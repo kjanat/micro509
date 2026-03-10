@@ -40,7 +40,7 @@ export interface CertificateExtensionsInput {
 	readonly extendedKeyUsage?: readonly ExtendedKeyUsage[];
 }
 
-export type ExtendedKeyUsage =
+export type KnownExtendedKeyUsage =
 	| "serverAuth"
 	| "clientAuth"
 	| "codeSigning"
@@ -48,7 +48,14 @@ export type ExtendedKeyUsage =
 	| "timeStamping"
 	| "ocspSigning";
 
-const EXTENDED_KEY_USAGE_OIDS: Record<ExtendedKeyUsage, string> = {
+export interface CustomExtendedKeyUsage {
+	readonly type: "oid";
+	readonly value: string;
+}
+
+export type ExtendedKeyUsage = KnownExtendedKeyUsage | CustomExtendedKeyUsage;
+
+const EXTENDED_KEY_USAGE_OIDS: Record<KnownExtendedKeyUsage, string> = {
 	serverAuth: OIDS.serverAuth,
 	clientAuth: OIDS.clientAuth,
 	codeSigning: OIDS.codeSigning,
@@ -189,7 +196,33 @@ export function encodeSubjectAltName(value: SubjectAltName): Uint8Array {
 }
 
 export function encodeExtendedKeyUsage(usages: readonly ExtendedKeyUsage[]): Uint8Array {
-	return sequence(usages.map((usage) => objectIdentifier(EXTENDED_KEY_USAGE_OIDS[usage])));
+	return sequence(usages.map((usage) => objectIdentifier(getExtendedKeyUsageOid(usage))));
+}
+
+export function getExtendedKeyUsageOid(usage: ExtendedKeyUsage): string {
+	if (typeof usage === "string") {
+		return EXTENDED_KEY_USAGE_OIDS[usage];
+	}
+	validateOid(usage.value);
+	return usage.value;
+}
+
+export function parseExtendedKeyUsageOid(oid: string): ExtendedKeyUsage {
+	switch (oid) {
+		case OIDS.serverAuth:
+			return "serverAuth";
+		case OIDS.clientAuth:
+			return "clientAuth";
+		case OIDS.codeSigning:
+			return "codeSigning";
+		case OIDS.emailProtection:
+			return "emailProtection";
+		case OIDS.timeStamping:
+			return "timeStamping";
+		case OIDS.ocspSigning:
+			return "ocspSigning";
+	}
+	return { type: "oid", value: oid };
 }
 
 function encodeIpAddress(input: string): Uint8Array {
@@ -249,4 +282,10 @@ function buildSubjectKeyIdentifier(subjectPublicKeyInfo: Uint8Array): Uint8Array
 	}
 	const publicKeyBytes = subjectPublicKey.value.slice(1);
 	return new Uint8Array(createHash("sha1").update(publicKeyBytes).digest());
+}
+
+function validateOid(oid: string): void {
+	if (!/^\d+(?:\.\d+)+$/.test(oid)) {
+		throw new Error(`Invalid OID: ${oid}`);
+	}
 }

@@ -5,6 +5,7 @@ Tiny X.509 builders for modern TypeScript.
 - create certs + CSRs
 - DER + PEM + base64 outputs
 - PKCS#8 + SPKI + JWK key import/export
+- parse certs + CSRs back to typed metadata
 - WebCrypto-first, typed, small surface
 
 ## Install
@@ -65,6 +66,7 @@ const leaf = await createCertificate({
 	issuerPublicKey: ca.keyPair.publicKey,
 	extensions: {
 		keyUsage: ["digitalSignature"],
+		extendedKeyUsage: ["serverAuth", { type: "oid", value: "1.2.3.4.5" }],
 		subjectAltNames: [{ type: "dns", value: "api.local" }],
 	},
 });
@@ -119,9 +121,26 @@ const jwkPublicKey = await importPublicJwk(await keyPair.exportPublicJwk(), {
 });
 ```
 
+## Parse certs + CSRs
+
+```ts
+import {
+	parseCertificatePem,
+	parseCertificateSigningRequestPem,
+} from "micro509";
+
+const parsedCert = parseCertificatePem(certificate.pem);
+console.log(parsedCert.subject.values.commonName);
+console.log(parsedCert.extendedKeyUsage);
+
+const parsedCsr = parseCertificateSigningRequestPem(csr.pem);
+console.log(parsedCsr.subjectAltNames);
+```
+
 ## Notes
 
 - keygen: `rsa`, `ecdsa`, `ed25519`
 - cert sigs: RSA PKCS#1 v1.5, ECDSA P-256/P-384, Ed25519
 - names: object shorthand or explicit ordered attributes
 - extensions: basic constraints, key usage, extended key usage, SAN, SKI, AKI
+- extended key usage: built-ins + custom OID escape hatch

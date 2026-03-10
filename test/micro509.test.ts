@@ -15,6 +15,8 @@ import {
 	importPublicJwk,
 	importSpkiBase64,
 	importSpkiPem,
+	parseCertificatePem,
+	parseCertificateSigningRequestPem,
 } from "../src/index.js";
 import { OIDS } from "../src/oids.js";
 
@@ -65,7 +67,7 @@ describe("micro509", () => {
 			issuerPublicKey: ca.keyPair.publicKey,
 			extensions: {
 				keyUsage: ["digitalSignature"],
-				extendedKeyUsage: ["serverAuth", "clientAuth"],
+				extendedKeyUsage: ["serverAuth", { type: "oid", value: "1.2.3.4.5" }],
 				subjectAltNames: [{ type: "dns", value: "leaf.example" }],
 			},
 		});
@@ -76,6 +78,11 @@ describe("micro509", () => {
 		expect(leafCertificate.checkHost("leaf.example")).toBe("leaf.example");
 		expect(leafCertificate.verify(caCertificate.publicKey)).toBe(true);
 		expect(hasExtensionOid(leaf.der, OIDS.extendedKeyUsage)).toBe(true);
+		const parsed = parseCertificatePem(leaf.pem);
+		expect(parsed.subject.values.commonName).toBe("leaf.example");
+		expect(parsed.issuer.values.commonName).toBe("Micro509 Test CA");
+		expect(parsed.subjectAltNames).toEqual([{ type: "dns", value: "leaf.example" }]);
+		expect(parsed.extendedKeyUsage).toEqual(["serverAuth", { type: "oid", value: "1.2.3.4.5" }]);
 	});
 
 	it("roundtrips keys through PEM, base64, and JWK imports", async () => {
@@ -129,6 +136,7 @@ describe("micro509", () => {
 			extensions: {
 				subjectAltNames: [{ type: "dns", value: "csr.example" }],
 				keyUsage: ["digitalSignature"],
+				extendedKeyUsage: ["clientAuth", { type: "oid", value: "1.2.3.4.6" }],
 			},
 		});
 
@@ -153,6 +161,11 @@ describe("micro509", () => {
 			throw new Error("Missing attribute OID");
 		}
 		expect(decodeObjectIdentifier(oidElement.value)).toBe(OIDS.extensionRequest);
+		const parsed = parseCertificateSigningRequestPem(csr.pem);
+		expect(parsed.subject.values.commonName).toBe("csr.example");
+		expect(parsed.subjectAltNames).toEqual([{ type: "dns", value: "csr.example" }]);
+		expect(parsed.keyUsage).toEqual(["digitalSignature"]);
+		expect(parsed.extendedKeyUsage).toEqual(["clientAuth", { type: "oid", value: "1.2.3.4.6" }]);
 	});
 });
 

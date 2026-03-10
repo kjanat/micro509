@@ -11,8 +11,10 @@ export { createCertificateSigningRequest, type CreateCsrInput, type CsrMaterial 
 export {
 	type BasicConstraints,
 	type CertificateExtensionsInput,
+	type CustomExtendedKeyUsage,
 	type ExtendedKeyUsage,
 	type KeyUsage,
+	type KnownExtendedKeyUsage,
 	type SubjectAltName,
 } from "./extensions.js";
 export {
@@ -43,4 +45,15 @@ export {
 	type PublicKeyImportInput,
 	type RsaKeyAlgorithmInput,
 } from "./keys.js";
-export { type NameAttribute, type NameInput, type NameObject } from "./name.js";
+export { type NameAttribute, type NameFieldKey, type NameInput, type NameObject } from "./name.js";
+export {
+	parseCertificateDer,
+	parseCertificatePem,
+	parseCertificateSigningRequestDer,
+	parseCertificateSigningRequestPem,
+	type ParsedCertificate,
+	type ParsedCertificateSigningRequest,
+	type ParsedExtension,
+	type ParsedName,
+	type ParsedNameAttribute,
+} from "./parse.js";
