@@ -7,6 +7,7 @@ Tiny X.509 builders for modern TypeScript.
 - PKCS#8 + SPKI + JWK key import/export
 - parse certs + CSRs back to typed metadata
 - verify leaf/intermediate/root chains with typed results
+- custom extension build hooks + decode helpers
 - WebCrypto-first, typed, small surface
 
 ## Install
@@ -126,6 +127,8 @@ const jwkPublicKey = await importPublicJwk(await keyPair.exportPublicJwk(), {
 
 ```ts
 import {
+	decodeExtension,
+	findExtension,
 	parseCertificatePem,
 	parseCertificateSigningRequestPem,
 } from "micro509";
@@ -138,6 +141,37 @@ console.log(parsedCert.crlDistributionPoints);
 
 const parsedCsr = parseCertificateSigningRequestPem(csr.pem);
 console.log(parsedCsr.subjectAltNames);
+```
+
+## Custom extensions
+
+```ts
+import {
+	createSelfSignedCertificate,
+	decodeExtension,
+	parseCertificatePem,
+} from "micro509";
+
+const { certificate } = await createSelfSignedCertificate({
+	subject: { commonName: "custom.example" },
+	extensions: {
+		customExtensions: [
+			{
+				oid: "1.2.3.4.200",
+				critical: true,
+				value: Uint8Array.of(0x04, 0x03, 0x01, 0x02, 0x03),
+			},
+		],
+	},
+});
+
+const parsed = parseCertificatePem(certificate.pem);
+const decoded = decodeExtension(parsed.extensions, {
+	oid: "1.2.3.4.200",
+	decode(extension) {
+		return Array.from(extension.valueDer);
+	},
+});
 ```
 
 ## Verify chain
@@ -170,6 +204,7 @@ if (result.ok) {
 - names: object shorthand or explicit ordered attributes
 - extensions: basic constraints, key usage, extended key usage, SAN, SKI, AKI
 - parsed extras: AIA, CRL distribution points, raw extension list
+- custom extensions: arbitrary OID/valueDER with duplicate OID rejection
 - extended key usage: built-ins + custom OID escape hatch
 - chain verify: issuer match, signatures, time, CA/keyCertSign, pathLen, AKI/SKI, SAN/EKU checks
 - verify failures: structured `code`, `index`, `details`

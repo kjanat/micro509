@@ -29,7 +29,13 @@ export interface ParsedName {
 export interface ParsedExtension {
 	readonly oid: string;
 	readonly critical: boolean;
+	readonly valueDer: Uint8Array;
 	readonly valueHex: string;
+}
+
+export interface ExtensionDecoder<TValue> {
+	readonly oid: string;
+	decode(extension: ParsedExtension): TValue;
 }
 
 export interface ParsedCertificate {
@@ -167,6 +173,24 @@ export function parseCertificateSigningRequestPem(pem: string): ParsedCertificat
 	return parseCertificateSigningRequestDer(pemDecode("CERTIFICATE REQUEST", pem));
 }
 
+export function findExtension(
+	extensions: readonly ParsedExtension[],
+	oid: string,
+): ParsedExtension | undefined {
+	return extensions.find((extension) => extension.oid === oid);
+}
+
+export function decodeExtension<TValue>(
+	extensions: readonly ParsedExtension[],
+	decoder: ExtensionDecoder<TValue>,
+): TValue | undefined {
+	const extension = findExtension(extensions, decoder.oid);
+	if (extension === undefined) {
+		return undefined;
+	}
+	return decoder.decode(extension);
+}
+
 interface ParsedExtensions {
 	readonly all: readonly ParsedExtension[];
 	readonly basicConstraints?: BasicConstraints;
@@ -228,7 +252,12 @@ function parseExtensionSequence(source: Uint8Array, sequenceElement: DerElement)
 		}
 		const extnValue = requireElement(children[offset], "extension value");
 		const inner = readElement(extnValue.value);
-		parsed.push({ oid, critical, valueHex: toHex(extnValue.value) });
+		parsed.push({
+			oid,
+			critical,
+			valueDer: new Uint8Array(extnValue.value),
+			valueHex: toHex(extnValue.value),
+		});
 		switch (oid) {
 			case OIDS.basicConstraints:
 				basicConstraints = parseBasicConstraints(extnValue.value);

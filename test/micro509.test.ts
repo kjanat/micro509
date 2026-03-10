@@ -5,9 +5,11 @@ import {
 	createCertificate,
 	createCertificateSigningRequest,
 	createSelfSignedCertificate,
+	decodeExtension,
 	exportBinaryBase64,
 	exportPkcs8Der,
 	exportSpkiDer,
+	findExtension,
 	generateKeyPair,
 	importPkcs8Base64,
 	importPkcs8Pem,
@@ -101,6 +103,43 @@ describe("micro509", () => {
 			{ method: "caIssuers", uri: "http://issuer.example.test/ca.der" },
 		]);
 		expect(parsed.crlDistributionPoints).toEqual(["http://issuer.example.test/ca.crl"]);
+	});
+
+	it("supports custom extension encode and decode hooks", async () => {
+		const certificate = await createSelfSignedCertificate({
+			subject: { commonName: "custom-ext.example" },
+			extensions: {
+				customExtensions: [
+					{ oid: "1.2.3.4.200", critical: true, value: Uint8Array.of(0x04, 0x03, 0x01, 0x02, 0x03) },
+				],
+			},
+		});
+
+		const parsed = parseCertificatePem(certificate.certificate.pem);
+		const extension = findExtension(parsed.extensions, "1.2.3.4.200");
+		if (extension === undefined) {
+			throw new Error("Missing custom extension");
+		}
+		expect(extension.critical).toBe(true);
+		expect(Array.from(extension.valueDer)).toEqual([0x04, 0x03, 0x01, 0x02, 0x03]);
+		expect(
+			decodeExtension(parsed.extensions, {
+				oid: "1.2.3.4.200",
+				decode(input) {
+					return Array.from(input.valueDer).join(":");
+				},
+			}),
+		).toBe("4:3:1:2:3");
+
+		await expect(
+			createSelfSignedCertificate({
+				subject: { commonName: "dup-ext.example" },
+				extensions: {
+					keyUsage: ["digitalSignature"],
+					customExtensions: [{ oid: OIDS.keyUsage, value: Uint8Array.of(0x05, 0x00) }],
+				},
+			}),
+		).rejects.toThrow("Duplicate extension OID");
 	});
 
 	it("parses PEM bundles and verifies a leaf to root chain", async () => {

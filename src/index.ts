@@ -15,6 +15,7 @@ export {
 	type CertificateExtensionsInput,
 	type CustomAuthorityInfoAccessMethod,
 	type CustomExtendedKeyUsage,
+	type CustomExtension,
 	type ExtendedKeyUsage,
 	type KeyUsage,
 	type KnownAuthorityInfoAccessMethod,
@@ -51,6 +52,9 @@ export {
 } from "./keys.ts";
 export { type NameAttribute, type NameFieldKey, type NameInput, type NameObject } from "./name.ts";
 export {
+	decodeExtension,
+	type ExtensionDecoder,
+	findExtension,
 	parseCertificateChainPem,
 	parseCertificateDer,
 	parseCertificatePem,
