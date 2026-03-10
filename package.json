@@ -1,0 +1,44 @@
+{
+	"name": "micro509",
+	"version": "0.1.0",
+	"description": "Small, typed X.509 builders for modern TypeScript",
+	"keywords": [
+		"x509",
+		"certificate",
+		"csr",
+		"pem",
+		"der",
+		"jwk"
+	],
+	"license": "MIT",
+	"type": "module",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		}
+	},
+	"files": [
+		"dist"
+	],
+	"scripts": {
+		"bd": "bun --bun run build",
+		"build": "tsc -p tsconfig.build.json",
+		"check": "tsc -p tsconfig.json --noEmit",
+		"fmt": "dprint fmt",
+		"test": "vitest run",
+		"typecheck": "tsgo --noEmit"
+	},
+	"devDependencies": {
+		"@types/node": "^25.4.0",
+		"@typescript/native-preview": "^7.0.0-dev.20260310.1",
+		"dprint": "^0.52.0",
+		"typescript": "^5.9.2",
+		"vitest": "^4.0.18"
+	},
+	"packageManager": "bun@1.3.10",
+	"volta": {
+		"node": "25.8.0",
+		"npm": "11.11.0"
+	}
+}
