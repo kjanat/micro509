@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import {
 	bitString,
 	bool,
+	explicitContext,
 	implicitPrimitiveContext,
 	integerFromNumber,
 	objectIdentifier,
@@ -38,6 +39,24 @@ export interface CertificateExtensionsInput {
 	readonly keyUsage?: readonly KeyUsage[];
 	readonly basicConstraints?: BasicConstraints;
 	readonly extendedKeyUsage?: readonly ExtendedKeyUsage[];
+	readonly authorityInfoAccess?: readonly AuthorityInformationAccess[];
+	readonly crlDistributionPoints?: readonly string[];
+}
+
+export type KnownAuthorityInfoAccessMethod = "ocsp" | "caIssuers";
+
+export interface CustomAuthorityInfoAccessMethod {
+	readonly type: "oid";
+	readonly value: string;
+}
+
+export type AuthorityInfoAccessMethod =
+	| KnownAuthorityInfoAccessMethod
+	| CustomAuthorityInfoAccessMethod;
+
+export interface AuthorityInformationAccess {
+	readonly method: AuthorityInfoAccessMethod;
+	readonly uri: string;
 }
 
 export type KnownExtendedKeyUsage =
@@ -62,6 +81,11 @@ const EXTENDED_KEY_USAGE_OIDS: Record<KnownExtendedKeyUsage, string> = {
 	emailProtection: OIDS.emailProtection,
 	timeStamping: OIDS.timeStamping,
 	ocspSigning: OIDS.ocspSigning,
+};
+
+const AUTHORITY_INFO_ACCESS_METHOD_OIDS: Record<KnownAuthorityInfoAccessMethod, string> = {
+	ocsp: OIDS.ocspAccessMethod,
+	caIssuers: OIDS.caIssuersAccessMethod,
 };
 
 const KEY_USAGE_BITS: Record<KeyUsage, number> = {
@@ -136,6 +160,28 @@ export function buildCertificateExtensions(
 			),
 		);
 	}
+	if (
+		input?.authorityInfoAccess !== undefined
+		&& input.authorityInfoAccess.length > 0
+	) {
+		extensions.push(
+			encodeExtension(
+				OIDS.authorityInfoAccess,
+				encodeAuthorityInfoAccess(input.authorityInfoAccess),
+			),
+		);
+	}
+	if (
+		input?.crlDistributionPoints !== undefined
+		&& input.crlDistributionPoints.length > 0
+	) {
+		extensions.push(
+			encodeExtension(
+				OIDS.cRLDistributionPoints,
+				encodeCrlDistributionPoints(input.crlDistributionPoints),
+			),
+		);
+	}
 	return extensions;
 }
 
@@ -176,6 +222,28 @@ export function buildRequestedExtensions(
 			encodeExtension(
 				OIDS.extendedKeyUsage,
 				encodeExtendedKeyUsage(input.extendedKeyUsage),
+			),
+		);
+	}
+	if (
+		input?.authorityInfoAccess !== undefined
+		&& input.authorityInfoAccess.length > 0
+	) {
+		extensions.push(
+			encodeExtension(
+				OIDS.authorityInfoAccess,
+				encodeAuthorityInfoAccess(input.authorityInfoAccess),
+			),
+		);
+	}
+	if (
+		input?.crlDistributionPoints !== undefined
+		&& input.crlDistributionPoints.length > 0
+	) {
+		extensions.push(
+			encodeExtension(
+				OIDS.cRLDistributionPoints,
+				encodeCrlDistributionPoints(input.crlDistributionPoints),
 			),
 		);
 	}
@@ -251,6 +319,35 @@ export function encodeExtendedKeyUsage(
 	);
 }
 
+export function encodeAuthorityInfoAccess(
+	entries: readonly AuthorityInformationAccess[],
+): Uint8Array {
+	return sequence(
+		entries.map((entry) =>
+			sequence([
+				objectIdentifier(getAuthorityInfoAccessMethodOid(entry.method)),
+				implicitPrimitiveContext(6, new TextEncoder().encode(entry.uri)),
+			])
+		),
+	);
+}
+
+export function encodeCrlDistributionPoints(uris: readonly string[]): Uint8Array {
+	return sequence(
+		uris.map((uri) =>
+			sequence([
+				explicitContext(
+					0,
+					explicitContext(
+						0,
+						sequence([implicitPrimitiveContext(6, new TextEncoder().encode(uri))]),
+					),
+				),
+			])
+		),
+	);
+}
+
 export function getExtendedKeyUsageOid(usage: ExtendedKeyUsage): string {
 	if (typeof usage === "string") {
 		return EXTENDED_KEY_USAGE_OIDS[usage];
@@ -273,6 +370,28 @@ export function parseExtendedKeyUsageOid(oid: string): ExtendedKeyUsage {
 			return "timeStamping";
 		case OIDS.ocspSigning:
 			return "ocspSigning";
+	}
+	return { type: "oid", value: oid };
+}
+
+export function getAuthorityInfoAccessMethodOid(
+	method: AuthorityInfoAccessMethod,
+): string {
+	if (typeof method === "string") {
+		return AUTHORITY_INFO_ACCESS_METHOD_OIDS[method];
+	}
+	validateOid(method.value);
+	return method.value;
+}
+
+export function parseAuthorityInfoAccessMethodOid(
+	oid: string,
+): AuthorityInfoAccessMethod {
+	switch (oid) {
+		case OIDS.ocspAccessMethod:
+			return "ocsp";
+		case OIDS.caIssuersAccessMethod:
+			return "caIssuers";
 	}
 	return { type: "oid", value: oid };
 }

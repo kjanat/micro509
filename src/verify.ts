@@ -1,6 +1,7 @@
 import { Buffer } from "node:buffer";
 import { X509Certificate } from "node:crypto";
-import { parseCertificateChainPem, parseCertificateDer, parseCertificatePem, type ParsedCertificate } from "./parse.ts";
+import { type ExtendedKeyUsage } from "./extensions.ts";
+import { parseCertificateChainPem, parseCertificateDer, type ParsedCertificate } from "./parse.ts";
 
 export type CertificateSource = string | Uint8Array;
 
@@ -36,6 +37,14 @@ export interface VerifiedCertificateChain {
 	readonly root: ParsedCertificate;
 }
 
+export interface VerifyFailureDetails {
+	readonly subjectCommonName?: string;
+	readonly issuerCommonName?: string;
+	readonly expected?: string;
+	readonly actual?: string;
+	readonly chainCommonNames?: readonly string[];
+}
+
 export type VerifyChainResult =
 	| { readonly ok: true; readonly value: VerifiedCertificateChain }
 	| {
@@ -43,6 +52,7 @@ export type VerifyChainResult =
 		readonly code: VerifyErrorCode;
 		readonly message: string;
 		readonly index?: number;
+		readonly details?: VerifyFailureDetails;
 	};
 
 interface LoadedCertificate {
@@ -57,6 +67,14 @@ interface BuildChainResult {
 	readonly missingIssuerAt?: number;
 }
 
+interface VerifyFailureDetailsInput {
+	readonly subjectCommonName?: string | undefined;
+	readonly issuerCommonName?: string | undefined;
+	readonly expected?: string | undefined;
+	readonly actual?: string | undefined;
+	readonly chainCommonNames?: readonly string[] | undefined;
+}
+
 export function verifyCertificateChain(input: VerifyCertificateChainInput): VerifyChainResult {
 	const leaf = loadSingleCertificate(input.leaf);
 	const intermediates = loadCertificates(input.intermediates ?? []);
@@ -67,15 +85,34 @@ export function verifyCertificateChain(input: VerifyCertificateChainInput): Veri
 
 	if (chain.length === 1 && isSelfIssued(leaf.parsed)) {
 		if (!input.allowSelfSignedLeaf) {
-			return failure("self_signed_leaf_not_allowed", "self-signed leaf not allowed", 0);
+			return failure(
+				"self_signed_leaf_not_allowed",
+				"self-signed leaf not allowed",
+				0,
+				detail({
+					subjectCommonName: leaf.parsed.subject.values.commonName,
+				}),
+			);
 		}
 	}
 
 	if (!buildResult.foundTrustedRoot) {
 		if (buildResult.missingIssuerAt !== undefined) {
-			return failure("issuer_not_found", "issuer certificate not found", buildResult.missingIssuerAt);
+			return failure(
+				"issuer_not_found",
+				"issuer certificate not found",
+				buildResult.missingIssuerAt,
+				buildFailureDetails(chain, buildResult.missingIssuerAt),
+			);
 		}
-		return failure("no_trusted_root", "no trusted root found");
+		return failure(
+			"no_trusted_root",
+			"no trusted root found",
+			undefined,
+			detail({
+				chainCommonNames: chain.map((certificate) => certificate.parsed.subject.values.commonName ?? "<unnamed>"),
+			}),
+		);
 	}
 
 	for (let index = 0; index < chain.length; index += 1) {
@@ -84,7 +121,16 @@ export function verifyCertificateChain(input: VerifyCertificateChainInput): Veri
 			return failure("issuer_not_found", "chain element missing", index);
 		}
 		if (!isWithinValidity(current.parsed, at)) {
-			return failure("certificate_expired", "certificate not valid at requested time", index);
+			return failure(
+				"certificate_expired",
+				"certificate not valid at requested time",
+				index,
+				detail({
+					subjectCommonName: current.parsed.subject.values.commonName,
+					expected: at.toISOString(),
+					actual: `${current.parsed.notBefore.toISOString()}..${current.parsed.notAfter.toISOString()}`,
+				}),
+			);
 		}
 		if (index === chain.length - 1) {
 			continue;
@@ -94,16 +140,38 @@ export function verifyCertificateChain(input: VerifyCertificateChainInput): Veri
 			return failure("issuer_not_found", "issuer missing", index);
 		}
 		if (!current.x509.verify(issuer.x509.publicKey)) {
-			return failure("signature_invalid", "certificate signature does not verify", index);
+			return failure(
+				"signature_invalid",
+				"certificate signature does not verify",
+				index,
+				detail({
+					subjectCommonName: current.parsed.subject.values.commonName,
+					issuerCommonName: issuer.parsed.subject.values.commonName,
+				}),
+			);
 		}
 		if (issuer.parsed.basicConstraints?.ca !== true) {
-			return failure("ca_required", "issuer must be a CA certificate", index + 1);
+			return failure(
+				"ca_required",
+				"issuer must be a CA certificate",
+				index + 1,
+				detail({
+					subjectCommonName: issuer.parsed.subject.values.commonName,
+				}),
+			);
 		}
 		if (
 			issuer.parsed.keyUsage !== undefined
 			&& !issuer.parsed.keyUsage.includes("keyCertSign")
 		) {
-			return failure("key_cert_sign_required", "issuer missing keyCertSign", index + 1);
+			return failure(
+				"key_cert_sign_required",
+				"issuer missing keyCertSign",
+				index + 1,
+				detail({
+					subjectCommonName: issuer.parsed.subject.values.commonName,
+				}),
+			);
 		}
 		if (
 			current.parsed.authorityKeyIdentifier !== undefined
@@ -114,6 +182,12 @@ export function verifyCertificateChain(input: VerifyCertificateChainInput): Veri
 				"authority_key_identifier_mismatch",
 				"authorityKeyIdentifier does not match issuer subjectKeyIdentifier",
 				index,
+				detail({
+					subjectCommonName: current.parsed.subject.values.commonName,
+					issuerCommonName: issuer.parsed.subject.values.commonName,
+					expected: issuer.parsed.subjectKeyIdentifier,
+					actual: current.parsed.authorityKeyIdentifier,
+				}),
 			);
 		}
 	}
@@ -126,7 +200,16 @@ export function verifyCertificateChain(input: VerifyCertificateChainInput): Veri
 		const maxCaBelow = countCaCertificatesBelow(chain, index);
 		const pathLength = current.parsed.basicConstraints?.pathLength;
 		if (pathLength !== undefined && maxCaBelow > pathLength) {
-			return failure("path_length_exceeded", "path length constraint exceeded", index);
+			return failure(
+				"path_length_exceeded",
+				"path length constraint exceeded",
+				index,
+				detail({
+					subjectCommonName: current.parsed.subject.values.commonName,
+					expected: String(pathLength),
+					actual: String(maxCaBelow),
+				}),
+			);
 		}
 	}
 
@@ -161,26 +244,60 @@ function validateLeaf(
 	if (purpose !== undefined) {
 		if (purpose === "ca") {
 			if (leaf.parsed.basicConstraints?.ca !== true) {
-				return failure("ca_required", "leaf is not a CA certificate", 0);
+				return failure(
+					"ca_required",
+					"leaf is not a CA certificate",
+					0,
+					detail({
+						subjectCommonName: leaf.parsed.subject.values.commonName,
+					}),
+				);
 			}
 		} else if (
 			leaf.parsed.extendedKeyUsage !== undefined
 			&& !leaf.parsed.extendedKeyUsage.includes(purpose)
 		) {
-			return failure("extended_key_usage_invalid", `leaf missing EKU ${purpose}`, 0);
+			return failure(
+				"extended_key_usage_invalid",
+				`leaf missing EKU ${purpose}`,
+				0,
+				detail({
+					subjectCommonName: leaf.parsed.subject.values.commonName,
+					expected: purpose,
+					actual: leaf.parsed.extendedKeyUsage.map(formatEku).join(","),
+				}),
+			);
 		}
 	}
 	if (input.dnsName !== undefined) {
 		const sans = leaf.parsed.subjectAltNames?.filter((entry) => entry.type === "dns") ?? [];
 		if (!sans.some((entry) => matchesDnsName(entry.value, input.dnsName ?? ""))) {
-			return failure("subject_alt_name_mismatch", "DNS name not present in SAN", 0);
+			return failure(
+				"subject_alt_name_mismatch",
+				"DNS name not present in SAN",
+				0,
+				detail({
+					subjectCommonName: leaf.parsed.subject.values.commonName,
+					expected: input.dnsName,
+					actual: sans.map((entry) => entry.value).join(","),
+				}),
+			);
 		}
 	}
 	if (input.ipAddress !== undefined) {
 		const expected = normalizeIpAddress(input.ipAddress);
 		const sans = leaf.parsed.subjectAltNames?.filter((entry) => entry.type === "ip") ?? [];
 		if (!sans.some((entry) => normalizeIpAddress(entry.value) === expected)) {
-			return failure("subject_alt_name_mismatch", "IP address not present in SAN", 0);
+			return failure(
+				"subject_alt_name_mismatch",
+				"IP address not present in SAN",
+				0,
+				detail({
+					subjectCommonName: leaf.parsed.subject.values.commonName,
+					expected,
+					actual: sans.map((entry) => normalizeIpAddress(entry.value)).join(","),
+				}),
+			);
 		}
 	}
 	return { ok: true };
@@ -393,6 +510,43 @@ function expandIpv6(value: string): readonly string[] {
 	);
 }
 
-function failure(code: VerifyErrorCode, message: string, index?: number): VerifyChainResult {
-	return index === undefined ? { ok: false, code, message } : { ok: false, code, message, index };
+function failure(
+	code: VerifyErrorCode,
+	message: string,
+	index?: number,
+	details?: VerifyFailureDetails,
+): VerifyChainResult {
+	return {
+		ok: false,
+		code,
+		message,
+		...(index === undefined ? {} : { index }),
+		...(details === undefined ? {} : { details }),
+	};
+}
+
+function buildFailureDetails(
+	chain: readonly LoadedCertificate[],
+	index: number,
+): VerifyFailureDetails {
+	const certificate = chain[index];
+	return detail({
+		subjectCommonName: certificate?.parsed.subject.values.commonName,
+		issuerCommonName: certificate?.parsed.issuer.values.commonName,
+		chainCommonNames: chain.map((entry) => entry.parsed.subject.values.commonName ?? "<unnamed>"),
+	});
+}
+
+function formatEku(value: ExtendedKeyUsage): string {
+	return typeof value === "string" ? value : value.value;
+}
+
+function detail(input: VerifyFailureDetailsInput): VerifyFailureDetails {
+	return {
+		...(input.subjectCommonName === undefined ? {} : { subjectCommonName: input.subjectCommonName }),
+		...(input.issuerCommonName === undefined ? {} : { issuerCommonName: input.issuerCommonName }),
+		...(input.expected === undefined ? {} : { expected: input.expected }),
+		...(input.actual === undefined ? {} : { actual: input.actual }),
+		...(input.chainCommonNames === undefined ? {} : { chainCommonNames: input.chainCommonNames }),
+	};
 }

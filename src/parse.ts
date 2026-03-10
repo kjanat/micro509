@@ -1,8 +1,10 @@
 import { type DerElement, readElement } from "./der.ts";
 import {
+	type AuthorityInformationAccess,
 	type BasicConstraints,
 	type ExtendedKeyUsage,
 	type KeyUsage,
+	parseAuthorityInfoAccessMethodOid,
 	parseExtendedKeyUsageOid,
 	type SubjectAltName,
 } from "./extensions.ts";
@@ -45,6 +47,8 @@ export interface ParsedCertificate {
 	readonly keyUsage?: readonly KeyUsage[];
 	readonly extendedKeyUsage?: readonly ExtendedKeyUsage[];
 	readonly subjectAltNames?: readonly SubjectAltName[];
+	readonly authorityInfoAccess?: readonly AuthorityInformationAccess[];
+	readonly crlDistributionPoints?: readonly string[];
 	readonly subjectKeyIdentifier?: string;
 	readonly authorityKeyIdentifier?: string;
 }
@@ -60,6 +64,8 @@ export interface ParsedCertificateSigningRequest {
 	readonly keyUsage?: readonly KeyUsage[];
 	readonly extendedKeyUsage?: readonly ExtendedKeyUsage[];
 	readonly subjectAltNames?: readonly SubjectAltName[];
+	readonly authorityInfoAccess?: readonly AuthorityInformationAccess[];
+	readonly crlDistributionPoints?: readonly string[];
 }
 
 export function parseCertificateDer(der: Uint8Array): ParsedCertificate {
@@ -102,6 +108,12 @@ export function parseCertificateDer(der: Uint8Array): ParsedCertificate {
 		...(parsedExtensions.keyUsage !== undefined ? { keyUsage: parsedExtensions.keyUsage } : {}),
 		...(parsedExtensions.extendedKeyUsage !== undefined ? { extendedKeyUsage: parsedExtensions.extendedKeyUsage } : {}),
 		...(parsedExtensions.subjectAltNames !== undefined ? { subjectAltNames: parsedExtensions.subjectAltNames } : {}),
+		...(parsedExtensions.authorityInfoAccess !== undefined
+			? { authorityInfoAccess: parsedExtensions.authorityInfoAccess }
+			: {}),
+		...(parsedExtensions.crlDistributionPoints !== undefined
+			? { crlDistributionPoints: parsedExtensions.crlDistributionPoints }
+			: {}),
 		...(parsedExtensions.subjectKeyIdentifier !== undefined
 			? { subjectKeyIdentifier: parsedExtensions.subjectKeyIdentifier }
 			: {}),
@@ -142,6 +154,12 @@ export function parseCertificateSigningRequestDer(der: Uint8Array): ParsedCertif
 		...(parsedExtensions.keyUsage !== undefined ? { keyUsage: parsedExtensions.keyUsage } : {}),
 		...(parsedExtensions.extendedKeyUsage !== undefined ? { extendedKeyUsage: parsedExtensions.extendedKeyUsage } : {}),
 		...(parsedExtensions.subjectAltNames !== undefined ? { subjectAltNames: parsedExtensions.subjectAltNames } : {}),
+		...(parsedExtensions.authorityInfoAccess !== undefined
+			? { authorityInfoAccess: parsedExtensions.authorityInfoAccess }
+			: {}),
+		...(parsedExtensions.crlDistributionPoints !== undefined
+			? { crlDistributionPoints: parsedExtensions.crlDistributionPoints }
+			: {}),
 	};
 }
 
@@ -155,6 +173,8 @@ interface ParsedExtensions {
 	readonly keyUsage?: readonly KeyUsage[];
 	readonly extendedKeyUsage?: readonly ExtendedKeyUsage[];
 	readonly subjectAltNames?: readonly SubjectAltName[];
+	readonly authorityInfoAccess?: readonly AuthorityInformationAccess[];
+	readonly crlDistributionPoints?: readonly string[];
 	readonly subjectKeyIdentifier?: string;
 	readonly authorityKeyIdentifier?: string;
 }
@@ -190,6 +210,8 @@ function parseExtensionSequence(source: Uint8Array, sequenceElement: DerElement)
 	let keyUsage: readonly KeyUsage[] | undefined;
 	let extendedKeyUsage: readonly ExtendedKeyUsage[] | undefined;
 	let subjectAltNames: readonly SubjectAltName[] | undefined;
+	let authorityInfoAccess: readonly AuthorityInformationAccess[] | undefined;
+	let crlDistributionPoints: readonly string[] | undefined;
 	let subjectKeyIdentifier: string | undefined;
 	let authorityKeyIdentifier: string | undefined;
 
@@ -220,6 +242,12 @@ function parseExtensionSequence(source: Uint8Array, sequenceElement: DerElement)
 			case OIDS.subjectAltName:
 				subjectAltNames = parseSubjectAltNames(extnValue.value);
 				break;
+			case OIDS.authorityInfoAccess:
+				authorityInfoAccess = parseAuthorityInfoAccess(extnValue.value);
+				break;
+			case OIDS.cRLDistributionPoints:
+				crlDistributionPoints = parseCrlDistributionPoints(extnValue.value);
+				break;
 			case OIDS.subjectKeyIdentifier:
 				subjectKeyIdentifier = toHex(inner.value);
 				break;
@@ -235,6 +263,8 @@ function parseExtensionSequence(source: Uint8Array, sequenceElement: DerElement)
 		...(keyUsage !== undefined ? { keyUsage } : {}),
 		...(extendedKeyUsage !== undefined ? { extendedKeyUsage } : {}),
 		...(subjectAltNames !== undefined ? { subjectAltNames } : {}),
+		...(authorityInfoAccess !== undefined ? { authorityInfoAccess } : {}),
+		...(crlDistributionPoints !== undefined ? { crlDistributionPoints } : {}),
 		...(subjectKeyIdentifier !== undefined ? { subjectKeyIdentifier } : {}),
 		...(authorityKeyIdentifier !== undefined ? { authorityKeyIdentifier } : {}),
 	};
@@ -364,6 +394,47 @@ function parseSubjectAltNames(bytes: Uint8Array): readonly SubjectAltName[] {
 				throw new Error(`Unsupported GeneralName tag: ${element.tag}`);
 		}
 	});
+}
+
+function parseAuthorityInfoAccess(
+	bytes: Uint8Array,
+): readonly AuthorityInformationAccess[] {
+	const sequenceElement = requireElement(readElement(bytes), "authorityInfoAccess sequence");
+	return childrenOf(bytes, sequenceElement).map((element) => {
+		const children = childrenOf(bytes, element);
+		const method = requireElement(children[0], "authorityInfoAccess method");
+		const location = requireElement(children[1], "authorityInfoAccess location");
+		if (location.tag !== 0x86) {
+			throw new Error(`Unsupported authorityInfoAccess location tag: ${location.tag}`);
+		}
+		return {
+			method: parseAuthorityInfoAccessMethodOid(decodeObjectIdentifier(method.value)),
+			uri: textDecoder.decode(location.value),
+		};
+	});
+}
+
+function parseCrlDistributionPoints(bytes: Uint8Array): readonly string[] {
+	const sequenceElement = requireElement(readElement(bytes), "cRLDistributionPoints sequence");
+	const uris: string[] = [];
+	for (const distributionPoint of childrenOf(bytes, sequenceElement)) {
+		for (const child of childrenOf(bytes, distributionPoint)) {
+			if (child.tag !== 0xa0) {
+				continue;
+			}
+			const distributionPointName = requireElement(childrenOf(bytes, child)[0], "distributionPointName");
+			if (distributionPointName.tag !== 0xa0) {
+				continue;
+			}
+			const generalNames = requireElement(childrenOf(bytes, distributionPointName)[0], "generalNames");
+			for (const name of childrenOf(bytes, generalNames)) {
+				if (name.tag === 0x86) {
+					uris.push(textDecoder.decode(name.value));
+				}
+			}
+		}
+	}
+	return uris;
 }
 
 function parseAuthorityKeyIdentifier(bytes: Uint8Array): string | undefined {

@@ -133,6 +133,8 @@ import {
 const parsedCert = parseCertificatePem(certificate.pem);
 console.log(parsedCert.subject.values.commonName);
 console.log(parsedCert.extendedKeyUsage);
+console.log(parsedCert.authorityInfoAccess);
+console.log(parsedCert.crlDistributionPoints);
 
 const parsedCsr = parseCertificateSigningRequestPem(csr.pem);
 console.log(parsedCsr.subjectAltNames);
@@ -154,6 +156,10 @@ const result = verifyCertificateChain({
 if (result.ok) {
 	console.log(result.value.chain.length);
 	console.log(result.value.root.subject.values.commonName);
+	console.log(result.value.leaf.authorityInfoAccess);
+} else {
+	console.log(result.code);
+	console.log(result.details);
 }
 ```
 
@@ -163,5 +169,7 @@ if (result.ok) {
 - cert sigs: RSA PKCS#1 v1.5, ECDSA P-256/P-384, Ed25519
 - names: object shorthand or explicit ordered attributes
 - extensions: basic constraints, key usage, extended key usage, SAN, SKI, AKI
+- parsed extras: AIA, CRL distribution points, raw extension list
 - extended key usage: built-ins + custom OID escape hatch
 - chain verify: issuer match, signatures, time, CA/keyCertSign, pathLen, AKI/SKI, SAN/EKU checks
+- verify failures: structured `code`, `index`, `details`

@@ -70,6 +70,11 @@ describe("micro509", () => {
 			extensions: {
 				keyUsage: ["digitalSignature"],
 				extendedKeyUsage: ["serverAuth", { type: "oid", value: "1.2.3.4.5" }],
+				authorityInfoAccess: [
+					{ method: "ocsp", uri: "http://ocsp.example.test" },
+					{ method: "caIssuers", uri: "http://issuer.example.test/ca.der" },
+				],
+				crlDistributionPoints: ["http://issuer.example.test/ca.crl"],
 				subjectAltNames: [{ type: "dns", value: "leaf.example" }],
 			},
 		});
@@ -91,6 +96,11 @@ describe("micro509", () => {
 		expect(parsed.issuer.values.commonName).toBe("Micro509 Test CA");
 		expect(parsed.subjectAltNames).toEqual([{ type: "dns", value: "leaf.example" }]);
 		expect(parsed.extendedKeyUsage).toEqual(["serverAuth", { type: "oid", value: "1.2.3.4.5" }]);
+		expect(parsed.authorityInfoAccess).toEqual([
+			{ method: "ocsp", uri: "http://ocsp.example.test" },
+			{ method: "caIssuers", uri: "http://issuer.example.test/ca.der" },
+		]);
+		expect(parsed.crlDistributionPoints).toEqual(["http://issuer.example.test/ca.crl"]);
 	});
 
 	it("parses PEM bundles and verifies a leaf to root chain", async () => {
@@ -157,7 +167,12 @@ describe("micro509", () => {
 				intermediates: [validChain.intermediate.pem],
 				roots: [],
 			}),
-		).toMatchObject({ ok: false, code: "issuer_not_found", index: 1 });
+		).toMatchObject({
+			ok: false,
+			code: "issuer_not_found",
+			index: 1,
+			details: { subjectCommonName: "Verify Intermediate CA" },
+		});
 
 		expect(
 			verifyCertificateChain({
@@ -166,7 +181,12 @@ describe("micro509", () => {
 				roots: [validChain.root.certificate.pem],
 				purpose: "clientAuth",
 			}),
-		).toMatchObject({ ok: false, code: "extended_key_usage_invalid", index: 0 });
+		).toMatchObject({
+			ok: false,
+			code: "extended_key_usage_invalid",
+			index: 0,
+			details: { expected: "clientAuth", subjectCommonName: "verify.example" },
+		});
 
 		expect(
 			verifyCertificateChain({
@@ -320,6 +340,8 @@ describe("micro509", () => {
 				subjectAltNames: [{ type: "dns", value: "csr.example" }],
 				keyUsage: ["digitalSignature"],
 				extendedKeyUsage: ["clientAuth", { type: "oid", value: "1.2.3.4.6" }],
+				authorityInfoAccess: [{ method: "ocsp", uri: "http://csr.example/ocsp" }],
+				crlDistributionPoints: ["http://csr.example/crl"],
 			},
 		});
 
@@ -349,6 +371,8 @@ describe("micro509", () => {
 		expect(parsed.subjectAltNames).toEqual([{ type: "dns", value: "csr.example" }]);
 		expect(parsed.keyUsage).toEqual(["digitalSignature"]);
 		expect(parsed.extendedKeyUsage).toEqual(["clientAuth", { type: "oid", value: "1.2.3.4.6" }]);
+		expect(parsed.authorityInfoAccess).toEqual([{ method: "ocsp", uri: "http://csr.example/ocsp" }]);
+		expect(parsed.crlDistributionPoints).toEqual(["http://csr.example/crl"]);
 	});
 });
 

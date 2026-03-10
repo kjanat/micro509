@@ -9,11 +9,15 @@ export {
 } from "./certificate.ts";
 export { createCertificateSigningRequest, type CreateCsrInput, type CsrMaterial } from "./csr.ts";
 export {
+	type AuthorityInfoAccessMethod,
+	type AuthorityInformationAccess,
 	type BasicConstraints,
 	type CertificateExtensionsInput,
+	type CustomAuthorityInfoAccessMethod,
 	type CustomExtendedKeyUsage,
 	type ExtendedKeyUsage,
 	type KeyUsage,
+	type KnownAuthorityInfoAccessMethod,
 	type KnownExtendedKeyUsage,
 	type SubjectAltName,
 } from "./extensions.ts";
@@ -65,5 +69,6 @@ export {
 	type VerifyCertificateChainInput,
 	type VerifyChainResult,
 	type VerifyErrorCode,
+	type VerifyFailureDetails,
 	type VerifyPurpose,
 } from "./verify.ts";
