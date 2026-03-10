@@ -1,0 +1,159 @@
+# PKIX validation scope checklist
+
+## 1. Define the boundary up front
+
+- [ ] Treat **certification path validation** as a function over a **prospective certification path** plus validation inputs, not as “build whatever chain you can find and hope for the best.”
+      RFC 5280 Section 6.1.1 defines the algorithm in terms of a candidate path and nine inputs. (IETF Datatracker[^rfc5280])
+- [ ] Keep **path building/discovery** separate from **path validation**.
+- [ ] Keep **service identity matching** separate from **path validation**.
+- [ ] Keep **revocation** separate from **path validation**.
+
+## 2. Required inputs for RFC 5280-style path validation
+
+- [ ] Prospective certification path.
+- [ ] Validation time.
+- [ ] Trust anchor information: trusted issuer name, trusted public key algorithm,
+      trusted public key, and optional trusted key parameters.
+- [ ] User-initial-policy-set.
+- [ ] Initial policy-mapping inhibit flag.
+- [ ] Initial explicit-policy flag.
+- [ ] Initial anyPolicy-inhibit flag.
+- [ ] Initial permitted subtrees.
+- [ ] Initial excluded subtrees. (IETF Datatracker[^rfc5280])
+
+## 3. Core certificate/path checks
+
+- [ ] Parse DER strictly enough to reject malformed certificates.
+- [ ] Verify issuer/subject chaining across the candidate path.
+- [ ] Verify each certificate signature using the evolving working public key.
+- [ ] Check validity time (`notBefore` / `notAfter`) against the chosen validation time.
+- [ ] Enforce `basicConstraints` for CA certificates.
+- [ ] Enforce `pathLenConstraint` where applicable.
+- [ ] Enforce `keyUsage`, especially `keyCertSign` for CAs used to sign subordinate certs.
+- [ ] Process self-issued vs non-self-issued certs correctly for path length and name constraints.
+- [ ] Reject the path if any required path-processing step fails. (IETF Datatracker[^rfc5280])
+
+## 4. Extension handling
+
+- [ ] Parse and preserve all extensions, including unknown ones.
+- [ ] Reject certificates containing an **unsupported critical extension** or a critical extension whose contents cannot be processed.
+- [ ] Process recognized non-critical extensions when relevant to path processing.
+- [ ] Expose raw extension data so callers can layer application-specific policy on top. (IETF Datatracker[^rfc5280])
+
+## 5. Name constraints
+
+- [ ] Support `nameConstraints` on CA certificates.
+- [ ] Support initial permitted/excluded subtrees as validator inputs.
+- [ ] Apply constraints across supported name forms, not just DNS SANs.
+- [ ] Handle self-issued certificates correctly when evaluating constraints. (IETF Datatracker[^rfc5280])
+
+## 6. Certificate policy processing
+
+- [ ] Support `certificatePolicies`.
+- [ ] Support `policyConstraints`.
+- [ ] Support `policyMappings` if you want full policy validation.
+- [ ] Support `inhibitAnyPolicy`.
+- [ ] If you implement policy validation, use the **RFC 9618** update rather than the older RFC 5280 policy-tree algorithm, because RFC 9618 replaced it with an equivalent, more efficient algorithm to avoid worst-case exponential blowups and DoS risk. (IETF Datatracker[^rfc9618])
+- [ ] If you do **not** implement this yet, say so explicitly instead of claiming full RFC 5280 validation.
+
+## 7. Trust-anchor model
+
+- [ ] Accept trust anchors as structured input, not only as “root cert PEM”.
+- [ ] Allow trust anchor info to come from a self-signed certificate as a convenience, but treat the trust anchor as out-of-band trust input.
+- [ ] Do not assume every self-signed cert is a trust anchor. (IETF Datatracker[^rfc5280])
+
+## 8. Application/service identity checks
+
+- [ ] Keep hostname/service-name matching in a separate API from path validation.
+- [ ] Match the reference identity against `subjectAltName` entries of the corresponding type first.
+- [ ] Only support CN fallback as an explicit compatibility mode, because RFC 6125 treats CN-ID usage as existing practice and prefers `subjectAltName`; CN comparison is deprecated. (IETF Datatracker[^rfc6125])
+- [ ] Make wildcard behavior explicit and test it hard.
+
+## 9. EKU / purpose checks
+
+- [ ] Keep EKU checks separate from raw path validity.
+- [ ] Allow callers to request purposes such as `serverAuth`, `clientAuth`, etc.
+- [ ] Distinguish “certificate is path-valid” from “certificate is acceptable for this application”.
+
+## 10. OCSP support checklist
+
+- [ ] Build `CertID` from issuer name hash, issuer key hash, serial number, and hash algorithm.
+- [ ] Discover the responder from AIA `id-ad-ocsp` or let callers provide a responder URL explicitly.
+- [ ] Parse and verify `BasicOCSPResponse`.
+- [ ] Check that the response actually refers to the requested certificate.
+- [ ] Validate the OCSP response signature.
+- [ ] Validate responder authorization.
+- [ ] Enforce response freshness using `thisUpdate` / `nextUpdate` and configurable clock skew.
+- [ ] Return `good`, `revoked`, and `unknown` distinctly.
+- [ ] Support optional nonce handling if you want replay binding between request and response. RFC 9654 defines the updated nonce extension details. (IETF Datatracker[^rfc6960])
+
+## 11. OCSP responder authorization rules
+
+- [ ] Accept an OCSP response signer if it matches local OCSP responder configuration for the certificate in question.
+- [ ] Accept it if the signer is the issuing CA certificate itself.
+- [ ] Accept it if the signer cert contains EKU `id-kp-OCSPSigning` **and** was issued directly by the CA that issued the target certificate.
+- [ ] Reject the response if the signer certificate meets none of those conditions.
+- [ ] Decide and document how you will handle revocation checking of the responder certificate; RFC 6960 allows CA signaling for that and also leaves room for local policy. (IETF Datatracker[^rfc6960])
+
+## 12. CRL support checklist
+
+- [ ] Treat CRL validation as a separate revocation subsystem.
+- [ ] Parse CRLs and CRL extensions.
+- [ ] Verify CRL signatures and issuer linkage.
+- [ ] Enforce CRL time/freshness semantics.
+- [ ] Support distribution points if you want network-assisted revocation.
+- [ ] Add delta CRL handling only if you actually want to live in that swamp. RFC 5280 defines CRL validation separately from path validation. (IETF Datatracker[^rfc5280])
+
+## 13. API design checklist
+
+- [ ] Separate:
+  - path building
+  - path validation
+  - service identity matching
+  - revocation checking
+- [ ] Expose structured validation inputs instead of hiding policy/name-constraint knobs.
+- [ ] Return typed failure reasons, including extension, policy, constraint, signature, time, trust-anchor, and revocation errors.
+- [ ] Distinguish hard validation failure from “status unknown / not checked”.
+
+## 14. Test/conformance checklist
+
+- [ ] Add fixed RFC-style test vectors for builders, parsers, and validators.
+- [ ] Add round-trip tests for certs, CSRs, names, and extensions.
+- [ ] Add malformed DER / fuzz tests.
+- [ ] Differential-test against at least one mature implementation.
+- [ ] Run the validator against **NIST PKITS**, which NIST describes as a comprehensive X.509 path validation test suite for relying parties. (NIST Computer Security Resource Center[^x-509-path-validation])
+
+## Recommended claim language
+
+### Safe to claim now
+
+- candidate chain validation
+- signature / time / issuer / CA / key usage / path length checks
+- SAN / EKU matching
+- typed parse/build APIs
+
+### Do _**not**_ claim until implemented
+
+- full RFC 5280 path validation
+- full certificate policy validation
+- full name-constraint validation
+- OCSP support
+- full revocation checking
+
+### Honest wording
+
+- “Validates candidate certificate paths with configurable trust anchors and typed results.”
+- “Service identity matching and revocation are separate APIs.”
+- “Advanced RFC 5280 features such as policy processing and full name-constraint handling are not yet complete.” (IETF Datatracker[^rfc5280])
+
+The main monster under the bed is simple: **once you say “full RFC 5280,” you’ve signed up for policy processing, name constraints, critical-extension behavior, and trust-anchor semantics — not just signatures and dates.** (IETF Datatiracker[^rfc5280])
+
+[^rfc5280]: https://datatracker.ietf.org/doc/html/rfc5280 "RFC 5280 - Internet X.509 Public Key Infrastructure Certificate and Certificate Revocation List (CRL) Profile"
+
+[^rfc9618]: https://datatracker.ietf.org/doc/html/rfc9618 "RFC 9618 - Updates to X.509 Policy Validation"
+
+[^rfc6125]: https://datatracker.ietf.org/doc/html/rfc6125 "RFC 6125 - Representation and Verification of Domain-Based Application Service Identity within Internet Public Key Infrastructure Using X.509 (PKIX) Certificates in the Context of Transport Layer Security (TLS)"
+
+[^rfc6960]: https://datatracker.ietf.org/doc/html/rfc6960 "RFC 6960 - X.509 Internet Public Key Infrastructure Online Certificate Status Protocol - OCSP"
+
+[^x-509-path-validation]: https://csrc.nist.gov/projects/pki-testing/x-509-path-validation-test-suite "X.509 Path Validation Test Suite - Public Key Infrastructure Testing | CSRC"
