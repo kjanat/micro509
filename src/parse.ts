@@ -19,6 +19,7 @@ export interface ParsedNameAttribute {
 }
 
 export interface ParsedName {
+	readonly derHex: string;
 	readonly attributes: readonly ParsedNameAttribute[];
 	readonly values: Partial<Record<NameFieldKey, string>>;
 }
@@ -112,6 +113,10 @@ export function parseCertificateDer(der: Uint8Array): ParsedCertificate {
 
 export function parseCertificatePem(pem: string): ParsedCertificate {
 	return parseCertificateDer(pemDecode("CERTIFICATE", pem));
+}
+
+export function parseCertificateChainPem(pemBundle: string): readonly ParsedCertificate[] {
+	return splitCertificatePemBlocks(pemBundle).map(parseCertificatePem);
 }
 
 export function parseCertificateSigningRequestDer(der: Uint8Array): ParsedCertificateSigningRequest {
@@ -250,7 +255,11 @@ function parseName(source: Uint8Array, element: DerElement): ParsedName {
 			values[key] = value;
 		}
 	}
-	return { attributes, values };
+	return {
+		derHex: toHex(source.slice(element.start - element.headerLength, element.end)),
+		attributes,
+		values,
+	};
 }
 
 function parseValidity(source: Uint8Array, element: DerElement): { readonly notBefore: Date; readonly notAfter: Date } {
@@ -497,4 +506,12 @@ function nameKeyFromOid(oid: string): NameFieldKey | undefined {
 			return "emailAddress";
 	}
 	return undefined;
+}
+
+function splitCertificatePemBlocks(pemBundle: string): readonly string[] {
+	const normalized = pemBundle.replace(/\r/g, "");
+	return Array.from(
+		normalized.matchAll(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g),
+		(match) => match[0],
+	);
 }

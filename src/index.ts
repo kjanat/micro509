@@ -47,6 +47,7 @@ export {
 } from "./keys.js";
 export { type NameAttribute, type NameFieldKey, type NameInput, type NameObject } from "./name.js";
 export {
+	parseCertificateChainPem,
 	parseCertificateDer,
 	parseCertificatePem,
 	parseCertificateSigningRequestDer,
@@ -57,3 +58,12 @@ export {
 	type ParsedName,
 	type ParsedNameAttribute,
 } from "./parse.js";
+export {
+	type CertificateSource,
+	type VerifiedCertificateChain,
+	verifyCertificateChain,
+	type VerifyCertificateChainInput,
+	type VerifyChainResult,
+	type VerifyErrorCode,
+	type VerifyPurpose,
+} from "./verify.js";

@@ -15,8 +15,10 @@ import {
 	importPublicJwk,
 	importSpkiBase64,
 	importSpkiPem,
+	parseCertificateChainPem,
 	parseCertificatePem,
 	parseCertificateSigningRequestPem,
+	verifyCertificateChain,
 } from "../src/index.js";
 import { OIDS } from "../src/oids.js";
 
@@ -83,6 +85,61 @@ describe("micro509", () => {
 		expect(parsed.issuer.values.commonName).toBe("Micro509 Test CA");
 		expect(parsed.subjectAltNames).toEqual([{ type: "dns", value: "leaf.example" }]);
 		expect(parsed.extendedKeyUsage).toEqual(["serverAuth", { type: "oid", value: "1.2.3.4.5" }]);
+	});
+
+	it("parses PEM bundles and verifies a leaf to root chain", async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: "Root CA" },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 1 },
+				keyUsage: ["keyCertSign", "cRLSign"],
+			},
+		});
+		const intermediateKeys = await generateKeyPair();
+		const intermediate = await createCertificate({
+			issuer: { commonName: "Root CA" },
+			subject: { commonName: "Intermediate CA" },
+			publicKey: intermediateKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ["keyCertSign", "cRLSign"],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: "Intermediate CA" },
+			subject: { commonName: "service.example" },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: intermediateKeys.privateKey,
+			issuerPublicKey: intermediateKeys.publicKey,
+			extensions: {
+				keyUsage: ["digitalSignature"],
+				extendedKeyUsage: ["serverAuth"],
+				subjectAltNames: [{ type: "dns", value: "service.example" }],
+			},
+		});
+
+		const bundle = `${leaf.pem}\n${intermediate.pem}\n${root.certificate.pem}`;
+		const parsedBundle = parseCertificateChainPem(bundle);
+		expect(parsedBundle).toHaveLength(3);
+		expect(parsedBundle[0]?.subject.values.commonName).toBe("service.example");
+
+		const result = verifyCertificateChain({
+			leaf: leaf.pem,
+			intermediates: [intermediate.pem],
+			roots: [root.certificate.pem],
+			purpose: "serverAuth",
+			dnsName: "service.example",
+		});
+
+		expect(result.ok).toBe(true);
+		if (!result.ok) {
+			throw new Error(result.message);
+		}
+		expect(result.value.chain).toHaveLength(3);
+		expect(result.value.root.subject.values.commonName).toBe("Root CA");
 	});
 
 	it("roundtrips keys through PEM, base64, and JWK imports", async () => {

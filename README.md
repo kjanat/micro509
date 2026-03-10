@@ -6,6 +6,7 @@ Tiny X.509 builders for modern TypeScript.
 - DER + PEM + base64 outputs
 - PKCS#8 + SPKI + JWK key import/export
 - parse certs + CSRs back to typed metadata
+- verify leaf/intermediate/root chains with typed results
 - WebCrypto-first, typed, small surface
 
 ## Install
@@ -137,6 +138,25 @@ const parsedCsr = parseCertificateSigningRequestPem(csr.pem);
 console.log(parsedCsr.subjectAltNames);
 ```
 
+## Verify chain
+
+```ts
+import { verifyCertificateChain } from "micro509";
+
+const result = verifyCertificateChain({
+	leaf: leaf.pem,
+	intermediates: [intermediate.pem],
+	roots: [root.pem],
+	purpose: "serverAuth",
+	dnsName: "api.local",
+});
+
+if (result.ok) {
+	console.log(result.value.chain.length);
+	console.log(result.value.root.subject.values.commonName);
+}
+```
+
 ## Notes
 
 - keygen: `rsa`, `ecdsa`, `ed25519`
@@ -144,3 +164,4 @@ console.log(parsedCsr.subjectAltNames);
 - names: object shorthand or explicit ordered attributes
 - extensions: basic constraints, key usage, extended key usage, SAN, SKI, AKI
 - extended key usage: built-ins + custom OID escape hatch
+- chain verify: issuer match, signatures, time, CA/keyCertSign, pathLen, AKI/SKI, SAN/EKU checks
