@@ -10,7 +10,7 @@ import {
 } from "./extensions.ts";
 import { type NameFieldKey } from "./name.ts";
 import { OIDS } from "./oids.ts";
-import { pemDecode } from "./pem.ts";
+import { pemDecode, splitPemBlocks } from "./pem.ts";
 
 const textDecoder = new TextDecoder();
 
@@ -36,6 +36,12 @@ export interface ParsedExtension {
 export interface ExtensionDecoder<TValue> {
 	readonly oid: string;
 	decode(extension: ParsedExtension): TValue;
+}
+
+export interface DecodedExtensionValue<TValue> {
+	readonly oid: string;
+	readonly critical: boolean;
+	readonly value: TValue;
 }
 
 export interface ParsedCertificate {
@@ -134,7 +140,9 @@ export function parseCertificatePem(pem: string): ParsedCertificate {
 }
 
 export function parseCertificateChainPem(pemBundle: string): readonly ParsedCertificate[] {
-	return splitCertificatePemBlocks(pemBundle).map(parseCertificatePem);
+	return splitPemBlocks(pemBundle)
+		.filter((block) => block.label === "CERTIFICATE")
+		.map((block) => parseCertificateDer(block.bytes));
 }
 
 export function parseCertificateSigningRequestDer(der: Uint8Array): ParsedCertificateSigningRequest {
@@ -189,6 +197,25 @@ export function decodeExtension<TValue>(
 		return undefined;
 	}
 	return decoder.decode(extension);
+}
+
+export function decodeExtensions(
+	extensions: readonly ParsedExtension[],
+	decoders: readonly ExtensionDecoder<unknown>[],
+): readonly DecodedExtensionValue<unknown>[] {
+	const decoded: DecodedExtensionValue<unknown>[] = [];
+	for (const decoder of decoders) {
+		const extension = findExtension(extensions, decoder.oid);
+		if (extension === undefined) {
+			continue;
+		}
+		decoded.push({
+			oid: extension.oid,
+			critical: extension.critical,
+			value: decoder.decode(extension),
+		});
+	}
+	return decoded;
 }
 
 interface ParsedExtensions {
@@ -606,12 +633,4 @@ function nameKeyFromOid(oid: string): NameFieldKey | undefined {
 			return "emailAddress";
 	}
 	return undefined;
-}
-
-function splitCertificatePemBlocks(pemBundle: string): readonly string[] {
-	const normalized = pemBundle.replace(/\r/g, "");
-	return Array.from(
-		normalized.matchAll(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g),
-		(match) => match[0],
-	);
 }

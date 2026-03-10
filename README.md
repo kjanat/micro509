@@ -128,6 +128,7 @@ const jwkPublicKey = await importPublicJwk(await keyPair.exportPublicJwk(), {
 ```ts
 import {
 	decodeExtension,
+	decodeExtensions,
 	findExtension,
 	parseCertificatePem,
 	parseCertificateSigningRequestPem,
@@ -172,6 +173,24 @@ const decoded = decodeExtension(parsed.extensions, {
 		return Array.from(extension.valueDer);
 	},
 });
+
+const allDecoded = decodeExtensions(parsed.extensions, [
+	{
+		oid: "1.2.3.4.200",
+		decode(extension) {
+			return extension.valueHex;
+		},
+	},
+]);
+```
+
+## Split PEM bundles
+
+```ts
+import { splitPemBlocks } from "micro509";
+
+const blocks = splitPemBlocks(bundle);
+console.log(blocks.map((block) => block.label));
 ```
 
 ## Verify chain
@@ -205,6 +224,8 @@ if (result.ok) {
 - extensions: basic constraints, key usage, extended key usage, SAN, SKI, AKI
 - parsed extras: AIA, CRL distribution points, raw extension list
 - custom extensions: arbitrary OID/valueDER with duplicate OID rejection
+- decode helpers: single-extension or registry-style decode over parsed extensions
+- pem helpers: split mixed cert/csr/key bundles by label
 - extended key usage: built-ins + custom OID escape hatch
 - chain verify: issuer match, signatures, time, CA/keyCertSign, pathLen, AKI/SKI, SAN/EKU checks
 - verify failures: structured `code`, `index`, `details`

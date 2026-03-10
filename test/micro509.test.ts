@@ -6,6 +6,7 @@ import {
 	createCertificateSigningRequest,
 	createSelfSignedCertificate,
 	decodeExtension,
+	decodeExtensions,
 	exportBinaryBase64,
 	exportPkcs8Der,
 	exportSpkiDer,
@@ -20,6 +21,7 @@ import {
 	parseCertificateChainPem,
 	parseCertificatePem,
 	parseCertificateSigningRequestPem,
+	splitPemBlocks,
 	verifyCertificateChain,
 } from "../src/index.ts";
 import { OIDS } from "../src/oids.ts";
@@ -111,6 +113,7 @@ describe("micro509", () => {
 			extensions: {
 				customExtensions: [
 					{ oid: "1.2.3.4.200", critical: true, value: Uint8Array.of(0x04, 0x03, 0x01, 0x02, 0x03) },
+					{ oid: "1.2.3.4.201", value: Uint8Array.of(0x04, 0x01, 0xff) },
 				],
 			},
 		});
@@ -130,6 +133,25 @@ describe("micro509", () => {
 				},
 			}),
 		).toBe("4:3:1:2:3");
+		expect(
+			decodeExtensions(parsed.extensions, [
+				{
+					oid: "1.2.3.4.200",
+					decode(input) {
+						return input.valueHex;
+					},
+				},
+				{
+					oid: "1.2.3.4.201",
+					decode(input) {
+						return input.critical ? "critical" : "non-critical";
+					},
+				},
+			]),
+		).toEqual([
+			{ oid: "1.2.3.4.200", critical: true, value: "0403010203" },
+			{ oid: "1.2.3.4.201", critical: false, value: "non-critical" },
+		]);
 
 		await expect(
 			createSelfSignedCertificate({
@@ -140,6 +162,25 @@ describe("micro509", () => {
 				},
 			}),
 		).rejects.toThrow("Duplicate extension OID");
+	});
+
+	it("splits mixed PEM bundles by label", async () => {
+		const certificate = await createSelfSignedCertificate({
+			subject: { commonName: "bundle.example" },
+		});
+		const csr = await createCertificateSigningRequest({
+			subject: { commonName: "bundle.example" },
+			publicKey: certificate.keyPair.publicKey,
+			signerPrivateKey: certificate.keyPair.privateKey,
+		});
+		const privateKeyPem = await certificate.keyPair.exportPkcs8Pem();
+		const bundle = `${certificate.certificate.pem}\n${csr.pem}\n${privateKeyPem}`;
+
+		expect(splitPemBlocks(bundle).map((block) => block.label)).toEqual([
+			"CERTIFICATE",
+			"CERTIFICATE REQUEST",
+			"PRIVATE KEY",
+		]);
 	});
 
 	it("parses PEM bundles and verifies a leaf to root chain", async () => {

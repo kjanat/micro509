@@ -52,7 +52,9 @@ export {
 } from "./keys.ts";
 export { type NameAttribute, type NameFieldKey, type NameInput, type NameObject } from "./name.ts";
 export {
+	type DecodedExtensionValue,
 	decodeExtension,
+	decodeExtensions,
 	type ExtensionDecoder,
 	findExtension,
 	parseCertificateChainPem,
@@ -66,6 +68,7 @@ export {
 	type ParsedName,
 	type ParsedNameAttribute,
 } from "./parse.ts";
+export { type PemBlock, pemDecode, pemEncode, splitPemBlocks } from "./pem.ts";
 export {
 	type CertificateSource,
 	type VerifiedCertificateChain,
