@@ -6,7 +6,7 @@ import {
 	type KeyUsage,
 	type SubjectAltName,
 } from "./extensions.ts";
-import { exportSpkiDer, generateKeyPair, getCrypto, type KeyPairMaterial } from "./keys.ts";
+import { exportSpkiDer, generateKeyPair, getCrypto, type KeyAlgorithmInput, type KeyPairMaterial } from "./keys.ts";
 import { encodeName, type NameInput } from "./name.ts";
 import { base64Encode, pemEncode } from "./pem.ts";
 import { encodeAlgorithmIdentifier, getSignatureAlgorithm, signBytes } from "./signing.ts";
@@ -30,7 +30,7 @@ export interface CreateCertificateInput {
 
 export interface CreateSelfSignedCertificateInput {
 	readonly subject: NameInput;
-	readonly algorithm?: import("./keys.js").KeyAlgorithmInput;
+	readonly algorithm?: KeyAlgorithmInput;
 	readonly keyPair?: KeyPairMaterial;
 	readonly validity?: ValidityInput;
 	readonly serialNumber?: Uint8Array;
