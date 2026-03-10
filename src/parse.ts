@@ -44,9 +44,16 @@ export interface DecodedExtensionValue<TValue> {
 	readonly value: TValue;
 }
 
+export interface ParseOptions {
+	readonly decoders?: readonly ExtensionDecoder<unknown>[];
+}
+
 export interface ParsedCertificate {
 	readonly version: number;
 	readonly serialNumberHex: string;
+	readonly tbsCertificateDer: Uint8Array;
+	readonly subjectPublicKeyInfoDer: Uint8Array;
+	readonly signatureValue: Uint8Array;
 	readonly issuer: ParsedName;
 	readonly subject: ParsedName;
 	readonly notBefore: Date;
@@ -61,12 +68,16 @@ export interface ParsedCertificate {
 	readonly subjectAltNames?: readonly SubjectAltName[];
 	readonly authorityInfoAccess?: readonly AuthorityInformationAccess[];
 	readonly crlDistributionPoints?: readonly string[];
+	readonly decodedExtensions?: readonly DecodedExtensionValue<unknown>[];
 	readonly subjectKeyIdentifier?: string;
 	readonly authorityKeyIdentifier?: string;
 }
 
 export interface ParsedCertificateSigningRequest {
 	readonly version: number;
+	readonly certificationRequestInfoDer: Uint8Array;
+	readonly subjectPublicKeyInfoDer: Uint8Array;
+	readonly signatureValue: Uint8Array;
 	readonly subject: ParsedName;
 	readonly signatureAlgorithmOid: string;
 	readonly publicKeyAlgorithmOid: string;
@@ -78,12 +89,17 @@ export interface ParsedCertificateSigningRequest {
 	readonly subjectAltNames?: readonly SubjectAltName[];
 	readonly authorityInfoAccess?: readonly AuthorityInformationAccess[];
 	readonly crlDistributionPoints?: readonly string[];
+	readonly decodedExtensions?: readonly DecodedExtensionValue<unknown>[];
 }
 
-export function parseCertificateDer(der: Uint8Array): ParsedCertificate {
+export function parseCertificateDer(
+	der: Uint8Array,
+	options?: ParseOptions,
+): ParsedCertificate {
 	const topLevel = childrenOf(der, readElement(der));
 	const tbsCertificate = requireElement(topLevel[0], "TBSCertificate");
 	const signatureAlgorithm = requireElement(topLevel[1], "signatureAlgorithm");
+	const signatureValue = requireElement(topLevel[2], "signatureValue");
 	const tbsChildren = childrenOf(der, tbsCertificate);
 
 	let index = 0;
@@ -104,10 +120,19 @@ export function parseCertificateDer(der: Uint8Array): ParsedCertificate {
 	const parsedExtensions = parseExtensionContainer(der, extensions);
 	const parsedValidity = parseValidity(der, validity);
 	const parsedSpki = parseSubjectPublicKeyInfo(der, subjectPublicKeyInfo);
+	const decodedExtensions = options?.decoders === undefined
+		? undefined
+		: decodeExtensions(parsedExtensions.all, options.decoders);
 
 	return {
 		version,
 		serialNumberHex: toHex(serialNumber.value),
+		tbsCertificateDer: der.slice(tbsCertificate.start - tbsCertificate.headerLength, tbsCertificate.end),
+		subjectPublicKeyInfoDer: der.slice(
+			subjectPublicKeyInfo.start - subjectPublicKeyInfo.headerLength,
+			subjectPublicKeyInfo.end,
+		),
+		signatureValue: extractBitStringValue(signatureValue),
 		issuer: parseName(der, issuer),
 		subject: parseName(der, subject),
 		notBefore: parsedValidity.notBefore,
@@ -126,6 +151,7 @@ export function parseCertificateDer(der: Uint8Array): ParsedCertificate {
 		...(parsedExtensions.crlDistributionPoints !== undefined
 			? { crlDistributionPoints: parsedExtensions.crlDistributionPoints }
 			: {}),
+		...(decodedExtensions !== undefined ? { decodedExtensions } : {}),
 		...(parsedExtensions.subjectKeyIdentifier !== undefined
 			? { subjectKeyIdentifier: parsedExtensions.subjectKeyIdentifier }
 			: {}),
@@ -135,20 +161,30 @@ export function parseCertificateDer(der: Uint8Array): ParsedCertificate {
 	};
 }
 
-export function parseCertificatePem(pem: string): ParsedCertificate {
-	return parseCertificateDer(pemDecode("CERTIFICATE", pem));
+export function parseCertificatePem(
+	pem: string,
+	options?: ParseOptions,
+): ParsedCertificate {
+	return parseCertificateDer(pemDecode("CERTIFICATE", pem), options);
 }
 
-export function parseCertificateChainPem(pemBundle: string): readonly ParsedCertificate[] {
+export function parseCertificateChainPem(
+	pemBundle: string,
+	options?: ParseOptions,
+): readonly ParsedCertificate[] {
 	return splitPemBlocks(pemBundle)
 		.filter((block) => block.label === "CERTIFICATE")
-		.map((block) => parseCertificateDer(block.bytes));
+		.map((block) => parseCertificateDer(block.bytes, options));
 }
 
-export function parseCertificateSigningRequestDer(der: Uint8Array): ParsedCertificateSigningRequest {
+export function parseCertificateSigningRequestDer(
+	der: Uint8Array,
+	options?: ParseOptions,
+): ParsedCertificateSigningRequest {
 	const topLevel = childrenOf(der, readElement(der));
 	const certificationRequestInfo = requireElement(topLevel[0], "CertificationRequestInfo");
 	const signatureAlgorithm = requireElement(topLevel[1], "signatureAlgorithm");
+	const signatureValue = requireElement(topLevel[2], "signatureValue");
 	const criChildren = childrenOf(der, certificationRequestInfo);
 	const version = decodeIntegerNumber(requireElement(criChildren[0], "version").value) + 1;
 	const subject = requireElement(criChildren[1], "subject");
@@ -156,9 +192,21 @@ export function parseCertificateSigningRequestDer(der: Uint8Array): ParsedCertif
 	const attributes = criChildren[3];
 	const parsedExtensions = parseRequestedExtensions(der, attributes);
 	const parsedSpki = parseSubjectPublicKeyInfo(der, subjectPublicKeyInfo);
+	const decodedExtensions = options?.decoders === undefined
+		? undefined
+		: decodeExtensions(parsedExtensions.all, options.decoders);
 
 	return {
 		version,
+		certificationRequestInfoDer: der.slice(
+			certificationRequestInfo.start - certificationRequestInfo.headerLength,
+			certificationRequestInfo.end,
+		),
+		subjectPublicKeyInfoDer: der.slice(
+			subjectPublicKeyInfo.start - subjectPublicKeyInfo.headerLength,
+			subjectPublicKeyInfo.end,
+		),
+		signatureValue: extractBitStringValue(signatureValue),
 		subject: parseName(der, subject),
 		signatureAlgorithmOid: parseAlgorithmIdentifier(der, signatureAlgorithm).oid,
 		publicKeyAlgorithmOid: parsedSpki.oid,
@@ -174,11 +222,15 @@ export function parseCertificateSigningRequestDer(der: Uint8Array): ParsedCertif
 		...(parsedExtensions.crlDistributionPoints !== undefined
 			? { crlDistributionPoints: parsedExtensions.crlDistributionPoints }
 			: {}),
+		...(decodedExtensions !== undefined ? { decodedExtensions } : {}),
 	};
 }
 
-export function parseCertificateSigningRequestPem(pem: string): ParsedCertificateSigningRequest {
-	return parseCertificateSigningRequestDer(pemDecode("CERTIFICATE REQUEST", pem));
+export function parseCertificateSigningRequestPem(
+	pem: string,
+	options?: ParseOptions,
+): ParsedCertificateSigningRequest {
+	return parseCertificateSigningRequestDer(pemDecode("CERTIFICATE REQUEST", pem), options);
 }
 
 export function findExtension(
@@ -581,6 +633,13 @@ function decodeIpAddress(bytes: Uint8Array): string {
 		return groups.join(":");
 	}
 	throw new Error("Unsupported IP address length");
+}
+
+function extractBitStringValue(element: DerElement): Uint8Array {
+	if (element.tag !== 0x03) {
+		throw new Error("Expected BIT STRING");
+	}
+	return element.value.slice(1);
 }
 
 function childrenOf(source: Uint8Array, parent: DerElement): DerElement[] {

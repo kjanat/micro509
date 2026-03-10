@@ -1,7 +1,9 @@
-import { Buffer } from "node:buffer";
-import { X509Certificate } from "node:crypto";
+import { readSequenceChildren } from "./der.ts";
 import { type ExtendedKeyUsage } from "./extensions.ts";
-import { parseCertificateChainPem, parseCertificateDer, type ParsedCertificate } from "./parse.ts";
+import { getCrypto, importSpkiDer, type PublicKeyImportInput } from "./keys.ts";
+import { OIDS } from "./oids.ts";
+import { parseCertificateDer, type ParsedCertificate } from "./parse.ts";
+import { splitPemBlocks } from "./pem.ts";
 
 export type CertificateSource = string | Uint8Array;
 
@@ -58,7 +60,6 @@ export type VerifyChainResult =
 interface LoadedCertificate {
 	readonly der: Uint8Array;
 	readonly parsed: ParsedCertificate;
-	readonly x509: X509Certificate;
 }
 
 interface BuildChainResult {
@@ -75,7 +76,15 @@ interface VerifyFailureDetailsInput {
 	readonly chainCommonNames?: readonly string[] | undefined;
 }
 
-export function verifyCertificateChain(input: VerifyCertificateChainInput): VerifyChainResult {
+interface VerifySignatureConfig {
+	readonly importAlgorithm: PublicKeyImportInput;
+	readonly verifyParams: Algorithm | EcdsaParams;
+	readonly ecdsaRawSignatureBytes?: number;
+}
+
+export async function verifyCertificateChain(
+	input: VerifyCertificateChainInput,
+): Promise<VerifyChainResult> {
 	const leaf = loadSingleCertificate(input.leaf);
 	const intermediates = loadCertificates(input.intermediates ?? []);
 	const roots = loadCertificates(input.roots);
@@ -139,7 +148,8 @@ export function verifyCertificateChain(input: VerifyCertificateChainInput): Veri
 		if (issuer === undefined) {
 			return failure("issuer_not_found", "issuer missing", index);
 		}
-		if (!current.x509.verify(issuer.x509.publicKey)) {
+		const signatureValid = await verifyCertificateSignature(current.parsed, issuer.parsed);
+		if (!signatureValid) {
 			return failure(
 				"signature_invalid",
 				"certificate signature does not verify",
@@ -405,22 +415,12 @@ function loadSingleCertificate(source: CertificateSource): LoadedCertificate {
 
 function expandSource(source: CertificateSource): readonly LoadedCertificate[] {
 	if (typeof source === "string") {
-		const pemCertificates = parseCertificateChainPem(source);
-		if (pemCertificates.length > 0) {
-			const blocks = splitPemCertificates(source);
-			return pemCertificates.map((parsed, index) => {
-				const pem = blocks[index];
-				if (pem === undefined) {
-					throw new Error("PEM parse mismatch");
-				}
-				return {
-					der: extractDerFromX509(new X509Certificate(pem)),
-					parsed,
-					x509: new X509Certificate(pem),
-				};
-			});
-		}
-		throw new Error("Certificate PEM required");
+		return splitPemBlocks(source)
+			.filter((block) => block.label === "CERTIFICATE")
+			.map((block) => ({
+				der: block.bytes,
+				parsed: parseCertificateDer(block.bytes),
+			}));
 	}
 	return [loadDerCertificate(source)];
 }
@@ -430,20 +430,137 @@ function loadDerCertificate(der: Uint8Array): LoadedCertificate {
 	return {
 		der: bytes,
 		parsed: parseCertificateDer(bytes),
-		x509: new X509Certificate(Buffer.from(bytes)),
 	};
 }
 
-function splitPemCertificates(pemBundle: string): readonly string[] {
-	const normalized = pemBundle.replace(/\r/g, "");
-	return Array.from(
-		normalized.matchAll(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g),
-		(match) => match[0],
-	);
+async function verifyCertificateSignature(
+	certificate: ParsedCertificate,
+	issuer: ParsedCertificate,
+): Promise<boolean> {
+	const config = getVerifySignatureConfig(certificate, issuer);
+	const issuerKey = await importSpkiDer(issuer.subjectPublicKeyInfoDer, config.importAlgorithm);
+	const subtle = getCrypto().subtle;
+	const signatureView = new Uint8Array(certificate.signatureValue);
+	const dataView = new Uint8Array(certificate.tbsCertificateDer);
+	if (await subtle.verify(config.verifyParams, issuerKey, signatureView, dataView)) {
+		return true;
+	}
+	if (config.ecdsaRawSignatureBytes !== undefined && certificate.signatureValue[0] === 0x30) {
+		const raw = new Uint8Array(derEcdsaSignatureToRaw(
+			certificate.signatureValue,
+			config.ecdsaRawSignatureBytes / 2,
+		));
+		return subtle.verify(config.verifyParams, issuerKey, raw, dataView);
+	}
+	return false;
 }
 
-function extractDerFromX509(certificate: X509Certificate): Uint8Array {
-	return new Uint8Array(certificate.raw);
+function getVerifySignatureConfig(
+	certificate: ParsedCertificate,
+	issuer: ParsedCertificate,
+): VerifySignatureConfig {
+	switch (certificate.signatureAlgorithmOid) {
+		case OIDS.sha256WithRSAEncryption:
+			return {
+				importAlgorithm: requireRsaIssuer(issuer, "SHA-256"),
+				verifyParams: { name: "RSASSA-PKCS1-v1_5" },
+			};
+		case OIDS.sha384WithRSAEncryption:
+			return {
+				importAlgorithm: requireRsaIssuer(issuer, "SHA-384"),
+				verifyParams: { name: "RSASSA-PKCS1-v1_5" },
+			};
+		case OIDS.sha512WithRSAEncryption:
+			return {
+				importAlgorithm: requireRsaIssuer(issuer, "SHA-512"),
+				verifyParams: { name: "RSASSA-PKCS1-v1_5" },
+			};
+		case OIDS.ecdsaWithSHA256:
+			return {
+				importAlgorithm: requireEcIssuer(issuer),
+				verifyParams: { name: "ECDSA", hash: "SHA-256" },
+				ecdsaRawSignatureBytes: curveBytes(issuer.publicKeyParametersOid),
+			};
+		case OIDS.ecdsaWithSHA384:
+			return {
+				importAlgorithm: requireEcIssuer(issuer),
+				verifyParams: { name: "ECDSA", hash: "SHA-384" },
+				ecdsaRawSignatureBytes: curveBytes(issuer.publicKeyParametersOid),
+			};
+		case OIDS.ed25519:
+			if (issuer.publicKeyAlgorithmOid !== OIDS.ed25519) {
+				throw new Error("Ed25519 signature requires Ed25519 issuer public key");
+			}
+			return {
+				importAlgorithm: { kind: "ed25519" },
+				verifyParams: { name: "Ed25519" },
+			};
+		default:
+			throw new Error(`Unsupported signature algorithm OID: ${certificate.signatureAlgorithmOid}`);
+	}
+}
+
+function requireRsaIssuer(
+	issuer: ParsedCertificate,
+	hash: "SHA-256" | "SHA-384" | "SHA-512",
+): PublicKeyImportInput {
+	if (issuer.publicKeyAlgorithmOid !== OIDS.rsaEncryption) {
+		throw new Error("RSA signature requires RSA issuer public key");
+	}
+	return { kind: "rsa", hash };
+}
+
+function requireEcIssuer(issuer: ParsedCertificate): PublicKeyImportInput {
+	if (issuer.publicKeyAlgorithmOid !== OIDS.ecPublicKey) {
+		throw new Error("ECDSA signature requires EC issuer public key");
+	}
+	switch (issuer.publicKeyParametersOid) {
+		case OIDS.prime256v1:
+			return { kind: "ecdsa", namedCurve: "P-256" };
+		case OIDS.secp384r1:
+			return { kind: "ecdsa", namedCurve: "P-384" };
+		default:
+			throw new Error(`Unsupported EC curve OID: ${issuer.publicKeyParametersOid ?? "missing"}`);
+	}
+}
+
+function curveBytes(parametersOid: string | undefined): number {
+	switch (parametersOid) {
+		case OIDS.prime256v1:
+			return 64;
+		case OIDS.secp384r1:
+			return 96;
+		default:
+			throw new Error(`Unsupported EC curve OID: ${parametersOid ?? "missing"}`);
+	}
+}
+
+function derEcdsaSignatureToRaw(signature: Uint8Array, partLength: number): Uint8Array {
+	const parts = readSequenceChildren(signature);
+	const r = parts[0];
+	const s = parts[1];
+	if (r === undefined || s === undefined) {
+		throw new Error("Malformed ECDSA DER signature");
+	}
+	return concatFixedWidth(trimLeadingZero(r.value), trimLeadingZero(s.value), partLength);
+}
+
+function trimLeadingZero(bytes: Uint8Array): Uint8Array {
+	let index = 0;
+	while (index < bytes.length - 1 && bytes[index] === 0) {
+		index += 1;
+	}
+	return bytes.slice(index);
+}
+
+function concatFixedWidth(left: Uint8Array, right: Uint8Array, partLength: number): Uint8Array {
+	if (left.length > partLength || right.length > partLength) {
+		throw new Error("ECDSA signature integer too large");
+	}
+	const out = new Uint8Array(partLength * 2);
+	out.set(left, partLength - left.length);
+	out.set(right, out.length - right.length);
+	return out;
 }
 
 function isSameCertificate(left: LoadedCertificate, right: LoadedCertificate): boolean {

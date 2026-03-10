@@ -8,6 +8,7 @@ Tiny X.509 builders for modern TypeScript.
 - parse certs + CSRs back to typed metadata
 - verify leaf/intermediate/root chains with typed results
 - custom extension build hooks + decode helpers
+- browser-native chain verification via WebCrypto
 - WebCrypto-first, typed, small surface
 
 ## Install
@@ -140,6 +141,17 @@ console.log(parsedCert.extendedKeyUsage);
 console.log(parsedCert.authorityInfoAccess);
 console.log(parsedCert.crlDistributionPoints);
 
+const parsedWithDecoders = parseCertificatePem(certificate.pem, {
+	decoders: [
+		{
+			oid: "1.2.3.4.200",
+			decode(extension) {
+				return extension.valueHex;
+			},
+		},
+	],
+});
+
 const parsedCsr = parseCertificateSigningRequestPem(csr.pem);
 console.log(parsedCsr.subjectAltNames);
 ```
@@ -193,12 +205,32 @@ const blocks = splitPemBlocks(bundle);
 console.log(blocks.map((block) => block.label));
 ```
 
+## Legacy private key PEM
+
+```ts
+import {
+	exportPkcs1Pem,
+	exportSec1Pem,
+	importPkcs1Pem,
+	importSec1Pem,
+} from "micro509";
+
+const rsaPem = await exportPkcs1Pem(rsaKey.privateKey);
+const rsaKeyAgain = await importPkcs1Pem(rsaPem, { kind: "rsa" });
+
+const ecPem = await exportSec1Pem(ecKey.privateKey);
+const ecKeyAgain = await importSec1Pem(ecPem, {
+	kind: "ecdsa",
+	namedCurve: "P-256",
+});
+```
+
 ## Verify chain
 
 ```ts
 import { verifyCertificateChain } from "micro509";
 
-const result = verifyCertificateChain({
+const result = await verifyCertificateChain({
 	leaf: leaf.pem,
 	intermediates: [intermediate.pem],
 	roots: [root.pem],
@@ -226,6 +258,7 @@ if (result.ok) {
 - custom extensions: arbitrary OID/valueDER with duplicate OID rejection
 - decode helpers: single-extension or registry-style decode over parsed extensions
 - pem helpers: split mixed cert/csr/key bundles by label
+- legacy key helpers: PKCS#1 RSA private key and SEC1 EC private key import/export
 - extended key usage: built-ins + custom OID escape hatch
-- chain verify: issuer match, signatures, time, CA/keyCertSign, pathLen, AKI/SKI, SAN/EKU checks
+- chain verify: async, WebCrypto-based, browser-safe, issuer match, signatures, time, CA/keyCertSign, pathLen, AKI/SKI, SAN/EKU checks
 - verify failures: structured `code`, `index`, `details`

@@ -8,14 +8,22 @@ import {
 	decodeExtension,
 	decodeExtensions,
 	exportBinaryBase64,
+	exportPkcs1Der,
+	exportPkcs1Pem,
 	exportPkcs8Der,
+	exportSec1Der,
+	exportSec1Pem,
 	exportSpkiDer,
 	findExtension,
 	generateKeyPair,
+	importPkcs1Der,
+	importPkcs1Pem,
 	importPkcs8Base64,
 	importPkcs8Pem,
 	importPrivateJwk,
 	importPublicJwk,
+	importSec1Der,
+	importSec1Pem,
 	importSpkiBase64,
 	importSpkiPem,
 	parseCertificateChainPem,
@@ -87,7 +95,7 @@ describe("micro509", () => {
 		expect(leafCertificate.issuer).toContain("CN=Micro509 Test CA");
 		expect(leafCertificate.checkHost("leaf.example")).toBe("leaf.example");
 		expect(
-			verifyCertificateChain({
+			await verifyCertificateChain({
 				leaf: leaf.pem,
 				roots: [ca.certificate.pem],
 				purpose: "serverAuth",
@@ -164,6 +172,32 @@ describe("micro509", () => {
 		).rejects.toThrow("Duplicate extension OID");
 	});
 
+	it("runs decoder registries directly during parse", async () => {
+		const certificate = await createSelfSignedCertificate({
+			subject: { commonName: "parse-registry.example" },
+			extensions: {
+				customExtensions: [
+					{ oid: "1.2.3.4.210", value: Uint8Array.of(0x04, 0x02, 0xaa, 0xbb) },
+				],
+			},
+		});
+
+		const parsed = parseCertificatePem(certificate.certificate.pem, {
+			decoders: [
+				{
+					oid: "1.2.3.4.210",
+					decode(extension) {
+						return extension.valueHex;
+					},
+				},
+			],
+		});
+
+		expect(parsed.decodedExtensions).toEqual([
+			{ oid: "1.2.3.4.210", critical: false, value: "0402aabb" },
+		]);
+	});
+
 	it("splits mixed PEM bundles by label", async () => {
 		const certificate = await createSelfSignedCertificate({
 			subject: { commonName: "bundle.example" },
@@ -181,6 +215,24 @@ describe("micro509", () => {
 			"CERTIFICATE REQUEST",
 			"PRIVATE KEY",
 		]);
+	});
+
+	it("roundtrips RSA PKCS#1 and EC SEC1 private keys", async () => {
+		const rsa = await generateKeyPair({ kind: "rsa", modulusLength: 2048 });
+		const pkcs1Pem = await exportPkcs1Pem(rsa.privateKey);
+		const pkcs1Der = await exportPkcs1Der(rsa.privateKey);
+		const rsaFromPem = await importPkcs1Pem(pkcs1Pem, { kind: "rsa" });
+		const rsaFromDer = await importPkcs1Der(pkcs1Der, { kind: "rsa" });
+		expect(await exportPkcs8Der(rsaFromPem)).toEqual(await exportPkcs8Der(rsa.privateKey));
+		expect(await exportPkcs8Der(rsaFromDer)).toEqual(await exportPkcs8Der(rsa.privateKey));
+
+		const ec = await generateKeyPair({ kind: "ecdsa", namedCurve: "P-256" });
+		const sec1Pem = await exportSec1Pem(ec.privateKey);
+		const sec1Der = await exportSec1Der(ec.privateKey);
+		const ecFromPem = await importSec1Pem(sec1Pem, { kind: "ecdsa", namedCurve: "P-256" });
+		const ecFromDer = await importSec1Der(sec1Der, { kind: "ecdsa", namedCurve: "P-256" });
+		expect(await exportPkcs8Der(ecFromPem)).toEqual(await exportPkcs8Der(ec.privateKey));
+		expect(await exportPkcs8Der(ecFromDer)).toEqual(await exportPkcs8Der(ec.privateKey));
 	});
 
 	it("parses PEM bundles and verifies a leaf to root chain", async () => {
@@ -222,7 +274,7 @@ describe("micro509", () => {
 		expect(parsedBundle).toHaveLength(3);
 		expect(parsedBundle[0]?.subject.values.commonName).toBe("service.example");
 
-		const result = verifyCertificateChain({
+		const result = await verifyCertificateChain({
 			leaf: leaf.pem,
 			intermediates: [intermediate.pem],
 			roots: [root.certificate.pem],
@@ -242,7 +294,7 @@ describe("micro509", () => {
 		const validChain = await issueChain();
 
 		expect(
-			verifyCertificateChain({
+			await verifyCertificateChain({
 				leaf: validChain.leaf.pem,
 				intermediates: [validChain.intermediate.pem],
 				roots: [],
@@ -255,7 +307,7 @@ describe("micro509", () => {
 		});
 
 		expect(
-			verifyCertificateChain({
+			await verifyCertificateChain({
 				leaf: validChain.leaf.pem,
 				intermediates: [validChain.intermediate.pem],
 				roots: [validChain.root.certificate.pem],
@@ -269,7 +321,7 @@ describe("micro509", () => {
 		});
 
 		expect(
-			verifyCertificateChain({
+			await verifyCertificateChain({
 				leaf: validChain.leaf.pem,
 				intermediates: [validChain.intermediate.pem],
 				roots: [validChain.root.certificate.pem],
@@ -285,7 +337,7 @@ describe("micro509", () => {
 			},
 		});
 		expect(
-			verifyCertificateChain({
+			await verifyCertificateChain({
 				leaf: expiredChain.leaf.pem,
 				intermediates: [expiredChain.intermediate.pem],
 				roots: [expiredChain.root.certificate.pem],
@@ -296,7 +348,7 @@ describe("micro509", () => {
 			intermediateExtensions: { basicConstraints: { ca: false }, keyUsage: ["digitalSignature"] },
 		});
 		expect(
-			verifyCertificateChain({
+			await verifyCertificateChain({
 				leaf: nonCaIssuerChain.leaf.pem,
 				intermediates: [nonCaIssuerChain.intermediate.pem],
 				roots: [nonCaIssuerChain.root.certificate.pem],
@@ -307,7 +359,7 @@ describe("micro509", () => {
 			intermediateExtensions: { basicConstraints: { ca: true, pathLength: 0 }, keyUsage: ["digitalSignature"] },
 		});
 		expect(
-			verifyCertificateChain({
+			await verifyCertificateChain({
 				leaf: noKeyCertSignChain.leaf.pem,
 				intermediates: [noKeyCertSignChain.intermediate.pem],
 				roots: [noKeyCertSignChain.root.certificate.pem],
@@ -318,7 +370,7 @@ describe("micro509", () => {
 			rootExtensions: { basicConstraints: { ca: true, pathLength: 0 }, keyUsage: ["keyCertSign", "cRLSign"] },
 		});
 		expect(
-			verifyCertificateChain({
+			await verifyCertificateChain({
 				leaf: pathLengthChain.leaf.pem,
 				intermediates: [pathLengthChain.intermediate.pem],
 				roots: [pathLengthChain.root.certificate.pem],
@@ -328,7 +380,7 @@ describe("micro509", () => {
 		const wrongAkiKeys = await generateKeyPair();
 		const akiMismatchChain = await issueChain({ leafIssuerPublicKey: wrongAkiKeys.publicKey });
 		expect(
-			verifyCertificateChain({
+			await verifyCertificateChain({
 				leaf: akiMismatchChain.leaf.pem,
 				intermediates: [akiMismatchChain.intermediate.pem],
 				roots: [akiMismatchChain.root.certificate.pem],
@@ -338,7 +390,7 @@ describe("micro509", () => {
 		const wrongSignerKeys = await generateKeyPair();
 		const badSignatureChain = await issueChain({ leafSignerPrivateKey: wrongSignerKeys.privateKey });
 		expect(
-			verifyCertificateChain({
+			await verifyCertificateChain({
 				leaf: badSignatureChain.leaf.pem,
 				intermediates: [badSignatureChain.intermediate.pem],
 				roots: [badSignatureChain.root.certificate.pem],
@@ -354,13 +406,13 @@ describe("micro509", () => {
 			},
 		});
 		expect(
-			verifyCertificateChain({
+			await verifyCertificateChain({
 				leaf: selfSigned.certificate.pem,
 				roots: [],
 			}),
 		).toMatchObject({ ok: false, code: "self_signed_leaf_not_allowed", index: 0 });
 		expect(
-			verifyCertificateChain({
+			await verifyCertificateChain({
 				leaf: selfSigned.certificate.pem,
 				roots: [],
 				allowSelfSignedLeaf: true,
