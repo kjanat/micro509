@@ -6,13 +6,13 @@ import {
 	objectIdentifier,
 	sequence,
 	setOf,
-} from "./der.js";
-import { buildRequestedExtensions, type CertificateExtensionsInput } from "./extensions.js";
-import { exportSpkiDer } from "./keys.js";
-import { encodeName, type NameInput } from "./name.js";
-import { OIDS } from "./oids.js";
-import { base64Encode, pemEncode } from "./pem.js";
-import { encodeAlgorithmIdentifier, getSignatureAlgorithm, signBytes } from "./signing.js";
+} from "./der.ts";
+import { buildRequestedExtensions, type CertificateExtensionsInput } from "./extensions.ts";
+import { exportSpkiDer } from "./keys.ts";
+import { encodeName, type NameInput } from "./name.ts";
+import { OIDS } from "./oids.ts";
+import { base64Encode, pemEncode } from "./pem.ts";
+import { encodeAlgorithmIdentifier, getSignatureAlgorithm, signBytes } from "./signing.ts";
 
 export interface CreateCsrInput {
 	readonly subject: NameInput;
@@ -50,7 +50,11 @@ export async function createCertificateSigningRequest(
 		encodeAlgorithmIdentifier(signatureAlgorithm),
 		bitString(normalizedSignature),
 	]);
-	return { der, pem: pemEncode("CERTIFICATE REQUEST", der), base64: base64Encode(der) };
+	return {
+		der,
+		pem: pemEncode("CERTIFICATE REQUEST", der),
+		base64: base64Encode(der),
+	};
 }
 
 function buildAttributes(

@@ -32,6 +32,7 @@
 	"devDependencies": {
 		"@types/node": "^25.4.0",
 		"@typescript/native-preview": "^7.0.0-dev.20260310.1",
+		"@vitest/coverage-v8": "^4.0.18",
 		"dprint": "^0.52.0",
 		"typescript": "^5.9.2",
 		"vitest": "^4.0.18"

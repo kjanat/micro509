@@ -1,5 +1,5 @@
-import { ia5String, objectIdentifier, printableString, sequence, setOf, utf8String } from "./der.js";
-import { OIDS } from "./oids.js";
+import { ia5String, objectIdentifier, printableString, sequence, setOf, utf8String } from "./der.ts";
+import { OIDS } from "./oids.ts";
 
 export type NameFieldKey =
 	| "commonName"

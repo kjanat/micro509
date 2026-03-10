@@ -1,14 +1,14 @@
-import { type DerElement, readElement } from "./der.js";
+import { type DerElement, readElement } from "./der.ts";
 import {
 	type BasicConstraints,
 	type ExtendedKeyUsage,
 	type KeyUsage,
 	parseExtendedKeyUsageOid,
 	type SubjectAltName,
-} from "./extensions.js";
-import { type NameFieldKey } from "./name.js";
-import { OIDS } from "./oids.js";
-import { pemDecode } from "./pem.js";
+} from "./extensions.ts";
+import { type NameFieldKey } from "./name.ts";
+import { OIDS } from "./oids.ts";
+import { pemDecode } from "./pem.ts";
 
 const textDecoder = new TextDecoder();
 

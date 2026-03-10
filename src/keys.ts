@@ -1,5 +1,5 @@
 import { webcrypto } from "node:crypto";
-import { base64Decode, base64Encode, pemDecode, pemEncode } from "./pem.js";
+import { base64Decode, base64Encode, pemDecode, pemEncode } from "./pem.ts";
 
 export type RsaHash = "SHA-256" | "SHA-384" | "SHA-512";
 

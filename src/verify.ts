@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 import { X509Certificate } from "node:crypto";
-import { parseCertificateChainPem, parseCertificateDer, parseCertificatePem, type ParsedCertificate } from "./parse.js";
+import { parseCertificateChainPem, parseCertificateDer, parseCertificatePem, type ParsedCertificate } from "./parse.ts";
 
 export type CertificateSource = string | Uint8Array;
 
@@ -20,7 +20,6 @@ export interface VerifyCertificateChainInput {
 export type VerifyErrorCode =
 	| "no_trusted_root"
 	| "issuer_not_found"
-	| "issuer_mismatch"
 	| "signature_invalid"
 	| "certificate_expired"
 	| "ca_required"
@@ -52,17 +51,31 @@ interface LoadedCertificate {
 	readonly x509: X509Certificate;
 }
 
+interface BuildChainResult {
+	readonly chain: readonly LoadedCertificate[];
+	readonly foundTrustedRoot: boolean;
+	readonly missingIssuerAt?: number;
+}
+
 export function verifyCertificateChain(input: VerifyCertificateChainInput): VerifyChainResult {
 	const leaf = loadSingleCertificate(input.leaf);
 	const intermediates = loadCertificates(input.intermediates ?? []);
 	const roots = loadCertificates(input.roots);
 	const at = input.at ?? new Date();
-	const chain = buildChain(leaf, intermediates, roots);
+	const buildResult = buildChain(leaf, intermediates, roots);
+	const chain = buildResult.chain;
 
 	if (chain.length === 1 && isSelfIssued(leaf.parsed)) {
 		if (!input.allowSelfSignedLeaf) {
 			return failure("self_signed_leaf_not_allowed", "self-signed leaf not allowed", 0);
 		}
+	}
+
+	if (!buildResult.foundTrustedRoot) {
+		if (buildResult.missingIssuerAt !== undefined) {
+			return failure("issuer_not_found", "issuer certificate not found", buildResult.missingIssuerAt);
+		}
+		return failure("no_trusted_root", "no trusted root found");
 	}
 
 	for (let index = 0; index < chain.length; index += 1) {
@@ -79,9 +92,6 @@ export function verifyCertificateChain(input: VerifyCertificateChainInput): Veri
 		const issuer = chain[index + 1];
 		if (issuer === undefined) {
 			return failure("issuer_not_found", "issuer missing", index);
-		}
-		if (current.parsed.issuer.derHex !== issuer.parsed.subject.derHex) {
-			return failure("issuer_mismatch", "issuer name does not match parent subject", index);
 		}
 		if (!current.x509.verify(issuer.x509.publicKey)) {
 			return failure("signature_invalid", "certificate signature does not verify", index);
@@ -180,7 +190,7 @@ function buildChain(
 	leaf: LoadedCertificate,
 	intermediates: readonly LoadedCertificate[],
 	roots: readonly LoadedCertificate[],
-): readonly LoadedCertificate[] {
+): BuildChainResult {
 	const chain: LoadedCertificate[] = [leaf];
 	const remainingIntermediates = [...intermediates];
 	while (true) {
@@ -193,20 +203,25 @@ function buildChain(
 			if (!isSameCertificate(current, trustedRoot)) {
 				chain.push(trustedRoot);
 			}
-			return chain;
+			return { chain, foundTrustedRoot: true };
+		}
+		if (isTrustedSelfSignedRoot(current, roots)) {
+			return { chain, foundTrustedRoot: true };
 		}
 		const issuerIndex = remainingIntermediates.findIndex((candidate) => isIssuerOf(candidate, current));
 		if (issuerIndex === -1) {
-			break;
+			return isSelfIssued(current.parsed)
+				? { chain, foundTrustedRoot: false }
+				: { chain, foundTrustedRoot: false, missingIssuerAt: chain.length - 1 };
 		}
 		const issuer = remainingIntermediates[issuerIndex];
 		if (issuer === undefined) {
-			break;
+			return { chain, foundTrustedRoot: false, missingIssuerAt: chain.length - 1 };
 		}
 		chain.push(issuer);
 		remainingIntermediates.splice(issuerIndex, 1);
 	}
-	return chain;
+	return { chain, foundTrustedRoot: false };
 }
 
 function findIssuer(
@@ -324,6 +339,13 @@ function isSameCertificate(left: LoadedCertificate, right: LoadedCertificate): b
 		}
 	}
 	return true;
+}
+
+function isTrustedSelfSignedRoot(
+	certificate: LoadedCertificate,
+	roots: readonly LoadedCertificate[],
+): boolean {
+	return isSelfIssued(certificate.parsed) && roots.some((candidate) => isSameCertificate(candidate, certificate));
 }
 
 function matchesDnsName(pattern: string, actual: string): boolean {

@@ -6,8 +6,8 @@ export {
 	type CreateSelfSignedCertificateInput,
 	type SelfSignedCertificateResult,
 	type ValidityInput,
-} from "./certificate.js";
-export { createCertificateSigningRequest, type CreateCsrInput, type CsrMaterial } from "./csr.js";
+} from "./certificate.ts";
+export { createCertificateSigningRequest, type CreateCsrInput, type CsrMaterial } from "./csr.ts";
 export {
 	type BasicConstraints,
 	type CertificateExtensionsInput,
@@ -16,7 +16,7 @@ export {
 	type KeyUsage,
 	type KnownExtendedKeyUsage,
 	type SubjectAltName,
-} from "./extensions.js";
+} from "./extensions.ts";
 export {
 	type EcKeyAlgorithmInput,
 	type Ed25519KeyAlgorithmInput,
@@ -44,8 +44,8 @@ export {
 	type PrivateKeyImportInput,
 	type PublicKeyImportInput,
 	type RsaKeyAlgorithmInput,
-} from "./keys.js";
-export { type NameAttribute, type NameFieldKey, type NameInput, type NameObject } from "./name.js";
+} from "./keys.ts";
+export { type NameAttribute, type NameFieldKey, type NameInput, type NameObject } from "./name.ts";
 export {
 	parseCertificateChainPem,
 	parseCertificateDer,
@@ -57,7 +57,7 @@ export {
 	type ParsedExtension,
 	type ParsedName,
 	type ParsedNameAttribute,
-} from "./parse.js";
+} from "./parse.ts";
 export {
 	type CertificateSource,
 	type VerifiedCertificateChain,
@@ -66,4 +66,4 @@ export {
 	type VerifyChainResult,
 	type VerifyErrorCode,
 	type VerifyPurpose,
-} from "./verify.js";
+} from "./verify.ts";

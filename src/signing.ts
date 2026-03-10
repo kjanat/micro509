@@ -1,6 +1,6 @@
-import { integer, nullValue, objectIdentifier, sequence } from "./der.js";
-import { getCrypto } from "./keys.js";
-import { OIDS } from "./oids.js";
+import { integer, nullValue, objectIdentifier, sequence } from "./der.ts";
+import { getCrypto } from "./keys.ts";
+import { OIDS } from "./oids.ts";
 
 export interface SignatureAlgorithmIdentifier {
 	readonly algorithmOid: string;

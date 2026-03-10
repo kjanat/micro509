@@ -8,8 +8,8 @@ import {
 	octetString,
 	readSequenceChildren,
 	sequence,
-} from "./der.js";
-import { OIDS } from "./oids.js";
+} from "./der.ts";
+import { OIDS } from "./oids.ts";
 
 export type KeyUsage =
 	| "digitalSignature"
@@ -84,30 +84,56 @@ export function buildCertificateExtensions(
 	const extensions: Uint8Array[] = [];
 	const basicConstraints = input?.basicConstraints ?? { ca: false };
 	extensions.push(
-		encodeExtension(OIDS.basicConstraints, encodeBasicConstraints(basicConstraints), true),
+		encodeExtension(
+			OIDS.basicConstraints,
+			encodeBasicConstraints(basicConstraints),
+			true,
+		),
 	);
 	extensions.push(
-		encodeExtension(OIDS.subjectKeyIdentifier, octetString(buildSubjectKeyIdentifier(subjectPublicKeyInfo))),
+		encodeExtension(
+			OIDS.subjectKeyIdentifier,
+			octetString(buildSubjectKeyIdentifier(subjectPublicKeyInfo)),
+		),
 	);
 	if (issuerPublicKeyInfo !== undefined) {
 		extensions.push(
 			encodeExtension(
 				OIDS.authorityKeyIdentifier,
-				sequence([implicitPrimitiveContext(0, buildSubjectKeyIdentifier(issuerPublicKeyInfo))]),
+				sequence([
+					implicitPrimitiveContext(
+						0,
+						buildSubjectKeyIdentifier(issuerPublicKeyInfo),
+					),
+				]),
 			),
 		);
 	}
 	if (input?.keyUsage !== undefined && input.keyUsage.length > 0) {
-		extensions.push(encodeExtension(OIDS.keyUsage, encodeKeyUsage(input.keyUsage), true));
-	}
-	if (input?.subjectAltNames !== undefined && input.subjectAltNames.length > 0) {
 		extensions.push(
-			encodeExtension(OIDS.subjectAltName, sequence(input.subjectAltNames.map(encodeSubjectAltName))),
+			encodeExtension(OIDS.keyUsage, encodeKeyUsage(input.keyUsage), true),
 		);
 	}
-	if (input?.extendedKeyUsage !== undefined && input.extendedKeyUsage.length > 0) {
+	if (
+		input?.subjectAltNames !== undefined
+		&& input.subjectAltNames.length > 0
+	) {
 		extensions.push(
-			encodeExtension(OIDS.extendedKeyUsage, encodeExtendedKeyUsage(input.extendedKeyUsage)),
+			encodeExtension(
+				OIDS.subjectAltName,
+				sequence(input.subjectAltNames.map(encodeSubjectAltName)),
+			),
+		);
+	}
+	if (
+		input?.extendedKeyUsage !== undefined
+		&& input.extendedKeyUsage.length > 0
+	) {
+		extensions.push(
+			encodeExtension(
+				OIDS.extendedKeyUsage,
+				encodeExtendedKeyUsage(input.extendedKeyUsage),
+			),
 		);
 	}
 	return extensions;
@@ -119,26 +145,48 @@ export function buildRequestedExtensions(
 	const extensions: Uint8Array[] = [];
 	if (input?.basicConstraints !== undefined) {
 		extensions.push(
-			encodeExtension(OIDS.basicConstraints, encodeBasicConstraints(input.basicConstraints), true),
+			encodeExtension(
+				OIDS.basicConstraints,
+				encodeBasicConstraints(input.basicConstraints),
+				true,
+			),
 		);
 	}
 	if (input?.keyUsage !== undefined && input.keyUsage.length > 0) {
-		extensions.push(encodeExtension(OIDS.keyUsage, encodeKeyUsage(input.keyUsage), true));
-	}
-	if (input?.subjectAltNames !== undefined && input.subjectAltNames.length > 0) {
 		extensions.push(
-			encodeExtension(OIDS.subjectAltName, sequence(input.subjectAltNames.map(encodeSubjectAltName))),
+			encodeExtension(OIDS.keyUsage, encodeKeyUsage(input.keyUsage), true),
 		);
 	}
-	if (input?.extendedKeyUsage !== undefined && input.extendedKeyUsage.length > 0) {
+	if (
+		input?.subjectAltNames !== undefined
+		&& input.subjectAltNames.length > 0
+	) {
 		extensions.push(
-			encodeExtension(OIDS.extendedKeyUsage, encodeExtendedKeyUsage(input.extendedKeyUsage)),
+			encodeExtension(
+				OIDS.subjectAltName,
+				sequence(input.subjectAltNames.map(encodeSubjectAltName)),
+			),
+		);
+	}
+	if (
+		input?.extendedKeyUsage !== undefined
+		&& input.extendedKeyUsage.length > 0
+	) {
+		extensions.push(
+			encodeExtension(
+				OIDS.extendedKeyUsage,
+				encodeExtendedKeyUsage(input.extendedKeyUsage),
+			),
 		);
 	}
 	return extensions;
 }
 
-export function encodeExtension(oid: string, extnValue: Uint8Array, critical = false): Uint8Array {
+export function encodeExtension(
+	oid: string,
+	extnValue: Uint8Array,
+	critical = false,
+): Uint8Array {
 	const fields = [objectIdentifier(oid)];
 	if (critical) {
 		fields.push(bool(true));
@@ -195,8 +243,12 @@ export function encodeSubjectAltName(value: SubjectAltName): Uint8Array {
 	}
 }
 
-export function encodeExtendedKeyUsage(usages: readonly ExtendedKeyUsage[]): Uint8Array {
-	return sequence(usages.map((usage) => objectIdentifier(getExtendedKeyUsageOid(usage))));
+export function encodeExtendedKeyUsage(
+	usages: readonly ExtendedKeyUsage[],
+): Uint8Array {
+	return sequence(
+		usages.map((usage) => objectIdentifier(getExtendedKeyUsageOid(usage))),
+	);
 }
 
 export function getExtendedKeyUsageOid(usage: ExtendedKeyUsage): string {
@@ -274,7 +326,9 @@ function encodeIpv6Address(input: string): Uint8Array {
 	return out;
 }
 
-function buildSubjectKeyIdentifier(subjectPublicKeyInfo: Uint8Array): Uint8Array {
+function buildSubjectKeyIdentifier(
+	subjectPublicKeyInfo: Uint8Array,
+): Uint8Array {
 	const topLevel = readSequenceChildren(subjectPublicKeyInfo);
 	const subjectPublicKey = topLevel[1];
 	if (subjectPublicKey === undefined || subjectPublicKey.tag !== 0x03) {

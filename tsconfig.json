@@ -17,7 +17,9 @@
 			"node",
 			"vitest/globals"
 		],
-		"skipLibCheck": true
+		"skipLibCheck": true,
+		"allowImportingTsExtensions": true,
+		"rewriteRelativeImportExtensions": true
 	},
 	"include": [
 		"src/**/*.ts",

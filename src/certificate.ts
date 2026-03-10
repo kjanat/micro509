@@ -1,15 +1,15 @@
-import { bitString, explicitContext, integer, integerFromNumber, sequence, time } from "./der.js";
+import { bitString, explicitContext, integer, integerFromNumber, sequence, time } from "./der.ts";
 import {
 	type BasicConstraints,
 	buildCertificateExtensions,
 	type CertificateExtensionsInput,
 	type KeyUsage,
 	type SubjectAltName,
-} from "./extensions.js";
-import { exportSpkiDer, generateKeyPair, getCrypto, type KeyPairMaterial } from "./keys.js";
-import { encodeName, type NameInput } from "./name.js";
-import { base64Encode, pemEncode } from "./pem.js";
-import { encodeAlgorithmIdentifier, getSignatureAlgorithm, signBytes } from "./signing.js";
+} from "./extensions.ts";
+import { exportSpkiDer, generateKeyPair, getCrypto, type KeyPairMaterial } from "./keys.ts";
+import { encodeName, type NameInput } from "./name.ts";
+import { base64Encode, pemEncode } from "./pem.ts";
+import { encodeAlgorithmIdentifier, getSignatureAlgorithm, signBytes } from "./signing.ts";
 
 export interface ValidityInput {
 	readonly notBefore?: Date;
@@ -59,7 +59,9 @@ export async function createSelfSignedCertificate(
 		signerPrivateKey: keyPair.privateKey,
 		issuerPublicKey: keyPair.publicKey,
 		...(input.validity !== undefined ? { validity: input.validity } : {}),
-		...(input.serialNumber !== undefined ? { serialNumber: input.serialNumber } : {}),
+		...(input.serialNumber !== undefined
+			? { serialNumber: input.serialNumber }
+			: {}),
 		...(input.extensions !== undefined ? { extensions: input.extensions } : {}),
 	} satisfies CreateCertificateInput;
 	const certificate = await createCertificate(certificateInput);
@@ -92,7 +94,11 @@ export async function createCertificate(
 		explicitContext(3, sequence(extensions)),
 	]);
 
-	const signatureValue = await signBytes(input.signerPrivateKey, signatureAlgorithm, tbsCertificate);
+	const signatureValue = await signBytes(
+		input.signerPrivateKey,
+		signatureAlgorithm,
+		tbsCertificate,
+	);
 	const certificateDer = sequence([
 		tbsCertificate,
 		encodeAlgorithmIdentifier(signatureAlgorithm),

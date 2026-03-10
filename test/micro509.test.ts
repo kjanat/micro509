@@ -1,6 +1,6 @@
 import { X509Certificate } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { readElement } from "../src/der.js";
+import { readElement } from "../src/der.ts";
 import {
 	createCertificate,
 	createCertificateSigningRequest,
@@ -19,8 +19,8 @@ import {
 	parseCertificatePem,
 	parseCertificateSigningRequestPem,
 	verifyCertificateChain,
-} from "../src/index.js";
-import { OIDS } from "../src/oids.js";
+} from "../src/index.ts";
+import { OIDS } from "../src/oids.ts";
 
 describe("micro509", () => {
 	it("creates a self-signed certificate with SANs and exportable keys", async () => {
@@ -75,10 +75,16 @@ describe("micro509", () => {
 		});
 
 		const leafCertificate = new X509Certificate(leaf.pem);
-		const caCertificate = new X509Certificate(ca.certificate.pem);
 		expect(leafCertificate.issuer).toContain("CN=Micro509 Test CA");
 		expect(leafCertificate.checkHost("leaf.example")).toBe("leaf.example");
-		expect(leafCertificate.verify(caCertificate.publicKey)).toBe(true);
+		expect(
+			verifyCertificateChain({
+				leaf: leaf.pem,
+				roots: [ca.certificate.pem],
+				purpose: "serverAuth",
+				dnsName: "leaf.example",
+			}),
+		).toMatchObject({ ok: true });
 		expect(hasExtensionOid(leaf.der, OIDS.extendedKeyUsage)).toBe(true);
 		const parsed = parseCertificatePem(leaf.pem);
 		expect(parsed.subject.values.commonName).toBe("leaf.example");
@@ -140,6 +146,126 @@ describe("micro509", () => {
 		}
 		expect(result.value.chain).toHaveLength(3);
 		expect(result.value.root.subject.values.commonName).toBe("Root CA");
+	});
+
+	it("returns structured verification errors", async () => {
+		const validChain = await issueChain();
+
+		expect(
+			verifyCertificateChain({
+				leaf: validChain.leaf.pem,
+				intermediates: [validChain.intermediate.pem],
+				roots: [],
+			}),
+		).toMatchObject({ ok: false, code: "issuer_not_found", index: 1 });
+
+		expect(
+			verifyCertificateChain({
+				leaf: validChain.leaf.pem,
+				intermediates: [validChain.intermediate.pem],
+				roots: [validChain.root.certificate.pem],
+				purpose: "clientAuth",
+			}),
+		).toMatchObject({ ok: false, code: "extended_key_usage_invalid", index: 0 });
+
+		expect(
+			verifyCertificateChain({
+				leaf: validChain.leaf.pem,
+				intermediates: [validChain.intermediate.pem],
+				roots: [validChain.root.certificate.pem],
+				purpose: "serverAuth",
+				dnsName: "wrong.example",
+			}),
+		).toMatchObject({ ok: false, code: "subject_alt_name_mismatch", index: 0 });
+
+		const expiredChain = await issueChain({
+			leafValidity: {
+				notBefore: new Date("2020-01-01T00:00:00Z"),
+				notAfter: new Date("2020-01-02T00:00:00Z"),
+			},
+		});
+		expect(
+			verifyCertificateChain({
+				leaf: expiredChain.leaf.pem,
+				intermediates: [expiredChain.intermediate.pem],
+				roots: [expiredChain.root.certificate.pem],
+			}),
+		).toMatchObject({ ok: false, code: "certificate_expired", index: 0 });
+
+		const nonCaIssuerChain = await issueChain({
+			intermediateExtensions: { basicConstraints: { ca: false }, keyUsage: ["digitalSignature"] },
+		});
+		expect(
+			verifyCertificateChain({
+				leaf: nonCaIssuerChain.leaf.pem,
+				intermediates: [nonCaIssuerChain.intermediate.pem],
+				roots: [nonCaIssuerChain.root.certificate.pem],
+			}),
+		).toMatchObject({ ok: false, code: "ca_required", index: 1 });
+
+		const noKeyCertSignChain = await issueChain({
+			intermediateExtensions: { basicConstraints: { ca: true, pathLength: 0 }, keyUsage: ["digitalSignature"] },
+		});
+		expect(
+			verifyCertificateChain({
+				leaf: noKeyCertSignChain.leaf.pem,
+				intermediates: [noKeyCertSignChain.intermediate.pem],
+				roots: [noKeyCertSignChain.root.certificate.pem],
+			}),
+		).toMatchObject({ ok: false, code: "key_cert_sign_required", index: 1 });
+
+		const pathLengthChain = await issueChain({
+			rootExtensions: { basicConstraints: { ca: true, pathLength: 0 }, keyUsage: ["keyCertSign", "cRLSign"] },
+		});
+		expect(
+			verifyCertificateChain({
+				leaf: pathLengthChain.leaf.pem,
+				intermediates: [pathLengthChain.intermediate.pem],
+				roots: [pathLengthChain.root.certificate.pem],
+			}),
+		).toMatchObject({ ok: false, code: "path_length_exceeded", index: 2 });
+
+		const wrongAkiKeys = await generateKeyPair();
+		const akiMismatchChain = await issueChain({ leafIssuerPublicKey: wrongAkiKeys.publicKey });
+		expect(
+			verifyCertificateChain({
+				leaf: akiMismatchChain.leaf.pem,
+				intermediates: [akiMismatchChain.intermediate.pem],
+				roots: [akiMismatchChain.root.certificate.pem],
+			}),
+		).toMatchObject({ ok: false, code: "authority_key_identifier_mismatch", index: 0 });
+
+		const wrongSignerKeys = await generateKeyPair();
+		const badSignatureChain = await issueChain({ leafSignerPrivateKey: wrongSignerKeys.privateKey });
+		expect(
+			verifyCertificateChain({
+				leaf: badSignatureChain.leaf.pem,
+				intermediates: [badSignatureChain.intermediate.pem],
+				roots: [badSignatureChain.root.certificate.pem],
+			}),
+		).toMatchObject({ ok: false, code: "signature_invalid", index: 0 });
+
+		const selfSigned = await createSelfSignedCertificate({
+			subject: { commonName: "solo.example" },
+			extensions: {
+				keyUsage: ["digitalSignature"],
+				extendedKeyUsage: ["serverAuth"],
+				subjectAltNames: [{ type: "dns", value: "solo.example" }],
+			},
+		});
+		expect(
+			verifyCertificateChain({
+				leaf: selfSigned.certificate.pem,
+				roots: [],
+			}),
+		).toMatchObject({ ok: false, code: "self_signed_leaf_not_allowed", index: 0 });
+		expect(
+			verifyCertificateChain({
+				leaf: selfSigned.certificate.pem,
+				roots: [],
+				allowSelfSignedLeaf: true,
+			}),
+		).toMatchObject({ ok: false, code: "no_trusted_root" });
 	});
 
 	it("roundtrips keys through PEM, base64, and JWK imports", async () => {
@@ -283,4 +409,59 @@ function hasExtensionOid(certificateDer: Uint8Array, oid: string): boolean {
 		}
 	}
 	return false;
+}
+
+interface IssueChainOptions {
+	readonly rootExtensions?: {
+		readonly basicConstraints: { readonly ca: boolean; readonly pathLength?: number };
+		readonly keyUsage: readonly ("keyCertSign" | "cRLSign" | "digitalSignature")[];
+	};
+	readonly intermediateExtensions?: {
+		readonly basicConstraints: { readonly ca: boolean; readonly pathLength?: number };
+		readonly keyUsage: readonly ("keyCertSign" | "cRLSign" | "digitalSignature")[];
+	};
+	readonly leafValidity?: {
+		readonly notBefore: Date;
+		readonly notAfter: Date;
+	};
+	readonly leafIssuerPublicKey?: CryptoKey;
+	readonly leafSignerPrivateKey?: CryptoKey;
+}
+
+async function issueChain(options: IssueChainOptions = {}) {
+	const root = await createSelfSignedCertificate({
+		subject: { commonName: "Verify Root CA" },
+		extensions: options.rootExtensions ?? {
+			basicConstraints: { ca: true, pathLength: 1 },
+			keyUsage: ["keyCertSign", "cRLSign"],
+		},
+	});
+	const intermediateKeys = await generateKeyPair();
+	const intermediate = await createCertificate({
+		issuer: { commonName: "Verify Root CA" },
+		subject: { commonName: "Verify Intermediate CA" },
+		publicKey: intermediateKeys.publicKey,
+		signerPrivateKey: root.keyPair.privateKey,
+		issuerPublicKey: root.keyPair.publicKey,
+		extensions: options.intermediateExtensions ?? {
+			basicConstraints: { ca: true, pathLength: 0 },
+			keyUsage: ["keyCertSign", "cRLSign"],
+		},
+	});
+	const leafKeys = await generateKeyPair();
+	const leafInput = {
+		issuer: { commonName: "Verify Intermediate CA" },
+		subject: { commonName: "verify.example" },
+		publicKey: leafKeys.publicKey,
+		signerPrivateKey: options.leafSignerPrivateKey ?? intermediateKeys.privateKey,
+		issuerPublicKey: options.leafIssuerPublicKey ?? intermediateKeys.publicKey,
+		...(options.leafValidity !== undefined ? { validity: options.leafValidity } : {}),
+		extensions: {
+			keyUsage: ["digitalSignature"],
+			extendedKeyUsage: ["serverAuth"],
+			subjectAltNames: [{ type: "dns", value: "verify.example" }],
+		},
+	} satisfies Parameters<typeof createCertificate>[0];
+	const leaf = await createCertificate(leafInput);
+	return { root, intermediate, intermediateKeys, leaf, leafKeys };
 }
