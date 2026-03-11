@@ -1,17 +1,17 @@
 # PROJECT KNOWLEDGE BASE
 
-**Generated:** 2026-03-11 **Commit:** a660a9b **Branch:** master
+**Generated:** 2026-03-11 **Commit:** c4e5315 **Branch:** master
 
 ## OVERVIEW
 
-`micro509` — zero-dependency TypeScript X.509/PKI library (certs, CSRs, CRLs, OCSP, PKCS#7/12, PFX). ESM-only, functional (no classes), async only where WebCrypto requires it. ~175 public exports through single barrel `src/index.ts`.
+`micro509` — zero-dependency TypeScript X.509/PKI library (certs, CSRs, CRLs, OCSP, PKCS#7/12, PFX). ESM-only, functional (no classes), async only where WebCrypto requires it. ~185 public exports through single barrel `src/index.ts`.
 
 ## STRUCTURE
 
 ```
 ts-x509/
 ├── src/            # 20 flat modules — all PKI domain code (no subdirs)
-├── test/           # Single monolithic test file (2014 lines)
+├── test/           # Single monolithic test file (2270 lines)
 ├── docs/           # FUTURE.md (roadmap), PKIX-SCOPE.md (RFC 5280 compliance)
 └── comparisons/    # Competitive analysis (@peculiar/x509)
 ```
