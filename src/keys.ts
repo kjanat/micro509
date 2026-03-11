@@ -1,6 +1,6 @@
-import { createHash, webcrypto } from "node:crypto";
 import { decodeObjectIdentifier, hexToBytes, toArrayBuffer, toHex } from "./asn1.ts";
 import { nullValue, objectIdentifier, octetString, readSequenceChildren, sequence } from "./der.ts";
+import { md5 } from "./hash.ts";
 import { OIDS } from "./oids.ts";
 import { decryptPbes2, encryptPbes2, type Pbes2EncryptionOptions } from "./pbes2.ts";
 import { base64Decode, base64Encode, pemDecode, pemEncode } from "./pem.ts";
@@ -67,11 +67,11 @@ export interface LegacyPemEncryptionOptions {
 }
 
 export function getCrypto(): Crypto {
-	const candidate = globalThis.crypto ?? webcrypto;
-	if (candidate?.subtle === undefined) {
+	const c = globalThis.crypto;
+	if (c?.subtle === undefined) {
 		throw new Error("WebCrypto subtle API is required");
 	}
-	return candidate;
+	return c;
 }
 
 export async function generateKeyPair(
@@ -601,11 +601,13 @@ function opensslBytesToKey(
 	let previous = new Uint8Array();
 	let total = 0;
 	while (total < length) {
-		const hash = createHash("md5");
-		hash.update(previous);
-		hash.update(passwordBytes);
-		hash.update(salt);
-		previous = new Uint8Array(hash.digest());
+		const input = new Uint8Array(
+			previous.length + passwordBytes.length + salt.length,
+		);
+		input.set(previous, 0);
+		input.set(passwordBytes, previous.length);
+		input.set(salt, previous.length + passwordBytes.length);
+		previous = md5(input);
 		chunks.push(previous);
 		total += previous.length;
 	}

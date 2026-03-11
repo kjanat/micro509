@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { hexToBytes } from "./asn1.ts";
 import {
 	bitString,
@@ -13,6 +12,7 @@ import {
 	sequence,
 	tlv,
 } from "./der.ts";
+import { sha1 } from "./hash.ts";
 import { OIDS } from "./oids.ts";
 
 export type KeyUsage =
@@ -613,7 +613,7 @@ function buildSubjectKeyIdentifier(
 		throw new Error("SPKI missing subject public key bit string");
 	}
 	const publicKeyBytes = subjectPublicKey.value.slice(1);
-	return new Uint8Array(createHash("sha1").update(publicKeyBytes).digest());
+	return sha1(publicKeyBytes);
 }
 
 function validateOid(oid: string): void {

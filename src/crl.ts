@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import {
 	childrenOf,
 	decodeIntegerNumber,
@@ -27,6 +26,7 @@ import {
 	tlv,
 } from "./der.ts";
 import { encodeCrlDistributionPoints } from "./extensions.ts";
+import { sha1 } from "./hash.ts";
 import { exportSpkiDer } from "./keys.ts";
 import { encodeName, type NameInput } from "./name.ts";
 import { OIDS } from "./oids.ts";
@@ -641,9 +641,7 @@ function buildSubjectKeyIdentifier(spki: Uint8Array): Uint8Array {
 	if (keyBitString === undefined || keyBitString.tag !== 0x03) {
 		throw new Error("SPKI missing subject public key bit string");
 	}
-	return new Uint8Array(
-		createHash("sha1").update(keyBitString.value.slice(1)).digest(),
-	);
+	return sha1(keyBitString.value.slice(1));
 }
 
 function parseIssuer(
