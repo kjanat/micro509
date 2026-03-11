@@ -32,6 +32,7 @@ export interface ParsedPkcs7SignerInfo {
 	readonly signatureAlgorithmOid: string;
 	readonly signatureHex: string;
 	readonly signature: Uint8Array;
+	readonly hasSignedAttrs: boolean;
 }
 
 export interface ParsedPkcs7SignedData {
@@ -73,6 +74,7 @@ export type VerifyPkcs7SignedDataResult =
 		readonly code:
 			| "signer_not_found"
 			| "signature_invalid"
+			| "signed_attrs_not_supported"
 			| "content_missing"
 			| ParsePkcs7ErrorCode;
 		readonly message: string;
@@ -260,6 +262,13 @@ export async function verifyPkcs7SignedData(
 				message: "Signer certificate not found in SignedData certificates",
 			};
 		}
+		if (signerInfo.hasSignedAttrs) {
+			return {
+				ok: false,
+				code: "signed_attrs_not_supported",
+				message: "SignedData with signed attributes is not supported",
+			};
+		}
 		const verified = await verifySignedData(
 			signerInfo.signatureAlgorithmOid,
 			signer.publicKeyAlgorithmOid,
@@ -353,7 +362,8 @@ function parseSignerInfos(
 		const sid = parts[1];
 		const digestAlgorithm = parts[2];
 		let index = 3;
-		if (parts[index]?.tag === 0xa0) {
+		const hasSignedAttrs = parts[index]?.tag === 0xa0;
+		if (hasSignedAttrs) {
 			index += 1;
 		}
 		const signatureAlgorithm = parts[index];
@@ -403,6 +413,7 @@ function parseSignerInfos(
 			signatureAlgorithmOid,
 			signatureHex: toHex(signature.value),
 			signature: new Uint8Array(signature.value),
+			hasSignedAttrs,
 		});
 	}
 	return signers;

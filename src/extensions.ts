@@ -10,6 +10,7 @@ import {
 	octetString,
 	readSequenceChildren,
 	sequence,
+	tlv,
 } from "./der.ts";
 import { OIDS } from "./oids.ts";
 
@@ -357,7 +358,7 @@ export function encodeSubjectAltName(value: SubjectAltName): Uint8Array {
 		case "ip":
 			return implicitPrimitiveContext(7, encodeIpAddress(value.value));
 		case "unknown":
-			return new Uint8Array(value.value);
+			return tlv(value.tag, value.value);
 		default: {
 			const _exhaustive: never = value;
 			throw new Error(`Unhandled SubjectAltName type: ${String(_exhaustive)}`);

@@ -9,6 +9,7 @@ export function decodeObjectIdentifier(bytes: Uint8Array): string {
 	}
 	const values = [Math.floor(first / 40), first % 40];
 	let current = 0;
+	let inContinuation = false;
 	for (let index = 1; index < bytes.length; index += 1) {
 		const next = bytes[index];
 		if (next === undefined) {
@@ -18,7 +19,13 @@ export function decodeObjectIdentifier(bytes: Uint8Array): string {
 		if ((next & 0x80) === 0) {
 			values.push(current);
 			current = 0;
+			inContinuation = false;
+		} else {
+			inContinuation = true;
 		}
+	}
+	if (inContinuation) {
+		throw new Error("Malformed OID: incomplete continuation");
 	}
 	return values.join(".");
 }
@@ -90,6 +97,11 @@ export function parseTime(element: DerElement): Date {
 }
 
 export function decodeIntegerNumber(bytes: Uint8Array): number {
+	if (bytes.length > 6) {
+		throw new Error(
+			`Integer too large for safe number (${bytes.length} bytes)`,
+		);
+	}
 	let value = 0;
 	for (const byte of bytes) {
 		value = value * 256 + byte;
