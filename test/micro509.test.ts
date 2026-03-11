@@ -5,6 +5,7 @@ import {
 	categorizePemBlocks,
 	createCertificate,
 	createCertificateSigningRequest,
+	createPkcs7CertBagPem,
 	createSelfSignedCertificate,
 	decodeExtension,
 	decodeExtensions,
@@ -34,6 +35,7 @@ import {
 	parseCertificateChainPem,
 	parseCertificatePem,
 	parseCertificateSigningRequestPem,
+	parsePkcs7CertBagPem,
 	pemDecode,
 	splitPemBlocks,
 	verifyCertificateChain,
@@ -203,6 +205,19 @@ describe("micro509", () => {
 		expect(parsed.decodedExtensions).toEqual([
 			{ oid: "1.2.3.4.210", critical: false, value: "0402aabb" },
 		]);
+		const typedParsed = parseCertificatePem(certificate.certificate.pem, {
+			decoderMap: {
+				customText: {
+					oid: "1.2.3.4.210",
+					decode: (extension: { readonly valueHex: string }) => extension.valueHex,
+				},
+			},
+		});
+		expect(typedParsed.decodedExtensionMap?.customText).toEqual({
+			oid: "1.2.3.4.210",
+			critical: false,
+			value: "0402aabb",
+		});
 	});
 
 	it("splits mixed PEM bundles by label", async () => {
@@ -247,6 +262,92 @@ describe("micro509", () => {
 		const ecFromDer = await importSec1Der(sec1Der, { kind: "ecdsa", namedCurve: "P-256" });
 		expect(await exportPkcs8Der(ecFromPem)).toEqual(await exportPkcs8Der(ec.privateKey));
 		expect(await exportPkcs8Der(ecFromDer)).toEqual(await exportPkcs8Der(ec.privateKey));
+	});
+
+	it("creates and parses PKCS#7 certificate bags", async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: "PKCS7 Root" },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ["keyCertSign", "cRLSign"],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: "PKCS7 Root" },
+			subject: { commonName: "pkcs7-leaf.example" },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+		});
+		const bag = createPkcs7CertBagPem([leaf.pem, root.certificate.pem]);
+		const parsed = parsePkcs7CertBagPem(bag.pem);
+		expect(parsed.map((certificate) => certificate.subject.values.commonName)).toEqual([
+			"pkcs7-leaf.example",
+			"PKCS7 Root",
+		]);
+	});
+
+	it("builds across multiple candidate intermediates", async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: "Path Root" },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 1 },
+				keyUsage: ["keyCertSign", "cRLSign"],
+			},
+		});
+		const badIntermediateKeys = await generateKeyPair();
+		const goodIntermediateKeys = await generateKeyPair();
+		const badIntermediate = await createCertificate({
+			issuer: { commonName: "Path Root" },
+			subject: { commonName: "Shared Intermediate" },
+			publicKey: badIntermediateKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ["digitalSignature"],
+			},
+		});
+		const goodIntermediate = await createCertificate({
+			issuer: { commonName: "Path Root" },
+			subject: { commonName: "Shared Intermediate" },
+			publicKey: goodIntermediateKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ["keyCertSign", "cRLSign"],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: "Shared Intermediate" },
+			subject: { commonName: "multi-path.example" },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: goodIntermediateKeys.privateKey,
+			issuerPublicKey: goodIntermediateKeys.publicKey,
+			extensions: {
+				keyUsage: ["digitalSignature"],
+				extendedKeyUsage: ["serverAuth"],
+				subjectAltNames: [{ type: "dns", value: "multi-path.example" }],
+			},
+		});
+		const result = await verifyCertificateChain({
+			leaf: leaf.pem,
+			intermediates: [badIntermediate.pem, goodIntermediate.pem],
+			roots: [root.certificate.pem],
+			purpose: "serverAuth",
+			dnsName: "multi-path.example",
+		});
+		expect(result).toMatchObject({ ok: true });
+		if (result.ok) {
+			expect(result.value.chain.map((certificate) => certificate.subject.values.commonName)).toEqual([
+				"multi-path.example",
+				"Shared Intermediate",
+				"Path Root",
+			]);
+		}
 	});
 
 	it("parses PEM bundles and verifies a leaf to root chain", async () => {

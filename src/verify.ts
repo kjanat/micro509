@@ -63,15 +63,17 @@ export type VerifyRequestResult =
 		readonly details?: VerifyFailureDetails;
 	};
 
+export interface VerifyChainFailure {
+	readonly ok: false;
+	readonly code: VerifyErrorCode;
+	readonly message: string;
+	readonly index?: number;
+	readonly details?: VerifyFailureDetails;
+}
+
 export type VerifyChainResult =
 	| { readonly ok: true; readonly value: VerifiedCertificateChain }
-	| {
-		readonly ok: false;
-		readonly code: VerifyErrorCode;
-		readonly message: string;
-		readonly index?: number;
-		readonly details?: VerifyFailureDetails;
-	};
+	| VerifyChainFailure;
 
 interface LoadedCertificate {
 	readonly der: Uint8Array;
@@ -82,6 +84,7 @@ interface BuildChainResult {
 	readonly chain: readonly LoadedCertificate[];
 	readonly foundTrustedRoot: boolean;
 	readonly missingIssuerAt?: number;
+	readonly failure?: VerifyChainFailure;
 }
 
 interface VerifyFailureDetailsInput {
@@ -105,7 +108,7 @@ export async function verifyCertificateChain(
 	const intermediates = loadCertificates(input.intermediates ?? []);
 	const roots = loadCertificates(input.roots);
 	const at = input.at ?? new Date();
-	const buildResult = buildChain(leaf, intermediates, roots);
+	const buildResult = await buildChain(leaf, intermediates, roots, at);
 	const chain = buildResult.chain;
 
 	if (chain.length === 1 && isSelfIssued(leaf.parsed)) {
@@ -122,6 +125,9 @@ export async function verifyCertificateChain(
 	}
 
 	if (!buildResult.foundTrustedRoot) {
+		if (buildResult.failure !== undefined) {
+			return buildResult.failure;
+		}
 		if (buildResult.missingIssuerAt !== undefined) {
 			return failure(
 				"issuer_not_found",
@@ -354,61 +360,256 @@ function validateLeaf(
 	return { ok: true };
 }
 
-function buildChain(
+async function buildChain(
 	leaf: LoadedCertificate,
 	intermediates: readonly LoadedCertificate[],
 	roots: readonly LoadedCertificate[],
-): BuildChainResult {
-	const chain: LoadedCertificate[] = [leaf];
-	const remainingIntermediates = [...intermediates];
-	while (true) {
-		const current = chain[chain.length - 1];
-		if (current === undefined) {
-			break;
+	at: Date,
+): Promise<BuildChainResult> {
+	const candidates = [...intermediates, ...roots];
+	const subjectIndex = new Map<string, LoadedCertificate[]>();
+	const order = new Map<string, number>();
+	const rootFingerprints = new Set(roots.map((candidate) => fingerprint(candidate)));
+	let sawUntrustedAnchor = false;
+	let deepestPath: readonly LoadedCertificate[] = [leaf];
+	let deepestMissingIssuerAt: number | undefined;
+	let preferredFailure: VerifyChainFailure | undefined;
+	const deadEnds = new Set<string>();
+
+	candidates.forEach((candidate, index) => {
+		const key = candidate.parsed.subject.derHex;
+		const existing = subjectIndex.get(key);
+		if (existing === undefined) {
+			subjectIndex.set(key, [candidate]);
+		} else {
+			existing.push(candidate);
 		}
-		const trustedRoot = findIssuer(current, roots);
-		if (trustedRoot !== undefined) {
-			if (!isSameCertificate(current, trustedRoot)) {
-				chain.push(trustedRoot);
-			}
-			return { chain, foundTrustedRoot: true };
-		}
-		if (isTrustedSelfSignedRoot(current, roots)) {
-			return { chain, foundTrustedRoot: true };
-		}
-		const issuerIndex = remainingIntermediates.findIndex((candidate) => isIssuerOf(candidate, current));
-		if (issuerIndex === -1) {
-			return isSelfIssued(current.parsed)
-				? { chain, foundTrustedRoot: false }
-				: { chain, foundTrustedRoot: false, missingIssuerAt: chain.length - 1 };
-		}
-		const issuer = remainingIntermediates[issuerIndex];
-		if (issuer === undefined) {
-			return { chain, foundTrustedRoot: false, missingIssuerAt: chain.length - 1 };
-		}
-		chain.push(issuer);
-		remainingIntermediates.splice(issuerIndex, 1);
+		order.set(fingerprint(candidate), index);
+	});
+
+	const maxDepth = candidates.length + 1;
+	const startFingerprint = fingerprint(leaf);
+	const success = await search(
+		leaf,
+		[leaf],
+		new Set([startFingerprint]),
+		0,
+	);
+	if (success !== undefined) {
+		return { chain: success, foundTrustedRoot: true };
 	}
-	return { chain, foundTrustedRoot: false };
+	if (preferredFailure !== undefined) {
+		return { chain: deepestPath, foundTrustedRoot: false, failure: preferredFailure };
+	}
+	if (sawUntrustedAnchor) {
+		return { chain: deepestPath, foundTrustedRoot: false };
+	}
+	return deepestMissingIssuerAt === undefined
+		? { chain: deepestPath, foundTrustedRoot: false }
+		: { chain: deepestPath, foundTrustedRoot: false, missingIssuerAt: deepestMissingIssuerAt };
+
+	async function search(
+		current: LoadedCertificate,
+		path: readonly LoadedCertificate[],
+		visited: ReadonlySet<string>,
+		caBelowCount: number,
+	): Promise<readonly LoadedCertificate[] | undefined> {
+		if (rootFingerprints.has(fingerprint(current))) {
+			return path;
+		}
+		if (path.length > maxDepth) {
+			return undefined;
+		}
+		const memoKey = `${fingerprint(current)}:${caBelowCount}`;
+		if (deadEnds.has(memoKey)) {
+			return undefined;
+		}
+		const issuers = rankIssuerCandidates(
+			current,
+			subjectIndex.get(current.parsed.issuer.derHex) ?? [],
+			order,
+			rootFingerprints,
+		);
+		if (issuers.length === 0) {
+			updateDeepest(path);
+			if (isSelfIssued(current.parsed)) {
+				sawUntrustedAnchor = true;
+			} else {
+				deepestMissingIssuerAt = path.length - 1;
+			}
+			deadEnds.add(memoKey);
+			return undefined;
+		}
+
+		for (const issuer of issuers) {
+			const issuerFingerprint = fingerprint(issuer);
+			if (visited.has(issuerFingerprint)) {
+				continue;
+			}
+			if (!isWithinValidity(issuer.parsed, at)) {
+				recordFailure(
+					failure(
+						"certificate_expired",
+						"certificate not valid at requested time",
+						path.length,
+						detail({
+							subjectCommonName: issuer.parsed.subject.values.commonName,
+							expected: at.toISOString(),
+							actual: `${issuer.parsed.notBefore.toISOString()}..${issuer.parsed.notAfter.toISOString()}`,
+						}),
+					),
+					path,
+				);
+				continue;
+			}
+			if (issuer.parsed.basicConstraints?.ca !== true) {
+				recordFailure(
+					failure(
+						"ca_required",
+						"issuer must be a CA certificate",
+						path.length,
+						detail({
+							subjectCommonName: issuer.parsed.subject.values.commonName,
+						}),
+					),
+					path,
+				);
+				continue;
+			}
+			if (issuer.parsed.keyUsage !== undefined && !issuer.parsed.keyUsage.includes("keyCertSign")) {
+				recordFailure(
+					failure(
+						"key_cert_sign_required",
+						"issuer missing keyCertSign",
+						path.length,
+						detail({
+							subjectCommonName: issuer.parsed.subject.values.commonName,
+						}),
+					),
+					path,
+				);
+				continue;
+			}
+			if (
+				current.parsed.authorityKeyIdentifier !== undefined
+				&& issuer.parsed.subjectKeyIdentifier !== undefined
+				&& current.parsed.authorityKeyIdentifier !== issuer.parsed.subjectKeyIdentifier
+			) {
+				recordFailure(
+					failure(
+						"authority_key_identifier_mismatch",
+						"authorityKeyIdentifier does not match issuer subjectKeyIdentifier",
+						path.length - 1,
+						detail({
+							subjectCommonName: current.parsed.subject.values.commonName,
+							issuerCommonName: issuer.parsed.subject.values.commonName,
+							expected: issuer.parsed.subjectKeyIdentifier,
+							actual: current.parsed.authorityKeyIdentifier,
+						}),
+					),
+					path,
+				);
+				continue;
+			}
+			const nextCaBelowCount = caBelowCount + (current.parsed.basicConstraints?.ca === true ? 1 : 0);
+			const pathLength = issuer.parsed.basicConstraints?.pathLength;
+			if (pathLength !== undefined && nextCaBelowCount > pathLength) {
+				recordFailure(
+					failure(
+						"path_length_exceeded",
+						"path length constraint exceeded",
+						path.length,
+						detail({
+							subjectCommonName: issuer.parsed.subject.values.commonName,
+							expected: String(pathLength),
+							actual: String(nextCaBelowCount),
+						}),
+					),
+					path,
+				);
+				continue;
+			}
+			if (!(await verifyCertificateSignature(current.parsed, issuer.parsed))) {
+				recordFailure(
+					failure(
+						"signature_invalid",
+						"certificate signature does not verify",
+						path.length - 1,
+						detail({
+							subjectCommonName: current.parsed.subject.values.commonName,
+							issuerCommonName: issuer.parsed.subject.values.commonName,
+						}),
+					),
+					path,
+				);
+				continue;
+			}
+			const nextVisited = new Set(visited);
+			nextVisited.add(issuerFingerprint);
+			const nextPath = [...path, issuer];
+			const result = await search(issuer, nextPath, nextVisited, nextCaBelowCount);
+			if (result !== undefined) {
+				return result;
+			}
+		}
+
+		deadEnds.add(memoKey);
+		updateDeepest(path);
+		return undefined;
+	}
+
+	function updateDeepest(path: readonly LoadedCertificate[]): void {
+		if (path.length > deepestPath.length) {
+			deepestPath = path;
+		}
+	}
+
+	function recordFailure(
+		candidateFailure: VerifyChainFailure,
+		path: readonly LoadedCertificate[],
+	): void {
+		if (preferredFailure === undefined || path.length >= deepestPath.length) {
+			preferredFailure = candidateFailure;
+		}
+	}
 }
 
-function findIssuer(
-	certificate: LoadedCertificate,
+function rankIssuerCandidates(
+	current: LoadedCertificate,
 	candidates: readonly LoadedCertificate[],
-): LoadedCertificate | undefined {
-	const aki = certificate.parsed.authorityKeyIdentifier;
-	if (aki !== undefined) {
-		for (const candidate of candidates) {
-			if (
-				isIssuerOf(candidate, certificate)
-				&& candidate.parsed.subjectKeyIdentifier !== undefined
-				&& candidate.parsed.subjectKeyIdentifier === aki
-			) {
-				return candidate;
+	order: ReadonlyMap<string, number>,
+	rootFingerprints: ReadonlySet<string>,
+): readonly LoadedCertificate[] {
+	const aki = current.parsed.authorityKeyIdentifier;
+	return [...candidates]
+		.filter((candidate) => isIssuerOf(candidate, current))
+		.sort((left, right) => {
+			const akiScore = compareBooleans(matchesAki(left, aki), matchesAki(right, aki));
+			if (akiScore !== 0) {
+				return akiScore;
 			}
-		}
+			const rootScore = compareBooleans(
+				rootFingerprints.has(fingerprint(left)),
+				rootFingerprints.has(fingerprint(right)),
+			);
+			if (rootScore !== 0) {
+				return rootScore;
+			}
+			return (order.get(fingerprint(left)) ?? Number.MAX_SAFE_INTEGER)
+				- (order.get(fingerprint(right)) ?? Number.MAX_SAFE_INTEGER);
+		});
+}
+
+function matchesAki(candidate: LoadedCertificate, aki: string | undefined): boolean {
+	return aki !== undefined && candidate.parsed.subjectKeyIdentifier !== undefined
+		&& candidate.parsed.subjectKeyIdentifier === aki;
+}
+
+function compareBooleans(left: boolean, right: boolean): number {
+	if (left === right) {
+		return 0;
 	}
-	return candidates.find((candidate) => isIssuerOf(candidate, certificate));
+	return left ? -1 : 1;
 }
 
 function isIssuerOf(issuer: LoadedCertificate, child: LoadedCertificate): boolean {
@@ -642,6 +843,10 @@ function isSameCertificate(left: LoadedCertificate, right: LoadedCertificate): b
 	return true;
 }
 
+function fingerprint(certificate: LoadedCertificate): string {
+	return Array.from(certificate.der, (value) => value.toString(16).padStart(2, "0")).join("");
+}
+
 function isTrustedSelfSignedRoot(
 	certificate: LoadedCertificate,
 	roots: readonly LoadedCertificate[],
@@ -699,7 +904,7 @@ function failure(
 	message: string,
 	index?: number,
 	details?: VerifyFailureDetails,
-): VerifyChainResult {
+): VerifyChainFailure {
 	return {
 		ok: false,
 		code,

@@ -10,6 +10,7 @@ Tiny X.509 builders for modern TypeScript.
 - custom extension build hooks + decode helpers
 - browser-native chain verification via WebCrypto
 - browser-native CSR signature verification too
+- PKCS#7 certificate bag helpers
 - WebCrypto-first, typed, small surface
 
 ## Install
@@ -153,6 +154,18 @@ const parsedWithDecoders = parseCertificatePem(certificate.pem, {
 	],
 });
 
+const parsedWithMap = parseCertificatePem(certificate.pem, {
+	decoderMap: {
+		customText: {
+			oid: "1.2.3.4.200",
+			decode(extension) {
+				return extension.valueHex;
+			},
+		},
+	},
+});
+console.log(parsedWithMap.decodedExtensionMap?.customText?.value);
+
 const parsedCsr = parseCertificateSigningRequestPem(csr.pem);
 console.log(parsedCsr.subjectAltNames);
 ```
@@ -207,6 +220,16 @@ console.log(blocks.map((block) => block.label));
 
 const categorized = categorizePemBlocks(bundle);
 console.log(categorized.certificates.length);
+```
+
+## PKCS#7 cert bag
+
+```ts
+import { createPkcs7CertBagPem, parsePkcs7CertBagPem } from "micro509";
+
+const bag = createPkcs7CertBagPem([leaf.pem, root.pem]);
+const certs = parsePkcs7CertBagPem(bag.pem);
+console.log(certs.map((cert) => cert.subject.values.commonName));
 ```
 
 ## Legacy private key PEM
@@ -272,9 +295,11 @@ if (result.ok) {
 - parsed extras: AIA, CRL distribution points, raw extension list
 - custom extensions: arbitrary OID/valueDER with duplicate OID rejection
 - decode helpers: single-extension or registry-style decode over parsed extensions
+- decoder maps: strongly keyed `decodedExtensionMap` on parse results
 - pem helpers: split mixed cert/csr/key bundles by label
+- pkcs7 helpers: create/parse degenerate signedData cert bags
 - legacy key helpers: PKCS#1 RSA private key and SEC1 EC private key import/export
 - extended key usage: built-ins + custom OID escape hatch
-- chain verify: async, WebCrypto-based, browser-safe, issuer match, signatures, time, CA/keyCertSign, pathLen, AKI/SKI, SAN/EKU checks
+- chain verify: async, WebCrypto-based, browser-safe, multi-candidate path building, issuer match, signatures, time, CA/keyCertSign, pathLen, AKI/SKI, SAN/EKU checks
 - csr verify: async, WebCrypto-based, browser-safe signature validation
 - verify failures: structured `code`, `index`, `details`

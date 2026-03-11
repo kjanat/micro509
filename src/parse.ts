@@ -38,17 +38,27 @@ export interface ExtensionDecoder<TValue> {
 	decode(extension: ParsedExtension): TValue;
 }
 
+export type ExtensionDecoderMap = Record<string, ExtensionDecoder<unknown>>;
+
+export type DecodedExtensionMap<TMap extends ExtensionDecoderMap> =
+	& {
+		[TKey in keyof TMap]?: TMap[TKey] extends ExtensionDecoder<infer TValue> ? DecodedExtensionValue<TValue>
+			: never;
+	}
+	& Partial<Record<keyof TMap, DecodedExtensionValue<unknown>>>;
+
 export interface DecodedExtensionValue<TValue> {
 	readonly oid: string;
 	readonly critical: boolean;
 	readonly value: TValue;
 }
 
-export interface ParseOptions {
+export interface ParseOptions<TMap extends ExtensionDecoderMap = Record<never, never>> {
 	readonly decoders?: readonly ExtensionDecoder<unknown>[];
+	readonly decoderMap?: TMap;
 }
 
-export interface ParsedCertificate {
+export interface ParsedCertificate<TMap extends ExtensionDecoderMap = Record<never, never>> {
 	readonly version: number;
 	readonly serialNumberHex: string;
 	readonly tbsCertificateDer: Uint8Array;
@@ -69,11 +79,12 @@ export interface ParsedCertificate {
 	readonly authorityInfoAccess?: readonly AuthorityInformationAccess[];
 	readonly crlDistributionPoints?: readonly string[];
 	readonly decodedExtensions?: readonly DecodedExtensionValue<unknown>[];
+	readonly decodedExtensionMap?: DecodedExtensionMap<TMap>;
 	readonly subjectKeyIdentifier?: string;
 	readonly authorityKeyIdentifier?: string;
 }
 
-export interface ParsedCertificateSigningRequest {
+export interface ParsedCertificateSigningRequest<TMap extends ExtensionDecoderMap = Record<never, never>> {
 	readonly version: number;
 	readonly certificationRequestInfoDer: Uint8Array;
 	readonly subjectPublicKeyInfoDer: Uint8Array;
@@ -90,12 +101,13 @@ export interface ParsedCertificateSigningRequest {
 	readonly authorityInfoAccess?: readonly AuthorityInformationAccess[];
 	readonly crlDistributionPoints?: readonly string[];
 	readonly decodedExtensions?: readonly DecodedExtensionValue<unknown>[];
+	readonly decodedExtensionMap?: DecodedExtensionMap<TMap>;
 }
 
-export function parseCertificateDer(
+export function parseCertificateDer<TMap extends ExtensionDecoderMap = Record<never, never>>(
 	der: Uint8Array,
-	options?: ParseOptions,
-): ParsedCertificate {
+	options?: ParseOptions<TMap>,
+): ParsedCertificate<TMap> {
 	const topLevel = childrenOf(der, readElement(der));
 	const tbsCertificate = requireElement(topLevel[0], "TBSCertificate");
 	const signatureAlgorithm = requireElement(topLevel[1], "signatureAlgorithm");
@@ -123,6 +135,9 @@ export function parseCertificateDer(
 	const decodedExtensions = options?.decoders === undefined
 		? undefined
 		: decodeExtensions(parsedExtensions.all, options.decoders);
+	const decodedExtensionMap = options?.decoderMap === undefined
+		? undefined
+		: decodeExtensionMap(parsedExtensions.all, options.decoderMap);
 
 	return {
 		version,
@@ -152,6 +167,7 @@ export function parseCertificateDer(
 			? { crlDistributionPoints: parsedExtensions.crlDistributionPoints }
 			: {}),
 		...(decodedExtensions !== undefined ? { decodedExtensions } : {}),
+		...(decodedExtensionMap !== undefined ? { decodedExtensionMap } : {}),
 		...(parsedExtensions.subjectKeyIdentifier !== undefined
 			? { subjectKeyIdentifier: parsedExtensions.subjectKeyIdentifier }
 			: {}),
@@ -161,26 +177,26 @@ export function parseCertificateDer(
 	};
 }
 
-export function parseCertificatePem(
+export function parseCertificatePem<TMap extends ExtensionDecoderMap = Record<never, never>>(
 	pem: string,
-	options?: ParseOptions,
-): ParsedCertificate {
+	options?: ParseOptions<TMap>,
+): ParsedCertificate<TMap> {
 	return parseCertificateDer(pemDecode("CERTIFICATE", pem), options);
 }
 
-export function parseCertificateChainPem(
+export function parseCertificateChainPem<TMap extends ExtensionDecoderMap = Record<never, never>>(
 	pemBundle: string,
-	options?: ParseOptions,
-): readonly ParsedCertificate[] {
+	options?: ParseOptions<TMap>,
+): readonly ParsedCertificate<TMap>[] {
 	return splitPemBlocks(pemBundle)
 		.filter((block) => block.label === "CERTIFICATE")
 		.map((block) => parseCertificateDer(block.bytes, options));
 }
 
-export function parseCertificateSigningRequestDer(
+export function parseCertificateSigningRequestDer<TMap extends ExtensionDecoderMap = Record<never, never>>(
 	der: Uint8Array,
-	options?: ParseOptions,
-): ParsedCertificateSigningRequest {
+	options?: ParseOptions<TMap>,
+): ParsedCertificateSigningRequest<TMap> {
 	const topLevel = childrenOf(der, readElement(der));
 	const certificationRequestInfo = requireElement(topLevel[0], "CertificationRequestInfo");
 	const signatureAlgorithm = requireElement(topLevel[1], "signatureAlgorithm");
@@ -195,6 +211,9 @@ export function parseCertificateSigningRequestDer(
 	const decodedExtensions = options?.decoders === undefined
 		? undefined
 		: decodeExtensions(parsedExtensions.all, options.decoders);
+	const decodedExtensionMap = options?.decoderMap === undefined
+		? undefined
+		: decodeExtensionMap(parsedExtensions.all, options.decoderMap);
 
 	return {
 		version,
@@ -223,13 +242,14 @@ export function parseCertificateSigningRequestDer(
 			? { crlDistributionPoints: parsedExtensions.crlDistributionPoints }
 			: {}),
 		...(decodedExtensions !== undefined ? { decodedExtensions } : {}),
+		...(decodedExtensionMap !== undefined ? { decodedExtensionMap } : {}),
 	};
 }
 
-export function parseCertificateSigningRequestPem(
+export function parseCertificateSigningRequestPem<TMap extends ExtensionDecoderMap = Record<never, never>>(
 	pem: string,
-	options?: ParseOptions,
-): ParsedCertificateSigningRequest {
+	options?: ParseOptions<TMap>,
+): ParsedCertificateSigningRequest<TMap> {
 	return parseCertificateSigningRequestDer(pemDecode("CERTIFICATE REQUEST", pem), options);
 }
 
@@ -266,6 +286,32 @@ export function decodeExtensions(
 			critical: extension.critical,
 			value: decoder.decode(extension),
 		});
+	}
+	return decoded;
+}
+
+export function decodeExtensionMap<TMap extends ExtensionDecoderMap>(
+	extensions: readonly ParsedExtension[],
+	decoderMap: TMap,
+): DecodedExtensionMap<TMap> {
+	let decoded: DecodedExtensionMap<TMap> = {};
+	for (const key in decoderMap) {
+		const decoder = decoderMap[key];
+		if (decoder === undefined) {
+			continue;
+		}
+		const extension = findExtension(extensions, decoder.oid);
+		if (extension === undefined) {
+			continue;
+		}
+		decoded = {
+			...decoded,
+			[key]: {
+				oid: extension.oid,
+				critical: extension.critical,
+				value: decoder.decode(extension),
+			},
+		};
 	}
 	return decoded;
 }

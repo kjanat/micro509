@@ -60,10 +60,13 @@ export {
 } from "./keys.ts";
 export { type NameAttribute, type NameFieldKey, type NameInput, type NameObject } from "./name.ts";
 export {
+	type DecodedExtensionMap,
 	type DecodedExtensionValue,
 	decodeExtension,
+	decodeExtensionMap,
 	decodeExtensions,
 	type ExtensionDecoder,
+	type ExtensionDecoderMap,
 	findExtension,
 	parseCertificateChainPem,
 	parseCertificateDer,
@@ -85,6 +88,14 @@ export {
 	pemEncode,
 	splitPemBlocks,
 } from "./pem.ts";
+export {
+	createPkcs7CertBagDer,
+	createPkcs7CertBagPem,
+	parsePkcs7CertBagDer,
+	parsePkcs7CertBagPem,
+	type Pkcs7CertBag,
+	type Pkcs7CertificateSource,
+} from "./pkcs7.ts";
 export {
 	type CertificateSource,
 	type CsrSource,

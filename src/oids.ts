@@ -12,6 +12,8 @@ export const OIDS = {
 	givenName: "2.5.4.42",
 	emailAddress: "1.2.840.113549.1.9.1",
 	extensionRequest: "1.2.840.113549.1.9.14",
+	pkcs7Data: "1.2.840.113549.1.7.1",
+	pkcs7SignedData: "1.2.840.113549.1.7.2",
 	rsaEncryption: "1.2.840.113549.1.1.1",
 	sha256WithRSAEncryption: "1.2.840.113549.1.1.11",
 	sha384WithRSAEncryption: "1.2.840.113549.1.1.12",
