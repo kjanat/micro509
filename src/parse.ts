@@ -38,6 +38,14 @@ export interface ExtensionDecoder<TValue> {
 	decode(extension: ParsedExtension): TValue;
 }
 
+export function defineExtensionDecoder<TValue>(decoder: ExtensionDecoder<TValue>): ExtensionDecoder<TValue> {
+	return decoder;
+}
+
+export function defineExtensionDecoderMap<TMap extends ExtensionDecoderMap>(decoderMap: TMap): TMap {
+	return decoderMap;
+}
+
 export type ExtensionDecoderMap = Record<string, ExtensionDecoder<unknown>>;
 
 export type DecodedExtensionMap<TMap extends ExtensionDecoderMap> =

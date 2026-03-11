@@ -1,4 +1,4 @@
-import { readSequenceChildren } from "./der.ts";
+import { integer, readSequenceChildren, sequence } from "./der.ts";
 import { type ExtendedKeyUsage } from "./extensions.ts";
 import { getCrypto, importSpkiDer, type PublicKeyImportInput } from "./keys.ts";
 import { OIDS } from "./oids.ts";
@@ -704,17 +704,19 @@ async function verifySignedData(
 	);
 	const issuerKey = await importSpkiDer(spkiDer, config.importAlgorithm);
 	const subtle = getCrypto().subtle;
-	const signatureView = new Uint8Array(signatureValue);
-	const dataView = new Uint8Array(data);
+	const signatureView = toArrayBuffer(signatureValue);
+	const dataView = toArrayBuffer(data);
 	if (await subtle.verify(config.verifyParams, issuerKey, signatureView, dataView)) {
 		return true;
 	}
-	if (config.ecdsaRawSignatureBytes !== undefined && signatureValue[0] === 0x30) {
-		const raw = new Uint8Array(derEcdsaSignatureToRaw(
+	if (config.ecdsaRawSignatureBytes !== undefined) {
+		const alternate = alternateEcdsaSignatureEncoding(
 			signatureValue,
 			config.ecdsaRawSignatureBytes / 2,
-		));
-		return subtle.verify(config.verifyParams, issuerKey, raw, dataView);
+		);
+		if (alternate !== undefined) {
+			return subtle.verify(config.verifyParams, issuerKey, toArrayBuffer(alternate), dataView);
+		}
 	}
 	return false;
 }
@@ -813,6 +815,30 @@ function derEcdsaSignatureToRaw(signature: Uint8Array, partLength: number): Uint
 	return concatFixedWidth(trimLeadingZero(r.value), trimLeadingZero(s.value), partLength);
 }
 
+function rawEcdsaSignatureToDer(signature: Uint8Array, partLength: number): Uint8Array {
+	if (signature.length !== partLength * 2) {
+		throw new Error("Unexpected ECDSA raw signature length");
+	}
+	return sequence([
+		integer(signature.slice(0, partLength)),
+		integer(signature.slice(partLength)),
+	]);
+}
+
+function alternateEcdsaSignatureEncoding(
+	signature: Uint8Array,
+	partLength: number,
+): Uint8Array | undefined {
+	try {
+		if (signature[0] === 0x30) {
+			return new Uint8Array(derEcdsaSignatureToRaw(signature, partLength));
+		}
+		return new Uint8Array(rawEcdsaSignatureToDer(signature, partLength));
+	} catch {
+		return undefined;
+	}
+}
+
 function trimLeadingZero(bytes: Uint8Array): Uint8Array {
 	let index = 0;
 	while (index < bytes.length - 1 && bytes[index] === 0) {
@@ -828,6 +854,12 @@ function concatFixedWidth(left: Uint8Array, right: Uint8Array, partLength: numbe
 	const out = new Uint8Array(partLength * 2);
 	out.set(left, partLength - left.length);
 	out.set(right, out.length - right.length);
+	return out;
+}
+
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+	const out = new ArrayBuffer(bytes.length);
+	new Uint8Array(out).set(bytes);
 	return out;
 }
 

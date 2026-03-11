@@ -7,6 +7,19 @@ export {
 	type SelfSignedCertificateResult,
 	type ValidityInput,
 } from "./certificate.ts";
+export {
+	type CertificateRevocationListMaterial,
+	createCertificateRevocationList,
+	type CreateCertificateRevocationListInput,
+	isCertificateRevoked,
+	parseCertificateRevocationListDer,
+	parseCertificateRevocationListPem,
+	type ParsedCertificateRevocationList,
+	type ParsedRevokedCertificate,
+	type RevokedCertificateInput,
+	verifyCertificateRevocationList,
+	type VerifyCertificateRevocationListResult,
+} from "./crl.ts";
 export { createCertificateSigningRequest, type CreateCsrInput, type CsrMaterial } from "./csr.ts";
 export {
 	type AuthorityInfoAccessMethod,
@@ -65,6 +78,8 @@ export {
 	decodeExtension,
 	decodeExtensionMap,
 	decodeExtensions,
+	defineExtensionDecoder,
+	defineExtensionDecoderMap,
 	type ExtensionDecoder,
 	type ExtensionDecoderMap,
 	findExtension,

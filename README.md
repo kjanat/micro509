@@ -11,6 +11,7 @@ Tiny X.509 builders for modern TypeScript.
 - browser-native chain verification via WebCrypto
 - browser-native CSR signature verification too
 - PKCS#7 certificate bag helpers
+- CRL parse/create/verify helpers
 - WebCrypto-first, typed, small surface
 
 ## Install
@@ -155,14 +156,14 @@ const parsedWithDecoders = parseCertificatePem(certificate.pem, {
 });
 
 const parsedWithMap = parseCertificatePem(certificate.pem, {
-	decoderMap: {
+	decoderMap: defineExtensionDecoderMap({
 		customText: {
 			oid: "1.2.3.4.200",
 			decode(extension) {
 				return extension.valueHex;
 			},
 		},
-	},
+	}),
 });
 console.log(parsedWithMap.decodedExtensionMap?.customText?.value);
 
@@ -232,6 +233,30 @@ const certs = parsePkcs7CertBagPem(bag.pem);
 console.log(certs.map((cert) => cert.subject.values.commonName));
 ```
 
+## CRL
+
+```ts
+import {
+	createCertificateRevocationList,
+	isCertificateRevoked,
+	parseCertificateRevocationListPem,
+	verifyCertificateRevocationList,
+} from "micro509";
+
+const crl = await createCertificateRevocationList({
+	issuer: { commonName: "Example CA" },
+	signerPrivateKey: caKey.privateKey,
+	issuerPublicKey: caKey.publicKey,
+	crlNumber: 1,
+	revokedCertificates: [{ serialNumber: serialBytes }],
+});
+
+const parsedCrl = parseCertificateRevocationListPem(crl.pem);
+console.log(parsedCrl.revokedCertificates.length);
+console.log(isCertificateRevoked(serialBytes, parsedCrl));
+console.log(await verifyCertificateRevocationList(crl.pem, caCert.pem));
+```
+
 ## Legacy private key PEM
 
 ```ts
@@ -294,10 +319,11 @@ if (result.ok) {
 - extensions: basic constraints, key usage, extended key usage, SAN, SKI, AKI
 - parsed extras: AIA, CRL distribution points, raw extension list
 - custom extensions: arbitrary OID/valueDER with duplicate OID rejection
-- decode helpers: single-extension or registry-style decode over parsed extensions
+- decode helpers: single-extension, registry-style, or typed decoder-map decode over parsed extensions
 - decoder maps: strongly keyed `decodedExtensionMap` on parse results
 - pem helpers: split mixed cert/csr/key bundles by label
 - pkcs7 helpers: create/parse degenerate signedData cert bags
+- crl helpers: create/parse/verify CRLs and check revocation by serial
 - legacy key helpers: PKCS#1 RSA private key and SEC1 EC private key import/export
 - extended key usage: built-ins + custom OID escape hatch
 - chain verify: async, WebCrypto-based, browser-safe, multi-candidate path building, issuer match, signatures, time, CA/keyCertSign, pathLen, AKI/SKI, SAN/EKU checks

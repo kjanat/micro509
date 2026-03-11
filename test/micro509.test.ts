@@ -4,11 +4,13 @@ import { readElement } from "../src/der.ts";
 import {
 	categorizePemBlocks,
 	createCertificate,
+	createCertificateRevocationList,
 	createCertificateSigningRequest,
 	createPkcs7CertBagPem,
 	createSelfSignedCertificate,
 	decodeExtension,
 	decodeExtensions,
+	defineExtensionDecoderMap,
 	exportBinaryBase64,
 	exportPkcs1Der,
 	exportPkcs1Pem,
@@ -32,13 +34,16 @@ import {
 	importSec1Pem,
 	importSpkiBase64,
 	importSpkiPem,
+	isCertificateRevoked,
 	parseCertificateChainPem,
 	parseCertificatePem,
+	parseCertificateRevocationListPem,
 	parseCertificateSigningRequestPem,
 	parsePkcs7CertBagPem,
 	pemDecode,
 	splitPemBlocks,
 	verifyCertificateChain,
+	verifyCertificateRevocationList,
 	verifyCertificateSigningRequest,
 } from "../src/index.ts";
 import { OIDS } from "../src/oids.ts";
@@ -206,12 +211,12 @@ describe("micro509", () => {
 			{ oid: "1.2.3.4.210", critical: false, value: "0402aabb" },
 		]);
 		const typedParsed = parseCertificatePem(certificate.certificate.pem, {
-			decoderMap: {
+			decoderMap: defineExtensionDecoderMap({
 				customText: {
 					oid: "1.2.3.4.210",
 					decode: (extension: { readonly valueHex: string }) => extension.valueHex,
 				},
-			},
+			}),
 		});
 		expect(typedParsed.decodedExtensionMap?.customText).toEqual({
 			oid: "1.2.3.4.210",
@@ -286,6 +291,49 @@ describe("micro509", () => {
 			"pkcs7-leaf.example",
 			"PKCS7 Root",
 		]);
+	});
+
+	it("creates, parses, and verifies CRLs", async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: "CRL Issuer" },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ["keyCertSign", "cRLSign"],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: "CRL Issuer" },
+			subject: { commonName: "revoked.example" },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const parsedLeaf = parseCertificatePem(leaf.pem);
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: "CRL Issuer" },
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+			crlNumber: 7,
+			revokedCertificates: [{ serialNumber: hexToBytes(parsedLeaf.serialNumberHex) }],
+		});
+		const parsedCrl = parseCertificateRevocationListPem(crl.pem);
+		expect(parsedCrl.issuer.commonName).toBe("CRL Issuer");
+		expect(parsedCrl.crlNumber).toBe(7);
+		expect(parsedCrl.revokedCertificates).toHaveLength(1);
+		expect(isCertificateRevoked(parsedLeaf.serialNumberHex, parsedCrl)).toBe(true);
+		expect(await verifyCertificateRevocationList(crl.pem, issuer.certificate.pem)).toMatchObject({ ok: true });
+
+		const wrongSigner = await generateKeyPair();
+		const badCrl = await createCertificateRevocationList({
+			issuer: { commonName: "CRL Issuer" },
+			signerPrivateKey: wrongSigner.privateKey,
+			revokedCertificates: [{ serialNumber: hexToBytes(parsedLeaf.serialNumberHex) }],
+		});
+		expect(await verifyCertificateRevocationList(badCrl.der, issuer.certificate.der)).toMatchObject({
+			ok: false,
+			code: "signature_invalid",
+		});
 	});
 
 	it("builds across multiple candidate intermediates", async () => {
@@ -1199,6 +1247,15 @@ function decodeObjectIdentifier(bytes: Uint8Array): string {
 		}
 	}
 	return values.join(".");
+}
+
+function hexToBytes(value: string): Uint8Array {
+	const normalized = value.length % 2 === 0 ? value : `0${value}`;
+	const bytes: number[] = [];
+	for (let index = 0; index < normalized.length; index += 2) {
+		bytes.push(Number.parseInt(normalized.slice(index, index + 2), 16));
+	}
+	return Uint8Array.from(bytes);
 }
 
 function hasExtensionOid(certificateDer: Uint8Array, oid: string): boolean {
