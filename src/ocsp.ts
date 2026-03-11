@@ -134,6 +134,7 @@ export interface ValidateOcspResponseInput {
 	readonly request?: OcspRequestSource;
 	readonly responderCertificate?: OcspCertificateSource;
 	readonly at?: Date;
+	readonly clockSkewMs?: number;
 }
 
 export type ValidateOcspResponseResult =
@@ -466,6 +467,7 @@ export async function validateOcspResponse(
 		}
 	}
 	const at = input.at ?? new Date();
+	const skew = input.clockSkewMs ?? 0;
 	for (const response of parsedResponse.responses ?? []) {
 		const expected = await buildParsedOcspCertId(
 			response.certId.hashAlgorithmOid,
@@ -483,9 +485,9 @@ export async function validateOcspResponse(
 			};
 		}
 		if (
-			response.thisUpdate.getTime() > at.getTime()
+			response.thisUpdate.getTime() - skew > at.getTime()
 			|| (response.nextUpdate !== undefined
-				&& response.nextUpdate.getTime() < at.getTime())
+				&& response.nextUpdate.getTime() + skew < at.getTime())
 		) {
 			return {
 				ok: false,

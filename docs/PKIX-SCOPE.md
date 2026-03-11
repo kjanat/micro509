@@ -30,13 +30,13 @@
 - [x] Enforce `basicConstraints` for CA certificates.
 - [x] Enforce `pathLenConstraint` where applicable.
 - [x] Enforce `keyUsage`, especially `keyCertSign` for CAs used to sign subordinate certs.
-- [ ] Process self-issued vs non-self-issued certs correctly for path length and name constraints.
+- [x] Process self-issued vs non-self-issued certs correctly for path length and name constraints.
 - [ ] Reject the path if any required path-processing step fails. (IETF Datatracker[^rfc5280])
 
 ## 4. Extension handling
 
 - [x] Parse and preserve all extensions, including unknown ones.
-- [ ] Reject certificates containing an **unsupported critical extension** or a critical extension whose contents cannot be processed.
+- [x] Reject certificates containing an **unsupported critical extension** or a critical extension whose contents cannot be processed.
 - [x] Process recognized non-critical extensions when relevant to path processing.
 - [x] Expose raw extension data so callers can layer application-specific policy on top. (IETF Datatracker[^rfc5280])
 
@@ -58,8 +58,8 @@
 
 ## 7. Trust-anchor model
 
-- [ ] Accept trust anchors as structured input, not only as “root cert PEM”.
-- [ ] Allow trust anchor info to come from a self-signed certificate as a convenience, but treat the trust anchor as out-of-band trust input.
+- [x] Accept trust anchors as structured input, not only as “root cert PEM”.
+- [x] Allow trust anchor info to come from a self-signed certificate as a convenience, but treat the trust anchor as out-of-band trust input.
 - [x] Do not assume every self-signed cert is a trust anchor. (IETF Datatracker[^rfc5280])
 
 ## 8. Application/service identity checks
@@ -71,9 +71,9 @@
 
 ## 9. EKU / purpose checks
 
-- [ ] Keep EKU checks separate from raw path validity.
+- [x] Keep EKU checks separate from raw path validity.
 - [x] Allow callers to request purposes such as `serverAuth`, `clientAuth`, etc.
-- [ ] Distinguish “certificate is path-valid” from “certificate is acceptable for this application”.
+- [x] Distinguish “certificate is path-valid” from “certificate is acceptable for this application”.
 
 ## 10. OCSP support checklist
 
@@ -83,7 +83,7 @@
 - [x] Check that the response actually refers to the requested certificate.
 - [x] Validate the OCSP response signature.
 - [x] Validate responder authorization.
-- [ ] Enforce response freshness using `thisUpdate` / `nextUpdate` and configurable clock skew.
+- [x] Enforce response freshness using `thisUpdate` / `nextUpdate` and configurable clock skew.
 - [x] Return `good`, `revoked`, and `unknown` distinctly.
 - [x] Support optional nonce handling if you want replay binding between request and response. RFC 9654 defines the updated nonce extension details. (IETF Datatracker[^rfc6960])
 
@@ -99,8 +99,8 @@
 
 - [x] Treat CRL validation as a separate revocation subsystem.
 - [x] Parse CRLs and CRL extensions.
-- [ ] Verify CRL signatures and issuer linkage.
-- [ ] Enforce CRL time/freshness semantics.
+- [x] Verify CRL signatures and issuer linkage.
+- [x] Enforce CRL time/freshness semantics.
 - [ ] Support distribution points if you want network-assisted revocation.
 - [ ] Add delta CRL handling only if you actually want to live in that swamp. RFC 5280 defines CRL validation separately from path validation. (IETF Datatracker[^rfc5280])
 

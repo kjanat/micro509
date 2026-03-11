@@ -1,4 +1,5 @@
 import type { ExtendedKeyUsage } from "./extensions.ts";
+import { OIDS } from "./oids.ts";
 import {
 	parseCertificateDer,
 	parseCertificateSigningRequestDer,
@@ -14,10 +15,36 @@ export type CsrSource = string | Uint8Array;
 
 export type VerifyPurpose = "serverAuth" | "clientAuth" | "ca";
 
+export type EkuCheckPurpose =
+	| "serverAuth"
+	| "clientAuth"
+	| "codeSigning"
+	| "emailProtection"
+	| "timeStamping"
+	| "ocspSigning";
+
+export type EkuCheckResult =
+	| { readonly ok: true }
+	| {
+		readonly ok: false;
+		readonly code: "leaf_eku_missing" | "intermediate_eku_constraint";
+		readonly message: string;
+		readonly index: number;
+	};
+
+export interface TrustAnchor {
+	readonly subjectDerHex: string;
+	readonly subjectPublicKeyInfoDer: Uint8Array;
+	readonly publicKeyAlgorithmOid: string;
+	readonly publicKeyParametersOid?: string;
+	readonly subjectKeyIdentifier?: string;
+}
+
 export interface VerifyCertificateChainInput {
 	readonly leaf: CertificateSource;
 	readonly intermediates?: readonly CertificateSource[];
 	readonly roots: readonly CertificateSource[];
+	readonly trustAnchors?: readonly TrustAnchor[];
 	readonly at?: Date;
 	readonly purpose?: VerifyPurpose;
 	readonly dnsName?: string;
@@ -36,7 +63,8 @@ export type VerifyErrorCode =
 	| "authority_key_identifier_mismatch"
 	| "extended_key_usage_invalid"
 	| "subject_alt_name_mismatch"
-	| "self_signed_leaf_not_allowed";
+	| "self_signed_leaf_not_allowed"
+	| "unrecognized_critical_extension";
 
 export interface VerifiedCertificateChain {
 	readonly leaf: ParsedCertificate;
@@ -73,6 +101,22 @@ export type VerifyChainResult =
 	| { readonly ok: true; readonly value: VerifiedCertificateChain }
 	| VerifyChainFailure;
 
+/**
+ * OIDs of extensions this verifier processes during path validation.
+ * Per RFC 5280 §6.1, certificates with unrecognized critical extensions
+ * that are not in this set must be rejected.
+ */
+const PROCESSED_EXTENSION_OIDS: ReadonlySet<string> = new Set([
+	OIDS.basicConstraints,
+	OIDS.keyUsage,
+	OIDS.extendedKeyUsage,
+	OIDS.subjectAltName,
+	OIDS.authorityKeyIdentifier,
+	OIDS.subjectKeyIdentifier,
+	OIDS.authorityInfoAccess,
+	OIDS.cRLDistributionPoints,
+]);
+
 interface LoadedCertificate {
 	readonly der: Uint8Array;
 	readonly parsed: ParsedCertificate;
@@ -99,8 +143,9 @@ export async function verifyCertificateChain(
 	const leaf = loadSingleCertificate(input.leaf);
 	const intermediates = loadCertificates(input.intermediates ?? []);
 	const roots = loadCertificates(input.roots);
+	const anchors = input.trustAnchors ?? [];
 	const at = input.at ?? new Date();
-	const buildResult = await buildChain(leaf, intermediates, roots, at);
+	const buildResult = await buildChain(leaf, intermediates, roots, anchors, at);
 	const chain = buildResult.chain;
 
 	if (chain.length === 1 && isSelfIssued(leaf.parsed)) {
@@ -154,6 +199,20 @@ export async function verifyCertificateChain(
 					subjectCommonName: current.parsed.subject.values.commonName,
 					expected: at.toISOString(),
 					actual: `${current.parsed.notBefore.toISOString()}..${current.parsed.notAfter.toISOString()}`,
+				}),
+			);
+		}
+		const unprocessedCritical = findUnprocessedCriticalExtension(
+			current.parsed,
+		);
+		if (unprocessedCritical !== undefined) {
+			return failure(
+				"unrecognized_critical_extension",
+				`certificate contains unrecognized critical extension ${unprocessedCritical}`,
+				index,
+				detail({
+					subjectCommonName: current.parsed.subject.values.commonName,
+					actual: unprocessedCritical,
 				}),
 			);
 		}
@@ -288,6 +347,71 @@ export async function verifyCertificateSigningRequest(
 	return { ok: true, value: parsed };
 }
 
+/**
+ * Standalone EKU check against a verified certificate chain.
+ * Validates that the leaf has the requested purpose and that
+ * intermediate CA EKU constraints (if present) permit it.
+ */
+export function checkExtendedKeyUsage(
+	chain: readonly ParsedCertificate[],
+	purpose: EkuCheckPurpose,
+): EkuCheckResult {
+	const leaf = chain[0];
+	if (leaf === undefined) {
+		return {
+			ok: false,
+			code: "leaf_eku_missing",
+			message: "chain is empty",
+			index: 0,
+		};
+	}
+	if (
+		leaf.extendedKeyUsage !== undefined
+		&& !leaf.extendedKeyUsage.includes(purpose)
+	) {
+		return {
+			ok: false,
+			code: "leaf_eku_missing",
+			message: `leaf certificate does not include EKU ${purpose}`,
+			index: 0,
+		};
+	}
+	for (let index = 1; index < chain.length; index += 1) {
+		const intermediate = chain[index];
+		if (intermediate === undefined) {
+			continue;
+		}
+		if (
+			intermediate.extendedKeyUsage !== undefined
+			&& !intermediate.extendedKeyUsage.includes(purpose)
+		) {
+			return {
+				ok: false,
+				code: "intermediate_eku_constraint",
+				message: `intermediate CA at index ${String(index)} constrains EKU and does not include ${purpose}`,
+				index,
+			};
+		}
+	}
+	return { ok: true };
+}
+
+export function trustAnchorFromCertificate(
+	certificate: ParsedCertificate,
+): TrustAnchor {
+	return {
+		subjectDerHex: certificate.subject.derHex,
+		subjectPublicKeyInfoDer: certificate.subjectPublicKeyInfoDer,
+		publicKeyAlgorithmOid: certificate.publicKeyAlgorithmOid,
+		...(certificate.publicKeyParametersOid === undefined
+			? {}
+			: { publicKeyParametersOid: certificate.publicKeyParametersOid }),
+		...(certificate.subjectKeyIdentifier === undefined
+			? {}
+			: { subjectKeyIdentifier: certificate.subjectKeyIdentifier }),
+	};
+}
+
 function validateLeaf(
 	leaf: LoadedCertificate | undefined,
 	input: VerifyCertificateChainInput,
@@ -367,6 +491,7 @@ async function buildChain(
 	leaf: LoadedCertificate,
 	intermediates: readonly LoadedCertificate[],
 	roots: readonly LoadedCertificate[],
+	trustAnchors: readonly TrustAnchor[],
 	at: Date,
 ): Promise<BuildChainResult> {
 	const candidates = [...intermediates, ...roots];
@@ -375,6 +500,15 @@ async function buildChain(
 	const rootFingerprints = new Set(
 		roots.map((candidate) => fingerprint(candidate)),
 	);
+	const anchorIndex = new Map<string, TrustAnchor[]>();
+	for (const anchor of trustAnchors) {
+		const existing = anchorIndex.get(anchor.subjectDerHex);
+		if (existing === undefined) {
+			anchorIndex.set(anchor.subjectDerHex, [anchor]);
+		} else {
+			existing.push(anchor);
+		}
+	}
 	let sawUntrustedAnchor = false;
 	let deepestPath: readonly LoadedCertificate[] = [leaf];
 	let deepestMissingIssuerAt: number | undefined;
@@ -423,6 +557,10 @@ async function buildChain(
 		caBelowCount: number,
 	): Promise<readonly LoadedCertificate[] | undefined> {
 		if (rootFingerprints.has(fingerprint(current))) {
+			return path;
+		}
+		const matchedAnchor = await matchTrustAnchor(current, anchorIndex);
+		if (matchedAnchor) {
 			return path;
 		}
 		if (path.length > maxDepth) {
@@ -523,7 +661,11 @@ async function buildChain(
 				);
 				continue;
 			}
-			const nextCaBelowCount = caBelowCount + (current.parsed.basicConstraints?.ca === true ? 1 : 0);
+			const nextCaBelowCount = caBelowCount
+				+ (current.parsed.basicConstraints?.ca === true
+						&& !isSelfIssued(current.parsed)
+					? 1
+					: 0);
 			const pathLength = issuer.parsed.basicConstraints?.pathLength;
 			if (pathLength !== undefined && nextCaBelowCount > pathLength) {
 				recordFailure(
@@ -647,6 +789,17 @@ function isIssuerOf(
 	return child.parsed.issuer.derHex === issuer.parsed.subject.derHex;
 }
 
+function findUnprocessedCriticalExtension(
+	certificate: ParsedCertificate,
+): string | undefined {
+	for (const extension of certificate.extensions) {
+		if (extension.critical && !PROCESSED_EXTENSION_OIDS.has(extension.oid)) {
+			return extension.oid;
+		}
+	}
+	return undefined;
+}
+
 function isWithinValidity(certificate: ParsedCertificate, at: Date): boolean {
 	return (
 		certificate.notBefore.getTime() <= at.getTime()
@@ -665,7 +818,10 @@ function countCaCertificatesBelow(
 	let total = 0;
 	for (let cursor = 0; cursor < index; cursor += 1) {
 		const certificate = chain[cursor];
-		if (certificate?.parsed.basicConstraints?.ca === true) {
+		if (
+			certificate?.parsed.basicConstraints?.ca === true
+			&& !isSelfIssued(certificate.parsed)
+		) {
 			total += 1;
 		}
 	}
@@ -737,6 +893,49 @@ function isSameCertificate(
 	}
 	for (let index = 0; index < left.der.length; index += 1) {
 		if (left.der[index] !== right.der[index]) {
+			return false;
+		}
+	}
+	return true;
+}
+
+async function matchTrustAnchor(
+	certificate: LoadedCertificate,
+	anchorIndex: ReadonlyMap<string, readonly TrustAnchor[]>,
+): Promise<boolean> {
+	const anchors = anchorIndex.get(certificate.parsed.issuer.derHex);
+	if (anchors === undefined) {
+		return false;
+	}
+	for (const anchor of anchors) {
+		if (
+			anchor.subjectKeyIdentifier !== undefined
+			&& certificate.parsed.authorityKeyIdentifier !== undefined
+			&& anchor.subjectKeyIdentifier !== certificate.parsed.authorityKeyIdentifier
+		) {
+			continue;
+		}
+		const verified = await verifySignedData(
+			certificate.parsed.signatureAlgorithmOid,
+			anchor.publicKeyAlgorithmOid,
+			anchor.publicKeyParametersOid,
+			anchor.subjectPublicKeyInfoDer,
+			certificate.parsed.signatureValue,
+			certificate.parsed.tbsCertificateDer,
+		);
+		if (verified) {
+			return true;
+		}
+	}
+	return false;
+}
+
+function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
+	if (left.length !== right.length) {
+		return false;
+	}
+	for (let index = 0; index < left.length; index += 1) {
+		if (left[index] !== right[index]) {
 			return false;
 		}
 	}

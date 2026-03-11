@@ -14,6 +14,7 @@ import {
 } from "../src/der.ts";
 import {
 	categorizePemBlocks,
+	checkExtendedKeyUsage,
 	createCertificate,
 	createCertificateRevocationList,
 	createCertificateSigningRequest,
@@ -71,6 +72,8 @@ import {
 	parsePkcs7SignedDataPem,
 	pemDecode,
 	splitPemBlocks,
+	trustAnchorFromCertificate,
+	validateCertificateRevocationList,
 	validateOcspResponse,
 	verifyCertificateChain,
 	verifyCertificateRevocationList,
@@ -1842,6 +1845,259 @@ describe("micro509", () => {
 				},
 			}),
 		).rejects.toThrow("pathLength requires ca=true");
+	});
+
+	it("validates OCSP response with clock skew tolerance", async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: "Clock Skew CA" },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ["keyCertSign", "cRLSign"],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: "Clock Skew CA" },
+			subject: { commonName: "clock-skew.example" },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: { keyUsage: ["digitalSignature"] },
+		});
+		const now = new Date();
+		const thisUpdate = new Date(now.getTime() + 10_000); // 10s in the future
+		const nextUpdate = new Date(now.getTime() + 60_000);
+		const response = await createOcspResponse({
+			signerPrivateKey: ca.keyPair.privateKey,
+			signerCertificate: ca.certificate.pem,
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: ca.certificate.pem,
+					certStatus: "good",
+					thisUpdate,
+					nextUpdate,
+				},
+			],
+		});
+		// Without skew tolerance, validation fails
+		const noSkew = await validateOcspResponse({
+			response: response.der,
+			issuerCertificate: ca.certificate.pem,
+			at: now,
+		});
+		expect(noSkew.ok).toBe(false);
+		if (!noSkew.ok) {
+			expect(noSkew.code).toBe("stale_response");
+		}
+		// With 15s skew tolerance, validation succeeds
+		const withSkew = await validateOcspResponse({
+			response: response.der,
+			issuerCertificate: ca.certificate.pem,
+			at: now,
+			clockSkewMs: 15_000,
+		});
+		expect(withSkew.ok).toBe(true);
+	});
+
+	it("validates CRL with issuer linkage and freshness", async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: "CRL Validate CA" },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ["keyCertSign", "cRLSign"],
+			},
+		});
+		const otherCa = await createSelfSignedCertificate({
+			subject: { commonName: "Other CA" },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ["keyCertSign", "cRLSign"],
+			},
+		});
+		const now = new Date();
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: "CRL Validate CA" },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			thisUpdate: now,
+			nextUpdate: new Date(now.getTime() + 3_600_000),
+		});
+		// Valid case
+		const valid = await validateCertificateRevocationList({
+			crl: crl.pem,
+			issuerCertificate: ca.certificate.pem,
+			at: now,
+		});
+		expect(valid.ok).toBe(true);
+		// Wrong issuer
+		const wrongIssuer = await validateCertificateRevocationList({
+			crl: crl.pem,
+			issuerCertificate: otherCa.certificate.pem,
+			at: now,
+		});
+		expect(wrongIssuer.ok).toBe(false);
+		if (!wrongIssuer.ok) {
+			expect(wrongIssuer.code).toBe("issuer_mismatch");
+		}
+		// Stale CRL (well past nextUpdate)
+		const stale = await validateCertificateRevocationList({
+			crl: crl.pem,
+			issuerCertificate: ca.certificate.pem,
+			at: new Date(now.getTime() + 7_200_000),
+		});
+		expect(stale.ok).toBe(false);
+		if (!stale.ok) {
+			expect(stale.code).toBe("stale_crl");
+		}
+		// Barely stale CRL rescued by clock skew tolerance
+		// Use 5s margin to avoid ASN.1 second-truncation races
+		const staleWithSkew = await validateCertificateRevocationList({
+			crl: crl.pem,
+			issuerCertificate: ca.certificate.pem,
+			at: new Date(now.getTime() + 3_605_000),
+			clockSkewMs: 10_000,
+		});
+		expect(staleWithSkew.ok).toBe(true);
+	});
+
+	it("rejects chain with unrecognized critical extension", async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: "Critical Ext CA" },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ["keyCertSign"],
+				customExtensions: [
+					{
+						oid: "1.2.3.4.5.6.7.8.9",
+						critical: true,
+						value: new Uint8Array([0x05, 0x00]),
+					},
+				],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: "Critical Ext CA" },
+			subject: { commonName: "critical.example" },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				keyUsage: ["digitalSignature"],
+				subjectAltNames: [{ type: "dns", value: "critical.example" }],
+			},
+		});
+		const result = await verifyCertificateChain({
+			leaf: leaf.pem,
+			roots: [ca.certificate.pem],
+		});
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.code).toBe("unrecognized_critical_extension");
+			expect(result.details?.actual).toBe("1.2.3.4.5.6.7.8.9");
+		}
+	});
+
+	it("allows chain with non-critical unknown extension", async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: "NonCritical Ext CA" },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ["keyCertSign"],
+				customExtensions: [
+					{
+						oid: "1.2.3.4.5.6.7.8.9",
+						critical: false,
+						value: new Uint8Array([0x05, 0x00]),
+					},
+				],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: "NonCritical Ext CA" },
+			subject: { commonName: "noncritical.example" },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				keyUsage: ["digitalSignature"],
+				subjectAltNames: [{ type: "dns", value: "noncritical.example" }],
+			},
+		});
+		const result = await verifyCertificateChain({
+			leaf: leaf.pem,
+			roots: [ca.certificate.pem],
+		});
+		expect(result.ok).toBe(true);
+	});
+
+	it("checks EKU separately from chain validation", async () => {
+		const chain = await issueChain();
+		const verifyResult = await verifyCertificateChain({
+			leaf: chain.leaf.pem,
+			intermediates: [chain.intermediate.pem],
+			roots: [chain.root.certificate.pem],
+		});
+		expect(verifyResult.ok).toBe(true);
+		if (!verifyResult.ok) return;
+		// Leaf has serverAuth EKU
+		const serverAuth = checkExtendedKeyUsage(
+			verifyResult.value.chain,
+			"serverAuth",
+		);
+		expect(serverAuth.ok).toBe(true);
+		// Leaf does not have codeSigning EKU
+		const codeSigning = checkExtendedKeyUsage(
+			verifyResult.value.chain,
+			"codeSigning",
+		);
+		expect(codeSigning.ok).toBe(false);
+		if (!codeSigning.ok) {
+			expect(codeSigning.code).toBe("leaf_eku_missing");
+		}
+	});
+
+	it("validates chain using trust anchors instead of root certificates", async () => {
+		const chain = await issueChain();
+		const rootParsed = parseCertificatePem(chain.root.certificate.pem);
+		const anchor = trustAnchorFromCertificate(rootParsed);
+		// Verify with trust anchor (no root cert needed in pool)
+		const result = await verifyCertificateChain({
+			leaf: chain.leaf.pem,
+			intermediates: [chain.intermediate.pem],
+			roots: [],
+			trustAnchors: [anchor],
+		});
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		// Chain terminates at the intermediate (anchor verifies intermediate's signature)
+		expect(result.value.root.subject.values.commonName).toBe(
+			"Verify Intermediate CA",
+		);
+		expect(result.value.chain).toHaveLength(2); // leaf + intermediate
+	});
+
+	it("rejects chain when trust anchor has wrong key", async () => {
+		const chain = await issueChain();
+		const otherCa = await createSelfSignedCertificate({
+			subject: { commonName: "Verify Root CA" }, // same name, different key
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ["keyCertSign"],
+			},
+		});
+		const wrongAnchor = trustAnchorFromCertificate(
+			parseCertificatePem(otherCa.certificate.pem),
+		);
+		const result = await verifyCertificateChain({
+			leaf: chain.leaf.pem,
+			intermediates: [chain.intermediate.pem],
+			roots: [],
+			trustAnchors: [wrongAnchor],
+		});
+		expect(result.ok).toBe(false);
 	});
 });
 

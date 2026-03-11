@@ -124,11 +124,29 @@ const REVOCATION_REASON_CODES: Record<RevocationReason, number> = {
 	aACompromise: 10,
 };
 
+export type CrlSource = string | Uint8Array | ParsedCertificateRevocationList;
+export type CrlCertificateSource = string | Uint8Array | ParsedCertificate;
+
 export type VerifyCertificateRevocationListResult =
 	| { readonly ok: true; readonly value: ParsedCertificateRevocationList }
 	| {
 		readonly ok: false;
 		readonly code: "signature_invalid";
+		readonly message: string;
+	};
+
+export interface ValidateCertificateRevocationListInput {
+	readonly crl: CrlSource;
+	readonly issuerCertificate: CrlCertificateSource;
+	readonly at?: Date;
+	readonly clockSkewMs?: number;
+}
+
+export type ValidateCertificateRevocationListResult =
+	| { readonly ok: true; readonly value: ParsedCertificateRevocationList }
+	| {
+		readonly ok: false;
+		readonly code: "signature_invalid" | "issuer_mismatch" | "stale_crl";
 		readonly message: string;
 	};
 
@@ -347,6 +365,60 @@ export async function verifyCertificateRevocationList(
 			code: "signature_invalid",
 			message: "certificate revocation list signature does not verify",
 		};
+}
+
+export async function validateCertificateRevocationList(
+	input: ValidateCertificateRevocationListInput,
+): Promise<ValidateCertificateRevocationListResult> {
+	const parsedCrl = normalizeCrl(input.crl);
+	const issuer = normalizeCrlCertificate(input.issuerCertificate);
+	if (parsedCrl.issuer.derHex !== issuer.subject.derHex) {
+		return {
+			ok: false,
+			code: "issuer_mismatch",
+			message: "CRL issuer name does not match certificate subject",
+		};
+	}
+	if (
+		parsedCrl.authorityKeyIdentifier !== undefined
+		&& issuer.subjectKeyIdentifier !== undefined
+		&& parsedCrl.authorityKeyIdentifier !== issuer.subjectKeyIdentifier
+	) {
+		return {
+			ok: false,
+			code: "issuer_mismatch",
+			message: "CRL authority key identifier does not match issuer subject key identifier",
+		};
+	}
+	const verified = await verifySignedData(
+		parsedCrl.signatureAlgorithmOid,
+		issuer.publicKeyAlgorithmOid,
+		issuer.publicKeyParametersOid,
+		issuer.subjectPublicKeyInfoDer,
+		parsedCrl.signatureValue,
+		parsedCrl.tbsCertListDer,
+	);
+	if (!verified) {
+		return {
+			ok: false,
+			code: "signature_invalid",
+			message: "certificate revocation list signature does not verify",
+		};
+	}
+	const at = input.at ?? new Date();
+	const skew = input.clockSkewMs ?? 0;
+	if (
+		parsedCrl.thisUpdate.getTime() - skew > at.getTime()
+		|| (parsedCrl.nextUpdate !== undefined
+			&& parsedCrl.nextUpdate.getTime() + skew < at.getTime())
+	) {
+		return {
+			ok: false,
+			code: "stale_crl",
+			message: "CRL is not valid at requested time",
+		};
+	}
+	return { ok: true, value: parsedCrl };
 }
 
 export function isCertificateRevoked(
@@ -659,6 +731,28 @@ function parseIssuerCertificateDer(der: Uint8Array): ParsedCertificate {
 
 function parseIssuerCertificatePem(pem: string): ParsedCertificate {
 	return parseCertificatePem(pem);
+}
+
+function normalizeCrl(source: CrlSource): ParsedCertificateRevocationList {
+	if (typeof source === "string") {
+		return parseCertificateRevocationListPem(source);
+	}
+	if (source instanceof Uint8Array) {
+		return parseCertificateRevocationListDer(new Uint8Array(source));
+	}
+	return source;
+}
+
+function normalizeCrlCertificate(
+	source: CrlCertificateSource,
+): ParsedCertificate {
+	if (typeof source === "string") {
+		return parseCertificatePem(source);
+	}
+	if (source instanceof Uint8Array) {
+		return parseCertificateDer(new Uint8Array(source));
+	}
+	return source;
 }
 
 const textDecoder = new TextDecoder();

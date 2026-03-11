@@ -9,9 +9,9 @@
 ## Path validation / PKIX completeness
 
 - [ ] Separate candidate path building from path validation more explicitly in the public API
-- [ ] Structured trust-anchor input model, not only convenience via root certificates
-- [ ] Unsupported critical extension rejection during candidate path validation
-- [ ] Self-issued handling for name-constraint / path-processing edge cases
+- [x] Structured trust-anchor input model, not only convenience via root certificates
+- [x] Unsupported critical extension rejection during candidate path validation
+- [x] Self-issued handling for name-constraint / path-processing edge cases
 - [ ] Name constraints support
 - [ ] Initial permitted/excluded subtree validator inputs
 - [ ] Certificate policy processing
@@ -25,8 +25,8 @@
 - [ ] OCSP response signer validation against explicit local responder configuration
 - [ ] OCSP responder revocation policy handling
 - [ ] OCSP request/response builders with richer extension support
-- [ ] OCSP response freshness clock-skew configuration
-- [ ] CRL freshness / nextUpdate policy helpers
+- [x] OCSP response freshness clock-skew configuration
+- [x] CRL freshness / nextUpdate policy helpers
 - [ ] CRL distribution point discovery / fetch hooks
 - [ ] Delta CRL application logic, not only parsing
 - [ ] Richer CRL entry extensions
