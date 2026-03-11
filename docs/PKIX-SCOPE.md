@@ -6,12 +6,12 @@
       RFC 5280 Section 6.1.1 defines the algorithm in terms of a candidate path and nine inputs. (IETF Datatracker[^rfc5280])
 - [ ] Keep **path building/discovery** separate from **path validation**.
 - [ ] Keep **service identity matching** separate from **path validation**.
-- [ ] Keep **revocation** separate from **path validation**.
+- [x] Keep **revocation** separate from **path validation**.
 
 ## 2. Required inputs for RFC 5280-style path validation
 
 - [ ] Prospective certification path.
-- [ ] Validation time.
+- [x] Validation time.
 - [ ] Trust anchor information: trusted issuer name, trusted public key algorithm,
       trusted public key, and optional trusted key parameters.
 - [ ] User-initial-policy-set.
@@ -23,22 +23,22 @@
 
 ## 3. Core certificate/path checks
 
-- [ ] Parse DER strictly enough to reject malformed certificates.
-- [ ] Verify issuer/subject chaining across the candidate path.
-- [ ] Verify each certificate signature using the evolving working public key.
-- [ ] Check validity time (`notBefore` / `notAfter`) against the chosen validation time.
-- [ ] Enforce `basicConstraints` for CA certificates.
-- [ ] Enforce `pathLenConstraint` where applicable.
-- [ ] Enforce `keyUsage`, especially `keyCertSign` for CAs used to sign subordinate certs.
+- [x] Parse DER strictly enough to reject malformed certificates.
+- [x] Verify issuer/subject chaining across the candidate path.
+- [x] Verify each certificate signature using the evolving working public key.
+- [x] Check validity time (`notBefore` / `notAfter`) against the chosen validation time.
+- [x] Enforce `basicConstraints` for CA certificates.
+- [x] Enforce `pathLenConstraint` where applicable.
+- [x] Enforce `keyUsage`, especially `keyCertSign` for CAs used to sign subordinate certs.
 - [ ] Process self-issued vs non-self-issued certs correctly for path length and name constraints.
 - [ ] Reject the path if any required path-processing step fails. (IETF Datatracker[^rfc5280])
 
 ## 4. Extension handling
 
-- [ ] Parse and preserve all extensions, including unknown ones.
+- [x] Parse and preserve all extensions, including unknown ones.
 - [ ] Reject certificates containing an **unsupported critical extension** or a critical extension whose contents cannot be processed.
-- [ ] Process recognized non-critical extensions when relevant to path processing.
-- [ ] Expose raw extension data so callers can layer application-specific policy on top. (IETF Datatracker[^rfc5280])
+- [x] Process recognized non-critical extensions when relevant to path processing.
+- [x] Expose raw extension data so callers can layer application-specific policy on top. (IETF Datatracker[^rfc5280])
 
 ## 5. Name constraints
 
@@ -60,45 +60,45 @@
 
 - [ ] Accept trust anchors as structured input, not only as “root cert PEM”.
 - [ ] Allow trust anchor info to come from a self-signed certificate as a convenience, but treat the trust anchor as out-of-band trust input.
-- [ ] Do not assume every self-signed cert is a trust anchor. (IETF Datatracker[^rfc5280])
+- [x] Do not assume every self-signed cert is a trust anchor. (IETF Datatracker[^rfc5280])
 
 ## 8. Application/service identity checks
 
 - [ ] Keep hostname/service-name matching in a separate API from path validation.
-- [ ] Match the reference identity against `subjectAltName` entries of the corresponding type first.
+- [x] Match the reference identity against `subjectAltName` entries of the corresponding type first.
 - [ ] Only support CN fallback as an explicit compatibility mode, because RFC 6125 treats CN-ID usage as existing practice and prefers `subjectAltName`; CN comparison is deprecated. (IETF Datatracker[^rfc6125])
-- [ ] Make wildcard behavior explicit and test it hard.
+- [x] Make wildcard behavior explicit and test it hard.
 
 ## 9. EKU / purpose checks
 
 - [ ] Keep EKU checks separate from raw path validity.
-- [ ] Allow callers to request purposes such as `serverAuth`, `clientAuth`, etc.
+- [x] Allow callers to request purposes such as `serverAuth`, `clientAuth`, etc.
 - [ ] Distinguish “certificate is path-valid” from “certificate is acceptable for this application”.
 
 ## 10. OCSP support checklist
 
-- [ ] Build `CertID` from issuer name hash, issuer key hash, serial number, and hash algorithm.
+- [x] Build `CertID` from issuer name hash, issuer key hash, serial number, and hash algorithm.
 - [ ] Discover the responder from AIA `id-ad-ocsp` or let callers provide a responder URL explicitly.
-- [ ] Parse and verify `BasicOCSPResponse`.
-- [ ] Check that the response actually refers to the requested certificate.
-- [ ] Validate the OCSP response signature.
-- [ ] Validate responder authorization.
+- [x] Parse and verify `BasicOCSPResponse`.
+- [x] Check that the response actually refers to the requested certificate.
+- [x] Validate the OCSP response signature.
+- [x] Validate responder authorization.
 - [ ] Enforce response freshness using `thisUpdate` / `nextUpdate` and configurable clock skew.
-- [ ] Return `good`, `revoked`, and `unknown` distinctly.
-- [ ] Support optional nonce handling if you want replay binding between request and response. RFC 9654 defines the updated nonce extension details. (IETF Datatracker[^rfc6960])
+- [x] Return `good`, `revoked`, and `unknown` distinctly.
+- [x] Support optional nonce handling if you want replay binding between request and response. RFC 9654 defines the updated nonce extension details. (IETF Datatracker[^rfc6960])
 
 ## 11. OCSP responder authorization rules
 
 - [ ] Accept an OCSP response signer if it matches local OCSP responder configuration for the certificate in question.
-- [ ] Accept it if the signer is the issuing CA certificate itself.
-- [ ] Accept it if the signer cert contains EKU `id-kp-OCSPSigning` **and** was issued directly by the CA that issued the target certificate.
-- [ ] Reject the response if the signer certificate meets none of those conditions.
+- [x] Accept it if the signer is the issuing CA certificate itself.
+- [x] Accept it if the signer cert contains EKU `id-kp-OCSPSigning` **and** was issued directly by the CA that issued the target certificate.
+- [x] Reject the response if the signer certificate meets none of those conditions.
 - [ ] Decide and document how you will handle revocation checking of the responder certificate; RFC 6960 allows CA signaling for that and also leaves room for local policy. (IETF Datatracker[^rfc6960])
 
 ## 12. CRL support checklist
 
-- [ ] Treat CRL validation as a separate revocation subsystem.
-- [ ] Parse CRLs and CRL extensions.
+- [x] Treat CRL validation as a separate revocation subsystem.
+- [x] Parse CRLs and CRL extensions.
 - [ ] Verify CRL signatures and issuer linkage.
 - [ ] Enforce CRL time/freshness semantics.
 - [ ] Support distribution points if you want network-assisted revocation.
@@ -118,7 +118,7 @@
 ## 14. Test/conformance checklist
 
 - [ ] Add fixed RFC-style test vectors for builders, parsers, and validators.
-- [ ] Add round-trip tests for certs, CSRs, names, and extensions.
+- [x] Add round-trip tests for certs, CSRs, names, and extensions.
 - [ ] Add malformed DER / fuzz tests.
 - [ ] Differential-test against at least one mature implementation.
 - [ ] Run the validator against **NIST PKITS**, which NIST describes as a comprehensive X.509 path validation test suite for relying parties. (NIST Computer Security Resource Center[^x-509-path-validation])
