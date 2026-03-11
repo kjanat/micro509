@@ -12,9 +12,13 @@ import {
 	exportPkcs1Der,
 	exportPkcs1Pem,
 	exportPkcs8Der,
+	exportPkcs8Pem,
+	exportPrivateJwk,
+	exportPublicJwk,
 	exportSec1Der,
 	exportSec1Pem,
 	exportSpkiDer,
+	exportSpkiPem,
 	findExtension,
 	generateKeyPair,
 	importPkcs1Der,
@@ -774,6 +778,14 @@ describe("micro509", () => {
 		expect(await exportPkcs8Der(edPriv)).toEqual(await ed.exportPkcs8Der());
 	});
 
+	it("exports keys with standalone PEM and JWK helpers", async () => {
+		const keyPair = await generateKeyPair({ kind: "ed25519" });
+		expect(await exportSpkiPem(keyPair.publicKey)).toContain("BEGIN PUBLIC KEY");
+		expect(await exportPkcs8Pem(keyPair.privateKey)).toContain("BEGIN PRIVATE KEY");
+		expect(await exportPublicJwk(keyPair.publicKey)).toHaveProperty("kty");
+		expect(await exportPrivateJwk(keyPair.privateKey)).toHaveProperty("kty");
+	});
+
 	it("creates certificates with RSA SHA-384, SHA-512 and ECDSA P-384", async () => {
 		const rsaSha384 = await createSelfSignedCertificate({
 			subject: { commonName: "rsa384.example" },
@@ -796,6 +808,193 @@ describe("micro509", () => {
 		});
 		const parsedEc384 = parseCertificatePem(ecP384.certificate.pem);
 		expect(parsedEc384.signatureAlgorithmOid).toBe("1.2.840.10045.4.3.3");
+	});
+
+	it("rejects empty and multi-certificate leaf sources", async () => {
+		const chain = await issueChain();
+		await expect(
+			verifyCertificateChain({
+				leaf: "",
+				roots: [chain.root.certificate.pem],
+			}),
+		).rejects.toThrow("No certificate found");
+
+		const mixedLeaf = `${chain.leaf.pem}\n${chain.intermediate.pem}`;
+		await expect(
+			verifyCertificateChain({
+				leaf: mixedLeaf,
+				roots: [chain.root.certificate.pem],
+			}),
+		).rejects.toThrow("Expected a single certificate source");
+	});
+
+	it("rejects invalid wildcard and invalid IPv6 verification inputs", async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: "pattern-ca" },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ["keyCertSign", "cRLSign"],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: "pattern-ca" },
+			subject: { commonName: "pattern-leaf" },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				subjectAltNames: [{ type: "dns", value: "a*b.example.com" }],
+			},
+		});
+
+		expect(
+			await verifyCertificateChain({
+				leaf: leaf.pem,
+				roots: [ca.certificate.pem],
+				dnsName: "axb.example.com",
+			}),
+		).toMatchObject({ ok: false, code: "subject_alt_name_mismatch" });
+
+		await expect(
+			verifyCertificateChain({
+				leaf: leaf.pem,
+				roots: [ca.certificate.pem],
+				ipAddress: "2001::db8::1",
+			}),
+		).rejects.toThrow("Invalid IPv6 address");
+	});
+
+	it("verifies chains signed with RSA SHA-384 and ECDSA P-384", async () => {
+		const rsaCaKeys = await generateKeyPair({ kind: "rsa", modulusLength: 2048, hash: "SHA-384" });
+		const rsaCa = await createSelfSignedCertificate({
+			subject: { commonName: "rsa-ca-384" },
+			keyPair: rsaCaKeys,
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ["keyCertSign", "cRLSign"],
+			},
+		});
+		const rsaLeafKeys = await generateKeyPair({ kind: "rsa", modulusLength: 2048, hash: "SHA-384" });
+		const rsaLeaf = await createCertificate({
+			issuer: { commonName: "rsa-ca-384" },
+			subject: { commonName: "rsa-leaf-384" },
+			publicKey: rsaLeafKeys.publicKey,
+			signerPrivateKey: rsaCaKeys.privateKey,
+			issuerPublicKey: rsaCaKeys.publicKey,
+		});
+
+		expect(
+			await verifyCertificateChain({
+				leaf: rsaLeaf.pem,
+				roots: [rsaCa.certificate.pem],
+			}),
+		).toMatchObject({ ok: true });
+
+		const p384CaKeys = await generateKeyPair({ kind: "ecdsa", namedCurve: "P-384" });
+		const p384Ca = await createSelfSignedCertificate({
+			subject: { commonName: "p384-ca" },
+			keyPair: p384CaKeys,
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ["keyCertSign", "cRLSign"],
+			},
+		});
+		const p384LeafKeys = await generateKeyPair({ kind: "ecdsa", namedCurve: "P-384" });
+		const p384Leaf = await createCertificate({
+			issuer: { commonName: "p384-ca" },
+			subject: { commonName: "p384-leaf" },
+			publicKey: p384LeafKeys.publicKey,
+			signerPrivateKey: p384CaKeys.privateKey,
+			issuerPublicKey: p384CaKeys.publicKey,
+		});
+
+		expect(
+			await verifyCertificateChain({
+				leaf: p384Leaf.pem,
+				roots: [p384Ca.certificate.pem],
+			}),
+		).toMatchObject({ ok: true });
+	});
+
+	it("verifies certificate request signatures for RSA and Ed25519", async () => {
+		const rsaKeys = await generateKeyPair({ kind: "rsa", modulusLength: 2048, hash: "SHA-512" });
+		const rsaCsr = await createCertificateSigningRequest({
+			subject: { commonName: "rsa-csr" },
+			publicKey: rsaKeys.publicKey,
+			signerPrivateKey: rsaKeys.privateKey,
+		});
+		expect(await verifyCertificateSigningRequest(rsaCsr.pem)).toMatchObject({ ok: true });
+
+		const edKeys = await generateKeyPair({ kind: "ed25519" });
+		const edCsr = await createCertificateSigningRequest({
+			subject: { commonName: "ed-csr" },
+			publicKey: edKeys.publicKey,
+			signerPrivateKey: edKeys.privateKey,
+		});
+		expect(await verifyCertificateSigningRequest(edCsr.der)).toMatchObject({ ok: true });
+	});
+
+	it("parses all supported name fields", async () => {
+		const { certificate } = await createSelfSignedCertificate({
+			subject: {
+				country: "US",
+				state: "CA",
+				locality: "San Francisco",
+				street: "Market St",
+				organization: "Acme",
+				organizationalUnit: "PKI",
+				commonName: "full-name.example",
+				givenName: "Jane",
+				surname: "Doe",
+				title: "Engineer",
+				serialNumber: "12345",
+				emailAddress: "jane@example.com",
+			},
+		});
+		const parsed = parseCertificatePem(certificate.pem);
+		expect(parsed.subject.values).toMatchObject({
+			country: "US",
+			state: "CA",
+			locality: "San Francisco",
+			street: "Market St",
+			organization: "Acme",
+			organizationalUnit: "PKI",
+			commonName: "full-name.example",
+			givenName: "Jane",
+			surname: "Doe",
+			title: "Engineer",
+			serialNumber: "12345",
+			emailAddress: "jane@example.com",
+		});
+	});
+
+	it("categorizes public and unknown PEM blocks from text and from blocks", async () => {
+		const keyPair = await generateKeyPair({ kind: "ed25519" });
+		const publicPem = await keyPair.exportSpkiPem();
+		const unknownPem = "-----BEGIN SOMETHING-----\nAQID\n-----END SOMETHING-----";
+		const bundle = `${publicPem}\n${unknownPem}`;
+
+		expect(categorizePemBlocks(bundle)).toMatchObject({
+			publicKeys: [{ label: "PUBLIC KEY" }],
+			others: [{ label: "SOMETHING" }],
+		});
+		expect(categorizePemBlocks(splitPemBlocks(bundle))).toMatchObject({
+			publicKeys: [{ label: "PUBLIC KEY" }],
+			others: [{ label: "SOMETHING" }],
+		});
+		expect(() => pemDecode("CERTIFICATE", publicPem)).toThrow("Invalid PEM for CERTIFICATE");
+	});
+
+	it("parses CSR without extensionRequest attributes", async () => {
+		const keyPair = await generateKeyPair({ kind: "ed25519" });
+		const csr = await createCertificateSigningRequest({
+			subject: { commonName: "csr-noext.example" },
+			publicKey: keyPair.publicKey,
+			signerPrivateKey: keyPair.privateKey,
+		});
+		const parsed = parseCertificateSigningRequestPem(csr.pem);
+		expect(parsed.requestedExtensions).toEqual([]);
 	});
 
 	it("creates a CSR with extensionRequest attributes", async () => {
