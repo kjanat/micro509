@@ -11,13 +11,7 @@ import {
 	setOf,
 	tlv,
 } from "@/der.ts";
-import {
-	createCertificate,
-	createSelfSignedCertificate,
-	generateKeyPair,
-	type parseCertificatePem,
-	verifyCertificateChain,
-} from "@/index.ts";
+import { createCertificate, createSelfSignedCertificate, generateKeyPair, type parseCertificatePem } from "@/index.ts";
 import { OIDS } from "@/oids.ts";
 import { getSignatureAlgorithm, signBytes } from "@/signing.ts";
 import { createHash } from "node:crypto";

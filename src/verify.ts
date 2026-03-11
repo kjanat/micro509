@@ -1199,21 +1199,6 @@ async function verifyCertificateSignature(
 	);
 }
 
-function isSameCertificate(
-	left: ParsedCertificate,
-	right: ParsedCertificate,
-): boolean {
-	if (left.der.length !== right.der.length) {
-		return false;
-	}
-	for (let index = 0; index < left.der.length; index += 1) {
-		if (left.der[index] !== right.der[index]) {
-			return false;
-		}
-	}
-	return true;
-}
-
 async function matchTrustAnchor(
 	certificate: ParsedCertificate,
 	anchorIndex: ReadonlyMap<string, readonly TrustAnchor[]>,

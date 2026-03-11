@@ -1,6 +1,6 @@
 import { createHash, webcrypto } from "node:crypto";
 import { decodeObjectIdentifier, hexToBytes, toArrayBuffer, toHex } from "./asn1.ts";
-import { nullValue, objectIdentifier, octetString, readElement, readSequenceChildren, sequence } from "./der.ts";
+import { nullValue, objectIdentifier, octetString, readSequenceChildren, sequence } from "./der.ts";
 import { OIDS } from "./oids.ts";
 import { decryptPbes2, encryptPbes2, type Pbes2EncryptionOptions } from "./pbes2.ts";
 import { base64Decode, base64Encode, pemDecode, pemEncode } from "./pem.ts";

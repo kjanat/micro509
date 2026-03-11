@@ -15,13 +15,11 @@ import {
 	explicitContext,
 	implicitPrimitiveContext,
 	integer,
-	integerFromNumber,
 	nullValue,
 	objectIdentifier,
 	octetString,
 	readElement,
 	sequence,
-	setOf,
 	time,
 	tlv,
 } from "./der.ts";

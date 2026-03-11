@@ -185,26 +185,30 @@ export function objectIdentifier(oid: string): Uint8Array {
 }
 
 export function utcTime(date: Date): Uint8Array {
-	const value = [
-		twoDigits(date.getUTCFullYear() % 100),
-		twoDigits(date.getUTCMonth() + 1),
-		twoDigits(date.getUTCDate()),
-		twoDigits(date.getUTCHours()),
-		twoDigits(date.getUTCMinutes()),
-		twoDigits(date.getUTCSeconds()),
-	].join("") + "Z";
+	const value = `${
+		[
+			twoDigits(date.getUTCFullYear() % 100),
+			twoDigits(date.getUTCMonth() + 1),
+			twoDigits(date.getUTCDate()),
+			twoDigits(date.getUTCHours()),
+			twoDigits(date.getUTCMinutes()),
+			twoDigits(date.getUTCSeconds()),
+		].join("")
+	}Z`;
 	return tlv(0x17, new TextEncoder().encode(value));
 }
 
 export function generalizedTime(date: Date): Uint8Array {
-	const value = [
-		String(date.getUTCFullYear()).padStart(4, "0"),
-		twoDigits(date.getUTCMonth() + 1),
-		twoDigits(date.getUTCDate()),
-		twoDigits(date.getUTCHours()),
-		twoDigits(date.getUTCMinutes()),
-		twoDigits(date.getUTCSeconds()),
-	].join("") + "Z";
+	const value = `${
+		[
+			String(date.getUTCFullYear()).padStart(4, "0"),
+			twoDigits(date.getUTCMonth() + 1),
+			twoDigits(date.getUTCDate()),
+			twoDigits(date.getUTCHours()),
+			twoDigits(date.getUTCMinutes()),
+			twoDigits(date.getUTCSeconds()),
+		].join("")
+	}Z`;
 	return tlv(0x18, new TextEncoder().encode(value));
 }
 

@@ -16,7 +16,6 @@ import {
 	readSequenceChildren,
 	sequence,
 	setOf,
-	tlv,
 } from "./der.ts";
 import { getCrypto } from "./keys.ts";
 import { OIDS } from "./oids.ts";

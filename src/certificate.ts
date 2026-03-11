@@ -1,11 +1,5 @@
 import { bitString, explicitContext, integer, integerFromNumber, sequence, time } from "./der.ts";
-import {
-	type BasicConstraints,
-	buildCertificateExtensions,
-	type CertificateExtensionsInput,
-	type KeyUsage,
-	type SubjectAltName,
-} from "./extensions.ts";
+import { buildCertificateExtensions, type CertificateExtensionsInput } from "./extensions.ts";
 import { exportSpkiDer, generateKeyPair, getCrypto, type KeyAlgorithmInput, type KeyPairMaterial } from "./keys.ts";
 import { encodeName, type NameInput } from "./name.ts";
 import { base64Encode, pemEncode } from "./pem.ts";
