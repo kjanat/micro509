@@ -12,6 +12,7 @@ Tiny X.509 builders for modern TypeScript.
 - browser-native CSR signature verification too
 - PKCS#7 certificate bag helpers
 - CRL parse/create/verify helpers
+- passwordless PFX bundle helpers
 - WebCrypto-first, typed, small surface
 
 ## Install
@@ -233,6 +234,26 @@ const certs = parsePkcs7CertBagPem(bag.pem);
 console.log(certs.map((cert) => cert.subject.values.commonName));
 ```
 
+## PFX
+
+```ts
+import { createPfx, parsePfxPem } from "micro509";
+
+const pfx = await createPfx({
+	certificates: [
+		{ certificate: leaf.pem, attributes: { friendlyName: "leaf" } },
+		{ certificate: root.pem, attributes: { friendlyName: "root" } },
+	],
+	privateKeys: [
+		{ privateKey: leafKey.privateKey, attributes: { friendlyName: "leaf" } },
+	],
+});
+
+const parsedPfx = parsePfxPem(pfx.pem);
+console.log(parsedPfx.certificates.length);
+console.log(parsedPfx.bags[0]?.attributes.friendlyName);
+```
+
 ## CRL
 
 ```ts
@@ -324,6 +345,7 @@ if (result.ok) {
 - pem helpers: split mixed cert/csr/key bundles by label
 - pkcs7 helpers: create/parse degenerate signedData cert bags
 - crl helpers: create/parse/verify CRLs and check revocation by serial
+- pfx helpers: create/parse passwordless cert+key bundles with bag attributes
 - legacy key helpers: PKCS#1 RSA private key and SEC1 EC private key import/export
 - extended key usage: built-ins + custom OID escape hatch
 - chain verify: async, WebCrypto-based, browser-safe, multi-candidate path building, issuer match, signatures, time, CA/keyCertSign, pathLen, AKI/SKI, SAN/EKU checks

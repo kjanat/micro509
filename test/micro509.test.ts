@@ -6,6 +6,7 @@ import {
 	createCertificate,
 	createCertificateRevocationList,
 	createCertificateSigningRequest,
+	createPfx,
 	createPkcs7CertBagPem,
 	createSelfSignedCertificate,
 	decodeExtension,
@@ -39,6 +40,7 @@ import {
 	parseCertificatePem,
 	parseCertificateRevocationListPem,
 	parseCertificateSigningRequestPem,
+	parsePfxPem,
 	parsePkcs7CertBagPem,
 	pemDecode,
 	splitPemBlocks,
@@ -291,6 +293,49 @@ describe("micro509", () => {
 			"pkcs7-leaf.example",
 			"PKCS7 Root",
 		]);
+	});
+
+	it("creates and parses passwordless PFX bundles", async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: "PFX Root" },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ["keyCertSign", "cRLSign"],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: "PFX Root" },
+			subject: { commonName: "pfx-leaf.example" },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+		const pfx = await createPfx({
+			certificates: [
+				{
+					certificate: leaf.pem,
+					attributes: { friendlyName: "leaf", localKeyId: Uint8Array.of(1, 2, 3) },
+				},
+				{ certificate: ca.certificate.pem, attributes: { friendlyName: "root" } },
+			],
+			privateKeys: [
+				{
+					privateKey: leafKeys.privateKey,
+					attributes: { friendlyName: "leaf", localKeyId: Uint8Array.of(1, 2, 3) },
+				},
+			],
+		});
+		const parsed = parsePfxPem(pfx.pem);
+		expect(parsed.certificates.map((certificate) => certificate.subject.values.commonName)).toEqual([
+			"pfx-leaf.example",
+			"PFX Root",
+		]);
+		expect(parsed.privateKeys).toHaveLength(1);
+		expect(parsed.bags[0]).toMatchObject({
+			kind: "certificate",
+			attributes: { friendlyName: "leaf", localKeyId: "010203" },
+		});
 	});
 
 	it("creates, parses, and verifies CRLs", async () => {

@@ -104,6 +104,22 @@ export {
 	splitPemBlocks,
 } from "./pem.ts";
 export {
+	createPfx,
+	type CreatePfxInput,
+	type ParsedPfx,
+	type ParsedPfxAttribute,
+	type ParsedPfxBag,
+	type ParsedPfxBagAttributes,
+	parsePfxDer,
+	parsePfxPem,
+	type PfxBagAttributesInput,
+	type PfxCertificateBagInput,
+	type PfxCertificateSource,
+	type PfxMaterial,
+	type PfxPrivateKeyBagInput,
+	type PfxPrivateKeySource,
+} from "./pfx.ts";
+export {
 	createPkcs7CertBagDer,
 	createPkcs7CertBagPem,
 	parsePkcs7CertBagDer,
