@@ -1,5 +1,3 @@
-import { Buffer } from "node:buffer";
-
 export interface PemBlock {
 	readonly label: string;
 	readonly bytes: Uint8Array;
@@ -15,13 +13,17 @@ export interface CategorizedPemBlocks {
 }
 
 export function pemEncode(label: string, der: Uint8Array): string {
-	const body = Buffer.from(der).toString("base64");
+	const body = base64Encode(der);
 	const lines = body.match(/.{1,64}/g) ?? [];
 	return `-----BEGIN ${label}-----\n${lines.join("\n")}\n-----END ${label}-----`;
 }
 
 export function base64Encode(bytes: Uint8Array): string {
-	return Buffer.from(bytes).toString("base64");
+	let binary = "";
+	for (const byte of bytes) {
+		binary += String.fromCharCode(byte);
+	}
+	return btoa(binary);
 }
 
 export function pemDecode(label: string, pem: string): Uint8Array {
@@ -35,11 +37,16 @@ export function pemDecode(label: string, pem: string): Uint8Array {
 		.slice(begin.length, normalized.length - end.length)
 		.replace(/\n/g, "")
 		.trim();
-	return new Uint8Array(Buffer.from(body, "base64"));
+	return base64Decode(body);
 }
 
 export function base64Decode(value: string): Uint8Array {
-	return new Uint8Array(Buffer.from(value, "base64"));
+	const binary = atob(value);
+	const bytes = new Uint8Array(binary.length);
+	for (let i = 0; i < binary.length; i++) {
+		bytes[i] = binary.charCodeAt(i);
+	}
+	return bytes;
 }
 
 export function splitPemBlocks(input: string): readonly PemBlock[] {
