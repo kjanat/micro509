@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { hexToBytes } from "./asn1.ts";
 import {
 	bitString,
 	bool,
@@ -30,6 +31,7 @@ export type SubjectAltName =
 	| { readonly type: "ip"; readonly value: string }
 	| { readonly type: "email"; readonly value: string }
 	| { readonly type: "uri"; readonly value: string }
+	| { readonly type: "directoryName"; readonly derHex: string }
 	| {
 		readonly type: "unknown";
 		readonly tag: number;
@@ -46,6 +48,7 @@ export interface CertificateExtensionsInput {
 	readonly keyUsage?: readonly KeyUsage[];
 	readonly basicConstraints?: BasicConstraints;
 	readonly extendedKeyUsage?: readonly ExtendedKeyUsage[];
+	readonly nameConstraints?: NameConstraints;
 	readonly authorityInfoAccess?: readonly AuthorityInformationAccess[];
 	readonly crlDistributionPoints?: readonly string[];
 	readonly customExtensions?: readonly CustomExtension[];
@@ -55,6 +58,35 @@ export interface CustomExtension {
 	readonly oid: string;
 	readonly value: Uint8Array;
 	readonly critical?: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Name constraints (RFC 5280 §4.2.1.10)
+// ---------------------------------------------------------------------------
+
+/**
+ * A name form used as a constraint base in nameConstraints.
+ * Distinct from {@link SubjectAltName} because IP constraints carry
+ * address + mask bytes (8 for IPv4, 32 for IPv6) rather than bare addresses.
+ */
+export type NameConstraintForm =
+	| { readonly type: "dns"; readonly value: string }
+	| { readonly type: "email"; readonly value: string }
+	| { readonly type: "uri"; readonly value: string }
+	| {
+		readonly type: "ip";
+		readonly addressBytes: Uint8Array;
+		readonly maskBytes: Uint8Array;
+	}
+	| { readonly type: "directoryName"; readonly derHex: string };
+
+export interface GeneralSubtree {
+	readonly base: NameConstraintForm;
+}
+
+export interface NameConstraints {
+	readonly permittedSubtrees?: readonly GeneralSubtree[];
+	readonly excludedSubtrees?: readonly GeneralSubtree[];
 }
 
 export type KnownAuthorityInfoAccessMethod = "ocsp" | "caIssuers";
@@ -180,6 +212,15 @@ export function buildCertificateExtensions(
 			seen,
 			OIDS.extendedKeyUsage,
 			encodeExtendedKeyUsage(input.extendedKeyUsage),
+		);
+	}
+	if (input?.nameConstraints !== undefined) {
+		pushExtension(
+			extensions,
+			seen,
+			OIDS.nameConstraints,
+			encodeNameConstraints(input.nameConstraints),
+			true,
 		);
 	}
 	if (
@@ -357,6 +398,8 @@ export function encodeSubjectAltName(value: SubjectAltName): Uint8Array {
 			return implicitPrimitiveContext(6, new TextEncoder().encode(value.value));
 		case "ip":
 			return implicitPrimitiveContext(7, encodeIpAddress(value.value));
+		case "directoryName":
+			return implicitConstructedContext(4, hexToBytes(value.derHex));
 		case "unknown":
 			return tlv(value.tag, value.value);
 		default: {
@@ -405,6 +448,63 @@ export function encodeCrlDistributionPoints(
 			])
 		),
 	);
+}
+
+export function encodeNameConstraints(
+	constraints: NameConstraints,
+): Uint8Array {
+	const parts: Uint8Array[] = [];
+	if (
+		constraints.permittedSubtrees !== undefined
+		&& constraints.permittedSubtrees.length > 0
+	) {
+		parts.push(
+			implicitConstructedContext(
+				0,
+				concatBytes(constraints.permittedSubtrees.map(encodeGeneralSubtree)),
+			),
+		);
+	}
+	if (
+		constraints.excludedSubtrees !== undefined
+		&& constraints.excludedSubtrees.length > 0
+	) {
+		parts.push(
+			implicitConstructedContext(
+				1,
+				concatBytes(constraints.excludedSubtrees.map(encodeGeneralSubtree)),
+			),
+		);
+	}
+	return sequence(parts);
+}
+
+function encodeGeneralSubtree(subtree: GeneralSubtree): Uint8Array {
+	return sequence([encodeNameConstraintForm(subtree.base)]);
+}
+
+function encodeNameConstraintForm(form: NameConstraintForm): Uint8Array {
+	switch (form.type) {
+		case "dns":
+			return implicitPrimitiveContext(2, new TextEncoder().encode(form.value));
+		case "email":
+			return implicitPrimitiveContext(1, new TextEncoder().encode(form.value));
+		case "uri":
+			return implicitPrimitiveContext(6, new TextEncoder().encode(form.value));
+		case "ip":
+			return implicitPrimitiveContext(
+				7,
+				concatBytes([form.addressBytes, form.maskBytes]),
+			);
+		case "directoryName":
+			return implicitConstructedContext(4, hexToBytes(form.derHex));
+		default: {
+			const _exhaustive: never = form;
+			throw new Error(
+				`Unhandled NameConstraintForm type: ${String(_exhaustive)}`,
+			);
+		}
+	}
 }
 
 export function getExtendedKeyUsageOid(usage: ExtendedKeyUsage): string {

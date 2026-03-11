@@ -2172,6 +2172,375 @@ describe("micro509", () => {
 		});
 		expect(result.ok).toBe(false);
 	});
+
+	// -----------------------------------------------------------------------
+	// Name constraints
+	// -----------------------------------------------------------------------
+
+	it("permits a leaf DNS SAN within CA permitted DNS subtree", async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: "NC Root CA" },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ["keyCertSign", "cRLSign"],
+				nameConstraints: {
+					permittedSubtrees: [{ base: { type: "dns", value: "example.com" } }],
+				},
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: "NC Root CA" },
+			subject: { commonName: "allowed.example.com" },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ["digitalSignature"],
+				subjectAltNames: [{ type: "dns", value: "allowed.example.com" }],
+			},
+		});
+		const result = await verifyCertificateChain({
+			leaf: leaf.pem,
+			roots: [root.certificate.pem],
+		});
+		expect(result.ok).toBe(true);
+	});
+
+	it("rejects a leaf DNS SAN outside CA permitted DNS subtree", async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: "NC Root CA" },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ["keyCertSign", "cRLSign"],
+				nameConstraints: {
+					permittedSubtrees: [{ base: { type: "dns", value: "example.com" } }],
+				},
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: "NC Root CA" },
+			subject: { commonName: "evil.notexample.com" },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ["digitalSignature"],
+				subjectAltNames: [{ type: "dns", value: "evil.notexample.com" }],
+			},
+		});
+		const result = await verifyCertificateChain({
+			leaf: leaf.pem,
+			roots: [root.certificate.pem],
+		});
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.code).toBe("name_constraints_violated");
+		}
+	});
+
+	it("rejects a leaf DNS SAN matching excluded DNS subtree", async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: "NC Root CA" },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ["keyCertSign", "cRLSign"],
+				nameConstraints: {
+					excludedSubtrees: [
+						{ base: { type: "dns", value: "forbidden.example.com" } },
+					],
+				},
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: "NC Root CA" },
+			subject: { commonName: "host.forbidden.example.com" },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ["digitalSignature"],
+				subjectAltNames: [{ type: "dns", value: "host.forbidden.example.com" }],
+			},
+		});
+		const result = await verifyCertificateChain({
+			leaf: leaf.pem,
+			roots: [root.certificate.pem],
+		});
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.code).toBe("name_constraints_violated");
+		}
+	});
+
+	it("enforces name constraints from intermediate CA, not just root", async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: "NC Root CA" },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 1 },
+				keyUsage: ["keyCertSign", "cRLSign"],
+			},
+		});
+		const intermediateKeys = await generateKeyPair();
+		const intermediate = await createCertificate({
+			issuer: { commonName: "NC Root CA" },
+			subject: { commonName: "NC Intermediate CA" },
+			publicKey: intermediateKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ["keyCertSign", "cRLSign"],
+				nameConstraints: {
+					permittedSubtrees: [
+						{ base: { type: "dns", value: "narrow.example.com" } },
+					],
+				},
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: "NC Intermediate CA" },
+			subject: { commonName: "host.narrow.example.com" },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: intermediateKeys.privateKey,
+			issuerPublicKey: intermediateKeys.publicKey,
+			extensions: {
+				keyUsage: ["digitalSignature"],
+				subjectAltNames: [{ type: "dns", value: "host.narrow.example.com" }],
+			},
+		});
+		const okResult = await verifyCertificateChain({
+			leaf: leaf.pem,
+			intermediates: [intermediate.pem],
+			roots: [root.certificate.pem],
+		});
+		expect(okResult.ok).toBe(true);
+
+		// Same intermediate, but leaf outside the permitted subtree
+		const badLeafKeys = await generateKeyPair();
+		const badLeaf = await createCertificate({
+			issuer: { commonName: "NC Intermediate CA" },
+			subject: { commonName: "other.example.com" },
+			publicKey: badLeafKeys.publicKey,
+			signerPrivateKey: intermediateKeys.privateKey,
+			issuerPublicKey: intermediateKeys.publicKey,
+			extensions: {
+				keyUsage: ["digitalSignature"],
+				subjectAltNames: [{ type: "dns", value: "other.example.com" }],
+			},
+		});
+		const failResult = await verifyCertificateChain({
+			leaf: badLeaf.pem,
+			intermediates: [intermediate.pem],
+			roots: [root.certificate.pem],
+		});
+		expect(failResult.ok).toBe(false);
+		if (!failResult.ok) {
+			expect(failResult.code).toBe("name_constraints_violated");
+		}
+	});
+
+	it("permits leaf IP SAN within CA permitted IP subnet", async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: "NC IP Root CA" },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ["keyCertSign", "cRLSign"],
+				nameConstraints: {
+					permittedSubtrees: [
+						{
+							base: {
+								type: "ip",
+								addressBytes: Uint8Array.of(10, 0, 0, 0),
+								maskBytes: Uint8Array.of(255, 0, 0, 0),
+							},
+						},
+					],
+				},
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: "NC IP Root CA" },
+			subject: { commonName: "ip-leaf" },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ["digitalSignature"],
+				subjectAltNames: [{ type: "ip", value: "10.1.2.3" }],
+			},
+		});
+		const okResult = await verifyCertificateChain({
+			leaf: leaf.pem,
+			roots: [root.certificate.pem],
+		});
+		expect(okResult.ok).toBe(true);
+
+		// IP outside subnet
+		const badKeys = await generateKeyPair();
+		const badLeaf = await createCertificate({
+			issuer: { commonName: "NC IP Root CA" },
+			subject: { commonName: "ip-leaf-bad" },
+			publicKey: badKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ["digitalSignature"],
+				subjectAltNames: [{ type: "ip", value: "192.168.1.1" }],
+			},
+		});
+		const failResult = await verifyCertificateChain({
+			leaf: badLeaf.pem,
+			roots: [root.certificate.pem],
+		});
+		expect(failResult.ok).toBe(false);
+		if (!failResult.ok) {
+			expect(failResult.code).toBe("name_constraints_violated");
+		}
+	});
+
+	it("permits email SAN within CA permitted email domain", async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: "NC Email Root CA" },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ["keyCertSign", "cRLSign"],
+				nameConstraints: {
+					permittedSubtrees: [
+						{ base: { type: "email", value: "example.com" } },
+					],
+				},
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: "NC Email Root CA" },
+			subject: { commonName: "email-leaf" },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ["digitalSignature"],
+				subjectAltNames: [{ type: "email", value: "user@example.com" }],
+			},
+		});
+		const okResult = await verifyCertificateChain({
+			leaf: leaf.pem,
+			roots: [root.certificate.pem],
+		});
+		expect(okResult.ok).toBe(true);
+
+		// Email outside domain
+		const badKeys = await generateKeyPair();
+		const badLeaf = await createCertificate({
+			issuer: { commonName: "NC Email Root CA" },
+			subject: { commonName: "email-leaf-bad" },
+			publicKey: badKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ["digitalSignature"],
+				subjectAltNames: [{ type: "email", value: "user@otherdomain.com" }],
+			},
+		});
+		const failResult = await verifyCertificateChain({
+			leaf: badLeaf.pem,
+			roots: [root.certificate.pem],
+		});
+		expect(failResult.ok).toBe(false);
+		if (!failResult.ok) {
+			expect(failResult.code).toBe("name_constraints_violated");
+		}
+	});
+
+	it("parses and round-trips nameConstraints extension", async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: "NC Parse Test CA" },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ["keyCertSign", "cRLSign"],
+				nameConstraints: {
+					permittedSubtrees: [
+						{ base: { type: "dns", value: "example.com" } },
+						{ base: { type: "email", value: ".example.org" } },
+					],
+					excludedSubtrees: [
+						{ base: { type: "dns", value: "bad.example.com" } },
+					],
+				},
+			},
+		});
+		const parsed = parseCertificatePem(root.certificate.pem);
+		expect(parsed.nameConstraints).toBeDefined();
+		expect(parsed.nameConstraints?.permittedSubtrees).toHaveLength(2);
+		expect(parsed.nameConstraints?.excludedSubtrees).toHaveLength(1);
+		const permitted = parsed.nameConstraints?.permittedSubtrees;
+		expect(permitted?.[0]?.base).toEqual({
+			type: "dns",
+			value: "example.com",
+		});
+		expect(permitted?.[1]?.base).toEqual({
+			type: "email",
+			value: ".example.org",
+		});
+		const excluded = parsed.nameConstraints?.excludedSubtrees;
+		expect(excluded?.[0]?.base).toEqual({
+			type: "dns",
+			value: "bad.example.com",
+		});
+	});
+
+	it("does not apply name constraints to self-issued intermediates", async () => {
+		// A self-issued certificate should NOT be checked against name
+		// constraints, per RFC 5280 §6.1.3(b).
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: "NC Self-Issued Root" },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 1 },
+				keyUsage: ["keyCertSign", "cRLSign"],
+				nameConstraints: {
+					permittedSubtrees: [{ base: { type: "dns", value: "example.com" } }],
+				},
+			},
+		});
+		// Self-issued intermediate: issuer == subject, yet CN is not
+		// in the permitted DNS subtree. Should still pass because
+		// self-issued certs are exempt from name constraint checking.
+		const intermediateKeys = await generateKeyPair();
+		const intermediate = await createCertificate({
+			issuer: { commonName: "NC Self-Issued Root" },
+			subject: { commonName: "NC Self-Issued Root" },
+			publicKey: intermediateKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ["keyCertSign", "cRLSign"],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: "NC Self-Issued Root" },
+			subject: { commonName: "ok.example.com" },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: intermediateKeys.privateKey,
+			issuerPublicKey: intermediateKeys.publicKey,
+			extensions: {
+				keyUsage: ["digitalSignature"],
+				subjectAltNames: [{ type: "dns", value: "ok.example.com" }],
+			},
+		});
+		const result = await verifyCertificateChain({
+			leaf: leaf.pem,
+			intermediates: [intermediate.pem],
+			roots: [root.certificate.pem],
+		});
+		expect(result.ok).toBe(true);
+	});
 });
 
 function childrenOf(

@@ -12,7 +12,7 @@
 - [x] Structured trust-anchor input model, not only convenience via root certificates
 - [x] Unsupported critical extension rejection during candidate path validation
 - [x] Self-issued handling for name-constraint / path-processing edge cases
-- [ ] Name constraints support
+- [x] Name constraints support
 - [ ] Initial permitted/excluded subtree validator inputs
 - [ ] Certificate policy processing
 - [ ] RFC 9618-style policy validation algorithm if policy validation is implemented

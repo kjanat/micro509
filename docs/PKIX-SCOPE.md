@@ -42,10 +42,10 @@
 
 ## 5. Name constraints
 
-- [ ] Support `nameConstraints` on CA certificates.
+- [x] Support `nameConstraints` on CA certificates.
 - [ ] Support initial permitted/excluded subtrees as validator inputs.
-- [ ] Apply constraints across supported name forms, not just DNS SANs.
-- [ ] Handle self-issued certificates correctly when evaluating constraints. (IETF Datatracker[^rfc5280])
+- [x] Apply constraints across supported name forms, not just DNS SANs.
+- [x] Handle self-issued certificates correctly when evaluating constraints. (IETF Datatracker[^rfc5280])
 
 ## 6. Certificate policy processing
 

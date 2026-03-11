@@ -39,6 +39,7 @@ export const OIDS = {
 	subjectKeyIdentifier: "2.5.29.14",
 	keyUsage: "2.5.29.15",
 	subjectAltName: "2.5.29.17",
+	nameConstraints: "2.5.29.30",
 	cRLNumber: "2.5.29.20",
 	cRLReason: "2.5.29.21",
 	invalidityDate: "2.5.29.24",

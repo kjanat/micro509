@@ -14,7 +14,10 @@ import {
 	type AuthorityInformationAccess,
 	type BasicConstraints,
 	type ExtendedKeyUsage,
+	type GeneralSubtree,
 	type KeyUsage,
+	type NameConstraintForm,
+	type NameConstraints,
 	parseAuthorityInfoAccessMethodOid,
 	parseExtendedKeyUsageOid,
 	type SubjectAltName,
@@ -102,6 +105,7 @@ export interface ParsedCertificate<
 	readonly keyUsage?: readonly KeyUsage[];
 	readonly extendedKeyUsage?: readonly ExtendedKeyUsage[];
 	readonly subjectAltNames?: readonly SubjectAltName[];
+	readonly nameConstraints?: NameConstraints;
 	readonly authorityInfoAccess?: readonly AuthorityInformationAccess[];
 	readonly crlDistributionPoints?: readonly string[];
 	readonly decodedExtensions?: readonly DecodedExtensionValue<unknown>[];
@@ -207,6 +211,9 @@ export function parseCertificateDer<
 			: {}),
 		...(parsedExtensions.subjectAltNames !== undefined
 			? { subjectAltNames: parsedExtensions.subjectAltNames }
+			: {}),
+		...(parsedExtensions.nameConstraints !== undefined
+			? { nameConstraints: parsedExtensions.nameConstraints }
 			: {}),
 		...(parsedExtensions.authorityInfoAccess !== undefined
 			? { authorityInfoAccess: parsedExtensions.authorityInfoAccess }
@@ -395,6 +402,7 @@ interface ParsedExtensions {
 	readonly keyUsage?: readonly KeyUsage[];
 	readonly extendedKeyUsage?: readonly ExtendedKeyUsage[];
 	readonly subjectAltNames?: readonly SubjectAltName[];
+	readonly nameConstraints?: NameConstraints;
 	readonly authorityInfoAccess?: readonly AuthorityInformationAccess[];
 	readonly crlDistributionPoints?: readonly string[];
 	readonly subjectKeyIdentifier?: string;
@@ -447,6 +455,7 @@ function parseExtensionSequence(
 	let keyUsage: readonly KeyUsage[] | undefined;
 	let extendedKeyUsage: readonly ExtendedKeyUsage[] | undefined;
 	let subjectAltNames: readonly SubjectAltName[] | undefined;
+	let nameConstraints: NameConstraints | undefined;
 	let authorityInfoAccess: readonly AuthorityInformationAccess[] | undefined;
 	let crlDistributionPoints: readonly string[] | undefined;
 	let subjectKeyIdentifier: string | undefined;
@@ -484,6 +493,9 @@ function parseExtensionSequence(
 			case OIDS.subjectAltName:
 				subjectAltNames = parseSubjectAltNames(extnValue.value);
 				break;
+			case OIDS.nameConstraints:
+				nameConstraints = parseNameConstraints(extnValue.value);
+				break;
 			case OIDS.authorityInfoAccess:
 				authorityInfoAccess = parseAuthorityInfoAccess(extnValue.value);
 				break;
@@ -505,6 +517,7 @@ function parseExtensionSequence(
 		...(keyUsage !== undefined ? { keyUsage } : {}),
 		...(extendedKeyUsage !== undefined ? { extendedKeyUsage } : {}),
 		...(subjectAltNames !== undefined ? { subjectAltNames } : {}),
+		...(nameConstraints !== undefined ? { nameConstraints } : {}),
 		...(authorityInfoAccess !== undefined ? { authorityInfoAccess } : {}),
 		...(crlDistributionPoints !== undefined ? { crlDistributionPoints } : {}),
 		...(subjectKeyIdentifier !== undefined ? { subjectKeyIdentifier } : {}),
@@ -662,6 +675,11 @@ function parseSubjectAltNames(bytes: Uint8Array): readonly SubjectAltName[] {
 				};
 			case 0x87:
 				return { type: "ip" as const, value: decodeIpAddress(element.value) };
+			case 0xa4:
+				return {
+					type: "directoryName" as const,
+					derHex: toHex(rebuildDirectoryNameFromImplicit(element, bytes)),
+				};
 			default:
 				return {
 					type: "unknown" as const,
@@ -723,6 +741,113 @@ function parseCrlDistributionPoints(bytes: Uint8Array): readonly string[] {
 		}
 	}
 	return uris;
+}
+
+function parseNameConstraints(bytes: Uint8Array): NameConstraints {
+	const sequenceElement = requireElement(
+		readElement(bytes),
+		"nameConstraints sequence",
+	);
+	let permittedSubtrees: readonly GeneralSubtree[] | undefined;
+	let excludedSubtrees: readonly GeneralSubtree[] | undefined;
+	for (const child of childrenOf(bytes, sequenceElement)) {
+		if (child.tag === 0xa0) {
+			permittedSubtrees = parseGeneralSubtrees(bytes, child);
+		} else if (child.tag === 0xa1) {
+			excludedSubtrees = parseGeneralSubtrees(bytes, child);
+		}
+	}
+	return {
+		...(permittedSubtrees !== undefined ? { permittedSubtrees } : {}),
+		...(excludedSubtrees !== undefined ? { excludedSubtrees } : {}),
+	};
+}
+
+function parseGeneralSubtrees(
+	source: Uint8Array,
+	container: DerElement,
+): readonly GeneralSubtree[] {
+	const subtrees: GeneralSubtree[] = [];
+	for (const subtreeElement of childrenOf(source, container)) {
+		const children = childrenOf(source, subtreeElement);
+		const baseElement = children[0];
+		if (baseElement === undefined) {
+			continue;
+		}
+		const form = parseNameConstraintGeneralName(source, baseElement);
+		if (form !== undefined) {
+			subtrees.push({ base: form });
+		}
+	}
+	return subtrees;
+}
+
+function parseNameConstraintGeneralName(
+	source: Uint8Array,
+	element: DerElement,
+): NameConstraintForm | undefined {
+	switch (element.tag) {
+		case 0x81:
+			return { type: "email", value: textDecoder.decode(element.value) };
+		case 0x82:
+			return { type: "dns", value: textDecoder.decode(element.value) };
+		case 0x86:
+			return { type: "uri", value: textDecoder.decode(element.value) };
+		case 0x87: {
+			if (element.value.length === 8) {
+				return {
+					type: "ip",
+					addressBytes: element.value.slice(0, 4),
+					maskBytes: element.value.slice(4, 8),
+				};
+			}
+			if (element.value.length === 32) {
+				return {
+					type: "ip",
+					addressBytes: element.value.slice(0, 16),
+					maskBytes: element.value.slice(16, 32),
+				};
+			}
+			return undefined;
+		}
+		case 0xa4:
+			return {
+				type: "directoryName",
+				derHex: toHex(rebuildDirectoryNameFromImplicit(element, source)),
+			};
+	}
+	return undefined;
+}
+
+/**
+ * DirectoryName in GeneralName is IMPLICIT [4], meaning the outer tag
+ * is 0xa4 but the content is a SEQUENCE of RDNs. We must reconstruct
+ * the original SEQUENCE (tag 0x30) for DER hex comparison.
+ */
+function rebuildDirectoryNameFromImplicit(
+	element: DerElement,
+	source: Uint8Array,
+): Uint8Array {
+	const contentBytes = source.slice(element.start, element.end);
+	const lengthEncoded = encodeAsn1Length(contentBytes.length);
+	const result = new Uint8Array(1 + lengthEncoded.length + contentBytes.length);
+	result[0] = 0x30;
+	result.set(lengthEncoded, 1);
+	result.set(contentBytes, 1 + lengthEncoded.length);
+	return result;
+}
+
+function encodeAsn1Length(length: number): Uint8Array {
+	if (length < 128) {
+		return Uint8Array.of(length);
+	}
+	const parts: number[] = [];
+	let current = length;
+	while (current > 0) {
+		parts.unshift(current & 0xff);
+		current >>= 8;
+	}
+	return Uint8Array.of(0x80 | parts.length, ...parts);
 }
 
 function parseAuthorityKeyIdentifier(bytes: Uint8Array): string | undefined {

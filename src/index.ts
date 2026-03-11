@@ -35,9 +35,12 @@ export type {
 	CustomExtendedKeyUsage,
 	CustomExtension,
 	ExtendedKeyUsage,
+	GeneralSubtree,
 	KeyUsage,
 	KnownAuthorityInfoAccessMethod,
 	KnownExtendedKeyUsage,
+	NameConstraintForm,
+	NameConstraints,
 	SubjectAltName,
 } from "./extensions.ts";
 export {

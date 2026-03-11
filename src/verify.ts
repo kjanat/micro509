@@ -1,4 +1,4 @@
-import type { ExtendedKeyUsage } from "./extensions.ts";
+import type { ExtendedKeyUsage, NameConstraintForm, NameConstraints } from "./extensions.ts";
 import { OIDS } from "./oids.ts";
 import {
 	parseCertificateDer,
@@ -69,7 +69,8 @@ export type VerifyErrorCode =
 	| "subject_alt_name_mismatch"
 	| "self_signed_leaf_not_allowed"
 	| "unrecognized_critical_extension"
-	| "intermediate_eku_constraint";
+	| "intermediate_eku_constraint"
+	| "name_constraints_violated";
 
 export interface VerifyFailureDetails {
 	readonly subjectCommonName?: string;
@@ -200,6 +201,7 @@ const PROCESSED_EXTENSION_OIDS: ReadonlySet<string> = new Set([
 	OIDS.keyUsage,
 	OIDS.extendedKeyUsage,
 	OIDS.subjectAltName,
+	OIDS.nameConstraints,
 	OIDS.authorityKeyIdentifier,
 	OIDS.subjectKeyIdentifier,
 	OIDS.authorityInfoAccess,
@@ -438,6 +440,11 @@ export async function validateCandidatePath(
 				}),
 			);
 		}
+	}
+
+	const nameConstraintResult = checkNameConstraints(chain);
+	if (!nameConstraintResult.ok) {
+		return nameConstraintResult;
 	}
 
 	return validateLeaf(leaf, input);
@@ -1334,4 +1341,456 @@ function detail(input: VerifyFailureDetailsInput): VerifyFailureDetails {
 			? {}
 			: { chainCommonNames: input.chainCommonNames }),
 	};
+}
+
+// ---------------------------------------------------------------------------
+// Private: name constraint validation (RFC 5280 §4.2.1.10 / §6.1)
+// ---------------------------------------------------------------------------
+
+/** Empty SEQUENCE DER hex — represents an empty subject DN. */
+const EMPTY_SEQUENCE_HEX = "3000";
+
+/**
+ * Accumulated name constraint state during root-to-leaf traversal.
+ * - `permittedLevels`: each entry is one CA's permittedSubtrees. A name
+ *   must match at least one entry in *every* level (intersection semantics).
+ * - `excluded`: flat list; a name must NOT match *any* entry.
+ */
+interface AccumulatedNameConstraints {
+	readonly permittedLevels: readonly (readonly NameConstraintForm[])[];
+	readonly excluded: readonly NameConstraintForm[];
+}
+
+/**
+ * Walks the chain root-to-leaf, accumulating nameConstraints from CA
+ * certificates and checking each non-self-issued certificate's names
+ * against the accumulated constraints.
+ *
+ * RFC 5280 §6.1.3(b)–(c) for intermediates, §6.1.5(g) for the leaf.
+ */
+function checkNameConstraints(
+	chain: readonly ParsedCertificate[],
+): ValidateCandidatePathResult {
+	let accumulated: AccumulatedNameConstraints = {
+		permittedLevels: [],
+		excluded: [],
+	};
+
+	// Seed constraints from the root (trust anchor). The root's own
+	// names are not checked, but its nameConstraints apply to all
+	// certificates below it in the chain.
+	const root = chain[chain.length - 1];
+	if (root?.nameConstraints !== undefined) {
+		accumulated = accumulateConstraints(accumulated, root.nameConstraints);
+	}
+
+	// Walk from just below root toward leaf.
+	for (let index = chain.length - 2; index >= 0; index -= 1) {
+		const current = chain[index];
+		if (current === undefined) {
+			continue;
+		}
+
+		// (b) If not self-issued, check names against accumulated constraints.
+		if (!isSelfIssued(current)) {
+			const nameCheckResult = checkCertificateNames(
+				current,
+				accumulated,
+				index,
+			);
+			if (!nameCheckResult.ok) {
+				return nameCheckResult;
+			}
+		}
+
+		// (c) If this cert has nameConstraints, accumulate them.
+		if (current.nameConstraints !== undefined) {
+			accumulated = accumulateConstraints(accumulated, current.nameConstraints);
+		}
+	}
+
+	return { ok: true };
+}
+
+function accumulateConstraints(
+	current: AccumulatedNameConstraints,
+	constraints: NameConstraints,
+): AccumulatedNameConstraints {
+	const permittedLevels = constraints.permittedSubtrees !== undefined
+			&& constraints.permittedSubtrees.length > 0
+		? [
+			...current.permittedLevels,
+			constraints.permittedSubtrees.map((subtree) => subtree.base),
+		]
+		: current.permittedLevels;
+	const excluded = constraints.excludedSubtrees !== undefined
+			&& constraints.excludedSubtrees.length > 0
+		? [
+			...current.excluded,
+			...constraints.excludedSubtrees.map((subtree) => subtree.base),
+		]
+		: current.excluded;
+	return { permittedLevels, excluded };
+}
+
+/**
+ * Checks a certificate's subject DN and SANs against accumulated
+ * name constraints. Returns a failure if any name violates constraints.
+ */
+function checkCertificateNames(
+	certificate: ParsedCertificate,
+	accumulated: AccumulatedNameConstraints,
+	index: number,
+): ValidateCandidatePathResult {
+	// Check subject DN as directoryName (if non-empty).
+	if (certificate.subject.derHex !== EMPTY_SEQUENCE_HEX) {
+		const dnResult = isNamePermitted(
+			{ type: "directoryName", derHex: certificate.subject.derHex },
+			accumulated,
+		);
+		if (!dnResult) {
+			return failure(
+				"name_constraints_violated",
+				"subject distinguished name violates name constraints",
+				index,
+				detail({
+					subjectCommonName: certificate.subject.values.commonName,
+				}),
+			);
+		}
+	}
+
+	// Check each SAN.
+	if (certificate.subjectAltNames !== undefined) {
+		for (const san of certificate.subjectAltNames) {
+			const checkable = sanToConstraintCheckable(san);
+			if (checkable === undefined) {
+				continue;
+			}
+			if (!isNamePermitted(checkable, accumulated)) {
+				return failure(
+					"name_constraints_violated",
+					`SAN ${formatConstraintForm(checkable)} violates name constraints`,
+					index,
+					detail({
+						subjectCommonName: certificate.subject.values.commonName,
+						actual: formatConstraintForm(checkable),
+					}),
+				);
+			}
+		}
+	}
+
+	return { ok: true };
+}
+
+/**
+ * Converts a SubjectAltName to a NameConstraintForm for checking.
+ * Returns `undefined` for name forms that don't participate in
+ * constraint checking (unknown tags).
+ */
+function sanToConstraintCheckable(
+	san: import("./extensions.ts").SubjectAltName,
+): NameConstraintForm | undefined {
+	switch (san.type) {
+		case "dns":
+			return { type: "dns", value: san.value };
+		case "email":
+			return { type: "email", value: san.value };
+		case "uri":
+			return { type: "uri", value: san.value };
+		case "ip":
+			return {
+				type: "ip",
+				addressBytes: parseIpAddressToBytes(san.value),
+				maskBytes: allOnesMask(san.value),
+			};
+		case "directoryName":
+			return { type: "directoryName", derHex: san.derHex };
+		case "unknown":
+			return undefined;
+		default: {
+			const _exhaustive: never = san;
+			throw new Error(`Unhandled SubjectAltName type: ${String(_exhaustive)}`);
+		}
+	}
+}
+
+/**
+ * Checks whether a name is permitted by the accumulated constraints.
+ * A name is permitted if:
+ * 1. It does NOT match any excluded constraint, AND
+ * 2. For every permitted level that contains constraints of the same
+ *    name form, it matches at least one.
+ */
+function isNamePermitted(
+	name: NameConstraintForm,
+	accumulated: AccumulatedNameConstraints,
+): boolean {
+	// Check excluded — if any match, reject.
+	for (const constraint of accumulated.excluded) {
+		if (nameMatchesConstraint(name, constraint)) {
+			return false;
+		}
+	}
+	// Check permitted — for each level with relevant constraints,
+	// the name must match at least one.
+	for (const level of accumulated.permittedLevels) {
+		const relevant = level.filter(
+			(constraint) => constraint.type === name.type,
+		);
+		if (relevant.length === 0) {
+			continue;
+		}
+		if (
+			!relevant.some((constraint) => nameMatchesConstraint(name, constraint))
+		) {
+			return false;
+		}
+	}
+	return true;
+}
+
+function nameMatchesConstraint(
+	name: NameConstraintForm,
+	constraint: NameConstraintForm,
+): boolean {
+	if (name.type === "dns" && constraint.type === "dns") {
+		return matchesDnsConstraint(name.value, constraint.value);
+	}
+	if (name.type === "email" && constraint.type === "email") {
+		return matchesEmailConstraint(name.value, constraint.value);
+	}
+	if (name.type === "uri" && constraint.type === "uri") {
+		return matchesUriConstraint(name.value, constraint.value);
+	}
+	if (name.type === "ip" && constraint.type === "ip") {
+		return matchesIpConstraint(
+			name.addressBytes,
+			constraint.addressBytes,
+			constraint.maskBytes,
+		);
+	}
+	if (name.type === "directoryName" && constraint.type === "directoryName") {
+		return matchesDnConstraint(name.derHex, constraint.derHex);
+	}
+	return false;
+}
+
+/**
+ * RFC 5280 §4.2.1.10: DNS name constraint matching.
+ * Constraint "example.com" matches "example.com" and any subdomain.
+ * Constraint ".example.com" matches only subdomains, not "example.com" itself.
+ */
+function matchesDnsConstraint(name: string, constraint: string): boolean {
+	const lowerName = name.toLowerCase();
+	const lowerConstraint = constraint.toLowerCase();
+	if (lowerConstraint.length === 0) {
+		return true;
+	}
+	if (lowerConstraint.startsWith(".")) {
+		return lowerName.endsWith(lowerConstraint);
+	}
+	return (
+		lowerName === lowerConstraint || lowerName.endsWith(`.${lowerConstraint}`)
+	);
+}
+
+/**
+ * RFC 5280 §4.2.1.10: Email constraint matching.
+ * - "user@example.com" matches only that exact address.
+ * - "example.com" matches any address @example.com.
+ * - ".example.com" matches any address @subdomain.example.com.
+ */
+function matchesEmailConstraint(name: string, constraint: string): boolean {
+	const lowerName = name.toLowerCase();
+	const lowerConstraint = constraint.toLowerCase();
+	if (lowerConstraint.includes("@")) {
+		return lowerName === lowerConstraint;
+	}
+	const atIndex = lowerName.indexOf("@");
+	if (atIndex < 0) {
+		return false;
+	}
+	const host = lowerName.slice(atIndex + 1);
+	if (lowerConstraint.startsWith(".")) {
+		return host.endsWith(lowerConstraint);
+	}
+	return host === lowerConstraint;
+}
+
+/**
+ * RFC 5280 §4.2.1.10: URI constraint matching.
+ * Applied to the host part of the URI, same rules as DNS.
+ */
+function matchesUriConstraint(uri: string, constraint: string): boolean {
+	const host = extractUriHost(uri);
+	if (host === undefined) {
+		return false;
+	}
+	return matchesDnsConstraint(host, constraint);
+}
+
+function extractUriHost(uri: string): string | undefined {
+	const schemeEnd = uri.indexOf("://");
+	if (schemeEnd < 0) {
+		return undefined;
+	}
+	const afterScheme = uri.slice(schemeEnd + 3);
+	const atSign = afterScheme.indexOf("@");
+	const hostStart = atSign >= 0 ? atSign + 1 : 0;
+	const rest = afterScheme.slice(hostStart);
+	const pathStart = rest.indexOf("/");
+	const portStart = rest.indexOf(":");
+	const end = pathStart >= 0
+		? portStart >= 0
+			? Math.min(pathStart, portStart)
+			: pathStart
+		: portStart >= 0
+		? portStart
+		: rest.length;
+	return rest.slice(0, end);
+}
+
+/**
+ * RFC 5280 §4.2.1.10: IP constraint matching.
+ * (nameIP & mask) == (constraintIP & mask)
+ */
+function matchesIpConstraint(
+	nameBytes: Uint8Array,
+	constraintAddr: Uint8Array,
+	constraintMask: Uint8Array,
+): boolean {
+	if (nameBytes.length !== constraintAddr.length) {
+		return false;
+	}
+	for (let i = 0; i < nameBytes.length; i += 1) {
+		const nameByte = nameBytes[i] ?? 0;
+		const addrByte = constraintAddr[i] ?? 0;
+		const maskByte = constraintMask[i] ?? 0;
+		if ((nameByte & maskByte) !== (addrByte & maskByte)) {
+			return false;
+		}
+	}
+	return true;
+}
+
+/**
+ * RFC 5280 §4.2.1.10: DirectoryName constraint matching.
+ * The subject DN must equal or be subordinate to the constraint DN.
+ * Subordinate means the constraint's DER is a prefix of the subject's
+ * RDN sequence.
+ *
+ * NOTE: This uses byte-exact DER comparison, which is stricter than
+ * RFC 5280 §7.1 (which allows string normalization). This avoids
+ * false positives but may produce false negatives for DNs with
+ * different string encodings (e.g. PrintableString vs UTF8String).
+ */
+function matchesDnConstraint(
+	subjectDerHex: string,
+	constraintDerHex: string,
+): boolean {
+	if (subjectDerHex === constraintDerHex) {
+		return true;
+	}
+	// Check if constraint is a prefix: the subject's RDN sequence
+	// starts with all RDNs from the constraint.
+	// DER SEQUENCE: tag(0x30) + length + content
+	// We compare the content (RDN SET elements) as a prefix.
+	const subjectContent = extractSequenceContent(subjectDerHex);
+	const constraintContent = extractSequenceContent(constraintDerHex);
+	if (subjectContent === undefined || constraintContent === undefined) {
+		return false;
+	}
+	return subjectContent.startsWith(constraintContent);
+}
+
+function extractSequenceContent(derHex: string): string | undefined {
+	if (derHex.length < 4) {
+		return undefined;
+	}
+	// Tag must be 0x30 (SEQUENCE)
+	if (derHex.slice(0, 2) !== "30") {
+		return undefined;
+	}
+	const firstLengthByte = Number.parseInt(derHex.slice(2, 4), 16);
+	if (Number.isNaN(firstLengthByte)) {
+		return undefined;
+	}
+	if (firstLengthByte < 128) {
+		return derHex.slice(4);
+	}
+	const lengthOctets = firstLengthByte & 0x7f;
+	return derHex.slice(4 + lengthOctets * 2);
+}
+
+function parseIpAddressToBytes(value: string): Uint8Array {
+	if (value.includes(":")) {
+		return parseIpv6ToBytes(value);
+	}
+	const segments = value.split(".");
+	if (segments.length !== 4) {
+		throw new Error(`Invalid IPv4 address: ${value}`);
+	}
+	return Uint8Array.from(
+		segments.map((segment) => {
+			const parsed = Number(segment);
+			if (!Number.isInteger(parsed) || parsed < 0 || parsed > 255) {
+				throw new Error(`Invalid IPv4 address: ${value}`);
+			}
+			return parsed;
+		}),
+	);
+}
+
+function parseIpv6ToBytes(value: string): Uint8Array {
+	const expanded = expandIpv6(value);
+	const bytes = new Uint8Array(16);
+	expanded.forEach((segment, index) => {
+		const parsed = Number.parseInt(segment, 16);
+		bytes[index * 2] = parsed >> 8;
+		bytes[index * 2 + 1] = parsed & 0xff;
+	});
+	return bytes;
+}
+
+function allOnesMask(ipValue: string): Uint8Array {
+	const length = ipValue.includes(":") ? 16 : 4;
+	const mask = new Uint8Array(length);
+	mask.fill(0xff);
+	return mask;
+}
+
+function formatConstraintForm(form: NameConstraintForm): string {
+	switch (form.type) {
+		case "dns":
+			return `dns:${form.value}`;
+		case "email":
+			return `email:${form.value}`;
+		case "uri":
+			return `uri:${form.value}`;
+		case "ip":
+			return `ip:${formatIpBytes(form.addressBytes)}`;
+		case "directoryName":
+			return `dn:${form.derHex.slice(0, 20)}...`;
+		default: {
+			const _exhaustive: never = form;
+			throw new Error(
+				`Unhandled NameConstraintForm type: ${String(_exhaustive)}`,
+			);
+		}
+	}
+}
+
+function formatIpBytes(bytes: Uint8Array): string {
+	if (bytes.length === 4) {
+		return Array.from(bytes, (value) => String(value)).join(".");
+	}
+	const groups: string[] = [];
+	for (let index = 0; index < bytes.length; index += 2) {
+		const left = bytes[index] ?? 0;
+		const right = bytes[index + 1] ?? 0;
+		groups.push(((left << 8) | right).toString(16));
+	}
+	return groups.join(":");
 }
