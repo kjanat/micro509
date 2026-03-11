@@ -134,6 +134,7 @@ const jwkPublicKey = await importPublicJwk(await keyPair.exportPublicJwk(), {
 import {
 	decodeExtension,
 	decodeExtensions,
+	defineExtensionDecoderMap,
 	findExtension,
 	parseCertificatePem,
 	parseCertificateSigningRequestPem,
@@ -249,9 +250,19 @@ const pfx = await createPfx({
 	],
 });
 
-const parsedPfx = parsePfxPem(pfx.pem);
+const parsedPfx = await parsePfxPem(pfx.pem);
 console.log(parsedPfx.certificates.length);
 console.log(parsedPfx.bags[0]?.attributes.friendlyName);
+
+const encryptedPfx = await createPfx({
+	certificates: [{ certificate: leaf.pem }],
+	privateKeys: [{ privateKey: leafKey.privateKey }],
+	encryption: { password: "secret123" },
+});
+
+const parsedEncryptedPfx = await parsePfxPem(encryptedPfx.pem, {
+	password: "secret123",
+});
 ```
 
 ## CRL
@@ -345,7 +356,7 @@ if (result.ok) {
 - pem helpers: split mixed cert/csr/key bundles by label
 - pkcs7 helpers: create/parse degenerate signedData cert bags
 - crl helpers: create/parse/verify CRLs and check revocation by serial
-- pfx helpers: create/parse passwordless cert+key bundles with bag attributes
+- pfx helpers: create/parse passwordless or encrypted cert+key bundles with bag attributes
 - legacy key helpers: PKCS#1 RSA private key and SEC1 EC private key import/export
 - extended key usage: built-ins + custom OID escape hatch
 - chain verify: async, WebCrypto-based, browser-safe, multi-candidate path building, issuer match, signatures, time, CA/keyCertSign, pathLen, AKI/SKI, SAN/EKU checks

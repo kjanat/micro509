@@ -326,7 +326,7 @@ describe("micro509", () => {
 				},
 			],
 		});
-		const parsed = parsePfxPem(pfx.pem);
+		const parsed = await parsePfxPem(pfx.pem);
 		expect(parsed.certificates.map((certificate) => certificate.subject.values.commonName)).toEqual([
 			"pfx-leaf.example",
 			"PFX Root",
@@ -336,6 +336,27 @@ describe("micro509", () => {
 			kind: "certificate",
 			attributes: { friendlyName: "leaf", localKeyId: "010203" },
 		});
+	});
+
+	it("creates and parses encrypted PFX bundles", async () => {
+		const keyPair = await generateKeyPair();
+		const certificate = await createSelfSignedCertificate({
+			subject: { commonName: "encrypted-pfx.example" },
+			keyPair,
+		});
+		const pfx = await createPfx({
+			certificates: [{ certificate: certificate.certificate.pem, attributes: { friendlyName: "leaf" } }],
+			privateKeys: [{ privateKey: keyPair.privateKey, attributes: { friendlyName: "leaf-key" } }],
+			encryption: { password: "secret123" },
+		});
+		const parsed = await parsePfxPem(pfx.pem, { password: "secret123" });
+		expect(parsed.certificates.map((entry) => entry.subject.values.commonName)).toEqual([
+			"encrypted-pfx.example",
+		]);
+		expect(parsed.privateKeys).toHaveLength(1);
+		await expect(parsePfxPem(pfx.pem, { password: "wrong" })).rejects.toThrow(
+			"Invalid PFX password or encrypted content",
+		);
 	});
 
 	it("creates, parses, and verifies CRLs", async () => {
