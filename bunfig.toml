@@ -1,0 +1,3 @@
+[test]
+root = "test"
+coveragePathIgnorePatterns = ["test/helpers.ts"]
