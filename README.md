@@ -13,6 +13,8 @@ Tiny X.509 builders for modern TypeScript.
 - PKCS#7 certificate bag helpers
 - CRL parse/create/verify helpers
 - passwordless PFX bundle helpers
+- OCSP request build + OCSP response parse helpers
+- encrypted PKCS#8 / encrypted PFX via PBES2
 - WebCrypto-first, typed, small surface
 
 ## Install
@@ -173,6 +175,22 @@ const parsedCsr = parseCertificateSigningRequestPem(csr.pem);
 console.log(parsedCsr.subjectAltNames);
 ```
 
+## Encrypted PKCS#8
+
+```ts
+import { exportEncryptedPkcs8Pem, importEncryptedPkcs8Pem } from "micro509";
+
+const encryptedPem = await exportEncryptedPkcs8Pem(keyPair.privateKey, {
+	password: "secret123",
+});
+
+const privateKey = await importEncryptedPkcs8Pem(
+	encryptedPem,
+	"secret123",
+	{ kind: "rsa" },
+);
+```
+
 ## Custom extensions
 
 ```ts
@@ -289,6 +307,27 @@ console.log(isCertificateRevoked(serialBytes, parsedCrl));
 console.log(await verifyCertificateRevocationList(crl.pem, caCert.pem));
 ```
 
+## OCSP
+
+```ts
+import {
+	createOcspRequest,
+	parseOcspRequestPem,
+	parseOcspResponseDer,
+} from "micro509";
+
+const request = await createOcspRequest({
+	requests: [{ certificate: leaf.pem, issuerCertificate: issuer.pem }],
+	nonce: Uint8Array.of(0xaa, 0xbb),
+});
+
+const parsedRequest = parseOcspRequestPem(request.pem);
+console.log(parsedRequest.requests.length);
+
+const parsedResponse = parseOcspResponseDer(responseDer);
+console.log(parsedResponse.responseStatus);
+```
+
 ## Legacy private key PEM
 
 ```ts
@@ -355,7 +394,8 @@ if (result.ok) {
 - decoder maps: strongly keyed `decodedExtensionMap` on parse results
 - pem helpers: split mixed cert/csr/key bundles by label
 - pkcs7 helpers: create/parse degenerate signedData cert bags
-- crl helpers: create/parse/verify CRLs and check revocation by serial
+- crl helpers: create/parse/verify CRLs, delta CRL indicator, entry reason/invalidity extensions, revocation lookup by serial
+- ocsp helpers: build requests, parse requests, parse responses
 - pfx helpers: create/parse passwordless or encrypted cert+key bundles with bag attributes
 - legacy key helpers: PKCS#1 RSA private key and SEC1 EC private key import/export
 - extended key usage: built-ins + custom OID escape hatch

@@ -31,7 +31,10 @@ export function pemDecode(label: string, pem: string): Uint8Array {
 	if (!normalized.startsWith(begin) || !normalized.endsWith(end)) {
 		throw new Error(`Invalid PEM for ${label}`);
 	}
-	const body = normalized.slice(begin.length, normalized.length - end.length).replace(/\n/g, "").trim();
+	const body = normalized
+		.slice(begin.length, normalized.length - end.length)
+		.replace(/\n/g, "")
+		.trim();
 	return new Uint8Array(Buffer.from(body, "base64"));
 }
 
@@ -58,7 +61,9 @@ export function splitPemBlocks(input: string): readonly PemBlock[] {
 	);
 }
 
-export function categorizePemBlocks(input: string | readonly PemBlock[]): CategorizedPemBlocks {
+export function categorizePemBlocks(
+	input: string | readonly PemBlock[],
+): CategorizedPemBlocks {
 	const blocks = typeof input === "string" ? splitPemBlocks(input) : input;
 	const certificates: PemBlock[] = [];
 	const certificateRequests: PemBlock[] = [];

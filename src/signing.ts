@@ -9,7 +9,9 @@ export interface SignatureAlgorithmIdentifier {
 	readonly ecdsaRawSignatureBytes?: number;
 }
 
-export function getSignatureAlgorithm(privateKey: CryptoKey): SignatureAlgorithmIdentifier {
+export function getSignatureAlgorithm(
+	privateKey: CryptoKey,
+): SignatureAlgorithmIdentifier {
 	const algorithm = privateKey.algorithm;
 	if (algorithm.name === "RSASSA-PKCS1-v1_5") {
 		if (!hasHash(algorithm)) {
@@ -71,7 +73,9 @@ export function getSignatureAlgorithm(privateKey: CryptoKey): SignatureAlgorithm
 	throw new Error(`Unsupported signing key algorithm: ${algorithm.name}`);
 }
 
-export function encodeAlgorithmIdentifier(input: SignatureAlgorithmIdentifier): Uint8Array {
+export function encodeAlgorithmIdentifier(
+	input: SignatureAlgorithmIdentifier,
+): Uint8Array {
 	const parts = [objectIdentifier(input.algorithmOid)];
 	if (input.parameters !== undefined) {
 		parts.push(input.parameters);

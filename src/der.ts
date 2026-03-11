@@ -40,11 +40,17 @@ export function explicitContext(tag: number, value: Uint8Array): Uint8Array {
 	return tlv(0xa0 + tag, value);
 }
 
-export function implicitConstructedContext(tag: number, value: Uint8Array): Uint8Array {
+export function implicitConstructedContext(
+	tag: number,
+	value: Uint8Array,
+): Uint8Array {
 	return tlv(0xa0 + tag, value);
 }
 
-export function implicitPrimitiveContext(tag: number, value: Uint8Array): Uint8Array {
+export function implicitPrimitiveContext(
+	tag: number,
+	value: Uint8Array,
+): Uint8Array {
 	return tlv(0x80 + tag, value);
 }
 

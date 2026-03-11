@@ -73,7 +73,9 @@ const NAME_OBJECT_ORDER: readonly NameFieldKey[] = [
 ];
 
 export function encodeName(input: NameInput): Uint8Array {
-	const attributes = isNameAttributes(input) ? input : nameObjectToAttributes(input);
+	const attributes = isNameAttributes(input)
+		? input
+		: nameObjectToAttributes(input);
 	if (attributes.length === 0) {
 		throw new Error("Name must contain at least one attribute");
 	}
@@ -89,7 +91,10 @@ export function encodeName(input: NameInput): Uint8Array {
 			}
 
 			return setOf([
-				sequence([objectIdentifier(definition.oid), definition.encode(attribute.value)]),
+				sequence([
+					objectIdentifier(definition.oid),
+					definition.encode(attribute.value),
+				]),
 			]);
 		}),
 	);

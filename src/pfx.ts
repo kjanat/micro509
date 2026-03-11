@@ -2,7 +2,6 @@ import {
 	type DerElement,
 	explicitContext,
 	integerFromNumber,
-	nullValue,
 	objectIdentifier,
 	octetString,
 	readElement,
@@ -11,9 +10,10 @@ import {
 	setOf,
 	tlv,
 } from "./der.ts";
-import { exportPkcs8Der, getCrypto } from "./keys.ts";
+import { exportPkcs8Der } from "./keys.ts";
 import { OIDS } from "./oids.ts";
 import { parseCertificateDer, type ParsedCertificate } from "./parse.ts";
+import { decryptPbes2, encryptPbes2, type Pbes2EncryptionOptions } from "./pbes2.ts";
 import { base64Encode, pemEncode, splitPemBlocks } from "./pem.ts";
 
 export type PfxCertificateSource = string | Uint8Array;
@@ -40,12 +40,7 @@ export interface CreatePfxInput {
 	readonly encryption?: PfxEncryptionOptions;
 }
 
-export interface PfxEncryptionOptions {
-	readonly password: string;
-	readonly iterations?: number;
-	readonly salt?: Uint8Array;
-	readonly iv?: Uint8Array;
-}
+export type PfxEncryptionOptions = Pbes2EncryptionOptions;
 
 export interface ParsePfxOptions {
 	readonly password?: string;
@@ -99,11 +94,19 @@ export async function createPfx(input: CreatePfxInput): Promise<PfxMaterial> {
 	const privateKeyBags: Uint8Array[] = [];
 	for (const certificate of input.certificates ?? []) {
 		certificateBags.push(
-			createCertificateBag(await normalizeCertificate(certificate.certificate), certificate.attributes),
+			createCertificateBag(
+				await normalizeCertificate(certificate.certificate),
+				certificate.attributes,
+			),
 		);
 	}
 	for (const privateKey of input.privateKeys ?? []) {
-		privateKeyBags.push(createPrivateKeyBag(await normalizePrivateKey(privateKey.privateKey), privateKey.attributes));
+		privateKeyBags.push(
+			createPrivateKeyBag(
+				await normalizePrivateKey(privateKey.privateKey),
+				privateKey.attributes,
+			),
+		);
 	}
 	const contentInfos: Uint8Array[] = [];
 	if (certificateBags.length > 0) {
@@ -129,18 +132,27 @@ export async function createPfx(input: CreatePfxInput): Promise<PfxMaterial> {
 	};
 }
 
-export async function parsePfxDer(der: Uint8Array, options?: ParsePfxOptions): Promise<ParsedPfx> {
+export async function parsePfxDer(
+	der: Uint8Array,
+	options?: ParsePfxOptions,
+): Promise<ParsedPfx> {
 	const topLevel = readSequenceChildren(der);
 	const authSafe = topLevel[1];
 	if (authSafe === undefined) {
 		throw new Error("Malformed PFX");
 	}
-	const authSafeDer = der.slice(authSafe.start - authSafe.headerLength, authSafe.end);
+	const authSafeDer = der.slice(
+		authSafe.start - authSafe.headerLength,
+		authSafe.end,
+	);
 	const authenticatedSafeOctets = extractContentInfoData(authSafeDer);
 	const authenticatedSafe = readSequenceChildren(authenticatedSafeOctets);
 	const bags: ParsedPfxBag[] = [];
 	for (const contentInfo of authenticatedSafe) {
-		const contentInfoDer = authenticatedSafeOctets.slice(contentInfo.start - contentInfo.headerLength, contentInfo.end);
+		const contentInfoDer = authenticatedSafeOctets.slice(
+			contentInfo.start - contentInfo.headerLength,
+			contentInfo.end,
+		);
 		const safeContents = await extractSafeContents(contentInfoDer, options);
 		for (const bag of readSequenceChildren(safeContents)) {
 			const bagDer = safeContents.slice(bag.start - bag.headerLength, bag.end);
@@ -189,13 +201,21 @@ async function extractSafeContents(
 	}
 	const encryptedData = extractContextChild(contentInfoDer, content);
 	return decryptEncryptedData(
-		contentInfoDer.slice(encryptedData.start - encryptedData.headerLength, encryptedData.end),
+		contentInfoDer.slice(
+			encryptedData.start - encryptedData.headerLength,
+			encryptedData.end,
+		),
 		options.password,
 	);
 }
 
-export async function parsePfxPem(pem: string, options?: ParsePfxOptions): Promise<ParsedPfx> {
-	const blocks = splitPemBlocks(pem).filter((block) => block.label === "PKCS12");
+export async function parsePfxPem(
+	pem: string,
+	options?: ParsePfxOptions,
+): Promise<ParsedPfx> {
+	const blocks = splitPemBlocks(pem).filter(
+		(block) => block.label === "PKCS12",
+	);
 	const block = blocks[0];
 	if (block === undefined || blocks.length !== 1) {
 		throw new Error("Expected exactly one PKCS12 block");
@@ -203,7 +223,10 @@ export async function parsePfxPem(pem: string, options?: ParsePfxOptions): Promi
 	return parsePfxDer(block.bytes, options);
 }
 
-function createCertificateBag(certificateDer: Uint8Array, attributes: PfxBagAttributesInput | undefined): Uint8Array {
+function createCertificateBag(
+	certificateDer: Uint8Array,
+	attributes: PfxBagAttributesInput | undefined,
+): Uint8Array {
 	const certBag = sequence([
 		objectIdentifier(OIDS.x509CertificateBagType),
 		explicitContext(0, octetString(certificateDer)),
@@ -215,7 +238,10 @@ function createCertificateBag(certificateDer: Uint8Array, attributes: PfxBagAttr
 	]);
 }
 
-function createPrivateKeyBag(pkcs8Der: Uint8Array, attributes: PfxBagAttributesInput | undefined): Uint8Array {
+function createPrivateKeyBag(
+	pkcs8Der: Uint8Array,
+	attributes: PfxBagAttributesInput | undefined,
+): Uint8Array {
 	return sequence([
 		objectIdentifier(OIDS.pkcs12KeyBag),
 		explicitContext(0, pkcs8Der),
@@ -234,30 +260,13 @@ async function createEncryptedDataContentInfo(
 	data: Uint8Array,
 	options: PfxEncryptionOptions,
 ): Promise<Uint8Array> {
-	const encryption = await encryptSafeContents(data, options);
+	const encryption = await encryptPbes2(data, options);
 	const encryptedData = sequence([
 		integerFromNumber(0),
 		sequence([
 			objectIdentifier(OIDS.pkcs7Data),
-			sequence([
-				objectIdentifier(OIDS.pbes2),
-				sequence([
-					sequence([
-						objectIdentifier(OIDS.pbkdf2),
-						sequence([
-							octetString(encryption.salt),
-							integerFromNumber(encryption.iterations),
-							integerFromNumber(32),
-							sequence([objectIdentifier(OIDS.hmacWithSHA256), nullValue()]),
-						]),
-					]),
-					sequence([
-						objectIdentifier(OIDS.aes256Cbc),
-						octetString(encryption.iv),
-					]),
-				]),
-			]),
-			tlv(0x80, encryption.encrypted),
+			encryption.algorithmIdentifierDer,
+			tlv(0x80, encryption.encryptedData),
 		]),
 	]);
 	return sequence([
@@ -266,22 +275,28 @@ async function createEncryptedDataContentInfo(
 	]);
 }
 
-function encodeBagAttributes(attributes: PfxBagAttributesInput | undefined): readonly Uint8Array[] {
+function encodeBagAttributes(
+	attributes: PfxBagAttributesInput | undefined,
+): readonly Uint8Array[] {
 	if (attributes === undefined) {
 		return [];
 	}
 	const out: Uint8Array[] = [];
 	if (attributes.friendlyName !== undefined) {
-		out.push(sequence([
-			objectIdentifier(OIDS.friendlyName),
-			setOf([bmpString(attributes.friendlyName)]),
-		]));
+		out.push(
+			sequence([
+				objectIdentifier(OIDS.friendlyName),
+				setOf([bmpString(attributes.friendlyName)]),
+			]),
+		);
 	}
 	if (attributes.localKeyId !== undefined) {
-		out.push(sequence([
-			objectIdentifier(OIDS.localKeyId),
-			setOf([octetString(attributes.localKeyId)]),
-		]));
+		out.push(
+			sequence([
+				objectIdentifier(OIDS.localKeyId),
+				setOf([octetString(attributes.localKeyId)]),
+			]),
+		);
 	}
 	return out.length === 0 ? [] : [setOf(out)];
 }
@@ -298,7 +313,10 @@ function parseSafeBag(der: Uint8Array): ParsedPfxBag {
 	const attributes = parseBagAttributes(der, attributeSet);
 	if (bagOid === OIDS.pkcs12CertBag) {
 		const certBag = extractContextChild(der, bagValue);
-		const certBagDer = der.slice(certBag.start - certBag.headerLength, certBag.end);
+		const certBagDer = der.slice(
+			certBag.start - certBag.headerLength,
+			certBag.end,
+		);
 		const certBagChildren = readSequenceChildren(certBagDer);
 		const certValue = certBagChildren[1];
 		if (certValue === undefined) {
@@ -330,7 +348,10 @@ function parseSafeBag(der: Uint8Array): ParsedPfxBag {
 	};
 }
 
-function parseBagAttributes(source: Uint8Array, attributeSet: DerElement | undefined): ParsedPfxBagAttributes {
+function parseBagAttributes(
+	source: Uint8Array,
+	attributeSet: DerElement | undefined,
+): ParsedPfxBagAttributes {
 	if (attributeSet === undefined) {
 		return { entries: [] };
 	}
@@ -338,7 +359,10 @@ function parseBagAttributes(source: Uint8Array, attributeSet: DerElement | undef
 	let friendlyName: string | undefined;
 	let localKeyId: string | undefined;
 	for (const attribute of childrenOf(source, attributeSet)) {
-		const attributeDer = source.slice(attribute.start - attribute.headerLength, attribute.end);
+		const attributeDer = source.slice(
+			attribute.start - attribute.headerLength,
+			attribute.end,
+		);
 		const parts = readSequenceChildren(attributeDer);
 		const oid = parts[0];
 		const values = parts[1];
@@ -349,7 +373,10 @@ function parseBagAttributes(source: Uint8Array, attributeSet: DerElement | undef
 		const rawValues = childrenOf(attributeDer, values).map((value) =>
 			attributeDer.slice(value.start - value.headerLength, value.end)
 		);
-		entries.push({ oid: attrOid, valuesHex: rawValues.map((value) => toHex(value)) });
+		entries.push({
+			oid: attrOid,
+			valuesHex: rawValues.map((value) => toHex(value)),
+		});
 		const firstValue = rawValues[0];
 		if (firstValue === undefined) {
 			continue;
@@ -368,16 +395,22 @@ function parseBagAttributes(source: Uint8Array, attributeSet: DerElement | undef
 	};
 }
 
-async function normalizePrivateKey(source: PfxPrivateKeySource): Promise<Uint8Array> {
+async function normalizePrivateKey(
+	source: PfxPrivateKeySource,
+): Promise<Uint8Array> {
 	if (source instanceof CryptoKey) {
 		return exportPkcs8Der(source);
 	}
 	return new Uint8Array(source);
 }
 
-async function normalizeCertificate(source: PfxCertificateSource): Promise<Uint8Array> {
+async function normalizeCertificate(
+	source: PfxCertificateSource,
+): Promise<Uint8Array> {
 	if (typeof source === "string") {
-		const block = splitPemBlocks(source).find((candidate) => candidate.label === "CERTIFICATE");
+		const block = splitPemBlocks(source).find(
+			(candidate) => candidate.label === "CERTIFICATE",
+		);
 		if (block === undefined) {
 			throw new Error("Certificate PEM required");
 		}
@@ -386,30 +419,10 @@ async function normalizeCertificate(source: PfxCertificateSource): Promise<Uint8
 	return new Uint8Array(source);
 }
 
-async function encryptSafeContents(
-	data: Uint8Array,
-	options: PfxEncryptionOptions,
-): Promise<{
-	readonly iterations: number;
-	readonly salt: Uint8Array;
-	readonly iv: Uint8Array;
-	readonly encrypted: Uint8Array;
-}> {
-	const iterations = options.iterations ?? 100_000;
-	const salt = options.salt ?? getCrypto().getRandomValues(new Uint8Array(16));
-	const iv = options.iv ?? getCrypto().getRandomValues(new Uint8Array(16));
-	const key = await deriveAesKey(options.password, salt, iterations, ["encrypt"]);
-	const encrypted = new Uint8Array(
-		await getCrypto().subtle.encrypt(
-			{ name: "AES-CBC", iv: toArrayBuffer(iv) },
-			key,
-			toArrayBuffer(data),
-		),
-	);
-	return { iterations, salt, iv, encrypted };
-}
-
-async function decryptEncryptedData(encryptedDataDer: Uint8Array, password: string): Promise<Uint8Array> {
+async function decryptEncryptedData(
+	encryptedDataDer: Uint8Array,
+	password: string,
+): Promise<Uint8Array> {
 	const topLevel = readSequenceChildren(encryptedDataDer);
 	const encryptedContentInfo = topLevel[1];
 	if (encryptedContentInfo === undefined) {
@@ -425,109 +438,27 @@ async function decryptEncryptedData(encryptedDataDer: Uint8Array, password: stri
 	if (algorithm === undefined || encryptedContent === undefined) {
 		throw new Error("Malformed EncryptedContentInfo");
 	}
-	const encryption = parseEncryptionParameters(
-		contentInfoDer.slice(algorithm.start - algorithm.headerLength, algorithm.end),
-	);
 	if (encryptedContent.tag !== 0x80) {
 		throw new Error("Malformed encrypted content");
 	}
-	const key = await deriveAesKey(password, encryption.salt, encryption.iterations, ["decrypt"]);
 	try {
-		return new Uint8Array(
-			await getCrypto().subtle.decrypt(
-				{ name: "AES-CBC", iv: toArrayBuffer(encryption.iv) },
-				key,
-				toArrayBuffer(encryptedContent.value),
+		return await decryptPbes2(
+			contentInfoDer.slice(
+				algorithm.start - algorithm.headerLength,
+				algorithm.end,
 			),
+			encryptedContent.value,
+			password,
 		);
 	} catch {
 		throw new Error("Invalid PFX password or encrypted content");
 	}
 }
 
-function parseEncryptionParameters(algorithmDer: Uint8Array): {
-	readonly salt: Uint8Array;
-	readonly iterations: number;
-	readonly iv: Uint8Array;
-} {
-	const topLevel = readSequenceChildren(algorithmDer);
-	const oid = topLevel[0];
-	const params = topLevel[1];
-	if (oid === undefined || params === undefined) {
-		throw new Error("Malformed encryption algorithm");
-	}
-	if (decodeObjectIdentifier(oid.value) !== OIDS.pbes2) {
-		throw new Error("Unsupported PFX encryption algorithm");
-	}
-	const paramsDer = algorithmDer.slice(params.start - params.headerLength, params.end);
-	const pbes2Params = readSequenceChildren(paramsDer);
-	const kdf = pbes2Params[0];
-	const scheme = pbes2Params[1];
-	if (kdf === undefined || scheme === undefined) {
-		throw new Error("Malformed PBES2 params");
-	}
-	const kdfDer = paramsDer.slice(kdf.start - kdf.headerLength, kdf.end);
-	const kdfChildren = readSequenceChildren(kdfDer);
-	const kdfOid = kdfChildren[0];
-	const kdfParams = kdfChildren[1];
-	if (kdfOid === undefined || kdfParams === undefined) {
-		throw new Error("Malformed KDF params");
-	}
-	if (decodeObjectIdentifier(kdfOid.value) !== OIDS.pbkdf2) {
-		throw new Error("Unsupported KDF");
-	}
-	const pbkdf2Der = kdfDer.slice(kdfParams.start - kdfParams.headerLength, kdfParams.end);
-	const pbkdf2Params = readSequenceChildren(pbkdf2Der);
-	const salt = pbkdf2Params[0];
-	const iterations = pbkdf2Params[1];
-	if (salt === undefined || iterations === undefined || salt.tag !== 0x04) {
-		throw new Error("Malformed PBKDF2 params");
-	}
-	const schemeDer = paramsDer.slice(scheme.start - scheme.headerLength, scheme.end);
-	const schemeChildren = readSequenceChildren(schemeDer);
-	const schemeOid = schemeChildren[0];
-	const iv = schemeChildren[1];
-	if (schemeOid === undefined || iv === undefined || iv.tag !== 0x04) {
-		throw new Error("Malformed encryption scheme");
-	}
-	if (decodeObjectIdentifier(schemeOid.value) !== OIDS.aes256Cbc) {
-		throw new Error("Unsupported content encryption scheme");
-	}
-	return {
-		salt: new Uint8Array(salt.value),
-		iterations: decodeInteger(iterations.value),
-		iv: new Uint8Array(iv.value),
-	};
-}
-
-async function deriveAesKey(
-	password: string,
-	salt: Uint8Array,
-	iterations: number,
-	usages: KeyUsage[],
-): Promise<CryptoKey> {
-	const passwordKey = await getCrypto().subtle.importKey(
-		"raw",
-		new TextEncoder().encode(password),
-		"PBKDF2",
-		false,
-		["deriveKey"],
-	);
-	return getCrypto().subtle.deriveKey(
-		{
-			name: "PBKDF2",
-			salt: toArrayBuffer(salt),
-			iterations,
-			hash: "SHA-256",
-		},
-		passwordKey,
-		{ name: "AES-CBC", length: 256 },
-		false,
-		usages,
-	);
-}
-
-function extractContextOctetString(source: Uint8Array, element: DerElement): Uint8Array {
+function extractContextOctetString(
+	source: Uint8Array,
+	element: DerElement,
+): Uint8Array {
 	const child = extractContextChild(source, element);
 	if (child.tag !== 0x04) {
 		throw new Error("Expected OCTET STRING in context value");
@@ -535,7 +466,10 @@ function extractContextOctetString(source: Uint8Array, element: DerElement): Uin
 	return child.value;
 }
 
-function extractContextChild(source: Uint8Array, element: DerElement): DerElement {
+function extractContextChild(
+	source: Uint8Array,
+	element: DerElement,
+): DerElement {
 	if ((element.tag & 0xe0) !== 0xa0) {
 		throw new Error("Expected context-specific constructed value");
 	}
@@ -598,20 +532,8 @@ function decodeObjectIdentifier(bytes: Uint8Array): string {
 	return values.join(".");
 }
 
-function decodeInteger(bytes: Uint8Array): number {
-	let value = 0;
-	for (const byte of bytes) {
-		value = (value << 8) | byte;
-	}
-	return value;
-}
-
-function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-	const out = new ArrayBuffer(bytes.length);
-	new Uint8Array(out).set(bytes);
-	return out;
-}
-
 function toHex(bytes: Uint8Array): string {
-	return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+	return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join(
+		"",
+	);
 }

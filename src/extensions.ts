@@ -90,7 +90,10 @@ const EXTENDED_KEY_USAGE_OIDS: Record<KnownExtendedKeyUsage, string> = {
 	ocspSigning: OIDS.ocspSigning,
 };
 
-const AUTHORITY_INFO_ACCESS_METHOD_OIDS: Record<KnownAuthorityInfoAccessMethod, string> = {
+const AUTHORITY_INFO_ACCESS_METHOD_OIDS: Record<
+	KnownAuthorityInfoAccessMethod,
+	string
+> = {
 	ocsp: OIDS.ocspAccessMethod,
 	caIssuers: OIDS.caIssuersAccessMethod,
 };
@@ -115,7 +118,13 @@ export function buildCertificateExtensions(
 	const extensions: Uint8Array[] = [];
 	const seen = new Set<string>();
 	const basicConstraints = input?.basicConstraints ?? { ca: false };
-	pushExtension(extensions, seen, OIDS.basicConstraints, encodeBasicConstraints(basicConstraints), true);
+	pushExtension(
+		extensions,
+		seen,
+		OIDS.basicConstraints,
+		encodeBasicConstraints(basicConstraints),
+		true,
+	);
 	pushExtension(
 		extensions,
 		seen,
@@ -136,7 +145,13 @@ export function buildCertificateExtensions(
 		);
 	}
 	if (input?.keyUsage !== undefined && input.keyUsage.length > 0) {
-		pushExtension(extensions, seen, OIDS.keyUsage, encodeKeyUsage(input.keyUsage), true);
+		pushExtension(
+			extensions,
+			seen,
+			OIDS.keyUsage,
+			encodeKeyUsage(input.keyUsage),
+			true,
+		);
 	}
 	if (
 		input?.subjectAltNames !== undefined
@@ -202,10 +217,22 @@ export function buildRequestedExtensions(
 	const extensions: Uint8Array[] = [];
 	const seen = new Set<string>();
 	if (input?.basicConstraints !== undefined) {
-		pushExtension(extensions, seen, OIDS.basicConstraints, encodeBasicConstraints(input.basicConstraints), true);
+		pushExtension(
+			extensions,
+			seen,
+			OIDS.basicConstraints,
+			encodeBasicConstraints(input.basicConstraints),
+			true,
+		);
 	}
 	if (input?.keyUsage !== undefined && input.keyUsage.length > 0) {
-		pushExtension(extensions, seen, OIDS.keyUsage, encodeKeyUsage(input.keyUsage), true);
+		pushExtension(
+			extensions,
+			seen,
+			OIDS.keyUsage,
+			encodeKeyUsage(input.keyUsage),
+			true,
+		);
 	}
 	if (
 		input?.subjectAltNames !== undefined
@@ -347,7 +374,9 @@ export function encodeAuthorityInfoAccess(
 	);
 }
 
-export function encodeCrlDistributionPoints(uris: readonly string[]): Uint8Array {
+export function encodeCrlDistributionPoints(
+	uris: readonly string[],
+): Uint8Array {
 	return sequence(
 		uris.map((uri) =>
 			sequence([
@@ -355,7 +384,9 @@ export function encodeCrlDistributionPoints(uris: readonly string[]): Uint8Array
 					0,
 					explicitContext(
 						0,
-						sequence([implicitPrimitiveContext(6, new TextEncoder().encode(uri))]),
+						sequence([
+							implicitPrimitiveContext(6, new TextEncoder().encode(uri)),
+						]),
 					),
 				),
 			])

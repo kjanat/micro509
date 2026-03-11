@@ -21,24 +21,27 @@ export {
 	type VerifyCertificateRevocationListResult,
 } from "./crl.ts";
 export { createCertificateSigningRequest, type CreateCsrInput, type CsrMaterial } from "./csr.ts";
-export {
-	type AuthorityInfoAccessMethod,
-	type AuthorityInformationAccess,
-	type BasicConstraints,
-	type CertificateExtensionsInput,
-	type CustomAuthorityInfoAccessMethod,
-	type CustomExtendedKeyUsage,
-	type CustomExtension,
-	type ExtendedKeyUsage,
-	type KeyUsage,
-	type KnownAuthorityInfoAccessMethod,
-	type KnownExtendedKeyUsage,
-	type SubjectAltName,
+export type {
+	AuthorityInfoAccessMethod,
+	AuthorityInformationAccess,
+	BasicConstraints,
+	CertificateExtensionsInput,
+	CustomAuthorityInfoAccessMethod,
+	CustomExtendedKeyUsage,
+	CustomExtension,
+	ExtendedKeyUsage,
+	KeyUsage,
+	KnownAuthorityInfoAccessMethod,
+	KnownExtendedKeyUsage,
+	SubjectAltName,
 } from "./extensions.ts";
 export {
 	type EcKeyAlgorithmInput,
 	type Ed25519KeyAlgorithmInput,
+	type EncryptedPkcs8Options,
 	exportBinaryBase64,
+	exportEncryptedPkcs8Der,
+	exportEncryptedPkcs8Pem,
 	exportPkcs1Der,
 	exportPkcs1Pem,
 	exportPkcs8Der,
@@ -52,6 +55,8 @@ export {
 	generateKeyPair,
 	type ImportEcPublicKeyInput,
 	type ImportEd25519PublicKeyInput,
+	importEncryptedPkcs8Der,
+	importEncryptedPkcs8Pem,
 	importPkcs1Der,
 	importPkcs1Pem,
 	importPkcs8Base64,
@@ -71,7 +76,25 @@ export {
 	type PublicKeyImportInput,
 	type RsaKeyAlgorithmInput,
 } from "./keys.ts";
-export { type NameAttribute, type NameFieldKey, type NameInput, type NameObject } from "./name.ts";
+export type { NameAttribute, NameFieldKey, NameInput, NameObject } from "./name.ts";
+export {
+	createOcspRequest,
+	type CreateOcspRequestInput,
+	type CreateOcspRequestItemInput,
+	type OcspCertificateSource,
+	type OcspCertStatus,
+	type OcspHashAlgorithm,
+	type OcspRequestMaterial,
+	type OcspResponseStatus,
+	type ParsedOcspCertId,
+	type ParsedOcspRequest,
+	type ParsedOcspResponse,
+	type ParsedOcspSingleResponse,
+	parseOcspRequestDer,
+	parseOcspRequestPem,
+	parseOcspResponseDer,
+	parseOcspResponsePem,
+} from "./ocsp.ts";
 export {
 	type DecodedExtensionMap,
 	type DecodedExtensionValue,

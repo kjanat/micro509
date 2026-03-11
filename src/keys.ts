@@ -1,6 +1,7 @@
 import { webcrypto } from "node:crypto";
 import { nullValue, objectIdentifier, octetString, readElement, readSequenceChildren, sequence } from "./der.ts";
 import { OIDS } from "./oids.ts";
+import { decryptPbes2, encryptPbes2, type Pbes2EncryptionOptions } from "./pbes2.ts";
 import { base64Decode, base64Encode, pemDecode, pemEncode } from "./pem.ts";
 
 export type RsaHash = "SHA-256" | "SHA-384" | "SHA-512";
@@ -57,6 +58,8 @@ export type PublicKeyImportInput =
 
 export type PrivateKeyImportInput = PublicKeyImportInput;
 
+export type EncryptedPkcs8Options = Pbes2EncryptionOptions;
+
 export function getCrypto(): Crypto {
 	const candidate = globalThis.crypto ?? webcrypto;
 	if (candidate?.subtle === undefined) {
@@ -82,18 +85,25 @@ export async function generateKeyPair(
 	return wrapKeyPair(generated.publicKey, generated.privateKey);
 }
 
-export function wrapKeyPair(publicKey: CryptoKey, privateKey: CryptoKey): KeyPairMaterial {
+export function wrapKeyPair(
+	publicKey: CryptoKey,
+	privateKey: CryptoKey,
+): KeyPairMaterial {
 	return {
 		publicKey,
 		privateKey,
 		async exportSpkiDer() {
-			return new Uint8Array(await getCrypto().subtle.exportKey("spki", publicKey));
+			return new Uint8Array(
+				await getCrypto().subtle.exportKey("spki", publicKey),
+			);
 		},
 		async exportSpkiPem() {
 			return pemEncode("PUBLIC KEY", await this.exportSpkiDer());
 		},
 		async exportPkcs8Der() {
-			return new Uint8Array(await getCrypto().subtle.exportKey("pkcs8", privateKey));
+			return new Uint8Array(
+				await getCrypto().subtle.exportKey("pkcs8", privateKey),
+			);
 		},
 		async exportPkcs8Pem() {
 			return pemEncode("PRIVATE KEY", await this.exportPkcs8Der());
@@ -111,15 +121,23 @@ export async function exportSpkiDer(publicKey: CryptoKey): Promise<Uint8Array> {
 	return new Uint8Array(await getCrypto().subtle.exportKey("spki", publicKey));
 }
 
-export async function exportPkcs8Der(privateKey: CryptoKey): Promise<Uint8Array> {
-	return new Uint8Array(await getCrypto().subtle.exportKey("pkcs8", privateKey));
+export async function exportPkcs8Der(
+	privateKey: CryptoKey,
+): Promise<Uint8Array> {
+	return new Uint8Array(
+		await getCrypto().subtle.exportKey("pkcs8", privateKey),
+	);
 }
 
-export async function exportPublicJwk(publicKey: CryptoKey): Promise<JsonWebKey> {
+export async function exportPublicJwk(
+	publicKey: CryptoKey,
+): Promise<JsonWebKey> {
 	return getCrypto().subtle.exportKey("jwk", publicKey);
 }
 
-export async function exportPrivateJwk(privateKey: CryptoKey): Promise<JsonWebKey> {
+export async function exportPrivateJwk(
+	privateKey: CryptoKey,
+): Promise<JsonWebKey> {
 	return getCrypto().subtle.exportKey("jwk", privateKey);
 }
 
@@ -127,7 +145,31 @@ export async function exportPkcs8Pem(privateKey: CryptoKey): Promise<string> {
 	return pemEncode("PRIVATE KEY", await exportPkcs8Der(privateKey));
 }
 
-export async function exportPkcs1Der(privateKey: CryptoKey): Promise<Uint8Array> {
+export async function exportEncryptedPkcs8Der(
+	privateKey: CryptoKey,
+	options: EncryptedPkcs8Options,
+): Promise<Uint8Array> {
+	const pkcs8 = await exportPkcs8Der(privateKey);
+	const encryption = await encryptPbes2(pkcs8, options);
+	return sequence([
+		encryption.algorithmIdentifierDer,
+		octetString(encryption.encryptedData),
+	]);
+}
+
+export async function exportEncryptedPkcs8Pem(
+	privateKey: CryptoKey,
+	options: EncryptedPkcs8Options,
+): Promise<string> {
+	return pemEncode(
+		"ENCRYPTED PRIVATE KEY",
+		await exportEncryptedPkcs8Der(privateKey, options),
+	);
+}
+
+export async function exportPkcs1Der(
+	privateKey: CryptoKey,
+): Promise<Uint8Array> {
 	const pkcs8 = await exportPkcs8Der(privateKey);
 	const parsed = parsePkcs8PrivateKey(pkcs8);
 	if (parsed.algorithmOid !== OIDS.rsaEncryption) {
@@ -140,7 +182,9 @@ export async function exportPkcs1Pem(privateKey: CryptoKey): Promise<string> {
 	return pemEncode("RSA PRIVATE KEY", await exportPkcs1Der(privateKey));
 }
 
-export async function exportSec1Der(privateKey: CryptoKey): Promise<Uint8Array> {
+export async function exportSec1Der(
+	privateKey: CryptoKey,
+): Promise<Uint8Array> {
 	const pkcs8 = await exportPkcs8Der(privateKey);
 	const parsed = parsePkcs8PrivateKey(pkcs8);
 	if (parsed.algorithmOid !== OIDS.ecPublicKey) {
@@ -211,6 +255,44 @@ export async function importPkcs8Pem(
 	return importPkcs8Der(pemDecode("PRIVATE KEY", pem), algorithm);
 }
 
+export async function importEncryptedPkcs8Der(
+	der: Uint8Array,
+	password: string,
+	algorithm: PrivateKeyImportInput,
+): Promise<CryptoKey> {
+	const children = readSequenceChildren(der);
+	const algorithmIdentifier = children[0];
+	const encryptedData = children[1];
+	if (
+		algorithmIdentifier === undefined
+		|| encryptedData === undefined
+		|| encryptedData.tag !== 0x04
+	) {
+		throw new Error("Malformed EncryptedPrivateKeyInfo");
+	}
+	const decrypted = await decryptPbes2(
+		der.slice(
+			algorithmIdentifier.start - algorithmIdentifier.headerLength,
+			algorithmIdentifier.end,
+		),
+		encryptedData.value,
+		password,
+	);
+	return importPkcs8Der(decrypted, algorithm);
+}
+
+export async function importEncryptedPkcs8Pem(
+	pem: string,
+	password: string,
+	algorithm: PrivateKeyImportInput,
+): Promise<CryptoKey> {
+	return importEncryptedPkcs8Der(
+		pemDecode("ENCRYPTED PRIVATE KEY", pem),
+		password,
+		algorithm,
+	);
+}
+
 export async function importPkcs1Der(
 	der: Uint8Array,
 	algorithm: ImportRsaPublicKeyInput = { kind: "rsa" },
@@ -250,14 +332,26 @@ export async function importPublicJwk(
 	jwk: JsonWebKey,
 	algorithm: PublicKeyImportInput,
 ): Promise<CryptoKey> {
-	return getCrypto().subtle.importKey("jwk", jwk, toImportAlgorithm(algorithm), true, ["verify"]);
+	return getCrypto().subtle.importKey(
+		"jwk",
+		jwk,
+		toImportAlgorithm(algorithm),
+		true,
+		["verify"],
+	);
 }
 
 export async function importPrivateJwk(
 	jwk: JsonWebKey,
 	algorithm: PrivateKeyImportInput,
 ): Promise<CryptoKey> {
-	return getCrypto().subtle.importKey("jwk", jwk, toImportAlgorithm(algorithm), true, ["sign"]);
+	return getCrypto().subtle.importKey(
+		"jwk",
+		jwk,
+		toImportAlgorithm(algorithm),
+		true,
+		["sign"],
+	);
 }
 
 function toGenerateKeyAlgorithm(
@@ -321,7 +415,9 @@ function parsePkcs8PrivateKey(der: Uint8Array): {
 	const parameters = algorithmChildren[1];
 	return {
 		algorithmOid: decodeObjectIdentifier(algorithmOid.value),
-		...(parameters?.tag === 0x06 ? { parametersOid: decodeObjectIdentifier(parameters.value) } : {}),
+		...(parameters?.tag === 0x06
+			? { parametersOid: decodeObjectIdentifier(parameters.value) }
+			: {}),
 		privateKeyDer: privateKey.value,
 	};
 }
@@ -334,15 +430,23 @@ function wrapPkcs1InPkcs8(der: Uint8Array): Uint8Array {
 	]);
 }
 
-function wrapSec1InPkcs8(der: Uint8Array, namedCurve: ImportEcPublicKeyInput["namedCurve"]): Uint8Array {
+function wrapSec1InPkcs8(
+	der: Uint8Array,
+	namedCurve: ImportEcPublicKeyInput["namedCurve"],
+): Uint8Array {
 	return sequence([
 		Uint8Array.of(0x02, 0x01, 0x00),
-		sequence([objectIdentifier(OIDS.ecPublicKey), objectIdentifier(namedCurveToOid(namedCurve))]),
+		sequence([
+			objectIdentifier(OIDS.ecPublicKey),
+			objectIdentifier(namedCurveToOid(namedCurve)),
+		]),
 		octetString(new Uint8Array(der)),
 	]);
 }
 
-function namedCurveToOid(namedCurve: ImportEcPublicKeyInput["namedCurve"]): string {
+function namedCurveToOid(
+	namedCurve: ImportEcPublicKeyInput["namedCurve"],
+): string {
 	switch (namedCurve) {
 		case "P-256":
 			return OIDS.prime256v1;

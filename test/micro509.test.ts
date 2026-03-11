@@ -1,11 +1,23 @@
 import { X509Certificate } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { readElement } from "../src/der.ts";
+import {
+	explicitContext,
+	generalizedTime,
+	integer,
+	integerFromNumber,
+	nullValue,
+	objectIdentifier,
+	octetString,
+	readElement,
+	sequence,
+	tlv,
+} from "../src/der.ts";
 import {
 	categorizePemBlocks,
 	createCertificate,
 	createCertificateRevocationList,
 	createCertificateSigningRequest,
+	createOcspRequest,
 	createPfx,
 	createPkcs7CertBagPem,
 	createSelfSignedCertificate,
@@ -13,6 +25,8 @@ import {
 	decodeExtensions,
 	defineExtensionDecoderMap,
 	exportBinaryBase64,
+	exportEncryptedPkcs8Der,
+	exportEncryptedPkcs8Pem,
 	exportPkcs1Der,
 	exportPkcs1Pem,
 	exportPkcs8Der,
@@ -25,6 +39,8 @@ import {
 	exportSpkiPem,
 	findExtension,
 	generateKeyPair,
+	importEncryptedPkcs8Der,
+	importEncryptedPkcs8Pem,
 	importPkcs1Der,
 	importPkcs1Pem,
 	importPkcs8Base64,
@@ -40,6 +56,8 @@ import {
 	parseCertificatePem,
 	parseCertificateRevocationListPem,
 	parseCertificateSigningRequestPem,
+	parseOcspRequestPem,
+	parseOcspResponseDer,
 	parsePfxPem,
 	parsePkcs7CertBagPem,
 	pemDecode,
@@ -75,7 +93,9 @@ describe("micro509", () => {
 		expect(certificate.issuer).toContain("CN=example.com");
 		expect(certificate.checkHost("example.com")).toBe("example.com");
 		expect(certificate.checkIP("127.0.0.1")).toBe("127.0.0.1");
-		expect(await result.keyPair.exportPkcs8Pem()).toContain("BEGIN PRIVATE KEY");
+		expect(await result.keyPair.exportPkcs8Pem()).toContain(
+			"BEGIN PRIVATE KEY",
+		);
 		expect(await result.keyPair.exportSpkiPem()).toContain("BEGIN PUBLIC KEY");
 		expect(await result.keyPair.exportPublicJwk()).toHaveProperty("kty");
 	});
@@ -122,13 +142,20 @@ describe("micro509", () => {
 		const parsed = parseCertificatePem(leaf.pem);
 		expect(parsed.subject.values.commonName).toBe("leaf.example");
 		expect(parsed.issuer.values.commonName).toBe("Micro509 Test CA");
-		expect(parsed.subjectAltNames).toEqual([{ type: "dns", value: "leaf.example" }]);
-		expect(parsed.extendedKeyUsage).toEqual(["serverAuth", { type: "oid", value: "1.2.3.4.5" }]);
+		expect(parsed.subjectAltNames).toEqual([
+			{ type: "dns", value: "leaf.example" },
+		]);
+		expect(parsed.extendedKeyUsage).toEqual([
+			"serverAuth",
+			{ type: "oid", value: "1.2.3.4.5" },
+		]);
 		expect(parsed.authorityInfoAccess).toEqual([
 			{ method: "ocsp", uri: "http://ocsp.example.test" },
 			{ method: "caIssuers", uri: "http://issuer.example.test/ca.der" },
 		]);
-		expect(parsed.crlDistributionPoints).toEqual(["http://issuer.example.test/ca.crl"]);
+		expect(parsed.crlDistributionPoints).toEqual([
+			"http://issuer.example.test/ca.crl",
+		]);
 	});
 
 	it("supports custom extension encode and decode hooks", async () => {
@@ -136,7 +163,11 @@ describe("micro509", () => {
 			subject: { commonName: "custom-ext.example" },
 			extensions: {
 				customExtensions: [
-					{ oid: "1.2.3.4.200", critical: true, value: Uint8Array.of(0x04, 0x03, 0x01, 0x02, 0x03) },
+					{
+						oid: "1.2.3.4.200",
+						critical: true,
+						value: Uint8Array.of(0x04, 0x03, 0x01, 0x02, 0x03),
+					},
 					{ oid: "1.2.3.4.201", value: Uint8Array.of(0x04, 0x01, 0xff) },
 				],
 			},
@@ -148,7 +179,13 @@ describe("micro509", () => {
 			throw new Error("Missing custom extension");
 		}
 		expect(extension.critical).toBe(true);
-		expect(Array.from(extension.valueDer)).toEqual([0x04, 0x03, 0x01, 0x02, 0x03]);
+		expect(Array.from(extension.valueDer)).toEqual([
+			0x04,
+			0x03,
+			0x01,
+			0x02,
+			0x03,
+		]);
 		expect(
 			decodeExtension(parsed.extensions, {
 				oid: "1.2.3.4.200",
@@ -182,7 +219,9 @@ describe("micro509", () => {
 				subject: { commonName: "dup-ext.example" },
 				extensions: {
 					keyUsage: ["digitalSignature"],
-					customExtensions: [{ oid: OIDS.keyUsage, value: Uint8Array.of(0x05, 0x00) }],
+					customExtensions: [
+						{ oid: OIDS.keyUsage, value: Uint8Array.of(0x05, 0x00) },
+					],
 				},
 			}),
 		).rejects.toThrow("Duplicate extension OID");
@@ -259,16 +298,30 @@ describe("micro509", () => {
 		const pkcs1Der = await exportPkcs1Der(rsa.privateKey);
 		const rsaFromPem = await importPkcs1Pem(pkcs1Pem, { kind: "rsa" });
 		const rsaFromDer = await importPkcs1Der(pkcs1Der, { kind: "rsa" });
-		expect(await exportPkcs8Der(rsaFromPem)).toEqual(await exportPkcs8Der(rsa.privateKey));
-		expect(await exportPkcs8Der(rsaFromDer)).toEqual(await exportPkcs8Der(rsa.privateKey));
+		expect(await exportPkcs8Der(rsaFromPem)).toEqual(
+			await exportPkcs8Der(rsa.privateKey),
+		);
+		expect(await exportPkcs8Der(rsaFromDer)).toEqual(
+			await exportPkcs8Der(rsa.privateKey),
+		);
 
 		const ec = await generateKeyPair({ kind: "ecdsa", namedCurve: "P-256" });
 		const sec1Pem = await exportSec1Pem(ec.privateKey);
 		const sec1Der = await exportSec1Der(ec.privateKey);
-		const ecFromPem = await importSec1Pem(sec1Pem, { kind: "ecdsa", namedCurve: "P-256" });
-		const ecFromDer = await importSec1Der(sec1Der, { kind: "ecdsa", namedCurve: "P-256" });
-		expect(await exportPkcs8Der(ecFromPem)).toEqual(await exportPkcs8Der(ec.privateKey));
-		expect(await exportPkcs8Der(ecFromDer)).toEqual(await exportPkcs8Der(ec.privateKey));
+		const ecFromPem = await importSec1Pem(sec1Pem, {
+			kind: "ecdsa",
+			namedCurve: "P-256",
+		});
+		const ecFromDer = await importSec1Der(sec1Der, {
+			kind: "ecdsa",
+			namedCurve: "P-256",
+		});
+		expect(await exportPkcs8Der(ecFromPem)).toEqual(
+			await exportPkcs8Der(ec.privateKey),
+		);
+		expect(await exportPkcs8Der(ecFromDer)).toEqual(
+			await exportPkcs8Der(ec.privateKey),
+		);
 	});
 
 	it("creates and parses PKCS#7 certificate bags", async () => {
@@ -289,10 +342,9 @@ describe("micro509", () => {
 		});
 		const bag = createPkcs7CertBagPem([leaf.pem, root.certificate.pem]);
 		const parsed = parsePkcs7CertBagPem(bag.pem);
-		expect(parsed.map((certificate) => certificate.subject.values.commonName)).toEqual([
-			"pkcs7-leaf.example",
-			"PKCS7 Root",
-		]);
+		expect(
+			parsed.map((certificate) => certificate.subject.values.commonName),
+		).toEqual(["pkcs7-leaf.example", "PKCS7 Root"]);
 	});
 
 	it("creates and parses passwordless PFX bundles", async () => {
@@ -315,22 +367,32 @@ describe("micro509", () => {
 			certificates: [
 				{
 					certificate: leaf.pem,
-					attributes: { friendlyName: "leaf", localKeyId: Uint8Array.of(1, 2, 3) },
+					attributes: {
+						friendlyName: "leaf",
+						localKeyId: Uint8Array.of(1, 2, 3),
+					},
 				},
-				{ certificate: ca.certificate.pem, attributes: { friendlyName: "root" } },
+				{
+					certificate: ca.certificate.pem,
+					attributes: { friendlyName: "root" },
+				},
 			],
 			privateKeys: [
 				{
 					privateKey: leafKeys.privateKey,
-					attributes: { friendlyName: "leaf", localKeyId: Uint8Array.of(1, 2, 3) },
+					attributes: {
+						friendlyName: "leaf",
+						localKeyId: Uint8Array.of(1, 2, 3),
+					},
 				},
 			],
 		});
 		const parsed = await parsePfxPem(pfx.pem);
-		expect(parsed.certificates.map((certificate) => certificate.subject.values.commonName)).toEqual([
-			"pfx-leaf.example",
-			"PFX Root",
-		]);
+		expect(
+			parsed.certificates.map(
+				(certificate) => certificate.subject.values.commonName,
+			),
+		).toEqual(["pfx-leaf.example", "PFX Root"]);
 		expect(parsed.privateKeys).toHaveLength(1);
 		expect(parsed.bags[0]).toMatchObject({
 			kind: "certificate",
@@ -345,18 +407,53 @@ describe("micro509", () => {
 			keyPair,
 		});
 		const pfx = await createPfx({
-			certificates: [{ certificate: certificate.certificate.pem, attributes: { friendlyName: "leaf" } }],
-			privateKeys: [{ privateKey: keyPair.privateKey, attributes: { friendlyName: "leaf-key" } }],
+			certificates: [
+				{
+					certificate: certificate.certificate.pem,
+					attributes: { friendlyName: "leaf" },
+				},
+			],
+			privateKeys: [
+				{
+					privateKey: keyPair.privateKey,
+					attributes: { friendlyName: "leaf-key" },
+				},
+			],
 			encryption: { password: "secret123" },
 		});
 		const parsed = await parsePfxPem(pfx.pem, { password: "secret123" });
-		expect(parsed.certificates.map((entry) => entry.subject.values.commonName)).toEqual([
-			"encrypted-pfx.example",
-		]);
+		expect(
+			parsed.certificates.map((entry) => entry.subject.values.commonName),
+		).toEqual(["encrypted-pfx.example"]);
 		expect(parsed.privateKeys).toHaveLength(1);
 		await expect(parsePfxPem(pfx.pem, { password: "wrong" })).rejects.toThrow(
 			"Invalid PFX password or encrypted content",
 		);
+	});
+
+	it("roundtrips encrypted PKCS#8 helpers", async () => {
+		const keyPair = await generateKeyPair({ kind: "rsa", modulusLength: 2048 });
+		const pem = await exportEncryptedPkcs8Pem(keyPair.privateKey, {
+			password: "secret123",
+		});
+		const der = await exportEncryptedPkcs8Der(keyPair.privateKey, {
+			password: "secret123",
+		});
+		const importedPem = await importEncryptedPkcs8Pem(pem, "secret123", {
+			kind: "rsa",
+		});
+		const importedDer = await importEncryptedPkcs8Der(der, "secret123", {
+			kind: "rsa",
+		});
+		expect(await exportPkcs8Der(importedPem)).toEqual(
+			await exportPkcs8Der(keyPair.privateKey),
+		);
+		expect(await exportPkcs8Der(importedDer)).toEqual(
+			await exportPkcs8Der(keyPair.privateKey),
+		);
+		await expect(
+			importEncryptedPkcs8Pem(pem, "wrong", { kind: "rsa" }),
+		).rejects.toThrow("Invalid password or encrypted content");
 	});
 
 	it("creates, parses, and verifies CRLs", async () => {
@@ -381,25 +478,105 @@ describe("micro509", () => {
 			signerPrivateKey: issuer.keyPair.privateKey,
 			issuerPublicKey: issuer.keyPair.publicKey,
 			crlNumber: 7,
-			revokedCertificates: [{ serialNumber: hexToBytes(parsedLeaf.serialNumberHex) }],
+			revokedCertificates: [
+				{ serialNumber: hexToBytes(parsedLeaf.serialNumberHex) },
+			],
 		});
 		const parsedCrl = parseCertificateRevocationListPem(crl.pem);
 		expect(parsedCrl.issuer.commonName).toBe("CRL Issuer");
 		expect(parsedCrl.crlNumber).toBe(7);
 		expect(parsedCrl.revokedCertificates).toHaveLength(1);
-		expect(isCertificateRevoked(parsedLeaf.serialNumberHex, parsedCrl)).toBe(true);
-		expect(await verifyCertificateRevocationList(crl.pem, issuer.certificate.pem)).toMatchObject({ ok: true });
+		expect(isCertificateRevoked(parsedLeaf.serialNumberHex, parsedCrl)).toBe(
+			true,
+		);
+		expect(
+			await verifyCertificateRevocationList(crl.pem, issuer.certificate.pem),
+		).toMatchObject({ ok: true });
 
 		const wrongSigner = await generateKeyPair();
 		const badCrl = await createCertificateRevocationList({
 			issuer: { commonName: "CRL Issuer" },
 			signerPrivateKey: wrongSigner.privateKey,
-			revokedCertificates: [{ serialNumber: hexToBytes(parsedLeaf.serialNumberHex) }],
+			revokedCertificates: [
+				{ serialNumber: hexToBytes(parsedLeaf.serialNumberHex) },
+			],
 		});
-		expect(await verifyCertificateRevocationList(badCrl.der, issuer.certificate.der)).toMatchObject({
+		expect(
+			await verifyCertificateRevocationList(badCrl.der, issuer.certificate.der),
+		).toMatchObject({
 			ok: false,
 			code: "signature_invalid",
 		});
+	});
+
+	it("parses CRL entry extensions and delta CRL indicator", async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: "Delta CRL Issuer" },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ["keyCertSign", "cRLSign"],
+			},
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: "Delta CRL Issuer" },
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+			crlNumber: 9,
+			baseCrlNumber: 8,
+			revokedCertificates: [
+				{
+					serialNumber: Uint8Array.of(0x01),
+					reasonCode: "keyCompromise",
+					invalidityDate: new Date("2024-01-01T00:00:00Z"),
+				},
+			],
+		});
+		const parsed = parseCertificateRevocationListPem(crl.pem);
+		expect(parsed.baseCrlNumber).toBe(8);
+		expect(parsed.revokedCertificates[0]).toMatchObject({
+			serialNumberHex: "01",
+			reasonCode: "keyCompromise",
+		});
+		expect(parsed.revokedCertificates[0]?.invalidityDate?.toISOString()).toBe(
+			"2024-01-01T00:00:00.000Z",
+		);
+	});
+
+	it("builds OCSP requests and parses OCSP responses", async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: "OCSP CA" },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ["keyCertSign", "cRLSign"],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: "OCSP CA" },
+			subject: { commonName: "ocsp-leaf.example" },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const request = await createOcspRequest({
+			requests: [
+				{ certificate: leaf.pem, issuerCertificate: issuer.certificate.pem },
+			],
+			nonce: Uint8Array.of(0xaa, 0xbb),
+		});
+		const parsedRequest = parseOcspRequestPem(request.pem);
+		expect(parsedRequest.requests).toHaveLength(1);
+		expect(parsedRequest.nonce).toBe("aabb");
+		const leafParsed = parseCertificatePem(leaf.pem);
+		const issuerParsed = parseCertificatePem(issuer.certificate.pem);
+		const ocspResponseDer = await createSyntheticOcspResponse(
+			leafParsed,
+			issuerParsed,
+		);
+		const parsedResponse = parseOcspResponseDer(ocspResponseDer);
+		expect(parsedResponse.responseStatus).toBe("successful");
+		expect(parsedResponse.responses?.[0]).toMatchObject({ certStatus: "good" });
+		expect(parsedResponse.nonce).toBe("aabb");
 	});
 
 	it("builds across multiple candidate intermediates", async () => {
@@ -456,11 +633,11 @@ describe("micro509", () => {
 		});
 		expect(result).toMatchObject({ ok: true });
 		if (result.ok) {
-			expect(result.value.chain.map((certificate) => certificate.subject.values.commonName)).toEqual([
-				"multi-path.example",
-				"Shared Intermediate",
-				"Path Root",
-			]);
+			expect(
+				result.value.chain.map(
+					(certificate) => certificate.subject.values.commonName,
+				),
+			).toEqual(["multi-path.example", "Shared Intermediate", "Path Root"]);
 		}
 	});
 
@@ -574,7 +751,10 @@ describe("micro509", () => {
 		).toMatchObject({ ok: false, code: "certificate_expired", index: 0 });
 
 		const nonCaIssuerChain = await issueChain({
-			intermediateExtensions: { basicConstraints: { ca: false }, keyUsage: ["digitalSignature"] },
+			intermediateExtensions: {
+				basicConstraints: { ca: false },
+				keyUsage: ["digitalSignature"],
+			},
 		});
 		expect(
 			await verifyCertificateChain({
@@ -585,7 +765,10 @@ describe("micro509", () => {
 		).toMatchObject({ ok: false, code: "ca_required", index: 1 });
 
 		const noKeyCertSignChain = await issueChain({
-			intermediateExtensions: { basicConstraints: { ca: true, pathLength: 0 }, keyUsage: ["digitalSignature"] },
+			intermediateExtensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ["digitalSignature"],
+			},
 		});
 		expect(
 			await verifyCertificateChain({
@@ -596,7 +779,10 @@ describe("micro509", () => {
 		).toMatchObject({ ok: false, code: "key_cert_sign_required", index: 1 });
 
 		const pathLengthChain = await issueChain({
-			rootExtensions: { basicConstraints: { ca: true, pathLength: 0 }, keyUsage: ["keyCertSign", "cRLSign"] },
+			rootExtensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ["keyCertSign", "cRLSign"],
+			},
 		});
 		expect(
 			await verifyCertificateChain({
@@ -607,17 +793,25 @@ describe("micro509", () => {
 		).toMatchObject({ ok: false, code: "path_length_exceeded", index: 2 });
 
 		const wrongAkiKeys = await generateKeyPair();
-		const akiMismatchChain = await issueChain({ leafIssuerPublicKey: wrongAkiKeys.publicKey });
+		const akiMismatchChain = await issueChain({
+			leafIssuerPublicKey: wrongAkiKeys.publicKey,
+		});
 		expect(
 			await verifyCertificateChain({
 				leaf: akiMismatchChain.leaf.pem,
 				intermediates: [akiMismatchChain.intermediate.pem],
 				roots: [akiMismatchChain.root.certificate.pem],
 			}),
-		).toMatchObject({ ok: false, code: "authority_key_identifier_mismatch", index: 0 });
+		).toMatchObject({
+			ok: false,
+			code: "authority_key_identifier_mismatch",
+			index: 0,
+		});
 
 		const wrongSignerKeys = await generateKeyPair();
-		const badSignatureChain = await issueChain({ leafSignerPrivateKey: wrongSignerKeys.privateKey });
+		const badSignatureChain = await issueChain({
+			leafSignerPrivateKey: wrongSignerKeys.privateKey,
+		});
 		expect(
 			await verifyCertificateChain({
 				leaf: badSignatureChain.leaf.pem,
@@ -639,7 +833,11 @@ describe("micro509", () => {
 				leaf: selfSigned.certificate.pem,
 				roots: [],
 			}),
-		).toMatchObject({ ok: false, code: "self_signed_leaf_not_allowed", index: 0 });
+		).toMatchObject({
+			ok: false,
+			code: "self_signed_leaf_not_allowed",
+			index: 0,
+		});
 		expect(
 			await verifyCertificateChain({
 				leaf: selfSigned.certificate.pem,
@@ -650,13 +848,32 @@ describe("micro509", () => {
 	});
 
 	it("roundtrips keys through PEM, base64, and JWK imports", async () => {
-		const original = await generateKeyPair({ kind: "rsa", modulusLength: 2048 });
-		const importedPublic = await importSpkiPem(await original.exportSpkiPem(), { kind: "rsa" });
-		const importedPrivate = await importPkcs8Pem(await original.exportPkcs8Pem(), { kind: "rsa" });
-		const base64Public = await importSpkiBase64(await exportBinaryBase64(original.publicKey), { kind: "rsa" });
-		const base64Private = await importPkcs8Base64(await exportBinaryBase64(original.privateKey), { kind: "rsa" });
-		const jwkPublic = await importPublicJwk(await original.exportPublicJwk(), { kind: "rsa" });
-		const jwkPrivate = await importPrivateJwk(await original.exportPrivateJwk(), { kind: "rsa" });
+		const original = await generateKeyPair({
+			kind: "rsa",
+			modulusLength: 2048,
+		});
+		const importedPublic = await importSpkiPem(await original.exportSpkiPem(), {
+			kind: "rsa",
+		});
+		const importedPrivate = await importPkcs8Pem(
+			await original.exportPkcs8Pem(),
+			{ kind: "rsa" },
+		);
+		const base64Public = await importSpkiBase64(
+			await exportBinaryBase64(original.publicKey),
+			{ kind: "rsa" },
+		);
+		const base64Private = await importPkcs8Base64(
+			await exportBinaryBase64(original.privateKey),
+			{ kind: "rsa" },
+		);
+		const jwkPublic = await importPublicJwk(await original.exportPublicJwk(), {
+			kind: "rsa",
+		});
+		const jwkPrivate = await importPrivateJwk(
+			await original.exportPrivateJwk(),
+			{ kind: "rsa" },
+		);
 
 		const certificate = await createCertificate({
 			issuer: { commonName: "imported-ca" },
@@ -680,15 +897,33 @@ describe("micro509", () => {
 			issuerPublicKey: jwkPublic,
 		});
 
-		expect(new X509Certificate(certificate.pem).subject).toContain("CN=imported-leaf");
-		expect(new X509Certificate(certificateFromBase64.pem).subject).toContain("CN=imported-leaf-2");
-		expect(new X509Certificate(certificateFromJwk.pem).subject).toContain("CN=imported-leaf-3");
-		expect(await exportSpkiDer(importedPublic)).toEqual(await original.exportSpkiDer());
-		expect(await exportPkcs8Der(importedPrivate)).toEqual(await original.exportPkcs8Der());
-		expect(await exportSpkiDer(base64Public)).toEqual(await original.exportSpkiDer());
-		expect(await exportPkcs8Der(base64Private)).toEqual(await original.exportPkcs8Der());
-		expect(await exportSpkiDer(jwkPublic)).toEqual(await original.exportSpkiDer());
-		expect(await exportPkcs8Der(jwkPrivate)).toEqual(await original.exportPkcs8Der());
+		expect(new X509Certificate(certificate.pem).subject).toContain(
+			"CN=imported-leaf",
+		);
+		expect(new X509Certificate(certificateFromBase64.pem).subject).toContain(
+			"CN=imported-leaf-2",
+		);
+		expect(new X509Certificate(certificateFromJwk.pem).subject).toContain(
+			"CN=imported-leaf-3",
+		);
+		expect(await exportSpkiDer(importedPublic)).toEqual(
+			await original.exportSpkiDer(),
+		);
+		expect(await exportPkcs8Der(importedPrivate)).toEqual(
+			await original.exportPkcs8Der(),
+		);
+		expect(await exportSpkiDer(base64Public)).toEqual(
+			await original.exportSpkiDer(),
+		);
+		expect(await exportPkcs8Der(base64Private)).toEqual(
+			await original.exportPkcs8Der(),
+		);
+		expect(await exportSpkiDer(jwkPublic)).toEqual(
+			await original.exportSpkiDer(),
+		);
+		expect(await exportPkcs8Der(jwkPrivate)).toEqual(
+			await original.exportPkcs8Der(),
+		);
 	});
 
 	it("rejects purpose=ca when leaf is not a CA", async () => {
@@ -815,9 +1050,7 @@ describe("micro509", () => {
 
 	it("verifies chain with DER certificate sources", async () => {
 		const chain = await issueChain();
-		const leafDer = new Uint8Array(
-			pemDecode("CERTIFICATE", chain.leaf.pem),
-		);
+		const leafDer = new Uint8Array(pemDecode("CERTIFICATE", chain.leaf.pem));
 		const intermediateDer = new Uint8Array(
 			pemDecode("CERTIFICATE", chain.intermediate.pem),
 		);
@@ -894,13 +1127,19 @@ describe("micro509", () => {
 			subject: { commonName: "aia-custom" },
 			extensions: {
 				authorityInfoAccess: [
-					{ method: { type: "oid", value: "1.3.6.1.5.5.7.48.99" }, uri: "http://custom.example/aia" },
+					{
+						method: { type: "oid", value: "1.3.6.1.5.5.7.48.99" },
+						uri: "http://custom.example/aia",
+					},
 				],
 			},
 		});
 		const parsed = parseCertificatePem(certificate.pem);
 		expect(parsed.authorityInfoAccess).toEqual([
-			{ method: { type: "oid", value: "1.3.6.1.5.5.7.48.99" }, uri: "http://custom.example/aia" },
+			{
+				method: { type: "oid", value: "1.3.6.1.5.5.7.48.99" },
+				uri: "http://custom.example/aia",
+			},
 		]);
 	});
 
@@ -913,7 +1152,11 @@ describe("micro509", () => {
 			extensions: {
 				basicConstraints: { ca: true, pathLength: 2 },
 				customExtensions: [
-					{ oid: "1.2.3.4.999", value: Uint8Array.of(0x05, 0x00), critical: true },
+					{
+						oid: "1.2.3.4.999",
+						value: Uint8Array.of(0x05, 0x00),
+						critical: true,
+					},
 				],
 			},
 		});
@@ -962,9 +1205,9 @@ describe("micro509", () => {
 	});
 
 	it("rejects empty subject name", async () => {
-		await expect(
-			createSelfSignedCertificate({ subject: {} }),
-		).rejects.toThrow("Name must contain at least one attribute");
+		await expect(createSelfSignedCertificate({ subject: {} })).rejects.toThrow(
+			"Name must contain at least one attribute",
+		);
 	});
 
 	it("rejects invalid country code length", async () => {
@@ -974,7 +1217,10 @@ describe("micro509", () => {
 	});
 
 	it("imports and exports keys via ecdsa and ed25519", async () => {
-		const ecP384 = await generateKeyPair({ kind: "ecdsa", namedCurve: "P-384" });
+		const ecP384 = await generateKeyPair({
+			kind: "ecdsa",
+			namedCurve: "P-384",
+		});
 		const ecPub = await importSpkiBase64(
 			await exportBinaryBase64(ecP384.publicKey),
 			{ kind: "ecdsa", namedCurve: "P-384" },
@@ -987,16 +1233,24 @@ describe("micro509", () => {
 		expect(await exportPkcs8Der(ecPriv)).toEqual(await ecP384.exportPkcs8Der());
 
 		const ed = await generateKeyPair({ kind: "ed25519" });
-		const edPub = await importSpkiPem(await ed.exportSpkiPem(), { kind: "ed25519" });
-		const edPriv = await importPkcs8Pem(await ed.exportPkcs8Pem(), { kind: "ed25519" });
+		const edPub = await importSpkiPem(await ed.exportSpkiPem(), {
+			kind: "ed25519",
+		});
+		const edPriv = await importPkcs8Pem(await ed.exportPkcs8Pem(), {
+			kind: "ed25519",
+		});
 		expect(await exportSpkiDer(edPub)).toEqual(await ed.exportSpkiDer());
 		expect(await exportPkcs8Der(edPriv)).toEqual(await ed.exportPkcs8Der());
 	});
 
 	it("exports keys with standalone PEM and JWK helpers", async () => {
 		const keyPair = await generateKeyPair({ kind: "ed25519" });
-		expect(await exportSpkiPem(keyPair.publicKey)).toContain("BEGIN PUBLIC KEY");
-		expect(await exportPkcs8Pem(keyPair.privateKey)).toContain("BEGIN PRIVATE KEY");
+		expect(await exportSpkiPem(keyPair.publicKey)).toContain(
+			"BEGIN PUBLIC KEY",
+		);
+		expect(await exportPkcs8Pem(keyPair.privateKey)).toContain(
+			"BEGIN PRIVATE KEY",
+		);
 		expect(await exportPublicJwk(keyPair.publicKey)).toHaveProperty("kty");
 		expect(await exportPrivateJwk(keyPair.privateKey)).toHaveProperty("kty");
 	});
@@ -1081,7 +1335,11 @@ describe("micro509", () => {
 	});
 
 	it("verifies chains signed with RSA SHA-384 and ECDSA P-384", async () => {
-		const rsaCaKeys = await generateKeyPair({ kind: "rsa", modulusLength: 2048, hash: "SHA-384" });
+		const rsaCaKeys = await generateKeyPair({
+			kind: "rsa",
+			modulusLength: 2048,
+			hash: "SHA-384",
+		});
 		const rsaCa = await createSelfSignedCertificate({
 			subject: { commonName: "rsa-ca-384" },
 			keyPair: rsaCaKeys,
@@ -1090,7 +1348,11 @@ describe("micro509", () => {
 				keyUsage: ["keyCertSign", "cRLSign"],
 			},
 		});
-		const rsaLeafKeys = await generateKeyPair({ kind: "rsa", modulusLength: 2048, hash: "SHA-384" });
+		const rsaLeafKeys = await generateKeyPair({
+			kind: "rsa",
+			modulusLength: 2048,
+			hash: "SHA-384",
+		});
 		const rsaLeaf = await createCertificate({
 			issuer: { commonName: "rsa-ca-384" },
 			subject: { commonName: "rsa-leaf-384" },
@@ -1106,7 +1368,10 @@ describe("micro509", () => {
 			}),
 		).toMatchObject({ ok: true });
 
-		const p384CaKeys = await generateKeyPair({ kind: "ecdsa", namedCurve: "P-384" });
+		const p384CaKeys = await generateKeyPair({
+			kind: "ecdsa",
+			namedCurve: "P-384",
+		});
 		const p384Ca = await createSelfSignedCertificate({
 			subject: { commonName: "p384-ca" },
 			keyPair: p384CaKeys,
@@ -1115,7 +1380,10 @@ describe("micro509", () => {
 				keyUsage: ["keyCertSign", "cRLSign"],
 			},
 		});
-		const p384LeafKeys = await generateKeyPair({ kind: "ecdsa", namedCurve: "P-384" });
+		const p384LeafKeys = await generateKeyPair({
+			kind: "ecdsa",
+			namedCurve: "P-384",
+		});
 		const p384Leaf = await createCertificate({
 			issuer: { commonName: "p384-ca" },
 			subject: { commonName: "p384-leaf" },
@@ -1133,13 +1401,19 @@ describe("micro509", () => {
 	});
 
 	it("verifies certificate request signatures for RSA and Ed25519", async () => {
-		const rsaKeys = await generateKeyPair({ kind: "rsa", modulusLength: 2048, hash: "SHA-512" });
+		const rsaKeys = await generateKeyPair({
+			kind: "rsa",
+			modulusLength: 2048,
+			hash: "SHA-512",
+		});
 		const rsaCsr = await createCertificateSigningRequest({
 			subject: { commonName: "rsa-csr" },
 			publicKey: rsaKeys.publicKey,
 			signerPrivateKey: rsaKeys.privateKey,
 		});
-		expect(await verifyCertificateSigningRequest(rsaCsr.pem)).toMatchObject({ ok: true });
+		expect(await verifyCertificateSigningRequest(rsaCsr.pem)).toMatchObject({
+			ok: true,
+		});
 
 		const edKeys = await generateKeyPair({ kind: "ed25519" });
 		const edCsr = await createCertificateSigningRequest({
@@ -1147,7 +1421,9 @@ describe("micro509", () => {
 			publicKey: edKeys.publicKey,
 			signerPrivateKey: edKeys.privateKey,
 		});
-		expect(await verifyCertificateSigningRequest(edCsr.der)).toMatchObject({ ok: true });
+		expect(await verifyCertificateSigningRequest(edCsr.der)).toMatchObject({
+			ok: true,
+		});
 	});
 
 	it("parses all supported name fields", async () => {
@@ -1198,7 +1474,9 @@ describe("micro509", () => {
 			publicKeys: [{ label: "PUBLIC KEY" }],
 			others: [{ label: "SOMETHING" }],
 		});
-		expect(() => pemDecode("CERTIFICATE", publicPem)).toThrow("Invalid PEM for CERTIFICATE");
+		expect(() => pemDecode("CERTIFICATE", publicPem)).toThrow(
+			"Invalid PEM for CERTIFICATE",
+		);
 	});
 
 	it("parses CSR without extensionRequest attributes", async () => {
@@ -1222,7 +1500,9 @@ describe("micro509", () => {
 				subjectAltNames: [{ type: "dns", value: "csr.example" }],
 				keyUsage: ["digitalSignature"],
 				extendedKeyUsage: ["clientAuth", { type: "oid", value: "1.2.3.4.6" }],
-				authorityInfoAccess: [{ method: "ocsp", uri: "http://csr.example/ocsp" }],
+				authorityInfoAccess: [
+					{ method: "ocsp", uri: "http://csr.example/ocsp" },
+				],
 				crlDistributionPoints: ["http://csr.example/crl"],
 			},
 		});
@@ -1247,26 +1527,43 @@ describe("micro509", () => {
 		if (oidElement === undefined) {
 			throw new Error("Missing attribute OID");
 		}
-		expect(decodeObjectIdentifier(oidElement.value)).toBe(OIDS.extensionRequest);
+		expect(decodeObjectIdentifier(oidElement.value)).toBe(
+			OIDS.extensionRequest,
+		);
 		const parsed = parseCertificateSigningRequestPem(csr.pem);
 		expect(parsed.subject.values.commonName).toBe("csr.example");
-		expect(parsed.subjectAltNames).toEqual([{ type: "dns", value: "csr.example" }]);
+		expect(parsed.subjectAltNames).toEqual([
+			{ type: "dns", value: "csr.example" },
+		]);
 		expect(parsed.keyUsage).toEqual(["digitalSignature"]);
-		expect(parsed.extendedKeyUsage).toEqual(["clientAuth", { type: "oid", value: "1.2.3.4.6" }]);
-		expect(parsed.authorityInfoAccess).toEqual([{ method: "ocsp", uri: "http://csr.example/ocsp" }]);
+		expect(parsed.extendedKeyUsage).toEqual([
+			"clientAuth",
+			{ type: "oid", value: "1.2.3.4.6" },
+		]);
+		expect(parsed.authorityInfoAccess).toEqual([
+			{ method: "ocsp", uri: "http://csr.example/ocsp" },
+		]);
 		expect(parsed.crlDistributionPoints).toEqual(["http://csr.example/crl"]);
 	});
 
 	it("verifies certificate request signatures with WebCrypto", async () => {
-		const goodKeyPair = await generateKeyPair({ kind: "ecdsa", namedCurve: "P-256" });
+		const goodKeyPair = await generateKeyPair({
+			kind: "ecdsa",
+			namedCurve: "P-256",
+		});
 		const goodCsr = await createCertificateSigningRequest({
 			subject: { commonName: "verify-csr.example" },
 			publicKey: goodKeyPair.publicKey,
 			signerPrivateKey: goodKeyPair.privateKey,
 		});
-		expect(await verifyCertificateSigningRequest(goodCsr.pem)).toMatchObject({ ok: true });
+		expect(await verifyCertificateSigningRequest(goodCsr.pem)).toMatchObject({
+			ok: true,
+		});
 
-		const wrongSigner = await generateKeyPair({ kind: "ecdsa", namedCurve: "P-256" });
+		const wrongSigner = await generateKeyPair({
+			kind: "ecdsa",
+			namedCurve: "P-256",
+		});
 		const badCsr = await createCertificateSigningRequest({
 			subject: { commonName: "bad-csr.example" },
 			publicKey: goodKeyPair.publicKey,
@@ -1315,6 +1612,76 @@ function decodeObjectIdentifier(bytes: Uint8Array): string {
 	return values.join(".");
 }
 
+async function createSyntheticOcspResponse(
+	certificate: ReturnType<typeof parseCertificatePem>,
+	issuer: ReturnType<typeof parseCertificatePem>,
+): Promise<Uint8Array> {
+	const issuerNameHash = await crypto.subtle.digest(
+		"SHA-1",
+		toArrayBuffer(hexToBytes(issuer.subject.derHex)),
+	);
+	const issuerKeyHash = await crypto.subtle.digest(
+		"SHA-1",
+		toArrayBuffer(extractSubjectPublicKeyBytes(issuer.subjectPublicKeyInfoDer)),
+	);
+	const certId = sequence([
+		sequence([objectIdentifier(OIDS.sha1), nullValue()]),
+		octetString(new Uint8Array(issuerNameHash)),
+		octetString(new Uint8Array(issuerKeyHash)),
+		integer(hexToBytes(certificate.serialNumberHex)),
+	]);
+	const responseData = sequence([
+		explicitContext(1, issuer.subjectPublicKeyInfoDer.slice(0, 8)),
+		generalizedTime(new Date("2024-01-01T00:00:00Z")),
+		sequence([
+			sequence([
+				certId,
+				tlv(0x80, new Uint8Array()),
+				generalizedTime(new Date("2024-01-01T00:00:00Z")),
+			]),
+		]),
+		explicitContext(
+			1,
+			sequence([
+				sequence([
+					objectIdentifier(OIDS.ocspNonce),
+					octetString(octetString(Uint8Array.of(0xaa, 0xbb))),
+				]),
+			]),
+		),
+	]);
+	const basicResponse = sequence([
+		responseData,
+		sequence([objectIdentifier(OIDS.sha256WithRSAEncryption), nullValue()]),
+		tlv(0x03, Uint8Array.of(0x00)),
+	]);
+	return sequence([
+		tlv(0x0a, Uint8Array.of(0x00)),
+		explicitContext(
+			0,
+			sequence([
+				objectIdentifier(OIDS.ocspBasicResponse),
+				octetString(basicResponse),
+			]),
+		),
+	]);
+}
+
+function extractSubjectPublicKeyBytes(spkiDer: Uint8Array): Uint8Array {
+	const top = childrenOf(spkiDer, readElement(spkiDer));
+	const bitStringElement = top[1];
+	if (bitStringElement === undefined) {
+		throw new Error("Missing subjectPublicKey BIT STRING");
+	}
+	return bitStringElement.value.slice(1);
+}
+
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+	const out = new ArrayBuffer(bytes.length);
+	new Uint8Array(out).set(bytes);
+	return out;
+}
+
 function hexToBytes(value: string): Uint8Array {
 	const normalized = value.length % 2 === 0 ? value : `0${value}`;
 	const bytes: number[] = [];
@@ -1341,7 +1708,10 @@ function hasExtensionOid(certificateDer: Uint8Array, oid: string): boolean {
 	}
 	for (const extension of childrenOf(certificateDer, extensionSequence)) {
 		const oidElement = childrenOf(certificateDer, extension)[0];
-		if (oidElement !== undefined && decodeObjectIdentifier(oidElement.value) === oid) {
+		if (
+			oidElement !== undefined
+			&& decodeObjectIdentifier(oidElement.value) === oid
+		) {
 			return true;
 		}
 	}
@@ -1350,12 +1720,26 @@ function hasExtensionOid(certificateDer: Uint8Array, oid: string): boolean {
 
 interface IssueChainOptions {
 	readonly rootExtensions?: {
-		readonly basicConstraints: { readonly ca: boolean; readonly pathLength?: number };
-		readonly keyUsage: readonly ("keyCertSign" | "cRLSign" | "digitalSignature")[];
+		readonly basicConstraints: {
+			readonly ca: boolean;
+			readonly pathLength?: number;
+		};
+		readonly keyUsage: readonly (
+			| "keyCertSign"
+			| "cRLSign"
+			| "digitalSignature"
+		)[];
 	};
 	readonly intermediateExtensions?: {
-		readonly basicConstraints: { readonly ca: boolean; readonly pathLength?: number };
-		readonly keyUsage: readonly ("keyCertSign" | "cRLSign" | "digitalSignature")[];
+		readonly basicConstraints: {
+			readonly ca: boolean;
+			readonly pathLength?: number;
+		};
+		readonly keyUsage: readonly (
+			| "keyCertSign"
+			| "cRLSign"
+			| "digitalSignature"
+		)[];
 	};
 	readonly leafValidity?: {
 		readonly notBefore: Date;
@@ -1392,7 +1776,9 @@ async function issueChain(options: IssueChainOptions = {}) {
 		publicKey: leafKeys.publicKey,
 		signerPrivateKey: options.leafSignerPrivateKey ?? intermediateKeys.privateKey,
 		issuerPublicKey: options.leafIssuerPublicKey ?? intermediateKeys.publicKey,
-		...(options.leafValidity !== undefined ? { validity: options.leafValidity } : {}),
+		...(options.leafValidity !== undefined
+			? { validity: options.leafValidity }
+			: {}),
 		extensions: {
 			keyUsage: ["digitalSignature"],
 			extendedKeyUsage: ["serverAuth"],

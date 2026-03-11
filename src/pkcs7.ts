@@ -48,7 +48,9 @@ export function createPkcs7CertBagPem(
 	};
 }
 
-export function parsePkcs7CertBagDer(der: Uint8Array): readonly ParsedCertificate[] {
+export function parsePkcs7CertBagDer(
+	der: Uint8Array,
+): readonly ParsedCertificate[] {
 	const contentInfo = readSequenceChildren(der);
 	const contentType = contentInfo[0];
 	const content = contentInfo[1];
@@ -74,7 +76,9 @@ export function parsePkcs7CertBagDer(der: Uint8Array): readonly ParsedCertificat
 	return parsed;
 }
 
-export function parsePkcs7CertBagPem(pem: string): readonly ParsedCertificate[] {
+export function parsePkcs7CertBagPem(
+	pem: string,
+): readonly ParsedCertificate[] {
 	const blocks = splitPemBlocks(pem).filter((block) => block.label === "PKCS7");
 	if (blocks.length !== 1) {
 		throw new Error("Expected exactly one PKCS7 block");
@@ -86,7 +90,9 @@ export function parsePkcs7CertBagPem(pem: string): readonly ParsedCertificate[] 
 	return parsePkcs7CertBagDer(block.bytes);
 }
 
-function normalizeCertificateSource(source: Pkcs7CertificateSource): readonly Uint8Array[] {
+function normalizeCertificateSource(
+	source: Pkcs7CertificateSource,
+): readonly Uint8Array[] {
 	if (typeof source === "string") {
 		return splitPemBlocks(source)
 			.filter((block) => block.label === "CERTIFICATE")

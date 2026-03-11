@@ -4,6 +4,7 @@ import {
 	bool,
 	type DerElement,
 	explicitContext,
+	generalizedTime,
 	implicitPrimitiveContext,
 	integer,
 	integerFromNumber,
@@ -13,6 +14,7 @@ import {
 	readSequenceChildren,
 	sequence,
 	time,
+	tlv,
 } from "./der.ts";
 import { exportSpkiDer, getCrypto, importSpkiDer, type PublicKeyImportInput } from "./keys.ts";
 import { encodeName, type NameInput } from "./name.ts";
@@ -24,7 +26,21 @@ import { encodeAlgorithmIdentifier, getSignatureAlgorithm, signBytes } from "./s
 export interface RevokedCertificateInput {
 	readonly serialNumber: Uint8Array;
 	readonly revocationDate?: Date;
+	readonly reasonCode?: RevocationReason;
+	readonly invalidityDate?: Date;
 }
+
+export type RevocationReason =
+	| "unspecified"
+	| "keyCompromise"
+	| "cACompromise"
+	| "affiliationChanged"
+	| "superseded"
+	| "cessationOfOperation"
+	| "certificateHold"
+	| "removeFromCRL"
+	| "privilegeWithdrawn"
+	| "aACompromise";
 
 export interface CreateCertificateRevocationListInput {
 	readonly issuer: NameInput;
@@ -34,6 +50,7 @@ export interface CreateCertificateRevocationListInput {
 	readonly nextUpdate?: Date;
 	readonly revokedCertificates?: readonly RevokedCertificateInput[];
 	readonly crlNumber?: number;
+	readonly baseCrlNumber?: number;
 }
 
 export interface CertificateRevocationListMaterial {
@@ -45,6 +62,8 @@ export interface CertificateRevocationListMaterial {
 export interface ParsedRevokedCertificate {
 	readonly serialNumberHex: string;
 	readonly revocationDate: Date;
+	readonly reasonCode?: RevocationReason;
+	readonly invalidityDate?: Date;
 }
 
 export interface ParsedCertificateRevocationList {
@@ -62,12 +81,30 @@ export interface ParsedCertificateRevocationList {
 	readonly issuerPublicKeyParametersOid?: string;
 	readonly authorityKeyIdentifier?: string;
 	readonly crlNumber?: number;
+	readonly baseCrlNumber?: number;
 	readonly revokedCertificates: readonly ParsedRevokedCertificate[];
 }
 
+const REVOCATION_REASON_CODES: Record<RevocationReason, number> = {
+	unspecified: 0,
+	keyCompromise: 1,
+	cACompromise: 2,
+	affiliationChanged: 3,
+	superseded: 4,
+	cessationOfOperation: 5,
+	certificateHold: 6,
+	removeFromCRL: 8,
+	privilegeWithdrawn: 9,
+	aACompromise: 10,
+};
+
 export type VerifyCertificateRevocationListResult =
 	| { readonly ok: true; readonly value: ParsedCertificateRevocationList }
-	| { readonly ok: false; readonly code: "signature_invalid"; readonly message: string };
+	| {
+		readonly ok: false;
+		readonly code: "signature_invalid";
+		readonly message: string;
+	};
 
 export async function createCertificateRevocationList(
 	input: CreateCertificateRevocationListInput,
@@ -75,16 +112,19 @@ export async function createCertificateRevocationList(
 	const signatureAlgorithm = getSignatureAlgorithm(input.signerPrivateKey);
 	const thisUpdate = input.thisUpdate ?? new Date();
 	const nextUpdate = input.nextUpdate;
-	const extensions = await buildCrlExtensions(input.issuerPublicKey, input.crlNumber);
+	const extensions = await buildCrlExtensions(
+		input.issuerPublicKey,
+		input.crlNumber,
+		input.baseCrlNumber,
+	);
 	const revoked = input.revokedCertificates ?? [];
 	const revokedSequence = revoked.length === 0
 		? []
-		: [sequence(revoked.map((entry) =>
-			sequence([
-				integer(entry.serialNumber),
-				time(entry.revocationDate ?? thisUpdate),
-			])
-		))];
+		: [
+			sequence(
+				revoked.map((entry) => createRevokedCertificate(entry, thisUpdate)),
+			),
+		];
 	const tbsCertList = sequence([
 		integerFromNumber(1),
 		encodeAlgorithmIdentifier(signatureAlgorithm),
@@ -92,9 +132,15 @@ export async function createCertificateRevocationList(
 		time(thisUpdate),
 		...(nextUpdate === undefined ? [] : [time(nextUpdate)]),
 		...revokedSequence,
-		...(extensions.length === 0 ? [] : [explicitContext(0, sequence(extensions))]),
+		...(extensions.length === 0
+			? []
+			: [explicitContext(0, sequence(extensions))]),
 	]);
-	const signatureValue = await signBytes(input.signerPrivateKey, signatureAlgorithm, tbsCertList);
+	const signatureValue = await signBytes(
+		input.signerPrivateKey,
+		signatureAlgorithm,
+		tbsCertList,
+	);
 	const der = sequence([
 		tbsCertList,
 		encodeAlgorithmIdentifier(signatureAlgorithm),
@@ -107,7 +153,9 @@ export async function createCertificateRevocationList(
 	};
 }
 
-export function parseCertificateRevocationListDer(der: Uint8Array): ParsedCertificateRevocationList {
+export function parseCertificateRevocationListDer(
+	der: Uint8Array,
+): ParsedCertificateRevocationList {
 	const top = childrenOf(der, readElement(der));
 	const tbsCertList = requireElement(top[0], "TBSCertList");
 	const signatureAlgorithm = requireElement(top[1], "signatureAlgorithm");
@@ -116,7 +164,8 @@ export function parseCertificateRevocationListDer(der: Uint8Array): ParsedCertif
 	let index = 0;
 	let version = 1;
 	if (tbsChildren[index]?.tag === 0x02) {
-		version = decodeIntegerNumber(requireElement(tbsChildren[index], "version").value) + 1;
+		version = decodeIntegerNumber(requireElement(tbsChildren[index], "version").value)
+			+ 1;
 		index += 1;
 	}
 	index += 1; // signature algorithm in TBS
@@ -124,7 +173,8 @@ export function parseCertificateRevocationListDer(der: Uint8Array): ParsedCertif
 	const thisUpdate = requireElement(tbsChildren[index + 1], "thisUpdate");
 	let cursor = index + 2;
 	const maybeNextUpdate = tbsChildren[cursor];
-	const nextUpdate = maybeNextUpdate !== undefined && (maybeNextUpdate.tag === 0x17 || maybeNextUpdate.tag === 0x18)
+	const nextUpdate = maybeNextUpdate !== undefined
+			&& (maybeNextUpdate.tag === 0x17 || maybeNextUpdate.tag === 0x18)
 		? parseTime(maybeNextUpdate)
 		: undefined;
 	if (nextUpdate !== undefined) {
@@ -134,46 +184,83 @@ export function parseCertificateRevocationListDer(der: Uint8Array): ParsedCertif
 	const maybeRevoked = tbsChildren[cursor];
 	if (maybeRevoked?.tag === 0x30) {
 		revokedCertificates = childrenOf(der, maybeRevoked).map((entry) => {
-			const parts = childrenOf(der, entry);
+			const entryDer = der.slice(entry.start - entry.headerLength, entry.end);
+			const parts = readSequenceChildren(entryDer);
+			const entryExtensions = parts[2];
+			const parsedEntryExtensions = parseRevokedCertificateExtensions(
+				entryDer,
+				entryExtensions,
+			);
 			return {
-				serialNumberHex: toHex(requireElement(parts[0], "revoked serialNumber").value),
+				serialNumberHex: toHex(
+					requireElement(parts[0], "revoked serialNumber").value,
+				),
 				revocationDate: parseTime(requireElement(parts[1], "revocationDate")),
+				...(parsedEntryExtensions.reasonCode === undefined
+					? {}
+					: { reasonCode: parsedEntryExtensions.reasonCode }),
+				...(parsedEntryExtensions.invalidityDate === undefined
+					? {}
+					: { invalidityDate: parsedEntryExtensions.invalidityDate }),
 			};
 		});
 		cursor += 1;
 	}
 	let authorityKeyIdentifier: string | undefined;
 	let crlNumber: number | undefined;
+	let baseCrlNumber: number | undefined;
 	const maybeExtensions = tbsChildren[cursor];
 	if (maybeExtensions?.tag === 0xa0) {
-		const extensionSequence = requireElement(childrenOf(der, maybeExtensions)[0], "crl extensions");
+		const extensionSequence = requireElement(
+			childrenOf(der, maybeExtensions)[0],
+			"crl extensions",
+		);
 		for (const extension of childrenOf(der, extensionSequence)) {
 			const parts = childrenOf(der, extension);
-			const oid = decodeObjectIdentifier(requireElement(parts[0], "extension OID").value);
-			const valueElement = requireElement(parts[parts.length - 1], "extension value");
+			const oid = decodeObjectIdentifier(
+				requireElement(parts[0], "extension OID").value,
+			);
+			const valueElement = requireElement(
+				parts[parts.length - 1],
+				"extension value",
+			);
 			if (oid === OIDS.authorityKeyIdentifier) {
-				authorityKeyIdentifier = parseAuthorityKeyIdentifier(valueElement.value);
+				authorityKeyIdentifier = parseAuthorityKeyIdentifier(
+					valueElement.value,
+				);
 			}
 			if (oid === OIDS.cRLNumber) {
 				crlNumber = decodeIntegerNumber(readElement(valueElement.value).value);
+			}
+			if (oid === OIDS.deltaCRLIndicator) {
+				baseCrlNumber = decodeIntegerNumber(
+					readElement(valueElement.value).value,
+				);
 			}
 		}
 	}
 	return {
 		version,
-		tbsCertListDer: der.slice(tbsCertList.start - tbsCertList.headerLength, tbsCertList.end),
+		tbsCertListDer: der.slice(
+			tbsCertList.start - tbsCertList.headerLength,
+			tbsCertList.end,
+		),
 		signatureValue: extractBitStringValue(signatureValue),
 		issuer: parseIssuer(der, issuer),
 		thisUpdate: parseTime(thisUpdate),
 		...(nextUpdate === undefined ? {} : { nextUpdate }),
-		signatureAlgorithmOid: parseAlgorithmIdentifier(der, signatureAlgorithm).oid,
+		signatureAlgorithmOid: parseAlgorithmIdentifier(der, signatureAlgorithm)
+			.oid,
 		...(authorityKeyIdentifier === undefined ? {} : { authorityKeyIdentifier }),
 		...(crlNumber === undefined ? {} : { crlNumber }),
+		...(baseCrlNumber === undefined ? {} : { baseCrlNumber }),
 		revokedCertificates,
 	};
 }
 
-export function parseCertificateRevocationListPem(pem: string): ParsedCertificateRevocationList {
+export function parseCertificateRevocationListPem(
+	pem: string,
+): ParsedCertificateRevocationList {
 	return parseCertificateRevocationListDer(pemDecode("X509 CRL", pem));
 }
 
@@ -192,7 +279,10 @@ export async function verifyCertificateRevocationList(
 		issuer.publicKeyAlgorithmOid,
 		issuer.publicKeyParametersOid,
 	);
-	const key = await importSpkiDer(issuer.subjectPublicKeyInfoDer, config.importAlgorithm);
+	const key = await importSpkiDer(
+		issuer.subjectPublicKeyInfoDer,
+		config.importAlgorithm,
+	);
 	const subtle = getCrypto().subtle;
 	const signatureView = toArrayBuffer(parsedCrl.signatureValue);
 	const dataView = toArrayBuffer(parsedCrl.tbsCertListDer);
@@ -206,12 +296,21 @@ export async function verifyCertificateRevocationList(
 		);
 		if (
 			alternate !== undefined
-			&& await subtle.verify(config.verifyParams, key, toArrayBuffer(alternate), dataView)
+			&& (await subtle.verify(
+				config.verifyParams,
+				key,
+				toArrayBuffer(alternate),
+				dataView,
+			))
 		) {
 			return { ok: true, value: parsedCrl };
 		}
 	}
-	return { ok: false, code: "signature_invalid", message: "certificate revocation list signature does not verify" };
+	return {
+		ok: false,
+		code: "signature_invalid",
+		message: "certificate revocation list signature does not verify",
+	};
 }
 
 export function isCertificateRevoked(
@@ -221,28 +320,118 @@ export function isCertificateRevoked(
 	const serialNumberHex = typeof certificateSerialNumber === "string"
 		? normalizeHex(certificateSerialNumber)
 		: toHex(certificateSerialNumber);
-	return crl.revokedCertificates.some((entry) => normalizeHex(entry.serialNumberHex) === serialNumberHex);
+	return crl.revokedCertificates.some(
+		(entry) => normalizeHex(entry.serialNumberHex) === serialNumberHex,
+	);
 }
 
 async function buildCrlExtensions(
 	issuerPublicKey: CryptoKey | undefined,
 	crlNumber: number | undefined,
+	baseCrlNumber?: number,
 ): Promise<Uint8Array[]> {
 	const extensions: Uint8Array[] = [];
 	if (issuerPublicKey !== undefined) {
 		const spki = await exportSpkiDer(issuerPublicKey);
-		extensions.push(encodeExtension(
-			OIDS.authorityKeyIdentifier,
-			sequence([implicitPrimitiveContext(0, buildSubjectKeyIdentifier(spki))]),
-		));
+		extensions.push(
+			encodeExtension(
+				OIDS.authorityKeyIdentifier,
+				sequence([
+					implicitPrimitiveContext(0, buildSubjectKeyIdentifier(spki)),
+				]),
+			),
+		);
 	}
 	if (crlNumber !== undefined) {
-		extensions.push(encodeExtension(OIDS.cRLNumber, integerFromNumber(crlNumber)));
+		extensions.push(
+			encodeExtension(OIDS.cRLNumber, integerFromNumber(crlNumber)),
+		);
+	}
+	if (baseCrlNumber !== undefined) {
+		extensions.push(
+			encodeExtension(
+				OIDS.deltaCRLIndicator,
+				integerFromNumber(baseCrlNumber),
+				true,
+			),
+		);
 	}
 	return extensions;
 }
 
-function encodeExtension(oid: string, value: Uint8Array, critical = false): Uint8Array {
+function createRevokedCertificate(
+	entry: RevokedCertificateInput,
+	thisUpdate: Date,
+): Uint8Array {
+	const extensions = buildRevokedCertificateExtensions(entry);
+	return sequence([
+		integer(entry.serialNumber),
+		time(entry.revocationDate ?? thisUpdate),
+		...(extensions.length === 0 ? [] : [sequence(extensions)]),
+	]);
+}
+
+function buildRevokedCertificateExtensions(
+	entry: RevokedCertificateInput,
+): Uint8Array[] {
+	const extensions: Uint8Array[] = [];
+	if (entry.reasonCode !== undefined) {
+		extensions.push(
+			encodeExtension(
+				OIDS.cRLReason,
+				tlv(0x0a, Uint8Array.of(REVOCATION_REASON_CODES[entry.reasonCode])),
+			),
+		);
+	}
+	if (entry.invalidityDate !== undefined) {
+		extensions.push(
+			encodeExtension(
+				OIDS.invalidityDate,
+				generalizedTime(entry.invalidityDate),
+			),
+		);
+	}
+	return extensions;
+}
+
+function parseRevokedCertificateExtensions(
+	entryDer: Uint8Array | undefined,
+	element: DerElement | undefined,
+): { readonly reasonCode?: RevocationReason; readonly invalidityDate?: Date } {
+	if (entryDer === undefined || element === undefined) {
+		return {};
+	}
+	let reasonCode: RevocationReason | undefined;
+	let invalidityDate: Date | undefined;
+	for (const extension of childrenOf(entryDer, element)) {
+		const parts = childrenOf(entryDer, extension);
+		const oid = decodeObjectIdentifier(
+			requireElement(parts[0], "revoked certificate extension OID").value,
+		);
+		const valueElement = requireElement(
+			parts[parts.length - 1],
+			"revoked certificate extension value",
+		);
+		if (oid === OIDS.cRLReason) {
+			reasonCode = revocationReasonFromCode(
+				readElement(valueElement.value).value[0],
+			);
+		}
+		if (oid === OIDS.invalidityDate) {
+			invalidityDate = parseTime(readElement(valueElement.value));
+		}
+	}
+	return {
+		...(reasonCode === undefined ? {} : { reasonCode }),
+		...(invalidityDate === undefined ? {} : { invalidityDate }),
+	};
+}
+
+function encodeExtension(
+	oid: string,
+	value: Uint8Array,
+	critical = false,
+): Uint8Array {
 	return sequence([
 		objectIdentifier(oid),
 		...(critical ? [bool(true)] : []),
@@ -256,7 +445,9 @@ function buildSubjectKeyIdentifier(spki: Uint8Array): Uint8Array {
 	if (keyBitString === undefined || keyBitString.tag !== 0x03) {
 		throw new Error("SPKI missing subject public key bit string");
 	}
-	return new Uint8Array(createHash("sha1").update(keyBitString.value.slice(1)).digest());
+	return new Uint8Array(
+		createHash("sha1").update(keyBitString.value.slice(1)).digest(),
+	);
 }
 
 function parseIssuer(
@@ -265,15 +456,24 @@ function parseIssuer(
 ): { readonly derHex: string; readonly commonName?: string } {
 	let commonName: string | undefined;
 	for (const setElement of childrenOf(source, element)) {
-		const attribute = requireElement(childrenOf(source, setElement)[0], "issuer attribute");
+		const attribute = requireElement(
+			childrenOf(source, setElement)[0],
+			"issuer attribute",
+		);
 		const parts = childrenOf(source, attribute);
-		const oid = decodeObjectIdentifier(requireElement(parts[0], "issuer attribute OID").value);
+		const oid = decodeObjectIdentifier(
+			requireElement(parts[0], "issuer attribute OID").value,
+		);
 		if (oid === OIDS.commonName) {
-			commonName = textDecoder.decode(requireElement(parts[1], "issuer attribute value").value);
+			commonName = textDecoder.decode(
+				requireElement(parts[1], "issuer attribute value").value,
+			);
 		}
 	}
 	return {
-		derHex: toHex(source.slice(element.start - element.headerLength, element.end)),
+		derHex: toHex(
+			source.slice(element.start - element.headerLength, element.end),
+		),
 		...(commonName === undefined ? {} : { commonName }),
 	};
 }
@@ -303,14 +503,20 @@ function parseTime(element: DerElement): Date {
 		const prefix = Number.parseInt(value.slice(0, 2), 10) >= 50 ? "19" : "20";
 		return new Date(
 			`${prefix}${value.slice(0, 2)}-${value.slice(2, 4)}-${value.slice(4, 6)}T${value.slice(6, 8)}:${
-				value.slice(8, 10)
+				value.slice(
+					8,
+					10,
+				)
 			}:${value.slice(10, 12)}Z`,
 		);
 	}
 	if (element.tag === 0x18) {
 		return new Date(
 			`${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}T${value.slice(8, 10)}:${value.slice(10, 12)}:${
-				value.slice(12, 14)
+				value.slice(
+					12,
+					14,
+				)
 			}Z`,
 		);
 	}
@@ -372,11 +578,41 @@ function decodeObjectIdentifier(bytes: Uint8Array): string {
 }
 
 function toHex(bytes: Uint8Array): string {
-	return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+	return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join(
+		"",
+	);
 }
 
 function normalizeHex(value: string): string {
 	return value.replace(/^0+/, "").toLowerCase();
+}
+
+function revocationReasonFromCode(
+	code: number | undefined,
+): RevocationReason | undefined {
+	switch (code) {
+		case 0:
+			return "unspecified";
+		case 1:
+			return "keyCompromise";
+		case 2:
+			return "cACompromise";
+		case 3:
+			return "affiliationChanged";
+		case 4:
+			return "superseded";
+		case 5:
+			return "cessationOfOperation";
+		case 6:
+			return "certificateHold";
+		case 8:
+			return "removeFromCRL";
+		case 9:
+			return "privilegeWithdrawn";
+		case 10:
+			return "aACompromise";
+	}
+	return undefined;
 }
 
 function parseIssuerCertificateDer(der: Uint8Array): ParsedCertificate {
@@ -414,13 +650,19 @@ function getVerifySignatureConfig(
 			};
 		case OIDS.ecdsaWithSHA256:
 			return {
-				importAlgorithm: requireEc(publicKeyAlgorithmOid, publicKeyParametersOid),
+				importAlgorithm: requireEc(
+					publicKeyAlgorithmOid,
+					publicKeyParametersOid,
+				),
 				verifyParams: { name: "ECDSA", hash: "SHA-256" },
 				ecdsaRawSignatureBytes: curveBytes(publicKeyParametersOid),
 			};
 		case OIDS.ecdsaWithSHA384:
 			return {
-				importAlgorithm: requireEc(publicKeyAlgorithmOid, publicKeyParametersOid),
+				importAlgorithm: requireEc(
+					publicKeyAlgorithmOid,
+					publicKeyParametersOid,
+				),
 				verifyParams: { name: "ECDSA", hash: "SHA-384" },
 				ecdsaRawSignatureBytes: curveBytes(publicKeyParametersOid),
 			};
@@ -428,20 +670,31 @@ function getVerifySignatureConfig(
 			if (publicKeyAlgorithmOid !== OIDS.ed25519) {
 				throw new Error("Ed25519 signature requires Ed25519 issuer public key");
 			}
-			return { importAlgorithm: { kind: "ed25519" }, verifyParams: { name: "Ed25519" } };
+			return {
+				importAlgorithm: { kind: "ed25519" },
+				verifyParams: { name: "Ed25519" },
+			};
 		default:
-			throw new Error(`Unsupported signature algorithm OID: ${signatureAlgorithmOid}`);
+			throw new Error(
+				`Unsupported signature algorithm OID: ${signatureAlgorithmOid}`,
+			);
 	}
 }
 
-function requireRsa(publicKeyAlgorithmOid: string, hash: "SHA-256" | "SHA-384" | "SHA-512"): PublicKeyImportInput {
+function requireRsa(
+	publicKeyAlgorithmOid: string,
+	hash: "SHA-256" | "SHA-384" | "SHA-512",
+): PublicKeyImportInput {
 	if (publicKeyAlgorithmOid !== OIDS.rsaEncryption) {
 		throw new Error("RSA signature requires RSA public key");
 	}
 	return { kind: "rsa", hash };
 }
 
-function requireEc(publicKeyAlgorithmOid: string, publicKeyParametersOid: string | undefined): PublicKeyImportInput {
+function requireEc(
+	publicKeyAlgorithmOid: string,
+	publicKeyParametersOid: string | undefined,
+): PublicKeyImportInput {
 	if (publicKeyAlgorithmOid !== OIDS.ecPublicKey) {
 		throw new Error("ECDSA signature requires EC public key");
 	}
@@ -451,7 +704,9 @@ function requireEc(publicKeyAlgorithmOid: string, publicKeyParametersOid: string
 		case OIDS.secp384r1:
 			return { kind: "ecdsa", namedCurve: "P-384" };
 		default:
-			throw new Error(`Unsupported EC curve OID: ${publicKeyParametersOid ?? "missing"}`);
+			throw new Error(
+				`Unsupported EC curve OID: ${publicKeyParametersOid ?? "missing"}`,
+			);
 	}
 }
 
@@ -462,21 +717,33 @@ function curveBytes(parametersOid: string | undefined): number {
 		case OIDS.secp384r1:
 			return 96;
 		default:
-			throw new Error(`Unsupported EC curve OID: ${parametersOid ?? "missing"}`);
+			throw new Error(
+				`Unsupported EC curve OID: ${parametersOid ?? "missing"}`,
+			);
 	}
 }
 
-function derEcdsaSignatureToRaw(signature: Uint8Array, partLength: number): Uint8Array {
+function derEcdsaSignatureToRaw(
+	signature: Uint8Array,
+	partLength: number,
+): Uint8Array {
 	const parts = readSequenceChildren(signature);
 	const r = parts[0];
 	const s = parts[1];
 	if (r === undefined || s === undefined) {
 		throw new Error("Malformed ECDSA DER signature");
 	}
-	return concatFixedWidth(trimLeadingZero(r.value), trimLeadingZero(s.value), partLength);
+	return concatFixedWidth(
+		trimLeadingZero(r.value),
+		trimLeadingZero(s.value),
+		partLength,
+	);
 }
 
-function rawEcdsaSignatureToDer(signature: Uint8Array, partLength: number): Uint8Array {
+function rawEcdsaSignatureToDer(
+	signature: Uint8Array,
+	partLength: number,
+): Uint8Array {
 	if (signature.length !== partLength * 2) {
 		throw new Error("Unexpected ECDSA raw signature length");
 	}
@@ -508,7 +775,11 @@ function trimLeadingZero(bytes: Uint8Array): Uint8Array {
 	return bytes.slice(index);
 }
 
-function concatFixedWidth(left: Uint8Array, right: Uint8Array, partLength: number): Uint8Array {
+function concatFixedWidth(
+	left: Uint8Array,
+	right: Uint8Array,
+	partLength: number,
+): Uint8Array {
 	if (left.length > partLength || right.length > partLength) {
 		throw new Error("ECDSA signature integer too large");
 	}

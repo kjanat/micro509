@@ -1,5 +1,5 @@
 import { integer, readSequenceChildren, sequence } from "./der.ts";
-import { type ExtendedKeyUsage } from "./extensions.ts";
+import type { ExtendedKeyUsage } from "./extensions.ts";
 import { getCrypto, importSpkiDer, type PublicKeyImportInput } from "./keys.ts";
 import { OIDS } from "./oids.ts";
 import {
@@ -141,7 +141,9 @@ export async function verifyCertificateChain(
 			"no trusted root found",
 			undefined,
 			detail({
-				chainCommonNames: chain.map((certificate) => certificate.parsed.subject.values.commonName ?? "<unnamed>"),
+				chainCommonNames: chain.map(
+					(certificate) => certificate.parsed.subject.values.commonName ?? "<unnamed>",
+				),
 			}),
 		);
 	}
@@ -170,7 +172,10 @@ export async function verifyCertificateChain(
 		if (issuer === undefined) {
 			return failure("issuer_not_found", "issuer missing", index);
 		}
-		const signatureValid = await verifyCertificateSignature(current.parsed, issuer.parsed);
+		const signatureValid = await verifyCertificateSignature(
+			current.parsed,
+			issuer.parsed,
+		);
 		if (!signatureValid) {
 			return failure(
 				"signature_invalid",
@@ -208,7 +213,8 @@ export async function verifyCertificateChain(
 		if (
 			current.parsed.authorityKeyIdentifier !== undefined
 			&& issuer.parsed.subjectKeyIdentifier !== undefined
-			&& current.parsed.authorityKeyIdentifier !== issuer.parsed.subjectKeyIdentifier
+			&& current.parsed.authorityKeyIdentifier
+				!== issuer.parsed.subjectKeyIdentifier
 		) {
 			return failure(
 				"authority_key_identifier_mismatch",
@@ -327,8 +333,11 @@ function validateLeaf(
 		}
 	}
 	if (input.dnsName !== undefined) {
-		const sans = leaf.parsed.subjectAltNames?.filter((entry) => entry.type === "dns") ?? [];
-		if (!sans.some((entry) => matchesDnsName(entry.value, input.dnsName ?? ""))) {
+		const sans = leaf.parsed.subjectAltNames?.filter((entry) => entry.type === "dns")
+			?? [];
+		if (
+			!sans.some((entry) => matchesDnsName(entry.value, input.dnsName ?? ""))
+		) {
 			return failure(
 				"subject_alt_name_mismatch",
 				"DNS name not present in SAN",
@@ -352,7 +361,9 @@ function validateLeaf(
 				detail({
 					subjectCommonName: leaf.parsed.subject.values.commonName,
 					expected,
-					actual: sans.map((entry) => normalizeIpAddress(entry.value)).join(","),
+					actual: sans
+						.map((entry) => normalizeIpAddress(entry.value))
+						.join(","),
 				}),
 			);
 		}
@@ -369,7 +380,9 @@ async function buildChain(
 	const candidates = [...intermediates, ...roots];
 	const subjectIndex = new Map<string, LoadedCertificate[]>();
 	const order = new Map<string, number>();
-	const rootFingerprints = new Set(roots.map((candidate) => fingerprint(candidate)));
+	const rootFingerprints = new Set(
+		roots.map((candidate) => fingerprint(candidate)),
+	);
 	let sawUntrustedAnchor = false;
 	let deepestPath: readonly LoadedCertificate[] = [leaf];
 	let deepestMissingIssuerAt: number | undefined;
@@ -389,24 +402,27 @@ async function buildChain(
 
 	const maxDepth = candidates.length + 1;
 	const startFingerprint = fingerprint(leaf);
-	const success = await search(
-		leaf,
-		[leaf],
-		new Set([startFingerprint]),
-		0,
-	);
+	const success = await search(leaf, [leaf], new Set([startFingerprint]), 0);
 	if (success !== undefined) {
 		return { chain: success, foundTrustedRoot: true };
 	}
 	if (preferredFailure !== undefined) {
-		return { chain: deepestPath, foundTrustedRoot: false, failure: preferredFailure };
+		return {
+			chain: deepestPath,
+			foundTrustedRoot: false,
+			failure: preferredFailure,
+		};
 	}
 	if (sawUntrustedAnchor) {
 		return { chain: deepestPath, foundTrustedRoot: false };
 	}
 	return deepestMissingIssuerAt === undefined
 		? { chain: deepestPath, foundTrustedRoot: false }
-		: { chain: deepestPath, foundTrustedRoot: false, missingIssuerAt: deepestMissingIssuerAt };
+		: {
+			chain: deepestPath,
+			foundTrustedRoot: false,
+			missingIssuerAt: deepestMissingIssuerAt,
+		};
 
 	async function search(
 		current: LoadedCertificate,
@@ -476,7 +492,10 @@ async function buildChain(
 				);
 				continue;
 			}
-			if (issuer.parsed.keyUsage !== undefined && !issuer.parsed.keyUsage.includes("keyCertSign")) {
+			if (
+				issuer.parsed.keyUsage !== undefined
+				&& !issuer.parsed.keyUsage.includes("keyCertSign")
+			) {
 				recordFailure(
 					failure(
 						"key_cert_sign_required",
@@ -493,7 +512,8 @@ async function buildChain(
 			if (
 				current.parsed.authorityKeyIdentifier !== undefined
 				&& issuer.parsed.subjectKeyIdentifier !== undefined
-				&& current.parsed.authorityKeyIdentifier !== issuer.parsed.subjectKeyIdentifier
+				&& current.parsed.authorityKeyIdentifier
+					!== issuer.parsed.subjectKeyIdentifier
 			) {
 				recordFailure(
 					failure(
@@ -547,7 +567,12 @@ async function buildChain(
 			const nextVisited = new Set(visited);
 			nextVisited.add(issuerFingerprint);
 			const nextPath = [...path, issuer];
-			const result = await search(issuer, nextPath, nextVisited, nextCaBelowCount);
+			const result = await search(
+				issuer,
+				nextPath,
+				nextVisited,
+				nextCaBelowCount,
+			);
 			if (result !== undefined) {
 				return result;
 			}
@@ -584,7 +609,10 @@ function rankIssuerCandidates(
 	return [...candidates]
 		.filter((candidate) => isIssuerOf(candidate, current))
 		.sort((left, right) => {
-			const akiScore = compareBooleans(matchesAki(left, aki), matchesAki(right, aki));
+			const akiScore = compareBooleans(
+				matchesAki(left, aki),
+				matchesAki(right, aki),
+			);
 			if (akiScore !== 0) {
 				return akiScore;
 			}
@@ -595,14 +623,22 @@ function rankIssuerCandidates(
 			if (rootScore !== 0) {
 				return rootScore;
 			}
-			return (order.get(fingerprint(left)) ?? Number.MAX_SAFE_INTEGER)
-				- (order.get(fingerprint(right)) ?? Number.MAX_SAFE_INTEGER);
+			return (
+				(order.get(fingerprint(left)) ?? Number.MAX_SAFE_INTEGER)
+				- (order.get(fingerprint(right)) ?? Number.MAX_SAFE_INTEGER)
+			);
 		});
 }
 
-function matchesAki(candidate: LoadedCertificate, aki: string | undefined): boolean {
-	return aki !== undefined && candidate.parsed.subjectKeyIdentifier !== undefined
-		&& candidate.parsed.subjectKeyIdentifier === aki;
+function matchesAki(
+	candidate: LoadedCertificate,
+	aki: string | undefined,
+): boolean {
+	return (
+		aki !== undefined
+		&& candidate.parsed.subjectKeyIdentifier !== undefined
+		&& candidate.parsed.subjectKeyIdentifier === aki
+	);
 }
 
 function compareBooleans(left: boolean, right: boolean): number {
@@ -612,19 +648,28 @@ function compareBooleans(left: boolean, right: boolean): number {
 	return left ? -1 : 1;
 }
 
-function isIssuerOf(issuer: LoadedCertificate, child: LoadedCertificate): boolean {
+function isIssuerOf(
+	issuer: LoadedCertificate,
+	child: LoadedCertificate,
+): boolean {
 	return child.parsed.issuer.derHex === issuer.parsed.subject.derHex;
 }
 
 function isWithinValidity(certificate: ParsedCertificate, at: Date): boolean {
-	return certificate.notBefore.getTime() <= at.getTime() && at.getTime() <= certificate.notAfter.getTime();
+	return (
+		certificate.notBefore.getTime() <= at.getTime()
+		&& at.getTime() <= certificate.notAfter.getTime()
+	);
 }
 
 function isSelfIssued(certificate: ParsedCertificate): boolean {
 	return certificate.subject.derHex === certificate.issuer.derHex;
 }
 
-function countCaCertificatesBelow(chain: readonly LoadedCertificate[], index: number): number {
+function countCaCertificatesBelow(
+	chain: readonly LoadedCertificate[],
+	index: number,
+): number {
 	let total = 0;
 	for (let cursor = 0; cursor < index; cursor += 1) {
 		const certificate = chain[cursor];
@@ -635,7 +680,9 @@ function countCaCertificatesBelow(chain: readonly LoadedCertificate[], index: nu
 	return total;
 }
 
-function loadCertificates(sources: readonly CertificateSource[]): readonly LoadedCertificate[] {
+function loadCertificates(
+	sources: readonly CertificateSource[],
+): readonly LoadedCertificate[] {
 	const loaded: LoadedCertificate[] = [];
 	for (const source of sources) {
 		loaded.push(...expandSource(source));
@@ -706,7 +753,9 @@ async function verifySignedData(
 	const subtle = getCrypto().subtle;
 	const signatureView = toArrayBuffer(signatureValue);
 	const dataView = toArrayBuffer(data);
-	if (await subtle.verify(config.verifyParams, issuerKey, signatureView, dataView)) {
+	if (
+		await subtle.verify(config.verifyParams, issuerKey, signatureView, dataView)
+	) {
 		return true;
 	}
 	if (config.ecdsaRawSignatureBytes !== undefined) {
@@ -715,7 +764,12 @@ async function verifySignedData(
 			config.ecdsaRawSignatureBytes / 2,
 		);
 		if (alternate !== undefined) {
-			return subtle.verify(config.verifyParams, issuerKey, toArrayBuffer(alternate), dataView);
+			return subtle.verify(
+				config.verifyParams,
+				issuerKey,
+				toArrayBuffer(alternate),
+				dataView,
+			);
 		}
 	}
 	return false;
@@ -744,13 +798,19 @@ function getVerifySignatureConfig(
 			};
 		case OIDS.ecdsaWithSHA256:
 			return {
-				importAlgorithm: requireEcPublicKey(publicKeyAlgorithmOid, publicKeyParametersOid),
+				importAlgorithm: requireEcPublicKey(
+					publicKeyAlgorithmOid,
+					publicKeyParametersOid,
+				),
 				verifyParams: { name: "ECDSA", hash: "SHA-256" },
 				ecdsaRawSignatureBytes: curveBytes(publicKeyParametersOid),
 			};
 		case OIDS.ecdsaWithSHA384:
 			return {
-				importAlgorithm: requireEcPublicKey(publicKeyAlgorithmOid, publicKeyParametersOid),
+				importAlgorithm: requireEcPublicKey(
+					publicKeyAlgorithmOid,
+					publicKeyParametersOid,
+				),
 				verifyParams: { name: "ECDSA", hash: "SHA-384" },
 				ecdsaRawSignatureBytes: curveBytes(publicKeyParametersOid),
 			};
@@ -763,7 +823,9 @@ function getVerifySignatureConfig(
 				verifyParams: { name: "Ed25519" },
 			};
 		default:
-			throw new Error(`Unsupported signature algorithm OID: ${signatureAlgorithmOid}`);
+			throw new Error(
+				`Unsupported signature algorithm OID: ${signatureAlgorithmOid}`,
+			);
 	}
 }
 
@@ -790,7 +852,9 @@ function requireEcPublicKey(
 		case OIDS.secp384r1:
 			return { kind: "ecdsa", namedCurve: "P-384" };
 		default:
-			throw new Error(`Unsupported EC curve OID: ${publicKeyParametersOid ?? "missing"}`);
+			throw new Error(
+				`Unsupported EC curve OID: ${publicKeyParametersOid ?? "missing"}`,
+			);
 	}
 }
 
@@ -801,21 +865,33 @@ function curveBytes(parametersOid: string | undefined): number {
 		case OIDS.secp384r1:
 			return 96;
 		default:
-			throw new Error(`Unsupported EC curve OID: ${parametersOid ?? "missing"}`);
+			throw new Error(
+				`Unsupported EC curve OID: ${parametersOid ?? "missing"}`,
+			);
 	}
 }
 
-function derEcdsaSignatureToRaw(signature: Uint8Array, partLength: number): Uint8Array {
+function derEcdsaSignatureToRaw(
+	signature: Uint8Array,
+	partLength: number,
+): Uint8Array {
 	const parts = readSequenceChildren(signature);
 	const r = parts[0];
 	const s = parts[1];
 	if (r === undefined || s === undefined) {
 		throw new Error("Malformed ECDSA DER signature");
 	}
-	return concatFixedWidth(trimLeadingZero(r.value), trimLeadingZero(s.value), partLength);
+	return concatFixedWidth(
+		trimLeadingZero(r.value),
+		trimLeadingZero(s.value),
+		partLength,
+	);
 }
 
-function rawEcdsaSignatureToDer(signature: Uint8Array, partLength: number): Uint8Array {
+function rawEcdsaSignatureToDer(
+	signature: Uint8Array,
+	partLength: number,
+): Uint8Array {
 	if (signature.length !== partLength * 2) {
 		throw new Error("Unexpected ECDSA raw signature length");
 	}
@@ -847,7 +923,11 @@ function trimLeadingZero(bytes: Uint8Array): Uint8Array {
 	return bytes.slice(index);
 }
 
-function concatFixedWidth(left: Uint8Array, right: Uint8Array, partLength: number): Uint8Array {
+function concatFixedWidth(
+	left: Uint8Array,
+	right: Uint8Array,
+	partLength: number,
+): Uint8Array {
 	if (left.length > partLength || right.length > partLength) {
 		throw new Error("ECDSA signature integer too large");
 	}
@@ -863,7 +943,10 @@ function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
 	return out;
 }
 
-function isSameCertificate(left: LoadedCertificate, right: LoadedCertificate): boolean {
+function isSameCertificate(
+	left: LoadedCertificate,
+	right: LoadedCertificate,
+): boolean {
 	if (left.der.length !== right.der.length) {
 		return false;
 	}
@@ -883,7 +966,10 @@ function isTrustedSelfSignedRoot(
 	certificate: LoadedCertificate,
 	roots: readonly LoadedCertificate[],
 ): boolean {
-	return isSelfIssued(certificate.parsed) && roots.some((candidate) => isSameCertificate(candidate, certificate));
+	return (
+		isSelfIssued(certificate.parsed)
+		&& roots.some((candidate) => isSameCertificate(candidate, certificate))
+	);
 }
 
 function matchesDnsName(pattern: string, actual: string): boolean {
@@ -926,9 +1012,9 @@ function expandIpv6(value: string): readonly string[] {
 		throw new Error(`Invalid IPv6 address: ${value}`);
 	}
 	const zeroes = Array.from({ length: missing }, () => "0");
-	return (tail === undefined ? headParts : [...headParts, ...zeroes, ...tailParts]).map((segment) =>
-		segment.padStart(4, "0")
-	);
+	return (
+		tail === undefined ? headParts : [...headParts, ...zeroes, ...tailParts]
+	).map((segment) => segment.padStart(4, "0"));
 }
 
 function failure(
@@ -954,7 +1040,9 @@ function buildFailureDetails(
 	return detail({
 		subjectCommonName: certificate?.parsed.subject.values.commonName,
 		issuerCommonName: certificate?.parsed.issuer.values.commonName,
-		chainCommonNames: chain.map((entry) => entry.parsed.subject.values.commonName ?? "<unnamed>"),
+		chainCommonNames: chain.map(
+			(entry) => entry.parsed.subject.values.commonName ?? "<unnamed>",
+		),
 	});
 }
 
@@ -964,10 +1052,16 @@ function formatEku(value: ExtendedKeyUsage): string {
 
 function detail(input: VerifyFailureDetailsInput): VerifyFailureDetails {
 	return {
-		...(input.subjectCommonName === undefined ? {} : { subjectCommonName: input.subjectCommonName }),
-		...(input.issuerCommonName === undefined ? {} : { issuerCommonName: input.issuerCommonName }),
+		...(input.subjectCommonName === undefined
+			? {}
+			: { subjectCommonName: input.subjectCommonName }),
+		...(input.issuerCommonName === undefined
+			? {}
+			: { issuerCommonName: input.issuerCommonName }),
 		...(input.expected === undefined ? {} : { expected: input.expected }),
 		...(input.actual === undefined ? {} : { actual: input.actual }),
-		...(input.chainCommonNames === undefined ? {} : { chainCommonNames: input.chainCommonNames }),
+		...(input.chainCommonNames === undefined
+			? {}
+			: { chainCommonNames: input.chainCommonNames }),
 	};
 }
