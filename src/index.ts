@@ -77,14 +77,24 @@ export {
 	type ParsedNameAttribute,
 	type ParseOptions,
 } from "./parse.ts";
-export { type PemBlock, pemDecode, pemEncode, splitPemBlocks } from "./pem.ts";
+export {
+	type CategorizedPemBlocks,
+	categorizePemBlocks,
+	type PemBlock,
+	pemDecode,
+	pemEncode,
+	splitPemBlocks,
+} from "./pem.ts";
 export {
 	type CertificateSource,
+	type CsrSource,
 	type VerifiedCertificateChain,
 	verifyCertificateChain,
 	type VerifyCertificateChainInput,
+	verifyCertificateSigningRequest,
 	type VerifyChainResult,
 	type VerifyErrorCode,
 	type VerifyFailureDetails,
 	type VerifyPurpose,
+	type VerifyRequestResult,
 } from "./verify.ts";

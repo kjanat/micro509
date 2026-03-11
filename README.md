@@ -9,6 +9,7 @@ Tiny X.509 builders for modern TypeScript.
 - verify leaf/intermediate/root chains with typed results
 - custom extension build hooks + decode helpers
 - browser-native chain verification via WebCrypto
+- browser-native CSR signature verification too
 - WebCrypto-first, typed, small surface
 
 ## Install
@@ -199,10 +200,13 @@ const allDecoded = decodeExtensions(parsed.extensions, [
 ## Split PEM bundles
 
 ```ts
-import { splitPemBlocks } from "micro509";
+import { categorizePemBlocks, splitPemBlocks } from "micro509";
 
 const blocks = splitPemBlocks(bundle);
 console.log(blocks.map((block) => block.label));
+
+const categorized = categorizePemBlocks(bundle);
+console.log(categorized.certificates.length);
 ```
 
 ## Legacy private key PEM
@@ -248,6 +252,17 @@ if (result.ok) {
 }
 ```
 
+## Verify CSR
+
+```ts
+import { verifyCertificateSigningRequest } from "micro509";
+
+const result = await verifyCertificateSigningRequest(csr.pem);
+if (result.ok) {
+	console.log(result.value.subject.values.commonName);
+}
+```
+
 ## Notes
 
 - keygen: `rsa`, `ecdsa`, `ed25519`
@@ -261,4 +276,5 @@ if (result.ok) {
 - legacy key helpers: PKCS#1 RSA private key and SEC1 EC private key import/export
 - extended key usage: built-ins + custom OID escape hatch
 - chain verify: async, WebCrypto-based, browser-safe, issuer match, signatures, time, CA/keyCertSign, pathLen, AKI/SKI, SAN/EKU checks
+- csr verify: async, WebCrypto-based, browser-safe signature validation
 - verify failures: structured `code`, `index`, `details`

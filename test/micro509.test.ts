@@ -2,6 +2,7 @@ import { X509Certificate } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { readElement } from "../src/der.ts";
 import {
+	categorizePemBlocks,
 	createCertificate,
 	createCertificateSigningRequest,
 	createSelfSignedCertificate,
@@ -29,8 +30,10 @@ import {
 	parseCertificateChainPem,
 	parseCertificatePem,
 	parseCertificateSigningRequestPem,
+	pemDecode,
 	splitPemBlocks,
 	verifyCertificateChain,
+	verifyCertificateSigningRequest,
 } from "../src/index.ts";
 import { OIDS } from "../src/oids.ts";
 
@@ -215,6 +218,13 @@ describe("micro509", () => {
 			"CERTIFICATE REQUEST",
 			"PRIVATE KEY",
 		]);
+		expect(categorizePemBlocks(bundle)).toMatchObject({
+			certificates: [{ label: "CERTIFICATE" }],
+			certificateRequests: [{ label: "CERTIFICATE REQUEST" }],
+			privateKeys: [{ label: "PRIVATE KEY" }],
+			publicKeys: [],
+			others: [],
+		});
 	});
 
 	it("roundtrips RSA PKCS#1 and EC SEC1 private keys", async () => {
@@ -462,6 +472,332 @@ describe("micro509", () => {
 		expect(await exportPkcs8Der(jwkPrivate)).toEqual(await original.exportPkcs8Der());
 	});
 
+	it("rejects purpose=ca when leaf is not a CA", async () => {
+		const chain = await issueChain();
+		expect(
+			await verifyCertificateChain({
+				leaf: chain.leaf.pem,
+				intermediates: [chain.intermediate.pem],
+				roots: [chain.root.certificate.pem],
+				purpose: "ca",
+			}),
+		).toMatchObject({ ok: false, code: "ca_required", index: 0 });
+	});
+
+	it("verifies IP SAN match and rejects mismatch", async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: "IP CA" },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ["keyCertSign", "cRLSign"],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: "IP CA" },
+			subject: { commonName: "ip-leaf" },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				keyUsage: ["digitalSignature"],
+				subjectAltNames: [
+					{ type: "ip", value: "10.0.0.1" },
+					{ type: "ip", value: "::1" },
+				],
+			},
+		});
+		expect(
+			await verifyCertificateChain({
+				leaf: leaf.pem,
+				roots: [ca.certificate.pem],
+				ipAddress: "10.0.0.1",
+			}),
+		).toMatchObject({ ok: true });
+		expect(
+			await verifyCertificateChain({
+				leaf: leaf.pem,
+				roots: [ca.certificate.pem],
+				ipAddress: "10.0.0.2",
+			}),
+		).toMatchObject({ ok: false, code: "subject_alt_name_mismatch" });
+		expect(
+			await verifyCertificateChain({
+				leaf: leaf.pem,
+				roots: [ca.certificate.pem],
+				ipAddress: "::1",
+			}),
+		).toMatchObject({ ok: true });
+	});
+
+	it("matches wildcard DNS names correctly", async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: "Wildcard CA" },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ["keyCertSign", "cRLSign"],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: "Wildcard CA" },
+			subject: { commonName: "wildcard-leaf" },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				keyUsage: ["digitalSignature"],
+				extendedKeyUsage: ["serverAuth"],
+				subjectAltNames: [{ type: "dns", value: "*.example.com" }],
+			},
+		});
+		expect(
+			await verifyCertificateChain({
+				leaf: leaf.pem,
+				roots: [ca.certificate.pem],
+				purpose: "serverAuth",
+				dnsName: "sub.example.com",
+			}),
+		).toMatchObject({ ok: true });
+		expect(
+			await verifyCertificateChain({
+				leaf: leaf.pem,
+				roots: [ca.certificate.pem],
+				dnsName: "deep.sub.example.com",
+			}),
+		).toMatchObject({ ok: false, code: "subject_alt_name_mismatch" });
+		expect(
+			await verifyCertificateChain({
+				leaf: leaf.pem,
+				roots: [ca.certificate.pem],
+				dnsName: "example.com",
+			}),
+		).toMatchObject({ ok: false, code: "subject_alt_name_mismatch" });
+	});
+
+	it("allows self-signed leaf when root is trusted", async () => {
+		const selfSigned = await createSelfSignedCertificate({
+			subject: { commonName: "self.example" },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ["keyCertSign", "digitalSignature"],
+				subjectAltNames: [{ type: "dns", value: "self.example" }],
+			},
+		});
+		expect(
+			await verifyCertificateChain({
+				leaf: selfSigned.certificate.pem,
+				roots: [selfSigned.certificate.pem],
+				allowSelfSignedLeaf: true,
+				dnsName: "self.example",
+			}),
+		).toMatchObject({ ok: true });
+	});
+
+	it("verifies chain with DER certificate sources", async () => {
+		const chain = await issueChain();
+		const leafDer = new Uint8Array(
+			pemDecode("CERTIFICATE", chain.leaf.pem),
+		);
+		const intermediateDer = new Uint8Array(
+			pemDecode("CERTIFICATE", chain.intermediate.pem),
+		);
+		const rootDer = new Uint8Array(
+			pemDecode("CERTIFICATE", chain.root.certificate.pem),
+		);
+		expect(
+			await verifyCertificateChain({
+				leaf: leafDer,
+				intermediates: [intermediateDer],
+				roots: [rootDer],
+			}),
+		).toMatchObject({ ok: true });
+	});
+
+	it("roundtrips email, URI, and IPv6 SANs through build and parse", async () => {
+		const { certificate } = await createSelfSignedCertificate({
+			subject: { commonName: "san-variety" },
+			extensions: {
+				subjectAltNames: [
+					{ type: "email", value: "user@example.com" },
+					{ type: "uri", value: "https://example.com/path" },
+					{ type: "ip", value: "fe80::1" },
+				],
+			},
+		});
+		const parsed = parseCertificatePem(certificate.pem);
+		expect(parsed.subjectAltNames).toEqual([
+			{ type: "email", value: "user@example.com" },
+			{ type: "uri", value: "https://example.com/path" },
+			{ type: "ip", value: "fe80:0:0:0:0:0:0:1" },
+		]);
+	});
+
+	it("parses all known EKU types", async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: "EKU CA" },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ["keyCertSign"],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: "EKU CA" },
+			subject: { commonName: "eku-leaf" },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				extendedKeyUsage: [
+					"serverAuth",
+					"clientAuth",
+					"codeSigning",
+					"emailProtection",
+					"timeStamping",
+					"ocspSigning",
+				],
+			},
+		});
+		const parsed = parseCertificatePem(leaf.pem);
+		expect(parsed.extendedKeyUsage).toEqual([
+			"serverAuth",
+			"clientAuth",
+			"codeSigning",
+			"emailProtection",
+			"timeStamping",
+			"ocspSigning",
+		]);
+	});
+
+	it("passes through custom AIA method OIDs", async () => {
+		const { certificate } = await createSelfSignedCertificate({
+			subject: { commonName: "aia-custom" },
+			extensions: {
+				authorityInfoAccess: [
+					{ method: { type: "oid", value: "1.3.6.1.5.5.7.48.99" }, uri: "http://custom.example/aia" },
+				],
+			},
+		});
+		const parsed = parseCertificatePem(certificate.pem);
+		expect(parsed.authorityInfoAccess).toEqual([
+			{ method: { type: "oid", value: "1.3.6.1.5.5.7.48.99" }, uri: "http://custom.example/aia" },
+		]);
+	});
+
+	it("includes basicConstraints and customExtensions in CSR requested extensions", async () => {
+		const keyPair = await generateKeyPair({ kind: "ed25519" });
+		const csr = await createCertificateSigningRequest({
+			subject: { commonName: "csr-bc.example" },
+			publicKey: keyPair.publicKey,
+			signerPrivateKey: keyPair.privateKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 2 },
+				customExtensions: [
+					{ oid: "1.2.3.4.999", value: Uint8Array.of(0x05, 0x00), critical: true },
+				],
+			},
+		});
+		const parsed = parseCertificateSigningRequestPem(csr.pem);
+		expect(parsed.basicConstraints).toEqual({ ca: true, pathLength: 2 });
+		const custom = findExtension(parsed.requestedExtensions, "1.2.3.4.999");
+		expect(custom).toBeDefined();
+		expect(custom?.critical).toBe(true);
+	});
+
+	it("decodeExtension returns undefined for missing OID", async () => {
+		const { certificate } = await createSelfSignedCertificate({
+			subject: { commonName: "decode-miss" },
+		});
+		const parsed = parseCertificatePem(certificate.pem);
+		expect(
+			decodeExtension(parsed.extensions, {
+				oid: "1.2.3.4.999.888",
+				decode: () => "should not run",
+			}),
+		).toBeUndefined();
+	});
+
+	it("decodeExtensions skips missing decoders", async () => {
+		const { certificate } = await createSelfSignedCertificate({
+			subject: { commonName: "decode-skip" },
+		});
+		const parsed = parseCertificatePem(certificate.pem);
+		const result = decodeExtensions(parsed.extensions, [
+			{ oid: "1.2.3.4.999.777", decode: () => "never" },
+			{ oid: "1.2.3.4.999.888", decode: () => "never" },
+		]);
+		expect(result).toEqual([]);
+	});
+
+	it("rejects notAfter <= notBefore", async () => {
+		await expect(
+			createSelfSignedCertificate({
+				subject: { commonName: "bad-validity" },
+				validity: {
+					notBefore: new Date("2025-01-02T00:00:00Z"),
+					notAfter: new Date("2025-01-01T00:00:00Z"),
+				},
+			}),
+		).rejects.toThrow("notAfter must be after notBefore");
+	});
+
+	it("rejects empty subject name", async () => {
+		await expect(
+			createSelfSignedCertificate({ subject: {} }),
+		).rejects.toThrow("Name must contain at least one attribute");
+	});
+
+	it("rejects invalid country code length", async () => {
+		await expect(
+			createSelfSignedCertificate({ subject: { country: "USA" } }),
+		).rejects.toThrow("Country must be a 2-character code");
+	});
+
+	it("imports and exports keys via ecdsa and ed25519", async () => {
+		const ecP384 = await generateKeyPair({ kind: "ecdsa", namedCurve: "P-384" });
+		const ecPub = await importSpkiBase64(
+			await exportBinaryBase64(ecP384.publicKey),
+			{ kind: "ecdsa", namedCurve: "P-384" },
+		);
+		const ecPriv = await importPkcs8Base64(
+			await exportBinaryBase64(ecP384.privateKey),
+			{ kind: "ecdsa", namedCurve: "P-384" },
+		);
+		expect(await exportSpkiDer(ecPub)).toEqual(await ecP384.exportSpkiDer());
+		expect(await exportPkcs8Der(ecPriv)).toEqual(await ecP384.exportPkcs8Der());
+
+		const ed = await generateKeyPair({ kind: "ed25519" });
+		const edPub = await importSpkiPem(await ed.exportSpkiPem(), { kind: "ed25519" });
+		const edPriv = await importPkcs8Pem(await ed.exportPkcs8Pem(), { kind: "ed25519" });
+		expect(await exportSpkiDer(edPub)).toEqual(await ed.exportSpkiDer());
+		expect(await exportPkcs8Der(edPriv)).toEqual(await ed.exportPkcs8Der());
+	});
+
+	it("creates certificates with RSA SHA-384, SHA-512 and ECDSA P-384", async () => {
+		const rsaSha384 = await createSelfSignedCertificate({
+			subject: { commonName: "rsa384.example" },
+			algorithm: { kind: "rsa", modulusLength: 2048, hash: "SHA-384" },
+		});
+		expect(rsaSha384.certificate.pem).toContain("BEGIN CERTIFICATE");
+		const parsed384 = parseCertificatePem(rsaSha384.certificate.pem);
+		expect(parsed384.signatureAlgorithmOid).toBe("1.2.840.113549.1.1.12");
+
+		const rsaSha512 = await createSelfSignedCertificate({
+			subject: { commonName: "rsa512.example" },
+			algorithm: { kind: "rsa", modulusLength: 2048, hash: "SHA-512" },
+		});
+		const parsed512 = parseCertificatePem(rsaSha512.certificate.pem);
+		expect(parsed512.signatureAlgorithmOid).toBe("1.2.840.113549.1.1.13");
+
+		const ecP384 = await createSelfSignedCertificate({
+			subject: { commonName: "ecp384.example" },
+			algorithm: { kind: "ecdsa", namedCurve: "P-384" },
+		});
+		const parsedEc384 = parseCertificatePem(ecP384.certificate.pem);
+		expect(parsedEc384.signatureAlgorithmOid).toBe("1.2.840.10045.4.3.3");
+	});
+
 	it("creates a CSR with extensionRequest attributes", async () => {
 		const keyPair = await generateKeyPair({ kind: "ed25519" });
 		const csr = await createCertificateSigningRequest({
@@ -505,6 +841,28 @@ describe("micro509", () => {
 		expect(parsed.extendedKeyUsage).toEqual(["clientAuth", { type: "oid", value: "1.2.3.4.6" }]);
 		expect(parsed.authorityInfoAccess).toEqual([{ method: "ocsp", uri: "http://csr.example/ocsp" }]);
 		expect(parsed.crlDistributionPoints).toEqual(["http://csr.example/crl"]);
+	});
+
+	it("verifies certificate request signatures with WebCrypto", async () => {
+		const goodKeyPair = await generateKeyPair({ kind: "ecdsa", namedCurve: "P-256" });
+		const goodCsr = await createCertificateSigningRequest({
+			subject: { commonName: "verify-csr.example" },
+			publicKey: goodKeyPair.publicKey,
+			signerPrivateKey: goodKeyPair.privateKey,
+		});
+		expect(await verifyCertificateSigningRequest(goodCsr.pem)).toMatchObject({ ok: true });
+
+		const wrongSigner = await generateKeyPair({ kind: "ecdsa", namedCurve: "P-256" });
+		const badCsr = await createCertificateSigningRequest({
+			subject: { commonName: "bad-csr.example" },
+			publicKey: goodKeyPair.publicKey,
+			signerPrivateKey: wrongSigner.privateKey,
+		});
+		expect(await verifyCertificateSigningRequest(badCsr.der)).toMatchObject({
+			ok: false,
+			code: "signature_invalid",
+			details: { subjectCommonName: "bad-csr.example" },
+		});
 	});
 });
 

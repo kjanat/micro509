@@ -6,6 +6,14 @@ export interface PemBlock {
 	readonly pem: string;
 }
 
+export interface CategorizedPemBlocks {
+	readonly certificates: readonly PemBlock[];
+	readonly certificateRequests: readonly PemBlock[];
+	readonly privateKeys: readonly PemBlock[];
+	readonly publicKeys: readonly PemBlock[];
+	readonly others: readonly PemBlock[];
+}
+
 export function pemEncode(label: string, der: Uint8Array): string {
 	const body = Buffer.from(der).toString("base64");
 	const lines = body.match(/.{1,64}/g) ?? [];
@@ -48,4 +56,36 @@ export function splitPemBlocks(input: string): readonly PemBlock[] {
 			};
 		},
 	);
+}
+
+export function categorizePemBlocks(input: string | readonly PemBlock[]): CategorizedPemBlocks {
+	const blocks = typeof input === "string" ? splitPemBlocks(input) : input;
+	const certificates: PemBlock[] = [];
+	const certificateRequests: PemBlock[] = [];
+	const privateKeys: PemBlock[] = [];
+	const publicKeys: PemBlock[] = [];
+	const others: PemBlock[] = [];
+
+	for (const block of blocks) {
+		switch (block.label) {
+			case "CERTIFICATE":
+				certificates.push(block);
+				break;
+			case "CERTIFICATE REQUEST":
+				certificateRequests.push(block);
+				break;
+			case "PRIVATE KEY":
+			case "RSA PRIVATE KEY":
+			case "EC PRIVATE KEY":
+				privateKeys.push(block);
+				break;
+			case "PUBLIC KEY":
+				publicKeys.push(block);
+				break;
+			default:
+				others.push(block);
+		}
+	}
+
+	return { certificates, certificateRequests, privateKeys, publicKeys, others };
 }

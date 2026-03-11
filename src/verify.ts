@@ -2,10 +2,17 @@ import { readSequenceChildren } from "./der.ts";
 import { type ExtendedKeyUsage } from "./extensions.ts";
 import { getCrypto, importSpkiDer, type PublicKeyImportInput } from "./keys.ts";
 import { OIDS } from "./oids.ts";
-import { parseCertificateDer, type ParsedCertificate } from "./parse.ts";
+import {
+	parseCertificateDer,
+	parseCertificateSigningRequestDer,
+	parseCertificateSigningRequestPem,
+	type ParsedCertificate,
+	type ParsedCertificateSigningRequest,
+} from "./parse.ts";
 import { splitPemBlocks } from "./pem.ts";
 
 export type CertificateSource = string | Uint8Array;
+export type CsrSource = string | Uint8Array;
 
 export type VerifyPurpose = "serverAuth" | "clientAuth" | "ca";
 
@@ -46,6 +53,15 @@ export interface VerifyFailureDetails {
 	readonly actual?: string;
 	readonly chainCommonNames?: readonly string[];
 }
+
+export type VerifyRequestResult =
+	| { readonly ok: true; readonly value: ParsedCertificateSigningRequest }
+	| {
+		readonly ok: false;
+		readonly code: "signature_invalid";
+		readonly message: string;
+		readonly details?: VerifyFailureDetails;
+	};
 
 export type VerifyChainResult =
 	| { readonly ok: true; readonly value: VerifiedCertificateChain }
@@ -243,6 +259,31 @@ export async function verifyCertificateChain(
 	};
 }
 
+export async function verifyCertificateSigningRequest(
+	input: CsrSource,
+): Promise<VerifyRequestResult> {
+	const parsed = typeof input === "string"
+		? parseCertificateSigningRequestPem(input)
+		: parseCertificateSigningRequestDer(new Uint8Array(input));
+	const signatureValid = await verifySignedData(
+		parsed.signatureAlgorithmOid,
+		parsed.publicKeyAlgorithmOid,
+		parsed.publicKeyParametersOid,
+		parsed.subjectPublicKeyInfoDer,
+		parsed.signatureValue,
+		parsed.certificationRequestInfoDer,
+	);
+	if (!signatureValid) {
+		return {
+			ok: false,
+			code: "signature_invalid",
+			message: "certificate request signature does not verify",
+			details: detail({ subjectCommonName: parsed.subject.values.commonName }),
+		};
+	}
+	return { ok: true, value: parsed };
+}
+
 function validateLeaf(
 	leaf: LoadedCertificate | undefined,
 	input: VerifyCertificateChainInput,
@@ -437,17 +478,39 @@ async function verifyCertificateSignature(
 	certificate: ParsedCertificate,
 	issuer: ParsedCertificate,
 ): Promise<boolean> {
-	const config = getVerifySignatureConfig(certificate, issuer);
-	const issuerKey = await importSpkiDer(issuer.subjectPublicKeyInfoDer, config.importAlgorithm);
+	return verifySignedData(
+		certificate.signatureAlgorithmOid,
+		issuer.publicKeyAlgorithmOid,
+		issuer.publicKeyParametersOid,
+		issuer.subjectPublicKeyInfoDer,
+		certificate.signatureValue,
+		certificate.tbsCertificateDer,
+	);
+}
+
+async function verifySignedData(
+	signatureAlgorithmOid: string,
+	publicKeyAlgorithmOid: string,
+	publicKeyParametersOid: string | undefined,
+	spkiDer: Uint8Array,
+	signatureValue: Uint8Array,
+	data: Uint8Array,
+): Promise<boolean> {
+	const config = getVerifySignatureConfig(
+		signatureAlgorithmOid,
+		publicKeyAlgorithmOid,
+		publicKeyParametersOid,
+	);
+	const issuerKey = await importSpkiDer(spkiDer, config.importAlgorithm);
 	const subtle = getCrypto().subtle;
-	const signatureView = new Uint8Array(certificate.signatureValue);
-	const dataView = new Uint8Array(certificate.tbsCertificateDer);
+	const signatureView = new Uint8Array(signatureValue);
+	const dataView = new Uint8Array(data);
 	if (await subtle.verify(config.verifyParams, issuerKey, signatureView, dataView)) {
 		return true;
 	}
-	if (config.ecdsaRawSignatureBytes !== undefined && certificate.signatureValue[0] === 0x30) {
+	if (config.ecdsaRawSignatureBytes !== undefined && signatureValue[0] === 0x30) {
 		const raw = new Uint8Array(derEcdsaSignatureToRaw(
-			certificate.signatureValue,
+			signatureValue,
 			config.ecdsaRawSignatureBytes / 2,
 		));
 		return subtle.verify(config.verifyParams, issuerKey, raw, dataView);
@@ -456,39 +519,40 @@ async function verifyCertificateSignature(
 }
 
 function getVerifySignatureConfig(
-	certificate: ParsedCertificate,
-	issuer: ParsedCertificate,
+	signatureAlgorithmOid: string,
+	publicKeyAlgorithmOid: string,
+	publicKeyParametersOid: string | undefined,
 ): VerifySignatureConfig {
-	switch (certificate.signatureAlgorithmOid) {
+	switch (signatureAlgorithmOid) {
 		case OIDS.sha256WithRSAEncryption:
 			return {
-				importAlgorithm: requireRsaIssuer(issuer, "SHA-256"),
+				importAlgorithm: requireRsaPublicKey(publicKeyAlgorithmOid, "SHA-256"),
 				verifyParams: { name: "RSASSA-PKCS1-v1_5" },
 			};
 		case OIDS.sha384WithRSAEncryption:
 			return {
-				importAlgorithm: requireRsaIssuer(issuer, "SHA-384"),
+				importAlgorithm: requireRsaPublicKey(publicKeyAlgorithmOid, "SHA-384"),
 				verifyParams: { name: "RSASSA-PKCS1-v1_5" },
 			};
 		case OIDS.sha512WithRSAEncryption:
 			return {
-				importAlgorithm: requireRsaIssuer(issuer, "SHA-512"),
+				importAlgorithm: requireRsaPublicKey(publicKeyAlgorithmOid, "SHA-512"),
 				verifyParams: { name: "RSASSA-PKCS1-v1_5" },
 			};
 		case OIDS.ecdsaWithSHA256:
 			return {
-				importAlgorithm: requireEcIssuer(issuer),
+				importAlgorithm: requireEcPublicKey(publicKeyAlgorithmOid, publicKeyParametersOid),
 				verifyParams: { name: "ECDSA", hash: "SHA-256" },
-				ecdsaRawSignatureBytes: curveBytes(issuer.publicKeyParametersOid),
+				ecdsaRawSignatureBytes: curveBytes(publicKeyParametersOid),
 			};
 		case OIDS.ecdsaWithSHA384:
 			return {
-				importAlgorithm: requireEcIssuer(issuer),
+				importAlgorithm: requireEcPublicKey(publicKeyAlgorithmOid, publicKeyParametersOid),
 				verifyParams: { name: "ECDSA", hash: "SHA-384" },
-				ecdsaRawSignatureBytes: curveBytes(issuer.publicKeyParametersOid),
+				ecdsaRawSignatureBytes: curveBytes(publicKeyParametersOid),
 			};
 		case OIDS.ed25519:
-			if (issuer.publicKeyAlgorithmOid !== OIDS.ed25519) {
+			if (publicKeyAlgorithmOid !== OIDS.ed25519) {
 				throw new Error("Ed25519 signature requires Ed25519 issuer public key");
 			}
 			return {
@@ -496,31 +560,34 @@ function getVerifySignatureConfig(
 				verifyParams: { name: "Ed25519" },
 			};
 		default:
-			throw new Error(`Unsupported signature algorithm OID: ${certificate.signatureAlgorithmOid}`);
+			throw new Error(`Unsupported signature algorithm OID: ${signatureAlgorithmOid}`);
 	}
 }
 
-function requireRsaIssuer(
-	issuer: ParsedCertificate,
+function requireRsaPublicKey(
+	publicKeyAlgorithmOid: string,
 	hash: "SHA-256" | "SHA-384" | "SHA-512",
 ): PublicKeyImportInput {
-	if (issuer.publicKeyAlgorithmOid !== OIDS.rsaEncryption) {
+	if (publicKeyAlgorithmOid !== OIDS.rsaEncryption) {
 		throw new Error("RSA signature requires RSA issuer public key");
 	}
 	return { kind: "rsa", hash };
 }
 
-function requireEcIssuer(issuer: ParsedCertificate): PublicKeyImportInput {
-	if (issuer.publicKeyAlgorithmOid !== OIDS.ecPublicKey) {
+function requireEcPublicKey(
+	publicKeyAlgorithmOid: string,
+	publicKeyParametersOid: string | undefined,
+): PublicKeyImportInput {
+	if (publicKeyAlgorithmOid !== OIDS.ecPublicKey) {
 		throw new Error("ECDSA signature requires EC issuer public key");
 	}
-	switch (issuer.publicKeyParametersOid) {
+	switch (publicKeyParametersOid) {
 		case OIDS.prime256v1:
 			return { kind: "ecdsa", namedCurve: "P-256" };
 		case OIDS.secp384r1:
 			return { kind: "ecdsa", namedCurve: "P-384" };
 		default:
-			throw new Error(`Unsupported EC curve OID: ${issuer.publicKeyParametersOid ?? "missing"}`);
+			throw new Error(`Unsupported EC curve OID: ${publicKeyParametersOid ?? "missing"}`);
 	}
 }
 
