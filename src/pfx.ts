@@ -15,6 +15,12 @@ import { OIDS } from "./oids.ts";
 import { parseCertificateDer, type ParsedCertificate } from "./parse.ts";
 import { decryptPbes2, encryptPbes2, type Pbes2EncryptionOptions } from "./pbes2.ts";
 import { base64Encode, pemEncode, splitPemBlocks } from "./pem.ts";
+import {
+	createPkcs12MacData,
+	type ParsedPkcs12MacData,
+	parsePkcs12MacData,
+	type Pkcs12MacOptions,
+} from "./pkcs12-mac.ts";
 
 export type PfxCertificateSource = string | Uint8Array;
 export type PfxPrivateKeySource = CryptoKey | Uint8Array;
@@ -38,12 +44,14 @@ export interface CreatePfxInput {
 	readonly certificates?: readonly PfxCertificateBagInput[];
 	readonly privateKeys?: readonly PfxPrivateKeyBagInput[];
 	readonly encryption?: PfxEncryptionOptions;
+	readonly mac?: Pkcs12MacOptions;
 }
 
 export type PfxEncryptionOptions = Pbes2EncryptionOptions;
 
 export interface ParsePfxOptions {
 	readonly password?: string;
+	readonly macPassword?: string;
 }
 
 export interface PfxMaterial {
@@ -87,6 +95,7 @@ export interface ParsedPfx {
 	readonly bags: readonly ParsedPfxBag[];
 	readonly certificates: readonly ParsedCertificate[];
 	readonly privateKeys: readonly Uint8Array[];
+	readonly macData?: ParsedPkcs12MacData;
 }
 
 export async function createPfx(input: CreatePfxInput): Promise<PfxMaterial> {
@@ -121,9 +130,13 @@ export async function createPfx(input: CreatePfxInput): Promise<PfxMaterial> {
 		);
 	}
 	const authenticatedSafe = sequence(contentInfos);
+	const macData = input.mac === undefined
+		? undefined
+		: await createPkcs12MacData(authenticatedSafe, input.mac);
 	const der = sequence([
 		integerFromNumber(3),
 		createDataContentInfo(authenticatedSafe),
+		...(macData === undefined ? [] : [macData.der]),
 	]);
 	return {
 		der,
@@ -146,6 +159,17 @@ export async function parsePfxDer(
 		authSafe.end,
 	);
 	const authenticatedSafeOctets = extractContentInfoData(authSafeDer);
+	const macElement = topLevel[2];
+	const macData = macElement === undefined
+		? undefined
+		: await parsePkcs12MacData(
+			der.slice(macElement.start - macElement.headerLength, macElement.end),
+			authenticatedSafeOctets,
+			options?.macPassword ?? options?.password,
+		);
+	if (macData?.valid === false) {
+		throw new Error("Invalid PFX MAC password or corrupted content");
+	}
 	const authenticatedSafe = readSequenceChildren(authenticatedSafeOctets);
 	const bags: ParsedPfxBag[] = [];
 	for (const contentInfo of authenticatedSafe) {
@@ -163,6 +187,7 @@ export async function parsePfxDer(
 		bags,
 		certificates: bags.flatMap((bag) => bag.kind === "certificate" ? [bag.certificate] : []),
 		privateKeys: bags.flatMap((bag) => bag.kind === "privateKey" ? [bag.pkcs8Der] : []),
+		...(macData === undefined ? {} : { macData }),
 	};
 }
 
@@ -200,13 +225,19 @@ async function extractSafeContents(
 		throw new Error("Password required for encrypted PFX content");
 	}
 	const encryptedData = extractContextChild(contentInfoDer, content);
-	return decryptEncryptedData(
+	const decrypted = await decryptEncryptedData(
 		contentInfoDer.slice(
 			encryptedData.start - encryptedData.headerLength,
 			encryptedData.end,
 		),
 		options.password,
 	);
+	try {
+		readSequenceChildren(decrypted);
+		return decrypted;
+	} catch {
+		throw new Error("Invalid PFX password or encrypted content");
+	}
 }
 
 export async function parsePfxPem(

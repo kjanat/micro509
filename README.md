@@ -293,10 +293,12 @@ const encryptedPfx = await createPfx({
 	certificates: [{ certificate: leaf.pem }],
 	privateKeys: [{ privateKey: leafKey.privateKey }],
 	encryption: { password: "secret123" },
+	mac: { password: "secret123" },
 });
 
 const parsedEncryptedPfx = await parsePfxPem(encryptedPfx.pem, {
 	password: "secret123",
+	macPassword: "secret123",
 });
 ```
 
@@ -332,6 +334,7 @@ import {
 	createOcspResponse,
 	parseOcspRequestPem,
 	parseOcspResponseDer,
+	validateOcspResponse,
 	verifyOcspResponse,
 } from "micro509";
 
@@ -356,6 +359,13 @@ const response = await createOcspResponse({
 const parsedResponse = parseOcspResponseDer(response.der);
 console.log(parsedResponse.responseStatus);
 console.log(await verifyOcspResponse(response.der, issuer.pem));
+console.log(
+	await validateOcspResponse({
+		response: response.der,
+		issuerCertificate: issuer.pem,
+		request: request.pem,
+	}),
+);
 ```
 
 ## Legacy private key PEM
@@ -426,7 +436,7 @@ if (result.ok) {
 - pkcs7 helpers: create/parse degenerate signedData cert bags
 - crl helpers: create/parse/verify CRLs, delta CRL indicator, issuing distribution point, freshest CRL, entry reason/invalidity extensions, revocation lookup by serial
 - ocsp helpers: build requests, build signed responses, parse requests/responses, verify response signatures
-- pfx helpers: create/parse passwordless or encrypted cert+key bundles with bag attributes
+- pfx helpers: create/parse passwordless or encrypted cert+key bundles with bag attributes and optional MAC integrity
 - legacy key helpers: PKCS#1 RSA and SEC1 EC import/export, plus encrypted traditional PEM
 - extended key usage: built-ins + custom OID escape hatch
 - chain verify: async, WebCrypto-based, browser-safe, multi-candidate path building, issuer match, signatures, time, CA/keyCertSign, pathLen, AKI/SKI, SAN/EKU checks

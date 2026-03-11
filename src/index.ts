@@ -103,6 +103,9 @@ export {
 	parseOcspRequestPem,
 	parseOcspResponseDer,
 	parseOcspResponsePem,
+	validateOcspResponse,
+	type ValidateOcspResponseInput,
+	type ValidateOcspResponseResult,
 	verifyOcspResponse,
 	type VerifyOcspResponseResult,
 } from "./ocsp.ts";

@@ -68,6 +68,7 @@ import {
 	parsePkcs7CertBagPem,
 	pemDecode,
 	splitPemBlocks,
+	validateOcspResponse,
 	verifyCertificateChain,
 	verifyCertificateRevocationList,
 	verifyCertificateSigningRequest,
@@ -438,6 +439,24 @@ describe("micro509", () => {
 		);
 	});
 
+	it("verifies PFX MAC integrity", async () => {
+		const keyPair = await generateKeyPair();
+		const certificate = await createSelfSignedCertificate({
+			subject: { commonName: "mac-pfx.example" },
+			keyPair,
+		});
+		const pfx = await createPfx({
+			certificates: [{ certificate: certificate.certificate.pem }],
+			privateKeys: [{ privateKey: keyPair.privateKey }],
+			mac: { password: "integrity123" },
+		});
+		const parsed = await parsePfxPem(pfx.pem, { macPassword: "integrity123" });
+		expect(parsed.macData?.valid).toBe(true);
+		await expect(
+			parsePfxPem(pfx.pem, { macPassword: "wrong" }),
+		).rejects.toThrow("Invalid PFX MAC password or corrupted content");
+	});
+
 	it("roundtrips encrypted PKCS#8 helpers", async () => {
 		const keyPair = await generateKeyPair({ kind: "rsa", modulusLength: 2048 });
 		const pem = await exportEncryptedPkcs8Pem(keyPair.privateKey, {
@@ -633,6 +652,26 @@ describe("micro509", () => {
 		expect(
 			await verifyOcspResponse(ocspResponse.der, issuer.certificate.pem),
 		).toMatchObject({ ok: true });
+		expect(
+			await validateOcspResponse({
+				response: ocspResponse.der,
+				issuerCertificate: issuer.certificate.pem,
+				request: request.pem,
+			}),
+		).toMatchObject({ ok: true });
+		const wrongNonceRequest = await createOcspRequest({
+			requests: [
+				{ certificate: leaf.pem, issuerCertificate: issuer.certificate.pem },
+			],
+			nonce: Uint8Array.of(0x00),
+		});
+		expect(
+			await validateOcspResponse({
+				response: ocspResponse.der,
+				issuerCertificate: issuer.certificate.pem,
+				request: wrongNonceRequest.pem,
+			}),
+		).toMatchObject({ ok: false, code: "nonce_mismatch" });
 	});
 
 	it("builds across multiple candidate intermediates", async () => {

@@ -19,9 +19,11 @@ import { OIDS } from "./oids.ts";
 import { parseCertificateDer, parseCertificatePem, type ParsedCertificate } from "./parse.ts";
 import { base64Encode, pemDecode, pemEncode } from "./pem.ts";
 import { encodeAlgorithmIdentifier, getSignatureAlgorithm, signBytes } from "./signing.ts";
+import { verifyCertificateChain } from "./verify.ts";
 
 export type OcspHashAlgorithm = "SHA-1" | "SHA-256";
 export type OcspCertificateSource = string | Uint8Array | ParsedCertificate;
+export type OcspRequestSource = string | Uint8Array | ParsedOcspRequest;
 
 export interface CreateOcspRequestItemInput {
 	readonly certificate: OcspCertificateSource;
@@ -109,6 +111,30 @@ export type VerifyOcspResponseResult =
 	| {
 		readonly ok: false;
 		readonly code: "signature_invalid";
+		readonly message: string;
+	};
+
+export interface ValidateOcspResponseInput {
+	readonly response: string | Uint8Array | ParsedOcspResponse;
+	readonly issuerCertificate: OcspCertificateSource;
+	readonly request?: OcspRequestSource;
+	readonly responderCertificate?: OcspCertificateSource;
+	readonly at?: Date;
+}
+
+export type ValidateOcspResponseResult =
+	| { readonly ok: true; readonly value: ParsedOcspResponse }
+	| {
+		readonly ok: false;
+		readonly code:
+			| "response_status_invalid"
+			| "signature_invalid"
+			| "nonce_mismatch"
+			| "request_mismatch"
+			| "issuer_mismatch"
+			| "responder_chain_invalid"
+			| "ocsp_signing_missing"
+			| "stale_response";
 		readonly message: string;
 	};
 
@@ -349,25 +375,153 @@ export async function verifyOcspResponse(
 		};
 }
 
+export async function validateOcspResponse(
+	input: ValidateOcspResponseInput,
+): Promise<ValidateOcspResponseResult> {
+	const parsedResponse = typeof input.response === "string"
+		? parseOcspResponsePem(input.response)
+		: input.response instanceof Uint8Array
+		? parseOcspResponseDer(input.response)
+		: input.response;
+	if (parsedResponse.responseStatus !== "successful") {
+		return {
+			ok: false,
+			code: "response_status_invalid",
+			message: `OCSP response status is ${parsedResponse.responseStatus}`,
+		};
+	}
+	const issuer = await normalizeCertificate(input.issuerCertificate);
+	const signer = await normalizeCertificate(
+		input.responderCertificate ?? input.issuerCertificate,
+	);
+	const signature = await verifyOcspResponse(parsedResponse, signer);
+	if (!signature.ok) {
+		return signature;
+	}
+	if (signer.subject.derHex !== issuer.subject.derHex) {
+		if (
+			typeof input.responderCertificate === "string"
+			|| input.responderCertificate instanceof Uint8Array
+		) {
+			const chain = await verifyCertificateChain({
+				leaf: input.responderCertificate,
+				roots: [certificateSourceToInput(input.issuerCertificate)],
+			});
+			if (!chain.ok) {
+				return {
+					ok: false,
+					code: "responder_chain_invalid",
+					message: "OCSP responder certificate chain does not validate",
+				};
+			}
+		}
+		if (
+			signer.extendedKeyUsage !== undefined
+			&& !signer.extendedKeyUsage.includes("ocspSigning")
+		) {
+			return {
+				ok: false,
+				code: "ocsp_signing_missing",
+				message: "Delegated OCSP responder lacks ocspSigning EKU",
+			};
+		}
+	}
+	const at = input.at ?? new Date();
+	for (const response of parsedResponse.responses ?? []) {
+		const expected = await buildParsedOcspCertId(
+			response.certId.hashAlgorithmOid,
+			issuer,
+			response.certId.serialNumberHex,
+		);
+		if (
+			response.certId.issuerNameHashHex !== expected.issuerNameHashHex
+			|| response.certId.issuerKeyHashHex !== expected.issuerKeyHashHex
+		) {
+			return {
+				ok: false,
+				code: "issuer_mismatch",
+				message: "OCSP response certId does not match issuer certificate",
+			};
+		}
+		if (
+			response.thisUpdate.getTime() > at.getTime()
+			|| (response.nextUpdate !== undefined
+				&& response.nextUpdate.getTime() < at.getTime())
+		) {
+			return {
+				ok: false,
+				code: "stale_response",
+				message: "OCSP response is not valid at requested time",
+			};
+		}
+	}
+	if (input.request !== undefined) {
+		const request = typeof input.request === "string"
+			? parseOcspRequestPem(input.request)
+			: input.request instanceof Uint8Array
+			? parseOcspRequestDer(input.request)
+			: input.request;
+		if (request.nonce !== undefined && request.nonce !== parsedResponse.nonce) {
+			return {
+				ok: false,
+				code: "nonce_mismatch",
+				message: "OCSP response nonce does not match request nonce",
+			};
+		}
+		const requestIds = new Set(
+			request.requests.map((entry) => serializeCertId(entry)),
+		);
+		for (const response of parsedResponse.responses ?? []) {
+			if (!requestIds.has(serializeCertId(response.certId))) {
+				return {
+					ok: false,
+					code: "request_mismatch",
+					message: "OCSP response includes a certId not present in request",
+				};
+			}
+		}
+	}
+	return { ok: true, value: parsedResponse };
+}
+
 async function encodeOcspCertId(
 	certificate: ParsedCertificate,
 	issuer: ParsedCertificate,
 	hashAlgorithm: OcspHashAlgorithm,
 ): Promise<Uint8Array> {
 	const hashAlgorithmOid = hashAlgorithm === "SHA-1" ? OIDS.sha1 : OIDS.sha256;
+	const parsed = await buildParsedOcspCertId(
+		hashAlgorithmOid,
+		issuer,
+		certificate.serialNumberHex,
+	);
 	return sequence([
 		sequence([objectIdentifier(hashAlgorithmOid), nullValue()]),
-		octetString(
+		octetString(hexToBytes(parsed.issuerNameHashHex)),
+		octetString(hexToBytes(parsed.issuerKeyHashHex)),
+		integer(hexToBytes(parsed.serialNumberHex)),
+	]);
+}
+
+async function buildParsedOcspCertId(
+	hashAlgorithmOid: string,
+	issuer: ParsedCertificate,
+	serialNumberHex: string,
+): Promise<ParsedOcspCertId> {
+	const hashAlgorithm = ocspHashAlgorithmFromOid(hashAlgorithmOid);
+	return {
+		hashAlgorithmOid,
+		issuerNameHashHex: toHex(
 			await digestBytes(hashAlgorithm, hexToBytes(issuer.subject.derHex)),
 		),
-		octetString(
+		issuerKeyHashHex: toHex(
 			await digestBytes(
 				hashAlgorithm,
 				extractSubjectPublicKeyBytes(issuer.subjectPublicKeyInfoDer),
 			),
 		),
-		integer(hexToBytes(certificate.serialNumberHex)),
-	]);
+		serialNumberHex,
+	};
 }
 
 async function digestBytes(
@@ -791,6 +945,37 @@ function ocspResponseStatusFromCode(
 		default:
 			return "internalError";
 	}
+}
+
+function ocspHashAlgorithmFromOid(oid: string): OcspHashAlgorithm {
+	switch (oid) {
+		case OIDS.sha1:
+			return "SHA-1";
+		case OIDS.sha256:
+			return "SHA-256";
+		default:
+			throw new Error(`Unsupported OCSP hash algorithm OID: ${oid}`);
+	}
+}
+
+function serializeCertId(certId: ParsedOcspCertId): string {
+	return [
+		certId.hashAlgorithmOid,
+		certId.issuerNameHashHex,
+		certId.issuerKeyHashHex,
+		certId.serialNumberHex,
+	].join(":");
+}
+
+function certificateSourceToInput(
+	source: OcspCertificateSource,
+): string | Uint8Array {
+	if (typeof source === "string" || source instanceof Uint8Array) {
+		return source;
+	}
+	throw new Error(
+		"Responder chain validation requires PEM or DER certificate input",
+	);
 }
 
 function childrenOf(source: Uint8Array, parent: DerElement): DerElement[] {
