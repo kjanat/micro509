@@ -743,7 +743,8 @@ function parseCrlDistributionPoints(bytes: Uint8Array): readonly string[] {
 	return uris;
 }
 
-function parseNameConstraints(bytes: Uint8Array): NameConstraints {
+/** @internal Exported for testing only — not part of the public API. */
+export function parseNameConstraints(bytes: Uint8Array): NameConstraints {
 	const sequenceElement = requireElement(
 		readElement(bytes),
 		"nameConstraints sequence",
@@ -774,6 +775,27 @@ function parseGeneralSubtrees(
 		if (baseElement === undefined) {
 			continue;
 		}
+
+		// RFC 5280 §4.2.1.10: minimum MUST be zero (default), maximum
+		// MUST be absent. Reject non-standard values.
+		for (let i = 1; i < children.length; i += 1) {
+			const child = children[i];
+			if (child === undefined) {
+				continue;
+			}
+			if (child.tag === 0x80) {
+				// minimum [0] INTEGER — must be 0
+				if (child.value.length !== 1 || child.value[0] !== 0) {
+					throw new Error("name constraints GeneralSubtree minimum must be 0");
+				}
+			} else if (child.tag === 0x81) {
+				// maximum [1] INTEGER — must be absent
+				throw new Error(
+					"name constraints GeneralSubtree maximum is not supported",
+				);
+			}
+		}
+
 		const form = parseNameConstraintGeneralName(source, baseElement);
 		if (form !== undefined) {
 			subtrees.push({ base: form });
@@ -808,7 +830,9 @@ function parseNameConstraintGeneralName(
 					maskBytes: element.value.slice(16, 32),
 				};
 			}
-			return undefined;
+			throw new Error(
+				`Invalid IP name constraint: expected 8 (IPv4) or 32 (IPv6) bytes, got ${String(element.value.length)}`,
+			);
 		}
 		case 0xa4:
 			return {

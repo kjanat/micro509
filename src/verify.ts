@@ -1392,7 +1392,9 @@ function checkNameConstraints(
 		}
 
 		// (b) If not self-issued, check names against accumulated constraints.
-		if (!isSelfIssued(current)) {
+		// RFC 5280 §4.2.1.10: self-issued certificates are exempt UNLESS
+		// they are the final certificate (leaf) in the path.
+		if (!isSelfIssued(current) || index === 0) {
 			const nameCheckResult = checkCertificateNames(
 				current,
 				accumulated,
@@ -1481,7 +1483,44 @@ function checkCertificateNames(
 		}
 	}
 
+	// RFC 5280 §4.2.1.10: When constraints are imposed on the rfc822Name
+	// name form, but the certificate does not include a SAN email, the
+	// constraint MUST be applied to the emailAddress attribute in the
+	// subject DN.
+	const hasEmailConstraints = accumulatedHasEmailConstraints(accumulated);
+	if (hasEmailConstraints) {
+		const hasSanEmail = certificate.subjectAltNames?.some((san) => san.type === "email") ?? false;
+		if (!hasSanEmail && certificate.subject.values.emailAddress !== undefined) {
+			const emailForm: NameConstraintForm = {
+				type: "email",
+				value: certificate.subject.values.emailAddress,
+			};
+			if (!isNamePermitted(emailForm, accumulated)) {
+				return failure(
+					"name_constraints_violated",
+					`subject emailAddress ${certificate.subject.values.emailAddress} violates name constraints`,
+					index,
+					detail({
+						subjectCommonName: certificate.subject.values.commonName,
+						actual: certificate.subject.values.emailAddress,
+					}),
+				);
+			}
+		}
+	}
+
 	return { ok: true };
+}
+
+function accumulatedHasEmailConstraints(
+	accumulated: AccumulatedNameConstraints,
+): boolean {
+	for (const level of accumulated.permittedLevels) {
+		if (level.some((c) => c.type === "email")) {
+			return true;
+		}
+	}
+	return accumulated.excluded.some((c) => c.type === "email");
 }
 
 /**
@@ -1621,14 +1660,26 @@ function matchesEmailConstraint(name: string, constraint: string): boolean {
 
 /**
  * RFC 5280 §4.2.1.10: URI constraint matching.
- * Applied to the host part of the URI, same rules as DNS.
+ * Applied to the host part of the URI.
+ * - Constraint ".example.com" matches subdomains only.
+ * - Constraint "example.com" matches ONLY that exact host (no subdomain
+ *   expansion, unlike DNS constraints).
  */
 function matchesUriConstraint(uri: string, constraint: string): boolean {
 	const host = extractUriHost(uri);
 	if (host === undefined) {
 		return false;
 	}
-	return matchesDnsConstraint(host, constraint);
+	const lowerHost = host.toLowerCase();
+	const lowerConstraint = constraint.toLowerCase();
+	if (lowerConstraint.length === 0) {
+		return true;
+	}
+	if (lowerConstraint.startsWith(".")) {
+		return lowerHost.endsWith(lowerConstraint);
+	}
+	// Non-period constraint: exact host match only (RFC 5280 §4.2.1.10).
+	return lowerHost === lowerConstraint;
 }
 
 function extractUriHost(uri: string): string | undefined {

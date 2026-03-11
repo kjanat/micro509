@@ -83,6 +83,7 @@ import {
 	verifyPkcs7SignedData,
 } from "../src/index.ts";
 import { OIDS } from "../src/oids.ts";
+import { parseNameConstraints } from "../src/parse.ts";
 import { getSignatureAlgorithm, signBytes } from "../src/signing.ts";
 
 describe("micro509", () => {
@@ -2540,6 +2541,232 @@ describe("micro509", () => {
 			roots: [root.certificate.pem],
 		});
 		expect(result.ok).toBe(true);
+	});
+
+	it("applies name constraints to self-issued leaf certificate", async () => {
+		// RFC 5280 §4.2.1.10: self-issued certs are exempt UNLESS they
+		// are the final (leaf) certificate in the path.
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: "NC Self-Issued Leaf Root" },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ["keyCertSign", "cRLSign"],
+				nameConstraints: {
+					permittedSubtrees: [{ base: { type: "dns", value: "example.com" } }],
+				},
+			},
+		});
+		// Self-issued leaf: issuer == subject, with a DNS SAN outside
+		// the permitted subtree. Must be rejected because it's the leaf.
+		const leafKeys = await generateKeyPair();
+		const selfIssuedLeaf = await createCertificate({
+			issuer: { commonName: "NC Self-Issued Leaf Root" },
+			subject: { commonName: "NC Self-Issued Leaf Root" },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ["digitalSignature"],
+				subjectAltNames: [{ type: "dns", value: "evil.org" }],
+			},
+		});
+		const result = await verifyCertificateChain({
+			leaf: selfIssuedLeaf.pem,
+			roots: [root.certificate.pem],
+		});
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.code).toBe("name_constraints_violated");
+		}
+	});
+
+	it("rejects URI SAN subdomain when constraint has no leading period", async () => {
+		// RFC 5280 §4.2.1.10: for URIs, a constraint without a leading
+		// period specifies a host (exact match only), not a domain.
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: "NC URI Exact Root" },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ["keyCertSign", "cRLSign"],
+				nameConstraints: {
+					permittedSubtrees: [{ base: { type: "uri", value: "example.com" } }],
+				},
+			},
+		});
+		// Exact match — should pass.
+		const okKeys = await generateKeyPair();
+		const okLeaf = await createCertificate({
+			issuer: { commonName: "NC URI Exact Root" },
+			subject: { commonName: "uri-exact-ok" },
+			publicKey: okKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ["digitalSignature"],
+				subjectAltNames: [{ type: "uri", value: "https://example.com/path" }],
+			},
+		});
+		const okResult = await verifyCertificateChain({
+			leaf: okLeaf.pem,
+			roots: [root.certificate.pem],
+		});
+		expect(okResult.ok).toBe(true);
+
+		// Subdomain — should fail (no subdomain expansion for URI).
+		const badKeys = await generateKeyPair();
+		const badLeaf = await createCertificate({
+			issuer: { commonName: "NC URI Exact Root" },
+			subject: { commonName: "uri-sub-bad" },
+			publicKey: badKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ["digitalSignature"],
+				subjectAltNames: [
+					{ type: "uri", value: "https://sub.example.com/path" },
+				],
+			},
+		});
+		const badResult = await verifyCertificateChain({
+			leaf: badLeaf.pem,
+			roots: [root.certificate.pem],
+		});
+		expect(badResult.ok).toBe(false);
+		if (!badResult.ok) {
+			expect(badResult.code).toBe("name_constraints_violated");
+		}
+	});
+
+	it("rejects GeneralSubtree with maximum field during parsing", () => {
+		// RFC 5280 §4.2.1.10: maximum MUST be absent in this profile.
+		// Build nameConstraints extension value DER with maximum present:
+		//   SEQUENCE { [0] { SEQUENCE { [2]"example.com", [1]INTEGER 5 } } }
+		const dnsName = tlv(0x82, new TextEncoder().encode("example.com"));
+		const maximum = tlv(0x81, Uint8Array.of(5));
+		const subtree = sequence([dnsName, maximum]);
+		const permitted = tlv(0xa0, subtree);
+		const ncValue = sequence([permitted]);
+		expect(() => parseNameConstraints(ncValue)).toThrow(/maximum/i);
+	});
+
+	it("rejects GeneralSubtree with non-zero minimum during parsing", () => {
+		// RFC 5280 §4.2.1.10: minimum MUST be zero.
+		const dnsName = tlv(0x82, new TextEncoder().encode("example.com"));
+		const minimum = tlv(0x80, Uint8Array.of(3)); // minimum = 3 (non-zero)
+		const subtree = sequence([dnsName, minimum]);
+		const permitted = tlv(0xa0, subtree);
+		const ncValue = sequence([permitted]);
+		expect(() => parseNameConstraints(ncValue)).toThrow(/minimum/i);
+	});
+
+	it("checks subject emailAddress against rfc822Name constraints when no SAN email", async () => {
+		// RFC 5280 §4.2.1.10: when constraints are imposed on rfc822Name
+		// but the cert has no SAN email, apply to subject emailAddress.
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: "NC Email DN Root" },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ["keyCertSign", "cRLSign"],
+				nameConstraints: {
+					permittedSubtrees: [
+						{ base: { type: "email", value: "example.com" } },
+					],
+				},
+			},
+		});
+		// Leaf with emailAddress in subject DN, no SAN email — should pass.
+		const okKeys = await generateKeyPair();
+		const okLeaf = await createCertificate({
+			issuer: { commonName: "NC Email DN Root" },
+			subject: { commonName: "email-ok", emailAddress: "user@example.com" },
+			publicKey: okKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ["digitalSignature"],
+				subjectAltNames: [{ type: "dns", value: "example.com" }],
+			},
+		});
+		const okResult = await verifyCertificateChain({
+			leaf: okLeaf.pem,
+			roots: [root.certificate.pem],
+		});
+		expect(okResult.ok).toBe(true);
+
+		// Leaf with emailAddress in subject DN outside permitted domain.
+		const badKeys = await generateKeyPair();
+		const badLeaf = await createCertificate({
+			issuer: { commonName: "NC Email DN Root" },
+			subject: { commonName: "email-bad", emailAddress: "user@evil.org" },
+			publicKey: badKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ["digitalSignature"],
+				subjectAltNames: [{ type: "dns", value: "example.com" }],
+			},
+		});
+		const badResult = await verifyCertificateChain({
+			leaf: badLeaf.pem,
+			roots: [root.certificate.pem],
+		});
+		expect(badResult.ok).toBe(false);
+		if (!badResult.ok) {
+			expect(badResult.code).toBe("name_constraints_violated");
+		}
+	});
+
+	it("permits URI SAN within CA permitted URI subtree and rejects outside", async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: "NC URI Root CA" },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ["keyCertSign", "cRLSign"],
+				nameConstraints: {
+					permittedSubtrees: [{ base: { type: "uri", value: ".example.com" } }],
+				},
+			},
+		});
+		const okKeys = await generateKeyPair();
+		const okLeaf = await createCertificate({
+			issuer: { commonName: "NC URI Root CA" },
+			subject: { commonName: "uri-ok" },
+			publicKey: okKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ["digitalSignature"],
+				subjectAltNames: [
+					{ type: "uri", value: "https://app.example.com/path" },
+				],
+			},
+		});
+		const okResult = await verifyCertificateChain({
+			leaf: okLeaf.pem,
+			roots: [root.certificate.pem],
+		});
+		expect(okResult.ok).toBe(true);
+
+		const badKeys = await generateKeyPair();
+		const badLeaf = await createCertificate({
+			issuer: { commonName: "NC URI Root CA" },
+			subject: { commonName: "uri-bad" },
+			publicKey: badKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ["digitalSignature"],
+				subjectAltNames: [{ type: "uri", value: "https://evil.org/sneaky" }],
+			},
+		});
+		const failResult = await verifyCertificateChain({
+			leaf: badLeaf.pem,
+			roots: [root.certificate.pem],
+		});
+		expect(failResult.ok).toBe(false);
+		if (!failResult.ok) {
+			expect(failResult.code).toBe("name_constraints_violated");
+		}
 	});
 });
 
