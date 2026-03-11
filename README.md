@@ -53,11 +53,7 @@ console.log(await keyPair.exportPublicJwk());
 ## CA-signed leaf cert
 
 ```ts
-import {
-	createCertificate,
-	createSelfSignedCertificate,
-	generateKeyPair,
-} from "micro509";
+import { createCertificate, createSelfSignedCertificate, generateKeyPair } from "micro509";
 
 const ca = await createSelfSignedCertificate({
 	subject: { commonName: "Local Test CA" },
@@ -105,13 +101,7 @@ console.log(csr.pem);
 ## Import keys back
 
 ```ts
-import {
-	exportBinaryBase64,
-	generateKeyPair,
-	importPkcs8Pem,
-	importPublicJwk,
-	importSpkiBase64,
-} from "micro509";
+import { exportBinaryBase64, generateKeyPair, importPkcs8Pem, importPublicJwk, importSpkiBase64 } from "micro509";
 
 const keyPair = await generateKeyPair({ kind: "rsa" });
 
@@ -134,14 +124,7 @@ const jwkPublicKey = await importPublicJwk(await keyPair.exportPublicJwk(), {
 ## Parse certs + CSRs
 
 ```ts
-import {
-	decodeExtension,
-	decodeExtensions,
-	defineExtensionDecoderMap,
-	findExtension,
-	parseCertificatePem,
-	parseCertificateSigningRequestPem,
-} from "micro509";
+import { decodeExtension, decodeExtensions, defineExtensionDecoderMap, findExtension, parseCertificatePem, parseCertificateSigningRequestPem } from "micro509";
 
 const parsedCert = parseCertificatePem(certificate.pem);
 console.log(parsedCert.subject.values.commonName);
@@ -211,11 +194,7 @@ const privateKey = await importEncryptedPkcs1Pem(
 ## Custom extensions
 
 ```ts
-import {
-	createSelfSignedCertificate,
-	decodeExtension,
-	parseCertificatePem,
-} from "micro509";
+import { createSelfSignedCertificate, decodeExtension, parseCertificatePem } from "micro509";
 
 const { certificate } = await createSelfSignedCertificate({
 	subject: { commonName: "custom.example" },
@@ -305,12 +284,7 @@ const parsedEncryptedPfx = await parsePfxPem(encryptedPfx.pem, {
 ## CRL
 
 ```ts
-import {
-	createCertificateRevocationList,
-	isCertificateRevoked,
-	parseCertificateRevocationListPem,
-	verifyCertificateRevocationList,
-} from "micro509";
+import { createCertificateRevocationList, isCertificateRevoked, parseCertificateRevocationListPem, verifyCertificateRevocationList } from "micro509";
 
 const crl = await createCertificateRevocationList({
 	issuer: { commonName: "Example CA" },
@@ -329,14 +303,7 @@ console.log(await verifyCertificateRevocationList(crl.pem, caCert.pem));
 ## OCSP
 
 ```ts
-import {
-	createOcspRequest,
-	createOcspResponse,
-	parseOcspRequestPem,
-	parseOcspResponseDer,
-	validateOcspResponse,
-	verifyOcspResponse,
-} from "micro509";
+import { createOcspRequest, createOcspResponse, parseOcspRequestPem, parseOcspResponseDer, validateOcspResponse, verifyOcspResponse } from "micro509";
 
 const request = await createOcspRequest({
 	requests: [{ certificate: leaf.pem, issuerCertificate: issuer.pem }],
@@ -381,12 +348,7 @@ console.log(signed.signerInfos.length);
 ## Legacy private key PEM
 
 ```ts
-import {
-	exportPkcs1Pem,
-	exportSec1Pem,
-	importPkcs1Pem,
-	importSec1Pem,
-} from "micro509";
+import { exportPkcs1Pem, exportSec1Pem, importPkcs1Pem, importSec1Pem } from "micro509";
 
 const rsaPem = await exportPkcs1Pem(rsaKey.privateKey);
 const rsaKeyAgain = await importPkcs1Pem(rsaPem, { kind: "rsa" });
