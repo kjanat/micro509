@@ -1,39 +1,39 @@
 # PROJECT KNOWLEDGE BASE
 
-**Generated:** 2026-03-11 **Commit:** c4e5315 **Branch:** master
+**Generated:** 2026-03-11 **Commit:** 11a11f9+ **Branch:** master
 
 ## OVERVIEW
 
-`micro509` — zero-dependency TypeScript X.509/PKI library (certs, CSRs, CRLs, OCSP, PKCS#7/12, PFX). ESM-only, functional (no classes), async only where WebCrypto requires it. ~185 public exports through single barrel `src/index.ts`.
+`micro509` — zero-dependency TypeScript X.509/PKI library (certs, CSRs, CRLs, OCSP, PKCS#7/12, PFX). ESM-only, functional (no classes), async only where WebCrypto requires it. ~195 public exports through single barrel `src/index.ts`.
 
 ## STRUCTURE
 
 ```
 ts-x509/
 ├── src/            # 20 flat modules — all PKI domain code (no subdirs)
-├── test/           # Single monolithic test file (2270 lines)
+├── test/           # Single monolithic test file (2290 lines)
 ├── docs/           # FUTURE.md (roadmap), PKIX-SCOPE.md (RFC 5280 compliance)
 └── comparisons/    # Competitive analysis (@peculiar/x509)
 ```
 
 ## WHERE TO LOOK
 
-| Task                         | Location                              | Notes                                                    |
-| ---------------------------- | ------------------------------------- | -------------------------------------------------------- |
-| Public API surface           | `src/index.ts`                        | Barrel re-exports from 13 of 20 modules                  |
-| Key generation/import/export | `src/keys.ts`                         | Largest surface (~45 exports), PKCS#1/8, SEC1, SPKI, JWK |
-| Certificate create/parse     | `src/certificate.ts`, `src/parse.ts`  | Create + DER/PEM parsing                                 |
-| Chain/CSR verification       | `src/verify.ts`                       | Discriminated union results with error codes             |
-| CRL lifecycle                | `src/crl.ts`                          | Create, parse, verify, revocation check                  |
-| OCSP request/response        | `src/ocsp.ts`                         | Create, parse, verify, validate                          |
-| PFX/PKCS#12                  | `src/pfx.ts`, `src/pkcs12-mac.ts`     | Create and parse PFX bundles                             |
-| PKCS#7 cert bags             | `src/pkcs7.ts`                        | SignedData parse, cert bag create/parse                  |
-| DER/ASN.1 internals          | `src/der.ts`, `src/asn1.ts`           | NOT public — encoding/decoding primitives                |
-| OID registry                 | `src/oids.ts`                         | NOT public — `as const satisfies Record<string, string>` |
-| Signing internals            | `src/signing.ts`, `src/sig-verify.ts` | NOT public — key-to-algorithm mapping                    |
-| Encryption internals         | `src/pbes2.ts`                        | NOT public — PBES2/PBKDF2 for encrypted keys             |
-| Roadmap                      | `docs/FUTURE.md`                      | Planned features and backlog                             |
-| RFC compliance               | `docs/PKIX-SCOPE.md`                  | What is/isn't implemented per RFC 5280                   |
+| Task                         | Location                              | Notes                                                     |
+| ---------------------------- | ------------------------------------- | --------------------------------------------------------- |
+| Public API surface           | `src/index.ts`                        | Barrel re-exports from 13 of 20 modules                   |
+| Key generation/import/export | `src/keys.ts`                         | Largest surface (~45 exports), PKCS#1/8, SEC1, SPKI, JWK  |
+| Certificate create/parse     | `src/certificate.ts`, `src/parse.ts`  | Create + DER/PEM parsing                                  |
+| Chain/CSR verification       | `src/verify.ts`                       | Path build/validate split, profiles, discriminated unions |
+| CRL lifecycle                | `src/crl.ts`                          | Create, parse, verify, validate, revocation check         |
+| OCSP request/response        | `src/ocsp.ts`                         | Create, parse, verify, validate                           |
+| PFX/PKCS#12                  | `src/pfx.ts`, `src/pkcs12-mac.ts`     | Create and parse PFX bundles                              |
+| PKCS#7 cert bags             | `src/pkcs7.ts`                        | SignedData parse, cert bag create/parse                   |
+| DER/ASN.1 internals          | `src/der.ts`, `src/asn1.ts`           | NOT public — encoding/decoding primitives                 |
+| OID registry                 | `src/oids.ts`                         | NOT public — `as const satisfies Record<string, string>`  |
+| Signing internals            | `src/signing.ts`, `src/sig-verify.ts` | NOT public — key-to-algorithm mapping                     |
+| Encryption internals         | `src/pbes2.ts`                        | NOT public — PBES2/PBKDF2 for encrypted keys              |
+| Roadmap                      | `docs/FUTURE.md`                      | Planned features and backlog                              |
+| RFC compliance               | `docs/PKIX-SCOPE.md`                  | What is/isn't implemented per RFC 5280                    |
 
 ## CONVENTIONS
 

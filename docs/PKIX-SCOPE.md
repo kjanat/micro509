@@ -2,15 +2,15 @@
 
 ## 1. Define the boundary up front
 
-- [ ] Treat **certification path validation** as a function over a **prospective certification path** plus validation inputs, not as “build whatever chain you can find and hope for the best.”
+- [x] Treat **certification path validation** as a function over a **prospective certification path** plus validation inputs, not as “build whatever chain you can find and hope for the best.”
       RFC 5280 Section 6.1.1 defines the algorithm in terms of a candidate path and nine inputs. (IETF Datatracker[^rfc5280])
-- [ ] Keep **path building/discovery** separate from **path validation**.
-- [ ] Keep **service identity matching** separate from **path validation**.
+- [x] Keep **path building/discovery** separate from **path validation**.
+- [x] Keep **service identity matching** separate from **path validation**.
 - [x] Keep **revocation** separate from **path validation**.
 
 ## 2. Required inputs for RFC 5280-style path validation
 
-- [ ] Prospective certification path.
+- [x] Prospective certification path.
 - [x] Validation time.
 - [ ] Trust anchor information: trusted issuer name, trusted public key algorithm,
       trusted public key, and optional trusted key parameters.
@@ -66,7 +66,7 @@
 
 - [ ] Keep hostname/service-name matching in a separate API from path validation.
 - [x] Match the reference identity against `subjectAltName` entries of the corresponding type first.
-- [ ] Only support CN fallback as an explicit compatibility mode, because RFC 6125 treats CN-ID usage as existing practice and prefers `subjectAltName`; CN comparison is deprecated. (IETF Datatracker[^rfc6125])
+- [x] Only support CN fallback as an explicit compatibility mode, because RFC 6125 treats CN-ID usage as existing practice and prefers `subjectAltName`; CN comparison is deprecated. (IETF Datatracker[^rfc6125])
 - [x] Make wildcard behavior explicit and test it hard.
 
 ## 9. EKU / purpose checks
@@ -106,13 +106,13 @@
 
 ## 13. API design checklist
 
-- [ ] Separate:
+- [x] Separate:
   - path building
   - path validation
   - service identity matching
   - revocation checking
-- [ ] Expose structured validation inputs instead of hiding policy/name-constraint knobs.
-- [ ] Return typed failure reasons, including extension, policy, constraint, signature, time, trust-anchor, and revocation errors.
+- [x] Expose structured validation inputs instead of hiding policy/name-constraint knobs.
+- [x] Return typed failure reasons, including extension, policy, constraint, signature, time, trust-anchor, and revocation errors.
 - [ ] Distinguish hard validation failure from “status unknown / not checked”.
 
 ## 14. Test/conformance checklist

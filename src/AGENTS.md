@@ -7,29 +7,29 @@
 | Module           | Lines | Exports                                     | Domain                                                                |
 | ---------------- | ----- | ------------------------------------------- | --------------------------------------------------------------------- |
 | `keys.ts`        | 666   | ~45 (12 types, ~33 fns)                     | Key gen, import/export: PKCS#1/8, SEC1, SPKI, JWK, encrypted variants |
-| `verify.ts`      | 1051  | 17 (12 types, 5 fns)                        | Chain + CSR verification, trust anchors, standalone EKU check         |
+| `verify.ts`      | 1337  | 32 (22 types, 10 fns)                       | Path build/validate split, profiles, CN fallback, trust anchors, EKU  |
 | `ocsp.ts`        | 798   | 26 (13 types, 13 fns)                       | OCSP request/response create, parse, verify, validate                 |
 | `parse.ts`       | 785   | 22 (10 types, 12 fns)                       | Certificate/CSR DER+PEM parsing, extension decoding framework         |
 | `crl.ts`         | 758   | 16 (9 types, 7 fns)                         | CRL create, parse, verify, validate, revocation check                 |
 | `extensions.ts`  | 537   | 12 types (public) + 13 internal builder fns | Extension types + ASN.1 encoding (builders NOT public)                |
-| `pfx.ts`         | 533   | 14 (10 types, 4 fns)                        | PKCS#12/PFX bundle create and parse                                   |
-| `certificate.ts` | —     | 7 (3 types, 2 fns, 2 interfaces)            | `createCertificate`, `createSelfSignedCertificate`                    |
-| `csr.ts`         | —     | 3 (2 types, 1 fn)                           | `createCertificateSigningRequest`                                     |
-| `pkcs7.ts`       | —     | 11 (5 types, 6 fns)                         | PKCS#7 SignedData parse, cert bag create/parse                        |
-| `pkcs12-mac.ts`  | —     | 4 (2 types, 2 fns)                          | PKCS#12 MAC creation and parsing                                      |
-| `pem.ts`         | —     | 6 (2 types, 4 fns)                          | PEM encode/decode/split/categorize                                    |
-| `name.ts`        | —     | 4 types                                     | X.500 DistinguishedName types (`NameInput`, `NameObject`, etc.)       |
+| `pfx.ts`         | 618   | 16 (13 types, 3 fns)                        | PKCS#12/PFX bundle create and parse (Result return types)             |
+| `pkcs7.ts`       | 460   | 13 (7 types, 6 fns)                         | PKCS#7 SignedData parse, cert bag create/parse (Result return types)  |
+| `certificate.ts` | 147   | 7 (5 types, 2 fns)                          | `createCertificate`, `createSelfSignedCertificate`                    |
+| `pkcs12-mac.ts`  | 226   | 4 (2 types, 2 fns)                          | PKCS#12 MAC creation and parsing                                      |
+| `name.ts`        | 116   | 4 types                                     | X.500 DistinguishedName types (`NameInput`, `NameObject`, etc.)       |
+| `pem.ts`         | 96    | 6 (2 types, 4 fns)                          | PEM encode/decode/split/categorize                                    |
+| `csr.ts`         | 73    | 3 (2 types, 1 fn)                           | `createCertificateSigningRequest`                                     |
 
 ## INTERNAL MODULES (not in index.ts)
 
 | Module                     | Role                                                                         | Consumed By                                           |
 | -------------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------- |
-| `der.ts`                   | DER/TLV encoding + decoding primitives                                       | Every module that creates or parses ASN.1             |
-| `asn1.ts`                  | Higher-level ASN.1 decode utilities (`childrenOf`, `decodeObjectIdentifier`) | `parse.ts`, `crl.ts`, `ocsp.ts`, `pfx.ts`, `pkcs7.ts` |
-| `oids.ts`                  | OID constant map (`as const satisfies Record<string, string>`)               | Every module that references OIDs                     |
-| `signing.ts`               | `CryptoKey` → WebCrypto algorithm params for signing                         | `certificate.ts`, `crl.ts`, `csr.ts`, `ocsp.ts`       |
-| `sig-verify.ts`            | Signature verification: OID → algorithm mapping, raw verify                  | `verify.ts`, `crl.ts`, `ocsp.ts`, `pkcs7.ts`          |
-| `pbes2.ts`                 | PBES2/PBKDF2 encrypt/decrypt for PKCS#8 keys                                 | `keys.ts` (encrypted key import/export)               |
+| `der.ts` (293)             | DER/TLV encoding + decoding primitives                                       | Every module that creates or parses ASN.1             |
+| `asn1.ts` (125)            | Higher-level ASN.1 decode utilities (`childrenOf`, `decodeObjectIdentifier`) | `parse.ts`, `crl.ts`, `ocsp.ts`, `pfx.ts`, `pkcs7.ts` |
+| `sig-verify.ts` (231)      | Signature verification: OID → algorithm mapping, raw verify                  | `verify.ts`, `crl.ts`, `ocsp.ts`, `pkcs7.ts`          |
+| `pbes2.ts` (185)           | PBES2/PBKDF2 encrypt/decrypt for PKCS#8 keys                                 | `keys.ts` (encrypted key import/export)               |
+| `signing.ts` (124)         | `CryptoKey` → WebCrypto algorithm params for signing                         | `certificate.ts`, `crl.ts`, `csr.ts`, `ocsp.ts`       |
+| `oids.ts` (63)             | OID constant map (`as const satisfies Record<string, string>`)               | Every module that references OIDs                     |
 | `extensions.ts` (builders) | `buildCertificateExtensions`, `encodeExtension`, etc.                        | `certificate.ts`, `csr.ts`, `crl.ts`                  |
 
 ## DEPENDENCY FLOW
@@ -51,13 +51,13 @@ pkcs7.ts ──→ asn1.ts ──→ der.ts
 
 All 7 large files follow the same pattern: type definitions at top, public functions in middle, private helpers at bottom.
 
-- **`verify.ts`** (1051) — most complex control flow; walks certificate chains with constraint/extension/critical-ext/trust-anchor checks
+- **`verify.ts`** (1337) — most complex control flow; `buildCandidatePath`/`validateCandidatePath` split, 4 profile fns, CN fallback, trust-anchor/constraint checks
 - **`ocsp.ts`** (798) — dual create+parse surfaces; SHA-1 for cert ID (standard), SHA-256 for signing
 - **`parse.ts`** (785) — generic extension decoder framework via `defineExtensionDecoder`/`defineExtensionDecoderMap`
-- **`keys.ts`** (666) — widest API surface; `opensslBytesToKey()` uses MD5 (legacy PEM compat only)
 - **`crl.ts`** (758) — full lifecycle: create → DER/PEM parse → verify signature → validate (issuer+freshness) → check revocation
+- **`keys.ts`** (666) — widest API surface; `opensslBytesToKey()` uses MD5 (legacy PEM compat only)
+- **`pfx.ts`** (618) — PKCS#12 create+parse; Result return types; password-based encryption via `pbes2.ts`
 - **`extensions.ts`** (537) — strict IP address validation (IPv4/IPv6), OID format regex, exhaustive `never` switch
-- **`pfx.ts`** (533) — PKCS#12 create+parse; password-based encryption via `pbes2.ts`
 
 ## WHERE NEW CODE GOES
 

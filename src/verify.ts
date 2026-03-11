@@ -10,8 +10,16 @@ import {
 import { splitPemBlocks } from "./pem.ts";
 import { verifySignedData } from "./sig-verify.ts";
 
+// ---------------------------------------------------------------------------
+// Source types
+// ---------------------------------------------------------------------------
+
 export type CertificateSource = string | Uint8Array;
 export type CsrSource = string | Uint8Array;
+
+// ---------------------------------------------------------------------------
+// Purpose & EKU types
+// ---------------------------------------------------------------------------
 
 export type VerifyPurpose = "serverAuth" | "clientAuth" | "ca";
 
@@ -32,6 +40,10 @@ export type EkuCheckResult =
 		readonly index: number;
 	};
 
+// ---------------------------------------------------------------------------
+// Trust anchor
+// ---------------------------------------------------------------------------
+
 export interface TrustAnchor {
 	readonly subjectDerHex: string;
 	readonly subjectPublicKeyInfoDer: Uint8Array;
@@ -40,17 +52,9 @@ export interface TrustAnchor {
 	readonly subjectKeyIdentifier?: string;
 }
 
-export interface VerifyCertificateChainInput {
-	readonly leaf: CertificateSource;
-	readonly intermediates?: readonly CertificateSource[];
-	readonly roots: readonly CertificateSource[];
-	readonly trustAnchors?: readonly TrustAnchor[];
-	readonly at?: Date;
-	readonly purpose?: VerifyPurpose;
-	readonly dnsName?: string;
-	readonly ipAddress?: string;
-	readonly allowSelfSignedLeaf?: boolean;
-}
+// ---------------------------------------------------------------------------
+// Error & failure types
+// ---------------------------------------------------------------------------
 
 export type VerifyErrorCode =
 	| "no_trusted_root"
@@ -64,13 +68,8 @@ export type VerifyErrorCode =
 	| "extended_key_usage_invalid"
 	| "subject_alt_name_mismatch"
 	| "self_signed_leaf_not_allowed"
-	| "unrecognized_critical_extension";
-
-export interface VerifiedCertificateChain {
-	readonly leaf: ParsedCertificate;
-	readonly chain: readonly ParsedCertificate[];
-	readonly root: ParsedCertificate;
-}
+	| "unrecognized_critical_extension"
+	| "intermediate_eku_constraint";
 
 export interface VerifyFailureDetails {
 	readonly subjectCommonName?: string;
@@ -79,6 +78,85 @@ export interface VerifyFailureDetails {
 	readonly actual?: string;
 	readonly chainCommonNames?: readonly string[];
 }
+
+export interface VerifyChainFailure {
+	readonly ok: false;
+	readonly code: VerifyErrorCode;
+	readonly message: string;
+	readonly index?: number;
+	readonly details?: VerifyFailureDetails;
+}
+
+// ---------------------------------------------------------------------------
+// Build candidate path
+// ---------------------------------------------------------------------------
+
+export interface BuildCandidatePathInput {
+	readonly leaf: CertificateSource;
+	readonly intermediates?: readonly CertificateSource[];
+	readonly roots: readonly CertificateSource[];
+	readonly trustAnchors?: readonly TrustAnchor[];
+	readonly at?: Date;
+}
+
+export interface CandidatePath {
+	readonly leaf: ParsedCertificate;
+	readonly chain: readonly ParsedCertificate[];
+	readonly root: ParsedCertificate;
+}
+
+export type BuildCandidatePathResult =
+	| { readonly ok: true; readonly value: CandidatePath }
+	| VerifyChainFailure;
+
+// ---------------------------------------------------------------------------
+// Validate candidate path
+// ---------------------------------------------------------------------------
+
+export interface ValidateCandidatePathInput {
+	readonly chain: readonly ParsedCertificate[];
+	readonly at?: Date;
+	readonly purpose?: VerifyPurpose;
+	readonly dnsName?: string;
+	readonly ipAddress?: string;
+	readonly allowSelfSignedLeaf?: boolean;
+	readonly allowCommonNameFallback?: boolean;
+}
+
+export type ValidateCandidatePathResult =
+	| { readonly ok: true }
+	| VerifyChainFailure;
+
+// ---------------------------------------------------------------------------
+// Verify chain (convenience composition)
+// ---------------------------------------------------------------------------
+
+export interface VerifyCertificateChainInput {
+	readonly leaf: CertificateSource;
+	readonly intermediates?: readonly CertificateSource[];
+	readonly roots: readonly CertificateSource[];
+	readonly trustAnchors?: readonly TrustAnchor[];
+	readonly at?: Date;
+	readonly purpose?: VerifyPurpose;
+	readonly dnsName?: string;
+	readonly ipAddress?: string;
+	readonly allowSelfSignedLeaf?: boolean;
+	readonly allowCommonNameFallback?: boolean;
+}
+
+export interface VerifiedCertificateChain {
+	readonly leaf: ParsedCertificate;
+	readonly chain: readonly ParsedCertificate[];
+	readonly root: ParsedCertificate;
+}
+
+export type VerifyChainResult =
+	| { readonly ok: true; readonly value: VerifiedCertificateChain }
+	| VerifyChainFailure;
+
+// ---------------------------------------------------------------------------
+// CSR verification
+// ---------------------------------------------------------------------------
 
 export type VerifyRequestResult =
 	| { readonly ok: true; readonly value: ParsedCertificateSigningRequest }
@@ -89,17 +167,28 @@ export type VerifyRequestResult =
 		readonly details?: VerifyFailureDetails;
 	};
 
-export interface VerifyChainFailure {
-	readonly ok: false;
-	readonly code: VerifyErrorCode;
-	readonly message: string;
-	readonly index?: number;
-	readonly details?: VerifyFailureDetails;
+// ---------------------------------------------------------------------------
+// Validation profile inputs
+// ---------------------------------------------------------------------------
+
+export interface ValidateForTlsServerInput {
+	readonly leaf: CertificateSource;
+	readonly intermediates?: readonly CertificateSource[];
+	readonly roots: readonly CertificateSource[];
+	readonly trustAnchors?: readonly TrustAnchor[];
+	readonly at?: Date;
+	readonly dnsName?: string;
+	readonly ipAddress?: string;
+	readonly allowCommonNameFallback?: boolean;
 }
 
-export type VerifyChainResult =
-	| { readonly ok: true; readonly value: VerifiedCertificateChain }
-	| VerifyChainFailure;
+export type ValidateForTlsClientInput = BuildCandidatePathInput;
+export type ValidateForCodeSigningInput = BuildCandidatePathInput;
+export type ValidateForCaInput = BuildCandidatePathInput;
+
+// ---------------------------------------------------------------------------
+// Internal constants
+// ---------------------------------------------------------------------------
 
 /**
  * OIDs of extensions this verifier processes during path validation.
@@ -117,13 +206,12 @@ const PROCESSED_EXTENSION_OIDS: ReadonlySet<string> = new Set([
 	OIDS.cRLDistributionPoints,
 ]);
 
-interface LoadedCertificate {
-	readonly der: Uint8Array;
-	readonly parsed: ParsedCertificate;
-}
+// ---------------------------------------------------------------------------
+// Internal types
+// ---------------------------------------------------------------------------
 
-interface BuildChainResult {
-	readonly chain: readonly LoadedCertificate[];
+interface InternalBuildResult {
+	readonly chain: readonly ParsedCertificate[];
 	readonly foundTrustedRoot: boolean;
 	readonly missingIssuerAt?: number;
 	readonly failure?: VerifyChainFailure;
@@ -137,29 +225,32 @@ interface VerifyFailureDetailsInput {
 	readonly chainCommonNames?: readonly string[] | undefined;
 }
 
-export async function verifyCertificateChain(
-	input: VerifyCertificateChainInput,
-): Promise<VerifyChainResult> {
+// ---------------------------------------------------------------------------
+// buildCandidatePath
+// ---------------------------------------------------------------------------
+
+/**
+ * Discovers and signature-verifies a candidate certification path from a
+ * leaf certificate to a trusted root or trust anchor. Does NOT validate
+ * time, constraints, or leaf policy — use {@link validateCandidatePath}
+ * for that, or {@link verifyCertificateChain} for the all-in-one API.
+ */
+export async function buildCandidatePath(
+	input: BuildCandidatePathInput,
+): Promise<BuildCandidatePathResult> {
 	const leaf = loadSingleCertificate(input.leaf);
 	const intermediates = loadCertificates(input.intermediates ?? []);
 	const roots = loadCertificates(input.roots);
 	const anchors = input.trustAnchors ?? [];
 	const at = input.at ?? new Date();
-	const buildResult = await buildChain(leaf, intermediates, roots, anchors, at);
+	const buildResult = await buildChainInternal(
+		leaf,
+		intermediates,
+		roots,
+		anchors,
+		at,
+	);
 	const chain = buildResult.chain;
-
-	if (chain.length === 1 && isSelfIssued(leaf.parsed)) {
-		if (!input.allowSelfSignedLeaf) {
-			return failure(
-				"self_signed_leaf_not_allowed",
-				"self-signed leaf not allowed",
-				0,
-				detail({
-					subjectCommonName: leaf.parsed.subject.values.commonName,
-				}),
-			);
-		}
-	}
 
 	if (!buildResult.foundTrustedRoot) {
 		if (buildResult.failure !== undefined) {
@@ -179,10 +270,63 @@ export async function verifyCertificateChain(
 			undefined,
 			detail({
 				chainCommonNames: chain.map(
-					(certificate) => certificate.parsed.subject.values.commonName ?? "<unnamed>",
+					(certificate) => certificate.subject.values.commonName ?? "<unnamed>",
 				),
 			}),
 		);
+	}
+
+	const root = chain[chain.length - 1];
+	if (root === undefined) {
+		return failure("no_trusted_root", "no trusted root found");
+	}
+
+	return {
+		ok: true,
+		value: {
+			leaf,
+			chain,
+			root,
+		},
+	};
+}
+
+// ---------------------------------------------------------------------------
+// validateCandidatePath
+// ---------------------------------------------------------------------------
+
+/**
+ * Validates a pre-built candidate path (time, critical extensions,
+ * signatures between chain members, CA/keyUsage/AKI constraints,
+ * pathLength, and leaf purpose/identity checks). The chain must be in
+ * leaf-to-root order.
+ *
+ * For full signature verification, each certificate in the chain is
+ * verified against its issuer (the next certificate). The root (last
+ * entry) is assumed trusted and not re-verified.
+ */
+export async function validateCandidatePath(
+	input: ValidateCandidatePathInput,
+): Promise<ValidateCandidatePathResult> {
+	const chain = input.chain;
+	const at = input.at ?? new Date();
+	const leaf = chain[0];
+
+	if (leaf === undefined) {
+		return failure("issuer_not_found", "chain is empty", 0);
+	}
+
+	if (chain.length === 1 && isSelfIssued(leaf)) {
+		if (input.allowSelfSignedLeaf !== true) {
+			return failure(
+				"self_signed_leaf_not_allowed",
+				"self-signed leaf not allowed",
+				0,
+				detail({
+					subjectCommonName: leaf.subject.values.commonName,
+				}),
+			);
+		}
 	}
 
 	for (let index = 0; index < chain.length; index += 1) {
@@ -190,28 +334,26 @@ export async function verifyCertificateChain(
 		if (current === undefined) {
 			return failure("issuer_not_found", "chain element missing", index);
 		}
-		if (!isWithinValidity(current.parsed, at)) {
+		if (!isWithinValidity(current, at)) {
 			return failure(
 				"certificate_expired",
 				"certificate not valid at requested time",
 				index,
 				detail({
-					subjectCommonName: current.parsed.subject.values.commonName,
+					subjectCommonName: current.subject.values.commonName,
 					expected: at.toISOString(),
-					actual: `${current.parsed.notBefore.toISOString()}..${current.parsed.notAfter.toISOString()}`,
+					actual: `${current.notBefore.toISOString()}..${current.notAfter.toISOString()}`,
 				}),
 			);
 		}
-		const unprocessedCritical = findUnprocessedCriticalExtension(
-			current.parsed,
-		);
+		const unprocessedCritical = findUnprocessedCriticalExtension(current);
 		if (unprocessedCritical !== undefined) {
 			return failure(
 				"unrecognized_critical_extension",
 				`certificate contains unrecognized critical extension ${unprocessedCritical}`,
 				index,
 				detail({
-					subjectCommonName: current.parsed.subject.values.commonName,
+					subjectCommonName: current.subject.values.commonName,
 					actual: unprocessedCritical,
 				}),
 			);
@@ -223,59 +365,55 @@ export async function verifyCertificateChain(
 		if (issuer === undefined) {
 			return failure("issuer_not_found", "issuer missing", index);
 		}
-		const signatureValid = await verifyCertificateSignature(
-			current.parsed,
-			issuer.parsed,
-		);
+		const signatureValid = await verifyCertificateSignature(current, issuer);
 		if (!signatureValid) {
 			return failure(
 				"signature_invalid",
 				"certificate signature does not verify",
 				index,
 				detail({
-					subjectCommonName: current.parsed.subject.values.commonName,
-					issuerCommonName: issuer.parsed.subject.values.commonName,
+					subjectCommonName: current.subject.values.commonName,
+					issuerCommonName: issuer.subject.values.commonName,
 				}),
 			);
 		}
-		if (issuer.parsed.basicConstraints?.ca !== true) {
+		if (issuer.basicConstraints?.ca !== true) {
 			return failure(
 				"ca_required",
 				"issuer must be a CA certificate",
 				index + 1,
 				detail({
-					subjectCommonName: issuer.parsed.subject.values.commonName,
+					subjectCommonName: issuer.subject.values.commonName,
 				}),
 			);
 		}
 		if (
-			issuer.parsed.keyUsage !== undefined
-			&& !issuer.parsed.keyUsage.includes("keyCertSign")
+			issuer.keyUsage !== undefined
+			&& !issuer.keyUsage.includes("keyCertSign")
 		) {
 			return failure(
 				"key_cert_sign_required",
 				"issuer missing keyCertSign",
 				index + 1,
 				detail({
-					subjectCommonName: issuer.parsed.subject.values.commonName,
+					subjectCommonName: issuer.subject.values.commonName,
 				}),
 			);
 		}
 		if (
-			current.parsed.authorityKeyIdentifier !== undefined
-			&& issuer.parsed.subjectKeyIdentifier !== undefined
-			&& current.parsed.authorityKeyIdentifier
-				!== issuer.parsed.subjectKeyIdentifier
+			current.authorityKeyIdentifier !== undefined
+			&& issuer.subjectKeyIdentifier !== undefined
+			&& current.authorityKeyIdentifier !== issuer.subjectKeyIdentifier
 		) {
 			return failure(
 				"authority_key_identifier_mismatch",
 				"authorityKeyIdentifier does not match issuer subjectKeyIdentifier",
 				index,
 				detail({
-					subjectCommonName: current.parsed.subject.values.commonName,
-					issuerCommonName: issuer.parsed.subject.values.commonName,
-					expected: issuer.parsed.subjectKeyIdentifier,
-					actual: current.parsed.authorityKeyIdentifier,
+					subjectCommonName: current.subject.values.commonName,
+					issuerCommonName: issuer.subject.values.commonName,
+					expected: issuer.subjectKeyIdentifier,
+					actual: current.authorityKeyIdentifier,
 				}),
 			);
 		}
@@ -286,15 +424,15 @@ export async function verifyCertificateChain(
 		if (current === undefined) {
 			return failure("issuer_not_found", "chain element missing", index);
 		}
-		const maxCaBelow = countCaCertificatesBelow(chain, index);
-		const pathLength = current.parsed.basicConstraints?.pathLength;
+		const maxCaBelow = countCaCertificatesBelowParsed(chain, index);
+		const pathLength = current.basicConstraints?.pathLength;
 		if (pathLength !== undefined && maxCaBelow > pathLength) {
 			return failure(
 				"path_length_exceeded",
 				"path length constraint exceeded",
 				index,
 				detail({
-					subjectCommonName: current.parsed.subject.values.commonName,
+					subjectCommonName: current.subject.values.commonName,
 					expected: String(pathLength),
 					actual: String(maxCaBelow),
 				}),
@@ -302,25 +440,59 @@ export async function verifyCertificateChain(
 		}
 	}
 
-	const leafValidation = validateLeaf(chain[0], input);
-	if (!leafValidation.ok) {
-		return leafValidation;
-	}
-
-	const root = chain[chain.length - 1];
-	if (root === undefined) {
-		return failure("no_trusted_root", "no trusted root found");
-	}
-
-	return {
-		ok: true,
-		value: {
-			leaf: leaf.parsed,
-			chain: chain.map((certificate) => certificate.parsed),
-			root: root.parsed,
-		},
-	};
+	return validateLeaf(leaf, input);
 }
+
+// ---------------------------------------------------------------------------
+// verifyCertificateChain (convenience composition)
+// ---------------------------------------------------------------------------
+
+/**
+ * All-in-one: builds a candidate path then validates it.
+ * Equivalent to calling {@link buildCandidatePath} followed by
+ * {@link validateCandidatePath}.
+ */
+export async function verifyCertificateChain(
+	input: VerifyCertificateChainInput,
+): Promise<VerifyChainResult> {
+	const buildResult = await buildCandidatePath({
+		leaf: input.leaf,
+		roots: input.roots,
+		...(input.intermediates !== undefined && {
+			intermediates: input.intermediates,
+		}),
+		...(input.trustAnchors !== undefined && {
+			trustAnchors: input.trustAnchors,
+		}),
+		...(input.at !== undefined && { at: input.at }),
+	});
+	if (!buildResult.ok) {
+		return buildResult;
+	}
+
+	const validateResult = await validateCandidatePath({
+		chain: buildResult.value.chain,
+		...(input.at !== undefined && { at: input.at }),
+		...(input.purpose !== undefined && { purpose: input.purpose }),
+		...(input.dnsName !== undefined && { dnsName: input.dnsName }),
+		...(input.ipAddress !== undefined && { ipAddress: input.ipAddress }),
+		...(input.allowSelfSignedLeaf !== undefined && {
+			allowSelfSignedLeaf: input.allowSelfSignedLeaf,
+		}),
+		...(input.allowCommonNameFallback !== undefined && {
+			allowCommonNameFallback: input.allowCommonNameFallback,
+		}),
+	});
+	if (!validateResult.ok) {
+		return validateResult;
+	}
+
+	return { ok: true, value: buildResult.value };
+}
+
+// ---------------------------------------------------------------------------
+// verifyCertificateSigningRequest
+// ---------------------------------------------------------------------------
 
 export async function verifyCertificateSigningRequest(
 	input: CsrSource,
@@ -346,6 +518,10 @@ export async function verifyCertificateSigningRequest(
 	}
 	return { ok: true, value: parsed };
 }
+
+// ---------------------------------------------------------------------------
+// checkExtendedKeyUsage
+// ---------------------------------------------------------------------------
 
 /**
  * Standalone EKU check against a verified certificate chain.
@@ -396,6 +572,10 @@ export function checkExtendedKeyUsage(
 	return { ok: true };
 }
 
+// ---------------------------------------------------------------------------
+// trustAnchorFromCertificate
+// ---------------------------------------------------------------------------
+
 export function trustAnchorFromCertificate(
 	certificate: ParsedCertificate,
 ): TrustAnchor {
@@ -412,70 +592,186 @@ export function trustAnchorFromCertificate(
 	};
 }
 
-function validateLeaf(
-	leaf: LoadedCertificate | undefined,
-	input: VerifyCertificateChainInput,
-): VerifyChainResult | { readonly ok: true } {
-	if (leaf === undefined) {
-		return failure("issuer_not_found", "leaf missing", 0);
+// ---------------------------------------------------------------------------
+// Validation profiles
+// ---------------------------------------------------------------------------
+
+/** Extracts defined optional fields from a base input for safe forwarding. */
+function baseChainInput(
+	input: BuildCandidatePathInput,
+): VerifyCertificateChainInput {
+	return {
+		leaf: input.leaf,
+		roots: input.roots,
+		...(input.intermediates !== undefined && {
+			intermediates: input.intermediates,
+		}),
+		...(input.trustAnchors !== undefined && {
+			trustAnchors: input.trustAnchors,
+		}),
+		...(input.at !== undefined && { at: input.at }),
+	};
+}
+
+/**
+ * Validates a certificate chain for TLS server use:
+ * chain verification + `serverAuth` EKU (leaf + intermediate propagation)
+ * + DNS/IP identity matching.
+ */
+export async function validateForTlsServer(
+	input: ValidateForTlsServerInput,
+): Promise<VerifyChainResult> {
+	const result = await verifyCertificateChain({
+		...baseChainInput(input),
+		...(input.dnsName !== undefined && { dnsName: input.dnsName }),
+		...(input.ipAddress !== undefined && { ipAddress: input.ipAddress }),
+		...(input.allowCommonNameFallback !== undefined && {
+			allowCommonNameFallback: input.allowCommonNameFallback,
+		}),
+	});
+	if (!result.ok) {
+		return result;
 	}
+	return applyEkuCheck(result, "serverAuth");
+}
+
+/**
+ * Validates a certificate chain for TLS client use:
+ * chain verification + `clientAuth` EKU (leaf + intermediate propagation).
+ */
+export async function validateForTlsClient(
+	input: ValidateForTlsClientInput,
+): Promise<VerifyChainResult> {
+	const result = await verifyCertificateChain(baseChainInput(input));
+	if (!result.ok) {
+		return result;
+	}
+	return applyEkuCheck(result, "clientAuth");
+}
+
+/**
+ * Validates a certificate chain for code signing:
+ * chain verification + `codeSigning` EKU (leaf + intermediate propagation).
+ */
+export async function validateForCodeSigning(
+	input: ValidateForCodeSigningInput,
+): Promise<VerifyChainResult> {
+	const result = await verifyCertificateChain(baseChainInput(input));
+	if (!result.ok) {
+		return result;
+	}
+	return applyEkuCheck(result, "codeSigning");
+}
+
+/**
+ * Validates a certificate chain for CA use:
+ * chain verification + `basicConstraints.ca` check on the leaf.
+ */
+export async function validateForCa(
+	input: ValidateForCaInput,
+): Promise<VerifyChainResult> {
+	return verifyCertificateChain({
+		...baseChainInput(input),
+		purpose: "ca",
+	});
+}
+
+// ---------------------------------------------------------------------------
+// Private: leaf validation
+// ---------------------------------------------------------------------------
+
+function validateLeaf(
+	leaf: ParsedCertificate,
+	input: {
+		readonly purpose?: VerifyPurpose;
+		readonly dnsName?: string;
+		readonly ipAddress?: string;
+		readonly allowCommonNameFallback?: boolean;
+	},
+): ValidateCandidatePathResult {
 	const purpose = input.purpose;
 	if (purpose !== undefined) {
 		if (purpose === "ca") {
-			if (leaf.parsed.basicConstraints?.ca !== true) {
+			if (leaf.basicConstraints?.ca !== true) {
 				return failure(
 					"ca_required",
 					"leaf is not a CA certificate",
 					0,
 					detail({
-						subjectCommonName: leaf.parsed.subject.values.commonName,
+						subjectCommonName: leaf.subject.values.commonName,
 					}),
 				);
 			}
 		} else if (
-			leaf.parsed.extendedKeyUsage !== undefined
-			&& !leaf.parsed.extendedKeyUsage.includes(purpose)
+			leaf.extendedKeyUsage !== undefined
+			&& !leaf.extendedKeyUsage.includes(purpose)
 		) {
 			return failure(
 				"extended_key_usage_invalid",
 				`leaf missing EKU ${purpose}`,
 				0,
 				detail({
-					subjectCommonName: leaf.parsed.subject.values.commonName,
+					subjectCommonName: leaf.subject.values.commonName,
 					expected: purpose,
-					actual: leaf.parsed.extendedKeyUsage.map(formatEku).join(","),
+					actual: leaf.extendedKeyUsage.map(formatEku).join(","),
 				}),
 			);
 		}
 	}
 	if (input.dnsName !== undefined) {
-		const sans = leaf.parsed.subjectAltNames?.filter((entry) => entry.type === "dns")
-			?? [];
-		if (
-			!sans.some((entry) => matchesDnsName(entry.value, input.dnsName ?? ""))
-		) {
+		const sans = leaf.subjectAltNames?.filter((entry) => entry.type === "dns") ?? [];
+		if (sans.length > 0) {
+			if (
+				!sans.some((entry) => matchesDnsName(entry.value, input.dnsName ?? ""))
+			) {
+				return failure(
+					"subject_alt_name_mismatch",
+					"DNS name not present in SAN",
+					0,
+					detail({
+						subjectCommonName: leaf.subject.values.commonName,
+						expected: input.dnsName,
+						actual: sans.map((entry) => entry.value).join(","),
+					}),
+				);
+			}
+		} else if (input.allowCommonNameFallback === true) {
+			const cn = leaf.subject.values.commonName;
+			if (cn === undefined || !matchesDnsName(cn, input.dnsName)) {
+				return failure(
+					"subject_alt_name_mismatch",
+					"DNS name not present in SAN or CN",
+					0,
+					detail({
+						subjectCommonName: cn,
+						expected: input.dnsName,
+						actual: cn ?? "",
+					}),
+				);
+			}
+		} else {
 			return failure(
 				"subject_alt_name_mismatch",
 				"DNS name not present in SAN",
 				0,
 				detail({
-					subjectCommonName: leaf.parsed.subject.values.commonName,
+					subjectCommonName: leaf.subject.values.commonName,
 					expected: input.dnsName,
-					actual: sans.map((entry) => entry.value).join(","),
+					actual: "",
 				}),
 			);
 		}
 	}
 	if (input.ipAddress !== undefined) {
 		const expected = normalizeIpAddress(input.ipAddress);
-		const sans = leaf.parsed.subjectAltNames?.filter((entry) => entry.type === "ip") ?? [];
+		const sans = leaf.subjectAltNames?.filter((entry) => entry.type === "ip") ?? [];
 		if (!sans.some((entry) => normalizeIpAddress(entry.value) === expected)) {
 			return failure(
 				"subject_alt_name_mismatch",
 				"IP address not present in SAN",
 				0,
 				detail({
-					subjectCommonName: leaf.parsed.subject.values.commonName,
+					subjectCommonName: leaf.subject.values.commonName,
 					expected,
 					actual: sans
 						.map((entry) => normalizeIpAddress(entry.value))
@@ -487,15 +783,19 @@ function validateLeaf(
 	return { ok: true };
 }
 
-async function buildChain(
-	leaf: LoadedCertificate,
-	intermediates: readonly LoadedCertificate[],
-	roots: readonly LoadedCertificate[],
+// ---------------------------------------------------------------------------
+// Private: chain building
+// ---------------------------------------------------------------------------
+
+async function buildChainInternal(
+	leaf: ParsedCertificate,
+	intermediates: readonly ParsedCertificate[],
+	roots: readonly ParsedCertificate[],
 	trustAnchors: readonly TrustAnchor[],
 	at: Date,
-): Promise<BuildChainResult> {
+): Promise<InternalBuildResult> {
 	const candidates = [...intermediates, ...roots];
-	const subjectIndex = new Map<string, LoadedCertificate[]>();
+	const subjectIndex = new Map<string, ParsedCertificate[]>();
 	const order = new Map<string, number>();
 	const rootFingerprints = new Set(
 		roots.map((candidate) => fingerprint(candidate)),
@@ -510,13 +810,13 @@ async function buildChain(
 		}
 	}
 	let sawUntrustedAnchor = false;
-	let deepestPath: readonly LoadedCertificate[] = [leaf];
+	let deepestPath: readonly ParsedCertificate[] = [leaf];
 	let deepestMissingIssuerAt: number | undefined;
 	let preferredFailure: VerifyChainFailure | undefined;
 	const deadEnds = new Set<string>();
 
 	candidates.forEach((candidate, index) => {
-		const key = candidate.parsed.subject.derHex;
+		const key = candidate.subject.derHex;
 		const existing = subjectIndex.get(key);
 		if (existing === undefined) {
 			subjectIndex.set(key, [candidate]);
@@ -551,11 +851,11 @@ async function buildChain(
 		};
 
 	async function search(
-		current: LoadedCertificate,
-		path: readonly LoadedCertificate[],
+		current: ParsedCertificate,
+		path: readonly ParsedCertificate[],
 		visited: ReadonlySet<string>,
 		caBelowCount: number,
-	): Promise<readonly LoadedCertificate[] | undefined> {
+	): Promise<readonly ParsedCertificate[] | undefined> {
 		if (rootFingerprints.has(fingerprint(current))) {
 			return path;
 		}
@@ -572,13 +872,13 @@ async function buildChain(
 		}
 		const issuers = rankIssuerCandidates(
 			current,
-			subjectIndex.get(current.parsed.issuer.derHex) ?? [],
+			subjectIndex.get(current.issuer.derHex) ?? [],
 			order,
 			rootFingerprints,
 		);
 		if (issuers.length === 0) {
 			updateDeepest(path);
-			if (isSelfIssued(current.parsed)) {
+			if (isSelfIssued(current)) {
 				sawUntrustedAnchor = true;
 			} else {
 				deepestMissingIssuerAt = path.length - 1;
@@ -592,30 +892,30 @@ async function buildChain(
 			if (visited.has(issuerFingerprint)) {
 				continue;
 			}
-			if (!isWithinValidity(issuer.parsed, at)) {
+			if (!isWithinValidity(issuer, at)) {
 				recordFailure(
 					failure(
 						"certificate_expired",
 						"certificate not valid at requested time",
 						path.length,
 						detail({
-							subjectCommonName: issuer.parsed.subject.values.commonName,
+							subjectCommonName: issuer.subject.values.commonName,
 							expected: at.toISOString(),
-							actual: `${issuer.parsed.notBefore.toISOString()}..${issuer.parsed.notAfter.toISOString()}`,
+							actual: `${issuer.notBefore.toISOString()}..${issuer.notAfter.toISOString()}`,
 						}),
 					),
 					path,
 				);
 				continue;
 			}
-			if (issuer.parsed.basicConstraints?.ca !== true) {
+			if (issuer.basicConstraints?.ca !== true) {
 				recordFailure(
 					failure(
 						"ca_required",
 						"issuer must be a CA certificate",
 						path.length,
 						detail({
-							subjectCommonName: issuer.parsed.subject.values.commonName,
+							subjectCommonName: issuer.subject.values.commonName,
 						}),
 					),
 					path,
@@ -623,8 +923,8 @@ async function buildChain(
 				continue;
 			}
 			if (
-				issuer.parsed.keyUsage !== undefined
-				&& !issuer.parsed.keyUsage.includes("keyCertSign")
+				issuer.keyUsage !== undefined
+				&& !issuer.keyUsage.includes("keyCertSign")
 			) {
 				recordFailure(
 					failure(
@@ -632,7 +932,7 @@ async function buildChain(
 						"issuer missing keyCertSign",
 						path.length,
 						detail({
-							subjectCommonName: issuer.parsed.subject.values.commonName,
+							subjectCommonName: issuer.subject.values.commonName,
 						}),
 					),
 					path,
@@ -640,10 +940,9 @@ async function buildChain(
 				continue;
 			}
 			if (
-				current.parsed.authorityKeyIdentifier !== undefined
-				&& issuer.parsed.subjectKeyIdentifier !== undefined
-				&& current.parsed.authorityKeyIdentifier
-					!== issuer.parsed.subjectKeyIdentifier
+				current.authorityKeyIdentifier !== undefined
+				&& issuer.subjectKeyIdentifier !== undefined
+				&& current.authorityKeyIdentifier !== issuer.subjectKeyIdentifier
 			) {
 				recordFailure(
 					failure(
@@ -651,10 +950,10 @@ async function buildChain(
 						"authorityKeyIdentifier does not match issuer subjectKeyIdentifier",
 						path.length - 1,
 						detail({
-							subjectCommonName: current.parsed.subject.values.commonName,
-							issuerCommonName: issuer.parsed.subject.values.commonName,
-							expected: issuer.parsed.subjectKeyIdentifier,
-							actual: current.parsed.authorityKeyIdentifier,
+							subjectCommonName: current.subject.values.commonName,
+							issuerCommonName: issuer.subject.values.commonName,
+							expected: issuer.subjectKeyIdentifier,
+							actual: current.authorityKeyIdentifier,
 						}),
 					),
 					path,
@@ -662,11 +961,10 @@ async function buildChain(
 				continue;
 			}
 			const nextCaBelowCount = caBelowCount
-				+ (current.parsed.basicConstraints?.ca === true
-						&& !isSelfIssued(current.parsed)
+				+ (current.basicConstraints?.ca === true && !isSelfIssued(current)
 					? 1
 					: 0);
-			const pathLength = issuer.parsed.basicConstraints?.pathLength;
+			const pathLength = issuer.basicConstraints?.pathLength;
 			if (pathLength !== undefined && nextCaBelowCount > pathLength) {
 				recordFailure(
 					failure(
@@ -674,7 +972,7 @@ async function buildChain(
 						"path length constraint exceeded",
 						path.length,
 						detail({
-							subjectCommonName: issuer.parsed.subject.values.commonName,
+							subjectCommonName: issuer.subject.values.commonName,
 							expected: String(pathLength),
 							actual: String(nextCaBelowCount),
 						}),
@@ -683,15 +981,15 @@ async function buildChain(
 				);
 				continue;
 			}
-			if (!(await verifyCertificateSignature(current.parsed, issuer.parsed))) {
+			if (!(await verifyCertificateSignature(current, issuer))) {
 				recordFailure(
 					failure(
 						"signature_invalid",
 						"certificate signature does not verify",
 						path.length - 1,
 						detail({
-							subjectCommonName: current.parsed.subject.values.commonName,
-							issuerCommonName: issuer.parsed.subject.values.commonName,
+							subjectCommonName: current.subject.values.commonName,
+							issuerCommonName: issuer.subject.values.commonName,
 						}),
 					),
 					path,
@@ -717,7 +1015,7 @@ async function buildChain(
 		return undefined;
 	}
 
-	function updateDeepest(path: readonly LoadedCertificate[]): void {
+	function updateDeepest(path: readonly ParsedCertificate[]): void {
 		if (path.length > deepestPath.length) {
 			deepestPath = path;
 		}
@@ -725,7 +1023,7 @@ async function buildChain(
 
 	function recordFailure(
 		candidateFailure: VerifyChainFailure,
-		path: readonly LoadedCertificate[],
+		path: readonly ParsedCertificate[],
 	): void {
 		if (preferredFailure === undefined || path.length >= deepestPath.length) {
 			preferredFailure = candidateFailure;
@@ -733,13 +1031,34 @@ async function buildChain(
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Private: helpers
+// ---------------------------------------------------------------------------
+
+function applyEkuCheck(
+	result: { readonly ok: true; readonly value: VerifiedCertificateChain },
+	purpose: EkuCheckPurpose,
+): VerifyChainResult {
+	const ekuCheck = checkExtendedKeyUsage(result.value.chain, purpose);
+	if (!ekuCheck.ok) {
+		return failure(
+			ekuCheck.code === "leaf_eku_missing"
+				? "extended_key_usage_invalid"
+				: "intermediate_eku_constraint",
+			ekuCheck.message,
+			ekuCheck.index,
+		);
+	}
+	return result;
+}
+
 function rankIssuerCandidates(
-	current: LoadedCertificate,
-	candidates: readonly LoadedCertificate[],
+	current: ParsedCertificate,
+	candidates: readonly ParsedCertificate[],
 	order: ReadonlyMap<string, number>,
 	rootFingerprints: ReadonlySet<string>,
-): readonly LoadedCertificate[] {
-	const aki = current.parsed.authorityKeyIdentifier;
+): readonly ParsedCertificate[] {
+	const aki = current.authorityKeyIdentifier;
 	return [...candidates]
 		.filter((candidate) => isIssuerOf(candidate, current))
 		.sort((left, right) => {
@@ -765,13 +1084,13 @@ function rankIssuerCandidates(
 }
 
 function matchesAki(
-	candidate: LoadedCertificate,
+	candidate: ParsedCertificate,
 	aki: string | undefined,
 ): boolean {
 	return (
 		aki !== undefined
-		&& candidate.parsed.subjectKeyIdentifier !== undefined
-		&& candidate.parsed.subjectKeyIdentifier === aki
+		&& candidate.subjectKeyIdentifier !== undefined
+		&& candidate.subjectKeyIdentifier === aki
 	);
 }
 
@@ -783,10 +1102,10 @@ function compareBooleans(left: boolean, right: boolean): number {
 }
 
 function isIssuerOf(
-	issuer: LoadedCertificate,
-	child: LoadedCertificate,
+	issuer: ParsedCertificate,
+	child: ParsedCertificate,
 ): boolean {
-	return child.parsed.issuer.derHex === issuer.parsed.subject.derHex;
+	return child.issuer.derHex === issuer.subject.derHex;
 }
 
 function findUnprocessedCriticalExtension(
@@ -811,16 +1130,16 @@ function isSelfIssued(certificate: ParsedCertificate): boolean {
 	return certificate.subject.derHex === certificate.issuer.derHex;
 }
 
-function countCaCertificatesBelow(
-	chain: readonly LoadedCertificate[],
+function countCaCertificatesBelowParsed(
+	chain: readonly ParsedCertificate[],
 	index: number,
 ): number {
 	let total = 0;
 	for (let cursor = 0; cursor < index; cursor += 1) {
 		const certificate = chain[cursor];
 		if (
-			certificate?.parsed.basicConstraints?.ca === true
-			&& !isSelfIssued(certificate.parsed)
+			certificate?.basicConstraints?.ca === true
+			&& !isSelfIssued(certificate)
 		) {
 			total += 1;
 		}
@@ -830,15 +1149,15 @@ function countCaCertificatesBelow(
 
 function loadCertificates(
 	sources: readonly CertificateSource[],
-): readonly LoadedCertificate[] {
-	const loaded: LoadedCertificate[] = [];
+): readonly ParsedCertificate[] {
+	const loaded: ParsedCertificate[] = [];
 	for (const source of sources) {
 		loaded.push(...expandSource(source));
 	}
 	return loaded;
 }
 
-function loadSingleCertificate(source: CertificateSource): LoadedCertificate {
+function loadSingleCertificate(source: CertificateSource): ParsedCertificate {
 	const loaded = expandSource(source);
 	const first = loaded[0];
 	if (first === undefined) {
@@ -850,24 +1169,13 @@ function loadSingleCertificate(source: CertificateSource): LoadedCertificate {
 	return first;
 }
 
-function expandSource(source: CertificateSource): readonly LoadedCertificate[] {
+function expandSource(source: CertificateSource): readonly ParsedCertificate[] {
 	if (typeof source === "string") {
 		return splitPemBlocks(source)
 			.filter((block) => block.label === "CERTIFICATE")
-			.map((block) => ({
-				der: block.bytes,
-				parsed: parseCertificateDer(block.bytes),
-			}));
+			.map((block) => parseCertificateDer(block.bytes));
 	}
-	return [loadDerCertificate(source)];
-}
-
-function loadDerCertificate(der: Uint8Array): LoadedCertificate {
-	const bytes = new Uint8Array(der);
-	return {
-		der: bytes,
-		parsed: parseCertificateDer(bytes),
-	};
+	return [parseCertificateDer(new Uint8Array(source))];
 }
 
 async function verifyCertificateSignature(
@@ -885,8 +1193,8 @@ async function verifyCertificateSignature(
 }
 
 function isSameCertificate(
-	left: LoadedCertificate,
-	right: LoadedCertificate,
+	left: ParsedCertificate,
+	right: ParsedCertificate,
 ): boolean {
 	if (left.der.length !== right.der.length) {
 		return false;
@@ -900,28 +1208,28 @@ function isSameCertificate(
 }
 
 async function matchTrustAnchor(
-	certificate: LoadedCertificate,
+	certificate: ParsedCertificate,
 	anchorIndex: ReadonlyMap<string, readonly TrustAnchor[]>,
 ): Promise<boolean> {
-	const anchors = anchorIndex.get(certificate.parsed.issuer.derHex);
+	const anchors = anchorIndex.get(certificate.issuer.derHex);
 	if (anchors === undefined) {
 		return false;
 	}
 	for (const anchor of anchors) {
 		if (
 			anchor.subjectKeyIdentifier !== undefined
-			&& certificate.parsed.authorityKeyIdentifier !== undefined
-			&& anchor.subjectKeyIdentifier !== certificate.parsed.authorityKeyIdentifier
+			&& certificate.authorityKeyIdentifier !== undefined
+			&& anchor.subjectKeyIdentifier !== certificate.authorityKeyIdentifier
 		) {
 			continue;
 		}
 		const verified = await verifySignedData(
-			certificate.parsed.signatureAlgorithmOid,
+			certificate.signatureAlgorithmOid,
 			anchor.publicKeyAlgorithmOid,
 			anchor.publicKeyParametersOid,
 			anchor.subjectPublicKeyInfoDer,
-			certificate.parsed.signatureValue,
-			certificate.parsed.tbsCertificateDer,
+			certificate.signatureValue,
+			certificate.tbsCertificateDer,
 		);
 		if (verified) {
 			return true;
@@ -930,30 +1238,8 @@ async function matchTrustAnchor(
 	return false;
 }
 
-function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
-	if (left.length !== right.length) {
-		return false;
-	}
-	for (let index = 0; index < left.length; index += 1) {
-		if (left[index] !== right[index]) {
-			return false;
-		}
-	}
-	return true;
-}
-
-function fingerprint(certificate: LoadedCertificate): string {
+function fingerprint(certificate: ParsedCertificate): string {
 	return Array.from(certificate.der, (value) => value.toString(16).padStart(2, "0")).join("");
-}
-
-function isTrustedSelfSignedRoot(
-	certificate: LoadedCertificate,
-	roots: readonly LoadedCertificate[],
-): boolean {
-	return (
-		isSelfIssued(certificate.parsed)
-		&& roots.some((candidate) => isSameCertificate(candidate, certificate))
-	);
 }
 
 function matchesDnsName(pattern: string, actual: string): boolean {
@@ -1017,15 +1303,15 @@ function failure(
 }
 
 function buildFailureDetails(
-	chain: readonly LoadedCertificate[],
+	chain: readonly ParsedCertificate[],
 	index: number,
 ): VerifyFailureDetails {
 	const certificate = chain[index];
 	return detail({
-		subjectCommonName: certificate?.parsed.subject.values.commonName,
-		issuerCommonName: certificate?.parsed.issuer.values.commonName,
+		subjectCommonName: certificate?.subject.values.commonName,
+		issuerCommonName: certificate?.issuer.values.commonName,
 		chainCommonNames: chain.map(
-			(entry) => entry.parsed.subject.values.commonName ?? "<unnamed>",
+			(entry) => entry.subject.values.commonName ?? "<unnamed>",
 		),
 	});
 }

@@ -356,8 +356,10 @@ describe("micro509", () => {
 		});
 		const bag = createPkcs7CertBagPem([leaf.pem, root.certificate.pem]);
 		const parsed = parsePkcs7CertBagPem(bag.pem);
+		expect(parsed.ok).toBe(true);
+		if (!parsed.ok) throw new Error("unreachable");
 		expect(
-			parsed.map((certificate) => certificate.subject.values.commonName),
+			parsed.value.map((certificate) => certificate.subject.values.commonName),
 		).toEqual(["pkcs7-leaf.example", "PKCS7 Root"]);
 	});
 
@@ -368,9 +370,11 @@ describe("micro509", () => {
 		const parsedSigner = parseCertificatePem(signer.certificate.pem);
 		const signedDataDer = createSyntheticPkcs7SignedData(parsedSigner);
 		const parsed = parsePkcs7SignedDataDer(signedDataDer);
-		expect(parsed.contentTypeOid).toBe(OIDS.pkcs7SignedData);
-		expect(parsed.certificates).toHaveLength(1);
-		expect(parsed.signerInfos[0]).toMatchObject({
+		expect(parsed.ok).toBe(true);
+		if (!parsed.ok) throw new Error("unreachable");
+		expect(parsed.value.contentTypeOid).toBe(OIDS.pkcs7SignedData);
+		expect(parsed.value.certificates).toHaveLength(1);
+		expect(parsed.value.signerInfos[0]).toMatchObject({
 			version: 1,
 			digestAlgorithmOid: OIDS.sha256,
 			signatureAlgorithmOid: OIDS.sha256WithRSAEncryption,
@@ -419,13 +423,15 @@ describe("micro509", () => {
 			],
 		});
 		const parsed = await parsePfxPem(pfx.pem);
+		expect(parsed.ok).toBe(true);
+		if (!parsed.ok) throw new Error("unreachable");
 		expect(
-			parsed.certificates.map(
+			parsed.value.certificates.map(
 				(certificate) => certificate.subject.values.commonName,
 			),
 		).toEqual(["pfx-leaf.example", "PFX Root"]);
-		expect(parsed.privateKeys).toHaveLength(1);
-		expect(parsed.bags[0]).toMatchObject({
+		expect(parsed.value.privateKeys).toHaveLength(1);
+		expect(parsed.value.bags[0]).toMatchObject({
 			kind: "certificate",
 			attributes: { friendlyName: "leaf", localKeyId: "010203" },
 		});
@@ -453,13 +459,17 @@ describe("micro509", () => {
 			encryption: { password: "secret123" },
 		});
 		const parsed = await parsePfxPem(pfx.pem, { password: "secret123" });
+		expect(parsed.ok).toBe(true);
+		if (!parsed.ok) throw new Error("unreachable");
 		expect(
-			parsed.certificates.map((entry) => entry.subject.values.commonName),
+			parsed.value.certificates.map((entry) => entry.subject.values.commonName),
 		).toEqual(["encrypted-pfx.example"]);
-		expect(parsed.privateKeys).toHaveLength(1);
-		await expect(parsePfxPem(pfx.pem, { password: "wrong" })).rejects.toThrow(
-			"Invalid PFX password or encrypted content",
-		);
+		expect(parsed.value.privateKeys).toHaveLength(1);
+		const wrongPassword = await parsePfxPem(pfx.pem, { password: "wrong" });
+		expect(wrongPassword).toMatchObject({
+			ok: false,
+			code: "invalid_password",
+		});
 	});
 
 	it("verifies PFX MAC integrity", async () => {
@@ -474,10 +484,14 @@ describe("micro509", () => {
 			mac: { password: "integrity123" },
 		});
 		const parsed = await parsePfxPem(pfx.pem, { macPassword: "integrity123" });
-		expect(parsed.macData?.valid).toBe(true);
-		await expect(
-			parsePfxPem(pfx.pem, { macPassword: "wrong" }),
-		).rejects.toThrow("Invalid PFX MAC password or corrupted content");
+		expect(parsed.ok).toBe(true);
+		if (!parsed.ok) throw new Error("unreachable");
+		expect(parsed.value.macData?.valid).toBe(true);
+		const wrongMac = await parsePfxPem(pfx.pem, { macPassword: "wrong" });
+		expect(wrongMac).toMatchObject({
+			ok: false,
+			code: "invalid_password",
+		});
 	});
 
 	it("roundtrips encrypted PKCS#8 helpers", async () => {
@@ -1007,6 +1021,12 @@ describe("micro509", () => {
 				leaf: selfSigned.certificate.pem,
 				roots: [],
 			}),
+		).toMatchObject({ ok: false, code: "no_trusted_root" });
+		expect(
+			await verifyCertificateChain({
+				leaf: selfSigned.certificate.pem,
+				roots: [selfSigned.certificate.pem],
+			}),
 		).toMatchObject({
 			ok: false,
 			code: "self_signed_leaf_not_allowed",
@@ -1015,10 +1035,10 @@ describe("micro509", () => {
 		expect(
 			await verifyCertificateChain({
 				leaf: selfSigned.certificate.pem,
-				roots: [],
+				roots: [selfSigned.certificate.pem],
 				allowSelfSignedLeaf: true,
 			}),
-		).toMatchObject({ ok: false, code: "no_trusted_root" });
+		).toMatchObject({ ok: true });
 	});
 
 	it("roundtrips keys through PEM, base64, and JWK imports", async () => {

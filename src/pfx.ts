@@ -99,6 +99,27 @@ export interface ParsedPfx {
 	readonly macData?: ParsedPkcs12MacData;
 }
 
+// ---------------------------------------------------------------------------
+// Result types for PFX parsing
+// ---------------------------------------------------------------------------
+
+export type ParsePfxErrorCode =
+	| "malformed"
+	| "invalid_password"
+	| "password_required";
+
+export type ParsePfxResult =
+	| { readonly ok: true; readonly value: ParsedPfx }
+	| {
+		readonly ok: false;
+		readonly code: ParsePfxErrorCode;
+		readonly message: string;
+	};
+
+// ---------------------------------------------------------------------------
+// createPfx
+// ---------------------------------------------------------------------------
+
 export async function createPfx(input: CreatePfxInput): Promise<PfxMaterial> {
 	const certificateBags: Uint8Array[] = [];
 	const privateKeyBags: Uint8Array[] = [];
@@ -146,50 +167,110 @@ export async function createPfx(input: CreatePfxInput): Promise<PfxMaterial> {
 	};
 }
 
+// ---------------------------------------------------------------------------
+// parsePfxDer / parsePfxPem — Result-returning
+// ---------------------------------------------------------------------------
+
 export async function parsePfxDer(
 	der: Uint8Array,
 	options?: ParsePfxOptions,
-): Promise<ParsedPfx> {
-	const topLevel = readSequenceChildren(der);
-	const authSafe = topLevel[1];
-	if (authSafe === undefined) {
-		throw new Error("Malformed PFX");
-	}
-	const authSafeDer = der.slice(
-		authSafe.start - authSafe.headerLength,
-		authSafe.end,
-	);
-	const authenticatedSafeOctets = extractContentInfoData(authSafeDer);
-	const macElement = topLevel[2];
-	const macData = macElement === undefined
-		? undefined
-		: await parsePkcs12MacData(
-			der.slice(macElement.start - macElement.headerLength, macElement.end),
-			authenticatedSafeOctets,
-			options?.macPassword ?? options?.password,
-		);
-	if (macData?.valid === false) {
-		throw new Error("Invalid PFX MAC password or corrupted content");
-	}
-	const authenticatedSafe = readSequenceChildren(authenticatedSafeOctets);
-	const bags: ParsedPfxBag[] = [];
-	for (const contentInfo of authenticatedSafe) {
-		const contentInfoDer = authenticatedSafeOctets.slice(
-			contentInfo.start - contentInfo.headerLength,
-			contentInfo.end,
-		);
-		const safeContents = await extractSafeContents(contentInfoDer, options);
-		for (const bag of readSequenceChildren(safeContents)) {
-			const bagDer = safeContents.slice(bag.start - bag.headerLength, bag.end);
-			bags.push(parseSafeBag(bagDer));
+): Promise<ParsePfxResult> {
+	try {
+		const topLevel = readSequenceChildren(der);
+		const authSafe = topLevel[1];
+		if (authSafe === undefined) {
+			return pfxFailure("malformed", "Malformed PFX structure");
 		}
+		const authSafeDer = der.slice(
+			authSafe.start - authSafe.headerLength,
+			authSafe.end,
+		);
+		const authenticatedSafeOctets = extractContentInfoData(authSafeDer);
+		const macElement = topLevel[2];
+		let macData: ParsedPkcs12MacData | undefined;
+		if (macElement !== undefined) {
+			try {
+				macData = await parsePkcs12MacData(
+					der.slice(macElement.start - macElement.headerLength, macElement.end),
+					authenticatedSafeOctets,
+					options?.macPassword ?? options?.password,
+				);
+			} catch {
+				return pfxFailure(
+					"invalid_password",
+					"Invalid PFX MAC password or corrupted content",
+				);
+			}
+			if (macData?.valid === false) {
+				return pfxFailure(
+					"invalid_password",
+					"Invalid PFX MAC password or corrupted content",
+				);
+			}
+		}
+		const authenticatedSafe = readSequenceChildren(authenticatedSafeOctets);
+		const bags: ParsedPfxBag[] = [];
+		for (const contentInfo of authenticatedSafe) {
+			const contentInfoDer = authenticatedSafeOctets.slice(
+				contentInfo.start - contentInfo.headerLength,
+				contentInfo.end,
+			);
+			const safeContentsResult = await extractSafeContents(
+				contentInfoDer,
+				options,
+			);
+			if (safeContentsResult.error !== undefined) {
+				return safeContentsResult.error;
+			}
+			for (const bag of readSequenceChildren(safeContentsResult.data)) {
+				const bagDer = safeContentsResult.data.slice(
+					bag.start - bag.headerLength,
+					bag.end,
+				);
+				bags.push(parseSafeBag(bagDer));
+			}
+		}
+		return {
+			ok: true,
+			value: {
+				bags,
+				certificates: bags.flatMap((bag) => bag.kind === "certificate" ? [bag.certificate] : []),
+				privateKeys: bags.flatMap((bag) => bag.kind === "privateKey" ? [bag.pkcs8Der] : []),
+				...(macData === undefined ? {} : { macData }),
+			},
+		};
+	} catch {
+		return pfxFailure("malformed", "Malformed PFX structure");
 	}
-	return {
-		bags,
-		certificates: bags.flatMap((bag) => bag.kind === "certificate" ? [bag.certificate] : []),
-		privateKeys: bags.flatMap((bag) => bag.kind === "privateKey" ? [bag.pkcs8Der] : []),
-		...(macData === undefined ? {} : { macData }),
-	};
+}
+
+export async function parsePfxPem(
+	pem: string,
+	options?: ParsePfxOptions,
+): Promise<ParsePfxResult> {
+	const blocks = splitPemBlocks(pem).filter(
+		(block) => block.label === "PKCS12",
+	);
+	const block = blocks[0];
+	if (block === undefined || blocks.length !== 1) {
+		return pfxFailure("malformed", "Expected exactly one PKCS12 PEM block");
+	}
+	return parsePfxDer(block.bytes, options);
+}
+
+// ---------------------------------------------------------------------------
+// Private: PFX helpers
+// ---------------------------------------------------------------------------
+
+function pfxFailure(
+	code: ParsePfxErrorCode,
+	message: string,
+): {
+	readonly ok: false;
+	readonly code: ParsePfxErrorCode;
+	readonly message: string;
+} {
+	return { ok: false, code, message };
 }
 
 function extractContentInfoData(contentInfoDer: Uint8Array): Uint8Array {
@@ -208,51 +289,59 @@ function extractContentInfoData(contentInfoDer: Uint8Array): Uint8Array {
 async function extractSafeContents(
 	contentInfoDer: Uint8Array,
 	options: ParsePfxOptions | undefined,
-): Promise<Uint8Array> {
+): Promise<
+	| { readonly data: Uint8Array; readonly error?: undefined }
+	| {
+		readonly data?: undefined;
+		readonly error: {
+			readonly ok: false;
+			readonly code: ParsePfxErrorCode;
+			readonly message: string;
+		};
+	}
+> {
 	const contentInfoChildren = readSequenceChildren(contentInfoDer);
 	const contentType = contentInfoChildren[0];
 	const content = contentInfoChildren[1];
 	if (contentType === undefined || content === undefined) {
-		throw new Error("Malformed ContentInfo");
+		return { error: pfxFailure("malformed", "Malformed ContentInfo") };
 	}
 	const oid = decodeObjectIdentifier(contentType.value);
 	if (oid === OIDS.pkcs7Data) {
-		return extractContextOctetString(contentInfoDer, content);
+		return { data: extractContextOctetString(contentInfoDer, content) };
 	}
 	if (oid !== OIDS.pkcs7EncryptedData) {
-		throw new Error("Unsupported PFX ContentInfo type");
+		return {
+			error: pfxFailure("malformed", "Unsupported PFX ContentInfo type"),
+		};
 	}
 	if (options?.password === undefined) {
-		throw new Error("Password required for encrypted PFX content");
+		return {
+			error: pfxFailure(
+				"password_required",
+				"Password required for encrypted PFX content",
+			),
+		};
 	}
 	const encryptedData = extractContextChild(contentInfoDer, content);
-	const decrypted = await decryptEncryptedData(
-		contentInfoDer.slice(
-			encryptedData.start - encryptedData.headerLength,
-			encryptedData.end,
-		),
-		options.password,
-	);
 	try {
+		const decrypted = await decryptEncryptedData(
+			contentInfoDer.slice(
+				encryptedData.start - encryptedData.headerLength,
+				encryptedData.end,
+			),
+			options.password,
+		);
 		readSequenceChildren(decrypted);
-		return decrypted;
+		return { data: decrypted };
 	} catch {
-		throw new Error("Invalid PFX password or encrypted content");
+		return {
+			error: pfxFailure(
+				"invalid_password",
+				"Invalid PFX password or encrypted content",
+			),
+		};
 	}
-}
-
-export async function parsePfxPem(
-	pem: string,
-	options?: ParsePfxOptions,
-): Promise<ParsedPfx> {
-	const blocks = splitPemBlocks(pem).filter(
-		(block) => block.label === "PKCS12",
-	);
-	const block = blocks[0];
-	if (block === undefined || blocks.length !== 1) {
-		throw new Error("Expected exactly one PKCS12 block");
-	}
-	return parsePfxDer(block.bytes, options);
 }
 
 function createCertificateBag(
@@ -473,18 +562,14 @@ async function decryptEncryptedData(
 	if (encryptedContent.tag !== 0x80) {
 		throw new Error("Malformed encrypted content");
 	}
-	try {
-		return await decryptPbes2(
-			contentInfoDer.slice(
-				algorithm.start - algorithm.headerLength,
-				algorithm.end,
-			),
-			encryptedContent.value,
-			password,
-		);
-	} catch {
-		throw new Error("Invalid PFX password or encrypted content");
-	}
+	return decryptPbes2(
+		contentInfoDer.slice(
+			algorithm.start - algorithm.headerLength,
+			algorithm.end,
+		),
+		encryptedContent.value,
+		password,
+	);
 }
 
 function extractContextOctetString(

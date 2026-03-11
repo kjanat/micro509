@@ -8,7 +8,7 @@
 
 ## Path validation / PKIX completeness
 
-- [ ] Separate candidate path building from path validation more explicitly in the public API
+- [x] Separate candidate path building from path validation more explicitly in the public API
 - [x] Structured trust-anchor input model, not only convenience via root certificates
 - [x] Unsupported critical extension rejection during candidate path validation
 - [x] Self-issued handling for name-constraint / path-processing edge cases
@@ -44,8 +44,8 @@
 
 - [ ] Zero-config decoder-map inference helpers for even tighter typing
 - [ ] Higher-level cert/CSR/CRL/OCSP fixtures for tests and demos
-- [ ] More explicit validation profiles: raw path-valid, TLS server, TLS client, OCSP responder, CA, etc.
-- [ ] Better failure typing for revocation / container / CMS subsystems
+- [x] More explicit validation profiles: raw path-valid, TLS server, TLS client, OCSP responder, CA, etc.
+- [x] Better failure typing for revocation / container / CMS subsystems
 - [ ] Browser examples and runtime matrix docs
 
 ## Nice-to-have monsters
