@@ -26,6 +26,7 @@
 		"build": "tsgo -p tsconfig.build.json",
 		"check": "tsgo -p tsconfig.json",
 		"fmt": "dprint fmt",
+		"test": "AGENT=1 bun test --coverage",
 		"typecheck": "tsgo --noEmit"
 	},
 	"devDependencies": {

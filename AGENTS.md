@@ -57,10 +57,6 @@ ts-x509/
 - **No classes** — entire library is functional
 - **No mocking in tests** — tests use real WebCrypto, Node's `X509Certificate` as oracle
 - **No `eslint-disable` or `@ts-ignore`** — zero instances in codebase
-- **Only AES-256-CBC** for traditional PEM encryption (rejects other ciphers)
-- **Only PBES2/PBKDF2** for PKCS#8 encryption
-- **Only RSASSA-PKCS1-v1_5, ECDSA (P-256/P-384), Ed25519** for signing
-- **Only SHA-256/384/512** for RSA hashing
 
 ## COMMANDS
 

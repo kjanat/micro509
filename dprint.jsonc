@@ -8,6 +8,8 @@
 		"quoteStyle": "preferDouble",
 		"importDeclaration.sortTypeOnlyImports": "first",
 		"importDeclaration.sortNamedImports": "caseSensitive",
+		"exportDeclaration.sortTypeOnlyExports": "first",
+		"exportDeclaration.sortNamedExports": "caseSensitive",
 	},
 	"json": {
 		"jsonTrailingCommaFiles": [

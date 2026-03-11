@@ -1,4 +1,14 @@
-import { createCertificate, createPfx, createSelfSignedCertificate, generateKeyPair, parsePfxPem } from "@/index.ts";
+import { explicitContext, integerFromNumber, objectIdentifier, octetString, sequence, setOf, tlv } from "@/der.ts";
+import {
+	createCertificate,
+	createPfx,
+	createSelfSignedCertificate,
+	exportPkcs8Der,
+	generateKeyPair,
+	parsePfxDer,
+	parsePfxPem,
+} from "@/index.ts";
+import { OIDS } from "@/oids.ts";
 import { describe, expect, it } from "bun:test";
 
 describe("pfx", () => {
@@ -112,5 +122,617 @@ describe("pfx", () => {
 			ok: false,
 			code: "invalid_password",
 		});
+	});
+
+	it("parsePfxDer rejects truncated DER", async () => {
+		const result = await parsePfxDer(Uint8Array.of(0x30, 0x03, 0x02, 0x01, 0x03));
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.code).toBe("malformed");
+	});
+
+	it("parsePfxDer rejects completely garbage input", async () => {
+		const result = await parsePfxDer(Uint8Array.of(0xff, 0xff));
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.code).toBe("malformed");
+	});
+
+	it("parsePfxPem rejects empty PEM", async () => {
+		const result = await parsePfxPem("not a PEM");
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.code).toBe("malformed");
+	});
+
+	it("parsePfxPem rejects multiple PFX blocks", async () => {
+		const keyPair = await generateKeyPair();
+		const cert = await createSelfSignedCertificate({
+			subject: { commonName: "multi-pfx" },
+			keyPair,
+		});
+		const pfx = await createPfx({
+			certificates: [{ certificate: cert.certificate.pem }],
+			privateKeys: [{ privateKey: keyPair.privateKey }],
+		});
+		const doublePem = `${pfx.pem}\n${pfx.pem}`;
+		const result = await parsePfxPem(doublePem);
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.code).toBe("malformed");
+	});
+
+	it("creates and parses PFX with encrypted content and wrong password", async () => {
+		const keyPair = await generateKeyPair();
+		const cert = await createSelfSignedCertificate({
+			subject: { commonName: "enc-pfx-wrong" },
+			keyPair,
+		});
+		const pfx = await createPfx({
+			certificates: [{ certificate: cert.certificate.pem }],
+			privateKeys: [{ privateKey: keyPair.privateKey }],
+			encryption: { password: "correct" },
+		});
+		// No password provided for encrypted PFX
+		const result = await parsePfxDer(pfx.der);
+		expect(result.ok).toBe(false);
+	});
+
+	// -----------------------------------------------------------------------
+	// createPfx input variants
+	// -----------------------------------------------------------------------
+
+	it("creates PFX with CryptoKey private key source", async () => {
+		const keyPair = await generateKeyPair();
+		const cert = await createSelfSignedCertificate({
+			subject: { commonName: "cryptokey-pfx" },
+			keyPair,
+		});
+		// Pass CryptoKey directly (covers normalizePrivateKey CryptoKey path)
+		const pfx = await createPfx({
+			certificates: [{ certificate: cert.certificate.pem }],
+			privateKeys: [{ privateKey: keyPair.privateKey }],
+		});
+		const parsed = await parsePfxDer(pfx.der);
+		expect(parsed.ok).toBe(true);
+		if (!parsed.ok) throw new Error("unreachable");
+		expect(parsed.value.privateKeys).toHaveLength(1);
+	});
+
+	it("creates PFX with Uint8Array private key source", async () => {
+		const keyPair = await generateKeyPair();
+		const cert = await createSelfSignedCertificate({
+			subject: { commonName: "uint8-key-pfx" },
+			keyPair,
+		});
+		// Pass Uint8Array PKCS#8 DER (covers normalizePrivateKey Uint8Array path)
+		const pkcs8 = await exportPkcs8Der(keyPair.privateKey);
+		const pfx = await createPfx({
+			certificates: [{ certificate: cert.certificate.pem }],
+			privateKeys: [{ privateKey: pkcs8 }],
+		});
+		const parsed = await parsePfxDer(pfx.der);
+		expect(parsed.ok).toBe(true);
+		if (!parsed.ok) throw new Error("unreachable");
+		expect(parsed.value.privateKeys).toHaveLength(1);
+	});
+
+	it("creates PFX with DER certificate source", async () => {
+		const keyPair = await generateKeyPair();
+		const cert = await createSelfSignedCertificate({
+			subject: { commonName: "der-cert-pfx" },
+			keyPair,
+		});
+		// Pass Uint8Array certificate DER (covers normalizeCertificate Uint8Array path)
+		const pfx = await createPfx({
+			certificates: [{ certificate: cert.certificate.der }],
+			privateKeys: [{ privateKey: keyPair.privateKey }],
+		});
+		const parsed = await parsePfxDer(pfx.der);
+		expect(parsed.ok).toBe(true);
+		if (!parsed.ok) throw new Error("unreachable");
+		expect(parsed.value.certificates).toHaveLength(1);
+		expect(parsed.value.certificates[0]?.subject.values.commonName).toBe("der-cert-pfx");
+	});
+
+	it("creates PFX with no attributes on bags", async () => {
+		const keyPair = await generateKeyPair();
+		const cert = await createSelfSignedCertificate({
+			subject: { commonName: "no-attr-pfx" },
+			keyPair,
+		});
+		// No attributes — covers encodeBagAttributes returning []
+		const pfx = await createPfx({
+			certificates: [{ certificate: cert.certificate.pem }],
+			privateKeys: [{ privateKey: keyPair.privateKey }],
+		});
+		const parsed = await parsePfxDer(pfx.der);
+		expect(parsed.ok).toBe(true);
+		if (!parsed.ok) throw new Error("unreachable");
+		expect(parsed.value.bags[0]?.attributes.entries).toHaveLength(0);
+	});
+
+	// -----------------------------------------------------------------------
+	// parsePfx error paths with crafted DER
+	// -----------------------------------------------------------------------
+
+	it("parsePfxDer returns password_required for encrypted content without password", async () => {
+		const keyPair = await generateKeyPair();
+		const cert = await createSelfSignedCertificate({
+			subject: { commonName: "pw-required" },
+			keyPair,
+		});
+		const pfx = await createPfx({
+			certificates: [{ certificate: cert.certificate.pem }],
+			privateKeys: [{ privateKey: keyPair.privateKey }],
+			encryption: { password: "secret" },
+		});
+		// Parse without password — should get password_required
+		const result = await parsePfxDer(pfx.der);
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.code).toBe("password_required");
+		}
+	});
+
+	it("parsePfxDer handles PFX with MAC and no macPassword (skips verification)", async () => {
+		const keyPair = await generateKeyPair();
+		const cert = await createSelfSignedCertificate({
+			subject: { commonName: "mac-no-pw" },
+			keyPair,
+		});
+		const pfx = await createPfx({
+			certificates: [{ certificate: cert.certificate.pem }],
+			privateKeys: [{ privateKey: keyPair.privateKey }],
+			mac: { password: "macpw" },
+		});
+		// Parse without providing macPassword — MAC is parsed but not verified
+		const result = await parsePfxDer(pfx.der);
+		expect(result.ok).toBe(true);
+		if (!result.ok) throw new Error("unreachable");
+		// macData should be present but no 'valid' field (password was not provided)
+		expect(result.value.macData).toBeDefined();
+		expect(result.value.macData?.digestAlgorithmOid).toBeDefined();
+	});
+
+	it("parsePfxDer returns invalid_password when MAC verification fails", async () => {
+		const keyPair = await generateKeyPair();
+		const cert = await createSelfSignedCertificate({
+			subject: { commonName: "mac-bad-pw" },
+			keyPair,
+		});
+		const pfx = await createPfx({
+			certificates: [{ certificate: cert.certificate.pem }],
+			privateKeys: [{ privateKey: keyPair.privateKey }],
+			mac: { password: "correct" },
+		});
+		// Wrong macPassword — MAC is invalid
+		const result = await parsePfxDer(pfx.der, { macPassword: "wrong" });
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.code).toBe("invalid_password");
+	});
+
+	it("parsePfxDer handles PFX with both MAC and encryption", async () => {
+		const keyPair = await generateKeyPair();
+		const cert = await createSelfSignedCertificate({
+			subject: { commonName: "mac-enc-pfx" },
+			keyPair,
+		});
+		const pfx = await createPfx({
+			certificates: [{ certificate: cert.certificate.pem }],
+			privateKeys: [{ privateKey: keyPair.privateKey }],
+			encryption: { password: "content-pw" },
+			mac: { password: "mac-pw" },
+		});
+		// Correct passwords
+		const result = await parsePfxDer(pfx.der, { password: "content-pw", macPassword: "mac-pw" });
+		expect(result.ok).toBe(true);
+		if (!result.ok) throw new Error("unreachable");
+		expect(result.value.macData?.valid).toBe(true);
+		expect(result.value.certificates).toHaveLength(1);
+		expect(result.value.privateKeys).toHaveLength(1);
+	});
+
+	it("creates PFX with certificates only (no private keys)", async () => {
+		const cert = await createSelfSignedCertificate({
+			subject: { commonName: "certs-only" },
+		});
+		const pfx = await createPfx({
+			certificates: [{ certificate: cert.certificate.pem }],
+		});
+		const parsed = await parsePfxDer(pfx.der);
+		expect(parsed.ok).toBe(true);
+		if (!parsed.ok) throw new Error("unreachable");
+		expect(parsed.value.certificates).toHaveLength(1);
+		expect(parsed.value.privateKeys).toHaveLength(0);
+	});
+
+	it("creates PFX with private keys only (no certificates)", async () => {
+		const keyPair = await generateKeyPair();
+		const pfx = await createPfx({
+			privateKeys: [{ privateKey: keyPair.privateKey }],
+		});
+		const parsed = await parsePfxDer(pfx.der);
+		expect(parsed.ok).toBe(true);
+		if (!parsed.ok) throw new Error("unreachable");
+		expect(parsed.value.certificates).toHaveLength(0);
+		expect(parsed.value.privateKeys).toHaveLength(1);
+	});
+
+	it("normalizeCertificate throws for PEM without CERTIFICATE block", async () => {
+		await expect(
+			createPfx({
+				certificates: [{ certificate: "-----BEGIN PRIVATE KEY-----\nMQ==\n-----END PRIVATE KEY-----" }],
+			}),
+		).rejects.toThrow("Certificate PEM required");
+	});
+
+	it("parses PFX with unknown bag type", async () => {
+		// Build PFX with a SafeBag using an unknown OID → kind: "unknown"
+		const unknownBagOid = "1.2.3.4.5.6.7";
+		const unknownValue = octetString(Uint8Array.of(0xde, 0xad));
+		const safeBag = sequence([
+			objectIdentifier(unknownBagOid),
+			explicitContext(0, unknownValue),
+		]);
+		const safeContents = sequence([safeBag]);
+		// Wrap in plaintext ContentInfo
+		const contentInfo = sequence([
+			objectIdentifier(OIDS.pkcs7Data),
+			explicitContext(0, octetString(safeContents)),
+		]);
+		const authenticatedSafe = sequence([contentInfo]);
+		const pfxDer = sequence([
+			integerFromNumber(3),
+			sequence([
+				objectIdentifier(OIDS.pkcs7Data),
+				explicitContext(0, octetString(authenticatedSafe)),
+			]),
+		]);
+		const result = await parsePfxDer(pfxDer);
+		expect(result.ok).toBe(true);
+		if (!result.ok) throw new Error("unreachable");
+		expect(result.value.bags).toHaveLength(1);
+		expect(result.value.bags[0]?.kind).toBe("unknown");
+	});
+
+	it("parses PFX with key bag (PKCS#8 private key)", async () => {
+		const keyPair = await generateKeyPair();
+		const pkcs8 = await exportPkcs8Der(keyPair.privateKey);
+		// Build PFX with a pkcs12KeyBag SafeBag → kind: "privateKey"
+		const safeBag = sequence([
+			objectIdentifier(OIDS.pkcs12KeyBag),
+			explicitContext(0, pkcs8),
+		]);
+		const safeContents = sequence([safeBag]);
+		const contentInfo = sequence([
+			objectIdentifier(OIDS.pkcs7Data),
+			explicitContext(0, octetString(safeContents)),
+		]);
+		const authenticatedSafe = sequence([contentInfo]);
+		const pfxDer = sequence([
+			integerFromNumber(3),
+			sequence([
+				objectIdentifier(OIDS.pkcs7Data),
+				explicitContext(0, octetString(authenticatedSafe)),
+			]),
+		]);
+		const result = await parsePfxDer(pfxDer);
+		expect(result.ok).toBe(true);
+		if (!result.ok) throw new Error("unreachable");
+		expect(result.value.bags).toHaveLength(1);
+		expect(result.value.bags[0]?.kind).toBe("privateKey");
+		expect(result.value.privateKeys).toHaveLength(1);
+	});
+
+	it("parsePfxDer rejects PFX with unsupported ContentInfo type", async () => {
+		// Build PFX whose authenticatedSafe contains a ContentInfo with an unsupported OID
+		const badContentInfo = sequence([
+			objectIdentifier("1.2.3.4.5"), // not pkcs7Data or pkcs7EncryptedData
+			explicitContext(0, octetString(Uint8Array.of(0x01))),
+		]);
+		const authenticatedSafe = sequence([badContentInfo]);
+		const pfxDer = sequence([
+			integerFromNumber(3),
+			sequence([
+				objectIdentifier(OIDS.pkcs7Data),
+				explicitContext(0, octetString(authenticatedSafe)),
+			]),
+		]);
+		const result = await parsePfxDer(pfxDer);
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.code).toBe("malformed");
+	});
+
+	it("parsePfxDer returns malformed for ContentInfo with missing content", async () => {
+		// ContentInfo with only OID, no content
+		const badContentInfo = sequence([
+			objectIdentifier(OIDS.pkcs7Data),
+		]);
+		const authenticatedSafe = sequence([badContentInfo]);
+		const pfxDer = sequence([
+			integerFromNumber(3),
+			sequence([
+				objectIdentifier(OIDS.pkcs7Data),
+				explicitContext(0, octetString(authenticatedSafe)),
+			]),
+		]);
+		const result = await parsePfxDer(pfxDer);
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.code).toBe("malformed");
+	});
+
+	it("parsePfxDer returns malformed for SafeBag with missing bagValue", async () => {
+		// SafeBag with only bagId, no bagValue
+		const badSafeBag = sequence([
+			objectIdentifier(OIDS.pkcs12CertBag),
+		]);
+		const safeContents = sequence([badSafeBag]);
+		const contentInfo = sequence([
+			objectIdentifier(OIDS.pkcs7Data),
+			explicitContext(0, octetString(safeContents)),
+		]);
+		const authenticatedSafe = sequence([contentInfo]);
+		const pfxDer = sequence([
+			integerFromNumber(3),
+			sequence([
+				objectIdentifier(OIDS.pkcs7Data),
+				explicitContext(0, octetString(authenticatedSafe)),
+			]),
+		]);
+		const result = await parsePfxDer(pfxDer);
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.code).toBe("malformed");
+	});
+
+	it("parsePfxDer returns malformed for certBag with missing cert value", async () => {
+		// certBag with only certType OID, no cert value
+		const certBag = sequence([
+			objectIdentifier(OIDS.x509CertificateBagType),
+		]);
+		const safeBag = sequence([
+			objectIdentifier(OIDS.pkcs12CertBag),
+			explicitContext(0, certBag),
+		]);
+		const safeContents = sequence([safeBag]);
+		const contentInfo = sequence([
+			objectIdentifier(OIDS.pkcs7Data),
+			explicitContext(0, octetString(safeContents)),
+		]);
+		const authenticatedSafe = sequence([contentInfo]);
+		const pfxDer = sequence([
+			integerFromNumber(3),
+			sequence([
+				objectIdentifier(OIDS.pkcs7Data),
+				explicitContext(0, octetString(authenticatedSafe)),
+			]),
+		]);
+		const result = await parsePfxDer(pfxDer);
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.code).toBe("malformed");
+	});
+
+	it("parsePfxDer returns malformed when extractContextChild gets non-context tag", async () => {
+		// Put a SEQUENCE where context-specific [0] is expected for bag value
+		// This tests extractContextChild's (element.tag & 0xe0) !== 0xa0 check
+		const safeBag = sequence([
+			objectIdentifier(OIDS.pkcs12CertBag),
+			// Use SEQUENCE (0x30) instead of [0] EXPLICIT context
+			sequence([octetString(Uint8Array.of(0x01))]),
+		]);
+		const safeContents = sequence([safeBag]);
+		const contentInfo = sequence([
+			objectIdentifier(OIDS.pkcs7Data),
+			explicitContext(0, octetString(safeContents)),
+		]);
+		const authenticatedSafe = sequence([contentInfo]);
+		const pfxDer = sequence([
+			integerFromNumber(3),
+			sequence([
+				objectIdentifier(OIDS.pkcs7Data),
+				explicitContext(0, octetString(authenticatedSafe)),
+			]),
+		]);
+		const result = await parsePfxDer(pfxDer);
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.code).toBe("malformed");
+	});
+
+	it("parsePfxDer returns malformed for bag attribute with missing values", async () => {
+		// SafeBag with attribute SET containing an attribute with only OID, no value SET
+		const attrWithOnlyOid = sequence([objectIdentifier("1.2.3.4")]);
+		const safeBag = sequence([
+			objectIdentifier("1.2.3.4.5.6"),
+			explicitContext(0, octetString(Uint8Array.of(0x01))),
+			setOf([attrWithOnlyOid]),
+		]);
+		const safeContents = sequence([safeBag]);
+		const contentInfo = sequence([
+			objectIdentifier(OIDS.pkcs7Data),
+			explicitContext(0, octetString(safeContents)),
+		]);
+		const authenticatedSafe = sequence([contentInfo]);
+		const pfxDer = sequence([
+			integerFromNumber(3),
+			sequence([
+				objectIdentifier(OIDS.pkcs7Data),
+				explicitContext(0, octetString(authenticatedSafe)),
+			]),
+		]);
+		const result = await parsePfxDer(pfxDer);
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.code).toBe("malformed");
+	});
+
+	it("parses PFX with bag attribute having empty value set", async () => {
+		// SafeBag with attribute that has a values SET but no values inside
+		// This covers the firstValue === undefined continue path
+		const attrWithEmptyValues = sequence([
+			objectIdentifier("1.2.3.4"),
+			setOf([]), // empty values SET
+		]);
+		const unknownBag = sequence([
+			objectIdentifier("1.2.3.4.5.6"),
+			explicitContext(0, octetString(Uint8Array.of(0x01))),
+			setOf([attrWithEmptyValues]),
+		]);
+		const safeContents = sequence([unknownBag]);
+		const contentInfo = sequence([
+			objectIdentifier(OIDS.pkcs7Data),
+			explicitContext(0, octetString(safeContents)),
+		]);
+		const authenticatedSafe = sequence([contentInfo]);
+		const pfxDer = sequence([
+			integerFromNumber(3),
+			sequence([
+				objectIdentifier(OIDS.pkcs7Data),
+				explicitContext(0, octetString(authenticatedSafe)),
+			]),
+		]);
+		const result = await parsePfxDer(pfxDer);
+		expect(result.ok).toBe(true);
+		if (!result.ok) throw new Error("unreachable");
+		expect(result.value.bags[0]?.attributes.entries).toHaveLength(1);
+		expect(result.value.bags[0]?.attributes.friendlyName).toBeUndefined();
+	});
+
+	it("parsePfxDer returns invalid_password for encrypted data with bad encrypted content", async () => {
+		// Build encrypted ContentInfo with malformed EncryptedData — decryptEncryptedData
+		// throws which gets caught and surfaced as invalid_password
+		const encryptedData = sequence([integerFromNumber(0)]);
+		const encryptedContentInfo = sequence([
+			objectIdentifier(OIDS.pkcs7EncryptedData),
+			explicitContext(0, encryptedData),
+		]);
+		const authenticatedSafe = sequence([encryptedContentInfo]);
+		const pfxDer = sequence([
+			integerFromNumber(3),
+			sequence([
+				objectIdentifier(OIDS.pkcs7Data),
+				explicitContext(0, octetString(authenticatedSafe)),
+			]),
+		]);
+		const result = await parsePfxDer(pfxDer, { password: "test" });
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.code).toBe("invalid_password");
+	});
+
+	it("parsePfxDer returns invalid_password when MAC data parsing throws (lines 198-201)", async () => {
+		// Build PFX with a MAC section that has totally invalid structure,
+		// causing parsePkcs12MacData to throw
+		const authenticatedSafe = sequence([]); // empty safe contents
+		const contentInfo = sequence([
+			objectIdentifier(OIDS.pkcs7Data),
+			explicitContext(0, octetString(authenticatedSafe)),
+		]);
+		// MAC section: use a completely malformed SEQUENCE (not valid MacData)
+		const malformedMac = sequence([integerFromNumber(999)]);
+		const pfxDer = sequence([
+			integerFromNumber(3),
+			contentInfo,
+			malformedMac,
+		]);
+		const result = await parsePfxDer(pfxDer, { password: "test" });
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.code).toBe("invalid_password");
+	});
+
+	it("extractContentInfoData throws on malformed outer ContentInfo (line 281)", async () => {
+		// Build PFX where the OUTER AuthSafe ContentInfo has only one child (missing content)
+		const malformedAuthSafe = sequence([objectIdentifier(OIDS.pkcs7Data)]);
+		// No explicitContext(0, ...) → missing second child in outer ContentInfo
+		const pfxDer = sequence([
+			integerFromNumber(3),
+			malformedAuthSafe,
+		]);
+		const result = await parsePfxDer(pfxDer);
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.code).toBe("malformed");
+	});
+
+	it("extractContentInfoData throws on non-pkcs7Data outer content type (line 284)", async () => {
+		// Outer ContentInfo with wrong content type OID
+		const wrongTypeAuthSafe = sequence([
+			objectIdentifier("1.2.840.113549.1.7.3"), // envelopedData, not pkcs7Data
+			explicitContext(0, octetString(new Uint8Array([0x30, 0x00]))),
+		]);
+		const pfxDer = sequence([
+			integerFromNumber(3),
+			wrongTypeAuthSafe,
+		]);
+		const result = await parsePfxDer(pfxDer);
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.code).toBe("malformed");
+	});
+
+	it("decryptEncryptedData throws on malformed EncryptedContentInfo (lines 560, 563)", async () => {
+		// Build encrypted ContentInfo where EncryptedData has EncryptedContentInfo
+		// with only one child (contentType OID, missing algorithm and encrypted content)
+		const encryptedContentInfo = sequence([
+			objectIdentifier(OIDS.pkcs7Data), // contentType
+			// Missing algorithmIdentifier and encryptedContent
+		]);
+		const encryptedData = sequence([
+			integerFromNumber(0), // version
+			encryptedContentInfo,
+		]);
+		const encContentInfo = sequence([
+			objectIdentifier(OIDS.pkcs7EncryptedData),
+			explicitContext(0, encryptedData),
+		]);
+		const authenticatedSafe = sequence([encContentInfo]);
+		const pfxDer = sequence([
+			integerFromNumber(3),
+			sequence([
+				objectIdentifier(OIDS.pkcs7Data),
+				explicitContext(0, octetString(authenticatedSafe)),
+			]),
+		]);
+		const result = await parsePfxDer(pfxDer, { password: "test" });
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.code).toBe("invalid_password");
+	});
+
+	it("decryptEncryptedData throws on wrong encrypted content tag (line 563)", async () => {
+		// EncryptedContentInfo with algorithm and content, but content tag is not 0x80
+		const encryptedContentInfo = sequence([
+			objectIdentifier(OIDS.pkcs7Data), // contentType
+			sequence([objectIdentifier("1.2.840.113549.1.5.13")]), // algorithm
+			octetString(new Uint8Array([0x01, 0x02])), // OCTET STRING (tag 0x04) instead of [0] (tag 0x80)
+		]);
+		const encryptedData = sequence([
+			integerFromNumber(0), // version
+			encryptedContentInfo,
+		]);
+		const encContentInfo = sequence([
+			objectIdentifier(OIDS.pkcs7EncryptedData),
+			explicitContext(0, encryptedData),
+		]);
+		const authenticatedSafe = sequence([encContentInfo]);
+		const pfxDer = sequence([
+			integerFromNumber(3),
+			sequence([
+				objectIdentifier(OIDS.pkcs7Data),
+				explicitContext(0, octetString(authenticatedSafe)),
+			]),
+		]);
+		const result = await parsePfxDer(pfxDer, { password: "test" });
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.code).toBe("invalid_password");
+	});
+
+	it("extractContextOctetString throws when context child is not OCTET STRING (line 581)", async () => {
+		// ContentInfo with pkcs7Data type but context value containing INTEGER instead of OCTET STRING
+		const badContextContentInfo = sequence([
+			objectIdentifier(OIDS.pkcs7Data),
+			explicitContext(0, integerFromNumber(42)), // INTEGER, not OCTET STRING
+		]);
+		const authenticatedSafe = sequence([badContextContentInfo]);
+		const pfxDer = sequence([
+			integerFromNumber(3),
+			sequence([
+				objectIdentifier(OIDS.pkcs7Data),
+				explicitContext(0, octetString(authenticatedSafe)),
+			]),
+		]);
+		const result = await parsePfxDer(pfxDer);
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.code).toBe("malformed");
 	});
 });
