@@ -33,7 +33,7 @@
 
 ## CMS / PKCS / container interop
 
-- [ ] CMS/PKCS#7 signature verification over signed attributes where applicable
+- [x] CMS/PKCS#7 signature verification over signed attributes where applicable
 - [ ] CMS/PKCS#7 detached content support
 - [ ] CMS signer certificate selection helpers
 - [ ] PKCS#12/PFX encrypted certificate safe bags

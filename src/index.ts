@@ -183,6 +183,8 @@ export {
 	type ParsePkcs7SignedDataResult,
 	type Pkcs7CertBag,
 	type Pkcs7CertificateSource,
+	verifyPkcs7SignedData,
+	type VerifyPkcs7SignedDataResult,
 } from "./pkcs7.ts";
 export {
 	buildCandidatePath,

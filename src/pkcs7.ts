@@ -1,4 +1,11 @@
-import { childrenOf, decodeIntegerNumber, decodeObjectIdentifier, requireElement, toHex } from "./asn1.ts";
+import {
+	childrenOf,
+	decodeIntegerNumber,
+	decodeObjectIdentifier,
+	requireElement,
+	toArrayBuffer,
+	toHex,
+} from "./asn1.ts";
 import {
 	concatBytes,
 	type DerElement,
@@ -11,6 +18,7 @@ import {
 	setOf,
 	tlv,
 } from "./der.ts";
+import { getCrypto } from "./keys.ts";
 import { OIDS } from "./oids.ts";
 import { parseCertificateDer, type ParsedCertificate } from "./parse.ts";
 import { base64Encode, pemEncode, splitPemBlocks } from "./pem.ts";
@@ -33,6 +41,8 @@ export interface ParsedPkcs7SignerInfo {
 	readonly signatureHex: string;
 	readonly signature: Uint8Array;
 	readonly hasSignedAttrs: boolean;
+	/** Raw DER of signedAttrs with original IMPLICIT [0] tag (0xa0). Present only when hasSignedAttrs is true. */
+	readonly signedAttrsDer?: Uint8Array;
 }
 
 export interface ParsedPkcs7SignedData {
@@ -74,7 +84,7 @@ export type VerifyPkcs7SignedDataResult =
 		readonly code:
 			| "signer_not_found"
 			| "signature_invalid"
-			| "signed_attrs_not_supported"
+			| "message_digest_mismatch"
 			| "content_missing"
 			| ParsePkcs7ErrorCode;
 		readonly message: string;
@@ -263,11 +273,15 @@ export async function verifyPkcs7SignedData(
 			};
 		}
 		if (signerInfo.hasSignedAttrs) {
-			return {
-				ok: false,
-				code: "signed_attrs_not_supported",
-				message: "SignedData with signed attributes is not supported",
-			};
+			const attrsResult = await verifySignedAttrs(
+				signerInfo,
+				signer,
+				parsed.encapsulatedContent,
+			);
+			if (!attrsResult.ok) {
+				return attrsResult;
+			}
+			continue;
 		}
 		const verified = await verifySignedData(
 			signerInfo.signatureAlgorithmOid,
@@ -362,7 +376,8 @@ function parseSignerInfos(
 		const sid = parts[1];
 		const digestAlgorithm = parts[2];
 		let index = 3;
-		const hasSignedAttrs = parts[index]?.tag === 0xa0;
+		const signedAttrsElement = parts[index]?.tag === 0xa0 ? parts[index] : undefined;
+		const hasSignedAttrs = signedAttrsElement !== undefined;
 		if (hasSignedAttrs) {
 			index += 1;
 		}
@@ -414,6 +429,16 @@ function parseSignerInfos(
 			signatureHex: toHex(signature.value),
 			signature: new Uint8Array(signature.value),
 			hasSignedAttrs,
+			...(signedAttrsElement === undefined
+				? {}
+				: {
+					signedAttrsDer: new Uint8Array(
+						signerDer.slice(
+							signedAttrsElement.start - signedAttrsElement.headerLength,
+							signedAttrsElement.end,
+						),
+					),
+				}),
 		});
 	}
 	return signers;
@@ -468,4 +493,131 @@ function childAt(
 		currentIndex += 1;
 	}
 	throw new Error(`Missing ${label}`);
+}
+
+// ---------------------------------------------------------------------------
+// CMS signed attributes verification (RFC 5652 Section 5.4)
+// ---------------------------------------------------------------------------
+
+function digestAlgorithmHash(
+	digestAlgorithmOid: string,
+): "SHA-256" | "SHA-384" | "SHA-512" {
+	switch (digestAlgorithmOid) {
+		case OIDS.sha256:
+			return "SHA-256";
+		case OIDS.sha384:
+			return "SHA-384";
+		case OIDS.sha512:
+			return "SHA-512";
+		default:
+			throw new Error(
+				`Unsupported digest algorithm OID: ${digestAlgorithmOid}`,
+			);
+	}
+}
+
+function extractMessageDigest(
+	signedAttrsDer: Uint8Array,
+): Uint8Array | undefined {
+	// signedAttrs is IMPLICIT [0] — parse children (each is a SEQUENCE of {OID, SET OF values})
+	const outer = readElement(signedAttrsDer);
+	for (const attr of childrenOf(signedAttrsDer, outer)) {
+		const attrDer = signedAttrsDer.slice(
+			attr.start - attr.headerLength,
+			attr.end,
+		);
+		const parts = readSequenceChildren(attrDer);
+		const oid = parts[0];
+		const values = parts[1];
+		if (oid === undefined || values === undefined) {
+			continue;
+		}
+		if (decodeObjectIdentifier(oid.value) === OIDS.cmsMessageDigest) {
+			// values is SET OF, first child is the OCTET STRING digest
+			const digestElement = readElement(attrDer, values.start);
+			if (digestElement.tag !== 0x04) {
+				return undefined;
+			}
+			return digestElement.value;
+		}
+	}
+	return undefined;
+}
+
+function retagSignedAttrsAsSet(signedAttrsDer: Uint8Array): Uint8Array {
+	// Replace IMPLICIT [0] tag (0xa0) with SET OF tag (0x31) per RFC 5652 Section 5.4
+	const copy = new Uint8Array(signedAttrsDer);
+	copy[0] = 0x31;
+	return copy;
+}
+
+function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
+	if (a.length !== b.length) {
+		return false;
+	}
+	let diff = 0;
+	for (let index = 0; index < a.length; index += 1) {
+		diff |= (a[index] ?? 0) ^ (b[index] ?? 0);
+	}
+	return diff === 0;
+}
+
+async function verifySignedAttrs(
+	signerInfo: ParsedPkcs7SignerInfo,
+	signer: ParsedCertificate,
+	encapsulatedContent: Uint8Array,
+): Promise<
+	| { readonly ok: true }
+	| {
+		readonly ok: false;
+		readonly code:
+			| "message_digest_mismatch"
+			| "signature_invalid"
+			| "malformed";
+		readonly message: string;
+	}
+> {
+	if (signerInfo.signedAttrsDer === undefined) {
+		return { ok: false, code: "malformed", message: "Missing signedAttrs DER" };
+	}
+	// Step 1: Extract messageDigest attribute from signedAttrs
+	const expectedDigest = extractMessageDigest(signerInfo.signedAttrsDer);
+	if (expectedDigest === undefined) {
+		return {
+			ok: false,
+			code: "malformed",
+			message: "Missing messageDigest attribute in signedAttrs",
+		};
+	}
+	// Step 2: Compute digest of encapsulated content
+	const hash = digestAlgorithmHash(signerInfo.digestAlgorithmOid);
+	const actualDigest = new Uint8Array(
+		await getCrypto().subtle.digest(hash, toArrayBuffer(encapsulatedContent)),
+	);
+	// Step 3: Compare digests (constant-time)
+	if (!constantTimeEqual(actualDigest, expectedDigest)) {
+		return {
+			ok: false,
+			code: "message_digest_mismatch",
+			message: "Content digest does not match messageDigest attribute",
+		};
+	}
+	// Step 4: Verify signature over re-tagged signedAttrs (0xa0 → 0x31 SET OF)
+	const signedData = retagSignedAttrsAsSet(signerInfo.signedAttrsDer);
+	const verified = await verifySignedData(
+		signerInfo.signatureAlgorithmOid,
+		signer.publicKeyAlgorithmOid,
+		signer.publicKeyParametersOid,
+		signer.subjectPublicKeyInfoDer,
+		signerInfo.signature,
+		signedData,
+	);
+	if (!verified) {
+		return {
+			ok: false,
+			code: "signature_invalid",
+			message: "SignedData signature over signedAttrs does not verify",
+		};
+	}
+	return { ok: true };
 }

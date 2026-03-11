@@ -1,6 +1,7 @@
-import { X509Certificate } from "node:crypto";
+import { createHash, X509Certificate } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
+	concatBytes,
 	explicitContext,
 	integer,
 	integerFromNumber,
@@ -79,8 +80,10 @@ import {
 	verifyCertificateRevocationList,
 	verifyCertificateSigningRequest,
 	verifyOcspResponse,
+	verifyPkcs7SignedData,
 } from "../src/index.ts";
 import { OIDS } from "../src/oids.ts";
+import { getSignatureAlgorithm, signBytes } from "../src/signing.ts";
 
 describe("micro509", () => {
 	it("creates a self-signed certificate with SANs and exportable keys", async () => {
@@ -361,6 +364,56 @@ describe("micro509", () => {
 		expect(
 			parsed.value.map((certificate) => certificate.subject.values.commonName),
 		).toEqual(["pkcs7-leaf.example", "PKCS7 Root"]);
+	});
+
+	it("verifies PKCS#7 signedData with signed attributes (CMS digest-then-sign)", async () => {
+		const signer = await createSelfSignedCertificate({
+			subject: { commonName: "CMS SignedAttrs Signer" },
+		});
+		const parsedSigner = parseCertificatePem(signer.certificate.pem);
+		const content = new TextEncoder().encode("Hello CMS signed attributes");
+		const signedDataDer = await createCmsSignedDataWithSignedAttrs(
+			parsedSigner,
+			signer.keyPair.privateKey,
+			content,
+		);
+		const result = await verifyPkcs7SignedData(signedDataDer);
+		expect(result.ok).toBe(true);
+		if (!result.ok) {
+			throw new Error(`Verify failed: ${result.code} — ${result.message}`);
+		}
+		expect(result.value.signerInfos[0]?.hasSignedAttrs).toBe(true);
+		expect(result.value.encapsulatedContent).toEqual(content);
+	});
+
+	it("rejects PKCS#7 signedData with tampered content (message digest mismatch)", async () => {
+		const signer = await createSelfSignedCertificate({
+			subject: { commonName: "CMS Tamper Test" },
+		});
+		const parsedSigner = parseCertificatePem(signer.certificate.pem);
+		const content = new TextEncoder().encode("Original content");
+		const signedDataDer = await createCmsSignedDataWithSignedAttrs(
+			parsedSigner,
+			signer.keyPair.privateKey,
+			content,
+		);
+		// Tamper: replace encapsulated content bytes in the DER
+		const tampered = new Uint8Array(signedDataDer);
+		// Find "Original content" and change first byte
+		const target = new TextEncoder().encode("Original content");
+		for (let i = 0; i < tampered.length - target.length; i++) {
+			if (
+				tampered[i] === target[0]
+				&& tampered.slice(i, i + target.length).every((b, j) => b === target[j])
+			) {
+				tampered[i] = 0xff;
+				break;
+			}
+		}
+		const result = await verifyPkcs7SignedData(tampered);
+		expect(result.ok).toBe(false);
+		if (result.ok) throw new Error("unreachable");
+		expect(result.code).toBe("message_digest_mismatch");
 	});
 
 	it("parses generic PKCS#7 signedData signer metadata", async () => {
@@ -2174,6 +2227,79 @@ function createSyntheticPkcs7SignedData(
 		setOf([sequence([objectIdentifier(OIDS.sha256), nullValue()])]),
 		sequence([objectIdentifier(OIDS.pkcs7Data)]),
 		explicitContext(0, signer.der),
+		setOf([signerInfo]),
+	]);
+	return sequence([
+		objectIdentifier(OIDS.pkcs7SignedData),
+		explicitContext(0, signedData),
+	]);
+}
+
+async function createCmsSignedDataWithSignedAttrs(
+	signer: ReturnType<typeof parseCertificatePem>,
+	privateKey: CryptoKey,
+	content: Uint8Array,
+): Promise<Uint8Array> {
+	// Compute message digest of content (SHA-256)
+	const contentDigest = createHash("sha256").update(content).digest();
+	// Build signedAttrs as SET OF (tag 0x31) for signing
+	const signedAttrsContent = concatBytes([
+		// contentType attribute
+		sequence([
+			objectIdentifier(OIDS.cmsContentType),
+			setOf([objectIdentifier(OIDS.pkcs7Data)]),
+		]),
+		// messageDigest attribute
+		sequence([
+			objectIdentifier(OIDS.cmsMessageDigest),
+			setOf([octetString(new Uint8Array(contentDigest))]),
+		]),
+	]);
+	// For signing: SET OF (0x31) tag
+	const signedAttrsForSigning = tlv(0x31, signedAttrsContent);
+	// For encoding in SignerInfo: IMPLICIT [0] (0xa0) tag
+	const signedAttrsImplicit = tlv(0xa0, signedAttrsContent);
+	// Sign the SET OF-tagged signedAttrs
+	const sigAlgorithm = getSignatureAlgorithm(privateKey);
+	const signature = await signBytes(
+		privateKey,
+		sigAlgorithm,
+		signedAttrsForSigning,
+	);
+	// Build SignerInfo
+	const signerInfo = sequence([
+		integerFromNumber(1),
+		// IssuerAndSerialNumber
+		sequence([
+			hexToBytes(signer.issuer.derHex),
+			integer(hexToBytes(signer.serialNumberHex)),
+		]),
+		// digestAlgorithm
+		sequence([objectIdentifier(OIDS.sha256), nullValue()]),
+		// signedAttrs [0] IMPLICIT
+		signedAttrsImplicit,
+		// signatureAlgorithm
+		sequence([
+			objectIdentifier(sigAlgorithm.algorithmOid),
+			...(sigAlgorithm.parameters !== undefined
+				? [sigAlgorithm.parameters]
+				: []),
+		]),
+		// signature
+		octetString(signature),
+	]);
+	// Build SignedData
+	const signedData = sequence([
+		integerFromNumber(1),
+		setOf([sequence([objectIdentifier(OIDS.sha256), nullValue()])]),
+		// EncapsulatedContentInfo with actual content
+		sequence([
+			objectIdentifier(OIDS.pkcs7Data),
+			explicitContext(0, octetString(content)),
+		]),
+		// certificates [0] IMPLICIT
+		explicitContext(0, signer.der),
+		// signerInfos
 		setOf([signerInfo]),
 	]);
 	return sequence([
