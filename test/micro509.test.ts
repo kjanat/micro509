@@ -2,7 +2,6 @@ import { X509Certificate } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
 	explicitContext,
-	generalizedTime,
 	integer,
 	integerFromNumber,
 	nullValue,
@@ -59,6 +58,7 @@ import {
 	importSpkiPem,
 	isCertificateRevoked,
 	parseCertificateChainPem,
+	parseCertificateDer,
 	parseCertificatePem,
 	parseCertificateRevocationListPem,
 	parseCertificateSigningRequestPem,
@@ -1746,6 +1746,103 @@ describe("micro509", () => {
 			details: { subjectCommonName: "bad-csr.example" },
 		});
 	});
+
+	it("throws on malformed or truncated DER input", () => {
+		expect(() => parseCertificateDer(new Uint8Array([0x30, 0x03, 0x01]))).toThrow();
+		expect(() => parseCertificateDer(new Uint8Array([]))).toThrow();
+		expect(() => parseCertificatePem("not a pem")).toThrow();
+		expect(() => parseCertificateDer(new Uint8Array([0xff, 0xff]))).toThrow();
+	});
+
+	it("parses OCSP responses with revoked and unknown cert status", async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: "OCSP Status CA" },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ["keyCertSign", "cRLSign"],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: "OCSP Status CA" },
+			subject: { commonName: "status-leaf.example" },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const revokedResponse = await createOcspResponse({
+			signerPrivateKey: issuer.keyPair.privateKey,
+			signerCertificate: issuer.certificate.pem,
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: "revoked",
+					revokedAt: new Date("2024-06-15T00:00:00Z"),
+					thisUpdate: new Date("2024-07-01T00:00:00Z"),
+				},
+			],
+		});
+		const parsedRevoked = parseOcspResponsePem(revokedResponse.pem);
+		expect(parsedRevoked.responses?.[0]?.certStatus).toBe("revoked");
+		expect(parsedRevoked.responses?.[0]?.revokedAt?.toISOString()).toBe(
+			"2024-06-15T00:00:00.000Z",
+		);
+
+		const unknownResponse = await createOcspResponse({
+			signerPrivateKey: issuer.keyPair.privateKey,
+			signerCertificate: issuer.certificate.pem,
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: "unknown",
+					thisUpdate: new Date("2024-07-01T00:00:00Z"),
+				},
+			],
+		});
+		const parsedUnknown = parseOcspResponsePem(unknownResponse.pem);
+		expect(parsedUnknown.responses?.[0]?.certStatus).toBe("unknown");
+	});
+
+	it("verifies an Ed25519 certificate chain", async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: "Ed25519 Root CA" },
+			algorithm: { kind: "ed25519" },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 1 },
+				keyUsage: ["keyCertSign", "cRLSign"],
+			},
+		});
+		const leafKeys = await generateKeyPair({ kind: "ed25519" });
+		const leaf = await createCertificate({
+			issuer: { commonName: "Ed25519 Root CA" },
+			subject: { commonName: "ed25519-leaf.example" },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ["digitalSignature"],
+				subjectAltNames: [{ type: "dns", value: "ed25519-leaf.example" }],
+			},
+		});
+		const result = await verifyCertificateChain({
+			leaf: leaf.pem,
+			roots: [root.certificate.pem],
+		});
+		expect(result).toMatchObject({ ok: true });
+	});
+
+	it("rejects pathLength without ca:true", async () => {
+		await expect(
+			createSelfSignedCertificate({
+				subject: { commonName: "bad-bc.example" },
+				extensions: {
+					basicConstraints: { ca: false, pathLength: 1 },
+				},
+			}),
+		).rejects.toThrow("pathLength requires ca=true");
+	});
 });
 
 function childrenOf(
@@ -1783,61 +1880,6 @@ function decodeObjectIdentifier(bytes: Uint8Array): string {
 	return values.join(".");
 }
 
-async function createSyntheticOcspResponse(
-	certificate: ReturnType<typeof parseCertificatePem>,
-	issuer: ReturnType<typeof parseCertificatePem>,
-): Promise<Uint8Array> {
-	const issuerNameHash = await crypto.subtle.digest(
-		"SHA-1",
-		toArrayBuffer(hexToBytes(issuer.subject.derHex)),
-	);
-	const issuerKeyHash = await crypto.subtle.digest(
-		"SHA-1",
-		toArrayBuffer(extractSubjectPublicKeyBytes(issuer.subjectPublicKeyInfoDer)),
-	);
-	const certId = sequence([
-		sequence([objectIdentifier(OIDS.sha1), nullValue()]),
-		octetString(new Uint8Array(issuerNameHash)),
-		octetString(new Uint8Array(issuerKeyHash)),
-		integer(hexToBytes(certificate.serialNumberHex)),
-	]);
-	const responseData = sequence([
-		explicitContext(1, issuer.subjectPublicKeyInfoDer.slice(0, 8)),
-		generalizedTime(new Date("2024-01-01T00:00:00Z")),
-		sequence([
-			sequence([
-				certId,
-				tlv(0x80, new Uint8Array()),
-				generalizedTime(new Date("2024-01-01T00:00:00Z")),
-			]),
-		]),
-		explicitContext(
-			1,
-			sequence([
-				sequence([
-					objectIdentifier(OIDS.ocspNonce),
-					octetString(octetString(Uint8Array.of(0xaa, 0xbb))),
-				]),
-			]),
-		),
-	]);
-	const basicResponse = sequence([
-		responseData,
-		sequence([objectIdentifier(OIDS.sha256WithRSAEncryption), nullValue()]),
-		tlv(0x03, Uint8Array.of(0x00)),
-	]);
-	return sequence([
-		tlv(0x0a, Uint8Array.of(0x00)),
-		explicitContext(
-			0,
-			sequence([
-				objectIdentifier(OIDS.ocspBasicResponse),
-				octetString(basicResponse),
-			]),
-		),
-	]);
-}
-
 function createSyntheticPkcs7SignedData(
 	signer: ReturnType<typeof parseCertificatePem>,
 ): Uint8Array {
@@ -1862,21 +1904,6 @@ function createSyntheticPkcs7SignedData(
 		objectIdentifier(OIDS.pkcs7SignedData),
 		explicitContext(0, signedData),
 	]);
-}
-
-function extractSubjectPublicKeyBytes(spkiDer: Uint8Array): Uint8Array {
-	const top = childrenOf(spkiDer, readElement(spkiDer));
-	const bitStringElement = top[1];
-	if (bitStringElement === undefined) {
-		throw new Error("Missing subjectPublicKey BIT STRING");
-	}
-	return bitStringElement.value.slice(1);
-}
-
-function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-	const out = new ArrayBuffer(bytes.length);
-	new Uint8Array(out).set(bytes);
-	return out;
 }
 
 function hexToBytes(value: string): Uint8Array {

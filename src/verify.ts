@@ -1,7 +1,4 @@
-import { integer, readSequenceChildren, sequence } from "./der.ts";
 import type { ExtendedKeyUsage } from "./extensions.ts";
-import { getCrypto, importSpkiDer, type PublicKeyImportInput } from "./keys.ts";
-import { OIDS } from "./oids.ts";
 import {
 	parseCertificateDer,
 	parseCertificateSigningRequestDer,
@@ -10,6 +7,7 @@ import {
 	type ParsedCertificateSigningRequest,
 } from "./parse.ts";
 import { splitPemBlocks } from "./pem.ts";
+import { verifySignedData } from "./sig-verify.ts";
 
 export type CertificateSource = string | Uint8Array;
 export type CsrSource = string | Uint8Array;
@@ -93,12 +91,6 @@ interface VerifyFailureDetailsInput {
 	readonly expected?: string | undefined;
 	readonly actual?: string | undefined;
 	readonly chainCommonNames?: readonly string[] | undefined;
-}
-
-interface VerifySignatureConfig {
-	readonly importAlgorithm: PublicKeyImportInput;
-	readonly verifyParams: Algorithm | EcdsaParams;
-	readonly ecdsaRawSignatureBytes?: number;
 }
 
 export async function verifyCertificateChain(
@@ -734,213 +726,6 @@ async function verifyCertificateSignature(
 		certificate.signatureValue,
 		certificate.tbsCertificateDer,
 	);
-}
-
-async function verifySignedData(
-	signatureAlgorithmOid: string,
-	publicKeyAlgorithmOid: string,
-	publicKeyParametersOid: string | undefined,
-	spkiDer: Uint8Array,
-	signatureValue: Uint8Array,
-	data: Uint8Array,
-): Promise<boolean> {
-	const config = getVerifySignatureConfig(
-		signatureAlgorithmOid,
-		publicKeyAlgorithmOid,
-		publicKeyParametersOid,
-	);
-	const issuerKey = await importSpkiDer(spkiDer, config.importAlgorithm);
-	const subtle = getCrypto().subtle;
-	const signatureView = toArrayBuffer(signatureValue);
-	const dataView = toArrayBuffer(data);
-	if (
-		await subtle.verify(config.verifyParams, issuerKey, signatureView, dataView)
-	) {
-		return true;
-	}
-	if (config.ecdsaRawSignatureBytes !== undefined) {
-		const alternate = alternateEcdsaSignatureEncoding(
-			signatureValue,
-			config.ecdsaRawSignatureBytes / 2,
-		);
-		if (alternate !== undefined) {
-			return subtle.verify(
-				config.verifyParams,
-				issuerKey,
-				toArrayBuffer(alternate),
-				dataView,
-			);
-		}
-	}
-	return false;
-}
-
-function getVerifySignatureConfig(
-	signatureAlgorithmOid: string,
-	publicKeyAlgorithmOid: string,
-	publicKeyParametersOid: string | undefined,
-): VerifySignatureConfig {
-	switch (signatureAlgorithmOid) {
-		case OIDS.sha256WithRSAEncryption:
-			return {
-				importAlgorithm: requireRsaPublicKey(publicKeyAlgorithmOid, "SHA-256"),
-				verifyParams: { name: "RSASSA-PKCS1-v1_5" },
-			};
-		case OIDS.sha384WithRSAEncryption:
-			return {
-				importAlgorithm: requireRsaPublicKey(publicKeyAlgorithmOid, "SHA-384"),
-				verifyParams: { name: "RSASSA-PKCS1-v1_5" },
-			};
-		case OIDS.sha512WithRSAEncryption:
-			return {
-				importAlgorithm: requireRsaPublicKey(publicKeyAlgorithmOid, "SHA-512"),
-				verifyParams: { name: "RSASSA-PKCS1-v1_5" },
-			};
-		case OIDS.ecdsaWithSHA256:
-			return {
-				importAlgorithm: requireEcPublicKey(
-					publicKeyAlgorithmOid,
-					publicKeyParametersOid,
-				),
-				verifyParams: { name: "ECDSA", hash: "SHA-256" },
-				ecdsaRawSignatureBytes: curveBytes(publicKeyParametersOid),
-			};
-		case OIDS.ecdsaWithSHA384:
-			return {
-				importAlgorithm: requireEcPublicKey(
-					publicKeyAlgorithmOid,
-					publicKeyParametersOid,
-				),
-				verifyParams: { name: "ECDSA", hash: "SHA-384" },
-				ecdsaRawSignatureBytes: curveBytes(publicKeyParametersOid),
-			};
-		case OIDS.ed25519:
-			if (publicKeyAlgorithmOid !== OIDS.ed25519) {
-				throw new Error("Ed25519 signature requires Ed25519 issuer public key");
-			}
-			return {
-				importAlgorithm: { kind: "ed25519" },
-				verifyParams: { name: "Ed25519" },
-			};
-		default:
-			throw new Error(
-				`Unsupported signature algorithm OID: ${signatureAlgorithmOid}`,
-			);
-	}
-}
-
-function requireRsaPublicKey(
-	publicKeyAlgorithmOid: string,
-	hash: "SHA-256" | "SHA-384" | "SHA-512",
-): PublicKeyImportInput {
-	if (publicKeyAlgorithmOid !== OIDS.rsaEncryption) {
-		throw new Error("RSA signature requires RSA issuer public key");
-	}
-	return { kind: "rsa", hash };
-}
-
-function requireEcPublicKey(
-	publicKeyAlgorithmOid: string,
-	publicKeyParametersOid: string | undefined,
-): PublicKeyImportInput {
-	if (publicKeyAlgorithmOid !== OIDS.ecPublicKey) {
-		throw new Error("ECDSA signature requires EC issuer public key");
-	}
-	switch (publicKeyParametersOid) {
-		case OIDS.prime256v1:
-			return { kind: "ecdsa", namedCurve: "P-256" };
-		case OIDS.secp384r1:
-			return { kind: "ecdsa", namedCurve: "P-384" };
-		default:
-			throw new Error(
-				`Unsupported EC curve OID: ${publicKeyParametersOid ?? "missing"}`,
-			);
-	}
-}
-
-function curveBytes(parametersOid: string | undefined): number {
-	switch (parametersOid) {
-		case OIDS.prime256v1:
-			return 64;
-		case OIDS.secp384r1:
-			return 96;
-		default:
-			throw new Error(
-				`Unsupported EC curve OID: ${parametersOid ?? "missing"}`,
-			);
-	}
-}
-
-function derEcdsaSignatureToRaw(
-	signature: Uint8Array,
-	partLength: number,
-): Uint8Array {
-	const parts = readSequenceChildren(signature);
-	const r = parts[0];
-	const s = parts[1];
-	if (r === undefined || s === undefined) {
-		throw new Error("Malformed ECDSA DER signature");
-	}
-	return concatFixedWidth(
-		trimLeadingZero(r.value),
-		trimLeadingZero(s.value),
-		partLength,
-	);
-}
-
-function rawEcdsaSignatureToDer(
-	signature: Uint8Array,
-	partLength: number,
-): Uint8Array {
-	if (signature.length !== partLength * 2) {
-		throw new Error("Unexpected ECDSA raw signature length");
-	}
-	return sequence([
-		integer(signature.slice(0, partLength)),
-		integer(signature.slice(partLength)),
-	]);
-}
-
-function alternateEcdsaSignatureEncoding(
-	signature: Uint8Array,
-	partLength: number,
-): Uint8Array | undefined {
-	try {
-		if (signature[0] === 0x30) {
-			return new Uint8Array(derEcdsaSignatureToRaw(signature, partLength));
-		}
-		return new Uint8Array(rawEcdsaSignatureToDer(signature, partLength));
-	} catch {
-		return undefined;
-	}
-}
-
-function trimLeadingZero(bytes: Uint8Array): Uint8Array {
-	let index = 0;
-	while (index < bytes.length - 1 && bytes[index] === 0) {
-		index += 1;
-	}
-	return bytes.slice(index);
-}
-
-function concatFixedWidth(
-	left: Uint8Array,
-	right: Uint8Array,
-	partLength: number,
-): Uint8Array {
-	if (left.length > partLength || right.length > partLength) {
-		throw new Error("ECDSA signature integer too large");
-	}
-	const out = new Uint8Array(partLength * 2);
-	out.set(left, partLength - left.length);
-	out.set(right, out.length - right.length);
-	return out;
-}
-
-function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-	const out = new ArrayBuffer(bytes.length);
-	new Uint8Array(out).set(bytes);
-	return out;
 }
 
 function isSameCertificate(

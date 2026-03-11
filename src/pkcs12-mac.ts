@@ -1,4 +1,13 @@
-import { integerFromNumber, nullValue, objectIdentifier, octetString, readSequenceChildren, sequence } from "./der.ts";
+import { decodeIntegerNumber, decodeObjectIdentifier, toArrayBuffer, toHex } from "./asn1.ts";
+import {
+	concatBytes,
+	integerFromNumber,
+	nullValue,
+	objectIdentifier,
+	octetString,
+	readSequenceChildren,
+	sequence,
+} from "./der.ts";
 import { getCrypto } from "./keys.ts";
 import { OIDS } from "./oids.ts";
 
@@ -91,7 +100,7 @@ export async function parsePkcs12MacData(
 		digestAlgorithmOid,
 		digestHex: toHex(digest.value),
 		saltHex: toHex(salt.value),
-		iterations: decodeInteger(iterations.value),
+		iterations: decodeIntegerNumber(iterations.value),
 	};
 	if (password === undefined) {
 		return parsed;
@@ -141,11 +150,11 @@ async function derivePkcs12Key(
 	const passwordBytes = encodePkcs12Password(password);
 	const S = repeatToMultiple(salt, v);
 	const P = repeatToMultiple(passwordBytes, v);
-	let I = concatBytes(S, P);
+	let I = concatBytes([S, P]);
 	const blocks = Math.ceil(length / u);
 	const output = new Uint8Array(blocks * u);
 	for (let index = 0; index < blocks; index += 1) {
-		let A = await digestSha256(concatBytes(D, I));
+		let A = await digestSha256(concatBytes([D, I]));
 		for (let round = 1; round < iterations; round += 1) {
 			A = await digestSha256(A);
 		}
@@ -205,13 +214,6 @@ function addBlockInPlace(block: Uint8Array, addend: Uint8Array): void {
 	}
 }
 
-function concatBytes(left: Uint8Array, right: Uint8Array): Uint8Array {
-	const out = new Uint8Array(left.length + right.length);
-	out.set(left, 0);
-	out.set(right, left.length);
-	return out;
-}
-
 function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
 	if (left.length !== right.length) {
 		return false;
@@ -221,45 +223,4 @@ function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
 		result |= (left[index] ?? 0) ^ (right[index] ?? 0);
 	}
 	return result === 0;
-}
-
-function decodeObjectIdentifier(bytes: Uint8Array): string {
-	const first = bytes[0];
-	if (first === undefined) {
-		throw new Error("OID is empty");
-	}
-	const values = [Math.floor(first / 40), first % 40];
-	let current = 0;
-	for (let index = 1; index < bytes.length; index += 1) {
-		const next = bytes[index];
-		if (next === undefined) {
-			throw new Error("Malformed OID");
-		}
-		current = (current << 7) | (next & 0x7f);
-		if ((next & 0x80) === 0) {
-			values.push(current);
-			current = 0;
-		}
-	}
-	return values.join(".");
-}
-
-function decodeInteger(bytes: Uint8Array): number {
-	let value = 0;
-	for (const byte of bytes) {
-		value = (value << 8) | byte;
-	}
-	return value;
-}
-
-function toHex(bytes: Uint8Array): string {
-	return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join(
-		"",
-	);
-}
-
-function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-	const out = new ArrayBuffer(bytes.length);
-	new Uint8Array(out).set(bytes);
-	return out;
 }

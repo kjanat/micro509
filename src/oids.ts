@@ -60,4 +60,4 @@ export const OIDS = {
 	emailProtection: "1.3.6.1.5.5.7.3.4",
 	timeStamping: "1.3.6.1.5.5.7.3.8",
 	ocspSigning: "1.3.6.1.5.5.7.3.9",
-};
+} as const satisfies Record<string, string>;

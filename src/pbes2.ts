@@ -1,3 +1,4 @@
+import { decodeIntegerNumber, decodeObjectIdentifier, toArrayBuffer } from "./asn1.ts";
 import { integerFromNumber, nullValue, objectIdentifier, octetString, readSequenceChildren, sequence } from "./der.ts";
 import { getCrypto } from "./keys.ts";
 import { OIDS } from "./oids.ts";
@@ -151,7 +152,7 @@ export function parsePbes2AlgorithmIdentifier(
 	}
 	return {
 		salt: new Uint8Array(salt.value),
-		iterations: decodeInteger(iterations.value),
+		iterations: decodeIntegerNumber(iterations.value),
 		iv: new Uint8Array(iv.value),
 	};
 }
@@ -181,39 +182,4 @@ async function deriveAesKey(
 		false,
 		usages,
 	);
-}
-
-function decodeObjectIdentifier(bytes: Uint8Array): string {
-	const first = bytes[0];
-	if (first === undefined) {
-		throw new Error("OID is empty");
-	}
-	const values = [Math.floor(first / 40), first % 40];
-	let current = 0;
-	for (let index = 1; index < bytes.length; index += 1) {
-		const next = bytes[index];
-		if (next === undefined) {
-			throw new Error("Malformed OID");
-		}
-		current = (current << 7) | (next & 0x7f);
-		if ((next & 0x80) === 0) {
-			values.push(current);
-			current = 0;
-		}
-	}
-	return values.join(".");
-}
-
-function decodeInteger(bytes: Uint8Array): number {
-	let value = 0;
-	for (const byte of bytes) {
-		value = (value << 8) | byte;
-	}
-	return value;
-}
-
-function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-	const out = new ArrayBuffer(bytes.length);
-	new Uint8Array(out).set(bytes);
-	return out;
 }

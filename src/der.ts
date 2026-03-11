@@ -33,7 +33,15 @@ export function sequence(parts: readonly Uint8Array[]): Uint8Array {
 }
 
 export function setOf(parts: readonly Uint8Array[]): Uint8Array {
-	return tlv(0x31, concatBytes(parts));
+	const sorted = parts.slice().sort((a, b) => {
+		const len = Math.min(a.length, b.length);
+		for (let i = 0; i < len; i++) {
+			const diff = (a[i] ?? 0) - (b[i] ?? 0);
+			if (diff !== 0) return diff;
+		}
+		return a.length - b.length;
+	});
+	return tlv(0x31, concatBytes(sorted));
 }
 
 export function explicitContext(tag: number, value: Uint8Array): Uint8Array {
@@ -104,6 +112,18 @@ export function octetString(value: Uint8Array): Uint8Array {
 }
 
 export function bitString(value: Uint8Array, unusedBits = 0): Uint8Array {
+	if (unusedBits < 0 || unusedBits > 7) {
+		throw new Error("unusedBits must be between 0 and 7");
+	}
+	if (value.length === 0 && unusedBits !== 0) {
+		throw new Error("unusedBits must be 0 when value is empty");
+	}
+	if (value.length > 0 && unusedBits > 0) {
+		const lastByte = value[value.length - 1] ?? 0;
+		if ((lastByte & ((1 << unusedBits) - 1)) !== 0) {
+			throw new Error("unused bits in the last byte must be zero");
+		}
+	}
 	return tlv(0x03, concatBytes([Uint8Array.of(unusedBits), value]));
 }
 
@@ -112,10 +132,20 @@ export function utf8String(value: string): Uint8Array {
 }
 
 export function printableString(value: string): Uint8Array {
+	if (!/^[A-Za-z0-9 '()+,\-./:=?]*$/.test(value)) {
+		throw new Error(
+			"Invalid PrintableString: contains characters outside the allowed set",
+		);
+	}
 	return tlv(0x13, new TextEncoder().encode(value));
 }
 
 export function ia5String(value: string): Uint8Array {
+	for (let i = 0; i < value.length; i++) {
+		if (value.charCodeAt(i) > 0x7f) {
+			throw new Error("Invalid IA5String: contains non-ASCII characters");
+		}
+	}
 	return tlv(0x16, new TextEncoder().encode(value));
 }
 
@@ -128,6 +158,14 @@ export function objectIdentifier(oid: string): Uint8Array {
 	const [first, second, ...rest] = segments;
 	if (first === undefined || second === undefined) {
 		throw new Error(`Invalid OID: ${oid}`);
+	}
+	if (first !== 0 && first !== 1 && first !== 2) {
+		throw new Error(`Invalid OID first arc: ${first}`);
+	}
+	if ((first === 0 || first === 1) && second >= 40) {
+		throw new Error(
+			`Invalid OID second arc: ${second} (must be < 40 when first arc is ${first})`,
+		);
 	}
 	const bytes: number[] = [first * 40 + second];
 	for (const segment of rest) {

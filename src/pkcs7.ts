@@ -1,5 +1,7 @@
+import { childrenOf, decodeIntegerNumber, decodeObjectIdentifier, requireElement, toHex } from "./asn1.ts";
 import {
 	concatBytes,
+	type DerElement,
 	explicitContext,
 	integerFromNumber,
 	objectIdentifier,
@@ -9,10 +11,10 @@ import {
 	setOf,
 	tlv,
 } from "./der.ts";
-import { getCrypto, importSpkiDer, type PublicKeyImportInput } from "./keys.ts";
 import { OIDS } from "./oids.ts";
 import { parseCertificateDer, type ParsedCertificate } from "./parse.ts";
 import { base64Encode, pemEncode, splitPemBlocks } from "./pem.ts";
+import { verifySignedData } from "./sig-verify.ts";
 
 export type Pkcs7CertificateSource = string | Uint8Array;
 
@@ -115,7 +117,7 @@ export function parsePkcs7SignedDataDer(
 		throw new Error("PKCS#7 content is not signedData");
 	}
 	const signedData = childAt(der, content, 0, "signedData");
-	const signedDataChildren = childrenOfElements(der, signedData);
+	const signedDataChildren = childrenOf(der, signedData);
 	const version = signedDataChildren[0];
 	const digestAlgorithms = signedDataChildren[1];
 	const encapContentInfo = signedDataChildren[2];
@@ -141,7 +143,7 @@ export function parsePkcs7SignedDataDer(
 	}
 	return {
 		contentTypeOid,
-		version: decodeInteger(version.value),
+		version: decodeIntegerNumber(version.value),
 		digestAlgorithmOids: parseDigestAlgorithms(der, digestAlgorithms),
 		encapsulatedContentTypeOid: decodeObjectIdentifier(encapType.value),
 		...(encapContent === undefined
@@ -226,225 +228,6 @@ function normalizeCertificateSource(
 	return [new Uint8Array(source)];
 }
 
-async function verifySignedData(
-	signatureAlgorithmOid: string,
-	publicKeyAlgorithmOid: string,
-	publicKeyParametersOid: string | undefined,
-	spkiDer: Uint8Array,
-	signatureValue: Uint8Array,
-	data: Uint8Array,
-): Promise<boolean> {
-	const config = getVerifySignatureConfig(
-		signatureAlgorithmOid,
-		publicKeyAlgorithmOid,
-		publicKeyParametersOid,
-	);
-	const key = await importSpkiDer(spkiDer, config.importAlgorithm);
-	const subtle = getCrypto().subtle;
-	const signatureView = toArrayBuffer(signatureValue);
-	const dataView = toArrayBuffer(data);
-	if (await subtle.verify(config.verifyParams, key, signatureView, dataView)) {
-		return true;
-	}
-	if (config.ecdsaRawSignatureBytes !== undefined) {
-		const alternate = alternateEcdsaSignatureEncoding(
-			signatureValue,
-			config.ecdsaRawSignatureBytes / 2,
-		);
-		if (alternate !== undefined) {
-			return subtle.verify(
-				config.verifyParams,
-				key,
-				toArrayBuffer(alternate),
-				dataView,
-			);
-		}
-	}
-	return false;
-}
-
-function getVerifySignatureConfig(
-	signatureAlgorithmOid: string,
-	publicKeyAlgorithmOid: string,
-	publicKeyParametersOid: string | undefined,
-): {
-	readonly importAlgorithm: PublicKeyImportInput;
-	readonly verifyParams: Algorithm | EcdsaParams;
-	readonly ecdsaRawSignatureBytes?: number;
-} {
-	switch (signatureAlgorithmOid) {
-		case OIDS.sha256WithRSAEncryption:
-			return {
-				importAlgorithm: requireRsaPublicKey(publicKeyAlgorithmOid, "SHA-256"),
-				verifyParams: { name: "RSASSA-PKCS1-v1_5" },
-			};
-		case OIDS.sha384WithRSAEncryption:
-			return {
-				importAlgorithm: requireRsaPublicKey(publicKeyAlgorithmOid, "SHA-384"),
-				verifyParams: { name: "RSASSA-PKCS1-v1_5" },
-			};
-		case OIDS.sha512WithRSAEncryption:
-			return {
-				importAlgorithm: requireRsaPublicKey(publicKeyAlgorithmOid, "SHA-512"),
-				verifyParams: { name: "RSASSA-PKCS1-v1_5" },
-			};
-		case OIDS.ecdsaWithSHA256:
-			return {
-				importAlgorithm: requireEcPublicKey(
-					publicKeyAlgorithmOid,
-					publicKeyParametersOid,
-				),
-				verifyParams: { name: "ECDSA", hash: "SHA-256" },
-				ecdsaRawSignatureBytes: curveBytes(publicKeyParametersOid),
-			};
-		case OIDS.ecdsaWithSHA384:
-			return {
-				importAlgorithm: requireEcPublicKey(
-					publicKeyAlgorithmOid,
-					publicKeyParametersOid,
-				),
-				verifyParams: { name: "ECDSA", hash: "SHA-384" },
-				ecdsaRawSignatureBytes: curveBytes(publicKeyParametersOid),
-			};
-		case OIDS.ed25519:
-			if (publicKeyAlgorithmOid !== OIDS.ed25519) {
-				throw new Error("Ed25519 signature requires Ed25519 signer public key");
-			}
-			return {
-				importAlgorithm: { kind: "ed25519" },
-				verifyParams: { name: "Ed25519" },
-			};
-		default:
-			throw new Error(
-				`Unsupported signature algorithm OID: ${signatureAlgorithmOid}`,
-			);
-	}
-}
-
-function requireRsaPublicKey(
-	publicKeyAlgorithmOid: string,
-	hash: "SHA-256" | "SHA-384" | "SHA-512",
-): PublicKeyImportInput {
-	if (publicKeyAlgorithmOid !== OIDS.rsaEncryption) {
-		throw new Error("RSA signature requires RSA signer public key");
-	}
-	return { kind: "rsa", hash };
-}
-
-function requireEcPublicKey(
-	publicKeyAlgorithmOid: string,
-	publicKeyParametersOid: string | undefined,
-): PublicKeyImportInput {
-	if (publicKeyAlgorithmOid !== OIDS.ecPublicKey) {
-		throw new Error("ECDSA signature requires EC signer public key");
-	}
-	switch (publicKeyParametersOid) {
-		case OIDS.prime256v1:
-			return { kind: "ecdsa", namedCurve: "P-256" };
-		case OIDS.secp384r1:
-			return { kind: "ecdsa", namedCurve: "P-384" };
-		default:
-			throw new Error(
-				`Unsupported EC curve OID: ${publicKeyParametersOid ?? "missing"}`,
-			);
-	}
-}
-
-function curveBytes(parametersOid: string | undefined): number {
-	switch (parametersOid) {
-		case OIDS.prime256v1:
-			return 64;
-		case OIDS.secp384r1:
-			return 96;
-		default:
-			throw new Error(
-				`Unsupported EC curve OID: ${parametersOid ?? "missing"}`,
-			);
-	}
-}
-
-function alternateEcdsaSignatureEncoding(
-	signature: Uint8Array,
-	partLength: number,
-): Uint8Array | undefined {
-	try {
-		if (signature[0] === 0x30) {
-			return derEcdsaSignatureToRaw(signature, partLength);
-		}
-		return rawEcdsaSignatureToDer(signature, partLength);
-	} catch {
-		return undefined;
-	}
-}
-
-function derEcdsaSignatureToRaw(
-	signature: Uint8Array,
-	partLength: number,
-): Uint8Array {
-	const parts = readSequenceChildren(signature);
-	const r = parts[0];
-	const s = parts[1];
-	if (r === undefined || s === undefined) {
-		throw new Error("Malformed ECDSA DER signature");
-	}
-	return concatFixedWidth(
-		trimLeadingZero(r.value),
-		trimLeadingZero(s.value),
-		partLength,
-	);
-}
-
-function rawEcdsaSignatureToDer(
-	signature: Uint8Array,
-	partLength: number,
-): Uint8Array {
-	if (signature.length !== partLength * 2) {
-		throw new Error("Unexpected ECDSA raw signature length");
-	}
-	return sequence([
-		integerFromBytes(signature.slice(0, partLength)),
-		integerFromBytes(signature.slice(partLength)),
-	]);
-}
-
-function integerFromBytes(bytes: Uint8Array): Uint8Array {
-	if ((bytes[0] ?? 0) >= 0x80) {
-		const out = new Uint8Array(bytes.length + 1);
-		out[0] = 0;
-		out.set(bytes, 1);
-		return tlv(0x02, out);
-	}
-	return tlv(0x02, bytes);
-}
-
-function trimLeadingZero(bytes: Uint8Array): Uint8Array {
-	let index = 0;
-	while (index < bytes.length - 1 && bytes[index] === 0) {
-		index += 1;
-	}
-	return bytes.slice(index);
-}
-
-function concatFixedWidth(
-	left: Uint8Array,
-	right: Uint8Array,
-	partLength: number,
-): Uint8Array {
-	if (left.length > partLength || right.length > partLength) {
-		throw new Error("ECDSA signature integer too large");
-	}
-	const out = new Uint8Array(partLength * 2);
-	out.set(left, partLength - left.length);
-	out.set(right, out.length - right.length);
-	return out;
-}
-
-function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-	const out = new ArrayBuffer(bytes.length);
-	new Uint8Array(out).set(bytes);
-	return out;
-}
-
 function parseCertificateSet(
 	source: Uint8Array,
 	certificates: ReturnType<typeof readElement> | undefined,
@@ -467,7 +250,7 @@ function parseDigestAlgorithms(
 	element: ReturnType<typeof readElement>,
 ): readonly string[] {
 	const digests: string[] = [];
-	for (const child of childrenOfElements(source, element)) {
+	for (const child of childrenOf(source, element)) {
 		const childDer = source.slice(child.start - child.headerLength, child.end);
 		const parts = readSequenceChildren(childDer);
 		const oid = parts[0];
@@ -483,7 +266,7 @@ function parseSignerInfos(
 	element: ReturnType<typeof readElement>,
 ): readonly ParsedPkcs7SignerInfo[] {
 	const signers: ParsedPkcs7SignerInfo[] = [];
-	for (const signerInfo of childrenOfElements(source, element)) {
+	for (const signerInfo of childrenOf(source, element)) {
 		const signerDer = source.slice(
 			signerInfo.start - signerInfo.headerLength,
 			signerInfo.end,
@@ -513,7 +296,7 @@ function parseSignerInfos(
 			digestAlgorithm.end,
 		);
 		const digestAlgorithmOid = decodeObjectIdentifier(
-			requireDefined(
+			requireElement(
 				readSequenceChildren(digestAlgorithmDer)[0],
 				"digest algorithm OID",
 			).value,
@@ -523,7 +306,7 @@ function parseSignerInfos(
 			signatureAlgorithm.end,
 		);
 		const signatureAlgorithmOid = decodeObjectIdentifier(
-			requireDefined(
+			requireElement(
 				readSequenceChildren(signatureAlgorithmDer)[0],
 				"signature algorithm OID",
 			).value,
@@ -532,7 +315,7 @@ function parseSignerInfos(
 			signerDer.slice(sid.start - sid.headerLength, sid.end),
 		);
 		signers.push({
-			version: decodeInteger(version.value),
+			version: decodeIntegerNumber(version.value),
 			...(parsedSid.issuerDerHex === undefined
 				? {}
 				: { issuerDerHex: parsedSid.issuerDerHex }),
@@ -580,47 +363,12 @@ function parseSignerIdentifier(der: Uint8Array): {
 	};
 }
 
-function childrenOfElements(
-	source: Uint8Array,
-	parent: { readonly start: number; readonly end: number },
-): ReturnType<typeof readElement>[] {
-	const children: ReturnType<typeof readElement>[] = [];
-	let offset = parent.start;
-	while (offset < parent.end) {
-		const child = readElement(source, offset);
-		children.push(child);
-		offset = child.end;
-	}
-	return children;
-}
-
-function decodeInteger(bytes: Uint8Array): number {
-	let value = 0;
-	for (const byte of bytes) {
-		value = (value << 8) | byte;
-	}
-	return value;
-}
-
-function requireDefined<T>(value: T | undefined, label: string): T {
-	if (value === undefined) {
-		throw new Error(`Missing ${label}`);
-	}
-	return value;
-}
-
-function toHex(bytes: Uint8Array): string {
-	return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join(
-		"",
-	);
-}
-
 function childAt(
 	source: Uint8Array,
-	parent: { readonly start: number; readonly end: number },
+	parent: DerElement,
 	index: number,
 	label: string,
-): { readonly start: number; readonly end: number } {
+): DerElement {
 	let offset = parent.start;
 	let currentIndex = 0;
 	while (offset < parent.end) {
@@ -632,25 +380,4 @@ function childAt(
 		currentIndex += 1;
 	}
 	throw new Error(`Missing ${label}`);
-}
-
-function decodeObjectIdentifier(bytes: Uint8Array): string {
-	const first = bytes[0];
-	if (first === undefined) {
-		throw new Error("OID is empty");
-	}
-	const values = [Math.floor(first / 40), first % 40];
-	let current = 0;
-	for (let index = 1; index < bytes.length; index += 1) {
-		const next = bytes[index];
-		if (next === undefined) {
-			throw new Error("Malformed OID");
-		}
-		current = (current << 7) | (next & 0x7f);
-		if ((next & 0x80) === 0) {
-			values.push(current);
-			current = 0;
-		}
-	}
-	return values.join(".");
 }

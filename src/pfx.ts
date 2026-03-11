@@ -1,3 +1,4 @@
+import { childrenOf, decodeObjectIdentifier, toHex } from "./asn1.ts";
 import {
 	type DerElement,
 	explicitContext,
@@ -507,17 +508,6 @@ function extractContextChild(
 	return readElement(source, element.start);
 }
 
-function childrenOf(source: Uint8Array, parent: DerElement): DerElement[] {
-	const children: DerElement[] = [];
-	let offset = parent.start;
-	while (offset < parent.end) {
-		const child = readElement(source, offset);
-		children.push(child);
-		offset = child.end;
-	}
-	return children;
-}
-
 function bmpString(value: string): Uint8Array {
 	const bytes = new Uint8Array(value.length * 2);
 	for (let index = 0; index < value.length; index += 1) {
@@ -540,31 +530,4 @@ function decodeBmpString(der: Uint8Array): string {
 		value += String.fromCharCode((left << 8) | right);
 	}
 	return value;
-}
-
-function decodeObjectIdentifier(bytes: Uint8Array): string {
-	const first = bytes[0];
-	if (first === undefined) {
-		throw new Error("OID is empty");
-	}
-	const values = [Math.floor(first / 40), first % 40];
-	let current = 0;
-	for (let index = 1; index < bytes.length; index += 1) {
-		const next = bytes[index];
-		if (next === undefined) {
-			throw new Error("Malformed OID");
-		}
-		current = (current << 7) | (next & 0x7f);
-		if ((next & 0x80) === 0) {
-			values.push(current);
-			current = 0;
-		}
-	}
-	return values.join(".");
-}
-
-function toHex(bytes: Uint8Array): string {
-	return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join(
-		"",
-	);
 }

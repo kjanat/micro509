@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import {
 	bitString,
 	bool,
-	explicitContext,
+	concatBytes,
+	implicitConstructedContext,
 	implicitPrimitiveContext,
 	integerFromNumber,
 	objectIdentifier,
@@ -27,7 +28,12 @@ export type SubjectAltName =
 	| { readonly type: "dns"; readonly value: string }
 	| { readonly type: "ip"; readonly value: string }
 	| { readonly type: "email"; readonly value: string }
-	| { readonly type: "uri"; readonly value: string };
+	| { readonly type: "uri"; readonly value: string }
+	| {
+		readonly type: "unknown";
+		readonly tag: number;
+		readonly value: Uint8Array;
+	};
 
 export interface BasicConstraints {
 	readonly ca: boolean;
@@ -350,6 +356,12 @@ export function encodeSubjectAltName(value: SubjectAltName): Uint8Array {
 			return implicitPrimitiveContext(6, new TextEncoder().encode(value.value));
 		case "ip":
 			return implicitPrimitiveContext(7, encodeIpAddress(value.value));
+		case "unknown":
+			return new Uint8Array(value.value);
+		default: {
+			const _exhaustive: never = value;
+			throw new Error(`Unhandled SubjectAltName type: ${String(_exhaustive)}`);
+		}
 	}
 }
 
@@ -380,11 +392,11 @@ export function encodeCrlDistributionPoints(
 	return sequence(
 		uris.map((uri) =>
 			sequence([
-				explicitContext(
+				implicitConstructedContext(
 					0,
-					explicitContext(
+					implicitConstructedContext(
 						0,
-						sequence([
+						concatBytes([
 							implicitPrimitiveContext(6, new TextEncoder().encode(uri)),
 						]),
 					),

@@ -1,4 +1,5 @@
 import { createHash, webcrypto } from "node:crypto";
+import { decodeObjectIdentifier, hexToBytes, toArrayBuffer, toHex } from "./asn1.ts";
 import { nullValue, objectIdentifier, octetString, readElement, readSequenceChildren, sequence } from "./der.ts";
 import { OIDS } from "./oids.ts";
 import { decryptPbes2, encryptPbes2, type Pbes2EncryptionOptions } from "./pbes2.ts";
@@ -504,27 +505,6 @@ function namedCurveToOid(
 	}
 }
 
-function decodeObjectIdentifier(bytes: Uint8Array): string {
-	const first = bytes[0];
-	if (first === undefined) {
-		throw new Error("OID is empty");
-	}
-	const values = [Math.floor(first / 40), first % 40];
-	let current = 0;
-	for (let index = 1; index < bytes.length; index += 1) {
-		const next = bytes[index];
-		if (next === undefined) {
-			throw new Error("Malformed OID");
-		}
-		current = (current << 7) | (next & 0x7f);
-		if ((next & 0x80) === 0) {
-			values.push(current);
-			current = 0;
-		}
-	}
-	return values.join(".");
-}
-
 async function encryptTraditionalPem(
 	label: "RSA PRIVATE KEY" | "EC PRIVATE KEY",
 	der: Uint8Array,
@@ -683,28 +663,4 @@ function parseTraditionalPem(pem: string): {
 	}
 	const body = lines.slice(index, lines.length - 1).join("");
 	return { label, headers, base64Body: body };
-}
-
-function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-	const out = new ArrayBuffer(bytes.length);
-	new Uint8Array(out).set(bytes);
-	return out;
-}
-
-function toHex(bytes: Uint8Array): string {
-	return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join(
-		"",
-	);
-}
-
-function hexToBytes(value: string): Uint8Array {
-	const normalized = value.length % 2 === 0 ? value : `0${value}`;
-	const out = new Uint8Array(normalized.length / 2);
-	for (let index = 0; index < out.length; index += 1) {
-		out[index] = Number.parseInt(
-			normalized.slice(index * 2, index * 2 + 2),
-			16,
-		);
-	}
-	return out;
 }

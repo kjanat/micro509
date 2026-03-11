@@ -1,3 +1,14 @@
+import {
+	childrenOf,
+	decodeBoolean,
+	decodeIntegerNumber,
+	decodeObjectIdentifier,
+	decodeString,
+	extractBitStringValue,
+	parseTime,
+	requireElement,
+	toHex,
+} from "./asn1.ts";
 import { type DerElement, readElement } from "./der.ts";
 import {
 	type AuthorityInformationAccess,
@@ -52,12 +63,10 @@ export function defineExtensionDecoderMap<TMap extends ExtensionDecoderMap>(
 
 export type ExtensionDecoderMap = Record<string, ExtensionDecoder<unknown>>;
 
-export type DecodedExtensionMap<TMap extends ExtensionDecoderMap> =
-	& {
-		[TKey in keyof TMap]?: TMap[TKey] extends ExtensionDecoder<infer TValue> ? DecodedExtensionValue<TValue>
-			: never;
-	}
-	& Partial<Record<keyof TMap, DecodedExtensionValue<unknown>>>;
+export type DecodedExtensionMap<TMap extends ExtensionDecoderMap> = {
+	[TKey in keyof TMap]?: TMap[TKey] extends ExtensionDecoder<infer TValue> ? DecodedExtensionValue<TValue>
+		: never;
+};
 
 export interface DecodedExtensionValue<TValue> {
 	readonly oid: string;
@@ -589,6 +598,9 @@ function parseBasicConstraints(bytes: Uint8Array): BasicConstraints {
 function parseKeyUsage(bytes: Uint8Array): readonly KeyUsage[] {
 	const bitString = requireElement(readElement(bytes), "keyUsage bit string");
 	const unusedBits = bitString.value[0] ?? 0;
+	if (unusedBits > 7) {
+		throw new Error("Invalid BIT STRING");
+	}
 	const data = bitString.value.slice(1);
 	const usages: KeyUsage[] = [];
 	const candidates: readonly KeyUsage[] = [
@@ -613,9 +625,6 @@ function parseKeyUsage(bytes: Uint8Array): readonly KeyUsage[] {
 			}
 		}
 	}
-	if (unusedBits > 7) {
-		throw new Error("Invalid BIT STRING");
-	}
 	return usages;
 }
 
@@ -637,15 +646,28 @@ function parseSubjectAltNames(bytes: Uint8Array): readonly SubjectAltName[] {
 	return childrenOf(bytes, sequenceElement).map((element) => {
 		switch (element.tag) {
 			case 0x81:
-				return { type: "email", value: textDecoder.decode(element.value) };
+				return {
+					type: "email" as const,
+					value: textDecoder.decode(element.value),
+				};
 			case 0x82:
-				return { type: "dns", value: textDecoder.decode(element.value) };
+				return {
+					type: "dns" as const,
+					value: textDecoder.decode(element.value),
+				};
 			case 0x86:
-				return { type: "uri", value: textDecoder.decode(element.value) };
+				return {
+					type: "uri" as const,
+					value: textDecoder.decode(element.value),
+				};
 			case 0x87:
-				return { type: "ip", value: decodeIpAddress(element.value) };
+				return { type: "ip" as const, value: decodeIpAddress(element.value) };
 			default:
-				throw new Error(`Unsupported GeneralName tag: ${element.tag}`);
+				return {
+					type: "unknown" as const,
+					tag: element.tag,
+					value: bytes.slice(element.start, element.end),
+				};
 		}
 	});
 }
@@ -689,20 +711,13 @@ function parseCrlDistributionPoints(bytes: Uint8Array): readonly string[] {
 			if (child.tag !== 0xa0) {
 				continue;
 			}
-			const distributionPointName = requireElement(
-				childrenOf(bytes, child)[0],
-				"distributionPointName",
-			);
-			if (distributionPointName.tag !== 0xa0) {
-				continue;
-			}
-			const generalNames = requireElement(
-				childrenOf(bytes, distributionPointName)[0],
-				"generalNames",
-			);
-			for (const name of childrenOf(bytes, generalNames)) {
-				if (name.tag === 0x86) {
-					uris.push(textDecoder.decode(name.value));
+			for (const innerChild of childrenOf(bytes, child)) {
+				if (innerChild.tag === 0xa0) {
+					for (const name of childrenOf(bytes, innerChild)) {
+						if (name.tag === 0x86) {
+							uris.push(textDecoder.decode(name.value));
+						}
+					}
 				}
 			}
 		}
@@ -723,76 +738,6 @@ function parseAuthorityKeyIdentifier(bytes: Uint8Array): string | undefined {
 	return undefined;
 }
 
-function parseTime(element: DerElement): Date {
-	const value = textDecoder.decode(element.value);
-	if (element.tag === 0x17) {
-		const yearPrefix = Number.parseInt(value.slice(0, 2), 10) >= 50 ? "19" : "20";
-		return new Date(
-			`${yearPrefix}${value.slice(0, 2)}-${value.slice(2, 4)}-${value.slice(4, 6)}T${value.slice(6, 8)}:${
-				value.slice(
-					8,
-					10,
-				)
-			}:${value.slice(10, 12)}Z`,
-		);
-	}
-	if (element.tag === 0x18) {
-		return new Date(
-			`${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}T${value.slice(8, 10)}:${value.slice(10, 12)}:${
-				value.slice(
-					12,
-					14,
-				)
-			}Z`,
-		);
-	}
-	throw new Error(`Unsupported time tag: ${element.tag}`);
-}
-
-function decodeString(tag: number, bytes: Uint8Array): string {
-	switch (tag) {
-		case 0x0c:
-		case 0x13:
-		case 0x16:
-			return textDecoder.decode(bytes);
-		default:
-			throw new Error(`Unsupported string tag: ${tag}`);
-	}
-}
-
-function decodeBoolean(bytes: Uint8Array): boolean {
-	return (bytes[0] ?? 0) !== 0;
-}
-
-function decodeIntegerNumber(bytes: Uint8Array): number {
-	let value = 0;
-	for (const byte of bytes) {
-		value = (value << 8) | byte;
-	}
-	return value;
-}
-
-function decodeObjectIdentifier(bytes: Uint8Array): string {
-	const first = bytes[0];
-	if (first === undefined) {
-		throw new Error("OID is empty");
-	}
-	const values = [Math.floor(first / 40), first % 40];
-	let current = 0;
-	for (let index = 1; index < bytes.length; index += 1) {
-		const next = bytes[index];
-		if (next === undefined) {
-			throw new Error("Malformed OID");
-		}
-		current = (current << 7) | (next & 0x7f);
-		if ((next & 0x80) === 0) {
-			values.push(current);
-			current = 0;
-		}
-	}
-	return values.join(".");
-}
-
 function decodeIpAddress(bytes: Uint8Array): string {
 	if (bytes.length === 4) {
 		return Array.from(bytes, (value) => String(value)).join(".");
@@ -807,37 +752,6 @@ function decodeIpAddress(bytes: Uint8Array): string {
 		return groups.join(":");
 	}
 	throw new Error("Unsupported IP address length");
-}
-
-function extractBitStringValue(element: DerElement): Uint8Array {
-	if (element.tag !== 0x03) {
-		throw new Error("Expected BIT STRING");
-	}
-	return element.value.slice(1);
-}
-
-function childrenOf(source: Uint8Array, parent: DerElement): DerElement[] {
-	const children: DerElement[] = [];
-	let offset = parent.start;
-	while (offset < parent.end) {
-		const child = readElement(source, offset);
-		children.push(child);
-		offset = child.end;
-	}
-	return children;
-}
-
-function requireElement<T>(value: T | undefined, label: string): T {
-	if (value === undefined) {
-		throw new Error(`Missing ${label}`);
-	}
-	return value;
-}
-
-function toHex(bytes: Uint8Array): string {
-	return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join(
-		"",
-	);
 }
 
 function nameKeyFromOid(oid: string): NameFieldKey | undefined {
