@@ -7,7 +7,9 @@ import {
 	readSequenceChildren,
 	sequence,
 	setOf,
+	tlv,
 } from "./der.ts";
+import { getCrypto, importSpkiDer, type PublicKeyImportInput } from "./keys.ts";
 import { OIDS } from "./oids.ts";
 import { parseCertificateDer, type ParsedCertificate } from "./parse.ts";
 import { base64Encode, pemEncode, splitPemBlocks } from "./pem.ts";
@@ -27,6 +29,7 @@ export interface ParsedPkcs7SignerInfo {
 	readonly digestAlgorithmOid: string;
 	readonly signatureAlgorithmOid: string;
 	readonly signatureHex: string;
+	readonly signature: Uint8Array;
 }
 
 export interface ParsedPkcs7SignedData {
@@ -34,9 +37,21 @@ export interface ParsedPkcs7SignedData {
 	readonly version: number;
 	readonly digestAlgorithmOids: readonly string[];
 	readonly encapsulatedContentTypeOid: string;
+	readonly encapsulatedContent?: Uint8Array;
 	readonly certificates: readonly ParsedCertificate[];
 	readonly signerInfos: readonly ParsedPkcs7SignerInfo[];
 }
+
+export type VerifyPkcs7SignedDataResult =
+	| { readonly ok: true; readonly value: ParsedPkcs7SignedData }
+	| {
+		readonly ok: false;
+		readonly code:
+			| "signer_not_found"
+			| "signature_invalid"
+			| "content_missing";
+		readonly message: string;
+	};
 
 export function createPkcs7CertBagDer(
 	certificates: readonly Pkcs7CertificateSource[],
@@ -120,6 +135,7 @@ export function parsePkcs7SignedDataDer(
 	);
 	const encapChildren = readSequenceChildren(encapDer);
 	const encapType = encapChildren[0];
+	const encapContent = encapChildren[1];
 	if (encapType === undefined) {
 		throw new Error("Malformed EncapsulatedContentInfo");
 	}
@@ -128,6 +144,14 @@ export function parsePkcs7SignedDataDer(
 		version: decodeInteger(version.value),
 		digestAlgorithmOids: parseDigestAlgorithms(der, digestAlgorithms),
 		encapsulatedContentTypeOid: decodeObjectIdentifier(encapType.value),
+		...(encapContent === undefined
+			? {}
+			: {
+				encapsulatedContent: extractEncapsulatedContent(
+					encapDer,
+					encapContent,
+				),
+			}),
 		certificates: parseCertificateSet(der, certificates),
 		signerInfos: parseSignerInfos(der, signerInfos),
 	};
@@ -142,6 +166,55 @@ export function parsePkcs7SignedDataPem(pem: string): ParsedPkcs7SignedData {
 	return parsePkcs7SignedDataDer(block.bytes);
 }
 
+export async function verifyPkcs7SignedData(
+	input: string | Uint8Array | ParsedPkcs7SignedData,
+): Promise<VerifyPkcs7SignedDataResult> {
+	const parsed = typeof input === "string"
+		? parsePkcs7SignedDataPem(input)
+		: input instanceof Uint8Array
+		? parsePkcs7SignedDataDer(input)
+		: input;
+	if (parsed.encapsulatedContent === undefined) {
+		return {
+			ok: false,
+			code: "content_missing",
+			message: "SignedData encapsulated content is missing",
+		};
+	}
+	for (const signerInfo of parsed.signerInfos) {
+		const signer = parsed.certificates.find(
+			(certificate) =>
+				signerInfo.serialNumberHex !== undefined
+				&& signerInfo.issuerDerHex !== undefined
+				&& certificate.serialNumberHex === signerInfo.serialNumberHex
+				&& certificate.issuer.derHex === signerInfo.issuerDerHex,
+		);
+		if (signer === undefined) {
+			return {
+				ok: false,
+				code: "signer_not_found",
+				message: "Signer certificate not found in SignedData certificates",
+			};
+		}
+		const verified = await verifySignedData(
+			signerInfo.signatureAlgorithmOid,
+			signer.publicKeyAlgorithmOid,
+			signer.publicKeyParametersOid,
+			signer.subjectPublicKeyInfoDer,
+			signerInfo.signature,
+			parsed.encapsulatedContent,
+		);
+		if (!verified) {
+			return {
+				ok: false,
+				code: "signature_invalid",
+				message: "SignedData signature does not verify",
+			};
+		}
+	}
+	return { ok: true, value: parsed };
+}
+
 function normalizeCertificateSource(
 	source: Pkcs7CertificateSource,
 ): readonly Uint8Array[] {
@@ -151,6 +224,225 @@ function normalizeCertificateSource(
 			.map((block) => new Uint8Array(block.bytes));
 	}
 	return [new Uint8Array(source)];
+}
+
+async function verifySignedData(
+	signatureAlgorithmOid: string,
+	publicKeyAlgorithmOid: string,
+	publicKeyParametersOid: string | undefined,
+	spkiDer: Uint8Array,
+	signatureValue: Uint8Array,
+	data: Uint8Array,
+): Promise<boolean> {
+	const config = getVerifySignatureConfig(
+		signatureAlgorithmOid,
+		publicKeyAlgorithmOid,
+		publicKeyParametersOid,
+	);
+	const key = await importSpkiDer(spkiDer, config.importAlgorithm);
+	const subtle = getCrypto().subtle;
+	const signatureView = toArrayBuffer(signatureValue);
+	const dataView = toArrayBuffer(data);
+	if (await subtle.verify(config.verifyParams, key, signatureView, dataView)) {
+		return true;
+	}
+	if (config.ecdsaRawSignatureBytes !== undefined) {
+		const alternate = alternateEcdsaSignatureEncoding(
+			signatureValue,
+			config.ecdsaRawSignatureBytes / 2,
+		);
+		if (alternate !== undefined) {
+			return subtle.verify(
+				config.verifyParams,
+				key,
+				toArrayBuffer(alternate),
+				dataView,
+			);
+		}
+	}
+	return false;
+}
+
+function getVerifySignatureConfig(
+	signatureAlgorithmOid: string,
+	publicKeyAlgorithmOid: string,
+	publicKeyParametersOid: string | undefined,
+): {
+	readonly importAlgorithm: PublicKeyImportInput;
+	readonly verifyParams: Algorithm | EcdsaParams;
+	readonly ecdsaRawSignatureBytes?: number;
+} {
+	switch (signatureAlgorithmOid) {
+		case OIDS.sha256WithRSAEncryption:
+			return {
+				importAlgorithm: requireRsaPublicKey(publicKeyAlgorithmOid, "SHA-256"),
+				verifyParams: { name: "RSASSA-PKCS1-v1_5" },
+			};
+		case OIDS.sha384WithRSAEncryption:
+			return {
+				importAlgorithm: requireRsaPublicKey(publicKeyAlgorithmOid, "SHA-384"),
+				verifyParams: { name: "RSASSA-PKCS1-v1_5" },
+			};
+		case OIDS.sha512WithRSAEncryption:
+			return {
+				importAlgorithm: requireRsaPublicKey(publicKeyAlgorithmOid, "SHA-512"),
+				verifyParams: { name: "RSASSA-PKCS1-v1_5" },
+			};
+		case OIDS.ecdsaWithSHA256:
+			return {
+				importAlgorithm: requireEcPublicKey(
+					publicKeyAlgorithmOid,
+					publicKeyParametersOid,
+				),
+				verifyParams: { name: "ECDSA", hash: "SHA-256" },
+				ecdsaRawSignatureBytes: curveBytes(publicKeyParametersOid),
+			};
+		case OIDS.ecdsaWithSHA384:
+			return {
+				importAlgorithm: requireEcPublicKey(
+					publicKeyAlgorithmOid,
+					publicKeyParametersOid,
+				),
+				verifyParams: { name: "ECDSA", hash: "SHA-384" },
+				ecdsaRawSignatureBytes: curveBytes(publicKeyParametersOid),
+			};
+		case OIDS.ed25519:
+			if (publicKeyAlgorithmOid !== OIDS.ed25519) {
+				throw new Error("Ed25519 signature requires Ed25519 signer public key");
+			}
+			return {
+				importAlgorithm: { kind: "ed25519" },
+				verifyParams: { name: "Ed25519" },
+			};
+		default:
+			throw new Error(
+				`Unsupported signature algorithm OID: ${signatureAlgorithmOid}`,
+			);
+	}
+}
+
+function requireRsaPublicKey(
+	publicKeyAlgorithmOid: string,
+	hash: "SHA-256" | "SHA-384" | "SHA-512",
+): PublicKeyImportInput {
+	if (publicKeyAlgorithmOid !== OIDS.rsaEncryption) {
+		throw new Error("RSA signature requires RSA signer public key");
+	}
+	return { kind: "rsa", hash };
+}
+
+function requireEcPublicKey(
+	publicKeyAlgorithmOid: string,
+	publicKeyParametersOid: string | undefined,
+): PublicKeyImportInput {
+	if (publicKeyAlgorithmOid !== OIDS.ecPublicKey) {
+		throw new Error("ECDSA signature requires EC signer public key");
+	}
+	switch (publicKeyParametersOid) {
+		case OIDS.prime256v1:
+			return { kind: "ecdsa", namedCurve: "P-256" };
+		case OIDS.secp384r1:
+			return { kind: "ecdsa", namedCurve: "P-384" };
+		default:
+			throw new Error(
+				`Unsupported EC curve OID: ${publicKeyParametersOid ?? "missing"}`,
+			);
+	}
+}
+
+function curveBytes(parametersOid: string | undefined): number {
+	switch (parametersOid) {
+		case OIDS.prime256v1:
+			return 64;
+		case OIDS.secp384r1:
+			return 96;
+		default:
+			throw new Error(
+				`Unsupported EC curve OID: ${parametersOid ?? "missing"}`,
+			);
+	}
+}
+
+function alternateEcdsaSignatureEncoding(
+	signature: Uint8Array,
+	partLength: number,
+): Uint8Array | undefined {
+	try {
+		if (signature[0] === 0x30) {
+			return derEcdsaSignatureToRaw(signature, partLength);
+		}
+		return rawEcdsaSignatureToDer(signature, partLength);
+	} catch {
+		return undefined;
+	}
+}
+
+function derEcdsaSignatureToRaw(
+	signature: Uint8Array,
+	partLength: number,
+): Uint8Array {
+	const parts = readSequenceChildren(signature);
+	const r = parts[0];
+	const s = parts[1];
+	if (r === undefined || s === undefined) {
+		throw new Error("Malformed ECDSA DER signature");
+	}
+	return concatFixedWidth(
+		trimLeadingZero(r.value),
+		trimLeadingZero(s.value),
+		partLength,
+	);
+}
+
+function rawEcdsaSignatureToDer(
+	signature: Uint8Array,
+	partLength: number,
+): Uint8Array {
+	if (signature.length !== partLength * 2) {
+		throw new Error("Unexpected ECDSA raw signature length");
+	}
+	return sequence([
+		integerFromBytes(signature.slice(0, partLength)),
+		integerFromBytes(signature.slice(partLength)),
+	]);
+}
+
+function integerFromBytes(bytes: Uint8Array): Uint8Array {
+	if ((bytes[0] ?? 0) >= 0x80) {
+		const out = new Uint8Array(bytes.length + 1);
+		out[0] = 0;
+		out.set(bytes, 1);
+		return tlv(0x02, out);
+	}
+	return tlv(0x02, bytes);
+}
+
+function trimLeadingZero(bytes: Uint8Array): Uint8Array {
+	let index = 0;
+	while (index < bytes.length - 1 && bytes[index] === 0) {
+		index += 1;
+	}
+	return bytes.slice(index);
+}
+
+function concatFixedWidth(
+	left: Uint8Array,
+	right: Uint8Array,
+	partLength: number,
+): Uint8Array {
+	if (left.length > partLength || right.length > partLength) {
+		throw new Error("ECDSA signature integer too large");
+	}
+	const out = new Uint8Array(partLength * 2);
+	out.set(left, partLength - left.length);
+	out.set(right, out.length - right.length);
+	return out;
+}
+
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+	const out = new ArrayBuffer(bytes.length);
+	new Uint8Array(out).set(bytes);
+	return out;
 }
 
 function parseCertificateSet(
@@ -250,9 +542,24 @@ function parseSignerInfos(
 			digestAlgorithmOid,
 			signatureAlgorithmOid,
 			signatureHex: toHex(signature.value),
+			signature: new Uint8Array(signature.value),
 		});
 	}
 	return signers;
+}
+
+function extractEncapsulatedContent(
+	encapDer: Uint8Array,
+	element: ReturnType<typeof readElement>,
+): Uint8Array {
+	if (element.tag !== 0xa0) {
+		throw new Error("Unexpected encapsulated content tag");
+	}
+	const inner = readElement(encapDer, element.start);
+	if (inner.tag !== 0x04) {
+		throw new Error("Expected encapsulated OCTET STRING");
+	}
+	return inner.value;
 }
 
 function parseSignerIdentifier(der: Uint8Array): {

@@ -85,9 +85,19 @@ export interface ParsedCertificateRevocationList {
 	readonly authorityKeyIdentifier?: string;
 	readonly crlNumber?: number;
 	readonly baseCrlNumber?: number;
+	readonly issuingDistributionPoint?: ParsedIssuingDistributionPoint;
 	readonly issuingDistributionPointUri?: string;
+	readonly freshestCrlDistributionPoints?: readonly ParsedDistributionPoint[];
 	readonly freshestCrlUris?: readonly string[];
 	readonly revokedCertificates: readonly ParsedRevokedCertificate[];
+}
+
+export interface ParsedDistributionPoint {
+	readonly fullNameUris: readonly string[];
+}
+
+export interface ParsedIssuingDistributionPoint {
+	readonly distributionPoint?: ParsedDistributionPoint;
 }
 
 const REVOCATION_REASON_CODES: Record<RevocationReason, number> = {
@@ -216,7 +226,11 @@ export function parseCertificateRevocationListDer(
 	let authorityKeyIdentifier: string | undefined;
 	let crlNumber: number | undefined;
 	let baseCrlNumber: number | undefined;
+	let issuingDistributionPoint: ParsedIssuingDistributionPoint | undefined;
 	let issuingDistributionPointUri: string | undefined;
+	let freshestCrlDistributionPoints:
+		| readonly ParsedDistributionPoint[]
+		| undefined;
 	let freshestCrlUris: readonly string[] | undefined;
 	const maybeExtensions = tbsChildren[cursor];
 	if (maybeExtensions?.tag === 0xa0) {
@@ -247,12 +261,18 @@ export function parseCertificateRevocationListDer(
 				);
 			}
 			if (oid === OIDS.issuingDistributionPoint) {
-				issuingDistributionPointUri = parseIssuingDistributionPoint(
+				issuingDistributionPoint = parseIssuingDistributionPoint(
 					valueElement.value,
 				);
+				issuingDistributionPointUri = issuingDistributionPoint.distributionPoint?.fullNameUris[0];
 			}
 			if (oid === OIDS.freshestCRL) {
-				freshestCrlUris = parseDistributionPointUris(valueElement.value);
+				freshestCrlDistributionPoints = parseDistributionPoints(
+					valueElement.value,
+				);
+				freshestCrlUris = freshestCrlDistributionPoints.flatMap(
+					(entry) => entry.fullNameUris,
+				);
 			}
 		}
 	}
@@ -271,9 +291,15 @@ export function parseCertificateRevocationListDer(
 		...(authorityKeyIdentifier === undefined ? {} : { authorityKeyIdentifier }),
 		...(crlNumber === undefined ? {} : { crlNumber }),
 		...(baseCrlNumber === undefined ? {} : { baseCrlNumber }),
+		...(issuingDistributionPoint === undefined
+			? {}
+			: { issuingDistributionPoint }),
 		...(issuingDistributionPointUri === undefined
 			? {}
 			: { issuingDistributionPointUri }),
+		...(freshestCrlDistributionPoints === undefined
+			? {}
+			: { freshestCrlDistributionPoints }),
 		...(freshestCrlUris === undefined ? {} : { freshestCrlUris }),
 		revokedCertificates,
 	};
@@ -482,7 +508,7 @@ function parseRevokedCertificateExtensions(
 
 function parseIssuingDistributionPoint(
 	valueDer: Uint8Array,
-): string | undefined {
+): ParsedIssuingDistributionPoint {
 	const sequenceElement = readElement(valueDer);
 	for (const child of childrenOf(valueDer, sequenceElement)) {
 		if (child.tag !== 0xa0) {
@@ -495,26 +521,21 @@ function parseIssuingDistributionPoint(
 		if (distributionPointName.tag !== 0xa0) {
 			continue;
 		}
-		for (
-			const generalName of childrenOf(
+		return {
+			distributionPoint: parseDistributionPointName(
 				valueDer,
-				requireElement(
-					childrenOf(valueDer, distributionPointName)[0],
-					"fullName",
-				),
-			)
-		) {
-			if (generalName.tag === 0x86) {
-				return textDecoder.decode(generalName.value);
-			}
-		}
+				distributionPointName,
+			),
+		};
 	}
-	return undefined;
+	return {};
 }
 
-function parseDistributionPointUris(valueDer: Uint8Array): readonly string[] {
+function parseDistributionPoints(
+	valueDer: Uint8Array,
+): readonly ParsedDistributionPoint[] {
 	const sequenceElement = readElement(valueDer);
-	const uris: string[] = [];
+	const points: ParsedDistributionPoint[] = [];
 	for (const distributionPoint of childrenOf(valueDer, sequenceElement)) {
 		for (const child of childrenOf(valueDer, distributionPoint)) {
 			if (child.tag !== 0xa0) {
@@ -527,18 +548,27 @@ function parseDistributionPointUris(valueDer: Uint8Array): readonly string[] {
 			if (distributionPointName.tag !== 0xa0) {
 				continue;
 			}
-			const fullName = requireElement(
-				childrenOf(valueDer, distributionPointName)[0],
-				"fullName",
-			);
-			for (const generalName of childrenOf(valueDer, fullName)) {
-				if (generalName.tag === 0x86) {
-					uris.push(textDecoder.decode(generalName.value));
-				}
-			}
+			points.push(parseDistributionPointName(valueDer, distributionPointName));
 		}
 	}
-	return uris;
+	return points;
+}
+
+function parseDistributionPointName(
+	valueDer: Uint8Array,
+	distributionPointName: DerElement,
+): ParsedDistributionPoint {
+	const fullName = requireElement(
+		childrenOf(valueDer, distributionPointName)[0],
+		"fullName",
+	);
+	const fullNameUris: string[] = [];
+	for (const generalName of childrenOf(valueDer, fullName)) {
+		if (generalName.tag === 0x86) {
+			fullNameUris.push(textDecoder.decode(generalName.value));
+		}
+	}
+	return { fullNameUris };
 }
 
 function encodeExtension(
