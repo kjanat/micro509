@@ -1,4 +1,4 @@
-import { webcrypto } from "node:crypto";
+import { createHash, webcrypto } from "node:crypto";
 import { nullValue, objectIdentifier, octetString, readElement, readSequenceChildren, sequence } from "./der.ts";
 import { OIDS } from "./oids.ts";
 import { decryptPbes2, encryptPbes2, type Pbes2EncryptionOptions } from "./pbes2.ts";
@@ -59,6 +59,11 @@ export type PublicKeyImportInput =
 export type PrivateKeyImportInput = PublicKeyImportInput;
 
 export type EncryptedPkcs8Options = Pbes2EncryptionOptions;
+
+export interface LegacyPemEncryptionOptions {
+	readonly password: string;
+	readonly iv?: Uint8Array;
+}
 
 export function getCrypto(): Crypto {
 	const candidate = globalThis.crypto ?? webcrypto;
@@ -182,6 +187,17 @@ export async function exportPkcs1Pem(privateKey: CryptoKey): Promise<string> {
 	return pemEncode("RSA PRIVATE KEY", await exportPkcs1Der(privateKey));
 }
 
+export async function exportEncryptedPkcs1Pem(
+	privateKey: CryptoKey,
+	options: LegacyPemEncryptionOptions,
+): Promise<string> {
+	return encryptTraditionalPem(
+		"RSA PRIVATE KEY",
+		await exportPkcs1Der(privateKey),
+		options,
+	);
+}
+
 export async function exportSec1Der(
 	privateKey: CryptoKey,
 ): Promise<Uint8Array> {
@@ -195,6 +211,17 @@ export async function exportSec1Der(
 
 export async function exportSec1Pem(privateKey: CryptoKey): Promise<string> {
 	return pemEncode("EC PRIVATE KEY", await exportSec1Der(privateKey));
+}
+
+export async function exportEncryptedSec1Pem(
+	privateKey: CryptoKey,
+	options: LegacyPemEncryptionOptions,
+): Promise<string> {
+	return encryptTraditionalPem(
+		"EC PRIVATE KEY",
+		await exportSec1Der(privateKey),
+		options,
+	);
 }
 
 export async function exportSpkiPem(publicKey: CryptoKey): Promise<string> {
@@ -307,6 +334,17 @@ export async function importPkcs1Pem(
 	return importPkcs1Der(pemDecode("RSA PRIVATE KEY", pem), algorithm);
 }
 
+export async function importEncryptedPkcs1Pem(
+	pem: string,
+	password: string,
+	algorithm: ImportRsaPublicKeyInput = { kind: "rsa" },
+): Promise<CryptoKey> {
+	return importPkcs1Der(
+		await decryptTraditionalPem("RSA PRIVATE KEY", pem, password),
+		algorithm,
+	);
+}
+
 export async function importPkcs8Base64(
 	base64: string,
 	algorithm: PrivateKeyImportInput,
@@ -326,6 +364,17 @@ export async function importSec1Pem(
 	algorithm: ImportEcPublicKeyInput,
 ): Promise<CryptoKey> {
 	return importSec1Der(pemDecode("EC PRIVATE KEY", pem), algorithm);
+}
+
+export async function importEncryptedSec1Pem(
+	pem: string,
+	password: string,
+	algorithm: ImportEcPublicKeyInput,
+): Promise<CryptoKey> {
+	return importSec1Der(
+		await decryptTraditionalPem("EC PRIVATE KEY", pem, password),
+		algorithm,
+	);
 }
 
 export async function importPublicJwk(
@@ -474,4 +523,188 @@ function decodeObjectIdentifier(bytes: Uint8Array): string {
 		}
 	}
 	return values.join(".");
+}
+
+async function encryptTraditionalPem(
+	label: "RSA PRIVATE KEY" | "EC PRIVATE KEY",
+	der: Uint8Array,
+	options: LegacyPemEncryptionOptions,
+): Promise<string> {
+	const iv = options.iv ?? getCrypto().getRandomValues(new Uint8Array(16));
+	if (iv.length !== 16) {
+		throw new Error("Traditional PEM encryption requires a 16-byte IV");
+	}
+	const key = await importTraditionalPemAesKey(
+		options.password,
+		iv.slice(0, 8),
+		["encrypt"],
+	);
+	const encrypted = new Uint8Array(
+		await getCrypto().subtle.encrypt(
+			{ name: "AES-CBC", iv: toArrayBuffer(iv) },
+			key,
+			toArrayBuffer(der),
+		),
+	);
+	const body = base64Encode(encrypted)
+		.match(/.{1,64}/g)
+		?.join("\n") ?? "";
+	return [
+		`-----BEGIN ${label}-----`,
+		"Proc-Type: 4,ENCRYPTED",
+		`DEK-Info: AES-256-CBC,${toHex(iv).toUpperCase()}`,
+		"",
+		body,
+		`-----END ${label}-----`,
+	].join("\n");
+}
+
+async function decryptTraditionalPem(
+	expectedLabel: "RSA PRIVATE KEY" | "EC PRIVATE KEY",
+	pem: string,
+	password: string,
+): Promise<Uint8Array> {
+	const parsed = parseTraditionalPem(pem);
+	if (parsed.label !== expectedLabel) {
+		throw new Error(`Expected ${expectedLabel} PEM block`);
+	}
+	const dekInfo = parsed.headers.get("DEK-Info");
+	if (
+		parsed.headers.get("Proc-Type") !== "4,ENCRYPTED"
+		|| dekInfo === undefined
+	) {
+		throw new Error("Traditional PEM encryption headers missing");
+	}
+	const [cipher, ivHex] = dekInfo.split(",");
+	if (cipher !== "AES-256-CBC" || ivHex === undefined) {
+		throw new Error("Only AES-256-CBC traditional PEM encryption is supported");
+	}
+	const iv = hexToBytes(ivHex);
+	const key = await importTraditionalPemAesKey(password, iv.slice(0, 8), [
+		"decrypt",
+	]);
+	try {
+		return new Uint8Array(
+			await getCrypto().subtle.decrypt(
+				{ name: "AES-CBC", iv: toArrayBuffer(iv) },
+				key,
+				toArrayBuffer(base64Decode(parsed.base64Body)),
+			),
+		);
+	} catch {
+		throw new Error("Invalid password or encrypted PEM content");
+	}
+}
+
+async function importTraditionalPemAesKey(
+	password: string,
+	salt: Uint8Array,
+	usages: KeyUsage[],
+): Promise<CryptoKey> {
+	const keyBytes = opensslBytesToKey(password, salt, 32);
+	return getCrypto().subtle.importKey(
+		"raw",
+		toArrayBuffer(keyBytes),
+		{ name: "AES-CBC", length: 256 },
+		false,
+		usages,
+	);
+}
+
+function opensslBytesToKey(
+	password: string,
+	salt: Uint8Array,
+	length: number,
+): Uint8Array {
+	const passwordBytes = new TextEncoder().encode(password);
+	const chunks: Uint8Array[] = [];
+	let previous = new Uint8Array();
+	let total = 0;
+	while (total < length) {
+		const hash = createHash("md5");
+		hash.update(previous);
+		hash.update(passwordBytes);
+		hash.update(salt);
+		previous = new Uint8Array(hash.digest());
+		chunks.push(previous);
+		total += previous.length;
+	}
+	const out = new Uint8Array(length);
+	let offset = 0;
+	for (const chunk of chunks) {
+		const slice = chunk.slice(0, Math.min(chunk.length, length - offset));
+		out.set(slice, offset);
+		offset += slice.length;
+		if (offset >= length) {
+			break;
+		}
+	}
+	return out;
+}
+
+function parseTraditionalPem(pem: string): {
+	readonly label: string;
+	readonly headers: ReadonlyMap<string, string>;
+	readonly base64Body: string;
+} {
+	const normalized = pem.replace(/\r/g, "").trim();
+	const lines = normalized.split("\n");
+	const begin = lines[0];
+	const end = lines[lines.length - 1];
+	if (
+		begin === undefined
+		|| end === undefined
+		|| !begin.startsWith("-----BEGIN ")
+		|| !end.startsWith("-----END ")
+	) {
+		throw new Error("Invalid PEM block");
+	}
+	const label = begin.slice(11, -5);
+	if (end !== `-----END ${label}-----`) {
+		throw new Error("PEM boundaries do not match");
+	}
+	const headers = new Map<string, string>();
+	let index = 1;
+	while (index < lines.length - 1) {
+		const line = lines[index];
+		if (line === undefined) {
+			break;
+		}
+		if (line.length === 0) {
+			index += 1;
+			break;
+		}
+		const delimiter = line.indexOf(": ");
+		if (delimiter === -1) {
+			break;
+		}
+		headers.set(line.slice(0, delimiter), line.slice(delimiter + 2));
+		index += 1;
+	}
+	const body = lines.slice(index, lines.length - 1).join("");
+	return { label, headers, base64Body: body };
+}
+
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+	const out = new ArrayBuffer(bytes.length);
+	new Uint8Array(out).set(bytes);
+	return out;
+}
+
+function toHex(bytes: Uint8Array): string {
+	return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join(
+		"",
+	);
+}
+
+function hexToBytes(value: string): Uint8Array {
+	const normalized = value.length % 2 === 0 ? value : `0${value}`;
+	const out = new Uint8Array(normalized.length / 2);
+	for (let index = 0; index < out.length; index += 1) {
+		out[index] = Number.parseInt(
+			normalized.slice(index * 2, index * 2 + 2),
+			16,
+		);
+	}
+	return out;
 }

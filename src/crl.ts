@@ -16,6 +16,7 @@ import {
 	time,
 	tlv,
 } from "./der.ts";
+import { encodeCrlDistributionPoints } from "./extensions.ts";
 import { exportSpkiDer, getCrypto, importSpkiDer, type PublicKeyImportInput } from "./keys.ts";
 import { encodeName, type NameInput } from "./name.ts";
 import { OIDS } from "./oids.ts";
@@ -51,6 +52,8 @@ export interface CreateCertificateRevocationListInput {
 	readonly revokedCertificates?: readonly RevokedCertificateInput[];
 	readonly crlNumber?: number;
 	readonly baseCrlNumber?: number;
+	readonly issuingDistributionPointUri?: string;
+	readonly freshestCrlUris?: readonly string[];
 }
 
 export interface CertificateRevocationListMaterial {
@@ -82,6 +85,8 @@ export interface ParsedCertificateRevocationList {
 	readonly authorityKeyIdentifier?: string;
 	readonly crlNumber?: number;
 	readonly baseCrlNumber?: number;
+	readonly issuingDistributionPointUri?: string;
+	readonly freshestCrlUris?: readonly string[];
 	readonly revokedCertificates: readonly ParsedRevokedCertificate[];
 }
 
@@ -116,6 +121,8 @@ export async function createCertificateRevocationList(
 		input.issuerPublicKey,
 		input.crlNumber,
 		input.baseCrlNumber,
+		input.issuingDistributionPointUri,
+		input.freshestCrlUris,
 	);
 	const revoked = input.revokedCertificates ?? [];
 	const revokedSequence = revoked.length === 0
@@ -209,6 +216,8 @@ export function parseCertificateRevocationListDer(
 	let authorityKeyIdentifier: string | undefined;
 	let crlNumber: number | undefined;
 	let baseCrlNumber: number | undefined;
+	let issuingDistributionPointUri: string | undefined;
+	let freshestCrlUris: readonly string[] | undefined;
 	const maybeExtensions = tbsChildren[cursor];
 	if (maybeExtensions?.tag === 0xa0) {
 		const extensionSequence = requireElement(
@@ -237,6 +246,14 @@ export function parseCertificateRevocationListDer(
 					readElement(valueElement.value).value,
 				);
 			}
+			if (oid === OIDS.issuingDistributionPoint) {
+				issuingDistributionPointUri = parseIssuingDistributionPoint(
+					valueElement.value,
+				);
+			}
+			if (oid === OIDS.freshestCRL) {
+				freshestCrlUris = parseDistributionPointUris(valueElement.value);
+			}
 		}
 	}
 	return {
@@ -254,6 +271,10 @@ export function parseCertificateRevocationListDer(
 		...(authorityKeyIdentifier === undefined ? {} : { authorityKeyIdentifier }),
 		...(crlNumber === undefined ? {} : { crlNumber }),
 		...(baseCrlNumber === undefined ? {} : { baseCrlNumber }),
+		...(issuingDistributionPointUri === undefined
+			? {}
+			: { issuingDistributionPointUri }),
+		...(freshestCrlUris === undefined ? {} : { freshestCrlUris }),
 		revokedCertificates,
 	};
 }
@@ -329,6 +350,8 @@ async function buildCrlExtensions(
 	issuerPublicKey: CryptoKey | undefined,
 	crlNumber: number | undefined,
 	baseCrlNumber?: number,
+	issuingDistributionPointUri?: string,
+	freshestCrlUris?: readonly string[],
 ): Promise<Uint8Array[]> {
 	const extensions: Uint8Array[] = [];
 	if (issuerPublicKey !== undefined) {
@@ -353,6 +376,36 @@ async function buildCrlExtensions(
 				OIDS.deltaCRLIndicator,
 				integerFromNumber(baseCrlNumber),
 				true,
+			),
+		);
+	}
+	if (issuingDistributionPointUri !== undefined) {
+		extensions.push(
+			encodeExtension(
+				OIDS.issuingDistributionPoint,
+				sequence([
+					explicitContext(
+						0,
+						explicitContext(
+							0,
+							sequence([
+								tlv(
+									0x86,
+									new TextEncoder().encode(issuingDistributionPointUri),
+								),
+							]),
+						),
+					),
+				]),
+				true,
+			),
+		);
+	}
+	if (freshestCrlUris !== undefined && freshestCrlUris.length > 0) {
+		extensions.push(
+			encodeExtension(
+				OIDS.freshestCRL,
+				encodeCrlDistributionPoints(freshestCrlUris),
 			),
 		);
 	}
@@ -425,6 +478,67 @@ function parseRevokedCertificateExtensions(
 		...(reasonCode === undefined ? {} : { reasonCode }),
 		...(invalidityDate === undefined ? {} : { invalidityDate }),
 	};
+}
+
+function parseIssuingDistributionPoint(
+	valueDer: Uint8Array,
+): string | undefined {
+	const sequenceElement = readElement(valueDer);
+	for (const child of childrenOf(valueDer, sequenceElement)) {
+		if (child.tag !== 0xa0) {
+			continue;
+		}
+		const distributionPointName = requireElement(
+			childrenOf(valueDer, child)[0],
+			"distributionPointName",
+		);
+		if (distributionPointName.tag !== 0xa0) {
+			continue;
+		}
+		for (
+			const generalName of childrenOf(
+				valueDer,
+				requireElement(
+					childrenOf(valueDer, distributionPointName)[0],
+					"fullName",
+				),
+			)
+		) {
+			if (generalName.tag === 0x86) {
+				return textDecoder.decode(generalName.value);
+			}
+		}
+	}
+	return undefined;
+}
+
+function parseDistributionPointUris(valueDer: Uint8Array): readonly string[] {
+	const sequenceElement = readElement(valueDer);
+	const uris: string[] = [];
+	for (const distributionPoint of childrenOf(valueDer, sequenceElement)) {
+		for (const child of childrenOf(valueDer, distributionPoint)) {
+			if (child.tag !== 0xa0) {
+				continue;
+			}
+			const distributionPointName = requireElement(
+				childrenOf(valueDer, child)[0],
+				"distributionPointName",
+			);
+			if (distributionPointName.tag !== 0xa0) {
+				continue;
+			}
+			const fullName = requireElement(
+				childrenOf(valueDer, distributionPointName)[0],
+				"fullName",
+			);
+			for (const generalName of childrenOf(valueDer, fullName)) {
+				if (generalName.tag === 0x86) {
+					uris.push(textDecoder.decode(generalName.value));
+				}
+			}
+		}
+	}
+	return uris;
 }
 
 function encodeExtension(

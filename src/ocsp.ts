@@ -1,17 +1,24 @@
 import {
+	bitString,
 	type DerElement,
 	explicitContext,
+	implicitPrimitiveContext,
 	integer,
+	integerFromNumber,
 	nullValue,
 	objectIdentifier,
 	octetString,
 	readElement,
 	sequence,
+	setOf,
+	time,
+	tlv,
 } from "./der.ts";
-import { getCrypto } from "./keys.ts";
+import { getCrypto, importSpkiDer, type PublicKeyImportInput } from "./keys.ts";
 import { OIDS } from "./oids.ts";
 import { parseCertificateDer, parseCertificatePem, type ParsedCertificate } from "./parse.ts";
 import { base64Encode, pemDecode, pemEncode } from "./pem.ts";
+import { encodeAlgorithmIdentifier, getSignatureAlgorithm, signBytes } from "./signing.ts";
 
 export type OcspHashAlgorithm = "SHA-1" | "SHA-256";
 export type OcspCertificateSource = string | Uint8Array | ParsedCertificate;
@@ -66,10 +73,44 @@ export interface ParsedOcspSingleResponse {
 export interface ParsedOcspResponse {
 	readonly responseStatus: OcspResponseStatus;
 	readonly responseTypeOid?: string;
+	readonly responseDataDer?: Uint8Array;
+	readonly signatureAlgorithmOid?: string;
+	readonly signatureValue?: Uint8Array;
 	readonly producedAt?: Date;
 	readonly responses?: readonly ParsedOcspSingleResponse[];
 	readonly nonce?: string;
 }
+
+export interface CreateOcspSingleResponseInput extends CreateOcspRequestItemInput {
+	readonly certStatus: OcspCertStatus;
+	readonly thisUpdate?: Date;
+	readonly nextUpdate?: Date;
+	readonly revokedAt?: Date;
+	readonly revocationReasonCode?: number;
+}
+
+export interface CreateOcspResponseInput {
+	readonly signerPrivateKey: CryptoKey;
+	readonly signerCertificate: OcspCertificateSource;
+	readonly responses: readonly CreateOcspSingleResponseInput[];
+	readonly producedAt?: Date;
+	readonly nonce?: Uint8Array;
+	readonly hashAlgorithm?: OcspHashAlgorithm;
+}
+
+export interface OcspResponseMaterial {
+	readonly der: Uint8Array;
+	readonly pem: string;
+	readonly base64: string;
+}
+
+export type VerifyOcspResponseResult =
+	| { readonly ok: true; readonly value: ParsedOcspResponse }
+	| {
+		readonly ok: false;
+		readonly code: "signature_invalid";
+		readonly message: string;
+	};
 
 export async function createOcspRequest(
 	input: CreateOcspRequestInput,
@@ -155,6 +196,11 @@ export function parseOcspResponseDer(der: Uint8Array): ParsedOcspResponse {
 	const basicResponse = response.value;
 	const basicChildren = childrenOf(basicResponse, readElement(basicResponse));
 	const responseData = requireElement(basicChildren[0], "responseData");
+	const signatureAlgorithm = requireElement(
+		basicChildren[1],
+		"signatureAlgorithm",
+	);
+	const signatureValue = requireElement(basicChildren[2], "signatureValue");
 	const responseDataDer = basicResponse.slice(
 		responseData.start - responseData.headerLength,
 		responseData.end,
@@ -180,6 +226,14 @@ export function parseOcspResponseDer(der: Uint8Array): ParsedOcspResponse {
 	return {
 		responseStatus,
 		responseTypeOid,
+		responseDataDer,
+		signatureAlgorithmOid: decodeObjectIdentifier(
+			requireElement(
+				childrenOf(basicResponse, signatureAlgorithm)[0],
+				"signatureAlgorithm OID",
+			).value,
+		),
+		signatureValue: extractBitStringValue(signatureValue),
 		producedAt: parseTime(producedAt),
 		responses: childrenOf(responseDataDer, responses).map((singleResponse) =>
 			parseSingleResponse(responseDataDer, singleResponse)
@@ -190,6 +244,109 @@ export function parseOcspResponseDer(der: Uint8Array): ParsedOcspResponse {
 
 export function parseOcspResponsePem(pem: string): ParsedOcspResponse {
 	return parseOcspResponseDer(pemDecode("OCSP RESPONSE", pem));
+}
+
+export async function createOcspResponse(
+	input: CreateOcspResponseInput,
+): Promise<OcspResponseMaterial> {
+	const signerCertificate = await normalizeCertificate(input.signerCertificate);
+	const signatureAlgorithm = getSignatureAlgorithm(input.signerPrivateKey);
+	const producedAt = input.producedAt ?? new Date();
+	const hashAlgorithm = input.hashAlgorithm ?? "SHA-1";
+	const responses: Uint8Array[] = [];
+	for (const response of input.responses) {
+		const certificate = await normalizeCertificate(response.certificate);
+		const issuer = await normalizeCertificate(response.issuerCertificate);
+		responses.push(
+			await encodeSingleResponse(certificate, issuer, response, hashAlgorithm),
+		);
+	}
+	const responderKeyHash = await digestBytes(
+		hashAlgorithm,
+		extractSubjectPublicKeyBytes(signerCertificate.subjectPublicKeyInfoDer),
+	);
+	const responseDataFields: Uint8Array[] = [
+		implicitPrimitiveContext(2, responderKeyHash),
+		time(producedAt),
+		sequence(responses),
+	];
+	if (input.nonce !== undefined) {
+		responseDataFields.push(
+			explicitContext(
+				1,
+				sequence([
+					sequence([
+						objectIdentifier(OIDS.ocspNonce),
+						octetString(octetString(input.nonce)),
+					]),
+				]),
+			),
+		);
+	}
+	const responseData = sequence(responseDataFields);
+	const signature = await signBytes(
+		input.signerPrivateKey,
+		signatureAlgorithm,
+		responseData,
+	);
+	const basicResponse = sequence([
+		responseData,
+		encodeAlgorithmIdentifier(signatureAlgorithm),
+		bitString(signature),
+	]);
+	const der = sequence([
+		tlv(0x0a, Uint8Array.of(0x00)),
+		explicitContext(
+			0,
+			sequence([
+				objectIdentifier(OIDS.ocspBasicResponse),
+				octetString(basicResponse),
+			]),
+		),
+	]);
+	return {
+		der,
+		pem: pemEncode("OCSP RESPONSE", der),
+		base64: base64Encode(der),
+	};
+}
+
+export async function verifyOcspResponse(
+	response: string | Uint8Array | ParsedOcspResponse,
+	signerCertificate: OcspCertificateSource,
+): Promise<VerifyOcspResponseResult> {
+	const parsed = typeof response === "string"
+		? parseOcspResponsePem(response)
+		: response instanceof Uint8Array
+		? parseOcspResponseDer(response)
+		: response;
+	if (
+		parsed.responseDataDer === undefined
+		|| parsed.signatureAlgorithmOid === undefined
+		|| parsed.signatureValue === undefined
+	) {
+		return {
+			ok: false,
+			code: "signature_invalid",
+			message: "OCSP response is not signed",
+		};
+	}
+	const signer = await normalizeCertificate(signerCertificate);
+	const verified = await verifySignedData(
+		parsed.signatureAlgorithmOid,
+		signer.publicKeyAlgorithmOid,
+		signer.publicKeyParametersOid,
+		signer.subjectPublicKeyInfoDer,
+		parsed.signatureValue,
+		parsed.responseDataDer,
+	);
+	return verified
+		? { ok: true, value: parsed }
+		: {
+			ok: false,
+			code: "signature_invalid",
+			message: "OCSP response signature does not verify",
+		};
 }
 
 async function encodeOcspCertId(
@@ -220,6 +377,49 @@ async function digestBytes(
 	return new Uint8Array(
 		await getCrypto().subtle.digest(algorithm, toArrayBuffer(bytes)),
 	);
+}
+
+async function encodeSingleResponse(
+	certificate: ParsedCertificate,
+	issuer: ParsedCertificate,
+	input: CreateOcspSingleResponseInput,
+	hashAlgorithm: OcspHashAlgorithm,
+): Promise<Uint8Array> {
+	const certId = await encodeOcspCertId(certificate, issuer, hashAlgorithm);
+	const certStatus = encodeOcspCertStatus(input);
+	return sequence([
+		certId,
+		certStatus,
+		time(input.thisUpdate ?? new Date()),
+		...(input.nextUpdate === undefined
+			? []
+			: [explicitContext(0, time(input.nextUpdate))]),
+	]);
+}
+
+function encodeOcspCertStatus(
+	input: CreateOcspSingleResponseInput,
+): Uint8Array {
+	switch (input.certStatus) {
+		case "good":
+			return tlv(0x80, new Uint8Array());
+		case "unknown":
+			return tlv(0x82, new Uint8Array());
+		case "revoked": {
+			const revokedFields: Uint8Array[] = [
+				time(input.revokedAt ?? input.thisUpdate ?? new Date()),
+			];
+			if (input.revocationReasonCode !== undefined) {
+				revokedFields.push(
+					explicitContext(
+						0,
+						tlv(0x0a, Uint8Array.of(input.revocationReasonCode)),
+					),
+				);
+			}
+			return tlv(0xa1, sequence(revokedFields));
+		}
+	}
 }
 
 async function normalizeCertificate(
@@ -322,6 +522,216 @@ function parseOcspNonceFromExtensions(
 		return toHex(readElement(extnValue.value).value);
 	}
 	return undefined;
+}
+
+async function verifySignedData(
+	signatureAlgorithmOid: string,
+	publicKeyAlgorithmOid: string,
+	publicKeyParametersOid: string | undefined,
+	spkiDer: Uint8Array,
+	signatureValue: Uint8Array,
+	data: Uint8Array,
+): Promise<boolean> {
+	const config = getVerifySignatureConfig(
+		signatureAlgorithmOid,
+		publicKeyAlgorithmOid,
+		publicKeyParametersOid,
+	);
+	const key = await importSpkiDer(spkiDer, config.importAlgorithm);
+	const subtle = getCrypto().subtle;
+	const signatureView = toArrayBuffer(signatureValue);
+	const dataView = toArrayBuffer(data);
+	if (await subtle.verify(config.verifyParams, key, signatureView, dataView)) {
+		return true;
+	}
+	if (config.ecdsaRawSignatureBytes !== undefined) {
+		const alternate = alternateEcdsaSignatureEncoding(
+			signatureValue,
+			config.ecdsaRawSignatureBytes / 2,
+		);
+		if (alternate !== undefined) {
+			return subtle.verify(
+				config.verifyParams,
+				key,
+				toArrayBuffer(alternate),
+				dataView,
+			);
+		}
+	}
+	return false;
+}
+
+function getVerifySignatureConfig(
+	signatureAlgorithmOid: string,
+	publicKeyAlgorithmOid: string,
+	publicKeyParametersOid: string | undefined,
+): {
+	readonly importAlgorithm: PublicKeyImportInput;
+	readonly verifyParams: Algorithm | EcdsaParams;
+	readonly ecdsaRawSignatureBytes?: number;
+} {
+	switch (signatureAlgorithmOid) {
+		case OIDS.sha256WithRSAEncryption:
+			return {
+				importAlgorithm: requireRsaPublicKey(publicKeyAlgorithmOid, "SHA-256"),
+				verifyParams: { name: "RSASSA-PKCS1-v1_5" },
+			};
+		case OIDS.sha384WithRSAEncryption:
+			return {
+				importAlgorithm: requireRsaPublicKey(publicKeyAlgorithmOid, "SHA-384"),
+				verifyParams: { name: "RSASSA-PKCS1-v1_5" },
+			};
+		case OIDS.sha512WithRSAEncryption:
+			return {
+				importAlgorithm: requireRsaPublicKey(publicKeyAlgorithmOid, "SHA-512"),
+				verifyParams: { name: "RSASSA-PKCS1-v1_5" },
+			};
+		case OIDS.ecdsaWithSHA256:
+			return {
+				importAlgorithm: requireEcPublicKey(
+					publicKeyAlgorithmOid,
+					publicKeyParametersOid,
+				),
+				verifyParams: { name: "ECDSA", hash: "SHA-256" },
+				ecdsaRawSignatureBytes: curveBytes(publicKeyParametersOid),
+			};
+		case OIDS.ecdsaWithSHA384:
+			return {
+				importAlgorithm: requireEcPublicKey(
+					publicKeyAlgorithmOid,
+					publicKeyParametersOid,
+				),
+				verifyParams: { name: "ECDSA", hash: "SHA-384" },
+				ecdsaRawSignatureBytes: curveBytes(publicKeyParametersOid),
+			};
+		case OIDS.ed25519:
+			if (publicKeyAlgorithmOid !== OIDS.ed25519) {
+				throw new Error("Ed25519 signature requires Ed25519 signer public key");
+			}
+			return {
+				importAlgorithm: { kind: "ed25519" },
+				verifyParams: { name: "Ed25519" },
+			};
+		default:
+			throw new Error(
+				`Unsupported signature algorithm OID: ${signatureAlgorithmOid}`,
+			);
+	}
+}
+
+function requireRsaPublicKey(
+	publicKeyAlgorithmOid: string,
+	hash: "SHA-256" | "SHA-384" | "SHA-512",
+): PublicKeyImportInput {
+	if (publicKeyAlgorithmOid !== OIDS.rsaEncryption) {
+		throw new Error("RSA signature requires RSA signer public key");
+	}
+	return { kind: "rsa", hash };
+}
+
+function requireEcPublicKey(
+	publicKeyAlgorithmOid: string,
+	publicKeyParametersOid: string | undefined,
+): PublicKeyImportInput {
+	if (publicKeyAlgorithmOid !== OIDS.ecPublicKey) {
+		throw new Error("ECDSA signature requires EC signer public key");
+	}
+	switch (publicKeyParametersOid) {
+		case OIDS.prime256v1:
+			return { kind: "ecdsa", namedCurve: "P-256" };
+		case OIDS.secp384r1:
+			return { kind: "ecdsa", namedCurve: "P-384" };
+		default:
+			throw new Error(
+				`Unsupported EC curve OID: ${publicKeyParametersOid ?? "missing"}`,
+			);
+	}
+}
+
+function curveBytes(parametersOid: string | undefined): number {
+	switch (parametersOid) {
+		case OIDS.prime256v1:
+			return 64;
+		case OIDS.secp384r1:
+			return 96;
+		default:
+			throw new Error(
+				`Unsupported EC curve OID: ${parametersOid ?? "missing"}`,
+			);
+	}
+}
+
+function alternateEcdsaSignatureEncoding(
+	signature: Uint8Array,
+	partLength: number,
+): Uint8Array | undefined {
+	try {
+		if (signature[0] === 0x30) {
+			return derEcdsaSignatureToRaw(signature, partLength);
+		}
+		return rawEcdsaSignatureToDer(signature, partLength);
+	} catch {
+		return undefined;
+	}
+}
+
+function derEcdsaSignatureToRaw(
+	signature: Uint8Array,
+	partLength: number,
+): Uint8Array {
+	const parts = childrenOf(signature, readElement(signature));
+	const r = parts[0];
+	const s = parts[1];
+	if (r === undefined || s === undefined) {
+		throw new Error("Malformed ECDSA DER signature");
+	}
+	return concatFixedWidth(
+		trimLeadingZero(r.value),
+		trimLeadingZero(s.value),
+		partLength,
+	);
+}
+
+function rawEcdsaSignatureToDer(
+	signature: Uint8Array,
+	partLength: number,
+): Uint8Array {
+	if (signature.length !== partLength * 2) {
+		throw new Error("Unexpected ECDSA raw signature length");
+	}
+	return sequence([
+		integer(signature.slice(0, partLength)),
+		integer(signature.slice(partLength)),
+	]);
+}
+
+function trimLeadingZero(bytes: Uint8Array): Uint8Array {
+	let index = 0;
+	while (index < bytes.length - 1 && bytes[index] === 0) {
+		index += 1;
+	}
+	return bytes.slice(index);
+}
+
+function concatFixedWidth(
+	left: Uint8Array,
+	right: Uint8Array,
+	partLength: number,
+): Uint8Array {
+	if (left.length > partLength || right.length > partLength) {
+		throw new Error("ECDSA signature integer too large");
+	}
+	const out = new Uint8Array(partLength * 2);
+	out.set(left, partLength - left.length);
+	out.set(right, out.length - right.length);
+	return out;
+}
+
+function extractBitStringValue(element: DerElement): Uint8Array {
+	if (element.tag !== 0x03) {
+		throw new Error("Expected BIT STRING");
+	}
+	return element.value.slice(1);
 }
 
 function parseTime(element: DerElement): Date {

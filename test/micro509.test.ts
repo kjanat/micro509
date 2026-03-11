@@ -18,6 +18,7 @@ import {
 	createCertificateRevocationList,
 	createCertificateSigningRequest,
 	createOcspRequest,
+	createOcspResponse,
 	createPfx,
 	createPkcs7CertBagPem,
 	createSelfSignedCertificate,
@@ -25,8 +26,10 @@ import {
 	decodeExtensions,
 	defineExtensionDecoderMap,
 	exportBinaryBase64,
+	exportEncryptedPkcs1Pem,
 	exportEncryptedPkcs8Der,
 	exportEncryptedPkcs8Pem,
+	exportEncryptedSec1Pem,
 	exportPkcs1Der,
 	exportPkcs1Pem,
 	exportPkcs8Der,
@@ -39,8 +42,10 @@ import {
 	exportSpkiPem,
 	findExtension,
 	generateKeyPair,
+	importEncryptedPkcs1Pem,
 	importEncryptedPkcs8Der,
 	importEncryptedPkcs8Pem,
+	importEncryptedSec1Pem,
 	importPkcs1Der,
 	importPkcs1Pem,
 	importPkcs8Base64,
@@ -58,6 +63,7 @@ import {
 	parseCertificateSigningRequestPem,
 	parseOcspRequestPem,
 	parseOcspResponseDer,
+	parseOcspResponsePem,
 	parsePfxPem,
 	parsePkcs7CertBagPem,
 	pemDecode,
@@ -65,6 +71,7 @@ import {
 	verifyCertificateChain,
 	verifyCertificateRevocationList,
 	verifyCertificateSigningRequest,
+	verifyOcspResponse,
 } from "../src/index.ts";
 import { OIDS } from "../src/oids.ts";
 
@@ -456,6 +463,37 @@ describe("micro509", () => {
 		).rejects.toThrow("Invalid password or encrypted content");
 	});
 
+	it("roundtrips encrypted traditional RSA and EC PEM helpers", async () => {
+		const rsa = await generateKeyPair({ kind: "rsa", modulusLength: 2048 });
+		const encryptedRsaPem = await exportEncryptedPkcs1Pem(rsa.privateKey, {
+			password: "secret123",
+		});
+		const importedRsa = await importEncryptedPkcs1Pem(
+			encryptedRsaPem,
+			"secret123",
+			{ kind: "rsa" },
+		);
+		expect(await exportPkcs8Der(importedRsa)).toEqual(
+			await exportPkcs8Der(rsa.privateKey),
+		);
+		await expect(
+			importEncryptedPkcs1Pem(encryptedRsaPem, "wrong", { kind: "rsa" }),
+		).rejects.toThrow("Invalid password or encrypted PEM content");
+
+		const ec = await generateKeyPair({ kind: "ecdsa", namedCurve: "P-256" });
+		const encryptedEcPem = await exportEncryptedSec1Pem(ec.privateKey, {
+			password: "secret123",
+		});
+		const importedEc = await importEncryptedSec1Pem(
+			encryptedEcPem,
+			"secret123",
+			{ kind: "ecdsa", namedCurve: "P-256" },
+		);
+		expect(await exportPkcs8Der(importedEc)).toEqual(
+			await exportPkcs8Der(ec.privateKey),
+		);
+	});
+
 	it("creates, parses, and verifies CRLs", async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: "CRL Issuer" },
@@ -523,6 +561,8 @@ describe("micro509", () => {
 			issuerPublicKey: issuer.keyPair.publicKey,
 			crlNumber: 9,
 			baseCrlNumber: 8,
+			issuingDistributionPointUri: "http://example.test/idp.crl",
+			freshestCrlUris: ["http://example.test/freshest.crl"],
 			revokedCertificates: [
 				{
 					serialNumber: Uint8Array.of(0x01),
@@ -533,6 +573,12 @@ describe("micro509", () => {
 		});
 		const parsed = parseCertificateRevocationListPem(crl.pem);
 		expect(parsed.baseCrlNumber).toBe(8);
+		expect(parsed.issuingDistributionPointUri).toBe(
+			"http://example.test/idp.crl",
+		);
+		expect(parsed.freshestCrlUris).toEqual([
+			"http://example.test/freshest.crl",
+		]);
 		expect(parsed.revokedCertificates[0]).toMatchObject({
 			serialNumberHex: "01",
 			reasonCode: "keyCompromise",
@@ -542,7 +588,7 @@ describe("micro509", () => {
 		);
 	});
 
-	it("builds OCSP requests and parses OCSP responses", async () => {
+	it("builds, parses, and verifies OCSP responses", async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: "OCSP CA" },
 			extensions: {
@@ -567,16 +613,26 @@ describe("micro509", () => {
 		const parsedRequest = parseOcspRequestPem(request.pem);
 		expect(parsedRequest.requests).toHaveLength(1);
 		expect(parsedRequest.nonce).toBe("aabb");
-		const leafParsed = parseCertificatePem(leaf.pem);
-		const issuerParsed = parseCertificatePem(issuer.certificate.pem);
-		const ocspResponseDer = await createSyntheticOcspResponse(
-			leafParsed,
-			issuerParsed,
-		);
-		const parsedResponse = parseOcspResponseDer(ocspResponseDer);
+		const ocspResponse = await createOcspResponse({
+			signerPrivateKey: issuer.keyPair.privateKey,
+			signerCertificate: issuer.certificate.pem,
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: "good",
+					thisUpdate: new Date("2024-01-01T00:00:00Z"),
+				},
+			],
+			nonce: Uint8Array.of(0xaa, 0xbb),
+		});
+		const parsedResponse = parseOcspResponsePem(ocspResponse.pem);
 		expect(parsedResponse.responseStatus).toBe("successful");
 		expect(parsedResponse.responses?.[0]).toMatchObject({ certStatus: "good" });
 		expect(parsedResponse.nonce).toBe("aabb");
+		expect(
+			await verifyOcspResponse(ocspResponse.der, issuer.certificate.pem),
+		).toMatchObject({ ok: true });
 	});
 
 	it("builds across multiple candidate intermediates", async () => {

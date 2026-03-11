@@ -15,6 +15,7 @@ Tiny X.509 builders for modern TypeScript.
 - passwordless PFX bundle helpers
 - OCSP request build + OCSP response parse helpers
 - encrypted PKCS#8 / encrypted PFX via PBES2
+- encrypted traditional RSA/EC PEM helpers
 - WebCrypto-first, typed, small surface
 
 ## Install
@@ -191,6 +192,22 @@ const privateKey = await importEncryptedPkcs8Pem(
 );
 ```
 
+## Encrypted traditional PEM
+
+```ts
+import { exportEncryptedPkcs1Pem, importEncryptedPkcs1Pem } from "micro509";
+
+const encryptedRsaPem = await exportEncryptedPkcs1Pem(keyPair.privateKey, {
+	password: "secret123",
+});
+
+const privateKey = await importEncryptedPkcs1Pem(
+	encryptedRsaPem,
+	"secret123",
+	{ kind: "rsa" },
+);
+```
+
 ## Custom extensions
 
 ```ts
@@ -312,8 +329,10 @@ console.log(await verifyCertificateRevocationList(crl.pem, caCert.pem));
 ```ts
 import {
 	createOcspRequest,
+	createOcspResponse,
 	parseOcspRequestPem,
 	parseOcspResponseDer,
+	verifyOcspResponse,
 } from "micro509";
 
 const request = await createOcspRequest({
@@ -324,8 +343,19 @@ const request = await createOcspRequest({
 const parsedRequest = parseOcspRequestPem(request.pem);
 console.log(parsedRequest.requests.length);
 
-const parsedResponse = parseOcspResponseDer(responseDer);
+const response = await createOcspResponse({
+	signerPrivateKey: issuerKey.privateKey,
+	signerCertificate: issuer.pem,
+	responses: [{
+		certificate: leaf.pem,
+		issuerCertificate: issuer.pem,
+		certStatus: "good",
+	}],
+});
+
+const parsedResponse = parseOcspResponseDer(response.der);
 console.log(parsedResponse.responseStatus);
+console.log(await verifyOcspResponse(response.der, issuer.pem));
 ```
 
 ## Legacy private key PEM
@@ -394,10 +424,10 @@ if (result.ok) {
 - decoder maps: strongly keyed `decodedExtensionMap` on parse results
 - pem helpers: split mixed cert/csr/key bundles by label
 - pkcs7 helpers: create/parse degenerate signedData cert bags
-- crl helpers: create/parse/verify CRLs, delta CRL indicator, entry reason/invalidity extensions, revocation lookup by serial
-- ocsp helpers: build requests, parse requests, parse responses
+- crl helpers: create/parse/verify CRLs, delta CRL indicator, issuing distribution point, freshest CRL, entry reason/invalidity extensions, revocation lookup by serial
+- ocsp helpers: build requests, build signed responses, parse requests/responses, verify response signatures
 - pfx helpers: create/parse passwordless or encrypted cert+key bundles with bag attributes
-- legacy key helpers: PKCS#1 RSA private key and SEC1 EC private key import/export
+- legacy key helpers: PKCS#1 RSA and SEC1 EC import/export, plus encrypted traditional PEM
 - extended key usage: built-ins + custom OID escape hatch
 - chain verify: async, WebCrypto-based, browser-safe, multi-candidate path building, issuer match, signatures, time, CA/keyCertSign, pathLen, AKI/SKI, SAN/EKU checks
 - csr verify: async, WebCrypto-based, browser-safe signature validation
