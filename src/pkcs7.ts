@@ -7,8 +7,8 @@ import {
 	toHex,
 } from "./asn1.ts";
 import {
-	concatBytes,
 	type DerElement,
+	concatBytes,
 	explicitContext,
 	integerFromNumber,
 	objectIdentifier,
@@ -19,7 +19,7 @@ import {
 } from "./der.ts";
 import { getCrypto } from "./keys.ts";
 import { OIDS } from "./oids.ts";
-import { parseCertificateDer, type ParsedCertificate } from "./parse.ts";
+import { type ParsedCertificate, parseCertificateDer } from "./parse.ts";
 import { base64Encode, pemEncode, splitPemBlocks } from "./pem.ts";
 import { verifySignedData } from "./sig-verify.ts";
 

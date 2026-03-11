@@ -7,9 +7,9 @@ import {
 	sequence,
 	setOf,
 } from "./der.ts";
-import { buildRequestedExtensions, type CertificateExtensionsInput } from "./extensions.ts";
+import { type CertificateExtensionsInput, buildRequestedExtensions } from "./extensions.ts";
 import { exportSpkiDer } from "./keys.ts";
-import { encodeName, type NameInput } from "./name.ts";
+import { type NameInput, encodeName } from "./name.ts";
 import { OIDS } from "./oids.ts";
 import { base64Encode, pemEncode } from "./pem.ts";
 import { encodeAlgorithmIdentifier, getSignatureAlgorithm, signBytes } from "./signing.ts";

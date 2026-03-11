@@ -18,9 +18,9 @@ import {
 	type KeyUsage,
 	type NameConstraintForm,
 	type NameConstraints,
+	type SubjectAltName,
 	parseAuthorityInfoAccessMethodOid,
 	parseExtendedKeyUsageOid,
-	type SubjectAltName,
 } from "./extensions.ts";
 import type { NameFieldKey } from "./name.ts";
 import { OIDS } from "./oids.ts";

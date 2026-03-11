@@ -8,9 +8,9 @@ import {
 	toHex,
 } from "./asn1.ts";
 import {
+	type DerElement,
 	bitString,
 	bool,
-	type DerElement,
 	explicitContext,
 	generalizedTime,
 	implicitConstructedContext,
@@ -28,9 +28,9 @@ import {
 import { encodeCrlDistributionPoints } from "./extensions.ts";
 import { sha1 } from "./hash.ts";
 import { exportSpkiDer } from "./keys.ts";
-import { encodeName, type NameInput } from "./name.ts";
+import { type NameInput, encodeName } from "./name.ts";
 import { OIDS } from "./oids.ts";
-import { parseCertificateDer, parseCertificatePem, type ParsedCertificate } from "./parse.ts";
+import { type ParsedCertificate, parseCertificateDer, parseCertificatePem } from "./parse.ts";
 import { base64Encode, pemDecode, pemEncode } from "./pem.ts";
 import { verifySignedData } from "./sig-verify.ts";
 import { encodeAlgorithmIdentifier, getSignatureAlgorithm, signBytes } from "./signing.ts";

@@ -6,6 +6,8 @@
 	"newLineKind": "lf",
 	"typescript": {
 		"quoteStyle": "preferDouble",
+		"importDeclaration.sortTypeOnlyImports": "first",
+		"importDeclaration.sortNamedImports": "caseSensitive",
 	},
 	"json": {
 		"jsonTrailingCommaFiles": [

@@ -1,6 +1,6 @@
 import { toArrayBuffer } from "./asn1.ts";
 import { integer, readSequenceChildren, sequence } from "./der.ts";
-import { getCrypto, importSpkiDer, type PublicKeyImportInput } from "./keys.ts";
+import { type PublicKeyImportInput, getCrypto, importSpkiDer } from "./keys.ts";
 import { OIDS } from "./oids.ts";
 
 export interface VerifySignatureConfig {
