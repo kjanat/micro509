@@ -1,4 +1,3 @@
-import { describe, expect, it } from "vitest";
 import {
 	createCertificate,
 	createOcspRequest,
@@ -9,7 +8,8 @@ import {
 	parseOcspResponsePem,
 	validateOcspResponse,
 	verifyOcspResponse,
-} from "../src/index.ts";
+} from "@/index.ts";
+import { describe, expect, it } from "bun:test";
 
 describe("ocsp", () => {
 	it("builds, parses, and verifies OCSP responses", async () => {

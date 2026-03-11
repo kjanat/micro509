@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import {
 	concatBytes,
 	explicitContext,
@@ -11,16 +10,17 @@ import {
 	sequence,
 	setOf,
 	tlv,
-} from "../src/der.ts";
+} from "@/der.ts";
 import {
 	createCertificate,
 	createSelfSignedCertificate,
 	generateKeyPair,
 	type parseCertificatePem,
 	verifyCertificateChain,
-} from "../src/index.ts";
-import { OIDS } from "../src/oids.ts";
-import { getSignatureAlgorithm, signBytes } from "../src/signing.ts";
+} from "@/index.ts";
+import { OIDS } from "@/oids.ts";
+import { getSignatureAlgorithm, signBytes } from "@/signing.ts";
+import { createHash } from "node:crypto";
 
 export function childrenOf(
 	source: Uint8Array,

@@ -1,13 +1,13 @@
-import { X509Certificate } from "node:crypto";
-import { describe, expect, it } from "vitest";
 import {
 	createCertificate,
 	createSelfSignedCertificate,
 	generateKeyPair,
 	parseCertificatePem,
 	verifyCertificateChain,
-} from "../src/index.ts";
-import { OIDS } from "../src/oids.ts";
+} from "@/index.ts";
+import { OIDS } from "@/oids.ts";
+import { describe, expect, it } from "bun:test";
+import { X509Certificate } from "node:crypto";
 import { hasExtensionOid } from "./helpers.ts";
 
 describe("certificate", () => {

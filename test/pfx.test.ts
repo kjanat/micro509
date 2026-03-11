@@ -1,11 +1,5 @@
-import { describe, expect, it } from "vitest";
-import {
-	createCertificate,
-	createPfx,
-	createSelfSignedCertificate,
-	generateKeyPair,
-	parsePfxPem,
-} from "../src/index.ts";
+import { createCertificate, createPfx, createSelfSignedCertificate, generateKeyPair, parsePfxPem } from "@/index.ts";
+import { describe, expect, it } from "bun:test";
 
 describe("pfx", () => {
 	it("creates and parses passwordless PFX bundles", async () => {

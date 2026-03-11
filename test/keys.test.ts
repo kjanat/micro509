@@ -1,5 +1,3 @@
-import { X509Certificate } from "node:crypto";
-import { describe, expect, it } from "vitest";
 import {
 	createCertificate,
 	exportBinaryBase64,
@@ -32,7 +30,9 @@ import {
 	importSec1Pem,
 	importSpkiBase64,
 	importSpkiPem,
-} from "../src/index.ts";
+} from "@/index.ts";
+import { describe, expect, it } from "bun:test";
+import { X509Certificate } from "node:crypto";
 
 describe("keys", () => {
 	it("roundtrips RSA PKCS#1 and EC SEC1 private keys", async () => {

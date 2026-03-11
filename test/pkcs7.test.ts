@@ -1,4 +1,3 @@
-import { describe, expect, it } from "vitest";
 import {
 	createCertificate,
 	createPkcs7CertBagPem,
@@ -8,8 +7,9 @@ import {
 	parsePkcs7CertBagPem,
 	parsePkcs7SignedDataDer,
 	verifyPkcs7SignedData,
-} from "../src/index.ts";
-import { OIDS } from "../src/oids.ts";
+} from "@/index.ts";
+import { OIDS } from "@/oids.ts";
+import { describe, expect, it } from "bun:test";
 import { createCmsSignedDataWithSignedAttrs, createSyntheticPkcs7SignedData } from "./helpers.ts";
 
 describe("pkcs7", () => {

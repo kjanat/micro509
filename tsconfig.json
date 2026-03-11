@@ -10,10 +10,13 @@
 		"declaration": true,
 		"sourceMap": true,
 		"outDir": "dist",
-		"types": ["node", "vitest/globals"],
+		"types": ["node", "bun-types"],
 		"skipLibCheck": true,
+		"noEmit": true,
 		"allowImportingTsExtensions": true,
-		"rewriteRelativeImportExtensions": true
+		"paths": {
+			"@/*": ["./src/*"]
+		}
 	},
 	"include": ["src/**/*.ts", "test/**/*.ts"]
 }

@@ -8,7 +8,7 @@
 
 ## STRUCTURE
 
-```
+```tree
 ts-x509/
 ├── src/            # 20 flat modules — all PKI domain code (no subdirs)
 ├── test/           # Single monolithic test file (2290 lines)
@@ -65,11 +65,10 @@ ts-x509/
 ## COMMANDS
 
 ```bash
-bun --bun run build     # tsc → dist/ (ESM .js + .d.ts)
-bun --bun run check     # tsc --noEmit (full type-check)
-bun --bun run typecheck # tsgo --noEmit (native TS compiler preview)
-bun --bun run test      # vitest run (single-pass)
-bun --bun run fmt       # dprint fmt
+bun bd        # tsc → dist/ (ESM .js + .d.ts)
+bun check     # tsgo --noEmit (full type-check)
+bun test      # bun's native test runner (single-pass)
+bun fmt       # dprint fmt
 ```
 
 ## NOTES

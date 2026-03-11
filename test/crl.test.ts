@@ -1,4 +1,3 @@
-import { describe, expect, it } from "vitest";
 import {
 	createCertificate,
 	createCertificateRevocationList,
@@ -9,7 +8,8 @@ import {
 	parseCertificateRevocationListPem,
 	validateCertificateRevocationList,
 	verifyCertificateRevocationList,
-} from "../src/index.ts";
+} from "@/index.ts";
+import { describe, expect, it } from "bun:test";
 import { hexToBytes } from "./helpers.ts";
 
 describe("crl", () => {

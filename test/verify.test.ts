@@ -1,5 +1,4 @@
-import { describe, expect, it } from "vitest";
-import { sequence, tlv } from "../src/der.ts";
+import { sequence, tlv } from "@/der.ts";
 import {
 	checkExtendedKeyUsage,
 	createCertificate,
@@ -10,8 +9,9 @@ import {
 	pemDecode,
 	trustAnchorFromCertificate,
 	verifyCertificateChain,
-} from "../src/index.ts";
-import { parseNameConstraints } from "../src/parse.ts";
+} from "@/index.ts";
+import { parseNameConstraints } from "@/parse.ts";
+import { describe, expect, it } from "bun:test";
 import { issueChain } from "./helpers.ts";
 
 describe("chain verification", () => {

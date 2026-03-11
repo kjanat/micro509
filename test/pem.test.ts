@@ -1,4 +1,3 @@
-import { describe, expect, it } from "vitest";
 import {
 	categorizePemBlocks,
 	createCertificateSigningRequest,
@@ -6,7 +5,8 @@ import {
 	generateKeyPair,
 	pemDecode,
 	splitPemBlocks,
-} from "../src/index.ts";
+} from "@/index.ts";
+import { describe, expect, it } from "bun:test";
 
 describe("pem", () => {
 	it("splits mixed PEM bundles by label", async () => {

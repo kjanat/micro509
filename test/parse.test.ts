@@ -1,5 +1,4 @@
-import { describe, expect, it } from "vitest";
-import { sequence, tlv } from "../src/der.ts";
+import { sequence, tlv } from "@/der.ts";
 import {
 	createCertificate,
 	createSelfSignedCertificate,
@@ -10,9 +9,10 @@ import {
 	generateKeyPair,
 	parseCertificateDer,
 	parseCertificatePem,
-} from "../src/index.ts";
-import { OIDS } from "../src/oids.ts";
-import { parseNameConstraints } from "../src/parse.ts";
+} from "@/index.ts";
+import { OIDS } from "@/oids.ts";
+import { parseNameConstraints } from "@/parse.ts";
+import { describe, expect, it } from "bun:test";
 
 describe("parse", () => {
 	it("supports custom extension encode and decode hooks", async () => {

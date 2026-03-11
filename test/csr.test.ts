@@ -1,13 +1,13 @@
-import { describe, expect, it } from "vitest";
-import { readElement } from "../src/der.ts";
+import { readElement } from "@/der.ts";
 import {
 	createCertificateSigningRequest,
 	findExtension,
 	generateKeyPair,
 	parseCertificateSigningRequestPem,
 	verifyCertificateSigningRequest,
-} from "../src/index.ts";
-import { OIDS } from "../src/oids.ts";
+} from "@/index.ts";
+import { OIDS } from "@/oids.ts";
+import { describe, expect, it } from "bun:test";
 import { childrenOf, decodeObjectIdentifier } from "./helpers.ts";
 
 describe("csr", () => {
