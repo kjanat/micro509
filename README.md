@@ -368,6 +368,16 @@ console.log(
 );
 ```
 
+## PKCS#7 signedData parse
+
+```ts
+import { parsePkcs7SignedDataPem } from "micro509";
+
+const signed = parsePkcs7SignedDataPem(pkcs7Pem);
+console.log(signed.certificates.length);
+console.log(signed.signerInfos.length);
+```
+
 ## Legacy private key PEM
 
 ```ts
@@ -433,9 +443,9 @@ if (result.ok) {
 - decode helpers: single-extension, registry-style, or typed decoder-map decode over parsed extensions
 - decoder maps: strongly keyed `decodedExtensionMap` on parse results
 - pem helpers: split mixed cert/csr/key bundles by label
-- pkcs7 helpers: create/parse degenerate signedData cert bags
+- pkcs7 helpers: create/parse degenerate signedData cert bags, parse general signedData signer metadata
 - crl helpers: create/parse/verify CRLs, delta CRL indicator, issuing distribution point, freshest CRL, entry reason/invalidity extensions, revocation lookup by serial
-- ocsp helpers: build requests, build signed responses, parse requests/responses, verify response signatures
+- ocsp helpers: build requests, build signed responses, parse requests/responses, verify response signatures, validate nonce/request/issuer/delegated responders
 - pfx helpers: create/parse passwordless or encrypted cert+key bundles with bag attributes and optional MAC integrity
 - legacy key helpers: PKCS#1 RSA and SEC1 EC import/export, plus encrypted traditional PEM
 - extended key usage: built-ins + custom OID escape hatch

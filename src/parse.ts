@@ -75,6 +75,7 @@ export interface ParseOptions<
 export interface ParsedCertificate<
 	TMap extends ExtensionDecoderMap = Record<never, never>,
 > {
+	readonly der: Uint8Array;
 	readonly version: number;
 	readonly serialNumberHex: string;
 	readonly tbsCertificateDer: Uint8Array;
@@ -163,6 +164,7 @@ export function parseCertificateDer<
 		: decodeExtensionMap(parsedExtensions.all, options.decoderMap);
 
 	return {
+		der: new Uint8Array(der),
 		version,
 		serialNumberHex: toHex(serialNumber.value),
 		tbsCertificateDer: der.slice(

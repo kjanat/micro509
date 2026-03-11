@@ -10,6 +10,7 @@ import {
 	octetString,
 	readElement,
 	sequence,
+	setOf,
 	tlv,
 } from "../src/der.ts";
 import {
@@ -66,6 +67,8 @@ import {
 	parseOcspResponsePem,
 	parsePfxPem,
 	parsePkcs7CertBagPem,
+	parsePkcs7SignedDataDer,
+	parsePkcs7SignedDataPem,
 	pemDecode,
 	splitPemBlocks,
 	validateOcspResponse,
@@ -353,6 +356,23 @@ describe("micro509", () => {
 		expect(
 			parsed.map((certificate) => certificate.subject.values.commonName),
 		).toEqual(["pkcs7-leaf.example", "PKCS7 Root"]);
+	});
+
+	it("parses generic PKCS#7 signedData signer metadata", async () => {
+		const signer = await createSelfSignedCertificate({
+			subject: { commonName: "CMS Signer" },
+		});
+		const parsedSigner = parseCertificatePem(signer.certificate.pem);
+		const signedDataDer = createSyntheticPkcs7SignedData(parsedSigner);
+		const parsed = parsePkcs7SignedDataDer(signedDataDer);
+		expect(parsed.contentTypeOid).toBe(OIDS.pkcs7SignedData);
+		expect(parsed.certificates).toHaveLength(1);
+		expect(parsed.signerInfos[0]).toMatchObject({
+			version: 1,
+			digestAlgorithmOid: OIDS.sha256,
+			signatureAlgorithmOid: OIDS.sha256WithRSAEncryption,
+			serialNumberHex: parsedSigner.serialNumberHex,
+		});
 	});
 
 	it("creates and parses passwordless PFX bundles", async () => {
@@ -672,6 +692,62 @@ describe("micro509", () => {
 				request: wrongNonceRequest.pem,
 			}),
 		).toMatchObject({ ok: false, code: "nonce_mismatch" });
+	});
+
+	it("validates delegated OCSP responder with included certificate", async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: "Delegating CA" },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 1 },
+				keyUsage: ["keyCertSign", "cRLSign"],
+			},
+		});
+		const responderKeys = await generateKeyPair();
+		const responder = await createCertificate({
+			issuer: { commonName: "Delegating CA" },
+			subject: { commonName: "OCSP Responder" },
+			publicKey: responderKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+			extensions: {
+				keyUsage: ["digitalSignature"],
+				extendedKeyUsage: ["ocspSigning"],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: "Delegating CA" },
+			subject: { commonName: "delegated-ocsp.example" },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const request = await createOcspRequest({
+			requests: [
+				{ certificate: leaf.pem, issuerCertificate: issuer.certificate.pem },
+			],
+			nonce: Uint8Array.of(0xca, 0xfe),
+		});
+		const response = await createOcspResponse({
+			signerPrivateKey: responderKeys.privateKey,
+			signerCertificate: responder.pem,
+			includedCertificates: [responder.pem],
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: "good",
+				},
+			],
+			nonce: Uint8Array.of(0xca, 0xfe),
+		});
+		expect(
+			await validateOcspResponse({
+				response: response.der,
+				issuerCertificate: issuer.certificate.pem,
+				request: request.pem,
+			}),
+		).toMatchObject({ ok: true });
 	});
 
 	it("builds across multiple candidate intermediates", async () => {
@@ -1759,6 +1835,32 @@ async function createSyntheticOcspResponse(
 				octetString(basicResponse),
 			]),
 		),
+	]);
+}
+
+function createSyntheticPkcs7SignedData(
+	signer: ReturnType<typeof parseCertificatePem>,
+): Uint8Array {
+	const signerInfo = sequence([
+		integerFromNumber(1),
+		sequence([
+			hexToBytes(signer.issuer.derHex),
+			integer(hexToBytes(signer.serialNumberHex)),
+		]),
+		sequence([objectIdentifier(OIDS.sha256), nullValue()]),
+		sequence([objectIdentifier(OIDS.sha256WithRSAEncryption), nullValue()]),
+		octetString(Uint8Array.of(0x01, 0x02, 0x03)),
+	]);
+	const signedData = sequence([
+		integerFromNumber(1),
+		setOf([sequence([objectIdentifier(OIDS.sha256), nullValue()])]),
+		sequence([objectIdentifier(OIDS.pkcs7Data)]),
+		explicitContext(0, signer.der),
+		setOf([signerInfo]),
+	]);
+	return sequence([
+		objectIdentifier(OIDS.pkcs7SignedData),
+		explicitContext(0, signedData),
 	]);
 }
 

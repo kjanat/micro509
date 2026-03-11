@@ -157,10 +157,20 @@ export {
 	type PfxPrivateKeySource,
 } from "./pfx.ts";
 export {
+	createPkcs12MacData,
+	type ParsedPkcs12MacData,
+	parsePkcs12MacData,
+	type Pkcs12MacOptions,
+} from "./pkcs12-mac.ts";
+export {
 	createPkcs7CertBagDer,
 	createPkcs7CertBagPem,
+	type ParsedPkcs7SignedData,
+	type ParsedPkcs7SignerInfo,
 	parsePkcs7CertBagDer,
 	parsePkcs7CertBagPem,
+	parsePkcs7SignedDataDer,
+	parsePkcs7SignedDataPem,
 	type Pkcs7CertBag,
 	type Pkcs7CertificateSource,
 } from "./pkcs7.ts";

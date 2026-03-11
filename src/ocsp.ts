@@ -1,5 +1,6 @@
 import {
 	bitString,
+	concatBytes,
 	type DerElement,
 	explicitContext,
 	implicitPrimitiveContext,
@@ -81,6 +82,7 @@ export interface ParsedOcspResponse {
 	readonly producedAt?: Date;
 	readonly responses?: readonly ParsedOcspSingleResponse[];
 	readonly nonce?: string;
+	readonly certificates?: readonly ParsedCertificate[];
 }
 
 export interface CreateOcspSingleResponseInput extends CreateOcspRequestItemInput {
@@ -98,6 +100,7 @@ export interface CreateOcspResponseInput {
 	readonly producedAt?: Date;
 	readonly nonce?: Uint8Array;
 	readonly hashAlgorithm?: OcspHashAlgorithm;
+	readonly includedCertificates?: readonly OcspCertificateSource[];
 }
 
 export interface OcspResponseMaterial {
@@ -227,6 +230,7 @@ export function parseOcspResponseDer(der: Uint8Array): ParsedOcspResponse {
 		"signatureAlgorithm",
 	);
 	const signatureValue = requireElement(basicChildren[2], "signatureValue");
+	const certificatesElement = basicChildren[3];
 	const responseDataDer = basicResponse.slice(
 		responseData.start - responseData.headerLength,
 		responseData.end,
@@ -265,6 +269,14 @@ export function parseOcspResponseDer(der: Uint8Array): ParsedOcspResponse {
 			parseSingleResponse(responseDataDer, singleResponse)
 		),
 		...(nonce === undefined ? {} : { nonce }),
+		...(certificatesElement?.tag === 0xa0
+			? {
+				certificates: parseEmbeddedCertificates(
+					basicResponse,
+					certificatesElement,
+				),
+			}
+			: {}),
 	};
 }
 
@@ -315,11 +327,23 @@ export async function createOcspResponse(
 		signatureAlgorithm,
 		responseData,
 	);
-	const basicResponse = sequence([
+	const includedCertificates = input.includedCertificates === undefined
+		? []
+		: await Promise.all(input.includedCertificates.map(normalizeCertificate));
+	const basicResponseFields: Uint8Array[] = [
 		responseData,
 		encodeAlgorithmIdentifier(signatureAlgorithm),
 		bitString(signature),
-	]);
+	];
+	if (includedCertificates.length > 0) {
+		basicResponseFields.push(
+			explicitContext(
+				0,
+				concatBytes(includedCertificates.map((certificate) => certificate.der)),
+			),
+		);
+	}
+	const basicResponse = sequence(basicResponseFields);
 	const der = sequence([
 		tlv(0x0a, Uint8Array.of(0x00)),
 		explicitContext(
@@ -391,20 +415,24 @@ export async function validateOcspResponse(
 		};
 	}
 	const issuer = await normalizeCertificate(input.issuerCertificate);
-	const signer = await normalizeCertificate(
-		input.responderCertificate ?? input.issuerCertificate,
-	);
+	const resolvedResponder = input.responderCertificate
+		?? parsedResponse.certificates?.[0]
+		?? input.issuerCertificate;
+	const signer = await normalizeCertificate(resolvedResponder);
 	const signature = await verifyOcspResponse(parsedResponse, signer);
 	if (!signature.ok) {
 		return signature;
 	}
 	if (signer.subject.derHex !== issuer.subject.derHex) {
 		if (
-			typeof input.responderCertificate === "string"
-			|| input.responderCertificate instanceof Uint8Array
+			typeof resolvedResponder === "string"
+			|| resolvedResponder instanceof Uint8Array
 		) {
 			const chain = await verifyCertificateChain({
-				leaf: input.responderCertificate,
+				leaf: resolvedResponder,
+				intermediates: (parsedResponse.certificates ?? [])
+					.slice(1)
+					.map((certificate) => certificate.der),
 				roots: [certificateSourceToInput(input.issuerCertificate)],
 			});
 			if (!chain.ok) {
@@ -676,6 +704,20 @@ function parseOcspNonceFromExtensions(
 		return toHex(readElement(extnValue.value).value);
 	}
 	return undefined;
+}
+
+function parseEmbeddedCertificates(
+	source: Uint8Array,
+	element: DerElement,
+): readonly ParsedCertificate[] {
+	const certificates: ParsedCertificate[] = [];
+	let offset = element.start;
+	while (offset < element.end) {
+		const child = readElement(source, offset);
+		certificates.push(parseCertificateDer(source.slice(offset, child.end)));
+		offset = child.end;
+	}
+	return certificates;
 }
 
 async function verifySignedData(
