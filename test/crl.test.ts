@@ -225,6 +225,44 @@ describe('crl', () => {
 		});
 	});
 
+	it('parses CRL general names for email, IP, and unknown tags', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'General Name CRL Issuer' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'General Name CRL Issuer' },
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+			freshestCrlDistributionPoints: [
+				{
+					distributionPoint: {
+						fullName: [
+							{ type: 'email', value: 'pki@example.test' },
+							{ type: 'ip', value: '2001:db8::7' },
+							{ type: 'unknown', tag: 0x89, value: Uint8Array.of(0xde, 0xad) },
+						],
+					},
+				},
+			],
+		});
+
+		expect(parseCertificateRevocationListPem(crl.pem).freshestCrlDistributionPoints).toEqual([
+			{
+				distributionPoint: {
+					fullName: [
+						{ type: 'email', value: 'pki@example.test' },
+						{ type: 'ip', value: '2001:db8:0:0:0:0:0:7' },
+						{ type: 'unknown', tag: 0x89, value: Uint8Array.of(0xde, 0xad) },
+					],
+				},
+			},
+		]);
+	});
+
 	it('validates CRL with issuer linkage and freshness', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'CRL Validate CA' },
@@ -1440,6 +1478,289 @@ describe('crl', () => {
 			code: 'non_applicable',
 			message: 'certificate distribution points do not authorize this indirect CRL issuer',
 			details: { reason: 'issuer_mismatch' },
+		});
+	});
+
+	it('rejects indirect CRLs for alternate issuers when certificate lacks distribution points', async () => {
+		const crlIssuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Indirect No-DP CRL Issuer' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const certificateIssuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Indirect No-DP Certificate Issuer' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Indirect No-DP Certificate Issuer' },
+			subject: { commonName: 'indirect-no-dp.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: certificateIssuer.keyPair.privateKey,
+			issuerPublicKey: certificateIssuer.keyPair.publicKey,
+		});
+		const indirectCrl = await createCertificateRevocationList({
+			issuer: { commonName: 'Indirect No-DP CRL Issuer' },
+			signerPrivateKey: crlIssuer.keyPair.privateKey,
+			issuerPublicKey: crlIssuer.keyPair.publicKey,
+			issuingDistributionPoint: {
+				indirectCrl: true,
+			},
+		});
+
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: leaf.pem,
+				issuerCertificate: crlIssuer.certificate.pem,
+				crl: indirectCrl.pem,
+			}),
+		).toEqual({
+			ok: false,
+			code: 'non_applicable',
+			message:
+				'indirect CRLs for alternate certificate issuers require matching cRLIssuer distribution points',
+			details: { reason: 'issuer_mismatch' },
+		});
+	});
+
+	it('rejects indirect CRLs when cRLIssuer uses unsupported GeneralName types', async () => {
+		const crlIssuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Unsupported cRLIssuer CRL Issuer' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const certificateIssuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Unsupported cRLIssuer Leaf Issuer' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Unsupported cRLIssuer Leaf Issuer' },
+			subject: { commonName: 'unsupported-crl-issuer-name.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: certificateIssuer.keyPair.privateKey,
+			issuerPublicKey: certificateIssuer.keyPair.publicKey,
+			extensions: {
+				crlDistributionPoints: [
+					{
+						distributionPoint: {
+							fullName: [{ type: 'uri', value: 'http://example.test/unsupported-crl-issuer.crl' }],
+						},
+						crlIssuer: [{ type: 'dns', value: 'unsupported.example.test' }],
+					},
+				],
+			},
+		});
+		const indirectCrl = await createCertificateRevocationList({
+			issuer: { commonName: 'Unsupported cRLIssuer CRL Issuer' },
+			signerPrivateKey: crlIssuer.keyPair.privateKey,
+			issuerPublicKey: crlIssuer.keyPair.publicKey,
+			issuingDistributionPoint: {
+				distributionPoint: {
+					fullName: [{ type: 'uri', value: 'http://example.test/unsupported-crl-issuer.crl' }],
+				},
+				indirectCrl: true,
+			},
+		});
+
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: leaf.pem,
+				issuerCertificate: crlIssuer.certificate.pem,
+				crl: indirectCrl.pem,
+			}),
+		).toEqual({
+			ok: false,
+			code: 'non_applicable',
+			message: 'indirect CRL distribution points must identify the CRL issuer with directoryName',
+			details: { reason: 'indirect_crl_unsupported' },
+		});
+	});
+
+	it('rejects delta CRL entries with unsupported certificateIssuer names', async () => {
+		const crlIssuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Delta Unsupported Entry CRL Issuer' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const certificateIssuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Delta Unsupported Entry Leaf Issuer' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const parsedCrlIssuer = parseCertificatePem(crlIssuer.certificate.pem);
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Delta Unsupported Entry Leaf Issuer' },
+			subject: { commonName: 'delta-unsupported-entry.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: certificateIssuer.keyPair.privateKey,
+			issuerPublicKey: certificateIssuer.keyPair.publicKey,
+			serialNumber: Uint8Array.of(0x55),
+			extensions: {
+				crlDistributionPoints: [
+					{
+						distributionPoint: {
+							fullName: [{ type: 'uri', value: 'http://example.test/delta-unsupported-entry.crl' }],
+						},
+						crlIssuer: [{ type: 'directoryName', derHex: parsedCrlIssuer.subject.derHex }],
+					},
+				],
+			},
+		});
+		const completeCrl = await createCertificateRevocationList({
+			issuer: { commonName: 'Delta Unsupported Entry CRL Issuer' },
+			signerPrivateKey: crlIssuer.keyPair.privateKey,
+			issuerPublicKey: crlIssuer.keyPair.publicKey,
+			crlNumber: 10,
+			issuingDistributionPoint: {
+				distributionPoint: {
+					fullName: [{ type: 'uri', value: 'http://example.test/delta-unsupported-entry.crl' }],
+				},
+				indirectCrl: true,
+			},
+		});
+		const deltaBase = await createCertificateRevocationList({
+			issuer: { commonName: 'Delta Unsupported Entry CRL Issuer' },
+			signerPrivateKey: crlIssuer.keyPair.privateKey,
+			issuerPublicKey: crlIssuer.keyPair.publicKey,
+			crlNumber: 11,
+			baseCrlNumber: 10,
+			issuingDistributionPoint: {
+				distributionPoint: {
+					fullName: [{ type: 'uri', value: 'http://example.test/delta-unsupported-entry.crl' }],
+				},
+				indirectCrl: true,
+			},
+			revokedCertificates: [{ serialNumber: Uint8Array.of(0x55), reasonCode: 'keyCompromise' }],
+		});
+		const deltaCrl = await addRevokedEntryCertificateIssuers(
+			deltaBase.der,
+			crlIssuer.keyPair.privateKey,
+			[
+				{
+					entryIndex: 0,
+					names: [{ type: 'email', value: 'unsupported@example.test' }],
+				},
+			],
+		);
+
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: leaf.pem,
+				issuerCertificate: crlIssuer.certificate.pem,
+				crl: completeCrl.pem,
+				deltaCrl,
+			}),
+		).toEqual({
+			ok: false,
+			code: 'non_applicable',
+			message: 'indirect CRL entry certificateIssuer must include a directoryName',
+			details: { reason: 'indirect_crl_unsupported' },
+		});
+	});
+
+	it('rejects parsed delta CRLs missing CRL numbers or mismatched authority key identifiers', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Parsed Delta Compatibility CA' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const { subjectKeyIdentifier: _ignoredSubjectKeyIdentifier, ...parsedIssuer } =
+			parseCertificatePem(ca.certificate.pem);
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Parsed Delta Compatibility CA' },
+			subject: { commonName: 'parsed-delta-compat.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				crlDistributionPoints: [
+					{
+						distributionPoint: {
+							fullName: [{ type: 'uri', value: 'http://example.test/parsed-delta-compat.crl' }],
+						},
+					},
+				],
+			},
+		});
+		const complete = parseCertificateRevocationListPem(
+			(
+				await createCertificateRevocationList({
+					issuer: { commonName: 'Parsed Delta Compatibility CA' },
+					signerPrivateKey: ca.keyPair.privateKey,
+					issuerPublicKey: ca.keyPair.publicKey,
+					crlNumber: 4,
+					issuingDistributionPoint: {
+						distributionPoint: {
+							fullName: [{ type: 'uri', value: 'http://example.test/parsed-delta-compat.crl' }],
+						},
+					},
+				})
+			).pem,
+		);
+		const delta = parseCertificateRevocationListPem(
+			(
+				await createCertificateRevocationList({
+					issuer: { commonName: 'Parsed Delta Compatibility CA' },
+					signerPrivateKey: ca.keyPair.privateKey,
+					issuerPublicKey: ca.keyPair.publicKey,
+					crlNumber: 5,
+					baseCrlNumber: 4,
+					issuingDistributionPoint: {
+						distributionPoint: {
+							fullName: [{ type: 'uri', value: 'http://example.test/parsed-delta-compat.crl' }],
+						},
+					},
+				})
+			).pem,
+		);
+
+		const { crlNumber: _ignoredCompleteCrlNumber, ...completeWithoutCrlNumber } = complete;
+
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: leaf.pem,
+				issuerCertificate: parsedIssuer,
+				crl: completeWithoutCrlNumber,
+				deltaCrl: delta,
+			}),
+		).toEqual({
+			ok: false,
+			code: 'non_applicable',
+			message: 'complete and delta CRLs must both carry CRL numbers for delta processing',
+			details: { reason: 'delta_crl_incompatible' },
+		});
+
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: leaf.pem,
+				issuerCertificate: parsedIssuer,
+				crl: complete,
+				deltaCrl: { ...delta, authorityKeyIdentifier: 'deadbeef' },
+			}),
+		).toEqual({
+			ok: false,
+			code: 'non_applicable',
+			message: 'complete and delta CRLs must share the same authority key identifier',
+			details: { reason: 'delta_crl_incompatible' },
 		});
 	});
 

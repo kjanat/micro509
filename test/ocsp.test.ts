@@ -1623,6 +1623,126 @@ describe('ocsp', () => {
 		if (!result.ok) expect(result.code).toBe('responder_chain_invalid');
 	});
 
+	it('validateOcspResponse returns issuer_mismatch when delegated responder chain is valid', async () => {
+		const actualIssuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Actual OCSP Issuer' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const validationIssuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Validation OCSP Issuer' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const responderKeys = await generateKeyPair();
+		const responder = await createCertificate({
+			issuer: { commonName: 'Validation OCSP Issuer' },
+			subject: { commonName: 'Delegated OCSP Responder' },
+			publicKey: responderKeys.publicKey,
+			signerPrivateKey: validationIssuer.keyPair.privateKey,
+			issuerPublicKey: validationIssuer.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['ocspSigning'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Actual OCSP Issuer' },
+			subject: { commonName: 'issuer-mismatch-valid-chain.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: actualIssuer.keyPair.privateKey,
+			issuerPublicKey: actualIssuer.keyPair.publicKey,
+		});
+		const response = await createOcspResponse({
+			signerPrivateKey: responderKeys.privateKey,
+			signerCertificate: responder.pem,
+			includedCertificates: [responder.pem],
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: actualIssuer.certificate.pem,
+					certStatus: 'good',
+				},
+			],
+		});
+
+		const result = await validateOcspResponse({
+			response: response.der,
+			issuerCertificate: validationIssuer.certificate.pem,
+			responderCertificate: responder.pem,
+		});
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.code).toBe('issuer_mismatch');
+	});
+
+	it('validateOcspResponse rejects chained responders when path validation fails', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Chained Responder Issuer' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 2 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const badIntermediateKeys = await generateKeyPair();
+		const badIntermediate = await createCertificate({
+			issuer: { commonName: 'Chained Responder Issuer' },
+			subject: { commonName: 'Bad OCSP Intermediate' },
+			publicKey: badIntermediateKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+			extensions: {
+				basicConstraints: { ca: false },
+				keyUsage: ['digitalSignature'],
+			},
+		});
+		const responderKeys = await generateKeyPair();
+		const responder = await createCertificate({
+			issuer: { commonName: 'Bad OCSP Intermediate' },
+			subject: { commonName: 'Bad Chain Responder' },
+			publicKey: responderKeys.publicKey,
+			signerPrivateKey: badIntermediateKeys.privateKey,
+			issuerPublicKey: badIntermediateKeys.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['ocspSigning'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Chained Responder Issuer' },
+			subject: { commonName: 'bad-chain.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const response = await createOcspResponse({
+			signerPrivateKey: responderKeys.privateKey,
+			signerCertificate: responder.pem,
+			includedCertificates: [responder.pem, badIntermediate.pem],
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: 'good',
+				},
+			],
+		});
+
+		const result = await validateOcspResponse({
+			response: response.der,
+			issuerCertificate: issuer.certificate.pem,
+			responderCertificate: responder.pem,
+			allowChainedResponderCertificate: true,
+		});
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.code).toBe('responder_chain_invalid');
+	});
+
 	it('createOcspResponse encodes revoked cert status with reason', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'OCSP Revoked CA' },

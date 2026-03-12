@@ -70,6 +70,31 @@ describe('revocation boundary', () => {
 		});
 	});
 
+	it('returns good when CRL evidence conclusively clears the certificate', async () => {
+		const { leaf, intermediate, intermediateKeys } = await issueChain();
+		const certificate = parseCertificatePem(leaf.pem);
+		const issuerCertificate = parseCertificatePem(intermediate.pem);
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Verify Intermediate CA' },
+			signerPrivateKey: intermediateKeys.privateKey,
+			issuerPublicKey: intermediateKeys.publicKey,
+			revokedCertificates: [{ serialNumber: Uint8Array.of(0x7f) }],
+		});
+
+		expect(
+			await checkCertificateRevocation({
+				certificate,
+				issuerCertificate,
+				evidence: [{ kind: 'crl', crl: crl.pem }],
+			}),
+		).toEqual({
+			ok: true,
+			status: 'good',
+			source: 'crl',
+			message: 'Certificate is not revoked according to CRL evidence',
+		});
+	});
+
 	it('returns revoked when a matching scoped complete CRL covers the certificate', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Scoped Revocation CA' },
@@ -379,6 +404,150 @@ describe('revocation boundary', () => {
 			status: 'good',
 			source: 'ocsp',
 			message: 'Certificate is not revoked according to OCSP evidence',
+		});
+	});
+
+	it('returns revoked when OCSP evidence revokes the certificate', async () => {
+		const { leaf, intermediate, intermediateKeys } = await issueChain();
+		const certificate = parseCertificatePem(leaf.pem);
+		const issuerCertificate = parseCertificatePem(intermediate.pem);
+		const revokedAt = new Date('2024-02-01T00:00:00Z');
+		const ocspResponse = await createOcspResponse({
+			signerPrivateKey: intermediateKeys.privateKey,
+			signerCertificate: intermediate.pem,
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: intermediate.pem,
+					certStatus: 'revoked',
+					revokedAt,
+					revocationReasonCode: 1,
+				},
+			],
+		});
+
+		expect(
+			await checkCertificateRevocation({
+				certificate,
+				issuerCertificate,
+				evidence: [{ kind: 'ocsp', response: ocspResponse.pem }],
+			}),
+		).toMatchObject({
+			ok: true,
+			status: 'revoked',
+			source: 'ocsp',
+			revocationReasonCode: 1,
+			revokedAt,
+		});
+	});
+
+	it('returns unknown when OCSP validation itself fails', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Revocation OCSP Issuer' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const responderKeys = await generateKeyPair();
+		const responder = await createCertificate({
+			issuer: { commonName: 'Revocation OCSP Issuer' },
+			subject: { commonName: 'Responder Without EKU' },
+			publicKey: responderKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Revocation OCSP Issuer' },
+			subject: { commonName: 'ocsp-invalid.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const ocspResponse = await createOcspResponse({
+			signerPrivateKey: responderKeys.privateKey,
+			signerCertificate: responder.pem,
+			includedCertificates: [responder.pem],
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: 'good',
+				},
+			],
+		});
+
+		expect(
+			await checkCertificateRevocation({
+				certificate: parseCertificatePem(leaf.pem),
+				issuerCertificate: parseCertificatePem(issuer.certificate.pem),
+				evidence: [{ kind: 'ocsp', response: ocspResponse.pem }],
+			}),
+		).toEqual({
+			ok: false,
+			status: 'unknown',
+			code: 'revocation_status_unknown',
+			message: 'No revocation evidence established certificate status',
+			details: {
+				checkedSources: ['ocsp'],
+				indeterminateEvidence: [
+					{
+						source: 'ocsp',
+						code: 'ocsp_signing_missing',
+						message: 'Delegated OCSP responder lacks ocspSigning EKU',
+					},
+				],
+			},
+		});
+	});
+
+	it('returns unknown when OCSP response omits the target certificate status', async () => {
+		const { leaf, intermediate, intermediateKeys } = await issueChain();
+		const otherLeafKeys = await generateKeyPair();
+		const otherLeaf = await createCertificate({
+			issuer: { commonName: 'Verify Intermediate CA' },
+			subject: { commonName: 'other-ocsp-status.example' },
+			publicKey: otherLeafKeys.publicKey,
+			signerPrivateKey: intermediateKeys.privateKey,
+			issuerPublicKey: intermediateKeys.publicKey,
+		});
+		const ocspResponse = await createOcspResponse({
+			signerPrivateKey: intermediateKeys.privateKey,
+			signerCertificate: intermediate.pem,
+			responses: [
+				{
+					certificate: otherLeaf.pem,
+					issuerCertificate: intermediate.pem,
+					certStatus: 'good',
+				},
+			],
+		});
+
+		expect(
+			await checkCertificateRevocation({
+				certificate: parseCertificatePem(leaf.pem),
+				issuerCertificate: parseCertificatePem(intermediate.pem),
+				evidence: [{ kind: 'ocsp', response: ocspResponse.pem }],
+			}),
+		).toEqual({
+			ok: false,
+			status: 'unknown',
+			code: 'revocation_status_unknown',
+			message: 'No revocation evidence established certificate status',
+			details: {
+				checkedSources: ['ocsp'],
+				indeterminateEvidence: [
+					{
+						source: 'ocsp',
+						code: 'certificate_status_missing',
+						message: 'OCSP response does not include certificate status for the target certificate',
+					},
+				],
+			},
 		});
 	});
 
