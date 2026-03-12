@@ -64,6 +64,7 @@ Started: 2026-03-12
 - For fixture-only RFC coverage, add a focused test file with one small issuance helper and paired pass/fail cases per supported name form; keep broad wrapper behavior in `test/verify.test.ts` and the fixture matrix in its own file.
 - For focused PKITS coverage, vendor a small fixture subset from a maintained mirror, run `verifyCertificateChain()` at the PKITS publication timestamp, and assert public policy outputs for at least one positive mapping case so the harness checks more than pass/fail.
 - Focused OCSP fixture coverage works best in its own small file with one authority helper and paired pass/fail cases for responder binding, delegated auth, freshness, request coverage, and normalized DER/PEM/parsed inputs.
+- For CLI-backed differential harnesses, compare normalized verdicts and small metadata fields instead of raw stderr; let focused fixture tests own richer typed failures and edge-case semantics.
 
 ## Validation Commands
 
@@ -469,3 +470,11 @@ Started: 2026-03-12
 - Ran the full feedback loop: `bun fmt`, `bun typecheck`, `bun lint`, `bun test`, `bun bd`.
 - Files changed: `test/identity-fixtures.test.ts`, `README.md`, `docs/PKIX-SCOPE.md`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** focused identity fixture coverage works best as a public-API-first matrix file with one tiny issuance helper and paired pass/fail cases per shipped identifier form, while broader boundary tests keep covering matcher edge details and wrapper composition.
+
+## Task - [add-diff-test-harness]
+
+- Added an OpenSSL-backed differential oracle in `test/oracles/openssl.ts` plus `test/differential.test.ts`, covering normalized comparisons for core path validation, direct CRL revocation, issuer-signed OCSP responses, and DNS/IP identity matching.
+- Documented the harness scope and known oracle limits in `docs/DIFF-HARNESS.md`, and updated `docs/PKIX-SCOPE.md` to point at the new differential coverage.
+- Ran the full feedback loop: `bun fmt`, `bun typecheck`, `bun lint`, `bun test`, `bun bd`.
+- Files changed: `test/oracles/openssl.ts`, `test/differential.test.ts`, `docs/DIFF-HARNESS.md`, `docs/PKIX-SCOPE.md`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** differential harnesses stay stable when the mature oracle generates or validates standard artifacts, while this repo compares only coarse public outcomes and documents the richer surfaces that still need focused fixture coverage.

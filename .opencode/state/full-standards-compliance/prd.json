@@ -521,7 +521,7 @@
 				"add-identity-fixtures"
 			],
 			"priority": "integration",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "finalize-claims-and-matrix",

@@ -149,7 +149,7 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
 - [x] Add round-trip tests for certs, CSRs, names, and extensions.
 - [x] Add a focused PKITS harness for shipped path-validation claims. See [`docs/PKITS-HARNESS.md`](./PKITS-HARNESS.md) and [`test/pkits.test.ts`](../test/pkits.test.ts).
 - [ ] Add malformed DER / fuzz tests.
-- [ ] Differential-test against at least one mature implementation.
+- [x] Differential-test against at least one mature implementation. See [`docs/DIFF-HARNESS.md`](./DIFF-HARNESS.md) and [`test/differential.test.ts`](../test/differential.test.ts).
 - [ ] Run the validator against **NIST PKITS**, which NIST describes as a comprehensive X.509 path validation test suite for relying parties. (NIST Computer Security Resource Center[^x-509-path-validation])
 
 ## Recommended claim language
