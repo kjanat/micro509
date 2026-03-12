@@ -21,6 +21,7 @@ Started: 2026-03-12
 - RFC 9618 policy validation should use a depth-indexed DAG keyed by `(depth, validPolicy)` plus constrained policy sets; never build or expose the deprecated RFC 5280 policy tree during core validation.
 - CRL applicability needs structured certificate DP + CRL IDP objects; URI-only projections are debug/display data, not enough for RFC 5280 scope decisions.
 - Standards docs should keep README + `docs/PKIX-SCOPE.md` aligned around a short `implemented` / `partial` / `not yet` matrix, then narrow per-feature wording to shipped behavior.
+- New verify-surface knobs should land as direct optional fields on input objects, then flow through wrapper helpers unchanged until enforcement work is ready.
 
 ## Validation Commands
 
@@ -102,3 +103,10 @@ Started: 2026-03-12
 - Regenerated `package.json` exports via `bun bd`, which now exposes stable package subpaths without manual export edits.
 - Files changed: `tsdown.config.ts`, `package.json`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** tsdown's generated exports stay aligned with the configured entry map, so package-surface changes should flow through build output instead of hand-maintained export metadata.
+
+## Task - [add-policy-input-types]
+
+- Added RFC 5280 policy input fields to the public verify-facing input types in `src/verify.ts`, including direct and profile helpers.
+- Forwarded defined policy knobs through verify wrapper helpers without changing current validation behavior, and added coverage in `test/verify.test.ts`.
+- Files changed: `src/verify.ts`, `test/verify.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** policy/state scaffolding can ship safely as typed passthrough fields first, as long as wrapper composition preserves the inputs verbatim for later enforcement work.

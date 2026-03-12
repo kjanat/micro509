@@ -8,7 +8,7 @@ import {
 } from './parse.ts';
 import { splitPemBlocks } from './pem.ts';
 import { verifySignedData } from './sig-verify.ts';
-import type { VerifyServiceIdentityInput } from './validation.ts';
+import type { PolicyValidationInput, VerifyServiceIdentityInput } from './validation.ts';
 
 // ---------------------------------------------------------------------------
 // Source types
@@ -114,7 +114,7 @@ export type BuildCandidatePathResult =
 // Validate candidate path
 // ---------------------------------------------------------------------------
 
-export interface ValidateCandidatePathInput {
+export interface ValidateCandidatePathInput extends PolicyValidationInput {
 	readonly chain: readonly ParsedCertificate[];
 	readonly at?: Date;
 	readonly purpose?: VerifyPurpose;
@@ -127,7 +127,7 @@ export type ValidateCandidatePathResult = { readonly ok: true } | VerifyChainFai
 // Verify chain (convenience composition)
 // ---------------------------------------------------------------------------
 
-export interface VerifyCertificateChainInput {
+export interface VerifyCertificateChainInput extends PolicyValidationInput {
 	readonly leaf: CertificateSource;
 	readonly intermediates?: readonly CertificateSource[];
 	readonly roots: readonly CertificateSource[];
@@ -165,7 +165,7 @@ export type VerifyRequestResult =
 // Validation profile inputs
 // ---------------------------------------------------------------------------
 
-export interface ValidateForTlsServerInput {
+export interface ValidateForTlsServerInput extends BuildCandidatePathInput, PolicyValidationInput {
 	readonly leaf: CertificateSource;
 	readonly intermediates?: readonly CertificateSource[];
 	readonly roots: readonly CertificateSource[];
@@ -174,9 +174,11 @@ export interface ValidateForTlsServerInput {
 	readonly serviceIdentity?: VerifyServiceIdentityInput;
 }
 
-export type ValidateForTlsClientInput = BuildCandidatePathInput;
-export type ValidateForCodeSigningInput = BuildCandidatePathInput;
-export type ValidateForCaInput = BuildCandidatePathInput;
+export interface ValidateForTlsClientInput extends BuildCandidatePathInput, PolicyValidationInput {}
+export interface ValidateForCodeSigningInput
+	extends BuildCandidatePathInput,
+		PolicyValidationInput {}
+export interface ValidateForCaInput extends BuildCandidatePathInput, PolicyValidationInput {}
 
 // ---------------------------------------------------------------------------
 // Internal constants
@@ -463,6 +465,7 @@ export async function verifyCertificateChain(
 		chain: buildResult.value.chain,
 		...(input.at !== undefined && { at: input.at }),
 		...(input.purpose !== undefined && { purpose: input.purpose }),
+		...copyPolicyValidationInput(input),
 		...(input.allowSelfSignedLeaf !== undefined && {
 			allowSelfSignedLeaf: input.allowSelfSignedLeaf,
 		}),
@@ -586,7 +589,9 @@ export function trustAnchorFromCertificate(certificate: ParsedCertificate): Trus
 // ---------------------------------------------------------------------------
 
 /** Extracts defined optional fields from a base input for safe forwarding. */
-function baseChainInput(input: BuildCandidatePathInput): VerifyCertificateChainInput {
+function baseChainInput(
+	input: BuildCandidatePathInput & PolicyValidationInput,
+): VerifyCertificateChainInput {
 	return {
 		leaf: input.leaf,
 		roots: input.roots,
@@ -597,6 +602,20 @@ function baseChainInput(input: BuildCandidatePathInput): VerifyCertificateChainI
 			trustAnchors: input.trustAnchors,
 		}),
 		...(input.at !== undefined && { at: input.at }),
+		...copyPolicyValidationInput(input),
+	};
+}
+
+function copyPolicyValidationInput(input: PolicyValidationInput): PolicyValidationInput {
+	return {
+		...(input.initialPolicySet === undefined ? {} : { initialPolicySet: input.initialPolicySet }),
+		...(input.requireExplicitPolicy === undefined
+			? {}
+			: { requireExplicitPolicy: input.requireExplicitPolicy }),
+		...(input.inhibitPolicyMapping === undefined
+			? {}
+			: { inhibitPolicyMapping: input.inhibitPolicyMapping }),
+		...(input.inhibitAnyPolicy === undefined ? {} : { inhibitAnyPolicy: input.inhibitAnyPolicy }),
 	};
 }
 

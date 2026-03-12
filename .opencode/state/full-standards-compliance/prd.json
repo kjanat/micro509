@@ -109,7 +109,7 @@
 			"description": "Add public policy-validation input types to verify APIs. Done when:\n- initialPolicySet, requireExplicitPolicy, inhibitPolicyMapping, and inhibitAnyPolicy are typed\n- exports include the new input shapes\n- existing call sites still compile",
 			"depends": ["define-validation-boundaries"],
 			"priority": "architecture",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "add-name-constraint-inputs",

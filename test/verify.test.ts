@@ -1854,6 +1854,37 @@ describe('validation profiles', () => {
 		expect(fail.ok).toBe(false);
 	});
 
+	it('validateForTlsClient accepts policy validation inputs', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Policy Input Root' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Policy Input Root' },
+			subject: { commonName: 'policy-client-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['clientAuth'],
+			},
+		});
+		const result = await validateForTlsClient({
+			leaf: leaf.pem,
+			roots: [root.certificate.pem],
+			initialPolicySet: ['1.2.3.4'],
+			requireExplicitPolicy: true,
+			inhibitPolicyMapping: true,
+			inhibitAnyPolicy: true,
+		});
+		expect(result.ok).toBe(true);
+	});
+
 	it('validateForCodeSigning checks chain + codeSigning EKU', async () => {
 		const root = await createSelfSignedCertificate({
 			subject: { commonName: 'Code Sign Root' },
@@ -1967,6 +1998,21 @@ describe('validateCandidatePath direct', () => {
 		});
 		expect(verifyResult.ok).toBe(false);
 		if (!verifyResult.ok) expect(verifyResult.code).toBe('subject_alt_name_mismatch');
+	});
+
+	it('accepts policy validation inputs on raw path validation', async () => {
+		const chain = await issueChain();
+		const leafParsed = parseCertificatePem(chain.leaf.pem);
+		const intParsed = parseCertificatePem(chain.intermediate.pem);
+		const rootParsed = parseCertificatePem(chain.root.certificate.pem);
+		const result = await validateCandidatePath({
+			chain: [leafParsed, intParsed, rootParsed],
+			initialPolicySet: ['1.2.3.4'],
+			requireExplicitPolicy: true,
+			inhibitPolicyMapping: true,
+			inhibitAnyPolicy: true,
+		});
+		expect(result.ok).toBe(true);
 	});
 
 	it('detects signature_invalid in candidate path', async () => {
