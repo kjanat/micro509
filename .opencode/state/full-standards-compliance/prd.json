@@ -507,7 +507,7 @@
 			"description": "Add a NIST PKITS harness for the path-validation claims this repo makes. Done when:\n- harness can run relevant PKITS cases\n- expected pass/fail mapping is documented\n- policy and name-constraint coverage are included once implemented",
 			"depends": ["add-policy-fixtures", "add-name-constraint-fixtures"],
 			"priority": "integration",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "add-diff-test-harness",

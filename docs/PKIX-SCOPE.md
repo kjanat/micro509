@@ -4,10 +4,10 @@
 
 | Area                       | Status    | Notes                                                                                                                                                                     |
 | -------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| RFC 5280 path validation   | `partial` | core path validation ships; policy processing, initial subtree inputs, and full name-constraint semantics are not complete yet                                            |
+| RFC 5280 path validation   | `partial` | core path validation, policy inputs/processing, and initial subtree inputs ship; full revocation integration and complete PKITS coverage are not complete yet             |
 | RFC 6960 OCSP              | `partial` | request/response parsing, signature checks, responder binding/authorization, nonce/request matching, and freshness checks ship; full request coverage is not complete yet |
 | RFC 6125 service identity  | `partial` | DNS-ID and IP-ID checks ship today inside verification helpers; separate identity APIs, URI-ID, SRV-ID, and IDNA are not complete yet                                     |
-| RFC 9618 policy validation | `not yet` | no RFC 9618 policy engine yet                                                                                                                                             |
+| RFC 9618 policy validation | `partial` | RFC 9618-style policy state, enforcement, outputs, and focused PKITS coverage ship; broader conformance evidence is still incomplete                                      |
 
 ## 1. Define the boundary up front
 
@@ -21,14 +21,14 @@
 
 - [x] Prospective certification path.
 - [x] Validation time.
-- [ ] Trust anchor information: trusted issuer name, trusted public key algorithm,
+- [x] Trust anchor information: trusted issuer name, trusted public key algorithm,
       trusted public key, and optional trusted key parameters.
-- [ ] User-initial-policy-set.
-- [ ] Initial policy-mapping inhibit flag.
-- [ ] Initial explicit-policy flag.
-- [ ] Initial anyPolicy-inhibit flag.
-- [ ] Initial permitted subtrees.
-- [ ] Initial excluded subtrees. (IETF Datatracker[^rfc5280])
+- [x] User-initial-policy-set.
+- [x] Initial policy-mapping inhibit flag.
+- [x] Initial explicit-policy flag.
+- [x] Initial anyPolicy-inhibit flag.
+- [x] Initial permitted subtrees.
+- [x] Initial excluded subtrees. (IETF Datatracker[^rfc5280])
 
 ## 3. Core certificate/path checks
 
@@ -52,7 +52,7 @@
 ## 5. Name constraints
 
 - [x] Support `nameConstraints` on CA certificates.
-- [ ] Support initial permitted/excluded subtrees as validator inputs.
+- [x] Support initial permitted/excluded subtrees as validator inputs.
 - [x] Apply constraints across supported name forms, not just DNS SANs.
 - [x] Handle self-issued certificates correctly when evaluating constraints. (IETF Datatracker[^rfc5280])
 
@@ -74,12 +74,12 @@ Current GeneralName matrix for `nameConstraints`:
 
 ## 6. Certificate policy processing
 
-- [ ] Support `certificatePolicies`.
-- [ ] Support `policyConstraints`.
-- [ ] Support `policyMappings` if you want full policy validation.
-- [ ] Support `inhibitAnyPolicy`.
-- [ ] If you implement policy validation, use the **RFC 9618** update rather than the older RFC 5280 policy-tree algorithm, because RFC 9618 replaced it with an equivalent, more efficient algorithm to avoid worst-case exponential blowups and DoS risk. (IETF Datatracker[^rfc9618])
-- [ ] If you do **not** implement this yet, say so explicitly instead of claiming full RFC 5280 validation.
+- [x] Support `certificatePolicies`.
+- [x] Support `policyConstraints`.
+- [x] Support `policyMappings`.
+- [x] Support `inhibitAnyPolicy`.
+- [x] Use the **RFC 9618** update rather than the older RFC 5280 policy-tree algorithm, because RFC 9618 replaced it with an equivalent, more efficient algorithm to avoid worst-case exponential blowups and DoS risk. (IETF Datatracker[^rfc9618])
+- [x] Keep public wording at `partial` until broader conformance evidence lands.
 
 ## 7. Trust-anchor model
 
@@ -142,6 +142,7 @@ Current GeneralName matrix for `nameConstraints`:
 
 - [ ] Add fixed RFC-style test vectors for builders, parsers, and validators.
 - [x] Add round-trip tests for certs, CSRs, names, and extensions.
+- [x] Add a focused PKITS harness for shipped path-validation claims. See [`docs/PKITS-HARNESS.md`](./PKITS-HARNESS.md) and [`test/pkits.test.ts`](../test/pkits.test.ts).
 - [ ] Add malformed DER / fuzz tests.
 - [ ] Differential-test against at least one mature implementation.
 - [ ] Run the validator against **NIST PKITS**, which NIST describes as a comprehensive X.509 path validation test suite for relying parties. (NIST Computer Security Resource Center[^x-509-path-validation])

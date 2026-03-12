@@ -61,6 +61,7 @@ Started: 2026-03-12
 - IDNA service-identity matching should normalize only DNS host parts to URL-hostname ASCII form, while keeping wildcard prefixes and URI/SRV service selectors outside the IDNA conversion step.
 - CN fallback should stay DNS-only and opt-in, and only run when no supported DNS-like SAN identifiers (`dns`, `uri`, `srv`) are present; if such SANs exist, return typed suppression details instead of silently falling back.
 - For fixture-only RFC coverage, add a focused test file with one small issuance helper and paired pass/fail cases per supported name form; keep broad wrapper behavior in `test/verify.test.ts` and the fixture matrix in its own file.
+- For focused PKITS coverage, vendor a small fixture subset from a maintained mirror, run `verifyCertificateChain()` at the PKITS publication timestamp, and assert public policy outputs for at least one positive mapping case so the harness checks more than pass/fail.
 
 ## Validation Commands
 
@@ -435,3 +436,11 @@ Started: 2026-03-12
 - Ran the full feedback loop: `bun fmt`, `bun typecheck`, `bun lint`, `bun test`, `bun bd`.
 - Files changed: `test/policy.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** focused policy fixture coverage works best with a local issuance helper plus assertions on both authority-constrained and user-constrained outputs; one Cartesian mapping-fanout case protects the DAG dedupe path without bloating the main verify test file.
+
+## Task - [add-pkits-harness]
+
+- Added `test/pkits.test.ts` plus vendored PKITS certificate fixtures under `test/fixtures/pkits/certs/`, covering shipped path-validation areas across signature/path basics, path length, RFC 9618 policy handling, and RFC 5280 name constraints.
+- Documented the included PKITS pass/fail matrix in `docs/PKITS-HARNESS.md` and tightened `docs/PKIX-SCOPE.md` so the standards-status and input checklist match the now-shipped policy and PKITS harness surface.
+- Ran the full feedback loop: `bun fmt`, `bun typecheck`, `bun lint`, `bun test`, `bun bd`.
+- Files changed: `test/pkits.test.ts`, `test/fixtures/pkits/certs/*.crt`, `docs/PKITS-HARNESS.md`, `docs/PKIX-SCOPE.md`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** focused PKITS harnesses are most useful when they track shipped claims instead of aspirational full-suite coverage; keep the case list explicit, pin the validation time, and assert policy outputs on at least one success path so conformance checks guard semantic regressions too.
