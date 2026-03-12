@@ -485,6 +485,172 @@ describe('crl', () => {
 		).toMatchObject({ ok: true, status: 'good' });
 	});
 
+	it('rejects direct CRLs with mismatched issuers and unsupported alternate CRL issuers', async () => {
+		const certIssuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Certificate Issuer CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const crlIssuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Different CRL Issuer CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Certificate Issuer CA' },
+			subject: { commonName: 'issuer-mismatch.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: certIssuer.keyPair.privateKey,
+			issuerPublicKey: certIssuer.keyPair.publicKey,
+			extensions: {
+				crlDistributionPoints: [
+					{
+						distributionPoint: {
+							fullName: [{ type: 'uri', value: 'http://example.test/direct.crl' }],
+						},
+					},
+				],
+			},
+		});
+		const mismatchedCrl = await createCertificateRevocationList({
+			issuer: { commonName: 'Different CRL Issuer CA' },
+			signerPrivateKey: crlIssuer.keyPair.privateKey,
+			issuerPublicKey: crlIssuer.keyPair.publicKey,
+		});
+
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: leaf.pem,
+				issuerCertificate: crlIssuer.certificate.pem,
+				crl: mismatchedCrl.pem,
+			}),
+		).toEqual({
+			ok: false,
+			code: 'non_applicable',
+			message: 'CRL issuer does not match certificate issuer for direct CRL processing',
+			details: { reason: 'issuer_mismatch' },
+		});
+
+		const alternateIssuerLeafKeys = await generateKeyPair();
+		const alternateIssuerLeaf = await createCertificate({
+			issuer: { commonName: 'Certificate Issuer CA' },
+			subject: { commonName: 'alternate-crl-issuer.example' },
+			publicKey: alternateIssuerLeafKeys.publicKey,
+			signerPrivateKey: certIssuer.keyPair.privateKey,
+			issuerPublicKey: certIssuer.keyPair.publicKey,
+			extensions: {
+				crlDistributionPoints: [
+					{
+						distributionPoint: {
+							fullName: [{ type: 'uri', value: 'http://example.test/direct.crl' }],
+						},
+						crlIssuer: [{ type: 'dns', value: 'alternate.example.test' }],
+					},
+				],
+			},
+		});
+		const directCrl = await createCertificateRevocationList({
+			issuer: { commonName: 'Certificate Issuer CA' },
+			signerPrivateKey: certIssuer.keyPair.privateKey,
+			issuerPublicKey: certIssuer.keyPair.publicKey,
+			issuingDistributionPoint: {
+				distributionPoint: {
+					fullName: [{ type: 'uri', value: 'http://example.test/direct.crl' }],
+				},
+			},
+		});
+
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: alternateIssuerLeaf.pem,
+				issuerCertificate: certIssuer.certificate.pem,
+				crl: directCrl.pem,
+			}),
+		).toEqual({
+			ok: false,
+			code: 'non_applicable',
+			message:
+				'certificate distribution points that name alternate CRL issuers are not supported yet',
+			details: { reason: 'indirect_crl_unsupported' },
+		});
+	});
+
+	it('rejects attribute-only and end-entity-only CRL scopes when the certificate type mismatches', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Scope Mismatch CA' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 1 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Scope Mismatch CA' },
+			subject: { commonName: 'attribute-only.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+		const subordinateCaKeys = await generateKeyPair();
+		const subordinateCa = await createCertificate({
+			issuer: { commonName: 'Scope Mismatch CA' },
+			subject: { commonName: 'Scope Mismatch Subordinate CA' },
+			publicKey: subordinateCaKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const attributeOnlyCrl = await createCertificateRevocationList({
+			issuer: { commonName: 'Scope Mismatch CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			issuingDistributionPoint: {
+				onlyContainsAttributeCerts: true,
+			},
+		});
+		const userOnlyCrl = await createCertificateRevocationList({
+			issuer: { commonName: 'Scope Mismatch CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			issuingDistributionPoint: {
+				onlyContainsUserCerts: true,
+			},
+		});
+
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: leaf.pem,
+				issuerCertificate: ca.certificate.pem,
+				crl: attributeOnlyCrl.pem,
+			}),
+		).toEqual({
+			ok: false,
+			code: 'non_applicable',
+			message: 'attribute-certificate-only CRLs are not applicable to public-key certificates',
+			details: { reason: 'certificate_scope_mismatch' },
+		});
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: subordinateCa.pem,
+				issuerCertificate: ca.certificate.pem,
+				crl: userOnlyCrl.pem,
+			}),
+		).toEqual({
+			ok: false,
+			code: 'non_applicable',
+			message: 'CRL only applies to end-entity certificates',
+			details: { reason: 'certificate_scope_mismatch' },
+		});
+	});
+
 	it('checks CRLs without certificate distribution points and signer permissions', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Full Scope CRL CA' },
@@ -971,6 +1137,120 @@ describe('crl', () => {
 			ok: false,
 			code: 'non_applicable',
 			message: 'complete and delta CRLs must share the same issuing distribution point scope',
+			details: { reason: 'delta_crl_incompatible' },
+		});
+	});
+
+	it('rejects incompatible delta CRL number combinations', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Delta Compatibility CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Delta Compatibility CA' },
+			subject: { commonName: 'delta-compat.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+
+		const completeDelta = await createCertificateRevocationList({
+			issuer: { commonName: 'Delta Compatibility CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			crlNumber: 8,
+			baseCrlNumber: 7,
+		});
+		const normalDelta = await createCertificateRevocationList({
+			issuer: { commonName: 'Delta Compatibility CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			crlNumber: 9,
+			baseCrlNumber: 8,
+		});
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: leaf.pem,
+				issuerCertificate: ca.certificate.pem,
+				crl: completeDelta.pem,
+				deltaCrl: normalDelta.pem,
+			}),
+		).toEqual({
+			ok: false,
+			code: 'non_applicable',
+			message: 'complete CRL input must not itself be a delta CRL',
+			details: { reason: 'delta_crl_incompatible' },
+		});
+
+		const complete = await createCertificateRevocationList({
+			issuer: { commonName: 'Delta Compatibility CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			crlNumber: 8,
+		});
+		const missingIndicatorDelta = await createCertificateRevocationList({
+			issuer: { commonName: 'Delta Compatibility CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			crlNumber: 9,
+		});
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: leaf.pem,
+				issuerCertificate: ca.certificate.pem,
+				crl: complete.pem,
+				deltaCrl: missingIndicatorDelta.pem,
+			}),
+		).toEqual({
+			ok: false,
+			code: 'non_applicable',
+			message: 'delta CRL input must include a delta CRL indicator',
+			details: { reason: 'delta_crl_incompatible' },
+		});
+
+		const tooNewBaseDelta = await createCertificateRevocationList({
+			issuer: { commonName: 'Delta Compatibility CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			crlNumber: 10,
+			baseCrlNumber: 9,
+		});
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: leaf.pem,
+				issuerCertificate: ca.certificate.pem,
+				crl: complete.pem,
+				deltaCrl: tooNewBaseDelta.pem,
+			}),
+		).toEqual({
+			ok: false,
+			code: 'non_applicable',
+			message: 'delta CRL base number must not exceed the complete CRL number',
+			details: { reason: 'delta_crl_incompatible' },
+		});
+
+		const notNewerDelta = await createCertificateRevocationList({
+			issuer: { commonName: 'Delta Compatibility CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			crlNumber: 8,
+			baseCrlNumber: 8,
+		});
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: leaf.pem,
+				issuerCertificate: ca.certificate.pem,
+				crl: complete.pem,
+				deltaCrl: notNewerDelta.pem,
+			}),
+		).toEqual({
+			ok: false,
+			code: 'non_applicable',
+			message: 'delta CRL number must be newer than the complete CRL number',
 			details: { reason: 'delta_crl_incompatible' },
 		});
 	});

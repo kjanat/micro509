@@ -475,6 +475,74 @@ describe('identity boundary', () => {
 		).toMatchObject({ ok: false, code: 'service_identity_service_mismatch' });
 	});
 
+	it('rejects URI SANs with matching scheme but different host', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Identity CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Identity CA' },
+			subject: { commonName: 'uri-host.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['serverAuth'],
+				subjectAltNames: [{ type: 'uri', value: 'https://api.example.com/admin' }],
+			},
+		});
+		const certificate = parseCertificatePem(leaf.pem);
+
+		expect(
+			matchServiceIdentity({
+				certificate,
+				serviceIdentity: { type: 'uri', value: 'https://admin.example.com/login' },
+			}),
+		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
+	});
+
+	it('rejects URI identities when no URI SAN is present and throws on malformed inputs', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Identity CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Identity CA' },
+			subject: { commonName: 'uri-missing.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['serverAuth'],
+				subjectAltNames: [{ type: 'dns', value: 'uri-missing.example' }],
+			},
+		});
+		const certificate = parseCertificatePem(leaf.pem);
+
+		expect(
+			matchServiceIdentity({
+				certificate,
+				serviceIdentity: { type: 'uri', value: 'https://uri-missing.example/login' },
+			}),
+		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
+		expect(() =>
+			matchServiceIdentity({
+				certificate,
+				serviceIdentity: { type: 'uri', value: 'not a uri' },
+			}),
+		).toThrow('Invalid URI service identity');
+	});
+
 	it('matches URI SANs across IDNA host forms', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Identity CA' },
@@ -541,6 +609,74 @@ describe('identity boundary', () => {
 				serviceIdentity: { type: 'srv', value: '_xmpp-server.im.example.org' },
 			}),
 		).toMatchObject({ ok: false, code: 'service_identity_service_mismatch' });
+	});
+
+	it('rejects SRV SANs with matching service but different domain', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Identity CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Identity CA' },
+			subject: { commonName: 'srv-domain.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['serverAuth'],
+				subjectAltNames: [{ type: 'srv', value: '_xmpp-client.im.example.org' }],
+			},
+		});
+		const certificate = parseCertificatePem(leaf.pem);
+
+		expect(
+			matchServiceIdentity({
+				certificate,
+				serviceIdentity: { type: 'srv', value: '_xmpp-client.chat.example.org' },
+			}),
+		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
+	});
+
+	it('rejects SRV identities when no SRV SAN is present and throws on malformed inputs', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Identity CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Identity CA' },
+			subject: { commonName: 'srv-missing.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['serverAuth'],
+				subjectAltNames: [{ type: 'dns', value: 'srv-missing.example' }],
+			},
+		});
+		const certificate = parseCertificatePem(leaf.pem);
+
+		expect(
+			matchServiceIdentity({
+				certificate,
+				serviceIdentity: { type: 'srv', value: '_xmpp-client.srv-missing.example' },
+			}),
+		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
+		expect(() =>
+			matchServiceIdentity({
+				certificate,
+				serviceIdentity: { type: 'srv', value: 'xmpp-client.example.org' },
+			}),
+		).toThrow('Invalid SRV service identity');
 	});
 
 	it('matches SRV SANs across IDNA host forms', async () => {

@@ -22,6 +22,7 @@ import {
 	setOf,
 	time,
 } from '#micro509/der.ts';
+import { parseKeyUsageExtension } from '#micro509/extension-bits.ts';
 import { buildCertificateExtensions, encodeSubjectAltName } from '#micro509/extensions.ts';
 import {
 	allOnesMaskForIpAddress,
@@ -265,6 +266,12 @@ describe('ip helpers', () => {
 
 	it('rejects invalid IPv6 segments', () => {
 		expect(() => parseIpAddressToBytes('2001:db8::zzzz')).toThrow('Invalid IPv6 address');
+	});
+
+	it('rejects key usage values encoded with the wrong ASN.1 tag', () => {
+		expect(() => parseKeyUsageExtension(Uint8Array.of(0x04, 0x01, 0x00))).toThrow(
+			'keyUsage must be a BIT STRING',
+		);
 	});
 });
 
