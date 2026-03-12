@@ -13,19 +13,19 @@ Tiny X.509 builders for modern TypeScript.
 - PKCS#7 certificate bag helpers
 - CRL parse/create/verify helpers
 - passwordless PFX bundle helpers
-- OCSP request build + basic OCSP response parse/validation helpers
+- OCSP request build + typed OCSP response parse/validation helpers
 - encrypted PKCS#8 / encrypted PFX via PBES2
 - encrypted traditional RSA/EC PEM helpers
 - WebCrypto-first, typed, small surface
 
 ## Standards status
 
-| Area                       | Status    | Notes                                                                                                                                        |
-| -------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| RFC 5280 path validation   | `partial` | core path checks ship; policy processing, initial subtree inputs, and full name-constraint coverage are not complete yet                     |
-| RFC 6960 OCSP              | `partial` | request/response helpers and basic validation ship; delegated responder binding/authorization and full request coverage are not complete yet |
-| RFC 6125 service identity  | `partial` | DNS-ID and IP-ID checks ship today via verification helpers; URI-ID, SRV-ID, IDNA, and extracted identity APIs are not complete yet          |
-| RFC 9618 policy validation | `not yet` | no RFC 9618 policy engine yet                                                                                                                |
+| Area                       | Status    | Notes                                                                                                                                                           |
+| -------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| RFC 5280 path validation   | `partial` | core path checks ship; policy processing, initial subtree inputs, and full name-constraint coverage are not complete yet                                        |
+| RFC 6960 OCSP              | `partial` | request/response helpers, responder binding/authorization, freshness checks, and full request coverage ship; local responder-policy acceptance stays incomplete |
+| RFC 6125 service identity  | `partial` | DNS-ID and IP-ID checks ship today via verification helpers; URI-ID, SRV-ID, IDNA, and extracted identity APIs are not complete yet                             |
+| RFC 9618 policy validation | `not yet` | no RFC 9618 policy engine yet                                                                                                                                   |
 
 ## Install
 
@@ -433,7 +433,7 @@ if (result.ok) {
 - pem helpers: split mixed cert/csr/key bundles by label
 - pkcs7 helpers: create/parse degenerate signedData cert bags, parse general signedData signer metadata
 - crl helpers: create/parse/verify CRLs, delta CRL indicator, issuing distribution point, freshest CRL, entry reason/invalidity extensions, revocation lookup by serial
-- ocsp helpers: build requests, build signed responses, parse requests/responses, verify response signatures, derive responder candidates from AIA or local config, and run nonce/request/issuer/time checks plus responderID/delegated-responder validation; full request coverage is still partial
+- ocsp helpers: build requests, build signed responses, parse requests/responses, verify response signatures, derive responder candidates from AIA or local config, and run nonce/request/issuer/time checks plus responderID/delegated-responder validation and full multi-cert request coverage; focused fixtures live in `test/ocsp-fixtures.test.ts`
 - pfx helpers: create/parse passwordless or encrypted cert+key bundles with bag attributes and optional MAC integrity
 - legacy key helpers: PKCS#1 RSA and SEC1 EC import/export, plus encrypted traditional PEM
 - extended key usage: built-ins + custom OID escape hatch

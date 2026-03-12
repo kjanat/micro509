@@ -2,12 +2,12 @@
 
 ## Standards status
 
-| Area                       | Status    | Notes                                                                                                                                                                     |
-| -------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| RFC 5280 path validation   | `partial` | core path validation, policy inputs/processing, and initial subtree inputs ship; full revocation integration and complete PKITS coverage are not complete yet             |
-| RFC 6960 OCSP              | `partial` | request/response parsing, signature checks, responder binding/authorization, nonce/request matching, and freshness checks ship; full request coverage is not complete yet |
-| RFC 6125 service identity  | `partial` | DNS-ID and IP-ID checks ship today inside verification helpers; separate identity APIs, URI-ID, SRV-ID, and IDNA are not complete yet                                     |
-| RFC 9618 policy validation | `partial` | RFC 9618-style policy state, enforcement, outputs, and focused PKITS coverage ship; broader conformance evidence is still incomplete                                      |
+| Area                       | Status    | Notes                                                                                                                                                                                                        |
+| -------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| RFC 5280 path validation   | `partial` | core path validation, policy inputs/processing, and initial subtree inputs ship; full revocation integration and complete PKITS coverage are not complete yet                                                |
+| RFC 6960 OCSP              | `partial` | request/response parsing, signature checks, responder binding/authorization, nonce/request matching, freshness checks, and full request coverage ship; local responder-policy acceptance is still incomplete |
+| RFC 6125 service identity  | `partial` | DNS-ID and IP-ID checks ship today inside verification helpers; separate identity APIs, URI-ID, SRV-ID, and IDNA are not complete yet                                                                        |
+| RFC 9618 policy validation | `partial` | RFC 9618-style policy state, enforcement, outputs, and focused PKITS coverage ship; broader conformance evidence is still incomplete                                                                         |
 
 ## 1. Define the boundary up front
 
@@ -103,9 +103,9 @@ Current GeneralName matrix for `nameConstraints`:
 ## 10. OCSP support checklist
 
 - [x] Build `CertID` from issuer name hash, issuer key hash, serial number, and hash algorithm.
-- [ ] Discover the responder from AIA `id-ad-ocsp` or let callers provide a responder URL explicitly.
+- [x] Discover the responder from AIA `id-ad-ocsp` or let callers provide a responder URL explicitly.
 - [x] Parse and verify `BasicOCSPResponse`.
-- [ ] Check that the response fully and correctly refers to the requested certificate set.
+- [x] Check that the response fully and correctly refers to the requested certificate set.
 - [x] Validate the OCSP response signature.
 - [ ] Validate responder authorization exhaustively.
 - [x] Enforce response freshness using `thisUpdate` / `nextUpdate` and configurable clock skew.
@@ -116,9 +116,11 @@ Current GeneralName matrix for `nameConstraints`:
 
 - [ ] Accept an OCSP response signer if it matches local OCSP responder configuration for the certificate in question.
 - [x] Accept it if the signer is the issuing CA certificate itself.
-- [ ] Accept it if the signer cert contains EKU `id-kp-OCSPSigning` **and** was issued directly by the CA that issued the target certificate.
+- [x] Accept it if the signer cert contains EKU `id-kp-OCSPSigning` **and** was issued directly by the CA that issued the target certificate.
 - [x] Reject the response if the signer certificate meets none of those conditions.
 - [ ] Decide and document how you will handle revocation checking of the responder certificate; RFC 6960 allows CA signaling for that and also leaves room for local policy. (IETF Datatracker[^rfc6960])
+
+Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.test.ts`](../test/ocsp-fixtures.test.ts).
 
 ## 12. CRL support checklist
 

@@ -63,6 +63,7 @@ Started: 2026-03-12
 - CN fallback should stay DNS-only and opt-in, and only run when no supported DNS-like SAN identifiers (`dns`, `uri`, `srv`) are present; if such SANs exist, return typed suppression details instead of silently falling back.
 - For fixture-only RFC coverage, add a focused test file with one small issuance helper and paired pass/fail cases per supported name form; keep broad wrapper behavior in `test/verify.test.ts` and the fixture matrix in its own file.
 - For focused PKITS coverage, vendor a small fixture subset from a maintained mirror, run `verifyCertificateChain()` at the PKITS publication timestamp, and assert public policy outputs for at least one positive mapping case so the harness checks more than pass/fail.
+- Focused OCSP fixture coverage works best in its own small file with one authority helper and paired pass/fail cases for responder binding, delegated auth, freshness, request coverage, and normalized DER/PEM/parsed inputs.
 
 ## Validation Commands
 
@@ -413,6 +414,13 @@ Started: 2026-03-12
 - Ran the full feedback loop: `bun fmt`, `bun typecheck`, `bun lint`, `bun test`, `bun bd`.
 - Files changed: `package.json`, `README.md`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** once preserved-module output and stable subpath exports are in place, `sideEffects: false` should ship with explicit import guidance so consumers know the root barrel stays supported while subpaths remain the tighter tree-shaking path.
+
+## Task - [add-ocsp-fixtures]
+
+- Added focused OCSP auth/completeness/freshness coverage in `test/ocsp-fixtures.test.ts`, with small fixture helpers and pass/fail cases for responderID binding, delegated responder authorization, `producedAt`, request coverage, and normalized DER/PEM/parsed inputs.
+- Updated `README.md` and `docs/PKIX-SCOPE.md` so the RFC 6960 notes no longer understate shipped request-coverage support and now point at the focused fixture file.
+- Files changed: `test/ocsp-fixtures.test.ts`, `README.md`, `docs/PKIX-SCOPE.md`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** focused OCSP coverage lands cleanly when the fixture file stays public-API-first and only dips into minimal DER helpers for responderID mismatch cases that builders cannot express directly.
 
 ## Task - [add-name-constraint-fixtures]
 

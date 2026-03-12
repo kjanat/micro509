@@ -421,7 +421,7 @@
 				"add-ocsp-responder-helper"
 			],
 			"priority": "polish",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "parse-srvid-othername",
