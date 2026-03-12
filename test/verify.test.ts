@@ -347,97 +347,6 @@ describe('chain verification', () => {
 		).toMatchObject({ ok: false, code: 'ca_required', index: 0 });
 	});
 
-	it('verifies IP SAN match and rejects mismatch', async () => {
-		const ca = await createSelfSignedCertificate({
-			subject: { commonName: 'IP CA' },
-			extensions: {
-				basicConstraints: { ca: true },
-				keyUsage: ['keyCertSign', 'cRLSign'],
-			},
-		});
-		const leafKeys = await generateKeyPair();
-		const leaf = await createCertificate({
-			issuer: { commonName: 'IP CA' },
-			subject: { commonName: 'ip-leaf' },
-			publicKey: leafKeys.publicKey,
-			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
-			extensions: {
-				keyUsage: ['digitalSignature'],
-				subjectAltNames: [
-					{ type: 'ip', value: '10.0.0.1' },
-					{ type: 'ip', value: '::1' },
-				],
-			},
-		});
-		expect(
-			await verifyCertificateChain({
-				leaf: leaf.pem,
-				roots: [ca.certificate.pem],
-				serviceIdentity: { type: 'ip', value: '10.0.0.1' },
-			}),
-		).toMatchObject({ ok: true });
-		expect(
-			await verifyCertificateChain({
-				leaf: leaf.pem,
-				roots: [ca.certificate.pem],
-				serviceIdentity: { type: 'ip', value: '10.0.0.2' },
-			}),
-		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
-		expect(
-			await verifyCertificateChain({
-				leaf: leaf.pem,
-				roots: [ca.certificate.pem],
-				serviceIdentity: { type: 'ip', value: '::1' },
-			}),
-		).toMatchObject({ ok: true });
-	});
-
-	it('matches wildcard DNS names correctly', async () => {
-		const ca = await createSelfSignedCertificate({
-			subject: { commonName: 'Wildcard CA' },
-			extensions: {
-				basicConstraints: { ca: true },
-				keyUsage: ['keyCertSign', 'cRLSign'],
-			},
-		});
-		const leafKeys = await generateKeyPair();
-		const leaf = await createCertificate({
-			issuer: { commonName: 'Wildcard CA' },
-			subject: { commonName: 'wildcard-leaf' },
-			publicKey: leafKeys.publicKey,
-			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
-			extensions: {
-				keyUsage: ['digitalSignature'],
-				extendedKeyUsage: ['serverAuth'],
-				subjectAltNames: [{ type: 'dns', value: '*.example.com' }],
-			},
-		});
-		expect(
-			await verifyCertificateChain({
-				leaf: leaf.pem,
-				roots: [ca.certificate.pem],
-				purpose: 'serverAuth',
-				serviceIdentity: { type: 'dns', value: 'sub.example.com' },
-			}),
-		).toMatchObject({ ok: true });
-		expect(
-			await verifyCertificateChain({
-				leaf: leaf.pem,
-				roots: [ca.certificate.pem],
-				serviceIdentity: { type: 'dns', value: 'deep.sub.example.com' },
-			}),
-		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
-		expect(
-			await verifyCertificateChain({
-				leaf: leaf.pem,
-				roots: [ca.certificate.pem],
-				serviceIdentity: { type: 'dns', value: 'example.com' },
-			}),
-		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
-	});
-
 	it('allows self-signed leaf when root is trusted', async () => {
 		const selfSigned = await createSelfSignedCertificate({
 			subject: { commonName: 'self.example' },
@@ -487,43 +396,6 @@ describe('chain verification', () => {
 				roots: [chain.root.certificate.pem],
 			}),
 		).rejects.toThrow('Expected a single certificate source');
-	});
-
-	it('rejects invalid wildcard and invalid IPv6 verification inputs', async () => {
-		const ca = await createSelfSignedCertificate({
-			subject: { commonName: 'pattern-ca' },
-			extensions: {
-				basicConstraints: { ca: true },
-				keyUsage: ['keyCertSign', 'cRLSign'],
-			},
-		});
-		const leafKeys = await generateKeyPair();
-		const leaf = await createCertificate({
-			issuer: { commonName: 'pattern-ca' },
-			subject: { commonName: 'pattern-leaf' },
-			publicKey: leafKeys.publicKey,
-			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
-			extensions: {
-				subjectAltNames: [{ type: 'dns', value: 'a*b.example.com' }],
-			},
-		});
-
-		expect(
-			await verifyCertificateChain({
-				leaf: leaf.pem,
-				roots: [ca.certificate.pem],
-				serviceIdentity: { type: 'dns', value: 'axb.example.com' },
-			}),
-		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
-
-		expect(
-			verifyCertificateChain({
-				leaf: leaf.pem,
-				roots: [ca.certificate.pem],
-				serviceIdentity: { type: 'ip', value: '2001::db8::1' },
-			}),
-		).rejects.toThrow('Invalid IPv6 address');
 	});
 
 	it('verifies chains signed with RSA SHA-384 and ECDSA P-384', async () => {
@@ -2955,122 +2827,35 @@ describe('checkExtendedKeyUsage edge cases', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Leaf CN fallback and no-SAN DNS rejection
+// Purpose=ca success case
 // ---------------------------------------------------------------------------
 
-describe('leaf CN fallback', () => {
-	it('rejects DNS name when leaf has no SAN and fallback disabled', async () => {
-		const ca = await createSelfSignedCertificate({
-			subject: { commonName: 'CN Fallback CA' },
-			extensions: {
-				basicConstraints: { ca: true },
-				keyUsage: ['keyCertSign', 'cRLSign'],
-			},
-		});
-		const leafKeys = await generateKeyPair();
-		const leaf = await createCertificate({
-			issuer: { commonName: 'CN Fallback CA' },
-			subject: { commonName: 'fallback.example' },
-			publicKey: leafKeys.publicKey,
-			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
-			extensions: { keyUsage: ['digitalSignature'] },
-		});
-		const result = await verifyCertificateChain({
-			leaf: leaf.pem,
-			roots: [ca.certificate.pem],
-			serviceIdentity: { type: 'dns', value: 'fallback.example' },
-		});
-		expect(result.ok).toBe(false);
-		if (!result.ok) expect(result.code).toBe('subject_alt_name_mismatch');
+it('accepts purpose=ca when leaf IS a CA', async () => {
+	const root = await createSelfSignedCertificate({
+		subject: { commonName: 'Purpose CA Root' },
+		extensions: {
+			basicConstraints: { ca: true, pathLength: 1 },
+			keyUsage: ['keyCertSign', 'cRLSign'],
+		},
 	});
-
-	it('accepts DNS name via CN fallback when enabled and CN matches', async () => {
-		const ca = await createSelfSignedCertificate({
-			subject: { commonName: 'CN Fallback CA' },
-			extensions: {
-				basicConstraints: { ca: true },
-				keyUsage: ['keyCertSign', 'cRLSign'],
-			},
-		});
-		const leafKeys = await generateKeyPair();
-		const leaf = await createCertificate({
-			issuer: { commonName: 'CN Fallback CA' },
-			subject: { commonName: 'fallback.example' },
-			publicKey: leafKeys.publicKey,
-			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
-			extensions: { keyUsage: ['digitalSignature'] },
-		});
-		const result = await verifyCertificateChain({
-			leaf: leaf.pem,
-			roots: [ca.certificate.pem],
-			serviceIdentity: {
-				type: 'dns',
-				value: 'fallback.example',
-				allowCommonNameFallback: true,
-			},
-		});
-		expect(result.ok).toBe(true);
+	const subCaKeys = await generateKeyPair();
+	const subCa = await createCertificate({
+		issuer: { commonName: 'Purpose CA Root' },
+		subject: { commonName: 'Sub CA' },
+		publicKey: subCaKeys.publicKey,
+		signerPrivateKey: root.keyPair.privateKey,
+		issuerPublicKey: root.keyPair.publicKey,
+		extensions: {
+			basicConstraints: { ca: true, pathLength: 0 },
+			keyUsage: ['keyCertSign', 'cRLSign'],
+		},
 	});
-
-	it('rejects DNS name via CN fallback when CN does not match', async () => {
-		const ca = await createSelfSignedCertificate({
-			subject: { commonName: 'CN Fallback CA' },
-			extensions: {
-				basicConstraints: { ca: true },
-				keyUsage: ['keyCertSign', 'cRLSign'],
-			},
-		});
-		const leafKeys = await generateKeyPair();
-		const leaf = await createCertificate({
-			issuer: { commonName: 'CN Fallback CA' },
-			subject: { commonName: 'other.example' },
-			publicKey: leafKeys.publicKey,
-			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
-			extensions: { keyUsage: ['digitalSignature'] },
-		});
-		const result = await verifyCertificateChain({
-			leaf: leaf.pem,
-			roots: [ca.certificate.pem],
-			serviceIdentity: {
-				type: 'dns',
-				value: 'fallback.example',
-				allowCommonNameFallback: true,
-			},
-		});
-		expect(result.ok).toBe(false);
-		if (!result.ok) expect(result.code).toBe('subject_alt_name_mismatch');
+	const result = await verifyCertificateChain({
+		leaf: subCa.pem,
+		roots: [root.certificate.pem],
+		purpose: 'ca',
 	});
-
-	it('accepts purpose=ca when leaf IS a CA', async () => {
-		const root = await createSelfSignedCertificate({
-			subject: { commonName: 'Purpose CA Root' },
-			extensions: {
-				basicConstraints: { ca: true, pathLength: 1 },
-				keyUsage: ['keyCertSign', 'cRLSign'],
-			},
-		});
-		const subCaKeys = await generateKeyPair();
-		const subCa = await createCertificate({
-			issuer: { commonName: 'Purpose CA Root' },
-			subject: { commonName: 'Sub CA' },
-			publicKey: subCaKeys.publicKey,
-			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
-			extensions: {
-				basicConstraints: { ca: true, pathLength: 0 },
-				keyUsage: ['keyCertSign', 'cRLSign'],
-			},
-		});
-		const result = await verifyCertificateChain({
-			leaf: subCa.pem,
-			roots: [root.certificate.pem],
-			purpose: 'ca',
-		});
-		expect(result.ok).toBe(true);
-	});
+	expect(result.ok).toBe(true);
 });
 
 // ---------------------------------------------------------------------------
@@ -3117,34 +2902,6 @@ describe('buildCandidatePath edge cases', () => {
 			roots: [root.certificate.pem],
 		});
 		expect(result.ok).toBe(false);
-	});
-
-	it('handles IPv6 with too many segments', async () => {
-		const ca = await createSelfSignedCertificate({
-			subject: { commonName: 'IPv6 CA' },
-			extensions: {
-				basicConstraints: { ca: true },
-				keyUsage: ['keyCertSign'],
-			},
-		});
-		const leafKeys = await generateKeyPair();
-		const leaf = await createCertificate({
-			issuer: { commonName: 'IPv6 CA' },
-			subject: { commonName: 'ipv6-leaf' },
-			publicKey: leafKeys.publicKey,
-			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
-			extensions: {
-				subjectAltNames: [{ type: 'ip', value: '::1' }],
-			},
-		});
-		expect(
-			verifyCertificateChain({
-				leaf: leaf.pem,
-				roots: [ca.certificate.pem],
-				serviceIdentity: { type: 'ip', value: '1:2:3:4:5:6:7:8:9' },
-			}),
-		).rejects.toThrow('Invalid IPv6');
 	});
 
 	it('handles multiple trust anchors with same subject', async () => {

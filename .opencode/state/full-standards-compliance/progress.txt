@@ -53,6 +53,7 @@ Started: 2026-03-12
 - Delegated OCSP responder validation should require `ocspSigning` EKU and default to direct issuance from the target cert issuer; any intermediate responder chain needs an explicit caller opt-in.
 - OCSP freshness should validate response-level `producedAt` separately from per-cert `thisUpdate`/`nextUpdate`: reject future `producedAt` beyond clock skew, and reject responses whose `producedAt` lands after a single-response `nextUpdate`.
 - OCSP request-bound validation must compare request and response `CertID` sets both ways: reject extra response entries and reject omitted requested entries, while staying order-insensitive for multi-cert requests.
+- Once DNS/IP matching lives behind `src/identity.ts`, keep matcher-specific wildcard / IPv6 / CN-fallback coverage in `test/identity.test.ts`; leave `test/verify.test.ts` focused on wrapper composition and failure adaptation.
 
 ## Validation Commands
 
@@ -368,3 +369,10 @@ Started: 2026-03-12
 - Added parser coverage in `test/parse.test.ts` for certificate and CSR SRV-ID round trips, unsupported `otherName` preservation, and malformed SRV-ID rejection.
 - Files changed: `src/extensions.ts`, `src/oids.ts`, `src/parse.ts`, `test/parse.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** known `otherName` OIDs should get narrow typed parsing plus strict structure checks, while unknown `otherName` payloads stay preserved as raw unknown SAN entries for later RFC-specific handling.
+
+## Task - [implement-dns-ip-matchers]
+
+- Finished the DNS/IP matcher move by relocating wildcard, IPv6 normalization, invalid-pattern, and CN-fallback coverage to `test/identity.test.ts`, so the dedicated identity boundary now owns matcher-specific regressions.
+- Trimmed `test/verify.test.ts` back to wrapper/composition coverage for service-identity forwarding and typed failure adaptation.
+- Files changed: `test/identity.test.ts`, `test/verify.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** once a boundary exists, its pure matching semantics should be tested directly there; wrapper tests should prove composition order and error mapping, not duplicate matcher behavior.

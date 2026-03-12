@@ -439,7 +439,7 @@
 			"description": "Move existing DNS/IP identity matching into the identity module. Done when:\n- DNS/IP matching no longer lives in raw path validation\n- wildcard and IP normalization behavior is preserved or tightened intentionally\n- tests move with the new API",
 			"depends": ["scaffold-identity-module", "split-host-inputs-from-path"],
 			"priority": "standard",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "implement-uri-srv-matchers",
