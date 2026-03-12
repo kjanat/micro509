@@ -17,10 +17,12 @@
 		"composite": true,
 		"allowImportingTsExtensions": true,
 		"noEmit": true,
+		"isolatedDeclarations": true,
 		"paths": {
 			"#micro509": ["./src/index.ts"],
 			"#micro509/*": ["./src/*"]
 		}
 	},
-	"include": ["src"]
+	"include": ["src"],
+	"exclude": ["dist", "node_modules"]
 }

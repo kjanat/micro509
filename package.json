@@ -21,7 +21,7 @@
 		"#micro509/*": "./src/*"
 	},
 	"exports": {
-		".": "./src/index.ts",
+		".": "./dist/index.js",
 		"./package.json": "./package.json"
 	},
 	"types": "./dist/index.d.ts",
@@ -29,7 +29,7 @@
 		"dist"
 	],
 	"scripts": {
-		"bd": "tsdown",
+		"bd": "tsdown --no-attw --no-publint --no-unused --no-report",
 		"build": "tsdown",
 		"fmt": "dprint fmt",
 		"lint:biome": "bunx @biomejs/biome lint {src,test}",
@@ -75,11 +75,5 @@
 	"volta": {
 		"node": "25.8.0",
 		"npm": "11.11.0"
-	},
-	"publishConfig": {
-		"exports": {
-			".": "./dist/index.js",
-			"./package.json": "./package.json"
-		}
 	}
 }

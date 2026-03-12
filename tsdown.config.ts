@@ -1,15 +1,21 @@
 import { defineConfig } from "tsdown";
 
 export default defineConfig({
-	entry: ["src/index.ts"],
+	entry: "src/index.ts",
 	format: ["esm"],
-	dts: true,
+	dts: { oxc: true },
 	clean: true,
-	platform: "browser",
+	platform: "neutral",
 	target: "es2023",
-	sourcemap: false,
 	tsconfig: "tsconfig.base.json",
-	exports: { devExports: true, enabled: true },
+	sourcemap: false,
+	unbundle: false,
+	inputOptions: {
+		resolve: {
+			mainFields: ["browser", "module", "main"],
+		},
+	},
+	exports: true,
 	onSuccess: "bunx sort-package-json --quiet package.json",
 	attw: { profile: "esm-only", ignoreRules: ["no-resolution"] },
 	unused: true,
