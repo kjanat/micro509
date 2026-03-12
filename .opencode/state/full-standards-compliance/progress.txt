@@ -26,6 +26,7 @@ Started: 2026-03-12
 - Adding a new public package subpath is a tsdown config change first: add the source module to the named `entry` map, rebuild, and let generated `package.json` exports update.
 - In tsdown multi-entry builds, `unbundle: true` preserves shared internal modules under `dist/src/` while keeping public entry files at `dist/<entry>.js`; stable package exports can stay pointed at the root entry files.
 - Root `micro509` export should stay ergonomic; granular domains should live behind stable subpath exports.
+- Once the package is proven pure, declare `sideEffects: false` in `package.json` and document root-vs-subpath import guidance together; tree-shaking metadata and import advice should ship as one contract.
 - New boundary modules should define neutral shared-source aliases locally; avoid leaking CRL/OCSP-branded source types into orchestration APIs.
 - Distribution-point model change is a clean break; no temporary URI-only compat alias.
 - RFC 5280 `directoryName` comparison is semantic: ordered DN, unordered RDN sets, RFC 4518-prepared AVA strings; never compare raw DER prefixes.
@@ -400,3 +401,10 @@ Started: 2026-03-12
 - Added typed fallback details/codes through `src/identity.ts` and `src/verify.ts`, plus regressions in `test/identity.test.ts` and `test/verify.test.ts` for suppression, disabled fallback, CN mismatch, and IP-SAN-only compatibility.
 - Files changed: `src/identity.ts`, `src/verify.ts`, `test/identity.test.ts`, `test/verify.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** RFC 6125 CN fallback is a last-resort DNS compatibility path, not a second pass after URI-ID or SRV-ID presence; wrapper layers should preserve suppression details instead of collapsing them into generic SAN mismatches.
+
+## Task - [set-sideeffects-flag]
+
+- Added `"sideEffects": false` to `package.json` and documented the package tree-shaking contract plus root-vs-subpath import guidance in `README.md`.
+- Ran the full feedback loop: `bun fmt`, `bun typecheck`, `bun lint`, `bun test`, `bun bd`.
+- Files changed: `package.json`, `README.md`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** once preserved-module output and stable subpath exports are in place, `sideEffects: false` should ship with explicit import guidance so consumers know the root barrel stays supported while subpaths remain the tighter tree-shaking path.

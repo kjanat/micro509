@@ -33,6 +33,9 @@ Tiny X.509 builders for modern TypeScript.
 npm install micro509
 ```
 
+- package is side-effect-free (`sideEffects: false`)
+- root import stays supported; subpath imports like `micro509/verify` and `micro509/identity` give tighter tree-shaking
+
 ## Self-signed cert
 
 ```ts

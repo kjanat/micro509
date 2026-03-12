@@ -100,7 +100,7 @@
 			"description": "Enable and verify side-effect-free package metadata. Done when:\n- `sideEffects: false` is added if valid\n- build/tests confirm no behavior loss\n- docs state the intended tree-shaking contract",
 			"depends": ["preserve-module-build"],
 			"priority": "polish",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "add-policy-input-types",

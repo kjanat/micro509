@@ -15,6 +15,7 @@
 		"url": "git+https://github.com/kjanat/ts-x509.git"
 	},
 	"license": "MIT",
+	"sideEffects": false,
 	"type": "module",
 	"imports": {
 		"#micro509": "./src/index.ts",
