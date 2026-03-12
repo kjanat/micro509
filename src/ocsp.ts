@@ -1,6 +1,7 @@
 import {
 	childrenOf,
 	decodeObjectIdentifier,
+	decodeString,
 	extractBitStringValue,
 	hexToBytes,
 	parseTime,
@@ -25,7 +26,12 @@ import {
 } from './der.ts';
 import { getCrypto } from './keys.ts';
 import { OIDS } from './oids.ts';
-import type { ParsedCertificate } from './parse.ts';
+import type {
+	ParsedCertificate,
+	ParsedName,
+	ParsedNameAttribute,
+	ParsedRelativeDistinguishedName,
+} from './parse.ts';
 import { parseCertificateDer, parseCertificatePem } from './parse.ts';
 import { base64Encode, pemDecode, pemEncode } from './pem.ts';
 import { verifySignedData } from './sig-verify.ts';
@@ -83,10 +89,21 @@ export interface ParsedOcspSingleResponse {
 	readonly revocationReasonCode?: number;
 }
 
+export type ParsedOcspResponderId =
+	| {
+			readonly type: 'byName';
+			readonly name: ParsedName;
+	  }
+	| {
+			readonly type: 'byKeyHash';
+			readonly keyHashHex: string;
+	  };
+
 export interface ParsedOcspResponse {
 	readonly responseStatus: OcspResponseStatus;
 	readonly responseTypeOid?: string;
 	readonly responseDataDer?: Uint8Array;
+	readonly responderId?: ParsedOcspResponderId;
 	readonly signatureAlgorithmOid?: string;
 	readonly signatureValue?: Uint8Array;
 	readonly producedAt?: Date;
@@ -237,7 +254,9 @@ export function parseOcspResponseDer(der: Uint8Array): ParsedOcspResponse {
 	if (responseDataChildren[index]?.tag === 0xa0) {
 		index += 1;
 	}
-	index += 1; // responderID
+	const responderIdElement = requireElement(responseDataChildren[index], 'responderID');
+	const responderId = parseOcspResponderId(responseDataDer, responderIdElement);
+	index += 1;
 	const producedAt = requireElement(responseDataChildren[index], 'producedAt');
 	const responses = requireElement(responseDataChildren[index + 1], 'responses');
 	const responseExtensions = responseDataChildren[index + 2];
@@ -249,6 +268,7 @@ export function parseOcspResponseDer(der: Uint8Array): ParsedOcspResponse {
 		responseStatus,
 		responseTypeOid,
 		responseDataDer,
+		responderId,
 		signatureAlgorithmOid: decodeObjectIdentifier(
 			requireElement(childrenOf(basicResponse, signatureAlgorithm)[0], 'signatureAlgorithm OID')
 				.value,
@@ -608,6 +628,111 @@ function parseSingleResponse(source: Uint8Array, element: DerElement): ParsedOcs
 		...(revokedAt === undefined ? {} : { revokedAt }),
 		...(revocationReasonCode === undefined ? {} : { revocationReasonCode }),
 	};
+}
+
+function parseOcspResponderId(source: Uint8Array, element: DerElement): ParsedOcspResponderId {
+	switch (element.tag) {
+		case 0x82:
+			return { type: 'byKeyHash', keyHashHex: toHex(element.value) };
+		case 0xa1:
+			return {
+				type: 'byName',
+				name: parseResponderName(
+					source,
+					requireElement(childrenOf(source, element)[0], 'ResponderID byName'),
+				),
+			};
+		case 0xa2:
+			return {
+				type: 'byKeyHash',
+				keyHashHex: toHex(
+					requireElement(childrenOf(source, element)[0], 'ResponderID byKeyHash').value,
+				),
+			};
+		default:
+			throw new Error(`Unsupported OCSP responderID tag: ${String(element.tag)}`);
+	}
+}
+
+function parseResponderName(source: Uint8Array, element: DerElement): ParsedName {
+	const rdns: ParsedRelativeDistinguishedName[] = [];
+	const attributes: ParsedNameAttribute[] = [];
+	const values: ParsedName['values'] = {};
+	for (const setElement of childrenOf(source, element)) {
+		const rdn = parseResponderNameAttributeSet(source, setElement);
+		rdns.push(rdn);
+		for (const attribute of rdn.attributes) {
+			attributes.push(attribute);
+			if (attribute.key !== undefined && values[attribute.key] === undefined) {
+				values[attribute.key] = attribute.value;
+			}
+		}
+	}
+	return {
+		derHex: toHex(source.slice(element.start - element.headerLength, element.end)),
+		rdns,
+		attributes,
+		values,
+	};
+}
+
+function parseResponderNameAttributeSet(
+	source: Uint8Array,
+	setElement: DerElement,
+): ParsedRelativeDistinguishedName {
+	const attributes: ParsedNameAttribute[] = [];
+	const values: ParsedRelativeDistinguishedName['values'] = {};
+	for (const attributeSequence of childrenOf(source, setElement)) {
+		const parts = childrenOf(source, attributeSequence);
+		const oid = decodeObjectIdentifier(requireElement(parts[0], 'name OID').value);
+		const valueElement = requireElement(parts[1], 'name value');
+		const key = responderNameKeyFromOid(oid);
+		const value = decodeString(valueElement.tag, valueElement.value);
+		const attribute: ParsedNameAttribute =
+			key === undefined
+				? { oid, valueTag: valueElement.tag, value }
+				: { oid, key, valueTag: valueElement.tag, value };
+		attributes.push(attribute);
+		if (key !== undefined && values[key] === undefined) {
+			values[key] = value;
+		}
+	}
+	return {
+		derHex: toHex(source.slice(setElement.start - setElement.headerLength, setElement.end)),
+		attributes,
+		values,
+	};
+}
+
+function responderNameKeyFromOid(oid: string): ParsedNameAttribute['key'] {
+	switch (oid) {
+		case OIDS.commonName:
+			return 'commonName';
+		case OIDS.surname:
+			return 'surname';
+		case OIDS.serialNumber:
+			return 'serialNumber';
+		case OIDS.countryName:
+			return 'country';
+		case OIDS.localityName:
+			return 'locality';
+		case OIDS.stateOrProvinceName:
+			return 'state';
+		case OIDS.streetAddress:
+			return 'street';
+		case OIDS.organizationName:
+			return 'organization';
+		case OIDS.organizationalUnitName:
+			return 'organizationalUnit';
+		case OIDS.title:
+			return 'title';
+		case OIDS.givenName:
+			return 'givenName';
+		case OIDS.emailAddress:
+			return 'emailAddress';
+		default:
+			return undefined;
+	}
 }
 
 function parseOcspNonceFromExtensions(source: Uint8Array, element: DerElement): string | undefined {

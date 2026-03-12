@@ -143,6 +143,7 @@ export {
 	type OcspResponseStatus,
 	type ParsedOcspCertId,
 	type ParsedOcspRequest,
+	type ParsedOcspResponderId,
 	type ParsedOcspResponse,
 	type ParsedOcspSingleResponse,
 	parseOcspRequestDer,

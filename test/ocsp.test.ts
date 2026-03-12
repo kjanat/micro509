@@ -14,7 +14,7 @@ import {
 	validateOcspResponse,
 	verifyOcspResponse,
 } from '#micro509';
-import { childrenOf } from '#micro509/asn1.ts';
+import { childrenOf, toHex } from '#micro509/asn1.ts';
 import {
 	bitString,
 	explicitContext,
@@ -71,6 +71,10 @@ describe('ocsp', () => {
 		expect(parsedResponse.responseStatus).toBe('successful');
 		expect(parsedResponse.responses?.[0]).toMatchObject({ certStatus: 'good' });
 		expect(parsedResponse.nonce).toBe('aabb');
+		expect(parsedResponse.responderId).toMatchObject({
+			type: 'byKeyHash',
+			keyHashHex: expect.any(String),
+		});
 		expect(await verifyOcspResponse(ocspResponse.der, issuer.certificate.pem)).toMatchObject({
 			ok: true,
 		});
@@ -1227,6 +1231,75 @@ describe('ocsp', () => {
 		expect(parsed.responseStatus).toBe('successful');
 		expect(parsed.responses).toBeDefined();
 		expect(parsed.responses).toHaveLength(1);
+		expect(parsed.responderId).toMatchObject({
+			type: 'byKeyHash',
+			keyHashHex: toHex(issuerKeyHash),
+		});
+	});
+
+	it('parses OCSP responderID byName', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'OCSP ByName CA', organization: 'Example Org' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'OCSP ByName CA', organization: 'Example Org' },
+			subject: { commonName: 'byname-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const issuerParsed = parseCertificatePem(issuer.certificate.pem);
+		const leafParsed = parseCertificatePem(leaf.pem);
+		const issuerNameHash = new Uint8Array(sha1(hexToBytes(issuerParsed.subject.derHex)));
+		const spkiDer = issuerParsed.subjectPublicKeyInfoDer;
+		const spkiTop = childrenOf(spkiDer, readElement(spkiDer));
+		const spkiBitString = spkiTop[1];
+		const publicKeyBytes =
+			spkiBitString !== undefined ? spkiBitString.value.slice(1) : new Uint8Array(0);
+		const issuerKeyHash = new Uint8Array(sha1(publicKeyBytes));
+		const certId = sequence([
+			sequence([objectIdentifier(OIDS.sha1), Uint8Array.of(0x05, 0x00)]),
+			octetString(issuerNameHash),
+			octetString(issuerKeyHash),
+			tlv(0x02, hexToBytes(leafParsed.serialNumberHex)),
+		]);
+		const singleResponse = sequence([
+			certId,
+			tlv(0x80, new Uint8Array(0)),
+			generalizedTime(new Date()),
+		]);
+		const responseData = sequence([
+			explicitContext(1, hexToBytes(issuerParsed.subject.derHex)),
+			generalizedTime(new Date()),
+			sequence([singleResponse]),
+		]);
+		const sigAlgIdentifier = sequence([
+			objectIdentifier(OIDS.sha256WithRSAEncryption),
+			Uint8Array.of(0x05, 0x00),
+		]);
+		const basicResponse = sequence([responseData, sigAlgIdentifier, bitString(new Uint8Array(64))]);
+		const ocspResponseDer = sequence([
+			tlv(0x0a, Uint8Array.of(0x00)),
+			explicitContext(
+				0,
+				sequence([objectIdentifier(OIDS.ocspBasicResponse), octetString(basicResponse)]),
+			),
+		]);
+		const parsed = parseOcspResponseDer(ocspResponseDer);
+		expect(parsed.responderId).toMatchObject({
+			type: 'byName',
+			name: {
+				values: {
+					commonName: 'OCSP ByName CA',
+					organization: 'Example Org',
+				},
+			},
+		});
 	});
 
 	it('parseOcspNonceFromExtensions returns undefined when no nonce extension present (lines 716-717)', async () => {

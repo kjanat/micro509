@@ -5,6 +5,7 @@ Started: 2026-03-12
 
 ## Codebase Patterns
 
+- OCSP `ResponderID` parsing should preserve the CHOICE branch in parsed output; accept the normal implicit `byKeyHash` bytes, but keep parser coverage for explicit wrapper variants used in hand-built fixtures.
 - Delta CRL support should validate the complete/delta pair up front (issuer, AKI, IDP scope, numbering), then overlay certificate-specific delta entries on the complete-CRL view; `removeFromCRL` only clears a prior `certificateHold`.
 - Indirect CRL revocation lookup is sequence-scoped state, not entry-local state: carry `certificateIssuer` forward across revoked entries, match on serial plus effective issuer, and fail closed only after scanning all same-serial candidates.
 - Structured distribution-point builder coverage should hit both optional halves of the RFC model: issuer-only certificate DPs and scope-only CRL IDPs, plus runtime rejects for empty `fullName` sequences.
@@ -302,3 +303,10 @@ Started: 2026-03-12
 - Added direct boundary coverage in `test/revocation.test.ts` for no-evidence, CRL-revoked, OCSP-good-with-non-applicable-CRL, and fully indeterminate mixed-evidence cases.
 - Files changed: `src/revocation.ts`, `test/revocation.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** high-level revocation APIs should treat source validation failures as evidence-level indeterminate outcomes, not fatal orchestration errors, so callers can combine CRL and OCSP safely without losing why status stayed unknown.
+
+## Task - [parse-responder-id]
+
+- Parsed OCSP `ResponderID` into a new public `ParsedOcspResponderId` union in `src/ocsp.ts`, exposing both `byName` and `byKeyHash` forms on parsed responses.
+- Added OCSP parser coverage in `test/ocsp.test.ts` for generated `byKeyHash` responses, explicit-wrapper `byKeyHash` fixtures, and hand-built `byName` responses.
+- Files changed: `src/ocsp.ts`, `src/index.ts`, `test/ocsp.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** OCSP responder identity is another parser-vs-validator split: parse both CHOICE branches now, then let later validation tasks bind signer certs against the parsed responder identity without reparsing wire bytes.

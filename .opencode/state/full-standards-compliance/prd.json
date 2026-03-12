@@ -352,7 +352,7 @@
 			"description": "Parse OCSP ResponderID by-name and by-key-hash. Done when:\n- parsed responses expose responder ID data\n- existing response parsing still works\n- fixtures cover both forms",
 			"depends": ["scaffold-revocation-module"],
 			"priority": "standard",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "bind-signer-to-responderid",
