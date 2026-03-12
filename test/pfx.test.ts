@@ -361,7 +361,7 @@ describe('pfx', () => {
 	});
 
 	it('normalizeCertificate throws for PEM without CERTIFICATE block', async () => {
-		await expect(
+		expect(
 			createPfx({
 				certificates: [
 					{ certificate: '-----BEGIN PRIVATE KEY-----\nMQ==\n-----END PRIVATE KEY-----' },

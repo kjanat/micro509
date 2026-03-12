@@ -1183,13 +1183,13 @@ describe('ocsp', () => {
 		const leafParsed = parseCertificatePem(leaf.pem);
 
 		// Compute cert ID hashes
-		const issuerNameHash = new Uint8Array(await sha1(hexToBytes(issuerParsed.subject.derHex)));
+		const issuerNameHash = new Uint8Array(sha1(hexToBytes(issuerParsed.subject.derHex)));
 		const spkiDer = issuerParsed.subjectPublicKeyInfoDer;
 		const spkiTop = childrenOf(spkiDer, readElement(spkiDer));
 		const spkiBitString = spkiTop[1];
 		const publicKeyBytes =
 			spkiBitString !== undefined ? spkiBitString.value.slice(1) : new Uint8Array(0);
-		const issuerKeyHash = new Uint8Array(await sha1(publicKeyBytes));
+		const issuerKeyHash = new Uint8Array(sha1(publicKeyBytes));
 
 		const certId = sequence([
 			sequence([objectIdentifier(OIDS.sha1), Uint8Array.of(0x05, 0x00)]),
@@ -1249,13 +1249,13 @@ describe('ocsp', () => {
 
 		const issuerParsed = parseCertificatePem(issuer.certificate.pem);
 		const leafParsed = parseCertificatePem(leaf.pem);
-		const issuerNameHash = new Uint8Array(await sha1(hexToBytes(issuerParsed.subject.derHex)));
+		const issuerNameHash = new Uint8Array(sha1(hexToBytes(issuerParsed.subject.derHex)));
 		const spkiDer = issuerParsed.subjectPublicKeyInfoDer;
 		const spkiTop = childrenOf(spkiDer, readElement(spkiDer));
 		const spkiBitString = spkiTop[1];
 		const publicKeyBytes =
 			spkiBitString !== undefined ? spkiBitString.value.slice(1) : new Uint8Array(0);
-		const issuerKeyHash = new Uint8Array(await sha1(publicKeyBytes));
+		const issuerKeyHash = new Uint8Array(sha1(publicKeyBytes));
 
 		const certId = sequence([
 			sequence([objectIdentifier(OIDS.sha1), Uint8Array.of(0x05, 0x00)]),
@@ -1345,7 +1345,7 @@ describe('ocsp', () => {
 		});
 		// Validate with issuerCertificate as ParsedCertificate (not PEM/DER)
 		const issuerParsed = parseCertificatePem(issuer.certificate.pem);
-		await expect(
+		expect(
 			validateOcspResponse({
 				response: response.der,
 				issuerCertificate: issuerParsed,

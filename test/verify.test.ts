@@ -431,7 +431,7 @@ describe('chain verification', () => {
 
 	it('rejects empty and multi-certificate leaf sources', async () => {
 		const chain = await issueChain();
-		await expect(
+		expect(
 			verifyCertificateChain({
 				leaf: '',
 				roots: [chain.root.certificate.pem],
@@ -439,7 +439,7 @@ describe('chain verification', () => {
 		).rejects.toThrow('No certificate found');
 
 		const mixedLeaf = `${chain.leaf.pem}\n${chain.intermediate.pem}`;
-		await expect(
+		expect(
 			verifyCertificateChain({
 				leaf: mixedLeaf,
 				roots: [chain.root.certificate.pem],
@@ -475,7 +475,7 @@ describe('chain verification', () => {
 			}),
 		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
 
-		await expect(
+		expect(
 			verifyCertificateChain({
 				leaf: leaf.pem,
 				roots: [ca.certificate.pem],
@@ -2270,7 +2270,7 @@ describe('buildCandidatePath edge cases', () => {
 				subjectAltNames: [{ type: 'ip', value: '::1' }],
 			},
 		});
-		await expect(
+		expect(
 			verifyCertificateChain({
 				leaf: leaf.pem,
 				roots: [ca.certificate.pem],
@@ -2920,7 +2920,7 @@ describe('coverage: verify.ts internal edge cases', () => {
 				],
 			},
 		};
-		await expect(
+		expect(
 			validateCandidatePath({
 				chain: [tamperedLeaf, tamperedRoot],
 				allowSelfSignedLeaf: true,
@@ -2948,7 +2948,7 @@ describe('coverage: verify.ts internal edge cases', () => {
 				],
 			},
 		};
-		await expect(
+		expect(
 			validateCandidatePath({
 				chain: [tamperedLeaf, tamperedRoot],
 				allowSelfSignedLeaf: true,
@@ -2976,7 +2976,7 @@ describe('coverage: verify.ts internal edge cases', () => {
 				],
 			},
 		};
-		await expect(
+		expect(
 			validateCandidatePath({
 				chain: [tamperedLeaf, tamperedRoot],
 				allowSelfSignedLeaf: true,

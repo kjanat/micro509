@@ -255,7 +255,7 @@ describe('extensions encoding', () => {
 
 	it('rejects invalid IPv4 addresses during certificate creation', async () => {
 		const { createSelfSignedCertificate } = await import('#micro509');
-		await expect(
+		expect(
 			createSelfSignedCertificate({
 				subject: { commonName: 'bad-ipv4' },
 				extensions: {
@@ -267,7 +267,7 @@ describe('extensions encoding', () => {
 
 	it('rejects IPv4 segment out of range', async () => {
 		const { createSelfSignedCertificate } = await import('#micro509');
-		await expect(
+		expect(
 			createSelfSignedCertificate({
 				subject: { commonName: 'bad-ipv4-segment' },
 				extensions: {
@@ -279,7 +279,7 @@ describe('extensions encoding', () => {
 
 	it('rejects IPv6 with multiple :: groups', async () => {
 		const { createSelfSignedCertificate } = await import('#micro509');
-		await expect(
+		expect(
 			createSelfSignedCertificate({
 				subject: { commonName: 'bad-ipv6-double' },
 				extensions: {
@@ -291,7 +291,7 @@ describe('extensions encoding', () => {
 
 	it('rejects IPv6 with invalid hex segment', async () => {
 		const { createSelfSignedCertificate } = await import('#micro509');
-		await expect(
+		expect(
 			createSelfSignedCertificate({
 				subject: { commonName: 'bad-ipv6-hex' },
 				extensions: {
@@ -303,7 +303,7 @@ describe('extensions encoding', () => {
 
 	it('rejects IPv6 with too many groups', async () => {
 		const { createSelfSignedCertificate } = await import('#micro509');
-		await expect(
+		expect(
 			createSelfSignedCertificate({
 				subject: { commonName: 'bad-ipv6-groups' },
 				extensions: {
@@ -478,7 +478,7 @@ describe('pkcs12-mac.ts edge cases', () => {
 				octetString(new Uint8Array(32)),
 			]),
 		]);
-		await expect(parsePkcs12MacData(malformed, dummySafe)).rejects.toThrow('Malformed MacData');
+		expect(parsePkcs12MacData(malformed, dummySafe)).rejects.toThrow('Malformed MacData');
 	});
 
 	it('parsePkcs12MacData throws on malformed MacData (salt wrong tag)', async () => {
@@ -491,7 +491,7 @@ describe('pkcs12-mac.ts edge cases', () => {
 			integerFromNumber(16), // wrong tag — should be octetString
 			integerFromNumber(2048),
 		]);
-		await expect(parsePkcs12MacData(malformed, dummySafe)).rejects.toThrow('Malformed MacData');
+		expect(parsePkcs12MacData(malformed, dummySafe)).rejects.toThrow('Malformed MacData');
 	});
 
 	it('parsePkcs12MacData throws on malformed DigestInfo (missing digest)', async () => {
@@ -501,7 +501,7 @@ describe('pkcs12-mac.ts edge cases', () => {
 			octetString(new Uint8Array(16)),
 			integerFromNumber(2048),
 		]);
-		await expect(parsePkcs12MacData(malformed, dummySafe)).rejects.toThrow('Malformed DigestInfo');
+		expect(parsePkcs12MacData(malformed, dummySafe)).rejects.toThrow('Malformed DigestInfo');
 	});
 
 	it('parsePkcs12MacData throws on malformed DigestInfo (digest wrong tag)', async () => {
@@ -514,7 +514,7 @@ describe('pkcs12-mac.ts edge cases', () => {
 			octetString(new Uint8Array(16)),
 			integerFromNumber(2048),
 		]);
-		await expect(parsePkcs12MacData(malformed, dummySafe)).rejects.toThrow('Malformed DigestInfo');
+		expect(parsePkcs12MacData(malformed, dummySafe)).rejects.toThrow('Malformed DigestInfo');
 	});
 
 	it('parsePkcs12MacData throws when algorithm OID is missing', async () => {
@@ -524,9 +524,7 @@ describe('pkcs12-mac.ts edge cases', () => {
 			octetString(new Uint8Array(16)),
 			integerFromNumber(2048),
 		]);
-		await expect(parsePkcs12MacData(malformed, dummySafe)).rejects.toThrow(
-			'MacData algorithm missing',
-		);
+		expect(parsePkcs12MacData(malformed, dummySafe)).rejects.toThrow('MacData algorithm missing');
 	});
 
 	it('parsePkcs12MacData throws on non-SHA-256 algorithm', async () => {
@@ -539,7 +537,7 @@ describe('pkcs12-mac.ts edge cases', () => {
 			octetString(new Uint8Array(16)),
 			integerFromNumber(2048),
 		]);
-		await expect(parsePkcs12MacData(malformed, dummySafe)).rejects.toThrow('Only SHA-256');
+		expect(parsePkcs12MacData(malformed, dummySafe)).rejects.toThrow('Only SHA-256');
 	});
 
 	it('parsePkcs12MacData skips MAC verification when password is undefined', async () => {

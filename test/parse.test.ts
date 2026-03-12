@@ -68,7 +68,7 @@ describe('parse', () => {
 			{ oid: '1.2.3.4.201', critical: false, value: 'non-critical' },
 		]);
 
-		await expect(
+		expect(
 			createSelfSignedCertificate({
 				subject: { commonName: 'dup-ext.example' },
 				extensions: {

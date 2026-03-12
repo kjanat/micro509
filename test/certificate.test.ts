@@ -132,7 +132,7 @@ describe('certificate', () => {
 	});
 
 	it('rejects notAfter <= notBefore', async () => {
-		await expect(
+		expect(
 			createSelfSignedCertificate({
 				subject: { commonName: 'bad-validity' },
 				validity: {
@@ -144,13 +144,13 @@ describe('certificate', () => {
 	});
 
 	it('rejects empty subject name', async () => {
-		await expect(createSelfSignedCertificate({ subject: {} })).rejects.toThrow(
+		expect(createSelfSignedCertificate({ subject: {} })).rejects.toThrow(
 			'Name must contain at least one attribute',
 		);
 	});
 
 	it('rejects invalid country code length', async () => {
-		await expect(createSelfSignedCertificate({ subject: { country: 'USA' } })).rejects.toThrow(
+		expect(createSelfSignedCertificate({ subject: { country: 'USA' } })).rejects.toThrow(
 			'Country must be a 2-character code',
 		);
 	});
@@ -180,7 +180,7 @@ describe('certificate', () => {
 	});
 
 	it('rejects pathLength without ca:true', async () => {
-		await expect(
+		expect(
 			createSelfSignedCertificate({
 				subject: { commonName: 'bad-bc.example' },
 				extensions: {

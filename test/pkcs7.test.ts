@@ -781,7 +781,7 @@ describe('pkcs7: coverage — error paths', () => {
 		]);
 		const der = sequence([objectIdentifier(OIDS.pkcs7SignedData), explicitContext(0, signedData)]);
 		// verifyPkcs7SignedData will call digestAlgorithmHash which throws
-		await expect(verifyPkcs7SignedData(der)).rejects.toThrow('Unsupported digest algorithm OID');
+		expect(verifyPkcs7SignedData(der)).rejects.toThrow('Unsupported digest algorithm OID');
 	});
 
 	it('extractMessageDigest returns undefined when digest tag is not OCTET STRING', async () => {
