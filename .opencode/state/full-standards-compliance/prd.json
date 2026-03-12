@@ -25,7 +25,7 @@
 			"title": "Research RFC 5280 name comparison",
 			"description": "Research RFC 5280 section 7 comparison rules for directoryName and related name forms. Done when:\n- required normalization rules are documented\n- unsafe shortcuts are identified\n- target helpers and fixtures are named",
 			"priority": "spike",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "rfc9618-engine-spike",

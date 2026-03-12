@@ -142,6 +142,16 @@ interface PolicyInformation {
 - Keep `./package.json` as an explicit export, but treat the rest of `package.json` export metadata as generated build output. tsdown does this automatically.
 - Split the work in two steps: first add the multi-entry map for stable subpaths, then enable preserved-module output in the later `preserve-module-build` task.
 
+### Spike Notes - RFC 5280 directoryName comparison
+
+- `directoryName` constraint checks cannot rely on `derHex` equality or DER-prefix subtree checks; RFC 5280 section 7.1 requires semantic DN comparison.
+- Compare DNs as ordered sequences of RDNs; compare each RDN as an unordered set of AVAs with the same cardinality.
+- For `DirectoryString` AVAs, use RFC 4518 string preparation as stored values: map with case folding, normalize with NFKC, apply prohibited-code-point checks, then compress insignificant spaces.
+- Initial implementation target is `PrintableString` and `UTF8String`; `TeletexString`, `BMPString`, and `UniversalString` stay explicitly unsupported until modeled and tested.
+- Future compare helpers should be named around intent, eg `prepareNameCompareString()`, `compareNameAttributeValue()`, `compareRelativeDistinguishedNames()`, `compareDistinguishedNames()`, and `isWithinDirectoryNameSubtree()`.
+- `ParsedName` needs RDN-aware data for semantic comparison; keep `derHex` for round-trip/debug use, but add structured `rdns`/AVA metadata instead of reparsing display strings.
+- Fixture plan for follow-up tasks: mixed `PrintableString`/`UTF8String` equality, case and space normalization, Unicode normalization, multi-valued RDN AVA reordering, exact-DN order sensitivity, subtree suffix matching, and regression coverage proving semantic compare replaces DER-prefix behavior.
+
 ## Deliverables (Ordered)
 
 ### D0. Remove Overclaims And Publish Compliance Matrix
