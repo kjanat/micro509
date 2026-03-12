@@ -16,6 +16,7 @@ Started: 2026-03-12
 - RFC 5280 `directoryName` comparison is semantic: ordered DN, unordered RDN sets, RFC 4518-prepared AVA strings; never compare raw DER prefixes.
 - RFC 9618 policy validation should use a depth-indexed DAG keyed by `(depth, validPolicy)` plus constrained policy sets; never build or expose the deprecated RFC 5280 policy tree during core validation.
 - CRL applicability needs structured certificate DP + CRL IDP objects; URI-only projections are debug/display data, not enough for RFC 5280 scope decisions.
+- Standards docs should keep README + `docs/PKIX-SCOPE.md` aligned around a short `implemented` / `partial` / `not yet` matrix, then narrow per-feature wording to shipped behavior.
 
 ## Validation Commands
 
@@ -60,3 +61,10 @@ Started: 2026-03-12
 - Captured that current URI-only CRL projections are lossy and cannot drive RFC 5280 scope enforcement without new structured parse/build types.
 - Files changed: `specs/full-standards-compliance.md`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** treat `non_applicable` as a first-class revocation outcome; scope mismatch is different from stale/signature-invalid evidence and lets higher-level revocation orchestration keep searching.
+
+## Task - [docs-compliance-matrix]
+
+- Tightened public standards claims in `README.md` and `docs/PKIX-SCOPE.md` around what ships today.
+- Added a short RFC status matrix and removed the remaining doc wording that implied service identity was already split from path validation.
+- Files changed: `README.md`, `docs/PKIX-SCOPE.md`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** when docs span both marketing and scope checklists, lead with the same small standards matrix in both places, then narrow feature bullets separately.

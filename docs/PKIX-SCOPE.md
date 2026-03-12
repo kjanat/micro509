@@ -1,11 +1,20 @@
 # PKIX validation scope checklist
 
+## Standards status
+
+| Area                       | Status    | Notes                                                                                                                                                                      |
+| -------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| RFC 5280 path validation   | `partial` | core path validation ships; policy processing, initial subtree inputs, and full name-constraint semantics are not complete yet                                             |
+| RFC 6960 OCSP              | `partial` | request/response parsing, signature checks, nonce/request matching, and freshness checks ship; delegated responder authorization and request coverage are not complete yet |
+| RFC 6125 service identity  | `partial` | DNS-ID and IP-ID checks ship today inside verification helpers; separate identity APIs, URI-ID, SRV-ID, and IDNA are not complete yet                                      |
+| RFC 9618 policy validation | `not yet` | no RFC 9618 policy engine yet                                                                                                                                              |
+
 ## 1. Define the boundary up front
 
 - [x] Treat **certification path validation** as a function over a **prospective certification path** plus validation inputs, not as “build whatever chain you can find and hope for the best.”
       RFC 5280 Section 6.1.1 defines the algorithm in terms of a candidate path and nine inputs. (IETF Datatracker[^rfc5280])
 - [x] Keep **path building/discovery** separate from **path validation**.
-- [x] Keep **service identity matching** separate from **path validation**.
+- [ ] Keep **service identity matching** separate from **path validation**.
 - [x] Keep **revocation** separate from **path validation**.
 
 ## 2. Required inputs for RFC 5280-style path validation
@@ -141,7 +150,7 @@
 ### Honest wording
 
 - “Validates candidate certificate paths with configurable trust anchors and typed results.”
-- “Revocation is a separate API; service identity matching is currently exposed through verification profiles and is planned as a separate API.”
+- “Revocation is a separate API; service identity matching is currently exposed through verification helpers and is planned as a separate API.”
 - “Advanced RFC 5280 features such as policy processing and full name-constraint handling are not yet complete.” (IETF Datatracker[^rfc5280])
 
 The main monster under the bed is simple: **once you say “full RFC 5280,” you’ve signed up for policy processing, name constraints, critical-extension behavior, and trust-anchor semantics — not just signatures and dates.** (IETF Datatiracker[^rfc5280])

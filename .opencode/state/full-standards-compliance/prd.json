@@ -9,7 +9,7 @@
 			"title": "Finish compliance matrix and docs audit",
 			"description": "Finish the implemented/partial/not-yet compliance matrix and audit all user-facing claims. Done when:\n- README and PKIX scope classify RFC areas honestly\n- every checked checklist item points to shipped behavior and tests\n- no doc implies full 5280/6960/6125 compliance early",
 			"priority": "polish",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "tsdown-multi-entry-spike",

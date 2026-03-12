@@ -6,17 +6,26 @@ Tiny X.509 builders for modern TypeScript.
 - DER + PEM + base64 outputs
 - PKCS#8 + SPKI + JWK key import/export
 - parse certs + CSRs back to typed metadata
-- verify leaf/intermediate/root chains with typed results
+- verify candidate leaf/intermediate/root chains with typed results
 - custom extension build hooks + decode helpers
 - browser-native chain verification via WebCrypto
 - browser-native CSR signature verification too
 - PKCS#7 certificate bag helpers
 - CRL parse/create/verify helpers
 - passwordless PFX bundle helpers
-- OCSP request build + OCSP response parse helpers
+- OCSP request build + basic OCSP response parse/validation helpers
 - encrypted PKCS#8 / encrypted PFX via PBES2
 - encrypted traditional RSA/EC PEM helpers
 - WebCrypto-first, typed, small surface
+
+## Standards status
+
+| Area                       | Status    | Notes                                                                                                                                        |
+| -------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| RFC 5280 path validation   | `partial` | core path checks ship; policy processing, initial subtree inputs, and full name-constraint coverage are not complete yet                     |
+| RFC 6960 OCSP              | `partial` | request/response helpers and basic validation ship; delegated responder binding/authorization and full request coverage are not complete yet |
+| RFC 6125 service identity  | `partial` | DNS-ID and IP-ID checks ship today via verification helpers; URI-ID, SRV-ID, IDNA, and extracted identity APIs are not complete yet          |
+| RFC 9618 policy validation | `not yet` | no RFC 9618 policy engine yet                                                                                                                |
 
 ## Install
 
@@ -421,10 +430,10 @@ if (result.ok) {
 - pem helpers: split mixed cert/csr/key bundles by label
 - pkcs7 helpers: create/parse degenerate signedData cert bags, parse general signedData signer metadata
 - crl helpers: create/parse/verify CRLs, delta CRL indicator, issuing distribution point, freshest CRL, entry reason/invalidity extensions, revocation lookup by serial
-- ocsp helpers: build requests, build signed responses, parse requests/responses, verify response signatures, and run basic nonce/request/issuer checks; delegated responder validation is partial
+- ocsp helpers: build requests, build signed responses, parse requests/responses, verify response signatures, and run basic nonce/request/issuer/time checks; delegated responder validation, ResponderID binding, and full request coverage are still partial
 - pfx helpers: create/parse passwordless or encrypted cert+key bundles with bag attributes and optional MAC integrity
 - legacy key helpers: PKCS#1 RSA and SEC1 EC import/export, plus encrypted traditional PEM
 - extended key usage: built-ins + custom OID escape hatch
-- chain verify: async, WebCrypto-based, browser-safe, multi-candidate path building, issuer match, signatures, time, CA/keyCertSign, pathLen, AKI/SKI, and basic DNS/IP SAN plus EKU checks
+- chain verify: async, WebCrypto-based, browser-safe, multi-candidate path building plus candidate-path validation with issuer match, signatures, time, CA/keyCertSign, pathLen, AKI/SKI, supported name-constraint checks, and basic DNS/IP SAN plus EKU checks; policy processing and full RFC 6125 identity matching are not complete yet
 - csr verify: async, WebCrypto-based, browser-safe signature validation
 - verify failures: structured `code`, `index`, `details`
