@@ -23,7 +23,14 @@ import {
 	time,
 } from '#micro509/der.ts';
 import { parseKeyUsageExtension } from '#micro509/extension-bits.ts';
-import { buildCertificateExtensions, encodeSubjectAltName } from '#micro509/extensions.ts';
+import {
+	buildCertificateExtensions,
+	encodeCertificatePolicies,
+	encodeCrlDistributionPoints,
+	encodeNameConstraints,
+	encodePolicyMappings,
+	encodeSubjectAltName,
+} from '#micro509/extensions.ts';
 import {
 	allOnesMaskForIpAddress,
 	decodeIpAddress,
@@ -303,6 +310,41 @@ describe('extensions encoding', () => {
 		expect(() => buildCertificateExtensions(malformedSpki, undefined, undefined)).toThrow(
 			'SPKI missing subject public key bit string',
 		);
+	});
+
+	it('rejects empty certificate policies and policy mappings', () => {
+		expect(() => encodeCertificatePolicies([])).toThrow('certificatePolicies must not be empty');
+		expect(() => encodePolicyMappings([])).toThrow('policyMappings must not be empty');
+	});
+
+	it('rejects invalid distribution point construction', () => {
+		expect(() =>
+			Reflect.apply(encodeCrlDistributionPoints, undefined, [[{ reasons: ['keyCompromise'] }]]),
+		).toThrow('DistributionPoint must contain distributionPoint or crlIssuer');
+		expect(() =>
+			encodeCrlDistributionPoints([
+				{
+					distributionPoint: {
+						fullName: [{ type: 'uri', value: 'http://example.test/crl' }],
+						relativeName: [{ type: 'commonName', value: 'bad' }],
+					},
+				},
+			]),
+		).toThrow('DistributionPointName cannot contain both fullName and relativeName');
+		expect(() => encodeCrlDistributionPoints([{ distributionPoint: {} }])).toThrow(
+			'DistributionPointName must contain fullName or relativeName',
+		);
+	});
+
+	it('rejects non-SEQUENCE directoryName DER when encoding names', () => {
+		expect(() => encodeSubjectAltName({ type: 'directoryName', derHex: '020100' })).toThrow(
+			'directoryName derHex must encode a DER SEQUENCE',
+		);
+		expect(() =>
+			encodeNameConstraints({
+				permittedSubtrees: [{ base: { type: 'directoryName', derHex: '020100' } }],
+			}),
+		).toThrow('directoryName derHex must encode a DER SEQUENCE');
 	});
 
 	it('rejects invalid IPv4 addresses during certificate creation', async () => {

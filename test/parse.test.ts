@@ -17,6 +17,7 @@ import {
 } from '#micro509';
 import {
 	bitString,
+	concatBytes,
 	integerFromNumber,
 	nullValue,
 	objectIdentifier,
@@ -572,6 +573,345 @@ describe('parse', () => {
 		);
 	});
 
+	it('rejects policyInformation with trailing fields and empty qualifier sequences', async () => {
+		const trailing = await createSelfSignedCertificate({
+			subject: { commonName: 'bad-policy-trailing.example' },
+			extensions: {
+				customExtensions: [
+					{
+						oid: OIDS.certificatePolicies,
+						critical: true,
+						value: sequence([
+							sequence([
+								objectIdentifier('1.2.3.4.1'),
+								sequence([
+									sequence([
+										objectIdentifier(OIDS.cpsPolicyQualifier),
+										tlv(0x16, new TextEncoder().encode('https://example.test/cps')),
+									]),
+								]),
+								integerFromNumber(7),
+							]),
+						]),
+					},
+				],
+			},
+		});
+		expect(() => parseCertificatePem(trailing.certificate.pem)).toThrow(
+			'policyInformation has unexpected trailing fields',
+		);
+
+		const emptyQualifiers = await createSelfSignedCertificate({
+			subject: { commonName: 'bad-policy-empty-qualifiers.example' },
+			extensions: {
+				customExtensions: [
+					{
+						oid: OIDS.certificatePolicies,
+						critical: true,
+						value: sequence([sequence([objectIdentifier('1.2.3.4.1'), sequence([])])]),
+					},
+				],
+			},
+		});
+		expect(() => parseCertificatePem(emptyQualifiers.certificate.pem)).toThrow(
+			'policyQualifiers must not be empty',
+		);
+	});
+
+	it('rejects malformed policy qualifier and userNotice structures during parsing', async () => {
+		const qualifierTrailing = await createSelfSignedCertificate({
+			subject: { commonName: 'bad-policy-qualifier-trailing.example' },
+			extensions: {
+				customExtensions: [
+					{
+						oid: OIDS.certificatePolicies,
+						critical: true,
+						value: sequence([
+							sequence([
+								objectIdentifier('1.2.3.4.1'),
+								sequence([
+									sequence([
+										objectIdentifier(OIDS.cpsPolicyQualifier),
+										tlv(0x16, new TextEncoder().encode('https://example.test/cps')),
+										integerFromNumber(1),
+									]),
+								]),
+							]),
+						]),
+					},
+				],
+			},
+		});
+		expect(() => parseCertificatePem(qualifierTrailing.certificate.pem)).toThrow(
+			'policyQualifierInfo has unexpected trailing fields',
+		);
+
+		const duplicateNoticeRef = await createSelfSignedCertificate({
+			subject: { commonName: 'bad-user-notice-ref.example' },
+			extensions: {
+				customExtensions: [
+					{
+						oid: OIDS.certificatePolicies,
+						critical: true,
+						value: sequence([
+							sequence([
+								objectIdentifier('1.2.3.4.1'),
+								sequence([
+									sequence([
+										objectIdentifier(OIDS.userNoticePolicyQualifier),
+										sequence([
+											sequence([
+												tlv(0x0c, new TextEncoder().encode('Org A')),
+												sequence([integerFromNumber(1)]),
+											]),
+											sequence([
+												tlv(0x0c, new TextEncoder().encode('Org B')),
+												sequence([integerFromNumber(2)]),
+											]),
+										]),
+									]),
+								]),
+							]),
+						]),
+					},
+				],
+			},
+		});
+		expect(() => parseCertificatePem(duplicateNoticeRef.certificate.pem)).toThrow(
+			'userNotice must not contain multiple noticeRef values',
+		);
+
+		const duplicateExplicitText = await createSelfSignedCertificate({
+			subject: { commonName: 'bad-user-notice-text.example' },
+			extensions: {
+				customExtensions: [
+					{
+						oid: OIDS.certificatePolicies,
+						critical: true,
+						value: sequence([
+							sequence([
+								objectIdentifier('1.2.3.4.1'),
+								sequence([
+									sequence([
+										objectIdentifier(OIDS.userNoticePolicyQualifier),
+										sequence([
+											tlv(0x0c, new TextEncoder().encode('first')),
+											tlv(0x0c, new TextEncoder().encode('second')),
+										]),
+									]),
+								]),
+							]),
+						]),
+					},
+				],
+			},
+		});
+		expect(() => parseCertificatePem(duplicateExplicitText.certificate.pem)).toThrow(
+			'userNotice must not contain multiple explicitText values',
+		);
+	});
+
+	it('rejects malformed noticeRef, policyMappings, and policyConstraints structures', async () => {
+		const noticeRefTrailing = await createSelfSignedCertificate({
+			subject: { commonName: 'bad-notice-ref-trailing.example' },
+			extensions: {
+				customExtensions: [
+					{
+						oid: OIDS.certificatePolicies,
+						critical: true,
+						value: sequence([
+							sequence([
+								objectIdentifier('1.2.3.4.1'),
+								sequence([
+									sequence([
+										objectIdentifier(OIDS.userNoticePolicyQualifier),
+										sequence([
+											sequence([
+												tlv(0x0c, new TextEncoder().encode('Example Org')),
+												sequence([integerFromNumber(1)]),
+												integerFromNumber(2),
+											]),
+										]),
+									]),
+								]),
+							]),
+						]),
+					},
+				],
+			},
+		});
+		expect(() => parseCertificatePem(noticeRefTrailing.certificate.pem)).toThrow(
+			'noticeRef has unexpected trailing fields',
+		);
+
+		const emptyMappings = await createSelfSignedCertificate({
+			subject: { commonName: 'bad-empty-mappings.example' },
+			extensions: {
+				customExtensions: [{ oid: OIDS.policyMappings, critical: true, value: sequence([]) }],
+			},
+		});
+		expect(() => parseCertificatePem(emptyMappings.certificate.pem)).toThrow(
+			'policyMappings must not be empty',
+		);
+
+		const trailingMapping = await createSelfSignedCertificate({
+			subject: { commonName: 'bad-trailing-mapping.example' },
+			extensions: {
+				customExtensions: [
+					{
+						oid: OIDS.policyMappings,
+						critical: true,
+						value: sequence([
+							sequence([
+								objectIdentifier('1.2.3.4.1'),
+								objectIdentifier('1.2.3.4.2'),
+								integerFromNumber(1),
+							]),
+						]),
+					},
+				],
+			},
+		});
+		expect(() => parseCertificatePem(trailingMapping.certificate.pem)).toThrow(
+			'policyMappings entry has unexpected trailing fields',
+		);
+
+		const duplicateRequire = await createSelfSignedCertificate({
+			subject: { commonName: 'bad-policy-constraints-require.example' },
+			extensions: {
+				customExtensions: [
+					{
+						oid: OIDS.policyConstraints,
+						critical: true,
+						value: sequence([tlv(0x80, Uint8Array.of(0x00)), tlv(0x80, Uint8Array.of(0x01))]),
+					},
+				],
+			},
+		});
+		expect(() => parseCertificatePem(duplicateRequire.certificate.pem)).toThrow(
+			'policyConstraints must not repeat requireExplicitPolicy',
+		);
+
+		const unsupportedPolicyConstraint = await createSelfSignedCertificate({
+			subject: { commonName: 'bad-policy-constraints-tag.example' },
+			extensions: {
+				customExtensions: [
+					{
+						oid: OIDS.policyConstraints,
+						critical: true,
+						value: sequence([tlv(0x82, Uint8Array.of(0x00))]),
+					},
+				],
+			},
+		});
+		expect(() => parseCertificatePem(unsupportedPolicyConstraint.certificate.pem)).toThrow(
+			'Unsupported policyConstraints field tag: 130',
+		);
+
+		const duplicateInhibit = await createSelfSignedCertificate({
+			subject: { commonName: 'bad-policy-constraints-inhibit.example' },
+			extensions: {
+				customExtensions: [
+					{
+						oid: OIDS.policyConstraints,
+						critical: true,
+						value: sequence([tlv(0x81, Uint8Array.of(0x00)), tlv(0x81, Uint8Array.of(0x01))]),
+					},
+				],
+			},
+		});
+		expect(() => parseCertificatePem(duplicateInhibit.certificate.pem)).toThrow(
+			'policyConstraints must not repeat inhibitPolicyMapping',
+		);
+	});
+
+	it('rejects malformed distributionPointName, SRV-ID, and unsupported DisplayText tags', async () => {
+		const badDistributionPointName = await createSelfSignedCertificate({
+			subject: { commonName: 'bad-dp-name.example' },
+			extensions: {
+				customExtensions: [
+					{
+						oid: OIDS.cRLDistributionPoints,
+						critical: true,
+						value: sequence([sequence([tlv(0xa0, Uint8Array.of(0x82, 0x01, 0x61))])]),
+					},
+				],
+			},
+		});
+		expect(() => parseCertificatePem(badDistributionPointName.certificate.pem)).toThrow(
+			'Unsupported distributionPointName tag: 130',
+		);
+
+		const badSrvId = await createSelfSignedCertificate({
+			subject: { commonName: 'bad-srv-id.example' },
+			extensions: {
+				customExtensions: [
+					{
+						oid: OIDS.subjectAltName,
+						critical: true,
+						value: sequence([
+							tlv(
+								0xa0,
+								sequence([
+									objectIdentifier(OIDS.idOnDnsSrv),
+									tlv(0x81, new TextEncoder().encode('_xmpp.example.test')),
+								]),
+							),
+						]),
+					},
+				],
+			},
+		});
+		expect(() => parseCertificatePem(badSrvId.certificate.pem)).toThrow(
+			'SRV-ID otherName value must use explicit [0]',
+		);
+
+		const badDisplayText = await createSelfSignedCertificate({
+			subject: { commonName: 'bad-display-text.example' },
+			extensions: {
+				customExtensions: [
+					{
+						oid: OIDS.certificatePolicies,
+						critical: true,
+						value: sequence([
+							sequence([
+								objectIdentifier('1.2.3.4.1'),
+								sequence([
+									sequence([
+										objectIdentifier(OIDS.userNoticePolicyQualifier),
+										sequence([tlv(0x02, Uint8Array.of(0x01))]),
+									]),
+								]),
+							]),
+						]),
+					},
+				],
+			},
+		});
+		expect(() => parseCertificatePem(badDisplayText.certificate.pem)).toThrow(
+			'Unsupported DisplayText tag: 2',
+		);
+	});
+
+	it('preserves x400Address and ediPartyName name constraints and drops unknown tags', () => {
+		const result = parseNameConstraints(
+			sequence([
+				tlv(
+					0xa0,
+					concatBytes([
+						sequence([tlv(0xa3, Uint8Array.of(0x01, 0x02))]),
+						sequence([tlv(0xa5, Uint8Array.of(0x03, 0x04))]),
+						sequence([tlv(0x89, Uint8Array.of(0x05, 0x06))]),
+					]),
+				),
+			]),
+		);
+		expect(result.permittedSubtrees).toEqual([
+			{ base: { type: 'x400Address', value: Uint8Array.of(0x01, 0x02) } },
+			{ base: { type: 'ediPartyName', value: Uint8Array.of(0x03, 0x04) } },
+		]);
+	});
+
 	it('rejects empty policy noticeNumbers during parsing', async () => {
 		const certificate = await createSelfSignedCertificate({
 			subject: { commonName: 'bad-policy-notice-parse.example' },
@@ -599,6 +939,67 @@ describe('parse', () => {
 		});
 		expect(() => parseCertificatePem(certificate.certificate.pem)).toThrow(
 			'noticeRef noticeNumbers must not be empty',
+		);
+	});
+
+	it('parses BMPString DisplayText in certificate policies', async () => {
+		const certificate = await createSelfSignedCertificate({
+			subject: { commonName: 'bmp-policy-parse.example' },
+			extensions: {
+				customExtensions: [
+					{
+						oid: OIDS.certificatePolicies,
+						critical: true,
+						value: sequence([
+							sequence([
+								objectIdentifier('1.2.3.4.1'),
+								sequence([
+									sequence([
+										objectIdentifier(OIDS.userNoticePolicyQualifier),
+										sequence([tlv(0x1e, Uint8Array.of(0x00, 0x4f, 0x00, 0x4b))]),
+									]),
+								]),
+							]),
+						]),
+					},
+				],
+			},
+		});
+
+		expect(parseCertificatePem(certificate.certificate.pem).certificatePolicies).toEqual([
+			{
+				policyIdentifier: '1.2.3.4.1',
+				policyQualifiers: [{ type: 'userNotice', explicitText: 'OK' }],
+			},
+		]);
+	});
+
+	it('rejects malformed BMPString DisplayText in certificate policies', async () => {
+		const certificate = await createSelfSignedCertificate({
+			subject: { commonName: 'bad-bmp-policy-parse.example' },
+			extensions: {
+				customExtensions: [
+					{
+						oid: OIDS.certificatePolicies,
+						critical: true,
+						value: sequence([
+							sequence([
+								objectIdentifier('1.2.3.4.1'),
+								sequence([
+									sequence([
+										objectIdentifier(OIDS.userNoticePolicyQualifier),
+										sequence([tlv(0x1e, Uint8Array.of(0x00, 0x4f, 0x00))]),
+									]),
+								]),
+							]),
+						]),
+					},
+				],
+			},
+		});
+
+		expect(() => parseCertificatePem(certificate.certificate.pem)).toThrow(
+			'Invalid BMPString length',
 		);
 	});
 
