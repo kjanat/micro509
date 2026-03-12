@@ -16,6 +16,24 @@ import type { RevocationStatus } from './validation.ts';
 
 export type RevocationEvidenceKind = 'crl' | 'ocsp';
 export type RevocationCertificateSource = string | Uint8Array | ParsedCertificate;
+export type OcspResponderSource = 'configured' | 'authorityInfoAccess';
+export type ConfiguredOcspResponderCertificate = string | Uint8Array;
+
+export interface ConfiguredOcspResponder {
+	readonly uri: string;
+	readonly responderCertificate?: ConfiguredOcspResponderCertificate;
+}
+
+export interface OcspResponderCandidate {
+	readonly source: OcspResponderSource;
+	readonly uri: string;
+	readonly responderCertificate?: ConfiguredOcspResponderCertificate;
+}
+
+export interface ResolveOcspResponderCandidatesInput {
+	readonly certificate: RevocationCertificateSource;
+	readonly configuredResponders?: readonly ConfiguredOcspResponder[];
+}
 
 export interface RevocationCrlEvidenceInput {
 	readonly kind: 'crl';
@@ -114,6 +132,61 @@ type RevocationEvidenceCheck =
 			readonly status: 'unknown';
 			readonly detail: RevocationIndeterminateEvidence;
 	  };
+
+export function getCertificateOcspResponderUris(
+	certificate: RevocationCertificateSource,
+): readonly string[] {
+	const parsedCertificate = normalizeCertificate(certificate);
+	const uris: string[] = [];
+	const seen = new Set<string>();
+	for (const accessDescription of parsedCertificate.authorityInfoAccess ?? []) {
+		if (accessDescription.method !== 'ocsp' || seen.has(accessDescription.uri)) {
+			continue;
+		}
+		seen.add(accessDescription.uri);
+		uris.push(accessDescription.uri);
+	}
+	return uris;
+}
+
+export function resolveOcspResponderCandidates(
+	input: ResolveOcspResponderCandidatesInput,
+): readonly OcspResponderCandidate[] {
+	const candidates: OcspResponderCandidate[] = [];
+	const configuredByUri = new Map<string, ConfiguredOcspResponder>();
+	for (const configuredResponder of input.configuredResponders ?? []) {
+		const existing = configuredByUri.get(configuredResponder.uri);
+		if (
+			existing === undefined ||
+			(existing.responderCertificate === undefined &&
+				configuredResponder.responderCertificate !== undefined)
+		) {
+			configuredByUri.set(configuredResponder.uri, configuredResponder);
+		}
+	}
+	const seen = new Set<string>();
+	for (const configuredResponder of configuredByUri.values()) {
+		seen.add(configuredResponder.uri);
+		candidates.push({
+			source: 'configured',
+			uri: configuredResponder.uri,
+			...(configuredResponder.responderCertificate === undefined
+				? {}
+				: { responderCertificate: configuredResponder.responderCertificate }),
+		});
+	}
+	for (const uri of getCertificateOcspResponderUris(input.certificate)) {
+		if (seen.has(uri)) {
+			continue;
+		}
+		seen.add(uri);
+		candidates.push({
+			source: 'authorityInfoAccess',
+			uri,
+		});
+	}
+	return candidates;
+}
 
 export async function checkCertificateRevocation(
 	input: CheckCertificateRevocationInput,

@@ -406,7 +406,7 @@
 			"description": "Add pure helper APIs for explicit responder selection and discovery inputs. Done when:\n- callers can derive responder candidates from certificate metadata without network I/O\n- local responder configuration has a typed home\n- helpers stay separate from pure validation",
 			"depends": ["expose-revocation-status"],
 			"priority": "integration",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "add-ocsp-fixtures",

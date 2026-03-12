@@ -5,6 +5,7 @@ Started: 2026-03-12
 
 ## Codebase Patterns
 
+- OCSP responder discovery should stay pure and metadata-only: expose AIA-derived responder URIs plus caller-supplied local responder config as typed candidates, and dedupe configured duplicates by keeping the most specific entry (one with a bound responder cert).
 - OCSP `ResponderID` parsing should preserve the CHOICE branch in parsed output; accept the normal implicit `byKeyHash` bytes, but keep parser coverage for explicit wrapper variants used in hand-built fixtures.
 - Delta CRL support should validate the complete/delta pair up front (issuer, AKI, IDP scope, numbering), then overlay certificate-specific delta entries on the complete-CRL view; `removeFromCRL` only clears a prior `certificateHold`.
 - Indirect CRL revocation lookup is sequence-scoped state, not entry-local state: carry `certificateIssuer` forward across revoked entries, match on serial plus effective issuer, and fail closed only after scanning all same-serial candidates.
@@ -310,3 +311,11 @@ Started: 2026-03-12
 - Added OCSP parser coverage in `test/ocsp.test.ts` for generated `byKeyHash` responses, explicit-wrapper `byKeyHash` fixtures, and hand-built `byName` responses.
 - Files changed: `src/ocsp.ts`, `src/index.ts`, `test/ocsp.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** OCSP responder identity is another parser-vs-validator split: parse both CHOICE branches now, then let later validation tasks bind signer certs against the parsed responder identity without reparsing wire bytes.
+
+## Task - [add-ocsp-responder-helper]
+
+- Added pure responder-discovery helpers in `src/revocation.ts` so callers can derive OCSP responder URIs from certificate AIA metadata and combine them with explicit local responder config without any network I/O.
+- Added typed `ConfiguredOcspResponder` / `OcspResponderCandidate` exports in `src/revocation.ts` and `src/index.ts`, with duplicate configured URIs preferring the entry that includes a responder certificate.
+- Added revocation-boundary coverage in `test/revocation.test.ts` for AIA URI discovery, duplicate filtering, and configured-responder precedence over discovered AIA entries.
+- Files changed: `src/revocation.ts`, `src/index.ts`, `test/revocation.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** keep responder-candidate helpers separate from `validateOcspResponse()`; discovery can accept parsed target certs, but configured delegated responder certs should stay raw PEM/DER so later validation cannot accidentally skip chain checks.

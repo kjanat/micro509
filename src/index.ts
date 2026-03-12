@@ -237,7 +237,13 @@ export {
 	type CheckCertificateRevocationFailureDetails,
 	type CheckCertificateRevocationInput,
 	type CheckCertificateRevocationResult,
+	type ConfiguredOcspResponder,
+	type ConfiguredOcspResponderCertificate,
 	checkCertificateRevocation,
+	getCertificateOcspResponderUris,
+	type OcspResponderCandidate,
+	type OcspResponderSource,
+	type ResolveOcspResponderCandidatesInput,
 	type RevocationCertificateSource,
 	type RevocationCheckGoodResult,
 	type RevocationCheckRevokedResult,
@@ -248,6 +254,7 @@ export {
 	type RevocationIndeterminateEvidence,
 	type RevocationIndeterminateReasonCode,
 	type RevocationOcspEvidenceInput,
+	resolveOcspResponderCandidates,
 } from './revocation.ts';
 export type {
 	ConstrainedPolicy,

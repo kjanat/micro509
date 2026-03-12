@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'bun:test';
 import {
 	checkCertificateRevocation,
+	createCertificate,
 	createCertificateRevocationList,
 	createOcspResponse,
+	createSelfSignedCertificate,
+	generateKeyPair,
+	getCertificateOcspResponderUris,
 	parseCertificatePem,
+	resolveOcspResponderCandidates,
 } from '#micro509';
 import { hexToBytes, issueChain } from './helpers.ts';
 
@@ -173,5 +178,100 @@ describe('revocation boundary', () => {
 				],
 			},
 		});
+	});
+
+	it('discovers OCSP responder URIs from certificate AIA metadata', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'AIA OCSP CA' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'AIA OCSP CA' },
+			subject: { commonName: 'aia-ocsp.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+			extensions: {
+				authorityInfoAccess: [
+					{ method: 'ocsp', uri: 'http://ocsp-1.example.test' },
+					{ method: 'caIssuers', uri: 'http://issuer.example.test/ca.der' },
+					{ method: 'ocsp', uri: 'http://ocsp-1.example.test' },
+					{ method: 'ocsp', uri: 'http://ocsp-2.example.test' },
+				],
+			},
+		});
+
+		expect(getCertificateOcspResponderUris(leaf.pem)).toEqual([
+			'http://ocsp-1.example.test',
+			'http://ocsp-2.example.test',
+		]);
+	});
+
+	it('resolves configured responders ahead of AIA discovery', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Configured OCSP CA' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const responderKeys = await generateKeyPair();
+		const responder = await createCertificate({
+			issuer: { commonName: 'Configured OCSP CA' },
+			subject: { commonName: 'Local OCSP Responder' },
+			publicKey: responderKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['ocspSigning'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Configured OCSP CA' },
+			subject: { commonName: 'configured-ocsp.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+			extensions: {
+				authorityInfoAccess: [
+					{ method: 'ocsp', uri: 'http://ocsp-aia.example.test' },
+					{ method: 'ocsp', uri: 'http://ocsp-configured.example.test' },
+				],
+			},
+		});
+
+		expect(
+			resolveOcspResponderCandidates({
+				certificate: parseCertificatePem(leaf.pem),
+				configuredResponders: [
+					{
+						uri: 'http://ocsp-configured.example.test',
+						responderCertificate: responder.pem,
+					},
+					{ uri: 'http://ocsp-local-only.example.test' },
+					{ uri: 'http://ocsp-local-only.example.test' },
+				],
+			}),
+		).toEqual([
+			{
+				source: 'configured',
+				uri: 'http://ocsp-configured.example.test',
+				responderCertificate: responder.pem,
+			},
+			{
+				source: 'configured',
+				uri: 'http://ocsp-local-only.example.test',
+			},
+			{
+				source: 'authorityInfoAccess',
+				uri: 'http://ocsp-aia.example.test',
+			},
+		]);
 	});
 });
