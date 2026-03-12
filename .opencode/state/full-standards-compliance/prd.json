@@ -325,7 +325,7 @@
 			"description": "Implement delta CRL processing and merge semantics. Done when:\n- complete plus delta combination follows RFC rules\n- removeFromCRL is handled correctly\n- stale or mismatched delta CRLs are rejected",
 			"depends": ["enforce-crl-applicability"],
 			"priority": "standard",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "expose-revocation-status",

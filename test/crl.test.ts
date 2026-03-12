@@ -13,7 +13,7 @@ import {
 	validateCertificateRevocationList,
 	verifyCertificateRevocationList,
 } from '#micro509';
-import { childrenOf } from '../src/asn1.ts';
+import { childrenOf } from '#micro509/asn1.ts';
 import {
 	bitString,
 	bool,
@@ -22,8 +22,9 @@ import {
 	readSequenceChildren,
 	sequence,
 } from '#micro509/der.ts';
-import { encodeSubjectAltName, type GeneralName } from '#micro509/extensions.ts';
-import { OIDS } from '../src/oids.ts';
+import type { GeneralName } from '#micro509/extensions.ts';
+import { encodeSubjectAltName } from '#micro509/extensions.ts';
+import { OIDS } from '#micro509/oids.ts';
 import { encodeAlgorithmIdentifier, getSignatureAlgorithm, signBytes } from '#micro509/signing.ts';
 import { hexToBytes } from './helpers.ts';
 
@@ -687,7 +688,7 @@ describe('crl', () => {
 		});
 	});
 
-	it('reports unsupported indirect and delta CRLs as non-applicable', async () => {
+	it('reports unsupported indirect and primary delta CRLs as non-applicable', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Unsupported CRL CA' },
 			extensions: {
@@ -777,6 +778,299 @@ describe('crl', () => {
 			code: 'non_applicable',
 			message: 'delta CRLs are not applicable until delta merge support is implemented',
 			details: { reason: 'delta_crl_unsupported' },
+		});
+	});
+
+	it('merges delta CRL revocation entries over the complete CRL view', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Delta Merge CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Delta Merge CA' },
+			subject: { commonName: 'delta-merge.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+		const parsedLeaf = parseCertificatePem(leaf.pem);
+		const completeCrl = await createCertificateRevocationList({
+			issuer: { commonName: 'Delta Merge CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			crlNumber: 5,
+		});
+		const deltaCrl = await createCertificateRevocationList({
+			issuer: { commonName: 'Delta Merge CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			crlNumber: 6,
+			baseCrlNumber: 5,
+			revokedCertificates: [
+				{
+					serialNumber: hexToBytes(parsedLeaf.serialNumberHex),
+					reasonCode: 'keyCompromise',
+				},
+			],
+		});
+
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: leaf.pem,
+				issuerCertificate: ca.certificate.pem,
+				crl: completeCrl.pem,
+				deltaCrl: deltaCrl.pem,
+			}),
+		).toMatchObject({
+			ok: true,
+			status: 'revoked',
+			reasonCode: 'keyCompromise',
+			value: { crlNumber: 5 },
+		});
+	});
+
+	it('uses removeFromCRL only to clear certificateHold entries from the complete CRL', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Delta Remove CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const heldLeafKeys = await generateKeyPair();
+		const heldLeaf = await createCertificate({
+			issuer: { commonName: 'Delta Remove CA' },
+			subject: { commonName: 'delta-held.example' },
+			publicKey: heldLeafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+		const compromisedLeafKeys = await generateKeyPair();
+		const compromisedLeaf = await createCertificate({
+			issuer: { commonName: 'Delta Remove CA' },
+			subject: { commonName: 'delta-compromised.example' },
+			publicKey: compromisedLeafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+		const expiredLeafKeys = await generateKeyPair();
+		const expiredLeaf = await createCertificate({
+			issuer: { commonName: 'Delta Remove CA' },
+			subject: { commonName: 'delta-expired.example' },
+			publicKey: expiredLeafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			validity: {
+				notBefore: new Date('2025-01-01T00:00:00Z'),
+				notAfter: new Date('2025-01-02T00:00:00Z'),
+			},
+		});
+		const parsedHeldLeaf = parseCertificatePem(heldLeaf.pem);
+		const parsedCompromisedLeaf = parseCertificatePem(compromisedLeaf.pem);
+		const parsedExpiredLeaf = parseCertificatePem(expiredLeaf.pem);
+		const completeCrl = await createCertificateRevocationList({
+			issuer: { commonName: 'Delta Remove CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			crlNumber: 10,
+			thisUpdate: new Date('2025-01-01T00:00:00Z'),
+			nextUpdate: new Date('2025-01-10T00:00:00Z'),
+			revokedCertificates: [
+				{
+					serialNumber: hexToBytes(parsedHeldLeaf.serialNumberHex),
+					reasonCode: 'certificateHold',
+				},
+				{
+					serialNumber: hexToBytes(parsedCompromisedLeaf.serialNumberHex),
+					reasonCode: 'keyCompromise',
+				},
+				{
+					serialNumber: hexToBytes(parsedExpiredLeaf.serialNumberHex),
+					reasonCode: 'keyCompromise',
+				},
+			],
+		});
+		const deltaCrl = await createCertificateRevocationList({
+			issuer: { commonName: 'Delta Remove CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			crlNumber: 11,
+			baseCrlNumber: 10,
+			thisUpdate: new Date('2025-01-02T00:00:00Z'),
+			nextUpdate: new Date('2025-01-10T00:00:00Z'),
+			revokedCertificates: [
+				{
+					serialNumber: hexToBytes(parsedHeldLeaf.serialNumberHex),
+					reasonCode: 'removeFromCRL',
+				},
+				{
+					serialNumber: hexToBytes(parsedCompromisedLeaf.serialNumberHex),
+					reasonCode: 'removeFromCRL',
+				},
+				{
+					serialNumber: hexToBytes(parsedExpiredLeaf.serialNumberHex),
+					reasonCode: 'removeFromCRL',
+				},
+			],
+		});
+
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: heldLeaf.pem,
+				issuerCertificate: ca.certificate.pem,
+				crl: completeCrl.pem,
+				deltaCrl: deltaCrl.pem,
+				at: new Date('2025-01-03T00:00:00Z'),
+			}),
+		).toMatchObject({
+			ok: true,
+			status: 'good',
+			value: { crlNumber: 10 },
+		});
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: compromisedLeaf.pem,
+				issuerCertificate: ca.certificate.pem,
+				crl: completeCrl.pem,
+				deltaCrl: deltaCrl.pem,
+				at: new Date('2025-01-03T00:00:00Z'),
+			}),
+		).toMatchObject({
+			ok: true,
+			status: 'revoked',
+			reasonCode: 'keyCompromise',
+			value: { crlNumber: 10 },
+		});
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: expiredLeaf.pem,
+				issuerCertificate: ca.certificate.pem,
+				crl: completeCrl.pem,
+				deltaCrl: deltaCrl.pem,
+				at: new Date('2025-01-03T00:00:00Z'),
+			}),
+		).toMatchObject({
+			ok: true,
+			status: 'good',
+			value: { crlNumber: 10 },
+		});
+	});
+
+	it('rejects stale delta CRLs during merge processing', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Delta Freshness CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Delta Freshness CA' },
+			subject: { commonName: 'delta-freshness.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+		const now = new Date('2026-03-12T12:00:00Z');
+		const completeCrl = await createCertificateRevocationList({
+			issuer: { commonName: 'Delta Freshness CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			crlNumber: 2,
+			thisUpdate: new Date('2026-03-12T10:00:00Z'),
+			nextUpdate: new Date('2026-03-12T14:00:00Z'),
+		});
+		const deltaCrl = await createCertificateRevocationList({
+			issuer: { commonName: 'Delta Freshness CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			crlNumber: 3,
+			baseCrlNumber: 2,
+			thisUpdate: new Date('2026-03-12T08:00:00Z'),
+			nextUpdate: new Date('2026-03-12T09:00:00Z'),
+		});
+
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: leaf.pem,
+				issuerCertificate: ca.certificate.pem,
+				crl: completeCrl.pem,
+				deltaCrl: deltaCrl.pem,
+				at: now,
+			}),
+		).toEqual({
+			ok: false,
+			code: 'stale_crl',
+			message: 'CRL is not valid at requested time',
+		});
+	});
+
+	it('rejects delta CRLs whose scope drifts from the complete CRL', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Delta Scope CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Delta Scope CA' },
+			subject: { commonName: 'delta-scope.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				crlDistributionPoints: [
+					{
+						distributionPoint: {
+							fullName: [{ type: 'uri', value: 'http://example.test/delta-scope-a.crl' }],
+						},
+					},
+				],
+			},
+		});
+		const completeCrl = await createCertificateRevocationList({
+			issuer: { commonName: 'Delta Scope CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			crlNumber: 7,
+			issuingDistributionPoint: {
+				distributionPoint: {
+					fullName: [{ type: 'uri', value: 'http://example.test/delta-scope-a.crl' }],
+				},
+			},
+		});
+		const deltaCrl = await createCertificateRevocationList({
+			issuer: { commonName: 'Delta Scope CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			crlNumber: 8,
+			baseCrlNumber: 7,
+			issuingDistributionPoint: {
+				distributionPoint: {
+					fullName: [{ type: 'uri', value: 'http://example.test/delta-scope-b.crl' }],
+				},
+			},
+		});
+
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: leaf.pem,
+				issuerCertificate: ca.certificate.pem,
+				crl: completeCrl.pem,
+				deltaCrl: deltaCrl.pem,
+			}),
+		).toEqual({
+			ok: false,
+			code: 'non_applicable',
+			message: 'complete and delta CRLs must share the same issuing distribution point scope',
+			details: { reason: 'delta_crl_incompatible' },
 		});
 	});
 

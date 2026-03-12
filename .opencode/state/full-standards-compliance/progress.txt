@@ -5,6 +5,7 @@ Started: 2026-03-12
 
 ## Codebase Patterns
 
+- Delta CRL support should validate the complete/delta pair up front (issuer, AKI, IDP scope, numbering), then overlay certificate-specific delta entries on the complete-CRL view; `removeFromCRL` only clears a prior `certificateHold`.
 - Indirect CRL revocation lookup is sequence-scoped state, not entry-local state: carry `certificateIssuer` forward across revoked entries, match on serial plus effective issuer, and fail closed only after scanning all same-serial candidates.
 - Structured distribution-point builder coverage should hit both optional halves of the RFC model: issuer-only certificate DPs and scope-only CRL IDPs, plus runtime rejects for empty `fullName` sequences.
 - For structured distribution-point coverage, prefer builder-backed round trips that assert both certificate-side DPs and CRL-side IDP/freshest-CRL parsing, with at least one `relativeName` case and one `fullName`+reasons case.
@@ -285,3 +286,11 @@ Started: 2026-03-12
 - Added focused indirect-CRL regressions in `test/crl.test.ts` for parsed entry issuers, carried issuer state, same-serial cross-issuer isolation, missing `cRLIssuer` authorization, and unsupported non-`directoryName` issuer forms.
 - Files changed: `src/crl.ts`, `src/oids.ts`, `test/crl.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** indirect CRL entry issuer state is path-dependent within the revoked-entry sequence; lookup must scan all same-serial entries before failing closed on unsupported issuer forms, or later matching issuers can be masked.
+
+## Task - [add-delta-crl-merge]
+
+- Added optional `deltaCrl` merge support to `checkCertificateRevocationAgainstCrl()` in `src/crl.ts`, including pair-compatibility checks for issuer, AKI, issuing-distribution-point scope, and CRL numbering.
+- Overlaid delta entries on the complete-CRL view so delta revocations win, stale/mismatched delta CRLs fail, and `removeFromCRL` only clears prior `certificateHold` entries.
+- Added CRL regressions in `test/crl.test.ts` for delta-added revocation, `removeFromCRL`, stale delta rejection, and scope-drift rejection.
+- Files changed: `src/crl.ts`, `test/crl.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** delta CRLs fit best as an overlay on certificate-specific lookup, not as a synthetic merged CRL; that keeps existing applicability and indirect-entry logic reusable while still enforcing pair-level compatibility early.

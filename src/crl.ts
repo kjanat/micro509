@@ -172,6 +172,7 @@ export interface CheckCertificateRevocationAgainstCrlInput {
 	readonly certificate: CrlCertificateSource;
 	readonly issuerCertificate: CrlCertificateSource;
 	readonly crl: CrlSource;
+	readonly deltaCrl?: CrlSource;
 	readonly at?: Date;
 	readonly clockSkewMs?: number;
 }
@@ -185,6 +186,7 @@ export type CheckCertificateRevocationAgainstCrlErrorCode =
 
 export type CrlApplicabilityFailureReason =
 	| 'certificate_scope_mismatch'
+	| 'delta_crl_incompatible'
 	| 'delta_crl_unsupported'
 	| 'distribution_point_mismatch'
 	| 'indirect_crl_unsupported'
@@ -469,28 +471,52 @@ export async function checkCertificateRevocationAgainstCrl(
 	if (!validated.ok) {
 		return validated;
 	}
+	let validatedDelta: ParsedCertificateRevocationList | undefined;
+	if (input.deltaCrl !== undefined) {
+		const deltaValidation = await validateCertificateRevocationList({
+			crl: input.deltaCrl,
+			issuerCertificate: input.issuerCertificate,
+			...(input.at === undefined ? {} : { at: input.at }),
+			...(input.clockSkewMs === undefined ? {} : { clockSkewMs: input.clockSkewMs }),
+		});
+		if (!deltaValidation.ok) {
+			return deltaValidation;
+		}
+		const compatibilityFailure = checkDeltaCrlCompatibility(validated.value, deltaValidation.value);
+		if (compatibilityFailure !== undefined) {
+			return compatibilityFailure;
+		}
+		validatedDelta = deltaValidation.value;
+	}
 	const applicabilityFailure = checkCrlApplicability(certificate, validated.value);
 	if (applicabilityFailure !== undefined) {
 		return applicabilityFailure;
 	}
-	const revoked = findRevokedCertificateEntry(certificate, validated.value);
-	if (!revoked.ok) {
-		return revoked;
+	if (validatedDelta !== undefined) {
+		const deltaApplicabilityFailure = checkCrlApplicability(certificate, validatedDelta, true);
+		if (deltaApplicabilityFailure !== undefined) {
+			return deltaApplicabilityFailure;
+		}
 	}
-	if (revoked.entry === undefined) {
-		return {
-			ok: true,
-			status: 'good',
-			value: validated.value,
-		};
+	const completeRevoked = findRevokedCertificateEntry(certificate, validated.value);
+	if (!completeRevoked.ok) {
+		return completeRevoked;
 	}
-	return {
-		ok: true,
-		status: 'revoked',
-		value: validated.value,
-		revocationDate: revoked.entry.revocationDate,
-		...(revoked.entry.reasonCode === undefined ? {} : { reasonCode: revoked.entry.reasonCode }),
-	};
+	let deltaRevoked: ParsedRevokedCertificate | undefined;
+	if (validatedDelta !== undefined) {
+		const deltaLookup = findRevokedCertificateEntry(certificate, validatedDelta);
+		if (!deltaLookup.ok) {
+			return deltaLookup;
+		}
+		deltaRevoked = deltaLookup.entry;
+	}
+	return resolveCertificateRevocationStatus(
+		certificate,
+		input.at ?? new Date(),
+		validated.value,
+		completeRevoked.entry,
+		deltaRevoked,
+	);
 }
 
 export function isCertificateRevoked(
@@ -540,6 +566,7 @@ function findRevokedCertificateEntry(
 function checkCrlApplicability(
 	certificate: ParsedCertificate,
 	crl: ParsedCertificateRevocationList,
+	allowDeltaCrl = false,
 ):
 	| {
 			readonly ok: false;
@@ -548,7 +575,7 @@ function checkCrlApplicability(
 			readonly details?: CheckCertificateRevocationAgainstCrlFailureDetails;
 	  }
 	| undefined {
-	if (crl.baseCrlNumber !== undefined) {
+	if (!allowDeltaCrl && crl.baseCrlNumber !== undefined) {
 		return nonApplicable(
 			'delta_crl_unsupported',
 			'delta CRLs are not applicable until delta merge support is implemented',
@@ -673,6 +700,73 @@ function checkCrlApplicability(
 	);
 }
 
+function checkDeltaCrlCompatibility(
+	completeCrl: ParsedCertificateRevocationList,
+	deltaCrl: ParsedCertificateRevocationList,
+):
+	| {
+			readonly ok: false;
+			readonly code: 'non_applicable';
+			readonly message: string;
+			readonly details?: CheckCertificateRevocationAgainstCrlFailureDetails;
+	  }
+	| undefined {
+	if (completeCrl.baseCrlNumber !== undefined) {
+		return nonApplicable(
+			'delta_crl_incompatible',
+			'complete CRL input must not itself be a delta CRL',
+		);
+	}
+	if (deltaCrl.baseCrlNumber === undefined) {
+		return nonApplicable(
+			'delta_crl_incompatible',
+			'delta CRL input must include a delta CRL indicator',
+		);
+	}
+	if (normalizeHex(completeCrl.issuer.derHex) !== normalizeHex(deltaCrl.issuer.derHex)) {
+		return nonApplicable(
+			'delta_crl_incompatible',
+			'complete and delta CRLs must share the same issuer',
+		);
+	}
+	if (completeCrl.authorityKeyIdentifier !== deltaCrl.authorityKeyIdentifier) {
+		return nonApplicable(
+			'delta_crl_incompatible',
+			'complete and delta CRLs must share the same authority key identifier',
+		);
+	}
+	if (
+		!sameIssuingDistributionPoint(
+			completeCrl.issuingDistributionPoint,
+			deltaCrl.issuingDistributionPoint,
+		)
+	) {
+		return nonApplicable(
+			'delta_crl_incompatible',
+			'complete and delta CRLs must share the same issuing distribution point scope',
+		);
+	}
+	if (completeCrl.crlNumber === undefined || deltaCrl.crlNumber === undefined) {
+		return nonApplicable(
+			'delta_crl_incompatible',
+			'complete and delta CRLs must both carry CRL numbers for delta processing',
+		);
+	}
+	if (completeCrl.crlNumber < deltaCrl.baseCrlNumber) {
+		return nonApplicable(
+			'delta_crl_incompatible',
+			'delta CRL base number must not exceed the complete CRL number',
+		);
+	}
+	if (completeCrl.crlNumber >= deltaCrl.crlNumber) {
+		return nonApplicable(
+			'delta_crl_incompatible',
+			'delta CRL number must be newer than the complete CRL number',
+		);
+	}
+	return undefined;
+}
+
 function matchesIndirectCrlIssuer(
 	crlIssuerNames: readonly GeneralName[] | undefined,
 	crl: ParsedCertificateRevocationList,
@@ -733,6 +827,51 @@ function nonApplicable(
 	};
 }
 
+function resolveCertificateRevocationStatus(
+	certificate: ParsedCertificate,
+	at: Date,
+	completeCrl: ParsedCertificateRevocationList,
+	completeEntry: ParsedRevokedCertificate | undefined,
+	deltaEntry: ParsedRevokedCertificate | undefined,
+): CheckCertificateRevocationAgainstCrlResult {
+	if (deltaEntry !== undefined) {
+		if (deltaEntry.reasonCode === 'removeFromCRL') {
+			if (
+				completeEntry?.reasonCode === 'certificateHold' ||
+				certificate.notAfter.getTime() < at.getTime()
+			) {
+				return {
+					ok: true,
+					status: 'good',
+					value: completeCrl,
+				};
+			}
+		} else {
+			return {
+				ok: true,
+				status: 'revoked',
+				value: completeCrl,
+				revocationDate: deltaEntry.revocationDate,
+				...(deltaEntry.reasonCode === undefined ? {} : { reasonCode: deltaEntry.reasonCode }),
+			};
+		}
+	}
+	if (completeEntry === undefined) {
+		return {
+			ok: true,
+			status: 'good',
+			value: completeCrl,
+		};
+	}
+	return {
+		ok: true,
+		status: 'revoked',
+		value: completeCrl,
+		revocationDate: completeEntry.revocationDate,
+		...(completeEntry.reasonCode === undefined ? {} : { reasonCode: completeEntry.reasonCode }),
+	};
+}
+
 function matchesDistributionPointName(
 	certificatePoint: ParsedDistributionPointName | undefined,
 	crlPoint: ParsedDistributionPointName | undefined,
@@ -756,6 +895,81 @@ function matchesDistributionPointName(
 		return false;
 	}
 	return compareRelativeDistinguishedNames(certificatePoint.relativeName, crlPoint.relativeName);
+}
+
+function sameIssuingDistributionPoint(
+	left: ParsedIssuingDistributionPoint | undefined,
+	right: ParsedIssuingDistributionPoint | undefined,
+): boolean {
+	if (left === undefined || right === undefined) {
+		return left === right;
+	}
+	return (
+		sameDistributionPointName(left.distributionPoint, right.distributionPoint) &&
+		(left.onlyContainsUserCerts === true) === (right.onlyContainsUserCerts === true) &&
+		(left.onlyContainsCACerts === true) === (right.onlyContainsCACerts === true) &&
+		(left.indirectCrl === true) === (right.indirectCrl === true) &&
+		(left.onlyContainsAttributeCerts === true) === (right.onlyContainsAttributeCerts === true) &&
+		sameReasonSet(left.onlySomeReasons, right.onlySomeReasons)
+	);
+}
+
+function sameDistributionPointName(
+	left: ParsedDistributionPointName | undefined,
+	right: ParsedDistributionPointName | undefined,
+): boolean {
+	if (left === undefined || right === undefined) {
+		return left === right;
+	}
+	if (left.fullName !== undefined || right.fullName !== undefined) {
+		if (left.fullName === undefined || right.fullName === undefined) {
+			return false;
+		}
+		return sameGeneralNameSet(left.fullName, right.fullName);
+	}
+	if (left.relativeName === undefined || right.relativeName === undefined) {
+		return false;
+	}
+	return compareRelativeDistinguishedNames(left.relativeName, right.relativeName);
+}
+
+function sameGeneralNameSet(left: readonly GeneralName[], right: readonly GeneralName[]): boolean {
+	if (left.length !== right.length) {
+		return false;
+	}
+	const matched = new Array(right.length).fill(false);
+	for (const leftName of left) {
+		let found = false;
+		for (let index = 0; index < right.length; index += 1) {
+			const rightName = right[index];
+			if (rightName === undefined || matched[index]) {
+				continue;
+			}
+			if (!compareGeneralNames(leftName, rightName)) {
+				continue;
+			}
+			matched[index] = true;
+			found = true;
+			break;
+		}
+		if (!found) {
+			return false;
+		}
+	}
+	return true;
+}
+
+function sameReasonSet(
+	left: readonly DistributionPointReason[] | undefined,
+	right: readonly DistributionPointReason[] | undefined,
+): boolean {
+	if (left === undefined || right === undefined) {
+		return left === right;
+	}
+	if (left.length !== right.length) {
+		return false;
+	}
+	return left.every((reason) => right.includes(reason));
 }
 
 function hasOverlappingReasons(

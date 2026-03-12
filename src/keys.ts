@@ -302,7 +302,12 @@ export async function importEncryptedPkcs1Pem(
 	password: string,
 	algorithm: ImportRsaPublicKeyInput = { kind: 'rsa' },
 ): Promise<CryptoKey> {
-	return importPkcs1Der(await decryptTraditionalPem('RSA PRIVATE KEY', pem, password), algorithm);
+	const decrypted = await decryptTraditionalPem('RSA PRIVATE KEY', pem, password);
+	try {
+		return importPkcs1Der(decrypted, algorithm);
+	} catch {
+		throw new Error('Invalid password or encrypted PEM content');
+	}
 }
 
 export async function importPkcs8Base64(
@@ -331,7 +336,12 @@ export async function importEncryptedSec1Pem(
 	password: string,
 	algorithm: ImportEcPublicKeyInput,
 ): Promise<CryptoKey> {
-	return importSec1Der(await decryptTraditionalPem('EC PRIVATE KEY', pem, password), algorithm);
+	const decrypted = await decryptTraditionalPem('EC PRIVATE KEY', pem, password);
+	try {
+		return importSec1Der(decrypted, algorithm);
+	} catch {
+		throw new Error('Invalid password or encrypted PEM content');
+	}
 }
 
 export async function importPublicJwk(
