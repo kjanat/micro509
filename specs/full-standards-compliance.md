@@ -135,6 +135,13 @@ interface PolicyInformation {
   - add stable subpath exports: `micro509/verify`, `micro509/identity`, `micro509/ocsp`, `micro509/crl`, `micro509/parse`, `micro509/extensions`, `micro509/keys`, `micro509/pem`, `micro509/pfx`, `micro509/pkcs7`, `micro509/pkcs12-mac`, `micro509/certificate`, `micro509/csr`, `micro509/name`.
     - Note! These are automatically set in package.json, depending on the entrypoints in "../tsdown.config.ts". Use the tsdown skill and if needed search though their src with opensrc to figyre out the details. Do NOT edit the exports in package.json manually, "bun bd" WILL overwrite it.
 
+### Spike Notes - tsdown multi-entry exports
+
+- Use a named `entry` object in `tsdown.config.ts` for stable public subpaths, eg `index: 'src/index.ts'`, `verify: 'src/verify.ts'`, `identity: 'src/identity.ts'`.
+- Keep `exports: true`; tsdown derives `package.json` export entries from the configured entry names and generated output files.
+- Keep `./package.json` as an explicit export, but treat the rest of `package.json` export metadata as generated build output. tsdown does this automatically.
+- Split the work in two steps: first add the multi-entry map for stable subpaths, then enable preserved-module output in the later `preserve-module-build` task.
+
 ## Deliverables (Ordered)
 
 ### D0. Remove Overclaims And Publish Compliance Matrix

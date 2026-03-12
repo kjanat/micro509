@@ -10,6 +10,7 @@ Started: 2026-03-12
 - Tabs, single quotes, `.ts` import extensions, readonly-heavy interfaces, discriminated unions.
 - Keep path validation, service identity, and revocation as separate public concepts.
 - Package exports are driven by `tsdown.config.ts`; do not hand-edit generated `package.json` exports.
+- For stable package subpaths, prefer a named tsdown `entry` object; let `exports: true` derive package exports from entry keys.
 - Root `micro509` export should stay ergonomic; granular domains should live behind stable subpath exports.
 - Distribution-point model change is a clean break; no temporary URI-only compat alias.
 
@@ -27,3 +28,10 @@ Started: 2026-03-12
 - Prefer `implemented`, `partial`, `not yet` wording over broad subsystem claims.
 
 ---
+
+## Task - [tsdown-multi-entry-spike]
+
+- Documented the recommended tsdown pattern in `specs/full-standards-compliance.md`.
+- Confirmed the intended shape is a named multi-entry `entry` map plus `exports: true`, with `package.json` exports treated as generated output.
+- Files changed: `specs/full-standards-compliance.md`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** keep subpath-export setup separate from later `unbundle` work; tsdown entry keys define stable public export names.

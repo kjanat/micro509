@@ -17,7 +17,7 @@
 			"title": "Investigate tsdown multi-entry exports",
 			"description": "Investigate how tsdown derives exports and multi-entry ESM output for this package. Done when:\n- recommended tsdown config pattern is documented\n- generated-exports behavior is confirmed\n- package.json exports are confirmed to be generated, not hand-edited",
 			"priority": "spike",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "rfc-name-compare-spike",
