@@ -136,7 +136,7 @@
 			"description": "Remove hostname/IP/CN-fallback inputs from raw path validation and move them to identity-oriented APIs. Done when:\n- `validateCandidatePath` no longer accepts host identity fields\n- path-only validation has direct tests\n- migration path for profile wrappers is clear",
 			"depends": ["plumb-verify-input-state", "scaffold-identity-module"],
 			"priority": "integration",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "update-tls-profile-wiring",

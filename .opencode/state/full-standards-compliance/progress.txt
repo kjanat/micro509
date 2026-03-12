@@ -28,6 +28,7 @@ Started: 2026-03-12
 - When RFC validation knobs are public before enforcement exists, normalize them into one internal state object and fail closed with typed "not implemented yet" results instead of silently ignoring them.
 - New extension families should land in three steps: add stable OIDs + public data shapes first, then builder/parser wiring, then validation/enforcement. Do not add `CertificateExtensionsInput` or parsed-certificate fields before encode/decode exists.
 - For CRL scope surfaces, replace URI shortcut fields in one clean break with structured distribution-point objects, then keep encode/parse helpers aligned on `fullName` vs `relativeName` and reason-mask semantics.
+- When moving a concern behind a new boundary module, keep verify/profile APIs stable by adapting boundary-specific failures at the composition seam instead of duplicating domain logic.
 
 ## Validation Commands
 
@@ -159,3 +160,10 @@ Started: 2026-03-12
 - Made policy and caller-supplied initial name-constraint knobs fail closed with typed `policy_processing_not_implemented` / `initial_name_constraints_not_implemented` results instead of being silently ignored, and updated `test/verify.test.ts` coverage for both profile and raw-path entry points.
 - Files changed: `src/verify.ts`, `test/verify.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** for staged RFC work, normalize booleans into RFC-style counters (`0` vs disabled depth sentinel) as soon as the public knob exists; later enforcement can consume the same state without another surface rewrite.
+
+## Task - [split-host-inputs-from-path]
+
+- Moved verify-owned DNS/IP service-identity matching over to the dedicated identity boundary by making `src/verify.ts` adapt `matchCertificateServiceIdentity()` results instead of carrying its own hostname/CN-fallback logic.
+- Added direct identity-boundary coverage for IP SAN normalization and DNS common-name fallback in `test/identity.test.ts`, while keeping raw `validateCandidatePath()` path-only behavior covered in `test/verify.test.ts`.
+- Files changed: `src/verify.ts`, `test/identity.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** once raw path validation is host-agnostic, wrapper composition can keep calling the identity boundary without reimplementing matcher details inside verify-owned code.

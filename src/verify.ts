@@ -4,6 +4,7 @@ import type {
 	NameConstraintForm,
 	NameConstraints,
 } from './extensions.ts';
+import { matchCertificateServiceIdentity } from './identity.ts';
 import { OIDS } from './oids.ts';
 import type { ParsedCertificate, ParsedCertificateSigningRequest } from './parse.ts';
 import {
@@ -780,73 +781,20 @@ function validateServiceIdentity(
 	leaf: ParsedCertificate,
 	serviceIdentity: VerifyServiceIdentityInput,
 ): ValidateCandidatePathResult {
-	switch (serviceIdentity.type) {
-		case 'dns': {
-			const expected = serviceIdentity.value;
-			const sans = leaf.subjectAltNames?.filter((entry) => entry.type === 'dns') ?? [];
-			if (sans.length > 0) {
-				if (!sans.some((entry) => matchesDnsName(entry.value, expected))) {
-					return failure(
-						'subject_alt_name_mismatch',
-						'DNS name not present in SAN',
-						0,
-						detail({
-							subjectCommonName: leaf.subject.values.commonName,
-							expected,
-							actual: sans.map((entry) => entry.value).join(','),
-						}),
-					);
-				}
-				return { ok: true };
-			}
-			if (serviceIdentity.allowCommonNameFallback === true) {
-				const commonName = leaf.subject.values.commonName;
-				if (commonName === undefined || !matchesDnsName(commonName, expected)) {
-					return failure(
-						'subject_alt_name_mismatch',
-						'DNS name not present in SAN or CN',
-						0,
-						detail({
-							subjectCommonName: commonName,
-							expected,
-							actual: commonName ?? '',
-						}),
-					);
-				}
-				return { ok: true };
-			}
-			return failure(
-				'subject_alt_name_mismatch',
-				'DNS name not present in SAN',
-				0,
-				detail({
-					subjectCommonName: leaf.subject.values.commonName,
-					expected,
-					actual: '',
-				}),
-			);
-		}
-		case 'ip': {
-			const expected = normalizeIpAddress(serviceIdentity.value);
-			const sans = leaf.subjectAltNames?.filter((entry) => entry.type === 'ip') ?? [];
-			if (!sans.some((entry) => normalizeIpAddress(entry.value) === expected)) {
-				return failure(
-					'subject_alt_name_mismatch',
-					'IP address not present in SAN',
-					0,
-					detail({
-						subjectCommonName: leaf.subject.values.commonName,
-						expected,
-						actual: sans.map((entry) => normalizeIpAddress(entry.value)).join(','),
-					}),
-				);
-			}
-			return { ok: true };
-		}
-		default: {
-			throw new Error('unreachable service identity type');
-		}
+	const result = matchCertificateServiceIdentity(leaf, serviceIdentity);
+	if (result.ok) {
+		return result;
 	}
+	if (result.code !== 'subject_alt_name_mismatch') {
+		throw new Error('unreachable service identity type');
+	}
+	return {
+		ok: false,
+		code: result.code,
+		message: result.message,
+		index: 0,
+		...(result.details === undefined ? {} : { details: result.details }),
+	};
 }
 
 // ---------------------------------------------------------------------------
@@ -1263,32 +1211,6 @@ async function matchTrustAnchor(
 
 function fingerprint(certificate: ParsedCertificate): string {
 	return Array.from(certificate.der, (value) => value.toString(16).padStart(2, '0')).join('');
-}
-
-function matchesDnsName(pattern: string, actual: string): boolean {
-	const lowerPattern = pattern.toLowerCase();
-	const lowerActual = actual.toLowerCase();
-	if (!lowerPattern.includes('*')) {
-		return lowerPattern === lowerActual;
-	}
-	if (!lowerPattern.startsWith('*.')) {
-		return false;
-	}
-	const suffix = lowerPattern.slice(1);
-	if (!lowerActual.endsWith(suffix)) {
-		return false;
-	}
-	const prefix = lowerActual.slice(0, lowerActual.length - suffix.length);
-	return prefix.length > 0 && !prefix.includes('.');
-}
-
-function normalizeIpAddress(value: string): string {
-	if (!value.includes(':')) {
-		return value;
-	}
-	return expandIpv6(value)
-		.map((segment) => segment.toLowerCase())
-		.join(':');
 }
 
 function expandIpv6(value: string): readonly string[] {
