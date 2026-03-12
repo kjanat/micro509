@@ -1,4 +1,4 @@
-import { objectIdentifier, octetString, readElement, sequence, setOf, tlv } from "@/der.ts";
+import { objectIdentifier, sequence, setOf, tlv } from "@/der.ts";
 import {
 	createCertificate,
 	createCertificateSigningRequest,

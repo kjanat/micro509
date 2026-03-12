@@ -1,7 +1,6 @@
 import { childrenOf } from "@/asn1.ts";
 import {
 	bitString,
-	concatBytes,
 	explicitContext,
 	generalizedTime,
 	integerFromNumber,
@@ -1187,17 +1186,7 @@ describe("ocsp", () => {
 			signerPrivateKey: issuer.keyPair.privateKey,
 			issuerPublicKey: issuer.keyPair.publicKey,
 		});
-		const response = await createOcspResponse({
-			signerCertificate: issuer.certificate.pem,
-			signerPrivateKey: issuer.keyPair.privateKey,
-			responses: [{
-				certificate: leaf.pem,
-				issuerCertificate: issuer.certificate.pem,
-				certStatus: "good",
-			}],
-		});
-		// Find ResponseData in the DER and insert version [0] EXPLICIT
-		const der = new Uint8Array(response.der);
+		// Build ResponseData with version [0] EXPLICIT manually
 		// ResponseData is a SEQUENCE inside BasicResponse inside the outer structure.
 		// We need to find the ResponseData SEQUENCE and add a version [0] tag at the start.
 		// Since parseDer doesn't verify signature, we can modify freely.

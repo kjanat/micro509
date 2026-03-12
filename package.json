@@ -22,21 +22,39 @@
 		"dist"
 	],
 	"scripts": {
-		"bd": "bun --bun run build",
-		"build": "tsgo -p tsconfig.build.json",
-		"check": "tsgo -p tsconfig.json",
+		"bd": "bun run build",
+		"build": "tsc -p tsconfig.build.json",
 		"fmt": "dprint fmt",
+		"lint:biome": "bunx @biomejs/biome lint {src,test}",
 		"test": "AGENT=1 bun test --coverage",
 		"typecheck": "tsgo --noEmit"
 	},
 	"devDependencies": {
 		"@types/bun": "^1.3.10",
-		"@types/node": "^25.4.0",
 		"@typescript/native-preview": "^7.0.0-dev.20260311.1",
 		"dprint": "^0.52.0",
-		"typescript": "^5.9.2"
+		"typescript": "^6.0.1-rc"
 	},
 	"packageManager": "bun@1.3.10",
+	"devEngines": {
+		"packageManager": [
+			{
+				"name": "bun",
+				"onFail": "download"
+			}
+		],
+		"runtime": [
+			{
+				"name": "node"
+			},
+			{
+				"name": "bun"
+			},
+			{
+				"name": "deno"
+			}
+		]
+	},
 	"volta": {
 		"node": "25.8.0",
 		"npm": "11.11.0"

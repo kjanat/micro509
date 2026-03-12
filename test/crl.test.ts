@@ -4,7 +4,6 @@ import {
 	createSelfSignedCertificate,
 	generateKeyPair,
 	isCertificateRevoked,
-	parseCertificateDer,
 	parseCertificatePem,
 	parseCertificateRevocationListDer,
 	parseCertificateRevocationListPem,

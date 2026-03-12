@@ -19,7 +19,6 @@ import {
 	parsePkcs7CertBagPem,
 	parsePkcs7SignedDataDer,
 	parsePkcs7SignedDataPem,
-	pemDecode,
 	verifyPkcs7SignedData,
 } from "@/index.ts";
 import { OIDS } from "@/oids.ts";
@@ -269,21 +268,6 @@ describe("pkcs7", () => {
 			integerFromNumber(1),
 			sequence([
 				hexToBytes(parsedSigner.issuer.derHex),
-				sequence([tlv(0x02, hexToBytes(parsedSigner.serialNumberHex))]),
-			].filter(Boolean)),
-			sequence([objectIdentifier(OIDS.sha384), nullValue()]),
-			signedAttrsImplicit,
-			sequence([
-				objectIdentifier(sigAlgorithm.algorithmOid),
-				...(sigAlgorithm.parameters !== undefined ? [sigAlgorithm.parameters] : []),
-			]),
-			octetString(sig),
-		]);
-		// Fix: proper signer identifier is IssuerAndSerialNumber SEQUENCE
-		const signerInfo2 = sequence([
-			integerFromNumber(1),
-			sequence([
-				hexToBytes(parsedSigner.issuer.derHex),
 				tlv(0x02, hexToBytes(parsedSigner.serialNumberHex)),
 			]),
 			sequence([objectIdentifier(OIDS.sha384), nullValue()]),
@@ -302,7 +286,7 @@ describe("pkcs7", () => {
 				explicitContext(0, octetString(content)),
 			]),
 			explicitContext(0, parsedSigner.der),
-			setOf([signerInfo2]),
+			setOf([signerInfo]),
 		]);
 		const der = sequence([
 			objectIdentifier(OIDS.pkcs7SignedData),
@@ -800,7 +784,6 @@ describe("pkcs7: coverage — error paths", () => {
 
 	it("parsePkcs7SignedDataDer returns malformed when encapsulated content inner tag is not OCTET STRING", () => {
 		// Build SignedData where the encapsulated content context [0] contains a non-OCTET-STRING → line 455
-		const fakeCert = sequence([sequence([integerFromNumber(1)])]);
 		const signedData = sequence([
 			integerFromNumber(1),
 			setOf([sequence([objectIdentifier(OIDS.sha256), nullValue()])]),

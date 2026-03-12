@@ -216,12 +216,7 @@ describe("sig-verify", () => {
 	});
 
 	it("derEcdsaSignatureToRaw throws on malformed DER (missing s)", () => {
-		// SEQUENCE with only one INTEGER child (missing s component)
-		const malformed = sequence([integer(Uint8Array.of(0x01))]);
-		// Override: make it a SEQUENCE with only one child by truncating
-		// Actually, readSequenceChildren will parse and parts[1] will be undefined
-		const singleInt = sequence([integer(Uint8Array.of(0x42))]);
-		// Manually build a SEQUENCE with just one element
+		// Manually build a SEQUENCE with just one INTEGER child (missing s component)
 		const justR = Uint8Array.of(0x30, 0x03, 0x02, 0x01, 0x42);
 		expect(() => derEcdsaSignatureToRaw(justR, 32)).toThrow("Malformed ECDSA DER signature");
 	});

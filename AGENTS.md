@@ -61,10 +61,11 @@ ts-x509/
 ## COMMANDS
 
 ```bash
-bun bd        # tsc → dist/ (ESM .js + .d.ts)
-bun check     # tsgo --noEmit (full type-check)
-bun test      # bun's native test runner (single-pass)
-bun fmt       # dprint fmt
+bun bd         # tsc → dist/ (ESM .js + .d.ts)
+bun typecheck  # tsgo --noEmit (full type-check)
+bun test       # bun's native test runner (single-pass)
+bun fmt        # dprint fmt
+bun lint:biome # biome lint {src,test}
 ```
 
 ## NOTES

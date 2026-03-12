@@ -1,4 +1,4 @@
-import { explicitContext, integerFromNumber, objectIdentifier, octetString, sequence, setOf, tlv } from "@/der.ts";
+import { explicitContext, integerFromNumber, objectIdentifier, octetString, sequence, setOf } from "@/der.ts";
 import {
 	createCertificate,
 	createPfx,
