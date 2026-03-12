@@ -199,6 +199,31 @@ describe('crl', () => {
 		});
 	});
 
+	it('roundtrips issuing distribution points without a named scope', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Scope Only CRL Issuer' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Scope Only CRL Issuer' },
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+			issuingDistributionPoint: {
+				onlyContainsAttributeCerts: true,
+				indirectCrl: true,
+			},
+		});
+
+		const parsed = parseCertificateRevocationListPem(crl.pem);
+		expect(parsed.issuingDistributionPoint).toEqual({
+			onlyContainsAttributeCerts: true,
+			indirectCrl: true,
+		});
+	});
+
 	it('validates CRL with issuer linkage and freshness', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'CRL Validate CA' },
@@ -429,6 +454,48 @@ describe('crl', () => {
 		});
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.code).toBe('signature_invalid');
+	});
+
+	it('rejects empty issuing distribution point fullName values', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Bad Scope CRL Issuer' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+
+		expect(
+			createCertificateRevocationList({
+				issuer: { commonName: 'Bad Scope CRL Issuer' },
+				signerPrivateKey: issuer.keyPair.privateKey,
+				issuerPublicKey: issuer.keyPair.publicKey,
+				issuingDistributionPoint: {
+					distributionPoint: {
+						fullName: [],
+					},
+				},
+			}),
+		).rejects.toThrow('DistributionPointName fullName must not be empty');
+	});
+
+	it('rejects empty freshest CRL issuer lists', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Bad Freshest CRL Issuer' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+
+		expect(
+			createCertificateRevocationList({
+				issuer: { commonName: 'Bad Freshest CRL Issuer' },
+				signerPrivateKey: issuer.keyPair.privateKey,
+				issuerPublicKey: issuer.keyPair.publicKey,
+				freshestCrlDistributionPoints: [{ crlIssuer: [] }],
+			}),
+		).rejects.toThrow('DistributionPoint crlIssuer must not be empty');
 	});
 
 	it('verifies CRL with PEM string sources', async () => {

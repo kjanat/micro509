@@ -298,7 +298,7 @@
 			"description": "Build distribution-point extensions from the new structured models. Done when:\n- certificate and CRL builders emit the new object model\n- invalid combinations are rejected\n- parse/build round trips stay stable",
 			"depends": ["define-dp-idp-types"],
 			"priority": "standard",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "enforce-crl-applicability",

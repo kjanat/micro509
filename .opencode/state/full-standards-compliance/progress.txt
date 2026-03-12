@@ -5,6 +5,7 @@ Started: 2026-03-12
 
 ## Codebase Patterns
 
+- Structured distribution-point builder coverage should hit both optional halves of the RFC model: issuer-only certificate DPs and scope-only CRL IDPs, plus runtime rejects for empty `fullName` sequences.
 - For structured distribution-point coverage, prefer builder-backed round trips that assert both certificate-side DPs and CRL-side IDP/freshest-CRL parsing, with at least one `relativeName` case and one `fullName`+reasons case.
 - For RFC 9618 mappings, keep graph mutation keyed by mapped `expectedPolicySet`, then derive caller-visible policy success from the surviving root-domain policies that still reach the leaf; never let an intermediate `anyPolicy` bridge satisfy arbitrary caller policy OIDs by itself.
 - For partially supported RFC surfaces, parser owns preserving/classifying unsupported wire forms; validator owns fail-closed decisions. Never silently drop unsupported critical semantics in parsing.
@@ -259,3 +260,10 @@ Started: 2026-03-12
 - Covered `relativeName`, `fullName`, reasons, and `crlIssuer` preservation through the public certificate and CRL parse surfaces.
 - Files changed: `test/certificate.test.ts`, `test/crl.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** structured DP parsing is easiest to lock down with builder-backed fixtures that exercise both cert and CRL entry points, because the same RFC shapes flow through different parser helpers.
+
+## Task - [build-structured-dps]
+
+- Tightened `src/extensions.ts` so structured certificate/CRL distribution points reject empty `crlIssuer` lists, then added builder-backed regressions in `test/certificate.test.ts` and `test/crl.test.ts` for the optional issuer-only certificate-DP path and scope-only CRL-IDP path.
+- Added runtime-guard coverage for empty structured `fullName` sequences and empty `crlIssuer` lists on both certificate-side and CRL-side builder flows so invalid object-model inputs fail before encoding.
+- Files changed: `src/extensions.ts`, `test/certificate.test.ts`, `test/crl.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** builder coverage for staged RFC object models should prove both optional branches of the union, not just the common `distributionPoint` path; otherwise encode-only regressions like empty alternate-issuer lists can hide behind parse fixtures.

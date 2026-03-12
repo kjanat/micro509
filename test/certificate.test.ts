@@ -175,6 +175,34 @@ describe('certificate', () => {
 		});
 	});
 
+	it('roundtrips CRL distribution points that only name an alternate CRL issuer', async () => {
+		const { certificate } = await createSelfSignedCertificate({
+			subject: { commonName: 'issuer-only-dp.example' },
+			extensions: {
+				crlDistributionPoints: [
+					{
+						reasons: ['cACompromise'],
+						crlIssuer: [
+							{ type: 'dns', value: 'indirect-issuer.example.test' },
+							{ type: 'uri', value: 'http://issuer.example.test/indirect.crl' },
+						],
+					},
+				],
+			},
+		});
+
+		const parsed = parseCertificatePem(certificate.pem);
+		expect(parsed.crlDistributionPoints).toEqual([
+			{
+				reasons: ['cACompromise'],
+				crlIssuer: [
+					{ type: 'dns', value: 'indirect-issuer.example.test' },
+					{ type: 'uri', value: 'http://issuer.example.test/indirect.crl' },
+				],
+			},
+		]);
+	});
+
 	it('roundtrips email, URI, and IPv6 SANs through build and parse', async () => {
 		const { certificate } = await createSelfSignedCertificate({
 			subject: { commonName: 'san-variety' },
@@ -348,6 +376,28 @@ describe('certificate', () => {
 				},
 			}),
 		).rejects.toThrow('policyConstraints must set requireExplicitPolicy or inhibitPolicyMapping');
+	});
+
+	it('rejects empty structured distribution point names', async () => {
+		expect(
+			createSelfSignedCertificate({
+				subject: { commonName: 'bad-dp.example' },
+				extensions: {
+					crlDistributionPoints: [{ distributionPoint: { fullName: [] } }],
+				},
+			}),
+		).rejects.toThrow('DistributionPointName fullName must not be empty');
+	});
+
+	it('rejects empty structured CRL issuer lists', async () => {
+		expect(
+			createSelfSignedCertificate({
+				subject: { commonName: 'bad-crl-issuer.example' },
+				extensions: {
+					crlDistributionPoints: [{ crlIssuer: [] }],
+				},
+			}),
+		).rejects.toThrow('DistributionPoint crlIssuer must not be empty');
 	});
 });
 

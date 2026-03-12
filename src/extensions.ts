@@ -721,6 +721,9 @@ function encodeGeneralSubtree(subtree: GeneralSubtree): Uint8Array {
 }
 
 function encodeDistributionPoint(point: DistributionPoint): Uint8Array[] {
+	if (point.crlIssuer !== undefined && point.crlIssuer.length === 0) {
+		throw new Error('DistributionPoint crlIssuer must not be empty');
+	}
 	if (point.distributionPoint === undefined && point.crlIssuer === undefined) {
 		throw new Error('DistributionPoint must contain distributionPoint or crlIssuer');
 	}
