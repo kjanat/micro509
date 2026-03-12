@@ -161,3 +161,4 @@ comparisons/*
 package-lock.json
 pnpm-*.yaml
 yarn.lock
+src/*.{js,d.ts}

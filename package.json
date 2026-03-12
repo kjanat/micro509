@@ -51,7 +51,8 @@
 		"fmt": "dprint fmt",
 		"lint": "biome lint",
 		"test": "AGENT=1 bun test --coverage",
-		"typecheck": "tsgo"
+		"typecheck": "tsgo --noEmit -p tsconfig.src.json && tsgo --noEmit -p tsconfig.other.json",
+		"typecheck:tsc": "tsc --noEmit -p tsconfig.src.json && tsc --noEmit -p tsconfig.other.json"
 	},
 	"devDependencies": {
 		"@arethetypeswrong/core": "^0.18.2",

@@ -25,7 +25,7 @@ export default defineConfig({
 	clean: true,
 	platform: 'neutral',
 	target: 'es2023',
-	tsconfig: 'tsconfig.base.json',
+	tsconfig: 'tsconfig.src.json',
 	sourcemap: false,
 	unbundle: true,
 	inputOptions: {

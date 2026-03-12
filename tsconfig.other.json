@@ -1,0 +1,26 @@
+{
+	"compilerOptions": {
+		"target": "ES2023",
+		"module": "NodeNext",
+		"moduleResolution": "NodeNext",
+		"lib": ["ES2023", "DOM"],
+		"types": ["bun-types", "node"],
+		"skipLibCheck": true,
+		"strict": true,
+		"noUncheckedIndexedAccess": true,
+		"exactOptionalPropertyTypes": true,
+		"noImplicitOverride": true,
+		"noFallthroughCasesInSwitch": true,
+		"forceConsistentCasingInFileNames": true,
+		"declaration": true,
+		"emitDeclarationOnly": true,
+		"composite": true,
+		"outDir": "./node_modules/.cache/tsc/other",
+		"tsBuildInfoFile": "./node_modules/.cache/tsc/tsconfig.other.tsbuildinfo",
+		"allowImportingTsExtensions": true,
+		"isolatedDeclarations": false
+	},
+	"include": ["test", "scripts", "tsdown.config.ts", "src/**/*.test.ts"],
+	"exclude": ["dist", "node_modules"],
+	"references": [{ "path": "./tsconfig.src.json" }]
+}

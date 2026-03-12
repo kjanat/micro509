@@ -11,17 +11,14 @@
 		"noFallthroughCasesInSwitch": true,
 		"forceConsistentCasingInFileNames": true,
 		"declaration": true,
-		"declarationMap": false,
-		"sourceMap": false,
 		"skipLibCheck": true,
 		"composite": true,
+		"outDir": "./node_modules/.cache/tsc/src",
+		"tsBuildInfoFile": "./node_modules/.cache/tsc/tsconfig.src.tsbuildinfo",
 		"allowImportingTsExtensions": true,
-		"noEmit": true,
+		"rewriteRelativeImportExtensions": true,
 		"isolatedDeclarations": true,
-		"paths": {
-			"#micro509": ["./src/index.ts"],
-			"#micro509/*": ["./src/*"]
-		}
+		"types": []
 	},
 	"include": ["src"],
 	"exclude": ["dist", "node_modules"]
