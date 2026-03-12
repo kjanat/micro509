@@ -29,6 +29,7 @@ Started: 2026-03-12
 - New extension families should land in three steps: add stable OIDs + public data shapes first, then builder/parser wiring, then validation/enforcement. Do not add `CertificateExtensionsInput` or parsed-certificate fields before encode/decode exists.
 - For CRL scope surfaces, replace URI shortcut fields in one clean break with structured distribution-point objects, then keep encode/parse helpers aligned on `fullName` vs `relativeName` and reason-mask semantics.
 - When moving a concern behind a new boundary module, keep verify/profile APIs stable by adapting boundary-specific failures at the composition seam instead of duplicating domain logic.
+- For profile helpers that combine purpose and service identity, run chain/purpose validation first, then call the identity boundary so EKU/profile failures do not get masked by hostname mismatches.
 
 ## Validation Commands
 
@@ -167,3 +168,10 @@ Started: 2026-03-12
 - Added direct identity-boundary coverage for IP SAN normalization and DNS common-name fallback in `test/identity.test.ts`, while keeping raw `validateCandidatePath()` path-only behavior covered in `test/verify.test.ts`.
 - Files changed: `src/verify.ts`, `test/identity.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** once raw path validation is host-agnostic, wrapper composition can keep calling the identity boundary without reimplementing matcher details inside verify-owned code.
+
+## Task - [update-tls-profile-wiring]
+
+- Rewired TLS/profile helpers in `src/verify.ts` so TLS server validation now runs chain plus EKU profile checks before calling the identity boundary, while TLS client and code-signing helpers share the same profile-check composition.
+- Added regression coverage in `test/verify.test.ts` for typed TLS server identity details and for the EKU-before-identity failure ordering.
+- Files changed: `src/verify.ts`, `test/verify.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** keep profile composition explicit at the wrapper layer; the all-in-one verify API can stay ergonomic, but profile helpers should order domain checks intentionally.

@@ -4,7 +4,7 @@ import type {
 	NameConstraintForm,
 	NameConstraints,
 } from './extensions.ts';
-import { matchCertificateServiceIdentity } from './identity.ts';
+import { matchServiceIdentity } from './identity.ts';
 import { OIDS } from './oids.ts';
 import type { ParsedCertificate, ParsedCertificateSigningRequest } from './parse.ts';
 import {
@@ -687,16 +687,17 @@ function copyValidationInputs(
 export async function validateForTlsServer(
 	input: ValidateForTlsServerInput,
 ): Promise<VerifyChainResult> {
-	const result = await verifyCertificateChain({
-		...baseChainInput(input),
-		...(input.serviceIdentity !== undefined && {
-			serviceIdentity: input.serviceIdentity,
-		}),
-	});
+	const result = await verifyChainForExtendedKeyUsageProfile(input, 'serverAuth');
 	if (!result.ok) {
 		return result;
 	}
-	return applyEkuCheck(result, 'serverAuth');
+	if (input.serviceIdentity !== undefined) {
+		const serviceIdentityResult = validateServiceIdentity(result.value.leaf, input.serviceIdentity);
+		if (!serviceIdentityResult.ok) {
+			return serviceIdentityResult;
+		}
+	}
+	return result;
 }
 
 /**
@@ -706,11 +707,7 @@ export async function validateForTlsServer(
 export async function validateForTlsClient(
 	input: ValidateForTlsClientInput,
 ): Promise<VerifyChainResult> {
-	const result = await verifyCertificateChain(baseChainInput(input));
-	if (!result.ok) {
-		return result;
-	}
-	return applyEkuCheck(result, 'clientAuth');
+	return verifyChainForExtendedKeyUsageProfile(input, 'clientAuth');
 }
 
 /**
@@ -720,11 +717,7 @@ export async function validateForTlsClient(
 export async function validateForCodeSigning(
 	input: ValidateForCodeSigningInput,
 ): Promise<VerifyChainResult> {
-	const result = await verifyCertificateChain(baseChainInput(input));
-	if (!result.ok) {
-		return result;
-	}
-	return applyEkuCheck(result, 'codeSigning');
+	return verifyChainForExtendedKeyUsageProfile(input, 'codeSigning');
 }
 
 /**
@@ -781,7 +774,7 @@ function validateServiceIdentity(
 	leaf: ParsedCertificate,
 	serviceIdentity: VerifyServiceIdentityInput,
 ): ValidateCandidatePathResult {
-	const result = matchCertificateServiceIdentity(leaf, serviceIdentity);
+	const result = matchServiceIdentity({ certificate: leaf, serviceIdentity });
 	if (result.ok) {
 		return result;
 	}
@@ -1052,6 +1045,17 @@ function applyEkuCheck(
 		);
 	}
 	return result;
+}
+
+async function verifyChainForExtendedKeyUsageProfile(
+	input: BuildCandidatePathInput & PolicyValidationInput & InitialNameConstraintsInput,
+	purpose: EkuCheckPurpose,
+): Promise<VerifyChainResult> {
+	const result = await verifyCertificateChain(baseChainInput(input));
+	if (!result.ok) {
+		return result;
+	}
+	return applyEkuCheck(result, purpose);
 }
 
 function rankIssuerCandidates(

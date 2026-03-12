@@ -145,7 +145,7 @@
 			"description": "Rewire TLS/client/server/profile helpers to compose path validation with the identity boundary. Done when:\n- TLS helpers call the new identity layer\n- purpose and identity failures remain typed\n- caller ergonomics stay intact",
 			"depends": ["split-host-inputs-from-path", "scaffold-identity-module"],
 			"priority": "integration",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "define-generalname-matrix",

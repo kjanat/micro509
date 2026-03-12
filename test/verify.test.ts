@@ -1774,8 +1774,16 @@ describe('validation profiles', () => {
 			roots: [chain.root.certificate.pem],
 			serviceIdentity: { type: 'dns', value: 'wrong.example' },
 		});
-		expect(wrongDns.ok).toBe(false);
-		if (!wrongDns.ok) expect(wrongDns.code).toBe('subject_alt_name_mismatch');
+		expect(wrongDns).toMatchObject({
+			ok: false,
+			code: 'subject_alt_name_mismatch',
+			index: 0,
+			details: {
+				expected: 'wrong.example',
+				actual: 'verify.example',
+				subjectCommonName: 'verify.example',
+			},
+		});
 	});
 
 	it('validateForTlsServer rejects when leaf lacks serverAuth EKU', async () => {
@@ -1806,6 +1814,40 @@ describe('validation profiles', () => {
 		});
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.code).toBe('extended_key_usage_invalid');
+	});
+
+	it('validateForTlsServer returns typed purpose failures before identity failures', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'TLS Purpose First Root' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'TLS Purpose First Root' },
+			subject: { commonName: 'tls-purpose-first' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['clientAuth'],
+				subjectAltNames: [{ type: 'dns', value: 'tls-purpose-first.example' }],
+			},
+		});
+		const result = await validateForTlsServer({
+			leaf: leaf.pem,
+			roots: [root.certificate.pem],
+			serviceIdentity: { type: 'dns', value: 'wrong.example' },
+		});
+		expect(result).toMatchObject({
+			ok: false,
+			code: 'extended_key_usage_invalid',
+			index: 0,
+			message: 'leaf certificate does not include EKU serverAuth',
+		});
 	});
 
 	it('validateForTlsClient checks chain + clientAuth EKU', async () => {
@@ -2446,7 +2488,7 @@ describe('buildCandidatePath edge cases', () => {
 // ---------------------------------------------------------------------------
 
 describe('validateForTlsServer with CN fallback', () => {
-	it('forwards allowCommonNameFallback to chain verification', async () => {
+	it('forwards allowCommonNameFallback to the identity boundary', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'TLS CN CA' },
 			extensions: {
@@ -2478,7 +2520,7 @@ describe('validateForTlsServer with CN fallback', () => {
 		expect(result.ok).toBe(true);
 	});
 
-	it('forwards ipAddress to chain verification', async () => {
+	it('forwards ipAddress to the identity boundary', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'TLS IP CA' },
 			extensions: {
