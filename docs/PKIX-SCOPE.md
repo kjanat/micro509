@@ -65,7 +65,7 @@
 ## 8. Application/service identity checks
 
 - [ ] Keep hostname/service-name matching in a separate API from path validation.
-- [x] Match the reference identity against `subjectAltName` entries of the corresponding type first.
+- [x] For currently supported identity types (`dNSName`, `iPAddress`), match `subjectAltName` entries of the corresponding type first.
 - [x] Only support CN fallback as an explicit compatibility mode, because RFC 6125 treats CN-ID usage as existing practice and prefers `subjectAltName`; CN comparison is deprecated. (IETF Datatracker[^rfc6125])
 - [x] Make wildcard behavior explicit and test it hard.
 
@@ -80,9 +80,9 @@
 - [x] Build `CertID` from issuer name hash, issuer key hash, serial number, and hash algorithm.
 - [ ] Discover the responder from AIA `id-ad-ocsp` or let callers provide a responder URL explicitly.
 - [x] Parse and verify `BasicOCSPResponse`.
-- [x] Check that the response actually refers to the requested certificate.
+- [ ] Check that the response fully and correctly refers to the requested certificate set.
 - [x] Validate the OCSP response signature.
-- [x] Validate responder authorization.
+- [ ] Validate responder authorization exhaustively.
 - [x] Enforce response freshness using `thisUpdate` / `nextUpdate` and configurable clock skew.
 - [x] Return `good`, `revoked`, and `unknown` distinctly.
 - [x] Support optional nonce handling if you want replay binding between request and response. RFC 9654 defines the updated nonce extension details. (IETF Datatracker[^rfc6960])
@@ -91,7 +91,7 @@
 
 - [ ] Accept an OCSP response signer if it matches local OCSP responder configuration for the certificate in question.
 - [x] Accept it if the signer is the issuing CA certificate itself.
-- [x] Accept it if the signer cert contains EKU `id-kp-OCSPSigning` **and** was issued directly by the CA that issued the target certificate.
+- [ ] Accept it if the signer cert contains EKU `id-kp-OCSPSigning` **and** was issued directly by the CA that issued the target certificate.
 - [x] Reject the response if the signer certificate meets none of those conditions.
 - [ ] Decide and document how you will handle revocation checking of the responder certificate; RFC 6960 allows CA signaling for that and also leaves room for local policy. (IETF Datatracker[^rfc6960])
 
@@ -106,13 +106,11 @@
 
 ## 13. API design checklist
 
-- [x] Separate:
-  - path building
-  - path validation
-  - service identity matching
-  - revocation checking
+- [x] Keep path building separate from path validation.
+- [ ] Keep service identity matching in a separate API from path validation.
+- [x] Keep revocation checking separate from path validation.
 - [x] Expose structured validation inputs instead of hiding policy/name-constraint knobs.
-- [x] Return typed failure reasons, including extension, policy, constraint, signature, time, trust-anchor, and revocation errors.
+- [x] Return typed failure reasons for currently implemented path-validation, CRL, and OCSP checks.
 - [ ] Distinguish hard validation failure from “status unknown / not checked”.
 
 ## 14. Test/conformance checklist
@@ -129,7 +127,7 @@
 
 - candidate chain validation
 - signature / time / issuer / CA / key usage / path length checks
-- SAN / EKU matching
+- basic DNS/IP SAN + EKU matching
 - typed parse/build APIs
 
 ### Do **_not_** claim until implemented
@@ -137,13 +135,13 @@
 - full RFC 5280 path validation
 - full certificate policy validation
 - full name-constraint validation
-- OCSP support
+- full RFC 6960 OCSP compliance
 - full revocation checking
 
 ### Honest wording
 
 - “Validates candidate certificate paths with configurable trust anchors and typed results.”
-- “Service identity matching and revocation are separate APIs.”
+- “Revocation is a separate API; service identity matching is currently exposed through verification profiles and is planned as a separate API.”
 - “Advanced RFC 5280 features such as policy processing and full name-constraint handling are not yet complete.” (IETF Datatracker[^rfc5280])
 
 The main monster under the bed is simple: **once you say “full RFC 5280,” you’ve signed up for policy processing, name constraints, critical-extension behavior, and trust-anchor semantics — not just signatures and dates.** (IETF Datatiracker[^rfc5280])

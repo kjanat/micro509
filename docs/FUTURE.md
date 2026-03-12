@@ -1,5 +1,7 @@
 # Future work
 
+Implementation-ready master plan: `specs/full-standards-compliance.md`.
+
 ## Immediate ultra-savage moves
 
 - [ ] CMS `signedData` generation, not only parse/verify

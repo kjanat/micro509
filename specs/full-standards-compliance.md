@@ -1,0 +1,387 @@
+# Full Standards Compliance and DX Plan - Implementation Spec
+
+**Status:** Ready for task breakdown
+**Effort:** XL
+**Date:** 2026-03-12
+
+## Problem Statement
+
+**Who:** maintainers and consumers who need strict PKIX behavior without giving up DX, edge/web portability, or tree-shakeable imports.
+
+**What:** `micro509` already has strong core PKI behavior, but it is still partial against `RFC 5280`, `RFC 6960`, `RFC 6125`, and `RFC 9618`. Docs also currently overclaim a few behaviors the code does not fully enforce.
+
+**Why it matters:** a library that claims standards compliance but accepts invalid chains, OCSP responders, or identity matches is harder to trust than a smaller, honest library. Full compliance work also risks bloating the root entry and hurting runtime/import DX unless package boundaries are locked first.
+
+**Evidence:** current code has no policy processing, partial name constraints, partial CRL validation, permissive OCSP delegated responder validation, DNS/IP-only identity matching, and user-facing docs that currently overstate a few OCSP and API-separation claims.
+
+## Discovery Summary
+
+- Existing strengths: strong candidate path building, trust-anchor model, signature/time/CA/pathLen/AKI-SKI checks, meaningful name-constraints groundwork, pure WebCrypto runtime, explicit named exports.
+- Main gaps: no `certificatePolicies` / `policyConstraints` / `policyMappings` / `inhibitAnyPolicy`, no full RFC 9618 policy engine, incomplete CRL processing, incomplete OCSP responder binding/authorization, incomplete RFC 6125 identity coverage, no subpath exports, bundled root-only package output.
+- Architectural risk: adding all missing RFC behavior to the current root barrel and bundled output would preserve correctness but degrade DX, tree-shaking, and edge import cost.
+
+## Recommendation
+
+Take a standards-first but regret-aware path:
+
+1. Remove overclaims immediately.
+2. Lock public API boundaries so path validation, service identity, and revocation are distinct concepts.
+3. Add the missing RFC 5280 input/state surface.
+4. Complete name comparison/name constraints and policy support.
+5. Implement RFC 9618 directly instead of building the old RFC 5280 policy tree first.
+6. Finish CRL correctness before claiming full revocation.
+7. Harden OCSP after the revocation model is explicit.
+8. Complete RFC 6125 identity matching on the new identity boundary.
+9. Ship subpath exports and unbundled ESM so full compliance does not wreck DX.
+10. Unlock standards claims only behind conformance gates.
+
+## Scope And Deliverables
+
+| Deliverable                                                         | Effort | Depends On         |
+| ------------------------------------------------------------------- | ------ | ------------------ |
+| D0. Remove overclaims and publish a compliance matrix               | S      | -                  |
+| D1. Lock API and package boundaries                                 | M      | D0                 |
+| D2. Add missing RFC 5280 validation inputs and state plumbing       | M      | D1                 |
+| D3. Complete RFC 5280 name comparison and name constraints          | L      | D2                 |
+| D4. Add policy-related extension types, OIDs, builders, and parsers | L      | D2                 |
+| D5. Implement RFC 9618 policy validation                            | XL     | D4                 |
+| D6. Implement full CRL processing scope                             | XL     | D2, D4             |
+| D7. Harden OCSP responder auth, binding, and completeness           | L      | D1, D6             |
+| D8. Extract and complete RFC 6125 identity matching                 | L      | D1, D3             |
+| D9. Ship DX/tree-shaking/package improvements                       | M      | D1                 |
+| D10. Add conformance gates and unlock claims                        | L      | D5, D6, D7, D8, D9 |
+
+## Non-Goals
+
+- Node-only runtime branches, `Buffer`, `fs`, or OpenSSL-shell helpers in core validation paths.
+- Implicit network fetching inside pure validation APIs.
+- Certificate Transparency, TSA, LDAP, or CMS beyond existing roadmap items.
+- Implementing the old RFC 5280 policy-tree algorithm before RFC 9618.
+- Preserving unsupported deep imports into `dist/`.
+
+## Locked Architectural Decisions
+
+| Chose                                           | Over                                                    | Because                                                                |
+| ----------------------------------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Separate path, identity, and revocation APIs    | Keep all checks inside `verify.ts` convenience wrappers | Standards boundaries are real; coupling here already caused overclaims |
+| RFC 9618 directly                               | RFC 5280 policy tree then later rewrite                 | Avoids churn and worst-case complexity baggage                         |
+| ESM-only, WebCrypto-only, platform-neutral core | Node-specific fallback branches                         | Preserves edge/web compatibility and keeps runtime model simple        |
+| Curated root barrel plus stable subpath exports | Root barrel only                                        | Keeps DX while restoring real tree-shaking and import-cost control     |
+| Structured distribution point and policy models | URI/string shortcuts                                    | Full RFC semantics need structured data, not lossy projections         |
+
+## Data Model
+
+### Public API Shapes
+
+```ts
+interface PolicyValidationInput {
+  readonly initialPolicySet?: readonly string[] | 'any';
+  readonly requireExplicitPolicy?: boolean;
+  readonly inhibitPolicyMapping?: boolean;
+  readonly inhibitAnyPolicy?: boolean;
+}
+
+interface InitialNameConstraintsInput {
+  readonly permittedSubtrees?: readonly GeneralSubtree[];
+  readonly excludedSubtrees?: readonly GeneralSubtree[];
+}
+
+interface ServiceIdentityInput {
+  readonly type: 'dns' | 'ip' | 'uri' | 'srv';
+  readonly value: string;
+  readonly allowCommonNameFallback?: boolean;
+}
+
+interface DistributionPointName {
+  readonly fullName?: readonly GeneralName[];
+  readonly relativeName?: readonly ParsedName;
+}
+
+interface DistributionPoint {
+  readonly distributionPoint?: DistributionPointName;
+  readonly reasons?: readonly RevocationReason[];
+  readonly crlIssuer?: readonly GeneralName[];
+}
+
+interface PolicyInformation {
+  readonly policyIdentifier: string;
+  readonly policyQualifiers?: readonly PolicyQualifierInfo[];
+}
+```
+
+### Planned Result Shapes
+
+- `validateCandidatePath()` remains a pure path-valid / path-invalid API.
+- `matchServiceIdentity()` becomes the only API that evaluates RFC 6125 identity rules.
+- revocation-facing APIs expose explicit certificate status (`good`, `revoked`, `unknown`) instead of forcing callers to infer unknown from transport or validation failure.
+- `ParsedCertificate`, CRL, and OCSP parse results gain structured RFC objects rather than URI-only or omitted fields.
+
+## API / Interface Contract
+
+### Boundary Changes
+
+- `src/verify.ts`
+  - keep path building and path validation public.
+  - remove `dnsName`, `ipAddress`, and `allowCommonNameFallback` from raw path-validation input.
+  - keep convenience TLS/profile wrappers, but route them through the new identity module.
+- new `src/identity.ts`
+  - export `matchServiceIdentity()` and typed identity-match result/failure codes.
+  - own RFC 6125 logic for DNS-ID, URI-ID, SRV-ID, IP-ID, and CN fallback compatibility mode.
+- new `src/revocation.ts`
+  - expose high-level revocation orchestration separately from path validation.
+  - compose OCSP and CRL outcomes without hiding unknown/indeterminate states.
+- package shape
+  - keep `micro509` root barrel.
+  - add stable subpath exports: `micro509/verify`, `micro509/identity`, `micro509/ocsp`, `micro509/crl`, `micro509/parse`, `micro509/extensions`, `micro509/keys`, `micro509/pem`, `micro509/pfx`, `micro509/pkcs7`, `micro509/pkcs12-mac`, `micro509/certificate`, `micro509/csr`, `micro509/name`.
+    - Note! These are automatically set in package.json, depending on the entrypoints in "../tsdown.config.ts". Use the tsdown skill and if needed search though their src with opensrc to figyre out the details. Do NOT edit the exports in package.json manually, "bun bd" WILL overwrite it.
+
+## Deliverables (Ordered)
+
+### D0. Remove Overclaims And Publish Compliance Matrix
+
+**Goal:** docs say exactly what ships now.
+
+**Files likely touched:** `README.md`, `docs/PKIX-SCOPE.md`, `docs/FUTURE.md`
+
+**Changes:**
+
+- replace broad OCSP and API-separation claims with precise, current wording.
+- change claim language from subsystem-wide labels (`OCSP support`) to standards-accurate labels (`basic OCSP request/response helpers`, `partial OCSP validation`, `partial DNS/IP identity matching`).
+- add one short matrix: `implemented`, `partial`, `not yet` for RFC 5280 / 6960 / 6125 / 9618 areas.
+
+**Acceptance criteria:**
+
+- [ ] every checked item in `docs/PKIX-SCOPE.md` has a corresponding implementation and test.
+- [ ] README feature bullets do not imply stricter OCSP responder auth or broader identity support than shipped.
+- [ ] `docs/FUTURE.md` points readers at this spec for full implementation sequencing.
+
+### D1. Lock API And Package Boundaries
+
+**Goal:** prevent future standards work from deepening the current path/identity/revocation coupling or bloating the root entry.
+
+**Files likely touched:** `src/verify.ts`, `src/index.ts`, `package.json`, `tsdown.config.ts`, new `src/identity.ts`, new `src/revocation.ts`, `README.md`
+
+**Changes:**
+
+- introduce dedicated identity API.
+- keep revocation separate from raw path validation.
+- add subpath exports and preserve module boundaries in package output.
+- add `sideEffects: false` if confirmed true.
+
+**Acceptance criteria:**
+
+- [ ] raw path validation can run without hostname/IP inputs.
+- [ ] identity matching has a stable public API of its own.
+- [ ] package exports allow domain imports without deep-importing `dist/`.
+- [ ] build output remains ESM-only and platform-neutral.
+
+### D2. Add Missing RFC 5280 Validation Inputs And State Plumbing
+
+**Goal:** make the validator capable of representing the full RFC 5280 section 6 input surface.
+
+**Files likely touched:** `src/verify.ts`, `src/index.ts`, `test/verify.test.ts`
+
+**Changes:**
+
+- add `initialPolicySet`, `requireExplicitPolicy`, `inhibitPolicyMapping`, `inhibitAnyPolicy`, `permittedSubtrees`, and `excludedSubtrees` to public validation inputs.
+- thread those values through candidate-path validation state.
+- add typed failure codes for policy/name-constraint setup and enforcement failures.
+
+**Acceptance criteria:**
+
+- [ ] all RFC 5280 section 6.1.1 inputs are representable in public types.
+- [ ] defaults are explicit and documented.
+- [ ] validation failures distinguish policy vs name-constraint vs trust-anchor vs signature/time failures.
+
+### D3. Complete RFC 5280 Name Comparison And Name Constraints
+
+**Goal:** finish path-processing semantics for names instead of relying on best-effort matching.
+
+**Files likely touched:** `src/parse.ts`, `src/extensions.ts`, `src/verify.ts`, `test/parse.test.ts`, `test/verify.test.ts`
+
+**Changes:**
+
+- stop silently dropping unsupported constrained name forms when that would under-enforce a critical constraint.
+- implement semantically correct `directoryName` comparison per RFC 5280 section 7.
+- honor initial permitted/excluded subtree inputs.
+- explicitly define supported and rejected GeneralName forms.
+
+**Acceptance criteria:**
+
+- [ ] self-issued handling still passes for pathLen/name-constraint edge cases.
+- [ ] directoryName constraints no longer rely on raw DER prefix equality.
+- [ ] unsupported critical name-constraint content fails closed.
+- [ ] tests cover email, DNS, URI, IP, and directoryName constraints, plus negative cases.
+
+### D4. Add Policy Extension Surface
+
+**Goal:** make policy inputs first-class parse/build data before algorithm work starts.
+
+**Files likely touched:** `src/oids.ts`, `src/extensions.ts`, `src/parse.ts`, `test/parse.test.ts`, `test/certificate.test.ts`
+
+**Changes:**
+
+- add OIDs, TS types, builders, and parsers for `certificatePolicies`, `policyMappings`, `policyConstraints`, and `inhibitAnyPolicy`.
+- keep raw extension preservation.
+- reject malformed encodings and `anyPolicy` misuse where RFC rules require it.
+
+**Acceptance criteria:**
+
+- [ ] all four policy-related extensions round-trip through create/parse flows.
+- [ ] invalid policy encodings fail parse/build predictably.
+- [ ] parsed certificates expose structured policy data needed by the RFC 9618 engine.
+
+### D5. Implement RFC 9618 Policy Validation
+
+**Goal:** ship policy processing that is standards-correct and fit to claim.
+
+**Files likely touched:** `src/verify.ts`, `src/parse.ts`, `src/extensions.ts`, `src/oids.ts`, `test/verify.test.ts`, `docs/PKIX-SCOPE.md`
+
+**Changes:**
+
+- implement RFC 9618 policy graph/set algorithm directly.
+- process policy mappings, explicit-policy requirements, `anyPolicy` inhibition, and policy constraints.
+- expose final constrained policy outcome or typed failure details.
+
+**Acceptance criteria:**
+
+- [ ] policy-aware validation rejects chains that current code would incorrectly accept.
+- [ ] explicit-policy, inhibit-any-policy, and policy-mapping behaviors each have positive and negative tests.
+- [ ] algorithm avoids exponential tree behavior and is documented as RFC 9618-based.
+
+### D6. Implement Full CRL Processing Scope
+
+**Goal:** move from basic CRL signature/freshness validation to full RFC 5280 CRL semantics.
+
+**Files likely touched:** `src/extensions.ts`, `src/parse.ts`, `src/crl.ts`, `src/index.ts`, `test/crl.test.ts`, `test/parse.test.ts`
+
+**Changes:**
+
+- replace URI-only certificate CRL DP shortcuts with structured distribution point objects.
+- make that CRL distribution-point model change a clean break; do not keep a temporary URI-only compat alias.
+- parse and enforce issuing-distribution-point scope, reasons masks, indirect CRLs, delta CRLs, and `removeFromCRL` semantics.
+- enforce issuer `cRLSign` usage where required.
+- expose explicit revocation outcomes and CRL applicability results.
+
+**Acceptance criteria:**
+
+- [ ] complete CRLs, delta CRLs, and indirect CRLs have direct test coverage.
+- [ ] non-applicable CRLs are rejected as non-applicable, not treated as fresh enough evidence.
+- [ ] revocation helpers can distinguish revoked, not revoked, and insufficient evidence.
+
+### D7. Harden OCSP Responder Auth, Binding, And Completeness
+
+**Goal:** make OCSP validation strict enough to claim real RFC 6960 support.
+
+**Files likely touched:** `src/ocsp.ts`, `src/verify.ts`, `src/index.ts`, `test/ocsp.test.ts`, `README.md`, `docs/PKIX-SCOPE.md`
+
+**Changes:**
+
+- parse and enforce `ResponderID` by-name and by-key-hash.
+- require direct issuance and `id-kp-OCSPSigning` for delegated responders unless explicit local policy says otherwise.
+- validate `producedAt` in addition to `thisUpdate` / `nextUpdate`.
+- require full request/response coverage for multi-cert requests.
+- ensure supported inputs never throw inside validation.
+
+**Acceptance criteria:**
+
+- [ ] same-subject/different-key responder certs fail when `ResponderID` does not bind.
+- [ ] delegated responders without direct issuance or `ocspSigning` fail.
+- [ ] multi-cert requests fail if any requested `CertID` is omitted.
+- [ ] `ParsedCertificate` and DER/PEM inputs all go through the same validation semantics.
+
+### D8. Extract And Complete RFC 6125 Identity Matching
+
+**Goal:** finish service identity matching on a clean boundary.
+
+**Files likely touched:** new `src/identity.ts`, `src/verify.ts`, `src/parse.ts`, `src/extensions.ts`, `src/oids.ts`, `src/index.ts`, `test/verify.test.ts`, `test/parse.test.ts`, `README.md`
+
+**Changes:**
+
+- move hostname/service-name checks out of raw path validation.
+- support DNS-ID, IP-ID, URI-ID, and SRV-ID explicitly.
+- add IDNA normalization rules and explicit wildcard constraints.
+- make CN fallback an explicit compatibility mode only when no supported presented identifier of the relevant type exists.
+
+**Acceptance criteria:**
+
+- [ ] DNS-ID, IP-ID, URI-ID, and SRV-ID each have explicit public input types and tests.
+- [ ] IDNs normalize correctly before comparison.
+- [ ] CN fallback is disabled by default and suppressed when supported SAN identifiers are present.
+
+### D9. Ship DX / Tree-Shaking / Package Improvements
+
+**Goal:** keep the library pleasant to use even after adding the missing RFC surface.
+
+**Files likely touched:** `package.json`, `tsdown.config.ts`, `src/index.ts`, `README.md`
+
+**Changes:**
+
+- add stable subpath exports.
+- switch package output to preserve module boundaries instead of a single bundled entry.
+- document runtime support matrix for Node, Bun, Deno, browsers, and workers.
+
+**Acceptance criteria:**
+
+- [ ] consumers can import domain-specific modules without pulling the root entry.
+- [ ] package remains edge/web compatible with no Node-only runtime dependency.
+- [ ] README documents runtime prerequisites and import patterns.
+
+### D10. Add Conformance Gates And Unlock Claims
+
+**Goal:** claims become earned, not aspirational.
+
+**Files likely touched:** `test/verify.test.ts`, `test/crl.test.ts`, `test/ocsp.test.ts`, new fixture directories as needed, `README.md`, `docs/PKIX-SCOPE.md`, `docs/FUTURE.md`
+
+**Changes:**
+
+- add RFC-derived fixtures, malformed DER corpus, PKITS coverage, and differential tests against at least one mature implementation.
+- define claim unlock rules for `partial`, `feature-complete`, and `standards-complete` wording.
+
+**Acceptance criteria:**
+
+- [ ] PKITS coverage exists for the path-validation areas the library claims.
+- [ ] OCSP/CRL edge cases have fixture-backed tests.
+- [ ] README and scope docs only advertise behavior proven by tests.
+
+## Test Strategy
+
+| Layer       | What                                                                                      | How                                                                       |
+| ----------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| Unit        | extension encoders/decoders, name comparison, responder binding, policy state transitions | deterministic fixture tests in `test/*.test.ts`                           |
+| Integration | full cert/CRL/OCSP flows across public APIs                                               | end-to-end DER/PEM round-trips and validation scenarios                   |
+| Conformance | RFC 5280 path validation, RFC 6960 OCSP, RFC 6125 identity semantics                      | PKITS, RFC-derived fixtures, differential tests vs mature implementations |
+| Runtime     | Node, Bun, Deno, browser, worker compatibility                                            | scripted smoke matrix using WebCrypto-only paths                          |
+
+## Risks And Mitigations
+
+| Risk                                                   | Likelihood | Impact | Mitigation                                                                              |
+| ------------------------------------------------------ | ---------- | ------ | --------------------------------------------------------------------------------------- |
+| stricter standards checks reject inputs accepted today | High       | High   | call out intentional tightening in release notes and docs                               |
+| package/API boundary cleanup causes breaking changes   | High       | High   | stage through wrappers, subpath exports, and explicit migration docs                    |
+| policy and CRL work balloons in complexity             | High       | High   | isolate policy and revocation state machines behind dedicated modules and fixtures      |
+| DX regresses as feature count grows                    | Medium     | High   | keep curated root barrel, add subpaths, preserve pure modules, document import guidance |
+| edge/web parity regresses through Node-only helpers    | Medium     | High   | keep WebCrypto-first architecture and ban Node builtins from core paths                 |
+
+## Compatibility Notes
+
+- `validateCandidatePath()` is expected to lose service-identity fields; wrappers keep ergonomic TLS entry points.
+- revocation-facing result shapes may become richer to represent `unknown` cleanly.
+- CRL distribution points move from URI shortcuts to structured objects as a clean break.
+- stricter OCSP responder auth, policy validation, and name constraints will intentionally fail more inputs than current releases.
+- package consumers should migrate from root-only imports to domain subpaths where size/import cost matters.
+
+## Success Metrics
+
+- every user-facing standards claim maps to passing tests and one documented subsystem boundary.
+- root DX stays intact while subpath imports exist for tree-shaking-sensitive consumers.
+- the package remains WebCrypto-only and runs in modern browsers, workers, Bun, Deno, and modern Node.
+- `docs/PKIX-SCOPE.md` can honestly mark RFC 5280 / 6960 / 6125 items complete only after the corresponding conformance gates pass.
+
+## Open Questions
+
+- None. This spec assumes pre-1.0 breaking changes are acceptable, uses a clean break for the CRL distribution-point model, and adds a dedicated `src/revocation.ts` boundary.
+
+---
+
+_Spec approved for task decomposition._
