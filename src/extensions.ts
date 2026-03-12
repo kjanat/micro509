@@ -43,6 +43,56 @@ export interface BasicConstraints {
 	readonly pathLength?: number;
 }
 
+export type CertificatePolicies = readonly PolicyInformation[];
+
+export interface PolicyInformation {
+	readonly policyIdentifier: string;
+	readonly policyQualifiers?: readonly PolicyQualifierInfo[];
+}
+
+export interface CpsPolicyQualifierInfo {
+	readonly type: 'cps';
+	readonly uri: string;
+}
+
+export interface PolicyNoticeReference {
+	readonly organization: string;
+	readonly noticeNumbers: readonly number[];
+}
+
+export interface UserNoticePolicyQualifierInfo {
+	readonly type: 'userNotice';
+	readonly noticeRef?: PolicyNoticeReference;
+	readonly explicitText?: string;
+}
+
+export interface CustomPolicyQualifierInfo {
+	readonly type: 'oid';
+	readonly oid: string;
+	readonly qualifierDer: Uint8Array;
+}
+
+export type PolicyQualifierInfo =
+	| CpsPolicyQualifierInfo
+	| UserNoticePolicyQualifierInfo
+	| CustomPolicyQualifierInfo;
+
+export type PolicyMappings = readonly PolicyMapping[];
+
+export interface PolicyMapping {
+	readonly issuerDomainPolicy: string;
+	readonly subjectDomainPolicy: string;
+}
+
+export interface PolicyConstraints {
+	readonly requireExplicitPolicy?: number;
+	readonly inhibitPolicyMapping?: number;
+}
+
+export interface InhibitAnyPolicy {
+	readonly skipCerts: number;
+}
+
 export interface CertificateExtensionsInput {
 	readonly subjectAltNames?: readonly SubjectAltName[];
 	readonly keyUsage?: readonly KeyUsage[];

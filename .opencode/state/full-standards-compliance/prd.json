@@ -199,7 +199,7 @@
 			"description": "Add RFC policy OIDs and structured types for policy extensions. Done when:\n- all four policy-related extensions have stable types\n- OIDs live in the registry\n- parse/build code can depend on the new shapes",
 			"depends": ["add-policy-input-types"],
 			"priority": "architecture",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "build-policy-extensions",

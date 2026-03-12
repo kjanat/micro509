@@ -24,6 +24,7 @@ Started: 2026-03-12
 - Standards docs should keep README + `docs/PKIX-SCOPE.md` aligned around a short `implemented` / `partial` / `not yet` matrix, then narrow per-feature wording to shipped behavior.
 - New verify-surface knobs should land as direct optional fields on input objects, then flow through wrapper helpers unchanged until enforcement work is ready.
 - When a verify-surface task adds another RFC input family, widen every verify/profile input interface plus the shared forwarding helper in one pass so wrappers stay aligned with raw path validation.
+- New extension families should land in three steps: add stable OIDs + public data shapes first, then builder/parser wiring, then validation/enforcement. Do not add `CertificateExtensionsInput` or parsed-certificate fields before encode/decode exists.
 
 ## Validation Commands
 
@@ -126,3 +127,10 @@ Started: 2026-03-12
 - Documented the parser/validator split explicitly: parser must preserve or classify unsupported constrained forms, validator must fail closed on unsupported critical semantics.
 - Files changed: `specs/full-standards-compliance.md`, `docs/PKIX-SCOPE.md`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** for partial RFC features, write the support matrix before enforcement work so later parse/validate tasks share the same supported-vs-unsupported boundary.
+
+## Task - [add-policy-oids-and-types]
+
+- Added stable policy-extension OIDs in `src/oids.ts` for the four RFC policy extensions plus `anyPolicy` and qualifier OIDs.
+- Added public policy extension data shapes in `src/extensions.ts`, re-exported them from `src/index.ts`, and covered the new surface in `test/extensions.test.ts`.
+- Files changed: `src/oids.ts`, `src/extensions.ts`, `src/index.ts`, `test/extensions.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** keep early extension-surface tasks type-only when encode/decode is still pending; stable names in `extensions.ts` plus registry OIDs are enough for later parse/build work to depend on without over-claiming behavior.
