@@ -2035,7 +2035,7 @@ describe('validation profiles', () => {
 		expect(fail.ok).toBe(false);
 	});
 
-	it('validateForTlsClient fails closed for policy validation inputs until enforcement lands', async () => {
+	it('validateForTlsClient still fails closed for inhibitPolicyMapping until mapping enforcement lands', async () => {
 		const root = await createSelfSignedCertificate({
 			subject: { commonName: 'Policy Input Root' },
 			extensions: {
@@ -2058,17 +2058,13 @@ describe('validation profiles', () => {
 		const result = await validateForTlsClient({
 			leaf: leaf.pem,
 			roots: [root.certificate.pem],
-			initialPolicySet: ['1.2.3.4'],
-			requireExplicitPolicy: true,
 			inhibitPolicyMapping: true,
-			inhibitAnyPolicy: true,
 		});
 		expect(result).toMatchObject({
 			ok: false,
 			code: 'policy_processing_not_implemented',
 			details: {
-				actual:
-					'initialPolicySet=1.2.3.4, requireExplicitPolicy, inhibitPolicyMapping, inhibitAnyPolicy',
+				actual: 'inhibitPolicyMapping',
 			},
 		});
 	});
@@ -2217,24 +2213,196 @@ describe('validateCandidatePath direct', () => {
 		if (!verifyResult.ok) expect(verifyResult.code).toBe('subject_alt_name_mismatch');
 	});
 
-	it('fails closed for policy validation inputs on raw path validation until enforcement lands', async () => {
+	it('still fails closed for inhibitPolicyMapping on raw path validation until mapping enforcement lands', async () => {
 		const chain = await issueChain();
 		const leafParsed = parseCertificatePem(chain.leaf.pem);
 		const intParsed = parseCertificatePem(chain.intermediate.pem);
 		const rootParsed = parseCertificatePem(chain.root.certificate.pem);
 		const result = await validateCandidatePath({
 			chain: [leafParsed, intParsed, rootParsed],
-			initialPolicySet: ['1.2.3.4'],
-			requireExplicitPolicy: true,
 			inhibitPolicyMapping: true,
-			inhibitAnyPolicy: true,
 		});
 		expect(result).toMatchObject({
 			ok: false,
 			code: 'policy_processing_not_implemented',
 			details: {
-				actual:
-					'initialPolicySet=1.2.3.4, requireExplicitPolicy, inhibitPolicyMapping, inhibitAnyPolicy',
+				actual: 'inhibitPolicyMapping',
+			},
+		});
+	});
+
+	it('accepts a matching initial policy set during raw path validation', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Policy Root' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Policy Root' },
+			subject: { commonName: 'policy-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				certificatePolicies: [{ policyIdentifier: '1.2.3.4' }],
+			},
+		});
+		const result = await validateCandidatePath({
+			chain: [parseCertificatePem(leaf.pem), parseCertificatePem(root.certificate.pem)],
+			initialPolicySet: ['1.2.3.4'],
+		});
+		expect(result.ok).toBe(true);
+	});
+
+	it('rejects raw path validation when the initial policy set is not satisfied', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Policy Root' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Policy Root' },
+			subject: { commonName: 'wrong-policy-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				certificatePolicies: [{ policyIdentifier: '1.2.3.4' }],
+			},
+		});
+		const result = await validateCandidatePath({
+			chain: [parseCertificatePem(leaf.pem), parseCertificatePem(root.certificate.pem)],
+			initialPolicySet: ['1.2.3.5'],
+		});
+		expect(result).toMatchObject({
+			ok: false,
+			code: 'initial_policy_set_not_satisfied',
+			details: {
+				expected: '1.2.3.5',
+				actual: '<none>',
+			},
+		});
+	});
+
+	it('rejects raw path validation when explicit policy is required but no policy remains', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Explicit Policy Root' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Explicit Policy Root' },
+			subject: { commonName: 'no-policy-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+			},
+		});
+		const result = await validateCandidatePath({
+			chain: [parseCertificatePem(leaf.pem), parseCertificatePem(root.certificate.pem)],
+			requireExplicitPolicy: true,
+		});
+		expect(result).toMatchObject({
+			ok: false,
+			code: 'explicit_policy_required',
+			details: {
+				expected: 'explicit policy',
+				actual: '<none>',
+			},
+		});
+	});
+
+	it('enforces certificate policyConstraints requireExplicitPolicy during raw path validation', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Constrained Policy Root' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 1 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const intermediateKeys = await generateKeyPair();
+		const intermediate = await createCertificate({
+			issuer: { commonName: 'Constrained Policy Root' },
+			subject: { commonName: 'Constrained Policy Intermediate' },
+			publicKey: intermediateKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+				policyConstraints: { requireExplicitPolicy: 0 },
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Constrained Policy Intermediate' },
+			subject: { commonName: 'constrained-policy-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: intermediateKeys.privateKey,
+			issuerPublicKey: intermediateKeys.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+			},
+		});
+		const result = await validateCandidatePath({
+			chain: [
+				parseCertificatePem(leaf.pem),
+				parseCertificatePem(intermediate.pem),
+				parseCertificatePem(root.certificate.pem),
+			],
+		});
+		expect(result).toMatchObject({ ok: false, code: 'explicit_policy_required' });
+	});
+
+	it('enforces inhibitAnyPolicy during raw path validation', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Any Policy Root' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Any Policy Root' },
+			subject: { commonName: 'any-policy-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				certificatePolicies: [{ policyIdentifier: OIDS.anyPolicy }],
+			},
+		});
+		const allowed = await validateCandidatePath({
+			chain: [parseCertificatePem(leaf.pem), parseCertificatePem(root.certificate.pem)],
+			initialPolicySet: ['1.2.3.4'],
+		});
+		expect(allowed.ok).toBe(true);
+		const blocked = await validateCandidatePath({
+			chain: [parseCertificatePem(leaf.pem), parseCertificatePem(root.certificate.pem)],
+			initialPolicySet: ['1.2.3.4'],
+			inhibitAnyPolicy: true,
+		});
+		expect(blocked).toMatchObject({
+			ok: false,
+			code: 'initial_policy_set_not_satisfied',
+			details: {
+				expected: '1.2.3.4',
+				actual: '<none>',
 			},
 		});
 	});

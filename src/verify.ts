@@ -98,6 +98,8 @@ export type VerifyErrorCode =
 	| 'unrecognized_critical_extension'
 	| 'intermediate_eku_constraint'
 	| 'policy_processing_not_implemented'
+	| 'explicit_policy_required'
+	| 'initial_policy_set_not_satisfied'
 	| 'initial_name_constraints_not_implemented'
 	| 'unsupported_name_constraints'
 	| 'name_constraints_violated';
@@ -514,6 +516,10 @@ export async function validateCandidatePath(
 	}
 
 	processPolicyState(chain, validationStateResult.value.policy);
+	const policyResult = validateProcessedPolicyState(chain, validationStateResult.value.policy);
+	if (!policyResult.ok) {
+		return policyResult;
+	}
 
 	const nameConstraintResult = checkNameConstraints(
 		chain,
@@ -1322,12 +1328,12 @@ function buildValidationState(
 	chainLength: number,
 ): ValidationStateResult {
 	const policy = normalizePolicyValidationState(input, chainLength);
-	if (hasNonDefaultPolicyInputs(policy)) {
+	if (hasUnsupportedPolicyInputs(policy)) {
 		return failure(
 			'policy_processing_not_implemented',
 			'policy validation inputs are not implemented yet',
 			undefined,
-			detail({ actual: describePolicyState(policy) }),
+			detail({ actual: describeUnsupportedPolicyState(policy) }),
 		);
 	}
 	const nameConstraints = normalizeNameConstraintValidationState(input);
@@ -1363,28 +1369,14 @@ function normalizeNameConstraintValidationState(
 	};
 }
 
-function hasNonDefaultPolicyInputs(policy: PolicyValidationState): boolean {
-	return (
-		policy.initialPolicySet !== 'any' ||
-		policy.explicitPolicy === 0 ||
-		policy.inhibitPolicyMapping === 0 ||
-		policy.inhibitAnyPolicy === 0
-	);
+function hasUnsupportedPolicyInputs(policy: PolicyValidationState): boolean {
+	return policy.inhibitPolicyMapping === 0;
 }
 
-function describePolicyState(policy: PolicyValidationState): string {
+function describeUnsupportedPolicyState(policy: PolicyValidationState): string {
 	const enabled: string[] = [];
-	if (policy.initialPolicySet !== 'any') {
-		enabled.push(`initialPolicySet=${policy.initialPolicySet.join(',')}`);
-	}
-	if (policy.explicitPolicy === 0) {
-		enabled.push('requireExplicitPolicy');
-	}
 	if (policy.inhibitPolicyMapping === 0) {
 		enabled.push('inhibitPolicyMapping');
-	}
-	if (policy.inhibitAnyPolicy === 0) {
-		enabled.push('inhibitAnyPolicy');
 	}
 	return enabled.join(', ');
 }
@@ -1430,6 +1422,82 @@ function processPolicyState(
 		const depth = leafDepth - index;
 		processPolicyCertificate(state, certificate, depth, depth === leafDepth);
 	}
+}
+
+function validateProcessedPolicyState(
+	chain: readonly ParsedCertificate[],
+	state: PolicyValidationState,
+): ValidateCandidatePathResult {
+	const finalPolicies = deriveUserConstrainedPolicies(chain, state);
+	if (state.explicitPolicy === 0 && finalPolicies.size === 0) {
+		return failure(
+			'explicit_policy_required',
+			'policy validation requires an explicit permitted policy',
+			0,
+			detail({
+				expected:
+					state.initialPolicySet === 'any' ? 'explicit policy' : state.initialPolicySet.join(','),
+				actual: describeFinalPolicies(finalPolicies),
+			}),
+		);
+	}
+	if (state.initialPolicySet !== 'any' && finalPolicies.size === 0) {
+		return failure(
+			'initial_policy_set_not_satisfied',
+			'certificate chain does not satisfy the requested initial policy set',
+			0,
+			detail({
+				expected: state.initialPolicySet.join(','),
+				actual: describeFinalPolicies(finalPolicies),
+			}),
+		);
+	}
+	return { ok: true };
+}
+
+function deriveUserConstrainedPolicies(
+	chain: readonly ParsedCertificate[],
+	state: PolicyValidationState,
+): ReadonlySet<string> {
+	const finalAuthorityPolicies = collectFinalAuthorityPolicies(chain, state.validPolicyGraph);
+	if (state.initialPolicySet === 'any') {
+		return finalAuthorityPolicies;
+	}
+	const constrained = new Set<string>();
+	if (finalAuthorityPolicies.has(OIDS.anyPolicy)) {
+		for (const policyIdentifier of state.initialPolicySet) {
+			constrained.add(policyIdentifier);
+		}
+	}
+	for (const policyIdentifier of state.initialPolicySet) {
+		if (finalAuthorityPolicies.has(policyIdentifier)) {
+			constrained.add(policyIdentifier);
+		}
+	}
+	return constrained;
+}
+
+function collectFinalAuthorityPolicies(
+	chain: readonly ParsedCertificate[],
+	graph: PolicyGraph | null,
+): ReadonlySet<string> {
+	if (graph === null) {
+		return new Set<string>();
+	}
+	const leafDepth = chain.length - 1;
+	const finalDepth = graph.nodesByDepth[leafDepth];
+	if (finalDepth === undefined) {
+		return new Set<string>();
+	}
+	const authorityPolicies = new Set<string>();
+	for (const node of finalDepth.values()) {
+		authorityPolicies.add(node.validPolicy);
+	}
+	return authorityPolicies;
+}
+
+function describeFinalPolicies(policies: ReadonlySet<string>): string {
+	return policies.size === 0 ? '<none>' : [...policies].join(',');
 }
 
 function processPolicyCertificate(

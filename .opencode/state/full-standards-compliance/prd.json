@@ -244,7 +244,7 @@
 			"description": "Apply explicit-policy, policyConstraints, and inhibitAnyPolicy rules during validation. Done when:\n- valid chains still pass\n- invalid chains fail with typed policy errors\n- edge-case fixtures cover each rule",
 			"depends": ["implement-policy-state"],
 			"priority": "standard",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "enforce-policy-mappings",

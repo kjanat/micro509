@@ -36,6 +36,7 @@ Started: 2026-03-12
 - Treat caller-supplied initial name constraints as the first accumulated constraint level, then layer certificate `nameConstraints` on top; that preserves RFC intersection semantics and existing self-issued exemptions.
 - For staged extension families, parser helpers should mirror builder guardrails on empty/repeated/forbidden RFC structures, and preserve custom `ANY` payloads as raw DER so round-trip-enough typed data lands before enforcement logic.
 - For staged standards work, land internal state machines before public enforcement, but keep public policy/revocation knobs fail-closed until the matching enforcement/output task exists.
+- For staged policy enforcement, enable only the RFC knobs the current task actually enforces, keep the rest fail-closed, and derive pass/fail from the final constrained policy set before exposing richer public outcomes.
 
 ## Validation Commands
 
@@ -226,3 +227,10 @@ Started: 2026-03-12
 - Kept public policy input knobs fail-closed for now, so `requireExplicitPolicy` and related inputs still return the existing typed not-implemented result until the later enforcement tasks land.
 - Files changed: `src/verify.ts`, `test/verify.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** ship policy-engine internals before relaxing public policy inputs; otherwise a partial state model can accidentally turn a deliberate fail-closed gate into fail-open behavior.
+
+## Task - [enforce-policy-constraints]
+
+- Enabled RFC 9618 policy enforcement in `src/verify.ts` for `initialPolicySet`, `requireExplicitPolicy`, certificate `policyConstraints.requireExplicitPolicy`, and `inhibitAnyPolicy`, while keeping `inhibitPolicyMapping` fail-closed until the mapping task lands.
+- Added raw-path validation regressions in `test/verify.test.ts` for matching/missing initial policies, explicit-policy failures, intermediate `policyConstraints`, and `anyPolicy` inhibition, and narrowed the old fail-closed tests to mapping-only inputs.
+- Files changed: `src/verify.ts`, `test/verify.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** once the internal policy graph exists, constraint enforcement should key off the final constrained policy set and explicit-policy counter, not on whether callers supplied a non-default input.
