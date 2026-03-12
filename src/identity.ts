@@ -185,8 +185,8 @@ export function matchCertificateServiceIdentity(
 }
 
 function matchesDnsName(pattern: string, actual: string): boolean {
-	const lowerPattern = pattern.toLowerCase();
-	const lowerActual = actual.toLowerCase();
+	const lowerPattern = normalizeDnsPattern(pattern);
+	const lowerActual = normalizeDnsName(actual);
 	if (!lowerPattern.includes('*')) {
 		return lowerPattern === lowerActual;
 	}
@@ -208,6 +208,34 @@ function normalizeIpAddress(value: string): string {
 	return expandIpv6(value)
 		.map((segment) => segment.toLowerCase())
 		.join(':');
+}
+
+function normalizeDnsPattern(value: string): string {
+	if (!value.startsWith('*.')) {
+		return normalizeDnsName(value);
+	}
+	return `*.${normalizeDnsName(value.slice(2))}`;
+}
+
+function normalizeDnsName(value: string): string {
+	const normalized = tryNormalizeDnsName(value);
+	return normalized ?? value.toLowerCase();
+}
+
+function tryNormalizeDnsName(value: string): string | undefined {
+	if (value.length === 0) {
+		return undefined;
+	}
+	for (const forbidden of ['/', ':', '?', '#', '@', '[', ']']) {
+		if (value.includes(forbidden)) {
+			return undefined;
+		}
+	}
+	try {
+		return new URL(`https://${value}`).hostname.toLowerCase();
+	} catch {
+		return undefined;
+	}
 }
 
 interface ServiceScopedIdentity {
@@ -233,7 +261,7 @@ function tryParseUriServiceIdentity(value: string): ServiceScopedIdentity | unde
 	if (domainName === undefined) {
 		return undefined;
 	}
-	return { serviceType, domainName: domainName.toLowerCase() };
+	return { serviceType, domainName: normalizeDnsName(domainName) };
 }
 
 function extractUriRegName(value: string): string | undefined {
@@ -289,7 +317,7 @@ function tryParseSrvServiceIdentity(value: string): ServiceScopedIdentity | unde
 	}
 	return {
 		serviceType: value.slice(1, dotIndex).toLowerCase(),
-		domainName: value.slice(dotIndex + 1).toLowerCase(),
+		domainName: normalizeDnsName(value.slice(dotIndex + 1)),
 	};
 }
 

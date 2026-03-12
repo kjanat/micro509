@@ -55,6 +55,7 @@ Started: 2026-03-12
 - OCSP request-bound validation must compare request and response `CertID` sets both ways: reject extra response entries and reject omitted requested entries, while staying order-insensitive for multi-cert requests.
 - Once DNS/IP matching lives behind `src/identity.ts`, keep matcher-specific wildcard / IPv6 / CN-fallback coverage in `test/identity.test.ts`; leave `test/verify.test.ts` focused on wrapper composition and failure adaptation.
 - URI-ID and SRV-ID matching should split presented identifiers into a service/scheme part plus a DNS domain part, compare service/scheme case-insensitively first, then run existing DNS-style host matching only within same-service candidates so service mismatches stay typed.
+- IDNA service-identity matching should normalize only DNS host parts to URL-hostname ASCII form, while keeping wildcard prefixes and URI/SRV service selectors outside the IDNA conversion step.
 
 ## Validation Commands
 
@@ -384,3 +385,10 @@ Started: 2026-03-12
 - Added direct boundary coverage in `test/identity.test.ts` for URI scheme+host matching and SRV service+domain matching, including case-insensitive service comparisons.
 - Files changed: `src/identity.ts`, `test/identity.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** for RFC 6125 service-bound identifiers, compare service/scheme before domain matching; otherwise a same-host different-service SAN can collapse into a generic hostname mismatch and lose the reason callers need.
+
+## Task - [add-idna-normalizer]
+
+- Added IDNA-aware host normalization in `src/identity.ts` so DNS, URI-ID, and SRV-ID comparisons now treat A-label and U-label host forms equivalently while keeping wildcard and service/scheme handling unchanged.
+- Added identity-boundary regressions in `test/identity.test.ts` for mixed-case A-label DNS matching plus IDNA URI-ID and SRV-ID host comparisons.
+- Files changed: `src/identity.ts`, `test/identity.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** normalize only the hostname portion through IDNA; wildcard labels and URI/SRV service selectors need separate RFC-specific handling outside the hostname conversion step.

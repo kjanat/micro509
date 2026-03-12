@@ -457,7 +457,7 @@
 			"description": "Add IDNA normalization for service identity matching. Done when:\n- A-label and U-label handling is explicit\n- internationalized identifiers compare correctly\n- tests cover mixed-case and IDN scenarios",
 			"depends": ["scaffold-identity-module"],
 			"priority": "standard",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "tighten-cn-fallback",

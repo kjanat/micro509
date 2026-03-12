@@ -101,6 +101,43 @@ describe('identity boundary', () => {
 		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
 	});
 
+	it('matches IDNA DNS SANs across A-label and U-label forms', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'IDNA Identity CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'IDNA Identity CA' },
+			subject: { commonName: 'idna.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['serverAuth'],
+				subjectAltNames: [{ type: 'dns', value: '*.xn--bcher-kva.example' }],
+			},
+		});
+		const certificate = parseCertificatePem(leaf.pem);
+
+		expect(
+			matchServiceIdentity({
+				certificate,
+				serviceIdentity: { type: 'dns', value: 'SHOP.XN--BCHER-KVA.EXAMPLE' },
+			}),
+		).toEqual({ ok: true });
+		expect(
+			matchServiceIdentity({
+				certificate,
+				serviceIdentity: { type: 'dns', value: 'shop.bücher.example' },
+			}),
+		).toEqual({ ok: true });
+	});
+
 	it('rejects invalid wildcard SAN patterns through the dedicated identity API', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Pattern Identity CA' },
@@ -269,6 +306,37 @@ describe('identity boundary', () => {
 		).toMatchObject({ ok: false, code: 'service_identity_service_mismatch' });
 	});
 
+	it('matches URI SANs across IDNA host forms', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Identity CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Identity CA' },
+			subject: { commonName: 'uri-idna.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['serverAuth'],
+				subjectAltNames: [{ type: 'uri', value: 'HTTPS://xn--bcher-kva.example/admin' }],
+			},
+		});
+		const certificate = parseCertificatePem(leaf.pem);
+
+		expect(
+			matchServiceIdentity({
+				certificate,
+				serviceIdentity: { type: 'uri', value: 'https://bücher.example/login' },
+			}),
+		).toEqual({ ok: true });
+	});
+
 	it('matches SRV SANs by service and domain through the dedicated identity API', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Identity CA' },
@@ -304,5 +372,36 @@ describe('identity boundary', () => {
 				serviceIdentity: { type: 'srv', value: '_xmpp-server.im.example.org' },
 			}),
 		).toMatchObject({ ok: false, code: 'service_identity_service_mismatch' });
+	});
+
+	it('matches SRV SANs across IDNA host forms', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Identity CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Identity CA' },
+			subject: { commonName: 'srv-idna.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['serverAuth'],
+				subjectAltNames: [{ type: 'srv', value: '_xmpp-client.xn--bcher-kva.example' }],
+			},
+		});
+		const certificate = parseCertificatePem(leaf.pem);
+
+		expect(
+			matchServiceIdentity({
+				certificate,
+				serviceIdentity: { type: 'srv', value: '_XMPP-CLIENT.bücher.example' },
+			}),
+		).toEqual({ ok: true });
 	});
 });
