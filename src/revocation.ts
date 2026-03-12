@@ -1,15 +1,7 @@
-import {
-	type CrlApplicabilityFailureReason,
-	type CrlSource,
-	checkCertificateRevocationAgainstCrl,
-	type RevocationReason,
-} from './crl.ts';
-import {
-	type OcspCertificateSource,
-	type OcspRequestSource,
-	type ParsedOcspResponse,
-	validateOcspResponse,
-} from './ocsp.ts';
+import type { CrlApplicabilityFailureReason, CrlSource, RevocationReason } from './crl.ts';
+import { checkCertificateRevocationAgainstCrl } from './crl.ts';
+import type { OcspCertificateSource, OcspRequestSource, ParsedOcspResponse } from './ocsp.ts';
+import { validateOcspResponse } from './ocsp.ts';
 import type { ParsedCertificate } from './parse.ts';
 import { parseCertificateDer, parseCertificatePem } from './parse.ts';
 import type { RevocationStatus } from './validation.ts';

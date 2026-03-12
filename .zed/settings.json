@@ -13,6 +13,7 @@
 	"languages": {
 		"TypeScript": {
 			"wrap_guides": [100],
+			"format_on_save": "on",
 			"formatter": [
 				{ "code_action": "fixAll.biome" },
 				{ "code_action": "organizeImports.biome" },
