@@ -1,82 +1,82 @@
 # PROJECT KNOWLEDGE BASE
 
-**Generated:** 2026-03-11 **Commit:** 11a11f9+ **Branch:** master
+**Generated:** 2026-03-12 **Commit:** 2607953 **Branch:** full-standards-compliance
 
 ## OVERVIEW
 
-`micro509` — zero-dependency TypeScript X.509/PKI library (certs, CSRs, CRLs, OCSP, PKCS#7/12, PFX). ESM-only, functional (no classes), async only where WebCrypto requires it. ~195 public exports through single barrel `src/index.ts`.
+`micro509` is a zero-dependency TypeScript X.509/PKI library. It is ESM-only, functional, strict-typed, and keeps public API surface in flat `src/*.ts` modules with Bun-first local tooling.
 
 ## STRUCTURE
 
 ```tree
 ts-x509/
-├── src/            # 20 flat modules — all PKI domain code (no subdirs)
-├── test/           # Single monolithic test file (2290 lines)
-├── docs/           # FUTURE.md (roadmap), PKIX-SCOPE.md (RFC 5280 compliance)
-└── comparisons/    # Competitive analysis (@peculiar/x509)
+|- src/            # flat PKI implementation modules; public + internal mixed
+|- test/           # feature suites, helpers, OpenSSL oracle, PKITS fixtures
+|- docs/           # scope statements and test-harness docs
+|- specs/          # long-lived implementation planning docs
+|- comparisons/    # competitor notes
+|- dist/           # generated build output
+`- .opencode/      # local agent workflow state
 ```
 
 ## WHERE TO LOOK
 
-| Task                         | Location                              | Notes                                                     |
-| ---------------------------- | ------------------------------------- | --------------------------------------------------------- |
-| Public API surface           | `src/index.ts`                        | Barrel re-exports from 13 of 20 modules                   |
-| Key generation/import/export | `src/keys.ts`                         | Largest surface (~45 exports), PKCS#1/8, SEC1, SPKI, JWK  |
-| Certificate create/parse     | `src/certificate.ts`, `src/parse.ts`  | Create + DER/PEM parsing                                  |
-| Chain/CSR verification       | `src/verify.ts`                       | Path build/validate split, profiles, discriminated unions |
-| CRL lifecycle                | `src/crl.ts`                          | Create, parse, verify, validate, revocation check         |
-| OCSP request/response        | `src/ocsp.ts`                         | Create, parse, verify, validate                           |
-| PFX/PKCS#12                  | `src/pfx.ts`, `src/pkcs12-mac.ts`     | Create and parse PFX bundles                              |
-| PKCS#7 cert bags             | `src/pkcs7.ts`                        | SignedData parse, cert bag create/parse                   |
-| DER/ASN.1 internals          | `src/der.ts`, `src/asn1.ts`           | NOT public — encoding/decoding primitives                 |
-| OID registry                 | `src/oids.ts`                         | NOT public — `as const satisfies Record<string, string>`  |
-| Signing internals            | `src/signing.ts`, `src/sig-verify.ts` | NOT public — key-to-algorithm mapping                     |
-| Encryption internals         | `src/pbes2.ts`                        | NOT public — PBES2/PBKDF2 for encrypted keys              |
-| Roadmap                      | `docs/FUTURE.md`                      | Planned features and backlog                              |
-| RFC compliance               | `docs/PKIX-SCOPE.md`                  | What is/isn't implemented per RFC 5280                    |
+| Task                              | Location                                               | Notes                                                      |
+| --------------------------------- | ------------------------------------------------------ | ---------------------------------------------------------- |
+| Public API surface                | `src/index.ts`                                         | Barrel export for package root                             |
+| Package entry routing             | `package.json`                                         | `exports`, `imports`, Bun scripts                          |
+| Chain validation                  | `src/verify.ts`                                        | path building, validation, policy, identity compose points |
+| Certificate and CSR parsing       | `src/parse.ts`                                         | DER/PEM parse boundary and extension decoding              |
+| CRL lifecycle                     | `src/crl.ts`                                           | create, parse, verify, validate, revocation                |
+| OCSP lifecycle                    | `src/ocsp.ts`                                          | request/response create, parse, verify, validate           |
+| Key import/export                 | `src/keys.ts`                                          | widest API surface; PKCS#1/8, SEC1, SPKI, JWK              |
+| Extension model/builders          | `src/extensions.ts`                                    | typed extension inputs plus encoder helpers                |
+| Test helpers and internals probes | `test/helpers.ts`, `test/internals.test.ts`            | shared DER helpers; internal coverage allowed in tests     |
+| Differential oracle               | `test/differential.test.ts`, `test/oracles/openssl.ts` | compare normalized semantics against OpenSSL               |
+| PKITS coverage                    | `test/pkits.test.ts`, `docs/PKITS-HARNESS.md`          | focused shipped-claims subset at fixed validation time     |
+| Standards scope                   | `docs/PKIX-SCOPE.md`                                   | source of truth for claim boundaries                       |
 
 ## CONVENTIONS
 
-- **Tabs** for indentation, LF line endings, single quotes in TS
-- **dprint** as sole formatter — no ESLint, no Prettier, no Biome
-- **Max TS strictness**: `strict` + `noUncheckedIndexedAccess` + `exactOptionalPropertyTypes`
-- **No `any`, no `!` non-null, no `as` type assertions** — `as const` and `as const satisfies` are the only permitted assertion forms
-- **`.ts` import extensions** everywhere — `rewriteRelativeImportExtensions` rewrites to `.js` on emit
-- **`readonly` properties** pervasively on all interfaces
-- **Discriminated unions** for results: `{ ok: true; value: T } | { ok: false; code: string; message: string }`
-- **No default exports** anywhere
-- **`Record<never, never>`** as empty-map generic default
-- **Exhaustive switches** via `const _exhaustive: never = value` pattern
-- **Throws** for invariant violations; returns Result unions for expected failures
+- Tabs, LF, single quotes.
+- `src/` stays flat; domain modules own end-to-end flows instead of subdirectories.
+- `.ts` relative import extensions are required in source; build rewrites to `.js`.
+- Return typed result unions for expected failures; throw only for invariants.
+- `readonly` everywhere; exhaustive `never` switches; `Record<never, never>` for empty map defaults.
+- Bun is default runner/package manager, but Node compatibility still matters.
+- Tests may import internals through `#micro509/*.ts` when asserting low-level behavior.
 
 ## ANTI-PATTERNS (THIS PROJECT)
 
-- **Never use `any`** — strict mode + `noUncheckedIndexedAccess` makes it unnecessary
-- **Never use `!` non-null assertion** — use explicit `undefined` checks and throws
-- **Never use `as Type`** — only `as const` / `as const satisfies` are allowed
-- **No classes** — entire library is functional
-- **No mocking in tests** — tests use real WebCrypto, Node's `X509Certificate` as oracle, and will in future test againt _NIST PKITS_
-- **No `eslint-disable` or `@ts-ignore`** — zero instances in codebase
-- **No `await expect()` in test files...** Use bun mcp server to get docs.
+- No `any`.
+- No non-null `!`.
+- No `as Type`; only `as const` and `as const satisfies`.
+- No classes.
+- No default exports.
+- No mocks in tests.
+- No `eslint-disable` or `@ts-ignore`.
+- No `await expect()` in tests.
+- Do not treat every self-signed cert as a trust anchor.
+- Do not overclaim RFC support beyond `docs/PKIX-SCOPE.md`.
 
 ## COMMANDS
 
 ```bash
-bun bd         # tsc → dist/ (ESM .js + .d.ts)
-bun typecheck  # tsgo --noEmit (full type-check)
-bun test       # bun's native test runner (single-pass)
-bun fmt        # dprint fmt
-bun lint       # biome lint {src,test}
+bun bd                 # fast build to dist/
+bun build              # full tsdown build
+bun typecheck          # tsgo type-check
+bun test               # bun test --coverage
+bun lint               # biome lint
+bun fmt                # dprint fmt
+bun test test/pkits.test.ts
+bun test test/differential.test.ts
 ```
 
 ## NOTES
 
-- **Repo name ≠ package name**: repo is `ts-x509`, npm package is `micro509`
-- **Dual typecheck**: `tsc` (5.9) and `tsgo` (native preview 7.0) — both must pass
-- **`DOM` in tsconfig lib**: needed for WebCrypto types (`SubtleCrypto`, `CryptoKey`)
-- **Bun** is package manager (`bun.lock`), but Volta pins Node 25.8.0 as fallback
-- **No CI** — no `.github/workflows/`; all checks are local
-- **Single test file** covers all 20 modules — helpers defined inline at bottom
-- **7 internal modules** (`asn1`, `der`, `oids`, `pbes2`, `sig-verify`, `signing`, + extension builders) are NOT re-exported from `index.ts`
-- **MD5** used only in `opensslBytesToKey()` for legacy PEM compat — not a general concern
-- **SHA-1** used for Subject Key Identifier (RFC 5280 mandate) and OCSP cert ID (standard)
+- Repo name is `ts-x509`; package name is `micro509`.
+- No CI workflows; checks are local.
+- `package.json` `exports` are generated by build tooling; do not hand-edit them casually.
+- `dist/` and `node_modules/` are present in-tree; treat them as generated/output, not source of truth.
+- `docs/rfc/` is vendored reference text, not authored project prose.
+- Highest-complexity source files: `src/verify.ts`, `src/crl.ts`, `src/parse.ts`, `src/ocsp.ts`, `src/extensions.ts`, `src/keys.ts`.
