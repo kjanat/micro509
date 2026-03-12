@@ -1,0 +1,26 @@
+# Progress Log
+
+PRD: pre-1-0-architecture-cleanup
+Started: 2026-03-13
+
+## Codebase Patterns
+
+- Keep top-level public modules easy to discover, but move complex engines behind nested internal modules when the domain seam is real.
+- Parse boundaries should reject malformed input early and loudly; typed result unions are for expected operational failures, not raw byte-structure rejection.
+- Cert and CSR built-in extensions should share one definition source for OID, encode, decode, and parse-assignment semantics; verifier support remains a separate concern.
+- Policy and name-constraints already behave like isolated engines inside `verify.ts`; the right move is extraction, not another layer of wrapper helpers around the monolith.
+- DER hardening belongs in one strict spine. Avoid ad hoc length parsing, TLV rebuilding, or child-walk helpers spread across parse domains.
+- Domain-owned public types are part of the API. Shared type buckets like `validation.ts` should be temporary at most.
+- Result harmonization should preserve domain meaning by moving stateful outcomes into `value`, not by flattening everything into one generic error enum.
+- Shared result primitives can land incrementally: first adopt structural base error interfaces in existing domains, then flip public unions to `Result<T, E>` in later tasks without creating import cycles.
+
+---
+<!-- Task logs below - APPEND ONLY -->
+
+## Task - [result-model-foundation]
+
+- Added shared public and internal result primitives in `src/result.ts` and `src/core/result.ts`.
+- Reused the new base error shapes in `src/verify.ts`, `src/identity.ts`, and `src/revocation.ts` without forcing the larger public result migration yet.
+- Exported the shared result primitives from `src/index.ts` and added a dedicated `result` build entry in `tsdown.config.ts`.
+- Files changed: `src/core/result.ts`, `src/result.ts`, `src/verify.ts`, `src/identity.ts`, `src/revocation.ts`, `src/index.ts`, `tsdown.config.ts`, `.opencode/state/pre-1-0-architecture-cleanup/prd.json`, `.opencode/state/pre-1-0-architecture-cleanup/progress.txt`
+- **Learnings:** base error interfaces are a low-risk bridge: they make later API unification easier without forcing every caller to migrate in the same commit.

@@ -1,3 +1,4 @@
+import type { Micro509Error } from './core/result.ts';
 import type { CrlApplicabilityFailureReason, CrlSource, RevocationReason } from './crl.ts';
 import { checkCertificateRevocationAgainstCrl } from './crl.ts';
 import type { OcspCertificateSource, OcspRequestSource, ParsedOcspResponse } from './ocsp.ts';
@@ -82,11 +83,13 @@ export interface CheckCertificateRevocationFailureDetails {
 	readonly indeterminateEvidence: readonly RevocationIndeterminateEvidence[];
 }
 
-export interface RevocationCheckUnknownResult {
+export interface RevocationCheckUnknownResult
+	extends Micro509Error<
+		CheckCertificateRevocationErrorCode,
+		CheckCertificateRevocationFailureDetails
+	> {
 	readonly ok: false;
 	readonly status: Extract<RevocationStatus, 'unknown'>;
-	readonly code: CheckCertificateRevocationErrorCode;
-	readonly message: string;
 	readonly details: CheckCertificateRevocationFailureDetails;
 }
 

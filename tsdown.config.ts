@@ -16,6 +16,7 @@ export default defineConfig({
 		pfx: 'src/pfx.ts',
 		pkcs7: 'src/pkcs7.ts',
 		'pkcs12-mac': 'src/pkcs12-mac.ts',
+		result: 'src/result.ts',
 		revocation: 'src/revocation.ts',
 		validation: 'src/validation.ts',
 		verify: 'src/verify.ts',

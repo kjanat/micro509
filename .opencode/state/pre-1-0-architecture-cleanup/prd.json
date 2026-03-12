@@ -1,0 +1,114 @@
+{
+	"prdName": "pre-1-0-architecture-cleanup",
+	"spec": "specs/pre-1-0-architecture-cleanup.md",
+	"description": "Refactor verification, DER parsing, extension handling, and public result models before the first stable release.",
+	"tasks": [
+		{
+			"id": "result-model-foundation",
+			"phase": 1,
+			"title": "Add shared result and error primitives",
+			"description": "Create public and internal result primitives in `src/result.ts` and `src/core/result.ts`. Done when:\n- `Result<T, E>` and base error shapes exist\n- at least one domain module can import them without cycles\n- the design clearly supports indexed verify failures and details-rich revocation errors",
+			"priority": "architecture",
+			"passes": true
+		},
+		{
+			"id": "der-spine-hardening",
+			"phase": 1,
+			"title": "Harden and centralize the DER spine",
+			"description": "Tighten low-level DER handling and make top-level parsers consume stricter shared helpers. Done when:\n- length encoding/decoding rejects overflow and non-minimal encodings\n- top-level parse entrypoints reject trailing DER data\n- bounded nesting checks exist for hostile deeply nested input\n- malformed regression tests cover the new failure cases",
+			"priority": "architecture",
+			"passes": false
+		},
+		{
+			"id": "split-domain-types",
+			"phase": 1,
+			"title": "Re-home public types to domain modules",
+			"description": "Move shared public types out of `src/validation.ts` into domain-owned modules. Done when:\n- policy types live in `src/policy.ts`\n- name-constraint types live in `src/name-constraints.ts`\n- identity and revocation types live with their owning domains\n- `src/validation.ts` is removed or reduced to a transient shim with an explicit removal step",
+			"depends": ["result-model-foundation"],
+			"priority": "architecture",
+			"passes": false
+		},
+		{
+			"id": "extract-policy-engine",
+			"phase": 2,
+			"title": "Extract the policy engine from verify",
+			"description": "Move RFC 9618 policy state and graph logic into `src/verify/policy-engine.ts`. Done when:\n- `src/verify.ts` delegates policy evaluation to one internal engine\n- policy state, transitions, and outcome derivation no longer live inline in `verify.ts`\n- existing policy and verify suites still cover the extracted behavior",
+			"depends": ["split-domain-types"],
+			"priority": "architecture",
+			"passes": false
+		},
+		{
+			"id": "extract-name-constraints",
+			"phase": 2,
+			"title": "Extract the name-constraints engine from verify",
+			"description": "Move name-constraint accumulation, matching, and directoryName subtree logic into `src/verify/name-constraints-engine.ts`. Done when:\n- `src/verify.ts` no longer owns per-name-form matcher logic\n- directoryName subtree comparison is isolated from verify orchestration\n- existing verify coverage plus focused internal tests protect the extracted engine",
+			"depends": ["split-domain-types", "der-spine-hardening"],
+			"priority": "architecture",
+			"passes": false
+		},
+		{
+			"id": "cert-csr-ext-registry",
+			"phase": 2,
+			"title": "Add the cert and CSR extension registry",
+			"description": "Create `src/extensions/registry.ts` for built-in certificate and CSR extensions. Done when:\n- built-in extension definitions own OID, encode, decode, and parse-assignment metadata\n- registry scope is explicitly limited to certificate and CSR extensions\n- verifier critical-extension support remains separate from registry support",
+			"depends": ["der-spine-hardening"],
+			"priority": "architecture",
+			"passes": false
+		},
+		{
+			"id": "rewire-parse-and-builders",
+			"phase": 3,
+			"title": "Rewire parse and builder paths to use the registry",
+			"description": "Replace the built-in extension switch in `src/parse.ts` and the duplicated built-in builder lists in `src/extensions.ts`. Done when:\n- cert/CSR parse dispatch uses registry definitions\n- cert/CSR builder paths use the same registry definitions\n- round-trip tests prove no semantic loss for built-in extensions",
+			"depends": ["cert-csr-ext-registry"],
+			"priority": "integration",
+			"passes": false
+		},
+		{
+			"id": "migrate-verify-identity",
+			"phase": 3,
+			"title": "Redesign verify and identity public APIs",
+			"description": "Adopt nested verify-domain inputs and shared result shapes across verify and identity surfaces. Done when:\n- verify inputs use nested `policy` and `nameConstraints` objects\n- verify and identity public failures are reported through the shared result model\n- `verify.ts` adapts identity failures at the composition seam instead of duplicating matcher concerns",
+			"depends": [
+				"result-model-foundation",
+				"split-domain-types",
+				"extract-policy-engine",
+				"extract-name-constraints"
+			],
+			"priority": "integration",
+			"passes": false
+		},
+		{
+			"id": "migrate-crl-ocsp-revocation",
+			"phase": 3,
+			"title": "Redesign CRL, OCSP, and revocation result surfaces",
+			"description": "Normalize revocation-facing APIs onto the shared result model without changing core parse-throw semantics. Done when:\n- CRL, OCSP, and revocation public results use `Result<T, E>`\n- status-bearing outcomes move into `value` payloads instead of mixed top-level unions\n- malformed-input behavior remains a parse-boundary concern, not a revocation-result concern",
+			"depends": ["result-model-foundation", "der-spine-hardening"],
+			"priority": "integration",
+			"passes": false
+		},
+		{
+			"id": "migrate-pfx-pkcs7-results",
+			"phase": 3,
+			"title": "Normalize PFX and PKCS7 result surfaces",
+			"description": "Bring PFX and PKCS7 public results onto the shared result model while preserving their domain-specific parse semantics. Done when:\n- PFX and PKCS7 public results use shared primitives\n- malformed/password/content-type distinctions stay explicit\n- tests prove the container APIs still surface the right failure category",
+			"depends": ["result-model-foundation", "der-spine-hardening"],
+			"priority": "integration",
+			"passes": false
+		},
+		{
+			"id": "finalize-exports-regression",
+			"phase": 4,
+			"title": "Finalize exports, docs, and regression coverage",
+			"description": "Finish the clean break by updating barrels, build/export config, docs, and the full validation matrix. Done when:\n- public exports point at the new domain-owned types and facades\n- spec/docs describe the new API boundaries and result model\n- `bun typecheck`, `bun test`, and `bun lint` pass after the refactor set",
+			"depends": [
+				"rewire-parse-and-builders",
+				"migrate-verify-identity",
+				"migrate-crl-ocsp-revocation",
+				"migrate-pfx-pkcs7-results"
+			],
+			"priority": "polish",
+			"passes": false
+		}
+	]
+}

@@ -6,6 +6,7 @@ import {
 	requireElement,
 	toHex,
 } from './asn1.ts';
+import type { IndexedMicro509Error } from './core/result.ts';
 import { type DerElement, readElement } from './der.ts';
 import type {
 	ExtendedKeyUsage,
@@ -123,12 +124,9 @@ export interface VerifyFailureDetails {
 		| 'common_name_mismatch';
 }
 
-export interface VerifyChainFailure {
+export interface VerifyChainFailure
+	extends IndexedMicro509Error<VerifyErrorCode, VerifyFailureDetails> {
 	readonly ok: false;
-	readonly code: VerifyErrorCode;
-	readonly message: string;
-	readonly index?: number;
-	readonly details?: VerifyFailureDetails;
 }
 
 // ---------------------------------------------------------------------------

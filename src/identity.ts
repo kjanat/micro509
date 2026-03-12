@@ -1,3 +1,4 @@
+import type { Micro509Error, Result } from './core/result.ts';
 import { normalizeIpAddress } from './ip.ts';
 import type { ParsedCertificate } from './parse.ts';
 import type { MatchableServiceIdentityInput, ServiceIdentityInput } from './validation.ts';
@@ -20,14 +21,14 @@ export interface MatchServiceIdentityFailureDetails {
 		| 'common_name_mismatch';
 }
 
-export type MatchServiceIdentityResult =
-	| { readonly ok: true }
-	| {
-			readonly ok: false;
-			readonly code: MatchServiceIdentityErrorCode;
-			readonly message: string;
-			readonly details?: MatchServiceIdentityFailureDetails;
-	  };
+export interface MatchServiceIdentityFailure
+	extends Micro509Error<MatchServiceIdentityErrorCode, MatchServiceIdentityFailureDetails> {
+	readonly ok: false;
+}
+
+export type MatchServiceIdentityResult = { readonly ok: true } | MatchServiceIdentityFailure;
+
+export type MatchServiceIdentityEvaluation = Result<void, MatchServiceIdentityFailure>;
 
 export interface MatchServiceIdentityInput {
 	readonly certificate: ParsedCertificate;

@@ -71,6 +71,8 @@ export type {
 } from './extensions.ts';
 export type {
 	MatchServiceIdentityErrorCode,
+	MatchServiceIdentityEvaluation,
+	MatchServiceIdentityFailure,
 	MatchServiceIdentityFailureDetails,
 	MatchServiceIdentityInput,
 	MatchServiceIdentityResult,
@@ -229,6 +231,7 @@ export {
 } from './pkcs7.ts';
 export type { ParsedPkcs12MacData, Pkcs12MacOptions } from './pkcs12-mac.ts';
 export { createPkcs12MacData, parsePkcs12MacData } from './pkcs12-mac.ts';
+export type { IndexedMicro509Error, Micro509Error, Result } from './result.ts';
 export type {
 	CheckCertificateRevocationErrorCode,
 	CheckCertificateRevocationFailureDetails,
