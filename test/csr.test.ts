@@ -131,21 +131,40 @@ describe('csr', () => {
 		]);
 	});
 
-	it('encodes policy extensions in CSR requested extensions', async () => {
+	it('round-trips policy extensions through CSR create/parse flows', async () => {
 		const keyPair = await generateKeyPair({ kind: 'ed25519' });
 		const csr = await createCertificateSigningRequest({
 			subject: { commonName: 'csr-policy.example' },
 			publicKey: keyPair.publicKey,
 			signerPrivateKey: keyPair.privateKey,
 			extensions: {
-				certificatePolicies: [{ policyIdentifier: '1.2.3.4.1' }],
+				certificatePolicies: [
+					{
+						policyIdentifier: '1.2.3.4.1',
+						policyQualifiers: [{ type: 'cps', uri: 'https://example.com/cps' }],
+					},
+				],
 				policyMappings: [{ issuerDomainPolicy: '1.2.3.4.1', subjectDomainPolicy: '1.2.3.4.2' }],
-				policyConstraints: { requireExplicitPolicy: 1 },
+				policyConstraints: { requireExplicitPolicy: 1, inhibitPolicyMapping: 0 },
 				inhibitAnyPolicy: { skipCerts: 2 },
 			},
 		});
 
 		const parsed = parseCertificateSigningRequestPem(csr.pem);
+		expect(parsed.certificatePolicies).toEqual([
+			{
+				policyIdentifier: '1.2.3.4.1',
+				policyQualifiers: [{ type: 'cps', uri: 'https://example.com/cps' }],
+			},
+		]);
+		expect(parsed.policyMappings).toEqual([
+			{ issuerDomainPolicy: '1.2.3.4.1', subjectDomainPolicy: '1.2.3.4.2' },
+		]);
+		expect(parsed.policyConstraints).toEqual({
+			requireExplicitPolicy: 1,
+			inhibitPolicyMapping: 0,
+		});
+		expect(parsed.inhibitAnyPolicy).toEqual({ skipCerts: 2 });
 		expect(findExtension(parsed.requestedExtensions, OIDS.certificatePolicies)?.critical).toBe(
 			false,
 		);

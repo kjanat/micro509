@@ -226,7 +226,7 @@
 			"description": "Add round-trip coverage for policy extension parsing/building. Done when:\n- each policy extension has positive round-trip tests\n- malformed fixtures exist\n- tests prove no required data loss",
 			"depends": ["build-policy-extensions", "parse-policy-extensions"],
 			"priority": "polish",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "implement-policy-state",

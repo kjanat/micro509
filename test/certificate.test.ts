@@ -243,7 +243,7 @@ describe('certificate', () => {
 		]);
 	});
 
-	it('encodes policy extensions in certificates', async () => {
+	it('round-trips policy extensions through certificate create/parse flows', async () => {
 		const { certificate } = await createSelfSignedCertificate({
 			subject: { commonName: 'policy-cert.example' },
 			extensions: {
@@ -278,6 +278,30 @@ describe('certificate', () => {
 		const policyConstraints = findExtension(parsed.extensions, OIDS.policyConstraints);
 		const inhibitAnyPolicy = findExtension(parsed.extensions, OIDS.inhibitAnyPolicy);
 
+		expect(parsed.certificatePolicies).toEqual([
+			{
+				policyIdentifier: '1.2.3.4.1',
+				policyQualifiers: [
+					{ type: 'cps', uri: 'https://example.com/cps' },
+					{
+						type: 'userNotice',
+						noticeRef: {
+							organization: 'Example PKI',
+							noticeNumbers: [7],
+						},
+						explicitText: 'policy notice',
+					},
+				],
+			},
+		]);
+		expect(parsed.policyMappings).toEqual([
+			{ issuerDomainPolicy: '1.2.3.4.1', subjectDomainPolicy: '1.2.3.4.2' },
+		]);
+		expect(parsed.policyConstraints).toEqual({
+			requireExplicitPolicy: 1,
+			inhibitPolicyMapping: 2,
+		});
+		expect(parsed.inhibitAnyPolicy).toEqual({ skipCerts: 3 });
 		expect(certificatePolicies?.critical).toBe(false);
 		expect(policyMappings?.critical).toBe(true);
 		expect(policyConstraints?.critical).toBe(true);

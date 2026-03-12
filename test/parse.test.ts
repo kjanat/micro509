@@ -620,6 +620,24 @@ describe('parse', () => {
 		);
 	});
 
+	it('rejects empty policyConstraints during parsing', async () => {
+		const certificate = await createSelfSignedCertificate({
+			subject: { commonName: 'bad-policy-constraints-parse.example' },
+			extensions: {
+				customExtensions: [
+					{
+						oid: OIDS.policyConstraints,
+						critical: true,
+						value: sequence([]),
+					},
+				],
+			},
+		});
+		expect(() => parseCertificatePem(certificate.certificate.pem)).toThrow(
+			'policyConstraints must set requireExplicitPolicy or inhibitPolicyMapping',
+		);
+	});
+
 	it('parses nameConstraints with directoryName form', async () => {
 		const root = await createSelfSignedCertificate({
 			subject: { commonName: 'DirName NC CA' },
