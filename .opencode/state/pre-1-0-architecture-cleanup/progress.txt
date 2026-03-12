@@ -15,6 +15,7 @@ Started: 2026-03-13
 - Shared result primitives can land incrementally: first adopt structural base error interfaces in existing domains, then flip public unions to `Result<T, E>` in later tasks without creating import cycles.
 - Top-level raw-DER parsers should enter through `readSequenceChildren(..., { maxDepth: DEFAULT_MAX_DER_DEPTH })`; nested helpers can then parse exact slices without reintroducing trailing-data acceptance.
 - Type re-home works best as a two-step move: make the new domain module the source of truth first, then keep the old shared file as a pure re-export shim until later cleanup removes it entirely.
+- When a public file name already occupies the obvious directory path (`verify.ts`), extract internal engines as sibling `*-engine.ts` modules instead of forcing a disruptive facade rename just to get nested paths.
 
 ---
 <!-- Task logs below - APPEND ONLY -->
@@ -43,3 +44,11 @@ Started: 2026-03-13
 - Replaced the old `src/validation.ts` type bucket with a documented compatibility shim that re-exports from the new domain modules and calls out its planned removal.
 - Files changed: `src/policy.ts`, `src/name-constraints.ts`, `src/identity.ts`, `src/revocation.ts`, `src/verify.ts`, `src/index.ts`, `src/validation.ts`, `.opencode/state/pre-1-0-architecture-cleanup/prd.json`, `.opencode/state/pre-1-0-architecture-cleanup/progress.txt`
 - **Learnings:** a compatibility shim preserves migration headroom without letting the old file keep owning behavior; the key is to ensure all internal imports switch to the new domain modules immediately.
+
+## Task - [extract-policy-engine]
+
+- Moved the RFC 9618 policy graph/state machine out of `src/verify.ts` into the new internal module `src/policy-engine.ts`.
+- Rewired `src/verify.ts` to build policy state via `createPolicyValidationState()` and delegate policy evaluation to `evaluatePolicyChain()`, then map engine failures back onto the existing verify failure shape.
+- Kept current policy behavior and public outputs intact while removing the inline policy graph implementation from `src/verify.ts`.
+- Files changed: `src/policy-engine.ts`, `src/verify.ts`, `.opencode/state/pre-1-0-architecture-cleanup/prd.json`, `.opencode/state/pre-1-0-architecture-cleanup/progress.txt`
+- **Learnings:** extracting the engine behind one state-constructor + one evaluator keeps the orchestration seam small and preserves existing tests while the public API is still in flux.

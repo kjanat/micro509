@@ -35,7 +35,7 @@
 			"description": "Move RFC 9618 policy state and graph logic into `src/verify/policy-engine.ts`. Done when:\n- `src/verify.ts` delegates policy evaluation to one internal engine\n- policy state, transitions, and outcome derivation no longer live inline in `verify.ts`\n- existing policy and verify suites still cover the extracted behavior",
 			"depends": ["split-domain-types"],
 			"priority": "architecture",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "extract-name-constraints",
