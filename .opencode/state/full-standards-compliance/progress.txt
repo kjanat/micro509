@@ -5,6 +5,7 @@ Started: 2026-03-12
 
 ## Codebase Patterns
 
+- Malformed-DER regression corpora land cleanly as one focused public-parser test file: generate a valid artifact per domain, apply a small structural mutation per case, and assert failures stay deterministic `Error`s instead of `TypeError`/`RangeError` crashes.
 - Runtime/import docs should publish one explicit matrix of required globals (`crypto.subtle`, `TextEncoder`, `TextDecoder`, `atob`, `btoa`) and pair it with root-vs-subpath examples so portability and tree-shaking guidance stay in one place.
 - For SAN `otherName`, classify supported OID-specific payloads at parse time (like SRV-ID), preserve unsupported `otherName` encodings as raw unknown entries, and reject malformed encodings for the known OIDs instead of silently downgrading them.
 - OCSP responder discovery should stay pure and metadata-only: expose AIA-derived responder URIs plus caller-supplied local responder config as typed candidates, and dedupe configured duplicates by keeping the most specific entry (one with a bound responder cert).
@@ -486,3 +487,11 @@ Started: 2026-03-12
 - Ran the full feedback loop: `bun fmt`, `bun typecheck`, `bun lint`, `bun test`, `bun bd`.
 - Files changed: `test/oracles/openssl.ts`, `test/differential.test.ts`, `docs/DIFF-HARNESS.md`, `docs/PKIX-SCOPE.md`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** differential harnesses stay stable when the mature oracle generates or validates standard artifacts, while this repo compares only coarse public outcomes and documents the richer surfaces that still need focused fixture coverage.
+
+## Task - [add-malformed-der-corpus]
+
+- Added `test/malformed-der.test.ts` as a focused malformed-DER corpus for certificate, CRL, OCSP request/response, and policy-extension parser regressions.
+- Covered both truncated fuzz-style inputs and small structural ASN.1 mutations, and asserted each malformed case fails with a deterministic `Error` instead of a `TypeError`/`RangeError` crash.
+- Ran the full feedback loop: `bun fmt`, `bun lint`, `bun typecheck`, `bun test`, `bun bd`.
+- Files changed: `test/malformed-der.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** targeted malformed corpora are easiest to maintain when each case starts from a valid public artifact and mutates exactly one structural assumption, so failure intent stays obvious and parser regressions stay local.

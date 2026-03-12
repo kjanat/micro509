@@ -498,7 +498,7 @@
 				"parse-srvid-othername"
 			],
 			"priority": "polish",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "add-pkits-harness",
