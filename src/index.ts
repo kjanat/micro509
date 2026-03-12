@@ -70,12 +70,19 @@ export type {
 	UserNoticePolicyQualifierInfo,
 } from './extensions.ts';
 export type {
+	DnsServiceIdentityInput,
+	IpServiceIdentityInput,
 	MatchServiceIdentityErrorCode,
 	MatchServiceIdentityEvaluation,
 	MatchServiceIdentityFailure,
 	MatchServiceIdentityFailureDetails,
 	MatchServiceIdentityInput,
 	MatchServiceIdentityResult,
+	ServiceIdentityInput,
+	ServiceIdentityType,
+	SrvServiceIdentityInput,
+	UriServiceIdentityInput,
+	VerifyServiceIdentityInput,
 } from './identity.ts';
 export { matchCertificateServiceIdentity, matchServiceIdentity } from './identity.ts';
 export type {
@@ -133,6 +140,7 @@ export type {
 	NameObject,
 	RelativeDistinguishedNameInput,
 } from './name.ts';
+export type { InitialNameConstraintsInput } from './name-constraints.ts';
 export type {
 	CreateOcspRequestInput,
 	CreateOcspRequestItemInput,
@@ -231,6 +239,11 @@ export {
 } from './pkcs7.ts';
 export type { ParsedPkcs12MacData, Pkcs12MacOptions } from './pkcs12-mac.ts';
 export { createPkcs12MacData, parsePkcs12MacData } from './pkcs12-mac.ts';
+export type {
+	ConstrainedPolicy,
+	PolicyValidationInput,
+	PolicyValidationOutcome,
+} from './policy.ts';
 export type { IndexedMicro509Error, Micro509Error, Result } from './result.ts';
 export type {
 	CheckCertificateRevocationErrorCode,
@@ -252,26 +265,13 @@ export type {
 	RevocationIndeterminateEvidence,
 	RevocationIndeterminateReasonCode,
 	RevocationOcspEvidenceInput,
+	RevocationStatus,
 } from './revocation.ts';
 export {
 	checkCertificateRevocation,
 	getCertificateOcspResponderUris,
 	resolveOcspResponderCandidates,
 } from './revocation.ts';
-export type {
-	ConstrainedPolicy,
-	DnsServiceIdentityInput,
-	InitialNameConstraintsInput,
-	IpServiceIdentityInput,
-	PolicyValidationInput,
-	PolicyValidationOutcome,
-	RevocationStatus,
-	ServiceIdentityInput,
-	ServiceIdentityType,
-	SrvServiceIdentityInput,
-	UriServiceIdentityInput,
-	VerifyServiceIdentityInput,
-} from './validation.ts';
 export type {
 	BuildCandidatePathInput,
 	BuildCandidatePathResult,

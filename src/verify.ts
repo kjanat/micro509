@@ -16,9 +16,11 @@ import type {
 	PolicyInformation,
 	PolicyQualifierInfo,
 } from './extensions.ts';
+import type { VerifyServiceIdentityInput } from './identity.ts';
 import { matchServiceIdentity } from './identity.ts';
 import { allOnesMaskForIpAddress, decodeIpAddress, parseIpAddressToBytes } from './ip.ts';
 import { nameFieldKeyFromOid } from './name.ts';
+import type { InitialNameConstraintsInput } from './name-constraints.ts';
 import { OIDS } from './oids.ts';
 import type {
 	ParsedCertificate,
@@ -33,14 +35,12 @@ import {
 	parseCertificateSigningRequestPem,
 } from './parse.ts';
 import { splitPemBlocks } from './pem.ts';
-import { verifySignedData } from './sig-verify.ts';
 import type {
 	ConstrainedPolicy,
-	InitialNameConstraintsInput,
 	PolicyValidationInput,
 	PolicyValidationOutcome,
-	VerifyServiceIdentityInput,
-} from './validation.ts';
+} from './policy.ts';
+import { verifySignedData } from './sig-verify.ts';
 
 // ---------------------------------------------------------------------------
 // Source types

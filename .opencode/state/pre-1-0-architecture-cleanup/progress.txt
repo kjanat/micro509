@@ -14,6 +14,7 @@ Started: 2026-03-13
 - Result harmonization should preserve domain meaning by moving stateful outcomes into `value`, not by flattening everything into one generic error enum.
 - Shared result primitives can land incrementally: first adopt structural base error interfaces in existing domains, then flip public unions to `Result<T, E>` in later tasks without creating import cycles.
 - Top-level raw-DER parsers should enter through `readSequenceChildren(..., { maxDepth: DEFAULT_MAX_DER_DEPTH })`; nested helpers can then parse exact slices without reintroducing trailing-data acceptance.
+- Type re-home works best as a two-step move: make the new domain module the source of truth first, then keep the old shared file as a pure re-export shim until later cleanup removes it entirely.
 
 ---
 <!-- Task logs below - APPEND ONLY -->
@@ -34,3 +35,11 @@ Started: 2026-03-13
 - Added regression coverage for non-minimal lengths, trailing DER data, and max-depth failures in `test/internals.test.ts` and `test/malformed-der.test.ts`.
 - Files changed: `src/der.ts`, `src/asn1.ts`, `src/parse.ts`, `src/crl.ts`, `src/ocsp.ts`, `src/pfx.ts`, `src/pkcs7.ts`, `test/internals.test.ts`, `test/malformed-der.test.ts`, `.opencode/state/pre-1-0-architecture-cleanup/prd.json`, `.opencode/state/pre-1-0-architecture-cleanup/progress.txt`
 - **Learnings:** the safest incremental spine change is to make the root parse stricter first, then let internal exact-slice parsers stay small; this catches hostile input without forcing a full parser rewrite in one step.
+
+## Task - [split-domain-types]
+
+- Added `src/policy.ts` and `src/name-constraints.ts` as the new source-of-truth homes for policy and initial name-constraint types.
+- Moved service-identity input types into `src/identity.ts` and revocation status typing into `src/revocation.ts`, then updated `src/verify.ts` and `src/index.ts` to import and export the domain-owned types directly.
+- Replaced the old `src/validation.ts` type bucket with a documented compatibility shim that re-exports from the new domain modules and calls out its planned removal.
+- Files changed: `src/policy.ts`, `src/name-constraints.ts`, `src/identity.ts`, `src/revocation.ts`, `src/verify.ts`, `src/index.ts`, `src/validation.ts`, `.opencode/state/pre-1-0-architecture-cleanup/prd.json`, `.opencode/state/pre-1-0-architecture-cleanup/progress.txt`
+- **Learnings:** a compatibility shim preserves migration headroom without letting the old file keep owning behavior; the key is to ensure all internal imports switch to the new domain modules immediately.

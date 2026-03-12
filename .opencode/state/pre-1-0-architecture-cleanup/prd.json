@@ -26,7 +26,7 @@
 			"description": "Move shared public types out of `src/validation.ts` into domain-owned modules. Done when:\n- policy types live in `src/policy.ts`\n- name-constraint types live in `src/name-constraints.ts`\n- identity and revocation types live with their owning domains\n- `src/validation.ts` is removed or reduced to a transient shim with an explicit removal step",
 			"depends": ["result-model-foundation"],
 			"priority": "architecture",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "extract-policy-engine",

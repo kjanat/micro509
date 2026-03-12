@@ -1,7 +1,37 @@
 import type { Micro509Error, Result } from './core/result.ts';
 import { normalizeIpAddress } from './ip.ts';
 import type { ParsedCertificate } from './parse.ts';
-import type { MatchableServiceIdentityInput, ServiceIdentityInput } from './validation.ts';
+
+export interface DnsServiceIdentityInput {
+	readonly type: 'dns';
+	readonly value: string;
+	readonly allowCommonNameFallback?: boolean;
+}
+
+export interface IpServiceIdentityInput {
+	readonly type: 'ip';
+	readonly value: string;
+}
+
+export interface UriServiceIdentityInput {
+	readonly type: 'uri';
+	readonly value: string;
+}
+
+export interface SrvServiceIdentityInput {
+	readonly type: 'srv';
+	readonly value: string;
+}
+
+export type ServiceIdentityInput =
+	| DnsServiceIdentityInput
+	| IpServiceIdentityInput
+	| UriServiceIdentityInput
+	| SrvServiceIdentityInput;
+
+export type ServiceIdentityType = ServiceIdentityInput['type'];
+export type MatchableServiceIdentityInput = ServiceIdentityInput;
+export type VerifyServiceIdentityInput = DnsServiceIdentityInput | IpServiceIdentityInput;
 
 export type MatchServiceIdentityErrorCode =
 	| 'subject_alt_name_mismatch'

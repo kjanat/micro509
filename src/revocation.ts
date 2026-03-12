@@ -5,7 +5,8 @@ import type { OcspCertificateSource, OcspRequestSource, ParsedOcspResponse } fro
 import { validateOcspResponse } from './ocsp.ts';
 import type { ParsedCertificate } from './parse.ts';
 import { parseCertificateDer, parseCertificatePem } from './parse.ts';
-import type { RevocationStatus } from './validation.ts';
+
+export type RevocationStatus = 'good' | 'revoked' | 'unknown';
 
 export type RevocationEvidenceKind = 'crl' | 'ocsp';
 export type RevocationCertificateSource = string | Uint8Array | ParsedCertificate;
