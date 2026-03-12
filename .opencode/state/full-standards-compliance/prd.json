@@ -475,7 +475,7 @@
 			"description": "Add RFC 6125 identity fixtures and regressions. Done when:\n- DNS, IP, URI, SRV, wildcard, IDNA, and CN-compat cases exist\n- positive and negative paths are covered\n- docs can claim only shipped identifier types",
 			"depends": ["tighten-cn-fallback"],
 			"priority": "polish",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "update-runtime-matrix-docs",

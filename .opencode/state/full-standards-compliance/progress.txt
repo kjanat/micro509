@@ -461,3 +461,11 @@ Started: 2026-03-12
 - Ran the full feedback loop: `bun fmt`, `bun typecheck`, `bun lint`, `bun test`, `bun bd`.
 - Files changed: `test/helpers.ts`, `test/crl.test.ts`, `test/revocation.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** CRL fixture coverage is strongest at the revocation boundary when each evidence shape maps to a distinct public outcome - revoked for complete/delta/indirect evidence, unknown plus indeterminate details for scope mismatch.
+
+## Task - [add-identity-fixtures]
+
+- Added `test/identity-fixtures.test.ts` with focused RFC 6125 fixture coverage for DNS-ID, IP-ID, URI-ID, SRV-ID, wildcard, IDNA, and opt-in CN-compat behavior, each with explicit pass/fail assertions.
+- Updated `README.md` and `docs/PKIX-SCOPE.md` so the RFC 6125 notes now claim the shipped `matchServiceIdentity()` surface accurately and point at the focused identity fixture file.
+- Ran the full feedback loop: `bun fmt`, `bun typecheck`, `bun lint`, `bun test`, `bun bd`.
+- Files changed: `test/identity-fixtures.test.ts`, `README.md`, `docs/PKIX-SCOPE.md`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** focused identity fixture coverage works best as a public-API-first matrix file with one tiny issuance helper and paired pass/fail cases per shipped identifier form, while broader boundary tests keep covering matcher edge details and wrapper composition.

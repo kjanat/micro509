@@ -6,7 +6,7 @@
 | -------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | RFC 5280 path validation   | `partial` | core path validation, policy inputs/processing, and initial subtree inputs ship; full revocation integration and complete PKITS coverage are not complete yet                                                |
 | RFC 6960 OCSP              | `partial` | request/response parsing, signature checks, responder binding/authorization, nonce/request matching, freshness checks, and full request coverage ship; local responder-policy acceptance is still incomplete |
-| RFC 6125 service identity  | `partial` | DNS-ID and IP-ID checks ship today inside verification helpers; separate identity APIs, URI-ID, SRV-ID, and IDNA are not complete yet                                                                        |
+| RFC 6125 service identity  | `partial` | `matchServiceIdentity()` ships DNS-ID, IP-ID, URI-ID, SRV-ID, wildcard, IDNA, and opt-in CN-compat checks; verification helpers still wire DNS/IP identities only                                            |
 | RFC 9618 policy validation | `partial` | RFC 9618-style policy state, enforcement, outputs, and focused PKITS coverage ship; broader conformance evidence is still incomplete                                                                         |
 
 ## 1. Define the boundary up front
@@ -91,8 +91,11 @@ Current GeneralName matrix for `nameConstraints`:
 
 - [ ] Keep hostname/service-name matching in a separate API from path validation.
 - [x] For currently supported identity types (`dNSName`, `iPAddress`), match `subjectAltName` entries of the corresponding type first.
+- [x] `matchServiceIdentity()` supports `dNSName`, `iPAddress`, URI-ID, and SRV-ID matching with wildcard and IDNA coverage.
 - [x] Only support CN fallback as an explicit compatibility mode, because RFC 6125 treats CN-ID usage as existing practice and prefers `subjectAltName`; CN comparison is deprecated. (IETF Datatracker[^rfc6125])
 - [x] Make wildcard behavior explicit and test it hard.
+
+Focused RFC 6125 identity fixtures live in [`test/identity-fixtures.test.ts`](../test/identity-fixtures.test.ts).
 
 ## 9. EKU / purpose checks
 
@@ -169,7 +172,7 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
 ### Honest wording
 
 - “Validates candidate certificate paths with configurable trust anchors and typed results.”
-- “Revocation is a separate API; service identity matching is currently exposed through verification helpers and is planned as a separate API.”
+- “Revocation is a separate API; `matchServiceIdentity()` handles shipped RFC 6125 identifier matching, while verification helpers currently compose DNS/IP identity checks on top of path validation.”
 - “Advanced RFC 5280 features such as policy processing and full name-constraint handling are not yet complete.” (IETF Datatracker[^rfc5280])
 
 The main monster under the bed is simple: **once you say “full RFC 5280,” you’ve signed up for policy processing, name constraints, critical-extension behavior, and trust-anchor semantics — not just signatures and dates.** (IETF Datatiracker[^rfc5280])
