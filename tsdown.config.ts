@@ -1,7 +1,25 @@
 import { defineConfig } from 'tsdown';
 
 export default defineConfig({
-	entry: 'src/index.ts',
+	entry: {
+		index: 'src/index.ts',
+		certificate: 'src/certificate.ts',
+		crl: 'src/crl.ts',
+		csr: 'src/csr.ts',
+		extensions: 'src/extensions.ts',
+		identity: 'src/identity.ts',
+		keys: 'src/keys.ts',
+		name: 'src/name.ts',
+		ocsp: 'src/ocsp.ts',
+		parse: 'src/parse.ts',
+		pem: 'src/pem.ts',
+		pfx: 'src/pfx.ts',
+		pkcs7: 'src/pkcs7.ts',
+		'pkcs12-mac': 'src/pkcs12-mac.ts',
+		revocation: 'src/revocation.ts',
+		validation: 'src/validation.ts',
+		verify: 'src/verify.ts',
+	},
 	format: ['esm'],
 	dts: { oxc: true },
 	clean: true,

@@ -82,7 +82,7 @@
 				"tsdown-multi-entry-spike"
 			],
 			"priority": "integration",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "preserve-module-build",

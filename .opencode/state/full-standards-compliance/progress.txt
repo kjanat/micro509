@@ -13,6 +13,7 @@ Started: 2026-03-12
 - New domain boundaries can ship as root-exported source modules first; keep broader shared unions in `src/validation.ts`, and fail closed inside the new boundary for not-yet-wired identity forms.
 - Package exports are driven by `tsdown.config.ts`; do not hand-edit generated `package.json` exports.
 - For stable package subpaths, prefer a named tsdown `entry` object; let `exports: true` derive package exports from entry keys.
+- Adding a new public package subpath is a tsdown config change first: add the source module to the named `entry` map, rebuild, and let generated `package.json` exports update.
 - Root `micro509` export should stay ergonomic; granular domains should live behind stable subpath exports.
 - New boundary modules should define neutral shared-source aliases locally; avoid leaking CRL/OCSP-branded source types into orchestration APIs.
 - Distribution-point model change is a clean break; no temporary URI-only compat alias.
@@ -94,3 +95,10 @@ Started: 2026-03-12
 - Re-exported the new revocation API from `src/index.ts` and added direct boundary coverage in `test/revocation.test.ts` for the fail-closed no-evidence path.
 - Files changed: `src/revocation.ts`, `src/index.ts`, `test/revocation.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** scaffolded orchestration APIs should fail closed with typed `unknown` results, but keep evidence ownership neutral so later CRL and OCSP normalization can plug in without conflicting source-of-truth rules.
+
+## Task - [add-subpath-entrypoints]
+
+- Added a named multi-entry `entry` map in `tsdown.config.ts` for the root barrel plus domain modules, including verify, identity, revocation, parse, keys, CRL, and OCSP subpaths.
+- Regenerated `package.json` exports via `bun bd`, which now exposes stable package subpaths without manual export edits.
+- Files changed: `tsdown.config.ts`, `package.json`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** tsdown's generated exports stay aligned with the configured entry map, so package-surface changes should flow through build output instead of hand-maintained export metadata.
