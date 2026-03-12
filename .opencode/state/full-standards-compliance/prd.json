@@ -118,7 +118,7 @@
 			"description": "Add initial permitted/excluded subtree input types for path validation. Done when:\n- public inputs can carry initial subtrees\n- exports include the new shapes\n- default behavior remains explicit",
 			"depends": ["define-validation-boundaries"],
 			"priority": "architecture",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "plumb-verify-input-state",

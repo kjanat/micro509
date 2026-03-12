@@ -22,6 +22,7 @@ Started: 2026-03-12
 - CRL applicability needs structured certificate DP + CRL IDP objects; URI-only projections are debug/display data, not enough for RFC 5280 scope decisions.
 - Standards docs should keep README + `docs/PKIX-SCOPE.md` aligned around a short `implemented` / `partial` / `not yet` matrix, then narrow per-feature wording to shipped behavior.
 - New verify-surface knobs should land as direct optional fields on input objects, then flow through wrapper helpers unchanged until enforcement work is ready.
+- When a verify-surface task adds another RFC input family, widen every verify/profile input interface plus the shared forwarding helper in one pass so wrappers stay aligned with raw path validation.
 
 ## Validation Commands
 
@@ -110,3 +111,10 @@ Started: 2026-03-12
 - Forwarded defined policy knobs through verify wrapper helpers without changing current validation behavior, and added coverage in `test/verify.test.ts`.
 - Files changed: `src/verify.ts`, `test/verify.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** policy/state scaffolding can ship safely as typed passthrough fields first, as long as wrapper composition preserves the inputs verbatim for later enforcement work.
+
+## Task - [add-name-constraint-inputs]
+
+- Added `InitialNameConstraintsInput` to raw path validation, chain verification, and profile helper inputs in `src/verify.ts`.
+- Forwarded `permittedSubtrees` and `excludedSubtrees` through the shared verify helper without changing current validation behavior, and added coverage in `test/verify.test.ts` for both profile and raw-path entry points.
+- Files changed: `src/verify.ts`, `test/verify.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** follow the same passthrough pattern for new RFC input families until enforcement lands; keeping one shared copy helper avoids wrapper drift.

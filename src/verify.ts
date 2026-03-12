@@ -8,7 +8,11 @@ import {
 } from './parse.ts';
 import { splitPemBlocks } from './pem.ts';
 import { verifySignedData } from './sig-verify.ts';
-import type { PolicyValidationInput, VerifyServiceIdentityInput } from './validation.ts';
+import type {
+	InitialNameConstraintsInput,
+	PolicyValidationInput,
+	VerifyServiceIdentityInput,
+} from './validation.ts';
 
 // ---------------------------------------------------------------------------
 // Source types
@@ -114,7 +118,9 @@ export type BuildCandidatePathResult =
 // Validate candidate path
 // ---------------------------------------------------------------------------
 
-export interface ValidateCandidatePathInput extends PolicyValidationInput {
+export interface ValidateCandidatePathInput
+	extends PolicyValidationInput,
+		InitialNameConstraintsInput {
 	readonly chain: readonly ParsedCertificate[];
 	readonly at?: Date;
 	readonly purpose?: VerifyPurpose;
@@ -127,7 +133,9 @@ export type ValidateCandidatePathResult = { readonly ok: true } | VerifyChainFai
 // Verify chain (convenience composition)
 // ---------------------------------------------------------------------------
 
-export interface VerifyCertificateChainInput extends PolicyValidationInput {
+export interface VerifyCertificateChainInput
+	extends PolicyValidationInput,
+		InitialNameConstraintsInput {
 	readonly leaf: CertificateSource;
 	readonly intermediates?: readonly CertificateSource[];
 	readonly roots: readonly CertificateSource[];
@@ -165,7 +173,10 @@ export type VerifyRequestResult =
 // Validation profile inputs
 // ---------------------------------------------------------------------------
 
-export interface ValidateForTlsServerInput extends BuildCandidatePathInput, PolicyValidationInput {
+export interface ValidateForTlsServerInput
+	extends BuildCandidatePathInput,
+		PolicyValidationInput,
+		InitialNameConstraintsInput {
 	readonly leaf: CertificateSource;
 	readonly intermediates?: readonly CertificateSource[];
 	readonly roots: readonly CertificateSource[];
@@ -174,11 +185,18 @@ export interface ValidateForTlsServerInput extends BuildCandidatePathInput, Poli
 	readonly serviceIdentity?: VerifyServiceIdentityInput;
 }
 
-export interface ValidateForTlsClientInput extends BuildCandidatePathInput, PolicyValidationInput {}
+export interface ValidateForTlsClientInput
+	extends BuildCandidatePathInput,
+		PolicyValidationInput,
+		InitialNameConstraintsInput {}
 export interface ValidateForCodeSigningInput
 	extends BuildCandidatePathInput,
-		PolicyValidationInput {}
-export interface ValidateForCaInput extends BuildCandidatePathInput, PolicyValidationInput {}
+		PolicyValidationInput,
+		InitialNameConstraintsInput {}
+export interface ValidateForCaInput
+	extends BuildCandidatePathInput,
+		PolicyValidationInput,
+		InitialNameConstraintsInput {}
 
 // ---------------------------------------------------------------------------
 // Internal constants
@@ -465,7 +483,7 @@ export async function verifyCertificateChain(
 		chain: buildResult.value.chain,
 		...(input.at !== undefined && { at: input.at }),
 		...(input.purpose !== undefined && { purpose: input.purpose }),
-		...copyPolicyValidationInput(input),
+		...copyValidationInputs(input),
 		...(input.allowSelfSignedLeaf !== undefined && {
 			allowSelfSignedLeaf: input.allowSelfSignedLeaf,
 		}),
@@ -590,7 +608,7 @@ export function trustAnchorFromCertificate(certificate: ParsedCertificate): Trus
 
 /** Extracts defined optional fields from a base input for safe forwarding. */
 function baseChainInput(
-	input: BuildCandidatePathInput & PolicyValidationInput,
+	input: BuildCandidatePathInput & PolicyValidationInput & InitialNameConstraintsInput,
 ): VerifyCertificateChainInput {
 	return {
 		leaf: input.leaf,
@@ -602,11 +620,13 @@ function baseChainInput(
 			trustAnchors: input.trustAnchors,
 		}),
 		...(input.at !== undefined && { at: input.at }),
-		...copyPolicyValidationInput(input),
+		...copyValidationInputs(input),
 	};
 }
 
-function copyPolicyValidationInput(input: PolicyValidationInput): PolicyValidationInput {
+function copyValidationInputs(
+	input: PolicyValidationInput & InitialNameConstraintsInput,
+): PolicyValidationInput & InitialNameConstraintsInput {
 	return {
 		...(input.initialPolicySet === undefined ? {} : { initialPolicySet: input.initialPolicySet }),
 		...(input.requireExplicitPolicy === undefined
@@ -616,6 +636,10 @@ function copyPolicyValidationInput(input: PolicyValidationInput): PolicyValidati
 			? {}
 			: { inhibitPolicyMapping: input.inhibitPolicyMapping }),
 		...(input.inhibitAnyPolicy === undefined ? {} : { inhibitAnyPolicy: input.inhibitAnyPolicy }),
+		...(input.permittedSubtrees === undefined
+			? {}
+			: { permittedSubtrees: input.permittedSubtrees }),
+		...(input.excludedSubtrees === undefined ? {} : { excludedSubtrees: input.excludedSubtrees }),
 	};
 }
 

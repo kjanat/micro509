@@ -1885,6 +1885,36 @@ describe('validation profiles', () => {
 		expect(result.ok).toBe(true);
 	});
 
+	it('validateForTlsClient accepts initial name constraint inputs', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Initial Name Constraint Root' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Initial Name Constraint Root' },
+			subject: { commonName: 'initial-name-constraint-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['clientAuth'],
+				subjectAltNames: [{ type: 'dns', value: 'initial-name-constraint-leaf.example' }],
+			},
+		});
+		const result = await validateForTlsClient({
+			leaf: leaf.pem,
+			roots: [root.certificate.pem],
+			permittedSubtrees: [{ base: { type: 'dns', value: 'example.com' } }],
+			excludedSubtrees: [{ base: { type: 'dns', value: 'forbidden.example.com' } }],
+		});
+		expect(result.ok).toBe(true);
+	});
+
 	it('validateForCodeSigning checks chain + codeSigning EKU', async () => {
 		const root = await createSelfSignedCertificate({
 			subject: { commonName: 'Code Sign Root' },
@@ -2011,6 +2041,19 @@ describe('validateCandidatePath direct', () => {
 			requireExplicitPolicy: true,
 			inhibitPolicyMapping: true,
 			inhibitAnyPolicy: true,
+		});
+		expect(result.ok).toBe(true);
+	});
+
+	it('accepts initial name constraint inputs on raw path validation', async () => {
+		const chain = await issueChain();
+		const leafParsed = parseCertificatePem(chain.leaf.pem);
+		const intParsed = parseCertificatePem(chain.intermediate.pem);
+		const rootParsed = parseCertificatePem(chain.root.certificate.pem);
+		const result = await validateCandidatePath({
+			chain: [leafParsed, intParsed, rootParsed],
+			permittedSubtrees: [{ base: { type: 'dns', value: 'example.com' } }],
+			excludedSubtrees: [{ base: { type: 'dns', value: 'forbidden.example.com' } }],
 		});
 		expect(result.ok).toBe(true);
 	});
