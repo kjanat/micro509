@@ -7,13 +7,25 @@ import {
 	decodeExtensions,
 	defineExtensionDecoder,
 	defineExtensionDecoderMap,
+	exportSpkiDer,
 	findExtension,
 	generateKeyPair,
 	parseCertificateDer,
 	parseCertificatePem,
+	parseCertificateSigningRequestDer,
 	parseCertificateSigningRequestPem,
 } from '#micro509';
-import { objectIdentifier, sequence, setOf, tlv } from '#micro509/der.ts';
+import {
+	bitString,
+	integerFromNumber,
+	nullValue,
+	objectIdentifier,
+	sequence,
+	setOf,
+	time,
+	tlv,
+} from '#micro509/der.ts';
+import { encodeName } from '#micro509/name.ts';
 import OIDS from '#micro509/oids.ts';
 import { parseNameConstraints } from '#micro509/parse.ts';
 
@@ -453,6 +465,50 @@ describe('parse', () => {
 		const parsed = parseCertificateSigningRequestPem(csr.pem);
 		expect(parsed.subject.values.commonName).toBe('no-ext-csr.example');
 		// No extensions → requestedExtensions should be empty
+		expect(parsed.requestedExtensions).toHaveLength(0);
+	});
+
+	it('parses certificate without extensions field', async () => {
+		const keys = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
+		const signatureAlgorithm = sequence([
+			objectIdentifier(OIDS.sha256WithRSAEncryption),
+			nullValue(),
+		]);
+		const name = encodeName({ commonName: 'no-ext-cert.example' });
+		const spki = await exportSpkiDer(keys.publicKey);
+		const tbsCertificate = sequence([
+			integerFromNumber(1),
+			signatureAlgorithm,
+			name,
+			sequence([time(new Date('2024-01-01T00:00:00Z')), time(new Date('2025-01-01T00:00:00Z'))]),
+			name,
+			spki,
+		]);
+		const der = sequence([tbsCertificate, signatureAlgorithm, bitString(Uint8Array.of(0x00))]);
+		const parsed = parseCertificateDer(der);
+		expect(parsed.subject.values.commonName).toBe('no-ext-cert.example');
+		expect(parsed.extensions).toHaveLength(0);
+	});
+
+	it('parses CSR without attributes field', async () => {
+		const keys = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
+		const signatureAlgorithm = sequence([
+			objectIdentifier(OIDS.sha256WithRSAEncryption),
+			nullValue(),
+		]);
+		const spki = await exportSpkiDer(keys.publicKey);
+		const certificationRequestInfo = sequence([
+			integerFromNumber(0),
+			encodeName({ commonName: 'bare-csr.example' }),
+			spki,
+		]);
+		const der = sequence([
+			certificationRequestInfo,
+			signatureAlgorithm,
+			bitString(Uint8Array.of(0x00)),
+		]);
+		const parsed = parseCertificateSigningRequestDer(der);
+		expect(parsed.subject.values.commonName).toBe('bare-csr.example');
 		expect(parsed.requestedExtensions).toHaveLength(0);
 	});
 

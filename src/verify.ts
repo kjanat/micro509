@@ -1459,8 +1459,8 @@ function sanToConstraintCheckable(
 		case 'unknown':
 			return undefined;
 		default: {
-			const _exhaustive: never = san;
-			throw new Error(`Unhandled SubjectAltName type: ${String(_exhaustive)}`);
+			const exhaustive: never = san;
+			throw new Error(`Unhandled SubjectAltName type: ${String(exhaustive)}`);
 		}
 	}
 }
@@ -1720,8 +1720,8 @@ function formatConstraintForm(form: NameConstraintForm): string {
 		case 'directoryName':
 			return `dn:${form.derHex.slice(0, 20)}...`;
 		default: {
-			const _exhaustive: never = form;
-			throw new Error(`Unhandled NameConstraintForm type: ${String(_exhaustive)}`);
+			const exhaustive = form;
+			throw new Error(`Unhandled NameConstraintForm type: ${String(exhaustive)}`);
 		}
 	}
 }

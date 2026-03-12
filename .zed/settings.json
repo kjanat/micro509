@@ -14,13 +14,10 @@
 		"TypeScript": {
 			"wrap_guides": [100],
 			"formatter": [
-				{ "language_server": { "name": "biome" } },
+				{ "code_action": "fixAll.biome" },
+				{ "code_action": "organizeImports.biome" },
 				{ "external": { "command": "dprint", "arguments": ["fmt", "--stdin", "{buffer_path}"] } }
-			],
-			"code_actions_on_format": {
-				"source.fixAll.biome": true,
-				"source.organizeImports.biome": true
-			}
+			]
 		}
 	}
 }

@@ -21,10 +21,10 @@ import {
 	setOf,
 	time,
 } from '#micro509/der.ts';
-import { encodeSubjectAltName } from '#micro509/extensions.ts';
+import { buildCertificateExtensions, encodeSubjectAltName } from '#micro509/extensions.ts';
 import { OIDS } from '#micro509/oids.ts';
 import { parsePbes2AlgorithmIdentifier } from '#micro509/pbes2.ts';
-import { parsePkcs12MacData } from '#micro509/pkcs12-mac.ts';
+import { createPkcs12MacData, parsePkcs12MacData } from '#micro509/pkcs12-mac.ts';
 import {
 	alternateEcdsaSignatureEncoding,
 	concatFixedWidth,
@@ -251,6 +251,13 @@ describe('extensions encoding', () => {
 			value: Uint8Array.of(0x01, 0x02),
 		});
 		expect(result[0]).toBe(0x88);
+	});
+
+	it('buildCertificateExtensions throws on SPKI without subject public key bit string', () => {
+		const malformedSpki = sequence([sequence([objectIdentifier(OIDS.rsaEncryption), nullValue()])]);
+		expect(() => buildCertificateExtensions(malformedSpki, undefined, undefined)).toThrow(
+			'SPKI missing subject public key bit string',
+		);
 	});
 
 	it('rejects invalid IPv4 addresses during certificate creation', async () => {
@@ -542,13 +549,24 @@ describe('pkcs12-mac.ts edge cases', () => {
 
 	it('parsePkcs12MacData skips MAC verification when password is undefined', async () => {
 		// Build a valid-looking MacData — parsePkcs12MacData should return without 'valid' field
-		const { createPkcs12MacData } = await import('#micro509/pkcs12-mac.ts');
 		const data = new Uint8Array([0x30, 0x03, 0x01, 0x01, 0xff]);
 		const mac = await createPkcs12MacData(data, { password: 'test' });
 		// Parse without password — should succeed but no 'valid' field
 		const parsed = await parsePkcs12MacData(mac.der, data);
 		expect(parsed.digestAlgorithmOid).toBe(OIDS.sha256);
 		expect(parsed.valid).toBeUndefined();
+	});
+
+	it('createPkcs12MacData supports empty salt', async () => {
+		const data = new Uint8Array([0x30, 0x03, 0x01, 0x01, 0xff]);
+		const mac = await createPkcs12MacData(data, {
+			password: 'test',
+			salt: new Uint8Array(),
+		});
+		expect(mac.parsed.saltHex).toBe('');
+		const parsed = await parsePkcs12MacData(mac.der, data, 'test');
+		expect(parsed.saltHex).toBe('');
+		expect(parsed.valid).toBe(true);
 	});
 
 	it('rawEcdsaSignatureToDer converts valid raw signature to DER', () => {
