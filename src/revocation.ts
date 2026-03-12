@@ -63,6 +63,7 @@ export type RevocationIndeterminateReasonCode =
 	| 'nonce_mismatch'
 	| 'ocsp_signing_missing'
 	| 'request_mismatch'
+	| 'responder_id_mismatch'
 	| 'responder_chain_invalid'
 	| 'response_status_invalid'
 	| 'signature_invalid'

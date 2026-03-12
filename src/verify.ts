@@ -2275,6 +2275,8 @@ function sanToConstraintCheckable(
 			return { type: 'email', value: san.value };
 		case 'uri':
 			return { type: 'uri', value: san.value };
+		case 'srv':
+			return undefined;
 		case 'ip':
 			return {
 				type: 'ip',

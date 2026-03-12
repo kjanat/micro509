@@ -20,7 +20,6 @@
 		"allowImportingTsExtensions": true,
 		"isolatedDeclarations": false
 	},
-	"include": ["test", "scripts", "tsdown.config.ts", "src/**/*.test.ts"],
-	"exclude": ["dist", "node_modules"],
-	"references": [{ "path": "./tsconfig.src.json" }]
+	"include": ["src", "test", "scripts", "tsdown.config.ts", "src/**/*.test.ts"],
+	"exclude": ["dist", "node_modules"]
 }
