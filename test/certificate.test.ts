@@ -105,6 +105,76 @@ describe('certificate', () => {
 		]);
 	});
 
+	it('parses structured CRL distribution points with full and relative names', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Structured DP CA' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Structured DP CA' },
+			subject: { commonName: 'structured-dp.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				crlDistributionPoints: [
+					{
+						distributionPoint: {
+							relativeName: [
+								{ type: 'organization', value: 'Example PKI' },
+								{ type: 'commonName', value: 'leaf-partition' },
+							],
+						},
+						reasons: ['keyCompromise', 'privilegeWithdrawn'],
+						crlIssuer: [
+							{ type: 'dns', value: 'crl-issuer.example.test' },
+							{ type: 'uri', value: 'http://issuer.example.test/alt.crl' },
+						],
+					},
+					{
+						distributionPoint: {
+							fullName: [
+								{ type: 'uri', value: 'http://issuer.example.test/full.crl' },
+								{ type: 'dns', value: 'full-crl.example.test' },
+							],
+						},
+					},
+				],
+				subjectAltNames: [{ type: 'dns', value: 'structured-dp.example' }],
+			},
+		});
+
+		const parsed = parseCertificatePem(leaf.pem);
+		expect(parsed.crlDistributionPoints).toHaveLength(2);
+		expect(parsed.crlDistributionPoints?.[0]).toMatchObject({
+			distributionPoint: {
+				relativeName: {
+					values: {
+						organization: 'Example PKI',
+						commonName: 'leaf-partition',
+					},
+				},
+			},
+			reasons: ['keyCompromise', 'privilegeWithdrawn'],
+			crlIssuer: [
+				{ type: 'dns', value: 'crl-issuer.example.test' },
+				{ type: 'uri', value: 'http://issuer.example.test/alt.crl' },
+			],
+		});
+		expect(parsed.crlDistributionPoints?.[1]).toEqual({
+			distributionPoint: {
+				fullName: [
+					{ type: 'uri', value: 'http://issuer.example.test/full.crl' },
+					{ type: 'dns', value: 'full-crl.example.test' },
+				],
+			},
+		});
+	});
+
 	it('roundtrips email, URI, and IPv6 SANs through build and parse', async () => {
 		const { certificate } = await createSelfSignedCertificate({
 			subject: { commonName: 'san-variety' },

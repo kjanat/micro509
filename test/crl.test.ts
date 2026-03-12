@@ -125,6 +125,80 @@ describe('crl', () => {
 		);
 	});
 
+	it('parses structured issuing and freshest distribution points', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Structured CRL Issuer' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Structured CRL Issuer' },
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+			issuingDistributionPoint: {
+				distributionPoint: {
+					relativeName: [
+						{ type: 'organizationalUnit', value: 'CRLs' },
+						{ type: 'commonName', value: 'ca-scope' },
+					],
+				},
+				onlyContainsCACerts: true,
+				onlySomeReasons: ['cACompromise', 'superseded'],
+			},
+			freshestCrlDistributionPoints: [
+				{
+					distributionPoint: {
+						fullName: [
+							{ type: 'uri', value: 'http://example.test/delta.crl' },
+							{ type: 'dns', value: 'delta.example.test' },
+						],
+					},
+					reasons: ['cACompromise'],
+					crlIssuer: [{ type: 'dns', value: 'delta-issuer.example.test' }],
+				},
+				{
+					distributionPoint: {
+						relativeName: [{ type: 'commonName', value: 'delta-relative' }],
+					},
+				},
+			],
+		});
+
+		const parsed = parseCertificateRevocationListPem(crl.pem);
+		expect(parsed.issuingDistributionPoint).toMatchObject({
+			distributionPoint: {
+				relativeName: {
+					values: {
+						organizationalUnit: 'CRLs',
+						commonName: 'ca-scope',
+					},
+				},
+			},
+			onlyContainsCACerts: true,
+			onlySomeReasons: ['cACompromise', 'superseded'],
+		});
+		expect(parsed.freshestCrlDistributionPoints).toHaveLength(2);
+		expect(parsed.freshestCrlDistributionPoints?.[0]).toEqual({
+			distributionPoint: {
+				fullName: [
+					{ type: 'uri', value: 'http://example.test/delta.crl' },
+					{ type: 'dns', value: 'delta.example.test' },
+				],
+			},
+			reasons: ['cACompromise'],
+			crlIssuer: [{ type: 'dns', value: 'delta-issuer.example.test' }],
+		});
+		expect(parsed.freshestCrlDistributionPoints?.[1]).toMatchObject({
+			distributionPoint: {
+				relativeName: {
+					values: { commonName: 'delta-relative' },
+				},
+			},
+		});
+	});
+
 	it('validates CRL with issuer linkage and freshness', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'CRL Validate CA' },

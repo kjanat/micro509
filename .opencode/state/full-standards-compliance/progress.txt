@@ -5,6 +5,7 @@ Started: 2026-03-12
 
 ## Codebase Patterns
 
+- For structured distribution-point coverage, prefer builder-backed round trips that assert both certificate-side DPs and CRL-side IDP/freshest-CRL parsing, with at least one `relativeName` case and one `fullName`+reasons case.
 - For RFC 9618 mappings, keep graph mutation keyed by mapped `expectedPolicySet`, then derive caller-visible policy success from the surviving root-domain policies that still reach the leaf; never let an intermediate `anyPolicy` bridge satisfy arbitrary caller policy OIDs by itself.
 - For partially supported RFC surfaces, parser owns preserving/classifying unsupported wire forms; validator owns fail-closed decisions. Never silently drop unsupported critical semantics in parsing.
 - ESM-only, WebCrypto-only, platform-neutral core; avoid Node builtins in core paths.
@@ -251,3 +252,10 @@ Started: 2026-03-12
 - Added regression coverage in `test/verify.test.ts` for both raw-path and TLS-client success outputs, and verified the full feedback loop (`bun fmt`, `bun typecheck`, `bun lint`, `bun test`, `bun bd`).
 - Files changed: `src/validation.ts`, `src/verify.ts`, `src/index.ts`, `test/verify.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** policy-output APIs need two distinct sets - final authority-constrained leaf policies for unconstrained callers, and separately derived caller-visible policies for mapped / `anyPolicy`-mediated requests.
+
+## Task - [parse-structured-dps]
+
+- Added round-trip parsing coverage for structured certificate CRL distribution points and CRL issuing/freshest distribution points in `test/certificate.test.ts` and `test/crl.test.ts`.
+- Covered `relativeName`, `fullName`, reasons, and `crlIssuer` preservation through the public certificate and CRL parse surfaces.
+- Files changed: `test/certificate.test.ts`, `test/crl.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** structured DP parsing is easiest to lock down with builder-backed fixtures that exercise both cert and CRL entry points, because the same RFC shapes flow through different parser helpers.

@@ -289,7 +289,7 @@
 			"description": "Parse structured distribution points from certificates and CRLs. Done when:\n- certificate CRL DPs and CRL IDP structures are preserved\n- relative/full names and reasons are available\n- fixtures cover varied encodings",
 			"depends": ["define-dp-idp-types"],
 			"priority": "standard",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "build-structured-dps",
