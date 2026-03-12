@@ -71,7 +71,7 @@ describe('chain verification', () => {
 			intermediates: [badIntermediate.pem, goodIntermediate.pem],
 			roots: [root.certificate.pem],
 			purpose: 'serverAuth',
-			dnsName: 'multi-path.example',
+			serviceIdentity: { type: 'dns', value: 'multi-path.example' },
 		});
 		expect(result).toMatchObject({ ok: true });
 		if (result.ok) {
@@ -125,7 +125,7 @@ describe('chain verification', () => {
 			intermediates: [intermediate.pem],
 			roots: [root.certificate.pem],
 			purpose: 'serverAuth',
-			dnsName: 'service.example',
+			serviceIdentity: { type: 'dns', value: 'service.example' },
 		});
 
 		expect(result.ok).toBe(true);
@@ -172,7 +172,7 @@ describe('chain verification', () => {
 				intermediates: [validChain.intermediate.pem],
 				roots: [validChain.root.certificate.pem],
 				purpose: 'serverAuth',
-				dnsName: 'wrong.example',
+				serviceIdentity: { type: 'dns', value: 'wrong.example' },
 			}),
 		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch', index: 0 });
 
@@ -332,21 +332,21 @@ describe('chain verification', () => {
 			await verifyCertificateChain({
 				leaf: leaf.pem,
 				roots: [ca.certificate.pem],
-				ipAddress: '10.0.0.1',
+				serviceIdentity: { type: 'ip', value: '10.0.0.1' },
 			}),
 		).toMatchObject({ ok: true });
 		expect(
 			await verifyCertificateChain({
 				leaf: leaf.pem,
 				roots: [ca.certificate.pem],
-				ipAddress: '10.0.0.2',
+				serviceIdentity: { type: 'ip', value: '10.0.0.2' },
 			}),
 		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
 		expect(
 			await verifyCertificateChain({
 				leaf: leaf.pem,
 				roots: [ca.certificate.pem],
-				ipAddress: '::1',
+				serviceIdentity: { type: 'ip', value: '::1' },
 			}),
 		).toMatchObject({ ok: true });
 	});
@@ -377,21 +377,21 @@ describe('chain verification', () => {
 				leaf: leaf.pem,
 				roots: [ca.certificate.pem],
 				purpose: 'serverAuth',
-				dnsName: 'sub.example.com',
+				serviceIdentity: { type: 'dns', value: 'sub.example.com' },
 			}),
 		).toMatchObject({ ok: true });
 		expect(
 			await verifyCertificateChain({
 				leaf: leaf.pem,
 				roots: [ca.certificate.pem],
-				dnsName: 'deep.sub.example.com',
+				serviceIdentity: { type: 'dns', value: 'deep.sub.example.com' },
 			}),
 		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
 		expect(
 			await verifyCertificateChain({
 				leaf: leaf.pem,
 				roots: [ca.certificate.pem],
-				dnsName: 'example.com',
+				serviceIdentity: { type: 'dns', value: 'example.com' },
 			}),
 		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
 	});
@@ -410,7 +410,7 @@ describe('chain verification', () => {
 				leaf: selfSigned.certificate.pem,
 				roots: [selfSigned.certificate.pem],
 				allowSelfSignedLeaf: true,
-				dnsName: 'self.example',
+				serviceIdentity: { type: 'dns', value: 'self.example' },
 			}),
 		).toMatchObject({ ok: true });
 	});
@@ -471,7 +471,7 @@ describe('chain verification', () => {
 			await verifyCertificateChain({
 				leaf: leaf.pem,
 				roots: [ca.certificate.pem],
-				dnsName: 'axb.example.com',
+				serviceIdentity: { type: 'dns', value: 'axb.example.com' },
 			}),
 		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
 
@@ -479,7 +479,7 @@ describe('chain verification', () => {
 			verifyCertificateChain({
 				leaf: leaf.pem,
 				roots: [ca.certificate.pem],
-				ipAddress: '2001::db8::1',
+				serviceIdentity: { type: 'ip', value: '2001::db8::1' },
 			}),
 		).rejects.toThrow('Invalid IPv6 address');
 	});
@@ -1763,7 +1763,7 @@ describe('validation profiles', () => {
 			leaf: chain.leaf.pem,
 			intermediates: [chain.intermediate.pem],
 			roots: [chain.root.certificate.pem],
-			dnsName: 'verify.example',
+			serviceIdentity: { type: 'dns', value: 'verify.example' },
 		});
 		expect(ok.ok).toBe(true);
 
@@ -1772,7 +1772,7 @@ describe('validation profiles', () => {
 			leaf: chain.leaf.pem,
 			intermediates: [chain.intermediate.pem],
 			roots: [chain.root.certificate.pem],
-			dnsName: 'wrong.example',
+			serviceIdentity: { type: 'dns', value: 'wrong.example' },
 		});
 		expect(wrongDns.ok).toBe(false);
 		if (!wrongDns.ok) expect(wrongDns.code).toBe('subject_alt_name_mismatch');
@@ -1802,7 +1802,7 @@ describe('validation profiles', () => {
 		const result = await validateForTlsServer({
 			leaf: leaf.pem,
 			roots: [root.certificate.pem],
-			dnsName: 'tls-leaf',
+			serviceIdentity: { type: 'dns', value: 'tls-leaf' },
 		});
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.code).toBe('extended_key_usage_invalid');
@@ -1947,6 +1947,26 @@ describe('validateCandidatePath direct', () => {
 		const result = await validateCandidatePath({ chain: [] });
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.code).toBe('issuer_not_found');
+	});
+
+	it('keeps service identity checks out of raw path validation', async () => {
+		const chain = await issueChain();
+		const leafParsed = parseCertificatePem(chain.leaf.pem);
+		const intParsed = parseCertificatePem(chain.intermediate.pem);
+		const rootParsed = parseCertificatePem(chain.root.certificate.pem);
+		const pathResult = await validateCandidatePath({
+			chain: [leafParsed, intParsed, rootParsed],
+		});
+		expect(pathResult.ok).toBe(true);
+
+		const verifyResult = await verifyCertificateChain({
+			leaf: chain.leaf.pem,
+			intermediates: [chain.intermediate.pem],
+			roots: [chain.root.certificate.pem],
+			serviceIdentity: { type: 'dns', value: 'wrong.example' },
+		});
+		expect(verifyResult.ok).toBe(false);
+		if (!verifyResult.ok) expect(verifyResult.code).toBe('subject_alt_name_mismatch');
 	});
 
 	it('detects signature_invalid in candidate path', async () => {
@@ -2117,7 +2137,7 @@ describe('leaf CN fallback', () => {
 		const result = await verifyCertificateChain({
 			leaf: leaf.pem,
 			roots: [ca.certificate.pem],
-			dnsName: 'fallback.example',
+			serviceIdentity: { type: 'dns', value: 'fallback.example' },
 		});
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.code).toBe('subject_alt_name_mismatch');
@@ -2143,8 +2163,11 @@ describe('leaf CN fallback', () => {
 		const result = await verifyCertificateChain({
 			leaf: leaf.pem,
 			roots: [ca.certificate.pem],
-			dnsName: 'fallback.example',
-			allowCommonNameFallback: true,
+			serviceIdentity: {
+				type: 'dns',
+				value: 'fallback.example',
+				allowCommonNameFallback: true,
+			},
 		});
 		expect(result.ok).toBe(true);
 	});
@@ -2169,8 +2192,11 @@ describe('leaf CN fallback', () => {
 		const result = await verifyCertificateChain({
 			leaf: leaf.pem,
 			roots: [ca.certificate.pem],
-			dnsName: 'fallback.example',
-			allowCommonNameFallback: true,
+			serviceIdentity: {
+				type: 'dns',
+				value: 'fallback.example',
+				allowCommonNameFallback: true,
+			},
 		});
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.code).toBe('subject_alt_name_mismatch');
@@ -2274,7 +2300,7 @@ describe('buildCandidatePath edge cases', () => {
 			verifyCertificateChain({
 				leaf: leaf.pem,
 				roots: [ca.certificate.pem],
-				ipAddress: '1:2:3:4:5:6:7:8:9',
+				serviceIdentity: { type: 'ip', value: '1:2:3:4:5:6:7:8:9' },
 			}),
 		).rejects.toThrow('Invalid IPv6');
 	});
@@ -2332,8 +2358,11 @@ describe('validateForTlsServer with CN fallback', () => {
 		const result = await validateForTlsServer({
 			leaf: leaf.pem,
 			roots: [ca.certificate.pem],
-			dnsName: 'tls-cn.example',
-			allowCommonNameFallback: true,
+			serviceIdentity: {
+				type: 'dns',
+				value: 'tls-cn.example',
+				allowCommonNameFallback: true,
+			},
 		});
 		expect(result.ok).toBe(true);
 	});
@@ -2362,7 +2391,7 @@ describe('validateForTlsServer with CN fallback', () => {
 		const result = await validateForTlsServer({
 			leaf: leaf.pem,
 			roots: [ca.certificate.pem],
-			ipAddress: '10.0.0.1',
+			serviceIdentity: { type: 'ip', value: '10.0.0.1' },
 		});
 		expect(result.ok).toBe(true);
 	});

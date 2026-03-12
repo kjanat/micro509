@@ -9,6 +9,7 @@ Started: 2026-03-12
 - TypeScript rules are strict: no `any`, no non-null assertions, no `as Type`, no classes.
 - Tabs, single quotes, `.ts` import extensions, readonly-heavy interfaces, discriminated unions.
 - Keep path validation, service identity, and revocation as separate public concepts.
+- Put forward-looking cross-domain types in `src/validation.ts`, but keep verify-owned inputs narrowed to the identity forms `verify.ts` actually enforces today.
 - Package exports are driven by `tsdown.config.ts`; do not hand-edit generated `package.json` exports.
 - For stable package subpaths, prefer a named tsdown `entry` object; let `exports: true` derive package exports from entry keys.
 - Root `micro509` export should stay ergonomic; granular domains should live behind stable subpath exports.
@@ -68,3 +69,11 @@ Started: 2026-03-12
 - Added a short RFC status matrix and removed the remaining doc wording that implied service identity was already split from path validation.
 - Files changed: `README.md`, `docs/PKIX-SCOPE.md`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** when docs span both marketing and scope checklists, lead with the same small standards matrix in both places, then narrow feature bullets separately.
+
+## Task - [define-validation-boundaries]
+
+- Added `src/validation.ts` as the shared boundary-types home for policy, name-constraint, service-identity, and revocation concepts.
+- Made `validateCandidatePath()` path-only, then kept service-identity checks in the convenience layer via `serviceIdentity` on `verifyCertificateChain()` and `validateForTlsServer()`.
+- Re-exported the new boundary types from `src/index.ts` and updated tests to cover the split between raw path validation and service-identity validation.
+- Files changed: `src/validation.ts`, `src/verify.ts`, `src/index.ts`, `test/verify.test.ts`, `test/certificate.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** make future-facing identity unions broader than current support only in the shared boundary module; verify-facing APIs should accept a narrower subset until URI-ID and SRV-ID land.

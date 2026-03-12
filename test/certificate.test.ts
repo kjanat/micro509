@@ -75,7 +75,7 @@ describe('certificate', () => {
 				leaf: leaf.pem,
 				roots: [ca.certificate.pem],
 				purpose: 'serverAuth',
-				dnsName: 'leaf.example',
+				serviceIdentity: { type: 'dns', value: 'leaf.example' },
 			}),
 		).toMatchObject({ ok: true });
 		expect(hasExtensionOid(leaf.der, OIDS.extendedKeyUsage)).toBe(true);

@@ -189,6 +189,18 @@ export {
 	type Pkcs12MacOptions,
 	parsePkcs12MacData,
 } from './pkcs12-mac.ts';
+export type {
+	DnsServiceIdentityInput,
+	InitialNameConstraintsInput,
+	IpServiceIdentityInput,
+	PolicyValidationInput,
+	RevocationStatus,
+	ServiceIdentityInput,
+	ServiceIdentityType,
+	SrvServiceIdentityInput,
+	UriServiceIdentityInput,
+	VerifyServiceIdentityInput,
+} from './validation.ts';
 export {
 	type BuildCandidatePathInput,
 	type BuildCandidatePathResult,

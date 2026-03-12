@@ -8,6 +8,7 @@ import {
 } from './parse.ts';
 import { splitPemBlocks } from './pem.ts';
 import { verifySignedData } from './sig-verify.ts';
+import type { VerifyServiceIdentityInput } from './validation.ts';
 
 // ---------------------------------------------------------------------------
 // Source types
@@ -117,10 +118,7 @@ export interface ValidateCandidatePathInput {
 	readonly chain: readonly ParsedCertificate[];
 	readonly at?: Date;
 	readonly purpose?: VerifyPurpose;
-	readonly dnsName?: string;
-	readonly ipAddress?: string;
 	readonly allowSelfSignedLeaf?: boolean;
-	readonly allowCommonNameFallback?: boolean;
 }
 
 export type ValidateCandidatePathResult = { readonly ok: true } | VerifyChainFailure;
@@ -136,10 +134,8 @@ export interface VerifyCertificateChainInput {
 	readonly trustAnchors?: readonly TrustAnchor[];
 	readonly at?: Date;
 	readonly purpose?: VerifyPurpose;
-	readonly dnsName?: string;
-	readonly ipAddress?: string;
+	readonly serviceIdentity?: VerifyServiceIdentityInput;
 	readonly allowSelfSignedLeaf?: boolean;
-	readonly allowCommonNameFallback?: boolean;
 }
 
 export interface VerifiedCertificateChain {
@@ -175,9 +171,7 @@ export interface ValidateForTlsServerInput {
 	readonly roots: readonly CertificateSource[];
 	readonly trustAnchors?: readonly TrustAnchor[];
 	readonly at?: Date;
-	readonly dnsName?: string;
-	readonly ipAddress?: string;
-	readonly allowCommonNameFallback?: boolean;
+	readonly serviceIdentity?: VerifyServiceIdentityInput;
 }
 
 export type ValidateForTlsClientInput = BuildCandidatePathInput;
@@ -291,7 +285,7 @@ export async function buildCandidatePath(
 /**
  * Validates a pre-built candidate path (time, critical extensions,
  * signatures between chain members, CA/keyUsage/AKI constraints,
- * pathLength, and leaf purpose/identity checks). The chain must be in
+ * pathLength, and leaf purpose checks). The chain must be in
  * leaf-to-root order.
  *
  * For full signature verification, each certificate in the chain is
@@ -469,17 +463,21 @@ export async function verifyCertificateChain(
 		chain: buildResult.value.chain,
 		...(input.at !== undefined && { at: input.at }),
 		...(input.purpose !== undefined && { purpose: input.purpose }),
-		...(input.dnsName !== undefined && { dnsName: input.dnsName }),
-		...(input.ipAddress !== undefined && { ipAddress: input.ipAddress }),
 		...(input.allowSelfSignedLeaf !== undefined && {
 			allowSelfSignedLeaf: input.allowSelfSignedLeaf,
-		}),
-		...(input.allowCommonNameFallback !== undefined && {
-			allowCommonNameFallback: input.allowCommonNameFallback,
 		}),
 	});
 	if (!validateResult.ok) {
 		return validateResult;
+	}
+	if (input.serviceIdentity !== undefined) {
+		const serviceIdentityResult = validateServiceIdentity(
+			buildResult.value.leaf,
+			input.serviceIdentity,
+		);
+		if (!serviceIdentityResult.ok) {
+			return serviceIdentityResult;
+		}
 	}
 
 	return { ok: true, value: buildResult.value };
@@ -612,10 +610,8 @@ export async function validateForTlsServer(
 ): Promise<VerifyChainResult> {
 	const result = await verifyCertificateChain({
 		...baseChainInput(input),
-		...(input.dnsName !== undefined && { dnsName: input.dnsName }),
-		...(input.ipAddress !== undefined && { ipAddress: input.ipAddress }),
-		...(input.allowCommonNameFallback !== undefined && {
-			allowCommonNameFallback: input.allowCommonNameFallback,
+		...(input.serviceIdentity !== undefined && {
+			serviceIdentity: input.serviceIdentity,
 		}),
 	});
 	if (!result.ok) {
@@ -671,9 +667,6 @@ function validateLeaf(
 	leaf: ParsedCertificate,
 	input: {
 		readonly purpose?: VerifyPurpose;
-		readonly dnsName?: string;
-		readonly ipAddress?: string;
-		readonly allowCommonNameFallback?: boolean;
 	},
 ): ValidateCandidatePathResult {
 	const purpose = input.purpose;
@@ -702,65 +695,80 @@ function validateLeaf(
 			);
 		}
 	}
-	if (input.dnsName !== undefined) {
-		const sans = leaf.subjectAltNames?.filter((entry) => entry.type === 'dns') ?? [];
-		if (sans.length > 0) {
-			if (!sans.some((entry) => matchesDnsName(entry.value, input.dnsName ?? ''))) {
-				return failure(
-					'subject_alt_name_mismatch',
-					'DNS name not present in SAN',
-					0,
-					detail({
-						subjectCommonName: leaf.subject.values.commonName,
-						expected: input.dnsName,
-						actual: sans.map((entry) => entry.value).join(','),
-					}),
-				);
+	return { ok: true };
+}
+
+function validateServiceIdentity(
+	leaf: ParsedCertificate,
+	serviceIdentity: VerifyServiceIdentityInput,
+): ValidateCandidatePathResult {
+	switch (serviceIdentity.type) {
+		case 'dns': {
+			const expected = serviceIdentity.value;
+			const sans = leaf.subjectAltNames?.filter((entry) => entry.type === 'dns') ?? [];
+			if (sans.length > 0) {
+				if (!sans.some((entry) => matchesDnsName(entry.value, expected))) {
+					return failure(
+						'subject_alt_name_mismatch',
+						'DNS name not present in SAN',
+						0,
+						detail({
+							subjectCommonName: leaf.subject.values.commonName,
+							expected,
+							actual: sans.map((entry) => entry.value).join(','),
+						}),
+					);
+				}
+				return { ok: true };
 			}
-		} else if (input.allowCommonNameFallback === true) {
-			const cn = leaf.subject.values.commonName;
-			if (cn === undefined || !matchesDnsName(cn, input.dnsName)) {
-				return failure(
-					'subject_alt_name_mismatch',
-					'DNS name not present in SAN or CN',
-					0,
-					detail({
-						subjectCommonName: cn,
-						expected: input.dnsName,
-						actual: cn ?? '',
-					}),
-				);
+			if (serviceIdentity.allowCommonNameFallback === true) {
+				const commonName = leaf.subject.values.commonName;
+				if (commonName === undefined || !matchesDnsName(commonName, expected)) {
+					return failure(
+						'subject_alt_name_mismatch',
+						'DNS name not present in SAN or CN',
+						0,
+						detail({
+							subjectCommonName: commonName,
+							expected,
+							actual: commonName ?? '',
+						}),
+					);
+				}
+				return { ok: true };
 			}
-		} else {
 			return failure(
 				'subject_alt_name_mismatch',
 				'DNS name not present in SAN',
 				0,
 				detail({
 					subjectCommonName: leaf.subject.values.commonName,
-					expected: input.dnsName,
+					expected,
 					actual: '',
 				}),
 			);
 		}
-	}
-	if (input.ipAddress !== undefined) {
-		const expected = normalizeIpAddress(input.ipAddress);
-		const sans = leaf.subjectAltNames?.filter((entry) => entry.type === 'ip') ?? [];
-		if (!sans.some((entry) => normalizeIpAddress(entry.value) === expected)) {
-			return failure(
-				'subject_alt_name_mismatch',
-				'IP address not present in SAN',
-				0,
-				detail({
-					subjectCommonName: leaf.subject.values.commonName,
-					expected,
-					actual: sans.map((entry) => normalizeIpAddress(entry.value)).join(','),
-				}),
-			);
+		case 'ip': {
+			const expected = normalizeIpAddress(serviceIdentity.value);
+			const sans = leaf.subjectAltNames?.filter((entry) => entry.type === 'ip') ?? [];
+			if (!sans.some((entry) => normalizeIpAddress(entry.value) === expected)) {
+				return failure(
+					'subject_alt_name_mismatch',
+					'IP address not present in SAN',
+					0,
+					detail({
+						subjectCommonName: leaf.subject.values.commonName,
+						expected,
+						actual: sans.map((entry) => normalizeIpAddress(entry.value)).join(','),
+					}),
+				);
+			}
+			return { ok: true };
+		}
+		default: {
+			throw new Error('unreachable service identity type');
 		}
 	}
-	return { ok: true };
 }
 
 // ---------------------------------------------------------------------------

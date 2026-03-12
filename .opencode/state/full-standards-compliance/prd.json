@@ -50,7 +50,7 @@
 			"description": "Define stable public boundaries for path validation, identity matching, revocation, and policy inputs/results. Done when:\n- shared boundary types are specified\n- raw path validation excludes service identity inputs\n- module ownership is explicit for verify, identity, and revocation",
 			"depends": ["docs-compliance-matrix"],
 			"priority": "architecture",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "scaffold-identity-module",
