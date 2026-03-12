@@ -1,4 +1,4 @@
-.zed/*.json															linguist-language=JSON-With-Comments
-bun.lock											-diff 		linguist-generated
-docs/rfc/*															linguist-vendored
-test/fixtures/pkits/certs/*		-diff			linguist-vendored
+.zed/*.json                             linguist-language=JSON-With-Comments
+bun.lock                       -diff    linguist-generated
+docs/rfc/*                              linguist-vendored
+test/fixtures/pkits/certs/*    -diff    linguist-vendored
