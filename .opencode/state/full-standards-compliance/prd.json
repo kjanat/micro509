@@ -91,7 +91,7 @@
 			"description": "Switch package build output from a single bundled entry to preserved ESM modules. Done when:\n- build emits unbundled ESM modules\n- root barrel still works\n- subpath imports resolve from generated output",
 			"depends": ["add-subpath-entrypoints"],
 			"priority": "integration",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "set-sideeffects-flag",

@@ -27,7 +27,7 @@ export default defineConfig({
 	target: 'es2023',
 	tsconfig: 'tsconfig.base.json',
 	sourcemap: false,
-	unbundle: false,
+	unbundle: true,
 	inputOptions: {
 		resolve: {
 			mainFields: ['browser', 'module', 'main'],

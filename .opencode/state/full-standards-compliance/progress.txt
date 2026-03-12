@@ -15,6 +15,7 @@ Started: 2026-03-12
 - Package exports are driven by `tsdown.config.ts`; do not hand-edit generated `package.json` exports.
 - For stable package subpaths, prefer a named tsdown `entry` object; let `exports: true` derive package exports from entry keys.
 - Adding a new public package subpath is a tsdown config change first: add the source module to the named `entry` map, rebuild, and let generated `package.json` exports update.
+- In tsdown multi-entry builds, `unbundle: true` preserves shared internal modules under `dist/src/` while keeping public entry files at `dist/<entry>.js`; stable package exports can stay pointed at the root entry files.
 - Root `micro509` export should stay ergonomic; granular domains should live behind stable subpath exports.
 - New boundary modules should define neutral shared-source aliases locally; avoid leaking CRL/OCSP-branded source types into orchestration APIs.
 - Distribution-point model change is a clean break; no temporary URI-only compat alias.
@@ -143,3 +144,10 @@ Started: 2026-03-12
 - Updated CRL, certificate, and CSR tests to use the clean-break distribution-point objects and added IDP flag/reason coverage.
 - Files changed: `src/name.ts`, `src/extensions.ts`, `src/parse.ts`, `src/crl.ts`, `src/index.ts`, `test/certificate.test.ts`, `test/csr.test.ts`, `test/crl.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** model DP/IDP scope at the boundary with object unions that forbid URI-only shortcuts and invalid reason-only points; keep runtime guards too because DER builders are callable from plain JS.
+
+## Task - [preserve-module-build]
+
+- Enabled tsdown preserved-module output by switching `unbundle` on in `tsdown.config.ts`, then rebuilt to verify the package now emits shared internals under `dist/src/` while keeping the public entry files at `dist/*.js`.
+- Confirmed the existing generated export map still resolves the root barrel and named subpaths against the new unbundled output layout.
+- Files changed: `tsdown.config.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** tsdown's multi-entry unbundle mode keeps public entry filenames stable, so preserved-module output can land as a one-line config change without reshaping the generated package exports.
