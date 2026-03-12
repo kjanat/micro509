@@ -190,7 +190,7 @@
 			"description": "Add focused fixtures for name constraints and name comparison. Done when:\n- email, DNS, URI, IP, and directoryName cases exist\n- positive and negative paths are covered\n- tests document intended semantics",
 			"depends": ["apply-initial-subtrees"],
 			"priority": "polish",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "add-policy-oids-and-types",

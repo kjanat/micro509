@@ -58,6 +58,7 @@ Started: 2026-03-12
 - URI-ID and SRV-ID matching should split presented identifiers into a service/scheme part plus a DNS domain part, compare service/scheme case-insensitively first, then run existing DNS-style host matching only within same-service candidates so service mismatches stay typed.
 - IDNA service-identity matching should normalize only DNS host parts to URL-hostname ASCII form, while keeping wildcard prefixes and URI/SRV service selectors outside the IDNA conversion step.
 - CN fallback should stay DNS-only and opt-in, and only run when no supported DNS-like SAN identifiers (`dns`, `uri`, `srv`) are present; if such SANs exist, return typed suppression details instead of silently falling back.
+- For fixture-only RFC coverage, add a focused test file with one small issuance helper and paired pass/fail cases per supported name form; keep broad wrapper behavior in `test/verify.test.ts` and the fixture matrix in its own file.
 
 ## Validation Commands
 
@@ -408,3 +409,11 @@ Started: 2026-03-12
 - Ran the full feedback loop: `bun fmt`, `bun typecheck`, `bun lint`, `bun test`, `bun bd`.
 - Files changed: `package.json`, `README.md`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** once preserved-module output and stable subpath exports are in place, `sideEffects: false` should ship with explicit import guidance so consumers know the root barrel stays supported while subpaths remain the tighter tree-shaking path.
+
+## Task - [add-name-constraint-fixtures]
+
+- Added `test/name-constraints.test.ts` with focused RFC-derived fixtures for DNS, email, URI, IP, and `directoryName` name-constraint coverage.
+- Paired positive and negative cases per supported name form so the intended semantics stay documented without leaning on the larger `test/verify.test.ts` matrix.
+- Ran the full feedback loop: `bun fmt`, `bun typecheck`, `bun lint`, `bun test`, `bun bd`.
+- Files changed: `test/name-constraints.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** focused fixture files work best when they own a tiny issuance helper and assert one pass plus one fail per RFC name form; that keeps coverage readable while broader verify tests keep exercising composition and edge cases.
