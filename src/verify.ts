@@ -1,4 +1,9 @@
-import type { ExtendedKeyUsage, NameConstraintForm, NameConstraints } from './extensions.ts';
+import type {
+	ExtendedKeyUsage,
+	GeneralSubtree,
+	NameConstraintForm,
+	NameConstraints,
+} from './extensions.ts';
 import { OIDS } from './oids.ts';
 import type { ParsedCertificate, ParsedCertificateSigningRequest } from './parse.ts';
 import {
@@ -74,6 +79,8 @@ export type VerifyErrorCode =
 	| 'self_signed_leaf_not_allowed'
 	| 'unrecognized_critical_extension'
 	| 'intermediate_eku_constraint'
+	| 'policy_processing_not_implemented'
+	| 'initial_name_constraints_not_implemented'
 	| 'name_constraints_violated';
 
 export interface VerifyFailureDetails {
@@ -238,6 +245,27 @@ interface VerifyFailureDetailsInput {
 	readonly chainCommonNames?: readonly string[] | undefined;
 }
 
+interface PolicyValidationState {
+	readonly initialPolicySet: readonly string[] | 'any';
+	readonly explicitPolicy: number;
+	readonly inhibitPolicyMapping: number;
+	readonly inhibitAnyPolicy: number;
+}
+
+interface NameConstraintValidationState {
+	readonly initialPermittedSubtrees: readonly GeneralSubtree[];
+	readonly initialExcludedSubtrees: readonly GeneralSubtree[];
+}
+
+interface ValidationState {
+	readonly policy: PolicyValidationState;
+	readonly nameConstraints: NameConstraintValidationState;
+}
+
+type ValidationStateResult =
+	| { readonly ok: true; readonly value: ValidationState }
+	| VerifyChainFailure;
+
 // ---------------------------------------------------------------------------
 // buildCandidatePath
 // ---------------------------------------------------------------------------
@@ -317,6 +345,10 @@ export async function validateCandidatePath(
 ): Promise<ValidateCandidatePathResult> {
 	const chain = input.chain;
 	const at = input.at ?? new Date();
+	const validationStateResult = buildValidationState(input, chain.length);
+	if (!validationStateResult.ok) {
+		return validationStateResult;
+	}
 	const leaf = chain[0];
 
 	if (leaf === undefined) {
@@ -444,7 +476,10 @@ export async function validateCandidatePath(
 		}
 	}
 
-	const nameConstraintResult = checkNameConstraints(chain);
+	const nameConstraintResult = checkNameConstraints(
+		chain,
+		validationStateResult.value.nameConstraints,
+	);
 	if (!nameConstraintResult.ok) {
 		return nameConstraintResult;
 	}
@@ -1318,6 +1353,99 @@ function detail(input: VerifyFailureDetailsInput): VerifyFailureDetails {
 	};
 }
 
+function buildValidationState(
+	input: PolicyValidationInput & InitialNameConstraintsInput,
+	chainLength: number,
+): ValidationStateResult {
+	const policy = normalizePolicyValidationState(input, chainLength);
+	if (hasNonDefaultPolicyInputs(policy)) {
+		return failure(
+			'policy_processing_not_implemented',
+			'policy validation inputs are not implemented yet',
+			undefined,
+			detail({ actual: describePolicyState(policy) }),
+		);
+	}
+	const nameConstraints = normalizeNameConstraintValidationState(input);
+	if (
+		nameConstraints.initialPermittedSubtrees.length > 0 ||
+		nameConstraints.initialExcludedSubtrees.length > 0
+	) {
+		return failure(
+			'initial_name_constraints_not_implemented',
+			'initial name constraint inputs are not implemented yet',
+			undefined,
+			detail({ actual: describeInitialNameConstraintState(nameConstraints) }),
+		);
+	}
+	return {
+		ok: true,
+		value: {
+			policy,
+			nameConstraints,
+		},
+	};
+}
+
+function normalizePolicyValidationState(
+	input: PolicyValidationInput,
+	chainLength: number,
+): PolicyValidationState {
+	const disabledCounter = chainLength + 1;
+	return {
+		initialPolicySet: input.initialPolicySet ?? 'any',
+		explicitPolicy: input.requireExplicitPolicy === true ? 0 : disabledCounter,
+		inhibitPolicyMapping: input.inhibitPolicyMapping === true ? 0 : disabledCounter,
+		inhibitAnyPolicy: input.inhibitAnyPolicy === true ? 0 : disabledCounter,
+	};
+}
+
+function normalizeNameConstraintValidationState(
+	input: InitialNameConstraintsInput,
+): NameConstraintValidationState {
+	return {
+		initialPermittedSubtrees: input.permittedSubtrees ?? [],
+		initialExcludedSubtrees: input.excludedSubtrees ?? [],
+	};
+}
+
+function hasNonDefaultPolicyInputs(policy: PolicyValidationState): boolean {
+	return (
+		policy.initialPolicySet !== 'any' ||
+		policy.explicitPolicy === 0 ||
+		policy.inhibitPolicyMapping === 0 ||
+		policy.inhibitAnyPolicy === 0
+	);
+}
+
+function describePolicyState(policy: PolicyValidationState): string {
+	const enabled: string[] = [];
+	if (policy.initialPolicySet !== 'any') {
+		enabled.push(`initialPolicySet=${policy.initialPolicySet.join(',')}`);
+	}
+	if (policy.explicitPolicy === 0) {
+		enabled.push('requireExplicitPolicy');
+	}
+	if (policy.inhibitPolicyMapping === 0) {
+		enabled.push('inhibitPolicyMapping');
+	}
+	if (policy.inhibitAnyPolicy === 0) {
+		enabled.push('inhibitAnyPolicy');
+	}
+	return enabled.join(', ');
+}
+
+function describeInitialNameConstraintState(state: NameConstraintValidationState): string {
+	const enabled: string[] = [];
+	if (state.initialPermittedSubtrees.length > 0) {
+		enabled.push(`permittedSubtrees=${String(state.initialPermittedSubtrees.length)}`);
+	}
+	if (state.initialExcludedSubtrees.length > 0) {
+		enabled.push(`excludedSubtrees=${String(state.initialExcludedSubtrees.length)}`);
+	}
+	return enabled.join(', ');
+}
+
 // ---------------------------------------------------------------------------
 // Private: name constraint validation (RFC 5280 §4.2.1.10 / §6.1)
 // ---------------------------------------------------------------------------
@@ -1343,7 +1471,11 @@ interface AccumulatedNameConstraints {
  *
  * RFC 5280 §6.1.3(b)–(c) for intermediates, §6.1.5(g) for the leaf.
  */
-function checkNameConstraints(chain: readonly ParsedCertificate[]): ValidateCandidatePathResult {
+
+function checkNameConstraints(
+	chain: readonly ParsedCertificate[],
+	_state: NameConstraintValidationState,
+): ValidateCandidatePathResult {
 	let accumulated: AccumulatedNameConstraints = {
 		permittedLevels: [],
 		excluded: [],

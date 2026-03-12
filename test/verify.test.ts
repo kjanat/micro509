@@ -1854,7 +1854,7 @@ describe('validation profiles', () => {
 		expect(fail.ok).toBe(false);
 	});
 
-	it('validateForTlsClient accepts policy validation inputs', async () => {
+	it('validateForTlsClient fails closed for policy validation inputs until implemented', async () => {
 		const root = await createSelfSignedCertificate({
 			subject: { commonName: 'Policy Input Root' },
 			extensions: {
@@ -1882,10 +1882,17 @@ describe('validation profiles', () => {
 			inhibitPolicyMapping: true,
 			inhibitAnyPolicy: true,
 		});
-		expect(result.ok).toBe(true);
+		expect(result).toMatchObject({
+			ok: false,
+			code: 'policy_processing_not_implemented',
+			details: {
+				actual:
+					'initialPolicySet=1.2.3.4, requireExplicitPolicy, inhibitPolicyMapping, inhibitAnyPolicy',
+			},
+		});
 	});
 
-	it('validateForTlsClient accepts initial name constraint inputs', async () => {
+	it('validateForTlsClient fails closed for initial name constraint inputs until implemented', async () => {
 		const root = await createSelfSignedCertificate({
 			subject: { commonName: 'Initial Name Constraint Root' },
 			extensions: {
@@ -1912,7 +1919,11 @@ describe('validation profiles', () => {
 			permittedSubtrees: [{ base: { type: 'dns', value: 'example.com' } }],
 			excludedSubtrees: [{ base: { type: 'dns', value: 'forbidden.example.com' } }],
 		});
-		expect(result.ok).toBe(true);
+		expect(result).toMatchObject({
+			ok: false,
+			code: 'initial_name_constraints_not_implemented',
+			details: { actual: 'permittedSubtrees=1, excludedSubtrees=1' },
+		});
 	});
 
 	it('validateForCodeSigning checks chain + codeSigning EKU', async () => {
@@ -2030,7 +2041,7 @@ describe('validateCandidatePath direct', () => {
 		if (!verifyResult.ok) expect(verifyResult.code).toBe('subject_alt_name_mismatch');
 	});
 
-	it('accepts policy validation inputs on raw path validation', async () => {
+	it('fails closed for policy validation inputs on raw path validation until implemented', async () => {
 		const chain = await issueChain();
 		const leafParsed = parseCertificatePem(chain.leaf.pem);
 		const intParsed = parseCertificatePem(chain.intermediate.pem);
@@ -2042,10 +2053,17 @@ describe('validateCandidatePath direct', () => {
 			inhibitPolicyMapping: true,
 			inhibitAnyPolicy: true,
 		});
-		expect(result.ok).toBe(true);
+		expect(result).toMatchObject({
+			ok: false,
+			code: 'policy_processing_not_implemented',
+			details: {
+				actual:
+					'initialPolicySet=1.2.3.4, requireExplicitPolicy, inhibitPolicyMapping, inhibitAnyPolicy',
+			},
+		});
 	});
 
-	it('accepts initial name constraint inputs on raw path validation', async () => {
+	it('fails closed for initial name constraint inputs on raw path validation until implemented', async () => {
 		const chain = await issueChain();
 		const leafParsed = parseCertificatePem(chain.leaf.pem);
 		const intParsed = parseCertificatePem(chain.intermediate.pem);
@@ -2055,7 +2073,11 @@ describe('validateCandidatePath direct', () => {
 			permittedSubtrees: [{ base: { type: 'dns', value: 'example.com' } }],
 			excludedSubtrees: [{ base: { type: 'dns', value: 'forbidden.example.com' } }],
 		});
-		expect(result.ok).toBe(true);
+		expect(result).toMatchObject({
+			ok: false,
+			code: 'initial_name_constraints_not_implemented',
+			details: { actual: 'permittedSubtrees=1, excludedSubtrees=1' },
+		});
 	});
 
 	it('detects signature_invalid in candidate path', async () => {

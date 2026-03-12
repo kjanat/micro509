@@ -127,7 +127,7 @@
 			"description": "Thread the new policy and name-constraint inputs through candidate-path validation state. Done when:\n- validation state carries all RFC 5280 section 6.1.1 inputs this spec requires\n- defaults are explicit in code and docs\n- setup/enforcement failures are typed",
 			"depends": ["add-policy-input-types", "add-name-constraint-inputs"],
 			"priority": "standard",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "split-host-inputs-from-path",
