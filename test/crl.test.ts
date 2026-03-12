@@ -13,7 +13,105 @@ import {
 	validateCertificateRevocationList,
 	verifyCertificateRevocationList,
 } from '#micro509';
+import { childrenOf } from '../src/asn1.ts';
+import {
+	bitString,
+	bool,
+	objectIdentifier,
+	octetString,
+	readSequenceChildren,
+	sequence,
+} from '#micro509/der.ts';
+import { encodeSubjectAltName, type GeneralName } from '#micro509/extensions.ts';
+import { OIDS } from '../src/oids.ts';
+import { encodeAlgorithmIdentifier, getSignatureAlgorithm, signBytes } from '#micro509/signing.ts';
 import { hexToBytes } from './helpers.ts';
+
+interface RevokedEntryCertificateIssuerOverride {
+	readonly entryIndex: number;
+	readonly names: readonly GeneralName[];
+}
+
+function sliceElement(
+	source: Uint8Array,
+	element: { readonly start: number; readonly end: number; readonly headerLength: number },
+): Uint8Array {
+	return source.slice(element.start - element.headerLength, element.end);
+}
+
+function encodeExtension(oid: string, value: Uint8Array, critical = false): Uint8Array {
+	return sequence([objectIdentifier(oid), ...(critical ? [bool(true)] : []), octetString(value)]);
+}
+
+async function addRevokedEntryCertificateIssuers(
+	crlDer: Uint8Array,
+	signerPrivateKey: CryptoKey,
+	overrides: readonly RevokedEntryCertificateIssuerOverride[],
+): Promise<Uint8Array> {
+	const top = readSequenceChildren(crlDer);
+	const tbsCertList = top[0];
+	if (tbsCertList === undefined) {
+		throw new Error('CRL missing TBSCertList');
+	}
+	const tbsDer = sliceElement(crlDer, tbsCertList);
+	const tbsChildren = readSequenceChildren(tbsDer);
+	let cursor = 3;
+	if (tbsChildren[0]?.tag === 0x02) {
+		cursor += 1;
+	}
+	const maybeNextUpdate = tbsChildren[cursor];
+	if (
+		maybeNextUpdate !== undefined &&
+		(maybeNextUpdate.tag === 0x17 || maybeNextUpdate.tag === 0x18)
+	) {
+		cursor += 1;
+	}
+	const revokedCertificates = tbsChildren[cursor];
+	if (revokedCertificates === undefined || revokedCertificates.tag !== 0x30) {
+		throw new Error('CRL missing revokedCertificates sequence');
+	}
+	const rebuiltEntries = childrenOf(tbsDer, revokedCertificates).map((entry, entryIndex) => {
+		const entryDer = sliceElement(tbsDer, entry);
+		const entryChildren = readSequenceChildren(entryDer);
+		const serialNumber = entryChildren[0];
+		const revocationDate = entryChildren[1];
+		if (serialNumber === undefined || revocationDate === undefined) {
+			throw new Error('Revoked certificate entry is incomplete');
+		}
+		const override = overrides.find((candidate) => candidate.entryIndex === entryIndex);
+		if (override === undefined) {
+			return entryDer;
+		}
+		const existingExtensions = entryChildren[2];
+		const encodedExtensions =
+			existingExtensions === undefined
+				? []
+				: childrenOf(entryDer, existingExtensions).map((extension) =>
+						sliceElement(entryDer, extension),
+					);
+		const certificateIssuerExtension = encodeExtension(
+			OIDS.certificateIssuer,
+			sequence(override.names.map((name) => encodeSubjectAltName(name))),
+			true,
+		);
+		return sequence([
+			sliceElement(entryDer, serialNumber),
+			sliceElement(entryDer, revocationDate),
+			sequence([...encodedExtensions, certificateIssuerExtension]),
+		]);
+	});
+	const rebuiltTbsChildren = tbsChildren.map((child, childIndex) =>
+		childIndex === cursor ? sequence(rebuiltEntries) : sliceElement(tbsDer, child),
+	);
+	const rebuiltTbsDer = sequence(rebuiltTbsChildren);
+	const signatureAlgorithm = getSignatureAlgorithm(signerPrivateKey);
+	const signatureValue = await signBytes(signerPrivateKey, signatureAlgorithm, rebuiltTbsDer);
+	return sequence([
+		rebuiltTbsDer,
+		encodeAlgorithmIdentifier(signatureAlgorithm),
+		bitString(signatureValue),
+	]);
+}
 
 describe('crl', () => {
 	it('creates, parses, and verifies CRLs', async () => {
@@ -624,6 +722,9 @@ describe('crl', () => {
 				},
 				indirectCrl: true,
 			},
+			revokedCertificates: [
+				{ serialNumber: hexToBytes(parseCertificatePem(leaf.pem).serialNumberHex) },
+			],
 		});
 		expect(
 			await checkCertificateRevocationAgainstCrl({
@@ -631,10 +732,31 @@ describe('crl', () => {
 				issuerCertificate: ca.certificate.pem,
 				crl: indirectCrl.pem,
 			}),
+		).toMatchObject({
+			ok: true,
+			status: 'revoked',
+		});
+
+		const unsupportedNamedIssuerCrl = await addRevokedEntryCertificateIssuers(
+			indirectCrl.der,
+			ca.keyPair.privateKey,
+			[
+				{
+					entryIndex: 0,
+					names: [{ type: 'dns', value: 'unsupported.example.test' }],
+				},
+			],
+		);
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: leaf.pem,
+				issuerCertificate: ca.certificate.pem,
+				crl: unsupportedNamedIssuerCrl,
+			}),
 		).toEqual({
 			ok: false,
 			code: 'non_applicable',
-			message: 'indirect CRLs are not applicable until indirect CRL support is implemented',
+			message: 'indirect CRL entry certificateIssuer must include a directoryName',
 			details: { reason: 'indirect_crl_unsupported' },
 		});
 
@@ -655,6 +777,194 @@ describe('crl', () => {
 			code: 'non_applicable',
 			message: 'delta CRLs are not applicable until delta merge support is implemented',
 			details: { reason: 'delta_crl_unsupported' },
+		});
+	});
+
+	it('parses revoked entry certificateIssuer extensions', async () => {
+		const crlIssuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Revoked Entry Parser CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const certificateIssuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Revoked Entry Leaf CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const parsedCertificateIssuer = parseCertificatePem(certificateIssuer.certificate.pem);
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Revoked Entry Parser CA' },
+			signerPrivateKey: crlIssuer.keyPair.privateKey,
+			issuerPublicKey: crlIssuer.keyPair.publicKey,
+			revokedCertificates: [{ serialNumber: Uint8Array.of(0x01) }],
+		});
+		const modifiedDer = await addRevokedEntryCertificateIssuers(
+			crl.der,
+			crlIssuer.keyPair.privateKey,
+			[
+				{
+					entryIndex: 0,
+					names: [{ type: 'directoryName', derHex: parsedCertificateIssuer.subject.derHex }],
+				},
+			],
+		);
+		expect(
+			parseCertificateRevocationListDer(modifiedDer).revokedCertificates[0]?.certificateIssuer,
+		).toEqual([{ type: 'directoryName', derHex: parsedCertificateIssuer.subject.derHex }]);
+	});
+
+	it('checks indirect CRL issuer selection and carried certificateIssuer entries', async () => {
+		const crlIssuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Indirect CRL Issuer' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const firstIssuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Indirect Leaf Issuer A' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const secondIssuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Indirect Leaf Issuer B' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const parsedCrlIssuer = parseCertificatePem(crlIssuer.certificate.pem);
+		const parsedFirstIssuer = parseCertificatePem(firstIssuer.certificate.pem);
+		const sharedSerial = Uint8Array.of(0x44);
+		const firstLeafKeys = await generateKeyPair();
+		const secondLeafKeys = await generateKeyPair();
+		const distributionPoints = [
+			{
+				distributionPoint: {
+					fullName: [{ type: 'uri', value: 'http://example.test/indirect.crl' }],
+				},
+				crlIssuer: [{ type: 'directoryName', derHex: parsedCrlIssuer.subject.derHex }],
+			},
+		] as const;
+		const firstLeaf = await createCertificate({
+			issuer: { commonName: 'Indirect Leaf Issuer A' },
+			subject: { commonName: 'indirect-a.example' },
+			publicKey: firstLeafKeys.publicKey,
+			signerPrivateKey: firstIssuer.keyPair.privateKey,
+			issuerPublicKey: firstIssuer.keyPair.publicKey,
+			serialNumber: sharedSerial,
+			extensions: { crlDistributionPoints: distributionPoints },
+		});
+		const secondLeaf = await createCertificate({
+			issuer: { commonName: 'Indirect Leaf Issuer B' },
+			subject: { commonName: 'indirect-b.example' },
+			publicKey: secondLeafKeys.publicKey,
+			signerPrivateKey: secondIssuer.keyPair.privateKey,
+			issuerPublicKey: secondIssuer.keyPair.publicKey,
+			serialNumber: sharedSerial,
+			extensions: { crlDistributionPoints: distributionPoints },
+		});
+		const baseCrl = await createCertificateRevocationList({
+			issuer: { commonName: 'Indirect CRL Issuer' },
+			signerPrivateKey: crlIssuer.keyPair.privateKey,
+			issuerPublicKey: crlIssuer.keyPair.publicKey,
+			issuingDistributionPoint: {
+				distributionPoint: {
+					fullName: [{ type: 'uri', value: 'http://example.test/indirect.crl' }],
+				},
+				indirectCrl: true,
+			},
+			revokedCertificates: [
+				{ serialNumber: Uint8Array.of(0x01) },
+				{ serialNumber: sharedSerial, reasonCode: 'keyCompromise' },
+			],
+		});
+		const indirectCrlDer = await addRevokedEntryCertificateIssuers(
+			baseCrl.der,
+			crlIssuer.keyPair.privateKey,
+			[
+				{
+					entryIndex: 0,
+					names: [{ type: 'directoryName', derHex: parsedFirstIssuer.subject.derHex }],
+				},
+			],
+		);
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: firstLeaf.pem,
+				issuerCertificate: crlIssuer.certificate.pem,
+				crl: indirectCrlDer,
+			}),
+		).toMatchObject({ ok: true, status: 'revoked', reasonCode: 'keyCompromise' });
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: secondLeaf.pem,
+				issuerCertificate: crlIssuer.certificate.pem,
+				crl: indirectCrlDer,
+			}),
+		).toMatchObject({ ok: true, status: 'good' });
+	});
+
+	it('rejects indirect CRLs without matching cRLIssuer distribution points', async () => {
+		const crlIssuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Indirect Applicability CRL Issuer' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const certificateIssuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Indirect Applicability Leaf Issuer' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Indirect Applicability Leaf Issuer' },
+			subject: { commonName: 'indirect-applicability.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: certificateIssuer.keyPair.privateKey,
+			issuerPublicKey: certificateIssuer.keyPair.publicKey,
+			extensions: {
+				crlDistributionPoints: [
+					{
+						distributionPoint: {
+							fullName: [{ type: 'uri', value: 'http://example.test/indirect-applicability.crl' }],
+						},
+					},
+				],
+			},
+		});
+		const indirectCrl = await createCertificateRevocationList({
+			issuer: { commonName: 'Indirect Applicability CRL Issuer' },
+			signerPrivateKey: crlIssuer.keyPair.privateKey,
+			issuerPublicKey: crlIssuer.keyPair.publicKey,
+			issuingDistributionPoint: {
+				distributionPoint: {
+					fullName: [{ type: 'uri', value: 'http://example.test/indirect-applicability.crl' }],
+				},
+				indirectCrl: true,
+			},
+		});
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: leaf.pem,
+				issuerCertificate: crlIssuer.certificate.pem,
+				crl: indirectCrl.pem,
+			}),
+		).toEqual({
+			ok: false,
+			code: 'non_applicable',
+			message: 'certificate distribution points do not authorize this indirect CRL issuer',
+			details: { reason: 'issuer_mismatch' },
 		});
 	});
 

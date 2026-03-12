@@ -316,7 +316,7 @@
 			"description": "Add indirect CRL and certificateIssuer entry processing. Done when:\n- indirect CRL entries can identify alternate certificate issuers\n- issuer selection logic is tested\n- unsupported cases fail clearly",
 			"depends": ["enforce-crl-applicability"],
 			"priority": "standard",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "add-delta-crl-merge",

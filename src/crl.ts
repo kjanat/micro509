@@ -101,6 +101,7 @@ export interface ParsedRevokedCertificate {
 	readonly revocationDate: Date;
 	readonly reasonCode?: RevocationReason;
 	readonly invalidityDate?: Date;
+	readonly certificateIssuer?: readonly GeneralName[];
 }
 
 export interface ParsedCertificateRevocationList {
@@ -189,6 +190,18 @@ export type CrlApplicabilityFailureReason =
 	| 'indirect_crl_unsupported'
 	| 'issuer_mismatch'
 	| 'reasons_mismatch';
+
+type RevokedCertificateLookupResult =
+	| {
+			readonly ok: true;
+			readonly entry?: ParsedRevokedCertificate;
+	  }
+	| {
+			readonly ok: false;
+			readonly code: 'non_applicable';
+			readonly message: string;
+			readonly details: CheckCertificateRevocationAgainstCrlFailureDetails;
+	  };
 
 export interface CheckCertificateRevocationAgainstCrlFailureDetails {
 	readonly reason?: CrlApplicabilityFailureReason;
@@ -297,6 +310,9 @@ export function parseCertificateRevocationListDer(
 				...(parsedEntryExtensions.invalidityDate === undefined
 					? {}
 					: { invalidityDate: parsedEntryExtensions.invalidityDate }),
+				...(parsedEntryExtensions.certificateIssuer === undefined
+					? {}
+					: { certificateIssuer: parsedEntryExtensions.certificateIssuer }),
 			};
 		});
 		cursor += 1;
@@ -457,8 +473,11 @@ export async function checkCertificateRevocationAgainstCrl(
 	if (applicabilityFailure !== undefined) {
 		return applicabilityFailure;
 	}
-	const revoked = findRevokedCertificateEntry(certificate.serialNumberHex, validated.value);
-	if (revoked === undefined) {
+	const revoked = findRevokedCertificateEntry(certificate, validated.value);
+	if (!revoked.ok) {
+		return revoked;
+	}
+	if (revoked.entry === undefined) {
 		return {
 			ok: true,
 			status: 'good',
@@ -469,8 +488,8 @@ export async function checkCertificateRevocationAgainstCrl(
 		ok: true,
 		status: 'revoked',
 		value: validated.value,
-		revocationDate: revoked.revocationDate,
-		...(revoked.reasonCode === undefined ? {} : { reasonCode: revoked.reasonCode }),
+		revocationDate: revoked.entry.revocationDate,
+		...(revoked.entry.reasonCode === undefined ? {} : { reasonCode: revoked.entry.reasonCode }),
 	};
 }
 
@@ -488,16 +507,34 @@ export function isCertificateRevoked(
 }
 
 function findRevokedCertificateEntry(
-	certificateSerialNumber: Uint8Array | string,
+	certificate: ParsedCertificate,
 	crl: ParsedCertificateRevocationList,
-): ParsedRevokedCertificate | undefined {
-	const serialNumberHex =
-		typeof certificateSerialNumber === 'string'
-			? normalizeHex(certificateSerialNumber)
-			: toHex(certificateSerialNumber);
-	return crl.revokedCertificates.find(
-		(entry) => normalizeHex(entry.serialNumberHex) === serialNumberHex,
-	);
+): RevokedCertificateLookupResult {
+	const serialNumberHex = normalizeHex(certificate.serialNumberHex);
+	let effectiveIssuer: readonly GeneralName[] | undefined;
+	let sawUnsupportedIssuer = false;
+	for (const entry of crl.revokedCertificates) {
+		if (entry.certificateIssuer !== undefined) {
+			effectiveIssuer = entry.certificateIssuer;
+		}
+		if (normalizeHex(entry.serialNumberHex) !== serialNumberHex) {
+			continue;
+		}
+		const issuerMatch = matchesRevokedEntryIssuer(certificate, crl, effectiveIssuer);
+		if (issuerMatch === 'match') {
+			return { ok: true, entry };
+		}
+		if (issuerMatch === 'unsupported') {
+			sawUnsupportedIssuer = true;
+		}
+	}
+	if (sawUnsupportedIssuer) {
+		return nonApplicable(
+			'indirect_crl_unsupported',
+			'indirect CRL entry certificateIssuer must include a directoryName',
+		);
+	}
+	return { ok: true };
 }
 
 function checkCrlApplicability(
@@ -518,13 +555,8 @@ function checkCrlApplicability(
 		);
 	}
 	const issuingDistributionPoint = crl.issuingDistributionPoint;
-	if (issuingDistributionPoint?.indirectCrl === true) {
-		return nonApplicable(
-			'indirect_crl_unsupported',
-			'indirect CRLs are not applicable until indirect CRL support is implemented',
-		);
-	}
-	if (certificate.issuer.derHex !== crl.issuer.derHex) {
+	const isIndirectCrl = issuingDistributionPoint?.indirectCrl === true;
+	if (!isIndirectCrl && certificate.issuer.derHex !== crl.issuer.derHex) {
 		return nonApplicable(
 			'issuer_mismatch',
 			'CRL issuer does not match certificate issuer for direct CRL processing',
@@ -554,15 +586,39 @@ function checkCrlApplicability(
 				'certificates without CRL distribution points only accept full-scope CRLs',
 			);
 		}
+		if (isIndirectCrl && certificate.issuer.derHex !== crl.issuer.derHex) {
+			return nonApplicable(
+				'issuer_mismatch',
+				'indirect CRLs for alternate certificate issuers require matching cRLIssuer distribution points',
+			);
+		}
 		return undefined;
 	}
 	let sawIndirectDistributionPoint = false;
 	let sawDistributionMismatch = false;
+	let sawIndirectIssuerMismatch = false;
+	let sawIndirectIssuerUnsupported = false;
 	let sawReasonsMismatch = false;
 	for (const distributionPoint of distributionPoints) {
-		if (distributionPoint.crlIssuer !== undefined) {
+		if (!isIndirectCrl && distributionPoint.crlIssuer !== undefined) {
 			sawIndirectDistributionPoint = true;
 			continue;
+		}
+		if (isIndirectCrl) {
+			if (
+				certificate.issuer.derHex !== crl.issuer.derHex ||
+				distributionPoint.crlIssuer !== undefined
+			) {
+				const issuerMatch = matchesIndirectCrlIssuer(distributionPoint.crlIssuer, crl);
+				if (issuerMatch === 'unsupported') {
+					sawIndirectIssuerUnsupported = true;
+					continue;
+				}
+				if (!issuerMatch) {
+					sawIndirectIssuerMismatch = true;
+					continue;
+				}
+			}
 		}
 		if (
 			!matchesDistributionPointName(
@@ -587,6 +643,18 @@ function checkCrlApplicability(
 			'certificate distribution point reasons do not overlap the CRL reason scope',
 		);
 	}
+	if (sawIndirectIssuerUnsupported) {
+		return nonApplicable(
+			'indirect_crl_unsupported',
+			'indirect CRL distribution points must identify the CRL issuer with directoryName',
+		);
+	}
+	if (sawIndirectIssuerMismatch) {
+		return nonApplicable(
+			'issuer_mismatch',
+			'certificate distribution points do not authorize this indirect CRL issuer',
+		);
+	}
 	if (sawDistributionMismatch) {
 		return nonApplicable(
 			'distribution_point_mismatch',
@@ -603,6 +671,49 @@ function checkCrlApplicability(
 		'distribution_point_mismatch',
 		'certificate distribution points do not match the CRL scope',
 	);
+}
+
+function matchesIndirectCrlIssuer(
+	crlIssuerNames: readonly GeneralName[] | undefined,
+	crl: ParsedCertificateRevocationList,
+): boolean | 'unsupported' {
+	if (crlIssuerNames === undefined) {
+		return false;
+	}
+	let sawUnsupportedName = false;
+	for (const generalName of crlIssuerNames) {
+		if (generalName.type === 'directoryName') {
+			if (normalizeHex(generalName.derHex) === normalizeHex(crl.issuer.derHex)) {
+				return true;
+			}
+			continue;
+		}
+		sawUnsupportedName = true;
+	}
+	return sawUnsupportedName ? 'unsupported' : false;
+}
+
+function matchesRevokedEntryIssuer(
+	certificate: ParsedCertificate,
+	crl: ParsedCertificateRevocationList,
+	effectiveIssuer: readonly GeneralName[] | undefined,
+): 'match' | 'mismatch' | 'unsupported' {
+	if (effectiveIssuer === undefined) {
+		return normalizeHex(certificate.issuer.derHex) === normalizeHex(crl.issuer.derHex)
+			? 'match'
+			: 'mismatch';
+	}
+	let sawUnsupportedName = false;
+	for (const generalName of effectiveIssuer) {
+		if (generalName.type === 'directoryName') {
+			if (normalizeHex(generalName.derHex) === normalizeHex(certificate.issuer.derHex)) {
+				return 'match';
+			}
+			continue;
+		}
+		sawUnsupportedName = true;
+	}
+	return sawUnsupportedName ? 'unsupported' : 'mismatch';
 }
 
 function nonApplicable(
@@ -817,12 +928,17 @@ function buildRevokedCertificateExtensions(entry: RevokedCertificateInput): Uint
 function parseRevokedCertificateExtensions(
 	entryDer: Uint8Array | undefined,
 	element: DerElement | undefined,
-): { readonly reasonCode?: RevocationReason; readonly invalidityDate?: Date } {
+): {
+	readonly reasonCode?: RevocationReason;
+	readonly invalidityDate?: Date;
+	readonly certificateIssuer?: readonly GeneralName[];
+} {
 	if (entryDer === undefined || element === undefined) {
 		return {};
 	}
 	let reasonCode: RevocationReason | undefined;
 	let invalidityDate: Date | undefined;
+	let certificateIssuer: readonly GeneralName[] | undefined;
 	for (const extension of childrenOf(entryDer, element)) {
 		const parts = childrenOf(entryDer, extension);
 		const oid = decodeObjectIdentifier(
@@ -838,10 +954,16 @@ function parseRevokedCertificateExtensions(
 		if (oid === OIDS.invalidityDate) {
 			invalidityDate = parseTime(readElement(valueElement.value));
 		}
+		if (oid === OIDS.certificateIssuer) {
+			certificateIssuer = childrenOf(valueElement.value, readElement(valueElement.value)).map(
+				(name) => parseGeneralName(name),
+			);
+		}
 	}
 	return {
 		...(reasonCode === undefined ? {} : { reasonCode }),
 		...(invalidityDate === undefined ? {} : { invalidityDate }),
+		...(certificateIssuer === undefined ? {} : { certificateIssuer }),
 	};
 }
 

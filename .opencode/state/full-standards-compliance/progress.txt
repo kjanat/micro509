@@ -5,6 +5,7 @@ Started: 2026-03-12
 
 ## Codebase Patterns
 
+- Indirect CRL revocation lookup is sequence-scoped state, not entry-local state: carry `certificateIssuer` forward across revoked entries, match on serial plus effective issuer, and fail closed only after scanning all same-serial candidates.
 - Structured distribution-point builder coverage should hit both optional halves of the RFC model: issuer-only certificate DPs and scope-only CRL IDPs, plus runtime rejects for empty `fullName` sequences.
 - For structured distribution-point coverage, prefer builder-backed round trips that assert both certificate-side DPs and CRL-side IDP/freshest-CRL parsing, with at least one `relativeName` case and one `fullName`+reasons case.
 - For RFC 9618 mappings, keep graph mutation keyed by mapped `expectedPolicySet`, then derive caller-visible policy success from the surviving root-domain policies that still reach the leaf; never let an intermediate `anyPolicy` bridge satisfy arbitrary caller policy OIDs by itself.
@@ -276,3 +277,11 @@ Started: 2026-03-12
 - Added CRL regressions in `test/crl.test.ts` for matching vs mismatched DPs, reason masks, CA-only scope, no-CRLDP fallback, signer permission checks, and indirect/delta rejection, and re-exported the new API from `src/index.ts`.
 - Files changed: `src/crl.ts`, `src/index.ts`, `test/crl.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** issuer-issued certificates without `cRLDistributionPoints` still accept reason-scoped IDP CRLs; only named IDP scope makes them non-applicable, so no-CRLDP fallback must stay narrower than explicit DP matching.
+
+## Task - [add-indirect-crl]
+
+- Added revoked-entry `certificateIssuer` parsing in `src/crl.ts` plus the `certificateIssuer` OID in `src/oids.ts`, so parsed CRLs now preserve indirect-entry issuer data.
+- Implemented indirect CRL applicability and lookup in `src/crl.ts`: alternate-issuer CRLs now require matching `cRLIssuer` distribution points, and revocation lookup carries `certificateIssuer` across entries so serial matching stays issuer-safe.
+- Added focused indirect-CRL regressions in `test/crl.test.ts` for parsed entry issuers, carried issuer state, same-serial cross-issuer isolation, missing `cRLIssuer` authorization, and unsupported non-`directoryName` issuer forms.
+- Files changed: `src/crl.ts`, `src/oids.ts`, `test/crl.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** indirect CRL entry issuer state is path-dependent within the revoked-entry sequence; lookup must scan all same-serial entries before failing closed on unsupported issuer forms, or later matching issuers can be masked.

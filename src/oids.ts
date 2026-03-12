@@ -45,6 +45,7 @@ const OIDS = {
 	cRLNumber: '2.5.29.20',
 	cRLReason: '2.5.29.21',
 	invalidityDate: '2.5.29.24',
+	certificateIssuer: '2.5.29.29',
 	issuingDistributionPoint: '2.5.29.28',
 	deltaCRLIndicator: '2.5.29.27',
 	basicConstraints: '2.5.29.19',
