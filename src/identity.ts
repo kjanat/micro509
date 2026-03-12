@@ -3,6 +3,7 @@ import type { MatchableServiceIdentityInput, ServiceIdentityInput } from './vali
 
 export type MatchServiceIdentityErrorCode =
 	| 'subject_alt_name_mismatch'
+	| 'service_identity_service_mismatch'
 	| 'service_identity_type_unsupported';
 
 export interface MatchServiceIdentityFailureDetails {
@@ -84,12 +85,101 @@ export function matchCertificateServiceIdentity(
 			}
 			return { ok: true };
 		}
-		default: {
+		case 'uri': {
+			const expected = parseUriServiceIdentity(serviceIdentity.value);
+			const sans = certificate.subjectAltNames?.filter((entry) => entry.type === 'uri') ?? [];
+			const matchingService = sans.flatMap((entry) => {
+				const parsed = tryParseUriServiceIdentity(entry.value);
+				if (parsed === undefined || parsed.serviceType !== expected.serviceType) {
+					return [];
+				}
+				return [parsed];
+			});
+			if (matchingService.some((entry) => matchesDnsName(entry.domainName, expected.domainName))) {
+				return { ok: true };
+			}
+			if (matchingService.length > 0) {
+				return failure(
+					'subject_alt_name_mismatch',
+					'URI host not present in SAN',
+					details(
+						certificate.subject.values.commonName,
+						expected.domainName,
+						matchingService.map((entry) => entry.domainName).join(','),
+					),
+				);
+			}
+			if (sans.length > 0) {
+				return failure(
+					'service_identity_service_mismatch',
+					'URI scheme not present in SAN',
+					details(
+						certificate.subject.values.commonName,
+						expected.serviceType,
+						sans
+							.flatMap((entry) => {
+								const parsed = tryParseUriServiceIdentity(entry.value);
+								return parsed === undefined ? [] : [parsed.serviceType];
+							})
+							.join(','),
+					),
+				);
+			}
 			return failure(
-				'service_identity_type_unsupported',
-				`${serviceIdentity.type} service identity matching not implemented yet`,
-				{ expected: serviceIdentity.value },
+				'subject_alt_name_mismatch',
+				'URI-ID not present in SAN',
+				details(certificate.subject.values.commonName, expected.domainName, ''),
 			);
+		}
+		case 'srv': {
+			const expected = parseSrvServiceIdentity(serviceIdentity.value);
+			const sans = certificate.subjectAltNames?.filter((entry) => entry.type === 'srv') ?? [];
+			const matchingService = sans.flatMap((entry) => {
+				const parsed = tryParseSrvServiceIdentity(entry.value);
+				if (parsed === undefined || parsed.serviceType !== expected.serviceType) {
+					return [];
+				}
+				return [parsed];
+			});
+			if (matchingService.some((entry) => matchesDnsName(entry.domainName, expected.domainName))) {
+				return { ok: true };
+			}
+			if (matchingService.length > 0) {
+				return failure(
+					'subject_alt_name_mismatch',
+					'SRV domain not present in SAN',
+					details(
+						certificate.subject.values.commonName,
+						expected.domainName,
+						matchingService.map((entry) => entry.domainName).join(','),
+					),
+				);
+			}
+			if (sans.length > 0) {
+				return failure(
+					'service_identity_service_mismatch',
+					'SRV service not present in SAN',
+					details(
+						certificate.subject.values.commonName,
+						expected.serviceType,
+						sans
+							.flatMap((entry) => {
+								const parsed = tryParseSrvServiceIdentity(entry.value);
+								return parsed === undefined ? [] : [parsed.serviceType];
+							})
+							.join(','),
+					),
+				);
+			}
+			return failure(
+				'subject_alt_name_mismatch',
+				'SRV-ID not present in SAN',
+				details(certificate.subject.values.commonName, expected.domainName, ''),
+			);
+		}
+		default: {
+			const _exhaustive: never = serviceIdentity;
+			throw new Error(`Unhandled service identity type: ${String(_exhaustive)}`);
 		}
 	}
 }
@@ -118,6 +208,89 @@ function normalizeIpAddress(value: string): string {
 	return expandIpv6(value)
 		.map((segment) => segment.toLowerCase())
 		.join(':');
+}
+
+interface ServiceScopedIdentity {
+	readonly serviceType: string;
+	readonly domainName: string;
+}
+
+function parseUriServiceIdentity(value: string): ServiceScopedIdentity {
+	const parsed = tryParseUriServiceIdentity(value);
+	if (parsed === undefined) {
+		throw new Error(`Invalid URI service identity: ${value}`);
+	}
+	return parsed;
+}
+
+function tryParseUriServiceIdentity(value: string): ServiceScopedIdentity | undefined {
+	const schemeEnd = value.indexOf(':');
+	if (schemeEnd <= 0) {
+		return undefined;
+	}
+	const serviceType = value.slice(0, schemeEnd).toLowerCase();
+	const domainName = extractUriRegName(value);
+	if (domainName === undefined) {
+		return undefined;
+	}
+	return { serviceType, domainName: domainName.toLowerCase() };
+}
+
+function extractUriRegName(value: string): string | undefined {
+	const schemeEnd = value.indexOf(':');
+	if (schemeEnd <= 0) {
+		return undefined;
+	}
+	const schemeSpecific = value.slice(schemeEnd + 1);
+	let authority = cutAtFirstDelimiter(
+		schemeSpecific.startsWith('//') ? schemeSpecific.slice(2) : schemeSpecific,
+		['/', '?', '#'],
+	);
+	const userInfoSeparator = authority.lastIndexOf('@');
+	if (userInfoSeparator >= 0) {
+		authority = authority.slice(userInfoSeparator + 1);
+	}
+	if (authority.startsWith('[')) {
+		return undefined;
+	}
+	const host = cutAtFirstDelimiter(authority, [':', ';']);
+	if (host.length === 0 || host.includes('[') || host.includes(']')) {
+		return undefined;
+	}
+	return host;
+}
+
+function cutAtFirstDelimiter(value: string, delimiters: readonly string[]): string {
+	let end = value.length;
+	for (const delimiter of delimiters) {
+		const index = value.indexOf(delimiter);
+		if (index >= 0 && index < end) {
+			end = index;
+		}
+	}
+	return value.slice(0, end);
+}
+
+function parseSrvServiceIdentity(value: string): ServiceScopedIdentity {
+	const parsed = tryParseSrvServiceIdentity(value);
+	if (parsed === undefined) {
+		throw new Error(`Invalid SRV service identity: ${value}`);
+	}
+	return parsed;
+}
+
+function tryParseSrvServiceIdentity(value: string): ServiceScopedIdentity | undefined {
+	if (!value.startsWith('_')) {
+		return undefined;
+	}
+	const dotIndex = value.indexOf('.');
+	if (dotIndex <= 1 || dotIndex === value.length - 1) {
+		return undefined;
+	}
+	return {
+		serviceType: value.slice(1, dotIndex).toLowerCase(),
+		domainName: value.slice(dotIndex + 1).toLowerCase(),
+	};
 }
 
 function expandIpv6(value: string): readonly string[] {

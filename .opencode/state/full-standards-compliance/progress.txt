@@ -54,6 +54,7 @@ Started: 2026-03-12
 - OCSP freshness should validate response-level `producedAt` separately from per-cert `thisUpdate`/`nextUpdate`: reject future `producedAt` beyond clock skew, and reject responses whose `producedAt` lands after a single-response `nextUpdate`.
 - OCSP request-bound validation must compare request and response `CertID` sets both ways: reject extra response entries and reject omitted requested entries, while staying order-insensitive for multi-cert requests.
 - Once DNS/IP matching lives behind `src/identity.ts`, keep matcher-specific wildcard / IPv6 / CN-fallback coverage in `test/identity.test.ts`; leave `test/verify.test.ts` focused on wrapper composition and failure adaptation.
+- URI-ID and SRV-ID matching should split presented identifiers into a service/scheme part plus a DNS domain part, compare service/scheme case-insensitively first, then run existing DNS-style host matching only within same-service candidates so service mismatches stay typed.
 
 ## Validation Commands
 
@@ -376,3 +377,10 @@ Started: 2026-03-12
 - Trimmed `test/verify.test.ts` back to wrapper/composition coverage for service-identity forwarding and typed failure adaptation.
 - Files changed: `test/identity.test.ts`, `test/verify.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** once a boundary exists, its pure matching semantics should be tested directly there; wrapper tests should prove composition order and error mapping, not duplicate matcher behavior.
+
+## Task - [implement-uri-srv-matchers]
+
+- Implemented URI-ID and SRV-ID matching in `src/identity.ts`, including typed `service_identity_service_mismatch` failures when the SAN scheme/service does not match even if the domain would.
+- Added direct boundary coverage in `test/identity.test.ts` for URI scheme+host matching and SRV service+domain matching, including case-insensitive service comparisons.
+- Files changed: `src/identity.ts`, `test/identity.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** for RFC 6125 service-bound identifiers, compare service/scheme before domain matching; otherwise a same-host different-service SAN can collapse into a generic hostname mismatch and lose the reason callers need.

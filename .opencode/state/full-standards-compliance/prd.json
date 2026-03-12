@@ -448,7 +448,7 @@
 			"description": "Add URI-ID and SRV-ID service identity matching. Done when:\n- URI host/service matching is implemented\n- SRV-ID matching follows RFC 6125 rules\n- typed failures distinguish identifier-type mismatches",
 			"depends": ["scaffold-identity-module", "parse-srvid-othername"],
 			"priority": "standard",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "add-idna-normalizer",

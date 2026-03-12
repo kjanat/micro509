@@ -232,15 +232,77 @@ describe('identity boundary', () => {
 		).toThrow('Invalid IPv6');
 	});
 
-	it('fails closed for identity types not wired yet', async () => {
-		const { leaf } = await issueChain();
+	it('matches URI SANs by scheme and host through the dedicated identity API', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Identity CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Identity CA' },
+			subject: { commonName: 'uri.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['serverAuth'],
+				subjectAltNames: [{ type: 'uri', value: 'https://api.example.com/admin' }],
+			},
+		});
 		const certificate = parseCertificatePem(leaf.pem);
 
 		expect(
 			matchServiceIdentity({
 				certificate,
-				serviceIdentity: { type: 'uri', value: 'https://verify.example' },
+				serviceIdentity: { type: 'uri', value: 'https://api.example.com/login' },
 			}),
-		).toMatchObject({ ok: false, code: 'service_identity_type_unsupported' });
+		).toEqual({ ok: true });
+		expect(
+			matchServiceIdentity({
+				certificate,
+				serviceIdentity: { type: 'uri', value: 'wss://api.example.com/socket' },
+			}),
+		).toMatchObject({ ok: false, code: 'service_identity_service_mismatch' });
+	});
+
+	it('matches SRV SANs by service and domain through the dedicated identity API', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Identity CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Identity CA' },
+			subject: { commonName: 'srv.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['serverAuth'],
+				subjectAltNames: [{ type: 'srv', value: '_xmpp-client.im.example.org' }],
+			},
+		});
+		const certificate = parseCertificatePem(leaf.pem);
+
+		expect(
+			matchServiceIdentity({
+				certificate,
+				serviceIdentity: { type: 'srv', value: '_XMPP-CLIENT.im.example.org' },
+			}),
+		).toEqual({ ok: true });
+		expect(
+			matchServiceIdentity({
+				certificate,
+				serviceIdentity: { type: 'srv', value: '_xmpp-server.im.example.org' },
+			}),
+		).toMatchObject({ ok: false, code: 'service_identity_service_mismatch' });
 	});
 });
