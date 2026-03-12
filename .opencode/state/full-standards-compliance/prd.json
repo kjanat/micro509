@@ -271,7 +271,7 @@
 			"description": "Add RFC 9618 policy validation fixtures and regressions. Done when:\n- valid and invalid policy chains exist\n- worst-case fanout behavior is covered\n- docs can point at passing policy tests",
 			"depends": ["expose-policy-outcomes"],
 			"priority": "polish",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "define-dp-idp-types",

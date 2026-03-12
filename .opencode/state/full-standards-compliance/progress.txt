@@ -48,6 +48,7 @@ Started: 2026-03-12
 - For staged standards work, land internal state machines before public enforcement, but keep public policy/revocation knobs fail-closed until the matching enforcement/output task exists.
 - For staged policy enforcement, enable only the RFC knobs the current task actually enforces, keep the rest fail-closed, and derive pass/fail from the final constrained policy set before exposing richer public outcomes.
 - Expose policy outcomes as two views: `authorityConstrainedPolicies` reports the final surviving leaf-domain policies, while `userConstrainedPolicies` reports caller-visible policy results after mapping and `anyPolicy` handling.
+- Focused policy fixture coverage works best with a local issuance helper plus assertions on both `authorityConstrainedPolicies` and `userConstrainedPolicies`; include one Cartesian mapping-fanout case so DAG dedupe stays protected.
 - Policy extension round-trip tests should assert both structured parse outputs and raw extension criticality so create/parse coverage catches semantic data loss without dropping wire-level defaults.
 - CRL handling should split signer/freshness validation from certificate applicability: first validate issuer, AKI, signature, time, and `cRLSign`; then return explicit `non_applicable` reasons for scope mismatches instead of treating a fresh wrong-scope CRL as usable evidence.
 - Revocation orchestration should normalize each evidence source into `good` / `revoked` / indeterminate results, short-circuit on any revocation, and preserve per-source indeterminate details so mixed CRL/OCSP evidence never fails open.
@@ -426,3 +427,11 @@ Started: 2026-03-12
 - Ran the full feedback loop: `bun fmt`, `bun typecheck`, `bun lint`, `bun test`, `bun bd`.
 - Files changed: `test/certificate.test.ts`, `test/csr.test.ts`, `test/parse.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** round-trip policy coverage is strongest when one test checks parsed semantic equality and the same flow still asserts extension criticality, because policy defaults and structured payload loss can regress independently.
+
+## Task - [add-policy-fixtures]
+
+- Added `test/policy.test.ts` with focused RFC 9618 fixture coverage for mapped-policy success/failure, explicit-policy and `anyPolicy` rejection cases, and a Cartesian mapping-fanout regression that asserts deduped leaf-policy outcomes.
+- Kept the fixture file self-contained with a tiny issuance helper so policy-chain setup stays readable and isolated from the broader `test/verify.test.ts` matrix.
+- Ran the full feedback loop: `bun fmt`, `bun typecheck`, `bun lint`, `bun test`, `bun bd`.
+- Files changed: `test/policy.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** focused policy fixture coverage works best with a local issuance helper plus assertions on both authority-constrained and user-constrained outputs; one Cartesian mapping-fanout case protects the DAG dedupe path without bloating the main verify test file.
