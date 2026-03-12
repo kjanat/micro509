@@ -612,11 +612,15 @@ function parseRelativeName(
 		const parts = childrenOf(valueDer, attributeSequence);
 		const oid = decodeObjectIdentifier(requireElement(parts[0], 'name OID').value);
 		const valueElement = requireElement(parts[1], 'name value');
-		const key = nameKeyFromOid(oid);
-		const value = decodeNameValue(valueElement);
-		attributes.push({ oid, ...(key === undefined ? {} : { key }), value });
-		if (key !== undefined && values[key] === undefined) {
-			values[key] = value;
+		const fieldKey = nameKeyFromOid(oid);
+		const fieldValue = decodeNameValue(valueElement);
+		const attribute: ParsedNameAttribute =
+			fieldKey === undefined
+				? { oid, valueTag: valueElement.tag, value: fieldValue }
+				: { oid, key: fieldKey, valueTag: valueElement.tag, value: fieldValue };
+		attributes.push(attribute);
+		if (fieldKey !== undefined && values[fieldKey] === undefined) {
+			values[fieldKey] = fieldValue;
 		}
 	}
 	return {

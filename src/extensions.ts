@@ -487,7 +487,7 @@ export function encodeSubjectAltName(value: SubjectAltName): Uint8Array {
 		case 'ip':
 			return implicitPrimitiveContext(7, encodeIpAddress(value.value));
 		case 'directoryName':
-			return implicitConstructedContext(4, hexToBytes(value.derHex));
+			return implicitConstructedContext(4, extractDirectoryNameContent(value.derHex));
 		case 'unknown':
 			return tlv(value.tag, value.value);
 		default: {
@@ -619,12 +619,20 @@ function encodeNameConstraintForm(form: NameConstraintForm): Uint8Array {
 		case 'ip':
 			return implicitPrimitiveContext(7, concatBytes([form.addressBytes, form.maskBytes]));
 		case 'directoryName':
-			return implicitConstructedContext(4, hexToBytes(form.derHex));
+			return implicitConstructedContext(4, extractDirectoryNameContent(form.derHex));
 		default: {
 			const _exhaustive: never = form;
 			throw new Error(`Unhandled NameConstraintForm type: ${String(_exhaustive)}`);
 		}
 	}
+}
+
+function extractDirectoryNameContent(derHex: string): Uint8Array {
+	const element = readElement(hexToBytes(derHex));
+	if (element.tag !== 0x30) {
+		throw new Error('directoryName derHex must encode a DER SEQUENCE');
+	}
+	return new Uint8Array(element.value);
 }
 
 export function getExtendedKeyUsageOid(usage: ExtendedKeyUsage): string {

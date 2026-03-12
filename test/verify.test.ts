@@ -16,7 +16,14 @@ import {
 	validateForTlsServer,
 	verifyCertificateChain,
 } from '#micro509';
-import { sequence, tlv } from '#micro509/der.ts';
+import {
+	objectIdentifier,
+	printableString,
+	sequence,
+	setOf,
+	tlv,
+	utf8String,
+} from '#micro509/der.ts';
 import { OIDS } from '#micro509/oids.ts';
 import { parseNameConstraints } from '#micro509/parse.ts';
 import { issueChain } from './helpers.ts';
@@ -25,6 +32,34 @@ function buildUnsupportedOtherNameConstraintsDer(): Uint8Array {
 	const otherName = tlv(0xa0, sequence([]));
 	const subtree = sequence([otherName]);
 	return sequence([tlv(0xa0, subtree)]);
+}
+
+type TestDnStringEncoding = 'printable' | 'utf8';
+
+function encodeTestDnString(value: string, encoding: TestDnStringEncoding): Uint8Array {
+	return encoding === 'printable' ? printableString(value) : utf8String(value);
+}
+
+function buildDirectoryNameDerHex(
+	rdns: readonly (readonly {
+		readonly oid: string;
+		readonly value: string;
+		readonly encoding: TestDnStringEncoding;
+	}[])[],
+): string {
+	const encoded = sequence(
+		rdns.map((rdn) =>
+			setOf(
+				rdn.map((attribute) =>
+					sequence([
+						objectIdentifier(attribute.oid),
+						encodeTestDnString(attribute.value, attribute.encoding),
+					]),
+				),
+			),
+		),
+	);
+	return Buffer.from(encoded).toString('hex');
 }
 
 describe('chain verification', () => {
@@ -2680,13 +2715,10 @@ describe('coverage: validation profiles and constraint matching', () => {
 		if (!result.ok) expect(result.code).toBe('name_constraints_violated');
 	});
 
-	it('directoryName name constraint rejects subject DN with mismatched derHex', async () => {
-		// NOTE: implicitConstructedContext wraps full SEQUENCE bytes rather than
-		// replacing the tag, causing derHex round-trip mismatch. This test verifies
-		// that the name constraint checking code path executes (covers matchesDnConstraint).
-		const { encodeName } = await import('#micro509/name.ts');
-		const constraintDn = encodeName({ organization: 'AllowedOrg' });
-		const constraintDerHex = Buffer.from(constraintDn).toString('hex');
+	it('directoryName name constraint matches subject DN semantically', async () => {
+		const constraintDerHex = buildDirectoryNameDerHex([
+			[{ oid: OIDS.organizationName, value: 'allowed org', encoding: 'printable' }],
+		]);
 		const root = await createSelfSignedCertificate({
 			subject: { organization: 'AllowedOrg', commonName: 'DN Root' },
 			extensions: {
@@ -2700,7 +2732,7 @@ describe('coverage: validation profiles and constraint matching', () => {
 		const leafKeys = await generateKeyPair();
 		const leaf = await createCertificate({
 			issuer: { organization: 'AllowedOrg', commonName: 'DN Root' },
-			subject: { organization: 'AllowedOrg', commonName: 'DN Leaf' },
+			subject: { organization: '  ALLOWED   ORG  ', commonName: 'DN Leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
 			issuerPublicKey: root.keyPair.publicKey,
@@ -2716,14 +2748,22 @@ describe('coverage: validation profiles and constraint matching', () => {
 			leaf: leaf.pem,
 			roots: [root.certificate.pem],
 		});
-		expect(result.ok).toBe(false);
-		if (!result.ok) expect(result.code).toBe('name_constraints_violated');
+		expect(result.ok).toBe(true);
 	});
 
-	it('directoryName SAN constraint violation triggers error', async () => {
-		const { encodeName } = await import('#micro509/name.ts');
-		const constraintDn = encodeName({ organization: 'AllowedOrg' });
-		const constraintDerHex = Buffer.from(constraintDn).toString('hex');
+	it('directoryName SAN constraint matches reordered AVAs in the same RDN', async () => {
+		const constraintDerHex = buildDirectoryNameDerHex([
+			[
+				{ oid: OIDS.organizationName, value: 'Allowed Org', encoding: 'printable' },
+				{ oid: OIDS.commonName, value: 'Service', encoding: 'utf8' },
+			],
+		]);
+		const sanDerHex = buildDirectoryNameDerHex([
+			[
+				{ oid: OIDS.commonName, value: 'service', encoding: 'printable' },
+				{ oid: OIDS.organizationName, value: '  allowed   org  ', encoding: 'utf8' },
+			],
+		]);
 		const root = await createSelfSignedCertificate({
 			subject: { commonName: 'DN Root' },
 			extensions: {
@@ -2743,22 +2783,53 @@ describe('coverage: validation profiles and constraint matching', () => {
 			issuerPublicKey: root.keyPair.publicKey,
 			extensions: {
 				keyUsage: ['digitalSignature'],
-				subjectAltNames: [
-					{
-						type: 'directoryName',
-						derHex: Buffer.from(encodeName({ organization: 'AllowedOrg' })).toString('hex'),
-					},
-				],
+				subjectAltNames: [{ type: 'directoryName', derHex: sanDerHex }],
 			},
 		});
 		const result = await verifyCertificateChain({
 			leaf: leaf.pem,
 			roots: [root.certificate.pem],
 		});
-		// The excluded constraint's derHex and the SAN's derHex both go through the
-		// same double-wrapping, so they DO match and the exclusion fires.
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.code).toBe('name_constraints_violated');
+	});
+
+	it('directoryName matching stays sensitive to RDN sequence order', async () => {
+		const constraintDerHex = buildDirectoryNameDerHex([
+			[{ oid: OIDS.organizationName, value: 'Allowed Org', encoding: 'utf8' }],
+			[{ oid: OIDS.commonName, value: 'Service', encoding: 'utf8' }],
+		]);
+		const sanDerHex = buildDirectoryNameDerHex([
+			[{ oid: OIDS.commonName, value: 'Service', encoding: 'utf8' }],
+			[{ oid: OIDS.organizationName, value: 'Allowed Org', encoding: 'utf8' }],
+		]);
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'DN Root' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+				nameConstraints: {
+					excludedSubtrees: [{ base: { type: 'directoryName', derHex: constraintDerHex } }],
+				},
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'DN Root' },
+			subject: { commonName: 'DN Leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				subjectAltNames: [{ type: 'directoryName', derHex: sanDerHex }],
+			},
+		});
+		const result = await verifyCertificateChain({
+			leaf: leaf.pem,
+			roots: [root.certificate.pem],
+		});
+		expect(result.ok).toBe(true);
 	});
 
 	it('unknown SAN type is ignored during name constraint checking', async () => {

@@ -31,6 +31,7 @@ Started: 2026-03-12
 - When moving a concern behind a new boundary module, keep verify/profile APIs stable by adapting boundary-specific failures at the composition seam instead of duplicating domain logic.
 - For profile helpers that combine purpose and service identity, run chain/purpose validation first, then call the identity boundary so EKU/profile failures do not get masked by hostname mismatches.
 - When parser coverage needs parsed-only unsupported RFC forms, keep builder-facing extension types generic with a supported default and widen only parse-owned outputs; that preserves encode type safety while letting validators fail closed.
+- `directoryName` general names are IMPLICIT constructed values: builders must encode only the inner SEQUENCE content, and validators must compare parsed RDN structure plus prepared strings instead of raw DER.
 
 ## Validation Commands
 
@@ -184,3 +185,11 @@ Started: 2026-03-12
 - Updated `test/verify.test.ts` and `test/parse.test.ts` to cover parsed preservation plus critical-extension rejection.
 - Files changed: `src/extensions.ts`, `src/index.ts`, `src/parse.ts`, `src/verify.ts`, `test/parse.test.ts`, `test/verify.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** parsed-only RFC variants fit best as generic extensions to shared data shapes; validators can then fail closed on unsupported critical content without turning unsupported builder inputs into type-valid authoring paths.
+
+## Task - [implement-dn-compare]
+
+- Replaced `directoryName` DER-prefix matching in `src/verify.ts` with RFC 5280 semantic DN comparison over ordered RDNs, unordered AVAs, and prepared `PrintableString` / `UTF8String` values.
+- Fixed `directoryName` SAN and name-constraint encoding in `src/extensions.ts` to emit IMPLICIT content correctly, and added parsed RDN/tag metadata in `src/parse.ts` for semantic comparison.
+- Updated CRL relative-name parsing metadata in `src/crl.ts` and added regression coverage in `test/verify.test.ts` for string normalization, multi-valued RDN reordering, RDN-order sensitivity, and invalid `derHex` handling.
+- Files changed: `src/crl.ts`, `src/extensions.ts`, `src/parse.ts`, `src/verify.ts`, `test/verify.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** `directoryName` correctness needed both sides fixed together - IMPLICIT DER encoding had to preserve only inner SEQUENCE content, and compare logic had to consume structured RDN/AVA data rather than hex prefixes.

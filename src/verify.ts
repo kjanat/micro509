@@ -1,3 +1,12 @@
+import {
+	childrenOf,
+	decodeObjectIdentifier,
+	decodeString,
+	hexToBytes,
+	requireElement,
+	toHex,
+} from './asn1.ts';
+import { type DerElement, readElement } from './der.ts';
 import type {
 	ExtendedKeyUsage,
 	GeneralSubtree,
@@ -7,7 +16,13 @@ import type {
 } from './extensions.ts';
 import { matchServiceIdentity } from './identity.ts';
 import { OIDS } from './oids.ts';
-import type { ParsedCertificate, ParsedCertificateSigningRequest } from './parse.ts';
+import type {
+	ParsedCertificate,
+	ParsedCertificateSigningRequest,
+	ParsedName,
+	ParsedNameAttribute,
+	ParsedRelativeDistinguishedName,
+} from './parse.ts';
 import {
 	parseCertificateDer,
 	parseCertificateSigningRequestDer,
@@ -1820,48 +1835,196 @@ function matchesIpConstraint(
 
 /**
  * RFC 5280 §4.2.1.10: DirectoryName constraint matching.
- * The subject DN must equal or be subordinate to the constraint DN.
- * Subordinate means the constraint's DER is a prefix of the subject's
- * RDN sequence.
- *
- * NOTE: This uses byte-exact DER comparison, which is stricter than
- * RFC 5280 §7.1 (which allows string normalization). This avoids
- * false positives but may produce false negatives for DNs with
- * different string encodings (e.g. PrintableString vs UTF8String).
+ * The subject DN must equal or be subordinate to the constraint DN,
+ * using RFC 5280 section 7.1 name comparison semantics.
  */
 function matchesDnConstraint(subjectDerHex: string, constraintDerHex: string): boolean {
-	if (subjectDerHex === constraintDerHex) {
-		return true;
-	}
-	// Check if constraint is a prefix: the subject's RDN sequence
-	// starts with all RDNs from the constraint.
-	// DER SEQUENCE: tag(0x30) + length + content
-	// We compare the content (RDN SET elements) as a prefix.
-	const subjectContent = extractSequenceContent(subjectDerHex);
-	const constraintContent = extractSequenceContent(constraintDerHex);
-	if (subjectContent === undefined || constraintContent === undefined) {
+	const subjectName = parseDirectoryNameDerHex(subjectDerHex);
+	const constraintName = parseDirectoryNameDerHex(constraintDerHex);
+	if (subjectName === undefined || constraintName === undefined) {
 		return false;
 	}
-	return subjectContent.startsWith(constraintContent);
+	return isWithinDirectoryNameSubtree(subjectName, constraintName);
 }
 
-function extractSequenceContent(derHex: string): string | undefined {
-	if (derHex.length < 4) {
+function parseDirectoryNameDerHex(derHex: string): ParsedName | undefined {
+	if (!/^(?:[0-9a-fA-F]{2})+$/.test(derHex)) {
 		return undefined;
 	}
-	// Tag must be 0x30 (SEQUENCE)
-	if (derHex.slice(0, 2) !== '30') {
+	try {
+		const bytes = hexToBytes(derHex);
+		const element = readElement(bytes);
+		if (element.tag !== 0x30) {
+			return undefined;
+		}
+		const rdns: ParsedRelativeDistinguishedName[] = [];
+		const attributes: ParsedNameAttribute[] = [];
+		const values: ParsedName['values'] = {};
+		for (const setElement of childrenOf(bytes, element)) {
+			const rdn = parseDirectoryNameRdn(bytes, setElement);
+			if (rdn === undefined) {
+				return undefined;
+			}
+			rdns.push(rdn);
+			for (const attribute of rdn.attributes) {
+				attributes.push(attribute);
+				if (attribute.key !== undefined && values[attribute.key] === undefined) {
+					values[attribute.key] = attribute.value;
+				}
+			}
+		}
+		return {
+			derHex: toHex(bytes),
+			rdns,
+			attributes,
+			values,
+		};
+	} catch {
 		return undefined;
 	}
-	const firstLengthByte = Number.parseInt(derHex.slice(2, 4), 16);
-	if (Number.isNaN(firstLengthByte)) {
+}
+
+function parseDirectoryNameRdn(
+	source: Uint8Array,
+	setElement: DerElement,
+): ParsedRelativeDistinguishedName | undefined {
+	const attributes: ParsedNameAttribute[] = [];
+	const values: ParsedName['values'] = {};
+	for (const attributeSequence of childrenOf(source, setElement)) {
+		const parts = childrenOf(source, attributeSequence);
+		const oidElement = parts[0];
+		const valueElement = parts[1];
+		if (oidElement === undefined || valueElement === undefined) {
+			return undefined;
+		}
+		const oid = decodeObjectIdentifier(requireElement(oidElement, 'directoryName OID').value);
+		let fieldValue: string;
+		try {
+			fieldValue = decodeString(
+				valueElement.tag,
+				requireElement(valueElement, 'directoryName value').value,
+			);
+		} catch {
+			return undefined;
+		}
+		const fieldKey = nameKeyFromOid(oid);
+		const attribute: ParsedNameAttribute =
+			fieldKey !== undefined
+				? { oid, key: fieldKey, valueTag: valueElement.tag, value: fieldValue }
+				: { oid, valueTag: valueElement.tag, value: fieldValue };
+		attributes.push(attribute);
+		if (fieldKey !== undefined && values[fieldKey] === undefined) {
+			values[fieldKey] = fieldValue;
+		}
+	}
+	return {
+		derHex: toHex(source.slice(setElement.start - setElement.headerLength, setElement.end)),
+		attributes,
+		values,
+	};
+}
+
+function isWithinDirectoryNameSubtree(subject: ParsedName, constraint: ParsedName): boolean {
+	if (constraint.rdns.length > subject.rdns.length) {
+		return false;
+	}
+	for (let index = 0; index < constraint.rdns.length; index += 1) {
+		const subjectRdn = subject.rdns[index];
+		const constraintRdn = constraint.rdns[index];
+		if (subjectRdn === undefined || constraintRdn === undefined) {
+			return false;
+		}
+		if (!compareRelativeDistinguishedNames(subjectRdn, constraintRdn)) {
+			return false;
+		}
+	}
+	return true;
+}
+
+function compareRelativeDistinguishedNames(
+	left: ParsedRelativeDistinguishedName,
+	right: ParsedRelativeDistinguishedName,
+): boolean {
+	if (left.attributes.length !== right.attributes.length) {
+		return false;
+	}
+	const matched = new Array(right.attributes.length).fill(false);
+	for (const leftAttribute of left.attributes) {
+		let found = false;
+		for (let index = 0; index < right.attributes.length; index += 1) {
+			const rightAttribute = right.attributes[index];
+			if (rightAttribute === undefined || matched[index]) {
+				continue;
+			}
+			if (!compareNameAttributeValue(leftAttribute, rightAttribute)) {
+				continue;
+			}
+			matched[index] = true;
+			found = true;
+			break;
+		}
+		if (!found) {
+			return false;
+		}
+	}
+	return true;
+}
+
+function compareNameAttributeValue(left: ParsedNameAttribute, right: ParsedNameAttribute): boolean {
+	if (left.oid !== right.oid) {
+		return false;
+	}
+	if (isDirectoryStringTag(left.valueTag) && isDirectoryStringTag(right.valueTag)) {
+		const preparedLeft = prepareNameCompareString(left.value);
+		const preparedRight = prepareNameCompareString(right.value);
+		if (preparedLeft === undefined || preparedRight === undefined) {
+			return false;
+		}
+		return preparedLeft === preparedRight;
+	}
+	return left.valueTag === right.valueTag && left.value === right.value;
+}
+
+function isDirectoryStringTag(tag: number): boolean {
+	return tag === 0x0c || tag === 0x13;
+}
+
+function prepareNameCompareString(value: string): string | undefined {
+	const normalized = value.normalize('NFKC');
+	if (/[^\P{Cc}\t\n\r]/u.test(normalized)) {
 		return undefined;
 	}
-	if (firstLengthByte < 128) {
-		return derHex.slice(4);
+	return normalized.toLowerCase().trim().replace(/\s+/gu, ' ');
+}
+
+function nameKeyFromOid(oid: string): ParsedNameAttribute['key'] {
+	switch (oid) {
+		case OIDS.commonName:
+			return 'commonName';
+		case OIDS.surname:
+			return 'surname';
+		case OIDS.serialNumber:
+			return 'serialNumber';
+		case OIDS.countryName:
+			return 'country';
+		case OIDS.localityName:
+			return 'locality';
+		case OIDS.stateOrProvinceName:
+			return 'state';
+		case OIDS.streetAddress:
+			return 'street';
+		case OIDS.organizationName:
+			return 'organization';
+		case OIDS.organizationalUnitName:
+			return 'organizationalUnit';
+		case OIDS.title:
+			return 'title';
+		case OIDS.givenName:
+			return 'givenName';
+		case OIDS.emailAddress:
+			return 'emailAddress';
 	}
-	const lengthOctets = firstLengthByte & 0x7f;
-	return derHex.slice(4 + lengthOctets * 2);
+	return undefined;
 }
 
 function parseIpAddressToBytes(value: string): Uint8Array {

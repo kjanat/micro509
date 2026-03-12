@@ -172,7 +172,7 @@
 			"description": "Implement RFC 5280 section 7 directoryName comparison semantics. Done when:\n- comparison no longer relies on raw DER prefix equality\n- normalization helpers encode the required rules\n- positive and negative DN fixtures pass",
 			"depends": ["rfc-name-compare-spike"],
 			"priority": "standard",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "apply-initial-subtrees",

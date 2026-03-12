@@ -33,11 +33,13 @@ const textDecoder = new TextDecoder();
 export interface ParsedNameAttribute {
 	readonly oid: string;
 	readonly key?: NameFieldKey;
+	readonly valueTag: number;
 	readonly value: string;
 }
 
 export interface ParsedName {
 	readonly derHex: string;
+	readonly rdns: readonly ParsedRelativeDistinguishedName[];
 	readonly attributes: readonly ParsedNameAttribute[];
 	readonly values: Partial<Record<NameFieldKey, string>>;
 }
@@ -519,13 +521,22 @@ function parseExtensionSequence(source: Uint8Array, sequenceElement: DerElement)
 }
 
 function parseName(source: Uint8Array, element: DerElement): ParsedName {
+	const rdns: ParsedRelativeDistinguishedName[] = [];
 	const attributes: ParsedNameAttribute[] = [];
 	const values: Partial<Record<NameFieldKey, string>> = {};
 	for (const setElement of childrenOf(source, element)) {
-		parseNameAttributeSet(source, setElement, attributes, values);
+		const rdn = parseNameAttributeSet(source, setElement);
+		rdns.push(rdn);
+		for (const attribute of rdn.attributes) {
+			attributes.push(attribute);
+			if (attribute.key !== undefined && values[attribute.key] === undefined) {
+				values[attribute.key] = attribute.value;
+			}
+		}
 	}
 	return {
 		derHex: toHex(source.slice(element.start - element.headerLength, element.end)),
+		rdns,
 		attributes,
 		values,
 	};
@@ -535,33 +546,35 @@ function parseRelativeDistinguishedName(
 	source: Uint8Array,
 	element: DerElement,
 ): ParsedRelativeDistinguishedName {
-	const attributes: ParsedNameAttribute[] = [];
-	const values: Partial<Record<NameFieldKey, string>> = {};
-	parseNameAttributeSet(source, element, attributes, values);
-	return {
-		derHex: toHex(source.slice(element.start - element.headerLength, element.end)),
-		attributes,
-		values,
-	};
+	return parseNameAttributeSet(source, element);
 }
 
 function parseNameAttributeSet(
 	source: Uint8Array,
 	setElement: DerElement,
-	attributes: ParsedNameAttribute[],
-	values: Partial<Record<NameFieldKey, string>>,
-): void {
+): ParsedRelativeDistinguishedName {
+	const attributes: ParsedNameAttribute[] = [];
+	const values: Partial<Record<NameFieldKey, string>> = {};
 	for (const attributeSequence of childrenOf(source, setElement)) {
 		const parts = childrenOf(source, attributeSequence);
 		const oid = decodeObjectIdentifier(requireElement(parts[0], 'name OID').value);
 		const valueElement = requireElement(parts[1], 'name value');
-		const key = nameKeyFromOid(oid);
-		const value = decodeString(valueElement.tag, valueElement.value);
-		attributes.push({ oid, ...(key !== undefined ? { key } : {}), value });
-		if (key !== undefined && values[key] === undefined) {
-			values[key] = value;
+		const fieldKey = nameKeyFromOid(oid);
+		const fieldValue = decodeString(valueElement.tag, valueElement.value);
+		const attribute: ParsedNameAttribute =
+			fieldKey !== undefined
+				? { oid, key: fieldKey, valueTag: valueElement.tag, value: fieldValue }
+				: { oid, valueTag: valueElement.tag, value: fieldValue };
+		attributes.push(attribute);
+		if (fieldKey !== undefined && values[fieldKey] === undefined) {
+			values[fieldKey] = fieldValue;
 		}
 	}
+	return {
+		derHex: toHex(source.slice(setElement.start - setElement.headerLength, setElement.end)),
+		attributes,
+		values,
+	};
 }
 
 function parseValidity(
