@@ -536,7 +536,7 @@
 				"add-diff-test-harness"
 			],
 			"priority": "polish",
-			"passes": false
+			"passes": true
 		}
 	]
 }

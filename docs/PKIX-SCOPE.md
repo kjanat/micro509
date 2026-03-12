@@ -2,19 +2,21 @@
 
 ## Standards status
 
-| Area                       | Status    | Notes                                                                                                                                                                                                        |
-| -------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| RFC 5280 path validation   | `partial` | core path validation, policy inputs/processing, and initial subtree inputs ship; full revocation integration and complete PKITS coverage are not complete yet                                                |
-| RFC 6960 OCSP              | `partial` | request/response parsing, signature checks, responder binding/authorization, nonce/request matching, freshness checks, and full request coverage ship; local responder-policy acceptance is still incomplete |
-| RFC 6125 service identity  | `partial` | `matchServiceIdentity()` ships DNS-ID, IP-ID, URI-ID, SRV-ID, wildcard, IDNA, and opt-in CN-compat checks; verification helpers still wire DNS/IP identities only                                            |
-| RFC 9618 policy validation | `partial` | RFC 9618-style policy state, enforcement, outputs, and focused PKITS coverage ship; broader conformance evidence is still incomplete                                                                         |
+| Area                       | Status    | Notes                                                                                                                                                                                                                                                    |
+| -------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| RFC 5280 path validation   | `partial` | core path validation, supported-form name constraints, initial subtree inputs, RFC 9618 policy processing, malformed-DER coverage, and focused PKITS coverage ship; revocation stays a separate API and broader conformance evidence is still incomplete |
+| RFC 6960 OCSP              | `partial` | request/response parsing, signature checks, responder binding/authorization, nonce/request matching, freshness checks, and full request coverage ship; local responder-policy acceptance is still incomplete                                             |
+| RFC 6125 service identity  | `partial` | `matchServiceIdentity()` ships DNS-ID, IP-ID, URI-ID, SRV-ID, wildcard, IDNA, and opt-in CN-compat checks; verification helpers still wire DNS/IP identities only                                                                                        |
+| RFC 9618 policy validation | `partial` | RFC 9618-style policy state, enforcement, outputs, and focused PKITS coverage ship; broader conformance evidence is still incomplete                                                                                                                     |
+
+Current conformance evidence: [`test/pkits.test.ts`](../test/pkits.test.ts), [`test/policy.test.ts`](../test/policy.test.ts), [`test/name-constraints.test.ts`](../test/name-constraints.test.ts), [`test/ocsp-fixtures.test.ts`](../test/ocsp-fixtures.test.ts), [`test/identity-fixtures.test.ts`](../test/identity-fixtures.test.ts), [`test/revocation.test.ts`](../test/revocation.test.ts), [`test/malformed-der.test.ts`](../test/malformed-der.test.ts), and [`test/differential.test.ts`](../test/differential.test.ts).
 
 ## 1. Define the boundary up front
 
 - [x] Treat **certification path validation** as a function over a **prospective certification path** plus validation inputs, not as “build whatever chain you can find and hope for the best.”
       RFC 5280 Section 6.1.1 defines the algorithm in terms of a candidate path and nine inputs. (IETF Datatracker[^rfc5280])
 - [x] Keep **path building/discovery** separate from **path validation**.
-- [ ] Keep **service identity matching** separate from **path validation**.
+- [x] Keep **service identity matching** separate from **path validation**.
 - [x] Keep **revocation** separate from **path validation**.
 
 ## 2. Required inputs for RFC 5280-style path validation
@@ -40,7 +42,7 @@
 - [x] Enforce `pathLenConstraint` where applicable.
 - [x] Enforce `keyUsage`, especially `keyCertSign` for CAs used to sign subordinate certs.
 - [x] Process self-issued vs non-self-issued certs correctly for path length and name constraints.
-- [ ] Reject the path if any required path-processing step fails. (IETF Datatracker[^rfc5280])
+- [x] Reject the path if any required path-processing step fails. (IETF Datatracker[^rfc5280])
 
 ## 4. Extension handling
 
@@ -58,16 +60,16 @@
 
 Current GeneralName matrix for `nameConstraints`:
 
-| Form                        | Parser role                                 | Validator role                           | Status    |
-| --------------------------- | ------------------------------------------- | ---------------------------------------- | --------- |
-| `rfc822Name` / `dNSName`    | decode to typed email/DNS values            | enforce                                  | `partial` |
-| `uniformResourceIdentifier` | decode to typed URI values                  | enforce host-based matching              | `partial` |
-| `iPAddress`                 | decode to address+mask bytes                | enforce                                  | `partial` |
-| `directoryName`             | preserve DN payload for later structured DN | enforce today, but semantic compare lags | `partial` |
-| `otherName`                 | do not silently discard in final design     | fail closed if critical                  | `not yet` |
-| `x400Address`               | do not silently discard in final design     | fail closed if critical                  | `not yet` |
-| `ediPartyName`              | do not silently discard in final design     | fail closed if critical                  | `not yet` |
-| `registeredID`              | do not silently discard in final design     | fail closed if critical                  | `not yet` |
+| Form                        | Parser role                             | Validator role                         | Status    |
+| --------------------------- | --------------------------------------- | -------------------------------------- | --------- |
+| `rfc822Name` / `dNSName`    | decode to typed email/DNS values        | enforce                                | `partial` |
+| `uniformResourceIdentifier` | decode to typed URI values              | enforce host-based matching            | `partial` |
+| `iPAddress`                 | decode to address+mask bytes            | enforce                                | `partial` |
+| `directoryName`             | preserve structured DN payload          | enforce with RFC 5280 semantic compare | `partial` |
+| `otherName`                 | do not silently discard in final design | fail closed if critical                | `not yet` |
+| `x400Address`               | do not silently discard in final design | fail closed if critical                | `not yet` |
+| `ediPartyName`              | do not silently discard in final design | fail closed if critical                | `not yet` |
+| `registeredID`              | do not silently discard in final design | fail closed if critical                | `not yet` |
 
 - Parser responsibility: preserve enough tag/type information that validation can make a deterministic supported-vs-unsupported decision.
 - Validator responsibility: enforce supported forms and reject critical under-enforced cases instead of silently widening trust.
@@ -89,7 +91,7 @@ Current GeneralName matrix for `nameConstraints`:
 
 ## 8. Application/service identity checks
 
-- [ ] Keep hostname/service-name matching in a separate API from path validation.
+- [x] Keep hostname/service-name matching in a separate API from path validation.
 - [x] For currently supported identity types (`dNSName`, `iPAddress`), match `subjectAltName` entries of the corresponding type first.
 - [x] `matchServiceIdentity()` supports `dNSName`, `iPAddress`, URI-ID, and SRV-ID matching with wildcard and IDNA coverage.
 - [x] Only support CN fallback as an explicit compatibility mode, because RFC 6125 treats CN-ID usage as existing practice and prefers `subjectAltName`; CN comparison is deprecated. (IETF Datatracker[^rfc6125])
@@ -131,24 +133,24 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
 - [x] Parse CRLs and CRL extensions.
 - [x] Verify CRL signatures and issuer linkage.
 - [x] Enforce CRL time/freshness semantics.
-- [ ] Support distribution points if you want network-assisted revocation.
-- [ ] Add delta CRL handling only if you actually want to live in that swamp. RFC 5280 defines CRL validation separately from path validation. (IETF Datatracker[^rfc5280])
+- [x] Support distribution points if you want network-assisted revocation.
+- [x] Add delta CRL handling only if you actually want to live in that swamp. RFC 5280 defines CRL validation separately from path validation. (IETF Datatracker[^rfc5280])
 
 ## 13. API design checklist
 
 - [x] Keep path building separate from path validation.
-- [ ] Keep service identity matching in a separate API from path validation.
+- [x] Keep service identity matching in a separate API from path validation.
 - [x] Keep revocation checking separate from path validation.
 - [x] Expose structured validation inputs instead of hiding policy/name-constraint knobs.
 - [x] Return typed failure reasons for currently implemented path-validation, CRL, and OCSP checks.
-- [ ] Distinguish hard validation failure from “status unknown / not checked”.
+- [x] Distinguish hard validation failure from “status unknown / not checked”.
 
 ## 14. Test/conformance checklist
 
-- [ ] Add fixed RFC-style test vectors for builders, parsers, and validators.
+- [x] Add fixed RFC-style test vectors for builders, parsers, and validators.
 - [x] Add round-trip tests for certs, CSRs, names, and extensions.
 - [x] Add a focused PKITS harness for shipped path-validation claims. See [`docs/PKITS-HARNESS.md`](./PKITS-HARNESS.md) and [`test/pkits.test.ts`](../test/pkits.test.ts).
-- [ ] Add malformed DER / fuzz tests.
+- [x] Add malformed DER / fuzz tests.
 - [x] Differential-test against at least one mature implementation. See [`docs/DIFF-HARNESS.md`](./DIFF-HARNESS.md) and [`test/differential.test.ts`](../test/differential.test.ts).
 - [ ] Run the validator against **NIST PKITS**, which NIST describes as a comprehensive X.509 path validation test suite for relying parties. (NIST Computer Security Resource Center[^x-509-path-validation])
 
@@ -156,9 +158,10 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
 
 ### Safe to claim now
 
-- candidate chain validation
-- signature / time / issuer / CA / key usage / path length checks
-- basic DNS/IP SAN + EKU matching
+- candidate chain validation with typed failures and RFC 9618 policy outcomes
+- signature / time / issuer / CA / key usage / path length / name-constraint checks
+- separate revocation orchestration plus focused CRL / OCSP fixture coverage
+- `matchServiceIdentity()` for DNS-ID, IP-ID, URI-ID, SRV-ID, wildcard, IDNA, and opt-in DNS CN compatibility
 - typed parse/build APIs
 
 ### Do **_not_** claim until implemented
@@ -173,9 +176,9 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
 
 - “Validates candidate certificate paths with configurable trust anchors and typed results.”
 - “Revocation is a separate API; `matchServiceIdentity()` handles shipped RFC 6125 identifier matching, while verification helpers currently compose DNS/IP identity checks on top of path validation.”
-- “Advanced RFC 5280 features such as policy processing and full name-constraint handling are not yet complete.” (IETF Datatracker[^rfc5280])
+- “RFC 5280 path validation is partial: supported-form name constraints, initial subtree inputs, and RFC 9618 policy processing ship, but revocation stays separate and broader conformance evidence is still incomplete.” (IETF Datatracker[^rfc5280])
 
-The main monster under the bed is simple: **once you say “full RFC 5280,” you’ve signed up for policy processing, name constraints, critical-extension behavior, and trust-anchor semantics — not just signatures and dates.** (IETF Datatiracker[^rfc5280])
+The main monster under the bed is simple: **once you say “full RFC 5280,” you've signed up for policy processing, name constraints, critical-extension behavior, trust-anchor semantics, and revocation integration - not just signatures and dates.** (IETF Datatracker[^rfc5280])
 
 [^rfc5280]: https://datatracker.ietf.org/doc/html/rfc5280 "RFC 5280 - Internet X.509 Public Key Infrastructure Certificate and Certificate Revocation List (CRL) Profile"
 

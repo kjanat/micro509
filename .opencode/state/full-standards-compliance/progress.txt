@@ -67,6 +67,7 @@ Started: 2026-03-12
 - For focused PKITS coverage, vendor a small fixture subset from a maintained mirror, run `verifyCertificateChain()` at the PKITS publication timestamp, and assert public policy outputs for at least one positive mapping case so the harness checks more than pass/fail.
 - Focused OCSP fixture coverage works best in its own small file with one authority helper and paired pass/fail cases for responder binding, delegated auth, freshness, request coverage, and normalized DER/PEM/parsed inputs.
 - For CLI-backed differential harnesses, compare normalized verdicts and small metadata fields instead of raw stderr; let focused fixture tests own richer typed failures and edge-case semantics.
+- Final standards-claim passes should update README, `docs/PKIX-SCOPE.md`, and `docs/FUTURE.md` together, and each matrix row should point at concrete fixture/harness files so claim wording stays tied to test evidence.
 
 ## Validation Commands
 
@@ -495,3 +496,10 @@ Started: 2026-03-12
 - Ran the full feedback loop: `bun fmt`, `bun lint`, `bun typecheck`, `bun test`, `bun bd`.
 - Files changed: `test/malformed-der.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** targeted malformed corpora are easiest to maintain when each case starts from a valid public artifact and mutates exactly one structural assumption, so failure intent stays obvious and parser regressions stay local.
+
+## Task - [finalize-claims-and-matrix]
+
+- Updated the public standards matrix in `README.md` and `docs/PKIX-SCOPE.md` so RFC 5280 / 6960 / 6125 / 9618 status text matches the now-shipped policy, name-constraint, conformance, and revocation boundaries.
+- Tightened `docs/PKIX-SCOPE.md` checklist items that were still stale after the implementation work, added direct references to the focused conformance evidence files, and refreshed `docs/FUTURE.md` so completed standards work no longer sits in the backlog.
+- Files changed: `README.md`, `docs/PKIX-SCOPE.md`, `docs/FUTURE.md`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** final claims work is easiest to keep honest when README, scope docs, and backlog docs all derive from the same small set of fixture and harness files; stale backlog bullets can overstate missing work just as easily as marketing docs can overstate shipped work.

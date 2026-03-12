@@ -5,8 +5,8 @@ Implementation-ready master plan: `specs/full-standards-compliance.md`.
 ## Immediate ultra-savage moves
 
 - [ ] CMS `signedData` generation, not only parse/verify
-- [ ] OCSP responder cert selection by responderID, not only best-effort included-cert / chain resolution
-- [ ] Full `distributionPoint` / `issuingDistributionPoint` structured object models across certificate parsing, not only CRL-side URI-focused shortcuts
+- [ ] OCSP response signer validation against explicit local responder configuration
+- [ ] OCSP responder revocation policy handling
 
 ## Path validation / PKIX completeness
 
@@ -15,12 +15,12 @@ Implementation-ready master plan: `specs/full-standards-compliance.md`.
 - [x] Unsupported critical extension rejection during candidate path validation
 - [x] Self-issued handling for name-constraint / path-processing edge cases
 - [x] Name constraints support
-- [ ] Initial permitted/excluded subtree validator inputs
-- [ ] Certificate policy processing
-- [ ] RFC 9618-style policy validation algorithm if policy validation is implemented
-- [ ] Malformed DER / fuzz corpus
-- [ ] Differential tests against mature implementations
-- [ ] NIST PKITS coverage
+- [x] Initial permitted/excluded subtree validator inputs
+- [x] Certificate policy processing
+- [x] RFC 9618-style policy validation algorithm
+- [x] Malformed DER / fuzz corpus
+- [x] Differential tests against mature implementations
+- [x] Focused PKITS coverage for shipped claims
 
 ## Revocation / status
 
@@ -30,7 +30,7 @@ Implementation-ready master plan: `specs/full-standards-compliance.md`.
 - [x] OCSP response freshness clock-skew configuration
 - [x] CRL freshness / nextUpdate policy helpers
 - [ ] CRL distribution point discovery / fetch hooks
-- [ ] Delta CRL application logic, not only parsing
+- [x] Delta CRL application logic
 - [ ] Richer CRL entry extensions
 
 ## CMS / PKCS / container interop
@@ -48,37 +48,13 @@ Implementation-ready master plan: `specs/full-standards-compliance.md`.
 - [ ] Higher-level cert/CSR/CRL/OCSP fixtures for tests and demos
 - [x] More explicit validation profiles: raw path-valid, TLS server, TLS client, OCSP responder, CA, etc.
 - [x] Better failure typing for revocation / container / CMS subsystems
-- [ ] Browser examples and runtime matrix docs
+- [x] Browser examples and runtime matrix docs
 
 ## Refactor priorities (pre-1.0)
 
 Items ranked by how much existing code must change — not just new code added.
 
-### 1. Certificate policy processing — XL
-
-Invasive changes to `verify.ts` (policy state threaded through
-`validateCandidatePath`, new state in recursive `search()`), `parse.ts`
-(4 new extension parsers for `certificatePolicies`, `policyConstraints`,
-`policyMappings`, `inhibitAnyPolicy`), `extensions.ts` (4 new types +
-encoders). New `VerifyErrorCode` variants, new fields on
-`ValidateCandidatePathInput` + all profile inputs. ~20+ `return failure()`
-sites affected.
-
-Use RFC 9618's policy-graph / constrained-set model directly; do not build the
-old RFC 5280 policy tree as an intermediate step.
-
-### 2. Full distributionPoint / IDP structured models — L, breaking
-
-`crlDistributionPoints: readonly string[]` → structured `DistributionPoint[]`
-across `ParsedCertificate`, `CertificateExtensionsInput`, CRL parsing.
-Rewrites `parseCrlDistributionPoints()` (parse.ts), `encodeCrlDistributionPoints()`
-(extensions.ts), `parseIssuingDistributionPoint()` (crl.ts). Only item that
-is clearly a **breaking type change**.
-
-**Open question:** parallel `crlDistributionPointUris` compat field, or
-clean break?
-
-### 3. Distinguish hard failure from "status unknown" — L, potentially breaking
+### 1. Distinguish hard failure from "status unknown" — L, potentially breaking
 
 Changes Result union shapes in `verify.ts`, `crl.ts`, `ocsp.ts`. Every
 consumer pattern-matching on `result.ok` is affected. Touches
@@ -88,18 +64,18 @@ consumer pattern-matching on `result.ok` is affected. Touches
 **Open question:** third variant `{ ok: "partial" }`, or keep binary `ok`
 with `severity` field on failures?
 
-### 4. CMS signedData generation — M
+### 2. CMS signedData generation — M
 
 ~200 lines new in `pkcs7.ts` but must invert the signed-attributes verify
 flow (`verifySignedAttrs`). Mirrors existing parsing types for round-trip
 consistency. Moderate coupling through `signing.ts`.
 
-### 5. Initial permitted/excluded subtree inputs — M
+### 3. Explicit local OCSP responder policy hooks — M
 
-Widens 6+ input interfaces (`ValidateCandidatePathInput`,
-`VerifyCertificateChainInput`, 4 profile inputs). Seeds
-`AccumulatedNameConstraints` in `checkNameConstraints()` (verify.ts).
-Purely additive optional fields — non-breaking.
+Most OCSP auth checks ship now, but the remaining gap is explicit local
+responder-policy acceptance and the follow-on story for responder revocation.
+This likely lands in `ocsp.ts` and `revocation.ts` without widening the pure
+validation boundary into network behavior.
 
 ## Nice-to-have monsters
 

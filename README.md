@@ -20,12 +20,14 @@ Tiny X.509 builders for modern TypeScript.
 
 ## Standards status
 
-| Area                       | Status    | Notes                                                                                                                                                             |
-| -------------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| RFC 5280 path validation   | `partial` | core path checks ship; policy processing, initial subtree inputs, and full name-constraint coverage are not complete yet                                          |
-| RFC 6960 OCSP              | `partial` | request/response helpers, responder binding/authorization, freshness checks, and full request coverage ship; local responder-policy acceptance stays incomplete   |
-| RFC 6125 service identity  | `partial` | `matchServiceIdentity()` ships DNS-ID, IP-ID, URI-ID, SRV-ID, wildcard, IDNA, and opt-in CN-compat checks; verification helpers still wire DNS/IP identities only |
-| RFC 9618 policy validation | `not yet` | no RFC 9618 policy engine yet                                                                                                                                     |
+| Area                       | Status    | Notes                                                                                                                                                                                                                                     |
+| -------------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| RFC 5280 path validation   | `partial` | core path validation, supported-form name constraints, initial subtree inputs, policy processing, malformed-DER coverage, and focused PKITS coverage ship; revocation stays separate and broader conformance evidence is still incomplete |
+| RFC 6960 OCSP              | `partial` | request/response helpers, responder binding/authorization, freshness checks, and full request coverage ship; local responder-policy acceptance stays incomplete                                                                           |
+| RFC 6125 service identity  | `partial` | `matchServiceIdentity()` ships DNS-ID, IP-ID, URI-ID, SRV-ID, wildcard, IDNA, and opt-in CN-compat checks; verification helpers still wire DNS/IP identities only                                                                         |
+| RFC 9618 policy validation | `partial` | RFC 9618-style policy state, enforcement, outputs, and focused PKITS coverage ship; broader conformance evidence is still incomplete                                                                                                      |
+
+Current conformance evidence lives in `test/pkits.test.ts`, `test/policy.test.ts`, `test/name-constraints.test.ts`, `test/ocsp-fixtures.test.ts`, `test/identity-fixtures.test.ts`, `test/revocation.test.ts`, `test/malformed-der.test.ts`, and `test/differential.test.ts`.
 
 ## Install
 
@@ -468,6 +470,6 @@ if (result.ok) {
 - legacy key helpers: PKCS#1 RSA and SEC1 EC import/export, plus encrypted traditional PEM
 - extended key usage: built-ins + custom OID escape hatch
 - identity helpers: `matchServiceIdentity()` covers DNS-ID, IP-ID, URI-ID, SRV-ID, wildcard, IDNA, and opt-in DNS CN compatibility; focused fixtures live in `test/identity-fixtures.test.ts`
-- chain verify: async, WebCrypto-based, browser-safe, multi-candidate path building plus candidate-path validation with issuer match, signatures, time, CA/keyCertSign, pathLen, AKI/SKI, supported name-constraint checks, and DNS/IP SAN plus EKU checks; broader RFC 6125 composition still stays outside raw path validation
+- chain verify: async, WebCrypto-based, browser-safe, multi-candidate path building plus candidate-path validation with issuer match, signatures, time, CA/keyCertSign, pathLen, AKI/SKI, supported-form name constraints, RFC 9618 policy outputs, and optional DNS/IP identity composition in verify helpers; broader revocation orchestration stays separate
 - csr verify: async, WebCrypto-based, browser-safe signature validation
 - verify failures: structured `code`, `index`, `details`
