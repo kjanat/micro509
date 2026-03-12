@@ -10,7 +10,7 @@ import {
 	toHex,
 } from './asn1.ts';
 import type { DerElement } from './der.ts';
-import { encodeLength, readElement } from './der.ts';
+import { DEFAULT_MAX_DER_DEPTH, encodeLength, readElement, readSequenceChildren } from './der.ts';
 import {
 	parseDistributionPointReasonFlagsContent,
 	parseKeyUsageExtension,
@@ -184,7 +184,7 @@ export function parseCertificateDer<TMap extends ExtensionDecoderMap = Record<ne
 	der: Uint8Array,
 	options?: ParseOptions<TMap>,
 ): ParsedCertificate<TMap> {
-	const topLevel = childrenOf(der, readElement(der));
+	const topLevel = readSequenceChildren(der, { maxDepth: DEFAULT_MAX_DER_DEPTH });
 	const tbsCertificate = requireElement(topLevel[0], 'TBSCertificate');
 	const signatureAlgorithm = requireElement(topLevel[1], 'signatureAlgorithm');
 	const signatureValue = requireElement(topLevel[2], 'signatureValue');
@@ -301,7 +301,7 @@ export function parseCertificateChainPem<TMap extends ExtensionDecoderMap = Reco
 export function parseCertificateSigningRequestDer<
 	TMap extends ExtensionDecoderMap = Record<never, never>,
 >(der: Uint8Array, options?: ParseOptions<TMap>): ParsedCertificateSigningRequest<TMap> {
-	const topLevel = childrenOf(der, readElement(der));
+	const topLevel = readSequenceChildren(der, { maxDepth: DEFAULT_MAX_DER_DEPTH });
 	const certificationRequestInfo = requireElement(topLevel[0], 'CertificationRequestInfo');
 	const signatureAlgorithm = requireElement(topLevel[1], 'signatureAlgorithm');
 	const signatureValue = requireElement(topLevel[2], 'signatureValue');

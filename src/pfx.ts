@@ -1,6 +1,7 @@
 import { childrenOf, decodeObjectIdentifier, toHex } from './asn1.ts';
 import type { DerElement } from './der.ts';
 import {
+	DEFAULT_MAX_DER_DEPTH,
 	explicitContext,
 	integerFromNumber,
 	objectIdentifier,
@@ -169,7 +170,7 @@ export async function parsePfxDer(
 	options?: ParsePfxOptions,
 ): Promise<ParsePfxResult> {
 	try {
-		const topLevel = readSequenceChildren(der);
+		const topLevel = readSequenceChildren(der, { maxDepth: DEFAULT_MAX_DER_DEPTH });
 		const authSafe = topLevel[1];
 		if (authSafe === undefined) {
 			return pfxFailure('malformed', 'Malformed PFX structure');

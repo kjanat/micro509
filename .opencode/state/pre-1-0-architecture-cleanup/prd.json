@@ -17,7 +17,7 @@
 			"title": "Harden and centralize the DER spine",
 			"description": "Tighten low-level DER handling and make top-level parsers consume stricter shared helpers. Done when:\n- length encoding/decoding rejects overflow and non-minimal encodings\n- top-level parse entrypoints reject trailing DER data\n- bounded nesting checks exist for hostile deeply nested input\n- malformed regression tests cover the new failure cases",
 			"priority": "architecture",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "split-domain-types",

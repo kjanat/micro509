@@ -171,6 +171,14 @@ function replaceFirstRevokedCertificateEntry(
 	]);
 }
 
+function nestedSequence(depth: number): Uint8Array {
+	let current = sequence([]);
+	for (let index = 0; index < depth; index += 1) {
+		current = sequence([current]);
+	}
+	return current;
+}
+
 function expectDeterministicParseFailure(testCase: CorpusCase): void {
 	let error: unknown;
 	try {
@@ -212,6 +220,19 @@ describe('malformed DER corpus', () => {
 			{
 				name: 'truncated certificate',
 				parse: () => parseCertificateDer(certificate.der.slice(0, certificate.der.length - 7)),
+			},
+			{
+				name: 'certificate with trailing DER data',
+				parse: () => parseCertificateDer(Uint8Array.of(...certificate.der, 0x00)),
+				messagePattern: /Trailing data/i,
+			},
+			{
+				name: 'certificate exceeding max DER depth',
+				parse: () =>
+					parseCertificateDer(
+						replaceCertificateSubjectPublicKeyInfo(certificate.der, nestedSequence(70)),
+					),
+				messagePattern: /max depth/i,
 			},
 			{
 				name: 'certificate missing subjectPublicKeyInfo fields',
@@ -264,6 +285,11 @@ describe('malformed DER corpus', () => {
 			{
 				name: 'truncated CRL',
 				parse: () => parseCertificateRevocationListDer(crl.der.slice(0, crl.der.length - 5)),
+			},
+			{
+				name: 'CRL with trailing DER data',
+				parse: () => parseCertificateRevocationListDer(Uint8Array.of(...crl.der, 0x00)),
+				messagePattern: /Trailing data/i,
 			},
 			{
 				name: 'CRL revoked entry missing revocationDate',
@@ -332,6 +358,11 @@ describe('malformed DER corpus', () => {
 				parse: () => parseOcspRequestDer(request.der.slice(0, request.der.length - 6)),
 			},
 			{
+				name: 'OCSP request with trailing DER data',
+				parse: () => parseOcspRequestDer(Uint8Array.of(...request.der, 0x00)),
+				messagePattern: /Trailing data/i,
+			},
+			{
 				name: 'OCSP request missing requestList',
 				parse: () => parseOcspRequestDer(sequence([sequence([])])),
 				messagePattern: /requestList/i,
@@ -339,6 +370,11 @@ describe('malformed DER corpus', () => {
 			{
 				name: 'truncated OCSP response',
 				parse: () => parseOcspResponseDer(response.der.slice(0, response.der.length - 9)),
+			},
+			{
+				name: 'OCSP response with trailing DER data',
+				parse: () => parseOcspResponseDer(Uint8Array.of(...response.der, 0x00)),
+				messagePattern: /Trailing data/i,
 			},
 			{
 				name: 'OCSP response missing responseBytes sequence',

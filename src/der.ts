@@ -1,4 +1,7 @@
+export const DEFAULT_MAX_DER_DEPTH = 64;
+
 export function encodeLength(length: number): Uint8Array {
+	assertNonNegativeSafeInteger(length, 'DER length');
 	if (length < 128) {
 		return Uint8Array.of(length);
 	}
@@ -69,8 +72,8 @@ export function integer(bytes: Uint8Array): Uint8Array {
 }
 
 export function integerFromNumber(value: number): Uint8Array {
-	if (!Number.isInteger(value) || value < 0) {
-		throw new Error('INTEGER must be a non-negative integer');
+	if (!Number.isSafeInteger(value) || value < 0) {
+		throw new Error('INTEGER must be a non-negative safe integer');
 	}
 
 	if (value === 0) {
@@ -197,6 +200,7 @@ function twoDigits(value: number): string {
 }
 
 function encodeBase256(value: number): readonly number[] {
+	assertNonNegativeSafeInteger(value, 'DER integer');
 	const parts: number[] = [];
 	let current = value;
 	while (current > 0) {
@@ -213,6 +217,10 @@ export interface DerElement {
 	readonly start: number;
 	readonly end: number;
 	readonly value: Uint8Array;
+}
+
+export interface ReadSequenceChildrenOptions {
+	readonly maxDepth?: number;
 }
 
 export function readElement(bytes: Uint8Array, offset = 0): DerElement {
@@ -234,13 +242,26 @@ export function readElement(bytes: Uint8Array, offset = 0): DerElement {
 		if (octets === 0) {
 			throw new Error('Indefinite lengths are not supported');
 		}
+		const firstLengthOctet = bytes[offset + 2];
+		if (firstLengthOctet === undefined) {
+			throw new Error('Unexpected end of DER input');
+		}
+		if (firstLengthOctet === 0) {
+			throw new Error('Non-minimal DER length encoding');
+		}
 		headerLength += octets;
 		for (let index = 0; index < octets; index += 1) {
 			const next = bytes[offset + 2 + index];
 			if (next === undefined) {
 				throw new Error('Unexpected end of DER input');
 			}
-			length = (length << 8) | next;
+			if (length > Math.floor((Number.MAX_SAFE_INTEGER - next) / 256)) {
+				throw new Error('DER length exceeds safe integer range');
+			}
+			length = length * 256 + next;
+		}
+		if (length < 128) {
+			throw new Error('Non-minimal DER length encoding');
 		}
 	}
 
@@ -260,16 +281,68 @@ export function readElement(bytes: Uint8Array, offset = 0): DerElement {
 	};
 }
 
-export function readSequenceChildren(bytes: Uint8Array): DerElement[] {
+export function assertDerMaxDepth(
+	bytes: Uint8Array,
+	maxDepth: number = DEFAULT_MAX_DER_DEPTH,
+): void {
+	if (!Number.isSafeInteger(maxDepth) || maxDepth < 1) {
+		throw new Error('DER max depth must be a positive safe integer');
+	}
+	const root = readElement(bytes, 0);
+	if (root.end !== bytes.length) {
+		throw new Error('Trailing data after DER element');
+	}
+	const stack: { readonly element: DerElement; readonly depth: number }[] = [
+		{ element: root, depth: 1 },
+	];
+	while (stack.length > 0) {
+		const current = stack.pop();
+		if (current === undefined) {
+			continue;
+		}
+		if (current.depth > maxDepth) {
+			throw new Error(`DER exceeds max depth of ${maxDepth}`);
+		}
+		if ((current.element.tag & 0x20) === 0) {
+			continue;
+		}
+		let offset = current.element.start;
+		while (offset < current.element.end) {
+			const child = readElement(bytes, offset);
+			if (child.end > current.element.end) {
+				throw new Error('DER child exceeds parent length');
+			}
+			stack.push({ element: child, depth: current.depth + 1 });
+			offset = child.end;
+		}
+		if (offset !== current.element.end) {
+			throw new Error('Malformed DER container');
+		}
+	}
+}
+
+export function readSequenceChildren(
+	bytes: Uint8Array,
+	options?: ReadSequenceChildrenOptions,
+): DerElement[] {
+	if (options?.maxDepth !== undefined) {
+		assertDerMaxDepth(bytes, options.maxDepth);
+	}
 	const sequenceElement = readElement(bytes, 0);
 	if (sequenceElement.tag !== 0x30) {
 		throw new Error('Expected SEQUENCE');
+	}
+	if (sequenceElement.end !== bytes.length) {
+		throw new Error('Trailing data after DER SEQUENCE');
 	}
 
 	const children: DerElement[] = [];
 	let offset = sequenceElement.start;
 	while (offset < sequenceElement.end) {
 		const element = readElement(bytes, offset);
+		if (element.end > sequenceElement.end) {
+			throw new Error('DER child exceeds parent length');
+		}
 		children.push(element);
 		offset = element.end;
 	}
@@ -277,4 +350,10 @@ export function readSequenceChildren(bytes: Uint8Array): DerElement[] {
 		throw new Error('Malformed DER sequence');
 	}
 	return children;
+}
+
+function assertNonNegativeSafeInteger(value: number, label: string): void {
+	if (!Number.isSafeInteger(value) || value < 0) {
+		throw new Error(`${label} must be a non-negative safe integer`);
+	}
 }

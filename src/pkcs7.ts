@@ -9,6 +9,7 @@ import {
 import type { DerElement } from './der.ts';
 import {
 	concatBytes,
+	DEFAULT_MAX_DER_DEPTH,
 	explicitContext,
 	integerFromNumber,
 	objectIdentifier,
@@ -147,7 +148,7 @@ export function parsePkcs7CertBagPem(pem: string): ParsePkcs7CertBagResult {
 
 export function parsePkcs7SignedDataDer(der: Uint8Array): ParsePkcs7SignedDataResult {
 	try {
-		const contentInfo = readSequenceChildren(der);
+		const contentInfo = readSequenceChildren(der, { maxDepth: DEFAULT_MAX_DER_DEPTH });
 		const contentType = contentInfo[0];
 		const content = contentInfo[1];
 		if (contentType === undefined || content === undefined) {

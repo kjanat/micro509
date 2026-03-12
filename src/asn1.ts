@@ -45,8 +45,14 @@ export function childrenOf(source: Uint8Array, parent: DerElement): DerElement[]
 	let offset = parent.start;
 	while (offset < parent.end) {
 		const child = readElement(source, offset);
+		if (child.end > parent.end) {
+			throw new Error('DER child exceeds parent length');
+		}
 		children.push(child);
 		offset = child.end;
+	}
+	if (offset !== parent.end) {
+		throw new Error('Malformed DER container');
 	}
 	return children;
 }

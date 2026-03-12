@@ -13,6 +13,7 @@ import type { DerElement } from './der.ts';
 import {
 	bitString,
 	concatBytes,
+	DEFAULT_MAX_DER_DEPTH,
 	explicitContext,
 	implicitPrimitiveContext,
 	integer,
@@ -20,6 +21,7 @@ import {
 	objectIdentifier,
 	octetString,
 	readElement,
+	readSequenceChildren,
 	sequence,
 	time,
 	tlv,
@@ -201,7 +203,7 @@ export async function createOcspRequest(
 }
 
 export function parseOcspRequestDer(der: Uint8Array): ParsedOcspRequest {
-	const top = childrenOf(der, readElement(der));
+	const top = readSequenceChildren(der, { maxDepth: DEFAULT_MAX_DER_DEPTH });
 	const tbsRequest = requireElement(top[0], 'tbsRequest');
 	const tbsChildren = childrenOf(der, tbsRequest);
 	const requestList = requireElement(
@@ -226,7 +228,7 @@ export function parseOcspRequestPem(pem: string): ParsedOcspRequest {
 }
 
 export function parseOcspResponseDer(der: Uint8Array): ParsedOcspResponse {
-	const top = childrenOf(der, readElement(der));
+	const top = readSequenceChildren(der, { maxDepth: DEFAULT_MAX_DER_DEPTH });
 	const statusElement = requireElement(top[0], 'responseStatus');
 	const responseStatus = ocspResponseStatusFromCode(statusElement.value[0]);
 	const responseBytes = top[1];
@@ -242,7 +244,7 @@ export function parseOcspResponseDer(der: Uint8Array): ParsedOcspResponse {
 		return { responseStatus, responseTypeOid };
 	}
 	const basicResponse = response.value;
-	const basicChildren = childrenOf(basicResponse, readElement(basicResponse));
+	const basicChildren = readSequenceChildren(basicResponse);
 	const responseData = requireElement(basicChildren[0], 'responseData');
 	const signatureAlgorithm = requireElement(basicChildren[1], 'signatureAlgorithm');
 	const signatureValue = requireElement(basicChildren[2], 'signatureValue');
@@ -251,7 +253,7 @@ export function parseOcspResponseDer(der: Uint8Array): ParsedOcspResponse {
 		responseData.start - responseData.headerLength,
 		responseData.end,
 	);
-	const responseDataChildren = childrenOf(responseDataDer, readElement(responseDataDer));
+	const responseDataChildren = readSequenceChildren(responseDataDer);
 	let index = 0;
 	if (responseDataChildren[index]?.tag === 0xa0) {
 		index += 1;

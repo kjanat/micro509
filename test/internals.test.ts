@@ -7,7 +7,9 @@ import {
 	requireElement,
 } from '#micro509/asn1.ts';
 import {
+	assertDerMaxDepth,
 	bitString,
+	DEFAULT_MAX_DER_DEPTH,
 	encodeLength,
 	ia5String,
 	integer,
@@ -82,6 +84,11 @@ describe('der encoding', () => {
 		expect(() => integerFromNumber(1.5)).toThrow('non-negative');
 	});
 
+	it('encodeLength and integerFromNumber reject unsafe integers', () => {
+		expect(() => encodeLength(Number.MAX_SAFE_INTEGER + 1)).toThrow('safe integer');
+		expect(() => integerFromNumber(Number.MAX_SAFE_INTEGER + 1)).toThrow('safe integer');
+	});
+
 	it('bitString rejects unusedBits out of range', () => {
 		expect(() => bitString(Uint8Array.of(0xff), 8)).toThrow('between 0 and 7');
 		expect(() => bitString(Uint8Array.of(0xff), -1)).toThrow('between 0 and 7');
@@ -141,6 +148,11 @@ describe('der encoding', () => {
 		expect(() => readElement(Uint8Array.of(0x30, 0x80))).toThrow('Indefinite');
 	});
 
+	it('readElement rejects non-minimal long-form lengths', () => {
+		expect(() => readElement(Uint8Array.of(0x04, 0x81, 0x7f, 0x00))).toThrow('Non-minimal');
+		expect(() => readElement(Uint8Array.of(0x04, 0x82, 0x00, 0x80, 0x00))).toThrow('Non-minimal');
+	});
+
 	it('encodeLength emits long-form lengths', () => {
 		expect(encodeLength(256)).toEqual(Uint8Array.of(0x82, 0x01, 0x00));
 	});
@@ -150,6 +162,18 @@ describe('der encoding', () => {
 		expect(() => readSequenceChildren(Uint8Array.of(0x02, 0x01, 0x00))).toThrow(
 			'Expected SEQUENCE',
 		);
+	});
+
+	it('readSequenceChildren rejects trailing data after the root sequence', () => {
+		expect(() => readSequenceChildren(Uint8Array.of(0x30, 0x00, 0x00))).toThrow('Trailing data');
+	});
+
+	it('assertDerMaxDepth rejects overly deep nesting', () => {
+		let der = sequence([]);
+		for (let index = 0; index < DEFAULT_MAX_DER_DEPTH; index += 1) {
+			der = sequence([der]);
+		}
+		expect(() => assertDerMaxDepth(der)).toThrow('max depth');
 	});
 });
 

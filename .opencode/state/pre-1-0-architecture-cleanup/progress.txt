@@ -13,6 +13,7 @@ Started: 2026-03-13
 - Domain-owned public types are part of the API. Shared type buckets like `validation.ts` should be temporary at most.
 - Result harmonization should preserve domain meaning by moving stateful outcomes into `value`, not by flattening everything into one generic error enum.
 - Shared result primitives can land incrementally: first adopt structural base error interfaces in existing domains, then flip public unions to `Result<T, E>` in later tasks without creating import cycles.
+- Top-level raw-DER parsers should enter through `readSequenceChildren(..., { maxDepth: DEFAULT_MAX_DER_DEPTH })`; nested helpers can then parse exact slices without reintroducing trailing-data acceptance.
 
 ---
 <!-- Task logs below - APPEND ONLY -->
@@ -24,3 +25,12 @@ Started: 2026-03-13
 - Exported the shared result primitives from `src/index.ts` and added a dedicated `result` build entry in `tsdown.config.ts`.
 - Files changed: `src/core/result.ts`, `src/result.ts`, `src/verify.ts`, `src/identity.ts`, `src/revocation.ts`, `src/index.ts`, `tsdown.config.ts`, `.opencode/state/pre-1-0-architecture-cleanup/prd.json`, `.opencode/state/pre-1-0-architecture-cleanup/progress.txt`
 - **Learnings:** base error interfaces are a low-risk bridge: they make later API unification easier without forcing every caller to migrate in the same commit.
+
+## Task - [der-spine-hardening]
+
+- Hardened `src/der.ts` to reject unsafe integer inputs, non-minimal long-form lengths, overflowed DER lengths, trailing root data, and overly deep nesting.
+- Updated top-level certificate, CSR, CRL, OCSP, PFX, and PKCS#7 parsers to enter through stricter sequence parsing with a shared max-depth guard.
+- Tightened `childrenOf()` parent-boundary checks in `src/asn1.ts` so malformed child lengths cannot silently overrun a container.
+- Added regression coverage for non-minimal lengths, trailing DER data, and max-depth failures in `test/internals.test.ts` and `test/malformed-der.test.ts`.
+- Files changed: `src/der.ts`, `src/asn1.ts`, `src/parse.ts`, `src/crl.ts`, `src/ocsp.ts`, `src/pfx.ts`, `src/pkcs7.ts`, `test/internals.test.ts`, `test/malformed-der.test.ts`, `.opencode/state/pre-1-0-architecture-cleanup/prd.json`, `.opencode/state/pre-1-0-architecture-cleanup/progress.txt`
+- **Learnings:** the safest incremental spine change is to make the root parse stricter first, then let internal exact-slice parsers stay small; this catches hostile input without forcing a full parser rewrite in one step.

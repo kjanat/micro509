@@ -12,6 +12,7 @@ import {
 	bitString,
 	bool,
 	concatBytes,
+	DEFAULT_MAX_DER_DEPTH,
 	type DerElement,
 	explicitContext,
 	generalizedTime,
@@ -278,7 +279,7 @@ export async function createCertificateRevocationList(
 export function parseCertificateRevocationListDer(
 	der: Uint8Array,
 ): ParsedCertificateRevocationList {
-	const top = childrenOf(der, readElement(der));
+	const top = readSequenceChildren(der, { maxDepth: DEFAULT_MAX_DER_DEPTH });
 	const tbsCertList = requireElement(top[0], 'TBSCertList');
 	const signatureAlgorithm = requireElement(top[1], 'signatureAlgorithm');
 	const signatureValue = requireElement(top[2], 'signatureValue');
