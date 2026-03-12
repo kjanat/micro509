@@ -36,6 +36,36 @@ npm install micro509
 - package is side-effect-free (`sideEffects: false`)
 - root import stays supported; subpath imports like `micro509/verify` and `micro509/identity` give tighter tree-shaking
 
+## Runtime matrix
+
+| Runtime | Status      | Notes                                                                                                                                        |
+| ------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Node    | `supported` | use modern Node with WebCrypto globals (`crypto.subtle`, `TextEncoder`, `TextDecoder`, `atob`, `btoa`); package metadata targets Node `>=24` |
+| Bun     | `supported` | use Bun `>=1.3`; globals needed by the library are built in                                                                                  |
+| Deno    | `supported` | ESM-only package; requires WebCrypto and text/base64 web globals                                                                             |
+| Browser | `supported` | modern browsers only; requires `crypto.subtle`, `TextEncoder`, `TextDecoder`, `atob`, and `btoa`                                             |
+| Worker  | `supported` | works in web-worker style runtimes when the same WebCrypto/text/base64 globals exist                                                         |
+
+The core stays ESM-only and WebCrypto-only. It does not depend on Node builtins in library code.
+
+## Import guidance
+
+Use the root package when you want the ergonomic all-in-one API:
+
+```ts
+import { createCertificate, verifyCertificateChain } from 'micro509';
+```
+
+Use subpath imports when you want a narrower surface or tighter tree-shaking:
+
+```ts
+import { verifyCertificateChain } from 'micro509/verify';
+import { matchServiceIdentity } from 'micro509/identity';
+import { getOcspResponderCandidates } from 'micro509/revocation';
+```
+
+Available public subpaths come from the build config and ship as stable package exports: `micro509/certificate`, `micro509/crl`, `micro509/csr`, `micro509/extensions`, `micro509/identity`, `micro509/keys`, `micro509/name`, `micro509/ocsp`, `micro509/parse`, `micro509/pem`, `micro509/pfx`, `micro509/pkcs12-mac`, `micro509/pkcs7`, `micro509/revocation`, `micro509/validation`, and `micro509/verify`.
+
 ## Self-signed cert
 
 ```ts

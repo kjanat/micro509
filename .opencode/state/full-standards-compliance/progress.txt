@@ -5,6 +5,7 @@ Started: 2026-03-12
 
 ## Codebase Patterns
 
+- Runtime/import docs should publish one explicit matrix of required globals (`crypto.subtle`, `TextEncoder`, `TextDecoder`, `atob`, `btoa`) and pair it with root-vs-subpath examples so portability and tree-shaking guidance stay in one place.
 - For SAN `otherName`, classify supported OID-specific payloads at parse time (like SRV-ID), preserve unsupported `otherName` encodings as raw unknown entries, and reject malformed encodings for the known OIDs instead of silently downgrading them.
 - OCSP responder discovery should stay pure and metadata-only: expose AIA-derived responder URIs plus caller-supplied local responder config as typed candidates, and dedupe configured duplicates by keeping the most specific entry (one with a bound responder cert).
 - OCSP `ResponderID` parsing should preserve the CHOICE branch in parsed output; accept the normal implicit `byKeyHash` bytes, but keep parser coverage for explicit wrapper variants used in hand-built fixtures.
@@ -408,6 +409,13 @@ Started: 2026-03-12
 - Added typed fallback details/codes through `src/identity.ts` and `src/verify.ts`, plus regressions in `test/identity.test.ts` and `test/verify.test.ts` for suppression, disabled fallback, CN mismatch, and IP-SAN-only compatibility.
 - Files changed: `src/identity.ts`, `src/verify.ts`, `test/identity.test.ts`, `test/verify.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** RFC 6125 CN fallback is a last-resort DNS compatibility path, not a second pass after URI-ID or SRV-ID presence; wrapper layers should preserve suppression details instead of collapsing them into generic SAN mismatches.
+
+## Task - [update-runtime-matrix-docs]
+
+- Added a runtime matrix plus import guidance to `README.md`, covering Node, Bun, Deno, browsers, and workers.
+- Documented the required WebCrypto/text/base64 globals and gave root-import vs subpath-import examples, plus the current stable public subpath list.
+- Files changed: `README.md`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** runtime support docs read best as one contract: required globals, supported environments, and root-vs-subpath guidance together.
 
 ## Task - [set-sideeffects-flag]
 

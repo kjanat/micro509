@@ -484,7 +484,7 @@
 			"description": "Document supported runtimes and import guidance. Done when:\n- README includes Node, Bun, Deno, browser, and worker support notes\n- WebCrypto/base64/TextEncoder requirements are explicit\n- root vs subpath import guidance is documented",
 			"depends": ["preserve-module-build", "set-sideeffects-flag"],
 			"priority": "polish",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "add-malformed-der-corpus",
