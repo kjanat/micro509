@@ -57,6 +57,7 @@ const OIDS = {
 	authorityKeyIdentifier: '2.5.29.35',
 	anyPolicy: '2.5.29.32.0',
 	authorityInfoAccess: '1.3.6.1.5.5.7.1.1',
+	idOnDnsSrv: '1.3.6.1.5.5.7.8.7',
 	cpsPolicyQualifier: '1.3.6.1.5.5.7.2.1',
 	userNoticePolicyQualifier: '1.3.6.1.5.5.7.2.2',
 	ocspAccessMethod: '1.3.6.1.5.5.7.48.1',

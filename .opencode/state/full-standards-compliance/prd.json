@@ -430,7 +430,7 @@
 			"description": "Parse SRV-ID from SAN otherName and add the needed OIDs and types. Done when:\n- SRV-ID data is preserved in parsed certificates\n- unsupported otherName values are handled intentionally\n- fixtures cover SRV-ID encodings",
 			"depends": ["scaffold-identity-module"],
 			"priority": "standard",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "implement-dns-ip-matchers",

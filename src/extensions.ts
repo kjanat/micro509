@@ -3,6 +3,7 @@ import {
 	bitString,
 	bool,
 	concatBytes,
+	explicitContext,
 	ia5String,
 	implicitConstructedContext,
 	implicitPrimitiveContext,
@@ -35,6 +36,7 @@ export type SubjectAltName =
 	| { readonly type: 'ip'; readonly value: string }
 	| { readonly type: 'email'; readonly value: string }
 	| { readonly type: 'uri'; readonly value: string }
+	| { readonly type: 'srv'; readonly value: string }
 	| { readonly type: 'directoryName'; readonly derHex: string }
 	| {
 			readonly type: 'unknown';
@@ -560,6 +562,11 @@ export function encodeSubjectAltName(value: SubjectAltName): Uint8Array {
 			return implicitPrimitiveContext(1, new TextEncoder().encode(value.value));
 		case 'uri':
 			return implicitPrimitiveContext(6, new TextEncoder().encode(value.value));
+		case 'srv':
+			return implicitConstructedContext(
+				0,
+				sequence([objectIdentifier(OIDS.idOnDnsSrv), explicitContext(0, ia5String(value.value))]),
+			);
 		case 'ip':
 			return implicitPrimitiveContext(7, encodeIpAddress(value.value));
 		case 'directoryName':

@@ -986,6 +986,17 @@ function parseGeneralNames(source: Uint8Array, element: DerElement): readonly Ge
 
 function parseGeneralName(source: Uint8Array, element: DerElement): GeneralName {
 	switch (element.tag) {
+		case 0xa0: {
+			const otherName = parseOtherName(source, element);
+			if (otherName !== undefined) {
+				return otherName;
+			}
+			return {
+				type: 'unknown' as const,
+				tag: element.tag,
+				value: source.slice(element.start, element.end),
+			};
+		}
 		case 0x81:
 			return { type: 'email' as const, value: textDecoder.decode(element.value) };
 		case 0x82:
@@ -1006,6 +1017,25 @@ function parseGeneralName(source: Uint8Array, element: DerElement): GeneralName 
 				value: source.slice(element.start, element.end),
 			};
 	}
+}
+
+function parseOtherName(source: Uint8Array, element: DerElement): SubjectAltName | undefined {
+	const otherNameSequence = requireElement(childrenOf(source, element)[0], 'otherName sequence');
+	const otherNameChildren = childrenOf(source, otherNameSequence);
+	const typeId = requireElement(otherNameChildren[0], 'otherName type-id');
+	const valueElement = requireElement(otherNameChildren[1], 'otherName value');
+	const typeIdOid = decodeObjectIdentifier(typeId.value);
+	if (typeIdOid !== OIDS.idOnDnsSrv) {
+		return undefined;
+	}
+	if (valueElement.tag !== 0xa0) {
+		throw new Error('SRV-ID otherName value must use explicit [0]');
+	}
+	const srvNameElement = requireElement(childrenOf(source, valueElement)[0], 'SRV-ID IA5String');
+	if (srvNameElement.tag !== 0x16) {
+		throw new Error('SRV-ID otherName value must be an IA5String');
+	}
+	return { type: 'srv', value: decodeString(srvNameElement.tag, srvNameElement.value) };
 }
 
 function parseDistributionPointReasonFlags(

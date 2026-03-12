@@ -5,6 +5,7 @@ Started: 2026-03-12
 
 ## Codebase Patterns
 
+- For SAN `otherName`, classify supported OID-specific payloads at parse time (like SRV-ID), preserve unsupported `otherName` encodings as raw unknown entries, and reject malformed encodings for the known OIDs instead of silently downgrading them.
 - OCSP responder discovery should stay pure and metadata-only: expose AIA-derived responder URIs plus caller-supplied local responder config as typed candidates, and dedupe configured duplicates by keeping the most specific entry (one with a bound responder cert).
 - OCSP `ResponderID` parsing should preserve the CHOICE branch in parsed output; accept the normal implicit `byKeyHash` bytes, but keep parser coverage for explicit wrapper variants used in hand-built fixtures.
 - OCSP responder validation must bind signer cert selection to `ResponderID`: prefer embedded certs that match the parsed `ResponderID`, and decide issuer-vs-delegated rules by actual cert identity, never shared subject DN alone.
@@ -360,3 +361,10 @@ Started: 2026-03-12
 - Added OCSP regressions in `test/ocsp.test.ts` for omitted requested `CertID`s and successful multi-cert request coverage with response order independence.
 - Files changed: `src/ocsp.ts`, `test/ocsp.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** request/response completeness checks should compare normalized `CertID` sets in both directions; one-way subset checks miss partial coverage bugs for multi-cert OCSP requests.
+
+## Task - [parse-srvid-othername]
+
+- Added SRV-ID SAN support in `src/parse.ts`, `src/extensions.ts`, and `src/oids.ts`, so `otherName` entries using `id-on-dnsSRV` now parse to a typed `{ type: 'srv', value }` form and builders can emit the same encoding.
+- Added parser coverage in `test/parse.test.ts` for certificate and CSR SRV-ID round trips, unsupported `otherName` preservation, and malformed SRV-ID rejection.
+- Files changed: `src/extensions.ts`, `src/oids.ts`, `src/parse.ts`, `test/parse.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** known `otherName` OIDs should get narrow typed parsing plus strict structure checks, while unknown `otherName` payloads stay preserved as raw unknown SAN entries for later RFC-specific handling.

@@ -26,7 +26,7 @@ import {
 	tlv,
 } from '#micro509/der.ts';
 import { encodeName } from '#micro509/name.ts';
-import OIDS from '#micro509/oids.ts';
+import { OIDS } from '#micro509/oids.ts';
 import { parseNameConstraints } from '#micro509/parse.ts';
 
 describe('parse', () => {
@@ -418,6 +418,69 @@ describe('parse', () => {
 		});
 		const parsed = parseCertificatePem(leaf.pem);
 		expect(parsed.subjectAltNames?.some((san) => san.type === 'unknown')).toBe(true);
+	});
+
+	it('parses SRV-ID subjectAltName otherName values from certificates', async () => {
+		const { certificate } = await createSelfSignedCertificate({
+			subject: { commonName: 'srv-id.example' },
+			extensions: {
+				subjectAltNames: [{ type: 'srv', value: '_xmpp.example.com' }],
+			},
+		});
+
+		const parsed = parseCertificatePem(certificate.pem);
+		expect(parsed.subjectAltNames).toEqual([{ type: 'srv', value: '_xmpp.example.com' }]);
+	});
+
+	it('parses SRV-ID subjectAltName otherName values from CSRs', async () => {
+		const keys = await generateKeyPair();
+		const csr = await createCertificateSigningRequest({
+			subject: { commonName: 'srv-id-csr.example' },
+			publicKey: keys.publicKey,
+			signerPrivateKey: keys.privateKey,
+			extensions: {
+				subjectAltNames: [{ type: 'srv', value: '_imap.example.com' }],
+			},
+		});
+
+		const parsed = parseCertificateSigningRequestPem(csr.pem);
+		expect(parsed.subjectAltNames).toEqual([{ type: 'srv', value: '_imap.example.com' }]);
+	});
+
+	it('preserves unsupported otherName subjectAltName values as unknown entries', async () => {
+		const { certificate } = await createSelfSignedCertificate({
+			subject: { commonName: 'unknown-othername.example' },
+			extensions: {
+				subjectAltNames: [
+					{
+						type: 'unknown',
+						tag: 0xa0,
+						value: sequence([objectIdentifier('1.2.3.4.5'), tlv(0xa0, integerFromNumber(7))]),
+					},
+				],
+			},
+		});
+
+		const parsed = parseCertificatePem(certificate.pem);
+		expect(parsed.subjectAltNames).toHaveLength(1);
+		expect(parsed.subjectAltNames?.[0]).toMatchObject({ type: 'unknown', tag: 0xa0 });
+	});
+
+	it('rejects malformed SRV-ID otherName values', async () => {
+		const { certificate } = await createSelfSignedCertificate({
+			subject: { commonName: 'bad-srv-id.example' },
+			extensions: {
+				subjectAltNames: [
+					{
+						type: 'unknown',
+						tag: 0xa0,
+						value: sequence([objectIdentifier(OIDS.idOnDnsSrv), tlv(0xa0, integerFromNumber(7))]),
+					},
+				],
+			},
+		});
+
+		expect(() => parseCertificatePem(certificate.pem)).toThrow(/SRV-ID/i);
 	});
 
 	it('parses IPv6 name constraints', async () => {
