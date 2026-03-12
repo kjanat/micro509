@@ -217,7 +217,7 @@
 			"description": "Implement parsers and decoders for policy-related extensions. Done when:\n- parsed certificates expose structured policy data\n- malformed encodings fail predictably\n- raw extension preservation remains intact",
 			"depends": ["add-policy-oids-and-types"],
 			"priority": "standard",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "add-policy-roundtrip-tests",

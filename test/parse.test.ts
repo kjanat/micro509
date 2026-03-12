@@ -224,6 +224,83 @@ describe('parse', () => {
 		});
 	});
 
+	it('parses policy extensions from certificates', async () => {
+		const certificate = await createSelfSignedCertificate({
+			subject: { commonName: 'policy-parse.example' },
+			extensions: {
+				certificatePolicies: [
+					{
+						policyIdentifier: '1.2.3.4.1',
+						policyQualifiers: [
+							{ type: 'cps', uri: 'https://example.com/cps' },
+							{
+								type: 'userNotice',
+								noticeRef: { organization: 'Example Org', noticeNumbers: [7, 9] },
+								explicitText: 'policy notice',
+							},
+							{
+								type: 'oid',
+								oid: '1.2.3.4.200',
+								qualifierDer: Uint8Array.of(0x04, 0x02, 0xde, 0xad),
+							},
+						],
+					},
+				],
+				policyMappings: [{ issuerDomainPolicy: '1.2.3.4.1', subjectDomainPolicy: '1.2.3.4.2' }],
+				policyConstraints: { requireExplicitPolicy: 1, inhibitPolicyMapping: 2 },
+				inhibitAnyPolicy: { skipCerts: 3 },
+			},
+		});
+
+		const parsed = parseCertificatePem(certificate.certificate.pem);
+		expect(parsed.certificatePolicies).toEqual([
+			{
+				policyIdentifier: '1.2.3.4.1',
+				policyQualifiers: [
+					{ type: 'cps', uri: 'https://example.com/cps' },
+					{
+						type: 'userNotice',
+						noticeRef: { organization: 'Example Org', noticeNumbers: [7, 9] },
+						explicitText: 'policy notice',
+					},
+					{
+						type: 'oid',
+						oid: '1.2.3.4.200',
+						qualifierDer: Uint8Array.of(0x04, 0x02, 0xde, 0xad),
+					},
+				],
+			},
+		]);
+		expect(parsed.policyMappings).toEqual([
+			{ issuerDomainPolicy: '1.2.3.4.1', subjectDomainPolicy: '1.2.3.4.2' },
+		]);
+		expect(parsed.policyConstraints).toEqual({ requireExplicitPolicy: 1, inhibitPolicyMapping: 2 });
+		expect(parsed.inhibitAnyPolicy).toEqual({ skipCerts: 3 });
+	});
+
+	it('parses policy extensions from CSR requested extensions', async () => {
+		const keys = await generateKeyPair();
+		const csr = await createCertificateSigningRequest({
+			subject: { commonName: 'policy-csr-parse.example' },
+			publicKey: keys.publicKey,
+			signerPrivateKey: keys.privateKey,
+			extensions: {
+				certificatePolicies: [{ policyIdentifier: '1.2.3.4.1' }],
+				policyMappings: [{ issuerDomainPolicy: '1.2.3.4.1', subjectDomainPolicy: '1.2.3.4.2' }],
+				policyConstraints: { requireExplicitPolicy: 1 },
+				inhibitAnyPolicy: { skipCerts: 4 },
+			},
+		});
+
+		const parsed = parseCertificateSigningRequestPem(csr.pem);
+		expect(parsed.certificatePolicies).toEqual([{ policyIdentifier: '1.2.3.4.1' }]);
+		expect(parsed.policyMappings).toEqual([
+			{ issuerDomainPolicy: '1.2.3.4.1', subjectDomainPolicy: '1.2.3.4.2' },
+		]);
+		expect(parsed.policyConstraints).toEqual({ requireExplicitPolicy: 1 });
+		expect(parsed.inhibitAnyPolicy).toEqual({ skipCerts: 4 });
+	});
+
 	it('throws on malformed or truncated DER input', () => {
 		expect(() => parseCertificateDer(new Uint8Array([0x30, 0x03, 0x01]))).toThrow();
 		expect(() => parseCertificateDer(new Uint8Array([]))).toThrow();
@@ -373,6 +450,111 @@ describe('parse', () => {
 		expect(parsed.nameConstraints?.permittedSubtrees).toHaveLength(1);
 		const ipForm = parsed.nameConstraints?.permittedSubtrees?.[0]?.base;
 		expect(ipForm?.type).toBe('ip');
+	});
+
+	it('rejects malformed certificatePolicies during parsing', async () => {
+		const certificate = await createSelfSignedCertificate({
+			subject: { commonName: 'bad-policy-parse.example' },
+			extensions: {
+				customExtensions: [{ oid: OIDS.certificatePolicies, critical: true, value: sequence([]) }],
+			},
+		});
+		expect(() => parseCertificatePem(certificate.certificate.pem)).toThrow(
+			'certificatePolicies must not be empty',
+		);
+	});
+
+	it('rejects anyPolicy in policyMappings during parsing', async () => {
+		const certificate = await createSelfSignedCertificate({
+			subject: { commonName: 'bad-policy-mappings-parse.example' },
+			extensions: {
+				customExtensions: [
+					{
+						oid: OIDS.policyMappings,
+						critical: true,
+						value: sequence([
+							sequence([objectIdentifier(OIDS.anyPolicy), objectIdentifier('1.2.3.4.2')]),
+						]),
+					},
+				],
+			},
+		});
+		expect(() => parseCertificatePem(certificate.certificate.pem)).toThrow(
+			'policyMappings must not use anyPolicy',
+		);
+	});
+
+	it('rejects malformed policy qualifiers during parsing', async () => {
+		const certificate = await createSelfSignedCertificate({
+			subject: { commonName: 'bad-policy-qualifier-parse.example' },
+			extensions: {
+				customExtensions: [
+					{
+						oid: OIDS.certificatePolicies,
+						critical: true,
+						value: sequence([
+							sequence([
+								objectIdentifier('1.2.3.4.1'),
+								sequence([
+									sequence([objectIdentifier(OIDS.cpsPolicyQualifier), integerFromNumber(7)]),
+								]),
+							]),
+						]),
+					},
+				],
+			},
+		});
+		expect(() => parseCertificatePem(certificate.certificate.pem)).toThrow(
+			'cps policy qualifier must use IA5String',
+		);
+	});
+
+	it('rejects empty policy noticeNumbers during parsing', async () => {
+		const certificate = await createSelfSignedCertificate({
+			subject: { commonName: 'bad-policy-notice-parse.example' },
+			extensions: {
+				customExtensions: [
+					{
+						oid: OIDS.certificatePolicies,
+						critical: true,
+						value: sequence([
+							sequence([
+								objectIdentifier('1.2.3.4.1'),
+								sequence([
+									sequence([
+										objectIdentifier(OIDS.userNoticePolicyQualifier),
+										sequence([
+											sequence([tlv(0x0c, new TextEncoder().encode('Example Org')), sequence([])]),
+										]),
+									]),
+								]),
+							]),
+						]),
+					},
+				],
+			},
+		});
+		expect(() => parseCertificatePem(certificate.certificate.pem)).toThrow(
+			'noticeRef noticeNumbers must not be empty',
+		);
+	});
+
+	it('rejects non-integer inhibitAnyPolicy during parsing', async () => {
+		const certificate = await createSelfSignedCertificate({
+			subject: { commonName: 'bad-inhibit-any-policy-parse.example' },
+			extensions: {
+				customExtensions: [
+					{
+						oid: OIDS.inhibitAnyPolicy,
+						critical: true,
+						value: tlv(0x01, Uint8Array.of(0x00)),
+					},
+				],
+			},
+		});
+		expect(() => parseCertificatePem(certificate.certificate.pem)).toThrow(
+			'inhibitAnyPolicy must be an INTEGER',
+		);
 	});
 
 	it('parses nameConstraints with directoryName form', async () => {

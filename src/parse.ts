@@ -14,13 +14,17 @@ import { readElement } from './der.ts';
 import type {
 	AuthorityInformationAccess,
 	BasicConstraints,
+	CertificatePolicies,
 	DistributionPointReason,
 	ExtendedKeyUsage,
 	GeneralName,
 	GeneralSubtree,
+	InhibitAnyPolicy,
 	KeyUsage,
 	NameConstraints,
 	ParsedNameConstraintForm,
+	PolicyConstraints,
+	PolicyMappings,
 	SubjectAltName,
 } from './extensions.ts';
 import { parseAuthorityInfoAccessMethodOid, parseExtendedKeyUsageOid } from './extensions.ts';
@@ -133,6 +137,10 @@ export interface ParsedCertificate<TMap extends ExtensionDecoderMap = Record<nev
 	readonly extendedKeyUsage?: readonly ExtendedKeyUsage[];
 	readonly subjectAltNames?: readonly SubjectAltName[];
 	readonly nameConstraints?: NameConstraints<ParsedNameConstraintForm>;
+	readonly certificatePolicies?: CertificatePolicies;
+	readonly policyMappings?: PolicyMappings;
+	readonly policyConstraints?: PolicyConstraints;
+	readonly inhibitAnyPolicy?: InhibitAnyPolicy;
 	readonly authorityInfoAccess?: readonly AuthorityInformationAccess[];
 	readonly crlDistributionPoints?: readonly ParsedDistributionPoint[];
 	readonly decodedExtensions?: readonly DecodedExtensionValue<unknown>[];
@@ -157,6 +165,10 @@ export interface ParsedCertificateSigningRequest<
 	readonly keyUsage?: readonly KeyUsage[];
 	readonly extendedKeyUsage?: readonly ExtendedKeyUsage[];
 	readonly subjectAltNames?: readonly SubjectAltName[];
+	readonly certificatePolicies?: CertificatePolicies;
+	readonly policyMappings?: PolicyMappings;
+	readonly policyConstraints?: PolicyConstraints;
+	readonly inhibitAnyPolicy?: InhibitAnyPolicy;
 	readonly authorityInfoAccess?: readonly AuthorityInformationAccess[];
 	readonly crlDistributionPoints?: readonly ParsedDistributionPoint[];
 	readonly decodedExtensions?: readonly DecodedExtensionValue<unknown>[];
@@ -235,6 +247,18 @@ export function parseCertificateDer<TMap extends ExtensionDecoderMap = Record<ne
 			: {}),
 		...(parsedExtensions.nameConstraints !== undefined
 			? { nameConstraints: parsedExtensions.nameConstraints }
+			: {}),
+		...(parsedExtensions.certificatePolicies !== undefined
+			? { certificatePolicies: parsedExtensions.certificatePolicies }
+			: {}),
+		...(parsedExtensions.policyMappings !== undefined
+			? { policyMappings: parsedExtensions.policyMappings }
+			: {}),
+		...(parsedExtensions.policyConstraints !== undefined
+			? { policyConstraints: parsedExtensions.policyConstraints }
+			: {}),
+		...(parsedExtensions.inhibitAnyPolicy !== undefined
+			? { inhibitAnyPolicy: parsedExtensions.inhibitAnyPolicy }
 			: {}),
 		...(parsedExtensions.authorityInfoAccess !== undefined
 			? { authorityInfoAccess: parsedExtensions.authorityInfoAccess }
@@ -319,6 +343,18 @@ export function parseCertificateSigningRequestDer<
 			: {}),
 		...(parsedExtensions.subjectAltNames !== undefined
 			? { subjectAltNames: parsedExtensions.subjectAltNames }
+			: {}),
+		...(parsedExtensions.certificatePolicies !== undefined
+			? { certificatePolicies: parsedExtensions.certificatePolicies }
+			: {}),
+		...(parsedExtensions.policyMappings !== undefined
+			? { policyMappings: parsedExtensions.policyMappings }
+			: {}),
+		...(parsedExtensions.policyConstraints !== undefined
+			? { policyConstraints: parsedExtensions.policyConstraints }
+			: {}),
+		...(parsedExtensions.inhibitAnyPolicy !== undefined
+			? { inhibitAnyPolicy: parsedExtensions.inhibitAnyPolicy }
 			: {}),
 		...(parsedExtensions.authorityInfoAccess !== undefined
 			? { authorityInfoAccess: parsedExtensions.authorityInfoAccess }
@@ -407,6 +443,10 @@ interface ParsedExtensions {
 	readonly extendedKeyUsage?: readonly ExtendedKeyUsage[];
 	readonly subjectAltNames?: readonly SubjectAltName[];
 	readonly nameConstraints?: NameConstraints<ParsedNameConstraintForm>;
+	readonly certificatePolicies?: CertificatePolicies;
+	readonly policyMappings?: PolicyMappings;
+	readonly policyConstraints?: PolicyConstraints;
+	readonly inhibitAnyPolicy?: InhibitAnyPolicy;
 	readonly authorityInfoAccess?: readonly AuthorityInformationAccess[];
 	readonly crlDistributionPoints?: readonly ParsedDistributionPoint[];
 	readonly subjectKeyIdentifier?: string;
@@ -451,6 +491,10 @@ function parseExtensionSequence(source: Uint8Array, sequenceElement: DerElement)
 	let extendedKeyUsage: readonly ExtendedKeyUsage[] | undefined;
 	let subjectAltNames: readonly SubjectAltName[] | undefined;
 	let nameConstraints: NameConstraints<ParsedNameConstraintForm> | undefined;
+	let certificatePolicies: CertificatePolicies | undefined;
+	let policyMappings: PolicyMappings | undefined;
+	let policyConstraints: PolicyConstraints | undefined;
+	let inhibitAnyPolicy: InhibitAnyPolicy | undefined;
 	let authorityInfoAccess: readonly AuthorityInformationAccess[] | undefined;
 	let crlDistributionPoints: readonly ParsedDistributionPoint[] | undefined;
 	let subjectKeyIdentifier: string | undefined;
@@ -491,6 +535,18 @@ function parseExtensionSequence(source: Uint8Array, sequenceElement: DerElement)
 			case OIDS.nameConstraints:
 				nameConstraints = parseNameConstraints(extnValue.value);
 				break;
+			case OIDS.certificatePolicies:
+				certificatePolicies = parseCertificatePolicies(extnValue.value);
+				break;
+			case OIDS.policyMappings:
+				policyMappings = parsePolicyMappings(extnValue.value);
+				break;
+			case OIDS.policyConstraints:
+				policyConstraints = parsePolicyConstraints(extnValue.value);
+				break;
+			case OIDS.inhibitAnyPolicy:
+				inhibitAnyPolicy = parseInhibitAnyPolicy(extnValue.value);
+				break;
 			case OIDS.authorityInfoAccess:
 				authorityInfoAccess = parseAuthorityInfoAccess(extnValue.value);
 				break;
@@ -513,6 +569,10 @@ function parseExtensionSequence(source: Uint8Array, sequenceElement: DerElement)
 		...(extendedKeyUsage !== undefined ? { extendedKeyUsage } : {}),
 		...(subjectAltNames !== undefined ? { subjectAltNames } : {}),
 		...(nameConstraints !== undefined ? { nameConstraints } : {}),
+		...(certificatePolicies !== undefined ? { certificatePolicies } : {}),
+		...(policyMappings !== undefined ? { policyMappings } : {}),
+		...(policyConstraints !== undefined ? { policyConstraints } : {}),
+		...(inhibitAnyPolicy !== undefined ? { inhibitAnyPolicy } : {}),
 		...(authorityInfoAccess !== undefined ? { authorityInfoAccess } : {}),
 		...(crlDistributionPoints !== undefined ? { crlDistributionPoints } : {}),
 		...(subjectKeyIdentifier !== undefined ? { subjectKeyIdentifier } : {}),
@@ -664,6 +724,189 @@ function parseExtendedKeyUsage(bytes: Uint8Array): readonly ExtendedKeyUsage[] {
 	return childrenOf(bytes, sequenceElement).map((element) =>
 		parseExtendedKeyUsageOid(decodeObjectIdentifier(element.value)),
 	);
+}
+
+function parseCertificatePolicies(bytes: Uint8Array): CertificatePolicies {
+	const sequenceElement = requireElement(readElement(bytes), 'certificatePolicies sequence');
+	const policyElements = childrenOf(bytes, sequenceElement);
+	if (policyElements.length === 0) {
+		throw new Error('certificatePolicies must not be empty');
+	}
+	return policyElements.map((policyElement) => parsePolicyInformation(bytes, policyElement));
+}
+
+function parsePolicyInformation(source: Uint8Array, element: DerElement) {
+	const children = childrenOf(source, element);
+	const policyIdentifier = decodeObjectIdentifier(
+		requireElement(children[0], 'policyIdentifier').value,
+	);
+	const qualifiersElement = children[1];
+	if (children.length > 2) {
+		throw new Error('policyInformation has unexpected trailing fields');
+	}
+	if (qualifiersElement === undefined) {
+		return { policyIdentifier };
+	}
+	const qualifiers = childrenOf(source, qualifiersElement);
+	if (qualifiers.length === 0) {
+		throw new Error('policyQualifiers must not be empty');
+	}
+	return {
+		policyIdentifier,
+		policyQualifiers: qualifiers.map((qualifierElement) =>
+			parsePolicyQualifierInfo(source, qualifierElement),
+		),
+	};
+}
+
+function parsePolicyQualifierInfo(source: Uint8Array, element: DerElement) {
+	const children = childrenOf(source, element);
+	const qualifierId = decodeObjectIdentifier(
+		requireElement(children[0], 'policyQualifierId').value,
+	);
+	const qualifierValue = requireElement(children[1], 'policyQualifier');
+	if (children.length > 2) {
+		throw new Error('policyQualifierInfo has unexpected trailing fields');
+	}
+	if (qualifierId === OIDS.cpsPolicyQualifier) {
+		if (qualifierValue.tag !== 0x16) {
+			throw new Error('cps policy qualifier must use IA5String');
+		}
+		return { type: 'cps' as const, uri: decodeString(qualifierValue.tag, qualifierValue.value) };
+	}
+	if (qualifierId === OIDS.userNoticePolicyQualifier) {
+		return {
+			type: 'userNotice' as const,
+			...parseUserNoticePolicyQualifierInfo(source, qualifierValue),
+		};
+	}
+	return {
+		type: 'oid' as const,
+		oid: qualifierId,
+		qualifierDer: source.slice(
+			qualifierValue.start - qualifierValue.headerLength,
+			qualifierValue.end,
+		),
+	};
+}
+
+function parseUserNoticePolicyQualifierInfo(
+	source: Uint8Array,
+	element: DerElement,
+): {
+	readonly noticeRef?: { readonly organization: string; readonly noticeNumbers: readonly number[] };
+	readonly explicitText?: string;
+} {
+	const children = childrenOf(source, element);
+	let noticeRef:
+		| { readonly organization: string; readonly noticeNumbers: readonly number[] }
+		| undefined;
+	let explicitText: string | undefined;
+	for (const child of children) {
+		if (child.tag === 0x30) {
+			if (noticeRef !== undefined) {
+				throw new Error('userNotice must not contain multiple noticeRef values');
+			}
+			noticeRef = parsePolicyNoticeReference(source, child);
+			continue;
+		}
+		if (explicitText !== undefined) {
+			throw new Error('userNotice must not contain multiple explicitText values');
+		}
+		explicitText = parseDisplayText(child);
+	}
+	return {
+		...(noticeRef === undefined ? {} : { noticeRef }),
+		...(explicitText === undefined ? {} : { explicitText }),
+	};
+}
+
+function parsePolicyNoticeReference(
+	source: Uint8Array,
+	element: DerElement,
+): { readonly organization: string; readonly noticeNumbers: readonly number[] } {
+	const children = childrenOf(source, element);
+	const organization = parseDisplayText(requireElement(children[0], 'noticeRef organization'));
+	const noticeNumbersElement = requireElement(children[1], 'noticeRef noticeNumbers');
+	if (children.length > 2) {
+		throw new Error('noticeRef has unexpected trailing fields');
+	}
+	return {
+		organization,
+		noticeNumbers: parsePolicyNoticeNumbers(source, noticeNumbersElement),
+	};
+}
+
+function parsePolicyNoticeNumbers(source: Uint8Array, element: DerElement): readonly number[] {
+	const noticeNumberElements = childrenOf(source, element);
+	if (noticeNumberElements.length === 0) {
+		throw new Error('noticeRef noticeNumbers must not be empty');
+	}
+	return noticeNumberElements.map((noticeNumberElement) =>
+		decodeIntegerNumber(noticeNumberElement.value),
+	);
+}
+
+function parsePolicyMappings(bytes: Uint8Array): PolicyMappings {
+	const sequenceElement = requireElement(readElement(bytes), 'policyMappings sequence');
+	const mappingElements = childrenOf(bytes, sequenceElement);
+	if (mappingElements.length === 0) {
+		throw new Error('policyMappings must not be empty');
+	}
+	return mappingElements.map((mappingElement) => {
+		const children = childrenOf(bytes, mappingElement);
+		const issuerDomainPolicy = decodeObjectIdentifier(
+			requireElement(children[0], 'policyMappings issuerDomainPolicy').value,
+		);
+		const subjectDomainPolicy = decodeObjectIdentifier(
+			requireElement(children[1], 'policyMappings subjectDomainPolicy').value,
+		);
+		if (children.length > 2) {
+			throw new Error('policyMappings entry has unexpected trailing fields');
+		}
+		if (issuerDomainPolicy === OIDS.anyPolicy || subjectDomainPolicy === OIDS.anyPolicy) {
+			throw new Error('policyMappings must not use anyPolicy');
+		}
+		return { issuerDomainPolicy, subjectDomainPolicy };
+	});
+}
+
+function parsePolicyConstraints(bytes: Uint8Array): PolicyConstraints {
+	const sequenceElement = requireElement(readElement(bytes), 'policyConstraints sequence');
+	let requireExplicitPolicy: number | undefined;
+	let inhibitPolicyMapping: number | undefined;
+	for (const child of childrenOf(bytes, sequenceElement)) {
+		if (child.tag === 0x80) {
+			if (requireExplicitPolicy !== undefined) {
+				throw new Error('policyConstraints must not repeat requireExplicitPolicy');
+			}
+			requireExplicitPolicy = decodeIntegerNumber(child.value);
+			continue;
+		}
+		if (child.tag === 0x81) {
+			if (inhibitPolicyMapping !== undefined) {
+				throw new Error('policyConstraints must not repeat inhibitPolicyMapping');
+			}
+			inhibitPolicyMapping = decodeIntegerNumber(child.value);
+			continue;
+		}
+		throw new Error(`Unsupported policyConstraints field tag: ${child.tag}`);
+	}
+	if (requireExplicitPolicy === undefined && inhibitPolicyMapping === undefined) {
+		throw new Error('policyConstraints must set requireExplicitPolicy or inhibitPolicyMapping');
+	}
+	return {
+		...(requireExplicitPolicy === undefined ? {} : { requireExplicitPolicy }),
+		...(inhibitPolicyMapping === undefined ? {} : { inhibitPolicyMapping }),
+	};
+}
+
+function parseInhibitAnyPolicy(bytes: Uint8Array): InhibitAnyPolicy {
+	const integerElement = requireElement(readElement(bytes), 'inhibitAnyPolicy integer');
+	if (integerElement.tag !== 0x02) {
+		throw new Error('inhibitAnyPolicy must be an INTEGER');
+	}
+	return { skipCerts: decodeIntegerNumber(integerElement.value) };
 }
 
 function parseSubjectAltNames(bytes: Uint8Array): readonly SubjectAltName[] {
@@ -926,6 +1169,35 @@ function encodeAsn1Length(length: number): Uint8Array {
 		current >>= 8;
 	}
 	return Uint8Array.of(0x80 | parts.length, ...parts);
+}
+
+function parseDisplayText(element: DerElement): string {
+	switch (element.tag) {
+		case 0x0c:
+		case 0x16:
+		case 0x1a:
+			return textDecoder.decode(element.value);
+		case 0x1e:
+			return decodeBmpString(element.value);
+		default:
+			throw new Error(`Unsupported DisplayText tag: ${element.tag}`);
+	}
+}
+
+function decodeBmpString(bytes: Uint8Array): string {
+	if (bytes.length % 2 !== 0) {
+		throw new Error('Invalid BMPString length');
+	}
+	let value = '';
+	for (let index = 0; index < bytes.length; index += 2) {
+		const left = bytes[index];
+		const right = bytes[index + 1];
+		if (left === undefined || right === undefined) {
+			throw new Error('Invalid BMPString content');
+		}
+		value += String.fromCharCode((left << 8) | right);
+	}
+	return value;
 }
 
 function parseAuthorityKeyIdentifier(bytes: Uint8Array): string | undefined {
