@@ -56,6 +56,22 @@
 - [x] Apply constraints across supported name forms, not just DNS SANs.
 - [x] Handle self-issued certificates correctly when evaluating constraints. (IETF Datatracker[^rfc5280])
 
+Current GeneralName matrix for `nameConstraints`:
+
+| Form                        | Parser role                                 | Validator role                           | Status    |
+| --------------------------- | ------------------------------------------- | ---------------------------------------- | --------- |
+| `rfc822Name` / `dNSName`    | decode to typed email/DNS values            | enforce                                  | `partial` |
+| `uniformResourceIdentifier` | decode to typed URI values                  | enforce host-based matching              | `partial` |
+| `iPAddress`                 | decode to address+mask bytes                | enforce                                  | `partial` |
+| `directoryName`             | preserve DN payload for later structured DN | enforce today, but semantic compare lags | `partial` |
+| `otherName`                 | do not silently discard in final design     | fail closed if critical                  | `not yet` |
+| `x400Address`               | do not silently discard in final design     | fail closed if critical                  | `not yet` |
+| `ediPartyName`              | do not silently discard in final design     | fail closed if critical                  | `not yet` |
+| `registeredID`              | do not silently discard in final design     | fail closed if critical                  | `not yet` |
+
+- Parser responsibility: preserve enough tag/type information that validation can make a deterministic supported-vs-unsupported decision.
+- Validator responsibility: enforce supported forms and reject critical under-enforced cases instead of silently widening trust.
+
 ## 6. Certificate policy processing
 
 - [ ] Support `certificatePolicies`.

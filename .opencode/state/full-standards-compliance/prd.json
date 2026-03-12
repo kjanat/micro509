@@ -154,7 +154,7 @@
 			"description": "Define supported GeneralName forms and fail-closed behavior for name constraints. Done when:\n- support matrix is explicit\n- unsupported critical forms have deterministic handling\n- parser vs validator responsibilities are documented",
 			"depends": ["add-name-constraint-inputs", "rfc-name-compare-spike"],
 			"priority": "architecture",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "fail-closed-unsupported-nc",

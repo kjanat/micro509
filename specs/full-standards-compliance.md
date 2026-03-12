@@ -152,6 +152,29 @@ interface PolicyInformation {
 - `ParsedName` needs RDN-aware data for semantic comparison; keep `derHex` for round-trip/debug use, but add structured `rdns`/AVA metadata instead of reparsing display strings.
 - Fixture plan for follow-up tasks: mixed `PrintableString`/`UTF8String` equality, case and space normalization, Unicode normalization, multi-valued RDN AVA reordering, exact-DN order sensitivity, subtree suffix matching, and regression coverage proving semantic compare replaces DER-prefix behavior.
 
+### Architecture Notes - GeneralName support matrix for name constraints
+
+- Split responsibilities cleanly:
+  - parser owns tag-family preservation, typed decoding for supported forms, and explicit classification of unsupported forms.
+  - validator owns RFC 5280 enforcement for supported forms and fail-closed handling when a critical `nameConstraints` extension carries an unsupported constrained form.
+  - builder inputs can stay limited to the supported set; unsupported-form handling is a parse/validate concern.
+- Support matrix for constrained `GeneralName` forms:
+
+| Form                        | Parser target                         | Validator target                           | Notes                                        |
+| --------------------------- | ------------------------------------- | ------------------------------------------ | -------------------------------------------- |
+| `rfc822Name`                | decode to `email`                     | enforce                                    | already modeled                              |
+| `dNSName`                   | decode to `dns`                       | enforce                                    | already modeled                              |
+| `uniformResourceIdentifier` | decode to `uri`                       | enforce                                    | host-only matching per RFC 5280              |
+| `iPAddress`                 | decode to address+mask bytes          | enforce                                    | reject non-8/non-32-byte constraint payloads |
+| `directoryName`             | preserve structured DN data plus DER  | enforce after semantic RFC 5280 comparison | current DER-prefix shortcut must be removed  |
+| `otherName`                 | preserve as explicit unsupported form | fail closed if critical                    | future RFC-specific handling can narrow this |
+| `x400Address`               | preserve as explicit unsupported form | fail closed if critical                    | no silent drop                               |
+| `ediPartyName`              | preserve as explicit unsupported form | fail closed if critical                    | no silent drop                               |
+| `registeredID`              | preserve as explicit unsupported form | fail closed if critical                    | no silent drop                               |
+
+- Current code is still between states: it decodes the supported set above, but unsupported constrained forms are not preserved yet. The follow-up `fail-closed-unsupported-nc` task must close that gap before full RFC 5280 claims.
+- `subjectAltName` parsing can continue to expose unknown SAN entries for round-trip/debug use, but name-constraint parsing must not silently erase unsupported constrained forms because that weakens validator semantics.
+
 ### Spike Notes - RFC 9618 policy engine
 
 - Model policy processing as a depth-indexed DAG, not a tree. Internal state should be a nullable `validPolicyGraph` plus the three RFC counters already threaded through validation state: `explicitPolicy`, `policyMapping`, and `inhibitAnyPolicy`.

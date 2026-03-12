@@ -5,6 +5,7 @@ Started: 2026-03-12
 
 ## Codebase Patterns
 
+- For partially supported RFC surfaces, parser owns preserving/classifying unsupported wire forms; validator owns fail-closed decisions. Never silently drop unsupported critical semantics in parsing.
 - ESM-only, WebCrypto-only, platform-neutral core; avoid Node builtins in core paths.
 - TypeScript rules are strict: no `any`, no non-null assertions, no `as Type`, no classes.
 - Tabs, single quotes, `.ts` import extensions, readonly-heavy interfaces, discriminated unions.
@@ -118,3 +119,10 @@ Started: 2026-03-12
 - Forwarded `permittedSubtrees` and `excludedSubtrees` through the shared verify helper without changing current validation behavior, and added coverage in `test/verify.test.ts` for both profile and raw-path entry points.
 - Files changed: `src/verify.ts`, `test/verify.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** follow the same passthrough pattern for new RFC input families until enforcement lands; keeping one shared copy helper avoids wrapper drift.
+
+## Task - [define-generalname-matrix]
+
+- Defined the name-constraint `GeneralName` support matrix in `specs/full-standards-compliance.md` and `docs/PKIX-SCOPE.md`.
+- Documented the parser/validator split explicitly: parser must preserve or classify unsupported constrained forms, validator must fail closed on unsupported critical semantics.
+- Files changed: `specs/full-standards-compliance.md`, `docs/PKIX-SCOPE.md`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** for partial RFC features, write the support matrix before enforcement work so later parse/validate tasks share the same supported-vs-unsupported boundary.
