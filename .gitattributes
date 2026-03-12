@@ -1,3 +1,4 @@
+.opencode/state/**/*.txt                linguist-language=Markdown
 .opencode/state/**/*           -diff    linguist-generated
 .zed/*.json                             linguist-language=JSON-With-Comments
 bun.lock                       -diff    linguist-generated
