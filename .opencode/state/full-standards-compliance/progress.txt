@@ -15,6 +15,7 @@ Started: 2026-03-12
 - Distribution-point model change is a clean break; no temporary URI-only compat alias.
 - RFC 5280 `directoryName` comparison is semantic: ordered DN, unordered RDN sets, RFC 4518-prepared AVA strings; never compare raw DER prefixes.
 - RFC 9618 policy validation should use a depth-indexed DAG keyed by `(depth, validPolicy)` plus constrained policy sets; never build or expose the deprecated RFC 5280 policy tree during core validation.
+- CRL applicability needs structured certificate DP + CRL IDP objects; URI-only projections are debug/display data, not enough for RFC 5280 scope decisions.
 
 ## Validation Commands
 
@@ -52,3 +53,10 @@ Started: 2026-03-12
 - Resolved the lingering policy-algorithm question in `docs/FUTURE.md` in favor of RFC 9618's DAG/set model instead of the deprecated RFC 5280 tree.
 - Files changed: `specs/full-standards-compliance.md`, `docs/FUTURE.md`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** keep policy state keyed by depth plus policy OID so multi-parent mappings stay linear-size; expose constrained policy sets, not graph internals, from public validation APIs.
+
+## Task - [crl-scope-spike]
+
+- Documented the CRL applicability plan in `specs/full-standards-compliance.md`, including the clean-break distribution-point / issuing-distribution-point data model, applicability checks, indirect-CRL issuer handling, delta-merge rules, and fixture targets.
+- Captured that current URI-only CRL projections are lossy and cannot drive RFC 5280 scope enforcement without new structured parse/build types.
+- Files changed: `specs/full-standards-compliance.md`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** treat `non_applicable` as a first-class revocation outcome; scope mismatch is different from stale/signature-invalid evidence and lets higher-level revocation orchestration keep searching.

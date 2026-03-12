@@ -41,7 +41,7 @@
 			"title": "Map full CRL applicability semantics",
 			"description": "Map distributionPoint, issuingDistributionPoint, indirect CRL, and delta CRL semantics before implementation. Done when:\n- clean-break CRL data model is documented\n- applicability rules are listed\n- required fixtures are enumerated",
 			"priority": "spike",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "define-validation-boundaries",
