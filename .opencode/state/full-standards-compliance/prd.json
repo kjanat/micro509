@@ -253,7 +253,7 @@
 			"description": "Apply policyMappings semantics and anyPolicy restrictions. Done when:\n- direct and invalid mappings are enforced\n- self-issued and multi-hop cases are covered\n- failure details identify the policy cause",
 			"depends": ["implement-policy-state"],
 			"priority": "standard",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "expose-policy-outcomes",

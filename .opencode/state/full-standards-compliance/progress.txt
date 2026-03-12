@@ -5,6 +5,7 @@ Started: 2026-03-12
 
 ## Codebase Patterns
 
+- For RFC 9618 mappings, keep graph mutation keyed by mapped `expectedPolicySet`, then derive caller-visible policy success from the surviving root-domain policies that still reach the leaf; never let an intermediate `anyPolicy` bridge satisfy arbitrary caller policy OIDs by itself.
 - For partially supported RFC surfaces, parser owns preserving/classifying unsupported wire forms; validator owns fail-closed decisions. Never silently drop unsupported critical semantics in parsing.
 - ESM-only, WebCrypto-only, platform-neutral core; avoid Node builtins in core paths.
 - TypeScript rules are strict: no `any`, no non-null assertions, no `as Type`, no classes.
@@ -234,3 +235,10 @@ Started: 2026-03-12
 - Added raw-path validation regressions in `test/verify.test.ts` for matching/missing initial policies, explicit-policy failures, intermediate `policyConstraints`, and `anyPolicy` inhibition, and narrowed the old fail-closed tests to mapping-only inputs.
 - Files changed: `src/verify.ts`, `test/verify.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** once the internal policy graph exists, constraint enforcement should key off the final constrained policy set and explicit-policy counter, not on whether callers supplied a non-default input.
+
+## Task - [enforce-policy-mappings]
+
+- Enabled RFC 9618 policy-mapping enforcement in `src/verify.ts` by removing the temporary fail-closed gate for `inhibitPolicyMapping` and by deriving caller-visible policy success from surviving root-domain policies that still reach the leaf through mapped paths.
+- Added regressions in `test/verify.test.ts` for direct mapping, caller-side inhibition, multi-hop mapping chains, and self-issued intermediates preserving the inhibit-policy-mapping counter.
+- Files changed: `src/verify.ts`, `test/verify.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** mapping evaluation can keep the existing depth-keyed DAG, but final user-policy success must trace surviving leaf paths back to their root-domain policy nodes instead of treating every reachable `anyPolicy` bridge as a satisfiable caller policy.

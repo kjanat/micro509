@@ -1328,14 +1328,6 @@ function buildValidationState(
 	chainLength: number,
 ): ValidationStateResult {
 	const policy = normalizePolicyValidationState(input, chainLength);
-	if (hasUnsupportedPolicyInputs(policy)) {
-		return failure(
-			'policy_processing_not_implemented',
-			'policy validation inputs are not implemented yet',
-			undefined,
-			detail({ actual: describeUnsupportedPolicyState(policy) }),
-		);
-	}
 	const nameConstraints = normalizeNameConstraintValidationState(input);
 	return {
 		ok: true,
@@ -1367,18 +1359,6 @@ function normalizeNameConstraintValidationState(
 		initialPermittedSubtrees: input.permittedSubtrees?.map((subtree) => subtree.base) ?? [],
 		initialExcludedSubtrees: input.excludedSubtrees?.map((subtree) => subtree.base) ?? [],
 	};
-}
-
-function hasUnsupportedPolicyInputs(policy: PolicyValidationState): boolean {
-	return policy.inhibitPolicyMapping === 0;
-}
-
-function describeUnsupportedPolicyState(policy: PolicyValidationState): string {
-	const enabled: string[] = [];
-	if (policy.inhibitPolicyMapping === 0) {
-		enabled.push('inhibitPolicyMapping');
-	}
-	return enabled.join(', ');
 }
 
 function createInitialPolicyGraph(): PolicyGraph {
@@ -1459,25 +1439,28 @@ function deriveUserConstrainedPolicies(
 	chain: readonly ParsedCertificate[],
 	state: PolicyValidationState,
 ): ReadonlySet<string> {
-	const finalAuthorityPolicies = collectFinalAuthorityPolicies(chain, state.validPolicyGraph);
+	const authorityConstrainedPolicies = collectAuthorityConstrainedPolicies(
+		chain,
+		state.validPolicyGraph,
+	);
 	if (state.initialPolicySet === 'any') {
-		return finalAuthorityPolicies;
+		return authorityConstrainedPolicies;
 	}
 	const constrained = new Set<string>();
-	if (finalAuthorityPolicies.has(OIDS.anyPolicy)) {
+	if (authorityConstrainedPolicies.has(OIDS.anyPolicy)) {
 		for (const policyIdentifier of state.initialPolicySet) {
 			constrained.add(policyIdentifier);
 		}
 	}
 	for (const policyIdentifier of state.initialPolicySet) {
-		if (finalAuthorityPolicies.has(policyIdentifier)) {
+		if (authorityConstrainedPolicies.has(policyIdentifier)) {
 			constrained.add(policyIdentifier);
 		}
 	}
 	return constrained;
 }
 
-function collectFinalAuthorityPolicies(
+function collectAuthorityConstrainedPolicies(
 	chain: readonly ParsedCertificate[],
 	graph: PolicyGraph | null,
 ): ReadonlySet<string> {
@@ -1490,10 +1473,44 @@ function collectFinalAuthorityPolicies(
 		return new Set<string>();
 	}
 	const authorityPolicies = new Set<string>();
-	for (const node of finalDepth.values()) {
-		authorityPolicies.add(node.validPolicy);
+	const visited = new Set<string>();
+	for (const [key, node] of finalDepth) {
+		if (node.validPolicy === OIDS.anyPolicy) {
+			authorityPolicies.add(OIDS.anyPolicy);
+			continue;
+		}
+		collectAuthorityPolicyRoots(graph, key, authorityPolicies, visited);
 	}
 	return authorityPolicies;
+}
+
+function collectAuthorityPolicyRoots(
+	graph: PolicyGraph,
+	nodeKey: string,
+	authorityPolicies: Set<string>,
+	visited: Set<string>,
+): void {
+	if (visited.has(nodeKey)) {
+		return;
+	}
+	visited.add(nodeKey);
+	const node = getPolicyGraphNode(graph, nodeKey);
+	if (node === undefined) {
+		return;
+	}
+	for (const parentKey of node.parentKeys) {
+		const parent = getPolicyGraphNode(graph, parentKey);
+		if (parent === undefined) {
+			continue;
+		}
+		if (parent.depth === 0 && parent.validPolicy === OIDS.anyPolicy) {
+			if (node.validPolicy !== OIDS.anyPolicy) {
+				authorityPolicies.add(node.validPolicy);
+			}
+			continue;
+		}
+		collectAuthorityPolicyRoots(graph, parentKey, authorityPolicies, visited);
+	}
 }
 
 function describeFinalPolicies(policies: ReadonlySet<string>): string {

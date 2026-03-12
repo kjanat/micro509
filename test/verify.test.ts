@@ -2035,36 +2035,62 @@ describe('validation profiles', () => {
 		expect(fail.ok).toBe(false);
 	});
 
-	it('validateForTlsClient still fails closed for inhibitPolicyMapping until mapping enforcement lands', async () => {
+	it('validateForTlsClient respects policy mappings and caller inhibition', async () => {
 		const root = await createSelfSignedCertificate({
 			subject: { commonName: 'Policy Input Root' },
 			extensions: {
-				basicConstraints: { ca: true },
+				basicConstraints: { ca: true, pathLength: 1 },
 				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const intermediateKeys = await generateKeyPair();
+		const intermediate = await createCertificate({
+			issuer: { commonName: 'Policy Input Root' },
+			subject: { commonName: 'Policy Mapping Intermediate' },
+			publicKey: intermediateKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+				certificatePolicies: [{ policyIdentifier: OIDS.anyPolicy }],
+				policyMappings: [{ issuerDomainPolicy: '1.2.3.4', subjectDomainPolicy: '1.2.3.5' }],
 			},
 		});
 		const leafKeys = await generateKeyPair();
 		const leaf = await createCertificate({
-			issuer: { commonName: 'Policy Input Root' },
+			issuer: { commonName: 'Policy Mapping Intermediate' },
 			subject: { commonName: 'policy-client-leaf' },
 			publicKey: leafKeys.publicKey,
-			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
+			signerPrivateKey: intermediateKeys.privateKey,
+			issuerPublicKey: intermediateKeys.publicKey,
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['clientAuth'],
+				certificatePolicies: [{ policyIdentifier: '1.2.3.5' }],
 			},
 		});
-		const result = await validateForTlsClient({
+		const allowed = await validateForTlsClient({
 			leaf: leaf.pem,
+			intermediates: [intermediate.pem],
 			roots: [root.certificate.pem],
+			initialPolicySet: ['1.2.3.4'],
+		});
+		expect(allowed.ok).toBe(true);
+
+		const blocked = await validateForTlsClient({
+			leaf: leaf.pem,
+			intermediates: [intermediate.pem],
+			roots: [root.certificate.pem],
+			initialPolicySet: ['1.2.3.4'],
 			inhibitPolicyMapping: true,
 		});
-		expect(result).toMatchObject({
+		expect(blocked).toMatchObject({
 			ok: false,
-			code: 'policy_processing_not_implemented',
+			code: 'initial_policy_set_not_satisfied',
 			details: {
-				actual: 'inhibitPolicyMapping',
+				expected: '1.2.3.4',
+				actual: '<none>',
 			},
 		});
 	});
@@ -2213,20 +2239,259 @@ describe('validateCandidatePath direct', () => {
 		if (!verifyResult.ok) expect(verifyResult.code).toBe('subject_alt_name_mismatch');
 	});
 
-	it('still fails closed for inhibitPolicyMapping on raw path validation until mapping enforcement lands', async () => {
-		const chain = await issueChain();
-		const leafParsed = parseCertificatePem(chain.leaf.pem);
-		const intParsed = parseCertificatePem(chain.intermediate.pem);
-		const rootParsed = parseCertificatePem(chain.root.certificate.pem);
-		const result = await validateCandidatePath({
-			chain: [leafParsed, intParsed, rootParsed],
+	it('applies direct policy mappings during raw path validation', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Direct Mapping Root' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 1 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const intermediateKeys = await generateKeyPair();
+		const intermediate = await createCertificate({
+			issuer: { commonName: 'Direct Mapping Root' },
+			subject: { commonName: 'Direct Mapping Intermediate' },
+			publicKey: intermediateKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+				certificatePolicies: [{ policyIdentifier: OIDS.anyPolicy }],
+				policyMappings: [{ issuerDomainPolicy: '1.2.3.4', subjectDomainPolicy: '1.2.3.5' }],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Direct Mapping Intermediate' },
+			subject: { commonName: 'direct-mapped-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: intermediateKeys.privateKey,
+			issuerPublicKey: intermediateKeys.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				certificatePolicies: [{ policyIdentifier: '1.2.3.5' }],
+			},
+		});
+		const allowed = await validateCandidatePath({
+			chain: [
+				parseCertificatePem(leaf.pem),
+				parseCertificatePem(intermediate.pem),
+				parseCertificatePem(root.certificate.pem),
+			],
+			initialPolicySet: ['1.2.3.4'],
+		});
+		expect(allowed.ok).toBe(true);
+
+		const blocked = await validateCandidatePath({
+			chain: [
+				parseCertificatePem(leaf.pem),
+				parseCertificatePem(intermediate.pem),
+				parseCertificatePem(root.certificate.pem),
+			],
+			initialPolicySet: ['1.2.3.4'],
 			inhibitPolicyMapping: true,
 		});
-		expect(result).toMatchObject({
+		expect(blocked).toMatchObject({
 			ok: false,
-			code: 'policy_processing_not_implemented',
+			code: 'initial_policy_set_not_satisfied',
 			details: {
-				actual: 'inhibitPolicyMapping',
+				expected: '1.2.3.4',
+				actual: '<none>',
+			},
+		});
+	});
+
+	it('supports multi-hop policy mappings during raw path validation', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Multi Hop Mapping Root' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 2 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const firstIntermediateKeys = await generateKeyPair();
+		const firstIntermediate = await createCertificate({
+			issuer: { commonName: 'Multi Hop Mapping Root' },
+			subject: { commonName: 'First Mapping Intermediate' },
+			publicKey: firstIntermediateKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 1 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+				certificatePolicies: [{ policyIdentifier: OIDS.anyPolicy }],
+				policyMappings: [{ issuerDomainPolicy: '1.2.3.4', subjectDomainPolicy: '1.2.3.5' }],
+			},
+		});
+		const secondIntermediateKeys = await generateKeyPair();
+		const secondIntermediate = await createCertificate({
+			issuer: { commonName: 'First Mapping Intermediate' },
+			subject: { commonName: 'Second Mapping Intermediate' },
+			publicKey: secondIntermediateKeys.publicKey,
+			signerPrivateKey: firstIntermediateKeys.privateKey,
+			issuerPublicKey: firstIntermediateKeys.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+				certificatePolicies: [{ policyIdentifier: '1.2.3.5' }],
+				policyMappings: [{ issuerDomainPolicy: '1.2.3.5', subjectDomainPolicy: '1.2.3.6' }],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Second Mapping Intermediate' },
+			subject: { commonName: 'multi-hop-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: secondIntermediateKeys.privateKey,
+			issuerPublicKey: secondIntermediateKeys.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				certificatePolicies: [{ policyIdentifier: '1.2.3.6' }],
+			},
+		});
+		const result = await validateCandidatePath({
+			chain: [
+				parseCertificatePem(leaf.pem),
+				parseCertificatePem(secondIntermediate.pem),
+				parseCertificatePem(firstIntermediate.pem),
+				parseCertificatePem(root.certificate.pem),
+			],
+			initialPolicySet: ['1.2.3.4'],
+		});
+		expect(result.ok).toBe(true);
+	});
+
+	it('enforces inhibitPolicyMapping counters without decrementing self-issued CAs', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Mapping Counter Root' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 3 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const constrainedKeys = await generateKeyPair();
+		const constrainedIntermediate = await createCertificate({
+			issuer: { commonName: 'Mapping Counter Root' },
+			subject: { commonName: 'Mapping Bridge' },
+			publicKey: constrainedKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 2 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+				certificatePolicies: [{ policyIdentifier: OIDS.anyPolicy }],
+				policyMappings: [{ issuerDomainPolicy: '1.2.3.4', subjectDomainPolicy: '1.2.3.5' }],
+				policyConstraints: { inhibitPolicyMapping: 1 },
+			},
+		});
+		const selfIssuedKeys = await generateKeyPair();
+		const selfIssuedIntermediate = await createCertificate({
+			issuer: { commonName: 'Mapping Bridge' },
+			subject: { commonName: 'Mapping Bridge' },
+			publicKey: selfIssuedKeys.publicKey,
+			signerPrivateKey: constrainedKeys.privateKey,
+			issuerPublicKey: constrainedKeys.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 1 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+				certificatePolicies: [{ policyIdentifier: '1.2.3.5' }],
+			},
+		});
+		const mappedKeys = await generateKeyPair();
+		const mappedIntermediate = await createCertificate({
+			issuer: { commonName: 'Mapping Bridge' },
+			subject: { commonName: 'Mapped Intermediate' },
+			publicKey: mappedKeys.publicKey,
+			signerPrivateKey: selfIssuedKeys.privateKey,
+			issuerPublicKey: selfIssuedKeys.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+				certificatePolicies: [{ policyIdentifier: '1.2.3.5' }],
+				policyMappings: [{ issuerDomainPolicy: '1.2.3.5', subjectDomainPolicy: '1.2.3.6' }],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Mapped Intermediate' },
+			subject: { commonName: 'mapping-counter-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: mappedKeys.privateKey,
+			issuerPublicKey: mappedKeys.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				certificatePolicies: [{ policyIdentifier: '1.2.3.6' }],
+			},
+		});
+		const allowed = await validateCandidatePath({
+			chain: [
+				parseCertificatePem(leaf.pem),
+				parseCertificatePem(mappedIntermediate.pem),
+				parseCertificatePem(selfIssuedIntermediate.pem),
+				parseCertificatePem(constrainedIntermediate.pem),
+				parseCertificatePem(root.certificate.pem),
+			],
+			initialPolicySet: ['1.2.3.4'],
+		});
+		expect(allowed.ok).toBe(true);
+
+		const normalBridgeKeys = await generateKeyPair();
+		const normalBridge = await createCertificate({
+			issuer: { commonName: 'Mapping Bridge' },
+			subject: { commonName: 'Normal Mapping Bridge' },
+			publicKey: normalBridgeKeys.publicKey,
+			signerPrivateKey: constrainedKeys.privateKey,
+			issuerPublicKey: constrainedKeys.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 1 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+				certificatePolicies: [{ policyIdentifier: '1.2.3.5' }],
+			},
+		});
+		const normalMappedKeys = await generateKeyPair();
+		const normalMappedIntermediate = await createCertificate({
+			issuer: { commonName: 'Normal Mapping Bridge' },
+			subject: { commonName: 'Normal Mapped Intermediate' },
+			publicKey: normalMappedKeys.publicKey,
+			signerPrivateKey: normalBridgeKeys.privateKey,
+			issuerPublicKey: normalBridgeKeys.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+				certificatePolicies: [{ policyIdentifier: '1.2.3.5' }],
+				policyMappings: [{ issuerDomainPolicy: '1.2.3.5', subjectDomainPolicy: '1.2.3.6' }],
+			},
+		});
+		const blockedLeafKeys = await generateKeyPair();
+		const blockedLeaf = await createCertificate({
+			issuer: { commonName: 'Normal Mapped Intermediate' },
+			subject: { commonName: 'blocked-mapping-counter-leaf' },
+			publicKey: blockedLeafKeys.publicKey,
+			signerPrivateKey: normalMappedKeys.privateKey,
+			issuerPublicKey: normalMappedKeys.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				certificatePolicies: [{ policyIdentifier: '1.2.3.6' }],
+			},
+		});
+
+		const blockedWithoutBridge = await validateCandidatePath({
+			chain: [
+				parseCertificatePem(blockedLeaf.pem),
+				parseCertificatePem(normalMappedIntermediate.pem),
+				parseCertificatePem(normalBridge.pem),
+				parseCertificatePem(constrainedIntermediate.pem),
+				parseCertificatePem(root.certificate.pem),
+			],
+			initialPolicySet: ['1.2.3.4'],
+		});
+		expect(blockedWithoutBridge).toMatchObject({
+			ok: false,
+			code: 'initial_policy_set_not_satisfied',
+			details: {
+				expected: '1.2.3.4',
+				actual: '<none>',
 			},
 		});
 	});
