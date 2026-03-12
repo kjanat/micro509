@@ -25,6 +25,7 @@ Started: 2026-03-12
 - New verify-surface knobs should land as direct optional fields on input objects, then flow through wrapper helpers unchanged until enforcement work is ready.
 - When a verify-surface task adds another RFC input family, widen every verify/profile input interface plus the shared forwarding helper in one pass so wrappers stay aligned with raw path validation.
 - New extension families should land in three steps: add stable OIDs + public data shapes first, then builder/parser wiring, then validation/enforcement. Do not add `CertificateExtensionsInput` or parsed-certificate fields before encode/decode exists.
+- For CRL scope surfaces, replace URI shortcut fields in one clean break with structured distribution-point objects, then keep encode/parse helpers aligned on `fullName` vs `relativeName` and reason-mask semantics.
 
 ## Validation Commands
 
@@ -134,3 +135,11 @@ Started: 2026-03-12
 - Added public policy extension data shapes in `src/extensions.ts`, re-exported them from `src/index.ts`, and covered the new surface in `test/extensions.test.ts`.
 - Files changed: `src/oids.ts`, `src/extensions.ts`, `src/index.ts`, `test/extensions.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** keep early extension-surface tasks type-only when encode/decode is still pending; stable names in `extensions.ts` plus registry OIDs are enough for later parse/build work to depend on without over-claiming behavior.
+
+## Task - [define-dp-idp-types]
+
+- Replaced certificate/CSR CRL distribution-point URI arrays with structured `DistributionPoint` / `DistributionPointName` inputs and parsed outputs, plus a typed `IssuingDistributionPoint` surface for CRLs.
+- Wired current encode/parse support through the new object model in `src/extensions.ts`, `src/parse.ts`, `src/crl.ts`, and re-exported the new types from `src/index.ts` and `src/name.ts`.
+- Updated CRL, certificate, and CSR tests to use the clean-break distribution-point objects and added IDP flag/reason coverage.
+- Files changed: `src/name.ts`, `src/extensions.ts`, `src/parse.ts`, `src/crl.ts`, `src/index.ts`, `test/certificate.test.ts`, `test/csr.test.ts`, `test/crl.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** model DP/IDP scope at the boundary with object unions that forbid URI-only shortcuts and invalid reason-only points; keep runtime guards too because DER builders are callable from plain JS.

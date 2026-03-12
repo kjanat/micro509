@@ -76,8 +76,21 @@ describe('crl', () => {
 			issuerPublicKey: issuer.keyPair.publicKey,
 			crlNumber: 9,
 			baseCrlNumber: 8,
-			issuingDistributionPointUri: 'http://example.test/idp.crl',
-			freshestCrlUris: ['http://example.test/freshest.crl'],
+			issuingDistributionPoint: {
+				distributionPoint: {
+					fullName: [{ type: 'uri', value: 'http://example.test/idp.crl' }],
+				},
+				onlyContainsUserCerts: true,
+				onlySomeReasons: ['keyCompromise', 'cessationOfOperation'],
+				indirectCrl: true,
+			},
+			freshestCrlDistributionPoints: [
+				{
+					distributionPoint: {
+						fullName: [{ type: 'uri', value: 'http://example.test/freshest.crl' }],
+					},
+				},
+			],
 			revokedCertificates: [
 				{
 					serialNumber: Uint8Array.of(0x01),
@@ -88,8 +101,21 @@ describe('crl', () => {
 		});
 		const parsed = parseCertificateRevocationListPem(crl.pem);
 		expect(parsed.baseCrlNumber).toBe(8);
-		expect(parsed.issuingDistributionPointUri).toBe('http://example.test/idp.crl');
-		expect(parsed.freshestCrlUris).toEqual(['http://example.test/freshest.crl']);
+		expect(parsed.issuingDistributionPoint).toEqual({
+			distributionPoint: {
+				fullName: [{ type: 'uri', value: 'http://example.test/idp.crl' }],
+			},
+			onlyContainsUserCerts: true,
+			onlySomeReasons: ['keyCompromise', 'cessationOfOperation'],
+			indirectCrl: true,
+		});
+		expect(parsed.freshestCrlDistributionPoints).toEqual([
+			{
+				distributionPoint: {
+					fullName: [{ type: 'uri', value: 'http://example.test/freshest.crl' }],
+				},
+			},
+		]);
 		expect(parsed.revokedCertificates[0]).toMatchObject({
 			serialNumberHex: '01',
 			reasonCode: 'keyCompromise',
@@ -361,7 +387,11 @@ describe('crl', () => {
 			issuer: { commonName: 'IDP CRL CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
-			issuingDistributionPointUri: 'http://crl.example.com/crl.pem',
+			issuingDistributionPoint: {
+				distributionPoint: {
+					fullName: [{ type: 'uri', value: 'http://crl.example.com/crl.pem' }],
+				},
+			},
 		});
 		const derBytes = new Uint8Array(pemDecode('X509 CRL', crl.pem));
 		// Find the IDP OID bytes (2.5.29.28 = 55 1D 1C) in the CRL DER
@@ -399,7 +429,7 @@ describe('crl', () => {
 			// Change [0] to [1] (onlyContainsUserCerts) — tag 0xa0 → 0x81
 			derBytes[targetOffset] = 0x81;
 			const modified = parseCertificateRevocationListDer(derBytes);
-			expect(modified.issuingDistributionPointUri).toBeUndefined();
+			expect(modified.issuingDistributionPoint).toEqual({});
 		}
 	});
 

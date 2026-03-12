@@ -8,11 +8,13 @@ import {
 	integerFromNumber,
 	objectIdentifier,
 	octetString,
+	readElement,
 	readSequenceChildren,
 	sequence,
 	tlv,
 } from './der.ts';
 import { sha1 } from './hash.ts';
+import { encodeRelativeDistinguishedName, type RelativeDistinguishedNameInput } from './name.ts';
 import { OIDS } from './oids.ts';
 
 export type KeyUsage =
@@ -37,6 +39,71 @@ export type SubjectAltName =
 			readonly tag: number;
 			readonly value: Uint8Array;
 	  };
+
+export type GeneralName = SubjectAltName;
+
+export type DistributionPointReason =
+	| 'keyCompromise'
+	| 'cACompromise'
+	| 'affiliationChanged'
+	| 'superseded'
+	| 'cessationOfOperation'
+	| 'certificateHold'
+	| 'privilegeWithdrawn'
+	| 'aACompromise';
+
+export interface DistributionPointName {
+	readonly fullName?: readonly GeneralName[];
+	readonly relativeName?: RelativeDistinguishedNameInput;
+}
+
+export type DistributionPoint =
+	| {
+			readonly distributionPoint: DistributionPointName;
+			readonly reasons?: readonly DistributionPointReason[];
+			readonly crlIssuer?: readonly GeneralName[];
+	  }
+	| {
+			readonly distributionPoint?: DistributionPointName;
+			readonly reasons?: readonly DistributionPointReason[];
+			readonly crlIssuer: readonly GeneralName[];
+	  };
+
+interface IssuingDistributionPointBase {
+	readonly distributionPoint?: DistributionPointName;
+	readonly onlySomeReasons?: readonly DistributionPointReason[];
+	readonly indirectCrl?: boolean;
+	readonly onlyContainsUserCerts?: false;
+	readonly onlyContainsCACerts?: false;
+	readonly onlyContainsAttributeCerts?: boolean;
+}
+
+interface IssuingDistributionPointForUserCerts
+	extends Omit<IssuingDistributionPointBase, 'onlyContainsUserCerts'> {
+	readonly onlyContainsUserCerts: true;
+	readonly onlyContainsCACerts?: false;
+	readonly onlyContainsAttributeCerts?: false;
+}
+
+interface IssuingDistributionPointForCaCerts
+	extends Omit<IssuingDistributionPointBase, 'onlyContainsCACerts'> {
+	readonly onlyContainsUserCerts?: false;
+	readonly onlyContainsCACerts: true;
+	readonly onlyContainsAttributeCerts?: false;
+}
+
+interface IssuingDistributionPointForAttributeCerts
+	extends Omit<IssuingDistributionPointBase, 'onlyContainsAttributeCerts'> {
+	readonly onlyContainsUserCerts?: false;
+	readonly onlyContainsCACerts?: false;
+	readonly onlyContainsAttributeCerts: true;
+}
+
+export type IssuingDistributionPoint =
+	| IssuingDistributionPointBase
+	| IssuingDistributionPointForUserCerts
+	| IssuingDistributionPointForCaCerts
+	| IssuingDistributionPointForAttributeCerts;
 
 export interface BasicConstraints {
 	readonly ca: boolean;
@@ -100,7 +167,7 @@ export interface CertificateExtensionsInput {
 	readonly extendedKeyUsage?: readonly ExtendedKeyUsage[];
 	readonly nameConstraints?: NameConstraints;
 	readonly authorityInfoAccess?: readonly AuthorityInformationAccess[];
-	readonly crlDistributionPoints?: readonly string[];
+	readonly crlDistributionPoints?: readonly DistributionPoint[];
 	readonly customExtensions?: readonly CustomExtension[];
 }
 
@@ -194,6 +261,17 @@ const KEY_USAGE_BITS: Record<KeyUsage, number> = {
 	cRLSign: 6,
 	encipherOnly: 7,
 	decipherOnly: 8,
+};
+
+const DISTRIBUTION_POINT_REASON_BITS: Record<DistributionPointReason, number> = {
+	keyCompromise: 1,
+	cACompromise: 2,
+	affiliationChanged: 3,
+	superseded: 4,
+	cessationOfOperation: 5,
+	certificateHold: 6,
+	privilegeWithdrawn: 7,
+	aACompromise: 8,
 };
 
 export function buildCertificateExtensions(
@@ -428,20 +506,8 @@ export function encodeAuthorityInfoAccess(
 	);
 }
 
-export function encodeCrlDistributionPoints(uris: readonly string[]): Uint8Array {
-	return sequence(
-		uris.map((uri) =>
-			sequence([
-				implicitConstructedContext(
-					0,
-					implicitConstructedContext(
-						0,
-						concatBytes([implicitPrimitiveContext(6, new TextEncoder().encode(uri))]),
-					),
-				),
-			]),
-		),
-	);
+export function encodeCrlDistributionPoints(points: readonly DistributionPoint[]): Uint8Array {
+	return sequence(points.map((point) => sequence(encodeDistributionPoint(point))));
 }
 
 export function encodeNameConstraints(constraints: NameConstraints): Uint8Array {
@@ -467,6 +533,71 @@ export function encodeNameConstraints(constraints: NameConstraints): Uint8Array 
 
 function encodeGeneralSubtree(subtree: GeneralSubtree): Uint8Array {
 	return sequence([encodeNameConstraintForm(subtree.base)]);
+}
+
+function encodeDistributionPoint(point: DistributionPoint): Uint8Array[] {
+	if (point.distributionPoint === undefined && point.crlIssuer === undefined) {
+		throw new Error('DistributionPoint must contain distributionPoint or crlIssuer');
+	}
+	const fields: Uint8Array[] = [];
+	if (point.distributionPoint !== undefined) {
+		fields.push(
+			implicitConstructedContext(0, encodeDistributionPointName(point.distributionPoint)),
+		);
+	}
+	if (point.reasons !== undefined && point.reasons.length > 0) {
+		fields.push(implicitPrimitiveContext(1, encodeDistributionPointReasonFlags(point.reasons)));
+	}
+	if (point.crlIssuer !== undefined && point.crlIssuer.length > 0) {
+		fields.push(
+			implicitConstructedContext(2, concatBytes(point.crlIssuer.map(encodeSubjectAltName))),
+		);
+	}
+	return fields;
+}
+
+function encodeDistributionPointName(name: DistributionPointName): Uint8Array {
+	if (name.fullName !== undefined && name.relativeName !== undefined) {
+		throw new Error('DistributionPointName cannot contain both fullName and relativeName');
+	}
+	if (name.fullName !== undefined) {
+		if (name.fullName.length === 0) {
+			throw new Error('DistributionPointName fullName must not be empty');
+		}
+		return implicitConstructedContext(0, concatBytes(name.fullName.map(encodeSubjectAltName)));
+	}
+	if (name.relativeName !== undefined) {
+		const relativeName = encodeRelativeDistinguishedName(name.relativeName);
+		const relativeNameElement = readElement(relativeName);
+		return implicitConstructedContext(
+			1,
+			relativeName.slice(relativeNameElement.start, relativeNameElement.end),
+		);
+	}
+	throw new Error('DistributionPointName must contain fullName or relativeName');
+}
+
+function encodeDistributionPointReasonFlags(
+	reasons: readonly DistributionPointReason[],
+): Uint8Array {
+	let highestBit = 0;
+	for (const reason of reasons) {
+		const bit = DISTRIBUTION_POINT_REASON_BITS[reason];
+		if (bit > highestBit) {
+			highestBit = bit;
+		}
+	}
+	const byteLength = Math.floor(highestBit / 8) + 1;
+	const bytes = new Uint8Array(byteLength);
+	for (const reason of reasons) {
+		const bit = DISTRIBUTION_POINT_REASON_BITS[reason];
+		const byteIndex = Math.floor(bit / 8);
+		const bitIndex = bit % 8;
+		const current = bytes[byteIndex] ?? 0;
+		bytes[byteIndex] = current | (1 << (7 - bitIndex));
+	}
+	const unusedBits = (8 - ((highestBit + 1) % 8)) % 8;
+	return concatBytes([Uint8Array.of(unusedBits), bytes]);
 }
 
 function encodeNameConstraintForm(form: NameConstraintForm): Uint8Array {

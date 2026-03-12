@@ -37,9 +37,14 @@ export type {
 	CustomExtendedKeyUsage,
 	CustomExtension,
 	CustomPolicyQualifierInfo,
+	DistributionPoint,
+	DistributionPointName,
+	DistributionPointReason,
 	ExtendedKeyUsage,
+	GeneralName,
 	GeneralSubtree,
 	InhibitAnyPolicy,
+	IssuingDistributionPoint,
 	KeyUsage,
 	KnownAuthorityInfoAccessMethod,
 	KnownExtendedKeyUsage,
@@ -108,7 +113,13 @@ export {
 	type PublicKeyImportInput,
 	type RsaKeyAlgorithmInput,
 } from './keys.ts';
-export type { NameAttribute, NameFieldKey, NameInput, NameObject } from './name.ts';
+export type {
+	NameAttribute,
+	NameFieldKey,
+	NameInput,
+	NameObject,
+	RelativeDistinguishedNameInput,
+} from './name.ts';
 export {
 	type CreateOcspRequestInput,
 	type CreateOcspRequestItemInput,
@@ -149,9 +160,13 @@ export {
 	findExtension,
 	type ParsedCertificate,
 	type ParsedCertificateSigningRequest,
+	type ParsedDistributionPoint,
+	type ParsedDistributionPointName,
 	type ParsedExtension,
+	type ParsedIssuingDistributionPoint,
 	type ParsedName,
 	type ParsedNameAttribute,
+	type ParsedRelativeDistinguishedName,
 	type ParseOptions,
 	parseCertificateChainPem,
 	parseCertificateDer,

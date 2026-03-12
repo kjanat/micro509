@@ -43,6 +43,7 @@ export interface NameAttribute {
 }
 
 export type NameInput = NameObject | readonly NameAttribute[];
+export type RelativeDistinguishedNameInput = readonly NameAttribute[];
 
 interface NameFieldDefinition {
 	readonly oid: string;
@@ -85,25 +86,35 @@ export function encodeName(input: NameInput): Uint8Array {
 		throw new Error('Name must contain at least one attribute');
 	}
 
-	return sequence(
-		attributes.map((attribute) => {
-			const definition = NAME_FIELD_DEFINITIONS[attribute.type];
-			if (definition === undefined) {
-				throw new Error(`Unsupported name field: ${attribute.type}`);
-			}
-			if (attribute.type === 'country' && attribute.value.length !== 2) {
-				throw new Error('Country must be a 2-character code');
-			}
+	return sequence(attributes.map(encodeNameAttributeAsSet));
+}
 
-			return setOf([
-				sequence([objectIdentifier(definition.oid), definition.encode(attribute.value)]),
-			]);
-		}),
-	);
+export function encodeRelativeDistinguishedName(
+	attributes: RelativeDistinguishedNameInput,
+): Uint8Array {
+	if (attributes.length === 0) {
+		throw new Error('Relative distinguished name must contain at least one attribute');
+	}
+	return setOf(attributes.map(encodeNameAttribute));
 }
 
 function isNameAttributes(input: NameInput): input is readonly NameAttribute[] {
 	return Array.isArray(input);
+}
+
+function encodeNameAttributeAsSet(attribute: NameAttribute): Uint8Array {
+	return setOf([encodeNameAttribute(attribute)]);
+}
+
+function encodeNameAttribute(attribute: NameAttribute): Uint8Array {
+	const definition = NAME_FIELD_DEFINITIONS[attribute.type];
+	if (definition === undefined) {
+		throw new Error(`Unsupported name field: ${attribute.type}`);
+	}
+	if (attribute.type === 'country' && attribute.value.length !== 2) {
+		throw new Error('Country must be a 2-character code');
+	}
+	return sequence([objectIdentifier(definition.oid), definition.encode(attribute.value)]);
 }
 
 function nameObjectToAttributes(input: NameObject): readonly NameAttribute[] {

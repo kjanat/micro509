@@ -14,7 +14,9 @@ import { readElement } from './der.ts';
 import type {
 	AuthorityInformationAccess,
 	BasicConstraints,
+	DistributionPointReason,
 	ExtendedKeyUsage,
+	GeneralName,
 	GeneralSubtree,
 	KeyUsage,
 	NameConstraintForm,
@@ -38,6 +40,32 @@ export interface ParsedName {
 	readonly derHex: string;
 	readonly attributes: readonly ParsedNameAttribute[];
 	readonly values: Partial<Record<NameFieldKey, string>>;
+}
+
+export interface ParsedRelativeDistinguishedName {
+	readonly derHex: string;
+	readonly attributes: readonly ParsedNameAttribute[];
+	readonly values: Partial<Record<NameFieldKey, string>>;
+}
+
+export interface ParsedDistributionPointName {
+	readonly fullName?: readonly GeneralName[];
+	readonly relativeName?: ParsedRelativeDistinguishedName;
+}
+
+export interface ParsedDistributionPoint {
+	readonly distributionPoint?: ParsedDistributionPointName;
+	readonly reasons?: readonly DistributionPointReason[];
+	readonly crlIssuer?: readonly GeneralName[];
+}
+
+export interface ParsedIssuingDistributionPoint {
+	readonly distributionPoint?: ParsedDistributionPointName;
+	readonly onlyContainsUserCerts?: boolean;
+	readonly onlyContainsCACerts?: boolean;
+	readonly onlySomeReasons?: readonly DistributionPointReason[];
+	readonly indirectCrl?: boolean;
+	readonly onlyContainsAttributeCerts?: boolean;
 }
 
 export interface ParsedExtension {
@@ -104,7 +132,7 @@ export interface ParsedCertificate<TMap extends ExtensionDecoderMap = Record<nev
 	readonly subjectAltNames?: readonly SubjectAltName[];
 	readonly nameConstraints?: NameConstraints;
 	readonly authorityInfoAccess?: readonly AuthorityInformationAccess[];
-	readonly crlDistributionPoints?: readonly string[];
+	readonly crlDistributionPoints?: readonly ParsedDistributionPoint[];
 	readonly decodedExtensions?: readonly DecodedExtensionValue<unknown>[];
 	readonly decodedExtensionMap?: DecodedExtensionMap<TMap>;
 	readonly subjectKeyIdentifier?: string;
@@ -128,7 +156,7 @@ export interface ParsedCertificateSigningRequest<
 	readonly extendedKeyUsage?: readonly ExtendedKeyUsage[];
 	readonly subjectAltNames?: readonly SubjectAltName[];
 	readonly authorityInfoAccess?: readonly AuthorityInformationAccess[];
-	readonly crlDistributionPoints?: readonly string[];
+	readonly crlDistributionPoints?: readonly ParsedDistributionPoint[];
 	readonly decodedExtensions?: readonly DecodedExtensionValue<unknown>[];
 	readonly decodedExtensionMap?: DecodedExtensionMap<TMap>;
 }
@@ -378,7 +406,7 @@ interface ParsedExtensions {
 	readonly subjectAltNames?: readonly SubjectAltName[];
 	readonly nameConstraints?: NameConstraints;
 	readonly authorityInfoAccess?: readonly AuthorityInformationAccess[];
-	readonly crlDistributionPoints?: readonly string[];
+	readonly crlDistributionPoints?: readonly ParsedDistributionPoint[];
 	readonly subjectKeyIdentifier?: string;
 	readonly authorityKeyIdentifier?: string;
 }
@@ -422,7 +450,7 @@ function parseExtensionSequence(source: Uint8Array, sequenceElement: DerElement)
 	let subjectAltNames: readonly SubjectAltName[] | undefined;
 	let nameConstraints: NameConstraints | undefined;
 	let authorityInfoAccess: readonly AuthorityInformationAccess[] | undefined;
-	let crlDistributionPoints: readonly string[] | undefined;
+	let crlDistributionPoints: readonly ParsedDistributionPoint[] | undefined;
 	let subjectKeyIdentifier: string | undefined;
 	let authorityKeyIdentifier: string | undefined;
 
@@ -494,22 +522,46 @@ function parseName(source: Uint8Array, element: DerElement): ParsedName {
 	const attributes: ParsedNameAttribute[] = [];
 	const values: Partial<Record<NameFieldKey, string>> = {};
 	for (const setElement of childrenOf(source, element)) {
-		const attributeSequence = requireElement(childrenOf(source, setElement)[0], 'name attribute');
-		const parts = childrenOf(source, attributeSequence);
-		const oid = decodeObjectIdentifier(requireElement(parts[0], 'name OID').value);
-		const valueElement = requireElement(parts[1], 'name value');
-		const key = nameKeyFromOid(oid);
-		const value = decodeString(valueElement.tag, valueElement.value);
-		attributes.push({ oid, ...(key !== undefined ? { key } : {}), value });
-		if (key !== undefined) {
-			values[key] = value;
-		}
+		parseNameAttributeSet(source, setElement, attributes, values);
 	}
 	return {
 		derHex: toHex(source.slice(element.start - element.headerLength, element.end)),
 		attributes,
 		values,
 	};
+}
+
+function parseRelativeDistinguishedName(
+	source: Uint8Array,
+	element: DerElement,
+): ParsedRelativeDistinguishedName {
+	const attributes: ParsedNameAttribute[] = [];
+	const values: Partial<Record<NameFieldKey, string>> = {};
+	parseNameAttributeSet(source, element, attributes, values);
+	return {
+		derHex: toHex(source.slice(element.start - element.headerLength, element.end)),
+		attributes,
+		values,
+	};
+}
+
+function parseNameAttributeSet(
+	source: Uint8Array,
+	setElement: DerElement,
+	attributes: ParsedNameAttribute[],
+	values: Partial<Record<NameFieldKey, string>>,
+): void {
+	for (const attributeSequence of childrenOf(source, setElement)) {
+		const parts = childrenOf(source, attributeSequence);
+		const oid = decodeObjectIdentifier(requireElement(parts[0], 'name OID').value);
+		const valueElement = requireElement(parts[1], 'name value');
+		const key = nameKeyFromOid(oid);
+		const value = decodeString(valueElement.tag, valueElement.value);
+		attributes.push({ oid, ...(key !== undefined ? { key } : {}), value });
+		if (key !== undefined && values[key] === undefined) {
+			values[key] = value;
+		}
+	}
 }
 
 function parseValidity(
@@ -603,38 +655,7 @@ function parseExtendedKeyUsage(bytes: Uint8Array): readonly ExtendedKeyUsage[] {
 
 function parseSubjectAltNames(bytes: Uint8Array): readonly SubjectAltName[] {
 	const sequenceElement = requireElement(readElement(bytes), 'subjectAltName sequence');
-	return childrenOf(bytes, sequenceElement).map((element) => {
-		switch (element.tag) {
-			case 0x81:
-				return {
-					type: 'email' as const,
-					value: textDecoder.decode(element.value),
-				};
-			case 0x82:
-				return {
-					type: 'dns' as const,
-					value: textDecoder.decode(element.value),
-				};
-			case 0x86:
-				return {
-					type: 'uri' as const,
-					value: textDecoder.decode(element.value),
-				};
-			case 0x87:
-				return { type: 'ip' as const, value: decodeIpAddress(element.value) };
-			case 0xa4:
-				return {
-					type: 'directoryName' as const,
-					derHex: toHex(rebuildDirectoryNameFromImplicit(element, bytes)),
-				};
-			default:
-				return {
-					type: 'unknown' as const,
-					tag: element.tag,
-					value: bytes.slice(element.start, element.end),
-				};
-		}
-	});
+	return childrenOf(bytes, sequenceElement).map((element) => parseGeneralName(bytes, element));
 }
 
 function parseAuthorityInfoAccess(bytes: Uint8Array): readonly AuthorityInformationAccess[] {
@@ -653,26 +674,114 @@ function parseAuthorityInfoAccess(bytes: Uint8Array): readonly AuthorityInformat
 	});
 }
 
-function parseCrlDistributionPoints(bytes: Uint8Array): readonly string[] {
+function parseCrlDistributionPoints(bytes: Uint8Array): readonly ParsedDistributionPoint[] {
 	const sequenceElement = requireElement(readElement(bytes), 'cRLDistributionPoints sequence');
-	const uris: string[] = [];
+	const points: ParsedDistributionPoint[] = [];
 	for (const distributionPoint of childrenOf(bytes, sequenceElement)) {
-		for (const child of childrenOf(bytes, distributionPoint)) {
-			if (child.tag !== 0xa0) {
-				continue;
-			}
-			for (const innerChild of childrenOf(bytes, child)) {
-				if (innerChild.tag === 0xa0) {
-					for (const name of childrenOf(bytes, innerChild)) {
-						if (name.tag === 0x86) {
-							uris.push(textDecoder.decode(name.value));
-						}
-					}
-				}
+		points.push(parseDistributionPoint(bytes, distributionPoint));
+	}
+	return points;
+}
+
+function parseDistributionPoint(source: Uint8Array, element: DerElement): ParsedDistributionPoint {
+	let distributionPoint: ParsedDistributionPointName | undefined;
+	let reasons: readonly DistributionPointReason[] | undefined;
+	let crlIssuer: readonly GeneralName[] | undefined;
+	for (const child of childrenOf(source, element)) {
+		if (child.tag === 0xa0) {
+			distributionPoint = parseDistributionPointName(source, child);
+		} else if (child.tag === 0x81) {
+			reasons = parseDistributionPointReasonFlags(child.value);
+		} else if (child.tag === 0xa2) {
+			crlIssuer = parseGeneralNames(source, child);
+		}
+	}
+	return {
+		...(distributionPoint === undefined ? {} : { distributionPoint }),
+		...(reasons === undefined ? {} : { reasons }),
+		...(crlIssuer === undefined ? {} : { crlIssuer }),
+	};
+}
+
+function parseDistributionPointName(
+	source: Uint8Array,
+	element: DerElement,
+): ParsedDistributionPointName {
+	const distributionPointName = requireElement(
+		childrenOf(source, element)[0],
+		'distributionPointName',
+	);
+	if (distributionPointName.tag === 0xa0) {
+		return {
+			fullName: childrenOf(source, distributionPointName).map((name) =>
+				parseGeneralName(source, name),
+			),
+		};
+	}
+	if (distributionPointName.tag === 0xa1) {
+		return { relativeName: parseRelativeDistinguishedName(source, distributionPointName) };
+	}
+	throw new Error(`Unsupported distributionPointName tag: ${distributionPointName.tag}`);
+}
+
+function parseGeneralNames(source: Uint8Array, element: DerElement): readonly GeneralName[] {
+	return childrenOf(source, element).map((name) => parseGeneralName(source, name));
+}
+
+function parseGeneralName(source: Uint8Array, element: DerElement): GeneralName {
+	switch (element.tag) {
+		case 0x81:
+			return { type: 'email' as const, value: textDecoder.decode(element.value) };
+		case 0x82:
+			return { type: 'dns' as const, value: textDecoder.decode(element.value) };
+		case 0x86:
+			return { type: 'uri' as const, value: textDecoder.decode(element.value) };
+		case 0x87:
+			return { type: 'ip' as const, value: decodeIpAddress(element.value) };
+		case 0xa4:
+			return {
+				type: 'directoryName' as const,
+				derHex: toHex(rebuildDirectoryNameFromImplicit(element, source)),
+			};
+		default:
+			return {
+				type: 'unknown' as const,
+				tag: element.tag,
+				value: source.slice(element.start, element.end),
+			};
+	}
+}
+
+function parseDistributionPointReasonFlags(
+	value: Uint8Array,
+): readonly DistributionPointReason[] | undefined {
+	const unusedBits = value[0] ?? 0;
+	if (unusedBits > 7) {
+		throw new Error('Invalid distribution point reasons BIT STRING');
+	}
+	const bytes = value.slice(1);
+	const reasons: DistributionPointReason[] = [];
+	const candidates: readonly DistributionPointReason[] = [
+		'keyCompromise',
+		'cACompromise',
+		'affiliationChanged',
+		'superseded',
+		'cessationOfOperation',
+		'certificateHold',
+		'privilegeWithdrawn',
+		'aACompromise',
+	];
+	for (let index = 0; index < candidates.length; index += 1) {
+		const byte = bytes[Math.floor((index + 1) / 8)] ?? 0;
+		const bitIndex = (index + 1) % 8;
+		if ((byte & (1 << (7 - bitIndex))) !== 0) {
+			const reason = candidates[index];
+			if (reason !== undefined) {
+				reasons.push(reason);
 			}
 		}
 	}
-	return uris;
+	return reasons.length === 0 ? undefined : reasons;
 }
 
 /** @internal Exported for testing only — not part of the public API. */

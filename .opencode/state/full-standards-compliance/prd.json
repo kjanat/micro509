@@ -280,7 +280,7 @@
 			"description": "Define structured certificate and CRL distribution-point models. Done when:\n- URI shortcuts are replaced by object shapes\n- issuingDistributionPoint and reasons masks are modeled\n- the clean-break migration is explicit",
 			"depends": ["crl-scope-spike"],
 			"priority": "architecture",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "parse-structured-dps",

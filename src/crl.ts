@@ -2,6 +2,7 @@ import {
 	childrenOf,
 	decodeIntegerNumber,
 	decodeObjectIdentifier,
+	decodeString,
 	extractBitStringValue,
 	parseTime,
 	requireElement,
@@ -10,6 +11,7 @@ import {
 import {
 	bitString,
 	bool,
+	concatBytes,
 	type DerElement,
 	explicitContext,
 	generalizedTime,
@@ -25,12 +27,33 @@ import {
 	time,
 	tlv,
 } from './der.ts';
-import { encodeCrlDistributionPoints } from './extensions.ts';
+import {
+	type DistributionPoint,
+	type DistributionPointReason,
+	encodeCrlDistributionPoints,
+	encodeSubjectAltName,
+	type GeneralName,
+	type IssuingDistributionPoint,
+} from './extensions.ts';
 import { sha1 } from './hash.ts';
 import { exportSpkiDer } from './keys.ts';
-import { encodeName, type NameInput } from './name.ts';
+import {
+	encodeName,
+	encodeRelativeDistinguishedName,
+	type NameFieldKey,
+	type NameInput,
+} from './name.ts';
 import { OIDS } from './oids.ts';
-import { type ParsedCertificate, parseCertificateDer, parseCertificatePem } from './parse.ts';
+import {
+	type ParsedCertificate,
+	type ParsedDistributionPoint,
+	type ParsedDistributionPointName,
+	type ParsedIssuingDistributionPoint,
+	type ParsedNameAttribute,
+	type ParsedRelativeDistinguishedName,
+	parseCertificateDer,
+	parseCertificatePem,
+} from './parse.ts';
 import { base64Encode, pemDecode, pemEncode } from './pem.ts';
 import { verifySignedData } from './sig-verify.ts';
 import { encodeAlgorithmIdentifier, getSignatureAlgorithm, signBytes } from './signing.ts';
@@ -63,8 +86,8 @@ export interface CreateCertificateRevocationListInput {
 	readonly revokedCertificates?: readonly RevokedCertificateInput[];
 	readonly crlNumber?: number;
 	readonly baseCrlNumber?: number;
-	readonly issuingDistributionPointUri?: string;
-	readonly freshestCrlUris?: readonly string[];
+	readonly issuingDistributionPoint?: IssuingDistributionPoint;
+	readonly freshestCrlDistributionPoints?: readonly DistributionPoint[];
 }
 
 export interface CertificateRevocationListMaterial {
@@ -97,18 +120,8 @@ export interface ParsedCertificateRevocationList {
 	readonly crlNumber?: number;
 	readonly baseCrlNumber?: number;
 	readonly issuingDistributionPoint?: ParsedIssuingDistributionPoint;
-	readonly issuingDistributionPointUri?: string;
 	readonly freshestCrlDistributionPoints?: readonly ParsedDistributionPoint[];
-	readonly freshestCrlUris?: readonly string[];
 	readonly revokedCertificates: readonly ParsedRevokedCertificate[];
-}
-
-export interface ParsedDistributionPoint {
-	readonly fullNameUris: readonly string[];
-}
-
-export interface ParsedIssuingDistributionPoint {
-	readonly distributionPoint?: ParsedDistributionPoint;
 }
 
 const REVOCATION_REASON_CODES: Record<RevocationReason, number> = {
@@ -160,8 +173,8 @@ export async function createCertificateRevocationList(
 		input.issuerPublicKey,
 		input.crlNumber,
 		input.baseCrlNumber,
-		input.issuingDistributionPointUri,
-		input.freshestCrlUris,
+		input.issuingDistributionPoint,
+		input.freshestCrlDistributionPoints,
 	);
 	const revoked = input.revokedCertificates ?? [];
 	const revokedSequence =
@@ -241,9 +254,7 @@ export function parseCertificateRevocationListDer(
 	let crlNumber: number | undefined;
 	let baseCrlNumber: number | undefined;
 	let issuingDistributionPoint: ParsedIssuingDistributionPoint | undefined;
-	let issuingDistributionPointUri: string | undefined;
 	let freshestCrlDistributionPoints: readonly ParsedDistributionPoint[] | undefined;
-	let freshestCrlUris: readonly string[] | undefined;
 	const maybeExtensions = tbsChildren[cursor];
 	if (maybeExtensions?.tag === 0xa0) {
 		const extensionSequence = requireElement(childrenOf(der, maybeExtensions)[0], 'crl extensions');
@@ -262,11 +273,9 @@ export function parseCertificateRevocationListDer(
 			}
 			if (oid === OIDS.issuingDistributionPoint) {
 				issuingDistributionPoint = parseIssuingDistributionPoint(valueElement.value);
-				issuingDistributionPointUri = issuingDistributionPoint.distributionPoint?.fullNameUris[0];
 			}
 			if (oid === OIDS.freshestCRL) {
 				freshestCrlDistributionPoints = parseDistributionPoints(valueElement.value);
-				freshestCrlUris = freshestCrlDistributionPoints.flatMap((entry) => entry.fullNameUris);
 			}
 		}
 	}
@@ -282,9 +291,7 @@ export function parseCertificateRevocationListDer(
 		...(crlNumber === undefined ? {} : { crlNumber }),
 		...(baseCrlNumber === undefined ? {} : { baseCrlNumber }),
 		...(issuingDistributionPoint === undefined ? {} : { issuingDistributionPoint }),
-		...(issuingDistributionPointUri === undefined ? {} : { issuingDistributionPointUri }),
 		...(freshestCrlDistributionPoints === undefined ? {} : { freshestCrlDistributionPoints }),
-		...(freshestCrlUris === undefined ? {} : { freshestCrlUris }),
 		revokedCertificates,
 	};
 }
@@ -392,8 +399,8 @@ async function buildCrlExtensions(
 	issuerPublicKey: CryptoKey | undefined,
 	crlNumber: number | undefined,
 	baseCrlNumber?: number,
-	issuingDistributionPointUri?: string,
-	freshestCrlUris?: readonly string[],
+	issuingDistributionPoint?: IssuingDistributionPoint,
+	freshestCrlDistributionPoints?: readonly DistributionPoint[],
 ): Promise<Uint8Array[]> {
 	const extensions: Uint8Array[] = [];
 	if (issuerPublicKey !== undefined) {
@@ -413,26 +420,18 @@ async function buildCrlExtensions(
 			encodeExtension(OIDS.deltaCRLIndicator, integerFromNumber(baseCrlNumber), true),
 		);
 	}
-	if (issuingDistributionPointUri !== undefined) {
+	if (issuingDistributionPoint !== undefined) {
 		extensions.push(
 			encodeExtension(
 				OIDS.issuingDistributionPoint,
-				sequence([
-					implicitConstructedContext(
-						0,
-						implicitConstructedContext(
-							0,
-							tlv(0x86, new TextEncoder().encode(issuingDistributionPointUri)),
-						),
-					),
-				]),
+				encodeIssuingDistributionPoint(issuingDistributionPoint),
 				true,
 			),
 		);
 	}
-	if (freshestCrlUris !== undefined && freshestCrlUris.length > 0) {
+	if (freshestCrlDistributionPoints !== undefined && freshestCrlDistributionPoints.length > 0) {
 		extensions.push(
-			encodeExtension(OIDS.freshestCRL, encodeCrlDistributionPoints(freshestCrlUris)),
+			encodeExtension(OIDS.freshestCRL, encodeCrlDistributionPoints(freshestCrlDistributionPoints)),
 		);
 	}
 	return extensions;
@@ -496,56 +495,324 @@ function parseRevokedCertificateExtensions(
 
 function parseIssuingDistributionPoint(valueDer: Uint8Array): ParsedIssuingDistributionPoint {
 	const sequenceElement = readElement(valueDer);
+	let distributionPoint: ParsedDistributionPointName | undefined;
+	let onlyContainsUserCerts: boolean | undefined;
+	let onlyContainsCACerts: boolean | undefined;
+	let onlySomeReasons: readonly DistributionPointReason[] | undefined;
+	let indirectCrl: boolean | undefined;
+	let onlyContainsAttributeCerts: boolean | undefined;
 	for (const child of childrenOf(valueDer, sequenceElement)) {
-		if (child.tag !== 0xa0) {
-			continue;
+		if (child.tag === 0xa0) {
+			const parsedDistributionPoint = parseDistributionPointName(valueDer, child);
+			if (parsedDistributionPoint !== undefined) {
+				distributionPoint = parsedDistributionPoint;
+			}
+		} else if (child.tag === 0x81) {
+			onlyContainsUserCerts = parseImplicitBoolean(child);
+		} else if (child.tag === 0x82) {
+			onlyContainsCACerts = parseImplicitBoolean(child);
+		} else if (child.tag === 0x83) {
+			onlySomeReasons = parseDistributionPointReasonFlags(child.value);
+		} else if (child.tag === 0x84) {
+			indirectCrl = parseImplicitBoolean(child);
+		} else if (child.tag === 0x85) {
+			onlyContainsAttributeCerts = parseImplicitBoolean(child);
 		}
-		const distributionPointName = requireElement(
-			childrenOf(valueDer, child)[0],
-			'distributionPointName',
-		);
-		if (distributionPointName.tag !== 0xa0) {
-			continue;
-		}
-		return {
-			distributionPoint: parseDistributionPointName(valueDer, distributionPointName),
-		};
 	}
-	return {};
+	return {
+		...(distributionPoint === undefined ? {} : { distributionPoint }),
+		...(onlyContainsUserCerts === undefined ? {} : { onlyContainsUserCerts }),
+		...(onlyContainsCACerts === undefined ? {} : { onlyContainsCACerts }),
+		...(onlySomeReasons === undefined ? {} : { onlySomeReasons }),
+		...(indirectCrl === undefined ? {} : { indirectCrl }),
+		...(onlyContainsAttributeCerts === undefined ? {} : { onlyContainsAttributeCerts }),
+	};
 }
 
 function parseDistributionPoints(valueDer: Uint8Array): readonly ParsedDistributionPoint[] {
 	const sequenceElement = readElement(valueDer);
-	const points: ParsedDistributionPoint[] = [];
-	for (const distributionPoint of childrenOf(valueDer, sequenceElement)) {
-		for (const child of childrenOf(valueDer, distributionPoint)) {
-			if (child.tag !== 0xa0) {
-				continue;
-			}
-			const distributionPointName = requireElement(
-				childrenOf(valueDer, child)[0],
-				'distributionPointName',
-			);
-			if (distributionPointName.tag !== 0xa0) {
-				continue;
-			}
-			points.push(parseDistributionPointName(valueDer, distributionPointName));
-		}
-	}
-	return points;
+	return childrenOf(valueDer, sequenceElement).map((distributionPoint) =>
+		parseDistributionPoint(valueDer, distributionPoint),
+	);
 }
 
 function parseDistributionPointName(
 	valueDer: Uint8Array,
-	fullName: DerElement,
+	element: DerElement,
+): ParsedDistributionPointName | undefined {
+	const distributionPointName = requireElement(
+		childrenOf(valueDer, element)[0],
+		'distributionPointName',
+	);
+	if (distributionPointName.tag === 0xa0) {
+		return {
+			fullName: childrenOf(valueDer, distributionPointName).map((name) => parseGeneralName(name)),
+		};
+	}
+	if (distributionPointName.tag === 0xa1) {
+		const relativeName = parseRelativeName(valueDer, distributionPointName);
+		return { relativeName };
+	}
+	return undefined;
+}
+
+function parseDistributionPoint(
+	valueDer: Uint8Array,
+	element: DerElement,
 ): ParsedDistributionPoint {
-	const fullNameUris: string[] = [];
-	for (const generalName of childrenOf(valueDer, fullName)) {
-		if (generalName.tag === 0x86) {
-			fullNameUris.push(textDecoder.decode(generalName.value));
+	let distributionPoint: ParsedDistributionPointName | undefined;
+	let reasons: readonly DistributionPointReason[] | undefined;
+	let crlIssuer: readonly GeneralName[] | undefined;
+	for (const child of childrenOf(valueDer, element)) {
+		if (child.tag === 0xa0) {
+			const parsedDistributionPoint = parseDistributionPointName(valueDer, child);
+			if (parsedDistributionPoint !== undefined) {
+				distributionPoint = parsedDistributionPoint;
+			}
+		} else if (child.tag === 0x81) {
+			reasons = parseDistributionPointReasonFlags(child.value);
+		} else if (child.tag === 0xa2) {
+			crlIssuer = childrenOf(valueDer, child).map((name) => parseGeneralName(name));
 		}
 	}
-	return { fullNameUris };
+	return {
+		...(distributionPoint === undefined ? {} : { distributionPoint }),
+		...(reasons === undefined ? {} : { reasons }),
+		...(crlIssuer === undefined ? {} : { crlIssuer }),
+	};
+}
+
+function parseGeneralName(element: DerElement): GeneralName {
+	switch (element.tag) {
+		case 0x81:
+			return { type: 'email' as const, value: textDecoder.decode(element.value) };
+		case 0x82:
+			return { type: 'dns' as const, value: textDecoder.decode(element.value) };
+		case 0x86:
+			return { type: 'uri' as const, value: textDecoder.decode(element.value) };
+		case 0x87:
+			return { type: 'ip' as const, value: decodeIpAddress(element.value) };
+		case 0xa4:
+			return {
+				type: 'directoryName' as const,
+				derHex: toHex(rebuildDirectoryNameFromImplicit(element)),
+			};
+		default:
+			return { type: 'unknown' as const, tag: element.tag, value: new Uint8Array(element.value) };
+	}
+}
+
+function parseRelativeName(
+	valueDer: Uint8Array,
+	element: DerElement,
+): ParsedRelativeDistinguishedName {
+	const attributes: ParsedNameAttribute[] = [];
+	const values: Partial<Record<NameFieldKey, string>> = {};
+	for (const attributeSequence of childrenOf(valueDer, element)) {
+		const parts = childrenOf(valueDer, attributeSequence);
+		const oid = decodeObjectIdentifier(requireElement(parts[0], 'name OID').value);
+		const valueElement = requireElement(parts[1], 'name value');
+		const key = nameKeyFromOid(oid);
+		const value = decodeNameValue(valueElement);
+		attributes.push({ oid, ...(key === undefined ? {} : { key }), value });
+		if (key !== undefined && values[key] === undefined) {
+			values[key] = value;
+		}
+	}
+	return {
+		derHex: toHex(valueDer.slice(element.start - element.headerLength, element.end)),
+		attributes,
+		values,
+	};
+}
+
+function nameKeyFromOid(oid: string): NameFieldKey | undefined {
+	switch (oid) {
+		case OIDS.commonName:
+			return 'commonName';
+		case OIDS.surname:
+			return 'surname';
+		case OIDS.serialNumber:
+			return 'serialNumber';
+		case OIDS.countryName:
+			return 'country';
+		case OIDS.localityName:
+			return 'locality';
+		case OIDS.stateOrProvinceName:
+			return 'state';
+		case OIDS.streetAddress:
+			return 'street';
+		case OIDS.organizationName:
+			return 'organization';
+		case OIDS.organizationalUnitName:
+			return 'organizationalUnit';
+		case OIDS.title:
+			return 'title';
+		case OIDS.givenName:
+			return 'givenName';
+		case OIDS.emailAddress:
+			return 'emailAddress';
+	}
+	return undefined;
+}
+
+function decodeNameValue(element: DerElement): string {
+	return decodeString(element.tag, element.value);
+}
+
+function parseImplicitBoolean(element: DerElement): boolean {
+	return (element.value[0] ?? 0) !== 0;
+}
+
+function parseDistributionPointReasonFlags(
+	value: Uint8Array,
+): readonly DistributionPointReason[] | undefined {
+	const unusedBits = value[0] ?? 0;
+	if (unusedBits > 7) {
+		throw new Error('Invalid distribution point reasons BIT STRING');
+	}
+	const bytes = value.slice(1);
+	const reasons: DistributionPointReason[] = [];
+	const candidates: readonly DistributionPointReason[] = [
+		'keyCompromise',
+		'cACompromise',
+		'affiliationChanged',
+		'superseded',
+		'cessationOfOperation',
+		'certificateHold',
+		'privilegeWithdrawn',
+		'aACompromise',
+	];
+	for (let index = 0; index < candidates.length; index += 1) {
+		const bit = index + 1;
+		const byte = bytes[Math.floor(bit / 8)] ?? 0;
+		const bitIndex = bit % 8;
+		if ((byte & (1 << (7 - bitIndex))) !== 0) {
+			const reason = candidates[index];
+			if (reason !== undefined) {
+				reasons.push(reason);
+			}
+		}
+	}
+	return reasons.length === 0 ? undefined : reasons;
+}
+
+function encodeIssuingDistributionPoint(value: IssuingDistributionPoint): Uint8Array {
+	const certificateScopeFlags = [
+		value.onlyContainsUserCerts === true,
+		value.onlyContainsCACerts === true,
+		value.onlyContainsAttributeCerts === true,
+	].filter(Boolean).length;
+	if (certificateScopeFlags > 1) {
+		throw new Error(
+			'IssuingDistributionPoint can assert at most one of user, CA, or attribute cert scope',
+		);
+	}
+	const fields: Uint8Array[] = [];
+	if (value.distributionPoint !== undefined) {
+		fields.push(
+			implicitConstructedContext(0, encodeDistributionPointName(value.distributionPoint)),
+		);
+	}
+	if (value.onlyContainsUserCerts) {
+		fields.push(implicitPrimitiveContext(1, Uint8Array.of(0xff)));
+	}
+	if (value.onlyContainsCACerts) {
+		fields.push(implicitPrimitiveContext(2, Uint8Array.of(0xff)));
+	}
+	if (value.onlySomeReasons !== undefined && value.onlySomeReasons.length > 0) {
+		fields.push(
+			implicitPrimitiveContext(3, encodeDistributionPointReasonFlags(value.onlySomeReasons)),
+		);
+	}
+	if (value.indirectCrl) {
+		fields.push(implicitPrimitiveContext(4, Uint8Array.of(0xff)));
+	}
+	if (value.onlyContainsAttributeCerts) {
+		fields.push(implicitPrimitiveContext(5, Uint8Array.of(0xff)));
+	}
+	return sequence(fields);
+}
+
+function encodeDistributionPointName(
+	value: IssuingDistributionPoint['distributionPoint'],
+): Uint8Array {
+	if (value === undefined) {
+		throw new Error('IssuingDistributionPoint distributionPoint is required');
+	}
+	if (value.fullName !== undefined && value.relativeName !== undefined) {
+		throw new Error('DistributionPointName cannot contain both fullName and relativeName');
+	}
+	if (value.fullName !== undefined) {
+		if (value.fullName.length === 0) {
+			throw new Error('DistributionPointName fullName must not be empty');
+		}
+		return implicitConstructedContext(0, concatGeneralNames(value.fullName));
+	}
+	if (value.relativeName !== undefined) {
+		const relativeName = encodeRelativeDistinguishedName(value.relativeName);
+		const relativeNameElement = readElement(relativeName);
+		return implicitConstructedContext(
+			1,
+			relativeName.slice(relativeNameElement.start, relativeNameElement.end),
+		);
+	}
+	throw new Error('DistributionPointName must contain fullName or relativeName');
+}
+
+function concatGeneralNames(names: readonly GeneralName[]): Uint8Array {
+	return concatBytes(names.map((name) => encodeSubjectAltName(name)));
+}
+
+function encodeDistributionPointReasonFlags(
+	reasons: readonly DistributionPointReason[],
+): Uint8Array {
+	const bitMap: Record<DistributionPointReason, number> = {
+		keyCompromise: 1,
+		cACompromise: 2,
+		affiliationChanged: 3,
+		superseded: 4,
+		cessationOfOperation: 5,
+		certificateHold: 6,
+		privilegeWithdrawn: 7,
+		aACompromise: 8,
+	};
+	let highestBit = 0;
+	for (const reason of reasons) {
+		const bit = bitMap[reason];
+		if (bit > highestBit) {
+			highestBit = bit;
+		}
+	}
+	const byteLength = Math.floor(highestBit / 8) + 1;
+	const bytes = new Uint8Array(byteLength);
+	for (const reason of reasons) {
+		const bit = bitMap[reason];
+		const byteIndex = Math.floor(bit / 8);
+		const bitIndex = bit % 8;
+		const current = bytes[byteIndex] ?? 0;
+		bytes[byteIndex] = current | (1 << (7 - bitIndex));
+	}
+	const unusedBits = (8 - ((highestBit + 1) % 8)) % 8;
+	return Uint8Array.of(unusedBits, ...bytes);
+}
+
+function rebuildDirectoryNameFromImplicit(element: DerElement): Uint8Array {
+	return tlv(0x30, element.value);
+}
+
+function decodeIpAddress(bytes: Uint8Array): string {
+	if (bytes.length === 4) {
+		return Array.from(bytes).join('.');
+	}
+	if (bytes.length === 16) {
+		const parts: string[] = [];
+		for (let index = 0; index < 16; index += 2) {
+			parts.push((((bytes[index] ?? 0) << 8) | (bytes[index + 1] ?? 0)).toString(16));
+		}
+		return parts.join(':');
+	}
+	throw new Error(`Unsupported IP address length: ${bytes.length}`);
 }
 
 function encodeExtension(oid: string, value: Uint8Array, critical = false): Uint8Array {

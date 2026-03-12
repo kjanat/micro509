@@ -62,7 +62,13 @@ describe('certificate', () => {
 					{ method: 'ocsp', uri: 'http://ocsp.example.test' },
 					{ method: 'caIssuers', uri: 'http://issuer.example.test/ca.der' },
 				],
-				crlDistributionPoints: ['http://issuer.example.test/ca.crl'],
+				crlDistributionPoints: [
+					{
+						distributionPoint: {
+							fullName: [{ type: 'uri', value: 'http://issuer.example.test/ca.crl' }],
+						},
+					},
+				],
 				subjectAltNames: [{ type: 'dns', value: 'leaf.example' }],
 			},
 		});
@@ -88,7 +94,13 @@ describe('certificate', () => {
 			{ method: 'ocsp', uri: 'http://ocsp.example.test' },
 			{ method: 'caIssuers', uri: 'http://issuer.example.test/ca.der' },
 		]);
-		expect(parsed.crlDistributionPoints).toEqual(['http://issuer.example.test/ca.crl']);
+		expect(parsed.crlDistributionPoints).toEqual([
+			{
+				distributionPoint: {
+					fullName: [{ type: 'uri', value: 'http://issuer.example.test/ca.crl' }],
+				},
+			},
+		]);
 	});
 
 	it('roundtrips email, URI, and IPv6 SANs through build and parse', async () => {

@@ -83,7 +83,13 @@ describe('csr', () => {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['clientAuth', { type: 'oid', value: '1.2.3.4.6' }],
 				authorityInfoAccess: [{ method: 'ocsp', uri: 'http://csr.example/ocsp' }],
-				crlDistributionPoints: ['http://csr.example/crl'],
+				crlDistributionPoints: [
+					{
+						distributionPoint: {
+							fullName: [{ type: 'uri', value: 'http://csr.example/crl' }],
+						},
+					},
+				],
 			},
 		});
 
@@ -116,7 +122,13 @@ describe('csr', () => {
 		expect(parsed.authorityInfoAccess).toEqual([
 			{ method: 'ocsp', uri: 'http://csr.example/ocsp' },
 		]);
-		expect(parsed.crlDistributionPoints).toEqual(['http://csr.example/crl']);
+		expect(parsed.crlDistributionPoints).toEqual([
+			{
+				distributionPoint: {
+					fullName: [{ type: 'uri', value: 'http://csr.example/crl' }],
+				},
+			},
+		]);
 	});
 
 	it('verifies certificate request signatures with WebCrypto', async () => {
