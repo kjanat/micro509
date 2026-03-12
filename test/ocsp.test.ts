@@ -418,6 +418,53 @@ describe('ocsp', () => {
 		if (!result.ok) expect(result.code).toBe('ocsp_signing_missing');
 	});
 
+	it('validateOcspResponse rejects delegated responder without an EKU extension', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Missing EKU CA' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 1 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const responderKeys = await generateKeyPair();
+		const responder = await createCertificate({
+			issuer: { commonName: 'Missing EKU CA' },
+			subject: { commonName: 'No EKU Responder' },
+			publicKey: responderKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Missing EKU CA' },
+			subject: { commonName: 'missing-eku.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const response = await createOcspResponse({
+			signerPrivateKey: responderKeys.privateKey,
+			signerCertificate: responder.pem,
+			includedCertificates: [responder.pem],
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: 'good',
+				},
+			],
+		});
+		const result = await validateOcspResponse({
+			response: response.der,
+			issuerCertificate: issuer.certificate.pem,
+		});
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.code).toBe('ocsp_signing_missing');
+	});
+
 	it('validateOcspResponse accepts matching responderID byName', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'ResponderID ByName CA' },
@@ -1695,6 +1742,128 @@ describe('ocsp', () => {
 		});
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.code).toBe('responder_chain_invalid');
+	});
+
+	it('validateOcspResponse rejects delegated responder not directly issued by issuer by default', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Indirect Responder CA' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 2 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const intermediateKeys = await generateKeyPair();
+		const intermediate = await createCertificate({
+			issuer: { commonName: 'Indirect Responder CA' },
+			subject: { commonName: 'Indirect Responder Intermediate' },
+			publicKey: intermediateKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const responderKeys = await generateKeyPair();
+		const responder = await createCertificate({
+			issuer: { commonName: 'Indirect Responder Intermediate' },
+			subject: { commonName: 'Indirect Responder' },
+			publicKey: responderKeys.publicKey,
+			signerPrivateKey: intermediateKeys.privateKey,
+			issuerPublicKey: intermediateKeys.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['ocspSigning'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Indirect Responder CA' },
+			subject: { commonName: 'indirect-responder.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const response = await createOcspResponse({
+			signerPrivateKey: responderKeys.privateKey,
+			signerCertificate: responder.pem,
+			includedCertificates: [responder.pem, intermediate.pem],
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: 'good',
+				},
+			],
+		});
+		const result = await validateOcspResponse({
+			response: response.der,
+			issuerCertificate: issuer.certificate.pem,
+			responderCertificate: responder.pem,
+		});
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.code).toBe('responder_chain_invalid');
+	});
+
+	it('validateOcspResponse allows indirect delegated responder when local policy opts in', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Allowed Indirect Responder CA' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 2 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const intermediateKeys = await generateKeyPair();
+		const intermediate = await createCertificate({
+			issuer: { commonName: 'Allowed Indirect Responder CA' },
+			subject: { commonName: 'Allowed Indirect Intermediate' },
+			publicKey: intermediateKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const responderKeys = await generateKeyPair();
+		const responder = await createCertificate({
+			issuer: { commonName: 'Allowed Indirect Intermediate' },
+			subject: { commonName: 'Allowed Indirect Responder' },
+			publicKey: responderKeys.publicKey,
+			signerPrivateKey: intermediateKeys.privateKey,
+			issuerPublicKey: intermediateKeys.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['ocspSigning'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Allowed Indirect Responder CA' },
+			subject: { commonName: 'allowed-indirect-responder.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const response = await createOcspResponse({
+			signerPrivateKey: responderKeys.privateKey,
+			signerCertificate: responder.pem,
+			includedCertificates: [responder.pem, intermediate.pem],
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: 'good',
+				},
+			],
+		});
+		const result = await validateOcspResponse({
+			response: response.der,
+			issuerCertificate: issuer.certificate.pem,
+			responderCertificate: responder.pem,
+			allowChainedResponderCertificate: true,
+		});
+		expect(result.ok).toBe(true);
 	});
 });
 

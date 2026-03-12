@@ -149,6 +149,7 @@ export interface ValidateOcspResponseInput {
 	readonly issuerCertificate: OcspCertificateSource;
 	readonly request?: OcspRequestSource;
 	readonly responderCertificate?: OcspCertificateSource;
+	readonly allowChainedResponderCertificate?: boolean;
 	readonly at?: Date;
 	readonly clockSkewMs?: number;
 }
@@ -419,9 +420,19 @@ export async function validateOcspResponse(
 		return responderBinding;
 	}
 	if (!isSameOcspCertificate(signer, issuer)) {
+		const allowChainedResponderCertificate = input.allowChainedResponderCertificate === true;
+		if (!allowChainedResponderCertificate && !isDirectlyIssuedByOcspIssuer(signer, issuer)) {
+			return {
+				ok: false,
+				code: 'responder_chain_invalid',
+				message: 'Delegated OCSP responder must be directly issued by issuer certificate',
+			};
+		}
 		const chain = await verifyCertificateChain({
 			leaf: signer.der,
-			intermediates: buildOcspResponderIntermediates(parsedResponse.certificates, signer, issuer),
+			intermediates: allowChainedResponderCertificate
+				? buildOcspResponderIntermediates(parsedResponse.certificates, signer, issuer)
+				: [],
 			roots: [issuer.der],
 		});
 		if (!chain.ok) {
@@ -431,7 +442,7 @@ export async function validateOcspResponse(
 				message: 'OCSP responder certificate chain does not validate',
 			};
 		}
-		if (signer.extendedKeyUsage !== undefined && !signer.extendedKeyUsage.includes('ocspSigning')) {
+		if (signer.extendedKeyUsage === undefined || !signer.extendedKeyUsage.includes('ocspSigning')) {
 			return {
 				ok: false,
 				code: 'ocsp_signing_missing',
@@ -574,6 +585,23 @@ function isSameOcspCertificate(left: ParsedCertificate, right: ParsedCertificate
 			(byte, index) => byte === right.subjectPublicKeyInfoDer[index],
 		)
 	);
+}
+
+function isDirectlyIssuedByOcspIssuer(
+	signer: ParsedCertificate,
+	issuer: ParsedCertificate,
+): boolean {
+	if (signer.issuer.derHex !== issuer.subject.derHex) {
+		return false;
+	}
+	if (
+		signer.authorityKeyIdentifier !== undefined &&
+		issuer.subjectKeyIdentifier !== undefined &&
+		signer.authorityKeyIdentifier !== issuer.subjectKeyIdentifier
+	) {
+		return false;
+	}
+	return true;
 }
 
 function buildOcspResponderIntermediates(

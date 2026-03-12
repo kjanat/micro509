@@ -49,6 +49,7 @@ Started: 2026-03-12
 - CRL handling should split signer/freshness validation from certificate applicability: first validate issuer, AKI, signature, time, and `cRLSign`; then return explicit `non_applicable` reasons for scope mismatches instead of treating a fresh wrong-scope CRL as usable evidence.
 - Revocation orchestration should normalize each evidence source into `good` / `revoked` / indeterminate results, short-circuit on any revocation, and preserve per-source indeterminate details so mixed CRL/OCSP evidence never fails open.
 - OCSP validation should normalize request/response/certificate inputs to parsed forms up front, then feed shared chain validation with parsed certificate `der` bytes so pre-parsed inputs cannot skip delegated-responder checks.
+- Delegated OCSP responder validation should require `ocspSigning` EKU and default to direct issuance from the target cert issuer; any intermediate responder chain needs an explicit caller opt-in.
 
 ## Validation Commands
 
@@ -335,3 +336,11 @@ Started: 2026-03-12
 - Removed the parsed-certificate chain-validation bypass by always feeding `verifyCertificateChain()` with normalized responder/issuer DER bytes, and added OCSP regressions for valid and invalid delegated responders supplied through pre-parsed inputs.
 - Files changed: `src/ocsp.ts`, `test/ocsp.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** when an API accepts parsed security objects, normalize early but still route enforcement through the same downstream verifier inputs; otherwise pre-parsed forms can silently dodge checks that raw inputs still hit.
+
+## Task - [enforce-delegated-ocsp-rules]
+
+- Tightened delegated responder authorization in `src/ocsp.ts`: delegated responders now need an explicit `ocspSigning` EKU, must be directly issued by the leaf issuer by default, and only allow chained responder certificates when `allowChainedResponderCertificate` is explicitly set.
+- Added OCSP regressions in `test/ocsp.test.ts` for missing EKU, indirect delegated responders failing by default, and the explicit local-policy opt-in path.
+- Updated OCSP status notes in `README.md` and `docs/PKIX-SCOPE.md` to reflect shipped responder binding/authorization while leaving `producedAt` and full request coverage marked partial.
+- Files changed: `src/ocsp.ts`, `test/ocsp.test.ts`, `README.md`, `docs/PKIX-SCOPE.md`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** OCSP delegated-responder policy splits cleanly into a strict default plus an explicit opt-in for chained responder certs; keeping the override on the validation input preserves RFC-safe defaults without blocking local-policy escape hatches.

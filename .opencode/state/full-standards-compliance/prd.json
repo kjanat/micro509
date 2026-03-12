@@ -370,7 +370,7 @@
 			"description": "Tighten delegated responder authorization rules. Done when:\n- direct issuance and ocspSigning EKU are required unless local policy overrides\n- issuer-signed responders still pass\n- invalid delegated responders fail deterministically",
 			"depends": ["bind-signer-to-responderid", "expose-revocation-status"],
 			"priority": "standard",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "validate-ocsp-producedat",

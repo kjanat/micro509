@@ -2,12 +2,12 @@
 
 ## Standards status
 
-| Area                       | Status    | Notes                                                                                                                                                                      |
-| -------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| RFC 5280 path validation   | `partial` | core path validation ships; policy processing, initial subtree inputs, and full name-constraint semantics are not complete yet                                             |
-| RFC 6960 OCSP              | `partial` | request/response parsing, signature checks, nonce/request matching, and freshness checks ship; delegated responder authorization and request coverage are not complete yet |
-| RFC 6125 service identity  | `partial` | DNS-ID and IP-ID checks ship today inside verification helpers; separate identity APIs, URI-ID, SRV-ID, and IDNA are not complete yet                                      |
-| RFC 9618 policy validation | `not yet` | no RFC 9618 policy engine yet                                                                                                                                              |
+| Area                       | Status    | Notes                                                                                                                                                                                     |
+| -------------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| RFC 5280 path validation   | `partial` | core path validation ships; policy processing, initial subtree inputs, and full name-constraint semantics are not complete yet                                                            |
+| RFC 6960 OCSP              | `partial` | request/response parsing, signature checks, responder binding/authorization, nonce/request matching, and freshness checks ship; producedAt and full request coverage are not complete yet |
+| RFC 6125 service identity  | `partial` | DNS-ID and IP-ID checks ship today inside verification helpers; separate identity APIs, URI-ID, SRV-ID, and IDNA are not complete yet                                                     |
+| RFC 9618 policy validation | `not yet` | no RFC 9618 policy engine yet                                                                                                                                                             |
 
 ## 1. Define the boundary up front
 
