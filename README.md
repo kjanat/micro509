@@ -430,7 +430,7 @@ if (result.ok) {
 - pem helpers: split mixed cert/csr/key bundles by label
 - pkcs7 helpers: create/parse degenerate signedData cert bags, parse general signedData signer metadata
 - crl helpers: create/parse/verify CRLs, delta CRL indicator, issuing distribution point, freshest CRL, entry reason/invalidity extensions, revocation lookup by serial
-- ocsp helpers: build requests, build signed responses, parse requests/responses, verify response signatures, derive responder candidates from AIA or local config, and run nonce/request/issuer/time checks plus responderID/delegated-responder validation; producedAt validation and full request coverage are still partial
+- ocsp helpers: build requests, build signed responses, parse requests/responses, verify response signatures, derive responder candidates from AIA or local config, and run nonce/request/issuer/time checks plus responderID/delegated-responder validation; full request coverage is still partial
 - pfx helpers: create/parse passwordless or encrypted cert+key bundles with bag attributes and optional MAC integrity
 - legacy key helpers: PKCS#1 RSA and SEC1 EC import/export, plus encrypted traditional PEM
 - extended key usage: built-ins + custom OID escape hatch

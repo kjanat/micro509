@@ -379,7 +379,7 @@
 			"description": "Validate OCSP producedAt freshness semantics. Done when:\n- producedAt is checked alongside thisUpdate and nextUpdate\n- clock-skew handling is explicit\n- stale and future responses fail predictably",
 			"depends": ["bind-signer-to-responderid"],
 			"priority": "standard",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "require-full-request-coverage",

@@ -1220,6 +1220,95 @@ describe('ocsp', () => {
 		if (!result.ok) expect(result.code).toBe('stale_response');
 	});
 
+	it('validateOcspResponse rejects future producedAt without enough clock skew', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Future producedAt CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Future producedAt CA' },
+			subject: { commonName: 'future-produced-at.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const at = new Date('2024-01-01T00:00:00Z');
+		const response = await createSignedOcspResponseWithResponderId({
+			signerPrivateKey: issuer.keyPair.privateKey,
+			certificatePem: leaf.pem,
+			issuerCertificatePem: issuer.certificate.pem,
+			responderId: {
+				type: 'byKeyHash',
+				keyHash: new Uint8Array(
+					sha1(
+						extractSubjectPublicKeyBytes(
+							parseCertificatePem(issuer.certificate.pem).subjectPublicKeyInfoDer,
+						),
+					),
+				),
+			},
+			thisUpdate: new Date('2023-12-31T23:59:00Z'),
+			producedAt: new Date('2024-01-01T00:00:10Z'),
+		});
+		const noSkew = await validateOcspResponse({
+			response,
+			issuerCertificate: issuer.certificate.pem,
+			at,
+		});
+		expect(noSkew.ok).toBe(false);
+		if (!noSkew.ok) expect(noSkew.code).toBe('stale_response');
+		const withSkew = await validateOcspResponse({
+			response,
+			issuerCertificate: issuer.certificate.pem,
+			at,
+			clockSkewMs: 15_000,
+		});
+		expect(withSkew.ok).toBe(true);
+	});
+
+	it('validateOcspResponse rejects producedAt later than nextUpdate', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Inconsistent producedAt CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Inconsistent producedAt CA' },
+			subject: { commonName: 'inconsistent-produced-at.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const response = await createOcspResponse({
+			signerPrivateKey: issuer.keyPair.privateKey,
+			signerCertificate: issuer.certificate.pem,
+			producedAt: new Date('2024-01-01T00:00:20Z'),
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: 'good',
+					thisUpdate: new Date('2024-01-01T00:00:00Z'),
+					nextUpdate: new Date('2024-01-01T00:00:10Z'),
+				},
+			],
+		});
+		const result = await validateOcspResponse({
+			response: response.der,
+			issuerCertificate: issuer.certificate.pem,
+			at: new Date('2024-01-01T00:00:05Z'),
+		});
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.code).toBe('stale_response');
+	});
+
 	it('validateOcspResponse detects request_mismatch', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'ReqMismatch CA' },

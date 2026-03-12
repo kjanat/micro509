@@ -452,6 +452,16 @@ export async function validateOcspResponse(
 	}
 	const at = input.at ?? new Date();
 	const skew = input.clockSkewMs ?? 0;
+	if (
+		parsedResponse.producedAt !== undefined &&
+		parsedResponse.producedAt.getTime() - skew > at.getTime()
+	) {
+		return {
+			ok: false,
+			code: 'stale_response',
+			message: 'OCSP response producedAt is later than requested time',
+		};
+	}
 	for (const response of parsedResponse.responses ?? []) {
 		const expected = await buildParsedOcspCertId(
 			response.certId.hashAlgorithmOid,
@@ -476,6 +486,17 @@ export async function validateOcspResponse(
 				ok: false,
 				code: 'stale_response',
 				message: 'OCSP response is not valid at requested time',
+			};
+		}
+		if (
+			parsedResponse.producedAt !== undefined &&
+			response.nextUpdate !== undefined &&
+			parsedResponse.producedAt.getTime() - skew > response.nextUpdate.getTime()
+		) {
+			return {
+				ok: false,
+				code: 'stale_response',
+				message: 'OCSP response producedAt is later than nextUpdate',
 			};
 		}
 	}
