@@ -466,7 +466,7 @@
 			"description": "Make CN fallback a strict compatibility mode. Done when:\n- fallback is off by default\n- fallback is suppressed when supported SAN identifiers exist\n- typed failures explain why fallback was or was not used",
 			"depends": ["implement-dns-ip-matchers", "implement-uri-srv-matchers", "add-idna-normalizer"],
 			"priority": "standard",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "add-identity-fixtures",

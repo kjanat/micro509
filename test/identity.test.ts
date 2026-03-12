@@ -201,6 +201,167 @@ describe('identity boundary', () => {
 		).toEqual({ ok: true });
 	});
 
+	it('suppresses DNS CN fallback when a DNS SAN is present', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Identity CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Identity CA' },
+			subject: { commonName: 'fallback.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['serverAuth'],
+				subjectAltNames: [{ type: 'dns', value: 'other.example' }],
+			},
+		});
+		const certificate = parseCertificatePem(leaf.pem);
+
+		expect(
+			matchServiceIdentity({
+				certificate,
+				serviceIdentity: {
+					type: 'dns',
+					value: 'fallback.example',
+					allowCommonNameFallback: true,
+				},
+			}),
+		).toMatchObject({
+			ok: false,
+			code: 'common_name_fallback_suppressed',
+			details: {
+				commonNameFallbackReason: 'suppressed_by_presented_identifier',
+				presentedIdentifierTypes: ['dns'],
+			},
+		});
+	});
+
+	it('suppresses DNS CN fallback when a URI SAN is present', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Identity CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Identity CA' },
+			subject: { commonName: 'fallback.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['serverAuth'],
+				subjectAltNames: [{ type: 'uri', value: 'https://api.example.com/login' }],
+			},
+		});
+		const certificate = parseCertificatePem(leaf.pem);
+
+		expect(
+			matchServiceIdentity({
+				certificate,
+				serviceIdentity: {
+					type: 'dns',
+					value: 'fallback.example',
+					allowCommonNameFallback: true,
+				},
+			}),
+		).toMatchObject({
+			ok: false,
+			code: 'common_name_fallback_suppressed',
+			details: {
+				commonNameFallbackReason: 'suppressed_by_presented_identifier',
+				presentedIdentifierTypes: ['uri'],
+			},
+		});
+	});
+
+	it('suppresses DNS CN fallback when an SRV SAN is present', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Identity CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Identity CA' },
+			subject: { commonName: 'fallback.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['serverAuth'],
+				subjectAltNames: [{ type: 'srv', value: '_xmpp-client.im.example.org' }],
+			},
+		});
+		const certificate = parseCertificatePem(leaf.pem);
+
+		expect(
+			matchServiceIdentity({
+				certificate,
+				serviceIdentity: {
+					type: 'dns',
+					value: 'fallback.example',
+					allowCommonNameFallback: true,
+				},
+			}),
+		).toMatchObject({
+			ok: false,
+			code: 'common_name_fallback_suppressed',
+			details: {
+				commonNameFallbackReason: 'suppressed_by_presented_identifier',
+				presentedIdentifierTypes: ['srv'],
+			},
+		});
+	});
+
+	it('still allows DNS CN fallback when only IP SANs are present', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Identity CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Identity CA' },
+			subject: { commonName: 'fallback.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['serverAuth'],
+				subjectAltNames: [{ type: 'ip', value: '10.0.0.1' }],
+			},
+		});
+		const certificate = parseCertificatePem(leaf.pem);
+
+		expect(
+			matchServiceIdentity({
+				certificate,
+				serviceIdentity: {
+					type: 'dns',
+					value: 'fallback.example',
+					allowCommonNameFallback: true,
+				},
+			}),
+		).toEqual({ ok: true });
+	});
+
 	it('rejects DNS CN fallback when disabled or mismatched', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Identity CA' },
@@ -227,7 +388,11 @@ describe('identity boundary', () => {
 				certificate,
 				serviceIdentity: { type: 'dns', value: 'other.example' },
 			}),
-		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
+		).toMatchObject({
+			ok: false,
+			code: 'subject_alt_name_mismatch',
+			details: { commonNameFallbackReason: 'disabled' },
+		});
 		expect(
 			matchServiceIdentity({
 				certificate,
@@ -237,7 +402,11 @@ describe('identity boundary', () => {
 					allowCommonNameFallback: true,
 				},
 			}),
-		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
+		).toMatchObject({
+			ok: false,
+			code: 'subject_alt_name_mismatch',
+			details: { commonNameFallbackReason: 'common_name_mismatch' },
+		});
 	});
 
 	it('throws for invalid IPv6 identity inputs through the dedicated identity API', async () => {

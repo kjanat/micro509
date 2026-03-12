@@ -3,6 +3,7 @@ import type { MatchableServiceIdentityInput, ServiceIdentityInput } from './vali
 
 export type MatchServiceIdentityErrorCode =
 	| 'subject_alt_name_mismatch'
+	| 'common_name_fallback_suppressed'
 	| 'service_identity_service_mismatch'
 	| 'service_identity_type_unsupported';
 
@@ -10,6 +11,12 @@ export interface MatchServiceIdentityFailureDetails {
 	readonly subjectCommonName?: string;
 	readonly expected?: string;
 	readonly actual?: string;
+	readonly presentedIdentifierTypes?: readonly ('dns' | 'uri' | 'srv')[];
+	readonly commonNameFallbackReason?:
+		| 'disabled'
+		| 'suppressed_by_presented_identifier'
+		| 'common_name_missing'
+		| 'common_name_mismatch';
 }
 
 export type MatchServiceIdentityResult =
@@ -38,19 +45,35 @@ export function matchCertificateServiceIdentity(
 		case 'dns': {
 			const expected = serviceIdentity.value;
 			const sans = certificate.subjectAltNames?.filter((entry) => entry.type === 'dns') ?? [];
-			if (sans.length > 0) {
-				if (!sans.some((entry) => matchesDnsName(entry.value, expected))) {
-					return failure(
-						'subject_alt_name_mismatch',
-						'DNS name not present in SAN',
-						details(
-							certificate.subject.values.commonName,
-							expected,
-							sans.map((entry) => entry.value).join(','),
-						),
-					);
-				}
+			if (sans.some((entry) => matchesDnsName(entry.value, expected))) {
 				return { ok: true };
+			}
+			const presentedIdentifierTypes = presentedDnsIdentifierTypes(certificate);
+			if (serviceIdentity.allowCommonNameFallback === true && presentedIdentifierTypes.length > 0) {
+				return failure(
+					'common_name_fallback_suppressed',
+					'DNS name not present in SAN; CN fallback suppressed because supported SAN identifiers exist',
+					details(
+						certificate.subject.values.commonName,
+						expected,
+						sans.map((entry) => entry.value).join(','),
+						{
+							presentedIdentifierTypes,
+							commonNameFallbackReason: 'suppressed_by_presented_identifier',
+						},
+					),
+				);
+			}
+			if (sans.length > 0) {
+				return failure(
+					'subject_alt_name_mismatch',
+					'DNS name not present in SAN',
+					details(
+						certificate.subject.values.commonName,
+						expected,
+						sans.map((entry) => entry.value).join(','),
+					),
+				);
 			}
 			if (serviceIdentity.allowCommonNameFallback === true) {
 				const commonName = certificate.subject.values.commonName;
@@ -58,7 +81,10 @@ export function matchCertificateServiceIdentity(
 					return failure(
 						'subject_alt_name_mismatch',
 						'DNS name not present in SAN or CN',
-						details(commonName, expected, commonName ?? ''),
+						details(commonName, expected, commonName ?? '', {
+							commonNameFallbackReason:
+								commonName === undefined ? 'common_name_missing' : 'common_name_mismatch',
+						}),
 					);
 				}
 				return { ok: true };
@@ -66,7 +92,9 @@ export function matchCertificateServiceIdentity(
 			return failure(
 				'subject_alt_name_mismatch',
 				'DNS name not present in SAN',
-				details(certificate.subject.values.commonName, expected, ''),
+				details(certificate.subject.values.commonName, expected, '', {
+					commonNameFallbackReason: 'disabled',
+				}),
 			);
 		}
 		case 'ip': {
@@ -243,6 +271,19 @@ interface ServiceScopedIdentity {
 	readonly domainName: string;
 }
 
+function presentedDnsIdentifierTypes(
+	certificate: ParsedCertificate,
+): readonly ('dns' | 'uri' | 'srv')[] {
+	const sans = certificate.subjectAltNames ?? [];
+	const types: ('dns' | 'uri' | 'srv')[] = [];
+	for (const type of ['dns', 'uri', 'srv'] as const) {
+		if (sans.some((entry) => entry.type === type)) {
+			types.push(type);
+		}
+	}
+	return types;
+}
+
 function parseUriServiceIdentity(value: string): ServiceScopedIdentity {
 	const parsed = tryParseUriServiceIdentity(value);
 	if (parsed === undefined) {
@@ -357,10 +398,20 @@ function details(
 	subjectCommonName: string | undefined,
 	expected: string,
 	actual: string,
+	extra?: Pick<
+		MatchServiceIdentityFailureDetails,
+		'presentedIdentifierTypes' | 'commonNameFallbackReason'
+	>,
 ): MatchServiceIdentityFailureDetails {
 	return {
 		...(subjectCommonName === undefined ? {} : { subjectCommonName }),
 		expected,
 		actual,
+		...(extra?.presentedIdentifierTypes === undefined
+			? {}
+			: { presentedIdentifierTypes: extra.presentedIdentifierTypes }),
+		...(extra?.commonNameFallbackReason === undefined
+			? {}
+			: { commonNameFallbackReason: extra.commonNameFallbackReason }),
 	};
 }

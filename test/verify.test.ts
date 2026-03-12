@@ -2966,6 +2966,47 @@ describe('validateForTlsServer with CN fallback', () => {
 		expect(result.ok).toBe(true);
 	});
 
+	it('forwards CN fallback suppression failures from the identity boundary', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'TLS CN CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'TLS CN CA' },
+			subject: { commonName: 'tls-cn.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['serverAuth'],
+				subjectAltNames: [{ type: 'uri', value: 'https://api.example.com/login' }],
+			},
+		});
+		const result = await validateForTlsServer({
+			leaf: leaf.pem,
+			roots: [ca.certificate.pem],
+			serviceIdentity: {
+				type: 'dns',
+				value: 'tls-cn.example',
+				allowCommonNameFallback: true,
+			},
+		});
+		expect(result).toMatchObject({
+			ok: false,
+			code: 'common_name_fallback_suppressed',
+			index: 0,
+			details: {
+				commonNameFallbackReason: 'suppressed_by_presented_identifier',
+				presentedIdentifierTypes: ['uri'],
+			},
+		});
+	});
+
 	it('forwards ipAddress to the identity boundary', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'TLS IP CA' },

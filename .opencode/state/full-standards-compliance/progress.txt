@@ -56,6 +56,7 @@ Started: 2026-03-12
 - Once DNS/IP matching lives behind `src/identity.ts`, keep matcher-specific wildcard / IPv6 / CN-fallback coverage in `test/identity.test.ts`; leave `test/verify.test.ts` focused on wrapper composition and failure adaptation.
 - URI-ID and SRV-ID matching should split presented identifiers into a service/scheme part plus a DNS domain part, compare service/scheme case-insensitively first, then run existing DNS-style host matching only within same-service candidates so service mismatches stay typed.
 - IDNA service-identity matching should normalize only DNS host parts to URL-hostname ASCII form, while keeping wildcard prefixes and URI/SRV service selectors outside the IDNA conversion step.
+- CN fallback should stay DNS-only and opt-in, and only run when no supported DNS-like SAN identifiers (`dns`, `uri`, `srv`) are present; if such SANs exist, return typed suppression details instead of silently falling back.
 
 ## Validation Commands
 
@@ -392,3 +393,10 @@ Started: 2026-03-12
 - Added identity-boundary regressions in `test/identity.test.ts` for mixed-case A-label DNS matching plus IDNA URI-ID and SRV-ID host comparisons.
 - Files changed: `src/identity.ts`, `test/identity.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** normalize only the hostname portion through IDNA; wildcard labels and URI/SRV service selectors need separate RFC-specific handling outside the hostname conversion step.
+
+## Task - [tighten-cn-fallback]
+
+- Tightened DNS CN fallback in `src/identity.ts` so it stays opt-in, remains DNS-only, and is suppressed when supported DNS-like SAN identifiers (`dns`, `uri`, `srv`) are present.
+- Added typed fallback details/codes through `src/identity.ts` and `src/verify.ts`, plus regressions in `test/identity.test.ts` and `test/verify.test.ts` for suppression, disabled fallback, CN mismatch, and IP-SAN-only compatibility.
+- Files changed: `src/identity.ts`, `src/verify.ts`, `test/identity.test.ts`, `test/verify.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** RFC 6125 CN fallback is a last-resort DNS compatibility path, not a second pass after URI-ID or SRV-ID presence; wrapper layers should preserve suppression details instead of collapsing them into generic SAN mismatches.

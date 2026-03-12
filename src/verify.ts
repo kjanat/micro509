@@ -96,6 +96,7 @@ export type VerifyErrorCode =
 	| 'authority_key_identifier_mismatch'
 	| 'extended_key_usage_invalid'
 	| 'subject_alt_name_mismatch'
+	| 'common_name_fallback_suppressed'
 	| 'self_signed_leaf_not_allowed'
 	| 'unrecognized_critical_extension'
 	| 'intermediate_eku_constraint'
@@ -112,6 +113,12 @@ export interface VerifyFailureDetails {
 	readonly expected?: string;
 	readonly actual?: string;
 	readonly chainCommonNames?: readonly string[];
+	readonly presentedIdentifierTypes?: readonly ('dns' | 'uri' | 'srv')[];
+	readonly commonNameFallbackReason?:
+		| 'disabled'
+		| 'suppressed_by_presented_identifier'
+		| 'common_name_missing'
+		| 'common_name_mismatch';
 }
 
 export interface VerifyChainFailure {
@@ -278,6 +285,13 @@ interface VerifyFailureDetailsInput {
 	readonly expected?: string | undefined;
 	readonly actual?: string | undefined;
 	readonly chainCommonNames?: readonly string[] | undefined;
+	readonly presentedIdentifierTypes?: readonly ('dns' | 'uri' | 'srv')[] | undefined;
+	readonly commonNameFallbackReason?:
+		| 'disabled'
+		| 'suppressed_by_presented_identifier'
+		| 'common_name_missing'
+		| 'common_name_mismatch'
+		| undefined;
 }
 
 interface PolicyValidationState {
@@ -845,7 +859,10 @@ function validateServiceIdentity(
 	if (result.ok) {
 		return result;
 	}
-	if (result.code !== 'subject_alt_name_mismatch') {
+	if (
+		result.code !== 'subject_alt_name_mismatch' &&
+		result.code !== 'common_name_fallback_suppressed'
+	) {
 		throw new Error('unreachable service identity type');
 	}
 	return {
@@ -1343,6 +1360,12 @@ function detail(input: VerifyFailureDetailsInput): VerifyFailureDetails {
 		...(input.expected === undefined ? {} : { expected: input.expected }),
 		...(input.actual === undefined ? {} : { actual: input.actual }),
 		...(input.chainCommonNames === undefined ? {} : { chainCommonNames: input.chainCommonNames }),
+		...(input.presentedIdentifierTypes === undefined
+			? {}
+			: { presentedIdentifierTypes: input.presentedIdentifierTypes }),
+		...(input.commonNameFallbackReason === undefined
+			? {}
+			: { commonNameFallbackReason: input.commonNameFallbackReason }),
 	};
 }
 
