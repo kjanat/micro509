@@ -163,7 +163,7 @@
 			"description": "Stop silently bypassing unsupported name-constraint forms. Done when:\n- critical under-enforced cases fail predictably\n- failure codes are typed\n- regression tests cover skipped-form cases",
 			"depends": ["define-generalname-matrix", "plumb-verify-input-state"],
 			"priority": "standard",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "implement-dn-compare",

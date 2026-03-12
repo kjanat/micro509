@@ -17,8 +17,15 @@ import {
 	verifyCertificateChain,
 } from '#micro509';
 import { sequence, tlv } from '#micro509/der.ts';
+import { OIDS } from '#micro509/oids.ts';
 import { parseNameConstraints } from '#micro509/parse.ts';
 import { issueChain } from './helpers.ts';
+
+function buildUnsupportedOtherNameConstraintsDer(): Uint8Array {
+	const otherName = tlv(0xa0, sequence([]));
+	const subtree = sequence([otherName]);
+	return sequence([tlv(0xa0, subtree)]);
+}
 
 describe('chain verification', () => {
 	it('builds across multiple candidate intermediates', async () => {
@@ -1643,6 +1650,61 @@ describe('chain verification', () => {
 		const permitted = tlv(0xa0, subtree);
 		const ncValue = sequence([permitted]);
 		expect(() => parseNameConstraints(ncValue)).toThrow(/minimum/i);
+	});
+
+	it('preserves unsupported name constraint forms during parsing', () => {
+		const parsed = parseNameConstraints(buildUnsupportedOtherNameConstraintsDer());
+		expect(parsed.permittedSubtrees).toHaveLength(1);
+		expect(parsed.permittedSubtrees?.[0]?.base).toMatchObject({ type: 'otherName' });
+	});
+
+	it('fails closed for unsupported critical name constraints', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Unsupported NC Root' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Unsupported NC Root' },
+			subject: { commonName: 'unsupported-nc.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				subjectAltNames: [{ type: 'dns', value: 'unsupported-nc.example' }],
+			},
+		});
+		const parsedRoot = parseCertificatePem(root.certificate.pem);
+		const parsedLeaf = parseCertificatePem(leaf.pem);
+		const unsupportedDer = buildUnsupportedOtherNameConstraintsDer();
+		const result = await validateCandidatePath({
+			chain: [
+				parsedLeaf,
+				{
+					...parsedRoot,
+					extensions: [
+						...parsedRoot.extensions,
+						{
+							oid: OIDS.nameConstraints,
+							critical: true,
+							valueDer: unsupportedDer,
+							valueHex: Buffer.from(unsupportedDer).toString('hex'),
+						},
+					],
+					nameConstraints: parseNameConstraints(unsupportedDer),
+				},
+			],
+			allowSelfSignedLeaf: true,
+		});
+		expect(result).toMatchObject({
+			ok: false,
+			code: 'unsupported_name_constraints',
+			details: { actual: 'otherName' },
+		});
 	});
 
 	it('checks subject emailAddress against rfc822Name constraints when no SAN email', async () => {

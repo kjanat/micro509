@@ -19,8 +19,8 @@ import type {
 	GeneralName,
 	GeneralSubtree,
 	KeyUsage,
-	NameConstraintForm,
 	NameConstraints,
+	ParsedNameConstraintForm,
 	SubjectAltName,
 } from './extensions.ts';
 import { parseAuthorityInfoAccessMethodOid, parseExtendedKeyUsageOid } from './extensions.ts';
@@ -130,7 +130,7 @@ export interface ParsedCertificate<TMap extends ExtensionDecoderMap = Record<nev
 	readonly keyUsage?: readonly KeyUsage[];
 	readonly extendedKeyUsage?: readonly ExtendedKeyUsage[];
 	readonly subjectAltNames?: readonly SubjectAltName[];
-	readonly nameConstraints?: NameConstraints;
+	readonly nameConstraints?: NameConstraints<ParsedNameConstraintForm>;
 	readonly authorityInfoAccess?: readonly AuthorityInformationAccess[];
 	readonly crlDistributionPoints?: readonly ParsedDistributionPoint[];
 	readonly decodedExtensions?: readonly DecodedExtensionValue<unknown>[];
@@ -404,7 +404,7 @@ interface ParsedExtensions {
 	readonly keyUsage?: readonly KeyUsage[];
 	readonly extendedKeyUsage?: readonly ExtendedKeyUsage[];
 	readonly subjectAltNames?: readonly SubjectAltName[];
-	readonly nameConstraints?: NameConstraints;
+	readonly nameConstraints?: NameConstraints<ParsedNameConstraintForm>;
 	readonly authorityInfoAccess?: readonly AuthorityInformationAccess[];
 	readonly crlDistributionPoints?: readonly ParsedDistributionPoint[];
 	readonly subjectKeyIdentifier?: string;
@@ -448,7 +448,7 @@ function parseExtensionSequence(source: Uint8Array, sequenceElement: DerElement)
 	let keyUsage: readonly KeyUsage[] | undefined;
 	let extendedKeyUsage: readonly ExtendedKeyUsage[] | undefined;
 	let subjectAltNames: readonly SubjectAltName[] | undefined;
-	let nameConstraints: NameConstraints | undefined;
+	let nameConstraints: NameConstraints<ParsedNameConstraintForm> | undefined;
 	let authorityInfoAccess: readonly AuthorityInformationAccess[] | undefined;
 	let crlDistributionPoints: readonly ParsedDistributionPoint[] | undefined;
 	let subjectKeyIdentifier: string | undefined;
@@ -785,10 +785,10 @@ function parseDistributionPointReasonFlags(
 }
 
 /** @internal Exported for testing only — not part of the public API. */
-export function parseNameConstraints(bytes: Uint8Array): NameConstraints {
+export function parseNameConstraints(bytes: Uint8Array): NameConstraints<ParsedNameConstraintForm> {
 	const sequenceElement = requireElement(readElement(bytes), 'nameConstraints sequence');
-	let permittedSubtrees: readonly GeneralSubtree[] | undefined;
-	let excludedSubtrees: readonly GeneralSubtree[] | undefined;
+	let permittedSubtrees: readonly GeneralSubtree<ParsedNameConstraintForm>[] | undefined;
+	let excludedSubtrees: readonly GeneralSubtree<ParsedNameConstraintForm>[] | undefined;
 	for (const child of childrenOf(bytes, sequenceElement)) {
 		if (child.tag === 0xa0) {
 			permittedSubtrees = parseGeneralSubtrees(bytes, child);
@@ -805,8 +805,8 @@ export function parseNameConstraints(bytes: Uint8Array): NameConstraints {
 function parseGeneralSubtrees(
 	source: Uint8Array,
 	container: DerElement,
-): readonly GeneralSubtree[] {
-	const subtrees: GeneralSubtree[] = [];
+): readonly GeneralSubtree<ParsedNameConstraintForm>[] {
+	const subtrees: GeneralSubtree<ParsedNameConstraintForm>[] = [];
 	for (const subtreeElement of childrenOf(source, container)) {
 		const children = childrenOf(source, subtreeElement);
 		const baseElement = children[0];
@@ -843,12 +843,16 @@ function parseGeneralSubtrees(
 function parseNameConstraintGeneralName(
 	source: Uint8Array,
 	element: DerElement,
-): NameConstraintForm | undefined {
+): ParsedNameConstraintForm | undefined {
 	switch (element.tag) {
+		case 0xa0:
+			return { type: 'otherName', value: new Uint8Array(element.value) };
 		case 0x81:
 			return { type: 'email', value: textDecoder.decode(element.value) };
 		case 0x82:
 			return { type: 'dns', value: textDecoder.decode(element.value) };
+		case 0xa3:
+			return { type: 'x400Address', value: new Uint8Array(element.value) };
 		case 0x86:
 			return { type: 'uri', value: textDecoder.decode(element.value) };
 		case 0x87: {
@@ -875,6 +879,10 @@ function parseNameConstraintGeneralName(
 				type: 'directoryName',
 				derHex: toHex(rebuildDirectoryNameFromImplicit(element, source)),
 			};
+		case 0xa5:
+			return { type: 'ediPartyName', value: new Uint8Array(element.value) };
+		case 0x88:
+			return { type: 'registeredID', value: decodeObjectIdentifier(element.value) };
 	}
 	return undefined;
 }

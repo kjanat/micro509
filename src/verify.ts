@@ -3,6 +3,7 @@ import type {
 	GeneralSubtree,
 	NameConstraintForm,
 	NameConstraints,
+	ParsedNameConstraintForm,
 } from './extensions.ts';
 import { matchServiceIdentity } from './identity.ts';
 import { OIDS } from './oids.ts';
@@ -82,6 +83,7 @@ export type VerifyErrorCode =
 	| 'intermediate_eku_constraint'
 	| 'policy_processing_not_implemented'
 	| 'initial_name_constraints_not_implemented'
+	| 'unsupported_name_constraints'
 	| 'name_constraints_violated';
 
 export interface VerifyFailureDetails {
@@ -1412,6 +1414,10 @@ function checkNameConstraints(
 	// certificates below it in the chain.
 	const root = chain[chain.length - 1];
 	if (root?.nameConstraints !== undefined) {
+		const unsupportedRoot = failOnUnsupportedNameConstraints(root, chain.length - 1);
+		if (!unsupportedRoot.ok) {
+			return unsupportedRoot;
+		}
 		accumulated = accumulateConstraints(accumulated, root.nameConstraints);
 	}
 
@@ -1434,6 +1440,10 @@ function checkNameConstraints(
 
 		// (c) If this cert has nameConstraints, accumulate them.
 		if (current.nameConstraints !== undefined) {
+			const unsupportedCurrent = failOnUnsupportedNameConstraints(current, index);
+			if (!unsupportedCurrent.ok) {
+				return unsupportedCurrent;
+			}
 			accumulated = accumulateConstraints(accumulated, current.nameConstraints);
 		}
 	}
@@ -1443,17 +1453,92 @@ function checkNameConstraints(
 
 function accumulateConstraints(
 	current: AccumulatedNameConstraints,
-	constraints: NameConstraints,
+	constraints: NameConstraints<ParsedNameConstraintForm>,
 ): AccumulatedNameConstraints {
 	const permittedLevels =
 		constraints.permittedSubtrees !== undefined && constraints.permittedSubtrees.length > 0
-			? [...current.permittedLevels, constraints.permittedSubtrees.map((subtree) => subtree.base)]
+			? [
+					...current.permittedLevels,
+					constraints.permittedSubtrees.flatMap((subtree) =>
+						isSupportedNameConstraintForm(subtree.base) ? [subtree.base] : [],
+					),
+				]
 			: current.permittedLevels;
 	const excluded =
 		constraints.excludedSubtrees !== undefined && constraints.excludedSubtrees.length > 0
-			? [...current.excluded, ...constraints.excludedSubtrees.map((subtree) => subtree.base)]
+			? [
+					...current.excluded,
+					...constraints.excludedSubtrees.flatMap((subtree) =>
+						isSupportedNameConstraintForm(subtree.base) ? [subtree.base] : [],
+					),
+				]
 			: current.excluded;
 	return { permittedLevels, excluded };
+}
+
+function failOnUnsupportedNameConstraints(
+	certificate: ParsedCertificate,
+	index: number,
+): { readonly ok: true } | VerifyChainFailure {
+	if (certificate.nameConstraints === undefined) {
+		return { ok: true };
+	}
+	const hasCriticalNameConstraintsExtension = certificate.extensions.some(
+		(entry) => entry.oid === OIDS.nameConstraints && entry.critical,
+	);
+	if (!hasCriticalNameConstraintsExtension) {
+		return { ok: true };
+	}
+	const unsupportedTypes = listUnsupportedNameConstraintTypes(certificate.nameConstraints);
+	if (unsupportedTypes.length === 0) {
+		return { ok: true };
+	}
+	return failure(
+		'unsupported_name_constraints',
+		'certificate contains unsupported critical name constraints',
+		index,
+		detail({
+			subjectCommonName: certificate.subject.values.commonName,
+			actual: unsupportedTypes.join(', '),
+		}),
+	);
+}
+
+function listUnsupportedNameConstraintTypes(
+	constraints: NameConstraints<ParsedNameConstraintForm>,
+): readonly string[] {
+	const unsupportedTypes = new Set<string>();
+	for (const subtree of constraints.permittedSubtrees ?? []) {
+		if (!isSupportedNameConstraintForm(subtree.base)) {
+			unsupportedTypes.add(subtree.base.type);
+		}
+	}
+	for (const subtree of constraints.excludedSubtrees ?? []) {
+		if (!isSupportedNameConstraintForm(subtree.base)) {
+			unsupportedTypes.add(subtree.base.type);
+		}
+	}
+	return [...unsupportedTypes];
+}
+
+function isSupportedNameConstraintForm(form: ParsedNameConstraintForm): form is NameConstraintForm {
+	switch (form.type) {
+		case 'dns':
+		case 'email':
+		case 'uri':
+		case 'ip':
+		case 'directoryName':
+			return true;
+		case 'otherName':
+		case 'x400Address':
+		case 'ediPartyName':
+		case 'registeredID':
+			return false;
+		default: {
+			const exhaustive: never = form;
+			throw new Error(`Unhandled NameConstraintForm type: ${String(exhaustive)}`);
+		}
+	}
 }
 
 /**

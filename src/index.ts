@@ -50,6 +50,7 @@ export type {
 	KnownExtendedKeyUsage,
 	NameConstraintForm,
 	NameConstraints,
+	ParsedNameConstraintForm,
 	PolicyConstraints,
 	PolicyInformation,
 	PolicyMapping,
@@ -57,6 +58,7 @@ export type {
 	PolicyNoticeReference,
 	PolicyQualifierInfo,
 	SubjectAltName,
+	UnsupportedNameConstraintForm,
 	UserNoticePolicyQualifierInfo,
 } from './extensions.ts';
 export {

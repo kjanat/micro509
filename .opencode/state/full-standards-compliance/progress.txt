@@ -30,6 +30,7 @@ Started: 2026-03-12
 - For CRL scope surfaces, replace URI shortcut fields in one clean break with structured distribution-point objects, then keep encode/parse helpers aligned on `fullName` vs `relativeName` and reason-mask semantics.
 - When moving a concern behind a new boundary module, keep verify/profile APIs stable by adapting boundary-specific failures at the composition seam instead of duplicating domain logic.
 - For profile helpers that combine purpose and service identity, run chain/purpose validation first, then call the identity boundary so EKU/profile failures do not get masked by hostname mismatches.
+- When parser coverage needs parsed-only unsupported RFC forms, keep builder-facing extension types generic with a supported default and widen only parse-owned outputs; that preserves encode type safety while letting validators fail closed.
 
 ## Validation Commands
 
@@ -175,3 +176,11 @@ Started: 2026-03-12
 - Added regression coverage in `test/verify.test.ts` for typed TLS server identity details and for the EKU-before-identity failure ordering.
 - Files changed: `src/verify.ts`, `test/verify.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** keep profile composition explicit at the wrapper layer; the all-in-one verify API can stay ergonomic, but profile helpers should order domain checks intentionally.
+
+## Task - [fail-closed-unsupported-nc]
+
+- Preserved unsupported `nameConstraints` GeneralName forms during parsing in `src/parse.ts` and modeled them as parsed-only variants in `src/extensions.ts` so validation can see them without widening builder inputs.
+- Made `src/verify.ts` fail closed with typed `unsupported_name_constraints` results when a critical `nameConstraints` extension carries unsupported constrained forms, while still accumulating only the supported enforced forms.
+- Updated `test/verify.test.ts` and `test/parse.test.ts` to cover parsed preservation plus critical-extension rejection.
+- Files changed: `src/extensions.ts`, `src/index.ts`, `src/parse.ts`, `src/verify.ts`, `test/parse.test.ts`, `test/verify.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** parsed-only RFC variants fit best as generic extensions to shared data shapes; validators can then fail closed on unsupported critical content without turning unsupported builder inputs into type-valid authoring paths.

@@ -428,15 +428,18 @@ describe('parse', () => {
 		expect(() => parseNameConstraints(nameConstraints)).toThrow('Invalid IP name constraint');
 	});
 
-	it('parseNameConstraints skips unsupported GeneralName types', () => {
-		// registeredID [8] — not dns/email/uri/ip/directoryName
+	it('parseNameConstraints preserves unsupported GeneralName types', () => {
+		// registeredID [8] is classified explicitly for later fail-closed validation.
 		const subtree = sequence([
 			tlv(0x88, Uint8Array.of(0x55, 0x04, 0x03)), // OID bytes for tag 0x88
 		]);
 		const nameConstraints = sequence([tlv(0xa0, subtree)]);
-		// Should not throw, just skip the unknown type
 		const result = parseNameConstraints(nameConstraints);
-		expect(result.permittedSubtrees).toHaveLength(0);
+		expect(result.permittedSubtrees).toHaveLength(1);
+		expect(result.permittedSubtrees?.[0]?.base).toEqual({
+			type: 'registeredID',
+			value: '2.5.4.3',
+		});
 	});
 
 	// -----------------------------------------------------------------------

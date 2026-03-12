@@ -197,13 +197,21 @@ export type NameConstraintForm =
 	  }
 	| { readonly type: 'directoryName'; readonly derHex: string };
 
-export interface GeneralSubtree {
-	readonly base: NameConstraintForm;
+export type UnsupportedNameConstraintForm =
+	| { readonly type: 'otherName'; readonly value: Uint8Array }
+	| { readonly type: 'x400Address'; readonly value: Uint8Array }
+	| { readonly type: 'ediPartyName'; readonly value: Uint8Array }
+	| { readonly type: 'registeredID'; readonly value: string };
+
+export type ParsedNameConstraintForm = NameConstraintForm | UnsupportedNameConstraintForm;
+
+export interface GeneralSubtree<TForm extends ParsedNameConstraintForm = NameConstraintForm> {
+	readonly base: TForm;
 }
 
-export interface NameConstraints {
-	readonly permittedSubtrees?: readonly GeneralSubtree[];
-	readonly excludedSubtrees?: readonly GeneralSubtree[];
+export interface NameConstraints<TForm extends ParsedNameConstraintForm = NameConstraintForm> {
+	readonly permittedSubtrees?: readonly GeneralSubtree<TForm>[];
+	readonly excludedSubtrees?: readonly GeneralSubtree<TForm>[];
 }
 
 export type KnownAuthorityInfoAccessMethod = 'ocsp' | 'caIssuers';
