@@ -9,9 +9,15 @@ export {
 } from './certificate.ts';
 export {
 	type CertificateRevocationListMaterial,
+	type CheckCertificateRevocationAgainstCrlErrorCode,
+	type CheckCertificateRevocationAgainstCrlFailureDetails,
+	type CheckCertificateRevocationAgainstCrlInput,
+	type CheckCertificateRevocationAgainstCrlResult,
 	type CreateCertificateRevocationListInput,
+	type CrlApplicabilityFailureReason,
 	type CrlCertificateSource,
 	type CrlSource,
+	checkCertificateRevocationAgainstCrl,
 	createCertificateRevocationList,
 	isCertificateRevoked,
 	type ParsedCertificateRevocationList,

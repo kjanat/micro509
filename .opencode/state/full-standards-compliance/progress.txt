@@ -41,6 +41,7 @@ Started: 2026-03-12
 - For staged standards work, land internal state machines before public enforcement, but keep public policy/revocation knobs fail-closed until the matching enforcement/output task exists.
 - For staged policy enforcement, enable only the RFC knobs the current task actually enforces, keep the rest fail-closed, and derive pass/fail from the final constrained policy set before exposing richer public outcomes.
 - Expose policy outcomes as two views: `authorityConstrainedPolicies` reports the final surviving leaf-domain policies, while `userConstrainedPolicies` reports caller-visible policy results after mapping and `anyPolicy` handling.
+- CRL handling should split signer/freshness validation from certificate applicability: first validate issuer, AKI, signature, time, and `cRLSign`; then return explicit `non_applicable` reasons for scope mismatches instead of treating a fresh wrong-scope CRL as usable evidence.
 
 ## Validation Commands
 
@@ -267,3 +268,11 @@ Started: 2026-03-12
 - Added runtime-guard coverage for empty structured `fullName` sequences and empty `crlIssuer` lists on both certificate-side and CRL-side builder flows so invalid object-model inputs fail before encoding.
 - Files changed: `src/extensions.ts`, `test/certificate.test.ts`, `test/crl.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** builder coverage for staged RFC object models should prove both optional branches of the union, not just the common `distributionPoint` path; otherwise encode-only regressions like empty alternate-issuer lists can hide behind parse fixtures.
+
+## Task - [enforce-crl-applicability]
+
+- Added `checkCertificateRevocationAgainstCrl()` in `src/crl.ts`, splitting CRL signer/freshness validation from certificate applicability and returning explicit `non_applicable` reasons for direct-CRL scope mismatches.
+- Enforced CRL signer `cRLSign`, certificate-type scope, distribution-point matching, reason-mask overlap, and direct-only behavior, while failing indirect and delta CRLs closed as unsupported-but-non-applicable evidence.
+- Added CRL regressions in `test/crl.test.ts` for matching vs mismatched DPs, reason masks, CA-only scope, no-CRLDP fallback, signer permission checks, and indirect/delta rejection, and re-exported the new API from `src/index.ts`.
+- Files changed: `src/crl.ts`, `src/index.ts`, `test/crl.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** issuer-issued certificates without `cRLDistributionPoints` still accept reason-scoped IDP CRLs; only named IDP scope makes them non-applicable, so no-CRLDP fallback must stay narrower than explicit DP matching.

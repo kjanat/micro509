@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import {
+	checkCertificateRevocationAgainstCrl,
 	createCertificate,
 	createCertificateRevocationList,
 	createSelfSignedCertificate,
@@ -310,6 +311,351 @@ describe('crl', () => {
 			issuerCertificate: otherCa.certificate.pem,
 		});
 		expect(result.ok).toBe(false);
+	});
+
+	it('checks CRL distribution-point applicability before revocation lookup', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Scoped CRL CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Scoped CRL CA' },
+			subject: { commonName: 'scoped.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				crlDistributionPoints: [
+					{
+						distributionPoint: {
+							fullName: [{ type: 'uri', value: 'http://example.test/leaf.crl' }],
+						},
+					},
+				],
+			},
+		});
+		const parsedLeaf = parseCertificatePem(leaf.pem);
+		const matchingCrl = await createCertificateRevocationList({
+			issuer: { commonName: 'Scoped CRL CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			issuingDistributionPoint: {
+				distributionPoint: {
+					fullName: [{ type: 'uri', value: 'http://example.test/leaf.crl' }],
+				},
+			},
+		});
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: leaf.pem,
+				issuerCertificate: ca.certificate.pem,
+				crl: matchingCrl.pem,
+			}),
+		).toMatchObject({ ok: true, status: 'good' });
+
+		const mismatchedCrl = await createCertificateRevocationList({
+			issuer: { commonName: 'Scoped CRL CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			issuingDistributionPoint: {
+				distributionPoint: {
+					fullName: [{ type: 'uri', value: 'http://example.test/other.crl' }],
+				},
+			},
+			revokedCertificates: [{ serialNumber: hexToBytes(parsedLeaf.serialNumberHex) }],
+		});
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: parsedLeaf,
+				issuerCertificate: ca.certificate.pem,
+				crl: mismatchedCrl.pem,
+			}),
+		).toEqual({
+			ok: false,
+			code: 'non_applicable',
+			message: 'certificate distribution points do not match the CRL issuing distribution point',
+			details: { reason: 'distribution_point_mismatch' },
+		});
+	});
+
+	it('checks CRL reason and certificate-type scope', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Reason Scope CA' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 1 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Reason Scope CA' },
+			subject: { commonName: 'reason-leaf.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				crlDistributionPoints: [
+					{
+						distributionPoint: {
+							fullName: [{ type: 'uri', value: 'http://example.test/reasons.crl' }],
+						},
+						reasons: ['keyCompromise'],
+					},
+				],
+			},
+		});
+		const parsedLeaf = parseCertificatePem(leaf.pem);
+		const reasonMismatchCrl = await createCertificateRevocationList({
+			issuer: { commonName: 'Reason Scope CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			issuingDistributionPoint: {
+				distributionPoint: {
+					fullName: [{ type: 'uri', value: 'http://example.test/reasons.crl' }],
+				},
+				onlySomeReasons: ['cessationOfOperation'],
+			},
+			revokedCertificates: [{ serialNumber: hexToBytes(parsedLeaf.serialNumberHex) }],
+		});
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: parsedLeaf,
+				issuerCertificate: ca.certificate.pem,
+				crl: reasonMismatchCrl.pem,
+			}),
+		).toEqual({
+			ok: false,
+			code: 'non_applicable',
+			message: 'certificate distribution point reasons do not overlap the CRL reason scope',
+			details: { reason: 'reasons_mismatch' },
+		});
+
+		const caKeys = await generateKeyPair();
+		const subordinateCa = await createCertificate({
+			issuer: { commonName: 'Reason Scope CA' },
+			subject: { commonName: 'Subordinate Reason CA' },
+			publicKey: caKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+				crlDistributionPoints: [
+					{
+						distributionPoint: {
+							fullName: [{ type: 'uri', value: 'http://example.test/ca-only.crl' }],
+						},
+					},
+				],
+			},
+		});
+		const caOnlyCrl = await createCertificateRevocationList({
+			issuer: { commonName: 'Reason Scope CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			issuingDistributionPoint: {
+				distributionPoint: {
+					fullName: [{ type: 'uri', value: 'http://example.test/ca-only.crl' }],
+				},
+				onlyContainsCACerts: true,
+			},
+		});
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: parsedLeaf,
+				issuerCertificate: ca.certificate.pem,
+				crl: caOnlyCrl.pem,
+			}),
+		).toEqual({
+			ok: false,
+			code: 'non_applicable',
+			message: 'CRL only applies to CA certificates',
+			details: { reason: 'certificate_scope_mismatch' },
+		});
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: subordinateCa.pem,
+				issuerCertificate: ca.certificate.pem,
+				crl: caOnlyCrl.pem,
+			}),
+		).toMatchObject({ ok: true, status: 'good' });
+	});
+
+	it('checks CRLs without certificate distribution points and signer permissions', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Full Scope CRL CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Full Scope CRL CA' },
+			subject: { commonName: 'full-scope.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+		const fullScopeCrl = await createCertificateRevocationList({
+			issuer: { commonName: 'Full Scope CRL CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: leaf.pem,
+				issuerCertificate: ca.certificate.pem,
+				crl: fullScopeCrl.pem,
+			}),
+		).toMatchObject({ ok: true, status: 'good' });
+
+		const reasonScopedCrl = await createCertificateRevocationList({
+			issuer: { commonName: 'Full Scope CRL CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			issuingDistributionPoint: {
+				onlySomeReasons: ['keyCompromise'],
+			},
+		});
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: leaf.pem,
+				issuerCertificate: ca.certificate.pem,
+				crl: reasonScopedCrl.pem,
+			}),
+		).toMatchObject({ ok: true, status: 'good' });
+
+		const scopedCrl = await createCertificateRevocationList({
+			issuer: { commonName: 'Full Scope CRL CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			issuingDistributionPoint: {
+				distributionPoint: {
+					fullName: [{ type: 'uri', value: 'http://example.test/scoped.crl' }],
+				},
+			},
+		});
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: leaf.pem,
+				issuerCertificate: ca.certificate.pem,
+				crl: scopedCrl.pem,
+			}),
+		).toEqual({
+			ok: false,
+			code: 'non_applicable',
+			message: 'certificates without CRL distribution points only accept full-scope CRLs',
+			details: { reason: 'distribution_point_mismatch' },
+		});
+
+		const signerWithoutCrlSign = await createSelfSignedCertificate({
+			subject: { commonName: 'No CRL Sign CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign'],
+			},
+		});
+		const noCrlSign = await createCertificateRevocationList({
+			issuer: { commonName: 'No CRL Sign CA' },
+			signerPrivateKey: signerWithoutCrlSign.keyPair.privateKey,
+			issuerPublicKey: signerWithoutCrlSign.keyPair.publicKey,
+		});
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: leaf.pem,
+				issuerCertificate: signerWithoutCrlSign.certificate.pem,
+				crl: noCrlSign.pem,
+			}),
+		).toEqual({
+			ok: false,
+			code: 'crl_sign_not_permitted',
+			message: 'issuer certificate key usage does not permit CRL signing',
+		});
+
+		expect(
+			await validateCertificateRevocationList({
+				crl: noCrlSign.pem,
+				issuerCertificate: signerWithoutCrlSign.certificate.pem,
+			}),
+		).toEqual({
+			ok: false,
+			code: 'crl_sign_not_permitted',
+			message: 'issuer certificate key usage does not permit CRL signing',
+		});
+	});
+
+	it('reports unsupported indirect and delta CRLs as non-applicable', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Unsupported CRL CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Unsupported CRL CA' },
+			subject: { commonName: 'unsupported.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				crlDistributionPoints: [
+					{
+						distributionPoint: {
+							fullName: [{ type: 'uri', value: 'http://example.test/unsupported.crl' }],
+						},
+					},
+				],
+			},
+		});
+		const indirectCrl = await createCertificateRevocationList({
+			issuer: { commonName: 'Unsupported CRL CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			issuingDistributionPoint: {
+				distributionPoint: {
+					fullName: [{ type: 'uri', value: 'http://example.test/unsupported.crl' }],
+				},
+				indirectCrl: true,
+			},
+		});
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: leaf.pem,
+				issuerCertificate: ca.certificate.pem,
+				crl: indirectCrl.pem,
+			}),
+		).toEqual({
+			ok: false,
+			code: 'non_applicable',
+			message: 'indirect CRLs are not applicable until indirect CRL support is implemented',
+			details: { reason: 'indirect_crl_unsupported' },
+		});
+
+		const deltaCrl = await createCertificateRevocationList({
+			issuer: { commonName: 'Unsupported CRL CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			baseCrlNumber: 1,
+		});
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: leaf.pem,
+				issuerCertificate: ca.certificate.pem,
+				crl: deltaCrl.pem,
+			}),
+		).toEqual({
+			ok: false,
+			code: 'non_applicable',
+			message: 'delta CRLs are not applicable until delta merge support is implemented',
+			details: { reason: 'delta_crl_unsupported' },
+		});
 	});
 
 	it('creates CRL with all revocation reason codes', async () => {

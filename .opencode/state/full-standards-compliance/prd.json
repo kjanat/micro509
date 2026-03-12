@@ -307,7 +307,7 @@
 			"description": "Implement CRL applicability checks before revocation status decisions. Done when:\n- issuer, scope, distribution point, reasons, and cRLSign constraints are enforced\n- non-applicable CRLs fail as non-applicable\n- public results separate applicability from freshness/signature issues",
 			"depends": ["parse-structured-dps", "build-structured-dps", "scaffold-revocation-module"],
 			"priority": "standard",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "add-indirect-crl",

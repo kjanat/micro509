@@ -159,8 +159,59 @@ export type ValidateCertificateRevocationListResult =
 	| { readonly ok: true; readonly value: ParsedCertificateRevocationList }
 	| {
 			readonly ok: false;
-			readonly code: 'signature_invalid' | 'issuer_mismatch' | 'stale_crl';
+			readonly code:
+				| 'signature_invalid'
+				| 'issuer_mismatch'
+				| 'stale_crl'
+				| 'crl_sign_not_permitted';
 			readonly message: string;
+	  };
+
+export interface CheckCertificateRevocationAgainstCrlInput {
+	readonly certificate: CrlCertificateSource;
+	readonly issuerCertificate: CrlCertificateSource;
+	readonly crl: CrlSource;
+	readonly at?: Date;
+	readonly clockSkewMs?: number;
+}
+
+export type CheckCertificateRevocationAgainstCrlErrorCode =
+	| 'signature_invalid'
+	| 'issuer_mismatch'
+	| 'stale_crl'
+	| 'crl_sign_not_permitted'
+	| 'non_applicable';
+
+export type CrlApplicabilityFailureReason =
+	| 'certificate_scope_mismatch'
+	| 'delta_crl_unsupported'
+	| 'distribution_point_mismatch'
+	| 'indirect_crl_unsupported'
+	| 'issuer_mismatch'
+	| 'reasons_mismatch';
+
+export interface CheckCertificateRevocationAgainstCrlFailureDetails {
+	readonly reason?: CrlApplicabilityFailureReason;
+}
+
+export type CheckCertificateRevocationAgainstCrlResult =
+	| {
+			readonly ok: true;
+			readonly status: 'good';
+			readonly value: ParsedCertificateRevocationList;
+	  }
+	| {
+			readonly ok: true;
+			readonly status: 'revoked';
+			readonly value: ParsedCertificateRevocationList;
+			readonly revocationDate: Date;
+			readonly reasonCode?: RevocationReason;
+	  }
+	| {
+			readonly ok: false;
+			readonly code: CheckCertificateRevocationAgainstCrlErrorCode;
+			readonly message: string;
+			readonly details?: CheckCertificateRevocationAgainstCrlFailureDetails;
 	  };
 
 export async function createCertificateRevocationList(
@@ -352,6 +403,13 @@ export async function validateCertificateRevocationList(
 			message: 'CRL authority key identifier does not match issuer subject key identifier',
 		};
 	}
+	if (issuer.keyUsage !== undefined && !issuer.keyUsage.includes('cRLSign')) {
+		return {
+			ok: false,
+			code: 'crl_sign_not_permitted',
+			message: 'issuer certificate key usage does not permit CRL signing',
+		};
+	}
 	const verified = await verifySignedData(
 		parsedCrl.signatureAlgorithmOid,
 		issuer.publicKeyAlgorithmOid,
@@ -382,6 +440,40 @@ export async function validateCertificateRevocationList(
 	return { ok: true, value: parsedCrl };
 }
 
+export async function checkCertificateRevocationAgainstCrl(
+	input: CheckCertificateRevocationAgainstCrlInput,
+): Promise<CheckCertificateRevocationAgainstCrlResult> {
+	const certificate = normalizeCrlCertificate(input.certificate);
+	const validated = await validateCertificateRevocationList({
+		crl: input.crl,
+		issuerCertificate: input.issuerCertificate,
+		...(input.at === undefined ? {} : { at: input.at }),
+		...(input.clockSkewMs === undefined ? {} : { clockSkewMs: input.clockSkewMs }),
+	});
+	if (!validated.ok) {
+		return validated;
+	}
+	const applicabilityFailure = checkCrlApplicability(certificate, validated.value);
+	if (applicabilityFailure !== undefined) {
+		return applicabilityFailure;
+	}
+	const revoked = findRevokedCertificateEntry(certificate.serialNumberHex, validated.value);
+	if (revoked === undefined) {
+		return {
+			ok: true,
+			status: 'good',
+			value: validated.value,
+		};
+	}
+	return {
+		ok: true,
+		status: 'revoked',
+		value: validated.value,
+		revocationDate: revoked.revocationDate,
+		...(revoked.reasonCode === undefined ? {} : { reasonCode: revoked.reasonCode }),
+	};
+}
+
 export function isCertificateRevoked(
 	certificateSerialNumber: Uint8Array | string,
 	crl: ParsedCertificateRevocationList,
@@ -393,6 +485,266 @@ export function isCertificateRevoked(
 	return crl.revokedCertificates.some(
 		(entry) => normalizeHex(entry.serialNumberHex) === serialNumberHex,
 	);
+}
+
+function findRevokedCertificateEntry(
+	certificateSerialNumber: Uint8Array | string,
+	crl: ParsedCertificateRevocationList,
+): ParsedRevokedCertificate | undefined {
+	const serialNumberHex =
+		typeof certificateSerialNumber === 'string'
+			? normalizeHex(certificateSerialNumber)
+			: toHex(certificateSerialNumber);
+	return crl.revokedCertificates.find(
+		(entry) => normalizeHex(entry.serialNumberHex) === serialNumberHex,
+	);
+}
+
+function checkCrlApplicability(
+	certificate: ParsedCertificate,
+	crl: ParsedCertificateRevocationList,
+):
+	| {
+			readonly ok: false;
+			readonly code: 'non_applicable';
+			readonly message: string;
+			readonly details?: CheckCertificateRevocationAgainstCrlFailureDetails;
+	  }
+	| undefined {
+	if (crl.baseCrlNumber !== undefined) {
+		return nonApplicable(
+			'delta_crl_unsupported',
+			'delta CRLs are not applicable until delta merge support is implemented',
+		);
+	}
+	const issuingDistributionPoint = crl.issuingDistributionPoint;
+	if (issuingDistributionPoint?.indirectCrl === true) {
+		return nonApplicable(
+			'indirect_crl_unsupported',
+			'indirect CRLs are not applicable until indirect CRL support is implemented',
+		);
+	}
+	if (certificate.issuer.derHex !== crl.issuer.derHex) {
+		return nonApplicable(
+			'issuer_mismatch',
+			'CRL issuer does not match certificate issuer for direct CRL processing',
+		);
+	}
+	if (issuingDistributionPoint?.onlyContainsAttributeCerts === true) {
+		return nonApplicable(
+			'certificate_scope_mismatch',
+			'attribute-certificate-only CRLs are not applicable to public-key certificates',
+		);
+	}
+	const isCaCertificate = certificate.basicConstraints?.ca === true;
+	if (issuingDistributionPoint?.onlyContainsUserCerts === true && isCaCertificate) {
+		return nonApplicable(
+			'certificate_scope_mismatch',
+			'CRL only applies to end-entity certificates',
+		);
+	}
+	if (issuingDistributionPoint?.onlyContainsCACerts === true && !isCaCertificate) {
+		return nonApplicable('certificate_scope_mismatch', 'CRL only applies to CA certificates');
+	}
+	const distributionPoints = certificate.crlDistributionPoints ?? [];
+	if (distributionPoints.length === 0) {
+		if (issuingDistributionPoint?.distributionPoint !== undefined) {
+			return nonApplicable(
+				'distribution_point_mismatch',
+				'certificates without CRL distribution points only accept full-scope CRLs',
+			);
+		}
+		return undefined;
+	}
+	let sawIndirectDistributionPoint = false;
+	let sawDistributionMismatch = false;
+	let sawReasonsMismatch = false;
+	for (const distributionPoint of distributionPoints) {
+		if (distributionPoint.crlIssuer !== undefined) {
+			sawIndirectDistributionPoint = true;
+			continue;
+		}
+		if (
+			!matchesDistributionPointName(
+				distributionPoint.distributionPoint,
+				issuingDistributionPoint?.distributionPoint,
+			)
+		) {
+			sawDistributionMismatch = true;
+			continue;
+		}
+		if (
+			!hasOverlappingReasons(distributionPoint.reasons, issuingDistributionPoint?.onlySomeReasons)
+		) {
+			sawReasonsMismatch = true;
+			continue;
+		}
+		return undefined;
+	}
+	if (sawReasonsMismatch) {
+		return nonApplicable(
+			'reasons_mismatch',
+			'certificate distribution point reasons do not overlap the CRL reason scope',
+		);
+	}
+	if (sawDistributionMismatch) {
+		return nonApplicable(
+			'distribution_point_mismatch',
+			'certificate distribution points do not match the CRL issuing distribution point',
+		);
+	}
+	if (sawIndirectDistributionPoint) {
+		return nonApplicable(
+			'indirect_crl_unsupported',
+			'certificate distribution points that name alternate CRL issuers are not supported yet',
+		);
+	}
+	return nonApplicable(
+		'distribution_point_mismatch',
+		'certificate distribution points do not match the CRL scope',
+	);
+}
+
+function nonApplicable(
+	reason: CrlApplicabilityFailureReason,
+	message: string,
+): {
+	readonly ok: false;
+	readonly code: 'non_applicable';
+	readonly message: string;
+	readonly details: CheckCertificateRevocationAgainstCrlFailureDetails;
+} {
+	return {
+		ok: false,
+		code: 'non_applicable',
+		message,
+		details: { reason },
+	};
+}
+
+function matchesDistributionPointName(
+	certificatePoint: ParsedDistributionPointName | undefined,
+	crlPoint: ParsedDistributionPointName | undefined,
+): boolean {
+	if (crlPoint === undefined) {
+		return true;
+	}
+	if (certificatePoint === undefined) {
+		return false;
+	}
+	if (certificatePoint.fullName !== undefined || crlPoint.fullName !== undefined) {
+		if (certificatePoint.fullName === undefined || crlPoint.fullName === undefined) {
+			return false;
+		}
+		return certificatePoint.fullName.some(
+			(leftName) =>
+				crlPoint.fullName?.some((rightName) => compareGeneralNames(leftName, rightName)) === true,
+		);
+	}
+	if (certificatePoint.relativeName === undefined || crlPoint.relativeName === undefined) {
+		return false;
+	}
+	return compareRelativeDistinguishedNames(certificatePoint.relativeName, crlPoint.relativeName);
+}
+
+function hasOverlappingReasons(
+	certificateReasons: readonly DistributionPointReason[] | undefined,
+	crlReasons: readonly DistributionPointReason[] | undefined,
+): boolean {
+	if (certificateReasons === undefined || crlReasons === undefined) {
+		return true;
+	}
+	return certificateReasons.some((reason) => crlReasons.includes(reason));
+}
+
+function compareGeneralNames(left: GeneralName, right: GeneralName): boolean {
+	if (left.type === 'dns' && right.type === 'dns') {
+		return left.value === right.value;
+	}
+	if (left.type === 'email' && right.type === 'email') {
+		return left.value === right.value;
+	}
+	if (left.type === 'ip' && right.type === 'ip') {
+		return left.value === right.value;
+	}
+	if (left.type === 'uri' && right.type === 'uri') {
+		return left.value === right.value;
+	}
+	if (left.type === 'directoryName' && right.type === 'directoryName') {
+		return normalizeHex(left.derHex) === normalizeHex(right.derHex);
+	}
+	if (left.type === 'unknown' && right.type === 'unknown') {
+		return left.tag === right.tag && bytesEqual(left.value, right.value);
+	}
+	return false;
+}
+
+function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
+	if (left.length !== right.length) {
+		return false;
+	}
+	for (let index = 0; index < left.length; index += 1) {
+		if (left[index] !== right[index]) {
+			return false;
+		}
+	}
+	return true;
+}
+
+function compareRelativeDistinguishedNames(
+	left: ParsedRelativeDistinguishedName,
+	right: ParsedRelativeDistinguishedName,
+): boolean {
+	if (left.attributes.length !== right.attributes.length) {
+		return false;
+	}
+	const matched = new Array(right.attributes.length).fill(false);
+	for (const leftAttribute of left.attributes) {
+		let found = false;
+		for (let index = 0; index < right.attributes.length; index += 1) {
+			const rightAttribute = right.attributes[index];
+			if (rightAttribute === undefined || matched[index]) {
+				continue;
+			}
+			if (!compareNameAttributeValue(leftAttribute, rightAttribute)) {
+				continue;
+			}
+			matched[index] = true;
+			found = true;
+			break;
+		}
+		if (!found) {
+			return false;
+		}
+	}
+	return true;
+}
+
+function compareNameAttributeValue(left: ParsedNameAttribute, right: ParsedNameAttribute): boolean {
+	if (left.oid !== right.oid) {
+		return false;
+	}
+	if (isDirectoryStringTag(left.valueTag) && isDirectoryStringTag(right.valueTag)) {
+		const preparedLeft = prepareNameCompareString(left.value);
+		const preparedRight = prepareNameCompareString(right.value);
+		if (preparedLeft === undefined || preparedRight === undefined) {
+			return false;
+		}
+		return preparedLeft === preparedRight;
+	}
+	return left.valueTag === right.valueTag && left.value === right.value;
+}
+
+function isDirectoryStringTag(tag: number): boolean {
+	return tag === 0x0c || tag === 0x13;
+}
+
+function prepareNameCompareString(value: string): string | undefined {
+	const normalized = value.normalize('NFKC');
+	if (/[^\P{Cc}\t\n\r]/u.test(normalized)) {
+		return undefined;
+	}
+	return normalized.toLowerCase().trim().replace(/\s+/gu, ' ');
 }
 
 async function buildCrlExtensions(
