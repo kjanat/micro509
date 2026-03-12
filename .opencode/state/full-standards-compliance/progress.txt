@@ -51,6 +51,7 @@ Started: 2026-03-12
 - OCSP validation should normalize request/response/certificate inputs to parsed forms up front, then feed shared chain validation with parsed certificate `der` bytes so pre-parsed inputs cannot skip delegated-responder checks.
 - Delegated OCSP responder validation should require `ocspSigning` EKU and default to direct issuance from the target cert issuer; any intermediate responder chain needs an explicit caller opt-in.
 - OCSP freshness should validate response-level `producedAt` separately from per-cert `thisUpdate`/`nextUpdate`: reject future `producedAt` beyond clock skew, and reject responses whose `producedAt` lands after a single-response `nextUpdate`.
+- OCSP request-bound validation must compare request and response `CertID` sets both ways: reject extra response entries and reject omitted requested entries, while staying order-insensitive for multi-cert requests.
 
 ## Validation Commands
 
@@ -352,3 +353,10 @@ Started: 2026-03-12
 - Added OCSP regressions in `test/ocsp.test.ts` for future `producedAt` skew handling and inconsistent `producedAt` vs `nextUpdate`, and updated `README.md` plus `docs/PKIX-SCOPE.md` to stop understating shipped OCSP freshness support.
 - Files changed: `src/ocsp.ts`, `test/ocsp.test.ts`, `README.md`, `docs/PKIX-SCOPE.md`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** `producedAt` is response-level freshness metadata, not a per-cert timestamp; validate it once per response, then combine it with each single response's `nextUpdate` window instead of duplicating it into `ParsedOcspSingleResponse`.
+
+## Task - [require-full-request-coverage]
+
+- Tightened `validateOcspResponse()` in `src/ocsp.ts` so request-bound validation now enforces full bidirectional `CertID` coverage: extra response entries still fail, and omitted requested entries now fail too.
+- Added OCSP regressions in `test/ocsp.test.ts` for omitted requested `CertID`s and successful multi-cert request coverage with response order independence.
+- Files changed: `src/ocsp.ts`, `test/ocsp.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** request/response completeness checks should compare normalized `CertID` sets in both directions; one-way subset checks miss partial coverage bugs for multi-cert OCSP requests.

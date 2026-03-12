@@ -388,7 +388,7 @@
 			"description": "Require complete request/response CertID coverage. Done when:\n- omitted requested CertIDs fail validation\n- extra unexpected responses still fail\n- multi-cert request fixtures exist",
 			"depends": ["bind-signer-to-responderid"],
 			"priority": "standard",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "normalize-ocsp-inputs",

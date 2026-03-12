@@ -510,12 +510,24 @@ export async function validateOcspResponse(
 			};
 		}
 		const requestIds = new Set(request.requests.map((entry) => serializeCertId(entry)));
+		const responseIds = new Set(
+			(parsedResponse.responses ?? []).map((response) => serializeCertId(response.certId)),
+		);
 		for (const response of parsedResponse.responses ?? []) {
 			if (!requestIds.has(serializeCertId(response.certId))) {
 				return {
 					ok: false,
 					code: 'request_mismatch',
 					message: 'OCSP response includes a certId not present in request',
+				};
+			}
+		}
+		for (const requestId of requestIds) {
+			if (!responseIds.has(requestId)) {
+				return {
+					ok: false,
+					code: 'request_mismatch',
+					message: 'OCSP response does not cover every requested certId',
 				};
 			}
 		}
