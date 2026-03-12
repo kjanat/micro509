@@ -14,6 +14,7 @@ Started: 2026-03-12
 - Root `micro509` export should stay ergonomic; granular domains should live behind stable subpath exports.
 - Distribution-point model change is a clean break; no temporary URI-only compat alias.
 - RFC 5280 `directoryName` comparison is semantic: ordered DN, unordered RDN sets, RFC 4518-prepared AVA strings; never compare raw DER prefixes.
+- RFC 9618 policy validation should use a depth-indexed DAG keyed by `(depth, validPolicy)` plus constrained policy sets; never build or expose the deprecated RFC 5280 policy tree during core validation.
 
 ## Validation Commands
 
@@ -27,6 +28,7 @@ Started: 2026-03-12
 
 - Do not upgrade README or `docs/PKIX-SCOPE.md` claims until matching tests and conformance gates pass.
 - Prefer `implemented`, `partial`, `not yet` wording over broad subsystem claims.
+- rfc full texts are available in docs/rfc/*
 
 ---
 
@@ -43,3 +45,10 @@ Started: 2026-03-12
 - Called out that current `directoryName` checks in `src/verify.ts` are DER-driven today and must move to RDN/AVA semantic comparison in the later implementation task.
 - Files changed: `specs/full-standards-compliance.md`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** keep `ParsedName.derHex` only for round-trip/debug use; future comparison needs structured RDN/AVA metadata, not display strings or DER-prefix matching.
+
+## Task - [rfc9618-engine-spike]
+
+- Documented the RFC 9618 policy-engine plan in `specs/full-standards-compliance.md`, including graph node/state shapes, per-certificate transitions, explicitPolicy / policyMappings / anyPolicy handling, final output sets, and follow-up fixture targets.
+- Resolved the lingering policy-algorithm question in `docs/FUTURE.md` in favor of RFC 9618's DAG/set model instead of the deprecated RFC 5280 tree.
+- Files changed: `specs/full-standards-compliance.md`, `docs/FUTURE.md`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** keep policy state keyed by depth plus policy OID so multi-parent mappings stay linear-size; expose constrained policy sets, not graph internals, from public validation APIs.

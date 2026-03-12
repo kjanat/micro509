@@ -64,8 +64,8 @@ encoders). New `VerifyErrorCode` variants, new fields on
 `ValidateCandidatePathInput` + all profile inputs. ~20+ `return failure()`
 sites affected.
 
-**Open question:** skip straight to RFC 9618 algorithm, or implement
-RFC 5280 §6.1 tree first then replace?
+Use RFC 9618's policy-graph / constrained-set model directly; do not build the
+old RFC 5280 policy tree as an intermediate step.
 
 ### 2. Full distributionPoint / IDP structured models — L, breaking
 

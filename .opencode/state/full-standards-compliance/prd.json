@@ -33,7 +33,7 @@
 			"title": "Design RFC 9618 policy engine",
 			"description": "Design the RFC 9618 policy state model before coding. Done when:\n- state structures and transitions are documented\n- explicitPolicy, anyPolicy, and policyMappings handling are mapped\n- the plan does not depend on the old RFC 5280 policy tree",
 			"priority": "spike",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "crl-scope-spike",
