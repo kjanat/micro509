@@ -8,6 +8,7 @@ import {
 } from '#micro509/asn1.ts';
 import {
 	bitString,
+	encodeLength,
 	ia5String,
 	integer,
 	integerFromNumber,
@@ -22,6 +23,13 @@ import {
 	time,
 } from '#micro509/der.ts';
 import { buildCertificateExtensions, encodeSubjectAltName } from '#micro509/extensions.ts';
+import {
+	allOnesMaskForIpAddress,
+	decodeIpAddress,
+	expandIpv6,
+	normalizeIpAddress,
+	parseIpAddressToBytes,
+} from '#micro509/ip.ts';
 import { OIDS } from '#micro509/oids.ts';
 import { parsePbes2AlgorithmIdentifier } from '#micro509/pbes2.ts';
 import { createPkcs12MacData, parsePkcs12MacData } from '#micro509/pkcs12-mac.ts';
@@ -123,6 +131,10 @@ describe('der encoding', () => {
 
 	it('readElement throws on indefinite length', () => {
 		expect(() => readElement(Uint8Array.of(0x30, 0x80))).toThrow('Indefinite');
+	});
+
+	it('encodeLength emits long-form lengths', () => {
+		expect(encodeLength(256)).toEqual(Uint8Array.of(0x82, 0x01, 0x00));
 	});
 
 	it('readSequenceChildren throws on non-SEQUENCE input', () => {
@@ -227,6 +239,32 @@ describe('sig-verify', () => {
 		// Manually build a SEQUENCE with just one INTEGER child (missing s component)
 		const justR = Uint8Array.of(0x30, 0x03, 0x02, 0x01, 0x42);
 		expect(() => derEcdsaSignatureToRaw(justR, 32)).toThrow('Malformed ECDSA DER signature');
+	});
+});
+
+describe('ip helpers', () => {
+	it('normalizes IPv6 addresses across expansion forms', () => {
+		expect(normalizeIpAddress('2001:db8::1')).toBe('2001:0db8:0000:0000:0000:0000:0000:0001');
+		expect(expandIpv6('2001:0db8::1')).toEqual([
+			'2001',
+			'0db8',
+			'0000',
+			'0000',
+			'0000',
+			'0000',
+			'0000',
+			'0001',
+		]);
+	});
+
+	it('round-trips IP bytes through shared helpers', () => {
+		expect(decodeIpAddress(parseIpAddressToBytes('10.0.0.7'))).toBe('10.0.0.7');
+		expect(decodeIpAddress(parseIpAddressToBytes('2001:db8::1'))).toBe('2001:db8:0:0:0:0:0:1');
+		expect(allOnesMaskForIpAddress('2001:db8::1')).toEqual(new Uint8Array(16).fill(0xff));
+	});
+
+	it('rejects invalid IPv6 segments', () => {
+		expect(() => parseIpAddressToBytes('2001:db8::zzzz')).toThrow('Invalid IPv6 address');
 	});
 });
 

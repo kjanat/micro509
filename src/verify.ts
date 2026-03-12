@@ -16,6 +16,8 @@ import type {
 	PolicyQualifierInfo,
 } from './extensions.ts';
 import { matchServiceIdentity } from './identity.ts';
+import { allOnesMaskForIpAddress, decodeIpAddress, parseIpAddressToBytes } from './ip.ts';
+import { nameFieldKeyFromOid } from './name.ts';
 import { OIDS } from './oids.ts';
 import type {
 	ParsedCertificate,
@@ -1298,26 +1300,7 @@ async function matchTrustAnchor(
 }
 
 function fingerprint(certificate: ParsedCertificate): string {
-	return Array.from(certificate.der, (value) => value.toString(16).padStart(2, '0')).join('');
-}
-
-function expandIpv6(value: string): readonly string[] {
-	const pieces = value.toLowerCase().split('::');
-	const head = pieces[0] ?? '';
-	const tail = pieces[1];
-	if (tail !== undefined && value.indexOf('::') !== value.lastIndexOf('::')) {
-		throw new Error(`Invalid IPv6 address: ${value}`);
-	}
-	const headParts = head.length > 0 ? head.split(':') : [];
-	const tailParts = tail !== undefined && tail.length > 0 ? tail.split(':') : [];
-	const missing = 8 - (headParts.length + tailParts.length);
-	if ((tail === undefined && headParts.length !== 8) || missing < 0) {
-		throw new Error(`Invalid IPv6 address: ${value}`);
-	}
-	const zeroes = Array.from({ length: missing }, () => '0');
-	return (tail === undefined ? headParts : [...headParts, ...zeroes, ...tailParts]).map((segment) =>
-		segment.padStart(4, '0'),
-	);
+	return toHex(certificate.der);
 }
 
 function failure(
@@ -2281,7 +2264,7 @@ function sanToConstraintCheckable(
 			return {
 				type: 'ip',
 				addressBytes: parseIpAddressToBytes(san.value),
-				maskBytes: allOnesMask(san.value),
+				maskBytes: allOnesMaskForIpAddress(san.value),
 			};
 		case 'directoryName':
 			return { type: 'directoryName', derHex: san.derHex };
@@ -2527,7 +2510,7 @@ function parseDirectoryNameRdn(
 		} catch {
 			return undefined;
 		}
-		const fieldKey = nameKeyFromOid(oid);
+		const fieldKey = nameFieldKeyFromOid(oid);
 		const attribute: ParsedNameAttribute =
 			fieldKey !== undefined
 				? { oid, key: fieldKey, valueTag: valueElement.tag, value: fieldValue }
@@ -2617,73 +2600,6 @@ function prepareNameCompareString(value: string): string | undefined {
 	return normalized.toLowerCase().trim().replace(/\s+/gu, ' ');
 }
 
-function nameKeyFromOid(oid: string): ParsedNameAttribute['key'] {
-	switch (oid) {
-		case OIDS.commonName:
-			return 'commonName';
-		case OIDS.surname:
-			return 'surname';
-		case OIDS.serialNumber:
-			return 'serialNumber';
-		case OIDS.countryName:
-			return 'country';
-		case OIDS.localityName:
-			return 'locality';
-		case OIDS.stateOrProvinceName:
-			return 'state';
-		case OIDS.streetAddress:
-			return 'street';
-		case OIDS.organizationName:
-			return 'organization';
-		case OIDS.organizationalUnitName:
-			return 'organizationalUnit';
-		case OIDS.title:
-			return 'title';
-		case OIDS.givenName:
-			return 'givenName';
-		case OIDS.emailAddress:
-			return 'emailAddress';
-	}
-	return undefined;
-}
-
-function parseIpAddressToBytes(value: string): Uint8Array {
-	if (value.includes(':')) {
-		return parseIpv6ToBytes(value);
-	}
-	const segments = value.split('.');
-	if (segments.length !== 4) {
-		throw new Error(`Invalid IPv4 address: ${value}`);
-	}
-	return Uint8Array.from(
-		segments.map((segment) => {
-			const parsed = Number(segment);
-			if (!Number.isInteger(parsed) || parsed < 0 || parsed > 255) {
-				throw new Error(`Invalid IPv4 address: ${value}`);
-			}
-			return parsed;
-		}),
-	);
-}
-
-function parseIpv6ToBytes(value: string): Uint8Array {
-	const expanded = expandIpv6(value);
-	const bytes = new Uint8Array(16);
-	expanded.forEach((segment, index) => {
-		const parsed = Number.parseInt(segment, 16);
-		bytes[index * 2] = parsed >> 8;
-		bytes[index * 2 + 1] = parsed & 0xff;
-	});
-	return bytes;
-}
-
-function allOnesMask(ipValue: string): Uint8Array {
-	const length = ipValue.includes(':') ? 16 : 4;
-	const mask = new Uint8Array(length);
-	mask.fill(0xff);
-	return mask;
-}
-
 function formatConstraintForm(form: NameConstraintForm): string {
 	switch (form.type) {
 		case 'dns':
@@ -2693,7 +2609,7 @@ function formatConstraintForm(form: NameConstraintForm): string {
 		case 'uri':
 			return `uri:${form.value}`;
 		case 'ip':
-			return `ip:${formatIpBytes(form.addressBytes)}`;
+			return `ip:${decodeIpAddress(form.addressBytes)}`;
 		case 'directoryName':
 			return `dn:${form.derHex.slice(0, 20)}...`;
 		default: {
@@ -2701,17 +2617,4 @@ function formatConstraintForm(form: NameConstraintForm): string {
 			throw new Error(`Unhandled NameConstraintForm type: ${String(exhaustive)}`);
 		}
 	}
-}
-
-function formatIpBytes(bytes: Uint8Array): string {
-	if (bytes.length === 4) {
-		return Array.from(bytes, (value) => String(value)).join('.');
-	}
-	const groups: string[] = [];
-	for (let index = 0; index < bytes.length; index += 2) {
-		const left = bytes[index] ?? 0;
-		const right = bytes[index + 1] ?? 0;
-		groups.push(((left << 8) | right).toString(16));
-	}
-	return groups.join(':');
 }

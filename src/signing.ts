@@ -1,4 +1,5 @@
-import { integer, nullValue, objectIdentifier, sequence } from './der.ts';
+import { nullValue, objectIdentifier, sequence } from './der.ts';
+import { rawEcdsaSignatureToDer } from './ecdsa.ts';
 import { getCrypto } from './keys.ts';
 import { OIDS } from './oids.ts';
 
@@ -89,7 +90,7 @@ export async function signBytes(
 		await getCrypto().subtle.sign(algorithm.signParams, privateKey, view),
 	);
 	if (algorithm.ecdsaRawSignatureBytes !== undefined && signature[0] !== 0x30) {
-		return ecdsaRawToDer(signature, algorithm.ecdsaRawSignatureBytes / 2);
+		return rawEcdsaSignatureToDer(signature, algorithm.ecdsaRawSignatureBytes / 2);
 	}
 	return signature;
 }
@@ -100,21 +101,4 @@ function hasHash(algorithm: KeyAlgorithm): algorithm is RsaHashedKeyAlgorithm {
 
 function hasNamedCurve(algorithm: KeyAlgorithm): algorithm is EcKeyAlgorithm {
 	return 'namedCurve' in algorithm;
-}
-
-function ecdsaRawToDer(signature: Uint8Array, partLength: number): Uint8Array {
-	if (signature.length !== partLength * 2) {
-		throw new Error('Unexpected ECDSA signature length');
-	}
-	const r = trimInteger(signature.slice(0, partLength));
-	const s = trimInteger(signature.slice(partLength));
-	return sequence([integer(r), integer(s)]);
-}
-
-function trimInteger(bytes: Uint8Array): Uint8Array {
-	let index = 0;
-	while (index < bytes.length - 1 && bytes[index] === 0) {
-		index += 1;
-	}
-	return bytes.slice(index);
 }

@@ -10,7 +10,11 @@ import {
 	toHex,
 } from './asn1.ts';
 import type { DerElement } from './der.ts';
-import { readElement } from './der.ts';
+import { encodeLength, readElement } from './der.ts';
+import {
+	parseDistributionPointReasonFlagsContent,
+	parseKeyUsageExtension,
+} from './extension-bits.ts';
 import type {
 	AuthorityInformationAccess,
 	BasicConstraints,
@@ -28,7 +32,8 @@ import type {
 	SubjectAltName,
 } from './extensions.ts';
 import { parseAuthorityInfoAccessMethodOid, parseExtendedKeyUsageOid } from './extensions.ts';
-import type { NameFieldKey } from './name.ts';
+import { decodeIpAddress } from './ip.ts';
+import { type NameFieldKey, nameFieldKeyFromOid } from './name.ts';
 import { OIDS } from './oids.ts';
 import { pemDecode, splitPemBlocks } from './pem.ts';
 
@@ -619,7 +624,7 @@ function parseNameAttributeSet(
 		const parts = childrenOf(source, attributeSequence);
 		const oid = decodeObjectIdentifier(requireElement(parts[0], 'name OID').value);
 		const valueElement = requireElement(parts[1], 'name value');
-		const fieldKey = nameKeyFromOid(oid);
+		const fieldKey = nameFieldKeyFromOid(oid);
 		const fieldValue = decodeString(valueElement.tag, valueElement.value);
 		const attribute: ParsedNameAttribute =
 			fieldKey !== undefined
@@ -687,36 +692,7 @@ function parseBasicConstraints(bytes: Uint8Array): BasicConstraints {
 }
 
 function parseKeyUsage(bytes: Uint8Array): readonly KeyUsage[] {
-	const bitString = requireElement(readElement(bytes), 'keyUsage bit string');
-	const unusedBits = bitString.value[0] ?? 0;
-	if (unusedBits > 7) {
-		throw new Error('Invalid BIT STRING');
-	}
-	const data = bitString.value.slice(1);
-	const usages: KeyUsage[] = [];
-	const candidates: readonly KeyUsage[] = [
-		'digitalSignature',
-		'nonRepudiation',
-		'keyEncipherment',
-		'dataEncipherment',
-		'keyAgreement',
-		'keyCertSign',
-		'cRLSign',
-		'encipherOnly',
-		'decipherOnly',
-	];
-	for (let index = 0; index < candidates.length; index += 1) {
-		const byteIndex = Math.floor(index / 8);
-		const bitIndex = index % 8;
-		const byte = data[byteIndex] ?? 0;
-		if ((byte & (1 << (7 - bitIndex))) !== 0) {
-			const usage = candidates[index];
-			if (usage !== undefined) {
-				usages.push(usage);
-			}
-		}
-	}
-	return usages;
+	return parseKeyUsageExtension(bytes);
 }
 
 function parseExtendedKeyUsage(bytes: Uint8Array): readonly ExtendedKeyUsage[] {
@@ -947,7 +923,7 @@ function parseDistributionPoint(source: Uint8Array, element: DerElement): Parsed
 		if (child.tag === 0xa0) {
 			distributionPoint = parseDistributionPointName(source, child);
 		} else if (child.tag === 0x81) {
-			reasons = parseDistributionPointReasonFlags(child.value);
+			reasons = parseDistributionPointReasonFlagsContent(child.value);
 		} else if (child.tag === 0xa2) {
 			crlIssuer = parseGeneralNames(source, child);
 		}
@@ -1036,38 +1012,6 @@ function parseOtherName(source: Uint8Array, element: DerElement): SubjectAltName
 		throw new Error('SRV-ID otherName value must be an IA5String');
 	}
 	return { type: 'srv', value: decodeString(srvNameElement.tag, srvNameElement.value) };
-}
-
-function parseDistributionPointReasonFlags(
-	value: Uint8Array,
-): readonly DistributionPointReason[] | undefined {
-	const unusedBits = value[0] ?? 0;
-	if (unusedBits > 7) {
-		throw new Error('Invalid distribution point reasons BIT STRING');
-	}
-	const bytes = value.slice(1);
-	const reasons: DistributionPointReason[] = [];
-	const candidates: readonly DistributionPointReason[] = [
-		'keyCompromise',
-		'cACompromise',
-		'affiliationChanged',
-		'superseded',
-		'cessationOfOperation',
-		'certificateHold',
-		'privilegeWithdrawn',
-		'aACompromise',
-	];
-	for (let index = 0; index < candidates.length; index += 1) {
-		const byte = bytes[Math.floor((index + 1) / 8)] ?? 0;
-		const bitIndex = (index + 1) % 8;
-		if ((byte & (1 << (7 - bitIndex))) !== 0) {
-			const reason = candidates[index];
-			if (reason !== undefined) {
-				reasons.push(reason);
-			}
-		}
-	}
-	return reasons.length === 0 ? undefined : reasons;
 }
 
 /** @internal Exported for testing only — not part of the public API. */
@@ -1180,25 +1124,12 @@ function parseNameConstraintGeneralName(
  */
 function rebuildDirectoryNameFromImplicit(element: DerElement, source: Uint8Array): Uint8Array {
 	const contentBytes = source.slice(element.start, element.end);
-	const lengthEncoded = encodeAsn1Length(contentBytes.length);
+	const lengthEncoded = encodeLength(contentBytes.length);
 	const result = new Uint8Array(1 + lengthEncoded.length + contentBytes.length);
 	result[0] = 0x30;
 	result.set(lengthEncoded, 1);
 	result.set(contentBytes, 1 + lengthEncoded.length);
 	return result;
-}
-
-function encodeAsn1Length(length: number): Uint8Array {
-	if (length < 128) {
-		return Uint8Array.of(length);
-	}
-	const parts: number[] = [];
-	let current = length;
-	while (current > 0) {
-		parts.unshift(current & 0xff);
-		current >>= 8;
-	}
-	return Uint8Array.of(0x80 | parts.length, ...parts);
 }
 
 function parseDisplayText(element: DerElement): string {
@@ -1236,52 +1167,6 @@ function parseAuthorityKeyIdentifier(bytes: Uint8Array): string | undefined {
 		if (child.tag === 0x80) {
 			return toHex(child.value);
 		}
-	}
-	return undefined;
-}
-
-function decodeIpAddress(bytes: Uint8Array): string {
-	if (bytes.length === 4) {
-		return Array.from(bytes, (value) => String(value)).join('.');
-	}
-	if (bytes.length === 16) {
-		const groups: string[] = [];
-		for (let index = 0; index < bytes.length; index += 2) {
-			const left = bytes[index] ?? 0;
-			const right = bytes[index + 1] ?? 0;
-			groups.push(((left << 8) | right).toString(16));
-		}
-		return groups.join(':');
-	}
-	throw new Error('Unsupported IP address length');
-}
-
-function nameKeyFromOid(oid: string): NameFieldKey | undefined {
-	switch (oid) {
-		case OIDS.commonName:
-			return 'commonName';
-		case OIDS.surname:
-			return 'surname';
-		case OIDS.serialNumber:
-			return 'serialNumber';
-		case OIDS.countryName:
-			return 'country';
-		case OIDS.localityName:
-			return 'locality';
-		case OIDS.stateOrProvinceName:
-			return 'state';
-		case OIDS.streetAddress:
-			return 'street';
-		case OIDS.organizationName:
-			return 'organization';
-		case OIDS.organizationalUnitName:
-			return 'organizationalUnit';
-		case OIDS.title:
-			return 'title';
-		case OIDS.givenName:
-			return 'givenName';
-		case OIDS.emailAddress:
-			return 'emailAddress';
 	}
 	return undefined;
 }

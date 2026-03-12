@@ -1,12 +1,5 @@
-import {
-	ia5String,
-	objectIdentifier,
-	printableString,
-	sequence,
-	setOf,
-	utf8String,
-} from './der.ts';
-import { OIDS } from './oids.ts';
+import { objectIdentifier, sequence, setOf } from './der.ts';
+import { NAME_FIELD_DEFINITIONS, NAME_OBJECT_ORDER } from './name-fields.ts';
 
 export type NameFieldKey =
 	| 'commonName'
@@ -45,40 +38,7 @@ export interface NameAttribute {
 export type NameInput = NameObject | readonly NameAttribute[];
 export type RelativeDistinguishedNameInput = readonly NameAttribute[];
 
-interface NameFieldDefinition {
-	readonly oid: string;
-	readonly encode: (value: string) => Uint8Array;
-}
-
-const NAME_FIELD_DEFINITIONS: Record<NameFieldKey, NameFieldDefinition> = {
-	commonName: { oid: OIDS.commonName, encode: utf8String },
-	surname: { oid: OIDS.surname, encode: utf8String },
-	serialNumber: { oid: OIDS.serialNumber, encode: printableString },
-	country: { oid: OIDS.countryName, encode: printableString },
-	locality: { oid: OIDS.localityName, encode: utf8String },
-	state: { oid: OIDS.stateOrProvinceName, encode: utf8String },
-	street: { oid: OIDS.streetAddress, encode: utf8String },
-	organization: { oid: OIDS.organizationName, encode: utf8String },
-	organizationalUnit: { oid: OIDS.organizationalUnitName, encode: utf8String },
-	title: { oid: OIDS.title, encode: utf8String },
-	givenName: { oid: OIDS.givenName, encode: utf8String },
-	emailAddress: { oid: OIDS.emailAddress, encode: ia5String },
-};
-
-const NAME_OBJECT_ORDER: readonly NameFieldKey[] = [
-	'country',
-	'state',
-	'locality',
-	'street',
-	'organization',
-	'organizationalUnit',
-	'commonName',
-	'givenName',
-	'surname',
-	'title',
-	'serialNumber',
-	'emailAddress',
-];
+export { nameFieldKeyFromOid } from './name-fields.ts';
 
 export function encodeName(input: NameInput): Uint8Array {
 	const attributes = isNameAttributes(input) ? input : nameObjectToAttributes(input);

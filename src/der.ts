@@ -1,15 +1,9 @@
-function encodeLength(length: number): Uint8Array {
+export function encodeLength(length: number): Uint8Array {
 	if (length < 128) {
 		return Uint8Array.of(length);
 	}
 
-	const parts: number[] = [];
-	let current = length;
-	while (current > 0) {
-		parts.unshift(current & 0xff);
-		current >>= 8;
-	}
-
+	const parts = encodeBase256(length);
 	return Uint8Array.of(0x80 | parts.length, ...parts);
 }
 
@@ -83,14 +77,7 @@ export function integerFromNumber(value: number): Uint8Array {
 		return integer(Uint8Array.of(0));
 	}
 
-	const parts: number[] = [];
-	let current = value;
-	while (current > 0) {
-		parts.unshift(current & 0xff);
-		current = Math.floor(current / 256);
-	}
-
-	return integer(Uint8Array.from(parts));
+	return integer(Uint8Array.from(encodeBase256(value)));
 }
 
 export function bool(value: boolean): Uint8Array {
@@ -207,6 +194,16 @@ export function time(date: Date): Uint8Array {
 
 function twoDigits(value: number): string {
 	return String(value).padStart(2, '0');
+}
+
+function encodeBase256(value: number): readonly number[] {
+	const parts: number[] = [];
+	let current = value;
+	while (current > 0) {
+		parts.unshift(current & 0xff);
+		current = Math.floor(current / 256);
+	}
+	return parts;
 }
 
 export interface DerElement {

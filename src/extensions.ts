@@ -1,6 +1,5 @@
 import { hexToBytes } from './asn1.ts';
 import {
-	bitString,
 	bool,
 	concatBytes,
 	explicitContext,
@@ -16,7 +15,12 @@ import {
 	tlv,
 	utf8String,
 } from './der.ts';
+import {
+	encodeDistributionPointReasonFlagsContent,
+	encodeKeyUsageExtension,
+} from './extension-bits.ts';
 import { sha1 } from './hash.ts';
+import { parseIpAddressToBytes } from './ip.ts';
 import { encodeRelativeDistinguishedName, type RelativeDistinguishedNameInput } from './name.ts';
 import { OIDS } from './oids.ts';
 
@@ -267,29 +271,6 @@ const AUTHORITY_INFO_ACCESS_METHOD_OIDS: Record<KnownAuthorityInfoAccessMethod, 
 	caIssuers: OIDS.caIssuersAccessMethod,
 };
 
-const KEY_USAGE_BITS: Record<KeyUsage, number> = {
-	digitalSignature: 0,
-	nonRepudiation: 1,
-	keyEncipherment: 2,
-	dataEncipherment: 3,
-	keyAgreement: 4,
-	keyCertSign: 5,
-	cRLSign: 6,
-	encipherOnly: 7,
-	decipherOnly: 8,
-};
-
-const DISTRIBUTION_POINT_REASON_BITS: Record<DistributionPointReason, number> = {
-	keyCompromise: 1,
-	cACompromise: 2,
-	affiliationChanged: 3,
-	superseded: 4,
-	cessationOfOperation: 5,
-	certificateHold: 6,
-	privilegeWithdrawn: 7,
-	aACompromise: 8,
-};
-
 export function buildCertificateExtensions(
 	subjectPublicKeyInfo: Uint8Array,
 	issuerPublicKeyInfo: Uint8Array | undefined,
@@ -534,24 +515,7 @@ export function encodeBasicConstraints(input: BasicConstraints): Uint8Array {
 }
 
 export function encodeKeyUsage(usages: readonly KeyUsage[]): Uint8Array {
-	let highestBit = 0;
-	for (const usage of usages) {
-		const index = KEY_USAGE_BITS[usage];
-		if (index > highestBit) {
-			highestBit = index;
-		}
-	}
-	const byteLength = Math.floor(highestBit / 8) + 1;
-	const bytes = new Uint8Array(byteLength);
-	for (const usage of usages) {
-		const index = KEY_USAGE_BITS[usage];
-		const byteIndex = Math.floor(index / 8);
-		const bitIndex = index % 8;
-		const current = bytes[byteIndex] ?? 0;
-		bytes[byteIndex] = current | (1 << (7 - bitIndex));
-	}
-	const unusedBits = (8 - ((highestBit + 1) % 8)) % 8;
-	return bitString(bytes, unusedBits);
+	return encodeKeyUsageExtension(usages);
 }
 
 export function encodeSubjectAltName(value: SubjectAltName): Uint8Array {
@@ -741,7 +705,9 @@ function encodeDistributionPoint(point: DistributionPoint): Uint8Array[] {
 		);
 	}
 	if (point.reasons !== undefined && point.reasons.length > 0) {
-		fields.push(implicitPrimitiveContext(1, encodeDistributionPointReasonFlags(point.reasons)));
+		fields.push(
+			implicitPrimitiveContext(1, encodeDistributionPointReasonFlagsContent(point.reasons)),
+		);
 	}
 	if (point.crlIssuer !== undefined && point.crlIssuer.length > 0) {
 		fields.push(
@@ -770,29 +736,6 @@ function encodeDistributionPointName(name: DistributionPointName): Uint8Array {
 		);
 	}
 	throw new Error('DistributionPointName must contain fullName or relativeName');
-}
-
-function encodeDistributionPointReasonFlags(
-	reasons: readonly DistributionPointReason[],
-): Uint8Array {
-	let highestBit = 0;
-	for (const reason of reasons) {
-		const bit = DISTRIBUTION_POINT_REASON_BITS[reason];
-		if (bit > highestBit) {
-			highestBit = bit;
-		}
-	}
-	const byteLength = Math.floor(highestBit / 8) + 1;
-	const bytes = new Uint8Array(byteLength);
-	for (const reason of reasons) {
-		const bit = DISTRIBUTION_POINT_REASON_BITS[reason];
-		const byteIndex = Math.floor(bit / 8);
-		const bitIndex = bit % 8;
-		const current = bytes[byteIndex] ?? 0;
-		bytes[byteIndex] = current | (1 << (7 - bitIndex));
-	}
-	const unusedBits = (8 - ((highestBit + 1) % 8)) % 8;
-	return concatBytes([Uint8Array.of(unusedBits), bytes]);
 }
 
 function encodeNameConstraintForm(form: NameConstraintForm): Uint8Array {
@@ -867,52 +810,7 @@ export function parseAuthorityInfoAccessMethodOid(oid: string): AuthorityInfoAcc
 }
 
 function encodeIpAddress(input: string): Uint8Array {
-	if (input.includes(':')) {
-		return encodeIpv6Address(input);
-	}
-	const segments = input.split('.');
-	if (segments.length !== 4) {
-		throw new Error(`Invalid IPv4 address: ${input}`);
-	}
-	return Uint8Array.from(
-		segments.map((segment) => {
-			const parsed = Number(segment);
-			if (!Number.isInteger(parsed) || parsed < 0 || parsed > 255) {
-				throw new Error(`Invalid IPv4 address: ${input}`);
-			}
-			return parsed;
-		}),
-	);
-}
-
-function encodeIpv6Address(input: string): Uint8Array {
-	const pieces = input.split('::');
-	const head = pieces[0] ?? '';
-	const tail = pieces[1];
-	if (tail !== undefined && input.indexOf('::') !== input.lastIndexOf('::')) {
-		throw new Error(`Invalid IPv6 address: ${input}`);
-	}
-	const headParts = head.length > 0 ? head.split(':') : [];
-	const tailParts = tail !== undefined && tail.length > 0 ? tail.split(':') : [];
-	const missing = 8 - (headParts.length + tailParts.length);
-	if ((tail === undefined && headParts.length !== 8) || missing < 0) {
-		throw new Error(`Invalid IPv6 address: ${input}`);
-	}
-	const zeroes = Array.from({ length: missing }, () => '0');
-	const parts = tail === undefined ? headParts : [...headParts, ...zeroes, ...tailParts];
-	if (parts.length !== 8) {
-		throw new Error(`Invalid IPv6 address: ${input}`);
-	}
-	const out = new Uint8Array(16);
-	parts.forEach((part, index) => {
-		const parsed = Number.parseInt(part, 16);
-		if (!Number.isInteger(parsed) || parsed < 0 || parsed > 0xffff) {
-			throw new Error(`Invalid IPv6 address: ${input}`);
-		}
-		out[index * 2] = parsed >> 8;
-		out[index * 2 + 1] = parsed & 0xff;
-	});
-	return out;
+	return parseIpAddressToBytes(input);
 }
 
 function buildSubjectKeyIdentifier(subjectPublicKeyInfo: Uint8Array): Uint8Array {

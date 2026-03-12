@@ -1,3 +1,4 @@
+import { normalizeIpAddress } from './ip.ts';
 import type { ParsedCertificate } from './parse.ts';
 import type { MatchableServiceIdentityInput, ServiceIdentityInput } from './validation.ts';
 
@@ -229,15 +230,6 @@ function matchesDnsName(pattern: string, actual: string): boolean {
 	return prefix.length > 0 && !prefix.includes('.');
 }
 
-function normalizeIpAddress(value: string): string {
-	if (!value.includes(':')) {
-		return value;
-	}
-	return expandIpv6(value)
-		.map((segment) => segment.toLowerCase())
-		.join(':');
-}
-
 function normalizeDnsPattern(value: string): string {
 	if (!value.startsWith('*.')) {
 		return normalizeDnsName(value);
@@ -360,25 +352,6 @@ function tryParseSrvServiceIdentity(value: string): ServiceScopedIdentity | unde
 		serviceType: value.slice(1, dotIndex).toLowerCase(),
 		domainName: normalizeDnsName(value.slice(dotIndex + 1)),
 	};
-}
-
-function expandIpv6(value: string): readonly string[] {
-	const pieces = value.toLowerCase().split('::');
-	const head = pieces[0] ?? '';
-	const tail = pieces[1];
-	if (tail !== undefined && value.indexOf('::') !== value.lastIndexOf('::')) {
-		throw new Error(`Invalid IPv6 address: ${value}`);
-	}
-	const headParts = head.length > 0 ? head.split(':') : [];
-	const tailParts = tail !== undefined && tail.length > 0 ? tail.split(':') : [];
-	const missing = 8 - (headParts.length + tailParts.length);
-	if ((tail === undefined && headParts.length !== 8) || missing < 0) {
-		throw new Error(`Invalid IPv6 address: ${value}`);
-	}
-	const zeroes = Array.from({ length: missing }, () => '0');
-	return (tail === undefined ? headParts : [...headParts, ...zeroes, ...tailParts]).map((segment) =>
-		segment.padStart(4, '0'),
-	);
 }
 
 function failure(

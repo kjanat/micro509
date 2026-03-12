@@ -28,6 +28,10 @@ import {
 	tlv,
 } from './der.ts';
 import {
+	encodeDistributionPointReasonFlagsContent,
+	parseDistributionPointReasonFlagsContent,
+} from './extension-bits.ts';
+import {
 	type DistributionPoint,
 	type DistributionPointReason,
 	encodeCrlDistributionPoints,
@@ -36,12 +40,14 @@ import {
 	type IssuingDistributionPoint,
 } from './extensions.ts';
 import { sha1 } from './hash.ts';
+import { decodeIpAddress } from './ip.ts';
 import { exportSpkiDer } from './keys.ts';
 import {
 	encodeName,
 	encodeRelativeDistinguishedName,
 	type NameFieldKey,
 	type NameInput,
+	nameFieldKeyFromOid,
 } from './name.ts';
 import { OIDS } from './oids.ts';
 import {
@@ -1200,7 +1206,7 @@ function parseIssuingDistributionPoint(valueDer: Uint8Array): ParsedIssuingDistr
 		} else if (child.tag === 0x82) {
 			onlyContainsCACerts = parseImplicitBoolean(child);
 		} else if (child.tag === 0x83) {
-			onlySomeReasons = parseDistributionPointReasonFlags(child.value);
+			onlySomeReasons = parseDistributionPointReasonFlagsContent(child.value);
 		} else if (child.tag === 0x84) {
 			indirectCrl = parseImplicitBoolean(child);
 		} else if (child.tag === 0x85) {
@@ -1258,7 +1264,7 @@ function parseDistributionPoint(
 				distributionPoint = parsedDistributionPoint;
 			}
 		} else if (child.tag === 0x81) {
-			reasons = parseDistributionPointReasonFlags(child.value);
+			reasons = parseDistributionPointReasonFlagsContent(child.value);
 		} else if (child.tag === 0xa2) {
 			crlIssuer = childrenOf(valueDer, child).map((name) => parseGeneralName(name));
 		}
@@ -1300,7 +1306,7 @@ function parseRelativeName(
 		const parts = childrenOf(valueDer, attributeSequence);
 		const oid = decodeObjectIdentifier(requireElement(parts[0], 'name OID').value);
 		const valueElement = requireElement(parts[1], 'name value');
-		const fieldKey = nameKeyFromOid(oid);
+		const fieldKey = nameFieldKeyFromOid(oid);
 		const fieldValue = decodeNameValue(valueElement);
 		const attribute: ParsedNameAttribute =
 			fieldKey === undefined
@@ -1318,75 +1324,12 @@ function parseRelativeName(
 	};
 }
 
-function nameKeyFromOid(oid: string): NameFieldKey | undefined {
-	switch (oid) {
-		case OIDS.commonName:
-			return 'commonName';
-		case OIDS.surname:
-			return 'surname';
-		case OIDS.serialNumber:
-			return 'serialNumber';
-		case OIDS.countryName:
-			return 'country';
-		case OIDS.localityName:
-			return 'locality';
-		case OIDS.stateOrProvinceName:
-			return 'state';
-		case OIDS.streetAddress:
-			return 'street';
-		case OIDS.organizationName:
-			return 'organization';
-		case OIDS.organizationalUnitName:
-			return 'organizationalUnit';
-		case OIDS.title:
-			return 'title';
-		case OIDS.givenName:
-			return 'givenName';
-		case OIDS.emailAddress:
-			return 'emailAddress';
-	}
-	return undefined;
-}
-
 function decodeNameValue(element: DerElement): string {
 	return decodeString(element.tag, element.value);
 }
 
 function parseImplicitBoolean(element: DerElement): boolean {
 	return (element.value[0] ?? 0) !== 0;
-}
-
-function parseDistributionPointReasonFlags(
-	value: Uint8Array,
-): readonly DistributionPointReason[] | undefined {
-	const unusedBits = value[0] ?? 0;
-	if (unusedBits > 7) {
-		throw new Error('Invalid distribution point reasons BIT STRING');
-	}
-	const bytes = value.slice(1);
-	const reasons: DistributionPointReason[] = [];
-	const candidates: readonly DistributionPointReason[] = [
-		'keyCompromise',
-		'cACompromise',
-		'affiliationChanged',
-		'superseded',
-		'cessationOfOperation',
-		'certificateHold',
-		'privilegeWithdrawn',
-		'aACompromise',
-	];
-	for (let index = 0; index < candidates.length; index += 1) {
-		const bit = index + 1;
-		const byte = bytes[Math.floor(bit / 8)] ?? 0;
-		const bitIndex = bit % 8;
-		if ((byte & (1 << (7 - bitIndex))) !== 0) {
-			const reason = candidates[index];
-			if (reason !== undefined) {
-				reasons.push(reason);
-			}
-		}
-	}
-	return reasons.length === 0 ? undefined : reasons;
 }
 
 function encodeIssuingDistributionPoint(value: IssuingDistributionPoint): Uint8Array {
@@ -1414,7 +1357,7 @@ function encodeIssuingDistributionPoint(value: IssuingDistributionPoint): Uint8A
 	}
 	if (value.onlySomeReasons !== undefined && value.onlySomeReasons.length > 0) {
 		fields.push(
-			implicitPrimitiveContext(3, encodeDistributionPointReasonFlags(value.onlySomeReasons)),
+			implicitPrimitiveContext(3, encodeDistributionPointReasonFlagsContent(value.onlySomeReasons)),
 		);
 	}
 	if (value.indirectCrl) {
@@ -1456,55 +1399,8 @@ function concatGeneralNames(names: readonly GeneralName[]): Uint8Array {
 	return concatBytes(names.map((name) => encodeSubjectAltName(name)));
 }
 
-function encodeDistributionPointReasonFlags(
-	reasons: readonly DistributionPointReason[],
-): Uint8Array {
-	const bitMap: Record<DistributionPointReason, number> = {
-		keyCompromise: 1,
-		cACompromise: 2,
-		affiliationChanged: 3,
-		superseded: 4,
-		cessationOfOperation: 5,
-		certificateHold: 6,
-		privilegeWithdrawn: 7,
-		aACompromise: 8,
-	};
-	let highestBit = 0;
-	for (const reason of reasons) {
-		const bit = bitMap[reason];
-		if (bit > highestBit) {
-			highestBit = bit;
-		}
-	}
-	const byteLength = Math.floor(highestBit / 8) + 1;
-	const bytes = new Uint8Array(byteLength);
-	for (const reason of reasons) {
-		const bit = bitMap[reason];
-		const byteIndex = Math.floor(bit / 8);
-		const bitIndex = bit % 8;
-		const current = bytes[byteIndex] ?? 0;
-		bytes[byteIndex] = current | (1 << (7 - bitIndex));
-	}
-	const unusedBits = (8 - ((highestBit + 1) % 8)) % 8;
-	return Uint8Array.of(unusedBits, ...bytes);
-}
-
 function rebuildDirectoryNameFromImplicit(element: DerElement): Uint8Array {
 	return tlv(0x30, element.value);
-}
-
-function decodeIpAddress(bytes: Uint8Array): string {
-	if (bytes.length === 4) {
-		return Array.from(bytes).join('.');
-	}
-	if (bytes.length === 16) {
-		const parts: string[] = [];
-		for (let index = 0; index < 16; index += 2) {
-			parts.push((((bytes[index] ?? 0) << 8) | (bytes[index + 1] ?? 0)).toString(16));
-		}
-		return parts.join(':');
-	}
-	throw new Error(`Unsupported IP address length: ${bytes.length}`);
 }
 
 function encodeExtension(oid: string, value: Uint8Array, critical = false): Uint8Array {
