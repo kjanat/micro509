@@ -618,6 +618,55 @@ describe('crl', () => {
 		});
 	});
 
+	it('accepts complete and delta CRLs without issuing distribution points when certificate has DPs', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'No IDP Delta CA' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'No IDP Delta CA' },
+			subject: { commonName: 'no-idp-delta.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				crlDistributionPoints: [
+					{
+						distributionPoint: {
+							fullName: [{ type: 'uri', value: 'http://example.test/no-idp-delta.crl' }],
+						},
+					},
+				],
+			},
+		});
+		const complete = await createCertificateRevocationList({
+			issuer: { commonName: 'No IDP Delta CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			crlNumber: 2,
+		});
+		const delta = await createCertificateRevocationList({
+			issuer: { commonName: 'No IDP Delta CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			crlNumber: 3,
+			baseCrlNumber: 2,
+		});
+
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: leaf.pem,
+				issuerCertificate: ca.certificate.pem,
+				crl: complete.pem,
+				deltaCrl: delta.pem,
+			}),
+		).toMatchObject({ ok: true, status: 'good' });
+	});
+
 	it('rejects attribute-only and end-entity-only CRL scopes when the certificate type mismatches', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Scope Mismatch CA' },
@@ -1762,6 +1811,334 @@ describe('crl', () => {
 			message: 'complete and delta CRLs must share the same authority key identifier',
 			details: { reason: 'delta_crl_incompatible' },
 		});
+	});
+
+	it('matches complex fullName issuing distribution points across delta compatibility', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Complex IDP CA' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const parsedCa = parseCertificatePem(ca.certificate.pem);
+		const complexNames = [
+			{ type: 'dns', value: 'crl.example.test' },
+			{ type: 'email', value: 'pki@example.test' },
+			{ type: 'ip', value: '2001:db8::7' },
+			{ type: 'uri', value: 'http://example.test/complex-idp.crl' },
+			{ type: 'directoryName', derHex: parsedCa.subject.derHex },
+			{ type: 'unknown', tag: 0x89, value: Uint8Array.of(0xde, 0xad) },
+		] as const;
+		const shuffledNames = [
+			complexNames[3],
+			complexNames[1],
+			complexNames[0],
+			complexNames[5],
+			complexNames[4],
+			complexNames[2],
+		].flatMap((value) => (value === undefined ? [] : [value]));
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Complex IDP CA' },
+			subject: { commonName: 'complex-idp.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				crlDistributionPoints: [
+					{
+						distributionPoint: {
+							fullName: [{ type: 'uri', value: 'http://example.test/complex-idp.crl' }],
+						},
+					},
+				],
+			},
+		});
+		const complete = parseCertificateRevocationListPem(
+			(
+				await createCertificateRevocationList({
+					issuer: { commonName: 'Complex IDP CA' },
+					signerPrivateKey: ca.keyPair.privateKey,
+					issuerPublicKey: ca.keyPair.publicKey,
+					crlNumber: 12,
+					issuingDistributionPoint: {
+						distributionPoint: { fullName: complexNames },
+					},
+				})
+			).pem,
+		);
+		const delta = parseCertificateRevocationListPem(
+			(
+				await createCertificateRevocationList({
+					issuer: { commonName: 'Complex IDP CA' },
+					signerPrivateKey: ca.keyPair.privateKey,
+					issuerPublicKey: ca.keyPair.publicKey,
+					crlNumber: 13,
+					baseCrlNumber: 12,
+					issuingDistributionPoint: {
+						distributionPoint: { fullName: shuffledNames },
+					},
+				})
+			).pem,
+		);
+
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: leaf.pem,
+				issuerCertificate: ca.certificate.pem,
+				crl: complete,
+				deltaCrl: delta,
+			}),
+		).toMatchObject({ ok: true, status: 'good' });
+	});
+
+	it('rejects delta CRLs when fullName unknown bytes or reason sets differ', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Complex IDP Mismatch CA' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const parsedCa = parseCertificatePem(ca.certificate.pem);
+		const names = [
+			{ type: 'uri', value: 'http://example.test/complex-idp-mismatch.crl' },
+			{ type: 'directoryName', derHex: parsedCa.subject.derHex },
+			{ type: 'unknown', tag: 0x89, value: Uint8Array.of(0xde, 0xad) },
+		] as const;
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Complex IDP Mismatch CA' },
+			subject: { commonName: 'complex-idp-mismatch.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				crlDistributionPoints: [
+					{
+						distributionPoint: {
+							fullName: [{ type: 'uri', value: 'http://example.test/complex-idp-mismatch.crl' }],
+						},
+					},
+				],
+			},
+		});
+		const complete = parseCertificateRevocationListPem(
+			(
+				await createCertificateRevocationList({
+					issuer: { commonName: 'Complex IDP Mismatch CA' },
+					signerPrivateKey: ca.keyPair.privateKey,
+					issuerPublicKey: ca.keyPair.publicKey,
+					crlNumber: 20,
+					issuingDistributionPoint: {
+						distributionPoint: { fullName: names },
+						onlySomeReasons: ['keyCompromise'],
+					},
+				})
+			).pem,
+		);
+		const delta = parseCertificateRevocationListPem(
+			(
+				await createCertificateRevocationList({
+					issuer: { commonName: 'Complex IDP Mismatch CA' },
+					signerPrivateKey: ca.keyPair.privateKey,
+					issuerPublicKey: ca.keyPair.publicKey,
+					crlNumber: 21,
+					baseCrlNumber: 20,
+					issuingDistributionPoint: {
+						distributionPoint: {
+							fullName: [
+								{ type: 'uri', value: 'http://example.test/complex-idp-mismatch.crl' },
+								{ type: 'directoryName', derHex: parsedCa.subject.derHex },
+								{ type: 'unknown', tag: 0x89, value: Uint8Array.of(0xde, 0xae) },
+							],
+						},
+						onlySomeReasons: ['keyCompromise', 'cessationOfOperation'],
+					},
+				})
+			).pem,
+		);
+
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: leaf.pem,
+				issuerCertificate: ca.certificate.pem,
+				crl: complete,
+				deltaCrl: delta,
+			}),
+		).toEqual({
+			ok: false,
+			code: 'non_applicable',
+			message: 'complete and delta CRLs must share the same issuing distribution point scope',
+			details: { reason: 'delta_crl_incompatible' },
+		});
+	});
+
+	it('matches relativeName issuing distribution points with normalized DirectoryString values', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Relative Name Delta CA' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Relative Name Delta CA' },
+			subject: { commonName: 'relative-name-delta.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				crlDistributionPoints: [
+					{
+						distributionPoint: {
+							relativeName: [{ type: 'commonName', value: 'team alpha' }],
+						},
+					},
+				],
+			},
+		});
+		const complete = parseCertificateRevocationListPem(
+			(
+				await createCertificateRevocationList({
+					issuer: { commonName: 'Relative Name Delta CA' },
+					signerPrivateKey: ca.keyPair.privateKey,
+					issuerPublicKey: ca.keyPair.publicKey,
+					crlNumber: 30,
+					issuingDistributionPoint: {
+						distributionPoint: {
+							relativeName: [{ type: 'commonName', value: ' Team   Alpha ' }],
+						},
+					},
+				})
+			).pem,
+		);
+		const delta = parseCertificateRevocationListPem(
+			(
+				await createCertificateRevocationList({
+					issuer: { commonName: 'Relative Name Delta CA' },
+					signerPrivateKey: ca.keyPair.privateKey,
+					issuerPublicKey: ca.keyPair.publicKey,
+					crlNumber: 31,
+					baseCrlNumber: 30,
+					issuingDistributionPoint: {
+						distributionPoint: {
+							relativeName: [{ type: 'commonName', value: 'TEAM ALPHA' }],
+						},
+					},
+				})
+			).pem,
+		);
+
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: leaf.pem,
+				issuerCertificate: ca.certificate.pem,
+				crl: complete,
+				deltaCrl: delta,
+			}),
+		).toMatchObject({ ok: true, status: 'good' });
+
+		const issuingDistributionPoint = delta.issuingDistributionPoint;
+		const distributionPoint = issuingDistributionPoint?.distributionPoint;
+		const relativeName = distributionPoint?.relativeName;
+		if (
+			issuingDistributionPoint === undefined ||
+			distributionPoint === undefined ||
+			relativeName === undefined
+		) {
+			throw new Error('Expected relativeName issuing distribution point');
+		}
+		const poisonedDelta = {
+			...delta,
+			issuingDistributionPoint: {
+				...issuingDistributionPoint,
+				distributionPoint: {
+					...distributionPoint,
+					relativeName: {
+						...relativeName,
+						attributes: relativeName.attributes.map((attribute, index) =>
+							index === 0 ? { ...attribute, value: 'TEAM\u0001ALPHA' } : attribute,
+						),
+						values: { ...relativeName.values, commonName: 'TEAM\u0001ALPHA' },
+					},
+				},
+			},
+		};
+
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: leaf.pem,
+				issuerCertificate: ca.certificate.pem,
+				crl: complete,
+				deltaCrl: poisonedDelta,
+			}),
+		).toEqual({
+			ok: false,
+			code: 'non_applicable',
+			message: 'complete and delta CRLs must share the same issuing distribution point scope',
+			details: { reason: 'delta_crl_incompatible' },
+		});
+	});
+
+	it('treats indirect CRL entries without certificateIssuer as issuer mismatches', async () => {
+		const crlIssuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Entry Mismatch CRL Issuer' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const certificateIssuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Entry Mismatch Leaf Issuer' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const parsedCrlIssuer = parseCertificatePem(crlIssuer.certificate.pem);
+		const leafKeys = await generateKeyPair();
+		const sharedSerial = Uint8Array.of(0x66);
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Entry Mismatch Leaf Issuer' },
+			subject: { commonName: 'entry-mismatch.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: certificateIssuer.keyPair.privateKey,
+			issuerPublicKey: certificateIssuer.keyPair.publicKey,
+			serialNumber: sharedSerial,
+			extensions: {
+				crlDistributionPoints: [
+					{
+						distributionPoint: {
+							fullName: [{ type: 'uri', value: 'http://example.test/entry-mismatch.crl' }],
+						},
+						crlIssuer: [{ type: 'directoryName', derHex: parsedCrlIssuer.subject.derHex }],
+					},
+				],
+			},
+		});
+		const indirectCrl = await createCertificateRevocationList({
+			issuer: { commonName: 'Entry Mismatch CRL Issuer' },
+			signerPrivateKey: crlIssuer.keyPair.privateKey,
+			issuerPublicKey: crlIssuer.keyPair.publicKey,
+			issuingDistributionPoint: {
+				distributionPoint: {
+					fullName: [{ type: 'uri', value: 'http://example.test/entry-mismatch.crl' }],
+				},
+				indirectCrl: true,
+			},
+			revokedCertificates: [{ serialNumber: sharedSerial, reasonCode: 'keyCompromise' }],
+		});
+
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: leaf.pem,
+				issuerCertificate: crlIssuer.certificate.pem,
+				crl: indirectCrl.pem,
+			}),
+		).toMatchObject({ ok: true, status: 'good' });
 	});
 
 	it('creates CRL with all revocation reason codes', async () => {
