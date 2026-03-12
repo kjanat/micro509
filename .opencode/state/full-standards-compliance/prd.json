@@ -208,7 +208,7 @@
 			"description": "Implement builders and encoders for certificatePolicies, policyMappings, policyConstraints, and inhibitAnyPolicy. Done when:\n- create flows can encode each supported policy extension\n- invalid combinations and anyPolicy misuse are rejected\n- builder tests cover edge cases",
 			"depends": ["add-policy-oids-and-types"],
 			"priority": "standard",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "parse-policy-extensions",

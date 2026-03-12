@@ -3,12 +3,14 @@ import { X509Certificate } from 'node:crypto';
 import {
 	createCertificate,
 	createSelfSignedCertificate,
+	findExtension,
 	generateKeyPair,
 	parseCertificatePem,
 	verifyCertificateChain,
 } from '#micro509';
+import { readElement } from '#micro509/der.ts';
 import { OIDS } from '#micro509/oids.ts';
-import { hasExtensionOid } from './helpers.ts';
+import { childrenOf, decodeObjectIdentifier, hasExtensionOid } from './helpers.ts';
 
 describe('certificate', () => {
 	it('creates a self-signed certificate with SANs and exportable keys', async () => {
@@ -143,6 +145,55 @@ describe('certificate', () => {
 		]);
 	});
 
+	it('encodes policy extensions in certificates', async () => {
+		const { certificate } = await createSelfSignedCertificate({
+			subject: { commonName: 'policy-cert.example' },
+			extensions: {
+				certificatePolicies: [
+					{
+						policyIdentifier: '1.2.3.4.1',
+						policyQualifiers: [
+							{ type: 'cps', uri: 'https://example.com/cps' },
+							{
+								type: 'userNotice',
+								noticeRef: {
+									organization: 'Example PKI',
+									noticeNumbers: [7],
+								},
+								explicitText: 'policy notice',
+							},
+						],
+					},
+				],
+				policyMappings: [{ issuerDomainPolicy: '1.2.3.4.1', subjectDomainPolicy: '1.2.3.4.2' }],
+				policyConstraints: {
+					requireExplicitPolicy: 1,
+					inhibitPolicyMapping: 2,
+				},
+				inhibitAnyPolicy: { skipCerts: 3 },
+			},
+		});
+
+		const parsed = parseCertificatePem(certificate.pem);
+		const certificatePolicies = findExtension(parsed.extensions, OIDS.certificatePolicies);
+		const policyMappings = findExtension(parsed.extensions, OIDS.policyMappings);
+		const policyConstraints = findExtension(parsed.extensions, OIDS.policyConstraints);
+		const inhibitAnyPolicy = findExtension(parsed.extensions, OIDS.inhibitAnyPolicy);
+
+		expect(certificatePolicies?.critical).toBe(false);
+		expect(policyMappings?.critical).toBe(true);
+		expect(policyConstraints?.critical).toBe(true);
+		expect(inhibitAnyPolicy?.critical).toBe(true);
+		expect(readPolicyInformationOids(certificatePolicies?.valueDer)).toEqual(['1.2.3.4.1']);
+		expect(readPolicyQualifierOids(certificatePolicies?.valueDer)).toEqual([
+			OIDS.cpsPolicyQualifier,
+			OIDS.userNoticePolicyQualifier,
+		]);
+		expect(readPolicyMappings(policyMappings?.valueDer)).toEqual([['1.2.3.4.1', '1.2.3.4.2']]);
+		expect(readImplicitIntegerSequence(policyConstraints?.valueDer)).toEqual([1, 2]);
+		expect(readDerInteger(inhibitAnyPolicy?.valueDer)).toBe(3);
+	});
+
 	it('rejects notAfter <= notBefore', async () => {
 		expect(
 			createSelfSignedCertificate({
@@ -201,4 +252,103 @@ describe('certificate', () => {
 			}),
 		).rejects.toThrow('pathLength requires ca=true');
 	});
+
+	it('rejects anyPolicy in policyMappings', async () => {
+		expect(
+			createSelfSignedCertificate({
+				subject: { commonName: 'bad-policy-mapping.example' },
+				extensions: {
+					policyMappings: [
+						{
+							issuerDomainPolicy: OIDS.anyPolicy,
+							subjectDomainPolicy: '1.2.3.4.2',
+						},
+					],
+				},
+			}),
+		).rejects.toThrow('policyMappings must not use anyPolicy');
+	});
+
+	it('rejects empty policyConstraints input', async () => {
+		expect(
+			createSelfSignedCertificate({
+				subject: { commonName: 'bad-policy-constraints.example' },
+				extensions: {
+					policyConstraints: {},
+				},
+			}),
+		).rejects.toThrow('policyConstraints must set requireExplicitPolicy or inhibitPolicyMapping');
+	});
 });
+
+function readPolicyInformationOids(valueDer: Uint8Array | undefined): readonly string[] {
+	const extensionValue = requireElementBytes(valueDer, 'policy extension value');
+	return childrenOf(extensionValue, readElement(extensionValue)).map((policyInformation) => {
+		const oid = childrenOf(extensionValue, policyInformation)[0];
+		if (oid === undefined) {
+			throw new Error('Missing policyIdentifier');
+		}
+		return decodeObjectIdentifier(oid.value);
+	});
+}
+
+function readPolicyQualifierOids(valueDer: Uint8Array | undefined): readonly string[] {
+	const extensionValue = requireElementBytes(valueDer, 'policy extension value');
+	const policyInformation = childrenOf(extensionValue, readElement(extensionValue))[0];
+	if (policyInformation === undefined) {
+		throw new Error('Missing policyInformation');
+	}
+	const qualifiers = childrenOf(extensionValue, policyInformation)[1];
+	if (qualifiers === undefined) {
+		throw new Error('Missing policyQualifiers');
+	}
+	return childrenOf(extensionValue, qualifiers).map((qualifier) => {
+		const oid = childrenOf(extensionValue, qualifier)[0];
+		if (oid === undefined) {
+			throw new Error('Missing policyQualifierId');
+		}
+		return decodeObjectIdentifier(oid.value);
+	});
+}
+
+function readPolicyMappings(
+	valueDer: Uint8Array | undefined,
+): readonly (readonly [string, string])[] {
+	const extensionValue = requireElementBytes(valueDer, 'policy mappings value');
+	return childrenOf(extensionValue, readElement(extensionValue)).map((mapping) => {
+		const fields = childrenOf(extensionValue, mapping);
+		const issuer = fields[0];
+		const subject = fields[1];
+		if (issuer === undefined || subject === undefined) {
+			throw new Error('Missing policy mapping field');
+		}
+		return [decodeObjectIdentifier(issuer.value), decodeObjectIdentifier(subject.value)] as const;
+	});
+}
+
+function readImplicitIntegerSequence(valueDer: Uint8Array | undefined): readonly number[] {
+	const extensionValue = requireElementBytes(valueDer, 'policy constraints value');
+	return childrenOf(extensionValue, readElement(extensionValue)).map((field) =>
+		readUnsignedInteger(field.value),
+	);
+}
+
+function readDerInteger(valueDer: Uint8Array | undefined): number {
+	const extensionValue = requireElementBytes(valueDer, 'integer extension value');
+	return readUnsignedInteger(readElement(extensionValue).value);
+}
+
+function readUnsignedInteger(bytes: Uint8Array): number {
+	let value = 0;
+	for (const byte of bytes) {
+		value = value * 256 + byte;
+	}
+	return value;
+}
+
+function requireElementBytes(value: Uint8Array | undefined, label: string): Uint8Array {
+	if (value === undefined) {
+		throw new Error(`Missing ${label}`);
+	}
+	return value;
+}

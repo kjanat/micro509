@@ -131,6 +131,29 @@ describe('csr', () => {
 		]);
 	});
 
+	it('encodes policy extensions in CSR requested extensions', async () => {
+		const keyPair = await generateKeyPair({ kind: 'ed25519' });
+		const csr = await createCertificateSigningRequest({
+			subject: { commonName: 'csr-policy.example' },
+			publicKey: keyPair.publicKey,
+			signerPrivateKey: keyPair.privateKey,
+			extensions: {
+				certificatePolicies: [{ policyIdentifier: '1.2.3.4.1' }],
+				policyMappings: [{ issuerDomainPolicy: '1.2.3.4.1', subjectDomainPolicy: '1.2.3.4.2' }],
+				policyConstraints: { requireExplicitPolicy: 1 },
+				inhibitAnyPolicy: { skipCerts: 2 },
+			},
+		});
+
+		const parsed = parseCertificateSigningRequestPem(csr.pem);
+		expect(findExtension(parsed.requestedExtensions, OIDS.certificatePolicies)?.critical).toBe(
+			false,
+		);
+		expect(findExtension(parsed.requestedExtensions, OIDS.policyMappings)?.critical).toBe(true);
+		expect(findExtension(parsed.requestedExtensions, OIDS.policyConstraints)?.critical).toBe(true);
+		expect(findExtension(parsed.requestedExtensions, OIDS.inhibitAnyPolicy)?.critical).toBe(true);
+	});
+
 	it('verifies certificate request signatures with WebCrypto', async () => {
 		const goodKeyPair = await generateKeyPair({
 			kind: 'ecdsa',

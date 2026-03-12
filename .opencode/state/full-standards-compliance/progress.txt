@@ -27,6 +27,7 @@ Started: 2026-03-12
 - When a verify-surface task adds another RFC input family, widen every verify/profile input interface plus the shared forwarding helper in one pass so wrappers stay aligned with raw path validation.
 - When RFC validation knobs are public before enforcement exists, normalize them into one internal state object and fail closed with typed "not implemented yet" results instead of silently ignoring them.
 - New extension families should land in three steps: add stable OIDs + public data shapes first, then builder/parser wiring, then validation/enforcement. Do not add `CertificateExtensionsInput` or parsed-certificate fields before encode/decode exists.
+- For staged RFC extensions, let builders own structural RFC rejects early (empty sequences, `anyPolicy` misuse, required critical encodings) even before parse/validation work lands.
 - For CRL scope surfaces, replace URI shortcut fields in one clean break with structured distribution-point objects, then keep encode/parse helpers aligned on `fullName` vs `relativeName` and reason-mask semantics.
 - When moving a concern behind a new boundary module, keep verify/profile APIs stable by adapting boundary-specific failures at the composition seam instead of duplicating domain logic.
 - For profile helpers that combine purpose and service identity, run chain/purpose validation first, then call the identity boundary so EKU/profile failures do not get masked by hostname mismatches.
@@ -201,3 +202,10 @@ Started: 2026-03-12
 - Added regression coverage in `test/verify.test.ts` for mixed path-plus-certificate constraints, wrapper-level enforcement, and self-issued intermediates staying exempt while leaf checks still run.
 - Files changed: `src/verify.ts`, `test/verify.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** initial subtree inputs fit cleanly as a seeded accumulated level instead of a special-case checker; that keeps RFC 5280 intersection behavior and self-issued handling aligned with certificate extension processing.
+
+## Task - [build-policy-extensions]
+
+- Added policy-extension builder support in `src/extensions.ts` for `certificatePolicies`, `policyMappings`, `policyConstraints`, and `inhibitAnyPolicy`, and wired the new inputs through both certificate and CSR extension builders.
+- Added certificate and CSR coverage in `test/certificate.test.ts` and `test/csr.test.ts` for raw extension encoding, criticality, and RFC rejects like `anyPolicy` in mappings and empty `policyConstraints`.
+- Files changed: `src/extensions.ts`, `test/certificate.test.ts`, `test/csr.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** policy builders can safely ship ahead of parsers if tests assert raw DER shape plus critical flags; encode-time RFC guardrails keep invalid authoring paths out of later validation work.

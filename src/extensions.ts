@@ -3,6 +3,7 @@ import {
 	bitString,
 	bool,
 	concatBytes,
+	ia5String,
 	implicitConstructedContext,
 	implicitPrimitiveContext,
 	integerFromNumber,
@@ -12,6 +13,7 @@ import {
 	readSequenceChildren,
 	sequence,
 	tlv,
+	utf8String,
 } from './der.ts';
 import { sha1 } from './hash.ts';
 import { encodeRelativeDistinguishedName, type RelativeDistinguishedNameInput } from './name.ts';
@@ -166,6 +168,10 @@ export interface CertificateExtensionsInput {
 	readonly basicConstraints?: BasicConstraints;
 	readonly extendedKeyUsage?: readonly ExtendedKeyUsage[];
 	readonly nameConstraints?: NameConstraints;
+	readonly certificatePolicies?: CertificatePolicies;
+	readonly policyMappings?: PolicyMappings;
+	readonly policyConstraints?: PolicyConstraints;
+	readonly inhibitAnyPolicy?: InhibitAnyPolicy;
 	readonly authorityInfoAccess?: readonly AuthorityInformationAccess[];
 	readonly crlDistributionPoints?: readonly DistributionPoint[];
 	readonly customExtensions?: readonly CustomExtension[];
@@ -339,6 +345,41 @@ export function buildCertificateExtensions(
 			true,
 		);
 	}
+	if (input?.certificatePolicies !== undefined && input.certificatePolicies.length > 0) {
+		pushExtension(
+			extensions,
+			seen,
+			OIDS.certificatePolicies,
+			encodeCertificatePolicies(input.certificatePolicies),
+		);
+	}
+	if (input?.policyMappings !== undefined && input.policyMappings.length > 0) {
+		pushExtension(
+			extensions,
+			seen,
+			OIDS.policyMappings,
+			encodePolicyMappings(input.policyMappings),
+			true,
+		);
+	}
+	if (input?.policyConstraints !== undefined) {
+		pushExtension(
+			extensions,
+			seen,
+			OIDS.policyConstraints,
+			encodePolicyConstraints(input.policyConstraints),
+			true,
+		);
+	}
+	if (input?.inhibitAnyPolicy !== undefined) {
+		pushExtension(
+			extensions,
+			seen,
+			OIDS.inhibitAnyPolicy,
+			encodeInhibitAnyPolicy(input.inhibitAnyPolicy),
+			true,
+		);
+	}
 	if (input?.authorityInfoAccess !== undefined && input.authorityInfoAccess.length > 0) {
 		pushExtension(
 			extensions,
@@ -400,6 +441,41 @@ export function buildRequestedExtensions(
 			seen,
 			OIDS.extendedKeyUsage,
 			encodeExtendedKeyUsage(input.extendedKeyUsage),
+		);
+	}
+	if (input?.certificatePolicies !== undefined && input.certificatePolicies.length > 0) {
+		pushExtension(
+			extensions,
+			seen,
+			OIDS.certificatePolicies,
+			encodeCertificatePolicies(input.certificatePolicies),
+		);
+	}
+	if (input?.policyMappings !== undefined && input.policyMappings.length > 0) {
+		pushExtension(
+			extensions,
+			seen,
+			OIDS.policyMappings,
+			encodePolicyMappings(input.policyMappings),
+			true,
+		);
+	}
+	if (input?.policyConstraints !== undefined) {
+		pushExtension(
+			extensions,
+			seen,
+			OIDS.policyConstraints,
+			encodePolicyConstraints(input.policyConstraints),
+			true,
+		);
+	}
+	if (input?.inhibitAnyPolicy !== undefined) {
+		pushExtension(
+			extensions,
+			seen,
+			OIDS.inhibitAnyPolicy,
+			encodeInhibitAnyPolicy(input.inhibitAnyPolicy),
+			true,
 		);
 	}
 	if (input?.authorityInfoAccess !== undefined && input.authorityInfoAccess.length > 0) {
@@ -537,6 +613,107 @@ export function encodeNameConstraints(constraints: NameConstraints): Uint8Array 
 		);
 	}
 	return sequence(parts);
+}
+
+export function encodeCertificatePolicies(policies: CertificatePolicies): Uint8Array {
+	if (policies.length === 0) {
+		throw new Error('certificatePolicies must not be empty');
+	}
+	return sequence(policies.map(encodePolicyInformation));
+}
+
+export function encodePolicyMappings(mappings: PolicyMappings): Uint8Array {
+	if (mappings.length === 0) {
+		throw new Error('policyMappings must not be empty');
+	}
+	return sequence(
+		mappings.map((mapping) => {
+			validatePolicyOid(mapping.issuerDomainPolicy);
+			validatePolicyOid(mapping.subjectDomainPolicy);
+			if (
+				mapping.issuerDomainPolicy === OIDS.anyPolicy ||
+				mapping.subjectDomainPolicy === OIDS.anyPolicy
+			) {
+				throw new Error('policyMappings must not use anyPolicy');
+			}
+			return sequence([
+				objectIdentifier(mapping.issuerDomainPolicy),
+				objectIdentifier(mapping.subjectDomainPolicy),
+			]);
+		}),
+	);
+}
+
+export function encodePolicyConstraints(constraints: PolicyConstraints): Uint8Array {
+	const fields: Uint8Array[] = [];
+	if (constraints.requireExplicitPolicy !== undefined) {
+		fields.push(
+			implicitPrimitiveContext(0, encodeIntegerContent(constraints.requireExplicitPolicy)),
+		);
+	}
+	if (constraints.inhibitPolicyMapping !== undefined) {
+		fields.push(
+			implicitPrimitiveContext(1, encodeIntegerContent(constraints.inhibitPolicyMapping)),
+		);
+	}
+	if (fields.length === 0) {
+		throw new Error('policyConstraints must set requireExplicitPolicy or inhibitPolicyMapping');
+	}
+	return sequence(fields);
+}
+
+export function encodeInhibitAnyPolicy(input: InhibitAnyPolicy): Uint8Array {
+	return integerFromNumber(input.skipCerts);
+}
+
+function encodePolicyInformation(policy: PolicyInformation): Uint8Array {
+	validatePolicyOid(policy.policyIdentifier);
+	const fields = [objectIdentifier(policy.policyIdentifier)];
+	if (policy.policyQualifiers !== undefined && policy.policyQualifiers.length > 0) {
+		fields.push(sequence(policy.policyQualifiers.map(encodePolicyQualifierInfo)));
+	}
+	return sequence(fields);
+}
+
+function encodePolicyQualifierInfo(qualifier: PolicyQualifierInfo): Uint8Array {
+	switch (qualifier.type) {
+		case 'cps':
+			return sequence([objectIdentifier(OIDS.cpsPolicyQualifier), ia5String(qualifier.uri)]);
+		case 'userNotice':
+			return sequence([
+				objectIdentifier(OIDS.userNoticePolicyQualifier),
+				encodeUserNoticePolicyQualifierInfo(qualifier),
+			]);
+		case 'oid':
+			validateOid(qualifier.oid);
+			return sequence([objectIdentifier(qualifier.oid), new Uint8Array(qualifier.qualifierDer)]);
+		default: {
+			const _exhaustive: never = qualifier;
+			throw new Error(`Unhandled PolicyQualifierInfo type: ${String(_exhaustive)}`);
+		}
+	}
+}
+
+function encodeUserNoticePolicyQualifierInfo(qualifier: UserNoticePolicyQualifierInfo): Uint8Array {
+	const fields: Uint8Array[] = [];
+	if (qualifier.noticeRef !== undefined) {
+		fields.push(encodePolicyNoticeReference(qualifier.noticeRef));
+	}
+	if (qualifier.explicitText !== undefined) {
+		fields.push(utf8String(qualifier.explicitText));
+	}
+	return sequence(fields);
+}
+
+function encodePolicyNoticeReference(reference: PolicyNoticeReference): Uint8Array {
+	return sequence([
+		utf8String(reference.organization),
+		sequence(reference.noticeNumbers.map((noticeNumber) => integerFromNumber(noticeNumber))),
+	]);
+}
+
+function encodeIntegerContent(value: number): Uint8Array {
+	return readElement(integerFromNumber(value)).value;
 }
 
 function encodeGeneralSubtree(subtree: GeneralSubtree): Uint8Array {
@@ -742,6 +919,10 @@ function validateOid(oid: string): void {
 	if (!/^\d+(?:\.\d+)+$/.test(oid)) {
 		throw new Error(`Invalid OID: ${oid}`);
 	}
+}
+
+function validatePolicyOid(oid: string): void {
+	validateOid(oid);
 }
 
 function pushExtension(
