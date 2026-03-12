@@ -197,6 +197,21 @@ export {
 	type Pkcs12MacOptions,
 	parsePkcs12MacData,
 } from './pkcs12-mac.ts';
+export {
+	type CheckCertificateRevocationErrorCode,
+	type CheckCertificateRevocationFailureDetails,
+	type CheckCertificateRevocationInput,
+	type CheckCertificateRevocationResult,
+	checkCertificateRevocation,
+	type RevocationCertificateSource,
+	type RevocationCheckGoodResult,
+	type RevocationCheckRevokedResult,
+	type RevocationCheckUnknownResult,
+	type RevocationCrlEvidenceInput,
+	type RevocationEvidenceInput,
+	type RevocationEvidenceKind,
+	type RevocationOcspEvidenceInput,
+} from './revocation.ts';
 export type {
 	DnsServiceIdentityInput,
 	InitialNameConstraintsInput,

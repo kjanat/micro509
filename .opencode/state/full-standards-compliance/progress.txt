@@ -14,6 +14,7 @@ Started: 2026-03-12
 - Package exports are driven by `tsdown.config.ts`; do not hand-edit generated `package.json` exports.
 - For stable package subpaths, prefer a named tsdown `entry` object; let `exports: true` derive package exports from entry keys.
 - Root `micro509` export should stay ergonomic; granular domains should live behind stable subpath exports.
+- New boundary modules should define neutral shared-source aliases locally; avoid leaking CRL/OCSP-branded source types into orchestration APIs.
 - Distribution-point model change is a clean break; no temporary URI-only compat alias.
 - RFC 5280 `directoryName` comparison is semantic: ordered DN, unordered RDN sets, RFC 4518-prepared AVA strings; never compare raw DER prefixes.
 - RFC 9618 policy validation should use a depth-indexed DAG keyed by `(depth, validPolicy)` plus constrained policy sets; never build or expose the deprecated RFC 5280 policy tree during core validation.
@@ -86,3 +87,10 @@ Started: 2026-03-12
 - Added direct identity-boundary coverage in `test/identity.test.ts` without changing existing verify behavior.
 - Files changed: `src/identity.ts`, `src/index.ts`, `src/validation.ts`, `test/identity.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** boundary scaffolds can publish stable result unions early if unsupported modes fail closed with typed errors, which lets later RFC work land without reshaping the public module.
+
+## Task - [scaffold-revocation-module]
+
+- Added `src/revocation.ts` as the dedicated CRL/OCSP orchestration boundary with neutral revocation-owned source aliases, evidence input unions, and stable `good` / `revoked` / `unknown` result shapes.
+- Re-exported the new revocation API from `src/index.ts` and added direct boundary coverage in `test/revocation.test.ts` for the fail-closed no-evidence path.
+- Files changed: `src/revocation.ts`, `src/index.ts`, `test/revocation.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** scaffolded orchestration APIs should fail closed with typed `unknown` results, but keep evidence ownership neutral so later CRL and OCSP normalization can plug in without conflicting source-of-truth rules.
