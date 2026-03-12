@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 import type { parseCertificatePem } from '#micro509';
 import { createCertificate, createSelfSignedCertificate, generateKeyPair } from '#micro509';
 import {
+	bitString,
+	bool,
 	concatBytes,
 	explicitContext,
 	integer,
@@ -10,12 +12,15 @@ import {
 	objectIdentifier,
 	octetString,
 	readElement,
+	readSequenceChildren,
 	sequence,
 	setOf,
 	tlv,
 } from '#micro509/der.ts';
+import type { GeneralName } from '#micro509/extensions.ts';
+import { encodeSubjectAltName } from '#micro509/extensions.ts';
 import { OIDS } from '#micro509/oids.ts';
-import { getSignatureAlgorithm, signBytes } from '#micro509/signing.ts';
+import { encodeAlgorithmIdentifier, getSignatureAlgorithm, signBytes } from '#micro509/signing.ts';
 
 export function childrenOf(
 	source: Uint8Array,
@@ -83,6 +88,92 @@ export function hasExtensionOid(certificateDer: Uint8Array, oid: string): boolea
 		}
 	}
 	return false;
+}
+
+export interface RevokedEntryCertificateIssuerOverride {
+	readonly entryIndex: number;
+	readonly names: readonly GeneralName[];
+}
+
+function sliceElement(
+	source: Uint8Array,
+	element: { readonly start: number; readonly end: number; readonly headerLength: number },
+): Uint8Array {
+	return source.slice(element.start - element.headerLength, element.end);
+}
+
+function encodeExtension(oid: string, value: Uint8Array, critical = false): Uint8Array {
+	return sequence([objectIdentifier(oid), ...(critical ? [bool(true)] : []), octetString(value)]);
+}
+
+export async function addRevokedEntryCertificateIssuers(
+	crlDer: Uint8Array,
+	signerPrivateKey: CryptoKey,
+	overrides: readonly RevokedEntryCertificateIssuerOverride[],
+): Promise<Uint8Array> {
+	const top = readSequenceChildren(crlDer);
+	const tbsCertList = top[0];
+	if (tbsCertList === undefined) {
+		throw new Error('CRL missing TBSCertList');
+	}
+	const tbsDer = sliceElement(crlDer, tbsCertList);
+	const tbsChildren = readSequenceChildren(tbsDer);
+	let cursor = 3;
+	if (tbsChildren[0]?.tag === 0x02) {
+		cursor += 1;
+	}
+	const maybeNextUpdate = tbsChildren[cursor];
+	if (
+		maybeNextUpdate !== undefined &&
+		(maybeNextUpdate.tag === 0x17 || maybeNextUpdate.tag === 0x18)
+	) {
+		cursor += 1;
+	}
+	const revokedCertificates = tbsChildren[cursor];
+	if (revokedCertificates === undefined || revokedCertificates.tag !== 0x30) {
+		throw new Error('CRL missing revokedCertificates sequence');
+	}
+	const rebuiltEntries = childrenOf(tbsDer, revokedCertificates).map((entry, entryIndex) => {
+		const entryDer = sliceElement(tbsDer, entry);
+		const entryChildren = readSequenceChildren(entryDer);
+		const serialNumber = entryChildren[0];
+		const revocationDate = entryChildren[1];
+		if (serialNumber === undefined || revocationDate === undefined) {
+			throw new Error('Revoked certificate entry is incomplete');
+		}
+		const override = overrides.find((candidate) => candidate.entryIndex === entryIndex);
+		if (override === undefined) {
+			return entryDer;
+		}
+		const existingExtensions = entryChildren[2];
+		const encodedExtensions =
+			existingExtensions === undefined
+				? []
+				: childrenOf(tbsDer, existingExtensions).map((extension) =>
+						sliceElement(entryDer, extension),
+					);
+		const certificateIssuerExtension = encodeExtension(
+			OIDS.certificateIssuer,
+			sequence(override.names.map((name) => encodeSubjectAltName(name))),
+			true,
+		);
+		return sequence([
+			sliceElement(entryDer, serialNumber),
+			sliceElement(entryDer, revocationDate),
+			sequence([...encodedExtensions, certificateIssuerExtension]),
+		]);
+	});
+	const rebuiltTbsChildren = tbsChildren.map((child, childIndex) =>
+		childIndex === cursor ? sequence(rebuiltEntries) : sliceElement(tbsDer, child),
+	);
+	const rebuiltTbsDer = sequence(rebuiltTbsChildren);
+	const signatureAlgorithm = getSignatureAlgorithm(signerPrivateKey);
+	const signatureValue = await signBytes(signerPrivateKey, signatureAlgorithm, rebuiltTbsDer);
+	return sequence([
+		rebuiltTbsDer,
+		encodeAlgorithmIdentifier(signatureAlgorithm),
+		bitString(signatureValue),
+	]);
 }
 
 export function createSyntheticPkcs7SignedData(

@@ -343,7 +343,7 @@
 			"description": "Add CRL fixtures and end-to-end revocation tests. Done when:\n- complete, delta, indirect, and scope-mismatch cases exist\n- revocation outcomes are asserted\n- tests protect the clean-break DP model",
 			"depends": ["expose-revocation-status"],
 			"priority": "polish",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "parse-responder-id",

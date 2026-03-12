@@ -52,6 +52,7 @@ Started: 2026-03-12
 - Policy extension round-trip tests should assert both structured parse outputs and raw extension criticality so create/parse coverage catches semantic data loss without dropping wire-level defaults.
 - CRL handling should split signer/freshness validation from certificate applicability: first validate issuer, AKI, signature, time, and `cRLSign`; then return explicit `non_applicable` reasons for scope mismatches instead of treating a fresh wrong-scope CRL as usable evidence.
 - Revocation orchestration should normalize each evidence source into `good` / `revoked` / indeterminate results, short-circuit on any revocation, and preserve per-source indeterminate details so mixed CRL/OCSP evidence never fails open.
+- Focused CRL fixture coverage should hit the high-level revocation boundary with one case each for complete, delta, indirect, and scope-mismatch evidence, and reuse a helper that injects revoked-entry `certificateIssuer` extensions so indirect fixtures stay small.
 - OCSP validation should normalize request/response/certificate inputs to parsed forms up front, then feed shared chain validation with parsed certificate `der` bytes so pre-parsed inputs cannot skip delegated-responder checks.
 - Delegated OCSP responder validation should require `ocspSigning` EKU and default to direct issuance from the target cert issuer; any intermediate responder chain needs an explicit caller opt-in.
 - OCSP freshness should validate response-level `producedAt` separately from per-cert `thisUpdate`/`nextUpdate`: reject future `producedAt` beyond clock skew, and reject responses whose `producedAt` lands after a single-response `nextUpdate`.
@@ -444,3 +445,11 @@ Started: 2026-03-12
 - Ran the full feedback loop: `bun fmt`, `bun typecheck`, `bun lint`, `bun test`, `bun bd`.
 - Files changed: `test/pkits.test.ts`, `test/fixtures/pkits/certs/*.crt`, `docs/PKITS-HARNESS.md`, `docs/PKIX-SCOPE.md`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** focused PKITS harnesses are most useful when they track shipped claims instead of aspirational full-suite coverage; keep the case list explicit, pin the validation time, and assert policy outputs on at least one success path so conformance checks guard semantic regressions too.
+
+## Task - [add-crl-fixtures]
+
+- Expanded `test/revocation.test.ts` with focused end-to-end CRL fixture coverage for scoped complete CRLs, delta overlays, indirect CRLs, and scope-mismatch evidence.
+- Moved the revoked-entry `certificateIssuer` injection helper into `test/helpers.ts` so both low-level CRL tests and revocation-boundary fixtures can build indirect CRL cases without duplicating DER surgery.
+- Ran the full feedback loop: `bun fmt`, `bun typecheck`, `bun lint`, `bun test`, `bun bd`.
+- Files changed: `test/helpers.ts`, `test/crl.test.ts`, `test/revocation.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** CRL fixture coverage is strongest at the revocation boundary when each evidence shape maps to a distinct public outcome - revoked for complete/delta/indirect evidence, unknown plus indeterminate details for scope mismatch.
