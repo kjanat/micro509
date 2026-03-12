@@ -359,12 +359,7 @@ export async function verifyOcspResponse(
 	response: string | Uint8Array | ParsedOcspResponse,
 	signerCertificate: OcspCertificateSource,
 ): Promise<VerifyOcspResponseResult> {
-	const parsed =
-		typeof response === 'string'
-			? parseOcspResponsePem(response)
-			: response instanceof Uint8Array
-				? parseOcspResponseDer(response)
-				: response;
+	const parsed = normalizeOcspResponse(response);
 	if (
 		parsed.responseDataDer === undefined ||
 		parsed.signatureAlgorithmOid === undefined ||
@@ -397,12 +392,7 @@ export async function verifyOcspResponse(
 export async function validateOcspResponse(
 	input: ValidateOcspResponseInput,
 ): Promise<ValidateOcspResponseResult> {
-	const parsedResponse =
-		typeof input.response === 'string'
-			? parseOcspResponsePem(input.response)
-			: input.response instanceof Uint8Array
-				? parseOcspResponseDer(input.response)
-				: input.response;
+	const parsedResponse = normalizeOcspResponse(input.response);
 	if (parsedResponse.responseStatus !== 'successful') {
 		return {
 			ok: false,
@@ -429,21 +419,17 @@ export async function validateOcspResponse(
 		return responderBinding;
 	}
 	if (!isSameOcspCertificate(signer, issuer)) {
-		if (typeof resolvedResponder === 'string' || resolvedResponder instanceof Uint8Array) {
-			const chain = await verifyCertificateChain({
-				leaf: resolvedResponder,
-				intermediates: (parsedResponse.certificates ?? [])
-					.slice(1)
-					.map((certificate) => certificate.der),
-				roots: [certificateSourceToInput(input.issuerCertificate)],
-			});
-			if (!chain.ok) {
-				return {
-					ok: false,
-					code: 'responder_chain_invalid',
-					message: 'OCSP responder certificate chain does not validate',
-				};
-			}
+		const chain = await verifyCertificateChain({
+			leaf: signer.der,
+			intermediates: buildOcspResponderIntermediates(parsedResponse.certificates, signer, issuer),
+			roots: [issuer.der],
+		});
+		if (!chain.ok) {
+			return {
+				ok: false,
+				code: 'responder_chain_invalid',
+				message: 'OCSP responder certificate chain does not validate',
+			};
 		}
 		if (signer.extendedKeyUsage !== undefined && !signer.extendedKeyUsage.includes('ocspSigning')) {
 			return {
@@ -483,12 +469,7 @@ export async function validateOcspResponse(
 		}
 	}
 	if (input.request !== undefined) {
-		const request =
-			typeof input.request === 'string'
-				? parseOcspRequestPem(input.request)
-				: input.request instanceof Uint8Array
-					? parseOcspRequestDer(input.request)
-					: input.request;
+		const request = normalizeOcspRequest(input.request);
 		if (request.nonce !== undefined && request.nonce !== parsedResponse.nonce) {
 			return {
 				ok: false,
@@ -508,6 +489,28 @@ export async function validateOcspResponse(
 		}
 	}
 	return { ok: true, value: parsedResponse };
+}
+
+function normalizeOcspResponse(
+	response: string | Uint8Array | ParsedOcspResponse,
+): ParsedOcspResponse {
+	if (typeof response === 'string') {
+		return parseOcspResponsePem(response);
+	}
+	if (response instanceof Uint8Array) {
+		return parseOcspResponseDer(response);
+	}
+	return response;
+}
+
+function normalizeOcspRequest(request: OcspRequestSource): ParsedOcspRequest {
+	if (typeof request === 'string') {
+		return parseOcspRequestPem(request);
+	}
+	if (request instanceof Uint8Array) {
+		return parseOcspRequestDer(request);
+	}
+	return request;
 }
 
 async function findMatchingOcspResponderCertificate(
@@ -571,6 +574,24 @@ function isSameOcspCertificate(left: ParsedCertificate, right: ParsedCertificate
 			(byte, index) => byte === right.subjectPublicKeyInfoDer[index],
 		)
 	);
+}
+
+function buildOcspResponderIntermediates(
+	certificates: readonly ParsedCertificate[] | undefined,
+	signer: ParsedCertificate,
+	issuer: ParsedCertificate,
+): readonly Uint8Array[] {
+	if (certificates === undefined) {
+		return [];
+	}
+	const intermediates: Uint8Array[] = [];
+	for (const certificate of certificates) {
+		if (isSameOcspCertificate(certificate, signer) || isSameOcspCertificate(certificate, issuer)) {
+			continue;
+		}
+		intermediates.push(certificate.der);
+	}
+	return intermediates;
 }
 
 async function encodeOcspCertId(
@@ -959,11 +980,4 @@ function serializeCertId(certId: ParsedOcspCertId): string {
 		certId.issuerKeyHashHex,
 		certId.serialNumberHex,
 	].join(':');
-}
-
-function certificateSourceToInput(source: OcspCertificateSource): string | Uint8Array {
-	if (typeof source === 'string' || source instanceof Uint8Array) {
-		return source;
-	}
-	throw new Error('Responder chain validation requires PEM or DER certificate input');
 }

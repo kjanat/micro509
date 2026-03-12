@@ -48,6 +48,7 @@ Started: 2026-03-12
 - Expose policy outcomes as two views: `authorityConstrainedPolicies` reports the final surviving leaf-domain policies, while `userConstrainedPolicies` reports caller-visible policy results after mapping and `anyPolicy` handling.
 - CRL handling should split signer/freshness validation from certificate applicability: first validate issuer, AKI, signature, time, and `cRLSign`; then return explicit `non_applicable` reasons for scope mismatches instead of treating a fresh wrong-scope CRL as usable evidence.
 - Revocation orchestration should normalize each evidence source into `good` / `revoked` / indeterminate results, short-circuit on any revocation, and preserve per-source indeterminate details so mixed CRL/OCSP evidence never fails open.
+- OCSP validation should normalize request/response/certificate inputs to parsed forms up front, then feed shared chain validation with parsed certificate `der` bytes so pre-parsed inputs cannot skip delegated-responder checks.
 
 ## Validation Commands
 
@@ -327,3 +328,10 @@ Started: 2026-03-12
 - Added OCSP regressions in `test/ocsp.test.ts` for matching/mismatched `byName`, same-subject/different-key `byKeyHash`, embedded responder-cert lookup, same-subject delegated responders, and SHA-256 responses still using SHA-1 responder key hashes.
 - Files changed: `src/ocsp.ts`, `test/ocsp.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** ResponderID binding is part of signer resolution, not just post-signature validation; matching the right embedded cert first avoids false signature failures, and subject-DN equality alone is not enough to classify a signer as the issuer.
+
+## Task - [normalize-ocsp-inputs]
+
+- Normalized `validateOcspResponse()` and `verifyOcspResponse()` input handling in `src/ocsp.ts` so PEM, DER, and pre-parsed OCSP request/response/certificate inputs share the same parse and delegated-responder chain-validation flow.
+- Removed the parsed-certificate chain-validation bypass by always feeding `verifyCertificateChain()` with normalized responder/issuer DER bytes, and added OCSP regressions for valid and invalid delegated responders supplied through pre-parsed inputs.
+- Files changed: `src/ocsp.ts`, `test/ocsp.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** when an API accepts parsed security objects, normalize early but still route enforcement through the same downstream verifier inputs; otherwise pre-parsed forms can silently dodge checks that raw inputs still hit.

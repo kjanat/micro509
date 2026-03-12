@@ -1222,7 +1222,7 @@ describe('ocsp', () => {
 		if (!result.ok) expect(result.code).toBe('request_mismatch');
 	});
 
-	it('certificateSourceToInput throws for pre-parsed cert', async () => {
+	it('validateOcspResponse accepts delegated responder inputs as pre-parsed certificates', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'Parsed Source CA' },
 			extensions: {
@@ -1261,21 +1261,13 @@ describe('ocsp', () => {
 				},
 			],
 		});
-		// Use a pre-parsed certificate as issuerCertificate — triggers
-		// the certificateSourceToInput throw when responder is different from issuer
 		const parsedIssuer = parseCertificatePem(issuer.certificate.pem);
 		const parsedResponder = parseCertificatePem(responder.pem);
-		// parsedResponder as responder with parsedIssuer — the responder
-		// differs from issuer, so chain validation is attempted but
-		// issuerCertificate is pre-parsed → throws
 		const result = await validateOcspResponse({
 			response: response.der,
 			issuerCertificate: parsedIssuer,
 			responderCertificate: parsedResponder,
 		});
-		// The delegated path can't validate chain because parsedResponder
-		// is a ParsedCertificate (not string/Uint8Array), so it skips
-		// chain validation but still checks EKU
 		expect(result.ok).toBe(true);
 	});
 
@@ -1644,12 +1636,7 @@ describe('ocsp', () => {
 		expect(parsed.nonce).toBeUndefined();
 	});
 
-	it('certificateSourceToInput throws when given ParsedCertificate (lines 792-795)', async () => {
-		// validateOcspResponse calls certificateSourceToInput when issuerCertificate is not PEM/DER
-		// and the responder chain needs validation. This requires:
-		// 1. A parsedResponse with a different responder than the issuer
-		// 2. The responderCertificate being string/Uint8Array (so chain validation is attempted)
-		// 3. The issuerCertificate being a ParsedCertificate
+	it('validateOcspResponse rejects invalid delegated responder chains for pre-parsed certs', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'OCSP Src CA' },
 			extensions: {
@@ -1657,13 +1644,20 @@ describe('ocsp', () => {
 				keyUsage: ['keyCertSign', 'cRLSign'],
 			},
 		});
+		const otherCa = await createSelfSignedCertificate({
+			subject: { commonName: 'Other OCSP Src CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
 		const responderKeys = await generateKeyPair();
 		const responderCert = await createCertificate({
-			issuer: { commonName: 'OCSP Src CA' },
+			issuer: { commonName: 'Other OCSP Src CA' },
 			subject: { commonName: 'OCSP Responder' },
 			publicKey: responderKeys.publicKey,
-			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			signerPrivateKey: otherCa.keyPair.privateKey,
+			issuerPublicKey: otherCa.keyPair.publicKey,
 			extensions: {
 				extendedKeyUsage: ['ocspSigning'],
 			},
@@ -1676,7 +1670,6 @@ describe('ocsp', () => {
 			signerPrivateKey: issuer.keyPair.privateKey,
 			issuerPublicKey: issuer.keyPair.publicKey,
 		});
-		// Create OCSP response signed by responder (not issuer)
 		const response = await createOcspResponse({
 			signerCertificate: responderCert.pem,
 			signerPrivateKey: responderKeys.privateKey,
@@ -1689,15 +1682,19 @@ describe('ocsp', () => {
 			],
 			includedCertificates: [responderCert.pem],
 		});
-		// Validate with issuerCertificate as ParsedCertificate (not PEM/DER)
 		const issuerParsed = parseCertificatePem(issuer.certificate.pem);
-		expect(
-			validateOcspResponse({
-				response: response.der,
-				issuerCertificate: issuerParsed,
-				responderCertificate: responderCert.pem,
-			}),
-		).rejects.toThrow('Responder chain validation requires PEM or DER');
+		const responderParsed = parseCertificatePem(responderCert.pem);
+		const request = await createOcspRequest({
+			requests: [{ certificate: leaf.pem, issuerCertificate: issuer.certificate.pem }],
+		});
+		const result = await validateOcspResponse({
+			response: parseOcspResponseDer(response.der),
+			issuerCertificate: issuerParsed,
+			responderCertificate: responderParsed,
+			request: parseOcspRequestPem(request.pem),
+		});
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.code).toBe('responder_chain_invalid');
 	});
 });
 
