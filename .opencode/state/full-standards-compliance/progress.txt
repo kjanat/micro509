@@ -1,0 +1,29 @@
+# Progress Log
+
+PRD: full-standards-compliance
+Started: 2026-03-12
+
+## Codebase Patterns
+
+- ESM-only, WebCrypto-only, platform-neutral core; avoid Node builtins in core paths.
+- TypeScript rules are strict: no `any`, no non-null assertions, no `as Type`, no classes.
+- Tabs, single quotes, `.ts` import extensions, readonly-heavy interfaces, discriminated unions.
+- Keep path validation, service identity, and revocation as separate public concepts.
+- Package exports are driven by `tsdown.config.ts`; do not hand-edit generated `package.json` exports.
+- Root `micro509` export should stay ergonomic; granular domains should live behind stable subpath exports.
+- Distribution-point model change is a clean break; no temporary URI-only compat alias.
+
+## Validation Commands
+
+- `bun test`
+- `bun typecheck`
+- `bun bd`
+- `bun fmt`
+- `bun lint`
+
+## Claim Discipline
+
+- Do not upgrade README or `docs/PKIX-SCOPE.md` claims until matching tests and conformance gates pass.
+- Prefer `implemented`, `partial`, `not yet` wording over broad subsystem claims.
+
+---
