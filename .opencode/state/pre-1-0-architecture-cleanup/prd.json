@@ -44,7 +44,7 @@
 			"description": "Move name-constraint accumulation, matching, and directoryName subtree logic into `src/verify/name-constraints-engine.ts`. Done when:\n- `src/verify.ts` no longer owns per-name-form matcher logic\n- directoryName subtree comparison is isolated from verify orchestration\n- existing verify coverage plus focused internal tests protect the extracted engine",
 			"depends": ["split-domain-types", "der-spine-hardening"],
 			"priority": "architecture",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "cert-csr-ext-registry",

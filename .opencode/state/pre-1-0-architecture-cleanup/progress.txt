@@ -16,6 +16,7 @@ Started: 2026-03-13
 - Top-level raw-DER parsers should enter through `readSequenceChildren(..., { maxDepth: DEFAULT_MAX_DER_DEPTH })`; nested helpers can then parse exact slices without reintroducing trailing-data acceptance.
 - Type re-home works best as a two-step move: make the new domain module the source of truth first, then keep the old shared file as a pure re-export shim until later cleanup removes it entirely.
 - When a public file name already occupies the obvious directory path (`verify.ts`), extract internal engines as sibling `*-engine.ts` modules instead of forcing a disruptive facade rename just to get nested paths.
+- For extracted validators, keep the engine failure shape structurally compatible with the facade's failure union when possible; that lets the facade delegate without inventing another translation layer.
 
 ---
 <!-- Task logs below - APPEND ONLY -->
@@ -52,3 +53,11 @@ Started: 2026-03-13
 - Kept current policy behavior and public outputs intact while removing the inline policy graph implementation from `src/verify.ts`.
 - Files changed: `src/policy-engine.ts`, `src/verify.ts`, `.opencode/state/pre-1-0-architecture-cleanup/prd.json`, `.opencode/state/pre-1-0-architecture-cleanup/progress.txt`
 - **Learnings:** extracting the engine behind one state-constructor + one evaluator keeps the orchestration seam small and preserves existing tests while the public API is still in flux.
+
+## Task - [extract-name-constraints]
+
+- Moved the name-constraints traversal, SAN/DN checking, unsupported-form handling, and directoryName subtree logic out of `src/verify.ts` into the new internal module `src/name-constraints-engine.ts`.
+- Rewired `src/verify.ts` to build name-constraint state via `createNameConstraintValidationState()` and delegate evaluation to `evaluateNameConstraints()`.
+- Kept the extracted engine failure shape compatible with existing verify failures, so `verify.ts` can return engine failures directly without behavioral churn.
+- Files changed: `src/name-constraints-engine.ts`, `src/verify.ts`, `.opencode/state/pre-1-0-architecture-cleanup/prd.json`, `.opencode/state/pre-1-0-architecture-cleanup/progress.txt`
+- **Learnings:** a direct engine result shape works well for refactors like this when the facade already owns the public error contract and the engine only needs a strict subset of it.
