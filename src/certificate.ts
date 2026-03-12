@@ -1,9 +1,15 @@
-import { bitString, explicitContext, integer, integerFromNumber, sequence, time } from "./der.ts";
-import { type CertificateExtensionsInput, buildCertificateExtensions } from "./extensions.ts";
-import { type KeyAlgorithmInput, type KeyPairMaterial, exportSpkiDer, generateKeyPair, getCrypto } from "./keys.ts";
-import { type NameInput, encodeName } from "./name.ts";
-import { base64Encode, pemEncode } from "./pem.ts";
-import { encodeAlgorithmIdentifier, getSignatureAlgorithm, signBytes } from "./signing.ts";
+import { bitString, explicitContext, integer, integerFromNumber, sequence, time } from './der.ts';
+import { buildCertificateExtensions, type CertificateExtensionsInput } from './extensions.ts';
+import {
+	exportSpkiDer,
+	generateKeyPair,
+	getCrypto,
+	type KeyAlgorithmInput,
+	type KeyPairMaterial,
+} from './keys.ts';
+import { encodeName, type NameInput } from './name.ts';
+import { base64Encode, pemEncode } from './pem.ts';
+import { encodeAlgorithmIdentifier, getSignatureAlgorithm, signBytes } from './signing.ts';
 
 export interface ValidityInput {
 	readonly notBefore?: Date;
@@ -53,9 +59,7 @@ export async function createSelfSignedCertificate(
 		signerPrivateKey: keyPair.privateKey,
 		issuerPublicKey: keyPair.publicKey,
 		...(input.validity !== undefined ? { validity: input.validity } : {}),
-		...(input.serialNumber !== undefined
-			? { serialNumber: input.serialNumber }
-			: {}),
+		...(input.serialNumber !== undefined ? { serialNumber: input.serialNumber } : {}),
 		...(input.extensions !== undefined ? { extensions: input.extensions } : {}),
 	} satisfies CreateCertificateInput;
 	const certificate = await createCertificate(certificateInput);
@@ -105,7 +109,7 @@ export async function createCertificate(
 function materializeCertificate(der: Uint8Array): CertificateMaterial {
 	return {
 		der,
-		pem: pemEncode("CERTIFICATE", der),
+		pem: pemEncode('CERTIFICATE', der),
 		base64: base64Encode(der),
 	};
 }
@@ -119,7 +123,7 @@ function resolveValidity(input: ValidityInput | undefined): ResolvedValidity {
 	const notBefore = input?.notBefore ?? new Date();
 	const notAfter = input?.notAfter ?? addDays(notBefore, input?.days ?? 30);
 	if (notAfter.getTime() <= notBefore.getTime()) {
-		throw new Error("notAfter must be after notBefore");
+		throw new Error('notAfter must be after notBefore');
 	}
 	return { notBefore, notAfter };
 }

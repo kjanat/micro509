@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'bun:test';
 import {
 	createCertificate,
 	createCertificateSigningRequest,
@@ -11,96 +12,85 @@ import {
 	parseCertificateDer,
 	parseCertificatePem,
 	parseCertificateSigningRequestPem,
-} from "#micro509";
-import { objectIdentifier, sequence, setOf, tlv } from "#micro509/der.ts";
-import { OIDS } from "#micro509/oids.ts";
-import { parseNameConstraints } from "#micro509/parse.ts";
-import { describe, expect, it } from "bun:test";
+} from '#micro509';
+import { objectIdentifier, sequence, setOf, tlv } from '#micro509/der.ts';
+import OIDS from '#micro509/oids.ts';
+import { parseNameConstraints } from '#micro509/parse.ts';
 
-describe("parse", () => {
-	it("supports custom extension encode and decode hooks", async () => {
+describe('parse', () => {
+	it('supports custom extension encode and decode hooks', async () => {
 		const certificate = await createSelfSignedCertificate({
-			subject: { commonName: "custom-ext.example" },
+			subject: { commonName: 'custom-ext.example' },
 			extensions: {
 				customExtensions: [
 					{
-						oid: "1.2.3.4.200",
+						oid: '1.2.3.4.200',
 						critical: true,
 						value: Uint8Array.of(0x04, 0x03, 0x01, 0x02, 0x03),
 					},
-					{ oid: "1.2.3.4.201", value: Uint8Array.of(0x04, 0x01, 0xff) },
+					{ oid: '1.2.3.4.201', value: Uint8Array.of(0x04, 0x01, 0xff) },
 				],
 			},
 		});
 
 		const parsed = parseCertificatePem(certificate.certificate.pem);
-		const extension = findExtension(parsed.extensions, "1.2.3.4.200");
+		const extension = findExtension(parsed.extensions, '1.2.3.4.200');
 		if (extension === undefined) {
-			throw new Error("Missing custom extension");
+			throw new Error('Missing custom extension');
 		}
 		expect(extension.critical).toBe(true);
-		expect(Array.from(extension.valueDer)).toEqual([
-			0x04,
-			0x03,
-			0x01,
-			0x02,
-			0x03,
-		]);
+		expect(Array.from(extension.valueDer)).toEqual([0x04, 0x03, 0x01, 0x02, 0x03]);
 		expect(
 			decodeExtension(parsed.extensions, {
-				oid: "1.2.3.4.200",
+				oid: '1.2.3.4.200',
 				decode(input) {
-					return Array.from(input.valueDer).join(":");
+					return Array.from(input.valueDer).join(':');
 				},
 			}),
-		).toBe("4:3:1:2:3");
+		).toBe('4:3:1:2:3');
 		expect(
 			decodeExtensions(parsed.extensions, [
 				{
-					oid: "1.2.3.4.200",
+					oid: '1.2.3.4.200',
 					decode(input) {
 						return input.valueHex;
 					},
 				},
 				{
-					oid: "1.2.3.4.201",
+					oid: '1.2.3.4.201',
 					decode(input) {
-						return input.critical ? "critical" : "non-critical";
+						return input.critical ? 'critical' : 'non-critical';
 					},
 				},
 			]),
 		).toEqual([
-			{ oid: "1.2.3.4.200", critical: true, value: "0403010203" },
-			{ oid: "1.2.3.4.201", critical: false, value: "non-critical" },
+			{ oid: '1.2.3.4.200', critical: true, value: '0403010203' },
+			{ oid: '1.2.3.4.201', critical: false, value: 'non-critical' },
 		]);
 
 		await expect(
 			createSelfSignedCertificate({
-				subject: { commonName: "dup-ext.example" },
+				subject: { commonName: 'dup-ext.example' },
 				extensions: {
-					keyUsage: ["digitalSignature"],
-					customExtensions: [
-						{ oid: OIDS.keyUsage, value: Uint8Array.of(0x05, 0x00) },
-					],
+					keyUsage: ['digitalSignature'],
+					customExtensions: [{ oid: OIDS.keyUsage, value: Uint8Array.of(0x05, 0x00) }],
 				},
 			}),
-		).rejects.toThrow("Duplicate extension OID");
+		).rejects.toThrow('Duplicate extension OID');
 	});
 
-	it("runs decoder registries directly during parse", async () => {
+	it('runs decoder registries directly during parse', async () => {
 		const certificate = await createSelfSignedCertificate({
-			subject: { commonName: "parse-registry.example" },
+			subject: { commonName: 'parse-registry.example' },
 			extensions: {
-				customExtensions: [
-					{ oid: "1.2.3.4.210", value: Uint8Array.of(0x04, 0x02, 0xaa, 0xbb) },
-				],
+				customExtensions: [{ oid: '1.2.3.4.210', value: Uint8Array.of(0x04, 0x02, 0xaa, 0xbb) }],
 			},
 		});
 
 		const parsed = parseCertificatePem(certificate.certificate.pem, {
 			decoders: [
 				{
-					oid: "1.2.3.4.210",
+					oid: '1.2.3.4.210',
 					decode(extension) {
 						return extension.valueHex;
 					},
@@ -109,140 +99,138 @@ describe("parse", () => {
 		});
 
 		expect(parsed.decodedExtensions).toEqual([
-			{ oid: "1.2.3.4.210", critical: false, value: "0402aabb" },
+			{ oid: '1.2.3.4.210', critical: false, value: '0402aabb' },
 		]);
 		const typedParsed = parseCertificatePem(certificate.certificate.pem, {
 			decoderMap: defineExtensionDecoderMap({
 				customText: {
-					oid: "1.2.3.4.210",
+					oid: '1.2.3.4.210',
 					decode: (extension: { readonly valueHex: string }) => extension.valueHex,
 				},
 			}),
 		});
 		expect(typedParsed.decodedExtensionMap?.customText).toEqual({
-			oid: "1.2.3.4.210",
+			oid: '1.2.3.4.210',
 			critical: false,
-			value: "0402aabb",
+			value: '0402aabb',
 		});
 	});
 
-	it("parses all known EKU types", async () => {
+	it('parses all known EKU types', async () => {
 		const ca = await createSelfSignedCertificate({
-			subject: { commonName: "EKU CA" },
+			subject: { commonName: 'EKU CA' },
 			extensions: {
 				basicConstraints: { ca: true },
-				keyUsage: ["keyCertSign"],
+				keyUsage: ['keyCertSign'],
 			},
 		});
 		const leafKeys = await generateKeyPair();
 		const leaf = await createCertificate({
-			issuer: { commonName: "EKU CA" },
-			subject: { commonName: "eku-leaf" },
+			issuer: { commonName: 'EKU CA' },
+			subject: { commonName: 'eku-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 			extensions: {
 				extendedKeyUsage: [
-					"serverAuth",
-					"clientAuth",
-					"codeSigning",
-					"emailProtection",
-					"timeStamping",
-					"ocspSigning",
+					'serverAuth',
+					'clientAuth',
+					'codeSigning',
+					'emailProtection',
+					'timeStamping',
+					'ocspSigning',
 				],
 			},
 		});
 		const parsed = parseCertificatePem(leaf.pem);
 		expect(parsed.extendedKeyUsage).toEqual([
-			"serverAuth",
-			"clientAuth",
-			"codeSigning",
-			"emailProtection",
-			"timeStamping",
-			"ocspSigning",
+			'serverAuth',
+			'clientAuth',
+			'codeSigning',
+			'emailProtection',
+			'timeStamping',
+			'ocspSigning',
 		]);
 	});
 
-	it("decodeExtension returns undefined for missing OID", async () => {
+	it('decodeExtension returns undefined for missing OID', async () => {
 		const { certificate } = await createSelfSignedCertificate({
-			subject: { commonName: "decode-miss" },
+			subject: { commonName: 'decode-miss' },
 		});
 		const parsed = parseCertificatePem(certificate.pem);
 		expect(
 			decodeExtension(parsed.extensions, {
-				oid: "1.2.3.4.999.888",
-				decode: () => "should not run",
+				oid: '1.2.3.4.999.888',
+				decode: () => 'should not run',
 			}),
 		).toBeUndefined();
 	});
 
-	it("decodeExtensions skips missing decoders", async () => {
+	it('decodeExtensions skips missing decoders', async () => {
 		const { certificate } = await createSelfSignedCertificate({
-			subject: { commonName: "decode-skip" },
+			subject: { commonName: 'decode-skip' },
 		});
 		const parsed = parseCertificatePem(certificate.pem);
 		const result = decodeExtensions(parsed.extensions, [
-			{ oid: "1.2.3.4.999.777", decode: () => "never" },
-			{ oid: "1.2.3.4.999.888", decode: () => "never" },
+			{ oid: '1.2.3.4.999.777', decode: () => 'never' },
+			{ oid: '1.2.3.4.999.888', decode: () => 'never' },
 		]);
 		expect(result).toEqual([]);
 	});
 
-	it("parses all supported name fields", async () => {
+	it('parses all supported name fields', async () => {
 		const { certificate } = await createSelfSignedCertificate({
 			subject: {
-				country: "US",
-				state: "CA",
-				locality: "San Francisco",
-				street: "Market St",
-				organization: "Acme",
-				organizationalUnit: "PKI",
-				commonName: "full-name.example",
-				givenName: "Jane",
-				surname: "Doe",
-				title: "Engineer",
-				serialNumber: "12345",
-				emailAddress: "jane@example.com",
+				country: 'US',
+				state: 'CA',
+				locality: 'San Francisco',
+				street: 'Market St',
+				organization: 'Acme',
+				organizationalUnit: 'PKI',
+				commonName: 'full-name.example',
+				givenName: 'Jane',
+				surname: 'Doe',
+				title: 'Engineer',
+				serialNumber: '12345',
+				emailAddress: 'jane@example.com',
 			},
 		});
 		const parsed = parseCertificatePem(certificate.pem);
 		expect(parsed.subject.values).toMatchObject({
-			country: "US",
-			state: "CA",
-			locality: "San Francisco",
-			street: "Market St",
-			organization: "Acme",
-			organizationalUnit: "PKI",
-			commonName: "full-name.example",
-			givenName: "Jane",
-			surname: "Doe",
-			title: "Engineer",
-			serialNumber: "12345",
-			emailAddress: "jane@example.com",
+			country: 'US',
+			state: 'CA',
+			locality: 'San Francisco',
+			street: 'Market St',
+			organization: 'Acme',
+			organizationalUnit: 'PKI',
+			commonName: 'full-name.example',
+			givenName: 'Jane',
+			surname: 'Doe',
+			title: 'Engineer',
+			serialNumber: '12345',
+			emailAddress: 'jane@example.com',
 		});
 	});
 
-	it("throws on malformed or truncated DER input", () => {
+	it('throws on malformed or truncated DER input', () => {
 		expect(() => parseCertificateDer(new Uint8Array([0x30, 0x03, 0x01]))).toThrow();
 		expect(() => parseCertificateDer(new Uint8Array([]))).toThrow();
-		expect(() => parseCertificatePem("not a pem")).toThrow();
+		expect(() => parseCertificatePem('not a pem')).toThrow();
 		expect(() => parseCertificateDer(new Uint8Array([0xff, 0xff]))).toThrow();
 	});
 
-	it("parses and round-trips nameConstraints extension", async () => {
+	it('parses and round-trips nameConstraints extension', async () => {
 		const root = await createSelfSignedCertificate({
-			subject: { commonName: "NC Parse Test CA" },
+			subject: { commonName: 'NC Parse Test CA' },
 			extensions: {
 				basicConstraints: { ca: true },
-				keyUsage: ["keyCertSign", "cRLSign"],
+				keyUsage: ['keyCertSign', 'cRLSign'],
 				nameConstraints: {
 					permittedSubtrees: [
-						{ base: { type: "dns", value: "example.com" } },
-						{ base: { type: "email", value: ".example.org" } },
+						{ base: { type: 'dns', value: 'example.com' } },
+						{ base: { type: 'email', value: '.example.org' } },
 					],
-					excludedSubtrees: [
-						{ base: { type: "dns", value: "bad.example.com" } },
-					],
+					excludedSubtrees: [{ base: { type: 'dns', value: 'bad.example.com' } }],
 				},
 			},
 		});
@@ -252,22 +240,22 @@ describe("parse", () => {
 		expect(parsed.nameConstraints?.excludedSubtrees).toHaveLength(1);
 		const permitted = parsed.nameConstraints?.permittedSubtrees;
 		expect(permitted?.[0]?.base).toEqual({
-			type: "dns",
-			value: "example.com",
+			type: 'dns',
+			value: 'example.com',
 		});
 		expect(permitted?.[1]?.base).toEqual({
-			type: "email",
-			value: ".example.org",
+			type: 'email',
+			value: '.example.org',
 		});
 		const excluded = parsed.nameConstraints?.excludedSubtrees;
 		expect(excluded?.[0]?.base).toEqual({
-			type: "dns",
-			value: "bad.example.com",
+			type: 'dns',
+			value: 'bad.example.com',
 		});
 	});
 
-	it("rejects GeneralSubtree with maximum field during parsing", () => {
-		const dnsName = tlv(0x82, new TextEncoder().encode("example.com"));
+	it('rejects GeneralSubtree with maximum field during parsing', () => {
+		const dnsName = tlv(0x82, new TextEncoder().encode('example.com'));
 		const maximum = tlv(0x81, Uint8Array.of(5));
 		const subtree = sequence([dnsName, maximum]);
 		const permitted = tlv(0xa0, subtree);
@@ -275,8 +263,8 @@ describe("parse", () => {
 		expect(() => parseNameConstraints(ncValue)).toThrow(/maximum/i);
 	});
 
-	it("rejects GeneralSubtree with non-zero minimum during parsing", () => {
-		const dnsName = tlv(0x82, new TextEncoder().encode("example.com"));
+	it('rejects GeneralSubtree with non-zero minimum during parsing', () => {
+		const dnsName = tlv(0x82, new TextEncoder().encode('example.com'));
 		const minimum = tlv(0x80, Uint8Array.of(3));
 		const subtree = sequence([dnsName, minimum]);
 		const permitted = tlv(0xa0, subtree);
@@ -284,66 +272,66 @@ describe("parse", () => {
 		expect(() => parseNameConstraints(ncValue)).toThrow(/minimum/i);
 	});
 
-	it("parses certificate with directoryName SAN", async () => {
+	it('parses certificate with directoryName SAN', async () => {
 		const ca = await createSelfSignedCertificate({
-			subject: { commonName: "DirName SAN CA" },
+			subject: { commonName: 'DirName SAN CA' },
 			extensions: {
 				basicConstraints: { ca: true },
-				keyUsage: ["keyCertSign"],
+				keyUsage: ['keyCertSign'],
 			},
 		});
 		const leafKeys = await generateKeyPair();
 		// Create leaf with directoryName SAN
 		const leaf = await createCertificate({
-			issuer: { commonName: "DirName SAN CA" },
-			subject: { commonName: "dirname-leaf" },
+			issuer: { commonName: 'DirName SAN CA' },
+			subject: { commonName: 'dirname-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 			extensions: {
-				keyUsage: ["digitalSignature"],
+				keyUsage: ['digitalSignature'],
 				subjectAltNames: [
-					{ type: "dns", value: "dirname-leaf.example" },
-					{ type: "directoryName", derHex: "300e310c300a060355040313036f7267" },
+					{ type: 'dns', value: 'dirname-leaf.example' },
+					{ type: 'directoryName', derHex: '300e310c300a060355040313036f7267' },
 				],
 			},
 		});
 		const parsed = parseCertificatePem(leaf.pem);
-		expect(parsed.subjectAltNames?.some((san) => san.type === "directoryName")).toBe(true);
-		const dirNameSan = parsed.subjectAltNames?.find((san) => san.type === "directoryName");
-		if (dirNameSan?.type === "directoryName") {
+		expect(parsed.subjectAltNames?.some((san) => san.type === 'directoryName')).toBe(true);
+		const dirNameSan = parsed.subjectAltNames?.find((san) => san.type === 'directoryName');
+		if (dirNameSan?.type === 'directoryName') {
 			expect(dirNameSan.derHex).toBeDefined();
 		}
 	});
 
-	it("parses certificate with unknown SAN type", async () => {
+	it('parses certificate with unknown SAN type', async () => {
 		const ca = await createSelfSignedCertificate({
-			subject: { commonName: "Unknown SAN CA" },
+			subject: { commonName: 'Unknown SAN CA' },
 			extensions: {
 				basicConstraints: { ca: true },
-				keyUsage: ["keyCertSign"],
+				keyUsage: ['keyCertSign'],
 			},
 		});
 		const leafKeys = await generateKeyPair();
 		const leaf = await createCertificate({
-			issuer: { commonName: "Unknown SAN CA" },
-			subject: { commonName: "unknown-san-leaf" },
+			issuer: { commonName: 'Unknown SAN CA' },
+			subject: { commonName: 'unknown-san-leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 			extensions: {
-				keyUsage: ["digitalSignature"],
+				keyUsage: ['digitalSignature'],
 				subjectAltNames: [
-					{ type: "dns", value: "unknown-san.example" },
-					{ type: "unknown", tag: 0x88, value: Uint8Array.of(0x01, 0x02) },
+					{ type: 'dns', value: 'unknown-san.example' },
+					{ type: 'unknown', tag: 0x88, value: Uint8Array.of(0x01, 0x02) },
 				],
 			},
 		});
 		const parsed = parseCertificatePem(leaf.pem);
-		expect(parsed.subjectAltNames?.some((san) => san.type === "unknown")).toBe(true);
+		expect(parsed.subjectAltNames?.some((san) => san.type === 'unknown')).toBe(true);
 	});
 
-	it("parses IPv6 name constraints", async () => {
+	it('parses IPv6 name constraints', async () => {
 		// IPv6 constraint is 32 bytes: 16 for address + 16 for mask
 		const ipv6Address = new Uint8Array(16);
 		ipv6Address[0] = 0x20;
@@ -352,15 +340,15 @@ describe("parse", () => {
 		ipv6Mask[0] = 0xff;
 		ipv6Mask[1] = 0xff;
 		const root = await createSelfSignedCertificate({
-			subject: { commonName: "IPv6 NC CA" },
+			subject: { commonName: 'IPv6 NC CA' },
 			extensions: {
 				basicConstraints: { ca: true },
-				keyUsage: ["keyCertSign", "cRLSign"],
+				keyUsage: ['keyCertSign', 'cRLSign'],
 				nameConstraints: {
 					permittedSubtrees: [
 						{
 							base: {
-								type: "ip",
+								type: 'ip',
 								addressBytes: ipv6Address,
 								maskBytes: ipv6Mask,
 							},
@@ -372,19 +360,19 @@ describe("parse", () => {
 		const parsed = parseCertificatePem(root.certificate.pem);
 		expect(parsed.nameConstraints?.permittedSubtrees).toHaveLength(1);
 		const ipForm = parsed.nameConstraints?.permittedSubtrees?.[0]?.base;
-		expect(ipForm?.type).toBe("ip");
+		expect(ipForm?.type).toBe('ip');
 	});
 
-	it("parses nameConstraints with directoryName form", async () => {
+	it('parses nameConstraints with directoryName form', async () => {
 		const root = await createSelfSignedCertificate({
-			subject: { commonName: "DirName NC CA" },
+			subject: { commonName: 'DirName NC CA' },
 			extensions: {
 				basicConstraints: { ca: true },
-				keyUsage: ["keyCertSign", "cRLSign"],
+				keyUsage: ['keyCertSign', 'cRLSign'],
 				nameConstraints: {
 					permittedSubtrees: [
 						{
-							base: { type: "directoryName", derHex: "300e310c300a060355040313036f7267" },
+							base: { type: 'directoryName', derHex: '300e310c300a060355040313036f7267' },
 						},
 					],
 				},
@@ -392,56 +380,48 @@ describe("parse", () => {
 		});
 		const parsed = parseCertificatePem(root.certificate.pem);
 		expect(parsed.nameConstraints?.permittedSubtrees).toHaveLength(1);
-		expect(parsed.nameConstraints?.permittedSubtrees?.[0]?.base.type).toBe("directoryName");
+		expect(parsed.nameConstraints?.permittedSubtrees?.[0]?.base.type).toBe('directoryName');
 	});
 
 	// -----------------------------------------------------------------------
 	// parseNameConstraints error paths via crafted DER
 	// -----------------------------------------------------------------------
 
-	it("parseNameConstraints throws on non-zero minimum", () => {
+	it('parseNameConstraints throws on non-zero minimum', () => {
 		// GeneralSubtree with minimum [0] = 1 (must be 0)
 		const subtree = sequence([
-			tlv(0x82, new TextEncoder().encode("example.com")), // DNS base
+			tlv(0x82, new TextEncoder().encode('example.com')), // DNS base
 			tlv(0x80, Uint8Array.of(0x01)), // minimum = 1 (invalid)
 		]);
 		const nameConstraints = sequence([
 			tlv(0xa0, subtree), // permittedSubtrees
 		]);
-		expect(() => parseNameConstraints(nameConstraints)).toThrow("minimum must be 0");
+		expect(() => parseNameConstraints(nameConstraints)).toThrow('minimum must be 0');
 	});
 
-	it("parseNameConstraints throws on maximum present", () => {
+	it('parseNameConstraints throws on maximum present', () => {
 		const subtree = sequence([
-			tlv(0x82, new TextEncoder().encode("example.com")),
+			tlv(0x82, new TextEncoder().encode('example.com')),
 			tlv(0x80, Uint8Array.of(0x00)), // minimum = 0 (valid)
 			tlv(0x81, Uint8Array.of(0x05)), // maximum = 5 (not supported)
 		]);
-		const nameConstraints = sequence([
-			tlv(0xa0, subtree),
-		]);
-		expect(() => parseNameConstraints(nameConstraints)).toThrow("maximum is not supported");
+		const nameConstraints = sequence([tlv(0xa0, subtree)]);
+		expect(() => parseNameConstraints(nameConstraints)).toThrow('maximum is not supported');
 	});
 
-	it("parseNameConstraints throws on invalid IP constraint length", () => {
+	it('parseNameConstraints throws on invalid IP constraint length', () => {
 		// IP with 3 bytes (not 8 or 32)
-		const subtree = sequence([
-			tlv(0x87, Uint8Array.of(0x01, 0x02, 0x03)),
-		]);
-		const nameConstraints = sequence([
-			tlv(0xa0, subtree),
-		]);
-		expect(() => parseNameConstraints(nameConstraints)).toThrow("Invalid IP name constraint");
+		const subtree = sequence([tlv(0x87, Uint8Array.of(0x01, 0x02, 0x03))]);
+		const nameConstraints = sequence([tlv(0xa0, subtree)]);
+		expect(() => parseNameConstraints(nameConstraints)).toThrow('Invalid IP name constraint');
 	});
 
-	it("parseNameConstraints skips unsupported GeneralName types", () => {
+	it('parseNameConstraints skips unsupported GeneralName types', () => {
 		// registeredID [8] — not dns/email/uri/ip/directoryName
 		const subtree = sequence([
 			tlv(0x88, Uint8Array.of(0x55, 0x04, 0x03)), // OID bytes for tag 0x88
 		]);
-		const nameConstraints = sequence([
-			tlv(0xa0, subtree),
-		]);
+		const nameConstraints = sequence([tlv(0xa0, subtree)]);
 		// Should not throw, just skip the unknown type
 		const result = parseNameConstraints(nameConstraints);
 		expect(result.permittedSubtrees).toHaveLength(0);
@@ -451,27 +431,27 @@ describe("parse", () => {
 	// defineExtensionDecoder identity function
 	// -----------------------------------------------------------------------
 
-	it("defineExtensionDecoder returns the decoder unchanged", () => {
+	it('defineExtensionDecoder returns the decoder unchanged', () => {
 		const decoder = defineExtensionDecoder({
-			oid: "1.2.3.4.999",
+			oid: '1.2.3.4.999',
 			decode: (ext) => ext.valueDer,
 		});
-		expect(decoder.oid).toBe("1.2.3.4.999");
+		expect(decoder.oid).toBe('1.2.3.4.999');
 	});
 
 	// -----------------------------------------------------------------------
 	// CSR parsing without extensions
 	// -----------------------------------------------------------------------
 
-	it("parses CSR without extensions attribute", async () => {
+	it('parses CSR without extensions attribute', async () => {
 		const keys = await generateKeyPair();
 		const csr = await createCertificateSigningRequest({
-			subject: { commonName: "no-ext-csr.example" },
+			subject: { commonName: 'no-ext-csr.example' },
 			publicKey: keys.publicKey,
 			signerPrivateKey: keys.privateKey,
 		});
 		const parsed = parseCertificateSigningRequestPem(csr.pem);
-		expect(parsed.subject.values.commonName).toBe("no-ext-csr.example");
+		expect(parsed.subject.values.commonName).toBe('no-ext-csr.example');
 		// No extensions → requestedExtensions should be empty
 		expect(parsed.requestedExtensions).toHaveLength(0);
 	});
@@ -480,9 +460,9 @@ describe("parse", () => {
 	// encodeAsn1Length for length >= 128 (multi-byte length)
 	// -----------------------------------------------------------------------
 
-	it("parses name constraint with large directoryName (multi-byte ASN.1 length)", () => {
+	it('parses name constraint with large directoryName (multi-byte ASN.1 length)', () => {
 		// Build a directoryName with content > 127 bytes to exercise encodeAsn1Length >= 128 path
-		const longCN = "x".repeat(130);
+		const longCN = 'x'.repeat(130);
 		const cnValue = new TextEncoder().encode(longCN);
 		// Build a minimal RDN: SET { SEQUENCE { OID, UTF8String } }
 		const rdnSeq = sequence([
@@ -495,39 +475,39 @@ describe("parse", () => {
 		const dnBytes = new Uint8Array(dnSequence);
 		dnBytes[0] = 0xa4;
 		const subtree = sequence([dnBytes]);
-		const nameConstraints = sequence([
-			tlv(0xa0, subtree),
-		]);
+		const nameConstraints = sequence([tlv(0xa0, subtree)]);
 		const result = parseNameConstraints(nameConstraints);
 		expect(result.permittedSubtrees).toHaveLength(1);
-		expect(result.permittedSubtrees?.[0]?.base.type).toBe("directoryName");
+		expect(result.permittedSubtrees?.[0]?.base.type).toBe('directoryName');
 	});
 });
 
-describe("parse: coverage — error paths", () => {
-	it("parseAuthorityInfoAccess throws on non-URI location tag", async () => {
+describe('parse: coverage — error paths', () => {
+	it('parseAuthorityInfoAccess throws on non-URI location tag', async () => {
 		// Build AIA extension with dNSName (tag 0x82) instead of URI (tag 0x86)
-		const ocspOid = "1.3.6.1.5.5.7.48.1"; // id-ad-ocsp
+		const ocspOid = '1.3.6.1.5.5.7.48.1'; // id-ad-ocsp
 		const aiaValue = sequence([
 			sequence([
 				objectIdentifier(ocspOid),
-				tlv(0x82, new TextEncoder().encode("ocsp.example.com")), // dNSName, not URI
+				tlv(0x82, new TextEncoder().encode('ocsp.example.com')), // dNSName, not URI
 			]),
 		]);
-		await expect(async () => {
+		expect(async () => {
 			await createSelfSignedCertificate({
-				subject: { commonName: "aia-test.example" },
+				subject: { commonName: 'aia-test.example' },
 				extensions: {
-					customExtensions: [{
-						oid: "1.3.6.1.5.5.7.1.1", // authorityInfoAccess
-						value: aiaValue,
-					}],
+					customExtensions: [
+						{
+							oid: '1.3.6.1.5.5.7.1.1', // authorityInfoAccess
+							value: aiaValue,
+						},
+					],
 				},
 			}).then((cert) => parseCertificatePem(cert.certificate.pem));
-		}).toThrow("Unsupported authorityInfoAccess location tag");
+		}).toThrow('Unsupported authorityInfoAccess location tag');
 	});
 
-	it("parseAuthorityKeyIdentifier returns undefined for AKI without keyIdentifier", async () => {
+	it('parseAuthorityKeyIdentifier returns undefined for AKI without keyIdentifier', async () => {
 		// Create certificate without auto-AKI, then add custom AKI with only serialNumber
 		// Use createCertificate with a separate issuer to get an AKI, but we need to
 		// manually construct a cert DER with custom AKI. Instead, use parseCertificateDer
@@ -559,23 +539,27 @@ describe("parse: coverage — error paths", () => {
 		// DER bytes.
 		const keys = await generateKeyPair();
 		const cert = await createSelfSignedCertificate({
-			subject: { commonName: "aki-test.example" },
+			subject: { commonName: 'aki-test.example' },
 			keyPair: keys,
 			extensions: {
-				keyUsage: ["digitalSignature"],
+				keyUsage: ['digitalSignature'],
 			},
 		});
 		// The AKI extension value is SEQUENCE { [0] keyIdentifier }.
 		// We want to replace it with SEQUENCE { [1] authorityCertIssuer }.
 		// parseCertificateDer doesn't verify the signature, so we can modify the DER.
-		const { pemDecode } = await import("#micro509");
-		const derBytes = pemDecode("CERTIFICATE", cert.certificate.pem);
+		const { pemDecode } = await import('#micro509');
+		const derBytes = pemDecode('CERTIFICATE', cert.certificate.pem);
 		const der = new Uint8Array(derBytes);
 		// Find AKI OID bytes (2.5.29.35 = 55 1D 23) in the DER
 		const akiOidBytes = [0x55, 0x1d, 0x23];
 		let akiOffset = -1;
 		for (let i = 0; i < der.length - 3; i++) {
-			if (der[i] === akiOidBytes[0] && der[i + 1] === akiOidBytes[1] && der[i + 2] === akiOidBytes[2]) {
+			if (
+				der[i] === akiOidBytes[0] &&
+				der[i + 1] === akiOidBytes[1] &&
+				der[i + 2] === akiOidBytes[2]
+			) {
 				akiOffset = i;
 				break;
 			}
@@ -596,42 +580,44 @@ describe("parse: coverage — error paths", () => {
 		expect(parsed.authorityKeyIdentifier).toBeUndefined();
 	});
 
-	it("decodeIpAddress throws on unsupported IP address length", async () => {
+	it('decodeIpAddress throws on unsupported IP address length', async () => {
 		// Create certificate with SAN containing an IP address of wrong length (e.g., 6 bytes)
 		// Build SubjectAltName with a 6-byte iPAddress (tag 0x87)
 		const sanValue = sequence([
 			tlv(0x87, Uint8Array.of(0x0a, 0x00, 0x00, 0x01, 0xff, 0xee)), // 6 bytes — invalid
 		]);
 		const cert = await createSelfSignedCertificate({
-			subject: { commonName: "bad-ip.example" },
+			subject: { commonName: 'bad-ip.example' },
 			extensions: {
-				customExtensions: [{
-					oid: "2.5.29.17", // subjectAltNames
-					value: sanValue,
-				}],
+				customExtensions: [
+					{
+						oid: '2.5.29.17', // subjectAltNames
+						value: sanValue,
+					},
+				],
 			},
 		});
 		expect(() => parseCertificatePem(cert.certificate.pem)).toThrow(
-			"Unsupported IP address length",
+			'Unsupported IP address length',
 		);
 	});
 
-	it("parseKeyUsage throws on BIT STRING with unusedBits > 7", async () => {
+	it('parseKeyUsage throws on BIT STRING with unusedBits > 7', async () => {
 		// Build keyUsage extension with unusedBits = 8 (invalid)
 		// KeyUsage is a BIT STRING: first byte is unused bits count
 		const keyUsageValue = tlv(0x03, Uint8Array.of(8, 0x80)); // unusedBits=8, data=0x80
 		const cert = await createSelfSignedCertificate({
-			subject: { commonName: "bad-ku.example" },
+			subject: { commonName: 'bad-ku.example' },
 			extensions: {
-				customExtensions: [{
-					oid: "2.5.29.15", // keyUsage
-					value: keyUsageValue,
-					critical: true,
-				}],
+				customExtensions: [
+					{
+						oid: '2.5.29.15', // keyUsage
+						value: keyUsageValue,
+						critical: true,
+					},
+				],
 			},
 		});
-		expect(() => parseCertificatePem(cert.certificate.pem)).toThrow(
-			"Invalid BIT STRING",
-		);
+		expect(() => parseCertificatePem(cert.certificate.pem)).toThrow('Invalid BIT STRING');
 	});
 });

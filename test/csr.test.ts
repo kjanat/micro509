@@ -1,27 +1,27 @@
+import { describe, expect, it } from 'bun:test';
 import {
 	createCertificateSigningRequest,
 	findExtension,
 	generateKeyPair,
 	parseCertificateSigningRequestPem,
 	verifyCertificateSigningRequest,
-} from "#micro509";
-import { readElement } from "#micro509/der.ts";
-import { OIDS } from "#micro509/oids.ts";
-import { describe, expect, it } from "bun:test";
-import { childrenOf, decodeObjectIdentifier } from "./helpers.ts";
+} from '#micro509';
+import { readElement } from '#micro509/der.ts';
+import { OIDS } from '#micro509/oids.ts';
+import { childrenOf, decodeObjectIdentifier } from './helpers.ts';
 
-describe("csr", () => {
-	it("includes basicConstraints and customExtensions in CSR requested extensions", async () => {
-		const keyPair = await generateKeyPair({ kind: "ed25519" });
+describe('csr', () => {
+	it('includes basicConstraints and customExtensions in CSR requested extensions', async () => {
+		const keyPair = await generateKeyPair({ kind: 'ed25519' });
 		const csr = await createCertificateSigningRequest({
-			subject: { commonName: "csr-bc.example" },
+			subject: { commonName: 'csr-bc.example' },
 			publicKey: keyPair.publicKey,
 			signerPrivateKey: keyPair.privateKey,
 			extensions: {
 				basicConstraints: { ca: true, pathLength: 2 },
 				customExtensions: [
 					{
-						oid: "1.2.3.4.999",
+						oid: '1.2.3.4.999',
 						value: Uint8Array.of(0x05, 0x00),
 						critical: true,
 					},
@@ -30,19 +30,19 @@ describe("csr", () => {
 		});
 		const parsed = parseCertificateSigningRequestPem(csr.pem);
 		expect(parsed.basicConstraints).toEqual({ ca: true, pathLength: 2 });
-		const custom = findExtension(parsed.requestedExtensions, "1.2.3.4.999");
+		const custom = findExtension(parsed.requestedExtensions, '1.2.3.4.999');
 		expect(custom).toBeDefined();
 		expect(custom?.critical).toBe(true);
 	});
 
-	it("verifies certificate request signatures for RSA and Ed25519", async () => {
+	it('verifies certificate request signatures for RSA and Ed25519', async () => {
 		const rsaKeys = await generateKeyPair({
-			kind: "rsa",
+			kind: 'rsa',
 			modulusLength: 2048,
-			hash: "SHA-512",
+			hash: 'SHA-512',
 		});
 		const rsaCsr = await createCertificateSigningRequest({
-			subject: { commonName: "rsa-csr" },
+			subject: { commonName: 'rsa-csr' },
 			publicKey: rsaKeys.publicKey,
 			signerPrivateKey: rsaKeys.privateKey,
 		});
@@ -50,9 +50,9 @@ describe("csr", () => {
 			ok: true,
 		});
 
-		const edKeys = await generateKeyPair({ kind: "ed25519" });
+		const edKeys = await generateKeyPair({ kind: 'ed25519' });
 		const edCsr = await createCertificateSigningRequest({
-			subject: { commonName: "ed-csr" },
+			subject: { commonName: 'ed-csr' },
 			publicKey: edKeys.publicKey,
 			signerPrivateKey: edKeys.privateKey,
 		});
@@ -61,10 +61,10 @@ describe("csr", () => {
 		});
 	});
 
-	it("parses CSR without extensionRequest attributes", async () => {
-		const keyPair = await generateKeyPair({ kind: "ed25519" });
+	it('parses CSR without extensionRequest attributes', async () => {
+		const keyPair = await generateKeyPair({ kind: 'ed25519' });
 		const csr = await createCertificateSigningRequest({
-			subject: { commonName: "csr-noext.example" },
+			subject: { commonName: 'csr-noext.example' },
 			publicKey: keyPair.publicKey,
 			signerPrivateKey: keyPair.privateKey,
 		});
@@ -72,69 +72,60 @@ describe("csr", () => {
 		expect(parsed.requestedExtensions).toEqual([]);
 	});
 
-	it("creates a CSR with extensionRequest attributes", async () => {
-		const keyPair = await generateKeyPair({ kind: "ed25519" });
+	it('creates a CSR with extensionRequest attributes', async () => {
+		const keyPair = await generateKeyPair({ kind: 'ed25519' });
 		const csr = await createCertificateSigningRequest({
-			subject: { commonName: "csr.example" },
+			subject: { commonName: 'csr.example' },
 			publicKey: keyPair.publicKey,
 			signerPrivateKey: keyPair.privateKey,
 			extensions: {
-				subjectAltNames: [{ type: "dns", value: "csr.example" }],
-				keyUsage: ["digitalSignature"],
-				extendedKeyUsage: ["clientAuth", { type: "oid", value: "1.2.3.4.6" }],
-				authorityInfoAccess: [
-					{ method: "ocsp", uri: "http://csr.example/ocsp" },
-				],
-				crlDistributionPoints: ["http://csr.example/crl"],
+				subjectAltNames: [{ type: 'dns', value: 'csr.example' }],
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['clientAuth', { type: 'oid', value: '1.2.3.4.6' }],
+				authorityInfoAccess: [{ method: 'ocsp', uri: 'http://csr.example/ocsp' }],
+				crlDistributionPoints: ['http://csr.example/crl'],
 			},
 		});
 
-		expect(csr.pem).toContain("BEGIN CERTIFICATE REQUEST");
+		expect(csr.pem).toContain('BEGIN CERTIFICATE REQUEST');
 		const top = childrenOf(csr.der, readElement(csr.der));
 		const certificationRequestInfo = top[0];
 		if (certificationRequestInfo === undefined) {
-			throw new Error("Missing certificationRequestInfo");
+			throw new Error('Missing certificationRequestInfo');
 		}
 		const criChildren = childrenOf(csr.der, certificationRequestInfo);
 		const attributes = criChildren[3];
 		if (attributes === undefined) {
-			throw new Error("Missing attributes");
+			throw new Error('Missing attributes');
 		}
 		const attribute = childrenOf(csr.der, attributes)[0];
 		if (attribute === undefined) {
-			throw new Error("Missing extensionRequest attribute");
+			throw new Error('Missing extensionRequest attribute');
 		}
 		const attributeChildren = childrenOf(csr.der, attribute);
 		const oidElement = attributeChildren[0];
 		if (oidElement === undefined) {
-			throw new Error("Missing attribute OID");
+			throw new Error('Missing attribute OID');
 		}
-		expect(decodeObjectIdentifier(oidElement.value)).toBe(
-			OIDS.extensionRequest,
-		);
+		expect(decodeObjectIdentifier(oidElement.value)).toBe(OIDS.extensionRequest);
 		const parsed = parseCertificateSigningRequestPem(csr.pem);
-		expect(parsed.subject.values.commonName).toBe("csr.example");
-		expect(parsed.subjectAltNames).toEqual([
-			{ type: "dns", value: "csr.example" },
-		]);
-		expect(parsed.keyUsage).toEqual(["digitalSignature"]);
-		expect(parsed.extendedKeyUsage).toEqual([
-			"clientAuth",
-			{ type: "oid", value: "1.2.3.4.6" },
-		]);
+		expect(parsed.subject.values.commonName).toBe('csr.example');
+		expect(parsed.subjectAltNames).toEqual([{ type: 'dns', value: 'csr.example' }]);
+		expect(parsed.keyUsage).toEqual(['digitalSignature']);
+		expect(parsed.extendedKeyUsage).toEqual(['clientAuth', { type: 'oid', value: '1.2.3.4.6' }]);
 		expect(parsed.authorityInfoAccess).toEqual([
-			{ method: "ocsp", uri: "http://csr.example/ocsp" },
+			{ method: 'ocsp', uri: 'http://csr.example/ocsp' },
 		]);
-		expect(parsed.crlDistributionPoints).toEqual(["http://csr.example/crl"]);
+		expect(parsed.crlDistributionPoints).toEqual(['http://csr.example/crl']);
 	});
 
-	it("verifies certificate request signatures with WebCrypto", async () => {
+	it('verifies certificate request signatures with WebCrypto', async () => {
 		const goodKeyPair = await generateKeyPair({
-			kind: "ecdsa",
-			namedCurve: "P-256",
+			kind: 'ecdsa',
+			namedCurve: 'P-256',
 		});
 		const goodCsr = await createCertificateSigningRequest({
-			subject: { commonName: "verify-csr.example" },
+			subject: { commonName: 'verify-csr.example' },
 			publicKey: goodKeyPair.publicKey,
 			signerPrivateKey: goodKeyPair.privateKey,
 		});
@@ -143,18 +134,18 @@ describe("csr", () => {
 		});
 
 		const wrongSigner = await generateKeyPair({
-			kind: "ecdsa",
-			namedCurve: "P-256",
+			kind: 'ecdsa',
+			namedCurve: 'P-256',
 		});
 		const badCsr = await createCertificateSigningRequest({
-			subject: { commonName: "bad-csr.example" },
+			subject: { commonName: 'bad-csr.example' },
 			publicKey: goodKeyPair.publicKey,
 			signerPrivateKey: wrongSigner.privateKey,
 		});
 		expect(await verifyCertificateSigningRequest(badCsr.der)).toMatchObject({
 			ok: false,
-			code: "signature_invalid",
-			details: { subjectCommonName: "bad-csr.example" },
+			code: 'signature_invalid',
+			details: { subjectCommonName: 'bad-csr.example' },
 		});
 	});
 });

@@ -1,19 +1,26 @@
-import { ia5String, objectIdentifier, printableString, sequence, setOf, utf8String } from "./der.ts";
-import { OIDS } from "./oids.ts";
+import {
+	ia5String,
+	objectIdentifier,
+	printableString,
+	sequence,
+	setOf,
+	utf8String,
+} from './der.ts';
+import { OIDS } from './oids.ts';
 
 export type NameFieldKey =
-	| "commonName"
-	| "surname"
-	| "serialNumber"
-	| "country"
-	| "locality"
-	| "state"
-	| "street"
-	| "organization"
-	| "organizationalUnit"
-	| "title"
-	| "givenName"
-	| "emailAddress";
+	| 'commonName'
+	| 'surname'
+	| 'serialNumber'
+	| 'country'
+	| 'locality'
+	| 'state'
+	| 'street'
+	| 'organization'
+	| 'organizationalUnit'
+	| 'title'
+	| 'givenName'
+	| 'emailAddress';
 
 export interface NameObject {
 	readonly commonName?: string;
@@ -58,26 +65,24 @@ const NAME_FIELD_DEFINITIONS: Record<NameFieldKey, NameFieldDefinition> = {
 };
 
 const NAME_OBJECT_ORDER: readonly NameFieldKey[] = [
-	"country",
-	"state",
-	"locality",
-	"street",
-	"organization",
-	"organizationalUnit",
-	"commonName",
-	"givenName",
-	"surname",
-	"title",
-	"serialNumber",
-	"emailAddress",
+	'country',
+	'state',
+	'locality',
+	'street',
+	'organization',
+	'organizationalUnit',
+	'commonName',
+	'givenName',
+	'surname',
+	'title',
+	'serialNumber',
+	'emailAddress',
 ];
 
 export function encodeName(input: NameInput): Uint8Array {
-	const attributes = isNameAttributes(input)
-		? input
-		: nameObjectToAttributes(input);
+	const attributes = isNameAttributes(input) ? input : nameObjectToAttributes(input);
 	if (attributes.length === 0) {
-		throw new Error("Name must contain at least one attribute");
+		throw new Error('Name must contain at least one attribute');
 	}
 
 	return sequence(
@@ -86,15 +91,12 @@ export function encodeName(input: NameInput): Uint8Array {
 			if (definition === undefined) {
 				throw new Error(`Unsupported name field: ${attribute.type}`);
 			}
-			if (attribute.type === "country" && attribute.value.length !== 2) {
-				throw new Error("Country must be a 2-character code");
+			if (attribute.type === 'country' && attribute.value.length !== 2) {
+				throw new Error('Country must be a 2-character code');
 			}
 
 			return setOf([
-				sequence([
-					objectIdentifier(definition.oid),
-					definition.encode(attribute.value),
-				]),
+				sequence([objectIdentifier(definition.oid), definition.encode(attribute.value)]),
 			]);
 		}),
 	);
@@ -108,7 +110,7 @@ function nameObjectToAttributes(input: NameObject): readonly NameAttribute[] {
 	const attributes: NameAttribute[] = [];
 	for (const key of NAME_OBJECT_ORDER) {
 		const value = input[key];
-		if (typeof value === "string" && value.length > 0) {
+		if (typeof value === 'string' && value.length > 0) {
 			attributes.push({ type: key, value });
 		}
 	}

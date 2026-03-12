@@ -1,4 +1,10 @@
-import { type parseCertificatePem, createCertificate, createSelfSignedCertificate, generateKeyPair } from "#micro509";
+import { createHash } from 'node:crypto';
+import {
+	createCertificate,
+	createSelfSignedCertificate,
+	generateKeyPair,
+	type parseCertificatePem,
+} from '#micro509';
 import {
 	concatBytes,
 	explicitContext,
@@ -11,10 +17,9 @@ import {
 	sequence,
 	setOf,
 	tlv,
-} from "#micro509/der.ts";
-import { OIDS } from "#micro509/oids.ts";
-import { getSignatureAlgorithm, signBytes } from "#micro509/signing.ts";
-import { createHash } from "node:crypto";
+} from '#micro509/der.ts';
+import { OIDS } from '#micro509/oids.ts';
+import { getSignatureAlgorithm, signBytes } from '#micro509/signing.ts';
 
 export function childrenOf(
 	source: Uint8Array,
@@ -33,14 +38,14 @@ export function childrenOf(
 export function decodeObjectIdentifier(bytes: Uint8Array): string {
 	const first = bytes[0];
 	if (first === undefined) {
-		throw new Error("OID is empty");
+		throw new Error('OID is empty');
 	}
 	const values = [Math.floor(first / 40), first % 40];
 	let current = 0;
 	for (let index = 1; index < bytes.length; index += 1) {
 		const next = bytes[index];
 		if (next === undefined) {
-			throw new Error("Malformed OID");
+			throw new Error('Malformed OID');
 		}
 		current = (current << 7) | (next & 0x7f);
 		if ((next & 0x80) === 0) {
@@ -48,7 +53,7 @@ export function decodeObjectIdentifier(bytes: Uint8Array): string {
 			current = 0;
 		}
 	}
-	return values.join(".");
+	return values.join('.');
 }
 
 export function hexToBytes(value: string): Uint8Array {
@@ -60,14 +65,11 @@ export function hexToBytes(value: string): Uint8Array {
 	return Uint8Array.from(bytes);
 }
 
-export function hasExtensionOid(
-	certificateDer: Uint8Array,
-	oid: string,
-): boolean {
+export function hasExtensionOid(certificateDer: Uint8Array, oid: string): boolean {
 	const top = childrenOf(certificateDer, readElement(certificateDer));
 	const tbsCertificate = top[0];
 	if (tbsCertificate === undefined) {
-		throw new Error("Missing TBSCertificate");
+		throw new Error('Missing TBSCertificate');
 	}
 	const tbsChildren = childrenOf(certificateDer, tbsCertificate);
 	const extensions = tbsChildren.find((child) => child.tag === 0xa3);
@@ -80,10 +82,7 @@ export function hasExtensionOid(
 	}
 	for (const extension of childrenOf(certificateDer, extensionSequence)) {
 		const oidElement = childrenOf(certificateDer, extension)[0];
-		if (
-			oidElement !== undefined
-			&& decodeObjectIdentifier(oidElement.value) === oid
-		) {
+		if (oidElement !== undefined && decodeObjectIdentifier(oidElement.value) === oid) {
 			return true;
 		}
 	}
@@ -95,10 +94,7 @@ export function createSyntheticPkcs7SignedData(
 ): Uint8Array {
 	const signerInfo = sequence([
 		integerFromNumber(1),
-		sequence([
-			hexToBytes(signer.issuer.derHex),
-			integer(hexToBytes(signer.serialNumberHex)),
-		]),
+		sequence([hexToBytes(signer.issuer.derHex), integer(hexToBytes(signer.serialNumberHex))]),
 		sequence([objectIdentifier(OIDS.sha256), nullValue()]),
 		sequence([objectIdentifier(OIDS.sha256WithRSAEncryption), nullValue()]),
 		octetString(Uint8Array.of(0x01, 0x02, 0x03)),
@@ -110,10 +106,7 @@ export function createSyntheticPkcs7SignedData(
 		explicitContext(0, signer.der),
 		setOf([signerInfo]),
 	]);
-	return sequence([
-		objectIdentifier(OIDS.pkcs7SignedData),
-		explicitContext(0, signedData),
-	]);
+	return sequence([objectIdentifier(OIDS.pkcs7SignedData), explicitContext(0, signedData)]);
 }
 
 export async function createCmsSignedDataWithSignedAttrs(
@@ -122,14 +115,11 @@ export async function createCmsSignedDataWithSignedAttrs(
 	content: Uint8Array,
 ): Promise<Uint8Array> {
 	// Compute message digest of content (SHA-256)
-	const contentDigest = createHash("sha256").update(content).digest();
+	const contentDigest = createHash('sha256').update(content).digest();
 	// Build signedAttrs as SET OF (tag 0x31) for signing
 	const signedAttrsContent = concatBytes([
 		// contentType attribute
-		sequence([
-			objectIdentifier(OIDS.cmsContentType),
-			setOf([objectIdentifier(OIDS.pkcs7Data)]),
-		]),
+		sequence([objectIdentifier(OIDS.cmsContentType), setOf([objectIdentifier(OIDS.pkcs7Data)])]),
 		// messageDigest attribute
 		sequence([
 			objectIdentifier(OIDS.cmsMessageDigest),
@@ -142,19 +132,12 @@ export async function createCmsSignedDataWithSignedAttrs(
 	const signedAttrsImplicit = tlv(0xa0, signedAttrsContent);
 	// Sign the SET OF-tagged signedAttrs
 	const sigAlgorithm = getSignatureAlgorithm(privateKey);
-	const signature = await signBytes(
-		privateKey,
-		sigAlgorithm,
-		signedAttrsForSigning,
-	);
+	const signature = await signBytes(privateKey, sigAlgorithm, signedAttrsForSigning);
 	// Build SignerInfo
 	const signerInfo = sequence([
 		integerFromNumber(1),
 		// IssuerAndSerialNumber
-		sequence([
-			hexToBytes(signer.issuer.derHex),
-			integer(hexToBytes(signer.serialNumberHex)),
-		]),
+		sequence([hexToBytes(signer.issuer.derHex), integer(hexToBytes(signer.serialNumberHex))]),
 		// digestAlgorithm
 		sequence([objectIdentifier(OIDS.sha256), nullValue()]),
 		// signedAttrs [0] IMPLICIT
@@ -162,9 +145,7 @@ export async function createCmsSignedDataWithSignedAttrs(
 		// signatureAlgorithm
 		sequence([
 			objectIdentifier(sigAlgorithm.algorithmOid),
-			...(sigAlgorithm.parameters !== undefined
-				? [sigAlgorithm.parameters]
-				: []),
+			...(sigAlgorithm.parameters !== undefined ? [sigAlgorithm.parameters] : []),
 		]),
 		// signature
 		octetString(signature),
@@ -174,19 +155,13 @@ export async function createCmsSignedDataWithSignedAttrs(
 		integerFromNumber(1),
 		setOf([sequence([objectIdentifier(OIDS.sha256), nullValue()])]),
 		// EncapsulatedContentInfo with actual content
-		sequence([
-			objectIdentifier(OIDS.pkcs7Data),
-			explicitContext(0, octetString(content)),
-		]),
+		sequence([objectIdentifier(OIDS.pkcs7Data), explicitContext(0, octetString(content))]),
 		// certificates [0] IMPLICIT
 		explicitContext(0, signer.der),
 		// signerInfos
 		setOf([signerInfo]),
 	]);
-	return sequence([
-		objectIdentifier(OIDS.pkcs7SignedData),
-		explicitContext(0, signedData),
-	]);
+	return sequence([objectIdentifier(OIDS.pkcs7SignedData), explicitContext(0, signedData)]);
 }
 
 export interface IssueChainOptions {
@@ -195,22 +170,14 @@ export interface IssueChainOptions {
 			readonly ca: boolean;
 			readonly pathLength?: number;
 		};
-		readonly keyUsage: readonly (
-			| "keyCertSign"
-			| "cRLSign"
-			| "digitalSignature"
-		)[];
+		readonly keyUsage: readonly ('keyCertSign' | 'cRLSign' | 'digitalSignature')[];
 	};
 	readonly intermediateExtensions?: {
 		readonly basicConstraints: {
 			readonly ca: boolean;
 			readonly pathLength?: number;
 		};
-		readonly keyUsage: readonly (
-			| "keyCertSign"
-			| "cRLSign"
-			| "digitalSignature"
-		)[];
+		readonly keyUsage: readonly ('keyCertSign' | 'cRLSign' | 'digitalSignature')[];
 	};
 	readonly leafValidity?: {
 		readonly notBefore: Date;
@@ -222,38 +189,36 @@ export interface IssueChainOptions {
 
 export async function issueChain(options: IssueChainOptions = {}) {
 	const root = await createSelfSignedCertificate({
-		subject: { commonName: "Verify Root CA" },
+		subject: { commonName: 'Verify Root CA' },
 		extensions: options.rootExtensions ?? {
 			basicConstraints: { ca: true, pathLength: 1 },
-			keyUsage: ["keyCertSign", "cRLSign"],
+			keyUsage: ['keyCertSign', 'cRLSign'],
 		},
 	});
 	const intermediateKeys = await generateKeyPair();
 	const intermediate = await createCertificate({
-		issuer: { commonName: "Verify Root CA" },
-		subject: { commonName: "Verify Intermediate CA" },
+		issuer: { commonName: 'Verify Root CA' },
+		subject: { commonName: 'Verify Intermediate CA' },
 		publicKey: intermediateKeys.publicKey,
 		signerPrivateKey: root.keyPair.privateKey,
 		issuerPublicKey: root.keyPair.publicKey,
 		extensions: options.intermediateExtensions ?? {
 			basicConstraints: { ca: true, pathLength: 0 },
-			keyUsage: ["keyCertSign", "cRLSign"],
+			keyUsage: ['keyCertSign', 'cRLSign'],
 		},
 	});
 	const leafKeys = await generateKeyPair();
 	const leafInput = {
-		issuer: { commonName: "Verify Intermediate CA" },
-		subject: { commonName: "verify.example" },
+		issuer: { commonName: 'Verify Intermediate CA' },
+		subject: { commonName: 'verify.example' },
 		publicKey: leafKeys.publicKey,
 		signerPrivateKey: options.leafSignerPrivateKey ?? intermediateKeys.privateKey,
 		issuerPublicKey: options.leafIssuerPublicKey ?? intermediateKeys.publicKey,
-		...(options.leafValidity !== undefined
-			? { validity: options.leafValidity }
-			: {}),
+		...(options.leafValidity !== undefined ? { validity: options.leafValidity } : {}),
 		extensions: {
-			keyUsage: ["digitalSignature"],
-			extendedKeyUsage: ["serverAuth"],
-			subjectAltNames: [{ type: "dns", value: "verify.example" }],
+			keyUsage: ['digitalSignature'],
+			extendedKeyUsage: ['serverAuth'],
+			subjectAltNames: [{ type: 'dns', value: 'verify.example' }],
 		},
 	} satisfies Parameters<typeof createCertificate>[0];
 	const leaf = await createCertificate(leafInput);

@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'bun:test';
 import {
 	createCertificate,
 	createCertificateRevocationList,
@@ -10,123 +11,112 @@ import {
 	pemDecode,
 	validateCertificateRevocationList,
 	verifyCertificateRevocationList,
-} from "#micro509";
-import { describe, expect, it } from "bun:test";
-import { hexToBytes } from "./helpers.ts";
+} from '#micro509';
+import { hexToBytes } from './helpers.ts';
 
-describe("crl", () => {
-	it("creates, parses, and verifies CRLs", async () => {
+describe('crl', () => {
+	it('creates, parses, and verifies CRLs', async () => {
 		const issuer = await createSelfSignedCertificate({
-			subject: { commonName: "CRL Issuer" },
+			subject: { commonName: 'CRL Issuer' },
 			extensions: {
 				basicConstraints: { ca: true, pathLength: 0 },
-				keyUsage: ["keyCertSign", "cRLSign"],
+				keyUsage: ['keyCertSign', 'cRLSign'],
 			},
 		});
 		const leafKeys = await generateKeyPair();
 		const leaf = await createCertificate({
-			issuer: { commonName: "CRL Issuer" },
-			subject: { commonName: "revoked.example" },
+			issuer: { commonName: 'CRL Issuer' },
+			subject: { commonName: 'revoked.example' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
 			issuerPublicKey: issuer.keyPair.publicKey,
 		});
 		const parsedLeaf = parseCertificatePem(leaf.pem);
 		const crl = await createCertificateRevocationList({
-			issuer: { commonName: "CRL Issuer" },
+			issuer: { commonName: 'CRL Issuer' },
 			signerPrivateKey: issuer.keyPair.privateKey,
 			issuerPublicKey: issuer.keyPair.publicKey,
 			crlNumber: 7,
-			revokedCertificates: [
-				{ serialNumber: hexToBytes(parsedLeaf.serialNumberHex) },
-			],
+			revokedCertificates: [{ serialNumber: hexToBytes(parsedLeaf.serialNumberHex) }],
 		});
 		const parsedCrl = parseCertificateRevocationListPem(crl.pem);
-		expect(parsedCrl.issuer.commonName).toBe("CRL Issuer");
+		expect(parsedCrl.issuer.commonName).toBe('CRL Issuer');
 		expect(parsedCrl.crlNumber).toBe(7);
 		expect(parsedCrl.revokedCertificates).toHaveLength(1);
-		expect(isCertificateRevoked(parsedLeaf.serialNumberHex, parsedCrl)).toBe(
-			true,
-		);
-		expect(
-			await verifyCertificateRevocationList(crl.pem, issuer.certificate.pem),
-		).toMatchObject({ ok: true });
+		expect(isCertificateRevoked(parsedLeaf.serialNumberHex, parsedCrl)).toBe(true);
+		expect(await verifyCertificateRevocationList(crl.pem, issuer.certificate.pem)).toMatchObject({
+			ok: true,
+		});
 
 		const wrongSigner = await generateKeyPair();
 		const badCrl = await createCertificateRevocationList({
-			issuer: { commonName: "CRL Issuer" },
+			issuer: { commonName: 'CRL Issuer' },
 			signerPrivateKey: wrongSigner.privateKey,
-			revokedCertificates: [
-				{ serialNumber: hexToBytes(parsedLeaf.serialNumberHex) },
-			],
+			revokedCertificates: [{ serialNumber: hexToBytes(parsedLeaf.serialNumberHex) }],
 		});
-		expect(
-			await verifyCertificateRevocationList(badCrl.der, issuer.certificate.der),
-		).toMatchObject({
-			ok: false,
-			code: "signature_invalid",
-		});
+		expect(await verifyCertificateRevocationList(badCrl.der, issuer.certificate.der)).toMatchObject(
+			{
+				ok: false,
+				code: 'signature_invalid',
+			},
+		);
 	});
 
-	it("parses CRL entry extensions and delta CRL indicator", async () => {
+	it('parses CRL entry extensions and delta CRL indicator', async () => {
 		const issuer = await createSelfSignedCertificate({
-			subject: { commonName: "Delta CRL Issuer" },
+			subject: { commonName: 'Delta CRL Issuer' },
 			extensions: {
 				basicConstraints: { ca: true, pathLength: 0 },
-				keyUsage: ["keyCertSign", "cRLSign"],
+				keyUsage: ['keyCertSign', 'cRLSign'],
 			},
 		});
 		const crl = await createCertificateRevocationList({
-			issuer: { commonName: "Delta CRL Issuer" },
+			issuer: { commonName: 'Delta CRL Issuer' },
 			signerPrivateKey: issuer.keyPair.privateKey,
 			issuerPublicKey: issuer.keyPair.publicKey,
 			crlNumber: 9,
 			baseCrlNumber: 8,
-			issuingDistributionPointUri: "http://example.test/idp.crl",
-			freshestCrlUris: ["http://example.test/freshest.crl"],
+			issuingDistributionPointUri: 'http://example.test/idp.crl',
+			freshestCrlUris: ['http://example.test/freshest.crl'],
 			revokedCertificates: [
 				{
 					serialNumber: Uint8Array.of(0x01),
-					reasonCode: "keyCompromise",
-					invalidityDate: new Date("2024-01-01T00:00:00Z"),
+					reasonCode: 'keyCompromise',
+					invalidityDate: new Date('2024-01-01T00:00:00Z'),
 				},
 			],
 		});
 		const parsed = parseCertificateRevocationListPem(crl.pem);
 		expect(parsed.baseCrlNumber).toBe(8);
-		expect(parsed.issuingDistributionPointUri).toBe(
-			"http://example.test/idp.crl",
-		);
-		expect(parsed.freshestCrlUris).toEqual([
-			"http://example.test/freshest.crl",
-		]);
+		expect(parsed.issuingDistributionPointUri).toBe('http://example.test/idp.crl');
+		expect(parsed.freshestCrlUris).toEqual(['http://example.test/freshest.crl']);
 		expect(parsed.revokedCertificates[0]).toMatchObject({
-			serialNumberHex: "01",
-			reasonCode: "keyCompromise",
+			serialNumberHex: '01',
+			reasonCode: 'keyCompromise',
 		});
 		expect(parsed.revokedCertificates[0]?.invalidityDate?.toISOString()).toBe(
-			"2024-01-01T00:00:00.000Z",
+			'2024-01-01T00:00:00.000Z',
 		);
 	});
 
-	it("validates CRL with issuer linkage and freshness", async () => {
+	it('validates CRL with issuer linkage and freshness', async () => {
 		const ca = await createSelfSignedCertificate({
-			subject: { commonName: "CRL Validate CA" },
+			subject: { commonName: 'CRL Validate CA' },
 			extensions: {
 				basicConstraints: { ca: true },
-				keyUsage: ["keyCertSign", "cRLSign"],
+				keyUsage: ['keyCertSign', 'cRLSign'],
 			},
 		});
 		const otherCa = await createSelfSignedCertificate({
-			subject: { commonName: "Other CA" },
+			subject: { commonName: 'Other CA' },
 			extensions: {
 				basicConstraints: { ca: true },
-				keyUsage: ["keyCertSign", "cRLSign"],
+				keyUsage: ['keyCertSign', 'cRLSign'],
 			},
 		});
 		const now = new Date();
 		const crl = await createCertificateRevocationList({
-			issuer: { commonName: "CRL Validate CA" },
+			issuer: { commonName: 'CRL Validate CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 			thisUpdate: now,
@@ -147,7 +137,7 @@ describe("crl", () => {
 		});
 		expect(wrongIssuer.ok).toBe(false);
 		if (!wrongIssuer.ok) {
-			expect(wrongIssuer.code).toBe("issuer_mismatch");
+			expect(wrongIssuer.code).toBe('issuer_mismatch');
 		}
 		// Stale CRL (well past nextUpdate)
 		const stale = await validateCertificateRevocationList({
@@ -157,7 +147,7 @@ describe("crl", () => {
 		});
 		expect(stale.ok).toBe(false);
 		if (!stale.ok) {
-			expect(stale.code).toBe("stale_crl");
+			expect(stale.code).toBe('stale_crl');
 		}
 		// Barely stale CRL rescued by clock skew tolerance
 		// Use 5s margin to avoid ASN.1 second-truncation races
@@ -170,23 +160,23 @@ describe("crl", () => {
 		expect(staleWithSkew.ok).toBe(true);
 	});
 
-	it("validates CRL with AKI mismatch", async () => {
+	it('validates CRL with AKI mismatch', async () => {
 		const ca = await createSelfSignedCertificate({
-			subject: { commonName: "AKI CRL CA" },
+			subject: { commonName: 'AKI CRL CA' },
 			extensions: {
 				basicConstraints: { ca: true },
-				keyUsage: ["keyCertSign", "cRLSign"],
+				keyUsage: ['keyCertSign', 'cRLSign'],
 			},
 		});
 		const otherCa = await createSelfSignedCertificate({
-			subject: { commonName: "AKI CRL CA" }, // Same name, different key
+			subject: { commonName: 'AKI CRL CA' }, // Same name, different key
 			extensions: {
 				basicConstraints: { ca: true },
-				keyUsage: ["keyCertSign", "cRLSign"],
+				keyUsage: ['keyCertSign', 'cRLSign'],
 			},
 		});
 		const crl = await createCertificateRevocationList({
-			issuer: { commonName: "AKI CRL CA" },
+			issuer: { commonName: 'AKI CRL CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 		});
@@ -197,32 +187,32 @@ describe("crl", () => {
 		expect(result.ok).toBe(false);
 	});
 
-	it("creates CRL with all revocation reason codes", async () => {
+	it('creates CRL with all revocation reason codes', async () => {
 		const ca = await createSelfSignedCertificate({
-			subject: { commonName: "Reason CA" },
+			subject: { commonName: 'Reason CA' },
 			extensions: {
 				basicConstraints: { ca: true },
-				keyUsage: ["keyCertSign", "cRLSign"],
+				keyUsage: ['keyCertSign', 'cRLSign'],
 			},
 		});
 		const reasons = [
-			"unspecified",
-			"keyCompromise",
-			"cACompromise",
-			"affiliationChanged",
-			"superseded",
-			"cessationOfOperation",
-			"certificateHold",
-			"removeFromCRL",
-			"privilegeWithdrawn",
-			"aACompromise",
+			'unspecified',
+			'keyCompromise',
+			'cACompromise',
+			'affiliationChanged',
+			'superseded',
+			'cessationOfOperation',
+			'certificateHold',
+			'removeFromCRL',
+			'privilegeWithdrawn',
+			'aACompromise',
 		] as const;
 		const revokedCerts = reasons.map((reason, index) => ({
 			serialNumber: Uint8Array.of(index + 1),
 			reasonCode: reason,
 		}));
 		const crl = await createCertificateRevocationList({
-			issuer: { commonName: "Reason CA" },
+			issuer: { commonName: 'Reason CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 			revokedCertificates: revokedCerts,
@@ -234,23 +224,23 @@ describe("crl", () => {
 		}
 	});
 
-	it("validates CRL with DER sources", async () => {
+	it('validates CRL with DER sources', async () => {
 		const ca = await createSelfSignedCertificate({
-			subject: { commonName: "DER CRL CA" },
+			subject: { commonName: 'DER CRL CA' },
 			extensions: {
 				basicConstraints: { ca: true },
-				keyUsage: ["keyCertSign", "cRLSign"],
+				keyUsage: ['keyCertSign', 'cRLSign'],
 			},
 		});
 		const now = new Date();
 		const crl = await createCertificateRevocationList({
-			issuer: { commonName: "DER CRL CA" },
+			issuer: { commonName: 'DER CRL CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 			thisUpdate: now,
 			nextUpdate: new Date(now.getTime() + 3_600_000),
 		});
-		const caDer = new Uint8Array(pemDecode("CERTIFICATE", ca.certificate.pem));
+		const caDer = new Uint8Array(pemDecode('CERTIFICATE', ca.certificate.pem));
 		// Use DER for both CRL and issuer
 		const result = await validateCertificateRevocationList({
 			crl: crl.der,
@@ -260,17 +250,17 @@ describe("crl", () => {
 		expect(result.ok).toBe(true);
 	});
 
-	it("validates CRL with pre-parsed sources", async () => {
+	it('validates CRL with pre-parsed sources', async () => {
 		const ca = await createSelfSignedCertificate({
-			subject: { commonName: "Parsed CRL CA" },
+			subject: { commonName: 'Parsed CRL CA' },
 			extensions: {
 				basicConstraints: { ca: true },
-				keyUsage: ["keyCertSign", "cRLSign"],
+				keyUsage: ['keyCertSign', 'cRLSign'],
 			},
 		});
 		const now = new Date();
 		const crl = await createCertificateRevocationList({
-			issuer: { commonName: "Parsed CRL CA" },
+			issuer: { commonName: 'Parsed CRL CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 			thisUpdate: now,
@@ -286,53 +276,50 @@ describe("crl", () => {
 		expect(result.ok).toBe(true);
 	});
 
-	it("verifyCertificateRevocationList rejects CRL signed by wrong key", async () => {
+	it('verifyCertificateRevocationList rejects CRL signed by wrong key', async () => {
 		const ca = await createSelfSignedCertificate({
-			subject: { commonName: "CRL CA" },
+			subject: { commonName: 'CRL CA' },
 			extensions: {
 				basicConstraints: { ca: true },
-				keyUsage: ["keyCertSign", "cRLSign"],
+				keyUsage: ['keyCertSign', 'cRLSign'],
 			},
 		});
 		const otherCa = await createSelfSignedCertificate({
-			subject: { commonName: "CRL CA" },
+			subject: { commonName: 'CRL CA' },
 			extensions: {
 				basicConstraints: { ca: true },
-				keyUsage: ["keyCertSign", "cRLSign"],
+				keyUsage: ['keyCertSign', 'cRLSign'],
 			},
 		});
 		// Sign CRL with ca but verify with otherCa (same subject, different key)
 		const crl = await createCertificateRevocationList({
-			issuer: { commonName: "CRL CA" },
+			issuer: { commonName: 'CRL CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 		});
-		const result = await verifyCertificateRevocationList(
-			crl.pem,
-			otherCa.certificate.pem,
-		);
+		const result = await verifyCertificateRevocationList(crl.pem, otherCa.certificate.pem);
 		expect(result.ok).toBe(false);
-		if (!result.ok) expect(result.code).toBe("signature_invalid");
+		if (!result.ok) expect(result.code).toBe('signature_invalid');
 	});
 
-	it("validateCertificateRevocationList rejects signature with wrong key", async () => {
+	it('validateCertificateRevocationList rejects signature with wrong key', async () => {
 		const ca = await createSelfSignedCertificate({
-			subject: { commonName: "CRL Validate CA" },
+			subject: { commonName: 'CRL Validate CA' },
 			extensions: {
 				basicConstraints: { ca: true },
-				keyUsage: ["keyCertSign", "cRLSign"],
+				keyUsage: ['keyCertSign', 'cRLSign'],
 			},
 		});
 		const otherCa = await createSelfSignedCertificate({
-			subject: { commonName: "CRL Validate CA" },
+			subject: { commonName: 'CRL Validate CA' },
 			extensions: {
 				basicConstraints: { ca: true },
-				keyUsage: ["keyCertSign", "cRLSign"],
+				keyUsage: ['keyCertSign', 'cRLSign'],
 			},
 		});
 		// Create CRL without AKI to bypass AKI check, signed by ca
 		const crl = await createCertificateRevocationList({
-			issuer: { commonName: "CRL Validate CA" },
+			issuer: { commonName: 'CRL Validate CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			// omit issuerPublicKey → no AKI extension
 		});
@@ -341,50 +328,51 @@ describe("crl", () => {
 			issuerCertificate: otherCa.certificate.pem,
 		});
 		expect(result.ok).toBe(false);
-		if (!result.ok) expect(result.code).toBe("signature_invalid");
+		if (!result.ok) expect(result.code).toBe('signature_invalid');
 	});
 
-	it("verifies CRL with PEM string sources", async () => {
+	it('verifies CRL with PEM string sources', async () => {
 		const ca = await createSelfSignedCertificate({
-			subject: { commonName: "PEM CRL CA" },
+			subject: { commonName: 'PEM CRL CA' },
 			extensions: {
 				basicConstraints: { ca: true },
-				keyUsage: ["keyCertSign", "cRLSign"],
+				keyUsage: ['keyCertSign', 'cRLSign'],
 			},
 		});
 		const crl = await createCertificateRevocationList({
-			issuer: { commonName: "PEM CRL CA" },
+			issuer: { commonName: 'PEM CRL CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 		});
-		const result = await verifyCertificateRevocationList(
-			crl.pem,
-			ca.certificate.pem,
-		);
+		const result = await verifyCertificateRevocationList(crl.pem, ca.certificate.pem);
 		expect(result.ok).toBe(true);
 	});
 
-	it("parseCertificateRevocationListDer handles IDP with no dist point name (lines 586-587)", async () => {
+	it('parseCertificateRevocationListDer handles IDP with no dist point name (lines 586-587)', async () => {
 		const ca = await createSelfSignedCertificate({
-			subject: { commonName: "IDP CRL CA" },
+			subject: { commonName: 'IDP CRL CA' },
 			extensions: {
 				basicConstraints: { ca: true },
-				keyUsage: ["keyCertSign", "cRLSign"],
+				keyUsage: ['keyCertSign', 'cRLSign'],
 			},
 		});
 		// Create CRL with IDP extension
 		const crl = await createCertificateRevocationList({
-			issuer: { commonName: "IDP CRL CA" },
+			issuer: { commonName: 'IDP CRL CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
-			issuingDistributionPointUri: "http://crl.example.com/crl.pem",
+			issuingDistributionPointUri: 'http://crl.example.com/crl.pem',
 		});
-		const derBytes = new Uint8Array(pemDecode("X509 CRL", crl.pem));
+		const derBytes = new Uint8Array(pemDecode('X509 CRL', crl.pem));
 		// Find the IDP OID bytes (2.5.29.28 = 55 1D 1C) in the CRL DER
 		const idpOidBytes = [0x55, 0x1d, 0x1c];
 		let idpOffset = -1;
 		for (let i = 0; i < derBytes.length - 3; i++) {
-			if (derBytes[i] === idpOidBytes[0] && derBytes[i + 1] === idpOidBytes[1] && derBytes[i + 2] === idpOidBytes[2]) {
+			if (
+				derBytes[i] === idpOidBytes[0] &&
+				derBytes[i + 1] === idpOidBytes[1] &&
+				derBytes[i + 2] === idpOidBytes[2]
+			) {
 				idpOffset = i;
 				break;
 			}
@@ -415,25 +403,29 @@ describe("crl", () => {
 		}
 	});
 
-	it("parseCertificateRevocationListDer handles AKI with no keyIdentifier (lines 680-682)", async () => {
+	it('parseCertificateRevocationListDer handles AKI with no keyIdentifier (lines 680-682)', async () => {
 		const ca = await createSelfSignedCertificate({
-			subject: { commonName: "AKI CRL CA" },
+			subject: { commonName: 'AKI CRL CA' },
 			extensions: {
 				basicConstraints: { ca: true },
-				keyUsage: ["keyCertSign", "cRLSign"],
+				keyUsage: ['keyCertSign', 'cRLSign'],
 			},
 		});
 		const crl = await createCertificateRevocationList({
-			issuer: { commonName: "AKI CRL CA" },
+			issuer: { commonName: 'AKI CRL CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 		});
-		const derBytes = new Uint8Array(pemDecode("X509 CRL", crl.pem));
+		const derBytes = new Uint8Array(pemDecode('X509 CRL', crl.pem));
 		// Find AKI OID bytes (2.5.29.35 = 55 1D 23)
 		const akiOidBytes = [0x55, 0x1d, 0x23];
 		let akiOffset = -1;
 		for (let i = 0; i < derBytes.length - 3; i++) {
-			if (derBytes[i] === akiOidBytes[0] && derBytes[i + 1] === akiOidBytes[1] && derBytes[i + 2] === akiOidBytes[2]) {
+			if (
+				derBytes[i] === akiOidBytes[0] &&
+				derBytes[i + 1] === akiOidBytes[1] &&
+				derBytes[i + 2] === akiOidBytes[2]
+			) {
 				akiOffset = i;
 				break;
 			}

@@ -1,11 +1,11 @@
-import { type DerElement, readElement } from "./der.ts";
+import { type DerElement, readElement } from './der.ts';
 
 const textDecoder = new TextDecoder();
 
 export function decodeObjectIdentifier(bytes: Uint8Array): string {
 	const first = bytes[0];
 	if (first === undefined) {
-		throw new Error("OID is empty");
+		throw new Error('OID is empty');
 	}
 	const values = [Math.floor(first / 40), first % 40];
 	let current = 0;
@@ -13,7 +13,7 @@ export function decodeObjectIdentifier(bytes: Uint8Array): string {
 	for (let index = 1; index < bytes.length; index += 1) {
 		const next = bytes[index];
 		if (next === undefined) {
-			throw new Error("Malformed OID");
+			throw new Error('Malformed OID');
 		}
 		current = current * 128 + (next & 0x7f);
 		if ((next & 0x80) === 0) {
@@ -25,15 +25,13 @@ export function decodeObjectIdentifier(bytes: Uint8Array): string {
 		}
 	}
 	if (inContinuation) {
-		throw new Error("Malformed OID: incomplete continuation");
+		throw new Error('Malformed OID: incomplete continuation');
 	}
-	return values.join(".");
+	return values.join('.');
 }
 
 export function toHex(bytes: Uint8Array): string {
-	return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join(
-		"",
-	);
+	return Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('');
 }
 
 export function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
@@ -42,10 +40,7 @@ export function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
 	return out;
 }
 
-export function childrenOf(
-	source: Uint8Array,
-	parent: DerElement,
-): DerElement[] {
+export function childrenOf(source: Uint8Array, parent: DerElement): DerElement[] {
 	const children: DerElement[] = [];
 	let offset = parent.start;
 	while (offset < parent.end) {
@@ -65,7 +60,7 @@ export function requireElement<T>(value: T | undefined, label: string): T {
 
 export function extractBitStringValue(element: DerElement): Uint8Array {
 	if (element.tag !== 0x03) {
-		throw new Error("Expected BIT STRING");
+		throw new Error('Expected BIT STRING');
 	}
 	return element.value.slice(1);
 }
@@ -73,24 +68,20 @@ export function extractBitStringValue(element: DerElement): Uint8Array {
 export function parseTime(element: DerElement): Date {
 	const value = textDecoder.decode(element.value);
 	if (element.tag === 0x17) {
-		const yearPrefix = Number.parseInt(value.slice(0, 2), 10) >= 50 ? "19" : "20";
+		const yearPrefix = Number.parseInt(value.slice(0, 2), 10) >= 50 ? '19' : '20';
 		return new Date(
-			`${yearPrefix}${value.slice(0, 2)}-${value.slice(2, 4)}-${value.slice(4, 6)}T${value.slice(6, 8)}:${
-				value.slice(
-					8,
-					10,
-				)
-			}:${value.slice(10, 12)}Z`,
+			`${yearPrefix}${value.slice(0, 2)}-${value.slice(2, 4)}-${value.slice(4, 6)}T${value.slice(6, 8)}:${value.slice(
+				8,
+				10,
+			)}:${value.slice(10, 12)}Z`,
 		);
 	}
 	if (element.tag === 0x18) {
 		return new Date(
-			`${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}T${value.slice(8, 10)}:${value.slice(10, 12)}:${
-				value.slice(
-					12,
-					14,
-				)
-			}Z`,
+			`${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}T${value.slice(8, 10)}:${value.slice(10, 12)}:${value.slice(
+				12,
+				14,
+			)}Z`,
 		);
 	}
 	throw new Error(`Unsupported time tag: ${element.tag}`);
@@ -98,9 +89,7 @@ export function parseTime(element: DerElement): Date {
 
 export function decodeIntegerNumber(bytes: Uint8Array): number {
 	if (bytes.length > 6) {
-		throw new Error(
-			`Integer too large for safe number (${bytes.length} bytes)`,
-		);
+		throw new Error(`Integer too large for safe number (${bytes.length} bytes)`);
 	}
 	let value = 0;
 	for (const byte of bytes) {
@@ -113,10 +102,7 @@ export function hexToBytes(value: string): Uint8Array {
 	const normalized = value.length % 2 === 0 ? value : `0${value}`;
 	const out = new Uint8Array(normalized.length / 2);
 	for (let index = 0; index < out.length; index += 1) {
-		out[index] = Number.parseInt(
-			normalized.slice(index * 2, index * 2 + 2),
-			16,
-		);
+		out[index] = Number.parseInt(normalized.slice(index * 2, index * 2 + 2), 16);
 	}
 	return out;
 }

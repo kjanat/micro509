@@ -8,23 +8,23 @@ import {
 	parseTime,
 	requireElement,
 	toHex,
-} from "./asn1.ts";
-import { type DerElement, readElement } from "./der.ts";
-import {
-	type AuthorityInformationAccess,
-	type BasicConstraints,
-	type ExtendedKeyUsage,
-	type GeneralSubtree,
-	type KeyUsage,
-	type NameConstraintForm,
-	type NameConstraints,
-	type SubjectAltName,
-	parseAuthorityInfoAccessMethodOid,
-	parseExtendedKeyUsageOid,
-} from "./extensions.ts";
-import type { NameFieldKey } from "./name.ts";
-import { OIDS } from "./oids.ts";
-import { pemDecode, splitPemBlocks } from "./pem.ts";
+} from './asn1.ts';
+import type { DerElement } from './der.ts';
+import { readElement } from './der.ts';
+import type {
+	AuthorityInformationAccess,
+	BasicConstraints,
+	ExtendedKeyUsage,
+	GeneralSubtree,
+	KeyUsage,
+	NameConstraintForm,
+	NameConstraints,
+	SubjectAltName,
+} from './extensions.ts';
+import { parseAuthorityInfoAccessMethodOid, parseExtendedKeyUsageOid } from './extensions.ts';
+import type { NameFieldKey } from './name.ts';
+import { OIDS } from './oids.ts';
+import { pemDecode, splitPemBlocks } from './pem.ts';
 
 const textDecoder = new TextDecoder();
 
@@ -67,7 +67,8 @@ export function defineExtensionDecoderMap<TMap extends ExtensionDecoderMap>(
 export type ExtensionDecoderMap = Record<string, ExtensionDecoder<unknown>>;
 
 export type DecodedExtensionMap<TMap extends ExtensionDecoderMap> = {
-	[TKey in keyof TMap]?: TMap[TKey] extends ExtensionDecoder<infer TValue> ? DecodedExtensionValue<TValue>
+	[TKey in keyof TMap]?: TMap[TKey] extends ExtensionDecoder<infer TValue>
+		? DecodedExtensionValue<TValue>
 		: never;
 };
 
@@ -77,16 +78,12 @@ export interface DecodedExtensionValue<TValue> {
 	readonly value: TValue;
 }
 
-export interface ParseOptions<
-	TMap extends ExtensionDecoderMap = Record<never, never>,
-> {
+export interface ParseOptions<TMap extends ExtensionDecoderMap = Record<never, never>> {
 	readonly decoders?: readonly ExtensionDecoder<unknown>[];
 	readonly decoderMap?: TMap;
 }
 
-export interface ParsedCertificate<
-	TMap extends ExtensionDecoderMap = Record<never, never>,
-> {
+export interface ParsedCertificate<TMap extends ExtensionDecoderMap = Record<never, never>> {
 	readonly der: Uint8Array;
 	readonly version: number;
 	readonly serialNumberHex: string;
@@ -136,45 +133,42 @@ export interface ParsedCertificateSigningRequest<
 	readonly decodedExtensionMap?: DecodedExtensionMap<TMap>;
 }
 
-export function parseCertificateDer<
-	TMap extends ExtensionDecoderMap = Record<never, never>,
->(der: Uint8Array, options?: ParseOptions<TMap>): ParsedCertificate<TMap> {
+export function parseCertificateDer<TMap extends ExtensionDecoderMap = Record<never, never>>(
+	der: Uint8Array,
+	options?: ParseOptions<TMap>,
+): ParsedCertificate<TMap> {
 	const topLevel = childrenOf(der, readElement(der));
-	const tbsCertificate = requireElement(topLevel[0], "TBSCertificate");
-	const signatureAlgorithm = requireElement(topLevel[1], "signatureAlgorithm");
-	const signatureValue = requireElement(topLevel[2], "signatureValue");
+	const tbsCertificate = requireElement(topLevel[0], 'TBSCertificate');
+	const signatureAlgorithm = requireElement(topLevel[1], 'signatureAlgorithm');
+	const signatureValue = requireElement(topLevel[2], 'signatureValue');
 	const tbsChildren = childrenOf(der, tbsCertificate);
 
 	let index = 0;
 	let version = 1;
 	const maybeVersion = tbsChildren[index];
 	if (maybeVersion?.tag === 0xa0) {
-		const versionElement = requireElement(
-			childrenOf(der, maybeVersion)[0],
-			"version INTEGER",
-		);
+		const versionElement = requireElement(childrenOf(der, maybeVersion)[0], 'version INTEGER');
 		version = decodeIntegerNumber(versionElement.value) + 1;
 		index += 1;
 	}
 
-	const serialNumber = requireElement(tbsChildren[index], "serialNumber");
-	const issuer = requireElement(tbsChildren[index + 2], "issuer");
-	const validity = requireElement(tbsChildren[index + 3], "validity");
-	const subject = requireElement(tbsChildren[index + 4], "subject");
-	const subjectPublicKeyInfo = requireElement(
-		tbsChildren[index + 5],
-		"subjectPublicKeyInfo",
-	);
+	const serialNumber = requireElement(tbsChildren[index], 'serialNumber');
+	const issuer = requireElement(tbsChildren[index + 2], 'issuer');
+	const validity = requireElement(tbsChildren[index + 3], 'validity');
+	const subject = requireElement(tbsChildren[index + 4], 'subject');
+	const subjectPublicKeyInfo = requireElement(tbsChildren[index + 5], 'subjectPublicKeyInfo');
 	const extensions = tbsChildren.find((element) => element.tag === 0xa3);
 	const parsedExtensions = parseExtensionContainer(der, extensions);
 	const parsedValidity = parseValidity(der, validity);
 	const parsedSpki = parseSubjectPublicKeyInfo(der, subjectPublicKeyInfo);
-	const decodedExtensions = options?.decoders === undefined
-		? undefined
-		: decodeExtensions(parsedExtensions.all, options.decoders);
-	const decodedExtensionMap = options?.decoderMap === undefined
-		? undefined
-		: decodeExtensionMap(parsedExtensions.all, options.decoderMap);
+	const decodedExtensions =
+		options?.decoders === undefined
+			? undefined
+			: decodeExtensions(parsedExtensions.all, options.decoders);
+	const decodedExtensionMap =
+		options?.decoderMap === undefined
+			? undefined
+			: decodeExtensionMap(parsedExtensions.all, options.decoderMap);
 
 	return {
 		der: new Uint8Array(der),
@@ -193,8 +187,7 @@ export function parseCertificateDer<
 		subject: parseName(der, subject),
 		notBefore: parsedValidity.notBefore,
 		notAfter: parsedValidity.notAfter,
-		signatureAlgorithmOid: parseAlgorithmIdentifier(der, signatureAlgorithm)
-			.oid,
+		signatureAlgorithmOid: parseAlgorithmIdentifier(der, signatureAlgorithm).oid,
 		publicKeyAlgorithmOid: parsedSpki.oid,
 		...(parsedSpki.parametersOid !== undefined
 			? { publicKeyParametersOid: parsedSpki.parametersOid }
@@ -203,9 +196,7 @@ export function parseCertificateDer<
 		...(parsedExtensions.basicConstraints !== undefined
 			? { basicConstraints: parsedExtensions.basicConstraints }
 			: {}),
-		...(parsedExtensions.keyUsage !== undefined
-			? { keyUsage: parsedExtensions.keyUsage }
-			: {}),
+		...(parsedExtensions.keyUsage !== undefined ? { keyUsage: parsedExtensions.keyUsage } : {}),
 		...(parsedExtensions.extendedKeyUsage !== undefined
 			? { extendedKeyUsage: parsedExtensions.extendedKeyUsage }
 			: {}),
@@ -232,52 +223,44 @@ export function parseCertificateDer<
 	};
 }
 
-export function parseCertificatePem<
-	TMap extends ExtensionDecoderMap = Record<never, never>,
->(pem: string, options?: ParseOptions<TMap>): ParsedCertificate<TMap> {
-	return parseCertificateDer(pemDecode("CERTIFICATE", pem), options);
+export function parseCertificatePem<TMap extends ExtensionDecoderMap = Record<never, never>>(
+	pem: string,
+	options?: ParseOptions<TMap>,
+): ParsedCertificate<TMap> {
+	return parseCertificateDer(pemDecode('CERTIFICATE', pem), options);
 }
 
-export function parseCertificateChainPem<
-	TMap extends ExtensionDecoderMap = Record<never, never>,
->(
+export function parseCertificateChainPem<TMap extends ExtensionDecoderMap = Record<never, never>>(
 	pemBundle: string,
 	options?: ParseOptions<TMap>,
 ): readonly ParsedCertificate<TMap>[] {
 	return splitPemBlocks(pemBundle)
-		.filter((block) => block.label === "CERTIFICATE")
+		.filter((block) => block.label === 'CERTIFICATE')
 		.map((block) => parseCertificateDer(block.bytes, options));
 }
 
 export function parseCertificateSigningRequestDer<
 	TMap extends ExtensionDecoderMap = Record<never, never>,
->(
-	der: Uint8Array,
-	options?: ParseOptions<TMap>,
-): ParsedCertificateSigningRequest<TMap> {
+>(der: Uint8Array, options?: ParseOptions<TMap>): ParsedCertificateSigningRequest<TMap> {
 	const topLevel = childrenOf(der, readElement(der));
-	const certificationRequestInfo = requireElement(
-		topLevel[0],
-		"CertificationRequestInfo",
-	);
-	const signatureAlgorithm = requireElement(topLevel[1], "signatureAlgorithm");
-	const signatureValue = requireElement(topLevel[2], "signatureValue");
+	const certificationRequestInfo = requireElement(topLevel[0], 'CertificationRequestInfo');
+	const signatureAlgorithm = requireElement(topLevel[1], 'signatureAlgorithm');
+	const signatureValue = requireElement(topLevel[2], 'signatureValue');
 	const criChildren = childrenOf(der, certificationRequestInfo);
-	const version = decodeIntegerNumber(requireElement(criChildren[0], "version").value) + 1;
-	const subject = requireElement(criChildren[1], "subject");
-	const subjectPublicKeyInfo = requireElement(
-		criChildren[2],
-		"subjectPublicKeyInfo",
-	);
+	const version = decodeIntegerNumber(requireElement(criChildren[0], 'version').value) + 1;
+	const subject = requireElement(criChildren[1], 'subject');
+	const subjectPublicKeyInfo = requireElement(criChildren[2], 'subjectPublicKeyInfo');
 	const attributes = criChildren[3];
 	const parsedExtensions = parseRequestedExtensions(der, attributes);
 	const parsedSpki = parseSubjectPublicKeyInfo(der, subjectPublicKeyInfo);
-	const decodedExtensions = options?.decoders === undefined
-		? undefined
-		: decodeExtensions(parsedExtensions.all, options.decoders);
-	const decodedExtensionMap = options?.decoderMap === undefined
-		? undefined
-		: decodeExtensionMap(parsedExtensions.all, options.decoderMap);
+	const decodedExtensions =
+		options?.decoders === undefined
+			? undefined
+			: decodeExtensions(parsedExtensions.all, options.decoders);
+	const decodedExtensionMap =
+		options?.decoderMap === undefined
+			? undefined
+			: decodeExtensionMap(parsedExtensions.all, options.decoderMap);
 
 	return {
 		version,
@@ -291,8 +274,7 @@ export function parseCertificateSigningRequestDer<
 		),
 		signatureValue: extractBitStringValue(signatureValue),
 		subject: parseName(der, subject),
-		signatureAlgorithmOid: parseAlgorithmIdentifier(der, signatureAlgorithm)
-			.oid,
+		signatureAlgorithmOid: parseAlgorithmIdentifier(der, signatureAlgorithm).oid,
 		publicKeyAlgorithmOid: parsedSpki.oid,
 		...(parsedSpki.parametersOid !== undefined
 			? { publicKeyParametersOid: parsedSpki.parametersOid }
@@ -301,9 +283,7 @@ export function parseCertificateSigningRequestDer<
 		...(parsedExtensions.basicConstraints !== undefined
 			? { basicConstraints: parsedExtensions.basicConstraints }
 			: {}),
-		...(parsedExtensions.keyUsage !== undefined
-			? { keyUsage: parsedExtensions.keyUsage }
-			: {}),
+		...(parsedExtensions.keyUsage !== undefined ? { keyUsage: parsedExtensions.keyUsage } : {}),
 		...(parsedExtensions.extendedKeyUsage !== undefined
 			? { extendedKeyUsage: parsedExtensions.extendedKeyUsage }
 			: {}),
@@ -323,14 +303,8 @@ export function parseCertificateSigningRequestDer<
 
 export function parseCertificateSigningRequestPem<
 	TMap extends ExtensionDecoderMap = Record<never, never>,
->(
-	pem: string,
-	options?: ParseOptions<TMap>,
-): ParsedCertificateSigningRequest<TMap> {
-	return parseCertificateSigningRequestDer(
-		pemDecode("CERTIFICATE REQUEST", pem),
-		options,
-	);
+>(pem: string, options?: ParseOptions<TMap>): ParsedCertificateSigningRequest<TMap> {
+	return parseCertificateSigningRequestDer(pemDecode('CERTIFICATE REQUEST', pem), options);
 }
 
 export function findExtension(
@@ -416,10 +390,7 @@ function parseExtensionContainer(
 	if (container === undefined) {
 		return { all: [] };
 	}
-	const sequenceElement = requireElement(
-		childrenOf(source, container)[0],
-		"extensions sequence",
-	);
+	const sequenceElement = requireElement(childrenOf(source, container)[0], 'extensions sequence');
 	return parseExtensionSequence(source, sequenceElement);
 }
 
@@ -432,24 +403,18 @@ function parseRequestedExtensions(
 	}
 	for (const attribute of childrenOf(source, attributes)) {
 		const attributeChildren = childrenOf(source, attribute);
-		const oid = requireElement(attributeChildren[0], "attribute OID");
+		const oid = requireElement(attributeChildren[0], 'attribute OID');
 		if (decodeObjectIdentifier(oid.value) !== OIDS.extensionRequest) {
 			continue;
 		}
-		const valuesSet = requireElement(attributeChildren[1], "attribute values");
-		const requested = requireElement(
-			childrenOf(source, valuesSet)[0],
-			"requested extensions",
-		);
+		const valuesSet = requireElement(attributeChildren[1], 'attribute values');
+		const requested = requireElement(childrenOf(source, valuesSet)[0], 'requested extensions');
 		return parseExtensionSequence(source, requested);
 	}
 	return { all: [] };
 }
 
-function parseExtensionSequence(
-	source: Uint8Array,
-	sequenceElement: DerElement,
-): ParsedExtensions {
+function parseExtensionSequence(source: Uint8Array, sequenceElement: DerElement): ParsedExtensions {
 	const parsed: ParsedExtension[] = [];
 	let basicConstraints: BasicConstraints | undefined;
 	let keyUsage: readonly KeyUsage[] | undefined;
@@ -463,7 +428,7 @@ function parseExtensionSequence(
 
 	for (const extension of childrenOf(source, sequenceElement)) {
 		const children = childrenOf(source, extension);
-		const oidElement = requireElement(children[0], "extension OID");
+		const oidElement = requireElement(children[0], 'extension OID');
 		const oid = decodeObjectIdentifier(oidElement.value);
 		let offset = 1;
 		let critical = false;
@@ -472,7 +437,7 @@ function parseExtensionSequence(
 			critical = decodeBoolean(maybeCritical.value);
 			offset += 1;
 		}
-		const extnValue = requireElement(children[offset], "extension value");
+		const extnValue = requireElement(children[offset], 'extension value');
 		const inner = readElement(extnValue.value);
 		parsed.push({
 			oid,
@@ -529,15 +494,10 @@ function parseName(source: Uint8Array, element: DerElement): ParsedName {
 	const attributes: ParsedNameAttribute[] = [];
 	const values: Partial<Record<NameFieldKey, string>> = {};
 	for (const setElement of childrenOf(source, element)) {
-		const attributeSequence = requireElement(
-			childrenOf(source, setElement)[0],
-			"name attribute",
-		);
+		const attributeSequence = requireElement(childrenOf(source, setElement)[0], 'name attribute');
 		const parts = childrenOf(source, attributeSequence);
-		const oid = decodeObjectIdentifier(
-			requireElement(parts[0], "name OID").value,
-		);
-		const valueElement = requireElement(parts[1], "name value");
+		const oid = decodeObjectIdentifier(requireElement(parts[0], 'name OID').value);
+		const valueElement = requireElement(parts[1], 'name value');
 		const key = nameKeyFromOid(oid);
 		const value = decodeString(valueElement.tag, valueElement.value);
 		attributes.push({ oid, ...(key !== undefined ? { key } : {}), value });
@@ -546,9 +506,7 @@ function parseName(source: Uint8Array, element: DerElement): ParsedName {
 		}
 	}
 	return {
-		derHex: toHex(
-			source.slice(element.start - element.headerLength, element.end),
-		),
+		derHex: toHex(source.slice(element.start - element.headerLength, element.end)),
 		attributes,
 		values,
 	};
@@ -560,8 +518,8 @@ function parseValidity(
 ): { readonly notBefore: Date; readonly notAfter: Date } {
 	const children = childrenOf(source, element);
 	return {
-		notBefore: parseTime(requireElement(children[0], "notBefore")),
-		notAfter: parseTime(requireElement(children[1], "notAfter")),
+		notBefore: parseTime(requireElement(children[0], 'notBefore')),
+		notAfter: parseTime(requireElement(children[1], 'notAfter')),
 	};
 }
 
@@ -570,10 +528,7 @@ function parseSubjectPublicKeyInfo(
 	element: DerElement,
 ): { readonly oid: string; readonly parametersOid?: string } {
 	const children = childrenOf(source, element);
-	const algorithm = parseAlgorithmIdentifier(
-		source,
-		requireElement(children[0], "SPKI algorithm"),
-	);
+	const algorithm = parseAlgorithmIdentifier(source, requireElement(children[0], 'SPKI algorithm'));
 	return algorithm;
 }
 
@@ -582,9 +537,7 @@ function parseAlgorithmIdentifier(
 	element: DerElement,
 ): { readonly oid: string; readonly parametersOid?: string } {
 	const children = childrenOf(source, element);
-	const oid = decodeObjectIdentifier(
-		requireElement(children[0], "algorithm OID").value,
-	);
+	const oid = decodeObjectIdentifier(requireElement(children[0], 'algorithm OID').value);
 	const parameters = children[1];
 	if (parameters?.tag === 0x06) {
 		return { oid, parametersOid: decodeObjectIdentifier(parameters.value) };
@@ -609,23 +562,23 @@ function parseBasicConstraints(bytes: Uint8Array): BasicConstraints {
 }
 
 function parseKeyUsage(bytes: Uint8Array): readonly KeyUsage[] {
-	const bitString = requireElement(readElement(bytes), "keyUsage bit string");
+	const bitString = requireElement(readElement(bytes), 'keyUsage bit string');
 	const unusedBits = bitString.value[0] ?? 0;
 	if (unusedBits > 7) {
-		throw new Error("Invalid BIT STRING");
+		throw new Error('Invalid BIT STRING');
 	}
 	const data = bitString.value.slice(1);
 	const usages: KeyUsage[] = [];
 	const candidates: readonly KeyUsage[] = [
-		"digitalSignature",
-		"nonRepudiation",
-		"keyEncipherment",
-		"dataEncipherment",
-		"keyAgreement",
-		"keyCertSign",
-		"cRLSign",
-		"encipherOnly",
-		"decipherOnly",
+		'digitalSignature',
+		'nonRepudiation',
+		'keyEncipherment',
+		'dataEncipherment',
+		'keyAgreement',
+		'keyCertSign',
+		'cRLSign',
+		'encipherOnly',
+		'decipherOnly',
 	];
 	for (let index = 0; index < candidates.length; index += 1) {
 		const byteIndex = Math.floor(index / 8);
@@ -642,47 +595,41 @@ function parseKeyUsage(bytes: Uint8Array): readonly KeyUsage[] {
 }
 
 function parseExtendedKeyUsage(bytes: Uint8Array): readonly ExtendedKeyUsage[] {
-	const sequenceElement = requireElement(
-		readElement(bytes),
-		"extendedKeyUsage sequence",
-	);
+	const sequenceElement = requireElement(readElement(bytes), 'extendedKeyUsage sequence');
 	return childrenOf(bytes, sequenceElement).map((element) =>
-		parseExtendedKeyUsageOid(decodeObjectIdentifier(element.value))
+		parseExtendedKeyUsageOid(decodeObjectIdentifier(element.value)),
 	);
 }
 
 function parseSubjectAltNames(bytes: Uint8Array): readonly SubjectAltName[] {
-	const sequenceElement = requireElement(
-		readElement(bytes),
-		"subjectAltName sequence",
-	);
+	const sequenceElement = requireElement(readElement(bytes), 'subjectAltName sequence');
 	return childrenOf(bytes, sequenceElement).map((element) => {
 		switch (element.tag) {
 			case 0x81:
 				return {
-					type: "email" as const,
+					type: 'email' as const,
 					value: textDecoder.decode(element.value),
 				};
 			case 0x82:
 				return {
-					type: "dns" as const,
+					type: 'dns' as const,
 					value: textDecoder.decode(element.value),
 				};
 			case 0x86:
 				return {
-					type: "uri" as const,
+					type: 'uri' as const,
 					value: textDecoder.decode(element.value),
 				};
 			case 0x87:
-				return { type: "ip" as const, value: decodeIpAddress(element.value) };
+				return { type: 'ip' as const, value: decodeIpAddress(element.value) };
 			case 0xa4:
 				return {
-					type: "directoryName" as const,
+					type: 'directoryName' as const,
 					derHex: toHex(rebuildDirectoryNameFromImplicit(element, bytes)),
 				};
 			default:
 				return {
-					type: "unknown" as const,
+					type: 'unknown' as const,
 					tag: element.tag,
 					value: bytes.slice(element.start, element.end),
 				};
@@ -690,39 +637,24 @@ function parseSubjectAltNames(bytes: Uint8Array): readonly SubjectAltName[] {
 	});
 }
 
-function parseAuthorityInfoAccess(
-	bytes: Uint8Array,
-): readonly AuthorityInformationAccess[] {
-	const sequenceElement = requireElement(
-		readElement(bytes),
-		"authorityInfoAccess sequence",
-	);
+function parseAuthorityInfoAccess(bytes: Uint8Array): readonly AuthorityInformationAccess[] {
+	const sequenceElement = requireElement(readElement(bytes), 'authorityInfoAccess sequence');
 	return childrenOf(bytes, sequenceElement).map((element) => {
 		const children = childrenOf(bytes, element);
-		const method = requireElement(children[0], "authorityInfoAccess method");
-		const location = requireElement(
-			children[1],
-			"authorityInfoAccess location",
-		);
+		const method = requireElement(children[0], 'authorityInfoAccess method');
+		const location = requireElement(children[1], 'authorityInfoAccess location');
 		if (location.tag !== 0x86) {
-			throw new Error(
-				`Unsupported authorityInfoAccess location tag: ${location.tag}`,
-			);
+			throw new Error(`Unsupported authorityInfoAccess location tag: ${location.tag}`);
 		}
 		return {
-			method: parseAuthorityInfoAccessMethodOid(
-				decodeObjectIdentifier(method.value),
-			),
+			method: parseAuthorityInfoAccessMethodOid(decodeObjectIdentifier(method.value)),
 			uri: textDecoder.decode(location.value),
 		};
 	});
 }
 
 function parseCrlDistributionPoints(bytes: Uint8Array): readonly string[] {
-	const sequenceElement = requireElement(
-		readElement(bytes),
-		"cRLDistributionPoints sequence",
-	);
+	const sequenceElement = requireElement(readElement(bytes), 'cRLDistributionPoints sequence');
 	const uris: string[] = [];
 	for (const distributionPoint of childrenOf(bytes, sequenceElement)) {
 		for (const child of childrenOf(bytes, distributionPoint)) {
@@ -745,10 +677,7 @@ function parseCrlDistributionPoints(bytes: Uint8Array): readonly string[] {
 
 /** @internal Exported for testing only — not part of the public API. */
 export function parseNameConstraints(bytes: Uint8Array): NameConstraints {
-	const sequenceElement = requireElement(
-		readElement(bytes),
-		"nameConstraints sequence",
-	);
+	const sequenceElement = requireElement(readElement(bytes), 'nameConstraints sequence');
 	let permittedSubtrees: readonly GeneralSubtree[] | undefined;
 	let excludedSubtrees: readonly GeneralSubtree[] | undefined;
 	for (const child of childrenOf(bytes, sequenceElement)) {
@@ -786,13 +715,11 @@ function parseGeneralSubtrees(
 			if (child.tag === 0x80) {
 				// minimum [0] INTEGER — must be 0
 				if (child.value.length !== 1 || child.value[0] !== 0) {
-					throw new Error("name constraints GeneralSubtree minimum must be 0");
+					throw new Error('name constraints GeneralSubtree minimum must be 0');
 				}
 			} else if (child.tag === 0x81) {
 				// maximum [1] INTEGER — must be absent
-				throw new Error(
-					"name constraints GeneralSubtree maximum is not supported",
-				);
+				throw new Error('name constraints GeneralSubtree maximum is not supported');
 			}
 		}
 
@@ -810,22 +737,22 @@ function parseNameConstraintGeneralName(
 ): NameConstraintForm | undefined {
 	switch (element.tag) {
 		case 0x81:
-			return { type: "email", value: textDecoder.decode(element.value) };
+			return { type: 'email', value: textDecoder.decode(element.value) };
 		case 0x82:
-			return { type: "dns", value: textDecoder.decode(element.value) };
+			return { type: 'dns', value: textDecoder.decode(element.value) };
 		case 0x86:
-			return { type: "uri", value: textDecoder.decode(element.value) };
+			return { type: 'uri', value: textDecoder.decode(element.value) };
 		case 0x87: {
 			if (element.value.length === 8) {
 				return {
-					type: "ip",
+					type: 'ip',
 					addressBytes: element.value.slice(0, 4),
 					maskBytes: element.value.slice(4, 8),
 				};
 			}
 			if (element.value.length === 32) {
 				return {
-					type: "ip",
+					type: 'ip',
 					addressBytes: element.value.slice(0, 16),
 					maskBytes: element.value.slice(16, 32),
 				};
@@ -836,7 +763,7 @@ function parseNameConstraintGeneralName(
 		}
 		case 0xa4:
 			return {
-				type: "directoryName",
+				type: 'directoryName',
 				derHex: toHex(rebuildDirectoryNameFromImplicit(element, source)),
 			};
 	}
@@ -848,10 +775,7 @@ function parseNameConstraintGeneralName(
  * is 0xa4 but the content is a SEQUENCE of RDNs. We must reconstruct
  * the original SEQUENCE (tag 0x30) for DER hex comparison.
  */
-function rebuildDirectoryNameFromImplicit(
-	element: DerElement,
-	source: Uint8Array,
-): Uint8Array {
+function rebuildDirectoryNameFromImplicit(element: DerElement, source: Uint8Array): Uint8Array {
 	const contentBytes = source.slice(element.start, element.end);
 	const lengthEncoded = encodeAsn1Length(contentBytes.length);
 	const result = new Uint8Array(1 + lengthEncoded.length + contentBytes.length);
@@ -875,10 +799,7 @@ function encodeAsn1Length(length: number): Uint8Array {
 }
 
 function parseAuthorityKeyIdentifier(bytes: Uint8Array): string | undefined {
-	const sequenceElement = requireElement(
-		readElement(bytes),
-		"authorityKeyIdentifier sequence",
-	);
+	const sequenceElement = requireElement(readElement(bytes), 'authorityKeyIdentifier sequence');
 	for (const child of childrenOf(bytes, sequenceElement)) {
 		if (child.tag === 0x80) {
 			return toHex(child.value);
@@ -889,7 +810,7 @@ function parseAuthorityKeyIdentifier(bytes: Uint8Array): string | undefined {
 
 function decodeIpAddress(bytes: Uint8Array): string {
 	if (bytes.length === 4) {
-		return Array.from(bytes, (value) => String(value)).join(".");
+		return Array.from(bytes, (value) => String(value)).join('.');
 	}
 	if (bytes.length === 16) {
 		const groups: string[] = [];
@@ -898,37 +819,37 @@ function decodeIpAddress(bytes: Uint8Array): string {
 			const right = bytes[index + 1] ?? 0;
 			groups.push(((left << 8) | right).toString(16));
 		}
-		return groups.join(":");
+		return groups.join(':');
 	}
-	throw new Error("Unsupported IP address length");
+	throw new Error('Unsupported IP address length');
 }
 
 function nameKeyFromOid(oid: string): NameFieldKey | undefined {
 	switch (oid) {
 		case OIDS.commonName:
-			return "commonName";
+			return 'commonName';
 		case OIDS.surname:
-			return "surname";
+			return 'surname';
 		case OIDS.serialNumber:
-			return "serialNumber";
+			return 'serialNumber';
 		case OIDS.countryName:
-			return "country";
+			return 'country';
 		case OIDS.localityName:
-			return "locality";
+			return 'locality';
 		case OIDS.stateOrProvinceName:
-			return "state";
+			return 'state';
 		case OIDS.streetAddress:
-			return "street";
+			return 'street';
 		case OIDS.organizationName:
-			return "organization";
+			return 'organization';
 		case OIDS.organizationalUnitName:
-			return "organizationalUnit";
+			return 'organizationalUnit';
 		case OIDS.title:
-			return "title";
+			return 'title';
 		case OIDS.givenName:
-			return "givenName";
+			return 'givenName';
 		case OIDS.emailAddress:
-			return "emailAddress";
+			return 'emailAddress';
 	}
 	return undefined;
 }

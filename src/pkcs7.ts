@@ -5,9 +5,9 @@ import {
 	requireElement,
 	toArrayBuffer,
 	toHex,
-} from "./asn1.ts";
+} from './asn1.ts';
+import type { DerElement } from './der.ts';
 import {
-	type DerElement,
 	concatBytes,
 	explicitContext,
 	integerFromNumber,
@@ -16,12 +16,13 @@ import {
 	readSequenceChildren,
 	sequence,
 	setOf,
-} from "./der.ts";
-import { getCrypto } from "./keys.ts";
-import { OIDS } from "./oids.ts";
-import { type ParsedCertificate, parseCertificateDer } from "./parse.ts";
-import { base64Encode, pemEncode, splitPemBlocks } from "./pem.ts";
-import { verifySignedData } from "./sig-verify.ts";
+} from './der.ts';
+import { getCrypto } from './keys.ts';
+import { OIDS } from './oids.ts';
+import type { ParsedCertificate } from './parse.ts';
+import { parseCertificateDer } from './parse.ts';
+import { base64Encode, pemEncode, splitPemBlocks } from './pem.ts';
+import { verifySignedData } from './sig-verify.ts';
 
 export type Pkcs7CertificateSource = string | Uint8Array;
 
@@ -58,44 +59,42 @@ export interface ParsedPkcs7SignedData {
 // Result types for PKCS#7 parsing
 // ---------------------------------------------------------------------------
 
-export type ParsePkcs7ErrorCode = "malformed" | "not_signed_data";
+export type ParsePkcs7ErrorCode = 'malformed' | 'not_signed_data';
 
 export type ParsePkcs7SignedDataResult =
 	| { readonly ok: true; readonly value: ParsedPkcs7SignedData }
 	| {
-		readonly ok: false;
-		readonly code: ParsePkcs7ErrorCode;
-		readonly message: string;
-	};
+			readonly ok: false;
+			readonly code: ParsePkcs7ErrorCode;
+			readonly message: string;
+	  };
 
 export type ParsePkcs7CertBagResult =
 	| { readonly ok: true; readonly value: readonly ParsedCertificate[] }
 	| {
-		readonly ok: false;
-		readonly code: ParsePkcs7ErrorCode;
-		readonly message: string;
-	};
+			readonly ok: false;
+			readonly code: ParsePkcs7ErrorCode;
+			readonly message: string;
+	  };
 
 export type VerifyPkcs7SignedDataResult =
 	| { readonly ok: true; readonly value: ParsedPkcs7SignedData }
 	| {
-		readonly ok: false;
-		readonly code:
-			| "signer_not_found"
-			| "signature_invalid"
-			| "message_digest_mismatch"
-			| "content_missing"
-			| ParsePkcs7ErrorCode;
-		readonly message: string;
-	};
+			readonly ok: false;
+			readonly code:
+				| 'signer_not_found'
+				| 'signature_invalid'
+				| 'message_digest_mismatch'
+				| 'content_missing'
+				| ParsePkcs7ErrorCode;
+			readonly message: string;
+	  };
 
 // ---------------------------------------------------------------------------
 // createPkcs7CertBag
 // ---------------------------------------------------------------------------
 
-export function createPkcs7CertBagDer(
-	certificates: readonly Pkcs7CertificateSource[],
-): Uint8Array {
+export function createPkcs7CertBagDer(certificates: readonly Pkcs7CertificateSource[]): Uint8Array {
 	const certificateDers = certificates.flatMap(normalizeCertificateSource);
 	const signedData = sequence([
 		integerFromNumber(1),
@@ -104,10 +103,7 @@ export function createPkcs7CertBagDer(
 		explicitContext(0, concatBytes(certificateDers)),
 		setOf([]),
 	]);
-	return sequence([
-		objectIdentifier(OIDS.pkcs7SignedData),
-		explicitContext(0, signedData),
-	]);
+	return sequence([objectIdentifier(OIDS.pkcs7SignedData), explicitContext(0, signedData)]);
 }
 
 export function createPkcs7CertBagPem(
@@ -116,7 +112,7 @@ export function createPkcs7CertBagPem(
 	const der = createPkcs7CertBagDer(certificates);
 	return {
 		der,
-		pem: pemEncode("PKCS7", der),
+		pem: pemEncode('PKCS7', der),
 		base64: base64Encode(der),
 	};
 }
@@ -134,13 +130,13 @@ export function parsePkcs7CertBagDer(der: Uint8Array): ParsePkcs7CertBagResult {
 }
 
 export function parsePkcs7CertBagPem(pem: string): ParsePkcs7CertBagResult {
-	const blocks = splitPemBlocks(pem).filter((block) => block.label === "PKCS7");
+	const blocks = splitPemBlocks(pem).filter((block) => block.label === 'PKCS7');
 	if (blocks.length !== 1) {
-		return pkcs7Failure("malformed", "Expected exactly one PKCS7 PEM block");
+		return pkcs7Failure('malformed', 'Expected exactly one PKCS7 PEM block');
 	}
 	const block = blocks[0];
 	if (block === undefined) {
-		return pkcs7Failure("malformed", "Missing PKCS7 block");
+		return pkcs7Failure('malformed', 'Missing PKCS7 block');
 	}
 	return parsePkcs7CertBagDer(block.bytes);
 }
@@ -149,24 +145,19 @@ export function parsePkcs7CertBagPem(pem: string): ParsePkcs7CertBagResult {
 // parsePkcs7SignedData — Result-returning
 // ---------------------------------------------------------------------------
 
-export function parsePkcs7SignedDataDer(
-	der: Uint8Array,
-): ParsePkcs7SignedDataResult {
+export function parsePkcs7SignedDataDer(der: Uint8Array): ParsePkcs7SignedDataResult {
 	try {
 		const contentInfo = readSequenceChildren(der);
 		const contentType = contentInfo[0];
 		const content = contentInfo[1];
 		if (contentType === undefined || content === undefined) {
-			return pkcs7Failure("malformed", "Malformed PKCS#7 content info");
+			return pkcs7Failure('malformed', 'Malformed PKCS#7 content info');
 		}
 		const contentTypeOid = decodeObjectIdentifier(contentType.value);
 		if (contentTypeOid !== OIDS.pkcs7SignedData) {
-			return pkcs7Failure(
-				"not_signed_data",
-				"PKCS#7 content is not signedData",
-			);
+			return pkcs7Failure('not_signed_data', 'PKCS#7 content is not signedData');
 		}
-		const signedData = childAt(der, content, 0, "signedData");
+		const signedData = childAt(der, content, 0, 'signedData');
 		const signedDataChildren = childrenOf(der, signedData);
 		const version = signedDataChildren[0];
 		const digestAlgorithms = signedDataChildren[1];
@@ -174,12 +165,12 @@ export function parsePkcs7SignedDataDer(
 		const certificates = signedDataChildren[3];
 		const signerInfos = signedDataChildren[signedDataChildren.length - 1];
 		if (
-			version === undefined
-			|| digestAlgorithms === undefined
-			|| encapContentInfo === undefined
-			|| signerInfos === undefined
+			version === undefined ||
+			digestAlgorithms === undefined ||
+			encapContentInfo === undefined ||
+			signerInfos === undefined
 		) {
-			return pkcs7Failure("malformed", "Malformed SignedData");
+			return pkcs7Failure('malformed', 'Malformed SignedData');
 		}
 		const encapDer = der.slice(
 			encapContentInfo.start - encapContentInfo.headerLength,
@@ -189,7 +180,7 @@ export function parsePkcs7SignedDataDer(
 		const encapType = encapChildren[0];
 		const encapContent = encapChildren[1];
 		if (encapType === undefined) {
-			return pkcs7Failure("malformed", "Malformed EncapsulatedContentInfo");
+			return pkcs7Failure('malformed', 'Malformed EncapsulatedContentInfo');
 		}
 		return {
 			ok: true,
@@ -201,27 +192,22 @@ export function parsePkcs7SignedDataDer(
 				...(encapContent === undefined
 					? {}
 					: {
-						encapsulatedContent: extractEncapsulatedContent(
-							encapDer,
-							encapContent,
-						),
-					}),
+							encapsulatedContent: extractEncapsulatedContent(encapDer, encapContent),
+						}),
 				certificates: parseCertificateSet(der, certificates),
 				signerInfos: parseSignerInfos(der, signerInfos),
 			},
 		};
 	} catch {
-		return pkcs7Failure("malformed", "Malformed PKCS#7 structure");
+		return pkcs7Failure('malformed', 'Malformed PKCS#7 structure');
 	}
 }
 
-export function parsePkcs7SignedDataPem(
-	pem: string,
-): ParsePkcs7SignedDataResult {
-	const blocks = splitPemBlocks(pem).filter((block) => block.label === "PKCS7");
+export function parsePkcs7SignedDataPem(pem: string): ParsePkcs7SignedDataResult {
+	const blocks = splitPemBlocks(pem).filter((block) => block.label === 'PKCS7');
 	const block = blocks[0];
 	if (block === undefined || blocks.length !== 1) {
-		return pkcs7Failure("malformed", "Expected exactly one PKCS7 PEM block");
+		return pkcs7Failure('malformed', 'Expected exactly one PKCS7 PEM block');
 	}
 	return parsePkcs7SignedDataDer(block.bytes);
 }
@@ -234,7 +220,7 @@ export async function verifyPkcs7SignedData(
 	input: string | Uint8Array | ParsedPkcs7SignedData,
 ): Promise<VerifyPkcs7SignedDataResult> {
 	let parsed: ParsedPkcs7SignedData;
-	if (typeof input === "string") {
+	if (typeof input === 'string') {
 		const result = parsePkcs7SignedDataPem(input);
 		if (!result.ok) {
 			return result;
@@ -252,31 +238,27 @@ export async function verifyPkcs7SignedData(
 	if (parsed.encapsulatedContent === undefined) {
 		return {
 			ok: false,
-			code: "content_missing",
-			message: "SignedData encapsulated content is missing",
+			code: 'content_missing',
+			message: 'SignedData encapsulated content is missing',
 		};
 	}
 	for (const signerInfo of parsed.signerInfos) {
 		const signer = parsed.certificates.find(
 			(certificate) =>
-				signerInfo.serialNumberHex !== undefined
-				&& signerInfo.issuerDerHex !== undefined
-				&& certificate.serialNumberHex === signerInfo.serialNumberHex
-				&& certificate.issuer.derHex === signerInfo.issuerDerHex,
+				signerInfo.serialNumberHex !== undefined &&
+				signerInfo.issuerDerHex !== undefined &&
+				certificate.serialNumberHex === signerInfo.serialNumberHex &&
+				certificate.issuer.derHex === signerInfo.issuerDerHex,
 		);
 		if (signer === undefined) {
 			return {
 				ok: false,
-				code: "signer_not_found",
-				message: "Signer certificate not found in SignedData certificates",
+				code: 'signer_not_found',
+				message: 'Signer certificate not found in SignedData certificates',
 			};
 		}
 		if (signerInfo.hasSignedAttrs) {
-			const attrsResult = await verifySignedAttrs(
-				signerInfo,
-				signer,
-				parsed.encapsulatedContent,
-			);
+			const attrsResult = await verifySignedAttrs(signerInfo, signer, parsed.encapsulatedContent);
 			if (!attrsResult.ok) {
 				return attrsResult;
 			}
@@ -293,8 +275,8 @@ export async function verifyPkcs7SignedData(
 		if (!verified) {
 			return {
 				ok: false,
-				code: "signature_invalid",
-				message: "SignedData signature does not verify",
+				code: 'signature_invalid',
+				message: 'SignedData signature does not verify',
 			};
 		}
 	}
@@ -316,12 +298,10 @@ function pkcs7Failure(
 	return { ok: false, code, message };
 }
 
-function normalizeCertificateSource(
-	source: Pkcs7CertificateSource,
-): readonly Uint8Array[] {
-	if (typeof source === "string") {
+function normalizeCertificateSource(source: Pkcs7CertificateSource): readonly Uint8Array[] {
+	if (typeof source === 'string') {
 		return splitPemBlocks(source)
-			.filter((block) => block.label === "CERTIFICATE")
+			.filter((block) => block.label === 'CERTIFICATE')
 			.map((block) => new Uint8Array(block.bytes));
 	}
 	return [new Uint8Array(source)];
@@ -366,10 +346,7 @@ function parseSignerInfos(
 ): readonly ParsedPkcs7SignerInfo[] {
 	const signers: ParsedPkcs7SignerInfo[] = [];
 	for (const signerInfo of childrenOf(source, element)) {
-		const signerDer = source.slice(
-			signerInfo.start - signerInfo.headerLength,
-			signerInfo.end,
-		);
+		const signerDer = source.slice(signerInfo.start - signerInfo.headerLength, signerInfo.end);
 		const parts = readSequenceChildren(signerDer);
 		const version = parts[0];
 		const sid = parts[1];
@@ -383,43 +360,34 @@ function parseSignerInfos(
 		const signatureAlgorithm = parts[index];
 		const signature = parts[index + 1];
 		if (
-			version === undefined
-			|| sid === undefined
-			|| digestAlgorithm === undefined
-			|| signatureAlgorithm === undefined
-			|| signature === undefined
-			|| signature.tag !== 0x04
+			version === undefined ||
+			sid === undefined ||
+			digestAlgorithm === undefined ||
+			signatureAlgorithm === undefined ||
+			signature === undefined ||
+			signature.tag !== 0x04
 		) {
-			throw new Error("Malformed SignerInfo");
+			throw new Error('Malformed SignerInfo');
 		}
 		const digestAlgorithmDer = signerDer.slice(
 			digestAlgorithm.start - digestAlgorithm.headerLength,
 			digestAlgorithm.end,
 		);
 		const digestAlgorithmOid = decodeObjectIdentifier(
-			requireElement(
-				readSequenceChildren(digestAlgorithmDer)[0],
-				"digest algorithm OID",
-			).value,
+			requireElement(readSequenceChildren(digestAlgorithmDer)[0], 'digest algorithm OID').value,
 		);
 		const signatureAlgorithmDer = signerDer.slice(
 			signatureAlgorithm.start - signatureAlgorithm.headerLength,
 			signatureAlgorithm.end,
 		);
 		const signatureAlgorithmOid = decodeObjectIdentifier(
-			requireElement(
-				readSequenceChildren(signatureAlgorithmDer)[0],
-				"signature algorithm OID",
-			).value,
+			requireElement(readSequenceChildren(signatureAlgorithmDer)[0], 'signature algorithm OID')
+				.value,
 		);
-		const parsedSid = parseSignerIdentifier(
-			signerDer.slice(sid.start - sid.headerLength, sid.end),
-		);
+		const parsedSid = parseSignerIdentifier(signerDer.slice(sid.start - sid.headerLength, sid.end));
 		signers.push({
 			version: decodeIntegerNumber(version.value),
-			...(parsedSid.issuerDerHex === undefined
-				? {}
-				: { issuerDerHex: parsedSid.issuerDerHex }),
+			...(parsedSid.issuerDerHex === undefined ? {} : { issuerDerHex: parsedSid.issuerDerHex }),
 			...(parsedSid.serialNumberHex === undefined
 				? {}
 				: { serialNumberHex: parsedSid.serialNumberHex }),
@@ -431,13 +399,13 @@ function parseSignerInfos(
 			...(signedAttrsElement === undefined
 				? {}
 				: {
-					signedAttrsDer: new Uint8Array(
-						signerDer.slice(
-							signedAttrsElement.start - signedAttrsElement.headerLength,
-							signedAttrsElement.end,
+						signedAttrsDer: new Uint8Array(
+							signerDer.slice(
+								signedAttrsElement.start - signedAttrsElement.headerLength,
+								signedAttrsElement.end,
+							),
 						),
-					),
-				}),
+					}),
 		});
 	}
 	return signers;
@@ -448,11 +416,11 @@ function extractEncapsulatedContent(
 	element: ReturnType<typeof readElement>,
 ): Uint8Array {
 	if (element.tag !== 0xa0) {
-		throw new Error("Unexpected encapsulated content tag");
+		throw new Error('Unexpected encapsulated content tag');
 	}
 	const inner = readElement(encapDer, element.start);
 	if (inner.tag !== 0x04) {
-		throw new Error("Expected encapsulated OCTET STRING");
+		throw new Error('Expected encapsulated OCTET STRING');
 	}
 	return inner.value;
 }
@@ -468,19 +436,12 @@ function parseSignerIdentifier(der: Uint8Array): {
 		return {};
 	}
 	return {
-		issuerDerHex: toHex(
-			der.slice(issuer.start - issuer.headerLength, issuer.end),
-		),
+		issuerDerHex: toHex(der.slice(issuer.start - issuer.headerLength, issuer.end)),
 		serialNumberHex: toHex(serial.value),
 	};
 }
 
-function childAt(
-	source: Uint8Array,
-	parent: DerElement,
-	index: number,
-	label: string,
-): DerElement {
+function childAt(source: Uint8Array, parent: DerElement, index: number, label: string): DerElement {
 	let offset = parent.start;
 	let currentIndex = 0;
 	while (offset < parent.end) {
@@ -498,33 +459,24 @@ function childAt(
 // CMS signed attributes verification (RFC 5652 Section 5.4)
 // ---------------------------------------------------------------------------
 
-function digestAlgorithmHash(
-	digestAlgorithmOid: string,
-): "SHA-256" | "SHA-384" | "SHA-512" {
+function digestAlgorithmHash(digestAlgorithmOid: string): 'SHA-256' | 'SHA-384' | 'SHA-512' {
 	switch (digestAlgorithmOid) {
 		case OIDS.sha256:
-			return "SHA-256";
+			return 'SHA-256';
 		case OIDS.sha384:
-			return "SHA-384";
+			return 'SHA-384';
 		case OIDS.sha512:
-			return "SHA-512";
+			return 'SHA-512';
 		default:
-			throw new Error(
-				`Unsupported digest algorithm OID: ${digestAlgorithmOid}`,
-			);
+			throw new Error(`Unsupported digest algorithm OID: ${digestAlgorithmOid}`);
 	}
 }
 
-function extractMessageDigest(
-	signedAttrsDer: Uint8Array,
-): Uint8Array | undefined {
+function extractMessageDigest(signedAttrsDer: Uint8Array): Uint8Array | undefined {
 	// signedAttrs is IMPLICIT [0] — parse children (each is a SEQUENCE of {OID, SET OF values})
 	const outer = readElement(signedAttrsDer);
 	for (const attr of childrenOf(signedAttrsDer, outer)) {
-		const attrDer = signedAttrsDer.slice(
-			attr.start - attr.headerLength,
-			attr.end,
-		);
+		const attrDer = signedAttrsDer.slice(attr.start - attr.headerLength, attr.end);
 		const parts = readSequenceChildren(attrDer);
 		const oid = parts[0];
 		const values = parts[1];
@@ -568,24 +520,21 @@ async function verifySignedAttrs(
 ): Promise<
 	| { readonly ok: true }
 	| {
-		readonly ok: false;
-		readonly code:
-			| "message_digest_mismatch"
-			| "signature_invalid"
-			| "malformed";
-		readonly message: string;
-	}
+			readonly ok: false;
+			readonly code: 'message_digest_mismatch' | 'signature_invalid' | 'malformed';
+			readonly message: string;
+	  }
 > {
 	if (signerInfo.signedAttrsDer === undefined) {
-		return { ok: false, code: "malformed", message: "Missing signedAttrs DER" };
+		return { ok: false, code: 'malformed', message: 'Missing signedAttrs DER' };
 	}
 	// Step 1: Extract messageDigest attribute from signedAttrs
 	const expectedDigest = extractMessageDigest(signerInfo.signedAttrsDer);
 	if (expectedDigest === undefined) {
 		return {
 			ok: false,
-			code: "malformed",
-			message: "Missing messageDigest attribute in signedAttrs",
+			code: 'malformed',
+			message: 'Missing messageDigest attribute in signedAttrs',
 		};
 	}
 	// Step 2: Compute digest of encapsulated content
@@ -597,8 +546,8 @@ async function verifySignedAttrs(
 	if (!constantTimeEqual(actualDigest, expectedDigest)) {
 		return {
 			ok: false,
-			code: "message_digest_mismatch",
-			message: "Content digest does not match messageDigest attribute",
+			code: 'message_digest_mismatch',
+			message: 'Content digest does not match messageDigest attribute',
 		};
 	}
 	// Step 4: Verify signature over re-tagged signedAttrs (0xa0 → 0x31 SET OF)
@@ -614,8 +563,8 @@ async function verifySignedAttrs(
 	if (!verified) {
 		return {
 			ok: false,
-			code: "signature_invalid",
-			message: "SignedData signature over signedAttrs does not verify",
+			code: 'signature_invalid',
+			message: 'SignedData signature over signedAttrs does not verify',
 		};
 	}
 	return { ok: true };

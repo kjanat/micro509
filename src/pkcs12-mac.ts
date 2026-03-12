@@ -1,4 +1,4 @@
-import { decodeIntegerNumber, decodeObjectIdentifier, toArrayBuffer, toHex } from "./asn1.ts";
+import { decodeIntegerNumber, decodeObjectIdentifier, toArrayBuffer, toHex } from './asn1.ts';
 import {
 	concatBytes,
 	integerFromNumber,
@@ -7,9 +7,9 @@ import {
 	octetString,
 	readSequenceChildren,
 	sequence,
-} from "./der.ts";
-import { getCrypto } from "./keys.ts";
-import { OIDS } from "./oids.ts";
+} from './der.ts';
+import { getCrypto } from './keys.ts';
+import { OIDS } from './oids.ts';
 
 export interface Pkcs12MacOptions {
 	readonly password: string;
@@ -31,17 +31,9 @@ export async function createPkcs12MacData(
 ): Promise<{ readonly der: Uint8Array; readonly parsed: ParsedPkcs12MacData }> {
 	const iterations = options.iterations ?? 2048;
 	const salt = options.salt ?? getCrypto().getRandomValues(new Uint8Array(16));
-	const mac = await computePkcs12Mac(
-		authenticatedSafe,
-		options.password,
-		salt,
-		iterations,
-	);
+	const mac = await computePkcs12Mac(authenticatedSafe, options.password, salt, iterations);
 	const der = sequence([
-		sequence([
-			sequence([objectIdentifier(OIDS.sha256), nullValue()]),
-			octetString(mac),
-		]),
+		sequence([sequence([objectIdentifier(OIDS.sha256), nullValue()]), octetString(mac)]),
 		octetString(salt),
 		integerFromNumber(iterations),
 	]);
@@ -66,35 +58,29 @@ export async function parsePkcs12MacData(
 	const salt = top[1];
 	const iterations = top[2];
 	if (
-		digestInfo === undefined
-		|| salt === undefined
-		|| iterations === undefined
-		|| salt.tag !== 0x04
+		digestInfo === undefined ||
+		salt === undefined ||
+		iterations === undefined ||
+		salt.tag !== 0x04
 	) {
-		throw new Error("Malformed MacData");
+		throw new Error('Malformed MacData');
 	}
-	const digestInfoDer = der.slice(
-		digestInfo.start - digestInfo.headerLength,
-		digestInfo.end,
-	);
+	const digestInfoDer = der.slice(digestInfo.start - digestInfo.headerLength, digestInfo.end);
 	const digestInfoChildren = readSequenceChildren(digestInfoDer);
 	const algorithm = digestInfoChildren[0];
 	const digest = digestInfoChildren[1];
 	if (algorithm === undefined || digest === undefined || digest.tag !== 0x04) {
-		throw new Error("Malformed DigestInfo");
+		throw new Error('Malformed DigestInfo');
 	}
-	const algorithmDer = digestInfoDer.slice(
-		algorithm.start - algorithm.headerLength,
-		algorithm.end,
-	);
+	const algorithmDer = digestInfoDer.slice(algorithm.start - algorithm.headerLength, algorithm.end);
 	const algorithmChildren = readSequenceChildren(algorithmDer);
 	const algorithmOid = algorithmChildren[0];
 	if (algorithmOid === undefined) {
-		throw new Error("MacData algorithm missing");
+		throw new Error('MacData algorithm missing');
 	}
 	const digestAlgorithmOid = decodeObjectIdentifier(algorithmOid.value);
 	if (digestAlgorithmOid !== OIDS.sha256) {
-		throw new Error("Only SHA-256 PKCS#12 MAC is supported");
+		throw new Error('Only SHA-256 PKCS#12 MAC is supported');
 	}
 	const parsed: ParsedPkcs12MacData = {
 		digestAlgorithmOid,
@@ -122,18 +108,14 @@ async function computePkcs12Mac(
 ): Promise<Uint8Array> {
 	const keyBytes = await derivePkcs12Key(password, salt, iterations, 3, 32);
 	const key = await getCrypto().subtle.importKey(
-		"raw",
+		'raw',
 		toArrayBuffer(keyBytes),
-		{ name: "HMAC", hash: "SHA-256" },
+		{ name: 'HMAC', hash: 'SHA-256' },
 		false,
-		["sign"],
+		['sign'],
 	);
 	return new Uint8Array(
-		await getCrypto().subtle.sign(
-			"HMAC",
-			key,
-			toArrayBuffer(authenticatedSafe),
-		),
+		await getCrypto().subtle.sign('HMAC', key, toArrayBuffer(authenticatedSafe)),
 	);
 }
 
@@ -175,9 +157,7 @@ async function derivePkcs12Key(
 }
 
 async function digestSha256(bytes: Uint8Array): Promise<Uint8Array> {
-	return new Uint8Array(
-		await getCrypto().subtle.digest("SHA-256", toArrayBuffer(bytes)),
-	);
+	return new Uint8Array(await getCrypto().subtle.digest('SHA-256', toArrayBuffer(bytes)));
 }
 
 function encodePkcs12Password(password: string): Uint8Array {

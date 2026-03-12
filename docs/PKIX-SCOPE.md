@@ -132,7 +132,7 @@
 - SAN / EKU matching
 - typed parse/build APIs
 
-### Do ***not*** claim until implemented
+### Do **_not_** claim until implemented
 
 - full RFC 5280 path validation
 - full certificate policy validation

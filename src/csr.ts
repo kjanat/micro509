@@ -6,13 +6,13 @@ import {
 	objectIdentifier,
 	sequence,
 	setOf,
-} from "./der.ts";
-import { type CertificateExtensionsInput, buildRequestedExtensions } from "./extensions.ts";
-import { exportSpkiDer } from "./keys.ts";
-import { type NameInput, encodeName } from "./name.ts";
-import { OIDS } from "./oids.ts";
-import { base64Encode, pemEncode } from "./pem.ts";
-import { encodeAlgorithmIdentifier, getSignatureAlgorithm, signBytes } from "./signing.ts";
+} from './der.ts';
+import { buildRequestedExtensions, type CertificateExtensionsInput } from './extensions.ts';
+import { exportSpkiDer } from './keys.ts';
+import { encodeName, type NameInput } from './name.ts';
+import { OIDS } from './oids.ts';
+import { base64Encode, pemEncode } from './pem.ts';
+import { encodeAlgorithmIdentifier, getSignatureAlgorithm, signBytes } from './signing.ts';
 
 export interface CreateCsrInput {
 	readonly subject: NameInput;
@@ -27,9 +27,7 @@ export interface CsrMaterial {
 	readonly base64: string;
 }
 
-export async function createCertificateSigningRequest(
-	input: CreateCsrInput,
-): Promise<CsrMaterial> {
+export async function createCertificateSigningRequest(input: CreateCsrInput): Promise<CsrMaterial> {
 	const signatureAlgorithm = getSignatureAlgorithm(input.signerPrivateKey);
 	const spki = await exportSpkiDer(input.publicKey);
 	const attributes = buildAttributes(input.extensions);
@@ -52,22 +50,15 @@ export async function createCertificateSigningRequest(
 	]);
 	return {
 		der,
-		pem: pemEncode("CERTIFICATE REQUEST", der),
+		pem: pemEncode('CERTIFICATE REQUEST', der),
 		base64: base64Encode(der),
 	};
 }
 
-function buildAttributes(
-	extensions: CertificateExtensionsInput | undefined,
-): Uint8Array[] {
+function buildAttributes(extensions: CertificateExtensionsInput | undefined): Uint8Array[] {
 	const builtExtensions = buildRequestedExtensions(extensions);
 	if (builtExtensions.length === 0) {
 		return [];
 	}
-	return [
-		sequence([
-			objectIdentifier(OIDS.extensionRequest),
-			setOf([sequence(builtExtensions)]),
-		]),
-	];
+	return [sequence([objectIdentifier(OIDS.extensionRequest), setOf([sequence(builtExtensions)])])];
 }

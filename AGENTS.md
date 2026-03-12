@@ -55,8 +55,9 @@ ts-x509/
 - **Never use `!` non-null assertion** — use explicit `undefined` checks and throws
 - **Never use `as Type`** — only `as const` / `as const satisfies` are allowed
 - **No classes** — entire library is functional
-- **No mocking in tests** — tests use real WebCrypto, Node's `X509Certificate` as oracle
+- **No mocking in tests** — tests use real WebCrypto, Node's `X509Certificate` as oracle, and will in future test againt _NIST PKITS_
 - **No `eslint-disable` or `@ts-ignore`** — zero instances in codebase
+- **No `await expect()` in test files...** Use bun mcp server to get docs.
 
 ## COMMANDS
 
@@ -65,7 +66,7 @@ bun bd         # tsc → dist/ (ESM .js + .d.ts)
 bun typecheck  # tsgo --noEmit (full type-check)
 bun test       # bun's native test runner (single-pass)
 bun fmt        # dprint fmt
-bun lint:biome # biome lint {src,test}
+bun lint       # biome lint {src,test}
 ```
 
 ## NOTES

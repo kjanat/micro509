@@ -1,14 +1,13 @@
-import type { ExtendedKeyUsage, NameConstraintForm, NameConstraints } from "./extensions.ts";
-import { OIDS } from "./oids.ts";
+import type { ExtendedKeyUsage, NameConstraintForm, NameConstraints } from './extensions.ts';
+import { OIDS } from './oids.ts';
+import type { ParsedCertificate, ParsedCertificateSigningRequest } from './parse.ts';
 import {
-	type ParsedCertificate,
-	type ParsedCertificateSigningRequest,
 	parseCertificateDer,
 	parseCertificateSigningRequestDer,
 	parseCertificateSigningRequestPem,
-} from "./parse.ts";
-import { splitPemBlocks } from "./pem.ts";
-import { verifySignedData } from "./sig-verify.ts";
+} from './parse.ts';
+import { splitPemBlocks } from './pem.ts';
+import { verifySignedData } from './sig-verify.ts';
 
 // ---------------------------------------------------------------------------
 // Source types
@@ -21,24 +20,24 @@ export type CsrSource = string | Uint8Array;
 // Purpose & EKU types
 // ---------------------------------------------------------------------------
 
-export type VerifyPurpose = "serverAuth" | "clientAuth" | "ca";
+export type VerifyPurpose = 'serverAuth' | 'clientAuth' | 'ca';
 
 export type EkuCheckPurpose =
-	| "serverAuth"
-	| "clientAuth"
-	| "codeSigning"
-	| "emailProtection"
-	| "timeStamping"
-	| "ocspSigning";
+	| 'serverAuth'
+	| 'clientAuth'
+	| 'codeSigning'
+	| 'emailProtection'
+	| 'timeStamping'
+	| 'ocspSigning';
 
 export type EkuCheckResult =
 	| { readonly ok: true }
 	| {
-		readonly ok: false;
-		readonly code: "leaf_eku_missing" | "intermediate_eku_constraint";
-		readonly message: string;
-		readonly index: number;
-	};
+			readonly ok: false;
+			readonly code: 'leaf_eku_missing' | 'intermediate_eku_constraint';
+			readonly message: string;
+			readonly index: number;
+	  };
 
 // ---------------------------------------------------------------------------
 // Trust anchor
@@ -57,20 +56,20 @@ export interface TrustAnchor {
 // ---------------------------------------------------------------------------
 
 export type VerifyErrorCode =
-	| "no_trusted_root"
-	| "issuer_not_found"
-	| "signature_invalid"
-	| "certificate_expired"
-	| "ca_required"
-	| "key_cert_sign_required"
-	| "path_length_exceeded"
-	| "authority_key_identifier_mismatch"
-	| "extended_key_usage_invalid"
-	| "subject_alt_name_mismatch"
-	| "self_signed_leaf_not_allowed"
-	| "unrecognized_critical_extension"
-	| "intermediate_eku_constraint"
-	| "name_constraints_violated";
+	| 'no_trusted_root'
+	| 'issuer_not_found'
+	| 'signature_invalid'
+	| 'certificate_expired'
+	| 'ca_required'
+	| 'key_cert_sign_required'
+	| 'path_length_exceeded'
+	| 'authority_key_identifier_mismatch'
+	| 'extended_key_usage_invalid'
+	| 'subject_alt_name_mismatch'
+	| 'self_signed_leaf_not_allowed'
+	| 'unrecognized_critical_extension'
+	| 'intermediate_eku_constraint'
+	| 'name_constraints_violated';
 
 export interface VerifyFailureDetails {
 	readonly subjectCommonName?: string;
@@ -124,9 +123,7 @@ export interface ValidateCandidatePathInput {
 	readonly allowCommonNameFallback?: boolean;
 }
 
-export type ValidateCandidatePathResult =
-	| { readonly ok: true }
-	| VerifyChainFailure;
+export type ValidateCandidatePathResult = { readonly ok: true } | VerifyChainFailure;
 
 // ---------------------------------------------------------------------------
 // Verify chain (convenience composition)
@@ -162,11 +159,11 @@ export type VerifyChainResult =
 export type VerifyRequestResult =
 	| { readonly ok: true; readonly value: ParsedCertificateSigningRequest }
 	| {
-		readonly ok: false;
-		readonly code: "signature_invalid";
-		readonly message: string;
-		readonly details?: VerifyFailureDetails;
-	};
+			readonly ok: false;
+			readonly code: 'signature_invalid';
+			readonly message: string;
+			readonly details?: VerifyFailureDetails;
+	  };
 
 // ---------------------------------------------------------------------------
 // Validation profile inputs
@@ -245,13 +242,7 @@ export async function buildCandidatePath(
 	const roots = loadCertificates(input.roots);
 	const anchors = input.trustAnchors ?? [];
 	const at = input.at ?? new Date();
-	const buildResult = await buildChainInternal(
-		leaf,
-		intermediates,
-		roots,
-		anchors,
-		at,
-	);
+	const buildResult = await buildChainInternal(leaf, intermediates, roots, anchors, at);
 	const chain = buildResult.chain;
 
 	if (!buildResult.foundTrustedRoot) {
@@ -260,19 +251,19 @@ export async function buildCandidatePath(
 		}
 		if (buildResult.missingIssuerAt !== undefined) {
 			return failure(
-				"issuer_not_found",
-				"issuer certificate not found",
+				'issuer_not_found',
+				'issuer certificate not found',
 				buildResult.missingIssuerAt,
 				buildFailureDetails(chain, buildResult.missingIssuerAt),
 			);
 		}
 		return failure(
-			"no_trusted_root",
-			"no trusted root found",
+			'no_trusted_root',
+			'no trusted root found',
 			undefined,
 			detail({
 				chainCommonNames: chain.map(
-					(certificate) => certificate.subject.values.commonName ?? "<unnamed>",
+					(certificate) => certificate.subject.values.commonName ?? '<unnamed>',
 				),
 			}),
 		);
@@ -280,7 +271,7 @@ export async function buildCandidatePath(
 
 	const root = chain[chain.length - 1];
 	if (root === undefined) {
-		return failure("no_trusted_root", "no trusted root found");
+		return failure('no_trusted_root', 'no trusted root found');
 	}
 
 	return {
@@ -315,14 +306,14 @@ export async function validateCandidatePath(
 	const leaf = chain[0];
 
 	if (leaf === undefined) {
-		return failure("issuer_not_found", "chain is empty", 0);
+		return failure('issuer_not_found', 'chain is empty', 0);
 	}
 
 	if (chain.length === 1 && isSelfIssued(leaf)) {
 		if (input.allowSelfSignedLeaf !== true) {
 			return failure(
-				"self_signed_leaf_not_allowed",
-				"self-signed leaf not allowed",
+				'self_signed_leaf_not_allowed',
+				'self-signed leaf not allowed',
 				0,
 				detail({
 					subjectCommonName: leaf.subject.values.commonName,
@@ -334,12 +325,12 @@ export async function validateCandidatePath(
 	for (let index = 0; index < chain.length; index += 1) {
 		const current = chain[index];
 		if (current === undefined) {
-			return failure("issuer_not_found", "chain element missing", index);
+			return failure('issuer_not_found', 'chain element missing', index);
 		}
 		if (!isWithinValidity(current, at)) {
 			return failure(
-				"certificate_expired",
-				"certificate not valid at requested time",
+				'certificate_expired',
+				'certificate not valid at requested time',
 				index,
 				detail({
 					subjectCommonName: current.subject.values.commonName,
@@ -351,7 +342,7 @@ export async function validateCandidatePath(
 		const unprocessedCritical = findUnprocessedCriticalExtension(current);
 		if (unprocessedCritical !== undefined) {
 			return failure(
-				"unrecognized_critical_extension",
+				'unrecognized_critical_extension',
 				`certificate contains unrecognized critical extension ${unprocessedCritical}`,
 				index,
 				detail({
@@ -365,13 +356,13 @@ export async function validateCandidatePath(
 		}
 		const issuer = chain[index + 1];
 		if (issuer === undefined) {
-			return failure("issuer_not_found", "issuer missing", index);
+			return failure('issuer_not_found', 'issuer missing', index);
 		}
 		const signatureValid = await verifyCertificateSignature(current, issuer);
 		if (!signatureValid) {
 			return failure(
-				"signature_invalid",
-				"certificate signature does not verify",
+				'signature_invalid',
+				'certificate signature does not verify',
 				index,
 				detail({
 					subjectCommonName: current.subject.values.commonName,
@@ -381,8 +372,18 @@ export async function validateCandidatePath(
 		}
 		if (issuer.basicConstraints?.ca !== true) {
 			return failure(
-				"ca_required",
-				"issuer must be a CA certificate",
+				'ca_required',
+				'issuer must be a CA certificate',
+				index + 1,
+				detail({
+					subjectCommonName: issuer.subject.values.commonName,
+				}),
+			);
+		}
+		if (issuer.keyUsage !== undefined && !issuer.keyUsage.includes('keyCertSign')) {
+			return failure(
+				'key_cert_sign_required',
+				'issuer missing keyCertSign',
 				index + 1,
 				detail({
 					subjectCommonName: issuer.subject.values.commonName,
@@ -390,26 +391,13 @@ export async function validateCandidatePath(
 			);
 		}
 		if (
-			issuer.keyUsage !== undefined
-			&& !issuer.keyUsage.includes("keyCertSign")
+			current.authorityKeyIdentifier !== undefined &&
+			issuer.subjectKeyIdentifier !== undefined &&
+			current.authorityKeyIdentifier !== issuer.subjectKeyIdentifier
 		) {
 			return failure(
-				"key_cert_sign_required",
-				"issuer missing keyCertSign",
-				index + 1,
-				detail({
-					subjectCommonName: issuer.subject.values.commonName,
-				}),
-			);
-		}
-		if (
-			current.authorityKeyIdentifier !== undefined
-			&& issuer.subjectKeyIdentifier !== undefined
-			&& current.authorityKeyIdentifier !== issuer.subjectKeyIdentifier
-		) {
-			return failure(
-				"authority_key_identifier_mismatch",
-				"authorityKeyIdentifier does not match issuer subjectKeyIdentifier",
+				'authority_key_identifier_mismatch',
+				'authorityKeyIdentifier does not match issuer subjectKeyIdentifier',
 				index,
 				detail({
 					subjectCommonName: current.subject.values.commonName,
@@ -424,14 +412,14 @@ export async function validateCandidatePath(
 	for (let index = 1; index < chain.length; index += 1) {
 		const current = chain[index];
 		if (current === undefined) {
-			return failure("issuer_not_found", "chain element missing", index);
+			return failure('issuer_not_found', 'chain element missing', index);
 		}
 		const maxCaBelow = countCaCertificatesBelowParsed(chain, index);
 		const pathLength = current.basicConstraints?.pathLength;
 		if (pathLength !== undefined && maxCaBelow > pathLength) {
 			return failure(
-				"path_length_exceeded",
-				"path length constraint exceeded",
+				'path_length_exceeded',
+				'path length constraint exceeded',
 				index,
 				detail({
 					subjectCommonName: current.subject.values.commonName,
@@ -504,9 +492,10 @@ export async function verifyCertificateChain(
 export async function verifyCertificateSigningRequest(
 	input: CsrSource,
 ): Promise<VerifyRequestResult> {
-	const parsed = typeof input === "string"
-		? parseCertificateSigningRequestPem(input)
-		: parseCertificateSigningRequestDer(new Uint8Array(input));
+	const parsed =
+		typeof input === 'string'
+			? parseCertificateSigningRequestPem(input)
+			: parseCertificateSigningRequestDer(new Uint8Array(input));
 	const signatureValid = await verifySignedData(
 		parsed.signatureAlgorithmOid,
 		parsed.publicKeyAlgorithmOid,
@@ -518,8 +507,8 @@ export async function verifyCertificateSigningRequest(
 	if (!signatureValid) {
 		return {
 			ok: false,
-			code: "signature_invalid",
-			message: "certificate request signature does not verify",
+			code: 'signature_invalid',
+			message: 'certificate request signature does not verify',
 			details: detail({ subjectCommonName: parsed.subject.values.commonName }),
 		};
 	}
@@ -543,18 +532,15 @@ export function checkExtendedKeyUsage(
 	if (leaf === undefined) {
 		return {
 			ok: false,
-			code: "leaf_eku_missing",
-			message: "chain is empty",
+			code: 'leaf_eku_missing',
+			message: 'chain is empty',
 			index: 0,
 		};
 	}
-	if (
-		leaf.extendedKeyUsage !== undefined
-		&& !leaf.extendedKeyUsage.includes(purpose)
-	) {
+	if (leaf.extendedKeyUsage !== undefined && !leaf.extendedKeyUsage.includes(purpose)) {
 		return {
 			ok: false,
-			code: "leaf_eku_missing",
+			code: 'leaf_eku_missing',
 			message: `leaf certificate does not include EKU ${purpose}`,
 			index: 0,
 		};
@@ -565,12 +551,12 @@ export function checkExtendedKeyUsage(
 			continue;
 		}
 		if (
-			intermediate.extendedKeyUsage !== undefined
-			&& !intermediate.extendedKeyUsage.includes(purpose)
+			intermediate.extendedKeyUsage !== undefined &&
+			!intermediate.extendedKeyUsage.includes(purpose)
 		) {
 			return {
 				ok: false,
-				code: "intermediate_eku_constraint",
+				code: 'intermediate_eku_constraint',
 				message: `intermediate CA at index ${String(index)} constrains EKU and does not include ${purpose}`,
 				index,
 			};
@@ -583,9 +569,7 @@ export function checkExtendedKeyUsage(
 // trustAnchorFromCertificate
 // ---------------------------------------------------------------------------
 
-export function trustAnchorFromCertificate(
-	certificate: ParsedCertificate,
-): TrustAnchor {
+export function trustAnchorFromCertificate(certificate: ParsedCertificate): TrustAnchor {
 	return {
 		subjectDerHex: certificate.subject.derHex,
 		subjectPublicKeyInfoDer: certificate.subjectPublicKeyInfoDer,
@@ -604,9 +588,7 @@ export function trustAnchorFromCertificate(
 // ---------------------------------------------------------------------------
 
 /** Extracts defined optional fields from a base input for safe forwarding. */
-function baseChainInput(
-	input: BuildCandidatePathInput,
-): VerifyCertificateChainInput {
+function baseChainInput(input: BuildCandidatePathInput): VerifyCertificateChainInput {
 	return {
 		leaf: input.leaf,
 		roots: input.roots,
@@ -639,7 +621,7 @@ export async function validateForTlsServer(
 	if (!result.ok) {
 		return result;
 	}
-	return applyEkuCheck(result, "serverAuth");
+	return applyEkuCheck(result, 'serverAuth');
 }
 
 /**
@@ -653,7 +635,7 @@ export async function validateForTlsClient(
 	if (!result.ok) {
 		return result;
 	}
-	return applyEkuCheck(result, "clientAuth");
+	return applyEkuCheck(result, 'clientAuth');
 }
 
 /**
@@ -667,19 +649,17 @@ export async function validateForCodeSigning(
 	if (!result.ok) {
 		return result;
 	}
-	return applyEkuCheck(result, "codeSigning");
+	return applyEkuCheck(result, 'codeSigning');
 }
 
 /**
  * Validates a certificate chain for CA use:
  * chain verification + `basicConstraints.ca` check on the leaf.
  */
-export async function validateForCa(
-	input: ValidateForCaInput,
-): Promise<VerifyChainResult> {
+export async function validateForCa(input: ValidateForCaInput): Promise<VerifyChainResult> {
 	return verifyCertificateChain({
 		...baseChainInput(input),
-		purpose: "ca",
+		purpose: 'ca',
 	});
 }
 
@@ -698,47 +678,42 @@ function validateLeaf(
 ): ValidateCandidatePathResult {
 	const purpose = input.purpose;
 	if (purpose !== undefined) {
-		if (purpose === "ca") {
+		if (purpose === 'ca') {
 			if (leaf.basicConstraints?.ca !== true) {
 				return failure(
-					"ca_required",
-					"leaf is not a CA certificate",
+					'ca_required',
+					'leaf is not a CA certificate',
 					0,
 					detail({
 						subjectCommonName: leaf.subject.values.commonName,
 					}),
 				);
 			}
-		} else if (
-			leaf.extendedKeyUsage !== undefined
-			&& !leaf.extendedKeyUsage.includes(purpose)
-		) {
+		} else if (leaf.extendedKeyUsage !== undefined && !leaf.extendedKeyUsage.includes(purpose)) {
 			return failure(
-				"extended_key_usage_invalid",
+				'extended_key_usage_invalid',
 				`leaf missing EKU ${purpose}`,
 				0,
 				detail({
 					subjectCommonName: leaf.subject.values.commonName,
 					expected: purpose,
-					actual: leaf.extendedKeyUsage.map(formatEku).join(","),
+					actual: leaf.extendedKeyUsage.map(formatEku).join(','),
 				}),
 			);
 		}
 	}
 	if (input.dnsName !== undefined) {
-		const sans = leaf.subjectAltNames?.filter((entry) => entry.type === "dns") ?? [];
+		const sans = leaf.subjectAltNames?.filter((entry) => entry.type === 'dns') ?? [];
 		if (sans.length > 0) {
-			if (
-				!sans.some((entry) => matchesDnsName(entry.value, input.dnsName ?? ""))
-			) {
+			if (!sans.some((entry) => matchesDnsName(entry.value, input.dnsName ?? ''))) {
 				return failure(
-					"subject_alt_name_mismatch",
-					"DNS name not present in SAN",
+					'subject_alt_name_mismatch',
+					'DNS name not present in SAN',
 					0,
 					detail({
 						subjectCommonName: leaf.subject.values.commonName,
 						expected: input.dnsName,
-						actual: sans.map((entry) => entry.value).join(","),
+						actual: sans.map((entry) => entry.value).join(','),
 					}),
 				);
 			}
@@ -746,43 +721,41 @@ function validateLeaf(
 			const cn = leaf.subject.values.commonName;
 			if (cn === undefined || !matchesDnsName(cn, input.dnsName)) {
 				return failure(
-					"subject_alt_name_mismatch",
-					"DNS name not present in SAN or CN",
+					'subject_alt_name_mismatch',
+					'DNS name not present in SAN or CN',
 					0,
 					detail({
 						subjectCommonName: cn,
 						expected: input.dnsName,
-						actual: cn ?? "",
+						actual: cn ?? '',
 					}),
 				);
 			}
 		} else {
 			return failure(
-				"subject_alt_name_mismatch",
-				"DNS name not present in SAN",
+				'subject_alt_name_mismatch',
+				'DNS name not present in SAN',
 				0,
 				detail({
 					subjectCommonName: leaf.subject.values.commonName,
 					expected: input.dnsName,
-					actual: "",
+					actual: '',
 				}),
 			);
 		}
 	}
 	if (input.ipAddress !== undefined) {
 		const expected = normalizeIpAddress(input.ipAddress);
-		const sans = leaf.subjectAltNames?.filter((entry) => entry.type === "ip") ?? [];
+		const sans = leaf.subjectAltNames?.filter((entry) => entry.type === 'ip') ?? [];
 		if (!sans.some((entry) => normalizeIpAddress(entry.value) === expected)) {
 			return failure(
-				"subject_alt_name_mismatch",
-				"IP address not present in SAN",
+				'subject_alt_name_mismatch',
+				'IP address not present in SAN',
 				0,
 				detail({
 					subjectCommonName: leaf.subject.values.commonName,
 					expected,
-					actual: sans
-						.map((entry) => normalizeIpAddress(entry.value))
-						.join(","),
+					actual: sans.map((entry) => normalizeIpAddress(entry.value)).join(','),
 				}),
 			);
 		}
@@ -804,9 +777,7 @@ async function buildChainInternal(
 	const candidates = [...intermediates, ...roots];
 	const subjectIndex = new Map<string, ParsedCertificate[]>();
 	const order = new Map<string, number>();
-	const rootFingerprints = new Set(
-		roots.map((candidate) => fingerprint(candidate)),
-	);
+	const rootFingerprints = new Set(roots.map((candidate) => fingerprint(candidate)));
 	const anchorIndex = new Map<string, TrustAnchor[]>();
 	for (const anchor of trustAnchors) {
 		const existing = anchorIndex.get(anchor.subjectDerHex);
@@ -852,10 +823,10 @@ async function buildChainInternal(
 	return deepestMissingIssuerAt === undefined
 		? { chain: deepestPath, foundTrustedRoot: false }
 		: {
-			chain: deepestPath,
-			foundTrustedRoot: false,
-			missingIssuerAt: deepestMissingIssuerAt,
-		};
+				chain: deepestPath,
+				foundTrustedRoot: false,
+				missingIssuerAt: deepestMissingIssuerAt,
+			};
 
 	async function search(
 		current: ParsedCertificate,
@@ -902,8 +873,8 @@ async function buildChainInternal(
 			if (!isWithinValidity(issuer, at)) {
 				recordFailure(
 					failure(
-						"certificate_expired",
-						"certificate not valid at requested time",
+						'certificate_expired',
+						'certificate not valid at requested time',
 						path.length,
 						detail({
 							subjectCommonName: issuer.subject.values.commonName,
@@ -918,8 +889,22 @@ async function buildChainInternal(
 			if (issuer.basicConstraints?.ca !== true) {
 				recordFailure(
 					failure(
-						"ca_required",
-						"issuer must be a CA certificate",
+						'ca_required',
+						'issuer must be a CA certificate',
+						path.length,
+						detail({
+							subjectCommonName: issuer.subject.values.commonName,
+						}),
+					),
+					path,
+				);
+				continue;
+			}
+			if (issuer.keyUsage !== undefined && !issuer.keyUsage.includes('keyCertSign')) {
+				recordFailure(
+					failure(
+						'key_cert_sign_required',
+						'issuer missing keyCertSign',
 						path.length,
 						detail({
 							subjectCommonName: issuer.subject.values.commonName,
@@ -930,31 +915,14 @@ async function buildChainInternal(
 				continue;
 			}
 			if (
-				issuer.keyUsage !== undefined
-				&& !issuer.keyUsage.includes("keyCertSign")
+				current.authorityKeyIdentifier !== undefined &&
+				issuer.subjectKeyIdentifier !== undefined &&
+				current.authorityKeyIdentifier !== issuer.subjectKeyIdentifier
 			) {
 				recordFailure(
 					failure(
-						"key_cert_sign_required",
-						"issuer missing keyCertSign",
-						path.length,
-						detail({
-							subjectCommonName: issuer.subject.values.commonName,
-						}),
-					),
-					path,
-				);
-				continue;
-			}
-			if (
-				current.authorityKeyIdentifier !== undefined
-				&& issuer.subjectKeyIdentifier !== undefined
-				&& current.authorityKeyIdentifier !== issuer.subjectKeyIdentifier
-			) {
-				recordFailure(
-					failure(
-						"authority_key_identifier_mismatch",
-						"authorityKeyIdentifier does not match issuer subjectKeyIdentifier",
+						'authority_key_identifier_mismatch',
+						'authorityKeyIdentifier does not match issuer subjectKeyIdentifier',
 						path.length - 1,
 						detail({
 							subjectCommonName: current.subject.values.commonName,
@@ -967,16 +935,14 @@ async function buildChainInternal(
 				);
 				continue;
 			}
-			const nextCaBelowCount = caBelowCount
-				+ (current.basicConstraints?.ca === true && !isSelfIssued(current)
-					? 1
-					: 0);
+			const nextCaBelowCount =
+				caBelowCount + (current.basicConstraints?.ca === true && !isSelfIssued(current) ? 1 : 0);
 			const pathLength = issuer.basicConstraints?.pathLength;
 			if (pathLength !== undefined && nextCaBelowCount > pathLength) {
 				recordFailure(
 					failure(
-						"path_length_exceeded",
-						"path length constraint exceeded",
+						'path_length_exceeded',
+						'path length constraint exceeded',
 						path.length,
 						detail({
 							subjectCommonName: issuer.subject.values.commonName,
@@ -991,8 +957,8 @@ async function buildChainInternal(
 			if (!(await verifyCertificateSignature(current, issuer))) {
 				recordFailure(
 					failure(
-						"signature_invalid",
-						"certificate signature does not verify",
+						'signature_invalid',
+						'certificate signature does not verify',
 						path.length - 1,
 						detail({
 							subjectCommonName: current.subject.values.commonName,
@@ -1006,12 +972,7 @@ async function buildChainInternal(
 			const nextVisited = new Set(visited);
 			nextVisited.add(issuerFingerprint);
 			const nextPath = [...path, issuer];
-			const result = await search(
-				issuer,
-				nextPath,
-				nextVisited,
-				nextCaBelowCount,
-			);
+			const result = await search(issuer, nextPath, nextVisited, nextCaBelowCount);
 			if (result !== undefined) {
 				return result;
 			}
@@ -1049,9 +1010,9 @@ function applyEkuCheck(
 	const ekuCheck = checkExtendedKeyUsage(result.value.chain, purpose);
 	if (!ekuCheck.ok) {
 		return failure(
-			ekuCheck.code === "leaf_eku_missing"
-				? "extended_key_usage_invalid"
-				: "intermediate_eku_constraint",
+			ekuCheck.code === 'leaf_eku_missing'
+				? 'extended_key_usage_invalid'
+				: 'intermediate_eku_constraint',
 			ekuCheck.message,
 			ekuCheck.index,
 		);
@@ -1069,10 +1030,7 @@ function rankIssuerCandidates(
 	return [...candidates]
 		.filter((candidate) => isIssuerOf(candidate, current))
 		.sort((left, right) => {
-			const akiScore = compareBooleans(
-				matchesAki(left, aki),
-				matchesAki(right, aki),
-			);
+			const akiScore = compareBooleans(matchesAki(left, aki), matchesAki(right, aki));
 			if (akiScore !== 0) {
 				return akiScore;
 			}
@@ -1084,20 +1042,17 @@ function rankIssuerCandidates(
 				return rootScore;
 			}
 			return (
-				(order.get(fingerprint(left)) ?? Number.MAX_SAFE_INTEGER)
-				- (order.get(fingerprint(right)) ?? Number.MAX_SAFE_INTEGER)
+				(order.get(fingerprint(left)) ?? Number.MAX_SAFE_INTEGER) -
+				(order.get(fingerprint(right)) ?? Number.MAX_SAFE_INTEGER)
 			);
 		});
 }
 
-function matchesAki(
-	candidate: ParsedCertificate,
-	aki: string | undefined,
-): boolean {
+function matchesAki(candidate: ParsedCertificate, aki: string | undefined): boolean {
 	return (
-		aki !== undefined
-		&& candidate.subjectKeyIdentifier !== undefined
-		&& candidate.subjectKeyIdentifier === aki
+		aki !== undefined &&
+		candidate.subjectKeyIdentifier !== undefined &&
+		candidate.subjectKeyIdentifier === aki
 	);
 }
 
@@ -1108,16 +1063,11 @@ function compareBooleans(left: boolean, right: boolean): number {
 	return left ? -1 : 1;
 }
 
-function isIssuerOf(
-	issuer: ParsedCertificate,
-	child: ParsedCertificate,
-): boolean {
+function isIssuerOf(issuer: ParsedCertificate, child: ParsedCertificate): boolean {
 	return child.issuer.derHex === issuer.subject.derHex;
 }
 
-function findUnprocessedCriticalExtension(
-	certificate: ParsedCertificate,
-): string | undefined {
+function findUnprocessedCriticalExtension(certificate: ParsedCertificate): string | undefined {
 	for (const extension of certificate.extensions) {
 		if (extension.critical && !PROCESSED_EXTENSION_OIDS.has(extension.oid)) {
 			return extension.oid;
@@ -1128,8 +1078,8 @@ function findUnprocessedCriticalExtension(
 
 function isWithinValidity(certificate: ParsedCertificate, at: Date): boolean {
 	return (
-		certificate.notBefore.getTime() <= at.getTime()
-		&& at.getTime() <= certificate.notAfter.getTime()
+		certificate.notBefore.getTime() <= at.getTime() &&
+		at.getTime() <= certificate.notAfter.getTime()
 	);
 }
 
@@ -1144,19 +1094,14 @@ function countCaCertificatesBelowParsed(
 	let total = 0;
 	for (let cursor = 0; cursor < index; cursor += 1) {
 		const certificate = chain[cursor];
-		if (
-			certificate?.basicConstraints?.ca === true
-			&& !isSelfIssued(certificate)
-		) {
+		if (certificate?.basicConstraints?.ca === true && !isSelfIssued(certificate)) {
 			total += 1;
 		}
 	}
 	return total;
 }
 
-function loadCertificates(
-	sources: readonly CertificateSource[],
-): readonly ParsedCertificate[] {
+function loadCertificates(sources: readonly CertificateSource[]): readonly ParsedCertificate[] {
 	const loaded: ParsedCertificate[] = [];
 	for (const source of sources) {
 		loaded.push(...expandSource(source));
@@ -1168,18 +1113,18 @@ function loadSingleCertificate(source: CertificateSource): ParsedCertificate {
 	const loaded = expandSource(source);
 	const first = loaded[0];
 	if (first === undefined) {
-		throw new Error("No certificate found");
+		throw new Error('No certificate found');
 	}
 	if (loaded.length !== 1) {
-		throw new Error("Expected a single certificate source");
+		throw new Error('Expected a single certificate source');
 	}
 	return first;
 }
 
 function expandSource(source: CertificateSource): readonly ParsedCertificate[] {
-	if (typeof source === "string") {
+	if (typeof source === 'string') {
 		return splitPemBlocks(source)
-			.filter((block) => block.label === "CERTIFICATE")
+			.filter((block) => block.label === 'CERTIFICATE')
 			.map((block) => parseCertificateDer(block.bytes));
 	}
 	return [parseCertificateDer(new Uint8Array(source))];
@@ -1209,9 +1154,9 @@ async function matchTrustAnchor(
 	}
 	for (const anchor of anchors) {
 		if (
-			anchor.subjectKeyIdentifier !== undefined
-			&& certificate.authorityKeyIdentifier !== undefined
-			&& anchor.subjectKeyIdentifier !== certificate.authorityKeyIdentifier
+			anchor.subjectKeyIdentifier !== undefined &&
+			certificate.authorityKeyIdentifier !== undefined &&
+			anchor.subjectKeyIdentifier !== certificate.authorityKeyIdentifier
 		) {
 			continue;
 		}
@@ -1231,16 +1176,16 @@ async function matchTrustAnchor(
 }
 
 function fingerprint(certificate: ParsedCertificate): string {
-	return Array.from(certificate.der, (value) => value.toString(16).padStart(2, "0")).join("");
+	return Array.from(certificate.der, (value) => value.toString(16).padStart(2, '0')).join('');
 }
 
 function matchesDnsName(pattern: string, actual: string): boolean {
 	const lowerPattern = pattern.toLowerCase();
 	const lowerActual = actual.toLowerCase();
-	if (!lowerPattern.includes("*")) {
+	if (!lowerPattern.includes('*')) {
 		return lowerPattern === lowerActual;
 	}
-	if (!lowerPattern.startsWith("*.")) {
+	if (!lowerPattern.startsWith('*.')) {
 		return false;
 	}
 	const suffix = lowerPattern.slice(1);
@@ -1248,35 +1193,35 @@ function matchesDnsName(pattern: string, actual: string): boolean {
 		return false;
 	}
 	const prefix = lowerActual.slice(0, lowerActual.length - suffix.length);
-	return prefix.length > 0 && !prefix.includes(".");
+	return prefix.length > 0 && !prefix.includes('.');
 }
 
 function normalizeIpAddress(value: string): string {
-	if (!value.includes(":")) {
+	if (!value.includes(':')) {
 		return value;
 	}
 	return expandIpv6(value)
 		.map((segment) => segment.toLowerCase())
-		.join(":");
+		.join(':');
 }
 
 function expandIpv6(value: string): readonly string[] {
-	const pieces = value.toLowerCase().split("::");
-	const head = pieces[0] ?? "";
+	const pieces = value.toLowerCase().split('::');
+	const head = pieces[0] ?? '';
 	const tail = pieces[1];
-	if (tail !== undefined && value.indexOf("::") !== value.lastIndexOf("::")) {
+	if (tail !== undefined && value.indexOf('::') !== value.lastIndexOf('::')) {
 		throw new Error(`Invalid IPv6 address: ${value}`);
 	}
-	const headParts = head.length > 0 ? head.split(":") : [];
-	const tailParts = tail !== undefined && tail.length > 0 ? tail.split(":") : [];
+	const headParts = head.length > 0 ? head.split(':') : [];
+	const tailParts = tail !== undefined && tail.length > 0 ? tail.split(':') : [];
 	const missing = 8 - (headParts.length + tailParts.length);
 	if ((tail === undefined && headParts.length !== 8) || missing < 0) {
 		throw new Error(`Invalid IPv6 address: ${value}`);
 	}
-	const zeroes = Array.from({ length: missing }, () => "0");
-	return (
-		tail === undefined ? headParts : [...headParts, ...zeroes, ...tailParts]
-	).map((segment) => segment.padStart(4, "0"));
+	const zeroes = Array.from({ length: missing }, () => '0');
+	return (tail === undefined ? headParts : [...headParts, ...zeroes, ...tailParts]).map((segment) =>
+		segment.padStart(4, '0'),
+	);
 }
 
 function failure(
@@ -1302,14 +1247,12 @@ function buildFailureDetails(
 	return detail({
 		subjectCommonName: certificate?.subject.values.commonName,
 		issuerCommonName: certificate?.issuer.values.commonName,
-		chainCommonNames: chain.map(
-			(entry) => entry.subject.values.commonName ?? "<unnamed>",
-		),
+		chainCommonNames: chain.map((entry) => entry.subject.values.commonName ?? '<unnamed>'),
 	});
 }
 
 function formatEku(value: ExtendedKeyUsage): string {
-	return typeof value === "string" ? value : value.value;
+	return typeof value === 'string' ? value : value.value;
 }
 
 function detail(input: VerifyFailureDetailsInput): VerifyFailureDetails {
@@ -1317,14 +1260,10 @@ function detail(input: VerifyFailureDetailsInput): VerifyFailureDetails {
 		...(input.subjectCommonName === undefined
 			? {}
 			: { subjectCommonName: input.subjectCommonName }),
-		...(input.issuerCommonName === undefined
-			? {}
-			: { issuerCommonName: input.issuerCommonName }),
+		...(input.issuerCommonName === undefined ? {} : { issuerCommonName: input.issuerCommonName }),
 		...(input.expected === undefined ? {} : { expected: input.expected }),
 		...(input.actual === undefined ? {} : { actual: input.actual }),
-		...(input.chainCommonNames === undefined
-			? {}
-			: { chainCommonNames: input.chainCommonNames }),
+		...(input.chainCommonNames === undefined ? {} : { chainCommonNames: input.chainCommonNames }),
 	};
 }
 
@@ -1333,7 +1272,7 @@ function detail(input: VerifyFailureDetailsInput): VerifyFailureDetails {
 // ---------------------------------------------------------------------------
 
 /** Empty SEQUENCE DER hex — represents an empty subject DN. */
-const EMPTY_SEQUENCE_HEX = "3000";
+const EMPTY_SEQUENCE_HEX = '3000';
 
 /**
  * Accumulated name constraint state during root-to-leaf traversal.
@@ -1353,9 +1292,7 @@ interface AccumulatedNameConstraints {
  *
  * RFC 5280 §6.1.3(b)–(c) for intermediates, §6.1.5(g) for the leaf.
  */
-function checkNameConstraints(
-	chain: readonly ParsedCertificate[],
-): ValidateCandidatePathResult {
+function checkNameConstraints(chain: readonly ParsedCertificate[]): ValidateCandidatePathResult {
 	let accumulated: AccumulatedNameConstraints = {
 		permittedLevels: [],
 		excluded: [],
@@ -1380,11 +1317,7 @@ function checkNameConstraints(
 		// RFC 5280 §4.2.1.10: self-issued certificates are exempt UNLESS
 		// they are the final certificate (leaf) in the path.
 		if (!isSelfIssued(current) || index === 0) {
-			const nameCheckResult = checkCertificateNames(
-				current,
-				accumulated,
-				index,
-			);
+			const nameCheckResult = checkCertificateNames(current, accumulated, index);
 			if (!nameCheckResult.ok) {
 				return nameCheckResult;
 			}
@@ -1403,20 +1336,14 @@ function accumulateConstraints(
 	current: AccumulatedNameConstraints,
 	constraints: NameConstraints,
 ): AccumulatedNameConstraints {
-	const permittedLevels = constraints.permittedSubtrees !== undefined
-			&& constraints.permittedSubtrees.length > 0
-		? [
-			...current.permittedLevels,
-			constraints.permittedSubtrees.map((subtree) => subtree.base),
-		]
-		: current.permittedLevels;
-	const excluded = constraints.excludedSubtrees !== undefined
-			&& constraints.excludedSubtrees.length > 0
-		? [
-			...current.excluded,
-			...constraints.excludedSubtrees.map((subtree) => subtree.base),
-		]
-		: current.excluded;
+	const permittedLevels =
+		constraints.permittedSubtrees !== undefined && constraints.permittedSubtrees.length > 0
+			? [...current.permittedLevels, constraints.permittedSubtrees.map((subtree) => subtree.base)]
+			: current.permittedLevels;
+	const excluded =
+		constraints.excludedSubtrees !== undefined && constraints.excludedSubtrees.length > 0
+			? [...current.excluded, ...constraints.excludedSubtrees.map((subtree) => subtree.base)]
+			: current.excluded;
 	return { permittedLevels, excluded };
 }
 
@@ -1432,13 +1359,13 @@ function checkCertificateNames(
 	// Check subject DN as directoryName (if non-empty).
 	if (certificate.subject.derHex !== EMPTY_SEQUENCE_HEX) {
 		const dnResult = isNamePermitted(
-			{ type: "directoryName", derHex: certificate.subject.derHex },
+			{ type: 'directoryName', derHex: certificate.subject.derHex },
 			accumulated,
 		);
 		if (!dnResult) {
 			return failure(
-				"name_constraints_violated",
-				"subject distinguished name violates name constraints",
+				'name_constraints_violated',
+				'subject distinguished name violates name constraints',
 				index,
 				detail({
 					subjectCommonName: certificate.subject.values.commonName,
@@ -1456,7 +1383,7 @@ function checkCertificateNames(
 			}
 			if (!isNamePermitted(checkable, accumulated)) {
 				return failure(
-					"name_constraints_violated",
+					'name_constraints_violated',
 					`SAN ${formatConstraintForm(checkable)} violates name constraints`,
 					index,
 					detail({
@@ -1474,15 +1401,15 @@ function checkCertificateNames(
 	// subject DN.
 	const hasEmailConstraints = accumulatedHasEmailConstraints(accumulated);
 	if (hasEmailConstraints) {
-		const hasSanEmail = certificate.subjectAltNames?.some((san) => san.type === "email") ?? false;
+		const hasSanEmail = certificate.subjectAltNames?.some((san) => san.type === 'email') ?? false;
 		if (!hasSanEmail && certificate.subject.values.emailAddress !== undefined) {
 			const emailForm: NameConstraintForm = {
-				type: "email",
+				type: 'email',
 				value: certificate.subject.values.emailAddress,
 			};
 			if (!isNamePermitted(emailForm, accumulated)) {
 				return failure(
-					"name_constraints_violated",
+					'name_constraints_violated',
 					`subject emailAddress ${certificate.subject.values.emailAddress} violates name constraints`,
 					index,
 					detail({
@@ -1497,15 +1424,13 @@ function checkCertificateNames(
 	return { ok: true };
 }
 
-function accumulatedHasEmailConstraints(
-	accumulated: AccumulatedNameConstraints,
-): boolean {
+function accumulatedHasEmailConstraints(accumulated: AccumulatedNameConstraints): boolean {
 	for (const level of accumulated.permittedLevels) {
-		if (level.some((c) => c.type === "email")) {
+		if (level.some((c) => c.type === 'email')) {
 			return true;
 		}
 	}
-	return accumulated.excluded.some((c) => c.type === "email");
+	return accumulated.excluded.some((c) => c.type === 'email');
 }
 
 /**
@@ -1514,24 +1439,24 @@ function accumulatedHasEmailConstraints(
  * constraint checking (unknown tags).
  */
 function sanToConstraintCheckable(
-	san: import("./extensions.ts").SubjectAltName,
+	san: import('./extensions.ts').SubjectAltName,
 ): NameConstraintForm | undefined {
 	switch (san.type) {
-		case "dns":
-			return { type: "dns", value: san.value };
-		case "email":
-			return { type: "email", value: san.value };
-		case "uri":
-			return { type: "uri", value: san.value };
-		case "ip":
+		case 'dns':
+			return { type: 'dns', value: san.value };
+		case 'email':
+			return { type: 'email', value: san.value };
+		case 'uri':
+			return { type: 'uri', value: san.value };
+		case 'ip':
 			return {
-				type: "ip",
+				type: 'ip',
 				addressBytes: parseIpAddressToBytes(san.value),
 				maskBytes: allOnesMask(san.value),
 			};
-		case "directoryName":
-			return { type: "directoryName", derHex: san.derHex };
-		case "unknown":
+		case 'directoryName':
+			return { type: 'directoryName', derHex: san.derHex };
+		case 'unknown':
 			return undefined;
 		default: {
 			const _exhaustive: never = san;
@@ -1560,42 +1485,31 @@ function isNamePermitted(
 	// Check permitted — for each level with relevant constraints,
 	// the name must match at least one.
 	for (const level of accumulated.permittedLevels) {
-		const relevant = level.filter(
-			(constraint) => constraint.type === name.type,
-		);
+		const relevant = level.filter((constraint) => constraint.type === name.type);
 		if (relevant.length === 0) {
 			continue;
 		}
-		if (
-			!relevant.some((constraint) => nameMatchesConstraint(name, constraint))
-		) {
+		if (!relevant.some((constraint) => nameMatchesConstraint(name, constraint))) {
 			return false;
 		}
 	}
 	return true;
 }
 
-function nameMatchesConstraint(
-	name: NameConstraintForm,
-	constraint: NameConstraintForm,
-): boolean {
-	if (name.type === "dns" && constraint.type === "dns") {
+function nameMatchesConstraint(name: NameConstraintForm, constraint: NameConstraintForm): boolean {
+	if (name.type === 'dns' && constraint.type === 'dns') {
 		return matchesDnsConstraint(name.value, constraint.value);
 	}
-	if (name.type === "email" && constraint.type === "email") {
+	if (name.type === 'email' && constraint.type === 'email') {
 		return matchesEmailConstraint(name.value, constraint.value);
 	}
-	if (name.type === "uri" && constraint.type === "uri") {
+	if (name.type === 'uri' && constraint.type === 'uri') {
 		return matchesUriConstraint(name.value, constraint.value);
 	}
-	if (name.type === "ip" && constraint.type === "ip") {
-		return matchesIpConstraint(
-			name.addressBytes,
-			constraint.addressBytes,
-			constraint.maskBytes,
-		);
+	if (name.type === 'ip' && constraint.type === 'ip') {
+		return matchesIpConstraint(name.addressBytes, constraint.addressBytes, constraint.maskBytes);
 	}
-	if (name.type === "directoryName" && constraint.type === "directoryName") {
+	if (name.type === 'directoryName' && constraint.type === 'directoryName') {
 		return matchesDnConstraint(name.derHex, constraint.derHex);
 	}
 	return false;
@@ -1612,12 +1526,10 @@ function matchesDnsConstraint(name: string, constraint: string): boolean {
 	if (lowerConstraint.length === 0) {
 		return true;
 	}
-	if (lowerConstraint.startsWith(".")) {
+	if (lowerConstraint.startsWith('.')) {
 		return lowerName.endsWith(lowerConstraint);
 	}
-	return (
-		lowerName === lowerConstraint || lowerName.endsWith(`.${lowerConstraint}`)
-	);
+	return lowerName === lowerConstraint || lowerName.endsWith(`.${lowerConstraint}`);
 }
 
 /**
@@ -1629,15 +1541,15 @@ function matchesDnsConstraint(name: string, constraint: string): boolean {
 function matchesEmailConstraint(name: string, constraint: string): boolean {
 	const lowerName = name.toLowerCase();
 	const lowerConstraint = constraint.toLowerCase();
-	if (lowerConstraint.includes("@")) {
+	if (lowerConstraint.includes('@')) {
 		return lowerName === lowerConstraint;
 	}
-	const atIndex = lowerName.indexOf("@");
+	const atIndex = lowerName.indexOf('@');
 	if (atIndex < 0) {
 		return false;
 	}
 	const host = lowerName.slice(atIndex + 1);
-	if (lowerConstraint.startsWith(".")) {
+	if (lowerConstraint.startsWith('.')) {
 		return host.endsWith(lowerConstraint);
 	}
 	return host === lowerConstraint;
@@ -1660,7 +1572,7 @@ function matchesUriConstraint(uri: string, constraint: string): boolean {
 	if (lowerConstraint.length === 0) {
 		return true;
 	}
-	if (lowerConstraint.startsWith(".")) {
+	if (lowerConstraint.startsWith('.')) {
 		return lowerHost.endsWith(lowerConstraint);
 	}
 	// Non-period constraint: exact host match only (RFC 5280 §4.2.1.10).
@@ -1668,23 +1580,24 @@ function matchesUriConstraint(uri: string, constraint: string): boolean {
 }
 
 function extractUriHost(uri: string): string | undefined {
-	const schemeEnd = uri.indexOf("://");
+	const schemeEnd = uri.indexOf('://');
 	if (schemeEnd < 0) {
 		return undefined;
 	}
 	const afterScheme = uri.slice(schemeEnd + 3);
-	const atSign = afterScheme.indexOf("@");
+	const atSign = afterScheme.indexOf('@');
 	const hostStart = atSign >= 0 ? atSign + 1 : 0;
 	const rest = afterScheme.slice(hostStart);
-	const pathStart = rest.indexOf("/");
-	const portStart = rest.indexOf(":");
-	const end = pathStart >= 0
-		? portStart >= 0
-			? Math.min(pathStart, portStart)
-			: pathStart
-		: portStart >= 0
-		? portStart
-		: rest.length;
+	const pathStart = rest.indexOf('/');
+	const portStart = rest.indexOf(':');
+	const end =
+		pathStart >= 0
+			? portStart >= 0
+				? Math.min(pathStart, portStart)
+				: pathStart
+			: portStart >= 0
+				? portStart
+				: rest.length;
 	return rest.slice(0, end);
 }
 
@@ -1722,10 +1635,7 @@ function matchesIpConstraint(
  * false positives but may produce false negatives for DNs with
  * different string encodings (e.g. PrintableString vs UTF8String).
  */
-function matchesDnConstraint(
-	subjectDerHex: string,
-	constraintDerHex: string,
-): boolean {
+function matchesDnConstraint(subjectDerHex: string, constraintDerHex: string): boolean {
 	if (subjectDerHex === constraintDerHex) {
 		return true;
 	}
@@ -1746,7 +1656,7 @@ function extractSequenceContent(derHex: string): string | undefined {
 		return undefined;
 	}
 	// Tag must be 0x30 (SEQUENCE)
-	if (derHex.slice(0, 2) !== "30") {
+	if (derHex.slice(0, 2) !== '30') {
 		return undefined;
 	}
 	const firstLengthByte = Number.parseInt(derHex.slice(2, 4), 16);
@@ -1761,10 +1671,10 @@ function extractSequenceContent(derHex: string): string | undefined {
 }
 
 function parseIpAddressToBytes(value: string): Uint8Array {
-	if (value.includes(":")) {
+	if (value.includes(':')) {
 		return parseIpv6ToBytes(value);
 	}
-	const segments = value.split(".");
+	const segments = value.split('.');
 	if (segments.length !== 4) {
 		throw new Error(`Invalid IPv4 address: ${value}`);
 	}
@@ -1791,7 +1701,7 @@ function parseIpv6ToBytes(value: string): Uint8Array {
 }
 
 function allOnesMask(ipValue: string): Uint8Array {
-	const length = ipValue.includes(":") ? 16 : 4;
+	const length = ipValue.includes(':') ? 16 : 4;
 	const mask = new Uint8Array(length);
 	mask.fill(0xff);
 	return mask;
@@ -1799,28 +1709,26 @@ function allOnesMask(ipValue: string): Uint8Array {
 
 function formatConstraintForm(form: NameConstraintForm): string {
 	switch (form.type) {
-		case "dns":
+		case 'dns':
 			return `dns:${form.value}`;
-		case "email":
+		case 'email':
 			return `email:${form.value}`;
-		case "uri":
+		case 'uri':
 			return `uri:${form.value}`;
-		case "ip":
+		case 'ip':
 			return `ip:${formatIpBytes(form.addressBytes)}`;
-		case "directoryName":
+		case 'directoryName':
 			return `dn:${form.derHex.slice(0, 20)}...`;
 		default: {
 			const _exhaustive: never = form;
-			throw new Error(
-				`Unhandled NameConstraintForm type: ${String(_exhaustive)}`,
-			);
+			throw new Error(`Unhandled NameConstraintForm type: ${String(_exhaustive)}`);
 		}
 	}
 }
 
 function formatIpBytes(bytes: Uint8Array): string {
 	if (bytes.length === 4) {
-		return Array.from(bytes, (value) => String(value)).join(".");
+		return Array.from(bytes, (value) => String(value)).join('.');
 	}
 	const groups: string[] = [];
 	for (let index = 0; index < bytes.length; index += 2) {
@@ -1828,5 +1736,5 @@ function formatIpBytes(bytes: Uint8Array): string {
 		const right = bytes[index + 1] ?? 0;
 		groups.push(((left << 8) | right).toString(16));
 	}
-	return groups.join(":");
+	return groups.join(':');
 }

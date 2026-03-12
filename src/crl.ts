@@ -6,11 +6,11 @@ import {
 	parseTime,
 	requireElement,
 	toHex,
-} from "./asn1.ts";
+} from './asn1.ts';
 import {
-	type DerElement,
 	bitString,
 	bool,
+	type DerElement,
 	explicitContext,
 	generalizedTime,
 	implicitConstructedContext,
@@ -24,16 +24,16 @@ import {
 	sequence,
 	time,
 	tlv,
-} from "./der.ts";
-import { encodeCrlDistributionPoints } from "./extensions.ts";
-import { sha1 } from "./hash.ts";
-import { exportSpkiDer } from "./keys.ts";
-import { type NameInput, encodeName } from "./name.ts";
-import { OIDS } from "./oids.ts";
-import { type ParsedCertificate, parseCertificateDer, parseCertificatePem } from "./parse.ts";
-import { base64Encode, pemDecode, pemEncode } from "./pem.ts";
-import { verifySignedData } from "./sig-verify.ts";
-import { encodeAlgorithmIdentifier, getSignatureAlgorithm, signBytes } from "./signing.ts";
+} from './der.ts';
+import { encodeCrlDistributionPoints } from './extensions.ts';
+import { sha1 } from './hash.ts';
+import { exportSpkiDer } from './keys.ts';
+import { encodeName, type NameInput } from './name.ts';
+import { OIDS } from './oids.ts';
+import { type ParsedCertificate, parseCertificateDer, parseCertificatePem } from './parse.ts';
+import { base64Encode, pemDecode, pemEncode } from './pem.ts';
+import { verifySignedData } from './sig-verify.ts';
+import { encodeAlgorithmIdentifier, getSignatureAlgorithm, signBytes } from './signing.ts';
 
 export interface RevokedCertificateInput {
 	readonly serialNumber: Uint8Array;
@@ -43,16 +43,16 @@ export interface RevokedCertificateInput {
 }
 
 export type RevocationReason =
-	| "unspecified"
-	| "keyCompromise"
-	| "cACompromise"
-	| "affiliationChanged"
-	| "superseded"
-	| "cessationOfOperation"
-	| "certificateHold"
-	| "removeFromCRL"
-	| "privilegeWithdrawn"
-	| "aACompromise";
+	| 'unspecified'
+	| 'keyCompromise'
+	| 'cACompromise'
+	| 'affiliationChanged'
+	| 'superseded'
+	| 'cessationOfOperation'
+	| 'certificateHold'
+	| 'removeFromCRL'
+	| 'privilegeWithdrawn'
+	| 'aACompromise';
 
 export interface CreateCertificateRevocationListInput {
 	readonly issuer: NameInput;
@@ -130,10 +130,10 @@ export type CrlCertificateSource = string | Uint8Array | ParsedCertificate;
 export type VerifyCertificateRevocationListResult =
 	| { readonly ok: true; readonly value: ParsedCertificateRevocationList }
 	| {
-		readonly ok: false;
-		readonly code: "signature_invalid";
-		readonly message: string;
-	};
+			readonly ok: false;
+			readonly code: 'signature_invalid';
+			readonly message: string;
+	  };
 
 export interface ValidateCertificateRevocationListInput {
 	readonly crl: CrlSource;
@@ -145,10 +145,10 @@ export interface ValidateCertificateRevocationListInput {
 export type ValidateCertificateRevocationListResult =
 	| { readonly ok: true; readonly value: ParsedCertificateRevocationList }
 	| {
-		readonly ok: false;
-		readonly code: "signature_invalid" | "issuer_mismatch" | "stale_crl";
-		readonly message: string;
-	};
+			readonly ok: false;
+			readonly code: 'signature_invalid' | 'issuer_mismatch' | 'stale_crl';
+			readonly message: string;
+	  };
 
 export async function createCertificateRevocationList(
 	input: CreateCertificateRevocationListInput,
@@ -164,13 +164,10 @@ export async function createCertificateRevocationList(
 		input.freshestCrlUris,
 	);
 	const revoked = input.revokedCertificates ?? [];
-	const revokedSequence = revoked.length === 0
-		? []
-		: [
-			sequence(
-				revoked.map((entry) => createRevokedCertificate(entry, thisUpdate)),
-			),
-		];
+	const revokedSequence =
+		revoked.length === 0
+			? []
+			: [sequence(revoked.map((entry) => createRevokedCertificate(entry, thisUpdate)))];
 	const tbsCertList = sequence([
 		integerFromNumber(1),
 		encodeAlgorithmIdentifier(signatureAlgorithm),
@@ -178,15 +175,9 @@ export async function createCertificateRevocationList(
 		time(thisUpdate),
 		...(nextUpdate === undefined ? [] : [time(nextUpdate)]),
 		...revokedSequence,
-		...(extensions.length === 0
-			? []
-			: [explicitContext(0, sequence(extensions))]),
+		...(extensions.length === 0 ? [] : [explicitContext(0, sequence(extensions))]),
 	]);
-	const signatureValue = await signBytes(
-		input.signerPrivateKey,
-		signatureAlgorithm,
-		tbsCertList,
-	);
+	const signatureValue = await signBytes(input.signerPrivateKey, signatureAlgorithm, tbsCertList);
 	const der = sequence([
 		tbsCertList,
 		encodeAlgorithmIdentifier(signatureAlgorithm),
@@ -194,7 +185,7 @@ export async function createCertificateRevocationList(
 	]);
 	return {
 		der,
-		pem: pemEncode("X509 CRL", der),
+		pem: pemEncode('X509 CRL', der),
 		base64: base64Encode(der),
 	};
 }
@@ -203,26 +194,25 @@ export function parseCertificateRevocationListDer(
 	der: Uint8Array,
 ): ParsedCertificateRevocationList {
 	const top = childrenOf(der, readElement(der));
-	const tbsCertList = requireElement(top[0], "TBSCertList");
-	const signatureAlgorithm = requireElement(top[1], "signatureAlgorithm");
-	const signatureValue = requireElement(top[2], "signatureValue");
+	const tbsCertList = requireElement(top[0], 'TBSCertList');
+	const signatureAlgorithm = requireElement(top[1], 'signatureAlgorithm');
+	const signatureValue = requireElement(top[2], 'signatureValue');
 	const tbsChildren = childrenOf(der, tbsCertList);
 	let index = 0;
 	let version = 1;
 	if (tbsChildren[index]?.tag === 0x02) {
-		version = decodeIntegerNumber(requireElement(tbsChildren[index], "version").value)
-			+ 1;
+		version = decodeIntegerNumber(requireElement(tbsChildren[index], 'version').value) + 1;
 		index += 1;
 	}
 	index += 1; // signature algorithm in TBS
-	const issuer = requireElement(tbsChildren[index], "issuer");
-	const thisUpdate = requireElement(tbsChildren[index + 1], "thisUpdate");
+	const issuer = requireElement(tbsChildren[index], 'issuer');
+	const thisUpdate = requireElement(tbsChildren[index + 1], 'thisUpdate');
 	let cursor = index + 2;
 	const maybeNextUpdate = tbsChildren[cursor];
-	const nextUpdate = maybeNextUpdate !== undefined
-			&& (maybeNextUpdate.tag === 0x17 || maybeNextUpdate.tag === 0x18)
-		? parseTime(maybeNextUpdate)
-		: undefined;
+	const nextUpdate =
+		maybeNextUpdate !== undefined && (maybeNextUpdate.tag === 0x17 || maybeNextUpdate.tag === 0x18)
+			? parseTime(maybeNextUpdate)
+			: undefined;
 	if (nextUpdate !== undefined) {
 		cursor += 1;
 	}
@@ -233,15 +223,10 @@ export function parseCertificateRevocationListDer(
 			const entryDer = der.slice(entry.start - entry.headerLength, entry.end);
 			const parts = readSequenceChildren(entryDer);
 			const entryExtensions = parts[2];
-			const parsedEntryExtensions = parseRevokedCertificateExtensions(
-				entryDer,
-				entryExtensions,
-			);
+			const parsedEntryExtensions = parseRevokedCertificateExtensions(entryDer, entryExtensions);
 			return {
-				serialNumberHex: toHex(
-					requireElement(parts[0], "revoked serialNumber").value,
-				),
-				revocationDate: parseTime(requireElement(parts[1], "revocationDate")),
+				serialNumberHex: toHex(requireElement(parts[0], 'revoked serialNumber').value),
+				revocationDate: parseTime(requireElement(parts[1], 'revocationDate')),
 				...(parsedEntryExtensions.reasonCode === undefined
 					? {}
 					: { reasonCode: parsedEntryExtensions.reasonCode }),
@@ -257,99 +242,69 @@ export function parseCertificateRevocationListDer(
 	let baseCrlNumber: number | undefined;
 	let issuingDistributionPoint: ParsedIssuingDistributionPoint | undefined;
 	let issuingDistributionPointUri: string | undefined;
-	let freshestCrlDistributionPoints:
-		| readonly ParsedDistributionPoint[]
-		| undefined;
+	let freshestCrlDistributionPoints: readonly ParsedDistributionPoint[] | undefined;
 	let freshestCrlUris: readonly string[] | undefined;
 	const maybeExtensions = tbsChildren[cursor];
 	if (maybeExtensions?.tag === 0xa0) {
-		const extensionSequence = requireElement(
-			childrenOf(der, maybeExtensions)[0],
-			"crl extensions",
-		);
+		const extensionSequence = requireElement(childrenOf(der, maybeExtensions)[0], 'crl extensions');
 		for (const extension of childrenOf(der, extensionSequence)) {
 			const parts = childrenOf(der, extension);
-			const oid = decodeObjectIdentifier(
-				requireElement(parts[0], "extension OID").value,
-			);
-			const valueElement = requireElement(
-				parts[parts.length - 1],
-				"extension value",
-			);
+			const oid = decodeObjectIdentifier(requireElement(parts[0], 'extension OID').value);
+			const valueElement = requireElement(parts[parts.length - 1], 'extension value');
 			if (oid === OIDS.authorityKeyIdentifier) {
-				authorityKeyIdentifier = parseAuthorityKeyIdentifier(
-					valueElement.value,
-				);
+				authorityKeyIdentifier = parseAuthorityKeyIdentifier(valueElement.value);
 			}
 			if (oid === OIDS.cRLNumber) {
 				crlNumber = decodeIntegerNumber(readElement(valueElement.value).value);
 			}
 			if (oid === OIDS.deltaCRLIndicator) {
-				baseCrlNumber = decodeIntegerNumber(
-					readElement(valueElement.value).value,
-				);
+				baseCrlNumber = decodeIntegerNumber(readElement(valueElement.value).value);
 			}
 			if (oid === OIDS.issuingDistributionPoint) {
-				issuingDistributionPoint = parseIssuingDistributionPoint(
-					valueElement.value,
-				);
+				issuingDistributionPoint = parseIssuingDistributionPoint(valueElement.value);
 				issuingDistributionPointUri = issuingDistributionPoint.distributionPoint?.fullNameUris[0];
 			}
 			if (oid === OIDS.freshestCRL) {
-				freshestCrlDistributionPoints = parseDistributionPoints(
-					valueElement.value,
-				);
-				freshestCrlUris = freshestCrlDistributionPoints.flatMap(
-					(entry) => entry.fullNameUris,
-				);
+				freshestCrlDistributionPoints = parseDistributionPoints(valueElement.value);
+				freshestCrlUris = freshestCrlDistributionPoints.flatMap((entry) => entry.fullNameUris);
 			}
 		}
 	}
 	return {
 		version,
-		tbsCertListDer: der.slice(
-			tbsCertList.start - tbsCertList.headerLength,
-			tbsCertList.end,
-		),
+		tbsCertListDer: der.slice(tbsCertList.start - tbsCertList.headerLength, tbsCertList.end),
 		signatureValue: extractBitStringValue(signatureValue),
 		issuer: parseIssuer(der, issuer),
 		thisUpdate: parseTime(thisUpdate),
 		...(nextUpdate === undefined ? {} : { nextUpdate }),
-		signatureAlgorithmOid: parseAlgorithmIdentifier(der, signatureAlgorithm)
-			.oid,
+		signatureAlgorithmOid: parseAlgorithmIdentifier(der, signatureAlgorithm).oid,
 		...(authorityKeyIdentifier === undefined ? {} : { authorityKeyIdentifier }),
 		...(crlNumber === undefined ? {} : { crlNumber }),
 		...(baseCrlNumber === undefined ? {} : { baseCrlNumber }),
-		...(issuingDistributionPoint === undefined
-			? {}
-			: { issuingDistributionPoint }),
-		...(issuingDistributionPointUri === undefined
-			? {}
-			: { issuingDistributionPointUri }),
-		...(freshestCrlDistributionPoints === undefined
-			? {}
-			: { freshestCrlDistributionPoints }),
+		...(issuingDistributionPoint === undefined ? {} : { issuingDistributionPoint }),
+		...(issuingDistributionPointUri === undefined ? {} : { issuingDistributionPointUri }),
+		...(freshestCrlDistributionPoints === undefined ? {} : { freshestCrlDistributionPoints }),
 		...(freshestCrlUris === undefined ? {} : { freshestCrlUris }),
 		revokedCertificates,
 	};
 }
 
-export function parseCertificateRevocationListPem(
-	pem: string,
-): ParsedCertificateRevocationList {
-	return parseCertificateRevocationListDer(pemDecode("X509 CRL", pem));
+export function parseCertificateRevocationListPem(pem: string): ParsedCertificateRevocationList {
+	return parseCertificateRevocationListDer(pemDecode('X509 CRL', pem));
 }
 
 export async function verifyCertificateRevocationList(
 	crl: string | Uint8Array,
 	issuerCertificate: string | Uint8Array,
 ): Promise<VerifyCertificateRevocationListResult> {
-	const parsedCrl = typeof crl === "string"
-		? parseCertificateRevocationListPem(crl)
-		: parseCertificateRevocationListDer(new Uint8Array(crl));
-	const issuer = typeof issuerCertificate === "string"
-		? parseIssuerCertificatePem(issuerCertificate)
-		: parseIssuerCertificateDer(new Uint8Array(issuerCertificate));
+	const parsedCrl =
+		typeof crl === 'string'
+			? parseCertificateRevocationListPem(crl)
+			: parseCertificateRevocationListDer(new Uint8Array(crl));
+	const issuer =
+		typeof issuerCertificate === 'string'
+			? parseIssuerCertificatePem(issuerCertificate)
+			: parseIssuerCertificateDer(new Uint8Array(issuerCertificate));
 	const verified = await verifySignedData(
 		parsedCrl.signatureAlgorithmOid,
 		issuer.publicKeyAlgorithmOid,
@@ -361,10 +316,10 @@ export async function verifyCertificateRevocationList(
 	return verified
 		? { ok: true, value: parsedCrl }
 		: {
-			ok: false,
-			code: "signature_invalid",
-			message: "certificate revocation list signature does not verify",
-		};
+				ok: false,
+				code: 'signature_invalid',
+				message: 'certificate revocation list signature does not verify',
+			};
 }
 
 export async function validateCertificateRevocationList(
@@ -375,19 +330,19 @@ export async function validateCertificateRevocationList(
 	if (parsedCrl.issuer.derHex !== issuer.subject.derHex) {
 		return {
 			ok: false,
-			code: "issuer_mismatch",
-			message: "CRL issuer name does not match certificate subject",
+			code: 'issuer_mismatch',
+			message: 'CRL issuer name does not match certificate subject',
 		};
 	}
 	if (
-		parsedCrl.authorityKeyIdentifier !== undefined
-		&& issuer.subjectKeyIdentifier !== undefined
-		&& parsedCrl.authorityKeyIdentifier !== issuer.subjectKeyIdentifier
+		parsedCrl.authorityKeyIdentifier !== undefined &&
+		issuer.subjectKeyIdentifier !== undefined &&
+		parsedCrl.authorityKeyIdentifier !== issuer.subjectKeyIdentifier
 	) {
 		return {
 			ok: false,
-			code: "issuer_mismatch",
-			message: "CRL authority key identifier does not match issuer subject key identifier",
+			code: 'issuer_mismatch',
+			message: 'CRL authority key identifier does not match issuer subject key identifier',
 		};
 	}
 	const verified = await verifySignedData(
@@ -401,21 +356,20 @@ export async function validateCertificateRevocationList(
 	if (!verified) {
 		return {
 			ok: false,
-			code: "signature_invalid",
-			message: "certificate revocation list signature does not verify",
+			code: 'signature_invalid',
+			message: 'certificate revocation list signature does not verify',
 		};
 	}
 	const at = input.at ?? new Date();
 	const skew = input.clockSkewMs ?? 0;
 	if (
-		parsedCrl.thisUpdate.getTime() - skew > at.getTime()
-		|| (parsedCrl.nextUpdate !== undefined
-			&& parsedCrl.nextUpdate.getTime() + skew < at.getTime())
+		parsedCrl.thisUpdate.getTime() - skew > at.getTime() ||
+		(parsedCrl.nextUpdate !== undefined && parsedCrl.nextUpdate.getTime() + skew < at.getTime())
 	) {
 		return {
 			ok: false,
-			code: "stale_crl",
-			message: "CRL is not valid at requested time",
+			code: 'stale_crl',
+			message: 'CRL is not valid at requested time',
 		};
 	}
 	return { ok: true, value: parsedCrl };
@@ -425,9 +379,10 @@ export function isCertificateRevoked(
 	certificateSerialNumber: Uint8Array | string,
 	crl: ParsedCertificateRevocationList,
 ): boolean {
-	const serialNumberHex = typeof certificateSerialNumber === "string"
-		? normalizeHex(certificateSerialNumber)
-		: toHex(certificateSerialNumber);
+	const serialNumberHex =
+		typeof certificateSerialNumber === 'string'
+			? normalizeHex(certificateSerialNumber)
+			: toHex(certificateSerialNumber);
 	return crl.revokedCertificates.some(
 		(entry) => normalizeHex(entry.serialNumberHex) === serialNumberHex,
 	);
@@ -446,24 +401,16 @@ async function buildCrlExtensions(
 		extensions.push(
 			encodeExtension(
 				OIDS.authorityKeyIdentifier,
-				sequence([
-					implicitPrimitiveContext(0, buildSubjectKeyIdentifier(spki)),
-				]),
+				sequence([implicitPrimitiveContext(0, buildSubjectKeyIdentifier(spki))]),
 			),
 		);
 	}
 	if (crlNumber !== undefined) {
-		extensions.push(
-			encodeExtension(OIDS.cRLNumber, integerFromNumber(crlNumber)),
-		);
+		extensions.push(encodeExtension(OIDS.cRLNumber, integerFromNumber(crlNumber)));
 	}
 	if (baseCrlNumber !== undefined) {
 		extensions.push(
-			encodeExtension(
-				OIDS.deltaCRLIndicator,
-				integerFromNumber(baseCrlNumber),
-				true,
-			),
+			encodeExtension(OIDS.deltaCRLIndicator, integerFromNumber(baseCrlNumber), true),
 		);
 	}
 	if (issuingDistributionPointUri !== undefined) {
@@ -485,19 +432,13 @@ async function buildCrlExtensions(
 	}
 	if (freshestCrlUris !== undefined && freshestCrlUris.length > 0) {
 		extensions.push(
-			encodeExtension(
-				OIDS.freshestCRL,
-				encodeCrlDistributionPoints(freshestCrlUris),
-			),
+			encodeExtension(OIDS.freshestCRL, encodeCrlDistributionPoints(freshestCrlUris)),
 		);
 	}
 	return extensions;
 }
 
-function createRevokedCertificate(
-	entry: RevokedCertificateInput,
-	thisUpdate: Date,
-): Uint8Array {
+function createRevokedCertificate(entry: RevokedCertificateInput, thisUpdate: Date): Uint8Array {
 	const extensions = buildRevokedCertificateExtensions(entry);
 	return sequence([
 		integer(entry.serialNumber),
@@ -506,9 +447,7 @@ function createRevokedCertificate(
 	]);
 }
 
-function buildRevokedCertificateExtensions(
-	entry: RevokedCertificateInput,
-): Uint8Array[] {
+function buildRevokedCertificateExtensions(entry: RevokedCertificateInput): Uint8Array[] {
 	const extensions: Uint8Array[] = [];
 	if (entry.reasonCode !== undefined) {
 		extensions.push(
@@ -519,12 +458,7 @@ function buildRevokedCertificateExtensions(
 		);
 	}
 	if (entry.invalidityDate !== undefined) {
-		extensions.push(
-			encodeExtension(
-				OIDS.invalidityDate,
-				generalizedTime(entry.invalidityDate),
-			),
-		);
+		extensions.push(encodeExtension(OIDS.invalidityDate, generalizedTime(entry.invalidityDate)));
 	}
 	return extensions;
 }
@@ -541,16 +475,14 @@ function parseRevokedCertificateExtensions(
 	for (const extension of childrenOf(entryDer, element)) {
 		const parts = childrenOf(entryDer, extension);
 		const oid = decodeObjectIdentifier(
-			requireElement(parts[0], "revoked certificate extension OID").value,
+			requireElement(parts[0], 'revoked certificate extension OID').value,
 		);
 		const valueElement = requireElement(
 			parts[parts.length - 1],
-			"revoked certificate extension value",
+			'revoked certificate extension value',
 		);
 		if (oid === OIDS.cRLReason) {
-			reasonCode = revocationReasonFromCode(
-				readElement(valueElement.value).value[0],
-			);
+			reasonCode = revocationReasonFromCode(readElement(valueElement.value).value[0]);
 		}
 		if (oid === OIDS.invalidityDate) {
 			invalidityDate = parseTime(readElement(valueElement.value));
@@ -562,9 +494,7 @@ function parseRevokedCertificateExtensions(
 	};
 }
 
-function parseIssuingDistributionPoint(
-	valueDer: Uint8Array,
-): ParsedIssuingDistributionPoint {
+function parseIssuingDistributionPoint(valueDer: Uint8Array): ParsedIssuingDistributionPoint {
 	const sequenceElement = readElement(valueDer);
 	for (const child of childrenOf(valueDer, sequenceElement)) {
 		if (child.tag !== 0xa0) {
@@ -572,24 +502,19 @@ function parseIssuingDistributionPoint(
 		}
 		const distributionPointName = requireElement(
 			childrenOf(valueDer, child)[0],
-			"distributionPointName",
+			'distributionPointName',
 		);
 		if (distributionPointName.tag !== 0xa0) {
 			continue;
 		}
 		return {
-			distributionPoint: parseDistributionPointName(
-				valueDer,
-				distributionPointName,
-			),
+			distributionPoint: parseDistributionPointName(valueDer, distributionPointName),
 		};
 	}
 	return {};
 }
 
-function parseDistributionPoints(
-	valueDer: Uint8Array,
-): readonly ParsedDistributionPoint[] {
+function parseDistributionPoints(valueDer: Uint8Array): readonly ParsedDistributionPoint[] {
 	const sequenceElement = readElement(valueDer);
 	const points: ParsedDistributionPoint[] = [];
 	for (const distributionPoint of childrenOf(valueDer, sequenceElement)) {
@@ -599,7 +524,7 @@ function parseDistributionPoints(
 			}
 			const distributionPointName = requireElement(
 				childrenOf(valueDer, child)[0],
-				"distributionPointName",
+				'distributionPointName',
 			);
 			if (distributionPointName.tag !== 0xa0) {
 				continue;
@@ -623,23 +548,15 @@ function parseDistributionPointName(
 	return { fullNameUris };
 }
 
-function encodeExtension(
-	oid: string,
-	value: Uint8Array,
-	critical = false,
-): Uint8Array {
-	return sequence([
-		objectIdentifier(oid),
-		...(critical ? [bool(true)] : []),
-		octetString(value),
-	]);
+function encodeExtension(oid: string, value: Uint8Array, critical = false): Uint8Array {
+	return sequence([objectIdentifier(oid), ...(critical ? [bool(true)] : []), octetString(value)]);
 }
 
 function buildSubjectKeyIdentifier(spki: Uint8Array): Uint8Array {
 	const top = readSequenceChildren(spki);
 	const keyBitString = top[1];
 	if (keyBitString === undefined || keyBitString.tag !== 0x03) {
-		throw new Error("SPKI missing subject public key bit string");
+		throw new Error('SPKI missing subject public key bit string');
 	}
 	return sha1(keyBitString.value.slice(1));
 }
@@ -650,24 +567,15 @@ function parseIssuer(
 ): { readonly derHex: string; readonly commonName?: string } {
 	let commonName: string | undefined;
 	for (const setElement of childrenOf(source, element)) {
-		const attribute = requireElement(
-			childrenOf(source, setElement)[0],
-			"issuer attribute",
-		);
+		const attribute = requireElement(childrenOf(source, setElement)[0], 'issuer attribute');
 		const parts = childrenOf(source, attribute);
-		const oid = decodeObjectIdentifier(
-			requireElement(parts[0], "issuer attribute OID").value,
-		);
+		const oid = decodeObjectIdentifier(requireElement(parts[0], 'issuer attribute OID').value);
 		if (oid === OIDS.commonName) {
-			commonName = textDecoder.decode(
-				requireElement(parts[1], "issuer attribute value").value,
-			);
+			commonName = textDecoder.decode(requireElement(parts[1], 'issuer attribute value').value);
 		}
 	}
 	return {
-		derHex: toHex(
-			source.slice(element.start - element.headerLength, element.end),
-		),
+		derHex: toHex(source.slice(element.start - element.headerLength, element.end)),
 		...(commonName === undefined ? {} : { commonName }),
 	};
 }
@@ -687,38 +595,36 @@ function parseAlgorithmIdentifier(
 	element: DerElement,
 ): { readonly oid: string } {
 	const children = childrenOf(source, element);
-	const oid = requireElement(children[0], "algorithm OID");
+	const oid = requireElement(children[0], 'algorithm OID');
 	return { oid: decodeObjectIdentifier(oid.value) };
 }
 
 function normalizeHex(value: string): string {
-	return value.replace(/^0+/, "").toLowerCase();
+	return value.replace(/^0+/, '').toLowerCase();
 }
 
-function revocationReasonFromCode(
-	code: number | undefined,
-): RevocationReason | undefined {
+function revocationReasonFromCode(code: number | undefined): RevocationReason | undefined {
 	switch (code) {
 		case 0:
-			return "unspecified";
+			return 'unspecified';
 		case 1:
-			return "keyCompromise";
+			return 'keyCompromise';
 		case 2:
-			return "cACompromise";
+			return 'cACompromise';
 		case 3:
-			return "affiliationChanged";
+			return 'affiliationChanged';
 		case 4:
-			return "superseded";
+			return 'superseded';
 		case 5:
-			return "cessationOfOperation";
+			return 'cessationOfOperation';
 		case 6:
-			return "certificateHold";
+			return 'certificateHold';
 		case 8:
-			return "removeFromCRL";
+			return 'removeFromCRL';
 		case 9:
-			return "privilegeWithdrawn";
+			return 'privilegeWithdrawn';
 		case 10:
-			return "aACompromise";
+			return 'aACompromise';
 	}
 	return undefined;
 }
@@ -732,7 +638,7 @@ function parseIssuerCertificatePem(pem: string): ParsedCertificate {
 }
 
 function normalizeCrl(source: CrlSource): ParsedCertificateRevocationList {
-	if (typeof source === "string") {
+	if (typeof source === 'string') {
 		return parseCertificateRevocationListPem(source);
 	}
 	if (source instanceof Uint8Array) {
@@ -741,10 +647,8 @@ function normalizeCrl(source: CrlSource): ParsedCertificateRevocationList {
 	return source;
 }
 
-function normalizeCrlCertificate(
-	source: CrlCertificateSource,
-): ParsedCertificate {
-	if (typeof source === "string") {
+function normalizeCrlCertificate(source: CrlCertificateSource): ParsedCertificate {
+	if (typeof source === 'string') {
 		return parseCertificatePem(source);
 	}
 	if (source instanceof Uint8Array) {

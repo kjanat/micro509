@@ -157,5 +157,7 @@ dist
 .nfs*
 
 # End of https://gitignore.kjanat.com/api/node,linux
-.zed/settings.json
 comparisons/*
+package-lock.json
+pnpm-*.yaml
+yarn.lock

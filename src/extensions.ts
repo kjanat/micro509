@@ -1,4 +1,4 @@
-import { hexToBytes } from "./asn1.ts";
+import { hexToBytes } from './asn1.ts';
 import {
 	bitString,
 	bool,
@@ -11,32 +11,32 @@ import {
 	readSequenceChildren,
 	sequence,
 	tlv,
-} from "./der.ts";
-import { sha1 } from "./hash.ts";
-import { OIDS } from "./oids.ts";
+} from './der.ts';
+import { sha1 } from './hash.ts';
+import { OIDS } from './oids.ts';
 
 export type KeyUsage =
-	| "digitalSignature"
-	| "nonRepudiation"
-	| "keyEncipherment"
-	| "dataEncipherment"
-	| "keyAgreement"
-	| "keyCertSign"
-	| "cRLSign"
-	| "encipherOnly"
-	| "decipherOnly";
+	| 'digitalSignature'
+	| 'nonRepudiation'
+	| 'keyEncipherment'
+	| 'dataEncipherment'
+	| 'keyAgreement'
+	| 'keyCertSign'
+	| 'cRLSign'
+	| 'encipherOnly'
+	| 'decipherOnly';
 
 export type SubjectAltName =
-	| { readonly type: "dns"; readonly value: string }
-	| { readonly type: "ip"; readonly value: string }
-	| { readonly type: "email"; readonly value: string }
-	| { readonly type: "uri"; readonly value: string }
-	| { readonly type: "directoryName"; readonly derHex: string }
+	| { readonly type: 'dns'; readonly value: string }
+	| { readonly type: 'ip'; readonly value: string }
+	| { readonly type: 'email'; readonly value: string }
+	| { readonly type: 'uri'; readonly value: string }
+	| { readonly type: 'directoryName'; readonly derHex: string }
 	| {
-		readonly type: "unknown";
-		readonly tag: number;
-		readonly value: Uint8Array;
-	};
+			readonly type: 'unknown';
+			readonly tag: number;
+			readonly value: Uint8Array;
+	  };
 
 export interface BasicConstraints {
 	readonly ca: boolean;
@@ -70,15 +70,15 @@ export interface CustomExtension {
  * address + mask bytes (8 for IPv4, 32 for IPv6) rather than bare addresses.
  */
 export type NameConstraintForm =
-	| { readonly type: "dns"; readonly value: string }
-	| { readonly type: "email"; readonly value: string }
-	| { readonly type: "uri"; readonly value: string }
+	| { readonly type: 'dns'; readonly value: string }
+	| { readonly type: 'email'; readonly value: string }
+	| { readonly type: 'uri'; readonly value: string }
 	| {
-		readonly type: "ip";
-		readonly addressBytes: Uint8Array;
-		readonly maskBytes: Uint8Array;
-	}
-	| { readonly type: "directoryName"; readonly derHex: string };
+			readonly type: 'ip';
+			readonly addressBytes: Uint8Array;
+			readonly maskBytes: Uint8Array;
+	  }
+	| { readonly type: 'directoryName'; readonly derHex: string };
 
 export interface GeneralSubtree {
 	readonly base: NameConstraintForm;
@@ -89,10 +89,10 @@ export interface NameConstraints {
 	readonly excludedSubtrees?: readonly GeneralSubtree[];
 }
 
-export type KnownAuthorityInfoAccessMethod = "ocsp" | "caIssuers";
+export type KnownAuthorityInfoAccessMethod = 'ocsp' | 'caIssuers';
 
 export interface CustomAuthorityInfoAccessMethod {
-	readonly type: "oid";
+	readonly type: 'oid';
 	readonly value: string;
 }
 
@@ -106,15 +106,15 @@ export interface AuthorityInformationAccess {
 }
 
 export type KnownExtendedKeyUsage =
-	| "serverAuth"
-	| "clientAuth"
-	| "codeSigning"
-	| "emailProtection"
-	| "timeStamping"
-	| "ocspSigning";
+	| 'serverAuth'
+	| 'clientAuth'
+	| 'codeSigning'
+	| 'emailProtection'
+	| 'timeStamping'
+	| 'ocspSigning';
 
 export interface CustomExtendedKeyUsage {
-	readonly type: "oid";
+	readonly type: 'oid';
 	readonly value: string;
 }
 
@@ -129,10 +129,7 @@ const EXTENDED_KEY_USAGE_OIDS: Record<KnownExtendedKeyUsage, string> = {
 	ocspSigning: OIDS.ocspSigning,
 };
 
-const AUTHORITY_INFO_ACCESS_METHOD_OIDS: Record<
-	KnownAuthorityInfoAccessMethod,
-	string
-> = {
+const AUTHORITY_INFO_ACCESS_METHOD_OIDS: Record<KnownAuthorityInfoAccessMethod, string> = {
 	ocsp: OIDS.ocspAccessMethod,
 	caIssuers: OIDS.caIssuersAccessMethod,
 };
@@ -175,27 +172,13 @@ export function buildCertificateExtensions(
 			extensions,
 			seen,
 			OIDS.authorityKeyIdentifier,
-			sequence([
-				implicitPrimitiveContext(
-					0,
-					buildSubjectKeyIdentifier(issuerPublicKeyInfo),
-				),
-			]),
+			sequence([implicitPrimitiveContext(0, buildSubjectKeyIdentifier(issuerPublicKeyInfo))]),
 		);
 	}
 	if (input?.keyUsage !== undefined && input.keyUsage.length > 0) {
-		pushExtension(
-			extensions,
-			seen,
-			OIDS.keyUsage,
-			encodeKeyUsage(input.keyUsage),
-			true,
-		);
+		pushExtension(extensions, seen, OIDS.keyUsage, encodeKeyUsage(input.keyUsage), true);
 	}
-	if (
-		input?.subjectAltNames !== undefined
-		&& input.subjectAltNames.length > 0
-	) {
+	if (input?.subjectAltNames !== undefined && input.subjectAltNames.length > 0) {
 		pushExtension(
 			extensions,
 			seen,
@@ -203,10 +186,7 @@ export function buildCertificateExtensions(
 			sequence(input.subjectAltNames.map(encodeSubjectAltName)),
 		);
 	}
-	if (
-		input?.extendedKeyUsage !== undefined
-		&& input.extendedKeyUsage.length > 0
-	) {
+	if (input?.extendedKeyUsage !== undefined && input.extendedKeyUsage.length > 0) {
 		pushExtension(
 			extensions,
 			seen,
@@ -223,10 +203,7 @@ export function buildCertificateExtensions(
 			true,
 		);
 	}
-	if (
-		input?.authorityInfoAccess !== undefined
-		&& input.authorityInfoAccess.length > 0
-	) {
+	if (input?.authorityInfoAccess !== undefined && input.authorityInfoAccess.length > 0) {
 		pushExtension(
 			extensions,
 			seen,
@@ -234,10 +211,7 @@ export function buildCertificateExtensions(
 			encodeAuthorityInfoAccess(input.authorityInfoAccess),
 		);
 	}
-	if (
-		input?.crlDistributionPoints !== undefined
-		&& input.crlDistributionPoints.length > 0
-	) {
+	if (input?.crlDistributionPoints !== undefined && input.crlDistributionPoints.length > 0) {
 		pushExtension(
 			extensions,
 			seen,
@@ -274,18 +248,9 @@ export function buildRequestedExtensions(
 		);
 	}
 	if (input?.keyUsage !== undefined && input.keyUsage.length > 0) {
-		pushExtension(
-			extensions,
-			seen,
-			OIDS.keyUsage,
-			encodeKeyUsage(input.keyUsage),
-			true,
-		);
+		pushExtension(extensions, seen, OIDS.keyUsage, encodeKeyUsage(input.keyUsage), true);
 	}
-	if (
-		input?.subjectAltNames !== undefined
-		&& input.subjectAltNames.length > 0
-	) {
+	if (input?.subjectAltNames !== undefined && input.subjectAltNames.length > 0) {
 		pushExtension(
 			extensions,
 			seen,
@@ -293,10 +258,7 @@ export function buildRequestedExtensions(
 			sequence(input.subjectAltNames.map(encodeSubjectAltName)),
 		);
 	}
-	if (
-		input?.extendedKeyUsage !== undefined
-		&& input.extendedKeyUsage.length > 0
-	) {
+	if (input?.extendedKeyUsage !== undefined && input.extendedKeyUsage.length > 0) {
 		pushExtension(
 			extensions,
 			seen,
@@ -304,10 +266,7 @@ export function buildRequestedExtensions(
 			encodeExtendedKeyUsage(input.extendedKeyUsage),
 		);
 	}
-	if (
-		input?.authorityInfoAccess !== undefined
-		&& input.authorityInfoAccess.length > 0
-	) {
+	if (input?.authorityInfoAccess !== undefined && input.authorityInfoAccess.length > 0) {
 		pushExtension(
 			extensions,
 			seen,
@@ -315,10 +274,7 @@ export function buildRequestedExtensions(
 			encodeAuthorityInfoAccess(input.authorityInfoAccess),
 		);
 	}
-	if (
-		input?.crlDistributionPoints !== undefined
-		&& input.crlDistributionPoints.length > 0
-	) {
+	if (input?.crlDistributionPoints !== undefined && input.crlDistributionPoints.length > 0) {
 		pushExtension(
 			extensions,
 			seen,
@@ -340,11 +296,7 @@ export function buildRequestedExtensions(
 	return extensions;
 }
 
-export function encodeExtension(
-	oid: string,
-	extnValue: Uint8Array,
-	critical = false,
-): Uint8Array {
+export function encodeExtension(oid: string, extnValue: Uint8Array, critical = false): Uint8Array {
 	const fields = [objectIdentifier(oid)];
 	if (critical) {
 		fields.push(bool(true));
@@ -360,7 +312,7 @@ export function encodeBasicConstraints(input: BasicConstraints): Uint8Array {
 	}
 	if (input.pathLength !== undefined) {
 		if (!input.ca) {
-			throw new Error("pathLength requires ca=true");
+			throw new Error('pathLength requires ca=true');
 		}
 		fields.push(integerFromNumber(input.pathLength));
 	}
@@ -390,17 +342,17 @@ export function encodeKeyUsage(usages: readonly KeyUsage[]): Uint8Array {
 
 export function encodeSubjectAltName(value: SubjectAltName): Uint8Array {
 	switch (value.type) {
-		case "dns":
+		case 'dns':
 			return implicitPrimitiveContext(2, new TextEncoder().encode(value.value));
-		case "email":
+		case 'email':
 			return implicitPrimitiveContext(1, new TextEncoder().encode(value.value));
-		case "uri":
+		case 'uri':
 			return implicitPrimitiveContext(6, new TextEncoder().encode(value.value));
-		case "ip":
+		case 'ip':
 			return implicitPrimitiveContext(7, encodeIpAddress(value.value));
-		case "directoryName":
+		case 'directoryName':
 			return implicitConstructedContext(4, hexToBytes(value.derHex));
-		case "unknown":
+		case 'unknown':
 			return tlv(value.tag, value.value);
 		default: {
 			const _exhaustive: never = value;
@@ -409,12 +361,8 @@ export function encodeSubjectAltName(value: SubjectAltName): Uint8Array {
 	}
 }
 
-export function encodeExtendedKeyUsage(
-	usages: readonly ExtendedKeyUsage[],
-): Uint8Array {
-	return sequence(
-		usages.map((usage) => objectIdentifier(getExtendedKeyUsageOid(usage))),
-	);
+export function encodeExtendedKeyUsage(usages: readonly ExtendedKeyUsage[]): Uint8Array {
+	return sequence(usages.map((usage) => objectIdentifier(getExtendedKeyUsageOid(usage))));
 }
 
 export function encodeAuthorityInfoAccess(
@@ -425,14 +373,12 @@ export function encodeAuthorityInfoAccess(
 			sequence([
 				objectIdentifier(getAuthorityInfoAccessMethodOid(entry.method)),
 				implicitPrimitiveContext(6, new TextEncoder().encode(entry.uri)),
-			])
+			]),
 		),
 	);
 }
 
-export function encodeCrlDistributionPoints(
-	uris: readonly string[],
-): Uint8Array {
+export function encodeCrlDistributionPoints(uris: readonly string[]): Uint8Array {
 	return sequence(
 		uris.map((uri) =>
 			sequence([
@@ -440,24 +386,17 @@ export function encodeCrlDistributionPoints(
 					0,
 					implicitConstructedContext(
 						0,
-						concatBytes([
-							implicitPrimitiveContext(6, new TextEncoder().encode(uri)),
-						]),
+						concatBytes([implicitPrimitiveContext(6, new TextEncoder().encode(uri))]),
 					),
 				),
-			])
+			]),
 		),
 	);
 }
 
-export function encodeNameConstraints(
-	constraints: NameConstraints,
-): Uint8Array {
+export function encodeNameConstraints(constraints: NameConstraints): Uint8Array {
 	const parts: Uint8Array[] = [];
-	if (
-		constraints.permittedSubtrees !== undefined
-		&& constraints.permittedSubtrees.length > 0
-	) {
+	if (constraints.permittedSubtrees !== undefined && constraints.permittedSubtrees.length > 0) {
 		parts.push(
 			implicitConstructedContext(
 				0,
@@ -465,10 +404,7 @@ export function encodeNameConstraints(
 			),
 		);
 	}
-	if (
-		constraints.excludedSubtrees !== undefined
-		&& constraints.excludedSubtrees.length > 0
-	) {
+	if (constraints.excludedSubtrees !== undefined && constraints.excludedSubtrees.length > 0) {
 		parts.push(
 			implicitConstructedContext(
 				1,
@@ -485,30 +421,25 @@ function encodeGeneralSubtree(subtree: GeneralSubtree): Uint8Array {
 
 function encodeNameConstraintForm(form: NameConstraintForm): Uint8Array {
 	switch (form.type) {
-		case "dns":
+		case 'dns':
 			return implicitPrimitiveContext(2, new TextEncoder().encode(form.value));
-		case "email":
+		case 'email':
 			return implicitPrimitiveContext(1, new TextEncoder().encode(form.value));
-		case "uri":
+		case 'uri':
 			return implicitPrimitiveContext(6, new TextEncoder().encode(form.value));
-		case "ip":
-			return implicitPrimitiveContext(
-				7,
-				concatBytes([form.addressBytes, form.maskBytes]),
-			);
-		case "directoryName":
+		case 'ip':
+			return implicitPrimitiveContext(7, concatBytes([form.addressBytes, form.maskBytes]));
+		case 'directoryName':
 			return implicitConstructedContext(4, hexToBytes(form.derHex));
 		default: {
 			const _exhaustive: never = form;
-			throw new Error(
-				`Unhandled NameConstraintForm type: ${String(_exhaustive)}`,
-			);
+			throw new Error(`Unhandled NameConstraintForm type: ${String(_exhaustive)}`);
 		}
 	}
 }
 
 export function getExtendedKeyUsageOid(usage: ExtendedKeyUsage): string {
-	if (typeof usage === "string") {
+	if (typeof usage === 'string') {
 		return EXTENDED_KEY_USAGE_OIDS[usage];
 	}
 	validateOid(usage.value);
@@ -518,48 +449,44 @@ export function getExtendedKeyUsageOid(usage: ExtendedKeyUsage): string {
 export function parseExtendedKeyUsageOid(oid: string): ExtendedKeyUsage {
 	switch (oid) {
 		case OIDS.serverAuth:
-			return "serverAuth";
+			return 'serverAuth';
 		case OIDS.clientAuth:
-			return "clientAuth";
+			return 'clientAuth';
 		case OIDS.codeSigning:
-			return "codeSigning";
+			return 'codeSigning';
 		case OIDS.emailProtection:
-			return "emailProtection";
+			return 'emailProtection';
 		case OIDS.timeStamping:
-			return "timeStamping";
+			return 'timeStamping';
 		case OIDS.ocspSigning:
-			return "ocspSigning";
+			return 'ocspSigning';
 	}
-	return { type: "oid", value: oid };
+	return { type: 'oid', value: oid };
 }
 
-export function getAuthorityInfoAccessMethodOid(
-	method: AuthorityInfoAccessMethod,
-): string {
-	if (typeof method === "string") {
+export function getAuthorityInfoAccessMethodOid(method: AuthorityInfoAccessMethod): string {
+	if (typeof method === 'string') {
 		return AUTHORITY_INFO_ACCESS_METHOD_OIDS[method];
 	}
 	validateOid(method.value);
 	return method.value;
 }
 
-export function parseAuthorityInfoAccessMethodOid(
-	oid: string,
-): AuthorityInfoAccessMethod {
+export function parseAuthorityInfoAccessMethodOid(oid: string): AuthorityInfoAccessMethod {
 	switch (oid) {
 		case OIDS.ocspAccessMethod:
-			return "ocsp";
+			return 'ocsp';
 		case OIDS.caIssuersAccessMethod:
-			return "caIssuers";
+			return 'caIssuers';
 	}
-	return { type: "oid", value: oid };
+	return { type: 'oid', value: oid };
 }
 
 function encodeIpAddress(input: string): Uint8Array {
-	if (input.includes(":")) {
+	if (input.includes(':')) {
 		return encodeIpv6Address(input);
 	}
-	const segments = input.split(".");
+	const segments = input.split('.');
 	if (segments.length !== 4) {
 		throw new Error(`Invalid IPv4 address: ${input}`);
 	}
@@ -575,19 +502,19 @@ function encodeIpAddress(input: string): Uint8Array {
 }
 
 function encodeIpv6Address(input: string): Uint8Array {
-	const pieces = input.split("::");
-	const head = pieces[0] ?? "";
+	const pieces = input.split('::');
+	const head = pieces[0] ?? '';
 	const tail = pieces[1];
-	if (tail !== undefined && input.indexOf("::") !== input.lastIndexOf("::")) {
+	if (tail !== undefined && input.indexOf('::') !== input.lastIndexOf('::')) {
 		throw new Error(`Invalid IPv6 address: ${input}`);
 	}
-	const headParts = head.length > 0 ? head.split(":") : [];
-	const tailParts = tail !== undefined && tail.length > 0 ? tail.split(":") : [];
+	const headParts = head.length > 0 ? head.split(':') : [];
+	const tailParts = tail !== undefined && tail.length > 0 ? tail.split(':') : [];
 	const missing = 8 - (headParts.length + tailParts.length);
 	if ((tail === undefined && headParts.length !== 8) || missing < 0) {
 		throw new Error(`Invalid IPv6 address: ${input}`);
 	}
-	const zeroes = Array.from({ length: missing }, () => "0");
+	const zeroes = Array.from({ length: missing }, () => '0');
 	const parts = tail === undefined ? headParts : [...headParts, ...zeroes, ...tailParts];
 	if (parts.length !== 8) {
 		throw new Error(`Invalid IPv6 address: ${input}`);
@@ -604,13 +531,11 @@ function encodeIpv6Address(input: string): Uint8Array {
 	return out;
 }
 
-function buildSubjectKeyIdentifier(
-	subjectPublicKeyInfo: Uint8Array,
-): Uint8Array {
+function buildSubjectKeyIdentifier(subjectPublicKeyInfo: Uint8Array): Uint8Array {
 	const topLevel = readSequenceChildren(subjectPublicKeyInfo);
 	const subjectPublicKey = topLevel[1];
 	if (subjectPublicKey === undefined || subjectPublicKey.tag !== 0x03) {
-		throw new Error("SPKI missing subject public key bit string");
+		throw new Error('SPKI missing subject public key bit string');
 	}
 	const publicKeyBytes = subjectPublicKey.value.slice(1);
 	return sha1(publicKeyBytes);
