@@ -59,7 +59,7 @@
 			"description": "Create the `src/identity.ts` public boundary and export surface. Done when:\n- module skeleton and public types exist\n- root barrel and future subpath wiring are in place\n- no behavior change is required yet",
 			"depends": ["define-validation-boundaries"],
 			"priority": "architecture",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "scaffold-revocation-module",

@@ -48,6 +48,7 @@ export type ServiceIdentityInput =
 	| SrvServiceIdentityInput;
 
 export type ServiceIdentityType = ServiceIdentityInput['type'];
+export type MatchableServiceIdentityInput = ServiceIdentityInput;
 export type VerifyServiceIdentityInput = DnsServiceIdentityInput | IpServiceIdentityInput;
 
 export type RevocationStatus = 'good' | 'revoked' | 'unknown';

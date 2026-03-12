@@ -10,6 +10,7 @@ Started: 2026-03-12
 - Tabs, single quotes, `.ts` import extensions, readonly-heavy interfaces, discriminated unions.
 - Keep path validation, service identity, and revocation as separate public concepts.
 - Put forward-looking cross-domain types in `src/validation.ts`, but keep verify-owned inputs narrowed to the identity forms `verify.ts` actually enforces today.
+- New domain boundaries can ship as root-exported source modules first; keep broader shared unions in `src/validation.ts`, and fail closed inside the new boundary for not-yet-wired identity forms.
 - Package exports are driven by `tsdown.config.ts`; do not hand-edit generated `package.json` exports.
 - For stable package subpaths, prefer a named tsdown `entry` object; let `exports: true` derive package exports from entry keys.
 - Root `micro509` export should stay ergonomic; granular domains should live behind stable subpath exports.
@@ -77,3 +78,11 @@ Started: 2026-03-12
 - Re-exported the new boundary types from `src/index.ts` and updated tests to cover the split between raw path validation and service-identity validation.
 - Files changed: `src/validation.ts`, `src/verify.ts`, `src/index.ts`, `test/verify.test.ts`, `test/certificate.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** make future-facing identity unions broader than current support only in the shared boundary module; verify-facing APIs should accept a narrower subset until URI-ID and SRV-ID land.
+
+## Task - [scaffold-identity-module]
+
+- Added `src/identity.ts` with a dedicated service-identity boundary, result/failure types, and fail-closed placeholders for URI/SRV matching.
+- Re-exported the new identity API from `src/index.ts` and kept shared identity input ownership in `src/validation.ts`.
+- Added direct identity-boundary coverage in `test/identity.test.ts` without changing existing verify behavior.
+- Files changed: `src/identity.ts`, `src/index.ts`, `src/validation.ts`, `test/identity.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** boundary scaffolds can publish stable result unions early if unsupported modes fail closed with typed errors, which lets later RFC work land without reshaping the public module.

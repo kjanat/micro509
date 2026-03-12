@@ -44,6 +44,14 @@ export type {
 	SubjectAltName,
 } from './extensions.ts';
 export {
+	type MatchServiceIdentityErrorCode,
+	type MatchServiceIdentityFailureDetails,
+	type MatchServiceIdentityInput,
+	type MatchServiceIdentityResult,
+	matchCertificateServiceIdentity,
+	matchServiceIdentity,
+} from './identity.ts';
+export {
 	type EcKeyAlgorithmInput,
 	type Ed25519KeyAlgorithmInput,
 	type EncryptedPkcs8Options,
