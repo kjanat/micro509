@@ -1110,6 +1110,48 @@ describe('chain verification', () => {
 		expect(result.ok).toBe(true);
 	});
 
+	it('does not apply initial name constraints to self-issued intermediates', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Initial NC Self-Issued Root' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 1 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const intermediateKeys = await generateKeyPair();
+		const intermediate = await createCertificate({
+			issuer: { commonName: 'Initial NC Self-Issued Root' },
+			subject: { commonName: 'Initial NC Self-Issued Root' },
+			publicKey: intermediateKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+				subjectAltNames: [{ type: 'dns', value: 'outside.example.org' }],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Initial NC Self-Issued Root' },
+			subject: { commonName: 'ok.example.com' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: intermediateKeys.privateKey,
+			issuerPublicKey: intermediateKeys.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				subjectAltNames: [{ type: 'dns', value: 'ok.example.com' }],
+			},
+		});
+		const result = await verifyCertificateChain({
+			leaf: leaf.pem,
+			intermediates: [intermediate.pem],
+			roots: [root.certificate.pem],
+			permittedSubtrees: [{ base: { type: 'dns', value: 'example.com' } }],
+		});
+		expect(result.ok).toBe(true);
+	});
+
 	it('applies name constraints to self-issued leaf certificate', async () => {
 		// RFC 5280 §4.2.1.10: self-issued certs are exempt UNLESS they
 		// are the final (leaf) certificate in the path.
@@ -2031,7 +2073,7 @@ describe('validation profiles', () => {
 		});
 	});
 
-	it('validateForTlsClient fails closed for initial name constraint inputs until implemented', async () => {
+	it('validateForTlsClient enforces caller-supplied initial name constraints', async () => {
 		const root = await createSelfSignedCertificate({
 			subject: { commonName: 'Initial Name Constraint Root' },
 			extensions: {
@@ -2049,20 +2091,15 @@ describe('validation profiles', () => {
 			extensions: {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['clientAuth'],
-				subjectAltNames: [{ type: 'dns', value: 'initial-name-constraint-leaf.example' }],
+				subjectAltNames: [{ type: 'dns', value: 'forbidden.example.com' }],
 			},
 		});
 		const result = await validateForTlsClient({
 			leaf: leaf.pem,
 			roots: [root.certificate.pem],
-			permittedSubtrees: [{ base: { type: 'dns', value: 'example.com' } }],
 			excludedSubtrees: [{ base: { type: 'dns', value: 'forbidden.example.com' } }],
 		});
-		expect(result).toMatchObject({
-			ok: false,
-			code: 'initial_name_constraints_not_implemented',
-			details: { actual: 'permittedSubtrees=1, excludedSubtrees=1' },
-		});
+		expect(result).toMatchObject({ ok: false, code: 'name_constraints_violated' });
 	});
 
 	it('validateForCodeSigning checks chain + codeSigning EKU', async () => {
@@ -2202,21 +2239,53 @@ describe('validateCandidatePath direct', () => {
 		});
 	});
 
-	it('fails closed for initial name constraint inputs on raw path validation until implemented', async () => {
-		const chain = await issueChain();
-		const leafParsed = parseCertificatePem(chain.leaf.pem);
-		const intParsed = parseCertificatePem(chain.intermediate.pem);
-		const rootParsed = parseCertificatePem(chain.root.certificate.pem);
-		const result = await validateCandidatePath({
-			chain: [leafParsed, intParsed, rootParsed],
-			permittedSubtrees: [{ base: { type: 'dns', value: 'example.com' } }],
-			excludedSubtrees: [{ base: { type: 'dns', value: 'forbidden.example.com' } }],
+	it('applies initial subtree inputs alongside certificate name constraints', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Mixed Initial Constraint Root' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+				nameConstraints: {
+					permittedSubtrees: [{ base: { type: 'dns', value: 'example.com' } }],
+					excludedSubtrees: [{ base: { type: 'dns', value: 'blocked.example.com' } }],
+				},
+			},
 		});
-		expect(result).toMatchObject({
-			ok: false,
-			code: 'initial_name_constraints_not_implemented',
-			details: { actual: 'permittedSubtrees=1, excludedSubtrees=1' },
+		const leafKeys = await generateKeyPair();
+		const allowedLeaf = await createCertificate({
+			issuer: { commonName: 'Mixed Initial Constraint Root' },
+			subject: { commonName: 'narrow.example.com' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				subjectAltNames: [{ type: 'dns', value: 'narrow.example.com' }],
+			},
 		});
+		const blockedLeafKeys = await generateKeyPair();
+		const blockedLeaf = await createCertificate({
+			issuer: { commonName: 'Mixed Initial Constraint Root' },
+			subject: { commonName: 'wide.example.com' },
+			publicKey: blockedLeafKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				subjectAltNames: [{ type: 'dns', value: 'wide.example.com' }],
+			},
+		});
+		const allowedResult = await validateCandidatePath({
+			chain: [parseCertificatePem(allowedLeaf.pem), parseCertificatePem(root.certificate.pem)],
+			permittedSubtrees: [{ base: { type: 'dns', value: 'narrow.example.com' } }],
+		});
+		expect(allowedResult.ok).toBe(true);
+
+		const blockedResult = await validateCandidatePath({
+			chain: [parseCertificatePem(blockedLeaf.pem), parseCertificatePem(root.certificate.pem)],
+			permittedSubtrees: [{ base: { type: 'dns', value: 'narrow.example.com' } }],
+		});
+		expect(blockedResult).toMatchObject({ ok: false, code: 'name_constraints_violated' });
 	});
 
 	it('detects signature_invalid in candidate path', async () => {

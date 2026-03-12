@@ -181,7 +181,7 @@
 			"description": "Enforce initial permitted/excluded subtree inputs during path validation. Done when:\n- initial subtrees seed accumulated constraints\n- self-issued handling stays correct\n- mixed chain/path tests pass",
 			"depends": ["fail-closed-unsupported-nc", "implement-dn-compare", "plumb-verify-input-state"],
 			"priority": "standard",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "add-name-constraint-fixtures",

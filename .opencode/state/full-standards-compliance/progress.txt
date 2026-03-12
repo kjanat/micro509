@@ -32,6 +32,7 @@ Started: 2026-03-12
 - For profile helpers that combine purpose and service identity, run chain/purpose validation first, then call the identity boundary so EKU/profile failures do not get masked by hostname mismatches.
 - When parser coverage needs parsed-only unsupported RFC forms, keep builder-facing extension types generic with a supported default and widen only parse-owned outputs; that preserves encode type safety while letting validators fail closed.
 - `directoryName` general names are IMPLICIT constructed values: builders must encode only the inner SEQUENCE content, and validators must compare parsed RDN structure plus prepared strings instead of raw DER.
+- Treat caller-supplied initial name constraints as the first accumulated constraint level, then layer certificate `nameConstraints` on top; that preserves RFC intersection semantics and existing self-issued exemptions.
 
 ## Validation Commands
 
@@ -193,3 +194,10 @@ Started: 2026-03-12
 - Updated CRL relative-name parsing metadata in `src/crl.ts` and added regression coverage in `test/verify.test.ts` for string normalization, multi-valued RDN reordering, RDN-order sensitivity, and invalid `derHex` handling.
 - Files changed: `src/crl.ts`, `src/extensions.ts`, `src/parse.ts`, `src/verify.ts`, `test/verify.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** `directoryName` correctness needed both sides fixed together - IMPLICIT DER encoding had to preserve only inner SEQUENCE content, and compare logic had to consume structured RDN/AVA data rather than hex prefixes.
+
+## Task - [apply-initial-subtrees]
+
+- Implemented initial permitted/excluded subtree enforcement in `src/verify.ts` by normalizing caller-supplied subtrees into the accumulated name-constraint state and seeding them before certificate-provided constraints.
+- Added regression coverage in `test/verify.test.ts` for mixed path-plus-certificate constraints, wrapper-level enforcement, and self-issued intermediates staying exempt while leaf checks still run.
+- Files changed: `src/verify.ts`, `test/verify.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** initial subtree inputs fit cleanly as a seeded accumulated level instead of a special-case checker; that keeps RFC 5280 intersection behavior and self-issued handling aligned with certificate extension processing.

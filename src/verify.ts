@@ -9,7 +9,6 @@ import {
 import { type DerElement, readElement } from './der.ts';
 import type {
 	ExtendedKeyUsage,
-	GeneralSubtree,
 	NameConstraintForm,
 	NameConstraints,
 	ParsedNameConstraintForm,
@@ -271,8 +270,8 @@ interface PolicyValidationState {
 }
 
 interface NameConstraintValidationState {
-	readonly initialPermittedSubtrees: readonly GeneralSubtree[];
-	readonly initialExcludedSubtrees: readonly GeneralSubtree[];
+	readonly initialPermittedSubtrees: readonly NameConstraintForm[];
+	readonly initialExcludedSubtrees: readonly NameConstraintForm[];
 }
 
 interface ValidationState {
@@ -1310,17 +1309,6 @@ function buildValidationState(
 		);
 	}
 	const nameConstraints = normalizeNameConstraintValidationState(input);
-	if (
-		nameConstraints.initialPermittedSubtrees.length > 0 ||
-		nameConstraints.initialExcludedSubtrees.length > 0
-	) {
-		return failure(
-			'initial_name_constraints_not_implemented',
-			'initial name constraint inputs are not implemented yet',
-			undefined,
-			detail({ actual: describeInitialNameConstraintState(nameConstraints) }),
-		);
-	}
 	return {
 		ok: true,
 		value: {
@@ -1347,8 +1335,8 @@ function normalizeNameConstraintValidationState(
 	input: InitialNameConstraintsInput,
 ): NameConstraintValidationState {
 	return {
-		initialPermittedSubtrees: input.permittedSubtrees ?? [],
-		initialExcludedSubtrees: input.excludedSubtrees ?? [],
+		initialPermittedSubtrees: input.permittedSubtrees?.map((subtree) => subtree.base) ?? [],
+		initialExcludedSubtrees: input.excludedSubtrees?.map((subtree) => subtree.base) ?? [],
 	};
 }
 
@@ -1374,17 +1362,6 @@ function describePolicyState(policy: PolicyValidationState): string {
 	}
 	if (policy.inhibitAnyPolicy === 0) {
 		enabled.push('inhibitAnyPolicy');
-	}
-	return enabled.join(', ');
-}
-
-function describeInitialNameConstraintState(state: NameConstraintValidationState): string {
-	const enabled: string[] = [];
-	if (state.initialPermittedSubtrees.length > 0) {
-		enabled.push(`permittedSubtrees=${String(state.initialPermittedSubtrees.length)}`);
-	}
-	if (state.initialExcludedSubtrees.length > 0) {
-		enabled.push(`excludedSubtrees=${String(state.initialExcludedSubtrees.length)}`);
 	}
 	return enabled.join(', ');
 }
@@ -1417,12 +1394,9 @@ interface AccumulatedNameConstraints {
 
 function checkNameConstraints(
 	chain: readonly ParsedCertificate[],
-	_state: NameConstraintValidationState,
+	state: NameConstraintValidationState,
 ): ValidateCandidatePathResult {
-	let accumulated: AccumulatedNameConstraints = {
-		permittedLevels: [],
-		excluded: [],
-	};
+	let accumulated = seedInitialNameConstraints(state);
 
 	// Seed constraints from the root (trust anchor). The root's own
 	// names are not checked, but its nameConstraints apply to all
@@ -1464,6 +1438,16 @@ function checkNameConstraints(
 	}
 
 	return { ok: true };
+}
+
+function seedInitialNameConstraints(
+	state: NameConstraintValidationState,
+): AccumulatedNameConstraints {
+	return {
+		permittedLevels:
+			state.initialPermittedSubtrees.length > 0 ? [state.initialPermittedSubtrees] : [],
+		excluded: state.initialExcludedSubtrees,
+	};
 }
 
 function accumulateConstraints(
