@@ -4,7 +4,7 @@ import {
 	extractBitStringValue,
 	parseTime,
 	requireElement,
-} from "@/asn1.ts";
+} from "#micro509/asn1.ts";
 import {
 	bitString,
 	ia5String,
@@ -19,11 +19,11 @@ import {
 	sequence,
 	setOf,
 	time,
-} from "@/der.ts";
-import { encodeSubjectAltName } from "@/extensions.ts";
-import { OIDS } from "@/oids.ts";
-import { parsePbes2AlgorithmIdentifier } from "@/pbes2.ts";
-import { parsePkcs12MacData } from "@/pkcs12-mac.ts";
+} from "#micro509/der.ts";
+import { encodeSubjectAltName } from "#micro509/extensions.ts";
+import { OIDS } from "#micro509/oids.ts";
+import { parsePbes2AlgorithmIdentifier } from "#micro509/pbes2.ts";
+import { parsePkcs12MacData } from "#micro509/pkcs12-mac.ts";
 import {
 	alternateEcdsaSignatureEncoding,
 	concatFixedWidth,
@@ -33,8 +33,8 @@ import {
 	rawEcdsaSignatureToDer,
 	requireEcPublicKey,
 	requireRsaPublicKey,
-} from "@/sig-verify.ts";
-import { encodeAlgorithmIdentifier, getSignatureAlgorithm } from "@/signing.ts";
+} from "#micro509/sig-verify.ts";
+import { encodeAlgorithmIdentifier, getSignatureAlgorithm } from "#micro509/signing.ts";
 import { describe, expect, it } from "bun:test";
 
 // ---------------------------------------------------------------------------
@@ -246,7 +246,7 @@ describe("extensions encoding", () => {
 	});
 
 	it("rejects invalid IPv4 addresses during certificate creation", async () => {
-		const { createSelfSignedCertificate } = await import("@/index.ts");
+		const { createSelfSignedCertificate } = await import("#micro509");
 		await expect(
 			createSelfSignedCertificate({
 				subject: { commonName: "bad-ipv4" },
@@ -258,7 +258,7 @@ describe("extensions encoding", () => {
 	});
 
 	it("rejects IPv4 segment out of range", async () => {
-		const { createSelfSignedCertificate } = await import("@/index.ts");
+		const { createSelfSignedCertificate } = await import("#micro509");
 		await expect(
 			createSelfSignedCertificate({
 				subject: { commonName: "bad-ipv4-segment" },
@@ -270,7 +270,7 @@ describe("extensions encoding", () => {
 	});
 
 	it("rejects IPv6 with multiple :: groups", async () => {
-		const { createSelfSignedCertificate } = await import("@/index.ts");
+		const { createSelfSignedCertificate } = await import("#micro509");
 		await expect(
 			createSelfSignedCertificate({
 				subject: { commonName: "bad-ipv6-double" },
@@ -282,7 +282,7 @@ describe("extensions encoding", () => {
 	});
 
 	it("rejects IPv6 with invalid hex segment", async () => {
-		const { createSelfSignedCertificate } = await import("@/index.ts");
+		const { createSelfSignedCertificate } = await import("#micro509");
 		await expect(
 			createSelfSignedCertificate({
 				subject: { commonName: "bad-ipv6-hex" },
@@ -294,7 +294,7 @@ describe("extensions encoding", () => {
 	});
 
 	it("rejects IPv6 with too many groups", async () => {
-		const { createSelfSignedCertificate } = await import("@/index.ts");
+		const { createSelfSignedCertificate } = await import("#micro509");
 		await expect(
 			createSelfSignedCertificate({
 				subject: { commonName: "bad-ipv6-groups" },
@@ -312,7 +312,7 @@ describe("extensions encoding", () => {
 
 describe("signing.ts edge cases", () => {
 	it("getSignatureAlgorithm throws for unsupported algorithm name", async () => {
-		const { generateKeyPair: genKp } = await import("@/index.ts");
+		const { generateKeyPair: genKp } = await import("#micro509");
 		// Use an ECDSA key but manually check the algorithm name guard
 		const keys = await genKp({ kind: "ecdsa", namedCurve: "P-256" });
 		// We can't easily create a CryptoKey with an unknown algorithm,
@@ -342,21 +342,21 @@ describe("signing.ts edge cases", () => {
 	});
 
 	it("getSignatureAlgorithm returns correct config for RSA SHA-384", async () => {
-		const { generateKeyPair: genKp } = await import("@/index.ts");
+		const { generateKeyPair: genKp } = await import("#micro509");
 		const keys = await genKp({ kind: "rsa", modulusLength: 2048, hash: "SHA-384" });
 		const result = getSignatureAlgorithm(keys.privateKey);
 		expect(result.algorithmOid).toBe(OIDS.sha384WithRSAEncryption);
 	});
 
 	it("getSignatureAlgorithm returns correct config for RSA SHA-512", async () => {
-		const { generateKeyPair: genKp } = await import("@/index.ts");
+		const { generateKeyPair: genKp } = await import("#micro509");
 		const keys = await genKp({ kind: "rsa", modulusLength: 2048, hash: "SHA-512" });
 		const result = getSignatureAlgorithm(keys.privateKey);
 		expect(result.algorithmOid).toBe(OIDS.sha512WithRSAEncryption);
 	});
 
 	it("getSignatureAlgorithm returns correct config for ECDSA P-384", async () => {
-		const { generateKeyPair: genKp } = await import("@/index.ts");
+		const { generateKeyPair: genKp } = await import("#micro509");
 		const keys = await genKp({ kind: "ecdsa", namedCurve: "P-384" });
 		const result = getSignatureAlgorithm(keys.privateKey);
 		expect(result.algorithmOid).toBe(OIDS.ecdsaWithSHA384);
@@ -364,7 +364,7 @@ describe("signing.ts edge cases", () => {
 	});
 
 	it("getSignatureAlgorithm returns correct config for Ed25519", async () => {
-		const { generateKeyPair: genKp } = await import("@/index.ts");
+		const { generateKeyPair: genKp } = await import("#micro509");
 		const keys = await genKp({ kind: "ed25519" });
 		const result = getSignatureAlgorithm(keys.privateKey);
 		expect(result.algorithmOid).toBe(OIDS.ed25519);
@@ -543,7 +543,7 @@ describe("pkcs12-mac.ts edge cases", () => {
 
 	it("parsePkcs12MacData skips MAC verification when password is undefined", async () => {
 		// Build a valid-looking MacData — parsePkcs12MacData should return without 'valid' field
-		const { createPkcs12MacData } = await import("@/pkcs12-mac.ts");
+		const { createPkcs12MacData } = await import("#micro509/pkcs12-mac.ts");
 		const data = new Uint8Array([0x30, 0x03, 0x01, 0x01, 0xff]);
 		const mac = await createPkcs12MacData(data, { password: "test" });
 		// Parse without password — should succeed but no 'valid' field

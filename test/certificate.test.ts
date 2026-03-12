@@ -4,8 +4,8 @@ import {
 	generateKeyPair,
 	parseCertificatePem,
 	verifyCertificateChain,
-} from "@/index.ts";
-import { OIDS } from "@/oids.ts";
+} from "#micro509";
+import { OIDS } from "#micro509/oids.ts";
 import { describe, expect, it } from "bun:test";
 import { X509Certificate } from "node:crypto";
 import { hasExtensionOid } from "./helpers.ts";

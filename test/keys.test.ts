@@ -30,7 +30,7 @@ import {
 	importSec1Pem,
 	importSpkiBase64,
 	importSpkiPem,
-} from "@/index.ts";
+} from "#micro509";
 import { describe, expect, it } from "bun:test";
 import { X509Certificate } from "node:crypto";
 
@@ -334,7 +334,7 @@ describe("keys", () => {
 describe("keys: coverage — malformed inputs", () => {
 	it("importEncryptedPkcs8Der throws on malformed EncryptedPrivateKeyInfo (missing OCTET STRING)", async () => {
 		// SEQUENCE with only one child (algorithmIdentifier) and no encryptedData
-		const { sequence, objectIdentifier, nullValue } = await import("@/der.ts");
+		const { sequence, objectIdentifier, nullValue } = await import("#micro509/der.ts");
 		const malformed = sequence([
 			sequence([objectIdentifier("1.2.840.113549.1.5.13"), nullValue()]),
 		]);
@@ -344,7 +344,7 @@ describe("keys: coverage — malformed inputs", () => {
 	});
 
 	it("importEncryptedPkcs8Der throws when second child is not OCTET STRING", async () => {
-		const { sequence, objectIdentifier, nullValue, integerFromNumber } = await import("@/der.ts");
+		const { sequence, objectIdentifier, nullValue, integerFromNumber } = await import("#micro509/der.ts");
 		// second child is INTEGER (tag 0x02), not OCTET STRING (tag 0x04)
 		const malformed = sequence([
 			sequence([objectIdentifier("1.2.840.113549.1.5.13"), nullValue()]),

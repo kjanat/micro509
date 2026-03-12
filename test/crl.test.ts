@@ -10,7 +10,7 @@ import {
 	pemDecode,
 	validateCertificateRevocationList,
 	verifyCertificateRevocationList,
-} from "@/index.ts";
+} from "#micro509";
 import { describe, expect, it } from "bun:test";
 import { hexToBytes } from "./helpers.ts";
 

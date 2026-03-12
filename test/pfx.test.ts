@@ -1,4 +1,3 @@
-import { explicitContext, integerFromNumber, objectIdentifier, octetString, sequence, setOf } from "@/der.ts";
 import {
 	createCertificate,
 	createPfx,
@@ -7,8 +6,9 @@ import {
 	generateKeyPair,
 	parsePfxDer,
 	parsePfxPem,
-} from "@/index.ts";
-import { OIDS } from "@/oids.ts";
+} from "#micro509";
+import { explicitContext, integerFromNumber, objectIdentifier, octetString, sequence, setOf } from "#micro509/der.ts";
+import { OIDS } from "#micro509/oids.ts";
 import { describe, expect, it } from "bun:test";
 
 describe("pfx", () => {

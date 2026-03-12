@@ -1,16 +1,3 @@
-import { childrenOf } from "@/asn1.ts";
-import {
-	bitString,
-	explicitContext,
-	generalizedTime,
-	integerFromNumber,
-	objectIdentifier,
-	octetString,
-	readElement,
-	sequence,
-	tlv,
-} from "@/der.ts";
-import { sha1 } from "@/hash.ts";
 import {
 	createCertificate,
 	createOcspRequest,
@@ -25,8 +12,21 @@ import {
 	pemDecode,
 	validateOcspResponse,
 	verifyOcspResponse,
-} from "@/index.ts";
-import { OIDS } from "@/oids.ts";
+} from "#micro509";
+import { childrenOf } from "#micro509/asn1.ts";
+import {
+	bitString,
+	explicitContext,
+	generalizedTime,
+	integerFromNumber,
+	objectIdentifier,
+	octetString,
+	readElement,
+	sequence,
+	tlv,
+} from "#micro509/der.ts";
+import { sha1 } from "#micro509/hash.ts";
+import { OIDS } from "#micro509/oids.ts";
 import { describe, expect, it } from "bun:test";
 import { hexToBytes } from "./helpers.ts";
 

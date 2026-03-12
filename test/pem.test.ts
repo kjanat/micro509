@@ -5,7 +5,7 @@ import {
 	generateKeyPair,
 	pemDecode,
 	splitPemBlocks,
-} from "@/index.ts";
+} from "#micro509";
 import { describe, expect, it } from "bun:test";
 
 describe("pem", () => {

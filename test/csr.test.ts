@@ -1,12 +1,12 @@
-import { readElement } from "@/der.ts";
 import {
 	createCertificateSigningRequest,
 	findExtension,
 	generateKeyPair,
 	parseCertificateSigningRequestPem,
 	verifyCertificateSigningRequest,
-} from "@/index.ts";
-import { OIDS } from "@/oids.ts";
+} from "#micro509";
+import { readElement } from "#micro509/der.ts";
+import { OIDS } from "#micro509/oids.ts";
 import { describe, expect, it } from "bun:test";
 import { childrenOf, decodeObjectIdentifier } from "./helpers.ts";
 

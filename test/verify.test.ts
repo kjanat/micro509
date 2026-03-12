@@ -1,4 +1,3 @@
-import { sequence, tlv } from "@/der.ts";
 import {
 	buildCandidatePath,
 	checkExtendedKeyUsage,
@@ -15,8 +14,9 @@ import {
 	validateForTlsClient,
 	validateForTlsServer,
 	verifyCertificateChain,
-} from "@/index.ts";
-import { parseNameConstraints } from "@/parse.ts";
+} from "#micro509";
+import { sequence, tlv } from "#micro509/der.ts";
+import { parseNameConstraints } from "#micro509/parse.ts";
 import { describe, expect, it } from "bun:test";
 import { issueChain } from "./helpers.ts";
 
@@ -2492,7 +2492,7 @@ describe("coverage: validation profiles and constraint matching", () => {
 		// NOTE: implicitConstructedContext wraps full SEQUENCE bytes rather than
 		// replacing the tag, causing derHex round-trip mismatch. This test verifies
 		// that the name constraint checking code path executes (covers matchesDnConstraint).
-		const { encodeName } = await import("@/name.ts");
+		const { encodeName } = await import("#micro509/name.ts");
 		const constraintDn = encodeName({ organization: "AllowedOrg" });
 		const constraintDerHex = Buffer.from(constraintDn).toString("hex");
 		const root = await createSelfSignedCertificate({
@@ -2531,7 +2531,7 @@ describe("coverage: validation profiles and constraint matching", () => {
 	});
 
 	it("directoryName SAN constraint violation triggers error", async () => {
-		const { encodeName } = await import("@/name.ts");
+		const { encodeName } = await import("#micro509/name.ts");
 		const constraintDn = encodeName({ organization: "AllowedOrg" });
 		const constraintDerHex = Buffer.from(constraintDn).toString("hex");
 		const root = await createSelfSignedCertificate({

@@ -1,3 +1,4 @@
+import { type parseCertificatePem, createCertificate, createSelfSignedCertificate, generateKeyPair } from "#micro509";
 import {
 	concatBytes,
 	explicitContext,
@@ -10,10 +11,9 @@ import {
 	sequence,
 	setOf,
 	tlv,
-} from "@/der.ts";
-import { type parseCertificatePem, createCertificate, createSelfSignedCertificate, generateKeyPair } from "@/index.ts";
-import { OIDS } from "@/oids.ts";
-import { getSignatureAlgorithm, signBytes } from "@/signing.ts";
+} from "#micro509/der.ts";
+import { OIDS } from "#micro509/oids.ts";
+import { getSignatureAlgorithm, signBytes } from "#micro509/signing.ts";
 import { createHash } from "node:crypto";
 
 export function childrenOf(

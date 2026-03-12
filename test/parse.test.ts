@@ -1,4 +1,3 @@
-import { objectIdentifier, sequence, setOf, tlv } from "@/der.ts";
 import {
 	createCertificate,
 	createCertificateSigningRequest,
@@ -12,9 +11,10 @@ import {
 	parseCertificateDer,
 	parseCertificatePem,
 	parseCertificateSigningRequestPem,
-} from "@/index.ts";
-import { OIDS } from "@/oids.ts";
-import { parseNameConstraints } from "@/parse.ts";
+} from "#micro509";
+import { objectIdentifier, sequence, setOf, tlv } from "#micro509/der.ts";
+import { OIDS } from "#micro509/oids.ts";
+import { parseNameConstraints } from "#micro509/parse.ts";
 import { describe, expect, it } from "bun:test";
 
 describe("parse", () => {
@@ -568,7 +568,7 @@ describe("parse: coverage — error paths", () => {
 		// The AKI extension value is SEQUENCE { [0] keyIdentifier }.
 		// We want to replace it with SEQUENCE { [1] authorityCertIssuer }.
 		// parseCertificateDer doesn't verify the signature, so we can modify the DER.
-		const { pemDecode } = await import("@/index.ts");
+		const { pemDecode } = await import("#micro509");
 		const derBytes = pemDecode("CERTIFICATE", cert.certificate.pem);
 		const der = new Uint8Array(derBytes);
 		// Find AKI OID bytes (2.5.29.35 = 55 1D 23) in the DER

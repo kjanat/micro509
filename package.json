@@ -10,30 +10,41 @@
 		"der",
 		"jwk"
 	],
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/kjanat/ts-x509.git"
+	},
 	"license": "MIT",
 	"type": "module",
-	"exports": {
-		".": {
-			"types": "./dist/index.d.ts",
-			"import": "./dist/index.js"
-		}
+	"imports": {
+		"#micro509": "./src/index.ts",
+		"#micro509/*": "./src/*"
 	},
+	"exports": {
+		".": "./src/index.ts",
+		"./package.json": "./package.json"
+	},
+	"types": "./dist/index.d.ts",
 	"files": [
 		"dist"
 	],
 	"scripts": {
-		"bd": "bun run build",
-		"build": "tsc -p tsconfig.build.json",
+		"bd": "tsdown",
+		"build": "tsdown",
 		"fmt": "dprint fmt",
 		"lint:biome": "bunx @biomejs/biome lint {src,test}",
 		"test": "AGENT=1 bun test --coverage",
-		"typecheck": "tsgo --noEmit"
+		"typecheck": "tsgo"
 	},
 	"devDependencies": {
+		"@arethetypeswrong/core": "^0.18.2",
 		"@types/bun": "^1.3.10",
 		"@typescript/native-preview": "^7.0.0-dev.20260311.1",
 		"dprint": "^0.52.0",
-		"typescript": "^6.0.1-rc"
+		"publint": "^0.3.18",
+		"tsdown": "^0.21.2",
+		"typescript": "^6.0.1-rc",
+		"unplugin-unused": "^0.5.7"
 	},
 	"packageManager": "bun@1.3.10",
 	"devEngines": {
@@ -41,14 +52,20 @@
 			{
 				"name": "bun",
 				"onFail": "download"
+			},
+			{
+				"name": "npm",
+				"version": ">=11"
 			}
 		],
 		"runtime": [
 			{
-				"name": "node"
+				"name": "node",
+				"version": ">=24"
 			},
 			{
-				"name": "bun"
+				"name": "bun",
+				"version": ">=1.3"
 			},
 			{
 				"name": "deno"
@@ -58,5 +75,11 @@
 	"volta": {
 		"node": "25.8.0",
 		"npm": "11.11.0"
+	},
+	"publishConfig": {
+		"exports": {
+			".": "./dist/index.js",
+			"./package.json": "./package.json"
+		}
 	}
 }
