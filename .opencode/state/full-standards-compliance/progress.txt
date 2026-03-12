@@ -44,6 +44,7 @@ Started: 2026-03-12
 - For staged policy enforcement, enable only the RFC knobs the current task actually enforces, keep the rest fail-closed, and derive pass/fail from the final constrained policy set before exposing richer public outcomes.
 - Expose policy outcomes as two views: `authorityConstrainedPolicies` reports the final surviving leaf-domain policies, while `userConstrainedPolicies` reports caller-visible policy results after mapping and `anyPolicy` handling.
 - CRL handling should split signer/freshness validation from certificate applicability: first validate issuer, AKI, signature, time, and `cRLSign`; then return explicit `non_applicable` reasons for scope mismatches instead of treating a fresh wrong-scope CRL as usable evidence.
+- Revocation orchestration should normalize each evidence source into `good` / `revoked` / indeterminate results, short-circuit on any revocation, and preserve per-source indeterminate details so mixed CRL/OCSP evidence never fails open.
 
 ## Validation Commands
 
@@ -294,3 +295,10 @@ Started: 2026-03-12
 - Added CRL regressions in `test/crl.test.ts` for delta-added revocation, `removeFromCRL`, stale delta rejection, and scope-drift rejection.
 - Files changed: `src/crl.ts`, `test/crl.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** delta CRLs fit best as an overlay on certificate-specific lookup, not as a synthetic merged CRL; that keeps existing applicability and indirect-entry logic reusable while still enforcing pair-level compatibility early.
+
+## Task - [expose-revocation-status]
+
+- Implemented real revocation orchestration in `src/revocation.ts` by composing CRL and OCSP evidence into `good` / `revoked` / `unknown` results, with revocation winning and per-source indeterminate details preserved.
+- Added direct boundary coverage in `test/revocation.test.ts` for no-evidence, CRL-revoked, OCSP-good-with-non-applicable-CRL, and fully indeterminate mixed-evidence cases.
+- Files changed: `src/revocation.ts`, `test/revocation.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** high-level revocation APIs should treat source validation failures as evidence-level indeterminate outcomes, not fatal orchestration errors, so callers can combine CRL and OCSP safely without losing why status stayed unknown.

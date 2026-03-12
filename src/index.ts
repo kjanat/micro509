@@ -244,6 +244,8 @@ export {
 	type RevocationCrlEvidenceInput,
 	type RevocationEvidenceInput,
 	type RevocationEvidenceKind,
+	type RevocationIndeterminateEvidence,
+	type RevocationIndeterminateReasonCode,
 	type RevocationOcspEvidenceInput,
 } from './revocation.ts';
 export type {

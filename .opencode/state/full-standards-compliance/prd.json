@@ -334,7 +334,7 @@
 			"description": "Expose high-level revocation orchestration in `src/revocation.ts`. Done when:\n- OCSP and CRL evidence compose into good/revoked/unknown style outcomes\n- API stays separate from path validation\n- docs/types describe evidence vs indeterminate states",
 			"depends": ["scaffold-revocation-module", "add-indirect-crl", "add-delta-crl-merge"],
 			"priority": "integration",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "add-crl-fixtures",
