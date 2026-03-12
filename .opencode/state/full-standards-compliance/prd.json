@@ -235,7 +235,7 @@
 			"description": "Implement the core RFC 9618 policy state machine and set model. Done when:\n- internal state transitions are coded\n- the algorithm is clearly RFC 9618-based\n- performance does not depend on tree expansion",
 			"depends": ["rfc9618-engine-spike", "parse-policy-extensions", "plumb-verify-input-state"],
 			"priority": "architecture",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "enforce-policy-constraints",

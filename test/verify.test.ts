@@ -2035,7 +2035,7 @@ describe('validation profiles', () => {
 		expect(fail.ok).toBe(false);
 	});
 
-	it('validateForTlsClient fails closed for policy validation inputs until implemented', async () => {
+	it('validateForTlsClient fails closed for policy validation inputs until enforcement lands', async () => {
 		const root = await createSelfSignedCertificate({
 			subject: { commonName: 'Policy Input Root' },
 			extensions: {
@@ -2217,7 +2217,7 @@ describe('validateCandidatePath direct', () => {
 		if (!verifyResult.ok) expect(verifyResult.code).toBe('subject_alt_name_mismatch');
 	});
 
-	it('fails closed for policy validation inputs on raw path validation until implemented', async () => {
+	it('fails closed for policy validation inputs on raw path validation until enforcement lands', async () => {
 		const chain = await issueChain();
 		const leafParsed = parseCertificatePem(chain.leaf.pem);
 		const intParsed = parseCertificatePem(chain.intermediate.pem);
@@ -2237,6 +2237,53 @@ describe('validateCandidatePath direct', () => {
 					'initialPolicySet=1.2.3.4, requireExplicitPolicy, inhibitPolicyMapping, inhibitAnyPolicy',
 			},
 		});
+	});
+
+	it('treats critical policy extensions as processed during raw path validation', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Policy Processed Root' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 1 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+				certificatePolicies: [{ policyIdentifier: '1.2.3.4' }],
+			},
+		});
+		const intermediateKeys = await generateKeyPair();
+		const intermediate = await createCertificate({
+			issuer: { commonName: 'Policy Processed Root' },
+			subject: { commonName: 'Policy Processed Intermediate' },
+			publicKey: intermediateKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+				certificatePolicies: [{ policyIdentifier: OIDS.anyPolicy }],
+				policyMappings: [{ issuerDomainPolicy: '1.2.3.4', subjectDomainPolicy: '1.2.3.4' }],
+				policyConstraints: { requireExplicitPolicy: 1, inhibitPolicyMapping: 1 },
+				inhibitAnyPolicy: { skipCerts: 1 },
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Policy Processed Intermediate' },
+			subject: { commonName: 'processed-policy-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: intermediateKeys.privateKey,
+			issuerPublicKey: intermediateKeys.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				certificatePolicies: [{ policyIdentifier: '1.2.3.4' }],
+			},
+		});
+		const result = await validateCandidatePath({
+			chain: [
+				parseCertificatePem(leaf.pem),
+				parseCertificatePem(intermediate.pem),
+				parseCertificatePem(root.certificate.pem),
+			],
+		});
+		expect(result.ok).toBe(true);
 	});
 
 	it('applies initial subtree inputs alongside certificate name constraints', async () => {
