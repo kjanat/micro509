@@ -1,4 +1,4 @@
-import type { GeneralSubtree } from './extensions.ts';
+import type { GeneralSubtree, PolicyQualifierInfo } from './extensions.ts';
 
 /**
  * Shared boundary types for validation domains.
@@ -13,6 +13,18 @@ export interface PolicyValidationInput {
 	readonly requireExplicitPolicy?: boolean;
 	readonly inhibitPolicyMapping?: boolean;
 	readonly inhibitAnyPolicy?: boolean;
+}
+
+/** One policy OID that survives RFC 5280 / RFC 9618 processing. */
+export interface ConstrainedPolicy {
+	readonly policyIdentifier: string;
+	readonly policyQualifiers?: readonly PolicyQualifierInfo[];
+}
+
+/** Final policy outputs exposed by successful path-validation APIs. */
+export interface PolicyValidationOutcome {
+	readonly authorityConstrainedPolicies: readonly ConstrainedPolicy[];
+	readonly userConstrainedPolicies: readonly ConstrainedPolicy[];
 }
 
 export interface InitialNameConstraintsInput {

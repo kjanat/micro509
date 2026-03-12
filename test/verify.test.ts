@@ -2095,6 +2095,42 @@ describe('validation profiles', () => {
 		});
 	});
 
+	it('validateForTlsClient exposes constrained policy outcomes on success', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Policy Outcome Root' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Policy Outcome Root' },
+			subject: { commonName: 'policy-outcome-client' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['clientAuth'],
+				certificatePolicies: [{ policyIdentifier: '1.2.3.4' }],
+			},
+		});
+		const result = await validateForTlsClient({
+			leaf: leaf.pem,
+			roots: [root.certificate.pem],
+			initialPolicySet: ['1.2.3.4'],
+		});
+		expect(result.ok).toBe(true);
+		if (!result.ok) {
+			throw new Error('expected policy-aware TLS client success');
+		}
+		expect(result.value.policyValidation).toEqual({
+			authorityConstrainedPolicies: [{ policyIdentifier: '1.2.3.4' }],
+			userConstrainedPolicies: [{ policyIdentifier: '1.2.3.4' }],
+		});
+	});
+
 	it('validateForTlsClient enforces caller-supplied initial name constraints', async () => {
 		const root = await createSelfSignedCertificate({
 			subject: { commonName: 'Initial Name Constraint Root' },
@@ -2521,6 +2557,13 @@ describe('validateCandidatePath direct', () => {
 			initialPolicySet: ['1.2.3.4'],
 		});
 		expect(result.ok).toBe(true);
+		if (!result.ok) {
+			throw new Error('expected policy-aware raw path success');
+		}
+		expect(result.policyValidation).toEqual({
+			authorityConstrainedPolicies: [{ policyIdentifier: '1.2.3.4' }],
+			userConstrainedPolicies: [{ policyIdentifier: '1.2.3.4' }],
+		});
 	});
 
 	it('rejects raw path validation when the initial policy set is not satisfied', async () => {

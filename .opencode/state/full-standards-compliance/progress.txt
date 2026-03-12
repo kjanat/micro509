@@ -38,6 +38,7 @@ Started: 2026-03-12
 - For staged extension families, parser helpers should mirror builder guardrails on empty/repeated/forbidden RFC structures, and preserve custom `ANY` payloads as raw DER so round-trip-enough typed data lands before enforcement logic.
 - For staged standards work, land internal state machines before public enforcement, but keep public policy/revocation knobs fail-closed until the matching enforcement/output task exists.
 - For staged policy enforcement, enable only the RFC knobs the current task actually enforces, keep the rest fail-closed, and derive pass/fail from the final constrained policy set before exposing richer public outcomes.
+- Expose policy outcomes as two views: `authorityConstrainedPolicies` reports the final surviving leaf-domain policies, while `userConstrainedPolicies` reports caller-visible policy results after mapping and `anyPolicy` handling.
 
 ## Validation Commands
 
@@ -242,3 +243,11 @@ Started: 2026-03-12
 - Added regressions in `test/verify.test.ts` for direct mapping, caller-side inhibition, multi-hop mapping chains, and self-issued intermediates preserving the inhibit-policy-mapping counter.
 - Files changed: `src/verify.ts`, `test/verify.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** mapping evaluation can keep the existing depth-keyed DAG, but final user-policy success must trace surviving leaf paths back to their root-domain policy nodes instead of treating every reachable `anyPolicy` bridge as a satisfiable caller policy.
+
+## Task - [expose-policy-outcomes]
+
+- Exposed RFC 9618 policy outcomes on successful validation results by adding public `ConstrainedPolicy` / `PolicyValidationOutcome` types and threading them through raw-path and wrapper success shapes.
+- Kept `authorityConstrainedPolicies` aligned with final surviving leaf-domain policies, while `userConstrainedPolicies` stays caller-facing for mapping / `anyPolicy` cases.
+- Added regression coverage in `test/verify.test.ts` for both raw-path and TLS-client success outputs, and verified the full feedback loop (`bun fmt`, `bun typecheck`, `bun lint`, `bun test`, `bun bd`).
+- Files changed: `src/validation.ts`, `src/verify.ts`, `src/index.ts`, `test/verify.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** policy-output APIs need two distinct sets - final authority-constrained leaf policies for unconstrained callers, and separately derived caller-visible policies for mapped / `anyPolicy`-mediated requests.

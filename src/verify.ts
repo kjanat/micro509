@@ -32,8 +32,10 @@ import {
 import { splitPemBlocks } from './pem.ts';
 import { verifySignedData } from './sig-verify.ts';
 import type {
+	ConstrainedPolicy,
 	InitialNameConstraintsInput,
 	PolicyValidationInput,
+	PolicyValidationOutcome,
 	VerifyServiceIdentityInput,
 } from './validation.ts';
 
@@ -155,7 +157,13 @@ export interface ValidateCandidatePathInput
 	readonly allowSelfSignedLeaf?: boolean;
 }
 
-export type ValidateCandidatePathResult = { readonly ok: true } | VerifyChainFailure;
+export interface ValidateCandidatePathSuccess {
+	readonly ok: true;
+	/** Final RFC 9618-constrained policy outputs for this validated path. */
+	readonly policyValidation: PolicyValidationOutcome;
+}
+
+export type ValidateCandidatePathResult = ValidateCandidatePathSuccess | VerifyChainFailure;
 
 // ---------------------------------------------------------------------------
 // Verify chain (convenience composition)
@@ -178,6 +186,8 @@ export interface VerifiedCertificateChain {
 	readonly leaf: ParsedCertificate;
 	readonly chain: readonly ParsedCertificate[];
 	readonly root: ParsedCertificate;
+	/** Final RFC 9618-constrained policy outputs for this validated path. */
+	readonly policyValidation: PolicyValidationOutcome;
 }
 
 export type VerifyChainResult =
@@ -303,6 +313,12 @@ interface ValidationState {
 
 type ValidationStateResult =
 	| { readonly ok: true; readonly value: ValidationState }
+	| VerifyChainFailure;
+
+type ValidationCheckResult = { readonly ok: true } | VerifyChainFailure;
+
+type PolicyValidationResult =
+	| { readonly ok: true; readonly value: PolicyValidationOutcome }
 	| VerifyChainFailure;
 
 // ---------------------------------------------------------------------------
@@ -529,7 +545,7 @@ export async function validateCandidatePath(
 		return nameConstraintResult;
 	}
 
-	return validateLeaf(leaf, input);
+	return validateLeaf(leaf, input, policyResult.value);
 }
 
 // ---------------------------------------------------------------------------
@@ -581,7 +597,13 @@ export async function verifyCertificateChain(
 		}
 	}
 
-	return { ok: true, value: buildResult.value };
+	return {
+		ok: true,
+		value: {
+			...buildResult.value,
+			policyValidation: validateResult.policyValidation,
+		},
+	};
 }
 
 // ---------------------------------------------------------------------------
@@ -784,6 +806,7 @@ function validateLeaf(
 	input: {
 		readonly purpose?: VerifyPurpose;
 	},
+	policyValidation: PolicyValidationOutcome,
 ): ValidateCandidatePathResult {
 	const purpose = input.purpose;
 	if (purpose !== undefined) {
@@ -811,13 +834,13 @@ function validateLeaf(
 			);
 		}
 	}
-	return { ok: true };
+	return { ok: true, policyValidation };
 }
 
 function validateServiceIdentity(
 	leaf: ParsedCertificate,
 	serviceIdentity: VerifyServiceIdentityInput,
-): ValidateCandidatePathResult {
+): ValidationCheckResult {
 	const result = matchServiceIdentity({ certificate: leaf, serviceIdentity });
 	if (result.ok) {
 		return result;
@@ -1407,9 +1430,9 @@ function processPolicyState(
 function validateProcessedPolicyState(
 	chain: readonly ParsedCertificate[],
 	state: PolicyValidationState,
-): ValidateCandidatePathResult {
-	const finalPolicies = deriveUserConstrainedPolicies(chain, state);
-	if (state.explicitPolicy === 0 && finalPolicies.size === 0) {
+): PolicyValidationResult {
+	const outcome = derivePolicyValidationOutcome(chain, state);
+	if (state.explicitPolicy === 0 && outcome.userConstrainedPolicies.length === 0) {
 		return failure(
 			'explicit_policy_required',
 			'policy validation requires an explicit permitted policy',
@@ -1417,104 +1440,207 @@ function validateProcessedPolicyState(
 			detail({
 				expected:
 					state.initialPolicySet === 'any' ? 'explicit policy' : state.initialPolicySet.join(','),
-				actual: describeFinalPolicies(finalPolicies),
+				actual: describeFinalPolicies(outcome.userConstrainedPolicies),
 			}),
 		);
 	}
-	if (state.initialPolicySet !== 'any' && finalPolicies.size === 0) {
+	if (state.initialPolicySet !== 'any' && outcome.userConstrainedPolicies.length === 0) {
 		return failure(
 			'initial_policy_set_not_satisfied',
 			'certificate chain does not satisfy the requested initial policy set',
 			0,
 			detail({
 				expected: state.initialPolicySet.join(','),
-				actual: describeFinalPolicies(finalPolicies),
+				actual: describeFinalPolicies(outcome.userConstrainedPolicies),
 			}),
 		);
 	}
-	return { ok: true };
+	return { ok: true, value: outcome };
 }
 
-function deriveUserConstrainedPolicies(
+function derivePolicyValidationOutcome(
 	chain: readonly ParsedCertificate[],
 	state: PolicyValidationState,
-): ReadonlySet<string> {
+): PolicyValidationOutcome {
 	const authorityConstrainedPolicies = collectAuthorityConstrainedPolicies(
 		chain,
 		state.validPolicyGraph,
 	);
-	if (state.initialPolicySet === 'any') {
-		return authorityConstrainedPolicies;
-	}
-	const constrained = new Set<string>();
-	if (authorityConstrainedPolicies.has(OIDS.anyPolicy)) {
-		for (const policyIdentifier of state.initialPolicySet) {
-			constrained.add(policyIdentifier);
-		}
-	}
-	for (const policyIdentifier of state.initialPolicySet) {
-		if (authorityConstrainedPolicies.has(policyIdentifier)) {
-			constrained.add(policyIdentifier);
-		}
-	}
-	return constrained;
+	const rootDomainPolicies = collectRootDomainPolicies(chain, state.validPolicyGraph);
+	return {
+		authorityConstrainedPolicies: [...authorityConstrainedPolicies.values()].sort(comparePolicies),
+		userConstrainedPolicies: deriveUserConstrainedPolicies(
+			authorityConstrainedPolicies,
+			rootDomainPolicies,
+			state.initialPolicySet,
+		),
+	};
 }
 
 function collectAuthorityConstrainedPolicies(
 	chain: readonly ParsedCertificate[],
 	graph: PolicyGraph | null,
-): ReadonlySet<string> {
+): ReadonlyMap<string, ConstrainedPolicy> {
 	if (graph === null) {
-		return new Set<string>();
+		return new Map<string, ConstrainedPolicy>();
 	}
 	const leafDepth = chain.length - 1;
 	const finalDepth = graph.nodesByDepth[leafDepth];
 	if (finalDepth === undefined) {
-		return new Set<string>();
+		return new Map<string, ConstrainedPolicy>();
 	}
-	const authorityPolicies = new Set<string>();
-	const visited = new Set<string>();
+	const authorityPolicies = new Map<string, ConstrainedPolicy>();
 	for (const [key, node] of finalDepth) {
 		if (node.validPolicy === OIDS.anyPolicy) {
-			authorityPolicies.add(OIDS.anyPolicy);
+			authorityPolicies.set(
+				OIDS.anyPolicy,
+				buildConstrainedPolicy(OIDS.anyPolicy, node.qualifierSet),
+			);
 			continue;
 		}
-		collectAuthorityPolicyRoots(graph, key, authorityPolicies, visited);
+		if (reachesAuthorityRoot(graph, key)) {
+			authorityPolicies.set(
+				node.validPolicy,
+				buildConstrainedPolicy(node.validPolicy, node.qualifierSet),
+			);
+		}
 	}
 	return authorityPolicies;
 }
 
-function collectAuthorityPolicyRoots(
+function reachesAuthorityRoot(graph: PolicyGraph, nodeKey: string): boolean {
+	const pending = [nodeKey];
+	const visited = new Set<string>();
+	while (pending.length > 0) {
+		const currentKey = pending.pop();
+		if (currentKey === undefined || visited.has(currentKey)) {
+			continue;
+		}
+		visited.add(currentKey);
+		const node = getPolicyGraphNode(graph, currentKey);
+		if (node === undefined) {
+			continue;
+		}
+		for (const parentKey of node.parentKeys) {
+			const parent = getPolicyGraphNode(graph, parentKey);
+			if (parent === undefined) {
+				continue;
+			}
+			if (parent.depth === 0 && parent.validPolicy === OIDS.anyPolicy) {
+				return true;
+			}
+			pending.push(parentKey);
+		}
+	}
+	return false;
+}
+
+function collectRootDomainPolicies(
+	chain: readonly ParsedCertificate[],
+	graph: PolicyGraph | null,
+): ReadonlyMap<string, ConstrainedPolicy> {
+	if (graph === null) {
+		return new Map<string, ConstrainedPolicy>();
+	}
+	const leafDepth = chain.length - 1;
+	const finalDepth = graph.nodesByDepth[leafDepth];
+	if (finalDepth === undefined) {
+		return new Map<string, ConstrainedPolicy>();
+	}
+	const rootPolicies = new Map<string, ConstrainedPolicy>();
+	for (const [key, node] of finalDepth) {
+		if (node.validPolicy === OIDS.anyPolicy) {
+			rootPolicies.set(OIDS.anyPolicy, buildConstrainedPolicy(OIDS.anyPolicy, node.qualifierSet));
+			continue;
+		}
+		collectAuthorityConstrainedPolicyRoots(graph, key, rootPolicies);
+	}
+	return rootPolicies;
+}
+
+function collectAuthorityConstrainedPolicyRoots(
 	graph: PolicyGraph,
 	nodeKey: string,
-	authorityPolicies: Set<string>,
-	visited: Set<string>,
+	authorityPolicies: Map<string, ConstrainedPolicy>,
 ): void {
-	if (visited.has(nodeKey)) {
-		return;
-	}
-	visited.add(nodeKey);
-	const node = getPolicyGraphNode(graph, nodeKey);
-	if (node === undefined) {
-		return;
-	}
-	for (const parentKey of node.parentKeys) {
-		const parent = getPolicyGraphNode(graph, parentKey);
-		if (parent === undefined) {
+	const pending = [nodeKey];
+	const visited = new Set<string>();
+	while (pending.length > 0) {
+		const currentKey = pending.pop();
+		if (currentKey === undefined || visited.has(currentKey)) {
 			continue;
 		}
-		if (parent.depth === 0 && parent.validPolicy === OIDS.anyPolicy) {
-			if (node.validPolicy !== OIDS.anyPolicy) {
-				authorityPolicies.add(node.validPolicy);
+		visited.add(currentKey);
+		const node = getPolicyGraphNode(graph, currentKey);
+		if (node === undefined) {
+			continue;
+		}
+		for (const parentKey of node.parentKeys) {
+			const parent = getPolicyGraphNode(graph, parentKey);
+			if (parent === undefined) {
+				continue;
 			}
-			continue;
+			if (parent.depth === 0 && parent.validPolicy === OIDS.anyPolicy) {
+				if (node.validPolicy !== OIDS.anyPolicy) {
+					authorityPolicies.set(
+						node.validPolicy,
+						buildConstrainedPolicy(
+							node.validPolicy,
+							currentKey === nodeKey ? node.qualifierSet : undefined,
+						),
+					);
+				}
+				continue;
+			}
+			pending.push(parentKey);
 		}
-		collectAuthorityPolicyRoots(graph, parentKey, authorityPolicies, visited);
 	}
 }
 
-function describeFinalPolicies(policies: ReadonlySet<string>): string {
-	return policies.size === 0 ? '<none>' : [...policies].join(',');
+function deriveUserConstrainedPolicies(
+	finalAuthorityConstrainedPolicies: ReadonlyMap<string, ConstrainedPolicy>,
+	rootDomainPolicies: ReadonlyMap<string, ConstrainedPolicy>,
+	initialPolicySet: readonly string[] | 'any',
+): readonly ConstrainedPolicy[] {
+	if (initialPolicySet === 'any') {
+		return [...finalAuthorityConstrainedPolicies.values()].sort(comparePolicies);
+	}
+	const anyPolicy = rootDomainPolicies.get(OIDS.anyPolicy);
+	const constrained = new Map<string, ConstrainedPolicy>();
+	for (const policyIdentifier of initialPolicySet) {
+		const direct = rootDomainPolicies.get(policyIdentifier);
+		if (direct !== undefined) {
+			constrained.set(policyIdentifier, direct);
+			continue;
+		}
+		if (anyPolicy !== undefined) {
+			constrained.set(
+				policyIdentifier,
+				buildConstrainedPolicy(policyIdentifier, anyPolicy.policyQualifiers),
+			);
+		}
+	}
+	return [...constrained.values()];
+}
+
+function buildConstrainedPolicy(
+	policyIdentifier: string,
+	policyQualifiers: readonly PolicyQualifierInfo[] | undefined,
+): ConstrainedPolicy {
+	return {
+		policyIdentifier,
+		...(policyQualifiers === undefined ? {} : { policyQualifiers }),
+	};
+}
+
+function comparePolicies(left: ConstrainedPolicy, right: ConstrainedPolicy): number {
+	return left.policyIdentifier.localeCompare(right.policyIdentifier);
+}
+
+function describeFinalPolicies(policies: readonly ConstrainedPolicy[]): string {
+	return policies.length === 0
+		? '<none>'
+		: policies.map((policy) => policy.policyIdentifier).join(',');
 }
 
 function processPolicyCertificate(
@@ -1880,7 +2006,7 @@ interface AccumulatedNameConstraints {
 function checkNameConstraints(
 	chain: readonly ParsedCertificate[],
 	state: NameConstraintValidationState,
-): ValidateCandidatePathResult {
+): ValidationCheckResult {
 	let accumulated = seedInitialNameConstraints(state);
 
 	// Seed constraints from the root (trust anchor). The root's own
@@ -2033,7 +2159,7 @@ function checkCertificateNames(
 	certificate: ParsedCertificate,
 	accumulated: AccumulatedNameConstraints,
 	index: number,
-): ValidateCandidatePathResult {
+): ValidationCheckResult {
 	// Check subject DN as directoryName (if non-empty).
 	if (certificate.subject.derHex !== EMPTY_SEQUENCE_HEX) {
 		const dnResult = isNamePermitted(

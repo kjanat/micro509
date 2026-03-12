@@ -262,7 +262,7 @@
 			"description": "Expose final policy outcomes through public validation APIs. Done when:\n- callers can inspect constrained policy results or typed failures\n- docs/types explain the result shape\n- wrapper APIs preserve ergonomic defaults",
 			"depends": ["enforce-policy-constraints", "enforce-policy-mappings"],
 			"priority": "integration",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "add-policy-fixtures",

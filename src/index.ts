@@ -241,10 +241,12 @@ export {
 	type RevocationOcspEvidenceInput,
 } from './revocation.ts';
 export type {
+	ConstrainedPolicy,
 	DnsServiceIdentityInput,
 	InitialNameConstraintsInput,
 	IpServiceIdentityInput,
 	PolicyValidationInput,
+	PolicyValidationOutcome,
 	RevocationStatus,
 	ServiceIdentityInput,
 	ServiceIdentityType,
