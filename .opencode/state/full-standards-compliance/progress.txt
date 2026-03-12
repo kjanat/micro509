@@ -7,6 +7,7 @@ Started: 2026-03-12
 
 - OCSP responder discovery should stay pure and metadata-only: expose AIA-derived responder URIs plus caller-supplied local responder config as typed candidates, and dedupe configured duplicates by keeping the most specific entry (one with a bound responder cert).
 - OCSP `ResponderID` parsing should preserve the CHOICE branch in parsed output; accept the normal implicit `byKeyHash` bytes, but keep parser coverage for explicit wrapper variants used in hand-built fixtures.
+- OCSP responder validation must bind signer cert selection to `ResponderID`: prefer embedded certs that match the parsed `ResponderID`, and decide issuer-vs-delegated rules by actual cert identity, never shared subject DN alone.
 - Delta CRL support should validate the complete/delta pair up front (issuer, AKI, IDP scope, numbering), then overlay certificate-specific delta entries on the complete-CRL view; `removeFromCRL` only clears a prior `certificateHold`.
 - Indirect CRL revocation lookup is sequence-scoped state, not entry-local state: carry `certificateIssuer` forward across revoked entries, match on serial plus effective issuer, and fail closed only after scanning all same-serial candidates.
 - Structured distribution-point builder coverage should hit both optional halves of the RFC model: issuer-only certificate DPs and scope-only CRL IDPs, plus runtime rejects for empty `fullName` sequences.
@@ -319,3 +320,10 @@ Started: 2026-03-12
 - Added revocation-boundary coverage in `test/revocation.test.ts` for AIA URI discovery, duplicate filtering, and configured-responder precedence over discovered AIA entries.
 - Files changed: `src/revocation.ts`, `src/index.ts`, `test/revocation.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
 - **Learnings:** keep responder-candidate helpers separate from `validateOcspResponse()`; discovery can accept parsed target certs, but configured delegated responder certs should stay raw PEM/DER so later validation cannot accidentally skip chain checks.
+
+## Task - [bind-signer-to-responderid]
+
+- Bound `validateOcspResponse()` to parsed `ResponderID` in `src/ocsp.ts`, adding typed `responder_id_mismatch` failures, SHA-1 responder-key binding, embedded-cert responder selection by `ResponderID`, and issuer-vs-delegated detection by actual cert identity instead of shared subject DN.
+- Added OCSP regressions in `test/ocsp.test.ts` for matching/mismatched `byName`, same-subject/different-key `byKeyHash`, embedded responder-cert lookup, same-subject delegated responders, and SHA-256 responses still using SHA-1 responder key hashes.
+- Files changed: `src/ocsp.ts`, `test/ocsp.test.ts`, `.opencode/state/full-standards-compliance/prd.json`, `.opencode/state/full-standards-compliance/progress.txt`
+- **Learnings:** ResponderID binding is part of signer resolution, not just post-signature validation; matching the right embedded cert first avoids false signature failures, and subject-DN equality alone is not enough to classify a signer as the issuer.

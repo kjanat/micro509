@@ -160,6 +160,7 @@ export type ValidateOcspResponseResult =
 			readonly code:
 				| 'response_status_invalid'
 				| 'signature_invalid'
+				| 'responder_id_mismatch'
 				| 'nonce_mismatch'
 				| 'request_mismatch'
 				| 'issuer_mismatch'
@@ -305,7 +306,7 @@ export async function createOcspResponse(
 		responses.push(await encodeSingleResponse(certificate, issuer, response, hashAlgorithm));
 	}
 	const responderKeyHash = await digestBytes(
-		hashAlgorithm,
+		'SHA-1',
 		extractSubjectPublicKeyBytes(signerCertificate.subjectPublicKeyInfoDer),
 	);
 	const responseDataFields: Uint8Array[] = [
@@ -411,13 +412,23 @@ export async function validateOcspResponse(
 	}
 	const issuer = await normalizeCertificate(input.issuerCertificate);
 	const resolvedResponder =
-		input.responderCertificate ?? parsedResponse.certificates?.[0] ?? input.issuerCertificate;
+		input.responderCertificate ??
+		(await findMatchingOcspResponderCertificate(
+			parsedResponse.certificates,
+			parsedResponse.responderId,
+		)) ??
+		parsedResponse.certificates?.[0] ??
+		input.issuerCertificate;
 	const signer = await normalizeCertificate(resolvedResponder);
 	const signature = await verifyOcspResponse(parsedResponse, signer);
 	if (!signature.ok) {
 		return signature;
 	}
-	if (signer.subject.derHex !== issuer.subject.derHex) {
+	const responderBinding = await validateOcspResponderIdBinding(parsedResponse.responderId, signer);
+	if (!responderBinding.ok) {
+		return responderBinding;
+	}
+	if (!isSameOcspCertificate(signer, issuer)) {
 		if (typeof resolvedResponder === 'string' || resolvedResponder instanceof Uint8Array) {
 			const chain = await verifyCertificateChain({
 				leaf: resolvedResponder,
@@ -497,6 +508,69 @@ export async function validateOcspResponse(
 		}
 	}
 	return { ok: true, value: parsedResponse };
+}
+
+async function findMatchingOcspResponderCertificate(
+	certificates: readonly ParsedCertificate[] | undefined,
+	responderId: ParsedOcspResponderId | undefined,
+): Promise<ParsedCertificate | undefined> {
+	if (certificates === undefined || responderId === undefined) {
+		return undefined;
+	}
+	for (const certificate of certificates) {
+		if (await matchesOcspResponderId(responderId, certificate)) {
+			return certificate;
+		}
+	}
+	return undefined;
+}
+
+async function validateOcspResponderIdBinding(
+	responderId: ParsedOcspResponderId | undefined,
+	signer: ParsedCertificate,
+): Promise<Extract<ValidateOcspResponseResult, { readonly ok: false }> | { readonly ok: true }> {
+	if (responderId === undefined) {
+		return { ok: true };
+	}
+	if (await matchesOcspResponderId(responderId, signer)) {
+		return { ok: true };
+	}
+	return responderId.type === 'byName'
+		? {
+				ok: false,
+				code: 'responder_id_mismatch',
+				message: 'OCSP responder certificate subject does not match responderID byName',
+			}
+		: {
+				ok: false,
+				code: 'responder_id_mismatch',
+				message: 'OCSP responder certificate public key does not match responderID byKeyHash',
+			};
+}
+
+async function matchesOcspResponderId(
+	responderId: ParsedOcspResponderId,
+	certificate: ParsedCertificate,
+): Promise<boolean> {
+	if (responderId.type === 'byName') {
+		return compareOcspResponderNames(responderId.name, certificate.subject);
+	}
+	const certificateKeyHashHex = toHex(
+		await digestBytes('SHA-1', extractSubjectPublicKeyBytes(certificate.subjectPublicKeyInfoDer)),
+	);
+	return certificateKeyHashHex === responderId.keyHashHex;
+}
+
+function isSameOcspCertificate(left: ParsedCertificate, right: ParsedCertificate): boolean {
+	return (
+		left.serialNumberHex === right.serialNumberHex &&
+		left.issuer.derHex === right.issuer.derHex &&
+		left.subject.derHex === right.subject.derHex &&
+		left.subjectPublicKeyInfoDer.length === right.subjectPublicKeyInfoDer.length &&
+		left.subjectPublicKeyInfoDer.every(
+			(byte, index) => byte === right.subjectPublicKeyInfoDer[index],
+		)
+	);
 }
 
 async function encodeOcspCertId(
@@ -702,6 +776,82 @@ function parseResponderNameAttributeSet(
 		attributes,
 		values,
 	};
+}
+
+function compareOcspResponderNames(left: ParsedName, right: ParsedName): boolean {
+	if (left.rdns.length !== right.rdns.length) {
+		return false;
+	}
+	for (let index = 0; index < left.rdns.length; index += 1) {
+		const leftRdn = left.rdns[index];
+		const rightRdn = right.rdns[index];
+		if (leftRdn === undefined || rightRdn === undefined) {
+			return false;
+		}
+		if (!compareOcspRelativeDistinguishedNames(leftRdn, rightRdn)) {
+			return false;
+		}
+	}
+	return true;
+}
+
+function compareOcspRelativeDistinguishedNames(
+	left: ParsedRelativeDistinguishedName,
+	right: ParsedRelativeDistinguishedName,
+): boolean {
+	if (left.attributes.length !== right.attributes.length) {
+		return false;
+	}
+	const matched = new Array(right.attributes.length).fill(false);
+	for (const leftAttribute of left.attributes) {
+		let found = false;
+		for (let index = 0; index < right.attributes.length; index += 1) {
+			const rightAttribute = right.attributes[index];
+			if (rightAttribute === undefined || matched[index]) {
+				continue;
+			}
+			if (!compareOcspNameAttributeValue(leftAttribute, rightAttribute)) {
+				continue;
+			}
+			matched[index] = true;
+			found = true;
+			break;
+		}
+		if (!found) {
+			return false;
+		}
+	}
+	return true;
+}
+
+function compareOcspNameAttributeValue(
+	left: ParsedNameAttribute,
+	right: ParsedNameAttribute,
+): boolean {
+	if (left.oid !== right.oid) {
+		return false;
+	}
+	if (isOcspDirectoryStringTag(left.valueTag) && isOcspDirectoryStringTag(right.valueTag)) {
+		const preparedLeft = prepareOcspNameCompareString(left.value);
+		const preparedRight = prepareOcspNameCompareString(right.value);
+		if (preparedLeft === undefined || preparedRight === undefined) {
+			return false;
+		}
+		return preparedLeft === preparedRight;
+	}
+	return left.valueTag === right.valueTag && left.value === right.value;
+}
+
+function isOcspDirectoryStringTag(tag: number): boolean {
+	return tag === 0x0c || tag === 0x13;
+}
+
+function prepareOcspNameCompareString(value: string): string | undefined {
+	const normalized = value.normalize('NFKC');
+	if (/[^\P{Cc}\t\n\r]/u.test(normalized)) {
+		return undefined;
+	}
+	return normalized.toLowerCase().trim().replace(/\s+/gu, ' ');
 }
 
 function responderNameKeyFromOid(oid: string): ParsedNameAttribute['key'] {

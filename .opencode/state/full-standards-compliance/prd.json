@@ -361,7 +361,7 @@
 			"description": "Bind the OCSP signer certificate to ResponderID during validation. Done when:\n- same-subject different-key responders fail\n- by-name and by-key-hash checks are enforced\n- failures are typed",
 			"depends": ["parse-responder-id"],
 			"priority": "standard",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "enforce-delegated-ocsp-rules",
