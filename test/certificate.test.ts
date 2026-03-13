@@ -10,6 +10,7 @@ import {
 } from '#micro509';
 import { readElement } from '#micro509/der.ts';
 import { OIDS } from '#micro509/oids.ts';
+import { encodeRsaPssParameters, rsaPssParametersForHash } from '#micro509/rsa-pss.ts';
 import { childrenOf, decodeObjectIdentifier, hasExtensionOid } from './helpers.ts';
 
 describe('certificate', () => {
@@ -103,6 +104,53 @@ describe('certificate', () => {
 				},
 			},
 		]);
+	});
+
+	it('creates RSA-PSS-signed certificates with explicit parameters', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'RSA-PSS Root CA' },
+			algorithm: {
+				kind: 'rsa',
+				modulusLength: 2048,
+				hash: 'SHA-384',
+				scheme: 'pss',
+			},
+			signature: { kind: 'rsa-pss' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'RSA-PSS Root CA' },
+			subject: { commonName: 'rsa-pss-leaf.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			signature: { kind: 'rsa-pss', saltLength: 48 },
+			extensions: {
+				subjectAltNames: [{ type: 'dns', value: 'rsa-pss-leaf.example' }],
+			},
+		});
+
+		const expectedParameters = encodeRsaPssParameters(rsaPssParametersForHash('SHA-384'));
+		expect(parseCertificatePem(root.certificate.pem)).toMatchObject({
+			signatureAlgorithmOid: OIDS.rsassaPss,
+			signatureAlgorithmParametersDer: expectedParameters,
+		});
+		expect(parseCertificatePem(leaf.pem)).toMatchObject({
+			signatureAlgorithmOid: OIDS.rsassaPss,
+			signatureAlgorithmParametersDer: expectedParameters,
+		});
+		expect(
+			await verifyCertificateChain({
+				leaf: leaf.pem,
+				roots: [root.certificate.pem],
+				purpose: 'serverAuth',
+				serviceIdentity: { type: 'dns', value: 'rsa-pss-leaf.example' },
+			}),
+		).toMatchObject({ ok: true });
 	});
 
 	it('parses structured CRL distribution points with full and relative names', async () => {

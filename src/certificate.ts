@@ -9,7 +9,12 @@ import {
 } from './keys.ts';
 import { encodeName, type NameInput } from './name.ts';
 import { base64Encode, pemEncode } from './pem.ts';
-import { encodeAlgorithmIdentifier, getSignatureAlgorithm, signBytes } from './signing.ts';
+import {
+	encodeAlgorithmIdentifier,
+	getSignatureAlgorithm,
+	type SignatureProfileInput,
+	signBytes,
+} from './signing.ts';
 
 export interface ValidityInput {
 	readonly notBefore?: Date;
@@ -26,6 +31,7 @@ export interface CreateCertificateInput {
 	readonly validity?: ValidityInput;
 	readonly serialNumber?: Uint8Array;
 	readonly extensions?: CertificateExtensionsInput;
+	readonly signature?: SignatureProfileInput;
 }
 
 export interface CreateSelfSignedCertificateInput {
@@ -35,6 +41,7 @@ export interface CreateSelfSignedCertificateInput {
 	readonly validity?: ValidityInput;
 	readonly serialNumber?: Uint8Array;
 	readonly extensions?: CertificateExtensionsInput;
+	readonly signature?: SignatureProfileInput;
 }
 
 export interface CertificateMaterial {
@@ -61,6 +68,7 @@ export async function createSelfSignedCertificate(
 		...(input.validity !== undefined ? { validity: input.validity } : {}),
 		...(input.serialNumber !== undefined ? { serialNumber: input.serialNumber } : {}),
 		...(input.extensions !== undefined ? { extensions: input.extensions } : {}),
+		...(input.signature !== undefined ? { signature: input.signature } : {}),
 	} satisfies CreateCertificateInput;
 	const certificate = await createCertificate(certificateInput);
 
@@ -74,7 +82,7 @@ export async function createCertificate(
 	const issuerPublicKeyInfo = input.issuerPublicKey
 		? await exportSpkiDer(input.issuerPublicKey)
 		: undefined;
-	const signatureAlgorithm = getSignatureAlgorithm(input.signerPrivateKey);
+	const signatureAlgorithm = getSignatureAlgorithm(input.signerPrivateKey, input.signature);
 	const validity = resolveValidity(input.validity);
 	const extensions = buildCertificateExtensions(
 		subjectPublicKeyInfo,

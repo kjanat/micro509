@@ -516,6 +516,33 @@ describe('signing.ts edge cases', () => {
 		expect(result.algorithmOid).toBe(OIDS.sha512WithRSAEncryption);
 	});
 
+	it('getSignatureAlgorithm returns RSA-PSS config for explicit profile input', async () => {
+		const { generateKeyPair: genKp } = await import('#micro509');
+		const keys = await genKp({
+			kind: 'rsa',
+			modulusLength: 2048,
+			hash: 'SHA-384',
+			scheme: 'pss',
+		});
+		const result = getSignatureAlgorithm(keys.privateKey, { kind: 'rsa-pss' });
+		expect(result.algorithmOid).toBe(OIDS.rsassaPss);
+		expect(result.parameters).toEqual(encodeRsaPssParameters(rsaPssParametersForHash('SHA-384')));
+		expect(result.signParams).toEqual({ name: 'RSA-PSS', saltLength: 48 });
+	});
+
+	it('getSignatureAlgorithm rejects unsupported RSA-PSS salt lengths', async () => {
+		const { generateKeyPair: genKp } = await import('#micro509');
+		const keys = await genKp({
+			kind: 'rsa',
+			modulusLength: 2048,
+			hash: 'SHA-384',
+			scheme: 'pss',
+		});
+		expect(() =>
+			getSignatureAlgorithm(keys.privateKey, { kind: 'rsa-pss', saltLength: 32 }),
+		).toThrow('Unsupported RSA-PSS saltLength 32');
+	});
+
 	it('getSignatureAlgorithm returns correct config for ECDSA P-384', async () => {
 		const { generateKeyPair: genKp } = await import('#micro509');
 		const keys = await genKp({ kind: 'ecdsa', namedCurve: 'P-384' });

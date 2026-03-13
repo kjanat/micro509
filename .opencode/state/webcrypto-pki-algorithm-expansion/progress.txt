@@ -13,6 +13,7 @@ Started: 2026-03-13
 - Parse-boundary compatibility additions should layer on optional raw DER fields, not replace existing convenience fields; keep decoded OIDs stable and expose `*ParametersDer` beside them.
 - Structured algorithm helpers should return canonical supported profiles and split failures into typed `unsupported_*` vs `malformed_*` results; raw `AlgorithmIdentifier` DER stays the shared parse boundary.
 - Verification adapters should return structured parameter-support failures from low-level signature config code, then let cert/CSR/path validators translate them into domain error results with the right certificate index.
+- Builder-side structured algorithm inputs should stay explicit and narrow: thread an optional `signature` profile through API wrappers, require the matching WebCrypto key kind, and always encode canonical `AlgorithmIdentifier` parameters from the shared internal helper.
 
 ---
 
@@ -39,3 +40,9 @@ Started: 2026-03-13
 - Wired RSA-PSS into certificate-chain and CSR verification by threading raw AlgorithmIdentifier parameter DER into `src/sig-verify.ts`, mapping shipped profiles to WebCrypto `RSA-PSS`, and converting unsupported params into typed verification failures instead of thrown crashes.
 - Files changed: `src/sig-verify.ts`, `src/verify.ts`, `src/verify-path.ts`, `src/crl.ts`, `src/ocsp.ts`, `src/pkcs7.ts`, `test/helpers.ts`, `test/internals.test.ts`, `test/verify.test.ts`, `test/csr.test.ts`.
 - **Learnings:** trust-anchor path building needs the same typed signature-param failure plumbing as direct issuer verification or unsupported algorithms get misreported as root-discovery problems.
+
+## Task - [wire-rsa-pss-builders]
+
+- Added explicit builder-side `signature` profiles for certificate, self-signed certificate, and CSR creation, then resolved RSA-PSS profiles into canonical explicit `AlgorithmIdentifier` parameters in `src/signing.ts`.
+- Files changed: `src/signing.ts`, `src/certificate.ts`, `src/csr.ts`, `src/index.ts`, `test/certificate.test.ts`, `test/csr.test.ts`, `test/internals.test.ts`, `.opencode/state/webcrypto-pki-algorithm-expansion/prd.json`.
+- **Learnings:** builder support for structured algorithms works best when the public API stays profile-driven and the low-level signer helper enforces the shipped subset before any DER is emitted.

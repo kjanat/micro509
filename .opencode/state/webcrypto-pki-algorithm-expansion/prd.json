@@ -44,7 +44,7 @@
 			"description": "Add explicit RSA-PSS signing support to certificate and CSR creation APIs. Done when:\n- `createCertificate()` and `createCertificateSigningRequest()` accept an explicit signature profile input\n- omitted signature profile keeps current behavior for existing callers\n- RSA-PSS signing defaults `saltLength` to digest size when omitted\n- emitted AlgorithmIdentifier values carry explicit RSA-PSS parameters",
 			"depends": ["add-rsa-pss-param-codec"],
 			"priority": "integration",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "add-p521-ecdsa-support",

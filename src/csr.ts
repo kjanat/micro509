@@ -12,13 +12,19 @@ import { exportSpkiDer } from './keys.ts';
 import { encodeName, type NameInput } from './name.ts';
 import { OIDS } from './oids.ts';
 import { base64Encode, pemEncode } from './pem.ts';
-import { encodeAlgorithmIdentifier, getSignatureAlgorithm, signBytes } from './signing.ts';
+import {
+	encodeAlgorithmIdentifier,
+	getSignatureAlgorithm,
+	type SignatureProfileInput,
+	signBytes,
+} from './signing.ts';
 
 export interface CreateCsrInput {
 	readonly subject: NameInput;
 	readonly publicKey: CryptoKey;
 	readonly signerPrivateKey: CryptoKey;
 	readonly extensions?: CertificateExtensionsInput;
+	readonly signature?: SignatureProfileInput;
 }
 
 export interface CsrMaterial {
@@ -28,7 +34,7 @@ export interface CsrMaterial {
 }
 
 export async function createCertificateSigningRequest(input: CreateCsrInput): Promise<CsrMaterial> {
-	const signatureAlgorithm = getSignatureAlgorithm(input.signerPrivateKey);
+	const signatureAlgorithm = getSignatureAlgorithm(input.signerPrivateKey, input.signature);
 	const spki = await exportSpkiDer(input.publicKey);
 	const attributes = buildAttributes(input.extensions);
 	const certificationRequestInfo = sequence([

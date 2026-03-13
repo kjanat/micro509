@@ -8,6 +8,7 @@ import {
 } from '#micro509';
 import { readElement } from '#micro509/der.ts';
 import { OIDS } from '#micro509/oids.ts';
+import { encodeRsaPssParameters, rsaPssParametersForHash } from '#micro509/rsa-pss.ts';
 import {
 	childrenOf,
 	decodeObjectIdentifier,
@@ -64,6 +65,27 @@ describe('csr', () => {
 		expect(await verifyCertificateSigningRequest(edCsr.der)).toMatchObject({
 			ok: true,
 		});
+	});
+
+	it('creates RSA-PSS certificate requests with explicit parameters', async () => {
+		const keyPair = await generateKeyPair({
+			kind: 'rsa',
+			modulusLength: 2048,
+			hash: 'SHA-512',
+			scheme: 'pss',
+		});
+		const csr = await createCertificateSigningRequest({
+			subject: { commonName: 'rsa-pss-create.example' },
+			publicKey: keyPair.publicKey,
+			signerPrivateKey: keyPair.privateKey,
+			signature: { kind: 'rsa-pss' },
+		});
+
+		expect(parseCertificateSigningRequestPem(csr.pem)).toMatchObject({
+			signatureAlgorithmOid: OIDS.rsassaPss,
+			signatureAlgorithmParametersDer: encodeRsaPssParameters(rsaPssParametersForHash('SHA-512')),
+		});
+		expect(await verifyCertificateSigningRequest(csr.pem)).toMatchObject({ ok: true });
 	});
 
 	it('parses CSR without extensionRequest attributes', async () => {
