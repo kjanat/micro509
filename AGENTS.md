@@ -47,6 +47,10 @@ ts-x509/
 - `readonly` everywhere; exhaustive `never` switches; `Record<never, never>` for empty map defaults.
 - Bun is default runner/package manager, but Node compatibility still matters.
 - Tests may import internals through `#micro509/*.ts` when asserting low-level behavior.
+- Commit messages:
+  - Follow conventional commits; prefer `type(scope): subject`.
+  - After the blank line, hard-wrap body lines at about 72 chars.
+  - Do not leave body paragraphs as one long line.
 
 ## ANTI-PATTERNS (THIS PROJECT)
 
