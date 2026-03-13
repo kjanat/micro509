@@ -17,7 +17,7 @@
 			"title": "Preserve raw AlgorithmIdentifier params",
 			"description": "Preserve raw signature and SPKI algorithm parameters in parsed cert and CSR outputs. Done when:\n- `src/parse.ts` exposes raw params DER for signature and public-key algorithm identifiers when present\n- existing OID fields stay stable for backward compatibility\n- malformed ASN.1 still fails at parse time instead of degrading silently",
 			"priority": "architecture",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "add-rsa-pss-param-codec",

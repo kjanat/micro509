@@ -145,7 +145,9 @@ export interface ParsedCertificate<TMap extends ExtensionDecoderMap = Record<nev
 	readonly notBefore: Date;
 	readonly notAfter: Date;
 	readonly signatureAlgorithmOid: string;
+	readonly signatureAlgorithmParametersDer?: Uint8Array;
 	readonly publicKeyAlgorithmOid: string;
+	readonly publicKeyAlgorithmParametersDer?: Uint8Array;
 	readonly publicKeyParametersOid?: string;
 	readonly extensions: readonly ParsedExtension[];
 	readonly basicConstraints?: BasicConstraints;
@@ -174,7 +176,9 @@ export interface ParsedCertificateSigningRequest<
 	readonly signatureValue: Uint8Array;
 	readonly subject: ParsedName;
 	readonly signatureAlgorithmOid: string;
+	readonly signatureAlgorithmParametersDer?: Uint8Array;
 	readonly publicKeyAlgorithmOid: string;
+	readonly publicKeyAlgorithmParametersDer?: Uint8Array;
 	readonly publicKeyParametersOid?: string;
 	readonly requestedExtensions: readonly ParsedExtension[];
 	readonly basicConstraints?: BasicConstraints;
@@ -220,6 +224,7 @@ export function parseCertificateDer<TMap extends ExtensionDecoderMap = Record<ne
 	const parsedExtensions = parseExtensionContainer(der, extensions);
 	const parsedValidity = parseValidity(der, validity);
 	const parsedSpki = parseSubjectPublicKeyInfo(der, subjectPublicKeyInfo);
+	const parsedSignatureAlgorithm = parseAlgorithmIdentifier(der, signatureAlgorithm);
 	const decodedExtensions =
 		options?.decoders === undefined
 			? undefined
@@ -246,8 +251,14 @@ export function parseCertificateDer<TMap extends ExtensionDecoderMap = Record<ne
 		subject: parseName(der, subject),
 		notBefore: parsedValidity.notBefore,
 		notAfter: parsedValidity.notAfter,
-		signatureAlgorithmOid: parseAlgorithmIdentifier(der, signatureAlgorithm).oid,
+		signatureAlgorithmOid: parsedSignatureAlgorithm.oid,
+		...(parsedSignatureAlgorithm.parametersDer !== undefined
+			? { signatureAlgorithmParametersDer: parsedSignatureAlgorithm.parametersDer }
+			: {}),
 		publicKeyAlgorithmOid: parsedSpki.oid,
+		...(parsedSpki.parametersDer !== undefined
+			? { publicKeyAlgorithmParametersDer: parsedSpki.parametersDer }
+			: {}),
 		...(parsedSpki.parametersOid !== undefined
 			? { publicKeyParametersOid: parsedSpki.parametersOid }
 			: {}),
@@ -324,6 +335,7 @@ export function parseCertificateSigningRequestDer<
 	const attributes = criChildren[3];
 	const parsedExtensions = parseRequestedExtensions(der, attributes);
 	const parsedSpki = parseSubjectPublicKeyInfo(der, subjectPublicKeyInfo);
+	const parsedSignatureAlgorithm = parseAlgorithmIdentifier(der, signatureAlgorithm);
 	const decodedExtensions =
 		options?.decoders === undefined
 			? undefined
@@ -345,8 +357,14 @@ export function parseCertificateSigningRequestDer<
 		),
 		signatureValue: extractBitStringValue(signatureValue),
 		subject: parseName(der, subject),
-		signatureAlgorithmOid: parseAlgorithmIdentifier(der, signatureAlgorithm).oid,
+		signatureAlgorithmOid: parsedSignatureAlgorithm.oid,
+		...(parsedSignatureAlgorithm.parametersDer !== undefined
+			? { signatureAlgorithmParametersDer: parsedSignatureAlgorithm.parametersDer }
+			: {}),
 		publicKeyAlgorithmOid: parsedSpki.oid,
+		...(parsedSpki.parametersDer !== undefined
+			? { publicKeyAlgorithmParametersDer: parsedSpki.parametersDer }
+			: {}),
 		...(parsedSpki.parametersOid !== undefined
 			? { publicKeyParametersOid: parsedSpki.parametersOid }
 			: {}),
@@ -597,23 +615,36 @@ function parseValidity(
 function parseSubjectPublicKeyInfo(
 	source: Uint8Array,
 	element: DerElement,
-): { readonly oid: string; readonly parametersOid?: string } {
+): ParsedAlgorithmIdentifier {
 	const children = childrenOf(source, element);
 	const algorithm = parseAlgorithmIdentifier(source, requireElement(children[0], 'SPKI algorithm'));
 	return algorithm;
 }
 
+interface ParsedAlgorithmIdentifier {
+	readonly oid: string;
+	readonly parametersDer?: Uint8Array;
+	readonly parametersOid?: string;
+}
+
 function parseAlgorithmIdentifier(
 	source: Uint8Array,
 	element: DerElement,
-): { readonly oid: string; readonly parametersOid?: string } {
+): ParsedAlgorithmIdentifier {
 	const children = childrenOf(source, element);
+	if (children.length === 0 || children.length > 2) {
+		throw new Error('Malformed AlgorithmIdentifier');
+	}
 	const oid = decodeObjectIdentifier(requireElement(children[0], 'algorithm OID').value);
 	const parameters = children[1];
-	if (parameters?.tag === 0x06) {
-		return { oid, parametersOid: decodeObjectIdentifier(parameters.value) };
+	if (parameters === undefined) {
+		return { oid };
 	}
-	return { oid };
+	const parametersDer = source.slice(parameters.start - parameters.headerLength, parameters.end);
+	if (parameters?.tag === 0x06) {
+		return { oid, parametersDer, parametersOid: decodeObjectIdentifier(parameters.value) };
+	}
+	return { oid, parametersDer };
 }
 
 /** @internal Exported for the extension registry. */

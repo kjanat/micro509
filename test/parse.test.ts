@@ -1157,6 +1157,27 @@ describe('parse', () => {
 		expect(parsed.extensions).toHaveLength(0);
 	});
 
+	it('preserves raw algorithm parameters in parsed certificates', async () => {
+		const rsaCertificate = await createSelfSignedCertificate({
+			subject: { commonName: 'algo-params-rsa.example' },
+			keyPair: await generateKeyPair({ kind: 'rsa', modulusLength: 2048 }),
+		});
+		const parsedRsa = parseCertificateDer(rsaCertificate.certificate.der);
+		expect(parsedRsa.signatureAlgorithmParametersDer).toEqual(nullValue());
+		expect(parsedRsa.publicKeyAlgorithmParametersDer).toEqual(nullValue());
+		expect(parsedRsa.signatureAlgorithmOid).toBe(OIDS.sha256WithRSAEncryption);
+		expect(parsedRsa.publicKeyAlgorithmOid).toBe(OIDS.rsaEncryption);
+
+		const ecCertificate = await createSelfSignedCertificate({
+			subject: { commonName: 'algo-params-ec.example' },
+			keyPair: await generateKeyPair({ kind: 'ecdsa', namedCurve: 'P-384' }),
+		});
+		const parsedEc = parseCertificateDer(ecCertificate.certificate.der);
+		expect(parsedEc.signatureAlgorithmParametersDer).toBeUndefined();
+		expect(parsedEc.publicKeyAlgorithmParametersDer).toEqual(objectIdentifier(OIDS.secp384r1));
+		expect(parsedEc.publicKeyParametersOid).toBe(OIDS.secp384r1);
+	});
+
 	it('parses CSR without attributes field', async () => {
 		const keys = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
 		const signatureAlgorithm = sequence([
@@ -1177,6 +1198,45 @@ describe('parse', () => {
 		const parsed = parseCertificateSigningRequestDer(der);
 		expect(parsed.subject.values.commonName).toBe('bare-csr.example');
 		expect(parsed.requestedExtensions).toHaveLength(0);
+	});
+
+	it('preserves raw algorithm parameters in parsed CSRs', async () => {
+		const keyPair = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
+		const csr = await createCertificateSigningRequest({
+			subject: { commonName: 'algo-params-csr.example' },
+			publicKey: keyPair.publicKey,
+			signerPrivateKey: keyPair.privateKey,
+		});
+		const parsed = parseCertificateSigningRequestDer(csr.der);
+		expect(parsed.signatureAlgorithmParametersDer).toEqual(nullValue());
+		expect(parsed.publicKeyAlgorithmParametersDer).toEqual(nullValue());
+		expect(parsed.signatureAlgorithmOid).toBe(OIDS.sha256WithRSAEncryption);
+		expect(parsed.publicKeyAlgorithmOid).toBe(OIDS.rsaEncryption);
+	});
+
+	it('rejects malformed AlgorithmIdentifier with extra elements', async () => {
+		const keys = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
+		const malformedSignatureAlgorithm = sequence([
+			objectIdentifier(OIDS.sha256WithRSAEncryption),
+			nullValue(),
+			nullValue(),
+		]);
+		const name = encodeName({ commonName: 'malformed-alg-id.example' });
+		const spki = await exportSpkiDer(keys.publicKey);
+		const tbsCertificate = sequence([
+			integerFromNumber(1),
+			malformedSignatureAlgorithm,
+			name,
+			sequence([time(new Date('2024-01-01T00:00:00Z')), time(new Date('2025-01-01T00:00:00Z'))]),
+			name,
+			spki,
+		]);
+		const der = sequence([
+			tbsCertificate,
+			malformedSignatureAlgorithm,
+			bitString(Uint8Array.of(0x00)),
+		]);
+		expect(() => parseCertificateDer(der)).toThrow('Malformed AlgorithmIdentifier');
 	});
 
 	// -----------------------------------------------------------------------
