@@ -53,7 +53,7 @@
 			"description": "Create `src/extensions/registry.ts` for built-in certificate and CSR extensions. Done when:\n- built-in extension definitions own OID, encode, decode, and parse-assignment metadata\n- registry scope is explicitly limited to certificate and CSR extensions\n- verifier critical-extension support remains separate from registry support",
 			"depends": ["der-spine-hardening"],
 			"priority": "architecture",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "rewire-parse-and-builders",

@@ -17,6 +17,7 @@ Started: 2026-03-13
 - Type re-home works best as a two-step move: make the new domain module the source of truth first, then keep the old shared file as a pure re-export shim until later cleanup removes it entirely.
 - When a public file name already occupies the obvious directory path (`verify.ts`), extract internal engines as sibling `*-engine.ts` modules instead of forcing a disruptive facade rename just to get nested paths.
 - For extracted validators, keep the engine failure shape structurally compatible with the facade's failure union when possible; that lets the facade delegate without inventing another translation layer.
+- Registry foundations can land before the big rewire if the registry is fully typed and test-covered, while existing parser/builder entrypoints still use their old control flow.
 
 ---
 <!-- Task logs below - APPEND ONLY -->
@@ -61,3 +62,12 @@ Started: 2026-03-13
 - Kept the extracted engine failure shape compatible with existing verify failures, so `verify.ts` can return engine failures directly without behavioral churn.
 - Files changed: `src/name-constraints-engine.ts`, `src/verify.ts`, `.opencode/state/pre-1-0-architecture-cleanup/prd.json`, `.opencode/state/pre-1-0-architecture-cleanup/progress.txt`
 - **Learnings:** a direct engine result shape works well for refactors like this when the facade already owns the public error contract and the engine only needs a strict subset of it.
+
+## Task - [cert-csr-ext-registry]
+
+- Added the new internal registry at `src/extension-registry.ts` with typed definitions for built-in certificate and CSR extensions, including OID, contexts, default criticality, encode/decode hooks, parse-assignment hooks, and derived-key-identifier metadata.
+- Exported the existing parse-side built-in extension decoders from `src/parse.ts` so the registry can own shared decode references without changing the current parse switch yet.
+- Added focused registry coverage in `test/extension-registry.test.ts`, including metadata checks, representative codec round-trips, derived subject key identifier checks, and CSR name-constraints round-tripping.
+- Closed two adjacent gaps while laying the foundation: CSR requested extensions now preserve `nameConstraints`, and policy-related parse integers now reject negative DER encodings through `decodeNonNegativeIntegerNumber()`.
+- Files changed: `src/extension-registry.ts`, `src/extensions.ts`, `src/parse.ts`, `src/asn1.ts`, `test/extension-registry.test.ts`, `test/internals.test.ts`, `test/malformed-der.test.ts`, `.opencode/state/pre-1-0-architecture-cleanup/prd.json`, `.opencode/state/pre-1-0-architecture-cleanup/progress.txt`
+- **Learnings:** if a registry is meant to become the source of truth, type erasure is a trap; keep definition lookups strongly typed from day one so the later rewire can consume them without casts.

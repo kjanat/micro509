@@ -14,6 +14,7 @@ import {
 import {
 	bitString,
 	explicitContext,
+	implicitPrimitiveContext,
 	integerFromNumber,
 	octetString,
 	readSequenceChildren,
@@ -442,6 +443,18 @@ describe('malformed DER corpus', () => {
 				messagePattern: /policyConstraints|SEQUENCE/i,
 			},
 			{
+				name: 'negative policyConstraints requireExplicitPolicy',
+				parse: () =>
+					parseCertificateDer(
+						replaceCertificateExtensionValue(
+							issuer.certificate.der,
+							OIDS.policyConstraints,
+							sequence([implicitPrimitiveContext(0, Uint8Array.of(0xff))]),
+						),
+					),
+				messagePattern: /policyConstraints requireExplicitPolicy|non-negative|SEQUENCE/i,
+			},
+			{
 				name: 'non-INTEGER inhibitAnyPolicy value',
 				parse: () =>
 					parseCertificateDer(
@@ -452,6 +465,18 @@ describe('malformed DER corpus', () => {
 						),
 					),
 				messagePattern: /inhibitAnyPolicy|INTEGER|SEQUENCE/i,
+			},
+			{
+				name: 'negative inhibitAnyPolicy value',
+				parse: () =>
+					parseCertificateDer(
+						replaceCertificateExtensionValue(
+							issuer.certificate.der,
+							OIDS.inhibitAnyPolicy,
+							tlv(0x02, Uint8Array.of(0xff)),
+						),
+					),
+				messagePattern: /inhibitAnyPolicy skipCerts|non-negative|SEQUENCE/i,
 			},
 		];
 

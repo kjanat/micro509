@@ -104,6 +104,20 @@ export function decodeIntegerNumber(bytes: Uint8Array): number {
 	return value;
 }
 
+export function decodeNonNegativeIntegerNumber(bytes: Uint8Array, label = 'INTEGER'): number {
+	const first = bytes[0];
+	if (first === undefined) {
+		throw new Error(`${label} is empty`);
+	}
+	if ((first & 0x80) !== 0) {
+		throw new Error(`${label} must be non-negative`);
+	}
+	if (bytes.length > 1 && first === 0 && ((bytes[1] ?? 0) & 0x80) === 0) {
+		throw new Error(`${label} must use minimal encoding`);
+	}
+	return decodeIntegerNumber(bytes);
+}
+
 export function hexToBytes(value: string): Uint8Array {
 	const normalized = value.length % 2 === 0 ? value : `0${value}`;
 	const out = new Uint8Array(normalized.length / 2);

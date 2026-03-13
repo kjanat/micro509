@@ -426,6 +426,15 @@ export function buildRequestedExtensions(
 			encodeExtendedKeyUsage(input.extendedKeyUsage),
 		);
 	}
+	if (input?.nameConstraints !== undefined) {
+		pushExtension(
+			extensions,
+			seen,
+			OIDS.nameConstraints,
+			encodeNameConstraints(input.nameConstraints),
+			true,
+		);
+	}
 	if (input?.certificatePolicies !== undefined && input.certificatePolicies.length > 0) {
 		pushExtension(
 			extensions,
@@ -813,7 +822,8 @@ function encodeIpAddress(input: string): Uint8Array {
 	return parseIpAddressToBytes(input);
 }
 
-function buildSubjectKeyIdentifier(subjectPublicKeyInfo: Uint8Array): Uint8Array {
+/** @internal Exported for the extension registry. */
+export function buildSubjectKeyIdentifier(subjectPublicKeyInfo: Uint8Array): Uint8Array {
 	const topLevel = readSequenceChildren(subjectPublicKeyInfo);
 	const subjectPublicKey = topLevel[1];
 	if (subjectPublicKey === undefined || subjectPublicKey.tag !== 0x03) {

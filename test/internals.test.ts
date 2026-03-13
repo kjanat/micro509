@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import {
 	decodeIntegerNumber,
+	decodeNonNegativeIntegerNumber,
 	decodeObjectIdentifier,
 	extractBitStringValue,
 	parseTime,
@@ -210,6 +211,15 @@ describe('asn1 decoding', () => {
 
 	it('decodeIntegerNumber throws on integers > 6 bytes', () => {
 		expect(() => decodeIntegerNumber(Uint8Array.of(1, 2, 3, 4, 5, 6, 7))).toThrow('too large');
+	});
+
+	it('decodeNonNegativeIntegerNumber rejects negative and non-minimal encodings', () => {
+		expect(() => decodeNonNegativeIntegerNumber(Uint8Array.of(0xff), 'test integer')).toThrow(
+			'non-negative',
+		);
+		expect(() => decodeNonNegativeIntegerNumber(Uint8Array.of(0x00, 0x01), 'test integer')).toThrow(
+			'minimal encoding',
+		);
 	});
 });
 

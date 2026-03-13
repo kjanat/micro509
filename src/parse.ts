@@ -2,6 +2,7 @@ import {
 	childrenOf,
 	decodeBoolean,
 	decodeIntegerNumber,
+	decodeNonNegativeIntegerNumber,
 	decodeObjectIdentifier,
 	decodeString,
 	extractBitStringValue,
@@ -170,6 +171,7 @@ export interface ParsedCertificateSigningRequest<
 	readonly keyUsage?: readonly KeyUsage[];
 	readonly extendedKeyUsage?: readonly ExtendedKeyUsage[];
 	readonly subjectAltNames?: readonly SubjectAltName[];
+	readonly nameConstraints?: NameConstraints<ParsedNameConstraintForm>;
 	readonly certificatePolicies?: CertificatePolicies;
 	readonly policyMappings?: PolicyMappings;
 	readonly policyConstraints?: PolicyConstraints;
@@ -348,6 +350,9 @@ export function parseCertificateSigningRequestDer<
 			: {}),
 		...(parsedExtensions.subjectAltNames !== undefined
 			? { subjectAltNames: parsedExtensions.subjectAltNames }
+			: {}),
+		...(parsedExtensions.nameConstraints !== undefined
+			? { nameConstraints: parsedExtensions.nameConstraints }
 			: {}),
 		...(parsedExtensions.certificatePolicies !== undefined
 			? { certificatePolicies: parsedExtensions.certificatePolicies }
@@ -675,7 +680,8 @@ function parseAlgorithmIdentifier(
 	return { oid };
 }
 
-function parseBasicConstraints(bytes: Uint8Array): BasicConstraints {
+/** @internal Exported for the extension registry. */
+export function parseBasicConstraints(bytes: Uint8Array): BasicConstraints {
 	const element = readElement(bytes);
 	const children = childrenOf(bytes, element);
 	let ca = false;
@@ -685,24 +691,27 @@ function parseBasicConstraints(bytes: Uint8Array): BasicConstraints {
 			ca = decodeBoolean(child.value);
 		}
 		if (child.tag === 0x02) {
-			pathLength = decodeIntegerNumber(child.value);
+			pathLength = decodeNonNegativeIntegerNumber(child.value, 'basicConstraints pathLength');
 		}
 	}
 	return pathLength !== undefined ? { ca, pathLength } : { ca };
 }
 
-function parseKeyUsage(bytes: Uint8Array): readonly KeyUsage[] {
+/** @internal Exported for the extension registry. */
+export function parseKeyUsage(bytes: Uint8Array): readonly KeyUsage[] {
 	return parseKeyUsageExtension(bytes);
 }
 
-function parseExtendedKeyUsage(bytes: Uint8Array): readonly ExtendedKeyUsage[] {
+/** @internal Exported for the extension registry. */
+export function parseExtendedKeyUsage(bytes: Uint8Array): readonly ExtendedKeyUsage[] {
 	const sequenceElement = requireElement(readElement(bytes), 'extendedKeyUsage sequence');
 	return childrenOf(bytes, sequenceElement).map((element) =>
 		parseExtendedKeyUsageOid(decodeObjectIdentifier(element.value)),
 	);
 }
 
-function parseCertificatePolicies(bytes: Uint8Array): CertificatePolicies {
+/** @internal Exported for the extension registry. */
+export function parseCertificatePolicies(bytes: Uint8Array): CertificatePolicies {
 	const sequenceElement = requireElement(readElement(bytes), 'certificatePolicies sequence');
 	const policyElements = childrenOf(bytes, sequenceElement);
 	if (policyElements.length === 0) {
@@ -819,11 +828,12 @@ function parsePolicyNoticeNumbers(source: Uint8Array, element: DerElement): read
 		throw new Error('noticeRef noticeNumbers must not be empty');
 	}
 	return noticeNumberElements.map((noticeNumberElement) =>
-		decodeIntegerNumber(noticeNumberElement.value),
+		decodeNonNegativeIntegerNumber(noticeNumberElement.value, 'noticeRef noticeNumber'),
 	);
 }
 
-function parsePolicyMappings(bytes: Uint8Array): PolicyMappings {
+/** @internal Exported for the extension registry. */
+export function parsePolicyMappings(bytes: Uint8Array): PolicyMappings {
 	const sequenceElement = requireElement(readElement(bytes), 'policyMappings sequence');
 	const mappingElements = childrenOf(bytes, sequenceElement);
 	if (mappingElements.length === 0) {
@@ -847,7 +857,8 @@ function parsePolicyMappings(bytes: Uint8Array): PolicyMappings {
 	});
 }
 
-function parsePolicyConstraints(bytes: Uint8Array): PolicyConstraints {
+/** @internal Exported for the extension registry. */
+export function parsePolicyConstraints(bytes: Uint8Array): PolicyConstraints {
 	const sequenceElement = requireElement(readElement(bytes), 'policyConstraints sequence');
 	let requireExplicitPolicy: number | undefined;
 	let inhibitPolicyMapping: number | undefined;
@@ -856,14 +867,20 @@ function parsePolicyConstraints(bytes: Uint8Array): PolicyConstraints {
 			if (requireExplicitPolicy !== undefined) {
 				throw new Error('policyConstraints must not repeat requireExplicitPolicy');
 			}
-			requireExplicitPolicy = decodeIntegerNumber(child.value);
+			requireExplicitPolicy = decodeNonNegativeIntegerNumber(
+				child.value,
+				'policyConstraints requireExplicitPolicy',
+			);
 			continue;
 		}
 		if (child.tag === 0x81) {
 			if (inhibitPolicyMapping !== undefined) {
 				throw new Error('policyConstraints must not repeat inhibitPolicyMapping');
 			}
-			inhibitPolicyMapping = decodeIntegerNumber(child.value);
+			inhibitPolicyMapping = decodeNonNegativeIntegerNumber(
+				child.value,
+				'policyConstraints inhibitPolicyMapping',
+			);
 			continue;
 		}
 		throw new Error(`Unsupported policyConstraints field tag: ${child.tag}`);
@@ -877,20 +894,25 @@ function parsePolicyConstraints(bytes: Uint8Array): PolicyConstraints {
 	};
 }
 
-function parseInhibitAnyPolicy(bytes: Uint8Array): InhibitAnyPolicy {
+/** @internal Exported for the extension registry. */
+export function parseInhibitAnyPolicy(bytes: Uint8Array): InhibitAnyPolicy {
 	const integerElement = requireElement(readElement(bytes), 'inhibitAnyPolicy integer');
 	if (integerElement.tag !== 0x02) {
 		throw new Error('inhibitAnyPolicy must be an INTEGER');
 	}
-	return { skipCerts: decodeIntegerNumber(integerElement.value) };
+	return {
+		skipCerts: decodeNonNegativeIntegerNumber(integerElement.value, 'inhibitAnyPolicy skipCerts'),
+	};
 }
 
-function parseSubjectAltNames(bytes: Uint8Array): readonly SubjectAltName[] {
+/** @internal Exported for the extension registry. */
+export function parseSubjectAltNames(bytes: Uint8Array): readonly SubjectAltName[] {
 	const sequenceElement = requireElement(readElement(bytes), 'subjectAltName sequence');
 	return childrenOf(bytes, sequenceElement).map((element) => parseGeneralName(bytes, element));
 }
 
-function parseAuthorityInfoAccess(bytes: Uint8Array): readonly AuthorityInformationAccess[] {
+/** @internal Exported for the extension registry. */
+export function parseAuthorityInfoAccess(bytes: Uint8Array): readonly AuthorityInformationAccess[] {
 	const sequenceElement = requireElement(readElement(bytes), 'authorityInfoAccess sequence');
 	return childrenOf(bytes, sequenceElement).map((element) => {
 		const children = childrenOf(bytes, element);
@@ -906,7 +928,8 @@ function parseAuthorityInfoAccess(bytes: Uint8Array): readonly AuthorityInformat
 	});
 }
 
-function parseCrlDistributionPoints(bytes: Uint8Array): readonly ParsedDistributionPoint[] {
+/** @internal Exported for the extension registry. */
+export function parseCrlDistributionPoints(bytes: Uint8Array): readonly ParsedDistributionPoint[] {
 	const sequenceElement = requireElement(readElement(bytes), 'cRLDistributionPoints sequence');
 	const points: ParsedDistributionPoint[] = [];
 	for (const distributionPoint of childrenOf(bytes, sequenceElement)) {
@@ -1161,7 +1184,8 @@ function decodeBmpString(bytes: Uint8Array): string {
 	return value;
 }
 
-function parseAuthorityKeyIdentifier(bytes: Uint8Array): string | undefined {
+/** @internal Exported for the extension registry. */
+export function parseAuthorityKeyIdentifier(bytes: Uint8Array): string | undefined {
 	const sequenceElement = requireElement(readElement(bytes), 'authorityKeyIdentifier sequence');
 	for (const child of childrenOf(bytes, sequenceElement)) {
 		if (child.tag === 0x80) {
