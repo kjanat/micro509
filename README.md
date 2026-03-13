@@ -64,9 +64,17 @@ Use subpath imports when you want a narrower surface or tighter tree-shaking:
 import { verifyCertificateChain } from 'micro509/verify';
 import { matchServiceIdentity } from 'micro509/identity';
 import { getOcspResponderCandidates } from 'micro509/revocation';
+import type { PolicyValidationInput } from 'micro509/policy';
 ```
 
-Available public subpaths come from the build config and ship as stable package exports: `micro509/certificate`, `micro509/crl`, `micro509/csr`, `micro509/extensions`, `micro509/identity`, `micro509/keys`, `micro509/name`, `micro509/ocsp`, `micro509/parse`, `micro509/pem`, `micro509/pfx`, `micro509/pkcs12-mac`, `micro509/pkcs7`, `micro509/revocation`, `micro509/validation`, and `micro509/verify`.
+Available public subpaths come from the build config and ship as stable package exports: `micro509/certificate`, `micro509/crl`, `micro509/csr`, `micro509/extensions`, `micro509/identity`, `micro509/keys`, `micro509/name`, `micro509/name-constraints`, `micro509/ocsp`, `micro509/parse`, `micro509/pem`, `micro509/pfx`, `micro509/pkcs12-mac`, `micro509/pkcs7`, `micro509/policy`, `micro509/result`, `micro509/revocation`, and `micro509/verify`.
+
+## Result model
+
+- validation and verification APIs return `Result`-style objects: `{ ok: true, value }` or `{ ok: false, error }`
+- failure results still mirror `code`, `message`, and domain fields at the top level for easier migration, but `error` is the canonical payload
+- business outcomes like revocation `good` / `revoked` / `unknown` now live under `value.status`
+- raw certificate / CSR / CRL / OCSP parse entrypoints still throw on malformed DER or PEM; container helpers like `parsePfx*()` and `parsePkcs7*()` return typed failures instead
 
 ## Self-signed cert
 
@@ -292,7 +300,10 @@ import { createPkcs7CertBagPem, parsePkcs7CertBagPem } from 'micro509';
 
 const bag = createPkcs7CertBagPem([leaf.pem, root.pem]);
 const certs = parsePkcs7CertBagPem(bag.pem);
-console.log(certs.map((cert) => cert.subject.values.commonName));
+
+if (certs.ok) {
+  console.log(certs.value.map((cert) => cert.subject.values.commonName));
+}
 ```
 
 ## PFX
@@ -309,8 +320,11 @@ const pfx = await createPfx({
 });
 
 const parsedPfx = await parsePfxPem(pfx.pem);
-console.log(parsedPfx.certificates.length);
-console.log(parsedPfx.bags[0]?.attributes.friendlyName);
+
+if (parsedPfx.ok) {
+  console.log(parsedPfx.value.certificates.length);
+  console.log(parsedPfx.value.bags[0]?.attributes.friendlyName);
+}
 
 const encryptedPfx = await createPfx({
   certificates: [{ certificate: leaf.pem }],
@@ -323,6 +337,10 @@ const parsedEncryptedPfx = await parsePfxPem(encryptedPfx.pem, {
   password: 'secret123',
   macPassword: 'secret123',
 });
+
+if (!parsedEncryptedPfx.ok) {
+  console.log(parsedEncryptedPfx.error.code);
+}
 ```
 
 ## CRL
@@ -399,8 +417,11 @@ console.log(
 import { parsePkcs7SignedDataPem } from 'micro509';
 
 const signed = parsePkcs7SignedDataPem(pkcs7Pem);
-console.log(signed.certificates.length);
-console.log(signed.signerInfos.length);
+
+if (signed.ok) {
+  console.log(signed.value.certificates.length);
+  console.log(signed.value.signerInfos.length);
+}
 ```
 
 ## Legacy private key PEM
@@ -428,7 +449,11 @@ const result = await verifyCertificateChain({
   intermediates: [intermediate.pem],
   roots: [root.pem],
   purpose: 'serverAuth',
-  dnsName: 'api.local',
+  serviceIdentity: { type: 'dns', value: 'api.local' },
+  policy: { initialPolicySet: ['1.2.3.4'] },
+  nameConstraints: {
+    permittedSubtrees: [{ base: { type: 'dns', value: 'api.local' } }],
+  },
 });
 
 if (result.ok) {
@@ -436,8 +461,8 @@ if (result.ok) {
   console.log(result.value.root.subject.values.commonName);
   console.log(result.value.leaf.authorityInfoAccess);
 } else {
-  console.log(result.code);
-  console.log(result.details);
+  console.log(result.error.code);
+  console.log(result.error.details);
 }
 ```
 

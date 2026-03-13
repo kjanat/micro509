@@ -24,6 +24,7 @@ WE HAVE NO DOWNSTREAM USERS. PRERELEASE PRIVATE STATUS
 - During API migration, compatibility is safest when nested replacements merge field-by-field and result wrappers mirror legacy top-level error fields while still exposing canonical `error` payloads.
 - For revocation APIs, `unknown` is still a status outcome, not a transport or parse failure; move it into `value.status` and leave malformed input at the parse boundary.
 - Container-format result migrations need exception traps at every PEM decoding edge; otherwise “result-returning” APIs still leak thrown base64/algorithm errors on malformed input.
+- Public subpath exports should point at actual owning domain modules, not transitional shims; if a shim still exists, keep it internal.
 
 ---
 <!-- Task logs below - APPEND ONLY -->
@@ -112,3 +113,12 @@ WE HAVE NO DOWNSTREAM USERS. PRERELEASE PRIVATE STATUS
 - Updated barrel exports in `src/index.ts` and added focused test assertions for the new `error.code` payloads and malformed PEM/unsupported-algorithm flows.
 - Files changed: `src/pfx.ts`, `src/pkcs7.ts`, `src/index.ts`, `test/pfx.test.ts`, `test/pkcs7.test.ts`, `.opencode/state/pre-1-0-architecture-cleanup/prd.json`, `.opencode/state/pre-1-0-architecture-cleanup/progress.txt`
 - **Learnings:** result-shape migrations are incomplete unless every thrown decode/verify edge in the public function body is wrapped; helper-level unions alone do not make the API reliably result-returning.
+
+## Task - [finalize-exports-regression]
+
+- Updated `tsdown.config.ts` so the public build/export surface now includes `policy`, `name-constraints`, and `result`, and no longer exports the transitional `validation` shim.
+- Regenerated package exports through the build so `package.json` now matches the real public module surface.
+- Updated `README.md` examples and guidance for the new result model, nested verify inputs, and current public subpath list, then reconciled `specs/pre-1-0-architecture-cleanup.md` with the final internal-shim status of `validation.ts`.
+- Re-ran the full validation matrix plus the package build after the export/docs updates.
+- Files changed: `tsdown.config.ts`, `package.json`, `README.md`, `specs/pre-1-0-architecture-cleanup.md`, `.opencode/state/pre-1-0-architecture-cleanup/prd.json`, `.opencode/state/pre-1-0-architecture-cleanup/progress.txt`
+- **Learnings:** export cleanup is not done until build config, generated package exports, and human docs all say the same thing; otherwise the library has multiple conflicting “public surfaces.”

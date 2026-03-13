@@ -108,7 +108,7 @@
 				"migrate-pfx-pkcs7-results"
 			],
 			"priority": "polish",
-			"passes": false
+			"passes": true
 		}
 	]
 }

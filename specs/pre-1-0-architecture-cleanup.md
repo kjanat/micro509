@@ -17,7 +17,7 @@
 ## Discovery Summary
 
 - `src/verify.ts` already contains two mostly self-contained subsystems: policy processing and name-constraint validation.
-- `src/validation.ts` is a temporary shared-type bucket, not a strong domain boundary.
+- `src/validation.ts` is a temporary internal compatibility shim, not a strong domain boundary.
 - The best near-term extension registry scope is certificate + CSR extensions only; CRL and OCSP extension handling should stay bespoke in this cleanup.
 - Core parse APIs should keep throwing on malformed input, but malformed-input rejection should become stricter and centralized.
 - Public entrypoints can stay easy to discover even if internal implementation moves into nested domain folders.
@@ -27,7 +27,7 @@
 Make one deliberate pre-1.0 clean break:
 
 1. Introduce a shared public result model.
-2. Re-home public types to domain modules and remove `src/validation.ts`.
+2. Re-home public types to domain modules and remove `src/validation.ts` from the public export surface.
 3. Harden the DER spine first so every later refactor sits on stricter parse primitives.
 4. Extract the policy and name-constraints engines out of `verify.ts`.
 5. Replace the built-in cert/CSR extension switch + duplicated builders with a cert/CSR extension registry.
@@ -37,18 +37,18 @@ This is intentionally broader than a pure internal refactor. Pre-1.0 is the righ
 
 ## Scope And Deliverables
 
-| Deliverable                                                                   | Effort | Depends On     |
-| ----------------------------------------------------------------------------- | ------ | -------------- |
-| D1. Add shared result and error primitives                                    | M      | -              |
-| D2. Re-home public types to domain modules and remove `validation.ts`         | M      | D1             |
-| D3. Harden and centralize the DER spine                                       | L      | -              |
-| D4. Extract the policy engine from `verify.ts`                                | M      | D2             |
-| D5. Extract the name-constraints engine from `verify.ts`                      | L      | D2, D3         |
-| D6. Add a cert/CSR extension registry                                         | L      | D3             |
-| D7. Rewire cert/CSR parse and builder paths to use the registry               | L      | D6             |
-| D8. Redesign verify + identity public inputs/results around domain boundaries | L      | D1, D2, D4, D5 |
-| D9. Redesign CRL, OCSP, revocation, PFX, and PKCS7 public result surfaces     | XL     | D1, D3         |
-| D10. Update exports, tests, and docs for the clean break                      | M      | D7, D8, D9     |
+| Deliverable                                                                               | Effort | Depends On     |
+| ----------------------------------------------------------------------------------------- | ------ | -------------- |
+| D1. Add shared result and error primitives                                                | M      | -              |
+| D2. Re-home public types to domain modules and demote `validation.ts` to an internal shim | M      | D1             |
+| D3. Harden and centralize the DER spine                                                   | L      | -              |
+| D4. Extract the policy engine from `verify.ts`                                            | M      | D2             |
+| D5. Extract the name-constraints engine from `verify.ts`                                  | L      | D2, D3         |
+| D6. Add a cert/CSR extension registry                                                     | L      | D3             |
+| D7. Rewire cert/CSR parse and builder paths to use the registry                           | L      | D6             |
+| D8. Redesign verify + identity public inputs/results around domain boundaries             | L      | D1, D2, D4, D5 |
+| D9. Redesign CRL, OCSP, revocation, PFX, and PKCS7 public result surfaces                 | XL     | D1, D3         |
+| D10. Update exports, tests, and docs for the clean break                                  | M      | D7, D8, D9     |
 
 ## Non-Goals
 
@@ -217,7 +217,7 @@ The DER spine must provide:
 
 1. Add `src/result.ts` and `src/core/result.ts` primitives.
 2. Re-home public types to `src/policy.ts`, `src/name-constraints.ts`, `src/identity.ts`, and `src/revocation.ts`.
-3. Remove `src/validation.ts` after import sites are updated.
+3. Remove `src/validation.ts` from public exports after import sites are updated; keep only as a temporary internal shim if needed.
 4. Harden the DER spine and push all raw-DER entrypoints through stricter top-level checks.
 
 ### Phase 2 - Verify Decomposition
@@ -243,7 +243,7 @@ The DER spine must provide:
 - `src/verify.ts` no longer contains name-form matcher or directoryName subtree engine logic.
 - `src/parse.ts` no longer uses a large built-in extension OID switch for certificate/CSR extension decoding.
 - built-in certificate and CSR extension encoding/decoding share one registry definition source.
-- `src/validation.ts` is removed and every exported type has a domain-owned home.
+- `src/validation.ts` is no longer a public export surface and every exported type has a domain-owned home.
 - all public non-parse result-returning APIs use `Result<T, E>`.
 - malformed top-level DER with trailing bytes, overflowed lengths, or excessive nesting is rejected deterministically.
 - existing behavioral suites pass after the intentional public API updates are applied to tests.
@@ -262,13 +262,13 @@ The DER spine must provide:
 
 ## Risks & Mitigations
 
-| Risk                                                                                           | Likelihood | Impact | Mitigation                                                                                  |
-| ---------------------------------------------------------------------------------------------- | ---------- | ------ | ------------------------------------------------------------------------------------------- |
-| Result harmonization touches too many public tests at once                                     | High       | High   | land shared primitives first, then migrate module families in separate steps                |
-| DER hardening rejects inputs old code silently accepted                                        | High       | Medium | treat stricter rejection as intentional, add explicit malformed regressions                 |
-| Extension registry accidentally conflates builder policy, parser support, and verifier support | Medium     | High   | keep verifier allowlists separate and encode context metadata explicitly                    |
-| Removing `validation.ts` creates circular imports                                              | Medium     | Medium | keep public types thin and engines internal; make top-level modules the only public facades |
-| Policy/name-constraint extraction causes hidden behavior drift                                 | Medium     | High   | preserve existing tests first, then add direct engine tests before public API reshaping     |
+| Risk                                                                                           | Likelihood | Impact | Mitigation                                                                                        |
+| ---------------------------------------------------------------------------------------------- | ---------- | ------ | ------------------------------------------------------------------------------------------------- |
+| Result harmonization touches too many public tests at once                                     | High       | High   | land shared primitives first, then migrate module families in separate steps                      |
+| DER hardening rejects inputs old code silently accepted                                        | High       | Medium | treat stricter rejection as intentional, add explicit malformed regressions                       |
+| Extension registry accidentally conflates builder policy, parser support, and verifier support | Medium     | High   | keep verifier allowlists separate and encode context metadata explicitly                          |
+| Fully deleting `validation.ts` too early creates circular-import risk                          | Medium     | Medium | keep public types thin and engines internal; retain a non-exported shim until deletion is trivial |
+| Policy/name-constraint extraction causes hidden behavior drift                                 | Medium     | High   | preserve existing tests first, then add direct engine tests before public API reshaping           |
 
 ## Trade-offs Made
 
@@ -291,7 +291,7 @@ The DER spine must provide:
 
 - each deliverable should land as its own commit or small series.
 - if the public clean break becomes too noisy, keep the new internal engines and shared result primitives, then postpone the final API churn to a later branch before release.
-- do not partially ship both `validation.ts` and new domain modules long-term; if rollback is needed, revert the removal cleanly instead of duplicating source-of-truth types.
+- do not keep `validation.ts` public long-term; if rollback is needed, revert the export-surface change cleanly instead of duplicating source-of-truth types.
 
 ## Handoff Summary
 
