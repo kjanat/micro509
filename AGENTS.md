@@ -1,6 +1,6 @@
 # PROJECT KNOWLEDGE BASE
 
-**Generated:** 2026-03-12 **Commit:** 2607953 **Branch:** full-standards-compliance
+**Generated:** 2026-03-13 **Commit:** 20bb7c6 **Branch:** pre-1-0-architecture-cleanup
 
 ## OVERVIEW
 
