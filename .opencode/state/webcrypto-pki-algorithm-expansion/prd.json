@@ -35,7 +35,7 @@
 			"description": "Teach verification flows to accept supported RSA-PSS artifacts. Done when:\n- cert chain verification accepts RSA-PSS-signed chains for the shipped parameter profile\n- CSR verification accepts RSA-PSS-signed requests for the same profile\n- RSA key import for verification chooses `RSA-PSS` vs `RSASSA-PKCS1-v1_5` by intended scheme\n- unsupported params fail with typed verification errors, not generic crashes",
 			"depends": ["add-rsa-pss-param-codec"],
 			"priority": "integration",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "wire-rsa-pss-builders",

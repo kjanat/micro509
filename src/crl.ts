@@ -416,6 +416,7 @@ export async function verifyCertificateRevocationList(
 			: parseIssuerCertificateDer(new Uint8Array(issuerCertificate));
 	const verified = await verifySignedData(
 		parsedCrl.signatureAlgorithmOid,
+		undefined,
 		issuer.publicKeyAlgorithmOid,
 		issuer.publicKeyParametersOid,
 		issuer.subjectPublicKeyInfoDer,
@@ -459,6 +460,7 @@ export async function validateCertificateRevocationList(
 	}
 	const verified = await verifySignedData(
 		parsedCrl.signatureAlgorithmOid,
+		undefined,
 		issuer.publicKeyAlgorithmOid,
 		issuer.publicKeyParametersOid,
 		issuer.subjectPublicKeyInfoDer,

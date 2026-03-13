@@ -263,15 +263,26 @@ describe('sig-verify', () => {
 	});
 
 	it('getVerifySignatureConfig throws for unknown signature algorithm', () => {
-		expect(() => getVerifySignatureConfig('1.2.3.4.999', OIDS.rsaEncryption, undefined)).toThrow(
-			'Unsupported signature algorithm',
-		);
+		expect(() =>
+			getVerifySignatureConfig('1.2.3.4.999', undefined, OIDS.rsaEncryption, undefined),
+		).toThrow('Unsupported signature algorithm');
 	});
 
 	it('getVerifySignatureConfig throws for Ed25519 sig with non-Ed25519 key', () => {
-		expect(() => getVerifySignatureConfig(OIDS.ed25519, OIDS.rsaEncryption, undefined)).toThrow(
-			'Ed25519',
+		expect(() =>
+			getVerifySignatureConfig(OIDS.ed25519, undefined, OIDS.rsaEncryption, undefined),
+		).toThrow('Ed25519');
+	});
+
+	it('getVerifySignatureConfig returns RSA-PSS verify config for shipped parameters', () => {
+		const result = getVerifySignatureConfig(
+			OIDS.rsassaPss,
+			encodeRsaPssParameters(rsaPssParametersForHash('SHA-384')),
+			OIDS.rsaEncryption,
+			undefined,
 		);
+		expect(result.importAlgorithm).toEqual({ kind: 'rsa', hash: 'SHA-384', scheme: 'pss' });
+		expect(result.verifyParams).toEqual({ name: 'RSA-PSS', saltLength: 48 });
 	});
 
 	it('rawEcdsaSignatureToDer throws on wrong length', () => {
@@ -523,7 +534,12 @@ describe('signing.ts edge cases', () => {
 	});
 
 	it('getVerifySignatureConfig returns correct config for ECDSA P-521', () => {
-		const result = getVerifySignatureConfig(OIDS.ecdsaWithSHA512, OIDS.ecPublicKey, OIDS.secp521r1);
+		const result = getVerifySignatureConfig(
+			OIDS.ecdsaWithSHA512,
+			undefined,
+			OIDS.ecPublicKey,
+			OIDS.secp521r1,
+		);
 		expect(result.importAlgorithm).toEqual({ kind: 'ecdsa', namedCurve: 'P-521' });
 		expect(result.verifyParams).toEqual({ name: 'ECDSA', hash: 'SHA-512' });
 		expect(result.ecdsaRawSignatureBytes).toBe(132);

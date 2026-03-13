@@ -2,7 +2,7 @@ import { toHex } from './asn1.ts';
 import type { ParsedCertificate } from './parse.ts';
 import { parseCertificateDer } from './parse.ts';
 import { splitPemBlocks } from './pem.ts';
-import { verifySignedData } from './sig-verify.ts';
+import { type VerifySignedDataResult, verifySignedDataDetailed } from './sig-verify.ts';
 import type {
 	CertificateSource,
 	TrustAnchor,
@@ -15,6 +15,11 @@ export interface InternalBuildResult {
 	readonly chain: readonly ParsedCertificate[];
 	readonly foundTrustedRoot: boolean;
 	readonly missingIssuerAt?: number;
+	readonly failure?: VerifyChainFailure;
+}
+
+interface TrustAnchorMatchResult {
+	readonly matched: boolean;
 	readonly failure?: VerifyChainFailure;
 }
 
@@ -86,9 +91,10 @@ export function loadSingleCertificate(source: CertificateSource): ParsedCertific
 export async function verifyCertificateSignature(
 	certificate: ParsedCertificate,
 	issuer: ParsedCertificate,
-): Promise<boolean> {
-	return verifySignedData(
+): Promise<VerifySignedDataResult> {
+	return verifySignedDataDetailed(
 		certificate.signatureAlgorithmOid,
+		certificate.signatureAlgorithmParametersDer,
 		issuer.publicKeyAlgorithmOid,
 		issuer.publicKeyParametersOid,
 		issuer.subjectPublicKeyInfoDer,
@@ -168,8 +174,11 @@ export async function buildChainInternal(
 		if (rootFingerprints.has(fingerprint(current))) {
 			return path;
 		}
-		const matchedAnchor = await matchTrustAnchor(current, anchorIndex);
-		if (matchedAnchor) {
+		const matchedAnchor = await matchTrustAnchor(current, anchorIndex, callbacks, path.length - 1);
+		if (matchedAnchor.failure !== undefined) {
+			recordFailure(matchedAnchor.failure, path);
+		}
+		if (matchedAnchor.matched) {
 			return path;
 		}
 		if (path.length > maxDepth) {
@@ -285,7 +294,24 @@ export async function buildChainInternal(
 				);
 				continue;
 			}
-			if (!(await verifyCertificateSignature(current, issuer))) {
+			const signatureResult = await verifyCertificateSignature(current, issuer);
+			if (!signatureResult.ok) {
+				recordFailure(
+					callbacks.failure(
+						signatureResult.code,
+						signatureResult.reason,
+						path.length - 1,
+						callbacks.detail({
+							subjectCommonName: current.subject.values.commonName,
+							issuerCommonName: issuer.subject.values.commonName,
+							actual: signatureResult.reason,
+						}),
+					),
+					path,
+				);
+				continue;
+			}
+			if (!signatureResult.valid) {
 				recordFailure(
 					callbacks.failure(
 						'signature_invalid',
@@ -389,10 +415,12 @@ function isIssuerOf(issuer: ParsedCertificate, child: ParsedCertificate): boolea
 async function matchTrustAnchor(
 	certificate: ParsedCertificate,
 	anchorIndex: ReadonlyMap<string, readonly TrustAnchor[]>,
-): Promise<boolean> {
+	callbacks: VerifyPathCallbacks,
+	index: number,
+): Promise<TrustAnchorMatchResult> {
 	const anchors = anchorIndex.get(certificate.issuer.derHex);
 	if (anchors === undefined) {
-		return false;
+		return { matched: false };
 	}
 	for (const anchor of anchors) {
 		if (
@@ -402,19 +430,34 @@ async function matchTrustAnchor(
 		) {
 			continue;
 		}
-		const verified = await verifySignedData(
+		const verified = await verifySignedDataDetailed(
 			certificate.signatureAlgorithmOid,
+			certificate.signatureAlgorithmParametersDer,
 			anchor.publicKeyAlgorithmOid,
 			anchor.publicKeyParametersOid,
 			anchor.subjectPublicKeyInfoDer,
 			certificate.signatureValue,
 			certificate.tbsCertificateDer,
 		);
-		if (verified) {
-			return true;
+		if (!verified.ok) {
+			return {
+				matched: false,
+				failure: callbacks.failure(
+					verified.code,
+					verified.reason,
+					index,
+					callbacks.detail({
+						subjectCommonName: certificate.subject.values.commonName,
+						actual: verified.reason,
+					}),
+				),
+			};
+		}
+		if (verified.valid) {
+			return { matched: true };
 		}
 	}
-	return false;
+	return { matched: false };
 }
 
 function fingerprint(certificate: ParsedCertificate): string {

@@ -1,6 +1,13 @@
 import { createHash } from 'node:crypto';
 import type { parseCertificatePem } from '#micro509';
-import { createCertificate, createSelfSignedCertificate, generateKeyPair } from '#micro509';
+import {
+	createCertificate,
+	createSelfSignedCertificate,
+	exportPkcs8Der,
+	generateKeyPair,
+	importPkcs8Der,
+} from '#micro509';
+import { toArrayBuffer } from '#micro509/asn1.ts';
 import {
 	bitString,
 	bool,
@@ -95,11 +102,108 @@ export interface RevokedEntryCertificateIssuerOverride {
 	readonly names: readonly GeneralName[];
 }
 
-function sliceElement(
+export function sliceElement(
 	source: Uint8Array,
 	element: { readonly start: number; readonly end: number; readonly headerLength: number },
 ): Uint8Array {
 	return source.slice(element.start - element.headerLength, element.end);
+}
+
+export async function importRsaPrivateKeyWithScheme(
+	privateKey: CryptoKey,
+	hash: 'SHA-256' | 'SHA-384' | 'SHA-512',
+	scheme: 'pkcs1-v1_5' | 'pss',
+): Promise<CryptoKey> {
+	return importPkcs8Der(await exportPkcs8Der(privateKey), { kind: 'rsa', hash, scheme });
+}
+
+export async function rewriteCertificateSignatureAsRsaPss(
+	certificateDer: Uint8Array,
+	signerPrivateKey: CryptoKey,
+	parameters: TestRsaPssParameters,
+): Promise<Uint8Array> {
+	const topLevel = readSequenceChildren(certificateDer);
+	const tbsCertificate = topLevel[0];
+	if (tbsCertificate === undefined) {
+		throw new Error('Missing TBSCertificate');
+	}
+	const tbsDer = sliceElement(certificateDer, tbsCertificate);
+	const tbsChildren = readSequenceChildren(tbsDer);
+	const signatureIndex = tbsChildren[0]?.tag === 0xa0 ? 2 : 1;
+	const signatureAlgorithm = encodeRsaPssAlgorithmIdentifier(parameters);
+	const rebuiltTbs = sequence(
+		tbsChildren.map((child, childIndex) =>
+			childIndex === signatureIndex ? signatureAlgorithm : sliceElement(tbsDer, child),
+		),
+	);
+	const signature = new Uint8Array(
+		await globalThis.crypto.subtle.sign(
+			{ name: 'RSA-PSS', saltLength: parameters.saltLength },
+			signerPrivateKey,
+			toArrayBuffer(rebuiltTbs),
+		),
+	);
+	return sequence([rebuiltTbs, signatureAlgorithm, bitString(signature)]);
+}
+
+export async function rewriteCsrSignatureAsRsaPss(
+	csrDer: Uint8Array,
+	signerPrivateKey: CryptoKey,
+	parameters: TestRsaPssParameters,
+): Promise<Uint8Array> {
+	const topLevel = readSequenceChildren(csrDer);
+	const certificationRequestInfo = topLevel[0];
+	if (certificationRequestInfo === undefined) {
+		throw new Error('Missing CertificationRequestInfo');
+	}
+	const certificationRequestInfoDer = sliceElement(csrDer, certificationRequestInfo);
+	const signatureAlgorithm = encodeRsaPssAlgorithmIdentifier(parameters);
+	const signature = new Uint8Array(
+		await globalThis.crypto.subtle.sign(
+			{ name: 'RSA-PSS', saltLength: parameters.saltLength },
+			signerPrivateKey,
+			toArrayBuffer(certificationRequestInfoDer),
+		),
+	);
+	return sequence([certificationRequestInfoDer, signatureAlgorithm, bitString(signature)]);
+}
+
+export interface TestRsaPssParameters {
+	readonly hash: 'SHA-256' | 'SHA-384' | 'SHA-512';
+	readonly mgfHash: 'SHA-256' | 'SHA-384' | 'SHA-512';
+	readonly saltLength: number;
+	readonly trailerField: number;
+}
+
+function encodeRsaPssAlgorithmIdentifier(parameters: TestRsaPssParameters): Uint8Array {
+	const hashOid = hashNameToOid(parameters.hash);
+	const mgfHashOid = hashNameToOid(parameters.mgfHash);
+	return sequence([
+		objectIdentifier(OIDS.rsassaPss),
+		sequence([
+			explicitContext(0, sequence([objectIdentifier(hashOid), nullValue()])),
+			explicitContext(
+				1,
+				sequence([
+					objectIdentifier(OIDS.mgf1),
+					sequence([objectIdentifier(mgfHashOid), nullValue()]),
+				]),
+			),
+			explicitContext(2, integerFromNumber(parameters.saltLength)),
+			explicitContext(3, integerFromNumber(parameters.trailerField)),
+		]),
+	]);
+}
+
+function hashNameToOid(hash: TestRsaPssParameters['hash']): string {
+	switch (hash) {
+		case 'SHA-256':
+			return OIDS.sha256;
+		case 'SHA-384':
+			return OIDS.sha384;
+		case 'SHA-512':
+			return OIDS.sha512;
+	}
 }
 
 function encodeExtension(oid: string, value: Uint8Array, critical = false): Uint8Array {

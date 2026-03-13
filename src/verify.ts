@@ -23,7 +23,7 @@ import type {
 	Micro509Error,
 } from './result.ts';
 import { errorResult, indexedErrorResult, indexedMicro509Error, micro509Error } from './result.ts';
-import { verifySignedData } from './sig-verify.ts';
+import { verifySignedDataDetailed } from './sig-verify.ts';
 import {
 	buildChainInternal,
 	countCaCertificatesBelowParsed,
@@ -490,8 +490,20 @@ async function validateCandidatePathRaw(
 		if (issuer === undefined) {
 			return failure('issuer_not_found', 'issuer missing', index);
 		}
-		const signatureValid = await verifyCertificateSignature(current, issuer);
-		if (!signatureValid) {
+		const signatureResult = await verifyCertificateSignature(current, issuer);
+		if (!signatureResult.ok) {
+			return failure(
+				signatureResult.code,
+				signatureResult.reason,
+				index,
+				detail({
+					subjectCommonName: current.subject.values.commonName,
+					issuerCommonName: issuer.subject.values.commonName,
+					actual: signatureResult.reason,
+				}),
+			);
+		}
+		if (!signatureResult.valid) {
 			return failure(
 				'signature_invalid',
 				'certificate signature does not verify',
@@ -664,15 +676,26 @@ export async function verifyCertificateSigningRequest(
 		typeof input === 'string'
 			? parseCertificateSigningRequestPem(input)
 			: parseCertificateSigningRequestDer(new Uint8Array(input));
-	const signatureValid = await verifySignedData(
+	const signatureResult = await verifySignedDataDetailed(
 		parsed.signatureAlgorithmOid,
+		parsed.signatureAlgorithmParametersDer,
 		parsed.publicKeyAlgorithmOid,
 		parsed.publicKeyParametersOid,
 		parsed.subjectPublicKeyInfoDer,
 		parsed.signatureValue,
 		parsed.certificationRequestInfoDer,
 	);
-	if (!signatureValid) {
+	if (!signatureResult.ok) {
+		return verifyRequestFailureResult(
+			signatureResult.code,
+			signatureResult.reason,
+			detail({
+				subjectCommonName: parsed.subject.values.commonName,
+				actual: signatureResult.reason,
+			}),
+		);
+	}
+	if (!signatureResult.valid) {
 		return verifyRequestFailureResult(
 			'signature_invalid',
 			'certificate request signature does not verify',

@@ -290,6 +290,7 @@ export async function verifyPkcs7SignedData(
 		try {
 			verified = await verifySignedData(
 				signerInfo.signatureAlgorithmOid,
+				undefined,
 				signer.publicKeyAlgorithmOid,
 				signer.publicKeyParametersOid,
 				signer.subjectPublicKeyInfoDer,
@@ -574,6 +575,7 @@ async function verifySignedAttrs(
 	try {
 		verified = await verifySignedData(
 			signerInfo.signatureAlgorithmOid,
+			undefined,
 			signer.publicKeyAlgorithmOid,
 			signer.publicKeyParametersOid,
 			signer.subjectPublicKeyInfoDer,

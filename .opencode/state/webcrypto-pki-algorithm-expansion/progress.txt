@@ -12,6 +12,7 @@ Started: 2026-03-13
 - When widening algorithm surface, update all four touchpoints together: `src/oids.ts` for identifiers, `src/keys.ts` for public WebCrypto-facing inputs, `src/signing.ts` for builder-side mapping, and `src/sig-verify.ts` for verifier-side mapping.
 - Parse-boundary compatibility additions should layer on optional raw DER fields, not replace existing convenience fields; keep decoded OIDs stable and expose `*ParametersDer` beside them.
 - Structured algorithm helpers should return canonical supported profiles and split failures into typed `unsupported_*` vs `malformed_*` results; raw `AlgorithmIdentifier` DER stays the shared parse boundary.
+- Verification adapters should return structured parameter-support failures from low-level signature config code, then let cert/CSR/path validators translate them into domain error results with the right certificate index.
 
 ---
 
@@ -32,3 +33,9 @@ Started: 2026-03-13
 - Added an internal `src/rsa-pss.ts` codec that parses and encodes the shipped RSA-PSS SHA-256/384/512 + MGF1 parameter profiles and distinguishes unsupported inputs from malformed DER.
 - Files changed: `src/rsa-pss.ts`, `test/internals.test.ts`.
 - **Learnings:** canonical profile unions keep supported RSA-PSS states narrow, while a small internal result union gives verify/build steps enough signal to map unsupported params separately from broken ASN.1.
+
+## Task - [wire-rsa-pss-verify]
+
+- Wired RSA-PSS into certificate-chain and CSR verification by threading raw AlgorithmIdentifier parameter DER into `src/sig-verify.ts`, mapping shipped profiles to WebCrypto `RSA-PSS`, and converting unsupported params into typed verification failures instead of thrown crashes.
+- Files changed: `src/sig-verify.ts`, `src/verify.ts`, `src/verify-path.ts`, `src/crl.ts`, `src/ocsp.ts`, `src/pkcs7.ts`, `test/helpers.ts`, `test/internals.test.ts`, `test/verify.test.ts`, `test/csr.test.ts`.
+- **Learnings:** trust-anchor path building needs the same typed signature-param failure plumbing as direct issuer verification or unsupported algorithms get misreported as root-discovery problems.

@@ -8,7 +8,12 @@ import {
 } from '#micro509';
 import { readElement } from '#micro509/der.ts';
 import { OIDS } from '#micro509/oids.ts';
-import { childrenOf, decodeObjectIdentifier } from './helpers.ts';
+import {
+	childrenOf,
+	decodeObjectIdentifier,
+	importRsaPrivateKeyWithScheme,
+	rewriteCsrSignatureAsRsaPss,
+} from './helpers.ts';
 
 describe('csr', () => {
 	it('includes basicConstraints and customExtensions in CSR requested extensions', async () => {
@@ -200,6 +205,62 @@ describe('csr', () => {
 			ok: false,
 			code: 'signature_invalid',
 			details: { subjectCommonName: 'bad-csr.example' },
+		});
+	});
+
+	it('verifies RSA-PSS certificate requests for the shipped profile', async () => {
+		const rsaKeys = await generateKeyPair({
+			kind: 'rsa',
+			modulusLength: 2048,
+			hash: 'SHA-512',
+		});
+		const csr = await createCertificateSigningRequest({
+			subject: { commonName: 'rsa-pss-csr' },
+			publicKey: rsaKeys.publicKey,
+			signerPrivateKey: rsaKeys.privateKey,
+		});
+		const rsaPssPrivateKey = await importRsaPrivateKeyWithScheme(
+			rsaKeys.privateKey,
+			'SHA-512',
+			'pss',
+		);
+		const rsaPssCsrDer = await rewriteCsrSignatureAsRsaPss(csr.der, rsaPssPrivateKey, {
+			hash: 'SHA-512',
+			mgfHash: 'SHA-512',
+			saltLength: 64,
+			trailerField: 1,
+		});
+
+		expect(await verifyCertificateSigningRequest(rsaPssCsrDer)).toMatchObject({ ok: true });
+	});
+
+	it('returns typed errors for unsupported RSA-PSS CSR parameters', async () => {
+		const rsaKeys = await generateKeyPair({
+			kind: 'rsa',
+			modulusLength: 2048,
+			hash: 'SHA-512',
+		});
+		const csr = await createCertificateSigningRequest({
+			subject: { commonName: 'rsa-pss-unsupported-csr' },
+			publicKey: rsaKeys.publicKey,
+			signerPrivateKey: rsaKeys.privateKey,
+		});
+		const rsaPssPrivateKey = await importRsaPrivateKeyWithScheme(
+			rsaKeys.privateKey,
+			'SHA-512',
+			'pss',
+		);
+		const unsupportedCsrDer = await rewriteCsrSignatureAsRsaPss(csr.der, rsaPssPrivateKey, {
+			hash: 'SHA-512',
+			mgfHash: 'SHA-512',
+			saltLength: 48,
+			trailerField: 1,
+		});
+
+		expect(await verifyCertificateSigningRequest(unsupportedCsrDer)).toMatchObject({
+			ok: false,
+			code: 'unsupported_signature_algorithm_parameters',
+			details: { subjectCommonName: 'rsa-pss-unsupported-csr' },
 		});
 	});
 });

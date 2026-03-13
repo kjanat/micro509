@@ -399,6 +399,7 @@ export async function verifyOcspResponse(
 	const signer = await normalizeCertificate(signerCertificate);
 	const verified = await verifySignedData(
 		parsed.signatureAlgorithmOid,
+		undefined,
 		signer.publicKeyAlgorithmOid,
 		signer.publicKeyParametersOid,
 		signer.subjectPublicKeyInfoDer,

@@ -3,6 +3,7 @@ import { alternateEcdsaSignatureEncoding } from './ecdsa.ts';
 import type { PublicKeyImportInput, RsaHash, RsaScheme } from './keys.ts';
 import { getCrypto, importSpkiDer } from './keys.ts';
 import { OIDS } from './oids.ts';
+import { parseRsaPssParameters } from './rsa-pss.ts';
 
 export {
 	alternateEcdsaSignatureEncoding,
@@ -13,19 +14,62 @@ export {
 
 export interface VerifySignatureConfig {
 	readonly importAlgorithm: PublicKeyImportInput;
-	readonly verifyParams: Algorithm | EcdsaParams;
+	readonly verifyParams: Algorithm | EcdsaParams | RsaPssParams;
 	readonly ecdsaRawSignatureBytes?: number;
 }
 
+export interface VerifySignatureConfigFailure {
+	readonly ok: false;
+	readonly code: 'unsupported_signature_algorithm_parameters';
+	readonly reason: string;
+}
+
+interface VerifySignatureConfigSuccess {
+	readonly ok: true;
+	readonly value: VerifySignatureConfig;
+}
+
+export type VerifySignatureConfigResult =
+	| VerifySignatureConfigSuccess
+	| VerifySignatureConfigFailure;
+
+interface VerifySignedDataSuccess {
+	readonly ok: true;
+	readonly valid: boolean;
+}
+
+export type VerifySignedDataResult = VerifySignedDataSuccess | VerifySignatureConfigFailure;
+
 export function getVerifySignatureConfig(
 	signatureAlgorithmOid: string,
+	signatureAlgorithmParametersDer: Uint8Array | undefined,
 	publicKeyAlgorithmOid: string,
 	publicKeyParametersOid: string | undefined,
 	context = 'issuer',
 ): VerifySignatureConfig {
+	const result = getVerifySignatureConfigResult(
+		signatureAlgorithmOid,
+		signatureAlgorithmParametersDer,
+		publicKeyAlgorithmOid,
+		publicKeyParametersOid,
+		context,
+	);
+	if (!result.ok) {
+		throw new Error(result.reason);
+	}
+	return result.value;
+}
+
+export function getVerifySignatureConfigResult(
+	signatureAlgorithmOid: string,
+	signatureAlgorithmParametersDer: Uint8Array | undefined,
+	publicKeyAlgorithmOid: string,
+	publicKeyParametersOid: string | undefined,
+	context = 'issuer',
+): VerifySignatureConfigResult {
 	switch (signatureAlgorithmOid) {
 		case OIDS.sha256WithRSAEncryption:
-			return {
+			return ok({
 				importAlgorithm: requireRsaPublicKey(
 					publicKeyAlgorithmOid,
 					'SHA-256',
@@ -33,9 +77,9 @@ export function getVerifySignatureConfig(
 					context,
 				),
 				verifyParams: { name: 'RSASSA-PKCS1-v1_5' },
-			};
+			});
 		case OIDS.sha384WithRSAEncryption:
-			return {
+			return ok({
 				importAlgorithm: requireRsaPublicKey(
 					publicKeyAlgorithmOid,
 					'SHA-384',
@@ -43,9 +87,9 @@ export function getVerifySignatureConfig(
 					context,
 				),
 				verifyParams: { name: 'RSASSA-PKCS1-v1_5' },
-			};
+			});
 		case OIDS.sha512WithRSAEncryption:
-			return {
+			return ok({
 				importAlgorithm: requireRsaPublicKey(
 					publicKeyAlgorithmOid,
 					'SHA-512',
@@ -53,33 +97,39 @@ export function getVerifySignatureConfig(
 					context,
 				),
 				verifyParams: { name: 'RSASSA-PKCS1-v1_5' },
-			};
+			});
+		case OIDS.rsassaPss:
+			return requireRsaPssVerifyConfig(
+				signatureAlgorithmParametersDer,
+				publicKeyAlgorithmOid,
+				context,
+			);
 		case OIDS.ecdsaWithSHA256:
-			return {
+			return ok({
 				importAlgorithm: requireEcPublicKey(publicKeyAlgorithmOid, publicKeyParametersOid, context),
 				verifyParams: { name: 'ECDSA', hash: 'SHA-256' },
 				ecdsaRawSignatureBytes: curveBytes(publicKeyParametersOid),
-			};
+			});
 		case OIDS.ecdsaWithSHA384:
-			return {
+			return ok({
 				importAlgorithm: requireEcPublicKey(publicKeyAlgorithmOid, publicKeyParametersOid, context),
 				verifyParams: { name: 'ECDSA', hash: 'SHA-384' },
 				ecdsaRawSignatureBytes: curveBytes(publicKeyParametersOid),
-			};
+			});
 		case OIDS.ecdsaWithSHA512:
-			return {
+			return ok({
 				importAlgorithm: requireEcPublicKey(publicKeyAlgorithmOid, publicKeyParametersOid, context),
 				verifyParams: { name: 'ECDSA', hash: 'SHA-512' },
 				ecdsaRawSignatureBytes: curveBytes(publicKeyParametersOid),
-			};
+			});
 		case OIDS.ed25519:
 			if (publicKeyAlgorithmOid !== OIDS.ed25519) {
 				throw new Error(`Ed25519 signature requires Ed25519 ${context} public key`);
 			}
-			return {
+			return ok({
 				importAlgorithm: { kind: 'ed25519' },
 				verifyParams: { name: 'Ed25519' },
-			};
+			});
 		default:
 			throw new Error(`Unsupported signature algorithm OID: ${signatureAlgorithmOid}`);
 	}
@@ -132,29 +182,104 @@ export function curveBytes(parametersOid: string | undefined): number {
 
 export async function verifySignedData(
 	signatureAlgorithmOid: string,
+	signatureAlgorithmParametersDer: Uint8Array | undefined,
 	publicKeyAlgorithmOid: string,
 	publicKeyParametersOid: string | undefined,
 	subjectPublicKeyInfoDer: Uint8Array,
 	signature: Uint8Array,
 	signedData: Uint8Array,
 ): Promise<boolean> {
-	const config = getVerifySignatureConfig(
+	const result = await verifySignedDataDetailed(
 		signatureAlgorithmOid,
+		signatureAlgorithmParametersDer,
+		publicKeyAlgorithmOid,
+		publicKeyParametersOid,
+		subjectPublicKeyInfoDer,
+		signature,
+		signedData,
+	);
+	if (!result.ok) {
+		throw new Error(result.reason);
+	}
+	return result.valid;
+}
+
+export async function verifySignedDataDetailed(
+	signatureAlgorithmOid: string,
+	signatureAlgorithmParametersDer: Uint8Array | undefined,
+	publicKeyAlgorithmOid: string,
+	publicKeyParametersOid: string | undefined,
+	subjectPublicKeyInfoDer: Uint8Array,
+	signature: Uint8Array,
+	signedData: Uint8Array,
+): Promise<VerifySignedDataResult> {
+	const config = getVerifySignatureConfigResult(
+		signatureAlgorithmOid,
+		signatureAlgorithmParametersDer,
 		publicKeyAlgorithmOid,
 		publicKeyParametersOid,
 	);
-	const key = await importSpkiDer(subjectPublicKeyInfoDer, config.importAlgorithm);
+	if (!config.ok) {
+		return config;
+	}
+	const key = await importSpkiDer(subjectPublicKeyInfoDer, config.value.importAlgorithm);
 	const subtle = getCrypto().subtle;
 	const signatureView = toArrayBuffer(signature);
 	const dataView = toArrayBuffer(signedData);
-	if (await subtle.verify(config.verifyParams, key, signatureView, dataView)) {
-		return true;
+	if (await subtle.verify(config.value.verifyParams, key, signatureView, dataView)) {
+		return { ok: true, valid: true };
 	}
-	if (config.ecdsaRawSignatureBytes !== undefined) {
-		const alternate = alternateEcdsaSignatureEncoding(signature, config.ecdsaRawSignatureBytes / 2);
+	if (config.value.ecdsaRawSignatureBytes !== undefined) {
+		const alternate = alternateEcdsaSignatureEncoding(
+			signature,
+			config.value.ecdsaRawSignatureBytes / 2,
+		);
 		if (alternate !== undefined) {
-			return subtle.verify(config.verifyParams, key, toArrayBuffer(alternate), dataView);
+			return {
+				ok: true,
+				valid: await subtle.verify(
+					config.value.verifyParams,
+					key,
+					toArrayBuffer(alternate),
+					dataView,
+				),
+			};
 		}
 	}
-	return false;
+	return { ok: true, valid: false };
+}
+
+function requireRsaPssVerifyConfig(
+	signatureAlgorithmParametersDer: Uint8Array | undefined,
+	publicKeyAlgorithmOid: string,
+	context: string,
+): VerifySignatureConfigResult {
+	const parameters = parseRsaPssParameters(signatureAlgorithmParametersDer);
+	if (!parameters.ok) {
+		return unsupported('RSA-PSS', parameters.reason);
+	}
+	return ok({
+		importAlgorithm: requireRsaPublicKey(
+			publicKeyAlgorithmOid,
+			parameters.value.hash,
+			'pss',
+			context,
+		),
+		verifyParams: {
+			name: 'RSA-PSS',
+			saltLength: parameters.value.saltLength,
+		},
+	});
+}
+
+function ok(value: VerifySignatureConfig): VerifySignatureConfigSuccess {
+	return { ok: true, value };
+}
+
+function unsupported(algorithm: string, reason: string): VerifySignatureConfigFailure {
+	return {
+		ok: false,
+		code: 'unsupported_signature_algorithm_parameters',
+		reason: `${algorithm} parameters unsupported: ${reason}`,
+	};
 }

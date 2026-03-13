@@ -26,7 +26,11 @@ import {
 } from '#micro509/der.ts';
 import { OIDS } from '#micro509/oids.ts';
 import { parseNameConstraints } from '#micro509/parse.ts';
-import { issueChain } from './helpers.ts';
+import {
+	importRsaPrivateKeyWithScheme,
+	issueChain,
+	rewriteCertificateSignatureAsRsaPss,
+} from './helpers.ts';
 
 function buildUnsupportedOtherNameConstraintsDer(): Uint8Array {
 	const otherName = tlv(0xa0, sequence([]));
@@ -492,6 +496,106 @@ describe('chain verification', () => {
 		expect(result).toMatchObject({ ok: true });
 	});
 
+	it('verifies RSA-PSS-signed certificate chains for the shipped profile', async () => {
+		const rootKeys = await generateKeyPair({
+			kind: 'rsa',
+			modulusLength: 2048,
+			hash: 'SHA-384',
+		});
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'rsa-pss-root' },
+			keyPair: rootKeys,
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair({
+			kind: 'rsa',
+			modulusLength: 2048,
+			hash: 'SHA-384',
+		});
+		const leaf = await createCertificate({
+			issuer: { commonName: 'rsa-pss-root' },
+			subject: { commonName: 'rsa-pss-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: rootKeys.privateKey,
+			issuerPublicKey: rootKeys.publicKey,
+		});
+		const rsaPssPrivateKey = await importRsaPrivateKeyWithScheme(
+			rootKeys.privateKey,
+			'SHA-384',
+			'pss',
+		);
+		const rsaPssLeafDer = await rewriteCertificateSignatureAsRsaPss(leaf.der, rsaPssPrivateKey, {
+			hash: 'SHA-384',
+			mgfHash: 'SHA-384',
+			saltLength: 48,
+			trailerField: 1,
+		});
+
+		expect(
+			await verifyCertificateChain({
+				leaf: rsaPssLeafDer,
+				roots: [root.certificate.pem],
+			}),
+		).toMatchObject({ ok: true });
+	});
+
+	it('returns typed errors for unsupported RSA-PSS certificate parameters', async () => {
+		const rootKeys = await generateKeyPair({
+			kind: 'rsa',
+			modulusLength: 2048,
+			hash: 'SHA-384',
+		});
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'rsa-pss-unsupported-root' },
+			keyPair: rootKeys,
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair({
+			kind: 'rsa',
+			modulusLength: 2048,
+			hash: 'SHA-384',
+		});
+		const leaf = await createCertificate({
+			issuer: { commonName: 'rsa-pss-unsupported-root' },
+			subject: { commonName: 'rsa-pss-unsupported-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: rootKeys.privateKey,
+			issuerPublicKey: rootKeys.publicKey,
+		});
+		const rsaPssPrivateKey = await importRsaPrivateKeyWithScheme(
+			rootKeys.privateKey,
+			'SHA-384',
+			'pss',
+		);
+		const unsupportedLeafDer = await rewriteCertificateSignatureAsRsaPss(
+			leaf.der,
+			rsaPssPrivateKey,
+			{
+				hash: 'SHA-384',
+				mgfHash: 'SHA-384',
+				saltLength: 32,
+				trailerField: 1,
+			},
+		);
+
+		expect(
+			await verifyCertificateChain({
+				leaf: unsupportedLeafDer,
+				roots: [root.certificate.pem],
+			}),
+		).toMatchObject({
+			ok: false,
+			code: 'unsupported_signature_algorithm_parameters',
+			index: 0,
+		});
+	});
+
 	it('rejects chain with unrecognized critical extension', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Critical Ext CA' },
@@ -619,6 +723,78 @@ describe('chain verification', () => {
 			trustAnchors: [wrongAnchor],
 		});
 		expect(result.ok).toBe(false);
+	});
+
+	it('reports unsupported RSA-PSS params at the intermediate when using trust anchors', async () => {
+		const rootKeys = await generateKeyPair({
+			kind: 'rsa',
+			modulusLength: 2048,
+			hash: 'SHA-384',
+		});
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'rsa-pss-anchor-root' },
+			keyPair: rootKeys,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 1 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const intermediateKeys = await generateKeyPair({
+			kind: 'rsa',
+			modulusLength: 2048,
+			hash: 'SHA-384',
+		});
+		const intermediate = await createCertificate({
+			issuer: { commonName: 'rsa-pss-anchor-root' },
+			subject: { commonName: 'rsa-pss-anchor-intermediate' },
+			publicKey: intermediateKeys.publicKey,
+			signerPrivateKey: rootKeys.privateKey,
+			issuerPublicKey: rootKeys.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair({
+			kind: 'rsa',
+			modulusLength: 2048,
+			hash: 'SHA-384',
+		});
+		const leaf = await createCertificate({
+			issuer: { commonName: 'rsa-pss-anchor-intermediate' },
+			subject: { commonName: 'rsa-pss-anchor-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: intermediateKeys.privateKey,
+			issuerPublicKey: intermediateKeys.publicKey,
+		});
+		const rsaPssPrivateKey = await importRsaPrivateKeyWithScheme(
+			rootKeys.privateKey,
+			'SHA-384',
+			'pss',
+		);
+		const unsupportedIntermediateDer = await rewriteCertificateSignatureAsRsaPss(
+			intermediate.der,
+			rsaPssPrivateKey,
+			{
+				hash: 'SHA-384',
+				mgfHash: 'SHA-384',
+				saltLength: 32,
+				trailerField: 1,
+			},
+		);
+
+		expect(
+			await verifyCertificateChain({
+				leaf: leaf.pem,
+				intermediates: [unsupportedIntermediateDer],
+				roots: [],
+				trustAnchors: [trustAnchorFromCertificate(parseCertificatePem(root.certificate.pem))],
+			}),
+		).toMatchObject({
+			ok: false,
+			code: 'unsupported_signature_algorithm_parameters',
+			index: 1,
+		});
 	});
 
 	// -----------------------------------------------------------------------
