@@ -57,6 +57,12 @@ export function getSignatureAlgorithm(privateKey: CryptoKey): SignatureAlgorithm
 					signParams: { name: 'ECDSA', hash: 'SHA-384' },
 					ecdsaRawSignatureBytes: 96,
 				};
+			case 'P-521':
+				return {
+					algorithmOid: OIDS.ecdsaWithSHA512,
+					signParams: { name: 'ECDSA', hash: 'SHA-512' },
+					ecdsaRawSignatureBytes: 132,
+				};
 			default:
 				throw new Error(`Unsupported curve: ${algorithm.namedCurve}`);
 		}

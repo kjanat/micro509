@@ -7,15 +7,20 @@ import { base64Decode, base64Encode, pemDecode, pemEncode } from './pem.ts';
 
 export type RsaHash = 'SHA-256' | 'SHA-384' | 'SHA-512';
 
+export type RsaScheme = 'pkcs1-v1_5' | 'pss';
+
+export type EcNamedCurve = 'P-256' | 'P-384' | 'P-521';
+
 export interface RsaKeyAlgorithmInput {
 	readonly kind: 'rsa';
 	readonly modulusLength?: 2048 | 3072 | 4096;
 	readonly hash?: RsaHash;
+	readonly scheme?: RsaScheme;
 }
 
 export interface EcKeyAlgorithmInput {
 	readonly kind: 'ecdsa';
-	readonly namedCurve?: 'P-256' | 'P-384';
+	readonly namedCurve?: EcNamedCurve;
 }
 
 export interface Ed25519KeyAlgorithmInput {
@@ -41,11 +46,12 @@ export interface KeyPairMaterial {
 export interface ImportRsaPublicKeyInput {
 	readonly kind: 'rsa';
 	readonly hash?: RsaHash;
+	readonly scheme?: RsaScheme;
 }
 
 export interface ImportEcPublicKeyInput {
 	readonly kind: 'ecdsa';
-	readonly namedCurve: 'P-256' | 'P-384';
+	readonly namedCurve: EcNamedCurve;
 }
 
 export interface ImportEd25519PublicKeyInput {
@@ -364,7 +370,7 @@ function toGenerateKeyAlgorithm(
 	switch (algorithm.kind) {
 		case 'rsa':
 			return {
-				name: 'RSASSA-PKCS1-v1_5',
+				name: rsaSchemeToWebCryptoAlgorithmName(algorithm.scheme),
 				modulusLength: algorithm.modulusLength ?? 2048,
 				publicExponent: Uint8Array.of(0x01, 0x00, 0x01),
 				hash: algorithm.hash ?? 'SHA-256',
@@ -385,7 +391,7 @@ function toImportAlgorithm(
 	switch (algorithm.kind) {
 		case 'rsa':
 			return {
-				name: 'RSASSA-PKCS1-v1_5',
+				name: rsaSchemeToWebCryptoAlgorithmName(algorithm.scheme),
 				hash: algorithm.hash ?? 'SHA-256',
 			};
 		case 'ecdsa':
@@ -451,7 +457,18 @@ function namedCurveToOid(namedCurve: ImportEcPublicKeyInput['namedCurve']): stri
 			return OIDS.prime256v1;
 		case 'P-384':
 			return OIDS.secp384r1;
+		case 'P-521':
+			return OIDS.secp521r1;
 	}
+}
+
+function rsaSchemeToWebCryptoAlgorithmName(
+	scheme: RsaScheme | undefined,
+): 'RSASSA-PKCS1-v1_5' | 'RSA-PSS' {
+	if (scheme === 'pss') {
+		return 'RSA-PSS';
+	}
+	return 'RSASSA-PKCS1-v1_5';
 }
 
 async function encryptTraditionalPem(

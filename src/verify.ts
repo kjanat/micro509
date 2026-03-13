@@ -107,7 +107,8 @@ export type VerifyErrorCode =
 	| 'initial_policy_set_not_satisfied'
 	| 'initial_name_constraints_not_implemented'
 	| 'unsupported_name_constraints'
-	| 'name_constraints_violated';
+	| 'name_constraints_violated'
+	| 'unsupported_signature_algorithm_parameters';
 
 export interface VerifyFailureDetails {
 	readonly subjectCommonName?: string;
@@ -224,12 +225,15 @@ export type VerifyChainResult =
 // ---------------------------------------------------------------------------
 
 export interface VerifyRequestFailure
-	extends Micro509Error<'signature_invalid', VerifyFailureDetails> {
+	extends Micro509Error<
+		'signature_invalid' | 'unsupported_signature_algorithm_parameters',
+		VerifyFailureDetails
+	> {
 	readonly ok: false;
 }
 
 type VerifyRequestFailureResult = ErrorResult<
-	'signature_invalid',
+	'signature_invalid' | 'unsupported_signature_algorithm_parameters',
 	VerifyFailureDetails,
 	VerifyRequestFailure
 >;
@@ -670,6 +674,7 @@ export async function verifyCertificateSigningRequest(
 	);
 	if (!signatureValid) {
 		return verifyRequestFailureResult(
+			'signature_invalid',
 			'certificate request signature does not verify',
 			detail({ subjectCommonName: parsed.subject.values.commonName }),
 		);
@@ -949,12 +954,13 @@ function validateCandidatePathSuccessResult(
 }
 
 function verifyRequestFailureResult(
+	code: VerifyRequestFailure['code'],
 	message: string,
 	details?: VerifyFailureDetails,
 ): VerifyRequestFailureResult {
 	const error: VerifyRequestFailure = {
 		ok: false,
-		...micro509Error('signature_invalid', message, details),
+		...micro509Error(code, message, details),
 	};
 	return errorResult(error);
 }

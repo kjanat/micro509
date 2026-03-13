@@ -1,0 +1,90 @@
+{
+	"prdName": "webcrypto-pki-algorithm-expansion",
+	"spec": "specs/webcrypto-pki-algorithm-expansion.md",
+	"description": "Expand micro509's WebCrypto-aligned PKI algorithm surface with RSA-PSS, ECDSA P-521, and low-cost key-container interop.",
+	"tasks": [
+		{
+			"id": "add-algo-oids-and-types",
+			"phase": 1,
+			"title": "Add algorithm OIDs and public type expansions",
+			"description": "Add the OIDs, unions, and public input/result shapes needed for RSA-PSS and ECDSA P-521. Done when:\n- `src/oids.ts` contains `rsassaPss`, `mgf1`, `ecdsaWithSHA512`, and `secp521r1`\n- RSA key inputs gain `scheme?: 'pkcs1-v1_5' | 'pss'` without breaking current callers\n- ECDSA curve unions include `P-521` anywhere current public APIs expose `P-256`/`P-384`\n- verify error unions include a typed `unsupported_signature_algorithm_parameters` path",
+			"priority": "architecture",
+			"passes": true
+		},
+		{
+			"id": "preserve-algorithm-params",
+			"phase": 1,
+			"title": "Preserve raw AlgorithmIdentifier params",
+			"description": "Preserve raw signature and SPKI algorithm parameters in parsed cert and CSR outputs. Done when:\n- `src/parse.ts` exposes raw params DER for signature and public-key algorithm identifiers when present\n- existing OID fields stay stable for backward compatibility\n- malformed ASN.1 still fails at parse time instead of degrading silently",
+			"priority": "architecture",
+			"passes": false
+		},
+		{
+			"id": "add-rsa-pss-param-codec",
+			"phase": 1,
+			"title": "Add constrained RSA-PSS parameter model",
+			"description": "Implement the internal RSA-PSS parameter parse/encode helpers shared by verify and builders. Done when:\n- one internal model represents hash, MGF1 hash, saltLength, and trailerField\n- parser accepts only the shipped SHA-256/384/512 plus MGF1 subset\n- encoder emits explicit parameters for builder-generated RSA-PSS signatures\n- unsupported-but-well-formed params are distinguishable from malformed DER",
+			"depends": ["add-algo-oids-and-types", "preserve-algorithm-params"],
+			"priority": "architecture",
+			"passes": false
+		},
+		{
+			"id": "wire-rsa-pss-verify",
+			"phase": 2,
+			"title": "Wire RSA-PSS into certificate and CSR verification",
+			"description": "Teach verification flows to accept supported RSA-PSS artifacts. Done when:\n- cert chain verification accepts RSA-PSS-signed chains for the shipped parameter profile\n- CSR verification accepts RSA-PSS-signed requests for the same profile\n- RSA key import for verification chooses `RSA-PSS` vs `RSASSA-PKCS1-v1_5` by intended scheme\n- unsupported params fail with typed verification errors, not generic crashes",
+			"depends": ["add-rsa-pss-param-codec"],
+			"priority": "integration",
+			"passes": false
+		},
+		{
+			"id": "wire-rsa-pss-builders",
+			"phase": 2,
+			"title": "Wire RSA-PSS into cert and CSR builders",
+			"description": "Add explicit RSA-PSS signing support to certificate and CSR creation APIs. Done when:\n- `createCertificate()` and `createCertificateSigningRequest()` accept an explicit signature profile input\n- omitted signature profile keeps current behavior for existing callers\n- RSA-PSS signing defaults `saltLength` to digest size when omitted\n- emitted AlgorithmIdentifier values carry explicit RSA-PSS parameters",
+			"depends": ["add-rsa-pss-param-codec"],
+			"priority": "integration",
+			"passes": false
+		},
+		{
+			"id": "add-p521-ecdsa-support",
+			"phase": 2,
+			"title": "Add ECDSA P-521 end-to-end support",
+			"description": "Make P-521 a first-class ECDSA option across keys, signing, and verification. Done when:\n- key generation and key import accept `P-521`\n- signing maps `P-521` to `ecdsaWithSHA512` with correct raw-signature width handling\n- verification accepts `ecdsaWithSHA512` on `secp521r1` keys\n- cert and CSR create/verify flows work with P-521 artifacts",
+			"depends": ["add-algo-oids-and-types"],
+			"priority": "integration",
+			"passes": false
+		},
+		{
+			"id": "widen-key-container-interop",
+			"phase": 2,
+			"title": "Widen encrypted private-key interop",
+			"description": "Expand low-cost encrypted-key compatibility using existing WebCrypto primitives. Done when:\n- PBES2 supports AES-128-CBC, AES-192-CBC, and AES-256-CBC\n- PBKDF2 PRFs include HMAC-SHA1 and HMAC-SHA256 where the key APIs can absorb them\n- traditional PEM AES-128/192/256-CBC variants import for RSA and EC private keys\n- unsupported schemes like 3DES still reject explicitly",
+			"priority": "standard",
+			"passes": false
+		},
+		{
+			"id": "add-algo-fixtures-and-reg",
+			"phase": 3,
+			"title": "Add fixtures and regression coverage",
+			"description": "Add focused coverage for the new algorithm and key-container surface. Done when:\n- RSA-PSS positive and negative cert/CSR fixtures exist\n- P-521 keygen/import/sign/verify coverage exists\n- encrypted-key interop fixtures cover positive and negative cases\n- regression tests prove current RSA PKCS#1 v1.5, P-256, P-384, and Ed25519 behavior stays intact",
+			"depends": [
+				"wire-rsa-pss-verify",
+				"wire-rsa-pss-builders",
+				"add-p521-ecdsa-support",
+				"widen-key-container-interop"
+			],
+			"priority": "polish",
+			"passes": false
+		},
+		{
+			"id": "sync-algo-doc-claims",
+			"phase": 3,
+			"title": "Sync docs to shipped algorithm matrix",
+			"description": "Update public docs only after the implementation and fixtures land. Done when:\n- `README.md`, `docs/PKIX-SCOPE.md`, and `docs/FUTURE.md` describe the exact shipped matrix\n- docs name RSA-PSS, ECDSA P-521, and key-container interop precisely\n- docs do not imply DSA, Ed448, or full WebCrypto parity\n- every user-facing claim maps to code and tests that now exist",
+			"depends": ["add-algo-fixtures-and-reg"],
+			"priority": "polish",
+			"passes": false
+		}
+	]
+}

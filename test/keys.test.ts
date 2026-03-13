@@ -184,6 +184,37 @@ describe('keys', () => {
 		expect(await exportPkcs8Der(edPriv)).toEqual(await ed.exportPkcs8Der());
 	});
 
+	it('accepts RSA-PSS and ECDSA P-521 key inputs', async () => {
+		const rsaPss = await generateKeyPair({
+			kind: 'rsa',
+			scheme: 'pss',
+			hash: 'SHA-256',
+		});
+		expect(rsaPss.privateKey.algorithm.name).toBe('RSA-PSS');
+
+		const rsaPssPublic = await importSpkiPem(await rsaPss.exportSpkiPem(), {
+			kind: 'rsa',
+			scheme: 'pss',
+			hash: 'SHA-256',
+		});
+		expect(rsaPssPublic.algorithm.name).toBe('RSA-PSS');
+
+		const ecP521 = await generateKeyPair({
+			kind: 'ecdsa',
+			namedCurve: 'P-521',
+		});
+		const ecP521Public = await importSpkiBase64(await exportBinaryBase64(ecP521.publicKey), {
+			kind: 'ecdsa',
+			namedCurve: 'P-521',
+		});
+		const ecP521Private = await importPkcs8Base64(await exportBinaryBase64(ecP521.privateKey), {
+			kind: 'ecdsa',
+			namedCurve: 'P-521',
+		});
+		expect(await exportSpkiDer(ecP521Public)).toEqual(await ecP521.exportSpkiDer());
+		expect(await exportPkcs8Der(ecP521Private)).toEqual(await ecP521.exportPkcs8Der());
+	});
+
 	it('exports keys with standalone PEM and JWK helpers', async () => {
 		const keyPair = await generateKeyPair({ kind: 'ed25519' });
 		expect(await exportSpkiPem(keyPair.publicKey)).toContain('BEGIN PUBLIC KEY');

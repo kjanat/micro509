@@ -1,0 +1,20 @@
+# Progress Log
+
+PRD: webcrypto-pki-algorithm-expansion
+Started: 2026-03-13
+
+## Codebase Patterns
+
+- Keep signature-algorithm work split cleanly: `src/parse.ts` preserves wire data, `src/signing.ts` owns emission, `src/sig-verify.ts` owns acceptance, and `src/keys.ts` owns WebCrypto key import/generation mapping.
+- For partially supported RFC surfaces, parser preserves unsupported-but-well-formed forms; validator and builder decide the shipped subset and fail closed outside it.
+- New algorithm support should stay WebCrypto-first and platform-neutral: no Node-only crypto branches in core paths.
+- Backward compatibility matters at API boundaries: prefer optional fields like RSA `scheme` and explicit builder `signature` inputs over breaking existing call patterns.
+- When widening algorithm surface, update all four touchpoints together: `src/oids.ts` for identifiers, `src/keys.ts` for public WebCrypto-facing inputs, `src/signing.ts` for builder-side mapping, and `src/sig-verify.ts` for verifier-side mapping.
+
+---
+
+## Task - [add-algo-oids-and-types]
+
+- Added RSA-PSS, MGF1, ECDSA SHA-512, and secp521r1 OIDs plus public RSA `scheme` and EC `P-521` type expansion.
+- Files changed: `src/oids.ts`, `src/keys.ts`, `src/signing.ts`, `src/sig-verify.ts`, `src/verify.ts`, `src/index.ts`, `test/internals.test.ts`, `test/keys.test.ts`.
+- **Learnings:** this repo's algorithm surface is intentionally split across OID constants, key import/generation inputs, signer mapping, and verifier mapping; if one lags, feature work becomes asymmetric fast.

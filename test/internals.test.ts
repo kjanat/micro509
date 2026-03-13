@@ -248,6 +248,14 @@ describe('sig-verify', () => {
 		expect(() => curveBytes('1.2.3.4.5')).toThrow('Unsupported EC curve');
 	});
 
+	it('requireEcPublicKey and curveBytes support secp521r1', () => {
+		expect(requireEcPublicKey(OIDS.ecPublicKey, OIDS.secp521r1)).toEqual({
+			kind: 'ecdsa',
+			namedCurve: 'P-521',
+		});
+		expect(curveBytes(OIDS.secp521r1)).toBe(132);
+	});
+
 	it('getVerifySignatureConfig throws for unknown signature algorithm', () => {
 		expect(() => getVerifySignatureConfig('1.2.3.4.999', OIDS.rsaEncryption, undefined)).toThrow(
 			'Unsupported signature algorithm',
@@ -497,6 +505,22 @@ describe('signing.ts edge cases', () => {
 		const result = getSignatureAlgorithm(keys.privateKey);
 		expect(result.algorithmOid).toBe(OIDS.ecdsaWithSHA384);
 		expect(result.ecdsaRawSignatureBytes).toBe(96);
+	});
+
+	it('getSignatureAlgorithm returns correct config for ECDSA P-521', async () => {
+		const { generateKeyPair: genKp } = await import('#micro509');
+		const keys = await genKp({ kind: 'ecdsa', namedCurve: 'P-521' });
+		const result = getSignatureAlgorithm(keys.privateKey);
+		expect(result.algorithmOid).toBe(OIDS.ecdsaWithSHA512);
+		expect(result.ecdsaRawSignatureBytes).toBe(132);
+		expect(result.signParams).toEqual({ name: 'ECDSA', hash: 'SHA-512' });
+	});
+
+	it('getVerifySignatureConfig returns correct config for ECDSA P-521', () => {
+		const result = getVerifySignatureConfig(OIDS.ecdsaWithSHA512, OIDS.ecPublicKey, OIDS.secp521r1);
+		expect(result.importAlgorithm).toEqual({ kind: 'ecdsa', namedCurve: 'P-521' });
+		expect(result.verifyParams).toEqual({ name: 'ECDSA', hash: 'SHA-512' });
+		expect(result.ecdsaRawSignatureBytes).toBe(132);
 	});
 
 	it('getSignatureAlgorithm returns correct config for Ed25519', async () => {

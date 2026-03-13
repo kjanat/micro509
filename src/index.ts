@@ -102,6 +102,7 @@ export type {
 	PrivateKeyImportInput,
 	PublicKeyImportInput,
 	RsaKeyAlgorithmInput,
+	RsaScheme,
 } from './keys.ts';
 export {
 	exportBinaryBase64,
