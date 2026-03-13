@@ -26,7 +26,7 @@
 			"description": "Implement the internal RSA-PSS parameter parse/encode helpers shared by verify and builders. Done when:\n- one internal model represents hash, MGF1 hash, saltLength, and trailerField\n- parser accepts only the shipped SHA-256/384/512 plus MGF1 subset\n- encoder emits explicit parameters for builder-generated RSA-PSS signatures\n- unsupported-but-well-formed params are distinguishable from malformed DER",
 			"depends": ["add-algo-oids-and-types", "preserve-algorithm-params"],
 			"priority": "architecture",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "wire-rsa-pss-verify",

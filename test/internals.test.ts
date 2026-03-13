@@ -12,6 +12,7 @@ import {
 	bitString,
 	DEFAULT_MAX_DER_DEPTH,
 	encodeLength,
+	explicitContext,
 	ia5String,
 	integer,
 	integerFromNumber,
@@ -44,6 +45,11 @@ import {
 import { OIDS } from '#micro509/oids.ts';
 import { parsePbes2AlgorithmIdentifier } from '#micro509/pbes2.ts';
 import { createPkcs12MacData, parsePkcs12MacData } from '#micro509/pkcs12-mac.ts';
+import {
+	encodeRsaPssParameters,
+	parseRsaPssParameters,
+	rsaPssParametersForHash,
+} from '#micro509/rsa-pss.ts';
 import {
 	alternateEcdsaSignatureEncoding,
 	concatFixedWidth,
@@ -531,6 +537,130 @@ describe('signing.ts edge cases', () => {
 		expect(result.ecdsaRawSignatureBytes).toBeUndefined();
 	});
 });
+
+// ---------------------------------------------------------------------------
+// rsa-pss.ts edge cases
+// ---------------------------------------------------------------------------
+
+describe('rsa-pss.ts edge cases', () => {
+	it('round-trips supported RSA-PSS profiles', () => {
+		for (const hash of ['SHA-256', 'SHA-384', 'SHA-512'] as const) {
+			const encoded = encodeRsaPssParameters(rsaPssParametersForHash(hash));
+			expect(parseRsaPssParameters(encoded)).toEqual({
+				ok: true,
+				value: rsaPssParametersForHash(hash),
+			});
+		}
+	});
+
+	it('treats omitted parameters as unsupported SHA-1 defaults', () => {
+		expect(parseRsaPssParameters(undefined)).toEqual({
+			ok: false,
+			code: 'unsupported_rsa_pss_parameters',
+			reason: 'default_hash_sha1',
+		});
+	});
+
+	it('rejects unsupported hash, MGF, salt length, and trailer profiles', () => {
+		const unsupportedHash = sequence([
+			explicitContext(0, hashAlgorithmIdentifier('1.2.3.4.5')),
+			explicitContext(1, maskGenAlgorithmIdentifier(OIDS.mgf1, OIDS.sha256)),
+			explicitContext(2, integerFromNumber(32)),
+			explicitContext(3, integerFromNumber(1)),
+		]);
+		expect(parseRsaPssParameters(unsupportedHash)).toEqual({
+			ok: false,
+			code: 'unsupported_rsa_pss_parameters',
+			reason: 'unsupported_hash',
+		});
+
+		const mismatchedMgf = sequence([
+			explicitContext(0, hashAlgorithmIdentifier(OIDS.sha256)),
+			explicitContext(1, maskGenAlgorithmIdentifier(OIDS.mgf1, OIDS.sha384)),
+			explicitContext(2, integerFromNumber(32)),
+			explicitContext(3, integerFromNumber(1)),
+		]);
+		expect(parseRsaPssParameters(mismatchedMgf)).toEqual({
+			ok: false,
+			code: 'unsupported_rsa_pss_parameters',
+			reason: 'mgf_hash_mismatch',
+		});
+
+		const unsupportedMgf = sequence([
+			explicitContext(0, hashAlgorithmIdentifier(OIDS.sha256)),
+			explicitContext(1, maskGenAlgorithmIdentifier('1.2.3.4.5')),
+			explicitContext(2, integerFromNumber(32)),
+			explicitContext(3, integerFromNumber(1)),
+		]);
+		expect(parseRsaPssParameters(unsupportedMgf)).toEqual({
+			ok: false,
+			code: 'unsupported_rsa_pss_parameters',
+			reason: 'unsupported_mgf_algorithm',
+		});
+
+		const unsupportedSaltLength = sequence([
+			explicitContext(0, hashAlgorithmIdentifier(OIDS.sha256)),
+			explicitContext(1, maskGenAlgorithmIdentifier(OIDS.mgf1, OIDS.sha256)),
+			explicitContext(2, integerFromNumber(20)),
+			explicitContext(3, integerFromNumber(1)),
+		]);
+		expect(parseRsaPssParameters(unsupportedSaltLength)).toEqual({
+			ok: false,
+			code: 'unsupported_rsa_pss_parameters',
+			reason: 'unsupported_salt_length',
+		});
+
+		const unsupportedTrailer = sequence([
+			explicitContext(0, hashAlgorithmIdentifier(OIDS.sha512)),
+			explicitContext(1, maskGenAlgorithmIdentifier(OIDS.mgf1, OIDS.sha512)),
+			explicitContext(2, integerFromNumber(64)),
+			explicitContext(3, integerFromNumber(2)),
+		]);
+		expect(parseRsaPssParameters(unsupportedTrailer)).toEqual({
+			ok: false,
+			code: 'unsupported_rsa_pss_parameters',
+			reason: 'unsupported_trailer_field',
+		});
+	});
+
+	it('distinguishes malformed RSA-PSS parameters from unsupported ones', () => {
+		const notSequence = octetString(new Uint8Array());
+		expect(parseRsaPssParameters(notSequence)).toMatchObject({
+			ok: false,
+			code: 'malformed_rsa_pss_parameters',
+		});
+
+		const duplicateHash = sequence([
+			explicitContext(0, hashAlgorithmIdentifier(OIDS.sha256)),
+			explicitContext(0, hashAlgorithmIdentifier(OIDS.sha256)),
+		]);
+		expect(parseRsaPssParameters(duplicateHash)).toMatchObject({
+			ok: false,
+			code: 'malformed_rsa_pss_parameters',
+		});
+
+		const malformedSaltLength = sequence([
+			explicitContext(0, hashAlgorithmIdentifier(OIDS.sha256)),
+			explicitContext(1, maskGenAlgorithmIdentifier(OIDS.mgf1, OIDS.sha256)),
+			explicitContext(2, sequence([])),
+		]);
+		expect(parseRsaPssParameters(malformedSaltLength)).toMatchObject({
+			ok: false,
+			code: 'malformed_rsa_pss_parameters',
+		});
+	});
+});
+
+function hashAlgorithmIdentifier(oid: string): Uint8Array {
+	return sequence([objectIdentifier(oid), nullValue()]);
+}
+
+function maskGenAlgorithmIdentifier(oid: string, hashOid?: string): Uint8Array {
+	if (hashOid === undefined) {
+		return sequence([objectIdentifier(oid)]);
+	}
+	return sequence([objectIdentifier(oid), hashAlgorithmIdentifier(hashOid)]);
+}
 
 // ---------------------------------------------------------------------------
 // pbes2.ts edge cases

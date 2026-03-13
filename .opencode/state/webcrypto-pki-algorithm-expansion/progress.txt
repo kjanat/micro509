@@ -11,6 +11,7 @@ Started: 2026-03-13
 - Backward compatibility matters at API boundaries: prefer optional fields like RSA `scheme` and explicit builder `signature` inputs over breaking existing call patterns.
 - When widening algorithm surface, update all four touchpoints together: `src/oids.ts` for identifiers, `src/keys.ts` for public WebCrypto-facing inputs, `src/signing.ts` for builder-side mapping, and `src/sig-verify.ts` for verifier-side mapping.
 - Parse-boundary compatibility additions should layer on optional raw DER fields, not replace existing convenience fields; keep decoded OIDs stable and expose `*ParametersDer` beside them.
+- Structured algorithm helpers should return canonical supported profiles and split failures into typed `unsupported_*` vs `malformed_*` results; raw `AlgorithmIdentifier` DER stays the shared parse boundary.
 
 ---
 
@@ -25,3 +26,9 @@ Started: 2026-03-13
 - Preserved raw signature and SPKI AlgorithmIdentifier parameter DER on parsed certificate and CSR outputs while keeping existing OID fields unchanged.
 - Files changed: `src/parse.ts`, `test/parse.test.ts`.
 - **Learnings:** parse-boundary algorithm metadata needs two layers: raw parameter DER for forward-compatible inspection and decoded OID shortcuts for the shipped subset.
+
+## Task - [add-rsa-pss-param-codec]
+
+- Added an internal `src/rsa-pss.ts` codec that parses and encodes the shipped RSA-PSS SHA-256/384/512 + MGF1 parameter profiles and distinguishes unsupported inputs from malformed DER.
+- Files changed: `src/rsa-pss.ts`, `test/internals.test.ts`.
+- **Learnings:** canonical profile unions keep supported RSA-PSS states narrow, while a small internal result union gives verify/build steps enough signal to map unsupported params separately from broken ASN.1.
