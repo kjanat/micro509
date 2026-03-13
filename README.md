@@ -29,6 +29,18 @@ Tiny X.509 builders for modern TypeScript.
 
 Current conformance evidence lives in `test/pkits.test.ts`, `test/policy.test.ts`, `test/name-constraints.test.ts`, `test/ocsp-fixtures.test.ts`, `test/identity-fixtures.test.ts`, `test/revocation.test.ts`, `test/malformed-der.test.ts`, and `test/differential.test.ts`.
 
+## Algorithm matrix
+
+| Area                         | Shipped support                                                                                                                                                   | Notes                                                                                     |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Certificate / CSR signatures | RSA PKCS#1 v1.5, RSA-PSS (`SHA-256` / `SHA-384` / `SHA-512` with matching `MGF1`, explicit params, digest-sized salt), ECDSA `P-256` / `P-384` / `P-521`, Ed25519 | Builder defaults stay on existing algorithms unless an explicit RSA-PSS profile is passed |
+| RSA key APIs                 | `scheme: 'pkcs1-v1_5' \| 'pss'`                                                                                                                                   | Omitted `scheme` keeps backward-compatible PKCS#1 v1.5 behavior                           |
+| ECDSA key APIs               | `P-256`, `P-384`, `P-521`                                                                                                                                         | `P-521` signs as `ecdsaWithSHA512`                                                        |
+| Encrypted PKCS#8 / PFX       | PBES2 with `AES-128-CBC` / `AES-192-CBC` / `AES-256-CBC`; PBKDF2 PRF `HMAC-SHA1` or `HMAC-SHA256`                                                                 | Missing PRF params still default to `HMAC-SHA1` per PBES2 rules                           |
+| Encrypted traditional PEM    | `AES-128-CBC`, `AES-192-CBC`, `AES-256-CBC` for RSA and EC private keys                                                                                           | Unsupported legacy ciphers like 3DES still reject explicitly                              |
+
+The package does not claim full WebCrypto parity. It does not add `DSA`, `Ed448`, `RSA-OAEP`, `ECDH`, `X25519`, or generic symmetric-crypto APIs just because those primitives may exist in some runtimes.
+
 ## Install
 
 ```bash
@@ -480,7 +492,7 @@ if (result.ok) {
 ## Notes
 
 - keygen: `rsa`, `ecdsa`, `ed25519`
-- cert sigs: RSA PKCS#1 v1.5, ECDSA P-256/P-384, Ed25519
+- cert sigs: RSA PKCS#1 v1.5, RSA-PSS (`SHA-256` / `SHA-384` / `SHA-512` shipped profile), ECDSA P-256/P-384/P-521, Ed25519
 - names: object shorthand or explicit ordered attributes
 - extensions: basic constraints, key usage, extended key usage, SAN, SKI, AKI
 - parsed extras: AIA, CRL distribution points, raw extension list
@@ -491,8 +503,8 @@ if (result.ok) {
 - pkcs7 helpers: create/parse degenerate signedData cert bags, parse general signedData signer metadata
 - crl helpers: create/parse/verify CRLs, delta CRL indicator, issuing distribution point, freshest CRL, entry reason/invalidity extensions, revocation lookup by serial
 - ocsp helpers: build requests, build signed responses, parse requests/responses, verify response signatures, derive responder candidates from AIA or local config, and run nonce/request/issuer/time checks plus responderID/delegated-responder validation and full multi-cert request coverage; focused fixtures live in `test/ocsp-fixtures.test.ts`
-- pfx helpers: create/parse passwordless or encrypted cert+key bundles with bag attributes and optional MAC integrity
-- legacy key helpers: PKCS#1 RSA and SEC1 EC import/export, plus encrypted traditional PEM
+- pfx helpers: create/parse passwordless or encrypted cert+key bundles with bag attributes, optional MAC integrity, and PBES2 AES-128/192/256-CBC + PBKDF2 HMAC-SHA1/HMAC-SHA256 encryption
+- legacy key helpers: PKCS#1 RSA and SEC1 EC import/export, plus encrypted traditional PEM with AES-128/192/256-CBC
 - extended key usage: built-ins + custom OID escape hatch
 - identity helpers: `matchServiceIdentity()` covers DNS-ID, IP-ID, URI-ID, SRV-ID, wildcard, IDNA, and opt-in DNS CN compatibility; focused fixtures live in `test/identity-fixtures.test.ts`
 - chain verify: async, WebCrypto-based, browser-safe, multi-candidate path building plus candidate-path validation with issuer match, signatures, time, CA/keyCertSign, pathLen, AKI/SKI, supported-form name constraints, RFC 9618 policy outputs, and optional DNS/IP identity composition in verify helpers; broader revocation orchestration stays separate

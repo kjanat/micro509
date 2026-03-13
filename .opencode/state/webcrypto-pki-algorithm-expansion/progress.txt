@@ -17,6 +17,7 @@ Started: 2026-03-13
 - End-to-end algorithm expansion tests should assert all three layers together: emitted signature OID, parsed subject public-key curve OID, and successful cert/CSR verification against real WebCrypto-generated artifacts.
 - Interop widening should keep defaults stable but make compat knobs explicit: thread optional cipher/PRF fields through export helpers, accept the broader shipped set on parse/import, and keep legacy rejects like 3DES explicit.
 - Malformed algorithm fixtures belong at the parse boundary: broken DER should still throw from parse/verify entrypoints, while well-formed-but-unsupported params should flow through typed `unsupported_*` results.
+- Extension parsers that only consume top-level context-specific fields should scan the outer SEQUENCE shallowly and treat unsupported constructed alternatives opaquely, or malformed nested payloads can break compatibility probes.
 
 ---
 
@@ -67,3 +68,9 @@ Started: 2026-03-13
 - Added regression coverage for the full shipped RSA-PSS digest matrix, malformed-vs-unsupported RSA-PSS fixture handling, P-521 SEC1 import/export, wider PKCS#8 cipher/PRF coverage, and OpenSSL differential checks for RSA-PSS and P-521 chains.
 - Files changed: `test/helpers.ts`, `test/verify.test.ts`, `test/csr.test.ts`, `test/keys.test.ts`, `test/differential.test.ts`, `.opencode/state/webcrypto-pki-algorithm-expansion/prd.json`.
 - **Learnings:** regression coverage for algorithm expansion is strongest when each new profile gets both in-process behavior checks and at least one cross-tool sanity check, while malformed DER cases stay asserted as parse-time throws instead of forced typed results.
+
+## Task - [sync-algo-doc-claims]
+
+- Synced public docs to the shipped algorithm matrix for RSA-PSS, ECDSA `P-521`, and AES-CBC key-container interop, and tightened non-claims around full WebCrypto parity.
+- Files changed: `README.md`, `docs/PKIX-SCOPE.md`, `docs/FUTURE.md`, `src/parse.ts`, `.opencode/state/webcrypto-pki-algorithm-expansion/prd.json`.
+- **Learnings:** doc-only slices still need full feedback loops; here they exposed an AKI parser edge where unsupported constructed alternatives should stay opaque instead of recursively validated.

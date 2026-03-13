@@ -14,6 +14,7 @@ import type { DerElement } from './der.ts';
 import {
 	DEFAULT_MAX_DER_DEPTH,
 	encodeLength,
+	readElement,
 	readRootElement,
 	readSequenceChildren,
 } from './der.ts';
@@ -1183,17 +1184,23 @@ function decodeBmpString(bytes: Uint8Array): string {
 
 /** @internal Exported for the extension registry. */
 export function parseAuthorityKeyIdentifier(bytes: Uint8Array): string | undefined {
-	const sequenceElement = requireElement(
-		readRootElement(bytes, {
-			maxDepth: DEFAULT_MAX_DER_DEPTH,
-			allowOpaqueConstructedTags: [0xa1, 0xa2],
-		}),
-		'authorityKeyIdentifier sequence',
-	);
-	for (const child of childrenOf(bytes, sequenceElement)) {
+	const sequenceElement = requireElement(readElement(bytes, 0), 'authorityKeyIdentifier sequence');
+	if (sequenceElement.end !== bytes.length) {
+		throw new Error('Trailing data after DER element');
+	}
+	let offset = sequenceElement.start;
+	while (offset < sequenceElement.end) {
+		const child = readElement(bytes, offset);
+		if (child.end > sequenceElement.end) {
+			throw new Error('DER child exceeds parent length');
+		}
 		if (child.tag === 0x80) {
 			return toHex(child.value);
 		}
+		offset = child.end;
+	}
+	if (offset !== sequenceElement.end) {
+		throw new Error('Malformed DER sequence');
 	}
 	return undefined;
 }

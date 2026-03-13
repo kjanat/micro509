@@ -35,12 +35,16 @@ Implementation-ready master plan: `specs/full-standards-compliance.md`.
 
 ## CMS / PKCS / container interop
 
+- [x] RSA-PSS certificate / CSR sign and verify support
+- [x] ECDSA `P-521` key, cert, and CSR support
+- [x] PBES2 AES-128/192/256-CBC plus PBKDF2 HMAC-SHA1/HMAC-SHA256 interop
+- [x] Traditional PEM AES-128/192/256-CBC interop for RSA and EC private keys
 - [x] CMS/PKCS#7 signature verification over signed attributes where applicable
 - [ ] CMS/PKCS#7 detached content support
 - [ ] CMS signer certificate selection helpers
 - [ ] PKCS#12/PFX encrypted certificate safe bags
 - [ ] Broader PKCS#12 algorithms and compatibility modes
-- [ ] Traditional PEM encryption algorithm variants beyond current support
+- [ ] Traditional PEM encryption algorithms beyond AES-128/192/256-CBC
 
 ## API / DX
 

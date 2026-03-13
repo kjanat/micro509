@@ -84,7 +84,7 @@
 			"description": "Update public docs only after the implementation and fixtures land. Done when:\n- `README.md`, `docs/PKIX-SCOPE.md`, and `docs/FUTURE.md` describe the exact shipped matrix\n- docs name RSA-PSS, ECDSA P-521, and key-container interop precisely\n- docs do not imply DSA, Ed448, or full WebCrypto parity\n- every user-facing claim maps to code and tests that now exist",
 			"depends": ["add-algo-fixtures-and-reg"],
 			"priority": "polish",
-			"passes": false
+			"passes": true
 		}
 	]
 }

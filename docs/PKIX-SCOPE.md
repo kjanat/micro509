@@ -162,6 +162,8 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
 - signature / time / issuer / CA / key usage / path length / name-constraint checks
 - separate revocation orchestration plus focused CRL / OCSP fixture coverage
 - `matchServiceIdentity()` for DNS-ID, IP-ID, URI-ID, SRV-ID, wildcard, IDNA, and opt-in DNS CN compatibility
+- certificate / CSR algorithm surface: RSA PKCS#1 v1.5, constrained RSA-PSS, ECDSA `P-256` / `P-384` / `P-521`, and Ed25519
+- encrypted private-key interop surface: PBES2 AES-128/192/256-CBC with PBKDF2 HMAC-SHA1/HMAC-SHA256, plus traditional PEM AES-128/192/256-CBC
 - typed parse/build APIs
 
 ### Do **_not_** claim until implemented
@@ -171,12 +173,15 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
 - full name-constraint validation
 - full RFC 6960 OCSP compliance
 - full revocation checking
+- full WebCrypto algorithm parity
+- `DSA`, `Ed448`, `ECDH`, `X25519`, or generic symmetric-crypto API support
 
 ### Honest wording
 
 - “Validates candidate certificate paths with configurable trust anchors and typed results.”
 - “Revocation is a separate API; `matchServiceIdentity()` handles shipped RFC 6125 identifier matching, while verification helpers currently compose DNS/IP identity checks on top of path validation.”
 - “RFC 5280 path validation is partial: supported-form name constraints, initial subtree inputs, and RFC 9618 policy processing ship, but revocation stays separate and broader conformance evidence is still incomplete.” (IETF Datatracker[^rfc5280])
+- “Certificate and CSR signing support covers RSA PKCS#1 v1.5, constrained RSA-PSS, ECDSA `P-256` / `P-384` / `P-521`, and Ed25519; encrypted key-container interop is limited to the shipped AES-CBC + PBKDF2 profiles.”
 
 The main monster under the bed is simple: **once you say “full RFC 5280,” you've signed up for policy processing, name constraints, critical-extension behavior, trust-anchor semantics, and revocation integration - not just signatures and dates.** (IETF Datatracker[^rfc5280])
 
