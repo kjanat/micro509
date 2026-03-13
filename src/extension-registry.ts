@@ -374,6 +374,61 @@ export function getExtensionDefinition(oid: string): KnownExtensionDefinition | 
 	}
 }
 
+export function decodeAndApplyKnownExtension(
+	context: ExtensionRegistryContext,
+	oid: string,
+	accumulator: MutableKnownParsedExtensionAccumulator,
+	valueDer: Uint8Array,
+): boolean {
+	const definition = getExtensionDefinition(oid);
+	if (definition === undefined || !definition.contexts.includes(context)) {
+		return false;
+	}
+	switch (oid) {
+		case OIDS.basicConstraints:
+			applyParsedExtension(BASIC_CONSTRAINTS_EXTENSION_DEFINITION, accumulator, valueDer);
+			return true;
+		case OIDS.keyUsage:
+			applyParsedExtension(KEY_USAGE_EXTENSION_DEFINITION, accumulator, valueDer);
+			return true;
+		case OIDS.extendedKeyUsage:
+			applyParsedExtension(EXTENDED_KEY_USAGE_EXTENSION_DEFINITION, accumulator, valueDer);
+			return true;
+		case OIDS.subjectAltName:
+			applyParsedExtension(SUBJECT_ALT_NAME_EXTENSION_DEFINITION, accumulator, valueDer);
+			return true;
+		case OIDS.nameConstraints:
+			applyParsedExtension(NAME_CONSTRAINTS_EXTENSION_DEFINITION, accumulator, valueDer);
+			return true;
+		case OIDS.certificatePolicies:
+			applyParsedExtension(CERTIFICATE_POLICIES_EXTENSION_DEFINITION, accumulator, valueDer);
+			return true;
+		case OIDS.policyMappings:
+			applyParsedExtension(POLICY_MAPPINGS_EXTENSION_DEFINITION, accumulator, valueDer);
+			return true;
+		case OIDS.policyConstraints:
+			applyParsedExtension(POLICY_CONSTRAINTS_EXTENSION_DEFINITION, accumulator, valueDer);
+			return true;
+		case OIDS.inhibitAnyPolicy:
+			applyParsedExtension(INHIBIT_ANY_POLICY_EXTENSION_DEFINITION, accumulator, valueDer);
+			return true;
+		case OIDS.authorityInfoAccess:
+			applyParsedExtension(AUTHORITY_INFO_ACCESS_EXTENSION_DEFINITION, accumulator, valueDer);
+			return true;
+		case OIDS.cRLDistributionPoints:
+			applyParsedExtension(CRL_DISTRIBUTION_POINTS_EXTENSION_DEFINITION, accumulator, valueDer);
+			return true;
+		case OIDS.subjectKeyIdentifier:
+			applyParsedExtension(SUBJECT_KEY_IDENTIFIER_EXTENSION_DEFINITION, accumulator, valueDer);
+			return true;
+		case OIDS.authorityKeyIdentifier:
+			applyParsedExtension(AUTHORITY_KEY_IDENTIFIER_EXTENSION_DEFINITION, accumulator, valueDer);
+			return true;
+		default:
+			return false;
+	}
+}
+
 export function buildSubjectKeyIdentifierFromSubjectPublicKeyInfo(
 	subjectPublicKeyInfo: Uint8Array,
 ): Uint8Array {
@@ -384,6 +439,14 @@ function defineExtensionDefinition<TParsed, TInput = TParsed>(
 	definition: ExtensionDefinition<TParsed, TInput>,
 ): ExtensionDefinition<TParsed, TInput> {
 	return definition;
+}
+
+function applyParsedExtension<TParsed, TInput>(
+	definition: ExtensionDefinition<TParsed, TInput>,
+	accumulator: MutableKnownParsedExtensionAccumulator,
+	valueDer: Uint8Array,
+): void {
+	definition.applyParsed(accumulator, definition.decode(valueDer));
 }
 
 function normalizeKeyIdentifier(value: string | Uint8Array): Uint8Array {

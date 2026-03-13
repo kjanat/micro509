@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'bun:test';
-import { createCertificateSigningRequest, parseCertificateSigningRequestDer } from '#micro509';
+import {
+	createCertificateSigningRequest,
+	createSelfSignedCertificate,
+	parseCertificateDer,
+	parseCertificateSigningRequestDer,
+} from '#micro509';
 import { toHex } from '#micro509/asn1.ts';
 import {
 	buildSubjectKeyIdentifierFromSubjectPublicKeyInfo,
@@ -152,22 +157,137 @@ describe('extension registry', () => {
 		).toBe(toHex(subjectKeyIdentifier));
 	});
 
-	it('round-trips name constraints through CSR creation and parsing', async () => {
+	it('round-trips registry-backed certificate extension building and parsing', async () => {
+		const certificate = await createSelfSignedCertificate({
+			subject: { commonName: 'registry-cert.example' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 1 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+				extendedKeyUsage: ['serverAuth', { type: 'oid', value: '1.2.3.4.5.6' }],
+				subjectAltNames: [
+					{ type: 'dns', value: 'registry-cert.example' },
+					{ type: 'uri', value: 'https://registry-cert.example' },
+				],
+				nameConstraints: {
+					permittedSubtrees: [{ base: { type: 'dns', value: '.example.test' } }],
+					excludedSubtrees: [{ base: { type: 'email', value: 'blocked@example.test' } }],
+				},
+				certificatePolicies: [{ policyIdentifier: '1.2.3.4.5' }],
+				policyMappings: [{ issuerDomainPolicy: '1.2.3.4.1', subjectDomainPolicy: '1.2.3.4.2' }],
+				policyConstraints: { requireExplicitPolicy: 0, inhibitPolicyMapping: 1 },
+				inhibitAnyPolicy: { skipCerts: 2 },
+				authorityInfoAccess: [{ method: 'ocsp', uri: 'https://ocsp.example.test' }],
+				crlDistributionPoints: [
+					{
+						distributionPoint: {
+							fullName: [{ type: 'uri', value: 'https://example.test/root.crl' }],
+						},
+					},
+				],
+			},
+		});
+
+		const parsed = parseCertificateDer(certificate.certificate.der);
+		expect(parsed.basicConstraints).toEqual({ ca: true, pathLength: 1 });
+		expect(parsed.keyUsage).toEqual(['keyCertSign', 'cRLSign']);
+		expect(parsed.extendedKeyUsage).toEqual(['serverAuth', { type: 'oid', value: '1.2.3.4.5.6' }]);
+		expect(parsed.subjectAltNames).toEqual([
+			{ type: 'dns', value: 'registry-cert.example' },
+			{ type: 'uri', value: 'https://registry-cert.example' },
+		]);
+		expect(parsed.nameConstraints).toEqual({
+			permittedSubtrees: [{ base: { type: 'dns', value: '.example.test' } }],
+			excludedSubtrees: [{ base: { type: 'email', value: 'blocked@example.test' } }],
+		});
+		expect(parsed.certificatePolicies).toEqual([{ policyIdentifier: '1.2.3.4.5' }]);
+		expect(parsed.policyMappings).toEqual([
+			{ issuerDomainPolicy: '1.2.3.4.1', subjectDomainPolicy: '1.2.3.4.2' },
+		]);
+		expect(parsed.policyConstraints).toEqual({ requireExplicitPolicy: 0, inhibitPolicyMapping: 1 });
+		expect(parsed.inhibitAnyPolicy).toEqual({ skipCerts: 2 });
+		expect(parsed.authorityInfoAccess).toEqual([
+			{ method: 'ocsp', uri: 'https://ocsp.example.test' },
+		]);
+		expect(parsed.crlDistributionPoints).toEqual([
+			{
+				distributionPoint: {
+					fullName: [{ type: 'uri', value: 'https://example.test/root.crl' }],
+				},
+			},
+		]);
+		expect(parsed.subjectKeyIdentifier).toBeDefined();
+		expect(parsed.authorityKeyIdentifier).toBe(parsed.subjectKeyIdentifier);
+	});
+
+	it('round-trips registry-backed CSR requested extensions and parsing', async () => {
 		const keyPair = await generateKeyPair();
 		const csr = await createCertificateSigningRequest({
 			subject: { commonName: 'registry-csr.example' },
 			publicKey: keyPair.publicKey,
 			signerPrivateKey: keyPair.privateKey,
 			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+				extendedKeyUsage: ['clientAuth'],
+				subjectAltNames: [{ type: 'dns', value: 'registry-csr.example' }],
 				nameConstraints: {
 					permittedSubtrees: [{ base: { type: 'dns', value: '.example.test' } }],
 					excludedSubtrees: [{ base: { type: 'email', value: 'blocked@example.test' } }],
 				},
+				certificatePolicies: [{ policyIdentifier: '1.2.3.7.8' }],
+				policyMappings: [{ issuerDomainPolicy: '1.2.3.7.1', subjectDomainPolicy: '1.2.3.7.2' }],
+				policyConstraints: { requireExplicitPolicy: 1 },
+				inhibitAnyPolicy: { skipCerts: 3 },
+				authorityInfoAccess: [{ method: 'ocsp', uri: 'https://csr-ocsp.example.test' }],
+				crlDistributionPoints: [
+					{
+						distributionPoint: {
+							fullName: [{ type: 'uri', value: 'https://example.test/csr.crl' }],
+						},
+					},
+				],
 			},
 		});
-		expect(parseCertificateSigningRequestDer(csr.der).nameConstraints).toEqual({
+		const parsed = parseCertificateSigningRequestDer(csr.der);
+		expect(parsed.basicConstraints).toEqual({ ca: true, pathLength: 0 });
+		expect(parsed.keyUsage).toEqual(['keyCertSign', 'cRLSign']);
+		expect(parsed.extendedKeyUsage).toEqual(['clientAuth']);
+		expect(parsed.subjectAltNames).toEqual([{ type: 'dns', value: 'registry-csr.example' }]);
+		expect(parsed.nameConstraints).toEqual({
 			permittedSubtrees: [{ base: { type: 'dns', value: '.example.test' } }],
 			excludedSubtrees: [{ base: { type: 'email', value: 'blocked@example.test' } }],
 		});
+		expect(parsed.certificatePolicies).toEqual([{ policyIdentifier: '1.2.3.7.8' }]);
+		expect(parsed.policyMappings).toEqual([
+			{ issuerDomainPolicy: '1.2.3.7.1', subjectDomainPolicy: '1.2.3.7.2' },
+		]);
+		expect(parsed.policyConstraints).toEqual({ requireExplicitPolicy: 1 });
+		expect(parsed.inhibitAnyPolicy).toEqual({ skipCerts: 3 });
+		expect(parsed.authorityInfoAccess).toEqual([
+			{ method: 'ocsp', uri: 'https://csr-ocsp.example.test' },
+		]);
+		expect(parsed.crlDistributionPoints).toEqual([
+			{
+				distributionPoint: {
+					fullName: [{ type: 'uri', value: 'https://example.test/csr.crl' }],
+				},
+			},
+		]);
+	});
+
+	it('rejects certificate-only known extensions in CSR customExtensions', async () => {
+		const keyPair = await generateKeyPair();
+		expect(
+			createCertificateSigningRequest({
+				subject: { commonName: 'csr-custom-extension.example' },
+				publicKey: keyPair.publicKey,
+				signerPrivateKey: keyPair.privateKey,
+				extensions: {
+					customExtensions: [
+						{ oid: OIDS.subjectKeyIdentifier, value: Uint8Array.of(0x04, 0x04, 1, 2, 3, 4) },
+					],
+				},
+			}),
+		).rejects.toThrow('not supported in csr context');
 	});
 });

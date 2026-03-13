@@ -16,6 +16,11 @@ import {
 	parseDistributionPointReasonFlagsContent,
 	parseKeyUsageExtension,
 } from './extension-bits.ts';
+import {
+	decodeAndApplyKnownExtension,
+	type KnownParsedExtensionAccumulator,
+	type MutableKnownParsedExtensionAccumulator,
+} from './extension-registry.ts';
 import type {
 	AuthorityInformationAccess,
 	BasicConstraints,
@@ -446,21 +451,8 @@ export function decodeExtensionMap<TMap extends ExtensionDecoderMap>(
 	return decoded;
 }
 
-interface ParsedExtensions {
+interface ParsedExtensions extends KnownParsedExtensionAccumulator {
 	readonly all: readonly ParsedExtension[];
-	readonly basicConstraints?: BasicConstraints;
-	readonly keyUsage?: readonly KeyUsage[];
-	readonly extendedKeyUsage?: readonly ExtendedKeyUsage[];
-	readonly subjectAltNames?: readonly SubjectAltName[];
-	readonly nameConstraints?: NameConstraints<ParsedNameConstraintForm>;
-	readonly certificatePolicies?: CertificatePolicies;
-	readonly policyMappings?: PolicyMappings;
-	readonly policyConstraints?: PolicyConstraints;
-	readonly inhibitAnyPolicy?: InhibitAnyPolicy;
-	readonly authorityInfoAccess?: readonly AuthorityInformationAccess[];
-	readonly crlDistributionPoints?: readonly ParsedDistributionPoint[];
-	readonly subjectKeyIdentifier?: string;
-	readonly authorityKeyIdentifier?: string;
 }
 
 function parseExtensionContainer(
@@ -471,7 +463,7 @@ function parseExtensionContainer(
 		return { all: [] };
 	}
 	const sequenceElement = requireElement(childrenOf(source, container)[0], 'extensions sequence');
-	return parseExtensionSequence(source, sequenceElement);
+	return parseExtensionSequence(source, sequenceElement, 'certificate');
 }
 
 function parseRequestedExtensions(
@@ -489,26 +481,18 @@ function parseRequestedExtensions(
 		}
 		const valuesSet = requireElement(attributeChildren[1], 'attribute values');
 		const requested = requireElement(childrenOf(source, valuesSet)[0], 'requested extensions');
-		return parseExtensionSequence(source, requested);
+		return parseExtensionSequence(source, requested, 'csr');
 	}
 	return { all: [] };
 }
 
-function parseExtensionSequence(source: Uint8Array, sequenceElement: DerElement): ParsedExtensions {
+function parseExtensionSequence(
+	source: Uint8Array,
+	sequenceElement: DerElement,
+	context: 'certificate' | 'csr',
+): ParsedExtensions {
 	const parsed: ParsedExtension[] = [];
-	let basicConstraints: BasicConstraints | undefined;
-	let keyUsage: readonly KeyUsage[] | undefined;
-	let extendedKeyUsage: readonly ExtendedKeyUsage[] | undefined;
-	let subjectAltNames: readonly SubjectAltName[] | undefined;
-	let nameConstraints: NameConstraints<ParsedNameConstraintForm> | undefined;
-	let certificatePolicies: CertificatePolicies | undefined;
-	let policyMappings: PolicyMappings | undefined;
-	let policyConstraints: PolicyConstraints | undefined;
-	let inhibitAnyPolicy: InhibitAnyPolicy | undefined;
-	let authorityInfoAccess: readonly AuthorityInformationAccess[] | undefined;
-	let crlDistributionPoints: readonly ParsedDistributionPoint[] | undefined;
-	let subjectKeyIdentifier: string | undefined;
-	let authorityKeyIdentifier: string | undefined;
+	const knownParsed: MutableKnownParsedExtensionAccumulator = {};
 
 	for (const extension of childrenOf(source, sequenceElement)) {
 		const children = childrenOf(source, extension);
@@ -522,71 +506,18 @@ function parseExtensionSequence(source: Uint8Array, sequenceElement: DerElement)
 			offset += 1;
 		}
 		const extnValue = requireElement(children[offset], 'extension value');
-		const inner = readElement(extnValue.value);
 		parsed.push({
 			oid,
 			critical,
 			valueDer: new Uint8Array(extnValue.value),
 			valueHex: toHex(extnValue.value),
 		});
-		switch (oid) {
-			case OIDS.basicConstraints:
-				basicConstraints = parseBasicConstraints(extnValue.value);
-				break;
-			case OIDS.keyUsage:
-				keyUsage = parseKeyUsage(extnValue.value);
-				break;
-			case OIDS.extendedKeyUsage:
-				extendedKeyUsage = parseExtendedKeyUsage(extnValue.value);
-				break;
-			case OIDS.subjectAltName:
-				subjectAltNames = parseSubjectAltNames(extnValue.value);
-				break;
-			case OIDS.nameConstraints:
-				nameConstraints = parseNameConstraints(extnValue.value);
-				break;
-			case OIDS.certificatePolicies:
-				certificatePolicies = parseCertificatePolicies(extnValue.value);
-				break;
-			case OIDS.policyMappings:
-				policyMappings = parsePolicyMappings(extnValue.value);
-				break;
-			case OIDS.policyConstraints:
-				policyConstraints = parsePolicyConstraints(extnValue.value);
-				break;
-			case OIDS.inhibitAnyPolicy:
-				inhibitAnyPolicy = parseInhibitAnyPolicy(extnValue.value);
-				break;
-			case OIDS.authorityInfoAccess:
-				authorityInfoAccess = parseAuthorityInfoAccess(extnValue.value);
-				break;
-			case OIDS.cRLDistributionPoints:
-				crlDistributionPoints = parseCrlDistributionPoints(extnValue.value);
-				break;
-			case OIDS.subjectKeyIdentifier:
-				subjectKeyIdentifier = toHex(inner.value);
-				break;
-			case OIDS.authorityKeyIdentifier:
-				authorityKeyIdentifier = parseAuthorityKeyIdentifier(extnValue.value);
-				break;
-		}
+		decodeAndApplyKnownExtension(context, oid, knownParsed, extnValue.value);
 	}
 
 	return {
 		all: parsed,
-		...(basicConstraints !== undefined ? { basicConstraints } : {}),
-		...(keyUsage !== undefined ? { keyUsage } : {}),
-		...(extendedKeyUsage !== undefined ? { extendedKeyUsage } : {}),
-		...(subjectAltNames !== undefined ? { subjectAltNames } : {}),
-		...(nameConstraints !== undefined ? { nameConstraints } : {}),
-		...(certificatePolicies !== undefined ? { certificatePolicies } : {}),
-		...(policyMappings !== undefined ? { policyMappings } : {}),
-		...(policyConstraints !== undefined ? { policyConstraints } : {}),
-		...(inhibitAnyPolicy !== undefined ? { inhibitAnyPolicy } : {}),
-		...(authorityInfoAccess !== undefined ? { authorityInfoAccess } : {}),
-		...(crlDistributionPoints !== undefined ? { crlDistributionPoints } : {}),
-		...(subjectKeyIdentifier !== undefined ? { subjectKeyIdentifier } : {}),
-		...(authorityKeyIdentifier !== undefined ? { authorityKeyIdentifier } : {}),
+		...knownParsed,
 	};
 }
 

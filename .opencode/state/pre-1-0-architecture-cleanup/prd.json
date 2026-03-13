@@ -62,7 +62,7 @@
 			"description": "Replace the built-in extension switch in `src/parse.ts` and the duplicated built-in builder lists in `src/extensions.ts`. Done when:\n- cert/CSR parse dispatch uses registry definitions\n- cert/CSR builder paths use the same registry definitions\n- round-trip tests prove no semantic loss for built-in extensions",
 			"depends": ["cert-csr-ext-registry"],
 			"priority": "integration",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "migrate-verify-identity",

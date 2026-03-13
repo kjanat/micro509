@@ -18,6 +18,7 @@ Started: 2026-03-13
 - When a public file name already occupies the obvious directory path (`verify.ts`), extract internal engines as sibling `*-engine.ts` modules instead of forcing a disruptive facade rename just to get nested paths.
 - For extracted validators, keep the engine failure shape structurally compatible with the facade's failure union when possible; that lets the facade delegate without inventing another translation layer.
 - Registry foundations can land before the big rewire if the registry is fully typed and test-covered, while existing parser/builder entrypoints still use their old control flow.
+- Once a registry spans multiple contexts, thread the context through both parse and build paths; otherwise known-but-unsupported OIDs leak across surfaces and create inconsistent behavior.
 
 ---
 <!-- Task logs below - APPEND ONLY -->
@@ -71,3 +72,12 @@ Started: 2026-03-13
 - Closed two adjacent gaps while laying the foundation: CSR requested extensions now preserve `nameConstraints`, and policy-related parse integers now reject negative DER encodings through `decodeNonNegativeIntegerNumber()`.
 - Files changed: `src/extension-registry.ts`, `src/extensions.ts`, `src/parse.ts`, `src/asn1.ts`, `test/extension-registry.test.ts`, `test/internals.test.ts`, `test/malformed-der.test.ts`, `.opencode/state/pre-1-0-architecture-cleanup/prd.json`, `.opencode/state/pre-1-0-architecture-cleanup/progress.txt`
 - **Learnings:** if a registry is meant to become the source of truth, type erasure is a trap; keep definition lookups strongly typed from day one so the later rewire can consume them without casts.
+
+## Task - [rewire-parse-and-builders]
+
+- Rewired `src/parse.ts` to replace the built-in extension OID switch with registry-backed decode/apply dispatch, while preserving cert vs CSR context rules.
+- Rewired `src/extensions.ts` so certificate and CSR builder emission flows through the registry definitions instead of duplicated built-in OID/encoder lists.
+- Added broader round-trip coverage in `test/extension-registry.test.ts` for registry-backed certificate and CSR build+parse paths, plus a guard against certificate-only known extensions being smuggled into CSR `customExtensions`.
+- Tightened custom CSR extension handling so known certificate-only OIDs are rejected in CSR context instead of being emitted inconsistently.
+- Files changed: `src/parse.ts`, `src/extensions.ts`, `src/extension-registry.ts`, `test/extension-registry.test.ts`, `.opencode/state/pre-1-0-architecture-cleanup/prd.json`, `.opencode/state/pre-1-0-architecture-cleanup/progress.txt`
+- **Learnings:** the registry rewire is safer when the parser and builders both consume the same context-aware definition layer, and the tests exercise both direct codecs and end-to-end material generation.

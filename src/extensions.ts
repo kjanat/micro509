@@ -19,6 +19,24 @@ import {
 	encodeDistributionPointReasonFlagsContent,
 	encodeKeyUsageExtension,
 } from './extension-bits.ts';
+import {
+	AUTHORITY_INFO_ACCESS_EXTENSION_DEFINITION,
+	AUTHORITY_KEY_IDENTIFIER_EXTENSION_DEFINITION,
+	BASIC_CONSTRAINTS_EXTENSION_DEFINITION,
+	CERTIFICATE_POLICIES_EXTENSION_DEFINITION,
+	CRL_DISTRIBUTION_POINTS_EXTENSION_DEFINITION,
+	EXTENDED_KEY_USAGE_EXTENSION_DEFINITION,
+	type ExtensionDefinition,
+	type ExtensionRegistryContext,
+	getExtensionDefinition,
+	INHIBIT_ANY_POLICY_EXTENSION_DEFINITION,
+	KEY_USAGE_EXTENSION_DEFINITION,
+	NAME_CONSTRAINTS_EXTENSION_DEFINITION,
+	POLICY_CONSTRAINTS_EXTENSION_DEFINITION,
+	POLICY_MAPPINGS_EXTENSION_DEFINITION,
+	SUBJECT_ALT_NAME_EXTENSION_DEFINITION,
+	SUBJECT_KEY_IDENTIFIER_EXTENSION_DEFINITION,
+} from './extension-registry.ts';
 import { sha1 } from './hash.ts';
 import { parseIpAddressToBytes } from './ip.ts';
 import { encodeRelativeDistinguishedName, type RelativeDistinguishedNameInput } from './name.ts';
@@ -279,117 +297,24 @@ export function buildCertificateExtensions(
 	const extensions: Uint8Array[] = [];
 	const seen = new Set<string>();
 	const basicConstraints = input?.basicConstraints ?? { ca: false };
-	pushExtension(
+	pushKnownExtension(extensions, seen, BASIC_CONSTRAINTS_EXTENSION_DEFINITION, basicConstraints);
+	pushKnownExtension(
 		extensions,
 		seen,
-		OIDS.basicConstraints,
-		encodeBasicConstraints(basicConstraints),
-		true,
-	);
-	pushExtension(
-		extensions,
-		seen,
-		OIDS.subjectKeyIdentifier,
-		octetString(buildSubjectKeyIdentifier(subjectPublicKeyInfo)),
+		SUBJECT_KEY_IDENTIFIER_EXTENSION_DEFINITION,
+		buildSubjectKeyIdentifier(subjectPublicKeyInfo),
 	);
 	if (issuerPublicKeyInfo !== undefined) {
-		pushExtension(
+		pushKnownExtension(
 			extensions,
 			seen,
-			OIDS.authorityKeyIdentifier,
-			sequence([implicitPrimitiveContext(0, buildSubjectKeyIdentifier(issuerPublicKeyInfo))]),
+			AUTHORITY_KEY_IDENTIFIER_EXTENSION_DEFINITION,
+			buildSubjectKeyIdentifier(issuerPublicKeyInfo),
 		);
 	}
-	if (input?.keyUsage !== undefined && input.keyUsage.length > 0) {
-		pushExtension(extensions, seen, OIDS.keyUsage, encodeKeyUsage(input.keyUsage), true);
-	}
-	if (input?.subjectAltNames !== undefined && input.subjectAltNames.length > 0) {
-		pushExtension(
-			extensions,
-			seen,
-			OIDS.subjectAltName,
-			sequence(input.subjectAltNames.map(encodeSubjectAltName)),
-		);
-	}
-	if (input?.extendedKeyUsage !== undefined && input.extendedKeyUsage.length > 0) {
-		pushExtension(
-			extensions,
-			seen,
-			OIDS.extendedKeyUsage,
-			encodeExtendedKeyUsage(input.extendedKeyUsage),
-		);
-	}
-	if (input?.nameConstraints !== undefined) {
-		pushExtension(
-			extensions,
-			seen,
-			OIDS.nameConstraints,
-			encodeNameConstraints(input.nameConstraints),
-			true,
-		);
-	}
-	if (input?.certificatePolicies !== undefined && input.certificatePolicies.length > 0) {
-		pushExtension(
-			extensions,
-			seen,
-			OIDS.certificatePolicies,
-			encodeCertificatePolicies(input.certificatePolicies),
-		);
-	}
-	if (input?.policyMappings !== undefined && input.policyMappings.length > 0) {
-		pushExtension(
-			extensions,
-			seen,
-			OIDS.policyMappings,
-			encodePolicyMappings(input.policyMappings),
-			true,
-		);
-	}
-	if (input?.policyConstraints !== undefined) {
-		pushExtension(
-			extensions,
-			seen,
-			OIDS.policyConstraints,
-			encodePolicyConstraints(input.policyConstraints),
-			true,
-		);
-	}
-	if (input?.inhibitAnyPolicy !== undefined) {
-		pushExtension(
-			extensions,
-			seen,
-			OIDS.inhibitAnyPolicy,
-			encodeInhibitAnyPolicy(input.inhibitAnyPolicy),
-			true,
-		);
-	}
-	if (input?.authorityInfoAccess !== undefined && input.authorityInfoAccess.length > 0) {
-		pushExtension(
-			extensions,
-			seen,
-			OIDS.authorityInfoAccess,
-			encodeAuthorityInfoAccess(input.authorityInfoAccess),
-		);
-	}
-	if (input?.crlDistributionPoints !== undefined && input.crlDistributionPoints.length > 0) {
-		pushExtension(
-			extensions,
-			seen,
-			OIDS.cRLDistributionPoints,
-			encodeCrlDistributionPoints(input.crlDistributionPoints),
-		);
-	}
-	if (input?.customExtensions !== undefined) {
-		for (const extension of input.customExtensions) {
-			pushExtension(
-				extensions,
-				seen,
-				extension.oid,
-				new Uint8Array(extension.value),
-				extension.critical ?? false,
-			);
-		}
-	}
+	appendConfiguredExtensions(extensions, seen, input, 'certificate', {
+		includeBasicConstraints: false,
+	});
 	return extensions;
 }
 
@@ -398,98 +323,96 @@ export function buildRequestedExtensions(
 ): Uint8Array[] {
 	const extensions: Uint8Array[] = [];
 	const seen = new Set<string>();
-	if (input?.basicConstraints !== undefined) {
-		pushExtension(
-			extensions,
+	appendConfiguredExtensions(extensions, seen, input, 'csr', { includeBasicConstraints: true });
+	return extensions;
+}
+
+function appendConfiguredExtensions(
+	encoded: Uint8Array[],
+	seen: Set<string>,
+	input: CertificateExtensionsInput | undefined,
+	context: ExtensionRegistryContext,
+	options: { readonly includeBasicConstraints: boolean },
+): void {
+	if (input === undefined) {
+		return;
+	}
+	if (options.includeBasicConstraints && input.basicConstraints !== undefined) {
+		pushKnownExtension(
+			encoded,
 			seen,
-			OIDS.basicConstraints,
-			encodeBasicConstraints(input.basicConstraints),
-			true,
+			BASIC_CONSTRAINTS_EXTENSION_DEFINITION,
+			input.basicConstraints,
 		);
 	}
-	if (input?.keyUsage !== undefined && input.keyUsage.length > 0) {
-		pushExtension(extensions, seen, OIDS.keyUsage, encodeKeyUsage(input.keyUsage), true);
+	if (input.keyUsage !== undefined && input.keyUsage.length > 0) {
+		pushKnownExtension(encoded, seen, KEY_USAGE_EXTENSION_DEFINITION, input.keyUsage);
 	}
-	if (input?.subjectAltNames !== undefined && input.subjectAltNames.length > 0) {
-		pushExtension(
-			extensions,
+	if (input.subjectAltNames !== undefined && input.subjectAltNames.length > 0) {
+		pushKnownExtension(encoded, seen, SUBJECT_ALT_NAME_EXTENSION_DEFINITION, input.subjectAltNames);
+	}
+	if (input.extendedKeyUsage !== undefined && input.extendedKeyUsage.length > 0) {
+		pushKnownExtension(
+			encoded,
 			seen,
-			OIDS.subjectAltName,
-			sequence(input.subjectAltNames.map(encodeSubjectAltName)),
+			EXTENDED_KEY_USAGE_EXTENSION_DEFINITION,
+			input.extendedKeyUsage,
 		);
 	}
-	if (input?.extendedKeyUsage !== undefined && input.extendedKeyUsage.length > 0) {
-		pushExtension(
-			extensions,
+	if (input.nameConstraints !== undefined) {
+		pushKnownExtension(encoded, seen, NAME_CONSTRAINTS_EXTENSION_DEFINITION, input.nameConstraints);
+	}
+	if (input.certificatePolicies !== undefined && input.certificatePolicies.length > 0) {
+		pushKnownExtension(
+			encoded,
 			seen,
-			OIDS.extendedKeyUsage,
-			encodeExtendedKeyUsage(input.extendedKeyUsage),
+			CERTIFICATE_POLICIES_EXTENSION_DEFINITION,
+			input.certificatePolicies,
 		);
 	}
-	if (input?.nameConstraints !== undefined) {
-		pushExtension(
-			extensions,
+	if (input.policyMappings !== undefined && input.policyMappings.length > 0) {
+		pushKnownExtension(encoded, seen, POLICY_MAPPINGS_EXTENSION_DEFINITION, input.policyMappings);
+	}
+	if (input.policyConstraints !== undefined) {
+		pushKnownExtension(
+			encoded,
 			seen,
-			OIDS.nameConstraints,
-			encodeNameConstraints(input.nameConstraints),
-			true,
+			POLICY_CONSTRAINTS_EXTENSION_DEFINITION,
+			input.policyConstraints,
 		);
 	}
-	if (input?.certificatePolicies !== undefined && input.certificatePolicies.length > 0) {
-		pushExtension(
-			extensions,
+	if (input.inhibitAnyPolicy !== undefined) {
+		pushKnownExtension(
+			encoded,
 			seen,
-			OIDS.certificatePolicies,
-			encodeCertificatePolicies(input.certificatePolicies),
+			INHIBIT_ANY_POLICY_EXTENSION_DEFINITION,
+			input.inhibitAnyPolicy,
 		);
 	}
-	if (input?.policyMappings !== undefined && input.policyMappings.length > 0) {
-		pushExtension(
-			extensions,
+	if (input.authorityInfoAccess !== undefined && input.authorityInfoAccess.length > 0) {
+		pushKnownExtension(
+			encoded,
 			seen,
-			OIDS.policyMappings,
-			encodePolicyMappings(input.policyMappings),
-			true,
+			AUTHORITY_INFO_ACCESS_EXTENSION_DEFINITION,
+			input.authorityInfoAccess,
 		);
 	}
-	if (input?.policyConstraints !== undefined) {
-		pushExtension(
-			extensions,
+	if (input.crlDistributionPoints !== undefined && input.crlDistributionPoints.length > 0) {
+		pushKnownExtension(
+			encoded,
 			seen,
-			OIDS.policyConstraints,
-			encodePolicyConstraints(input.policyConstraints),
-			true,
+			CRL_DISTRIBUTION_POINTS_EXTENSION_DEFINITION,
+			input.crlDistributionPoints,
 		);
 	}
-	if (input?.inhibitAnyPolicy !== undefined) {
-		pushExtension(
-			extensions,
-			seen,
-			OIDS.inhibitAnyPolicy,
-			encodeInhibitAnyPolicy(input.inhibitAnyPolicy),
-			true,
-		);
-	}
-	if (input?.authorityInfoAccess !== undefined && input.authorityInfoAccess.length > 0) {
-		pushExtension(
-			extensions,
-			seen,
-			OIDS.authorityInfoAccess,
-			encodeAuthorityInfoAccess(input.authorityInfoAccess),
-		);
-	}
-	if (input?.crlDistributionPoints !== undefined && input.crlDistributionPoints.length > 0) {
-		pushExtension(
-			extensions,
-			seen,
-			OIDS.cRLDistributionPoints,
-			encodeCrlDistributionPoints(input.crlDistributionPoints),
-		);
-	}
-	if (input?.customExtensions !== undefined) {
+	if (input.customExtensions !== undefined) {
 		for (const extension of input.customExtensions) {
+			const knownDefinition = getExtensionDefinition(extension.oid);
+			if (knownDefinition !== undefined && !knownDefinition.contexts.includes(context)) {
+				throw new Error(`Extension ${extension.oid} is not supported in ${context} context`);
+			}
 			pushExtension(
-				extensions,
+				encoded,
 				seen,
 				extension.oid,
 				new Uint8Array(extension.value),
@@ -497,7 +420,16 @@ export function buildRequestedExtensions(
 			);
 		}
 	}
-	return extensions;
+}
+
+function pushKnownExtension<TParsed, TInput>(
+	encoded: Uint8Array[],
+	seen: Set<string>,
+	definition: ExtensionDefinition<TParsed, TInput>,
+	value: TInput,
+	critical = definition.defaultCritical,
+): void {
+	pushExtension(encoded, seen, definition.oid, definition.encode(value), critical);
 }
 
 export function encodeExtension(oid: string, extnValue: Uint8Array, critical = false): Uint8Array {
