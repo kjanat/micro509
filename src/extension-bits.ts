@@ -1,4 +1,4 @@
-import { bitString, readElement } from './der.ts';
+import { bitString, DEFAULT_MAX_DER_DEPTH, readRootElement } from './der.ts';
 import type { DistributionPointReason, KeyUsage } from './extensions.ts';
 
 const KEY_USAGE_ORDER = [
@@ -32,7 +32,7 @@ export function encodeKeyUsageExtension(usages: readonly KeyUsage[]): Uint8Array
 }
 
 export function parseKeyUsageExtension(bytes: Uint8Array): readonly KeyUsage[] {
-	const bitStringElement = readElement(bytes);
+	const bitStringElement = readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH });
 	if (bitStringElement.tag !== 0x03) {
 		throw new Error('keyUsage must be a BIT STRING');
 	}

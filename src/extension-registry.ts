@@ -1,5 +1,11 @@
 import { hexToBytes, toHex } from './asn1.ts';
-import { implicitPrimitiveContext, octetString, readElement, sequence } from './der.ts';
+import {
+	DEFAULT_MAX_DER_DEPTH,
+	implicitPrimitiveContext,
+	octetString,
+	readRootElement,
+	sequence,
+} from './der.ts';
 import type {
 	AuthorityInformationAccess,
 	BasicConstraints,
@@ -290,6 +296,68 @@ export const CERT_CSR_EXTENSION_DEFINITIONS: readonly KnownExtensionDefinition[]
 	AUTHORITY_KEY_IDENTIFIER_EXTENSION_DEFINITION,
 ];
 
+const EXTENSION_DEFINITION_MAP = new Map<string, KnownExtensionDefinition>(
+	CERT_CSR_EXTENSION_DEFINITIONS.map((definition) => [definition.oid, definition]),
+);
+
+const PARSED_EXTENSION_APPLIERS = new Map<
+	string,
+	(accumulator: MutableKnownParsedExtensionAccumulator, valueDer: Uint8Array) => void
+>([
+	[
+		BASIC_CONSTRAINTS_EXTENSION_DEFINITION.oid,
+		createParsedExtensionApplicator(BASIC_CONSTRAINTS_EXTENSION_DEFINITION),
+	],
+	[
+		KEY_USAGE_EXTENSION_DEFINITION.oid,
+		createParsedExtensionApplicator(KEY_USAGE_EXTENSION_DEFINITION),
+	],
+	[
+		EXTENDED_KEY_USAGE_EXTENSION_DEFINITION.oid,
+		createParsedExtensionApplicator(EXTENDED_KEY_USAGE_EXTENSION_DEFINITION),
+	],
+	[
+		SUBJECT_ALT_NAME_EXTENSION_DEFINITION.oid,
+		createParsedExtensionApplicator(SUBJECT_ALT_NAME_EXTENSION_DEFINITION),
+	],
+	[
+		NAME_CONSTRAINTS_EXTENSION_DEFINITION.oid,
+		createParsedExtensionApplicator(NAME_CONSTRAINTS_EXTENSION_DEFINITION),
+	],
+	[
+		CERTIFICATE_POLICIES_EXTENSION_DEFINITION.oid,
+		createParsedExtensionApplicator(CERTIFICATE_POLICIES_EXTENSION_DEFINITION),
+	],
+	[
+		POLICY_MAPPINGS_EXTENSION_DEFINITION.oid,
+		createParsedExtensionApplicator(POLICY_MAPPINGS_EXTENSION_DEFINITION),
+	],
+	[
+		POLICY_CONSTRAINTS_EXTENSION_DEFINITION.oid,
+		createParsedExtensionApplicator(POLICY_CONSTRAINTS_EXTENSION_DEFINITION),
+	],
+	[
+		INHIBIT_ANY_POLICY_EXTENSION_DEFINITION.oid,
+		createParsedExtensionApplicator(INHIBIT_ANY_POLICY_EXTENSION_DEFINITION),
+	],
+	[
+		AUTHORITY_INFO_ACCESS_EXTENSION_DEFINITION.oid,
+		createParsedExtensionApplicator(AUTHORITY_INFO_ACCESS_EXTENSION_DEFINITION),
+	],
+	[
+		CRL_DISTRIBUTION_POINTS_EXTENSION_DEFINITION.oid,
+		createParsedExtensionApplicator(CRL_DISTRIBUTION_POINTS_EXTENSION_DEFINITION),
+	],
+	[
+		SUBJECT_KEY_IDENTIFIER_EXTENSION_DEFINITION.oid,
+		createParsedExtensionApplicator(SUBJECT_KEY_IDENTIFIER_EXTENSION_DEFINITION),
+	],
+	[
+		AUTHORITY_KEY_IDENTIFIER_EXTENSION_DEFINITION.oid,
+		createParsedExtensionApplicator(AUTHORITY_KEY_IDENTIFIER_EXTENSION_DEFINITION),
+	],
+]);
+
 export function listExtensionDefinitions(
 	context?: ExtensionRegistryContext,
 ): readonly KnownExtensionDefinition[] {
@@ -342,36 +410,7 @@ export function getExtensionDefinition(
 ): typeof AUTHORITY_KEY_IDENTIFIER_EXTENSION_DEFINITION;
 export function getExtensionDefinition(oid: string): KnownExtensionDefinition | undefined;
 export function getExtensionDefinition(oid: string): KnownExtensionDefinition | undefined {
-	switch (oid) {
-		case OIDS.basicConstraints:
-			return BASIC_CONSTRAINTS_EXTENSION_DEFINITION;
-		case OIDS.keyUsage:
-			return KEY_USAGE_EXTENSION_DEFINITION;
-		case OIDS.extendedKeyUsage:
-			return EXTENDED_KEY_USAGE_EXTENSION_DEFINITION;
-		case OIDS.subjectAltName:
-			return SUBJECT_ALT_NAME_EXTENSION_DEFINITION;
-		case OIDS.nameConstraints:
-			return NAME_CONSTRAINTS_EXTENSION_DEFINITION;
-		case OIDS.certificatePolicies:
-			return CERTIFICATE_POLICIES_EXTENSION_DEFINITION;
-		case OIDS.policyMappings:
-			return POLICY_MAPPINGS_EXTENSION_DEFINITION;
-		case OIDS.policyConstraints:
-			return POLICY_CONSTRAINTS_EXTENSION_DEFINITION;
-		case OIDS.inhibitAnyPolicy:
-			return INHIBIT_ANY_POLICY_EXTENSION_DEFINITION;
-		case OIDS.authorityInfoAccess:
-			return AUTHORITY_INFO_ACCESS_EXTENSION_DEFINITION;
-		case OIDS.cRLDistributionPoints:
-			return CRL_DISTRIBUTION_POINTS_EXTENSION_DEFINITION;
-		case OIDS.subjectKeyIdentifier:
-			return SUBJECT_KEY_IDENTIFIER_EXTENSION_DEFINITION;
-		case OIDS.authorityKeyIdentifier:
-			return AUTHORITY_KEY_IDENTIFIER_EXTENSION_DEFINITION;
-		default:
-			return undefined;
-	}
+	return EXTENSION_DEFINITION_MAP.get(oid);
 }
 
 export function decodeAndApplyKnownExtension(
@@ -384,49 +423,12 @@ export function decodeAndApplyKnownExtension(
 	if (definition === undefined || !definition.contexts.includes(context)) {
 		return false;
 	}
-	switch (oid) {
-		case OIDS.basicConstraints:
-			applyParsedExtension(BASIC_CONSTRAINTS_EXTENSION_DEFINITION, accumulator, valueDer);
-			return true;
-		case OIDS.keyUsage:
-			applyParsedExtension(KEY_USAGE_EXTENSION_DEFINITION, accumulator, valueDer);
-			return true;
-		case OIDS.extendedKeyUsage:
-			applyParsedExtension(EXTENDED_KEY_USAGE_EXTENSION_DEFINITION, accumulator, valueDer);
-			return true;
-		case OIDS.subjectAltName:
-			applyParsedExtension(SUBJECT_ALT_NAME_EXTENSION_DEFINITION, accumulator, valueDer);
-			return true;
-		case OIDS.nameConstraints:
-			applyParsedExtension(NAME_CONSTRAINTS_EXTENSION_DEFINITION, accumulator, valueDer);
-			return true;
-		case OIDS.certificatePolicies:
-			applyParsedExtension(CERTIFICATE_POLICIES_EXTENSION_DEFINITION, accumulator, valueDer);
-			return true;
-		case OIDS.policyMappings:
-			applyParsedExtension(POLICY_MAPPINGS_EXTENSION_DEFINITION, accumulator, valueDer);
-			return true;
-		case OIDS.policyConstraints:
-			applyParsedExtension(POLICY_CONSTRAINTS_EXTENSION_DEFINITION, accumulator, valueDer);
-			return true;
-		case OIDS.inhibitAnyPolicy:
-			applyParsedExtension(INHIBIT_ANY_POLICY_EXTENSION_DEFINITION, accumulator, valueDer);
-			return true;
-		case OIDS.authorityInfoAccess:
-			applyParsedExtension(AUTHORITY_INFO_ACCESS_EXTENSION_DEFINITION, accumulator, valueDer);
-			return true;
-		case OIDS.cRLDistributionPoints:
-			applyParsedExtension(CRL_DISTRIBUTION_POINTS_EXTENSION_DEFINITION, accumulator, valueDer);
-			return true;
-		case OIDS.subjectKeyIdentifier:
-			applyParsedExtension(SUBJECT_KEY_IDENTIFIER_EXTENSION_DEFINITION, accumulator, valueDer);
-			return true;
-		case OIDS.authorityKeyIdentifier:
-			applyParsedExtension(AUTHORITY_KEY_IDENTIFIER_EXTENSION_DEFINITION, accumulator, valueDer);
-			return true;
-		default:
-			return false;
+	const applyParsed = PARSED_EXTENSION_APPLIERS.get(oid);
+	if (applyParsed === undefined) {
+		return false;
 	}
+	applyParsed(accumulator, valueDer);
+	return true;
 }
 
 export function buildSubjectKeyIdentifierFromSubjectPublicKeyInfo(
@@ -441,12 +443,12 @@ function defineExtensionDefinition<TParsed, TInput = TParsed>(
 	return definition;
 }
 
-function applyParsedExtension<TParsed, TInput>(
+function createParsedExtensionApplicator<TParsed, TInput>(
 	definition: ExtensionDefinition<TParsed, TInput>,
-	accumulator: MutableKnownParsedExtensionAccumulator,
-	valueDer: Uint8Array,
-): void {
-	definition.applyParsed(accumulator, definition.decode(valueDer));
+): (accumulator: MutableKnownParsedExtensionAccumulator, valueDer: Uint8Array) => void {
+	return (accumulator, valueDer) => {
+		definition.applyParsed(accumulator, definition.decode(valueDer));
+	};
 }
 
 function normalizeKeyIdentifier(value: string | Uint8Array): Uint8Array {
@@ -454,5 +456,5 @@ function normalizeKeyIdentifier(value: string | Uint8Array): Uint8Array {
 }
 
 function decodeSubjectKeyIdentifier(valueDer: Uint8Array): string {
-	return toHex(readElement(valueDer).value);
+	return toHex(readRootElement(valueDer, { maxDepth: DEFAULT_MAX_DER_DEPTH }).value);
 }

@@ -2,6 +2,7 @@ import { hexToBytes } from './asn1.ts';
 import {
 	bool,
 	concatBytes,
+	DEFAULT_MAX_DER_DEPTH,
 	explicitContext,
 	ia5String,
 	implicitConstructedContext,
@@ -10,6 +11,7 @@ import {
 	objectIdentifier,
 	octetString,
 	readElement,
+	readRootElement,
 	readSequenceChildren,
 	sequence,
 	tlv,
@@ -699,7 +701,7 @@ function encodeNameConstraintForm(form: NameConstraintForm): Uint8Array {
 }
 
 function extractDirectoryNameContent(derHex: string): Uint8Array {
-	const element = readElement(hexToBytes(derHex));
+	const element = readRootElement(hexToBytes(derHex), { maxDepth: DEFAULT_MAX_DER_DEPTH });
 	if (element.tag !== 0x30) {
 		throw new Error('directoryName derHex must encode a DER SEQUENCE');
 	}

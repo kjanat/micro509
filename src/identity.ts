@@ -1,6 +1,7 @@
-import type { Micro509Error, Result } from './core/result.ts';
 import { normalizeIpAddress } from './ip.ts';
 import type { ParsedCertificate } from './parse.ts';
+import type { ErrorResult, Micro509Error, Result } from './result.ts';
+import { errorResult, micro509Error, successResult } from './result.ts';
 
 export interface DnsServiceIdentityInput {
 	readonly type: 'dns';
@@ -61,13 +62,11 @@ export interface MatchServiceIdentitySuccess {
 	readonly value: undefined;
 }
 
-export interface MatchServiceIdentityFailureResult {
-	readonly ok: false;
-	readonly error: MatchServiceIdentityFailure;
-	readonly code: MatchServiceIdentityErrorCode;
-	readonly message: string;
-	readonly details?: MatchServiceIdentityFailureDetails;
-}
+export type MatchServiceIdentityFailureResult = ErrorResult<
+	MatchServiceIdentityErrorCode,
+	MatchServiceIdentityFailureDetails,
+	MatchServiceIdentityFailure
+>;
 
 export type MatchServiceIdentityResult =
 	| MatchServiceIdentitySuccess
@@ -407,21 +406,13 @@ function failure(
 ): MatchServiceIdentityResult {
 	const error: MatchServiceIdentityFailure = {
 		ok: false,
-		code,
-		message,
-		...(details === undefined ? {} : { details }),
+		...micro509Error(code, message, details),
 	};
-	return {
-		ok: false,
-		error,
-		code,
-		message,
-		...(details === undefined ? {} : { details }),
-	};
+	return errorResult(error);
 }
 
 function success(): MatchServiceIdentitySuccess {
-	return { ok: true, value: undefined };
+	return successResult(undefined);
 }
 
 function details(

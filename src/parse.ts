@@ -11,7 +11,12 @@ import {
 	toHex,
 } from './asn1.ts';
 import type { DerElement } from './der.ts';
-import { DEFAULT_MAX_DER_DEPTH, encodeLength, readElement, readSequenceChildren } from './der.ts';
+import {
+	DEFAULT_MAX_DER_DEPTH,
+	encodeLength,
+	readRootElement,
+	readSequenceChildren,
+} from './der.ts';
 import {
 	parseDistributionPointReasonFlagsContent,
 	parseKeyUsageExtension,
@@ -613,7 +618,7 @@ function parseAlgorithmIdentifier(
 
 /** @internal Exported for the extension registry. */
 export function parseBasicConstraints(bytes: Uint8Array): BasicConstraints {
-	const element = readElement(bytes);
+	const element = readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH });
 	const children = childrenOf(bytes, element);
 	let ca = false;
 	let pathLength: number | undefined;
@@ -635,7 +640,10 @@ export function parseKeyUsage(bytes: Uint8Array): readonly KeyUsage[] {
 
 /** @internal Exported for the extension registry. */
 export function parseExtendedKeyUsage(bytes: Uint8Array): readonly ExtendedKeyUsage[] {
-	const sequenceElement = requireElement(readElement(bytes), 'extendedKeyUsage sequence');
+	const sequenceElement = requireElement(
+		readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH }),
+		'extendedKeyUsage sequence',
+	);
 	return childrenOf(bytes, sequenceElement).map((element) =>
 		parseExtendedKeyUsageOid(decodeObjectIdentifier(element.value)),
 	);
@@ -643,7 +651,10 @@ export function parseExtendedKeyUsage(bytes: Uint8Array): readonly ExtendedKeyUs
 
 /** @internal Exported for the extension registry. */
 export function parseCertificatePolicies(bytes: Uint8Array): CertificatePolicies {
-	const sequenceElement = requireElement(readElement(bytes), 'certificatePolicies sequence');
+	const sequenceElement = requireElement(
+		readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH }),
+		'certificatePolicies sequence',
+	);
 	const policyElements = childrenOf(bytes, sequenceElement);
 	if (policyElements.length === 0) {
 		throw new Error('certificatePolicies must not be empty');
@@ -765,7 +776,10 @@ function parsePolicyNoticeNumbers(source: Uint8Array, element: DerElement): read
 
 /** @internal Exported for the extension registry. */
 export function parsePolicyMappings(bytes: Uint8Array): PolicyMappings {
-	const sequenceElement = requireElement(readElement(bytes), 'policyMappings sequence');
+	const sequenceElement = requireElement(
+		readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH }),
+		'policyMappings sequence',
+	);
 	const mappingElements = childrenOf(bytes, sequenceElement);
 	if (mappingElements.length === 0) {
 		throw new Error('policyMappings must not be empty');
@@ -790,7 +804,10 @@ export function parsePolicyMappings(bytes: Uint8Array): PolicyMappings {
 
 /** @internal Exported for the extension registry. */
 export function parsePolicyConstraints(bytes: Uint8Array): PolicyConstraints {
-	const sequenceElement = requireElement(readElement(bytes), 'policyConstraints sequence');
+	const sequenceElement = requireElement(
+		readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH }),
+		'policyConstraints sequence',
+	);
 	let requireExplicitPolicy: number | undefined;
 	let inhibitPolicyMapping: number | undefined;
 	for (const child of childrenOf(bytes, sequenceElement)) {
@@ -827,7 +844,10 @@ export function parsePolicyConstraints(bytes: Uint8Array): PolicyConstraints {
 
 /** @internal Exported for the extension registry. */
 export function parseInhibitAnyPolicy(bytes: Uint8Array): InhibitAnyPolicy {
-	const integerElement = requireElement(readElement(bytes), 'inhibitAnyPolicy integer');
+	const integerElement = requireElement(
+		readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH }),
+		'inhibitAnyPolicy integer',
+	);
 	if (integerElement.tag !== 0x02) {
 		throw new Error('inhibitAnyPolicy must be an INTEGER');
 	}
@@ -838,13 +858,19 @@ export function parseInhibitAnyPolicy(bytes: Uint8Array): InhibitAnyPolicy {
 
 /** @internal Exported for the extension registry. */
 export function parseSubjectAltNames(bytes: Uint8Array): readonly SubjectAltName[] {
-	const sequenceElement = requireElement(readElement(bytes), 'subjectAltName sequence');
+	const sequenceElement = requireElement(
+		readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH }),
+		'subjectAltName sequence',
+	);
 	return childrenOf(bytes, sequenceElement).map((element) => parseGeneralName(bytes, element));
 }
 
 /** @internal Exported for the extension registry. */
 export function parseAuthorityInfoAccess(bytes: Uint8Array): readonly AuthorityInformationAccess[] {
-	const sequenceElement = requireElement(readElement(bytes), 'authorityInfoAccess sequence');
+	const sequenceElement = requireElement(
+		readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH }),
+		'authorityInfoAccess sequence',
+	);
 	return childrenOf(bytes, sequenceElement).map((element) => {
 		const children = childrenOf(bytes, element);
 		const method = requireElement(children[0], 'authorityInfoAccess method');
@@ -861,7 +887,10 @@ export function parseAuthorityInfoAccess(bytes: Uint8Array): readonly AuthorityI
 
 /** @internal Exported for the extension registry. */
 export function parseCrlDistributionPoints(bytes: Uint8Array): readonly ParsedDistributionPoint[] {
-	const sequenceElement = requireElement(readElement(bytes), 'cRLDistributionPoints sequence');
+	const sequenceElement = requireElement(
+		readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH }),
+		'cRLDistributionPoints sequence',
+	);
 	const points: ParsedDistributionPoint[] = [];
 	for (const distributionPoint of childrenOf(bytes, sequenceElement)) {
 		points.push(parseDistributionPoint(bytes, distributionPoint));
@@ -970,7 +999,13 @@ function parseOtherName(source: Uint8Array, element: DerElement): SubjectAltName
 
 /** @internal Exported for testing only — not part of the public API. */
 export function parseNameConstraints(bytes: Uint8Array): NameConstraints<ParsedNameConstraintForm> {
-	const sequenceElement = requireElement(readElement(bytes), 'nameConstraints sequence');
+	const sequenceElement = requireElement(
+		readRootElement(bytes, {
+			maxDepth: DEFAULT_MAX_DER_DEPTH,
+			allowOpaqueConstructedTags: [0xa0, 0xa3, 0xa5],
+		}),
+		'nameConstraints sequence',
+	);
 	let permittedSubtrees: readonly GeneralSubtree<ParsedNameConstraintForm>[] | undefined;
 	let excludedSubtrees: readonly GeneralSubtree<ParsedNameConstraintForm>[] | undefined;
 	for (const child of childrenOf(bytes, sequenceElement)) {
@@ -1117,7 +1152,13 @@ function decodeBmpString(bytes: Uint8Array): string {
 
 /** @internal Exported for the extension registry. */
 export function parseAuthorityKeyIdentifier(bytes: Uint8Array): string | undefined {
-	const sequenceElement = requireElement(readElement(bytes), 'authorityKeyIdentifier sequence');
+	const sequenceElement = requireElement(
+		readRootElement(bytes, {
+			maxDepth: DEFAULT_MAX_DER_DEPTH,
+			allowOpaqueConstructedTags: [0xa1, 0xa2],
+		}),
+		'authorityKeyIdentifier sequence',
+	);
 	for (const child of childrenOf(bytes, sequenceElement)) {
 		if (child.tag === 0x80) {
 			return toHex(child.value);

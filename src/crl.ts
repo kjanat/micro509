@@ -24,6 +24,7 @@ import {
 	objectIdentifier,
 	octetString,
 	readElement,
+	readRootElement,
 	readSequenceChildren,
 	sequence,
 	time,
@@ -1209,9 +1210,10 @@ function parseRevokedCertificateExtensions(
 			invalidityDate = parseTime(readElement(valueElement.value));
 		}
 		if (oid === OIDS.certificateIssuer) {
-			certificateIssuer = childrenOf(valueElement.value, readElement(valueElement.value)).map(
-				(name) => parseGeneralName(name),
-			);
+			certificateIssuer = childrenOf(
+				valueElement.value,
+				readRootElement(valueElement.value, { maxDepth: DEFAULT_MAX_DER_DEPTH }),
+			).map((name) => parseGeneralName(name));
 		}
 	}
 	return {
@@ -1222,7 +1224,7 @@ function parseRevokedCertificateExtensions(
 }
 
 function parseIssuingDistributionPoint(valueDer: Uint8Array): ParsedIssuingDistributionPoint {
-	const sequenceElement = readElement(valueDer);
+	const sequenceElement = readRootElement(valueDer, { maxDepth: DEFAULT_MAX_DER_DEPTH });
 	let distributionPoint: ParsedDistributionPointName | undefined;
 	let onlyContainsUserCerts: boolean | undefined;
 	let onlyContainsCACerts: boolean | undefined;
@@ -1258,7 +1260,7 @@ function parseIssuingDistributionPoint(valueDer: Uint8Array): ParsedIssuingDistr
 }
 
 function parseDistributionPoints(valueDer: Uint8Array): readonly ParsedDistributionPoint[] {
-	const sequenceElement = readElement(valueDer);
+	const sequenceElement = readRootElement(valueDer, { maxDepth: DEFAULT_MAX_DER_DEPTH });
 	return childrenOf(valueDer, sequenceElement).map((distributionPoint) =>
 		parseDistributionPoint(valueDer, distributionPoint),
 	);
@@ -1470,10 +1472,19 @@ function parseIssuer(
 }
 
 function parseAuthorityKeyIdentifier(bytes: Uint8Array): string | undefined {
-	const sequenceElement = readElement(bytes);
+	const sequenceElement = readRootElement(bytes, {
+		maxDepth: DEFAULT_MAX_DER_DEPTH,
+		allowOpaqueConstructedTags: [0xa1, 0xa2],
+	});
 	for (const child of childrenOf(bytes, sequenceElement)) {
-		if (child.tag === 0x80 || child.tag === 0xa0) {
+		if (child.tag === 0x80) {
 			return toHex(child.value);
+		}
+		if (child.tag === 0xa0) {
+			const keyIdentifier = readRootElement(child.value, { maxDepth: DEFAULT_MAX_DER_DEPTH });
+			if (keyIdentifier.tag === 0x04) {
+				return toHex(keyIdentifier.value);
+			}
 		}
 	}
 	return undefined;

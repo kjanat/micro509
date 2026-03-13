@@ -221,6 +221,12 @@ export interface DerElement {
 
 export interface ReadSequenceChildrenOptions {
 	readonly maxDepth?: number;
+	readonly allowOpaqueConstructedTags?: readonly number[];
+}
+
+export interface ReadRootElementOptions {
+	readonly maxDepth?: number;
+	readonly allowOpaqueConstructedTags?: readonly number[];
 }
 
 export function readElement(bytes: Uint8Array, offset = 0): DerElement {
@@ -284,6 +290,7 @@ export function readElement(bytes: Uint8Array, offset = 0): DerElement {
 export function assertDerMaxDepth(
 	bytes: Uint8Array,
 	maxDepth: number = DEFAULT_MAX_DER_DEPTH,
+	options?: { readonly allowOpaqueConstructedTags?: readonly number[] },
 ): void {
 	if (!Number.isSafeInteger(maxDepth) || maxDepth < 1) {
 		throw new Error('DER max depth must be a positive safe integer');
@@ -307,33 +314,54 @@ export function assertDerMaxDepth(
 			continue;
 		}
 		let offset = current.element.start;
+		let treatedAsOpaqueLeaf = false;
 		while (offset < current.element.end) {
-			const child = readElement(bytes, offset);
+			let child: DerElement;
+			try {
+				child = readElement(bytes, offset);
+			} catch (error) {
+				if (canTreatAsOpaqueLeaf(current.element, offset, options)) {
+					treatedAsOpaqueLeaf = true;
+					offset = current.element.end;
+					break;
+				}
+				throw error;
+			}
 			if (child.end > current.element.end) {
+				if (canTreatAsOpaqueLeaf(current.element, offset, options)) {
+					treatedAsOpaqueLeaf = true;
+					offset = current.element.end;
+					break;
+				}
 				throw new Error('DER child exceeds parent length');
 			}
 			stack.push({ element: child, depth: current.depth + 1 });
 			offset = child.end;
 		}
-		if (offset !== current.element.end) {
+		if (!treatedAsOpaqueLeaf && offset !== current.element.end) {
 			throw new Error('Malformed DER container');
 		}
 	}
+}
+
+export function readRootElement(bytes: Uint8Array, options?: ReadRootElementOptions): DerElement {
+	if (options?.maxDepth !== undefined) {
+		assertDerMaxDepth(bytes, options.maxDepth, options);
+	}
+	const element = readElement(bytes, 0);
+	if (element.end !== bytes.length) {
+		throw new Error('Trailing data after DER element');
+	}
+	return element;
 }
 
 export function readSequenceChildren(
 	bytes: Uint8Array,
 	options?: ReadSequenceChildrenOptions,
 ): DerElement[] {
-	if (options?.maxDepth !== undefined) {
-		assertDerMaxDepth(bytes, options.maxDepth);
-	}
-	const sequenceElement = readElement(bytes, 0);
+	const sequenceElement = readRootElement(bytes, options);
 	if (sequenceElement.tag !== 0x30) {
 		throw new Error('Expected SEQUENCE');
-	}
-	if (sequenceElement.end !== bytes.length) {
-		throw new Error('Trailing data after DER SEQUENCE');
 	}
 
 	const children: DerElement[] = [];
@@ -356,4 +384,14 @@ function assertNonNegativeSafeInteger(value: number, label: string): void {
 	if (!Number.isSafeInteger(value) || value < 0) {
 		throw new Error(`${label} must be a non-negative safe integer`);
 	}
+}
+
+function canTreatAsOpaqueLeaf(
+	element: DerElement,
+	offset: number,
+	options?: { readonly allowOpaqueConstructedTags?: readonly number[] },
+): boolean {
+	return (
+		offset === element.start && options?.allowOpaqueConstructedTags?.includes(element.tag) === true
+	);
 }

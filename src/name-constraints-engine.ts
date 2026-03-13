@@ -7,7 +7,7 @@ import {
 	toHex,
 } from './asn1.ts';
 import type { Micro509Error } from './core/result.ts';
-import { type DerElement, readElement } from './der.ts';
+import { DEFAULT_MAX_DER_DEPTH, type DerElement, readRootElement } from './der.ts';
 import type {
 	NameConstraintForm,
 	NameConstraints,
@@ -568,7 +568,7 @@ function parseDirectoryNameDerHex(derHex: string): ParsedName | undefined {
 	}
 	try {
 		const bytes = hexToBytes(derHex);
-		const element = readElement(bytes);
+		const element = readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH });
 		if (element.tag !== 0x30) {
 			return undefined;
 		}
