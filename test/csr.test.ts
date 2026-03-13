@@ -88,6 +88,28 @@ describe('csr', () => {
 		expect(await verifyCertificateSigningRequest(csr.pem)).toMatchObject({ ok: true });
 	});
 
+	it('creates and verifies P-521 certificate requests', async () => {
+		const keyPair = await generateKeyPair({
+			kind: 'ecdsa',
+			namedCurve: 'P-521',
+		});
+		const csr = await createCertificateSigningRequest({
+			subject: { commonName: 'p521-csr.example' },
+			publicKey: keyPair.publicKey,
+			signerPrivateKey: keyPair.privateKey,
+			extensions: {
+				subjectAltNames: [{ type: 'dns', value: 'p521-csr.example' }],
+			},
+		});
+
+		expect(parseCertificateSigningRequestPem(csr.pem)).toMatchObject({
+			signatureAlgorithmOid: OIDS.ecdsaWithSHA512,
+			publicKeyParametersOid: OIDS.secp521r1,
+			subjectAltNames: [{ type: 'dns', value: 'p521-csr.example' }],
+		});
+		expect(await verifyCertificateSigningRequest(csr.pem)).toMatchObject({ ok: true });
+	});
+
 	it('parses CSR without extensionRequest attributes', async () => {
 		const keyPair = await generateKeyPair({ kind: 'ed25519' });
 		const csr = await createCertificateSigningRequest({

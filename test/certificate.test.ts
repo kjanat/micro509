@@ -153,6 +153,50 @@ describe('certificate', () => {
 		).toMatchObject({ ok: true });
 	});
 
+	it('creates P-521-signed certificates with ECDSA SHA-512', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'P-521 Root CA' },
+			algorithm: {
+				kind: 'ecdsa',
+				namedCurve: 'P-521',
+			},
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair({
+			kind: 'ecdsa',
+			namedCurve: 'P-521',
+		});
+		const leaf = await createCertificate({
+			issuer: { commonName: 'P-521 Root CA' },
+			subject: { commonName: 'p521-leaf.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				subjectAltNames: [{ type: 'dns', value: 'p521-leaf.example' }],
+			},
+		});
+
+		expect(parseCertificatePem(root.certificate.pem).signatureAlgorithmOid).toBe(
+			OIDS.ecdsaWithSHA512,
+		);
+		expect(parseCertificatePem(leaf.pem)).toMatchObject({
+			signatureAlgorithmOid: OIDS.ecdsaWithSHA512,
+			publicKeyParametersOid: OIDS.secp521r1,
+		});
+		expect(
+			await verifyCertificateChain({
+				leaf: leaf.pem,
+				roots: [root.certificate.pem],
+				purpose: 'serverAuth',
+				serviceIdentity: { type: 'dns', value: 'p521-leaf.example' },
+			}),
+		).toMatchObject({ ok: true });
+	});
+
 	it('parses structured CRL distribution points with full and relative names', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Structured DP CA' },

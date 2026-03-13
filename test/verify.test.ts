@@ -402,7 +402,7 @@ describe('chain verification', () => {
 		).rejects.toThrow('Expected a single certificate source');
 	});
 
-	it('verifies chains signed with RSA SHA-384 and ECDSA P-384', async () => {
+	it('verifies chains signed with RSA SHA-384, ECDSA P-384, and ECDSA P-521', async () => {
 		const rsaCaKeys = await generateKeyPair({
 			kind: 'rsa',
 			modulusLength: 2048,
@@ -464,6 +464,37 @@ describe('chain verification', () => {
 			await verifyCertificateChain({
 				leaf: p384Leaf.pem,
 				roots: [p384Ca.certificate.pem],
+			}),
+		).toMatchObject({ ok: true });
+
+		const p521CaKeys = await generateKeyPair({
+			kind: 'ecdsa',
+			namedCurve: 'P-521',
+		});
+		const p521Ca = await createSelfSignedCertificate({
+			subject: { commonName: 'p521-ca' },
+			keyPair: p521CaKeys,
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const p521LeafKeys = await generateKeyPair({
+			kind: 'ecdsa',
+			namedCurve: 'P-521',
+		});
+		const p521Leaf = await createCertificate({
+			issuer: { commonName: 'p521-ca' },
+			subject: { commonName: 'p521-leaf' },
+			publicKey: p521LeafKeys.publicKey,
+			signerPrivateKey: p521CaKeys.privateKey,
+			issuerPublicKey: p521CaKeys.publicKey,
+		});
+
+		expect(
+			await verifyCertificateChain({
+				leaf: p521Leaf.pem,
+				roots: [p521Ca.certificate.pem],
 			}),
 		).toMatchObject({ ok: true });
 	});

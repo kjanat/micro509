@@ -53,7 +53,7 @@
 			"description": "Make P-521 a first-class ECDSA option across keys, signing, and verification. Done when:\n- key generation and key import accept `P-521`\n- signing maps `P-521` to `ecdsaWithSHA512` with correct raw-signature width handling\n- verification accepts `ecdsaWithSHA512` on `secp521r1` keys\n- cert and CSR create/verify flows work with P-521 artifacts",
 			"depends": ["add-algo-oids-and-types"],
 			"priority": "integration",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "widen-key-container-interop",

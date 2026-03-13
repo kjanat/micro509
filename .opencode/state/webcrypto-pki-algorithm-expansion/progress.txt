@@ -14,6 +14,7 @@ Started: 2026-03-13
 - Structured algorithm helpers should return canonical supported profiles and split failures into typed `unsupported_*` vs `malformed_*` results; raw `AlgorithmIdentifier` DER stays the shared parse boundary.
 - Verification adapters should return structured parameter-support failures from low-level signature config code, then let cert/CSR/path validators translate them into domain error results with the right certificate index.
 - Builder-side structured algorithm inputs should stay explicit and narrow: thread an optional `signature` profile through API wrappers, require the matching WebCrypto key kind, and always encode canonical `AlgorithmIdentifier` parameters from the shared internal helper.
+- End-to-end algorithm expansion tests should assert all three layers together: emitted signature OID, parsed subject public-key curve OID, and successful cert/CSR verification against real WebCrypto-generated artifacts.
 
 ---
 
@@ -46,3 +47,9 @@ Started: 2026-03-13
 - Added explicit builder-side `signature` profiles for certificate, self-signed certificate, and CSR creation, then resolved RSA-PSS profiles into canonical explicit `AlgorithmIdentifier` parameters in `src/signing.ts`.
 - Files changed: `src/signing.ts`, `src/certificate.ts`, `src/csr.ts`, `src/index.ts`, `test/certificate.test.ts`, `test/csr.test.ts`, `test/internals.test.ts`, `.opencode/state/webcrypto-pki-algorithm-expansion/prd.json`.
 - **Learnings:** builder support for structured algorithms works best when the public API stays profile-driven and the low-level signer helper enforces the shipped subset before any DER is emitted.
+
+## Task - [add-p521-ecdsa-support]
+
+- Added end-to-end P-521 coverage for certificate create/parse/verify and CSR create/parse/verify flows, plus chain verification coverage for P-521-issued artifacts.
+- Files changed: `test/certificate.test.ts`, `test/csr.test.ts`, `test/verify.test.ts`, `.opencode/state/webcrypto-pki-algorithm-expansion/prd.json`.
+- **Learnings:** P-521 support is only meaningfully covered when tests assert both `ecdsaWithSHA512` on signatures and `secp521r1` on SPKI params before running the normal verify path.
