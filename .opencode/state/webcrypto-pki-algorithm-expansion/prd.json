@@ -75,7 +75,7 @@
 				"widen-key-container-interop"
 			],
 			"priority": "polish",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "sync-algo-doc-claims",

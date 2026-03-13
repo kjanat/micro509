@@ -29,6 +29,7 @@ import { parseNameConstraints } from '#micro509/parse.ts';
 import {
 	importRsaPrivateKeyWithScheme,
 	issueChain,
+	replaceCertificateSignatureAlgorithm,
 	rewriteCertificateSignatureAsRsaPss,
 } from './helpers.ts';
 
@@ -573,6 +574,58 @@ describe('chain verification', () => {
 		).toMatchObject({ ok: true });
 	});
 
+	it('verifies RSA-PSS-signed certificate chains for all shipped digests', async () => {
+		for (const testCase of [
+			{ hash: 'SHA-256', saltLength: 32 },
+			{ hash: 'SHA-384', saltLength: 48 },
+			{ hash: 'SHA-512', saltLength: 64 },
+		] as const) {
+			const rootKeys = await generateKeyPair({
+				kind: 'rsa',
+				modulusLength: 2048,
+				hash: testCase.hash,
+			});
+			const root = await createSelfSignedCertificate({
+				subject: { commonName: `rsa-pss-${testCase.hash}-root` },
+				keyPair: rootKeys,
+				extensions: {
+					basicConstraints: { ca: true },
+					keyUsage: ['keyCertSign', 'cRLSign'],
+				},
+			});
+			const leafKeys = await generateKeyPair({
+				kind: 'rsa',
+				modulusLength: 2048,
+				hash: testCase.hash,
+			});
+			const leaf = await createCertificate({
+				issuer: { commonName: `rsa-pss-${testCase.hash}-root` },
+				subject: { commonName: `rsa-pss-${testCase.hash}-leaf` },
+				publicKey: leafKeys.publicKey,
+				signerPrivateKey: rootKeys.privateKey,
+				issuerPublicKey: rootKeys.publicKey,
+			});
+			const rsaPssPrivateKey = await importRsaPrivateKeyWithScheme(
+				rootKeys.privateKey,
+				testCase.hash,
+				'pss',
+			);
+			const rsaPssLeafDer = await rewriteCertificateSignatureAsRsaPss(leaf.der, rsaPssPrivateKey, {
+				hash: testCase.hash,
+				mgfHash: testCase.hash,
+				saltLength: testCase.saltLength,
+				trailerField: 1,
+			});
+
+			expect(
+				await verifyCertificateChain({
+					leaf: rsaPssLeafDer,
+					roots: [root.certificate.pem],
+				}),
+			).toMatchObject({ ok: true });
+		}
+	});
+
 	it('returns typed errors for unsupported RSA-PSS certificate parameters', async () => {
 		const rootKeys = await generateKeyPair({
 			kind: 'rsa',
@@ -625,6 +678,49 @@ describe('chain verification', () => {
 			code: 'unsupported_signature_algorithm_parameters',
 			index: 0,
 		});
+	});
+
+	it('throws on malformed RSA-PSS certificate parameters', async () => {
+		const rootKeys = await generateKeyPair({
+			kind: 'rsa',
+			modulusLength: 2048,
+			hash: 'SHA-256',
+		});
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'rsa-pss-malformed-root' },
+			keyPair: rootKeys,
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair({
+			kind: 'rsa',
+			modulusLength: 2048,
+			hash: 'SHA-256',
+		});
+		const leaf = await createCertificate({
+			issuer: { commonName: 'rsa-pss-malformed-root' },
+			subject: { commonName: 'rsa-pss-malformed-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: rootKeys.privateKey,
+			issuerPublicKey: rootKeys.publicKey,
+		});
+		const malformedLeafDer = replaceCertificateSignatureAlgorithm(
+			leaf.der,
+			sequence([objectIdentifier(OIDS.rsassaPss), tlv(0x30, Uint8Array.of(0x80))]),
+		);
+
+		try {
+			await verifyCertificateChain({
+				leaf: malformedLeafDer,
+				roots: [root.certificate.pem],
+			});
+			throw new Error('Expected malformed RSA-PSS certificate parameters to throw');
+		} catch (error) {
+			expect(error).toBeInstanceOf(Error);
+			expect(String(error)).toContain('DER child exceeds parent length');
+		}
 	});
 
 	it('rejects chain with unrecognized critical extension', async () => {

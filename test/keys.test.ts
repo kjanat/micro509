@@ -63,6 +63,8 @@ describe('keys', () => {
 		const keyPair = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
 		const cases = [
 			{ encryption: 'aes128-cbc', prf: 'hmac-sha1' },
+			{ encryption: 'aes128-cbc', prf: 'hmac-sha256' },
+			{ encryption: 'aes192-cbc', prf: 'hmac-sha1' },
 			{ encryption: 'aes192-cbc', prf: 'hmac-sha256' },
 			{ encryption: 'aes256-cbc', prf: 'hmac-sha1' },
 			{ encryption: 'aes256-cbc', prf: 'hmac-sha256' },
@@ -285,6 +287,22 @@ describe('keys', () => {
 			namedCurve: 'P-384',
 		});
 		expect(reimported.type).toBe('private');
+	});
+
+	it('round-trips EC P-521 keys through SEC1', async () => {
+		const keys = await generateKeyPair({
+			kind: 'ecdsa',
+			namedCurve: 'P-521',
+		});
+		const sec1Der = await exportSec1Der(keys.privateKey);
+		expect(sec1Der.length).toBeGreaterThan(60);
+		const sec1Pem = await exportSec1Pem(keys.privateKey);
+		expect(sec1Pem).toContain('BEGIN EC PRIVATE KEY');
+		const reimported = await importSec1Pem(sec1Pem, {
+			kind: 'ecdsa',
+			namedCurve: 'P-521',
+		});
+		expect(await exportPkcs8Der(reimported)).toEqual(await exportPkcs8Der(keys.privateKey));
 	});
 
 	it('round-trips encrypted PKCS#1 PEM for RSA keys', async () => {

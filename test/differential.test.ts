@@ -165,6 +165,75 @@ differential('OpenSSL differential harness', () => {
 		expect(revokedOpenSsl.status).toBe('revoked');
 	});
 
+	it('matches OpenSSL path verdicts for RSA-PSS and P-521 chains', async () => {
+		const rsaPssRoot = await createSelfSignedCertificate({
+			subject: { commonName: 'Diff RSA-PSS Root CA' },
+			algorithm: {
+				kind: 'rsa',
+				modulusLength: 2048,
+				hash: 'SHA-256',
+				scheme: 'pss',
+			},
+			signature: { kind: 'rsa-pss' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const rsaPssLeafKeys = await generateKeyPair();
+		const rsaPssLeaf = await createCertificate({
+			issuer: { commonName: 'Diff RSA-PSS Root CA' },
+			subject: { commonName: 'diff-rsa-pss.example' },
+			publicKey: rsaPssLeafKeys.publicKey,
+			signerPrivateKey: rsaPssRoot.keyPair.privateKey,
+			issuerPublicKey: rsaPssRoot.keyPair.publicKey,
+			signature: { kind: 'rsa-pss' },
+			extensions: {
+				subjectAltNames: [{ type: 'dns', value: 'diff-rsa-pss.example' }],
+			},
+		});
+		const rsaPssMicro = await verifyCertificateChain({
+			leaf: rsaPssLeaf.pem,
+			roots: [rsaPssRoot.certificate.pem],
+		});
+		const rsaPssOpenSsl = await verifyChainWithOpenSsl({
+			leafPem: rsaPssLeaf.pem,
+			rootPem: rsaPssRoot.certificate.pem,
+		});
+		expect(rsaPssMicro.ok).toBe(true);
+		expect(rsaPssOpenSsl.valid).toBe(true);
+
+		const p521Root = await createSelfSignedCertificate({
+			subject: { commonName: 'Diff P-521 Root CA' },
+			algorithm: { kind: 'ecdsa', namedCurve: 'P-521' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const p521LeafKeys = await generateKeyPair({ kind: 'ecdsa', namedCurve: 'P-521' });
+		const p521Leaf = await createCertificate({
+			issuer: { commonName: 'Diff P-521 Root CA' },
+			subject: { commonName: 'diff-p521.example' },
+			publicKey: p521LeafKeys.publicKey,
+			signerPrivateKey: p521Root.keyPair.privateKey,
+			issuerPublicKey: p521Root.keyPair.publicKey,
+			extensions: {
+				subjectAltNames: [{ type: 'dns', value: 'diff-p521.example' }],
+			},
+		});
+		const p521Micro = await verifyCertificateChain({
+			leaf: p521Leaf.pem,
+			roots: [p521Root.certificate.pem],
+		});
+		const p521OpenSsl = await verifyChainWithOpenSsl({
+			leafPem: p521Leaf.pem,
+			rootPem: p521Root.certificate.pem,
+		});
+		expect(p521Micro.ok).toBe(true);
+		expect(p521OpenSsl.valid).toBe(true);
+	});
+
 	it('matches OpenSSL issuer-signed OCSP status for good and revoked responses', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'Diff OCSP CA' },

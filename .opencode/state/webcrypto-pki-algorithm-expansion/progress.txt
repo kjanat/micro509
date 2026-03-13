@@ -16,6 +16,7 @@ Started: 2026-03-13
 - Builder-side structured algorithm inputs should stay explicit and narrow: thread an optional `signature` profile through API wrappers, require the matching WebCrypto key kind, and always encode canonical `AlgorithmIdentifier` parameters from the shared internal helper.
 - End-to-end algorithm expansion tests should assert all three layers together: emitted signature OID, parsed subject public-key curve OID, and successful cert/CSR verification against real WebCrypto-generated artifacts.
 - Interop widening should keep defaults stable but make compat knobs explicit: thread optional cipher/PRF fields through export helpers, accept the broader shipped set on parse/import, and keep legacy rejects like 3DES explicit.
+- Malformed algorithm fixtures belong at the parse boundary: broken DER should still throw from parse/verify entrypoints, while well-formed-but-unsupported params should flow through typed `unsupported_*` results.
 
 ---
 
@@ -60,3 +61,9 @@ Started: 2026-03-13
 - Added PBES2 AES-128/192/256 plus PBKDF2 HMAC-SHA1/HMAC-SHA256 support, and widened traditional PEM AES-CBC import/export to the same shipped AES set while keeping unsupported legacy ciphers rejected explicitly.
 - Files changed: `src/oids.ts`, `src/pbes2.ts`, `src/keys.ts`, `test/internals.test.ts`, `test/keys.test.ts`, `.opencode/state/webcrypto-pki-algorithm-expansion/prd.json`.
 - **Learnings:** encrypted-key interop widens cleanly when ASN.1 algorithm parsing normalizes wire OIDs into a tiny internal profile, then both PBES2 and traditional PEM derive key length from that profile instead of baking AES-256 assumptions into decryption paths.
+
+## Task - [add-algo-fixtures-and-reg]
+
+- Added regression coverage for the full shipped RSA-PSS digest matrix, malformed-vs-unsupported RSA-PSS fixture handling, P-521 SEC1 import/export, wider PKCS#8 cipher/PRF coverage, and OpenSSL differential checks for RSA-PSS and P-521 chains.
+- Files changed: `test/helpers.ts`, `test/verify.test.ts`, `test/csr.test.ts`, `test/keys.test.ts`, `test/differential.test.ts`, `.opencode/state/webcrypto-pki-algorithm-expansion/prd.json`.
+- **Learnings:** regression coverage for algorithm expansion is strongest when each new profile gets both in-process behavior checks and at least one cross-tool sanity check, while malformed DER cases stay asserted as parse-time throws instead of forced typed results.

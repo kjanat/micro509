@@ -168,6 +168,40 @@ export async function rewriteCsrSignatureAsRsaPss(
 	return sequence([certificationRequestInfoDer, signatureAlgorithm, bitString(signature)]);
 }
 
+export function replaceCertificateSignatureAlgorithm(
+	certificateDer: Uint8Array,
+	signatureAlgorithmDer: Uint8Array,
+): Uint8Array {
+	const topLevel = readSequenceChildren(certificateDer);
+	const tbsCertificate = topLevel[0];
+	const signatureValue = topLevel[2];
+	if (tbsCertificate === undefined || signatureValue === undefined) {
+		throw new Error('Malformed Certificate');
+	}
+	return sequence([
+		sliceElement(certificateDer, tbsCertificate),
+		signatureAlgorithmDer,
+		sliceElement(certificateDer, signatureValue),
+	]);
+}
+
+export function replaceCsrSignatureAlgorithm(
+	csrDer: Uint8Array,
+	signatureAlgorithmDer: Uint8Array,
+): Uint8Array {
+	const topLevel = readSequenceChildren(csrDer);
+	const certificationRequestInfo = topLevel[0];
+	const signatureValue = topLevel[2];
+	if (certificationRequestInfo === undefined || signatureValue === undefined) {
+		throw new Error('Malformed CertificationRequest');
+	}
+	return sequence([
+		sliceElement(csrDer, certificationRequestInfo),
+		signatureAlgorithmDer,
+		sliceElement(csrDer, signatureValue),
+	]);
+}
+
 export interface TestRsaPssParameters {
 	readonly hash: 'SHA-256' | 'SHA-384' | 'SHA-512';
 	readonly mgfHash: 'SHA-256' | 'SHA-384' | 'SHA-512';

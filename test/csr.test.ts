@@ -6,13 +6,14 @@ import {
 	parseCertificateSigningRequestPem,
 	verifyCertificateSigningRequest,
 } from '#micro509';
-import { readElement } from '#micro509/der.ts';
+import { objectIdentifier, readElement, sequence, tlv } from '#micro509/der.ts';
 import { OIDS } from '#micro509/oids.ts';
 import { encodeRsaPssParameters, rsaPssParametersForHash } from '#micro509/rsa-pss.ts';
 import {
 	childrenOf,
 	decodeObjectIdentifier,
 	importRsaPrivateKeyWithScheme,
+	replaceCsrSignatureAlgorithm,
 	rewriteCsrSignatureAsRsaPss,
 } from './helpers.ts';
 
@@ -278,6 +279,38 @@ describe('csr', () => {
 		expect(await verifyCertificateSigningRequest(rsaPssCsrDer)).toMatchObject({ ok: true });
 	});
 
+	it('verifies RSA-PSS certificate requests for all shipped digests', async () => {
+		for (const testCase of [
+			{ hash: 'SHA-256', saltLength: 32 },
+			{ hash: 'SHA-384', saltLength: 48 },
+			{ hash: 'SHA-512', saltLength: 64 },
+		] as const) {
+			const rsaKeys = await generateKeyPair({
+				kind: 'rsa',
+				modulusLength: 2048,
+				hash: testCase.hash,
+			});
+			const csr = await createCertificateSigningRequest({
+				subject: { commonName: `rsa-pss-${testCase.hash}-csr` },
+				publicKey: rsaKeys.publicKey,
+				signerPrivateKey: rsaKeys.privateKey,
+			});
+			const rsaPssPrivateKey = await importRsaPrivateKeyWithScheme(
+				rsaKeys.privateKey,
+				testCase.hash,
+				'pss',
+			);
+			const rsaPssCsrDer = await rewriteCsrSignatureAsRsaPss(csr.der, rsaPssPrivateKey, {
+				hash: testCase.hash,
+				mgfHash: testCase.hash,
+				saltLength: testCase.saltLength,
+				trailerField: 1,
+			});
+
+			expect(await verifyCertificateSigningRequest(rsaPssCsrDer)).toMatchObject({ ok: true });
+		}
+	});
+
 	it('returns typed errors for unsupported RSA-PSS CSR parameters', async () => {
 		const rsaKeys = await generateKeyPair({
 			kind: 'rsa',
@@ -306,5 +339,30 @@ describe('csr', () => {
 			code: 'unsupported_signature_algorithm_parameters',
 			details: { subjectCommonName: 'rsa-pss-unsupported-csr' },
 		});
+	});
+
+	it('throws on malformed RSA-PSS CSR parameters', async () => {
+		const rsaKeys = await generateKeyPair({
+			kind: 'rsa',
+			modulusLength: 2048,
+			hash: 'SHA-256',
+		});
+		const csr = await createCertificateSigningRequest({
+			subject: { commonName: 'rsa-pss-malformed-csr' },
+			publicKey: rsaKeys.publicKey,
+			signerPrivateKey: rsaKeys.privateKey,
+		});
+		const malformedCsrDer = replaceCsrSignatureAlgorithm(
+			csr.der,
+			sequence([objectIdentifier(OIDS.rsassaPss), tlv(0x30, Uint8Array.of(0x80))]),
+		);
+
+		try {
+			await verifyCertificateSigningRequest(malformedCsrDer);
+			throw new Error('Expected malformed RSA-PSS CSR parameters to throw');
+		} catch (error) {
+			expect(error).toBeInstanceOf(Error);
+			expect(String(error)).toContain('DER child exceeds parent length');
+		}
 	});
 });
