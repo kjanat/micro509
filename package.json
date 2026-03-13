@@ -36,6 +36,7 @@
 		"./pfx": "./dist/pfx.js",
 		"./pkcs12-mac": "./dist/pkcs12-mac.js",
 		"./pkcs7": "./dist/pkcs7.js",
+		"./result": "./dist/result.js",
 		"./revocation": "./dist/revocation.js",
 		"./validation": "./dist/validation.js",
 		"./verify": "./dist/verify.js",

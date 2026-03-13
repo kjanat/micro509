@@ -6,6 +6,8 @@
 
 `micro509` is a zero-dependency TypeScript X.509/PKI library. It is ESM-only, functional, strict-typed, and keeps public API surface in flat `src/*.ts` modules with Bun-first local tooling.
 
+PRERELEASE. NO DOWNSTREAM USERS
+
 ## STRUCTURE
 
 ```tree
