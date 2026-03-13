@@ -9,6 +9,7 @@ import {
 	toArrayBuffer,
 	toHex,
 } from './asn1.ts';
+import type { Micro509Error } from './core/result.ts';
 import type { DerElement } from './der.ts';
 import {
 	bitString,
@@ -138,13 +139,20 @@ export interface OcspResponseMaterial {
 	readonly base64: string;
 }
 
+export interface VerifyOcspResponseFailure extends Micro509Error<'signature_invalid'> {
+	readonly ok: false;
+}
+
+interface VerifyOcspResponseFailureResult {
+	readonly ok: false;
+	readonly error: VerifyOcspResponseFailure;
+	readonly code: 'signature_invalid';
+	readonly message: string;
+}
+
 export type VerifyOcspResponseResult =
 	| { readonly ok: true; readonly value: ParsedOcspResponse }
-	| {
-			readonly ok: false;
-			readonly code: 'signature_invalid';
-			readonly message: string;
-	  };
+	| VerifyOcspResponseFailureResult;
 
 export interface ValidateOcspResponseInput {
 	readonly response: string | Uint8Array | ParsedOcspResponse;
@@ -156,22 +164,40 @@ export interface ValidateOcspResponseInput {
 	readonly clockSkewMs?: number;
 }
 
+export interface ValidateOcspResponseFailure
+	extends Micro509Error<
+		| 'response_status_invalid'
+		| 'signature_invalid'
+		| 'responder_id_mismatch'
+		| 'nonce_mismatch'
+		| 'request_mismatch'
+		| 'issuer_mismatch'
+		| 'responder_chain_invalid'
+		| 'ocsp_signing_missing'
+		| 'stale_response'
+	> {
+	readonly ok: false;
+}
+
+interface ValidateOcspResponseFailureResult {
+	readonly ok: false;
+	readonly error: ValidateOcspResponseFailure;
+	readonly code:
+		| 'response_status_invalid'
+		| 'signature_invalid'
+		| 'responder_id_mismatch'
+		| 'nonce_mismatch'
+		| 'request_mismatch'
+		| 'issuer_mismatch'
+		| 'responder_chain_invalid'
+		| 'ocsp_signing_missing'
+		| 'stale_response';
+	readonly message: string;
+}
+
 export type ValidateOcspResponseResult =
 	| { readonly ok: true; readonly value: ParsedOcspResponse }
-	| {
-			readonly ok: false;
-			readonly code:
-				| 'response_status_invalid'
-				| 'signature_invalid'
-				| 'responder_id_mismatch'
-				| 'nonce_mismatch'
-				| 'request_mismatch'
-				| 'issuer_mismatch'
-				| 'responder_chain_invalid'
-				| 'ocsp_signing_missing'
-				| 'stale_response';
-			readonly message: string;
-	  };
+	| ValidateOcspResponseFailureResult;
 
 export async function createOcspRequest(
 	input: CreateOcspRequestInput,
@@ -368,11 +394,7 @@ export async function verifyOcspResponse(
 		parsed.signatureAlgorithmOid === undefined ||
 		parsed.signatureValue === undefined
 	) {
-		return {
-			ok: false,
-			code: 'signature_invalid',
-			message: 'OCSP response is not signed',
-		};
+		return verifyOcspResponseFailureResult('signature_invalid', 'OCSP response is not signed');
 	}
 	const signer = await normalizeCertificate(signerCertificate);
 	const verified = await verifySignedData(
@@ -385,11 +407,10 @@ export async function verifyOcspResponse(
 	);
 	return verified
 		? { ok: true, value: parsed }
-		: {
-				ok: false,
-				code: 'signature_invalid',
-				message: 'OCSP response signature does not verify',
-			};
+		: verifyOcspResponseFailureResult(
+				'signature_invalid',
+				'OCSP response signature does not verify',
+			);
 }
 
 export async function validateOcspResponse(
@@ -397,11 +418,10 @@ export async function validateOcspResponse(
 ): Promise<ValidateOcspResponseResult> {
 	const parsedResponse = normalizeOcspResponse(input.response);
 	if (parsedResponse.responseStatus !== 'successful') {
-		return {
-			ok: false,
-			code: 'response_status_invalid',
-			message: `OCSP response status is ${parsedResponse.responseStatus}`,
-		};
+		return validateOcspResponseFailureResult(
+			'response_status_invalid',
+			`OCSP response status is ${parsedResponse.responseStatus}`,
+		);
 	}
 	const issuer = await normalizeCertificate(input.issuerCertificate);
 	const resolvedResponder =
@@ -415,7 +435,7 @@ export async function validateOcspResponse(
 	const signer = await normalizeCertificate(resolvedResponder);
 	const signature = await verifyOcspResponse(parsedResponse, signer);
 	if (!signature.ok) {
-		return signature;
+		return validateOcspResponseFailureResult(signature.code, signature.message);
 	}
 	const responderBinding = await validateOcspResponderIdBinding(parsedResponse.responderId, signer);
 	if (!responderBinding.ok) {
@@ -424,11 +444,10 @@ export async function validateOcspResponse(
 	if (!isSameOcspCertificate(signer, issuer)) {
 		const allowChainedResponderCertificate = input.allowChainedResponderCertificate === true;
 		if (!allowChainedResponderCertificate && !isDirectlyIssuedByOcspIssuer(signer, issuer)) {
-			return {
-				ok: false,
-				code: 'responder_chain_invalid',
-				message: 'Delegated OCSP responder must be directly issued by issuer certificate',
-			};
+			return validateOcspResponseFailureResult(
+				'responder_chain_invalid',
+				'Delegated OCSP responder must be directly issued by issuer certificate',
+			);
 		}
 		const chain = await verifyCertificateChain({
 			leaf: signer.der,
@@ -438,18 +457,16 @@ export async function validateOcspResponse(
 			roots: [issuer.der],
 		});
 		if (!chain.ok) {
-			return {
-				ok: false,
-				code: 'responder_chain_invalid',
-				message: 'OCSP responder certificate chain does not validate',
-			};
+			return validateOcspResponseFailureResult(
+				'responder_chain_invalid',
+				'OCSP responder certificate chain does not validate',
+			);
 		}
 		if (signer.extendedKeyUsage === undefined || !signer.extendedKeyUsage.includes('ocspSigning')) {
-			return {
-				ok: false,
-				code: 'ocsp_signing_missing',
-				message: 'Delegated OCSP responder lacks ocspSigning EKU',
-			};
+			return validateOcspResponseFailureResult(
+				'ocsp_signing_missing',
+				'Delegated OCSP responder lacks ocspSigning EKU',
+			);
 		}
 	}
 	const at = input.at ?? new Date();
@@ -458,11 +475,10 @@ export async function validateOcspResponse(
 		parsedResponse.producedAt !== undefined &&
 		parsedResponse.producedAt.getTime() - skew > at.getTime()
 	) {
-		return {
-			ok: false,
-			code: 'stale_response',
-			message: 'OCSP response producedAt is later than requested time',
-		};
+		return validateOcspResponseFailureResult(
+			'stale_response',
+			'OCSP response producedAt is later than requested time',
+		);
 	}
 	for (const response of parsedResponse.responses ?? []) {
 		const expected = await buildParsedOcspCertId(
@@ -474,42 +490,38 @@ export async function validateOcspResponse(
 			response.certId.issuerNameHashHex !== expected.issuerNameHashHex ||
 			response.certId.issuerKeyHashHex !== expected.issuerKeyHashHex
 		) {
-			return {
-				ok: false,
-				code: 'issuer_mismatch',
-				message: 'OCSP response certId does not match issuer certificate',
-			};
+			return validateOcspResponseFailureResult(
+				'issuer_mismatch',
+				'OCSP response certId does not match issuer certificate',
+			);
 		}
 		if (
 			response.thisUpdate.getTime() - skew > at.getTime() ||
 			(response.nextUpdate !== undefined && response.nextUpdate.getTime() + skew < at.getTime())
 		) {
-			return {
-				ok: false,
-				code: 'stale_response',
-				message: 'OCSP response is not valid at requested time',
-			};
+			return validateOcspResponseFailureResult(
+				'stale_response',
+				'OCSP response is not valid at requested time',
+			);
 		}
 		if (
 			parsedResponse.producedAt !== undefined &&
 			response.nextUpdate !== undefined &&
 			parsedResponse.producedAt.getTime() - skew > response.nextUpdate.getTime()
 		) {
-			return {
-				ok: false,
-				code: 'stale_response',
-				message: 'OCSP response producedAt is later than nextUpdate',
-			};
+			return validateOcspResponseFailureResult(
+				'stale_response',
+				'OCSP response producedAt is later than nextUpdate',
+			);
 		}
 	}
 	if (input.request !== undefined) {
 		const request = normalizeOcspRequest(input.request);
 		if (request.nonce !== undefined && request.nonce !== parsedResponse.nonce) {
-			return {
-				ok: false,
-				code: 'nonce_mismatch',
-				message: 'OCSP response nonce does not match request nonce',
-			};
+			return validateOcspResponseFailureResult(
+				'nonce_mismatch',
+				'OCSP response nonce does not match request nonce',
+			);
 		}
 		const requestIds = new Set(request.requests.map((entry) => serializeCertId(entry)));
 		const responseIds = new Set(
@@ -517,24 +529,38 @@ export async function validateOcspResponse(
 		);
 		for (const response of parsedResponse.responses ?? []) {
 			if (!requestIds.has(serializeCertId(response.certId))) {
-				return {
-					ok: false,
-					code: 'request_mismatch',
-					message: 'OCSP response includes a certId not present in request',
-				};
+				return validateOcspResponseFailureResult(
+					'request_mismatch',
+					'OCSP response includes a certId not present in request',
+				);
 			}
 		}
 		for (const requestId of requestIds) {
 			if (!responseIds.has(requestId)) {
-				return {
-					ok: false,
-					code: 'request_mismatch',
-					message: 'OCSP response does not cover every requested certId',
-				};
+				return validateOcspResponseFailureResult(
+					'request_mismatch',
+					'OCSP response does not cover every requested certId',
+				);
 			}
 		}
 	}
 	return { ok: true, value: parsedResponse };
+}
+
+function verifyOcspResponseFailureResult(
+	code: 'signature_invalid',
+	message: string,
+): VerifyOcspResponseFailureResult {
+	const error: VerifyOcspResponseFailure = { ok: false, code, message };
+	return { ok: false, error, code, message };
+}
+
+function validateOcspResponseFailureResult(
+	code: ValidateOcspResponseFailureResult['code'],
+	message: string,
+): ValidateOcspResponseFailureResult {
+	const error: ValidateOcspResponseFailure = { ok: false, code, message };
+	return { ok: false, error, code, message };
 }
 
 function normalizeOcspResponse(
@@ -585,16 +611,14 @@ async function validateOcspResponderIdBinding(
 		return { ok: true };
 	}
 	return responderId.type === 'byName'
-		? {
-				ok: false,
-				code: 'responder_id_mismatch',
-				message: 'OCSP responder certificate subject does not match responderID byName',
-			}
-		: {
-				ok: false,
-				code: 'responder_id_mismatch',
-				message: 'OCSP responder certificate public key does not match responderID byKeyHash',
-			};
+		? validateOcspResponseFailureResult(
+				'responder_id_mismatch',
+				'OCSP responder certificate subject does not match responderID byName',
+			)
+		: validateOcspResponseFailureResult(
+				'responder_id_mismatch',
+				'OCSP responder certificate public key does not match responderID byKeyHash',
+			);
 }
 
 async function matchesOcspResponderId(

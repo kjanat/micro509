@@ -8,6 +8,7 @@ import {
 	requireElement,
 	toHex,
 } from './asn1.ts';
+import type { Micro509Error } from './core/result.ts';
 import {
 	bitString,
 	bool,
@@ -148,13 +149,20 @@ const REVOCATION_REASON_CODES: Record<RevocationReason, number> = {
 export type CrlSource = string | Uint8Array | ParsedCertificateRevocationList;
 export type CrlCertificateSource = string | Uint8Array | ParsedCertificate;
 
+export interface VerifyCertificateRevocationListFailure extends Micro509Error<'signature_invalid'> {
+	readonly ok: false;
+}
+
+interface VerifyCertificateRevocationListFailureResult {
+	readonly ok: false;
+	readonly error: VerifyCertificateRevocationListFailure;
+	readonly code: 'signature_invalid';
+	readonly message: string;
+}
+
 export type VerifyCertificateRevocationListResult =
 	| { readonly ok: true; readonly value: ParsedCertificateRevocationList }
-	| {
-			readonly ok: false;
-			readonly code: 'signature_invalid';
-			readonly message: string;
-	  };
+	| VerifyCertificateRevocationListFailureResult;
 
 export interface ValidateCertificateRevocationListInput {
 	readonly crl: CrlSource;
@@ -163,17 +171,23 @@ export interface ValidateCertificateRevocationListInput {
 	readonly clockSkewMs?: number;
 }
 
+export interface ValidateCertificateRevocationListFailure
+	extends Micro509Error<
+		'signature_invalid' | 'issuer_mismatch' | 'stale_crl' | 'crl_sign_not_permitted'
+	> {
+	readonly ok: false;
+}
+
+interface ValidateCertificateRevocationListFailureResult {
+	readonly ok: false;
+	readonly error: ValidateCertificateRevocationListFailure;
+	readonly code: 'signature_invalid' | 'issuer_mismatch' | 'stale_crl' | 'crl_sign_not_permitted';
+	readonly message: string;
+}
+
 export type ValidateCertificateRevocationListResult =
 	| { readonly ok: true; readonly value: ParsedCertificateRevocationList }
-	| {
-			readonly ok: false;
-			readonly code:
-				| 'signature_invalid'
-				| 'issuer_mismatch'
-				| 'stale_crl'
-				| 'crl_sign_not_permitted';
-			readonly message: string;
-	  };
+	| ValidateCertificateRevocationListFailureResult;
 
 export interface CheckCertificateRevocationAgainstCrlInput {
 	readonly certificate: CrlCertificateSource;
@@ -205,36 +219,47 @@ type RevokedCertificateLookupResult =
 			readonly ok: true;
 			readonly entry?: ParsedRevokedCertificate;
 	  }
-	| {
-			readonly ok: false;
-			readonly code: 'non_applicable';
-			readonly message: string;
-			readonly details: CheckCertificateRevocationAgainstCrlFailureDetails;
-	  };
+	| CheckCertificateRevocationAgainstCrlFailureResult;
 
 export interface CheckCertificateRevocationAgainstCrlFailureDetails {
 	readonly reason?: CrlApplicabilityFailureReason;
 }
 
+export interface CheckCertificateRevocationAgainstCrlFailure
+	extends Micro509Error<
+		CheckCertificateRevocationAgainstCrlErrorCode,
+		CheckCertificateRevocationAgainstCrlFailureDetails
+	> {
+	readonly ok: false;
+}
+
+export interface CheckCertificateRevocationAgainstCrlGoodValue {
+	readonly status: 'good';
+	readonly crl: ParsedCertificateRevocationList;
+}
+
+export interface CheckCertificateRevocationAgainstCrlRevokedValue {
+	readonly status: 'revoked';
+	readonly crl: ParsedCertificateRevocationList;
+	readonly revocationDate: Date;
+	readonly reasonCode?: RevocationReason;
+}
+
+export type CheckCertificateRevocationAgainstCrlValue =
+	| CheckCertificateRevocationAgainstCrlGoodValue
+	| CheckCertificateRevocationAgainstCrlRevokedValue;
+
+interface CheckCertificateRevocationAgainstCrlFailureResult {
+	readonly ok: false;
+	readonly error: CheckCertificateRevocationAgainstCrlFailure;
+	readonly code: CheckCertificateRevocationAgainstCrlErrorCode;
+	readonly message: string;
+	readonly details?: CheckCertificateRevocationAgainstCrlFailureDetails;
+}
+
 export type CheckCertificateRevocationAgainstCrlResult =
-	| {
-			readonly ok: true;
-			readonly status: 'good';
-			readonly value: ParsedCertificateRevocationList;
-	  }
-	| {
-			readonly ok: true;
-			readonly status: 'revoked';
-			readonly value: ParsedCertificateRevocationList;
-			readonly revocationDate: Date;
-			readonly reasonCode?: RevocationReason;
-	  }
-	| {
-			readonly ok: false;
-			readonly code: CheckCertificateRevocationAgainstCrlErrorCode;
-			readonly message: string;
-			readonly details?: CheckCertificateRevocationAgainstCrlFailureDetails;
-	  };
+	| { readonly ok: true; readonly value: CheckCertificateRevocationAgainstCrlValue }
+	| CheckCertificateRevocationAgainstCrlFailureResult;
 
 export async function createCertificateRevocationList(
 	input: CreateCertificateRevocationListInput,
@@ -398,11 +423,10 @@ export async function verifyCertificateRevocationList(
 	);
 	return verified
 		? { ok: true, value: parsedCrl }
-		: {
-				ok: false,
-				code: 'signature_invalid',
-				message: 'certificate revocation list signature does not verify',
-			};
+		: verifyCertificateRevocationListFailureResult(
+				'signature_invalid',
+				'certificate revocation list signature does not verify',
+			);
 }
 
 export async function validateCertificateRevocationList(
@@ -411,29 +435,26 @@ export async function validateCertificateRevocationList(
 	const parsedCrl = normalizeCrl(input.crl);
 	const issuer = normalizeCrlCertificate(input.issuerCertificate);
 	if (parsedCrl.issuer.derHex !== issuer.subject.derHex) {
-		return {
-			ok: false,
-			code: 'issuer_mismatch',
-			message: 'CRL issuer name does not match certificate subject',
-		};
+		return validateCertificateRevocationListFailureResult(
+			'issuer_mismatch',
+			'CRL issuer name does not match certificate subject',
+		);
 	}
 	if (
 		parsedCrl.authorityKeyIdentifier !== undefined &&
 		issuer.subjectKeyIdentifier !== undefined &&
 		parsedCrl.authorityKeyIdentifier !== issuer.subjectKeyIdentifier
 	) {
-		return {
-			ok: false,
-			code: 'issuer_mismatch',
-			message: 'CRL authority key identifier does not match issuer subject key identifier',
-		};
+		return validateCertificateRevocationListFailureResult(
+			'issuer_mismatch',
+			'CRL authority key identifier does not match issuer subject key identifier',
+		);
 	}
 	if (issuer.keyUsage !== undefined && !issuer.keyUsage.includes('cRLSign')) {
-		return {
-			ok: false,
-			code: 'crl_sign_not_permitted',
-			message: 'issuer certificate key usage does not permit CRL signing',
-		};
+		return validateCertificateRevocationListFailureResult(
+			'crl_sign_not_permitted',
+			'issuer certificate key usage does not permit CRL signing',
+		);
 	}
 	const verified = await verifySignedData(
 		parsedCrl.signatureAlgorithmOid,
@@ -444,11 +465,10 @@ export async function validateCertificateRevocationList(
 		parsedCrl.tbsCertListDer,
 	);
 	if (!verified) {
-		return {
-			ok: false,
-			code: 'signature_invalid',
-			message: 'certificate revocation list signature does not verify',
-		};
+		return validateCertificateRevocationListFailureResult(
+			'signature_invalid',
+			'certificate revocation list signature does not verify',
+		);
 	}
 	const at = input.at ?? new Date();
 	const skew = input.clockSkewMs ?? 0;
@@ -456,11 +476,10 @@ export async function validateCertificateRevocationList(
 		parsedCrl.thisUpdate.getTime() - skew > at.getTime() ||
 		(parsedCrl.nextUpdate !== undefined && parsedCrl.nextUpdate.getTime() + skew < at.getTime())
 	) {
-		return {
-			ok: false,
-			code: 'stale_crl',
-			message: 'CRL is not valid at requested time',
-		};
+		return validateCertificateRevocationListFailureResult(
+			'stale_crl',
+			'CRL is not valid at requested time',
+		);
 	}
 	return { ok: true, value: parsedCrl };
 }
@@ -476,7 +495,7 @@ export async function checkCertificateRevocationAgainstCrl(
 		...(input.clockSkewMs === undefined ? {} : { clockSkewMs: input.clockSkewMs }),
 	});
 	if (!validated.ok) {
-		return validated;
+		return checkCertificateRevocationAgainstCrlFailureResult(validated.code, validated.message);
 	}
 	let validatedDelta: ParsedCertificateRevocationList | undefined;
 	if (input.deltaCrl !== undefined) {
@@ -487,7 +506,10 @@ export async function checkCertificateRevocationAgainstCrl(
 			...(input.clockSkewMs === undefined ? {} : { clockSkewMs: input.clockSkewMs }),
 		});
 		if (!deltaValidation.ok) {
-			return deltaValidation;
+			return checkCertificateRevocationAgainstCrlFailureResult(
+				deltaValidation.code,
+				deltaValidation.message,
+			);
 		}
 		const compatibilityFailure = checkDeltaCrlCompatibility(validated.value, deltaValidation.value);
 		if (compatibilityFailure !== undefined) {
@@ -524,6 +546,48 @@ export async function checkCertificateRevocationAgainstCrl(
 		completeRevoked.entry,
 		deltaRevoked,
 	);
+}
+
+function verifyCertificateRevocationListFailureResult(
+	code: 'signature_invalid',
+	message: string,
+): VerifyCertificateRevocationListFailureResult {
+	const error: VerifyCertificateRevocationListFailure = { ok: false, code, message };
+	return { ok: false, error, code, message };
+}
+
+function validateCertificateRevocationListFailureResult(
+	code: ValidateCertificateRevocationListFailureResult['code'],
+	message: string,
+): ValidateCertificateRevocationListFailureResult {
+	const error: ValidateCertificateRevocationListFailure = { ok: false, code, message };
+	return { ok: false, error, code, message };
+}
+
+function checkCertificateRevocationAgainstCrlFailureResult(
+	code: CheckCertificateRevocationAgainstCrlErrorCode,
+	message: string,
+	details?: CheckCertificateRevocationAgainstCrlFailureDetails,
+): CheckCertificateRevocationAgainstCrlFailureResult {
+	const error: CheckCertificateRevocationAgainstCrlFailure = {
+		ok: false,
+		code,
+		message,
+		...(details === undefined ? {} : { details }),
+	};
+	return {
+		ok: false,
+		error,
+		code,
+		message,
+		...(details === undefined ? {} : { details }),
+	};
+}
+
+function checkCertificateRevocationAgainstCrlSuccess(
+	value: CheckCertificateRevocationAgainstCrlValue,
+): CheckCertificateRevocationAgainstCrlResult {
+	return { ok: true, value };
 }
 
 export function isCertificateRevoked(
@@ -574,14 +638,7 @@ function checkCrlApplicability(
 	certificate: ParsedCertificate,
 	crl: ParsedCertificateRevocationList,
 	allowDeltaCrl = false,
-):
-	| {
-			readonly ok: false;
-			readonly code: 'non_applicable';
-			readonly message: string;
-			readonly details?: CheckCertificateRevocationAgainstCrlFailureDetails;
-	  }
-	| undefined {
+): CheckCertificateRevocationAgainstCrlFailureResult | undefined {
 	if (!allowDeltaCrl && crl.baseCrlNumber !== undefined) {
 		return nonApplicable(
 			'delta_crl_unsupported',
@@ -710,14 +767,7 @@ function checkCrlApplicability(
 function checkDeltaCrlCompatibility(
 	completeCrl: ParsedCertificateRevocationList,
 	deltaCrl: ParsedCertificateRevocationList,
-):
-	| {
-			readonly ok: false;
-			readonly code: 'non_applicable';
-			readonly message: string;
-			readonly details?: CheckCertificateRevocationAgainstCrlFailureDetails;
-	  }
-	| undefined {
+): CheckCertificateRevocationAgainstCrlFailureResult | undefined {
 	if (completeCrl.baseCrlNumber !== undefined) {
 		return nonApplicable(
 			'delta_crl_incompatible',
@@ -820,18 +870,8 @@ function matchesRevokedEntryIssuer(
 function nonApplicable(
 	reason: CrlApplicabilityFailureReason,
 	message: string,
-): {
-	readonly ok: false;
-	readonly code: 'non_applicable';
-	readonly message: string;
-	readonly details: CheckCertificateRevocationAgainstCrlFailureDetails;
-} {
-	return {
-		ok: false,
-		code: 'non_applicable',
-		message,
-		details: { reason },
-	};
+): CheckCertificateRevocationAgainstCrlFailureResult {
+	return checkCertificateRevocationAgainstCrlFailureResult('non_applicable', message, { reason });
 }
 
 function resolveCertificateRevocationStatus(
@@ -847,36 +887,29 @@ function resolveCertificateRevocationStatus(
 				completeEntry?.reasonCode === 'certificateHold' ||
 				certificate.notAfter.getTime() < at.getTime()
 			) {
-				return {
-					ok: true,
+				return checkCertificateRevocationAgainstCrlSuccess({
 					status: 'good',
-					value: completeCrl,
-				};
+					crl: completeCrl,
+				});
 			}
 		} else {
-			return {
-				ok: true,
+			return checkCertificateRevocationAgainstCrlSuccess({
 				status: 'revoked',
-				value: completeCrl,
+				crl: completeCrl,
 				revocationDate: deltaEntry.revocationDate,
 				...(deltaEntry.reasonCode === undefined ? {} : { reasonCode: deltaEntry.reasonCode }),
-			};
+			});
 		}
 	}
 	if (completeEntry === undefined) {
-		return {
-			ok: true,
-			status: 'good',
-			value: completeCrl,
-		};
+		return checkCertificateRevocationAgainstCrlSuccess({ status: 'good', crl: completeCrl });
 	}
-	return {
-		ok: true,
+	return checkCertificateRevocationAgainstCrlSuccess({
 		status: 'revoked',
-		value: completeCrl,
+		crl: completeCrl,
 		revocationDate: completeEntry.revocationDate,
 		...(completeEntry.reasonCode === undefined ? {} : { reasonCode: completeEntry.reasonCode }),
-	};
+	});
 }
 
 function matchesDistributionPointName(

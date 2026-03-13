@@ -146,7 +146,7 @@ differential('OpenSSL differential harness', () => {
 			issuerCertificatePem: issuer.certificate.pem,
 			crlPem: goodCrl.pem,
 		});
-		expect(goodMicro).toMatchObject({ ok: true, status: 'good' });
+		expect(goodMicro).toMatchObject({ ok: true, value: { status: 'good' } });
 		expect(goodOpenSsl.status).toBe('good');
 		expect(goodOpenSsl.crlNumber).toBe(parseCertificateRevocationListPem(goodCrl.pem).crlNumber);
 		expect(goodOpenSsl.issuer).toContain('CN=Diff CRL CA');
@@ -161,7 +161,7 @@ differential('OpenSSL differential harness', () => {
 			issuerCertificatePem: issuer.certificate.pem,
 			crlPem: revokedCrl.pem,
 		});
-		expect(revokedMicro).toMatchObject({ ok: true, status: 'revoked' });
+		expect(revokedMicro).toMatchObject({ ok: true, value: { status: 'revoked' } });
 		expect(revokedOpenSsl.status).toBe('revoked');
 	});
 

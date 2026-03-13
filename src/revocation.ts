@@ -1,4 +1,4 @@
-import type { Micro509Error } from './core/result.ts';
+import type { Result } from './core/result.ts';
 import type { CrlApplicabilityFailureReason, CrlSource, RevocationReason } from './crl.ts';
 import { checkCertificateRevocationAgainstCrl } from './crl.ts';
 import type { OcspCertificateSource, OcspRequestSource, ParsedOcspResponse } from './ocsp.ts';
@@ -84,25 +84,20 @@ export interface CheckCertificateRevocationFailureDetails {
 	readonly indeterminateEvidence: readonly RevocationIndeterminateEvidence[];
 }
 
-export interface RevocationCheckUnknownResult
-	extends Micro509Error<
-		CheckCertificateRevocationErrorCode,
-		CheckCertificateRevocationFailureDetails
-	> {
-	readonly ok: false;
+export interface RevocationCheckUnknownValue {
 	readonly status: Extract<RevocationStatus, 'unknown'>;
+	readonly code: CheckCertificateRevocationErrorCode;
+	readonly message: string;
 	readonly details: CheckCertificateRevocationFailureDetails;
 }
 
-export interface RevocationCheckGoodResult {
-	readonly ok: true;
+export interface RevocationCheckGoodValue {
 	readonly status: Extract<RevocationStatus, 'good'>;
 	readonly source: RevocationEvidenceKind;
 	readonly message: string;
 }
 
-export interface RevocationCheckRevokedResult {
-	readonly ok: true;
+export interface RevocationCheckRevokedValue {
 	readonly status: Extract<RevocationStatus, 'revoked'>;
 	readonly source: RevocationEvidenceKind;
 	readonly message: string;
@@ -111,19 +106,21 @@ export interface RevocationCheckRevokedResult {
 	readonly revocationReasonCode?: number;
 }
 
-export type CheckCertificateRevocationResult =
-	| RevocationCheckGoodResult
-	| RevocationCheckRevokedResult
-	| RevocationCheckUnknownResult;
+export type CheckCertificateRevocationValue =
+	| RevocationCheckGoodValue
+	| RevocationCheckRevokedValue
+	| RevocationCheckUnknownValue;
+
+export type CheckCertificateRevocationResult = Result<CheckCertificateRevocationValue, never>;
 
 type RevocationEvidenceCheck =
 	| {
 			readonly status: 'good';
-			readonly result: RevocationCheckGoodResult;
+			readonly result: RevocationCheckGoodValue;
 	  }
 	| {
 			readonly status: 'revoked';
-			readonly result: RevocationCheckRevokedResult;
+			readonly result: RevocationCheckRevokedValue;
 	  }
 	| {
 			readonly status: 'unknown';
@@ -191,8 +188,7 @@ export async function checkCertificateRevocation(
 	const evidence = input.evidence ?? [];
 	const checkedSources = evidence.map((entry) => entry.kind);
 	if (evidence.length === 0) {
-		return {
-			ok: false,
+		return revocationSuccess({
 			status: 'unknown',
 			code: 'revocation_evidence_missing',
 			message: 'No CRL or OCSP evidence provided',
@@ -200,9 +196,9 @@ export async function checkCertificateRevocation(
 				checkedSources,
 				indeterminateEvidence: [],
 			},
-		};
+		});
 	}
-	let goodResult: RevocationCheckGoodResult | undefined;
+	let goodResult: RevocationCheckGoodValue | undefined;
 	const indeterminateEvidence: RevocationIndeterminateEvidence[] = [];
 	for (const entry of evidence) {
 		const result =
@@ -210,7 +206,7 @@ export async function checkCertificateRevocation(
 				? await checkCertificateRevocationWithCrl(input, entry)
 				: await checkCertificateRevocationWithOcsp(input, entry);
 		if (result.status === 'revoked') {
-			return result.result;
+			return revocationSuccess(result.result);
 		}
 		if (result.status === 'good') {
 			goodResult ??= result.result;
@@ -219,10 +215,9 @@ export async function checkCertificateRevocation(
 		indeterminateEvidence.push(result.detail);
 	}
 	if (goodResult !== undefined) {
-		return goodResult;
+		return revocationSuccess(goodResult);
 	}
-	return {
-		ok: false,
+	return revocationSuccess({
 		status: 'unknown',
 		code: 'revocation_status_unknown',
 		message: 'No revocation evidence established certificate status',
@@ -230,7 +225,7 @@ export async function checkCertificateRevocation(
 			checkedSources,
 			indeterminateEvidence,
 		},
-	};
+	});
 }
 
 async function checkCertificateRevocationWithCrl(
@@ -246,23 +241,23 @@ async function checkCertificateRevocationWithCrl(
 		...(input.clockSkewMs === undefined ? {} : { clockSkewMs: input.clockSkewMs }),
 	});
 	if (result.ok) {
-		if (result.status === 'revoked') {
+		if (result.value.status === 'revoked') {
 			return {
 				status: 'revoked',
 				result: {
-					ok: true,
 					status: 'revoked',
 					source: 'crl',
 					message: 'Certificate is revoked according to CRL evidence',
-					revokedAt: result.revocationDate,
-					...(result.reasonCode === undefined ? {} : { revocationReason: result.reasonCode }),
+					revokedAt: result.value.revocationDate,
+					...(result.value.reasonCode === undefined
+						? {}
+						: { revocationReason: result.value.reasonCode }),
 				},
 			};
 		}
 		return {
 			status: 'good',
 			result: {
-				ok: true,
 				status: 'good',
 				source: 'crl',
 				message: 'Certificate is not revoked according to CRL evidence',
@@ -323,7 +318,6 @@ async function checkCertificateRevocationWithOcsp(
 		return {
 			status: 'revoked',
 			result: {
-				ok: true,
 				status: 'revoked',
 				source: 'ocsp',
 				message: 'Certificate is revoked according to OCSP evidence',
@@ -340,7 +334,6 @@ async function checkCertificateRevocationWithOcsp(
 		return {
 			status: 'good',
 			result: {
-				ok: true,
 				status: 'good',
 				source: 'ocsp',
 				message: 'Certificate is not revoked according to OCSP evidence',
@@ -370,4 +363,10 @@ function normalizeCertificate(certificate: RevocationCertificateSource): ParsedC
 function normalizeHex(value: string): string {
 	const normalized = value.toLowerCase().replace(/^0+/, '');
 	return normalized === '' ? '0' : normalized;
+}
+
+function revocationSuccess(
+	value: CheckCertificateRevocationValue,
+): CheckCertificateRevocationResult {
+	return { ok: true, value };
 }

@@ -85,7 +85,7 @@
 			"description": "Normalize revocation-facing APIs onto the shared result model without changing core parse-throw semantics. Done when:\n- CRL, OCSP, and revocation public results use `Result<T, E>`\n- status-bearing outcomes move into `value` payloads instead of mixed top-level unions\n- malformed-input behavior remains a parse-boundary concern, not a revocation-result concern",
 			"depends": ["result-model-foundation", "der-spine-hardening"],
 			"priority": "integration",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "migrate-pfx-pkcs7-results",

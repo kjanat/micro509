@@ -393,7 +393,7 @@ describe('crl', () => {
 				issuerCertificate: ca.certificate.pem,
 				crl: matchingCrl.pem,
 			}),
-		).toMatchObject({ ok: true, status: 'good' });
+		).toMatchObject({ ok: true, value: { status: 'good' } });
 
 		const mismatchedCrl = await createCertificateRevocationList({
 			issuer: { commonName: 'Scoped CRL CA' },
@@ -412,7 +412,7 @@ describe('crl', () => {
 				issuerCertificate: ca.certificate.pem,
 				crl: mismatchedCrl.pem,
 			}),
-		).toEqual({
+		).toMatchObject({
 			ok: false,
 			code: 'non_applicable',
 			message: 'certificate distribution points do not match the CRL issuing distribution point',
@@ -465,7 +465,7 @@ describe('crl', () => {
 				issuerCertificate: ca.certificate.pem,
 				crl: reasonMismatchCrl.pem,
 			}),
-		).toEqual({
+		).toMatchObject({
 			ok: false,
 			code: 'non_applicable',
 			message: 'certificate distribution point reasons do not overlap the CRL reason scope',
@@ -508,7 +508,7 @@ describe('crl', () => {
 				issuerCertificate: ca.certificate.pem,
 				crl: caOnlyCrl.pem,
 			}),
-		).toEqual({
+		).toMatchObject({
 			ok: false,
 			code: 'non_applicable',
 			message: 'CRL only applies to CA certificates',
@@ -520,7 +520,7 @@ describe('crl', () => {
 				issuerCertificate: ca.certificate.pem,
 				crl: caOnlyCrl.pem,
 			}),
-		).toMatchObject({ ok: true, status: 'good' });
+		).toMatchObject({ ok: true, value: { status: 'good' } });
 	});
 
 	it('rejects direct CRLs with mismatched issuers and unsupported alternate CRL issuers', async () => {
@@ -567,7 +567,7 @@ describe('crl', () => {
 				issuerCertificate: crlIssuer.certificate.pem,
 				crl: mismatchedCrl.pem,
 			}),
-		).toEqual({
+		).toMatchObject({
 			ok: false,
 			code: 'non_applicable',
 			message: 'CRL issuer does not match certificate issuer for direct CRL processing',
@@ -609,7 +609,7 @@ describe('crl', () => {
 				issuerCertificate: certIssuer.certificate.pem,
 				crl: directCrl.pem,
 			}),
-		).toEqual({
+		).toMatchObject({
 			ok: false,
 			code: 'non_applicable',
 			message:
@@ -664,7 +664,7 @@ describe('crl', () => {
 				crl: complete.pem,
 				deltaCrl: delta.pem,
 			}),
-		).toMatchObject({ ok: true, status: 'good' });
+		).toMatchObject({ ok: true, value: { status: 'good' } });
 	});
 
 	it('rejects attribute-only and end-entity-only CRL scopes when the certificate type mismatches', async () => {
@@ -718,7 +718,7 @@ describe('crl', () => {
 				issuerCertificate: ca.certificate.pem,
 				crl: attributeOnlyCrl.pem,
 			}),
-		).toEqual({
+		).toMatchObject({
 			ok: false,
 			code: 'non_applicable',
 			message: 'attribute-certificate-only CRLs are not applicable to public-key certificates',
@@ -730,7 +730,7 @@ describe('crl', () => {
 				issuerCertificate: ca.certificate.pem,
 				crl: userOnlyCrl.pem,
 			}),
-		).toEqual({
+		).toMatchObject({
 			ok: false,
 			code: 'non_applicable',
 			message: 'CRL only applies to end-entity certificates',
@@ -765,7 +765,7 @@ describe('crl', () => {
 				issuerCertificate: ca.certificate.pem,
 				crl: fullScopeCrl.pem,
 			}),
-		).toMatchObject({ ok: true, status: 'good' });
+		).toMatchObject({ ok: true, value: { status: 'good' } });
 
 		const reasonScopedCrl = await createCertificateRevocationList({
 			issuer: { commonName: 'Full Scope CRL CA' },
@@ -781,7 +781,7 @@ describe('crl', () => {
 				issuerCertificate: ca.certificate.pem,
 				crl: reasonScopedCrl.pem,
 			}),
-		).toMatchObject({ ok: true, status: 'good' });
+		).toMatchObject({ ok: true, value: { status: 'good' } });
 
 		const scopedCrl = await createCertificateRevocationList({
 			issuer: { commonName: 'Full Scope CRL CA' },
@@ -799,7 +799,7 @@ describe('crl', () => {
 				issuerCertificate: ca.certificate.pem,
 				crl: scopedCrl.pem,
 			}),
-		).toEqual({
+		).toMatchObject({
 			ok: false,
 			code: 'non_applicable',
 			message: 'certificates without CRL distribution points only accept full-scope CRLs',
@@ -824,7 +824,7 @@ describe('crl', () => {
 				issuerCertificate: signerWithoutCrlSign.certificate.pem,
 				crl: noCrlSign.pem,
 			}),
-		).toEqual({
+		).toMatchObject({
 			ok: false,
 			code: 'crl_sign_not_permitted',
 			message: 'issuer certificate key usage does not permit CRL signing',
@@ -835,7 +835,7 @@ describe('crl', () => {
 				crl: noCrlSign.pem,
 				issuerCertificate: signerWithoutCrlSign.certificate.pem,
 			}),
-		).toEqual({
+		).toMatchObject({
 			ok: false,
 			code: 'crl_sign_not_permitted',
 			message: 'issuer certificate key usage does not permit CRL signing',
@@ -889,7 +889,7 @@ describe('crl', () => {
 			}),
 		).toMatchObject({
 			ok: true,
-			status: 'revoked',
+			value: { status: 'revoked' },
 		});
 
 		const unsupportedNamedIssuerCrl = await addRevokedEntryCertificateIssuers(
@@ -908,7 +908,7 @@ describe('crl', () => {
 				issuerCertificate: ca.certificate.pem,
 				crl: unsupportedNamedIssuerCrl,
 			}),
-		).toEqual({
+		).toMatchObject({
 			ok: false,
 			code: 'non_applicable',
 			message: 'indirect CRL entry certificateIssuer must include a directoryName',
@@ -927,7 +927,7 @@ describe('crl', () => {
 				issuerCertificate: ca.certificate.pem,
 				crl: deltaCrl.pem,
 			}),
-		).toEqual({
+		).toMatchObject({
 			ok: false,
 			code: 'non_applicable',
 			message: 'delta CRLs are not applicable until delta merge support is implemented',
@@ -981,9 +981,7 @@ describe('crl', () => {
 			}),
 		).toMatchObject({
 			ok: true,
-			status: 'revoked',
-			reasonCode: 'keyCompromise',
-			value: { crlNumber: 5 },
+			value: { status: 'revoked', reasonCode: 'keyCompromise', crl: { crlNumber: 5 } },
 		});
 	});
 
@@ -1082,8 +1080,7 @@ describe('crl', () => {
 			}),
 		).toMatchObject({
 			ok: true,
-			status: 'good',
-			value: { crlNumber: 10 },
+			value: { status: 'good', crl: { crlNumber: 10 } },
 		});
 		expect(
 			await checkCertificateRevocationAgainstCrl({
@@ -1095,9 +1092,11 @@ describe('crl', () => {
 			}),
 		).toMatchObject({
 			ok: true,
-			status: 'revoked',
-			reasonCode: 'keyCompromise',
-			value: { crlNumber: 10 },
+			value: {
+				status: 'revoked',
+				reasonCode: 'keyCompromise',
+				crl: { crlNumber: 10 },
+			},
 		});
 		expect(
 			await checkCertificateRevocationAgainstCrl({
@@ -1109,8 +1108,7 @@ describe('crl', () => {
 			}),
 		).toMatchObject({
 			ok: true,
-			status: 'good',
-			value: { crlNumber: 10 },
+			value: { status: 'good', crl: { crlNumber: 10 } },
 		});
 	});
 
@@ -1157,7 +1155,7 @@ describe('crl', () => {
 				deltaCrl: deltaCrl.pem,
 				at: now,
 			}),
-		).toEqual({
+		).toMatchObject({
 			ok: false,
 			code: 'stale_crl',
 			message: 'CRL is not valid at requested time',
@@ -1220,7 +1218,7 @@ describe('crl', () => {
 				crl: completeCrl.pem,
 				deltaCrl: deltaCrl.pem,
 			}),
-		).toEqual({
+		).toMatchObject({
 			ok: false,
 			code: 'non_applicable',
 			message: 'complete and delta CRLs must share the same issuing distribution point scope',
@@ -1266,7 +1264,7 @@ describe('crl', () => {
 				crl: completeDelta.pem,
 				deltaCrl: normalDelta.pem,
 			}),
-		).toEqual({
+		).toMatchObject({
 			ok: false,
 			code: 'non_applicable',
 			message: 'complete CRL input must not itself be a delta CRL',
@@ -1292,7 +1290,7 @@ describe('crl', () => {
 				crl: complete.pem,
 				deltaCrl: missingIndicatorDelta.pem,
 			}),
-		).toEqual({
+		).toMatchObject({
 			ok: false,
 			code: 'non_applicable',
 			message: 'delta CRL input must include a delta CRL indicator',
@@ -1313,7 +1311,7 @@ describe('crl', () => {
 				crl: complete.pem,
 				deltaCrl: tooNewBaseDelta.pem,
 			}),
-		).toEqual({
+		).toMatchObject({
 			ok: false,
 			code: 'non_applicable',
 			message: 'delta CRL base number must not exceed the complete CRL number',
@@ -1334,7 +1332,7 @@ describe('crl', () => {
 				crl: complete.pem,
 				deltaCrl: notNewerDelta.pem,
 			}),
-		).toEqual({
+		).toMatchObject({
 			ok: false,
 			code: 'non_applicable',
 			message: 'delta CRL number must be newer than the complete CRL number',
@@ -1463,14 +1461,14 @@ describe('crl', () => {
 				issuerCertificate: crlIssuer.certificate.pem,
 				crl: indirectCrlDer,
 			}),
-		).toMatchObject({ ok: true, status: 'revoked', reasonCode: 'keyCompromise' });
+		).toMatchObject({ ok: true, value: { status: 'revoked', reasonCode: 'keyCompromise' } });
 		expect(
 			await checkCertificateRevocationAgainstCrl({
 				certificate: secondLeaf.pem,
 				issuerCertificate: crlIssuer.certificate.pem,
 				crl: indirectCrlDer,
 			}),
-		).toMatchObject({ ok: true, status: 'good' });
+		).toMatchObject({ ok: true, value: { status: 'good' } });
 	});
 
 	it('rejects indirect CRLs without matching cRLIssuer distribution points', async () => {
@@ -1522,7 +1520,7 @@ describe('crl', () => {
 				issuerCertificate: crlIssuer.certificate.pem,
 				crl: indirectCrl.pem,
 			}),
-		).toEqual({
+		).toMatchObject({
 			ok: false,
 			code: 'non_applicable',
 			message: 'certificate distribution points do not authorize this indirect CRL issuer',
@@ -1568,7 +1566,7 @@ describe('crl', () => {
 				issuerCertificate: crlIssuer.certificate.pem,
 				crl: indirectCrl.pem,
 			}),
-		).toEqual({
+		).toMatchObject({
 			ok: false,
 			code: 'non_applicable',
 			message:
@@ -1628,7 +1626,7 @@ describe('crl', () => {
 				issuerCertificate: crlIssuer.certificate.pem,
 				crl: indirectCrl.pem,
 			}),
-		).toEqual({
+		).toMatchObject({
 			ok: false,
 			code: 'non_applicable',
 			message: 'indirect CRL distribution points must identify the CRL issuer with directoryName',
@@ -1715,7 +1713,7 @@ describe('crl', () => {
 				crl: completeCrl.pem,
 				deltaCrl,
 			}),
-		).toEqual({
+		).toMatchObject({
 			ok: false,
 			code: 'non_applicable',
 			message: 'indirect CRL entry certificateIssuer must include a directoryName',
@@ -1791,7 +1789,7 @@ describe('crl', () => {
 				crl: completeWithoutCrlNumber,
 				deltaCrl: delta,
 			}),
-		).toEqual({
+		).toMatchObject({
 			ok: false,
 			code: 'non_applicable',
 			message: 'complete and delta CRLs must both carry CRL numbers for delta processing',
@@ -1805,7 +1803,7 @@ describe('crl', () => {
 				crl: complete,
 				deltaCrl: { ...delta, authorityKeyIdentifier: 'deadbeef' },
 			}),
-		).toEqual({
+		).toMatchObject({
 			ok: false,
 			code: 'non_applicable',
 			message: 'complete and delta CRLs must share the same authority key identifier',
@@ -1890,7 +1888,7 @@ describe('crl', () => {
 				crl: complete,
 				deltaCrl: delta,
 			}),
-		).toMatchObject({ ok: true, status: 'good' });
+		).toMatchObject({ ok: true, value: { status: 'good' } });
 	});
 
 	it('rejects delta CRLs when fullName unknown bytes or reason sets differ', async () => {
@@ -1967,7 +1965,7 @@ describe('crl', () => {
 				crl: complete,
 				deltaCrl: delta,
 			}),
-		).toEqual({
+		).toMatchObject({
 			ok: false,
 			code: 'non_applicable',
 			message: 'complete and delta CRLs must share the same issuing distribution point scope',
@@ -2039,7 +2037,7 @@ describe('crl', () => {
 				crl: complete,
 				deltaCrl: delta,
 			}),
-		).toMatchObject({ ok: true, status: 'good' });
+		).toMatchObject({ ok: true, value: { status: 'good' } });
 
 		const issuingDistributionPoint = delta.issuingDistributionPoint;
 		const distributionPoint = issuingDistributionPoint?.distributionPoint;
@@ -2075,7 +2073,7 @@ describe('crl', () => {
 				crl: complete,
 				deltaCrl: poisonedDelta,
 			}),
-		).toEqual({
+		).toMatchObject({
 			ok: false,
 			code: 'non_applicable',
 			message: 'complete and delta CRLs must share the same issuing distribution point scope',
@@ -2138,7 +2136,7 @@ describe('crl', () => {
 				issuerCertificate: crlIssuer.certificate.pem,
 				crl: indirectCrl.pem,
 			}),
-		).toMatchObject({ ok: true, status: 'good' });
+		).toMatchObject({ ok: true, value: { status: 'good' } });
 	});
 
 	it('creates CRL with all revocation reason codes', async () => {

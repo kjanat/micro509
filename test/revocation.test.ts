@@ -24,13 +24,15 @@ describe('revocation boundary', () => {
 				issuerCertificate,
 			}),
 		).toEqual({
-			ok: false,
-			status: 'unknown',
-			code: 'revocation_evidence_missing',
-			message: 'No CRL or OCSP evidence provided',
-			details: {
-				checkedSources: [],
-				indeterminateEvidence: [],
+			ok: true,
+			value: {
+				status: 'unknown',
+				code: 'revocation_evidence_missing',
+				message: 'No CRL or OCSP evidence provided',
+				details: {
+					checkedSources: [],
+					indeterminateEvidence: [],
+				},
 			},
 		});
 	});
@@ -64,9 +66,11 @@ describe('revocation boundary', () => {
 			}),
 		).toMatchObject({
 			ok: true,
-			status: 'revoked',
-			source: 'crl',
-			revocationReason: 'keyCompromise',
+			value: {
+				status: 'revoked',
+				source: 'crl',
+				revocationReason: 'keyCompromise',
+			},
 		});
 	});
 
@@ -89,9 +93,11 @@ describe('revocation boundary', () => {
 			}),
 		).toEqual({
 			ok: true,
-			status: 'good',
-			source: 'crl',
-			message: 'Certificate is not revoked according to CRL evidence',
+			value: {
+				status: 'good',
+				source: 'crl',
+				message: 'Certificate is not revoked according to CRL evidence',
+			},
 		});
 	});
 
@@ -146,9 +152,11 @@ describe('revocation boundary', () => {
 			}),
 		).toMatchObject({
 			ok: true,
-			status: 'revoked',
-			source: 'crl',
-			revocationReason: 'keyCompromise',
+			value: {
+				status: 'revoked',
+				source: 'crl',
+				revocationReason: 'keyCompromise',
+			},
 		});
 	});
 
@@ -216,9 +224,11 @@ describe('revocation boundary', () => {
 			}),
 		).toMatchObject({
 			ok: true,
-			status: 'revoked',
-			source: 'crl',
-			revocationReason: 'cessationOfOperation',
+			value: {
+				status: 'revoked',
+				source: 'crl',
+				revocationReason: 'cessationOfOperation',
+			},
 		});
 	});
 
@@ -290,9 +300,11 @@ describe('revocation boundary', () => {
 			}),
 		).toMatchObject({
 			ok: true,
-			status: 'revoked',
-			source: 'crl',
-			revocationReason: 'keyCompromise',
+			value: {
+				status: 'revoked',
+				source: 'crl',
+				revocationReason: 'keyCompromise',
+			},
 		});
 	});
 
@@ -341,21 +353,23 @@ describe('revocation boundary', () => {
 				evidence: [{ kind: 'crl', crl: mismatchedCrl.pem }],
 			}),
 		).toEqual({
-			ok: false,
-			status: 'unknown',
-			code: 'revocation_status_unknown',
-			message: 'No revocation evidence established certificate status',
-			details: {
-				checkedSources: ['crl'],
-				indeterminateEvidence: [
-					{
-						source: 'crl',
-						code: 'non_applicable',
-						message:
-							'certificate distribution points do not match the CRL issuing distribution point',
-						reason: 'distribution_point_mismatch',
-					},
-				],
+			ok: true,
+			value: {
+				status: 'unknown',
+				code: 'revocation_status_unknown',
+				message: 'No revocation evidence established certificate status',
+				details: {
+					checkedSources: ['crl'],
+					indeterminateEvidence: [
+						{
+							source: 'crl',
+							code: 'non_applicable',
+							message:
+								'certificate distribution points do not match the CRL issuing distribution point',
+							reason: 'distribution_point_mismatch',
+						},
+					],
+				},
 			},
 		});
 	});
@@ -401,9 +415,11 @@ describe('revocation boundary', () => {
 			}),
 		).toEqual({
 			ok: true,
-			status: 'good',
-			source: 'ocsp',
-			message: 'Certificate is not revoked according to OCSP evidence',
+			value: {
+				status: 'good',
+				source: 'ocsp',
+				message: 'Certificate is not revoked according to OCSP evidence',
+			},
 		});
 	});
 
@@ -434,10 +450,12 @@ describe('revocation boundary', () => {
 			}),
 		).toMatchObject({
 			ok: true,
-			status: 'revoked',
-			source: 'ocsp',
-			revocationReasonCode: 1,
-			revokedAt,
+			value: {
+				status: 'revoked',
+				source: 'ocsp',
+				revocationReasonCode: 1,
+				revokedAt,
+			},
 		});
 	});
 
@@ -488,19 +506,21 @@ describe('revocation boundary', () => {
 				evidence: [{ kind: 'ocsp', response: ocspResponse.pem }],
 			}),
 		).toEqual({
-			ok: false,
-			status: 'unknown',
-			code: 'revocation_status_unknown',
-			message: 'No revocation evidence established certificate status',
-			details: {
-				checkedSources: ['ocsp'],
-				indeterminateEvidence: [
-					{
-						source: 'ocsp',
-						code: 'ocsp_signing_missing',
-						message: 'Delegated OCSP responder lacks ocspSigning EKU',
-					},
-				],
+			ok: true,
+			value: {
+				status: 'unknown',
+				code: 'revocation_status_unknown',
+				message: 'No revocation evidence established certificate status',
+				details: {
+					checkedSources: ['ocsp'],
+					indeterminateEvidence: [
+						{
+							source: 'ocsp',
+							code: 'ocsp_signing_missing',
+							message: 'Delegated OCSP responder lacks ocspSigning EKU',
+						},
+					],
+				},
 			},
 		});
 	});
@@ -534,19 +554,22 @@ describe('revocation boundary', () => {
 				evidence: [{ kind: 'ocsp', response: ocspResponse.pem }],
 			}),
 		).toEqual({
-			ok: false,
-			status: 'unknown',
-			code: 'revocation_status_unknown',
-			message: 'No revocation evidence established certificate status',
-			details: {
-				checkedSources: ['ocsp'],
-				indeterminateEvidence: [
-					{
-						source: 'ocsp',
-						code: 'certificate_status_missing',
-						message: 'OCSP response does not include certificate status for the target certificate',
-					},
-				],
+			ok: true,
+			value: {
+				status: 'unknown',
+				code: 'revocation_status_unknown',
+				message: 'No revocation evidence established certificate status',
+				details: {
+					checkedSources: ['ocsp'],
+					indeterminateEvidence: [
+						{
+							source: 'ocsp',
+							code: 'certificate_status_missing',
+							message:
+								'OCSP response does not include certificate status for the target certificate',
+						},
+					],
+				},
 			},
 		});
 	});
@@ -591,25 +614,27 @@ describe('revocation boundary', () => {
 				],
 			}),
 		).toEqual({
-			ok: false,
-			status: 'unknown',
-			code: 'revocation_status_unknown',
-			message: 'No revocation evidence established certificate status',
-			details: {
-				checkedSources: ['crl', 'ocsp'],
-				indeterminateEvidence: [
-					{
-						source: 'crl',
-						code: 'non_applicable',
-						message: 'CRL only applies to CA certificates',
-						reason: 'certificate_scope_mismatch',
-					},
-					{
-						source: 'ocsp',
-						code: 'certificate_status_unknown',
-						message: 'OCSP responder returned certificate status unknown',
-					},
-				],
+			ok: true,
+			value: {
+				status: 'unknown',
+				code: 'revocation_status_unknown',
+				message: 'No revocation evidence established certificate status',
+				details: {
+					checkedSources: ['crl', 'ocsp'],
+					indeterminateEvidence: [
+						{
+							source: 'crl',
+							code: 'non_applicable',
+							message: 'CRL only applies to CA certificates',
+							reason: 'certificate_scope_mismatch',
+						},
+						{
+							source: 'ocsp',
+							code: 'certificate_status_unknown',
+							message: 'OCSP responder returned certificate status unknown',
+						},
+					],
+				},
 			},
 		});
 	});

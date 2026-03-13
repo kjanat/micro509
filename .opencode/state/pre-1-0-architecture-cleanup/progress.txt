@@ -5,6 +5,8 @@ Started: 2026-03-13
 
 ## Codebase Patterns
 
+WE HAVE NO DOWNSTREAM USERS. PRERELEASE PRIVATE STATUS
+
 - Keep top-level public modules easy to discover, but move complex engines behind nested internal modules when the domain seam is real.
 - Parse boundaries should reject malformed input early and loudly; typed result unions are for expected operational failures, not raw byte-structure rejection.
 - Cert and CSR built-in extensions should share one definition source for OID, encode, decode, and parse-assignment semantics; verifier support remains a separate concern.
@@ -20,6 +22,7 @@ Started: 2026-03-13
 - Registry foundations can land before the big rewire if the registry is fully typed and test-covered, while existing parser/builder entrypoints still use their old control flow.
 - Once a registry spans multiple contexts, thread the context through both parse and build paths; otherwise known-but-unsupported OIDs leak across surfaces and create inconsistent behavior.
 - During API migration, compatibility is safest when nested replacements merge field-by-field and result wrappers mirror legacy top-level error fields while still exposing canonical `error` payloads.
+- For revocation APIs, `unknown` is still a status outcome, not a transport or parse failure; move it into `value.status` and leave malformed input at the parse boundary.
 
 ---
 <!-- Task logs below - APPEND ONLY -->
@@ -91,3 +94,12 @@ Started: 2026-03-13
 - Expanded regression coverage for the new identity success shape and for mixed flat+nested verify inputs so the migration path stays deterministic.
 - Files changed: `src/verify.ts`, `src/identity.ts`, `test/verify.test.ts`, `test/identity.test.ts`, `test/identity-fixtures.test.ts`, `.opencode/state/pre-1-0-architecture-cleanup/prd.json`, `.opencode/state/pre-1-0-architecture-cleanup/progress.txt`
 - **Learnings:** mirrored compatibility fields let a shared result model land without rewriting every caller in one step, but mixed-input migrations must merge per-field or they create silent behavior drift.
+
+## Task - [migrate-crl-ocsp-revocation]
+
+- Migrated CRL and OCSP verify/validate surfaces onto the shared success/value + failure/error shape while preserving top-level `code` and `message` on failures.
+- Changed direct and orchestration revocation status APIs so status-bearing outcomes now live under `value`, including `unknown` outcomes for indeterminate evidence.
+- Updated CRL compatibility/applicability helpers and OCSP validation helpers to emit the new failure wrappers without changing parse-boundary throw behavior.
+- Reworked revocation, CRL, and differential tests for the new result shapes and added coverage for the intentional `unknown`-as-value behavior.
+- Files changed: `src/crl.ts`, `src/ocsp.ts`, `src/revocation.ts`, `src/index.ts`, `test/crl.test.ts`, `test/revocation.test.ts`, `test/differential.test.ts`, `.opencode/state/pre-1-0-architecture-cleanup/prd.json`, `.opencode/state/pre-1-0-architecture-cleanup/progress.txt`
+- **Learnings:** when a domain has business statuses like `good` / `revoked` / `unknown`, the clean shared-result split is `ok` for evaluation success and `value.status` for the business outcome; otherwise consumers have to treat “unknown” like a transport error.
