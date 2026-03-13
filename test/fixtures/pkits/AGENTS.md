@@ -15,11 +15,11 @@ pkits/
 
 ## WHERE TO LOOK
 
-| Need | Location | Notes |
-| ---- | -------- | ----- |
-| Harness owner | `test/pkits.test.ts` | table-driven subset, fixed validation time |
-| Scope and non-goals | `docs/PKITS-HARNESS.md` | shipped subset only |
-| Fixture corpus | `certs/*.crt` | upstream-style names are part of the harness contract |
+| Need                | Location                | Notes                                                 |
+| ------------------- | ----------------------- | ----------------------------------------------------- |
+| Harness owner       | `test/pkits.test.ts`    | table-driven subset, fixed validation time            |
+| Scope and non-goals | `docs/PKITS-HARNESS.md` | shipped subset only                                   |
+| Fixture corpus      | `certs/*.crt`           | upstream-style names are part of the harness contract |
 
 ## LOCAL CONVENTIONS
 

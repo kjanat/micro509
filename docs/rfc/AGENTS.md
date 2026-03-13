@@ -8,12 +8,12 @@ Vendored standards text only. Reference material, not project-authored prose.
 
 ## WHERE TO LOOK
 
-| Need | File | Notes |
-| ---- | ---- | ----- |
-| PKIX path validation baseline | `rfc5280.txt` | certificate/profile rules and validation language |
-| Service identity matching | `rfc6125.txt` | DNS/IP identity reference |
-| OCSP baseline | `rfc6960.txt` | request/response and responder rules |
-| Policy processing updates | `rfc9618.txt` | RFC 5280 policy updates referenced by current work |
+| Need                          | File          | Notes                                              |
+| ----------------------------- | ------------- | -------------------------------------------------- |
+| PKIX path validation baseline | `rfc5280.txt` | certificate/profile rules and validation language  |
+| Service identity matching     | `rfc6125.txt` | DNS/IP identity reference                          |
+| OCSP baseline                 | `rfc6960.txt` | request/response and responder rules               |
+| Policy processing updates     | `rfc9618.txt` | RFC 5280 policy updates referenced by current work |
 
 ## LOCAL CONVENTIONS
 
