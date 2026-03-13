@@ -1019,9 +1019,28 @@ describe('chain verification', () => {
 			leaf: leaf.pem,
 			intermediates: [intermediate.pem],
 			roots: [root.certificate.pem],
-			permittedSubtrees: [{ base: { type: 'dns', value: 'example.com' } }],
+			nameConstraints: {
+				permittedSubtrees: [{ base: { type: 'dns', value: 'example.com' } }],
+			},
 		});
 		expect(result.ok).toBe(true);
+	});
+
+	it('merges flat and nested caller-supplied initial name constraints', async () => {
+		const chain = await issueChain();
+		const result = await verifyCertificateChain({
+			leaf: chain.leaf.pem,
+			intermediates: [chain.intermediate.pem],
+			roots: [chain.root.certificate.pem],
+			excludedSubtrees: [{ base: { type: 'dns', value: 'verify.example' } }],
+			nameConstraints: {
+				permittedSubtrees: [{ base: { type: 'dns', value: 'example.com' } }],
+			},
+		});
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.code).toBe('name_constraints_violated');
+		}
 	});
 
 	it('applies name constraints to self-issued leaf certificate', async () => {
@@ -1946,7 +1965,7 @@ describe('validation profiles', () => {
 			leaf: leaf.pem,
 			intermediates: [intermediate.pem],
 			roots: [root.certificate.pem],
-			initialPolicySet: ['1.2.3.4'],
+			policy: { initialPolicySet: ['1.2.3.4'] },
 		});
 		expect(allowed.ok).toBe(true);
 
@@ -1955,7 +1974,7 @@ describe('validation profiles', () => {
 			intermediates: [intermediate.pem],
 			roots: [root.certificate.pem],
 			initialPolicySet: ['1.2.3.4'],
-			inhibitPolicyMapping: true,
+			policy: { inhibitPolicyMapping: true },
 		});
 		expect(blocked).toMatchObject({
 			ok: false,
@@ -2426,13 +2445,13 @@ describe('validateCandidatePath direct', () => {
 		});
 		const result = await validateCandidatePath({
 			chain: [parseCertificatePem(leaf.pem), parseCertificatePem(root.certificate.pem)],
-			initialPolicySet: ['1.2.3.4'],
+			policy: { initialPolicySet: ['1.2.3.4'] },
 		});
 		expect(result.ok).toBe(true);
 		if (!result.ok) {
 			throw new Error('expected policy-aware raw path success');
 		}
-		expect(result.policyValidation).toEqual({
+		expect(result.value.policyValidation).toEqual({
 			authorityConstrainedPolicies: [{ policyIdentifier: '1.2.3.4' }],
 			userConstrainedPolicies: [{ policyIdentifier: '1.2.3.4' }],
 		});
@@ -2460,7 +2479,7 @@ describe('validateCandidatePath direct', () => {
 		});
 		const result = await validateCandidatePath({
 			chain: [parseCertificatePem(leaf.pem), parseCertificatePem(root.certificate.pem)],
-			initialPolicySet: ['1.2.3.5'],
+			policy: { initialPolicySet: ['1.2.3.5'] },
 		});
 		expect(result).toMatchObject({
 			ok: false,

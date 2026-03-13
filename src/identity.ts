@@ -56,7 +56,22 @@ export interface MatchServiceIdentityFailure
 	readonly ok: false;
 }
 
-export type MatchServiceIdentityResult = { readonly ok: true } | MatchServiceIdentityFailure;
+export interface MatchServiceIdentitySuccess {
+	readonly ok: true;
+	readonly value: undefined;
+}
+
+export interface MatchServiceIdentityFailureResult {
+	readonly ok: false;
+	readonly error: MatchServiceIdentityFailure;
+	readonly code: MatchServiceIdentityErrorCode;
+	readonly message: string;
+	readonly details?: MatchServiceIdentityFailureDetails;
+}
+
+export type MatchServiceIdentityResult =
+	| MatchServiceIdentitySuccess
+	| MatchServiceIdentityFailureResult;
 
 export type MatchServiceIdentityEvaluation = Result<void, MatchServiceIdentityFailure>;
 
@@ -78,7 +93,7 @@ export function matchCertificateServiceIdentity(
 			const expected = serviceIdentity.value;
 			const sans = certificate.subjectAltNames?.filter((entry) => entry.type === 'dns') ?? [];
 			if (sans.some((entry) => matchesDnsName(entry.value, expected))) {
-				return { ok: true };
+				return success();
 			}
 			const presentedIdentifierTypes = presentedDnsIdentifierTypes(certificate);
 			if (serviceIdentity.allowCommonNameFallback === true && presentedIdentifierTypes.length > 0) {
@@ -119,7 +134,7 @@ export function matchCertificateServiceIdentity(
 						}),
 					);
 				}
-				return { ok: true };
+				return success();
 			}
 			return failure(
 				'subject_alt_name_mismatch',
@@ -143,7 +158,7 @@ export function matchCertificateServiceIdentity(
 					),
 				);
 			}
-			return { ok: true };
+			return success();
 		}
 		case 'uri': {
 			const expected = parseUriServiceIdentity(serviceIdentity.value);
@@ -156,7 +171,7 @@ export function matchCertificateServiceIdentity(
 				return [parsed];
 			});
 			if (matchingService.some((entry) => matchesDnsName(entry.domainName, expected.domainName))) {
-				return { ok: true };
+				return success();
 			}
 			if (matchingService.length > 0) {
 				return failure(
@@ -202,7 +217,7 @@ export function matchCertificateServiceIdentity(
 				return [parsed];
 			});
 			if (matchingService.some((entry) => matchesDnsName(entry.domainName, expected.domainName))) {
-				return { ok: true };
+				return success();
 			}
 			if (matchingService.length > 0) {
 				return failure(
@@ -390,12 +405,23 @@ function failure(
 	message: string,
 	details?: MatchServiceIdentityFailureDetails,
 ): MatchServiceIdentityResult {
-	return {
+	const error: MatchServiceIdentityFailure = {
 		ok: false,
 		code,
 		message,
 		...(details === undefined ? {} : { details }),
 	};
+	return {
+		ok: false,
+		error,
+		code,
+		message,
+		...(details === undefined ? {} : { details }),
+	};
+}
+
+function success(): MatchServiceIdentitySuccess {
+	return { ok: true, value: undefined };
 }
 
 function details(

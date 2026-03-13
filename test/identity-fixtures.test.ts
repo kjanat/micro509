@@ -57,7 +57,7 @@ describe('identity fixtures', () => {
 				subjectAltNames: [{ type: 'dns', value: 'api.example.com' }],
 				serviceIdentity: { type: 'dns', value: 'api.example.com' },
 			}),
-		).toEqual({ ok: true });
+		).toEqual({ ok: true, value: undefined });
 
 		expect(
 			await matchIdentityFixture({
@@ -75,7 +75,7 @@ describe('identity fixtures', () => {
 				subjectAltNames: [{ type: 'dns', value: '*.example.com' }],
 				serviceIdentity: { type: 'dns', value: 'chat.example.com' },
 			}),
-		).toEqual({ ok: true });
+		).toEqual({ ok: true, value: undefined });
 
 		expect(
 			await matchIdentityFixture({
@@ -93,7 +93,7 @@ describe('identity fixtures', () => {
 				subjectAltNames: [{ type: 'ip', value: '2001:db8::1' }],
 				serviceIdentity: { type: 'ip', value: '2001:0db8:0:0:0:0:0:1' },
 			}),
-		).toEqual({ ok: true });
+		).toEqual({ ok: true, value: undefined });
 
 		expect(
 			await matchIdentityFixture({
@@ -111,7 +111,7 @@ describe('identity fixtures', () => {
 				subjectAltNames: [{ type: 'uri', value: 'https://api.example.com/login' }],
 				serviceIdentity: { type: 'uri', value: 'https://api.example.com/admin' },
 			}),
-		).toEqual({ ok: true });
+		).toEqual({ ok: true, value: undefined });
 
 		expect(
 			await matchIdentityFixture({
@@ -129,7 +129,7 @@ describe('identity fixtures', () => {
 				subjectAltNames: [{ type: 'srv', value: '_xmpp-client.im.example.org' }],
 				serviceIdentity: { type: 'srv', value: '_XMPP-CLIENT.im.example.org' },
 			}),
-		).toEqual({ ok: true });
+		).toEqual({ ok: true, value: undefined });
 
 		expect(
 			await matchIdentityFixture({
@@ -147,7 +147,7 @@ describe('identity fixtures', () => {
 				subjectAltNames: [{ type: 'dns', value: '*.xn--bcher-kva.example' }],
 				serviceIdentity: { type: 'dns', value: 'shop.bücher.example' },
 			}),
-		).toEqual({ ok: true });
+		).toEqual({ ok: true, value: undefined });
 
 		expect(
 			await matchIdentityFixture({
@@ -155,7 +155,7 @@ describe('identity fixtures', () => {
 				subjectAltNames: [{ type: 'uri', value: 'https://xn--bcher-kva.example/login' }],
 				serviceIdentity: { type: 'uri', value: 'https://bücher.example/admin' },
 			}),
-		).toEqual({ ok: true });
+		).toEqual({ ok: true, value: undefined });
 
 		expect(
 			await matchIdentityFixture({
@@ -163,7 +163,7 @@ describe('identity fixtures', () => {
 				subjectAltNames: [{ type: 'srv', value: '_xmpp-client.xn--bcher-kva.example' }],
 				serviceIdentity: { type: 'srv', value: '_xmpp-client.bücher.example' },
 			}),
-		).toEqual({ ok: true });
+		).toEqual({ ok: true, value: undefined });
 
 		expect(
 			await matchIdentityFixture({
@@ -184,7 +184,7 @@ describe('identity fixtures', () => {
 					allowCommonNameFallback: true,
 				},
 			}),
-		).toEqual({ ok: true });
+		).toEqual({ ok: true, value: undefined });
 
 		expect(
 			await matchIdentityFixture({

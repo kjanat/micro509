@@ -76,7 +76,7 @@
 				"extract-name-constraints"
 			],
 			"priority": "integration",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "migrate-crl-ocsp-revocation",

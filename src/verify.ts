@@ -1,5 +1,5 @@
 import { toHex } from './asn1.ts';
-import type { IndexedMicro509Error } from './core/result.ts';
+import type { IndexedMicro509Error, Micro509Error } from './core/result.ts';
 import type { ExtendedKeyUsage } from './extensions.ts';
 import type { VerifyServiceIdentityInput } from './identity.ts';
 import { matchServiceIdentity } from './identity.ts';
@@ -47,13 +47,22 @@ export type EkuCheckPurpose =
 	| 'ocspSigning';
 
 export type EkuCheckResult =
-	| { readonly ok: true }
-	| {
-			readonly ok: false;
-			readonly code: 'leaf_eku_missing' | 'intermediate_eku_constraint';
-			readonly message: string;
-			readonly index: number;
-	  };
+	| { readonly ok: true; readonly value: undefined }
+	| EkuCheckFailureResult;
+
+export interface EkuCheckFailure
+	extends Micro509Error<'leaf_eku_missing' | 'intermediate_eku_constraint'> {
+	readonly ok: false;
+	readonly index: number;
+}
+
+interface EkuCheckFailureResult {
+	readonly ok: false;
+	readonly error: EkuCheckFailure;
+	readonly code: 'leaf_eku_missing' | 'intermediate_eku_constraint';
+	readonly message: string;
+	readonly index: number;
+}
 
 // ---------------------------------------------------------------------------
 // Trust anchor
@@ -112,6 +121,15 @@ export interface VerifyChainFailure
 	readonly ok: false;
 }
 
+interface VerifyFailureResult {
+	readonly ok: false;
+	readonly error: VerifyChainFailure;
+	readonly code: VerifyErrorCode;
+	readonly message: string;
+	readonly index?: number;
+	readonly details?: VerifyFailureDetails;
+}
+
 // ---------------------------------------------------------------------------
 // Build candidate path
 // ---------------------------------------------------------------------------
@@ -132,7 +150,7 @@ export interface CandidatePath {
 
 export type BuildCandidatePathResult =
 	| { readonly ok: true; readonly value: CandidatePath }
-	| VerifyChainFailure;
+	| VerifyFailureResult;
 
 // ---------------------------------------------------------------------------
 // Validate candidate path
@@ -141,6 +159,8 @@ export type BuildCandidatePathResult =
 export interface ValidateCandidatePathInput
 	extends PolicyValidationInput,
 		InitialNameConstraintsInput {
+	readonly policy?: PolicyValidationInput;
+	readonly nameConstraints?: InitialNameConstraintsInput;
 	readonly chain: readonly ParsedCertificate[];
 	readonly at?: Date;
 	readonly purpose?: VerifyPurpose;
@@ -148,12 +168,21 @@ export interface ValidateCandidatePathInput
 }
 
 export interface ValidateCandidatePathSuccess {
-	readonly ok: true;
 	/** Final RFC 9618-constrained policy outputs for this validated path. */
 	readonly policyValidation: PolicyValidationOutcome;
 }
 
-export type ValidateCandidatePathResult = ValidateCandidatePathSuccess | VerifyChainFailure;
+interface ValidateCandidatePathSuccessResult {
+	readonly ok: true;
+	readonly value: ValidateCandidatePathSuccess;
+	readonly policyValidation: PolicyValidationOutcome;
+}
+
+type ValidateCandidatePathRawResult =
+	| { readonly ok: true; readonly policyValidation: PolicyValidationOutcome }
+	| VerifyChainFailure;
+
+export type ValidateCandidatePathResult = ValidateCandidatePathSuccessResult | VerifyFailureResult;
 
 // ---------------------------------------------------------------------------
 // Verify chain (convenience composition)
@@ -162,6 +191,8 @@ export type ValidateCandidatePathResult = ValidateCandidatePathSuccess | VerifyC
 export interface VerifyCertificateChainInput
 	extends PolicyValidationInput,
 		InitialNameConstraintsInput {
+	readonly policy?: PolicyValidationInput;
+	readonly nameConstraints?: InitialNameConstraintsInput;
 	readonly leaf: CertificateSource;
 	readonly intermediates?: readonly CertificateSource[];
 	readonly roots: readonly CertificateSource[];
@@ -182,20 +213,28 @@ export interface VerifiedCertificateChain {
 
 export type VerifyChainResult =
 	| { readonly ok: true; readonly value: VerifiedCertificateChain }
-	| VerifyChainFailure;
+	| VerifyFailureResult;
 
 // ---------------------------------------------------------------------------
 // CSR verification
 // ---------------------------------------------------------------------------
 
+export interface VerifyRequestFailure
+	extends Micro509Error<'signature_invalid', VerifyFailureDetails> {
+	readonly ok: false;
+}
+
+interface VerifyRequestFailureResult {
+	readonly ok: false;
+	readonly error: VerifyRequestFailure;
+	readonly code: 'signature_invalid';
+	readonly message: string;
+	readonly details?: VerifyFailureDetails;
+}
+
 export type VerifyRequestResult =
 	| { readonly ok: true; readonly value: ParsedCertificateSigningRequest }
-	| {
-			readonly ok: false;
-			readonly code: 'signature_invalid';
-			readonly message: string;
-			readonly details?: VerifyFailureDetails;
-	  };
+	| VerifyRequestFailureResult;
 
 // ---------------------------------------------------------------------------
 // Validation profile inputs
@@ -205,6 +244,8 @@ export interface ValidateForTlsServerInput
 	extends BuildCandidatePathInput,
 		PolicyValidationInput,
 		InitialNameConstraintsInput {
+	readonly policy?: PolicyValidationInput;
+	readonly nameConstraints?: InitialNameConstraintsInput;
 	readonly leaf: CertificateSource;
 	readonly intermediates?: readonly CertificateSource[];
 	readonly roots: readonly CertificateSource[];
@@ -216,15 +257,24 @@ export interface ValidateForTlsServerInput
 export interface ValidateForTlsClientInput
 	extends BuildCandidatePathInput,
 		PolicyValidationInput,
-		InitialNameConstraintsInput {}
+		InitialNameConstraintsInput {
+	readonly policy?: PolicyValidationInput;
+	readonly nameConstraints?: InitialNameConstraintsInput;
+}
 export interface ValidateForCodeSigningInput
 	extends BuildCandidatePathInput,
 		PolicyValidationInput,
-		InitialNameConstraintsInput {}
+		InitialNameConstraintsInput {
+	readonly policy?: PolicyValidationInput;
+	readonly nameConstraints?: InitialNameConstraintsInput;
+}
 export interface ValidateForCaInput
 	extends BuildCandidatePathInput,
 		PolicyValidationInput,
-		InitialNameConstraintsInput {}
+		InitialNameConstraintsInput {
+	readonly policy?: PolicyValidationInput;
+	readonly nameConstraints?: InitialNameConstraintsInput;
+}
 
 // ---------------------------------------------------------------------------
 // Internal constants
@@ -282,6 +332,11 @@ interface ValidationState {
 	readonly nameConstraints: NameConstraintValidationState;
 }
 
+interface NestedValidationInputs {
+	readonly policy?: PolicyValidationInput;
+	readonly nameConstraints?: InitialNameConstraintsInput;
+}
+
 type ValidationStateResult =
 	| { readonly ok: true; readonly value: ValidationState }
 	| VerifyChainFailure;
@@ -298,9 +353,9 @@ type ValidationCheckResult = { readonly ok: true } | VerifyChainFailure;
  * time, constraints, or leaf policy — use {@link validateCandidatePath}
  * for that, or {@link verifyCertificateChain} for the all-in-one API.
  */
-export async function buildCandidatePath(
+async function buildCandidatePathRaw(
 	input: BuildCandidatePathInput,
-): Promise<BuildCandidatePathResult> {
+): Promise<{ readonly ok: true; readonly value: CandidatePath } | VerifyChainFailure> {
 	const leaf = loadSingleCertificate(input.leaf);
 	const intermediates = loadCertificates(input.intermediates ?? []);
 	const roots = loadCertificates(input.roots);
@@ -348,6 +403,13 @@ export async function buildCandidatePath(
 	};
 }
 
+export async function buildCandidatePath(
+	input: BuildCandidatePathInput,
+): Promise<BuildCandidatePathResult> {
+	const result = await buildCandidatePathRaw(input);
+	return result.ok ? result : verifyFailureResult(result);
+}
+
 // ---------------------------------------------------------------------------
 // validateCandidatePath
 // ---------------------------------------------------------------------------
@@ -362,9 +424,9 @@ export async function buildCandidatePath(
  * verified against its issuer (the next certificate). The root (last
  * entry) is assumed trusted and not re-verified.
  */
-export async function validateCandidatePath(
+async function validateCandidatePathRaw(
 	input: ValidateCandidatePathInput,
-): Promise<ValidateCandidatePathResult> {
+): Promise<ValidateCandidatePathRawResult> {
 	const chain = input.chain;
 	const at = input.at ?? new Date();
 	const validationStateResult = buildValidationState(input, chain.length);
@@ -522,6 +584,15 @@ export async function validateCandidatePath(
 	return validateLeaf(leaf, input, policyResult.value);
 }
 
+export async function validateCandidatePath(
+	input: ValidateCandidatePathInput,
+): Promise<ValidateCandidatePathResult> {
+	const result = await validateCandidatePathRaw(input);
+	return result.ok
+		? validateCandidatePathSuccessResult(result.policyValidation)
+		: verifyFailureResult(result);
+}
+
 // ---------------------------------------------------------------------------
 // verifyCertificateChain (convenience composition)
 // ---------------------------------------------------------------------------
@@ -567,7 +638,7 @@ export async function verifyCertificateChain(
 			input.serviceIdentity,
 		);
 		if (!serviceIdentityResult.ok) {
-			return serviceIdentityResult;
+			return verifyFailureResult(serviceIdentityResult);
 		}
 	}
 
@@ -575,7 +646,7 @@ export async function verifyCertificateChain(
 		ok: true,
 		value: {
 			...buildResult.value,
-			policyValidation: validateResult.policyValidation,
+			policyValidation: validateResult.value.policyValidation,
 		},
 	};
 }
@@ -600,12 +671,10 @@ export async function verifyCertificateSigningRequest(
 		parsed.certificationRequestInfoDer,
 	);
 	if (!signatureValid) {
-		return {
-			ok: false,
-			code: 'signature_invalid',
-			message: 'certificate request signature does not verify',
-			details: detail({ subjectCommonName: parsed.subject.values.commonName }),
-		};
+		return verifyRequestFailureResult(
+			'certificate request signature does not verify',
+			detail({ subjectCommonName: parsed.subject.values.commonName }),
+		);
 	}
 	return { ok: true, value: parsed };
 }
@@ -625,20 +694,14 @@ export function checkExtendedKeyUsage(
 ): EkuCheckResult {
 	const leaf = chain[0];
 	if (leaf === undefined) {
-		return {
-			ok: false,
-			code: 'leaf_eku_missing',
-			message: 'chain is empty',
-			index: 0,
-		};
+		return ekuCheckFailureResult('leaf_eku_missing', 'chain is empty', 0);
 	}
 	if (leaf.extendedKeyUsage !== undefined && !leaf.extendedKeyUsage.includes(purpose)) {
-		return {
-			ok: false,
-			code: 'leaf_eku_missing',
-			message: `leaf certificate does not include EKU ${purpose}`,
-			index: 0,
-		};
+		return ekuCheckFailureResult(
+			'leaf_eku_missing',
+			`leaf certificate does not include EKU ${purpose}`,
+			0,
+		);
 	}
 	for (let index = 1; index < chain.length; index += 1) {
 		const intermediate = chain[index];
@@ -649,15 +712,14 @@ export function checkExtendedKeyUsage(
 			intermediate.extendedKeyUsage !== undefined &&
 			!intermediate.extendedKeyUsage.includes(purpose)
 		) {
-			return {
-				ok: false,
-				code: 'intermediate_eku_constraint',
-				message: `intermediate CA at index ${String(index)} constrains EKU and does not include ${purpose}`,
+			return ekuCheckFailureResult(
+				'intermediate_eku_constraint',
+				`intermediate CA at index ${String(index)} constrains EKU and does not include ${purpose}`,
 				index,
-			};
+			);
 		}
 	}
-	return { ok: true };
+	return { ok: true, value: undefined };
 }
 
 // ---------------------------------------------------------------------------
@@ -684,7 +746,10 @@ export function trustAnchorFromCertificate(certificate: ParsedCertificate): Trus
 
 /** Extracts defined optional fields from a base input for safe forwarding. */
 function baseChainInput(
-	input: BuildCandidatePathInput & PolicyValidationInput & InitialNameConstraintsInput,
+	input: BuildCandidatePathInput &
+		PolicyValidationInput &
+		InitialNameConstraintsInput &
+		NestedValidationInputs,
 ): VerifyCertificateChainInput {
 	return {
 		leaf: input.leaf,
@@ -697,25 +762,6 @@ function baseChainInput(
 		}),
 		...(input.at !== undefined && { at: input.at }),
 		...copyValidationInputs(input),
-	};
-}
-
-function copyValidationInputs(
-	input: PolicyValidationInput & InitialNameConstraintsInput,
-): PolicyValidationInput & InitialNameConstraintsInput {
-	return {
-		...(input.initialPolicySet === undefined ? {} : { initialPolicySet: input.initialPolicySet }),
-		...(input.requireExplicitPolicy === undefined
-			? {}
-			: { requireExplicitPolicy: input.requireExplicitPolicy }),
-		...(input.inhibitPolicyMapping === undefined
-			? {}
-			: { inhibitPolicyMapping: input.inhibitPolicyMapping }),
-		...(input.inhibitAnyPolicy === undefined ? {} : { inhibitAnyPolicy: input.inhibitAnyPolicy }),
-		...(input.permittedSubtrees === undefined
-			? {}
-			: { permittedSubtrees: input.permittedSubtrees }),
-		...(input.excludedSubtrees === undefined ? {} : { excludedSubtrees: input.excludedSubtrees }),
 	};
 }
 
@@ -734,7 +780,7 @@ export async function validateForTlsServer(
 	if (input.serviceIdentity !== undefined) {
 		const serviceIdentityResult = validateServiceIdentity(result.value.leaf, input.serviceIdentity);
 		if (!serviceIdentityResult.ok) {
-			return serviceIdentityResult;
+			return verifyFailureResult(serviceIdentityResult);
 		}
 	}
 	return result;
@@ -781,7 +827,7 @@ function validateLeaf(
 		readonly purpose?: VerifyPurpose;
 	},
 	policyValidation: PolicyValidationOutcome,
-): ValidateCandidatePathResult {
+): ValidateCandidatePathRawResult {
 	const purpose = input.purpose;
 	if (purpose !== undefined) {
 		if (purpose === 'ca') {
@@ -817,20 +863,21 @@ function validateServiceIdentity(
 ): ValidationCheckResult {
 	const result = matchServiceIdentity({ certificate: leaf, serviceIdentity });
 	if (result.ok) {
-		return result;
+		return { ok: true };
 	}
+	const error = result.error;
 	if (
-		result.code !== 'subject_alt_name_mismatch' &&
-		result.code !== 'common_name_fallback_suppressed'
+		error.code !== 'subject_alt_name_mismatch' &&
+		error.code !== 'common_name_fallback_suppressed'
 	) {
 		throw new Error('unreachable service identity type');
 	}
 	return {
 		ok: false,
-		code: result.code,
-		message: result.message,
+		code: error.code,
+		message: error.message,
 		index: 0,
-		...(result.details === undefined ? {} : { details: result.details }),
+		...(error.details === undefined ? {} : { details: error.details }),
 	};
 }
 
@@ -1080,12 +1127,14 @@ function applyEkuCheck(
 ): VerifyChainResult {
 	const ekuCheck = checkExtendedKeyUsage(result.value.chain, purpose);
 	if (!ekuCheck.ok) {
-		return failure(
-			ekuCheck.code === 'leaf_eku_missing'
-				? 'extended_key_usage_invalid'
-				: 'intermediate_eku_constraint',
-			ekuCheck.message,
-			ekuCheck.index,
+		return verifyFailureResult(
+			failure(
+				ekuCheck.code === 'leaf_eku_missing'
+					? 'extended_key_usage_invalid'
+					: 'intermediate_eku_constraint',
+				ekuCheck.message,
+				ekuCheck.index,
+			),
 		);
 	}
 	return result;
@@ -1276,6 +1325,129 @@ function failure(
 	};
 }
 
+function verifyFailureResult(error: VerifyChainFailure): VerifyFailureResult {
+	return {
+		ok: false,
+		error,
+		code: error.code,
+		message: error.message,
+		...(error.index === undefined ? {} : { index: error.index }),
+		...(error.details === undefined ? {} : { details: error.details }),
+	};
+}
+
+function validateCandidatePathSuccessResult(
+	policyValidation: PolicyValidationOutcome,
+): ValidateCandidatePathSuccessResult {
+	return {
+		ok: true,
+		value: { policyValidation },
+		policyValidation,
+	};
+}
+
+function verifyRequestFailureResult(
+	message: string,
+	details?: VerifyFailureDetails,
+): VerifyRequestFailureResult {
+	const error: VerifyRequestFailure = {
+		ok: false,
+		code: 'signature_invalid',
+		message,
+		...(details === undefined ? {} : { details }),
+	};
+	return {
+		ok: false,
+		error,
+		code: error.code,
+		message: error.message,
+		...(error.details === undefined ? {} : { details: error.details }),
+	};
+}
+
+function ekuCheckFailureResult(
+	code: EkuCheckFailure['code'],
+	message: string,
+	index: number,
+): EkuCheckFailureResult {
+	const error: EkuCheckFailure = { ok: false, code, message, index };
+	return {
+		ok: false,
+		error,
+		code,
+		message,
+		index,
+	};
+}
+
+function resolvePolicyValidationInput(
+	input: NestedValidationInputs & PolicyValidationInput,
+): PolicyValidationInput {
+	return {
+		...(input.initialPolicySet === undefined ? {} : { initialPolicySet: input.initialPolicySet }),
+		...(input.requireExplicitPolicy === undefined
+			? {}
+			: { requireExplicitPolicy: input.requireExplicitPolicy }),
+		...(input.inhibitPolicyMapping === undefined
+			? {}
+			: { inhibitPolicyMapping: input.inhibitPolicyMapping }),
+		...(input.inhibitAnyPolicy === undefined ? {} : { inhibitAnyPolicy: input.inhibitAnyPolicy }),
+		...(input.policy?.initialPolicySet === undefined
+			? {}
+			: { initialPolicySet: input.policy.initialPolicySet }),
+		...(input.policy?.requireExplicitPolicy === undefined
+			? {}
+			: { requireExplicitPolicy: input.policy.requireExplicitPolicy }),
+		...(input.policy?.inhibitPolicyMapping === undefined
+			? {}
+			: { inhibitPolicyMapping: input.policy.inhibitPolicyMapping }),
+		...(input.policy?.inhibitAnyPolicy === undefined
+			? {}
+			: { inhibitAnyPolicy: input.policy.inhibitAnyPolicy }),
+	};
+}
+
+function resolveInitialNameConstraintsInput(
+	input: NestedValidationInputs & InitialNameConstraintsInput,
+): InitialNameConstraintsInput {
+	return {
+		...(input.permittedSubtrees === undefined
+			? {}
+			: { permittedSubtrees: input.permittedSubtrees }),
+		...(input.excludedSubtrees === undefined ? {} : { excludedSubtrees: input.excludedSubtrees }),
+		...(input.nameConstraints?.permittedSubtrees === undefined
+			? {}
+			: { permittedSubtrees: input.nameConstraints.permittedSubtrees }),
+		...(input.nameConstraints?.excludedSubtrees === undefined
+			? {}
+			: { excludedSubtrees: input.nameConstraints.excludedSubtrees }),
+	};
+}
+
+function copyValidationInputs(
+	input: NestedValidationInputs & PolicyValidationInput & InitialNameConstraintsInput,
+): NestedValidationInputs {
+	const policy = resolvePolicyValidationInput(input);
+	const nameConstraints = resolveInitialNameConstraintsInput(input);
+	return {
+		...(hasPolicyValidationInput(policy) ? { policy } : {}),
+		...(hasInitialNameConstraintsInput(nameConstraints) ? { nameConstraints } : {}),
+	};
+}
+
+function hasPolicyValidationInput(input: PolicyValidationInput): boolean {
+	return (
+		input.initialPolicySet !== undefined ||
+		input.requireExplicitPolicy !== undefined ||
+		input.inhibitPolicyMapping !== undefined ||
+		input.inhibitAnyPolicy !== undefined
+	);
+}
+
+function hasInitialNameConstraintsInput(input: InitialNameConstraintsInput): boolean {
+	return input.permittedSubtrees !== undefined || input.excludedSubtrees !== undefined;
+}
+
 function buildFailureDetails(
 	chain: readonly ParsedCertificate[],
 	index: number,
@@ -1311,11 +1483,13 @@ function detail(input: VerifyFailureDetailsInput): VerifyFailureDetails {
 }
 
 function buildValidationState(
-	input: PolicyValidationInput & InitialNameConstraintsInput,
+	input: NestedValidationInputs & PolicyValidationInput & InitialNameConstraintsInput,
 	chainLength: number,
 ): ValidationStateResult {
-	const policy = createPolicyValidationState(input, chainLength);
-	const nameConstraints = createNameConstraintValidationState(input);
+	const policy = createPolicyValidationState(resolvePolicyValidationInput(input), chainLength);
+	const nameConstraints = createNameConstraintValidationState(
+		resolveInitialNameConstraintsInput(input),
+	);
 	return {
 		ok: true,
 		value: {

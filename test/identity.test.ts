@@ -18,7 +18,7 @@ describe('identity boundary', () => {
 				certificate,
 				serviceIdentity: { type: 'dns', value: 'verify.example' },
 			}),
-		).toEqual({ ok: true });
+		).toEqual({ ok: true, value: undefined });
 	});
 
 	it('matches IP SANs through the dedicated identity API', async () => {
@@ -49,7 +49,7 @@ describe('identity boundary', () => {
 				certificate,
 				serviceIdentity: { type: 'ip', value: '2001:0db8:0:0:0:0:0:1' },
 			}),
-		).toEqual({ ok: true });
+		).toEqual({ ok: true, value: undefined });
 		expect(
 			matchServiceIdentity({
 				certificate,
@@ -86,7 +86,7 @@ describe('identity boundary', () => {
 				certificate,
 				serviceIdentity: { type: 'dns', value: 'api.example.com' },
 			}),
-		).toEqual({ ok: true });
+		).toEqual({ ok: true, value: undefined });
 		expect(
 			matchServiceIdentity({
 				certificate,
@@ -129,13 +129,13 @@ describe('identity boundary', () => {
 				certificate,
 				serviceIdentity: { type: 'dns', value: 'SHOP.XN--BCHER-KVA.EXAMPLE' },
 			}),
-		).toEqual({ ok: true });
+		).toEqual({ ok: true, value: undefined });
 		expect(
 			matchServiceIdentity({
 				certificate,
 				serviceIdentity: { type: 'dns', value: 'shop.bücher.example' },
 			}),
-		).toEqual({ ok: true });
+		).toEqual({ ok: true, value: undefined });
 	});
 
 	it('rejects invalid wildcard SAN patterns through the dedicated identity API', async () => {
@@ -198,7 +198,7 @@ describe('identity boundary', () => {
 					allowCommonNameFallback: true,
 				},
 			}),
-		).toEqual({ ok: true });
+		).toEqual({ ok: true, value: undefined });
 	});
 
 	it('suppresses DNS CN fallback when a DNS SAN is present', async () => {
@@ -359,7 +359,7 @@ describe('identity boundary', () => {
 					allowCommonNameFallback: true,
 				},
 			}),
-		).toEqual({ ok: true });
+		).toEqual({ ok: true, value: undefined });
 	});
 
 	it('rejects DNS CN fallback when disabled or mismatched', async () => {
@@ -466,7 +466,7 @@ describe('identity boundary', () => {
 				certificate,
 				serviceIdentity: { type: 'uri', value: 'https://api.example.com/login' },
 			}),
-		).toEqual({ ok: true });
+		).toEqual({ ok: true, value: undefined });
 		expect(
 			matchServiceIdentity({
 				certificate,
@@ -571,7 +571,7 @@ describe('identity boundary', () => {
 				certificate,
 				serviceIdentity: { type: 'uri', value: 'https://bücher.example/login' },
 			}),
-		).toEqual({ ok: true });
+		).toEqual({ ok: true, value: undefined });
 	});
 
 	it('matches SRV SANs by service and domain through the dedicated identity API', async () => {
@@ -602,7 +602,7 @@ describe('identity boundary', () => {
 				certificate,
 				serviceIdentity: { type: 'srv', value: '_XMPP-CLIENT.im.example.org' },
 			}),
-		).toEqual({ ok: true });
+		).toEqual({ ok: true, value: undefined });
 		expect(
 			matchServiceIdentity({
 				certificate,
@@ -707,6 +707,6 @@ describe('identity boundary', () => {
 				certificate,
 				serviceIdentity: { type: 'srv', value: '_XMPP-CLIENT.bücher.example' },
 			}),
-		).toEqual({ ok: true });
+		).toEqual({ ok: true, value: undefined });
 	});
 });

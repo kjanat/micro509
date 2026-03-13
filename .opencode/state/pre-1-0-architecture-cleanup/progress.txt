@@ -19,6 +19,7 @@ Started: 2026-03-13
 - For extracted validators, keep the engine failure shape structurally compatible with the facade's failure union when possible; that lets the facade delegate without inventing another translation layer.
 - Registry foundations can land before the big rewire if the registry is fully typed and test-covered, while existing parser/builder entrypoints still use their old control flow.
 - Once a registry spans multiple contexts, thread the context through both parse and build paths; otherwise known-but-unsupported OIDs leak across surfaces and create inconsistent behavior.
+- During API migration, compatibility is safest when nested replacements merge field-by-field and result wrappers mirror legacy top-level error fields while still exposing canonical `error` payloads.
 
 ---
 <!-- Task logs below - APPEND ONLY -->
@@ -81,3 +82,12 @@ Started: 2026-03-13
 - Tightened custom CSR extension handling so known certificate-only OIDs are rejected in CSR context instead of being emitted inconsistently.
 - Files changed: `src/parse.ts`, `src/extensions.ts`, `src/extension-registry.ts`, `test/extension-registry.test.ts`, `.opencode/state/pre-1-0-architecture-cleanup/prd.json`, `.opencode/state/pre-1-0-architecture-cleanup/progress.txt`
 - **Learnings:** the registry rewire is safer when the parser and builders both consume the same context-aware definition layer, and the tests exercise both direct codecs and end-to-end material generation.
+
+## Task - [migrate-verify-identity]
+
+- Updated verify inputs to support nested `policy` and `nameConstraints` objects across direct validation, chain verification, and validation-profile helpers, with field-by-field merging for mixed legacy+nested callers during the transition.
+- Migrated verify and identity result surfaces onto the shared success/value + failure/error model while preserving top-level failure fields like `code`, `message`, `index`, and `details` for compatibility.
+- Reworked `verify.ts` to adapt identity failures through the composition seam using the identity API's `error` payload instead of duplicating matcher internals.
+- Expanded regression coverage for the new identity success shape and for mixed flat+nested verify inputs so the migration path stays deterministic.
+- Files changed: `src/verify.ts`, `src/identity.ts`, `test/verify.test.ts`, `test/identity.test.ts`, `test/identity-fixtures.test.ts`, `.opencode/state/pre-1-0-architecture-cleanup/prd.json`, `.opencode/state/pre-1-0-architecture-cleanup/progress.txt`
+- **Learnings:** mirrored compatibility fields let a shared result model land without rewriting every caller in one step, but mixed-input migrations must merge per-field or they create silent behavior drift.
