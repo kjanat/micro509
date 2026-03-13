@@ -61,20 +61,34 @@ describe('keys', () => {
 
 	it('roundtrips encrypted PKCS#8 helpers', async () => {
 		const keyPair = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
+		const cases = [
+			{ encryption: 'aes128-cbc', prf: 'hmac-sha1' },
+			{ encryption: 'aes192-cbc', prf: 'hmac-sha256' },
+			{ encryption: 'aes256-cbc', prf: 'hmac-sha1' },
+			{ encryption: 'aes256-cbc', prf: 'hmac-sha256' },
+		] as const;
+		for (const testCase of cases) {
+			const pem = await exportEncryptedPkcs8Pem(keyPair.privateKey, {
+				password: 'secret123',
+				...testCase,
+			});
+			const der = await exportEncryptedPkcs8Der(keyPair.privateKey, {
+				password: 'secret123',
+				...testCase,
+			});
+			const importedPem = await importEncryptedPkcs8Pem(pem, 'secret123', {
+				kind: 'rsa',
+			});
+			const importedDer = await importEncryptedPkcs8Der(der, 'secret123', {
+				kind: 'rsa',
+			});
+			expect(await exportPkcs8Der(importedPem)).toEqual(await exportPkcs8Der(keyPair.privateKey));
+			expect(await exportPkcs8Der(importedDer)).toEqual(await exportPkcs8Der(keyPair.privateKey));
+		}
+
 		const pem = await exportEncryptedPkcs8Pem(keyPair.privateKey, {
 			password: 'secret123',
 		});
-		const der = await exportEncryptedPkcs8Der(keyPair.privateKey, {
-			password: 'secret123',
-		});
-		const importedPem = await importEncryptedPkcs8Pem(pem, 'secret123', {
-			kind: 'rsa',
-		});
-		const importedDer = await importEncryptedPkcs8Der(der, 'secret123', {
-			kind: 'rsa',
-		});
-		expect(await exportPkcs8Der(importedPem)).toEqual(await exportPkcs8Der(keyPair.privateKey));
-		expect(await exportPkcs8Der(importedDer)).toEqual(await exportPkcs8Der(keyPair.privateKey));
 		expect(importEncryptedPkcs8Pem(pem, 'wrong', { kind: 'rsa' })).rejects.toThrow(
 			'Invalid password or encrypted content',
 		);
@@ -278,15 +292,18 @@ describe('keys', () => {
 			kind: 'rsa',
 			modulusLength: 2048,
 		});
-		const encrypted = await exportEncryptedPkcs1Pem(keys.privateKey, {
-			password: 'testpass',
-		});
-		expect(encrypted).toContain('Proc-Type: 4,ENCRYPTED');
-		expect(encrypted).toContain('DEK-Info: AES-256-CBC');
-		const reimported = await importEncryptedPkcs1Pem(encrypted, 'testpass', {
-			kind: 'rsa',
-		});
-		expect(reimported.type).toBe('private');
+		for (const cipher of ['AES-128-CBC', 'AES-192-CBC', 'AES-256-CBC'] as const) {
+			const encrypted = await exportEncryptedPkcs1Pem(keys.privateKey, {
+				password: 'testpass',
+				cipher,
+			});
+			expect(encrypted).toContain('Proc-Type: 4,ENCRYPTED');
+			expect(encrypted).toContain(`DEK-Info: ${cipher}`);
+			const reimported = await importEncryptedPkcs1Pem(encrypted, 'testpass', {
+				kind: 'rsa',
+			});
+			expect(reimported.type).toBe('private');
+		}
 	});
 
 	it('round-trips encrypted SEC1 PEM for EC keys', async () => {
@@ -294,15 +311,19 @@ describe('keys', () => {
 			kind: 'ecdsa',
 			namedCurve: 'P-256',
 		});
-		const encrypted = await exportEncryptedSec1Pem(keys.privateKey, {
-			password: 'ecpass',
-		});
-		expect(encrypted).toContain('Proc-Type: 4,ENCRYPTED');
-		const reimported = await importEncryptedSec1Pem(encrypted, 'ecpass', {
-			kind: 'ecdsa',
-			namedCurve: 'P-256',
-		});
-		expect(reimported.type).toBe('private');
+		for (const cipher of ['AES-128-CBC', 'AES-192-CBC', 'AES-256-CBC'] as const) {
+			const encrypted = await exportEncryptedSec1Pem(keys.privateKey, {
+				password: 'ecpass',
+				cipher,
+			});
+			expect(encrypted).toContain('Proc-Type: 4,ENCRYPTED');
+			expect(encrypted).toContain(`DEK-Info: ${cipher}`);
+			const reimported = await importEncryptedSec1Pem(encrypted, 'ecpass', {
+				kind: 'ecdsa',
+				namedCurve: 'P-256',
+			});
+			expect(reimported.type).toBe('private');
+		}
 	});
 
 	it('PKCS#8 base64 import works for Ed25519 keys', async () => {
@@ -374,7 +395,7 @@ describe('keys: coverage — malformed inputs', () => {
 		// Replace AES-256-CBC with DES-EDE3-CBC in the header
 		const tampered = encrypted.replace('AES-256-CBC', 'DES-EDE3-CBC');
 		expect(importEncryptedPkcs1Pem(tampered, 'test', { kind: 'rsa' })).rejects.toThrow(
-			'Only AES-256-CBC',
+			'Only AES-128-CBC, AES-192-CBC, and AES-256-CBC',
 		);
 	});
 

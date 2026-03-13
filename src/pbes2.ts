@@ -10,17 +10,25 @@ import {
 import { getCrypto } from './keys.ts';
 import { OIDS } from './oids.ts';
 
+export type Pbes2EncryptionScheme = 'aes128-cbc' | 'aes192-cbc' | 'aes256-cbc';
+
+export type Pbes2Prf = 'hmac-sha1' | 'hmac-sha256';
+
 export interface Pbes2EncryptionOptions {
 	readonly password: string;
 	readonly iterations?: number;
 	readonly salt?: Uint8Array;
 	readonly iv?: Uint8Array;
+	readonly encryption?: Pbes2EncryptionScheme;
+	readonly prf?: Pbes2Prf;
 }
 
 export interface Pbes2Parameters {
 	readonly iterations: number;
 	readonly salt: Uint8Array;
 	readonly iv: Uint8Array;
+	readonly encryption: Pbes2EncryptionScheme;
+	readonly prf: Pbes2Prf;
 }
 
 export interface Pbes2EncryptionResult {
@@ -36,7 +44,9 @@ export async function encryptPbes2(
 	const iterations = options.iterations ?? 100_000;
 	const salt = options.salt ?? getCrypto().getRandomValues(new Uint8Array(16));
 	const iv = options.iv ?? getCrypto().getRandomValues(new Uint8Array(16));
-	const key = await deriveAesKey(options.password, salt, iterations, ['encrypt']);
+	const encryption = options.encryption ?? 'aes256-cbc';
+	const prf = options.prf ?? 'hmac-sha256';
+	const key = await deriveAesKey(options.password, salt, iterations, encryption, prf, ['encrypt']);
 	const encryptedData = new Uint8Array(
 		await getCrypto().subtle.encrypt(
 			{ name: 'AES-CBC', iv: toArrayBuffer(iv) },
@@ -49,9 +59,11 @@ export async function encryptPbes2(
 			iterations,
 			salt,
 			iv,
+			encryption,
+			prf,
 		}),
 		encryptedData,
-		parameters: { iterations, salt, iv },
+		parameters: { iterations, salt, iv, encryption, prf },
 	};
 }
 
@@ -61,7 +73,14 @@ export async function decryptPbes2(
 	password: string,
 ): Promise<Uint8Array> {
 	const parameters = parsePbes2AlgorithmIdentifier(algorithmIdentifierDer);
-	const key = await deriveAesKey(password, parameters.salt, parameters.iterations, ['decrypt']);
+	const key = await deriveAesKey(
+		password,
+		parameters.salt,
+		parameters.iterations,
+		parameters.encryption,
+		parameters.prf,
+		['decrypt'],
+	);
 	try {
 		return new Uint8Array(
 			await getCrypto().subtle.decrypt(
@@ -76,6 +95,8 @@ export async function decryptPbes2(
 }
 
 export function encodePbes2AlgorithmIdentifier(parameters: Pbes2Parameters): Uint8Array {
+	const encryption = resolveEncryptionProfile(parameters.encryption);
+	const prf = resolvePrfProfile(parameters.prf);
 	return sequence([
 		objectIdentifier(OIDS.pbes2),
 		sequence([
@@ -84,11 +105,11 @@ export function encodePbes2AlgorithmIdentifier(parameters: Pbes2Parameters): Uin
 				sequence([
 					octetString(parameters.salt),
 					integerFromNumber(parameters.iterations),
-					integerFromNumber(32),
-					sequence([objectIdentifier(OIDS.hmacWithSHA256), nullValue()]),
+					integerFromNumber(encryption.keyLengthBytes),
+					sequence([objectIdentifier(prf.oid), nullValue()]),
 				]),
 			]),
-			sequence([objectIdentifier(OIDS.aes256Cbc), octetString(parameters.iv)]),
+			sequence([objectIdentifier(encryption.oid), octetString(parameters.iv)]),
 		]),
 	]);
 }
@@ -127,6 +148,9 @@ export function parsePbes2AlgorithmIdentifier(algorithmIdentifierDer: Uint8Array
 	if (salt === undefined || iterations === undefined || salt.tag !== 0x04) {
 		throw new Error('Malformed PBKDF2 params');
 	}
+	const keyLengthElement = pbkdf2Params[2];
+	const hasExplicitKeyLength = keyLengthElement?.tag === 0x02;
+	const prfElement = hasExplicitKeyLength ? pbkdf2Params[3] : keyLengthElement;
 	const schemeDer = paramsDer.slice(scheme.start - scheme.headerLength, scheme.end);
 	const schemeChildren = readSequenceChildren(schemeDer);
 	const schemeOid = schemeChildren[0];
@@ -134,13 +158,26 @@ export function parsePbes2AlgorithmIdentifier(algorithmIdentifierDer: Uint8Array
 	if (schemeOid === undefined || iv === undefined || iv.tag !== 0x04) {
 		throw new Error('Malformed encryption scheme');
 	}
-	if (decodeObjectIdentifier(schemeOid.value) !== OIDS.aes256Cbc) {
+	const encryption = encryptionSchemeFromOid(decodeObjectIdentifier(schemeOid.value));
+	if (encryption === undefined) {
 		throw new Error('Unsupported content encryption scheme');
 	}
+	if (keyLengthElement !== undefined && !hasExplicitKeyLength && keyLengthElement.tag !== 0x30) {
+		throw new Error('Malformed PBKDF2 params');
+	}
+	if (
+		hasExplicitKeyLength &&
+		decodeIntegerNumber(keyLengthElement.value) !== encryption.keyLengthBytes
+	) {
+		throw new Error('Unsupported PBKDF2 key length');
+	}
+	const prf = parsePbkdf2Prf(pbkdf2Der, prfElement);
 	return {
 		salt: new Uint8Array(salt.value),
 		iterations: decodeIntegerNumber(iterations.value),
 		iv: new Uint8Array(iv.value),
+		encryption: encryption.name,
+		prf,
 	};
 }
 
@@ -148,8 +185,12 @@ async function deriveAesKey(
 	password: string,
 	salt: Uint8Array,
 	iterations: number,
+	encryptionName: Pbes2EncryptionScheme,
+	prfName: Pbes2Prf,
 	usages: KeyUsage[],
 ): Promise<CryptoKey> {
+	const encryption = resolveEncryptionProfile(encryptionName);
+	const prf = resolvePrfProfile(prfName);
 	const passwordKey = await getCrypto().subtle.importKey(
 		'raw',
 		new TextEncoder().encode(password),
@@ -162,11 +203,95 @@ async function deriveAesKey(
 			name: 'PBKDF2',
 			salt: toArrayBuffer(salt),
 			iterations,
-			hash: 'SHA-256',
+			hash: prf.hash,
 		},
 		passwordKey,
-		{ name: 'AES-CBC', length: 256 },
+		{ name: 'AES-CBC', length: encryption.keyLengthBits },
 		false,
 		usages,
 	);
+}
+
+function parsePbkdf2Prf(
+	pbkdf2Der: Uint8Array,
+	element: ReturnType<typeof readSequenceChildren>[number] | undefined,
+): Pbes2Prf {
+	if (element === undefined) {
+		return 'hmac-sha1';
+	}
+	if (element.tag !== 0x30) {
+		throw new Error('Malformed PBKDF2 PRF');
+	}
+	const prfDer = readSequenceChildren(
+		pbkdf2Der.slice(element.start - element.headerLength, element.end),
+	);
+	const oid = prfDer[0];
+	if (oid === undefined) {
+		throw new Error('Malformed PBKDF2 PRF');
+	}
+	const prf = prfFromOid(decodeObjectIdentifier(oid.value));
+	if (prf === undefined) {
+		throw new Error('Unsupported PBKDF2 PRF');
+	}
+	return prf;
+}
+
+function encryptionSchemeFromOid(oid: string):
+	| {
+			readonly name: Pbes2EncryptionScheme;
+			readonly oid: string;
+			readonly keyLengthBits: 128 | 192 | 256;
+			readonly keyLengthBytes: 16 | 24 | 32;
+	  }
+	| undefined {
+	switch (oid) {
+		case OIDS.aes128Cbc:
+			return { name: 'aes128-cbc', oid, keyLengthBits: 128, keyLengthBytes: 16 };
+		case OIDS.aes192Cbc:
+			return { name: 'aes192-cbc', oid, keyLengthBits: 192, keyLengthBytes: 24 };
+		case OIDS.aes256Cbc:
+			return { name: 'aes256-cbc', oid, keyLengthBits: 256, keyLengthBytes: 32 };
+	}
+	return undefined;
+}
+
+function prfFromOid(oid: string): Pbes2Prf | undefined {
+	switch (oid) {
+		case OIDS.hmacWithSHA1:
+			return 'hmac-sha1';
+		case OIDS.hmacWithSHA256:
+			return 'hmac-sha256';
+	}
+	return undefined;
+}
+
+function resolveEncryptionProfile(name: Pbes2EncryptionScheme): {
+	readonly name: Pbes2EncryptionScheme;
+	readonly oid: string;
+	readonly keyLengthBits: 128 | 192 | 256;
+	readonly keyLengthBytes: 16 | 24 | 32;
+} {
+	const profile = encryptionSchemeFromOid(
+		name === 'aes128-cbc'
+			? OIDS.aes128Cbc
+			: name === 'aes192-cbc'
+				? OIDS.aes192Cbc
+				: OIDS.aes256Cbc,
+	);
+	if (profile === undefined) {
+		throw new Error('Unsupported content encryption scheme');
+	}
+	return profile;
+}
+
+function resolvePrfProfile(name: Pbes2Prf): {
+	readonly oid: string;
+	readonly hash: 'SHA-1' | 'SHA-256';
+} {
+	switch (name) {
+		case 'hmac-sha1':
+			return { oid: OIDS.hmacWithSHA1, hash: 'SHA-1' };
+		case 'hmac-sha256':
+			return { oid: OIDS.hmacWithSHA256, hash: 'SHA-256' };
+	}
 }

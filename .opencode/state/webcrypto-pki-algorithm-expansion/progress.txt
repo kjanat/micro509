@@ -15,6 +15,7 @@ Started: 2026-03-13
 - Verification adapters should return structured parameter-support failures from low-level signature config code, then let cert/CSR/path validators translate them into domain error results with the right certificate index.
 - Builder-side structured algorithm inputs should stay explicit and narrow: thread an optional `signature` profile through API wrappers, require the matching WebCrypto key kind, and always encode canonical `AlgorithmIdentifier` parameters from the shared internal helper.
 - End-to-end algorithm expansion tests should assert all three layers together: emitted signature OID, parsed subject public-key curve OID, and successful cert/CSR verification against real WebCrypto-generated artifacts.
+- Interop widening should keep defaults stable but make compat knobs explicit: thread optional cipher/PRF fields through export helpers, accept the broader shipped set on parse/import, and keep legacy rejects like 3DES explicit.
 
 ---
 
@@ -53,3 +54,9 @@ Started: 2026-03-13
 - Added end-to-end P-521 coverage for certificate create/parse/verify and CSR create/parse/verify flows, plus chain verification coverage for P-521-issued artifacts.
 - Files changed: `test/certificate.test.ts`, `test/csr.test.ts`, `test/verify.test.ts`, `.opencode/state/webcrypto-pki-algorithm-expansion/prd.json`.
 - **Learnings:** P-521 support is only meaningfully covered when tests assert both `ecdsaWithSHA512` on signatures and `secp521r1` on SPKI params before running the normal verify path.
+
+## Task - [widen-key-container-interop]
+
+- Added PBES2 AES-128/192/256 plus PBKDF2 HMAC-SHA1/HMAC-SHA256 support, and widened traditional PEM AES-CBC import/export to the same shipped AES set while keeping unsupported legacy ciphers rejected explicitly.
+- Files changed: `src/oids.ts`, `src/pbes2.ts`, `src/keys.ts`, `test/internals.test.ts`, `test/keys.test.ts`, `.opencode/state/webcrypto-pki-algorithm-expansion/prd.json`.
+- **Learnings:** encrypted-key interop widens cleanly when ASN.1 algorithm parsing normalizes wire OIDs into a tiny internal profile, then both PBES2 and traditional PEM derive key length from that profile instead of baking AES-256 assumptions into decryption paths.

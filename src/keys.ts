@@ -70,6 +70,7 @@ export type EncryptedPkcs8Options = Pbes2EncryptionOptions;
 export interface LegacyPemEncryptionOptions {
 	readonly password: string;
 	readonly iv?: Uint8Array;
+	readonly cipher?: 'AES-128-CBC' | 'AES-192-CBC' | 'AES-256-CBC';
 }
 
 export function getCrypto(): Crypto {
@@ -480,7 +481,10 @@ async function encryptTraditionalPem(
 	if (iv.length !== 16) {
 		throw new Error('Traditional PEM encryption requires a 16-byte IV');
 	}
-	const key = await importTraditionalPemAesKey(options.password, iv.slice(0, 8), ['encrypt']);
+	const cipher = options.cipher ?? 'AES-256-CBC';
+	const key = await importTraditionalPemAesKey(options.password, iv.slice(0, 8), cipher, [
+		'encrypt',
+	]);
 	const encrypted = new Uint8Array(
 		await getCrypto().subtle.encrypt(
 			{ name: 'AES-CBC', iv: toArrayBuffer(iv) },
@@ -495,7 +499,7 @@ async function encryptTraditionalPem(
 	return [
 		`-----BEGIN ${label}-----`,
 		'Proc-Type: 4,ENCRYPTED',
-		`DEK-Info: AES-256-CBC,${toHex(iv).toUpperCase()}`,
+		`DEK-Info: ${cipher},${toHex(iv).toUpperCase()}`,
 		'',
 		body,
 		`-----END ${label}-----`,
@@ -516,11 +520,13 @@ async function decryptTraditionalPem(
 		throw new Error('Traditional PEM encryption headers missing');
 	}
 	const [cipher, ivHex] = dekInfo.split(',');
-	if (cipher !== 'AES-256-CBC' || ivHex === undefined) {
-		throw new Error('Only AES-256-CBC traditional PEM encryption is supported');
+	if (!isTraditionalPemCipher(cipher) || ivHex === undefined) {
+		throw new Error(
+			'Only AES-128-CBC, AES-192-CBC, and AES-256-CBC traditional PEM encryption is supported',
+		);
 	}
 	const iv = hexToBytes(ivHex);
-	const key = await importTraditionalPemAesKey(password, iv.slice(0, 8), ['decrypt']);
+	const key = await importTraditionalPemAesKey(password, iv.slice(0, 8), cipher, ['decrypt']);
 	try {
 		return new Uint8Array(
 			await getCrypto().subtle.decrypt(
@@ -537,16 +543,37 @@ async function decryptTraditionalPem(
 async function importTraditionalPemAesKey(
 	password: string,
 	salt: Uint8Array,
+	cipher: 'AES-128-CBC' | 'AES-192-CBC' | 'AES-256-CBC',
 	usages: KeyUsage[],
 ): Promise<CryptoKey> {
-	const keyBytes = opensslBytesToKey(password, salt, 32);
+	const keyLength = traditionalPemCipherKeyLength(cipher);
+	const keyBytes = opensslBytesToKey(password, salt, keyLength / 8);
 	return getCrypto().subtle.importKey(
 		'raw',
 		toArrayBuffer(keyBytes),
-		{ name: 'AES-CBC', length: 256 },
+		{ name: 'AES-CBC', length: keyLength },
 		false,
 		usages,
 	);
+}
+
+function isTraditionalPemCipher(
+	cipher: string | undefined,
+): cipher is 'AES-128-CBC' | 'AES-192-CBC' | 'AES-256-CBC' {
+	return cipher === 'AES-128-CBC' || cipher === 'AES-192-CBC' || cipher === 'AES-256-CBC';
+}
+
+function traditionalPemCipherKeyLength(
+	cipher: 'AES-128-CBC' | 'AES-192-CBC' | 'AES-256-CBC',
+): 128 | 192 | 256 {
+	switch (cipher) {
+		case 'AES-128-CBC':
+			return 128;
+		case 'AES-192-CBC':
+			return 192;
+		case 'AES-256-CBC':
+			return 256;
+	}
 }
 
 function opensslBytesToKey(password: string, salt: Uint8Array, length: number): Uint8Array {

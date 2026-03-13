@@ -61,7 +61,7 @@
 			"title": "Widen encrypted private-key interop",
 			"description": "Expand low-cost encrypted-key compatibility using existing WebCrypto primitives. Done when:\n- PBES2 supports AES-128-CBC, AES-192-CBC, and AES-256-CBC\n- PBKDF2 PRFs include HMAC-SHA1 and HMAC-SHA256 where the key APIs can absorb them\n- traditional PEM AES-128/192/256-CBC variants import for RSA and EC private keys\n- unsupported schemes like 3DES still reject explicitly",
 			"priority": "standard",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "add-algo-fixtures-and-reg",

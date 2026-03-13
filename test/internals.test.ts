@@ -751,6 +751,96 @@ describe('pbes2.ts edge cases', () => {
 		expect(() => parsePbes2AlgorithmIdentifier(badPbkdf2)).toThrow(/Malformed PBKDF2/);
 	});
 
+	it('parsePbes2AlgorithmIdentifier accepts shipped AES-CBC and PBKDF2 PRF variants', () => {
+		const cases = [
+			{
+				encryptionOid: OIDS.aes128Cbc,
+				encryption: 'aes128-cbc',
+				keyLength: 16,
+				prfOid: OIDS.hmacWithSHA1,
+				prf: 'hmac-sha1',
+			},
+			{
+				encryptionOid: OIDS.aes192Cbc,
+				encryption: 'aes192-cbc',
+				keyLength: 24,
+				prfOid: OIDS.hmacWithSHA256,
+				prf: 'hmac-sha256',
+			},
+			{
+				encryptionOid: OIDS.aes256Cbc,
+				encryption: 'aes256-cbc',
+				keyLength: 32,
+				prfOid: OIDS.hmacWithSHA1,
+				prf: 'hmac-sha1',
+			},
+		] as const;
+
+		for (const testCase of cases) {
+			const algorithmIdentifier = sequence([
+				objectIdentifier(OIDS.pbes2),
+				sequence([
+					sequence([
+						objectIdentifier(OIDS.pbkdf2),
+						sequence([
+							octetString(new Uint8Array(16).fill(0x11)),
+							integerFromNumber(2048),
+							integerFromNumber(testCase.keyLength),
+							sequence([objectIdentifier(testCase.prfOid), nullValue()]),
+						]),
+					]),
+					sequence([
+						objectIdentifier(testCase.encryptionOid),
+						octetString(new Uint8Array(16).fill(0x22)),
+					]),
+				]),
+			]);
+
+			expect(parsePbes2AlgorithmIdentifier(algorithmIdentifier)).toMatchObject({
+				iterations: 2048,
+				encryption: testCase.encryption,
+				prf: testCase.prf,
+			});
+		}
+	});
+
+	it('parsePbes2AlgorithmIdentifier defaults missing PRF to HMAC-SHA1', () => {
+		const algorithmIdentifier = sequence([
+			objectIdentifier(OIDS.pbes2),
+			sequence([
+				sequence([
+					objectIdentifier(OIDS.pbkdf2),
+					sequence([octetString(new Uint8Array(16).fill(0x11)), integerFromNumber(2048)]),
+				]),
+				sequence([objectIdentifier(OIDS.aes256Cbc), octetString(new Uint8Array(16).fill(0x22))]),
+			]),
+		]);
+
+		expect(parsePbes2AlgorithmIdentifier(algorithmIdentifier)).toMatchObject({
+			prf: 'hmac-sha1',
+			encryption: 'aes256-cbc',
+		});
+	});
+
+	it('parsePbes2AlgorithmIdentifier throws on unsupported PBKDF2 PRF', () => {
+		const badPrf = sequence([
+			objectIdentifier(OIDS.pbes2),
+			sequence([
+				sequence([
+					objectIdentifier(OIDS.pbkdf2),
+					sequence([
+						octetString(new Uint8Array(16)),
+						integerFromNumber(2048),
+						sequence([objectIdentifier('1.2.3.4.5'), nullValue()]),
+					]),
+				]),
+				sequence([objectIdentifier(OIDS.aes256Cbc), octetString(new Uint8Array(16))]),
+			]),
+		]);
+
+		expect(() => parsePbes2AlgorithmIdentifier(badPrf)).toThrow(/Unsupported PBKDF2 PRF/);
+	});
+
 	it('parsePbes2AlgorithmIdentifier throws on unsupported encryption scheme', () => {
 		const badScheme = sequence([
 			objectIdentifier(OIDS.pbes2),
