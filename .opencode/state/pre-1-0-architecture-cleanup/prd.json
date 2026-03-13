@@ -94,7 +94,7 @@
 			"description": "Bring PFX and PKCS7 public results onto the shared result model while preserving their domain-specific parse semantics. Done when:\n- PFX and PKCS7 public results use shared primitives\n- malformed/password/content-type distinctions stay explicit\n- tests prove the container APIs still surface the right failure category",
 			"depends": ["result-model-foundation", "der-spine-hardening"],
 			"priority": "integration",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "finalize-exports-regression",

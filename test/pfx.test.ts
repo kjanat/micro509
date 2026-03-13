@@ -105,6 +105,9 @@ describe('pfx', () => {
 			ok: false,
 			code: 'invalid_password',
 		});
+		if (!wrongPassword.ok) {
+			expect(wrongPassword.error.code).toBe('invalid_password');
+		}
 	});
 
 	it('verifies PFX MAC integrity', async () => {
@@ -127,6 +130,9 @@ describe('pfx', () => {
 			ok: false,
 			code: 'invalid_password',
 		});
+		if (!wrongMac.ok) {
+			expect(wrongMac.error.code).toBe('invalid_password');
+		}
 	});
 
 	it('parsePfxDer rejects truncated DER', async () => {
@@ -145,6 +151,14 @@ describe('pfx', () => {
 		const result = await parsePfxPem('not a PEM');
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.code).toBe('malformed');
+	});
+
+	it('parsePfxPem returns malformed for invalid PEM body text', async () => {
+		const result = await parsePfxPem('-----BEGIN PKCS12-----\n%%%\n-----END PKCS12-----');
+		expect(result).toMatchObject({ ok: false, code: 'malformed' });
+		if (!result.ok) {
+			expect(result.error.code).toBe('malformed');
+		}
 	});
 
 	it('parsePfxPem rejects multiple PFX blocks', async () => {

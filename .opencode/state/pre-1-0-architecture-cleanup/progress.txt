@@ -23,6 +23,7 @@ WE HAVE NO DOWNSTREAM USERS. PRERELEASE PRIVATE STATUS
 - Once a registry spans multiple contexts, thread the context through both parse and build paths; otherwise known-but-unsupported OIDs leak across surfaces and create inconsistent behavior.
 - During API migration, compatibility is safest when nested replacements merge field-by-field and result wrappers mirror legacy top-level error fields while still exposing canonical `error` payloads.
 - For revocation APIs, `unknown` is still a status outcome, not a transport or parse failure; move it into `value.status` and leave malformed input at the parse boundary.
+- Container-format result migrations need exception traps at every PEM decoding edge; otherwise “result-returning” APIs still leak thrown base64/algorithm errors on malformed input.
 
 ---
 <!-- Task logs below - APPEND ONLY -->
@@ -103,3 +104,11 @@ WE HAVE NO DOWNSTREAM USERS. PRERELEASE PRIVATE STATUS
 - Reworked revocation, CRL, and differential tests for the new result shapes and added coverage for the intentional `unknown`-as-value behavior.
 - Files changed: `src/crl.ts`, `src/ocsp.ts`, `src/revocation.ts`, `src/index.ts`, `test/crl.test.ts`, `test/revocation.test.ts`, `test/differential.test.ts`, `.opencode/state/pre-1-0-architecture-cleanup/prd.json`, `.opencode/state/pre-1-0-architecture-cleanup/progress.txt`
 - **Learnings:** when a domain has business statuses like `good` / `revoked` / `unknown`, the clean shared-result split is `ok` for evaluation success and `value.status` for the business outcome; otherwise consumers have to treat “unknown” like a transport error.
+
+## Task - [migrate-pfx-pkcs7-results]
+
+- Migrated `src/pfx.ts` and `src/pkcs7.ts` failure branches onto the shared success/value + failure/error result shape while preserving top-level `code` and `message` access for callers.
+- Added explicit error wrappers for PFX parsing, PKCS#7 parsing, and PKCS#7 verification so malformed PEM bodies and unsupported verification algorithms now return typed failures instead of throwing.
+- Updated barrel exports in `src/index.ts` and added focused test assertions for the new `error.code` payloads and malformed PEM/unsupported-algorithm flows.
+- Files changed: `src/pfx.ts`, `src/pkcs7.ts`, `src/index.ts`, `test/pfx.test.ts`, `test/pkcs7.test.ts`, `.opencode/state/pre-1-0-architecture-cleanup/prd.json`, `.opencode/state/pre-1-0-architecture-cleanup/progress.txt`
+- **Learnings:** result-shape migrations are incomplete unless every thrown decode/verify edge in the public function body is wrapped; helper-level unions alone do not make the API reliably result-returning.

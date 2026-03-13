@@ -215,6 +215,7 @@ export type {
 	ParsedPfxBag,
 	ParsedPfxBagAttributes,
 	ParsePfxErrorCode,
+	ParsePfxFailure,
 	ParsePfxResult,
 	PfxBagAttributesInput,
 	PfxCertificateBagInput,
@@ -229,9 +230,11 @@ export type {
 	ParsedPkcs7SignerInfo,
 	ParsePkcs7CertBagResult,
 	ParsePkcs7ErrorCode,
+	ParsePkcs7Failure,
 	ParsePkcs7SignedDataResult,
 	Pkcs7CertBag,
 	Pkcs7CertificateSource,
+	VerifyPkcs7SignedDataFailure,
 	VerifyPkcs7SignedDataResult,
 } from './pkcs7.ts';
 export {

@@ -1,4 +1,5 @@
 import { childrenOf, decodeObjectIdentifier, toHex } from './asn1.ts';
+import type { Micro509Error } from './core/result.ts';
 import type { DerElement } from './der.ts';
 import {
 	DEFAULT_MAX_DER_DEPTH,
@@ -106,13 +107,20 @@ export interface ParsedPfx {
 
 export type ParsePfxErrorCode = 'malformed' | 'invalid_password' | 'password_required';
 
+export interface ParsePfxFailure extends Micro509Error<ParsePfxErrorCode> {
+	readonly ok: false;
+}
+
+interface ParsePfxFailureResult {
+	readonly ok: false;
+	readonly error: ParsePfxFailure;
+	readonly code: ParsePfxErrorCode;
+	readonly message: string;
+}
+
 export type ParsePfxResult =
 	| { readonly ok: true; readonly value: ParsedPfx }
-	| {
-			readonly ok: false;
-			readonly code: ParsePfxErrorCode;
-			readonly message: string;
-	  };
+	| ParsePfxFailureResult;
 
 // ---------------------------------------------------------------------------
 // createPfx
@@ -224,27 +232,25 @@ export async function parsePfxDer(
 }
 
 export async function parsePfxPem(pem: string, options?: ParsePfxOptions): Promise<ParsePfxResult> {
-	const blocks = splitPemBlocks(pem).filter((block) => block.label === 'PKCS12');
-	const block = blocks[0];
-	if (block === undefined || blocks.length !== 1) {
+	try {
+		const blocks = splitPemBlocks(pem).filter((block) => block.label === 'PKCS12');
+		const block = blocks[0];
+		if (block === undefined || blocks.length !== 1) {
+			return pfxFailure('malformed', 'Expected exactly one PKCS12 PEM block');
+		}
+		return parsePfxDer(block.bytes, options);
+	} catch {
 		return pfxFailure('malformed', 'Expected exactly one PKCS12 PEM block');
 	}
-	return parsePfxDer(block.bytes, options);
 }
 
 // ---------------------------------------------------------------------------
 // Private: PFX helpers
 // ---------------------------------------------------------------------------
 
-function pfxFailure(
-	code: ParsePfxErrorCode,
-	message: string,
-): {
-	readonly ok: false;
-	readonly code: ParsePfxErrorCode;
-	readonly message: string;
-} {
-	return { ok: false, code, message };
+function pfxFailure(code: ParsePfxErrorCode, message: string): ParsePfxFailureResult {
+	const error: ParsePfxFailure = { ok: false, code, message };
+	return { ok: false, error, code, message };
 }
 
 function extractContentInfoData(contentInfoDer: Uint8Array): Uint8Array {
@@ -267,11 +273,7 @@ async function extractSafeContents(
 	| { readonly data: Uint8Array; readonly error?: undefined }
 	| {
 			readonly data?: undefined;
-			readonly error: {
-				readonly ok: false;
-				readonly code: ParsePfxErrorCode;
-				readonly message: string;
-			};
+			readonly error: ParsePfxFailureResult;
 	  }
 > {
 	const contentInfoChildren = readSequenceChildren(contentInfoDer);

@@ -106,6 +106,7 @@ describe('pkcs7', () => {
 		expect(result.ok).toBe(false);
 		if (result.ok) throw new Error('unreachable');
 		expect(result.code).toBe('message_digest_mismatch');
+		expect(result.error.code).toBe('message_digest_mismatch');
 	});
 
 	it('parses generic PKCS#7 signedData signer metadata', async () => {
@@ -179,6 +180,14 @@ describe('pkcs7', () => {
 		if (!result.ok) expect(result.code).toBe('malformed');
 	});
 
+	it('parsePkcs7SignedDataPem returns malformed for invalid PEM body text', () => {
+		const result = parsePkcs7SignedDataPem('-----BEGIN PKCS7-----\n%%%\n-----END PKCS7-----');
+		expect(result).toMatchObject({ ok: false, code: 'malformed' });
+		if (!result.ok) {
+			expect(result.error.code).toBe('malformed');
+		}
+	});
+
 	// -----------------------------------------------------------------------
 	// verifyPkcs7SignedData input variants
 	// -----------------------------------------------------------------------
@@ -215,6 +224,34 @@ describe('pkcs7', () => {
 		if (!parsed.ok) throw new Error('unreachable');
 		const result = await verifyPkcs7SignedData(parsed.value);
 		expect(result.ok).toBe(true);
+	});
+
+	it('verifyPkcs7SignedData returns malformed for unsupported signature algorithm', async () => {
+		const signer = await createSelfSignedCertificate({
+			subject: { commonName: 'Unsupported PKCS7 Signer' },
+		});
+		const parsed = parsePkcs7SignedDataDer(
+			createSyntheticPkcs7SignedData(parseCertificatePem(signer.certificate.pem)),
+		);
+		expect(parsed.ok).toBe(true);
+		if (!parsed.ok) throw new Error('unreachable');
+		const signerInfo = parsed.value.signerInfos[0];
+		if (signerInfo === undefined) throw new Error('expected signer info');
+		const result = await verifyPkcs7SignedData({
+			...parsed.value,
+			encapsulatedContent: new TextEncoder().encode('pkcs7-bad-sig-alg'),
+			signerInfos: [
+				((existingSignerInfo) => ({
+					...existingSignerInfo,
+					hasSignedAttrs: false,
+					signatureAlgorithmOid: '1.2.3.4.5',
+				}))(signerInfo),
+			],
+		});
+		expect(result).toMatchObject({ ok: false, code: 'malformed' });
+		if (!result.ok) {
+			expect(result.error.code).toBe('malformed');
+		}
 	});
 
 	it('verifyPkcs7SignedData rejects when signer not found', async () => {
@@ -734,7 +771,7 @@ describe('pkcs7: coverage — error paths', () => {
 		if (!result.ok) expect(result.code).toBe('malformed');
 	});
 
-	it('digestAlgorithmHash throws on unsupported OID', async () => {
+	it('verifyPkcs7SignedData returns malformed for unsupported digest OID', async () => {
 		// Build CMS with signed attrs using MD5 digest OID → line 512-514
 		const rsaKeys = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
 		const ca = await createSelfSignedCertificate({
@@ -780,8 +817,11 @@ describe('pkcs7: coverage — error paths', () => {
 			setOf([signerInfo]),
 		]);
 		const der = sequence([objectIdentifier(OIDS.pkcs7SignedData), explicitContext(0, signedData)]);
-		// verifyPkcs7SignedData will call digestAlgorithmHash which throws
-		expect(verifyPkcs7SignedData(der)).rejects.toThrow('Unsupported digest algorithm OID');
+		const result = await verifyPkcs7SignedData(der);
+		expect(result).toMatchObject({ ok: false, code: 'malformed' });
+		if (!result.ok) {
+			expect(result.error.code).toBe('malformed');
+		}
 	});
 
 	it('extractMessageDigest returns undefined when digest tag is not OCTET STRING', async () => {
