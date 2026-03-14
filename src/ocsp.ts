@@ -1,3 +1,10 @@
+/**
+ * OCSP request and response helpers.
+ *
+ * This module builds, parses, verifies, and validates OCSP messages and responder
+ * metadata.
+ */
+
 import {
 	childrenOf,
 	decodeObjectIdentifier,
@@ -41,40 +48,112 @@ import { verifySignedData } from './sig-verify.ts';
 import { encodeAlgorithmIdentifier, getSignatureAlgorithm, signBytes } from './signing.ts';
 import { verifyCertificateChain } from './verify.ts';
 
+/**
+ * Defines OCSP hash algorithm.
+ */
 export type OcspHashAlgorithm = 'SHA-1' | 'SHA-256';
+/**
+ * Describes the accepted source forms for OCSP certificate inputs.
+ */
 export type OcspCertificateSource = string | Uint8Array | ParsedCertificate;
+/**
+ * Describes the accepted source forms for OCSP request inputs.
+ */
 export type OcspRequestSource = string | Uint8Array | ParsedOcspRequest;
 
+/**
+ * Describes the input shape for create OCSP request item operations.
+ */
 export interface CreateOcspRequestItemInput {
+	/**
+	 * Carries the certificate value.
+	 */
 	readonly certificate: OcspCertificateSource;
+	/**
+	 * Carries the issuer certificate value.
+	 */
 	readonly issuerCertificate: OcspCertificateSource;
 }
 
+/**
+ * Describes the input shape for create OCSP request operations.
+ */
 export interface CreateOcspRequestInput {
+	/**
+	 * Carries the requests value.
+	 */
 	readonly requests: readonly CreateOcspRequestItemInput[];
+	/**
+	 * Carries the hash algorithm value.
+	 */
 	readonly hashAlgorithm?: OcspHashAlgorithm;
+	/**
+	 * Carries the nonce value.
+	 */
 	readonly nonce?: Uint8Array;
 }
 
+/**
+ * Bundles the encoded artifacts produced by OCSP request operations.
+ */
 export interface OcspRequestMaterial {
+	/**
+	 * Carries the der value.
+	 */
 	readonly der: Uint8Array;
+	/**
+	 * Carries the pem value.
+	 */
 	readonly pem: string;
+	/**
+	 * Carries the base64 value.
+	 */
 	readonly base64: string;
 }
 
+/**
+ * Describes the structured OCSP cert id produced by parsing helpers.
+ */
 export interface ParsedOcspCertId {
+	/**
+	 * Carries the OID for hash algorithm.
+	 */
 	readonly hashAlgorithmOid: string;
+	/**
+	 * Carries the hexadecimal issuer name hash.
+	 */
 	readonly issuerNameHashHex: string;
+	/**
+	 * Carries the hexadecimal issuer key hash.
+	 */
 	readonly issuerKeyHashHex: string;
+	/**
+	 * Carries the hexadecimal serial number.
+	 */
 	readonly serialNumberHex: string;
 }
 
+/**
+ * Describes the structured OCSP request produced by parsing helpers.
+ */
 export interface ParsedOcspRequest {
+	/**
+	 * Carries the requests value.
+	 */
 	readonly requests: readonly ParsedOcspCertId[];
+	/**
+	 * Carries the nonce value.
+	 */
 	readonly nonce?: string;
 }
 
+/**
+ * Enumerates OCSP cert values used by this module.
+ */
 export type OcspCertStatus = 'good' | 'revoked' | 'unknown';
+/**
+ * Enumerates OCSP response values used by this module.
+ */
 export type OcspResponseStatus =
 	| 'successful'
 	| 'malformedRequest'
@@ -83,87 +162,270 @@ export type OcspResponseStatus =
 	| 'sigRequired'
 	| 'unauthorized';
 
+/**
+ * Describes the structured OCSP single response produced by parsing helpers.
+ */
 export interface ParsedOcspSingleResponse {
+	/**
+	 * Carries the cert id value.
+	 */
 	readonly certId: ParsedOcspCertId;
+	/**
+	 * Carries the cert status value.
+	 */
 	readonly certStatus: OcspCertStatus;
+	/**
+	 * Carries the this update value.
+	 */
 	readonly thisUpdate: Date;
+	/**
+	 * Carries the next update value.
+	 */
 	readonly nextUpdate?: Date;
+	/**
+	 * Carries the revoked at value.
+	 */
 	readonly revokedAt?: Date;
+	/**
+	 * Carries the revocation reason code value.
+	 */
 	readonly revocationReasonCode?: number;
 }
 
+/**
+ * Describes the structured OCSP responder id produced by parsing helpers.
+ */
 export type ParsedOcspResponderId =
 	| {
+			/**
+			 * Identifies the type value.
+			 */
 			readonly type: 'byName';
+			/**
+			 * Carries the name value.
+			 */
 			readonly name: ParsedName;
 	  }
 	| {
+			/**
+			 * Identifies the type value.
+			 */
 			readonly type: 'byKeyHash';
+			/**
+			 * Carries the hexadecimal key hash.
+			 */
 			readonly keyHashHex: string;
 	  };
 
+/**
+ * Describes the structured OCSP response produced by parsing helpers.
+ */
 export interface ParsedOcspResponse {
+	/**
+	 * Carries the response status value.
+	 */
 	readonly responseStatus: OcspResponseStatus;
+	/**
+	 * Carries the OID for response type.
+	 */
 	readonly responseTypeOid?: string;
+	/**
+	 * Carries the DER-encoded response data.
+	 */
 	readonly responseDataDer?: Uint8Array;
+	/**
+	 * Carries the responder id value.
+	 */
 	readonly responderId?: ParsedOcspResponderId;
+	/**
+	 * Carries the OID for signature algorithm.
+	 */
 	readonly signatureAlgorithmOid?: string;
+	/**
+	 * Carries the signature value value.
+	 */
 	readonly signatureValue?: Uint8Array;
+	/**
+	 * Carries the produced at value.
+	 */
 	readonly producedAt?: Date;
+	/**
+	 * Carries the responses value.
+	 */
 	readonly responses?: readonly ParsedOcspSingleResponse[];
+	/**
+	 * Carries the nonce value.
+	 */
 	readonly nonce?: string;
+	/**
+	 * Carries the certificates value.
+	 */
 	readonly certificates?: readonly ParsedCertificate[];
 }
 
+/**
+ * Describes the input shape for create OCSP single response operations.
+ */
 export interface CreateOcspSingleResponseInput extends CreateOcspRequestItemInput {
+	/**
+	 * Carries the cert status value.
+	 */
 	readonly certStatus: OcspCertStatus;
+	/**
+	 * Carries the this update value.
+	 */
 	readonly thisUpdate?: Date;
+	/**
+	 * Carries the next update value.
+	 */
 	readonly nextUpdate?: Date;
+	/**
+	 * Carries the revoked at value.
+	 */
 	readonly revokedAt?: Date;
+	/**
+	 * Carries the revocation reason code value.
+	 */
 	readonly revocationReasonCode?: number;
 }
 
+/**
+ * Describes the input shape for create OCSP response operations.
+ */
 export interface CreateOcspResponseInput {
+	/**
+	 * Carries the signer private key value.
+	 */
 	readonly signerPrivateKey: CryptoKey;
+	/**
+	 * Carries the signer certificate value.
+	 */
 	readonly signerCertificate: OcspCertificateSource;
+	/**
+	 * Carries the responses value.
+	 */
 	readonly responses: readonly CreateOcspSingleResponseInput[];
+	/**
+	 * Carries the produced at value.
+	 */
 	readonly producedAt?: Date;
+	/**
+	 * Carries the nonce value.
+	 */
 	readonly nonce?: Uint8Array;
+	/**
+	 * Carries the hash algorithm value.
+	 */
 	readonly hashAlgorithm?: OcspHashAlgorithm;
+	/**
+	 * Carries the included certificates value.
+	 */
 	readonly includedCertificates?: readonly OcspCertificateSource[];
 }
 
+/**
+ * Bundles the encoded artifacts produced by OCSP response operations.
+ */
 export interface OcspResponseMaterial {
+	/**
+	 * Carries the der value.
+	 */
 	readonly der: Uint8Array;
+	/**
+	 * Carries the pem value.
+	 */
 	readonly pem: string;
+	/**
+	 * Carries the base64 value.
+	 */
 	readonly base64: string;
 }
 
+/**
+ * Represents a typed failure produced by verify OCSP response operations.
+ */
 export interface VerifyOcspResponseFailure extends Micro509Error<'signature_invalid'> {
+	/**
+	 * Indicates whether the operation succeeded.
+	 */
 	readonly ok: false;
 }
 
+/**
+ * Represents the result returned by verify OCSP response failure operations.
+ */
 interface VerifyOcspResponseFailureResult {
+	/**
+	 * Indicates whether the operation succeeded.
+	 */
 	readonly ok: false;
+	/**
+	 * Carries the canonical error payload.
+	 */
 	readonly error: VerifyOcspResponseFailure;
+	/**
+	 * Carries the machine-readable error code.
+	 */
 	readonly code: 'signature_invalid';
+	/**
+	 * Carries the human-readable error message.
+	 */
 	readonly message: string;
 }
 
+/**
+ * Represents the result returned by verify OCSP response operations.
+ */
 export type VerifyOcspResponseResult =
-	| { readonly ok: true; readonly value: ParsedOcspResponse }
+	| {
+			/**
+			 * Indicates whether the operation succeeded.
+			 */
+			readonly ok: true;
+			/**
+			 * Carries the successful value payload.
+			 */
+			readonly value: ParsedOcspResponse;
+	  }
 	| VerifyOcspResponseFailureResult;
 
+/**
+ * Describes the input shape for validate OCSP response operations.
+ */
 export interface ValidateOcspResponseInput {
+	/**
+	 * Carries the response value.
+	 */
 	readonly response: string | Uint8Array | ParsedOcspResponse;
+	/**
+	 * Carries the issuer certificate value.
+	 */
 	readonly issuerCertificate: OcspCertificateSource;
+	/**
+	 * Carries the request value.
+	 */
 	readonly request?: OcspRequestSource;
+	/**
+	 * Carries the responder certificate value.
+	 */
 	readonly responderCertificate?: OcspCertificateSource;
+	/**
+	 * Indicates whether allow chained responder certificate.
+	 */
 	readonly allowChainedResponderCertificate?: boolean;
+	/**
+	 * Carries the at value.
+	 */
 	readonly at?: Date;
+	/**
+	 * Carries the clock skew ms value.
+	 */
 	readonly clockSkewMs?: number;
 }
 
+/**
+ * Represents a typed failure produced by validate OCSP response operations.
+ */
 export interface ValidateOcspResponseFailure
 	extends Micro509Error<
 		| 'response_status_invalid'
@@ -176,12 +438,27 @@ export interface ValidateOcspResponseFailure
 		| 'ocsp_signing_missing'
 		| 'stale_response'
 	> {
+	/**
+	 * Indicates whether the operation succeeded.
+	 */
 	readonly ok: false;
 }
 
+/**
+ * Represents the result returned by validate OCSP response failure operations.
+ */
 interface ValidateOcspResponseFailureResult {
+	/**
+	 * Indicates whether the operation succeeded.
+	 */
 	readonly ok: false;
+	/**
+	 * Carries the canonical error payload.
+	 */
 	readonly error: ValidateOcspResponseFailure;
+	/**
+	 * Carries the machine-readable error code.
+	 */
 	readonly code:
 		| 'response_status_invalid'
 		| 'signature_invalid'
@@ -192,13 +469,34 @@ interface ValidateOcspResponseFailureResult {
 		| 'responder_chain_invalid'
 		| 'ocsp_signing_missing'
 		| 'stale_response';
+	/**
+	 * Carries the human-readable error message.
+	 */
 	readonly message: string;
 }
 
+/**
+ * Represents the result returned by validate OCSP response operations.
+ */
 export type ValidateOcspResponseResult =
-	| { readonly ok: true; readonly value: ParsedOcspResponse }
+	| {
+			/**
+			 * Indicates whether the operation succeeded.
+			 */
+			readonly ok: true;
+			/**
+			 * Carries the successful value payload.
+			 */
+			readonly value: ParsedOcspResponse;
+	  }
 	| ValidateOcspResponseFailureResult;
 
+/**
+ * Creates OCSP request.
+ *
+ * @param input The typed input payload.
+ * @returns The created OCSP request.
+ */
 export async function createOcspRequest(
 	input: CreateOcspRequestInput,
 ): Promise<OcspRequestMaterial> {
@@ -228,6 +526,12 @@ export async function createOcspRequest(
 	};
 }
 
+/**
+ * Parses OCSP request DER.
+ *
+ * @param der The DER-encoded bytes.
+ * @returns The parsed OCSP request DER.
+ */
 export function parseOcspRequestDer(der: Uint8Array): ParsedOcspRequest {
 	const top = readSequenceChildren(der, { maxDepth: DEFAULT_MAX_DER_DEPTH });
 	const tbsRequest = requireElement(top[0], 'tbsRequest');
@@ -249,10 +553,22 @@ export function parseOcspRequestDer(der: Uint8Array): ParsedOcspRequest {
 	};
 }
 
+/**
+ * Parses OCSP request PEM.
+ *
+ * @param pem The PEM-encoded text.
+ * @returns The parsed OCSP request PEM.
+ */
 export function parseOcspRequestPem(pem: string): ParsedOcspRequest {
 	return parseOcspRequestDer(pemDecode('OCSP REQUEST', pem));
 }
 
+/**
+ * Parses OCSP response DER.
+ *
+ * @param der The DER-encoded bytes.
+ * @returns The parsed OCSP response DER.
+ */
 export function parseOcspResponseDer(der: Uint8Array): ParsedOcspResponse {
 	const top = readSequenceChildren(der, { maxDepth: DEFAULT_MAX_DER_DEPTH });
 	const statusElement = requireElement(top[0], 'responseStatus');
@@ -317,10 +633,22 @@ export function parseOcspResponseDer(der: Uint8Array): ParsedOcspResponse {
 	};
 }
 
+/**
+ * Parses OCSP response PEM.
+ *
+ * @param pem The PEM-encoded text.
+ * @returns The parsed OCSP response PEM.
+ */
 export function parseOcspResponsePem(pem: string): ParsedOcspResponse {
 	return parseOcspResponseDer(pemDecode('OCSP RESPONSE', pem));
 }
 
+/**
+ * Creates OCSP response.
+ *
+ * @param input The typed input payload.
+ * @returns The created OCSP response.
+ */
 export async function createOcspResponse(
 	input: CreateOcspResponseInput,
 ): Promise<OcspResponseMaterial> {
@@ -384,6 +712,13 @@ export async function createOcspResponse(
 	};
 }
 
+/**
+ * Verifies OCSP response.
+ *
+ * @param response The response input.
+ * @param signerCertificate The signer certificate value.
+ * @returns The verification result.
+ */
 export async function verifyOcspResponse(
 	response: string | Uint8Array | ParsedOcspResponse,
 	signerCertificate: OcspCertificateSource,
@@ -414,6 +749,12 @@ export async function verifyOcspResponse(
 			);
 }
 
+/**
+ * Validates OCSP response.
+ *
+ * @param input The typed input payload.
+ * @returns The validation result.
+ */
 export async function validateOcspResponse(
 	input: ValidateOcspResponseInput,
 ): Promise<ValidateOcspResponseResult> {
@@ -548,22 +889,68 @@ export async function validateOcspResponse(
 	return { ok: true, value: parsedResponse };
 }
 
+/**
+ * Verifies OCSP response failure result.
+ *
+ * @param code The code value.
+ * @param message The message value.
+ * @returns The verification result.
+ */
 function verifyOcspResponseFailureResult(
 	code: 'signature_invalid',
 	message: string,
 ): VerifyOcspResponseFailureResult {
-	const error: VerifyOcspResponseFailure = { ok: false, code, message };
+	const error: VerifyOcspResponseFailure = {
+		/**
+		 * Indicates whether the operation succeeded.
+		 */
+		ok: false,
+		/**
+		 * Carries the machine-readable error code.
+		 */
+		code,
+		/**
+		 * Carries the human-readable error message.
+		 */
+		message,
+	};
 	return { ok: false, error, code, message };
 }
 
+/**
+ * Validates OCSP response failure result.
+ *
+ * @param code The code value.
+ * @param message The message value.
+ * @returns The validation result.
+ */
 function validateOcspResponseFailureResult(
 	code: ValidateOcspResponseFailureResult['code'],
 	message: string,
 ): ValidateOcspResponseFailureResult {
-	const error: ValidateOcspResponseFailure = { ok: false, code, message };
+	const error: ValidateOcspResponseFailure = {
+		/**
+		 * Indicates whether the operation succeeded.
+		 */
+		ok: false,
+		/**
+		 * Carries the machine-readable error code.
+		 */
+		code,
+		/**
+		 * Carries the human-readable error message.
+		 */
+		message,
+	};
 	return { ok: false, error, code, message };
 }
 
+/**
+ * Normalizes OCSP response.
+ *
+ * @param response The response input.
+ * @returns The computed value.
+ */
 function normalizeOcspResponse(
 	response: string | Uint8Array | ParsedOcspResponse,
 ): ParsedOcspResponse {
@@ -576,6 +963,12 @@ function normalizeOcspResponse(
 	return response;
 }
 
+/**
+ * Normalizes OCSP request.
+ *
+ * @param request The request input.
+ * @returns The computed value.
+ */
 function normalizeOcspRequest(request: OcspRequestSource): ParsedOcspRequest {
 	if (typeof request === 'string') {
 		return parseOcspRequestPem(request);
@@ -586,6 +979,13 @@ function normalizeOcspRequest(request: OcspRequestSource): ParsedOcspRequest {
 	return request;
 }
 
+/**
+ * Finds matching OCSP responder certificate.
+ *
+ * @param certificates The certificate inputs.
+ * @param responderId The responder id value.
+ * @returns The matching matching OCSP responder certificate.
+ */
 async function findMatchingOcspResponderCertificate(
 	certificates: readonly ParsedCertificate[] | undefined,
 	responderId: ParsedOcspResponderId | undefined,
@@ -601,10 +1001,33 @@ async function findMatchingOcspResponderCertificate(
 	return undefined;
 }
 
+/**
+ * Validates OCSP responder id binding.
+ *
+ * @param responderId The responder id value.
+ * @param signer The signer value.
+ * @returns The validation result.
+ */
 async function validateOcspResponderIdBinding(
 	responderId: ParsedOcspResponderId | undefined,
 	signer: ParsedCertificate,
-): Promise<Extract<ValidateOcspResponseResult, { readonly ok: false }> | { readonly ok: true }> {
+): Promise<
+	| Extract<
+			ValidateOcspResponseResult,
+			{
+				/**
+				 * Indicates whether the operation succeeded.
+				 */
+				readonly ok: false;
+			}
+	  >
+	| {
+			/**
+			 * Indicates whether the operation succeeded.
+			 */
+			readonly ok: true;
+	  }
+> {
 	if (responderId === undefined) {
 		return { ok: true };
 	}
@@ -622,6 +1045,13 @@ async function validateOcspResponderIdBinding(
 			);
 }
 
+/**
+ * Matches es OCSP responder id.
+ *
+ * @param responderId The responder id value.
+ * @param certificate The certificate input.
+ * @returns The computed value.
+ */
 async function matchesOcspResponderId(
 	responderId: ParsedOcspResponderId,
 	certificate: ParsedCertificate,
@@ -635,6 +1065,13 @@ async function matchesOcspResponderId(
 	return certificateKeyHashHex === responderId.keyHashHex;
 }
 
+/**
+ * Returns whether same OCSP certificate.
+ *
+ * @param left The left value.
+ * @param right The right value.
+ * @returns Whether the condition holds.
+ */
 function isSameOcspCertificate(left: ParsedCertificate, right: ParsedCertificate): boolean {
 	return (
 		left.serialNumberHex === right.serialNumberHex &&
@@ -647,6 +1084,13 @@ function isSameOcspCertificate(left: ParsedCertificate, right: ParsedCertificate
 	);
 }
 
+/**
+ * Returns whether directly issued by OCSP issuer.
+ *
+ * @param signer The signer value.
+ * @param issuer The issuer value.
+ * @returns Whether the condition holds.
+ */
 function isDirectlyIssuedByOcspIssuer(
 	signer: ParsedCertificate,
 	issuer: ParsedCertificate,
@@ -664,6 +1108,14 @@ function isDirectlyIssuedByOcspIssuer(
 	return true;
 }
 
+/**
+ * Builds OCSP responder intermediates.
+ *
+ * @param certificates The certificate inputs.
+ * @param signer The signer value.
+ * @param issuer The issuer value.
+ * @returns The built OCSP responder intermediates.
+ */
 function buildOcspResponderIntermediates(
 	certificates: readonly ParsedCertificate[] | undefined,
 	signer: ParsedCertificate,
@@ -682,6 +1134,14 @@ function buildOcspResponderIntermediates(
 	return intermediates;
 }
 
+/**
+ * Encodes OCSP cert id.
+ *
+ * @param certificate The certificate input.
+ * @param issuer The issuer value.
+ * @param hashAlgorithm The hash algorithm value.
+ * @returns The encoded OCSP cert id.
+ */
 async function encodeOcspCertId(
 	certificate: ParsedCertificate,
 	issuer: ParsedCertificate,
@@ -697,6 +1157,14 @@ async function encodeOcspCertId(
 	]);
 }
 
+/**
+ * Builds parsed OCSP cert id.
+ *
+ * @param hashAlgorithmOid The hash algorithm OID value.
+ * @param issuer The issuer value.
+ * @param serialNumberHex The serial number hex value.
+ * @returns The built parsed OCSP cert id.
+ */
 async function buildParsedOcspCertId(
 	hashAlgorithmOid: string,
 	issuer: ParsedCertificate,
@@ -716,10 +1184,26 @@ async function buildParsedOcspCertId(
 	};
 }
 
+/**
+ * Digest bytes.
+ *
+ * @param algorithm The algorithm configuration.
+ * @param bytes The raw bytes to process.
+ * @returns The computed value.
+ */
 async function digestBytes(algorithm: OcspHashAlgorithm, bytes: Uint8Array): Promise<Uint8Array> {
 	return new Uint8Array(await getCrypto().subtle.digest(algorithm, toArrayBuffer(bytes)));
 }
 
+/**
+ * Encodes single response.
+ *
+ * @param certificate The certificate input.
+ * @param issuer The issuer value.
+ * @param input The typed input payload.
+ * @param hashAlgorithm The hash algorithm value.
+ * @returns The encoded single response.
+ */
 async function encodeSingleResponse(
 	certificate: ParsedCertificate,
 	issuer: ParsedCertificate,
@@ -736,6 +1220,12 @@ async function encodeSingleResponse(
 	]);
 }
 
+/**
+ * Encodes OCSP cert status.
+ *
+ * @param input The typed input payload.
+ * @returns The encoded OCSP cert status.
+ */
 function encodeOcspCertStatus(input: CreateOcspSingleResponseInput): Uint8Array {
 	switch (input.certStatus) {
 		case 'good':
@@ -754,6 +1244,12 @@ function encodeOcspCertStatus(input: CreateOcspSingleResponseInput): Uint8Array 
 	}
 }
 
+/**
+ * Normalizes certificate.
+ *
+ * @param source The source value to process.
+ * @returns The computed value.
+ */
 async function normalizeCertificate(source: OcspCertificateSource): Promise<ParsedCertificate> {
 	if (typeof source === 'string') {
 		return parseCertificatePem(source);
@@ -764,10 +1260,22 @@ async function normalizeCertificate(source: OcspCertificateSource): Promise<Pars
 	return parseCertificateDer(source);
 }
 
+/**
+ * Returns whether parsed certificate shape.
+ *
+ * @param value The value to process.
+ * @returns Whether the condition holds.
+ */
 function hasParsedCertificateShape(value: OcspCertificateSource): value is ParsedCertificate {
 	return typeof value !== 'string' && 'subjectPublicKeyInfoDer' in value;
 }
 
+/**
+ * Parses OCSP cert id.
+ *
+ * @param der The DER-encoded bytes.
+ * @returns The parsed OCSP cert id.
+ */
 function parseOcspCertId(der: Uint8Array): ParsedOcspCertId {
 	const children = childrenOf(der, readElement(der));
 	const hashAlgorithm = requireElement(children[0], 'hashAlgorithm');
@@ -781,6 +1289,13 @@ function parseOcspCertId(der: Uint8Array): ParsedOcspCertId {
 	};
 }
 
+/**
+ * Parses single response.
+ *
+ * @param source The source value to process.
+ * @param element The ASN.1 element to process.
+ * @returns The parsed single response.
+ */
 function parseSingleResponse(source: Uint8Array, element: DerElement): ParsedOcspSingleResponse {
 	const children = childrenOf(source, element);
 	const certId = requireElement(children[0], 'certId');
@@ -813,6 +1328,13 @@ function parseSingleResponse(source: Uint8Array, element: DerElement): ParsedOcs
 	};
 }
 
+/**
+ * Parses OCSP responder id.
+ *
+ * @param source The source value to process.
+ * @param element The ASN.1 element to process.
+ * @returns The parsed OCSP responder id.
+ */
 function parseOcspResponderId(source: Uint8Array, element: DerElement): ParsedOcspResponderId {
 	switch (element.tag) {
 		case 0x82:
@@ -837,6 +1359,13 @@ function parseOcspResponderId(source: Uint8Array, element: DerElement): ParsedOc
 	}
 }
 
+/**
+ * Parses responder name.
+ *
+ * @param source The source value to process.
+ * @param element The ASN.1 element to process.
+ * @returns The parsed responder name.
+ */
 function parseResponderName(source: Uint8Array, element: DerElement): ParsedName {
 	const rdns: ParsedRelativeDistinguishedName[] = [];
 	const attributes: ParsedNameAttribute[] = [];
@@ -859,6 +1388,13 @@ function parseResponderName(source: Uint8Array, element: DerElement): ParsedName
 	};
 }
 
+/**
+ * Parses responder name attribute set.
+ *
+ * @param source The source value to process.
+ * @param setElement The set element value.
+ * @returns The parsed responder name attribute set.
+ */
 function parseResponderNameAttributeSet(
 	source: Uint8Array,
 	setElement: DerElement,
@@ -887,6 +1423,13 @@ function parseResponderNameAttributeSet(
 	};
 }
 
+/**
+ * Compares OCSP responder names.
+ *
+ * @param left The left value.
+ * @param right The right value.
+ * @returns The computed value.
+ */
 function compareOcspResponderNames(left: ParsedName, right: ParsedName): boolean {
 	if (left.rdns.length !== right.rdns.length) {
 		return false;
@@ -904,6 +1447,13 @@ function compareOcspResponderNames(left: ParsedName, right: ParsedName): boolean
 	return true;
 }
 
+/**
+ * Compares OCSP relative distinguished names.
+ *
+ * @param left The left value.
+ * @param right The right value.
+ * @returns The computed value.
+ */
 function compareOcspRelativeDistinguishedNames(
 	left: ParsedRelativeDistinguishedName,
 	right: ParsedRelativeDistinguishedName,
@@ -933,6 +1483,13 @@ function compareOcspRelativeDistinguishedNames(
 	return true;
 }
 
+/**
+ * Compares OCSP name attribute value.
+ *
+ * @param left The left value.
+ * @param right The right value.
+ * @returns The computed value.
+ */
 function compareOcspNameAttributeValue(
 	left: ParsedNameAttribute,
 	right: ParsedNameAttribute,
@@ -951,10 +1508,22 @@ function compareOcspNameAttributeValue(
 	return left.valueTag === right.valueTag && left.value === right.value;
 }
 
+/**
+ * Returns whether OCSP directory string tag.
+ *
+ * @param tag The tag value.
+ * @returns Whether the condition holds.
+ */
 function isOcspDirectoryStringTag(tag: number): boolean {
 	return tag === 0x0c || tag === 0x13;
 }
 
+/**
+ * Prepare OCSP name compare string.
+ *
+ * @param value The value to process.
+ * @returns The computed value.
+ */
 function prepareOcspNameCompareString(value: string): string | undefined {
 	const normalized = value.normalize('NFKC');
 	if (/[^\P{Cc}\t\n\r]/u.test(normalized)) {
@@ -963,6 +1532,12 @@ function prepareOcspNameCompareString(value: string): string | undefined {
 	return normalized.toLowerCase().trim().replace(/\s+/gu, ' ');
 }
 
+/**
+ * Responder name key from OID.
+ *
+ * @param oid The object identifier.
+ * @returns The computed value.
+ */
 function responderNameKeyFromOid(oid: string): ParsedNameAttribute['key'] {
 	switch (oid) {
 		case OIDS.commonName:
@@ -994,6 +1569,13 @@ function responderNameKeyFromOid(oid: string): ParsedNameAttribute['key'] {
 	}
 }
 
+/**
+ * Parses OCSP nonce from extensions.
+ *
+ * @param source The source value to process.
+ * @param element The ASN.1 element to process.
+ * @returns The parsed OCSP nonce from extensions.
+ */
 function parseOcspNonceFromExtensions(source: Uint8Array, element: DerElement): string | undefined {
 	const extensionsSequence = requireElement(childrenOf(source, element)[0], 'extensions');
 	for (const extension of childrenOf(source, extensionsSequence)) {
@@ -1008,6 +1590,13 @@ function parseOcspNonceFromExtensions(source: Uint8Array, element: DerElement): 
 	return undefined;
 }
 
+/**
+ * Parses embedded certificates.
+ *
+ * @param source The source value to process.
+ * @param element The ASN.1 element to process.
+ * @returns The parsed embedded certificates.
+ */
 function parseEmbeddedCertificates(
 	source: Uint8Array,
 	element: DerElement,
@@ -1022,6 +1611,12 @@ function parseEmbeddedCertificates(
 	return certificates;
 }
 
+/**
+ * Extract subject public key bytes.
+ *
+ * @param spkiDer The SPKI DER value.
+ * @returns The computed value.
+ */
 function extractSubjectPublicKeyBytes(spkiDer: Uint8Array): Uint8Array {
 	const top = childrenOf(spkiDer, readElement(spkiDer));
 	const bitStringElement = requireElement(top[1], 'subjectPublicKey BIT STRING');
@@ -1031,6 +1626,12 @@ function extractSubjectPublicKeyBytes(spkiDer: Uint8Array): Uint8Array {
 	return bitStringElement.value.slice(1);
 }
 
+/**
+ * OCSP response status from code.
+ *
+ * @param code The code value.
+ * @returns The computed value.
+ */
 function ocspResponseStatusFromCode(code: number | undefined): OcspResponseStatus {
 	switch (code) {
 		case 0:
@@ -1050,6 +1651,12 @@ function ocspResponseStatusFromCode(code: number | undefined): OcspResponseStatu
 	}
 }
 
+/**
+ * OCSP hash algorithm from OID.
+ *
+ * @param oid The object identifier.
+ * @returns The computed value.
+ */
 function ocspHashAlgorithmFromOid(oid: string): OcspHashAlgorithm {
 	switch (oid) {
 		case OIDS.sha1:
@@ -1061,6 +1668,12 @@ function ocspHashAlgorithmFromOid(oid: string): OcspHashAlgorithm {
 	}
 }
 
+/**
+ * Serialize cert id.
+ *
+ * @param certId The cert id value.
+ * @returns The computed value.
+ */
 function serializeCertId(certId: ParsedOcspCertId): string {
 	return [
 		certId.hashAlgorithmOid,

@@ -1,3 +1,10 @@
+/**
+ * Internal signature-verification helpers.
+ *
+ * This module resolves parsed algorithm metadata into the WebCrypto verification
+ * configuration used by higher-level validators.
+ */
+
 import { toArrayBuffer } from './asn1.ts';
 import { alternateEcdsaSignatureEncoding } from './ecdsa.ts';
 import type { PublicKeyImportInput, RsaHash, RsaScheme } from './keys.ts';
@@ -12,34 +19,92 @@ export {
 	rawEcdsaSignatureToDer,
 } from './ecdsa.ts';
 
+/**
+ * Describes verify signature config.
+ */
 export interface VerifySignatureConfig {
+	/**
+	 * Carries the import algorithm value.
+	 */
 	readonly importAlgorithm: PublicKeyImportInput;
+	/**
+	 * Carries the verify params value.
+	 */
 	readonly verifyParams: Algorithm | EcdsaParams | RsaPssParams;
+	/**
+	 * Carries the ecdsa raw signature bytes value.
+	 */
 	readonly ecdsaRawSignatureBytes?: number;
 }
 
+/**
+ * Represents a typed failure produced by verify signature config operations.
+ */
 export interface VerifySignatureConfigFailure {
+	/**
+	 * Indicates whether the operation succeeded.
+	 */
 	readonly ok: false;
+	/**
+	 * Carries the machine-readable error code.
+	 */
 	readonly code: 'unsupported_signature_algorithm_parameters';
+	/**
+	 * Carries the reason value.
+	 */
 	readonly reason: string;
 }
 
+/**
+ * Represents a successful outcome produced by verify signature config operations.
+ */
 interface VerifySignatureConfigSuccess {
+	/**
+	 * Indicates whether the operation succeeded.
+	 */
 	readonly ok: true;
+	/**
+	 * Carries the successful value payload.
+	 */
 	readonly value: VerifySignatureConfig;
 }
 
+/**
+ * Represents the result returned by verify signature config operations.
+ */
 export type VerifySignatureConfigResult =
 	| VerifySignatureConfigSuccess
 	| VerifySignatureConfigFailure;
 
+/**
+ * Represents a successful outcome produced by verify signed data operations.
+ */
 interface VerifySignedDataSuccess {
+	/**
+	 * Indicates whether the operation succeeded.
+	 */
 	readonly ok: true;
+	/**
+	 * Indicates whether valid.
+	 */
 	readonly valid: boolean;
 }
 
+/**
+ * Represents the result returned by verify signed data operations.
+ */
 export type VerifySignedDataResult = VerifySignedDataSuccess | VerifySignatureConfigFailure;
 
+/**
+ * Returns verify signature config.
+ *
+ * @param signatureAlgorithmOid The signature algorithm OID value.
+ * @param signatureAlgorithmParametersDer The signature algorithm parameters DER value.
+ * @param publicKeyAlgorithmOid The public key algorithm OID value.
+ * @param publicKeyParametersOid The public key parameters OID value.
+ * @param context The registry context value.
+ * @returns The verify signature config.
+ */
 export function getVerifySignatureConfig(
 	signatureAlgorithmOid: string,
 	signatureAlgorithmParametersDer: Uint8Array | undefined,
@@ -60,6 +125,16 @@ export function getVerifySignatureConfig(
 	return result.value;
 }
 
+/**
+ * Returns verify signature config result.
+ *
+ * @param signatureAlgorithmOid The signature algorithm OID value.
+ * @param signatureAlgorithmParametersDer The signature algorithm parameters DER value.
+ * @param publicKeyAlgorithmOid The public key algorithm OID value.
+ * @param publicKeyParametersOid The public key parameters OID value.
+ * @param context The registry context value.
+ * @returns The verify signature config result.
+ */
 export function getVerifySignatureConfigResult(
 	signatureAlgorithmOid: string,
 	signatureAlgorithmParametersDer: Uint8Array | undefined,
@@ -135,6 +210,15 @@ export function getVerifySignatureConfigResult(
 	}
 }
 
+/**
+ * Requires and returns RSA public key.
+ *
+ * @param algorithmOid The algorithm OID value.
+ * @param hash The hash value.
+ * @param scheme The scheme value.
+ * @param context The registry context value.
+ * @returns The computed value.
+ */
 export function requireRsaPublicKey(
 	algorithmOid: string,
 	hash: RsaHash,
@@ -147,6 +231,14 @@ export function requireRsaPublicKey(
 	return { kind: 'rsa', hash, scheme };
 }
 
+/**
+ * Requires and returns EC public key.
+ *
+ * @param algorithmOid The algorithm OID value.
+ * @param parametersOid The parameters OID value.
+ * @param context The registry context value.
+ * @returns The computed value.
+ */
 export function requireEcPublicKey(
 	algorithmOid: string,
 	parametersOid: string | undefined,
@@ -167,6 +259,12 @@ export function requireEcPublicKey(
 	}
 }
 
+/**
+ * Curve bytes.
+ *
+ * @param parametersOid The parameters OID value.
+ * @returns The computed value.
+ */
 export function curveBytes(parametersOid: string | undefined): number {
 	switch (parametersOid) {
 		case OIDS.prime256v1:
@@ -180,6 +278,18 @@ export function curveBytes(parametersOid: string | undefined): number {
 	}
 }
 
+/**
+ * Verifies signed data.
+ *
+ * @param signatureAlgorithmOid The signature algorithm OID value.
+ * @param signatureAlgorithmParametersDer The signature algorithm parameters DER value.
+ * @param publicKeyAlgorithmOid The public key algorithm OID value.
+ * @param publicKeyParametersOid The public key parameters OID value.
+ * @param subjectPublicKeyInfoDer The subject public key info DER value.
+ * @param signature The signature value.
+ * @param signedData The signed data value.
+ * @returns The verification result.
+ */
 export async function verifySignedData(
 	signatureAlgorithmOid: string,
 	signatureAlgorithmParametersDer: Uint8Array | undefined,
@@ -204,6 +314,18 @@ export async function verifySignedData(
 	return result.valid;
 }
 
+/**
+ * Verifies signed data detailed.
+ *
+ * @param signatureAlgorithmOid The signature algorithm OID value.
+ * @param signatureAlgorithmParametersDer The signature algorithm parameters DER value.
+ * @param publicKeyAlgorithmOid The public key algorithm OID value.
+ * @param publicKeyParametersOid The public key parameters OID value.
+ * @param subjectPublicKeyInfoDer The subject public key info DER value.
+ * @param signature The signature value.
+ * @param signedData The signed data value.
+ * @returns The verification result.
+ */
 export async function verifySignedDataDetailed(
 	signatureAlgorithmOid: string,
 	signatureAlgorithmParametersDer: Uint8Array | undefined,
@@ -249,6 +371,14 @@ export async function verifySignedDataDetailed(
 	return { ok: true, valid: false };
 }
 
+/**
+ * Requires and returns RSA PSS verify config.
+ *
+ * @param signatureAlgorithmParametersDer The signature algorithm parameters DER value.
+ * @param publicKeyAlgorithmOid The public key algorithm OID value.
+ * @param context The registry context value.
+ * @returns The computed value.
+ */
 function requireRsaPssVerifyConfig(
 	signatureAlgorithmParametersDer: Uint8Array | undefined,
 	publicKeyAlgorithmOid: string,
@@ -272,10 +402,23 @@ function requireRsaPssVerifyConfig(
 	});
 }
 
+/**
+ * Builds a successful helper result for this module.
+ *
+ * @param value The value to process.
+ * @returns The successful result wrapper.
+ */
 function ok(value: VerifySignatureConfig): VerifySignatureConfigSuccess {
 	return { ok: true, value };
 }
 
+/**
+ * Builds an unsupported helper result for this module.
+ *
+ * @param algorithm The algorithm configuration.
+ * @param reason The reason value.
+ * @returns The unsupported-result wrapper.
+ */
 function unsupported(algorithm: string, reason: string): VerifySignatureConfigFailure {
 	return {
 		ok: false,

@@ -1,5 +1,21 @@
+/**
+ * IP address parsing and normalization helpers shared by parsing, validation, and identity
+ * matching flows.
+ *
+ * These utilities keep IPv4 and IPv6 handling consistent across the library.
+ */
+
+/**
+ * Defines the ipv6 segment used by this module.
+ */
 const IPV6_SEGMENT = /^[0-9a-f]{1,4}$/;
 
+/**
+ * Normalizes IP address.
+ *
+ * @param value The value to process.
+ * @returns The computed value.
+ */
 export function normalizeIpAddress(value: string): string {
 	if (!value.includes(':')) {
 		return value;
@@ -7,6 +23,12 @@ export function normalizeIpAddress(value: string): string {
 	return expandIpv6(value).join(':');
 }
 
+/**
+ * Expands ipv6.
+ *
+ * @param value The value to process.
+ * @returns The computed value.
+ */
 export function expandIpv6(value: string): readonly string[] {
 	const normalized = value.toLowerCase();
 	const pieces = normalized.split('::');
@@ -34,6 +56,12 @@ export function expandIpv6(value: string): readonly string[] {
 	});
 }
 
+/**
+ * Parses IP address to bytes.
+ *
+ * @param value The value to process.
+ * @returns The parsed IP address to bytes.
+ */
 export function parseIpAddressToBytes(value: string): Uint8Array {
 	if (value.includes(':')) {
 		return parseIpv6ToBytes(value);
@@ -53,6 +81,12 @@ export function parseIpAddressToBytes(value: string): Uint8Array {
 	);
 }
 
+/**
+ * Decodes IP address.
+ *
+ * @param bytes The raw bytes to process.
+ * @returns The decoded IP address.
+ */
 export function decodeIpAddress(bytes: Uint8Array): string {
 	if (bytes.length === 4) {
 		return Array.from(bytes, (value) => String(value)).join('.');
@@ -69,12 +103,24 @@ export function decodeIpAddress(bytes: Uint8Array): string {
 	throw new Error(`Unsupported IP address length: ${bytes.length}`);
 }
 
+/**
+ * All ones mask for IP address.
+ *
+ * @param value The value to process.
+ * @returns The computed value.
+ */
 export function allOnesMaskForIpAddress(value: string): Uint8Array {
 	const mask = new Uint8Array(value.includes(':') ? 16 : 4);
 	mask.fill(0xff);
 	return mask;
 }
 
+/**
+ * Parses ipv6 to bytes.
+ *
+ * @param value The value to process.
+ * @returns The parsed ipv6 to bytes.
+ */
 function parseIpv6ToBytes(value: string): Uint8Array {
 	const expanded = expandIpv6(value);
 	const bytes = new Uint8Array(16);

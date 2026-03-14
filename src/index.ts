@@ -1,3 +1,9 @@
+/**
+ * Root package barrel for `micro509`.
+ *
+ * This module re-exports the stable public surface consumed from the package root import.
+ */
+
 export type {
 	CertificateMaterial,
 	CreateCertificateInput,

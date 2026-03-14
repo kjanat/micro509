@@ -1,3 +1,10 @@
+/**
+ * Internal certificate path-building and signature-check helpers.
+ *
+ * This module loads candidate certificates, ranks issuers, matches trust anchors, and
+ * performs low-level path checks for the public verify APIs.
+ */
+
 import { toHex } from './asn1.ts';
 import type { ParsedCertificate } from './parse.ts';
 import { parseCertificateDer } from './parse.ts';
@@ -11,36 +18,94 @@ import type {
 	VerifyFailureDetails,
 } from './verify.ts';
 
+/**
+ * Represents the result returned by internal build operations.
+ */
 export interface InternalBuildResult {
+	/**
+	 * Carries the chain value.
+	 */
 	readonly chain: readonly ParsedCertificate[];
+	/**
+	 * Indicates whether found trusted root.
+	 */
 	readonly foundTrustedRoot: boolean;
+	/**
+	 * Carries the missing issuer at value.
+	 */
 	readonly missingIssuerAt?: number;
+	/**
+	 * Carries the failure value.
+	 */
 	readonly failure?: VerifyChainFailure;
 }
 
+/**
+ * Represents the result returned by trust anchor match operations.
+ */
 interface TrustAnchorMatchResult {
+	/**
+	 * Indicates whether matched.
+	 */
 	readonly matched: boolean;
+	/**
+	 * Carries the failure value.
+	 */
 	readonly failure?: VerifyChainFailure;
 }
 
+/**
+ * Describes the input shape for verify path failure details operations.
+ */
 interface VerifyPathFailureDetailsInput {
+	/**
+	 * Carries the subject common name value.
+	 */
 	readonly subjectCommonName?: string | undefined;
+	/**
+	 * Carries the issuer common name value.
+	 */
 	readonly issuerCommonName?: string | undefined;
+	/**
+	 * Carries the expected value.
+	 */
 	readonly expected?: string | undefined;
+	/**
+	 * Carries the actual value.
+	 */
 	readonly actual?: string | undefined;
+	/**
+	 * Carries the chain common names value.
+	 */
 	readonly chainCommonNames?: readonly string[] | undefined;
 }
 
+/**
+ * Describes verify path callbacks.
+ */
 export interface VerifyPathCallbacks {
+	/**
+	 * Carries the failure value.
+	 */
 	readonly failure: (
 		code: VerifyErrorCode,
 		message: string,
 		index?: number,
 		details?: VerifyFailureDetails,
 	) => VerifyChainFailure;
+	/**
+	 * Carries the detail value.
+	 */
 	readonly detail: (input: VerifyPathFailureDetailsInput) => VerifyFailureDetails;
 }
 
+/**
+ * Returns whether within validity.
+ *
+ * @param certificate The certificate input.
+ * @param at The at value.
+ * @returns Whether the condition holds.
+ */
 export function isWithinValidity(certificate: ParsedCertificate, at: Date): boolean {
 	return (
 		certificate.notBefore.getTime() <= at.getTime() &&
@@ -48,10 +113,23 @@ export function isWithinValidity(certificate: ParsedCertificate, at: Date): bool
 	);
 }
 
+/**
+ * Returns whether self issued.
+ *
+ * @param certificate The certificate input.
+ * @returns Whether the condition holds.
+ */
 export function isSelfIssued(certificate: ParsedCertificate): boolean {
 	return certificate.subject.derHex === certificate.issuer.derHex;
 }
 
+/**
+ * Counts CA certificates below parsed.
+ *
+ * @param chain The chain value.
+ * @param index The index value.
+ * @returns The number of CA certificates below parsed.
+ */
 export function countCaCertificatesBelowParsed(
 	chain: readonly ParsedCertificate[],
 	index: number,
@@ -66,6 +144,12 @@ export function countCaCertificatesBelowParsed(
 	return total;
 }
 
+/**
+ * Loads certificates.
+ *
+ * @param sources The source values to process.
+ * @returns The loaded certificates.
+ */
 export function loadCertificates(
 	sources: readonly CertificateSource[],
 ): readonly ParsedCertificate[] {
@@ -76,6 +160,12 @@ export function loadCertificates(
 	return loaded;
 }
 
+/**
+ * Loads single certificate.
+ *
+ * @param source The source value to process.
+ * @returns The loaded single certificate.
+ */
 export function loadSingleCertificate(source: CertificateSource): ParsedCertificate {
 	const loaded = expandSource(source);
 	const first = loaded[0];
@@ -88,6 +178,13 @@ export function loadSingleCertificate(source: CertificateSource): ParsedCertific
 	return first;
 }
 
+/**
+ * Verifies certificate signature.
+ *
+ * @param certificate The certificate input.
+ * @param issuer The issuer value.
+ * @returns The verification result.
+ */
 export async function verifyCertificateSignature(
 	certificate: ParsedCertificate,
 	issuer: ParsedCertificate,
@@ -103,6 +200,17 @@ export async function verifyCertificateSignature(
 	);
 }
 
+/**
+ * Builds chain internal.
+ *
+ * @param leaf The leaf value.
+ * @param intermediates The intermediates value.
+ * @param roots The roots value.
+ * @param trustAnchors The trust anchors value.
+ * @param at The at value.
+ * @param callbacks The callbacks value.
+ * @returns The built chain internal.
+ */
 export async function buildChainInternal(
 	leaf: ParsedCertificate,
 	intermediates: readonly ParsedCertificate[],
@@ -356,6 +464,12 @@ export async function buildChainInternal(
 	}
 }
 
+/**
+ * Expands source.
+ *
+ * @param source The source value to process.
+ * @returns The computed value.
+ */
 function expandSource(source: CertificateSource): readonly ParsedCertificate[] {
 	if (typeof source === 'string') {
 		return splitPemBlocks(source)
@@ -365,6 +479,15 @@ function expandSource(source: CertificateSource): readonly ParsedCertificate[] {
 	return [parseCertificateDer(new Uint8Array(source))];
 }
 
+/**
+ * Rank issuer candidates.
+ *
+ * @param current The current value.
+ * @param candidates The candidates value.
+ * @param order The order value.
+ * @param rootFingerprints The root fingerprints value.
+ * @returns The computed value.
+ */
 function rankIssuerCandidates(
 	current: ParsedCertificate,
 	candidates: readonly ParsedCertificate[],
@@ -393,6 +516,13 @@ function rankIssuerCandidates(
 		});
 }
 
+/**
+ * Matches es AKI.
+ *
+ * @param candidate The candidate value.
+ * @param aki The AKI value.
+ * @returns The computed value.
+ */
 function matchesAki(candidate: ParsedCertificate, aki: string | undefined): boolean {
 	return (
 		aki !== undefined &&
@@ -401,6 +531,13 @@ function matchesAki(candidate: ParsedCertificate, aki: string | undefined): bool
 	);
 }
 
+/**
+ * Compares booleans.
+ *
+ * @param left The left value.
+ * @param right The right value.
+ * @returns The computed value.
+ */
 function compareBooleans(left: boolean, right: boolean): number {
 	if (left === right) {
 		return 0;
@@ -408,10 +545,26 @@ function compareBooleans(left: boolean, right: boolean): number {
 	return left ? -1 : 1;
 }
 
+/**
+ * Returns whether issuer of.
+ *
+ * @param issuer The issuer value.
+ * @param child The child element to inspect.
+ * @returns Whether the condition holds.
+ */
 function isIssuerOf(issuer: ParsedCertificate, child: ParsedCertificate): boolean {
 	return child.issuer.derHex === issuer.subject.derHex;
 }
 
+/**
+ * Matches trust anchor.
+ *
+ * @param certificate The certificate input.
+ * @param anchorIndex The anchor index value.
+ * @param callbacks The callbacks value.
+ * @param index The index value.
+ * @returns The matching result.
+ */
 async function matchTrustAnchor(
 	certificate: ParsedCertificate,
 	anchorIndex: ReadonlyMap<string, readonly TrustAnchor[]>,
@@ -460,6 +613,12 @@ async function matchTrustAnchor(
 	return { matched: false };
 }
 
+/**
+ * Computes a fingerprint for the provided value.
+ *
+ * @param certificate The certificate input.
+ * @returns The computed value.
+ */
 function fingerprint(certificate: ParsedCertificate): string {
 	return toHex(certificate.der);
 }

@@ -1,3 +1,12 @@
+/**
+ * Create X.509 certificates from typed names, extensions, and WebCrypto keys.
+ *
+ * Use this module to issue a certificate from an existing issuer key pair or to
+ * generate a self-signed certificate in one step.
+ *
+ * @module
+ */
+
 import { bitString, explicitContext, integer, integerFromNumber, sequence, time } from './der.ts';
 import { buildCertificateExtensions, type CertificateExtensionsInput } from './extensions.ts';
 import {
@@ -16,45 +25,169 @@ import {
 	signBytes,
 } from './signing.ts';
 
+/**
+ * Configures the certificate validity window.
+ *
+ * If `notAfter` is omitted, it is derived from `notBefore` plus `days`. If both
+ * `notAfter` and `days` are omitted, the certificate is valid for 30 days.
+ */
 export interface ValidityInput {
+	/**
+	 * Start of the validity window.
+	 *
+	 * Defaults to the current time.
+	 */
 	readonly notBefore?: Date;
+	/**
+	 * End of the validity window.
+	 *
+	 * Must be later than `notBefore`.
+	 */
 	readonly notAfter?: Date;
+	/**
+	 * Number of days to add to `notBefore` when `notAfter` is omitted.
+	 */
 	readonly days?: number;
 }
 
+/**
+ * Input for {@link createCertificate}.
+ */
 export interface CreateCertificateInput {
+	/**
+	 * Issuer distinguished name.
+	 */
 	readonly issuer: NameInput;
+	/**
+	 * Subject distinguished name.
+	 */
 	readonly subject: NameInput;
+	/**
+	 * Subject public key to encode into the certificate.
+	 */
 	readonly publicKey: CryptoKey;
+	/**
+	 * Private key used to sign the certificate.
+	 */
 	readonly signerPrivateKey: CryptoKey;
+	/**
+	 * Issuer public key.
+	 *
+	 * Provide this when extension builders need issuer key material, such as
+	 * authority key identifier derivation.
+	 */
 	readonly issuerPublicKey?: CryptoKey;
+	/**
+	 * Validity window configuration.
+	 */
 	readonly validity?: ValidityInput;
+	/**
+	 * DER integer bytes for the certificate serial number.
+	 *
+	 * When omitted, a random positive 16-byte serial number is generated.
+	 */
 	readonly serialNumber?: Uint8Array;
+	/**
+	 * X.509 extensions to encode into the certificate.
+	 */
 	readonly extensions?: CertificateExtensionsInput;
+	/**
+	 * Signature algorithm override.
+	 *
+	 * When omitted, the library selects a compatible profile from the signing
+	 * key.
+	 */
 	readonly signature?: SignatureProfileInput;
 }
 
+/**
+ * Input for {@link createSelfSignedCertificate}.
+ */
 export interface CreateSelfSignedCertificateInput {
+	/**
+	 * Subject distinguished name used as both subject and issuer.
+	 */
 	readonly subject: NameInput;
+	/**
+	 * Key generation parameters.
+	 *
+	 * Ignored when `keyPair` is provided.
+	 */
 	readonly algorithm?: KeyAlgorithmInput;
+	/**
+	 * Existing key pair to reuse for both subject and issuer.
+	 *
+	 * When omitted, a new key pair is generated.
+	 */
 	readonly keyPair?: KeyPairMaterial;
+	/**
+	 * Validity window configuration.
+	 */
 	readonly validity?: ValidityInput;
+	/**
+	 * DER integer bytes for the certificate serial number.
+	 */
 	readonly serialNumber?: Uint8Array;
+	/**
+	 * X.509 extensions to encode into the certificate.
+	 */
 	readonly extensions?: CertificateExtensionsInput;
+	/**
+	 * Signature algorithm override.
+	 */
 	readonly signature?: SignatureProfileInput;
 }
 
+/**
+ * Encoded certificate material in common interchange formats.
+ */
 export interface CertificateMaterial {
+	/**
+	 * DER-encoded certificate bytes.
+	 */
 	readonly der: Uint8Array;
+	/**
+	 * PEM-encoded certificate.
+	 */
 	readonly pem: string;
+	/**
+	 * Base64 encoding of {@link der} without PEM armor.
+	 */
 	readonly base64: string;
 }
 
+/**
+ * Result returned by {@link createSelfSignedCertificate}.
+ */
 export interface SelfSignedCertificateResult {
+	/**
+	 * Encoded certificate outputs.
+	 */
 	readonly certificate: CertificateMaterial;
+	/**
+	 * Key pair used to issue the certificate.
+	 */
 	readonly keyPair: KeyPairMaterial;
 }
 
+/**
+ * Create a self-signed certificate.
+ *
+ * Reuses `input.keyPair` when provided; otherwise generates a new key pair from
+ * `input.algorithm`. The returned certificate uses `input.subject` as both
+ * issuer and subject.
+ *
+ * @example
+ * ```ts
+ * const { certificate, keyPair } = await createSelfSignedCertificate({
+ * 	subject: { commonName: 'example.com' },
+ * 	algorithm: { kind: 'ecdsa', namedCurve: 'P-256' },
+ * });
+ * ```
+ *
+ * @param input Certificate subject, key, validity, and extension settings.
+ * @returns The certificate plus the key pair used to sign it.
+ */
 export async function createSelfSignedCertificate(
 	input: CreateSelfSignedCertificateInput,
 ): Promise<SelfSignedCertificateResult> {
@@ -75,6 +208,28 @@ export async function createSelfSignedCertificate(
 	return { certificate, keyPair };
 }
 
+/**
+ * Create an X.509 certificate signed by `input.signerPrivateKey`.
+ *
+ * The certificate encodes `input.subject`, `input.publicKey`, and any supplied
+ * extensions. When `serialNumber` is omitted, a random positive serial number is
+ * generated. When `validity` is omitted, the certificate is valid from now for
+ * 30 days.
+ *
+ * @example
+ * ```ts
+ * const certificate = await createCertificate({
+ * 	issuer: { commonName: 'Example Root CA' },
+ * 	subject: { commonName: 'example.com' },
+ * 	publicKey: leafKeys.publicKey,
+ * 	signerPrivateKey: issuerKeys.privateKey,
+ * 	issuerPublicKey: issuerKeys.publicKey,
+ * });
+ * ```
+ *
+ * @param input Issuer, subject, key, validity, and extension settings.
+ * @returns The encoded certificate material.
+ */
 export async function createCertificate(
 	input: CreateCertificateInput,
 ): Promise<CertificateMaterial> {
@@ -114,6 +269,12 @@ export async function createCertificate(
 	return materializeCertificate(certificateDer);
 }
 
+/**
+ * Convert DER bytes into all exported certificate encodings.
+ *
+ * @param der DER-encoded certificate bytes.
+ * @returns DER, PEM, and base64 views of the same certificate.
+ */
 function materializeCertificate(der: Uint8Array): CertificateMaterial {
 	return {
 		der,
@@ -122,11 +283,26 @@ function materializeCertificate(der: Uint8Array): CertificateMaterial {
 	};
 }
 
+/**
+ * Normalized validity window used during certificate creation.
+ */
 interface ResolvedValidity {
+	/**
+	 * Start of the validity window.
+	 */
 	readonly notBefore: Date;
+	/**
+	 * End of the validity window.
+	 */
 	readonly notAfter: Date;
 }
 
+/**
+ * Resolve defaults for a certificate validity window.
+ *
+ * @param input Optional validity settings.
+ * @returns A concrete `notBefore` and `notAfter` pair.
+ */
 function resolveValidity(input: ValidityInput | undefined): ResolvedValidity {
 	const notBefore = input?.notBefore ?? new Date();
 	const notAfter = input?.notAfter ?? addDays(notBefore, input?.days ?? 30);
@@ -136,12 +312,24 @@ function resolveValidity(input: ValidityInput | undefined): ResolvedValidity {
 	return { notBefore, notAfter };
 }
 
+/**
+ * Return a new date offset by a whole number of UTC days.
+ *
+ * @param date Base date.
+ * @param days Number of days to add.
+ * @returns The shifted date.
+ */
 function addDays(date: Date, days: number): Date {
 	const out = new Date(date.getTime());
 	out.setUTCDate(out.getUTCDate() + days);
 	return out;
 }
 
+/**
+ * Generate a random positive serial number suitable for certificate issuance.
+ *
+ * @returns A 16-byte positive serial number.
+ */
 function randomSerialNumber(): Uint8Array {
 	const serial = getCrypto().getRandomValues(new Uint8Array(16));
 	const first = serial[0] ?? 0;

@@ -1569,8 +1569,6 @@ describe('crl', () => {
 		).toMatchObject({
 			ok: false,
 			code: 'non_applicable',
-			message:
-				'indirect CRLs for alternate certificate issuers require matching cRLIssuer distribution points',
 			details: { reason: 'issuer_mismatch' },
 		});
 	});

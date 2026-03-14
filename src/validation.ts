@@ -1,13 +1,8 @@
 /**
- * Temporary compatibility shim for pre-1.0 type moves.
+ * Cross-domain validation types shared by the public validation surfaces.
  *
- * Import new types from their owning domain modules instead:
- * - `./policy.ts`
- * - `./name-constraints.ts`
- * - `./identity.ts`
- * - `./revocation.ts`
- *
- * Remove this file once internal and external callers finish migrating.
+ * This module keeps shared validation structures in one place so verify, identity, and
+ * revocation APIs stay aligned.
  */
 
 export type {

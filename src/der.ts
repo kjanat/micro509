@@ -1,5 +1,21 @@
+/**
+ * Low-level DER encoding and reading helpers shared across the library.
+ *
+ * These utilities build and traverse ASN.1 TLV structures without pulling in external
+ * dependencies.
+ */
+
+/**
+ * Defines the default max der depth used by this module.
+ */
 export const DEFAULT_MAX_DER_DEPTH = 64;
 
+/**
+ * Encodes length.
+ *
+ * @param length The length value.
+ * @returns The encoded length.
+ */
 export function encodeLength(length: number): Uint8Array {
 	assertNonNegativeSafeInteger(length, 'DER length');
 	if (length < 128) {
@@ -10,6 +26,12 @@ export function encodeLength(length: number): Uint8Array {
 	return Uint8Array.of(0x80 | parts.length, ...parts);
 }
 
+/**
+ * Concatenates bytes.
+ *
+ * @param parts The parts value.
+ * @returns The computed value.
+ */
 export function concatBytes(parts: readonly Uint8Array[]): Uint8Array {
 	const length = parts.reduce((sum, part) => sum + part.length, 0);
 	const out = new Uint8Array(length);
@@ -21,14 +43,33 @@ export function concatBytes(parts: readonly Uint8Array[]): Uint8Array {
 	return out;
 }
 
+/**
+ * TLV.
+ *
+ * @param tag The tag value.
+ * @param value The value to process.
+ * @returns The computed value.
+ */
 export function tlv(tag: number, value: Uint8Array): Uint8Array {
 	return concatBytes([Uint8Array.of(tag), encodeLength(value.length), value]);
 }
 
+/**
+ * Sequence.
+ *
+ * @param parts The parts value.
+ * @returns The computed value.
+ */
 export function sequence(parts: readonly Uint8Array[]): Uint8Array {
 	return tlv(0x30, concatBytes(parts));
 }
 
+/**
+ * Set of.
+ *
+ * @param parts The parts value.
+ * @returns The computed value.
+ */
 export function setOf(parts: readonly Uint8Array[]): Uint8Array {
 	const sorted = parts.slice().sort((a, b) => {
 		const len = Math.min(a.length, b.length);
@@ -41,18 +82,45 @@ export function setOf(parts: readonly Uint8Array[]): Uint8Array {
 	return tlv(0x31, concatBytes(sorted));
 }
 
+/**
+ * Explicit context.
+ *
+ * @param tag The tag value.
+ * @param value The value to process.
+ * @returns The computed value.
+ */
 export function explicitContext(tag: number, value: Uint8Array): Uint8Array {
 	return tlv(0xa0 + tag, value);
 }
 
+/**
+ * Implicit constructed context.
+ *
+ * @param tag The tag value.
+ * @param value The value to process.
+ * @returns The computed value.
+ */
 export function implicitConstructedContext(tag: number, value: Uint8Array): Uint8Array {
 	return tlv(0xa0 + tag, value);
 }
 
+/**
+ * Implicit primitive context.
+ *
+ * @param tag The tag value.
+ * @param value The value to process.
+ * @returns The computed value.
+ */
 export function implicitPrimitiveContext(tag: number, value: Uint8Array): Uint8Array {
 	return tlv(0x80 + tag, value);
 }
 
+/**
+ * Integer.
+ *
+ * @param bytes The raw bytes to process.
+ * @returns The computed value.
+ */
 export function integer(bytes: Uint8Array): Uint8Array {
 	if (bytes.length === 0) {
 		return tlv(0x02, Uint8Array.of(0));
@@ -71,6 +139,12 @@ export function integer(bytes: Uint8Array): Uint8Array {
 	return tlv(0x02, value);
 }
 
+/**
+ * Integer from number.
+ *
+ * @param value The value to process.
+ * @returns The computed value.
+ */
 export function integerFromNumber(value: number): Uint8Array {
 	if (!Number.isSafeInteger(value) || value < 0) {
 		throw new Error('INTEGER must be a non-negative safe integer');
@@ -83,18 +157,42 @@ export function integerFromNumber(value: number): Uint8Array {
 	return integer(Uint8Array.from(encodeBase256(value)));
 }
 
+/**
+ * Bool.
+ *
+ * @param value The value to process.
+ * @returns The computed value.
+ */
 export function bool(value: boolean): Uint8Array {
 	return tlv(0x01, Uint8Array.of(value ? 0xff : 0x00));
 }
 
+/**
+ * Null value.
+ *
+ * @returns The computed value.
+ */
 export function nullValue(): Uint8Array {
 	return tlv(0x05, new Uint8Array());
 }
 
+/**
+ * Octet string.
+ *
+ * @param value The value to process.
+ * @returns The computed value.
+ */
 export function octetString(value: Uint8Array): Uint8Array {
 	return tlv(0x04, value);
 }
 
+/**
+ * Bit string.
+ *
+ * @param value The value to process.
+ * @param unusedBits The unused bits value.
+ * @returns The computed value.
+ */
 export function bitString(value: Uint8Array, unusedBits = 0): Uint8Array {
 	if (unusedBits < 0 || unusedBits > 7) {
 		throw new Error('unusedBits must be between 0 and 7');
@@ -111,10 +209,22 @@ export function bitString(value: Uint8Array, unusedBits = 0): Uint8Array {
 	return tlv(0x03, concatBytes([Uint8Array.of(unusedBits), value]));
 }
 
+/**
+ * UTF-8 string.
+ *
+ * @param value The value to process.
+ * @returns The computed value.
+ */
 export function utf8String(value: string): Uint8Array {
 	return tlv(0x0c, new TextEncoder().encode(value));
 }
 
+/**
+ * Printable string.
+ *
+ * @param value The value to process.
+ * @returns The computed value.
+ */
 export function printableString(value: string): Uint8Array {
 	if (!/^[A-Za-z0-9 '()+,\-./:=?]*$/.test(value)) {
 		throw new Error('Invalid PrintableString: contains characters outside the allowed set');
@@ -122,6 +232,12 @@ export function printableString(value: string): Uint8Array {
 	return tlv(0x13, new TextEncoder().encode(value));
 }
 
+/**
+ * Ia5 string.
+ *
+ * @param value The value to process.
+ * @returns The computed value.
+ */
 export function ia5String(value: string): Uint8Array {
 	for (let i = 0; i < value.length; i++) {
 		if (value.charCodeAt(i) > 0x7f) {
@@ -131,6 +247,12 @@ export function ia5String(value: string): Uint8Array {
 	return tlv(0x16, new TextEncoder().encode(value));
 }
 
+/**
+ * Object identifier.
+ *
+ * @param oid The object identifier.
+ * @returns The computed value.
+ */
 export function objectIdentifier(oid: string): Uint8Array {
 	const segments = oid.split('.').map((segment) => Number(segment));
 	if (segments.length < 2) {
@@ -164,6 +286,12 @@ export function objectIdentifier(oid: string): Uint8Array {
 	return tlv(0x06, Uint8Array.from(bytes));
 }
 
+/**
+ * Utc time.
+ *
+ * @param date The date value.
+ * @returns The computed value.
+ */
 export function utcTime(date: Date): Uint8Array {
 	const value = `${[
 		twoDigits(date.getUTCFullYear() % 100),
@@ -176,6 +304,12 @@ export function utcTime(date: Date): Uint8Array {
 	return tlv(0x17, new TextEncoder().encode(value));
 }
 
+/**
+ * Generalized time.
+ *
+ * @param date The date value.
+ * @returns The computed value.
+ */
 export function generalizedTime(date: Date): Uint8Array {
 	const value = `${[
 		String(date.getUTCFullYear()).padStart(4, '0'),
@@ -188,6 +322,12 @@ export function generalizedTime(date: Date): Uint8Array {
 	return tlv(0x18, new TextEncoder().encode(value));
 }
 
+/**
+ * Time.
+ *
+ * @param date The date value.
+ * @returns The computed value.
+ */
 export function time(date: Date): Uint8Array {
 	if (date.getUTCFullYear() >= 2050 || date.getUTCFullYear() < 1950) {
 		return generalizedTime(date);
@@ -195,10 +335,22 @@ export function time(date: Date): Uint8Array {
 	return utcTime(date);
 }
 
+/**
+ * Two digits.
+ *
+ * @param value The value to process.
+ * @returns The computed value.
+ */
 function twoDigits(value: number): string {
 	return String(value).padStart(2, '0');
 }
 
+/**
+ * Encodes base256.
+ *
+ * @param value The value to process.
+ * @returns The encoded base256.
+ */
 function encodeBase256(value: number): readonly number[] {
 	assertNonNegativeSafeInteger(value, 'DER integer');
 	const parts: number[] = [];
@@ -210,25 +362,71 @@ function encodeBase256(value: number): readonly number[] {
 	return parts;
 }
 
+/**
+ * Describes DER element.
+ */
 export interface DerElement {
+	/**
+	 * Carries the tag value.
+	 */
 	readonly tag: number;
+	/**
+	 * Carries the header length value.
+	 */
 	readonly headerLength: number;
+	/**
+	 * Carries the length value.
+	 */
 	readonly length: number;
+	/**
+	 * Carries the start value.
+	 */
 	readonly start: number;
+	/**
+	 * Carries the end value.
+	 */
 	readonly end: number;
+	/**
+	 * Carries the successful value payload.
+	 */
 	readonly value: Uint8Array;
 }
 
+/**
+ * Configures read sequence children operations.
+ */
 export interface ReadSequenceChildrenOptions {
+	/**
+	 * Carries the max depth value.
+	 */
 	readonly maxDepth?: number;
+	/**
+	 * Carries the allow opaqu e constructed tags value.
+	 */
 	readonly allowOpaqueConstructedTags?: readonly number[];
 }
 
+/**
+ * Configures read root element operations.
+ */
 export interface ReadRootElementOptions {
+	/**
+	 * Carries the max depth value.
+	 */
 	readonly maxDepth?: number;
+	/**
+	 * Carries the allow opaqu e constructed tags value.
+	 */
 	readonly allowOpaqueConstructedTags?: readonly number[];
 }
 
+/**
+ * Read element.
+ *
+ * @param bytes The raw bytes to process.
+ * @param offset The offset value.
+ * @returns The computed value.
+ */
 export function readElement(bytes: Uint8Array, offset = 0): DerElement {
 	const tag = bytes[offset];
 	if (tag === undefined) {
@@ -287,10 +485,22 @@ export function readElement(bytes: Uint8Array, offset = 0): DerElement {
 	};
 }
 
+/**
+ * Assert DER max depth.
+ *
+ * @param bytes The raw bytes to process.
+ * @param maxDepth The max depth value.
+ * @param options The options that control the operation.
+ */
 export function assertDerMaxDepth(
 	bytes: Uint8Array,
 	maxDepth: number = DEFAULT_MAX_DER_DEPTH,
-	options?: { readonly allowOpaqueConstructedTags?: readonly number[] },
+	options?: {
+		/**
+		 * Carries the allow opaqu e constructed tags value.
+		 */
+		readonly allowOpaqueConstructedTags?: readonly number[];
+	},
 ): void {
 	if (!Number.isSafeInteger(maxDepth) || maxDepth < 1) {
 		throw new Error('DER max depth must be a positive safe integer');
@@ -299,9 +509,16 @@ export function assertDerMaxDepth(
 	if (root.end !== bytes.length) {
 		throw new Error('Trailing data after DER element');
 	}
-	const stack: { readonly element: DerElement; readonly depth: number }[] = [
-		{ element: root, depth: 1 },
-	];
+	const stack: {
+		/**
+		 * Carries the element value.
+		 */
+		readonly element: DerElement;
+		/**
+		 * Carries the depth value.
+		 */
+		readonly depth: number;
+	}[] = [{ element: root, depth: 1 }];
 	while (stack.length > 0) {
 		const current = stack.pop();
 		if (current === undefined) {
@@ -344,6 +561,13 @@ export function assertDerMaxDepth(
 	}
 }
 
+/**
+ * Read root element.
+ *
+ * @param bytes The raw bytes to process.
+ * @param options The options that control the operation.
+ * @returns The computed value.
+ */
 export function readRootElement(bytes: Uint8Array, options?: ReadRootElementOptions): DerElement {
 	if (options?.maxDepth !== undefined) {
 		assertDerMaxDepth(bytes, options.maxDepth, options);
@@ -355,6 +579,13 @@ export function readRootElement(bytes: Uint8Array, options?: ReadRootElementOpti
 	return element;
 }
 
+/**
+ * Read sequence children.
+ *
+ * @param bytes The raw bytes to process.
+ * @param options The options that control the operation.
+ * @returns The computed value.
+ */
 export function readSequenceChildren(
 	bytes: Uint8Array,
 	options?: ReadSequenceChildrenOptions,
@@ -380,16 +611,35 @@ export function readSequenceChildren(
 	return children;
 }
 
+/**
+ * Assert non negative safe integer.
+ *
+ * @param value The value to process.
+ * @param label The label value.
+ */
 function assertNonNegativeSafeInteger(value: number, label: string): void {
 	if (!Number.isSafeInteger(value) || value < 0) {
 		throw new Error(`${label} must be a non-negative safe integer`);
 	}
 }
 
+/**
+ * Can treat as opaque leaf.
+ *
+ * @param element The ASN.1 element to process.
+ * @param offset The offset value.
+ * @param options The options that control the operation.
+ * @returns The computed value.
+ */
 function canTreatAsOpaqueLeaf(
 	element: DerElement,
 	offset: number,
-	options?: { readonly allowOpaqueConstructedTags?: readonly number[] },
+	options?: {
+		/**
+		 * Carries the allow opaqu e constructed tags value.
+		 */
+		readonly allowOpaqueConstructedTags?: readonly number[];
+	},
 ): boolean {
 	return (
 		offset === element.start && options?.allowOpaqueConstructedTags?.includes(element.tag) === true

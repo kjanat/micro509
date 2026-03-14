@@ -1,3 +1,9 @@
+/**
+ * Internal PBES2 helpers used by encrypted PKCS#8 and PFX flows.
+ *
+ * This module parses, encodes, encrypts, and decrypts the shipped PBES2 profiles.
+ */
+
 import { decodeIntegerNumber, decodeObjectIdentifier, toArrayBuffer } from './asn1.ts';
 import {
 	integerFromNumber,
@@ -10,33 +16,97 @@ import {
 import { getCrypto } from './keys.ts';
 import { OIDS } from './oids.ts';
 
+/**
+ * Enumerates the supported PBES2 encryption schemes.
+ */
 export type Pbes2EncryptionScheme = 'aes128-cbc' | 'aes192-cbc' | 'aes256-cbc';
 
+/**
+ * Defines PBES2 PRF.
+ */
 export type Pbes2Prf = 'hmac-sha1' | 'hmac-sha256';
 
+/**
+ * Configures PBES2 encryption operations.
+ */
 export interface Pbes2EncryptionOptions {
+	/**
+	 * Carries the password value.
+	 */
 	readonly password: string;
+	/**
+	 * Carries the iterations value.
+	 */
 	readonly iterations?: number;
+	/**
+	 * Carries the salt value.
+	 */
 	readonly salt?: Uint8Array;
+	/**
+	 * Carries the iv value.
+	 */
 	readonly iv?: Uint8Array;
+	/**
+	 * Carries the encryption value.
+	 */
 	readonly encryption?: Pbes2EncryptionScheme;
+	/**
+	 * Carries the prf value.
+	 */
 	readonly prf?: Pbes2Prf;
 }
 
+/**
+ * Describes PBES2 parameters handled by this module.
+ */
 export interface Pbes2Parameters {
+	/**
+	 * Carries the iterations value.
+	 */
 	readonly iterations: number;
+	/**
+	 * Carries the salt value.
+	 */
 	readonly salt: Uint8Array;
+	/**
+	 * Carries the iv value.
+	 */
 	readonly iv: Uint8Array;
+	/**
+	 * Carries the encryption value.
+	 */
 	readonly encryption: Pbes2EncryptionScheme;
+	/**
+	 * Carries the prf value.
+	 */
 	readonly prf: Pbes2Prf;
 }
 
+/**
+ * Represents the result returned by PBES2 encryption operations.
+ */
 export interface Pbes2EncryptionResult {
+	/**
+	 * Carries the DER-encoded algorithm identifier.
+	 */
 	readonly algorithmIdentifierDer: Uint8Array;
+	/**
+	 * Carries the encrypted data value.
+	 */
 	readonly encryptedData: Uint8Array;
+	/**
+	 * Carries the parameters value.
+	 */
 	readonly parameters: Pbes2Parameters;
 }
 
+/**
+ * Encrypt PBES2.
+ *
+ * @param data The raw bytes to process.
+ * @param options The options that control the operation.
+ * @returns The computed value.
+ */
 export async function encryptPbes2(
 	data: Uint8Array,
 	options: Pbes2EncryptionOptions,
@@ -67,6 +137,14 @@ export async function encryptPbes2(
 	};
 }
 
+/**
+ * Decrypt PBES2.
+ *
+ * @param algorithmIdentifierDer The algorithm identifier DER value.
+ * @param encryptedData The encrypted data value.
+ * @param password The password used to protect or unlock the data.
+ * @returns The computed value.
+ */
 export async function decryptPbes2(
 	algorithmIdentifierDer: Uint8Array,
 	encryptedData: Uint8Array,
@@ -94,6 +172,12 @@ export async function decryptPbes2(
 	}
 }
 
+/**
+ * Encodes PBES2 algorithm identifier.
+ *
+ * @param parameters The parameters value.
+ * @returns The encoded PBES2 algorithm identifier.
+ */
 export function encodePbes2AlgorithmIdentifier(parameters: Pbes2Parameters): Uint8Array {
 	const encryption = resolveEncryptionProfile(parameters.encryption);
 	const prf = resolvePrfProfile(parameters.prf);
@@ -114,6 +198,12 @@ export function encodePbes2AlgorithmIdentifier(parameters: Pbes2Parameters): Uin
 	]);
 }
 
+/**
+ * Parses PBES2 algorithm identifier.
+ *
+ * @param algorithmIdentifierDer The algorithm identifier DER value.
+ * @returns The parsed PBES2 algorithm identifier.
+ */
 export function parsePbes2AlgorithmIdentifier(algorithmIdentifierDer: Uint8Array): Pbes2Parameters {
 	const topLevel = readSequenceChildren(algorithmIdentifierDer);
 	const oid = topLevel[0];
@@ -181,6 +271,17 @@ export function parsePbes2AlgorithmIdentifier(algorithmIdentifierDer: Uint8Array
 	};
 }
 
+/**
+ * Derives aes key.
+ *
+ * @param password The password used to protect or unlock the data.
+ * @param salt The salt value.
+ * @param iterations The iterations value.
+ * @param encryptionName The encryption name value.
+ * @param prfName The PRF name value.
+ * @param usages The usages value.
+ * @returns The derived aes key.
+ */
 async function deriveAesKey(
 	password: string,
 	salt: Uint8Array,
@@ -212,6 +313,13 @@ async function deriveAesKey(
 	);
 }
 
+/**
+ * Parses PBKDF2 PRF.
+ *
+ * @param pbkdf2Der The PBKDF2 DER value.
+ * @param element The ASN.1 element to process.
+ * @returns The parsed PBKDF2 PRF.
+ */
 function parsePbkdf2Prf(
 	pbkdf2Der: Uint8Array,
 	element: ReturnType<typeof readSequenceChildren>[number] | undefined,
@@ -236,11 +344,29 @@ function parsePbkdf2Prf(
 	return prf;
 }
 
+/**
+ * Encryption scheme from OID.
+ *
+ * @param oid The object identifier.
+ * @returns The computed value.
+ */
 function encryptionSchemeFromOid(oid: string):
 	| {
+			/**
+			 * Carries the name value.
+			 */
 			readonly name: Pbes2EncryptionScheme;
+			/**
+			 * Carries the oid value.
+			 */
 			readonly oid: string;
+			/**
+			 * Carries the key length bits value.
+			 */
 			readonly keyLengthBits: 128 | 192 | 256;
+			/**
+			 * Carries the key length bytes value.
+			 */
 			readonly keyLengthBytes: 16 | 24 | 32;
 	  }
 	| undefined {
@@ -255,6 +381,12 @@ function encryptionSchemeFromOid(oid: string):
 	return undefined;
 }
 
+/**
+ * PRF from OID.
+ *
+ * @param oid The object identifier.
+ * @returns The computed value.
+ */
 function prfFromOid(oid: string): Pbes2Prf | undefined {
 	switch (oid) {
 		case OIDS.hmacWithSHA1:
@@ -265,10 +397,28 @@ function prfFromOid(oid: string): Pbes2Prf | undefined {
 	return undefined;
 }
 
+/**
+ * Resolves encryption profile.
+ *
+ * @param name The name value.
+ * @returns The resolved encryption profile.
+ */
 function resolveEncryptionProfile(name: Pbes2EncryptionScheme): {
+	/**
+	 * Carries the name value.
+	 */
 	readonly name: Pbes2EncryptionScheme;
+	/**
+	 * Carries the oid value.
+	 */
 	readonly oid: string;
+	/**
+	 * Carries the key length bits value.
+	 */
 	readonly keyLengthBits: 128 | 192 | 256;
+	/**
+	 * Carries the key length bytes value.
+	 */
 	readonly keyLengthBytes: 16 | 24 | 32;
 } {
 	const profile = encryptionSchemeFromOid(
@@ -284,8 +434,20 @@ function resolveEncryptionProfile(name: Pbes2EncryptionScheme): {
 	return profile;
 }
 
+/**
+ * Resolves PRF profile.
+ *
+ * @param name The name value.
+ * @returns The resolved PRF profile.
+ */
 function resolvePrfProfile(name: Pbes2Prf): {
+	/**
+	 * Carries the oid value.
+	 */
 	readonly oid: string;
+	/**
+	 * Carries the hash value.
+	 */
 	readonly hash: 'SHA-1' | 'SHA-256';
 } {
 	switch (name) {

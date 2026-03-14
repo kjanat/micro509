@@ -1,3 +1,9 @@
+/**
+ * Higher-level revocation orchestration helpers.
+ *
+ * This module combines CRL and OCSP evidence into one typed revocation result surface.
+ */
+
 import type { Result } from './core/result.ts';
 import type { CrlApplicabilityFailureReason, CrlSource, RevocationReason } from './crl.ts';
 import { checkCertificateRevocationAgainstCrl } from './crl.ts';
@@ -6,56 +12,155 @@ import { validateOcspResponse } from './ocsp.ts';
 import type { ParsedCertificate } from './parse.ts';
 import { parseCertificateDer, parseCertificatePem } from './parse.ts';
 
+/**
+ * Enumerates revocation values used by this module.
+ */
 export type RevocationStatus = 'good' | 'revoked' | 'unknown';
 
+/**
+ * Enumerates revocation evidence values used by this module.
+ */
 export type RevocationEvidenceKind = 'crl' | 'ocsp';
+/**
+ * Describes the accepted source forms for revocation certificate inputs.
+ */
 export type RevocationCertificateSource = string | Uint8Array | ParsedCertificate;
+/**
+ * Describes the accepted source forms for OCSP responder inputs.
+ */
 export type OcspResponderSource = 'configured' | 'authorityInfoAccess';
+/**
+ * Defines configured OCSP responder certificate.
+ */
 export type ConfiguredOcspResponderCertificate = string | Uint8Array;
 
+/**
+ * Describes configured OCSP responder.
+ */
 export interface ConfiguredOcspResponder {
+	/**
+	 * Carries the uri value.
+	 */
 	readonly uri: string;
+	/**
+	 * Carries the responder certificate value.
+	 */
 	readonly responderCertificate?: ConfiguredOcspResponderCertificate;
 }
 
+/**
+ * Describes OCSP responder candidate.
+ */
 export interface OcspResponderCandidate {
+	/**
+	 * Carries the source value.
+	 */
 	readonly source: OcspResponderSource;
+	/**
+	 * Carries the uri value.
+	 */
 	readonly uri: string;
+	/**
+	 * Carries the responder certificate value.
+	 */
 	readonly responderCertificate?: ConfiguredOcspResponderCertificate;
 }
 
+/**
+ * Describes the input shape for resolve OCSP responder candidates operations.
+ */
 export interface ResolveOcspResponderCandidatesInput {
+	/**
+	 * Carries the certificate value.
+	 */
 	readonly certificate: RevocationCertificateSource;
+	/**
+	 * Carries the configured responders value.
+	 */
 	readonly configuredResponders?: readonly ConfiguredOcspResponder[];
 }
 
+/**
+ * Describes the input shape for revocation CRL evidence operations.
+ */
 export interface RevocationCrlEvidenceInput {
+	/**
+	 * Identifies the kind value.
+	 */
 	readonly kind: 'crl';
+	/**
+	 * Carries the crl value.
+	 */
 	readonly crl: CrlSource;
+	/**
+	 * Carries the delta crl value.
+	 */
 	readonly deltaCrl?: CrlSource;
 }
 
+/**
+ * Describes the input shape for revocation OCSP evidence operations.
+ */
 export interface RevocationOcspEvidenceInput {
+	/**
+	 * Identifies the kind value.
+	 */
 	readonly kind: 'ocsp';
+	/**
+	 * Carries the response value.
+	 */
 	readonly response: string | Uint8Array | ParsedOcspResponse;
+	/**
+	 * Carries the request value.
+	 */
 	readonly request?: OcspRequestSource;
+	/**
+	 * Carries the responder certificate value.
+	 */
 	readonly responderCertificate?: OcspCertificateSource;
 }
 
+/**
+ * Describes the input shape for revocation evidence operations.
+ */
 export type RevocationEvidenceInput = RevocationCrlEvidenceInput | RevocationOcspEvidenceInput;
 
+/**
+ * Describes the input shape for check certificate revocation operations.
+ */
 export interface CheckCertificateRevocationInput {
+	/**
+	 * Carries the certificate value.
+	 */
 	readonly certificate: RevocationCertificateSource;
+	/**
+	 * Carries the issuer certificate value.
+	 */
 	readonly issuerCertificate: RevocationCertificateSource;
+	/**
+	 * Carries the evidence value.
+	 */
 	readonly evidence?: readonly RevocationEvidenceInput[];
+	/**
+	 * Carries the at value.
+	 */
 	readonly at?: Date;
+	/**
+	 * Carries the clock skew ms value.
+	 */
 	readonly clockSkewMs?: number;
 }
 
+/**
+ * Enumerates the error codes used by check certificate revocation failures.
+ */
 export type CheckCertificateRevocationErrorCode =
 	| 'revocation_evidence_missing'
 	| 'revocation_status_unknown';
 
+/**
+ * Enumerates the reason codes used by revocation indeterminate failures.
+ */
 export type RevocationIndeterminateReasonCode =
 	| 'certificate_status_missing'
 	| 'certificate_status_unknown'
@@ -72,61 +177,166 @@ export type RevocationIndeterminateReasonCode =
 	| 'stale_crl'
 	| 'stale_response';
 
+/**
+ * Describes revocation indeterminate evidence.
+ */
 export interface RevocationIndeterminateEvidence {
+	/**
+	 * Carries the source value.
+	 */
 	readonly source: RevocationEvidenceKind;
+	/**
+	 * Carries the machine-readable error code.
+	 */
 	readonly code: RevocationIndeterminateReasonCode;
+	/**
+	 * Carries the human-readable error message.
+	 */
 	readonly message: string;
+	/**
+	 * Carries the reason value.
+	 */
 	readonly reason?: CrlApplicabilityFailureReason;
 }
 
+/**
+ * Carries structured details for check certificate revocation failures.
+ */
 export interface CheckCertificateRevocationFailureDetails {
+	/**
+	 * Carries the checked sources value.
+	 */
 	readonly checkedSources: readonly RevocationEvidenceKind[];
+	/**
+	 * Carries the indeterminate evidence value.
+	 */
 	readonly indeterminateEvidence: readonly RevocationIndeterminateEvidence[];
 }
 
+/**
+ * Carries the value returned by revocation check unknown operations.
+ */
 export interface RevocationCheckUnknownValue {
+	/**
+	 * Identifies the status value.
+	 */
 	readonly status: Extract<RevocationStatus, 'unknown'>;
+	/**
+	 * Carries the machine-readable error code.
+	 */
 	readonly code: CheckCertificateRevocationErrorCode;
+	/**
+	 * Carries the human-readable error message.
+	 */
 	readonly message: string;
+	/**
+	 * Carries structured details for the current failure.
+	 */
 	readonly details: CheckCertificateRevocationFailureDetails;
 }
 
+/**
+ * Carries the value returned by revocation check good operations.
+ */
 export interface RevocationCheckGoodValue {
+	/**
+	 * Identifies the status value.
+	 */
 	readonly status: Extract<RevocationStatus, 'good'>;
+	/**
+	 * Carries the source value.
+	 */
 	readonly source: RevocationEvidenceKind;
+	/**
+	 * Carries the human-readable error message.
+	 */
 	readonly message: string;
 }
 
+/**
+ * Carries the value returned by revocation check revoked operations.
+ */
 export interface RevocationCheckRevokedValue {
+	/**
+	 * Identifies the status value.
+	 */
 	readonly status: Extract<RevocationStatus, 'revoked'>;
+	/**
+	 * Carries the source value.
+	 */
 	readonly source: RevocationEvidenceKind;
+	/**
+	 * Carries the human-readable error message.
+	 */
 	readonly message: string;
+	/**
+	 * Carries the revoked at value.
+	 */
 	readonly revokedAt?: Date;
+	/**
+	 * Carries the revocation reason value.
+	 */
 	readonly revocationReason?: RevocationReason;
+	/**
+	 * Carries the revocation reason code value.
+	 */
 	readonly revocationReasonCode?: number;
 }
 
+/**
+ * Carries the value returned by check certificate revocation operations.
+ */
 export type CheckCertificateRevocationValue =
 	| RevocationCheckGoodValue
 	| RevocationCheckRevokedValue
 	| RevocationCheckUnknownValue;
 
+/**
+ * Represents the result returned by check certificate revocation operations.
+ */
 export type CheckCertificateRevocationResult = Result<CheckCertificateRevocationValue, never>;
 
+/**
+ * Defines revocation evidence check.
+ */
 type RevocationEvidenceCheck =
 	| {
+			/**
+			 * Identifies the status value.
+			 */
 			readonly status: 'good';
+			/**
+			 * Carries the result value.
+			 */
 			readonly result: RevocationCheckGoodValue;
 	  }
 	| {
+			/**
+			 * Identifies the status value.
+			 */
 			readonly status: 'revoked';
+			/**
+			 * Carries the result value.
+			 */
 			readonly result: RevocationCheckRevokedValue;
 	  }
 	| {
+			/**
+			 * Identifies the status value.
+			 */
 			readonly status: 'unknown';
+			/**
+			 * Carries the detail value.
+			 */
 			readonly detail: RevocationIndeterminateEvidence;
 	  };
 
+/**
+ * Returns certificate OCSP responder uris.
+ *
+ * @param certificate The certificate input.
+ * @returns The certificate OCSP responder uris.
+ */
 export function getCertificateOcspResponderUris(
 	certificate: RevocationCertificateSource,
 ): readonly string[] {
@@ -143,6 +353,12 @@ export function getCertificateOcspResponderUris(
 	return uris;
 }
 
+/**
+ * Resolves OCSP responder candidates.
+ *
+ * @param input The typed input payload.
+ * @returns The resolved OCSP responder candidates.
+ */
 export function resolveOcspResponderCandidates(
 	input: ResolveOcspResponderCandidatesInput,
 ): readonly OcspResponderCandidate[] {
@@ -182,6 +398,12 @@ export function resolveOcspResponderCandidates(
 	return candidates;
 }
 
+/**
+ * Checks certificate revocation.
+ *
+ * @param input The typed input payload.
+ * @returns The check result.
+ */
 export async function checkCertificateRevocation(
 	input: CheckCertificateRevocationInput,
 ): Promise<CheckCertificateRevocationResult> {
@@ -228,6 +450,13 @@ export async function checkCertificateRevocation(
 	});
 }
 
+/**
+ * Checks certificate revocation with CRL.
+ *
+ * @param input The typed input payload.
+ * @param evidence The evidence value.
+ * @returns The check result.
+ */
 async function checkCertificateRevocationWithCrl(
 	input: CheckCertificateRevocationInput,
 	evidence: RevocationCrlEvidenceInput,
@@ -275,6 +504,13 @@ async function checkCertificateRevocationWithCrl(
 	};
 }
 
+/**
+ * Checks certificate revocation with OCSP.
+ *
+ * @param input The typed input payload.
+ * @param evidence The evidence value.
+ * @returns The check result.
+ */
 async function checkCertificateRevocationWithOcsp(
 	input: CheckCertificateRevocationInput,
 	evidence: RevocationOcspEvidenceInput,
@@ -350,6 +586,12 @@ async function checkCertificateRevocationWithOcsp(
 	};
 }
 
+/**
+ * Normalizes certificate.
+ *
+ * @param certificate The certificate input.
+ * @returns The computed value.
+ */
 function normalizeCertificate(certificate: RevocationCertificateSource): ParsedCertificate {
 	if (typeof certificate === 'string') {
 		return parseCertificatePem(certificate);
@@ -360,11 +602,23 @@ function normalizeCertificate(certificate: RevocationCertificateSource): ParsedC
 	return certificate;
 }
 
+/**
+ * Normalizes hex.
+ *
+ * @param value The value to process.
+ * @returns The computed value.
+ */
 function normalizeHex(value: string): string {
 	const normalized = value.toLowerCase().replace(/^0+/, '');
 	return normalized === '' ? '0' : normalized;
 }
 
+/**
+ * Revocation success.
+ *
+ * @param value The value to process.
+ * @returns The computed value.
+ */
 function revocationSuccess(
 	value: CheckCertificateRevocationValue,
 ): CheckCertificateRevocationResult {

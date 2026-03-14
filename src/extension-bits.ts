@@ -1,6 +1,16 @@
+/**
+ * Bit-string helpers for key-usage and distribution-point reason flags.
+ *
+ * This module centralizes bit ordering so certificate builders and parsers stay aligned on
+ * the same wire encoding.
+ */
+
 import { bitString, DEFAULT_MAX_DER_DEPTH, readRootElement } from './der.ts';
 import type { DistributionPointReason, KeyUsage } from './extensions.ts';
 
+/**
+ * Defines the key usage order used by this module.
+ */
 const KEY_USAGE_ORDER = [
 	'digitalSignature',
 	'nonRepudiation',
@@ -13,6 +23,9 @@ const KEY_USAGE_ORDER = [
 	'decipherOnly',
 ] as const satisfies readonly KeyUsage[];
 
+/**
+ * Defines the distribution point reason order used by this module.
+ */
 const DISTRIBUTION_POINT_REASON_ORDER = [
 	'keyCompromise',
 	'cACompromise',
@@ -24,6 +37,12 @@ const DISTRIBUTION_POINT_REASON_ORDER = [
 	'aACompromise',
 ] as const satisfies readonly DistributionPointReason[];
 
+/**
+ * Encodes key usage extension.
+ *
+ * @param usages The usages value.
+ * @returns The encoded key usage extension.
+ */
 export function encodeKeyUsageExtension(usages: readonly KeyUsage[]): Uint8Array {
 	const encoded = encodeBitFlags(usages, (usage) =>
 		indexInOrder(KEY_USAGE_ORDER, usage, 'key usage'),
@@ -31,6 +50,12 @@ export function encodeKeyUsageExtension(usages: readonly KeyUsage[]): Uint8Array
 	return bitString(encoded.bytes, encoded.unusedBits);
 }
 
+/**
+ * Parses key usage extension.
+ *
+ * @param bytes The raw bytes to process.
+ * @returns The parsed key usage extension.
+ */
 export function parseKeyUsageExtension(bytes: Uint8Array): readonly KeyUsage[] {
 	const bitStringElement = readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH });
 	if (bitStringElement.tag !== 0x03) {
@@ -39,6 +64,12 @@ export function parseKeyUsageExtension(bytes: Uint8Array): readonly KeyUsage[] {
 	return decodeBitFlags(bitStringElement.value, KEY_USAGE_ORDER, 0);
 }
 
+/**
+ * Encodes distribution point reason flags content.
+ *
+ * @param reasons The reasons value.
+ * @returns The encoded distribution point reason flags content.
+ */
 export function encodeDistributionPointReasonFlagsContent(
 	reasons: readonly DistributionPointReason[],
 ): Uint8Array {
@@ -50,6 +81,12 @@ export function encodeDistributionPointReasonFlagsContent(
 	return Uint8Array.of(encoded.unusedBits, ...encoded.bytes);
 }
 
+/**
+ * Parses distribution point reason flags content.
+ *
+ * @param value The value to process.
+ * @returns The parsed distribution point reason flags content.
+ */
 export function parseDistributionPointReasonFlagsContent(
 	value: Uint8Array,
 ): readonly DistributionPointReason[] | undefined {
@@ -57,10 +94,26 @@ export function parseDistributionPointReasonFlagsContent(
 	return reasons.length === 0 ? undefined : reasons;
 }
 
+/**
+ * Encodes bit flags.
+ *
+ * @param values The values to process.
+ * @param bitForValue The bit for value value.
+ * @returns The encoded bit flags.
+ */
 function encodeBitFlags<T extends string>(
 	values: readonly T[],
 	bitForValue: (value: T) => number,
-): { readonly bytes: Uint8Array; readonly unusedBits: number } {
+): {
+	/**
+	 * Carries the bytes value.
+	 */
+	readonly bytes: Uint8Array;
+	/**
+	 * Carries the unused bits value.
+	 */
+	readonly unusedBits: number;
+} {
 	let highestBit = 0;
 	for (const value of values) {
 		const bit = bitForValue(value);
@@ -83,6 +136,14 @@ function encodeBitFlags<T extends string>(
 	};
 }
 
+/**
+ * Decodes bit flags.
+ *
+ * @param value The value to process.
+ * @param candidates The candidates value.
+ * @param bitOffset The bit offset value.
+ * @returns The decoded bit flags.
+ */
 function decodeBitFlags<T extends string>(
 	value: Uint8Array,
 	candidates: readonly T[],
@@ -108,6 +169,14 @@ function decodeBitFlags<T extends string>(
 	return out;
 }
 
+/**
+ * Index in order.
+ *
+ * @param order The order value.
+ * @param value The value to process.
+ * @param label The label value.
+ * @returns The computed value.
+ */
 function indexInOrder<T extends string>(order: readonly T[], value: T, label: string): number {
 	const index = order.indexOf(value);
 	if (index < 0) {

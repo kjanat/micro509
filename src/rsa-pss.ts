@@ -1,3 +1,10 @@
+/**
+ * Internal RSA-PSS parameter helpers.
+ *
+ * This module parses, validates, and encodes the shipped RSA-PSS `AlgorithmIdentifier`
+ * parameter profiles.
+ */
+
 import {
 	childrenOf,
 	decodeNonNegativeIntegerNumber,
@@ -15,28 +22,73 @@ import {
 } from './der.ts';
 import { OIDS } from './oids.ts';
 
+/**
+ * Enumerates the supported RSA PSS hash values.
+ */
 export type RsaPssHash = 'SHA-256' | 'SHA-384' | 'SHA-512';
 
+/**
+ * Describes RSA PSS parameters handled by this module.
+ */
 export type RsaPssParameters =
 	| {
+			/**
+			 * Carries the hash value.
+			 */
 			readonly hash: 'SHA-256';
+			/**
+			 * Carries the mgf hash value.
+			 */
 			readonly mgfHash: 'SHA-256';
+			/**
+			 * Carries the salt length value.
+			 */
 			readonly saltLength: 32;
+			/**
+			 * Carries the trailer field value.
+			 */
 			readonly trailerField: 1;
 	  }
 	| {
+			/**
+			 * Carries the hash value.
+			 */
 			readonly hash: 'SHA-384';
+			/**
+			 * Carries the mgf hash value.
+			 */
 			readonly mgfHash: 'SHA-384';
+			/**
+			 * Carries the salt length value.
+			 */
 			readonly saltLength: 48;
+			/**
+			 * Carries the trailer field value.
+			 */
 			readonly trailerField: 1;
 	  }
 	| {
+			/**
+			 * Carries the hash value.
+			 */
 			readonly hash: 'SHA-512';
+			/**
+			 * Carries the mgf hash value.
+			 */
 			readonly mgfHash: 'SHA-512';
+			/**
+			 * Carries the salt length value.
+			 */
 			readonly saltLength: 64;
+			/**
+			 * Carries the trailer field value.
+			 */
 			readonly trailerField: 1;
 	  };
 
+/**
+ * Enumerates unsupported RSA PSS parameters values used by this module.
+ */
 export type UnsupportedRsaPssParametersReason =
 	| 'default_hash_sha1'
 	| 'unsupported_hash'
@@ -46,35 +98,89 @@ export type UnsupportedRsaPssParametersReason =
 	| 'unsupported_salt_length'
 	| 'unsupported_trailer_field';
 
+/**
+ * Represents a successful outcome produced by parsed RSA PSS parameters operations.
+ */
 export interface ParsedRsaPssParametersSuccess {
+	/**
+	 * Indicates whether the operation succeeded.
+	 */
 	readonly ok: true;
+	/**
+	 * Carries the successful value payload.
+	 */
 	readonly value: RsaPssParameters;
 }
 
+/**
+ * Describes the structured RSA PSS parameters unsupported produced by parsing helpers.
+ */
 export interface ParsedRsaPssParametersUnsupported {
+	/**
+	 * Indicates whether the operation succeeded.
+	 */
 	readonly ok: false;
+	/**
+	 * Carries the machine-readable error code.
+	 */
 	readonly code: 'unsupported_rsa_pss_parameters';
+	/**
+	 * Carries the reason value.
+	 */
 	readonly reason: UnsupportedRsaPssParametersReason;
 }
 
+/**
+ * Describes the structured RSA PSS parameters malformed produced by parsing helpers.
+ */
 export interface ParsedRsaPssParametersMalformed {
+	/**
+	 * Indicates whether the operation succeeded.
+	 */
 	readonly ok: false;
+	/**
+	 * Carries the machine-readable error code.
+	 */
 	readonly code: 'malformed_rsa_pss_parameters';
+	/**
+	 * Carries the reason value.
+	 */
 	readonly reason: string;
 }
 
+/**
+ * Represents the result returned by parsed RSA PSS parameters operations.
+ */
 export type ParsedRsaPssParametersResult =
 	| ParsedRsaPssParametersSuccess
 	| ParsedRsaPssParametersUnsupported
 	| ParsedRsaPssParametersMalformed;
 
+/**
+ * Describes the structured mask gen algorithm produced by parsing helpers.
+ */
 interface ParsedMaskGenAlgorithm {
+	/**
+	 * Carries the oid value.
+	 */
 	readonly oid: string;
+	/**
+	 * Carries the OID for hash.
+	 */
 	readonly hashOid?: string;
 }
 
+/**
+ * Defines the sha-1 salt length used by this module.
+ */
 const SHA1_SALT_LENGTH = 20;
 
+/**
+ * RSA PSS parameters for hash.
+ *
+ * @param hash The hash value.
+ * @returns The computed value.
+ */
 export function rsaPssParametersForHash(hash: RsaPssHash): RsaPssParameters {
 	switch (hash) {
 		case 'SHA-256':
@@ -101,6 +207,12 @@ export function rsaPssParametersForHash(hash: RsaPssHash): RsaPssParameters {
 	}
 }
 
+/**
+ * Encodes RSA PSS parameters.
+ *
+ * @param parameters The parameters value.
+ * @returns The encoded RSA PSS parameters.
+ */
 export function encodeRsaPssParameters(parameters: RsaPssParameters): Uint8Array {
 	const hashOid = hashOidForName(parameters.hash);
 	const hashAlgorithmIdentifier = encodeHashAlgorithmIdentifier(hashOid);
@@ -115,6 +227,12 @@ export function encodeRsaPssParameters(parameters: RsaPssParameters): Uint8Array
 	]);
 }
 
+/**
+ * Parses RSA PSS parameters.
+ *
+ * @param parametersDer The parameters DER value.
+ * @returns The parsed RSA PSS parameters.
+ */
 export function parseRsaPssParameters(
 	parametersDer: Uint8Array | undefined,
 ): ParsedRsaPssParametersResult {
@@ -129,7 +247,16 @@ export function parseRsaPssParameters(
 		}
 		const children = childrenOf(parametersDer, element);
 		let hashOid: string = OIDS.sha1;
-		let maskGenAlgorithm: ParsedMaskGenAlgorithm = { oid: OIDS.mgf1, hashOid: OIDS.sha1 };
+		let maskGenAlgorithm: ParsedMaskGenAlgorithm = {
+			/**
+			 * Carries the oid value.
+			 */
+			oid: OIDS.mgf1,
+			/**
+			 * Carries the OID for hash.
+			 */
+			hashOid: OIDS.sha1,
+		};
 		let saltLength = SHA1_SALT_LENGTH;
 		let trailerField = 1;
 		let sawHash = false;
@@ -225,6 +352,14 @@ export function parseRsaPssParameters(
 	}
 }
 
+/**
+ * Requires and returns single explicit child.
+ *
+ * @param source The source value to process.
+ * @param element The ASN.1 element to process.
+ * @param label The label value.
+ * @returns The computed value.
+ */
 function requireSingleExplicitChild(
 	source: Uint8Array,
 	element: ReturnType<typeof readRootElement>,
@@ -237,6 +372,15 @@ function requireSingleExplicitChild(
 	return requireElement(children[0], `RSA-PSS ${label}`);
 }
 
+/**
+ * Parses explicit integer.
+ *
+ * @param source The source value to process.
+ * @param element The ASN.1 element to process.
+ * @param label The label value.
+ * @param integerLabel The integer label value.
+ * @returns The parsed explicit integer.
+ */
 function parseExplicitInteger(
 	source: Uint8Array,
 	element: ReturnType<typeof readRootElement>,
@@ -250,6 +394,14 @@ function parseExplicitInteger(
 	return decodeNonNegativeIntegerNumber(integerElement.value, integerLabel);
 }
 
+/**
+ * Parses hash algorithm identifier.
+ *
+ * @param source The source value to process.
+ * @param element The ASN.1 element to process.
+ * @param label The label value.
+ * @returns The parsed hash algorithm identifier.
+ */
 function parseHashAlgorithmIdentifier(
 	source: Uint8Array,
 	element: ReturnType<typeof readRootElement>,
@@ -266,6 +418,13 @@ function parseHashAlgorithmIdentifier(
 	return decodeObjectIdentifier(oid.value);
 }
 
+/**
+ * Parses mask gen algorithm identifier.
+ *
+ * @param source The source value to process.
+ * @param element The ASN.1 element to process.
+ * @returns The parsed mask gen algorithm identifier.
+ */
 function parseMaskGenAlgorithmIdentifier(
 	source: Uint8Array,
 	element: ReturnType<typeof readRootElement>,
@@ -286,10 +445,22 @@ function parseMaskGenAlgorithmIdentifier(
 	return { oid, hashOid: parseHashAlgorithmIdentifier(source, parameters, 'MGF1 hashAlgorithm') };
 }
 
+/**
+ * Encodes hash algorithm identifier.
+ *
+ * @param oid The object identifier.
+ * @returns The encoded hash algorithm identifier.
+ */
 function encodeHashAlgorithmIdentifier(oid: string): Uint8Array {
 	return sequence([objectIdentifier(oid), nullValue()]);
 }
 
+/**
+ * Hash OID for name.
+ *
+ * @param hash The hash value.
+ * @returns The computed value.
+ */
 function hashOidForName(hash: RsaPssHash): string {
 	switch (hash) {
 		case 'SHA-256':
@@ -301,6 +472,12 @@ function hashOidForName(hash: RsaPssHash): string {
 	}
 }
 
+/**
+ * Hash name from OID.
+ *
+ * @param oid The object identifier.
+ * @returns The computed value.
+ */
 function hashNameFromOid(oid: string | undefined): RsaPssHash | undefined {
 	switch (oid) {
 		case OIDS.sha256:
@@ -314,6 +491,12 @@ function hashNameFromOid(oid: string | undefined): RsaPssHash | undefined {
 	}
 }
 
+/**
+ * Unsupported result.
+ *
+ * @param reason The reason value.
+ * @returns The unsupported-result wrapper.
+ */
 function unsupportedResult(
 	reason: UnsupportedRsaPssParametersReason,
 ): ParsedRsaPssParametersUnsupported {

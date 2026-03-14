@@ -1,5 +1,19 @@
+/**
+ * Internal ECDSA signature conversion helpers.
+ *
+ * This module normalizes between DER-encoded ASN.1 signatures and the fixed-width raw
+ * signatures used by WebCrypto.
+ */
+
 import { integer, readSequenceChildren, sequence } from './der.ts';
 
+/**
+ * DER ECDSA signature to raw.
+ *
+ * @param signature The signature value.
+ * @param partLength The part length value.
+ * @returns The computed value.
+ */
 export function derEcdsaSignatureToRaw(signature: Uint8Array, partLength: number): Uint8Array {
 	const parts = readSequenceChildren(signature);
 	const r = parts[0];
@@ -10,6 +24,13 @@ export function derEcdsaSignatureToRaw(signature: Uint8Array, partLength: number
 	return concatFixedWidth(trimLeadingZero(r.value), trimLeadingZero(s.value), partLength);
 }
 
+/**
+ * Raw ECDSA signature to DER.
+ *
+ * @param signature The signature value.
+ * @param partLength The part length value.
+ * @returns The computed value.
+ */
 export function rawEcdsaSignatureToDer(signature: Uint8Array, partLength: number): Uint8Array {
 	if (signature.length !== partLength * 2) {
 		throw new Error('Unexpected ECDSA raw signature length');
@@ -17,6 +38,13 @@ export function rawEcdsaSignatureToDer(signature: Uint8Array, partLength: number
 	return sequence([integer(signature.slice(0, partLength)), integer(signature.slice(partLength))]);
 }
 
+/**
+ * Alternate ECDSA signature encoding.
+ *
+ * @param signature The signature value.
+ * @param partLength The part length value.
+ * @returns The computed value.
+ */
 export function alternateEcdsaSignatureEncoding(
 	signature: Uint8Array,
 	partLength: number,
@@ -31,6 +59,14 @@ export function alternateEcdsaSignatureEncoding(
 	}
 }
 
+/**
+ * Concatenates fixed width.
+ *
+ * @param left The left value.
+ * @param right The right value.
+ * @param partLength The part length value.
+ * @returns The computed value.
+ */
 export function concatFixedWidth(
 	left: Uint8Array,
 	right: Uint8Array,
@@ -45,6 +81,12 @@ export function concatFixedWidth(
 	return out;
 }
 
+/**
+ * Trims leading zero.
+ *
+ * @param bytes The raw bytes to process.
+ * @returns The computed value.
+ */
 function trimLeadingZero(bytes: Uint8Array): Uint8Array {
 	let index = 0;
 	while (index < bytes.length - 1 && bytes[index] === 0) {

@@ -1,3 +1,13 @@
+/**
+ * Object identifier registry used throughout the library.
+ *
+ * This module centralizes the ASN.1 OIDs referenced by create, parse, verify, and
+ * container flows.
+ */
+
+/**
+ * Maps the ASN.1 object identifiers referenced across the library.
+ */
 const OIDS = {
 	commonName: '2.5.4.3',
 	surname: '2.5.4.4',

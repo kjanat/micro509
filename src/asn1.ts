@@ -1,7 +1,23 @@
+/**
+ * ASN.1 decoding helpers used by the higher-level DER, parse, and crypto modules.
+ *
+ * These utilities stay intentionally small and strict so malformed input fails early and
+ * higher-level modules can build on one consistent decoding layer.
+ */
+
 import { type DerElement, readElement } from './der.ts';
 
+/**
+ * Stores the shared UTF-8 text decoder used by this module.
+ */
 const textDecoder = new TextDecoder();
 
+/**
+ * Decodes object identifier.
+ *
+ * @param bytes The raw bytes to process.
+ * @returns The decoded object identifier.
+ */
 export function decodeObjectIdentifier(bytes: Uint8Array): string {
 	const first = bytes[0];
 	if (first === undefined) {
@@ -30,16 +46,35 @@ export function decodeObjectIdentifier(bytes: Uint8Array): string {
 	return values.join('.');
 }
 
+/**
+ * To hex.
+ *
+ * @param bytes The raw bytes to process.
+ * @returns The computed value.
+ */
 export function toHex(bytes: Uint8Array): string {
 	return Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('');
 }
 
+/**
+ * To array buffer.
+ *
+ * @param bytes The raw bytes to process.
+ * @returns The computed value.
+ */
 export function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
 	const out = new ArrayBuffer(bytes.length);
 	new Uint8Array(out).set(bytes);
 	return out;
 }
 
+/**
+ * Children of.
+ *
+ * @param source The source value to process.
+ * @param parent The parent value.
+ * @returns The computed value.
+ */
 export function childrenOf(source: Uint8Array, parent: DerElement): DerElement[] {
 	const children: DerElement[] = [];
 	let offset = parent.start;
@@ -57,6 +92,13 @@ export function childrenOf(source: Uint8Array, parent: DerElement): DerElement[]
 	return children;
 }
 
+/**
+ * Requires and returns element.
+ *
+ * @param value The value to process.
+ * @param label The label value.
+ * @returns The computed value.
+ */
 export function requireElement<T>(value: T | undefined, label: string): T {
 	if (value === undefined) {
 		throw new Error(`Missing ${label}`);
@@ -64,6 +106,12 @@ export function requireElement<T>(value: T | undefined, label: string): T {
 	return value;
 }
 
+/**
+ * Extract bit string value.
+ *
+ * @param element The ASN.1 element to process.
+ * @returns The computed value.
+ */
 export function extractBitStringValue(element: DerElement): Uint8Array {
 	if (element.tag !== 0x03) {
 		throw new Error('Expected BIT STRING');
@@ -71,6 +119,12 @@ export function extractBitStringValue(element: DerElement): Uint8Array {
 	return element.value.slice(1);
 }
 
+/**
+ * Parses time.
+ *
+ * @param element The ASN.1 element to process.
+ * @returns The parsed time.
+ */
 export function parseTime(element: DerElement): Date {
 	const value = textDecoder.decode(element.value);
 	if (element.tag === 0x17) {
@@ -93,6 +147,12 @@ export function parseTime(element: DerElement): Date {
 	throw new Error(`Unsupported time tag: ${element.tag}`);
 }
 
+/**
+ * Decodes integer number.
+ *
+ * @param bytes The raw bytes to process.
+ * @returns The decoded integer number.
+ */
 export function decodeIntegerNumber(bytes: Uint8Array): number {
 	if (bytes.length > 6) {
 		throw new Error(`Integer too large for safe number (${bytes.length} bytes)`);
@@ -104,6 +164,13 @@ export function decodeIntegerNumber(bytes: Uint8Array): number {
 	return value;
 }
 
+/**
+ * Decodes non negative integer number.
+ *
+ * @param bytes The raw bytes to process.
+ * @param label The label value.
+ * @returns The decoded non negative integer number.
+ */
 export function decodeNonNegativeIntegerNumber(bytes: Uint8Array, label = 'INTEGER'): number {
 	const first = bytes[0];
 	if (first === undefined) {
@@ -118,6 +185,12 @@ export function decodeNonNegativeIntegerNumber(bytes: Uint8Array, label = 'INTEG
 	return decodeIntegerNumber(bytes);
 }
 
+/**
+ * Hex to bytes.
+ *
+ * @param value The value to process.
+ * @returns The computed value.
+ */
 export function hexToBytes(value: string): Uint8Array {
 	const normalized = value.length % 2 === 0 ? value : `0${value}`;
 	const out = new Uint8Array(normalized.length / 2);
@@ -127,10 +200,23 @@ export function hexToBytes(value: string): Uint8Array {
 	return out;
 }
 
+/**
+ * Decodes boolean.
+ *
+ * @param bytes The raw bytes to process.
+ * @returns The decoded boolean.
+ */
 export function decodeBoolean(bytes: Uint8Array): boolean {
 	return (bytes[0] ?? 0) !== 0;
 }
 
+/**
+ * Decodes string.
+ *
+ * @param tag The tag value.
+ * @param bytes The raw bytes to process.
+ * @returns The decoded string.
+ */
 export function decodeString(tag: number, bytes: Uint8Array): string {
 	switch (tag) {
 		case 0x0c:
