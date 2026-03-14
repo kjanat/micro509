@@ -385,6 +385,9 @@ Primary types:
 
 ## Examples
 
-Minimal examples live in `README.md`.
+Minimal examples live in [`README.md`].
 
-For deeper scope notes and standards boundaries, see `docs/PKIX-SCOPE.md`.
+For deeper scope notes and standards boundaries, see [`docs/PKIX-SCOPE.md`].
+
+[`README.md`]: ../README.md
+[`docs/PKIX-SCOPE.md`]: ./PKIX-SCOPE.md

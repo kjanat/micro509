@@ -1,10 +1,13 @@
 # test/ - Test Map
 
-Feature-oriented Bun suites plus shared helpers, oracle adapters, and vendored PKITS fixtures.
+Feature-oriented Bun suites plus shared helpers, oracle adapters, and vendored
+PKITS fixtures.
 
 ## OVERVIEW
 
-Tests mirror source domains with one main `*.test.ts` per feature area. Coverage mixes public API checks, intentional internal probes, fixed fixtures, and differential checks against OpenSSL.
+Tests mirror source domains with one main `*.test.ts` per feature area.\
+Coverage mixes public API checks, intentional internal probes, fixed fixtures,
+and differential checks against OpenSSL.
 
 ## STRUCTURE
 
@@ -35,15 +38,21 @@ test/
 - Use `bun:test` directly; no mocking framework.
 - Prefer real keys/certs/CRLs/OCSP payloads, often synthesized in-process.
 - Assert typed result objects and error codes, not human-readable strings.
-- Internal imports through `#micro509/*.ts` are acceptable when validating low-level invariants.
-- Shared helpers belong in `helpers.ts`; OpenSSL process wrappers belong in `oracles/`.
-- Differential tests compare normalized semantics only, never exact CLI stderr/stdout.
-- PKITS cases run at fixed `2011-04-15T00:00:00Z`; do not casually change harness time.
+- Internal imports through `#micro509/*.ts` are acceptable when validating
+  low-level invariants.
+- Shared helpers belong in `helpers.ts`; OpenSSL process wrappers belong in
+  `oracles/`.
+- Differential tests compare normalized semantics only, never exact CLI
+  stderr/stdout.
+- PKITS cases run at fixed `2011-04-15T00:00:00Z`; do not casually change
+  harness time.
 
 ## ANTI-PATTERNS
 
 - No mocks.
 - No `await expect()`.
 - Do not overfit to OpenSSL text output.
-- Do not hide expected failure reasons behind generic booleans when a typed code exists.
-- Do not drop vendored PKITS naming; upstream-style names are part of the harness contract.
+- Do not hide expected failure reasons behind generic booleans when a typed code
+  exists.
+- Do not drop vendored PKITS naming; upstream-style names are part of the
+  harness contract.

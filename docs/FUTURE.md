@@ -1,6 +1,6 @@
 # Future work
 
-Implementation-ready master plan: `specs/full-standards-compliance.md`.
+Implementation-ready master plan: [`specs/full-standards-compliance.md`].
 
 ## Immediate ultra-savage moves
 
@@ -87,3 +87,5 @@ validation boundary into network behavior.
 - [ ] Certificate transparency / SCT parsing
 - [ ] Timestamp / TSA structures
 - [ ] More complete CMS / ASN.1 utility coverage if the library grows beyond PKIX core
+
+[`specs/full-standards-compliance.md`]: ../specs/full-standards-compliance.md

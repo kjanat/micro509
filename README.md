@@ -114,12 +114,13 @@ The core stays ESM-only and side-effect-free.
 | Area                           | Shipped support                                                      |
 | ------------------------------ | -------------------------------------------------------------------- |
 | Certificate and CSR signatures | RSA PKCS#1 v1.5, RSA-PSS, ECDSA `P-256` / `P-384` / `P-521`, Ed25519 |
-| RSA key APIs                   | `scheme: 'pkcs1-v1_5'                                                |
+| RSA key APIs                   | `scheme: 'pkcs1-v1_5'`                                               |
 | ECDSA key APIs                 | `P-256`, `P-384`, `P-521`                                            |
 | Encrypted PKCS#8 and PFX       | PBES2 with AES-CBC plus PBKDF2 HMAC-SHA1/HMAC-SHA256                 |
 | Encrypted traditional PEM      | AES-128-CBC, AES-192-CBC, AES-256-CBC for RSA and EC private keys    |
 
-`micro509` does not try to mirror every primitive some WebCrypto runtimes expose. It does not add `DSA`, `Ed448`, `RSA-OAEP`, `ECDH`, `X25519`, or generic symmetric-crypto APIs just because they may exist elsewhere.
+`micro509` does not try to mirror every primitive some WebCrypto runtimes expose.\
+It does not add `DSA`, `Ed448`, `RSA-OAEP`, `ECDH`, `X25519`, or generic symmetric-crypto APIs just because they may exist elsewhere.
 
 ## Standards status
 
@@ -130,7 +131,8 @@ The core stays ESM-only and side-effect-free.
 | RFC 6125 service identity  | `partial` |
 | RFC 9618 policy validation | `partial` |
 
-See `docs/PKIX-SCOPE.md` for the detailed scope boundary and `docs/API.md` for the public module surface.
+See [`docs/PKIX-SCOPE.md`](./docs/PKIX-SCOPE.md) for the detailed scope boundary
+and [`docs/API.md`](./docs/API.md) for the public module surface.
 
 ## Imports
 
@@ -149,15 +151,15 @@ import { parseCertificatePem } from 'micro509/parse';
 import { generateKeyPair } from 'micro509/keys';
 ```
 
-The full stable subpath list lives in `docs/API.md`.
+The full stable subpath list lives in [`docs/API.md`](./docs/API.md).
 
 ## More docs
 
-- API reference: `docs/API.md`
-- Standards scope: `docs/PKIX-SCOPE.md`
-- PKITS harness notes: `docs/PKITS-HARNESS.md`
-- Differential harness notes: `docs/DIFF-HARNESS.md`
-- Contributing: `CONTRIBUTING.md`
+- API reference: [`docs/API.md`](./docs/API.md)
+- Standards scope: [`docs/PKIX-SCOPE.md`](./docs/PKIX-SCOPE.md)
+- PKITS harness notes: [`docs/PKITS-HARNESS.md`](./docs/PKITS-HARNESS.md)
+- Differential harness notes: [`docs/DIFF-HARNESS.md`](./docs/DIFF-HARNESS.md)
+- Contributing: [`CONTRIBUTING.md`](./CONTRIBUTING.md)
 
 ## Contributing
 

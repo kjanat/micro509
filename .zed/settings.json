@@ -9,16 +9,17 @@
 			}
 		}
 	],
+	"wrap_guides": [100],
 	"prettier": { "allowed": false },
 	"languages": {
 		"TypeScript": {
-			"wrap_guides": [100],
 			"format_on_save": "on",
 			"formatter": [
 				{ "code_action": "fixAll.biome" },
 				{ "code_action": "organizeImports.biome" },
 				{ "external": { "command": "dprint", "arguments": ["fmt", "--stdin", "{buffer_path}"] } }
 			]
-		}
+		},
+		"Markdown": { "wrap_guides": [80] }
 	}
 }

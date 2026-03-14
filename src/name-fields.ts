@@ -8,7 +8,7 @@
  */
 
 import { ia5String, printableString, utf8String } from './der.ts';
-import type { NameFieldKey } from './name.ts';
+import type { NameFieldKey, NameObject } from './name.ts';
 import { OIDS } from './oids.ts';
 
 /**

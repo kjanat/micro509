@@ -10,7 +10,7 @@
 import type { GeneralSubtree } from './extensions.ts';
 
 /**
- * Input for {@link createNameConstraintValidationState}.
+ * Input for `createNameConstraintValidationState`.
  *
  * Seeds the name-constraint engine with trust-anchor-level subtree
  * restrictions that apply before any certificate in the chain is processed.

@@ -1,8 +1,8 @@
 # PKITS Harness
 
-Focused PKITS coverage lives in `test/pkits.test.ts`.
+Focused PKITS coverage lives in [`test/pkits.test.ts`].
 
-- Source fixtures: vendored from BoringSSL's mirrored NIST PKITS corpus under [`test/fixtures/pkits/certs/`](../test/fixtures/pkits/certs/).
+- Source fixtures: vendored from BoringSSL's mirrored NIST PKITS corpus under [`test/fixtures/pkits/certs/`].
 - Scope: only shipped path-validation claims today - signature/path basics, RFC 9618 policy handling, and RFC 5280 name constraints.
 - Runtime: `bun test test/pkits.test.ts`
 - Validation time: all cases run at `2011-04-15T00:00:00Z`, matching the PKITS publication-time convention used by BoringSSL's harness.
@@ -28,4 +28,7 @@ Focused PKITS coverage lives in `test/pkits.test.ts`.
 - `NIST test policy 2` -> `2.16.840.1.101.3.2.1.48.2`
 - `NIST test policy 4` -> `2.16.840.1.101.3.2.1.48.4`
 
-Those symbolic names come from BoringSSL's PKITS harness and map directly onto the OIDs above in [`test/pkits.test.ts`](../test/pkits.test.ts).
+Those symbolic names come from BoringSSL's PKITS harness and map directly onto the OIDs above in [`test/pkits.test.ts`].
+
+[`test/fixtures/pkits/certs/`]: ../test/fixtures/pkits/certs/
+[`test/pkits.test.ts`]: ../test/pkits.test.ts

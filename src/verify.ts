@@ -330,7 +330,7 @@ export interface VerifiedCertificateChain {
 	readonly chain: readonly ParsedCertificate[];
 	/** Trusted root that terminates the path. */
 	readonly root: ParsedCertificate;
-	/** Final RFC 5280 §6 constrained policy outputs for this validated path. */
+	/** Final RFC 5280 §6 / RFC 9618 constrained policy outputs for this validated path. */
 	readonly policyValidation: PolicyValidationOutcome;
 }
 
@@ -577,6 +577,8 @@ async function buildCandidatePathRaw(input: BuildCandidatePathInput): Promise<
  *
  * @example
  * ```ts
+ * import { buildCandidatePath } from 'micro509';
+ *
  * const result = await buildCandidatePath({
  *   leaf: leafPem,
  *   intermediates: [intermediatePem],
@@ -804,6 +806,8 @@ export async function validateCandidatePath(
  *
  * @example
  * ```ts
+ * import { verifyCertificateChain } from 'micro509';
+ *
  * const result = await verifyCertificateChain({
  *   leaf: serverCertPem,
  *   intermediates: [intermediatePem],
@@ -877,6 +881,8 @@ export async function verifyCertificateChain(
  *
  * @example
  * ```ts
+ * import { verifyCertificateSigningRequest } from 'micro509';
+ *
  * const result = await verifyCertificateSigningRequest(csrPem);
  * if (result.ok) {
  *   console.log('subject:', result.value.subject.values.commonName);
@@ -927,6 +933,16 @@ export async function verifyCertificateSigningRequest(
  * Standalone EKU check against a verified certificate chain.
  * Validates that the leaf has the requested purpose and that
  * intermediate CA EKU constraints (if present) permit it.
+ *
+ * @example
+ * ```ts
+ * import { checkExtendedKeyUsage } from 'micro509';
+ *
+ * const result = checkExtendedKeyUsage(chain, 'serverAuth');
+ * if (!result.ok) {
+ *   console.error(result.error.code, result.error.message);
+ * }
+ * ```
  */
 export function checkExtendedKeyUsage(
 	chain: readonly ParsedCertificate[],
@@ -1010,6 +1026,20 @@ function baseChainInput(
  * Validates a certificate chain for TLS server use:
  * chain verification + `serverAuth` EKU (leaf + intermediate propagation)
  * + DNS/IP identity matching.
+ *
+ * @example
+ * ```ts
+ * import { validateForTlsServer } from 'micro509';
+ *
+ * const result = await validateForTlsServer({
+ *   leaf: serverCertPem,
+ *   roots: [rootCaPem],
+ *   serviceIdentity: { type: 'dns', value: 'example.com' },
+ * });
+ * if (result.ok) {
+ *   console.log('valid for', result.value.leaf.subject.values.commonName);
+ * }
+ * ```
  */
 export async function validateForTlsServer(
 	input: ValidateForTlsServerInput,
@@ -1030,6 +1060,16 @@ export async function validateForTlsServer(
 /**
  * Validates a certificate chain for TLS client use:
  * chain verification + `clientAuth` EKU (leaf + intermediate propagation).
+ *
+ * @example
+ * ```ts
+ * import { validateForTlsClient } from 'micro509';
+ *
+ * const result = await validateForTlsClient({
+ *   leaf: clientCertPem,
+ *   roots: [rootCaPem],
+ * });
+ * ```
  */
 export async function validateForTlsClient(
 	input: ValidateForTlsClientInput,
@@ -1040,6 +1080,16 @@ export async function validateForTlsClient(
 /**
  * Validates a certificate chain for code signing:
  * chain verification + `codeSigning` EKU (leaf + intermediate propagation).
+ *
+ * @example
+ * ```ts
+ * import { validateForCodeSigning } from 'micro509';
+ *
+ * const result = await validateForCodeSigning({
+ *   leaf: codeSigningCertPem,
+ *   roots: [rootCaPem],
+ * });
+ * ```
  */
 export async function validateForCodeSigning(
 	input: ValidateForCodeSigningInput,
@@ -1050,6 +1100,16 @@ export async function validateForCodeSigning(
 /**
  * Validates a certificate chain for CA use:
  * chain verification + `basicConstraints.ca` check on the leaf.
+ *
+ * @example
+ * ```ts
+ * import { validateForCa } from 'micro509';
+ *
+ * const result = await validateForCa({
+ *   leaf: intermediateCertPem,
+ *   roots: [rootCaPem],
+ * });
+ * ```
  */
 export async function validateForCa(input: ValidateForCaInput): Promise<VerifyChainResult> {
 	return verifyCertificateChain({

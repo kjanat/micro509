@@ -45,7 +45,7 @@ import {
 	encodeSubjectAltName,
 } from './extensions.ts';
 import { OIDS } from './oids.ts';
-import type { ParsedDistributionPoint } from './parse.ts';
+import type { ParsedCertificate, ParsedDistributionPoint } from './parse.ts';
 import {
 	parseAuthorityInfoAccess,
 	parseAuthorityKeyIdentifier,
@@ -69,18 +69,31 @@ export type ExtensionRegistryContext = 'certificate' | 'csr';
  * Fields mirror the extension slots on {@link ParsedCertificate}.
  */
 export interface KnownParsedExtensionAccumulator {
+	/** Basic Constraints (CA flag + optional pathLength). */
 	readonly basicConstraints?: BasicConstraints;
+	/** Key Usage flags (digitalSignature, keyCertSign, etc.). */
 	readonly keyUsage?: readonly KeyUsage[];
+	/** Extended Key Usage purposes (serverAuth, clientAuth, etc.). */
 	readonly extendedKeyUsage?: readonly ExtendedKeyUsage[];
+	/** Subject Alternative Names (dns, ip, email, uri, srv, directoryName). */
 	readonly subjectAltNames?: readonly SubjectAltName[];
+	/** Name Constraints (permitted/excluded subtrees). */
 	readonly nameConstraints?: NameConstraints<ParsedNameConstraintForm>;
+	/** Certificate Policies extension values. */
 	readonly certificatePolicies?: CertificatePolicies;
+	/** Policy Mappings from issuer to subject policy domains. */
 	readonly policyMappings?: PolicyMappings;
+	/** Policy Constraints (requireExplicitPolicy / inhibitPolicyMapping). */
 	readonly policyConstraints?: PolicyConstraints;
+	/** Inhibit Any-Policy skip-certs value. */
 	readonly inhibitAnyPolicy?: InhibitAnyPolicy;
+	/** Authority Information Access (OCSP, CA issuers). */
 	readonly authorityInfoAccess?: readonly AuthorityInformationAccess[];
+	/** CRL Distribution Points. */
 	readonly crlDistributionPoints?: readonly ParsedDistributionPoint[];
+	/** Hex-encoded Subject Key Identifier. */
 	readonly subjectKeyIdentifier?: string;
+	/** Hex-encoded Authority Key Identifier. */
 	readonly authorityKeyIdentifier?: string;
 }
 

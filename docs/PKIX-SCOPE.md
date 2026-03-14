@@ -9,12 +9,24 @@
 | RFC 6125 service identity  | `partial` | `matchServiceIdentity()` ships DNS-ID, IP-ID, URI-ID, SRV-ID, wildcard, IDNA, and opt-in CN-compat checks; verification helpers still wire DNS/IP identities only                                                                                        |
 | RFC 9618 policy validation | `partial` | RFC 9618-style policy state, enforcement, outputs, and focused PKITS coverage ship; broader conformance evidence is still incomplete                                                                                                                     |
 
-Current conformance evidence: [`test/pkits.test.ts`](../test/pkits.test.ts), [`test/policy.test.ts`](../test/policy.test.ts), [`test/name-constraints.test.ts`](../test/name-constraints.test.ts), [`test/ocsp-fixtures.test.ts`](../test/ocsp-fixtures.test.ts), [`test/identity-fixtures.test.ts`](../test/identity-fixtures.test.ts), [`test/revocation.test.ts`](../test/revocation.test.ts), [`test/malformed-der.test.ts`](../test/malformed-der.test.ts), and [`test/differential.test.ts`](../test/differential.test.ts).
+Current conformance evidence:
+
+- [`test/pkits.test.ts`](../test/pkits.test.ts),
+- [`test/policy.test.ts`](../test/policy.test.ts),
+- [`test/name-constraints.test.ts`](../test/name-constraints.test.ts),
+- [`test/ocsp-fixtures.test.ts`](../test/ocsp-fixtures.test.ts),
+- [`test/identity-fixtures.test.ts`](../test/identity-fixtures.test.ts),
+- [`test/revocation.test.ts`](../test/revocation.test.ts),
+- [`test/malformed-der.test.ts`](../test/malformed-der.test.ts), and
+- [`test/differential.test.ts`](../test/differential.test.ts).
 
 ## 1. Define the boundary up front
 
-- [x] Treat **certification path validation** as a function over a **prospective certification path** plus validation inputs, not as “build whatever chain you can find and hope for the best.”
-      RFC 5280 Section 6.1.1 defines the algorithm in terms of a candidate path and nine inputs. (IETF Datatracker[^rfc5280])
+- [x] Treat **certification path validation** as a function over a
+      **prospective certification path** plus validation inputs, not as
+      “build whatever chain you can find and hope for the best.”\
+       RFC 5280 Section 6.1.1 defines the algorithm in terms of a candidate path
+      and nine inputs. (IETF Datatracker[^rfc5280])
 - [x] Keep **path building/discovery** separate from **path validation**.
 - [x] Keep **service identity matching** separate from **path validation**.
 - [x] Keep **revocation** separate from **path validation**.
@@ -23,7 +35,8 @@ Current conformance evidence: [`test/pkits.test.ts`](../test/pkits.test.ts), [`t
 
 - [x] Prospective certification path.
 - [x] Validation time.
-- [x] Trust anchor information: trusted issuer name, trusted public key algorithm,
+- [x] Trust anchor information: trusted issuer name,
+      trusted public key algorithm,
       trusted public key, and optional trusted key parameters.
 - [x] User-initial-policy-set.
 - [x] Initial policy-mapping inhibit flag.
@@ -47,7 +60,8 @@ Current conformance evidence: [`test/pkits.test.ts`](../test/pkits.test.ts), [`t
 ## 4. Extension handling
 
 - [x] Parse and preserve all extensions, including unknown ones.
-- [x] Reject certificates containing an **unsupported critical extension** or a critical extension whose contents cannot be processed.
+- [x] Reject certificates containing an **unsupported critical extension** or a
+      critical extension whose contents cannot be processed.
 - [x] Process recognized non-critical extensions when relevant to path processing.
 - [x] Expose raw extension data so callers can layer application-specific policy on top. (IETF Datatracker[^rfc5280])
 
@@ -56,7 +70,8 @@ Current conformance evidence: [`test/pkits.test.ts`](../test/pkits.test.ts), [`t
 - [x] Support `nameConstraints` on CA certificates.
 - [x] Support initial permitted/excluded subtrees as validator inputs.
 - [x] Apply constraints across supported name forms, not just DNS SANs.
-- [x] Handle self-issued certificates correctly when evaluating constraints. (IETF Datatracker[^rfc5280])
+- [x] Handle self-issued certificates correctly when evaluating constraints.
+      (IETF Datatracker[^rfc5280])
 
 Current GeneralName matrix for `nameConstraints`:
 
@@ -80,14 +95,19 @@ Current GeneralName matrix for `nameConstraints`:
 - [x] Support `policyConstraints`.
 - [x] Support `policyMappings`.
 - [x] Support `inhibitAnyPolicy`.
-- [x] Use the **RFC 9618** update rather than the older RFC 5280 policy-tree algorithm, because RFC 9618 replaced it with an equivalent, more efficient algorithm to avoid worst-case exponential blowups and DoS risk. (IETF Datatracker[^rfc9618])
+- [x] Use the **RFC 9618** update rather than the older RFC 5280 policy-tree
+      algorithm, because RFC 9618 replaced it with an equivalent, more efficient
+      algorithm to avoid worst-case exponential blowups and DoS risk.
+      (IETF Datatracker[^rfc9618])
 - [x] Keep public wording at `partial` until broader conformance evidence lands.
 
 ## 7. Trust-anchor model
 
 - [x] Accept trust anchors as structured input, not only as “root cert PEM”.
-- [x] Allow trust anchor info to come from a self-signed certificate as a convenience, but treat the trust anchor as out-of-band trust input.
-- [x] Do not assume every self-signed cert is a trust anchor. (IETF Datatracker[^rfc5280])
+- [x] Allow trust anchor info to come from a self-signed certificate as a
+      convenience, but treat the trust anchor as out-of-band trust input.
+- [x] Do not assume every self-signed cert is a trust anchor.
+      (IETF Datatracker[^rfc5280])
 
 ## 8. Application/service identity checks
 

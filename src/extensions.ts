@@ -326,7 +326,8 @@ export interface InhibitAnyPolicy {
 }
 
 /**
- * Input for {@link buildCertificateExtensions} and {@link buildRequestedExtensions}.
+ * Input for `createCertificate`, `createSelfSignedCertificate`,
+ * and `createCertificateSigningRequest`.
  *
  * Every field is optional. Omitted extensions are not encoded. Built-in
  * extensions (SKI, AKI, basicConstraints defaults) are handled automatically

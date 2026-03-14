@@ -325,6 +325,16 @@ export function parsePkcs7SignedDataPem(pem: string): ParsePkcs7SignedDataResult
  * Accepts PEM text, raw DER, or an already-parsed {@link ParsedPkcs7SignedData}.
  * For each signer, locates the matching certificate in the embedded set and
  * verifies the signature (including signed-attribute digest checks per RFC 5652 Section 5.4).
+ *
+ * @example
+ * ```ts
+ * import { verifyPkcs7SignedData } from 'micro509';
+ *
+ * const result = await verifyPkcs7SignedData(pkcs7Pem);
+ * if (result.ok) {
+ *   console.log('all signers verified');
+ * }
+ * ```
  */
 export async function verifyPkcs7SignedData(
 	input: string | Uint8Array | ParsedPkcs7SignedData,

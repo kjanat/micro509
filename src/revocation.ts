@@ -138,6 +138,7 @@ export interface RevocationCheckUnknownValue {
 	readonly status: Extract<RevocationStatus, 'unknown'>;
 	/** Why revocation status is unknown. */
 	readonly code: CheckCertificateRevocationErrorCode;
+	/** Human-readable diagnostic message. */
 	readonly message: string;
 	/** What evidence was attempted and why each failed. */
 	readonly details: CheckCertificateRevocationFailureDetails;
@@ -149,6 +150,7 @@ export interface RevocationCheckGoodValue {
 	readonly status: Extract<RevocationStatus, 'good'>;
 	/** Which evidence kind confirmed the good status. */
 	readonly source: RevocationEvidenceKind;
+	/** Human-readable diagnostic message. */
 	readonly message: string;
 }
 
@@ -158,6 +160,7 @@ export interface RevocationCheckRevokedValue {
 	readonly status: Extract<RevocationStatus, 'revoked'>;
 	/** Which evidence kind reported the revocation. */
 	readonly source: RevocationEvidenceKind;
+	/** Human-readable diagnostic message. */
 	readonly message: string;
 	/** When the certificate was revoked (from CRL entry or OCSP response). */
 	readonly revokedAt?: Date;
@@ -249,6 +252,20 @@ export function resolveOcspResponderCandidates(
  * Evaluates all provided CRL and OCSP evidence to determine the certificate's
  * revocation status. Returns the first `revoked` if any, else the first `good`,
  * else `unknown` with diagnostic details about each indeterminate evidence.
+ *
+ * @example
+ * ```ts
+ * import { checkCertificateRevocation } from 'micro509';
+ *
+ * const result = await checkCertificateRevocation({
+ *   certificate: leafPem,
+ *   issuerCertificate: caPem,
+ *   evidence: [{ kind: 'crl', crl: crlPem }],
+ * });
+ * if (result.ok && result.value.status === 'revoked') {
+ *   console.log('revoked at', result.value.revokedAt);
+ * }
+ * ```
  */
 export async function checkCertificateRevocation(
 	input: CheckCertificateRevocationInput,

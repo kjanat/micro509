@@ -71,7 +71,7 @@ export interface CsrMaterial {
  *   subject: { commonName: 'example.com' },
  *   publicKey: keyPair.publicKey,
  *   signerPrivateKey: keyPair.privateKey,
- *   extensions: { subjectAlternativeNames: [{ dnsName: 'example.com' }] },
+ *   extensions: { subjectAltNames: [{ type: 'dns', value: 'example.com' }] },
  * });
  * console.log(csr.pem);
  * ```
