@@ -1,54 +1,46 @@
 /**
- * Public policy-validation input and output types.
+ * Certificate policy validation types (RFC 5280 §6.1 / RFC 9618).
  *
- * These types describe the caller-facing policy knobs and the constrained policy results
- * exposed by verification APIs.
+ * Caller-facing knobs for controlling policy processing and the constrained
+ * policy sets returned by successful path validation.
+ *
+ * @module
  */
 
 import type { PolicyQualifierInfo } from './extensions.ts';
 
 /**
- * Describes the input shape for policy validation operations.
+ * Input for the policy-validation engine.
+ *
+ * All fields are optional — omitted values produce the most permissive
+ * behavior (accept any policy, allow mappings, allow anyPolicy).
  */
 export interface PolicyValidationInput {
 	/**
-	 * Carries the initial policy set value.
+	 * OIDs the relying party considers acceptable, or `'any'` to accept
+	 * whatever the chain asserts. Default: `'any'`.
 	 */
 	readonly initialPolicySet?: readonly string[] | 'any';
-	/**
-	 * Indicates whether require explicit policy.
-	 */
+	/** When `true`, the chain must assert at least one acceptable policy. Default: `false`. */
 	readonly requireExplicitPolicy?: boolean;
-	/**
-	 * Indicates whether inhibit policy mapping.
-	 */
+	/** When `true`, policy mappings in CA certificates are ignored. Default: `false`. */
 	readonly inhibitPolicyMapping?: boolean;
-	/**
-	 * Indicates whether inhibit any policy.
-	 */
+	/** When `true`, the anyPolicy OID is not treated as matching all policies. Default: `false`. */
 	readonly inhibitAnyPolicy?: boolean;
 }
 
 /** One policy OID that survives RFC 5280 / RFC 9618 processing. */
 export interface ConstrainedPolicy {
-	/**
-	 * Carries the policy identifier value.
-	 */
+	/** Dotted-decimal OID of the surviving policy. */
 	readonly policyIdentifier: string;
-	/**
-	 * Carries the policy qualifiers value.
-	 */
+	/** Qualifier info (CPS URIs, user notices) attached to this policy, if any. */
 	readonly policyQualifiers?: readonly PolicyQualifierInfo[];
 }
 
 /** Final policy outputs exposed by successful path-validation APIs. */
 export interface PolicyValidationOutcome {
-	/**
-	 * Carries the authority constrained policies value.
-	 */
+	/** Policies valid under the authority's (CA chain) constraints alone. */
 	readonly authorityConstrainedPolicies: readonly ConstrainedPolicy[];
-	/**
-	 * Carries the user constrained policies value.
-	 */
+	/** Policies that also satisfy the caller's {@link PolicyValidationInput.initialPolicySet}. */
 	readonly userConstrainedPolicies: readonly ConstrainedPolicy[];
 }

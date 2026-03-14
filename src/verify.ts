@@ -1,8 +1,19 @@
 /**
  * Public certificate and CSR verification APIs.
  *
- * This module builds and validates certificate paths, purpose constraints, policy state,
- * name constraints, and optional identity checks.
+ * Builds and validates certificate paths per RFC 5280 §6, enforcing purpose
+ * constraints, policy state, name constraints, and optional service identity
+ * checks against a leaf certificate.
+ *
+ * Three levels of granularity:
+ * - {@link buildCandidatePath} — signature-verified path only
+ * - {@link validateCandidatePath} — time/constraint/policy validation on a pre-built path
+ * - {@link verifyCertificateChain} — all-in-one build + validate
+ *
+ * Purpose-scoped convenience wrappers: {@link validateForTlsServer},
+ * {@link validateForTlsClient}, {@link validateForCodeSigning}, {@link validateForCa}.
+ *
+ * @module
  */
 
 import type { ExtendedKeyUsage } from './extensions.ts';
@@ -45,27 +56,19 @@ import {
 // Source types
 // ---------------------------------------------------------------------------
 
-/**
- * Describes the accepted source forms for certificate inputs.
- */
+/** PEM string or DER bytes for a certificate. PEM may contain multiple blocks. */
 export type CertificateSource = string | Uint8Array;
-/**
- * Describes the accepted source forms for CSR inputs.
- */
+/** PEM string or DER bytes for a certificate signing request. */
 export type CsrSource = string | Uint8Array;
 
 // ---------------------------------------------------------------------------
 // Purpose & EKU types
 // ---------------------------------------------------------------------------
 
-/**
- * Defines verify purpose.
- */
+/** High-level purpose applied during path validation to enforce leaf constraints. */
 export type VerifyPurpose = 'serverAuth' | 'clientAuth' | 'ca';
 
-/**
- * Defines EKU check purpose.
- */
+/** Extended key usage purpose checked by {@link checkExtendedKeyUsage}. */
 export type EkuCheckPurpose =
 	| 'serverAuth'
 	| 'clientAuth'
@@ -74,40 +77,23 @@ export type EkuCheckPurpose =
 	| 'timeStamping'
 	| 'ocspSigning';
 
-/**
- * Represents the result returned by EKU check operations.
- */
+/** Result of {@link checkExtendedKeyUsage}. Success carries no value; failure identifies the offending certificate. */
 export type EkuCheckResult =
 	| {
-			/**
-			 * Indicates whether the operation succeeded.
-			 */
 			readonly ok: true;
-			/**
-			 * Carries the successful value payload.
-			 */
 			readonly value: undefined;
 	  }
 	| EkuCheckFailureResult;
 
-/**
- * Represents a typed failure produced by EKU check operations.
- */
+/** Failure from {@link checkExtendedKeyUsage} with the chain index of the certificate that failed. */
 export interface EkuCheckFailure
 	extends Micro509Error<'leaf_eku_missing' | 'intermediate_eku_constraint'> {
-	/**
-	 * Indicates whether the operation succeeded.
-	 */
 	readonly ok: false;
-	/**
-	 * Carries the zero-based index associated with this value.
-	 */
+	/** Zero-based index into the chain of the certificate that lacks the required EKU. */
 	readonly index: number;
 }
 
-/**
- * Represents the result returned by EKU check failure operations.
- */
+/** Wrapped error result for EKU check failures. */
 type EkuCheckFailureResult = IndexedErrorResult<
 	'leaf_eku_missing' | 'intermediate_eku_constraint',
 	Record<never, never>,
@@ -119,28 +105,20 @@ type EkuCheckFailureResult = IndexedErrorResult<
 // ---------------------------------------------------------------------------
 
 /**
- * Describes trust anchor.
+ * Bare trust anchor — subject identity and public key material without a
+ * full certificate. Used when the root CA certificate is unavailable but
+ * its key is known. Build from a certificate with {@link trustAnchorFromCertificate}.
  */
 export interface TrustAnchor {
-	/**
-	 * Carries the hexadecimal subject der.
-	 */
+	/** Hex-encoded DER of the subject distinguished name. Used for issuer matching. */
 	readonly subjectDerHex: string;
-	/**
-	 * Carries the DER-encoded subject public key info.
-	 */
+	/** DER-encoded SubjectPublicKeyInfo used to verify signatures from this anchor. */
 	readonly subjectPublicKeyInfoDer: Uint8Array;
-	/**
-	 * Carries the OID for public key algorithm.
-	 */
+	/** OID of the public key algorithm (e.g. `1.2.840.10045.2.1` for EC). */
 	readonly publicKeyAlgorithmOid: string;
-	/**
-	 * Carries the OID for public key parameters.
-	 */
+	/** OID of the key parameters, when algorithm-specific (e.g. named curve OID for EC). */
 	readonly publicKeyParametersOid?: string;
-	/**
-	 * Carries the subject key identifier value.
-	 */
+	/** Hex-encoded subject key identifier for AKI matching. */
 	readonly subjectKeyIdentifier?: string;
 }
 
@@ -149,7 +127,29 @@ export interface TrustAnchor {
 // ---------------------------------------------------------------------------
 
 /**
- * Enumerates the error codes used by verify failures.
+ * Discriminant for every failure a verify operation can produce.
+ *
+ * - `no_trusted_root` — chain could not be anchored to any root or {@link TrustAnchor}.
+ * - `issuer_not_found` — an intermediate's issuer was not in the candidate set.
+ * - `signature_invalid` — a certificate's signature failed cryptographic verification.
+ * - `certificate_expired` — a certificate's notBefore/notAfter window excludes the validation time.
+ * - `ca_required` — an issuer lacks `basicConstraints.ca = true`.
+ * - `key_cert_sign_required` — an issuer has keyUsage but omits `keyCertSign`.
+ * - `path_length_exceeded` — the number of CA certificates below an issuer exceeds its pathLength.
+ * - `authority_key_identifier_mismatch` — a certificate's AKI does not match the issuer's SKI.
+ * - `extended_key_usage_invalid` — the leaf certificate lacks the required EKU for the requested purpose.
+ * - `subject_alt_name_mismatch` — no SAN entry matches the requested service identity.
+ * - `common_name_fallback_suppressed` — CN fallback was attempted but suppressed (SAN present or disabled).
+ * - `self_signed_leaf_not_allowed` — the leaf is self-signed and `allowSelfSignedLeaf` was not set.
+ * - `unrecognized_critical_extension` — a certificate contains a critical extension the verifier cannot process.
+ * - `intermediate_eku_constraint` — an intermediate CA's EKU set does not include the required purpose.
+ * - `policy_processing_not_implemented` — policy processing encountered an unsupported construct.
+ * - `explicit_policy_required` — `requireExplicitPolicy` was set but no acceptable policy was found.
+ * - `initial_policy_set_not_satisfied` — the chain's policies do not intersect `initialPolicySet`.
+ * - `initial_name_constraints_not_implemented` — caller-supplied initial name constraints are unsupported.
+ * - `unsupported_name_constraints` — a certificate's nameConstraints use an unsupported form.
+ * - `name_constraints_violated` — a subject name violates a permitted/excluded subtree.
+ * - `unsupported_signature_algorithm_parameters` — the signature algorithm uses unrecognized parameters.
  */
 export type VerifyErrorCode =
 	| 'no_trusted_root'
@@ -174,37 +174,21 @@ export type VerifyErrorCode =
 	| 'name_constraints_violated'
 	| 'unsupported_signature_algorithm_parameters';
 
-/**
- * Carries structured details for verify failures.
- */
+/** Diagnostic context attached to every {@link VerifyChainFailure}. All fields are optional; presence depends on the error code. */
 export interface VerifyFailureDetails {
-	/**
-	 * Carries the subject common name value.
-	 */
+	/** CN of the certificate that triggered the failure. */
 	readonly subjectCommonName?: string;
-	/**
-	 * Carries the issuer common name value.
-	 */
+	/** CN of the issuer of the offending certificate. */
 	readonly issuerCommonName?: string;
-	/**
-	 * Carries the expected value.
-	 */
+	/** The value the verifier expected (e.g. a validity window bound or SKI). */
 	readonly expected?: string;
-	/**
-	 * Carries the actual value.
-	 */
+	/** The value actually found. */
 	readonly actual?: string;
-	/**
-	 * Carries the chain common names value.
-	 */
+	/** CNs of every certificate in the chain, leaf-first. Present on `no_trusted_root`. */
 	readonly chainCommonNames?: readonly string[];
-	/**
-	 * Carries the presented identifier types value.
-	 */
+	/** SAN identifier types the leaf actually presents. Set on identity-match failures. */
 	readonly presentedIdentifierTypes?: readonly ('dns' | 'uri' | 'srv')[];
-	/**
-	 * Carries the common name fallback reason value.
-	 */
+	/** Why the CN-fallback path was not taken. Set on `common_name_fallback_suppressed`. */
 	readonly commonNameFallbackReason?:
 		| 'disabled'
 		| 'suppressed_by_presented_identifier'
@@ -212,20 +196,13 @@ export interface VerifyFailureDetails {
 		| 'common_name_mismatch';
 }
 
-/**
- * Represents a typed failure produced by verify chain operations.
- */
+/** A chain verification failure with its error code, human message, chain index, and diagnostic details. */
 export interface VerifyChainFailure
 	extends IndexedMicro509Error<VerifyErrorCode, VerifyFailureDetails> {
-	/**
-	 * Indicates whether the operation succeeded.
-	 */
 	readonly ok: false;
 }
 
-/**
- * Represents the result returned by verify failure operations.
- */
+/** Wrapped error result for chain verification failures. */
 type VerifyFailureResult = IndexedErrorResult<
 	VerifyErrorCode,
 	VerifyFailureDetails,
@@ -236,62 +213,34 @@ type VerifyFailureResult = IndexedErrorResult<
 // Build candidate path
 // ---------------------------------------------------------------------------
 
-/**
- * Describes the input shape for build candidate path operations.
- */
+/** Input for {@link buildCandidatePath}. */
 export interface BuildCandidatePathInput {
-	/**
-	 * Carries the leaf value.
-	 */
+	/** End-entity certificate to verify. */
 	readonly leaf: CertificateSource;
-	/**
-	 * Carries the intermediates value.
-	 */
+	/** Intermediate CA certificates available for path building. Order does not matter. */
 	readonly intermediates?: readonly CertificateSource[];
-	/**
-	 * Carries the roots value.
-	 */
+	/** Trusted root CA certificates. At least one root or trust anchor must be supplied. */
 	readonly roots: readonly CertificateSource[];
-	/**
-	 * Carries the trust anchors value.
-	 */
+	/** Bare trust anchors to try when no root certificate matches. */
 	readonly trustAnchors?: readonly TrustAnchor[];
-	/**
-	 * Carries the at value.
-	 */
+	/** Validation time. Defaults to `new Date()`. */
 	readonly at?: Date;
 }
 
-/**
- * Describes candidate path.
- */
+/** A signature-verified certification path from leaf to root, before constraint validation. */
 export interface CandidatePath {
-	/**
-	 * Carries the leaf value.
-	 */
+	/** Parsed end-entity certificate. */
 	readonly leaf: ParsedCertificate;
-	/**
-	 * Carries the chain value.
-	 */
+	/** Full chain in leaf-to-root order (includes both leaf and root). */
 	readonly chain: readonly ParsedCertificate[];
-	/**
-	 * Carries the root value.
-	 */
+	/** Trusted root that terminates the path. */
 	readonly root: ParsedCertificate;
 }
 
-/**
- * Represents the result returned by build candidate path operations.
- */
+/** Result of {@link buildCandidatePath}. On success, contains the {@link CandidatePath}. */
 export type BuildCandidatePathResult =
 	| {
-			/**
-			 * Indicates whether the operation succeeded.
-			 */
 			readonly ok: true;
-			/**
-			 * Carries the successful value payload.
-			 */
 			readonly value: CandidatePath;
 	  }
 	| VerifyFailureResult;
@@ -300,169 +249,95 @@ export type BuildCandidatePathResult =
 // Validate candidate path
 // ---------------------------------------------------------------------------
 
-/**
- * Describes the input shape for validate candidate path operations.
- */
+/** Input for {@link validateCandidatePath}. */
 export interface ValidateCandidatePathInput
 	extends PolicyValidationInput,
 		InitialNameConstraintsInput {
-	/**
-	 * Carries the policy value.
-	 */
+	/** Nested policy validation overrides (takes precedence over flat fields). */
 	readonly policy?: PolicyValidationInput;
-	/**
-	 * Carries the nam e constraints value.
-	 */
+	/** Nested name constraint overrides (takes precedence over flat fields). */
 	readonly nameConstraints?: InitialNameConstraintsInput;
-	/**
-	 * Carries the chain value.
-	 */
+	/** Pre-built certificate chain in leaf-to-root order. */
 	readonly chain: readonly ParsedCertificate[];
-	/**
-	 * Carries the at value.
-	 */
+	/** Validation time. Defaults to `new Date()`. */
 	readonly at?: Date;
-	/**
-	 * Carries the purpose value.
-	 */
+	/** Leaf purpose constraint to enforce. */
 	readonly purpose?: VerifyPurpose;
-	/**
-	 * Indicates whether allow self signed leaf.
-	 */
+	/** When `true`, allows a self-signed leaf that is also the root. Defaults to `false`. */
 	readonly allowSelfSignedLeaf?: boolean;
 }
 
-/**
- * Represents a successful outcome produced by validate candidate path operations.
- */
+/** Success payload from {@link validateCandidatePath}. */
 export interface ValidateCandidatePathSuccess {
 	/** Final RFC 9618-constrained policy outputs for this validated path. */
 	readonly policyValidation: PolicyValidationOutcome;
 }
 
-/**
- * Represents the result returned by validate candidate path success operations.
- */
+/** Internal success shape for validate-candidate-path, carrying both wrapped and flat policy fields. */
 interface ValidateCandidatePathSuccessResult {
-	/**
-	 * Indicates whether the operation succeeded.
-	 */
 	readonly ok: true;
-	/**
-	 * Carries the successful value payload.
-	 */
 	readonly value: ValidateCandidatePathSuccess;
-	/**
-	 * Carries the policy validation value.
-	 */
+	/** Shorthand duplicate of `value.policyValidation` for internal forwarding. */
 	readonly policyValidation: PolicyValidationOutcome;
 }
 
-/**
- * Represents the result returned by validate candidate path raw operations.
- */
+/** Internal result from raw candidate-path validation before wrapping. */
 type ValidateCandidatePathRawResult =
 	| {
-			/**
-			 * Indicates whether the operation succeeded.
-			 */
 			readonly ok: true;
-			/**
-			 * Carries the policy validation value.
-			 */
 			readonly policyValidation: PolicyValidationOutcome;
 	  }
 	| VerifyChainFailure;
 
-/**
- * Represents the result returned by validate candidate path operations.
- */
+/** Result of {@link validateCandidatePath}. */
 export type ValidateCandidatePathResult = ValidateCandidatePathSuccessResult | VerifyFailureResult;
 
 // ---------------------------------------------------------------------------
 // Verify chain (convenience composition)
 // ---------------------------------------------------------------------------
 
-/**
- * Describes the input shape for verify certificate chain operations.
- */
+/** Input for {@link verifyCertificateChain}. Combines path-building, validation, and identity options. */
 export interface VerifyCertificateChainInput
 	extends PolicyValidationInput,
 		InitialNameConstraintsInput {
-	/**
-	 * Carries the policy value.
-	 */
+	/** Nested policy validation overrides. */
 	readonly policy?: PolicyValidationInput;
-	/**
-	 * Carries the nam e constraints value.
-	 */
+	/** Nested name constraint overrides. */
 	readonly nameConstraints?: InitialNameConstraintsInput;
-	/**
-	 * Carries the leaf value.
-	 */
+	/** End-entity certificate to verify. */
 	readonly leaf: CertificateSource;
-	/**
-	 * Carries the intermediates value.
-	 */
+	/** Intermediate CA certificates available for path building. */
 	readonly intermediates?: readonly CertificateSource[];
-	/**
-	 * Carries the roots value.
-	 */
+	/** Trusted root CA certificates. */
 	readonly roots: readonly CertificateSource[];
-	/**
-	 * Carries the trust anchors value.
-	 */
+	/** Bare trust anchors to try when no root certificate matches. */
 	readonly trustAnchors?: readonly TrustAnchor[];
-	/**
-	 * Carries the at value.
-	 */
+	/** Validation time. Defaults to `new Date()`. */
 	readonly at?: Date;
-	/**
-	 * Carries the purpose value.
-	 */
+	/** Leaf purpose constraint to enforce during validation. */
 	readonly purpose?: VerifyPurpose;
-	/**
-	 * Carries the service identity value.
-	 */
+	/** DNS/IP/URI/SRV identity to match against the leaf's SAN. */
 	readonly serviceIdentity?: VerifyServiceIdentityInput;
-	/**
-	 * Indicates whether allow self signed leaf.
-	 */
+	/** When `true`, allows a self-signed leaf. Defaults to `false`. */
 	readonly allowSelfSignedLeaf?: boolean;
 }
 
-/**
- * Describes verified certificate chain.
- */
+/** Fully verified certificate chain returned on success from {@link verifyCertificateChain}. */
 export interface VerifiedCertificateChain {
-	/**
-	 * Carries the leaf value.
-	 */
+	/** Parsed end-entity certificate. */
 	readonly leaf: ParsedCertificate;
-	/**
-	 * Carries the chain value.
-	 */
+	/** Full chain in leaf-to-root order. */
 	readonly chain: readonly ParsedCertificate[];
-	/**
-	 * Carries the root value.
-	 */
+	/** Trusted root that terminates the path. */
 	readonly root: ParsedCertificate;
-	/** Final RFC 9618-constrained policy outputs for this validated path. */
+	/** Final RFC 5280 §6 constrained policy outputs for this validated path. */
 	readonly policyValidation: PolicyValidationOutcome;
 }
 
-/**
- * Represents the result returned by verify chain operations.
- */
+/** Result of {@link verifyCertificateChain}. On success, contains the {@link VerifiedCertificateChain}. */
 export type VerifyChainResult =
 	| {
-			/**
-			 * Indicates whether the operation succeeded.
-			 */
 			readonly ok: true;
-			/**
-			 * Carries the successful value payload.
-			 */
 			readonly value: VerifiedCertificateChain;
 	  }
 	| VerifyFailureResult;
@@ -471,41 +346,26 @@ export type VerifyChainResult =
 // CSR verification
 // ---------------------------------------------------------------------------
 
-/**
- * Represents a typed failure produced by verify request operations.
- */
+/** Failure from {@link verifyCertificateSigningRequest}. */
 export interface VerifyRequestFailure
 	extends Micro509Error<
 		'signature_invalid' | 'unsupported_signature_algorithm_parameters',
 		VerifyFailureDetails
 	> {
-	/**
-	 * Indicates whether the operation succeeded.
-	 */
 	readonly ok: false;
 }
 
-/**
- * Represents the result returned by verify request failure operations.
- */
+/** Wrapped error result for CSR verification failures. */
 type VerifyRequestFailureResult = ErrorResult<
 	'signature_invalid' | 'unsupported_signature_algorithm_parameters',
 	VerifyFailureDetails,
 	VerifyRequestFailure
 >;
 
-/**
- * Represents the result returned by verify request operations.
- */
+/** Result of {@link verifyCertificateSigningRequest}. On success, contains the parsed CSR. */
 export type VerifyRequestResult =
 	| {
-			/**
-			 * Indicates whether the operation succeeded.
-			 */
 			readonly ok: true;
-			/**
-			 * Carries the successful value payload.
-			 */
 			readonly value: ParsedCertificateSigningRequest;
 	  }
 	| VerifyRequestFailureResult;
@@ -514,93 +374,57 @@ export type VerifyRequestResult =
 // Validation profile inputs
 // ---------------------------------------------------------------------------
 
-/**
- * Describes the input shape for validate for TLS server operations.
- */
+/** Input for {@link validateForTlsServer}. Enforces `serverAuth` EKU and optional DNS/IP identity matching. */
 export interface ValidateForTlsServerInput
 	extends BuildCandidatePathInput,
 		PolicyValidationInput,
 		InitialNameConstraintsInput {
-	/**
-	 * Carries the policy value.
-	 */
+	/** Nested policy validation overrides. */
 	readonly policy?: PolicyValidationInput;
-	/**
-	 * Carries the nam e constraints value.
-	 */
+	/** Nested name constraint overrides. */
 	readonly nameConstraints?: InitialNameConstraintsInput;
-	/**
-	 * Carries the leaf value.
-	 */
+	/** End-entity certificate to verify. */
 	readonly leaf: CertificateSource;
-	/**
-	 * Carries the intermediates value.
-	 */
+	/** Intermediate CA certificates. */
 	readonly intermediates?: readonly CertificateSource[];
-	/**
-	 * Carries the roots value.
-	 */
+	/** Trusted root CA certificates. */
 	readonly roots: readonly CertificateSource[];
-	/**
-	 * Carries the trust anchors value.
-	 */
+	/** Bare trust anchors. */
 	readonly trustAnchors?: readonly TrustAnchor[];
-	/**
-	 * Carries the at value.
-	 */
+	/** Validation time. Defaults to `new Date()`. */
 	readonly at?: Date;
-	/**
-	 * Carries the service identity value.
-	 */
+	/** DNS/IP identity to match against the leaf's SAN. */
 	readonly serviceIdentity?: VerifyServiceIdentityInput;
 }
 
-/**
- * Describes the input shape for validate for TLS client operations.
- */
+/** Input for {@link validateForTlsClient}. Enforces `clientAuth` EKU. */
 export interface ValidateForTlsClientInput
 	extends BuildCandidatePathInput,
 		PolicyValidationInput,
 		InitialNameConstraintsInput {
-	/**
-	 * Carries the policy value.
-	 */
+	/** Nested policy validation overrides. */
 	readonly policy?: PolicyValidationInput;
-	/**
-	 * Carries the nam e constraints value.
-	 */
+	/** Nested name constraint overrides. */
 	readonly nameConstraints?: InitialNameConstraintsInput;
 }
-/**
- * Describes the input shape for validate for code signing operations.
- */
+/** Input for {@link validateForCodeSigning}. Enforces `codeSigning` EKU. */
 export interface ValidateForCodeSigningInput
 	extends BuildCandidatePathInput,
 		PolicyValidationInput,
 		InitialNameConstraintsInput {
-	/**
-	 * Carries the policy value.
-	 */
+	/** Nested policy validation overrides. */
 	readonly policy?: PolicyValidationInput;
-	/**
-	 * Carries the nam e constraints value.
-	 */
+	/** Nested name constraint overrides. */
 	readonly nameConstraints?: InitialNameConstraintsInput;
 }
-/**
- * Describes the input shape for validate for CA operations.
- */
+/** Input for {@link validateForCa}. Enforces `basicConstraints.ca` on the leaf. */
 export interface ValidateForCaInput
 	extends BuildCandidatePathInput,
 		PolicyValidationInput,
 		InitialNameConstraintsInput {
-	/**
-	 * Carries the policy value.
-	 */
+	/** Nested policy validation overrides. */
 	readonly policy?: PolicyValidationInput;
-	/**
-	 * Carries the nam e constraints value.
-	 */
+	/** Nested name constraint overrides. */
 	readonly nameConstraints?: InitialNameConstraintsInput;
 }
 
@@ -633,37 +457,14 @@ const PROCESSED_EXTENSION_OIDS: ReadonlySet<string> = new Set([
 // Internal types
 // ---------------------------------------------------------------------------
 
-/**
- * Describes the input shape for verify failure details operations.
- */
+/** Loose input for building a {@link VerifyFailureDetails} — accepts `undefined` values that get stripped. */
 interface VerifyFailureDetailsInput {
-	/**
-	 * Carries the subject common name value.
-	 */
 	readonly subjectCommonName?: string | undefined;
-	/**
-	 * Carries the issuer common name value.
-	 */
 	readonly issuerCommonName?: string | undefined;
-	/**
-	 * Carries the expected value.
-	 */
 	readonly expected?: string | undefined;
-	/**
-	 * Carries the actual value.
-	 */
 	readonly actual?: string | undefined;
-	/**
-	 * Carries the chain common names value.
-	 */
 	readonly chainCommonNames?: readonly string[] | undefined;
-	/**
-	 * Carries the presented identifier types value.
-	 */
 	readonly presentedIdentifierTypes?: readonly ('dns' | 'uri' | 'srv')[] | undefined;
-	/**
-	 * Carries the common name fallback reason value.
-	 */
 	readonly commonNameFallbackReason?:
 		| 'disabled'
 		| 'suppressed_by_presented_identifier'
@@ -672,58 +473,29 @@ interface VerifyFailureDetailsInput {
 		| undefined;
 }
 
-/**
- * Tracks internal state for validation processing.
- */
+/** Mutable validation state accumulated during path walks. */
 interface ValidationState {
-	/**
-	 * Carries the policy value.
-	 */
 	readonly policy: PolicyValidationState;
-	/**
-	 * Carries the nam e constraints value.
-	 */
 	readonly nameConstraints: NameConstraintValidationState;
 }
 
-/**
- * Describes nested validation inputs.
- */
+/** Optional nested policy and name-constraint inputs extracted from public input types. */
 interface NestedValidationInputs {
-	/**
-	 * Carries the policy value.
-	 */
 	readonly policy?: PolicyValidationInput;
-	/**
-	 * Carries the nam e constraints value.
-	 */
 	readonly nameConstraints?: InitialNameConstraintsInput;
 }
 
-/**
- * Represents the result returned by validation state operations.
- */
+/** Result of initializing validation state — may fail if constraints are unsupported. */
 type ValidationStateResult =
 	| {
-			/**
-			 * Indicates whether the operation succeeded.
-			 */
 			readonly ok: true;
-			/**
-			 * Carries the successful value payload.
-			 */
 			readonly value: ValidationState;
 	  }
 	| VerifyChainFailure;
 
-/**
- * Represents the result returned by validation check operations.
- */
+/** Pass/fail result for a single validation check (carries no value on success). */
 type ValidationCheckResult =
 	| {
-			/**
-			 * Indicates whether the operation succeeded.
-			 */
 			readonly ok: true;
 	  }
 	| VerifyChainFailure;
@@ -735,18 +507,12 @@ type ValidationCheckResult =
 /**
  * Discovers and signature-verifies a candidate certification path from a
  * leaf certificate to a trusted root or trust anchor. Does NOT validate
- * time, constraints, or leaf policy — use {@link validatECandidatePath}
- * for that, or {@link verifyCertificatEChain} for the all-in-one API.
+ * time, constraints, or leaf policy — use {@link validateCandidatePath}
+ * for that, or {@link verifyCertificateChain} for the all-in-one API.
  */
 async function buildCandidatePathRaw(input: BuildCandidatePathInput): Promise<
 	| {
-			/**
-			 * Indicates whether the operation succeeded.
-			 */
 			readonly ok: true;
-			/**
-			 * Carries the successful value payload.
-			 */
 			readonly value: CandidatePath;
 	  }
 	| VerifyChainFailure
@@ -802,10 +568,24 @@ async function buildCandidatePathRaw(input: BuildCandidatePathInput): Promise<
 }
 
 /**
- * Builds candidate path.
+ * Builds a signature-verified path from a leaf certificate to a trusted root.
  *
- * @param input The typed input payload.
- * @returns The built candidate path.
+ * Parses the supplied certificates, walks the issuer chain, signature-checks
+ * each link, and returns the first valid path. Does not enforce time, constraints,
+ * or leaf purpose — call {@link validateCandidatePath} or use the all-in-one
+ * {@link verifyCertificateChain} for full validation.
+ *
+ * @example
+ * ```ts
+ * const result = await buildCandidatePath({
+ *   leaf: leafPem,
+ *   intermediates: [intermediatePem],
+ *   roots: [rootPem],
+ * });
+ * if (result.ok) {
+ *   console.log('path length:', result.value.chain.length);
+ * }
+ * ```
  */
 export async function buildCandidatePath(
 	input: BuildCandidatePathInput,
@@ -819,14 +599,12 @@ export async function buildCandidatePath(
 // ---------------------------------------------------------------------------
 
 /**
- * Validates a pre-built candidate path (time, critical extensions,
- * signatures between chain members, CA/keyUsage/AKI constraints,
- * pathLength, and leaf purpose checks). The chain must be in
- * leaf-to-root order.
+ * Validates a pre-built candidate path: time window, critical extensions,
+ * inter-certificate signatures, CA/keyUsage/AKI constraints, pathLength,
+ * policy processing, name constraints, and leaf purpose checks.
  *
- * For full signature verification, each certificate in the chain is
- * verified against its issuer (the next certificate). The root (last
- * entry) is assumed trusted and not re-verified.
+ * The chain must be in leaf-to-root order. The root (last entry) is
+ * assumed trusted and not re-verified.
  */
 async function validateCandidatePathRaw(
 	input: ValidateCandidatePathInput,
@@ -1001,10 +779,8 @@ async function validateCandidatePathRaw(
 }
 
 /**
- * Validates candidate path.
- *
- * @param input The typed input payload.
- * @returns The validation result.
+ * Validates a pre-built certificate chain for time, constraints, policy, and
+ * optionally leaf purpose. Wrap the result of {@link buildCandidatePath}.
  */
 export async function validateCandidatePath(
 	input: ValidateCandidatePathInput,
@@ -1020,9 +796,25 @@ export async function validateCandidatePath(
 // ---------------------------------------------------------------------------
 
 /**
- * All-in-one: builds a candidate path then validates it.
+ * All-in-one certificate chain verification: builds a candidate path then
+ * validates time, constraints, policy, purpose, and optional service identity.
+ *
  * Equivalent to calling {@link buildCandidatePath} followed by
- * {@link validateCandidatePath}.
+ * {@link validateCandidatePath} (plus identity matching when configured).
+ *
+ * @example
+ * ```ts
+ * const result = await verifyCertificateChain({
+ *   leaf: serverCertPem,
+ *   intermediates: [intermediatePem],
+ *   roots: [rootCaPem],
+ *   purpose: 'serverAuth',
+ *   serviceIdentity: { type: 'dns', value: 'example.com' },
+ * });
+ * if (!result.ok) {
+ *   console.error(result.error.code, result.error.message);
+ * }
+ * ```
  */
 export async function verifyCertificateChain(
 	input: VerifyCertificateChainInput,
@@ -1078,10 +870,18 @@ export async function verifyCertificateChain(
 // ---------------------------------------------------------------------------
 
 /**
- * Verifies certificate signing request.
+ * Verifies the self-signature of a PKCS#10 certificate signing request.
  *
- * @param input The typed input payload.
- * @returns The verification result.
+ * Parses the CSR from PEM or DER, then checks that its signature is valid
+ * against its own embedded public key.
+ *
+ * @example
+ * ```ts
+ * const result = await verifyCertificateSigningRequest(csrPem);
+ * if (result.ok) {
+ *   console.log('subject:', result.value.subject.values.commonName);
+ * }
+ * ```
  */
 export async function verifyCertificateSigningRequest(
 	input: CsrSource,
@@ -1166,12 +966,7 @@ export function checkExtendedKeyUsage(
 // trustAnchorFromCertificate
 // ---------------------------------------------------------------------------
 
-/**
- * Trust anchor from certificate.
- *
- * @param certificate The certificate input.
- * @returns The computed value.
- */
+/** Extracts a {@link TrustAnchor} from a parsed certificate, copying the subject, SPKI, and key identifiers. */
 export function trustAnchorFromCertificate(certificate: ParsedCertificate): TrustAnchor {
 	return {
 		subjectDerHex: certificate.subject.derHex,
@@ -1267,20 +1062,10 @@ export async function validateForCa(input: ValidateForCaInput): Promise<VerifyCh
 // Private: leaf validation
 // ---------------------------------------------------------------------------
 
-/**
- * Validates leaf.
- *
- * @param leaf The leaf value.
- * @param input The typed input payload.
- * @param policyValidation The policy validation value.
- * @returns The validation result.
- */
+/** Enforces purpose-specific constraints on the leaf certificate (CA flag or EKU). */
 function validateLeaf(
 	leaf: ParsedCertificate,
 	input: {
-		/**
-		 * Carries the purpose value.
-		 */
 		readonly purpose?: VerifyPurpose;
 	},
 	policyValidation: PolicyValidationOutcome,
@@ -1314,13 +1099,7 @@ function validateLeaf(
 	return { ok: true, policyValidation };
 }
 
-/**
- * Validates service identity.
- *
- * @param leaf The leaf value.
- * @param serviceIdentity The service identity value.
- * @returns The validation result.
- */
+/** Matches the leaf's SAN against the requested service identity. */
 function validateServiceIdentity(
 	leaf: ParsedCertificate,
 	serviceIdentity: VerifyServiceIdentityInput,
@@ -1349,22 +1128,10 @@ function validateServiceIdentity(
 // Private: helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Apply EKU check.
- *
- * @param result The result value.
- * @param purpose The purpose value.
- * @returns The computed value.
- */
+/** Applies an EKU check to a successfully verified chain and maps failures to verify error codes. */
 function applyEkuCheck(
 	result: {
-		/**
-		 * Indicates whether the operation succeeded.
-		 */
 		readonly ok: true;
-		/**
-		 * Carries the successful value payload.
-		 */
 		readonly value: VerifiedCertificateChain;
 	},
 	purpose: EkuCheckPurpose,
@@ -1384,13 +1151,7 @@ function applyEkuCheck(
 	return result;
 }
 
-/**
- * Verifies chain for extended key usage profile.
- *
- * @param input The typed input payload.
- * @param purpose The purpose value.
- * @returns The verification result.
- */
+/** Verifies a chain then checks that all certificates permit the given EKU purpose. */
 async function verifyChainForExtendedKeyUsageProfile(
 	input: BuildCandidatePathInput & PolicyValidationInput & InitialNameConstraintsInput,
 	purpose: EkuCheckPurpose,
@@ -1402,12 +1163,7 @@ async function verifyChainForExtendedKeyUsageProfile(
 	return applyEkuCheck(result, purpose);
 }
 
-/**
- * Finds unprocessed critical extension.
- *
- * @param certificate The certificate input.
- * @returns The matching unprocessed critical extension.
- */
+/** Returns the OID of the first critical extension not in {@link PROCESSED_EXTENSION_OIDS}, or `undefined`. */
 function findUnprocessedCriticalExtension(certificate: ParsedCertificate): string | undefined {
 	for (const extension of certificate.extensions) {
 		if (extension.critical && !PROCESSED_EXTENSION_OIDS.has(extension.oid)) {
@@ -1417,15 +1173,7 @@ function findUnprocessedCriticalExtension(certificate: ParsedCertificate): strin
 	return undefined;
 }
 
-/**
- * Failure.
- *
- * @param code The code value.
- * @param message The message value.
- * @param index The index value.
- * @param details The structured details value.
- * @returns The computed value.
- */
+/** Constructs a {@link VerifyChainFailure} with the given code, message, optional chain index, and details. */
 function failure(
 	code: VerifyErrorCode,
 	message: string,
@@ -1438,22 +1186,12 @@ function failure(
 	};
 }
 
-/**
- * Verifies failure result.
- *
- * @param error The error value.
- * @returns The verification result.
- */
+/** Wraps a {@link VerifyChainFailure} into the standard indexed error result shape. */
 function verifyFailureResult(error: VerifyChainFailure): VerifyFailureResult {
 	return indexedErrorResult(error);
 }
 
-/**
- * Validates candidate path success result.
- *
- * @param policyValidation The policy validation value.
- * @returns The validation result.
- */
+/** Wraps a policy outcome into the validate-candidate-path success result shape. */
 function validateCandidatePathSuccessResult(
 	policyValidation: PolicyValidationOutcome,
 ): ValidateCandidatePathSuccessResult {
@@ -1464,62 +1202,34 @@ function validateCandidatePathSuccessResult(
 	};
 }
 
-/**
- * Verifies request failure result.
- *
- * @param code The code value.
- * @param message The message value.
- * @param details The structured details value.
- * @returns The verification result.
- */
+/** Constructs a CSR verification failure result. */
 function verifyRequestFailureResult(
 	code: VerifyRequestFailure['code'],
 	message: string,
 	details?: VerifyFailureDetails,
 ): VerifyRequestFailureResult {
 	const error: VerifyRequestFailure = {
-		/**
-		 * Indicates whether the operation succeeded.
-		 */
 		ok: false,
 		...micro509Error(code, message, details),
 	};
 	return errorResult(error);
 }
 
-/**
- * EKU check failure result.
- *
- * @param code The code value.
- * @param message The message value.
- * @param index The index value.
- * @returns The computed value.
- */
+/** Constructs an EKU check failure result at the given chain index. */
 function ekuCheckFailureResult(
 	code: EkuCheckFailure['code'],
 	message: string,
 	index: number,
 ): EkuCheckFailureResult {
 	const error: EkuCheckFailure = {
-		/**
-		 * Indicates whether the operation succeeded.
-		 */
 		ok: false,
 		...indexedMicro509Error(code, message, index),
-		/**
-		 * Carries the zero-based index associated with this value.
-		 */
 		index,
 	};
 	return indexedErrorResult(error);
 }
 
-/**
- * Resolves policy validation input.
- *
- * @param input The typed input payload.
- * @returns The resolved policy validation input.
- */
+/** Merges flat and nested policy fields, with nested taking precedence. */
 function resolvePolicyValidationInput(
 	input: NestedValidationInputs & PolicyValidationInput,
 ): PolicyValidationInput {
@@ -1547,12 +1257,7 @@ function resolvePolicyValidationInput(
 	};
 }
 
-/**
- * Resolves initial name constraints input.
- *
- * @param input The typed input payload.
- * @returns The resolved initial name constraints input.
- */
+/** Merges flat and nested name-constraint fields, with nested taking precedence. */
 function resolveInitialNameConstraintsInput(
 	input: NestedValidationInputs & InitialNameConstraintsInput,
 ): InitialNameConstraintsInput {
@@ -1570,12 +1275,7 @@ function resolveInitialNameConstraintsInput(
 	};
 }
 
-/**
- * Copy validation inputs.
- *
- * @param input The typed input payload.
- * @returns The computed value.
- */
+/** Extracts the resolved policy and name-constraint inputs for forwarding. */
 function copyValidationInputs(
 	input: NestedValidationInputs & PolicyValidationInput & InitialNameConstraintsInput,
 ): NestedValidationInputs {
@@ -1587,12 +1287,7 @@ function copyValidationInputs(
 	};
 }
 
-/**
- * Returns whether policy validation input.
- *
- * @param input The typed input payload.
- * @returns Whether the condition holds.
- */
+/** Returns `true` if any policy validation field is defined. */
 function hasPolicyValidationInput(input: PolicyValidationInput): boolean {
 	return (
 		input.initialPolicySet !== undefined ||
@@ -1602,23 +1297,12 @@ function hasPolicyValidationInput(input: PolicyValidationInput): boolean {
 	);
 }
 
-/**
- * Returns whether initial name constraints input.
- *
- * @param input The typed input payload.
- * @returns Whether the condition holds.
- */
+/** Returns `true` if any initial name constraint field is defined. */
 function hasInitialNameConstraintsInput(input: InitialNameConstraintsInput): boolean {
 	return input.permittedSubtrees !== undefined || input.excludedSubtrees !== undefined;
 }
 
-/**
- * Builds failure details.
- *
- * @param chain The chain value.
- * @param index The index value.
- * @returns The built failure details.
- */
+/** Constructs failure details with subject/issuer CNs and full chain CN list. */
 function buildFailureDetails(
 	chain: readonly ParsedCertificate[],
 	index: number,
@@ -1631,22 +1315,12 @@ function buildFailureDetails(
 	});
 }
 
-/**
- * Format EKU.
- *
- * @param value The value to process.
- * @returns The computed value.
- */
+/** Formats an EKU value as a human-readable string (name or raw OID). */
 function formatEku(value: ExtendedKeyUsage): string {
 	return typeof value === 'string' ? value : value.value;
 }
 
-/**
- * Detail.
- *
- * @param input The typed input payload.
- * @returns The computed value.
- */
+/** Strips `undefined` values from a loose input to produce a clean {@link VerifyFailureDetails}. */
 function detail(input: VerifyFailureDetailsInput): VerifyFailureDetails {
 	return {
 		...(input.subjectCommonName === undefined
@@ -1665,13 +1339,7 @@ function detail(input: VerifyFailureDetailsInput): VerifyFailureDetails {
 	};
 }
 
-/**
- * Builds validation state.
- *
- * @param input The typed input payload.
- * @param chainLength The chain length value.
- * @returns The built validation state.
- */
+/** Initializes policy and name-constraint validation state for a chain walk. */
 function buildValidationState(
 	input: NestedValidationInputs & PolicyValidationInput & InitialNameConstraintsInput,
 	chainLength: number,

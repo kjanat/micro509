@@ -1,8 +1,10 @@
 /**
- * CRL lifecycle helpers.
+ * Full CRL lifecycle: create, parse, verify, validate, and revocation check.
  *
- * This module creates, parses, validates, and verifies certificate revocation lists and
- * exposes certificate-level revocation lookup helpers.
+ * Supports complete and delta CRLs, issuing distribution point scoping,
+ * indirect CRL processing, per-entry reason codes, and invalidity dates.
+ *
+ * @module
  */
 
 import {
@@ -75,29 +77,23 @@ import { verifySignedData } from './sig-verify.ts';
 import { encodeAlgorithmIdentifier, getSignatureAlgorithm, signBytes } from './signing.ts';
 
 /**
- * Describes the input shape for revoked certificate operations.
+ * Single revoked certificate entry for {@link createCertificateRevocationList}.
  */
 export interface RevokedCertificateInput {
-	/**
-	 * Carries the serial number value.
-	 */
+	/** DER-encoded certificate serial number to revoke. */
 	readonly serialNumber: Uint8Array;
-	/**
-	 * Carries the revocation date value.
-	 */
+	/** When the certificate was revoked. Defaults to `thisUpdate` of the CRL. */
 	readonly revocationDate?: Date;
-	/**
-	 * Carries the reason code value.
-	 */
+	/** RFC 5280 CRLReason code. Omit for `unspecified`. */
 	readonly reasonCode?: RevocationReason;
-	/**
-	 * Carries the invalidity date value.
-	 */
+	/** When the key or certificate became suspect — may predate `revocationDate`. */
 	readonly invalidityDate?: Date;
 }
 
 /**
- * Enumerates revocation values used by this module.
+ * RFC 5280 §5.3.1 CRLReason code values.
+ *
+ * `removeFromCRL` is used in delta CRLs to un-hold a certificate.
  */
 export type RevocationReason =
 	| 'unspecified'
@@ -112,380 +108,212 @@ export type RevocationReason =
 	| 'aACompromise';
 
 /**
- * Describes the input shape for create certificate revocation list operations.
+ * Input for {@link createCertificateRevocationList}.
  */
 export interface CreateCertificateRevocationListInput {
-	/**
-	 * Carries the issuer value.
-	 */
+	/** Distinguished name of the CRL issuer (typically the signing CA). */
 	readonly issuer: NameInput;
-	/**
-	 * Carries the signer private key value.
-	 */
+	/** Private key used to sign the CRL. Algorithm is inferred from the key. */
 	readonly signerPrivateKey: CryptoKey;
-	/**
-	 * Carries the issuer public key value.
-	 */
+	/** Issuer public key — used to embed an Authority Key Identifier extension. */
 	readonly issuerPublicKey?: CryptoKey;
-	/**
-	 * Carries the this update value.
-	 */
+	/** Issuance timestamp. Defaults to `new Date()`. */
 	readonly thisUpdate?: Date;
-	/**
-	 * Carries the next update value.
-	 */
+	/** Planned next issuance. Omit for an open-ended CRL. */
 	readonly nextUpdate?: Date;
-	/**
-	 * Carries the revoked certificates value.
-	 */
+	/** Certificates to list as revoked in this CRL. */
 	readonly revokedCertificates?: readonly RevokedCertificateInput[];
-	/**
-	 * Carries the crl number value.
-	 */
+	/** Monotonically-increasing CRL sequence number (CRLNumber extension). */
 	readonly crlNumber?: number;
-	/**
-	 * Carries the bas e crl number value.
-	 */
+	/** If set, marks this CRL as a delta CRL referencing the given base CRL number. */
 	readonly baseCrlNumber?: number;
-	/**
-	 * Carries the issuing distribution point value.
-	 */
+	/** Issuing distribution point extension — scopes this CRL to a subset of certificates. */
 	readonly issuingDistributionPoint?: IssuingDistributionPoint;
-	/**
-	 * Carries the freshest crl distribution points value.
-	 */
+	/** Freshest CRL distribution points — tells relying parties where to find delta CRLs. */
 	readonly freshestCrlDistributionPoints?: readonly DistributionPoint[];
 }
 
 /**
- * Bundles the encoded artifacts produced by certificate revocation list operations.
+ * Encoded CRL in multiple serialisation formats, returned by {@link createCertificateRevocationList}.
  */
 export interface CertificateRevocationListMaterial {
-	/**
-	 * Carries the der value.
-	 */
+	/** Raw DER bytes of the signed CRL. */
 	readonly der: Uint8Array;
-	/**
-	 * Carries the pem value.
-	 */
+	/** PEM-encoded CRL (`-----BEGIN X509 CRL-----`). */
 	readonly pem: string;
-	/**
-	 * Carries the base64 value.
-	 */
+	/** Base64-encoded DER (no PEM armour). */
 	readonly base64: string;
 }
 
 /**
- * Describes the structured revoked certificate produced by parsing helpers.
+ * A single revoked-certificate entry decoded from a CRL.
  */
 export interface ParsedRevokedCertificate {
-	/**
-	 * Carries the hexadecimal serial number.
-	 */
+	/** Hex-encoded serial number of the revoked certificate. */
 	readonly serialNumberHex: string;
-	/**
-	 * Carries the revocation date value.
-	 */
+	/** When the CA declared this certificate revoked. */
 	readonly revocationDate: Date;
-	/**
-	 * Carries the reason code value.
-	 */
+	/** RFC 5280 CRLReason, if the entry carries one. */
 	readonly reasonCode?: RevocationReason;
-	/**
-	 * Carries the invalidity date value.
-	 */
+	/** When the key or certificate actually became suspect, if present. */
 	readonly invalidityDate?: Date;
-	/**
-	 * Carries the certificate issuer value.
-	 */
+	/** Indirect-CRL certificate issuer override (RFC 5280 §5.3.3). */
 	readonly certificateIssuer?: readonly GeneralName[];
 }
 
 /**
- * Describes the structured certificate revocation list produced by parsing helpers.
+ * Decoded X.509 CRL, returned by {@link parseCertificateRevocationListDer}
+ * and {@link parseCertificateRevocationListPem}.
  */
 export interface ParsedCertificateRevocationList {
-	/**
-	 * Carries the version value.
-	 */
+	/** CRL version (1 = v1, 2 = v2 with extensions). */
 	readonly version: number;
-	/**
-	 * Carries the DER-encoded tbs cert list.
-	 */
+	/** DER-encoded TBSCertList — the signed payload for signature verification. */
 	readonly tbsCertListDer: Uint8Array;
-	/**
-	 * Carries the signature value value.
-	 */
+	/** Raw signature bytes from the CRL outer wrapper. */
 	readonly signatureValue: Uint8Array;
-	/**
-	 * Carries the issuer value.
-	 */
+	/** CRL issuer distinguished name. */
 	readonly issuer: {
-		/**
-		 * Carries the hexadecimal der.
-		 */
+		/** Hex-encoded DER of the full Name SEQUENCE. */
 		readonly derHex: string;
-		/**
-		 * Carries the common name value.
-		 */
+		/** Common name component, if present. */
 		readonly commonName?: string;
 	};
-	/**
-	 * Carries the this update value.
-	 */
+	/** Start of the CRL validity window. */
 	readonly thisUpdate: Date;
-	/**
-	 * Carries the next update value.
-	 */
+	/** End of the CRL validity window. Absent if the CA does not commit to a schedule. */
 	readonly nextUpdate?: Date;
-	/**
-	 * Carries the OID for signature algorithm.
-	 */
+	/** OID of the algorithm used to sign this CRL. */
 	readonly signatureAlgorithmOid: string;
-	/**
-	 * Carries the OID for issuer public key algorithm.
-	 */
+	/** OID of the issuer's public key algorithm, when available. */
 	readonly issuerPublicKeyAlgorithmOid?: string;
-	/**
-	 * Carries the OID for issuer public key parameters.
-	 */
+	/** OID of the issuer's public key parameters (e.g. named curve), when available. */
 	readonly issuerPublicKeyParametersOid?: string;
-	/**
-	 * Carries the authority key identifier value.
-	 */
+	/** Hex-encoded Authority Key Identifier, if the extension is present. */
 	readonly authorityKeyIdentifier?: string;
-	/**
-	 * Carries the crl number value.
-	 */
+	/** CRLNumber extension value — monotonically increasing sequence number. */
 	readonly crlNumber?: number;
-	/**
-	 * Carries the bas e crl number value.
-	 */
+	/** Delta CRL indicator — present only on delta CRLs, referencing the base CRL number. */
 	readonly baseCrlNumber?: number;
-	/**
-	 * Carries the issuing distribution point value.
-	 */
+	/** Issuing distribution point extension — scopes this CRL to a certificate subset. */
 	readonly issuingDistributionPoint?: ParsedIssuingDistributionPoint;
-	/**
-	 * Carries the freshest crl distribution points value.
-	 */
+	/** Freshest CRL extension — points to delta CRL locations. */
 	readonly freshestCrlDistributionPoints?: readonly ParsedDistributionPoint[];
-	/**
-	 * Carries the revoked certificates value.
-	 */
+	/** All revoked certificate entries (empty array if none). */
 	readonly revokedCertificates: readonly ParsedRevokedCertificate[];
 }
 
-/**
- * Defines the revocation reason codes used by this module.
- */
+/** RFC 5280 §5.3.1 CRLReason integer codes, keyed by reason name. */
 const REVOCATION_REASON_CODES: Record<RevocationReason, number> = {
-	/**
-	 * Carries the unspecified value.
-	 */
 	unspecified: 0,
-	/**
-	 * Carries the key compromise value.
-	 */
 	keyCompromise: 1,
-	/**
-	 * Carries the ca compromise value.
-	 */
 	cACompromise: 2,
-	/**
-	 * Carries the affiliation changed value.
-	 */
 	affiliationChanged: 3,
-	/**
-	 * Carries the superseded value.
-	 */
 	superseded: 4,
-	/**
-	 * Carries the cessation of operation value.
-	 */
 	cessationOfOperation: 5,
-	/**
-	 * Carries the certificate hold value.
-	 */
 	certificateHold: 6,
-	/**
-	 * Carries the remove from crl value.
-	 */
 	removeFromCRL: 8,
-	/**
-	 * Carries the privilege withdrawn value.
-	 */
 	privilegeWithdrawn: 9,
-	/**
-	 * Carries the a a compromise value.
-	 */
 	aACompromise: 10,
 };
 
-/**
- * Describes the accepted source forms for CRL inputs.
- */
+/** PEM string, DER bytes, or already-parsed CRL. */
 export type CrlSource = string | Uint8Array | ParsedCertificateRevocationList;
-/**
- * Describes the accepted source forms for CRL certificate inputs.
- */
+/** PEM string, DER bytes, or already-parsed certificate. */
 export type CrlCertificateSource = string | Uint8Array | ParsedCertificate;
 
-/**
- * Represents a typed failure produced by verify certificate revocation list operations.
- */
+/** Failure detail when CRL signature verification fails. */
 export interface VerifyCertificateRevocationListFailure extends Micro509Error<'signature_invalid'> {
-	/**
-	 * Indicates whether the operation succeeded.
-	 */
 	readonly ok: false;
 }
 
-/**
- * Represents the result returned by verify certificate revocation list failure operations.
- */
+/** Failure branch of {@link VerifyCertificateRevocationListResult}. */
 interface VerifyCertificateRevocationListFailureResult {
-	/**
-	 * Indicates whether the operation succeeded.
-	 */
 	readonly ok: false;
-	/**
-	 * Carries the canonical error payload.
-	 */
 	readonly error: VerifyCertificateRevocationListFailure;
-	/**
-	 * Carries the machine-readable error code.
-	 */
 	readonly code: 'signature_invalid';
-	/**
-	 * Carries the human-readable error message.
-	 */
 	readonly message: string;
 }
 
 /**
- * Represents the result returned by verify certificate revocation list operations.
+ * Result of {@link verifyCertificateRevocationList}.
+ *
+ * On success, `value` is the parsed CRL whose signature has been verified.
  */
 export type VerifyCertificateRevocationListResult =
 	| {
-			/**
-			 * Indicates whether the operation succeeded.
-			 */
 			readonly ok: true;
-			/**
-			 * Carries the successful value payload.
-			 */
+			/** Parsed CRL with a verified signature. */
 			readonly value: ParsedCertificateRevocationList;
 	  }
 	| VerifyCertificateRevocationListFailureResult;
 
 /**
- * Describes the input shape for validate certificate revocation list operations.
+ * Input for {@link validateCertificateRevocationList}.
  */
 export interface ValidateCertificateRevocationListInput {
-	/**
-	 * Carries the crl value.
-	 */
+	/** The CRL to validate. */
 	readonly crl: CrlSource;
-	/**
-	 * Carries the issuer certificate value.
-	 */
+	/** Certificate of the CA that should have signed the CRL. */
 	readonly issuerCertificate: CrlCertificateSource;
-	/**
-	 * Carries the at value.
-	 */
+	/** Evaluation time for freshness checks. Defaults to `new Date()`. */
 	readonly at?: Date;
-	/**
-	 * Carries the clock skew ms value.
-	 */
+	/** Tolerance in milliseconds for clock skew when checking `thisUpdate`/`nextUpdate`. */
 	readonly clockSkewMs?: number;
 }
 
 /**
- * Represents a typed failure produced by validate certificate revocation list operations.
+ * Failure detail for {@link validateCertificateRevocationList}.
+ *
+ * Possible codes: `signature_invalid`, `issuer_mismatch`, `stale_crl`, `crl_sign_not_permitted`.
  */
 export interface ValidateCertificateRevocationListFailure
 	extends Micro509Error<
 		'signature_invalid' | 'issuer_mismatch' | 'stale_crl' | 'crl_sign_not_permitted'
 	> {
-	/**
-	 * Indicates whether the operation succeeded.
-	 */
 	readonly ok: false;
 }
 
-/**
- * Represents the result returned by validate certificate revocation list failure
- * operations.
- */
+/** Failure branch of {@link ValidateCertificateRevocationListResult}. */
 interface ValidateCertificateRevocationListFailureResult {
-	/**
-	 * Indicates whether the operation succeeded.
-	 */
 	readonly ok: false;
-	/**
-	 * Carries the canonical error payload.
-	 */
 	readonly error: ValidateCertificateRevocationListFailure;
-	/**
-	 * Carries the machine-readable error code.
-	 */
 	readonly code: 'signature_invalid' | 'issuer_mismatch' | 'stale_crl' | 'crl_sign_not_permitted';
-	/**
-	 * Carries the human-readable error message.
-	 */
 	readonly message: string;
 }
 
 /**
- * Represents the result returned by validate certificate revocation list operations.
+ * Result of {@link validateCertificateRevocationList}.
+ *
+ * On success, the CRL has passed signature, issuer, key-usage, and freshness checks.
  */
 export type ValidateCertificateRevocationListResult =
 	| {
-			/**
-			 * Indicates whether the operation succeeded.
-			 */
 			readonly ok: true;
-			/**
-			 * Carries the successful value payload.
-			 */
+			/** Validated and parsed CRL. */
 			readonly value: ParsedCertificateRevocationList;
 	  }
 	| ValidateCertificateRevocationListFailureResult;
 
 /**
- * Describes the input shape for check certificate revocation against CRL operations.
+ * Input for {@link checkCertificateRevocationAgainstCrl}.
  */
 export interface CheckCertificateRevocationAgainstCrlInput {
-	/**
-	 * Carries the certificate value.
-	 */
+	/** Certificate whose revocation status to check. */
 	readonly certificate: CrlCertificateSource;
-	/**
-	 * Carries the issuer certificate value.
-	 */
+	/** Issuer of `certificate` — also expected signer of the CRL. */
 	readonly issuerCertificate: CrlCertificateSource;
-	/**
-	 * Carries the crl value.
-	 */
+	/** Complete (base) CRL to check against. */
 	readonly crl: CrlSource;
-	/**
-	 * Carries the delta crl value.
-	 */
+	/** Optional delta CRL for more recent revocation information. */
 	readonly deltaCrl?: CrlSource;
-	/**
-	 * Carries the at value.
-	 */
+	/** Evaluation time. Defaults to `new Date()`. */
 	readonly at?: Date;
-	/**
-	 * Carries the clock skew ms value.
-	 */
+	/** Clock-skew tolerance in milliseconds for freshness checks. */
 	readonly clockSkewMs?: number;
 }
 
-/**
- * Enumerates the error codes used by check certificate revocation against CRL failures.
- */
+/** Error codes that {@link checkCertificateRevocationAgainstCrl} may return. */
 export type CheckCertificateRevocationAgainstCrlErrorCode =
 	| 'signature_invalid'
 	| 'issuer_mismatch'
@@ -493,9 +321,7 @@ export type CheckCertificateRevocationAgainstCrlErrorCode =
 	| 'crl_sign_not_permitted'
 	| 'non_applicable';
 
-/**
- * Enumerates CRL applicability failure values used by this module.
- */
+/** Structured reason why a CRL was deemed non-applicable to a given certificate. */
 export type CrlApplicabilityFailureReason =
 	| 'certificate_scope_mismatch'
 	| 'delta_crl_incompatible'
@@ -505,139 +331,101 @@ export type CrlApplicabilityFailureReason =
 	| 'issuer_mismatch'
 	| 'reasons_mismatch';
 
-/**
- * Represents the result returned by revoked certificate lookup operations.
- */
+/** Internal result of looking up a serial number in a CRL's revoked entries. */
 type RevokedCertificateLookupResult =
 	| {
-			/**
-			 * Indicates whether the operation succeeded.
-			 */
 			readonly ok: true;
-			/**
-			 * Carries the entry value.
-			 */
+			/** Matching revoked entry, if found. */
 			readonly entry?: ParsedRevokedCertificate;
 	  }
 	| CheckCertificateRevocationAgainstCrlFailureResult;
 
-/**
- * Carries structured details for check certificate revocation against CRL failures.
- */
+/** Structured details attached to a {@link CheckCertificateRevocationAgainstCrlFailure}. */
 export interface CheckCertificateRevocationAgainstCrlFailureDetails {
-	/**
-	 * Carries the reason value.
-	 */
+	/** Why the CRL was non-applicable, when the error code is `non_applicable`. */
 	readonly reason?: CrlApplicabilityFailureReason;
 }
 
-/**
- * Represents a typed failure produced by check certificate revocation against CRL
- * operations.
- */
+/** Failure detail for {@link checkCertificateRevocationAgainstCrl}. */
 export interface CheckCertificateRevocationAgainstCrlFailure
 	extends Micro509Error<
 		CheckCertificateRevocationAgainstCrlErrorCode,
 		CheckCertificateRevocationAgainstCrlFailureDetails
 	> {
-	/**
-	 * Indicates whether the operation succeeded.
-	 */
 	readonly ok: false;
 }
 
-/**
- * Carries the value returned by check certificate revocation against CRL good operations.
- */
+/** Success value when the certificate is not found in the CRL. */
 export interface CheckCertificateRevocationAgainstCrlGoodValue {
-	/**
-	 * Identifies the status value.
-	 */
+	/** Certificate is not revoked. */
 	readonly status: 'good';
-	/**
-	 * Carries the crl value.
-	 */
+	/** The validated CRL that was checked. */
 	readonly crl: ParsedCertificateRevocationList;
 }
 
-/**
- * Carries the value returned by check certificate revocation against CRL revoked
- * operations.
- */
+/** Success value when the certificate is found as revoked in the CRL. */
 export interface CheckCertificateRevocationAgainstCrlRevokedValue {
-	/**
-	 * Identifies the status value.
-	 */
+	/** Certificate is revoked. */
 	readonly status: 'revoked';
-	/**
-	 * Carries the crl value.
-	 */
+	/** The validated CRL that contained the revocation entry. */
 	readonly crl: ParsedCertificateRevocationList;
-	/**
-	 * Carries the revocation date value.
-	 */
+	/** When the CA declared this certificate revoked. */
 	readonly revocationDate: Date;
-	/**
-	 * Carries the reason code value.
-	 */
+	/** CRLReason from the entry, if present. */
 	readonly reasonCode?: RevocationReason;
 }
 
-/**
- * Carries the value returned by check certificate revocation against CRL operations.
- */
+/** Discriminated union of `good` and `revoked` outcomes. */
 export type CheckCertificateRevocationAgainstCrlValue =
 	| CheckCertificateRevocationAgainstCrlGoodValue
 	| CheckCertificateRevocationAgainstCrlRevokedValue;
 
-/**
- * Represents the result returned by check certificate revocation against CRL failure
- * operations.
- */
+/** Failure branch of {@link CheckCertificateRevocationAgainstCrlResult}. */
 interface CheckCertificateRevocationAgainstCrlFailureResult {
-	/**
-	 * Indicates whether the operation succeeded.
-	 */
 	readonly ok: false;
-	/**
-	 * Carries the canonical error payload.
-	 */
 	readonly error: CheckCertificateRevocationAgainstCrlFailure;
-	/**
-	 * Carries the machine-readable error code.
-	 */
 	readonly code: CheckCertificateRevocationAgainstCrlErrorCode;
-	/**
-	 * Carries the human-readable error message.
-	 */
 	readonly message: string;
-	/**
-	 * Carries structured details for the current failure.
-	 */
+	/** Present when `code` is `non_applicable` — explains why the CRL was rejected. */
 	readonly details?: CheckCertificateRevocationAgainstCrlFailureDetails;
 }
 
 /**
- * Represents the result returned by check certificate revocation against CRL operations.
+ * Result of {@link checkCertificateRevocationAgainstCrl}.
+ *
+ * On success `value.status` is `'good'` or `'revoked'`.
+ * On failure the CRL could not be validated or was non-applicable.
  */
 export type CheckCertificateRevocationAgainstCrlResult =
 	| {
-			/**
-			 * Indicates whether the operation succeeded.
-			 */
 			readonly ok: true;
-			/**
-			 * Carries the successful value payload.
-			 */
 			readonly value: CheckCertificateRevocationAgainstCrlValue;
 	  }
 	| CheckCertificateRevocationAgainstCrlFailureResult;
 
 /**
- * Creates certificate revocation list.
+ * Signs and encodes an X.509 v2 CRL.
  *
- * @param input The typed input payload.
- * @returns The created certificate revocation list.
+ * Embeds Authority Key Identifier, CRLNumber, delta CRL indicator,
+ * issuing distribution point, and freshest-CRL extensions as configured.
+ *
+ * @example
+ * ```ts
+ * import { createCertificateRevocationList } from 'micro509';
+ *
+ * const crl = await createCertificateRevocationList({
+ *   issuer: { commonName: 'Example CA' },
+ *   signerPrivateKey: caPrivateKey,
+ *   issuerPublicKey: caPublicKey,
+ *   thisUpdate: new Date('2025-01-01'),
+ *   nextUpdate: new Date('2025-02-01'),
+ *   crlNumber: 42,
+ *   revokedCertificates: [
+ *     { serialNumber: revokedSerial, reasonCode: 'keyCompromise' },
+ *   ],
+ * });
+ * // crl.pem, crl.der, crl.base64
+ * ```
  */
 export async function createCertificateRevocationList(
 	input: CreateCertificateRevocationListInput,
@@ -680,10 +468,10 @@ export async function createCertificateRevocationList(
 }
 
 /**
- * Parses certificate revocation list DER.
+ * Decodes a DER-encoded X.509 CRL into a structured {@link ParsedCertificateRevocationList}.
  *
- * @param der The DER-encoded bytes.
- * @returns The parsed certificate revocation list DER.
+ * Does not verify the signature — call {@link verifyCertificateRevocationList} or
+ * {@link validateCertificateRevocationList} for that.
  */
 export function parseCertificateRevocationListDer(
 	der: Uint8Array,
@@ -782,21 +570,25 @@ export function parseCertificateRevocationListDer(
 }
 
 /**
- * Parses certificate revocation list PEM.
+ * Decodes a PEM-encoded X.509 CRL (`-----BEGIN X509 CRL-----`).
  *
- * @param pem The PEM-encoded text.
- * @returns The parsed certificate revocation list PEM.
+ * @example
+ * ```ts
+ * import { parseCertificateRevocationListPem } from 'micro509';
+ *
+ * const crl = parseCertificateRevocationListPem(pemString);
+ * console.log(crl.issuer.commonName, crl.revokedCertificates.length);
+ * ```
  */
 export function parseCertificateRevocationListPem(pem: string): ParsedCertificateRevocationList {
 	return parseCertificateRevocationListDer(pemDecode('X509 CRL', pem));
 }
 
 /**
- * Verifies certificate revocation list.
+ * Verifies the CRL signature against the issuer certificate's public key.
  *
- * @param crl The CRL value.
- * @param issuerCertificate The issuer certificate input.
- * @returns The verification result.
+ * Does **not** check issuer name match, key-usage, or freshness — use
+ * {@link validateCertificateRevocationList} for full validation.
  */
 export async function verifyCertificateRevocationList(
 	crl: string | Uint8Array,
@@ -828,10 +620,9 @@ export async function verifyCertificateRevocationList(
 }
 
 /**
- * Validates certificate revocation list.
- *
- * @param input The typed input payload.
- * @returns The validation result.
+ * Full CRL validation: issuer name match, authority key identifier match,
+ * cRLSign key-usage check, signature verification, and `thisUpdate`/`nextUpdate`
+ * freshness check (with optional clock-skew tolerance).
  */
 export async function validateCertificateRevocationList(
 	input: ValidateCertificateRevocationListInput,
@@ -890,10 +681,26 @@ export async function validateCertificateRevocationList(
 }
 
 /**
- * Checks certificate revocation against CRL.
+ * End-to-end revocation check: validates the CRL (and optional delta CRL),
+ * verifies applicability via distribution-point and scope matching, then
+ * resolves the certificate's revocation status.
  *
- * @param input The typed input payload.
- * @returns The check result.
+ * Returns `good` if the serial is absent, `revoked` with date/reason if present,
+ * or an error if the CRL cannot be validated or is non-applicable.
+ *
+ * @example
+ * ```ts
+ * import { checkCertificateRevocationAgainstCrl } from 'micro509';
+ *
+ * const result = await checkCertificateRevocationAgainstCrl({
+ *   certificate: leafPem,
+ *   issuerCertificate: caPem,
+ *   crl: crlPem,
+ * });
+ * if (result.ok && result.value.status === 'revoked') {
+ *   console.log('revoked on', result.value.revocationDate);
+ * }
+ * ```
  */
 export async function checkCertificateRevocationAgainstCrl(
 	input: CheckCertificateRevocationAgainstCrlInput,
@@ -959,87 +766,41 @@ export async function checkCertificateRevocationAgainstCrl(
 	);
 }
 
-/**
- * Verifies certificate revocation list failure result.
- *
- * @param code The code value.
- * @param message The message value.
- * @returns The verification result.
- */
+/** Builds a `VerifyCertificateRevocationListFailureResult`. */
 function verifyCertificateRevocationListFailureResult(
 	code: 'signature_invalid',
 	message: string,
 ): VerifyCertificateRevocationListFailureResult {
 	const error: VerifyCertificateRevocationListFailure = {
-		/**
-		 * Indicates whether the operation succeeded.
-		 */
 		ok: false,
-		/**
-		 * Carries the machine-readable error code.
-		 */
 		code,
-		/**
-		 * Carries the human-readable error message.
-		 */
 		message,
 	};
 	return { ok: false, error, code, message };
 }
 
-/**
- * Validates certificate revocation list failure result.
- *
- * @param code The code value.
- * @param message The message value.
- * @returns The validation result.
- */
+/** Builds a `ValidateCertificateRevocationListFailureResult`. */
 function validateCertificateRevocationListFailureResult(
 	code: ValidateCertificateRevocationListFailureResult['code'],
 	message: string,
 ): ValidateCertificateRevocationListFailureResult {
 	const error: ValidateCertificateRevocationListFailure = {
-		/**
-		 * Indicates whether the operation succeeded.
-		 */
 		ok: false,
-		/**
-		 * Carries the machine-readable error code.
-		 */
 		code,
-		/**
-		 * Carries the human-readable error message.
-		 */
 		message,
 	};
 	return { ok: false, error, code, message };
 }
 
-/**
- * Checks certificate revocation against CRL failure result.
- *
- * @param code The code value.
- * @param message The message value.
- * @param details The structured details value.
- * @returns The check result.
- */
+/** Builds a `CheckCertificateRevocationAgainstCrlFailureResult`. */
 function checkCertificateRevocationAgainstCrlFailureResult(
 	code: CheckCertificateRevocationAgainstCrlErrorCode,
 	message: string,
 	details?: CheckCertificateRevocationAgainstCrlFailureDetails,
 ): CheckCertificateRevocationAgainstCrlFailureResult {
 	const error: CheckCertificateRevocationAgainstCrlFailure = {
-		/**
-		 * Indicates whether the operation succeeded.
-		 */
 		ok: false,
-		/**
-		 * Carries the machine-readable error code.
-		 */
 		code,
-		/**
-		 * Carries the human-readable error message.
-		 */
 		message,
 		...(details === undefined ? {} : { details }),
 	};
@@ -1052,12 +813,7 @@ function checkCertificateRevocationAgainstCrlFailureResult(
 	};
 }
 
-/**
- * Checks certificate revocation against CRL success.
- *
- * @param value The value to process.
- * @returns The check result.
- */
+/** Wraps a success value into a `CheckCertificateRevocationAgainstCrlResult`. */
 function checkCertificateRevocationAgainstCrlSuccess(
 	value: CheckCertificateRevocationAgainstCrlValue,
 ): CheckCertificateRevocationAgainstCrlResult {
@@ -1065,11 +821,8 @@ function checkCertificateRevocationAgainstCrlSuccess(
 }
 
 /**
- * Returns whether certificate revoked.
- *
- * @param certificateSerialNumber The certificate serial number value.
- * @param crl The CRL value.
- * @returns Whether the condition holds.
+ * Quick serial-number lookup — returns `true` if the serial appears in the
+ * CRL's revoked entries. Does **not** validate the CRL or check applicability.
  */
 export function isCertificateRevoked(
 	certificateSerialNumber: Uint8Array | string,
@@ -1084,13 +837,7 @@ export function isCertificateRevoked(
 	);
 }
 
-/**
- * Finds revoked certificate entry.
- *
- * @param certificate The certificate input.
- * @param crl The CRL value.
- * @returns The matching revoked certificate entry.
- */
+/** Searches CRL entries for the certificate's serial, respecting indirect-CRL issuer overrides. */
 function findRevokedCertificateEntry(
 	certificate: ParsedCertificate,
 	crl: ParsedCertificateRevocationList,
@@ -1122,14 +869,7 @@ function findRevokedCertificateEntry(
 	return { ok: true };
 }
 
-/**
- * Checks CRL applicability.
- *
- * @param certificate The certificate input.
- * @param crl The CRL value.
- * @param allowDeltaCrl The allow delta CRL value.
- * @returns The check result.
- */
+/** RFC 5280 §6.3 CRL applicability: scope, distribution-point, reason, and indirect-CRL checks. */
 function checkCrlApplicability(
 	certificate: ParsedCertificate,
 	crl: ParsedCertificateRevocationList,
@@ -1260,13 +1000,7 @@ function checkCrlApplicability(
 	);
 }
 
-/**
- * Checks delta CRL compatibility.
- *
- * @param completECrl The complete CRL value.
- * @param deltaCrl The delta CRL value.
- * @returns The check result.
- */
+/** Verifies that a delta CRL is compatible with the given complete CRL (same issuer, AKI, IDP, and valid numbering). */
 function checkDeltaCrlCompatibility(
 	completeCrl: ParsedCertificateRevocationList,
 	deltaCrl: ParsedCertificateRevocationList,
@@ -1327,13 +1061,7 @@ function checkDeltaCrlCompatibility(
 	return undefined;
 }
 
-/**
- * Matches es indirect CRL issuer.
- *
- * @param crlIssuerNames The CRL issuer names value.
- * @param crl The CRL value.
- * @returns The computed value.
- */
+/** Checks whether any `crlIssuer` GeneralName matches the CRL's issuer via directoryName DER comparison. */
 function matchesIndirectCrlIssuer(
 	crlIssuerNames: readonly GeneralName[] | undefined,
 	crl: ParsedCertificateRevocationList,
@@ -1354,14 +1082,7 @@ function matchesIndirectCrlIssuer(
 	return sawUnsupportedName ? 'unsupported' : false;
 }
 
-/**
- * Matches es revoked entry issuer.
- *
- * @param certificate The certificate input.
- * @param crl The CRL value.
- * @param effectiveIssuer The effective issuer value.
- * @returns The computed value.
- */
+/** Determines whether a revoked entry's effective issuer matches the certificate's issuer. */
 function matchesRevokedEntryIssuer(
 	certificate: ParsedCertificate,
 	crl: ParsedCertificateRevocationList,
@@ -1385,13 +1106,7 @@ function matchesRevokedEntryIssuer(
 	return sawUnsupportedName ? 'unsupported' : 'mismatch';
 }
 
-/**
- * Non applicable.
- *
- * @param reason The reason value.
- * @param message The message value.
- * @returns The computed value.
- */
+/** Shorthand for building a `non_applicable` failure result with the given reason. */
 function nonApplicable(
 	reason: CrlApplicabilityFailureReason,
 	message: string,
@@ -1399,16 +1114,7 @@ function nonApplicable(
 	return checkCertificateRevocationAgainstCrlFailureResult('non_applicable', message, { reason });
 }
 
-/**
- * Resolves certificate revocation status.
- *
- * @param certificate The certificate input.
- * @param at The at value.
- * @param completECrl The complete CRL value.
- * @param completeEntry The complete entry value.
- * @param deltaEntry The delta entry value.
- * @returns The resolved certificate revocation status.
- */
+/** Merges complete and delta CRL entries per RFC 5280 §5.2.4 to produce a final `good`/`revoked` status. */
 function resolveCertificateRevocationStatus(
 	certificate: ParsedCertificate,
 	at: Date,
@@ -1447,13 +1153,7 @@ function resolveCertificateRevocationStatus(
 	});
 }
 
-/**
- * Matches es distribution point name.
- *
- * @param certificatePoint The certificate point value.
- * @param crlPoint The CRL point value.
- * @returns The computed value.
- */
+/** Returns `true` if the certificate's distribution-point name matches the CRL's IDP name. */
 function matchesDistributionPointName(
 	certificatePoint: ParsedDistributionPointName | undefined,
 	crlPoint: ParsedDistributionPointName | undefined,
@@ -1479,13 +1179,7 @@ function matchesDistributionPointName(
 	return compareRelativeDistinguishedNames(certificatePoint.relativeName, crlPoint.relativeName);
 }
 
-/**
- * Same issuing distribution point.
- *
- * @param left The left value.
- * @param right The right value.
- * @returns The computed value.
- */
+/** Deep-compares two issuing distribution point extensions for delta-CRL compatibility. */
 function sameIssuingDistributionPoint(
 	left: ParsedIssuingDistributionPoint | undefined,
 	right: ParsedIssuingDistributionPoint | undefined,
@@ -1503,13 +1197,7 @@ function sameIssuingDistributionPoint(
 	);
 }
 
-/**
- * Same distribution point name.
- *
- * @param left The left value.
- * @param right The right value.
- * @returns The computed value.
- */
+/** Compares two DistributionPointName values (fullName set or relativeName). */
 function sameDistributionPointName(
 	left: ParsedDistributionPointName | undefined,
 	right: ParsedDistributionPointName | undefined,
@@ -1529,13 +1217,7 @@ function sameDistributionPointName(
 	return compareRelativeDistinguishedNames(left.relativeName, right.relativeName);
 }
 
-/**
- * Same general name set.
- *
- * @param left The left value.
- * @param right The right value.
- * @returns The computed value.
- */
+/** Set-equality comparison for GeneralName arrays (order-independent). */
 function sameGeneralNameSet(left: readonly GeneralName[], right: readonly GeneralName[]): boolean {
 	if (left.length !== right.length) {
 		return false;
@@ -1562,13 +1244,7 @@ function sameGeneralNameSet(left: readonly GeneralName[], right: readonly Genera
 	return true;
 }
 
-/**
- * Same reason set.
- *
- * @param left The left value.
- * @param right The right value.
- * @returns The computed value.
- */
+/** Set-equality comparison for DistributionPointReason arrays. */
 function sameReasonSet(
 	left: readonly DistributionPointReason[] | undefined,
 	right: readonly DistributionPointReason[] | undefined,
@@ -1582,13 +1258,7 @@ function sameReasonSet(
 	return left.every((reason) => right.includes(reason));
 }
 
-/**
- * Returns whether overlapping reasons.
- *
- * @param certificateReasons The certificate reasons value.
- * @param crlReasons The CRL reasons value.
- * @returns Whether the condition holds.
- */
+/** Returns `true` if the certificate's DP reasons overlap the CRL's `onlySomeReasons`, or if either is absent (= all reasons). */
 function hasOverlappingReasons(
 	certificateReasons: readonly DistributionPointReason[] | undefined,
 	crlReasons: readonly DistributionPointReason[] | undefined,
@@ -1599,13 +1269,7 @@ function hasOverlappingReasons(
 	return certificateReasons.some((reason) => crlReasons.includes(reason));
 }
 
-/**
- * Compares general names.
- *
- * @param left The left value.
- * @param right The right value.
- * @returns The computed value.
- */
+/** Value-equality for two GeneralName entries, using DER comparison for directoryName. */
 function compareGeneralNames(left: GeneralName, right: GeneralName): boolean {
 	if (left.type === 'dns' && right.type === 'dns') {
 		return left.value === right.value;
@@ -1628,13 +1292,7 @@ function compareGeneralNames(left: GeneralName, right: GeneralName): boolean {
 	return false;
 }
 
-/**
- * Bytes equal.
- *
- * @param left The left value.
- * @param right The right value.
- * @returns The computed value.
- */
+/** Constant-length byte-array equality check. */
 function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
 	if (left.length !== right.length) {
 		return false;
@@ -1647,13 +1305,7 @@ function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
 	return true;
 }
 
-/**
- * Compares relative distinguished names.
- *
- * @param left The left value.
- * @param right The right value.
- * @returns The computed value.
- */
+/** Set-equality comparison for RDN attribute sets (order-independent, RFC 4518 string prep). */
 function compareRelativeDistinguishedNames(
 	left: ParsedRelativeDistinguishedName,
 	right: ParsedRelativeDistinguishedName,
@@ -1683,13 +1335,7 @@ function compareRelativeDistinguishedNames(
 	return true;
 }
 
-/**
- * Compares name attribute value.
- *
- * @param left The left value.
- * @param right The right value.
- * @returns The computed value.
- */
+/** Compares two name attributes with RFC 4518 string preparation for directory-string types. */
 function compareNameAttributeValue(left: ParsedNameAttribute, right: ParsedNameAttribute): boolean {
 	if (left.oid !== right.oid) {
 		return false;
@@ -1705,22 +1351,12 @@ function compareNameAttributeValue(left: ParsedNameAttribute, right: ParsedNameA
 	return left.valueTag === right.valueTag && left.value === right.value;
 }
 
-/**
- * Returns whether directory string tag.
- *
- * @param tag The tag value.
- * @returns Whether the condition holds.
- */
+/** Returns `true` for UTF8String (0x0c) and PrintableString (0x13) — the comparable directory-string types. */
 function isDirectoryStringTag(tag: number): boolean {
 	return tag === 0x0c || tag === 0x13;
 }
 
-/**
- * Prepare name compare string.
- *
- * @param value The value to process.
- * @returns The computed value.
- */
+/** NFKC-normalises, lowercases, trims, and collapses whitespace for RFC 4518 name comparison. Returns `undefined` if the string contains disallowed control characters. */
 function prepareNameCompareString(value: string): string | undefined {
 	const normalized = value.normalize('NFKC');
 	if (/[^\P{Cc}\t\n\r]/u.test(normalized)) {
@@ -1729,16 +1365,7 @@ function prepareNameCompareString(value: string): string | undefined {
 	return normalized.toLowerCase().trim().replace(/\s+/gu, ' ');
 }
 
-/**
- * Builds CRL extensions.
- *
- * @param issuerPublicKey The issuer public key value.
- * @param crlNumber The CRL number value.
- * @param basECrlNumber The base CRL number value.
- * @param issuingDistributionPoint The issuing distribution point value.
- * @param freshestCrlDistributionPoints The freshest CRL distribution points value.
- * @returns The built CRL extensions.
- */
+/** Assembles the CRL-level v2 extensions (AKI, CRLNumber, deltaCRLIndicator, IDP, freshestCRL). */
 async function buildCrlExtensions(
 	issuerPublicKey: CryptoKey | undefined,
 	crlNumber: number | undefined,
@@ -1781,13 +1408,7 @@ async function buildCrlExtensions(
 	return extensions;
 }
 
-/**
- * Creates revoked certificate.
- *
- * @param entry The entry value.
- * @param thisUpdate The this update value.
- * @returns The created revoked certificate.
- */
+/** DER-encodes a single revokedCertificate SEQUENCE (serial, date, optional extensions). */
 function createRevokedCertificate(entry: RevokedCertificateInput, thisUpdate: Date): Uint8Array {
 	const extensions = buildRevokedCertificateExtensions(entry);
 	return sequence([
@@ -1797,12 +1418,7 @@ function createRevokedCertificate(entry: RevokedCertificateInput, thisUpdate: Da
 	]);
 }
 
-/**
- * Builds revoked certificate extensions.
- *
- * @param entry The entry value.
- * @returns The built revoked certificate extensions.
- */
+/** Encodes CRL entry extensions (reasonCode, invalidityDate). */
 function buildRevokedCertificateExtensions(entry: RevokedCertificateInput): Uint8Array[] {
 	const extensions: Uint8Array[] = [];
 	if (entry.reasonCode !== undefined) {
@@ -1819,28 +1435,13 @@ function buildRevokedCertificateExtensions(entry: RevokedCertificateInput): Uint
 	return extensions;
 }
 
-/**
- * Parses revoked certificate extensions.
- *
- * @param entryDer The entry DER value.
- * @param element The ASN.1 element to process.
- * @returns The parsed revoked certificate extensions.
- */
+/** Decodes per-entry CRL extensions (reasonCode, invalidityDate, certificateIssuer). */
 function parseRevokedCertificateExtensions(
 	entryDer: Uint8Array | undefined,
 	element: DerElement | undefined,
 ): {
-	/**
-	 * Carries the reason code value.
-	 */
 	readonly reasonCode?: RevocationReason;
-	/**
-	 * Carries the invalidity date value.
-	 */
 	readonly invalidityDate?: Date;
-	/**
-	 * Carries the certificate issuer value.
-	 */
 	readonly certificateIssuer?: readonly GeneralName[];
 } {
 	if (entryDer === undefined || element === undefined) {
@@ -1878,12 +1479,7 @@ function parseRevokedCertificateExtensions(
 	};
 }
 
-/**
- * Parses issuing distribution point.
- *
- * @param valueDer The value DER value.
- * @returns The parsed issuing distribution point.
- */
+/** Decodes the IssuingDistributionPoint extension from its OCTET STRING content. */
 function parseIssuingDistributionPoint(valueDer: Uint8Array): ParsedIssuingDistributionPoint {
 	const sequenceElement = readRootElement(valueDer, { maxDepth: DEFAULT_MAX_DER_DEPTH });
 	let distributionPoint: ParsedDistributionPointName | undefined;
@@ -1920,12 +1516,7 @@ function parseIssuingDistributionPoint(valueDer: Uint8Array): ParsedIssuingDistr
 	};
 }
 
-/**
- * Parses distribution points.
- *
- * @param valueDer The value DER value.
- * @returns The parsed distribution points.
- */
+/** Decodes a SEQUENCE OF DistributionPoint from DER. */
 function parseDistributionPoints(valueDer: Uint8Array): readonly ParsedDistributionPoint[] {
 	const sequenceElement = readRootElement(valueDer, { maxDepth: DEFAULT_MAX_DER_DEPTH });
 	return childrenOf(valueDer, sequenceElement).map((distributionPoint) =>
@@ -1933,13 +1524,7 @@ function parseDistributionPoints(valueDer: Uint8Array): readonly ParsedDistribut
 	);
 }
 
-/**
- * Parses distribution point name.
- *
- * @param valueDer The value DER value.
- * @param element The ASN.1 element to process.
- * @returns The parsed distribution point name.
- */
+/** Decodes a DistributionPointName (fullName or relativeName). */
 function parseDistributionPointName(
 	valueDer: Uint8Array,
 	element: DerElement,
@@ -1960,13 +1545,7 @@ function parseDistributionPointName(
 	return undefined;
 }
 
-/**
- * Parses distribution point.
- *
- * @param valueDer The value DER value.
- * @param element The ASN.1 element to process.
- * @returns The parsed distribution point.
- */
+/** Decodes a single DistributionPoint SEQUENCE. */
 function parseDistributionPoint(
 	valueDer: Uint8Array,
 	element: DerElement,
@@ -1993,12 +1572,7 @@ function parseDistributionPoint(
 	};
 }
 
-/**
- * Parses general name.
- *
- * @param element The ASN.1 element to process.
- * @returns The parsed general name.
- */
+/** Decodes a GeneralName from its context-tagged ASN.1 element. */
 function parseGeneralName(element: DerElement): GeneralName {
 	switch (element.tag) {
 		case 0x81:
@@ -2019,13 +1593,7 @@ function parseGeneralName(element: DerElement): GeneralName {
 	}
 }
 
-/**
- * Parses relative name.
- *
- * @param valueDer The value DER value.
- * @param element The ASN.1 element to process.
- * @returns The parsed relative name.
- */
+/** Decodes a RelativeDistinguishedName SET from an implicitly-tagged context element. */
 function parseRelativeName(
 	valueDer: Uint8Array,
 	element: DerElement,
@@ -2054,32 +1622,17 @@ function parseRelativeName(
 	};
 }
 
-/**
- * Decodes name value.
- *
- * @param element The ASN.1 element to process.
- * @returns The decoded name value.
- */
+/** Decodes an ASN.1 string element (UTF8String, PrintableString, etc.) to a JS string. */
 function decodeNameValue(element: DerElement): string {
 	return decodeString(element.tag, element.value);
 }
 
-/**
- * Parses implicit boolean.
- *
- * @param element The ASN.1 element to process.
- * @returns The parsed implicit boolean.
- */
+/** Reads an implicitly-tagged BOOLEAN from a context element. Absent content → `false`. */
 function parseImplicitBoolean(element: DerElement): boolean {
 	return (element.value[0] ?? 0) !== 0;
 }
 
-/**
- * Encodes issuing distribution point.
- *
- * @param value The value to process.
- * @returns The encoded issuing distribution point.
- */
+/** DER-encodes an IssuingDistributionPoint extension value. Throws on mutually-exclusive scope flags. */
 function encodeIssuingDistributionPoint(value: IssuingDistributionPoint): Uint8Array {
 	const certificateScopeFlags = [
 		value.onlyContainsUserCerts === true,
@@ -2117,12 +1670,7 @@ function encodeIssuingDistributionPoint(value: IssuingDistributionPoint): Uint8A
 	return sequence(fields);
 }
 
-/**
- * Encodes distribution point name.
- *
- * @param value The value to process.
- * @returns The encoded distribution point name.
- */
+/** DER-encodes a DistributionPointName (fullName or relativeName). */
 function encodeDistributionPointName(
 	value: IssuingDistributionPoint['distributionPoint'],
 ): Uint8Array {
@@ -2149,44 +1697,22 @@ function encodeDistributionPointName(
 	throw new Error('DistributionPointName must contain fullName or relativeName');
 }
 
-/**
- * Concatenates general names.
- *
- * @param names The name values.
- * @returns The computed value.
- */
+/** DER-encodes and concatenates a list of GeneralName values. */
 function concatGeneralNames(names: readonly GeneralName[]): Uint8Array {
 	return concatBytes(names.map((name) => encodeSubjectAltName(name)));
 }
 
-/**
- * Rebuild directory name from implicit.
- *
- * @param element The ASN.1 element to process.
- * @returns The computed value.
- */
+/** Re-wraps an implicitly-tagged directoryName as an explicit SEQUENCE (tag 0x30). */
 function rebuildDirectoryNameFromImplicit(element: DerElement): Uint8Array {
 	return tlv(0x30, element.value);
 }
 
-/**
- * Encodes extension.
- *
- * @param oid The object identifier.
- * @param value The value to process.
- * @param critical The critical value.
- * @returns The encoded extension.
- */
+/** DER-encodes an X.509 extension (OID + optional critical flag + OCTET STRING value). */
 function encodeExtension(oid: string, value: Uint8Array, critical = false): Uint8Array {
 	return sequence([objectIdentifier(oid), ...(critical ? [bool(true)] : []), octetString(value)]);
 }
 
-/**
- * Builds subject key identifier.
- *
- * @param spki The SPKI value.
- * @returns The built subject key identifier.
- */
+/** SHA-1 hash of the SubjectPublicKey BIT STRING content, per RFC 5280 §4.2.1.2 method 1. */
 function buildSubjectKeyIdentifier(spki: Uint8Array): Uint8Array {
 	const top = readSequenceChildren(spki);
 	const keyBitString = top[1];
@@ -2196,24 +1722,12 @@ function buildSubjectKeyIdentifier(spki: Uint8Array): Uint8Array {
 	return sha1(keyBitString.value.slice(1));
 }
 
-/**
- * Parses issuer.
- *
- * @param source The source value to process.
- * @param element The ASN.1 element to process.
- * @returns The parsed issuer.
- */
+/** Extracts issuer DER hex and optional commonName from a Name SEQUENCE element. */
 function parseIssuer(
 	source: Uint8Array,
 	element: DerElement,
 ): {
-	/**
-	 * Carries the hexadecimal der.
-	 */
 	readonly derHex: string;
-	/**
-	 * Carries the common name value.
-	 */
 	readonly commonName?: string;
 } {
 	let commonName: string | undefined;
@@ -2231,12 +1745,7 @@ function parseIssuer(
 	};
 }
 
-/**
- * Parses authority key identifier.
- *
- * @param bytes The raw bytes to process.
- * @returns The parsed authority key identifier.
- */
+/** Extracts the keyIdentifier field from an AuthorityKeyIdentifier extension value. */
 function parseAuthorityKeyIdentifier(bytes: Uint8Array): string | undefined {
 	const sequenceElement = readRootElement(bytes, {
 		maxDepth: DEFAULT_MAX_DER_DEPTH,
@@ -2256,20 +1765,11 @@ function parseAuthorityKeyIdentifier(bytes: Uint8Array): string | undefined {
 	return undefined;
 }
 
-/**
- * Parses algorithm identifier.
- *
- * @param source The source value to process.
- * @param element The ASN.1 element to process.
- * @returns The parsed algorithm identifier.
- */
+/** Extracts the algorithm OID from an AlgorithmIdentifier SEQUENCE. */
 function parseAlgorithmIdentifier(
 	source: Uint8Array,
 	element: DerElement,
 ): {
-	/**
-	 * Carries the oid value.
-	 */
 	readonly oid: string;
 } {
 	const children = childrenOf(source, element);
@@ -2277,22 +1777,12 @@ function parseAlgorithmIdentifier(
 	return { oid: decodeObjectIdentifier(oid.value) };
 }
 
-/**
- * Normalizes hex.
- *
- * @param value The value to process.
- * @returns The computed value.
- */
+/** Strips leading zeros and lowercases a hex string for comparison. */
 function normalizeHex(value: string): string {
 	return value.replace(/^0+/, '').toLowerCase();
 }
 
-/**
- * Revocation reason from code.
- *
- * @param code The code value.
- * @returns The computed value.
- */
+/** Maps an integer CRLReason code back to its {@link RevocationReason} string, or `undefined` for unknown codes. */
 function revocationReasonFromCode(code: number | undefined): RevocationReason | undefined {
 	switch (code) {
 		case 0:
@@ -2319,32 +1809,17 @@ function revocationReasonFromCode(code: number | undefined): RevocationReason | 
 	return undefined;
 }
 
-/**
- * Parses issuer certificate DER.
- *
- * @param der The DER-encoded bytes.
- * @returns The parsed issuer certificate DER.
- */
+/** Thin wrapper — parses a DER-encoded certificate for use as a CRL issuer. */
 function parseIssuerCertificateDer(der: Uint8Array): ParsedCertificate {
 	return parseCertificateDer(der);
 }
 
-/**
- * Parses issuer certificate PEM.
- *
- * @param pem The PEM-encoded text.
- * @returns The parsed issuer certificate PEM.
- */
+/** Thin wrapper — parses a PEM-encoded certificate for use as a CRL issuer. */
 function parseIssuerCertificatePem(pem: string): ParsedCertificate {
 	return parseCertificatePem(pem);
 }
 
-/**
- * Normalizes CRL.
- *
- * @param source The source value to process.
- * @returns The computed value.
- */
+/** Accepts PEM, DER, or already-parsed CRL and returns a parsed CRL. */
 function normalizeCrl(source: CrlSource): ParsedCertificateRevocationList {
 	if (typeof source === 'string') {
 		return parseCertificateRevocationListPem(source);
@@ -2355,12 +1830,7 @@ function normalizeCrl(source: CrlSource): ParsedCertificateRevocationList {
 	return source;
 }
 
-/**
- * Normalizes CRL certificate.
- *
- * @param source The source value to process.
- * @returns The computed value.
- */
+/** Accepts PEM, DER, or already-parsed certificate and returns a parsed certificate. */
 function normalizeCrlCertificate(source: CrlCertificateSource): ParsedCertificate {
 	if (typeof source === 'string') {
 		return parseCertificatePem(source);
@@ -2371,7 +1841,5 @@ function normalizeCrlCertificate(source: CrlCertificateSource): ParsedCertificat
 	return source;
 }
 
-/**
- * Stores the shared UTF-8 text decoder used by this module.
- */
+/** Shared UTF-8 decoder instance. */
 const textDecoder = new TextDecoder();

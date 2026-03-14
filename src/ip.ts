@@ -1,20 +1,20 @@
 /**
- * IP address parsing and normalization helpers shared by parsing, validation, and identity
- * matching flows.
+ * IP address parsing and normalization helpers shared by parsing, validation,
+ * and identity matching flows.
  *
- * These utilities keep IPv4 and IPv6 handling consistent across the library.
+ * These utilities keep IPv4 and IPv6 handling consistent for SAN matching
+ * and name constraint evaluation.
+ *
+ * @module
  */
 
-/**
- * Defines the ipv6 segment used by this module.
- */
+/** Matches a single valid IPv6 hex segment (1–4 hex digits). */
 const IPV6_SEGMENT = /^[0-9a-f]{1,4}$/;
 
 /**
- * Normalizes IP address.
- *
- * @param value The value to process.
- * @returns The computed value.
+ * Normalizes an IP address string for comparison. IPv4 addresses pass
+ * through unchanged; IPv6 addresses are fully expanded to 8 colon-separated
+ * zero-padded groups (e.g. `"::1"` → `"0000:0000:…:0001"`).
  */
 export function normalizeIpAddress(value: string): string {
 	if (!value.includes(':')) {
@@ -24,10 +24,8 @@ export function normalizeIpAddress(value: string): string {
 }
 
 /**
- * Expands ipv6.
- *
- * @param value The value to process.
- * @returns The computed value.
+ * Expands an IPv6 address (which may contain `::` shorthand) into exactly
+ * 8 zero-padded four-character hex segments. Throws on malformed input.
  */
 export function expandIpv6(value: string): readonly string[] {
 	const normalized = value.toLowerCase();
@@ -57,10 +55,9 @@ export function expandIpv6(value: string): readonly string[] {
 }
 
 /**
- * Parses IP address to bytes.
- *
- * @param value The value to process.
- * @returns The parsed IP address to bytes.
+ * Parses an IPv4 or IPv6 address string into its raw byte representation:
+ * 4 bytes for IPv4, 16 bytes for IPv6. Suitable for encoding into SAN
+ * iPAddress octets or name-constraint ranges.
  */
 export function parseIpAddressToBytes(value: string): Uint8Array {
 	if (value.includes(':')) {
@@ -82,10 +79,9 @@ export function parseIpAddressToBytes(value: string): Uint8Array {
 }
 
 /**
- * Decodes IP address.
- *
- * @param bytes The raw bytes to process.
- * @returns The decoded IP address.
+ * Converts raw IP address bytes back to a human-readable string.
+ * 4 bytes → dotted-decimal IPv4, 16 bytes → colon-separated hex IPv6.
+ * Throws on any other length.
  */
 export function decodeIpAddress(bytes: Uint8Array): string {
 	if (bytes.length === 4) {
@@ -104,10 +100,9 @@ export function decodeIpAddress(bytes: Uint8Array): string {
 }
 
 /**
- * All ones mask for IP address.
- *
- * @param value The value to process.
- * @returns The computed value.
+ * Returns an all-ones (`0xff`) mask of the appropriate length for the
+ * given IP address string: 4 bytes for IPv4, 16 bytes for IPv6.
+ * Used to build name-constraint subnet masks that match a single host.
  */
 export function allOnesMaskForIpAddress(value: string): Uint8Array {
 	const mask = new Uint8Array(value.includes(':') ? 16 : 4);
@@ -115,12 +110,7 @@ export function allOnesMaskForIpAddress(value: string): Uint8Array {
 	return mask;
 }
 
-/**
- * Parses ipv6 to bytes.
- *
- * @param value The value to process.
- * @returns The parsed ipv6 to bytes.
- */
+/** Expands and converts an IPv6 address string into a 16-byte `Uint8Array`. */
 function parseIpv6ToBytes(value: string): Uint8Array {
 	const expanded = expandIpv6(value);
 	const bytes = new Uint8Array(16);

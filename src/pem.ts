@@ -1,59 +1,44 @@
 /**
  * PEM and base64 helpers used across the public API.
  *
- * This module encodes, decodes, splits, and categorizes PEM blocks.
+ * Encodes, decodes, splits, and categorizes PEM blocks as defined by
+ * RFC 7468.
+ *
+ * @module
  */
 
-/**
- * Describes PEM block.
- */
+/** A single decoded PEM block with its label, decoded DER bytes, and original PEM text. */
 export interface PemBlock {
-	/**
-	 * Carries the label value.
-	 */
+	/** RFC 7468 label between the `BEGIN` / `END` markers (e.g. `"CERTIFICATE"`). */
 	readonly label: string;
-	/**
-	 * Carries the bytes value.
-	 */
+	/** Decoded DER content of this block. */
 	readonly bytes: Uint8Array;
-	/**
-	 * Carries the pem value.
-	 */
+	/** The original PEM text including `BEGIN`/`END` lines. */
 	readonly pem: string;
 }
 
 /**
- * Describes categorized PEM blocks.
+ * PEM blocks grouped by their label into well-known PKI categories.
+ * Blocks that don't match any known label land in {@link others}.
  */
 export interface CategorizedPemBlocks {
-	/**
-	 * Carries the certificates value.
-	 */
+	/** Blocks with label `CERTIFICATE`. */
 	readonly certificates: readonly PemBlock[];
-	/**
-	 * Carries the certificate requests value.
-	 */
+	/** Blocks with label `CERTIFICATE REQUEST`. */
 	readonly certificateRequests: readonly PemBlock[];
-	/**
-	 * Carries the private keys value.
-	 */
+	/** Blocks with label `PRIVATE KEY`, `RSA PRIVATE KEY`, or `EC PRIVATE KEY`. */
 	readonly privateKeys: readonly PemBlock[];
-	/**
-	 * Carries the public keys value.
-	 */
+	/** Blocks with label `PUBLIC KEY`. */
 	readonly publicKeys: readonly PemBlock[];
-	/**
-	 * Carries the others value.
-	 */
+	/** Blocks whose label doesn't match any of the above categories. */
 	readonly others: readonly PemBlock[];
 }
 
 /**
- * PEM encode.
+ * Wraps DER bytes in a PEM envelope with 64-character base64 lines.
  *
- * @param label The label value.
- * @param der The DER-encoded bytes.
- * @returns The computed value.
+ * @param label PEM type label (e.g. `"CERTIFICATE"`, `"PRIVATE KEY"`).
+ * @param der Raw DER-encoded content.
  */
 export function pemEncode(label: string, der: Uint8Array): string {
 	const body = base64Encode(der);
@@ -61,12 +46,7 @@ export function pemEncode(label: string, der: Uint8Array): string {
 	return `-----BEGIN ${label}-----\n${lines.join('\n')}\n-----END ${label}-----`;
 }
 
-/**
- * Base64 encode.
- *
- * @param bytes The raw bytes to process.
- * @returns The computed value.
- */
+/** Encodes raw bytes to a standard base64 string (no line breaks). */
 export function base64Encode(bytes: Uint8Array): string {
 	let binary = '';
 	for (const byte of bytes) {
@@ -76,11 +56,11 @@ export function base64Encode(bytes: Uint8Array): string {
 }
 
 /**
- * PEM decode.
+ * Extracts and base64-decodes the DER content from a PEM string.
+ * Throws if the `BEGIN`/`END` markers don't match `label`.
  *
- * @param label The label value.
- * @param pem The PEM-encoded text.
- * @returns The computed value.
+ * @param label Expected PEM type label.
+ * @param pem PEM-encoded text (may contain `\r`).
  */
 export function pemDecode(label: string, pem: string): Uint8Array {
 	const normalized = pem.replace(/\r/g, '').trim();
@@ -96,12 +76,7 @@ export function pemDecode(label: string, pem: string): Uint8Array {
 	return base64Decode(body);
 }
 
-/**
- * Base64 decode.
- *
- * @param value The value to process.
- * @returns The computed value.
- */
+/** Decodes a standard base64 string to raw bytes. */
 export function base64Decode(value: string): Uint8Array {
 	const binary = atob(value);
 	const bytes = new Uint8Array(binary.length);
@@ -112,10 +87,9 @@ export function base64Decode(value: string): Uint8Array {
 }
 
 /**
- * Split PEM blocks.
- *
- * @param input The typed input payload.
- * @returns The computed value.
+ * Finds all `BEGIN`/`END`-delimited PEM blocks in a string and returns
+ * them as parsed {@link PemBlock} entries. Handles concatenated PEM files
+ * and ignores non-PEM text between blocks.
  */
 export function splitPemBlocks(input: string): readonly PemBlock[] {
 	const normalized = input.replace(/\r/g, '');
@@ -137,10 +111,9 @@ export function splitPemBlocks(input: string): readonly PemBlock[] {
 }
 
 /**
- * Categorize PEM blocks.
- *
- * @param input The typed input payload.
- * @returns The computed value.
+ * Groups PEM blocks by label into well-known PKI categories
+ * (certificates, CSRs, private keys, public keys, and everything else).
+ * Accepts either raw PEM text or pre-split {@link PemBlock} entries.
  */
 export function categorizePemBlocks(input: string | readonly PemBlock[]): CategorizedPemBlocks {
 	const blocks = typeof input === 'string' ? splitPemBlocks(input) : input;

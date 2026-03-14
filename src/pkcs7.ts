@@ -1,8 +1,10 @@
 /**
- * PKCS#7 certificate-bag and signedData helpers.
+ * PKCS#7/CMS certificate bags and SignedData.
  *
- * This module creates degenerate cert bags, parses signedData structures, and verifies
- * signer metadata.
+ * Creates degenerate (signature-less) certificate bags, parses RFC 2315 / RFC 5652
+ * SignedData structures, and verifies signer signatures including signed-attribute flows.
+ *
+ * @module
  */
 
 import {
@@ -33,100 +35,56 @@ import { parseCertificateDer } from './parse.ts';
 import { base64Encode, pemEncode, splitPemBlocks } from './pem.ts';
 import { verifySignedData } from './sig-verify.ts';
 
-/**
- * Describes the accepted source forms for PKCS#7 certificate inputs.
- */
+/** PEM text (may contain multiple CERTIFICATE blocks) or raw DER bytes. */
 export type Pkcs7CertificateSource = string | Uint8Array;
 
-/**
- * Describes PKCS#7 cert bag.
- */
+/** DER, PEM, and base64 encodings of a PKCS#7 certificate bag. */
 export interface Pkcs7CertBag {
-	/**
-	 * Carries the der value.
-	 */
+	/** Raw DER-encoded PKCS#7 structure. */
 	readonly der: Uint8Array;
-	/**
-	 * Carries the pem value.
-	 */
+	/** PEM-armored PKCS#7 (`-----BEGIN PKCS7-----`). */
 	readonly pem: string;
-	/**
-	 * Carries the base64 value.
-	 */
+	/** Base64-encoded DER (no PEM armor). */
 	readonly base64: string;
 }
 
-/**
- * Describes the structured PKCS#7 signer info produced by parsing helpers.
- */
+/** A single SignerInfo decoded from a PKCS#7 SignedData structure. */
 export interface ParsedPkcs7SignerInfo {
-	/**
-	 * Carries the version value.
-	 */
+	/** CMS SignerInfo version (typically 1 for issuerAndSerialNumber). */
 	readonly version: number;
-	/**
-	 * Carries the hexadecimal issuer der.
-	 */
+	/** Hex-encoded DER of the signer's issuer name, if present. */
 	readonly issuerDerHex?: string;
-	/**
-	 * Carries the hexadecimal serial number.
-	 */
+	/** Hex-encoded serial number used to locate the signer certificate. */
 	readonly serialNumberHex?: string;
-	/**
-	 * Carries the OID for digest algorithm.
-	 */
+	/** OID of the digest algorithm used to hash the content. */
 	readonly digestAlgorithmOid: string;
-	/**
-	 * Carries the OID for signature algorithm.
-	 */
+	/** OID of the algorithm used to produce the signature. */
 	readonly signatureAlgorithmOid: string;
-	/**
-	 * Carries the hexadecimal signature.
-	 */
+	/** Hex-encoded raw signature bytes. */
 	readonly signatureHex: string;
-	/**
-	 * Carries the signature value.
-	 */
+	/** Raw signature bytes. */
 	readonly signature: Uint8Array;
-	/**
-	 * Indicates whether has signed attrs.
-	 */
+	/** Whether this SignerInfo includes authenticated (signed) attributes. */
 	readonly hasSignedAttrs: boolean;
-	/** Raw DER of signedAttrs with original IMPLICIT [0] tag (0xa0). Present only when hasSignedAttrs is true. */
+	/** Raw DER of signedAttrs with original IMPLICIT [0] tag (0xa0). Present only when `hasSignedAttrs` is true. */
 	readonly signedAttrsDer?: Uint8Array;
 }
 
-/**
- * Describes the structured PKCS#7 signed data produced by parsing helpers.
- */
+/** Decoded PKCS#7 SignedData content, including certificates and signer info. */
 export interface ParsedPkcs7SignedData {
-	/**
-	 * Carries the OID for content type.
-	 */
+	/** Outer ContentInfo type OID (always `pkcs7-signedData`). */
 	readonly contentTypeOid: string;
-	/**
-	 * Carries the version value.
-	 */
+	/** SignedData version number. */
 	readonly version: number;
-	/**
-	 * Carries the digest algorithm oids value.
-	 */
+	/** OIDs of digest algorithms declared in `digestAlgorithms`. */
 	readonly digestAlgorithmOids: readonly string[];
-	/**
-	 * Carries the OID for encapsulated content type.
-	 */
+	/** OID of the encapsulated content type (e.g. `pkcs7-data`). */
 	readonly encapsulatedContentTypeOid: string;
-	/**
-	 * Carries the encapsulated content value.
-	 */
+	/** Raw encapsulated content bytes. Absent in degenerate (certs-only) bags. */
 	readonly encapsulatedContent?: Uint8Array;
-	/**
-	 * Carries the certificates value.
-	 */
+	/** Certificates included in the SignedData certificate set. */
 	readonly certificates: readonly ParsedCertificate[];
-	/**
-	 * Carries the signer infos value.
-	 */
+	/** Decoded signer info entries. Empty for degenerate cert bags. */
 	readonly signerInfos: readonly ParsedPkcs7SignerInfo[];
 }
 
@@ -134,78 +92,48 @@ export interface ParsedPkcs7SignedData {
 // Result types for PKCS#7 parsing
 // ---------------------------------------------------------------------------
 
-/**
- * Enumerates the error codes used by parse PKCS#7 failures.
- */
+/** Error codes for PKCS#7 parse failures. */
 export type ParsePkcs7ErrorCode = 'malformed' | 'not_signed_data';
 
-/**
- * Represents a typed failure produced by parse PKCS#7 operations.
- */
+/** Error payload for a failed PKCS#7 parse. */
 export interface ParsePkcs7Failure extends Micro509Error<ParsePkcs7ErrorCode> {
-	/**
-	 * Indicates whether the operation succeeded.
-	 */
+	/** Always `false` for failures. */
 	readonly ok: false;
 }
 
-/**
- * Represents the result returned by parse PKCS#7 failure operations.
- */
+/** Failure branch of PKCS#7 parse results. */
 interface ParsePkcs7FailureResult {
-	/**
-	 * Indicates whether the operation succeeded.
-	 */
+	/** Always `false` for failures. */
 	readonly ok: false;
-	/**
-	 * Carries the canonical error payload.
-	 */
+	/** Structured error with code and message. */
 	readonly error: ParsePkcs7Failure;
-	/**
-	 * Carries the machine-readable error code.
-	 */
+	/** Machine-readable failure reason. */
 	readonly code: ParsePkcs7ErrorCode;
-	/**
-	 * Carries the human-readable error message.
-	 */
+	/** Human-readable diagnostic. */
 	readonly message: string;
 }
 
-/**
- * Represents the result returned by parse PKCS#7 signed data operations.
- */
+/** Success-or-failure result from {@link parsePkcs7SignedDataDer} / {@link parsePkcs7SignedDataPem}. */
 export type ParsePkcs7SignedDataResult =
 	| {
-			/**
-			 * Indicates whether the operation succeeded.
-			 */
+			/** Parse succeeded. */
 			readonly ok: true;
-			/**
-			 * Carries the successful value payload.
-			 */
+			/** Decoded SignedData. */
 			readonly value: ParsedPkcs7SignedData;
 	  }
 	| ParsePkcs7FailureResult;
 
-/**
- * Represents the result returned by parse PKCS#7 cert bag operations.
- */
+/** Success-or-failure result from {@link parsePkcs7CertBagDer} / {@link parsePkcs7CertBagPem}. */
 export type ParsePkcs7CertBagResult =
 	| {
-			/**
-			 * Indicates whether the operation succeeded.
-			 */
+			/** Parse succeeded. */
 			readonly ok: true;
-			/**
-			 * Carries the successful value payload.
-			 */
+			/** Parsed certificates from the cert bag. */
 			readonly value: readonly ParsedCertificate[];
 	  }
 	| ParsePkcs7FailureResult;
 
-/**
- * Represents a typed failure produced by verify PKCS#7 signed data operations.
- */
+/** Error payload for a failed {@link verifyPkcs7SignedData} call. */
 export interface VerifyPkcs7SignedDataFailure
 	extends Micro509Error<
 		| 'signer_not_found'
@@ -214,51 +142,33 @@ export interface VerifyPkcs7SignedDataFailure
 		| 'content_missing'
 		| ParsePkcs7ErrorCode
 	> {
-	/**
-	 * Indicates whether the operation succeeded.
-	 */
+	/** Always `false` for failures. */
 	readonly ok: false;
 }
 
-/**
- * Represents the result returned by verify PKCS#7 signed data failure operations.
- */
+/** Failure branch of {@link VerifyPkcs7SignedDataResult}. */
 interface VerifyPkcs7SignedDataFailureResult {
-	/**
-	 * Indicates whether the operation succeeded.
-	 */
+	/** Always `false` for failures. */
 	readonly ok: false;
-	/**
-	 * Carries the canonical error payload.
-	 */
+	/** Structured error with code and message. */
 	readonly error: VerifyPkcs7SignedDataFailure;
-	/**
-	 * Carries the machine-readable error code.
-	 */
+	/** Machine-readable failure reason. */
 	readonly code:
 		| 'signer_not_found'
 		| 'signature_invalid'
 		| 'message_digest_mismatch'
 		| 'content_missing'
 		| ParsePkcs7ErrorCode;
-	/**
-	 * Carries the human-readable error message.
-	 */
+	/** Human-readable diagnostic. */
 	readonly message: string;
 }
 
-/**
- * Represents the result returned by verify PKCS#7 signed data operations.
- */
+/** Success-or-failure result from {@link verifyPkcs7SignedData}. */
 export type VerifyPkcs7SignedDataResult =
 	| {
-			/**
-			 * Indicates whether the operation succeeded.
-			 */
+			/** Verification succeeded. */
 			readonly ok: true;
-			/**
-			 * Carries the successful value payload.
-			 */
+			/** The verified SignedData structure. */
 			readonly value: ParsedPkcs7SignedData;
 	  }
 	| VerifyPkcs7SignedDataFailureResult;
@@ -268,10 +178,9 @@ export type VerifyPkcs7SignedDataResult =
 // ---------------------------------------------------------------------------
 
 /**
- * Creates PKCS#7 cert bag DER.
+ * Creates a degenerate PKCS#7 SignedData structure containing only certificates (no signers).
  *
- * @param certificates The certificate inputs.
- * @returns The created PKCS#7 cert bag DER.
+ * Returns the raw DER encoding. Use {@link createPkcs7CertBagPem} for PEM + base64.
  */
 export function createPkcs7CertBagDer(certificates: readonly Pkcs7CertificateSource[]): Uint8Array {
 	const certificateDers = certificates.flatMap(normalizeCertificateSource);
@@ -286,10 +195,7 @@ export function createPkcs7CertBagDer(certificates: readonly Pkcs7CertificateSou
 }
 
 /**
- * Creates PKCS#7 cert bag PEM.
- *
- * @param certificates The certificate inputs.
- * @returns The created PKCS#7 cert bag PEM.
+ * Creates a degenerate PKCS#7 SignedData certificate bag and returns DER, PEM, and base64 forms.
  */
 export function createPkcs7CertBagPem(
 	certificates: readonly Pkcs7CertificateSource[],
@@ -306,12 +212,7 @@ export function createPkcs7CertBagPem(
 // parsePkcs7CertBag — Result-returning
 // ---------------------------------------------------------------------------
 
-/**
- * Parses PKCS#7 cert bag DER.
- *
- * @param der The DER-encoded bytes.
- * @returns The parsed PKCS#7 cert bag DER.
- */
+/** Parses a DER-encoded PKCS#7 cert bag, returning the contained certificates. */
 export function parsePkcs7CertBagDer(der: Uint8Array): ParsePkcs7CertBagResult {
 	const result = parsePkcs7SignedDataDer(der);
 	if (!result.ok) {
@@ -320,12 +221,7 @@ export function parsePkcs7CertBagDer(der: Uint8Array): ParsePkcs7CertBagResult {
 	return { ok: true, value: result.value.certificates };
 }
 
-/**
- * Parses PKCS#7 cert bag PEM.
- *
- * @param pem The PEM-encoded text.
- * @returns The parsed PKCS#7 cert bag PEM.
- */
+/** Parses a PEM-armored PKCS#7 cert bag. Expects exactly one `PKCS7` PEM block. */
 export function parsePkcs7CertBagPem(pem: string): ParsePkcs7CertBagResult {
 	try {
 		const blocks = splitPemBlocks(pem).filter((block) => block.label === 'PKCS7');
@@ -346,12 +242,7 @@ export function parsePkcs7CertBagPem(pem: string): ParsePkcs7CertBagResult {
 // parsePkcs7SignedData — Result-returning
 // ---------------------------------------------------------------------------
 
-/**
- * Parses PKCS#7 signed data DER.
- *
- * @param der The DER-encoded bytes.
- * @returns The parsed PKCS#7 signed data DER.
- */
+/** Decodes a DER-encoded PKCS#7 ContentInfo expecting `signedData` content type. */
 export function parsePkcs7SignedDataDer(der: Uint8Array): ParsePkcs7SignedDataResult {
 	try {
 		const contentInfo = readSequenceChildren(der, { maxDepth: DEFAULT_MAX_DER_DEPTH });
@@ -410,12 +301,7 @@ export function parsePkcs7SignedDataDer(der: Uint8Array): ParsePkcs7SignedDataRe
 	}
 }
 
-/**
- * Parses PKCS#7 signed data PEM.
- *
- * @param pem The PEM-encoded text.
- * @returns The parsed PKCS#7 signed data PEM.
- */
+/** Decodes a PEM-armored PKCS#7 SignedData. Expects exactly one `PKCS7` PEM block. */
 export function parsePkcs7SignedDataPem(pem: string): ParsePkcs7SignedDataResult {
 	try {
 		const blocks = splitPemBlocks(pem).filter((block) => block.label === 'PKCS7');
@@ -434,10 +320,11 @@ export function parsePkcs7SignedDataPem(pem: string): ParsePkcs7SignedDataResult
 // ---------------------------------------------------------------------------
 
 /**
- * Verifies PKCS#7 signed data.
+ * Verifies all signer signatures in a PKCS#7 SignedData structure.
  *
- * @param input The typed input payload.
- * @returns The verification result.
+ * Accepts PEM text, raw DER, or an already-parsed {@link ParsedPkcs7SignedData}.
+ * For each signer, locates the matching certificate in the embedded set and
+ * verifies the signature (including signed-attribute digest checks per RFC 5652 Section 5.4).
  */
 export async function verifyPkcs7SignedData(
 	input: string | Uint8Array | ParsedPkcs7SignedData,
@@ -507,65 +394,22 @@ export async function verifyPkcs7SignedData(
 // Private helpers
 // ---------------------------------------------------------------------------
 
-/**
- * PKCS#7 failure.
- *
- * @param code The code value.
- * @param message The message value.
- * @returns The computed value.
- */
+/** Shorthand for constructing a PKCS#7 parse failure result. */
 function pkcs7Failure(code: ParsePkcs7ErrorCode, message: string): ParsePkcs7FailureResult {
-	const error: ParsePkcs7Failure = {
-		/**
-		 * Indicates whether the operation succeeded.
-		 */
-		ok: false,
-		/**
-		 * Carries the machine-readable error code.
-		 */
-		code,
-		/**
-		 * Carries the human-readable error message.
-		 */
-		message,
-	};
+	const error: ParsePkcs7Failure = { ok: false, code, message };
 	return { ok: false, error, code, message };
 }
 
-/**
- * Verifies PKCS#7 failure.
- *
- * @param code The code value.
- * @param message The message value.
- * @returns The verification result.
- */
+/** Shorthand for constructing a PKCS#7 verification failure result. */
 function verifyPkcs7Failure(
 	code: VerifyPkcs7SignedDataFailureResult['code'],
 	message: string,
 ): VerifyPkcs7SignedDataFailureResult {
-	const error: VerifyPkcs7SignedDataFailure = {
-		/**
-		 * Indicates whether the operation succeeded.
-		 */
-		ok: false,
-		/**
-		 * Carries the machine-readable error code.
-		 */
-		code,
-		/**
-		 * Carries the human-readable error message.
-		 */
-		message,
-	};
+	const error: VerifyPkcs7SignedDataFailure = { ok: false, code, message };
 	return { ok: false, error, code, message };
 }
 
-/**
- * Normalizes certificate source.
- *
- * @param source The source value to process.
- * @returns The computed value.
- */
+/** Converts PEM text to an array of DER certificate blobs, or wraps raw DER. */
 function normalizeCertificateSource(source: Pkcs7CertificateSource): readonly Uint8Array[] {
 	if (typeof source === 'string') {
 		return splitPemBlocks(source)
@@ -575,13 +419,7 @@ function normalizeCertificateSource(source: Pkcs7CertificateSource): readonly Ui
 	return [new Uint8Array(source)];
 }
 
-/**
- * Parses certificate set.
- *
- * @param source The source value to process.
- * @param certificates The certificate inputs.
- * @returns The parsed certificate set.
- */
+/** Parses the IMPLICIT [0] certificate set from a SignedData structure. */
 function parseCertificateSet(
 	source: Uint8Array,
 	certificates: ReturnType<typeof readElement> | undefined,
@@ -599,13 +437,7 @@ function parseCertificateSet(
 	return parsed;
 }
 
-/**
- * Parses digest algorithms.
- *
- * @param source The source value to process.
- * @param element The ASN.1 element to process.
- * @returns The parsed digest algorithms.
- */
+/** Extracts the list of digest algorithm OIDs from the digestAlgorithms SET. */
 function parseDigestAlgorithms(
 	source: Uint8Array,
 	element: ReturnType<typeof readElement>,
@@ -622,13 +454,7 @@ function parseDigestAlgorithms(
 	return digests;
 }
 
-/**
- * Parses signer infos.
- *
- * @param source The source value to process.
- * @param element The ASN.1 element to process.
- * @returns The parsed signer infos.
- */
+/** Decodes the signerInfos SET OF from a SignedData structure. */
 function parseSignerInfos(
 	source: Uint8Array,
 	element: ReturnType<typeof readElement>,
@@ -700,13 +526,7 @@ function parseSignerInfos(
 	return signers;
 }
 
-/**
- * Extract encapsulated content.
- *
- * @param encapDer The encap DER value.
- * @param element The ASN.1 element to process.
- * @returns The computed value.
- */
+/** Unwraps the OCTET STRING inside the IMPLICIT [0] encapsulated content. */
 function extractEncapsulatedContent(
 	encapDer: Uint8Array,
 	element: ReturnType<typeof readElement>,
@@ -721,20 +541,9 @@ function extractEncapsulatedContent(
 	return inner.value;
 }
 
-/**
- * Parses signer identifier.
- *
- * @param der The DER-encoded bytes.
- * @returns The parsed signer identifier.
- */
+/** Extracts issuer DER and serial number from an issuerAndSerialNumber SEQUENCE. */
 function parseSignerIdentifier(der: Uint8Array): {
-	/**
-	 * Carries the hexadecimal issuer der.
-	 */
 	readonly issuerDerHex?: string;
-	/**
-	 * Carries the hexadecimal serial number.
-	 */
 	readonly serialNumberHex?: string;
 } {
 	const top = readSequenceChildren(der);
@@ -749,15 +558,7 @@ function parseSignerIdentifier(der: Uint8Array): {
 	};
 }
 
-/**
- * Child at.
- *
- * @param source The source value to process.
- * @param parent The parent value.
- * @param index The index value.
- * @param label The label value.
- * @returns The computed value.
- */
+/** Returns the nth child element inside a constructed ASN.1 element, or throws. */
 function childAt(source: Uint8Array, parent: DerElement, index: number, label: string): DerElement {
 	let offset = parent.start;
 	let currentIndex = 0;
@@ -776,12 +577,7 @@ function childAt(source: Uint8Array, parent: DerElement, index: number, label: s
 // CMS signed attributes verification (RFC 5652 Section 5.4)
 // ---------------------------------------------------------------------------
 
-/**
- * Digest algorithm hash.
- *
- * @param digestAlgorithmOid The digest algorithm OID value.
- * @returns The computed value.
- */
+/** Maps a digest algorithm OID to the WebCrypto hash name. */
 function digestAlgorithmHash(digestAlgorithmOid: string): 'SHA-256' | 'SHA-384' | 'SHA-512' {
 	switch (digestAlgorithmOid) {
 		case OIDS.sha256:
@@ -795,12 +591,7 @@ function digestAlgorithmHash(digestAlgorithmOid: string): 'SHA-256' | 'SHA-384' 
 	}
 }
 
-/**
- * Extract message digest.
- *
- * @param signedAttrsDer The signed attrs DER value.
- * @returns The computed value.
- */
+/** Locates and returns the messageDigest OCTET STRING value from signedAttrs. */
 function extractMessageDigest(signedAttrsDer: Uint8Array): Uint8Array | undefined {
 	// signedAttrs is IMPLICIT [0] — parse children (each is a SEQUENCE of {OID, SET OF values})
 	const outer = readElement(signedAttrsDer);
@@ -824,12 +615,7 @@ function extractMessageDigest(signedAttrsDer: Uint8Array): Uint8Array | undefine
 	return undefined;
 }
 
-/**
- * Retag signed attrs as set.
- *
- * @param signedAttrsDer The signed attrs DER value.
- * @returns The computed value.
- */
+/** Replaces the IMPLICIT [0] tag (0xa0) with SET OF (0x31) per RFC 5652 Section 5.4. */
 function retagSignedAttrsAsSet(signedAttrsDer: Uint8Array): Uint8Array {
 	// Replace IMPLICIT [0] tag (0xa0) with SET OF tag (0x31) per RFC 5652 Section 5.4
 	const copy = new Uint8Array(signedAttrsDer);
@@ -837,13 +623,7 @@ function retagSignedAttrsAsSet(signedAttrsDer: Uint8Array): Uint8Array {
 	return copy;
 }
 
-/**
- * Constant time equal.
- *
- * @param a The a value.
- * @param b The b value.
- * @returns The computed value.
- */
+/** Constant-time byte comparison to avoid timing side-channels in digest checks. */
 function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
 	if (a.length !== b.length) {
 		return false;
@@ -855,27 +635,12 @@ function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
 	return diff === 0;
 }
 
-/**
- * Verifies signed attrs.
- *
- * @param signerInfo The signer info value.
- * @param signer The signer value.
- * @param encapsulatedContent The encapsulated content value.
- * @returns The verification result.
- */
+/** Verifies a signed-attributes flow: digest match + signature over re-tagged attrs. */
 async function verifySignedAttrs(
 	signerInfo: ParsedPkcs7SignerInfo,
 	signer: ParsedCertificate,
 	encapsulatedContent: Uint8Array,
-): Promise<
-	| {
-			/**
-			 * Indicates whether the operation succeeded.
-			 */
-			readonly ok: true;
-	  }
-	| VerifyPkcs7SignedDataFailureResult
-> {
+): Promise<{ readonly ok: true } | VerifyPkcs7SignedDataFailureResult> {
 	if (signerInfo.signedAttrsDer === undefined) {
 		return verifyPkcs7Failure('malformed', 'Missing signedAttrs DER');
 	}

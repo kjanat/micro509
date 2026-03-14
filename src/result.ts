@@ -1,8 +1,10 @@
 /**
- * Public result and error types shared across validation-heavy APIs.
+ * Canonical result and error types for the library's fallible APIs.
  *
- * This module exposes the canonical success and failure shapes returned by the library's
- * result-oriented functions.
+ * Re-exports the success/failure discriminated unions and error constructors
+ * used by every result-returning function in micro509.
+ *
+ * @module
  */
 
 export type {

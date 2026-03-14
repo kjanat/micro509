@@ -1,9 +1,8 @@
 /**
- * Internal digest helpers used where WebCrypto portability or legacy compatibility
- * requires local hashing.
+ * Synchronous digest implementations for MD5 and SHA-1, used where WebCrypto's
+ * async API is impractical (e.g. `EVP_BytesToKey` key derivation, PKCS#12 MAC).
  *
- * The implementations stay narrow on purpose and only cover the algorithms this library
- * still needs internally.
+ * @module
  */
 
 // ── Shared Merkle–Damgård primitives ──────────────────────────────
@@ -43,18 +42,14 @@ function w32(arr: Uint32Array, i: number): number {
 
 // ── MD5 (RFC 1321) ───────────────────────────────────────────────
 
-/**
- * Defines the md5 s used by this module.
- */
+/** Per-round left-rotate amounts for MD5 (RFC 1321 §3.4). */
 const MD5_S = /* dprint-ignore */ [
 	7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14,
 	20, 5, 9, 14, 20, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 6, 10, 15, 21, 6,
 	10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21,
 ] as const satisfies readonly number[];
 
-/**
- * Defines the md5 k used by this module.
- */
+/** Pre-computed sine-derived constants for MD5 (RFC 1321 §3.4). */
 const MD5_K = /* dprint-ignore */ [
 	0xd76aa478, 0xe8c7b756, 0x242070db, 0xc1bdceee, 0xf57c0faf, 0x4787c62a, 0xa8304613, 0xfd469501,
 	0x698098d8, 0x8b44f7af, 0xffff5bb1, 0x895cd7be, 0x6b901122, 0xfd987193, 0xa679438e, 0x49b40821,
@@ -66,12 +61,7 @@ const MD5_K = /* dprint-ignore */ [
 	0x6fa87e4f, 0xfe2ce6e0, 0xa3014314, 0x4e0811a1, 0xf7537e82, 0xbd3af235, 0x2ad7d2bb, 0xeb86d391,
 ] as const satisfies readonly number[];
 
-/**
- * Computes the MD5 digest for the provided bytes.
- *
- * @param data The raw bytes to process.
- * @returns The MD5 digest bytes.
- */
+/** Compute a 16-byte MD5 digest (RFC 1321). Used by `EVP_BytesToKey` key derivation. */
 export function md5(data: Uint8Array): Uint8Array<ArrayBuffer> {
 	const padded = mdPad(data, true);
 
@@ -130,12 +120,7 @@ export function md5(data: Uint8Array): Uint8Array<ArrayBuffer> {
 
 // ── SHA-1 (RFC 3174) ─────────────────────────────────────────────
 
-/**
- * Computes the SHA-1 digest for the provided bytes.
- *
- * @param data The raw bytes to process.
- * @returns The SHA-1 digest bytes.
- */
+/** Compute a 20-byte SHA-1 digest (RFC 3174). Used by PKCS#12 MAC verification. */
 export function sha1(data: Uint8Array): Uint8Array<ArrayBuffer> {
 	const padded = mdPad(data, false);
 

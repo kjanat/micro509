@@ -1,8 +1,8 @@
 /**
- * WebCrypto key generation plus import and export helpers.
+ * WebCrypto key generation plus import/export for PKCS#1, PKCS#8, SEC1, SPKI, and JWK
+ * key containers.
  *
- * This module owns the library's public key-material boundary and its key-container
- * interoperability logic.
+ * @module
  */
 
 import { decodeObjectIdentifier, hexToBytes, toArrayBuffer, toHex } from './asn1.ts';
@@ -12,208 +12,114 @@ import { OIDS } from './oids.ts';
 import { decryptPbes2, encryptPbes2, type Pbes2EncryptionOptions } from './pbes2.ts';
 import { base64Decode, base64Encode, pemDecode, pemEncode } from './pem.ts';
 
-/**
- * Enumerates the supported RSA hash values.
- */
+/** Hash algorithm paired with an RSA key. */
 export type RsaHash = 'SHA-256' | 'SHA-384' | 'SHA-512';
 
-/**
- * Enumerates the supported RSA schemes.
- */
+/** RSA signature padding scheme. */
 export type RsaScheme = 'pkcs1-v1_5' | 'pss';
 
-/**
- * Defines EC named curve.
- */
+/** NIST elliptic curve for ECDSA keys. */
 export type EcNamedCurve = 'P-256' | 'P-384' | 'P-521';
 
-/**
- * Describes the input shape for RSA key algorithm operations.
- */
+/** RSA variant of {@link KeyAlgorithmInput}. */
 export interface RsaKeyAlgorithmInput {
-	/**
-	 * Identifies the kind value.
-	 */
+	/** Discriminant selecting RSA key generation. */
 	readonly kind: 'rsa';
-	/**
-	 * Carries the modulus length value.
-	 */
+	/** RSA modulus size in bits. Defaults to `2048`. */
 	readonly modulusLength?: 2048 | 3072 | 4096;
-	/**
-	 * Carries the hash value.
-	 */
+	/** Hash algorithm for the key. Defaults to `'SHA-256'`. */
 	readonly hash?: RsaHash;
-	/**
-	 * Carries the scheme value.
-	 */
+	/** Signature padding scheme. Defaults to `'pkcs1-v1_5'`. */
 	readonly scheme?: RsaScheme;
 }
 
-/**
- * Describes the input shape for EC key algorithm operations.
- */
+/** ECDSA variant of {@link KeyAlgorithmInput}. */
 export interface EcKeyAlgorithmInput {
-	/**
-	 * Identifies the kind value.
-	 */
+	/** Discriminant selecting ECDSA key generation. */
 	readonly kind: 'ecdsa';
-	/**
-	 * Carries the named curve value.
-	 */
+	/** NIST curve. Defaults to `'P-256'`. */
 	readonly namedCurve?: EcNamedCurve;
 }
 
-/**
- * Describes the input shape for Ed25519 key algorithm operations.
- */
+/** Ed25519 variant of {@link KeyAlgorithmInput}. */
 export interface Ed25519KeyAlgorithmInput {
-	/**
-	 * Identifies the kind value.
-	 */
+	/** Discriminant selecting Ed25519 key generation. */
 	readonly kind: 'ed25519';
 }
 
-/**
- * Describes the input shape for key algorithm operations.
- */
+/** Input for {@link generateKeyPair}. Selects algorithm family and parameters. */
 export type KeyAlgorithmInput =
 	| RsaKeyAlgorithmInput
 	| EcKeyAlgorithmInput
 	| Ed25519KeyAlgorithmInput;
 
-/**
- * Bundles the encoded artifacts produced by key pair operations.
- */
+/** Key pair with convenience export helpers. Returned by {@link generateKeyPair} and {@link wrapKeyPair}. */
 export interface KeyPairMaterial {
-	/**
-	 * Carries the public key value.
-	 */
+	/** The WebCrypto public key (extractable, `verify` usage). */
 	readonly publicKey: CryptoKey;
-	/**
-	 * Carries the private key value.
-	 */
+	/** The WebCrypto private key (extractable, `sign` usage). */
 	readonly privateKey: CryptoKey;
-	/**
-	 * Exports spki der.
-	 *
-	 * @returns The exported spki der.
-	 */
+	/** Export the public key as DER-encoded SubjectPublicKeyInfo. */
 	exportSpkiDer(): Promise<Uint8Array>;
-	/**
-	 * Exports spk i pem.
-	 *
-	 * @returns The exported spk i pem.
-	 */
+	/** Export the public key as PEM-encoded SubjectPublicKeyInfo. */
 	exportSpkiPem(): Promise<string>;
-	/**
-	 * Exports pkcs#8 der.
-	 *
-	 * @returns The exported pkcs#8 der.
-	 */
+	/** Export the private key as DER-encoded PKCS#8 PrivateKeyInfo. */
 	exportPkcs8Der(): Promise<Uint8Array>;
-	/**
-	 * Exports pkcs#8 pem.
-	 *
-	 * @returns The exported pkcs#8 pem.
-	 */
+	/** Export the private key as PEM-encoded PKCS#8 PrivateKeyInfo. */
 	exportPkcs8Pem(): Promise<string>;
-	/**
-	 * Exports public jwk.
-	 *
-	 * @returns The exported public jwk.
-	 */
+	/** Export the public key as a JSON Web Key. */
 	exportPublicJwk(): Promise<JsonWebKey>;
-	/**
-	 * Exports private jwk.
-	 *
-	 * @returns The exported private jwk.
-	 */
+	/** Export the private key as a JSON Web Key. */
 	exportPrivateJwk(): Promise<JsonWebKey>;
 }
 
-/**
- * Describes the input shape for import RSA public key operations.
- */
+/** RSA variant of {@link PublicKeyImportInput}. */
 export interface ImportRsaPublicKeyInput {
-	/**
-	 * Identifies the kind value.
-	 */
+	/** Discriminant selecting RSA import. */
 	readonly kind: 'rsa';
-	/**
-	 * Carries the hash value.
-	 */
+	/** Hash algorithm. Defaults to `'SHA-256'`. */
 	readonly hash?: RsaHash;
-	/**
-	 * Carries the scheme value.
-	 */
+	/** Signature padding scheme. Defaults to `'pkcs1-v1_5'`. */
 	readonly scheme?: RsaScheme;
 }
 
-/**
- * Describes the input shape for import EC public key operations.
- */
+/** ECDSA variant of {@link PublicKeyImportInput}. */
 export interface ImportEcPublicKeyInput {
-	/**
-	 * Identifies the kind value.
-	 */
+	/** Discriminant selecting ECDSA import. */
 	readonly kind: 'ecdsa';
-	/**
-	 * Carries the named curve value.
-	 */
+	/** NIST curve the key belongs to. Required for EC import. */
 	readonly namedCurve: EcNamedCurve;
 }
 
-/**
- * Describes the input shape for import Ed25519 public key operations.
- */
+/** Ed25519 variant of {@link PublicKeyImportInput}. */
 export interface ImportEd25519PublicKeyInput {
-	/**
-	 * Identifies the kind value.
-	 */
+	/** Discriminant selecting Ed25519 import. */
 	readonly kind: 'ed25519';
 }
 
-/**
- * Describes the input shape for public key import operations.
- */
+/** Algorithm descriptor for public key import functions. */
 export type PublicKeyImportInput =
 	| ImportRsaPublicKeyInput
 	| ImportEcPublicKeyInput
 	| ImportEd25519PublicKeyInput;
 
-/**
- * Describes the input shape for private key import operations.
- */
+/** Algorithm descriptor for private key import functions. Same shape as {@link PublicKeyImportInput}. */
 export type PrivateKeyImportInput = PublicKeyImportInput;
 
-/**
- * Configures encrypted PKCS#8 operations.
- */
+/** PBES2 encryption options for {@link exportEncryptedPkcs8Der} and {@link exportEncryptedPkcs8Pem}. */
 export type EncryptedPkcs8Options = Pbes2EncryptionOptions;
 
-/**
- * Configures legacy PEM encryption operations.
- */
+/** Options for OpenSSL-style `Proc-Type: 4,ENCRYPTED` PEM encryption (PKCS#1/SEC1). */
 export interface LegacyPemEncryptionOptions {
-	/**
-	 * Carries the password value.
-	 */
+	/** Passphrase used to derive the encryption key. */
 	readonly password: string;
-	/**
-	 * Carries the iv value.
-	 */
+	/** 16-byte initialization vector. Random when omitted. */
 	readonly iv?: Uint8Array;
-	/**
-	 * Carries the cipher value.
-	 */
+	/** AES-CBC cipher. Defaults to `'AES-256-CBC'`. */
 	readonly cipher?: 'AES-128-CBC' | 'AES-192-CBC' | 'AES-256-CBC';
 }
 
-/**
- * Returns crypto.
- *
- * @returns The crypto.
- */
+/** Return the global `Crypto` object. Throws when WebCrypto is unavailable. */
 export function getCrypto(): Crypto {
 	const c = globalThis.crypto;
 	if (c?.subtle === undefined) {
@@ -223,10 +129,18 @@ export function getCrypto(): Crypto {
 }
 
 /**
- * Generates key pair.
+ * Generate an asymmetric key pair for signing and verification.
  *
- * @param algorithm The algorithm configuration.
- * @returns The generated key pair.
+ * @example
+ * ```ts
+ * const ecKeys = await generateKeyPair({ kind: 'ecdsa', namedCurve: 'P-384' });
+ * const rsaKeys = await generateKeyPair({ kind: 'rsa', modulusLength: 4096 });
+ * const edKeys = await generateKeyPair({ kind: 'ed25519' });
+ *
+ * // Default: ECDSA P-256
+ * const keys = await generateKeyPair();
+ * const pem = await keys.exportPkcs8Pem();
+ * ```
  */
 export async function generateKeyPair(
 	algorithm: KeyAlgorithmInput = { kind: 'ecdsa', namedCurve: 'P-256' },
@@ -244,13 +158,7 @@ export async function generateKeyPair(
 	return wrapKeyPair(generated.publicKey, generated.privateKey);
 }
 
-/**
- * Wrap key pair.
- *
- * @param publicKey The public key to use.
- * @param privateKey The private key to use.
- * @returns The computed value.
- */
+/** Wrap an existing WebCrypto key pair into a {@link KeyPairMaterial} with export helpers. */
 export function wrapKeyPair(publicKey: CryptoKey, privateKey: CryptoKey): KeyPairMaterial {
 	return {
 		publicKey,
@@ -276,63 +184,40 @@ export function wrapKeyPair(publicKey: CryptoKey, privateKey: CryptoKey): KeyPai
 	};
 }
 
-/**
- * Exports SPKI DER.
- *
- * @param publicKey The public key to use.
- * @returns The exported SPKI DER.
- */
+/** Export a public key as DER-encoded SubjectPublicKeyInfo. */
 export async function exportSpkiDer(publicKey: CryptoKey): Promise<Uint8Array> {
 	return new Uint8Array(await getCrypto().subtle.exportKey('spki', publicKey));
 }
 
-/**
- * Exports PKCS#8 DER.
- *
- * @param privateKey The private key to use.
- * @returns The exported PKCS#8 DER.
- */
+/** Export a private key as DER-encoded PKCS#8 PrivateKeyInfo. */
 export async function exportPkcs8Der(privateKey: CryptoKey): Promise<Uint8Array> {
 	return new Uint8Array(await getCrypto().subtle.exportKey('pkcs8', privateKey));
 }
 
 /**
- * Exports public JWK.
+ * Export a public key as a JSON Web Key.
  *
- * @param publicKey The public key to use.
- * @returns The exported public JWK.
+ * @example
+ * ```ts
+ * const keys = await generateKeyPair({ kind: 'ecdsa', namedCurve: 'P-256' });
+ * const jwk = await exportPublicJwk(keys.publicKey);
+ * ```
  */
 export async function exportPublicJwk(publicKey: CryptoKey): Promise<JsonWebKey> {
 	return getCrypto().subtle.exportKey('jwk', publicKey);
 }
 
-/**
- * Exports private JWK.
- *
- * @param privateKey The private key to use.
- * @returns The exported private JWK.
- */
+/** Export a private key as a JSON Web Key. */
 export async function exportPrivateJwk(privateKey: CryptoKey): Promise<JsonWebKey> {
 	return getCrypto().subtle.exportKey('jwk', privateKey);
 }
 
-/**
- * Exports PKCS#8 PEM.
- *
- * @param privateKey The private key to use.
- * @returns The exported PKCS#8 PEM.
- */
+/** Export a private key as a PEM-encoded PKCS#8 PrivateKeyInfo. */
 export async function exportPkcs8Pem(privateKey: CryptoKey): Promise<string> {
 	return pemEncode('PRIVATE KEY', await exportPkcs8Der(privateKey));
 }
 
-/**
- * Exports encrypted PKCS#8 DER.
- *
- * @param privateKey The private key to use.
- * @param options The options that control the operation.
- * @returns The exported encrypted PKCS#8 DER.
- */
+/** Export a private key as DER-encoded PBES2-encrypted PKCS#8 EncryptedPrivateKeyInfo. */
 export async function exportEncryptedPkcs8Der(
 	privateKey: CryptoKey,
 	options: EncryptedPkcs8Options,
@@ -342,13 +227,7 @@ export async function exportEncryptedPkcs8Der(
 	return sequence([encryption.algorithmIdentifierDer, octetString(encryption.encryptedData)]);
 }
 
-/**
- * Exports encrypted PKCS#8 PEM.
- *
- * @param privateKey The private key to use.
- * @param options The options that control the operation.
- * @returns The exported encrypted PKCS#8 PEM.
- */
+/** Export a private key as PEM-encoded PBES2-encrypted PKCS#8 EncryptedPrivateKeyInfo. */
 export async function exportEncryptedPkcs8Pem(
 	privateKey: CryptoKey,
 	options: EncryptedPkcs8Options,
@@ -356,12 +235,7 @@ export async function exportEncryptedPkcs8Pem(
 	return pemEncode('ENCRYPTED PRIVATE KEY', await exportEncryptedPkcs8Der(privateKey, options));
 }
 
-/**
- * Exports PKCS#1 DER.
- *
- * @param privateKey The private key to use.
- * @returns The exported PKCS#1 DER.
- */
+/** Export an RSA private key as DER-encoded PKCS#1 RSAPrivateKey. Throws for non-RSA keys. */
 export async function exportPkcs1Der(privateKey: CryptoKey): Promise<Uint8Array> {
 	const pkcs8 = await exportPkcs8Der(privateKey);
 	const parsed = parsePkcs8PrivateKey(pkcs8);
@@ -371,23 +245,12 @@ export async function exportPkcs1Der(privateKey: CryptoKey): Promise<Uint8Array>
 	return parsed.privateKeyDer;
 }
 
-/**
- * Exports PKCS#1 PEM.
- *
- * @param privateKey The private key to use.
- * @returns The exported PKCS#1 PEM.
- */
+/** Export an RSA private key as PEM-encoded PKCS#1 RSAPrivateKey. Throws for non-RSA keys. */
 export async function exportPkcs1Pem(privateKey: CryptoKey): Promise<string> {
 	return pemEncode('RSA PRIVATE KEY', await exportPkcs1Der(privateKey));
 }
 
-/**
- * Exports encrypted PKCS#1 PEM.
- *
- * @param privateKey The private key to use.
- * @param options The options that control the operation.
- * @returns The exported encrypted PKCS#1 PEM.
- */
+/** Export an RSA private key as legacy `Proc-Type: 4,ENCRYPTED` PEM (PKCS#1). */
 export async function exportEncryptedPkcs1Pem(
 	privateKey: CryptoKey,
 	options: LegacyPemEncryptionOptions,
@@ -395,12 +258,7 @@ export async function exportEncryptedPkcs1Pem(
 	return encryptTraditionalPem('RSA PRIVATE KEY', await exportPkcs1Der(privateKey), options);
 }
 
-/**
- * Exports SEC1 DER.
- *
- * @param privateKey The private key to use.
- * @returns The exported SEC1 DER.
- */
+/** Export an EC private key as DER-encoded SEC 1 ECPrivateKey. Throws for non-EC keys. */
 export async function exportSec1Der(privateKey: CryptoKey): Promise<Uint8Array> {
 	const pkcs8 = await exportPkcs8Der(privateKey);
 	const parsed = parsePkcs8PrivateKey(pkcs8);
@@ -410,23 +268,12 @@ export async function exportSec1Der(privateKey: CryptoKey): Promise<Uint8Array> 
 	return parsed.privateKeyDer;
 }
 
-/**
- * Exports SEC1 PEM.
- *
- * @param privateKey The private key to use.
- * @returns The exported SEC1 PEM.
- */
+/** Export an EC private key as PEM-encoded SEC 1 ECPrivateKey. */
 export async function exportSec1Pem(privateKey: CryptoKey): Promise<string> {
 	return pemEncode('EC PRIVATE KEY', await exportSec1Der(privateKey));
 }
 
-/**
- * Exports encrypted SEC1 PEM.
- *
- * @param privateKey The private key to use.
- * @param options The options that control the operation.
- * @returns The exported encrypted SEC1 PEM.
- */
+/** Export an EC private key as legacy `Proc-Type: 4,ENCRYPTED` PEM (SEC 1). */
 export async function exportEncryptedSec1Pem(
 	privateKey: CryptoKey,
 	options: LegacyPemEncryptionOptions,
@@ -435,21 +282,19 @@ export async function exportEncryptedSec1Pem(
 }
 
 /**
- * Exports SPKI PEM.
+ * Export a public key as PEM-encoded SubjectPublicKeyInfo.
  *
- * @param publicKey The public key to use.
- * @returns The exported SPKI PEM.
+ * @example
+ * ```ts
+ * const keys = await generateKeyPair();
+ * const pem = await exportSpkiPem(keys.publicKey);
+ * ```
  */
 export async function exportSpkiPem(publicKey: CryptoKey): Promise<string> {
 	return pemEncode('PUBLIC KEY', await exportSpkiDer(publicKey));
 }
 
-/**
- * Exports binary base64.
- *
- * @param key The key value.
- * @returns The exported binary base64.
- */
+/** Export a key as raw base64: SPKI for public keys, PKCS#8 for private keys. */
 export async function exportBinaryBase64(key: CryptoKey): Promise<string> {
 	if (key.type === 'public') {
 		return base64Encode(await exportSpkiDer(key));
@@ -457,13 +302,7 @@ export async function exportBinaryBase64(key: CryptoKey): Promise<string> {
 	return base64Encode(await exportPkcs8Der(key));
 }
 
-/**
- * Imports SPKI DER.
- *
- * @param der The DER-encoded bytes.
- * @param algorithm The algorithm configuration.
- * @returns The imported SPKI DER.
- */
+/** Import a public key from DER-encoded SubjectPublicKeyInfo. */
 export async function importSpkiDer(
 	der: Uint8Array,
 	algorithm: PublicKeyImportInput,
@@ -477,13 +316,7 @@ export async function importSpkiDer(
 	);
 }
 
-/**
- * Imports SPKI PEM.
- *
- * @param pem The PEM-encoded text.
- * @param algorithm The algorithm configuration.
- * @returns The imported SPKI PEM.
- */
+/** Import a public key from PEM-encoded SubjectPublicKeyInfo. */
 export async function importSpkiPem(
 	pem: string,
 	algorithm: PublicKeyImportInput,
@@ -491,13 +324,7 @@ export async function importSpkiPem(
 	return importSpkiDer(pemDecode('PUBLIC KEY', pem), algorithm);
 }
 
-/**
- * Imports SPKI base64.
- *
- * @param base64 The base64-encoded text.
- * @param algorithm The algorithm configuration.
- * @returns The imported SPKI base64.
- */
+/** Import a public key from base64-encoded SubjectPublicKeyInfo (no PEM headers). */
 export async function importSpkiBase64(
 	base64: string,
 	algorithm: PublicKeyImportInput,
@@ -505,13 +332,7 @@ export async function importSpkiBase64(
 	return importSpkiDer(base64Decode(base64), algorithm);
 }
 
-/**
- * Imports PKCS#8 DER.
- *
- * @param der The DER-encoded bytes.
- * @param algorithm The algorithm configuration.
- * @returns The imported PKCS#8 DER.
- */
+/** Import a private key from DER-encoded PKCS#8 PrivateKeyInfo. */
 export async function importPkcs8Der(
 	der: Uint8Array,
 	algorithm: PrivateKeyImportInput,
@@ -526,11 +347,12 @@ export async function importPkcs8Der(
 }
 
 /**
- * Imports PKCS#8 PEM.
+ * Import a private key from PEM-encoded PKCS#8 PrivateKeyInfo.
  *
- * @param pem The PEM-encoded text.
- * @param algorithm The algorithm configuration.
- * @returns The imported PKCS#8 PEM.
+ * @example
+ * ```ts
+ * const key = await importPkcs8Pem(pemString, { kind: 'ecdsa', namedCurve: 'P-256' });
+ * ```
  */
 export async function importPkcs8Pem(
 	pem: string,
@@ -539,14 +361,7 @@ export async function importPkcs8Pem(
 	return importPkcs8Der(pemDecode('PRIVATE KEY', pem), algorithm);
 }
 
-/**
- * Imports encrypted PKCS#8 DER.
- *
- * @param der The DER-encoded bytes.
- * @param password The password used to protect or unlock the data.
- * @param algorithm The algorithm configuration.
- * @returns The imported encrypted PKCS#8 DER.
- */
+/** Import a private key from DER-encoded PBES2-encrypted PKCS#8 EncryptedPrivateKeyInfo. */
 export async function importEncryptedPkcs8Der(
 	der: Uint8Array,
 	password: string,
@@ -574,12 +389,12 @@ export async function importEncryptedPkcs8Der(
 }
 
 /**
- * Imports encrypted PKCS#8 PEM.
+ * Import a private key from PEM-encoded PBES2-encrypted PKCS#8 EncryptedPrivateKeyInfo.
  *
- * @param pem The PEM-encoded text.
- * @param password The password used to protect or unlock the data.
- * @param algorithm The algorithm configuration.
- * @returns The imported encrypted PKCS#8 PEM.
+ * @example
+ * ```ts
+ * const key = await importEncryptedPkcs8Pem(pem, 'secret', { kind: 'rsa' });
+ * ```
  */
 export async function importEncryptedPkcs8Pem(
 	pem: string,
@@ -589,13 +404,7 @@ export async function importEncryptedPkcs8Pem(
 	return importEncryptedPkcs8Der(pemDecode('ENCRYPTED PRIVATE KEY', pem), password, algorithm);
 }
 
-/**
- * Imports PKCS#1 DER.
- *
- * @param der The DER-encoded bytes.
- * @param algorithm The algorithm configuration.
- * @returns The imported PKCS#1 DER.
- */
+/** Import an RSA private key from DER-encoded PKCS#1 RSAPrivateKey. */
 export async function importPkcs1Der(
 	der: Uint8Array,
 	algorithm: ImportRsaPublicKeyInput = { kind: 'rsa' },
@@ -603,13 +412,7 @@ export async function importPkcs1Der(
 	return importPkcs8Der(wrapPkcs1InPkcs8(der), algorithm);
 }
 
-/**
- * Imports PKCS#1 PEM.
- *
- * @param pem The PEM-encoded text.
- * @param algorithm The algorithm configuration.
- * @returns The imported PKCS#1 PEM.
- */
+/** Import an RSA private key from PEM-encoded PKCS#1 RSAPrivateKey (`RSA PRIVATE KEY` label). */
 export async function importPkcs1Pem(
 	pem: string,
 	algorithm: ImportRsaPublicKeyInput = { kind: 'rsa' },
@@ -617,14 +420,7 @@ export async function importPkcs1Pem(
 	return importPkcs1Der(pemDecode('RSA PRIVATE KEY', pem), algorithm);
 }
 
-/**
- * Imports encrypted PKCS#1 PEM.
- *
- * @param pem The PEM-encoded text.
- * @param password The password used to protect or unlock the data.
- * @param algorithm The algorithm configuration.
- * @returns The imported encrypted PKCS#1 PEM.
- */
+/** Import an RSA private key from legacy `Proc-Type: 4,ENCRYPTED` PEM (PKCS#1). */
 export async function importEncryptedPkcs1Pem(
 	pem: string,
 	password: string,
@@ -638,13 +434,7 @@ export async function importEncryptedPkcs1Pem(
 	}
 }
 
-/**
- * Imports PKCS#8 base64.
- *
- * @param base64 The base64-encoded text.
- * @param algorithm The algorithm configuration.
- * @returns The imported PKCS#8 base64.
- */
+/** Import a private key from base64-encoded PKCS#8 PrivateKeyInfo (no PEM headers). */
 export async function importPkcs8Base64(
 	base64: string,
 	algorithm: PrivateKeyImportInput,
@@ -652,13 +442,7 @@ export async function importPkcs8Base64(
 	return importPkcs8Der(base64Decode(base64), algorithm);
 }
 
-/**
- * Imports SEC1 DER.
- *
- * @param der The DER-encoded bytes.
- * @param algorithm The algorithm configuration.
- * @returns The imported SEC1 DER.
- */
+/** Import an EC private key from DER-encoded SEC 1 ECPrivateKey. */
 export async function importSec1Der(
 	der: Uint8Array,
 	algorithm: ImportEcPublicKeyInput,
@@ -666,13 +450,7 @@ export async function importSec1Der(
 	return importPkcs8Der(wrapSec1InPkcs8(der, algorithm.namedCurve), algorithm);
 }
 
-/**
- * Imports SEC1 PEM.
- *
- * @param pem The PEM-encoded text.
- * @param algorithm The algorithm configuration.
- * @returns The imported SEC1 PEM.
- */
+/** Import an EC private key from PEM-encoded SEC 1 ECPrivateKey (`EC PRIVATE KEY` label). */
 export async function importSec1Pem(
 	pem: string,
 	algorithm: ImportEcPublicKeyInput,
@@ -680,14 +458,7 @@ export async function importSec1Pem(
 	return importSec1Der(pemDecode('EC PRIVATE KEY', pem), algorithm);
 }
 
-/**
- * Imports encrypted SEC1 PEM.
- *
- * @param pem The PEM-encoded text.
- * @param password The password used to protect or unlock the data.
- * @param algorithm The algorithm configuration.
- * @returns The imported encrypted SEC1 PEM.
- */
+/** Import an EC private key from legacy `Proc-Type: 4,ENCRYPTED` PEM (SEC 1). */
 export async function importEncryptedSec1Pem(
 	pem: string,
 	password: string,
@@ -701,13 +472,7 @@ export async function importEncryptedSec1Pem(
 	}
 }
 
-/**
- * Imports public JWK.
- *
- * @param jwk The JWK value.
- * @param algorithm The algorithm configuration.
- * @returns The imported public JWK.
- */
+/** Import a public verification key from a JSON Web Key. */
 export async function importPublicJwk(
 	jwk: JsonWebKey,
 	algorithm: PublicKeyImportInput,
@@ -716,11 +481,13 @@ export async function importPublicJwk(
 }
 
 /**
- * Imports private JWK.
+ * Import a private signing key from a JSON Web Key.
  *
- * @param jwk The JWK value.
- * @param algorithm The algorithm configuration.
- * @returns The imported private JWK.
+ * @example
+ * ```ts
+ * const jwk = { kty: 'EC', crv: 'P-256', x: '...', y: '...', d: '...' };
+ * const key = await importPrivateJwk(jwk, { kind: 'ecdsa', namedCurve: 'P-256' });
+ * ```
  */
 export async function importPrivateJwk(
 	jwk: JsonWebKey,
@@ -729,12 +496,7 @@ export async function importPrivateJwk(
 	return getCrypto().subtle.importKey('jwk', jwk, toImportAlgorithm(algorithm), true, ['sign']);
 }
 
-/**
- * To generate key algorithm.
- *
- * @param algorithm The algorithm configuration.
- * @returns The computed value.
- */
+/** Map a {@link KeyAlgorithmInput} to the WebCrypto `generateKey` algorithm parameter. */
 function toGenerateKeyAlgorithm(
 	algorithm: KeyAlgorithmInput,
 ): EcKeyGenParams | RsaHashedKeyGenParams | AlgorithmIdentifier {
@@ -756,12 +518,7 @@ function toGenerateKeyAlgorithm(
 	}
 }
 
-/**
- * To import algorithm.
- *
- * @param algorithm The algorithm configuration.
- * @returns The computed value.
- */
+/** Map a {@link PublicKeyImportInput} to the WebCrypto `importKey` algorithm parameter. */
 function toImportAlgorithm(
 	algorithm: PublicKeyImportInput,
 ): EcKeyImportParams | RsaHashedImportParams | AlgorithmIdentifier {
@@ -781,24 +538,13 @@ function toImportAlgorithm(
 	}
 }
 
-/**
- * Parses PKCS#8 private key.
- *
- * @param der The DER-encoded bytes.
- * @returns The parsed PKCS#8 private key.
- */
+/** Extract algorithm OID and inner key bytes from a PKCS#8 PrivateKeyInfo envelope. */
 function parsePkcs8PrivateKey(der: Uint8Array): {
-	/**
-	 * Carries the OID for algorithm.
-	 */
+	/** OID identifying the algorithm family (e.g. rsaEncryption, ecPublicKey). */
 	readonly algorithmOid: string;
-	/**
-	 * Carries the OID for parameters.
-	 */
+	/** Optional algorithm parameter OID (e.g. named curve for EC keys). */
 	readonly parametersOid?: string;
-	/**
-	 * Carries the DER-encoded private key.
-	 */
+	/** Raw DER of the inner private key (PKCS#1 for RSA, SEC 1 for EC). */
 	readonly privateKeyDer: Uint8Array;
 } {
 	const children = readSequenceChildren(der);
@@ -824,12 +570,7 @@ function parsePkcs8PrivateKey(der: Uint8Array): {
 	};
 }
 
-/**
- * Wrap PKCS#1 in PKCS#8.
- *
- * @param der The DER-encoded bytes.
- * @returns The computed value.
- */
+/** Wrap a PKCS#1 RSAPrivateKey in a PKCS#8 PrivateKeyInfo envelope for WebCrypto import. */
 function wrapPkcs1InPkcs8(der: Uint8Array): Uint8Array {
 	return sequence([
 		Uint8Array.of(0x02, 0x01, 0x00),
@@ -838,13 +579,7 @@ function wrapPkcs1InPkcs8(der: Uint8Array): Uint8Array {
 	]);
 }
 
-/**
- * Wrap SEC1 in PKCS#8.
- *
- * @param der The DER-encoded bytes.
- * @param namedCurve The named curve value.
- * @returns The computed value.
- */
+/** Wrap a SEC 1 ECPrivateKey in a PKCS#8 PrivateKeyInfo envelope for WebCrypto import. */
 function wrapSec1InPkcs8(
 	der: Uint8Array,
 	namedCurve: ImportEcPublicKeyInput['namedCurve'],
@@ -856,12 +591,7 @@ function wrapSec1InPkcs8(
 	]);
 }
 
-/**
- * Named curve to OID.
- *
- * @param namedCurve The named curve value.
- * @returns The computed value.
- */
+/** Map a WebCrypto named curve to its ASN.1 OID string. */
 function namedCurveToOid(namedCurve: ImportEcPublicKeyInput['namedCurve']): string {
 	switch (namedCurve) {
 		case 'P-256':
@@ -873,12 +603,7 @@ function namedCurveToOid(namedCurve: ImportEcPublicKeyInput['namedCurve']): stri
 	}
 }
 
-/**
- * RSA scheme to web crypto algorithm name.
- *
- * @param scheme The scheme value.
- * @returns The computed value.
- */
+/** Map an {@link RsaScheme} to the WebCrypto algorithm name string. */
 function rsaSchemeToWebCryptoAlgorithmName(
 	scheme: RsaScheme | undefined,
 ): 'RSASSA-PKCS1-v1_5' | 'RSA-PSS' {
@@ -888,14 +613,7 @@ function rsaSchemeToWebCryptoAlgorithmName(
 	return 'RSASSA-PKCS1-v1_5';
 }
 
-/**
- * Encrypt traditional PEM.
- *
- * @param label The label value.
- * @param der The DER-encoded bytes.
- * @param options The options that control the operation.
- * @returns The computed value.
- */
+/** Encrypt DER key material as an OpenSSL-style `Proc-Type: 4,ENCRYPTED` PEM block. */
 async function encryptTraditionalPem(
 	label: 'RSA PRIVATE KEY' | 'EC PRIVATE KEY',
 	der: Uint8Array,
@@ -930,14 +648,7 @@ async function encryptTraditionalPem(
 	].join('\n');
 }
 
-/**
- * Decrypt traditional PEM.
- *
- * @param expectedLabel The expected label value.
- * @param pem The PEM-encoded text.
- * @param password The password used to protect or unlock the data.
- * @returns The computed value.
- */
+/** Decrypt an OpenSSL-style `Proc-Type: 4,ENCRYPTED` PEM block back to plaintext DER. */
 async function decryptTraditionalPem(
 	expectedLabel: 'RSA PRIVATE KEY' | 'EC PRIVATE KEY',
 	pem: string,
@@ -972,15 +683,7 @@ async function decryptTraditionalPem(
 	}
 }
 
-/**
- * Imports traditional PEM aes key.
- *
- * @param password The password used to protect or unlock the data.
- * @param salt The salt value.
- * @param cipher The cipher value.
- * @param usages The usages value.
- * @returns The imported traditional PEM aes key.
- */
+/** Derive and import an AES-CBC key for legacy PEM encryption using OpenSSL `EVP_BytesToKey`. */
 async function importTraditionalPemAesKey(
 	password: string,
 	salt: Uint8Array,
@@ -998,24 +701,14 @@ async function importTraditionalPemAesKey(
 	);
 }
 
-/**
- * Returns whether traditional PEM cipher.
- *
- * @param cipher The cipher value.
- * @returns Whether the condition holds.
- */
+/** Type guard for the three AES-CBC ciphers supported by legacy PEM encryption. */
 function isTraditionalPemCipher(
 	cipher: string | undefined,
 ): cipher is 'AES-128-CBC' | 'AES-192-CBC' | 'AES-256-CBC' {
 	return cipher === 'AES-128-CBC' || cipher === 'AES-192-CBC' || cipher === 'AES-256-CBC';
 }
 
-/**
- * Traditional PEM cipher key length.
- *
- * @param cipher The cipher value.
- * @returns The computed value.
- */
+/** Return the AES key size in bits for a given cipher name. */
 function traditionalPemCipherKeyLength(
 	cipher: 'AES-128-CBC' | 'AES-192-CBC' | 'AES-256-CBC',
 ): 128 | 192 | 256 {
@@ -1029,14 +722,7 @@ function traditionalPemCipherKeyLength(
 	}
 }
 
-/**
- * Openssl bytes to key.
- *
- * @param password The password used to protect or unlock the data.
- * @param salt The salt value.
- * @param length The length value.
- * @returns The computed value.
- */
+/** OpenSSL `EVP_BytesToKey` with MD5 — derives a fixed-length key from password + salt. */
 function opensslBytesToKey(password: string, salt: Uint8Array, length: number): Uint8Array {
 	const passwordBytes = new TextEncoder().encode(password);
 	const chunks: Uint8Array[] = [];
@@ -1064,24 +750,13 @@ function opensslBytesToKey(password: string, salt: Uint8Array, length: number): 
 	return out;
 }
 
-/**
- * Parses traditional PEM.
- *
- * @param pem The PEM-encoded text.
- * @returns The parsed traditional PEM.
- */
+/** Parse a PEM block into its label, RFC 1421 headers, and base64 body. */
 function parseTraditionalPem(pem: string): {
-	/**
-	 * Carries the label value.
-	 */
+	/** PEM type label between `BEGIN` and `END` markers. */
 	readonly label: string;
-	/**
-	 * Carries the headers value.
-	 */
+	/** RFC 1421 encapsulated headers (e.g. `Proc-Type`, `DEK-Info`). */
 	readonly headers: ReadonlyMap<string, string>;
-	/**
-	 * Carries the base64 body value.
-	 */
+	/** Base64-encoded payload after the headers. */
 	readonly base64Body: string;
 } {
 	const normalized = pem.replace(/\r/g, '').trim();

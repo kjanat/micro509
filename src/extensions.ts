@@ -1,8 +1,10 @@
 /**
- * Typed certificate and CSR extension model plus encoder helpers.
+ * Typed certificate and CSR extension model plus ASN.1 encoder helpers.
  *
- * This module defines the public extension input surface and the shared builders used by
- * create flows.
+ * Defines input types for every supported X.509v3 extension (RFC 5280) and
+ * the DER encoders consumed by certificate and CSR builder flows.
+ *
+ * @module
  */
 
 import { hexToBytes } from './asn1.ts';
@@ -52,7 +54,9 @@ import { encodeRelativeDistinguishedName, type RelativeDistinguishedNameInput } 
 import { OIDS } from './oids.ts';
 
 /**
- * Defines key usage.
+ * RFC 5280 §4.2.1.3 Key Usage bit flag.
+ *
+ * Each value corresponds to one bit in the KeyUsage BIT STRING.
  */
 export type KeyUsage =
 	| 'digitalSignature'
@@ -66,91 +70,63 @@ export type KeyUsage =
 	| 'decipherOnly';
 
 /**
- * Defines subject alt name.
+ * RFC 5280 §4.2.1.6 Subject Alternative Name / GeneralName.
+ *
+ * Discriminated union keyed on `type`. The `'unknown'` variant preserves
+ * unrecognized GeneralName tags for round-trip fidelity.
  */
 export type SubjectAltName =
 	| {
-			/**
-			 * Identifies the type value.
-			 */
+			/** DNS hostname (dNSName [2]). */
 			readonly type: 'dns';
-			/**
-			 * Carries the successful value payload.
-			 */
+			/** Fully-qualified domain name, e.g. `"example.com"`. */
 			readonly value: string;
 	  }
 	| {
-			/**
-			 * Identifies the type value.
-			 */
+			/** IP address (iPAddress [7]). */
 			readonly type: 'ip';
-			/**
-			 * Carries the successful value payload.
-			 */
+			/** Dotted-decimal IPv4 or colon-hex IPv6 string. */
 			readonly value: string;
 	  }
 	| {
-			/**
-			 * Identifies the type value.
-			 */
+			/** Email address (rfc822Name [1]). */
 			readonly type: 'email';
-			/**
-			 * Carries the successful value payload.
-			 */
+			/** RFC 822 mailbox, e.g. `"admin@example.com"`. */
 			readonly value: string;
 	  }
 	| {
-			/**
-			 * Identifies the type value.
-			 */
+			/** URI (uniformResourceIdentifier [6]). */
 			readonly type: 'uri';
-			/**
-			 * Carries the successful value payload.
-			 */
+			/** Absolute URI string. */
 			readonly value: string;
 	  }
 	| {
-			/**
-			 * Identifies the type value.
-			 */
+			/** SRV-ID otherName (id-on-dnsSRV). */
 			readonly type: 'srv';
-			/**
-			 * Carries the successful value payload.
-			 */
+			/** SRV service name, e.g. `"_imaps.example.com"`. */
 			readonly value: string;
 	  }
 	| {
-			/**
-			 * Identifies the type value.
-			 */
+			/** X.500 directory name (directoryName [4]). */
 			readonly type: 'directoryName';
-			/**
-			 * Carries the hexadecimal der.
-			 */
+			/** Hex-encoded DER of the Name SEQUENCE. */
 			readonly derHex: string;
 	  }
 	| {
-			/**
-			 * Identifies the type value.
-			 */
+			/** Unrecognized GeneralName tag, preserved as raw bytes. */
 			readonly type: 'unknown';
-			/**
-			 * Carries the tag value.
-			 */
+			/** ASN.1 context tag number. */
 			readonly tag: number;
-			/**
-			 * Carries the successful value payload.
-			 */
+			/** Raw content bytes of the element. */
 			readonly value: Uint8Array;
 	  };
 
-/**
- * Defines general name.
- */
+/** Alias for {@link SubjectAltName} — used where RFC 5280 says "GeneralName". */
 export type GeneralName = SubjectAltName;
 
 /**
- * Enumerates distribution point values used by this module.
+ * Revocation reason flags for CRL Distribution Points and Issuing Distribution Points
+ * (RFC 5280 §4.2.1.13, §5.2.5).
  */
 export type DistributionPointReason =
 	| 'keyCompromise'
@@ -163,141 +139,84 @@ export type DistributionPointReason =
 	| 'aACompromise';
 
 /**
- * Describes distribution point name.
+ * Name component of a CRL Distribution Point (RFC 5280 §4.2.1.13).
+ * Supply exactly one of `fullName` or `relativeName`.
  */
 export interface DistributionPointName {
-	/**
-	 * Carries the full name value.
-	 */
+	/** Absolute GeneralName(s) identifying the distribution point (usually a URI). */
 	readonly fullName?: readonly GeneralName[];
-	/**
-	 * Carries the relative name value.
-	 */
+	/** Name relative to the issuer's DN; mutually exclusive with `fullName`. */
 	readonly relativeName?: RelativeDistinguishedNameInput;
 }
 
 /**
- * Defines distribution point.
+ * Input for a single CRL Distribution Point (RFC 5280 §4.2.1.13).
+ *
+ * At least one of `distributionPoint` or `crlIssuer` must be provided.
+ * The union enforces this constraint at the type level.
  */
 export type DistributionPoint =
 	| {
-			/**
-			 * Carries the distribution point value.
-			 */
+			/** Where to fetch the CRL (fullName or relativeName). */
 			readonly distributionPoint: DistributionPointName;
-			/**
-			 * Carries the reasons value.
-			 */
+			/** Revocation reason subset. Absent means all reasons. */
 			readonly reasons?: readonly DistributionPointReason[];
-			/**
-			 * Carries the crl issuer value.
-			 */
+			/** Entity that signed the CRL, when different from the cert issuer. */
 			readonly crlIssuer?: readonly GeneralName[];
 	  }
 	| {
-			/**
-			 * Carries the distribution point value.
-			 */
+			/** Where to fetch the CRL. Optional when `crlIssuer` is present. */
 			readonly distributionPoint?: DistributionPointName;
-			/**
-			 * Carries the reasons value.
-			 */
+			/** Revocation reason subset. Absent means all reasons. */
 			readonly reasons?: readonly DistributionPointReason[];
-			/**
-			 * Carries the crl issuer value.
-			 */
+			/** Entity that signed the CRL. Required when `distributionPoint` is absent. */
 			readonly crlIssuer: readonly GeneralName[];
 	  };
 
-/**
- * Describes issuing distribution point base.
- */
+/** Base shape for Issuing Distribution Point (RFC 5280 §5.2.5) — no scope restriction. */
 interface IssuingDistributionPointBase {
-	/**
-	 * Carries the distribution point value.
-	 */
+	/** Where to fetch this CRL. */
 	readonly distributionPoint?: DistributionPointName;
-	/**
-	 * Carries the only some reasons value.
-	 */
+	/** Limits the CRL to these revocation reasons. Absent means all reasons. */
 	readonly onlySomeReasons?: readonly DistributionPointReason[];
-	/**
-	 * Indicates whether indirect crl.
-	 */
+	/** When true, the CRL may contain entries from other CAs. Default false. */
 	readonly indirectCrl?: boolean;
-	/**
-	 * Indicates whether only contains user certs.
-	 */
+	/** Must be absent or false in this variant (no user-cert-only restriction). */
 	readonly onlyContainsUserCerts?: false;
-	/**
-	 * Indicates whether only contains ca certs.
-	 */
+	/** Must be absent or false in this variant (no CA-cert-only restriction). */
 	readonly onlyContainsCACerts?: false;
-	/**
-	 * Indicates whether only contains attribut e certs.
-	 */
+	/** When true, the CRL only covers attribute certificates. Default false. */
 	readonly onlyContainsAttributeCerts?: boolean;
 }
 
-/**
- * Describes issuing distribution point for user certs.
- */
+/** IDP scoped to end-entity (user) certificates only. Mutually exclusive with CA / attribute scopes. */
 interface IssuingDistributionPointForUserCerts
 	extends Omit<IssuingDistributionPointBase, 'onlyContainsUserCerts'> {
-	/**
-	 * Indicates whether only contains user certs.
-	 */
 	readonly onlyContainsUserCerts: true;
-	/**
-	 * Indicates whether only contains ca certs.
-	 */
 	readonly onlyContainsCACerts?: false;
-	/**
-	 * Indicates whether only contains attribut e certs.
-	 */
 	readonly onlyContainsAttributeCerts?: false;
 }
 
-/**
- * Describes issuing distribution point for CA certs.
- */
+/** IDP scoped to CA certificates only. Mutually exclusive with user / attribute scopes. */
 interface IssuingDistributionPointForCaCerts
 	extends Omit<IssuingDistributionPointBase, 'onlyContainsCACerts'> {
-	/**
-	 * Indicates whether only contains user certs.
-	 */
 	readonly onlyContainsUserCerts?: false;
-	/**
-	 * Indicates whether only contains ca certs.
-	 */
 	readonly onlyContainsCACerts: true;
-	/**
-	 * Indicates whether only contains attribut e certs.
-	 */
 	readonly onlyContainsAttributeCerts?: false;
 }
 
-/**
- * Describes issuing distribution point for attribute certs.
- */
+/** IDP scoped to attribute certificates only. Mutually exclusive with user / CA scopes. */
 interface IssuingDistributionPointForAttributeCerts
 	extends Omit<IssuingDistributionPointBase, 'onlyContainsAttributeCerts'> {
-	/**
-	 * Indicates whether only contains user certs.
-	 */
 	readonly onlyContainsUserCerts?: false;
-	/**
-	 * Indicates whether only contains ca certs.
-	 */
 	readonly onlyContainsCACerts?: false;
-	/**
-	 * Indicates whether only contains attribut e certs.
-	 */
 	readonly onlyContainsAttributeCerts: true;
 }
 
 /**
- * Defines issuing distribution point.
+ * Input for the Issuing Distribution Point CRL extension (RFC 5280 §5.2.5).
+ *
+ * The union enforces that at most one of the `onlyContains*` flags is true.
  */
 export type IssuingDistributionPoint =
 	| IssuingDistributionPointBase
@@ -306,222 +225,147 @@ export type IssuingDistributionPoint =
 	| IssuingDistributionPointForAttributeCerts;
 
 /**
- * Describes basic constraints.
+ * RFC 5280 §4.2.1.9 Basic Constraints.
+ *
+ * A certificate with `ca: true` may issue other certificates; `pathLength`
+ * limits how many additional CAs may appear below it in the chain.
  */
 export interface BasicConstraints {
-	/**
-	 * Indicates whether ca.
-	 */
+	/** Whether this certificate belongs to a CA. End-entity certs set this to `false`. */
 	readonly ca: boolean;
-	/**
-	 * Carries the path length value.
-	 */
+	/** Maximum number of intermediate CA certificates allowed below this CA. Only valid when `ca` is `true`. */
 	readonly pathLength?: number;
 }
 
-/**
- * Defines certificate policies.
- */
+/** RFC 5280 §4.2.1.4 — array of policy OIDs with optional qualifiers. */
 export type CertificatePolicies = readonly PolicyInformation[];
 
-/**
- * Describes policy information.
- */
+/** A single certificate policy: an OID plus optional qualifiers. */
 export interface PolicyInformation {
-	/**
-	 * Carries the policy identifier value.
-	 */
+	/** Dotted-decimal OID of the policy (e.g. `"2.23.140.1.2.1"` for DV). */
 	readonly policyIdentifier: string;
-	/**
-	 * Carries the policy qualifiers value.
-	 */
+	/** Optional CPS URIs or user notices attached to this policy. */
 	readonly policyQualifiers?: readonly PolicyQualifierInfo[];
 }
 
-/**
- * Describes cps policy qualifier info.
- */
+/** CPS (Certification Practice Statement) URI policy qualifier. */
 export interface CpsPolicyQualifierInfo {
-	/**
-	 * Identifies the type value.
-	 */
+	/** Discriminant for the `'cps'` qualifier variant. */
 	readonly type: 'cps';
-	/**
-	 * Carries the uri value.
-	 */
+	/** URL of the Certification Practice Statement document. */
 	readonly uri: string;
 }
 
-/**
- * Describes policy notice reference.
- */
+/** Reference to a numbered notice within an organization's practice statement. */
 export interface PolicyNoticeReference {
-	/**
-	 * Carries the organization value.
-	 */
+	/** Organization name that published the notice. */
 	readonly organization: string;
-	/**
-	 * Carries the notice numbers value.
-	 */
+	/** One-based notice numbers within that organization's documentation. */
 	readonly noticeNumbers: readonly number[];
 }
 
-/**
- * Describes user notice policy qualifier info.
- */
+/** UserNotice policy qualifier — human-readable notice text and/or a notice reference. */
 export interface UserNoticePolicyQualifierInfo {
-	/**
-	 * Identifies the type value.
-	 */
+	/** Discriminant for the `'userNotice'` qualifier variant. */
 	readonly type: 'userNotice';
-	/**
-	 * Carries the notice ref value.
-	 */
+	/** Pointer to a numbered notice in an organization's practice statement. */
 	readonly noticeRef?: PolicyNoticeReference;
-	/**
-	 * Carries the explicit text value.
-	 */
+	/** Free-form text to display to relying parties. */
 	readonly explicitText?: string;
 }
 
-/**
- * Describes custom policy qualifier info.
- */
+/** Opaque policy qualifier identified by a custom OID, carried as raw DER. */
 export interface CustomPolicyQualifierInfo {
-	/**
-	 * Identifies the type value.
-	 */
+	/** Discriminant for the custom-OID qualifier variant. */
 	readonly type: 'oid';
-	/**
-	 * Carries the oid value.
-	 */
+	/** Dotted-decimal OID of the qualifier. */
 	readonly oid: string;
-	/**
-	 * Carries the DER-encoded qualifier.
-	 */
+	/** DER-encoded qualifier payload. */
 	readonly qualifierDer: Uint8Array;
 }
 
-/**
- * Defines policy qualifier info.
- */
+/** Discriminated union of all supported policy qualifier types. */
 export type PolicyQualifierInfo =
 	| CpsPolicyQualifierInfo
 	| UserNoticePolicyQualifierInfo
 	| CustomPolicyQualifierInfo;
 
-/**
- * Defines policy mappings.
- */
+/** RFC 5280 §4.2.1.5 — array of issuer-to-subject policy OID pairs. */
 export type PolicyMappings = readonly PolicyMapping[];
 
-/**
- * Describes policy mapping.
- */
+/** Maps a policy OID in the issuer's domain to an equivalent OID in the subject's domain. */
 export interface PolicyMapping {
-	/**
-	 * Carries the issuer domain policy value.
-	 */
+	/** Policy OID as defined by the issuing CA. Must not be anyPolicy. */
 	readonly issuerDomainPolicy: string;
-	/**
-	 * Carries the subject domain policy value.
-	 */
+	/** Equivalent policy OID in the subject CA's domain. Must not be anyPolicy. */
 	readonly subjectDomainPolicy: string;
 }
 
 /**
- * Describes policy constraints.
+ * RFC 5280 §4.2.1.11 Policy Constraints.
+ *
+ * At least one field must be present. Values are certificate-count
+ * thresholds measured from the current certificate toward the end entity.
  */
 export interface PolicyConstraints {
-	/**
-	 * Carries the require explicit policy value.
-	 */
+	/** After this many certificates, an acceptable policy must be in the path. */
 	readonly requireExplicitPolicy?: number;
-	/**
-	 * Carries the inhibit policy mapping value.
-	 */
+	/** After this many certificates, policy mapping is no longer allowed. */
 	readonly inhibitPolicyMapping?: number;
 }
 
 /**
- * Describes inhibit any policy.
+ * RFC 5280 §4.2.1.14 Inhibit anyPolicy.
+ *
+ * After `skipCerts` additional certificates in the path, the special
+ * anyPolicy OID is no longer considered a match.
  */
 export interface InhibitAnyPolicy {
-	/**
-	 * Carries the skip certs value.
-	 */
+	/** Number of additional certificates before anyPolicy stops being valid. */
 	readonly skipCerts: number;
 }
 
 /**
- * Describes the input shape for certificate extensions operations.
+ * Input for {@link buildCertificateExtensions} and {@link buildRequestedExtensions}.
+ *
+ * Every field is optional. Omitted extensions are not encoded. Built-in
+ * extensions (SKI, AKI, basicConstraints defaults) are handled automatically
+ * by the builder.
  */
 export interface CertificateExtensionsInput {
-	/**
-	 * Carries the subject alt names value.
-	 */
+	/** Subject Alternative Names (dns, ip, email, uri, srv, directoryName). */
 	readonly subjectAltNames?: readonly SubjectAltName[];
-	/**
-	 * Carries the key usage value.
-	 */
+	/** Key Usage flags (digitalSignature, keyCertSign, etc.). */
 	readonly keyUsage?: readonly KeyUsage[];
-	/**
-	 * Carries the basic constraints value.
-	 */
+	/** Basic Constraints (CA flag + optional pathLength). Defaults to `{ ca: false }` for certs. */
 	readonly basicConstraints?: BasicConstraints;
-	/**
-	 * Carries the extended key usage value.
-	 */
+	/** Extended Key Usage purposes (serverAuth, clientAuth, etc.). */
 	readonly extendedKeyUsage?: readonly ExtendedKeyUsage[];
-	/**
-	 * Carries the nam e constraints value.
-	 */
+	/** Name Constraints — permitted and/or excluded subtrees. */
 	readonly nameConstraints?: NameConstraints;
-	/**
-	 * Carries the certificate policies value.
-	 */
+	/** Certificate Policies with optional qualifiers. */
 	readonly certificatePolicies?: CertificatePolicies;
-	/**
-	 * Carries the policy mappings value.
-	 */
+	/** Policy Mappings between issuer and subject policy domains. */
 	readonly policyMappings?: PolicyMappings;
-	/**
-	 * Carries the policy constraints value.
-	 */
+	/** Policy Constraints (requireExplicitPolicy / inhibitPolicyMapping thresholds). */
 	readonly policyConstraints?: PolicyConstraints;
-	/**
-	 * Carries the inhibit any policy value.
-	 */
+	/** Inhibit anyPolicy skip-certs threshold. */
 	readonly inhibitAnyPolicy?: InhibitAnyPolicy;
-	/**
-	 * Carries the authority info access value.
-	 */
+	/** Authority Information Access — OCSP responder and CA issuer URIs. */
 	readonly authorityInfoAccess?: readonly AuthorityInformationAccess[];
-	/**
-	 * Carries the crl distribution points value.
-	 */
+	/** CRL Distribution Points — where to check revocation status. */
 	readonly crlDistributionPoints?: readonly DistributionPoint[];
-	/**
-	 * Carries the custom extensions value.
-	 */
+	/** Arbitrary extensions not covered by the built-in fields. */
 	readonly customExtensions?: readonly CustomExtension[];
 }
 
-/**
- * Describes custom extension.
- */
+/** An extension not covered by the typed fields in {@link CertificateExtensionsInput}. */
 export interface CustomExtension {
-	/**
-	 * Carries the oid value.
-	 */
+	/** Dotted-decimal OID of the extension. */
 	readonly oid: string;
-	/**
-	 * Carries the successful value payload.
-	 */
+	/** Pre-encoded DER content for the extnValue OCTET STRING. */
 	readonly value: Uint8Array;
-	/**
-	 * Indicates whether critical.
-	 */
+	/** Whether the extension is critical. Default `false`. */
 	readonly critical?: boolean;
 }
 
@@ -536,177 +380,111 @@ export interface CustomExtension {
  */
 export type NameConstraintForm =
 	| {
-			/**
-			 * Identifies the type value.
-			 */
+			/** DNS domain constraint (dNSName [2]). */
 			readonly type: 'dns';
-			/**
-			 * Carries the successful value payload.
-			 */
+			/** Domain suffix, e.g. `".example.com"` or `"example.com"`. */
 			readonly value: string;
 	  }
 	| {
-			/**
-			 * Identifies the type value.
-			 */
+			/** Email constraint (rfc822Name [1]). */
 			readonly type: 'email';
-			/**
-			 * Carries the successful value payload.
-			 */
+			/** Email domain or full address pattern. */
 			readonly value: string;
 	  }
 	| {
-			/**
-			 * Identifies the type value.
-			 */
+			/** URI constraint (uniformResourceIdentifier [6]). */
 			readonly type: 'uri';
-			/**
-			 * Carries the successful value payload.
-			 */
+			/** Host or domain component of a URI. */
 			readonly value: string;
 	  }
 	| {
-			/**
-			 * Identifies the type value.
-			 */
+			/** IP range constraint (iPAddress [7]). */
 			readonly type: 'ip';
-			/**
-			 * Carries the address bytes value.
-			 */
+			/** Network address bytes (4 for IPv4, 16 for IPv6). */
 			readonly addressBytes: Uint8Array;
-			/**
-			 * Carries the mask bytes value.
-			 */
+			/** Subnet mask bytes (same length as addressBytes). */
 			readonly maskBytes: Uint8Array;
 	  }
 	| {
-			/**
-			 * Identifies the type value.
-			 */
+			/** Directory name constraint (directoryName [4]). */
 			readonly type: 'directoryName';
-			/**
-			 * Carries the hexadecimal der.
-			 */
+			/** Hex-encoded DER of the Name SEQUENCE. */
 			readonly derHex: string;
 	  };
 
 /**
- * Defines unsupported name constraint form.
+ * Name constraint forms parsed from DER but not supported for encoding or
+ * validation. Preserved for diagnostic round-tripping.
  */
 export type UnsupportedNameConstraintForm =
 	| {
-			/**
-			 * Identifies the type value.
-			 */
+			/** otherName [0] — raw bytes. */
 			readonly type: 'otherName';
-			/**
-			 * Carries the successful value payload.
-			 */
 			readonly value: Uint8Array;
 	  }
 	| {
-			/**
-			 * Identifies the type value.
-			 */
+			/** x400Address [3] — raw bytes. */
 			readonly type: 'x400Address';
-			/**
-			 * Carries the successful value payload.
-			 */
 			readonly value: Uint8Array;
 	  }
 	| {
-			/**
-			 * Identifies the type value.
-			 */
+			/** ediPartyName [5] — raw bytes. */
 			readonly type: 'ediPartyName';
-			/**
-			 * Carries the successful value payload.
-			 */
 			readonly value: Uint8Array;
 	  }
 	| {
-			/**
-			 * Identifies the type value.
-			 */
+			/** registeredID [8] — decoded OID string. */
 			readonly type: 'registeredID';
-			/**
-			 * Carries the successful value payload.
-			 */
 			readonly value: string;
 	  };
 
-/**
- * Describes the structured name constraint form produced by parsing helpers.
- */
+/** Union of supported and unsupported name constraint forms as produced by parsing. */
 export type ParsedNameConstraintForm = NameConstraintForm | UnsupportedNameConstraintForm;
 
-/**
- * Describes general subtree.
- */
+/** A single subtree entry in a Name Constraints permitted/excluded list. */
 export interface GeneralSubtree<TForm extends ParsedNameConstraintForm = NameConstraintForm> {
-	/**
-	 * Carries the base value.
-	 */
+	/** The name form that defines this constraint boundary. */
 	readonly base: TForm;
 }
 
 /**
- * Describes name constraints.
+ * RFC 5280 §4.2.1.10 Name Constraints.
+ *
+ * A CA certificate may restrict the namespace of all subject names in
+ * subsequent certificates in the path.
  */
 export interface NameConstraints<TForm extends ParsedNameConstraintForm = NameConstraintForm> {
-	/**
-	 * Carries the permitted subtrees value.
-	 */
+	/** Names that MUST fall within these subtrees to be valid. */
 	readonly permittedSubtrees?: readonly GeneralSubtree<TForm>[];
-	/**
-	 * Carries the excluded subtrees value.
-	 */
+	/** Names that MUST NOT fall within these subtrees. Takes precedence over permitted. */
 	readonly excludedSubtrees?: readonly GeneralSubtree<TForm>[];
 }
 
-/**
- * Defines known authority info access method.
- */
+/** Well-known AIA access methods: OCSP responder or CA issuer certificate. */
 export type KnownAuthorityInfoAccessMethod = 'ocsp' | 'caIssuers';
 
-/**
- * Describes custom authority info access method.
- */
+/** AIA access method identified by a custom OID not in the well-known set. */
 export interface CustomAuthorityInfoAccessMethod {
-	/**
-	 * Identifies the type value.
-	 */
+	/** Discriminant for the custom-OID access method variant. */
 	readonly type: 'oid';
-	/**
-	 * Carries the successful value payload.
-	 */
+	/** Dotted-decimal OID of the access method. */
 	readonly value: string;
 }
 
-/**
- * Defines authority info access method.
- */
+/** AIA access method — either a well-known string or a custom OID. */
 export type AuthorityInfoAccessMethod =
 	| KnownAuthorityInfoAccessMethod
 	| CustomAuthorityInfoAccessMethod;
 
-/**
- * Describes authority information access.
- */
+/** A single entry in the Authority Information Access extension (RFC 5280 §4.2.2.1). */
 export interface AuthorityInformationAccess {
-	/**
-	 * Carries the method value.
-	 */
+	/** Access method (`'ocsp'`, `'caIssuers'`, or custom OID). */
 	readonly method: AuthorityInfoAccessMethod;
-	/**
-	 * Carries the uri value.
-	 */
+	/** URI where the resource can be fetched. */
 	readonly uri: string;
 }
 
-/**
- * Defines known extended key usage.
- */
+/** Well-known Extended Key Usage purpose strings (RFC 5280 §4.2.1.12). */
 export type KnownExtendedKeyUsage =
 	| 'serverAuth'
 	| 'clientAuth'
@@ -715,76 +493,44 @@ export type KnownExtendedKeyUsage =
 	| 'timeStamping'
 	| 'ocspSigning';
 
-/**
- * Describes custom extended key usage.
- */
+/** Extended Key Usage purpose identified by a custom OID. */
 export interface CustomExtendedKeyUsage {
-	/**
-	 * Identifies the type value.
-	 */
+	/** Discriminant for the custom-OID EKU variant. */
 	readonly type: 'oid';
-	/**
-	 * Carries the successful value payload.
-	 */
+	/** Dotted-decimal OID of the usage purpose. */
 	readonly value: string;
 }
 
-/**
- * Defines extended key usage.
- */
+/** Extended Key Usage — either a well-known purpose string or a custom OID. */
 export type ExtendedKeyUsage = KnownExtendedKeyUsage | CustomExtendedKeyUsage;
 
-/**
- * Defines the extended key usage oids used by this module.
- */
+/** Map from well-known EKU names to their dotted-decimal OIDs. */
 const EXTENDED_KEY_USAGE_OIDS: Record<KnownExtendedKeyUsage, string> = {
-	/**
-	 * Carries the server auth value.
-	 */
 	serverAuth: OIDS.serverAuth,
-	/**
-	 * Carries the client auth value.
-	 */
 	clientAuth: OIDS.clientAuth,
-	/**
-	 * Carries the code signing value.
-	 */
 	codeSigning: OIDS.codeSigning,
-	/**
-	 * Carries the email protection value.
-	 */
 	emailProtection: OIDS.emailProtection,
-	/**
-	 * Carries the time stamping value.
-	 */
 	timeStamping: OIDS.timeStamping,
-	/**
-	 * Carries the ocsp signing value.
-	 */
 	ocspSigning: OIDS.ocspSigning,
 };
 
-/**
- * Defines the authority info access method oids used by this module.
- */
+/** Map from well-known AIA method names to their dotted-decimal OIDs. */
 const AUTHORITY_INFO_ACCESS_METHOD_OIDS: Record<KnownAuthorityInfoAccessMethod, string> = {
-	/**
-	 * Carries the ocsp value.
-	 */
 	ocsp: OIDS.ocspAccessMethod,
-	/**
-	 * Carries the ca issuers value.
-	 */
 	caIssuers: OIDS.caIssuersAccessMethod,
 };
 
 /**
- * Builds certificate extensions.
+ * Build the v3 extensions block for a certificate.
  *
- * @param subjectPublicKeyInfo The subject public key info value.
- * @param issuerPublicKeyInfo The issuer public key info value.
- * @param input The typed input payload.
- * @returns The built certificate extensions.
+ * Automatically adds SKI, AKI (when issuer key is available), and
+ * basicConstraints (defaults to `{ ca: false }`). Additional extensions
+ * come from the caller's {@link CertificateExtensionsInput}.
+ *
+ * @param subjectPublicKeyInfo DER-encoded SPKI of the subject.
+ * @param issuerPublicKeyInfo DER-encoded SPKI of the issuer, or `undefined` for self-signed.
+ * @param input Optional extension configuration.
+ * @returns Array of DER-encoded Extension SEQUENCEs.
  */
 export function buildCertificateExtensions(
 	subjectPublicKeyInfo: Uint8Array,
@@ -816,10 +562,12 @@ export function buildCertificateExtensions(
 }
 
 /**
- * Builds requested extensions.
+ * Build the extensions for a CSR's extensionRequest attribute.
  *
- * @param input The typed input payload.
- * @returns The built requested extensions.
+ * Unlike {@link buildCertificateExtensions}, SKI/AKI are not auto-generated.
+ *
+ * @param input Optional extension configuration.
+ * @returns Array of DER-encoded Extension SEQUENCEs.
  */
 export function buildRequestedExtensions(
 	input: CertificateExtensionsInput | undefined,
@@ -830,24 +578,13 @@ export function buildRequestedExtensions(
 	return extensions;
 }
 
-/**
- * Append configured extensions.
- *
- * @param encoded The encoded value.
- * @param seen The seen value.
- * @param input The typed input payload.
- * @param context The registry context value.
- * @param options The options that control the operation.
- */
+/** Encode and push each configured extension from the input, enforcing no duplicates. */
 function appendConfiguredExtensions(
 	encoded: Uint8Array[],
 	seen: Set<string>,
 	input: CertificateExtensionsInput | undefined,
 	context: ExtensionRegistryContext,
 	options: {
-		/**
-		 * Indicates whether include basic constraints.
-		 */
 		readonly includeBasicConstraints: boolean;
 	},
 ): void {
@@ -939,15 +676,7 @@ function appendConfiguredExtensions(
 	}
 }
 
-/**
- * Push known extension.
- *
- * @param encoded The encoded value.
- * @param seen The seen value.
- * @param definition The definition value.
- * @param value The value to process.
- * @param critical The critical value.
- */
+/** Encode a known extension via its registry definition and push it. */
 function pushKnownExtension<TParsed, TInput>(
 	encoded: Uint8Array[],
 	seen: Set<string>,
@@ -959,12 +688,11 @@ function pushKnownExtension<TParsed, TInput>(
 }
 
 /**
- * Encodes extension.
+ * Encode a single X.509 Extension SEQUENCE (OID + optional critical BOOLEAN + OCTET STRING).
  *
- * @param oid The object identifier.
- * @param extnValue The extn value value.
- * @param critical The critical value.
- * @returns The encoded extension.
+ * @param oid Dotted-decimal extension OID.
+ * @param extnValue DER-encoded extension payload.
+ * @param critical Whether to mark the extension as critical. Default `false`.
  */
 export function encodeExtension(oid: string, extnValue: Uint8Array, critical = false): Uint8Array {
 	const fields = [objectIdentifier(oid)];
@@ -976,10 +704,10 @@ export function encodeExtension(oid: string, extnValue: Uint8Array, critical = f
 }
 
 /**
- * Encodes basic constraints.
+ * DER-encode a {@link BasicConstraints} value.
  *
- * @param input The typed input payload.
- * @returns The encoded basic constraints.
+ * @param input CA flag and optional pathLength.
+ * @returns DER SEQUENCE suitable for wrapping in an Extension OCTET STRING.
  */
 export function encodeBasicConstraints(input: BasicConstraints): Uint8Array {
 	const fields: Uint8Array[] = [];
@@ -996,20 +724,18 @@ export function encodeBasicConstraints(input: BasicConstraints): Uint8Array {
 }
 
 /**
- * Encodes key usage.
+ * DER-encode a Key Usage BIT STRING from an array of {@link KeyUsage} flags.
  *
- * @param usages The usages value.
- * @returns The encoded key usage.
+ * @param usages Flags to set in the bit string.
  */
 export function encodeKeyUsage(usages: readonly KeyUsage[]): Uint8Array {
 	return encodeKeyUsageExtension(usages);
 }
 
 /**
- * Encodes subject alt name.
+ * DER-encode a single {@link SubjectAltName} GeneralName element.
  *
- * @param value The value to process.
- * @returns The encoded subject alt name.
+ * @param value The SAN entry to encode.
  */
 export function encodeSubjectAltName(value: SubjectAltName): Uint8Array {
 	switch (value.type) {
@@ -1038,20 +764,18 @@ export function encodeSubjectAltName(value: SubjectAltName): Uint8Array {
 }
 
 /**
- * Encodes extended key usage.
+ * DER-encode an Extended Key Usage SEQUENCE OF OIDs.
  *
- * @param usages The usages value.
- * @returns The encoded extended key usage.
+ * @param usages EKU purposes to encode.
  */
 export function encodeExtendedKeyUsage(usages: readonly ExtendedKeyUsage[]): Uint8Array {
 	return sequence(usages.map((usage) => objectIdentifier(getExtendedKeyUsageOid(usage))));
 }
 
 /**
- * Encodes authority info access.
+ * DER-encode an Authority Information Access SEQUENCE.
  *
- * @param entries The entries value.
- * @returns The encoded authority info access.
+ * @param entries AIA entries (OCSP, caIssuers, or custom) to encode.
  */
 export function encodeAuthorityInfoAccess(
 	entries: readonly AuthorityInformationAccess[],
@@ -1067,20 +791,18 @@ export function encodeAuthorityInfoAccess(
 }
 
 /**
- * Encodes CRL distribution points.
+ * DER-encode a CRL Distribution Points SEQUENCE.
  *
- * @param points The points value.
- * @returns The encoded CRL distribution points.
+ * @param points Distribution points to encode.
  */
 export function encodeCrlDistributionPoints(points: readonly DistributionPoint[]): Uint8Array {
 	return sequence(points.map((point) => sequence(encodeDistributionPoint(point))));
 }
 
 /**
- * Encodes name constraints.
+ * DER-encode a Name Constraints extension value.
  *
- * @param constraints The constraints value.
- * @returns The encoded name constraints.
+ * @param constraints Permitted and/or excluded subtrees.
  */
 export function encodeNameConstraints(constraints: NameConstraints): Uint8Array {
 	const parts: Uint8Array[] = [];
@@ -1104,10 +826,9 @@ export function encodeNameConstraints(constraints: NameConstraints): Uint8Array 
 }
 
 /**
- * Encodes certificate policies.
+ * DER-encode a Certificate Policies extension value.
  *
- * @param policies The policies value.
- * @returns The encoded certificate policies.
+ * @param policies Non-empty array of policy information entries.
  */
 export function encodeCertificatePolicies(policies: CertificatePolicies): Uint8Array {
 	if (policies.length === 0) {
@@ -1117,10 +838,9 @@ export function encodeCertificatePolicies(policies: CertificatePolicies): Uint8A
 }
 
 /**
- * Encodes policy mappings.
+ * DER-encode a Policy Mappings extension value.
  *
- * @param mappings The mappings value.
- * @returns The encoded policy mappings.
+ * @param mappings Non-empty array of issuer-to-subject policy pairs. Neither OID may be anyPolicy.
  */
 export function encodePolicyMappings(mappings: PolicyMappings): Uint8Array {
 	if (mappings.length === 0) {
@@ -1145,10 +865,9 @@ export function encodePolicyMappings(mappings: PolicyMappings): Uint8Array {
 }
 
 /**
- * Encodes policy constraints.
+ * DER-encode a Policy Constraints extension value.
  *
- * @param constraints The constraints value.
- * @returns The encoded policy constraints.
+ * @param constraints At least one of `requireExplicitPolicy` or `inhibitPolicyMapping` must be set.
  */
 export function encodePolicyConstraints(constraints: PolicyConstraints): Uint8Array {
 	const fields: Uint8Array[] = [];
@@ -1169,21 +888,15 @@ export function encodePolicyConstraints(constraints: PolicyConstraints): Uint8Ar
 }
 
 /**
- * Encodes inhibit any policy.
+ * DER-encode an Inhibit anyPolicy extension value (single INTEGER).
  *
- * @param input The typed input payload.
- * @returns The encoded inhibit any policy.
+ * @param input The skipCerts threshold.
  */
 export function encodeInhibitAnyPolicy(input: InhibitAnyPolicy): Uint8Array {
 	return integerFromNumber(input.skipCerts);
 }
 
-/**
- * Encodes policy information.
- *
- * @param policy The policy value.
- * @returns The encoded policy information.
- */
+/** DER-encode a single PolicyInformation SEQUENCE. */
 function encodePolicyInformation(policy: PolicyInformation): Uint8Array {
 	validatePolicyOid(policy.policyIdentifier);
 	const fields = [objectIdentifier(policy.policyIdentifier)];
@@ -1193,12 +906,7 @@ function encodePolicyInformation(policy: PolicyInformation): Uint8Array {
 	return sequence(fields);
 }
 
-/**
- * Encodes policy qualifier info.
- *
- * @param qualifier The qualifier value.
- * @returns The encoded policy qualifier info.
- */
+/** DER-encode a single PolicyQualifierInfo SEQUENCE. */
 function encodePolicyQualifierInfo(qualifier: PolicyQualifierInfo): Uint8Array {
 	switch (qualifier.type) {
 		case 'cps':
@@ -1218,12 +926,7 @@ function encodePolicyQualifierInfo(qualifier: PolicyQualifierInfo): Uint8Array {
 	}
 }
 
-/**
- * Encodes user notice policy qualifier info.
- *
- * @param qualifier The qualifier value.
- * @returns The encoded user notice policy qualifier info.
- */
+/** DER-encode a UserNotice qualifier SEQUENCE. */
 function encodeUserNoticePolicyQualifierInfo(qualifier: UserNoticePolicyQualifierInfo): Uint8Array {
 	const fields: Uint8Array[] = [];
 	if (qualifier.noticeRef !== undefined) {
@@ -1235,12 +938,7 @@ function encodeUserNoticePolicyQualifierInfo(qualifier: UserNoticePolicyQualifie
 	return sequence(fields);
 }
 
-/**
- * Encodes policy notice reference.
- *
- * @param reference The reference value.
- * @returns The encoded policy notice reference.
- */
+/** DER-encode a NoticeReference SEQUENCE. */
 function encodePolicyNoticeReference(reference: PolicyNoticeReference): Uint8Array {
 	return sequence([
 		utf8String(reference.organization),
@@ -1248,32 +946,17 @@ function encodePolicyNoticeReference(reference: PolicyNoticeReference): Uint8Arr
 	]);
 }
 
-/**
- * Encodes integer content.
- *
- * @param value The value to process.
- * @returns The encoded integer content.
- */
+/** Encode an INTEGER and return only the content bytes (no TLV wrapper). */
 function encodeIntegerContent(value: number): Uint8Array {
 	return readElement(integerFromNumber(value)).value;
 }
 
-/**
- * Encodes general subtree.
- *
- * @param subtree The subtree value.
- * @returns The encoded general subtree.
- */
+/** DER-encode a GeneralSubtree SEQUENCE (base name only; min/max omitted per RFC 5280). */
 function encodeGeneralSubtree(subtree: GeneralSubtree): Uint8Array {
 	return sequence([encodeNameConstraintForm(subtree.base)]);
 }
 
-/**
- * Encodes distribution point.
- *
- * @param point The point value.
- * @returns The encoded distribution point.
- */
+/** DER-encode the fields of a single DistributionPoint. */
 function encodeDistributionPoint(point: DistributionPoint): Uint8Array[] {
 	if (point.crlIssuer !== undefined && point.crlIssuer.length === 0) {
 		throw new Error('DistributionPoint crlIssuer must not be empty');
@@ -1300,12 +983,7 @@ function encodeDistributionPoint(point: DistributionPoint): Uint8Array[] {
 	return fields;
 }
 
-/**
- * Encodes distribution point name.
- *
- * @param name The name value.
- * @returns The encoded distribution point name.
- */
+/** DER-encode a DistributionPointName (fullName or relativeName). */
 function encodeDistributionPointName(name: DistributionPointName): Uint8Array {
 	if (name.fullName !== undefined && name.relativeName !== undefined) {
 		throw new Error('DistributionPointName cannot contain both fullName and relativeName');
@@ -1327,12 +1005,7 @@ function encodeDistributionPointName(name: DistributionPointName): Uint8Array {
 	throw new Error('DistributionPointName must contain fullName or relativeName');
 }
 
-/**
- * Encodes name constraint form.
- *
- * @param form The form value.
- * @returns The encoded name constraint form.
- */
+/** DER-encode a NameConstraintForm as an implicit-tagged GeneralName. */
 function encodeNameConstraintForm(form: NameConstraintForm): Uint8Array {
 	switch (form.type) {
 		case 'dns':
@@ -1352,12 +1025,7 @@ function encodeNameConstraintForm(form: NameConstraintForm): Uint8Array {
 	}
 }
 
-/**
- * Extract directory name content.
- *
- * @param derHex The DER hex value.
- * @returns The computed value.
- */
+/** Extract the content bytes from a hex-encoded DER SEQUENCE (strips the outer TLV). */
 function extractDirectoryNameContent(derHex: string): Uint8Array {
 	const element = readRootElement(hexToBytes(derHex), { maxDepth: DEFAULT_MAX_DER_DEPTH });
 	if (element.tag !== 0x30) {
@@ -1367,10 +1035,9 @@ function extractDirectoryNameContent(derHex: string): Uint8Array {
 }
 
 /**
- * Returns extended key usage OID.
+ * Resolve an {@link ExtendedKeyUsage} to its dotted-decimal OID.
  *
- * @param usage The usage value.
- * @returns The extended key usage OID.
+ * @param usage Well-known string or custom OID object.
  */
 export function getExtendedKeyUsageOid(usage: ExtendedKeyUsage): string {
 	if (typeof usage === 'string') {
@@ -1381,10 +1048,9 @@ export function getExtendedKeyUsageOid(usage: ExtendedKeyUsage): string {
 }
 
 /**
- * Parses extended key usage OID.
+ * Map a dotted-decimal OID to an {@link ExtendedKeyUsage} value.
  *
- * @param oid The object identifier.
- * @returns The parsed extended key usage OID.
+ * Returns a well-known string for recognized OIDs, or `{ type: 'oid', value }` otherwise.
  */
 export function parseExtendedKeyUsageOid(oid: string): ExtendedKeyUsage {
 	switch (oid) {
@@ -1405,10 +1071,9 @@ export function parseExtendedKeyUsageOid(oid: string): ExtendedKeyUsage {
 }
 
 /**
- * Returns authority info access method OID.
+ * Resolve an {@link AuthorityInfoAccessMethod} to its dotted-decimal OID.
  *
- * @param method The method value.
- * @returns The authority info access method OID.
+ * @param method Well-known string or custom OID object.
  */
 export function getAuthorityInfoAccessMethodOid(method: AuthorityInfoAccessMethod): string {
 	if (typeof method === 'string') {
@@ -1419,10 +1084,9 @@ export function getAuthorityInfoAccessMethodOid(method: AuthorityInfoAccessMetho
 }
 
 /**
- * Parses authority info access method OID.
+ * Map a dotted-decimal OID to an {@link AuthorityInfoAccessMethod} value.
  *
- * @param oid The object identifier.
- * @returns The parsed authority info access method OID.
+ * Returns `'ocsp'` or `'caIssuers'` for recognized OIDs, or `{ type: 'oid', value }` otherwise.
  */
 export function parseAuthorityInfoAccessMethodOid(oid: string): AuthorityInfoAccessMethod {
 	switch (oid) {
@@ -1434,17 +1098,12 @@ export function parseAuthorityInfoAccessMethodOid(oid: string): AuthorityInfoAcc
 	return { type: 'oid', value: oid };
 }
 
-/**
- * Encodes IP address.
- *
- * @param input The typed input payload.
- * @returns The encoded IP address.
- */
+/** Parse a dotted-decimal/colon-hex IP string to raw address bytes. */
 function encodeIpAddress(input: string): Uint8Array {
 	return parseIpAddressToBytes(input);
 }
 
-/** @internal Exported for the extension registry. */
+/** @internal Compute the SKI as SHA-1 of the subjectPublicKey BIT STRING content. */
 export function buildSubjectKeyIdentifier(subjectPublicKeyInfo: Uint8Array): Uint8Array {
 	const topLevel = readSequenceChildren(subjectPublicKeyInfo);
 	const subjectPublicKey = topLevel[1];
@@ -1455,35 +1114,19 @@ export function buildSubjectKeyIdentifier(subjectPublicKeyInfo: Uint8Array): Uin
 	return sha1(publicKeyBytes);
 }
 
-/**
- * Validates OID.
- *
- * @param oid The object identifier.
- */
+/** Throw if the string is not a valid dotted-decimal OID. */
 function validateOid(oid: string): void {
 	if (!/^\d+(?:\.\d+)+$/.test(oid)) {
 		throw new Error(`Invalid OID: ${oid}`);
 	}
 }
 
-/**
- * Validates policy OID.
- *
- * @param oid The object identifier.
- */
+/** Validate that a policy OID is syntactically valid. */
 function validatePolicyOid(oid: string): void {
 	validateOid(oid);
 }
 
-/**
- * Push extension.
- *
- * @param encoded The encoded value.
- * @param seen The seen value.
- * @param oid The object identifier.
- * @param value The value to process.
- * @param critical The critical value.
- */
+/** Encode and push an extension, rejecting duplicate OIDs. */
 function pushExtension(
 	encoded: Uint8Array[],
 	seen: Set<string>,

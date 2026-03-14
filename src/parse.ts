@@ -1,8 +1,12 @@
 /**
  * Certificate and CSR parse boundary.
  *
- * This module decodes DER and PEM inputs into typed structures and exposes
- * extension-decoding helpers for callers that need richer metadata.
+ * Decodes DER and PEM inputs into typed {@link ParsedCertificate} and
+ * {@link ParsedCertificateSigningRequest} structures. Includes an
+ * extension-decoder framework for callers that need richer metadata beyond
+ * the built-in extensions.
+ *
+ * @module
  */
 
 import {
@@ -56,179 +60,118 @@ import { type NameFieldKey, nameFieldKeyFromOid } from './name.ts';
 import { OIDS } from './oids.ts';
 import { pemDecode, splitPemBlocks } from './pem.ts';
 
-/**
- * Stores the shared UTF-8 text decoder used by this module.
- */
+/** Shared UTF-8 decoder for IA5String / UTF8String values. */
 const textDecoder = new TextDecoder();
 
-/**
- * Describes the structured name attribute produced by parsing helpers.
- */
+/** A single attribute from an X.501 RelativeDistinguishedName. */
 export interface ParsedNameAttribute {
-	/**
-	 * Carries the oid value.
-	 */
+	/** Dotted-decimal OID of the attribute type (e.g. `"2.5.4.3"` for CN). */
 	readonly oid: string;
-	/**
-	 * Carries the key value.
-	 */
+	/** Friendly key when the OID maps to a well-known field (CN, O, etc.). */
 	readonly key?: NameFieldKey;
-	/**
-	 * Carries the value tag value.
-	 */
+	/** ASN.1 tag of the value encoding (UTF8String = 0x0c, PrintableString = 0x13, etc.). */
 	readonly valueTag: number;
-	/**
-	 * Carries the successful value payload.
-	 */
+	/** Decoded string content of the attribute value. */
 	readonly value: string;
 }
 
 /**
- * Describes the structured name produced by parsing helpers.
+ * An X.501 Distinguished Name decoded from an issuer or subject field.
+ *
+ * Provides three views of the same data: ordered RDNs, a flat attribute
+ * list, and a convenience key-value map for well-known fields.
  */
 export interface ParsedName {
-	/**
-	 * Carries the hexadecimal der.
-	 */
+	/** Hex-encoded DER of the complete Name SEQUENCE, usable for byte-exact comparisons. */
 	readonly derHex: string;
-	/**
-	 * Carries the rdns value.
-	 */
+	/** Ordered list of RelativeDistinguishedNames, preserving multi-valued RDN structure. */
 	readonly rdns: readonly ParsedRelativeDistinguishedName[];
-	/**
-	 * Carries the attributes value.
-	 */
+	/** Flat list of every attribute across all RDNs, in encounter order. */
 	readonly attributes: readonly ParsedNameAttribute[];
-	/**
-	 * Carries the values value.
-	 */
+	/** First-occurrence map of well-known fields (CN, O, OU, etc.) for quick lookups. */
 	readonly values: Partial<Record<NameFieldKey, string>>;
 }
 
-/**
- * Describes the structured relative distinguished name produced by parsing helpers.
- */
+/** A single RelativeDistinguishedName SET from an X.501 Name. */
 export interface ParsedRelativeDistinguishedName {
-	/**
-	 * Carries the hexadecimal der.
-	 */
+	/** Hex-encoded DER of this RDN SET element. */
 	readonly derHex: string;
-	/**
-	 * Carries the attributes value.
-	 */
+	/** Attributes within this RDN (usually one, but multi-valued RDNs are legal). */
 	readonly attributes: readonly ParsedNameAttribute[];
-	/**
-	 * Carries the values value.
-	 */
+	/** First-occurrence map of well-known fields within this RDN. */
 	readonly values: Partial<Record<NameFieldKey, string>>;
 }
 
 /**
- * Describes the structured distribution point name produced by parsing helpers.
+ * The name component of a CRL Distribution Point (RFC 5280 §4.2.1.13).
+ * Exactly one of `fullName` or `relativeName` will be present.
  */
 export interface ParsedDistributionPointName {
-	/**
-	 * Carries the full name value.
-	 */
+	/** Absolute GeneralName(s) identifying the distribution point. */
 	readonly fullName?: readonly GeneralName[];
-	/**
-	 * Carries the relative name value.
-	 */
+	/** Name relative to the CRL issuer's distinguished name. */
 	readonly relativeName?: ParsedRelativeDistinguishedName;
 }
 
-/**
- * Describes the structured distribution point produced by parsing helpers.
- */
+/** A decoded DistributionPoint from the CRL Distribution Points extension. */
 export interface ParsedDistributionPoint {
-	/**
-	 * Carries the distribution point value.
-	 */
+	/** Where to fetch the CRL — a fullName URI or relativeName. */
 	readonly distributionPoint?: ParsedDistributionPointName;
-	/**
-	 * Carries the reasons value.
-	 */
+	/** Revocation reason subset this distribution point covers. Absent means all reasons. */
 	readonly reasons?: readonly DistributionPointReason[];
-	/**
-	 * Carries the crl issuer value.
-	 */
+	/** Entity that signed the CRL, when different from the certificate issuer. */
 	readonly crlIssuer?: readonly GeneralName[];
 }
 
 /**
- * Describes the structured issuing distribution point produced by parsing helpers.
+ * Decoded Issuing Distribution Point CRL extension (RFC 5280 §5.2.5).
+ * Constrains which certificates a CRL covers (scope, reasons, indirection).
  */
 export interface ParsedIssuingDistributionPoint {
-	/**
-	 * Carries the distribution point value.
-	 */
+	/** Where to fetch this CRL, if specified. */
 	readonly distributionPoint?: ParsedDistributionPointName;
-	/**
-	 * Indicates whether only contains user certs.
-	 */
+	/** When true, this CRL only covers end-entity certificates. Default false. */
 	readonly onlyContainsUserCerts?: boolean;
-	/**
-	 * Indicates whether only contains ca certs.
-	 */
+	/** When true, this CRL only covers CA certificates. Default false. */
 	readonly onlyContainsCACerts?: boolean;
-	/**
-	 * Carries the only some reasons value.
-	 */
+	/** Limits the CRL to these revocation reasons. Absent means all reasons. */
 	readonly onlySomeReasons?: readonly DistributionPointReason[];
-	/**
-	 * Indicates whether indirect crl.
-	 */
+	/** When true, this CRL may contain entries from CAs other than the issuer. Default false. */
 	readonly indirectCrl?: boolean;
-	/**
-	 * Indicates whether only contains attribut e certs.
-	 */
+	/** When true, this CRL only covers attribute certificates. Default false. */
 	readonly onlyContainsAttributeCerts?: boolean;
 }
 
-/**
- * Describes the structured extension produced by parsing helpers.
- */
+/** A raw X.509v3 extension before type-specific decoding. */
 export interface ParsedExtension {
-	/**
-	 * Carries the oid value.
-	 */
+	/** Dotted-decimal OID identifying this extension. */
 	readonly oid: string;
-	/**
-	 * Indicates whether critical.
-	 */
+	/** Whether a validator MUST reject the certificate if it cannot process this extension. */
 	readonly critical: boolean;
-	/**
-	 * Carries the DER-encoded value.
-	 */
+	/** DER-encoded OCTET STRING payload (extnValue). */
 	readonly valueDer: Uint8Array;
-	/**
-	 * Carries the hexadecimal value.
-	 */
+	/** Hex-encoded form of `valueDer` for display and comparison. */
 	readonly valueHex: string;
 }
 
 /**
- * Describes extension decoder.
+ * User-supplied decoder for a single extension OID.
+ *
+ * Register with {@link ParseOptions.decoders} or {@link ParseOptions.decoderMap}
+ * to decode custom extensions during parsing.
  */
 export interface ExtensionDecoder<TValue> {
-	/**
-	 * Carries the oid value.
-	 */
+	/** OID this decoder handles. */
 	readonly oid: string;
-	/**
-	 * decode.
-	 *
-	 * @param extension The extension to process.
-	 * @returns The computed value.
-	 */
+	/** Decode the raw {@link ParsedExtension} into a typed value. */
 	decode(extension: ParsedExtension): TValue;
 }
 
 /**
- * Define extension decoder.
+ * Identity helper that narrows the type of a custom {@link ExtensionDecoder} literal.
  *
- * @param decoder The decoder to register.
- * @returns The computed value.
+ * @param decoder Decoder definition to return unchanged.
+ * @returns The same decoder, properly typed.
  */
 export function defineExtensionDecoder<TValue>(
 	decoder: ExtensionDecoder<TValue>,
@@ -237,10 +180,10 @@ export function defineExtensionDecoder<TValue>(
 }
 
 /**
- * Define extension decoder map.
+ * Identity helper that narrows the type of a custom {@link ExtensionDecoderMap} literal.
  *
- * @param decoderMap The decoders to register.
- * @returns The computed value.
+ * @param decoderMap Map of named decoders to return unchanged.
+ * @returns The same map, properly typed.
  */
 export function defineExtensionDecoderMap<TMap extends ExtensionDecoderMap>(
 	decoderMap: TMap,
@@ -248,292 +191,188 @@ export function defineExtensionDecoderMap<TMap extends ExtensionDecoderMap>(
 	return decoderMap;
 }
 
-/**
- * Defines the mapping used for extension decoder lookups.
- */
+/** String-keyed map of {@link ExtensionDecoder}s, used with {@link ParseOptions.decoderMap}. */
 export type ExtensionDecoderMap = Record<string, ExtensionDecoder<unknown>>;
 
-/**
- * Defines the mapping used for decoded extension lookups.
- */
+/** Inferred result type when decoding extensions via an {@link ExtensionDecoderMap}. */
 export type DecodedExtensionMap<TMap extends ExtensionDecoderMap> = {
 	[TKey in keyof TMap]?: TMap[TKey] extends ExtensionDecoder<infer TValue>
 		? DecodedExtensionValue<TValue>
 		: never;
 };
 
-/**
- * Carries the value returned by decoded extension operations.
- */
+/** A successfully decoded extension value paired with its OID and criticality. */
 export interface DecodedExtensionValue<TValue> {
-	/**
-	 * Carries the oid value.
-	 */
+	/** Dotted-decimal OID of the decoded extension. */
 	readonly oid: string;
-	/**
-	 * Indicates whether critical.
-	 */
+	/** Whether the extension was marked critical in the certificate. */
 	readonly critical: boolean;
-	/**
-	 * Carries the successful value payload.
-	 */
+	/** Typed value produced by the {@link ExtensionDecoder}. */
 	readonly value: TValue;
 }
 
 /**
- * Configures parse operations.
+ * Options for {@link parseCertificateDer}, {@link parseCertificatePem}, and CSR parse functions.
+ *
+ * Supply custom extension decoders to have their results included in
+ * the parsed output alongside the built-in extensions.
  */
 export interface ParseOptions<TMap extends ExtensionDecoderMap = Record<never, never>> {
-	/**
-	 * Carries the decoders value.
-	 */
+	/** Array of decoders; decoded values appear in `decodedExtensions`. */
 	readonly decoders?: readonly ExtensionDecoder<unknown>[];
-	/**
-	 * Carries the decoder map value.
-	 */
+	/** Named decoder map; decoded values appear in `decodedExtensionMap` keyed by map key. */
 	readonly decoderMap?: TMap;
 }
 
 /**
- * Describes the structured certificate produced by parsing helpers.
+ * A fully decoded X.509 certificate.
+ *
+ * Built-in extensions (basicConstraints, keyUsage, etc.) are decoded into
+ * typed fields automatically. Supply {@link ParseOptions} to also decode
+ * custom extensions.
  */
 export interface ParsedCertificate<TMap extends ExtensionDecoderMap = Record<never, never>> {
-	/**
-	 * Carries the der value.
-	 */
+	/** Complete DER encoding of the certificate (copied from the input). */
 	readonly der: Uint8Array;
-	/**
-	 * Carries the version value.
-	 */
+	/** X.509 version number (1, 2, or 3). Almost always 3. */
 	readonly version: number;
-	/**
-	 * Carries the hexadecimal serial number.
-	 */
+	/** Hex-encoded serial number assigned by the issuing CA. */
 	readonly serialNumberHex: string;
-	/**
-	 * Carries the DER-encoded tbs certificate.
-	 */
+	/** DER encoding of the TBSCertificate, used for signature verification. */
 	readonly tbsCertificateDer: Uint8Array;
-	/**
-	 * Carries the DER-encoded subject public key info.
-	 */
+	/** DER encoding of the SubjectPublicKeyInfo, used for key import. */
 	readonly subjectPublicKeyInfoDer: Uint8Array;
-	/**
-	 * Carries the signature value value.
-	 */
+	/** Raw signature bytes (BIT STRING content, padding removed). */
 	readonly signatureValue: Uint8Array;
-	/**
-	 * Carries the issuer value.
-	 */
+	/** Distinguished name of the certificate issuer. */
 	readonly issuer: ParsedName;
-	/**
-	 * Carries the subject value.
-	 */
+	/** Distinguished name of the certificate subject. */
 	readonly subject: ParsedName;
-	/**
-	 * Carries the not before value.
-	 */
+	/** Start of the certificate validity period. */
 	readonly notBefore: Date;
-	/**
-	 * Carries the not after value.
-	 */
+	/** End of the certificate validity period. */
 	readonly notAfter: Date;
-	/**
-	 * Carries the OID for signature algorithm.
-	 */
+	/** OID of the algorithm used to sign this certificate (e.g. `"1.2.840.113549.1.1.11"` for SHA-256 with RSA). */
 	readonly signatureAlgorithmOid: string;
-	/**
-	 * Carries the DER-encoded signature algorithm parameters.
-	 */
+	/** DER-encoded parameters for the signature algorithm. Absent for algorithms with no parameters. */
 	readonly signatureAlgorithmParametersDer?: Uint8Array;
-	/**
-	 * Carries the OID for public key algorithm.
-	 */
+	/** OID of the subject's public key algorithm (e.g. `"1.2.840.10045.2.1"` for EC). */
 	readonly publicKeyAlgorithmOid: string;
-	/**
-	 * Carries the DER-encoded public key algorithm parameters.
-	 */
+	/** DER-encoded parameters for the public key algorithm. Absent when implicit. */
 	readonly publicKeyAlgorithmParametersDer?: Uint8Array;
-	/**
-	 * Carries the OID for public key parameters.
-	 */
+	/** OID of the named curve or other key sub-parameter, when present. */
 	readonly publicKeyParametersOid?: string;
-	/**
-	 * Carries the extensions value.
-	 */
+	/** All extensions as raw {@link ParsedExtension}s, in certificate order. */
 	readonly extensions: readonly ParsedExtension[];
-	/**
-	 * Carries the basic constraints value.
-	 */
+	/** Decoded Basic Constraints (RFC 5280 §4.2.1.9). */
 	readonly basicConstraints?: BasicConstraints;
-	/**
-	 * Carries the key usage value.
-	 */
+	/** Decoded Key Usage bit flags (RFC 5280 §4.2.1.3). */
 	readonly keyUsage?: readonly KeyUsage[];
-	/**
-	 * Carries the extended key usage value.
-	 */
+	/** Decoded Extended Key Usage purposes (RFC 5280 §4.2.1.12). */
 	readonly extendedKeyUsage?: readonly ExtendedKeyUsage[];
-	/**
-	 * Carries the subject alt names value.
-	 */
+	/** Decoded Subject Alternative Names (RFC 5280 §4.2.1.6). */
 	readonly subjectAltNames?: readonly SubjectAltName[];
-	/**
-	 * Carries the nam e constraints value.
-	 */
+	/** Decoded Name Constraints (RFC 5280 §4.2.1.10). */
 	readonly nameConstraints?: NameConstraints<ParsedNameConstraintForm>;
-	/**
-	 * Carries the certificate policies value.
-	 */
+	/** Decoded Certificate Policies (RFC 5280 §4.2.1.4). */
 	readonly certificatePolicies?: CertificatePolicies;
-	/**
-	 * Carries the policy mappings value.
-	 */
+	/** Decoded Policy Mappings (RFC 5280 §4.2.1.5). */
 	readonly policyMappings?: PolicyMappings;
-	/**
-	 * Carries the policy constraints value.
-	 */
+	/** Decoded Policy Constraints (RFC 5280 §4.2.1.11). */
 	readonly policyConstraints?: PolicyConstraints;
-	/**
-	 * Carries the inhibit any policy value.
-	 */
+	/** Decoded Inhibit anyPolicy (RFC 5280 §4.2.1.14). */
 	readonly inhibitAnyPolicy?: InhibitAnyPolicy;
-	/**
-	 * Carries the authority info access value.
-	 */
+	/** Decoded Authority Information Access — OCSP and CA Issuer URIs (RFC 5280 §4.2.2.1). */
 	readonly authorityInfoAccess?: readonly AuthorityInformationAccess[];
-	/**
-	 * Carries the crl distribution points value.
-	 */
+	/** Decoded CRL Distribution Points (RFC 5280 §4.2.1.13). */
 	readonly crlDistributionPoints?: readonly ParsedDistributionPoint[];
-	/**
-	 * Carries the decoded extensions value.
-	 */
+	/** Custom-decoded extensions from {@link ParseOptions.decoders}. */
 	readonly decodedExtensions?: readonly DecodedExtensionValue<unknown>[];
-	/**
-	 * Carries the decoded extension map value.
-	 */
+	/** Custom-decoded extensions from {@link ParseOptions.decoderMap}, keyed by map key. */
 	readonly decodedExtensionMap?: DecodedExtensionMap<TMap>;
-	/**
-	 * Carries the subject key identifier value.
-	 */
+	/** Hex-encoded Subject Key Identifier (RFC 5280 §4.2.1.2). */
 	readonly subjectKeyIdentifier?: string;
-	/**
-	 * Carries the authority key identifier value.
-	 */
+	/** Hex-encoded Authority Key Identifier (RFC 5280 §4.2.1.1). */
 	readonly authorityKeyIdentifier?: string;
 }
 
 /**
- * Describes the structured certificate signing request produced by parsing helpers.
+ * A fully decoded PKCS#10 Certificate Signing Request.
+ *
+ * Extension fields mirror {@link ParsedCertificate} but come from the
+ * CSR's extensionRequest attribute rather than the v3 extensions block.
  */
 export interface ParsedCertificateSigningRequest<
 	TMap extends ExtensionDecoderMap = Record<never, never>,
 > {
-	/**
-	 * Carries the version value.
-	 */
+	/** PKCS#10 version number (always 1). */
 	readonly version: number;
-	/**
-	 * Carries the DER-encoded certification request info.
-	 */
+	/** DER encoding of the CertificationRequestInfo, used for signature verification. */
 	readonly certificationRequestInfoDer: Uint8Array;
-	/**
-	 * Carries the DER-encoded subject public key info.
-	 */
+	/** DER encoding of the SubjectPublicKeyInfo. */
 	readonly subjectPublicKeyInfoDer: Uint8Array;
-	/**
-	 * Carries the signature value value.
-	 */
+	/** Raw signature bytes (BIT STRING content, padding removed). */
 	readonly signatureValue: Uint8Array;
-	/**
-	 * Carries the subject value.
-	 */
+	/** Distinguished name the requester wants on the certificate. */
 	readonly subject: ParsedName;
-	/**
-	 * Carries the OID for signature algorithm.
-	 */
+	/** OID of the algorithm used to sign this CSR. */
 	readonly signatureAlgorithmOid: string;
-	/**
-	 * Carries the DER-encoded signature algorithm parameters.
-	 */
+	/** DER-encoded parameters for the signature algorithm. Absent for algorithms with no parameters. */
 	readonly signatureAlgorithmParametersDer?: Uint8Array;
-	/**
-	 * Carries the OID for public key algorithm.
-	 */
+	/** OID of the subject's public key algorithm. */
 	readonly publicKeyAlgorithmOid: string;
-	/**
-	 * Carries the DER-encoded public key algorithm parameters.
-	 */
+	/** DER-encoded parameters for the public key algorithm. */
 	readonly publicKeyAlgorithmParametersDer?: Uint8Array;
-	/**
-	 * Carries the OID for public key parameters.
-	 */
+	/** OID of the named curve or other key sub-parameter, when present. */
 	readonly publicKeyParametersOid?: string;
-	/**
-	 * Carries the requested extensions value.
-	 */
+	/** All requested extensions as raw {@link ParsedExtension}s. */
 	readonly requestedExtensions: readonly ParsedExtension[];
-	/**
-	 * Carries the basic constraints value.
-	 */
+	/** Decoded Basic Constraints from the extensionRequest attribute. */
 	readonly basicConstraints?: BasicConstraints;
-	/**
-	 * Carries the key usage value.
-	 */
+	/** Decoded Key Usage from the extensionRequest attribute. */
 	readonly keyUsage?: readonly KeyUsage[];
-	/**
-	 * Carries the extended key usage value.
-	 */
+	/** Decoded Extended Key Usage from the extensionRequest attribute. */
 	readonly extendedKeyUsage?: readonly ExtendedKeyUsage[];
-	/**
-	 * Carries the subject alt names value.
-	 */
+	/** Decoded Subject Alternative Names from the extensionRequest attribute. */
 	readonly subjectAltNames?: readonly SubjectAltName[];
-	/**
-	 * Carries the nam e constraints value.
-	 */
+	/** Decoded Name Constraints from the extensionRequest attribute. */
 	readonly nameConstraints?: NameConstraints<ParsedNameConstraintForm>;
-	/**
-	 * Carries the certificate policies value.
-	 */
+	/** Decoded Certificate Policies from the extensionRequest attribute. */
 	readonly certificatePolicies?: CertificatePolicies;
-	/**
-	 * Carries the policy mappings value.
-	 */
+	/** Decoded Policy Mappings from the extensionRequest attribute. */
 	readonly policyMappings?: PolicyMappings;
-	/**
-	 * Carries the policy constraints value.
-	 */
+	/** Decoded Policy Constraints from the extensionRequest attribute. */
 	readonly policyConstraints?: PolicyConstraints;
-	/**
-	 * Carries the inhibit any policy value.
-	 */
+	/** Decoded Inhibit anyPolicy from the extensionRequest attribute. */
 	readonly inhibitAnyPolicy?: InhibitAnyPolicy;
-	/**
-	 * Carries the authority info access value.
-	 */
+	/** Decoded Authority Information Access from the extensionRequest attribute. */
 	readonly authorityInfoAccess?: readonly AuthorityInformationAccess[];
-	/**
-	 * Carries the crl distribution points value.
-	 */
+	/** Decoded CRL Distribution Points from the extensionRequest attribute. */
 	readonly crlDistributionPoints?: readonly ParsedDistributionPoint[];
-	/**
-	 * Carries the decoded extensions value.
-	 */
+	/** Custom-decoded extensions from {@link ParseOptions.decoders}. */
 	readonly decodedExtensions?: readonly DecodedExtensionValue<unknown>[];
-	/**
-	 * Carries the decoded extension map value.
-	 */
+	/** Custom-decoded extensions from {@link ParseOptions.decoderMap}. */
 	readonly decodedExtensionMap?: DecodedExtensionMap<TMap>;
 }
 
 /**
- * Parses certificate DER.
+ * Decode a DER-encoded X.509 certificate into a {@link ParsedCertificate}.
  *
- * @param der The DER-encoded bytes.
- * @param options The options that control the operation.
- * @returns The parsed certificate DER.
+ * All built-in extensions (basicConstraints, keyUsage, subjectAltNames, etc.)
+ * are decoded automatically. Pass {@link ParseOptions} to also decode custom
+ * extensions.
+ *
+ * @example
+ * ```ts
+ * import { parseCertificateDer } from 'micro509';
+ *
+ * const cert = parseCertificateDer(derBytes);
+ * console.log(cert.subject.values.CN); // "example.com"
+ * console.log(cert.keyUsage);          // ["digitalSignature", "keyEncipherment"]
+ * ```
+ *
+ * @param der Raw DER bytes of an X.509 certificate.
+ * @param options Custom extension decoders to apply during parsing.
  */
 export function parseCertificateDer<TMap extends ExtensionDecoderMap = Record<never, never>>(
 	der: Uint8Array,
@@ -645,11 +484,22 @@ export function parseCertificateDer<TMap extends ExtensionDecoderMap = Record<ne
 }
 
 /**
- * Parses certificate PEM.
+ * Decode a PEM-encoded X.509 certificate into a {@link ParsedCertificate}.
  *
- * @param pem The PEM-encoded text.
- * @param options The options that control the operation.
- * @returns The parsed certificate PEM.
+ * Expects a single `-----BEGIN CERTIFICATE-----` block. For bundles
+ * containing multiple certificates, use {@link parseCertificateChainPem}.
+ *
+ * @example
+ * ```ts
+ * import { parseCertificatePem } from 'micro509';
+ *
+ * const cert = parseCertificatePem(pemString);
+ * console.log(cert.issuer.values.O);   // "Let's Encrypt"
+ * console.log(cert.notAfter);          // Date
+ * ```
+ *
+ * @param pem PEM string with a CERTIFICATE block.
+ * @param options Custom extension decoders to apply during parsing.
  */
 export function parseCertificatePem<TMap extends ExtensionDecoderMap = Record<never, never>>(
 	pem: string,
@@ -659,11 +509,12 @@ export function parseCertificatePem<TMap extends ExtensionDecoderMap = Record<ne
 }
 
 /**
- * Parses certificate chain PEM.
+ * Decode a PEM bundle containing one or more certificates.
  *
- * @param pemBundle The PEM bundle value.
- * @param options The options that control the operation.
- * @returns The parsed certificate chain PEM.
+ * Non-CERTIFICATE blocks (e.g. private keys) are silently skipped.
+ *
+ * @param pemBundle PEM text that may contain multiple CERTIFICATE blocks.
+ * @param options Custom extension decoders to apply during parsing.
  */
 export function parseCertificateChainPem<TMap extends ExtensionDecoderMap = Record<never, never>>(
 	pemBundle: string,
@@ -675,11 +526,10 @@ export function parseCertificateChainPem<TMap extends ExtensionDecoderMap = Reco
 }
 
 /**
- * Parses certificate signing request DER.
+ * Decode a DER-encoded PKCS#10 CSR into a {@link ParsedCertificateSigningRequest}.
  *
- * @param der The DER-encoded bytes.
- * @param options The options that control the operation.
- * @returns The parsed certificate signing request DER.
+ * @param der Raw DER bytes of a PKCS#10 certificate signing request.
+ * @param options Custom extension decoders to apply during parsing.
  */
 export function parseCertificateSigningRequestDer<
 	TMap extends ExtensionDecoderMap = Record<never, never>,
@@ -766,11 +616,10 @@ export function parseCertificateSigningRequestDer<
 }
 
 /**
- * Parses certificate signing request PEM.
+ * Decode a PEM-encoded PKCS#10 CSR into a {@link ParsedCertificateSigningRequest}.
  *
- * @param pem The PEM-encoded text.
- * @param options The options that control the operation.
- * @returns The parsed certificate signing request PEM.
+ * @param pem PEM string with a CERTIFICATE REQUEST block.
+ * @param options Custom extension decoders to apply during parsing.
  */
 export function parseCertificateSigningRequestPem<
 	TMap extends ExtensionDecoderMap = Record<never, never>,
@@ -779,11 +628,11 @@ export function parseCertificateSigningRequestPem<
 }
 
 /**
- * Finds extension.
+ * Find a raw extension by OID within a parsed extension list.
  *
- * @param extensions The extensions to process.
- * @param oid The object identifier.
- * @returns The matching extension.
+ * @param extensions Extension list from a {@link ParsedCertificate} or CSR.
+ * @param oid Dotted-decimal OID to look up.
+ * @returns The matching extension, or `undefined` if not present.
  */
 export function findExtension(
 	extensions: readonly ParsedExtension[],
@@ -793,11 +642,11 @@ export function findExtension(
 }
 
 /**
- * Decodes extension.
+ * Decode a single extension using a custom {@link ExtensionDecoder}.
  *
- * @param extensions The extensions to process.
- * @param decoder The decoder to register.
- * @returns The decoded extension.
+ * @param extensions Extension list to search.
+ * @param decoder Decoder whose OID will be matched.
+ * @returns The decoded value, or `undefined` if the extension is absent.
  */
 export function decodeExtension<TValue>(
 	extensions: readonly ParsedExtension[],
@@ -811,11 +660,10 @@ export function decodeExtension<TValue>(
 }
 
 /**
- * Decodes extensions.
+ * Decode all matching extensions using an array of {@link ExtensionDecoder}s.
  *
- * @param extensions The extensions to process.
- * @param decoders The decoders value.
- * @returns The decoded extensions.
+ * @param extensions Extension list to search.
+ * @param decoders Decoders to apply. Only matching OIDs produce output.
  */
 export function decodeExtensions(
 	extensions: readonly ParsedExtension[],
@@ -837,11 +685,10 @@ export function decodeExtensions(
 }
 
 /**
- * Decodes extension map.
+ * Decode all matching extensions using a named {@link ExtensionDecoderMap}.
  *
- * @param extensions The extensions to process.
- * @param decoderMap The decoders to register.
- * @returns The decoded extension map.
+ * @param extensions Extension list to search.
+ * @param decoderMap Named decoders. Results are keyed by the same map keys.
  */
 export function decodeExtensionMap<TMap extends ExtensionDecoderMap>(
 	extensions: readonly ParsedExtension[],
@@ -869,23 +716,13 @@ export function decodeExtensionMap<TMap extends ExtensionDecoderMap>(
 	return decoded;
 }
 
-/**
- * Describes the structured extensions produced by parsing helpers.
- */
+/** Aggregate of raw + decoded extensions produced during certificate/CSR parsing. */
 interface ParsedExtensions extends KnownParsedExtensionAccumulator {
-	/**
-	 * Carries the all value.
-	 */
+	/** Every extension as a raw {@link ParsedExtension}, in wire order. */
 	readonly all: readonly ParsedExtension[];
 }
 
-/**
- * Parses extension container.
- *
- * @param source The source value to process.
- * @param container The container value.
- * @returns The parsed extension container.
- */
+/** Decode the explicit [3] extensions wrapper from a TBSCertificate. */
 function parseExtensionContainer(
 	source: Uint8Array,
 	container: DerElement | undefined,
@@ -897,13 +734,7 @@ function parseExtensionContainer(
 	return parseExtensionSequence(source, sequenceElement, 'certificate');
 }
 
-/**
- * Parses requested extensions.
- *
- * @param source The source value to process.
- * @param attributes The attributes value.
- * @returns The parsed requested extensions.
- */
+/** Extract extensions from the CSR extensionRequest attribute. */
 function parseRequestedExtensions(
 	source: Uint8Array,
 	attributes: DerElement | undefined,
@@ -924,14 +755,7 @@ function parseRequestedExtensions(
 	return { all: [] };
 }
 
-/**
- * Parses extension sequence.
- *
- * @param source The source value to process.
- * @param sequenceElement The sequence element value.
- * @param context The registry context value.
- * @returns The parsed extension sequence.
- */
+/** Walk a SEQUENCE OF Extension and decode each one, populating known-extension slots. */
 function parseExtensionSequence(
 	source: Uint8Array,
 	sequenceElement: DerElement,
@@ -967,13 +791,7 @@ function parseExtensionSequence(
 	};
 }
 
-/**
- * Parses name.
- *
- * @param source The source value to process.
- * @param element The ASN.1 element to process.
- * @returns The parsed name.
- */
+/** Decode an X.501 Name (issuer / subject) into a {@link ParsedName}. */
 function parseName(source: Uint8Array, element: DerElement): ParsedName {
 	const rdns: ParsedRelativeDistinguishedName[] = [];
 	const attributes: ParsedNameAttribute[] = [];
@@ -996,13 +814,7 @@ function parseName(source: Uint8Array, element: DerElement): ParsedName {
 	};
 }
 
-/**
- * Parses relative distinguished name.
- *
- * @param source The source value to process.
- * @param element The ASN.1 element to process.
- * @returns The parsed relative distinguished name.
- */
+/** Decode a single RDN SET element. */
 function parseRelativeDistinguishedName(
 	source: Uint8Array,
 	element: DerElement,
@@ -1010,13 +822,7 @@ function parseRelativeDistinguishedName(
 	return parseNameAttributeSet(source, element);
 }
 
-/**
- * Parses name attribute set.
- *
- * @param source The source value to process.
- * @param setElement The set element value.
- * @returns The parsed name attribute set.
- */
+/** Decode the AttributeTypeAndValue pairs within a SET element. */
 function parseNameAttributeSet(
 	source: Uint8Array,
 	setElement: DerElement,
@@ -1045,24 +851,12 @@ function parseNameAttributeSet(
 	};
 }
 
-/**
- * Parses validity.
- *
- * @param source The source value to process.
- * @param element The ASN.1 element to process.
- * @returns The parsed validity.
- */
+/** Decode the Validity SEQUENCE into notBefore / notAfter Dates. */
 function parseValidity(
 	source: Uint8Array,
 	element: DerElement,
 ): {
-	/**
-	 * Carries the not before value.
-	 */
 	readonly notBefore: Date;
-	/**
-	 * Carries the not after value.
-	 */
 	readonly notAfter: Date;
 } {
 	const children = childrenOf(source, element);
@@ -1072,13 +866,7 @@ function parseValidity(
 	};
 }
 
-/**
- * Parses subject public key info.
- *
- * @param source The source value to process.
- * @param element The ASN.1 element to process.
- * @returns The parsed subject public key info.
- */
+/** Extract the algorithm identifier from a SubjectPublicKeyInfo SEQUENCE. */
 function parseSubjectPublicKeyInfo(
 	source: Uint8Array,
 	element: DerElement,
@@ -1088,31 +876,17 @@ function parseSubjectPublicKeyInfo(
 	return algorithm;
 }
 
-/**
- * Describes an algorithm identifier used by parsed operations.
- */
+/** Decoded AlgorithmIdentifier: OID plus optional DER parameters. */
 interface ParsedAlgorithmIdentifier {
-	/**
-	 * Carries the oid value.
-	 */
+	/** Dotted-decimal algorithm OID. */
 	readonly oid: string;
-	/**
-	 * Carries the DER-encoded parameters.
-	 */
+	/** Full DER of the parameters element, when present. */
 	readonly parametersDer?: Uint8Array;
-	/**
-	 * Carries the OID for parameters.
-	 */
+	/** Decoded OID when the parameters element is itself an OID (e.g. named curves). */
 	readonly parametersOid?: string;
 }
 
-/**
- * Parses algorithm identifier.
- *
- * @param source The source value to process.
- * @param element The ASN.1 element to process.
- * @returns The parsed algorithm identifier.
- */
+/** Decode an AlgorithmIdentifier SEQUENCE (OID + optional parameters). */
 function parseAlgorithmIdentifier(
 	source: Uint8Array,
 	element: DerElement,
@@ -1133,7 +907,7 @@ function parseAlgorithmIdentifier(
 	return { oid, parametersDer };
 }
 
-/** @internal Exported for the extension registry. */
+/** @internal Decode the Basic Constraints extension value DER. */
 export function parseBasicConstraints(bytes: Uint8Array): BasicConstraints {
 	const element = readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH });
 	const children = childrenOf(bytes, element);
@@ -1150,12 +924,12 @@ export function parseBasicConstraints(bytes: Uint8Array): BasicConstraints {
 	return pathLength !== undefined ? { ca, pathLength } : { ca };
 }
 
-/** @internal Exported for the extension registry. */
+/** @internal Decode the Key Usage BIT STRING extension value. */
 export function parseKeyUsage(bytes: Uint8Array): readonly KeyUsage[] {
 	return parseKeyUsageExtension(bytes);
 }
 
-/** @internal Exported for the extension registry. */
+/** @internal Decode the Extended Key Usage SEQUENCE OF OIDs. */
 export function parseExtendedKeyUsage(bytes: Uint8Array): readonly ExtendedKeyUsage[] {
 	const sequenceElement = requireElement(
 		readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH }),
@@ -1166,7 +940,7 @@ export function parseExtendedKeyUsage(bytes: Uint8Array): readonly ExtendedKeyUs
 	);
 }
 
-/** @internal Exported for the extension registry. */
+/** @internal Decode the Certificate Policies extension value. */
 export function parseCertificatePolicies(bytes: Uint8Array): CertificatePolicies {
 	const sequenceElement = requireElement(
 		readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH }),
@@ -1179,13 +953,7 @@ export function parseCertificatePolicies(bytes: Uint8Array): CertificatePolicies
 	return policyElements.map((policyElement) => parsePolicyInformation(bytes, policyElement));
 }
 
-/**
- * Parses policy information.
- *
- * @param source The source value to process.
- * @param element The ASN.1 element to process.
- * @returns The parsed policy information.
- */
+/** Decode a single PolicyInformation SEQUENCE (OID + optional qualifiers). */
 function parsePolicyInformation(source: Uint8Array, element: DerElement) {
 	const children = childrenOf(source, element);
 	const policyIdentifier = decodeObjectIdentifier(
@@ -1210,13 +978,7 @@ function parsePolicyInformation(source: Uint8Array, element: DerElement) {
 	};
 }
 
-/**
- * Parses policy qualifier info.
- *
- * @param source The source value to process.
- * @param element The ASN.1 element to process.
- * @returns The parsed policy qualifier info.
- */
+/** Decode a PolicyQualifierInfo (CPS URI, UserNotice, or opaque OID). */
 function parsePolicyQualifierInfo(source: Uint8Array, element: DerElement) {
 	const children = childrenOf(source, element);
 	const qualifierId = decodeObjectIdentifier(
@@ -1248,45 +1010,21 @@ function parsePolicyQualifierInfo(source: Uint8Array, element: DerElement) {
 	};
 }
 
-/**
- * Parses user notice policy qualifier info.
- *
- * @param source The source value to process.
- * @param element The ASN.1 element to process.
- * @returns The parsed user notice policy qualifier info.
- */
+/** Decode a UserNotice qualifier (optional noticeRef + optional explicitText). */
 function parseUserNoticePolicyQualifierInfo(
 	source: Uint8Array,
 	element: DerElement,
 ): {
-	/**
-	 * Carries the notice ref value.
-	 */
 	readonly noticeRef?: {
-		/**
-		 * Carries the organization value.
-		 */
 		readonly organization: string;
-		/**
-		 * Carries the notice numbers value.
-		 */
 		readonly noticeNumbers: readonly number[];
 	};
-	/**
-	 * Carries the explicit text value.
-	 */
 	readonly explicitText?: string;
 } {
 	const children = childrenOf(source, element);
 	let noticeRef:
 		| {
-				/**
-				 * Carries the organization value.
-				 */
 				readonly organization: string;
-				/**
-				 * Carries the notice numbers value.
-				 */
 				readonly noticeNumbers: readonly number[];
 		  }
 		| undefined;
@@ -1310,24 +1048,12 @@ function parseUserNoticePolicyQualifierInfo(
 	};
 }
 
-/**
- * Parses policy notice reference.
- *
- * @param source The source value to process.
- * @param element The ASN.1 element to process.
- * @returns The parsed policy notice reference.
- */
+/** Decode a NoticeReference (organization name + notice number list). */
 function parsePolicyNoticeReference(
 	source: Uint8Array,
 	element: DerElement,
 ): {
-	/**
-	 * Carries the organization value.
-	 */
 	readonly organization: string;
-	/**
-	 * Carries the notice numbers value.
-	 */
 	readonly noticeNumbers: readonly number[];
 } {
 	const children = childrenOf(source, element);
@@ -1342,13 +1068,7 @@ function parsePolicyNoticeReference(
 	};
 }
 
-/**
- * Parses policy notice numbers.
- *
- * @param source The source value to process.
- * @param element The ASN.1 element to process.
- * @returns The parsed policy notice numbers.
- */
+/** Decode a SEQUENCE OF INTEGER notice numbers. */
 function parsePolicyNoticeNumbers(source: Uint8Array, element: DerElement): readonly number[] {
 	const noticeNumberElements = childrenOf(source, element);
 	if (noticeNumberElements.length === 0) {
@@ -1359,7 +1079,7 @@ function parsePolicyNoticeNumbers(source: Uint8Array, element: DerElement): read
 	);
 }
 
-/** @internal Exported for the extension registry. */
+/** @internal Decode the Policy Mappings extension value. */
 export function parsePolicyMappings(bytes: Uint8Array): PolicyMappings {
 	const sequenceElement = requireElement(
 		readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH }),
@@ -1387,7 +1107,7 @@ export function parsePolicyMappings(bytes: Uint8Array): PolicyMappings {
 	});
 }
 
-/** @internal Exported for the extension registry. */
+/** @internal Decode the Policy Constraints extension value. */
 export function parsePolicyConstraints(bytes: Uint8Array): PolicyConstraints {
 	const sequenceElement = requireElement(
 		readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH }),
@@ -1427,7 +1147,7 @@ export function parsePolicyConstraints(bytes: Uint8Array): PolicyConstraints {
 	};
 }
 
-/** @internal Exported for the extension registry. */
+/** @internal Decode the Inhibit anyPolicy extension (single INTEGER). */
 export function parseInhibitAnyPolicy(bytes: Uint8Array): InhibitAnyPolicy {
 	const integerElement = requireElement(
 		readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH }),
@@ -1441,7 +1161,7 @@ export function parseInhibitAnyPolicy(bytes: Uint8Array): InhibitAnyPolicy {
 	};
 }
 
-/** @internal Exported for the extension registry. */
+/** @internal Decode the Subject Alternative Names SEQUENCE OF GeneralName. */
 export function parseSubjectAltNames(bytes: Uint8Array): readonly SubjectAltName[] {
 	const sequenceElement = requireElement(
 		readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH }),
@@ -1450,7 +1170,7 @@ export function parseSubjectAltNames(bytes: Uint8Array): readonly SubjectAltName
 	return childrenOf(bytes, sequenceElement).map((element) => parseGeneralName(bytes, element));
 }
 
-/** @internal Exported for the extension registry. */
+/** @internal Decode the Authority Information Access extension value. */
 export function parseAuthorityInfoAccess(bytes: Uint8Array): readonly AuthorityInformationAccess[] {
 	const sequenceElement = requireElement(
 		readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH }),
@@ -1470,7 +1190,7 @@ export function parseAuthorityInfoAccess(bytes: Uint8Array): readonly AuthorityI
 	});
 }
 
-/** @internal Exported for the extension registry. */
+/** @internal Decode the CRL Distribution Points extension value. */
 export function parseCrlDistributionPoints(bytes: Uint8Array): readonly ParsedDistributionPoint[] {
 	const sequenceElement = requireElement(
 		readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH }),
@@ -1483,13 +1203,7 @@ export function parseCrlDistributionPoints(bytes: Uint8Array): readonly ParsedDi
 	return points;
 }
 
-/**
- * Parses distribution point.
- *
- * @param source The source value to process.
- * @param element The ASN.1 element to process.
- * @returns The parsed distribution point.
- */
+/** Decode a single DistributionPoint SEQUENCE. */
 function parseDistributionPoint(source: Uint8Array, element: DerElement): ParsedDistributionPoint {
 	let distributionPoint: ParsedDistributionPointName | undefined;
 	let reasons: readonly DistributionPointReason[] | undefined;
@@ -1510,13 +1224,7 @@ function parseDistributionPoint(source: Uint8Array, element: DerElement): Parsed
 	};
 }
 
-/**
- * Parses distribution point name.
- *
- * @param source The source value to process.
- * @param element The ASN.1 element to process.
- * @returns The parsed distribution point name.
- */
+/** Decode a DistributionPointName (fullName or relativeName). */
 function parseDistributionPointName(
 	source: Uint8Array,
 	element: DerElement,
@@ -1538,24 +1246,12 @@ function parseDistributionPointName(
 	throw new Error(`Unsupported distributionPointName tag: ${distributionPointName.tag}`);
 }
 
-/**
- * Parses general names.
- *
- * @param source The source value to process.
- * @param element The ASN.1 element to process.
- * @returns The parsed general names.
- */
+/** Decode a SEQUENCE OF GeneralName. */
 function parseGeneralNames(source: Uint8Array, element: DerElement): readonly GeneralName[] {
 	return childrenOf(source, element).map((name) => parseGeneralName(source, name));
 }
 
-/**
- * Parses general name.
- *
- * @param source The source value to process.
- * @param element The ASN.1 element to process.
- * @returns The parsed general name.
- */
+/** Decode a single GeneralName from its implicit context tag. */
 function parseGeneralName(source: Uint8Array, element: DerElement): GeneralName {
 	switch (element.tag) {
 		case 0xa0: {
@@ -1591,13 +1287,7 @@ function parseGeneralName(source: Uint8Array, element: DerElement): GeneralName 
 	}
 }
 
-/**
- * Parses other name.
- *
- * @param source The source value to process.
- * @param element The ASN.1 element to process.
- * @returns The parsed other name.
- */
+/** Attempt to decode an otherName [0] as a known type (currently only SRV-ID). */
 function parseOtherName(source: Uint8Array, element: DerElement): SubjectAltName | undefined {
 	const otherNameSequence = requireElement(childrenOf(source, element)[0], 'otherName sequence');
 	const otherNameChildren = childrenOf(source, otherNameSequence);
@@ -1617,7 +1307,7 @@ function parseOtherName(source: Uint8Array, element: DerElement): SubjectAltName
 	return { type: 'srv', value: decodeString(srvNameElement.tag, srvNameElement.value) };
 }
 
-/** @internal Exported for testing only — not part of the public API. */
+/** @internal Decode the Name Constraints extension value. */
 export function parseNameConstraints(bytes: Uint8Array): NameConstraints<ParsedNameConstraintForm> {
 	const sequenceElement = requireElement(
 		readRootElement(bytes, {
@@ -1641,13 +1331,7 @@ export function parseNameConstraints(bytes: Uint8Array): NameConstraints<ParsedN
 	};
 }
 
-/**
- * Parses general subtrees.
- *
- * @param source The source value to process.
- * @param container The container value.
- * @returns The parsed general subtrees.
- */
+/** Decode a SEQUENCE OF GeneralSubtree from a permittedSubtrees or excludedSubtrees wrapper. */
 function parseGeneralSubtrees(
 	source: Uint8Array,
 	container: DerElement,
@@ -1686,13 +1370,7 @@ function parseGeneralSubtrees(
 	return subtrees;
 }
 
-/**
- * Parses name constraint general name.
- *
- * @param source The source value to process.
- * @param element The ASN.1 element to process.
- * @returns The parsed name constraint general name.
- */
+/** Decode a GeneralName for use in name constraints (IP carries address+mask). */
 function parseNameConstraintGeneralName(
 	source: Uint8Array,
 	element: DerElement,
@@ -1755,12 +1433,7 @@ function rebuildDirectoryNameFromImplicit(element: DerElement, source: Uint8Arra
 	return result;
 }
 
-/**
- * Parses display text.
- *
- * @param element The ASN.1 element to process.
- * @returns The parsed display text.
- */
+/** Decode a DisplayText (UTF8String, IA5String, VisibleString, or BMPString). */
 function parseDisplayText(element: DerElement): string {
 	switch (element.tag) {
 		case 0x0c:
@@ -1774,12 +1447,7 @@ function parseDisplayText(element: DerElement): string {
 	}
 }
 
-/**
- * Decodes bmp string.
- *
- * @param bytes The raw bytes to process.
- * @returns The decoded bmp string.
- */
+/** Decode a BMPString (UCS-2 big-endian) to a JS string. */
 function decodeBmpString(bytes: Uint8Array): string {
 	if (bytes.length % 2 !== 0) {
 		throw new Error('Invalid BMPString length');
@@ -1796,7 +1464,7 @@ function decodeBmpString(bytes: Uint8Array): string {
 	return value;
 }
 
-/** @internal Exported for the extension registry. */
+/** @internal Decode the Authority Key Identifier extension, returning the keyIdentifier hex or undefined. */
 export function parseAuthorityKeyIdentifier(bytes: Uint8Array): string | undefined {
 	const sequenceElement = requireElement(readElement(bytes, 0), 'authorityKeyIdentifier sequence');
 	if (sequenceElement.end !== bytes.length) {

@@ -1,8 +1,10 @@
 /**
  * Distinguished-name field metadata.
  *
- * This module defines the supported attribute mapping between friendly field keys and
- * ASN.1 object identifiers.
+ * Maps friendly {@link NameFieldKey} names to their ASN.1 OIDs and
+ * string-encoding functions.
+ *
+ * @module
  */
 
 import { ia5String, printableString, utf8String } from './der.ts';
@@ -10,75 +12,40 @@ import type { NameFieldKey } from './name.ts';
 import { OIDS } from './oids.ts';
 
 /**
- * Describes the registry definition used for name field handling.
+ * OID and ASN.1 string encoder for one distinguished-name attribute type.
  */
 export interface NameFieldDefinition {
-	/**
-	 * Carries the oid value.
-	 */
+	/** Dotted-decimal OID (e.g. `"2.5.4.3"` for commonName). */
 	readonly oid: string;
-	/**
-	 * Carries the encode value.
-	 */
+	/** Encodes the attribute value to the correct ASN.1 string type (UTF8, PrintableString, IA5). */
 	readonly encode: (value: string) => Uint8Array;
 }
 
 /**
- * Defines the name field definitions used by this module.
+ * Registry mapping every {@link NameFieldKey} to its OID and ASN.1 encoder.
+ *
+ * Country and serialNumber use PrintableString; emailAddress uses IA5String;
+ * all others use UTF8String.
  */
 export const NAME_FIELD_DEFINITIONS: Record<NameFieldKey, NameFieldDefinition> = {
-	/**
-	 * Carries the common name value.
-	 */
 	commonName: { oid: OIDS.commonName, encode: utf8String },
-	/**
-	 * Carries the surname value.
-	 */
 	surname: { oid: OIDS.surname, encode: utf8String },
-	/**
-	 * Carries the serial number value.
-	 */
 	serialNumber: { oid: OIDS.serialNumber, encode: printableString },
-	/**
-	 * Carries the country value.
-	 */
 	country: { oid: OIDS.countryName, encode: printableString },
-	/**
-	 * Carries the locality value.
-	 */
 	locality: { oid: OIDS.localityName, encode: utf8String },
-	/**
-	 * Carries the state value.
-	 */
 	state: { oid: OIDS.stateOrProvinceName, encode: utf8String },
-	/**
-	 * Carries the street value.
-	 */
 	street: { oid: OIDS.streetAddress, encode: utf8String },
-	/**
-	 * Carries the organization value.
-	 */
 	organization: { oid: OIDS.organizationName, encode: utf8String },
-	/**
-	 * Carries the organizational unit value.
-	 */
 	organizationalUnit: { oid: OIDS.organizationalUnitName, encode: utf8String },
-	/**
-	 * Carries the title value.
-	 */
 	title: { oid: OIDS.title, encode: utf8String },
-	/**
-	 * Carries the given name value.
-	 */
 	givenName: { oid: OIDS.givenName, encode: utf8String },
-	/**
-	 * Carries the email address value.
-	 */
 	emailAddress: { oid: OIDS.emailAddress, encode: ia5String },
 };
 
 /**
- * Defines the name object order used by this module.
+ * Canonical emission order when converting a {@link NameObject} to RDN attributes.
+ *
+ * Follows the conventional C/ST/L/STREET/O/OU/CN/… ordering.
  */
 export const NAME_OBJECT_ORDER: readonly NameFieldKey[] = [
 	'country',
@@ -95,20 +62,13 @@ export const NAME_OBJECT_ORDER: readonly NameFieldKey[] = [
 	'emailAddress',
 ];
 
-/**
- * Defines the name field keys by oid used by this module.
- */
+/** Reverse lookup table: OID string → friendly {@link NameFieldKey}. */
 const NAME_FIELD_KEYS_BY_OID = new Map<string, NameFieldKey>();
 for (const key of NAME_OBJECT_ORDER) {
 	NAME_FIELD_KEYS_BY_OID.set(NAME_FIELD_DEFINITIONS[key].oid, key);
 }
 
-/**
- * Name field key from OID.
- *
- * @param oid The object identifier.
- * @returns The computed value.
- */
+/** Resolves a dotted-decimal OID to its {@link NameFieldKey}, or `undefined` if unknown. */
 export function nameFieldKeyFromOid(oid: string): NameFieldKey | undefined {
 	return NAME_FIELD_KEYS_BY_OID.get(oid);
 }

@@ -1,133 +1,84 @@
 /**
  * Internal result helper types and constructors shared by low-level modules.
- * This module mirrors the public result model without depending on the public barrel.
+ *
+ * Mirrors the public result model without depending on the public barrel.
+ *
+ * @module
  */
 
 /**
- * Represents the canonical success-or-failure result shape used by the library.
+ * Discriminated `ok` union: either `{ ok: true; value }` or `{ ok: false; error }`.
+ *
+ * Every fallible public API in micro509 returns a specialization of this type.
  */
 export type Result<TValue, TError> =
 	| {
-			/**
-			 * Indicates whether the operation succeeded.
-			 */
+			/** Operation succeeded. */
 			readonly ok: true;
-			/**
-			 * Carries the successful value payload.
-			 */
+			/** Successful payload. */
 			readonly value: TValue;
 	  }
 	| {
-			/**
-			 * Indicates whether the operation succeeded.
-			 */
+			/** Operation failed. */
 			readonly ok: false;
-			/**
-			 * Carries the canonical error payload.
-			 */
+			/** Structured error payload. */
 			readonly error: TError;
 	  };
 
-/**
- * Represents a failed result carrying one typed error payload.
- */
+/** Failed result with a flattened code/message/details surface for ergonomic matching. */
 export interface ErrorResult<
 	TCode extends string,
 	TDetails,
 	TError extends Micro509Error<TCode, TDetails>,
 > {
-	/**
-	 * Indicates whether the operation succeeded.
-	 */
+	/** Always `false` for failures. */
 	readonly ok: false;
-	/**
-	 * Carries the canonical error payload.
-	 */
+	/** Structured error payload. */
 	readonly error: TError;
-	/**
-	 * Carries the machine-readable error code.
-	 */
+	/** Machine-readable failure reason, mirrored from `error.code`. */
 	readonly code: TCode;
-	/**
-	 * Carries the human-readable error message.
-	 */
+	/** Human-readable diagnostic, mirrored from `error.message`. */
 	readonly message: string;
-	/**
-	 * Carries structured details for the current failure.
-	 */
+	/** Optional structured context for the failure. */
 	readonly details?: TDetails | undefined;
 }
 
-/**
- * Represents a failed result that also carries an index into the processed collection.
- */
+/** Like {@link ErrorResult} but also carries an index into the collection that was being processed. */
 export interface IndexedErrorResult<
 	TCode extends string,
 	TDetails,
 	TError extends IndexedMicro509Error<TCode, TDetails>,
 > extends ErrorResult<TCode, TDetails, TError> {
-	/**
-	 * Carries the zero-based index associated with this value.
-	 */
+	/** Zero-based position of the failing item in the input collection. */
 	readonly index?: number | undefined;
 }
 
-/**
- * Represents the canonical typed error payload used by public result APIs.
- */
+/** Base error shape carried by all failure results in the library. */
 export interface Micro509Error<TCode extends string, TDetails = Record<never, never>> {
-	/**
-	 * Carries the machine-readable error code.
-	 */
+	/** Machine-readable failure reason (e.g. `'malformed'`, `'expired'`). */
 	readonly code: TCode;
-	/**
-	 * Carries the human-readable error message.
-	 */
+	/** Human-readable diagnostic message. */
 	readonly message: string;
-	/**
-	 * Carries structured details for the current failure.
-	 */
+	/** Optional structured context for the failure. */
 	readonly details?: TDetails;
 }
 
-/**
- * Represents a canonical typed error payload with an associated index.
- */
+/** Like {@link Micro509Error} but includes a positional index for collection-processing APIs. */
 export interface IndexedMicro509Error<TCode extends string, TDetails = Record<never, never>>
 	extends Micro509Error<TCode, TDetails> {
-	/**
-	 * Carries the zero-based index associated with this value.
-	 */
+	/** Zero-based position of the failing item in the input collection. */
 	readonly index?: number;
 }
 
-/**
- * Success result.
- *
- * @param value The value to process.
- * @returns The computed value.
- */
+/** Wraps a value in a success result (`{ ok: true, value }`). */
 export function successResult<TValue>(value: TValue): {
-	/**
-	 * Indicates whether the operation succeeded.
-	 */
 	readonly ok: true;
-	/**
-	 * Carries the successful value payload.
-	 */
 	readonly value: TValue;
 } {
 	return { ok: true, value };
 }
 
-/**
- * Micro509 error.
- *
- * @param code The code value.
- * @param message The message value.
- * @param details The structured details value.
- * @returns The computed value.
- */
+/** Constructs a {@link Micro509Error} payload. */
 export function micro509Error<TCode extends string, TDetails = Record<never, never>>(
 	code: TCode,
 	message: string,
@@ -140,15 +91,7 @@ export function micro509Error<TCode extends string, TDetails = Record<never, nev
 	};
 }
 
-/**
- * Indexed micro509 error.
- *
- * @param code The code value.
- * @param message The message value.
- * @param index The index value.
- * @param details The structured details value.
- * @returns The computed value.
- */
+/** Constructs an {@link IndexedMicro509Error} payload with an optional collection index. */
 export function indexedMicro509Error<TCode extends string, TDetails = Record<never, never>>(
 	code: TCode,
 	message: string,
@@ -163,12 +106,7 @@ export function indexedMicro509Error<TCode extends string, TDetails = Record<nev
 	};
 }
 
-/**
- * Error result.
- *
- * @param error The error value.
- * @returns The computed value.
- */
+/** Wraps a {@link Micro509Error} in a flattened {@link ErrorResult}. */
 export function errorResult<
 	TCode extends string,
 	TDetails,
@@ -183,12 +121,7 @@ export function errorResult<
 	};
 }
 
-/**
- * Indexed error result.
- *
- * @param error The error value.
- * @returns The computed value.
- */
+/** Wraps an {@link IndexedMicro509Error} in a flattened {@link IndexedErrorResult}. */
 export function indexedErrorResult<
 	TCode extends string,
 	TDetails,

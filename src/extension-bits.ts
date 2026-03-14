@@ -1,16 +1,16 @@
 /**
- * Bit-string helpers for key-usage and distribution-point reason flags.
+ * BIT STRING helpers for {@link KeyUsage} and {@link DistributionPointReason} flags.
  *
- * This module centralizes bit ordering so certificate builders and parsers stay aligned on
- * the same wire encoding.
+ * Centralizes the bit-position ordering so certificate builders and parsers
+ * produce identical wire encodings.
+ *
+ * @module
  */
 
 import { bitString, DEFAULT_MAX_DER_DEPTH, readRootElement } from './der.ts';
 import type { DistributionPointReason, KeyUsage } from './extensions.ts';
 
-/**
- * Defines the key usage order used by this module.
- */
+/** Canonical bit-position order for Key Usage flags (RFC 5280 §4.2.1.3). */
 const KEY_USAGE_ORDER = [
 	'digitalSignature',
 	'nonRepudiation',
@@ -23,9 +23,7 @@ const KEY_USAGE_ORDER = [
 	'decipherOnly',
 ] as const satisfies readonly KeyUsage[];
 
-/**
- * Defines the distribution point reason order used by this module.
- */
+/** Canonical bit-position order for DistributionPoint reason flags (RFC 5280 §4.2.1.13). */
 const DISTRIBUTION_POINT_REASON_ORDER = [
 	'keyCompromise',
 	'cACompromise',
@@ -38,10 +36,9 @@ const DISTRIBUTION_POINT_REASON_ORDER = [
 ] as const satisfies readonly DistributionPointReason[];
 
 /**
- * Encodes key usage extension.
+ * Encode an array of {@link KeyUsage} flags into a DER BIT STRING.
  *
- * @param usages The usages value.
- * @returns The encoded key usage extension.
+ * @param usages Flags to set. Bit positions follow RFC 5280 §4.2.1.3 order.
  */
 export function encodeKeyUsageExtension(usages: readonly KeyUsage[]): Uint8Array {
 	const encoded = encodeBitFlags(usages, (usage) =>
@@ -51,10 +48,9 @@ export function encodeKeyUsageExtension(usages: readonly KeyUsage[]): Uint8Array
 }
 
 /**
- * Parses key usage extension.
+ * Decode a DER-encoded Key Usage BIT STRING into an array of {@link KeyUsage} flags.
  *
- * @param bytes The raw bytes to process.
- * @returns The parsed key usage extension.
+ * @param bytes DER of the keyUsage extension value (BIT STRING).
  */
 export function parseKeyUsageExtension(bytes: Uint8Array): readonly KeyUsage[] {
 	const bitStringElement = readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH });
@@ -65,10 +61,10 @@ export function parseKeyUsageExtension(bytes: Uint8Array): readonly KeyUsage[] {
 }
 
 /**
- * Encodes distribution point reason flags content.
+ * Encode {@link DistributionPointReason} flags as BIT STRING content bytes
+ * (unusedBits prefix + flag bytes), suitable for wrapping in an implicit context tag.
  *
- * @param reasons The reasons value.
- * @returns The encoded distribution point reason flags content.
+ * @param reasons Reason flags to encode.
  */
 export function encodeDistributionPointReasonFlagsContent(
 	reasons: readonly DistributionPointReason[],
@@ -82,10 +78,10 @@ export function encodeDistributionPointReasonFlagsContent(
 }
 
 /**
- * Parses distribution point reason flags content.
+ * Decode BIT STRING content bytes into {@link DistributionPointReason} flags.
  *
- * @param value The value to process.
- * @returns The parsed distribution point reason flags content.
+ * @param value Raw content bytes (unusedBits prefix + flag bytes).
+ * @returns Decoded reason flags, or `undefined` if no bits are set.
  */
 export function parseDistributionPointReasonFlagsContent(
 	value: Uint8Array,
@@ -94,24 +90,12 @@ export function parseDistributionPointReasonFlagsContent(
 	return reasons.length === 0 ? undefined : reasons;
 }
 
-/**
- * Encodes bit flags.
- *
- * @param values The values to process.
- * @param bitForValue The bit for value value.
- * @returns The encoded bit flags.
- */
+/** Pack named flags into a minimal byte array with DER BIT STRING unused-bits count. */
 function encodeBitFlags<T extends string>(
 	values: readonly T[],
 	bitForValue: (value: T) => number,
 ): {
-	/**
-	 * Carries the bytes value.
-	 */
 	readonly bytes: Uint8Array;
-	/**
-	 * Carries the unused bits value.
-	 */
 	readonly unusedBits: number;
 } {
 	let highestBit = 0;
@@ -136,14 +120,7 @@ function encodeBitFlags<T extends string>(
 	};
 }
 
-/**
- * Decodes bit flags.
- *
- * @param value The value to process.
- * @param candidates The candidates value.
- * @param bitOffset The bit offset value.
- * @returns The decoded bit flags.
- */
+/** Unpack set bits from a BIT STRING content into named flags from a candidate list. */
 function decodeBitFlags<T extends string>(
 	value: Uint8Array,
 	candidates: readonly T[],
@@ -169,14 +146,7 @@ function decodeBitFlags<T extends string>(
 	return out;
 }
 
-/**
- * Index in order.
- *
- * @param order The order value.
- * @param value The value to process.
- * @param label The label value.
- * @returns The computed value.
- */
+/** Look up the bit position of a flag in its canonical order array. Throws on unknown flags. */
 function indexInOrder<T extends string>(order: readonly T[], value: T, label: string): number {
 	const index = order.indexOf(value);
 	if (index < 0) {

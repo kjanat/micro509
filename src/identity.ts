@@ -1,8 +1,11 @@
 /**
- * Service-identity matching helpers.
+ * Service-identity matching (RFC 6125 / RFC 9525).
  *
- * This module implements DNS, IP, URI, and SRV identifier comparison for certificate
- * consumers.
+ * Compares a reference identifier (hostname, IP, URI, SRV name) against the
+ * presented identifiers in a certificate's SAN extension, with optional
+ * common-name fallback for DNS names.
+ *
+ * @module
  */
 
 import { normalizeIpAddress } from './ip.ts';
@@ -10,120 +13,72 @@ import type { ParsedCertificate } from './parse.ts';
 import type { ErrorResult, Micro509Error, Result } from './result.ts';
 import { errorResult, micro509Error, successResult } from './result.ts';
 
-/**
- * Describes the input shape for DNS service identity operations.
- */
+/** DNS hostname reference identifier. */
 export interface DnsServiceIdentityInput {
-	/**
-	 * Identifies the type value.
-	 */
 	readonly type: 'dns';
-	/**
-	 * Carries the successful value payload.
-	 */
+	/** The hostname to match (e.g. `"mail.example.com"`). Wildcard labels in the certificate are handled internally. */
 	readonly value: string;
 	/**
-	 * Indicates whether allow common name fallback.
+	 * When `true`, falls back to the subject CN if the SAN extension has no
+	 * dns/uri/srv entries. Suppressed when any supported SAN type is present.
+	 * Default: `false`.
 	 */
 	readonly allowCommonNameFallback?: boolean;
 }
 
-/**
- * Describes the input shape for IP service identity operations.
- */
+/** IP address reference identifier. */
 export interface IpServiceIdentityInput {
-	/**
-	 * Identifies the type value.
-	 */
 	readonly type: 'ip';
-	/**
-	 * Carries the successful value payload.
-	 */
+	/** IPv4 or IPv6 address string. Normalized before comparison. */
 	readonly value: string;
 }
 
-/**
- * Describes the input shape for URI service identity operations.
- */
+/** URI-ID reference identifier (RFC 6125 §6.5). Scheme and host are matched. */
 export interface UriServiceIdentityInput {
-	/**
-	 * Identifies the type value.
-	 */
 	readonly type: 'uri';
-	/**
-	 * Carries the successful value payload.
-	 */
+	/** Full URI whose scheme and reg-name will be compared. */
 	readonly value: string;
 }
 
-/**
- * Describes the input shape for SRV service identity operations.
- */
+/** SRV-ID reference identifier (RFC 4985). */
 export interface SrvServiceIdentityInput {
-	/**
-	 * Identifies the type value.
-	 */
 	readonly type: 'srv';
-	/**
-	 * Carries the successful value payload.
-	 */
+	/** SRV name in `_service.domain` form (e.g. `"_imap.example.com"`). */
 	readonly value: string;
 }
 
-/**
- * Describes the input shape for service identity operations.
- */
+/** Discriminated union of all supported reference identifier types. */
 export type ServiceIdentityInput =
 	| DnsServiceIdentityInput
 	| IpServiceIdentityInput
 	| UriServiceIdentityInput
 	| SrvServiceIdentityInput;
 
-/**
- * Defines service identity type.
- */
+/** The `type` discriminant values of {@link ServiceIdentityInput}. */
 export type ServiceIdentityType = ServiceIdentityInput['type'];
-/**
- * Describes the input shape for matchable service identity operations.
- */
+/** Alias for the full identity union accepted by matching functions. */
 export type MatchableServiceIdentityInput = ServiceIdentityInput;
-/**
- * Describes the input shape for verify service identity operations.
- */
+/** Subset of identities usable for TLS server verification (DNS and IP only). */
 export type VerifyServiceIdentityInput = DnsServiceIdentityInput | IpServiceIdentityInput;
 
-/**
- * Enumerates the error codes used by match service identity failures.
- */
+/** Discriminant codes for identity-matching failures. */
 export type MatchServiceIdentityErrorCode =
 	| 'subject_alt_name_mismatch'
 	| 'common_name_fallback_suppressed'
 	| 'service_identity_service_mismatch'
 	| 'service_identity_type_unsupported';
 
-/**
- * Carries structured details for match service identity failures.
- */
+/** Diagnostic context attached to an identity-matching failure. */
 export interface MatchServiceIdentityFailureDetails {
-	/**
-	 * Carries the subject common name value.
-	 */
+	/** CN of the certificate that was being matched, if present. */
 	readonly subjectCommonName?: string;
-	/**
-	 * Carries the expected value.
-	 */
+	/** The reference identifier the caller asked to verify. */
 	readonly expected?: string;
-	/**
-	 * Carries the actual value.
-	 */
+	/** Comma-joined presented identifiers (from SAN) that were compared. */
 	readonly actual?: string;
-	/**
-	 * Carries the presented identifier types value.
-	 */
+	/** SAN types that were present, relevant to CN-fallback suppression logic. */
 	readonly presentedIdentifierTypes?: readonly ('dns' | 'uri' | 'srv')[];
-	/**
-	 * Carries the common name fallback reason value.
-	 */
+	/** Explains why CN fallback was not used or failed. */
 	readonly commonNameFallbackReason?:
 		| 'disabled'
 		| 'suppressed_by_presented_identifier'
@@ -131,82 +86,86 @@ export interface MatchServiceIdentityFailureDetails {
 		| 'common_name_mismatch';
 }
 
-/**
- * Represents a typed failure produced by match service identity operations.
- */
+/** A failed identity-matching attempt. */
 export interface MatchServiceIdentityFailure
 	extends Micro509Error<MatchServiceIdentityErrorCode, MatchServiceIdentityFailureDetails> {
-	/**
-	 * Indicates whether the operation succeeded.
-	 */
+	/** Always `false` for failures. */
 	readonly ok: false;
 }
 
-/**
- * Represents a successful outcome produced by match service identity operations.
- */
+/** A successful identity match (the certificate covers the requested name). */
 export interface MatchServiceIdentitySuccess {
-	/**
-	 * Indicates whether the operation succeeded.
-	 */
+	/** Always `true` for success. */
 	readonly ok: true;
-	/**
-	 * Carries the successful value payload.
-	 */
+	/** No payload on success — the match itself is the signal. */
 	readonly value: undefined;
 }
 
-/**
- * Represents the result returned by match service identity failure operations.
- */
+/** Failure branch of {@link MatchServiceIdentityResult} with structured error details. */
 export type MatchServiceIdentityFailureResult = ErrorResult<
 	MatchServiceIdentityErrorCode,
 	MatchServiceIdentityFailureDetails,
 	MatchServiceIdentityFailure
 >;
 
-/**
- * Represents the result returned by match service identity operations.
- */
+/** Result of matching a reference identifier against a certificate's presented identifiers. */
 export type MatchServiceIdentityResult =
 	| MatchServiceIdentitySuccess
 	| MatchServiceIdentityFailureResult;
 
-/**
- * Defines match service identity evaluation.
- */
+/** Void-valued result type used internally during identity evaluation. */
 export type MatchServiceIdentityEvaluation = Result<void, MatchServiceIdentityFailure>;
 
-/**
- * Describes the input shape for match service identity operations.
- */
+/** Input for {@link matchServiceIdentity}. */
 export interface MatchServiceIdentityInput {
-	/**
-	 * Carries the certificate value.
-	 */
+	/** The parsed leaf certificate to check. */
 	readonly certificate: ParsedCertificate;
-	/**
-	 * Carries the service identity value.
-	 */
+	/** The reference identifier the client wants to verify. */
 	readonly serviceIdentity: ServiceIdentityInput;
 }
 
 /**
- * Matches service identity.
+ * Checks whether a certificate covers the requested service identity.
  *
- * @param input The typed input payload.
- * @returns The matching result.
+ * Delegates to {@link matchCertificateServiceIdentity} — this overload
+ * accepts a single options object.
+ *
+ * @example
+ * ```ts
+ * const result = matchServiceIdentity({
+ *   certificate: parsed,
+ *   serviceIdentity: { type: 'dns', value: 'example.com' },
+ * });
+ * if (!result.ok) console.error(result.error.message);
+ * ```
  */
 export function matchServiceIdentity(input: MatchServiceIdentityInput): MatchServiceIdentityResult {
 	return matchCertificateServiceIdentity(input.certificate, input.serviceIdentity);
 }
 
 /**
- * Matches certificate service identity.
+ * Compares a reference identifier against a certificate's SAN entries.
  *
- * @param certificate The certificate input.
- * @param serviceIdentity The service identity value.
- * @returns The matching result.
+ * Supports DNS (with wildcard matching), IP, URI-ID, and SRV-ID.
+ * For DNS, optionally falls back to subject CN when no SAN of a supported
+ * type is present.
+ *
+ * @example
+ * ```ts
+ * const result = matchCertificateServiceIdentity(parsed, {
+ *   type: 'ip',
+ *   value: '192.168.1.1',
+ * });
+ * ```
+ *
+ * @example
+ * ```ts
+ * const result = matchCertificateServiceIdentity(parsed, {
+ *   type: 'dns',
+ *   value: 'mail.example.com',
+ *   allowCommonNameFallback: true,
+ * });
+ * ```
  */
 export function matchCertificateServiceIdentity(
 	certificate: ParsedCertificate,
@@ -383,13 +342,7 @@ export function matchCertificateServiceIdentity(
 	}
 }
 
-/**
- * Matches es DNS name.
- *
- * @param pattern The pattern value.
- * @param actual The actual value.
- * @returns The computed value.
- */
+/** Compares a presented DNS identifier (possibly wildcarded) against a reference name. */
 function matchesDnsName(pattern: string, actual: string): boolean {
 	const lowerPattern = normalizeDnsPattern(pattern);
 	const lowerActual = normalizeDnsName(actual);
@@ -407,12 +360,7 @@ function matchesDnsName(pattern: string, actual: string): boolean {
 	return prefix.length > 0 && !prefix.includes('.');
 }
 
-/**
- * Normalizes DNS pattern.
- *
- * @param value The value to process.
- * @returns The computed value.
- */
+/** Lowercases a DNS pattern, preserving the `*.` wildcard prefix if present. */
 function normalizeDnsPattern(value: string): string {
 	if (!value.startsWith('*.')) {
 		return normalizeDnsName(value);
@@ -420,23 +368,13 @@ function normalizeDnsPattern(value: string): string {
 	return `*.${normalizeDnsName(value.slice(2))}`;
 }
 
-/**
- * Normalizes DNS name.
- *
- * @param value The value to process.
- * @returns The computed value.
- */
+/** Lowercases and IDNA-normalizes a DNS name via the URL parser. */
 function normalizeDnsName(value: string): string {
 	const normalized = tryNormalizeDnsName(value);
 	return normalized ?? value.toLowerCase();
 }
 
-/**
- * Try normalize DNS name.
- *
- * @param value The value to process.
- * @returns The computed value.
- */
+/** Attempts IDNA normalization via URL constructor. Returns `undefined` for invalid names. */
 function tryNormalizeDnsName(value: string): string | undefined {
 	if (value.length === 0) {
 		return undefined;
@@ -453,26 +391,15 @@ function tryNormalizeDnsName(value: string): string | undefined {
 	}
 }
 
-/**
- * Describes service scoped identity.
- */
+/** Decomposed URI-ID or SRV-ID: a service type discriminant plus a domain. */
 interface ServiceScopedIdentity {
-	/**
-	 * Carries the service type value.
-	 */
+	/** URI scheme (e.g. `"https"`) or SRV service label (e.g. `"imap"`). */
 	readonly serviceType: string;
-	/**
-	 * Carries the domain name value.
-	 */
+	/** Normalized domain name portion for DNS comparison. */
 	readonly domainName: string;
 }
 
-/**
- * Presented DNS identifier types.
- *
- * @param certificate The certificate input.
- * @returns The computed value.
- */
+/** Returns which SAN types (dns, uri, srv) the certificate presents, used for CN-fallback suppression. */
 function presentedDnsIdentifierTypes(
 	certificate: ParsedCertificate,
 ): readonly ('dns' | 'uri' | 'srv')[] {
@@ -486,12 +413,7 @@ function presentedDnsIdentifierTypes(
 	return types;
 }
 
-/**
- * Parses URI service identity.
- *
- * @param value The value to process.
- * @returns The parsed URI service identity.
- */
+/** Parses a URI into scheme + host. Throws on malformed input. */
 function parseUriServiceIdentity(value: string): ServiceScopedIdentity {
 	const parsed = tryParseUriServiceIdentity(value);
 	if (parsed === undefined) {
@@ -500,12 +422,7 @@ function parseUriServiceIdentity(value: string): ServiceScopedIdentity {
 	return parsed;
 }
 
-/**
- * Try parse URI service identity.
- *
- * @param value The value to process.
- * @returns The computed value.
- */
+/** Attempts to split a URI into scheme + reg-name. Returns `undefined` on failure. */
 function tryParseUriServiceIdentity(value: string): ServiceScopedIdentity | undefined {
 	const schemeEnd = value.indexOf(':');
 	if (schemeEnd <= 0) {
@@ -519,12 +436,7 @@ function tryParseUriServiceIdentity(value: string): ServiceScopedIdentity | unde
 	return { serviceType, domainName: normalizeDnsName(domainName) };
 }
 
-/**
- * Extract URI reg name.
- *
- * @param value The value to process.
- * @returns The computed value.
- */
+/** Extracts the reg-name host from a URI, stripping scheme, userinfo, port, and path components. */
 function extractUriRegName(value: string): string | undefined {
 	const schemeEnd = value.indexOf(':');
 	if (schemeEnd <= 0) {
@@ -549,13 +461,7 @@ function extractUriRegName(value: string): string | undefined {
 	return host;
 }
 
-/**
- * Cut at first delimiter.
- *
- * @param value The value to process.
- * @param delimiters The delimiters value.
- * @returns The computed value.
- */
+/** Returns the substring before the first occurrence of any delimiter character. */
 function cutAtFirstDelimiter(value: string, delimiters: readonly string[]): string {
 	let end = value.length;
 	for (const delimiter of delimiters) {
@@ -567,12 +473,7 @@ function cutAtFirstDelimiter(value: string, delimiters: readonly string[]): stri
 	return value.slice(0, end);
 }
 
-/**
- * Parses SRV service identity.
- *
- * @param value The value to process.
- * @returns The parsed SRV service identity.
- */
+/** Parses an SRV name (`_service.domain`) into parts. Throws on malformed input. */
 function parseSrvServiceIdentity(value: string): ServiceScopedIdentity {
 	const parsed = tryParseSrvServiceIdentity(value);
 	if (parsed === undefined) {
@@ -581,12 +482,7 @@ function parseSrvServiceIdentity(value: string): ServiceScopedIdentity {
 	return parsed;
 }
 
-/**
- * Try parse SRV service identity.
- *
- * @param value The value to process.
- * @returns The computed value.
- */
+/** Attempts to split `_service.domain` into parts. Returns `undefined` on failure. */
 function tryParseSrvServiceIdentity(value: string): ServiceScopedIdentity | undefined {
 	if (!value.startsWith('_')) {
 		return undefined;
@@ -601,47 +497,25 @@ function tryParseSrvServiceIdentity(value: string): ServiceScopedIdentity | unde
 	};
 }
 
-/**
- * Failure.
- *
- * @param code The code value.
- * @param message The message value.
- * @param details The structured details value.
- * @returns The computed value.
- */
+/** Constructs a failure result with the given error code and diagnostic details. */
 function failure(
 	code: MatchServiceIdentityErrorCode,
 	message: string,
 	details?: MatchServiceIdentityFailureDetails,
 ): MatchServiceIdentityResult {
 	const error: MatchServiceIdentityFailure = {
-		/**
-		 * Indicates whether the operation succeeded.
-		 */
 		ok: false,
 		...micro509Error(code, message, details),
 	};
 	return errorResult(error);
 }
 
-/**
- * Success.
- *
- * @returns The computed value.
- */
+/** Constructs a success result indicating the identity matched. */
 function success(): MatchServiceIdentitySuccess {
 	return successResult(undefined);
 }
 
-/**
- * Details.
- *
- * @param subjectCommonName The subject common name value.
- * @param expected The expected value.
- * @param actual The actual value.
- * @param extra The extra value.
- * @returns The computed value.
- */
+/** Assembles failure detail fields, merging optional CN-fallback and identifier-type info. */
 function details(
 	subjectCommonName: string | undefined,
 	expected: string,

@@ -1,8 +1,8 @@
 /**
- * Internal signing helpers used by certificate and CSR builders.
+ * Signing helpers that map WebCrypto keys and signature profiles to on-wire
+ * `AlgorithmIdentifier` values. Used by certificate and CSR builders.
  *
- * This module maps WebCrypto keys and signature profiles to the `AlgorithmIdentifier`
- * values emitted on wire.
+ * @module
  */
 
 import { nullValue, objectIdentifier, sequence } from './der.ts';
@@ -12,55 +12,36 @@ import { OIDS } from './oids.ts';
 import { encodeRsaPssParameters, type RsaPssHash, rsaPssParametersForHash } from './rsa-pss.ts';
 
 /**
- * Describes the input shape for signature profile operations.
+ * Controls how the signature algorithm is chosen.
+ *
+ * `'auto'` (default) infers the algorithm from the key. `'rsa-pss'` forces RSA-PSS
+ * padding and requires an RSA-PSS private key.
  */
 export type SignatureProfileInput =
 	| {
-			/**
-			 * Identifies the kind value.
-			 */
+			/** Infer the signature algorithm from the private key. */
 			readonly kind?: 'auto';
 	  }
 	| {
-			/**
-			 * Identifies the kind value.
-			 */
+			/** Force RSA-PSS padding. */
 			readonly kind: 'rsa-pss';
-			/**
-			 * Carries the salt length value.
-			 */
+			/** Salt length in bytes. Must match the key's hash digest size. */
 			readonly saltLength?: 32 | 48 | 64;
 	  };
 
-/**
- * Describes an algorithm identifier used by signature operations.
- */
+/** Resolved signature algorithm: the OID/parameters for DER encoding and the WebCrypto sign params. */
 export interface SignatureAlgorithmIdentifier {
-	/**
-	 * Carries the OID for algorithm.
-	 */
+	/** ASN.1 OID of the signature algorithm (e.g. sha256WithRSAEncryption). */
 	readonly algorithmOid: string;
-	/**
-	 * Carries the parameters value.
-	 */
+	/** DER-encoded algorithm parameters, if the algorithm requires them (e.g. RSA-PSS). */
 	readonly parameters?: Uint8Array;
-	/**
-	 * Carries the sign params value.
-	 */
+	/** WebCrypto `sign()` algorithm parameter. */
 	readonly signParams: Algorithm | EcdsaParams | RsaPssParams;
-	/**
-	 * Carries the ecdsa raw signature bytes value.
-	 */
+	/** When set, the raw ECDSA signature is this many bytes and must be DER-converted. */
 	readonly ecdsaRawSignatureBytes?: number;
 }
 
-/**
- * Returns signature algorithm.
- *
- * @param privateKey The private key to use.
- * @param profile The profile value.
- * @returns The signature algorithm.
- */
+/** Resolve a private key and optional profile into a {@link SignatureAlgorithmIdentifier}. */
 export function getSignatureAlgorithm(
 	privateKey: CryptoKey,
 	profile: SignatureProfileInput = {},
@@ -139,13 +120,7 @@ export function getSignatureAlgorithm(
 	throw new Error(`Unsupported signing key algorithm: ${algorithm.name}`);
 }
 
-/**
- * Returns RSA PSS signature algorithm.
- *
- * @param privateKey The private key to use.
- * @param saltLength The salt length value.
- * @returns The RSA PSS signature algorithm.
- */
+/** Build an RSA-PSS {@link SignatureAlgorithmIdentifier} from an RSA-PSS private key. */
 function getRsaPssSignatureAlgorithm(
 	privateKey: CryptoKey,
 	saltLength: number | undefined,
@@ -174,12 +149,7 @@ function getRsaPssSignatureAlgorithm(
 	};
 }
 
-/**
- * Encodes algorithm identifier.
- *
- * @param input The typed input payload.
- * @returns The encoded algorithm identifier.
- */
+/** DER-encode a {@link SignatureAlgorithmIdentifier} as an ASN.1 `AlgorithmIdentifier` SEQUENCE. */
 export function encodeAlgorithmIdentifier(input: SignatureAlgorithmIdentifier): Uint8Array {
 	const parts = [objectIdentifier(input.algorithmOid)];
 	if (input.parameters !== undefined) {
@@ -188,14 +158,7 @@ export function encodeAlgorithmIdentifier(input: SignatureAlgorithmIdentifier): 
 	return sequence(parts);
 }
 
-/**
- * Sign bytes.
- *
- * @param privateKey The private key to use.
- * @param algorithm The algorithm configuration.
- * @param data The raw bytes to process.
- * @returns The computed value.
- */
+/** Sign `data` and return a DER-encoded signature. ECDSA raw signatures are auto-converted to DER. */
 export async function signBytes(
 	privateKey: CryptoKey,
 	algorithm: SignatureAlgorithmIdentifier,
@@ -211,32 +174,17 @@ export async function signBytes(
 	return signature;
 }
 
-/**
- * Returns whether hash.
- *
- * @param algorithm The algorithm configuration.
- * @returns Whether the condition holds.
- */
+/** Type guard: does this key algorithm carry a `hash` property (RSA keys). */
 function hasHash(algorithm: KeyAlgorithm): algorithm is RsaHashedKeyAlgorithm {
 	return 'hash' in algorithm;
 }
 
-/**
- * Returns whether named curve.
- *
- * @param algorithm The algorithm configuration.
- * @returns Whether the condition holds.
- */
+/** Type guard: does this key algorithm carry a `namedCurve` property (EC keys). */
 function hasNamedCurve(algorithm: KeyAlgorithm): algorithm is EcKeyAlgorithm {
 	return 'namedCurve' in algorithm;
 }
 
-/**
- * RSA PSS hash from web crypto name.
- *
- * @param hash The hash value.
- * @returns The computed value.
- */
+/** Narrow a WebCrypto hash name string to the supported {@link RsaPssHash} union. */
 function rsaPssHashFromWebCryptoName(hash: string): RsaPssHash {
 	switch (hash) {
 		case 'SHA-256':

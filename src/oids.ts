@@ -1,12 +1,15 @@
 /**
- * Object identifier registry used throughout the library.
+ * Centralized ASN.1 object identifier registry referenced by create, parse,
+ * verify, and container modules.
  *
- * This module centralizes the ASN.1 OIDs referenced by create, parse, verify, and
- * container flows.
+ * All OIDs are dotted-decimal string constants keyed by their common short name.
+ *
+ * @module
  */
 
 /**
- * Maps the ASN.1 object identifiers referenced across the library.
+ * Dotted-decimal OID constants for X.500 attributes, PKCS algorithms,
+ * X.509v3 extensions, EKU purposes, hash algorithms, and PKIX access methods.
  */
 const OIDS = {
 	commonName: '2.5.4.3',

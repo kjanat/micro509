@@ -1,8 +1,10 @@
 /**
- * PKCS#12 MAC helpers used by PFX flows.
+ * PKCS#12 MAC data creation and verification.
  *
- * This module creates and parses MAC data blocks and computes the password-based MAC used
- * by PKCS#12.
+ * Computes and verifies the password-based HMAC-SHA-256 integrity check
+ * defined in PKCS#12 (RFC 7292), using the PKCS#12 key-derivation scheme.
+ *
+ * @module
  */
 
 import { decodeIntegerNumber, decodeObjectIdentifier, toArrayBuffer, toHex } from './asn1.ts';
@@ -18,68 +20,41 @@ import {
 import { getCrypto } from './keys.ts';
 import { OIDS } from './oids.ts';
 
-/**
- * Configures PKCS#12 mac operations.
- */
+/** Input for {@link createPkcs12MacData}. */
 export interface Pkcs12MacOptions {
-	/**
-	 * Carries the password value.
-	 */
+	/** Password used to derive the HMAC key via the PKCS#12 KDF. */
 	readonly password: string;
-	/**
-	 * Carries the iterations value.
-	 */
+	/** PKCS#12 KDF iteration count. Default: `2048`. */
 	readonly iterations?: number;
-	/**
-	 * Carries the salt value.
-	 */
+	/** Random salt. Default: 16 cryptographically random bytes. */
 	readonly salt?: Uint8Array;
 }
 
-/**
- * Describes the structured PKCS#12 mac data produced by parsing helpers.
- */
+/** Decoded PKCS#12 MacData block returned by {@link parsePkcs12MacData}. */
 export interface ParsedPkcs12MacData {
-	/**
-	 * Carries the OID for digest algorithm.
-	 */
+	/** OID of the digest algorithm (currently always SHA-256). */
 	readonly digestAlgorithmOid: string;
-	/**
-	 * Carries the hexadecimal digest.
-	 */
+	/** Hex-encoded MAC digest value. */
 	readonly digestHex: string;
-	/**
-	 * Carries the hexadecimal salt.
-	 */
+	/** Hex-encoded salt bytes used during key derivation. */
 	readonly saltHex: string;
-	/**
-	 * Carries the iterations value.
-	 */
+	/** Number of PKCS#12 KDF iterations. */
 	readonly iterations: number;
-	/**
-	 * Indicates whether valid.
-	 */
+	/** MAC verification outcome. Present only when a password was supplied during parsing. */
 	readonly valid?: boolean;
 }
 
 /**
- * Creates PKCS#12 mac data.
- *
- * @param authenticatedSafe The authenticated safe value.
- * @param options The options that control the operation.
- * @returns The created PKCS#12 mac data.
+ * Computes a PKCS#12 HMAC-SHA-256 MAC over the AuthenticatedSafe and returns
+ * the DER-encoded MacData block alongside its parsed representation.
  */
 export async function createPkcs12MacData(
 	authenticatedSafe: Uint8Array,
 	options: Pkcs12MacOptions,
 ): Promise<{
-	/**
-	 * Carries the der value.
-	 */
+	/** DER-encoded MacData SEQUENCE. */
 	readonly der: Uint8Array;
-	/**
-	 * Carries the parsed value.
-	 */
+	/** Structured representation of the MAC parameters and digest. */
 	readonly parsed: ParsedPkcs12MacData;
 }> {
 	const iterations = options.iterations ?? 2048;
@@ -102,12 +77,8 @@ export async function createPkcs12MacData(
 }
 
 /**
- * Parses PKCS#12 mac data.
- *
- * @param der The DER-encoded bytes.
- * @param authenticatedSafe The authenticated safe value.
- * @param password The password used to protect or unlock the data.
- * @returns The parsed PKCS#12 mac data.
+ * Decodes a DER-encoded MacData block. When `password` is provided, verifies
+ * the MAC and sets the `valid` flag on the returned structure.
  */
 export async function parsePkcs12MacData(
 	der: Uint8Array,
@@ -144,21 +115,9 @@ export async function parsePkcs12MacData(
 		throw new Error('Only SHA-256 PKCS#12 MAC is supported');
 	}
 	const parsed: ParsedPkcs12MacData = {
-		/**
-		 * Carries the OID for digest algorithm.
-		 */
 		digestAlgorithmOid,
-		/**
-		 * Carries the hexadecimal digest.
-		 */
 		digestHex: toHex(digest.value),
-		/**
-		 * Carries the hexadecimal salt.
-		 */
 		saltHex: toHex(salt.value),
-		/**
-		 * Carries the iterations value.
-		 */
 		iterations: decodeIntegerNumber(iterations.value),
 	};
 	if (password === undefined) {
@@ -173,15 +132,7 @@ export async function parsePkcs12MacData(
 	return { ...parsed, valid: equalBytes(expected, digest.value) };
 }
 
-/**
- * Compute PKCS#12 mac.
- *
- * @param authenticatedSafe The authenticated safe value.
- * @param password The password used to protect or unlock the data.
- * @param salt The salt value.
- * @param iterations The iterations value.
- * @returns The computed value.
- */
+/** Derives an HMAC-SHA-256 key via the PKCS#12 KDF and signs the AuthenticatedSafe. */
 async function computePkcs12Mac(
 	authenticatedSafe: Uint8Array,
 	password: string,
@@ -201,16 +152,7 @@ async function computePkcs12Mac(
 	);
 }
 
-/**
- * Derives PKCS#12 key.
- *
- * @param password The password used to protect or unlock the data.
- * @param salt The salt value.
- * @param iterations The iterations value.
- * @param id The id value.
- * @param length The length value.
- * @returns The derived PKCS#12 key.
- */
+/** PKCS#12 key derivation (RFC 7292 Appendix B). `id` selects the purpose (3 = MAC key). */
 async function derivePkcs12Key(
 	password: string,
 	salt: Uint8Array,
@@ -248,22 +190,12 @@ async function derivePkcs12Key(
 	return output.slice(0, length);
 }
 
-/**
- * Digest SHA-256.
- *
- * @param bytes The raw bytes to process.
- * @returns The computed value.
- */
+/** SHA-256 hash via WebCrypto. */
 async function digestSha256(bytes: Uint8Array): Promise<Uint8Array> {
 	return new Uint8Array(await getCrypto().subtle.digest('SHA-256', toArrayBuffer(bytes)));
 }
 
-/**
- * Encodes PKCS#12 password.
- *
- * @param password The password used to protect or unlock the data.
- * @returns The encoded PKCS#12 password.
- */
+/** Encodes a password as a null-terminated UCS-2 big-endian byte array (RFC 7292 B.1). */
 function encodePkcs12Password(password: string): Uint8Array {
 	const out = new Uint8Array((password.length + 1) * 2);
 	for (let index = 0; index < password.length; index += 1) {
@@ -274,13 +206,7 @@ function encodePkcs12Password(password: string): Uint8Array {
 	return out;
 }
 
-/**
- * Repeat to multiple.
- *
- * @param bytes The raw bytes to process.
- * @param size The size value.
- * @returns The computed value.
- */
+/** Repeats `bytes` to the nearest multiple of `size`. */
 function repeatToMultiple(bytes: Uint8Array, size: number): Uint8Array {
 	if (bytes.length === 0) {
 		return new Uint8Array();
@@ -288,13 +214,7 @@ function repeatToMultiple(bytes: Uint8Array, size: number): Uint8Array {
 	return repeatToLength(bytes, size * Math.ceil(bytes.length / size));
 }
 
-/**
- * Repeat to length.
- *
- * @param bytes The raw bytes to process.
- * @param length The length value.
- * @returns The computed value.
- */
+/** Cyclically repeats `bytes` to fill exactly `length` bytes. */
 function repeatToLength(bytes: Uint8Array, length: number): Uint8Array {
 	const out = new Uint8Array(length);
 	for (let index = 0; index < length; index += 1) {
@@ -303,12 +223,7 @@ function repeatToLength(bytes: Uint8Array, length: number): Uint8Array {
 	return out;
 }
 
-/**
- * Adds block in place.
- *
- * @param block The block value.
- * @param addend The addend value.
- */
+/** Big-endian add-with-carry of `addend` into `block`, modifying `block` in place. */
 function addBlockInPlace(block: Uint8Array, addend: Uint8Array): void {
 	let carry = 1;
 	for (let index = block.length - 1; index >= 0; index -= 1) {
@@ -318,13 +233,7 @@ function addBlockInPlace(block: Uint8Array, addend: Uint8Array): void {
 	}
 }
 
-/**
- * Equal bytes.
- *
- * @param left The left value.
- * @param right The right value.
- * @returns The computed value.
- */
+/** Constant-time byte comparison to avoid timing side-channels in MAC checks. */
 function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
 	if (left.length !== right.length) {
 		return false;

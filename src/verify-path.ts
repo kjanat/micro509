@@ -1,8 +1,11 @@
 /**
  * Internal certificate path-building and signature-check helpers.
  *
- * This module loads candidate certificates, ranks issuers, matches trust anchors, and
- * performs low-level path checks for the public verify APIs.
+ * Loads and parses candidate certificates, ranks issuer candidates by AKI/root
+ * affinity, matches against bare {@link TrustAnchor}s, and performs the
+ * depth-first chain search used by the public verify APIs in `verify.ts`.
+ *
+ * @module
  */
 
 import { toHex } from './asn1.ts';
@@ -18,94 +21,49 @@ import type {
 	VerifyFailureDetails,
 } from './verify.ts';
 
-/**
- * Represents the result returned by internal build operations.
- */
+/** Result of the internal chain-building search. */
 export interface InternalBuildResult {
-	/**
-	 * Carries the chain value.
-	 */
+	/** Deepest chain found (leaf-to-root order), may be partial if no root was reached. */
 	readonly chain: readonly ParsedCertificate[];
-	/**
-	 * Indicates whether found trusted root.
-	 */
+	/** `true` when the chain terminates at a trusted root or anchor. */
 	readonly foundTrustedRoot: boolean;
-	/**
-	 * Carries the missing issuer at value.
-	 */
+	/** Chain index where no issuer candidate existed, when the search dead-ended. */
 	readonly missingIssuerAt?: number;
-	/**
-	 * Carries the failure value.
-	 */
+	/** Best failure encountered during the search, for diagnostic reporting. */
 	readonly failure?: VerifyChainFailure;
 }
 
-/**
- * Represents the result returned by trust anchor match operations.
- */
+/** Result of attempting to match a certificate against bare trust anchors. */
 interface TrustAnchorMatchResult {
-	/**
-	 * Indicates whether matched.
-	 */
+	/** `true` if a trust anchor verified the certificate's signature. */
 	readonly matched: boolean;
-	/**
-	 * Carries the failure value.
-	 */
+	/** Failure to report when matching was attempted but signature verification failed. */
 	readonly failure?: VerifyChainFailure;
 }
 
-/**
- * Describes the input shape for verify path failure details operations.
- */
+/** Loose input for constructing failure detail objects during path building. */
 interface VerifyPathFailureDetailsInput {
-	/**
-	 * Carries the subject common name value.
-	 */
 	readonly subjectCommonName?: string | undefined;
-	/**
-	 * Carries the issuer common name value.
-	 */
 	readonly issuerCommonName?: string | undefined;
-	/**
-	 * Carries the expected value.
-	 */
 	readonly expected?: string | undefined;
-	/**
-	 * Carries the actual value.
-	 */
 	readonly actual?: string | undefined;
-	/**
-	 * Carries the chain common names value.
-	 */
 	readonly chainCommonNames?: readonly string[] | undefined;
 }
 
-/**
- * Describes verify path callbacks.
- */
+/** Callbacks injected by the caller to construct failure objects during path building. */
 export interface VerifyPathCallbacks {
-	/**
-	 * Carries the failure value.
-	 */
+	/** Constructs a {@link VerifyChainFailure} from a code, message, chain index, and details. */
 	readonly failure: (
 		code: VerifyErrorCode,
 		message: string,
 		index?: number,
 		details?: VerifyFailureDetails,
 	) => VerifyChainFailure;
-	/**
-	 * Carries the detail value.
-	 */
+	/** Constructs a {@link VerifyFailureDetails} from loose inputs. */
 	readonly detail: (input: VerifyPathFailureDetailsInput) => VerifyFailureDetails;
 }
 
-/**
- * Returns whether within validity.
- *
- * @param certificate The certificate input.
- * @param at The at value.
- * @returns Whether the condition holds.
- */
+/** Returns `true` if `at` falls within the certificate's notBefore/notAfter window (inclusive). */
 export function isWithinValidity(certificate: ParsedCertificate, at: Date): boolean {
 	return (
 		certificate.notBefore.getTime() <= at.getTime() &&
@@ -113,23 +71,12 @@ export function isWithinValidity(certificate: ParsedCertificate, at: Date): bool
 	);
 }
 
-/**
- * Returns whether self issued.
- *
- * @param certificate The certificate input.
- * @returns Whether the condition holds.
- */
+/** Returns `true` if the certificate's subject and issuer distinguished names are byte-identical. */
 export function isSelfIssued(certificate: ParsedCertificate): boolean {
 	return certificate.subject.derHex === certificate.issuer.derHex;
 }
 
-/**
- * Counts CA certificates below parsed.
- *
- * @param chain The chain value.
- * @param index The index value.
- * @returns The number of CA certificates below parsed.
- */
+/** Counts non-self-issued CA certificates in positions 0..(index-1) for pathLength checking. */
 export function countCaCertificatesBelowParsed(
 	chain: readonly ParsedCertificate[],
 	index: number,
@@ -144,12 +91,7 @@ export function countCaCertificatesBelowParsed(
 	return total;
 }
 
-/**
- * Loads certificates.
- *
- * @param sources The source values to process.
- * @returns The loaded certificates.
- */
+/** Parses an array of PEM/DER sources into parsed certificates, expanding multi-block PEM. */
 export function loadCertificates(
 	sources: readonly CertificateSource[],
 ): readonly ParsedCertificate[] {
@@ -160,12 +102,7 @@ export function loadCertificates(
 	return loaded;
 }
 
-/**
- * Loads single certificate.
- *
- * @param source The source value to process.
- * @returns The loaded single certificate.
- */
+/** Parses exactly one certificate from a PEM/DER source. Throws if the source contains zero or multiple certificates. */
 export function loadSingleCertificate(source: CertificateSource): ParsedCertificate {
 	const loaded = expandSource(source);
 	const first = loaded[0];
@@ -178,13 +115,7 @@ export function loadSingleCertificate(source: CertificateSource): ParsedCertific
 	return first;
 }
 
-/**
- * Verifies certificate signature.
- *
- * @param certificate The certificate input.
- * @param issuer The issuer value.
- * @returns The verification result.
- */
+/** Verifies that `certificate` was signed by `issuer`'s public key. */
 export async function verifyCertificateSignature(
 	certificate: ParsedCertificate,
 	issuer: ParsedCertificate,
@@ -201,15 +132,10 @@ export async function verifyCertificateSignature(
 }
 
 /**
- * Builds chain internal.
- *
- * @param leaf The leaf value.
- * @param intermediates The intermediates value.
- * @param roots The roots value.
- * @param trustAnchors The trust anchors value.
- * @param at The at value.
- * @param callbacks The callbacks value.
- * @returns The built chain internal.
+ * Depth-first chain search from leaf to root. Tries all issuer candidates,
+ * checking validity, CA constraints, AKI, pathLength, and signatures at each
+ * step. Returns the first fully anchored path or the deepest partial path
+ * with the best failure encountered.
  */
 export async function buildChainInternal(
 	leaf: ParsedCertificate,
@@ -464,12 +390,7 @@ export async function buildChainInternal(
 	}
 }
 
-/**
- * Expands source.
- *
- * @param source The source value to process.
- * @returns The computed value.
- */
+/** Expands a PEM (possibly multi-block) or DER source into parsed certificates. */
 function expandSource(source: CertificateSource): readonly ParsedCertificate[] {
 	if (typeof source === 'string') {
 		return splitPemBlocks(source)
@@ -479,15 +400,7 @@ function expandSource(source: CertificateSource): readonly ParsedCertificate[] {
 	return [parseCertificateDer(new Uint8Array(source))];
 }
 
-/**
- * Rank issuer candidates.
- *
- * @param current The current value.
- * @param candidates The candidates value.
- * @param order The order value.
- * @param rootFingerprints The root fingerprints value.
- * @returns The computed value.
- */
+/** Filters and sorts issuer candidates: AKI match first, then roots, then input order. */
 function rankIssuerCandidates(
 	current: ParsedCertificate,
 	candidates: readonly ParsedCertificate[],
@@ -516,13 +429,7 @@ function rankIssuerCandidates(
 		});
 }
 
-/**
- * Matches es AKI.
- *
- * @param candidate The candidate value.
- * @param aki The AKI value.
- * @returns The computed value.
- */
+/** Returns `true` if the candidate's SKI matches the given authority key identifier. */
 function matchesAki(candidate: ParsedCertificate, aki: string | undefined): boolean {
 	return (
 		aki !== undefined &&
@@ -531,13 +438,7 @@ function matchesAki(candidate: ParsedCertificate, aki: string | undefined): bool
 	);
 }
 
-/**
- * Compares booleans.
- *
- * @param left The left value.
- * @param right The right value.
- * @returns The computed value.
- */
+/** Sort comparator: `true` sorts before `false`. Returns -1, 0, or 1. */
 function compareBooleans(left: boolean, right: boolean): number {
 	if (left === right) {
 		return 0;
@@ -545,26 +446,12 @@ function compareBooleans(left: boolean, right: boolean): number {
 	return left ? -1 : 1;
 }
 
-/**
- * Returns whether issuer of.
- *
- * @param issuer The issuer value.
- * @param child The child element to inspect.
- * @returns Whether the condition holds.
- */
+/** Returns `true` if `issuer`'s subject DN matches `child`'s issuer DN. */
 function isIssuerOf(issuer: ParsedCertificate, child: ParsedCertificate): boolean {
 	return child.issuer.derHex === issuer.subject.derHex;
 }
 
-/**
- * Matches trust anchor.
- *
- * @param certificate The certificate input.
- * @param anchorIndex The anchor index value.
- * @param callbacks The callbacks value.
- * @param index The index value.
- * @returns The matching result.
- */
+/** Attempts to verify `certificate` against each bare trust anchor whose subject DN matches. */
 async function matchTrustAnchor(
 	certificate: ParsedCertificate,
 	anchorIndex: ReadonlyMap<string, readonly TrustAnchor[]>,
@@ -613,12 +500,7 @@ async function matchTrustAnchor(
 	return { matched: false };
 }
 
-/**
- * Computes a fingerprint for the provided value.
- *
- * @param certificate The certificate input.
- * @returns The computed value.
- */
+/** Returns a hex fingerprint of the certificate's raw DER, used for cycle detection and dedup. */
 function fingerprint(certificate: ParsedCertificate): string {
 	return toHex(certificate.der);
 }

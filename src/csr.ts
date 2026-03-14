@@ -1,7 +1,10 @@
 /**
- * Certificate signing request creation helpers.
+ * PKCS#10 Certificate Signing Request (CSR) creation.
  *
- * This module builds PKCS#10 CSRs from typed subject, extension, and WebCrypto key inputs.
+ * Builds a CSR from a subject name, WebCrypto key pair, and optional extensions,
+ * producing DER, PEM, and base64 outputs.
+ *
+ * @module
  */
 
 import {
@@ -25,55 +28,53 @@ import {
 	signBytes,
 } from './signing.ts';
 
-/**
- * Describes the input shape for create CSR operations.
- */
+/** Input for {@link createCertificateSigningRequest}. */
 export interface CreateCsrInput {
-	/**
-	 * Carries the subject value.
-	 */
+	/** Distinguished name for the CSR subject (e.g. `{ commonName: 'example.com' }`). */
 	readonly subject: NameInput;
-	/**
-	 * Carries the public key value.
-	 */
+	/** WebCrypto public key to embed in the CSR's SubjectPublicKeyInfo. */
 	readonly publicKey: CryptoKey;
-	/**
-	 * Carries the signer private key value.
-	 */
+	/** WebCrypto private key used to self-sign the CSR (proves key possession). */
 	readonly signerPrivateKey: CryptoKey;
-	/**
-	 * Carries the extensions value.
-	 */
+	/** Requested X.509v3 extensions to include in the CSR attributes. */
 	readonly extensions?: CertificateExtensionsInput;
-	/**
-	 * Carries the signature value.
-	 */
+	/** Override the signature algorithm profile (hash, salt length, etc.). */
 	readonly signature?: SignatureProfileInput;
 }
 
-/**
- * Bundles the encoded artifacts produced by CSR operations.
- */
+/** DER, PEM, and base64 encodings of a CSR produced by {@link createCertificateSigningRequest}. */
 export interface CsrMaterial {
-	/**
-	 * Carries the der value.
-	 */
+	/** Raw DER-encoded PKCS#10 CertificationRequest. */
 	readonly der: Uint8Array;
-	/**
-	 * Carries the pem value.
-	 */
+	/** PEM-armored CSR (`-----BEGIN CERTIFICATE REQUEST-----`). */
 	readonly pem: string;
-	/**
-	 * Carries the base64 value.
-	 */
+	/** Base64-encoded DER (no PEM armor). */
 	readonly base64: string;
 }
 
 /**
- * Creates certificate signing request.
+ * Creates a PKCS#10 Certificate Signing Request signed with the given private key.
  *
- * @param input The typed input payload.
- * @returns The created certificate signing request.
+ * The CSR embeds the public key's SPKI, the subject name, and any requested extensions
+ * as attributes. The signature proves possession of the private key.
+ *
+ * @example
+ * ```ts
+ * import { createCertificateSigningRequest } from 'micro509';
+ *
+ * const keyPair = await crypto.subtle.generateKey(
+ *   { name: 'ECDSA', namedCurve: 'P-256' },
+ *   true,
+ *   ['sign', 'verify'],
+ * );
+ * const csr = await createCertificateSigningRequest({
+ *   subject: { commonName: 'example.com' },
+ *   publicKey: keyPair.publicKey,
+ *   signerPrivateKey: keyPair.privateKey,
+ *   extensions: { subjectAlternativeNames: [{ dnsName: 'example.com' }] },
+ * });
+ * console.log(csr.pem);
+ * ```
  */
 export async function createCertificateSigningRequest(input: CreateCsrInput): Promise<CsrMaterial> {
 	const signatureAlgorithm = getSignatureAlgorithm(input.signerPrivateKey, input.signature);
@@ -103,12 +104,7 @@ export async function createCertificateSigningRequest(input: CreateCsrInput): Pr
 	};
 }
 
-/**
- * Builds attributes.
- *
- * @param extensions The extensions to process.
- * @returns The built attributes.
- */
+/** Encodes extensions into a CSR extensionRequest attribute, or returns empty. */
 function buildAttributes(extensions: CertificateExtensionsInput | undefined): Uint8Array[] {
 	const builtExtensions = buildRequestedExtensions(extensions);
 	if (builtExtensions.length === 0) {

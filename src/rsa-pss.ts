@@ -1,8 +1,10 @@
 /**
- * Internal RSA-PSS parameter helpers.
+ * RSA-PSS `AlgorithmIdentifier` parameter parsing, validation, and encoding.
  *
- * This module parses, validates, and encodes the shipped RSA-PSS `AlgorithmIdentifier`
- * parameter profiles.
+ * Only the three hash-matched profiles (SHA-256/384/512 with MGF1 and matching salt
+ * length) are accepted; SHA-1 defaults and mismatched MGF hashes are rejected.
+ *
+ * @module
  */
 
 import {
@@ -22,73 +24,47 @@ import {
 } from './der.ts';
 import { OIDS } from './oids.ts';
 
-/**
- * Enumerates the supported RSA PSS hash values.
- */
+/** Hash algorithm accepted for RSA-PSS signatures in this library. */
 export type RsaPssHash = 'SHA-256' | 'SHA-384' | 'SHA-512';
 
 /**
- * Describes RSA PSS parameters handled by this module.
+ * One of the three supported RSA-PSS parameter profiles.
+ *
+ * Hash, MGF1 hash, and salt length are always matched (e.g. SHA-256 / SHA-256 / 32).
  */
 export type RsaPssParameters =
 	| {
-			/**
-			 * Carries the hash value.
-			 */
+			/** Message digest algorithm. */
 			readonly hash: 'SHA-256';
-			/**
-			 * Carries the mgf hash value.
-			 */
+			/** MGF1 hash — always matches `hash`. */
 			readonly mgfHash: 'SHA-256';
-			/**
-			 * Carries the salt length value.
-			 */
+			/** Salt length in bytes — equals the hash digest size. */
 			readonly saltLength: 32;
-			/**
-			 * Carries the trailer field value.
-			 */
+			/** Trailer field (always 0xBC per RFC 3447). */
 			readonly trailerField: 1;
 	  }
 	| {
-			/**
-			 * Carries the hash value.
-			 */
+			/** Message digest algorithm. */
 			readonly hash: 'SHA-384';
-			/**
-			 * Carries the mgf hash value.
-			 */
+			/** MGF1 hash — always matches `hash`. */
 			readonly mgfHash: 'SHA-384';
-			/**
-			 * Carries the salt length value.
-			 */
+			/** Salt length in bytes — equals the hash digest size. */
 			readonly saltLength: 48;
-			/**
-			 * Carries the trailer field value.
-			 */
+			/** Trailer field (always 0xBC per RFC 3447). */
 			readonly trailerField: 1;
 	  }
 	| {
-			/**
-			 * Carries the hash value.
-			 */
+			/** Message digest algorithm. */
 			readonly hash: 'SHA-512';
-			/**
-			 * Carries the mgf hash value.
-			 */
+			/** MGF1 hash — always matches `hash`. */
 			readonly mgfHash: 'SHA-512';
-			/**
-			 * Carries the salt length value.
-			 */
+			/** Salt length in bytes — equals the hash digest size. */
 			readonly saltLength: 64;
-			/**
-			 * Carries the trailer field value.
-			 */
+			/** Trailer field (always 0xBC per RFC 3447). */
 			readonly trailerField: 1;
 	  };
 
-/**
- * Enumerates unsupported RSA PSS parameters values used by this module.
- */
+/** Machine-readable reason why an RSA-PSS parameter set is not supported. */
 export type UnsupportedRsaPssParametersReason =
 	| 'default_hash_sha1'
 	| 'unsupported_hash'
@@ -98,89 +74,52 @@ export type UnsupportedRsaPssParametersReason =
 	| 'unsupported_salt_length'
 	| 'unsupported_trailer_field';
 
-/**
- * Represents a successful outcome produced by parsed RSA PSS parameters operations.
- */
+/** Success branch of {@link ParsedRsaPssParametersResult}. */
 export interface ParsedRsaPssParametersSuccess {
-	/**
-	 * Indicates whether the operation succeeded.
-	 */
+	/** Discriminant for the success branch. */
 	readonly ok: true;
-	/**
-	 * Carries the successful value payload.
-	 */
+	/** The validated RSA-PSS parameter profile. */
 	readonly value: RsaPssParameters;
 }
 
-/**
- * Describes the structured RSA PSS parameters unsupported produced by parsing helpers.
- */
+/** Failure: valid ASN.1 but an unsupported parameter combination. */
 export interface ParsedRsaPssParametersUnsupported {
-	/**
-	 * Indicates whether the operation succeeded.
-	 */
+	/** Discriminant for the failure branch. */
 	readonly ok: false;
-	/**
-	 * Carries the machine-readable error code.
-	 */
+	/** Machine-readable failure code. */
 	readonly code: 'unsupported_rsa_pss_parameters';
-	/**
-	 * Carries the reason value.
-	 */
+	/** Which specific parameter is unsupported. */
 	readonly reason: UnsupportedRsaPssParametersReason;
 }
 
-/**
- * Describes the structured RSA PSS parameters malformed produced by parsing helpers.
- */
+/** Failure: the DER encoding is structurally invalid. */
 export interface ParsedRsaPssParametersMalformed {
-	/**
-	 * Indicates whether the operation succeeded.
-	 */
+	/** Discriminant for the failure branch. */
 	readonly ok: false;
-	/**
-	 * Carries the machine-readable error code.
-	 */
+	/** Machine-readable failure code. */
 	readonly code: 'malformed_rsa_pss_parameters';
-	/**
-	 * Carries the reason value.
-	 */
+	/** Human-readable description of the structural defect. */
 	readonly reason: string;
 }
 
-/**
- * Represents the result returned by parsed RSA PSS parameters operations.
- */
+/** Result of {@link parseRsaPssParameters}: success, unsupported, or malformed. */
 export type ParsedRsaPssParametersResult =
 	| ParsedRsaPssParametersSuccess
 	| ParsedRsaPssParametersUnsupported
 	| ParsedRsaPssParametersMalformed;
 
-/**
- * Describes the structured mask gen algorithm produced by parsing helpers.
- */
+/** Parsed MGF AlgorithmIdentifier from an RSA-PSS parameter SEQUENCE. */
 interface ParsedMaskGenAlgorithm {
-	/**
-	 * Carries the oid value.
-	 */
+	/** OID of the mask generation function (expected: id-mgf1). */
 	readonly oid: string;
-	/**
-	 * Carries the OID for hash.
-	 */
+	/** OID of the hash algorithm used by MGF1, if present. */
 	readonly hashOid?: string;
 }
 
-/**
- * Defines the sha-1 salt length used by this module.
- */
+/** RFC 3447 default salt length when hash is SHA-1 (used to detect the unsupported default). */
 const SHA1_SALT_LENGTH = 20;
 
-/**
- * RSA PSS parameters for hash.
- *
- * @param hash The hash value.
- * @returns The computed value.
- */
+/** Return the canonical {@link RsaPssParameters} profile for a given hash algorithm. */
 export function rsaPssParametersForHash(hash: RsaPssHash): RsaPssParameters {
 	switch (hash) {
 		case 'SHA-256':
@@ -207,12 +146,7 @@ export function rsaPssParametersForHash(hash: RsaPssHash): RsaPssParameters {
 	}
 }
 
-/**
- * Encodes RSA PSS parameters.
- *
- * @param parameters The parameters value.
- * @returns The encoded RSA PSS parameters.
- */
+/** DER-encode an {@link RsaPssParameters} profile as an ASN.1 RSASSA-PSS-params SEQUENCE. */
 export function encodeRsaPssParameters(parameters: RsaPssParameters): Uint8Array {
 	const hashOid = hashOidForName(parameters.hash);
 	const hashAlgorithmIdentifier = encodeHashAlgorithmIdentifier(hashOid);
@@ -228,10 +162,10 @@ export function encodeRsaPssParameters(parameters: RsaPssParameters): Uint8Array
 }
 
 /**
- * Parses RSA PSS parameters.
+ * Parse and validate DER-encoded RSASSA-PSS-params.
  *
- * @param parametersDer The parameters DER value.
- * @returns The parsed RSA PSS parameters.
+ * Returns a typed result: success with a supported profile, unsupported with
+ * a reason code, or malformed with an error message.
  */
 export function parseRsaPssParameters(
 	parametersDer: Uint8Array | undefined,
@@ -248,13 +182,7 @@ export function parseRsaPssParameters(
 		const children = childrenOf(parametersDer, element);
 		let hashOid: string = OIDS.sha1;
 		let maskGenAlgorithm: ParsedMaskGenAlgorithm = {
-			/**
-			 * Carries the oid value.
-			 */
 			oid: OIDS.mgf1,
-			/**
-			 * Carries the OID for hash.
-			 */
 			hashOid: OIDS.sha1,
 		};
 		let saltLength = SHA1_SALT_LENGTH;
@@ -352,14 +280,7 @@ export function parseRsaPssParameters(
 	}
 }
 
-/**
- * Requires and returns single explicit child.
- *
- * @param source The source value to process.
- * @param element The ASN.1 element to process.
- * @param label The label value.
- * @returns The computed value.
- */
+/** Unwrap an explicit context tag and assert it contains exactly one child element. */
 function requireSingleExplicitChild(
 	source: Uint8Array,
 	element: ReturnType<typeof readRootElement>,
@@ -372,15 +293,7 @@ function requireSingleExplicitChild(
 	return requireElement(children[0], `RSA-PSS ${label}`);
 }
 
-/**
- * Parses explicit integer.
- *
- * @param source The source value to process.
- * @param element The ASN.1 element to process.
- * @param label The label value.
- * @param integerLabel The integer label value.
- * @returns The parsed explicit integer.
- */
+/** Extract a non-negative integer from an explicit context-tagged wrapper. */
 function parseExplicitInteger(
 	source: Uint8Array,
 	element: ReturnType<typeof readRootElement>,
@@ -394,14 +307,7 @@ function parseExplicitInteger(
 	return decodeNonNegativeIntegerNumber(integerElement.value, integerLabel);
 }
 
-/**
- * Parses hash algorithm identifier.
- *
- * @param source The source value to process.
- * @param element The ASN.1 element to process.
- * @param label The label value.
- * @returns The parsed hash algorithm identifier.
- */
+/** Parse an AlgorithmIdentifier SEQUENCE and return the algorithm OID. */
 function parseHashAlgorithmIdentifier(
 	source: Uint8Array,
 	element: ReturnType<typeof readRootElement>,
@@ -418,13 +324,7 @@ function parseHashAlgorithmIdentifier(
 	return decodeObjectIdentifier(oid.value);
 }
 
-/**
- * Parses mask gen algorithm identifier.
- *
- * @param source The source value to process.
- * @param element The ASN.1 element to process.
- * @returns The parsed mask gen algorithm identifier.
- */
+/** Parse an MGF AlgorithmIdentifier SEQUENCE into OID and optional inner hash OID. */
 function parseMaskGenAlgorithmIdentifier(
 	source: Uint8Array,
 	element: ReturnType<typeof readRootElement>,
@@ -445,22 +345,12 @@ function parseMaskGenAlgorithmIdentifier(
 	return { oid, hashOid: parseHashAlgorithmIdentifier(source, parameters, 'MGF1 hashAlgorithm') };
 }
 
-/**
- * Encodes hash algorithm identifier.
- *
- * @param oid The object identifier.
- * @returns The encoded hash algorithm identifier.
- */
+/** DER-encode a hash AlgorithmIdentifier as `SEQUENCE { OID, NULL }`. */
 function encodeHashAlgorithmIdentifier(oid: string): Uint8Array {
 	return sequence([objectIdentifier(oid), nullValue()]);
 }
 
-/**
- * Hash OID for name.
- *
- * @param hash The hash value.
- * @returns The computed value.
- */
+/** Map a hash algorithm name to its ASN.1 OID string. */
 function hashOidForName(hash: RsaPssHash): string {
 	switch (hash) {
 		case 'SHA-256':
@@ -472,12 +362,7 @@ function hashOidForName(hash: RsaPssHash): string {
 	}
 }
 
-/**
- * Hash name from OID.
- *
- * @param oid The object identifier.
- * @returns The computed value.
- */
+/** Reverse-map a hash OID to a supported {@link RsaPssHash} name, or `undefined` if unsupported. */
 function hashNameFromOid(oid: string | undefined): RsaPssHash | undefined {
 	switch (oid) {
 		case OIDS.sha256:
@@ -491,12 +376,7 @@ function hashNameFromOid(oid: string | undefined): RsaPssHash | undefined {
 	}
 }
 
-/**
- * Unsupported result.
- *
- * @param reason The reason value.
- * @returns The unsupported-result wrapper.
- */
+/** Build an unsupported-parameters failure result. */
 function unsupportedResult(
 	reason: UnsupportedRsaPssParametersReason,
 ): ParsedRsaPssParametersUnsupported {

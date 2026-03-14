@@ -1,8 +1,10 @@
 /**
  * Internal RFC 9618 policy-validation engine.
  *
- * This module tracks policy state, updates it per certificate, and derives the public
- * policy-validation outcome.
+ * Tracks the policy graph and counter state through each certificate in a
+ * chain, then derives the {@link PolicyValidationOutcome}.
+ *
+ * @module
  */
 
 import type { Micro509Error, Result } from './core/result.ts';
@@ -16,109 +18,71 @@ import type {
 } from './policy.ts';
 
 /**
- * Tracks internal state for policy validation processing.
+ * Mutable state threaded through each step of the policy-validation walk.
+ *
+ * Created by {@link createPolicyValidationState}, consumed by
+ * {@link evaluatePolicyChain}.
  */
 export interface PolicyValidationState {
-	/**
-	 * Carries the initial policy set value.
-	 */
+	/** Caller-requested acceptable policies, or `'any'`. */
 	initialPolicySet: readonly string[] | 'any';
-	/**
-	 * Carries the explicit policy value.
-	 */
+	/** Remaining certificates before explicit-policy enforcement kicks in. */
 	explicitPolicy: number;
-	/**
-	 * Carries the inhibit policy mapping value.
-	 */
+	/** Remaining certificates before policy mappings are disallowed. */
 	inhibitPolicyMapping: number;
-	/**
-	 * Carries the inhibit any policy value.
-	 */
+	/** Remaining certificates before anyPolicy expansion stops. */
 	inhibitAnyPolicy: number;
-	/**
-	 * Carries the valid policy graph value.
-	 */
+	/** The RFC 9618 policy graph; `null` when the graph has been emptied. */
 	validPolicyGraph: PolicyGraph | null;
 }
 
-/**
- * Defines policy validation failure code.
- */
+/** Discriminant codes for policy-validation failures. */
 export type PolicyValidationFailureCode =
 	| 'explicit_policy_required'
 	| 'initial_policy_set_not_satisfied';
 
-/**
- * Carries structured details for policy validation failures.
- */
+/** Diagnostic context for a policy-validation failure. */
 export interface PolicyValidationFailureDetails {
-	/**
-	 * Carries the expected value.
-	 */
+	/** Description of the policies the caller expected. */
 	readonly expected: string;
-	/**
-	 * Carries the actual value.
-	 */
+	/** Comma-joined OIDs (or `"<none>"`) that actually survived processing. */
 	readonly actual: string;
 }
 
-/**
- * Represents a typed failure produced by policy validation operations.
- */
+/** A policy-validation failure with structured diagnostic details. */
 export interface PolicyValidationFailure
 	extends Micro509Error<PolicyValidationFailureCode, PolicyValidationFailureDetails> {}
 
-/**
- * Represents the result returned by policy validation operations.
- */
+/** Success with {@link PolicyValidationOutcome}, or a {@link PolicyValidationFailure}. */
 export type PolicyValidationResult = Result<PolicyValidationOutcome, PolicyValidationFailure>;
 
-/**
- * Describes policy graph node.
- */
+/** One node in the RFC 9618 policy graph, keyed by `depth:policyOID`. */
 interface PolicyGraphNode {
-	/**
-	 * Carries the depth value.
-	 */
+	/** Graph depth (0 = root anyPolicy node). */
 	depth: number;
-	/**
-	 * Carries the valid policy value.
-	 */
+	/** The policy OID this node represents at its depth. */
 	validPolicy: string;
-	/**
-	 * Carries the qualifier set value.
-	 */
+	/** Policy qualifiers inherited from the certificate that created this node. */
 	qualifierSet?: readonly PolicyQualifierInfo[];
-	/**
-	 * Carries the expected policy set value.
-	 */
+	/** OIDs this node expects to see in the next certificate's policies. */
 	expectedPolicySet: Set<string>;
-	/**
-	 * Carries the parent keys value.
-	 */
+	/** Keys of parent nodes in the previous depth level. */
 	parentKeys: Set<string>;
-	/**
-	 * Carries the child keys value.
-	 */
+	/** Keys of child nodes in the next depth level. */
 	childKeys: Set<string>;
 }
 
-/**
- * Describes policy graph.
- */
+/** The full RFC 9618 valid-policy graph, indexed by depth level. */
 interface PolicyGraph {
-	/**
-	 * Carries the nodes by depth value.
-	 */
+	/** Each index `i` holds the nodes at depth `i`, keyed by `"depth:oid"`. */
 	nodesByDepth: Map<string, PolicyGraphNode>[];
 }
 
 /**
- * Creates policy validation state.
+ * Initializes mutable policy state from caller options.
  *
- * @param input The typed input payload.
- * @param chainLength The chain length value.
- * @returns The created policy validation state.
+ * Counter values default to `chainLength + 1` (effectively disabled) unless
+ * the corresponding input flag is `true`.
  */
 export function createPolicyValidationState(
 	input: PolicyValidationInput,
@@ -135,11 +99,8 @@ export function createPolicyValidationState(
 }
 
 /**
- * Evaluates policy chain.
- *
- * @param chain The chain value.
- * @param state The current state value.
- * @returns The computed value.
+ * Walks the chain root-to-leaf, updating policy state per certificate,
+ * then checks whether the resulting policy set satisfies caller requirements.
  */
 export function evaluatePolicyChain(
 	chain: readonly ParsedCertificate[],
@@ -177,11 +138,7 @@ export function evaluatePolicyChain(
 	return { ok: true, value: outcome };
 }
 
-/**
- * Creates initial policy graph.
- *
- * @returns The created initial policy graph.
- */
+/** Builds the depth-0 graph with a single anyPolicy root node. */
 function createInitialPolicyGraph(): PolicyGraph {
 	const rootNode = createPolicyGraphNode(0, OIDS.anyPolicy, undefined, [OIDS.anyPolicy], []);
 	return {
@@ -189,16 +146,7 @@ function createInitialPolicyGraph(): PolicyGraph {
 	};
 }
 
-/**
- * Creates policy graph node.
- *
- * @param depth The depth value.
- * @param validPolicy The valid policy value.
- * @param qualifierSet The qualifier set value.
- * @param expectedPolicySet The expected policy set value.
- * @param parentKeys The parent keys value.
- * @returns The created policy graph node.
- */
+/** Constructs a new {@link PolicyGraphNode} with empty child-key set. */
 function createPolicyGraphNode(
 	depth: number,
 	validPolicy: string,
@@ -216,23 +164,12 @@ function createPolicyGraphNode(
 	};
 }
 
-/**
- * Policy node key.
- *
- * @param depth The depth value.
- * @param validPolicy The valid policy value.
- * @returns The computed value.
- */
+/** Canonical map key for a graph node: `"depth:policyOID"`. */
 function policyNodeKey(depth: number, validPolicy: string): string {
 	return `${String(depth)}:${validPolicy}`;
 }
 
-/**
- * Process policy state.
- *
- * @param chain The chain value.
- * @param state The current state value.
- */
+/** Iterates root-to-leaf (skipping root), applying each certificate's policies to the state. */
 function processPolicyState(
 	chain: readonly ParsedCertificate[],
 	state: PolicyValidationState,
@@ -248,13 +185,7 @@ function processPolicyState(
 	}
 }
 
-/**
- * Derives policy validation outcome.
- *
- * @param chain The chain value.
- * @param state The current state value.
- * @returns The derived policy validation outcome.
- */
+/** Extracts the final authority- and user-constrained policy sets from the completed graph. */
 function derivePolicyValidationOutcome(
 	chain: readonly ParsedCertificate[],
 	state: PolicyValidationState,
@@ -274,13 +205,7 @@ function derivePolicyValidationOutcome(
 	};
 }
 
-/**
- * Collects authority constrained policies.
- *
- * @param chain The chain value.
- * @param graph The graph value.
- * @returns The collected authority constrained policies.
- */
+/** Collects leaf-depth policies whose graph paths trace back to the anyPolicy root. */
 function collectAuthorityConstrainedPolicies(
 	chain: readonly ParsedCertificate[],
 	graph: PolicyGraph | null,
@@ -312,13 +237,7 @@ function collectAuthorityConstrainedPolicies(
 	return authorityPolicies;
 }
 
-/**
- * Reaches authority root.
- *
- * @param graph The graph value.
- * @param nodeKey The node key value.
- * @returns The computed value.
- */
+/** BFS upward through parent links to check if the node ultimately connects to the depth-0 anyPolicy root. */
 function reachesAuthorityRoot(graph: PolicyGraph, nodeKey: string): boolean {
 	const pending = [nodeKey];
 	const visited = new Set<string>();
@@ -346,13 +265,7 @@ function reachesAuthorityRoot(graph: PolicyGraph, nodeKey: string): boolean {
 	return false;
 }
 
-/**
- * Collects root domain policies.
- *
- * @param chain The chain value.
- * @param graph The graph value.
- * @returns The collected root domain policies.
- */
+/** Like authority-constrained, but records the OID at the depth-1 node that connects to root. */
 function collectRootDomainPolicies(
 	chain: readonly ParsedCertificate[],
 	graph: PolicyGraph | null,
@@ -376,13 +289,7 @@ function collectRootDomainPolicies(
 	return rootPolicies;
 }
 
-/**
- * Collects authority constrained policy roots.
- *
- * @param graph The graph value.
- * @param nodeKey The node key value.
- * @param authorityPolicies The authority policies value.
- */
+/** Walks parent links upward, collecting the depth-1 OID that first connects to the root anyPolicy. */
 function collectAuthorityConstrainedPolicyRoots(
 	graph: PolicyGraph,
 	nodeKey: string,
@@ -422,14 +329,7 @@ function collectAuthorityConstrainedPolicyRoots(
 	}
 }
 
-/**
- * Derives user constrained policies.
- *
- * @param finalAuthorityConstrainedPolicies The final authority constrained policies value.
- * @param rootDomainPolicies The root domain policies value.
- * @param initialPolicySet The initial policy set value.
- * @returns The derived user constrained policies.
- */
+/** Intersects root-domain policies with the caller's initial-policy-set. */
 function deriveUserConstrainedPolicies(
 	finalAuthorityConstrainedPolicies: ReadonlyMap<string, ConstrainedPolicy>,
 	rootDomainPolicies: ReadonlyMap<string, ConstrainedPolicy>,
@@ -456,13 +356,7 @@ function deriveUserConstrainedPolicies(
 	return [...constrained.values()];
 }
 
-/**
- * Builds constrained policy.
- *
- * @param policyIdentifier The policy identifier value.
- * @param policyQualifiers The policy qualifiers value.
- * @returns The built constrained policy.
- */
+/** Constructs a {@link ConstrainedPolicy}, omitting qualifiers when absent. */
 function buildConstrainedPolicy(
 	policyIdentifier: string,
 	policyQualifiers: readonly PolicyQualifierInfo[] | undefined,
@@ -473,37 +367,19 @@ function buildConstrainedPolicy(
 	};
 }
 
-/**
- * Compares policies.
- *
- * @param left The left value.
- * @param right The right value.
- * @returns The computed value.
- */
+/** Lexicographic comparator for sorting policies by OID string. */
 function comparePolicies(left: ConstrainedPolicy, right: ConstrainedPolicy): number {
 	return left.policyIdentifier.localeCompare(right.policyIdentifier);
 }
 
-/**
- * Describe final policies.
- *
- * @param policies The policies value.
- * @returns The computed value.
- */
+/** Human-readable comma-joined OID list for error messages; `"<none>"` when empty. */
 function describeFinalPolicies(policies: readonly ConstrainedPolicy[]): string {
 	return policies.length === 0
 		? '<none>'
 		: policies.map((policy) => policy.policyIdentifier).join(',');
 }
 
-/**
- * Process policy certificate.
- *
- * @param state The current state value.
- * @param certificate The certificate input.
- * @param depth The depth value.
- * @param isLeaf The is leaf value.
- */
+/** Applies one certificate's policies, mappings, and constraints to the running state. */
 function processPolicyCertificate(
 	state: PolicyValidationState,
 	certificate: ParsedCertificate,
@@ -532,12 +408,7 @@ function processPolicyCertificate(
 	updatePolicyCounters(state, certificate, isLeaf);
 }
 
-/**
- * Normalizes certificate policies.
- *
- * @param policies The policies value.
- * @returns The computed value.
- */
+/** Deduplicates certificate policies by OID, keeping the first occurrence. */
 function normalizeCertificatePolicies(
 	policies: readonly PolicyInformation[] | undefined,
 ): Map<string, PolicyInformation> | undefined {
@@ -553,14 +424,7 @@ function normalizeCertificatePolicies(
 	return byOid;
 }
 
-/**
- * Apply certificate policy step.
- *
- * @param graph The graph value.
- * @param certificatePolicies The certificate policies value.
- * @param depth The depth value.
- * @param allowAnyPolicyExpansion The allow any policy expansion value.
- */
+/** Extends the policy graph by one depth level using a certificate's policy extension. */
 function applyCertificatePolicyStep(
 	graph: PolicyGraph,
 	certificatePolicies: ReadonlyMap<string, PolicyInformation>,
@@ -641,13 +505,7 @@ function applyCertificatePolicyStep(
 	prunePolicyGraph(graph, depth - 1);
 }
 
-/**
- * Collects parents for expected policy.
- *
- * @param nodes The nodes value.
- * @param policyIdentifier The policy identifier value.
- * @returns The collected parents for expected policy.
- */
+/** Finds all previous-depth nodes whose expectedPolicySet contains the given OID. */
 function collectParentsForExpectedPolicy(
 	nodes: ReadonlyMap<string, PolicyGraphNode>,
 	policyIdentifier: string,
@@ -661,12 +519,7 @@ function collectParentsForExpectedPolicy(
 	return parents;
 }
 
-/**
- * Collects expected policy parents.
- *
- * @param nodes The nodes value.
- * @returns The collected expected policy parents.
- */
+/** Groups all previous-depth nodes by each OID in their expectedPolicySet. */
 function collectExpectedPolicyParents(
 	nodes: ReadonlyMap<string, PolicyGraphNode>,
 ): Map<string, string[]> {
@@ -684,17 +537,7 @@ function collectExpectedPolicyParents(
 	return parentsByPolicy;
 }
 
-/**
- * Adds or merge policy node.
- *
- * @param graph The graph value.
- * @param currentDepth The current depth value.
- * @param depth The depth value.
- * @param validPolicy The valid policy value.
- * @param qualifierSet The qualifier set value.
- * @param parentKeys The parent keys value.
- * @param expectedPolicySet The expected policy set value.
- */
+/** Inserts a node at the current depth, or merges parents/expected-policies into an existing one. */
 function addOrMergePolicyNode(
 	graph: PolicyGraph,
 	currentDepth: Map<string, PolicyGraphNode>,
@@ -732,13 +575,7 @@ function addOrMergePolicyNode(
 	}
 }
 
-/**
- * Returns policy graph node.
- *
- * @param graph The graph value.
- * @param key The key value.
- * @returns The policy graph node.
- */
+/** Looks up a node by its `"depth:oid"` key, parsing the depth prefix. */
 function getPolicyGraphNode(graph: PolicyGraph, key: string): PolicyGraphNode | undefined {
 	const separator = key.indexOf(':');
 	if (separator <= 0) {
@@ -752,12 +589,7 @@ function getPolicyGraphNode(graph: PolicyGraph, key: string): PolicyGraphNode | 
 	return graph.nodesByDepth[depth]?.get(key);
 }
 
-/**
- * Prune policy graph.
- *
- * @param graph The graph value.
- * @param maxDepth The max depth value.
- */
+/** Removes childless leaf nodes bottom-up, cascading deletions through parent links. */
 function prunePolicyGraph(graph: PolicyGraph, maxDepth: number): void {
 	for (let depth = maxDepth; depth >= 0; depth -= 1) {
 		const nodes = graph.nodesByDepth[depth];
@@ -774,12 +606,7 @@ function prunePolicyGraph(graph: PolicyGraph, maxDepth: number): void {
 	}
 }
 
-/**
- * Delete policy graph node.
- *
- * @param graph The graph value.
- * @param key The key value.
- */
+/** Removes a node and recursively prunes its parents if they become childless. */
 function deletePolicyGraphNode(graph: PolicyGraph, key: string): void {
 	const node = getPolicyGraphNode(graph, key);
 	if (node === undefined) {
@@ -798,25 +625,12 @@ function deletePolicyGraphNode(graph: PolicyGraph, key: string): void {
 	}
 }
 
-/**
- * Apply policy mappings step.
- *
- * @param graph The graph value.
- * @param depth The depth value.
- * @param mappings The mappings value.
- * @param mappingAllowed The mapping allowed value.
- */
+/** Applies issuer→subject policy mappings at the current depth, or deletes mapped nodes when disallowed. */
 function applyPolicyMappingsStep(
 	graph: PolicyGraph,
 	depth: number,
 	mappings: readonly {
-		/**
-		 * Carries the issuer domain policy value.
-		 */
 		readonly issuerDomainPolicy: string;
-		/**
-		 * Carries the subject domain policy value.
-		 */
 		readonly subjectDomainPolicy: string;
 	}[],
 	mappingAllowed: boolean,
@@ -863,13 +677,7 @@ function applyPolicyMappingsStep(
 	prunePolicyGraph(graph, depth - 1);
 }
 
-/**
- * Update policy counters.
- *
- * @param state The current state value.
- * @param certificate The certificate input.
- * @param isLeaf The is leaf value.
- */
+/** Decrements explicitPolicy / inhibitPolicyMapping / inhibitAnyPolicy and applies policyConstraints overrides. */
 function updatePolicyCounters(
 	state: PolicyValidationState,
 	certificate: ParsedCertificate,
@@ -916,12 +724,7 @@ function updatePolicyCounters(
 	}
 }
 
-/**
- * Returns whether self issued.
- *
- * @param certificate The certificate input.
- * @returns Whether the condition holds.
- */
+/** A certificate is self-issued when subject and issuer DER match exactly. */
 function isSelfIssued(certificate: ParsedCertificate): boolean {
 	return certificate.subject.derHex === certificate.issuer.derHex;
 }

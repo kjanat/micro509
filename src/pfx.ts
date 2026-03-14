@@ -1,8 +1,10 @@
 /**
- * PKCS#12/PFX creation and parsing helpers.
+ * PKCS#12/PFX container creation and parsing.
  *
- * This module manages certificate bags, private-key bags, encryption, and MAC verification
- * for PFX containers.
+ * Builds and decodes PFX archives containing certificate bags, private-key bags,
+ * optional PBES2 encryption, and PKCS#12 MAC integrity verification.
+ *
+ * @module
  */
 
 import { childrenOf, decodeObjectIdentifier, toHex } from './asn1.ts';
@@ -32,226 +34,132 @@ import {
 	parsePkcs12MacData,
 } from './pkcs12-mac.ts';
 
-/**
- * Describes the accepted source forms for PFX certificate inputs.
- */
+/** PEM string or DER bytes for a certificate to include in a PFX bag. */
 export type PfxCertificateSource = string | Uint8Array;
-/**
- * Describes the accepted source forms for PFX private key inputs.
- */
+/** A WebCrypto private key or raw PKCS#8 DER bytes for a PFX key bag. */
 export type PfxPrivateKeySource = CryptoKey | Uint8Array;
 
-/**
- * Describes the input shape for PFX bag attributes operations.
- */
+/** Optional metadata attached to a certificate or key bag inside a PFX. */
 export interface PfxBagAttributesInput {
-	/**
-	 * Carries the friendly name value.
-	 */
+	/** Human-readable label stored as a BMPString attribute. */
 	readonly friendlyName?: string;
-	/**
-	 * Carries the local key id value.
-	 */
+	/** Opaque identifier linking a certificate bag to its corresponding key bag. */
 	readonly localKeyId?: Uint8Array;
 }
 
-/**
- * Describes the input shape for PFX certificate bag operations.
- */
+/** A certificate to embed in a PFX container. Input for {@link createPfx}. */
 export interface PfxCertificateBagInput {
-	/**
-	 * Carries the certificate value.
-	 */
+	/** Certificate as PEM text or DER bytes. */
 	readonly certificate: PfxCertificateSource;
-	/**
-	 * Carries the attributes value.
-	 */
+	/** Optional bag-level attributes (friendly name, local key ID). */
 	readonly attributes?: PfxBagAttributesInput;
 }
 
-/**
- * Describes the input shape for PFX private key bag operations.
- */
+/** A private key to embed in a PFX container. Input for {@link createPfx}. */
 export interface PfxPrivateKeyBagInput {
-	/**
-	 * Carries the private key value.
-	 */
+	/** Private key as a WebCrypto `CryptoKey` or raw PKCS#8 DER bytes. */
 	readonly privateKey: PfxPrivateKeySource;
-	/**
-	 * Carries the attributes value.
-	 */
+	/** Optional bag-level attributes (friendly name, local key ID). */
 	readonly attributes?: PfxBagAttributesInput;
 }
 
-/**
- * Describes the input shape for create PFX operations.
- */
+/** Input for {@link createPfx}. */
 export interface CreatePfxInput {
-	/**
-	 * Carries the certificates value.
-	 */
+	/** Certificates to include as certBag entries. */
 	readonly certificates?: readonly PfxCertificateBagInput[];
-	/**
-	 * Carries the private keys value.
-	 */
+	/** Private keys to include as keyBag entries. */
 	readonly privateKeys?: readonly PfxPrivateKeyBagInput[];
-	/**
-	 * Carries the encryption value.
-	 */
+	/** PBES2 encryption settings for the key-bag ContentInfo. Omit for unencrypted. */
 	readonly encryption?: PfxEncryptionOptions;
-	/**
-	 * Carries the mac value.
-	 */
+	/** PKCS#12 MAC integrity settings. Omit to skip MAC generation. */
 	readonly mac?: Pkcs12MacOptions;
 }
 
-/**
- * Configures PFX encryption operations.
- */
+/** PBES2 encryption settings for PFX key-bag protection. Alias of {@link Pbes2EncryptionOptions}. */
 export type PfxEncryptionOptions = Pbes2EncryptionOptions;
 
-/**
- * Configures parse PFX operations.
- */
+/** Options for {@link parsePfxDer} and {@link parsePfxPem}. */
 export interface ParsePfxOptions {
-	/**
-	 * Carries the password value.
-	 */
+	/** Password used to decrypt PBES2-encrypted ContentInfo entries. Also used for MAC verification when `macPassword` is omitted. */
 	readonly password?: string;
-	/**
-	 * Carries the mac password value.
-	 */
+	/** Separate password for MAC verification. Falls back to `password` when omitted. */
 	readonly macPassword?: string;
 }
 
-/**
- * Bundles the encoded artifacts produced by PFX operations.
- */
+/** DER, PEM, and base64 encodings of a PFX container produced by {@link createPfx}. */
 export interface PfxMaterial {
-	/**
-	 * Carries the der value.
-	 */
+	/** Raw DER-encoded PFX bytes. */
 	readonly der: Uint8Array;
-	/**
-	 * Carries the pem value.
-	 */
+	/** PEM-armored PFX (`-----BEGIN PKCS12-----`). */
 	readonly pem: string;
-	/**
-	 * Carries the base64 value.
-	 */
+	/** Base64-encoded DER (no PEM armor). */
 	readonly base64: string;
 }
 
-/**
- * Describes the structured PFX attribute produced by parsing helpers.
- */
+/** A single PKCS#12 bag attribute as decoded by {@link parsePfxDer}. */
 export interface ParsedPfxAttribute {
-	/**
-	 * Carries the oid value.
-	 */
+	/** Dotted-decimal OID identifying this attribute type. */
 	readonly oid: string;
-	/**
-	 * Carries the hexadecimal values.
-	 */
+	/** Hex-encoded DER of each attribute value. */
 	readonly valuesHex: readonly string[];
 }
 
-/**
- * Describes the structured PFX bag attributes produced by parsing helpers.
- */
+/** Decoded bag attributes for a single SafeBag inside a PFX. */
 export interface ParsedPfxBagAttributes {
-	/**
-	 * Carries the entries value.
-	 */
+	/** All raw attributes as OID + hex-encoded values. */
 	readonly entries: readonly ParsedPfxAttribute[];
-	/**
-	 * Carries the friendly name value.
-	 */
+	/** Decoded BMPString friendly-name attribute, if present. */
 	readonly friendlyName?: string;
-	/**
-	 * Carries the local key id value.
-	 */
+	/** Hex-encoded localKeyId attribute, if present. */
 	readonly localKeyId?: string;
 }
 
 /**
- * Describes the structured PFX bag produced by parsing helpers.
+ * Discriminated union of SafeBag types decoded from a PFX container.
+ *
+ * Use `kind` to narrow: `'certificate'` | `'privateKey'` | `'unknown'`.
  */
 export type ParsedPfxBag =
 	| {
-			/**
-			 * Identifies the kind value.
-			 */
+			/** Bag contains an X.509 certificate. */
 			readonly kind: 'certificate';
-			/**
-			 * Carries the bag id value.
-			 */
+			/** Dotted-decimal OID of the bag type. */
 			readonly bagId: string;
-			/**
-			 * Carries the attributes value.
-			 */
+			/** Decoded bag-level attributes. */
 			readonly attributes: ParsedPfxBagAttributes;
-			/**
-			 * Carries the certificate value.
-			 */
+			/** Parsed certificate from the certBag. */
 			readonly certificate: ParsedCertificate;
 	  }
 	| {
-			/**
-			 * Identifies the kind value.
-			 */
+			/** Bag contains a PKCS#8 private key. */
 			readonly kind: 'privateKey';
-			/**
-			 * Carries the bag id value.
-			 */
+			/** Dotted-decimal OID of the bag type. */
 			readonly bagId: string;
-			/**
-			 * Carries the attributes value.
-			 */
+			/** Decoded bag-level attributes. */
 			readonly attributes: ParsedPfxBagAttributes;
-			/**
-			 * Carries the DER-encoded pkcs#8.
-			 */
+			/** Raw DER-encoded PKCS#8 PrivateKeyInfo. */
 			readonly pkcs8Der: Uint8Array;
 	  }
 	| {
-			/**
-			 * Identifies the kind value.
-			 */
+			/** Bag type not recognized by this library. */
 			readonly kind: 'unknown';
-			/**
-			 * Carries the bag id value.
-			 */
+			/** Dotted-decimal OID of the bag type. */
 			readonly bagId: string;
-			/**
-			 * Carries the attributes value.
-			 */
+			/** Decoded bag-level attributes. */
 			readonly attributes: ParsedPfxBagAttributes;
-			/**
-			 * Carries the DER-encoded value.
-			 */
+			/** Raw DER of the unrecognized bag value. */
 			readonly valueDer: Uint8Array;
 	  };
 
-/**
- * Describes the structured PFX produced by parsing helpers.
- */
+/** Fully decoded PFX container returned by {@link parsePfxDer} / {@link parsePfxPem}. */
 export interface ParsedPfx {
-	/**
-	 * Carries the bags value.
-	 */
+	/** All SafeBags in the PFX, including unknown types. */
 	readonly bags: readonly ParsedPfxBag[];
-	/**
-	 * Carries the certificates value.
-	 */
+	/** Convenience: only the parsed certificates extracted from certBag entries. */
 	readonly certificates: readonly ParsedCertificate[];
-	/**
-	 * Carries the private keys value.
-	 */
+	/** Convenience: raw PKCS#8 DER of each private key extracted from keyBag entries. */
 	readonly privateKeys: readonly Uint8Array[];
-	/**
-	 * Carries the mac data value.
-	 */
+	/** MAC verification metadata, present when the PFX includes a MacData block. */
 	readonly macData?: ParsedPkcs12MacData;
 }
 
@@ -259,55 +167,33 @@ export interface ParsedPfx {
 // Result types for PFX parsing
 // ---------------------------------------------------------------------------
 
-/**
- * Enumerates the error codes used by parse PFX failures.
- */
+/** Error codes returned by {@link parsePfxDer} and {@link parsePfxPem}. */
 export type ParsePfxErrorCode = 'malformed' | 'invalid_password' | 'password_required';
 
-/**
- * Represents a typed failure produced by parse PFX operations.
- */
+/** Error payload for a failed PFX parse. */
 export interface ParsePfxFailure extends Micro509Error<ParsePfxErrorCode> {
-	/**
-	 * Indicates whether the operation succeeded.
-	 */
+	/** Always `false` for failures. */
 	readonly ok: false;
 }
 
-/**
- * Represents the result returned by parse PFX failure operations.
- */
+/** Failure branch of {@link ParsePfxResult}. */
 interface ParsePfxFailureResult {
-	/**
-	 * Indicates whether the operation succeeded.
-	 */
+	/** Always `false` for failures. */
 	readonly ok: false;
-	/**
-	 * Carries the canonical error payload.
-	 */
+	/** Structured error with code and message. */
 	readonly error: ParsePfxFailure;
-	/**
-	 * Carries the machine-readable error code.
-	 */
+	/** Machine-readable failure reason. */
 	readonly code: ParsePfxErrorCode;
-	/**
-	 * Carries the human-readable error message.
-	 */
+	/** Human-readable diagnostic. */
 	readonly message: string;
 }
 
-/**
- * Represents the result returned by parse PFX operations.
- */
+/** Success-or-failure result from {@link parsePfxDer} / {@link parsePfxPem}. */
 export type ParsePfxResult =
 	| {
-			/**
-			 * Indicates whether the operation succeeded.
-			 */
+			/** Parse succeeded. */
 			readonly ok: true;
-			/**
-			 * Carries the successful value payload.
-			 */
+			/** Decoded PFX container. */
 			readonly value: ParsedPfx;
 	  }
 	| ParsePfxFailureResult;
@@ -317,10 +203,23 @@ export type ParsePfxResult =
 // ---------------------------------------------------------------------------
 
 /**
- * Creates PFX.
+ * Builds a PKCS#12/PFX archive containing certificates and/or private keys.
  *
- * @param input The typed input payload.
- * @returns The created PFX.
+ * When `encryption` is provided, the key-bag ContentInfo is PBES2-encrypted.
+ * When `mac` is provided, a PKCS#12 MAC integrity block is appended.
+ *
+ * @example
+ * ```ts
+ * import { createPfx } from 'micro509';
+ *
+ * const pfx = await createPfx({
+ *   certificates: [{ certificate: certPem }],
+ *   privateKeys: [{ privateKey: keyPair.privateKey }],
+ *   encryption: { password: 's3cret' },
+ *   mac: { password: 's3cret' },
+ * });
+ * // pfx.der, pfx.pem, pfx.base64
+ * ```
  */
 export async function createPfx(input: CreatePfxInput): Promise<PfxMaterial> {
 	const certificateBags: Uint8Array[] = [];
@@ -370,11 +269,21 @@ export async function createPfx(input: CreatePfxInput): Promise<PfxMaterial> {
 // ---------------------------------------------------------------------------
 
 /**
- * Parses PFX DER.
+ * Decodes a DER-encoded PKCS#12/PFX container into its constituent bags.
  *
- * @param der The DER-encoded bytes.
- * @param options The options that control the operation.
- * @returns The parsed PFX DER.
+ * Returns a result union — check `ok` before accessing `value`.
+ * Encrypted containers require `options.password`. MAC verification uses
+ * `options.macPassword` (falls back to `options.password`).
+ *
+ * @example
+ * ```ts
+ * import { parsePfxDer } from 'micro509';
+ *
+ * const result = await parsePfxDer(pfxBytes, { password: 's3cret' });
+ * if (result.ok) {
+ *   console.log(result.value.certificates.length);
+ * }
+ * ```
  */
 export async function parsePfxDer(
 	der: Uint8Array,
@@ -435,11 +344,19 @@ export async function parsePfxDer(
 }
 
 /**
- * Parses PFX PEM.
+ * Decodes a PEM-armored PKCS#12/PFX container. Expects exactly one `PKCS12` block.
  *
- * @param pem The PEM-encoded text.
- * @param options The options that control the operation.
- * @returns The parsed PFX PEM.
+ * Delegates to {@link parsePfxDer} after PEM decoding.
+ *
+ * @example
+ * ```ts
+ * import { parsePfxPem } from 'micro509';
+ *
+ * const result = await parsePfxPem(pfxPemString, { password: 's3cret' });
+ * if (result.ok) {
+ *   console.log(result.value.privateKeys.length);
+ * }
+ * ```
  */
 export async function parsePfxPem(pem: string, options?: ParsePfxOptions): Promise<ParsePfxResult> {
 	try {
@@ -458,37 +375,13 @@ export async function parsePfxPem(pem: string, options?: ParsePfxOptions): Promi
 // Private: PFX helpers
 // ---------------------------------------------------------------------------
 
-/**
- * PFX failure.
- *
- * @param code The code value.
- * @param message The message value.
- * @returns The computed value.
- */
+/** Shorthand for constructing a PFX parse failure result. */
 function pfxFailure(code: ParsePfxErrorCode, message: string): ParsePfxFailureResult {
-	const error: ParsePfxFailure = {
-		/**
-		 * Indicates whether the operation succeeded.
-		 */
-		ok: false,
-		/**
-		 * Carries the machine-readable error code.
-		 */
-		code,
-		/**
-		 * Carries the human-readable error message.
-		 */
-		message,
-	};
+	const error: ParsePfxFailure = { ok: false, code, message };
 	return { ok: false, error, code, message };
 }
 
-/**
- * Extract content info data.
- *
- * @param contentInfoDer The content info DER value.
- * @returns The computed value.
- */
+/** Unwraps a `data` ContentInfo to its inner OCTET STRING payload. */
 function extractContentInfoData(contentInfoDer: Uint8Array): Uint8Array {
 	const contentInfoChildren = readSequenceChildren(contentInfoDer);
 	const contentType = contentInfoChildren[0];
@@ -502,35 +395,17 @@ function extractContentInfoData(contentInfoDer: Uint8Array): Uint8Array {
 	return extractContextOctetString(contentInfoDer, content);
 }
 
-/**
- * Extract safe contents.
- *
- * @param contentInfoDer The content info DER value.
- * @param options The options that control the operation.
- * @returns The computed value.
- */
+/** Extracts SafeContents bytes from a ContentInfo, decrypting if EncryptedData. */
 async function extractSafeContents(
 	contentInfoDer: Uint8Array,
 	options: ParsePfxOptions | undefined,
 ): Promise<
 	| {
-			/**
-			 * Carries the data value.
-			 */
 			readonly data: Uint8Array;
-			/**
-			 * Carries the canonical error payload.
-			 */
 			readonly error?: undefined;
 	  }
 	| {
-			/**
-			 * Carries the data value.
-			 */
 			readonly data?: undefined;
-			/**
-			 * Carries the canonical error payload.
-			 */
 			readonly error: ParsePfxFailureResult;
 	  }
 > {
@@ -569,13 +444,7 @@ async function extractSafeContents(
 	}
 }
 
-/**
- * Creates certificate bag.
- *
- * @param certificateDer The certificate DER value.
- * @param attributes The attributes value.
- * @returns The created certificate bag.
- */
+/** Encodes a certBag SafeBag wrapping a DER certificate with optional attributes. */
 function createCertificateBag(
 	certificateDer: Uint8Array,
 	attributes: PfxBagAttributesInput | undefined,
@@ -591,13 +460,7 @@ function createCertificateBag(
 	]);
 }
 
-/**
- * Creates private key bag.
- *
- * @param pkcs8Der The PKCS#8 DER value.
- * @param attributes The attributes value.
- * @returns The created private key bag.
- */
+/** Encodes a keyBag SafeBag wrapping PKCS#8 DER with optional attributes. */
 function createPrivateKeyBag(
 	pkcs8Der: Uint8Array,
 	attributes: PfxBagAttributesInput | undefined,
@@ -609,23 +472,12 @@ function createPrivateKeyBag(
 	]);
 }
 
-/**
- * Creates data content info.
- *
- * @param data The raw bytes to process.
- * @returns The created data content info.
- */
+/** Wraps raw bytes in a `pkcs7-data` ContentInfo SEQUENCE. */
 function createDataContentInfo(data: Uint8Array): Uint8Array {
 	return sequence([objectIdentifier(OIDS.pkcs7Data), explicitContext(0, octetString(data))]);
 }
 
-/**
- * Creates encrypted data content info.
- *
- * @param data The raw bytes to process.
- * @param options The options that control the operation.
- * @returns The created encrypted data content info.
- */
+/** PBES2-encrypts data and wraps it in a `pkcs7-encryptedData` ContentInfo. */
 async function createEncryptedDataContentInfo(
 	data: Uint8Array,
 	options: PfxEncryptionOptions,
@@ -642,12 +494,7 @@ async function createEncryptedDataContentInfo(
 	return sequence([objectIdentifier(OIDS.pkcs7EncryptedData), explicitContext(0, encryptedData)]);
 }
 
-/**
- * Encodes bag attributes.
- *
- * @param attributes The attributes value.
- * @returns The encoded bag attributes.
- */
+/** DER-encodes optional friendlyName / localKeyId into a SET OF SEQUENCE. */
 function encodeBagAttributes(attributes: PfxBagAttributesInput | undefined): readonly Uint8Array[] {
 	if (attributes === undefined) {
 		return [];
@@ -666,12 +513,7 @@ function encodeBagAttributes(attributes: PfxBagAttributesInput | undefined): rea
 	return out.length === 0 ? [] : [setOf(out)];
 }
 
-/**
- * Parses safe bag.
- *
- * @param der The DER-encoded bytes.
- * @returns The parsed safe bag.
- */
+/** Decodes a single SafeBag from DER into a {@link ParsedPfxBag} discriminated union. */
 function parseSafeBag(der: Uint8Array): ParsedPfxBag {
 	const children = readSequenceChildren(der);
 	const bagId = children[0];
@@ -716,13 +558,7 @@ function parseSafeBag(der: Uint8Array): ParsedPfxBag {
 	};
 }
 
-/**
- * Parses bag attributes.
- *
- * @param source The source value to process.
- * @param attributeSet The attribute set value.
- * @returns The parsed bag attributes.
- */
+/** Decodes the SET OF attributes attached to a SafeBag. */
 function parseBagAttributes(
 	source: Uint8Array,
 	attributeSet: DerElement | undefined,
@@ -767,12 +603,7 @@ function parseBagAttributes(
 	};
 }
 
-/**
- * Normalizes private key.
- *
- * @param source The source value to process.
- * @returns The computed value.
- */
+/** Exports a `CryptoKey` to PKCS#8 DER, or passes raw bytes through. */
 async function normalizePrivateKey(source: PfxPrivateKeySource): Promise<Uint8Array> {
 	if (source instanceof CryptoKey) {
 		return exportPkcs8Der(source);
@@ -780,12 +611,7 @@ async function normalizePrivateKey(source: PfxPrivateKeySource): Promise<Uint8Ar
 	return new Uint8Array(source);
 }
 
-/**
- * Normalizes certificate.
- *
- * @param source The source value to process.
- * @returns The computed value.
- */
+/** Extracts DER bytes from a PEM string, or passes raw DER through. */
 async function normalizeCertificate(source: PfxCertificateSource): Promise<Uint8Array> {
 	if (typeof source === 'string') {
 		const block = splitPemBlocks(source).find((candidate) => candidate.label === 'CERTIFICATE');
@@ -797,13 +623,7 @@ async function normalizeCertificate(source: PfxCertificateSource): Promise<Uint8
 	return new Uint8Array(source);
 }
 
-/**
- * Decrypt encrypted data.
- *
- * @param encryptedDataDer The encrypted data DER value.
- * @param password The password used to protect or unlock the data.
- * @returns The computed value.
- */
+/** Decrypts a PKCS#7 EncryptedData structure using PBES2 with the given password. */
 async function decryptEncryptedData(
 	encryptedDataDer: Uint8Array,
 	password: string,
@@ -833,13 +653,7 @@ async function decryptEncryptedData(
 	);
 }
 
-/**
- * Extract context octet string.
- *
- * @param source The source value to process.
- * @param element The ASN.1 element to process.
- * @returns The computed value.
- */
+/** Reads the first child of a context-tagged element, expecting an OCTET STRING. */
 function extractContextOctetString(source: Uint8Array, element: DerElement): Uint8Array {
 	const child = extractContextChild(source, element);
 	if (child.tag !== 0x04) {
@@ -848,13 +662,7 @@ function extractContextOctetString(source: Uint8Array, element: DerElement): Uin
 	return child.value;
 }
 
-/**
- * Extract context child.
- *
- * @param source The source value to process.
- * @param element The ASN.1 element to process.
- * @returns The computed value.
- */
+/** Reads the first child element inside a context-specific constructed wrapper. */
 function extractContextChild(source: Uint8Array, element: DerElement): DerElement {
 	if ((element.tag & 0xe0) !== 0xa0) {
 		throw new Error('Expected context-specific constructed value');
@@ -862,12 +670,7 @@ function extractContextChild(source: Uint8Array, element: DerElement): DerElemen
 	return readElement(source, element.start);
 }
 
-/**
- * Bmp string.
- *
- * @param value The value to process.
- * @returns The computed value.
- */
+/** Encodes a JS string as an ASN.1 BMPString (UCS-2 big-endian, tag 0x1e). */
 function bmpString(value: string): Uint8Array {
 	const bytes = new Uint8Array(value.length * 2);
 	for (let index = 0; index < value.length; index += 1) {
@@ -878,12 +681,7 @@ function bmpString(value: string): Uint8Array {
 	return tlv(0x1e, bytes);
 }
 
-/**
- * Decodes bmp string.
- *
- * @param der The DER-encoded bytes.
- * @returns The decoded bmp string.
- */
+/** Decodes a DER-encoded BMPString (tag 0x1e) back to a JS string. */
 function decodeBmpString(der: Uint8Array): string {
 	const element = readElement(der);
 	if (element.tag !== 0x1e) {

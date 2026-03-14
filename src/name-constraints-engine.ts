@@ -1,8 +1,10 @@
 /**
  * Internal name-constraints evaluation engine.
  *
- * This module accumulates and evaluates the shipped RFC 5280 name-constraint subset during
- * path validation.
+ * Accumulates and evaluates the shipped RFC 5280 §4.2.1.10 / §6.1
+ * name-constraint subset during certificate path validation.
+ *
+ * @module
  */
 
 import {
@@ -33,93 +35,56 @@ import type {
 } from './parse.ts';
 
 /**
- * Tracks internal state for name constraint validation processing.
+ * Opaque state seeded from {@link InitialNameConstraintsInput} and consumed
+ * by {@link evaluateNameConstraints}.
  */
 export interface NameConstraintValidationState {
-	/**
-	 * Carries the initial permitted subtrees value.
-	 */
+	/** Caller-supplied permitted subtree bases (pre-chain). */
 	readonly initialPermittedSubtrees: readonly NameConstraintForm[];
-	/**
-	 * Carries the initial excluded subtrees value.
-	 */
+	/** Caller-supplied excluded subtree bases (pre-chain). */
 	readonly initialExcludedSubtrees: readonly NameConstraintForm[];
 }
 
-/**
- * Defines name constraint validation failure code.
- */
+/** Discriminant codes for name-constraint validation failures. */
 export type NameConstraintValidationFailureCode =
 	| 'name_constraints_violated'
 	| 'unsupported_name_constraints';
 
-/**
- * Carries structured details for name constraint validation failures.
- */
+/** Diagnostic context attached to a name-constraint validation failure. */
 export interface NameConstraintValidationFailureDetails {
-	/**
-	 * Carries the subject common name value.
-	 */
+	/** CN of the certificate whose name violated constraints, if available. */
 	readonly subjectCommonName?: string;
-	/**
-	 * Carries the actual value.
-	 */
+	/** The name or constraint-type string that caused the violation. */
 	readonly actual?: string;
 }
 
-/**
- * Represents a typed failure produced by name constraint validation operations.
- */
+/** A name-constraint check that failed, with the offending certificate's chain index. */
 export interface NameConstraintValidationFailure
 	extends Micro509Error<
 		NameConstraintValidationFailureCode,
 		NameConstraintValidationFailureDetails
 	> {
-	/**
-	 * Indicates whether the operation succeeded.
-	 */
+	/** Always `false` for failures. */
 	readonly ok: false;
-	/**
-	 * Carries the zero-based index associated with this value.
-	 */
+	/** Zero-based index into the chain of the certificate that violated constraints. */
 	readonly index: number;
 }
 
-/**
- * Represents the result returned by name constraint validation operations.
- */
+/** Success or failure outcome of name-constraint evaluation across a chain. */
 export type NameConstraintValidationResult =
 	| {
-			/**
-			 * Indicates whether the operation succeeded.
-			 */
+			/** All names in the chain satisfy accumulated constraints. */
 			readonly ok: true;
 	  }
 	| NameConstraintValidationFailure;
 
-/**
- * Describes the input shape for name constraint validation failure details operations.
- */
+/** Builder input for assembling optional failure detail fields. */
 interface NameConstraintValidationFailureDetailsInput {
-	/**
-	 * Carries the subject common name value.
-	 */
 	readonly subjectCommonName?: string | undefined;
-	/**
-	 * Carries the actual value.
-	 */
 	readonly actual?: string | undefined;
 }
 
-/**
- * Name constraint failure.
- *
- * @param code The code value.
- * @param message The message value.
- * @param index The index value.
- * @param details The structured details value.
- * @returns The computed value.
- */
+/** Constructs a {@link NameConstraintValidationFailure} with optional details. */
 function nameConstraintFailure(
 	code: NameConstraintValidationFailureCode,
 	message: string,
@@ -135,12 +100,7 @@ function nameConstraintFailure(
 	};
 }
 
-/**
- * Name constraint details.
- *
- * @param input The typed input payload.
- * @returns The computed value.
- */
+/** Strips undefined fields and returns `undefined` when all fields are empty. */
 function nameConstraintDetails(
 	input: NameConstraintValidationFailureDetailsInput,
 ): NameConstraintValidationFailureDetails | undefined {
@@ -153,21 +113,15 @@ function nameConstraintDetails(
 	return Object.keys(details).length === 0 ? undefined : details;
 }
 
-/**
- * Returns whether self issued.
- *
- * @param certificate The certificate input.
- * @returns Whether the condition holds.
- */
+/** A certificate is self-issued when subject and issuer DER match exactly. */
 function isSelfIssued(certificate: ParsedCertificate): boolean {
 	return certificate.subject.derHex === certificate.issuer.derHex;
 }
 
 /**
- * Creates name constraint validation state.
+ * Initializes validation state from caller-supplied initial constraints.
  *
- * @param input The typed input payload.
- * @returns The created name constraint validation state.
+ * Call once before {@link evaluateNameConstraints}.
  */
 export function createNameConstraintValidationState(
 	input: InitialNameConstraintsInput,
@@ -192,13 +146,9 @@ const EMPTY_SEQUENCE_HEX = '3000';
  * - `excluded`: flat list; a name must NOT match *any* entry.
  */
 interface AccumulatedNameConstraints {
-	/**
-	 * Carries the permitted levels value.
-	 */
+	/** One entry per CA that asserted permittedSubtrees; intersection semantics. */
 	readonly permittedLevels: readonly (readonly NameConstraintForm[])[];
-	/**
-	 * Carries the excluded value.
-	 */
+	/** Flat union of all excludedSubtrees seen so far. */
 	readonly excluded: readonly NameConstraintForm[];
 }
 
@@ -258,12 +208,7 @@ export function evaluateNameConstraints(
 	return { ok: true };
 }
 
-/**
- * Seeds initial name constraints.
- *
- * @param state The current state value.
- * @returns The computed value.
- */
+/** Converts initial state into the starting accumulated-constraints snapshot. */
 function seedInitialNameConstraints(
 	state: NameConstraintValidationState,
 ): AccumulatedNameConstraints {
@@ -274,13 +219,7 @@ function seedInitialNameConstraints(
 	};
 }
 
-/**
- * Accumulates constraints.
- *
- * @param current The current value.
- * @param constraints The constraints value.
- * @returns The computed value.
- */
+/** Merges one certificate's nameConstraints extension into the running totals. */
 function accumulateConstraints(
 	current: AccumulatedNameConstraints,
 	constraints: NameConstraints<ParsedNameConstraintForm>,
@@ -306,13 +245,7 @@ function accumulateConstraints(
 	return { permittedLevels, excluded };
 }
 
-/**
- * Fail on unsupported name constraints.
- *
- * @param certificate The certificate input.
- * @param index The index value.
- * @returns The computed value.
- */
+/** Rejects the chain if a critical nameConstraints extension uses unsupported name forms. */
 function failOnUnsupportedNameConstraints(
 	certificate: ParsedCertificate,
 	index: number,
@@ -341,12 +274,7 @@ function failOnUnsupportedNameConstraints(
 	);
 }
 
-/**
- * List unsupported name constraint types.
- *
- * @param constraints The constraints value.
- * @returns The computed value.
- */
+/** Collects the distinct unsupported GeneralName type strings from a nameConstraints extension. */
 function listUnsupportedNameConstraintTypes(
 	constraints: NameConstraints<ParsedNameConstraintForm>,
 ): readonly string[] {
@@ -364,12 +292,7 @@ function listUnsupportedNameConstraintTypes(
 	return [...unsupportedTypes];
 }
 
-/**
- * Returns whether supported name constraint form.
- *
- * @param form The form value.
- * @returns Whether the condition holds.
- */
+/** True for name forms this engine can evaluate: dns, email, uri, ip, directoryName. */
 function isSupportedNameConstraintForm(form: ParsedNameConstraintForm): form is NameConstraintForm {
 	switch (form.type) {
 		case 'dns':
@@ -447,13 +370,7 @@ function checkCertificateNames(
 		const hasSanEmail = certificate.subjectAltNames?.some((san) => san.type === 'email') ?? false;
 		if (!hasSanEmail && certificate.subject.values.emailAddress !== undefined) {
 			const emailForm: NameConstraintForm = {
-				/**
-				 * Identifies the type value.
-				 */
 				type: 'email',
-				/**
-				 * Carries the successful value payload.
-				 */
 				value: certificate.subject.values.emailAddress,
 			};
 			if (!isNamePermitted(emailForm, accumulated)) {
@@ -473,12 +390,7 @@ function checkCertificateNames(
 	return { ok: true };
 }
 
-/**
- * Accumulates d has email constraints.
- *
- * @param accumulated The accumulated value.
- * @returns The computed value.
- */
+/** True when any level of accumulated constraints addresses the email name form. */
 function accumulatedHasEmailConstraints(accumulated: AccumulatedNameConstraints): boolean {
 	for (const level of accumulated.permittedLevels) {
 		if (level.some((c) => c.type === 'email')) {
@@ -551,13 +463,7 @@ function isNamePermitted(
 	return true;
 }
 
-/**
- * Name matches constraint.
- *
- * @param name The name value.
- * @param constraint The constraint value.
- * @returns The computed value.
- */
+/** Dispatches to the type-specific matching function for the name form. */
 function nameMatchesConstraint(name: NameConstraintForm, constraint: NameConstraintForm): boolean {
 	if (name.type === 'dns' && constraint.type === 'dns') {
 		return matchesDnsConstraint(name.value, constraint.value);
@@ -641,12 +547,7 @@ function matchesUriConstraint(uri: string, constraint: string): boolean {
 	return lowerHost === lowerConstraint;
 }
 
-/**
- * Extract URI host.
- *
- * @param uri The URI value.
- * @returns The computed value.
- */
+/** Extracts the host (reg-name) portion of a URI, stripping scheme, userinfo, port, and path. */
 function extractUriHost(uri: string): string | undefined {
 	const schemeEnd = uri.indexOf('://');
 	if (schemeEnd < 0) {
@@ -706,12 +607,7 @@ function matchesDnConstraint(subjectDerHex: string, constraintDerHex: string): b
 	return isWithinDirectoryNameSubtree(subjectName, constraintName);
 }
 
-/**
- * Parses directory name DER hex.
- *
- * @param derHex The DER hex value.
- * @returns The parsed directory name DER hex.
- */
+/** Re-parses a hex-encoded DER Name for RDN-by-RDN comparison. Returns `undefined` on malformed input. */
 function parseDirectoryNameDerHex(derHex: string): ParsedName | undefined {
 	if (!/^(?:[0-9a-fA-F]{2})+$/.test(derHex)) {
 		return undefined;
@@ -749,13 +645,7 @@ function parseDirectoryNameDerHex(derHex: string): ParsedName | undefined {
 	}
 }
 
-/**
- * Parses directory name RDN.
- *
- * @param source The source value to process.
- * @param setElement The set element value.
- * @returns The parsed directory name RDN.
- */
+/** Parses one SET element (a single RDN) from the DER Name SEQUENCE. */
 function parseDirectoryNameRdn(
 	source: Uint8Array,
 	setElement: DerElement,
@@ -796,13 +686,7 @@ function parseDirectoryNameRdn(
 	};
 }
 
-/**
- * Returns whether within directory name subtree.
- *
- * @param subject The subject value.
- * @param constraint The constraint value.
- * @returns Whether the condition holds.
- */
+/** True when `subject` equals or is subordinate to `constraint` (RDN prefix match). */
 function isWithinDirectoryNameSubtree(subject: ParsedName, constraint: ParsedName): boolean {
 	if (constraint.rdns.length > subject.rdns.length) {
 		return false;
@@ -820,13 +704,7 @@ function isWithinDirectoryNameSubtree(subject: ParsedName, constraint: ParsedNam
 	return true;
 }
 
-/**
- * Compares relative distinguished names.
- *
- * @param left The left value.
- * @param right The right value.
- * @returns The computed value.
- */
+/** Order-independent RDN equality: same attribute count, each pair matched exactly once. */
 function compareRelativeDistinguishedNames(
 	left: ParsedRelativeDistinguishedName,
 	right: ParsedRelativeDistinguishedName,
@@ -856,13 +734,7 @@ function compareRelativeDistinguishedNames(
 	return true;
 }
 
-/**
- * Compares name attribute value.
- *
- * @param left The left value.
- * @param right The right value.
- * @returns The computed value.
- */
+/** Compares two AttributeTypeAndValue pairs using RFC 5280 §7.1 string-prep for DirectoryString tags. */
 function compareNameAttributeValue(left: ParsedNameAttribute, right: ParsedNameAttribute): boolean {
 	if (left.oid !== right.oid) {
 		return false;
@@ -878,22 +750,12 @@ function compareNameAttributeValue(left: ParsedNameAttribute, right: ParsedNameA
 	return left.valueTag === right.valueTag && left.value === right.value;
 }
 
-/**
- * Returns whether directory string tag.
- *
- * @param tag The tag value.
- * @returns Whether the condition holds.
- */
+/** True for UTF8String (0x0C) and PrintableString (0x13) — the DirectoryString types we normalize. */
 function isDirectoryStringTag(tag: number): boolean {
 	return tag === 0x0c || tag === 0x13;
 }
 
-/**
- * Prepare name compare string.
- *
- * @param value The value to process.
- * @returns The computed value.
- */
+/** NFKC-normalizes, lowercases, trims, and collapses whitespace for RFC 5280 §7.1 comparison. */
 function prepareNameCompareString(value: string): string | undefined {
 	const normalized = value.normalize('NFKC');
 	if (/[^\P{Cc}\t\n\r]/u.test(normalized)) {
@@ -902,12 +764,7 @@ function prepareNameCompareString(value: string): string | undefined {
 	return normalized.toLowerCase().trim().replace(/\s+/gu, ' ');
 }
 
-/**
- * Format constraint form.
- *
- * @param form The form value.
- * @returns The computed value.
- */
+/** Human-readable label for a constraint form, used in error messages. */
 function formatConstraintForm(form: NameConstraintForm): string {
 	switch (form.type) {
 		case 'dns':

@@ -1,14 +1,19 @@
 /**
  * Distinguished-name input and encoding helpers.
  *
- * This module turns typed name inputs into DER-encoded X.509 Name structures.
+ * Turns typed name inputs into DER-encoded X.509 Name structures
+ * (RFC 5280 §4.1.2.4).
+ *
+ * @module
  */
 
 import { objectIdentifier, sequence, setOf } from './der.ts';
 import { NAME_FIELD_DEFINITIONS, NAME_OBJECT_ORDER } from './name-fields.ts';
 
 /**
- * Defines name field key.
+ * Union of recognized X.501 attribute type shorthand names.
+ *
+ * Each key maps to an OID + ASN.1 string encoding in {@link NAME_FIELD_DEFINITIONS}.
  */
 export type NameFieldKey =
 	| 'commonName'
@@ -25,89 +30,82 @@ export type NameFieldKey =
 	| 'emailAddress';
 
 /**
- * Describes name object.
+ * Bag-of-fields form of an X.501 distinguished name.
+ *
+ * Fields are emitted into the DER Name in the order defined by
+ * {@link NAME_OBJECT_ORDER}. For full control over RDN ordering, pass a
+ * {@link NameAttribute} array instead.
  */
 export interface NameObject {
-	/**
-	 * Carries the common name value.
-	 */
+	/** Subject or issuer common name (CN). */
 	readonly commonName?: string;
-	/**
-	 * Carries the surname value.
-	 */
+	/** Subject surname (SN). */
 	readonly surname?: string;
-	/**
-	 * Carries the serial number value.
-	 */
+	/** Device or entity serial number — not the certificate serial. */
 	readonly serialNumber?: string;
-	/**
-	 * Carries the country value.
-	 */
+	/** ISO 3166 two-letter country code (C). Must be exactly 2 characters. */
 	readonly country?: string;
-	/**
-	 * Carries the locality value.
-	 */
+	/** City or locality (L). */
 	readonly locality?: string;
-	/**
-	 * Carries the state value.
-	 */
+	/** State or province (ST). */
 	readonly state?: string;
-	/**
-	 * Carries the street value.
-	 */
+	/** Street address. */
 	readonly street?: string;
-	/**
-	 * Carries the organization value.
-	 */
+	/** Organization name (O). */
 	readonly organization?: string;
-	/**
-	 * Carries the organizational unit value.
-	 */
+	/** Organizational unit (OU). Deprecated in modern CA practice. */
 	readonly organizationalUnit?: string;
-	/**
-	 * Carries the title value.
-	 */
+	/** Job title or functional designation. */
 	readonly title?: string;
-	/**
-	 * Carries the given name value.
-	 */
+	/** First / given name (GN). */
 	readonly givenName?: string;
-	/**
-	 * Carries the email address value.
-	 */
+	/** RFC 822 email address. Encoded as IA5String, not UTF-8. */
 	readonly emailAddress?: string;
 }
 
 /**
- * Describes name attribute.
+ * Single attribute type–value pair within a distinguished name.
+ *
+ * Use an array of these when you need explicit RDN ordering that
+ * {@link NameObject} cannot express.
  */
 export interface NameAttribute {
-	/**
-	 * Identifies the type value.
-	 */
+	/** Which attribute type this pair represents. */
 	readonly type: NameFieldKey;
-	/**
-	 * Carries the successful value payload.
-	 */
+	/** The string value for this attribute (encoding chosen per field definition). */
 	readonly value: string;
 }
 
 /**
- * Describes the input shape for name operations.
+ * Input for {@link encodeName}. Either a {@link NameObject} bag-of-fields or
+ * an ordered array of {@link NameAttribute} pairs.
  */
 export type NameInput = NameObject | readonly NameAttribute[];
 /**
- * Describes the input shape for relative distinguished name operations.
+ * Input for {@link encodeRelativeDistinguishedName}. Each attribute becomes
+ * one element in the SET OF.
  */
 export type RelativeDistinguishedNameInput = readonly NameAttribute[];
 
 export { nameFieldKeyFromOid } from './name-fields.ts';
 
 /**
- * Encodes name.
+ * DER-encodes an X.509 Name (SEQUENCE OF SET OF AttributeTypeAndValue).
  *
- * @param input The typed input payload.
- * @returns The encoded name.
+ * Throws if the input produces zero attributes.
+ *
+ * @example
+ * ```ts
+ * const der = encodeName({ country: 'US', commonName: 'example.com' });
+ * ```
+ *
+ * @example
+ * ```ts
+ * const der = encodeName([
+ *   { type: 'country', value: 'US' },
+ *   { type: 'commonName', value: 'example.com' },
+ * ]);
+ * ```
  */
 export function encodeName(input: NameInput): Uint8Array {
 	const attributes = isNameAttributes(input) ? input : nameObjectToAttributes(input);
@@ -119,10 +117,9 @@ export function encodeName(input: NameInput): Uint8Array {
 }
 
 /**
- * Encodes relative distinguished name.
+ * DER-encodes a single RelativeDistinguishedName (SET OF AttributeTypeAndValue).
  *
- * @param attributes The attributes value.
- * @returns The encoded relative distinguished name.
+ * Throws if the attribute list is empty.
  */
 export function encodeRelativeDistinguishedName(
 	attributes: RelativeDistinguishedNameInput,
@@ -133,31 +130,20 @@ export function encodeRelativeDistinguishedName(
 	return setOf(attributes.map(encodeNameAttribute));
 }
 
-/**
- * Returns whether name attributes.
- *
- * @param input The typed input payload.
- * @returns Whether the condition holds.
- */
+/** Narrows a {@link NameInput} to the ordered-attribute-array form. */
 function isNameAttributes(input: NameInput): input is readonly NameAttribute[] {
 	return Array.isArray(input);
 }
 
-/**
- * Encodes name attribute as set.
- *
- * @param attribute The attribute value.
- * @returns The encoded name attribute as set.
- */
+/** Wraps a single attribute in a SET OF for the Name SEQUENCE. */
 function encodeNameAttributeAsSet(attribute: NameAttribute): Uint8Array {
 	return setOf([encodeNameAttribute(attribute)]);
 }
 
 /**
- * Encodes name attribute.
+ * DER-encodes one AttributeTypeAndValue SEQUENCE.
  *
- * @param attribute The attribute value.
- * @returns The encoded name attribute.
+ * Throws for unsupported field keys and invalid country codes.
  */
 function encodeNameAttribute(attribute: NameAttribute): Uint8Array {
 	const definition = NAME_FIELD_DEFINITIONS[attribute.type];
@@ -170,12 +156,7 @@ function encodeNameAttribute(attribute: NameAttribute): Uint8Array {
 	return sequence([objectIdentifier(definition.oid), definition.encode(attribute.value)]);
 }
 
-/**
- * Name object to attributes.
- *
- * @param input The typed input payload.
- * @returns The computed value.
- */
+/** Converts a {@link NameObject} to ordered attributes per {@link NAME_OBJECT_ORDER}. */
 function nameObjectToAttributes(input: NameObject): readonly NameAttribute[] {
 	const attributes: NameAttribute[] = [];
 	for (const key of NAME_OBJECT_ORDER) {

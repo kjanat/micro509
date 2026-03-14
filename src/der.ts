@@ -1,20 +1,22 @@
 /**
  * Low-level DER encoding and reading helpers shared across the library.
  *
- * These utilities build and traverse ASN.1 TLV structures without pulling in external
- * dependencies.
+ * These utilities build and traverse ASN.1 TLV (tag-length-value) structures
+ * without pulling in external dependencies.
+ *
+ * @module
  */
 
 /**
- * Defines the default max der depth used by this module.
+ * Maximum nesting depth allowed when recursively walking a DER structure.
+ * Guards against stack exhaustion from pathologically nested input.
  */
 export const DEFAULT_MAX_DER_DEPTH = 64;
 
 /**
- * Encodes length.
- *
- * @param length The length value.
- * @returns The encoded length.
+ * Produces the DER length octets for a given byte count.
+ * Values < 128 use the short form (one octet); larger values use the
+ * long form (leading octet encodes the number of subsequent length bytes).
  */
 export function encodeLength(length: number): Uint8Array {
 	assertNonNegativeSafeInteger(length, 'DER length');
@@ -26,12 +28,7 @@ export function encodeLength(length: number): Uint8Array {
 	return Uint8Array.of(0x80 | parts.length, ...parts);
 }
 
-/**
- * Concatenates bytes.
- *
- * @param parts The parts value.
- * @returns The computed value.
- */
+/** Concatenates multiple byte arrays into a single `Uint8Array`. */
 export function concatBytes(parts: readonly Uint8Array[]): Uint8Array {
 	const length = parts.reduce((sum, part) => sum + part.length, 0);
 	const out = new Uint8Array(length);
@@ -44,31 +41,21 @@ export function concatBytes(parts: readonly Uint8Array[]): Uint8Array {
 }
 
 /**
- * TLV.
- *
- * @param tag The tag value.
- * @param value The value to process.
- * @returns The computed value.
+ * Builds a complete DER TLV (tag-length-value) element: one tag octet,
+ * the DER-encoded length, then the raw value bytes.
  */
 export function tlv(tag: number, value: Uint8Array): Uint8Array {
 	return concatBytes([Uint8Array.of(tag), encodeLength(value.length), value]);
 }
 
-/**
- * Sequence.
- *
- * @param parts The parts value.
- * @returns The computed value.
- */
+/** Wraps concatenated children in a SEQUENCE (tag `0x30`). */
 export function sequence(parts: readonly Uint8Array[]): Uint8Array {
 	return tlv(0x30, concatBytes(parts));
 }
 
 /**
- * Set of.
- *
- * @param parts The parts value.
- * @returns The computed value.
+ * Wraps children in a SET (tag `0x31`) after DER-sorting them
+ * lexicographically by encoded bytes, as required by X.690 DER.
  */
 export function setOf(parts: readonly Uint8Array[]): Uint8Array {
 	const sorted = parts.slice().sort((a, b) => {
@@ -83,43 +70,33 @@ export function setOf(parts: readonly Uint8Array[]): Uint8Array {
 }
 
 /**
- * Explicit context.
- *
- * @param tag The tag value.
- * @param value The value to process.
- * @returns The computed value.
+ * Wraps a value in an explicit context-specific constructed tag (`0xa0 + tag`).
+ * Used for optional SEQUENCE fields tagged with `[tag] EXPLICIT`.
  */
 export function explicitContext(tag: number, value: Uint8Array): Uint8Array {
 	return tlv(0xa0 + tag, value);
 }
 
 /**
- * Implicit constructed context.
- *
- * @param tag The tag value.
- * @param value The value to process.
- * @returns The computed value.
+ * Wraps a value in an implicit context-specific constructed tag (`0xa0 + tag`).
+ * Used for `[tag] IMPLICIT` fields whose underlying type is constructed (e.g. SEQUENCE).
  */
 export function implicitConstructedContext(tag: number, value: Uint8Array): Uint8Array {
 	return tlv(0xa0 + tag, value);
 }
 
 /**
- * Implicit primitive context.
- *
- * @param tag The tag value.
- * @param value The value to process.
- * @returns The computed value.
+ * Wraps a value in an implicit context-specific primitive tag (`0x80 + tag`).
+ * Used for `[tag] IMPLICIT` fields whose underlying type is primitive (e.g. OCTET STRING).
  */
 export function implicitPrimitiveContext(tag: number, value: Uint8Array): Uint8Array {
 	return tlv(0x80 + tag, value);
 }
 
 /**
- * Integer.
- *
- * @param bytes The raw bytes to process.
- * @returns The computed value.
+ * Encodes raw big-endian bytes as a DER INTEGER (tag `0x02`).
+ * Strips leading zero bytes for minimal encoding and prepends a zero
+ * byte when the high bit is set to keep the value non-negative.
  */
 export function integer(bytes: Uint8Array): Uint8Array {
 	if (bytes.length === 0) {
@@ -140,10 +117,8 @@ export function integer(bytes: Uint8Array): Uint8Array {
 }
 
 /**
- * Integer from number.
- *
- * @param value The value to process.
- * @returns The computed value.
+ * Encodes a non-negative JavaScript `number` as a DER INTEGER.
+ * Throws if the value is not a non-negative safe integer.
  */
 export function integerFromNumber(value: number): Uint8Array {
 	if (!Number.isSafeInteger(value) || value < 0) {
@@ -157,41 +132,26 @@ export function integerFromNumber(value: number): Uint8Array {
 	return integer(Uint8Array.from(encodeBase256(value)));
 }
 
-/**
- * Bool.
- *
- * @param value The value to process.
- * @returns The computed value.
- */
+/** Encodes a DER BOOLEAN (tag `0x01`): `true` → `0xff`, `false` → `0x00`. */
 export function bool(value: boolean): Uint8Array {
 	return tlv(0x01, Uint8Array.of(value ? 0xff : 0x00));
 }
 
-/**
- * Null value.
- *
- * @returns The computed value.
- */
+/** Produces a DER NULL element (tag `0x05`, zero-length value). */
 export function nullValue(): Uint8Array {
 	return tlv(0x05, new Uint8Array());
 }
 
-/**
- * Octet string.
- *
- * @param value The value to process.
- * @returns The computed value.
- */
+/** Wraps raw bytes in an OCTET STRING element (tag `0x04`). */
 export function octetString(value: Uint8Array): Uint8Array {
 	return tlv(0x04, value);
 }
 
 /**
- * Bit string.
+ * Encodes a DER BIT STRING (tag `0x03`). The value is prefixed with a
+ * single octet indicating how many trailing bits in the last byte are unused.
  *
- * @param value The value to process.
- * @param unusedBits The unused bits value.
- * @returns The computed value.
+ * @param unusedBits Number of unused trailing bits (0–7). Defaults to 0.
  */
 export function bitString(value: Uint8Array, unusedBits = 0): Uint8Array {
 	if (unusedBits < 0 || unusedBits > 7) {
@@ -209,21 +169,14 @@ export function bitString(value: Uint8Array, unusedBits = 0): Uint8Array {
 	return tlv(0x03, concatBytes([Uint8Array.of(unusedBits), value]));
 }
 
-/**
- * UTF-8 string.
- *
- * @param value The value to process.
- * @returns The computed value.
- */
+/** Encodes a DER UTF8String (tag `0x0c`). */
 export function utf8String(value: string): Uint8Array {
 	return tlv(0x0c, new TextEncoder().encode(value));
 }
 
 /**
- * Printable string.
- *
- * @param value The value to process.
- * @returns The computed value.
+ * Encodes a DER PrintableString (tag `0x13`).
+ * Throws if the input contains characters outside the X.520 PrintableString set.
  */
 export function printableString(value: string): Uint8Array {
 	if (!/^[A-Za-z0-9 '()+,\-./:=?]*$/.test(value)) {
@@ -233,10 +186,8 @@ export function printableString(value: string): Uint8Array {
 }
 
 /**
- * Ia5 string.
- *
- * @param value The value to process.
- * @returns The computed value.
+ * Encodes a DER IA5String (tag `0x16`).
+ * Throws if the input contains any non-ASCII character (code point > 0x7f).
  */
 export function ia5String(value: string): Uint8Array {
 	for (let i = 0; i < value.length; i++) {
@@ -248,10 +199,9 @@ export function ia5String(value: string): Uint8Array {
 }
 
 /**
- * Object identifier.
- *
- * @param oid The object identifier.
- * @returns The computed value.
+ * Encodes a dotted-decimal OID string as a DER OBJECT IDENTIFIER (tag `0x06`).
+ * Validates arc constraints per X.660: first arc must be 0–2, second < 40
+ * for arcs 0 and 1. Sub-identifiers are encoded with base-128 continuation.
  */
 export function objectIdentifier(oid: string): Uint8Array {
 	const segments = oid.split('.').map((segment) => Number(segment));
@@ -287,10 +237,8 @@ export function objectIdentifier(oid: string): Uint8Array {
 }
 
 /**
- * Utc time.
- *
- * @param date The date value.
- * @returns The computed value.
+ * Encodes a `Date` as a DER UTCTime (tag `0x17`), format `YYMMDDHHMMSSZ`.
+ * Only the two-digit year is stored; suitable for dates in 1950–2049.
  */
 export function utcTime(date: Date): Uint8Array {
 	const value = `${[
@@ -305,10 +253,8 @@ export function utcTime(date: Date): Uint8Array {
 }
 
 /**
- * Generalized time.
- *
- * @param date The date value.
- * @returns The computed value.
+ * Encodes a `Date` as a DER GeneralizedTime (tag `0x18`), format `YYYYMMDDHHMMSSZ`.
+ * Uses a four-digit year; required for dates outside the 1950–2049 range.
  */
 export function generalizedTime(date: Date): Uint8Array {
 	const value = `${[
@@ -323,10 +269,8 @@ export function generalizedTime(date: Date): Uint8Array {
 }
 
 /**
- * Time.
- *
- * @param date The date value.
- * @returns The computed value.
+ * Encodes a `Date` as the appropriate DER time type per RFC 5280:
+ * {@link utcTime} for 1950–2049, {@link generalizedTime} otherwise.
  */
 export function time(date: Date): Uint8Array {
 	if (date.getUTCFullYear() >= 2050 || date.getUTCFullYear() < 1950) {
@@ -335,22 +279,12 @@ export function time(date: Date): Uint8Array {
 	return utcTime(date);
 }
 
-/**
- * Two digits.
- *
- * @param value The value to process.
- * @returns The computed value.
- */
+/** Zero-pads a number to two digits for time encoding. */
 function twoDigits(value: number): string {
 	return String(value).padStart(2, '0');
 }
 
-/**
- * Encodes base256.
- *
- * @param value The value to process.
- * @returns The encoded base256.
- */
+/** Encodes a non-negative integer as big-endian base-256 octets. */
 function encodeBase256(value: number): readonly number[] {
 	assertNonNegativeSafeInteger(value, 'DER integer');
 	const parts: number[] = [];
@@ -362,70 +296,45 @@ function encodeBase256(value: number): readonly number[] {
 	return parts;
 }
 
-/**
- * Describes DER element.
- */
+/** A single parsed ASN.1 TLV element with byte-range metadata. */
 export interface DerElement {
-	/**
-	 * Carries the tag value.
-	 */
+	/** ASN.1 tag byte (e.g. `0x30` for SEQUENCE, `0x02` for INTEGER). */
 	readonly tag: number;
-	/**
-	 * Carries the header length value.
-	 */
+	/** Number of bytes occupied by the tag + length octets. */
 	readonly headerLength: number;
-	/**
-	 * Carries the length value.
-	 */
+	/** Byte length of the value portion (excluding tag and length octets). */
 	readonly length: number;
-	/**
-	 * Carries the start value.
-	 */
+	/** Byte offset where the value portion begins in the source buffer. */
 	readonly start: number;
-	/**
-	 * Carries the end value.
-	 */
+	/** Byte offset one past the last value byte — equals the next element's header offset. */
 	readonly end: number;
-	/**
-	 * Carries the successful value payload.
-	 */
+	/** The raw value bytes (slice of the source buffer). */
 	readonly value: Uint8Array;
 }
 
-/**
- * Configures read sequence children operations.
- */
+/** Options for {@link readSequenceChildren}. */
 export interface ReadSequenceChildrenOptions {
-	/**
-	 * Carries the max depth value.
-	 */
+	/** Maximum nesting depth for the DER depth check. Default: {@link DEFAULT_MAX_DER_DEPTH}. */
 	readonly maxDepth?: number;
-	/**
-	 * Carries the allow opaqu e constructed tags value.
-	 */
+	/** Constructed tags whose inner bytes may not parse as valid TLV children (e.g. opaque extension values). */
 	readonly allowOpaqueConstructedTags?: readonly number[];
 }
 
-/**
- * Configures read root element operations.
- */
+/** Options for {@link readRootElement}. */
 export interface ReadRootElementOptions {
-	/**
-	 * Carries the max depth value.
-	 */
+	/** Maximum nesting depth for the DER depth check. Default: {@link DEFAULT_MAX_DER_DEPTH}. */
 	readonly maxDepth?: number;
-	/**
-	 * Carries the allow opaqu e constructed tags value.
-	 */
+	/** Constructed tags whose inner bytes may not parse as valid TLV children (e.g. opaque extension values). */
 	readonly allowOpaqueConstructedTags?: readonly number[];
 }
 
 /**
- * Read element.
+ * Reads one TLV element from `bytes` starting at `offset`.
+ * Parses the tag byte, decodes the DER length octets, and slices out the
+ * value bytes. Throws on truncated input, indefinite lengths, and
+ * non-minimal length encodings.
  *
- * @param bytes The raw bytes to process.
- * @param offset The offset value.
- * @returns The computed value.
+ * @param offset Byte position of the tag octet. Defaults to 0.
  */
 export function readElement(bytes: Uint8Array, offset = 0): DerElement {
 	const tag = bytes[offset];
@@ -486,19 +395,15 @@ export function readElement(bytes: Uint8Array, offset = 0): DerElement {
 }
 
 /**
- * Assert DER max depth.
- *
- * @param bytes The raw bytes to process.
- * @param maxDepth The max depth value.
- * @param options The options that control the operation.
+ * Walks the full DER tree rooted in `bytes` and throws if nesting exceeds
+ * `maxDepth`. Constructed tags with content that cannot be parsed as valid
+ * children are tolerated when listed in `allowOpaqueConstructedTags`.
  */
 export function assertDerMaxDepth(
 	bytes: Uint8Array,
 	maxDepth: number = DEFAULT_MAX_DER_DEPTH,
 	options?: {
-		/**
-		 * Carries the allow opaqu e constructed tags value.
-		 */
+		/** Constructed tags whose inner bytes may not parse as valid TLV children. */
 		readonly allowOpaqueConstructedTags?: readonly number[];
 	},
 ): void {
@@ -510,13 +415,7 @@ export function assertDerMaxDepth(
 		throw new Error('Trailing data after DER element');
 	}
 	const stack: {
-		/**
-		 * Carries the element value.
-		 */
 		readonly element: DerElement;
-		/**
-		 * Carries the depth value.
-		 */
 		readonly depth: number;
 	}[] = [{ element: root, depth: 1 }];
 	while (stack.length > 0) {
@@ -562,11 +461,8 @@ export function assertDerMaxDepth(
 }
 
 /**
- * Read root element.
- *
- * @param bytes The raw bytes to process.
- * @param options The options that control the operation.
- * @returns The computed value.
+ * Reads the single top-level TLV element from `bytes`, optionally
+ * validating nesting depth. Throws if there is trailing data after the element.
  */
 export function readRootElement(bytes: Uint8Array, options?: ReadRootElementOptions): DerElement {
 	if (options?.maxDepth !== undefined) {
@@ -580,11 +476,8 @@ export function readRootElement(bytes: Uint8Array, options?: ReadRootElementOpti
 }
 
 /**
- * Read sequence children.
- *
- * @param bytes The raw bytes to process.
- * @param options The options that control the operation.
- * @returns The computed value.
+ * Reads a DER-encoded SEQUENCE from `bytes` and returns its direct children.
+ * Throws if the root element is not a SEQUENCE or if child boundaries are inconsistent.
  */
 export function readSequenceChildren(
 	bytes: Uint8Array,
@@ -611,12 +504,7 @@ export function readSequenceChildren(
 	return children;
 }
 
-/**
- * Assert non negative safe integer.
- *
- * @param value The value to process.
- * @param label The label value.
- */
+/** Throws if `value` is not a non-negative safe integer. */
 function assertNonNegativeSafeInteger(value: number, label: string): void {
 	if (!Number.isSafeInteger(value) || value < 0) {
 		throw new Error(`${label} must be a non-negative safe integer`);
@@ -624,20 +512,15 @@ function assertNonNegativeSafeInteger(value: number, label: string): void {
 }
 
 /**
- * Can treat as opaque leaf.
- *
- * @param element The ASN.1 element to process.
- * @param offset The offset value.
- * @param options The options that control the operation.
- * @returns The computed value.
+ * Returns `true` when a constructed element's content should be treated as
+ * an opaque leaf (not recursed into) because its tag appears in the
+ * `allowOpaqueConstructedTags` list and the offset is at the element start.
  */
 function canTreatAsOpaqueLeaf(
 	element: DerElement,
 	offset: number,
 	options?: {
-		/**
-		 * Carries the allow opaqu e constructed tags value.
-		 */
+		/** Constructed tags whose inner bytes may not parse as valid TLV children. */
 		readonly allowOpaqueConstructedTags?: readonly number[];
 	},
 ): boolean {

@@ -1,8 +1,11 @@
 /**
  * Cross-domain validation types shared by the public validation surfaces.
  *
- * This module keeps shared validation structures in one place so verify, identity, and
- * revocation APIs stay aligned.
+ * Re-exports identity, name-constraint, policy, and revocation types so that
+ * downstream consumers can import a single validation namespace without
+ * reaching into internal modules.
+ *
+ * @module
  */
 
 export type {

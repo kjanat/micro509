@@ -3,20 +3,21 @@
  *
  * These utilities stay intentionally small and strict so malformed input fails early and
  * higher-level modules can build on one consistent decoding layer.
+ *
+ * @module
  */
 
 import { type DerElement, readElement } from './der.ts';
 
-/**
- * Stores the shared UTF-8 text decoder used by this module.
- */
+/** Shared UTF-8 text decoder for ASN.1 string types. */
 const textDecoder = new TextDecoder();
 
 /**
- * Decodes object identifier.
+ * Decodes a DER-encoded OBJECT IDENTIFIER value into its dotted-decimal string
+ * form (e.g. `"1.2.840.113549.1.1.1"`).
  *
- * @param bytes The raw bytes to process.
- * @returns The decoded object identifier.
+ * Throws on empty input, truncated multi-byte sub-identifiers, or incomplete
+ * continuation octets.
  */
 export function decodeObjectIdentifier(bytes: Uint8Array): string {
 	const first = bytes[0];
@@ -46,21 +47,14 @@ export function decodeObjectIdentifier(bytes: Uint8Array): string {
 	return values.join('.');
 }
 
-/**
- * To hex.
- *
- * @param bytes The raw bytes to process.
- * @returns The computed value.
- */
+/** Converts raw bytes to a lowercase hex string with no separator. */
 export function toHex(bytes: Uint8Array): string {
 	return Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('');
 }
 
 /**
- * To array buffer.
- *
- * @param bytes The raw bytes to process.
- * @returns The computed value.
+ * Copies a `Uint8Array` into a standalone `ArrayBuffer` suitable for
+ * Web Crypto operations that require a non-shared backing buffer.
  */
 export function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
 	const out = new ArrayBuffer(bytes.length);
@@ -69,11 +63,11 @@ export function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
 }
 
 /**
- * Children of.
+ * Iterates through all direct child TLV elements inside a constructed
+ * {@link DerElement} (SEQUENCE, SET, or context-tagged container).
  *
- * @param source The source value to process.
- * @param parent The parent value.
- * @returns The computed value.
+ * Throws if any child overflows the parent boundary or if there is
+ * leftover data between the last child and the parent end offset.
  */
 export function childrenOf(source: Uint8Array, parent: DerElement): DerElement[] {
 	const children: DerElement[] = [];
@@ -93,11 +87,10 @@ export function childrenOf(source: Uint8Array, parent: DerElement): DerElement[]
 }
 
 /**
- * Requires and returns element.
+ * Asserts that a value is not `undefined`, returning it narrowed.
+ * Used to enforce the presence of mandatory ASN.1 fields during parsing.
  *
- * @param value The value to process.
- * @param label The label value.
- * @returns The computed value.
+ * @param label Human-readable field name included in the error message on failure.
  */
 export function requireElement<T>(value: T | undefined, label: string): T {
 	if (value === undefined) {
@@ -107,10 +100,10 @@ export function requireElement<T>(value: T | undefined, label: string): T {
 }
 
 /**
- * Extract bit string value.
+ * Strips the leading "unused bits" octet from a BIT STRING element,
+ * returning just the payload bytes. Throws if the tag is not `0x03`.
  *
- * @param element The ASN.1 element to process.
- * @returns The computed value.
+ * Used to extract signature values and public keys from their BIT STRING wrapper.
  */
 export function extractBitStringValue(element: DerElement): Uint8Array {
 	if (element.tag !== 0x03) {
@@ -120,10 +113,11 @@ export function extractBitStringValue(element: DerElement): Uint8Array {
 }
 
 /**
- * Parses time.
+ * Parses a {@link DerElement} with tag UTCTime (`0x17`) or GeneralizedTime (`0x18`)
+ * into a `Date`.
  *
- * @param element The ASN.1 element to process.
- * @returns The parsed time.
+ * For UTCTime, the two-digit year is interpreted per RFC 5280: values >= 50 map
+ * to 19xx, values < 50 map to 20xx. Throws on unrecognized time tags.
  */
 export function parseTime(element: DerElement): Date {
 	const value = textDecoder.decode(element.value);
@@ -148,10 +142,9 @@ export function parseTime(element: DerElement): Date {
 }
 
 /**
- * Decodes integer number.
- *
- * @param bytes The raw bytes to process.
- * @returns The decoded integer number.
+ * Decodes a big-endian unsigned byte sequence into a JavaScript `number`.
+ * Throws if the value exceeds 6 bytes (48 bits), which is the safe-integer
+ * boundary for lossless arithmetic.
  */
 export function decodeIntegerNumber(bytes: Uint8Array): number {
 	if (bytes.length > 6) {
@@ -165,11 +158,11 @@ export function decodeIntegerNumber(bytes: Uint8Array): number {
 }
 
 /**
- * Decodes non negative integer number.
+ * Like {@link decodeIntegerNumber} but additionally enforces DER rules for
+ * non-negative integers: the high bit must be clear, and leading zero padding
+ * must be minimal.
  *
- * @param bytes The raw bytes to process.
- * @param label The label value.
- * @returns The decoded non negative integer number.
+ * @param label Field name for error messages (defaults to `"INTEGER"`).
  */
 export function decodeNonNegativeIntegerNumber(bytes: Uint8Array, label = 'INTEGER'): number {
 	const first = bytes[0];
@@ -186,10 +179,8 @@ export function decodeNonNegativeIntegerNumber(bytes: Uint8Array, label = 'INTEG
 }
 
 /**
- * Hex to bytes.
- *
- * @param value The value to process.
- * @returns The computed value.
+ * Converts a hex string (even or odd length) to a `Uint8Array`.
+ * Odd-length strings are left-padded with a zero nibble.
  */
 export function hexToBytes(value: string): Uint8Array {
 	const normalized = value.length % 2 === 0 ? value : `0${value}`;
@@ -200,22 +191,15 @@ export function hexToBytes(value: string): Uint8Array {
 	return out;
 }
 
-/**
- * Decodes boolean.
- *
- * @param bytes The raw bytes to process.
- * @returns The decoded boolean.
- */
+/** Decodes a DER BOOLEAN value: any non-zero first byte is `true`. */
 export function decodeBoolean(bytes: Uint8Array): boolean {
 	return (bytes[0] ?? 0) !== 0;
 }
 
 /**
- * Decodes string.
- *
- * @param tag The tag value.
- * @param bytes The raw bytes to process.
- * @returns The decoded string.
+ * Decodes a DER string element by tag. Supports UTF8String (`0x0c`),
+ * PrintableString (`0x13`), and IA5String (`0x16`).
+ * Throws on unsupported string tags.
  */
 export function decodeString(tag: number, bytes: Uint8Array): string {
 	switch (tag) {
