@@ -65,6 +65,7 @@
 		"**/worker-configuration.d.ts",
 		"**/bun.lock",
 		"**/dist",
+		"**/docs/deno",
 	],
 	"plugins": [
 		"https://plugins.dprint.dev/dockerfile-0.3.3.wasm",

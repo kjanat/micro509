@@ -1,7 +1,61 @@
 /**
- * Root package barrel for `micro509`.
+ * Stable root import for `micro509`.\
+ * Re-exports the public X.509, CSR, CRL, OCSP, PKCS#7, PKCS#12/PFX, key, parsing, and
+ * path-validation APIs from one package entrypoint.
  *
- * This module re-exports the stable public surface consumed from the package root import.
+ * Reach for this module when you want the supported package surface without importing internal
+ * files directly.
+ *
+ * The root export is organized around common PKI flows:
+ *
+ * - create certificates, CSRs, CRLs, OCSP responses, PKCS#7, and PFX artifacts
+ * - parse DER or PEM inputs into typed certificate and request shapes
+ * - verify certificate chains, service identities, CRLs, OCSP, and signed data
+ * - import, export, generate, and encrypt key material with WebCrypto-safe algorithms
+ * - build and inspect typed extension inputs, revocation evidence, and validation results
+ *
+ * @example
+ * ```ts
+ * import {
+ * 	createSelfSignedCertificate,
+ * 	parseCertificatePem,
+ * 	verifyCertificateChain,
+ * } from 'micro509';
+ *
+ * const { certificate } = await createSelfSignedCertificate({
+ * 	subject: { commonName: 'example.com' },
+ * 	algorithm: { kind: 'ecdsa', namedCurve: 'P-256' },
+ * });
+ *
+ * const parsed = parseCertificatePem(certificate.pem);
+ * // parsed.subject.values.commonName === 'example.com'
+ *
+ * const result = await verifyCertificateChain({
+ * 	certificate: parsed,
+ * 	trustAnchors: [parsed],
+ * });
+ * // result.ok === true
+ * ```
+ *
+ * @example
+ * ```ts
+ * import {
+ * 	generateKeyPair,
+ * 	parseCertificateSigningRequestPem,
+ * 	createCertificateSigningRequest,
+ * } from 'micro509';
+ *
+ * const keyPair = await generateKeyPair({ kind: 'ecdsa', namedCurve: 'P-256' });
+ * const csr = await createCertificateSigningRequest({
+ * 	subject: { commonName: 'example.com' },
+ * 	publicKey: keyPair.publicKey,
+ * 	signerPrivateKey: keyPair.privateKey,
+ * });
+ *
+ * const parsed = parseCertificateSigningRequestPem(csr.pem);
+ * // parsed.subject.values.commonName === 'example.com'
+ * ```
+ * @module
  */
 
 export type {

@@ -51,6 +51,7 @@ ts-x509/
   - Follow conventional commits; prefer `type(scope): subject`.
   - After the blank line, hard-wrap body lines at about 72 chars.
   - Do not leave body paragraphs as one long line.
+- Add jsr-style jsdoc. See <https://github.com/jsr-io/jsr/blob/main/frontend/docs/writing-docs.md> for style guidance.
 
 ## ANTI-PATTERNS (THIS PROJECT)
 
@@ -64,6 +65,7 @@ ts-x509/
 - No `await expect()` in tests.
 - Do not treat every self-signed cert as a trust anchor.
 - Do not overclaim RFC support beyond `docs/PKIX-SCOPE.md`.
+- Keep `\` for intentional hard breaks, both in markdown and jsdoc.
 
 ## COMMANDS
 
@@ -74,8 +76,8 @@ bun typecheck          # tsgo type-check
 bun test               # bun test --coverage
 bun lint               # biome lint
 bun fmt                # dprint fmt
-bun test test/pkits.test.ts
-bun test test/differential.test.ts
+bun test:pkits
+bun test:differential
 ```
 
 ## NOTES

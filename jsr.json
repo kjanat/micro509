@@ -1,0 +1,28 @@
+{
+	"name": "@kjanat/micro509",
+	"exports": {
+		".": "./src/index.ts",
+		"./certificate": "./src/certificate.ts",
+		"./crl": "./src/crl.ts",
+		"./csr": "./src/csr.ts",
+		"./extensions": "./src/extensions.ts",
+		"./identity": "./src/identity.ts",
+		"./keys": "./src/keys.ts",
+		"./name": "./src/name.ts",
+		"./name-constraints": "./src/name-constraints.ts",
+		"./ocsp": "./src/ocsp.ts",
+		"./parse": "./src/parse.ts",
+		"./pem": "./src/pem.ts",
+		"./pfx": "./src/pfx.ts",
+		"./pkcs12-mac": "./src/pkcs12-mac.ts",
+		"./pkcs7": "./src/pkcs7.ts",
+		"./policy": "./src/policy.ts",
+		"./result": "./src/result.ts",
+		"./revocation": "./src/revocation.ts",
+		"./verify": "./src/verify.ts",
+		"./package.json": "./package.json"
+	},
+	"license": "MIT",
+	"publish": { "include": ["src"], "exclude": [] },
+	"version": "0.1.0"
+}

@@ -18,9 +18,8 @@
 		"outDir": "./node_modules/.cache/tsc/other",
 		"tsBuildInfoFile": "./node_modules/.cache/tsc/tsconfig.other.tsbuildinfo",
 		"allowImportingTsExtensions": true,
-		"isolatedDeclarations": false,
-		"stripInternal": true
+		"isolatedDeclarations": false
 	},
-	"include": ["src", "test", "scripts", "tsdown.config.ts", "src/**/*.test.ts"],
+	"include": ["src", "test", "scripts", "*.config.ts"],
 	"exclude": ["dist", "node_modules"]
 }

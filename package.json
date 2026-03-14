@@ -50,9 +50,15 @@
 	"scripts": {
 		"bd": "tsdown --no-attw --no-publint --no-unused --no-report",
 		"build": "tsdown",
+		"docs:build": "rm -rf ./docs/deno 2>/dev/null; deno doc --html --output=./docs/deno --name=micro509 src/index.ts",
+		"docs:lint": "rm -rf ./docs/deno 2>/dev/null; deno doc --html --output=./docs/deno --name=micro509 --lint src/index.ts",
 		"fmt": "dprint fmt",
-		"lint": "biome lint",
+		"lint": "bun lint:biome",
+		"lint:biome": "biome lint",
+		"lint:deno": "deno lint --rules-exclude=no-node-globals,require-await,no-unused-vars src",
 		"test": "AGENT=1 bun test --coverage",
+		"test:differential": "bun test test/differential.test.ts",
+		"test:pkits": "bun test test/pkits.test.ts",
 		"typecheck": "tsgo --noEmit -p tsconfig.src.json && tsgo --noEmit -p tsconfig.other.json",
 		"typecheck:tsc": "tsc --noEmit -p tsconfig.src.json && tsc --noEmit -p tsconfig.other.json"
 	},

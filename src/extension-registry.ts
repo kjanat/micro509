@@ -66,6 +66,7 @@ export type ExtensionRegistryContext = 'certificate' | 'csr';
 
 /**
  * Readonly snapshot of decoded known extensions collected during parsing.
+ *
  * Fields mirror the extension slots on {@linkcode ParsedCertificate}.
  */
 export interface KnownParsedExtensionAccumulator {

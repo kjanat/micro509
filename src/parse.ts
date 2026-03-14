@@ -63,7 +63,13 @@ import { pemDecode, splitPemBlocks } from './pem.ts';
 /** Shared UTF-8 decoder for IA5String / UTF8String values. */
 const textDecoder = new TextDecoder();
 
-/** A single attribute from an X.501 RelativeDistinguishedName. */
+/**
+ * A single decoded name attribute from an X.501 RelativeDistinguishedName.
+ *
+ * RFC 5280 / X.501 call this structure an `AttributeTypeAndValue`.
+ *
+ * @see {@link https://datatracker.ietf.org/doc/html/rfc5280#appendix-A.1 RFC 5280 Appendix A.1}
+ */
 export interface ParsedNameAttribute {
 	/** Dotted-decimal OID of the attribute type (e.g. `"2.5.4.3"` for CN). */
 	readonly oid: string;
@@ -212,10 +218,11 @@ export interface DecodedExtensionValue<TValue> {
 }
 
 /**
- * Options for {@linkcode parseCertificateDer}, {@linkcode parseCertificatePem}, and CSR parse functions.
+ * Options for {@linkcode parseCertificateDer}, {@linkcode parseCertificatePem},
+ * and CSR parse functions.
  *
- * Supply custom extension decoders to have their results included in
- * the parsed output alongside the built-in extensions.
+ * Supply custom extension decoders to have their results included in the parsed output alongside
+ * the built-in extensions.
  */
 export interface ParseOptions<TMap extends ExtensionDecoderMap = Record<never, never>> {
 	/** Array of decoders; decoded values appear in `decodedExtensions`. */
@@ -367,8 +374,8 @@ export interface ParsedCertificateSigningRequest<
  * import { parseCertificateDer } from 'micro509';
  *
  * const cert = parseCertificateDer(derBytes);
- * console.log(cert.subject.values.CN); // "example.com"
- * console.log(cert.keyUsage);          // ["digitalSignature", "keyEncipherment"]
+ * console.log(cert.subject.values.commonName); // "example.com"
+ * console.log(cert.keyUsage);                  // ["digitalSignature", "keyEncipherment"]
  * ```
  *
  * @param der Raw DER bytes of an X.509 certificate.

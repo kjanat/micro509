@@ -1,9 +1,35 @@
 /**
- * IP address parsing and normalization helpers shared by parsing, validation,
- * and identity matching flows.
+ * IP address parsing and normalization helpers shared by parsing,
+ * validation, and identity matching flows.
  *
- * These utilities keep IPv4 and IPv6 handling consistent for SAN matching
- * and name constraint evaluation.
+ * These utilities keep IPv4 and IPv6 handling consistent for SAN
+ * matching and name constraint evaluation.
+ *
+ * @example
+ * ```ts
+ * import {
+ * 	allOnesMaskForIpAddress,
+ * 	decodeIpAddress,
+ * 	expandIpv6,
+ * 	normalizeIpAddress,
+ * 	parseIpAddressToBytes,
+ * } from './ip.ts';
+ *
+ * normalizeIpAddress('::1');
+ * // '0000:0000:0000:0000:0000:0000:0000:0001'
+ *
+ * expandIpv6('2001:db8::1');
+ * // ['2001', '0db8', '0000', '0000', '0000', '0000', '0000', '0001']
+ *
+ * Array.from(parseIpAddressToBytes('127.0.0.1'));
+ * // [127, 0, 0, 1]
+ *
+ * decodeIpAddress(Uint8Array.of(127, 0, 0, 1));
+ * // '127.0.0.1'
+ *
+ * Array.from(allOnesMaskForIpAddress('127.0.0.1'));
+ * // [255, 255, 255, 255]
+ * ```
  *
  * @module
  */
@@ -12,9 +38,18 @@
 const IPV6_SEGMENT = /^[0-9a-f]{1,4}$/;
 
 /**
- * Normalizes an IP address string for comparison. IPv4 addresses pass
- * through unchanged; IPv6 addresses are fully expanded to 8 colon-separated
- * zero-padded groups (e.g. `"::1"` → `"0000:0000:…:0001"`).
+ * Normalizes an IP address string for comparison.\
+ * IPv4 addresses pass through unchanged; IPv6 addresses expand to 8
+ * colon-separated zero-padded groups.
+ *
+ * @example
+ * ```ts
+ * normalizeIpAddress('::1');
+ * // '0000:0000:0000:0000:0000:0000:0000:0001'
+ * ```
+ *
+ * @param value IPv4 or IPv6 address string to normalize.
+ * @returns The normalized address string.
  */
 export function normalizeIpAddress(value: string): string {
 	if (!value.includes(':')) {
@@ -24,8 +59,18 @@ export function normalizeIpAddress(value: string): string {
 }
 
 /**
- * Expands an IPv6 address (which may contain `::` shorthand) into exactly
- * 8 zero-padded four-character hex segments. Throws on malformed input.
+ * Expands an IPv6 address, including `::` shorthand, into exactly 8
+ * zero-padded four-character hex segments.\
+ * Throws on malformed input.
+ *
+ * @example
+ * ```ts
+ * expandIpv6('2001:db8::1');
+ * // ['2001', '0db8', '0000', '0000', '0000', '0000', '0000', '0001']
+ * ```
+ *
+ * @param value IPv6 address string to expand.
+ * @returns The 8 normalized IPv6 segments.
  */
 export function expandIpv6(value: string): readonly string[] {
 	const normalized = value.toLowerCase();
@@ -55,9 +100,19 @@ export function expandIpv6(value: string): readonly string[] {
 }
 
 /**
- * Parses an IPv4 or IPv6 address string into its raw byte representation:
- * 4 bytes for IPv4, 16 bytes for IPv6. Suitable for encoding into SAN
- * iPAddress octets or name-constraint ranges.
+ * Parses an IPv4 or IPv6 address string into raw bytes.\
+ * Returns 4 bytes for IPv4 and 16 bytes for IPv6.
+ *
+ * Suitable for encoding into SAN iPAddress octets or name-constraint ranges.
+ *
+ * @example
+ * ```ts
+ * Array.from(parseIpAddressToBytes('127.0.0.1'));
+ * // [127, 0, 0, 1]
+ * ```
+ *
+ * @param value IPv4 or IPv6 address string to parse.
+ * @returns The raw address bytes.
  */
 export function parseIpAddressToBytes(value: string): Uint8Array {
 	if (value.includes(':')) {
@@ -79,9 +134,20 @@ export function parseIpAddressToBytes(value: string): Uint8Array {
 }
 
 /**
- * Converts raw IP address bytes back to a human-readable string.
- * 4 bytes → dotted-decimal IPv4, 16 bytes → colon-separated hex IPv6.
+ * Converts raw IP address bytes back to a human-readable string.\
+ * Returns dotted-decimal IPv4 for 4-byte input and colon-separated hex
+ * IPv6 for 16-byte input.
+ *
  * Throws on any other length.
+ *
+ * @example
+ * ```ts
+ * decodeIpAddress(Uint8Array.of(127, 0, 0, 1));
+ * // '127.0.0.1'
+ * ```
+ *
+ * @param bytes Raw IPv4 or IPv6 address bytes.
+ * @returns The decoded address string.
  */
 export function decodeIpAddress(bytes: Uint8Array): string {
 	if (bytes.length === 4) {
@@ -101,8 +167,19 @@ export function decodeIpAddress(bytes: Uint8Array): string {
 
 /**
  * Returns an all-ones (`0xff`) mask of the appropriate length for the
- * given IP address string: 4 bytes for IPv4, 16 bytes for IPv6.
+ * given IP address string.\
+ * Returns 4 bytes for IPv4 and 16 bytes for IPv6.
+ *
  * Used to build name-constraint subnet masks that match a single host.
+ *
+ * @example
+ * ```ts
+ * Array.from(allOnesMaskForIpAddress('127.0.0.1'));
+ * // [255, 255, 255, 255]
+ * ```
+ *
+ * @param value IPv4 or IPv6 address string used to choose mask length.
+ * @returns An all-ones mask for the same address family.
  */
 export function allOnesMaskForIpAddress(value: string): Uint8Array {
 	const mask = new Uint8Array(value.includes(':') ? 16 : 4);
@@ -110,7 +187,7 @@ export function allOnesMaskForIpAddress(value: string): Uint8Array {
 	return mask;
 }
 
-/** Expands and converts an IPv6 address string into a 16-byte `Uint8Array`. */
+/** Parses an IPv6 address string into a 16-byte `Uint8Array`. */
 function parseIpv6ToBytes(value: string): Uint8Array {
 	const expanded = expandIpv6(value);
 	const bytes = new Uint8Array(16);

@@ -72,8 +72,9 @@ export type KeyUsage =
 /**
  * RFC 5280 §4.2.1.6 Subject Alternative Name / GeneralName.
  *
- * Discriminated union keyed on `type`. The `'unknown'` variant preserves
- * unrecognized GeneralName tags for round-trip fidelity.
+ * Discriminated union keyed on `type`.
+ *
+ * The `'unknown'` variant preserves unrecognized {@linkcode GeneralName} tags for round-trip fidelity.
  */
 export type SubjectAltName =
 	| {
@@ -113,7 +114,7 @@ export type SubjectAltName =
 			readonly derHex: string;
 	  }
 	| {
-			/** Unrecognized GeneralName tag, preserved as raw bytes. */
+			/** Unrecognized {@linkcode GeneralName} tag, preserved as raw bytes. */
 			readonly type: 'unknown';
 			/** ASN.1 context tag number. */
 			readonly tag: number;
@@ -140,10 +141,11 @@ export type DistributionPointReason =
 
 /**
  * Name component of a CRL Distribution Point (RFC 5280 §4.2.1.13).
+ *
  * Supply exactly one of `fullName` or `relativeName`.
  */
 export interface DistributionPointName {
-	/** Absolute GeneralName(s) identifying the distribution point (usually a URI). */
+	/** Absolute {@linkcode GeneralName}(s) identifying the distribution point (usually a URI). */
 	readonly fullName?: readonly GeneralName[];
 	/** Name relative to the issuer's DN; mutually exclusive with `fullName`. */
 	readonly relativeName?: RelativeDistinguishedNameInput;
@@ -1006,7 +1008,7 @@ function encodeDistributionPointName(name: DistributionPointName): Uint8Array {
 	throw new Error('DistributionPointName must contain fullName or relativeName');
 }
 
-/** DER-encode a NameConstraintForm as an implicit-tagged GeneralName. */
+/** DER-encode a NameConstraintForm as an implicit-tagged {@linkcode GeneralName}. */
 function encodeNameConstraintForm(form: NameConstraintForm): Uint8Array {
 	switch (form.type) {
 		case 'dns':

@@ -1,9 +1,7 @@
 /**
  * Distinguished-name field metadata.
  *
- * Maps friendly {@linkcode NameFieldKey} names to their ASN.1 OIDs and
- * string-encoding functions.
- *
+ * Maps friendly {@linkcode NameFieldKey} names to their ASN.1 OIDs and string-encoding functions.
  * @module
  */
 
@@ -45,7 +43,7 @@ export const NAME_FIELD_DEFINITIONS: Record<NameFieldKey, NameFieldDefinition> =
 /**
  * Canonical emission order when converting a {@linkcode NameObject} to RDN attributes.
  *
- * Follows the conventional C/ST/L/STREET/O/OU/CN/… ordering.
+ * Follows the conventional `C/ST/L/STREET/O/OU/CN/…` ordering.
  */
 export const NAME_OBJECT_ORDER: readonly NameFieldKey[] = [
 	'country',
