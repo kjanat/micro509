@@ -1,9 +1,9 @@
 {
 	"compilerOptions": {
-		"target": "ES2023",
+		"target": "ES2024",
 		"module": "NodeNext",
 		"moduleResolution": "NodeNext",
-		"lib": ["ES2023", "DOM"],
+		"lib": ["ES2024", "DOM"],
 		"types": ["bun-types", "node"],
 		"skipLibCheck": true,
 		"strict": true,
@@ -18,7 +18,8 @@
 		"outDir": "./node_modules/.cache/tsc/other",
 		"tsBuildInfoFile": "./node_modules/.cache/tsc/tsconfig.other.tsbuildinfo",
 		"allowImportingTsExtensions": true,
-		"isolatedDeclarations": false
+		"isolatedDeclarations": false,
+		"stripInternal": true
 	},
 	"include": ["src", "test", "scripts", "tsdown.config.ts", "src/**/*.test.ts"],
 	"exclude": ["dist", "node_modules"]
