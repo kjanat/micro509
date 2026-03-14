@@ -53,10 +53,14 @@ import { parseIpAddressToBytes } from './ip.ts';
 import { encodeRelativeDistinguishedName, type RelativeDistinguishedNameInput } from './name.ts';
 import { OIDS } from './oids.ts';
 
+export type { NameAttribute, NameFieldKey, RelativeDistinguishedNameInput } from './name.ts';
+
 /**
  * RFC 5280 §4.2.1.3 Key Usage bit flag.
  *
  * Each value corresponds to one bit in the KeyUsage BIT STRING.
+ *
+ * @see {@link https://datatracker.ietf.org/doc/html/rfc5280#section-4.2.1.3 RFC 5280 §4.2.1.3}
  */
 export type KeyUsage =
 	| 'digitalSignature'
@@ -176,7 +180,7 @@ export type DistributionPoint =
 	  };
 
 /** Base shape for Issuing Distribution Point (RFC 5280 §5.2.5) — no scope restriction. */
-interface IssuingDistributionPointBase {
+export interface IssuingDistributionPointBase {
 	/** Where to fetch this CRL. */
 	readonly distributionPoint?: DistributionPointName;
 	/** Limits the CRL to these revocation reasons. Absent means all reasons. */
@@ -192,26 +196,35 @@ interface IssuingDistributionPointBase {
 }
 
 /** IDP scoped to end-entity (user) certificates only. Mutually exclusive with CA / attribute scopes. */
-interface IssuingDistributionPointForUserCerts
+export interface IssuingDistributionPointForUserCerts
 	extends Omit<IssuingDistributionPointBase, 'onlyContainsUserCerts'> {
+	/** This variant only covers end-entity certificates. */
 	readonly onlyContainsUserCerts: true;
+	/** Must be absent or false when the CRL is not CA-only. */
 	readonly onlyContainsCACerts?: false;
+	/** Must be absent or false when the CRL is not attribute-cert-only. */
 	readonly onlyContainsAttributeCerts?: false;
 }
 
 /** IDP scoped to CA certificates only. Mutually exclusive with user / attribute scopes. */
-interface IssuingDistributionPointForCaCerts
+export interface IssuingDistributionPointForCaCerts
 	extends Omit<IssuingDistributionPointBase, 'onlyContainsCACerts'> {
+	/** Must be absent or false when the CRL is not user-cert-only. */
 	readonly onlyContainsUserCerts?: false;
+	/** This variant only covers CA certificates. */
 	readonly onlyContainsCACerts: true;
+	/** Must be absent or false when the CRL is not attribute-cert-only. */
 	readonly onlyContainsAttributeCerts?: false;
 }
 
 /** IDP scoped to attribute certificates only. Mutually exclusive with user / CA scopes. */
-interface IssuingDistributionPointForAttributeCerts
+export interface IssuingDistributionPointForAttributeCerts
 	extends Omit<IssuingDistributionPointBase, 'onlyContainsAttributeCerts'> {
+	/** Must be absent or false when the CRL is not user-cert-only. */
 	readonly onlyContainsUserCerts?: false;
+	/** Must be absent or false when the CRL is not CA-only. */
 	readonly onlyContainsCACerts?: false;
+	/** This variant only covers attribute certificates. */
 	readonly onlyContainsAttributeCerts: true;
 }
 
@@ -239,9 +252,6 @@ export interface BasicConstraints {
 	readonly pathLength?: number;
 }
 
-/** RFC 5280 §4.2.1.4 — array of policy OIDs with optional qualifiers. */
-export type CertificatePolicies = readonly PolicyInformation[];
-
 /** A single certificate policy: an OID plus optional qualifiers. */
 export interface PolicyInformation {
 	/** Dotted-decimal OID of the policy (e.g. `"2.23.140.1.2.1"` for DV). */
@@ -249,6 +259,32 @@ export interface PolicyInformation {
 	/** Optional CPS URIs or user notices attached to this policy. */
 	readonly policyQualifiers?: readonly PolicyQualifierInfo[];
 }
+
+/** RFC 5280 §4.2.1.4 — array of policy OIDs with optional qualifiers. */
+export type CertificatePolicies = readonly {
+	/** Dotted-decimal OID of the policy (e.g. `"2.23.140.1.2.1"` for DV). */
+	readonly policyIdentifier: string;
+	/** Optional CPS URIs or user notices attached to this policy. */
+	readonly policyQualifiers?: readonly (
+		| {
+				readonly type: 'cps';
+				readonly uri: string;
+		  }
+		| {
+				readonly type: 'userNotice';
+				readonly noticeRef?: {
+					readonly organization: string;
+					readonly noticeNumbers: readonly number[];
+				};
+				readonly explicitText?: string;
+		  }
+		| {
+				readonly type: 'oid';
+				readonly oid: string;
+				readonly qualifierDer: Uint8Array;
+		  }
+	)[];
+}[];
 
 /** CPS (Certification Practice Statement) URI policy qualifier. */
 export interface CpsPolicyQualifierInfo {
@@ -292,9 +328,6 @@ export type PolicyQualifierInfo =
 	| UserNoticePolicyQualifierInfo
 	| CustomPolicyQualifierInfo;
 
-/** RFC 5280 §4.2.1.5 — array of issuer-to-subject policy OID pairs. */
-export type PolicyMappings = readonly PolicyMapping[];
-
 /** Maps a policy OID in the issuer's domain to an equivalent OID in the subject's domain. */
 export interface PolicyMapping {
 	/** Policy OID as defined by the issuing CA. Must not be anyPolicy. */
@@ -302,6 +335,14 @@ export interface PolicyMapping {
 	/** Equivalent policy OID in the subject CA's domain. Must not be anyPolicy. */
 	readonly subjectDomainPolicy: string;
 }
+
+/** RFC 5280 §4.2.1.5 — array of issuer-to-subject policy OID pairs. */
+export type PolicyMappings = readonly {
+	/** Policy OID as defined by the issuing CA. Must not be anyPolicy. */
+	readonly issuerDomainPolicy: string;
+	/** Equivalent policy OID in the subject CA's domain. Must not be anyPolicy. */
+	readonly subjectDomainPolicy: string;
+}[];
 
 /**
  * RFC 5280 §4.2.1.11 Policy Constraints.
@@ -442,10 +483,70 @@ export type UnsupportedNameConstraintForm =
 	  };
 
 /** Union of supported and unsupported name constraint forms as produced by parsing. */
-export type ParsedNameConstraintForm = NameConstraintForm | UnsupportedNameConstraintForm;
+export type ParsedNameConstraintForm =
+	| {
+			readonly type: 'dns';
+			readonly value: string;
+	  }
+	| {
+			readonly type: 'email';
+			readonly value: string;
+	  }
+	| {
+			readonly type: 'uri';
+			readonly value: string;
+	  }
+	| {
+			readonly type: 'ip';
+			readonly addressBytes: Uint8Array;
+			readonly maskBytes: Uint8Array;
+	  }
+	| {
+			readonly type: 'directoryName';
+			readonly derHex: string;
+	  }
+	| {
+			readonly type: 'otherName';
+			readonly value: Uint8Array;
+	  }
+	| {
+			readonly type: 'x400Address';
+			readonly value: Uint8Array;
+	  }
+	| {
+			readonly type: 'ediPartyName';
+			readonly value: Uint8Array;
+	  }
+	| {
+			readonly type: 'registeredID';
+			readonly value: string;
+	  };
 
 /** A single subtree entry in a Name Constraints permitted/excluded list. */
-export interface GeneralSubtree<TForm extends ParsedNameConstraintForm = NameConstraintForm> {
+export interface GeneralSubtree<
+	TForm extends ParsedNameConstraintForm =
+		| {
+				readonly type: 'dns';
+				readonly value: string;
+		  }
+		| {
+				readonly type: 'email';
+				readonly value: string;
+		  }
+		| {
+				readonly type: 'uri';
+				readonly value: string;
+		  }
+		| {
+				readonly type: 'ip';
+				readonly addressBytes: Uint8Array;
+				readonly maskBytes: Uint8Array;
+		  }
+		| {
+				readonly type: 'directoryName';
+				readonly derHex: string;
+		  },
+> {
 	/** The name form that defines this constraint boundary. */
 	readonly base: TForm;
 }
@@ -456,7 +557,30 @@ export interface GeneralSubtree<TForm extends ParsedNameConstraintForm = NameCon
  * A CA certificate may restrict the namespace of all subject names in
  * subsequent certificates in the path.
  */
-export interface NameConstraints<TForm extends ParsedNameConstraintForm = NameConstraintForm> {
+export interface NameConstraints<
+	TForm extends ParsedNameConstraintForm =
+		| {
+				readonly type: 'dns';
+				readonly value: string;
+		  }
+		| {
+				readonly type: 'email';
+				readonly value: string;
+		  }
+		| {
+				readonly type: 'uri';
+				readonly value: string;
+		  }
+		| {
+				readonly type: 'ip';
+				readonly addressBytes: Uint8Array;
+				readonly maskBytes: Uint8Array;
+		  }
+		| {
+				readonly type: 'directoryName';
+				readonly derHex: string;
+		  },
+> {
 	/** Names that MUST fall within these subtrees to be valid. */
 	readonly permittedSubtrees?: readonly GeneralSubtree<TForm>[];
 	/** Names that MUST NOT fall within these subtrees. Takes precedence over permitted. */
@@ -482,7 +606,13 @@ export type AuthorityInfoAccessMethod =
 /** A single entry in the Authority Information Access extension (RFC 5280 §4.2.2.1). */
 export interface AuthorityInformationAccess {
 	/** Access method (`'ocsp'`, `'caIssuers'`, or custom OID). */
-	readonly method: AuthorityInfoAccessMethod;
+	readonly method:
+		| 'ocsp'
+		| 'caIssuers'
+		| {
+				readonly type: 'oid';
+				readonly value: string;
+		  };
 	/** URI where the resource can be fetched. */
 	readonly uri: string;
 }
@@ -505,7 +635,17 @@ export interface CustomExtendedKeyUsage {
 }
 
 /** Extended Key Usage — either a well-known purpose string or a custom OID. */
-export type ExtendedKeyUsage = KnownExtendedKeyUsage | CustomExtendedKeyUsage;
+export type ExtendedKeyUsage =
+	| 'serverAuth'
+	| 'clientAuth'
+	| 'codeSigning'
+	| 'emailProtection'
+	| 'timeStamping'
+	| 'ocspSigning'
+	| {
+			readonly type: 'oid';
+			readonly value: string;
+	  };
 
 /** Map from well-known EKU names to their dotted-decimal OIDs. */
 const EXTENDED_KEY_USAGE_OIDS: Record<KnownExtendedKeyUsage, string> = {

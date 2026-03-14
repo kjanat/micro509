@@ -23,6 +23,6 @@
 		"./package.json": "./package.json"
 	},
 	"license": "MIT",
-	"publish": { "include": ["src"], "exclude": [] },
+	"publish": { "include": ["src", "package.json", "README.md"], "exclude": [] },
 	"version": "0.1.0"
 }

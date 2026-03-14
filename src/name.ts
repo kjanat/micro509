@@ -23,7 +23,7 @@
  *
  * @example
  * ```ts
- * import { encodeName } from 'micro509';
+ * import { encodeName } from 'micro509/name';
  *
  * const subjectDer = encodeName({
  * 	country: 'US',
@@ -36,7 +36,7 @@
  *
  * @example
  * ```ts
- * import { encodeName } from 'micro509';
+ * import { encodeName } from 'micro509/name';
  *
  * const subjectDer = encodeName([
  * 	{ type: 'commonName', value: 'example.com' },
@@ -49,7 +49,7 @@
  *
  * @example
  * ```ts
- * import { encodeRelativeDistinguishedName } from 'micro509';
+ * import { encodeRelativeDistinguishedName } from 'micro509/name';
  *
  * const rdnDer = encodeRelativeDistinguishedName([
  * 	{ type: 'commonName', value: 'example.com' },

@@ -9,6 +9,8 @@
 
 import type { GeneralSubtree } from './extensions.ts';
 
+export type * from './extensions.ts';
+
 /**
  * Input for `createNameConstraintValidationState`.
  *

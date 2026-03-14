@@ -60,6 +60,24 @@ import { type NameFieldKey, nameFieldKeyFromOid } from './name.ts';
 import { OIDS } from './oids.ts';
 import { pemDecode, splitPemBlocks } from './pem.ts';
 
+export type {
+	AuthorityInformationAccess,
+	BasicConstraints,
+	CertificatePolicies,
+	DistributionPointReason,
+	ExtendedKeyUsage,
+	GeneralName,
+	GeneralSubtree,
+	InhibitAnyPolicy,
+	KeyUsage,
+	NameConstraints,
+	ParsedNameConstraintForm,
+	PolicyConstraints,
+	PolicyMappings,
+	SubjectAltName,
+} from './extensions.ts';
+export type { NameFieldKey } from './name.ts';
+
 /** Shared UTF-8 decoder for IA5String / UTF8String values. */
 const textDecoder = new TextDecoder();
 
@@ -501,7 +519,7 @@ export function parseCertificateDer<TMap extends ExtensionDecoderMap = Record<ne
  * import { parseCertificatePem } from 'micro509';
  *
  * const cert = parseCertificatePem(pemString);
- * console.log(cert.issuer.values.O);   // "Let's Encrypt"
+ * console.log(cert.issuer.values.organization); // "Let's Encrypt"
  * console.log(cert.notAfter);          // Date
  * ```
  *

@@ -12,6 +12,8 @@ import { OIDS } from './oids.ts';
 import { decryptPbes2, encryptPbes2, type Pbes2EncryptionOptions } from './pbes2.ts';
 import { base64Decode, base64Encode, pemDecode, pemEncode } from './pem.ts';
 
+export type { Pbes2EncryptionOptions, Pbes2EncryptionScheme, Pbes2Prf } from './pbes2.ts';
+
 /** Hash algorithm paired with an RSA key. */
 export type RsaHash = 'SHA-256' | 'SHA-384' | 'SHA-512';
 

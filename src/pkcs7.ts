@@ -15,7 +15,6 @@ import {
 	toArrayBuffer,
 	toHex,
 } from './asn1.ts';
-import type { Micro509Error } from './core/result.ts';
 import type { DerElement } from './der.ts';
 import {
 	concatBytes,
@@ -33,7 +32,11 @@ import { OIDS } from './oids.ts';
 import type { ParsedCertificate } from './parse.ts';
 import { parseCertificateDer } from './parse.ts';
 import { base64Encode, pemEncode, splitPemBlocks } from './pem.ts';
+import type { ErrorResult, Micro509Error } from './result.ts';
 import { verifySignedData } from './sig-verify.ts';
+
+export type * from './parse.ts';
+export type * from './result.ts';
 
 /** PEM text (may contain multiple CERTIFICATE blocks) or raw DER bytes. */
 export type Pkcs7CertificateSource = string | Uint8Array;
@@ -101,18 +104,6 @@ export interface ParsePkcs7Failure extends Micro509Error<ParsePkcs7ErrorCode> {
 	readonly ok: false;
 }
 
-/** Failure branch of PKCS#7 parse results. */
-interface ParsePkcs7FailureResult {
-	/** Always `false` for failures. */
-	readonly ok: false;
-	/** Structured error with code and message. */
-	readonly error: ParsePkcs7Failure;
-	/** Machine-readable failure reason. */
-	readonly code: ParsePkcs7ErrorCode;
-	/** Human-readable diagnostic. */
-	readonly message: string;
-}
-
 /** Success-or-failure result from {@linkcode parsePkcs7SignedDataDer} / {@linkcode parsePkcs7SignedDataPem}. */
 export type ParsePkcs7SignedDataResult =
 	| {
@@ -121,7 +112,7 @@ export type ParsePkcs7SignedDataResult =
 			/** Decoded SignedData. */
 			readonly value: ParsedPkcs7SignedData;
 	  }
-	| ParsePkcs7FailureResult;
+	| ErrorResult<ParsePkcs7ErrorCode, Record<never, never>, ParsePkcs7Failure>;
 
 /** Success-or-failure result from {@linkcode parsePkcs7CertBagDer} / {@linkcode parsePkcs7CertBagPem}. */
 export type ParsePkcs7CertBagResult =
@@ -131,7 +122,7 @@ export type ParsePkcs7CertBagResult =
 			/** Parsed certificates from the cert bag. */
 			readonly value: readonly ParsedCertificate[];
 	  }
-	| ParsePkcs7FailureResult;
+	| ErrorResult<ParsePkcs7ErrorCode, Record<never, never>, ParsePkcs7Failure>;
 
 /** Error payload for a failed {@linkcode verifyPkcs7SignedData} call. */
 export interface VerifyPkcs7SignedDataFailure
@@ -146,23 +137,6 @@ export interface VerifyPkcs7SignedDataFailure
 	readonly ok: false;
 }
 
-/** Failure branch of {@linkcode VerifyPkcs7SignedDataResult}. */
-interface VerifyPkcs7SignedDataFailureResult {
-	/** Always `false` for failures. */
-	readonly ok: false;
-	/** Structured error with code and message. */
-	readonly error: VerifyPkcs7SignedDataFailure;
-	/** Machine-readable failure reason. */
-	readonly code:
-		| 'signer_not_found'
-		| 'signature_invalid'
-		| 'message_digest_mismatch'
-		| 'content_missing'
-		| ParsePkcs7ErrorCode;
-	/** Human-readable diagnostic. */
-	readonly message: string;
-}
-
 /** Success-or-failure result from {@linkcode verifyPkcs7SignedData}. */
 export type VerifyPkcs7SignedDataResult =
 	| {
@@ -171,7 +145,15 @@ export type VerifyPkcs7SignedDataResult =
 			/** The verified SignedData structure. */
 			readonly value: ParsedPkcs7SignedData;
 	  }
-	| VerifyPkcs7SignedDataFailureResult;
+	| ErrorResult<
+			| 'signer_not_found'
+			| 'signature_invalid'
+			| 'message_digest_mismatch'
+			| 'content_missing'
+			| ParsePkcs7ErrorCode,
+			Record<never, never>,
+			VerifyPkcs7SignedDataFailure
+	  >;
 
 // ---------------------------------------------------------------------------
 // createPkcs7CertBag
@@ -405,16 +387,32 @@ export async function verifyPkcs7SignedData(
 // ---------------------------------------------------------------------------
 
 /** Shorthand for constructing a PKCS#7 parse failure result. */
-function pkcs7Failure(code: ParsePkcs7ErrorCode, message: string): ParsePkcs7FailureResult {
+function pkcs7Failure(
+	code: ParsePkcs7ErrorCode,
+	message: string,
+): ErrorResult<ParsePkcs7ErrorCode, Record<never, never>, ParsePkcs7Failure> {
 	const error: ParsePkcs7Failure = { ok: false, code, message };
 	return { ok: false, error, code, message };
 }
 
 /** Shorthand for constructing a PKCS#7 verification failure result. */
 function verifyPkcs7Failure(
-	code: VerifyPkcs7SignedDataFailureResult['code'],
+	code:
+		| 'signer_not_found'
+		| 'signature_invalid'
+		| 'message_digest_mismatch'
+		| 'content_missing'
+		| ParsePkcs7ErrorCode,
 	message: string,
-): VerifyPkcs7SignedDataFailureResult {
+): ErrorResult<
+	| 'signer_not_found'
+	| 'signature_invalid'
+	| 'message_digest_mismatch'
+	| 'content_missing'
+	| ParsePkcs7ErrorCode,
+	Record<never, never>,
+	VerifyPkcs7SignedDataFailure
+> {
 	const error: VerifyPkcs7SignedDataFailure = { ok: false, code, message };
 	return { ok: false, error, code, message };
 }
@@ -650,7 +648,18 @@ async function verifySignedAttrs(
 	signerInfo: ParsedPkcs7SignerInfo,
 	signer: ParsedCertificate,
 	encapsulatedContent: Uint8Array,
-): Promise<{ readonly ok: true } | VerifyPkcs7SignedDataFailureResult> {
+): Promise<
+	| { readonly ok: true }
+	| ErrorResult<
+			| 'signer_not_found'
+			| 'signature_invalid'
+			| 'message_digest_mismatch'
+			| 'content_missing'
+			| ParsePkcs7ErrorCode,
+			Record<never, never>,
+			VerifyPkcs7SignedDataFailure
+	  >
+> {
 	if (signerInfo.signedAttrsDer === undefined) {
 		return verifyPkcs7Failure('malformed', 'Missing signedAttrs DER');
 	}

@@ -17,7 +17,6 @@ import {
 	requireElement,
 	toHex,
 } from './asn1.ts';
-import type { Micro509Error } from './core/result.ts';
 import {
 	bitString,
 	bool,
@@ -73,8 +72,14 @@ import {
 	parseCertificatePem,
 } from './parse.ts';
 import { base64Encode, pemDecode, pemEncode } from './pem.ts';
+import type { ErrorResult, Micro509Error } from './result.ts';
 import { verifySignedData } from './sig-verify.ts';
 import { encodeAlgorithmIdentifier, getSignatureAlgorithm, signBytes } from './signing.ts';
+
+export type * from './extensions.ts';
+export type * from './name.ts';
+export type * from './parse.ts';
+export type * from './result.ts';
 
 /**
  * Single revoked certificate entry for {@linkcode createCertificateRevocationList}.
@@ -224,15 +229,8 @@ export type CrlCertificateSource = string | Uint8Array | ParsedCertificate;
 
 /** Failure detail when CRL signature verification fails. */
 export interface VerifyCertificateRevocationListFailure extends Micro509Error<'signature_invalid'> {
+	/** Always `false` for failures. */
 	readonly ok: false;
-}
-
-/** Failure branch of {@linkcode VerifyCertificateRevocationListResult}. */
-interface VerifyCertificateRevocationListFailureResult {
-	readonly ok: false;
-	readonly error: VerifyCertificateRevocationListFailure;
-	readonly code: 'signature_invalid';
-	readonly message: string;
 }
 
 /**
@@ -246,7 +244,7 @@ export type VerifyCertificateRevocationListResult =
 			/** Parsed CRL with a verified signature. */
 			readonly value: ParsedCertificateRevocationList;
 	  }
-	| VerifyCertificateRevocationListFailureResult;
+	| ErrorResult<'signature_invalid', Record<never, never>, VerifyCertificateRevocationListFailure>;
 
 /**
  * Input for {@linkcode validateCertificateRevocationList}.
@@ -271,15 +269,8 @@ export interface ValidateCertificateRevocationListFailure
 	extends Micro509Error<
 		'signature_invalid' | 'issuer_mismatch' | 'stale_crl' | 'crl_sign_not_permitted'
 	> {
+	/** Always `false` for failures. */
 	readonly ok: false;
-}
-
-/** Failure branch of {@linkcode ValidateCertificateRevocationListResult}. */
-interface ValidateCertificateRevocationListFailureResult {
-	readonly ok: false;
-	readonly error: ValidateCertificateRevocationListFailure;
-	readonly code: 'signature_invalid' | 'issuer_mismatch' | 'stale_crl' | 'crl_sign_not_permitted';
-	readonly message: string;
 }
 
 /**
@@ -293,7 +284,11 @@ export type ValidateCertificateRevocationListResult =
 			/** Validated and parsed CRL. */
 			readonly value: ParsedCertificateRevocationList;
 	  }
-	| ValidateCertificateRevocationListFailureResult;
+	| ErrorResult<
+			'signature_invalid' | 'issuer_mismatch' | 'stale_crl' | 'crl_sign_not_permitted',
+			Record<never, never>,
+			ValidateCertificateRevocationListFailure
+	  >;
 
 /**
  * Input for {@linkcode checkCertificateRevocationAgainstCrl}.
@@ -338,7 +333,11 @@ type RevokedCertificateLookupResult =
 			/** Matching revoked entry, if found. */
 			readonly entry?: ParsedRevokedCertificate;
 	  }
-	| CheckCertificateRevocationAgainstCrlFailureResult;
+	| ErrorResult<
+			CheckCertificateRevocationAgainstCrlErrorCode,
+			CheckCertificateRevocationAgainstCrlFailureDetails,
+			CheckCertificateRevocationAgainstCrlFailure
+	  >;
 
 /** Structured details attached to a {@linkcode CheckCertificateRevocationAgainstCrlFailure}. */
 export interface CheckCertificateRevocationAgainstCrlFailureDetails {
@@ -352,6 +351,7 @@ export interface CheckCertificateRevocationAgainstCrlFailure
 		CheckCertificateRevocationAgainstCrlErrorCode,
 		CheckCertificateRevocationAgainstCrlFailureDetails
 	> {
+	/** Always `false` for failures. */
 	readonly ok: false;
 }
 
@@ -380,16 +380,6 @@ export type CheckCertificateRevocationAgainstCrlValue =
 	| CheckCertificateRevocationAgainstCrlGoodValue
 	| CheckCertificateRevocationAgainstCrlRevokedValue;
 
-/** Failure branch of {@linkcode CheckCertificateRevocationAgainstCrlResult}. */
-interface CheckCertificateRevocationAgainstCrlFailureResult {
-	readonly ok: false;
-	readonly error: CheckCertificateRevocationAgainstCrlFailure;
-	readonly code: CheckCertificateRevocationAgainstCrlErrorCode;
-	readonly message: string;
-	/** Present when `code` is `non_applicable` — explains why the CRL was rejected. */
-	readonly details?: CheckCertificateRevocationAgainstCrlFailureDetails;
-}
-
 /**
  * Result of {@linkcode checkCertificateRevocationAgainstCrl}.
  *
@@ -401,7 +391,11 @@ export type CheckCertificateRevocationAgainstCrlResult =
 			readonly ok: true;
 			readonly value: CheckCertificateRevocationAgainstCrlValue;
 	  }
-	| CheckCertificateRevocationAgainstCrlFailureResult;
+	| ErrorResult<
+			CheckCertificateRevocationAgainstCrlErrorCode,
+			CheckCertificateRevocationAgainstCrlFailureDetails,
+			CheckCertificateRevocationAgainstCrlFailure
+	  >;
 
 /**
  * Signs and encodes an X.509 v2 CRL.
@@ -770,7 +764,7 @@ export async function checkCertificateRevocationAgainstCrl(
 function verifyCertificateRevocationListFailureResult(
 	code: 'signature_invalid',
 	message: string,
-): VerifyCertificateRevocationListFailureResult {
+): ErrorResult<'signature_invalid', Record<never, never>, VerifyCertificateRevocationListFailure> {
 	const error: VerifyCertificateRevocationListFailure = {
 		ok: false,
 		code,
@@ -781,9 +775,13 @@ function verifyCertificateRevocationListFailureResult(
 
 /** Builds a `ValidateCertificateRevocationListFailureResult`. */
 function validateCertificateRevocationListFailureResult(
-	code: ValidateCertificateRevocationListFailureResult['code'],
+	code: 'signature_invalid' | 'issuer_mismatch' | 'stale_crl' | 'crl_sign_not_permitted',
 	message: string,
-): ValidateCertificateRevocationListFailureResult {
+): ErrorResult<
+	'signature_invalid' | 'issuer_mismatch' | 'stale_crl' | 'crl_sign_not_permitted',
+	Record<never, never>,
+	ValidateCertificateRevocationListFailure
+> {
 	const error: ValidateCertificateRevocationListFailure = {
 		ok: false,
 		code,
@@ -797,7 +795,11 @@ function checkCertificateRevocationAgainstCrlFailureResult(
 	code: CheckCertificateRevocationAgainstCrlErrorCode,
 	message: string,
 	details?: CheckCertificateRevocationAgainstCrlFailureDetails,
-): CheckCertificateRevocationAgainstCrlFailureResult {
+): ErrorResult<
+	CheckCertificateRevocationAgainstCrlErrorCode,
+	CheckCertificateRevocationAgainstCrlFailureDetails,
+	CheckCertificateRevocationAgainstCrlFailure
+> {
 	const error: CheckCertificateRevocationAgainstCrlFailure = {
 		ok: false,
 		code,
@@ -874,7 +876,13 @@ function checkCrlApplicability(
 	certificate: ParsedCertificate,
 	crl: ParsedCertificateRevocationList,
 	allowDeltaCrl = false,
-): CheckCertificateRevocationAgainstCrlFailureResult | undefined {
+):
+	| ErrorResult<
+			CheckCertificateRevocationAgainstCrlErrorCode,
+			CheckCertificateRevocationAgainstCrlFailureDetails,
+			CheckCertificateRevocationAgainstCrlFailure
+	  >
+	| undefined {
 	if (!allowDeltaCrl && crl.baseCrlNumber !== undefined) {
 		return nonApplicable(
 			'delta_crl_unsupported',
@@ -1004,7 +1012,13 @@ function checkCrlApplicability(
 function checkDeltaCrlCompatibility(
 	completeCrl: ParsedCertificateRevocationList,
 	deltaCrl: ParsedCertificateRevocationList,
-): CheckCertificateRevocationAgainstCrlFailureResult | undefined {
+):
+	| ErrorResult<
+			CheckCertificateRevocationAgainstCrlErrorCode,
+			CheckCertificateRevocationAgainstCrlFailureDetails,
+			CheckCertificateRevocationAgainstCrlFailure
+	  >
+	| undefined {
 	if (completeCrl.baseCrlNumber !== undefined) {
 		return nonApplicable(
 			'delta_crl_incompatible',
@@ -1110,7 +1124,11 @@ function matchesRevokedEntryIssuer(
 function nonApplicable(
 	reason: CrlApplicabilityFailureReason,
 	message: string,
-): CheckCertificateRevocationAgainstCrlFailureResult {
+): ErrorResult<
+	CheckCertificateRevocationAgainstCrlErrorCode,
+	CheckCertificateRevocationAgainstCrlFailureDetails,
+	CheckCertificateRevocationAgainstCrlFailure
+> {
 	return checkCertificateRevocationAgainstCrlFailureResult('non_applicable', message, { reason });
 }
 

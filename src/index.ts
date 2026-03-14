@@ -31,8 +31,9 @@
  * // parsed.subject.values.commonName === 'example.com'
  *
  * const result = await verifyCertificateChain({
- * 	certificate: parsed,
- * 	trustAnchors: [parsed],
+ * 	leaf: certificate.pem,
+ * 	roots: [certificate.pem],
+ * 	allowSelfSignedLeaf: true,
  * });
  * // result.ok === true
  * ```
@@ -71,8 +72,10 @@ export type {
 	CheckCertificateRevocationAgainstCrlErrorCode,
 	CheckCertificateRevocationAgainstCrlFailure,
 	CheckCertificateRevocationAgainstCrlFailureDetails,
+	CheckCertificateRevocationAgainstCrlGoodValue,
 	CheckCertificateRevocationAgainstCrlInput,
 	CheckCertificateRevocationAgainstCrlResult,
+	CheckCertificateRevocationAgainstCrlRevokedValue,
 	CheckCertificateRevocationAgainstCrlValue,
 	CreateCertificateRevocationListInput,
 	CrlApplicabilityFailureReason,
@@ -80,6 +83,7 @@ export type {
 	CrlSource,
 	ParsedCertificateRevocationList,
 	ParsedRevokedCertificate,
+	RevocationReason,
 	RevokedCertificateInput,
 	ValidateCertificateRevocationListFailure,
 	ValidateCertificateRevocationListInput,
@@ -117,6 +121,10 @@ export type {
 	GeneralSubtree,
 	InhibitAnyPolicy,
 	IssuingDistributionPoint,
+	IssuingDistributionPointBase,
+	IssuingDistributionPointForAttributeCerts,
+	IssuingDistributionPointForCaCerts,
+	IssuingDistributionPointForUserCerts,
 	KeyUsage,
 	KnownAuthorityInfoAccessMethod,
 	KnownExtendedKeyUsage,
@@ -140,8 +148,10 @@ export type {
 	MatchServiceIdentityEvaluation,
 	MatchServiceIdentityFailure,
 	MatchServiceIdentityFailureDetails,
+	MatchServiceIdentityFailureResult,
 	MatchServiceIdentityInput,
 	MatchServiceIdentityResult,
+	MatchServiceIdentitySuccess,
 	ServiceIdentityInput,
 	ServiceIdentityType,
 	SrvServiceIdentityInput,
@@ -151,6 +161,7 @@ export type {
 export { matchCertificateServiceIdentity, matchServiceIdentity } from './identity.ts';
 export type {
 	EcKeyAlgorithmInput,
+	EcNamedCurve,
 	Ed25519KeyAlgorithmInput,
 	EncryptedPkcs8Options,
 	ImportEcPublicKeyInput,
@@ -159,8 +170,12 @@ export type {
 	KeyAlgorithmInput,
 	KeyPairMaterial,
 	LegacyPemEncryptionOptions,
+	Pbes2EncryptionOptions,
+	Pbes2EncryptionScheme,
+	Pbes2Prf,
 	PrivateKeyImportInput,
 	PublicKeyImportInput,
+	RsaHash,
 	RsaKeyAlgorithmInput,
 	RsaScheme,
 } from './keys.ts';
@@ -215,6 +230,7 @@ export type {
 	OcspCertStatus,
 	OcspHashAlgorithm,
 	OcspRequestMaterial,
+	OcspRequestSource,
 	OcspResponseMaterial,
 	OcspResponseStatus,
 	ParsedOcspCertId,
@@ -277,10 +293,12 @@ export type {
 	ParsedPfxBagAttributes,
 	ParsePfxErrorCode,
 	ParsePfxFailure,
+	ParsePfxOptions,
 	ParsePfxResult,
 	PfxBagAttributesInput,
 	PfxCertificateBagInput,
 	PfxCertificateSource,
+	PfxEncryptionOptions,
 	PfxMaterial,
 	PfxPrivateKeyBagInput,
 	PfxPrivateKeySource,
@@ -314,7 +332,13 @@ export type {
 	PolicyValidationInput,
 	PolicyValidationOutcome,
 } from './policy.ts';
-export type { IndexedMicro509Error, Micro509Error, Result } from './result.ts';
+export type {
+	ErrorResult,
+	IndexedErrorResult,
+	IndexedMicro509Error,
+	Micro509Error,
+	Result,
+} from './result.ts';
 export type {
 	CheckCertificateRevocationErrorCode,
 	CheckCertificateRevocationFailureDetails,
@@ -350,21 +374,25 @@ export type {
 	CandidatePath,
 	CertificateSource,
 	CsrSource,
+	EkuCheckFailure,
 	EkuCheckPurpose,
 	EkuCheckResult,
 	TrustAnchor,
 	ValidateCandidatePathInput,
 	ValidateCandidatePathResult,
+	ValidateCandidatePathSuccess,
 	ValidateForCaInput,
 	ValidateForCodeSigningInput,
 	ValidateForTlsClientInput,
 	ValidateForTlsServerInput,
 	VerifiedCertificateChain,
 	VerifyCertificateChainInput,
+	VerifyChainFailure,
 	VerifyChainResult,
 	VerifyErrorCode,
 	VerifyFailureDetails,
 	VerifyPurpose,
+	VerifyRequestFailure,
 	VerifyRequestResult,
 } from './verify.ts';
 export {

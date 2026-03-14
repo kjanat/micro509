@@ -9,6 +9,8 @@
 
 import type { PolicyQualifierInfo } from './extensions.ts';
 
+export type * from './extensions.ts';
+
 /**
  * Input for the policy-validation engine.
  *

@@ -25,6 +25,11 @@ import {
 	signBytes,
 } from './signing.ts';
 
+export type * from './extensions.ts';
+export type * from './keys.ts';
+export type * from './name.ts';
+export type * from './signing.ts';
+
 /**
  * Configures the certificate validity window.
  *

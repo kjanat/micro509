@@ -28,6 +28,10 @@ import {
 	signBytes,
 } from './signing.ts';
 
+export type * from './extensions.ts';
+export type * from './name.ts';
+export type * from './signing.ts';
+
 /** Input for {@linkcode createCertificateSigningRequest}. */
 export interface CreateCsrInput {
 	/** Distinguished name for the CSR subject (e.g. `{ commonName: 'example.com' }`). */

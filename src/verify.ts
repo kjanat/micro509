@@ -52,6 +52,13 @@ import {
 	verifyCertificateSignature,
 } from './verify-path.ts';
 
+export type * from './extensions.ts';
+export type * from './identity.ts';
+export type * from './name-constraints.ts';
+export type * from './parse.ts';
+export type * from './policy.ts';
+export type * from './result.ts';
+
 // ---------------------------------------------------------------------------
 // Source types
 // ---------------------------------------------------------------------------
@@ -83,22 +90,20 @@ export type EkuCheckResult =
 			readonly ok: true;
 			readonly value: undefined;
 	  }
-	| EkuCheckFailureResult;
+	| IndexedErrorResult<
+			'leaf_eku_missing' | 'intermediate_eku_constraint',
+			Record<never, never>,
+			EkuCheckFailure
+	  >;
 
 /** Failure from {@linkcode checkExtendedKeyUsage} with the chain index of the certificate that failed. */
 export interface EkuCheckFailure
 	extends Micro509Error<'leaf_eku_missing' | 'intermediate_eku_constraint'> {
+	/** Always `false` for failures. */
 	readonly ok: false;
 	/** Zero-based index into the chain of the certificate that lacks the required EKU. */
 	readonly index: number;
 }
-
-/** Wrapped error result for EKU check failures. */
-type EkuCheckFailureResult = IndexedErrorResult<
-	'leaf_eku_missing' | 'intermediate_eku_constraint',
-	Record<never, never>,
-	EkuCheckFailure
->;
 
 // ---------------------------------------------------------------------------
 // Trust anchor
@@ -199,15 +204,9 @@ export interface VerifyFailureDetails {
 /** A chain verification failure with its error code, human message, chain index, and diagnostic details. */
 export interface VerifyChainFailure
 	extends IndexedMicro509Error<VerifyErrorCode, VerifyFailureDetails> {
+	/** Always `false` for failures. */
 	readonly ok: false;
 }
-
-/** Wrapped error result for chain verification failures. */
-type VerifyFailureResult = IndexedErrorResult<
-	VerifyErrorCode,
-	VerifyFailureDetails,
-	VerifyChainFailure
->;
 
 // ---------------------------------------------------------------------------
 // Build candidate path
@@ -243,7 +242,7 @@ export type BuildCandidatePathResult =
 			readonly ok: true;
 			readonly value: CandidatePath;
 	  }
-	| VerifyFailureResult;
+	| IndexedErrorResult<VerifyErrorCode, VerifyFailureDetails, VerifyChainFailure>;
 
 // ---------------------------------------------------------------------------
 // Validate candidate path
@@ -273,14 +272,6 @@ export interface ValidateCandidatePathSuccess {
 	readonly policyValidation: PolicyValidationOutcome;
 }
 
-/** Internal success shape for validate-candidate-path, carrying both wrapped and flat policy fields. */
-interface ValidateCandidatePathSuccessResult {
-	readonly ok: true;
-	readonly value: ValidateCandidatePathSuccess;
-	/** Shorthand duplicate of `value.policyValidation` for internal forwarding. */
-	readonly policyValidation: PolicyValidationOutcome;
-}
-
 /** Internal result from raw candidate-path validation before wrapping. */
 type ValidateCandidatePathRawResult =
 	| {
@@ -290,7 +281,14 @@ type ValidateCandidatePathRawResult =
 	| VerifyChainFailure;
 
 /** Result of {@linkcode validateCandidatePath}. */
-export type ValidateCandidatePathResult = ValidateCandidatePathSuccessResult | VerifyFailureResult;
+export type ValidateCandidatePathResult =
+	| {
+			readonly ok: true;
+			readonly value: ValidateCandidatePathSuccess;
+			/** Shorthand duplicate of `value.policyValidation` for internal forwarding. */
+			readonly policyValidation: PolicyValidationOutcome;
+	  }
+	| IndexedErrorResult<VerifyErrorCode, VerifyFailureDetails, VerifyChainFailure>;
 
 // ---------------------------------------------------------------------------
 // Verify chain (convenience composition)
@@ -340,7 +338,7 @@ export type VerifyChainResult =
 			readonly ok: true;
 			readonly value: VerifiedCertificateChain;
 	  }
-	| VerifyFailureResult;
+	| IndexedErrorResult<VerifyErrorCode, VerifyFailureDetails, VerifyChainFailure>;
 
 // ---------------------------------------------------------------------------
 // CSR verification
@@ -352,15 +350,9 @@ export interface VerifyRequestFailure
 		'signature_invalid' | 'unsupported_signature_algorithm_parameters',
 		VerifyFailureDetails
 	> {
+	/** Always `false` for failures. */
 	readonly ok: false;
 }
-
-/** Wrapped error result for CSR verification failures. */
-type VerifyRequestFailureResult = ErrorResult<
-	'signature_invalid' | 'unsupported_signature_algorithm_parameters',
-	VerifyFailureDetails,
-	VerifyRequestFailure
->;
 
 /** Result of {@linkcode verifyCertificateSigningRequest}. On success, contains the parsed CSR. */
 export type VerifyRequestResult =
@@ -368,7 +360,11 @@ export type VerifyRequestResult =
 			readonly ok: true;
 			readonly value: ParsedCertificateSigningRequest;
 	  }
-	| VerifyRequestFailureResult;
+	| ErrorResult<
+			'signature_invalid' | 'unsupported_signature_algorithm_parameters',
+			VerifyFailureDetails,
+			VerifyRequestFailure
+	  >;
 
 // ---------------------------------------------------------------------------
 // Validation profile inputs
@@ -1247,14 +1243,16 @@ function failure(
 }
 
 /** Wraps a {@linkcode VerifyChainFailure} into the standard indexed error result shape. */
-function verifyFailureResult(error: VerifyChainFailure): VerifyFailureResult {
+function verifyFailureResult(
+	error: VerifyChainFailure,
+): IndexedErrorResult<VerifyErrorCode, VerifyFailureDetails, VerifyChainFailure> {
 	return indexedErrorResult(error);
 }
 
 /** Wraps a policy outcome into the validate-candidate-path success result shape. */
 function validateCandidatePathSuccessResult(
 	policyValidation: PolicyValidationOutcome,
-): ValidateCandidatePathSuccessResult {
+): Extract<ValidateCandidatePathResult, { readonly ok: true }> {
 	return {
 		ok: true,
 		value: { policyValidation },
@@ -1267,7 +1265,11 @@ function verifyRequestFailureResult(
 	code: VerifyRequestFailure['code'],
 	message: string,
 	details?: VerifyFailureDetails,
-): VerifyRequestFailureResult {
+): ErrorResult<
+	'signature_invalid' | 'unsupported_signature_algorithm_parameters',
+	VerifyFailureDetails,
+	VerifyRequestFailure
+> {
 	const error: VerifyRequestFailure = {
 		ok: false,
 		...micro509Error(code, message, details),
@@ -1280,7 +1282,11 @@ function ekuCheckFailureResult(
 	code: EkuCheckFailure['code'],
 	message: string,
 	index: number,
-): EkuCheckFailureResult {
+): IndexedErrorResult<
+	'leaf_eku_missing' | 'intermediate_eku_constraint',
+	Record<never, never>,
+	EkuCheckFailure
+> {
 	const error: EkuCheckFailure = {
 		ok: false,
 		...indexedMicro509Error(code, message, index),

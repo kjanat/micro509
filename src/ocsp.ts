@@ -19,7 +19,6 @@ import {
 	toArrayBuffer,
 	toHex,
 } from './asn1.ts';
-import type { Micro509Error } from './core/result.ts';
 import type { DerElement } from './der.ts';
 import {
 	bitString,
@@ -47,9 +46,13 @@ import type {
 } from './parse.ts';
 import { parseCertificateDer, parseCertificatePem } from './parse.ts';
 import { base64Encode, pemDecode, pemEncode } from './pem.ts';
+import type { ErrorResult, Micro509Error } from './result.ts';
 import { verifySignedData } from './sig-verify.ts';
 import { encodeAlgorithmIdentifier, getSignatureAlgorithm, signBytes } from './signing.ts';
 import { verifyCertificateChain } from './verify.ts';
+
+export type * from './parse.ts';
+export type * from './result.ts';
 
 /** Hash algorithm used to compute OCSP CertID fields. SHA-1 is the RFC 6960 default. */
 export type OcspHashAlgorithm = 'SHA-1' | 'SHA-256';
@@ -244,15 +247,8 @@ export interface OcspResponseMaterial {
 
 /** Failure detail when OCSP response signature verification fails. */
 export interface VerifyOcspResponseFailure extends Micro509Error<'signature_invalid'> {
+	/** Always `false` for failures. */
 	readonly ok: false;
-}
-
-/** Failure branch of {@linkcode VerifyOcspResponseResult}. */
-interface VerifyOcspResponseFailureResult {
-	readonly ok: false;
-	readonly error: VerifyOcspResponseFailure;
-	readonly code: 'signature_invalid';
-	readonly message: string;
 }
 
 /**
@@ -266,7 +262,7 @@ export type VerifyOcspResponseResult =
 			/** Parsed response with a verified signature. */
 			readonly value: ParsedOcspResponse;
 	  }
-	| VerifyOcspResponseFailureResult;
+	| ErrorResult<'signature_invalid', Record<never, never>, VerifyOcspResponseFailure>;
 
 /**
  * Input for {@linkcode validateOcspResponse}.
@@ -308,24 +304,8 @@ export interface ValidateOcspResponseFailure
 		| 'ocsp_signing_missing'
 		| 'stale_response'
 	> {
+	/** Always `false` for failures. */
 	readonly ok: false;
-}
-
-/** Failure branch of {@linkcode ValidateOcspResponseResult}. */
-interface ValidateOcspResponseFailureResult {
-	readonly ok: false;
-	readonly error: ValidateOcspResponseFailure;
-	readonly code:
-		| 'response_status_invalid'
-		| 'signature_invalid'
-		| 'responder_id_mismatch'
-		| 'nonce_mismatch'
-		| 'request_mismatch'
-		| 'issuer_mismatch'
-		| 'responder_chain_invalid'
-		| 'ocsp_signing_missing'
-		| 'stale_response';
-	readonly message: string;
 }
 
 /**
@@ -340,7 +320,19 @@ export type ValidateOcspResponseResult =
 			/** Fully validated OCSP response. */
 			readonly value: ParsedOcspResponse;
 	  }
-	| ValidateOcspResponseFailureResult;
+	| ErrorResult<
+			| 'response_status_invalid'
+			| 'signature_invalid'
+			| 'responder_id_mismatch'
+			| 'nonce_mismatch'
+			| 'request_mismatch'
+			| 'issuer_mismatch'
+			| 'responder_chain_invalid'
+			| 'ocsp_signing_missing'
+			| 'stale_response',
+			Record<never, never>,
+			ValidateOcspResponseFailure
+	  >;
 
 /**
  * Builds a DER-encoded OCSP request containing one or more CertID entries
@@ -783,7 +775,7 @@ export async function validateOcspResponse(
 function verifyOcspResponseFailureResult(
 	code: 'signature_invalid',
 	message: string,
-): VerifyOcspResponseFailureResult {
+): ErrorResult<'signature_invalid', Record<never, never>, VerifyOcspResponseFailure> {
 	const error: VerifyOcspResponseFailure = {
 		ok: false,
 		code,
@@ -794,9 +786,30 @@ function verifyOcspResponseFailureResult(
 
 /** Builds a `ValidateOcspResponseFailureResult`. */
 function validateOcspResponseFailureResult(
-	code: ValidateOcspResponseFailureResult['code'],
+	code:
+		| 'response_status_invalid'
+		| 'signature_invalid'
+		| 'responder_id_mismatch'
+		| 'nonce_mismatch'
+		| 'request_mismatch'
+		| 'issuer_mismatch'
+		| 'responder_chain_invalid'
+		| 'ocsp_signing_missing'
+		| 'stale_response',
 	message: string,
-): ValidateOcspResponseFailureResult {
+): ErrorResult<
+	| 'response_status_invalid'
+	| 'signature_invalid'
+	| 'responder_id_mismatch'
+	| 'nonce_mismatch'
+	| 'request_mismatch'
+	| 'issuer_mismatch'
+	| 'responder_chain_invalid'
+	| 'ocsp_signing_missing'
+	| 'stale_response',
+	Record<never, never>,
+	ValidateOcspResponseFailure
+> {
 	const error: ValidateOcspResponseFailure = {
 		ok: false,
 		code,

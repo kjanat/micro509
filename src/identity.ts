@@ -13,8 +13,12 @@ import type { ParsedCertificate } from './parse.ts';
 import type { ErrorResult, Micro509Error, Result } from './result.ts';
 import { errorResult, micro509Error, successResult } from './result.ts';
 
+export type * from './parse.ts';
+export type * from './result.ts';
+
 /** DNS hostname reference identifier. */
 export interface DnsServiceIdentityInput {
+	/** Discriminant for DNS hostname matching. */
 	readonly type: 'dns';
 	/** The hostname to match (e.g. `"mail.example.com"`). Wildcard labels in the certificate are handled internally. */
 	readonly value: string;
@@ -28,6 +32,7 @@ export interface DnsServiceIdentityInput {
 
 /** IP address reference identifier. */
 export interface IpServiceIdentityInput {
+	/** Discriminant for IP address matching. */
 	readonly type: 'ip';
 	/** IPv4 or IPv6 address string. Normalized before comparison. */
 	readonly value: string;
@@ -35,6 +40,7 @@ export interface IpServiceIdentityInput {
 
 /** URI-ID reference identifier (RFC 6125 §6.5). Scheme and host are matched. */
 export interface UriServiceIdentityInput {
+	/** Discriminant for URI-ID matching. */
 	readonly type: 'uri';
 	/** Full URI whose scheme and reg-name will be compared. */
 	readonly value: string;
@@ -42,6 +48,7 @@ export interface UriServiceIdentityInput {
 
 /** SRV-ID reference identifier (RFC 4985). */
 export interface SrvServiceIdentityInput {
+	/** Discriminant for SRV-ID matching. */
 	readonly type: 'srv';
 	/** SRV name in `_service.domain` form (e.g. `"_imap.example.com"`). */
 	readonly value: string;
@@ -111,7 +118,11 @@ export type MatchServiceIdentityFailureResult = ErrorResult<
 /** Result of matching a reference identifier against a certificate's presented identifiers. */
 export type MatchServiceIdentityResult =
 	| MatchServiceIdentitySuccess
-	| MatchServiceIdentityFailureResult;
+	| ErrorResult<
+			MatchServiceIdentityErrorCode,
+			MatchServiceIdentityFailureDetails,
+			MatchServiceIdentityFailure
+	  >;
 
 /** Void-valued result type used internally during identity evaluation. */
 export type MatchServiceIdentityEvaluation = Result<void, MatchServiceIdentityFailure>;
@@ -169,7 +180,7 @@ export function matchServiceIdentity(input: MatchServiceIdentityInput): MatchSer
  */
 export function matchCertificateServiceIdentity(
 	certificate: ParsedCertificate,
-	serviceIdentity: MatchableServiceIdentityInput,
+	serviceIdentity: ServiceIdentityInput,
 ): MatchServiceIdentityResult {
 	switch (serviceIdentity.type) {
 		case 'dns': {

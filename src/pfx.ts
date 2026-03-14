@@ -8,7 +8,6 @@
  */
 
 import { childrenOf, decodeObjectIdentifier, toHex } from './asn1.ts';
-import type { Micro509Error } from './core/result.ts';
 import type { DerElement } from './der.ts';
 import {
 	DEFAULT_MAX_DER_DEPTH,
@@ -33,6 +32,12 @@ import {
 	type Pkcs12MacOptions,
 	parsePkcs12MacData,
 } from './pkcs12-mac.ts';
+import type { ErrorResult, Micro509Error } from './result.ts';
+
+export type * from './parse.ts';
+export type { Pbes2EncryptionOptions, Pbes2EncryptionScheme, Pbes2Prf } from './pbes2.ts';
+export type * from './pkcs12-mac.ts';
+export type * from './result.ts';
 
 /** PEM string or DER bytes for a certificate to include in a PFX bag. */
 export type PfxCertificateSource = string | Uint8Array;
@@ -176,18 +181,6 @@ export interface ParsePfxFailure extends Micro509Error<ParsePfxErrorCode> {
 	readonly ok: false;
 }
 
-/** Failure branch of {@linkcode ParsePfxResult}. */
-interface ParsePfxFailureResult {
-	/** Always `false` for failures. */
-	readonly ok: false;
-	/** Structured error with code and message. */
-	readonly error: ParsePfxFailure;
-	/** Machine-readable failure reason. */
-	readonly code: ParsePfxErrorCode;
-	/** Human-readable diagnostic. */
-	readonly message: string;
-}
-
 /** Success-or-failure result from {@linkcode parsePfxDer} / {@linkcode parsePfxPem}. */
 export type ParsePfxResult =
 	| {
@@ -196,7 +189,7 @@ export type ParsePfxResult =
 			/** Decoded PFX container. */
 			readonly value: ParsedPfx;
 	  }
-	| ParsePfxFailureResult;
+	| ErrorResult<ParsePfxErrorCode, Record<never, never>, ParsePfxFailure>;
 
 // ---------------------------------------------------------------------------
 // createPfx
@@ -324,8 +317,9 @@ export async function parsePfxDer(
 			if (safeContentsResult.error !== undefined) {
 				return safeContentsResult.error;
 			}
-			for (const bag of readSequenceChildren(safeContentsResult.data)) {
-				const bagDer = safeContentsResult.data.slice(bag.start - bag.headerLength, bag.end);
+			const safeContents = safeContentsResult.data;
+			for (const bag of readSequenceChildren(safeContents)) {
+				const bagDer = safeContents.slice(bag.start - bag.headerLength, bag.end);
 				bags.push(parseSafeBag(bagDer));
 			}
 		}
@@ -376,7 +370,10 @@ export async function parsePfxPem(pem: string, options?: ParsePfxOptions): Promi
 // ---------------------------------------------------------------------------
 
 /** Shorthand for constructing a PFX parse failure result. */
-function pfxFailure(code: ParsePfxErrorCode, message: string): ParsePfxFailureResult {
+function pfxFailure(
+	code: ParsePfxErrorCode,
+	message: string,
+): ErrorResult<ParsePfxErrorCode, Record<never, never>, ParsePfxFailure> {
 	const error: ParsePfxFailure = { ok: false, code, message };
 	return { ok: false, error, code, message };
 }
@@ -406,7 +403,7 @@ async function extractSafeContents(
 	  }
 	| {
 			readonly data?: undefined;
-			readonly error: ParsePfxFailureResult;
+			readonly error: ErrorResult<ParsePfxErrorCode, Record<never, never>, ParsePfxFailure>;
 	  }
 > {
 	const contentInfoChildren = readSequenceChildren(contentInfoDer);
