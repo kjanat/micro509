@@ -121,7 +121,7 @@ export type SubjectAltName =
 			readonly value: Uint8Array;
 	  };
 
-/** Alias for {@link SubjectAltName} — used where RFC 5280 says "GeneralName". */
+/** Alias for {@linkcode SubjectAltName} — used where RFC 5280 says "GeneralName". */
 export type GeneralName = SubjectAltName;
 
 /**
@@ -360,7 +360,7 @@ export interface CertificateExtensionsInput {
 	readonly customExtensions?: readonly CustomExtension[];
 }
 
-/** An extension not covered by the typed fields in {@link CertificateExtensionsInput}. */
+/** An extension not covered by the typed fields in {@linkcode CertificateExtensionsInput}. */
 export interface CustomExtension {
 	/** Dotted-decimal OID of the extension. */
 	readonly oid: string;
@@ -376,7 +376,7 @@ export interface CustomExtension {
 
 /**
  * A name form used as a constraint base in namEConstraints.
- * Distinct from {@link SubjectAltName} because IP constraints carry
+ * Distinct from {@linkcode SubjectAltName} because IP constraints carry
  * address + mask bytes (8 for IPv4, 32 for IPv6) rather than bare addresses.
  */
 export type NameConstraintForm =
@@ -526,7 +526,7 @@ const AUTHORITY_INFO_ACCESS_METHOD_OIDS: Record<KnownAuthorityInfoAccessMethod, 
  *
  * Automatically adds SKI, AKI (when issuer key is available), and
  * basicConstraints (defaults to `{ ca: false }`). Additional extensions
- * come from the caller's {@link CertificateExtensionsInput}.
+ * come from the caller's {@linkcode CertificateExtensionsInput}.
  *
  * @param subjectPublicKeyInfo DER-encoded SPKI of the subject.
  * @param issuerPublicKeyInfo DER-encoded SPKI of the issuer, or `undefined` for self-signed.
@@ -565,7 +565,7 @@ export function buildCertificateExtensions(
 /**
  * Build the extensions for a CSR's extensionRequest attribute.
  *
- * Unlike {@link buildCertificateExtensions}, SKI/AKI are not auto-generated.
+ * Unlike {@linkcode buildCertificateExtensions}, SKI/AKI are not auto-generated.
  *
  * @param input Optional extension configuration.
  * @returns Array of DER-encoded Extension SEQUENCEs.
@@ -705,7 +705,7 @@ export function encodeExtension(oid: string, extnValue: Uint8Array, critical = f
 }
 
 /**
- * DER-encode a {@link BasicConstraints} value.
+ * DER-encode a {@linkcode BasicConstraints} value.
  *
  * @param input CA flag and optional pathLength.
  * @returns DER SEQUENCE suitable for wrapping in an Extension OCTET STRING.
@@ -725,7 +725,7 @@ export function encodeBasicConstraints(input: BasicConstraints): Uint8Array {
 }
 
 /**
- * DER-encode a Key Usage BIT STRING from an array of {@link KeyUsage} flags.
+ * DER-encode a Key Usage BIT STRING from an array of {@linkcode KeyUsage} flags.
  *
  * @param usages Flags to set in the bit string.
  */
@@ -734,7 +734,7 @@ export function encodeKeyUsage(usages: readonly KeyUsage[]): Uint8Array {
 }
 
 /**
- * DER-encode a single {@link SubjectAltName} GeneralName element.
+ * DER-encode a single {@linkcode SubjectAltName} GeneralName element.
  *
  * @param value The SAN entry to encode.
  */
@@ -1036,7 +1036,7 @@ function extractDirectoryNameContent(derHex: string): Uint8Array {
 }
 
 /**
- * Resolve an {@link ExtendedKeyUsage} to its dotted-decimal OID.
+ * Resolve an {@linkcode ExtendedKeyUsage} to its dotted-decimal OID.
  *
  * @param usage Well-known string or custom OID object.
  */
@@ -1049,7 +1049,7 @@ export function getExtendedKeyUsageOid(usage: ExtendedKeyUsage): string {
 }
 
 /**
- * Map a dotted-decimal OID to an {@link ExtendedKeyUsage} value.
+ * Map a dotted-decimal OID to an {@linkcode ExtendedKeyUsage} value.
  *
  * Returns a well-known string for recognized OIDs, or `{ type: 'oid', value }` otherwise.
  */
@@ -1072,7 +1072,7 @@ export function parseExtendedKeyUsageOid(oid: string): ExtendedKeyUsage {
 }
 
 /**
- * Resolve an {@link AuthorityInfoAccessMethod} to its dotted-decimal OID.
+ * Resolve an {@linkcode AuthorityInfoAccessMethod} to its dotted-decimal OID.
  *
  * @param method Well-known string or custom OID object.
  */
@@ -1085,7 +1085,7 @@ export function getAuthorityInfoAccessMethodOid(method: AuthorityInfoAccessMetho
 }
 
 /**
- * Map a dotted-decimal OID to an {@link AuthorityInfoAccessMethod} value.
+ * Map a dotted-decimal OID to an {@linkcode AuthorityInfoAccessMethod} value.
  *
  * Returns `'ocsp'` or `'caIssuers'` for recognized OIDs, or `{ type: 'oid', value }` otherwise.
  */

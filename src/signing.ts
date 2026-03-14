@@ -41,7 +41,7 @@ export interface SignatureAlgorithmIdentifier {
 	readonly ecdsaRawSignatureBytes?: number;
 }
 
-/** Resolve a private key and optional profile into a {@link SignatureAlgorithmIdentifier}. */
+/** Resolve a private key and optional profile into a {@linkcode SignatureAlgorithmIdentifier}. */
 export function getSignatureAlgorithm(
 	privateKey: CryptoKey,
 	profile: SignatureProfileInput = {},
@@ -120,7 +120,7 @@ export function getSignatureAlgorithm(
 	throw new Error(`Unsupported signing key algorithm: ${algorithm.name}`);
 }
 
-/** Build an RSA-PSS {@link SignatureAlgorithmIdentifier} from an RSA-PSS private key. */
+/** Build an RSA-PSS {@linkcode SignatureAlgorithmIdentifier} from an RSA-PSS private key. */
 function getRsaPssSignatureAlgorithm(
 	privateKey: CryptoKey,
 	saltLength: number | undefined,
@@ -149,7 +149,7 @@ function getRsaPssSignatureAlgorithm(
 	};
 }
 
-/** DER-encode a {@link SignatureAlgorithmIdentifier} as an ASN.1 `AlgorithmIdentifier` SEQUENCE. */
+/** DER-encode a {@linkcode SignatureAlgorithmIdentifier} as an ASN.1 `AlgorithmIdentifier` SEQUENCE. */
 export function encodeAlgorithmIdentifier(input: SignatureAlgorithmIdentifier): Uint8Array {
 	const parts = [objectIdentifier(input.algorithmOid)];
 	if (input.parameters !== undefined) {
@@ -184,7 +184,7 @@ function hasNamedCurve(algorithm: KeyAlgorithm): algorithm is EcKeyAlgorithm {
 	return 'namedCurve' in algorithm;
 }
 
-/** Narrow a WebCrypto hash name string to the supported {@link RsaPssHash} union. */
+/** Narrow a WebCrypto hash name string to the supported {@linkcode RsaPssHash} union. */
 function rsaPssHashFromWebCryptoName(hash: string): RsaPssHash {
 	switch (hash) {
 		case 'SHA-256':

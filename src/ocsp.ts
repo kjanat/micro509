@@ -60,7 +60,7 @@ export type OcspRequestSource = string | Uint8Array | ParsedOcspRequest;
 
 /**
  * One certificate whose status to query in an OCSP request.
- * Used as an element of {@link CreateOcspRequestInput.requests}.
+ * Used as an element of {@linkcode CreateOcspRequestInput.requests}.
  */
 export interface CreateOcspRequestItemInput {
 	/** Certificate whose revocation status is being queried. */
@@ -70,7 +70,7 @@ export interface CreateOcspRequestItemInput {
 }
 
 /**
- * Input for {@link createOcspRequest}.
+ * Input for {@linkcode createOcspRequest}.
  */
 export interface CreateOcspRequestInput {
 	/** One or more certificates to query (batched into a single OCSP request). */
@@ -82,7 +82,7 @@ export interface CreateOcspRequestInput {
 }
 
 /**
- * Encoded OCSP request in multiple serialisation formats, returned by {@link createOcspRequest}.
+ * Encoded OCSP request in multiple serialisation formats, returned by {@linkcode createOcspRequest}.
  */
 export interface OcspRequestMaterial {
 	/** Raw DER bytes. */
@@ -109,7 +109,7 @@ export interface ParsedOcspCertId {
 }
 
 /**
- * Decoded OCSP request, returned by {@link parseOcspRequestDer} / {@link parseOcspRequestPem}.
+ * Decoded OCSP request, returned by {@linkcode parseOcspRequestDer} / {@linkcode parseOcspRequestPem}.
  */
 export interface ParsedOcspRequest {
 	/** CertIDs of the certificates being queried. */
@@ -166,7 +166,7 @@ export type ParsedOcspResponderId =
 	  };
 
 /**
- * Decoded OCSP response, returned by {@link parseOcspResponseDer} / {@link parseOcspResponsePem}.
+ * Decoded OCSP response, returned by {@linkcode parseOcspResponseDer} / {@linkcode parseOcspResponsePem}.
  *
  * When `responseStatus` is not `'successful'`, most fields are absent.
  */
@@ -194,8 +194,8 @@ export interface ParsedOcspResponse {
 }
 
 /**
- * One certificate's status entry for {@link CreateOcspResponseInput.responses}.
- * Extends {@link CreateOcspRequestItemInput} with status and timing fields.
+ * One certificate's status entry for {@linkcode CreateOcspResponseInput.responses}.
+ * Extends {@linkcode CreateOcspRequestItemInput} with status and timing fields.
  */
 export interface CreateOcspSingleResponseInput extends CreateOcspRequestItemInput {
 	/** Status to assert for this certificate. */
@@ -211,7 +211,7 @@ export interface CreateOcspSingleResponseInput extends CreateOcspRequestItemInpu
 }
 
 /**
- * Input for {@link createOcspResponse}.
+ * Input for {@linkcode createOcspResponse}.
  */
 export interface CreateOcspResponseInput {
 	/** Private key used to sign the response. Algorithm is inferred from the key. */
@@ -231,7 +231,7 @@ export interface CreateOcspResponseInput {
 }
 
 /**
- * Encoded OCSP response in multiple serialisation formats, returned by {@link createOcspResponse}.
+ * Encoded OCSP response in multiple serialisation formats, returned by {@linkcode createOcspResponse}.
  */
 export interface OcspResponseMaterial {
 	/** Raw DER bytes. */
@@ -247,7 +247,7 @@ export interface VerifyOcspResponseFailure extends Micro509Error<'signature_inva
 	readonly ok: false;
 }
 
-/** Failure branch of {@link VerifyOcspResponseResult}. */
+/** Failure branch of {@linkcode VerifyOcspResponseResult}. */
 interface VerifyOcspResponseFailureResult {
 	readonly ok: false;
 	readonly error: VerifyOcspResponseFailure;
@@ -256,7 +256,7 @@ interface VerifyOcspResponseFailureResult {
 }
 
 /**
- * Result of {@link verifyOcspResponse}.
+ * Result of {@linkcode verifyOcspResponse}.
  *
  * On success, `value` is the parsed response whose signature has been verified.
  */
@@ -269,7 +269,7 @@ export type VerifyOcspResponseResult =
 	| VerifyOcspResponseFailureResult;
 
 /**
- * Input for {@link validateOcspResponse}.
+ * Input for {@linkcode validateOcspResponse}.
  */
 export interface ValidateOcspResponseInput {
 	/** The OCSP response to validate. */
@@ -289,7 +289,7 @@ export interface ValidateOcspResponseInput {
 }
 
 /**
- * Failure detail for {@link validateOcspResponse}.
+ * Failure detail for {@linkcode validateOcspResponse}.
  *
  * Possible codes: `response_status_invalid`, `signature_invalid`,
  * `responder_id_mismatch`, `nonce_mismatch`, `request_mismatch`,
@@ -311,7 +311,7 @@ export interface ValidateOcspResponseFailure
 	readonly ok: false;
 }
 
-/** Failure branch of {@link ValidateOcspResponseResult}. */
+/** Failure branch of {@linkcode ValidateOcspResponseResult}. */
 interface ValidateOcspResponseFailureResult {
 	readonly ok: false;
 	readonly error: ValidateOcspResponseFailure;
@@ -329,7 +329,7 @@ interface ValidateOcspResponseFailureResult {
 }
 
 /**
- * Result of {@link validateOcspResponse}.
+ * Result of {@linkcode validateOcspResponse}.
  *
  * On success, the response has passed status, signature, responder binding,
  * freshness, nonce, and request-coverage checks.
@@ -387,7 +387,7 @@ export async function createOcspRequest(
 	};
 }
 
-/** Decodes a DER-encoded OCSP request into a structured {@link ParsedOcspRequest}. */
+/** Decodes a DER-encoded OCSP request into a structured {@linkcode ParsedOcspRequest}. */
 export function parseOcspRequestDer(der: Uint8Array): ParsedOcspRequest {
 	const top = readSequenceChildren(der, { maxDepth: DEFAULT_MAX_DER_DEPTH });
 	const tbsRequest = requireElement(top[0], 'tbsRequest');
@@ -414,7 +414,7 @@ export function parseOcspRequestPem(pem: string): ParsedOcspRequest {
 	return parseOcspRequestDer(pemDecode('OCSP REQUEST', pem));
 }
 
-/** Decodes a DER-encoded OCSP response into a structured {@link ParsedOcspResponse}. Does not verify the signature. */
+/** Decodes a DER-encoded OCSP response into a structured {@linkcode ParsedOcspResponse}. Does not verify the signature. */
 export function parseOcspResponseDer(der: Uint8Array): ParsedOcspResponse {
 	const top = readSequenceChildren(der, { maxDepth: DEFAULT_MAX_DER_DEPTH });
 	const statusElement = requireElement(top[0], 'responseStatus');
@@ -592,7 +592,7 @@ export async function createOcspResponse(
  * Verifies the OCSP response signature against the given signer certificate.
  *
  * Does **not** check responder binding, freshness, or nonce — use
- * {@link validateOcspResponse} for full validation.
+ * {@linkcode validateOcspResponse} for full validation.
  */
 export async function verifyOcspResponse(
 	response: string | Uint8Array | ParsedOcspResponse,
@@ -1024,7 +1024,7 @@ function hasParsedCertificateShape(value: OcspCertificateSource): value is Parse
 	return typeof value !== 'string' && 'subjectPublicKeyInfoDer' in value;
 }
 
-/** Decodes a DER-encoded CertID SEQUENCE into a {@link ParsedOcspCertId}. */
+/** Decodes a DER-encoded CertID SEQUENCE into a {@linkcode ParsedOcspCertId}. */
 function parseOcspCertId(der: Uint8Array): ParsedOcspCertId {
 	const children = childrenOf(der, readElement(der));
 	const hashAlgorithm = requireElement(children[0], 'hashAlgorithm');
@@ -1301,7 +1301,7 @@ function extractSubjectPublicKeyBytes(spkiDer: Uint8Array): Uint8Array {
 	return bitStringElement.value.slice(1);
 }
 
-/** Maps an integer response-status code to its {@link OcspResponseStatus} string. */
+/** Maps an integer response-status code to its {@linkcode OcspResponseStatus} string. */
 function ocspResponseStatusFromCode(code: number | undefined): OcspResponseStatus {
 	switch (code) {
 		case 0:

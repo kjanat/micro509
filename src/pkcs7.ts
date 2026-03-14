@@ -113,7 +113,7 @@ interface ParsePkcs7FailureResult {
 	readonly message: string;
 }
 
-/** Success-or-failure result from {@link parsePkcs7SignedDataDer} / {@link parsePkcs7SignedDataPem}. */
+/** Success-or-failure result from {@linkcode parsePkcs7SignedDataDer} / {@linkcode parsePkcs7SignedDataPem}. */
 export type ParsePkcs7SignedDataResult =
 	| {
 			/** Parse succeeded. */
@@ -123,7 +123,7 @@ export type ParsePkcs7SignedDataResult =
 	  }
 	| ParsePkcs7FailureResult;
 
-/** Success-or-failure result from {@link parsePkcs7CertBagDer} / {@link parsePkcs7CertBagPem}. */
+/** Success-or-failure result from {@linkcode parsePkcs7CertBagDer} / {@linkcode parsePkcs7CertBagPem}. */
 export type ParsePkcs7CertBagResult =
 	| {
 			/** Parse succeeded. */
@@ -133,7 +133,7 @@ export type ParsePkcs7CertBagResult =
 	  }
 	| ParsePkcs7FailureResult;
 
-/** Error payload for a failed {@link verifyPkcs7SignedData} call. */
+/** Error payload for a failed {@linkcode verifyPkcs7SignedData} call. */
 export interface VerifyPkcs7SignedDataFailure
 	extends Micro509Error<
 		| 'signer_not_found'
@@ -146,7 +146,7 @@ export interface VerifyPkcs7SignedDataFailure
 	readonly ok: false;
 }
 
-/** Failure branch of {@link VerifyPkcs7SignedDataResult}. */
+/** Failure branch of {@linkcode VerifyPkcs7SignedDataResult}. */
 interface VerifyPkcs7SignedDataFailureResult {
 	/** Always `false` for failures. */
 	readonly ok: false;
@@ -163,7 +163,7 @@ interface VerifyPkcs7SignedDataFailureResult {
 	readonly message: string;
 }
 
-/** Success-or-failure result from {@link verifyPkcs7SignedData}. */
+/** Success-or-failure result from {@linkcode verifyPkcs7SignedData}. */
 export type VerifyPkcs7SignedDataResult =
 	| {
 			/** Verification succeeded. */
@@ -180,7 +180,7 @@ export type VerifyPkcs7SignedDataResult =
 /**
  * Creates a degenerate PKCS#7 SignedData structure containing only certificates (no signers).
  *
- * Returns the raw DER encoding. Use {@link createPkcs7CertBagPem} for PEM + base64.
+ * Returns the raw DER encoding. Use {@linkcode createPkcs7CertBagPem} for PEM + base64.
  */
 export function createPkcs7CertBagDer(certificates: readonly Pkcs7CertificateSource[]): Uint8Array {
 	const certificateDers = certificates.flatMap(normalizeCertificateSource);
@@ -322,7 +322,7 @@ export function parsePkcs7SignedDataPem(pem: string): ParsePkcs7SignedDataResult
 /**
  * Verifies all signer signatures in a PKCS#7 SignedData structure.
  *
- * Accepts PEM text, raw DER, or an already-parsed {@link ParsedPkcs7SignedData}.
+ * Accepts PEM text, raw DER, or an already-parsed {@linkcode ParsedPkcs7SignedData}.
  * For each signer, locates the matching certificate in the embedded set and
  * verifies the signature (including signed-attribute digest checks per RFC 5652 Section 5.4).
  *

@@ -1,10 +1,10 @@
 /**
  * Certificate and CSR parse boundary.
  *
- * Decodes DER and PEM inputs into typed {@link ParsedCertificate} and
- * {@link ParsedCertificateSigningRequest} structures. Includes an
- * extension-decoder framework for callers that need richer metadata beyond
- * the built-in extensions.
+ * Decodes DER and PEM inputs into typed {@linkcode ParsedCertificate} and
+ * {@linkcode ParsedCertificateSigningRequest} structures.\
+ * Includes an extension-decoder framework for callers that need richer metadata beyond the built-in
+ * extensions.
  *
  * @module
  */
@@ -157,18 +157,18 @@ export interface ParsedExtension {
 /**
  * User-supplied decoder for a single extension OID.
  *
- * Register with {@link ParseOptions.decoders} or {@link ParseOptions.decoderMap}
+ * Register with {@linkcode ParseOptions.decoders} or {@linkcode ParseOptions.decoderMap}
  * to decode custom extensions during parsing.
  */
 export interface ExtensionDecoder<TValue> {
 	/** OID this decoder handles. */
 	readonly oid: string;
-	/** Decode the raw {@link ParsedExtension} into a typed value. */
+	/** Decode the raw {@linkcode ParsedExtension} into a typed value. */
 	decode(extension: ParsedExtension): TValue;
 }
 
 /**
- * Identity helper that narrows the type of a custom {@link ExtensionDecoder} literal.
+ * Identity helper that narrows the type of a custom {@linkcode ExtensionDecoder} literal.
  *
  * @param decoder Decoder definition to return unchanged.
  * @returns The same decoder, properly typed.
@@ -180,7 +180,7 @@ export function defineExtensionDecoder<TValue>(
 }
 
 /**
- * Identity helper that narrows the type of a custom {@link ExtensionDecoderMap} literal.
+ * Identity helper that narrows the type of a custom {@linkcode ExtensionDecoderMap} literal.
  *
  * @param decoderMap Map of named decoders to return unchanged.
  * @returns The same map, properly typed.
@@ -191,10 +191,10 @@ export function defineExtensionDecoderMap<TMap extends ExtensionDecoderMap>(
 	return decoderMap;
 }
 
-/** String-keyed map of {@link ExtensionDecoder}s, used with {@link ParseOptions.decoderMap}. */
+/** String-keyed map of {@linkcode ExtensionDecoder}s, used with {@linkcode ParseOptions.decoderMap}. */
 export type ExtensionDecoderMap = Record<string, ExtensionDecoder<unknown>>;
 
-/** Inferred result type when decoding extensions via an {@link ExtensionDecoderMap}. */
+/** Inferred result type when decoding extensions via an {@linkcode ExtensionDecoderMap}. */
 export type DecodedExtensionMap<TMap extends ExtensionDecoderMap> = {
 	[TKey in keyof TMap]?: TMap[TKey] extends ExtensionDecoder<infer TValue>
 		? DecodedExtensionValue<TValue>
@@ -207,12 +207,12 @@ export interface DecodedExtensionValue<TValue> {
 	readonly oid: string;
 	/** Whether the extension was marked critical in the certificate. */
 	readonly critical: boolean;
-	/** Typed value produced by the {@link ExtensionDecoder}. */
+	/** Typed value produced by the {@linkcode ExtensionDecoder}. */
 	readonly value: TValue;
 }
 
 /**
- * Options for {@link parseCertificateDer}, {@link parseCertificatePem}, and CSR parse functions.
+ * Options for {@linkcode parseCertificateDer}, {@linkcode parseCertificatePem}, and CSR parse functions.
  *
  * Supply custom extension decoders to have their results included in
  * the parsed output alongside the built-in extensions.
@@ -228,8 +228,8 @@ export interface ParseOptions<TMap extends ExtensionDecoderMap = Record<never, n
  * A fully decoded X.509 certificate.
  *
  * Built-in extensions (basicConstraints, keyUsage, etc.) are decoded into
- * typed fields automatically. Supply {@link ParseOptions} to also decode
- * custom extensions.
+ * typed fields automatically.\
+ * Supply {@linkcode ParseOptions} to also decode custom extensions.
  */
 export interface ParsedCertificate<TMap extends ExtensionDecoderMap = Record<never, never>> {
 	/** Complete DER encoding of the certificate (copied from the input). */
@@ -262,7 +262,7 @@ export interface ParsedCertificate<TMap extends ExtensionDecoderMap = Record<nev
 	readonly publicKeyAlgorithmParametersDer?: Uint8Array;
 	/** OID of the named curve or other key sub-parameter, when present. */
 	readonly publicKeyParametersOid?: string;
-	/** All extensions as raw {@link ParsedExtension}s, in certificate order. */
+	/** All extensions as raw {@linkcode ParsedExtension}s, in certificate order. */
 	readonly extensions: readonly ParsedExtension[];
 	/** Decoded Basic Constraints (RFC 5280 §4.2.1.9). */
 	readonly basicConstraints?: BasicConstraints;
@@ -286,9 +286,9 @@ export interface ParsedCertificate<TMap extends ExtensionDecoderMap = Record<nev
 	readonly authorityInfoAccess?: readonly AuthorityInformationAccess[];
 	/** Decoded CRL Distribution Points (RFC 5280 §4.2.1.13). */
 	readonly crlDistributionPoints?: readonly ParsedDistributionPoint[];
-	/** Custom-decoded extensions from {@link ParseOptions.decoders}. */
+	/** Custom-decoded extensions from {@linkcode ParseOptions.decoders}. */
 	readonly decodedExtensions?: readonly DecodedExtensionValue<unknown>[];
-	/** Custom-decoded extensions from {@link ParseOptions.decoderMap}, keyed by map key. */
+	/** Custom-decoded extensions from {@linkcode ParseOptions.decoderMap}, keyed by map key. */
 	readonly decodedExtensionMap?: DecodedExtensionMap<TMap>;
 	/** Hex-encoded Subject Key Identifier (RFC 5280 §4.2.1.2). */
 	readonly subjectKeyIdentifier?: string;
@@ -299,7 +299,7 @@ export interface ParsedCertificate<TMap extends ExtensionDecoderMap = Record<nev
 /**
  * A fully decoded PKCS#10 Certificate Signing Request.
  *
- * Extension fields mirror {@link ParsedCertificate} but come from the
+ * Extension fields mirror {@linkcode ParsedCertificate} but come from the
  * CSR's extensionRequest attribute rather than the v3 extensions block.
  */
 export interface ParsedCertificateSigningRequest<
@@ -325,7 +325,7 @@ export interface ParsedCertificateSigningRequest<
 	readonly publicKeyAlgorithmParametersDer?: Uint8Array;
 	/** OID of the named curve or other key sub-parameter, when present. */
 	readonly publicKeyParametersOid?: string;
-	/** All requested extensions as raw {@link ParsedExtension}s. */
+	/** All requested extensions as raw {@linkcode ParsedExtension}s. */
 	readonly requestedExtensions: readonly ParsedExtension[];
 	/** Decoded Basic Constraints from the extensionRequest attribute. */
 	readonly basicConstraints?: BasicConstraints;
@@ -349,18 +349,18 @@ export interface ParsedCertificateSigningRequest<
 	readonly authorityInfoAccess?: readonly AuthorityInformationAccess[];
 	/** Decoded CRL Distribution Points from the extensionRequest attribute. */
 	readonly crlDistributionPoints?: readonly ParsedDistributionPoint[];
-	/** Custom-decoded extensions from {@link ParseOptions.decoders}. */
+	/** Custom-decoded extensions from {@linkcode ParseOptions.decoders}. */
 	readonly decodedExtensions?: readonly DecodedExtensionValue<unknown>[];
-	/** Custom-decoded extensions from {@link ParseOptions.decoderMap}. */
+	/** Custom-decoded extensions from {@linkcode ParseOptions.decoderMap}. */
 	readonly decodedExtensionMap?: DecodedExtensionMap<TMap>;
 }
 
 /**
- * Decode a DER-encoded X.509 certificate into a {@link ParsedCertificate}.
+ * Decode a DER-encoded X.509 certificate into a {@linkcode ParsedCertificate}.
  *
  * All built-in extensions (basicConstraints, keyUsage, subjectAltNames, etc.)
- * are decoded automatically. Pass {@link ParseOptions} to also decode custom
- * extensions.
+ * are decoded automatically.\
+ * Pass {@linkcode ParseOptions} to also decode custom extensions.
  *
  * @example
  * ```ts
@@ -484,10 +484,10 @@ export function parseCertificateDer<TMap extends ExtensionDecoderMap = Record<ne
 }
 
 /**
- * Decode a PEM-encoded X.509 certificate into a {@link ParsedCertificate}.
+ * Decode a PEM-encoded X.509 certificate into a {@linkcode ParsedCertificate}.
  *
  * Expects a single `-----BEGIN CERTIFICATE-----` block. For bundles
- * containing multiple certificates, use {@link parseCertificateChainPem}.
+ * containing multiple certificates, use {@linkcode parseCertificateChainPem}.
  *
  * @example
  * ```ts
@@ -526,7 +526,7 @@ export function parseCertificateChainPem<TMap extends ExtensionDecoderMap = Reco
 }
 
 /**
- * Decode a DER-encoded PKCS#10 CSR into a {@link ParsedCertificateSigningRequest}.
+ * Decode a DER-encoded PKCS#10 CSR into a {@linkcode ParsedCertificateSigningRequest}.
  *
  * @param der Raw DER bytes of a PKCS#10 certificate signing request.
  * @param options Custom extension decoders to apply during parsing.
@@ -616,7 +616,7 @@ export function parseCertificateSigningRequestDer<
 }
 
 /**
- * Decode a PEM-encoded PKCS#10 CSR into a {@link ParsedCertificateSigningRequest}.
+ * Decode a PEM-encoded PKCS#10 CSR into a {@linkcode ParsedCertificateSigningRequest}.
  *
  * @param pem PEM string with a CERTIFICATE REQUEST block.
  * @param options Custom extension decoders to apply during parsing.
@@ -630,7 +630,7 @@ export function parseCertificateSigningRequestPem<
 /**
  * Find a raw extension by OID within a parsed extension list.
  *
- * @param extensions Extension list from a {@link ParsedCertificate} or CSR.
+ * @param extensions Extension list from a {@linkcode ParsedCertificate} or CSR.
  * @param oid Dotted-decimal OID to look up.
  * @returns The matching extension, or `undefined` if not present.
  */
@@ -642,7 +642,7 @@ export function findExtension(
 }
 
 /**
- * Decode a single extension using a custom {@link ExtensionDecoder}.
+ * Decode a single extension using a custom {@linkcode ExtensionDecoder}.
  *
  * @param extensions Extension list to search.
  * @param decoder Decoder whose OID will be matched.
@@ -660,7 +660,7 @@ export function decodeExtension<TValue>(
 }
 
 /**
- * Decode all matching extensions using an array of {@link ExtensionDecoder}s.
+ * Decode all matching extensions using an array of {@linkcode ExtensionDecoder}s.
  *
  * @param extensions Extension list to search.
  * @param decoders Decoders to apply. Only matching OIDs produce output.
@@ -685,7 +685,7 @@ export function decodeExtensions(
 }
 
 /**
- * Decode all matching extensions using a named {@link ExtensionDecoderMap}.
+ * Decode all matching extensions using a named {@linkcode ExtensionDecoderMap}.
  *
  * @param extensions Extension list to search.
  * @param decoderMap Named decoders. Results are keyed by the same map keys.
@@ -718,7 +718,7 @@ export function decodeExtensionMap<TMap extends ExtensionDecoderMap>(
 
 /** Aggregate of raw + decoded extensions produced during certificate/CSR parsing. */
 interface ParsedExtensions extends KnownParsedExtensionAccumulator {
-	/** Every extension as a raw {@link ParsedExtension}, in wire order. */
+	/** Every extension as a raw {@linkcode ParsedExtension}, in wire order. */
 	readonly all: readonly ParsedExtension[];
 }
 
@@ -791,7 +791,7 @@ function parseExtensionSequence(
 	};
 }
 
-/** Decode an X.501 Name (issuer / subject) into a {@link ParsedName}. */
+/** Decode an X.501 Name (issuer / subject) into a {@linkcode ParsedName}. */
 function parseName(source: Uint8Array, element: DerElement): ParsedName {
 	const rdns: ParsedRelativeDistinguishedName[] = [];
 	const attributes: ParsedNameAttribute[] = [];

@@ -21,7 +21,7 @@ export type RsaScheme = 'pkcs1-v1_5' | 'pss';
 /** NIST elliptic curve for ECDSA keys. */
 export type EcNamedCurve = 'P-256' | 'P-384' | 'P-521';
 
-/** RSA variant of {@link KeyAlgorithmInput}. */
+/** RSA variant of {@linkcode KeyAlgorithmInput}. */
 export interface RsaKeyAlgorithmInput {
 	/** Discriminant selecting RSA key generation. */
 	readonly kind: 'rsa';
@@ -33,7 +33,7 @@ export interface RsaKeyAlgorithmInput {
 	readonly scheme?: RsaScheme;
 }
 
-/** ECDSA variant of {@link KeyAlgorithmInput}. */
+/** ECDSA variant of {@linkcode KeyAlgorithmInput}. */
 export interface EcKeyAlgorithmInput {
 	/** Discriminant selecting ECDSA key generation. */
 	readonly kind: 'ecdsa';
@@ -41,19 +41,19 @@ export interface EcKeyAlgorithmInput {
 	readonly namedCurve?: EcNamedCurve;
 }
 
-/** Ed25519 variant of {@link KeyAlgorithmInput}. */
+/** Ed25519 variant of {@linkcode KeyAlgorithmInput}. */
 export interface Ed25519KeyAlgorithmInput {
 	/** Discriminant selecting Ed25519 key generation. */
 	readonly kind: 'ed25519';
 }
 
-/** Input for {@link generateKeyPair}. Selects algorithm family and parameters. */
+/** Input for {@linkcode generateKeyPair}. Selects algorithm family and parameters. */
 export type KeyAlgorithmInput =
 	| RsaKeyAlgorithmInput
 	| EcKeyAlgorithmInput
 	| Ed25519KeyAlgorithmInput;
 
-/** Key pair with convenience export helpers. Returned by {@link generateKeyPair} and {@link wrapKeyPair}. */
+/** Key pair with convenience export helpers. Returned by {@linkcode generateKeyPair} and {@linkcode wrapKeyPair}. */
 export interface KeyPairMaterial {
 	/** The WebCrypto public key (extractable, `verify` usage). */
 	readonly publicKey: CryptoKey;
@@ -73,7 +73,7 @@ export interface KeyPairMaterial {
 	exportPrivateJwk(): Promise<JsonWebKey>;
 }
 
-/** RSA variant of {@link PublicKeyImportInput}. */
+/** RSA variant of {@linkcode PublicKeyImportInput}. */
 export interface ImportRsaPublicKeyInput {
 	/** Discriminant selecting RSA import. */
 	readonly kind: 'rsa';
@@ -83,7 +83,7 @@ export interface ImportRsaPublicKeyInput {
 	readonly scheme?: RsaScheme;
 }
 
-/** ECDSA variant of {@link PublicKeyImportInput}. */
+/** ECDSA variant of {@linkcode PublicKeyImportInput}. */
 export interface ImportEcPublicKeyInput {
 	/** Discriminant selecting ECDSA import. */
 	readonly kind: 'ecdsa';
@@ -91,7 +91,7 @@ export interface ImportEcPublicKeyInput {
 	readonly namedCurve: EcNamedCurve;
 }
 
-/** Ed25519 variant of {@link PublicKeyImportInput}. */
+/** Ed25519 variant of {@linkcode PublicKeyImportInput}. */
 export interface ImportEd25519PublicKeyInput {
 	/** Discriminant selecting Ed25519 import. */
 	readonly kind: 'ed25519';
@@ -103,10 +103,10 @@ export type PublicKeyImportInput =
 	| ImportEcPublicKeyInput
 	| ImportEd25519PublicKeyInput;
 
-/** Algorithm descriptor for private key import functions. Same shape as {@link PublicKeyImportInput}. */
+/** Algorithm descriptor for private key import functions. Same shape as {@linkcode PublicKeyImportInput}. */
 export type PrivateKeyImportInput = PublicKeyImportInput;
 
-/** PBES2 encryption options for {@link exportEncryptedPkcs8Der} and {@link exportEncryptedPkcs8Pem}. */
+/** PBES2 encryption options for {@linkcode exportEncryptedPkcs8Der} and {@linkcode exportEncryptedPkcs8Pem}. */
 export type EncryptedPkcs8Options = Pbes2EncryptionOptions;
 
 /** Options for OpenSSL-style `Proc-Type: 4,ENCRYPTED` PEM encryption (PKCS#1/SEC1). */
@@ -158,7 +158,7 @@ export async function generateKeyPair(
 	return wrapKeyPair(generated.publicKey, generated.privateKey);
 }
 
-/** Wrap an existing WebCrypto key pair into a {@link KeyPairMaterial} with export helpers. */
+/** Wrap an existing WebCrypto key pair into a {@linkcode KeyPairMaterial} with export helpers. */
 export function wrapKeyPair(publicKey: CryptoKey, privateKey: CryptoKey): KeyPairMaterial {
 	return {
 		publicKey,
@@ -496,7 +496,7 @@ export async function importPrivateJwk(
 	return getCrypto().subtle.importKey('jwk', jwk, toImportAlgorithm(algorithm), true, ['sign']);
 }
 
-/** Map a {@link KeyAlgorithmInput} to the WebCrypto `generateKey` algorithm parameter. */
+/** Map a {@linkcode KeyAlgorithmInput} to the WebCrypto `generateKey` algorithm parameter. */
 function toGenerateKeyAlgorithm(
 	algorithm: KeyAlgorithmInput,
 ): EcKeyGenParams | RsaHashedKeyGenParams | AlgorithmIdentifier {
@@ -518,7 +518,7 @@ function toGenerateKeyAlgorithm(
 	}
 }
 
-/** Map a {@link PublicKeyImportInput} to the WebCrypto `importKey` algorithm parameter. */
+/** Map a {@linkcode PublicKeyImportInput} to the WebCrypto `importKey` algorithm parameter. */
 function toImportAlgorithm(
 	algorithm: PublicKeyImportInput,
 ): EcKeyImportParams | RsaHashedImportParams | AlgorithmIdentifier {
@@ -603,7 +603,7 @@ function namedCurveToOid(namedCurve: ImportEcPublicKeyInput['namedCurve']): stri
 	}
 }
 
-/** Map an {@link RsaScheme} to the WebCrypto algorithm name string. */
+/** Map an {@linkcode RsaScheme} to the WebCrypto algorithm name string. */
 function rsaSchemeToWebCryptoAlgorithmName(
 	scheme: RsaScheme | undefined,
 ): 'RSASSA-PKCS1-v1_5' | 'RSA-PSS' {

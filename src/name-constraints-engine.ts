@@ -35,8 +35,8 @@ import type {
 } from './parse.ts';
 
 /**
- * Opaque state seeded from {@link InitialNameConstraintsInput} and consumed
- * by {@link evaluateNameConstraints}.
+ * Opaque state seeded from {@linkcode InitialNameConstraintsInput} and consumed
+ * by {@linkcode evaluateNameConstraints}.
  */
 export interface NameConstraintValidationState {
 	/** Caller-supplied permitted subtree bases (pre-chain). */
@@ -84,7 +84,7 @@ interface NameConstraintValidationFailureDetailsInput {
 	readonly actual?: string | undefined;
 }
 
-/** Constructs a {@link NameConstraintValidationFailure} with optional details. */
+/** Constructs a {@linkcode NameConstraintValidationFailure} with optional details. */
 function nameConstraintFailure(
 	code: NameConstraintValidationFailureCode,
 	message: string,
@@ -121,7 +121,7 @@ function isSelfIssued(certificate: ParsedCertificate): boolean {
 /**
  * Initializes validation state from caller-supplied initial constraints.
  *
- * Call once before {@link evaluateNameConstraints}.
+ * Call once before {@linkcode evaluateNameConstraints}.
  */
 export function createNameConstraintValidationState(
 	input: InitialNameConstraintsInput,

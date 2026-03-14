@@ -64,7 +64,7 @@ export function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
 
 /**
  * Iterates through all direct child TLV elements inside a constructed
- * {@link DerElement} (SEQUENCE, SET, or context-tagged container).
+ * {@linkcode DerElement} (SEQUENCE, SET, or context-tagged container).
  *
  * Throws if any child overflows the parent boundary or if there is
  * leftover data between the last child and the parent end offset.
@@ -113,7 +113,7 @@ export function extractBitStringValue(element: DerElement): Uint8Array {
 }
 
 /**
- * Parses a {@link DerElement} with tag UTCTime (`0x17`) or GeneralizedTime (`0x18`)
+ * Parses a {@linkcode DerElement} with tag UTCTime (`0x17`) or GeneralizedTime (`0x18`)
  * into a `Date`.
  *
  * For UTCTime, the two-digit year is interpreted per RFC 5280: values >= 50 map
@@ -158,7 +158,7 @@ export function decodeIntegerNumber(bytes: Uint8Array): number {
 }
 
 /**
- * Like {@link decodeIntegerNumber} but additionally enforces DER rules for
+ * Like {@linkcode decodeIntegerNumber} but additionally enforces DER rules for
  * non-negative integers: the high bit must be clear, and leading zero padding
  * must be minimal.
  *

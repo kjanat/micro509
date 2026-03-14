@@ -270,7 +270,7 @@ export function generalizedTime(date: Date): Uint8Array {
 
 /**
  * Encodes a `Date` as the appropriate DER time type per RFC 5280:
- * {@link utcTime} for 1950–2049, {@link generalizedTime} otherwise.
+ * {@linkcode utcTime} for 1950–2049, {@linkcode generalizedTime} otherwise.
  */
 export function time(date: Date): Uint8Array {
 	if (date.getUTCFullYear() >= 2050 || date.getUTCFullYear() < 1950) {
@@ -312,17 +312,17 @@ export interface DerElement {
 	readonly value: Uint8Array;
 }
 
-/** Options for {@link readSequenceChildren}. */
+/** Options for {@linkcode readSequenceChildren}. */
 export interface ReadSequenceChildrenOptions {
-	/** Maximum nesting depth for the DER depth check. Default: {@link DEFAULT_MAX_DER_DEPTH}. */
+	/** Maximum nesting depth for the DER depth check. Default: {@linkcode DEFAULT_MAX_DER_DEPTH}. */
 	readonly maxDepth?: number;
 	/** Constructed tags whose inner bytes may not parse as valid TLV children (e.g. opaque extension values). */
 	readonly allowOpaqueConstructedTags?: readonly number[];
 }
 
-/** Options for {@link readRootElement}. */
+/** Options for {@linkcode readRootElement}. */
 export interface ReadRootElementOptions {
-	/** Maximum nesting depth for the DER depth check. Default: {@link DEFAULT_MAX_DER_DEPTH}. */
+	/** Maximum nesting depth for the DER depth check. Default: {@linkcode DEFAULT_MAX_DER_DEPTH}. */
 	readonly maxDepth?: number;
 	/** Constructed tags whose inner bytes may not parse as valid TLV children (e.g. opaque extension values). */
 	readonly allowOpaqueConstructedTags?: readonly number[];

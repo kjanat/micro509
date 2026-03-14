@@ -77,7 +77,7 @@ import { verifySignedData } from './sig-verify.ts';
 import { encodeAlgorithmIdentifier, getSignatureAlgorithm, signBytes } from './signing.ts';
 
 /**
- * Single revoked certificate entry for {@link createCertificateRevocationList}.
+ * Single revoked certificate entry for {@linkcode createCertificateRevocationList}.
  */
 export interface RevokedCertificateInput {
 	/** DER-encoded certificate serial number to revoke. */
@@ -108,7 +108,7 @@ export type RevocationReason =
 	| 'aACompromise';
 
 /**
- * Input for {@link createCertificateRevocationList}.
+ * Input for {@linkcode createCertificateRevocationList}.
  */
 export interface CreateCertificateRevocationListInput {
 	/** Distinguished name of the CRL issuer (typically the signing CA). */
@@ -134,7 +134,7 @@ export interface CreateCertificateRevocationListInput {
 }
 
 /**
- * Encoded CRL in multiple serialisation formats, returned by {@link createCertificateRevocationList}.
+ * Encoded CRL in multiple serialisation formats, returned by {@linkcode createCertificateRevocationList}.
  */
 export interface CertificateRevocationListMaterial {
 	/** Raw DER bytes of the signed CRL. */
@@ -162,8 +162,8 @@ export interface ParsedRevokedCertificate {
 }
 
 /**
- * Decoded X.509 CRL, returned by {@link parseCertificateRevocationListDer}
- * and {@link parseCertificateRevocationListPem}.
+ * Decoded X.509 CRL, returned by {@linkcode parseCertificateRevocationListDer}
+ * and {@linkcode parseCertificateRevocationListPem}.
  */
 export interface ParsedCertificateRevocationList {
 	/** CRL version (1 = v1, 2 = v2 with extensions). */
@@ -227,7 +227,7 @@ export interface VerifyCertificateRevocationListFailure extends Micro509Error<'s
 	readonly ok: false;
 }
 
-/** Failure branch of {@link VerifyCertificateRevocationListResult}. */
+/** Failure branch of {@linkcode VerifyCertificateRevocationListResult}. */
 interface VerifyCertificateRevocationListFailureResult {
 	readonly ok: false;
 	readonly error: VerifyCertificateRevocationListFailure;
@@ -236,7 +236,7 @@ interface VerifyCertificateRevocationListFailureResult {
 }
 
 /**
- * Result of {@link verifyCertificateRevocationList}.
+ * Result of {@linkcode verifyCertificateRevocationList}.
  *
  * On success, `value` is the parsed CRL whose signature has been verified.
  */
@@ -249,7 +249,7 @@ export type VerifyCertificateRevocationListResult =
 	| VerifyCertificateRevocationListFailureResult;
 
 /**
- * Input for {@link validateCertificateRevocationList}.
+ * Input for {@linkcode validateCertificateRevocationList}.
  */
 export interface ValidateCertificateRevocationListInput {
 	/** The CRL to validate. */
@@ -263,7 +263,7 @@ export interface ValidateCertificateRevocationListInput {
 }
 
 /**
- * Failure detail for {@link validateCertificateRevocationList}.
+ * Failure detail for {@linkcode validateCertificateRevocationList}.
  *
  * Possible codes: `signature_invalid`, `issuer_mismatch`, `stale_crl`, `crl_sign_not_permitted`.
  */
@@ -274,7 +274,7 @@ export interface ValidateCertificateRevocationListFailure
 	readonly ok: false;
 }
 
-/** Failure branch of {@link ValidateCertificateRevocationListResult}. */
+/** Failure branch of {@linkcode ValidateCertificateRevocationListResult}. */
 interface ValidateCertificateRevocationListFailureResult {
 	readonly ok: false;
 	readonly error: ValidateCertificateRevocationListFailure;
@@ -283,7 +283,7 @@ interface ValidateCertificateRevocationListFailureResult {
 }
 
 /**
- * Result of {@link validateCertificateRevocationList}.
+ * Result of {@linkcode validateCertificateRevocationList}.
  *
  * On success, the CRL has passed signature, issuer, key-usage, and freshness checks.
  */
@@ -296,7 +296,7 @@ export type ValidateCertificateRevocationListResult =
 	| ValidateCertificateRevocationListFailureResult;
 
 /**
- * Input for {@link checkCertificateRevocationAgainstCrl}.
+ * Input for {@linkcode checkCertificateRevocationAgainstCrl}.
  */
 export interface CheckCertificateRevocationAgainstCrlInput {
 	/** Certificate whose revocation status to check. */
@@ -313,7 +313,7 @@ export interface CheckCertificateRevocationAgainstCrlInput {
 	readonly clockSkewMs?: number;
 }
 
-/** Error codes that {@link checkCertificateRevocationAgainstCrl} may return. */
+/** Error codes that {@linkcode checkCertificateRevocationAgainstCrl} may return. */
 export type CheckCertificateRevocationAgainstCrlErrorCode =
 	| 'signature_invalid'
 	| 'issuer_mismatch'
@@ -340,13 +340,13 @@ type RevokedCertificateLookupResult =
 	  }
 	| CheckCertificateRevocationAgainstCrlFailureResult;
 
-/** Structured details attached to a {@link CheckCertificateRevocationAgainstCrlFailure}. */
+/** Structured details attached to a {@linkcode CheckCertificateRevocationAgainstCrlFailure}. */
 export interface CheckCertificateRevocationAgainstCrlFailureDetails {
 	/** Why the CRL was non-applicable, when the error code is `non_applicable`. */
 	readonly reason?: CrlApplicabilityFailureReason;
 }
 
-/** Failure detail for {@link checkCertificateRevocationAgainstCrl}. */
+/** Failure detail for {@linkcode checkCertificateRevocationAgainstCrl}. */
 export interface CheckCertificateRevocationAgainstCrlFailure
 	extends Micro509Error<
 		CheckCertificateRevocationAgainstCrlErrorCode,
@@ -380,7 +380,7 @@ export type CheckCertificateRevocationAgainstCrlValue =
 	| CheckCertificateRevocationAgainstCrlGoodValue
 	| CheckCertificateRevocationAgainstCrlRevokedValue;
 
-/** Failure branch of {@link CheckCertificateRevocationAgainstCrlResult}. */
+/** Failure branch of {@linkcode CheckCertificateRevocationAgainstCrlResult}. */
 interface CheckCertificateRevocationAgainstCrlFailureResult {
 	readonly ok: false;
 	readonly error: CheckCertificateRevocationAgainstCrlFailure;
@@ -391,7 +391,7 @@ interface CheckCertificateRevocationAgainstCrlFailureResult {
 }
 
 /**
- * Result of {@link checkCertificateRevocationAgainstCrl}.
+ * Result of {@linkcode checkCertificateRevocationAgainstCrl}.
  *
  * On success `value.status` is `'good'` or `'revoked'`.
  * On failure the CRL could not be validated or was non-applicable.
@@ -468,10 +468,10 @@ export async function createCertificateRevocationList(
 }
 
 /**
- * Decodes a DER-encoded X.509 CRL into a structured {@link ParsedCertificateRevocationList}.
+ * Decodes a DER-encoded X.509 CRL into a structured {@linkcode ParsedCertificateRevocationList}.
  *
- * Does not verify the signature — call {@link verifyCertificateRevocationList} or
- * {@link validateCertificateRevocationList} for that.
+ * Does not verify the signature — call {@linkcode verifyCertificateRevocationList} or
+ * {@linkcode validateCertificateRevocationList} for that.
  */
 export function parseCertificateRevocationListDer(
 	der: Uint8Array,
@@ -588,7 +588,7 @@ export function parseCertificateRevocationListPem(pem: string): ParsedCertificat
  * Verifies the CRL signature against the issuer certificate's public key.
  *
  * Does **not** check issuer name match, key-usage, or freshness — use
- * {@link validateCertificateRevocationList} for full validation.
+ * {@linkcode validateCertificateRevocationList} for full validation.
  */
 export async function verifyCertificateRevocationList(
 	crl: string | Uint8Array,
@@ -1782,7 +1782,7 @@ function normalizeHex(value: string): string {
 	return value.replace(/^0+/, '').toLowerCase();
 }
 
-/** Maps an integer CRLReason code back to its {@link RevocationReason} string, or `undefined` for unknown codes. */
+/** Maps an integer CRLReason code back to its {@linkcode RevocationReason} string, or `undefined` for unknown codes. */
 function revocationReasonFromCode(code: number | undefined): RevocationReason | undefined {
 	switch (code) {
 		case 0:

@@ -74,7 +74,7 @@ export type UnsupportedRsaPssParametersReason =
 	| 'unsupported_salt_length'
 	| 'unsupported_trailer_field';
 
-/** Success branch of {@link ParsedRsaPssParametersResult}. */
+/** Success branch of {@linkcode ParsedRsaPssParametersResult}. */
 export interface ParsedRsaPssParametersSuccess {
 	/** Discriminant for the success branch. */
 	readonly ok: true;
@@ -102,7 +102,7 @@ export interface ParsedRsaPssParametersMalformed {
 	readonly reason: string;
 }
 
-/** Result of {@link parseRsaPssParameters}: success, unsupported, or malformed. */
+/** Result of {@linkcode parseRsaPssParameters}: success, unsupported, or malformed. */
 export type ParsedRsaPssParametersResult =
 	| ParsedRsaPssParametersSuccess
 	| ParsedRsaPssParametersUnsupported
@@ -119,7 +119,7 @@ interface ParsedMaskGenAlgorithm {
 /** RFC 3447 default salt length when hash is SHA-1 (used to detect the unsupported default). */
 const SHA1_SALT_LENGTH = 20;
 
-/** Return the canonical {@link RsaPssParameters} profile for a given hash algorithm. */
+/** Return the canonical {@linkcode RsaPssParameters} profile for a given hash algorithm. */
 export function rsaPssParametersForHash(hash: RsaPssHash): RsaPssParameters {
 	switch (hash) {
 		case 'SHA-256':
@@ -146,7 +146,7 @@ export function rsaPssParametersForHash(hash: RsaPssHash): RsaPssParameters {
 	}
 }
 
-/** DER-encode an {@link RsaPssParameters} profile as an ASN.1 RSASSA-PSS-params SEQUENCE. */
+/** DER-encode an {@linkcode RsaPssParameters} profile as an ASN.1 RSASSA-PSS-params SEQUENCE. */
 export function encodeRsaPssParameters(parameters: RsaPssParameters): Uint8Array {
 	const hashOid = hashOidForName(parameters.hash);
 	const hashAlgorithmIdentifier = encodeHashAlgorithmIdentifier(hashOid);
@@ -362,7 +362,7 @@ function hashOidForName(hash: RsaPssHash): string {
 	}
 }
 
-/** Reverse-map a hash OID to a supported {@link RsaPssHash} name, or `undefined` if unsupported. */
+/** Reverse-map a hash OID to a supported {@linkcode RsaPssHash} name, or `undefined` if unsupported. */
 function hashNameFromOid(oid: string | undefined): RsaPssHash | undefined {
 	switch (oid) {
 		case OIDS.sha256:

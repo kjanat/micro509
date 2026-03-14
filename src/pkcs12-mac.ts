@@ -20,7 +20,7 @@ import {
 import { getCrypto } from './keys.ts';
 import { OIDS } from './oids.ts';
 
-/** Input for {@link createPkcs12MacData}. */
+/** Input for {@linkcode createPkcs12MacData}. */
 export interface Pkcs12MacOptions {
 	/** Password used to derive the HMAC key via the PKCS#12 KDF. */
 	readonly password: string;
@@ -30,7 +30,7 @@ export interface Pkcs12MacOptions {
 	readonly salt?: Uint8Array;
 }
 
-/** Decoded PKCS#12 MacData block returned by {@link parsePkcs12MacData}. */
+/** Decoded PKCS#12 MacData block returned by {@linkcode parsePkcs12MacData}. */
 export interface ParsedPkcs12MacData {
 	/** OID of the digest algorithm (currently always SHA-256). */
 	readonly digestAlgorithmOid: string;

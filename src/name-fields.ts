@@ -1,7 +1,7 @@
 /**
  * Distinguished-name field metadata.
  *
- * Maps friendly {@link NameFieldKey} names to their ASN.1 OIDs and
+ * Maps friendly {@linkcode NameFieldKey} names to their ASN.1 OIDs and
  * string-encoding functions.
  *
  * @module
@@ -22,7 +22,7 @@ export interface NameFieldDefinition {
 }
 
 /**
- * Registry mapping every {@link NameFieldKey} to its OID and ASN.1 encoder.
+ * Registry mapping every {@linkcode NameFieldKey} to its OID and ASN.1 encoder.
  *
  * Country and serialNumber use PrintableString; emailAddress uses IA5String;
  * all others use UTF8String.
@@ -43,7 +43,7 @@ export const NAME_FIELD_DEFINITIONS: Record<NameFieldKey, NameFieldDefinition> =
 };
 
 /**
- * Canonical emission order when converting a {@link NameObject} to RDN attributes.
+ * Canonical emission order when converting a {@linkcode NameObject} to RDN attributes.
  *
  * Follows the conventional C/ST/L/STREET/O/OU/CN/… ordering.
  */
@@ -62,13 +62,13 @@ export const NAME_OBJECT_ORDER: readonly NameFieldKey[] = [
 	'emailAddress',
 ];
 
-/** Reverse lookup table: OID string → friendly {@link NameFieldKey}. */
+/** Reverse lookup table: OID string → friendly {@linkcode NameFieldKey}. */
 const NAME_FIELD_KEYS_BY_OID = new Map<string, NameFieldKey>();
 for (const key of NAME_OBJECT_ORDER) {
 	NAME_FIELD_KEYS_BY_OID.set(NAME_FIELD_DEFINITIONS[key].oid, key);
 }
 
-/** Resolves a dotted-decimal OID to its {@link NameFieldKey}, or `undefined` if unknown. */
+/** Resolves a dotted-decimal OID to its {@linkcode NameFieldKey}, or `undefined` if unknown. */
 export function nameFieldKeyFromOid(oid: string): NameFieldKey | undefined {
 	return NAME_FIELD_KEYS_BY_OID.get(oid);
 }

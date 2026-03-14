@@ -21,7 +21,7 @@ export {
 
 /** Resolved WebCrypto parameters needed to verify a signature. */
 export interface VerifySignatureConfig {
-	/** Algorithm descriptor for importing the signer's public key via {@link importSpkiDer}. */
+	/** Algorithm descriptor for importing the signer's public key via {@linkcode importSpkiDer}. */
 	readonly importAlgorithm: PublicKeyImportInput;
 	/** WebCrypto `verify()` algorithm parameter. */
 	readonly verifyParams: Algorithm | EcdsaParams | RsaPssParams;
@@ -39,7 +39,7 @@ export interface VerifySignatureConfigFailure {
 	readonly reason: string;
 }
 
-/** Success branch of {@link VerifySignatureConfigResult}. */
+/** Success branch of {@linkcode VerifySignatureConfigResult}. */
 interface VerifySignatureConfigSuccess {
 	/** Discriminant for the success branch. */
 	readonly ok: true;
@@ -47,12 +47,12 @@ interface VerifySignatureConfigSuccess {
 	readonly value: VerifySignatureConfig;
 }
 
-/** Result of resolving signature algorithm OIDs into a {@link VerifySignatureConfig}. */
+/** Result of resolving signature algorithm OIDs into a {@linkcode VerifySignatureConfig}. */
 export type VerifySignatureConfigResult =
 	| VerifySignatureConfigSuccess
 	| VerifySignatureConfigFailure;
 
-/** Success branch of {@link VerifySignedDataResult}. */
+/** Success branch of {@linkcode VerifySignedDataResult}. */
 interface VerifySignedDataSuccess {
 	/** Discriminant for the success branch. */
 	readonly ok: true;
@@ -64,9 +64,9 @@ interface VerifySignedDataSuccess {
 export type VerifySignedDataResult = VerifySignedDataSuccess | VerifySignatureConfigFailure;
 
 /**
- * Resolve algorithm OIDs into a {@link VerifySignatureConfig}.
+ * Resolve algorithm OIDs into a {@linkcode VerifySignatureConfig}.
  *
- * Throws on unsupported algorithms. Use {@link getVerifySignatureConfigResult} for
+ * Throws on unsupported algorithms. Use {@linkcode getVerifySignatureConfigResult} for
  * a non-throwing variant.
  */
 export function getVerifySignatureConfig(
@@ -89,7 +89,7 @@ export function getVerifySignatureConfig(
 	return result.value;
 }
 
-/** Non-throwing variant of {@link getVerifySignatureConfig} — returns a typed result union. */
+/** Non-throwing variant of {@linkcode getVerifySignatureConfig} — returns a typed result union. */
 export function getVerifySignatureConfigResult(
 	signatureAlgorithmOid: string,
 	signatureAlgorithmParametersDer: Uint8Array | undefined,
@@ -216,7 +216,7 @@ export function curveBytes(parametersOid: string | undefined): number {
 /**
  * Verify a signature against the signer's SPKI and the signed TBS bytes.
  *
- * Throws on unsupported algorithms. Use {@link verifySignedDataDetailed} for
+ * Throws on unsupported algorithms. Use {@linkcode verifySignedDataDetailed} for
  * a non-throwing variant.
  */
 export async function verifySignedData(
@@ -244,8 +244,8 @@ export async function verifySignedData(
 }
 
 /**
- * Non-throwing variant of {@link verifySignedData} — returns a typed
- * {@link VerifySignedDataResult} instead of throwing on unsupported algorithms.
+ * Non-throwing variant of {@linkcode verifySignedData} — returns a typed
+ * {@linkcode VerifySignedDataResult} instead of throwing on unsupported algorithms.
  *
  * Tries both DER and raw ECDSA encodings when the first attempt fails.
  */

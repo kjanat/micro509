@@ -47,7 +47,7 @@ export interface PfxBagAttributesInput {
 	readonly localKeyId?: Uint8Array;
 }
 
-/** A certificate to embed in a PFX container. Input for {@link createPfx}. */
+/** A certificate to embed in a PFX container. Input for {@linkcode createPfx}. */
 export interface PfxCertificateBagInput {
 	/** Certificate as PEM text or DER bytes. */
 	readonly certificate: PfxCertificateSource;
@@ -55,7 +55,7 @@ export interface PfxCertificateBagInput {
 	readonly attributes?: PfxBagAttributesInput;
 }
 
-/** A private key to embed in a PFX container. Input for {@link createPfx}. */
+/** A private key to embed in a PFX container. Input for {@linkcode createPfx}. */
 export interface PfxPrivateKeyBagInput {
 	/** Private key as a WebCrypto `CryptoKey` or raw PKCS#8 DER bytes. */
 	readonly privateKey: PfxPrivateKeySource;
@@ -63,7 +63,7 @@ export interface PfxPrivateKeyBagInput {
 	readonly attributes?: PfxBagAttributesInput;
 }
 
-/** Input for {@link createPfx}. */
+/** Input for {@linkcode createPfx}. */
 export interface CreatePfxInput {
 	/** Certificates to include as certBag entries. */
 	readonly certificates?: readonly PfxCertificateBagInput[];
@@ -75,10 +75,10 @@ export interface CreatePfxInput {
 	readonly mac?: Pkcs12MacOptions;
 }
 
-/** PBES2 encryption settings for PFX key-bag protection. Alias of {@link Pbes2EncryptionOptions}. */
+/** PBES2 encryption settings for PFX key-bag protection. Alias of {@linkcode Pbes2EncryptionOptions}. */
 export type PfxEncryptionOptions = Pbes2EncryptionOptions;
 
-/** Options for {@link parsePfxDer} and {@link parsePfxPem}. */
+/** Options for {@linkcode parsePfxDer} and {@linkcode parsePfxPem}. */
 export interface ParsePfxOptions {
 	/** Password used to decrypt PBES2-encrypted ContentInfo entries. Also used for MAC verification when `macPassword` is omitted. */
 	readonly password?: string;
@@ -86,7 +86,7 @@ export interface ParsePfxOptions {
 	readonly macPassword?: string;
 }
 
-/** DER, PEM, and base64 encodings of a PFX container produced by {@link createPfx}. */
+/** DER, PEM, and base64 encodings of a PFX container produced by {@linkcode createPfx}. */
 export interface PfxMaterial {
 	/** Raw DER-encoded PFX bytes. */
 	readonly der: Uint8Array;
@@ -96,7 +96,7 @@ export interface PfxMaterial {
 	readonly base64: string;
 }
 
-/** A single PKCS#12 bag attribute as decoded by {@link parsePfxDer}. */
+/** A single PKCS#12 bag attribute as decoded by {@linkcode parsePfxDer}. */
 export interface ParsedPfxAttribute {
 	/** Dotted-decimal OID identifying this attribute type. */
 	readonly oid: string;
@@ -151,7 +151,7 @@ export type ParsedPfxBag =
 			readonly valueDer: Uint8Array;
 	  };
 
-/** Fully decoded PFX container returned by {@link parsePfxDer} / {@link parsePfxPem}. */
+/** Fully decoded PFX container returned by {@linkcode parsePfxDer} / {@linkcode parsePfxPem}. */
 export interface ParsedPfx {
 	/** All SafeBags in the PFX, including unknown types. */
 	readonly bags: readonly ParsedPfxBag[];
@@ -167,7 +167,7 @@ export interface ParsedPfx {
 // Result types for PFX parsing
 // ---------------------------------------------------------------------------
 
-/** Error codes returned by {@link parsePfxDer} and {@link parsePfxPem}. */
+/** Error codes returned by {@linkcode parsePfxDer} and {@linkcode parsePfxPem}. */
 export type ParsePfxErrorCode = 'malformed' | 'invalid_password' | 'password_required';
 
 /** Error payload for a failed PFX parse. */
@@ -176,7 +176,7 @@ export interface ParsePfxFailure extends Micro509Error<ParsePfxErrorCode> {
 	readonly ok: false;
 }
 
-/** Failure branch of {@link ParsePfxResult}. */
+/** Failure branch of {@linkcode ParsePfxResult}. */
 interface ParsePfxFailureResult {
 	/** Always `false` for failures. */
 	readonly ok: false;
@@ -188,7 +188,7 @@ interface ParsePfxFailureResult {
 	readonly message: string;
 }
 
-/** Success-or-failure result from {@link parsePfxDer} / {@link parsePfxPem}. */
+/** Success-or-failure result from {@linkcode parsePfxDer} / {@linkcode parsePfxPem}. */
 export type ParsePfxResult =
 	| {
 			/** Parse succeeded. */
@@ -346,7 +346,7 @@ export async function parsePfxDer(
 /**
  * Decodes a PEM-armored PKCS#12/PFX container. Expects exactly one `PKCS12` block.
  *
- * Delegates to {@link parsePfxDer} after PEM decoding.
+ * Delegates to {@linkcode parsePfxDer} after PEM decoding.
  *
  * @example
  * ```ts
@@ -513,7 +513,7 @@ function encodeBagAttributes(attributes: PfxBagAttributesInput | undefined): rea
 	return out.length === 0 ? [] : [setOf(out)];
 }
 
-/** Decodes a single SafeBag from DER into a {@link ParsedPfxBag} discriminated union. */
+/** Decodes a single SafeBag from DER into a {@linkcode ParsedPfxBag} discriminated union. */
 function parseSafeBag(der: Uint8Array): ParsedPfxBag {
 	const children = readSequenceChildren(der);
 	const bagId = children[0];

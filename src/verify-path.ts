@@ -2,7 +2,7 @@
  * Internal certificate path-building and signature-check helpers.
  *
  * Loads and parses candidate certificates, ranks issuer candidates by AKI/root
- * affinity, matches against bare {@link TrustAnchor}s, and performs the
+ * affinity, matches against bare {@linkcode TrustAnchor}s, and performs the
  * depth-first chain search used by the public verify APIs in `verify.ts`.
  *
  * @module
@@ -52,14 +52,14 @@ interface VerifyPathFailureDetailsInput {
 
 /** Callbacks injected by the caller to construct failure objects during path building. */
 export interface VerifyPathCallbacks {
-	/** Constructs a {@link VerifyChainFailure} from a code, message, chain index, and details. */
+	/** Constructs a {@linkcode VerifyChainFailure} from a code, message, chain index, and details. */
 	readonly failure: (
 		code: VerifyErrorCode,
 		message: string,
 		index?: number,
 		details?: VerifyFailureDetails,
 	) => VerifyChainFailure;
-	/** Constructs a {@link VerifyFailureDetails} from loose inputs. */
+	/** Constructs a {@linkcode VerifyFailureDetails} from loose inputs. */
 	readonly detail: (input: VerifyPathFailureDetailsInput) => VerifyFailureDetails;
 }
 

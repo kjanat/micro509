@@ -2,7 +2,7 @@
  * Internal RFC 9618 policy-validation engine.
  *
  * Tracks the policy graph and counter state through each certificate in a
- * chain, then derives the {@link PolicyValidationOutcome}.
+ * chain, then derives the {@linkcode PolicyValidationOutcome}.
  *
  * @module
  */
@@ -20,8 +20,8 @@ import type {
 /**
  * Mutable state threaded through each step of the policy-validation walk.
  *
- * Created by {@link createPolicyValidationState}, consumed by
- * {@link evaluatePolicyChain}.
+ * Created by {@linkcode createPolicyValidationState}, consumed by
+ * {@linkcode evaluatePolicyChain}.
  */
 export interface PolicyValidationState {
 	/** Caller-requested acceptable policies, or `'any'`. */
@@ -53,7 +53,7 @@ export interface PolicyValidationFailureDetails {
 export interface PolicyValidationFailure
 	extends Micro509Error<PolicyValidationFailureCode, PolicyValidationFailureDetails> {}
 
-/** Success with {@link PolicyValidationOutcome}, or a {@link PolicyValidationFailure}. */
+/** Success with {@linkcode PolicyValidationOutcome}, or a {@linkcode PolicyValidationFailure}. */
 export type PolicyValidationResult = Result<PolicyValidationOutcome, PolicyValidationFailure>;
 
 /** One node in the RFC 9618 policy graph, keyed by `depth:policyOID`. */
@@ -146,7 +146,7 @@ function createInitialPolicyGraph(): PolicyGraph {
 	};
 }
 
-/** Constructs a new {@link PolicyGraphNode} with empty child-key set. */
+/** Constructs a new {@linkcode PolicyGraphNode} with empty child-key set. */
 function createPolicyGraphNode(
 	depth: number,
 	validPolicy: string,
@@ -356,7 +356,7 @@ function deriveUserConstrainedPolicies(
 	return [...constrained.values()];
 }
 
-/** Constructs a {@link ConstrainedPolicy}, omitting qualifiers when absent. */
+/** Constructs a {@linkcode ConstrainedPolicy}, omitting qualifiers when absent. */
 function buildConstrainedPolicy(
 	policyIdentifier: string,
 	policyQualifiers: readonly PolicyQualifierInfo[] | undefined,

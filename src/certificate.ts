@@ -51,7 +51,7 @@ export interface ValidityInput {
 }
 
 /**
- * Input for {@link createCertificate}.
+ * Input for {@linkcode createCertificate}.
  */
 export interface CreateCertificateInput {
 	/**
@@ -101,7 +101,7 @@ export interface CreateCertificateInput {
 }
 
 /**
- * Input for {@link createSelfSignedCertificate}.
+ * Input for {@linkcode createSelfSignedCertificate}.
  */
 export interface CreateSelfSignedCertificateInput {
 	/**
@@ -151,13 +151,13 @@ export interface CertificateMaterial {
 	 */
 	readonly pem: string;
 	/**
-	 * Base64 encoding of {@link der} without PEM armor.
+	 * Base64 encoding of {@linkcode der} without PEM armor.
 	 */
 	readonly base64: string;
 }
 
 /**
- * Result returned by {@link createSelfSignedCertificate}.
+ * Result returned by {@linkcode createSelfSignedCertificate}.
  */
 export interface SelfSignedCertificateResult {
 	/**

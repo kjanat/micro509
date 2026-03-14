@@ -19,7 +19,7 @@ export interface PemBlock {
 
 /**
  * PEM blocks grouped by their label into well-known PKI categories.
- * Blocks that don't match any known label land in {@link others}.
+ * Blocks that don't match any known label land in {@linkcode others}.
  */
 export interface CategorizedPemBlocks {
 	/** Blocks with label `CERTIFICATE`. */
@@ -88,7 +88,7 @@ export function base64Decode(value: string): Uint8Array {
 
 /**
  * Finds all `BEGIN`/`END`-delimited PEM blocks in a string and returns
- * them as parsed {@link PemBlock} entries. Handles concatenated PEM files
+ * them as parsed {@linkcode PemBlock} entries. Handles concatenated PEM files
  * and ignores non-PEM text between blocks.
  */
 export function splitPemBlocks(input: string): readonly PemBlock[] {
@@ -113,7 +113,7 @@ export function splitPemBlocks(input: string): readonly PemBlock[] {
 /**
  * Groups PEM blocks by label into well-known PKI categories
  * (certificates, CSRs, private keys, public keys, and everything else).
- * Accepts either raw PEM text or pre-split {@link PemBlock} entries.
+ * Accepts either raw PEM text or pre-split {@linkcode PemBlock} entries.
  */
 export function categorizePemBlocks(input: string | readonly PemBlock[]): CategorizedPemBlocks {
 	const blocks = typeof input === 'string' ? splitPemBlocks(input) : input;

@@ -28,7 +28,7 @@ import {
 	signBytes,
 } from './signing.ts';
 
-/** Input for {@link createCertificateSigningRequest}. */
+/** Input for {@linkcode createCertificateSigningRequest}. */
 export interface CreateCsrInput {
 	/** Distinguished name for the CSR subject (e.g. `{ commonName: 'example.com' }`). */
 	readonly subject: NameInput;
@@ -42,7 +42,7 @@ export interface CreateCsrInput {
 	readonly signature?: SignatureProfileInput;
 }
 
-/** DER, PEM, and base64 encodings of a CSR produced by {@link createCertificateSigningRequest}. */
+/** DER, PEM, and base64 encodings of a CSR produced by {@linkcode createCertificateSigningRequest}. */
 export interface CsrMaterial {
 	/** Raw DER-encoded PKCS#10 CertificationRequest. */
 	readonly der: Uint8Array;

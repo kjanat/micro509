@@ -1,5 +1,5 @@
 /**
- * BIT STRING helpers for {@link KeyUsage} and {@link DistributionPointReason} flags.
+ * BIT STRING helpers for {@linkcode KeyUsage} and {@linkcode DistributionPointReason} flags.
  *
  * Centralizes the bit-position ordering so certificate builders and parsers
  * produce identical wire encodings.
@@ -36,7 +36,7 @@ const DISTRIBUTION_POINT_REASON_ORDER = [
 ] as const satisfies readonly DistributionPointReason[];
 
 /**
- * Encode an array of {@link KeyUsage} flags into a DER BIT STRING.
+ * Encode an array of {@linkcode KeyUsage} flags into a DER BIT STRING.
  *
  * @param usages Flags to set. Bit positions follow RFC 5280 §4.2.1.3 order.
  */
@@ -48,7 +48,7 @@ export function encodeKeyUsageExtension(usages: readonly KeyUsage[]): Uint8Array
 }
 
 /**
- * Decode a DER-encoded Key Usage BIT STRING into an array of {@link KeyUsage} flags.
+ * Decode a DER-encoded Key Usage BIT STRING into an array of {@linkcode KeyUsage} flags.
  *
  * @param bytes DER of the keyUsage extension value (BIT STRING).
  */
@@ -61,7 +61,7 @@ export function parseKeyUsageExtension(bytes: Uint8Array): readonly KeyUsage[] {
 }
 
 /**
- * Encode {@link DistributionPointReason} flags as BIT STRING content bytes
+ * Encode {@linkcode DistributionPointReason} flags as BIT STRING content bytes
  * (unusedBits prefix + flag bytes), suitable for wrapping in an implicit context tag.
  *
  * @param reasons Reason flags to encode.
@@ -78,7 +78,7 @@ export function encodeDistributionPointReasonFlagsContent(
 }
 
 /**
- * Decode BIT STRING content bytes into {@link DistributionPointReason} flags.
+ * Decode BIT STRING content bytes into {@linkcode DistributionPointReason} flags.
  *
  * @param value Raw content bytes (unusedBits prefix + flag bytes).
  * @returns Decoded reason flags, or `undefined` if no bits are set.

@@ -33,7 +33,7 @@ export interface ConfiguredOcspResponder {
 	readonly responderCertificate?: ConfiguredOcspResponderCertificate;
 }
 
-/** One candidate OCSP responder resolved by {@link resolveOcspResponderCandidates}. */
+/** One candidate OCSP responder resolved by {@linkcode resolveOcspResponderCandidates}. */
 export interface OcspResponderCandidate {
 	/** Whether this candidate came from configuration or the certificate's AIA extension. */
 	readonly source: OcspResponderSource;
@@ -43,7 +43,7 @@ export interface OcspResponderCandidate {
 	readonly responderCertificate?: ConfiguredOcspResponderCertificate;
 }
 
-/** Input for {@link resolveOcspResponderCandidates}. */
+/** Input for {@linkcode resolveOcspResponderCandidates}. */
 export interface ResolveOcspResponderCandidatesInput {
 	/** Certificate whose AIA extension will be inspected for OCSP URIs. */
 	readonly certificate: RevocationCertificateSource;
@@ -51,7 +51,7 @@ export interface ResolveOcspResponderCandidatesInput {
 	readonly configuredResponders?: readonly ConfiguredOcspResponder[];
 }
 
-/** CRL-based revocation evidence for {@link CheckCertificateRevocationInput.evidence}. */
+/** CRL-based revocation evidence for {@linkcode CheckCertificateRevocationInput.evidence}. */
 export interface RevocationCrlEvidenceInput {
 	/** Discriminator for the CRL evidence variant. */
 	readonly kind: 'crl';
@@ -61,7 +61,7 @@ export interface RevocationCrlEvidenceInput {
 	readonly deltaCrl?: CrlSource;
 }
 
-/** OCSP-based revocation evidence for {@link CheckCertificateRevocationInput.evidence}. */
+/** OCSP-based revocation evidence for {@linkcode CheckCertificateRevocationInput.evidence}. */
 export interface RevocationOcspEvidenceInput {
 	/** Discriminator for the OCSP evidence variant. */
 	readonly kind: 'ocsp';
@@ -76,7 +76,7 @@ export interface RevocationOcspEvidenceInput {
 /** Discriminated union of CRL and OCSP evidence inputs. */
 export type RevocationEvidenceInput = RevocationCrlEvidenceInput | RevocationOcspEvidenceInput;
 
-/** Input for {@link checkCertificateRevocation}. */
+/** Input for {@linkcode checkCertificateRevocation}. */
 export interface CheckCertificateRevocationInput {
 	/** Certificate whose revocation status to determine. */
 	readonly certificate: RevocationCertificateSource;
@@ -90,7 +90,7 @@ export interface CheckCertificateRevocationInput {
 	readonly clockSkewMs?: number;
 }
 
-/** Error codes that {@link checkCertificateRevocation} may surface inside an `unknown` result. */
+/** Error codes that {@linkcode checkCertificateRevocation} may surface inside an `unknown` result. */
 export type CheckCertificateRevocationErrorCode =
 	| 'revocation_evidence_missing'
 	| 'revocation_status_unknown';
@@ -177,7 +177,7 @@ export type CheckCertificateRevocationValue =
 	| RevocationCheckUnknownValue;
 
 /**
- * Result of {@link checkCertificateRevocation}. Always succeeds (`ok: true`) —
+ * Result of {@linkcode checkCertificateRevocation}. Always succeeds (`ok: true`) —
  * the `value.status` discriminator carries the actual outcome.
  */
 export type CheckCertificateRevocationResult = Result<CheckCertificateRevocationValue, never>;
@@ -313,7 +313,7 @@ export async function checkCertificateRevocation(
 	});
 }
 
-/** Evaluates a single CRL evidence entry via {@link checkCertificateRevocationAgainstCrl}. */
+/** Evaluates a single CRL evidence entry via {@linkcode checkCertificateRevocationAgainstCrl}. */
 async function checkCertificateRevocationWithCrl(
 	input: CheckCertificateRevocationInput,
 	evidence: RevocationCrlEvidenceInput,
@@ -361,7 +361,7 @@ async function checkCertificateRevocationWithCrl(
 	};
 }
 
-/** Evaluates a single OCSP evidence entry via {@link validateOcspResponse}. */
+/** Evaluates a single OCSP evidence entry via {@linkcode validateOcspResponse}. */
 async function checkCertificateRevocationWithOcsp(
 	input: CheckCertificateRevocationInput,
 	evidence: RevocationOcspEvidenceInput,

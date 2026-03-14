@@ -13,7 +13,7 @@ import { NAME_FIELD_DEFINITIONS, NAME_OBJECT_ORDER } from './name-fields.ts';
 /**
  * Union of recognized X.501 attribute type shorthand names.
  *
- * Each key maps to an OID + ASN.1 string encoding in {@link NAME_FIELD_DEFINITIONS}.
+ * Each key maps to an OID + ASN.1 string encoding in {@linkcode NAME_FIELD_DEFINITIONS}.
  */
 export type NameFieldKey =
 	| 'commonName'
@@ -33,8 +33,8 @@ export type NameFieldKey =
  * Bag-of-fields form of an X.501 distinguished name.
  *
  * Fields are emitted into the DER Name in the order defined by
- * {@link NAME_OBJECT_ORDER}. For full control over RDN ordering, pass a
- * {@link NameAttribute} array instead.
+ * {@linkcode NAME_OBJECT_ORDER}. For full control over RDN ordering, pass a
+ * {@linkcode NameAttribute} array instead.
  */
 export interface NameObject {
 	/** Subject or issuer common name (CN). */
@@ -67,7 +67,7 @@ export interface NameObject {
  * Single attribute type–value pair within a distinguished name.
  *
  * Use an array of these when you need explicit RDN ordering that
- * {@link NameObject} cannot express.
+ * {@linkcode NameObject} cannot express.
  */
 export interface NameAttribute {
 	/** Which attribute type this pair represents. */
@@ -77,12 +77,12 @@ export interface NameAttribute {
 }
 
 /**
- * Input for {@link encodeName}. Either a {@link NameObject} bag-of-fields or
- * an ordered array of {@link NameAttribute} pairs.
+ * Input for {@linkcode encodeName}. Either a {@linkcode NameObject} bag-of-fields or
+ * an ordered array of {@linkcode NameAttribute} pairs.
  */
 export type NameInput = NameObject | readonly NameAttribute[];
 /**
- * Input for {@link encodeRelativeDistinguishedName}. Each attribute becomes
+ * Input for {@linkcode encodeRelativeDistinguishedName}. Each attribute becomes
  * one element in the SET OF.
  */
 export type RelativeDistinguishedNameInput = readonly NameAttribute[];
@@ -130,7 +130,7 @@ export function encodeRelativeDistinguishedName(
 	return setOf(attributes.map(encodeNameAttribute));
 }
 
-/** Narrows a {@link NameInput} to the ordered-attribute-array form. */
+/** Narrows a {@linkcode NameInput} to the ordered-attribute-array form. */
 function isNameAttributes(input: NameInput): input is readonly NameAttribute[] {
 	return Array.isArray(input);
 }
@@ -156,7 +156,7 @@ function encodeNameAttribute(attribute: NameAttribute): Uint8Array {
 	return sequence([objectIdentifier(definition.oid), definition.encode(attribute.value)]);
 }
 
-/** Converts a {@link NameObject} to ordered attributes per {@link NAME_OBJECT_ORDER}. */
+/** Converts a {@linkcode NameObject} to ordered attributes per {@linkcode NAME_OBJECT_ORDER}. */
 function nameObjectToAttributes(input: NameObject): readonly NameAttribute[] {
 	const attributes: NameAttribute[] = [];
 	for (const key of NAME_OBJECT_ORDER) {

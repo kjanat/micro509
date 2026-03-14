@@ -54,7 +54,7 @@ export type ServiceIdentityInput =
 	| UriServiceIdentityInput
 	| SrvServiceIdentityInput;
 
-/** The `type` discriminant values of {@link ServiceIdentityInput}. */
+/** The `type` discriminant values of {@linkcode ServiceIdentityInput}. */
 export type ServiceIdentityType = ServiceIdentityInput['type'];
 /** Alias for the full identity union accepted by matching functions. */
 export type MatchableServiceIdentityInput = ServiceIdentityInput;
@@ -101,7 +101,7 @@ export interface MatchServiceIdentitySuccess {
 	readonly value: undefined;
 }
 
-/** Failure branch of {@link MatchServiceIdentityResult} with structured error details. */
+/** Failure branch of {@linkcode MatchServiceIdentityResult} with structured error details. */
 export type MatchServiceIdentityFailureResult = ErrorResult<
 	MatchServiceIdentityErrorCode,
 	MatchServiceIdentityFailureDetails,
@@ -116,7 +116,7 @@ export type MatchServiceIdentityResult =
 /** Void-valued result type used internally during identity evaluation. */
 export type MatchServiceIdentityEvaluation = Result<void, MatchServiceIdentityFailure>;
 
-/** Input for {@link matchServiceIdentity}. */
+/** Input for {@linkcode matchServiceIdentity}. */
 export interface MatchServiceIdentityInput {
 	/** The parsed leaf certificate to check. */
 	readonly certificate: ParsedCertificate;
@@ -127,7 +127,7 @@ export interface MatchServiceIdentityInput {
 /**
  * Checks whether a certificate covers the requested service identity.
  *
- * Delegates to {@link matchCertificateServiceIdentity} — this overload
+ * Delegates to {@linkcode matchCertificateServiceIdentity} — this overload
  * accepts a single options object.
  *
  * @example

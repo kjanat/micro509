@@ -66,7 +66,7 @@ export type ExtensionRegistryContext = 'certificate' | 'csr';
 
 /**
  * Readonly snapshot of decoded known extensions collected during parsing.
- * Fields mirror the extension slots on {@link ParsedCertificate}.
+ * Fields mirror the extension slots on {@linkcode ParsedCertificate}.
  */
 export interface KnownParsedExtensionAccumulator {
 	/** Basic Constraints (CA flag + optional pathLength). */
@@ -98,7 +98,7 @@ export interface KnownParsedExtensionAccumulator {
 }
 
 /**
- * Mutable version of {@link KnownParsedExtensionAccumulator} used during
+ * Mutable version of {@linkcode KnownParsedExtensionAccumulator} used during
  * extension parsing to progressively fill in decoded values.
  */
 export interface MutableKnownParsedExtensionAccumulator extends KnownParsedExtensionAccumulator {
@@ -523,7 +523,7 @@ export function buildSubjectKeyIdentifierFromSubjectPublicKeyInfo(
 	return buildSubjectKeyIdentifier(subjectPublicKeyInfo);
 }
 
-/** Identity helper that narrows the type of an {@link ExtensionDefinition} literal. */
+/** Identity helper that narrows the type of an {@linkcode ExtensionDefinition} literal. */
 function defineExtensionDefinition<TParsed, TInput = TParsed>(
 	definition: ExtensionDefinition<TParsed, TInput>,
 ): ExtensionDefinition<TParsed, TInput> {
