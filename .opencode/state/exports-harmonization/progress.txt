@@ -8,6 +8,7 @@ Started: 2026-03-15
 - Public entrypoints should follow product domains, not source filenames.
 - `micro509` is the canonical documented import; domain entrypoints are the exhaustive advanced homes.
 - Each public symbol has one owner domain; root re-exports are convenience only.
+- Land API ownership inventories as spec artifacts before file moves; they make later export and import edits mechanical instead of guesswork.
 - `src/internal/**` is the only implementation-only tree; helpers and engines should move there aggressively.
 - Public leaf modules may import internals, but must not import public barrels.
 - Tests that need internals should use an explicit `#micro509/internal/*` path, not incidental public seams.
@@ -17,3 +18,9 @@ Started: 2026-03-15
 
 ---
 <!-- Task logs below - APPEND ONLY -->
+
+## Task - [map-symbol-ownership]
+
+- Implemented a full symbol ownership inventory in `specs/exports-harmonization-ownership.md`.
+- Files changed: `specs/exports-harmonization-ownership.md`, `.opencode/state/exports-harmonization/prd.json`, `.opencode/state/exports-harmonization/progress.txt`.
+- **Learnings:** root currently mirrors almost every public file-shaped seam, so the ownership matrix needs to be domain-first and root-second; obvious internalization candidates already exist in the current public surface (`getCrypto`, `wrapKeyPair`, `base64Encode`, `base64Decode`).

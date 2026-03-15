@@ -9,7 +9,7 @@
 			"title": "Map canonical symbol ownership",
 			"description": "Inventory the current root and subpath exports and assign every public symbol one owning domain. Done when:\n- every public symbol is mapped to `x509`, `verify`, `revocation`, `pkcs`, `keys`, `pem`, or `result`\n- each current subpath symbol is marked keep, root-only re-export, internalize, or drop\n- the ownership matrix captures high-risk renames and removals before file moves begin",
 			"priority": "architecture",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "scaffold-domain-layout",
