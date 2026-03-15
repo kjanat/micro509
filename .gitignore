@@ -161,3 +161,9 @@ comparisons/*
 package-lock.json
 pnpm-*.yaml
 yarn.lock
+src/**/*.js
+src/**/*.d.ts
+/docs/deno/
+/site/.vitepress/cache/
+/site/.vitepress/dist/
+/site/reference/api/
