@@ -523,9 +523,23 @@ async function buildCandidatePathRaw(input: BuildCandidatePathInput): Promise<
 	  }
 	| VerifyChainFailure
 > {
-	const leaf = loadSingleCertificate(input.leaf);
-	const intermediates = loadCertificates(input.intermediates ?? []);
-	const roots = loadCertificates(input.roots);
+	let leaf: ParsedCertificate;
+	let intermediates: readonly ParsedCertificate[];
+	let roots: readonly ParsedCertificate[];
+	try {
+		leaf = loadSingleCertificate(input.leaf);
+		intermediates = loadCertificates(input.intermediates ?? []);
+		roots = loadCertificates(input.roots);
+	} catch (error) {
+		return failure(
+			'issuer_not_found',
+			'certificate source is malformed or leaf source does not contain exactly one certificate',
+			0,
+			detail({
+				actual: error instanceof Error ? error.message : 'certificate source is malformed',
+			}),
+		);
+	}
 	const anchors = input.trustAnchors ?? [];
 	const at = input.at ?? new Date();
 	const buildResult = await buildChainInternal(leaf, intermediates, roots, anchors, at, {

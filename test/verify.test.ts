@@ -388,19 +388,67 @@ describe('chain verification', () => {
 	it('rejects empty and multi-certificate leaf sources', async () => {
 		const chain = await issueChain();
 		expect(
-			verifyCertificateChain({
+			await verifyCertificateChain({
 				leaf: '',
 				roots: [chain.root.certificate.pem],
 			}),
-		).rejects.toThrow('No certificate found');
+		).toMatchObject({
+			ok: false,
+			code: 'issuer_not_found',
+			index: 0,
+			details: { actual: 'No certificate found' },
+		});
 
 		const mixedLeaf = `${chain.leaf.pem}\n${chain.intermediate.pem}`;
 		expect(
-			verifyCertificateChain({
+			await verifyCertificateChain({
 				leaf: mixedLeaf,
 				roots: [chain.root.certificate.pem],
 			}),
-		).rejects.toThrow('Expected a single certificate source');
+		).toMatchObject({
+			ok: false,
+			code: 'issuer_not_found',
+			index: 0,
+			details: { actual: 'Expected a single certificate source' },
+		});
+	});
+
+	it('fails closed for malformed trust anchors', async () => {
+		const chain = await issueChain();
+		const rootParsed = parseCertificatePem(chain.root.certificate.pem);
+		const malformedAnchor = {
+			subject: rootParsed.subject,
+			subjectPublicKeyInfoDer: Uint8Array.of(0x30, 0x80),
+			publicKeyAlgorithmOid: rootParsed.publicKeyAlgorithmOid,
+			...(rootParsed.publicKeyParametersOid === undefined
+				? {}
+				: { publicKeyParametersOid: rootParsed.publicKeyParametersOid }),
+			...(rootParsed.subjectKeyIdentifier === undefined
+				? {}
+				: { subjectKeyIdentifier: rootParsed.subjectKeyIdentifier }),
+		};
+
+		const result = await verifyCertificateChain({
+			leaf: chain.leaf.pem,
+			intermediates: [chain.intermediate.pem],
+			roots: [],
+			trustAnchors: [malformedAnchor],
+		});
+		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
+	});
+
+	it('fails closed for invalid buildCandidatePath times', async () => {
+		const chain = await issueChain();
+		const result = await buildCandidatePath({
+			leaf: chain.leaf.pem,
+			intermediates: [chain.intermediate.pem],
+			roots: [chain.root.certificate.pem],
+			at: new Date('invalid'),
+		});
+		expect(result).toMatchObject({ ok: false, code: 'certificate_expired' });
+		if (!result.ok) {
+			expect(result.details?.expected).toBe('<invalid date>');
+		}
 	});
 
 	it('verifies chains signed with RSA SHA-384, ECDSA P-384, and ECDSA P-521', async () => {
@@ -680,7 +728,7 @@ describe('chain verification', () => {
 		});
 	});
 
-	it('throws on malformed RSA-PSS certificate parameters', async () => {
+	it('fails closed for malformed RSA-PSS certificate parameters', async () => {
 		const rootKeys = await generateKeyPair({
 			kind: 'rsa',
 			modulusLength: 2048,
@@ -711,16 +759,16 @@ describe('chain verification', () => {
 			sequence([objectIdentifier(OIDS.rsassaPss), tlv(0x30, Uint8Array.of(0x80))]),
 		);
 
-		try {
-			await verifyCertificateChain({
-				leaf: malformedLeafDer,
-				roots: [root.certificate.pem],
-			});
-			throw new Error('Expected malformed RSA-PSS certificate parameters to throw');
-		} catch (error) {
-			expect(error).toBeInstanceOf(Error);
-			expect(String(error)).toContain('DER child exceeds parent length');
-		}
+		const result = await verifyCertificateChain({
+			leaf: malformedLeafDer,
+			roots: [root.certificate.pem],
+		});
+		expect(result).toMatchObject({
+			ok: false,
+			code: 'issuer_not_found',
+			index: 0,
+			details: { actual: 'DER child exceeds parent length' },
+		});
 	});
 
 	it('rejects chain with unrecognized critical extension', async () => {

@@ -258,8 +258,8 @@ export async function buildChainInternal(
 						path.length,
 						callbacks.detail({
 							subjectCommonName: issuer.subject.values.commonName,
-							expected: at.toISOString(),
-							actual: `${issuer.notBefore.toISOString()}..${issuer.notAfter.toISOString()}`,
+							expected: describeDateTime(at),
+							actual: `${describeDateTime(issuer.notBefore)}..${describeDateTime(issuer.notAfter)}`,
 						}),
 					),
 					path,
@@ -318,7 +318,7 @@ export async function buildChainInternal(
 			const nextCaBelowCount =
 				caBelowCount + (current.basicConstraints?.ca === true && !isSelfIssued(current) ? 1 : 0);
 			const pathLength = issuer.basicConstraints?.pathLength;
-			if (pathLength !== undefined && nextCaBelowCount > pathLength) {
+			if (isNonNegativeInteger(pathLength) && nextCaBelowCount > pathLength) {
 				recordFailure(
 					callbacks.failure(
 						'path_length_exceeded',
@@ -481,15 +481,31 @@ async function matchTrustAnchor(
 		) {
 			continue;
 		}
-		const verified = await verifySignedDataDetailed(
-			certificate.signatureAlgorithmOid,
-			certificate.signatureAlgorithmParametersDer,
-			anchor.publicKeyAlgorithmOid,
-			anchor.publicKeyParametersOid,
-			anchor.subjectPublicKeyInfoDer,
-			certificate.signatureValue,
-			certificate.tbsCertificateDer,
-		);
+		let verified: VerifySignedDataResult;
+		try {
+			verified = await verifySignedDataDetailed(
+				certificate.signatureAlgorithmOid,
+				certificate.signatureAlgorithmParametersDer,
+				anchor.publicKeyAlgorithmOid,
+				anchor.publicKeyParametersOid,
+				anchor.subjectPublicKeyInfoDer,
+				certificate.signatureValue,
+				certificate.tbsCertificateDer,
+			);
+		} catch (error) {
+			if (firstFailure === undefined) {
+				firstFailure = callbacks.failure(
+					'signature_invalid',
+					'certificate signature does not verify',
+					index,
+					callbacks.detail({
+						subjectCommonName: certificate.subject.values.commonName,
+						actual: error instanceof Error ? error.message : 'trust anchor key is malformed',
+					}),
+				);
+			}
+			continue;
+		}
 		if (!verified.ok) {
 			// Capture the first failure but continue trying other anchors
 			if (firstFailure === undefined) {
@@ -526,6 +542,14 @@ async function matchTrustAnchor(
 	return firstFailure !== undefined
 		? { matched: false, failure: firstFailure }
 		: { matched: false };
+}
+
+function describeDateTime(value: Date): string {
+	return Number.isNaN(value.getTime()) ? '<invalid date>' : value.toISOString();
+}
+
+function isNonNegativeInteger(value: number | undefined): value is number {
+	return value !== undefined && Number.isInteger(value) && value >= 0;
 }
 
 /** Returns a hex fingerprint of the certificate's raw DER, used for cycle detection and dedup. */
