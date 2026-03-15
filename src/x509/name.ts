@@ -62,8 +62,8 @@
  * @module
  */
 
-import { objectIdentifier, sequence, setOf } from './internal/asn1/der.ts';
-import { NAME_FIELD_DEFINITIONS, NAME_OBJECT_ORDER } from './internal/x509/name-fields.ts';
+import { objectIdentifier, sequence, setOf } from '../internal/asn1/der.ts';
+import { NAME_FIELD_DEFINITIONS, NAME_OBJECT_ORDER } from '../internal/x509/name-fields.ts';
 
 /**
  * Union of recognized X.501 attribute type shorthand names.
@@ -155,7 +155,7 @@ export type NameInput = NameObject | readonly NameAttribute[];
  */
 export type RelativeDistinguishedNameInput = readonly NameAttribute[];
 
-export { nameFieldKeyFromOid } from './internal/x509/name-fields.ts';
+export { nameFieldKeyFromOid } from '../internal/x509/name-fields.ts';
 
 /**
  * DER-encodes an X.509 `Name`.

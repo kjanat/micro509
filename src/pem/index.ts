@@ -4,5 +4,5 @@
  * @module
  */
 
-export type { CategorizedPemBlocks, PemBlock } from '../pem.ts';
-export { categorizePemBlocks, pemDecode, pemEncode, splitPemBlocks } from '../pem.ts';
+export type { CategorizedPemBlocks, PemBlock } from './pem.ts';
+export { categorizePemBlocks, pemDecode, pemEncode, splitPemBlocks } from './pem.ts';

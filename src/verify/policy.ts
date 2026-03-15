@@ -7,9 +7,9 @@
  * @module
  */
 
-import type { PolicyQualifierInfo } from './extensions.ts';
+import type { PolicyQualifierInfo } from '../x509/extensions.ts';
 
-export type * from './extensions.ts';
+export type * from '../x509/extensions.ts';
 
 /**
  * Input for the policy-validation engine.

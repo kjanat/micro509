@@ -4,7 +4,7 @@
  * @module
  */
 
-export type * from '../crl.ts';
+export type * from './crl.ts';
 export {
 	checkCertificateRevocationAgainstCrl,
 	createCertificateRevocationList,
@@ -13,9 +13,9 @@ export {
 	parseCertificateRevocationListPem,
 	validateCertificateRevocationList,
 	verifyCertificateRevocationList,
-} from '../crl.ts';
+} from './crl.ts';
 
-export type * from '../ocsp.ts';
+export type * from './ocsp.ts';
 export {
 	createOcspRequest,
 	createOcspResponse,
@@ -25,11 +25,11 @@ export {
 	parseOcspResponsePem,
 	validateOcspResponse,
 	verifyOcspResponse,
-} from '../ocsp.ts';
+} from './ocsp.ts';
 
-export type * from '../revocation.ts';
+export type * from './revocation.ts';
 export {
 	checkCertificateRevocation,
 	getCertificateOcspResponderUris,
 	resolveOcspResponderCandidates,
-} from '../revocation.ts';
+} from './revocation.ts';

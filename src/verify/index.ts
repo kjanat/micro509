@@ -4,7 +4,7 @@
  * @module
  */
 
-export type * from '../identity.ts';
+export type * from './identity.ts';
 export type {
 	DnsServiceIdentityInput,
 	IpServiceIdentityInput,
@@ -22,17 +22,17 @@ export type {
 	SrvServiceIdentityInput,
 	UriServiceIdentityInput,
 	VerifyServiceIdentityInput,
-} from '../identity.ts';
-export { matchCertificateServiceIdentity, matchServiceIdentity } from '../identity.ts';
-export type * from '../name-constraints.ts';
-export type { InitialNameConstraintsInput } from '../name-constraints.ts';
-export type * from '../policy.ts';
+} from './identity.ts';
+export { matchCertificateServiceIdentity, matchServiceIdentity } from './identity.ts';
+export type * from './name-constraints.ts';
+export type { InitialNameConstraintsInput } from './name-constraints.ts';
+export type * from './policy.ts';
 export type {
 	ConstrainedPolicy,
 	PolicyValidationInput,
 	PolicyValidationOutcome,
-} from '../policy.ts';
-export type * from '../verify.ts';
+} from './policy.ts';
+export type * from './verify.ts';
 export type {
 	BuildCandidatePathInput,
 	BuildCandidatePathResult,
@@ -59,7 +59,7 @@ export type {
 	VerifyPurpose,
 	VerifyRequestFailure,
 	VerifyRequestResult,
-} from '../verify.ts';
+} from './verify.ts';
 export {
 	buildCandidatePath,
 	checkExtendedKeyUsage,
@@ -71,4 +71,4 @@ export {
 	validateForTlsServer,
 	verifyCertificateChain,
 	verifyCertificateSigningRequest,
-} from '../verify.ts';
+} from './verify.ts';

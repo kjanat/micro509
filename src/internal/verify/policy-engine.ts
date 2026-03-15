@@ -7,14 +7,14 @@
  * @module
  */
 
-import type { PolicyInformation, PolicyQualifierInfo } from '../../extensions.ts';
-import type { ParsedCertificate } from '../../parse.ts';
+import type { PolicyInformation, PolicyQualifierInfo } from '../../x509/extensions.ts';
+import type { ParsedCertificate } from '../../x509/parse.ts';
 import type {
 	ConstrainedPolicy,
 	PolicyValidationInput,
 	PolicyValidationOutcome,
-} from '../../policy.ts';
-import type { Micro509Error, Result } from '../../result.ts';
+} from '../../verify/policy.ts';
+import type { Micro509Error, Result } from '../../result/result.ts';
 import { OIDS } from '../asn1/oids.ts';
 
 /**

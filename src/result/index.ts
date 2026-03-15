@@ -10,11 +10,11 @@ export type {
 	IndexedMicro509Error,
 	Micro509Error,
 	Result,
-} from '../result.ts';
+} from './result.ts';
 export {
 	errorResult,
 	indexedErrorResult,
 	indexedMicro509Error,
 	micro509Error,
 	successResult,
-} from '../result.ts';
+} from './result.ts';

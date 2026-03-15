@@ -15,27 +15,27 @@ import {
 	integerFromNumber,
 	sequence,
 	time,
-} from './internal/asn1/der.ts';
+} from '../internal/asn1/der.ts';
 import {
 	encodeAlgorithmIdentifier,
 	getSignatureAlgorithm,
 	type SignatureProfileInput,
 	signBytes,
-} from './internal/crypto/signing.ts';
-import { getCrypto } from './internal/crypto/webcrypto.ts';
-import { base64Encode } from './internal/shared/base64.ts';
+} from '../internal/crypto/signing.ts';
+import { getCrypto } from '../internal/crypto/webcrypto.ts';
+import { base64Encode } from '../internal/shared/base64.ts';
 import {
 	exportSpkiDer,
 	generateKeyPair,
 	type KeyAlgorithmInput,
 	type KeyPairMaterial,
-} from './keys.ts';
+} from '../keys/keys.ts';
 import { encodeName, type NameInput } from './name.ts';
-import { pemEncode } from './pem.ts';
+import { pemEncode } from '../pem/pem.ts';
 
 export type * from './extensions.ts';
-export type * from './internal/crypto/signing.ts';
-export type * from './keys.ts';
+export type * from '../internal/crypto/signing.ts';
+export type * from '../keys/keys.ts';
 export type * from './name.ts';
 
 /**

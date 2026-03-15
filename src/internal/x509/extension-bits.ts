@@ -7,7 +7,7 @@
  * @module
  */
 
-import type { DistributionPointReason, KeyUsage } from '../../extensions.ts';
+import type { DistributionPointReason, KeyUsage } from '../../x509/extensions.ts';
 import { bitString, DEFAULT_MAX_DER_DEPTH, readRootElement } from '../asn1/der.ts';
 
 /** Canonical bit-position order for Key Usage flags (RFC 5280 §4.2.1.3). */

@@ -16,7 +16,7 @@
  * @module
  */
 
-import type { ExtendedKeyUsage } from './extensions.ts';
+import type { ExtendedKeyUsage } from '../x509/extensions.ts';
 import type { VerifyServiceIdentityInput } from './identity.ts';
 import { matchServiceIdentity } from './identity.ts';
 import type { InitialNameConstraintsInput } from './name-constraints.ts';
@@ -24,24 +24,32 @@ import {
 	createNameConstraintValidationState,
 	evaluateNameConstraints,
 	type NameConstraintValidationState,
-} from './internal/verify/name-constraints-engine.ts';
-import { OIDS } from './internal/asn1/oids.ts';
-import type { ParsedCertificate, ParsedCertificateSigningRequest } from './parse.ts';
-import { parseCertificateSigningRequestDer, parseCertificateSigningRequestPem } from './parse.ts';
+} from '../internal/verify/name-constraints-engine.ts';
+import { OIDS } from '../internal/asn1/oids.ts';
+import type { ParsedCertificate, ParsedCertificateSigningRequest } from '../x509/parse.ts';
+import {
+	parseCertificateSigningRequestDer,
+	parseCertificateSigningRequestPem,
+} from '../x509/parse.ts';
 import type { PolicyValidationInput, PolicyValidationOutcome } from './policy.ts';
 import {
 	createPolicyValidationState,
 	evaluatePolicyChain,
 	type PolicyValidationState,
-} from './internal/verify/policy-engine.ts';
+} from '../internal/verify/policy-engine.ts';
 import type {
 	ErrorResult,
 	IndexedErrorResult,
 	IndexedMicro509Error,
 	Micro509Error,
-} from './result.ts';
-import { errorResult, indexedErrorResult, indexedMicro509Error, micro509Error } from './result.ts';
-import { verifySignedDataDetailed } from './internal/crypto/sig-verify.ts';
+} from '../result/result.ts';
+import {
+	errorResult,
+	indexedErrorResult,
+	indexedMicro509Error,
+	micro509Error,
+} from '../result/result.ts';
+import { verifySignedDataDetailed } from '../internal/crypto/sig-verify.ts';
 import {
 	buildChainInternal,
 	countCaCertificatesBelowParsed,
@@ -50,14 +58,14 @@ import {
 	loadCertificates,
 	loadSingleCertificate,
 	verifyCertificateSignature,
-} from './internal/verify/verify-path.ts';
+} from '../internal/verify/verify-path.ts';
 
-export type * from './extensions.ts';
+export type * from '../x509/extensions.ts';
 export type * from './identity.ts';
 export type * from './name-constraints.ts';
-export type * from './parse.ts';
+export type * from '../x509/parse.ts';
 export type * from './policy.ts';
-export type * from './result.ts';
+export type * from '../result/result.ts';
 
 // ---------------------------------------------------------------------------
 // Source types

@@ -10,10 +10,10 @@ export type {
 	CreateSelfSignedCertificateInput,
 	SelfSignedCertificateResult,
 	ValidityInput,
-} from '../certificate.ts';
-export { createCertificate, createSelfSignedCertificate } from '../certificate.ts';
-export type { CreateCsrInput, CsrMaterial } from '../csr.ts';
-export { createCertificateSigningRequest } from '../csr.ts';
+} from './certificate.ts';
+export { createCertificate, createSelfSignedCertificate } from './certificate.ts';
+export type { CreateCsrInput, CsrMaterial } from './csr.ts';
+export { createCertificateSigningRequest } from './csr.ts';
 export type {
 	AuthorityInfoAccessMethod,
 	AuthorityInformationAccess,
@@ -52,7 +52,7 @@ export type {
 	SubjectAltName,
 	UnsupportedNameConstraintForm,
 	UserNoticePolicyQualifierInfo,
-} from '../extensions.ts';
+} from './extensions.ts';
 export {
 	buildCertificateExtensions,
 	buildRequestedExtensions,
@@ -72,7 +72,7 @@ export {
 	getExtendedKeyUsageOid,
 	parseAuthorityInfoAccessMethodOid,
 	parseExtendedKeyUsageOid,
-} from '../extensions.ts';
+} from './extensions.ts';
 export type { SignatureProfileInput } from '../internal/crypto/signing.ts';
 export type {
 	NameAttribute,
@@ -80,8 +80,8 @@ export type {
 	NameInput,
 	NameObject,
 	RelativeDistinguishedNameInput,
-} from '../name.ts';
-export { encodeName, encodeRelativeDistinguishedName } from '../name.ts';
+} from './name.ts';
+export { encodeName, encodeRelativeDistinguishedName } from './name.ts';
 export type {
 	DecodedExtensionMap,
 	DecodedExtensionValue,
@@ -97,7 +97,7 @@ export type {
 	ParsedNameAttribute,
 	ParsedRelativeDistinguishedName,
 	ParseOptions,
-} from '../parse.ts';
+} from './parse.ts';
 export {
 	decodeExtension,
 	decodeExtensionMap,
@@ -110,4 +110,4 @@ export {
 	parseCertificatePem,
 	parseCertificateSigningRequestDer,
 	parseCertificateSigningRequestPem,
-} from '../parse.ts';
+} from './parse.ts';

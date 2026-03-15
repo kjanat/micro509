@@ -5,30 +5,30 @@
  * @module
  */
 
-import { decodeObjectIdentifier, hexToBytes, toArrayBuffer, toHex } from './internal/asn1/asn1.ts';
+import { decodeObjectIdentifier, hexToBytes, toArrayBuffer, toHex } from '../internal/asn1/asn1.ts';
 import {
 	nullValue,
 	objectIdentifier,
 	octetString,
 	readSequenceChildren,
 	sequence,
-} from './internal/asn1/der.ts';
-import { OIDS } from './internal/asn1/oids.ts';
-import { md5 } from './internal/crypto/hash.ts';
+} from '../internal/asn1/der.ts';
+import { OIDS } from '../internal/asn1/oids.ts';
+import { md5 } from '../internal/crypto/hash.ts';
 import {
 	decryptPbes2,
 	encryptPbes2,
 	type Pbes2EncryptionOptions,
-} from './internal/crypto/pbes2.ts';
-import { getCrypto } from './internal/crypto/webcrypto.ts';
-import { base64Decode, base64Encode } from './internal/shared/base64.ts';
-import { pemDecode, pemEncode } from './pem.ts';
+} from '../internal/crypto/pbes2.ts';
+import { getCrypto } from '../internal/crypto/webcrypto.ts';
+import { base64Decode, base64Encode } from '../internal/shared/base64.ts';
+import { pemDecode, pemEncode } from '../pem/pem.ts';
 
 export type {
 	Pbes2EncryptionOptions,
 	Pbes2EncryptionScheme,
 	Pbes2Prf,
-} from './internal/crypto/pbes2.ts';
+} from '../internal/crypto/pbes2.ts';
 
 /** Hash algorithm paired with an RSA key. */
 export type RsaHash = 'SHA-256' | 'SHA-384' | 'SHA-512';

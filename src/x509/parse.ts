@@ -20,24 +20,24 @@ import {
 	parseTime,
 	requireElement,
 	toHex,
-} from './internal/asn1/asn1.ts';
-import type { DerElement } from './internal/asn1/der.ts';
+} from '../internal/asn1/asn1.ts';
+import type { DerElement } from '../internal/asn1/der.ts';
 import {
 	DEFAULT_MAX_DER_DEPTH,
 	encodeLength,
 	readElement,
 	readRootElement,
 	readSequenceChildren,
-} from './internal/asn1/der.ts';
+} from '../internal/asn1/der.ts';
 import {
 	parseDistributionPointReasonFlagsContent,
 	parseKeyUsageExtension,
-} from './internal/x509/extension-bits.ts';
+} from '../internal/x509/extension-bits.ts';
 import {
 	decodeAndApplyKnownExtension,
 	type KnownParsedExtensionAccumulator,
 	type MutableKnownParsedExtensionAccumulator,
-} from './internal/x509/extension-registry.ts';
+} from '../internal/x509/extension-registry.ts';
 import type {
 	AuthorityInformationAccess,
 	BasicConstraints,
@@ -55,10 +55,10 @@ import type {
 	SubjectAltName,
 } from './extensions.ts';
 import { parseAuthorityInfoAccessMethodOid, parseExtendedKeyUsageOid } from './extensions.ts';
-import { decodeIpAddress } from './internal/shared/ip.ts';
+import { decodeIpAddress } from '../internal/shared/ip.ts';
 import { type NameFieldKey, nameFieldKeyFromOid } from './name.ts';
-import { OIDS } from './internal/asn1/oids.ts';
-import { pemDecode, splitPemBlocks } from './pem.ts';
+import { OIDS } from '../internal/asn1/oids.ts';
+import { pemDecode, splitPemBlocks } from '../pem/pem.ts';
 
 export type {
 	AuthorityInformationAccess,

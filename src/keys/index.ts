@@ -23,7 +23,7 @@ export type {
 	RsaHash,
 	RsaKeyAlgorithmInput,
 	RsaScheme,
-} from '../keys.ts';
+} from './keys.ts';
 export {
 	exportBinaryBase64,
 	exportEncryptedPkcs1Pem,
@@ -57,4 +57,4 @@ export {
 	importSpkiBase64,
 	importSpkiDer,
 	importSpkiPem,
-} from '../keys.ts';
+} from './keys.ts';

@@ -10,8 +10,8 @@ import { OIDS } from '../asn1/oids.ts';
 import { alternateEcdsaSignatureEncoding } from './ecdsa.ts';
 import { parseRsaPssParameters } from './rsa-pss.ts';
 import { getCrypto } from './webcrypto.ts';
-import type { PublicKeyImportInput, RsaHash, RsaScheme } from '../../keys.ts';
-import { importSpkiDer } from '../../keys.ts';
+import type { PublicKeyImportInput, RsaHash, RsaScheme } from '../../keys/keys.ts';
+import { importSpkiDer } from '../../keys/keys.ts';
 
 export {
 	alternateEcdsaSignatureEncoding,

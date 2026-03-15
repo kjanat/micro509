@@ -12,16 +12,16 @@ import type {
 	NameConstraints,
 	ParsedNameConstraintForm,
 	SubjectAltName,
-} from '../../extensions.ts';
-import { nameFieldKeyFromOid } from '../../name.ts';
-import type { InitialNameConstraintsInput } from '../../name-constraints.ts';
+} from '../../x509/extensions.ts';
+import { nameFieldKeyFromOid } from '../../x509/name.ts';
+import type { InitialNameConstraintsInput } from '../../verify/name-constraints.ts';
 import type {
 	ParsedCertificate,
 	ParsedName,
 	ParsedNameAttribute,
 	ParsedRelativeDistinguishedName,
-} from '../../parse.ts';
-import type { Micro509Error } from '../../result.ts';
+} from '../../x509/parse.ts';
+import type { Micro509Error } from '../../result/result.ts';
 import {
 	childrenOf,
 	decodeObjectIdentifier,

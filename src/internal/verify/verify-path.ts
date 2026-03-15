@@ -8,16 +8,16 @@
  * @module
  */
 
-import type { ParsedCertificate } from '../../parse.ts';
-import { parseCertificateDer } from '../../parse.ts';
-import { splitPemBlocks } from '../../pem.ts';
+import type { ParsedCertificate } from '../../x509/parse.ts';
+import { parseCertificateDer } from '../../x509/parse.ts';
+import { splitPemBlocks } from '../../pem/pem.ts';
 import type {
 	CertificateSource,
 	TrustAnchor,
 	VerifyChainFailure,
 	VerifyErrorCode,
 	VerifyFailureDetails,
-} from '../../verify.ts';
+} from '../../verify/verify.ts';
 import { toHex } from '../asn1/asn1.ts';
 import { type VerifySignedDataResult, verifySignedDataDetailed } from '../crypto/sig-verify.ts';
 

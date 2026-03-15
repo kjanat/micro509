@@ -21,7 +21,7 @@ import type {
 	PolicyConstraints,
 	PolicyMappings,
 	SubjectAltName,
-} from '../../extensions.ts';
+} from '../../x509/extensions.ts';
 import {
 	buildSubjectKeyIdentifier,
 	encodeAuthorityInfoAccess,
@@ -35,8 +35,8 @@ import {
 	encodePolicyConstraints,
 	encodePolicyMappings,
 	encodeSubjectAltName,
-} from '../../extensions.ts';
-import type { ParsedDistributionPoint } from '../../parse.ts';
+} from '../../x509/extensions.ts';
+import type { ParsedDistributionPoint } from '../../x509/parse.ts';
 import {
 	parseAuthorityInfoAccess,
 	parseAuthorityKeyIdentifier,
@@ -50,7 +50,7 @@ import {
 	parsePolicyConstraints,
 	parsePolicyMappings,
 	parseSubjectAltNames,
-} from '../../parse.ts';
+} from '../../x509/parse.ts';
 import { hexToBytes, toHex } from '../asn1/asn1.ts';
 import {
 	DEFAULT_MAX_DER_DEPTH,

@@ -16,21 +16,21 @@ import {
 	objectIdentifier,
 	sequence,
 	setOf,
-} from './internal/asn1/der.ts';
-import { OIDS } from './internal/asn1/oids.ts';
+} from '../internal/asn1/der.ts';
+import { OIDS } from '../internal/asn1/oids.ts';
 import {
 	encodeAlgorithmIdentifier,
 	getSignatureAlgorithm,
 	type SignatureProfileInput,
 	signBytes,
-} from './internal/crypto/signing.ts';
-import { base64Encode } from './internal/shared/base64.ts';
-import { exportSpkiDer } from './keys.ts';
+} from '../internal/crypto/signing.ts';
+import { base64Encode } from '../internal/shared/base64.ts';
+import { exportSpkiDer } from '../keys/keys.ts';
 import { encodeName, type NameInput } from './name.ts';
-import { pemEncode } from './pem.ts';
+import { pemEncode } from '../pem/pem.ts';
 
 export type * from './extensions.ts';
-export type * from './internal/crypto/signing.ts';
+export type * from '../internal/crypto/signing.ts';
 export type * from './name.ts';
 
 /** Input for {@linkcode createCertificateSigningRequest}. */

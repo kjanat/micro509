@@ -27,7 +27,7 @@ import {
 	tlv,
 } from '#micro509/internal/asn1/der.ts';
 import { OIDS } from '#micro509/internal/asn1/oids.ts';
-import { parseNameConstraints } from '#micro509/parse.ts';
+import { parseNameConstraints } from '#micro509/x509/parse.ts';
 import { encodeName } from '#micro509/x509/index.ts';
 
 describe('parse', () => {

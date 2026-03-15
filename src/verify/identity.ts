@@ -8,13 +8,13 @@
  * @module
  */
 
-import { normalizeIpAddress } from './internal/shared/ip.ts';
-import type { ParsedCertificate } from './parse.ts';
-import type { ErrorResult, Micro509Error, Result } from './result.ts';
-import { errorResult, micro509Error, successResult } from './result.ts';
+import { normalizeIpAddress } from '../internal/shared/ip.ts';
+import type { ParsedCertificate } from '../x509/parse.ts';
+import type { ErrorResult, Micro509Error, Result } from '../result/result.ts';
+import { errorResult, micro509Error, successResult } from '../result/result.ts';
 
-export type * from './parse.ts';
-export type * from './result.ts';
+export type * from '../x509/parse.ts';
+export type * from '../result/result.ts';
 
 /** DNS hostname reference identifier. */
 export interface DnsServiceIdentityInput {
