@@ -64,9 +64,6 @@ import { matchServiceIdentity } from './identity.ts';
 import type { InitialNameConstraintsInput } from './name-constraints.ts';
 import type { PolicyValidationInput, PolicyValidationOutcome } from './policy.ts';
 
-export type * from '#micro509/result/result.ts';
-export type * from '#micro509/x509/extensions.ts';
-export type * from '#micro509/x509/parse.ts';
 export type * from './identity.ts';
 export type * from './name-constraints.ts';
 export type * from './policy.ts';

@@ -82,11 +82,6 @@ import type {
 } from '#micro509/x509/parse.ts';
 import { parseCertificateDer, parseCertificatePem } from '#micro509/x509/parse.ts';
 
-export type * from '#micro509/result/result.ts';
-export type * from '#micro509/x509/extensions.ts';
-export type * from '#micro509/x509/name.ts';
-export type * from '#micro509/x509/parse.ts';
-
 /**
  * Single revoked certificate entry for {@linkcode createCertificateRevocationList}.
  */

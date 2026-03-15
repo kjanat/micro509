@@ -21,6 +21,7 @@
 	"gitRevision": "master",
 	"excludePrivate": true,
 	"excludeInternal": true,
+	"excludeReferences": true,
 	"readme": "none",
 	"cleanOutputDir": false,
 	"entryFileName": "modules",

@@ -13,8 +13,6 @@ import { checkCertificateRevocationAgainstCrl } from './crl.ts';
 import type { OcspCertificateSource, OcspRequestSource, ParsedOcspResponse } from './ocsp.ts';
 import { validateOcspResponse } from './ocsp.ts';
 
-export type * from '#micro509/result/result.ts';
-export type * from '#micro509/x509/parse.ts';
 export type * from './crl.ts';
 export type * from './ocsp.ts';
 

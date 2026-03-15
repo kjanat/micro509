@@ -44,8 +44,6 @@ export type {
 	Pbes2EncryptionScheme,
 	Pbes2Prf,
 } from '#micro509/internal/crypto/pbes2.ts';
-export type * from '#micro509/result/result.ts';
-export type * from '#micro509/x509/parse.ts';
 export type * from './pkcs12-mac.ts';
 
 /** PEM string or DER bytes for a certificate to include in a PFX bag. */
@@ -229,7 +227,7 @@ export async function createPfx(input: CreatePfxInput): Promise<PfxMaterial> {
 	for (const certificate of input.certificates ?? []) {
 		certificateBags.push(
 			createCertificateBag(
-				await normalizeCertificate(certificate.certificate),
+				normalizeCertificate(certificate.certificate),
 				certificate.attributes,
 			),
 		);

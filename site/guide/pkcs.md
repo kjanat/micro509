@@ -20,6 +20,8 @@ const pfx = await createPfx({
 
 ### Parse a PFX bundle
 
+<!--<LiveCode>-->
+
 ```ts
 import { parsePfxDer } from 'micro509/pkcs';
 
@@ -30,6 +32,8 @@ if (result.ok) {
   result.value.privateKey; // CryptoKey
 }
 ```
+
+<!--</LiveCode>-->
 
 ## PKCS#7 / CMS
 

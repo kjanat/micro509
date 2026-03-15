@@ -33,6 +33,8 @@ import * as micro509 from 'jsr:@kjanat/micro509';
 
 ### Create a self-signed certificate
 
+<LiveCode>
+
 ```ts
 import { createSelfSignedCertificate } from 'micro509';
 
@@ -57,7 +59,11 @@ console.log(certificate.pem);
 console.log(await keyPair.exportPkcs8Pem());
 ```
 
+</LiveCode>
+
 ### Create a CSR
+
+<LiveCode>
 
 ```ts
 import {
@@ -80,7 +86,11 @@ const csr = await createCertificateSigningRequest({
 console.log(csr.pem);
 ```
 
+</LiveCode>
+
 ### Parse a certificate
+
+<LiveCode>
 
 ```ts
 import {
@@ -100,7 +110,11 @@ console.log(parsed.extendedKeyUsage);
 console.log(parsed.authorityInfoAccess);
 ```
 
+</LiveCode>
+
 ### Verify a chain
+
+<LiveCode>
 
 ```ts
 import {
@@ -128,6 +142,8 @@ if (result.ok) {
   console.log(result.error.code);
 }
 ```
+
+</LiveCode>
 
 ## Imports
 

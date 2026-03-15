@@ -1,3 +1,4 @@
+import type { Plugin } from 'vite';
 import { robotsTxt } from 'vite-robots-txt';
 import svgToIco from 'vite-svg-to-ico';
 import { defineConfig } from 'vitepress';
@@ -5,10 +6,44 @@ import { defineConfig } from 'vitepress';
 import pkg from '../../package.json' with { type: 'json' };
 import typedocSidebar from '../api/typedoc-sidebar.json' with { type: 'json' };
 
+/** Derive a browser import map from package.json exports — same specifiers, served from /micro509/. */
+const importMap = JSON.stringify({
+	imports: Object.fromEntries(
+		(Object.entries(pkg.exports) as [string, string | { default: string }][])
+			.filter((e): e is [string, { default: string }] => typeof e[1] === 'object')
+			.map(([key, value]) => [
+				key === '.' ? pkg.name : `${pkg.name}/${key.slice(2)}`,
+				value.default.replace('./dist/', '/micro509/'),
+			]),
+	),
+});
+
+/**
+ * Vite plugin that injects the import map before any module scripts.
+ * `head-prepend` ensures it lands before Vite's own client script in dev,
+ * so the browser registers the map before any ES module runs.
+ */
+function importMapPlugin(): Plugin {
+	return {
+		name: 'micro509-importmap',
+		transformIndexHtml() {
+			return [
+				{
+					tag: 'script',
+					attrs: { type: 'importmap' },
+					children: importMap,
+					injectTo: 'head-prepend',
+				},
+			];
+		},
+	};
+}
+
 export default defineConfig({
 	vite: {
 		build: { chunkSizeWarningLimit: 1500 },
 		plugins: [
+			importMapPlugin(),
 			robotsTxt({ preset: 'disallowAll' }),
 			svgToIco({
 				input: `${import.meta.dirname}/../assets/favicon.svg`,
@@ -74,7 +109,7 @@ export default defineConfig({
 											],
 								)
 							: []),
-						{ text: 'Full Reference', link: '/api/micro509' },
+						{ text: 'Root Import', link: '/api/micro509' },
 					],
 				},
 			],

@@ -1,0 +1,56 @@
+name: Setup Js Runtime
+description: Setup Deno, Node.js, and/or Bun runtimes
+
+inputs:
+  install-deno: { description: Install Deno, required: false, default: "false" }
+  deno-version: { description: Deno version to install, required: false, default: "2.x" }
+  install-node: { description: Install Node.js, required: false, default: "false" }
+  node-version: { description: Node version to install, required: false, default: "latest" }
+  update-npm: { description: "Update npm to latest", required: false, default: "false" }
+  install-bun: { description: Install Bun, required: false, default: "true" }
+  bun-version: { description: Bun version to install, required: false, default: "latest" }
+
+outputs:
+  deno-version: { description: The installed Deno version, value: "${{ steps.setup-deno.outputs.deno-version }}" }
+  cache-hit: { description: Whether dependencies cache was restored, value: "${{ steps.cache-deno.outputs.cache-hit }}" }
+  node-version: { description: The installed Node.js version (if install-node is true), value: "${{ steps.setup-node.outputs.node-version }}" }
+  npm-version: { description: The installed npm version (if install-node is true), value: "${{ steps.update-npm.outputs.npm-version }}" }
+  bun-version: { description: The installed Bun version (if install-bun is true), value: "${{ steps.setup-bun.outputs.bun-version }}" }
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Deno
+      id: setup-deno
+      if: ${{ inputs.install-deno == 'true' }}
+      uses: denoland/setup-deno@v2
+      with: { deno-version: "${{ inputs.version }}" }
+
+    - name: Setup Node
+      id: setup-node
+      if: ${{ inputs.install-node == 'true' }}
+      uses: actions/setup-node@v6
+      with: { node-version: "${{ inputs.node-version }}" }
+
+    - name: Setup Bun
+      id: setup-bun
+      if: ${{ inputs.install-bun == 'true' }}
+      uses: oven-sh/setup-bun@v2
+      with: { bun-version: "${{ inputs.bun-version }}" }
+
+    - name: Cache Deno dependencies
+      id: cache-deno
+      if: ${{ inputs.install-deno == 'true' }}
+      uses: actions/cache@v5
+      with:
+        path: ~/.cache/deno
+        key: ${{ runner.os }}-deno-${{ hashFiles('**/deno.lock', '**/deno.json', '**/deno.jsonc') }}
+        restore-keys: "${{ runner.os }}-deno-"
+
+    - name: Update npm
+      id: update-npm
+      if: ${{ inputs.install-node == 'true' }}
+      shell: bash
+      run: |
+        if [[ "${{ inputs.update-npm }}" == "true" ]]; then npm install -g npm@latest; fi
+        echo "npm-version=$(npm --version)" >> "${GITHUB_OUTPUT}"

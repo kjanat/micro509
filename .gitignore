@@ -166,7 +166,8 @@ src/**/*.d.ts
 /docs/deno/
 /site/.vitepress/cache/
 /site/.vitepress/dist/
-/site/api/*
+/site/assets/micro509/
 !/site/api/index.md
+!/site/api/typedoc-sidebar.json
 /site/reference/api/
 .playwright-cli

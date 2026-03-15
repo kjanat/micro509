@@ -1,4 +1,4 @@
 [test]
-root = "test"
+root                       = "test"
 coveragePathIgnorePatterns = ["test/helpers.ts", "test/oracles/*"]
-coverageSkipTestFiles = true
+coverageSkipTestFiles      = true

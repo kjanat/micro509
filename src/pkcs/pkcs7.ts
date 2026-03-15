@@ -44,9 +44,6 @@ import type {
 } from '#micro509/x509/parse.ts';
 import { parseCertificateDer } from '#micro509/x509/parse.ts';
 
-export type * from '#micro509/result/result.ts';
-export type * from '#micro509/x509/parse.ts';
-
 /** PEM text (may contain multiple CERTIFICATE blocks) or raw DER bytes. */
 export type Pkcs7CertificateSource = string | Uint8Array;
 

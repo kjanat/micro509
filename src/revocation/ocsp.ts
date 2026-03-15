@@ -57,9 +57,6 @@ import type {
 } from '#micro509/x509/parse.ts';
 import { parseCertificateDer, parseCertificatePem } from '#micro509/x509/parse.ts';
 
-export type * from '#micro509/result/result.ts';
-export type * from '#micro509/x509/parse.ts';
-
 /** Hash algorithm used to compute OCSP CertID fields. SHA-1 is the RFC 6960 default. */
 export type OcspHashAlgorithm = 'SHA-1' | 'SHA-256';
 /** PEM string, DER bytes, or already-parsed certificate. */

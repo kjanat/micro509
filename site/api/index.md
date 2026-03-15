@@ -1,7 +1,7 @@
 # API Reference
 
 Use the domain pages when you know the area you want.
-Use the full reference when you want one page with every public symbol.
+Use the root import page when you want the stable `micro509` package surface.
 
 ## Choose a surface
 
@@ -21,6 +21,6 @@ Use the full reference when you want one page with every public symbol.
 The root `micro509` entrypoint re-exports the common workflow-first surface.
 Reach for the domain entrypoints when you need exhaustive advanced types.
 
-## Full Reference
+## Root Import
 
-- [`Full Reference`](/api/micro509) - single-page dump of every public symbol
+- [`micro509`](/api/micro509) - stable root import surface
