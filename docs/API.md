@@ -8,13 +8,13 @@ Use the root package for most applications:
 import { createCertificate, parseCertificatePem, verifyCertificateChain } from 'micro509';
 ```
 
-Use subpaths when you want a narrower entrypoint.
+Use the domain entrypoints when you want exhaustive advanced types or a narrower import.
 
 ## Package entrypoints
 
 | Subpath                     | Purpose                                                     |
 | --------------------------- | ----------------------------------------------------------- |
-| `micro509`                  | root barrel with the full public API                        |
+| `micro509`                  | curated workflow-first root import                          |
 | `micro509/x509`             | canonical certificate, CSR, name, extension, and parse APIs |
 | `micro509/certificate`      | certificate creation helpers                                |
 | `micro509/crl`              | CRL create, parse, validate, verify, and revocation lookup  |
@@ -48,6 +48,9 @@ Raw certificate, CSR, CRL, and OCSP parse entrypoints still throw on malformed D
 
 ## Root exports by area
 
+The root module keeps the common workflows close at hand, but leaves owner-only
+advanced seams in their domain modules.
+
 ### Certificate
 
 Primary functions:
@@ -62,7 +65,6 @@ Primary types:
 - `CertificateMaterial`
 - `SelfSignedCertificateResult`
 - `ValidityInput`
-- `SignatureProfileInput`
 
 Notes:
 
@@ -79,7 +81,6 @@ Primary types:
 
 - `CreateCsrInput`
 - `CsrMaterial`
-- `SignatureProfileInput`
 
 ### Parse
 
@@ -320,6 +321,9 @@ Notes:
 
 ### PFX
 
+Keep advanced PKCS#12 MAC plumbing off the root import; use the PKCS-facing
+entrypoints when you need that lower-level seam.
+
 Primary functions:
 
 - `createPfx()`
@@ -336,6 +340,8 @@ Primary types:
 - `ParsePfxErrorCode`
 
 ### PKCS#12 MAC
+
+Advanced seam: do not treat this as part of the normal root workflow surface.
 
 Primary functions:
 
@@ -418,11 +424,7 @@ Primary types:
 
 Primary functions:
 
-- `successResult()`
-- `errorResult()`
-- `micro509Error()`
-- `indexedMicro509Error()`
-- `indexedErrorResult()`
+- none at root; import the helper constructors from `micro509/result`
 
 ## Examples
 

@@ -1,10 +1,11 @@
 /**
  * Stable root import for `micro509`.\
- * Re-exports the public X.509, CSR, CRL, OCSP, PKCS#7, PKCS#12/PFX, key, parsing, and
- * path-validation APIs from one package entrypoint.
+ * Re-exports the common certificate, parsing, verification, revocation, key, and PKCS
+ * workflows from one package entrypoint.
  *
- * Reach for this module when you want the supported package surface without importing internal
- * files directly.
+ * Reach for this module when you want the default workflow-first package surface.
+ * Use domain entrypoints such as `micro509/x509`, `micro509/verify`, and
+ * `micro509/revocation` when you need exhaustive advanced types.
  *
  * The root export is organized around common PKI flows:
  *
@@ -12,7 +13,10 @@
  * - parse DER or PEM inputs into typed certificate and request shapes
  * - verify certificate chains, service identities, CRLs, OCSP, and signed data
  * - import, export, generate, and encrypt key material with WebCrypto-safe algorithms
- * - build and inspect typed extension inputs, revocation evidence, and validation results
+ * - work with the common extension inputs, revocation evidence, and validation results
+ *
+ * Advanced PKCS#12 MAC plumbing, signature profile tuning, and other domain-specific helper
+ * types stay in their owner domains instead of being headlined here.
  *
  * @example
  * ```ts
@@ -121,10 +125,16 @@ export type {
 	ParsedPfxAttribute,
 	ParsedPfxBag,
 	ParsedPfxBagAttributes,
+	ParsedPkcs7SignedData,
+	ParsedPkcs7SignerInfo,
 	ParsePfxErrorCode,
 	ParsePfxFailure,
 	ParsePfxOptions,
 	ParsePfxResult,
+	ParsePkcs7CertBagResult,
+	ParsePkcs7ErrorCode,
+	ParsePkcs7Failure,
+	ParsePkcs7SignedDataResult,
 	PfxBagAttributesInput,
 	PfxCertificateBagInput,
 	PfxCertificateSource,
@@ -132,31 +142,23 @@ export type {
 	PfxMaterial,
 	PfxPrivateKeyBagInput,
 	PfxPrivateKeySource,
-} from './pfx.ts';
-export { createPfx, parsePfxDer, parsePfxPem } from './pfx.ts';
-export type {
-	ParsedPkcs7SignedData,
-	ParsedPkcs7SignerInfo,
-	ParsePkcs7CertBagResult,
-	ParsePkcs7ErrorCode,
-	ParsePkcs7Failure,
-	ParsePkcs7SignedDataResult,
 	Pkcs7CertBag,
 	Pkcs7CertificateSource,
 	VerifyPkcs7SignedDataFailure,
 	VerifyPkcs7SignedDataResult,
-} from './pkcs7.ts';
+} from './pkcs/index.ts';
 export {
+	createPfx,
 	createPkcs7CertBagDer,
 	createPkcs7CertBagPem,
+	parsePfxDer,
+	parsePfxPem,
 	parsePkcs7CertBagDer,
 	parsePkcs7CertBagPem,
 	parsePkcs7SignedDataDer,
 	parsePkcs7SignedDataPem,
 	verifyPkcs7SignedData,
-} from './pkcs7.ts';
-export type { ParsedPkcs12MacData, Pkcs12MacOptions } from './pkcs12-mac.ts';
-export { createPkcs12MacData, parsePkcs12MacData } from './pkcs12-mac.ts';
+} from './pkcs/index.ts';
 export type {
 	ErrorResult,
 	IndexedErrorResult,
@@ -370,7 +372,6 @@ export type {
 	PolicyQualifierInfo,
 	RelativeDistinguishedNameInput,
 	SelfSignedCertificateResult,
-	SignatureProfileInput,
 	SubjectAltName,
 	UnsupportedNameConstraintForm,
 	UserNoticePolicyQualifierInfo,

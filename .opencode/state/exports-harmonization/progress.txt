@@ -5,6 +5,7 @@ Started: 2026-03-15
 
 ## Codebase Patterns
 
+- Root-barrel cleanup can de-headline advanced tuning/plumbing first while leaving heavily-used workflow exports in place until the broader docs and export-map cutover.
 - Scaffold future public domains as pure re-export barrels first; that creates stable landing zones before risky file moves.
 - Public entrypoints should follow product domains, not source filenames.
 - `micro509` is the canonical documented import; domain entrypoints are the exhaustive advanced homes.
@@ -72,3 +73,9 @@ Started: 2026-03-15
 - Verified the shipped `micro509/verify` domain work still satisfies the task acceptance criteria, then synced the PRD state so the workflow can advance.
 - Files changed: `.opencode/state/exports-harmonization/prd.json`, `.opencode/state/exports-harmonization/progress.txt`.
 - **Learnings:** PRD task state can drift from already-committed implementation work, so the next-task workflow sometimes needs an explicit state-sync commit before it can advance to the next real code task.
+
+## Task - [redesign-root-barrel]
+
+- Reworked `src/index.ts` into a clearer workflow-first root barrel, routed PKCS convenience exports through the owner domain, and dropped root exposure for PKCS#12 MAC helpers plus `SignatureProfileInput`.
+- Files changed: `src/index.ts`, `docs/API.md`, `test/root-barrel.test.ts`, `test/root-barrel.types.ts`, `.opencode/state/exports-harmonization/prd.json`, `.opencode/state/exports-harmonization/progress.txt`.
+- **Learnings:** root-surface cleanup can be staged safely by removing domain-only tuning and plumbing first, then proving the curated root with runtime and compile-time surface checks.

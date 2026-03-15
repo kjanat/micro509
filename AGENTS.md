@@ -49,7 +49,7 @@ ts-x509/
 - Tests may import internals through `#micro509/*.ts` when asserting low-level behavior.
 - Commit messages:
   - Follow conventional commits; prefer `type(scope): subject`.
-  - After the blank line, hard-wrap body lines at about 72 chars.
+  - After the blank line, hard-wrap body lines at about 72 chars. Use `git commit -F - <<'EOF'` with heredoc. Verify message has no literal `\n` in message after comitting.
   - Do not leave body paragraphs as one long line.
 - Add jsr-style jsdoc. See <https://github.com/jsr-io/jsr/blob/main/frontend/docs/writing-docs.md> for style guidance.
 
