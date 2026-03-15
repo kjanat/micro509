@@ -21,7 +21,8 @@ import {
 	type Pbes2EncryptionOptions,
 } from './internal/crypto/pbes2.ts';
 import { getCrypto } from './internal/crypto/webcrypto.ts';
-import { base64Decode, base64Encode, pemDecode, pemEncode } from './pem.ts';
+import { base64Decode, base64Encode } from './internal/shared/base64.ts';
+import { pemDecode, pemEncode } from './pem.ts';
 
 export type {
 	Pbes2EncryptionOptions,

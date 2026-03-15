@@ -1,7 +1,60 @@
 /**
- * Staged domain barrel for key generation and import/export APIs.
- * Re-exports the current flat module until the file moves land.
+ * Canonical key generation and import/export domain surface.
+ * Owns the stable `micro509/keys` entrypoint.
  * @module
  */
 
-export * from '../keys.ts';
+export type {
+	EcKeyAlgorithmInput,
+	EcNamedCurve,
+	Ed25519KeyAlgorithmInput,
+	EncryptedPkcs8Options,
+	ImportEcPublicKeyInput,
+	ImportEd25519PublicKeyInput,
+	ImportRsaPublicKeyInput,
+	KeyAlgorithmInput,
+	KeyPairMaterial,
+	LegacyPemEncryptionOptions,
+	Pbes2EncryptionOptions,
+	Pbes2EncryptionScheme,
+	Pbes2Prf,
+	PrivateKeyImportInput,
+	PublicKeyImportInput,
+	RsaHash,
+	RsaKeyAlgorithmInput,
+	RsaScheme,
+} from '../keys.ts';
+export {
+	exportBinaryBase64,
+	exportEncryptedPkcs1Pem,
+	exportEncryptedPkcs8Der,
+	exportEncryptedPkcs8Pem,
+	exportEncryptedSec1Pem,
+	exportPkcs1Der,
+	exportPkcs1Pem,
+	exportPkcs8Der,
+	exportPkcs8Pem,
+	exportPrivateJwk,
+	exportPublicJwk,
+	exportSec1Der,
+	exportSec1Pem,
+	exportSpkiDer,
+	exportSpkiPem,
+	generateKeyPair,
+	importEncryptedPkcs1Pem,
+	importEncryptedPkcs8Der,
+	importEncryptedPkcs8Pem,
+	importEncryptedSec1Pem,
+	importPkcs1Der,
+	importPkcs1Pem,
+	importPkcs8Base64,
+	importPkcs8Der,
+	importPkcs8Pem,
+	importPrivateJwk,
+	importPublicJwk,
+	importSec1Der,
+	importSec1Pem,
+	importSpkiBase64,
+	importSpkiDer,
+	importSpkiPem,
+} from '../keys.ts';

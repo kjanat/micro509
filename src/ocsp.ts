@@ -44,6 +44,7 @@ import {
 	signBytes,
 } from './internal/crypto/signing.ts';
 import { getCrypto } from './internal/crypto/webcrypto.ts';
+import { base64Encode } from './internal/shared/base64.ts';
 import type {
 	ParsedCertificate,
 	ParsedName,
@@ -51,7 +52,7 @@ import type {
 	ParsedRelativeDistinguishedName,
 } from './parse.ts';
 import { parseCertificateDer, parseCertificatePem } from './parse.ts';
-import { base64Encode, pemDecode, pemEncode } from './pem.ts';
+import { pemDecode, pemEncode } from './pem.ts';
 import type { ErrorResult, Micro509Error } from './result.ts';
 import { verifyCertificateChain } from './verify.ts';
 

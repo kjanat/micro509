@@ -21,15 +21,16 @@ import {
 	setOf,
 	tlv,
 } from './internal/asn1/der.ts';
-import { exportPkcs8Der } from './keys.ts';
 import { OIDS } from './internal/asn1/oids.ts';
-import { type ParsedCertificate, parseCertificateDer } from './parse.ts';
 import {
 	decryptPbes2,
 	encryptPbes2,
 	type Pbes2EncryptionOptions,
 } from './internal/crypto/pbes2.ts';
-import { base64Encode, pemEncode, splitPemBlocks } from './pem.ts';
+import { base64Encode } from './internal/shared/base64.ts';
+import { exportPkcs8Der } from './keys.ts';
+import { type ParsedCertificate, parseCertificateDer } from './parse.ts';
+import { pemEncode, splitPemBlocks } from './pem.ts';
 import {
 	createPkcs12MacData,
 	type ParsedPkcs12MacData,
@@ -38,12 +39,12 @@ import {
 } from './pkcs12-mac.ts';
 import type { ErrorResult, Micro509Error } from './result.ts';
 
-export type * from './parse.ts';
 export type {
 	Pbes2EncryptionOptions,
 	Pbes2EncryptionScheme,
 	Pbes2Prf,
 } from './internal/crypto/pbes2.ts';
+export type * from './parse.ts';
 export type * from './pkcs12-mac.ts';
 export type * from './result.ts';
 

@@ -129,7 +129,7 @@ export type {
 	RsaHash,
 	RsaKeyAlgorithmInput,
 	RsaScheme,
-} from './keys.ts';
+} from './keys/index.ts';
 export {
 	exportBinaryBase64,
 	exportEncryptedPkcs1Pem,
@@ -163,7 +163,7 @@ export {
 	importSpkiBase64,
 	importSpkiDer,
 	importSpkiPem,
-} from './keys.ts';
+} from './keys/index.ts';
 export type { InitialNameConstraintsInput } from './name-constraints.ts';
 export type {
 	CreateOcspRequestInput,
@@ -198,8 +198,8 @@ export {
 	validateOcspResponse,
 	verifyOcspResponse,
 } from './ocsp.ts';
-export type { CategorizedPemBlocks, PemBlock } from './pem.ts';
-export { categorizePemBlocks, pemDecode, pemEncode, splitPemBlocks } from './pem.ts';
+export type { CategorizedPemBlocks, PemBlock } from './pem/index.ts';
+export { categorizePemBlocks, pemDecode, pemEncode, splitPemBlocks } from './pem/index.ts';
 export type {
 	CreatePfxInput,
 	ParsedPfx,
@@ -253,7 +253,7 @@ export type {
 	IndexedMicro509Error,
 	Micro509Error,
 	Result,
-} from './result.ts';
+} from './result/index.ts';
 export type {
 	CheckCertificateRevocationErrorCode,
 	CheckCertificateRevocationFailureDetails,

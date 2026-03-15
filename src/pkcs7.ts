@@ -30,9 +30,10 @@ import {
 import { OIDS } from './internal/asn1/oids.ts';
 import { verifySignedData } from './internal/crypto/sig-verify.ts';
 import { getCrypto } from './internal/crypto/webcrypto.ts';
+import { base64Encode } from './internal/shared/base64.ts';
 import type { ParsedCertificate } from './parse.ts';
 import { parseCertificateDer } from './parse.ts';
-import { base64Encode, pemEncode, splitPemBlocks } from './pem.ts';
+import { pemEncode, splitPemBlocks } from './pem.ts';
 import type { ErrorResult, Micro509Error } from './result.ts';
 
 export type * from './parse.ts';

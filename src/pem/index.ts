@@ -1,7 +1,8 @@
 /**
- * Staged domain barrel for PEM encode/decode APIs.
- * Re-exports the current flat module until the file moves land.
+ * Canonical PEM boundary surface.
+ * Owns the stable `micro509/pem` entrypoint.
  * @module
  */
 
-export * from '../pem.ts';
+export type { CategorizedPemBlocks, PemBlock } from '../pem.ts';
+export { categorizePemBlocks, pemDecode, pemEncode, splitPemBlocks } from '../pem.ts';

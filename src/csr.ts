@@ -7,6 +7,7 @@
  * @module
  */
 
+import { buildRequestedExtensions, type CertificateExtensionsInput } from './extensions.ts';
 import {
 	bitString,
 	concatBytes,
@@ -16,21 +17,21 @@ import {
 	sequence,
 	setOf,
 } from './internal/asn1/der.ts';
-import { buildRequestedExtensions, type CertificateExtensionsInput } from './extensions.ts';
-import { exportSpkiDer } from './keys.ts';
-import { encodeName, type NameInput } from './name.ts';
 import { OIDS } from './internal/asn1/oids.ts';
-import { base64Encode, pemEncode } from './pem.ts';
 import {
 	encodeAlgorithmIdentifier,
 	getSignatureAlgorithm,
 	type SignatureProfileInput,
 	signBytes,
 } from './internal/crypto/signing.ts';
+import { base64Encode } from './internal/shared/base64.ts';
+import { exportSpkiDer } from './keys.ts';
+import { encodeName, type NameInput } from './name.ts';
+import { pemEncode } from './pem.ts';
 
 export type * from './extensions.ts';
-export type * from './name.ts';
 export type * from './internal/crypto/signing.ts';
+export type * from './name.ts';
 
 /** Input for {@linkcode createCertificateSigningRequest}. */
 export interface CreateCsrInput {

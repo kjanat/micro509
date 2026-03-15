@@ -1,7 +1,20 @@
 /**
- * Staged domain barrel for shared result primitives.
- * Re-exports the current flat module until the file moves land.
+ * Canonical shared result surface.
+ * Owns the stable `micro509/result` entrypoint.
  * @module
  */
 
-export * from '../result.ts';
+export type {
+	ErrorResult,
+	IndexedErrorResult,
+	IndexedMicro509Error,
+	Micro509Error,
+	Result,
+} from '../result.ts';
+export {
+	errorResult,
+	indexedErrorResult,
+	indexedMicro509Error,
+	micro509Error,
+	successResult,
+} from '../result.ts';

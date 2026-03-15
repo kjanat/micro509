@@ -72,7 +72,7 @@
 			"description": "Make `keys`, `pem`, and `result` clean standalone domains with explicit ownership rules. Done when:\n- `keys`, `pem`, and `result` each have a stable public entrypoint and internal dependencies flow downward\n- `pem` stays a permanent public PKI boundary module\n- shared result primitives are owned only by `result` and re-exported elsewhere intentionally\n- these utility domains no longer depend on accidental top-level layout assumptions",
 			"depends": ["move-internal-modules"],
 			"priority": "architecture",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "redesign-root-barrel",

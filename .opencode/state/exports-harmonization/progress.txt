@@ -18,6 +18,7 @@ Started: 2026-03-15
 - PKCS#12 MAC support stays under `pkcs`, but should be documented as advanced plumbing, not a headline surface.
 - Source files should reach `src/internal/**` through relative imports so build-time `.ts` rewriting still works; tests can keep `#micro509/internal/*` aliases.
 - `@internal` jsdoc can still affect emitted declarations for exported helpers, so new canonical domain barrels should not promote symbols that declaration emit already treats as internal.
+- When a utility domain becomes canonical, point the build entry at its domain barrel and move shared cross-domain primitives under `src/internal/shared/**` instead of leaking them through a neighboring public module.
 
 ---
 <!-- Task logs below - APPEND ONLY -->
@@ -45,3 +46,9 @@ Started: 2026-03-15
 - Implemented a canonical `micro509/x509` entrypoint, rerouted root X.509 re-exports through it, and added a focused surface test plus docs updates.
 - Files changed: `docs/API.md`, `package.json`, `specs/exports-harmonization-ownership.md`, `src/index.ts`, `src/name.ts`, `src/x509/index.ts`, `test/x509-domain.test.ts`, `tsdown.config.ts`, `.opencode/state/exports-harmonization/prd.json`, `.opencode/state/exports-harmonization/progress.txt`.
 - **Learnings:** canonical domain barrels need explicit export curation instead of `export *`; several legacy parse helpers and SKI builder helpers are documented `@internal`, and promoting them into a new domain barrel breaks declaration generation.
+
+## Task - [build-utility-domains]
+
+- Implemented canonical `micro509/keys`, `micro509/pem`, and `micro509/result` domain barrels, rerouted root utility re-exports through them, and pointed tsdown at those domain entrypoints.
+- Files changed: `docs/API.md`, `src/certificate.ts`, `src/crl.ts`, `src/csr.ts`, `src/index.ts`, `src/keys.ts`, `src/keys/index.ts`, `src/ocsp.ts`, `src/pem.ts`, `src/pem/index.ts`, `src/pfx.ts`, `src/pkcs7.ts`, `src/result/index.ts`, `src/internal/shared/base64.ts`, `test/utility-domains.test.ts`, `tsdown.config.ts`, `.opencode/state/exports-harmonization/prd.json`, `.opencode/state/exports-harmonization/progress.txt`.
+- **Learnings:** utility-domain cleanup exposed that raw base64 helpers were only cross-domain plumbing, so they belonged in `src/internal/shared/**` instead of the public PEM API; keeping root re-exports pointed at canonical domain barrels lets ownership shift without changing documented import homes.

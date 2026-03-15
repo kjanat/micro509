@@ -7,6 +7,7 @@
  * @module
  */
 
+import { buildCertificateExtensions, type CertificateExtensionsInput } from './extensions.ts';
 import {
 	bitString,
 	explicitContext,
@@ -22,7 +23,7 @@ import {
 	signBytes,
 } from './internal/crypto/signing.ts';
 import { getCrypto } from './internal/crypto/webcrypto.ts';
-import { buildCertificateExtensions, type CertificateExtensionsInput } from './extensions.ts';
+import { base64Encode } from './internal/shared/base64.ts';
 import {
 	exportSpkiDer,
 	generateKeyPair,
@@ -30,10 +31,10 @@ import {
 	type KeyPairMaterial,
 } from './keys.ts';
 import { encodeName, type NameInput } from './name.ts';
-import { base64Encode, pemEncode } from './pem.ts';
+import { pemEncode } from './pem.ts';
 
-export type * from './internal/crypto/signing.ts';
 export type * from './extensions.ts';
+export type * from './internal/crypto/signing.ts';
 export type * from './keys.ts';
 export type * from './name.ts';
 

@@ -1,11 +1,13 @@
 /**
- * PEM and base64 helpers used across the public API.
+ * PEM helpers used across the public API.
  *
  * Encodes, decodes, splits, and categorizes PEM blocks as defined by
  * RFC 7468.
  *
  * @module
  */
+
+import { base64Decode, base64Encode } from './internal/shared/base64.ts';
 
 /** A single decoded PEM block with its label, decoded DER bytes, and original PEM text. */
 export interface PemBlock {
@@ -46,15 +48,6 @@ export function pemEncode(label: string, der: Uint8Array): string {
 	return `-----BEGIN ${label}-----\n${lines.join('\n')}\n-----END ${label}-----`;
 }
 
-/** Encodes raw bytes to a standard base64 string (no line breaks). */
-export function base64Encode(bytes: Uint8Array): string {
-	let binary = '';
-	for (const byte of bytes) {
-		binary += String.fromCharCode(byte);
-	}
-	return btoa(binary);
-}
-
 /**
  * Extracts and base64-decodes the DER content from a PEM string.
  * Throws if the `BEGIN`/`END` markers don't match `label`.
@@ -74,16 +67,6 @@ export function pemDecode(label: string, pem: string): Uint8Array {
 		.replace(/\n/g, '')
 		.trim();
 	return base64Decode(body);
-}
-
-/** Decodes a standard base64 string to raw bytes. */
-export function base64Decode(value: string): Uint8Array {
-	const binary = atob(value);
-	const bytes = new Uint8Array(binary.length);
-	for (let i = 0; i < binary.length; i++) {
-		bytes[i] = binary.charCodeAt(i);
-	}
-	return bytes;
 }
 
 /**
