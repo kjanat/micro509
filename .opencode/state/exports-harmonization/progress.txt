@@ -24,6 +24,7 @@ Started: 2026-03-15
 - Multi-file workflow domains can become canonical by routing root exports and build entries through one curated barrel while legacy leaf subpaths stay as compatibility seams for a later cutover.
 - Keep the canonical public entry map in `tsdown.config.ts`; let tsdown own npm exports and update only `jsr.json`'s `exports` field from a post-build hook.
 - When `tsdown.config.ts` imports manifest JSON directly, `tsconfig.other.json` needs `resolveJsonModule` plus a JSON include, and the post-build hook should mutate only the JSR fields it owns (`exports`, version).
+- Once root and domain barrels cover the public workflows, shrink the generated export map to owner domains only and scrub docs/examples/tests of file-shaped import seams at the same time.
 
 ---
 <!-- Task logs below - APPEND ONLY -->
@@ -90,3 +91,9 @@ Started: 2026-03-15
 - Refined the build hook to import both manifests directly, sync `jsr.json` `exports` from `entry`, sync `jsr.json` `version` from `package.json`, and let manifest formatting cover both files.
 - Files changed: `dprint.jsonc`, `jsr.json`, `package.json`, `tsconfig.other.json`, `tsdown.config.ts`, `.opencode/state/exports-harmonization/progress.txt`.
 - **Learnings:** direct JSON imports keep the config self-contained, but they also make JSON compiler support explicit and work best when the hook only mutates the small JSR surface it actually owns.
+
+## Task - [migrate-tests-and-docs]
+
+- Migrated docs, README examples, and test imports to the surviving domain entrypoints, added a focused `pkcs` domain surface test, and cut the generated npm/JSR export map down to root plus owner domains.
+- Files changed: `README.md`, `docs/API.md`, `jsr.json`, `package.json`, `test/extension-registry.test.ts`, `test/helpers.ts`, `test/internals.test.ts`, `test/parse.test.ts`, `test/pkcs-domain.test.ts`, `tsdown.config.ts`, `.opencode/state/exports-harmonization/prd.json`, `.opencode/state/exports-harmonization/progress.txt`.
+- **Learnings:** docs cleanup is the right moment to remove file-shaped publish seams entirely, but test-only probes may still need source-file imports for helpers that are not part of the public domain barrels.

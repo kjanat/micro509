@@ -26,9 +26,9 @@ import {
 	time,
 	tlv,
 } from '#micro509/internal/asn1/der.ts';
-import { encodeName } from '#micro509/name.ts';
 import { OIDS } from '#micro509/internal/asn1/oids.ts';
 import { parseNameConstraints } from '#micro509/parse.ts';
+import { encodeName } from '#micro509/x509/index.ts';
 
 describe('parse', () => {
 	it('supports custom extension encode and decode hooks', async () => {

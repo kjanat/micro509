@@ -142,12 +142,14 @@ Use the root package for most applications:
 import { createCertificate, parseCertificatePem, verifyCertificateChain } from 'micro509';
 ```
 
-Use subpaths when you want a narrower surface:
+Use domain entrypoints when you want exhaustive advanced types or a narrower
+workflow surface:
 
 ```ts
+import { parseCertificatePem } from 'micro509/x509';
 import { verifyCertificateChain } from 'micro509/verify';
-import { matchServiceIdentity } from 'micro509/identity';
-import { parseCertificatePem } from 'micro509/parse';
+import { matchServiceIdentity } from 'micro509/verify';
+import { createPfx } from 'micro509/pkcs';
 import { generateKeyPair } from 'micro509/keys';
 ```
 

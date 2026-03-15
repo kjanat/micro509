@@ -105,7 +105,7 @@
 			"description": "Update internal imports, examples, and docs to the new domain-shaped API. Done when:\n- tests that need internals import through an explicit `#micro509/internal/*` path\n- stale references to dropped file-level subpaths are removed from source docs and guides\n- root-first examples and advanced domain examples both point at the new entrypoints\n- PKCS#12 MAC is documented only in advanced PKCS material",
 			"depends": ["redesign-root-barrel", "harmonize-export-generation"],
 			"priority": "polish",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "run-surface-validation",

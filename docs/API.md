@@ -12,28 +12,19 @@ Use the domain entrypoints when you want exhaustive advanced types or a narrower
 
 ## Package entrypoints
 
-| Subpath                     | Purpose                                                     |
-| --------------------------- | ----------------------------------------------------------- |
-| `micro509`                  | curated workflow-first root import                          |
-| `micro509/x509`             | canonical certificate, CSR, name, extension, and parse APIs |
-| `micro509/certificate`      | certificate creation helpers                                |
-| `micro509/crl`              | CRL create, parse, validate, verify, and revocation lookup  |
-| `micro509/csr`              | CSR creation helpers                                        |
-| `micro509/extensions`       | certificate and CSR extension input types                   |
-| `micro509/identity`         | service identity matching compatibility seam                |
-| `micro509/keys`             | canonical key generation plus import and export helpers     |
-| `micro509/name`             | distinguished-name input types                              |
-| `micro509/name-constraints` | initial name-constraint compatibility seam                  |
-| `micro509/ocsp`             | OCSP create, parse, validate, and verify helpers            |
-| `micro509/parse`            | cert and CSR parse plus extension decode helpers            |
-| `micro509/pem`              | canonical PEM split, decode, and encode helpers             |
-| `micro509/pfx`              | PKCS#12/PFX create and parse helpers                        |
-| `micro509/pkcs12-mac`       | PKCS#12 MAC helpers                                         |
-| `micro509/pkcs7`            | PKCS#7 cert bag and signedData parse helpers                |
-| `micro509/policy`           | policy-validation compatibility seam                        |
-| `micro509/result`           | canonical shared `Result` types and constructors            |
-| `micro509/revocation`       | canonical CRL, OCSP, and revocation orchestration APIs      |
-| `micro509/verify`           | canonical verification, identity, policy, and path helpers  |
+| Subpath               | Purpose                                                     |
+| --------------------- | ----------------------------------------------------------- |
+| `micro509`            | curated workflow-first root import                          |
+| `micro509/x509`       | canonical certificate, CSR, name, extension, and parse APIs |
+| `micro509/verify`     | canonical verification, identity, policy, and path helpers  |
+| `micro509/revocation` | canonical CRL, OCSP, and revocation orchestration APIs      |
+| `micro509/pkcs`       | canonical PFX, PKCS#7, and PKCS#12 MAC APIs                 |
+| `micro509/keys`       | canonical key generation plus import and export helpers     |
+| `micro509/pem`        | canonical PEM split, decode, and encode helpers             |
+| `micro509/result`     | canonical shared `Result` types and constructors            |
+
+The file-shaped compatibility subpaths are gone. Import each workflow from its
+owner domain.
 
 ## Result model
 
@@ -147,11 +138,9 @@ Notes:
 
 - chain verification is async and WebCrypto-based
 - revocation orchestration is separate; use `micro509/revocation` when you need CRL and OCSP evidence handling
-- service-identity matching, policy knobs, and initial name-constraint inputs are owned by this domain even when legacy subpaths remain available
+- service-identity matching, policy knobs, and initial name-constraint inputs are owned by this domain
 
 ### Identity
-
-Compatibility subpath: prefer `micro509/verify` for new imports
 
 Primary functions:
 
@@ -203,8 +192,6 @@ Notes:
 
 ### CRL
 
-Compatibility subpath: prefer `micro509/revocation` for new imports
-
 Primary functions:
 
 - `createCertificateRevocationList()`
@@ -227,8 +214,6 @@ Primary types:
 - `CheckCertificateRevocationAgainstCrlResult`
 
 ### OCSP
-
-Compatibility subpath: prefer `micro509/revocation` for new imports
 
 Primary functions:
 
@@ -319,16 +304,27 @@ Notes:
 
 - raw base64 helpers are internal-only; the public PEM surface stays focused on PEM boundaries
 
-### PFX
+### PKCS
 
-Keep advanced PKCS#12 MAC plumbing off the root import; use the PKCS-facing
-entrypoints when you need that lower-level seam.
+Canonical advanced home: `micro509/pkcs`
+
+Keep advanced PKCS#12 MAC plumbing off the root import; document and import it
+through the PKCS domain.
 
 Primary functions:
 
 - `createPfx()`
 - `parsePfxDer()`
 - `parsePfxPem()`
+- `createPkcs7CertBagDer()`
+- `createPkcs7CertBagPem()`
+- `parsePkcs7CertBagDer()`
+- `parsePkcs7CertBagPem()`
+- `parsePkcs7SignedDataDer()`
+- `parsePkcs7SignedDataPem()`
+- `createPkcs12MacData()`
+- `parsePkcs12MacData()`
+- `verifyPkcs7SignedData()`
 
 Primary types:
 
@@ -338,36 +334,9 @@ Primary types:
 - `ParsePfxResult`
 - `ParsePfxFailure`
 - `ParsePfxErrorCode`
-
-### PKCS#12 MAC
-
-Advanced seam: do not treat this as part of the normal root workflow surface.
-
-Primary functions:
-
-- `createPkcs12MacData()`
-- `parsePkcs12MacData()`
-
-Primary types:
-
+- `Pkcs7CertBag`
 - `Pkcs12MacOptions`
 - `ParsedPkcs12MacData`
-
-### PKCS#7
-
-Primary functions:
-
-- `createPkcs7CertBagDer()`
-- `createPkcs7CertBagPem()`
-- `parsePkcs7CertBagDer()`
-- `parsePkcs7CertBagPem()`
-- `parsePkcs7SignedDataDer()`
-- `parsePkcs7SignedDataPem()`
-- `verifyPkcs7SignedData()`
-
-Primary types:
-
-- `Pkcs7CertBag`
 - `ParsedPkcs7SignedData`
 - `ParsedPkcs7SignerInfo`
 - `ParsePkcs7CertBagResult`
@@ -375,8 +344,6 @@ Primary types:
 - `VerifyPkcs7SignedDataResult`
 
 ### Policy
-
-Compatibility subpath: prefer `micro509/verify` for new imports
 
 Primary types:
 

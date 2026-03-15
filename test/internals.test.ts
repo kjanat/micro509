@@ -26,25 +26,8 @@ import {
 	setOf,
 	time,
 } from '#micro509/internal/asn1/der.ts';
-import { parseKeyUsageExtension } from '#micro509/internal/x509/extension-bits.ts';
-import {
-	buildCertificateExtensions,
-	encodeCertificatePolicies,
-	encodeCrlDistributionPoints,
-	encodeNameConstraints,
-	encodePolicyMappings,
-	encodeSubjectAltName,
-} from '#micro509/extensions.ts';
-import {
-	allOnesMaskForIpAddress,
-	decodeIpAddress,
-	expandIpv6,
-	normalizeIpAddress,
-	parseIpAddressToBytes,
-} from '#micro509/internal/shared/ip.ts';
 import { OIDS } from '#micro509/internal/asn1/oids.ts';
 import { parsePbes2AlgorithmIdentifier } from '#micro509/internal/crypto/pbes2.ts';
-import { createPkcs12MacData, parsePkcs12MacData } from '#micro509/pkcs12-mac.ts';
 import {
 	encodeRsaPssParameters,
 	parseRsaPssParameters,
@@ -64,6 +47,23 @@ import {
 	encodeAlgorithmIdentifier,
 	getSignatureAlgorithm,
 } from '#micro509/internal/crypto/signing.ts';
+import {
+	allOnesMaskForIpAddress,
+	decodeIpAddress,
+	expandIpv6,
+	normalizeIpAddress,
+	parseIpAddressToBytes,
+} from '#micro509/internal/shared/ip.ts';
+import { parseKeyUsageExtension } from '#micro509/internal/x509/extension-bits.ts';
+import { createPkcs12MacData, parsePkcs12MacData } from '#micro509/pkcs/index.ts';
+import {
+	buildCertificateExtensions,
+	encodeCertificatePolicies,
+	encodeCrlDistributionPoints,
+	encodeNameConstraints,
+	encodePolicyMappings,
+	encodeSubjectAltName,
+} from '#micro509/x509/index.ts';
 
 // ---------------------------------------------------------------------------
 // DER encoding edge cases

@@ -6,6 +6,7 @@ import {
 	parseCertificateSigningRequestDer,
 } from '#micro509';
 import { toHex } from '#micro509/internal/asn1/asn1.ts';
+import { OIDS } from '#micro509/internal/asn1/oids.ts';
 import {
 	buildSubjectKeyIdentifierFromSubjectPublicKeyInfo,
 	type ExtensionDefinition,
@@ -13,8 +14,7 @@ import {
 	listExtensionDefinitions,
 	type MutableKnownParsedExtensionAccumulator,
 } from '#micro509/internal/x509/extension-registry.ts';
-import { exportSpkiDer, generateKeyPair } from '#micro509/keys.ts';
-import { OIDS } from '#micro509/internal/asn1/oids.ts';
+import { exportSpkiDer, generateKeyPair } from '#micro509/keys/index.ts';
 
 function applyDefinition<TParsed, TInput>(
 	definition: ExtensionDefinition<TParsed, TInput>,
