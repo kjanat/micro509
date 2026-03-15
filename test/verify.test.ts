@@ -2134,6 +2134,40 @@ describe('validation profiles', () => {
 		});
 	});
 
+	it('validateForTlsServer fails closed for malformed service identity types', async () => {
+		const chain = await issueChain();
+		const input = {
+			leaf: chain.leaf.pem,
+			intermediates: [chain.intermediate.pem],
+			roots: [chain.root.certificate.pem],
+			serviceIdentity: { type: 'dns' as const, value: 'verify.example' },
+		};
+		Object.defineProperty(input.serviceIdentity, 'type', { value: 'uri' });
+
+		const result = await validateForTlsServer(input);
+		expect(result).toMatchObject({
+			ok: false,
+			code: 'subject_alt_name_mismatch',
+			index: 0,
+		});
+	});
+
+	it('verifyCertificateChain fails closed for malformed IP service identity values', async () => {
+		const chain = await issueChain();
+		const result = await verifyCertificateChain({
+			leaf: chain.leaf.pem,
+			intermediates: [chain.intermediate.pem],
+			roots: [chain.root.certificate.pem],
+			purpose: 'serverAuth',
+			serviceIdentity: { type: 'ip', value: '1:2:3:4:5:6:7:8:9' },
+		});
+		expect(result).toMatchObject({
+			ok: false,
+			code: 'subject_alt_name_mismatch',
+			index: 0,
+		});
+	});
+
 	it('validateForTlsServer rejects when leaf lacks serverAuth EKU', async () => {
 		const root = await createSelfSignedCertificate({
 			subject: { commonName: 'TLS Profile Root' },

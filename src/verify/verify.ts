@@ -18,6 +18,7 @@
 
 import { OIDS } from '#micro509/internal/asn1/oids.ts';
 import { verifySignedDataDetailed } from '#micro509/internal/crypto/sig-verify.ts';
+import { parseIpAddressToBytes } from '#micro509/internal/shared/ip.ts';
 import {
 	createNameConstraintValidationState,
 	evaluateNameConstraints,
@@ -1169,6 +1170,10 @@ function validateServiceIdentity(
 	leaf: ParsedCertificate,
 	serviceIdentity: VerifyServiceIdentityInput,
 ): ValidationCheckResult {
+	const malformedInput = validateVerifyServiceIdentityInput(serviceIdentity);
+	if (!malformedInput.ok) {
+		return malformedInput;
+	}
 	const result = matchServiceIdentity({ certificate: leaf, serviceIdentity });
 	if (result.ok) {
 		return { ok: true };
@@ -1178,7 +1183,12 @@ function validateServiceIdentity(
 		error.code !== 'subject_alt_name_mismatch' &&
 		error.code !== 'common_name_fallback_suppressed'
 	) {
-		throw new Error('unreachable service identity type');
+		return failure(
+			'subject_alt_name_mismatch',
+			'service identity input is malformed',
+			0,
+			detail({ expected: serviceIdentity.value, actual: error.code }),
+		);
 	}
 	return {
 		ok: false,
@@ -1187,6 +1197,43 @@ function validateServiceIdentity(
 		index: 0,
 		...(error.details === undefined ? {} : { details: error.details }),
 	};
+}
+
+function validateVerifyServiceIdentityInput(
+	serviceIdentity: VerifyServiceIdentityInput,
+): ValidationCheckResult {
+	if (!isRecord(serviceIdentity)) {
+		return failure('subject_alt_name_mismatch', 'service identity input is malformed', 0);
+	}
+	if (serviceIdentity.type !== 'dns' && serviceIdentity.type !== 'ip') {
+		return failure(
+			'subject_alt_name_mismatch',
+			'service identity input is malformed',
+			0,
+			detail({ actual: String(serviceIdentity.type) }),
+		);
+	}
+	if (typeof serviceIdentity.value !== 'string') {
+		return failure(
+			'subject_alt_name_mismatch',
+			'service identity input is malformed',
+			0,
+			detail({ actual: serviceIdentity.type }),
+		);
+	}
+	if (serviceIdentity.type === 'ip') {
+		try {
+			parseIpAddressToBytes(serviceIdentity.value);
+		} catch {
+			return failure(
+				'subject_alt_name_mismatch',
+				'service identity input is malformed',
+				0,
+				detail({ expected: serviceIdentity.value, actual: 'ip' }),
+			);
+		}
+	}
+	return { ok: true };
 }
 
 // ---------------------------------------------------------------------------

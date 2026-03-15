@@ -2,7 +2,7 @@
 
 The TypeScript PKI library that tells you _why_ verification failed, not just that it did.
 
-Zero dependencies. Under 50 kB gzipped. Pure WebCrypto. Runs everywhere: Node, Bun, Deno, browsers, Cloudflare Workers.
+Zero dependencies. Tree-shakeable subpath entrypoints. Pure WebCrypto. Runs everywhere: Node, Bun, Deno, browsers, Cloudflare Workers.
 
 > **Prerelease** — API may change before 1.0.
 
@@ -142,8 +142,8 @@ The core stays ESM-only and side-effect-free.
 | Encrypted PKCS#8 and PFX       | PBES2 with AES-CBC plus PBKDF2 HMAC-SHA1/HMAC-SHA256                 |
 | Encrypted traditional PEM      | AES-128-CBC, AES-192-CBC, AES-256-CBC for RSA and EC private keys    |
 
-`micro509` does not try to mirror every primitive some WebCrypto runtimes expose.\
-It does not add `DSA`, `Ed448`, `RSA-OAEP`, `ECDH`, `X25519`, or generic symmetric-crypto APIs just because they may exist elsewhere.
+`micro509` focuses on algorithms that are broadly interoperable in modern X.509 and WebCrypto-backed runtimes.\
+It intentionally excludes niche, blockchain-specific, or key-agreement-only primitives from the core API unless they are needed for a PKI workflow the library explicitly supports.
 
 ## Standards status
 
