@@ -196,10 +196,16 @@ export { nameFieldKeyFromOid } from '#micro509/internal/x509/name-fields.ts';
 export function encodeName(input: NameInput): Uint8Array {
 	const attributes = isNameAttributes(input) ? input : nameObjectToAttributes(input);
 	if (attributes.length === 0) {
-		throw new Error('Name must contain at least one attribute');
+		return sequence([]);
 	}
 
 	return sequence(attributes.map(encodeNameAttributeAsSet));
+}
+
+/** True when a {@linkcode NameInput} resolves to zero attributes (empty DN). */
+export function isNameInputEmpty(input: NameInput): boolean {
+	const attributes = isNameAttributes(input) ? input : nameObjectToAttributes(input);
+	return attributes.length === 0;
 }
 
 /**

@@ -31,7 +31,7 @@ import {
 } from '#micro509/keys/keys.ts';
 import { pemEncode } from '#micro509/pem/pem.ts';
 import { buildCertificateExtensions, type CertificateExtensionsInput } from './extensions.ts';
-import { encodeName, type NameInput } from './name.ts';
+import { encodeName, isNameInputEmpty, type NameInput } from './name.ts';
 
 export type * from '#micro509/internal/crypto/signing.ts';
 export type * from '#micro509/keys/keys.ts';
@@ -252,10 +252,12 @@ export async function createCertificate(
 		: undefined;
 	const signatureAlgorithm = getSignatureAlgorithm(input.signerPrivateKey, input.signature);
 	const validity = resolveValidity(input.validity);
+	const subjectIsEmpty = isNameInputEmpty(input.subject);
 	const extensions = buildCertificateExtensions(
 		subjectPublicKeyInfo,
 		issuerPublicKeyInfo,
 		input.extensions,
+		subjectIsEmpty,
 	);
 	const tbsCertificate = sequence([
 		explicitContext(0, integerFromNumber(2)),

@@ -673,12 +673,15 @@ const AUTHORITY_INFO_ACCESS_METHOD_OIDS: Record<KnownAuthorityInfoAccessMethod, 
  * @param subjectPublicKeyInfo DER-encoded SPKI of the subject.
  * @param issuerPublicKeyInfo DER-encoded SPKI of the issuer, or `undefined` for self-signed.
  * @param input Optional extension configuration.
+ * @param subjectIsEmpty Whether the certificate subject DN is empty. When `true`, the
+ *   subjectAltName extension is marked critical per RFC 5280 §4.2.1.6.
  * @returns Array of DER-encoded Extension SEQUENCEs.
  */
 export function buildCertificateExtensions(
 	subjectPublicKeyInfo: Uint8Array,
 	issuerPublicKeyInfo: Uint8Array | undefined,
 	input: CertificateExtensionsInput | undefined,
+	subjectIsEmpty = false,
 ): Uint8Array[] {
 	const extensions: Uint8Array[] = [];
 	const seen = new Set<string>();
@@ -700,6 +703,7 @@ export function buildCertificateExtensions(
 	}
 	appendConfiguredExtensions(extensions, seen, input, 'certificate', {
 		includeBasicConstraints: false,
+		subjectIsEmpty,
 	});
 	return extensions;
 }
@@ -729,6 +733,8 @@ function appendConfiguredExtensions(
 	context: ExtensionRegistryContext,
 	options: {
 		readonly includeBasicConstraints: boolean;
+		/** When true, SAN is marked critical per RFC 5280 §4.2.1.6. */
+		readonly subjectIsEmpty?: boolean;
 	},
 ): void {
 	if (input === undefined) {
@@ -746,7 +752,15 @@ function appendConfiguredExtensions(
 		pushKnownExtension(encoded, seen, KEY_USAGE_EXTENSION_DEFINITION, input.keyUsage);
 	}
 	if (input.subjectAltNames !== undefined && input.subjectAltNames.length > 0) {
-		pushKnownExtension(encoded, seen, SUBJECT_ALT_NAME_EXTENSION_DEFINITION, input.subjectAltNames);
+		// RFC 5280 §4.2.1.6: SAN MUST be critical when subject DN is empty.
+		const sanCritical = options.subjectIsEmpty === true ? true : undefined;
+		pushKnownExtension(
+			encoded,
+			seen,
+			SUBJECT_ALT_NAME_EXTENSION_DEFINITION,
+			input.subjectAltNames,
+			sanCritical,
+		);
 	}
 	if (input.extendedKeyUsage !== undefined && input.extendedKeyUsage.length > 0) {
 		pushKnownExtension(

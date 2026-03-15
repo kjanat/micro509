@@ -5,6 +5,7 @@ import {
 	createSelfSignedCertificate,
 	findExtension,
 	generateKeyPair,
+	parseCertificateDer,
 	parseCertificatePem,
 	verifyCertificateChain,
 } from '#micro509';
@@ -423,10 +424,19 @@ describe('certificate', () => {
 		).rejects.toThrow('notAfter must be after notBefore');
 	});
 
-	it('rejects empty subject name', async () => {
-		expect(createSelfSignedCertificate({ subject: {} })).rejects.toThrow(
-			'Name must contain at least one attribute',
-		);
+	it('allows empty subject DN when SAN is present and marks SAN critical (RFC 5280 §4.2.1.6)', async () => {
+		const { certificate } = await createSelfSignedCertificate({
+			subject: {},
+			extensions: {
+				subjectAltNames: [{ type: 'dns', value: 'example.com' }],
+			},
+		});
+		const parsed = parseCertificateDer(certificate.der);
+		expect(parsed.subject.rdns).toHaveLength(0);
+		expect(parsed.subjectAltNames).toEqual([{ type: 'dns', value: 'example.com' }]);
+		// SAN must be critical when subject DN is empty
+		const sanExtension = parsed.extensions.find((ext: { oid: string }) => ext.oid === '2.5.29.17');
+		expect(sanExtension?.critical).toBe(true);
 	});
 
 	it('rejects invalid country code length', async () => {
