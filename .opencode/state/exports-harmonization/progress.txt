@@ -1,0 +1,19 @@
+# Progress Log
+
+PRD: exports-harmonization
+Started: 2026-03-15
+
+## Codebase Patterns
+
+- Public entrypoints should follow product domains, not source filenames.
+- `micro509` is the canonical documented import; domain entrypoints are the exhaustive advanced homes.
+- Each public symbol has one owner domain; root re-exports are convenience only.
+- `src/internal/**` is the only implementation-only tree; helpers and engines should move there aggressively.
+- Public leaf modules may import internals, but must not import public barrels.
+- Tests that need internals should use an explicit `#micro509/internal/*` path, not incidental public seams.
+- `tsdown.config.ts` should be the source of truth for public entrypoints; JSR exports should be generated from the same entry map.
+- `micro509/pem` stays public as a narrow PKI boundary module.
+- PKCS#12 MAC support stays under `pkcs`, but should be documented as advanced plumbing, not a headline surface.
+
+---
+<!-- Task logs below - APPEND ONLY -->
