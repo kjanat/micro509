@@ -10,10 +10,10 @@ CRL and OCSP evidence collection, parsing, and proof checks.
 
 ```tree
 revocation/
-|- crl.ts           # CRL parsing + lifecycle
-|- ocsp.ts          # OCSP request/response lifecycle
-|- revocation.ts    # revocation orchestration
-|- index.ts         # domain barrel
+├── crl.ts          # CRL parsing + lifecycle
+├── ocsp.ts         # OCSP request/response lifecycle
+├── revocation.ts   # revocation orchestration
+└── index.ts        # domain barrel
 ```
 
 ## WHERE TO LOOK

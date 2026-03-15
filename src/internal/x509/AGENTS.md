@@ -11,9 +11,9 @@ Extension registry and name metadata shared by parser and builder boundaries.
 
 ```tree
 internal/x509/
-|- extension-registry.ts  # extension decode/encode dispatch and accumulators
-|- extension-bits.ts      # bit-string encoding/decoding helpers
-`- name-fields.ts         # DN OID and string-encoder metadata
+├── extension-registry.ts  # extension decode/encode dispatch and accumulators
+├── extension-bits.ts      # bit-string encoding/decoding helpers
+└── name-fields.ts         # DN OID and string-encoder metadata
 ```
 
 ## WHERE TO LOOK

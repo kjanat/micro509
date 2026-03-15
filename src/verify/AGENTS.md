@@ -11,11 +11,11 @@ decisions.
 
 ```tree
 verify/
-|- verify.ts           # chain candidate + result orchestration
-|- identity.ts         # service identity input/types + matcher
-|- name-constraints.ts # domain-specific name constraint API types
-|- policy.ts           # policy-related public surfaces
-|- index.ts            # domain barrel
+├── verify.ts           # chain candidate + result orchestration
+├── identity.ts         # service identity input/types + matcher
+├── name-constraints.ts # domain-specific name constraint API types
+├── policy.ts           # policy-related public surfaces
+└── index.ts            # domain barrel
 ```
 
 ## WHERE TO LOOK

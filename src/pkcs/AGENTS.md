@@ -11,10 +11,10 @@ container auth flows.
 
 ```tree
 pkcs/
-|- pfx.ts         # PFX + PBES2 parse/encode/create
-|- pkcs7.ts       # PKCS#7 signed-data flows
-|- pkcs12-mac.ts  # MAC helper and compatibility surface
-`- index.ts       # domain barrel
+├── pfx.ts         # PFX + PBES2 parse/encode/create
+├── pkcs7.ts       # PKCS#7 signed-data flows
+├── pkcs12-mac.ts  # MAC helper and compatibility surface
+└── index.ts       # domain barrel
 ```
 
 ## WHERE TO LOOK

@@ -11,9 +11,9 @@ CRL, and OCSP workflows.
 
 ```tree
 asn1/
-|- asn1.ts    # TLV readers/writers
-|- der.ts     # DER-specific conversions and guards
-`- oids.ts    # OID symbol map and algorithm registry
+├── asn1.ts  # TLV readers/writers
+├── der.ts   # DER-specific conversions and guards
+└── oids.ts  # OID symbol map and algorithm registry
 ```
 
 ## WHERE TO LOOK

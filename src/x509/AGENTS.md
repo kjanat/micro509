@@ -11,12 +11,12 @@ extension data.
 
 ```tree
 x509/
-|- certificate.ts   # certificate creation
-|- csr.ts           # CSR creation
-|- name.ts          # X.500 name encoding and helpers
-|- extensions.ts    # extension schema + encoder/decoder map
-|- parse.ts         # certificate/CSR parse boundary
-`- index.ts         # domain barrel
+├── certificate.ts  # certificate creation
+├── csr.ts          # CSR creation
+├── name.ts         # X.500 name encoding and helpers
+├── extensions.ts   # extension schema + encoder/decoder map
+├── parse.ts        # certificate/CSR parse boundary
+└── index.ts        # domain barrel
 ```
 
 ## WHERE TO LOOK

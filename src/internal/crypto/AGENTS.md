@@ -11,14 +11,14 @@ X.509 builders, and revocation/signature checks.
 
 ```tree
 crypto/
-|- crypto.ts         # helper entrypoints for WebCrypto integration
-|- ecdsa.ts          # curve/hash profile support checks
-|- hash.ts           # digest helpers
-|- pbes2.ts          # password-based encryption profile logic
-|- rsa-pss.ts        # RSA-PSS parameter decode/validate
-|- signing.ts        # public signing profile mapping
-|- sig-verify.ts     # verification profile mapping
-`- webcrypto.ts      # backend availability checks
+├── crypto.ts      # helper entrypoints for WebCrypto integration
+├── ecdsa.ts       # curve/hash profile support checks
+├── hash.ts        # digest helpers
+├── pbes2.ts       # password-based encryption profile logic
+├── rsa-pss.ts     # RSA-PSS parameter decode/validate
+├── signing.ts     # public signing profile mapping
+├── sig-verify.ts  # verification profile mapping
+└── webcrypto.ts   # backend availability checks
 ```
 
 ## WHERE TO LOOK

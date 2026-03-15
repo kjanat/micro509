@@ -13,10 +13,10 @@ and differential checks against OpenSSL.
 
 ```tree
 test/
-|- *.test.ts               # feature suites
-|- helpers.ts              # shared DER/cert builders and fixture utilities
-|- oracles/openssl.ts      # normalized OpenSSL wrapper
-`- fixtures/pkits/certs/   # vendored PKITS certificates
+├── *.test.ts              # feature suites
+├── helpers.ts             # shared DER/cert builders and fixture utilities
+├── oracles/openssl.ts     # normalized OpenSSL wrapper
+└── fixtures/pkits/certs/  # vendored PKITS certificates
 ```
 
 ## WHERE TO LOOK

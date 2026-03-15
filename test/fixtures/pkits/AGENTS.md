@@ -10,7 +10,7 @@ This directory is not a general fixture area. It exists to preserve the imported
 
 ```tree
 pkits/
-- certs/   # vendored `.crt` inputs loaded by filename stem
+└── certs/  # vendored `.crt` inputs loaded by filename stem
 ```
 
 ## WHERE TO LOOK

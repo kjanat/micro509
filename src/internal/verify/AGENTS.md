@@ -11,9 +11,9 @@ search mechanics that are shared across certificate and revocation checks.
 
 ```tree
 internal/verify/
-|- verify-path.ts         # chain search and trust-anchor matching
-|- policy-engine.ts       # RFC 9618 policy graph evaluation
-`- name-constraints-engine.ts # RFC 5280 name constraints state and checks
+├── verify-path.ts             # chain search and trust-anchor matching
+├── policy-engine.ts           # RFC 9618 policy graph evaluation
+└── name-constraints-engine.ts # RFC 5280 name constraints state and checks
 ```
 
 ## WHERE TO LOOK

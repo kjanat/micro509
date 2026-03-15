@@ -11,11 +11,11 @@ Public barrels should stay in domain folders.
 
 ```tree
 internal/
-|- asn1/      # DER/ASN.1 primitives, OID catalog
-|- crypto/    # signature, hashing, encryption helpers
-|- shared/    # base64 + ip helpers with cross-domain use
-|- verify/    # policy/path/constraint engines
-`- x509/      # extension/name metadata helpers
+├── asn1/    # DER/ASN.1 primitives, OID catalog
+├── crypto/  # signature, hashing, encryption helpers
+├── shared/  # base64 + ip helpers with cross-domain use
+├── verify/  # policy/path/constraint engines
+└── x509/    # extension/name metadata helpers
 ```
 
 ## WHERE TO LOOK
