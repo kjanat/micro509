@@ -14,9 +14,10 @@
 	},
 	"publish": {
 		"include": [
-			"src",
+			"src/**/*.ts",
 			"package.json",
-			"README.md"
+			"README.md",
+			"!**/AGENTS.md"
 		],
 		"exclude": []
 	}
