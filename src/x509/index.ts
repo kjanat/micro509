@@ -4,6 +4,7 @@
  * @module
  */
 
+export type { SignatureProfileInput } from '#micro509/internal/crypto/signing.ts';
 export type {
 	CertificateMaterial,
 	CreateCertificateInput,
@@ -73,7 +74,6 @@ export {
 	parseAuthorityInfoAccessMethodOid,
 	parseExtendedKeyUsageOid,
 } from './extensions.ts';
-export type { SignatureProfileInput } from '#micro509/internal/crypto/signing.ts';
 export type {
 	NameAttribute,
 	NameFieldKey,

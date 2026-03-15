@@ -22,8 +22,8 @@ import {
 	sequence,
 	tlv,
 } from '#micro509/internal/asn1/der.ts';
-import { sha1 } from '#micro509/internal/crypto/hash.ts';
 import { OIDS } from '#micro509/internal/asn1/oids.ts';
+import { sha1 } from '#micro509/internal/crypto/hash.ts';
 import {
 	encodeAlgorithmIdentifier,
 	getSignatureAlgorithm,

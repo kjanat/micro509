@@ -8,14 +8,6 @@
  */
 
 import {
-	type DistributionPoint,
-	type DistributionPointReason,
-	encodeCrlDistributionPoints,
-	encodeSubjectAltName,
-	type GeneralName,
-	type IssuingDistributionPoint,
-} from '#micro509/x509/extensions.ts';
-import {
 	childrenOf,
 	decodeIntegerNumber,
 	decodeObjectIdentifier,
@@ -61,6 +53,16 @@ import {
 	parseDistributionPointReasonFlagsContent,
 } from '#micro509/internal/x509/extension-bits.ts';
 import { exportSpkiDer } from '#micro509/keys/keys.ts';
+import { pemDecode, pemEncode } from '#micro509/pem/pem.ts';
+import type { ErrorResult, Micro509Error } from '#micro509/result/result.ts';
+import {
+	type DistributionPoint,
+	type DistributionPointReason,
+	encodeCrlDistributionPoints,
+	encodeSubjectAltName,
+	type GeneralName,
+	type IssuingDistributionPoint,
+} from '#micro509/x509/extensions.ts';
 import {
 	encodeName,
 	encodeRelativeDistinguishedName,
@@ -78,13 +80,11 @@ import {
 	parseCertificateDer,
 	parseCertificatePem,
 } from '#micro509/x509/parse.ts';
-import { pemDecode, pemEncode } from '#micro509/pem/pem.ts';
-import type { ErrorResult, Micro509Error } from '#micro509/result/result.ts';
 
+export type * from '#micro509/result/result.ts';
 export type * from '#micro509/x509/extensions.ts';
 export type * from '#micro509/x509/name.ts';
 export type * from '#micro509/x509/parse.ts';
-export type * from '#micro509/result/result.ts';
 
 /**
  * Single revoked certificate entry for {@linkcode createCertificateRevocationList}.

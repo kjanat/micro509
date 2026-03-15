@@ -9,12 +9,12 @@
  */
 
 import { normalizeIpAddress } from '#micro509/internal/shared/ip.ts';
-import type { ParsedCertificate } from '#micro509/x509/parse.ts';
 import type { ErrorResult, Micro509Error, Result } from '#micro509/result/result.ts';
 import { errorResult, micro509Error, successResult } from '#micro509/result/result.ts';
+import type { ParsedCertificate } from '#micro509/x509/parse.ts';
 
-export type * from '#micro509/x509/parse.ts';
 export type * from '#micro509/result/result.ts';
+export type * from '#micro509/x509/parse.ts';
 
 /** DNS hostname reference identifier. */
 export interface DnsServiceIdentityInput {

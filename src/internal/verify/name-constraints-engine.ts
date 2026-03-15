@@ -7,21 +7,6 @@
  * @module
  */
 
-import type {
-	NameConstraintForm,
-	NameConstraints,
-	ParsedNameConstraintForm,
-	SubjectAltName,
-} from '#micro509/x509/extensions.ts';
-import { nameFieldKeyFromOid } from '#micro509/x509/name.ts';
-import type { InitialNameConstraintsInput } from '#micro509/verify/name-constraints.ts';
-import type {
-	ParsedCertificate,
-	ParsedName,
-	ParsedNameAttribute,
-	ParsedRelativeDistinguishedName,
-} from '#micro509/x509/parse.ts';
-import type { Micro509Error } from '#micro509/result/result.ts';
 import {
 	childrenOf,
 	decodeObjectIdentifier,
@@ -41,6 +26,21 @@ import {
 	decodeIpAddress,
 	parseIpAddressToBytes,
 } from '#micro509/internal/shared/ip.ts';
+import type { Micro509Error } from '#micro509/result/result.ts';
+import type { InitialNameConstraintsInput } from '#micro509/verify/name-constraints.ts';
+import type {
+	NameConstraintForm,
+	NameConstraints,
+	ParsedNameConstraintForm,
+	SubjectAltName,
+} from '#micro509/x509/extensions.ts';
+import { nameFieldKeyFromOid } from '#micro509/x509/name.ts';
+import type {
+	ParsedCertificate,
+	ParsedName,
+	ParsedNameAttribute,
+	ParsedRelativeDistinguishedName,
+} from '#micro509/x509/parse.ts';
 
 /**
  * Opaque state seeded from {@linkcode InitialNameConstraintsInput} and consumed

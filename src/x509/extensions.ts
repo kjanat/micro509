@@ -26,6 +26,9 @@ import {
 	tlv,
 	utf8String,
 } from '#micro509/internal/asn1/der.ts';
+import { OIDS } from '#micro509/internal/asn1/oids.ts';
+import { sha1 } from '#micro509/internal/crypto/hash.ts';
+import { parseIpAddressToBytes } from '#micro509/internal/shared/ip.ts';
 import {
 	encodeDistributionPointReasonFlagsContent,
 	encodeKeyUsageExtension,
@@ -48,10 +51,7 @@ import {
 	SUBJECT_ALT_NAME_EXTENSION_DEFINITION,
 	SUBJECT_KEY_IDENTIFIER_EXTENSION_DEFINITION,
 } from '#micro509/internal/x509/extension-registry.ts';
-import { sha1 } from '#micro509/internal/crypto/hash.ts';
-import { parseIpAddressToBytes } from '#micro509/internal/shared/ip.ts';
 import { encodeRelativeDistinguishedName, type RelativeDistinguishedNameInput } from './name.ts';
-import { OIDS } from '#micro509/internal/asn1/oids.ts';
 
 export type { NameAttribute, NameFieldKey, RelativeDistinguishedNameInput } from './name.ts';
 

@@ -7,11 +7,11 @@
 
 import { toArrayBuffer } from '#micro509/internal/asn1/asn1.ts';
 import { OIDS } from '#micro509/internal/asn1/oids.ts';
+import type { PublicKeyImportInput, RsaHash, RsaScheme } from '#micro509/keys/keys.ts';
+import { importSpkiDer } from '#micro509/keys/keys.ts';
 import { alternateEcdsaSignatureEncoding } from './ecdsa.ts';
 import { parseRsaPssParameters } from './rsa-pss.ts';
 import { getCrypto } from './webcrypto.ts';
-import type { PublicKeyImportInput, RsaHash, RsaScheme } from '#micro509/keys/keys.ts';
-import { importSpkiDer } from '#micro509/keys/keys.ts';
 
 export {
 	alternateEcdsaSignatureEncoding,

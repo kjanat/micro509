@@ -29,6 +29,8 @@ import {
 	readRootElement,
 	readSequenceChildren,
 } from '#micro509/internal/asn1/der.ts';
+import { OIDS } from '#micro509/internal/asn1/oids.ts';
+import { decodeIpAddress } from '#micro509/internal/shared/ip.ts';
 import {
 	parseDistributionPointReasonFlagsContent,
 	parseKeyUsageExtension,
@@ -38,6 +40,7 @@ import {
 	type KnownParsedExtensionAccumulator,
 	type MutableKnownParsedExtensionAccumulator,
 } from '#micro509/internal/x509/extension-registry.ts';
+import { pemDecode, splitPemBlocks } from '#micro509/pem/pem.ts';
 import type {
 	AuthorityInformationAccess,
 	BasicConstraints,
@@ -55,10 +58,7 @@ import type {
 	SubjectAltName,
 } from './extensions.ts';
 import { parseAuthorityInfoAccessMethodOid, parseExtendedKeyUsageOid } from './extensions.ts';
-import { decodeIpAddress } from '#micro509/internal/shared/ip.ts';
 import { type NameFieldKey, nameFieldKeyFromOid } from './name.ts';
-import { OIDS } from '#micro509/internal/asn1/oids.ts';
-import { pemDecode, splitPemBlocks } from '#micro509/pem/pem.ts';
 
 export type {
 	AuthorityInformationAccess,

@@ -8,6 +8,15 @@
  * @module
  */
 
+import { hexToBytes, toHex } from '#micro509/internal/asn1/asn1.ts';
+import {
+	DEFAULT_MAX_DER_DEPTH,
+	implicitPrimitiveContext,
+	octetString,
+	readRootElement,
+	sequence,
+} from '#micro509/internal/asn1/der.ts';
+import { OIDS } from '#micro509/internal/asn1/oids.ts';
 import type {
 	AuthorityInformationAccess,
 	BasicConstraints,
@@ -51,15 +60,6 @@ import {
 	parsePolicyMappings,
 	parseSubjectAltNames,
 } from '#micro509/x509/parse.ts';
-import { hexToBytes, toHex } from '#micro509/internal/asn1/asn1.ts';
-import {
-	DEFAULT_MAX_DER_DEPTH,
-	implicitPrimitiveContext,
-	octetString,
-	readRootElement,
-	sequence,
-} from '#micro509/internal/asn1/der.ts';
-import { OIDS } from '#micro509/internal/asn1/oids.ts';
 
 /** Whether an extension applies to certificate parsing, CSR parsing, or both. */
 export type ExtensionRegistryContext = 'certificate' | 'csr';

@@ -7,7 +7,6 @@
  * @module
  */
 
-import { buildCertificateExtensions, type CertificateExtensionsInput } from './extensions.ts';
 import {
 	bitString,
 	explicitContext,
@@ -30,12 +29,13 @@ import {
 	type KeyAlgorithmInput,
 	type KeyPairMaterial,
 } from '#micro509/keys/keys.ts';
-import { encodeName, type NameInput } from './name.ts';
 import { pemEncode } from '#micro509/pem/pem.ts';
+import { buildCertificateExtensions, type CertificateExtensionsInput } from './extensions.ts';
+import { encodeName, type NameInput } from './name.ts';
 
-export type * from './extensions.ts';
 export type * from '#micro509/internal/crypto/signing.ts';
 export type * from '#micro509/keys/keys.ts';
+export type * from './extensions.ts';
 export type * from './name.ts';
 
 /**

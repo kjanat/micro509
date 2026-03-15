@@ -7,7 +7,6 @@
  * @module
  */
 
-import { buildRequestedExtensions, type CertificateExtensionsInput } from './extensions.ts';
 import {
 	bitString,
 	concatBytes,
@@ -26,11 +25,12 @@ import {
 } from '#micro509/internal/crypto/signing.ts';
 import { base64Encode } from '#micro509/internal/shared/base64.ts';
 import { exportSpkiDer } from '#micro509/keys/keys.ts';
-import { encodeName, type NameInput } from './name.ts';
 import { pemEncode } from '#micro509/pem/pem.ts';
+import { buildRequestedExtensions, type CertificateExtensionsInput } from './extensions.ts';
+import { encodeName, type NameInput } from './name.ts';
 
-export type * from './extensions.ts';
 export type * from '#micro509/internal/crypto/signing.ts';
+export type * from './extensions.ts';
 export type * from './name.ts';
 
 /** Input for {@linkcode createCertificateSigningRequest}. */

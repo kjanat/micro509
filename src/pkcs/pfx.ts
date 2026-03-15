@@ -29,24 +29,24 @@ import {
 } from '#micro509/internal/crypto/pbes2.ts';
 import { base64Encode } from '#micro509/internal/shared/base64.ts';
 import { exportPkcs8Der } from '#micro509/keys/keys.ts';
-import { type ParsedCertificate, parseCertificateDer } from '#micro509/x509/parse.ts';
 import { pemEncode, splitPemBlocks } from '#micro509/pem/pem.ts';
+import type { ErrorResult, Micro509Error } from '#micro509/result/result.ts';
+import { type ParsedCertificate, parseCertificateDer } from '#micro509/x509/parse.ts';
 import {
 	createPkcs12MacData,
 	type ParsedPkcs12MacData,
 	type Pkcs12MacOptions,
 	parsePkcs12MacData,
 } from './pkcs12-mac.ts';
-import type { ErrorResult, Micro509Error } from '#micro509/result/result.ts';
 
 export type {
 	Pbes2EncryptionOptions,
 	Pbes2EncryptionScheme,
 	Pbes2Prf,
 } from '#micro509/internal/crypto/pbes2.ts';
+export type * from '#micro509/result/result.ts';
 export type * from '#micro509/x509/parse.ts';
 export type * from './pkcs12-mac.ts';
-export type * from '#micro509/result/result.ts';
 
 /** PEM string or DER bytes for a certificate to include in a PFX bag. */
 export type PfxCertificateSource = string | Uint8Array;

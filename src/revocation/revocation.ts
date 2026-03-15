@@ -5,18 +5,18 @@
  * @module
  */
 
+import type { Result } from '#micro509/result/result.ts';
+import type { ParsedCertificate } from '#micro509/x509/parse.ts';
+import { parseCertificateDer, parseCertificatePem } from '#micro509/x509/parse.ts';
 import type { CrlApplicabilityFailureReason, CrlSource, RevocationReason } from './crl.ts';
 import { checkCertificateRevocationAgainstCrl } from './crl.ts';
 import type { OcspCertificateSource, OcspRequestSource, ParsedOcspResponse } from './ocsp.ts';
 import { validateOcspResponse } from './ocsp.ts';
-import type { ParsedCertificate } from '#micro509/x509/parse.ts';
-import { parseCertificateDer, parseCertificatePem } from '#micro509/x509/parse.ts';
-import type { Result } from '#micro509/result/result.ts';
 
+export type * from '#micro509/result/result.ts';
+export type * from '#micro509/x509/parse.ts';
 export type * from './crl.ts';
 export type * from './ocsp.ts';
-export type * from '#micro509/x509/parse.ts';
-export type * from '#micro509/result/result.ts';
 
 /** Unified revocation outcome across CRL and OCSP evidence. */
 export type RevocationStatus = 'good' | 'revoked' | 'unknown';
