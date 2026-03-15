@@ -1,5 +1,5 @@
 name: Deploy Site
-on: { push: { branches: [master] }, workflow_dispatch: }
+on: { push: { branches: [master, vitepress] }, workflow_dispatch: }
 permissions: { contents: read, pages: write, id-token: write }
 concurrency: { group: pages, cancel-in-progress: false }
 jobs:
