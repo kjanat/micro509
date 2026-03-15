@@ -5,6 +5,7 @@ Started: 2026-03-15
 
 ## Codebase Patterns
 
+- Scaffold future public domains as pure re-export barrels first; that creates stable landing zones before risky file moves.
 - Public entrypoints should follow product domains, not source filenames.
 - `micro509` is the canonical documented import; domain entrypoints are the exhaustive advanced homes.
 - Each public symbol has one owner domain; root re-exports are convenience only.
@@ -24,3 +25,9 @@ Started: 2026-03-15
 - Implemented a full symbol ownership inventory in `specs/exports-harmonization-ownership.md`.
 - Files changed: `specs/exports-harmonization-ownership.md`, `.opencode/state/exports-harmonization/prd.json`, `.opencode/state/exports-harmonization/progress.txt`.
 - **Learnings:** root currently mirrors almost every public file-shaped seam, so the ownership matrix needs to be domain-first and root-second; obvious internalization candidates already exist in the current public surface (`getCrypto`, `wrapKeyPair`, `base64Encode`, `base64Decode`).
+
+## Task - [scaffold-domain-layout]
+
+- Implemented staged domain barrels under `src/x509/`, `src/verify/`, `src/revocation/`, `src/pkcs/`, `src/keys/`, `src/pem/`, and `src/result/`, plus a tracked `src/internal/` tree with planned sub-buckets.
+- Files changed: `package.json`, `src/AGENTS.md`, `src/x509/index.ts`, `src/verify/index.ts`, `src/revocation/index.ts`, `src/pkcs/index.ts`, `src/keys/index.ts`, `src/pem/index.ts`, `src/result/index.ts`, `src/internal/README.md`, `src/internal/asn1/README.md`, `src/internal/crypto/README.md`, `src/internal/x509/README.md`, `src/internal/verify/README.md`, `src/internal/shared/README.md`, `.opencode/state/exports-harmonization/prd.json`, `.opencode/state/exports-harmonization/progress.txt`.
+- **Learnings:** a re-export-only scaffold lets the package keep its flat implementation files while establishing the future domain and internal boundaries; `#micro509/internal/*` needs to exist in `package.json` before test and source imports can migrate cleanly.

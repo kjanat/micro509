@@ -18,7 +18,7 @@
 			"description": "Create the target domain folders and explicit internal tree without changing behavior. Done when:\n- `src/x509`, `src/verify`, `src/revocation`, `src/pkcs`, `src/keys`, `src/pem`, `src/result`, and `src/internal` exist\n- local import aliases support explicit internal imports for tests and implementation code\n- barrel and import-direction rules are documented near the codebase\n- existing code still builds before the large moves start",
 			"depends": ["map-symbol-ownership"],
 			"priority": "architecture",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "move-internal-modules",

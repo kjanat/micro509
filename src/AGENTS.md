@@ -1,6 +1,8 @@
 # src/ - Module Map
 
-Flat module layer. Public modules and internal support files live side-by-side.
+Flat module layer. Public modules and internal support files currently live
+side-by-side while the exports-harmonization refactor scaffolds the target
+domain layout.
 
 ## OVERVIEW
 
@@ -31,6 +33,14 @@ Flat module layer. Public modules and internal support files live side-by-side.
 - Large files follow a common shape: public types first, public functions next, private helpers last.
 - `verify.ts` owns validation semantics; `parse.ts` owns input decoding semantics; do not blur that boundary.
 - If an algorithm is added, update both `signing.ts` and `sig-verify.ts`.
+- Staged domain barrels live in `src/x509/`, `src/verify/`, `src/revocation/`,
+  `src/pkcs/`, `src/keys/`, `src/pem/`, and `src/result/`; keep them as
+  re-export-only scaffolding until the real file moves land.
+- Implementation-only modules belong under `src/internal/**`; tests and source
+  should prefer `#micro509/internal/*` over incidental flat-file imports once an
+  internal home exists.
+- Public leaf modules may import `src/internal/**` directly, but must not import
+  public barrels such as `src/index.ts` or sibling domain `index.ts` files.
 
 ## HOTSPOTS
 
@@ -43,7 +53,8 @@ Flat module layer. Public modules and internal support files live side-by-side.
 
 ## ANTI-PATTERNS
 
-- Do not add subdirectories under `src/` without strong reason; flat layout is intentional.
+- Do not add new public subdirectories beyond the staged domain layout without a
+  matching exports decision.
 - Do not expose internal helpers from `index.ts` unless the package API truly expands.
 - Do not mix parse-time tolerance with validation-time policy; reject malformed input early.
 - Do not add one-off assertion shortcuts that violate repo typing bans.

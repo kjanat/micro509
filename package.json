@@ -19,7 +19,8 @@
 	"type": "module",
 	"imports": {
 		"#micro509": "./src/index.ts",
-		"#micro509/*": "./src/*"
+		"#micro509/*": "./src/*",
+		"#micro509/internal/*": "./src/internal/*"
 	},
 	"exports": {
 		".": "./dist/index.js",
