@@ -5,7 +5,7 @@
  * @module
  */
 
-import { integer, readSequenceChildren, sequence } from './der.ts';
+import { integer, readSequenceChildren, sequence } from '../asn1/der.ts';
 
 /** Convert a DER-encoded ECDSA signature (SEQUENCE of two INTEGERs) to fixed-width raw `r || s`. */
 export function derEcdsaSignatureToRaw(signature: Uint8Array, partLength: number): Uint8Array {

@@ -7,7 +7,7 @@
  * @module
  */
 
-import { hexToBytes } from './asn1.ts';
+import { hexToBytes } from './internal/asn1/asn1.ts';
 import {
 	bool,
 	concatBytes,
@@ -25,11 +25,11 @@ import {
 	sequence,
 	tlv,
 	utf8String,
-} from './der.ts';
+} from './internal/asn1/der.ts';
 import {
 	encodeDistributionPointReasonFlagsContent,
 	encodeKeyUsageExtension,
-} from './extension-bits.ts';
+} from './internal/x509/extension-bits.ts';
 import {
 	AUTHORITY_INFO_ACCESS_EXTENSION_DEFINITION,
 	AUTHORITY_KEY_IDENTIFIER_EXTENSION_DEFINITION,
@@ -47,11 +47,11 @@ import {
 	POLICY_MAPPINGS_EXTENSION_DEFINITION,
 	SUBJECT_ALT_NAME_EXTENSION_DEFINITION,
 	SUBJECT_KEY_IDENTIFIER_EXTENSION_DEFINITION,
-} from './extension-registry.ts';
-import { sha1 } from './hash.ts';
-import { parseIpAddressToBytes } from './ip.ts';
+} from './internal/x509/extension-registry.ts';
+import { sha1 } from './internal/crypto/hash.ts';
+import { parseIpAddressToBytes } from './internal/shared/ip.ts';
 import { encodeRelativeDistinguishedName, type RelativeDistinguishedNameInput } from './name.ts';
-import { OIDS } from './oids.ts';
+import { OIDS } from './internal/asn1/oids.ts';
 
 export type { NameAttribute, NameFieldKey, RelativeDistinguishedNameInput } from './name.ts';
 

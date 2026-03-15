@@ -15,22 +15,22 @@ import {
 	objectIdentifier,
 	sequence,
 	setOf,
-} from './der.ts';
+} from './internal/asn1/der.ts';
 import { buildRequestedExtensions, type CertificateExtensionsInput } from './extensions.ts';
 import { exportSpkiDer } from './keys.ts';
 import { encodeName, type NameInput } from './name.ts';
-import { OIDS } from './oids.ts';
+import { OIDS } from './internal/asn1/oids.ts';
 import { base64Encode, pemEncode } from './pem.ts';
 import {
 	encodeAlgorithmIdentifier,
 	getSignatureAlgorithm,
 	type SignatureProfileInput,
 	signBytes,
-} from './signing.ts';
+} from './internal/crypto/signing.ts';
 
 export type * from './extensions.ts';
 export type * from './name.ts';
-export type * from './signing.ts';
+export type * from './internal/crypto/signing.ts';
 
 /** Input for {@linkcode createCertificateSigningRequest}. */
 export interface CreateCsrInput {

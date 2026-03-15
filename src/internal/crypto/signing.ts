@@ -5,11 +5,11 @@
  * @module
  */
 
-import { nullValue, objectIdentifier, sequence } from './der.ts';
+import { nullValue, objectIdentifier, sequence } from '../asn1/der.ts';
+import { OIDS } from '../asn1/oids.ts';
 import { rawEcdsaSignatureToDer } from './ecdsa.ts';
-import { getCrypto } from './keys.ts';
-import { OIDS } from './oids.ts';
 import { encodeRsaPssParameters, type RsaPssHash, rsaPssParametersForHash } from './rsa-pss.ts';
+import { getCrypto } from './webcrypto.ts';
 
 /**
  * Controls how the signature algorithm is chosen.

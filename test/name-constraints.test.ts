@@ -5,8 +5,14 @@ import {
 	generateKeyPair,
 	verifyCertificateChain,
 } from '#micro509';
-import { objectIdentifier, printableString, sequence, setOf, utf8String } from '#micro509/der.ts';
-import { OIDS } from '#micro509/oids.ts';
+import {
+	objectIdentifier,
+	printableString,
+	sequence,
+	setOf,
+	utf8String,
+} from '#micro509/internal/asn1/der.ts';
+import { OIDS } from '#micro509/internal/asn1/oids.ts';
 
 type TestDnStringEncoding = 'printable' | 'utf8';
 type DirectoryNameAttribute = {

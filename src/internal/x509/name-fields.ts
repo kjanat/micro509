@@ -5,9 +5,9 @@
  * @module
  */
 
-import { ia5String, printableString, utf8String } from './der.ts';
-import type { NameFieldKey, NameObject } from './name.ts';
-import { OIDS } from './oids.ts';
+import type { NameFieldKey, NameObject } from '../../name.ts';
+import { ia5String, printableString, utf8String } from '../asn1/der.ts';
+import { OIDS } from '../asn1/oids.ts';
 
 /**
  * OID and ASN.1 string encoder for one distinguished-name attribute type.

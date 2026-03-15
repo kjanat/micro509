@@ -6,7 +6,7 @@ import {
 	extractBitStringValue,
 	parseTime,
 	requireElement,
-} from '#micro509/asn1.ts';
+} from '#micro509/internal/asn1/asn1.ts';
 import {
 	assertDerMaxDepth,
 	bitString,
@@ -25,8 +25,8 @@ import {
 	sequence,
 	setOf,
 	time,
-} from '#micro509/der.ts';
-import { parseKeyUsageExtension } from '#micro509/extension-bits.ts';
+} from '#micro509/internal/asn1/der.ts';
+import { parseKeyUsageExtension } from '#micro509/internal/x509/extension-bits.ts';
 import {
 	buildCertificateExtensions,
 	encodeCertificatePolicies,
@@ -41,15 +41,15 @@ import {
 	expandIpv6,
 	normalizeIpAddress,
 	parseIpAddressToBytes,
-} from '#micro509/ip.ts';
-import { OIDS } from '#micro509/oids.ts';
-import { parsePbes2AlgorithmIdentifier } from '#micro509/pbes2.ts';
+} from '#micro509/internal/shared/ip.ts';
+import { OIDS } from '#micro509/internal/asn1/oids.ts';
+import { parsePbes2AlgorithmIdentifier } from '#micro509/internal/crypto/pbes2.ts';
 import { createPkcs12MacData, parsePkcs12MacData } from '#micro509/pkcs12-mac.ts';
 import {
 	encodeRsaPssParameters,
 	parseRsaPssParameters,
 	rsaPssParametersForHash,
-} from '#micro509/rsa-pss.ts';
+} from '#micro509/internal/crypto/rsa-pss.ts';
 import {
 	alternateEcdsaSignatureEncoding,
 	concatFixedWidth,
@@ -59,8 +59,11 @@ import {
 	rawEcdsaSignatureToDer,
 	requireEcPublicKey,
 	requireRsaPublicKey,
-} from '#micro509/sig-verify.ts';
-import { encodeAlgorithmIdentifier, getSignatureAlgorithm } from '#micro509/signing.ts';
+} from '#micro509/internal/crypto/sig-verify.ts';
+import {
+	encodeAlgorithmIdentifier,
+	getSignatureAlgorithm,
+} from '#micro509/internal/crypto/signing.ts';
 
 // ---------------------------------------------------------------------------
 // DER encoding edge cases

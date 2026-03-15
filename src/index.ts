@@ -367,7 +367,7 @@ export {
 	getCertificateOcspResponderUris,
 	resolveOcspResponderCandidates,
 } from './revocation.ts';
-export type { SignatureProfileInput } from './signing.ts';
+export type { SignatureProfileInput } from './internal/crypto/signing.ts';
 export type {
 	BuildCandidatePathInput,
 	BuildCandidatePathResult,

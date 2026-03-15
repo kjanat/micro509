@@ -15,8 +15,8 @@ import {
 	octetString,
 	sequence,
 	setOf,
-} from '#micro509/der.ts';
-import { OIDS } from '#micro509/oids.ts';
+} from '#micro509/internal/asn1/der.ts';
+import { OIDS } from '#micro509/internal/asn1/oids.ts';
 
 describe('pfx', () => {
 	it('creates and parses passwordless PFX bundles', async () => {

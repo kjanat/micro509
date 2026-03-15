@@ -23,8 +23,8 @@ import {
 	setOf,
 	tlv,
 	utf8String,
-} from '#micro509/der.ts';
-import { OIDS } from '#micro509/oids.ts';
+} from '#micro509/internal/asn1/der.ts';
+import { OIDS } from '#micro509/internal/asn1/oids.ts';
 import { parseNameConstraints } from '#micro509/parse.ts';
 import {
 	importRsaPrivateKeyWithScheme,

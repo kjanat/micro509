@@ -24,8 +24,8 @@ import {
 	createNameConstraintValidationState,
 	evaluateNameConstraints,
 	type NameConstraintValidationState,
-} from './name-constraints-engine.ts';
-import { OIDS } from './oids.ts';
+} from './internal/verify/name-constraints-engine.ts';
+import { OIDS } from './internal/asn1/oids.ts';
 import type { ParsedCertificate, ParsedCertificateSigningRequest } from './parse.ts';
 import { parseCertificateSigningRequestDer, parseCertificateSigningRequestPem } from './parse.ts';
 import type { PolicyValidationInput, PolicyValidationOutcome } from './policy.ts';
@@ -33,7 +33,7 @@ import {
 	createPolicyValidationState,
 	evaluatePolicyChain,
 	type PolicyValidationState,
-} from './policy-engine.ts';
+} from './internal/verify/policy-engine.ts';
 import type {
 	ErrorResult,
 	IndexedErrorResult,
@@ -41,7 +41,7 @@ import type {
 	Micro509Error,
 } from './result.ts';
 import { errorResult, indexedErrorResult, indexedMicro509Error, micro509Error } from './result.ts';
-import { verifySignedDataDetailed } from './sig-verify.ts';
+import { verifySignedDataDetailed } from './internal/crypto/sig-verify.ts';
 import {
 	buildChainInternal,
 	countCaCertificatesBelowParsed,
@@ -50,7 +50,7 @@ import {
 	loadCertificates,
 	loadSingleCertificate,
 	verifyCertificateSignature,
-} from './verify-path.ts';
+} from './internal/verify/verify-path.ts';
 
 export type * from './extensions.ts';
 export type * from './identity.ts';

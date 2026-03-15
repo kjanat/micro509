@@ -1,8 +1,7 @@
 # src/ - Module Map
 
-Flat module layer. Public modules and internal support files currently live
-side-by-side while the exports-harmonization refactor scaffolds the target
-domain layout.
+Public modules stay flat while implementation-only helpers now live under
+`src/internal/**`.
 
 ## OVERVIEW
 
@@ -10,20 +9,20 @@ domain layout.
 
 ## WHERE TO LOOK
 
-| Area               | File                                      | Notes                                                            |
-| ------------------ | ----------------------------------------- | ---------------------------------------------------------------- |
-| Root exports       | `index.ts`                                | package root barrel                                              |
-| Certificate create | `certificate.ts`                          | create + self-signed create                                      |
-| CSR create         | `csr.ts`                                  | CSR builder only                                                 |
-| Parse boundary     | `parse.ts`                                | certificate/CSR DER+PEM parse, extension decoding                |
-| Path validation    | `verify.ts`                               | path build + validate, policy, constraints, identity composition |
-| Revocation by CRL  | `crl.ts`, `revocation.ts`                 | CRL lifecycle and orchestration                                  |
-| OCSP               | `ocsp.ts`                                 | request/response create + parse + verify + validate              |
-| Key material       | `keys.ts`                                 | keygen and key import/export                                     |
-| Container formats  | `pfx.ts`, `pkcs7.ts`, `pkcs12-mac.ts`     | PKCS#12/PFX, PKCS#7, MAC helpers                                 |
-| Extension schema   | `extensions.ts`                           | typed extension inputs plus ASN.1 encoders                       |
-| ASN.1 internals    | `der.ts`, `asn1.ts`, `oids.ts`            | shared low-level spine                                           |
-| Crypto internals   | `signing.ts`, `sig-verify.ts`, `pbes2.ts` | algorithm mapping, verify, PBES2                                 |
+| Area               | File                                  | Notes                                                            |
+| ------------------ | ------------------------------------- | ---------------------------------------------------------------- |
+| Root exports       | `index.ts`                            | package root barrel                                              |
+| Certificate create | `certificate.ts`                      | create + self-signed create                                      |
+| CSR create         | `csr.ts`                              | CSR builder only                                                 |
+| Parse boundary     | `parse.ts`                            | certificate/CSR DER+PEM parse, extension decoding                |
+| Path validation    | `verify.ts`                           | path build + validate, policy, constraints, identity composition |
+| Revocation by CRL  | `crl.ts`, `revocation.ts`             | CRL lifecycle and orchestration                                  |
+| OCSP               | `ocsp.ts`                             | request/response create + parse + verify + validate              |
+| Key material       | `keys.ts`                             | keygen and key import/export                                     |
+| Container formats  | `pfx.ts`, `pkcs7.ts`, `pkcs12-mac.ts` | PKCS#12/PFX, PKCS#7, MAC helpers                                 |
+| Extension schema   | `extensions.ts`                       | typed extension inputs plus ASN.1 encoders                       |
+| ASN.1 internals    | `internal/asn1/*.ts`                  | shared low-level spine                                           |
+| Crypto internals   | `internal/crypto/*.ts`                | algorithm mapping, verify, PBES2, WebCrypto runtime              |
 
 ## LOCAL CONVENTIONS
 
@@ -32,7 +31,8 @@ domain layout.
 - Internal helper modules are not re-exported just because tests use them.
 - Large files follow a common shape: public types first, public functions next, private helpers last.
 - `verify.ts` owns validation semantics; `parse.ts` owns input decoding semantics; do not blur that boundary.
-- If an algorithm is added, update both `signing.ts` and `sig-verify.ts`.
+- If an algorithm is added, update both `internal/crypto/signing.ts` and
+  `internal/crypto/sig-verify.ts`.
 - Staged domain barrels live in `src/x509/`, `src/verify/`, `src/revocation/`,
   `src/pkcs/`, `src/keys/`, `src/pem/`, and `src/result/`; keep them as
   re-export-only scaffolding until the real file moves land.

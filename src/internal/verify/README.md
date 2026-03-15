@@ -1,3 +1,3 @@
 # Verify Internals
 
-Planned home for path building, policy, name-constraint, and validation engines.
+Home for path building, policy, and name-constraint engines.

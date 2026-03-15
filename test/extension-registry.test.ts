@@ -5,16 +5,16 @@ import {
 	parseCertificateDer,
 	parseCertificateSigningRequestDer,
 } from '#micro509';
-import { toHex } from '#micro509/asn1.ts';
+import { toHex } from '#micro509/internal/asn1/asn1.ts';
 import {
 	buildSubjectKeyIdentifierFromSubjectPublicKeyInfo,
 	type ExtensionDefinition,
 	getExtensionDefinition,
 	listExtensionDefinitions,
 	type MutableKnownParsedExtensionAccumulator,
-} from '#micro509/extension-registry.ts';
+} from '#micro509/internal/x509/extension-registry.ts';
 import { exportSpkiDer, generateKeyPair } from '#micro509/keys.ts';
-import { OIDS } from '#micro509/oids.ts';
+import { OIDS } from '#micro509/internal/asn1/oids.ts';
 
 function applyDefinition<TParsed, TInput>(
 	definition: ExtensionDefinition<TParsed, TInput>,

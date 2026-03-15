@@ -1,7 +1,7 @@
 # Internal Layout
 
-This tree is the implementation-only destination for helper modules, engines,
-and low-level primitives during the exports-harmonization refactor.
+This tree is the implementation-only home for helper modules, engines, and
+low-level primitives during the exports-harmonization refactor.
 
 Rules:
 
@@ -10,7 +10,7 @@ Rules:
 - never import public barrels from internal modules
 - use `#micro509/internal/*` for tests and source once an internal file exists
 
-Planned buckets:
+Current buckets:
 
 - `asn1/` - ASN.1, DER, OID helpers
 - `crypto/` - signing, hashing, PBES2, and algorithm helpers

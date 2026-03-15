@@ -7,7 +7,12 @@
  * @module
  */
 
-import { decodeIntegerNumber, decodeObjectIdentifier, toArrayBuffer, toHex } from './asn1.ts';
+import {
+	decodeIntegerNumber,
+	decodeObjectIdentifier,
+	toArrayBuffer,
+	toHex,
+} from './internal/asn1/asn1.ts';
 import {
 	concatBytes,
 	integerFromNumber,
@@ -16,9 +21,9 @@ import {
 	octetString,
 	readSequenceChildren,
 	sequence,
-} from './der.ts';
-import { getCrypto } from './keys.ts';
-import { OIDS } from './oids.ts';
+} from './internal/asn1/der.ts';
+import { OIDS } from './internal/asn1/oids.ts';
+import { getCrypto } from './internal/crypto/webcrypto.ts';
 
 /** Input for {@linkcode createPkcs12MacData}. */
 export interface Pkcs12MacOptions {

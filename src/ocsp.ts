@@ -18,8 +18,8 @@ import {
 	requireElement,
 	toArrayBuffer,
 	toHex,
-} from './asn1.ts';
-import type { DerElement } from './der.ts';
+} from './internal/asn1/asn1.ts';
+import type { DerElement } from './internal/asn1/der.ts';
 import {
 	bitString,
 	concatBytes,
@@ -35,9 +35,15 @@ import {
 	sequence,
 	time,
 	tlv,
-} from './der.ts';
-import { getCrypto } from './keys.ts';
-import { OIDS } from './oids.ts';
+} from './internal/asn1/der.ts';
+import { OIDS } from './internal/asn1/oids.ts';
+import { verifySignedData } from './internal/crypto/sig-verify.ts';
+import {
+	encodeAlgorithmIdentifier,
+	getSignatureAlgorithm,
+	signBytes,
+} from './internal/crypto/signing.ts';
+import { getCrypto } from './internal/crypto/webcrypto.ts';
 import type {
 	ParsedCertificate,
 	ParsedName,
@@ -47,8 +53,6 @@ import type {
 import { parseCertificateDer, parseCertificatePem } from './parse.ts';
 import { base64Encode, pemDecode, pemEncode } from './pem.ts';
 import type { ErrorResult, Micro509Error } from './result.ts';
-import { verifySignedData } from './sig-verify.ts';
-import { encodeAlgorithmIdentifier, getSignatureAlgorithm, signBytes } from './signing.ts';
 import { verifyCertificateChain } from './verify.ts';
 
 export type * from './parse.ts';

@@ -25,9 +25,9 @@ import {
 	setOf,
 	time,
 	tlv,
-} from '#micro509/der.ts';
+} from '#micro509/internal/asn1/der.ts';
 import { encodeName } from '#micro509/name.ts';
-import { OIDS } from '#micro509/oids.ts';
+import { OIDS } from '#micro509/internal/asn1/oids.ts';
 import { parseNameConstraints } from '#micro509/parse.ts';
 
 describe('parse', () => {

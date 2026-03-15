@@ -5,14 +5,29 @@
  * @module
  */
 
-import { decodeObjectIdentifier, hexToBytes, toArrayBuffer, toHex } from './asn1.ts';
-import { nullValue, objectIdentifier, octetString, readSequenceChildren, sequence } from './der.ts';
-import { md5 } from './hash.ts';
-import { OIDS } from './oids.ts';
-import { decryptPbes2, encryptPbes2, type Pbes2EncryptionOptions } from './pbes2.ts';
+import { decodeObjectIdentifier, hexToBytes, toArrayBuffer, toHex } from './internal/asn1/asn1.ts';
+import {
+	nullValue,
+	objectIdentifier,
+	octetString,
+	readSequenceChildren,
+	sequence,
+} from './internal/asn1/der.ts';
+import { OIDS } from './internal/asn1/oids.ts';
+import { md5 } from './internal/crypto/hash.ts';
+import {
+	decryptPbes2,
+	encryptPbes2,
+	type Pbes2EncryptionOptions,
+} from './internal/crypto/pbes2.ts';
+import { getCrypto } from './internal/crypto/webcrypto.ts';
 import { base64Decode, base64Encode, pemDecode, pemEncode } from './pem.ts';
 
-export type { Pbes2EncryptionOptions, Pbes2EncryptionScheme, Pbes2Prf } from './pbes2.ts';
+export type {
+	Pbes2EncryptionOptions,
+	Pbes2EncryptionScheme,
+	Pbes2Prf,
+} from './internal/crypto/pbes2.ts';
 
 /** Hash algorithm paired with an RSA key. */
 export type RsaHash = 'SHA-256' | 'SHA-384' | 'SHA-512';
@@ -55,7 +70,7 @@ export type KeyAlgorithmInput =
 	| EcKeyAlgorithmInput
 	| Ed25519KeyAlgorithmInput;
 
-/** Key pair with convenience export helpers. Returned by {@linkcode generateKeyPair} and {@linkcode wrapKeyPair}. */
+/** Key pair with convenience export helpers. Returned by {@linkcode generateKeyPair}. */
 export interface KeyPairMaterial {
 	/** The WebCrypto public key (extractable, `verify` usage). */
 	readonly publicKey: CryptoKey;
@@ -121,15 +136,6 @@ export interface LegacyPemEncryptionOptions {
 	readonly cipher?: 'AES-128-CBC' | 'AES-192-CBC' | 'AES-256-CBC';
 }
 
-/** Return the global `Crypto` object. Throws when WebCrypto is unavailable. */
-export function getCrypto(): Crypto {
-	const c = globalThis.crypto;
-	if (c?.subtle === undefined) {
-		throw new Error('WebCrypto subtle API is required');
-	}
-	return c;
-}
-
 /**
  * Generate an asymmetric key pair for signing and verification.
  *
@@ -160,8 +166,7 @@ export async function generateKeyPair(
 	return wrapKeyPair(generated.publicKey, generated.privateKey);
 }
 
-/** Wrap an existing WebCrypto key pair into a {@linkcode KeyPairMaterial} with export helpers. */
-export function wrapKeyPair(publicKey: CryptoKey, privateKey: CryptoKey): KeyPairMaterial {
+function wrapKeyPair(publicKey: CryptoKey, privateKey: CryptoKey): KeyPairMaterial {
 	return {
 		publicKey,
 		privateKey,

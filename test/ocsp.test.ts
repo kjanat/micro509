@@ -14,7 +14,7 @@ import {
 	validateOcspResponse,
 	verifyOcspResponse,
 } from '#micro509';
-import { childrenOf, toHex } from '#micro509/asn1.ts';
+import { childrenOf, toHex } from '#micro509/internal/asn1/asn1.ts';
 import {
 	bitString,
 	explicitContext,
@@ -26,10 +26,14 @@ import {
 	readElement,
 	sequence,
 	tlv,
-} from '#micro509/der.ts';
-import { sha1 } from '#micro509/hash.ts';
-import { OIDS } from '#micro509/oids.ts';
-import { encodeAlgorithmIdentifier, getSignatureAlgorithm, signBytes } from '#micro509/signing.ts';
+} from '#micro509/internal/asn1/der.ts';
+import { sha1 } from '#micro509/internal/crypto/hash.ts';
+import { OIDS } from '#micro509/internal/asn1/oids.ts';
+import {
+	encodeAlgorithmIdentifier,
+	getSignatureAlgorithm,
+	signBytes,
+} from '#micro509/internal/crypto/signing.ts';
 import { hexToBytes } from './helpers.ts';
 
 describe('ocsp', () => {

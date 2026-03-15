@@ -7,8 +7,8 @@
  * @module
  */
 
-import { childrenOf, decodeObjectIdentifier, toHex } from './asn1.ts';
-import type { DerElement } from './der.ts';
+import { childrenOf, decodeObjectIdentifier, toHex } from './internal/asn1/asn1.ts';
+import type { DerElement } from './internal/asn1/der.ts';
 import {
 	DEFAULT_MAX_DER_DEPTH,
 	explicitContext,
@@ -20,11 +20,15 @@ import {
 	sequence,
 	setOf,
 	tlv,
-} from './der.ts';
+} from './internal/asn1/der.ts';
 import { exportPkcs8Der } from './keys.ts';
-import { OIDS } from './oids.ts';
+import { OIDS } from './internal/asn1/oids.ts';
 import { type ParsedCertificate, parseCertificateDer } from './parse.ts';
-import { decryptPbes2, encryptPbes2, type Pbes2EncryptionOptions } from './pbes2.ts';
+import {
+	decryptPbes2,
+	encryptPbes2,
+	type Pbes2EncryptionOptions,
+} from './internal/crypto/pbes2.ts';
 import { base64Encode, pemEncode, splitPemBlocks } from './pem.ts';
 import {
 	createPkcs12MacData,
@@ -35,7 +39,11 @@ import {
 import type { ErrorResult, Micro509Error } from './result.ts';
 
 export type * from './parse.ts';
-export type { Pbes2EncryptionOptions, Pbes2EncryptionScheme, Pbes2Prf } from './pbes2.ts';
+export type {
+	Pbes2EncryptionOptions,
+	Pbes2EncryptionScheme,
+	Pbes2Prf,
+} from './internal/crypto/pbes2.ts';
 export type * from './pkcs12-mac.ts';
 export type * from './result.ts';
 

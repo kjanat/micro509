@@ -38,8 +38,8 @@ test/
 - Use `bun:test` directly; no mocking framework.
 - Prefer real keys/certs/CRLs/OCSP payloads, often synthesized in-process.
 - Assert typed result objects and error codes, not human-readable strings.
-- Internal imports through `#micro509/*.ts` are acceptable when validating
-  low-level invariants.
+- Internal imports through `#micro509/internal/*` are acceptable when
+  validating low-level invariants.
 - Shared helpers belong in `helpers.ts`; OpenSSL process wrappers belong in
   `oracles/`.
 - Differential tests compare normalized semantics only, never exact CLI

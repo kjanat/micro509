@@ -6,9 +6,12 @@ import {
 	parseCertificateSigningRequestPem,
 	verifyCertificateSigningRequest,
 } from '#micro509';
-import { objectIdentifier, readElement, sequence, tlv } from '#micro509/der.ts';
-import { OIDS } from '#micro509/oids.ts';
-import { encodeRsaPssParameters, rsaPssParametersForHash } from '#micro509/rsa-pss.ts';
+import { objectIdentifier, readElement, sequence, tlv } from '#micro509/internal/asn1/der.ts';
+import { OIDS } from '#micro509/internal/asn1/oids.ts';
+import {
+	encodeRsaPssParameters,
+	rsaPssParametersForHash,
+} from '#micro509/internal/crypto/rsa-pss.ts';
 import {
 	childrenOf,
 	decodeObjectIdentifier,

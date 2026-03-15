@@ -16,7 +16,7 @@ import {
 	parseTime,
 	requireElement,
 	toHex,
-} from './asn1.ts';
+} from './internal/asn1/asn1.ts';
 import {
 	bitString,
 	bool,
@@ -37,11 +37,11 @@ import {
 	sequence,
 	time,
 	tlv,
-} from './der.ts';
+} from './internal/asn1/der.ts';
 import {
 	encodeDistributionPointReasonFlagsContent,
 	parseDistributionPointReasonFlagsContent,
-} from './extension-bits.ts';
+} from './internal/x509/extension-bits.ts';
 import {
 	type DistributionPoint,
 	type DistributionPointReason,
@@ -50,8 +50,8 @@ import {
 	type GeneralName,
 	type IssuingDistributionPoint,
 } from './extensions.ts';
-import { sha1 } from './hash.ts';
-import { decodeIpAddress } from './ip.ts';
+import { sha1 } from './internal/crypto/hash.ts';
+import { decodeIpAddress } from './internal/shared/ip.ts';
 import { exportSpkiDer } from './keys.ts';
 import {
 	encodeName,
@@ -60,7 +60,7 @@ import {
 	type NameInput,
 	nameFieldKeyFromOid,
 } from './name.ts';
-import { OIDS } from './oids.ts';
+import { OIDS } from './internal/asn1/oids.ts';
 import {
 	type ParsedCertificate,
 	type ParsedDistributionPoint,
@@ -73,8 +73,12 @@ import {
 } from './parse.ts';
 import { base64Encode, pemDecode, pemEncode } from './pem.ts';
 import type { ErrorResult, Micro509Error } from './result.ts';
-import { verifySignedData } from './sig-verify.ts';
-import { encodeAlgorithmIdentifier, getSignatureAlgorithm, signBytes } from './signing.ts';
+import { verifySignedData } from './internal/crypto/sig-verify.ts';
+import {
+	encodeAlgorithmIdentifier,
+	getSignatureAlgorithm,
+	signBytes,
+} from './internal/crypto/signing.ts';
 
 export type * from './extensions.ts';
 export type * from './name.ts';

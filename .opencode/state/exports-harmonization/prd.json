@@ -27,7 +27,7 @@
 			"description": "Re-home implementation-only files under `src/internal/**` and rewrite imports downward. Done when:\n- ASN.1, crypto helpers, shared helpers, extension helpers, and verification engines live under `src/internal/**`\n- public leaf modules import internals directly instead of public barrels\n- no public entrypoint maps to helper modules moved under `src/internal/**`\n- typecheck and build still pass after the move set",
 			"depends": ["scaffold-domain-layout"],
 			"priority": "architecture",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "build-x509-domain",

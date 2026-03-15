@@ -8,14 +8,6 @@
  * @module
  */
 
-import { hexToBytes, toHex } from './asn1.ts';
-import {
-	DEFAULT_MAX_DER_DEPTH,
-	implicitPrimitiveContext,
-	octetString,
-	readRootElement,
-	sequence,
-} from './der.ts';
 import type {
 	AuthorityInformationAccess,
 	BasicConstraints,
@@ -29,7 +21,7 @@ import type {
 	PolicyConstraints,
 	PolicyMappings,
 	SubjectAltName,
-} from './extensions.ts';
+} from '../../extensions.ts';
 import {
 	buildSubjectKeyIdentifier,
 	encodeAuthorityInfoAccess,
@@ -43,9 +35,8 @@ import {
 	encodePolicyConstraints,
 	encodePolicyMappings,
 	encodeSubjectAltName,
-} from './extensions.ts';
-import { OIDS } from './oids.ts';
-import type { ParsedCertificate, ParsedDistributionPoint } from './parse.ts';
+} from '../../extensions.ts';
+import type { ParsedCertificate, ParsedDistributionPoint } from '../../parse.ts';
 import {
 	parseAuthorityInfoAccess,
 	parseAuthorityKeyIdentifier,
@@ -59,7 +50,16 @@ import {
 	parsePolicyConstraints,
 	parsePolicyMappings,
 	parseSubjectAltNames,
-} from './parse.ts';
+} from '../../parse.ts';
+import { hexToBytes, toHex } from '../asn1/asn1.ts';
+import {
+	DEFAULT_MAX_DER_DEPTH,
+	implicitPrimitiveContext,
+	octetString,
+	readRootElement,
+	sequence,
+} from '../asn1/der.ts';
+import { OIDS } from '../asn1/oids.ts';
 
 /** Whether an extension applies to certificate parsing, CSR parsing, or both. */
 export type ExtensionRegistryContext = 'certificate' | 'csr';

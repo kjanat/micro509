@@ -7,6 +7,6 @@
 export * from '../certificate.ts';
 export * from '../csr.ts';
 export * from '../extensions.ts';
+export type { SignatureProfileInput } from '../internal/crypto/signing.ts';
 export * from '../name.ts';
 export * from '../parse.ts';
-export type { SignatureProfileInput } from '../signing.ts';

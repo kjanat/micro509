@@ -5,12 +5,13 @@
  * @module
  */
 
-import { toArrayBuffer } from './asn1.ts';
+import { toArrayBuffer } from '../asn1/asn1.ts';
+import { OIDS } from '../asn1/oids.ts';
 import { alternateEcdsaSignatureEncoding } from './ecdsa.ts';
-import type { PublicKeyImportInput, RsaHash, RsaScheme } from './keys.ts';
-import { getCrypto, importSpkiDer } from './keys.ts';
-import { OIDS } from './oids.ts';
 import { parseRsaPssParameters } from './rsa-pss.ts';
+import { getCrypto } from './webcrypto.ts';
+import type { PublicKeyImportInput, RsaHash, RsaScheme } from '../../keys.ts';
+import { importSpkiDer } from '../../keys.ts';
 
 export {
 	alternateEcdsaSignatureEncoding,

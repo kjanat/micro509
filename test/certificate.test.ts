@@ -8,9 +8,12 @@ import {
 	parseCertificatePem,
 	verifyCertificateChain,
 } from '#micro509';
-import { readElement } from '#micro509/der.ts';
-import { OIDS } from '#micro509/oids.ts';
-import { encodeRsaPssParameters, rsaPssParametersForHash } from '#micro509/rsa-pss.ts';
+import { readElement } from '#micro509/internal/asn1/der.ts';
+import { OIDS } from '#micro509/internal/asn1/oids.ts';
+import {
+	encodeRsaPssParameters,
+	rsaPssParametersForHash,
+} from '#micro509/internal/crypto/rsa-pss.ts';
 import { childrenOf, decodeObjectIdentifier, hasExtensionOid } from './helpers.ts';
 
 describe('certificate', () => {

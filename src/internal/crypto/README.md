@@ -1,3 +1,4 @@
 # Crypto Internals
 
-Planned home for signing, hashing, PBES2, and algorithm implementation helpers.
+Home for signing, hashing, PBES2, signature verification, and WebCrypto runtime
+helpers.

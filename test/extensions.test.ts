@@ -6,7 +6,7 @@ import type {
 	PolicyMappings,
 	PolicyQualifierInfo,
 } from '#micro509';
-import { OIDS } from '#micro509/oids.ts';
+import { OIDS } from '#micro509/internal/asn1/oids.ts';
 
 describe('policy extension surface', () => {
 	it('exports policy extension OIDs', () => {

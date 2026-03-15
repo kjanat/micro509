@@ -8,7 +8,7 @@
  * @module
  */
 
-import { normalizeIpAddress } from './ip.ts';
+import { normalizeIpAddress } from './internal/shared/ip.ts';
 import type { ParsedCertificate } from './parse.ts';
 import type { ErrorResult, Micro509Error, Result } from './result.ts';
 import { errorResult, micro509Error, successResult } from './result.ts';

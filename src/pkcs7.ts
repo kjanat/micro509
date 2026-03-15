@@ -14,8 +14,8 @@ import {
 	requireElement,
 	toArrayBuffer,
 	toHex,
-} from './asn1.ts';
-import type { DerElement } from './der.ts';
+} from './internal/asn1/asn1.ts';
+import type { DerElement } from './internal/asn1/der.ts';
 import {
 	concatBytes,
 	DEFAULT_MAX_DER_DEPTH,
@@ -26,14 +26,14 @@ import {
 	readSequenceChildren,
 	sequence,
 	setOf,
-} from './der.ts';
-import { getCrypto } from './keys.ts';
-import { OIDS } from './oids.ts';
+} from './internal/asn1/der.ts';
+import { OIDS } from './internal/asn1/oids.ts';
+import { verifySignedData } from './internal/crypto/sig-verify.ts';
+import { getCrypto } from './internal/crypto/webcrypto.ts';
 import type { ParsedCertificate } from './parse.ts';
 import { parseCertificateDer } from './parse.ts';
 import { base64Encode, pemEncode, splitPemBlocks } from './pem.ts';
 import type { ErrorResult, Micro509Error } from './result.ts';
-import { verifySignedData } from './sig-verify.ts';
 
 export type * from './parse.ts';
 export type * from './result.ts';

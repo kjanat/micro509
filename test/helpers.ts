@@ -7,7 +7,7 @@ import {
 	generateKeyPair,
 	importPkcs8Der,
 } from '#micro509';
-import { toArrayBuffer } from '#micro509/asn1.ts';
+import { toArrayBuffer } from '#micro509/internal/asn1/asn1.ts';
 import {
 	bitString,
 	bool,
@@ -23,11 +23,15 @@ import {
 	sequence,
 	setOf,
 	tlv,
-} from '#micro509/der.ts';
+} from '#micro509/internal/asn1/der.ts';
 import type { GeneralName } from '#micro509/extensions.ts';
 import { encodeSubjectAltName } from '#micro509/extensions.ts';
-import { OIDS } from '#micro509/oids.ts';
-import { encodeAlgorithmIdentifier, getSignatureAlgorithm, signBytes } from '#micro509/signing.ts';
+import { OIDS } from '#micro509/internal/asn1/oids.ts';
+import {
+	encodeAlgorithmIdentifier,
+	getSignatureAlgorithm,
+	signBytes,
+} from '#micro509/internal/crypto/signing.ts';
 
 export function childrenOf(
 	source: Uint8Array,

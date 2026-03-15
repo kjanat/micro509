@@ -7,28 +7,35 @@
  * @module
  */
 
-import { bitString, explicitContext, integer, integerFromNumber, sequence, time } from './der.ts';
-import { buildCertificateExtensions, type CertificateExtensionsInput } from './extensions.ts';
 import {
-	exportSpkiDer,
-	generateKeyPair,
-	getCrypto,
-	type KeyAlgorithmInput,
-	type KeyPairMaterial,
-} from './keys.ts';
-import { encodeName, type NameInput } from './name.ts';
-import { base64Encode, pemEncode } from './pem.ts';
+	bitString,
+	explicitContext,
+	integer,
+	integerFromNumber,
+	sequence,
+	time,
+} from './internal/asn1/der.ts';
 import {
 	encodeAlgorithmIdentifier,
 	getSignatureAlgorithm,
 	type SignatureProfileInput,
 	signBytes,
-} from './signing.ts';
+} from './internal/crypto/signing.ts';
+import { getCrypto } from './internal/crypto/webcrypto.ts';
+import { buildCertificateExtensions, type CertificateExtensionsInput } from './extensions.ts';
+import {
+	exportSpkiDer,
+	generateKeyPair,
+	type KeyAlgorithmInput,
+	type KeyPairMaterial,
+} from './keys.ts';
+import { encodeName, type NameInput } from './name.ts';
+import { base64Encode, pemEncode } from './pem.ts';
 
+export type * from './internal/crypto/signing.ts';
 export type * from './extensions.ts';
 export type * from './keys.ts';
 export type * from './name.ts';
-export type * from './signing.ts';
 
 /**
  * Configures the certificate validity window.

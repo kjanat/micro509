@@ -7,7 +7,7 @@
  * @module
  */
 
-import { decodeIntegerNumber, decodeObjectIdentifier, toArrayBuffer } from './asn1.ts';
+import { decodeIntegerNumber, decodeObjectIdentifier, toArrayBuffer } from '../asn1/asn1.ts';
 import {
 	integerFromNumber,
 	nullValue,
@@ -15,9 +15,9 @@ import {
 	octetString,
 	readSequenceChildren,
 	sequence,
-} from './der.ts';
-import { getCrypto } from './keys.ts';
-import { OIDS } from './oids.ts';
+} from '../asn1/der.ts';
+import { OIDS } from '../asn1/oids.ts';
+import { getCrypto } from './webcrypto.ts';
 
 /** AES-CBC key sizes supported by this PBES2 implementation. */
 export type Pbes2EncryptionScheme = 'aes128-cbc' | 'aes192-cbc' | 'aes256-cbc';
