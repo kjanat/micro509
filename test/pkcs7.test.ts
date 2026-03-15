@@ -229,6 +229,80 @@ describe('pkcs7', () => {
 		expect(result.ok).toBe(true);
 	});
 
+	it('verifyPkcs7SignedData accepts signer lookup by subject key identifier', async () => {
+		const signer = await createSelfSignedCertificate({
+			subject: { commonName: 'SKI Verify Signer' },
+		});
+		const parsedSigner = parseCertificatePem(signer.certificate.pem);
+		const subjectKeyIdentifier = parsedSigner.subjectKeyIdentifier;
+		if (subjectKeyIdentifier === undefined) {
+			throw new Error('expected subjectKeyIdentifier');
+		}
+		const content = new TextEncoder().encode('SKI verify test');
+		const der = await createCmsSignedDataWithSignedAttrs(
+			parsedSigner,
+			signer.keyPair.privateKey,
+			content,
+		);
+		const parsed = parsePkcs7SignedDataDer(der);
+		expect(parsed.ok).toBe(true);
+		if (!parsed.ok) throw new Error('unreachable');
+		const signerInfo = parsed.value.signerInfos[0];
+		if (signerInfo === undefined) {
+			throw new Error('expected signer info');
+		}
+		const {
+			issuer: _ignoredIssuer,
+			serialNumberHex: _ignoredSerialNumberHex,
+			...signerInfoWithoutIssuerAndSerial
+		} = signerInfo;
+		const result = await verifyPkcs7SignedData({
+			...parsed.value,
+			signerInfos: [
+				{
+					...signerInfoWithoutIssuerAndSerial,
+					subjectKeyIdentifier,
+				},
+			],
+		});
+		expect(result.ok).toBe(true);
+	});
+
+	it('verifyPkcs7SignedData does not fall back to SKI when issuer-and-serial is present', async () => {
+		const signer = await createSelfSignedCertificate({
+			subject: { commonName: 'Dual Identifier Signer' },
+		});
+		const parsedSigner = parseCertificatePem(signer.certificate.pem);
+		const subjectKeyIdentifier = parsedSigner.subjectKeyIdentifier;
+		if (subjectKeyIdentifier === undefined) {
+			throw new Error('expected subjectKeyIdentifier');
+		}
+		const content = new TextEncoder().encode('Dual identifier test');
+		const der = await createCmsSignedDataWithSignedAttrs(
+			parsedSigner,
+			signer.keyPair.privateKey,
+			content,
+		);
+		const parsed = parsePkcs7SignedDataDer(der);
+		expect(parsed.ok).toBe(true);
+		if (!parsed.ok) throw new Error('unreachable');
+		const signerInfo = parsed.value.signerInfos[0];
+		if (signerInfo === undefined) {
+			throw new Error('expected signer info');
+		}
+		const result = await verifyPkcs7SignedData({
+			...parsed.value,
+			signerInfos: [
+				{
+					...signerInfo,
+					serialNumberHex: 'deadbeef',
+					subjectKeyIdentifier,
+				},
+			],
+		});
+		expect(result).toMatchObject({ ok: false, code: 'signer_not_found' });
+	});
+
 	it('verifyPkcs7SignedData returns malformed for unsupported signature algorithm', async () => {
 		const signer = await createSelfSignedCertificate({
 			subject: { commonName: 'Unsupported PKCS7 Signer' },
@@ -279,6 +353,58 @@ describe('pkcs7', () => {
 		const result = await verifyPkcs7SignedData(tampered);
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.code).toBe('signer_not_found');
+	});
+
+	it('verifyPkcs7SignedData rejects malformed signedAttrs on pre-parsed input', async () => {
+		const signer = await createSelfSignedCertificate({
+			subject: { commonName: 'Malformed Attrs Signer' },
+		});
+		const parsedSigner = parseCertificatePem(signer.certificate.pem);
+		const content = new TextEncoder().encode('Malformed attrs content');
+		const der = await createCmsSignedDataWithSignedAttrs(
+			parsedSigner,
+			signer.keyPair.privateKey,
+			content,
+		);
+		const parsed = parsePkcs7SignedDataDer(der);
+		expect(parsed.ok).toBe(true);
+		if (!parsed.ok) throw new Error('unreachable');
+		const signerInfo = parsed.value.signerInfos[0];
+		if (signerInfo === undefined) {
+			throw new Error('expected signer info');
+		}
+		const result = await verifyPkcs7SignedData({
+			...parsed.value,
+			signerInfos: [{ ...signerInfo, signedAttrsDer: Uint8Array.of(0x31, 0x80) }],
+		});
+		expect(result).toMatchObject({ ok: false, code: 'malformed' });
+	});
+
+	it('verifyPkcs7SignedData rejects retagged signedAttrs on pre-parsed input', async () => {
+		const signer = await createSelfSignedCertificate({
+			subject: { commonName: 'Retagged Attrs Signer' },
+		});
+		const parsedSigner = parseCertificatePem(signer.certificate.pem);
+		const content = new TextEncoder().encode('Retagged attrs content');
+		const der = await createCmsSignedDataWithSignedAttrs(
+			parsedSigner,
+			signer.keyPair.privateKey,
+			content,
+		);
+		const parsed = parsePkcs7SignedDataDer(der);
+		expect(parsed.ok).toBe(true);
+		if (!parsed.ok) throw new Error('unreachable');
+		const signerInfo = parsed.value.signerInfos[0];
+		if (signerInfo === undefined || signerInfo.signedAttrsDer === undefined) {
+			throw new Error('expected signed attrs');
+		}
+		const retagged = new Uint8Array(signerInfo.signedAttrsDer);
+		retagged[0] = 0x31;
+		const result = await verifyPkcs7SignedData({
+			...parsed.value,
+			signerInfos: [{ ...signerInfo, signedAttrsDer: retagged }],
+		});
+		expect(result).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
 	it('verifies signedData with SHA-384 signed attrs', async () => {

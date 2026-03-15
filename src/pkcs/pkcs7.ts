@@ -363,12 +363,8 @@ export async function verifyPkcs7SignedData(
 		return verifyPkcs7Failure('content_missing', 'SignedData encapsulated content is missing');
 	}
 	for (const signerInfo of parsed.signerInfos) {
-		const signer = parsed.certificates.find(
-			(certificate) =>
-				signerInfo.serialNumberHex !== undefined &&
-				signerInfo.issuer !== undefined &&
-				certificate.serialNumberHex === signerInfo.serialNumberHex &&
-				compareDistinguishedNames(certificate.issuer, signerInfo.issuer),
+		const signer = parsed.certificates.find((certificate) =>
+			signerIdentifierMatches(certificate, signerInfo),
 		);
 		if (signer === undefined) {
 			return verifyPkcs7Failure(
@@ -771,7 +767,13 @@ async function verifySignedAttrs(
 		return verifyPkcs7Failure('malformed', 'Missing signedAttrs DER');
 	}
 	// Step 1: Extract messageDigest attribute from signedAttrs
-	const expectedDigest = extractMessageDigest(signerInfo.signedAttrsDer);
+	let expectedDigest: Uint8Array | undefined;
+	try {
+		assertImplicitSignedAttrsDer(signerInfo.signedAttrsDer);
+		expectedDigest = extractMessageDigest(signerInfo.signedAttrsDer);
+	} catch {
+		return verifyPkcs7Failure('malformed', 'Malformed signedAttrs in SignedData');
+	}
 	if (expectedDigest === undefined) {
 		return verifyPkcs7Failure('malformed', 'Missing messageDigest attribute in signedAttrs');
 	}
@@ -793,7 +795,12 @@ async function verifySignedAttrs(
 		);
 	}
 	// Step 4: Verify signature over re-tagged signedAttrs (0xa0 → 0x31 SET OF)
-	const signedData = retagSignedAttrsAsSet(signerInfo.signedAttrsDer);
+	let signedData: Uint8Array;
+	try {
+		signedData = retagSignedAttrsAsSet(signerInfo.signedAttrsDer);
+	} catch {
+		return verifyPkcs7Failure('malformed', 'Malformed signedAttrs in SignedData');
+	}
 	let verified: boolean;
 	try {
 		verified = await verifySignedData(
@@ -815,4 +822,28 @@ async function verifySignedAttrs(
 		);
 	}
 	return { ok: true };
+}
+
+function signerIdentifierMatches(
+	certificate: ParsedCertificate,
+	signerInfo: ParsedPkcs7SignerInfo,
+): boolean {
+	if (signerInfo.issuer !== undefined || signerInfo.serialNumberHex !== undefined) {
+		return (
+			signerInfo.issuer !== undefined &&
+			signerInfo.serialNumberHex !== undefined &&
+			certificate.serialNumberHex === signerInfo.serialNumberHex &&
+			compareDistinguishedNames(certificate.issuer, signerInfo.issuer)
+		);
+	}
+	return (
+		signerInfo.subjectKeyIdentifier !== undefined &&
+		certificate.subjectKeyIdentifier === signerInfo.subjectKeyIdentifier
+	);
+}
+
+function assertImplicitSignedAttrsDer(signedAttrsDer: Uint8Array): void {
+	if (readElement(signedAttrsDer).tag !== 0xa0) {
+		throw new Error('signedAttrs must use IMPLICIT [0] tag');
+	}
 }

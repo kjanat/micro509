@@ -207,7 +207,7 @@ interface PolicyInformation {
 
 **Goal:** docs say exactly what ships now.
 
-**Files likely touched:** `README.md`, `docs/PKIX-SCOPE.md`, `docs/FUTURE.md`
+**Files likely touched:** `README.md`, `docs/PKIX-SCOPE.md`
 
 **Changes:**
 
@@ -219,7 +219,7 @@ interface PolicyInformation {
 
 - [ ] every checked item in `docs/PKIX-SCOPE.md` has a corresponding implementation and test.
 - [ ] README feature bullets do not imply stricter OCSP responder auth or broader identity support than shipped.
-- [ ] `docs/FUTURE.md` points readers at this spec for full implementation sequencing.
+- [ ] `docs/PKIX-SCOPE.md` points readers at this spec for full implementation sequencing.
 
 ### D1. Lock API And Package Boundaries
 
@@ -397,7 +397,7 @@ interface PolicyInformation {
 
 **Goal:** claims become earned, not aspirational.
 
-**Files likely touched:** `test/verify.test.ts`, `test/crl.test.ts`, `test/ocsp.test.ts`, new fixture directories as needed, `README.md`, `docs/PKIX-SCOPE.md`, `docs/FUTURE.md`
+**Files likely touched:** `test/verify.test.ts`, `test/crl.test.ts`, `test/ocsp.test.ts`, new fixture directories as needed, `README.md`, `docs/PKIX-SCOPE.md`
 
 **Changes:**
 

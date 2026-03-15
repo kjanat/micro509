@@ -235,7 +235,7 @@ Rules:
 
 **Goal:** docs say exactly what ships and do not imply full WebCrypto parity.
 
-**Files likely touched:** `README.md`, `docs/PKIX-SCOPE.md`, `docs/FUTURE.md`
+**Files likely touched:** `README.md`, `docs/PKIX-SCOPE.md`
 
 **Acceptance criteria:**
 
@@ -308,7 +308,7 @@ Rules:
 
 **Goal:** keep scope claims honest and prevent silent interop regressions.
 
-**Files likely touched:** `README.md`, `docs/PKIX-SCOPE.md`, `docs/FUTURE.md`, `test/verify.test.ts`, `test/keys.test.ts`, `test/certificate.test.ts`, `test/csr.test.ts`, `test/differential.test.ts`
+**Files likely touched:** `README.md`, `docs/PKIX-SCOPE.md`, `test/verify.test.ts`, `test/keys.test.ts`, `test/certificate.test.ts`, `test/csr.test.ts`, `test/differential.test.ts`
 
 **Acceptance criteria:**
 

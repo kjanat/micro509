@@ -6,7 +6,7 @@ This directory defines what the project claims, not just how it works.
 ## OVERVIEW
 
 [`docs/`][docs] is small but high-leverage:
-[`PKIX-SCOPE.md`] sets support boundaries, and harness docs tie prose claims to
+[`PKIX-SCOPE.md`] sets support boundaries and the roadmap, and harness docs tie prose claims to
 concrete tests, while
 [`ARCHITECTURE.md`] captures cross-cutting module conventions and utility
 ownership.
@@ -17,7 +17,7 @@ ownership.
 | ----------------------------- | -------------------- | ----------------------------------------------------- |
 | Support boundary              | [`PKIX-SCOPE.md`]    | canonical claim language and partial/full scope lines |
 | Architecture conventions      | [`ARCHITECTURE.md`]  | cross-cutting utility ownership and import patterns   |
-| Roadmap                       | [`FUTURE.md`]        | backlog and future surfaces                           |
+| Roadmap + support boundary    | [`PKIX-SCOPE.md`]    | canonical claims, partial/full scope, backlog         |
 | PKITS harness contract        | [`PKITS-HARNESS.md`] | shipped PKITS subset and fixed validation time        |
 | Differential harness contract | [`DIFF-HARNESS.md`]  | OpenSSL oracle scope and non-goals                    |
 | RFC source text               | [`rfc/*.txt`][rfc]   | vendored references only                              |
@@ -41,7 +41,6 @@ ownership.
 [docs]: ../docs/
 [`PKIX-SCOPE.md`]: ./PKIX-SCOPE.md
 [`ARCHITECTURE.md`]: ./ARCHITECTURE.md
-[`FUTURE.md`]: ./FUTURE.md
 [`PKITS-HARNESS.md`]: ./PKITS-HARNESS.md
 [`DIFF-HARNESS.md`]: ./DIFF-HARNESS.md
 [rfc]: ../docs/rfc/
