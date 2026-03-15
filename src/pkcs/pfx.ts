@@ -226,10 +226,7 @@ export async function createPfx(input: CreatePfxInput): Promise<PfxMaterial> {
 	const privateKeyBags: Uint8Array[] = [];
 	for (const certificate of input.certificates ?? []) {
 		certificateBags.push(
-			createCertificateBag(
-				normalizeCertificate(certificate.certificate),
-				certificate.attributes,
-			),
+			createCertificateBag(normalizeCertificate(certificate.certificate), certificate.attributes),
 		);
 	}
 	for (const privateKey of input.privateKeys ?? []) {

@@ -1,9 +1,9 @@
 <!--
 	LiveCode — run code examples in the browser.
 
-	The page's import map (derived from package.json exports, injected by
-	the importMapPlugin in config.ts) resolves bare `micro509` specifiers,
-	so the code runs exactly as written — no URL rewriting.
+	The page's import map (derived from package.json exports, injected via
+	transformHtml in config.ts) resolves bare `micro509` specifiers through
+	esm.sh, so code runs exactly as written — no URL rewriting.
 
 	Usage in markdown:
 
@@ -16,86 +16,86 @@
 	  </LiveCode>
 -->
 <script setup lang="ts">
-	import { nextTick, onMounted, ref } from 'vue';
+import { nextTick, onMounted, ref } from 'vue';
 
-	const props = withDefaults(
-		defineProps<{
-			/** Auto-run on mount */
-			auto?: boolean;
-		}>(),
-		{ auto: false },
-	);
+const props = withDefaults(
+	defineProps<{
+		/** Auto-run on mount */
+		auto?: boolean;
+	}>(),
+	{ auto: false },
+);
 
-	const el = ref<HTMLElement>();
-	const logs = ref<string[]>([]);
-	const err = ref<string>();
-	const busy = ref(false);
-	const ran = ref(false);
+const el = ref<HTMLElement>();
+const logs = ref<string[]>([]);
+const err = ref<string>();
+const busy = ref(false);
+const ran = ref(false);
 
-	/** Extract raw text from the Shiki-rendered code element in the slot. */
-	function extractCode(): string {
-		return el.value?.querySelector('pre code')?.textContent?.trim() ?? '';
-	}
+/** Extract raw text from the Shiki-rendered code element in the slot. */
+function extractCode(): string {
+	return el.value?.querySelector('pre code')?.textContent?.trim() ?? '';
+}
 
-	/**
-	 * Split source into import declarations and body.
-	 * Imports must stay at module top-level (can't be inside try/catch).
-	 */
-	function splitCode(src: string): { head: string; body: string } {
-		const lines = src.split('\n');
-		const head: string[] = [];
-		const body: string[] = [];
-		let importing = false;
-		let pastImports = false;
+/**
+ * Split source into import declarations and body.
+ * Imports must stay at module top-level (can't be inside try/catch).
+ */
+function splitCode(src: string): { head: string; body: string } {
+	const lines = src.split('\n');
+	const head: string[] = [];
+	const body: string[] = [];
+	let importing = false;
+	let pastImports = false;
 
-		for (const line of lines) {
-			if (pastImports) {
-				body.push(line);
-				continue;
-			}
-			if (importing) {
-				head.push(line);
-				if (/from\s+['"]/.test(line)) importing = false;
-				continue;
-			}
-			const t = line.trim();
-			if (t === '' || t.startsWith('//')) {
-				head.push(line);
-				continue;
-			}
-			if (/^import[\s{]/.test(t)) {
-				head.push(line);
-				if (!/from\s+['"]/.test(t)) importing = true;
-				continue;
-			}
-			pastImports = true;
+	for (const line of lines) {
+		if (pastImports) {
 			body.push(line);
+			continue;
 		}
-
-		return { head: head.join('\n'), body: body.join('\n') };
+		if (importing) {
+			head.push(line);
+			if (/from\s+['"]/.test(line)) importing = false;
+			continue;
+		}
+		const t = line.trim();
+		if (t === '' || t.startsWith('//')) {
+			head.push(line);
+			continue;
+		}
+		if (/^import[\s{]/.test(t)) {
+			head.push(line);
+			if (!/from\s+['"]/.test(t)) importing = true;
+			continue;
+		}
+		pastImports = true;
+		body.push(line);
 	}
 
-	const TIMEOUT = 30_000;
+	return { head: head.join('\n'), body: body.join('\n') };
+}
 
-	async function run() {
-		busy.value = true;
-		err.value = undefined;
-		logs.value = [];
-		ran.value = true;
+const TIMEOUT = 30_000;
 
-		try {
-			const raw = extractCode();
-			if (!raw) throw new Error('No code found');
+async function run() {
+	busy.value = true;
+	err.value = undefined;
+	logs.value = [];
+	ran.value = true;
 
-			const { head, body } = splitCode(raw);
-			const eid = `__lc${Date.now()}${Math.random().toString(36).slice(2)}`;
+	try {
+		const raw = extractCode();
+		if (!raw) throw new Error('No code found');
 
-			const src = `${head}
+		const { head, body } = splitCode(raw);
+		const eid = `__lc${Date.now()}${Math.random().toString(36).slice(2)}`;
+
+		const src = `${head}
 			const __out = [];
 			const console = Object.create(globalThis.console, {
 			  log: { value: (...a) => {
 			    globalThis.console.log(...a);
-			    __out.push(a.map(v => typeof v === 'string' ? v : JSON.stringify(v, null, 2)).join(' '));
+			    __out.push(a.map(v => typeof v === 'string' ? v : JSON.stringify(v, null, 2) ?? String(v)).join(' '));
 			  }},
 			});
 			try {
@@ -106,52 +106,52 @@
 			window.dispatchEvent(new CustomEvent('${eid}', { detail: __out }));
 			`;
 
-			const result = await new Promise<string[]>((resolve, reject) => {
-				const script = document.createElement('script');
-				const timer = setTimeout(() => {
-					script.remove();
-					reject(new Error('Execution timed out'));
-				}, TIMEOUT);
+		const result = await new Promise<string[]>((resolve, reject) => {
+			const script = document.createElement('script');
+			const timer = setTimeout(() => {
+				script.remove();
+				reject(new Error('Execution timed out'));
+			}, TIMEOUT);
 
-				const cleanup = () => {
-					clearTimeout(timer);
-					script.remove();
-				};
+			const cleanup = () => {
+				clearTimeout(timer);
+				script.remove();
+			};
 
-				window.addEventListener(
-					eid,
-					((e: CustomEvent) => {
-						cleanup();
-						resolve(e.detail);
-					}) as EventListener,
-					{ once: true },
-				);
+			window.addEventListener(
+				eid,
+				((e: CustomEvent) => {
+					cleanup();
+					resolve(e.detail);
+				}) as EventListener,
+				{ once: true },
+			);
 
-				script.addEventListener(
-					'error',
-					() => {
-						cleanup();
-						reject(new Error('Failed to load module'));
-					},
-					{ once: true },
-				);
+			script.addEventListener(
+				'error',
+				() => {
+					cleanup();
+					reject(new Error('Failed to load module'));
+				},
+				{ once: true },
+			);
 
-				script.type = 'module';
-				script.textContent = src;
-				document.body.appendChild(script);
-			});
+			script.type = 'module';
+			script.textContent = src;
+			document.body.appendChild(script);
+		});
 
-			logs.value = result;
-		} catch (e) {
-			err.value = e instanceof Error ? e.message : String(e);
-		} finally {
-			busy.value = false;
-		}
+		logs.value = result;
+	} catch (e) {
+		err.value = e instanceof Error ? e.message : String(e);
+	} finally {
+		busy.value = false;
 	}
+}
 
-	onMounted(() => {
-		if (props.auto) nextTick(run);
-	});
+onMounted(() => {
+	if (props.auto) nextTick(run);
+});
 </script>
 
 <template>

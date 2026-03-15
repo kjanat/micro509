@@ -98,16 +98,38 @@ import {
   createSelfSignedCertificate,
 } from 'micro509';
 
-// Using the certificate from the first example
 const { certificate } = await createSelfSignedCertificate({
-  subject: { commonName: 'example.com' },
-  validity: { days: 30 },
+  subject: {
+    commonName: 'example.com',
+    organization: 'Acme',
+  },
+  validity: { days: 365 },
+  extensions: {
+    keyUsage: ['digitalSignature', 'keyEncipherment'],
+    subjectAltNames: [
+      { type: 'dns', value: 'example.com' },
+      { type: 'dns', value: '*.example.com' },
+    ],
+  },
 });
 
 const parsed = parseCertificatePem(certificate.pem);
-console.log(parsed.subject.values.commonName);
-console.log(parsed.extendedKeyUsage);
-console.log(parsed.authorityInfoAccess);
+console.log(
+  `subject:   ${parsed.subject.values.commonName}`,
+);
+console.log(
+  `org:       ${parsed.subject.values.organization}`,
+);
+console.log(`version:   ${parsed.version}`);
+console.log(
+  `serial:    ${parsed.serialNumberHex.slice(0, 16)}...`,
+);
+console.log(
+  `key usage: ${parsed.keyUsage.flags.join(', ')}`,
+);
+console.log(
+  `SANs:      ${parsed.subjectAltNames.map((s) => s.value).join(', ')}`,
+);
 ```
 
 </LiveCode>
@@ -118,28 +140,85 @@ console.log(parsed.authorityInfoAccess);
 
 ```ts
 import {
-  verifyCertificateChain,
   createSelfSignedCertificate,
+  createCertificate,
+  generateKeyPair,
+  verifyCertificateChain,
 } from 'micro509';
 
-// Using certificates from previous examples
-const { certificate } = await createSelfSignedCertificate({
-  subject: { commonName: 'example.com' },
-  validity: { days: 30 },
+// Create a CA root
+const ca = await createSelfSignedCertificate({
+  subject: { commonName: 'Demo Root CA' },
+  extensions: {
+    basicConstraints: { ca: true },
+    keyUsage: ['keyCertSign', 'cRLSign'],
+  },
 });
 
+// Issue a leaf signed by the CA
+const leafKeys = await generateKeyPair();
+const leaf = await createCertificate({
+  issuer: { commonName: 'Demo Root CA' },
+  subject: { commonName: 'app.example.com' },
+  publicKey: leafKeys.publicKey,
+  signerPrivateKey: ca.keyPair.privateKey,
+  issuerPublicKey: ca.keyPair.publicKey,
+  extensions: {
+    subjectAltNames: [
+      { type: 'dns', value: 'app.example.com' },
+    ],
+  },
+});
+
+// Verify the CA → leaf chain
 const result = await verifyCertificateChain({
-  leaf: certificate.pem,
-  intermediates: [],
-  roots: [certificate.pem], // Using self-signed cert as root for demo
-  purpose: 'serverAuth',
-  serviceIdentity: { type: 'dns', value: 'example.com' },
+  leaf: leaf.pem,
+  roots: [ca.certificate.pem],
+  serviceIdentity: {
+    type: 'dns',
+    value: 'app.example.com',
+  },
 });
 
 if (result.ok) {
-  console.log(result.value.chain.length);
-} else {
+  const { leaf: parsed } = result.value;
+  console.log(
+    `verified ${parsed.subject.values.commonName}`,
+  );
+  console.log(
+    `  issuer: ${parsed.issuer.values.commonName}`,
+  );
+  console.log(
+    `  chain length: ${result.value.chain.length}`,
+  );
+}
+```
+
+</LiveCode>
+
+### Reject a self-signed leaf
+
+<LiveCode>
+
+```ts
+import {
+  createSelfSignedCertificate,
+  verifyCertificateChain,
+} from 'micro509';
+
+const { certificate } = await createSelfSignedCertificate({
+  subject: { commonName: 'rogue.example' },
+});
+
+// Self-signed leaf is rejected even when listed as a root
+const result = await verifyCertificateChain({
+  leaf: certificate.pem,
+  roots: [certificate.pem],
+});
+
+if (!result.ok) {
   console.log(result.error.code);
+  console.log(result.error.message);
 }
 ```
 

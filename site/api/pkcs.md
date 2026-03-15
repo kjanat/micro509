@@ -1119,7 +1119,7 @@ readonly [`Pkcs7CertificateSource`](#pkcs7certificatesource)[]
 
 > **parsePfxDer**(`der`, `options?`): `Promise`\<[`ParsePfxResult`](#parsepfxresult)\>
 
-Defined in: [pkcs/pfx.ts:288](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L288)
+Defined in: [pkcs/pfx.ts:285](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L285)
 
 Decodes a DER-encoded PKCS#12/PFX container into its constituent bags.
 
@@ -1158,7 +1158,7 @@ if (result.ok) {
 
 > **parsePfxPem**(`pem`, `options?`): `Promise`\<[`ParsePfxResult`](#parsepfxresult)\>
 
-Defined in: [pkcs/pfx.ts:362](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L362)
+Defined in: [pkcs/pfx.ts:359](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L359)
 
 Decodes a PEM-armored PKCS#12/PFX container. Expects exactly one `PKCS12` block.
 
