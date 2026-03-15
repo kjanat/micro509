@@ -1,0 +1,25 @@
+.VPImage.image-src,
+.VPImage.logo {
+  -webkit-user-drag: none;
+  user-drag: none;
+}
+
+.VPSocialLink:hover .vpi-social-github {
+  color: #181717;
+}
+
+.VPSocialLink:hover .vpi-social-npm {
+  color: #cb3837;
+}
+
+.VPSocialLink:hover .vpi-social-jsr {
+  color: #f7df1e;
+}
+
+.dark .VPSocialLink:hover .vpi-social-github {
+  color: #f0f0f0;
+}
+
+.VPSocialLink [class^="vpi-social-"] {
+  transition: color 0.25s;
+}

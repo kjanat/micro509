@@ -10,15 +10,23 @@ micro509 is `0.x` — API may change before 1.0.
 npm install micro509
 ```
 
+### Bun
+
 ```bash
 bun add micro509
 ```
 
+### Deno
+
 ```bash
 deno add jsr:@kjanat/micro509
-import * as micro509 from "@kjanat/micro509";
-# or directly in code:
-import * as micro509 from "jsr:@kjanat/micro509";
+```
+
+```ts
+import * as micro509 from '@kjanat/micro509';
+
+// or import directly in code:
+import * as micro509 from 'jsr:@kjanat/micro509';
 ```
 
 ## Quick Start

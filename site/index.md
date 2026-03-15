@@ -5,7 +5,8 @@ hero:
   text: Typed PKI for modern TypeScript
   tagline: The X.509 library that tells you why verification failed, not just that it did.
   image:
-    src: /icon.svg
+    light: /icon.svg
+    dark: /icon-light.svg
     alt: micro509
   actions:
     - theme: brand
@@ -13,7 +14,7 @@ hero:
       link: /guide/getting-started
     - theme: alt
       text: API Reference
-      link: /reference/api
+      link: /api/
     - theme: alt
       text: GitHub
       link: https://github.com/kjanat/ts-x509
