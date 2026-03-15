@@ -49,7 +49,7 @@ Defined in: [pkcs/pfx.ts:83](https://github.com/kjanat/ts-x509/blob/vitepress/sr
 
 Private keys to include as keyBag entries.
 
-***
+---
 
 ### ParsedPfx
 
@@ -91,7 +91,7 @@ Defined in: [pkcs/pfx.ts:173](https://github.com/kjanat/ts-x509/blob/vitepress/s
 
 Convenience: raw PKCS#8 DER of each private key extracted from keyBag entries.
 
-***
+---
 
 ### ParsedPfxAttribute
 
@@ -117,7 +117,7 @@ Defined in: [pkcs/pfx.ts:116](https://github.com/kjanat/ts-x509/blob/vitepress/s
 
 Hex-encoded DER of each attribute value.
 
-***
+---
 
 ### ParsedPfxBagAttributes
 
@@ -151,7 +151,7 @@ Defined in: [pkcs/pfx.ts:126](https://github.com/kjanat/ts-x509/blob/vitepress/s
 
 Hex-encoded localKeyId attribute, if present.
 
-***
+---
 
 ### ParsedPkcs12MacData
 
@@ -201,7 +201,7 @@ Defined in: [pkcs/pkcs12-mac.ts:49](https://github.com/kjanat/ts-x509/blob/vitep
 
 MAC verification outcome. Present only when a password was supplied during parsing.
 
-***
+---
 
 ### ParsedPkcs7SignedData
 
@@ -267,7 +267,7 @@ Defined in: [pkcs/pkcs7.ts:91](https://github.com/kjanat/ts-x509/blob/vitepress/
 
 SignedData version number.
 
-***
+---
 
 ### ParsedPkcs7SignerInfo
 
@@ -365,7 +365,7 @@ Defined in: [pkcs/pkcs7.ts:63](https://github.com/kjanat/ts-x509/blob/vitepress/
 
 CMS SignerInfo version (typically 1 for issuerAndSerialNumber).
 
-***
+---
 
 ### ParsePfxFailure
 
@@ -423,7 +423,7 @@ Defined in: [pkcs/pfx.ts:188](https://github.com/kjanat/ts-x509/blob/vitepress/s
 
 Always `false` for failures.
 
-***
+---
 
 ### ParsePfxOptions
 
@@ -449,7 +449,7 @@ Defined in: [pkcs/pfx.ts:96](https://github.com/kjanat/ts-x509/blob/vitepress/sr
 
 Password used to decrypt PBES2-encrypted ContentInfo entries. Also used for MAC verification when `macPassword` is omitted.
 
-***
+---
 
 ### ParsePkcs7Failure
 
@@ -507,7 +507,7 @@ Defined in: [pkcs/pkcs7.ts:114](https://github.com/kjanat/ts-x509/blob/vitepress
 
 Always `false` for failures.
 
-***
+---
 
 ### PfxBagAttributesInput
 
@@ -533,7 +533,7 @@ Defined in: [pkcs/pfx.ts:59](https://github.com/kjanat/ts-x509/blob/vitepress/sr
 
 Opaque identifier linking a certificate bag to its corresponding key bag.
 
-***
+---
 
 ### PfxCertificateBagInput
 
@@ -559,7 +559,7 @@ Defined in: [pkcs/pfx.ts:65](https://github.com/kjanat/ts-x509/blob/vitepress/sr
 
 Certificate as PEM text or DER bytes.
 
-***
+---
 
 ### PfxMaterial
 
@@ -593,7 +593,7 @@ Defined in: [pkcs/pfx.ts:106](https://github.com/kjanat/ts-x509/blob/vitepress/s
 
 PEM-armored PFX (`-----BEGIN PKCS12-----`).
 
-***
+---
 
 ### PfxPrivateKeyBagInput
 
@@ -619,7 +619,7 @@ Defined in: [pkcs/pfx.ts:73](https://github.com/kjanat/ts-x509/blob/vitepress/sr
 
 Private key as a WebCrypto `CryptoKey` or raw PKCS#8 DER bytes.
 
-***
+---
 
 ### Pkcs12MacOptions
 
@@ -653,7 +653,7 @@ Defined in: [pkcs/pkcs12-mac.ts:35](https://github.com/kjanat/ts-x509/blob/vitep
 
 Random salt. Default: 16 cryptographically random bytes.
 
-***
+---
 
 ### Pkcs7CertBag
 
@@ -687,7 +687,7 @@ Defined in: [pkcs/pkcs7.ts:55](https://github.com/kjanat/ts-x509/blob/vitepress/
 
 PEM-armored PKCS#7 (`-----BEGIN PKCS7-----`).
 
-***
+---
 
 ### VerifyPkcs7SignedDataFailure
 
@@ -837,7 +837,7 @@ Bag type not recognized by this library.
 
 Raw DER of the unrecognized bag value.
 
-***
+---
 
 ### ParsePfxErrorCode
 
@@ -847,7 +847,7 @@ Defined in: [pkcs/pfx.ts:183](https://github.com/kjanat/ts-x509/blob/vitepress/s
 
 Error codes returned by [`parsePfxDer`](#parsepfxder) and [`parsePfxPem`](#parsepfxpem).
 
-***
+---
 
 ### ParsePfxResult
 
@@ -875,7 +875,7 @@ Decoded PFX container.
 
 [`ErrorResult`](result.md#errorresult)\<[`ParsePfxErrorCode`](#parsepfxerrorcode), `Record`\<`never`, `never`\>, [`ParsePfxFailure`](#parsepfxfailure)\>
 
-***
+---
 
 ### ParsePkcs7CertBagResult
 
@@ -903,7 +903,7 @@ Parsed certificates from the cert bag.
 
 [`ErrorResult`](result.md#errorresult)\<[`ParsePkcs7ErrorCode`](#parsepkcs7errorcode), `Record`\<`never`, `never`\>, [`ParsePkcs7Failure`](#parsepkcs7failure)\>
 
-***
+---
 
 ### ParsePkcs7ErrorCode
 
@@ -913,7 +913,7 @@ Defined in: [pkcs/pkcs7.ts:109](https://github.com/kjanat/ts-x509/blob/vitepress
 
 Error codes for PKCS#7 parse failures.
 
-***
+---
 
 ### ParsePkcs7SignedDataResult
 
@@ -941,7 +941,7 @@ Decoded SignedData.
 
 [`ErrorResult`](result.md#errorresult)\<[`ParsePkcs7ErrorCode`](#parsepkcs7errorcode), `Record`\<`never`, `never`\>, [`ParsePkcs7Failure`](#parsepkcs7failure)\>
 
-***
+---
 
 ### PfxCertificateSource
 
@@ -951,7 +951,7 @@ Defined in: [pkcs/pfx.ts:50](https://github.com/kjanat/ts-x509/blob/vitepress/sr
 
 PEM string or DER bytes for a certificate to include in a PFX bag.
 
-***
+---
 
 ### PfxEncryptionOptions
 
@@ -961,7 +961,7 @@ Defined in: [pkcs/pfx.ts:91](https://github.com/kjanat/ts-x509/blob/vitepress/sr
 
 PBES2 encryption settings for PFX key-bag protection. Alias of [`Pbes2EncryptionOptions`](keys.md#pbes2encryptionoptions).
 
-***
+---
 
 ### PfxPrivateKeySource
 
@@ -971,7 +971,7 @@ Defined in: [pkcs/pfx.ts:52](https://github.com/kjanat/ts-x509/blob/vitepress/sr
 
 A WebCrypto private key or raw PKCS#8 DER bytes for a PFX key bag.
 
-***
+---
 
 ### Pkcs7CertificateSource
 
@@ -981,7 +981,7 @@ Defined in: [pkcs/pkcs7.ts:48](https://github.com/kjanat/ts-x509/blob/vitepress/
 
 PEM text (may contain multiple CERTIFICATE blocks) or raw DER bytes.
 
-***
+---
 
 ### VerifyPkcs7SignedDataResult
 
@@ -1046,7 +1046,7 @@ const pfx = await createPfx({
 // pfx.der, pfx.pem, pfx.base64
 ```
 
-***
+---
 
 ### createPkcs12MacData()
 
@@ -1071,7 +1071,7 @@ the DER-encoded MacData block alongside its parsed representation.
 
 `Promise`\<\{ `der`: `Uint8Array`; `parsed`: [`ParsedPkcs12MacData`](#parsedpkcs12macdata); \}\>
 
-***
+---
 
 ### createPkcs7CertBagDer()
 
@@ -1093,7 +1093,7 @@ readonly [`Pkcs7CertificateSource`](#pkcs7certificatesource)[]
 
 `Uint8Array`
 
-***
+---
 
 ### createPkcs7CertBagPem()
 
@@ -1113,7 +1113,7 @@ readonly [`Pkcs7CertificateSource`](#pkcs7certificatesource)[]
 
 [`Pkcs7CertBag`](#pkcs7certbag)
 
-***
+---
 
 ### parsePfxDer()
 
@@ -1146,13 +1146,15 @@ Encrypted containers require `options.password`. MAC verification uses
 ```ts
 import { parsePfxDer } from 'micro509';
 
-const result = await parsePfxDer(pfxBytes, { password: 's3cret' });
+const result = await parsePfxDer(pfxBytes, {
+  password: 's3cret',
+});
 if (result.ok) {
   console.log(result.value.certificates.length);
 }
 ```
 
-***
+---
 
 ### parsePfxPem()
 
@@ -1183,13 +1185,15 @@ Delegates to [`parsePfxDer`](#parsepfxder) after PEM decoding.
 ```ts
 import { parsePfxPem } from 'micro509';
 
-const result = await parsePfxPem(pfxPemString, { password: 's3cret' });
+const result = await parsePfxPem(pfxPemString, {
+  password: 's3cret',
+});
 if (result.ok) {
   console.log(result.value.privateKeys.length);
 }
 ```
 
-***
+---
 
 ### parsePkcs12MacData()
 
@@ -1218,7 +1222,7 @@ the MAC and sets the `valid` flag on the returned structure.
 
 `Promise`\<[`ParsedPkcs12MacData`](#parsedpkcs12macdata)\>
 
-***
+---
 
 ### parsePkcs7CertBagDer()
 
@@ -1238,7 +1242,7 @@ Parses a DER-encoded PKCS#7 cert bag, returning the contained certificates.
 
 [`ParsePkcs7CertBagResult`](#parsepkcs7certbagresult)
 
-***
+---
 
 ### parsePkcs7CertBagPem()
 
@@ -1258,7 +1262,7 @@ Parses a PEM-armored PKCS#7 cert bag. Expects exactly one `PKCS7` PEM block.
 
 [`ParsePkcs7CertBagResult`](#parsepkcs7certbagresult)
 
-***
+---
 
 ### parsePkcs7SignedDataDer()
 
@@ -1278,7 +1282,7 @@ Decodes a DER-encoded PKCS#7 ContentInfo expecting `signedData` content type.
 
 [`ParsePkcs7SignedDataResult`](#parsepkcs7signeddataresult)
 
-***
+---
 
 ### parsePkcs7SignedDataPem()
 
@@ -1298,7 +1302,7 @@ Decodes a PEM-armored PKCS#7 SignedData. Expects exactly one `PKCS7` PEM block.
 
 [`ParsePkcs7SignedDataResult`](#parsepkcs7signeddataresult)
 
-***
+---
 
 ### verifyPkcs7SignedData()
 

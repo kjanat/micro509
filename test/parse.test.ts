@@ -29,6 +29,11 @@ import {
 } from '#micro509/internal/asn1/der.ts';
 import { OIDS } from '#micro509/internal/asn1/oids.ts';
 import { parseNameConstraints } from '#micro509/x509/parse.ts';
+import {
+	importRsaPrivateKeyWithScheme,
+	rewriteCertificateSignatureAsRsaPss,
+	rewriteCsrSignatureAsRsaPss,
+} from './helpers.ts';
 
 describe('parse', () => {
 	it('supports custom extension encode and decode hooks', async () => {
@@ -1166,7 +1171,9 @@ describe('parse', () => {
 		expect(parsedRsa.signatureAlgorithmParametersDer).toEqual(nullValue());
 		expect(parsedRsa.publicKeyAlgorithmParametersDer).toEqual(nullValue());
 		expect(parsedRsa.signatureAlgorithmOid).toBe(OIDS.sha256WithRSAEncryption);
+		expect(parsedRsa.signatureAlgorithmName).toBe('RSA PKCS#1 v1.5 with SHA-256');
 		expect(parsedRsa.publicKeyAlgorithmOid).toBe(OIDS.rsaEncryption);
+		expect(parsedRsa.publicKeyAlgorithmName).toBe('RSA');
 
 		const ecCertificate = await createSelfSignedCertificate({
 			subject: { commonName: 'algo-params-ec.example' },
@@ -1174,8 +1181,10 @@ describe('parse', () => {
 		});
 		const parsedEc = parseCertificateDer(ecCertificate.certificate.der);
 		expect(parsedEc.signatureAlgorithmParametersDer).toBeUndefined();
+		expect(parsedEc.signatureAlgorithmName).toBe('ECDSA with SHA-384');
 		expect(parsedEc.publicKeyAlgorithmParametersDer).toEqual(objectIdentifier(OIDS.secp384r1));
 		expect(parsedEc.publicKeyParametersOid).toBe(OIDS.secp384r1);
+		expect(parsedEc.publicKeyAlgorithmName).toBe('EC P-384');
 	});
 
 	it('parses CSR without attributes field', async () => {
@@ -1211,7 +1220,53 @@ describe('parse', () => {
 		expect(parsed.signatureAlgorithmParametersDer).toEqual(nullValue());
 		expect(parsed.publicKeyAlgorithmParametersDer).toEqual(nullValue());
 		expect(parsed.signatureAlgorithmOid).toBe(OIDS.sha256WithRSAEncryption);
+		expect(parsed.signatureAlgorithmName).toBe('RSA PKCS#1 v1.5 with SHA-256');
 		expect(parsed.publicKeyAlgorithmOid).toBe(OIDS.rsaEncryption);
+		expect(parsed.publicKeyAlgorithmName).toBe('RSA');
+	});
+
+	it('describes RSA-PSS algorithms for parsed certificates and CSRs', async () => {
+		const keyPair = await generateKeyPair({
+			kind: 'rsa',
+			modulusLength: 2048,
+			hash: 'SHA-384',
+		});
+		const certificate = await createSelfSignedCertificate({
+			subject: { commonName: 'rsa-pss-parse.example' },
+			keyPair,
+		});
+		const csr = await createCertificateSigningRequest({
+			subject: { commonName: 'rsa-pss-csr-parse.example' },
+			publicKey: keyPair.publicKey,
+			signerPrivateKey: keyPair.privateKey,
+		});
+		const rsaPssPrivateKey = await importRsaPrivateKeyWithScheme(
+			keyPair.privateKey,
+			'SHA-384',
+			'pss',
+		);
+		const rsaPssParameters = {
+			hash: 'SHA-384',
+			mgfHash: 'SHA-384',
+			saltLength: 48,
+			trailerField: 1,
+		} as const;
+
+		const parsedCertificate = parseCertificateDer(
+			await rewriteCertificateSignatureAsRsaPss(
+				certificate.certificate.der,
+				rsaPssPrivateKey,
+				rsaPssParameters,
+			),
+		);
+		expect(parsedCertificate.signatureAlgorithmName).toBe('RSA-PSS with SHA-384');
+		expect(parsedCertificate.publicKeyAlgorithmName).toBe('RSA');
+
+		const parsedCsr = parseCertificateSigningRequestDer(
+			await rewriteCsrSignatureAsRsaPss(csr.der, rsaPssPrivateKey, rsaPssParameters),
+		);
+		expect(parsedCsr.signatureAlgorithmName).toBe('RSA-PSS with SHA-384');
+		expect(parsedCsr.publicKeyAlgorithmName).toBe('RSA');
 	});
 
 	it('rejects malformed AlgorithmIdentifier with extra elements', async () => {

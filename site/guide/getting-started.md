@@ -55,7 +55,7 @@ const { certificate, keyPair } =
     },
   });
 
-console.log(certificate.pem);
+console.log(certificate.pem, '\n');
 console.log(await keyPair.exportPkcs8Pem());
 ```
 
@@ -114,22 +114,13 @@ const { certificate } = await createSelfSignedCertificate({
 });
 
 const parsed = parseCertificatePem(certificate.pem);
-console.log(
-  `subject:   ${parsed.subject.values.commonName}`,
-);
-console.log(
-  `org:       ${parsed.subject.values.organization}`,
-);
-console.log(`version:   ${parsed.version}`);
-console.log(
-  `serial:    ${parsed.serialNumberHex.slice(0, 16)}...`,
-);
-console.log(
-  `key usage: ${parsed.keyUsage.flags.join(', ')}`,
-);
-console.log(
-  `SANs:      ${parsed.subjectAltNames.map((s) => s.value).join(', ')}`,
-);
+console.log(`\
+subject:   ${parsed.subject.values.commonName}
+org:       ${parsed.subject.values.organization}
+sig algo:  ${parsed.signatureAlgorithmName}
+pubkey:    ${parsed.publicKeyAlgorithmName}
+key usage: ${parsed.keyUsage.flags.join(', ')}
+SANs:      ${parsed.subjectAltNames.map((name) => name.value).join(', ')}`);
 ```
 
 </LiveCode>
@@ -182,15 +173,9 @@ const result = await verifyCertificateChain({
 
 if (result.ok) {
   const { leaf: parsed } = result.value;
-  console.log(
-    `verified ${parsed.subject.values.commonName}`,
-  );
-  console.log(
-    `  issuer: ${parsed.issuer.values.commonName}`,
-  );
-  console.log(
-    `  chain length: ${result.value.chain.length}`,
-  );
+  console.log(`verified ${parsed.subject.values.commonName}
+  issuer:       ${parsed.issuer.values.commonName}
+  chain length: ${result.value.chain.length}`);
 }
 ```
 
@@ -211,15 +196,22 @@ const { certificate } = await createSelfSignedCertificate({
 });
 
 // Self-signed leaf is rejected even when listed as a root
-const result = await verifyCertificateChain({
+const trusted = await verifyCertificateChain({
   leaf: certificate.pem,
   roots: [certificate.pem],
 });
 
-if (!result.ok) {
-  console.log(result.error.code);
-  console.log(result.error.message);
-}
+// Explicit opt-in allows it for development use
+const selfSigned = await verifyCertificateChain({
+  leaf: certificate.pem,
+  roots: [certificate.pem],
+  /** When `true`, allows a self-signed leaf. @default false */
+  allowSelfSignedLeaf: true,
+});
+
+console.log(`\
+trusted: ${trusted.ok} (${!trusted.ok && trusted.error.code})
+opt-in:  ${selfSigned.ok}`);
 ```
 
 </LiveCode>

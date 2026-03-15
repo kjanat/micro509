@@ -22,3 +22,7 @@
 .VPSocialLink [class^="vpi-social-"] {
   transition: color 0.25s;
 }
+
+.live-code-btn {
+  user-select: none;
+}

@@ -21,7 +21,7 @@ Failed result with a flattened code/message/details surface for ergonomic matchi
 
 ##### TCode
 
-`TCode` *extends* `string`
+`TCode` _extends_ `string`
 
 ##### TDetails
 
@@ -29,7 +29,7 @@ Failed result with a flattened code/message/details surface for ergonomic matchi
 
 ##### TError
 
-`TError` *extends* [`Micro509Error`](#micro509error)\<`TCode`, `TDetails`\>
+`TError` _extends_ [`Micro509Error`](#micro509error)\<`TCode`, `TDetails`\>
 
 #### Properties
 
@@ -73,7 +73,7 @@ Defined in: [result/result.ts:35](https://github.com/kjanat/ts-x509/blob/vitepre
 
 Always `false` for failures.
 
-***
+---
 
 ### IndexedErrorResult
 
@@ -89,7 +89,7 @@ Like [ErrorResult](#errorresult) but also carries an index into the collection t
 
 ##### TCode
 
-`TCode` *extends* `string`
+`TCode` _extends_ `string`
 
 ##### TDetails
 
@@ -97,7 +97,7 @@ Like [ErrorResult](#errorresult) but also carries an index into the collection t
 
 ##### TError
 
-`TError` *extends* [`IndexedMicro509Error`](#indexedmicro509error)\<`TCode`, `TDetails`\>
+`TError` _extends_ [`IndexedMicro509Error`](#indexedmicro509error)\<`TCode`, `TDetails`\>
 
 #### Properties
 
@@ -169,7 +169,7 @@ Always `false` for failures.
 
 [`ErrorResult`](#errorresult).[`ok`](#ok)
 
-***
+---
 
 ### IndexedMicro509Error
 
@@ -189,7 +189,7 @@ Like [Micro509Error](#micro509error) but includes a positional index for collect
 
 ##### TCode
 
-`TCode` *extends* `string`
+`TCode` _extends_ `string`
 
 ##### TDetails
 
@@ -241,7 +241,7 @@ Human-readable diagnostic message.
 
 [`Micro509Error`](#micro509error).[`message`](#message-3)
 
-***
+---
 
 ### Micro509Error
 
@@ -268,7 +268,7 @@ Base error shape carried by all failure results in the library.
 
 ##### TCode
 
-`TCode` *extends* `string`
+`TCode` _extends_ `string`
 
 ##### TDetails
 
@@ -366,7 +366,7 @@ Wraps a [Micro509Error](#micro509error) in a flattened [ErrorResult](#errorresul
 
 ##### TCode
 
-`TCode` *extends* `string`
+`TCode` _extends_ `string`
 
 ##### TDetails
 
@@ -374,7 +374,7 @@ Wraps a [Micro509Error](#micro509error) in a flattened [ErrorResult](#errorresul
 
 ##### TError
 
-`TError` *extends* [`Micro509Error`](#micro509error)\<`TCode`, `TDetails`\>
+`TError` _extends_ [`Micro509Error`](#micro509error)\<`TCode`, `TDetails`\>
 
 #### Parameters
 
@@ -386,7 +386,7 @@ Wraps a [Micro509Error](#micro509error) in a flattened [ErrorResult](#errorresul
 
 [`ErrorResult`](#errorresult)\<`TCode`, `TDetails`, `TError`\>
 
-***
+---
 
 ### indexedErrorResult()
 
@@ -400,7 +400,7 @@ Wraps an [IndexedMicro509Error](#indexedmicro509error) in a flattened [IndexedEr
 
 ##### TCode
 
-`TCode` *extends* `string`
+`TCode` _extends_ `string`
 
 ##### TDetails
 
@@ -408,7 +408,7 @@ Wraps an [IndexedMicro509Error](#indexedmicro509error) in a flattened [IndexedEr
 
 ##### TError
 
-`TError` *extends* [`IndexedMicro509Error`](#indexedmicro509error)\<`TCode`, `TDetails`\>
+`TError` _extends_ [`IndexedMicro509Error`](#indexedmicro509error)\<`TCode`, `TDetails`\>
 
 #### Parameters
 
@@ -420,7 +420,7 @@ Wraps an [IndexedMicro509Error](#indexedmicro509error) in a flattened [IndexedEr
 
 [`IndexedErrorResult`](#indexederrorresult)\<`TCode`, `TDetails`, `TError`\>
 
-***
+---
 
 ### indexedMicro509Error()
 
@@ -434,7 +434,7 @@ Constructs an [IndexedMicro509Error](#indexedmicro509error) payload with an opti
 
 ##### TCode
 
-`TCode` *extends* `string`
+`TCode` _extends_ `string`
 
 ##### TDetails
 
@@ -462,7 +462,7 @@ Constructs an [IndexedMicro509Error](#indexedmicro509error) payload with an opti
 
 [`IndexedMicro509Error`](#indexedmicro509error)\<`TCode`, `TDetails`\>
 
-***
+---
 
 ### micro509Error()
 
@@ -476,7 +476,7 @@ Constructs a [Micro509Error](#micro509error) payload.
 
 ##### TCode
 
-`TCode` *extends* `string`
+`TCode` _extends_ `string`
 
 ##### TDetails
 
@@ -500,7 +500,7 @@ Constructs a [Micro509Error](#micro509error) payload.
 
 [`Micro509Error`](#micro509error)\<`TCode`, `TDetails`\>
 
-***
+---
 
 ### successResult()
 

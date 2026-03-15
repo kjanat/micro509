@@ -30,6 +30,7 @@ import {
 	readSequenceChildren,
 } from '#micro509/internal/asn1/der.ts';
 import { OIDS } from '#micro509/internal/asn1/oids.ts';
+import { parseRsaPssParameters } from '#micro509/internal/crypto/rsa-pss.ts';
 import { decodeIpAddress } from '#micro509/internal/shared/ip.ts';
 import {
 	type ParsedBitFlags,
@@ -281,10 +282,14 @@ export interface ParsedCertificate<TMap extends ExtensionDecoderMap = Record<nev
 	readonly notAfter: Date;
 	/** OID of the algorithm used to sign this certificate (e.g. `"1.2.840.113549.1.1.11"` for SHA-256 with RSA). */
 	readonly signatureAlgorithmOid: string;
+	/** Human-readable signature algorithm name (e.g. `"ECDSA with SHA-256"`). */
+	readonly signatureAlgorithmName: string;
 	/** DER-encoded parameters for the signature algorithm. Absent for algorithms with no parameters. */
 	readonly signatureAlgorithmParametersDer?: Uint8Array;
 	/** OID of the subject's public key algorithm (e.g. `"1.2.840.10045.2.1"` for EC). */
 	readonly publicKeyAlgorithmOid: string;
+	/** Human-readable public key algorithm name (e.g. `"EC P-256"`). */
+	readonly publicKeyAlgorithmName: string;
 	/** DER-encoded parameters for the public key algorithm. Absent when implicit. */
 	readonly publicKeyAlgorithmParametersDer?: Uint8Array;
 	/** OID of the named curve or other key sub-parameter, when present. */
@@ -344,10 +349,14 @@ export interface ParsedCertificateSigningRequest<
 	readonly subject: ParsedName;
 	/** OID of the algorithm used to sign this CSR. */
 	readonly signatureAlgorithmOid: string;
+	/** Human-readable signature algorithm name (e.g. `"ECDSA with SHA-256"`). */
+	readonly signatureAlgorithmName: string;
 	/** DER-encoded parameters for the signature algorithm. Absent for algorithms with no parameters. */
 	readonly signatureAlgorithmParametersDer?: Uint8Array;
 	/** OID of the subject's public key algorithm. */
 	readonly publicKeyAlgorithmOid: string;
+	/** Human-readable public key algorithm name (e.g. `"EC P-256"`). */
+	readonly publicKeyAlgorithmName: string;
 	/** DER-encoded parameters for the public key algorithm. */
 	readonly publicKeyAlgorithmParametersDer?: Uint8Array;
 	/** OID of the named curve or other key sub-parameter, when present. */
@@ -457,10 +466,15 @@ export function parseCertificateDer<TMap extends ExtensionDecoderMap = Record<ne
 		notBefore: parsedValidity.notBefore,
 		notAfter: parsedValidity.notAfter,
 		signatureAlgorithmOid: parsedSignatureAlgorithm.oid,
+		signatureAlgorithmName: describeSignatureAlgorithm(
+			parsedSignatureAlgorithm.oid,
+			parsedSignatureAlgorithm.parametersDer,
+		),
 		...(parsedSignatureAlgorithm.parametersDer !== undefined
 			? { signatureAlgorithmParametersDer: parsedSignatureAlgorithm.parametersDer }
 			: {}),
 		publicKeyAlgorithmOid: parsedSpki.oid,
+		publicKeyAlgorithmName: describePublicKeyAlgorithm(parsedSpki.oid, parsedSpki.parametersOid),
 		...(parsedSpki.parametersDer !== undefined
 			? { publicKeyAlgorithmParametersDer: parsedSpki.parametersDer }
 			: {}),
@@ -595,10 +609,15 @@ export function parseCertificateSigningRequestDer<
 		signatureValue: extractBitStringValue(signatureValue),
 		subject: parseName(der, subject),
 		signatureAlgorithmOid: parsedSignatureAlgorithm.oid,
+		signatureAlgorithmName: describeSignatureAlgorithm(
+			parsedSignatureAlgorithm.oid,
+			parsedSignatureAlgorithm.parametersDer,
+		),
 		...(parsedSignatureAlgorithm.parametersDer !== undefined
 			? { signatureAlgorithmParametersDer: parsedSignatureAlgorithm.parametersDer }
 			: {}),
 		publicKeyAlgorithmOid: parsedSpki.oid,
+		publicKeyAlgorithmName: describePublicKeyAlgorithm(parsedSpki.oid, parsedSpki.parametersOid),
 		...(parsedSpki.parametersDer !== undefined
 			? { publicKeyAlgorithmParametersDer: parsedSpki.parametersDer }
 			: {}),
@@ -911,6 +930,60 @@ interface ParsedAlgorithmIdentifier {
 	readonly parametersDer?: Uint8Array;
 	/** Decoded OID when the parameters element is itself an OID (e.g. named curves). */
 	readonly parametersOid?: string;
+}
+
+/** Convert a signature AlgorithmIdentifier into a human-readable name. */
+function describeSignatureAlgorithm(oid: string, parametersDer: Uint8Array | undefined): string {
+	switch (oid) {
+		case OIDS.sha256WithRSAEncryption:
+			return 'RSA PKCS#1 v1.5 with SHA-256';
+		case OIDS.sha384WithRSAEncryption:
+			return 'RSA PKCS#1 v1.5 with SHA-384';
+		case OIDS.sha512WithRSAEncryption:
+			return 'RSA PKCS#1 v1.5 with SHA-512';
+		case OIDS.rsassaPss: {
+			const parsed = parseRsaPssParameters(parametersDer);
+			if (parsed.ok) {
+				return `RSA-PSS with ${parsed.value.hash}`;
+			}
+			return 'RSA-PSS';
+		}
+		case OIDS.ecdsaWithSHA256:
+			return 'ECDSA with SHA-256';
+		case OIDS.ecdsaWithSHA384:
+			return 'ECDSA with SHA-384';
+		case OIDS.ecdsaWithSHA512:
+			return 'ECDSA with SHA-512';
+		case OIDS.ed25519:
+			return 'Ed25519';
+		default:
+			return `Unknown (${oid})`;
+	}
+}
+
+/** Convert a SubjectPublicKeyInfo algorithm identifier into a human-readable name. */
+function describePublicKeyAlgorithm(oid: string, parametersOid: string | undefined): string {
+	switch (oid) {
+		case OIDS.rsaEncryption:
+			return 'RSA';
+		case OIDS.rsassaPss:
+			return 'RSA-PSS';
+		case OIDS.ecPublicKey:
+			switch (parametersOid) {
+				case OIDS.prime256v1:
+					return 'EC P-256';
+				case OIDS.secp384r1:
+					return 'EC P-384';
+				case OIDS.secp521r1:
+					return 'EC P-521';
+				default:
+					return 'EC';
+			}
+		case OIDS.ed25519:
+			return 'Ed25519';
+		default:
+			return `Unknown (${oid})`;
+	}
 }
 
 /** Decode an AlgorithmIdentifier SEQUENCE (OID + optional parameters). */
