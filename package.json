@@ -55,6 +55,8 @@
 		"docs:build": "rm -rf ./docs/deno 2>/dev/null; deno doc --html --output=./docs/deno --name=micro509 src/index.ts",
 		"docs:lint": "rm -rf ./docs/deno 2>/dev/null; deno doc --html --output=./docs/deno --name=micro509 --lint src/index.ts",
 		"fmt": "dprint fmt",
+		"jsr:check": "bun --eval \"import { checkExportMapParity } from './tsdown.config.ts'; await checkExportMapParity();\"",
+		"jsr:sync": "bun --eval \"import { syncJsrManifest } from './tsdown.config.ts'; await syncJsrManifest();\"",
 		"lint": "bun lint:biome",
 		"lint:biome": "biome lint",
 		"lint:deno": "deno lint --rules-exclude=no-node-globals,require-await,no-unused-vars src",
