@@ -66,3 +66,9 @@ Started: 2026-03-15
 - Implemented a canonical `micro509/revocation` entrypoint, rerouted root revocation-facing re-exports through it, and pointed tsdown at the domain barrel.
 - Files changed: `docs/API.md`, `src/index.ts`, `src/revocation/index.ts`, `test/revocation-domain.test.ts`, `tsdown.config.ts`, `src/internal/x509/extension-registry.ts`, `src/internal/x509/name-fields.ts`, `src/ocsp.ts`, `src/pfx.ts`, `.opencode/state/exports-harmonization/prd.json`, `.opencode/state/exports-harmonization/progress.txt`.
 - **Learnings:** revocation needed one advanced home for CRL, OCSP, and orchestration values, but keeping transitive type re-exports and legacy `crl`/`ocsp` leaf entrypoints avoids a premature packaging cutover before the root-barrel and export-map tasks land.
+
+## Task - [build-verify-domain-state-sync]
+
+- Verified the shipped `micro509/verify` domain work still satisfies the task acceptance criteria, then synced the PRD state so the workflow can advance.
+- Files changed: `.opencode/state/exports-harmonization/prd.json`, `.opencode/state/exports-harmonization/progress.txt`.
+- **Learnings:** PRD task state can drift from already-committed implementation work, so the next-task workflow sometimes needs an explicit state-sync commit before it can advance to the next real code task.

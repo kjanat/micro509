@@ -63,7 +63,7 @@
 			"description": "Merge PFX, PKCS#7, and PKCS#12 MAC support under one `pkcs` public domain. Done when:\n- `src/pkcs/index.ts` is the public home for PFX and PKCS#7 workflows\n- PKCS#12 MAC remains reachable only as advanced PKCS plumbing, not as a headline surface\n- PKCS modules stop exporting file-shaped product seams\n- docs can teach container workflows without fragmenting imports across multiple subpaths",
 			"depends": ["move-internal-modules", "build-x509-domain"],
 			"priority": "integration",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "build-utility-domains",
