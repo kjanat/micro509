@@ -14,7 +14,7 @@
 	"languages": {
 		"TypeScript": {
 			"format_on_save": "on",
-			"language_servers": ["...", "deno"],
+			"language_servers": ["tsgo", "biome"],
 			"formatter": [
 				{ "code_action": "fixAll.biome" },
 				{ "code_action": "organizeImports.biome" },
