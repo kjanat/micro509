@@ -21,6 +21,7 @@ export default defineConfig({
 				emit: { source: true, inject: false },
 			}),
 		],
+		publicDir: `${import.meta.dirname}/../assets/`,
 	},
 	title: pkg.name,
 	description: pkg.description,
@@ -38,7 +39,7 @@ export default defineConfig({
 	],
 
 	themeConfig: {
-		logo: '/assets/favicon.svg',
+		logo: '/favicon.svg',
 		nav: [
 			{ text: 'Guide', link: '/guide/getting-started' },
 			{ text: 'API', link: '/reference/api/' },

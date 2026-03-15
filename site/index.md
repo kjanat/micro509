@@ -5,7 +5,7 @@ hero:
   text: Typed PKI for modern TypeScript
   tagline: The X.509 library that tells you why verification failed, not just that it did.
   image:
-    src: /assets/icon.svg
+    src: /icon.svg
     alt: micro509
   actions:
     - theme: brand

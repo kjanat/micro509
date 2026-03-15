@@ -81,6 +81,9 @@
 		"typecheck": "tsgo --noEmit -p tsconfig.src.json && tsgo --noEmit -p tsconfig.other.json",
 		"typecheck:tsc": "tsc --noEmit -p tsconfig.src.json && tsc --noEmit -p tsconfig.other.json"
 	},
+	"overrides": {
+		"vite": "^8.0.0-beta.18"
+	},
 	"devDependencies": {
 		"@arethetypeswrong/core": "^0.18.2",
 		"@biomejs/biome": "^2.4.7",
@@ -99,9 +102,6 @@
 		"vite-robots-txt": "^1.0.0",
 		"vite-svg-to-ico": "^2.0.1",
 		"vitepress": "^2.0.0-alpha.16"
-	},
-	"overrides": {
-		"vite": "^8.0.0-beta.18"
 	},
 	"packageManager": "bun@1.3.10",
 	"devEngines": {
