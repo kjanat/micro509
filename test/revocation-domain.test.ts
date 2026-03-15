@@ -1,32 +1,117 @@
 import { describe, expect, it } from 'bun:test';
-import type {
-	CheckCertificateRevocationInput,
-	ParsedCertificateRevocationList,
-	ParsedOcspResponse,
-} from '#micro509/revocation/index.ts';
+import { createCertificate, createSelfSignedCertificate, generateKeyPair } from '#micro509';
 import * as revocation from '#micro509/revocation/index.ts';
 
-function assertRevocationDomainTypes(_input: {
-	readonly check?: CheckCertificateRevocationInput;
-	readonly crl?: ParsedCertificateRevocationList;
-	readonly ocsp?: ParsedOcspResponse;
-}): void {}
-
 describe('revocation domain', () => {
-	it('exposes the consolidated advanced revocation surface', () => {
-		const input: CheckCertificateRevocationInput = {
-			certificate: new Uint8Array(),
-			issuerCertificate: new Uint8Array(),
-		};
+	it('creates a CRL with an empty revoked list', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Revocation Domain CA' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
 
-		assertRevocationDomainTypes({});
+		const crl = await revocation.createCertificateRevocationList({
+			issuer: { commonName: 'Revocation Domain CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			crlNumber: 1,
+			revokedCertificates: [],
+		});
 
-		expect(input.evidence).toBeUndefined();
-		expect(typeof revocation.checkCertificateRevocation).toBe('function');
-		expect(typeof revocation.resolveOcspResponderCandidates).toBe('function');
-		expect(typeof revocation.createCertificateRevocationList).toBe('function');
-		expect(typeof revocation.validateCertificateRevocationList).toBe('function');
-		expect(typeof revocation.createOcspRequest).toBe('function');
-		expect(typeof revocation.validateOcspResponse).toBe('function');
+		expect(crl.pem).toContain('BEGIN X509 CRL');
+		expect(crl.der).toBeInstanceOf(Uint8Array);
+		expect(crl.der.length).toBeGreaterThan(0);
+	});
+
+	it('parses and validates a CRL against the issuing CA', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Revocation Validate CA' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+
+		const crl = await revocation.createCertificateRevocationList({
+			issuer: { commonName: 'Revocation Validate CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			crlNumber: 2,
+		});
+
+		const parsed = revocation.parseCertificateRevocationListPem(crl.pem);
+		expect(parsed.issuer.commonName).toBe('Revocation Validate CA');
+		expect(parsed.revokedCertificates).toHaveLength(0);
+		expect(parsed.crlNumber).toBe(2);
+
+		const result = await revocation.validateCertificateRevocationList({
+			crl: crl.pem,
+			issuerCertificate: ca.certificate.pem,
+		});
+		expect(result.ok).toBe(true);
+	});
+
+	it('creates an OCSP request for a leaf certificate', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'OCSP Domain CA' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'OCSP Domain CA' },
+			subject: { commonName: 'ocsp-leaf.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+
+		const ocspReq = await revocation.createOcspRequest({
+			requests: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: ca.certificate.pem,
+				},
+			],
+		});
+
+		expect(ocspReq.der).toBeInstanceOf(Uint8Array);
+		expect(ocspReq.der.length).toBeGreaterThan(0);
+	});
+
+	it('returns unknown status when no evidence is provided', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'No Evidence CA' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'No Evidence CA' },
+			subject: { commonName: 'no-evidence.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+
+		const result = await revocation.checkCertificateRevocation({
+			certificate: leaf.der,
+			issuerCertificate: ca.certificate.der,
+		});
+
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.value.status).toBe('unknown');
+		if (result.value.status !== 'unknown') return;
+		expect(result.value.code).toBe('revocation_evidence_missing');
+		expect(result.value.details.indeterminateEvidence).toHaveLength(0);
 	});
 });
