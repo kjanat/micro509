@@ -1,0 +1,25 @@
+name: Validate Release Version
+description: Extract and validate version from jsr.json + package.json against git tag
+
+inputs:
+  event-name: { description: GitHub event name (push or pull_request), required: false }
+  ref-name: { description: Git ref name (tag name for push events), required: false }
+
+outputs:
+  version: { description: Validated version string (e.g. v1.2.3), value: "${{ steps.validate.outputs.version }}" }
+  is_push: { description: Whether this is a push event (vs pull_request), value: "${{ steps.validate.outputs.is_push }}" }
+  is_tag: { description: Whether this is a version tag push (REF_NAME starts with "v"), value: "${{ steps.validate.outputs.is_tag }}" }
+  prerelease: { description: Whether this is a prerelease version, value: "${{ steps.validate.outputs.prerelease }}" }
+  is_stable: { description: Whether this is a stable tag release (is_tag && !prerelease), value: "${{ steps.validate.outputs.is_stable }}" }
+  mode: { description: Mode string - publish for tag pushes, dry-run for PRs, value: "${{ steps.validate.outputs.mode }}" }
+
+runs:
+  using: composite
+  steps:
+    - name: Validate version
+      id: validate
+      shell: bash
+      run: ${{ github.action_path }}/validate.sh
+      env:
+        EVENT_NAME: ${{ inputs.event-name || github.event_name }}
+        REF_NAME: ${{ inputs.ref-name || github.ref_name }}
