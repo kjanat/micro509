@@ -42,6 +42,7 @@
 		"./result": "./dist/result.js",
 		"./revocation": "./dist/revocation.js",
 		"./verify": "./dist/verify.js",
+		"./x509": "./dist/x509.js",
 		"./package.json": "./package.json"
 	},
 	"types": "./dist/index.d.ts",

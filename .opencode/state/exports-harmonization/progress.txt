@@ -17,6 +17,7 @@ Started: 2026-03-15
 - `micro509/pem` stays public as a narrow PKI boundary module.
 - PKCS#12 MAC support stays under `pkcs`, but should be documented as advanced plumbing, not a headline surface.
 - Source files should reach `src/internal/**` through relative imports so build-time `.ts` rewriting still works; tests can keep `#micro509/internal/*` aliases.
+- `@internal` jsdoc can still affect emitted declarations for exported helpers, so new canonical domain barrels should not promote symbols that declaration emit already treats as internal.
 
 ---
 <!-- Task logs below - APPEND ONLY -->
@@ -38,3 +39,9 @@ Started: 2026-03-15
 - Moved ASN.1, crypto, extension, shared-IP, and verify-engine helpers into `src/internal/**`, then rewired public leaves to import internals directly.
 - Files changed: `src/AGENTS.md`, `src/certificate.ts`, `src/crl.ts`, `src/csr.ts`, `src/extensions.ts`, `src/identity.ts`, `src/index.ts`, `src/keys.ts`, `src/name.ts`, `src/ocsp.ts`, `src/parse.ts`, `src/pfx.ts`, `src/pkcs12-mac.ts`, `src/pkcs7.ts`, `src/verify.ts`, `src/x509/index.ts`, `src/internal/README.md`, `src/internal/asn1/README.md`, `src/internal/crypto/README.md`, `src/internal/shared/README.md`, `src/internal/verify/README.md`, `src/internal/x509/README.md`, `src/internal/asn1/asn1.ts`, `src/internal/asn1/der.ts`, `src/internal/asn1/oids.ts`, `src/internal/crypto/ecdsa.ts`, `src/internal/crypto/hash.ts`, `src/internal/crypto/pbes2.ts`, `src/internal/crypto/rsa-pss.ts`, `src/internal/crypto/sig-verify.ts`, `src/internal/crypto/signing.ts`, `src/internal/crypto/webcrypto.ts`, `src/internal/shared/ip.ts`, `src/internal/verify/name-constraints-engine.ts`, `src/internal/verify/policy-engine.ts`, `src/internal/verify/verify-path.ts`, `src/internal/x509/extension-bits.ts`, `src/internal/x509/extension-registry.ts`, `src/internal/x509/name-fields.ts`, `test/AGENTS.md`, `test/certificate.test.ts`, `test/csr.test.ts`, `test/extension-registry.test.ts`, `test/extensions.test.ts`, `test/helpers.ts`, `test/internals.test.ts`, `test/keys.test.ts`, `test/malformed-der.test.ts`, `test/name-constraints.test.ts`, `test/ocsp-fixtures.test.ts`, `test/ocsp.test.ts`, `test/parse.test.ts`, `test/pfx.test.ts`, `test/pkcs7.test.ts`, `test/policy.test.ts`, `test/verify.test.ts`, `.opencode/state/exports-harmonization/prd.json`, `.opencode/state/exports-harmonization/progress.txt`.
 - **Learnings:** helper moves exposed that source imports must stay relative for emitted `.js` rewrites, while tests can safely probe internals through `#micro509/internal/*`; `getCrypto` belonged in a dedicated internal runtime helper, but `wrapKeyPair` only needed to stop being public.
+
+## Task - [build-x509-domain]
+
+- Implemented a canonical `micro509/x509` entrypoint, rerouted root X.509 re-exports through it, and added a focused surface test plus docs updates.
+- Files changed: `docs/API.md`, `package.json`, `specs/exports-harmonization-ownership.md`, `src/index.ts`, `src/name.ts`, `src/x509/index.ts`, `test/x509-domain.test.ts`, `tsdown.config.ts`, `.opencode/state/exports-harmonization/prd.json`, `.opencode/state/exports-harmonization/progress.txt`.
+- **Learnings:** canonical domain barrels need explicit export curation instead of `export *`; several legacy parse helpers and SKI builder helpers are documented `@internal`, and promoting them into a new domain barrel breaks declaration generation.

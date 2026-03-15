@@ -58,7 +58,7 @@ as convenience only, never as canonical ownership.
   `encodePolicyMappings`, `encodePolicyConstraints`,
   `encodeInhibitAnyPolicy`, `getExtendedKeyUsageOid`,
   `parseExtendedKeyUsageOid`, `getAuthorityInfoAccessMethodOid`,
-  `parseAuthorityInfoAccessMethodOid`, `buildSubjectKeyIdentifier`
+  `parseAuthorityInfoAccessMethodOid`
 
 #### `./name` -> `micro509/x509`
 
@@ -78,12 +78,9 @@ as convenience only, never as canonical ownership.
   `parseCertificatePem`, `parseCertificateChainPem`,
   `parseCertificateSigningRequestDer`, `parseCertificateSigningRequestPem`,
   `findExtension`, `decodeExtension`, `decodeExtensions`,
-  `decodeExtensionMap`, `parseBasicConstraints`, `parseKeyUsage`,
-  `parseExtendedKeyUsage`, `parseCertificatePolicies`,
-  `parsePolicyMappings`, `parsePolicyConstraints`,
-  `parseInhibitAnyPolicy`, `parseSubjectAltNames`,
-  `parseAuthorityInfoAccess`, `parseCrlDistributionPoints`,
-  `parseNameConstraints`, `parseAuthorityKeyIdentifier`
+  `decodeExtensionMap`
+- `drop`: legacy extension-value decoders still carry `@internal` docs in
+  `parse.ts`, so do not promote them into `micro509/x509`
 
 ### `verify`
 

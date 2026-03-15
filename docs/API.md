@@ -12,27 +12,28 @@ Use subpaths when you want a narrower entrypoint.
 
 ## Package entrypoints
 
-| Subpath                     | Purpose                                                    |
-| --------------------------- | ---------------------------------------------------------- |
-| `micro509`                  | root barrel with the full public API                       |
-| `micro509/certificate`      | certificate creation helpers                               |
-| `micro509/crl`              | CRL create, parse, validate, verify, and revocation lookup |
-| `micro509/csr`              | CSR creation helpers                                       |
-| `micro509/extensions`       | certificate and CSR extension input types                  |
-| `micro509/identity`         | service identity matching                                  |
-| `micro509/keys`             | key generation plus import and export helpers              |
-| `micro509/name`             | distinguished-name input types                             |
-| `micro509/name-constraints` | initial name-constraint input types                        |
-| `micro509/ocsp`             | OCSP create, parse, validate, and verify helpers           |
-| `micro509/parse`            | cert and CSR parse plus extension decode helpers           |
-| `micro509/pem`              | PEM split, decode, encode helpers                          |
-| `micro509/pfx`              | PKCS#12/PFX create and parse helpers                       |
-| `micro509/pkcs12-mac`       | PKCS#12 MAC helpers                                        |
-| `micro509/pkcs7`            | PKCS#7 cert bag and signedData parse helpers               |
-| `micro509/policy`           | policy-validation input and output types                   |
-| `micro509/result`           | shared `Result` and error types                            |
-| `micro509/revocation`       | higher-level revocation orchestration helpers              |
-| `micro509/verify`           | chain, CSR, purpose, and path validation helpers           |
+| Subpath                     | Purpose                                                     |
+| --------------------------- | ----------------------------------------------------------- |
+| `micro509`                  | root barrel with the full public API                        |
+| `micro509/x509`             | canonical certificate, CSR, name, extension, and parse APIs |
+| `micro509/certificate`      | certificate creation helpers                                |
+| `micro509/crl`              | CRL create, parse, validate, verify, and revocation lookup  |
+| `micro509/csr`              | CSR creation helpers                                        |
+| `micro509/extensions`       | certificate and CSR extension input types                   |
+| `micro509/identity`         | service identity matching                                   |
+| `micro509/keys`             | key generation plus import and export helpers               |
+| `micro509/name`             | distinguished-name input types                              |
+| `micro509/name-constraints` | initial name-constraint input types                         |
+| `micro509/ocsp`             | OCSP create, parse, validate, and verify helpers            |
+| `micro509/parse`            | cert and CSR parse plus extension decode helpers            |
+| `micro509/pem`              | PEM split, decode, encode helpers                           |
+| `micro509/pfx`              | PKCS#12/PFX create and parse helpers                        |
+| `micro509/pkcs12-mac`       | PKCS#12 MAC helpers                                         |
+| `micro509/pkcs7`            | PKCS#7 cert bag and signedData parse helpers                |
+| `micro509/policy`           | policy-validation input and output types                    |
+| `micro509/result`           | shared `Result` and error types                             |
+| `micro509/revocation`       | higher-level revocation orchestration helpers               |
+| `micro509/verify`           | chain, CSR, purpose, and path validation helpers            |
 
 ## Result model
 
@@ -373,7 +374,7 @@ Primary types:
 
 Notes:
 
-- root exports include the common extension and name input types even though the builder-heavy logic lives in `micro509/extensions`
+- root exports include the common extension and name input types even though the exhaustive advanced surface lives in `micro509/x509`
 
 ### Shared result types
 

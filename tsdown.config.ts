@@ -21,6 +21,7 @@ export default defineConfig({
 		result: 'src/result.ts',
 		revocation: 'src/revocation.ts',
 		verify: 'src/verify.ts',
+		x509: 'src/x509/index.ts',
 	},
 	name: 'micro509',
 	format: ['esm'],

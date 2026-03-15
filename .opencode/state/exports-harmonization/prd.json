@@ -36,7 +36,7 @@
 			"description": "Move certificate, CSR, parse, extension, and name APIs into the `x509` domain and make it their canonical public home. Done when:\n- `src/x509/index.ts` is the exhaustive advanced entrypoint for cert, CSR, parse, name, and extension symbols\n- file ownership for `certificate`, `csr`, `extensions`, `name`, and `parse` is consolidated under `x509`\n- public types in this area stop depending on cross-domain incidental ownership\n- docs/examples for these workflows can point to one stable domain module",
 			"depends": ["move-internal-modules"],
 			"priority": "integration",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "build-verify-domain",
