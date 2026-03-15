@@ -2,7 +2,9 @@
 
 The TypeScript PKI library that tells you _why_ verification failed, not just that it did.
 
-Zero dependencies. Pure WebCrypto. Runs everywhere: Node, Bun, Deno, browsers, Cloudflare Workers.
+Zero dependencies. Under 50 kB gzipped. Pure WebCrypto. Runs everywhere: Node, Bun, Deno, browsers, Cloudflare Workers.
+
+> **Prerelease** — API may change before 1.0.
 
 ## Install
 
@@ -13,30 +15,33 @@ npm install micro509
 ## Why micro509
 
 Other JS X.509 libraries return a boolean from chain verification.
-micro509 returns a discriminated union with 13 typed error codes, the
+micro509 returns a discriminated union with 21 typed error codes, the
 failing certificate's index, and structured failure details — so your
 code can _handle_ the failure, not just log it.
 
 ```ts
 if (!result.ok) {
-  // result.error.code: 'SIGNATURE_INVALID' | 'EXPIRED' | 'NAME_CONSTRAINTS_VIOLATED' | ...
+  // result.error.code: 'signature_invalid' | 'certificate_expired' | 'name_constraints_violated' | ...
   // result.error.index: which certificate in the chain failed
   // result.error.details: { expected, actual } for identity mismatches
 }
 ```
 
-Beyond verification, micro509 covers PKI surface that no other
-zero-dependency JS package ships:
+Beyond verification, micro509 covers PKI surface that's hard to find
+in a single zero-dependency JS package:
 
 - **OCSP** — build requests, parse and validate responses, verify responder authorization
 - **PFX / PKCS#12** — create and parse password-protected key+cert bundles
 - **PKCS#7 / CMS** — parse SignedData, verify signer signatures, extract cert bags
 - **CRLs** — create, parse, verify, and check revocation status
 - **Encrypted keys** — PBES2 PKCS#8, legacy OpenSSL encrypted PEM, PKCS#1, SEC1
+- **Key import/export** — PKCS#8, SPKI, JWK, PKCS#1, SEC1 with generation for RSA, ECDSA, Ed25519
 - **Service identity** — wildcard DNS, IPv6 normalization, URI-ID, SRV-ID, explicit CN opt-in
 
-All with no `any`, no type assertions, no non-null assertions, and
-no runtime DI frameworks that break edge runtimes.
+Narrow defaults, explicit escape hatches — dangerous operations like CN
+fallback or self-signed leaf acceptance require opt-in. All with no `any`,
+no type assertions, no non-null assertions, and no runtime DI frameworks
+that break edge runtimes.
 
 ## Quick start
 
