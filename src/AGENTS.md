@@ -1,60 +1,52 @@
-# src/ - Module Map
+# `src/` - Module Map
 
-Public modules stay flat while implementation-only helpers now live under
-`src/internal/**`.
+Public domain entrypoints are one-level buckets, implementation details stay in
+`src/internal/`.
 
 ## OVERVIEW
 
-`src/` is one-level-deep by design. Large domain files usually own a full lifecycle instead of splitting by subfeature.
+`src/` is the library boundary. High-level workflow ownership is in domain
+barrels under `x509`, `verify`, `revocation`, `keys`, `pem`, `pkcs`, and
+`result`.
 
 ## WHERE TO LOOK
 
-| Area               | File                                  | Notes                                                            |
-| ------------------ | ------------------------------------- | ---------------------------------------------------------------- |
-| Root exports       | `index.ts`                            | package root barrel                                              |
-| Certificate create | `certificate.ts`                      | create + self-signed create                                      |
-| CSR create         | `csr.ts`                              | CSR builder only                                                 |
-| Parse boundary     | `parse.ts`                            | certificate/CSR DER+PEM parse, extension decoding                |
-| Path validation    | `verify.ts`                           | path build + validate, policy, constraints, identity composition |
-| Revocation by CRL  | `crl.ts`, `revocation.ts`             | CRL lifecycle and orchestration                                  |
-| OCSP               | `ocsp.ts`                             | request/response create + parse + verify + validate              |
-| Key material       | `keys.ts`                             | keygen and key import/export                                     |
-| Container formats  | `pfx.ts`, `pkcs7.ts`, `pkcs12-mac.ts` | PKCS#12/PFX, PKCS#7, MAC helpers                                 |
-| Extension schema   | `extensions.ts`                       | typed extension inputs plus ASN.1 encoders                       |
-| ASN.1 internals    | `internal/asn1/*.ts`                  | shared low-level spine                                           |
-| Crypto internals   | `internal/crypto/*.ts`                | algorithm mapping, verify, PBES2, WebCrypto runtime              |
+| Area               | File/dir                          | Notes                                               |
+| ------------------ | --------------------------------- | --------------------------------------------------- |
+| Package root       | `index.ts`                        | all stable package exports                          |
+| Domain entrypoints | `x509/`, `verify/`, `revocation/` | re-export-only in most cases                        |
+| Key APIs           | `keys/`                           | import/export, generation, encryption options       |
+| PEM boundary       | `pem/`                            | encode/decode and block classification              |
+| PKCS workflows     | `pkcs/`                           | PFX and PKCS#7 data lifecycles                      |
+| Result model       | `result/`                         | shared typed `Result` and error constructors        |
+| Internal spine     | `internal/`                       | ASN.1, crypto, shared helpers, verification engines |
 
 ## LOCAL CONVENTIONS
 
-- Keep new code in an existing domain file unless a new RFC surface clearly merits a new top-level module.
-- Public API additions need both source export and `index.ts` barrel review.
-- Internal helper modules are not re-exported just because tests use them.
-- Large files follow a common shape: public types first, public functions next, private helpers last.
-- `verify.ts` owns validation semantics; `parse.ts` owns input decoding semantics; do not blur that boundary.
-- If an algorithm is added, update both `internal/crypto/signing.ts` and
-  `internal/crypto/sig-verify.ts`.
-- Staged domain barrels live in `src/x509/`, `src/verify/`, `src/revocation/`,
-  `src/pkcs/`, `src/keys/`, `src/pem/`, and `src/result/`; keep them as
-  re-export-only scaffolding until the real file moves land.
-- Implementation-only modules belong under `src/internal/**`; tests and source
-  should prefer `#micro509/internal/*` over incidental flat-file imports once an
-  internal home exists.
-- Public leaf modules may import `src/internal/**` directly, but must not import
-  public barrels such as `src/index.ts` or sibling domain `index.ts` files.
+- Keep APIs by domain barrel; add files inside existing domain unless the domain
+  model clearly needs a new public ownership file.
+- Public API additions need both module export and barrel review.
+- Internal helpers are not re-exported from public barrels unless they define API
+  state.
+- `src/internal/**` is implementation-only; tests and source should use
+  `#micro509/internal/*` imports when they exist.
+- Public leaf modules import from `internal` but must not import sibling public
+  domain barrels.
+- Validation semantics belong to `verify`; parse semantics belong to `x509`.
 
 ## HOTSPOTS
 
-- `verify.ts` - biggest control-flow surface; path, policy, name constraints, identity hooks.
-- `crl.ts` - full CRL lifecycle in one file.
-- `parse.ts` - parse boundary and extension decoder framework.
-- `ocsp.ts` - request/response lifecycle plus responder validation.
-- `extensions.ts` - typed schema hub for cert/CSR/CRL builders.
-- `keys.ts` - broadest API width; legacy compatibility lives here.
+- `src/verify/verify.ts` - core candidate path and policy composition control.
+- `src/revocation/ocsp.ts` and `src/revocation/crl.ts` - largest revocation
+  control-flow surface.
+- `src/x509/parse.ts` and `src/x509/extensions.ts` - parse boundary and
+  extension codec hub.
+- `src/keys/keys.ts` - broadest API with legacy compatibility matrix.
 
 ## ANTI-PATTERNS
 
-- Do not add new public subdirectories beyond the staged domain layout without a
-  matching exports decision.
-- Do not expose internal helpers from `index.ts` unless the package API truly expands.
-- Do not mix parse-time tolerance with validation-time policy; reject malformed input early.
-- Do not add one-off assertion shortcuts that violate repo typing bans.
+- Do not add public-facing APIs under `src/internal/**`.
+- Do not split existing domain owners unless scope requires a new RFC-facing
+  module.
+- Do not add parse-tolerant behavior in validation layers.
+- Do not bypass result ADTs with `throw` for expected domain failures.

@@ -1,20 +1,34 @@
 # PROJECT KNOWLEDGE BASE
 
-**Generated:** 2026-03-13 **Commit:** 20bb7c6 **Branch:** pre-1-0-architecture-cleanup
+**Generated:** 2026-03-15 **Commit:** 0edfac9 **Branch:** exports-harmonization
 
 ## OVERVIEW
 
-`micro509` is a zero-dependency TypeScript X.509/PKI library. It is ESM-only, functional, strict-typed, and keeps public API surface in flat `src/*.ts` modules with Bun-first local tooling.
+`micro509` is a zero-dependency TypeScript X.509/PKI library.
+It is ESM-only, functional, strict-typed, and Bun-first in tooling.
 
-PRERELEASE. NO DOWNSTREAM USERS
+PRERELEASE. NO DOWNSTREAM USERS.
 
 ## STRUCTURE
 
 ```tree
 ts-x509/
-|- src/            # flat PKI implementation modules; public + internal mixed
-|- test/           # feature suites, helpers, OpenSSL oracle, PKITS fixtures
-|- docs/           # scope statements and test-harness docs
+|- src/            # domain barrels + public modules
+|  |- x509/       # cert + CSR + extension + parse APIs
+|  |- verify/     # chain validation + policy + identity checks
+|  |- revocation/ # CRL/OCSP lifecycles
+|  |- keys/       # key import/export and generation
+|  |- pem/        # PEM encode/decode boundary
+|  |- pkcs/       # PKCS-7 and PKCS#12 workflows
+|  |- result/     # shared result/error algebra
+|  `- internal/   # implementation-only modules
+|      |- asn1/
+|      |- crypto/
+|      |- shared/
+|      |- verify/
+|      `- x509/
+|- test/           # feature suites, helpers, oracle adapters, PKITS fixtures
+|- docs/           # scope statements and harness docs
 |- specs/          # long-lived implementation planning docs
 |- comparisons/    # competitor notes
 |- dist/           # generated build output
@@ -23,49 +37,51 @@ ts-x509/
 
 ## WHERE TO LOOK
 
-| Task                              | Location                                               | Notes                                                      |
-| --------------------------------- | ------------------------------------------------------ | ---------------------------------------------------------- |
-| Public API surface                | `src/index.ts`                                         | Barrel export for package root                             |
-| Package entry routing             | `package.json`                                         | `exports`, `imports`, Bun scripts                          |
-| Chain validation                  | `src/verify.ts`                                        | path building, validation, policy, identity compose points |
-| Certificate and CSR parsing       | `src/parse.ts`                                         | DER/PEM parse boundary and extension decoding              |
-| CRL lifecycle                     | `src/crl.ts`                                           | create, parse, verify, validate, revocation                |
-| OCSP lifecycle                    | `src/ocsp.ts`                                          | request/response create, parse, verify, validate           |
-| Key import/export                 | `src/keys.ts`                                          | widest API surface; PKCS#1/8, SEC1, SPKI, JWK              |
-| Extension model/builders          | `src/extensions.ts`                                    | typed extension inputs plus encoder helpers                |
-| Test helpers and internals probes | `test/helpers.ts`, `test/internals.test.ts`            | shared DER helpers; internal coverage allowed in tests     |
-| Differential oracle               | `test/differential.test.ts`, `test/oracles/openssl.ts` | compare normalized semantics against OpenSSL               |
-| PKITS coverage                    | `test/pkits.test.ts`, `docs/PKITS-HARNESS.md`          | focused shipped-claims subset at fixed validation time     |
-| Standards scope                   | `docs/PKIX-SCOPE.md`                                   | source of truth for claim boundaries                       |
+| Task                              | Location                                                   | Notes                                                |
+| --------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------- |
+| Public API surface                | `src/index.ts`                                             | root barrel for `micro509`                           |
+| Domain entrypoints                | `src/x509/`, `src/verify/`, `src/revocation/`, `src/keys/` | domain-specific high-level entry surfaces            |
+| Package entry routing             | `package.json`                                             | `exports`, `imports`, scripts                        |
+| Chain validation                  | `src/verify/verify.ts`                                     | candidate path building, policy composition          |
+| Certificate/CSR parsing           | `src/x509/parse.ts`                                        | DER/PEM parse boundary + extension decoding          |
+| Revocation                        | `src/revocation/crl.ts`, `src/revocation/ocsp.ts`          | CRL + OCSP creation, parse, validate, verify         |
+| Key import/export                 | `src/keys/keys.ts`                                         | PKCS#1/8, SEC1, SPKI, JWK flows                      |
+| Extension model/builders          | `src/x509/extensions.ts`                                   | typed extension schema and encoder helpers           |
+| Test helpers and internals probes | `test/helpers.ts`, `test/internals.test.ts`                | shared DER helpers, internal probing through imports |
+| Differential oracle               | `test/differential.test.ts`, `test/oracles/openssl.ts`     | normalized semantics against OpenSSL                 |
+| PKITS coverage                    | `test/pkits.test.ts`, `docs/PKITS-HARNESS.md`              | fixed-time conformance subset                        |
+| Standards scope                   | `docs/PKIX-SCOPE.md`                                       | claim boundaries                                     |
 
 ## CONVENTIONS
 
-- Tabs, LF, single quotes.
-- `src/` stays flat; domain modules own end-to-end flows instead of subdirectories.
-- `.ts` relative import extensions are required in source; build rewrites to `.js`.
+- Domain entrypoints own feature ownership; concrete lifecycle modules do implementation.
+- `src/*/` barrels are re-export-only unless local file owners expand naturally.
+- `.ts` import extensions are used across source.
+- Import boundaries: public leaf modules may use `#micro509/internal/*`, not sibling barrels.
 - Return typed result unions for expected failures; throw only for invariants.
-- `readonly` everywhere; exhaustive `never` switches; `Record<never, never>` for empty map defaults.
-- Bun is default runner/package manager, but Node compatibility still matters.
-- Tests may import internals through `#micro509/*.ts` when asserting low-level behavior.
-- Commit messages:
-  - Follow conventional commits; prefer `type(scope): subject`.
-  - After the blank line, hard-wrap body lines at about 72 chars. Use `git commit -F - <<'EOF'` with heredoc. Verify message has no literal `\n` in message after comitting.
-  - Do not leave body paragraphs as one long line.
-- Add jsr-style jsdoc. See <https://github.com/jsr-io/jsr/blob/main/frontend/docs/writing-docs.md> for style guidance.
+- `readonly` and exhaustive ADTs with `never` checks.
 
 ## ANTI-PATTERNS (THIS PROJECT)
 
 - No `any`.
-- No non-null `!`.
-- No `as Type`; only `as const` and `as const satisfies`.
-- No classes.
-- No default exports.
+- No non-null assertions `!`.
+- No `as Type`; use `as const` and `as const satisfies` only.
+- No classes or default exports.
 - No mocks in tests.
 - No `eslint-disable` or `@ts-ignore`.
 - No `await expect()` in tests.
-- Do not treat every self-signed cert as a trust anchor.
-- Do not overclaim RFC support beyond `docs/PKIX-SCOPE.md`.
-- Keep `\` for intentional hard breaks, both in markdown and jsdoc.
+- Do not over-claim RFC support outside `docs/PKIX-SCOPE.md`.
+- `docs/rfc` is vendored text, not project prose.
+
+## CODE MAP
+
+| Symbol                    | Type          | Location            | Refs                                      |
+| ------------------------- | ------------- | ------------------- | ----------------------------------------- |
+| `src/index.ts`            | barrel export | root surface        | Re-exports all stable API slices          |
+| `src/x509/index.ts`       | domain barrel | X.509 feature slice | Certificate, CSR, parse, extension APIs   |
+| `src/verify/index.ts`     | domain barrel | verification slice  | Path, policy, identity, name constraints  |
+| `src/revocation/index.ts` | domain barrel | revocation slice    | CRL/OCSP orchestration                    |
+| `src/result/result.ts`    | result ADT    | shared model        | central `Result`/`Micro509Error` contract |
 
 ## COMMANDS
 
@@ -83,8 +99,5 @@ bun test:differential
 ## NOTES
 
 - Repo name is `ts-x509`; package name is `micro509`.
-- No CI workflows; checks are local.
-- `package.json` `exports` are generated by build tooling; do not hand-edit them casually.
-- `dist/` and `node_modules/` are present in-tree; treat them as generated/output, not source of truth.
-- `docs/rfc/` is vendored reference text, not authored project prose.
-- Highest-complexity source files: `src/verify.ts`, `src/crl.ts`, `src/parse.ts`, `src/ocsp.ts`, `src/extensions.ts`, `src/keys.ts`.
+- `dist/` and `node_modules/` are generated output, not source of truth.
+- `package.json` `exports` are generated by tooling; edit source + build inputs, not output.
