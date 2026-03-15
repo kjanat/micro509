@@ -542,7 +542,7 @@ function createParsedExtensionApplicator<TParsed, TInput>(
 
 /** Accept hex string or Uint8Array and return raw bytes. */
 function normalizeKeyIdentifier(value: string | Uint8Array): Uint8Array {
-	return typeof value === 'string' ? hexToBytes(value) : new Uint8Array(value);
+	return typeof value === 'string' ? hexToBytes(value) : value;
 }
 
 /** Decode an SKI extension value DER to a hex string. */
