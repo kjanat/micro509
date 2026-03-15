@@ -1318,8 +1318,10 @@ function ekuCheckFailureResult(
 function resolvePolicyValidationInput(
 	input: NestedValidationInputs & PolicyValidationInput,
 ): PolicyValidationInput {
+	const flatInitialPolicySet = normalizeInitialPolicySet(input.initialPolicySet);
+	const nestedInitialPolicySet = normalizeInitialPolicySet(input.policy?.initialPolicySet);
 	return {
-		...(input.initialPolicySet === undefined ? {} : { initialPolicySet: input.initialPolicySet }),
+		...(flatInitialPolicySet === undefined ? {} : { initialPolicySet: flatInitialPolicySet }),
 		...(input.requireExplicitPolicy === undefined
 			? {}
 			: { requireExplicitPolicy: input.requireExplicitPolicy }),
@@ -1327,9 +1329,7 @@ function resolvePolicyValidationInput(
 			? {}
 			: { inhibitPolicyMapping: input.inhibitPolicyMapping }),
 		...(input.inhibitAnyPolicy === undefined ? {} : { inhibitAnyPolicy: input.inhibitAnyPolicy }),
-		...(input.policy?.initialPolicySet === undefined
-			? {}
-			: { initialPolicySet: input.policy.initialPolicySet }),
+		...(nestedInitialPolicySet === undefined ? {} : { initialPolicySet: nestedInitialPolicySet }),
 		...(input.policy?.requireExplicitPolicy === undefined
 			? {}
 			: { requireExplicitPolicy: input.policy.requireExplicitPolicy }),
@@ -1430,8 +1430,14 @@ function buildValidationState(
 	chainLength: number,
 ): ValidationStateResult {
 	const policy = createPolicyValidationState(resolvePolicyValidationInput(input), chainLength);
-	const nameConstraints = createNameConstraintValidationState(
+	const initialNameConstraintsValidation = validateInitialNameConstraintsInput(
 		resolveInitialNameConstraintsInput(input),
+	);
+	if (!initialNameConstraintsValidation.ok) {
+		return initialNameConstraintsValidation;
+	}
+	const nameConstraints = createNameConstraintValidationState(
+		initialNameConstraintsValidation.value,
 	);
 	return {
 		ok: true,
@@ -1440,4 +1446,104 @@ function buildValidationState(
 			nameConstraints,
 		},
 	};
+}
+
+function normalizeInitialPolicySet(
+	initialPolicySet: PolicyValidationInput['initialPolicySet'] | undefined,
+): PolicyValidationInput['initialPolicySet'] | undefined {
+	if (initialPolicySet === undefined || initialPolicySet === 'any') {
+		return initialPolicySet;
+	}
+	if (!Array.isArray(initialPolicySet)) {
+		return [];
+	}
+	return initialPolicySet.every((policyIdentifier) => typeof policyIdentifier === 'string')
+		? initialPolicySet
+		: [];
+}
+
+function validateInitialNameConstraintsInput(input: InitialNameConstraintsInput):
+	| {
+			readonly ok: true;
+			readonly value: InitialNameConstraintsInput;
+	  }
+	| VerifyChainFailure {
+	const permittedValidation = validateInitialNameConstraintSubtrees(
+		input.permittedSubtrees,
+		'permittedSubtrees',
+	);
+	if (!permittedValidation.ok) {
+		return permittedValidation;
+	}
+	const excludedValidation = validateInitialNameConstraintSubtrees(
+		input.excludedSubtrees,
+		'excludedSubtrees',
+	);
+	if (!excludedValidation.ok) {
+		return excludedValidation;
+	}
+	return { ok: true, value: input };
+}
+
+function validateInitialNameConstraintSubtrees(
+	subtrees:
+		| InitialNameConstraintsInput['permittedSubtrees']
+		| InitialNameConstraintsInput['excludedSubtrees'],
+	label: 'permittedSubtrees' | 'excludedSubtrees',
+): { readonly ok: true } | VerifyChainFailure {
+	if (subtrees === undefined) {
+		return { ok: true };
+	}
+	if (!Array.isArray(subtrees)) {
+		return invalidInitialNameConstraintsFailure(label);
+	}
+	for (const subtree of subtrees) {
+		const invalidForm = describeInvalidInitialNameConstraintForm(subtree);
+		if (invalidForm !== undefined) {
+			return invalidInitialNameConstraintsFailure(invalidForm);
+		}
+	}
+	return { ok: true };
+}
+
+function describeInvalidInitialNameConstraintForm(subtree: unknown): string | undefined {
+	if (!isRecord(subtree)) {
+		return 'invalid subtree';
+	}
+	const base = subtree.base;
+	if (!isRecord(base) || typeof base.type !== 'string') {
+		return 'invalid subtree';
+	}
+	switch (base.type) {
+		case 'dns':
+		case 'email':
+		case 'uri':
+			return typeof base.value === 'string' ? undefined : base.type;
+		case 'directoryName':
+			return typeof base.derHex === 'string' ? undefined : base.type;
+		case 'ip':
+			return base.addressBytes instanceof Uint8Array && base.maskBytes instanceof Uint8Array
+				? undefined
+				: base.type;
+		case 'otherName':
+		case 'x400Address':
+		case 'ediPartyName':
+		case 'registeredID':
+			return base.type;
+		default:
+			return base.type;
+	}
+}
+
+function invalidInitialNameConstraintsFailure(actual: string): VerifyChainFailure {
+	return failure(
+		'initial_name_constraints_not_implemented',
+		'initial name constraints use unsupported or malformed forms',
+		undefined,
+		detail({ actual }),
+	);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === 'object' && value !== null;
 }

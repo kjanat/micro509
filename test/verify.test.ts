@@ -3020,6 +3020,76 @@ describe('validateCandidatePath direct', () => {
 		expect(blockedResult).toMatchObject({ ok: false, code: 'name_constraints_violated' });
 	});
 
+	it('fails closed for malformed initialPolicySet input shapes', async () => {
+		const chain = await issueChain();
+		const input = {
+			chain: parseCertificateChainPem(
+				`${chain.leaf.pem}${chain.intermediate.pem}${chain.root.certificate.pem}`,
+			),
+			initialPolicySet: ['1.2.3.4'],
+		};
+		Object.defineProperty(input, 'initialPolicySet', { value: { malformed: true } });
+
+		const result = await validateCandidatePath(input);
+		expect(result).toMatchObject({ ok: false, code: 'initial_policy_set_not_satisfied' });
+	});
+
+	it('fails closed for malformed nested policy initialPolicySet input shapes', async () => {
+		const chain = await issueChain();
+		const input = {
+			chain: parseCertificateChainPem(
+				`${chain.leaf.pem}${chain.intermediate.pem}${chain.root.certificate.pem}`,
+			),
+			policy: { initialPolicySet: ['1.2.3.4'] },
+		};
+		Object.defineProperty(input.policy, 'initialPolicySet', { value: { malformed: true } });
+
+		const result = await validateCandidatePath(input);
+		expect(result).toMatchObject({ ok: false, code: 'initial_policy_set_not_satisfied' });
+	});
+
+	it('rejects unsupported initial name constraint forms', async () => {
+		const chain = await issueChain();
+		const input = {
+			chain: parseCertificateChainPem(
+				`${chain.leaf.pem}${chain.intermediate.pem}${chain.root.certificate.pem}`,
+			),
+			permittedSubtrees: [{ base: { type: 'dns', value: 'example.com' } } as const],
+		};
+		Object.defineProperty(input, 'permittedSubtrees', {
+			value: [{ base: { type: 'otherName', value: new Uint8Array([0x05, 0x00]) } }],
+		});
+
+		const result = await validateCandidatePath(input);
+		expect(result).toMatchObject({
+			ok: false,
+			code: 'initial_name_constraints_not_implemented',
+			details: { actual: 'otherName' },
+		});
+	});
+
+	it('rejects malformed nested initial name constraint subtree containers', async () => {
+		const chain = await issueChain();
+		const input = {
+			chain: parseCertificateChainPem(
+				`${chain.leaf.pem}${chain.intermediate.pem}${chain.root.certificate.pem}`,
+			),
+			nameConstraints: {
+				permittedSubtrees: [{ base: { type: 'dns', value: 'example.com' } } as const],
+			},
+		};
+		Object.defineProperty(input.nameConstraints, 'permittedSubtrees', {
+			value: { malformed: true },
+		});
+
+		const result = await validateCandidatePath(input);
+		expect(result).toMatchObject({
+			ok: false,
+			code: 'initial_name_constraints_not_implemented',
+			details: { actual: 'permittedSubtrees' },
+		});
+	});
+
 	it('detects signature_invalid in candidate path', async () => {
 		const chain = await issueChain();
 		const leafParsed = parseCertificatePem(chain.leaf.pem);
