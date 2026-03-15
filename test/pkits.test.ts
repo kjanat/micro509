@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { readFile } from 'node:fs/promises';
-import type { VerifyErrorCode } from '#micro509';
-import { verifyCertificateChain } from '#micro509';
+import type { VerifyErrorCode } from 'micro509';
+import { verifyCertificateChain } from 'micro509';
 
 const PKITS_VALIDATION_TIME = new Date('2011-04-15T00:00:00Z');
 const NIST_TEST_POLICY_1 = '2.16.840.1.101.3.2.1.48.1';

@@ -45,7 +45,10 @@ export default defineConfig({
 			await writeFile('jsr.json', `${JSON.stringify(jsrJson, null, '\t')}\n`);
 		},
 	},
-	exports: true,
+	exports: {
+		enabled: true,
+		devExports: 'bun',
+	},
 	onSuccess: 'bunx sort-package-json --quiet {package,jsr}.json',
 	attw: { profile: 'esm-only', ignoreRules: ['no-resolution'] },
 	unused: true,

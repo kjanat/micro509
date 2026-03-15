@@ -19,7 +19,8 @@
 		"tsBuildInfoFile": "./node_modules/.cache/tsc/tsconfig.other.tsbuildinfo",
 		"allowImportingTsExtensions": true,
 		"resolveJsonModule": true,
-		"isolatedDeclarations": false
+		"isolatedDeclarations": false,
+		"customConditions": ["bun"]
 	},
 	"include": ["src", "test", "scripts", "*.config.ts", "*.json"],
 	"exclude": ["dist", "node_modules"]

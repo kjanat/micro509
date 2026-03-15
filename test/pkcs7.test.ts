@@ -11,7 +11,7 @@ import {
 	parsePkcs7SignedDataDer,
 	parsePkcs7SignedDataPem,
 	verifyPkcs7SignedData,
-} from '#micro509';
+} from 'micro509';
 import {
 	concatBytes,
 	explicitContext,

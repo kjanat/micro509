@@ -7,7 +7,7 @@ import {
 	generateKeyPair,
 	parsePfxDer,
 	parsePfxPem,
-} from '#micro509';
+} from 'micro509';
 import {
 	explicitContext,
 	integerFromNumber,

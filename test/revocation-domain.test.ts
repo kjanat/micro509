@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import { createCertificate, createSelfSignedCertificate, generateKeyPair } from '#micro509';
-import * as revocation from '#micro509/revocation/index.ts';
+import { createCertificate, createSelfSignedCertificate, generateKeyPair } from 'micro509';
+import * as revocation from 'micro509/revocation';
 
 describe('revocation domain', () => {
 	it('creates a CRL with an empty revoked list', async () => {

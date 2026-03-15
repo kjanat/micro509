@@ -32,7 +32,7 @@ import {
 	importSec1Pem,
 	importSpkiBase64,
 	importSpkiPem,
-} from '#micro509';
+} from 'micro509';
 
 describe('keys', () => {
 	it('roundtrips RSA PKCS#1 and EC SEC1 private keys', async () => {

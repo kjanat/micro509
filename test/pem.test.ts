@@ -6,7 +6,7 @@ import {
 	generateKeyPair,
 	pemDecode,
 	splitPemBlocks,
-} from '#micro509';
+} from 'micro509';
 
 describe('pem', () => {
 	it('splits mixed PEM bundles by label', async () => {

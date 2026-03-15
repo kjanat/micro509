@@ -4,7 +4,7 @@ import {
 	createSelfSignedCertificate,
 	generateKeyPair,
 	verifyCertificateChain,
-} from '#micro509';
+} from 'micro509';
 import {
 	objectIdentifier,
 	printableString,

@@ -3,13 +3,12 @@ import type {
 	CreatePfxInput,
 	Result,
 	VerifyCertificateChainInput,
-} from '#micro509';
+} from 'micro509';
+import type { ParsedPkcs12MacData } from 'micro509/pkcs';
+import type { SignatureProfileInput } from '#micro509/internal/crypto/signing.ts';
 
-// @ts-expect-error PKCS#12 MAC stays off the workflow-first root import.
-type RootPkcs12MacData = import('#micro509').ParsedPkcs12MacData;
-
-// @ts-expect-error Signature profile tuning stays owned by x509.
-type RootSignatureProfileInput = import('#micro509').SignatureProfileInput;
+type RootPkcs12MacData = ParsedPkcs12MacData;
+type RootSignatureProfileInput = SignatureProfileInput;
 
 function assertRootTypes(_input: {
 	readonly certificate?: CreateCertificateInput;

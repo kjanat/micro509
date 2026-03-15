@@ -139,6 +139,12 @@ function decodeBitFlags<T extends string>(
 		throw new Error('Invalid BIT STRING');
 	}
 	const bytes = value.slice(1);
+	// NOTE: We intentionally do not validate that the lower `unusedBits` of the
+	// last byte are zero (DER X.690 §11.2.2). This is parse infrastructure —
+	// strict DER validation belongs in the verification layer. Rejecting non-zero
+	// padding here would break interop with real-world certificates that have
+	// non-conformant BIT STRING encodings, without any correctness benefit: the
+	// decode loop only inspects bits at known candidate positions.
 	if (bytes.length === 0 && unusedBits !== 0) {
 		throw new Error('Invalid BIT STRING');
 	}

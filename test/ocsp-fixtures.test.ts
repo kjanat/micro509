@@ -9,7 +9,7 @@ import {
 	parseOcspRequestPem,
 	parseOcspResponseDer,
 	validateOcspResponse,
-} from '#micro509';
+} from 'micro509';
 import { childrenOf } from '#micro509/internal/asn1/asn1.ts';
 import {
 	bitString,

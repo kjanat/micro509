@@ -9,7 +9,7 @@ import {
 	getCertificateOcspResponderUris,
 	parseCertificatePem,
 	resolveOcspResponderCandidates,
-} from '#micro509';
+} from 'micro509';
 import { addRevokedEntryCertificateIssuers, hexToBytes, issueChain } from './helpers.ts';
 
 describe('revocation boundary', () => {

@@ -1,12 +1,14 @@
 import { createHash } from 'node:crypto';
-import type { parseCertificatePem } from '#micro509';
+import type { parseCertificatePem } from 'micro509';
 import {
 	createCertificate,
 	createSelfSignedCertificate,
 	exportPkcs8Der,
 	generateKeyPair,
 	importPkcs8Der,
-} from '#micro509';
+} from 'micro509';
+import type { GeneralName } from 'micro509/x509';
+import { encodeSubjectAltName } from 'micro509/x509';
 import { toArrayBuffer } from '#micro509/internal/asn1/asn1.ts';
 import {
 	bitString,
@@ -30,8 +32,6 @@ import {
 	getSignatureAlgorithm,
 	signBytes,
 } from '#micro509/internal/crypto/signing.ts';
-import type { GeneralName } from '#micro509/x509/index.ts';
-import { encodeSubjectAltName } from '#micro509/x509/index.ts';
 
 export function childrenOf(
 	source: Uint8Array,

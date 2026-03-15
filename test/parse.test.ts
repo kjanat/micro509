@@ -14,7 +14,8 @@ import {
 	parseCertificatePem,
 	parseCertificateSigningRequestDer,
 	parseCertificateSigningRequestPem,
-} from '#micro509';
+} from 'micro509';
+import { encodeName } from 'micro509/x509';
 import {
 	bitString,
 	concatBytes,
@@ -27,7 +28,6 @@ import {
 	tlv,
 } from '#micro509/internal/asn1/der.ts';
 import { OIDS } from '#micro509/internal/asn1/oids.ts';
-import { encodeName } from '#micro509/x509/index.ts';
 import { parseNameConstraints } from '#micro509/x509/parse.ts';
 
 describe('parse', () => {

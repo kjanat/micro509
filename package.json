@@ -24,14 +24,38 @@
 		"#micro509/internal/*": "./src/internal/*"
 	},
 	"exports": {
-		".": "./dist/index.js",
-		"./keys": "./dist/keys.js",
-		"./pem": "./dist/pem.js",
-		"./pkcs": "./dist/pkcs.js",
-		"./result": "./dist/result.js",
-		"./revocation": "./dist/revocation.js",
-		"./verify": "./dist/verify.js",
-		"./x509": "./dist/x509.js",
+		".": {
+			"bun": "./src/index.ts",
+			"default": "./dist/index.js"
+		},
+		"./keys": {
+			"bun": "./src/keys/index.ts",
+			"default": "./dist/keys.js"
+		},
+		"./pem": {
+			"bun": "./src/pem/index.ts",
+			"default": "./dist/pem.js"
+		},
+		"./pkcs": {
+			"bun": "./src/pkcs/index.ts",
+			"default": "./dist/pkcs.js"
+		},
+		"./result": {
+			"bun": "./src/result/index.ts",
+			"default": "./dist/result.js"
+		},
+		"./revocation": {
+			"bun": "./src/revocation/index.ts",
+			"default": "./dist/revocation.js"
+		},
+		"./verify": {
+			"bun": "./src/verify/index.ts",
+			"default": "./dist/verify.js"
+		},
+		"./x509": {
+			"bun": "./src/x509/index.ts",
+			"default": "./dist/x509.js"
+		},
 		"./package.json": "./package.json"
 	},
 	"types": "./dist/index.d.ts",
@@ -101,5 +125,18 @@
 	"volta": {
 		"node": "25.8.0",
 		"npm": "11.11.0"
+	},
+	"publishConfig": {
+		"exports": {
+			".": "./dist/index.js",
+			"./keys": "./dist/keys.js",
+			"./pem": "./dist/pem.js",
+			"./pkcs": "./dist/pkcs.js",
+			"./result": "./dist/result.js",
+			"./revocation": "./dist/revocation.js",
+			"./verify": "./dist/verify.js",
+			"./x509": "./dist/x509.js",
+			"./package.json": "./package.json"
+		}
 	}
 }

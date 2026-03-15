@@ -4,9 +4,8 @@ import {
 	createSelfSignedCertificate,
 	generateKeyPair,
 	parseCertificatePem,
-} from '#micro509';
-import { OIDS } from '#micro509/internal/asn1/oids.ts';
-import { pemEncode } from '#micro509/pem/index.ts';
+} from 'micro509';
+import { pemEncode } from 'micro509/pem';
 import {
 	createPfx,
 	createPkcs7CertBagPem,
@@ -18,7 +17,8 @@ import {
 	parsePkcs7SignedDataPem,
 	parsePkcs12MacData,
 	verifyPkcs7SignedData,
-} from '#micro509/pkcs/index.ts';
+} from 'micro509/pkcs';
+import { OIDS } from '#micro509/internal/asn1/oids.ts';
 import { createCmsSignedDataWithSignedAttrs } from './helpers.ts';
 
 describe('pkcs domain', () => {

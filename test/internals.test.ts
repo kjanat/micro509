@@ -1,4 +1,13 @@
 import { describe, expect, it } from 'bun:test';
+import { createPkcs12MacData, parsePkcs12MacData } from 'micro509/pkcs';
+import {
+	buildCertificateExtensions,
+	encodeCertificatePolicies,
+	encodeCrlDistributionPoints,
+	encodeNameConstraints,
+	encodePolicyMappings,
+	encodeSubjectAltName,
+} from 'micro509/x509';
 import {
 	decodeIntegerNumber,
 	decodeNonNegativeIntegerNumber,
@@ -55,15 +64,6 @@ import {
 	parseIpAddressToBytes,
 } from '#micro509/internal/shared/ip.ts';
 import { parseKeyUsageExtension } from '#micro509/internal/x509/extension-bits.ts';
-import { createPkcs12MacData, parsePkcs12MacData } from '#micro509/pkcs/index.ts';
-import {
-	buildCertificateExtensions,
-	encodeCertificatePolicies,
-	encodeCrlDistributionPoints,
-	encodeNameConstraints,
-	encodePolicyMappings,
-	encodeSubjectAltName,
-} from '#micro509/x509/index.ts';
 
 // ---------------------------------------------------------------------------
 // DER encoding edge cases
