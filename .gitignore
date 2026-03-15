@@ -165,3 +165,4 @@ src/*.{js,d.ts}
 /docs/deno/
 /site/.vitepress/cache/
 /site/.vitepress/dist/
+/site/reference/api/

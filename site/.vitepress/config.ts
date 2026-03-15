@@ -1,4 +1,10 @@
 import { defineConfig } from 'vitepress';
+import typedocSidebar from '../reference/api/typedoc-sidebar.json';
+
+const apiSidebar = typedocSidebar.map((item: { text: string; link: string }) => ({
+	text: item.text === 'index' ? 'micro509' : `micro509/${item.text}`,
+	link: item.link.replace('/site/', '/').replace('.md', ''),
+}));
 
 export default defineConfig({
 	title: 'micro509',
@@ -13,11 +19,8 @@ export default defineConfig({
 	themeConfig: {
 		nav: [
 			{ text: 'Guide', link: '/guide/getting-started' },
-			{ text: 'Reference', link: '/reference/api' },
-			{
-				text: 'Standards',
-				link: '/reference/standards',
-			},
+			{ text: 'API', link: '/reference/api/' },
+			{ text: 'Standards', link: '/reference/standards' },
 		],
 
 		sidebar: {
@@ -40,11 +43,16 @@ export default defineConfig({
 					],
 				},
 			],
+			'/reference/api/': [
+				{
+					text: 'API Reference',
+					items: apiSidebar,
+				},
+			],
 			'/reference/': [
 				{
 					text: 'Reference',
 					items: [
-						{ text: 'API Surface', link: '/reference/api' },
 						{ text: 'Standards Scope', link: '/reference/standards' },
 						{ text: 'Algorithms', link: '/reference/algorithms' },
 						{ text: 'Runtime Support', link: '/reference/runtimes' },

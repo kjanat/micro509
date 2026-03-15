@@ -1,0 +1,29 @@
+{
+	"$schema": "https://typedoc.org/schema.json",
+	"name": "micro509",
+	"cname": "micro509.kjanat.com",
+	"includeVersion": true,
+	"githubPages": true,
+	"entryPoints": [
+		"src/index.ts",
+		"src/keys/index.ts",
+		"src/pem/index.ts",
+		"src/pkcs/index.ts",
+		"src/result/index.ts",
+		"src/revocation/index.ts",
+		"src/verify/index.ts",
+		"src/x509/index.ts"
+	],
+	"entryPointStrategy": "resolve",
+	"tsconfig": "tsconfig.src.json",
+	"out": "site/reference/api",
+	"plugin": ["typedoc-plugin-markdown", "typedoc-vitepress-theme"],
+	"gitRevision": "master",
+	"excludePrivate": true,
+	"excludeInternal": true,
+	"readme": "none",
+	"outputFileStrategy": "modules",
+	"mergeReadme": false,
+	"hidePageHeader": true,
+	"hideBreadcrumbs": true
+}
