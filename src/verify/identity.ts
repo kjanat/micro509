@@ -180,6 +180,9 @@ export function matchCertificateServiceIdentity(
 ): MatchServiceIdentityResult {
 	switch (serviceIdentity.type) {
 		case 'dns': {
+			if (typeof serviceIdentity.value !== 'string') {
+				return malformedServiceIdentityFailure(certificate, 'dns', serviceIdentity.value);
+			}
 			const expected = serviceIdentity.value;
 			const sans = certificate.subjectAltNames?.filter((entry) => entry.type === 'dns') ?? [];
 			if (sans.some((entry) => matchesDnsName(entry.value, expected))) {
@@ -235,7 +238,13 @@ export function matchCertificateServiceIdentity(
 			);
 		}
 		case 'ip': {
-			const expectedBytes = parseIpAddressToBytes(serviceIdentity.value);
+			if (typeof serviceIdentity.value !== 'string') {
+				return malformedServiceIdentityFailure(certificate, 'ip', serviceIdentity.value);
+			}
+			const expectedBytes = tryParsePresentedIpAddress(serviceIdentity.value);
+			if (expectedBytes === undefined) {
+				return malformedServiceIdentityFailure(certificate, 'ip', serviceIdentity.value);
+			}
 			const expected = decodeIpAddress(expectedBytes);
 			const sans = certificate.subjectAltNames?.filter((entry) => entry.type === 'ip') ?? [];
 			const presentedAddresses: string[] = [];
@@ -260,7 +269,13 @@ export function matchCertificateServiceIdentity(
 			);
 		}
 		case 'uri': {
-			const expected = parseUriServiceIdentity(serviceIdentity.value);
+			if (typeof serviceIdentity.value !== 'string') {
+				return malformedServiceIdentityFailure(certificate, 'uri', serviceIdentity.value);
+			}
+			const expected = tryParseUriServiceIdentity(serviceIdentity.value);
+			if (expected === undefined) {
+				return malformedServiceIdentityFailure(certificate, 'uri', serviceIdentity.value);
+			}
 			const sans = certificate.subjectAltNames?.filter((entry) => entry.type === 'uri') ?? [];
 			const matchingService = sans.flatMap((entry) => {
 				const parsed = tryParseUriServiceIdentity(entry.value);
@@ -306,7 +321,13 @@ export function matchCertificateServiceIdentity(
 			);
 		}
 		case 'srv': {
-			const expected = parseSrvServiceIdentity(serviceIdentity.value);
+			if (typeof serviceIdentity.value !== 'string') {
+				return malformedServiceIdentityFailure(certificate, 'srv', serviceIdentity.value);
+			}
+			const expected = tryParseSrvServiceIdentity(serviceIdentity.value);
+			if (expected === undefined) {
+				return malformedServiceIdentityFailure(certificate, 'srv', serviceIdentity.value);
+			}
 			const sans = certificate.subjectAltNames?.filter((entry) => entry.type === 'srv') ?? [];
 			const matchingService = sans.flatMap((entry) => {
 				const parsed = tryParseSrvServiceIdentity(entry.value);
@@ -352,8 +373,7 @@ export function matchCertificateServiceIdentity(
 			);
 		}
 		default: {
-			const _exhaustive: never = serviceIdentity;
-			throw new Error(`Unhandled service identity type: ${String(_exhaustive)}`);
+			return failure('service_identity_type_unsupported', 'Unsupported service identity type');
 		}
 	}
 }
@@ -429,15 +449,6 @@ function presentedDnsIdentifierTypes(
 	return types;
 }
 
-/** Parses a URI into scheme + host. Throws on malformed input. */
-function parseUriServiceIdentity(value: string): ServiceScopedIdentity {
-	const parsed = tryParseUriServiceIdentity(value);
-	if (parsed === undefined) {
-		throw new Error(`Invalid URI service identity: ${value}`);
-	}
-	return parsed;
-}
-
 /** Attempts to split a URI into scheme + reg-name. @returns `undefined` on failure. */
 function tryParseUriServiceIdentity(value: string): ServiceScopedIdentity | undefined {
 	const schemeEnd = value.indexOf(':');
@@ -489,15 +500,6 @@ function cutAtFirstDelimiter(value: string, delimiters: readonly string[]): stri
 	return value.slice(0, end);
 }
 
-/** Parses an SRV name (`_service.domain`) into parts. Throws on malformed input. */
-function parseSrvServiceIdentity(value: string): ServiceScopedIdentity {
-	const parsed = tryParseSrvServiceIdentity(value);
-	if (parsed === undefined) {
-		throw new Error(`Invalid SRV service identity: ${value}`);
-	}
-	return parsed;
-}
-
 /** Attempts to split `_service.domain` into parts. @returns `undefined` on failure. */
 function tryParseSrvServiceIdentity(value: string): ServiceScopedIdentity | undefined {
 	if (!value.startsWith('_')) {
@@ -529,6 +531,19 @@ function failure(
 /** Constructs a success result indicating the identity matched. */
 function success(): MatchServiceIdentitySuccess {
 	return successResult(undefined);
+}
+
+function malformedServiceIdentityFailure(
+	certificate: ParsedCertificate,
+	type: ServiceIdentityType,
+	value: unknown,
+): MatchServiceIdentityResult {
+	const renderedValue = typeof value === 'string' ? value : '<malformed>';
+	return failure(
+		'subject_alt_name_mismatch',
+		'service identity input is malformed',
+		details(certificate.subject.values.commonName, `${type}:${renderedValue}`, type),
+	);
 }
 
 function tryParsePresentedIpAddress(value: string): Uint8Array | undefined {

@@ -447,7 +447,7 @@ describe('identity boundary', () => {
 		});
 	});
 
-	it('throws for invalid IPv6 identity inputs through the dedicated identity API', async () => {
+	it('fails closed for invalid IPv6 identity inputs through the dedicated identity API', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Identity CA' },
 			extensions: {
@@ -468,12 +468,12 @@ describe('identity boundary', () => {
 		});
 		const certificate = parseCertificatePem(leaf.pem);
 
-		expect(() =>
+		expect(
 			matchServiceIdentity({
 				certificate,
 				serviceIdentity: { type: 'ip', value: '1:2:3:4:5:6:7:8:9' },
 			}),
-		).toThrow('Invalid IPv6');
+		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
 	});
 
 	it('matches URI SANs by scheme and host through the dedicated identity API', async () => {
@@ -544,7 +544,7 @@ describe('identity boundary', () => {
 		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
 	});
 
-	it('rejects URI identities when no URI SAN is present and throws on malformed inputs', async () => {
+	it('rejects URI identities when no URI SAN is present and fails closed on malformed inputs', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Identity CA' },
 			extensions: {
@@ -573,12 +573,12 @@ describe('identity boundary', () => {
 				serviceIdentity: { type: 'uri', value: 'https://uri-missing.example/login' },
 			}),
 		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
-		expect(() =>
+		expect(
 			matchServiceIdentity({
 				certificate,
 				serviceIdentity: { type: 'uri', value: 'not a uri' },
 			}),
-		).toThrow('Invalid URI service identity');
+		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
 	});
 
 	it('matches URI SANs across IDNA host forms', async () => {
@@ -680,7 +680,7 @@ describe('identity boundary', () => {
 		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
 	});
 
-	it('rejects SRV identities when no SRV SAN is present and throws on malformed inputs', async () => {
+	it('rejects SRV identities when no SRV SAN is present and fails closed on malformed inputs', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Identity CA' },
 			extensions: {
@@ -709,12 +709,81 @@ describe('identity boundary', () => {
 				serviceIdentity: { type: 'srv', value: '_xmpp-client.srv-missing.example' },
 			}),
 		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
-		expect(() =>
+		expect(
 			matchServiceIdentity({
 				certificate,
 				serviceIdentity: { type: 'srv', value: 'xmpp-client.example.org' },
 			}),
-		).toThrow('Invalid SRV service identity');
+		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
+	});
+
+	it('fails closed for unsupported direct identity types at runtime', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Identity CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Identity CA' },
+			subject: { commonName: 'unsupported-type.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				subjectAltNames: [{ type: 'dns', value: 'unsupported-type.example' }],
+			},
+		});
+		const certificate = parseCertificatePem(leaf.pem);
+		const serviceIdentity = { type: 'dns' as const, value: 'unsupported-type.example' };
+		Object.defineProperty(serviceIdentity, 'type', { value: 'gopher' });
+
+		expect(
+			matchServiceIdentity({
+				certificate,
+				serviceIdentity,
+			}),
+		).toMatchObject({ ok: false, code: 'service_identity_type_unsupported' });
+	});
+
+	it('fails closed for malformed identity values with hostile coercion', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Identity CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Identity CA' },
+			subject: { commonName: 'hostile-value.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				subjectAltNames: [{ type: 'dns', value: 'hostile-value.example' }],
+			},
+		});
+		const certificate = parseCertificatePem(leaf.pem);
+		const hostileValue = {
+			[Symbol.toPrimitive](): string {
+				throw new Error('should not coerce');
+			},
+		};
+		const serviceIdentity = { type: 'dns' as const, value: 'hostile-value.example' };
+		Object.defineProperty(serviceIdentity, 'value', { value: hostileValue });
+
+		expect(
+			matchServiceIdentity({
+				certificate,
+				serviceIdentity,
+			}),
+		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
 	});
 
 	it('matches SRV SANs across IDNA host forms', async () => {
