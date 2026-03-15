@@ -40,6 +40,7 @@ import {
 	tlv,
 } from '#micro509/internal/asn1/der.ts';
 import { OIDS } from '#micro509/internal/asn1/oids.ts';
+import { describeSignatureAlgorithm } from '#micro509/internal/crypto/algorithm-names.ts';
 import { sha1 } from '#micro509/internal/crypto/hash.ts';
 import { verifySignedData } from '#micro509/internal/crypto/sig-verify.ts';
 import {
@@ -186,6 +187,8 @@ export interface ParsedCertificateRevocationList {
 	readonly nextUpdate?: Date;
 	/** OID of the algorithm used to sign this CRL. */
 	readonly signatureAlgorithmOid: string;
+	/** Human-readable signature algorithm name (e.g. `"ECDSA with SHA-256"`). */
+	readonly signatureAlgorithmName: string;
 	/** OID of the issuer's public key algorithm, when available. */
 	readonly issuerPublicKeyAlgorithmOid?: string;
 	/** OID of the issuer's public key parameters (e.g. named curve), when available. */
@@ -518,6 +521,7 @@ export function parseCertificateRevocationListDer(
 	let baseCrlNumber: number | undefined;
 	let issuingDistributionPoint: ParsedIssuingDistributionPoint | undefined;
 	let freshestCrlDistributionPoints: readonly ParsedDistributionPoint[] | undefined;
+	const parsedSignatureAlgorithm = parseAlgorithmIdentifier(der, signatureAlgorithm);
 	const maybeExtensions = tbsChildren[cursor];
 	if (maybeExtensions?.tag === 0xa0) {
 		const extensionSequence = requireElement(childrenOf(der, maybeExtensions)[0], 'crl extensions');
@@ -549,7 +553,11 @@ export function parseCertificateRevocationListDer(
 		issuer: parseIssuer(der, issuer),
 		thisUpdate: parseTime(thisUpdate),
 		...(nextUpdate === undefined ? {} : { nextUpdate }),
-		signatureAlgorithmOid: parseAlgorithmIdentifier(der, signatureAlgorithm).oid,
+		signatureAlgorithmOid: parsedSignatureAlgorithm.oid,
+		signatureAlgorithmName: describeSignatureAlgorithm(
+			parsedSignatureAlgorithm.oid,
+			parsedSignatureAlgorithm.parametersDer,
+		),
 		...(authorityKeyIdentifier === undefined ? {} : { authorityKeyIdentifier }),
 		...(crlNumber === undefined ? {} : { crlNumber }),
 		...(baseCrlNumber === undefined ? {} : { baseCrlNumber }),
@@ -1833,10 +1841,17 @@ function parseAlgorithmIdentifier(
 	element: DerElement,
 ): {
 	readonly oid: string;
+	readonly parametersDer?: Uint8Array;
 } {
 	const children = childrenOf(source, element);
 	const oid = requireElement(children[0], 'algorithm OID');
-	return { oid: decodeObjectIdentifier(oid.value) };
+	const parameters = children[1];
+	return parameters === undefined
+		? { oid: decodeObjectIdentifier(oid.value) }
+		: {
+				oid: decodeObjectIdentifier(oid.value),
+				parametersDer: source.slice(parameters.start - parameters.headerLength, parameters.end),
+			};
 }
 
 /** Strips leading zeros and lowercases a hex string for comparison. */

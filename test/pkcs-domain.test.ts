@@ -91,6 +91,7 @@ describe('pkcs domain', () => {
 
 		expect(mac.parsed).toMatchObject({
 			digestAlgorithmOid: OIDS.sha256,
+			digestAlgorithmName: 'SHA-256',
 			iterations: 32,
 			saltHex: '09080706',
 		});
@@ -98,6 +99,7 @@ describe('pkcs domain', () => {
 		const verified = await parsePkcs12MacData(mac.der, authenticatedSafe, 'integrity123');
 		expect(verified).toMatchObject({
 			digestAlgorithmOid: OIDS.sha256,
+			digestAlgorithmName: 'SHA-256',
 			iterations: 32,
 			saltHex: '09080706',
 			valid: true,
@@ -167,7 +169,9 @@ describe('pkcs domain', () => {
 		expect(parsedPem.value.signerInfos[0]).toMatchObject({
 			hasSignedAttrs: true,
 			digestAlgorithmOid: OIDS.sha256,
+			digestAlgorithmName: 'SHA-256',
 		});
+		expect(parsedPem.value.digestAlgorithmNames).toEqual(['SHA-256']);
 
 		const verified = await verifyPkcs7SignedData(signedDataDer);
 		expect(verified.ok).toBe(true);

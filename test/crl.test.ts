@@ -43,6 +43,7 @@ describe('crl', () => {
 		const parsedCrl = parseCertificateRevocationListPem(crl.pem);
 		expect(parsedCrl.issuer.values.commonName).toBe('CRL Issuer');
 		expect(parsedCrl.crlNumber).toBe(7);
+		expect(parsedCrl.signatureAlgorithmName).toBe('ECDSA with SHA-256');
 		expect(parsedCrl.revokedCertificates).toHaveLength(1);
 		expect(isCertificateRevoked(parsedLeaf.serialNumberHex, parsedCrl)).toBe(true);
 		expect(await verifyCertificateRevocationList(crl.pem, issuer.certificate.pem)).toMatchObject({

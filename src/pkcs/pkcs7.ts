@@ -29,6 +29,10 @@ import {
 	setOf,
 } from '#micro509/internal/asn1/der.ts';
 import { OIDS } from '#micro509/internal/asn1/oids.ts';
+import {
+	describeHashAlgorithm,
+	describeSignatureAlgorithm,
+} from '#micro509/internal/crypto/algorithm-names.ts';
 import { verifySignedData } from '#micro509/internal/crypto/sig-verify.ts';
 import { getCrypto } from '#micro509/internal/crypto/webcrypto.ts';
 import { base64Encode } from '#micro509/internal/shared/base64.ts';
@@ -69,8 +73,12 @@ export interface ParsedPkcs7SignerInfo {
 	readonly subjectKeyIdentifier?: string;
 	/** OID of the digest algorithm used to hash the content. */
 	readonly digestAlgorithmOid: string;
+	/** Human-readable digest algorithm name (e.g. `"SHA-256"`). */
+	readonly digestAlgorithmName: string;
 	/** OID of the algorithm used to produce the signature. */
 	readonly signatureAlgorithmOid: string;
+	/** Human-readable signature algorithm name. */
+	readonly signatureAlgorithmName: string;
 	/** Raw DER of the signature AlgorithmIdentifier parameters, if present. */
 	readonly signatureAlgorithmParametersDer?: Uint8Array;
 	/** Hex-encoded raw signature bytes. */
@@ -91,6 +99,8 @@ export interface ParsedPkcs7SignedData {
 	readonly version: number;
 	/** OIDs of digest algorithms declared in `digestAlgorithms`. */
 	readonly digestAlgorithmOids: readonly string[];
+	/** Human-readable digest algorithm names declared in `digestAlgorithms`. */
+	readonly digestAlgorithmNames: readonly string[];
 	/** OID of the encapsulated content type (e.g. `pkcs7-data`). */
 	readonly encapsulatedContentTypeOid: string;
 	/** Raw encapsulated content bytes. Absent in degenerate (certs-only) bags. */
@@ -269,6 +279,7 @@ export function parsePkcs7SignedDataDer(der: Uint8Array): ParsePkcs7SignedDataRe
 		const encapChildren = readSequenceChildren(encapDer);
 		const encapType = encapChildren[0];
 		const encapContent = encapChildren[1];
+		const digestAlgorithmOids = parseDigestAlgorithms(der, digestAlgorithms);
 		if (encapType === undefined) {
 			return pkcs7Failure('malformed', 'Malformed EncapsulatedContentInfo');
 		}
@@ -277,7 +288,8 @@ export function parsePkcs7SignedDataDer(der: Uint8Array): ParsePkcs7SignedDataRe
 			value: {
 				contentTypeOid,
 				version: decodeIntegerNumber(version.value),
-				digestAlgorithmOids: parseDigestAlgorithms(der, digestAlgorithms),
+				digestAlgorithmOids,
+				digestAlgorithmNames: digestAlgorithmOids.map((oid) => describeHashAlgorithm(oid)),
 				encapsulatedContentTypeOid: decodeObjectIdentifier(encapType.value),
 				...(encapContent === undefined
 					? {}
@@ -529,7 +541,19 @@ function parseSignerInfos(
 				? {}
 				: { subjectKeyIdentifier: parsedSid.subjectKeyIdentifier }),
 			digestAlgorithmOid,
+			digestAlgorithmName: describeHashAlgorithm(digestAlgorithmOid),
 			signatureAlgorithmOid,
+			signatureAlgorithmName: describeSignatureAlgorithm(
+				signatureAlgorithmOid,
+				signatureAlgorithmParams === undefined
+					? undefined
+					: new Uint8Array(
+							signatureAlgorithmDer.slice(
+								signatureAlgorithmParams.start - signatureAlgorithmParams.headerLength,
+								signatureAlgorithmParams.end,
+							),
+						),
+			),
 			...(signatureAlgorithmParams === undefined
 				? {}
 				: {

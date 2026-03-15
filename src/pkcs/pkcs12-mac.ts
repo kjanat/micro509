@@ -23,6 +23,7 @@ import {
 	sequence,
 } from '#micro509/internal/asn1/der.ts';
 import { OIDS } from '#micro509/internal/asn1/oids.ts';
+import { describeHashAlgorithm } from '#micro509/internal/crypto/algorithm-names.ts';
 import { getCrypto } from '#micro509/internal/crypto/webcrypto.ts';
 
 /** Input for {@linkcode createPkcs12MacData}. */
@@ -39,6 +40,8 @@ export interface Pkcs12MacOptions {
 export interface ParsedPkcs12MacData {
 	/** OID of the digest algorithm (currently always SHA-256). */
 	readonly digestAlgorithmOid: string;
+	/** Human-readable digest algorithm name (currently `"SHA-256"`). */
+	readonly digestAlgorithmName: string;
 	/** Hex-encoded MAC digest value. */
 	readonly digestHex: string;
 	/** Hex-encoded salt bytes used during key derivation. */
@@ -74,6 +77,7 @@ export async function createPkcs12MacData(
 		der,
 		parsed: {
 			digestAlgorithmOid: OIDS.sha256,
+			digestAlgorithmName: describeHashAlgorithm(OIDS.sha256),
 			digestHex: toHex(mac),
 			saltHex: toHex(salt),
 			iterations,
@@ -121,6 +125,7 @@ export async function parsePkcs12MacData(
 	}
 	const parsed: ParsedPkcs12MacData = {
 		digestAlgorithmOid,
+		digestAlgorithmName: describeHashAlgorithm(digestAlgorithmOid),
 		digestHex: toHex(digest.value),
 		saltHex: toHex(salt.value),
 		iterations: decodeIntegerNumber(iterations.value),

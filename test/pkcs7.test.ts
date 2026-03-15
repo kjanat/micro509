@@ -120,10 +120,13 @@ describe('pkcs7', () => {
 		if (!parsed.ok) throw new Error('unreachable');
 		expect(parsed.value.contentTypeOid).toBe(OIDS.pkcs7SignedData);
 		expect(parsed.value.certificates).toHaveLength(1);
+		expect(parsed.value.digestAlgorithmNames).toEqual(['SHA-256']);
 		expect(parsed.value.signerInfos[0]).toMatchObject({
 			version: 1,
 			digestAlgorithmOid: OIDS.sha256,
+			digestAlgorithmName: 'SHA-256',
 			signatureAlgorithmOid: OIDS.sha256WithRSAEncryption,
+			signatureAlgorithmName: 'RSA PKCS#1 v1.5 with SHA-256',
 			serialNumberHex: parsedSigner.serialNumberHex,
 		});
 	});
@@ -440,6 +443,7 @@ describe('pkcs7', () => {
 			contentTypeOid: parsed.value.contentTypeOid,
 			version: parsed.value.version,
 			digestAlgorithmOids: parsed.value.digestAlgorithmOids,
+			digestAlgorithmNames: parsed.value.digestAlgorithmNames,
 			encapsulatedContentTypeOid: parsed.value.encapsulatedContentTypeOid,
 			certificates: parsed.value.certificates,
 			signerInfos: parsed.value.signerInfos,

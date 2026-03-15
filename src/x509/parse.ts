@@ -30,7 +30,10 @@ import {
 	readSequenceChildren,
 } from '#micro509/internal/asn1/der.ts';
 import { OIDS } from '#micro509/internal/asn1/oids.ts';
-import { parseRsaPssParameters } from '#micro509/internal/crypto/rsa-pss.ts';
+import {
+	describePublicKeyAlgorithm,
+	describeSignatureAlgorithm,
+} from '#micro509/internal/crypto/algorithm-names.ts';
 import { decodeIpAddress } from '#micro509/internal/shared/ip.ts';
 import {
 	type ParsedBitFlags,
@@ -930,60 +933,6 @@ interface ParsedAlgorithmIdentifier {
 	readonly parametersDer?: Uint8Array;
 	/** Decoded OID when the parameters element is itself an OID (e.g. named curves). */
 	readonly parametersOid?: string;
-}
-
-/** Convert a signature AlgorithmIdentifier into a human-readable name. */
-function describeSignatureAlgorithm(oid: string, parametersDer: Uint8Array | undefined): string {
-	switch (oid) {
-		case OIDS.sha256WithRSAEncryption:
-			return 'RSA PKCS#1 v1.5 with SHA-256';
-		case OIDS.sha384WithRSAEncryption:
-			return 'RSA PKCS#1 v1.5 with SHA-384';
-		case OIDS.sha512WithRSAEncryption:
-			return 'RSA PKCS#1 v1.5 with SHA-512';
-		case OIDS.rsassaPss: {
-			const parsed = parseRsaPssParameters(parametersDer);
-			if (parsed.ok) {
-				return `RSA-PSS with ${parsed.value.hash}`;
-			}
-			return 'RSA-PSS';
-		}
-		case OIDS.ecdsaWithSHA256:
-			return 'ECDSA with SHA-256';
-		case OIDS.ecdsaWithSHA384:
-			return 'ECDSA with SHA-384';
-		case OIDS.ecdsaWithSHA512:
-			return 'ECDSA with SHA-512';
-		case OIDS.ed25519:
-			return 'Ed25519';
-		default:
-			return `Unknown (${oid})`;
-	}
-}
-
-/** Convert a SubjectPublicKeyInfo algorithm identifier into a human-readable name. */
-function describePublicKeyAlgorithm(oid: string, parametersOid: string | undefined): string {
-	switch (oid) {
-		case OIDS.rsaEncryption:
-			return 'RSA';
-		case OIDS.rsassaPss:
-			return 'RSA-PSS';
-		case OIDS.ecPublicKey:
-			switch (parametersOid) {
-				case OIDS.prime256v1:
-					return 'EC P-256';
-				case OIDS.secp384r1:
-					return 'EC P-384';
-				case OIDS.secp521r1:
-					return 'EC P-521';
-				default:
-					return 'EC';
-			}
-		case OIDS.ed25519:
-			return 'Ed25519';
-		default:
-			return `Unknown (${oid})`;
-	}
 }
 
 /** Decode an AlgorithmIdentifier SEQUENCE (OID + optional parameters). */

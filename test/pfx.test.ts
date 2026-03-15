@@ -308,6 +308,7 @@ describe('pfx', () => {
 		// macData should be present but no 'valid' field (password was not provided)
 		expect(result.value.macData).toBeDefined();
 		expect(result.value.macData?.digestAlgorithmOid).toBeDefined();
+		expect(result.value.macData?.digestAlgorithmName).toBe('SHA-256');
 	});
 
 	it('parsePfxDer returns invalid_password when MAC verification fails', async () => {

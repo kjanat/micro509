@@ -37,6 +37,10 @@ import {
 	tlv,
 } from '#micro509/internal/asn1/der.ts';
 import { OIDS } from '#micro509/internal/asn1/oids.ts';
+import {
+	describeHashAlgorithm,
+	describeSignatureAlgorithm,
+} from '#micro509/internal/crypto/algorithm-names.ts';
 import { verifySignedData } from '#micro509/internal/crypto/sig-verify.ts';
 import {
 	encodeAlgorithmIdentifier,
@@ -106,6 +110,8 @@ export interface OcspRequestMaterial {
 export interface ParsedOcspCertId {
 	/** OID of the hash algorithm used for the name and key hashes. */
 	readonly hashAlgorithmOid: string;
+	/** Human-readable hash algorithm name (e.g. `"SHA-256"`). */
+	readonly hashAlgorithmName: string;
 	/** Hex-encoded hash of the issuer's distinguished name DER. */
 	readonly issuerNameHashHex: string;
 	/** Hex-encoded hash of the issuer's SubjectPublicKey BIT STRING content. */
@@ -187,6 +193,8 @@ export interface ParsedOcspResponse {
 	readonly responderId?: ParsedOcspResponderId;
 	/** OID of the algorithm used to sign this response. */
 	readonly signatureAlgorithmOid?: string;
+	/** Human-readable signature algorithm name. */
+	readonly signatureAlgorithmName?: string;
 	/** Raw signature bytes. */
 	readonly signatureValue?: Uint8Array;
 	/** Timestamp when the responder produced this response. */
@@ -432,6 +440,11 @@ export function parseOcspResponseDer(der: Uint8Array): ParsedOcspResponse {
 	const signatureAlgorithm = requireElement(basicChildren[1], 'signatureAlgorithm');
 	const signatureValue = requireElement(basicChildren[2], 'signatureValue');
 	const certificatesElement = basicChildren[3];
+	const signatureAlgorithmChildren = childrenOf(basicResponse, signatureAlgorithm);
+	const signatureAlgorithmOid = decodeObjectIdentifier(
+		requireElement(signatureAlgorithmChildren[0], 'signatureAlgorithm OID').value,
+	);
+	const signatureAlgorithmParameters = signatureAlgorithmChildren[1];
 	const responseDataDer = basicResponse.slice(
 		responseData.start - responseData.headerLength,
 		responseData.end,
@@ -456,9 +469,15 @@ export function parseOcspResponseDer(der: Uint8Array): ParsedOcspResponse {
 		responseTypeOid,
 		responseDataDer,
 		responderId,
-		signatureAlgorithmOid: decodeObjectIdentifier(
-			requireElement(childrenOf(basicResponse, signatureAlgorithm)[0], 'signatureAlgorithm OID')
-				.value,
+		signatureAlgorithmOid,
+		signatureAlgorithmName: describeSignatureAlgorithm(
+			signatureAlgorithmOid,
+			signatureAlgorithmParameters === undefined
+				? undefined
+				: basicResponse.slice(
+						signatureAlgorithmParameters.start - signatureAlgorithmParameters.headerLength,
+						signatureAlgorithmParameters.end,
+					),
 		),
 		signatureValue: extractBitStringValue(signatureValue),
 		producedAt: parseTime(producedAt),
@@ -972,6 +991,7 @@ async function buildParsedOcspCertId(
 	const hashAlgorithm = ocspHashAlgorithmFromOid(hashAlgorithmOid);
 	return {
 		hashAlgorithmOid,
+		hashAlgorithmName: describeHashAlgorithm(hashAlgorithmOid),
 		issuerNameHashHex: toHex(await digestBytes(hashAlgorithm, hexToBytes(issuer.subject.derHex))),
 		issuerKeyHashHex: toHex(
 			await digestBytes(
@@ -1046,8 +1066,10 @@ function parseOcspCertId(der: Uint8Array): ParsedOcspCertId {
 	const hashAlgorithm = requireElement(children[0], 'hashAlgorithm');
 	const algorithmChildren = childrenOf(der, hashAlgorithm);
 	const algorithmOid = requireElement(algorithmChildren[0], 'hashAlgorithm OID');
+	const hashAlgorithmOid = decodeObjectIdentifier(algorithmOid.value);
 	return {
-		hashAlgorithmOid: decodeObjectIdentifier(algorithmOid.value),
+		hashAlgorithmOid,
+		hashAlgorithmName: describeHashAlgorithm(hashAlgorithmOid),
 		issuerNameHashHex: toHex(requireElement(children[1], 'issuerNameHash').value),
 		issuerKeyHashHex: toHex(requireElement(children[2], 'issuerKeyHash').value),
 		serialNumberHex: toHex(requireElement(children[3], 'serialNumber').value),
