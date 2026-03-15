@@ -142,6 +142,18 @@ export interface ExtensionDefinition<TParsed, TInput = TParsed> {
 	applyParsed(accumulator: MutableKnownParsedExtensionAccumulator, value: TParsed): void;
 }
 
+/**
+ * Module-internal decode-and-apply closures, captured at definition time.
+ *
+ * Each entry is keyed by OID and populated by {@linkcode defineExtensionDefinition}
+ * when the concrete generic type is known, avoiding the correlated-union problem
+ * that would arise from calling `decode` and `applyParsed` through a union type.
+ */
+const extensionAppliers = new Map<
+	string,
+	(accumulator: MutableKnownParsedExtensionAccumulator, valueDer: Uint8Array) => void
+>();
+
 /** Registry entry for Basic Constraints (OID 2.5.29.19). Critical by default. */
 export const BASIC_CONSTRAINTS_EXTENSION_DEFINITION: ExtensionDefinition<BasicConstraints> =
 	defineExtensionDefinition<BasicConstraints>({
@@ -363,65 +375,6 @@ const EXTENSION_DEFINITION_MAP = new Map<string, KnownExtensionDefinition>(
 	CERT_CSR_EXTENSION_DEFINITIONS.map((definition) => [definition.oid, definition]),
 );
 
-/** OID-keyed decode-and-apply closures for populating the accumulator. */
-const PARSED_EXTENSION_APPLIERS = new Map<
-	string,
-	(accumulator: MutableKnownParsedExtensionAccumulator, valueDer: Uint8Array) => void
->([
-	[
-		BASIC_CONSTRAINTS_EXTENSION_DEFINITION.oid,
-		createParsedExtensionApplicator(BASIC_CONSTRAINTS_EXTENSION_DEFINITION),
-	],
-	[
-		KEY_USAGE_EXTENSION_DEFINITION.oid,
-		createParsedExtensionApplicator(KEY_USAGE_EXTENSION_DEFINITION),
-	],
-	[
-		EXTENDED_KEY_USAGE_EXTENSION_DEFINITION.oid,
-		createParsedExtensionApplicator(EXTENDED_KEY_USAGE_EXTENSION_DEFINITION),
-	],
-	[
-		SUBJECT_ALT_NAME_EXTENSION_DEFINITION.oid,
-		createParsedExtensionApplicator(SUBJECT_ALT_NAME_EXTENSION_DEFINITION),
-	],
-	[
-		NAME_CONSTRAINTS_EXTENSION_DEFINITION.oid,
-		createParsedExtensionApplicator(NAME_CONSTRAINTS_EXTENSION_DEFINITION),
-	],
-	[
-		CERTIFICATE_POLICIES_EXTENSION_DEFINITION.oid,
-		createParsedExtensionApplicator(CERTIFICATE_POLICIES_EXTENSION_DEFINITION),
-	],
-	[
-		POLICY_MAPPINGS_EXTENSION_DEFINITION.oid,
-		createParsedExtensionApplicator(POLICY_MAPPINGS_EXTENSION_DEFINITION),
-	],
-	[
-		POLICY_CONSTRAINTS_EXTENSION_DEFINITION.oid,
-		createParsedExtensionApplicator(POLICY_CONSTRAINTS_EXTENSION_DEFINITION),
-	],
-	[
-		INHIBIT_ANY_POLICY_EXTENSION_DEFINITION.oid,
-		createParsedExtensionApplicator(INHIBIT_ANY_POLICY_EXTENSION_DEFINITION),
-	],
-	[
-		AUTHORITY_INFO_ACCESS_EXTENSION_DEFINITION.oid,
-		createParsedExtensionApplicator(AUTHORITY_INFO_ACCESS_EXTENSION_DEFINITION),
-	],
-	[
-		CRL_DISTRIBUTION_POINTS_EXTENSION_DEFINITION.oid,
-		createParsedExtensionApplicator(CRL_DISTRIBUTION_POINTS_EXTENSION_DEFINITION),
-	],
-	[
-		SUBJECT_KEY_IDENTIFIER_EXTENSION_DEFINITION.oid,
-		createParsedExtensionApplicator(SUBJECT_KEY_IDENTIFIER_EXTENSION_DEFINITION),
-	],
-	[
-		AUTHORITY_KEY_IDENTIFIER_EXTENSION_DEFINITION.oid,
-		createParsedExtensionApplicator(AUTHORITY_KEY_IDENTIFIER_EXTENSION_DEFINITION),
-	],
-]);
-
 /**
  * Return all known extension definitions, optionally filtered by context.
  *
@@ -506,11 +459,11 @@ export function decodeAndApplyKnownExtension(
 	if (definition === undefined || !definition.contexts.includes(context)) {
 		return false;
 	}
-	const applyParsed = PARSED_EXTENSION_APPLIERS.get(oid);
-	if (applyParsed === undefined) {
+	const applier = extensionAppliers.get(oid);
+	if (applier === undefined) {
 		return false;
 	}
-	applyParsed(accumulator, valueDer);
+	applier(accumulator, valueDer);
 	return true;
 }
 
@@ -524,20 +477,21 @@ export function buildSubjectKeyIdentifierFromSubjectPublicKeyInfo(
 	return buildSubjectKeyIdentifier(subjectPublicKeyInfo);
 }
 
-/** Identity helper that narrows the type of an {@linkcode ExtensionDefinition} literal. */
+/**
+ * Identity helper that narrows the type of an {@linkcode ExtensionDefinition} literal
+ * and captures a decode-and-apply closure in {@linkcode extensionAppliers}.
+ *
+ * The closure is built here — where `TParsed` is concrete — so that
+ * `decodeAndApplyKnownExtension` can call it through the union-typed
+ * `KnownExtensionDefinition` without hitting TypeScript's correlated-union limitation.
+ */
 function defineExtensionDefinition<TParsed, TInput = TParsed>(
 	definition: ExtensionDefinition<TParsed, TInput>,
 ): ExtensionDefinition<TParsed, TInput> {
-	return definition;
-}
-
-/** Build a closure that decodes DER and applies the result to the accumulator. */
-function createParsedExtensionApplicator<TParsed, TInput>(
-	definition: ExtensionDefinition<TParsed, TInput>,
-): (accumulator: MutableKnownParsedExtensionAccumulator, valueDer: Uint8Array) => void {
-	return (accumulator, valueDer) => {
+	extensionAppliers.set(definition.oid, (accumulator, valueDer) => {
 		definition.applyParsed(accumulator, definition.decode(valueDer));
-	};
+	});
+	return definition;
 }
 
 /** Accept hex string or Uint8Array and return raw bytes. */
