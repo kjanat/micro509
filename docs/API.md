@@ -20,20 +20,20 @@ Use subpaths when you want a narrower entrypoint.
 | `micro509/crl`              | CRL create, parse, validate, verify, and revocation lookup  |
 | `micro509/csr`              | CSR creation helpers                                        |
 | `micro509/extensions`       | certificate and CSR extension input types                   |
-| `micro509/identity`         | service identity matching                                   |
+| `micro509/identity`         | service identity matching compatibility seam                |
 | `micro509/keys`             | canonical key generation plus import and export helpers     |
 | `micro509/name`             | distinguished-name input types                              |
-| `micro509/name-constraints` | initial name-constraint input types                         |
+| `micro509/name-constraints` | initial name-constraint compatibility seam                  |
 | `micro509/ocsp`             | OCSP create, parse, validate, and verify helpers            |
 | `micro509/parse`            | cert and CSR parse plus extension decode helpers            |
 | `micro509/pem`              | canonical PEM split, decode, and encode helpers             |
 | `micro509/pfx`              | PKCS#12/PFX create and parse helpers                        |
 | `micro509/pkcs12-mac`       | PKCS#12 MAC helpers                                         |
 | `micro509/pkcs7`            | PKCS#7 cert bag and signedData parse helpers                |
-| `micro509/policy`           | policy-validation input and output types                    |
+| `micro509/policy`           | policy-validation compatibility seam                        |
 | `micro509/result`           | canonical shared `Result` types and constructors            |
 | `micro509/revocation`       | higher-level revocation orchestration helpers               |
-| `micro509/verify`           | chain, CSR, purpose, and path validation helpers            |
+| `micro509/verify`           | canonical verification, identity, policy, and path helpers  |
 
 ## Result model
 
@@ -115,6 +115,8 @@ Notes:
 
 ### Verify
 
+Canonical advanced home: `micro509/verify`
+
 Primary functions:
 
 - `verifyCertificateChain()`
@@ -144,8 +146,11 @@ Notes:
 
 - chain verification is async and WebCrypto-based
 - revocation orchestration is separate; use `micro509/revocation` when you need CRL and OCSP evidence handling
+- service-identity matching, policy knobs, and initial name-constraint inputs are owned by this domain even when legacy subpaths remain available
 
 ### Identity
+
+Compatibility subpath: prefer `micro509/verify` for new imports
 
 Primary functions:
 
@@ -351,6 +356,8 @@ Primary types:
 
 ### Policy
 
+Compatibility subpath: prefer `micro509/verify` for new imports
+
 Primary types:
 
 - `PolicyValidationInput`
@@ -383,6 +390,7 @@ Primary types:
 Notes:
 
 - root exports include the common extension and name input types even though the exhaustive advanced surface lives in `micro509/x509`
+- initial name-constraint inputs are canonically owned by `micro509/verify`
 
 ### Shared result types
 

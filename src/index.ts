@@ -93,24 +93,6 @@ export {
 	verifyCertificateRevocationList,
 } from './crl.ts';
 export type {
-	DnsServiceIdentityInput,
-	IpServiceIdentityInput,
-	MatchServiceIdentityErrorCode,
-	MatchServiceIdentityEvaluation,
-	MatchServiceIdentityFailure,
-	MatchServiceIdentityFailureDetails,
-	MatchServiceIdentityFailureResult,
-	MatchServiceIdentityInput,
-	MatchServiceIdentityResult,
-	MatchServiceIdentitySuccess,
-	ServiceIdentityInput,
-	ServiceIdentityType,
-	SrvServiceIdentityInput,
-	UriServiceIdentityInput,
-	VerifyServiceIdentityInput,
-} from './identity.ts';
-export { matchCertificateServiceIdentity, matchServiceIdentity } from './identity.ts';
-export type {
 	EcKeyAlgorithmInput,
 	EcNamedCurve,
 	Ed25519KeyAlgorithmInput,
@@ -164,7 +146,6 @@ export {
 	importSpkiDer,
 	importSpkiPem,
 } from './keys/index.ts';
-export type { InitialNameConstraintsInput } from './name-constraints.ts';
 export type {
 	CreateOcspRequestInput,
 	CreateOcspRequestItemInput,
@@ -243,11 +224,6 @@ export {
 export type { ParsedPkcs12MacData, Pkcs12MacOptions } from './pkcs12-mac.ts';
 export { createPkcs12MacData, parsePkcs12MacData } from './pkcs12-mac.ts';
 export type {
-	ConstrainedPolicy,
-	PolicyValidationInput,
-	PolicyValidationOutcome,
-} from './policy.ts';
-export type {
 	ErrorResult,
 	IndexedErrorResult,
 	IndexedMicro509Error,
@@ -287,11 +263,29 @@ export type {
 	BuildCandidatePathResult,
 	CandidatePath,
 	CertificateSource,
+	ConstrainedPolicy,
 	CsrSource,
+	DnsServiceIdentityInput,
 	EkuCheckFailure,
 	EkuCheckPurpose,
 	EkuCheckResult,
+	InitialNameConstraintsInput,
+	IpServiceIdentityInput,
+	MatchServiceIdentityErrorCode,
+	MatchServiceIdentityEvaluation,
+	MatchServiceIdentityFailure,
+	MatchServiceIdentityFailureDetails,
+	MatchServiceIdentityFailureResult,
+	MatchServiceIdentityInput,
+	MatchServiceIdentityResult,
+	MatchServiceIdentitySuccess,
+	PolicyValidationInput,
+	PolicyValidationOutcome,
+	ServiceIdentityInput,
+	ServiceIdentityType,
+	SrvServiceIdentityInput,
 	TrustAnchor,
+	UriServiceIdentityInput,
 	ValidateCandidatePathInput,
 	ValidateCandidatePathResult,
 	ValidateCandidatePathSuccess,
@@ -308,10 +302,13 @@ export type {
 	VerifyPurpose,
 	VerifyRequestFailure,
 	VerifyRequestResult,
-} from './verify.ts';
+	VerifyServiceIdentityInput,
+} from './verify/index.ts';
 export {
 	buildCandidatePath,
 	checkExtendedKeyUsage,
+	matchCertificateServiceIdentity,
+	matchServiceIdentity,
 	trustAnchorFromCertificate,
 	validateCandidatePath,
 	validateForCa,
@@ -320,7 +317,7 @@ export {
 	validateForTlsServer,
 	verifyCertificateChain,
 	verifyCertificateSigningRequest,
-} from './verify.ts';
+} from './verify/index.ts';
 export type {
 	AuthorityInfoAccessMethod,
 	AuthorityInformationAccess,

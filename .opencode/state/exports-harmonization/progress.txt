@@ -19,6 +19,7 @@ Started: 2026-03-15
 - Source files should reach `src/internal/**` through relative imports so build-time `.ts` rewriting still works; tests can keep `#micro509/internal/*` aliases.
 - `@internal` jsdoc can still affect emitted declarations for exported helpers, so new canonical domain barrels should not promote symbols that declaration emit already treats as internal.
 - When a utility domain becomes canonical, point the build entry at its domain barrel and move shared cross-domain primitives under `src/internal/shared/**` instead of leaking them through a neighboring public module.
+- Canonical domain barrels can tighten value exports, but should preserve legacy type re-exports during the migration so the advanced import home grows without breaking compile-time callers.
 
 ---
 <!-- Task logs below - APPEND ONLY -->
@@ -52,3 +53,9 @@ Started: 2026-03-15
 - Implemented canonical `micro509/keys`, `micro509/pem`, and `micro509/result` domain barrels, rerouted root utility re-exports through them, and pointed tsdown at those domain entrypoints.
 - Files changed: `docs/API.md`, `src/certificate.ts`, `src/crl.ts`, `src/csr.ts`, `src/index.ts`, `src/keys.ts`, `src/keys/index.ts`, `src/ocsp.ts`, `src/pem.ts`, `src/pem/index.ts`, `src/pfx.ts`, `src/pkcs7.ts`, `src/result/index.ts`, `src/internal/shared/base64.ts`, `test/utility-domains.test.ts`, `tsdown.config.ts`, `.opencode/state/exports-harmonization/prd.json`, `.opencode/state/exports-harmonization/progress.txt`.
 - **Learnings:** utility-domain cleanup exposed that raw base64 helpers were only cross-domain plumbing, so they belonged in `src/internal/shared/**` instead of the public PEM API; keeping root re-exports pointed at canonical domain barrels lets ownership shift without changing documented import homes.
+
+## Task - [build-verify-domain]
+
+- Implemented a canonical `micro509/verify` entrypoint, rerouted root verify-facing re-exports through it, and pointed tsdown at the domain barrel.
+- Files changed: `docs/API.md`, `src/index.ts`, `src/verify/index.ts`, `test/verify-domain.test.ts`, `tsdown.config.ts`, `.opencode/state/exports-harmonization/prd.json`, `.opencode/state/exports-harmonization/progress.txt`.
+- **Learnings:** verify-domain curation can make value ownership explicit, but the barrel still needs to preserve legacy transitive type exports during the migration so `micro509/verify` becomes the advanced home without surprise compile-time breaks.

@@ -20,7 +20,7 @@ export default defineConfig({
 		policy: 'src/policy.ts',
 		result: 'src/result/index.ts',
 		revocation: 'src/revocation.ts',
-		verify: 'src/verify.ts',
+		verify: 'src/verify/index.ts',
 		x509: 'src/x509/index.ts',
 	},
 	name: 'micro509',

@@ -45,7 +45,7 @@
 			"description": "Move verify, identity, policy, and name-constraints APIs into the `verify` domain and make it their canonical public home. Done when:\n- `src/verify/index.ts` owns advanced path-validation imports\n- identity, policy, and name-constraint types stop pretending to be standalone top-level products\n- verify-facing public signatures resolve within the domain without export sprawl\n- verify modules do not import root or sibling public barrels",
 			"depends": ["move-internal-modules", "build-x509-domain"],
 			"priority": "integration",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "build-revocation-domain",
