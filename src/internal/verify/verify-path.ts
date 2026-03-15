@@ -505,6 +505,20 @@ async function matchTrustAnchor(
 			}
 			continue;
 		}
+		if (!verified.valid) {
+			if (firstFailure === undefined) {
+				firstFailure = callbacks.failure(
+					'signature_invalid',
+					'certificate signature does not verify',
+					index,
+					callbacks.detail({
+						subjectCommonName: certificate.subject.values.commonName,
+						actual: 'certificate signature does not verify',
+					}),
+				);
+			}
+			continue;
+		}
 		if (verified.valid) {
 			return { matched: true };
 		}

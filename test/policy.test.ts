@@ -142,6 +142,45 @@ describe('policy fixtures', () => {
 		});
 	});
 
+	it('ignores tampered policy mappings that use anyPolicy', async () => {
+		const chain = await issuePolicyFixtureChain({
+			intermediates: [
+				{
+					commonName: 'Tampered Mapping Intermediate',
+					certificatePolicies: [OIDS.anyPolicy],
+				},
+			],
+			leafPolicies: ['1.2.3.5'],
+		});
+
+		const leaf = chain[0];
+		const intermediate = chain[1];
+		const root = chain[2];
+		if (leaf === undefined || intermediate === undefined || root === undefined) {
+			throw new Error('Missing policy fixture certificate');
+		}
+		const tamperedChain = [
+			leaf,
+			{
+				...intermediate,
+				policyMappings: [{ issuerDomainPolicy: OIDS.anyPolicy, subjectDomainPolicy: '1.2.3.5' }],
+			},
+			root,
+		];
+
+		const result = await validateCandidatePath({
+			chain: tamperedChain,
+			inhibitPolicyMapping: true,
+		});
+		expect(result).toMatchObject({
+			ok: true,
+			policyValidation: {
+				authorityConstrainedPolicies: [{ policyIdentifier: '1.2.3.5' }],
+				userConstrainedPolicies: [{ policyIdentifier: '1.2.3.5' }],
+			},
+		});
+	});
+
 	it('covers explicit-policy and anyPolicy rejection fixtures', async () => {
 		const explicitPolicyChain = await issuePolicyFixtureChain({});
 		const explicitPolicyFailure = await validateCandidatePath({

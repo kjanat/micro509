@@ -835,6 +835,7 @@ describe('chain verification', () => {
 
 	it('rejects chain when trust anchor has wrong key', async () => {
 		const chain = await issueChain();
+		const rootParsed = parseCertificatePem(chain.root.certificate.pem);
 		const otherCa = await createSelfSignedCertificate({
 			subject: { commonName: 'Verify Root CA' }, // same name, different key
 			extensions: {
@@ -842,7 +843,18 @@ describe('chain verification', () => {
 				keyUsage: ['keyCertSign'],
 			},
 		});
-		const wrongAnchor = trustAnchorFromCertificate(parseCertificatePem(otherCa.certificate.pem));
+		const otherParsed = parseCertificatePem(otherCa.certificate.pem);
+		const wrongAnchor = {
+			subject: rootParsed.subject,
+			subjectPublicKeyInfoDer: otherParsed.subjectPublicKeyInfoDer,
+			publicKeyAlgorithmOid: otherParsed.publicKeyAlgorithmOid,
+			...(otherParsed.publicKeyParametersOid === undefined
+				? {}
+				: { publicKeyParametersOid: otherParsed.publicKeyParametersOid }),
+			...(rootParsed.subjectKeyIdentifier === undefined
+				? {}
+				: { subjectKeyIdentifier: rootParsed.subjectKeyIdentifier }),
+		};
 		const result = await verifyCertificateChain({
 			leaf: chain.leaf.pem,
 			intermediates: [chain.intermediate.pem],
@@ -850,6 +862,9 @@ describe('chain verification', () => {
 			trustAnchors: [wrongAnchor],
 		});
 		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.code).toBe('signature_invalid');
+		}
 	});
 
 	it('reports unsupported RSA-PSS params at the intermediate when using trust anchors', async () => {

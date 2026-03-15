@@ -642,6 +642,12 @@ function applyPolicyMappingsStep(
 	}
 	const groupedMappings = new Map<string, string[]>();
 	for (const mapping of mappings) {
+		if (
+			mapping.issuerDomainPolicy === OIDS.anyPolicy ||
+			mapping.subjectDomainPolicy === OIDS.anyPolicy
+		) {
+			continue;
+		}
 		const subjectPolicies = groupedMappings.get(mapping.issuerDomainPolicy);
 		if (subjectPolicies === undefined) {
 			groupedMappings.set(mapping.issuerDomainPolicy, [mapping.subjectDomainPolicy]);
