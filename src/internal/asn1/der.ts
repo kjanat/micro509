@@ -198,18 +198,29 @@ export function ia5String(value: string): Uint8Array {
 	return tlv(0x16, new TextEncoder().encode(value));
 }
 
+/** Encode a non-negative integer as a base-128 sub-identifier (X.690 §8.19.2). */
+function encodeBase128(value: bigint): number[] {
+	const encoded: number[] = [Number(value & 0x7fn)];
+	let current = value >> 7n;
+	while (current > 0n) {
+		encoded.unshift(0x80 | Number(current & 0x7fn));
+		current >>= 7n;
+	}
+	return encoded;
+}
+
 /**
  * Encodes a dotted-decimal OID string as a DER OBJECT IDENTIFIER (tag `0x06`).
  * Validates arc constraints per X.660: first arc must be 0–2, second < 40
  * for arcs 0 and 1. Sub-identifiers are encoded with base-128 continuation.
  */
 export function objectIdentifier(oid: string): Uint8Array {
+	const digitPattern = /^\d+$/;
 	const segments = oid.split('.').map((segment) => {
-		const parsed = Number(segment);
-		if (!Number.isInteger(parsed) || parsed < 0 || !Number.isSafeInteger(parsed)) {
+		if (!digitPattern.test(segment)) {
 			throw new Error(`Invalid OID segment: ${segment}`);
 		}
-		return parsed;
+		return BigInt(segment);
 	});
 	if (segments.length < 2) {
 		throw new Error(`Invalid OID: ${oid}`);
@@ -219,27 +230,15 @@ export function objectIdentifier(oid: string): Uint8Array {
 	if (first === undefined || second === undefined) {
 		throw new Error(`Invalid OID: ${oid}`);
 	}
-	if (first !== 0 && first !== 1 && first !== 2) {
+	if (first !== 0n && first !== 1n && first !== 2n) {
 		throw new Error(`Invalid OID first arc: ${first}`);
 	}
-	if ((first === 0 || first === 1) && second >= 40) {
+	if ((first === 0n || first === 1n) && second >= 40n) {
 		throw new Error(`Invalid OID second arc: ${second} (must be < 40 when first arc is ${first})`);
 	}
-	if (!Number.isSafeInteger(first * 40 + second)) {
-		throw new Error(`OID encoding overflow: ${oid}`);
-	}
-	const bytes: number[] = [first * 40 + second];
+	const bytes: number[] = encodeBase128(first * 40n + second);
 	for (const segment of rest) {
-		if (!Number.isInteger(segment) || segment < 0) {
-			throw new Error(`Invalid OID segment in ${oid}`);
-		}
-		const encoded: number[] = [segment & 0x7f];
-		let current = segment >> 7;
-		while (current > 0) {
-			encoded.unshift(0x80 | (current & 0x7f));
-			current >>= 7;
-		}
-		bytes.push(...encoded);
+		bytes.push(...encodeBase128(segment));
 	}
 
 	return tlv(0x06, Uint8Array.from(bytes));

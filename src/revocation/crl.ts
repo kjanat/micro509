@@ -891,7 +891,7 @@ function checkCrlApplicability(
 	if (!allowDeltaCrl && crl.baseCrlNumber !== undefined) {
 		return nonApplicable(
 			'delta_crl_unsupported',
-			'delta CRLs are not applicable until delta merge support is implemented',
+			'a delta CRL cannot be used as the primary complete CRL input',
 		);
 	}
 	const issuingDistributionPoint = crl.issuingDistributionPoint;

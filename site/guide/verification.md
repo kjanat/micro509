@@ -82,7 +82,9 @@ The `VerifyErrorCode` type covers 21 failure modes:
 | `self_signed_leaf_not_allowed`               | Self-signed leaf without explicit opt-in     |
 | `unrecognized_critical_extension`            | Unknown critical extension                   |
 | `intermediate_eku_constraint`                | Intermediate has restrictive EKU             |
+| `policy_processing_not_implemented`          | Policy processing not implemented            |
 | `name_constraints_violated`                  | Name constraints check failed                |
+| `initial_name_constraints_not_implemented`   | Initial name constraints not implemented     |
 | `unsupported_name_constraints`               | Unsupported name constraint form             |
 | `explicit_policy_required`                   | Policy required but not satisfied            |
 | `initial_policy_set_not_satisfied`           | Initial policy set not met                   |

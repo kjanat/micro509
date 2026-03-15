@@ -930,7 +930,7 @@ describe('crl', () => {
 		).toMatchObject({
 			ok: false,
 			code: 'non_applicable',
-			message: 'delta CRLs are not applicable until delta merge support is implemented',
+			message: 'a delta CRL cannot be used as the primary complete CRL input',
 			details: { reason: 'delta_crl_unsupported' },
 		});
 	});
