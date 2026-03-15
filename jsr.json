@@ -1,5 +1,7 @@
 {
 	"name": "@kjanat/micro509",
+	"version": "0.1.0",
+	"license": "MIT",
 	"exports": {
 		".": "./src/index.ts",
 		"./certificate": "./src/certificate.ts",
@@ -22,7 +24,6 @@
 		"./verify": "./src/verify/index.ts",
 		"./x509": "./src/x509/index.ts"
 	},
-	"license": "MIT",
 	"publish": {
 		"include": [
 			"src",
@@ -30,6 +31,5 @@
 			"README.md"
 		],
 		"exclude": []
-	},
-	"version": "0.1.0"
+	}
 }

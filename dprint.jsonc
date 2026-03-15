@@ -127,7 +127,7 @@
 			},
 			{
 				"command": "npx -y sort-package-json --stdin",
-				"fileNames": ["package.json"],
+				"fileNames": ["package.json", "jsr.json"],
 			},
 		],
 	},
