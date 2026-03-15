@@ -238,7 +238,7 @@ function collectAuthorityConstrainedPolicies(
 	return authorityPolicies;
 }
 
-/** BFS upward through parent links to check if the node ultimately connects to the depth-0 anyPolicy root. */
+/** DFS upward through parent links to check if the node ultimately connects to the depth-0 anyPolicy root. */
 function reachesAuthorityRoot(graph: PolicyGraph, nodeKey: string): boolean {
 	const pending = [nodeKey];
 	const visited = new Set<string>();
