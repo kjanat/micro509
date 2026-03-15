@@ -416,25 +416,27 @@ function rankIssuerCandidates(
 	rootFingerprints: ReadonlySet<string>,
 ): readonly ParsedCertificate[] {
 	const aki = current.authorityKeyIdentifier;
-	return [...candidates]
-		.filter((candidate) => isIssuerOf(candidate, current))
-		.sort((left, right) => {
-			const akiScore = compareBooleans(matchesAki(left, aki), matchesAki(right, aki));
-			if (akiScore !== 0) {
-				return akiScore;
-			}
-			const rootScore = compareBooleans(
-				rootFingerprints.has(fingerprint(left)),
-				rootFingerprints.has(fingerprint(right)),
-			);
-			if (rootScore !== 0) {
-				return rootScore;
-			}
-			return (
-				(order.get(fingerprint(left)) ?? Number.MAX_SAFE_INTEGER) -
-				(order.get(fingerprint(right)) ?? Number.MAX_SAFE_INTEGER)
-			);
-		});
+	const filtered = [...candidates].filter((candidate) => isIssuerOf(candidate, current));
+	const fps = new Map<ParsedCertificate, string>();
+	for (const candidate of filtered) {
+		fps.set(candidate, fingerprint(candidate));
+	}
+	return filtered.sort((left, right) => {
+		const akiScore = compareBooleans(matchesAki(left, aki), matchesAki(right, aki));
+		if (akiScore !== 0) {
+			return akiScore;
+		}
+		const leftFp = fps.get(left) ?? '';
+		const rightFp = fps.get(right) ?? '';
+		const rootScore = compareBooleans(rootFingerprints.has(leftFp), rootFingerprints.has(rightFp));
+		if (rootScore !== 0) {
+			return rootScore;
+		}
+		return (
+			(order.get(leftFp) ?? Number.MAX_SAFE_INTEGER) -
+			(order.get(rightFp) ?? Number.MAX_SAFE_INTEGER)
+		);
+	});
 }
 
 /** Returns `true` if the candidate's SKI matches the given authority key identifier. */
