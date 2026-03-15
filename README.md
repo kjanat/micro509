@@ -1,13 +1,8 @@
 # micro509
 
-Small, typed X.509 and PKI tooling for modern TypeScript.
-Zero dependencies, ~167 kB of JS (~43 kB gzipped) across all modules.
+The TypeScript PKI library that tells you _why_ verification failed, not just that it did.
 
-- create certificates, CSRs, CRLs, OCSP requests, PKCS#7 cert bags, and PFX bundles
-- parse DER, PEM, and base64 inputs back to typed metadata
-- verify certificate chains and CSR signatures with typed results
-- import and export PKCS#8, SPKI, JWK, PKCS#1, and SEC1 keys
-- stay WebCrypto-first, ESM-only, and browser-safe
+Zero dependencies. Pure WebCrypto. Runs everywhere: Node, Bun, Deno, browsers, Cloudflare Workers.
 
 ## Install
 
@@ -15,12 +10,33 @@ Zero dependencies, ~167 kB of JS (~43 kB gzipped) across all modules.
 npm install micro509
 ```
 
-## Why use it
+## Why micro509
 
-- WebCrypto-first: no Node builtins in library code
-- typed outcomes: verification APIs return structured success or failure objects
-- modern PKI surface: certificates, CSRs, revocation, OCSP, PFX, PKCS#7
-- narrow defaults, explicit escape hatches
+Other JS X.509 libraries return a boolean from chain verification.
+micro509 returns a discriminated union with 13 typed error codes, the
+failing certificate's index, and structured failure details — so your
+code can _handle_ the failure, not just log it.
+
+```ts
+if (!result.ok) {
+  // result.error.code: 'SIGNATURE_INVALID' | 'EXPIRED' | 'NAME_CONSTRAINTS_VIOLATED' | ...
+  // result.error.index: which certificate in the chain failed
+  // result.error.details: { expected, actual } for identity mismatches
+}
+```
+
+Beyond verification, micro509 covers PKI surface that no other
+zero-dependency JS package ships:
+
+- **OCSP** — build requests, parse and validate responses, verify responder authorization
+- **PFX / PKCS#12** — create and parse password-protected key+cert bundles
+- **PKCS#7 / CMS** — parse SignedData, verify signer signatures, extract cert bags
+- **CRLs** — create, parse, verify, and check revocation status
+- **Encrypted keys** — PBES2 PKCS#8, legacy OpenSSL encrypted PEM, PKCS#1, SEC1
+- **Service identity** — wildcard DNS, IPv6 normalization, URI-ID, SRV-ID, explicit CN opt-in
+
+All with no `any`, no type assertions, no non-null assertions, and
+no runtime DI frameworks that break edge runtimes.
 
 ## Quick start
 
