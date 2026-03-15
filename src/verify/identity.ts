@@ -8,7 +8,7 @@
  * @module
  */
 
-import { normalizeIpAddress } from '#micro509/internal/shared/ip.ts';
+import { decodeIpAddress, parseIpAddressToBytes } from '#micro509/internal/shared/ip.ts';
 import type { ErrorResult, Micro509Error, Result } from '#micro509/result/result.ts';
 import { errorResult, micro509Error, successResult } from '#micro509/result/result.ts';
 import type { ParsedCertificate } from '#micro509/x509/parse.ts';
@@ -22,7 +22,7 @@ export interface DnsServiceIdentityInput {
 	/**
 	 * When `true`, falls back to the subject CN if the SAN extension has no
 	 * dns/uri/srv entries. Suppressed when any supported SAN type is present.
-	 * Default: `false`.
+	 * @default false
 	 */
 	readonly allowCommonNameFallback?: boolean;
 }
@@ -155,8 +155,7 @@ export function matchServiceIdentity(input: MatchServiceIdentityInput): MatchSer
  * Compares a reference identifier against a certificate's SAN entries.
  *
  * Supports DNS (with wildcard matching), IP, URI-ID, and SRV-ID.
- * For DNS, optionally falls back to subject CN when no SAN of a supported
- * type is present.
+ * For DNS, optionally falls back to subject CN when no SAN of a supported type is present.
  *
  * @example
  * ```ts
@@ -236,20 +235,29 @@ export function matchCertificateServiceIdentity(
 			);
 		}
 		case 'ip': {
-			const expected = normalizeIpAddress(serviceIdentity.value);
+			const expectedBytes = parseIpAddressToBytes(serviceIdentity.value);
+			const expected = decodeIpAddress(expectedBytes);
 			const sans = certificate.subjectAltNames?.filter((entry) => entry.type === 'ip') ?? [];
-			if (!sans.some((entry) => normalizeIpAddress(entry.value) === expected)) {
-				return failure(
-					'subject_alt_name_mismatch',
-					'IP address not present in SAN',
-					details(
-						certificate.subject.values.commonName,
-						expected,
-						sans.map((entry) => normalizeIpAddress(entry.value)).join(','),
-					),
-				);
+			const presentedAddresses: string[] = [];
+			for (const entry of sans) {
+				const presentedBytes = tryParsePresentedIpAddress(entry.value);
+				if (presentedBytes === undefined) {
+					return failure(
+						'subject_alt_name_mismatch',
+						'IP address SAN is malformed',
+						details(certificate.subject.values.commonName, expected, `ip:${entry.value}`),
+					);
+				}
+				presentedAddresses.push(decodeIpAddress(presentedBytes));
+				if (sameIpAddressBytes(presentedBytes, expectedBytes)) {
+					return success();
+				}
 			}
-			return success();
+			return failure(
+				'subject_alt_name_mismatch',
+				'IP address not present in SAN',
+				details(certificate.subject.values.commonName, expected, presentedAddresses.join(',')),
+			);
 		}
 		case 'uri': {
 			const expected = parseUriServiceIdentity(serviceIdentity.value);
@@ -430,7 +438,7 @@ function parseUriServiceIdentity(value: string): ServiceScopedIdentity {
 	return parsed;
 }
 
-/** Attempts to split a URI into scheme + reg-name. Returns `undefined` on failure. */
+/** Attempts to split a URI into scheme + reg-name. @returns `undefined` on failure. */
 function tryParseUriServiceIdentity(value: string): ServiceScopedIdentity | undefined {
 	const schemeEnd = value.indexOf(':');
 	if (schemeEnd <= 0) {
@@ -490,7 +498,7 @@ function parseSrvServiceIdentity(value: string): ServiceScopedIdentity {
 	return parsed;
 }
 
-/** Attempts to split `_service.domain` into parts. Returns `undefined` on failure. */
+/** Attempts to split `_service.domain` into parts. @returns `undefined` on failure. */
 function tryParseSrvServiceIdentity(value: string): ServiceScopedIdentity | undefined {
 	if (!value.startsWith('_')) {
 		return undefined;
@@ -521,6 +529,26 @@ function failure(
 /** Constructs a success result indicating the identity matched. */
 function success(): MatchServiceIdentitySuccess {
 	return successResult(undefined);
+}
+
+function tryParsePresentedIpAddress(value: string): Uint8Array | undefined {
+	try {
+		return parseIpAddressToBytes(value);
+	} catch {
+		return undefined;
+	}
+}
+
+function sameIpAddressBytes(left: Uint8Array, right: Uint8Array): boolean {
+	if (left.length !== right.length) {
+		return false;
+	}
+	for (let index = 0; index < left.length; index += 1) {
+		if (left[index] !== right[index]) {
+			return false;
+		}
+	}
+	return true;
 }
 
 /** Assembles failure detail fields, merging optional CN-fallback and identifier-type info. */

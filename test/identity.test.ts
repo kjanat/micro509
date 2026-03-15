@@ -58,6 +58,44 @@ describe('identity boundary', () => {
 		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
 	});
 
+	it('rejects malformed IP SANs instead of throwing during identity matching', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Identity CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Identity CA' },
+			subject: { commonName: 'identity-ip.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['serverAuth'],
+				subjectAltNames: [{ type: 'ip', value: '2001:db8::1' }],
+			},
+		});
+		const certificate = parseCertificatePem(leaf.pem);
+		const tamperedCertificate = {
+			...certificate,
+			subjectAltNames: [
+				{ type: 'ip' as const, value: '1.2.3.999' },
+				{ type: 'ip' as const, value: '2001:db8::1' },
+			],
+		};
+
+		expect(
+			matchServiceIdentity({
+				certificate: tamperedCertificate,
+				serviceIdentity: { type: 'ip', value: '2001:db8::1' },
+			}),
+		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
+	});
+
 	it('matches wildcard DNS SANs through the dedicated identity API', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Wildcard Identity CA' },

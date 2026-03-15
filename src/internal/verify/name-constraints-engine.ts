@@ -96,6 +96,16 @@ interface NameConstraintValidationFailureDetailsInput {
 	readonly actual?: string | undefined;
 }
 
+type SubjectAltNameCheckableResult =
+	| {
+			readonly ok: true;
+			readonly value: NameConstraintForm | undefined;
+	  }
+	| {
+			readonly ok: false;
+			readonly actual: string;
+	  };
+
 /** Constructs a {@linkcode NameConstraintValidationFailure} with optional details. */
 function nameConstraintFailure(
 	code: NameConstraintValidationFailureCode,
@@ -355,7 +365,19 @@ function checkCertificateNames(
 	// Check each SAN.
 	if (certificate.subjectAltNames !== undefined) {
 		for (const san of certificate.subjectAltNames) {
-			const checkable = sanToConstraintCheckable(san);
+			const checkableResult = sanToConstraintCheckable(san);
+			if (!checkableResult.ok) {
+				return nameConstraintFailure(
+					'name_constraints_violated',
+					`SAN ${checkableResult.actual} is malformed and cannot be checked against name constraints`,
+					index,
+					nameConstraintDetails({
+						subjectCommonName: certificate.subject.values.commonName,
+						actual: checkableResult.actual,
+					}),
+				);
+			}
+			const checkable = checkableResult.value;
 			if (checkable === undefined) {
 				continue;
 			}
@@ -417,26 +439,36 @@ function accumulatedHasEmailConstraints(accumulated: AccumulatedNameConstraints)
  * Returns `undefined` for name forms that don't participate in
  * constraint checking (unknown tags).
  */
-function sanToConstraintCheckable(san: SubjectAltName): NameConstraintForm | undefined {
+function sanToConstraintCheckable(san: SubjectAltName): SubjectAltNameCheckableResult {
 	switch (san.type) {
 		case 'dns':
-			return { type: 'dns', value: san.value };
+			return { ok: true, value: { type: 'dns', value: san.value } };
 		case 'email':
-			return { type: 'email', value: san.value };
+			return { ok: true, value: { type: 'email', value: san.value } };
 		case 'uri':
-			return { type: 'uri', value: san.value };
+			return { ok: true, value: { type: 'uri', value: san.value } };
 		case 'srv':
-			return undefined;
+			return { ok: true, value: undefined };
 		case 'ip':
-			return {
-				type: 'ip',
-				addressBytes: parseIpAddressToBytes(san.value),
-				maskBytes: allOnesMaskForIpAddress(san.value),
-			};
+			try {
+				return {
+					ok: true,
+					value: {
+						type: 'ip',
+						addressBytes: parseIpAddressToBytes(san.value),
+						maskBytes: allOnesMaskForIpAddress(san.value),
+					},
+				};
+			} catch {
+				return {
+					ok: false,
+					actual: `ip:${san.value}`,
+				};
+			}
 		case 'directoryName':
-			return { type: 'directoryName', derHex: san.derHex };
+			return { ok: true, value: { type: 'directoryName', derHex: san.derHex } };
 		case 'unknown':
-			return undefined;
+			return { ok: true, value: undefined };
 		default: {
 			const exhaustive: never = san;
 			throw new Error(`Unhandled SubjectAltName type: ${String(exhaustive)}`);

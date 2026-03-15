@@ -3941,7 +3941,7 @@ describe('coverage: verify.ts internal edge cases', () => {
 
 	// --- parseIpAddressToBytes error paths (lines 1769, 1775) ---
 
-	it('IP SAN with wrong segment count throws (line 1769)', async () => {
+	it('rejects malformed IP SANs with wrong segment count (line 1769)', async () => {
 		const { parsedRoot, parsedLeaf } = await makeSelfSignedChain();
 		// Tamper leaf to have an IP SAN with invalid value (3 segments)
 		const tamperedLeaf = {
@@ -3962,15 +3962,14 @@ describe('coverage: verify.ts internal edge cases', () => {
 				],
 			},
 		};
-		expect(
-			validateCandidatePath({
-				chain: [tamperedLeaf, tamperedRoot],
-				allowSelfSignedLeaf: true,
-			}),
-		).rejects.toThrow('Invalid IPv4 address');
+		const result = await validateCandidatePath({
+			chain: [tamperedLeaf, tamperedRoot],
+			allowSelfSignedLeaf: true,
+		});
+		expect(result).toMatchObject({ ok: false, code: 'name_constraints_violated' });
 	});
 
-	it('IP SAN with non-numeric segment throws (line 1775)', async () => {
+	it('rejects malformed IP SANs with non-numeric segments (line 1775)', async () => {
 		const { parsedRoot, parsedLeaf } = await makeSelfSignedChain();
 		const tamperedLeaf = {
 			...parsedLeaf,
@@ -3990,15 +3989,14 @@ describe('coverage: verify.ts internal edge cases', () => {
 				],
 			},
 		};
-		expect(
-			validateCandidatePath({
-				chain: [tamperedLeaf, tamperedRoot],
-				allowSelfSignedLeaf: true,
-			}),
-		).rejects.toThrow('Invalid IPv4 address');
+		const result = await validateCandidatePath({
+			chain: [tamperedLeaf, tamperedRoot],
+			allowSelfSignedLeaf: true,
+		});
+		expect(result).toMatchObject({ ok: false, code: 'name_constraints_violated' });
 	});
 
-	it('IP SAN with out-of-range segment throws (line 1775)', async () => {
+	it('rejects malformed IP SANs with out-of-range segments (line 1775)', async () => {
 		const { parsedRoot, parsedLeaf } = await makeSelfSignedChain();
 		const tamperedLeaf = {
 			...parsedLeaf,
@@ -4018,12 +4016,11 @@ describe('coverage: verify.ts internal edge cases', () => {
 				],
 			},
 		};
-		expect(
-			validateCandidatePath({
-				chain: [tamperedLeaf, tamperedRoot],
-				allowSelfSignedLeaf: true,
-			}),
-		).rejects.toThrow('Invalid IPv4 address');
+		const result = await validateCandidatePath({
+			chain: [tamperedLeaf, tamperedRoot],
+			allowSelfSignedLeaf: true,
+		});
+		expect(result).toMatchObject({ ok: false, code: 'name_constraints_violated' });
 	});
 
 	// --- rankIssuerCandidates tiebreakers (lines 1078-1088) ---
