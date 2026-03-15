@@ -3,5 +3,6 @@
 	"default": true,
 	"no-hard-tabs": { "code_blocks": false },
 	"no-bare-urls": false,
-	"line-length": false
+	"line-length": false,
+	"no-inline-html": false
 }

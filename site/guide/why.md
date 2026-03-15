@@ -8,20 +8,61 @@ Other JS X.509 libraries return a boolean from chain verification. When verifica
 
 micro509 returns a discriminated union with 21 typed error codes, the failing certificate's index, and structured failure details:
 
+<LiveCode>
+
 ```ts
+import {
+  createSelfSignedCertificate,
+  createCertificate,
+  generateKeyPair,
+  verifyCertificateChain,
+} from 'micro509';
+
+// Build a CA and leaf
+const ca = await createSelfSignedCertificate({
+  subject: { commonName: 'Demo CA' },
+  extensions: {
+    basicConstraints: { ca: true },
+    keyUsage: ['keyCertSign'],
+  },
+});
+
+const leafKeys = await generateKeyPair();
+const leaf = await createCertificate({
+  issuer: { commonName: 'Demo CA' },
+  subject: { commonName: 'app.example.com' },
+  publicKey: leafKeys.publicKey,
+  signerPrivateKey: ca.keyPair.privateKey,
+  issuerPublicKey: ca.keyPair.publicKey,
+  extensions: {
+    subjectAltNames: [
+      { type: 'dns', value: 'app.example.com' },
+    ],
+  },
+});
+
+// Verify against the wrong hostname
 const result = await verifyCertificateChain({
   leaf: leaf.pem,
-  intermediates: [intermediate.pem],
-  roots: [root.pem],
-  purpose: 'serverAuth',
+  roots: [ca.certificate.pem],
+  serviceIdentity: {
+    type: 'dns',
+    value: 'evil.example.com',
+  },
 });
 
 if (!result.ok) {
-  // result.error.code: 'signature_invalid' | 'certificate_expired' | 'name_constraints_violated' | ...
-  // result.error.index: which certificate in the chain failed
-  // result.error.details: { expected, actual } for identity mismatches
+  console.log(`\
+code:    ${result.error.code}
+message: ${result.error.message}
+details: ${JSON.stringify(result.error.details, null, '  ')}`);
 }
+// result.error.code: 'signature_invalid' | 'certificate_expired' | 'name_constraints_violated' | ...
+// result.error.index: which certificate in the chain failed
+// result.error.details: { expected, actual } for identity mismatches
 ```
+
+</LiveCode>
 
 ## PKI surface
 

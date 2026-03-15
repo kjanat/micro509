@@ -28,8 +28,10 @@ import { parsePfxDer } from 'micro509/pkcs';
 const result = await parsePfxDer(der, 'secret');
 
 if (result.ok) {
-  result.value.certificates; // parsed certificates
-  result.value.privateKey; // CryptoKey
+	// parsed certificates
+  result.value.certificates;
+  // CryptoKey
+  result.value.privateKey;
 }
 ```
 
@@ -53,7 +55,8 @@ import { parsePkcs7CertBagPem } from 'micro509/pkcs';
 const result = parsePkcs7CertBagPem(pem);
 
 if (result.ok) {
-  result.value.certificates; // parsed certificates
+	// parsed certificates
+  result.value.certificates;
 }
 ```
 
@@ -89,8 +92,9 @@ import {
 } from 'micro509/pem';
 
 // Decode a single PEM block
-const pem =
-  '-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----';
+const pem = `-----BEGIN CERTIFICATE-----
+...
+-----END CERTIFICATE-----`;
 const der = pemDecode(pem);
 
 // Encode DER as PEM
