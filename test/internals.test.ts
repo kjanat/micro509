@@ -237,20 +237,36 @@ describe('asn1 decoding', () => {
 // ---------------------------------------------------------------------------
 
 describe('sig-verify', () => {
-	it('requireRsaPublicKey throws for non-RSA OID', () => {
-		expect(() => requireRsaPublicKey(OIDS.ecPublicKey, 'SHA-256')).toThrow('RSA');
+	it('requireRsaPublicKey returns failure for non-RSA OID', () => {
+		const result = requireRsaPublicKey(OIDS.ecPublicKey, 'SHA-256');
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.reason).toContain('RSA');
+		}
 	});
 
-	it('requireEcPublicKey throws for non-EC OID', () => {
-		expect(() => requireEcPublicKey(OIDS.rsaEncryption, undefined)).toThrow('EC');
+	it('requireEcPublicKey returns failure for non-EC OID', () => {
+		const result = requireEcPublicKey(OIDS.rsaEncryption, undefined, 'SHA-256');
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.reason).toContain('EC');
+		}
 	});
 
-	it('requireEcPublicKey throws for unsupported curve OID', () => {
-		expect(() => requireEcPublicKey(OIDS.ecPublicKey, '1.2.3.4.5')).toThrow('Unsupported EC curve');
+	it('requireEcPublicKey returns failure for unsupported curve OID', () => {
+		const result = requireEcPublicKey(OIDS.ecPublicKey, '1.2.3.4.5', 'SHA-256');
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.reason).toContain('unsupported EC curve');
+		}
 	});
 
-	it('requireEcPublicKey throws for missing curve OID', () => {
-		expect(() => requireEcPublicKey(OIDS.ecPublicKey, undefined)).toThrow('Unsupported EC curve');
+	it('requireEcPublicKey returns failure for missing curve OID', () => {
+		const result = requireEcPublicKey(OIDS.ecPublicKey, undefined, 'SHA-256');
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.reason).toContain('unsupported EC curve');
+		}
 	});
 
 	it('curveBytes throws for unsupported curve', () => {
@@ -258,17 +274,19 @@ describe('sig-verify', () => {
 	});
 
 	it('requireEcPublicKey and curveBytes support secp521r1', () => {
-		expect(requireEcPublicKey(OIDS.ecPublicKey, OIDS.secp521r1)).toEqual({
-			kind: 'ecdsa',
-			namedCurve: 'P-521',
-		});
+		const result = requireEcPublicKey(OIDS.ecPublicKey, OIDS.secp521r1, 'SHA-512');
+		expect(result.ok).toBe(true);
+		if (result.ok) {
+			expect(result.value.importAlgorithm).toEqual({ kind: 'ecdsa', namedCurve: 'P-521' });
+			expect(result.value.ecdsaRawSignatureBytes).toBe(132);
+		}
 		expect(curveBytes(OIDS.secp521r1)).toBe(132);
 	});
 
 	it('getVerifySignatureConfig throws for unknown signature algorithm', () => {
 		expect(() =>
 			getVerifySignatureConfig('1.2.3.4.999', undefined, OIDS.rsaEncryption, undefined),
-		).toThrow('Unsupported signature algorithm');
+		).toThrow('unrecognized signature algorithm OID');
 	});
 
 	it('getVerifySignatureConfig throws for Ed25519 sig with non-Ed25519 key', () => {

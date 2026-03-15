@@ -100,35 +100,11 @@ export function getVerifySignatureConfigResult(
 ): VerifySignatureConfigResult {
 	switch (signatureAlgorithmOid) {
 		case OIDS.sha256WithRSAEncryption:
-			return ok({
-				importAlgorithm: requireRsaPublicKey(
-					publicKeyAlgorithmOid,
-					'SHA-256',
-					'pkcs1-v1_5',
-					context,
-				),
-				verifyParams: { name: 'RSASSA-PKCS1-v1_5' },
-			});
+			return requireRsaPublicKey(publicKeyAlgorithmOid, 'SHA-256', 'pkcs1-v1_5', context);
 		case OIDS.sha384WithRSAEncryption:
-			return ok({
-				importAlgorithm: requireRsaPublicKey(
-					publicKeyAlgorithmOid,
-					'SHA-384',
-					'pkcs1-v1_5',
-					context,
-				),
-				verifyParams: { name: 'RSASSA-PKCS1-v1_5' },
-			});
+			return requireRsaPublicKey(publicKeyAlgorithmOid, 'SHA-384', 'pkcs1-v1_5', context);
 		case OIDS.sha512WithRSAEncryption:
-			return ok({
-				importAlgorithm: requireRsaPublicKey(
-					publicKeyAlgorithmOid,
-					'SHA-512',
-					'pkcs1-v1_5',
-					context,
-				),
-				verifyParams: { name: 'RSASSA-PKCS1-v1_5' },
-			});
+			return requireRsaPublicKey(publicKeyAlgorithmOid, 'SHA-512', 'pkcs1-v1_5', context);
 		case OIDS.rsassaPss:
 			return requireRsaPssVerifyConfig(
 				signatureAlgorithmParametersDer,
@@ -136,67 +112,73 @@ export function getVerifySignatureConfigResult(
 				context,
 			);
 		case OIDS.ecdsaWithSHA256:
-			return ok({
-				importAlgorithm: requireEcPublicKey(publicKeyAlgorithmOid, publicKeyParametersOid, context),
-				verifyParams: { name: 'ECDSA', hash: 'SHA-256' },
-				ecdsaRawSignatureBytes: curveBytes(publicKeyParametersOid),
-			});
+			return requireEcPublicKey(publicKeyAlgorithmOid, publicKeyParametersOid, 'SHA-256', context);
 		case OIDS.ecdsaWithSHA384:
-			return ok({
-				importAlgorithm: requireEcPublicKey(publicKeyAlgorithmOid, publicKeyParametersOid, context),
-				verifyParams: { name: 'ECDSA', hash: 'SHA-384' },
-				ecdsaRawSignatureBytes: curveBytes(publicKeyParametersOid),
-			});
+			return requireEcPublicKey(publicKeyAlgorithmOid, publicKeyParametersOid, 'SHA-384', context);
 		case OIDS.ecdsaWithSHA512:
-			return ok({
-				importAlgorithm: requireEcPublicKey(publicKeyAlgorithmOid, publicKeyParametersOid, context),
-				verifyParams: { name: 'ECDSA', hash: 'SHA-512' },
-				ecdsaRawSignatureBytes: curveBytes(publicKeyParametersOid),
-			});
+			return requireEcPublicKey(publicKeyAlgorithmOid, publicKeyParametersOid, 'SHA-512', context);
 		case OIDS.ed25519:
 			if (publicKeyAlgorithmOid !== OIDS.ed25519) {
-				throw new Error(`Ed25519 signature requires Ed25519 ${context} public key`);
+				return unsupported('Ed25519', `requires Ed25519 ${context} public key`);
 			}
 			return ok({
 				importAlgorithm: { kind: 'ed25519' },
 				verifyParams: { name: 'Ed25519' },
 			});
 		default:
-			throw new Error(`Unsupported signature algorithm OID: ${signatureAlgorithmOid}`);
+			return unsupported(signatureAlgorithmOid, 'unrecognized signature algorithm OID');
 	}
 }
 
-/** Assert the public key OID is `rsaEncryption` and return an RSA import descriptor. */
+/** Validate that the public key OID is `rsaEncryption` and return an RSA verification config result. */
 export function requireRsaPublicKey(
 	algorithmOid: string,
 	hash: RsaHash,
 	scheme: RsaScheme = 'pkcs1-v1_5',
 	context = 'issuer',
-): PublicKeyImportInput {
+	saltLength?: number,
+): VerifySignatureConfigResult {
 	if (algorithmOid !== OIDS.rsaEncryption) {
-		throw new Error(`RSA signature requires RSA ${context} public key`);
+		return unsupported('RSA', `requires RSA ${context} public key`);
 	}
-	return { kind: 'rsa', hash, scheme };
+	const verifyParams: Algorithm | RsaPssParams =
+		scheme === 'pss'
+			? { name: 'RSA-PSS', saltLength: saltLength ?? 0 }
+			: { name: 'RSASSA-PKCS1-v1_5' };
+	return ok({ importAlgorithm: { kind: 'rsa', hash, scheme }, verifyParams });
 }
 
-/** Assert the public key OID is `ecPublicKey`, resolve the curve, and return an ECDSA import descriptor. */
+/** Validate that the public key OID is `ecPublicKey`, resolve the curve, and return an ECDSA verification config result. */
 export function requireEcPublicKey(
 	algorithmOid: string,
 	parametersOid: string | undefined,
+	hash: string,
 	context = 'issuer',
-): PublicKeyImportInput {
+): VerifySignatureConfigResult {
 	if (algorithmOid !== OIDS.ecPublicKey) {
-		throw new Error(`ECDSA signature requires EC ${context} public key`);
+		return unsupported('ECDSA', `requires EC ${context} public key`);
 	}
 	switch (parametersOid) {
 		case OIDS.prime256v1:
-			return { kind: 'ecdsa', namedCurve: 'P-256' };
+			return ok({
+				importAlgorithm: { kind: 'ecdsa', namedCurve: 'P-256' },
+				verifyParams: { name: 'ECDSA', hash },
+				ecdsaRawSignatureBytes: 64,
+			});
 		case OIDS.secp384r1:
-			return { kind: 'ecdsa', namedCurve: 'P-384' };
+			return ok({
+				importAlgorithm: { kind: 'ecdsa', namedCurve: 'P-384' },
+				verifyParams: { name: 'ECDSA', hash },
+				ecdsaRawSignatureBytes: 96,
+			});
 		case OIDS.secp521r1:
-			return { kind: 'ecdsa', namedCurve: 'P-521' };
+			return ok({
+				importAlgorithm: { kind: 'ecdsa', namedCurve: 'P-521' },
+				verifyParams: { name: 'ECDSA', hash },
+				ecdsaRawSignatureBytes: 132,
+			});
 		default:
-			throw new Error(`Unsupported EC curve OID: ${parametersOid ?? 'missing'}`);
+			return unsupported('ECDSA', `unsupported EC curve OID: ${parametersOid ?? 'missing'}`);
 	}
 }
 
@@ -305,18 +287,13 @@ function requireRsaPssVerifyConfig(
 	if (!parameters.ok) {
 		return unsupported('RSA-PSS', parameters.reason);
 	}
-	return ok({
-		importAlgorithm: requireRsaPublicKey(
-			publicKeyAlgorithmOid,
-			parameters.value.hash,
-			'pss',
-			context,
-		),
-		verifyParams: {
-			name: 'RSA-PSS',
-			saltLength: parameters.value.saltLength,
-		},
-	});
+	return requireRsaPublicKey(
+		publicKeyAlgorithmOid,
+		parameters.value.hash,
+		'pss',
+		context,
+		parameters.value.saltLength,
+	);
 }
 
 /** Wrap a config in a success result. */

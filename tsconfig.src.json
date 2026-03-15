@@ -16,6 +16,7 @@
 		"outDir": "./node_modules/.cache/tsc/src",
 		"tsBuildInfoFile": "./node_modules/.cache/tsc/tsconfig.src.tsbuildinfo",
 		"allowImportingTsExtensions": true,
+		"noEmit": true,
 		"isolatedDeclarations": true,
 		"stripInternal": true,
 		"types": []
