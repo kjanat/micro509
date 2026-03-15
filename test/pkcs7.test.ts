@@ -542,8 +542,8 @@ describe('pkcs7', () => {
 		const result = parsePkcs7SignedDataDer(der);
 		expect(result.ok).toBe(true);
 		if (!result.ok) throw new Error('unreachable');
-		// SignerInfo should have undefined issuerDerHex/serialNumberHex
-		expect(result.value.signerInfos[0]?.issuerDerHex).toBeUndefined();
+		// SignerInfo should have undefined issuer/serialNumberHex
+		expect(result.value.signerInfos[0]?.issuer).toBeUndefined();
 		expect(result.value.signerInfos[0]?.serialNumberHex).toBeUndefined();
 	});
 

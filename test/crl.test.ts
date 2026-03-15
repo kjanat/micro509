@@ -41,7 +41,7 @@ describe('crl', () => {
 			revokedCertificates: [{ serialNumber: hexToBytes(parsedLeaf.serialNumberHex) }],
 		});
 		const parsedCrl = parseCertificateRevocationListPem(crl.pem);
-		expect(parsedCrl.issuer.commonName).toBe('CRL Issuer');
+		expect(parsedCrl.issuer.values.commonName).toBe('CRL Issuer');
 		expect(parsedCrl.crlNumber).toBe(7);
 		expect(parsedCrl.revokedCertificates).toHaveLength(1);
 		expect(isCertificateRevoked(parsedLeaf.serialNumberHex, parsedCrl)).toBe(true);

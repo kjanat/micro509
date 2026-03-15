@@ -13,6 +13,7 @@ import {
 	type VerifySignedDataResult,
 	verifySignedDataDetailed,
 } from '#micro509/internal/crypto/sig-verify.ts';
+import { canonicalDnKey, compareDistinguishedNames } from '#micro509/internal/shared/dn.ts';
 import { splitPemBlocks } from '#micro509/pem/pem.ts';
 import type {
 	CertificateSource,
@@ -74,9 +75,9 @@ export function isWithinValidity(certificate: ParsedCertificate, at: Date): bool
 	);
 }
 
-/** Returns `true` if the certificate's subject and issuer distinguished names are byte-identical. */
+/** Returns `true` if the certificate's subject and issuer DNs are semantically equal (RFC 5280 §7.1). */
 export function isSelfIssued(certificate: ParsedCertificate): boolean {
-	return certificate.subject.derHex === certificate.issuer.derHex;
+	return compareDistinguishedNames(certificate.subject, certificate.issuer);
 }
 
 /** Counts non-self-issued CA certificates in positions 0..(index-1) for pathLength checking. */
@@ -154,9 +155,10 @@ export async function buildChainInternal(
 	const rootFingerprints = new Set(roots.map((candidate) => fingerprint(candidate)));
 	const anchorIndex = new Map<string, TrustAnchor[]>();
 	for (const anchor of trustAnchors) {
-		const existing = anchorIndex.get(anchor.subjectDerHex);
+		const key = canonicalDnKey(anchor.subject);
+		const existing = anchorIndex.get(key);
 		if (existing === undefined) {
-			anchorIndex.set(anchor.subjectDerHex, [anchor]);
+			anchorIndex.set(key, [anchor]);
 		} else {
 			existing.push(anchor);
 		}
@@ -168,7 +170,7 @@ export async function buildChainInternal(
 	const deadEnds = new Set<string>();
 
 	candidates.forEach((candidate, index) => {
-		const key = candidate.subject.derHex;
+		const key = canonicalDnKey(candidate.subject);
 		const existing = subjectIndex.get(key);
 		if (existing === undefined) {
 			subjectIndex.set(key, [candidate]);
@@ -227,7 +229,7 @@ export async function buildChainInternal(
 		}
 		const issuers = rankIssuerCandidates(
 			current,
-			subjectIndex.get(current.issuer.derHex) ?? [],
+			subjectIndex.get(canonicalDnKey(current.issuer)) ?? [],
 			order,
 			rootFingerprints,
 		);
@@ -452,9 +454,9 @@ function compareBooleans(left: boolean, right: boolean): number {
 	return left ? -1 : 1;
 }
 
-/** Returns `true` if `issuer`'s subject DN matches `child`'s issuer DN. */
+/** Returns `true` if `issuer`'s subject DN semantically matches `child`'s issuer DN (RFC 5280 §7.1). */
 function isIssuerOf(issuer: ParsedCertificate, child: ParsedCertificate): boolean {
-	return child.issuer.derHex === issuer.subject.derHex;
+	return compareDistinguishedNames(child.issuer, issuer.subject);
 }
 
 /** Attempts to verify `certificate` against each bare trust anchor whose subject DN matches. */
@@ -464,7 +466,7 @@ async function matchTrustAnchor(
 	callbacks: VerifyPathCallbacks,
 	index: number,
 ): Promise<TrustAnchorMatchResult> {
-	const anchors = anchorIndex.get(certificate.issuer.derHex);
+	const anchors = anchorIndex.get(canonicalDnKey(certificate.issuer));
 	if (anchors === undefined) {
 		return { matched: false };
 	}

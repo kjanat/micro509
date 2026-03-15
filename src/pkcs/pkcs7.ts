@@ -11,6 +11,7 @@ import {
 	childrenOf,
 	decodeIntegerNumber,
 	decodeObjectIdentifier,
+	decodeString,
 	requireElement,
 	toArrayBuffer,
 	toHex,
@@ -31,9 +32,16 @@ import { OIDS } from '#micro509/internal/asn1/oids.ts';
 import { verifySignedData } from '#micro509/internal/crypto/sig-verify.ts';
 import { getCrypto } from '#micro509/internal/crypto/webcrypto.ts';
 import { base64Encode } from '#micro509/internal/shared/base64.ts';
+import { compareDistinguishedNames } from '#micro509/internal/shared/dn.ts';
 import { pemEncode, splitPemBlocks } from '#micro509/pem/pem.ts';
 import type { ErrorResult, Micro509Error } from '#micro509/result/result.ts';
-import type { ParsedCertificate } from '#micro509/x509/parse.ts';
+import { type NameFieldKey, nameFieldKeyFromOid } from '#micro509/x509/name.ts';
+import type {
+	ParsedCertificate,
+	ParsedName,
+	ParsedNameAttribute,
+	ParsedRelativeDistinguishedName,
+} from '#micro509/x509/parse.ts';
 import { parseCertificateDer } from '#micro509/x509/parse.ts';
 
 export type * from '#micro509/result/result.ts';
@@ -56,8 +64,8 @@ export interface Pkcs7CertBag {
 export interface ParsedPkcs7SignerInfo {
 	/** CMS SignerInfo version (typically 1 for issuerAndSerialNumber). */
 	readonly version: number;
-	/** Hex-encoded DER of the signer's issuer name, if present. */
-	readonly issuerDerHex?: string;
+	/** Parsed issuer distinguished name, if present (issuerAndSerialNumber signer identifier). */
+	readonly issuer?: ParsedName;
 	/** Hex-encoded serial number used to locate the signer certificate, if present. */
 	readonly serialNumberHex?: string;
 	/** Hex-encoded SubjectKeyIdentifier used to locate the signer certificate, if present. */
@@ -349,9 +357,9 @@ export async function verifyPkcs7SignedData(
 		const signer = parsed.certificates.find(
 			(certificate) =>
 				signerInfo.serialNumberHex !== undefined &&
-				signerInfo.issuerDerHex !== undefined &&
+				signerInfo.issuer !== undefined &&
 				certificate.serialNumberHex === signerInfo.serialNumberHex &&
-				certificate.issuer.derHex === signerInfo.issuerDerHex,
+				compareDistinguishedNames(certificate.issuer, signerInfo.issuer),
 		);
 		if (signer === undefined) {
 			return verifyPkcs7Failure(
@@ -516,7 +524,7 @@ function parseSignerInfos(
 		const parsedSid = parseSignerIdentifier(signerDer.slice(sid.start - sid.headerLength, sid.end));
 		signers.push({
 			version: decodeIntegerNumber(version.value),
-			...(parsedSid.issuerDerHex === undefined ? {} : { issuerDerHex: parsedSid.issuerDerHex }),
+			...(parsedSid.issuer === undefined ? {} : { issuer: parsedSid.issuer }),
 			...(parsedSid.serialNumberHex === undefined
 				? {}
 				: { serialNumberHex: parsedSid.serialNumberHex }),
@@ -568,9 +576,9 @@ function extractEncapsulatedContent(
 	return inner.value;
 }
 
-/** Extracts issuer DER and serial number from an issuerAndSerialNumber SEQUENCE, or subjectKeyIdentifier from [0] IMPLICIT. */
+/** Extracts issuer Name and serial number from an issuerAndSerialNumber SEQUENCE, or subjectKeyIdentifier from [0] IMPLICIT. */
 function parseSignerIdentifier(der: Uint8Array): {
-	readonly issuerDerHex?: string;
+	readonly issuer?: ParsedName;
 	readonly serialNumberHex?: string;
 	readonly subjectKeyIdentifier?: string;
 } {
@@ -584,17 +592,64 @@ function parseSignerIdentifier(der: Uint8Array): {
 	// SEQUENCE { issuer Name, serialNumber INTEGER }
 	if (element.tag === 0x30) {
 		const top = readSequenceChildren(der);
-		const issuer = top[0];
+		const issuerElement = top[0];
 		const serial = top[1];
-		if (issuer === undefined || serial === undefined) {
+		if (issuerElement === undefined || serial === undefined) {
 			return {};
 		}
 		return {
-			issuerDerHex: toHex(der.slice(issuer.start - issuer.headerLength, issuer.end)),
+			issuer: parseSignerIssuerName(der, issuerElement),
 			serialNumberHex: toHex(serial.value),
 		};
 	}
 	return {};
+}
+
+const textDecoder = new TextDecoder();
+
+/** Parses a Name SEQUENCE element from a PKCS#7 signer identifier into a {@linkcode ParsedName}. */
+function parseSignerIssuerName(source: Uint8Array, element: DerElement): ParsedName {
+	const derHex = toHex(source.slice(element.start - element.headerLength, element.end));
+	const rdns: ParsedRelativeDistinguishedName[] = [];
+	const allAttributes: ParsedNameAttribute[] = [];
+	const values: Partial<Record<NameFieldKey, string>> = {};
+	for (const setElement of childrenOf(source, element)) {
+		const rdnAttributes: ParsedNameAttribute[] = [];
+		const rdnValues: Partial<Record<NameFieldKey, string>> = {};
+		for (const attrSequence of childrenOf(source, setElement)) {
+			const parts = childrenOf(source, attrSequence);
+			const oidElement = requireElement(parts[0], 'signer issuer attribute OID');
+			const valueElement = requireElement(parts[1], 'signer issuer attribute value');
+			const oid = decodeObjectIdentifier(oidElement.value);
+			let fieldValue: string;
+			try {
+				fieldValue = decodeString(valueElement.tag, valueElement.value);
+			} catch {
+				fieldValue = textDecoder.decode(valueElement.value);
+			}
+			const fieldKey = nameFieldKeyFromOid(oid);
+			const attribute: ParsedNameAttribute =
+				fieldKey !== undefined
+					? { oid, key: fieldKey, valueTag: valueElement.tag, value: fieldValue }
+					: { oid, valueTag: valueElement.tag, value: fieldValue };
+			rdnAttributes.push(attribute);
+			allAttributes.push(attribute);
+			if (fieldKey !== undefined) {
+				if (rdnValues[fieldKey] === undefined) {
+					rdnValues[fieldKey] = fieldValue;
+				}
+				if (values[fieldKey] === undefined) {
+					values[fieldKey] = fieldValue;
+				}
+			}
+		}
+		rdns.push({
+			derHex: toHex(source.slice(setElement.start - setElement.headerLength, setElement.end)),
+			attributes: rdnAttributes,
+			values: rdnValues,
+		});
+	}
+	return { derHex, rdns, attributes: allAttributes, values };
 }
 
 /** Returns the nth child element inside a constructed ASN.1 element, or throws. */

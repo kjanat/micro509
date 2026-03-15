@@ -22,6 +22,10 @@ import {
 } from '#micro509/internal/asn1/der.ts';
 import { OIDS } from '#micro509/internal/asn1/oids.ts';
 import {
+	compareDistinguishedNames,
+	isWithinDirectoryNameSubtree,
+} from '#micro509/internal/shared/dn.ts';
+import {
 	allOnesMaskForIpAddress,
 	decodeIpAddress,
 	parseIpAddressToBytes,
@@ -121,9 +125,9 @@ function nameConstraintDetails(
 	return Object.keys(details).length === 0 ? undefined : details;
 }
 
-/** A certificate is self-issued when subject and issuer distinguished names match exactly. */
+/** A certificate is self-issued when subject and issuer DNs are semantically equal (RFC 5280 §7.1). */
 function isSelfIssued(certificate: ParsedCertificate): boolean {
-	return certificate.subject.derHex === certificate.issuer.derHex;
+	return compareDistinguishedNames(certificate.subject, certificate.issuer);
 }
 
 /**
@@ -688,84 +692,6 @@ function parseDirectoryNameRdn(
 		attributes,
 		values,
 	};
-}
-
-/** True when `subject` equals or is subordinate to `constraint` (RDN prefix match). */
-function isWithinDirectoryNameSubtree(subject: ParsedName, constraint: ParsedName): boolean {
-	if (constraint.rdns.length > subject.rdns.length) {
-		return false;
-	}
-	for (let index = 0; index < constraint.rdns.length; index += 1) {
-		const subjectRdn = subject.rdns[index];
-		const constraintRdn = constraint.rdns[index];
-		if (subjectRdn === undefined || constraintRdn === undefined) {
-			return false;
-		}
-		if (!compareRelativeDistinguishedNames(subjectRdn, constraintRdn)) {
-			return false;
-		}
-	}
-	return true;
-}
-
-/** Order-independent RDN equality: same attribute count, each pair matched exactly once. */
-function compareRelativeDistinguishedNames(
-	left: ParsedRelativeDistinguishedName,
-	right: ParsedRelativeDistinguishedName,
-): boolean {
-	if (left.attributes.length !== right.attributes.length) {
-		return false;
-	}
-	const matched = new Array(right.attributes.length).fill(false);
-	for (const leftAttribute of left.attributes) {
-		let found = false;
-		for (let index = 0; index < right.attributes.length; index += 1) {
-			const rightAttribute = right.attributes[index];
-			if (rightAttribute === undefined || matched[index]) {
-				continue;
-			}
-			if (!compareNameAttributeValue(leftAttribute, rightAttribute)) {
-				continue;
-			}
-			matched[index] = true;
-			found = true;
-			break;
-		}
-		if (!found) {
-			return false;
-		}
-	}
-	return true;
-}
-
-/** Compares two AttributeTypeAndValue pairs using RFC 5280 §7.1 string-prep for DirectoryString tags. */
-function compareNameAttributeValue(left: ParsedNameAttribute, right: ParsedNameAttribute): boolean {
-	if (left.oid !== right.oid) {
-		return false;
-	}
-	if (isDirectoryStringTag(left.valueTag) && isDirectoryStringTag(right.valueTag)) {
-		const preparedLeft = prepareNameCompareString(left.value);
-		const preparedRight = prepareNameCompareString(right.value);
-		if (preparedLeft === undefined || preparedRight === undefined) {
-			return false;
-		}
-		return preparedLeft === preparedRight;
-	}
-	return left.valueTag === right.valueTag && left.value === right.value;
-}
-
-/** True for UTF8String (0x0C) and PrintableString (0x13) — the DirectoryString types we normalize. */
-function isDirectoryStringTag(tag: number): boolean {
-	return tag === 0x0c || tag === 0x13;
-}
-
-/** NFKC-normalizes, lowercases, trims, and collapses whitespace for RFC 5280 §7.1 comparison. */
-function prepareNameCompareString(value: string): string | undefined {
-	const normalized = value.normalize('NFKC');
-	if (/[^\P{Cc}\t\n\r]/u.test(normalized)) {
-		return undefined;
-	}
-	return normalized.toLowerCase().trim().replace(/\s+/gu, ' ');
 }
 
 /** Human-readable label for a constraint form, used in error messages. */

@@ -45,6 +45,7 @@ import {
 } from '#micro509/internal/crypto/signing.ts';
 import { getCrypto } from '#micro509/internal/crypto/webcrypto.ts';
 import { base64Encode } from '#micro509/internal/shared/base64.ts';
+import { compareDistinguishedNames } from '#micro509/internal/shared/dn.ts';
 import { pemDecode, pemEncode } from '#micro509/pem/pem.ts';
 import type { ErrorResult, Micro509Error } from '#micro509/result/result.ts';
 import { verifyCertificateChain } from '#micro509/verify/verify.ts';
@@ -903,8 +904,8 @@ async function matchesOcspResponderId(
 function isSameOcspCertificate(left: ParsedCertificate, right: ParsedCertificate): boolean {
 	return (
 		left.serialNumberHex === right.serialNumberHex &&
-		left.issuer.derHex === right.issuer.derHex &&
-		left.subject.derHex === right.subject.derHex &&
+		compareDistinguishedNames(left.issuer, right.issuer) &&
+		compareDistinguishedNames(left.subject, right.subject) &&
 		left.subjectPublicKeyInfoDer.length === right.subjectPublicKeyInfoDer.length &&
 		left.subjectPublicKeyInfoDer.every(
 			(byte, index) => byte === right.subjectPublicKeyInfoDer[index],
@@ -917,7 +918,7 @@ function isDirectlyIssuedByOcspIssuer(
 	signer: ParsedCertificate,
 	issuer: ParsedCertificate,
 ): boolean {
-	if (signer.issuer.derHex !== issuer.subject.derHex) {
+	if (!compareDistinguishedNames(signer.issuer, issuer.subject)) {
 		return false;
 	}
 	if (

@@ -8,6 +8,7 @@
  */
 
 import { OIDS } from '#micro509/internal/asn1/oids.ts';
+import { compareDistinguishedNames } from '#micro509/internal/shared/dn.ts';
 import type { Micro509Error, Result } from '#micro509/result/result.ts';
 import type {
 	ConstrainedPolicy,
@@ -724,7 +725,7 @@ function updatePolicyCounters(
 	}
 }
 
-/** A certificate is self-issued when subject and issuer DER match exactly. */
+/** A certificate is self-issued when subject and issuer DNs are semantically equal (RFC 5280 §7.1). */
 function isSelfIssued(certificate: ParsedCertificate): boolean {
-	return certificate.subject.derHex === certificate.issuer.derHex;
+	return compareDistinguishedNames(certificate.subject, certificate.issuer);
 }

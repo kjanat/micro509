@@ -13,16 +13,17 @@ import {
 	decodeObjectIdentifier,
 	decodeString,
 	extractBitStringValue,
+	hexToBytes,
 	parseTime,
 	requireElement,
 	toHex,
 } from '#micro509/internal/asn1/asn1.ts';
+import type { DerElement } from '#micro509/internal/asn1/der.ts';
 import {
 	bitString,
 	bool,
 	concatBytes,
 	DEFAULT_MAX_DER_DEPTH,
-	type DerElement,
 	explicitContext,
 	generalizedTime,
 	implicitConstructedContext,
@@ -47,6 +48,7 @@ import {
 	signBytes,
 } from '#micro509/internal/crypto/signing.ts';
 import { base64Encode } from '#micro509/internal/shared/base64.ts';
+import { compareDistinguishedNames } from '#micro509/internal/shared/dn.ts';
 import { decodeIpAddress } from '#micro509/internal/shared/ip.ts';
 import {
 	encodeDistributionPointReasonFlagsContent,
@@ -55,31 +57,29 @@ import {
 import { exportSpkiDer } from '#micro509/keys/keys.ts';
 import { pemDecode, pemEncode } from '#micro509/pem/pem.ts';
 import type { ErrorResult, Micro509Error } from '#micro509/result/result.ts';
-import {
-	type DistributionPoint,
-	type DistributionPointReason,
-	encodeCrlDistributionPoints,
-	encodeSubjectAltName,
-	type GeneralName,
-	type IssuingDistributionPoint,
+import type {
+	DistributionPoint,
+	DistributionPointReason,
+	GeneralName,
+	IssuingDistributionPoint,
 } from '#micro509/x509/extensions.ts';
+import { encodeCrlDistributionPoints, encodeSubjectAltName } from '#micro509/x509/extensions.ts';
+import type { NameFieldKey, NameInput } from '#micro509/x509/name.ts';
 import {
 	encodeName,
 	encodeRelativeDistinguishedName,
-	type NameFieldKey,
-	type NameInput,
 	nameFieldKeyFromOid,
 } from '#micro509/x509/name.ts';
-import {
-	type ParsedCertificate,
-	type ParsedDistributionPoint,
-	type ParsedDistributionPointName,
-	type ParsedIssuingDistributionPoint,
-	type ParsedNameAttribute,
-	type ParsedRelativeDistinguishedName,
-	parseCertificateDer,
-	parseCertificatePem,
+import type {
+	ParsedCertificate,
+	ParsedDistributionPoint,
+	ParsedDistributionPointName,
+	ParsedIssuingDistributionPoint,
+	ParsedName,
+	ParsedNameAttribute,
+	ParsedRelativeDistinguishedName,
 } from '#micro509/x509/parse.ts';
+import { parseCertificateDer, parseCertificatePem } from '#micro509/x509/parse.ts';
 
 export type * from '#micro509/result/result.ts';
 export type * from '#micro509/x509/extensions.ts';
@@ -183,12 +183,7 @@ export interface ParsedCertificateRevocationList {
 	/** Raw signature bytes from the CRL outer wrapper. */
 	readonly signatureValue: Uint8Array;
 	/** CRL issuer distinguished name. */
-	readonly issuer: {
-		/** Hex-encoded DER of the full Name SEQUENCE. */
-		readonly derHex: string;
-		/** Common name component, if present. */
-		readonly commonName?: string;
-	};
+	readonly issuer: ParsedName;
 	/** Start of the CRL validity window. */
 	readonly thisUpdate: Date;
 	/** End of the CRL validity window. Absent if the CA does not commit to a schedule. */
@@ -576,7 +571,7 @@ export function parseCertificateRevocationListDer(
  * import { parseCertificateRevocationListPem } from 'micro509';
  *
  * const crl = parseCertificateRevocationListPem(pemString);
- * console.log(crl.issuer.commonName, crl.revokedCertificates.length);
+ * console.log(crl.issuer.values.commonName, crl.revokedCertificates.length);
  * ```
  */
 export function parseCertificateRevocationListPem(pem: string): ParsedCertificateRevocationList {
@@ -628,7 +623,7 @@ export async function validateCertificateRevocationList(
 ): Promise<ValidateCertificateRevocationListResult> {
 	const parsedCrl = normalizeCrl(input.crl);
 	const issuer = normalizeCrlCertificate(input.issuerCertificate);
-	if (parsedCrl.issuer.derHex !== issuer.subject.derHex) {
+	if (!compareDistinguishedNames(parsedCrl.issuer, issuer.subject)) {
 		return validateCertificateRevocationListFailureResult(
 			'issuer_mismatch',
 			'CRL issuer name does not match certificate subject',
@@ -896,7 +891,7 @@ function checkCrlApplicability(
 	}
 	const issuingDistributionPoint = crl.issuingDistributionPoint;
 	const isIndirectCrl = issuingDistributionPoint?.indirectCrl === true;
-	if (!isIndirectCrl && certificate.issuer.derHex !== crl.issuer.derHex) {
+	if (!isIndirectCrl && !compareDistinguishedNames(certificate.issuer, crl.issuer)) {
 		return nonApplicable(
 			'issuer_mismatch',
 			'CRL issuer does not match certificate issuer for direct CRL processing',
@@ -926,7 +921,7 @@ function checkCrlApplicability(
 				'certificates without CRL distribution points only accept full-scope CRLs',
 			);
 		}
-		if (isIndirectCrl && certificate.issuer.derHex !== crl.issuer.derHex) {
+		if (isIndirectCrl && !compareDistinguishedNames(certificate.issuer, crl.issuer)) {
 			return nonApplicable(
 				'issuer_mismatch',
 				'indirect CRLs for alternate certificate issuers require matching CRLIssuer distribution points',
@@ -946,7 +941,7 @@ function checkCrlApplicability(
 		}
 		if (isIndirectCrl) {
 			if (
-				certificate.issuer.derHex !== crl.issuer.derHex ||
+				!compareDistinguishedNames(certificate.issuer, crl.issuer) ||
 				distributionPoint.crlIssuer !== undefined
 			) {
 				const issuerMatch = matchesIndirectCrlIssuer(distributionPoint.crlIssuer, crl);
@@ -1036,7 +1031,7 @@ function checkDeltaCrlCompatibility(
 			'delta CRL input must include a delta CRL indicator',
 		);
 	}
-	if (normalizeHex(completeCrl.issuer.derHex) !== normalizeHex(deltaCrl.issuer.derHex)) {
+	if (!compareDistinguishedNames(completeCrl.issuer, deltaCrl.issuer)) {
 		return nonApplicable(
 			'delta_crl_incompatible',
 			'complete and delta CRLs must share the same issuer',
@@ -1091,7 +1086,7 @@ function matchesIndirectCrlIssuer(
 	let sawUnsupportedName = false;
 	for (const generalName of crlIssuerNames) {
 		if (generalName.type === 'directoryName') {
-			if (normalizeHex(generalName.derHex) === normalizeHex(crl.issuer.derHex)) {
+			if (directoryNameDerHexMatchesParsedName(generalName.derHex, crl.issuer)) {
 				return true;
 			}
 			continue;
@@ -1108,14 +1103,12 @@ function matchesRevokedEntryIssuer(
 	effectiveIssuer: readonly GeneralName[] | undefined,
 ): 'match' | 'mismatch' | 'unsupported' {
 	if (effectiveIssuer === undefined) {
-		return normalizeHex(certificate.issuer.derHex) === normalizeHex(crl.issuer.derHex)
-			? 'match'
-			: 'mismatch';
+		return compareDistinguishedNames(certificate.issuer, crl.issuer) ? 'match' : 'mismatch';
 	}
 	let sawUnsupportedName = false;
 	for (const generalName of effectiveIssuer) {
 		if (generalName.type === 'directoryName') {
-			if (normalizeHex(generalName.derHex) === normalizeHex(certificate.issuer.derHex)) {
+			if (directoryNameDerHexMatchesParsedName(generalName.derHex, certificate.issuer)) {
 				return 'match';
 			}
 			continue;
@@ -1307,7 +1300,12 @@ function compareGeneralNames(left: GeneralName, right: GeneralName): boolean {
 		return left.value === right.value;
 	}
 	if (left.type === 'directoryName' && right.type === 'directoryName') {
-		return normalizeHex(left.derHex) === normalizeHex(right.derHex);
+		const leftName = parseDerHexName(left.derHex);
+		const rightName = parseDerHexName(right.derHex);
+		if (leftName === undefined || rightName === undefined) {
+			return false;
+		}
+		return compareDistinguishedNames(leftName, rightName);
 	}
 	if (left.type === 'unknown' && right.type === 'unknown') {
 		return left.tag === right.tag && bytesEqual(left.value, right.value);
@@ -1745,27 +1743,72 @@ function buildSubjectKeyIdentifier(spki: Uint8Array): Uint8Array {
 	return sha1(keyBitString.value.slice(1));
 }
 
-/** Extracts issuer DER hex and optional commonName from a Name SEQUENCE element. */
-function parseIssuer(
-	source: Uint8Array,
-	element: DerElement,
-): {
-	readonly derHex: string;
-	readonly commonName?: string;
-} {
-	let commonName: string | undefined;
+/** Parses a Name SEQUENCE element into a full {@linkcode ParsedName}. */
+function parseIssuer(source: Uint8Array, element: DerElement): ParsedName {
+	const derHex = toHex(source.slice(element.start - element.headerLength, element.end));
+	const rdns: ParsedRelativeDistinguishedName[] = [];
+	const allAttributes: ParsedNameAttribute[] = [];
+	const values: Partial<Record<NameFieldKey, string>> = {};
 	for (const setElement of childrenOf(source, element)) {
-		const attribute = requireElement(childrenOf(source, setElement)[0], 'issuer attribute');
-		const parts = childrenOf(source, attribute);
-		const oid = decodeObjectIdentifier(requireElement(parts[0], 'issuer attribute OID').value);
-		if (oid === OIDS.commonName) {
-			commonName = textDecoder.decode(requireElement(parts[1], 'issuer attribute value').value);
+		const rdnAttributes: ParsedNameAttribute[] = [];
+		const rdnValues: Partial<Record<NameFieldKey, string>> = {};
+		for (const attrSequence of childrenOf(source, setElement)) {
+			const parts = childrenOf(source, attrSequence);
+			const oidElement = requireElement(parts[0], 'issuer attribute OID');
+			const valueElement = requireElement(parts[1], 'issuer attribute value');
+			const oid = decodeObjectIdentifier(oidElement.value);
+			let fieldValue: string;
+			try {
+				fieldValue = decodeString(valueElement.tag, valueElement.value);
+			} catch {
+				fieldValue = textDecoder.decode(valueElement.value);
+			}
+			const fieldKey = nameFieldKeyFromOid(oid);
+			const attribute: ParsedNameAttribute =
+				fieldKey !== undefined
+					? { oid, key: fieldKey, valueTag: valueElement.tag, value: fieldValue }
+					: { oid, valueTag: valueElement.tag, value: fieldValue };
+			rdnAttributes.push(attribute);
+			allAttributes.push(attribute);
+			if (fieldKey !== undefined) {
+				if (rdnValues[fieldKey] === undefined) {
+					rdnValues[fieldKey] = fieldValue;
+				}
+				if (values[fieldKey] === undefined) {
+					values[fieldKey] = fieldValue;
+				}
+			}
 		}
+		rdns.push({
+			derHex: toHex(source.slice(setElement.start - setElement.headerLength, setElement.end)),
+			attributes: rdnAttributes,
+			values: rdnValues,
+		});
 	}
-	return {
-		derHex: toHex(source.slice(element.start - element.headerLength, element.end)),
-		...(commonName === undefined ? {} : { commonName }),
-	};
+	return { derHex, rdns, attributes: allAttributes, values };
+}
+
+/** Re-parses a hex-encoded DER Name into a {@linkcode ParsedName}. Returns `undefined` on malformed input. */
+function parseDerHexName(hex: string): ParsedName | undefined {
+	try {
+		const bytes = hexToBytes(hex);
+		const element = readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH });
+		if (element.tag !== 0x30) {
+			return undefined;
+		}
+		return parseIssuer(bytes, element);
+	} catch {
+		return undefined;
+	}
+}
+
+/** Semantic comparison of a GeneralName directoryName `derHex` against a {@linkcode ParsedName}. */
+function directoryNameDerHexMatchesParsedName(derHex: string, name: ParsedName): boolean {
+	const parsed = parseDerHexName(derHex);
+	if (parsed === undefined) {
+		return false;
+	}
+	return compareDistinguishedNames(parsed, name);
 }
 
 /** Extracts the keyIdentifier field from an AuthorityKeyIdentifier extension value. */

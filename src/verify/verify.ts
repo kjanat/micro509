@@ -50,7 +50,11 @@ import {
 	micro509Error,
 } from '#micro509/result/result.ts';
 import type { ExtendedKeyUsage } from '#micro509/x509/extensions.ts';
-import type { ParsedCertificate, ParsedCertificateSigningRequest } from '#micro509/x509/parse.ts';
+import type {
+	ParsedCertificate,
+	ParsedCertificateSigningRequest,
+	ParsedName,
+} from '#micro509/x509/parse.ts';
 import {
 	parseCertificateSigningRequestDer,
 	parseCertificateSigningRequestPem,
@@ -123,8 +127,8 @@ export interface EkuCheckFailure
  * its key is known. Build from a certificate with {@linkcode trustAnchorFromCertificate}.
  */
 export interface TrustAnchor {
-	/** Hex-encoded DER of the subject distinguished name. Used for issuer matching. */
-	readonly subjectDerHex: string;
+	/** Parsed subject distinguished name. Used for semantic issuer matching (RFC 5280 §7.1). */
+	readonly subject: ParsedName;
 	/** DER-encoded SubjectPublicKeyInfo used to verify signatures from this anchor. */
 	readonly subjectPublicKeyInfoDer: Uint8Array;
 	/** OID of the public key algorithm (e.g. `1.2.840.10045.2.1` for EC). */
@@ -989,7 +993,7 @@ export function checkExtendedKeyUsage(
 /** Extracts a {@linkcode TrustAnchor} from a parsed certificate, copying the subject, SPKI, and key identifiers. */
 export function trustAnchorFromCertificate(certificate: ParsedCertificate): TrustAnchor {
 	return {
-		subjectDerHex: certificate.subject.derHex,
+		subject: certificate.subject,
 		subjectPublicKeyInfoDer: certificate.subjectPublicKeyInfoDer,
 		publicKeyAlgorithmOid: certificate.publicKeyAlgorithmOid,
 		...(certificate.publicKeyParametersOid === undefined
