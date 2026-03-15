@@ -6,6 +6,10 @@ import { defineConfig } from 'vitepress';
 import pkg from '../../package.json' with { type: 'json' };
 import typedocSidebar from '../api/typedoc-sidebar.json' with { type: 'json' };
 
+const getGitBranch = async (): Promise<string> => {
+	return Bun.$`git branch --show-current`.text();
+};
+
 /**
  * CDN base for the micro509 package in browser import maps.
  * Uses pkg-pr-new via esm.sh while pre-release; switch to
@@ -144,8 +148,14 @@ export default defineConfig({
 			{ icon: 'jsr', link: 'https://jsr.io/@kjanat/micro509', ariaLabel: 'JSR' },
 		],
 
+		editLink: {
+			pattern: `https://github.com/kjanat/ts-x509/edit/${await getGitBranch()}/site/:path`,
+			text: 'Edit this page on GitHub',
+		},
+
 		footer: {
 			message: `Released under the ${pkg.license} License.`,
+			copyright: 'Copyright © 2026-present Kaj Kowalski',
 		},
 
 		search: {

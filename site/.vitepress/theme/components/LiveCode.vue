@@ -79,8 +79,6 @@ const TIMEOUT = 30_000;
 
 async function run() {
 	busy.value = true;
-	err.value = undefined;
-	logs.value = [];
 	ran.value = true;
 
 	try {
@@ -141,8 +139,10 @@ async function run() {
 			document.body.appendChild(script);
 		});
 
+		err.value = undefined;
 		logs.value = result;
 	} catch (e) {
+		logs.value = [];
 		err.value = e instanceof Error ? e.message : String(e);
 	} finally {
 		busy.value = false;
@@ -163,7 +163,15 @@ onMounted(() => {
 			</button>
 		</div>
 		<div v-if="ran" class="live-code-output">
-			<div class="live-code-label">Output</div>
+			<div class="live-code-label">
+				Output
+				<button
+					v-if="!busy"
+					class="live-code-close"
+					title="Clear output"
+					@click="ran = false; logs = []; err = undefined"
+				>&times;</button>
+			</div>
 			<pre v-if="err" class="live-code-pre live-code-err">{{ err }}</pre>
 			<pre v-else-if="logs.length" class="live-code-pre">{{ logs.join('\n') }}</pre>
 			<pre v-else class="live-code-pre live-code-empty">(no output)</pre>
@@ -194,6 +202,7 @@ onMounted(() => {
 		border-radius: 6px;
 		cursor: pointer;
 		transition: background 0.2s, border-color 0.2s;
+		user-select: none;
 	}
 
 	.live-code-btn:hover:not(:disabled) {
@@ -214,6 +223,9 @@ onMounted(() => {
 	}
 
 	.live-code-label {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
 		padding: 6px 16px;
 		font-size: 12px;
 		font-weight: 600;
@@ -222,6 +234,21 @@ onMounted(() => {
 		border-bottom: 1px solid var(--vp-c-divider);
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
+	}
+
+	.live-code-close {
+		padding: 0 4px;
+		font-size: 16px;
+		line-height: 1;
+		color: var(--vp-c-text-3);
+		background: none;
+		border: none;
+		cursor: pointer;
+		transition: color 0.15s;
+	}
+
+	.live-code-close:hover {
+		color: var(--vp-c-text-1);
 	}
 
 	.live-code-pre {

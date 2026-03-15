@@ -73,7 +73,7 @@ const result = await validateOcspResponse({
 });
 
 if (result.ok) {
-	// 'good' | 'revoked' | 'unknown'
+  // 'good' | 'revoked' | 'unknown'
   console.log(result.value.status);
 }
 ```

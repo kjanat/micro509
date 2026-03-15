@@ -28,7 +28,7 @@ import { parsePfxDer } from 'micro509/pkcs';
 const result = await parsePfxDer(der, 'secret');
 
 if (result.ok) {
-	// parsed certificates
+  // parsed certificates
   result.value.certificates;
   // CryptoKey
   result.value.privateKey;
@@ -55,7 +55,7 @@ import { parsePkcs7CertBagPem } from 'micro509/pkcs';
 const result = parsePkcs7CertBagPem(pem);
 
 if (result.ok) {
-	// parsed certificates
+  // parsed certificates
   result.value.certificates;
 }
 ```
