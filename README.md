@@ -1,6 +1,7 @@
 # micro509
 
 Small, typed X.509 and PKI tooling for modern TypeScript.
+Zero dependencies, ~167 kB of JS (~43 kB gzipped) across all modules.
 
 - create certificates, CSRs, CRLs, OCSP requests, PKCS#7 cert bags, and PFX bundles
 - parse DER, PEM, and base64 inputs back to typed metadata
@@ -99,13 +100,13 @@ if (result.ok) {
 
 ## Runtime support
 
-| Runtime | Status      | Notes                                                                        |
-| ------- | ----------- | ---------------------------------------------------------------------------- |
-| Node    | `supported` | use modern Node with WebCrypto globals; package metadata targets Node `>=24` |
-| Bun     | `supported` | use Bun `>=1.3`                                                              |
-| Deno    | `supported` | requires WebCrypto and web text/base64 globals                               |
-| Browser | `supported` | modern browsers only                                                         |
-| Worker  | `supported` | same WebCrypto and text/base64 globals required                              |
+| Runtime | Status    | Notes                                              |
+| ------- | --------- | -------------------------------------------------- |
+| Node    | supported | modern Node with WebCrypto globals (tested on 24+) |
+| Bun     | supported | Bun 1.3+                                           |
+| Deno    | supported | requires WebCrypto and web text/base64 globals     |
+| Browser | supported | modern browsers only                               |
+| Worker  | supported | same WebCrypto and text/base64 globals required    |
 
 The core stays ESM-only and side-effect-free.
 
@@ -124,12 +125,12 @@ It does not add `DSA`, `Ed448`, `RSA-OAEP`, `ECDH`, `X25519`, or generic symmetr
 
 ## Standards status
 
-| Area                       | Status    |
-| -------------------------- | --------- |
-| RFC 5280 path validation   | `partial` |
-| RFC 6960 OCSP              | `partial` |
-| RFC 6125 service identity  | `partial` |
-| RFC 9618 policy validation | `partial` |
+| Area                       | Status  |
+| -------------------------- | ------- |
+| RFC 5280 path validation   | partial |
+| RFC 6960 OCSP              | partial |
+| RFC 6125 service identity  | partial |
+| RFC 9618 policy validation | partial |
 
 See [`docs/PKIX-SCOPE.md`](./docs/PKIX-SCOPE.md) for the detailed scope boundary
 and [`docs/API.md`](./docs/API.md) for the public module surface.
@@ -147,10 +148,12 @@ workflow surface:
 
 ```ts
 import { parseCertificatePem } from 'micro509/x509';
-import { verifyCertificateChain } from 'micro509/verify';
-import { matchServiceIdentity } from 'micro509/verify';
+import { verifyCertificateChain, matchServiceIdentity } from 'micro509/verify';
+import { createOcspRequest, checkCertificateRevocation } from 'micro509/revocation';
 import { createPfx } from 'micro509/pkcs';
 import { generateKeyPair } from 'micro509/keys';
+import { pemDecode, pemEncode } from 'micro509/pem';
+import type { Micro509Error } from 'micro509/result';
 ```
 
 The full stable subpath list lives in [`docs/API.md`](./docs/API.md).
@@ -163,6 +166,6 @@ The full stable subpath list lives in [`docs/API.md`](./docs/API.md).
 - Differential harness notes: [`docs/DIFF-HARNESS.md`](./docs/DIFF-HARNESS.md)
 - Contributing: [`CONTRIBUTING.md`](./CONTRIBUTING.md)
 
-## Contributing
+## License
 
-See `CONTRIBUTING.md`.
+[MIT](./LICENSE)
