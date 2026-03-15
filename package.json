@@ -10,6 +10,7 @@
 		"der",
 		"jwk"
 	],
+	"homepage": "https://micro509.kjanat.com",
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/kjanat/ts-x509.git"
@@ -42,13 +43,13 @@
 		"build": "tsdown",
 		"docs:build": "rm -rf ./docs/deno 2>/dev/null; deno doc --html --output=./docs/deno --name=micro509 src/**/index.ts",
 		"docs:lint": "rm -rf ./docs/deno 2>/dev/null; deno doc --html --output=./docs/deno --name=micro509 --lint src/**/index.ts",
-		"site:dev": "vitepress dev site",
-		"site:build": "vitepress build site",
-		"site:preview": "vitepress preview site",
 		"fmt": "dprint fmt",
 		"lint": "bun lint:biome",
 		"lint:biome": "biome lint",
 		"lint:deno": "deno lint --rules-exclude=no-node-globals,require-await,no-unused-vars src",
+		"site:build": "vitepress build site",
+		"site:dev": "vitepress dev site",
+		"site:preview": "vitepress preview site",
 		"test": "AGENT=1 bun test --coverage",
 		"test:differential": "bun test test/differential.test.ts",
 		"test:pkits": "bun test test/pkits.test.ts",
