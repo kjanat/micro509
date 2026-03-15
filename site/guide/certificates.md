@@ -25,7 +25,7 @@ const { certificate, keyPair } = await createSelfSignedCertificate({
 ## Create a CA-signed certificate
 
 ```ts
-import { createCertificate, createSelfSignedCertificate } from 'micro509';
+import { createCertificate, createSelfSignedCertificate, generateKeyPair } from 'micro509';
 
 // Create a CA
 const ca = await createSelfSignedCertificate({
@@ -36,6 +36,9 @@ const ca = await createSelfSignedCertificate({
     keyUsage: ['keyCertSign', 'cRLSign'],
   },
 });
+
+// Generate a key pair for the leaf certificate
+const leafKeyPair = await generateKeyPair({ kind: 'ecdsa', namedCurve: 'P-256' });
 
 // Issue a leaf certificate
 const leaf = await createCertificate({

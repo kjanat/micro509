@@ -232,10 +232,11 @@ export async function buildChainInternal(
 			rootFingerprints,
 		);
 		if (issuers.length === 0) {
+			const wasDeepest = path.length > deepestPath.length;
 			updateDeepest(path);
 			if (isSelfIssued(current)) {
 				sawUntrustedAnchor = true;
-			} else {
+			} else if (wasDeepest) {
 				deepestMissingIssuerAt = path.length - 1;
 			}
 			deadEnds.add(memoKey);
@@ -377,10 +378,12 @@ export async function buildChainInternal(
 		return undefined;
 	}
 
-	function updateDeepest(path: readonly ParsedCertificate[]): void {
+	function updateDeepest(path: readonly ParsedCertificate[]): boolean {
 		if (path.length > deepestPath.length) {
 			deepestPath = path;
+			return true;
 		}
+		return false;
 	}
 
 	function recordFailure(
@@ -465,6 +468,7 @@ async function matchTrustAnchor(
 	if (anchors === undefined) {
 		return { matched: false };
 	}
+	let firstFailure: VerifyChainFailure | undefined;
 	for (const anchor of anchors) {
 		if (
 			anchor.subjectKeyIdentifier !== undefined &&
@@ -483,9 +487,9 @@ async function matchTrustAnchor(
 			certificate.tbsCertificateDer,
 		);
 		if (!verified.ok) {
-			return {
-				matched: false,
-				failure: callbacks.failure(
+			// Capture the first failure but continue trying other anchors
+			if (firstFailure === undefined) {
+				firstFailure = callbacks.failure(
 					verified.code,
 					verified.reason,
 					index,
@@ -493,14 +497,17 @@ async function matchTrustAnchor(
 						subjectCommonName: certificate.subject.values.commonName,
 						actual: verified.reason,
 					}),
-				),
-			};
+				);
+			}
+			continue;
 		}
 		if (verified.valid) {
 			return { matched: true };
 		}
 	}
-	return { matched: false };
+	return firstFailure !== undefined
+		? { matched: false, failure: firstFailure }
+		: { matched: false };
 }
 
 /** Returns a hex fingerprint of the certificate's raw DER, used for cycle detection and dedup. */

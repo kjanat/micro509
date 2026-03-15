@@ -6,7 +6,6 @@ Implementation-ready master plan: [`specs/full-standards-compliance.md`].
 
 - [ ] CMS `signedData` generation, not only parse/verify
 - [ ] OCSP response signer validation against explicit local responder configuration
-- [ ] OCSP responder revocation policy handling
 
 ## Path validation / PKIX completeness
 

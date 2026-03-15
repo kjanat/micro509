@@ -104,12 +104,13 @@ Verify a chain:
 ```ts
 import { verifyCertificateChain } from 'micro509';
 
+// Assuming you have leaf, intermediate, and root certificates from previous examples
 const result = await verifyCertificateChain({
-  leaf: leaf.pem,
-  intermediates: [intermediate.pem],
-  roots: [root.pem],
+  leaf: certificate.pem,
+  intermediates: [],
+  roots: [certificate.pem], // Using self-signed cert as root for demo
   purpose: 'serverAuth',
-  serviceIdentity: { type: 'dns', value: 'api.local' },
+  serviceIdentity: { type: 'dns', value: 'example.com' },
 });
 
 if (result.ok) {

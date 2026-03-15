@@ -1,10 +1,10 @@
 /** Encode raw bytes as standard base64 without line breaks. */
 export function base64Encode(bytes: Uint8Array): string {
-	let binary = '';
+	const parts: string[] = [];
 	for (const byte of bytes) {
-		binary += String.fromCharCode(byte);
+		parts.push(String.fromCharCode(byte));
 	}
-	return btoa(binary);
+	return btoa(parts.join(''));
 }
 
 /** Decode a standard base64 string into raw bytes. */

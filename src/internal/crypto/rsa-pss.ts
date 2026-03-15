@@ -313,6 +313,9 @@ function parseHashAlgorithmIdentifier(
 	element: ReturnType<typeof readRootElement>,
 	label: string,
 ): string {
+	if (element.tag !== 0x30) {
+		throw new Error(`RSA-PSS ${label} must be a SEQUENCE`);
+	}
 	const children = childrenOf(source, element);
 	if (children.length === 0 || children.length > 2) {
 		throw new Error(`Malformed RSA-PSS ${label} AlgorithmIdentifier`);
@@ -329,6 +332,9 @@ function parseMaskGenAlgorithmIdentifier(
 	source: Uint8Array,
 	element: ReturnType<typeof readRootElement>,
 ): ParsedMaskGenAlgorithm {
+	if (element.tag !== 0x30) {
+		throw new Error('RSA-PSS maskGenAlgorithm must be a SEQUENCE');
+	}
 	const children = childrenOf(source, element);
 	if (children.length === 0 || children.length > 2) {
 		throw new Error('Malformed RSA-PSS maskGenAlgorithm AlgorithmIdentifier');

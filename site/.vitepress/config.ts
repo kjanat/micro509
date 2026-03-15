@@ -1,10 +1,12 @@
 import { defineConfig } from 'vitepress';
 import typedocSidebar from '../reference/api/typedoc-sidebar.json';
 
-const apiSidebar = typedocSidebar.map((item: { text: string; link: string }) => ({
-	text: item.text === 'index' ? 'micro509' : `micro509/${item.text}`,
-	link: item.link.replace('/site/', '/').replace('.md', ''),
-}));
+const apiSidebar = Array.isArray(typedocSidebar)
+	? typedocSidebar.map((item: { text: string; link: string }) => ({
+			text: item.text === 'index' ? 'micro509' : `micro509/${item.text}`,
+			link: item.link.replace('/site/', '/').replace('.md', ''),
+		}))
+	: [];
 
 export default defineConfig({
 	vite: { build: { chunkSizeWarningLimit: 1500 } },

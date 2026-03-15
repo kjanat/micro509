@@ -18,7 +18,7 @@ Vendored standards text only. Reference material, not project-authored prose.
 ## LOCAL CONVENTIONS
 
 - Treat filenames and contents as vendored upstream artifacts.
-- Put project commentary in sibling markdown docs, not inline here.
+- Put project commentary in sibling Markdown docs, not inline here.
 - When scope changes, update `docs/PKIX-SCOPE.md` or harness docs first; refresh vendored RFC text only when the source artifact changes.
 
 ## ANTI-PATTERNS

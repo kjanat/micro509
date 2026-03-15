@@ -75,10 +75,11 @@ if (result.ok) {
 import { pemDecode, pemEncode, splitPemBlocks, categorizePemBlocks } from 'micro509/pem';
 
 // Decode a single PEM block
+const pem = '-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----';
 const der = pemDecode(pem);
 
 // Encode DER as PEM
-const pem = pemEncode(der, 'CERTIFICATE');
+const pemEncoded = pemEncode(der, 'CERTIFICATE');
 
 // Split a multi-block PEM file
 const blocks = splitPemBlocks(multiPem);

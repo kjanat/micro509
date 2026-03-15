@@ -52,9 +52,10 @@ barrels under `x509`, `verify`, `revocation`, `keys`, `pem`, `pkcs`, and
 
 ## ANTI-PATTERNS
 
-- Do not add public-facing APIs under `src/internal/**`.
-- Do not split existing domain owners unless scope requires a new RFC-facing
-  module.
-- Do not add parse-tolerant behavior in validation layers.
-- Do not bypass result ADTs with `throw` for expected domain failures.
-- Do not silently normalize malformed PEM payloads.
+Avoid the following:
+
+- Adding public-facing APIs under `src/internal/**`
+- Splitting existing domain owners unless scope requires a new RFC-facing module
+- Adding parse-tolerant behavior in validation layers
+- Bypassing result ADTs with `throw` for expected domain failures
+- Silently normalizing malformed PEM payloads

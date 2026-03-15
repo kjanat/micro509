@@ -12,8 +12,11 @@ export function derEcdsaSignatureToRaw(signature: Uint8Array, partLength: number
 	const parts = readSequenceChildren(signature);
 	const r = parts[0];
 	const s = parts[1];
-	if (r === undefined || s === undefined) {
+	if (r === undefined || s === undefined || parts.length !== 2) {
 		throw new Error('Malformed ECDSA DER signature');
+	}
+	if (r.tag !== 0x02 || s.tag !== 0x02) {
+		throw new Error('ECDSA DER signature must contain two INTEGERs');
 	}
 	return concatFixedWidth(trimLeadingZero(r.value), trimLeadingZero(s.value), partLength);
 }
@@ -36,10 +39,16 @@ export function alternateEcdsaSignatureEncoding(
 	signature: Uint8Array,
 	partLength: number,
 ): Uint8Array | undefined {
-	try {
-		if (signature[0] === 0x30) {
+	// Try DER→raw first if it looks like DER (starts with SEQUENCE tag)
+	if (signature[0] === 0x30) {
+		try {
 			return derEcdsaSignatureToRaw(signature, partLength);
+		} catch {
+			// Fall through to try raw→DER
 		}
+	}
+	// Try raw→DER
+	try {
 		return rawEcdsaSignatureToDer(signature, partLength);
 	} catch {
 		return undefined;

@@ -204,7 +204,13 @@ export function ia5String(value: string): Uint8Array {
  * for arcs 0 and 1. Sub-identifiers are encoded with base-128 continuation.
  */
 export function objectIdentifier(oid: string): Uint8Array {
-	const segments = oid.split('.').map((segment) => Number(segment));
+	const segments = oid.split('.').map((segment) => {
+		const parsed = Number(segment);
+		if (!Number.isInteger(parsed) || parsed < 0 || !Number.isSafeInteger(parsed)) {
+			throw new Error(`Invalid OID segment: ${segment}`);
+		}
+		return parsed;
+	});
 	if (segments.length < 2) {
 		throw new Error(`Invalid OID: ${oid}`);
 	}
@@ -218,6 +224,9 @@ export function objectIdentifier(oid: string): Uint8Array {
 	}
 	if ((first === 0 || first === 1) && second >= 40) {
 		throw new Error(`Invalid OID second arc: ${second} (must be < 40 when first arc is ${first})`);
+	}
+	if (!Number.isSafeInteger(first * 40 + second)) {
+		throw new Error(`OID encoding overflow: ${oid}`);
 	}
 	const bytes: number[] = [first * 40 + second];
 	for (const segment of rest) {
@@ -465,9 +474,8 @@ export function assertDerMaxDepth(
  * validating nesting depth. Throws if there is trailing data after the element.
  */
 export function readRootElement(bytes: Uint8Array, options?: ReadRootElementOptions): DerElement {
-	if (options?.maxDepth !== undefined) {
-		assertDerMaxDepth(bytes, options.maxDepth, options);
-	}
+	const maxDepth = options?.maxDepth ?? DEFAULT_MAX_DER_DEPTH;
+	assertDerMaxDepth(bytes, maxDepth, options);
 	const element = readElement(bytes, 0);
 	if (element.end !== bytes.length) {
 		throw new Error('Trailing data after DER element');

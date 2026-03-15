@@ -51,7 +51,7 @@
 ## What doesn't ship
 
 - Full CRL distribution point processing
-- Delta CRL support
+- Delta CRL automatic application
 - OCSP local responder-policy acceptance
 - Broader PKITS conformance (ongoing)
 - Certificate Policies extension parsing in chain validation

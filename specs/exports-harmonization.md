@@ -284,8 +284,8 @@ Platform rules:
 
 ### Phase 2 - Internalization First
 
-4. Create target folder structure.
-5. Move known implementation-only files into `src/internal/**` first:
+1. Create target folder structure.
+2. Move known implementation-only files into `src/internal/**` first:
    - `verify-path.ts`
    - `policy-engine.ts`
    - `name-constraints-engine.ts`
@@ -299,32 +299,32 @@ Platform rules:
    - `der.ts`
    - `oids.ts`
    - `ip.ts`
-6. Rewrite imports so public leaves point downward into internal modules.
+3. Rewrite imports so public leaves point downward into internal modules.
 
 ### Phase 3 - Domain Public Modules
 
-7. Move current public leaves into domain folders.
-8. Keep behavior and top-level exported symbols stable while files move.
-9. Add domain `index.ts` files that are exhaustive, canonical public homes.
+1. Move current public leaves into domain folders.
+2. Keep behavior and top-level exported symbols stable while files move.
+3. Add domain `index.ts` files that are exhaustive, canonical public homes.
 
 ### Phase 4 - Root Redesign
 
-10. Replace the current root mega-barrel with a workflow-first curated barrel.
-11. Remove advanced type soup from root where it does not help ordinary users.
-12. Make all examples use root unless they are explicitly teaching a domain entrypoint.
+1. Replace the current root mega-barrel with a workflow-first curated barrel.
+2. Remove advanced type soup from root where it does not help ordinary users.
+3. Make all examples use root unless they are explicitly teaching a domain entrypoint.
 
 ### Phase 5 - Exports Cutover
 
-13. Replace file-level npm/JSR exports with domain entrypoints.
-14. Make `./package.json` npm-only.
-15. Generate JSR exports from the same tsdown entry map used for npm build entries.
-16. Add a parity check so npm and JSR exports cannot silently drift.
+1. Replace file-level npm/JSR exports with domain entrypoints.
+2. Make `./package.json` npm-only.
+3. Generate JSR exports from the same tsdown entry map used for npm build entries.
+4. Add a parity check so npm and JSR exports cannot silently drift.
 
 ### Phase 6 - Test And Docs Cleanup
 
-17. Update tests to import internals only through `#micro509/internal/*`.
-18. Regenerate and lint docs against the surviving public entrypoints only.
-19. Remove any stale examples or docs that mention dropped fine-grained subpaths.
+1. Update tests to import internals only through `#micro509/internal/*`.
+2. Regenerate and lint docs against the surviving public entrypoints only.
+3. Remove any stale examples or docs that mention dropped fine-grained subpaths.
 
 ## Acceptance Criteria
 

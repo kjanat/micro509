@@ -1,6 +1,6 @@
 # PROJECT KNOWLEDGE BASE
 
-**Generated:** 2026-03-15 **Commit:** 0edfac9 **Branch:** exports-harmonization
+**Last updated:** 2026-03-15
 
 ## OVERVIEW
 
@@ -63,15 +63,17 @@ ts-x509/
 
 ## ANTI-PATTERNS (THIS PROJECT)
 
-- No `any`.
-- No non-null assertions `!`.
-- No `as Type`; use `as const` and `as const satisfies` only.
-- No classes or default exports.
-- No mocks in tests.
-- No `eslint-disable` or `@ts-ignore`.
-- No `await expect()` in tests.
-- Do not over-claim RFC support outside `docs/PKIX-SCOPE.md`.
-- `docs/rfc` is vendored text, not project prose.
+Avoid the following in this project:
+
+- `any`
+- Non-null assertions `!`
+- `as Type`; use `as const` and `as const satisfies` only
+- Classes or default exports
+- Mocks in tests
+- `eslint-disable` or `@ts-ignore`
+- `await expect()` in tests
+- Over-claiming RFC support outside `docs/PKIX-SCOPE.md`
+- Editing `docs/rfc` — it is vendored text, not project prose
 
 ## CODE MAP
 

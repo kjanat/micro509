@@ -121,7 +121,7 @@ function nameConstraintDetails(
 	return Object.keys(details).length === 0 ? undefined : details;
 }
 
-/** A certificate is self-issued when subject and issuer DER match exactly. */
+/** A certificate is self-issued when subject and issuer distinguished names match exactly. */
 function isSelfIssued(certificate: ParsedCertificate): boolean {
 	return certificate.subject.derHex === certificate.issuer.derHex;
 }
@@ -557,25 +557,12 @@ function matchesUriConstraint(uri: string, constraint: string): boolean {
 
 /** Extracts the host (reg-name) portion of a URI, stripping scheme, userinfo, port, and path. */
 function extractUriHost(uri: string): string | undefined {
-	const schemeEnd = uri.indexOf('://');
-	if (schemeEnd < 0) {
+	try {
+		const url = new URL(uri);
+		return url.hostname;
+	} catch {
 		return undefined;
 	}
-	const afterScheme = uri.slice(schemeEnd + 3);
-	const atSign = afterScheme.indexOf('@');
-	const hostStart = atSign >= 0 ? atSign + 1 : 0;
-	const rest = afterScheme.slice(hostStart);
-	const pathStart = rest.indexOf('/');
-	const portStart = rest.indexOf(':');
-	const end =
-		pathStart >= 0
-			? portStart >= 0
-				? Math.min(pathStart, portStart)
-				: pathStart
-			: portStart >= 0
-				? portStart
-				: rest.length;
-	return rest.slice(0, end);
 }
 
 /**
@@ -658,13 +645,22 @@ function parseDirectoryNameRdn(
 	source: Uint8Array,
 	setElement: DerElement,
 ): ParsedRelativeDistinguishedName | undefined {
+	if (setElement.tag !== 0x31) {
+		return undefined;
+	}
 	const attributes: ParsedNameAttribute[] = [];
 	const values: ParsedName['values'] = {};
 	for (const attributeSequence of childrenOf(source, setElement)) {
+		if (attributeSequence.tag !== 0x30) {
+			return undefined;
+		}
 		const parts = childrenOf(source, attributeSequence);
 		const oidElement = parts[0];
 		const valueElement = parts[1];
-		if (oidElement === undefined || valueElement === undefined) {
+		if (oidElement === undefined || valueElement === undefined || parts.length !== 2) {
+			return undefined;
+		}
+		if (oidElement.tag !== 0x06) {
 			return undefined;
 		}
 		const oid = decodeObjectIdentifier(requireElement(oidElement, 'directoryName OID').value);

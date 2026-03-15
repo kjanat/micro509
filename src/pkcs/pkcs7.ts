@@ -58,12 +58,16 @@ export interface ParsedPkcs7SignerInfo {
 	readonly version: number;
 	/** Hex-encoded DER of the signer's issuer name, if present. */
 	readonly issuerDerHex?: string;
-	/** Hex-encoded serial number used to locate the signer certificate. */
+	/** Hex-encoded serial number used to locate the signer certificate, if present. */
 	readonly serialNumberHex?: string;
+	/** Hex-encoded SubjectKeyIdentifier used to locate the signer certificate, if present. */
+	readonly subjectKeyIdentifier?: string;
 	/** OID of the digest algorithm used to hash the content. */
 	readonly digestAlgorithmOid: string;
 	/** OID of the algorithm used to produce the signature. */
 	readonly signatureAlgorithmOid: string;
+	/** Raw DER of the signature AlgorithmIdentifier parameters, if present. */
+	readonly signatureAlgorithmParametersDer?: Uint8Array;
 	/** Hex-encoded raw signature bytes. */
 	readonly signatureHex: string;
 	/** Raw signature bytes. */
@@ -504,10 +508,11 @@ function parseSignerInfos(
 			signatureAlgorithm.start - signatureAlgorithm.headerLength,
 			signatureAlgorithm.end,
 		);
+		const signatureAlgorithmChildren = readSequenceChildren(signatureAlgorithmDer);
 		const signatureAlgorithmOid = decodeObjectIdentifier(
-			requireElement(readSequenceChildren(signatureAlgorithmDer)[0], 'signature algorithm OID')
-				.value,
+			requireElement(signatureAlgorithmChildren[0], 'signature algorithm OID').value,
 		);
+		const signatureAlgorithmParams = signatureAlgorithmChildren[1];
 		const parsedSid = parseSignerIdentifier(signerDer.slice(sid.start - sid.headerLength, sid.end));
 		signers.push({
 			version: decodeIntegerNumber(version.value),
@@ -515,8 +520,21 @@ function parseSignerInfos(
 			...(parsedSid.serialNumberHex === undefined
 				? {}
 				: { serialNumberHex: parsedSid.serialNumberHex }),
+			...(parsedSid.subjectKeyIdentifier === undefined
+				? {}
+				: { subjectKeyIdentifier: parsedSid.subjectKeyIdentifier }),
 			digestAlgorithmOid,
 			signatureAlgorithmOid,
+			...(signatureAlgorithmParams === undefined
+				? {}
+				: {
+						signatureAlgorithmParametersDer: new Uint8Array(
+							signatureAlgorithmDer.slice(
+								signatureAlgorithmParams.start - signatureAlgorithmParams.headerLength,
+								signatureAlgorithmParams.end,
+							),
+						),
+					}),
 			signatureHex: toHex(signature.value),
 			signature: new Uint8Array(signature.value),
 			hasSignedAttrs,
@@ -550,21 +568,33 @@ function extractEncapsulatedContent(
 	return inner.value;
 }
 
-/** Extracts issuer DER and serial number from an issuerAndSerialNumber SEQUENCE. */
+/** Extracts issuer DER and serial number from an issuerAndSerialNumber SEQUENCE, or subjectKeyIdentifier from [0] IMPLICIT. */
 function parseSignerIdentifier(der: Uint8Array): {
 	readonly issuerDerHex?: string;
 	readonly serialNumberHex?: string;
+	readonly subjectKeyIdentifier?: string;
 } {
-	const top = readSequenceChildren(der);
-	const issuer = top[0];
-	const serial = top[1];
-	if (issuer === undefined || serial === undefined) {
-		return {};
+	const element = readElement(der);
+	// [0] IMPLICIT SubjectKeyIdentifier
+	if (element.tag === 0x80) {
+		return {
+			subjectKeyIdentifier: toHex(element.value),
+		};
 	}
-	return {
-		issuerDerHex: toHex(der.slice(issuer.start - issuer.headerLength, issuer.end)),
-		serialNumberHex: toHex(serial.value),
-	};
+	// SEQUENCE { issuer Name, serialNumber INTEGER }
+	if (element.tag === 0x30) {
+		const top = readSequenceChildren(der);
+		const issuer = top[0];
+		const serial = top[1];
+		if (issuer === undefined || serial === undefined) {
+			return {};
+		}
+		return {
+			issuerDerHex: toHex(der.slice(issuer.start - issuer.headerLength, issuer.end)),
+			serialNumberHex: toHex(serial.value),
+		};
+	}
+	return {};
 }
 
 /** Returns the nth child element inside a constructed ASN.1 element, or throws. */

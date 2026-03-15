@@ -15,11 +15,11 @@ Before changing behavior, read:
 
 Then read the files for the area you are touching:
 
-- certificates and CSRs: `src/certificate.ts`, `src/csr.ts`, `src/parse.ts`
-- chain validation: `src/verify.ts`, `src/verify-path.ts`, `src/identity.ts`
-- revocation: `src/crl.ts`, `src/ocsp.ts`, `src/revocation.ts`
-- keys and signing: `src/keys.ts`, `src/signing.ts`, `src/sig-verify.ts`, `src/pbes2.ts`
-- extensions and names: `src/extensions.ts`, `src/extension-registry.ts`, `src/name.ts`, `src/name-constraints-engine.ts`
+- certificates and CSRs: `src/x509/certificate.ts`, `src/x509/csr.ts`, `src/x509/parse.ts`
+- chain validation: `src/verify/verify.ts`, `src/internal/verify/verify-path.ts`, `src/verify/identity.ts`
+- revocation: `src/revocation/crl.ts`, `src/revocation/ocsp.ts`, `src/revocation/revocation.ts`
+- keys and signing: `src/keys/keys.ts`, `src/internal/crypto/signing.ts`, `src/internal/crypto/sig-verify.ts`, `src/internal/crypto/pbes2.ts`
+- extensions and names: `src/x509/extensions.ts`, `src/internal/x509/extension-registry.ts`, `src/x509/name.ts`, `src/internal/verify/name-constraints-engine.ts`
 
 ## Setup
 
@@ -62,7 +62,7 @@ bun test test/differential.test.ts
 - ESM-only
 - WebCrypto-first
 - zero runtime dependencies
-- keep `src/` flat unless there is a very strong reason not to
+- prefer domain-first layout: organize code into domain folders like `src/x509/`, `src/verify/`, `src/revocation/` rather than a flat structure; keep implementation details in `src/internal/` subdirectories
 - tabs, LF, single quotes
 - use `.ts` relative import extensions in source
 - no `any`
@@ -88,9 +88,9 @@ If you change support boundaries, update both docs and tests in the same change.
 ## API and module discipline
 
 - keep parse tolerance separate from validation policy
-- if you add or change an algorithm, review both `src/signing.ts` and `src/sig-verify.ts`
+- if you add or change an algorithm, review both `src/internal/crypto/signing.ts` and `src/internal/crypto/sig-verify.ts`
 - if you add or change a public API, review `src/index.ts` and `docs/API.md`
-- if you change extension parsing, review `src/parse.ts`, `src/extensions.ts`, and `src/extension-registry.ts`
+- if you change extension parsing, review `src/x509/parse.ts`, `src/x509/extensions.ts`, and `src/internal/x509/extension-registry.ts`
 - keep user-facing docs about using the package, not about internal build machinery
 
 ## Test expectations
@@ -101,7 +101,7 @@ If you change support boundaries, update both docs and tests in the same change.
 - add semantic tests, not just shape tests
 - use focused fixtures for edge cases
 - failing tests are acceptable when they expose a real bug
-- internal imports through `#micro509/*.ts` are fine when testing low-level behavior intentionally
+- internal imports through `#micro509/internal/*` are fine when testing low-level behavior intentionally
 
 Public claims are backed by test coverage. If your change alters a claim, update
 the tests that justify it.

@@ -28,7 +28,7 @@ ownership.
 - Harness docs should point at owning test files.
 - Prefer exact scope language over marketing language.
 - [`docs/rfc/`][rfc] is reference material; project-authored edits belong in the
-  markdown docs, not vendored RFC text.
+  Markdown docs, not vendored RFC text.
 
 ## ANTI-PATTERNS
 

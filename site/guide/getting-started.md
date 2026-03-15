@@ -62,7 +62,13 @@ console.log(csr.pem);
 ### Parse a certificate
 
 ```ts
-import { parseCertificatePem } from 'micro509';
+import { parseCertificatePem, createSelfSignedCertificate } from 'micro509';
+
+// Using the certificate from the first example
+const { certificate } = await createSelfSignedCertificate({
+  subject: { commonName: 'example.com' },
+  validity: { days: 30 },
+});
 
 const parsed = parseCertificatePem(certificate.pem);
 console.log(parsed.subject.values.commonName);
@@ -73,14 +79,20 @@ console.log(parsed.authorityInfoAccess);
 ### Verify a chain
 
 ```ts
-import { verifyCertificateChain } from 'micro509';
+import { verifyCertificateChain, createSelfSignedCertificate } from 'micro509';
+
+// Using certificates from previous examples
+const { certificate } = await createSelfSignedCertificate({
+  subject: { commonName: 'example.com' },
+  validity: { days: 30 },
+});
 
 const result = await verifyCertificateChain({
-  leaf: leaf.pem,
-  intermediates: [intermediate.pem],
-  roots: [root.pem],
+  leaf: certificate.pem,
+  intermediates: [],
+  roots: [certificate.pem], // Using self-signed cert as root for demo
   purpose: 'serverAuth',
-  serviceIdentity: { type: 'dns', value: 'api.local' },
+  serviceIdentity: { type: 'dns', value: 'example.com' },
 });
 
 if (result.ok) {

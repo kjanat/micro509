@@ -98,7 +98,10 @@ function encodeBitFlags<T extends string>(
 	readonly bytes: Uint8Array;
 	readonly unusedBits: number;
 } {
-	let highestBit = 0;
+	if (values.length === 0) {
+		return { bytes: new Uint8Array(0), unusedBits: 0 };
+	}
+	let highestBit = -1;
 	for (const value of values) {
 		const bit = bitForValue(value);
 		if (bit > highestBit) {
@@ -114,9 +117,11 @@ function encodeBitFlags<T extends string>(
 		const current = bytes[byteIndex] ?? 0;
 		bytes[byteIndex] = current | (1 << (7 - bitIndex));
 	}
+	const totalBits = highestBit + 1;
+	const unusedBits = (8 - (totalBits % 8)) % 8;
 	return {
 		bytes,
-		unusedBits: (8 - ((highestBit + 1) % 8)) % 8,
+		unusedBits,
 	};
 }
 
@@ -126,15 +131,25 @@ function decodeBitFlags<T extends string>(
 	candidates: readonly T[],
 	bitOffset: number,
 ): readonly T[] {
+	if (value.length === 0) {
+		throw new Error('Empty BIT STRING');
+	}
 	const unusedBits = value[0] ?? 0;
 	if (unusedBits > 7) {
 		throw new Error('Invalid BIT STRING');
 	}
 	const bytes = value.slice(1);
+	if (bytes.length === 0 && unusedBits !== 0) {
+		throw new Error('Invalid BIT STRING');
+	}
 	const out: T[] = [];
 	for (let index = 0; index < candidates.length; index += 1) {
 		const bit = index + bitOffset;
-		const byte = bytes[Math.floor(bit / 8)] ?? 0;
+		const byteIndex = Math.floor(bit / 8);
+		if (byteIndex >= bytes.length) {
+			break;
+		}
+		const byte = bytes[byteIndex] ?? 0;
 		const bitIndex = bit % 8;
 		if ((byte & (1 << (7 - bitIndex))) !== 0) {
 			const candidate = candidates[index];

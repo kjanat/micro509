@@ -312,7 +312,10 @@ export async function exportBinaryBase64(key: CryptoKey): Promise<string> {
 	if (key.type === 'public') {
 		return base64Encode(await exportSpkiDer(key));
 	}
-	return base64Encode(await exportPkcs8Der(key));
+	if (key.type === 'private') {
+		return base64Encode(await exportPkcs8Der(key));
+	}
+	throw new Error('Cannot export secret/symmetric CryptoKey');
 }
 
 /** Import a public key from DER-encoded SubjectPublicKeyInfo. */
@@ -440,11 +443,7 @@ export async function importEncryptedPkcs1Pem(
 	algorithm: ImportRsaPublicKeyInput = { kind: 'rsa' },
 ): Promise<CryptoKey> {
 	const decrypted = await decryptTraditionalPem('RSA PRIVATE KEY', pem, password);
-	try {
-		return importPkcs1Der(decrypted, algorithm);
-	} catch {
-		throw new Error('Invalid password or encrypted PEM content');
-	}
+	return importPkcs1Der(decrypted, algorithm);
 }
 
 /** Import a private key from base64-encoded PKCS#8 PrivateKeyInfo (no PEM headers). */
@@ -478,11 +477,7 @@ export async function importEncryptedSec1Pem(
 	algorithm: ImportEcPublicKeyInput,
 ): Promise<CryptoKey> {
 	const decrypted = await decryptTraditionalPem('EC PRIVATE KEY', pem, password);
-	try {
-		return importSec1Der(decrypted, algorithm);
-	} catch {
-		throw new Error('Invalid password or encrypted PEM content');
-	}
+	return importSec1Der(decrypted, algorithm);
 }
 
 /** Import a public verification key from a JSON Web Key. */

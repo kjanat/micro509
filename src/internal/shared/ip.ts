@@ -124,6 +124,9 @@ export function parseIpAddressToBytes(value: string): Uint8Array {
 	}
 	return Uint8Array.from(
 		segments.map((segment) => {
+			if (segment.length === 0) {
+				throw new Error(`Invalid IPv4 address: ${value}`);
+			}
 			const parsed = Number(segment);
 			if (!Number.isInteger(parsed) || parsed < 0 || parsed > 255) {
 				throw new Error(`Invalid IPv4 address: ${value}`);
@@ -182,7 +185,9 @@ export function decodeIpAddress(bytes: Uint8Array): string {
  * @returns An all-ones mask for the same address family.
  */
 export function allOnesMaskForIpAddress(value: string): Uint8Array {
-	const mask = new Uint8Array(value.includes(':') ? 16 : 4);
+	// Validate and parse the IP address to determine its type
+	const parsed = parseIpAddressToBytes(value);
+	const mask = new Uint8Array(parsed.length);
 	mask.fill(0xff);
 	return mask;
 }

@@ -168,6 +168,8 @@ export async function signBytes(
 	const signature = new Uint8Array(
 		await getCrypto().subtle.sign(algorithm.signParams, privateKey, view),
 	);
+	// For ECDSA keys, WebCrypto may return either raw (r || s) or DER format.
+	// If the signature doesn't start with SEQUENCE tag and we expect ECDSA, convert to DER.
 	if (algorithm.ecdsaRawSignatureBytes !== undefined && signature[0] !== 0x30) {
 		return rawEcdsaSignatureToDer(signature, algorithm.ecdsaRawSignatureBytes / 2);
 	}

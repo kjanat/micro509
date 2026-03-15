@@ -1,6 +1,6 @@
 # Pre-1.0 Architecture Cleanup - Implementation Spec
 
-**Status:** Ready for task breakdown
+**Status:** Superseded by exports-harmonization and domain-structured refactor
 **Effort:** XL
 **Date:** 2026-03-13
 

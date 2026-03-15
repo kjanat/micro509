@@ -79,6 +79,22 @@ export async function encryptPbes2(
 	const iv = options.iv ?? getCrypto().getRandomValues(new Uint8Array(16));
 	const encryption = options.encryption ?? 'aes256-cbc';
 	const prf = options.prf ?? 'hmac-sha256';
+
+	// Validate inputs before any WebCrypto calls
+	if (!Number.isInteger(iterations) || iterations < 1) {
+		throw new RangeError(`Invalid iterations: must be an integer >= 1, got ${iterations}`);
+	}
+	if (!(salt instanceof Uint8Array) || salt.length < 8) {
+		throw new TypeError(
+			`Invalid salt: must be Uint8Array with length >= 8, got length ${salt.length}`,
+		);
+	}
+	if (!(iv instanceof Uint8Array) || iv.length !== 16) {
+		throw new TypeError(
+			`Invalid IV: must be Uint8Array of exactly 16 bytes, got length ${iv.length}`,
+		);
+	}
+
 	const key = await deriveAesKey(options.password, salt, iterations, encryption, prf, ['encrypt']);
 	const encryptedData = new Uint8Array(
 		await getCrypto().subtle.encrypt(
@@ -177,6 +193,7 @@ export function parsePbes2AlgorithmIdentifier(algorithmIdentifierDer: Uint8Array
 	if (decodeObjectIdentifier(kdfOid.value) !== OIDS.pbkdf2) {
 		throw new Error('Unsupported KDF');
 	}
+	// PBKDF2 params: SEQUENCE { salt OCTET STRING, iterationCount INTEGER, [keyLength INTEGER], [prf AlgorithmIdentifier] }
 	const pbkdf2Der = kdfDer.slice(kdfParams.start - kdfParams.headerLength, kdfParams.end);
 	const pbkdf2Params = readSequenceChildren(pbkdf2Der);
 	const salt = pbkdf2Params[0];
@@ -208,10 +225,26 @@ export function parsePbes2AlgorithmIdentifier(algorithmIdentifierDer: Uint8Array
 		throw new Error('Unsupported PBKDF2 key length');
 	}
 	const prf = parsePbkdf2Prf(pbkdf2Der, prfElement);
+
+	// Validate parsed parameters before returning
+	const iterationsValue = decodeIntegerNumber(iterations.value);
+	const saltValue = new Uint8Array(salt.value);
+	const ivValue = new Uint8Array(iv.value);
+
+	if (iterationsValue < 1) {
+		throw new RangeError(`Invalid PBES2 iterations: must be >= 1, got ${iterationsValue}`);
+	}
+	if (saltValue.length < 8) {
+		throw new RangeError(`Invalid PBES2 salt: must be >= 8 bytes, got ${saltValue.length}`);
+	}
+	if (ivValue.length !== 16) {
+		throw new RangeError(`Invalid PBES2 IV: must be exactly 16 bytes, got ${ivValue.length}`);
+	}
+
 	return {
-		salt: new Uint8Array(salt.value),
-		iterations: decodeIntegerNumber(iterations.value),
-		iv: new Uint8Array(iv.value),
+		salt: saltValue,
+		iterations: iterationsValue,
+		iv: ivValue,
 		encryption: encryption.name,
 		prf,
 	};

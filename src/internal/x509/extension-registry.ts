@@ -547,5 +547,9 @@ function normalizeKeyIdentifier(value: string | Uint8Array): Uint8Array {
 
 /** Decode an SKI extension value DER to a hex string. */
 function decodeSubjectKeyIdentifier(valueDer: Uint8Array): string {
-	return toHex(readRootElement(valueDer, { maxDepth: DEFAULT_MAX_DER_DEPTH }).value);
+	const element = readRootElement(valueDer, { maxDepth: DEFAULT_MAX_DER_DEPTH });
+	if (element.tag !== 0x04) {
+		throw new Error('SubjectKeyIdentifier must be an OCTET STRING');
+	}
+	return toHex(element.value);
 }
