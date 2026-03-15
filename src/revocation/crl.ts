@@ -473,97 +473,36 @@ export function parseCertificateRevocationListDer(
 	const tbsCertList = requireElement(top[0], 'TBSCertList');
 	const signatureAlgorithm = requireElement(top[1], 'signatureAlgorithm');
 	const signatureValue = requireElement(top[2], 'signatureValue');
-	const tbsChildren = childrenOf(der, tbsCertList);
-	let index = 0;
-	let version = 1;
-	if (tbsChildren[index]?.tag === 0x02) {
-		version = decodeIntegerNumber(requireElement(tbsChildren[index], 'version').value) + 1;
-		index += 1;
-	}
-	index += 1; // signature algorithm in TBS
-	const issuer = requireElement(tbsChildren[index], 'issuer');
-	const thisUpdate = requireElement(tbsChildren[index + 1], 'thisUpdate');
-	let cursor = index + 2;
-	const maybeNextUpdate = tbsChildren[cursor];
-	const nextUpdate =
-		maybeNextUpdate !== undefined && (maybeNextUpdate.tag === 0x17 || maybeNextUpdate.tag === 0x18)
-			? parseTime(maybeNextUpdate)
-			: undefined;
-	if (nextUpdate !== undefined) {
-		cursor += 1;
-	}
-	let revokedCertificates: readonly ParsedRevokedCertificate[] = [];
-	const maybeRevoked = tbsChildren[cursor];
-	if (maybeRevoked?.tag === 0x30) {
-		revokedCertificates = childrenOf(der, maybeRevoked).map((entry) => {
-			const entryDer = der.slice(entry.start - entry.headerLength, entry.end);
-			const parts = readSequenceChildren(entryDer);
-			const entryExtensions = parts[2];
-			const parsedEntryExtensions = parseRevokedCertificateExtensions(entryDer, entryExtensions);
-			return {
-				serialNumberHex: toHex(requireElement(parts[0], 'revoked serialNumber').value),
-				revocationDate: parseTime(requireElement(parts[1], 'revocationDate')),
-				...(parsedEntryExtensions.reasonCode === undefined
-					? {}
-					: { reasonCode: parsedEntryExtensions.reasonCode }),
-				...(parsedEntryExtensions.invalidityDate === undefined
-					? {}
-					: { invalidityDate: parsedEntryExtensions.invalidityDate }),
-				...(parsedEntryExtensions.certificateIssuer === undefined
-					? {}
-					: { certificateIssuer: parsedEntryExtensions.certificateIssuer }),
-			};
-		});
-		cursor += 1;
-	}
-	let authorityKeyIdentifier: string | undefined;
-	let crlNumber: number | undefined;
-	let baseCrlNumber: number | undefined;
-	let issuingDistributionPoint: ParsedIssuingDistributionPoint | undefined;
-	let freshestCrlDistributionPoints: readonly ParsedDistributionPoint[] | undefined;
+	const signedFields = parseSignedCrlFields(
+		der.slice(tbsCertList.start - tbsCertList.headerLength, tbsCertList.end),
+	);
 	const parsedSignatureAlgorithm = parseAlgorithmIdentifier(der, signatureAlgorithm);
-	const maybeExtensions = tbsChildren[cursor];
-	if (maybeExtensions?.tag === 0xa0) {
-		const extensionSequence = requireElement(childrenOf(der, maybeExtensions)[0], 'crl extensions');
-		for (const extension of childrenOf(der, extensionSequence)) {
-			const parts = childrenOf(der, extension);
-			const oid = decodeObjectIdentifier(requireElement(parts[0], 'extension OID').value);
-			const valueElement = requireElement(parts[parts.length - 1], 'extension value');
-			if (oid === OIDS.authorityKeyIdentifier) {
-				authorityKeyIdentifier = parseAuthorityKeyIdentifier(valueElement.value);
-			}
-			if (oid === OIDS.cRLNumber) {
-				crlNumber = decodeIntegerNumber(readElement(valueElement.value).value);
-			}
-			if (oid === OIDS.deltaCRLIndicator) {
-				baseCrlNumber = decodeIntegerNumber(readElement(valueElement.value).value);
-			}
-			if (oid === OIDS.issuingDistributionPoint) {
-				issuingDistributionPoint = parseIssuingDistributionPoint(valueElement.value);
-			}
-			if (oid === OIDS.freshestCRL) {
-				freshestCrlDistributionPoints = parseDistributionPoints(valueElement.value);
-			}
-		}
-	}
 	return {
-		version,
+		version: signedFields.version,
 		tbsCertListDer: der.slice(tbsCertList.start - tbsCertList.headerLength, tbsCertList.end),
 		signatureValue: extractBitStringValue(signatureValue),
-		issuer: parseIssuer(der, issuer),
-		thisUpdate: parseTime(thisUpdate),
-		...(nextUpdate === undefined ? {} : { nextUpdate }),
+		issuer: signedFields.issuer,
+		thisUpdate: signedFields.thisUpdate,
+		...(signedFields.nextUpdate === undefined ? {} : { nextUpdate: signedFields.nextUpdate }),
 		signatureAlgorithmOid: parsedSignatureAlgorithm.oid,
 		signatureAlgorithmName: describeSignatureAlgorithm(
 			parsedSignatureAlgorithm.oid,
 			parsedSignatureAlgorithm.parametersDer,
 		),
-		...(authorityKeyIdentifier === undefined ? {} : { authorityKeyIdentifier }),
-		...(crlNumber === undefined ? {} : { crlNumber }),
-		...(baseCrlNumber === undefined ? {} : { baseCrlNumber }),
-		...(issuingDistributionPoint === undefined ? {} : { issuingDistributionPoint }),
-		...(freshestCrlDistributionPoints === undefined ? {} : { freshestCrlDistributionPoints }),
-		revokedCertificates,
+		...(signedFields.authorityKeyIdentifier === undefined
+			? {}
+			: { authorityKeyIdentifier: signedFields.authorityKeyIdentifier }),
+		...(signedFields.crlNumber === undefined ? {} : { crlNumber: signedFields.crlNumber }),
+		...(signedFields.baseCrlNumber === undefined
+			? {}
+			: { baseCrlNumber: signedFields.baseCrlNumber }),
+		...(signedFields.issuingDistributionPoint === undefined
+			? {}
+			: { issuingDistributionPoint: signedFields.issuingDistributionPoint }),
+		...(signedFields.freshestCrlDistributionPoints === undefined
+			? {}
+			: { freshestCrlDistributionPoints: signedFields.freshestCrlDistributionPoints }),
+		revokedCertificates: signedFields.revokedCertificates,
 	};
 }
 
@@ -625,7 +564,15 @@ export async function verifyCertificateRevocationList(
 export async function validateCertificateRevocationList(
 	input: ValidateCertificateRevocationListInput,
 ): Promise<ValidateCertificateRevocationListResult> {
-	const parsedCrl = normalizeCrl(input.crl);
+	let parsedCrl: ParsedCertificateRevocationList;
+	try {
+		parsedCrl = normalizeCrl(input.crl);
+	} catch {
+		return validateCertificateRevocationListFailureResult(
+			'signature_invalid',
+			'certificate revocation list signed content is malformed',
+		);
+	}
 	const issuer = normalizeCrlCertificate(input.issuerCertificate);
 	if (!compareDistinguishedNames(parsedCrl.issuer, issuer.subject)) {
 		return validateCertificateRevocationListFailureResult(
@@ -1904,7 +1851,140 @@ function normalizeCrl(source: CrlSource): ParsedCertificateRevocationList {
 	if (source instanceof Uint8Array) {
 		return parseCertificateRevocationListDer(new Uint8Array(source));
 	}
-	return source;
+	const {
+		authorityKeyIdentifier: _ignoredAuthorityKeyIdentifier,
+		baseCrlNumber: _ignoredBaseCrlNumber,
+		crlNumber: _ignoredCrlNumber,
+		freshestCrlDistributionPoints: _ignoredFreshestCrlDistributionPoints,
+		issuer: _ignoredIssuer,
+		issuingDistributionPoint: _ignoredIssuingDistributionPoint,
+		nextUpdate: _ignoredNextUpdate,
+		revokedCertificates: _ignoredRevokedCertificates,
+		thisUpdate: _ignoredThisUpdate,
+		version: _ignoredVersion,
+		...unsignedFields
+	} = source;
+	const signedFields = parseSignedCrlFields(source.tbsCertListDer);
+	return {
+		...unsignedFields,
+		...signedFields,
+		...(signedFields.nextUpdate === undefined ? {} : { nextUpdate: signedFields.nextUpdate }),
+		...(signedFields.authorityKeyIdentifier === undefined
+			? {}
+			: { authorityKeyIdentifier: signedFields.authorityKeyIdentifier }),
+		...(signedFields.crlNumber === undefined ? {} : { crlNumber: signedFields.crlNumber }),
+		...(signedFields.baseCrlNumber === undefined
+			? {}
+			: { baseCrlNumber: signedFields.baseCrlNumber }),
+		...(signedFields.issuingDistributionPoint === undefined
+			? {}
+			: { issuingDistributionPoint: signedFields.issuingDistributionPoint }),
+		...(signedFields.freshestCrlDistributionPoints === undefined
+			? {}
+			: { freshestCrlDistributionPoints: signedFields.freshestCrlDistributionPoints }),
+	};
+}
+
+function parseSignedCrlFields(tbsCertListDer: Uint8Array): {
+	readonly version: number;
+	readonly issuer: ParsedName;
+	readonly thisUpdate: Date;
+	readonly nextUpdate?: Date;
+	readonly authorityKeyIdentifier?: string;
+	readonly crlNumber?: number;
+	readonly baseCrlNumber?: number;
+	readonly issuingDistributionPoint?: ParsedIssuingDistributionPoint;
+	readonly freshestCrlDistributionPoints?: readonly ParsedDistributionPoint[];
+	readonly revokedCertificates: readonly ParsedRevokedCertificate[];
+} {
+	const tbsCertList = readRootElement(tbsCertListDer, { maxDepth: DEFAULT_MAX_DER_DEPTH });
+	const tbsChildren = childrenOf(tbsCertListDer, tbsCertList);
+	let index = 0;
+	let version = 1;
+	if (tbsChildren[index]?.tag === 0x02) {
+		version = decodeIntegerNumber(requireElement(tbsChildren[index], 'version').value) + 1;
+		index += 1;
+	}
+	index += 1;
+	const issuerElement = requireElement(tbsChildren[index], 'issuer');
+	const thisUpdateElement = requireElement(tbsChildren[index + 1], 'thisUpdate');
+	let cursor = index + 2;
+	const maybeNextUpdate = tbsChildren[cursor];
+	const nextUpdate =
+		maybeNextUpdate !== undefined && (maybeNextUpdate.tag === 0x17 || maybeNextUpdate.tag === 0x18)
+			? parseTime(maybeNextUpdate)
+			: undefined;
+	if (nextUpdate !== undefined) {
+		cursor += 1;
+	}
+	let revokedCertificates: readonly ParsedRevokedCertificate[] = [];
+	const maybeRevoked = tbsChildren[cursor];
+	if (maybeRevoked?.tag === 0x30) {
+		revokedCertificates = childrenOf(tbsCertListDer, maybeRevoked).map((entry) => {
+			const entryDer = tbsCertListDer.slice(entry.start - entry.headerLength, entry.end);
+			const parts = readSequenceChildren(entryDer);
+			const entryExtensions = parts[2];
+			const parsedEntryExtensions = parseRevokedCertificateExtensions(entryDer, entryExtensions);
+			return {
+				serialNumberHex: toHex(requireElement(parts[0], 'revoked serialNumber').value),
+				revocationDate: parseTime(requireElement(parts[1], 'revocationDate')),
+				...(parsedEntryExtensions.reasonCode === undefined
+					? {}
+					: { reasonCode: parsedEntryExtensions.reasonCode }),
+				...(parsedEntryExtensions.invalidityDate === undefined
+					? {}
+					: { invalidityDate: parsedEntryExtensions.invalidityDate }),
+				...(parsedEntryExtensions.certificateIssuer === undefined
+					? {}
+					: { certificateIssuer: parsedEntryExtensions.certificateIssuer }),
+			};
+		});
+		cursor += 1;
+	}
+	let authorityKeyIdentifier: string | undefined;
+	let crlNumber: number | undefined;
+	let baseCrlNumber: number | undefined;
+	let issuingDistributionPoint: ParsedIssuingDistributionPoint | undefined;
+	let freshestCrlDistributionPoints: readonly ParsedDistributionPoint[] | undefined;
+	const maybeExtensions = tbsChildren[cursor];
+	if (maybeExtensions?.tag === 0xa0) {
+		const extensionSequence = requireElement(
+			childrenOf(tbsCertListDer, maybeExtensions)[0],
+			'crl extensions',
+		);
+		for (const extension of childrenOf(tbsCertListDer, extensionSequence)) {
+			const parts = childrenOf(tbsCertListDer, extension);
+			const oid = decodeObjectIdentifier(requireElement(parts[0], 'extension OID').value);
+			const valueElement = requireElement(parts[parts.length - 1], 'extension value');
+			if (oid === OIDS.authorityKeyIdentifier) {
+				authorityKeyIdentifier = parseAuthorityKeyIdentifier(valueElement.value);
+			}
+			if (oid === OIDS.cRLNumber) {
+				crlNumber = decodeIntegerNumber(readElement(valueElement.value).value);
+			}
+			if (oid === OIDS.deltaCRLIndicator) {
+				baseCrlNumber = decodeIntegerNumber(readElement(valueElement.value).value);
+			}
+			if (oid === OIDS.issuingDistributionPoint) {
+				issuingDistributionPoint = parseIssuingDistributionPoint(valueElement.value);
+			}
+			if (oid === OIDS.freshestCRL) {
+				freshestCrlDistributionPoints = parseDistributionPoints(valueElement.value);
+			}
+		}
+	}
+	return {
+		version,
+		issuer: parseIssuer(tbsCertListDer, issuerElement),
+		thisUpdate: parseTime(thisUpdateElement),
+		...(nextUpdate === undefined ? {} : { nextUpdate }),
+		...(authorityKeyIdentifier === undefined ? {} : { authorityKeyIdentifier }),
+		...(crlNumber === undefined ? {} : { crlNumber }),
+		...(baseCrlNumber === undefined ? {} : { baseCrlNumber }),
+		...(issuingDistributionPoint === undefined ? {} : { issuingDistributionPoint }),
+		...(freshestCrlDistributionPoints === undefined ? {} : { freshestCrlDistributionPoints }),
+		revokedCertificates,
+	};
 }
 
 /** Accepts PEM, DER, or already-parsed certificate and returns a parsed certificate. */

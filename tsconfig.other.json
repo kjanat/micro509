@@ -20,7 +20,12 @@
 		"allowImportingTsExtensions": true,
 		"resolveJsonModule": true,
 		"isolatedDeclarations": false,
-		"customConditions": ["bun"]
+		"customConditions": ["bun"],
+		"paths": {
+			"micro509": ["./src/index.ts"],
+			"#micro509": ["./src/index.ts"],
+			"#micro509/*": ["./src/*"]
+		}
 	},
 	"include": ["src", "test", "scripts", "site", "*.config.ts", "*.json"],
 	"exclude": ["dist", "node_modules"]

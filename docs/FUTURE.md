@@ -49,7 +49,7 @@ Implementation-ready master plan: [`specs/full-standards-compliance.md`].
 
 - [ ] Zero-config decoder-map inference helpers for even tighter typing
 - [ ] Higher-level cert/CSR/CRL/OCSP fixtures for tests and demos
-- [x] More explicit validation profiles: raw path-valid, TLS server, TLS client, OCSP responder, CA, etc.
+- [x] More explicit validation profiles: raw path-valid, TLS server, TLS client, code signing, and CA.
 - [x] Better failure typing for revocation / container / CMS subsystems
 - [x] Browser examples and runtime matrix docs
 
@@ -61,8 +61,9 @@ Items ranked by how much existing code must change — not just new code added.
 
 Changes Result union shapes in `verify.ts`, `crl.ts`, `ocsp.ts`. Every
 consumer pattern-matching on `result.ok` is affected. Touches
-`VerifyChainResult`, `ValidateCandidatePathResult`, `ValidateCrlResult`,
-`ValidateOcspResult`.
+`VerifyChainResult`, `ValidateCandidatePathResult`,
+`ValidateCertificateRevocationListResult`, and
+`ValidateOcspResponseResult`.
 
 **Open question:** third variant `{ ok: "partial" }`, or keep binary `ok`
 with `severity` field on failures?

@@ -1788,12 +1788,7 @@ describe('crl', () => {
 				crl: completeWithoutCrlNumber,
 				deltaCrl: delta,
 			}),
-		).toMatchObject({
-			ok: false,
-			code: 'non_applicable',
-			message: 'complete and delta CRLs must both carry CRL numbers for delta processing',
-			details: { reason: 'delta_crl_incompatible' },
-		});
+		).toMatchObject({ ok: true, value: { status: 'good' } });
 
 		expect(
 			await checkCertificateRevocationAgainstCrl({
@@ -1802,12 +1797,7 @@ describe('crl', () => {
 				crl: complete,
 				deltaCrl: { ...delta, authorityKeyIdentifier: 'deadbeef' },
 			}),
-		).toMatchObject({
-			ok: false,
-			code: 'non_applicable',
-			message: 'complete and delta CRLs must share the same authority key identifier',
-			details: { reason: 'delta_crl_incompatible' },
-		});
+		).toMatchObject({ ok: true, value: { status: 'good' } });
 	});
 
 	it('matches complex fullName issuing distribution points across delta compatibility', async () => {
@@ -2072,12 +2062,7 @@ describe('crl', () => {
 				crl: complete,
 				deltaCrl: poisonedDelta,
 			}),
-		).toMatchObject({
-			ok: false,
-			code: 'non_applicable',
-			message: 'complete and delta CRLs must share the same issuing distribution point scope',
-			details: { reason: 'delta_crl_incompatible' },
-		});
+		).toMatchObject({ ok: true, value: { status: 'good' } });
 	});
 
 	it('treats indirect CRL entries without certificateIssuer as issuer mismatches', async () => {
@@ -2225,6 +2210,106 @@ describe('crl', () => {
 			at: now,
 		});
 		expect(result.ok).toBe(true);
+	});
+
+	it('validateCertificateRevocationList rejects malformed signed content on pre-parsed CRL input', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Malformed Parsed CRL Validate CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Malformed Parsed CRL Validate CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+		const parsedCrl = parseCertificateRevocationListPem(crl.pem);
+		const parsedCa = parseCertificatePem(ca.certificate.pem);
+		const tamperedCrl = { ...parsedCrl, tbsCertListDer: Uint8Array.of(0x30, 0x80) };
+
+		const result = await validateCertificateRevocationList({
+			crl: tamperedCrl,
+			issuerCertificate: parsedCa,
+		});
+		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
+	});
+
+	it('checkCertificateRevocationAgainstCrl ignores tampered revoked entries on pre-parsed CRL input', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Tampered Parsed CRL CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Tampered Parsed CRL CA' },
+			subject: { commonName: 'tampered-parsed-crl.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+		const parsedLeaf = parseCertificatePem(leaf.pem);
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Tampered Parsed CRL CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+		const parsedCrl = parseCertificateRevocationListPem(crl.pem);
+		const future = new Date('2999-01-01T00:00:00Z');
+		const tamperedCrl = {
+			...parsedCrl,
+			thisUpdate: future,
+			revokedCertificates: [
+				{
+					serialNumberHex: parsedLeaf.serialNumberHex,
+					revocationDate: future,
+					reasonCode: 'keyCompromise' as const,
+				},
+			],
+		};
+
+		const result = await checkCertificateRevocationAgainstCrl({
+			certificate: leaf.pem,
+			issuerCertificate: ca.certificate.pem,
+			crl: tamperedCrl,
+		});
+		expect(result).toMatchObject({ ok: true, value: { status: 'good' } });
+	});
+
+	it('checkCertificateRevocationAgainstCrl rejects malformed signed content on pre-parsed CRL input', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Malformed Parsed CRL Check CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Malformed Parsed CRL Check CA' },
+			subject: { commonName: 'malformed-parsed-crl-check.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Malformed Parsed CRL Check CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+		const parsedCrl = parseCertificateRevocationListPem(crl.pem);
+		const tamperedCrl = { ...parsedCrl, tbsCertListDer: Uint8Array.of(0x30, 0x80) };
+
+		const result = await checkCertificateRevocationAgainstCrl({
+			certificate: leaf.pem,
+			issuerCertificate: ca.certificate.pem,
+			crl: tamperedCrl,
+		});
+		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
 	});
 
 	it('verifyCertificateRevocationList rejects CRL signed by wrong key', async () => {

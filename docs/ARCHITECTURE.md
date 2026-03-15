@@ -5,14 +5,14 @@ This document captures the cross-cutting patterns already visible in the
 
 ## Module Topology
 
-`src/` is intentionally one-level-deep for public files while implementation-only
-helpers are moved into `src/internal/**`.
+`src/index.ts` is the root public barrel. Domain-owned public workflows and
+types live under `src/x509/`, `src/verify/`, `src/revocation/`, `src/keys/`,
+`src/pem/`, `src/pkcs/`, and `src/result/`, while implementation-only helpers
+live under `src/internal/**`.
 
-- `src/*.ts` contains public domain workflows, lifecycle orchestration, and
-  typed convenience surfaces.
+- `src/index.ts` contains the curated workflow-first root surface.
+- `src/*/` contains domain-owned public workflows, types, and re-export barrels.
 - `src/internal/**` contains low-level and cross-domain primitives.
-- `src/*/` barrels (`src/x509`, `src/verify`, `src/revocation`, etc.) are
-  re-export-only scaffolds.
 - `src/result/result.ts` is the canonical typed failure model used across domains
   via `src/result/index.ts` and explicit imports.
 

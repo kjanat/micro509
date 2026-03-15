@@ -153,7 +153,8 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
 - [x] Parse CRLs and CRL extensions.
 - [x] Verify CRL signatures and issuer linkage.
 - [x] Enforce CRL time/freshness semantics.
-- [x] Support distribution points if you want network-assisted revocation.
+- [x] Parse CRL distribution points and enforce distribution-point scope during
+      CRL applicability; CRL discovery/fetch hooks are not shipped.
 - [x] Add delta CRL handling only if you actually want to live in that swamp. RFC 5280 defines CRL validation separately from path validation. (IETF Datatracker[^rfc5280])
 
 ## 13. API design checklist
@@ -163,7 +164,9 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
 - [x] Keep revocation checking separate from path validation.
 - [x] Expose structured validation inputs instead of hiding policy/name-constraint knobs.
 - [x] Return typed failure reasons for currently implemented path-validation, CRL, and OCSP checks.
-- [x] Distinguish hard validation failure from “status unknown / not checked”.
+- [x] Distinguish hard validation failure from revocation status `unknown` in
+      revocation orchestration; chain, CRL, and OCSP validators still return
+      binary success/failure results.
 
 ## 14. Test/conformance checklist
 

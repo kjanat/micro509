@@ -449,26 +449,12 @@ export function parseOcspResponseDer(der: Uint8Array): ParsedOcspResponse {
 		responseData.start - responseData.headerLength,
 		responseData.end,
 	);
-	const responseDataChildren = readSequenceChildren(responseDataDer);
-	let index = 0;
-	if (responseDataChildren[index]?.tag === 0xa0) {
-		index += 1;
-	}
-	const responderIdElement = requireElement(responseDataChildren[index], 'responderID');
-	const responderId = parseOcspResponderId(responseDataDer, responderIdElement);
-	index += 1;
-	const producedAt = requireElement(responseDataChildren[index], 'producedAt');
-	const responses = requireElement(responseDataChildren[index + 1], 'responses');
-	const responseExtensions = responseDataChildren[index + 2];
-	const nonce =
-		responseExtensions === undefined
-			? undefined
-			: parseOcspNonceFromExtensions(responseDataDer, responseExtensions);
+	const signedResponseData = parseSignedOcspResponseData(responseDataDer);
 	return {
 		responseStatus,
 		responseTypeOid,
 		responseDataDer,
-		responderId,
+		responderId: signedResponseData.responderId,
 		signatureAlgorithmOid,
 		signatureAlgorithmName: describeSignatureAlgorithm(
 			signatureAlgorithmOid,
@@ -480,11 +466,9 @@ export function parseOcspResponseDer(der: Uint8Array): ParsedOcspResponse {
 					),
 		),
 		signatureValue: extractBitStringValue(signatureValue),
-		producedAt: parseTime(producedAt),
-		responses: childrenOf(responseDataDer, responses).map((singleResponse) =>
-			parseSingleResponse(responseDataDer, singleResponse),
-		),
-		...(nonce === undefined ? {} : { nonce }),
+		producedAt: signedResponseData.producedAt,
+		responses: signedResponseData.responses,
+		...(signedResponseData.nonce === undefined ? {} : { nonce: signedResponseData.nonce }),
 		...(certificatesElement?.tag === 0xa0
 			? {
 					certificates: parseEmbeddedCertificates(basicResponse, certificatesElement),
@@ -612,7 +596,15 @@ export async function verifyOcspResponse(
 	response: string | Uint8Array | ParsedOcspResponse,
 	signerCertificate: OcspCertificateSource,
 ): Promise<VerifyOcspResponseResult> {
-	const parsed = normalizeOcspResponse(response);
+	let parsed: ParsedOcspResponse;
+	try {
+		parsed = normalizeOcspResponse(response);
+	} catch {
+		return verifyOcspResponseFailureResult(
+			'signature_invalid',
+			'OCSP response signed content is malformed',
+		);
+	}
 	if (
 		parsed.responseDataDer === undefined ||
 		parsed.signatureAlgorithmOid === undefined ||
@@ -662,7 +654,15 @@ export async function verifyOcspResponse(
 export async function validateOcspResponse(
 	input: ValidateOcspResponseInput,
 ): Promise<ValidateOcspResponseResult> {
-	const parsedResponse = normalizeOcspResponse(input.response);
+	let parsedResponse: ParsedOcspResponse;
+	try {
+		parsedResponse = normalizeOcspResponse(input.response);
+	} catch {
+		return validateOcspResponseFailureResult(
+			'signature_invalid',
+			'OCSP response signed content is malformed',
+		);
+	}
 	if (parsedResponse.responseStatus !== 'successful') {
 		return validateOcspResponseFailureResult(
 			'response_status_invalid',
@@ -850,7 +850,18 @@ function normalizeOcspResponse(
 	if (response instanceof Uint8Array) {
 		return parseOcspResponseDer(response);
 	}
-	return response;
+	if (response.responseDataDer === undefined) {
+		return response;
+	}
+	const signedResponseData = parseSignedOcspResponseData(response.responseDataDer);
+	const { nonce: _ignoredNonce, ...responseWithoutNonce } = response;
+	return {
+		...responseWithoutNonce,
+		responderId: signedResponseData.responderId,
+		producedAt: signedResponseData.producedAt,
+		responses: signedResponseData.responses,
+		...(signedResponseData.nonce === undefined ? {} : { nonce: signedResponseData.nonce }),
+	};
 }
 
 /** Accepts PEM, DER, or already-parsed OCSP request and returns a parsed request. */
@@ -862,6 +873,37 @@ function normalizeOcspRequest(request: OcspRequestSource): ParsedOcspRequest {
 		return parseOcspRequestDer(request);
 	}
 	return request;
+}
+
+function parseSignedOcspResponseData(responseDataDer: Uint8Array): {
+	readonly responderId: ParsedOcspResponderId;
+	readonly producedAt: Date;
+	readonly responses: readonly ParsedOcspSingleResponse[];
+	readonly nonce?: string;
+} {
+	const responseDataChildren = readSequenceChildren(responseDataDer);
+	let index = 0;
+	if (responseDataChildren[index]?.tag === 0xa0) {
+		index += 1;
+	}
+	const responderIdElement = requireElement(responseDataChildren[index], 'responderID');
+	const responderId = parseOcspResponderId(responseDataDer, responderIdElement);
+	index += 1;
+	const producedAtElement = requireElement(responseDataChildren[index], 'producedAt');
+	const responsesElement = requireElement(responseDataChildren[index + 1], 'responses');
+	const responseExtensions = responseDataChildren[index + 2];
+	const nonce =
+		responseExtensions === undefined
+			? undefined
+			: parseOcspNonceFromExtensions(responseDataDer, responseExtensions);
+	return {
+		responderId,
+		producedAt: parseTime(producedAtElement),
+		responses: childrenOf(responseDataDer, responsesElement).map((singleResponse) =>
+			parseSingleResponse(responseDataDer, singleResponse),
+		),
+		...(nonce === undefined ? {} : { nonce }),
+	};
 }
 
 /** Searches embedded certificates for one whose subject or key hash matches the responder ID. */

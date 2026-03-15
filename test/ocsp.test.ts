@@ -963,6 +963,62 @@ describe('ocsp', () => {
 		expect(result.ok).toBe(true);
 	});
 
+	it('validateOcspResponse ignores tampered signed fields on pre-parsed response input', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Tampered Parsed Response CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Tampered Parsed Response CA' },
+			subject: { commonName: 'tampered-parsed-resp.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const response = await createOcspResponse({
+			signerPrivateKey: issuer.keyPair.privateKey,
+			signerCertificate: issuer.certificate.pem,
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: 'good',
+				},
+			],
+		});
+		const parsed = parseOcspResponsePem(response.pem);
+		const future = new Date('2999-01-01T00:00:00Z');
+		const tampered = {
+			...parsed,
+			producedAt: future,
+			...(parsed.responses === undefined
+				? {}
+				: {
+						responses: parsed.responses.map((entry) => ({
+							...entry,
+							certStatus: 'revoked' as const,
+							thisUpdate: future,
+						})),
+					}),
+		};
+
+		const result = await validateOcspResponse({
+			response: tampered,
+			issuerCertificate: issuer.certificate.pem,
+		});
+		expect(result.ok).toBe(true);
+		if (!result.ok) {
+			throw new Error('expected tampered parsed OCSP response to validate');
+		}
+		expect(result.value.producedAt?.getTime()).not.toBe(future.getTime());
+		expect(result.value.responses?.[0]?.certStatus).toBe('good');
+		expect(result.value.responses?.[0]?.thisUpdate.getTime()).not.toBe(future.getTime());
+	});
+
 	it('verifyOcspResponse accepts PEM response input', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'PEM Verify CA' },
@@ -1024,6 +1080,77 @@ describe('ocsp', () => {
 		const parsed = parseOcspResponsePem(response.pem);
 		const result = await verifyOcspResponse(parsed, issuer.certificate.pem);
 		expect(result.ok).toBe(true);
+	});
+
+	it('verifyOcspResponse rejects malformed signed content on pre-parsed response input', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Malformed Parsed Verify CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Malformed Parsed Verify CA' },
+			subject: { commonName: 'malformed-parsed-verify.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const response = await createOcspResponse({
+			signerPrivateKey: issuer.keyPair.privateKey,
+			signerCertificate: issuer.certificate.pem,
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: 'good',
+				},
+			],
+		});
+		const parsed = parseOcspResponsePem(response.pem);
+		const tampered = { ...parsed, responseDataDer: Uint8Array.of(0x30, 0x80) };
+
+		const result = await verifyOcspResponse(tampered, issuer.certificate.pem);
+		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
+	});
+
+	it('validateOcspResponse rejects malformed signed content on pre-parsed response input', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Malformed Parsed Validate CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Malformed Parsed Validate CA' },
+			subject: { commonName: 'malformed-parsed-validate.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const response = await createOcspResponse({
+			signerPrivateKey: issuer.keyPair.privateKey,
+			signerCertificate: issuer.certificate.pem,
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: 'good',
+				},
+			],
+		});
+		const parsed = parseOcspResponsePem(response.pem);
+		const tampered = { ...parsed, responseDataDer: Uint8Array.of(0x30, 0x80) };
+
+		const result = await validateOcspResponse({
+			response: tampered,
+			issuerCertificate: issuer.certificate.pem,
+		});
+		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
 	});
 
 	it('validateOcspResponse validates delegated responder chain with DER certs', async () => {
