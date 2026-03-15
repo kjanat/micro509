@@ -14,12 +14,12 @@
  * multi-valued RDN.
  *
  * `NameObject` favors convenience: populated fields are emitted in the
- * canonical order from {@linkcode NAME_OBJECT_ORDER}.\
+ * canonical order from `NAME_OBJECT_ORDER`.\
  * `NameAttribute` arrays favor control: caller order is preserved, but each
  * entry still becomes its own single-attribute RDN.
  *
  * Attribute OIDs and ASN.1 string encodings come from
- * {@linkcode NAME_FIELD_DEFINITIONS}.
+ * `NAME_FIELD_DEFINITIONS`.
  *
  * @example
  * ```ts
@@ -68,7 +68,7 @@ import { NAME_FIELD_DEFINITIONS, NAME_OBJECT_ORDER } from '#micro509/internal/x5
 /**
  * Union of recognized X.501 attribute type shorthand names.
  *
- * Each key maps to an OID + ASN.1 string encoding in {@linkcode NAME_FIELD_DEFINITIONS}.
+ * Each key maps to an OID + ASN.1 string encoding in `NAME_FIELD_DEFINITIONS`.
  */
 export type NameFieldKey =
 	| 'commonName'
@@ -88,7 +88,7 @@ export type NameFieldKey =
  * Convenience object form of an X.501 distinguished name.
  *
  * Populated fields are emitted in the order defined by
- * {@linkcode NAME_OBJECT_ORDER}.\
+ * `NAME_OBJECT_ORDER`.\
  * Each populated field becomes its own single-attribute RDN.
  *
  * For caller-controlled ordering, pass a {@linkcode NameAttribute} array to {@linkcode encodeName}.\
@@ -165,11 +165,11 @@ export { nameFieldKeyFromOid } from '#micro509/internal/x509/name-fields.ts';
  *
  * @see {@link https://datatracker.ietf.org/doc/html/rfc5280#appendix-A.1 RFC 5280 Appendix A.1}
  *
- * {@linkcode NameObject} input emits populated fields in the canonical order from {@linkcode NAME_OBJECT_ORDER}.\
+ * {@linkcode NameObject} input emits populated fields in the canonical order from `NAME_OBJECT_ORDER`.\
  * {@linkcode NameAttribute} array input preserves caller-supplied ordering,
  * but each entry still becomes its own single-attribute RDN.
  *
- * Attribute OIDs and ASN.1 string encodings come from {@linkcode NAME_FIELD_DEFINITIONS}.\
+ * Attribute OIDs and ASN.1 string encodings come from `NAME_FIELD_DEFINITIONS`.\
  * Empty strings and `undefined` fields are ignored when the input is a {@linkcode NameObject}.
  *
  * @example
@@ -211,7 +211,7 @@ export function encodeName(input: NameInput): Uint8Array {
  * @see {@link https://datatracker.ietf.org/doc/html/rfc5280#appendix-A.1 RFC 5280 Appendix A.1}
  *
  * Attribute OIDs and ASN.1 string encodings come from
- * {@linkcode NAME_FIELD_DEFINITIONS}.
+ * `NAME_FIELD_DEFINITIONS`.
  *
  * @example
  * ```ts
@@ -262,7 +262,7 @@ function encodeNameAttribute(attribute: NameAttribute): Uint8Array {
 	return sequence([objectIdentifier(definition.oid), definition.encode(attribute.value)]);
 }
 
-/** Converts a {@linkcode NameObject} to ordered attributes per {@linkcode NAME_OBJECT_ORDER}. */
+/** Converts a {@linkcode NameObject} to ordered attributes per `NAME_OBJECT_ORDER`. */
 function nameObjectToAttributes(input: NameObject): readonly NameAttribute[] {
 	const attributes: NameAttribute[] = [];
 	for (const key of NAME_OBJECT_ORDER) {

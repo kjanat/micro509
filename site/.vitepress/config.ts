@@ -7,6 +7,7 @@ const apiSidebar = typedocSidebar.map((item: { text: string; link: string }) => 
 }));
 
 export default defineConfig({
+	vite: { build: { chunkSizeWarningLimit: 1500 } },
 	title: 'micro509',
 	description:
 		'The TypeScript PKI library that tells you why verification failed, not just that it did.',

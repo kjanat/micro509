@@ -29,7 +29,7 @@ export type Pbes2EncryptionScheme = 'aes128-cbc' | 'aes192-cbc' | 'aes256-cbc';
 /** PBKDF2 pseudo-random function choices. `hmac-sha1` is the RFC default; `hmac-sha256` is preferred. */
 export type Pbes2Prf = 'hmac-sha1' | 'hmac-sha256';
 
-/** Input for {@linkcode encryptPbes2}. */
+/** Input for `encryptPbes2`. */
 export interface Pbes2EncryptionOptions {
 	/** Password fed to PBKDF2 for key derivation. */
 	readonly password: string;
@@ -45,7 +45,7 @@ export interface Pbes2EncryptionOptions {
 	readonly prf?: Pbes2Prf;
 }
 
-/** Resolved PBES2 algorithm parameters, either parsed from DER or built by {@linkcode encryptPbes2}. */
+/** Resolved PBES2 algorithm parameters, either parsed from DER or built by `encryptPbes2`. */
 export interface Pbes2Parameters {
 	/** PBKDF2 iteration count. */
 	readonly iterations: number;
@@ -59,7 +59,7 @@ export interface Pbes2Parameters {
 	readonly prf: Pbes2Prf;
 }
 
-/** Output of {@linkcode encryptPbes2}: ciphertext plus the DER-encoded AlgorithmIdentifier. */
+/** Output of `encryptPbes2`: ciphertext plus the DER-encoded AlgorithmIdentifier. */
 export interface Pbes2EncryptionResult {
 	/** DER-encoded PBES2 AlgorithmIdentifier SEQUENCE (embeds KDF + cipher params). */
 	readonly algorithmIdentifierDer: Uint8Array;
