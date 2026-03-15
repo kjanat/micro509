@@ -10,4 +10,4 @@ jobs:
       - { uses: ./.github/actions/setup-ts, with: { install-bun: true } }
       - run: bun i
       - run: bun run build
-      - run: bunx pkg-pr-new publish
+      - run: bunx pkg-pr-new publish --packageManager="bun" --bun
