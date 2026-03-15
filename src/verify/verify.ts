@@ -653,8 +653,8 @@ async function validateCandidatePathRaw(
 				index,
 				detail({
 					subjectCommonName: current.subject.values.commonName,
-					expected: at.toISOString(),
-					actual: `${current.notBefore.toISOString()}..${current.notAfter.toISOString()}`,
+					expected: describeDateTime(at),
+					actual: `${describeDateTime(current.notBefore)}..${describeDateTime(current.notAfter)}`,
 				}),
 			);
 		}
@@ -747,7 +747,7 @@ async function validateCandidatePathRaw(
 		}
 		const maxCaBelow = countCaCertificatesBelowParsed(chain, index);
 		const pathLength = current.basicConstraints?.pathLength;
-		if (pathLength !== undefined && maxCaBelow > pathLength) {
+		if (isNonNegativeInteger(pathLength) && maxCaBelow > pathLength) {
 			return failure(
 				'path_length_exceeded',
 				'path length constraint exceeded',
@@ -1267,6 +1267,16 @@ function validateCandidatePathSuccessResult(
 		value: { policyValidation },
 		policyValidation,
 	};
+}
+
+/** Describes a date in ISO format, or `'<invalid date>'` if invalid. */
+function describeDateTime(value: Date): string {
+	return Number.isNaN(value.getTime()) ? '<invalid date>' : value.toISOString();
+}
+
+/** Returns `true` if the value is a non-negative integer (including zero). */
+function isNonNegativeInteger(value: number | undefined): value is number {
+	return value !== undefined && Number.isInteger(value) && value >= 0;
 }
 
 /** Constructs a CSR verification failure result. */

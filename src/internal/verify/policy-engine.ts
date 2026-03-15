@@ -694,8 +694,10 @@ function updatePolicyCounters(
 		if (state.explicitPolicy > 0) {
 			state.explicitPolicy -= 1;
 		}
-		if (certificate.policyConstraints?.requireExplicitPolicy === 0) {
-			state.explicitPolicy = 0;
+		if (isNonNegativeInteger(certificate.policyConstraints?.requireExplicitPolicy)) {
+			if (certificate.policyConstraints.requireExplicitPolicy === 0) {
+				state.explicitPolicy = 0;
+			}
 		}
 		return;
 	}
@@ -712,23 +714,27 @@ function updatePolicyCounters(
 	}
 	const policyConstraints = certificate.policyConstraints;
 	if (
-		policyConstraints?.requireExplicitPolicy !== undefined &&
+		isNonNegativeInteger(policyConstraints?.requireExplicitPolicy) &&
 		policyConstraints.requireExplicitPolicy < state.explicitPolicy
 	) {
 		state.explicitPolicy = policyConstraints.requireExplicitPolicy;
 	}
 	if (
-		policyConstraints?.inhibitPolicyMapping !== undefined &&
+		isNonNegativeInteger(policyConstraints?.inhibitPolicyMapping) &&
 		policyConstraints.inhibitPolicyMapping < state.inhibitPolicyMapping
 	) {
 		state.inhibitPolicyMapping = policyConstraints.inhibitPolicyMapping;
 	}
 	if (
-		certificate.inhibitAnyPolicy !== undefined &&
+		isNonNegativeInteger(certificate.inhibitAnyPolicy?.skipCerts) &&
 		certificate.inhibitAnyPolicy.skipCerts < state.inhibitAnyPolicy
 	) {
 		state.inhibitAnyPolicy = certificate.inhibitAnyPolicy.skipCerts;
 	}
+}
+
+function isNonNegativeInteger(value: number | undefined): value is number {
+	return value !== undefined && Number.isInteger(value) && value >= 0;
 }
 
 /** A certificate is self-issued when subject and issuer DNs are semantically equal (RFC 5280 §7.1). */

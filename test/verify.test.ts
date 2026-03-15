@@ -3939,6 +3939,35 @@ describe('coverage: verify.ts internal edge cases', () => {
 		if (!result.ok) expect(result.code).toBe('name_constraints_violated');
 	});
 
+	it('ignores malformed pathLength values in tampered ParsedCertificate input', async () => {
+		const { parsedRoot, parsedLeaf } = await makeSelfSignedChain();
+		const tamperedRoot = {
+			...parsedRoot,
+			basicConstraints: { ca: true, pathLength: -1 },
+		};
+		const result = await validateCandidatePath({
+			chain: [parsedLeaf, tamperedRoot],
+			allowSelfSignedLeaf: true,
+		});
+		expect(result.ok).toBe(true);
+	});
+
+	it('returns typed expiry failure for malformed validity dates in tampered ParsedCertificate input', async () => {
+		const { parsedRoot, parsedLeaf } = await makeSelfSignedChain();
+		const tamperedLeaf = {
+			...parsedLeaf,
+			notBefore: new Date('invalid'),
+		};
+		const result = await validateCandidatePath({
+			chain: [tamperedLeaf, parsedRoot],
+			allowSelfSignedLeaf: true,
+		});
+		expect(result).toMatchObject({ ok: false, code: 'certificate_expired' });
+		if (!result.ok) {
+			expect(result.details?.actual).toContain('<invalid date>');
+		}
+	});
+
 	// --- parseIpAddressToBytes error paths (lines 1769, 1775) ---
 
 	it('rejects malformed IP SANs with wrong segment count (line 1769)', async () => {

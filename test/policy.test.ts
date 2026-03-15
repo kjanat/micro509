@@ -181,6 +181,270 @@ describe('policy fixtures', () => {
 		});
 	});
 
+	it('ignores tampered negative requireExplicitPolicy values', async () => {
+		const chain = await issuePolicyFixtureChain({
+			intermediates: [
+				{
+					commonName: 'Negative Explicit Intermediate',
+					certificatePolicies: ['1.2.3.4'],
+				},
+			],
+		});
+
+		const leaf = chain[0];
+		const intermediate = chain[1];
+		const root = chain[2];
+		if (leaf === undefined || intermediate === undefined || root === undefined) {
+			throw new Error('Missing policy fixture certificate');
+		}
+		const tamperedChain = [
+			leaf,
+			{
+				...intermediate,
+				policyConstraints: { requireExplicitPolicy: -1 },
+			},
+			root,
+		];
+
+		const result = await validateCandidatePath({
+			chain: tamperedChain,
+			requireExplicitPolicy: true,
+		});
+		expect(result).toMatchObject({
+			ok: false,
+			code: 'explicit_policy_required',
+		});
+	});
+
+	it('ignores tampered fractional requireExplicitPolicy values', async () => {
+		const chain = await issuePolicyFixtureChain({
+			intermediates: [
+				{
+					commonName: 'Fractional Explicit Intermediate',
+					certificatePolicies: ['1.2.3.4'],
+				},
+			],
+		});
+
+		const leaf = chain[0];
+		const intermediate = chain[1];
+		const root = chain[2];
+		if (leaf === undefined || intermediate === undefined || root === undefined) {
+			throw new Error('Missing policy fixture certificate');
+		}
+		const tamperedChain = [
+			leaf,
+			{
+				...intermediate,
+				policyConstraints: { requireExplicitPolicy: 0.5 },
+			},
+			root,
+		];
+
+		const result = await validateCandidatePath({
+			chain: tamperedChain,
+			requireExplicitPolicy: true,
+		});
+		expect(result).toMatchObject({
+			ok: false,
+			code: 'explicit_policy_required',
+		});
+	});
+
+	it('ignores tampered negative inhibitAnyPolicy values', async () => {
+		const chain = await issuePolicyFixtureChain({
+			intermediates: [
+				{
+					commonName: 'Negative AnyPolicy Intermediate',
+					certificatePolicies: ['1.2.3.4'],
+				},
+			],
+			leafPolicies: [OIDS.anyPolicy],
+		});
+
+		const leaf = chain[0];
+		const intermediate = chain[1];
+		const root = chain[2];
+		if (leaf === undefined || intermediate === undefined || root === undefined) {
+			throw new Error('Missing policy fixture certificate');
+		}
+		const tamperedChain = [
+			leaf,
+			{
+				...intermediate,
+				inhibitAnyPolicy: { skipCerts: -1 },
+			},
+			root,
+		];
+
+		const result = await validateCandidatePath({
+			chain: tamperedChain,
+			initialPolicySet: ['1.2.3.4'],
+		});
+		expect(result).toMatchObject({
+			ok: true,
+			policyValidation: {
+				userConstrainedPolicies: [{ policyIdentifier: '1.2.3.4' }],
+			},
+		});
+	});
+
+	it('ignores tampered fractional inhibitAnyPolicy values', async () => {
+		const chain = await issuePolicyFixtureChain({
+			intermediates: [
+				{
+					commonName: 'Fractional AnyPolicy Stage One',
+					certificatePolicies: ['1.2.3.4'],
+				},
+				{
+					commonName: 'Fractional AnyPolicy Stage Two',
+					certificatePolicies: ['1.2.3.4'],
+				},
+			],
+			leafPolicies: [OIDS.anyPolicy],
+		});
+
+		const leaf = chain[0];
+		const stageTwo = chain[1];
+		const stageOne = chain[2];
+		const root = chain[3];
+		if (
+			leaf === undefined ||
+			stageTwo === undefined ||
+			stageOne === undefined ||
+			root === undefined
+		) {
+			throw new Error('Missing policy fixture certificate');
+		}
+		const tamperedChain = [
+			leaf,
+			stageTwo,
+			{
+				...stageOne,
+				inhibitAnyPolicy: { skipCerts: 0.5 },
+			},
+			root,
+		];
+
+		const result = await validateCandidatePath({
+			chain: tamperedChain,
+			initialPolicySet: ['1.2.3.4'],
+		});
+		expect(result).toMatchObject({
+			ok: true,
+			policyValidation: {
+				userConstrainedPolicies: [{ policyIdentifier: '1.2.3.4' }],
+			},
+		});
+	});
+
+	it('ignores tampered negative inhibitPolicyMapping values', async () => {
+		const chain = await issuePolicyFixtureChain({
+			intermediates: [
+				{
+					commonName: 'Negative Mapping Constraint Stage One',
+					certificatePolicies: ['1.2.3.4'],
+				},
+				{
+					commonName: 'Negative Mapping Constraint Stage Two',
+					certificatePolicies: [OIDS.anyPolicy],
+					policyMappings: [{ issuerDomainPolicy: '1.2.3.4', subjectDomainPolicy: '1.2.3.5' }],
+				},
+			],
+			leafPolicies: ['1.2.3.5'],
+		});
+
+		const leaf = chain[0];
+		const stageTwo = chain[1];
+		const stageOne = chain[2];
+		const root = chain[3];
+		if (
+			leaf === undefined ||
+			stageTwo === undefined ||
+			stageOne === undefined ||
+			root === undefined
+		) {
+			throw new Error('Missing policy fixture certificate');
+		}
+		const tamperedChain = [
+			leaf,
+			stageTwo,
+			{
+				...stageOne,
+				policyConstraints: { inhibitPolicyMapping: -1 },
+			},
+			root,
+		];
+
+		const result = await validateCandidatePath({
+			chain: tamperedChain,
+			initialPolicySet: ['1.2.3.4'],
+		});
+		expect(result).toMatchObject({
+			ok: true,
+			policyValidation: {
+				userConstrainedPolicies: [{ policyIdentifier: '1.2.3.4' }],
+			},
+		});
+	});
+
+	it('ignores tampered fractional inhibitPolicyMapping values', async () => {
+		const chain = await issuePolicyFixtureChain({
+			intermediates: [
+				{
+					commonName: 'Fractional Mapping Constraint Stage One',
+					certificatePolicies: ['1.2.3.4'],
+				},
+				{
+					commonName: 'Fractional Mapping Constraint Stage Two',
+					certificatePolicies: ['1.2.3.4'],
+				},
+				{
+					commonName: 'Fractional Mapping Constraint Stage Three',
+					certificatePolicies: [OIDS.anyPolicy],
+					policyMappings: [{ issuerDomainPolicy: '1.2.3.4', subjectDomainPolicy: '1.2.3.5' }],
+				},
+			],
+			leafPolicies: ['1.2.3.5'],
+		});
+
+		const leaf = chain[0];
+		const stageThree = chain[1];
+		const stageTwo = chain[2];
+		const stageOne = chain[3];
+		const root = chain[4];
+		if (
+			leaf === undefined ||
+			stageThree === undefined ||
+			stageTwo === undefined ||
+			stageOne === undefined ||
+			root === undefined
+		) {
+			throw new Error('Missing policy fixture certificate');
+		}
+		const tamperedChain = [
+			leaf,
+			stageThree,
+			stageTwo,
+			{
+				...stageOne,
+				policyConstraints: { inhibitPolicyMapping: 0.5 },
+			},
+			root,
+		];
+
+		const result = await validateCandidatePath({
+			chain: tamperedChain,
+			initialPolicySet: ['1.2.3.4'],
+		});
+		expect(result).toMatchObject({
+			ok: true,
+			policyValidation: {
+				userConstrainedPolicies: [{ policyIdentifier: '1.2.3.4' }],
+			},
+		});
+	});
+
 	it('covers explicit-policy and anyPolicy rejection fixtures', async () => {
 		const explicitPolicyChain = await issuePolicyFixtureChain({});
 		const explicitPolicyFailure = await validateCandidatePath({
