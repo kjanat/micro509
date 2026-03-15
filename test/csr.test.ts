@@ -170,7 +170,7 @@ describe('csr', () => {
 		const parsed = parseCertificateSigningRequestPem(csr.pem);
 		expect(parsed.subject.values.commonName).toBe('csr.example');
 		expect(parsed.subjectAltNames).toEqual([{ type: 'dns', value: 'csr.example' }]);
-		expect(parsed.keyUsage).toEqual(['digitalSignature']);
+		expect(parsed.keyUsage).toEqual({ flags: ['digitalSignature'], nonZeroPadding: false });
 		expect(parsed.extendedKeyUsage).toEqual(['clientAuth', { type: 'oid', value: '1.2.3.4.6' }]);
 		expect(parsed.authorityInfoAccess).toEqual([
 			{ method: 'ocsp', uri: 'http://csr.example/ocsp' },

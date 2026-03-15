@@ -107,7 +107,7 @@ describe('crl', () => {
 				fullName: [{ type: 'uri', value: 'http://example.test/idp.crl' }],
 			},
 			onlyContainsUserCerts: true,
-			onlySomeReasons: ['keyCompromise', 'cessationOfOperation'],
+			onlySomeReasons: { flags: ['keyCompromise', 'cessationOfOperation'], nonZeroPadding: false },
 			indirectCrl: true,
 		});
 		expect(parsed.freshestCrlDistributionPoints).toEqual([
@@ -178,7 +178,7 @@ describe('crl', () => {
 				},
 			},
 			onlyContainsCACerts: true,
-			onlySomeReasons: ['cACompromise', 'superseded'],
+			onlySomeReasons: { flags: ['cACompromise', 'superseded'], nonZeroPadding: false },
 		});
 		expect(parsed.freshestCrlDistributionPoints).toHaveLength(2);
 		expect(parsed.freshestCrlDistributionPoints?.[0]).toEqual({
@@ -188,7 +188,7 @@ describe('crl', () => {
 					{ type: 'dns', value: 'delta.example.test' },
 				],
 			},
-			reasons: ['cACompromise'],
+			reasons: { flags: ['cACompromise'], nonZeroPadding: false },
 			crlIssuer: [{ type: 'dns', value: 'delta-issuer.example.test' }],
 		});
 		expect(parsed.freshestCrlDistributionPoints?.[1]).toMatchObject({

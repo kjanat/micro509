@@ -41,7 +41,7 @@ describe('x509 domain', () => {
 		expect(parsed.issuer.values.commonName).toBe('test-ca.example');
 
 		expect(parsed.basicConstraints).toEqual({ ca: true, pathLength: 1 });
-		expect(parsed.keyUsage).toEqual(['keyCertSign', 'cRLSign']);
+		expect(parsed.keyUsage).toEqual({ flags: ['keyCertSign', 'cRLSign'], nonZeroPadding: false });
 
 		const dns = parsed.subjectAltNames?.find((s) => s.type === 'dns');
 		expect(dns).toBeDefined();

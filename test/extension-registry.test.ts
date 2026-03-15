@@ -189,7 +189,7 @@ describe('extension registry', () => {
 
 		const parsed = parseCertificateDer(certificate.certificate.der);
 		expect(parsed.basicConstraints).toEqual({ ca: true, pathLength: 1 });
-		expect(parsed.keyUsage).toEqual(['keyCertSign', 'cRLSign']);
+		expect(parsed.keyUsage).toEqual({ flags: ['keyCertSign', 'cRLSign'], nonZeroPadding: false });
 		expect(parsed.extendedKeyUsage).toEqual(['serverAuth', { type: 'oid', value: '1.2.3.4.5.6' }]);
 		expect(parsed.subjectAltNames).toEqual([
 			{ type: 'dns', value: 'registry-cert.example' },
@@ -250,7 +250,7 @@ describe('extension registry', () => {
 		});
 		const parsed = parseCertificateSigningRequestDer(csr.der);
 		expect(parsed.basicConstraints).toEqual({ ca: true, pathLength: 0 });
-		expect(parsed.keyUsage).toEqual(['keyCertSign', 'cRLSign']);
+		expect(parsed.keyUsage).toEqual({ flags: ['keyCertSign', 'cRLSign'], nonZeroPadding: false });
 		expect(parsed.extendedKeyUsage).toEqual(['clientAuth']);
 		expect(parsed.subjectAltNames).toEqual([{ type: 'dns', value: 'registry-csr.example' }]);
 		expect(parsed.nameConstraints).toEqual({

@@ -255,7 +255,7 @@ describe('certificate', () => {
 					},
 				},
 			},
-			reasons: ['keyCompromise', 'privilegeWithdrawn'],
+			reasons: { flags: ['keyCompromise', 'privilegeWithdrawn'], nonZeroPadding: false },
 			crlIssuer: [
 				{ type: 'dns', value: 'crl-issuer.example.test' },
 				{ type: 'uri', value: 'http://issuer.example.test/alt.crl' },
@@ -290,7 +290,7 @@ describe('certificate', () => {
 		const parsed = parseCertificatePem(certificate.pem);
 		expect(parsed.crlDistributionPoints).toEqual([
 			{
-				reasons: ['cACompromise'],
+				reasons: { flags: ['cACompromise'], nonZeroPadding: false },
 				crlIssuer: [
 					{ type: 'dns', value: 'indirect-issuer.example.test' },
 					{ type: 'uri', value: 'http://issuer.example.test/indirect.crl' },

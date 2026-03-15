@@ -17,6 +17,7 @@ import {
 	sequence,
 } from '#micro509/internal/asn1/der.ts';
 import { OIDS } from '#micro509/internal/asn1/oids.ts';
+import type { ParsedBitFlags } from '#micro509/internal/x509/extension-bits.ts';
 import type {
 	AuthorityInformationAccess,
 	BasicConstraints,
@@ -73,7 +74,7 @@ export interface KnownParsedExtensionAccumulator {
 	/** Basic Constraints (CA flag + optional pathLength). */
 	readonly basicConstraints?: BasicConstraints;
 	/** Key Usage flags (digitalSignature, keyCertSign, etc.). */
-	readonly keyUsage?: readonly KeyUsage[];
+	readonly keyUsage?: ParsedBitFlags<KeyUsage>;
 	/** Extended Key Usage purposes (serverAuth, clientAuth, etc.). */
 	readonly extendedKeyUsage?: readonly ExtendedKeyUsage[];
 	/** Subject Alternative Names (dns, ip, email, uri, srv, directoryName). */
@@ -104,7 +105,7 @@ export interface KnownParsedExtensionAccumulator {
  */
 export interface MutableKnownParsedExtensionAccumulator extends KnownParsedExtensionAccumulator {
 	basicConstraints?: BasicConstraints;
-	keyUsage?: readonly KeyUsage[];
+	keyUsage?: ParsedBitFlags<KeyUsage>;
 	extendedKeyUsage?: readonly ExtendedKeyUsage[];
 	subjectAltNames?: readonly SubjectAltName[];
 	nameConstraints?: NameConstraints<ParsedNameConstraintForm>;
@@ -168,17 +169,19 @@ export const BASIC_CONSTRAINTS_EXTENSION_DEFINITION: ExtensionDefinition<BasicCo
 	});
 
 /** Registry entry for Key Usage (OID 2.5.29.15). Critical by default. */
-export const KEY_USAGE_EXTENSION_DEFINITION: ExtensionDefinition<readonly KeyUsage[]> =
-	defineExtensionDefinition<readonly KeyUsage[]>({
-		oid: OIDS.keyUsage,
-		contexts: ['certificate', 'csr'],
-		defaultCritical: true,
-		decode: (valueDer) => parseKeyUsage(valueDer),
-		encode: (value) => encodeKeyUsage(value),
-		applyParsed: (accumulator, value) => {
-			accumulator.keyUsage = value;
-		},
-	});
+export const KEY_USAGE_EXTENSION_DEFINITION: ExtensionDefinition<
+	ParsedBitFlags<KeyUsage>,
+	readonly KeyUsage[]
+> = defineExtensionDefinition<ParsedBitFlags<KeyUsage>, readonly KeyUsage[]>({
+	oid: OIDS.keyUsage,
+	contexts: ['certificate', 'csr'],
+	defaultCritical: true,
+	decode: (valueDer) => parseKeyUsage(valueDer),
+	encode: (value) => encodeKeyUsage(value),
+	applyParsed: (accumulator, value) => {
+		accumulator.keyUsage = value;
+	},
+});
 
 /** Registry entry for Extended Key Usage (OID 2.5.29.37). Non-critical by default. */
 export const EXTENDED_KEY_USAGE_EXTENSION_DEFINITION: ExtensionDefinition<

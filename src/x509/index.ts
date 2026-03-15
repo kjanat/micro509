@@ -87,6 +87,7 @@ export type {
 	DecodedExtensionValue,
 	ExtensionDecoder,
 	ExtensionDecoderMap,
+	ParsedBitFlags,
 	ParsedCertificate,
 	ParsedCertificateSigningRequest,
 	ParsedDistributionPoint,

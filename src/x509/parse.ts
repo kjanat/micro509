@@ -32,6 +32,7 @@ import {
 import { OIDS } from '#micro509/internal/asn1/oids.ts';
 import { decodeIpAddress } from '#micro509/internal/shared/ip.ts';
 import {
+	type ParsedBitFlags,
 	parseDistributionPointReasonFlagsContent,
 	parseKeyUsageExtension,
 } from '#micro509/internal/x509/extension-bits.ts';
@@ -60,6 +61,7 @@ import type {
 import { parseAuthorityInfoAccessMethodOid, parseExtendedKeyUsageOid } from './extensions.ts';
 import { type NameFieldKey, nameFieldKeyFromOid } from './name.ts';
 
+export type { ParsedBitFlags } from '#micro509/internal/x509/extension-bits.ts';
 export type {
 	AuthorityInformationAccess,
 	BasicConstraints,
@@ -142,7 +144,7 @@ export interface ParsedDistributionPoint {
 	/** Where to fetch the CRL — a fullName URI or relativeName. */
 	readonly distributionPoint?: ParsedDistributionPointName;
 	/** Revocation reason subset this distribution point covers. Absent means all reasons. */
-	readonly reasons?: readonly DistributionPointReason[];
+	readonly reasons?: ParsedBitFlags<DistributionPointReason>;
 	/** Entity that signed the CRL, when different from the certificate issuer. */
 	readonly crlIssuer?: readonly GeneralName[];
 }
@@ -159,7 +161,7 @@ export interface ParsedIssuingDistributionPoint {
 	/** When true, this CRL only covers CA certificates. Default false. */
 	readonly onlyContainsCACerts?: boolean;
 	/** Limits the CRL to these revocation reasons. Absent means all reasons. */
-	readonly onlySomeReasons?: readonly DistributionPointReason[];
+	readonly onlySomeReasons?: ParsedBitFlags<DistributionPointReason>;
 	/** When true, this CRL may contain entries from CAs other than the issuer. Default false. */
 	readonly indirectCrl?: boolean;
 	/** When true, this CRL only covers attribute certificates. Default false. */
@@ -292,7 +294,7 @@ export interface ParsedCertificate<TMap extends ExtensionDecoderMap = Record<nev
 	/** Decoded Basic Constraints (RFC 5280 §4.2.1.9). */
 	readonly basicConstraints?: BasicConstraints;
 	/** Decoded Key Usage bit flags (RFC 5280 §4.2.1.3). */
-	readonly keyUsage?: readonly KeyUsage[];
+	readonly keyUsage?: ParsedBitFlags<KeyUsage>;
 	/** Decoded Extended Key Usage purposes (RFC 5280 §4.2.1.12). */
 	readonly extendedKeyUsage?: readonly ExtendedKeyUsage[];
 	/** Decoded Subject Alternative Names (RFC 5280 §4.2.1.6). */
@@ -355,7 +357,7 @@ export interface ParsedCertificateSigningRequest<
 	/** Decoded Basic Constraints from the extensionRequest attribute. */
 	readonly basicConstraints?: BasicConstraints;
 	/** Decoded Key Usage from the extensionRequest attribute. */
-	readonly keyUsage?: readonly KeyUsage[];
+	readonly keyUsage?: ParsedBitFlags<KeyUsage>;
 	/** Decoded Extended Key Usage from the extensionRequest attribute. */
 	readonly extendedKeyUsage?: readonly ExtendedKeyUsage[];
 	/** Decoded Subject Alternative Names from the extensionRequest attribute. */
@@ -950,7 +952,7 @@ export function parseBasicConstraints(bytes: Uint8Array): BasicConstraints {
 }
 
 /** @internal Decode the Key Usage BIT STRING extension value. */
-export function parseKeyUsage(bytes: Uint8Array): readonly KeyUsage[] {
+export function parseKeyUsage(bytes: Uint8Array): ParsedBitFlags<KeyUsage> {
 	return parseKeyUsageExtension(bytes);
 }
 
@@ -1231,7 +1233,7 @@ export function parseCrlDistributionPoints(bytes: Uint8Array): readonly ParsedDi
 /** Decode a single DistributionPoint SEQUENCE. */
 function parseDistributionPoint(source: Uint8Array, element: DerElement): ParsedDistributionPoint {
 	let distributionPoint: ParsedDistributionPointName | undefined;
-	let reasons: readonly DistributionPointReason[] | undefined;
+	let reasons: ParsedBitFlags<DistributionPointReason> | undefined;
 	let crlIssuer: readonly GeneralName[] | undefined;
 	for (const child of childrenOf(source, element)) {
 		if (child.tag === 0xa0) {

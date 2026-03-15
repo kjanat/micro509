@@ -52,6 +52,7 @@ import { compareDistinguishedNames } from '#micro509/internal/shared/dn.ts';
 import { decodeIpAddress } from '#micro509/internal/shared/ip.ts';
 import {
 	encodeDistributionPointReasonFlagsContent,
+	type ParsedBitFlags,
 	parseDistributionPointReasonFlagsContent,
 } from '#micro509/internal/x509/extension-bits.ts';
 import { exportSpkiDer } from '#micro509/keys/keys.ts';
@@ -639,7 +640,7 @@ export async function validateCertificateRevocationList(
 			'CRL authority key identifier does not match issuer subject key identifier',
 		);
 	}
-	if (issuer.keyUsage !== undefined && !issuer.keyUsage.includes('cRLSign')) {
+	if (issuer.keyUsage !== undefined && !issuer.keyUsage.flags.includes('cRLSign')) {
 		return validateCertificateRevocationListFailureResult(
 			'crl_sign_not_permitted',
 			'issuer certificate key usage does not permit CRL signing',
@@ -1262,27 +1263,27 @@ function sameGeneralNameSet(left: readonly GeneralName[], right: readonly Genera
 
 /** Set-equality comparison for DistributionPointReason arrays. */
 function sameReasonSet(
-	left: readonly DistributionPointReason[] | undefined,
-	right: readonly DistributionPointReason[] | undefined,
+	left: ParsedBitFlags<DistributionPointReason> | undefined,
+	right: ParsedBitFlags<DistributionPointReason> | undefined,
 ): boolean {
 	if (left === undefined || right === undefined) {
 		return left === right;
 	}
-	if (left.length !== right.length) {
+	if (left.flags.length !== right.flags.length) {
 		return false;
 	}
-	return left.every((reason) => right.includes(reason));
+	return left.flags.every((reason) => right.flags.includes(reason));
 }
 
 /** Returns `true` if the certificate's DP reasons overlap the CRL's `onlySomeReasons`, or if either is absent (= all reasons). */
 function hasOverlappingReasons(
-	certificateReasons: readonly DistributionPointReason[] | undefined,
-	crlReasons: readonly DistributionPointReason[] | undefined,
+	certificateReasons: ParsedBitFlags<DistributionPointReason> | undefined,
+	crlReasons: ParsedBitFlags<DistributionPointReason> | undefined,
 ): boolean {
 	if (certificateReasons === undefined || crlReasons === undefined) {
 		return true;
 	}
-	return certificateReasons.some((reason) => crlReasons.includes(reason));
+	return certificateReasons.flags.some((reason) => crlReasons.flags.includes(reason));
 }
 
 /** Value-equality for two GeneralName entries, using DER comparison for directoryName. */
@@ -1506,7 +1507,7 @@ function parseIssuingDistributionPoint(valueDer: Uint8Array): ParsedIssuingDistr
 	let distributionPoint: ParsedDistributionPointName | undefined;
 	let onlyContainsUserCerts: boolean | undefined;
 	let onlyContainsCACerts: boolean | undefined;
-	let onlySomeReasons: readonly DistributionPointReason[] | undefined;
+	let onlySomeReasons: ParsedBitFlags<DistributionPointReason> | undefined;
 	let indirectCrl: boolean | undefined;
 	let onlyContainsAttributeCerts: boolean | undefined;
 	for (const child of childrenOf(valueDer, sequenceElement)) {
@@ -1572,7 +1573,7 @@ function parseDistributionPoint(
 	element: DerElement,
 ): ParsedDistributionPoint {
 	let distributionPoint: ParsedDistributionPointName | undefined;
-	let reasons: readonly DistributionPointReason[] | undefined;
+	let reasons: ParsedBitFlags<DistributionPointReason> | undefined;
 	let crlIssuer: readonly GeneralName[] | undefined;
 	for (const child of childrenOf(valueDer, element)) {
 		if (child.tag === 0xa0) {

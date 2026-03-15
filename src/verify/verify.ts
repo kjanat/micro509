@@ -714,7 +714,7 @@ async function validateCandidatePathRaw(
 				}),
 			);
 		}
-		if (issuer.keyUsage !== undefined && !issuer.keyUsage.includes('keyCertSign')) {
+		if (issuer.keyUsage !== undefined && !issuer.keyUsage.flags.includes('keyCertSign')) {
 			return failure(
 				'key_cert_sign_required',
 				'issuer missing keyCertSign',

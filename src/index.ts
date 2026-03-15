@@ -330,6 +330,7 @@ export type {
 	NameFieldKey,
 	NameInput,
 	NameObject,
+	ParsedBitFlags,
 	ParsedCertificate,
 	ParsedCertificateSigningRequest,
 	ParsedDistributionPoint,

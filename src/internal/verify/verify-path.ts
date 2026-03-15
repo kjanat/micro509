@@ -280,7 +280,7 @@ export async function buildChainInternal(
 				);
 				continue;
 			}
-			if (issuer.keyUsage !== undefined && !issuer.keyUsage.includes('keyCertSign')) {
+			if (issuer.keyUsage !== undefined && !issuer.keyUsage.flags.includes('keyCertSign')) {
 				recordFailure(
 					callbacks.failure(
 						'key_cert_sign_required',

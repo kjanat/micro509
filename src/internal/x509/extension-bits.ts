@@ -10,6 +10,21 @@
 import { bitString, DEFAULT_MAX_DER_DEPTH, readRootElement } from '#micro509/internal/asn1/der.ts';
 import type { DistributionPointReason, KeyUsage } from '#micro509/x509/extensions.ts';
 
+/**
+ * Decoded BIT STRING flags with DER conformance metadata.
+ *
+ * `flags` contains the recognized flag values with any non-zero padding bits
+ * masked out. `nonZeroPadding` is `true` when the original BIT STRING encoding
+ * had non-zero bits in positions that DER (X.690 §11.2.2) requires to be zero.
+ * Verification layers can use this signal to reject non-conformant encodings.
+ */
+export interface ParsedBitFlags<T extends string> {
+	/** Decoded flag values, padding bits masked. */
+	readonly flags: readonly T[];
+	/** `true` when the original encoding had non-zero padding bits (DER violation). */
+	readonly nonZeroPadding: boolean;
+}
+
 /** Canonical bit-position order for Key Usage flags (RFC 5280 §4.2.1.3). */
 const KEY_USAGE_ORDER = [
 	'digitalSignature',
@@ -52,7 +67,7 @@ export function encodeKeyUsageExtension(usages: readonly KeyUsage[]): Uint8Array
  *
  * @param bytes DER of the keyUsage extension value (BIT STRING).
  */
-export function parseKeyUsageExtension(bytes: Uint8Array): readonly KeyUsage[] {
+export function parseKeyUsageExtension(bytes: Uint8Array): ParsedBitFlags<KeyUsage> {
 	const bitStringElement = readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH });
 	if (bitStringElement.tag !== 0x03) {
 		throw new Error('keyUsage must be a BIT STRING');
@@ -85,9 +100,9 @@ export function encodeDistributionPointReasonFlagsContent(
  */
 export function parseDistributionPointReasonFlagsContent(
 	value: Uint8Array,
-): readonly DistributionPointReason[] | undefined {
-	const reasons = decodeBitFlags(value, DISTRIBUTION_POINT_REASON_ORDER, 1);
-	return reasons.length === 0 ? undefined : reasons;
+): ParsedBitFlags<DistributionPointReason> | undefined {
+	const result = decodeBitFlags(value, DISTRIBUTION_POINT_REASON_ORDER, 1);
+	return result.flags.length === 0 ? undefined : result;
 }
 
 /** Pack named flags into a minimal byte array with DER BIT STRING unused-bits count. */
@@ -130,7 +145,7 @@ function decodeBitFlags<T extends string>(
 	value: Uint8Array,
 	candidates: readonly T[],
 	bitOffset: number,
-): readonly T[] {
+): ParsedBitFlags<T> {
 	if (value.length === 0) {
 		throw new Error('Empty BIT STRING');
 	}
@@ -139,16 +154,20 @@ function decodeBitFlags<T extends string>(
 		throw new Error('Invalid BIT STRING');
 	}
 	const bytes = value.slice(1);
-	// NOTE: We intentionally do not validate that the lower `unusedBits` of the
-	// last byte are zero (DER X.690 §11.2.2). This is parse infrastructure —
-	// strict DER validation belongs in the verification layer. Rejecting non-zero
-	// padding here would break interop with real-world certificates that have
-	// non-conformant BIT STRING encodings, without any correctness benefit: the
-	// decode loop only inspects bits at known candidate positions.
 	if (bytes.length === 0 && unusedBits !== 0) {
 		throw new Error('Invalid BIT STRING');
 	}
-	const out: T[] = [];
+	// Detect non-zero padding bits in the unused positions of the last byte.
+	// DER X.690 §11.2.2 requires these to be zero. Rather than rejecting here
+	// (which would break interop with real-world non-conformant certificates),
+	// we record the violation so verification layers can decide.
+	let nonZeroPadding = false;
+	if (unusedBits > 0 && bytes.length > 0) {
+		const lastByte = bytes[bytes.length - 1] ?? 0;
+		const paddingMask = (1 << unusedBits) - 1;
+		nonZeroPadding = (lastByte & paddingMask) !== 0;
+	}
+	const flags: T[] = [];
 	for (let index = 0; index < candidates.length; index += 1) {
 		const bit = index + bitOffset;
 		const byteIndex = Math.floor(bit / 8);
@@ -160,11 +179,11 @@ function decodeBitFlags<T extends string>(
 		if ((byte & (1 << (7 - bitIndex))) !== 0) {
 			const candidate = candidates[index];
 			if (candidate !== undefined) {
-				out.push(candidate);
+				flags.push(candidate);
 			}
 		}
 	}
-	return out;
+	return { flags, nonZeroPadding };
 }
 
 /** Look up the bit position of a flag in its canonical order array. Throws on unknown flags. */
