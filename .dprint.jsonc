@@ -51,8 +51,8 @@
 		"svelteDirectiveShorthand": true,
 		"ignoreCommentDirective": "dprint-ignore",
 		"ignoreFileCommentDirective": "dprint-ignore-file",
-		"associations": ["!**/*.svg"],
 		"scriptFormatter": "biome",
+		"associations": ["!**/*.svg"],
 	},
 	"yaml": {
 		"printWidth": 160,
@@ -109,7 +109,6 @@
 		"json.indentStyle": "tab",
 		"json.lineWidth": 100,
 	},
-	"incremental": false,
 	"lineWidth": 100,
 	"toml": {
 		"comment.forceLeadingSpace": false,

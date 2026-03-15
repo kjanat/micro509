@@ -35,6 +35,12 @@
 		{
 			"includes": ["**/*.jsonc", "!biome.jsonc"],
 			"json": { "formatter": { "trailingCommas": "all" } }
+		},
+		{
+			"includes": ["**/site"],
+			"formatter": {
+				"lineWidth": 60
+			}
 		}
 	]
 }

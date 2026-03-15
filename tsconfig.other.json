@@ -22,6 +22,6 @@
 		"isolatedDeclarations": false,
 		"customConditions": ["bun"]
 	},
-	"include": ["src", "test", "scripts", "*.config.ts", "*.json"],
+	"include": ["src", "test", "scripts", "site", "*.config.ts", "*.json"],
 	"exclude": ["dist", "node_modules"]
 }

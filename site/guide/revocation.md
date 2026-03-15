@@ -11,7 +11,9 @@ const crl = await createCertificateRevocationList({
   issuerCertificate: ca.certificate,
   signerPrivateKey: ca.keyPair.privateKey,
   thisUpdate: new Date(),
-  nextUpdate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+  nextUpdate: new Date(
+    Date.now() + 7 * 24 * 60 * 60 * 1000,
+  ),
   revokedCertificates: [
     {
       serialNumber: '01',
@@ -33,7 +35,10 @@ import {
 
 const parsed = parseCertificateRevocationListPem(pem);
 
-const verifyResult = await verifyCertificateRevocationList(parsed, ca.certificate);
+const verifyResult = await verifyCertificateRevocationList(
+  parsed,
+  ca.certificate,
+);
 
 const revoked = isCertificateRevoked('01', parsed);
 ```
@@ -54,7 +59,10 @@ const request = await createOcspRequest({
 ### Parse and validate a response
 
 ```ts
-import { parseOcspResponseDer, validateOcspResponse } from 'micro509/revocation';
+import {
+  parseOcspResponseDer,
+  validateOcspResponse,
+} from 'micro509/revocation';
 
 const response = parseOcspResponseDer(der);
 

@@ -5,27 +5,32 @@
 ```ts
 import { createSelfSignedCertificate } from 'micro509';
 
-const { certificate, keyPair } = await createSelfSignedCertificate({
-  subject: {
-    commonName: 'example.com',
-    organization: 'Acme',
-    country: 'US',
-  },
-  validity: { days: 365 },
-  extensions: {
-    keyUsage: ['digitalSignature', 'keyEncipherment'],
-    subjectAltNames: [
-      { type: 'dns', value: 'example.com' },
-      { type: 'dns', value: '*.example.com' },
-    ],
-  },
-});
+const { certificate, keyPair } =
+  await createSelfSignedCertificate({
+    subject: {
+      commonName: 'example.com',
+      organization: 'Acme',
+      country: 'US',
+    },
+    validity: { days: 365 },
+    extensions: {
+      keyUsage: ['digitalSignature', 'keyEncipherment'],
+      subjectAltNames: [
+        { type: 'dns', value: 'example.com' },
+        { type: 'dns', value: '*.example.com' },
+      ],
+    },
+  });
 ```
 
 ## Create a CA-signed certificate
 
 ```ts
-import { createCertificate, createSelfSignedCertificate, generateKeyPair } from 'micro509';
+import {
+  createCertificate,
+  createSelfSignedCertificate,
+  generateKeyPair,
+} from 'micro509';
 
 // Create a CA
 const ca = await createSelfSignedCertificate({
@@ -38,7 +43,10 @@ const ca = await createSelfSignedCertificate({
 });
 
 // Generate a key pair for the leaf certificate
-const leafKeyPair = await generateKeyPair({ kind: 'ecdsa', namedCurve: 'P-256' });
+const leafKeyPair = await generateKeyPair({
+  kind: 'ecdsa',
+  namedCurve: 'P-256',
+});
 
 // Issue a leaf certificate
 const leaf = await createCertificate({
@@ -49,7 +57,9 @@ const leaf = await createCertificate({
   subjectPublicKey: leafKeyPair.publicKey,
   extensions: {
     keyUsage: ['digitalSignature'],
-    subjectAltNames: [{ type: 'dns', value: 'leaf.example.com' }],
+    subjectAltNames: [
+      { type: 'dns', value: 'leaf.example.com' },
+    ],
   },
 });
 ```
@@ -57,7 +67,10 @@ const leaf = await createCertificate({
 ## Create a CSR
 
 ```ts
-import { createCertificateSigningRequest, generateKeyPair } from 'micro509';
+import {
+  createCertificateSigningRequest,
+  generateKeyPair,
+} from 'micro509';
 
 const keyPair = await generateKeyPair({ kind: 'ed25519' });
 const csr = await createCertificateSigningRequest({
@@ -65,7 +78,9 @@ const csr = await createCertificateSigningRequest({
   publicKey: keyPair.publicKey,
   signerPrivateKey: keyPair.privateKey,
   extensions: {
-    subjectAltNames: [{ type: 'dns', value: 'csr.example' }],
+    subjectAltNames: [
+      { type: 'dns', value: 'csr.example' },
+    ],
   },
 });
 ```

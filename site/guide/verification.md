@@ -10,11 +10,18 @@ const result = await verifyCertificateChain({
   intermediates: [intermediate.pem],
   roots: [root.pem],
   purpose: 'serverAuth',
-  serviceIdentity: { type: 'dns', value: 'api.example.com' },
+  serviceIdentity: {
+    type: 'dns',
+    value: 'api.example.com',
+  },
 });
 
 if (result.ok) {
-  console.log('Valid chain:', result.value.chain.length, 'certificates');
+  console.log(
+    'Valid chain:',
+    result.value.chain.length,
+    'certificates',
+  );
 } else {
   console.log('Failed:', result.error.code);
   console.log('At index:', result.error.index);
@@ -95,7 +102,9 @@ The `VerifyErrorCode` type covers 21 failure modes:
 ```ts
 import { verifyCertificateSigningRequest } from 'micro509';
 
-const result = await verifyCertificateSigningRequest(csr.pem);
+const result = await verifyCertificateSigningRequest(
+  csr.pem,
+);
 
 if (result.ok) {
   console.log('CSR signature valid');

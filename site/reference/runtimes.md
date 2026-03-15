@@ -21,7 +21,7 @@ micro509 requires these global APIs:
 - `TextEncoder` / `TextDecoder`
 - `atob` / `btoa`
 
-No Node.js builtins (`crypto`, `buffer`, `fs`, etc.) are used in library code.
+_No_ Node.js builtins (`crypto`, `buffer`, `fs`, etc.) are used in library code.
 
 ## Tree-shaking
 

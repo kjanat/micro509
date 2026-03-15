@@ -1,4 +1,7 @@
+import { robotsTxt } from 'vite-robots-txt';
+import svgToIco from 'vite-svg-to-ico';
 import { defineConfig } from 'vitepress';
+import pkg from '../../package.json' with { type: 'json' };
 import typedocSidebar from '../reference/api/typedoc-sidebar.json';
 
 const apiSidebar = Array.isArray(typedocSidebar)
@@ -9,21 +12,37 @@ const apiSidebar = Array.isArray(typedocSidebar)
 	: [];
 
 export default defineConfig({
-	vite: { build: { chunkSizeWarningLimit: 1500 } },
-	title: 'micro509',
-	description:
-		'The TypeScript PKI library that tells you why verification failed, not just that it did.',
+	vite: {
+		build: { chunkSizeWarningLimit: 1500 },
+		plugins: [
+			robotsTxt({ preset: 'disallowAll' }),
+			svgToIco({
+				input: `${import.meta.dirname}/../assets/favicon.svg`,
+				emit: { source: true, inject: false },
+			}),
+		],
+	},
+	title: pkg.name,
+	description: pkg.description,
 	base: '/',
 	cleanUrls: true,
 	lastUpdated: true,
 
-	head: [['meta', { name: 'theme-color', content: '#3c8772' }]],
+	head: [
+		['meta', { name: 'theme-color', content: '#3c8772' }],
+		[
+			'link',
+			{ rel: 'icon', href: '/favicon.ico', type: 'image/x-icon', sizes: '16x16 32x32 48x48' },
+		],
+		['link', { rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml' }],
+	],
 
 	themeConfig: {
+		logo: '/assets/favicon.svg',
 		nav: [
 			{ text: 'Guide', link: '/guide/getting-started' },
 			{ text: 'API', link: '/reference/api/' },
-			{ text: 'Standards', link: '/reference/standards' },
+			{ text: 'Reference', link: '/reference/standards' },
 		],
 
 		sidebar: {
@@ -32,7 +51,7 @@ export default defineConfig({
 					text: 'Introduction',
 					items: [
 						{ text: 'Getting Started', link: '/guide/getting-started' },
-						{ text: 'Why micro509', link: '/guide/why' },
+						{ text: `Why ${pkg.name}?`, link: '/guide/why' },
 					],
 				},
 				{
@@ -67,7 +86,7 @@ export default defineConfig({
 		socialLinks: [{ icon: 'github', link: 'https://github.com/kjanat/ts-x509' }],
 
 		footer: {
-			message: 'Released under the MIT License.',
+			message: `Released under the ${pkg.license} License.`,
 		},
 
 		search: {

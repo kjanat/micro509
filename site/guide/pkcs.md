@@ -56,12 +56,17 @@ if (result.ok) {
 ### Verify SignedData
 
 ```ts
-import { parsePkcs7SignedDataDer, verifyPkcs7SignedData } from 'micro509/pkcs';
+import {
+  parsePkcs7SignedDataDer,
+  verifyPkcs7SignedData,
+} from 'micro509/pkcs';
 
 const result = parsePkcs7SignedDataDer(der);
 
 if (result.ok) {
-  const verifyResult = await verifyPkcs7SignedData(result.value);
+  const verifyResult = await verifyPkcs7SignedData(
+    result.value,
+  );
 
   if (verifyResult.ok) {
     console.log('All signers verified');
@@ -72,10 +77,16 @@ if (result.ok) {
 ## PEM utilities
 
 ```ts
-import { pemDecode, pemEncode, splitPemBlocks, categorizePemBlocks } from 'micro509/pem';
+import {
+  pemDecode,
+  pemEncode,
+  splitPemBlocks,
+  categorizePemBlocks,
+} from 'micro509/pem';
 
 // Decode a single PEM block
-const pem = '-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----';
+const pem =
+  '-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----';
 const der = pemDecode(pem);
 
 // Encode DER as PEM
@@ -85,5 +96,6 @@ const pemEncoded = pemEncode(der, 'CERTIFICATE');
 const blocks = splitPemBlocks(multiPem);
 
 // Categorize blocks by type
-const { certificates, privateKeys, csrs } = categorizePemBlocks(multiPem);
+const { certificates, privateKeys, csrs } =
+  categorizePemBlocks(multiPem);
 ```

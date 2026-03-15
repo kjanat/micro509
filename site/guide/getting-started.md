@@ -14,6 +14,13 @@ npm install micro509
 bun add micro509
 ```
 
+```bash
+deno add jsr:@kjanat/micro509
+import * as micro509 from "@kjanat/micro509";
+# or directly in code:
+import * as micro509 from "jsr:@kjanat/micro509";
+```
+
 ## Quick Start
 
 ### Create a self-signed certificate
@@ -21,21 +28,22 @@ bun add micro509
 ```ts
 import { createSelfSignedCertificate } from 'micro509';
 
-const { certificate, keyPair } = await createSelfSignedCertificate({
-  subject: {
-    commonName: 'example.com',
-    organization: 'Acme',
-    country: 'US',
-  },
-  validity: { days: 30 },
-  extensions: {
-    keyUsage: ['digitalSignature', 'keyEncipherment'],
-    subjectAltNames: [
-      { type: 'dns', value: 'example.com' },
-      { type: 'dns', value: 'www.example.com' },
-    ],
-  },
-});
+const { certificate, keyPair } =
+  await createSelfSignedCertificate({
+    subject: {
+      commonName: 'example.com',
+      organization: 'Acme',
+      country: 'US',
+    },
+    validity: { days: 30 },
+    extensions: {
+      keyUsage: ['digitalSignature', 'keyEncipherment'],
+      subjectAltNames: [
+        { type: 'dns', value: 'example.com' },
+        { type: 'dns', value: 'www.example.com' },
+      ],
+    },
+  });
 
 console.log(certificate.pem);
 console.log(await keyPair.exportPkcs8Pem());
@@ -44,7 +52,10 @@ console.log(await keyPair.exportPkcs8Pem());
 ### Create a CSR
 
 ```ts
-import { createCertificateSigningRequest, generateKeyPair } from 'micro509';
+import {
+  createCertificateSigningRequest,
+  generateKeyPair,
+} from 'micro509';
 
 const keyPair = await generateKeyPair({ kind: 'ed25519' });
 const csr = await createCertificateSigningRequest({
@@ -52,7 +63,9 @@ const csr = await createCertificateSigningRequest({
   publicKey: keyPair.publicKey,
   signerPrivateKey: keyPair.privateKey,
   extensions: {
-    subjectAltNames: [{ type: 'dns', value: 'csr.example' }],
+    subjectAltNames: [
+      { type: 'dns', value: 'csr.example' },
+    ],
   },
 });
 
@@ -62,7 +75,10 @@ console.log(csr.pem);
 ### Parse a certificate
 
 ```ts
-import { parseCertificatePem, createSelfSignedCertificate } from 'micro509';
+import {
+  parseCertificatePem,
+  createSelfSignedCertificate,
+} from 'micro509';
 
 // Using the certificate from the first example
 const { certificate } = await createSelfSignedCertificate({
@@ -79,7 +95,10 @@ console.log(parsed.authorityInfoAccess);
 ### Verify a chain
 
 ```ts
-import { verifyCertificateChain, createSelfSignedCertificate } from 'micro509';
+import {
+  verifyCertificateChain,
+  createSelfSignedCertificate,
+} from 'micro509';
 
 // Using certificates from previous examples
 const { certificate } = await createSelfSignedCertificate({
@@ -107,15 +126,25 @@ if (result.ok) {
 Use the root package for most applications:
 
 ```ts
-import { createCertificate, parseCertificatePem, verifyCertificateChain } from 'micro509';
+import {
+  createCertificate,
+  parseCertificatePem,
+  verifyCertificateChain,
+} from 'micro509';
 ```
 
 Use domain entrypoints for exhaustive advanced types or a narrower workflow surface:
 
 ```ts
 import { parseCertificatePem } from 'micro509/x509';
-import { verifyCertificateChain, matchServiceIdentity } from 'micro509/verify';
-import { createOcspRequest, checkCertificateRevocation } from 'micro509/revocation';
+import {
+  verifyCertificateChain,
+  matchServiceIdentity,
+} from 'micro509/verify';
+import {
+  createOcspRequest,
+  checkCertificateRevocation,
+} from 'micro509/revocation';
 import { createPfx } from 'micro509/pkcs';
 import { generateKeyPair } from 'micro509/keys';
 import { pemDecode, pemEncode } from 'micro509/pem';

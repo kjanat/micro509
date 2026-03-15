@@ -5,30 +5,30 @@
 | Algorithm       | Certificate / CSR signing | Chain verification |
 | --------------- | :-----------------------: | :----------------: |
 | RSA PKCS#1 v1.5 |            yes            |        yes         |
-| RSA-PSS         |            yes            |        yes         |
-| ECDSA P-256     |            yes            |        yes         |
-| ECDSA P-384     |            yes            |        yes         |
-| ECDSA P-521     |            yes            |        yes         |
+| RSA‑PSS         |            yes            |        yes         |
+| ECDSA P‑256     |            yes            |        yes         |
+| ECDSA P‑384     |            yes            |        yes         |
+| ECDSA P‑521     |            yes            |        yes         |
 | Ed25519         |            yes            |        yes         |
 
 ## Key formats
 
 | Format       | Import | Export |        Encrypted         |
 | ------------ | :----: | :----: | :----------------------: |
-| PKCS#8       |  yes   |  yes   | PBES2 (AES-CBC + PBKDF2) |
+| PKCS#8       |  yes   |  yes   | PBES2 (AES‑CBC + PBKDF2) |
 | SPKI         |  yes   |  yes   |            —             |
 | JWK          |  yes   |  yes   |            —             |
-| PKCS#1 (RSA) |  yes   |  yes   |   Legacy PEM (AES-CBC)   |
-| SEC1 (EC)    |  yes   |  yes   |   Legacy PEM (AES-CBC)   |
+| PKCS#1 (RSA) |  yes   |  yes   |   Legacy PEM (AES‑CBC)   |
+| SEC1 (EC)    |  yes   |  yes   |   Legacy PEM (AES‑CBC)   |
 
 ## Encryption
 
 | Context              | Schemes                                              |
 | -------------------- | ---------------------------------------------------- |
-| Encrypted PKCS#8     | PBES2 with AES-CBC + PBKDF2 HMAC-SHA1 or HMAC-SHA256 |
-| Encrypted PFX        | PBES2 with AES-CBC + PBKDF2 HMAC-SHA1 or HMAC-SHA256 |
-| Legacy encrypted PEM | AES-128-CBC, AES-192-CBC, AES-256-CBC                |
-| PKCS#12 MAC          | PKCS#12 KDF + HMAC-SHA-256                           |
+| Encrypted PKCS#8     | PBES2 with AES‑CBC + PBKDF2 HMAC‑SHA1 or HMAC‑SHA256 |
+| Encrypted PFX        | PBES2 with AES‑CBC + PBKDF2 HMAC‑SHA1 or HMAC‑SHA256 |
+| Legacy encrypted PEM | AES‑128‑CBC, AES‑192‑CBC, AES‑256‑CBC                |
+| PKCS#12 MAC          | PKCS#12 KDF + HMAC‑SHA‑256                           |
 
 ## Not supported
 

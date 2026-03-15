@@ -1,9 +1,9 @@
 {
-	"$schema": "https://typedoc.org/schema.json",
+	"$schema": "./node_modules/typedoc/typedoc-config.schema.json",
 	"name": "micro509",
 	"cname": "micro509.kjanat.com",
 	"includeVersion": true,
-	"githubPages": true,
+	"githubPages": false,
 	"entryPoints": [
 		"src/index.ts",
 		"src/keys/index.ts",
@@ -22,8 +22,9 @@
 	"excludePrivate": true,
 	"excludeInternal": true,
 	"readme": "none",
+	"entryFileName": "modules",
 	"outputFileStrategy": "modules",
-	"mergeReadme": false,
 	"hidePageHeader": true,
-	"hideBreadcrumbs": true
+	"hideBreadcrumbs": false,
+	"typePrintWidth": 60
 }
