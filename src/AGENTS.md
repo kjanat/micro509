@@ -33,6 +33,13 @@ barrels under `x509`, `verify`, `revocation`, `keys`, `pem`, `pkcs`, and
 - Public leaf modules import from `internal` but must not import sibling public
   domain barrels.
 - Validation semantics belong to `verify`; parse semantics belong to `x509`.
+- PEM parsing/formatting lives only in `pem/pem.ts`; do not duplicate splitting
+  logic in other modules.
+- Key import/export must not silently fall back between schemes; fail with
+  concrete error values. Keep WebCrypto assumptions and legacy compatibility
+  options explicit and typed in `keys/keys.ts`.
+- Do not return raw string errors in new result code; do not widen `Result`
+  without callers handling the new branch.
 
 ## HOTSPOTS
 
@@ -50,3 +57,4 @@ barrels under `x509`, `verify`, `revocation`, `keys`, `pem`, `pkcs`, and
   module.
 - Do not add parse-tolerant behavior in validation layers.
 - Do not bypass result ADTs with `throw` for expected domain failures.
+- Do not silently normalize malformed PEM payloads.

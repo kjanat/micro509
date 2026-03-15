@@ -33,6 +33,8 @@ internal/
   root API barrels unless requested by API changes.
 - Keep import direction inward: public leaf → internal.
 - Avoid public barrel dependence inside internal modules.
+- `shared/` helpers must stay pure and deterministic; do not add domain-specific
+  policy logic there.
 
 ## ANTI-PATTERNS
 
