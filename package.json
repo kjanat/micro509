@@ -1,7 +1,7 @@
 {
 	"name": "micro509",
 	"version": "0.1.0",
-	"description": "Small, typed X.509 builders for modern TypeScript",
+	"description": "The zero-dependency TypeScript PKI toolkit for real certificate workflows.",
 	"keywords": [
 		"x509",
 		"certificate",

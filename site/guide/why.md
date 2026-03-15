@@ -2,7 +2,18 @@
 
 ## The problem
 
-Other JS X.509 libraries return a boolean from chain verification. When verification fails, your code can log `false` — but it can't tell the user _why_, which certificate caused it, or what to fix.
+Existing JavaScript PKI packages tend to fall into three camps:
+heavyweight standards toolkits, older crypto kitchen sinks, or narrow
+parsing utilities.
+
+micro509 aims at the practical middle: modern X.509/PKI workflows,
+pure WebCrypto, zero dependencies, and typed results that let your code
+act on failures instead of just logging them.
+
+That matters most during verification. A bare `false` does not tell you
+which certificate failed, whether the problem was the signature,
+hostname, EKU, name constraints, or revocation freshness, or what to
+show the user next.
 
 ## Typed verification results
 

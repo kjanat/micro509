@@ -1,6 +1,6 @@
 # micro509
 
-The TypeScript PKI library that tells you _why_ verification failed, not just that it did.
+A zero-dependency TypeScript PKI toolkit for certificates, verification, revocation, and PKCS workflows.
 
 Zero dependencies. Tree-shakeable subpath entrypoints. Pure WebCrypto. Runs everywhere: Node, Bun, Deno, browsers, Cloudflare Workers.
 
@@ -14,10 +14,24 @@ npm install micro509
 
 ## Why micro509
 
-Other JS X.509 libraries return a boolean from chain verification.
-micro509 returns a discriminated union with 21 typed error codes, the
-failing certificate's index, and structured failure details — so your
-code can _handle_ the failure, not just log it.
+JavaScript PKI libraries usually force a bad tradeoff:
+heavyweight standards toolkits, legacy crypto kitchen sinks,
+or narrow parsing utilities.
+
+micro509 is the practical middle: a modern, WebCrypto-native
+PKI toolkit with zero runtime dependencies and typed APIs for
+the workflows most applications actually need.
+
+It gives you one library for certificate and CSR creation,
+chain verification, service-identity matching, CRLs, OCSP,
+PKCS#7 SignedData, PFX/PKCS#12, PEM handling, and key
+import/export.
+
+And when verification fails, you get typed results your code
+can act on: [21 error codes], the failing certificate index,
+and structured failure details instead of `false`.
+
+[21 error codes]: https://micro509.kjanat.com/guide/verification#error-codes
 
 ```ts
 if (!result.ok) {
