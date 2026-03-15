@@ -7,8 +7,8 @@
  * @module
  */
 
-import type { DistributionPointReason, KeyUsage } from '../../x509/extensions.ts';
-import { bitString, DEFAULT_MAX_DER_DEPTH, readRootElement } from '../asn1/der.ts';
+import type { DistributionPointReason, KeyUsage } from '#micro509/x509/extensions.ts';
+import { bitString, DEFAULT_MAX_DER_DEPTH, readRootElement } from '#micro509/internal/asn1/der.ts';
 
 /** Canonical bit-position order for Key Usage flags (RFC 5280 §4.2.1.3). */
 const KEY_USAGE_ORDER = [

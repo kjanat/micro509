@@ -21,7 +21,7 @@ import type {
 	PolicyConstraints,
 	PolicyMappings,
 	SubjectAltName,
-} from '../../x509/extensions.ts';
+} from '#micro509/x509/extensions.ts';
 import {
 	buildSubjectKeyIdentifier,
 	encodeAuthorityInfoAccess,
@@ -35,8 +35,8 @@ import {
 	encodePolicyConstraints,
 	encodePolicyMappings,
 	encodeSubjectAltName,
-} from '../../x509/extensions.ts';
-import type { ParsedDistributionPoint } from '../../x509/parse.ts';
+} from '#micro509/x509/extensions.ts';
+import type { ParsedDistributionPoint } from '#micro509/x509/parse.ts';
 import {
 	parseAuthorityInfoAccess,
 	parseAuthorityKeyIdentifier,
@@ -50,16 +50,16 @@ import {
 	parsePolicyConstraints,
 	parsePolicyMappings,
 	parseSubjectAltNames,
-} from '../../x509/parse.ts';
-import { hexToBytes, toHex } from '../asn1/asn1.ts';
+} from '#micro509/x509/parse.ts';
+import { hexToBytes, toHex } from '#micro509/internal/asn1/asn1.ts';
 import {
 	DEFAULT_MAX_DER_DEPTH,
 	implicitPrimitiveContext,
 	octetString,
 	readRootElement,
 	sequence,
-} from '../asn1/der.ts';
-import { OIDS } from '../asn1/oids.ts';
+} from '#micro509/internal/asn1/der.ts';
+import { OIDS } from '#micro509/internal/asn1/oids.ts';
 
 /** Whether an extension applies to certificate parsing, CSR parsing, or both. */
 export type ExtensionRegistryContext = 'certificate' | 'csr';

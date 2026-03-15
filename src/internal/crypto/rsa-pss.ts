@@ -12,7 +12,7 @@ import {
 	decodeNonNegativeIntegerNumber,
 	decodeObjectIdentifier,
 	requireElement,
-} from '../asn1/asn1.ts';
+} from '#micro509/internal/asn1/asn1.ts';
 import {
 	DEFAULT_MAX_DER_DEPTH,
 	explicitContext,
@@ -21,8 +21,8 @@ import {
 	objectIdentifier,
 	readRootElement,
 	sequence,
-} from '../asn1/der.ts';
-import { OIDS } from '../asn1/oids.ts';
+} from '#micro509/internal/asn1/der.ts';
+import { OIDS } from '#micro509/internal/asn1/oids.ts';
 
 /** Hash algorithm accepted for RSA-PSS signatures in this library. */
 export type RsaPssHash = 'SHA-256' | 'SHA-384' | 'SHA-512';

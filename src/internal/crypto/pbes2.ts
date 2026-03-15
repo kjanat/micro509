@@ -7,7 +7,11 @@
  * @module
  */
 
-import { decodeIntegerNumber, decodeObjectIdentifier, toArrayBuffer } from '../asn1/asn1.ts';
+import {
+	decodeIntegerNumber,
+	decodeObjectIdentifier,
+	toArrayBuffer,
+} from '#micro509/internal/asn1/asn1.ts';
 import {
 	integerFromNumber,
 	nullValue,
@@ -15,8 +19,8 @@ import {
 	octetString,
 	readSequenceChildren,
 	sequence,
-} from '../asn1/der.ts';
-import { OIDS } from '../asn1/oids.ts';
+} from '#micro509/internal/asn1/der.ts';
+import { OIDS } from '#micro509/internal/asn1/oids.ts';
 import { getCrypto } from './webcrypto.ts';
 
 /** AES-CBC key sizes supported by this PBES2 implementation. */

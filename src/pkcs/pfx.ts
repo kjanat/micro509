@@ -7,8 +7,8 @@
  * @module
  */
 
-import { childrenOf, decodeObjectIdentifier, toHex } from '../internal/asn1/asn1.ts';
-import type { DerElement } from '../internal/asn1/der.ts';
+import { childrenOf, decodeObjectIdentifier, toHex } from '#micro509/internal/asn1/asn1.ts';
+import type { DerElement } from '#micro509/internal/asn1/der.ts';
 import {
 	DEFAULT_MAX_DER_DEPTH,
 	explicitContext,
@@ -20,33 +20,33 @@ import {
 	sequence,
 	setOf,
 	tlv,
-} from '../internal/asn1/der.ts';
-import { OIDS } from '../internal/asn1/oids.ts';
+} from '#micro509/internal/asn1/der.ts';
+import { OIDS } from '#micro509/internal/asn1/oids.ts';
 import {
 	decryptPbes2,
 	encryptPbes2,
 	type Pbes2EncryptionOptions,
-} from '../internal/crypto/pbes2.ts';
-import { base64Encode } from '../internal/shared/base64.ts';
-import { exportPkcs8Der } from '../keys/keys.ts';
-import { type ParsedCertificate, parseCertificateDer } from '../x509/parse.ts';
-import { pemEncode, splitPemBlocks } from '../pem/pem.ts';
+} from '#micro509/internal/crypto/pbes2.ts';
+import { base64Encode } from '#micro509/internal/shared/base64.ts';
+import { exportPkcs8Der } from '#micro509/keys/keys.ts';
+import { type ParsedCertificate, parseCertificateDer } from '#micro509/x509/parse.ts';
+import { pemEncode, splitPemBlocks } from '#micro509/pem/pem.ts';
 import {
 	createPkcs12MacData,
 	type ParsedPkcs12MacData,
 	type Pkcs12MacOptions,
 	parsePkcs12MacData,
 } from './pkcs12-mac.ts';
-import type { ErrorResult, Micro509Error } from '../result/result.ts';
+import type { ErrorResult, Micro509Error } from '#micro509/result/result.ts';
 
 export type {
 	Pbes2EncryptionOptions,
 	Pbes2EncryptionScheme,
 	Pbes2Prf,
-} from '../internal/crypto/pbes2.ts';
-export type * from '../x509/parse.ts';
+} from '#micro509/internal/crypto/pbes2.ts';
+export type * from '#micro509/x509/parse.ts';
 export type * from './pkcs12-mac.ts';
-export type * from '../result/result.ts';
+export type * from '#micro509/result/result.ts';
 
 /** PEM string or DER bytes for a certificate to include in a PFX bag. */
 export type PfxCertificateSource = string | Uint8Array;

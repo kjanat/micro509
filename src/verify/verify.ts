@@ -16,7 +16,7 @@
  * @module
  */
 
-import type { ExtendedKeyUsage } from '../x509/extensions.ts';
+import type { ExtendedKeyUsage } from '#micro509/x509/extensions.ts';
 import type { VerifyServiceIdentityInput } from './identity.ts';
 import { matchServiceIdentity } from './identity.ts';
 import type { InitialNameConstraintsInput } from './name-constraints.ts';
@@ -24,32 +24,32 @@ import {
 	createNameConstraintValidationState,
 	evaluateNameConstraints,
 	type NameConstraintValidationState,
-} from '../internal/verify/name-constraints-engine.ts';
-import { OIDS } from '../internal/asn1/oids.ts';
-import type { ParsedCertificate, ParsedCertificateSigningRequest } from '../x509/parse.ts';
+} from '#micro509/internal/verify/name-constraints-engine.ts';
+import { OIDS } from '#micro509/internal/asn1/oids.ts';
+import type { ParsedCertificate, ParsedCertificateSigningRequest } from '#micro509/x509/parse.ts';
 import {
 	parseCertificateSigningRequestDer,
 	parseCertificateSigningRequestPem,
-} from '../x509/parse.ts';
+} from '#micro509/x509/parse.ts';
 import type { PolicyValidationInput, PolicyValidationOutcome } from './policy.ts';
 import {
 	createPolicyValidationState,
 	evaluatePolicyChain,
 	type PolicyValidationState,
-} from '../internal/verify/policy-engine.ts';
+} from '#micro509/internal/verify/policy-engine.ts';
 import type {
 	ErrorResult,
 	IndexedErrorResult,
 	IndexedMicro509Error,
 	Micro509Error,
-} from '../result/result.ts';
+} from '#micro509/result/result.ts';
 import {
 	errorResult,
 	indexedErrorResult,
 	indexedMicro509Error,
 	micro509Error,
-} from '../result/result.ts';
-import { verifySignedDataDetailed } from '../internal/crypto/sig-verify.ts';
+} from '#micro509/result/result.ts';
+import { verifySignedDataDetailed } from '#micro509/internal/crypto/sig-verify.ts';
 import {
 	buildChainInternal,
 	countCaCertificatesBelowParsed,
@@ -58,14 +58,14 @@ import {
 	loadCertificates,
 	loadSingleCertificate,
 	verifyCertificateSignature,
-} from '../internal/verify/verify-path.ts';
+} from '#micro509/internal/verify/verify-path.ts';
 
-export type * from '../x509/extensions.ts';
+export type * from '#micro509/x509/extensions.ts';
 export type * from './identity.ts';
 export type * from './name-constraints.ts';
-export type * from '../x509/parse.ts';
+export type * from '#micro509/x509/parse.ts';
 export type * from './policy.ts';
-export type * from '../result/result.ts';
+export type * from '#micro509/result/result.ts';
 
 // ---------------------------------------------------------------------------
 // Source types

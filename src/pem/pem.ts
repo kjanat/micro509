@@ -7,7 +7,7 @@
  * @module
  */
 
-import { base64Decode, base64Encode } from '../internal/shared/base64.ts';
+import { base64Decode, base64Encode } from '#micro509/internal/shared/base64.ts';
 
 /** A single decoded PEM block with its label, decoded DER bytes, and original PEM text. */
 export interface PemBlock {

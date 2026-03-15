@@ -7,7 +7,7 @@
  * @module
  */
 
-import { hexToBytes } from '../internal/asn1/asn1.ts';
+import { hexToBytes } from '#micro509/internal/asn1/asn1.ts';
 import {
 	bool,
 	concatBytes,
@@ -25,11 +25,11 @@ import {
 	sequence,
 	tlv,
 	utf8String,
-} from '../internal/asn1/der.ts';
+} from '#micro509/internal/asn1/der.ts';
 import {
 	encodeDistributionPointReasonFlagsContent,
 	encodeKeyUsageExtension,
-} from '../internal/x509/extension-bits.ts';
+} from '#micro509/internal/x509/extension-bits.ts';
 import {
 	AUTHORITY_INFO_ACCESS_EXTENSION_DEFINITION,
 	AUTHORITY_KEY_IDENTIFIER_EXTENSION_DEFINITION,
@@ -47,11 +47,11 @@ import {
 	POLICY_MAPPINGS_EXTENSION_DEFINITION,
 	SUBJECT_ALT_NAME_EXTENSION_DEFINITION,
 	SUBJECT_KEY_IDENTIFIER_EXTENSION_DEFINITION,
-} from '../internal/x509/extension-registry.ts';
-import { sha1 } from '../internal/crypto/hash.ts';
-import { parseIpAddressToBytes } from '../internal/shared/ip.ts';
+} from '#micro509/internal/x509/extension-registry.ts';
+import { sha1 } from '#micro509/internal/crypto/hash.ts';
+import { parseIpAddressToBytes } from '#micro509/internal/shared/ip.ts';
 import { encodeRelativeDistinguishedName, type RelativeDistinguishedNameInput } from './name.ts';
-import { OIDS } from '../internal/asn1/oids.ts';
+import { OIDS } from '#micro509/internal/asn1/oids.ts';
 
 export type { NameAttribute, NameFieldKey, RelativeDistinguishedNameInput } from './name.ts';
 

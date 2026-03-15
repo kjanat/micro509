@@ -7,9 +7,9 @@
  * @module
  */
 
-import type { GeneralSubtree } from '../x509/extensions.ts';
+import type { GeneralSubtree } from '#micro509/x509/extensions.ts';
 
-export type * from '../x509/extensions.ts';
+export type * from '#micro509/x509/extensions.ts';
 
 /**
  * Input for `createNameConstraintValidationState`.

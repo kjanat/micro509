@@ -18,8 +18,8 @@ import {
 	requireElement,
 	toArrayBuffer,
 	toHex,
-} from '../internal/asn1/asn1.ts';
-import type { DerElement } from '../internal/asn1/der.ts';
+} from '#micro509/internal/asn1/asn1.ts';
+import type { DerElement } from '#micro509/internal/asn1/der.ts';
 import {
 	bitString,
 	concatBytes,
@@ -35,29 +35,29 @@ import {
 	sequence,
 	time,
 	tlv,
-} from '../internal/asn1/der.ts';
-import { OIDS } from '../internal/asn1/oids.ts';
-import { verifySignedData } from '../internal/crypto/sig-verify.ts';
+} from '#micro509/internal/asn1/der.ts';
+import { OIDS } from '#micro509/internal/asn1/oids.ts';
+import { verifySignedData } from '#micro509/internal/crypto/sig-verify.ts';
 import {
 	encodeAlgorithmIdentifier,
 	getSignatureAlgorithm,
 	signBytes,
-} from '../internal/crypto/signing.ts';
-import { getCrypto } from '../internal/crypto/webcrypto.ts';
-import { base64Encode } from '../internal/shared/base64.ts';
+} from '#micro509/internal/crypto/signing.ts';
+import { getCrypto } from '#micro509/internal/crypto/webcrypto.ts';
+import { base64Encode } from '#micro509/internal/shared/base64.ts';
 import type {
 	ParsedCertificate,
 	ParsedName,
 	ParsedNameAttribute,
 	ParsedRelativeDistinguishedName,
-} from '../x509/parse.ts';
-import { parseCertificateDer, parseCertificatePem } from '../x509/parse.ts';
-import { pemDecode, pemEncode } from '../pem/pem.ts';
-import type { ErrorResult, Micro509Error } from '../result/result.ts';
-import { verifyCertificateChain } from '../verify/verify.ts';
+} from '#micro509/x509/parse.ts';
+import { parseCertificateDer, parseCertificatePem } from '#micro509/x509/parse.ts';
+import { pemDecode, pemEncode } from '#micro509/pem/pem.ts';
+import type { ErrorResult, Micro509Error } from '#micro509/result/result.ts';
+import { verifyCertificateChain } from '#micro509/verify/verify.ts';
 
-export type * from '../x509/parse.ts';
-export type * from '../result/result.ts';
+export type * from '#micro509/x509/parse.ts';
+export type * from '#micro509/result/result.ts';
 
 /** Hash algorithm used to compute OCSP CertID fields. SHA-1 is the RFC 6960 default. */
 export type OcspHashAlgorithm = 'SHA-1' | 'SHA-256';

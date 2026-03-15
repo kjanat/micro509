@@ -14,8 +14,8 @@ import {
 	requireElement,
 	toArrayBuffer,
 	toHex,
-} from '../internal/asn1/asn1.ts';
-import type { DerElement } from '../internal/asn1/der.ts';
+} from '#micro509/internal/asn1/asn1.ts';
+import type { DerElement } from '#micro509/internal/asn1/der.ts';
 import {
 	concatBytes,
 	DEFAULT_MAX_DER_DEPTH,
@@ -26,18 +26,18 @@ import {
 	readSequenceChildren,
 	sequence,
 	setOf,
-} from '../internal/asn1/der.ts';
-import { OIDS } from '../internal/asn1/oids.ts';
-import { verifySignedData } from '../internal/crypto/sig-verify.ts';
-import { getCrypto } from '../internal/crypto/webcrypto.ts';
-import { base64Encode } from '../internal/shared/base64.ts';
-import type { ParsedCertificate } from '../x509/parse.ts';
-import { parseCertificateDer } from '../x509/parse.ts';
-import { pemEncode, splitPemBlocks } from '../pem/pem.ts';
-import type { ErrorResult, Micro509Error } from '../result/result.ts';
+} from '#micro509/internal/asn1/der.ts';
+import { OIDS } from '#micro509/internal/asn1/oids.ts';
+import { verifySignedData } from '#micro509/internal/crypto/sig-verify.ts';
+import { getCrypto } from '#micro509/internal/crypto/webcrypto.ts';
+import { base64Encode } from '#micro509/internal/shared/base64.ts';
+import type { ParsedCertificate } from '#micro509/x509/parse.ts';
+import { parseCertificateDer } from '#micro509/x509/parse.ts';
+import { pemEncode, splitPemBlocks } from '#micro509/pem/pem.ts';
+import type { ErrorResult, Micro509Error } from '#micro509/result/result.ts';
 
-export type * from '../x509/parse.ts';
-export type * from '../result/result.ts';
+export type * from '#micro509/x509/parse.ts';
+export type * from '#micro509/result/result.ts';
 
 /** PEM text (may contain multiple CERTIFICATE blocks) or raw DER bytes. */
 export type Pkcs7CertificateSource = string | Uint8Array;

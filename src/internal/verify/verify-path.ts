@@ -8,18 +8,21 @@
  * @module
  */
 
-import type { ParsedCertificate } from '../../x509/parse.ts';
-import { parseCertificateDer } from '../../x509/parse.ts';
-import { splitPemBlocks } from '../../pem/pem.ts';
+import type { ParsedCertificate } from '#micro509/x509/parse.ts';
+import { parseCertificateDer } from '#micro509/x509/parse.ts';
+import { splitPemBlocks } from '#micro509/pem/pem.ts';
 import type {
 	CertificateSource,
 	TrustAnchor,
 	VerifyChainFailure,
 	VerifyErrorCode,
 	VerifyFailureDetails,
-} from '../../verify/verify.ts';
-import { toHex } from '../asn1/asn1.ts';
-import { type VerifySignedDataResult, verifySignedDataDetailed } from '../crypto/sig-verify.ts';
+} from '#micro509/verify/verify.ts';
+import { toHex } from '#micro509/internal/asn1/asn1.ts';
+import {
+	type VerifySignedDataResult,
+	verifySignedDataDetailed,
+} from '#micro509/internal/crypto/sig-verify.ts';
 
 /** Result of the internal chain-building search. */
 export interface InternalBuildResult {

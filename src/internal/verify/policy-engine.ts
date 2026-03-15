@@ -7,15 +7,15 @@
  * @module
  */
 
-import type { PolicyInformation, PolicyQualifierInfo } from '../../x509/extensions.ts';
-import type { ParsedCertificate } from '../../x509/parse.ts';
+import type { PolicyInformation, PolicyQualifierInfo } from '#micro509/x509/extensions.ts';
+import type { ParsedCertificate } from '#micro509/x509/parse.ts';
 import type {
 	ConstrainedPolicy,
 	PolicyValidationInput,
 	PolicyValidationOutcome,
-} from '../../verify/policy.ts';
-import type { Micro509Error, Result } from '../../result/result.ts';
-import { OIDS } from '../asn1/oids.ts';
+} from '#micro509/verify/policy.ts';
+import type { Micro509Error, Result } from '#micro509/result/result.ts';
+import { OIDS } from '#micro509/internal/asn1/oids.ts';
 
 /**
  * Mutable state threaded through each step of the policy-validation walk.

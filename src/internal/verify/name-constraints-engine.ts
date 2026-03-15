@@ -12,16 +12,16 @@ import type {
 	NameConstraints,
 	ParsedNameConstraintForm,
 	SubjectAltName,
-} from '../../x509/extensions.ts';
-import { nameFieldKeyFromOid } from '../../x509/name.ts';
-import type { InitialNameConstraintsInput } from '../../verify/name-constraints.ts';
+} from '#micro509/x509/extensions.ts';
+import { nameFieldKeyFromOid } from '#micro509/x509/name.ts';
+import type { InitialNameConstraintsInput } from '#micro509/verify/name-constraints.ts';
 import type {
 	ParsedCertificate,
 	ParsedName,
 	ParsedNameAttribute,
 	ParsedRelativeDistinguishedName,
-} from '../../x509/parse.ts';
-import type { Micro509Error } from '../../result/result.ts';
+} from '#micro509/x509/parse.ts';
+import type { Micro509Error } from '#micro509/result/result.ts';
 import {
 	childrenOf,
 	decodeObjectIdentifier,
@@ -29,10 +29,18 @@ import {
 	hexToBytes,
 	requireElement,
 	toHex,
-} from '../asn1/asn1.ts';
-import { DEFAULT_MAX_DER_DEPTH, type DerElement, readRootElement } from '../asn1/der.ts';
-import { OIDS } from '../asn1/oids.ts';
-import { allOnesMaskForIpAddress, decodeIpAddress, parseIpAddressToBytes } from '../shared/ip.ts';
+} from '#micro509/internal/asn1/asn1.ts';
+import {
+	DEFAULT_MAX_DER_DEPTH,
+	type DerElement,
+	readRootElement,
+} from '#micro509/internal/asn1/der.ts';
+import { OIDS } from '#micro509/internal/asn1/oids.ts';
+import {
+	allOnesMaskForIpAddress,
+	decodeIpAddress,
+	parseIpAddressToBytes,
+} from '#micro509/internal/shared/ip.ts';
 
 /**
  * Opaque state seeded from {@linkcode InitialNameConstraintsInput} and consumed

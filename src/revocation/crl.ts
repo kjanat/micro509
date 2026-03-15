@@ -14,7 +14,7 @@ import {
 	encodeSubjectAltName,
 	type GeneralName,
 	type IssuingDistributionPoint,
-} from '../x509/extensions.ts';
+} from '#micro509/x509/extensions.ts';
 import {
 	childrenOf,
 	decodeIntegerNumber,
@@ -24,7 +24,7 @@ import {
 	parseTime,
 	requireElement,
 	toHex,
-} from '../internal/asn1/asn1.ts';
+} from '#micro509/internal/asn1/asn1.ts';
 import {
 	bitString,
 	bool,
@@ -45,29 +45,29 @@ import {
 	sequence,
 	time,
 	tlv,
-} from '../internal/asn1/der.ts';
-import { OIDS } from '../internal/asn1/oids.ts';
-import { sha1 } from '../internal/crypto/hash.ts';
-import { verifySignedData } from '../internal/crypto/sig-verify.ts';
+} from '#micro509/internal/asn1/der.ts';
+import { OIDS } from '#micro509/internal/asn1/oids.ts';
+import { sha1 } from '#micro509/internal/crypto/hash.ts';
+import { verifySignedData } from '#micro509/internal/crypto/sig-verify.ts';
 import {
 	encodeAlgorithmIdentifier,
 	getSignatureAlgorithm,
 	signBytes,
-} from '../internal/crypto/signing.ts';
-import { base64Encode } from '../internal/shared/base64.ts';
-import { decodeIpAddress } from '../internal/shared/ip.ts';
+} from '#micro509/internal/crypto/signing.ts';
+import { base64Encode } from '#micro509/internal/shared/base64.ts';
+import { decodeIpAddress } from '#micro509/internal/shared/ip.ts';
 import {
 	encodeDistributionPointReasonFlagsContent,
 	parseDistributionPointReasonFlagsContent,
-} from '../internal/x509/extension-bits.ts';
-import { exportSpkiDer } from '../keys/keys.ts';
+} from '#micro509/internal/x509/extension-bits.ts';
+import { exportSpkiDer } from '#micro509/keys/keys.ts';
 import {
 	encodeName,
 	encodeRelativeDistinguishedName,
 	type NameFieldKey,
 	type NameInput,
 	nameFieldKeyFromOid,
-} from '../x509/name.ts';
+} from '#micro509/x509/name.ts';
 import {
 	type ParsedCertificate,
 	type ParsedDistributionPoint,
@@ -77,14 +77,14 @@ import {
 	type ParsedRelativeDistinguishedName,
 	parseCertificateDer,
 	parseCertificatePem,
-} from '../x509/parse.ts';
-import { pemDecode, pemEncode } from '../pem/pem.ts';
-import type { ErrorResult, Micro509Error } from '../result/result.ts';
+} from '#micro509/x509/parse.ts';
+import { pemDecode, pemEncode } from '#micro509/pem/pem.ts';
+import type { ErrorResult, Micro509Error } from '#micro509/result/result.ts';
 
-export type * from '../x509/extensions.ts';
-export type * from '../x509/name.ts';
-export type * from '../x509/parse.ts';
-export type * from '../result/result.ts';
+export type * from '#micro509/x509/extensions.ts';
+export type * from '#micro509/x509/name.ts';
+export type * from '#micro509/x509/parse.ts';
+export type * from '#micro509/result/result.ts';
 
 /**
  * Single revoked certificate entry for {@linkcode createCertificateRevocationList}.
