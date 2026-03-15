@@ -324,6 +324,9 @@ function parseHashAlgorithmIdentifier(
 	if (oid.tag !== 0x06) {
 		throw new Error(`Malformed RSA-PSS ${label} AlgorithmIdentifier`);
 	}
+	if (children.length === 2 && requireElement(children[1], `${label} parameters`).tag !== 0x05) {
+		throw new Error(`RSA-PSS ${label} AlgorithmIdentifier parameters must be NULL when present`);
+	}
 	return decodeObjectIdentifier(oid.value);
 }
 
