@@ -63,6 +63,7 @@
  * @module
  */
 
+// ── keys ─────────────────────────────────────────────────────────────
 export type {
 	EcKeyAlgorithmInput,
 	EcNamedCurve,
@@ -117,8 +118,12 @@ export {
 	importSpkiDer,
 	importSpkiPem,
 } from './keys/index.ts';
+
+// ── pem ──────────────────────────────────────────────────────────────
 export type { CategorizedPemBlocks, PemBlock } from './pem/index.ts';
 export { categorizePemBlocks, pemDecode, pemEncode, splitPemBlocks } from './pem/index.ts';
+
+// ── pkcs ─────────────────────────────────────────────────────────────
 export type {
 	CreatePfxInput,
 	ParsedPfx,
@@ -159,6 +164,8 @@ export {
 	parsePkcs7SignedDataPem,
 	verifyPkcs7SignedData,
 } from './pkcs/index.ts';
+
+// ── result ───────────────────────────────────────────────────────────
 export type {
 	ErrorResult,
 	IndexedErrorResult,
@@ -166,40 +173,29 @@ export type {
 	Micro509Error,
 	Result,
 } from './result/index.ts';
+
+// ── revocation ───────────────────────────────────────────────────────
 export type {
 	CertificateRevocationListMaterial,
-	CheckCertificateRevocationAgainstCrlErrorCode,
-	CheckCertificateRevocationAgainstCrlFailure,
-	CheckCertificateRevocationAgainstCrlFailureDetails,
-	CheckCertificateRevocationAgainstCrlGoodValue,
 	CheckCertificateRevocationAgainstCrlInput,
 	CheckCertificateRevocationAgainstCrlResult,
-	CheckCertificateRevocationAgainstCrlRevokedValue,
-	CheckCertificateRevocationAgainstCrlValue,
-	CheckCertificateRevocationErrorCode,
-	CheckCertificateRevocationFailureDetails,
 	CheckCertificateRevocationInput,
 	CheckCertificateRevocationResult,
-	CheckCertificateRevocationValue,
 	ConfiguredOcspResponder,
-	ConfiguredOcspResponderCertificate,
 	CreateCertificateRevocationListInput,
 	CreateOcspRequestInput,
 	CreateOcspRequestItemInput,
 	CreateOcspResponseInput,
 	CreateOcspSingleResponseInput,
-	CrlApplicabilityFailureReason,
 	CrlCertificateSource,
 	CrlSource,
 	OcspCertificateSource,
 	OcspCertStatus,
-	OcspHashAlgorithm,
 	OcspRequestMaterial,
 	OcspRequestSource,
 	OcspResponderCandidate,
 	OcspResponderSource,
 	OcspResponseMaterial,
-	OcspResponseStatus,
 	ParsedCertificateRevocationList,
 	ParsedOcspCertId,
 	ParsedOcspRequest,
@@ -209,14 +205,9 @@ export type {
 	ParsedRevokedCertificate,
 	ResolveOcspResponderCandidatesInput,
 	RevocationCertificateSource,
-	RevocationCheckGoodValue,
-	RevocationCheckRevokedValue,
-	RevocationCheckUnknownValue,
 	RevocationCrlEvidenceInput,
 	RevocationEvidenceInput,
 	RevocationEvidenceKind,
-	RevocationIndeterminateEvidence,
-	RevocationIndeterminateReasonCode,
 	RevocationOcspEvidenceInput,
 	RevocationReason,
 	RevocationStatus,
@@ -252,12 +243,13 @@ export {
 	verifyCertificateRevocationList,
 	verifyOcspResponse,
 } from './revocation/index.ts';
+
+// ── verify ───────────────────────────────────────────────────────────
 export type {
 	BuildCandidatePathInput,
 	BuildCandidatePathResult,
 	CandidatePath,
 	CertificateSource,
-	ConstrainedPolicy,
 	CsrSource,
 	DnsServiceIdentityInput,
 	EkuCheckFailure,
@@ -266,15 +258,11 @@ export type {
 	InitialNameConstraintsInput,
 	IpServiceIdentityInput,
 	MatchServiceIdentityErrorCode,
-	MatchServiceIdentityEvaluation,
 	MatchServiceIdentityFailure,
-	MatchServiceIdentityFailureDetails,
-	MatchServiceIdentityFailureResult,
 	MatchServiceIdentityInput,
 	MatchServiceIdentityResult,
 	MatchServiceIdentitySuccess,
 	PolicyValidationInput,
-	PolicyValidationOutcome,
 	ServiceIdentityInput,
 	ServiceIdentityType,
 	SrvServiceIdentityInput,
@@ -312,27 +300,22 @@ export {
 	verifyCertificateChain,
 	verifyCertificateSigningRequest,
 } from './verify/index.ts';
+
+// ── x509 ─────────────────────────────────────────────────────────────
 export type {
-	AuthorityInfoAccessMethod,
 	AuthorityInformationAccess,
 	BasicConstraints,
 	CertificateExtensionsInput,
 	CertificateMaterial,
 	CertificatePolicies,
-	CpsPolicyQualifierInfo,
 	CreateCertificateInput,
 	CreateCsrInput,
 	CreateSelfSignedCertificateInput,
 	CsrMaterial,
-	CustomAuthorityInfoAccessMethod,
-	CustomExtendedKeyUsage,
-	CustomExtension,
-	CustomPolicyQualifierInfo,
 	DecodedExtensionMap,
 	DecodedExtensionValue,
 	DistributionPoint,
 	DistributionPointName,
-	DistributionPointReason,
 	ExtendedKeyUsage,
 	ExtensionDecoder,
 	ExtensionDecoderMap,
@@ -340,13 +323,7 @@ export type {
 	GeneralSubtree,
 	InhibitAnyPolicy,
 	IssuingDistributionPoint,
-	IssuingDistributionPointBase,
-	IssuingDistributionPointForAttributeCerts,
-	IssuingDistributionPointForCaCerts,
-	IssuingDistributionPointForUserCerts,
 	KeyUsage,
-	KnownAuthorityInfoAccessMethod,
-	KnownExtendedKeyUsage,
 	NameAttribute,
 	NameConstraintForm,
 	NameConstraints,
@@ -368,13 +345,10 @@ export type {
 	PolicyInformation,
 	PolicyMapping,
 	PolicyMappings,
-	PolicyNoticeReference,
 	PolicyQualifierInfo,
 	RelativeDistinguishedNameInput,
 	SelfSignedCertificateResult,
 	SubjectAltName,
-	UnsupportedNameConstraintForm,
-	UserNoticePolicyQualifierInfo,
 	ValidityInput,
 } from './x509/index.ts';
 export {
