@@ -19,7 +19,7 @@ export default defineConfig({
 		'pkcs12-mac': 'src/pkcs12-mac.ts',
 		policy: 'src/policy.ts',
 		result: 'src/result/index.ts',
-		revocation: 'src/revocation.ts',
+		revocation: 'src/revocation/index.ts',
 		verify: 'src/verify/index.ts',
 		x509: 'src/x509/index.ts',
 	},

@@ -618,7 +618,7 @@ async function normalizePrivateKey(source: PfxPrivateKeySource): Promise<Uint8Ar
 }
 
 /** Extracts DER bytes from a PEM string, or passes raw DER through. */
-async function normalizeCertificate(source: PfxCertificateSource): Promise<Uint8Array> {
+function normalizeCertificate(source: PfxCertificateSource): Uint8Array {
 	if (typeof source === 'string') {
 		const block = splitPemBlocks(source).find((candidate) => candidate.label === 'CERTIFICATE');
 		if (block === undefined) {

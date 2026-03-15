@@ -32,7 +32,7 @@ Use subpaths when you want a narrower entrypoint.
 | `micro509/pkcs7`            | PKCS#7 cert bag and signedData parse helpers                |
 | `micro509/policy`           | policy-validation compatibility seam                        |
 | `micro509/result`           | canonical shared `Result` types and constructors            |
-| `micro509/revocation`       | higher-level revocation orchestration helpers               |
+| `micro509/revocation`       | canonical CRL, OCSP, and revocation orchestration APIs      |
 | `micro509/verify`           | canonical verification, identity, policy, and path helpers  |
 
 ## Result model
@@ -172,11 +172,19 @@ Notes:
 
 ### Revocation
 
+Canonical advanced home: `micro509/revocation`
+
 Primary functions:
 
 - `checkCertificateRevocation()`
 - `getCertificateOcspResponderUris()`
 - `resolveOcspResponderCandidates()`
+- `createCertificateRevocationList()`
+- `parseCertificateRevocationListPem()`
+- `validateCertificateRevocationList()`
+- `createOcspRequest()`
+- `parseOcspResponsePem()`
+- `validateOcspResponse()`
 
 Primary types:
 
@@ -185,12 +193,16 @@ Primary types:
 - `RevocationEvidenceInput`
 - `RevocationStatus`
 - `OcspResponderCandidate`
+- `ParsedCertificateRevocationList`
+- `ParsedOcspResponse`
 
 Notes:
 
 - combines CRL and OCSP evidence into a higher-level result model
 
 ### CRL
+
+Compatibility subpath: prefer `micro509/revocation` for new imports
 
 Primary functions:
 
@@ -214,6 +226,8 @@ Primary types:
 - `CheckCertificateRevocationAgainstCrlResult`
 
 ### OCSP
+
+Compatibility subpath: prefer `micro509/revocation` for new imports
 
 Primary functions:
 

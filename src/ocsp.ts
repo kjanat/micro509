@@ -1027,7 +1027,7 @@ function encodeOcspCertStatus(input: CreateOcspSingleResponseInput): Uint8Array 
 }
 
 /** Accepts PEM, DER, or already-parsed certificate and returns a parsed certificate. */
-async function normalizeCertificate(source: OcspCertificateSource): Promise<ParsedCertificate> {
+function normalizeCertificate(source: OcspCertificateSource): ParsedCertificate {
 	if (typeof source === 'string') {
 		return parseCertificatePem(source);
 	}

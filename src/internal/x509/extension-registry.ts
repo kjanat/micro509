@@ -36,7 +36,7 @@ import {
 	encodePolicyMappings,
 	encodeSubjectAltName,
 } from '../../extensions.ts';
-import type { ParsedCertificate, ParsedDistributionPoint } from '../../parse.ts';
+import type { ParsedDistributionPoint } from '../../parse.ts';
 import {
 	parseAuthorityInfoAccess,
 	parseAuthorityKeyIdentifier,

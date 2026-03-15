@@ -5,7 +5,7 @@
  * @module
  */
 
-import type { NameFieldKey, NameObject } from '../../name.ts';
+import type { NameFieldKey } from '../../name.ts';
 import { ia5String, printableString, utf8String } from '../asn1/der.ts';
 import { OIDS } from '../asn1/oids.ts';
 

@@ -1,9 +1,35 @@
 /**
- * Staged domain barrel for CRL, OCSP, and revocation orchestration APIs.
- * Re-exports the current flat modules until the file moves land.
+ * Canonical revocation domain surface.
+ * Owns CRL, OCSP, and revocation orchestration APIs.
  * @module
  */
 
-export * from '../crl.ts';
-export * from '../ocsp.ts';
-export * from '../revocation.ts';
+export type * from '../crl.ts';
+export {
+	checkCertificateRevocationAgainstCrl,
+	createCertificateRevocationList,
+	isCertificateRevoked,
+	parseCertificateRevocationListDer,
+	parseCertificateRevocationListPem,
+	validateCertificateRevocationList,
+	verifyCertificateRevocationList,
+} from '../crl.ts';
+
+export type * from '../ocsp.ts';
+export {
+	createOcspRequest,
+	createOcspResponse,
+	parseOcspRequestDer,
+	parseOcspRequestPem,
+	parseOcspResponseDer,
+	parseOcspResponsePem,
+	validateOcspResponse,
+	verifyOcspResponse,
+} from '../ocsp.ts';
+
+export type * from '../revocation.ts';
+export {
+	checkCertificateRevocation,
+	getCertificateOcspResponderUris,
+	resolveOcspResponderCandidates,
+} from '../revocation.ts';

@@ -20,6 +20,7 @@ Started: 2026-03-15
 - `@internal` jsdoc can still affect emitted declarations for exported helpers, so new canonical domain barrels should not promote symbols that declaration emit already treats as internal.
 - When a utility domain becomes canonical, point the build entry at its domain barrel and move shared cross-domain primitives under `src/internal/shared/**` instead of leaking them through a neighboring public module.
 - Canonical domain barrels can tighten value exports, but should preserve legacy type re-exports during the migration so the advanced import home grows without breaking compile-time callers.
+- Multi-file workflow domains can become canonical by routing root exports and build entries through one curated barrel while legacy leaf subpaths stay as compatibility seams for a later cutover.
 
 ---
 <!-- Task logs below - APPEND ONLY -->
@@ -59,3 +60,9 @@ Started: 2026-03-15
 - Implemented a canonical `micro509/verify` entrypoint, rerouted root verify-facing re-exports through it, and pointed tsdown at the domain barrel.
 - Files changed: `docs/API.md`, `src/index.ts`, `src/verify/index.ts`, `test/verify-domain.test.ts`, `tsdown.config.ts`, `.opencode/state/exports-harmonization/prd.json`, `.opencode/state/exports-harmonization/progress.txt`.
 - **Learnings:** verify-domain curation can make value ownership explicit, but the barrel still needs to preserve legacy transitive type exports during the migration so `micro509/verify` becomes the advanced home without surprise compile-time breaks.
+
+## Task - [build-revocation-domain]
+
+- Implemented a canonical `micro509/revocation` entrypoint, rerouted root revocation-facing re-exports through it, and pointed tsdown at the domain barrel.
+- Files changed: `docs/API.md`, `src/index.ts`, `src/revocation/index.ts`, `test/revocation-domain.test.ts`, `tsdown.config.ts`, `src/internal/x509/extension-registry.ts`, `src/internal/x509/name-fields.ts`, `src/ocsp.ts`, `src/pfx.ts`, `.opencode/state/exports-harmonization/prd.json`, `.opencode/state/exports-harmonization/progress.txt`.
+- **Learnings:** revocation needed one advanced home for CRL, OCSP, and orchestration values, but keeping transitive type re-exports and legacy `crl`/`ocsp` leaf entrypoints avoids a premature packaging cutover before the root-barrel and export-map tasks land.

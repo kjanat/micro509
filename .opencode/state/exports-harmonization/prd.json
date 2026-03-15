@@ -54,7 +54,7 @@
 			"description": "Merge CRL, OCSP, and revocation orchestration into one `revocation` public domain. Done when:\n- `src/revocation/index.ts` owns CRL, OCSP, and revocation orchestration APIs\n- the former `crl` and `ocsp` surfaces become subdomain implementation files rather than first-class package products\n- cross-links to verify and x509 types resolve through domain ownership rather than accidental file-level exports\n- advanced docs for revocation have one obvious import home",
 			"depends": ["move-internal-modules", "build-x509-domain", "build-verify-domain"],
 			"priority": "integration",
-			"passes": false
+			"passes": true
 		},
 		{
 			"id": "build-pkcs-domain",
