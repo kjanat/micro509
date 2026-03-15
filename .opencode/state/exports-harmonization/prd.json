@@ -114,7 +114,7 @@
 			"description": "Validate that the refactor leaves one coherent publishable API. Done when:\n- `bun typecheck`, `bun build`, and the relevant test suites pass\n- `deno doc --lint` passes for root and each surviving public domain entrypoint\n- `deno publish --dry-run` succeeds with the generated JSR export map\n- an automated parity check proves npm and JSR exports cannot silently drift",
 			"depends": ["migrate-tests-and-docs"],
 			"priority": "polish",
-			"passes": false
+			"passes": true
 		}
 	]
 }
