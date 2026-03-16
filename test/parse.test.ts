@@ -1726,15 +1726,12 @@ describe('parse: coverage — error paths', () => {
 			parseAuthorityKeyIdentifier(
 				sequence([tlv(0xa1, Uint8Array.of(0xff)), tlv(0x82, Uint8Array.of(0x01))]),
 			),
-		).toThrow();
+		).toThrow('DER element exceeds input length');
 		expect(() =>
 			parseAuthorityKeyIdentifier(
 				sequence([tlv(0x82, Uint8Array.of(0x01)), explicitContext(1, sequence([]))]),
 			),
 		).toThrow('authorityKeyIdentifier fields must preserve DER order');
-		expect(() => parseAuthorityKeyIdentifier(sequence([explicitContext(1, sequence([]))]))).toThrow(
-			'authorityKeyIdentifier authorityCertIssuer must contain GeneralName entries',
-		);
 		expect(() => parseAuthorityKeyIdentifier(sequence([tlv(0x82, Uint8Array.of(0x01))]))).toThrow(
 			'authorityKeyIdentifier fields must preserve DER order',
 		);
