@@ -304,7 +304,7 @@ export async function parsePfxDer(
 					options?.macPassword ?? options?.password,
 				);
 			} catch {
-				return pfxFailure('invalid_password', 'Invalid PFX MAC password or corrupted content');
+				return pfxFailure('malformed', 'Malformed PFX MacData');
 			}
 			if (macData?.valid === false) {
 				return pfxFailure('invalid_password', 'Invalid PFX MAC password or corrupted content');
@@ -438,7 +438,12 @@ async function extractSafeContents(
 		);
 		readSequenceChildren(decrypted);
 		return { data: decrypted };
-	} catch {
+	} catch (error) {
+		if (isMalformedPfxEncryptedContentError(error)) {
+			return {
+				error: pfxFailure('malformed', 'Malformed PFX encrypted content'),
+			};
+		}
 		return {
 			error: pfxFailure('invalid_password', 'Invalid PFX password or encrypted content'),
 		};
@@ -520,7 +525,7 @@ function parseSafeBag(der: Uint8Array): ParsedPfxBag {
 	const bagId = children[0];
 	const bagValue = children[1];
 	const attributeSet = children[2];
-	if (bagId === undefined || bagValue === undefined) {
+	if (bagId === undefined || bagValue === undefined || children.length > 3) {
 		throw new Error('Malformed SafeBag');
 	}
 	const bagOid = decodeObjectIdentifier(bagId.value);
@@ -529,8 +534,14 @@ function parseSafeBag(der: Uint8Array): ParsedPfxBag {
 		const certBag = extractContextChild(der, bagValue);
 		const certBagDer = der.slice(certBag.start - certBag.headerLength, certBag.end);
 		const certBagChildren = readSequenceChildren(certBagDer);
+		const certType = certBagChildren[0];
 		const certValue = certBagChildren[1];
-		if (certValue === undefined) {
+		if (
+			certType === undefined ||
+			certValue === undefined ||
+			certBagChildren.length !== 2 ||
+			decodeObjectIdentifier(certType.value) !== OIDS.x509CertificateBagType
+		) {
 			throw new Error('Malformed certBag');
 		}
 		const certificateDer = extractContextOctetString(certBagDer, certValue);
@@ -575,7 +586,7 @@ function parseBagAttributes(
 		const parts = readSequenceChildren(attributeDer);
 		const oid = parts[0];
 		const values = parts[1];
-		if (oid === undefined || values === undefined) {
+		if (oid === undefined || values === undefined || parts.length !== 2 || values.tag !== 0x31) {
 			throw new Error('Malformed PFX bag attribute');
 		}
 		const attrOid = decodeObjectIdentifier(oid.value);
@@ -586,15 +597,20 @@ function parseBagAttributes(
 			oid: attrOid,
 			valuesHex: rawValues.map((value) => toHex(value)),
 		});
-		const firstValue = rawValues[0];
-		if (firstValue === undefined) {
+		if (attrOid === OIDS.friendlyName) {
+			const firstValue = rawValues[0];
+			if (friendlyName !== undefined || rawValues.length !== 1 || firstValue === undefined) {
+				throw new Error('Malformed friendlyName attribute');
+			}
+			friendlyName = decodeBmpString(firstValue);
 			continue;
 		}
-		if (attrOid === OIDS.friendlyName) {
-			friendlyName = decodeBmpString(firstValue);
-		}
 		if (attrOid === OIDS.localKeyId) {
-			localKeyId = toHex(readElement(firstValue).value);
+			const firstValue = rawValues[0];
+			if (localKeyId !== undefined || rawValues.length !== 1 || firstValue === undefined) {
+				throw new Error('Malformed localKeyId attribute');
+			}
+			localKeyId = decodeLocalKeyId(firstValue);
 		}
 	}
 	return {
@@ -602,6 +618,26 @@ function parseBagAttributes(
 		...(friendlyName === undefined ? {} : { friendlyName }),
 		...(localKeyId === undefined ? {} : { localKeyId }),
 	};
+}
+
+function decodeLocalKeyId(der: Uint8Array): string {
+	const element = readElement(der);
+	if (element.tag !== 0x04) {
+		throw new Error('localKeyId must use OCTET STRING');
+	}
+	return toHex(element.value);
+}
+
+function isMalformedPfxEncryptedContentError(error: unknown): boolean {
+	if (!(error instanceof Error)) {
+		return false;
+	}
+	return (
+		error.message.startsWith('Malformed ') ||
+		error.message.startsWith('Unsupported ') ||
+		error.message.startsWith('Invalid PBES2 ') ||
+		error.message === 'Only passwordless data ContentInfo is supported'
+	);
 }
 
 /** Exports a `CryptoKey` to PKCS#8 DER, or passes raw bytes through. */

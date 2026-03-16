@@ -2259,7 +2259,7 @@ if (result.ok && result.value.status === 'revoked') {
 
 > **checkCertificateRevocationAgainstCrl**(`input`): `Promise`\<[`CheckCertificateRevocationAgainstCrlResult`](#checkcertificaterevocationagainstcrlresult)\>
 
-Defined in: [revocation/crl.ts:703](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L703)
+Defined in: [revocation/crl.ts:650](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L650)
 
 End-to-end revocation check: validates the CRL (and optional delta CRL),
 verifies applicability via distribution-point and scope matching, then
@@ -2380,7 +2380,7 @@ const req = await createOcspRequest({
 
 > **createOcspResponse**(`input`): `Promise`\<[`OcspResponseMaterial`](#ocspresponsematerial)\>
 
-Defined in: [revocation/ocsp.ts:542](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L542)
+Defined in: [revocation/ocsp.ts:526](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L526)
 
 Signs and encodes an OCSP BasicResponse with a `successful` status.
 
@@ -2445,7 +2445,7 @@ readonly `string`[]
 
 > **isCertificateRevoked**(`certificateSerialNumber`, `crl`): `boolean`
 
-Defined in: [revocation/crl.ts:833](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L833)
+Defined in: [revocation/crl.ts:780](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L780)
 
 Quick serial-number lookup — returns `true` if the serial appears in the
 CRL's revoked entries. Does **not** validate the CRL or check applicability.
@@ -2493,7 +2493,7 @@ Does not verify the signature — call [`verifyCertificateRevocationList`](#veri
 
 > **parseCertificateRevocationListPem**(`pem`): [`ParsedCertificateRevocationList`](#parsedcertificaterevocationlist)
 
-Defined in: [revocation/crl.ts:581](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L581)
+Defined in: [revocation/crl.ts:520](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L520)
 
 Decodes a PEM-encoded X.509 CRL (`-----BEGIN X509 CRL-----`).
 
@@ -2585,7 +2585,7 @@ Decodes a DER-encoded OCSP response into a structured [`ParsedOcspResponse`](#pa
 
 > **parseOcspResponsePem**(`pem`): [`ParsedOcspResponse`](#parsedocspresponse)
 
-Defined in: [revocation/ocsp.ts:511](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L511)
+Defined in: [revocation/ocsp.ts:495](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L495)
 
 Decodes a PEM-encoded OCSP response (`-----BEGIN OCSP RESPONSE-----`).
 
@@ -2642,7 +2642,7 @@ readonly [`OcspResponderCandidate`](#ocsprespondercandidate)[]
 
 > **validateCertificateRevocationList**(`input`): `Promise`\<[`ValidateCertificateRevocationListResult`](#validatecertificaterevocationlistresult)\>
 
-Defined in: [revocation/crl.ts:625](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L625)
+Defined in: [revocation/crl.ts:564](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L564)
 
 Full CRL validation: issuer name match, authority key identifier match,
 cRLSign key-usage check, signature verification, and `thisUpdate`/`nextUpdate`
@@ -2664,7 +2664,7 @@ freshness check (with optional clock-skew tolerance).
 
 > **validateOcspResponse**(`input`): `Promise`\<[`ValidateOcspResponseResult`](#validateocspresponseresult)\>
 
-Defined in: [revocation/ocsp.ts:662](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L662)
+Defined in: [revocation/ocsp.ts:654](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L654)
 
 Full OCSP response validation: response status check, signature verification,
 responder ID binding (byName or byKeyHash), delegated-responder chain and
@@ -2703,7 +2703,7 @@ if (result.ok) {
 
 > **verifyCertificateRevocationList**(`crl`, `issuerCertificate`): `Promise`\<[`VerifyCertificateRevocationListResult`](#verifycertificaterevocationlistresult)\>
 
-Defined in: [revocation/crl.ts:591](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L591)
+Defined in: [revocation/crl.ts:530](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L530)
 
 Verifies the CRL signature against the issuer certificate's public key.
 
@@ -2730,7 +2730,7 @@ Does **not** check issuer name match, key-usage, or freshness — use
 
 > **verifyOcspResponse**(`response`, `signerCertificate`): `Promise`\<[`VerifyOcspResponseResult`](#verifyocspresponseresult)\>
 
-Defined in: [revocation/ocsp.ts:611](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L611)
+Defined in: [revocation/ocsp.ts:595](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L595)
 
 Verifies the OCSP response signature against the given signer certificate.
 

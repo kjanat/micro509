@@ -986,6 +986,40 @@ describe('pkcs12-mac.ts edge cases', () => {
 		expect(parsed.valid).toBeUndefined();
 	});
 
+	it('parsePkcs12MacData throws on zero iterations', async () => {
+		const malformed = sequence([
+			sequence([
+				sequence([objectIdentifier(OIDS.sha256), nullValue()]),
+				octetString(new Uint8Array(32)),
+			]),
+			octetString(new Uint8Array(16)),
+			integerFromNumber(0),
+		]);
+		expect(parsePkcs12MacData(malformed, dummySafe)).rejects.toThrow(
+			'MacData iterations must be a positive safe integer',
+		);
+	});
+
+	it('parsePkcs12MacData throws on negative iterations', async () => {
+		const malformed = sequence([
+			sequence([
+				sequence([objectIdentifier(OIDS.sha256), nullValue()]),
+				octetString(new Uint8Array(32)),
+			]),
+			octetString(new Uint8Array(16)),
+			new Uint8Array([0x02, 0x01, 0xff]),
+		]);
+		expect(parsePkcs12MacData(malformed, dummySafe)).rejects.toThrow(
+			'MacData iterations must be non-negative',
+		);
+	});
+
+	it('createPkcs12MacData rejects zero iterations', async () => {
+		expect(createPkcs12MacData(dummySafe, { password: 'test', iterations: 0 })).rejects.toThrow(
+			'MacData iterations must be a positive safe integer',
+		);
+	});
+
 	it('createPkcs12MacData supports empty salt', async () => {
 		const data = new Uint8Array([0x30, 0x03, 0x01, 0x01, 0xff]);
 		const mac = await createPkcs12MacData(data, {

@@ -8,7 +8,7 @@
  */
 
 import {
-	decodeIntegerNumber,
+	decodeNonNegativeIntegerNumber,
 	decodeObjectIdentifier,
 	toArrayBuffer,
 	toHex,
@@ -66,6 +66,7 @@ export async function createPkcs12MacData(
 	readonly parsed: ParsedPkcs12MacData;
 }> {
 	const iterations = options.iterations ?? 2048;
+	assertPkcs12MacIterations(iterations);
 	const salt = options.salt ?? getCrypto().getRandomValues(new Uint8Array(16));
 	const mac = await computePkcs12Mac(authenticatedSafe, options.password, salt, iterations);
 	const der = sequence([
@@ -99,6 +100,7 @@ export async function parsePkcs12MacData(
 	const salt = top[1];
 	const iterations = top[2];
 	if (
+		top.length !== 3 ||
 		digestInfo === undefined ||
 		salt === undefined ||
 		iterations === undefined ||
@@ -110,25 +112,35 @@ export async function parsePkcs12MacData(
 	const digestInfoChildren = readSequenceChildren(digestInfoDer);
 	const algorithm = digestInfoChildren[0];
 	const digest = digestInfoChildren[1];
-	if (algorithm === undefined || digest === undefined || digest.tag !== 0x04) {
+	if (
+		digestInfoChildren.length !== 2 ||
+		algorithm === undefined ||
+		digest === undefined ||
+		digest.tag !== 0x04
+	) {
 		throw new Error('Malformed DigestInfo');
 	}
 	const algorithmDer = digestInfoDer.slice(algorithm.start - algorithm.headerLength, algorithm.end);
 	const algorithmChildren = readSequenceChildren(algorithmDer);
 	const algorithmOid = algorithmChildren[0];
-	if (algorithmOid === undefined) {
+	if (
+		algorithmOid === undefined ||
+		(algorithmChildren.length !== 1 && algorithmChildren.length !== 2)
+	) {
 		throw new Error('MacData algorithm missing');
 	}
 	const digestAlgorithmOid = decodeObjectIdentifier(algorithmOid.value);
 	if (digestAlgorithmOid !== OIDS.sha256) {
 		throw new Error('Only SHA-256 PKCS#12 MAC is supported');
 	}
+	const parsedIterations = decodeNonNegativeIntegerNumber(iterations.value, 'MacData iterations');
+	assertPkcs12MacIterations(parsedIterations);
 	const parsed: ParsedPkcs12MacData = {
 		digestAlgorithmOid,
 		digestAlgorithmName: describeHashAlgorithm(digestAlgorithmOid),
 		digestHex: toHex(digest.value),
 		saltHex: toHex(salt.value),
-		iterations: decodeIntegerNumber(iterations.value),
+		iterations: parsedIterations,
 	};
 	if (password === undefined) {
 		return parsed;
@@ -140,6 +152,12 @@ export async function parsePkcs12MacData(
 		parsed.iterations,
 	);
 	return { ...parsed, valid: equalBytes(expected, digest.value) };
+}
+
+function assertPkcs12MacIterations(iterations: number): void {
+	if (!Number.isSafeInteger(iterations) || iterations <= 0) {
+		throw new Error('MacData iterations must be a positive safe integer');
+	}
 }
 
 /** Derives an HMAC-SHA-256 key via the PKCS#12 KDF and signs the AuthenticatedSafe. */

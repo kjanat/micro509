@@ -828,7 +828,7 @@ const pem = await keys.exportPkcs8Pem();
 
 > **importEncryptedPkcs1Pem**(`pem`, `password`, `algorithm?`): `Promise`\<`CryptoKey`\>
 
-Defined in: [keys/keys.ts:440](https://github.com/kjanat/ts-x509/blob/vitepress/src/keys/keys.ts#L440)
+Defined in: [keys/keys.ts:459](https://github.com/kjanat/ts-x509/blob/vitepress/src/keys/keys.ts#L459)
 
 Import an RSA private key from legacy `Proc-Type: 4,ENCRYPTED` PEM (PKCS#1).
 
@@ -856,7 +856,7 @@ Import an RSA private key from legacy `Proc-Type: 4,ENCRYPTED` PEM (PKCS#1).
 
 > **importEncryptedPkcs8Der**(`der`, `password`, `algorithm`): `Promise`\<`CryptoKey`\>
 
-Defined in: [keys/keys.ts:381](https://github.com/kjanat/ts-x509/blob/vitepress/src/keys/keys.ts#L381)
+Defined in: [keys/keys.ts:394](https://github.com/kjanat/ts-x509/blob/vitepress/src/keys/keys.ts#L394)
 
 Import a private key from DER-encoded PBES2-encrypted PKCS#8 EncryptedPrivateKeyInfo.
 
@@ -884,7 +884,7 @@ Import a private key from DER-encoded PBES2-encrypted PKCS#8 EncryptedPrivateKey
 
 > **importEncryptedPkcs8Pem**(`pem`, `password`, `algorithm`): `Promise`\<`CryptoKey`\>
 
-Defined in: [keys/keys.ts:415](https://github.com/kjanat/ts-x509/blob/vitepress/src/keys/keys.ts#L415)
+Defined in: [keys/keys.ts:434](https://github.com/kjanat/ts-x509/blob/vitepress/src/keys/keys.ts#L434)
 
 Import a private key from PEM-encoded PBES2-encrypted PKCS#8 EncryptedPrivateKeyInfo.
 
@@ -920,7 +920,7 @@ const key = await importEncryptedPkcs8Pem(pem, 'secret', {
 
 > **importEncryptedSec1Pem**(`pem`, `password`, `algorithm`): `Promise`\<`CryptoKey`\>
 
-Defined in: [keys/keys.ts:474](https://github.com/kjanat/ts-x509/blob/vitepress/src/keys/keys.ts#L474)
+Defined in: [keys/keys.ts:500](https://github.com/kjanat/ts-x509/blob/vitepress/src/keys/keys.ts#L500)
 
 Import an EC private key from legacy `Proc-Type: 4,ENCRYPTED` PEM (SEC 1).
 
@@ -948,7 +948,7 @@ Import an EC private key from legacy `Proc-Type: 4,ENCRYPTED` PEM (SEC 1).
 
 > **importPkcs1Der**(`der`, `algorithm?`): `Promise`\<`CryptoKey`\>
 
-Defined in: [keys/keys.ts:424](https://github.com/kjanat/ts-x509/blob/vitepress/src/keys/keys.ts#L424)
+Defined in: [keys/keys.ts:443](https://github.com/kjanat/ts-x509/blob/vitepress/src/keys/keys.ts#L443)
 
 Import an RSA private key from DER-encoded PKCS#1 RSAPrivateKey.
 
@@ -972,7 +972,7 @@ Import an RSA private key from DER-encoded PKCS#1 RSAPrivateKey.
 
 > **importPkcs1Pem**(`pem`, `algorithm?`): `Promise`\<`CryptoKey`\>
 
-Defined in: [keys/keys.ts:432](https://github.com/kjanat/ts-x509/blob/vitepress/src/keys/keys.ts#L432)
+Defined in: [keys/keys.ts:451](https://github.com/kjanat/ts-x509/blob/vitepress/src/keys/keys.ts#L451)
 
 Import an RSA private key from PEM-encoded PKCS#1 RSAPrivateKey (`RSA PRIVATE KEY` label).
 
@@ -996,7 +996,7 @@ Import an RSA private key from PEM-encoded PKCS#1 RSAPrivateKey (`RSA PRIVATE KE
 
 > **importPkcs8Base64**(`base64`, `algorithm`): `Promise`\<`CryptoKey`\>
 
-Defined in: [keys/keys.ts:450](https://github.com/kjanat/ts-x509/blob/vitepress/src/keys/keys.ts#L450)
+Defined in: [keys/keys.ts:469](https://github.com/kjanat/ts-x509/blob/vitepress/src/keys/keys.ts#L469)
 
 Import a private key from base64-encoded PKCS#8 PrivateKeyInfo (no PEM headers).
 
@@ -1020,7 +1020,7 @@ Import a private key from base64-encoded PKCS#8 PrivateKeyInfo (no PEM headers).
 
 > **importPkcs8Der**(`der`, `algorithm`): `Promise`\<`CryptoKey`\>
 
-Defined in: [keys/keys.ts:352](https://github.com/kjanat/ts-x509/blob/vitepress/src/keys/keys.ts#L352)
+Defined in: [keys/keys.ts:360](https://github.com/kjanat/ts-x509/blob/vitepress/src/keys/keys.ts#L360)
 
 Import a private key from DER-encoded PKCS#8 PrivateKeyInfo.
 
@@ -1044,7 +1044,7 @@ Import a private key from DER-encoded PKCS#8 PrivateKeyInfo.
 
 > **importPkcs8Pem**(`pem`, `algorithm`): `Promise`\<`CryptoKey`\>
 
-Defined in: [keys/keys.ts:373](https://github.com/kjanat/ts-x509/blob/vitepress/src/keys/keys.ts#L373)
+Defined in: [keys/keys.ts:386](https://github.com/kjanat/ts-x509/blob/vitepress/src/keys/keys.ts#L386)
 
 Import a private key from PEM-encoded PKCS#8 PrivateKeyInfo.
 
@@ -1077,7 +1077,7 @@ const key = await importPkcs8Pem(pemString, {
 
 > **importPrivateJwk**(`jwk`, `algorithm`): `Promise`\<`CryptoKey`\>
 
-Defined in: [keys/keys.ts:500](https://github.com/kjanat/ts-x509/blob/vitepress/src/keys/keys.ts#L500)
+Defined in: [keys/keys.ts:526](https://github.com/kjanat/ts-x509/blob/vitepress/src/keys/keys.ts#L526)
 
 Import a private signing key from a JSON Web Key.
 
@@ -1117,7 +1117,7 @@ const key = await importPrivateJwk(jwk, {
 
 > **importPublicJwk**(`jwk`, `algorithm`): `Promise`\<`CryptoKey`\>
 
-Defined in: [keys/keys.ts:484](https://github.com/kjanat/ts-x509/blob/vitepress/src/keys/keys.ts#L484)
+Defined in: [keys/keys.ts:510](https://github.com/kjanat/ts-x509/blob/vitepress/src/keys/keys.ts#L510)
 
 Import a public verification key from a JSON Web Key.
 
@@ -1141,7 +1141,7 @@ Import a public verification key from a JSON Web Key.
 
 > **importSec1Der**(`der`, `algorithm`): `Promise`\<`CryptoKey`\>
 
-Defined in: [keys/keys.ts:458](https://github.com/kjanat/ts-x509/blob/vitepress/src/keys/keys.ts#L458)
+Defined in: [keys/keys.ts:484](https://github.com/kjanat/ts-x509/blob/vitepress/src/keys/keys.ts#L484)
 
 Import an EC private key from DER-encoded SEC 1 ECPrivateKey.
 
@@ -1165,7 +1165,7 @@ Import an EC private key from DER-encoded SEC 1 ECPrivateKey.
 
 > **importSec1Pem**(`pem`, `algorithm`): `Promise`\<`CryptoKey`\>
 
-Defined in: [keys/keys.ts:466](https://github.com/kjanat/ts-x509/blob/vitepress/src/keys/keys.ts#L466)
+Defined in: [keys/keys.ts:492](https://github.com/kjanat/ts-x509/blob/vitepress/src/keys/keys.ts#L492)
 
 Import an EC private key from PEM-encoded SEC 1 ECPrivateKey (`EC PRIVATE KEY` label).
 
@@ -1189,7 +1189,7 @@ Import an EC private key from PEM-encoded SEC 1 ECPrivateKey (`EC PRIVATE KEY` l
 
 > **importSpkiBase64**(`base64`, `algorithm`): `Promise`\<`CryptoKey`\>
 
-Defined in: [keys/keys.ts:344](https://github.com/kjanat/ts-x509/blob/vitepress/src/keys/keys.ts#L344)
+Defined in: [keys/keys.ts:345](https://github.com/kjanat/ts-x509/blob/vitepress/src/keys/keys.ts#L345)
 
 Import a public key from base64-encoded SubjectPublicKeyInfo (no PEM headers).
 
@@ -1237,7 +1237,7 @@ Import a public key from DER-encoded SubjectPublicKeyInfo.
 
 > **importSpkiPem**(`pem`, `algorithm`): `Promise`\<`CryptoKey`\>
 
-Defined in: [keys/keys.ts:336](https://github.com/kjanat/ts-x509/blob/vitepress/src/keys/keys.ts#L336)
+Defined in: [keys/keys.ts:337](https://github.com/kjanat/ts-x509/blob/vitepress/src/keys/keys.ts#L337)
 
 Import a public key from PEM-encoded SubjectPublicKeyInfo.
 
