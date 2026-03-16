@@ -2197,6 +2197,136 @@ describe('ocsp', () => {
 		expect(() => parseOcspResponseDer(ocspResponseDer)).toThrow('Duplicate OCSP extension OID');
 	});
 
+	it('parseOcspResponseDer rejects non-OCTET OCSP extension values', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'OCSP Bad Extension Value CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'OCSP Bad Extension Value CA' },
+			subject: { commonName: 'bad-extension-value-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+
+		const issuerParsed = parseCertificatePem(issuer.certificate.pem);
+		const leafParsed = parseCertificatePem(leaf.pem);
+		const issuerNameHash = new Uint8Array(sha1(hexToBytes(issuerParsed.subject.derHex)));
+		const spkiDer = issuerParsed.subjectPublicKeyInfoDer;
+		const spkiTop = childrenOf(spkiDer, readElement(spkiDer));
+		const spkiBitString = spkiTop[1];
+		const publicKeyBytes =
+			spkiBitString !== undefined ? spkiBitString.value.slice(1) : new Uint8Array(0);
+		const issuerKeyHash = new Uint8Array(sha1(publicKeyBytes));
+
+		const certId = sequence([
+			sequence([objectIdentifier(OIDS.sha1), Uint8Array.of(0x05, 0x00)]),
+			octetString(issuerNameHash),
+			octetString(issuerKeyHash),
+			tlv(0x02, hexToBytes(leafParsed.serialNumberHex)),
+		]);
+		const singleResponse = sequence([
+			certId,
+			tlv(0x80, new Uint8Array(0)),
+			generalizedTime(new Date()),
+		]);
+		const nonceExtension = sequence([objectIdentifier(OIDS.ocspNonce), integerFromNumber(1)]);
+		const responseData = sequence([
+			tlv(0xa2, octetString(issuerKeyHash)),
+			generalizedTime(new Date()),
+			sequence([singleResponse]),
+			explicitContext(1, sequence([nonceExtension])),
+		]);
+		const sigAlgIdentifier = sequence([
+			objectIdentifier(OIDS.sha256WithRSAEncryption),
+			Uint8Array.of(0x05, 0x00),
+		]);
+		const fakeSig = bitString(new Uint8Array(64));
+		const basicResponse = sequence([responseData, sigAlgIdentifier, fakeSig]);
+		const ocspResponseDer = sequence([
+			tlv(0x0a, Uint8Array.of(0x00)),
+			explicitContext(
+				0,
+				sequence([objectIdentifier(OIDS.ocspBasicResponse), octetString(basicResponse)]),
+			),
+		]);
+
+		expect(() => parseOcspResponseDer(ocspResponseDer)).toThrow(
+			'OCSP extension value must use OCTET STRING',
+		);
+	});
+
+	it('parseOcspResponseDer rejects malformed OCSP extension middle fields', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'OCSP Bad Extension Middle Field CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'OCSP Bad Extension Middle Field CA' },
+			subject: { commonName: 'bad-extension-middle-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+
+		const issuerParsed = parseCertificatePem(issuer.certificate.pem);
+		const leafParsed = parseCertificatePem(leaf.pem);
+		const issuerNameHash = new Uint8Array(sha1(hexToBytes(issuerParsed.subject.derHex)));
+		const spkiDer = issuerParsed.subjectPublicKeyInfoDer;
+		const spkiTop = childrenOf(spkiDer, readElement(spkiDer));
+		const spkiBitString = spkiTop[1];
+		const publicKeyBytes =
+			spkiBitString !== undefined ? spkiBitString.value.slice(1) : new Uint8Array(0);
+		const issuerKeyHash = new Uint8Array(sha1(publicKeyBytes));
+
+		const certId = sequence([
+			sequence([objectIdentifier(OIDS.sha1), Uint8Array.of(0x05, 0x00)]),
+			octetString(issuerNameHash),
+			octetString(issuerKeyHash),
+			tlv(0x02, hexToBytes(leafParsed.serialNumberHex)),
+		]);
+		const singleResponse = sequence([
+			certId,
+			tlv(0x80, new Uint8Array(0)),
+			generalizedTime(new Date()),
+		]);
+		const nonceExtension = sequence([
+			objectIdentifier(OIDS.ocspNonce),
+			integerFromNumber(1),
+			octetString(octetString(Uint8Array.of(0xaa, 0xbb))),
+		]);
+		const responseData = sequence([
+			tlv(0xa2, octetString(issuerKeyHash)),
+			generalizedTime(new Date()),
+			sequence([singleResponse]),
+			explicitContext(1, sequence([nonceExtension])),
+		]);
+		const sigAlgIdentifier = sequence([
+			objectIdentifier(OIDS.sha256WithRSAEncryption),
+			Uint8Array.of(0x05, 0x00),
+		]);
+		const fakeSig = bitString(new Uint8Array(64));
+		const basicResponse = sequence([responseData, sigAlgIdentifier, fakeSig]);
+		const ocspResponseDer = sequence([
+			tlv(0x0a, Uint8Array.of(0x00)),
+			explicitContext(
+				0,
+				sequence([objectIdentifier(OIDS.ocspBasicResponse), octetString(basicResponse)]),
+			),
+		]);
+
+		expect(() => parseOcspResponseDer(ocspResponseDer)).toThrow('Malformed OCSP extension');
+	});
+
 	it('validateOcspResponse rejects invalid delegated responder chains for pre-parsed certs', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'OCSP Src CA' },

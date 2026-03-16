@@ -824,6 +824,9 @@ function parseExtensionSequence(
 
 	for (const extension of childrenOf(source, sequenceElement)) {
 		const children = childrenOf(source, extension);
+		if (children.length < 2 || children.length > 3) {
+			throw new Error('Malformed Extension');
+		}
 		const oidElement = requireElement(children[0], 'extension OID');
 		const oid = decodeObjectIdentifier(oidElement.value);
 		if (seenOids.has(oid)) {
@@ -838,6 +841,9 @@ function parseExtensionSequence(
 			offset += 1;
 		}
 		const extnValue = requireElement(children[offset], 'extension value');
+		if (extnValue.tag !== 0x04 || offset !== children.length - 1) {
+			throw new Error('Extension value must use OCTET STRING');
+		}
 		parsed.push({
 			oid,
 			critical,

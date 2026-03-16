@@ -1425,6 +1425,12 @@ function parseRevokedCertificateExtensions(
 	const seenOids = new Set<string>();
 	for (const extension of childrenOf(entryDer, element)) {
 		const parts = childrenOf(entryDer, extension);
+		if (parts.length < 2 || parts.length > 3) {
+			throw new Error('Malformed revoked certificate extension');
+		}
+		if (parts.length === 3 && parts[1]?.tag !== 0x01) {
+			throw new Error('Malformed revoked certificate extension');
+		}
 		const oid = decodeObjectIdentifier(
 			requireElement(parts[0], 'revoked certificate extension OID').value,
 		);
@@ -1436,6 +1442,9 @@ function parseRevokedCertificateExtensions(
 			parts[parts.length - 1],
 			'revoked certificate extension value',
 		);
+		if (valueElement.tag !== 0x04) {
+			throw new Error('Revoked certificate extension value must use OCTET STRING');
+		}
 		if (oid === OIDS.cRLReason) {
 			reasonCode = revocationReasonFromCode(readElement(valueElement.value).value[0]);
 		}
@@ -1960,12 +1969,21 @@ function parseSignedCrlFields(tbsCertListDer: Uint8Array): {
 		);
 		for (const extension of childrenOf(tbsCertListDer, extensionSequence)) {
 			const parts = childrenOf(tbsCertListDer, extension);
+			if (parts.length < 2 || parts.length > 3) {
+				throw new Error('Malformed CRL extension');
+			}
+			if (parts.length === 3 && parts[1]?.tag !== 0x01) {
+				throw new Error('Malformed CRL extension');
+			}
 			const oid = decodeObjectIdentifier(requireElement(parts[0], 'extension OID').value);
 			if (seenOids.has(oid)) {
 				throw new Error(`Duplicate CRL extension OID: ${oid}`);
 			}
 			seenOids.add(oid);
 			const valueElement = requireElement(parts[parts.length - 1], 'extension value');
+			if (valueElement.tag !== 0x04) {
+				throw new Error('CRL extension value must use OCTET STRING');
+			}
 			if (oid === OIDS.authorityKeyIdentifier) {
 				authorityKeyIdentifier = parseAuthorityKeyIdentifier(valueElement.value);
 			}

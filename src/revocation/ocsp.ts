@@ -1348,15 +1348,24 @@ function parseOcspNonceFromExtensions(source: Uint8Array, element: DerElement): 
 	let nonce: string | undefined;
 	for (const extension of childrenOf(source, extensionsSequence)) {
 		const parts = childrenOf(source, extension);
+		if (parts.length < 2 || parts.length > 3) {
+			throw new Error('Malformed OCSP extension');
+		}
+		if (parts.length === 3 && parts[1]?.tag !== 0x01) {
+			throw new Error('Malformed OCSP extension');
+		}
 		const oid = decodeObjectIdentifier(requireElement(parts[0], 'extension OID').value);
 		if (seenOids.has(oid)) {
 			throw new Error(`Duplicate OCSP extension OID: ${oid}`);
 		}
 		seenOids.add(oid);
+		const extnValue = requireElement(parts[parts.length - 1], 'extnValue');
+		if (extnValue.tag !== 0x04) {
+			throw new Error('OCSP extension value must use OCTET STRING');
+		}
 		if (oid !== OIDS.ocspNonce) {
 			continue;
 		}
-		const extnValue = requireElement(parts[parts.length - 1], 'extnValue');
 		nonce = toHex(readElement(extnValue.value).value);
 	}
 	return nonce;
