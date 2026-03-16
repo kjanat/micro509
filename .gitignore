@@ -167,3 +167,4 @@ src/**/*.d.ts
 /site/.vitepress/cache/
 /site/.vitepress/dist/
 .playwright-cli
+.opencode/state/
