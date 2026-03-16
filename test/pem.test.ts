@@ -4,6 +4,7 @@ import {
 	createCertificateSigningRequest,
 	createSelfSignedCertificate,
 	generateKeyPair,
+	parseCertificateChainPem,
 	pemDecode,
 	splitPemBlocks,
 } from 'micro509';
@@ -50,5 +51,79 @@ describe('pem', () => {
 			others: [{ label: 'SOMETHING' }],
 		});
 		expect(() => pemDecode('CERTIFICATE', publicPem)).toThrow('Invalid PEM for CERTIFICATE');
+	});
+
+	it('rejects single-line PEM envelopes', () => {
+		const pem = '-----BEGIN CERTIFICATE-----AQID-----END CERTIFICATE-----';
+		expect(() => pemDecode('CERTIFICATE', pem)).toThrow('Invalid PEM for CERTIFICATE');
+	});
+
+	it('rejects malformed base64 inside PEM envelopes with stable errors', () => {
+		const pem = '-----BEGIN CERTIFICATE-----\n@@@@\n-----END CERTIFICATE-----';
+		expect(() => pemDecode('CERTIFICATE', pem)).toThrow('Invalid PEM for CERTIFICATE');
+	});
+
+	it('pemDecode tolerates harmless whitespace around base64 body lines', () => {
+		const pem = '-----BEGIN CERTIFICATE-----\n AQID \n-----END CERTIFICATE-----';
+		expect(Array.from(pemDecode('CERTIFICATE', pem))).toEqual([1, 2, 3]);
+	});
+
+	it('pemDecode tolerates embedded horizontal whitespace inside base64 body lines', () => {
+		const pem = '-----BEGIN CERTIFICATE-----\nAQ I\tD\n-----END CERTIFICATE-----';
+		expect(Array.from(pemDecode('CERTIFICATE', pem))).toEqual([1, 2, 3]);
+	});
+
+	it('pemDecode tolerates whitespace-only separator lines inside the body', () => {
+		const pem = '-----BEGIN CERTIFICATE-----\nAQID\n \t\n-----END CERTIFICATE-----';
+		expect(Array.from(pemDecode('CERTIFICATE', pem))).toEqual([1, 2, 3]);
+	});
+
+	it('splitPemBlocks rejects truncated trailing PEM blocks instead of dropping them', async () => {
+		const certificate = await createSelfSignedCertificate({
+			subject: { commonName: 'truncated-pem.example' },
+		});
+		const malformedBundle = `${certificate.certificate.pem}\n-----BEGIN CERTIFICATE-----\nAQID`;
+		expect(() => splitPemBlocks(malformedBundle)).toThrow('Malformed PEM block');
+	});
+
+	it('splitPemBlocks keeps adjacent concatenated PEM blocks working', async () => {
+		const first = await createSelfSignedCertificate({
+			subject: { commonName: 'adjacent-first.example' },
+		});
+		const second = await createSelfSignedCertificate({
+			subject: { commonName: 'adjacent-second.example' },
+		});
+		const adjacentBundle = `${first.certificate.pem}${second.certificate.pem}`;
+		expect(splitPemBlocks(adjacentBundle).map((block) => block.label)).toEqual([
+			'CERTIFICATE',
+			'CERTIFICATE',
+		]);
+	});
+
+	it('splitPemBlocks still ignores non-PEM text between blocks', async () => {
+		const certificate = await createSelfSignedCertificate({
+			subject: { commonName: 'noise-between.example' },
+		});
+		const csr = await createCertificateSigningRequest({
+			subject: { commonName: 'noise-between.example' },
+			publicKey: certificate.keyPair.publicKey,
+			signerPrivateKey: certificate.keyPair.privateKey,
+		});
+		const bundle = `${certificate.certificate.pem}\nnot pem text\n${csr.pem}`;
+		expect(splitPemBlocks(bundle).map((block) => block.label)).toEqual([
+			'CERTIFICATE',
+			'CERTIFICATE REQUEST',
+		]);
+	});
+
+	it('parseCertificateChainPem rejects malformed trailing PEM blocks instead of silently shrinking bundles', async () => {
+		const first = await createSelfSignedCertificate({
+			subject: { commonName: 'first-chain.example' },
+		});
+		const second = await createSelfSignedCertificate({
+			subject: { commonName: 'second-chain.example' },
+		});
+		const malformedBundle = `${first.certificate.pem}\n${second.certificate.pem}\n-----BEGIN CERTIFICATE-----\nAQID`;
+		expect(() => parseCertificateChainPem(malformedBundle)).toThrow('Malformed PEM block');
 	});
 });

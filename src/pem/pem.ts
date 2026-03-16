@@ -59,14 +59,19 @@ export function pemDecode(label: string, pem: string): Uint8Array {
 	const normalized = pem.replace(/\r/g, '').trim();
 	const begin = `-----BEGIN ${label}-----`;
 	const end = `-----END ${label}-----`;
-	if (!normalized.startsWith(begin) || !normalized.endsWith(end)) {
+	const lines = normalized.split('\n');
+	if (lines[0] !== begin || lines[lines.length - 1] !== end || lines.length < 3) {
 		throw new Error(`Invalid PEM for ${label}`);
 	}
-	const body = normalized
-		.slice(begin.length, normalized.length - end.length)
-		.replace(/\n/g, '')
-		.trim();
-	return base64Decode(body);
+	const bodyLines = normalizePemBodyLines(lines.slice(1, -1));
+	if (bodyLines === undefined) {
+		throw new Error(`Invalid PEM for ${label}`);
+	}
+	try {
+		return base64Decode(bodyLines.join(''));
+	} catch {
+		throw new Error(`Invalid PEM for ${label}`);
+	}
 }
 
 /**
@@ -76,21 +81,30 @@ export function pemDecode(label: string, pem: string): Uint8Array {
  */
 export function splitPemBlocks(input: string): readonly PemBlock[] {
 	const normalized = input.replace(/\r/g, '');
-	return Array.from(
-		normalized.matchAll(/-----BEGIN ([^-]+)-----[\s\S]*?-----END \1-----/g),
-		(match) => {
-			const pem = match[0];
-			const label = match[1];
-			if (pem === undefined || label === undefined) {
-				throw new Error('Invalid PEM block match');
-			}
-			return {
-				label,
-				bytes: pemDecode(label, pem),
-				pem,
-			};
-		},
-	);
+	const blocks: PemBlock[] = [];
+	const pattern = /-----BEGIN ([^-]+)-----\n([\s\S]*?)\n-----END \1-----/g;
+	let cursor = 0;
+	for (const match of normalized.matchAll(pattern)) {
+		const pem = match[0];
+		const label = match[1];
+		const index = match.index;
+		if (pem === undefined || label === undefined || index === undefined) {
+			throw new Error('Invalid PEM block match');
+		}
+		if (containsPemMarker(normalized.slice(cursor, index))) {
+			throw new Error('Malformed PEM block');
+		}
+		blocks.push({
+			label,
+			bytes: pemDecode(label, pem),
+			pem,
+		});
+		cursor = index + pem.length;
+	}
+	if (containsPemMarker(normalized.slice(cursor))) {
+		throw new Error('Malformed PEM block');
+	}
+	return blocks;
 }
 
 /**
@@ -128,4 +142,17 @@ export function categorizePemBlocks(input: string | readonly PemBlock[]): Catego
 	}
 
 	return { certificates, certificateRequests, privateKeys, publicKeys, others };
+}
+
+function normalizePemBodyLines(lines: readonly string[]): readonly string[] | undefined {
+	const normalizedLines = lines.map((line) => line.replace(/[ \t]/g, ''));
+	const nonEmptyLines = normalizedLines.filter((line) => line !== '');
+	if (nonEmptyLines.length === 0) {
+		return [''];
+	}
+	return nonEmptyLines.every((line) => /^[A-Za-z0-9+/=]+$/.test(line)) ? nonEmptyLines : undefined;
+}
+
+function containsPemMarker(value: string): boolean {
+	return value.includes('-----BEGIN ') || value.includes('-----END ');
 }
