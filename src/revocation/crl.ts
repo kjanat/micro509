@@ -1915,8 +1915,16 @@ function parseSignedCrlFields(tbsCertListDer: Uint8Array): {
 	const tbsChildren = childrenOf(tbsCertListDer, tbsCertList);
 	let index = 0;
 	let version = 1;
-	if (tbsChildren[index]?.tag === 0x02) {
-		version = decodeIntegerNumber(requireElement(tbsChildren[index], 'version').value) + 1;
+	const firstChild = tbsChildren[index];
+	if (firstChild !== undefined && firstChild.tag !== 0x02 && firstChild.tag !== 0x30) {
+		throw new Error('version must use INTEGER');
+	}
+	if (firstChild?.tag === 0x02) {
+		const versionElement = requireElement(tbsChildren[index], 'version');
+		if (versionElement.tag !== 0x02) {
+			throw new Error('version must use INTEGER');
+		}
+		version = decodeIntegerNumber(versionElement.value) + 1;
 		index += 1;
 	}
 	index += 1;
@@ -1937,10 +1945,14 @@ function parseSignedCrlFields(tbsCertListDer: Uint8Array): {
 		revokedCertificates = childrenOf(tbsCertListDer, maybeRevoked).map((entry) => {
 			const entryDer = tbsCertListDer.slice(entry.start - entry.headerLength, entry.end);
 			const parts = readSequenceChildren(entryDer);
+			const serialNumber = requireElement(parts[0], 'revoked serialNumber');
+			if (serialNumber.tag !== 0x02) {
+				throw new Error('revoked serialNumber must use INTEGER');
+			}
 			const entryExtensions = parts[2];
 			const parsedEntryExtensions = parseRevokedCertificateExtensions(entryDer, entryExtensions);
 			return {
-				serialNumberHex: toHex(requireElement(parts[0], 'revoked serialNumber').value),
+				serialNumberHex: toHex(serialNumber.value),
 				revocationDate: parseTime(requireElement(parts[1], 'revocationDate')),
 				...(parsedEntryExtensions.reasonCode === undefined
 					? {}

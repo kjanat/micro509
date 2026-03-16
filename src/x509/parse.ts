@@ -428,11 +428,17 @@ export function parseCertificateDer<TMap extends ExtensionDecoderMap = Record<ne
 	const maybeVersion = tbsChildren[index];
 	if (maybeVersion?.tag === 0xa0) {
 		const versionElement = requireElement(childrenOf(der, maybeVersion)[0], 'version INTEGER');
+		if (versionElement.tag !== 0x02) {
+			throw new Error('version must use INTEGER');
+		}
 		version = decodeIntegerNumber(versionElement.value) + 1;
 		index += 1;
 	}
 
 	const serialNumber = requireElement(tbsChildren[index], 'serialNumber');
+	if (serialNumber.tag !== 0x02) {
+		throw new Error('serialNumber must use INTEGER');
+	}
 	const issuer = requireElement(tbsChildren[index + 2], 'issuer');
 	const validity = requireElement(tbsChildren[index + 3], 'validity');
 	const subject = requireElement(tbsChildren[index + 4], 'subject');
@@ -605,7 +611,11 @@ export function parseCertificateSigningRequestDer<
 	const signatureAlgorithm = requireElement(topLevel[1], 'signatureAlgorithm');
 	const signatureValue = requireElement(topLevel[2], 'signatureValue');
 	const criChildren = childrenOf(der, certificationRequestInfo);
-	const version = decodeIntegerNumber(requireElement(criChildren[0], 'version').value) + 1;
+	const versionElement = requireElement(criChildren[0], 'version');
+	if (versionElement.tag !== 0x02) {
+		throw new Error('version must use INTEGER');
+	}
+	const version = decodeIntegerNumber(versionElement.value) + 1;
 	const subject = requireElement(criChildren[1], 'subject');
 	const subjectPublicKeyInfo = requireElement(criChildren[2], 'subjectPublicKeyInfo');
 	const attributes = criChildren[3];

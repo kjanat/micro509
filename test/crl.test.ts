@@ -2562,6 +2562,27 @@ describe('crl', () => {
 		).toThrow('Duplicate CRL extension OID');
 	});
 
+	it('parseCertificateRevocationListDer rejects non-INTEGER version tags', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Bad CRL Version Tag CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Bad CRL Version Tag CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			crlNumber: 1,
+		});
+		expect(() =>
+			parseCertificateRevocationListDer(
+				rewriteCrlVersionTag(new Uint8Array(pemDecode('X509 CRL', crl.pem)), 0x01),
+			),
+		).toThrow('version must use INTEGER');
+	});
+
 	it('parseCertificateRevocationListDer rejects non-OCTET CRL extension values', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Bad CRL Extension Value CA' },
@@ -2693,6 +2714,43 @@ describe('crl', () => {
 				),
 			),
 		).toThrow('Revoked certificate extension value must use OCTET STRING');
+	});
+
+	it('parseCertificateRevocationListDer rejects non-INTEGER revoked serialNumber tags', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Bad Revoked Serial Tag CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Bad Revoked Serial Tag CA' },
+			subject: { commonName: 'bad-revoked-serial.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+		const parsedLeaf = parseCertificatePem(leaf.pem);
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Bad Revoked Serial Tag CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			revokedCertificates: [
+				{
+					serialNumber: hexToBytes(parsedLeaf.serialNumberHex),
+					revocationDate: new Date('2024-01-01T00:00:00Z'),
+					reasonCode: 'keyCompromise',
+				},
+			],
+		});
+
+		expect(() =>
+			parseCertificateRevocationListDer(
+				rewriteFirstRevokedEntrySerialTag(new Uint8Array(pemDecode('X509 CRL', crl.pem)), 0x04),
+			),
+		).toThrow('revoked serialNumber must use INTEGER');
 	});
 
 	it('parseCertificateRevocationListDer rejects malformed revoked entry extension middle fields', async () => {
@@ -2831,6 +2889,36 @@ function rewriteCrlExtensionMiddleFieldTag(
 	);
 }
 
+function rewriteCrlVersionTag(crlDer: Uint8Array, tag: number): Uint8Array {
+	const topLevel = readSequenceChildren(crlDer);
+	const tbsCertList = topLevel[0];
+	const signatureAlgorithm = topLevel[1];
+	const signatureValue = topLevel[2];
+	if (
+		tbsCertList === undefined ||
+		signatureAlgorithm === undefined ||
+		signatureValue === undefined
+	) {
+		throw new Error('Malformed CRL');
+	}
+	const tbsDer = sliceElement(crlDer, tbsCertList);
+	const tbsChildren = readSequenceChildren(tbsDer);
+	const versionElement = tbsChildren[0];
+	if (versionElement?.tag !== 0x02) {
+		throw new Error('CRL missing version INTEGER');
+	}
+	const rebuiltTbs = sequence(
+		tbsChildren.map((child, index) =>
+			index === 0 ? tlv(tag, child.value) : sliceElement(tbsDer, child),
+		),
+	);
+	return sequence([
+		rebuiltTbs,
+		sliceElement(crlDer, signatureAlgorithm),
+		sliceElement(crlDer, signatureValue),
+	]);
+}
+
 function duplicateFirstRevokedEntryExtension(crlDer: Uint8Array, oid: string): Uint8Array {
 	const topLevel = readSequenceChildren(crlDer);
 	const tbsCertList = topLevel[0];
@@ -2945,6 +3033,56 @@ function rewriteFirstRevokedEntryExtensionMiddleFieldTag(
 	return rewriteFirstRevokedEntryExtension(crlDer, (firstEntryDer, entryExtensions) =>
 		rewriteSequenceEntryMiddleFieldTag(firstEntryDer, entryExtensions, oid, tag),
 	);
+}
+
+function rewriteFirstRevokedEntrySerialTag(crlDer: Uint8Array, tag: number): Uint8Array {
+	const topLevel = readSequenceChildren(crlDer);
+	const tbsCertList = topLevel[0];
+	const signatureAlgorithm = topLevel[1];
+	const signatureValue = topLevel[2];
+	if (
+		tbsCertList === undefined ||
+		signatureAlgorithm === undefined ||
+		signatureValue === undefined
+	) {
+		throw new Error('Malformed CRL');
+	}
+	const tbsDer = sliceElement(crlDer, tbsCertList);
+	const tbsChildren = readSequenceChildren(tbsDer);
+	const revokedEntriesIndex = findRevokedEntriesIndex(tbsChildren);
+	const revokedEntries = tbsChildren[revokedEntriesIndex];
+	if (revokedEntries === undefined) {
+		throw new Error('CRL missing revokedCertificates');
+	}
+	const revokedEntryElements = childrenOf(tbsDer, revokedEntries);
+	const firstEntry = revokedEntryElements[0];
+	if (firstEntry === undefined) {
+		throw new Error('CRL missing revoked entry');
+	}
+	const firstEntryDer = sliceElement(tbsDer, firstEntry);
+	const firstEntryParts = readSequenceChildren(firstEntryDer);
+	const serialNumber = firstEntryParts[0];
+	if (serialNumber === undefined) {
+		throw new Error('revoked serialNumber missing');
+	}
+	const rebuiltFirstEntry = sequence([
+		tlv(tag, serialNumber.value),
+		...firstEntryParts.slice(1).map((part) => sliceElement(firstEntryDer, part)),
+	]);
+	const rebuiltRevokedEntries = sequence([
+		rebuiltFirstEntry,
+		...revokedEntryElements.slice(1).map((entry) => sliceElement(tbsDer, entry)),
+	]);
+	const rebuiltTbs = sequence(
+		tbsChildren.map((child, index) =>
+			index === revokedEntriesIndex ? rebuiltRevokedEntries : sliceElement(tbsDer, child),
+		),
+	);
+	return sequence([
+		rebuiltTbs,
+		sliceElement(crlDer, signatureAlgorithm),
+		sliceElement(crlDer, signatureValue),
+	]);
 }
 
 function rewriteCrlExtensionEntry(

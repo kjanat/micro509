@@ -10,6 +10,7 @@
 
 import {
 	childrenOf,
+	decodeNonNegativeIntegerNumber,
 	decodeObjectIdentifier,
 	decodeString,
 	extractBitStringValue,
@@ -421,7 +422,12 @@ export function parseOcspRequestPem(pem: string): ParsedOcspRequest {
 export function parseOcspResponseDer(der: Uint8Array): ParsedOcspResponse {
 	const top = readSequenceChildren(der, { maxDepth: DEFAULT_MAX_DER_DEPTH });
 	const statusElement = requireElement(top[0], 'responseStatus');
-	const responseStatus = ocspResponseStatusFromCode(statusElement.value[0]);
+	if (statusElement.tag !== 0x0a) {
+		throw new Error('responseStatus must use ENUMERATED');
+	}
+	const responseStatus = ocspResponseStatusFromCode(
+		decodeNonNegativeIntegerNumber(statusElement.value, 'OCSP responseStatus'),
+	);
 	const responseBytes = top[1];
 	if (responseBytes === undefined) {
 		return { responseStatus };
@@ -1106,12 +1112,16 @@ function parseOcspCertId(der: Uint8Array): ParsedOcspCertId {
 	const algorithmChildren = childrenOf(der, hashAlgorithm);
 	const algorithmOid = requireElement(algorithmChildren[0], 'hashAlgorithm OID');
 	const hashAlgorithmOid = decodeObjectIdentifier(algorithmOid.value);
+	const serialNumber = requireElement(children[3], 'serialNumber');
+	if (serialNumber.tag !== 0x02) {
+		throw new Error('serialNumber must use INTEGER');
+	}
 	return {
 		hashAlgorithmOid,
 		hashAlgorithmName: describeHashAlgorithm(hashAlgorithmOid),
 		issuerNameHashHex: toHex(requireElement(children[1], 'issuerNameHash').value),
 		issuerKeyHashHex: toHex(requireElement(children[2], 'issuerKeyHash').value),
-		serialNumberHex: toHex(requireElement(children[3], 'serialNumber').value),
+		serialNumberHex: toHex(serialNumber.value),
 	};
 }
 
@@ -1124,6 +1134,20 @@ function parseSingleResponse(source: Uint8Array, element: DerElement): ParsedOcs
 	const nextUpdateElement = children[3]?.tag === 0xa0 ? children[3] : undefined;
 	let revokedAt: Date | undefined;
 	let revocationReasonCode: number | undefined;
+	if (certStatus.tag === 0x80) {
+		return {
+			certId: parseOcspCertId(source.slice(certId.start - certId.headerLength, certId.end)),
+			certStatus: 'good',
+			thisUpdate: parseTime(thisUpdate),
+			...(nextUpdateElement === undefined
+				? {}
+				: {
+						nextUpdate: parseTime(
+							requireElement(childrenOf(source, nextUpdateElement)[0], 'nextUpdate'),
+						),
+					}),
+		};
+	}
 	if (certStatus.tag === 0xa1) {
 		const revokedInfo = childrenOf(source, certStatus);
 		revokedAt = parseTime(requireElement(revokedInfo[0], 'revocationTime'));
@@ -1131,10 +1155,12 @@ function parseSingleResponse(source: Uint8Array, element: DerElement): ParsedOcs
 		if (reason?.tag === 0xa0) {
 			revocationReasonCode = readElement(source, reason.start).value[0];
 		}
+	} else if (certStatus.tag !== 0x82) {
+		throw new Error(`Unsupported OCSP certStatus tag: ${String(certStatus.tag)}`);
 	}
 	return {
 		certId: parseOcspCertId(source.slice(certId.start - certId.headerLength, certId.end)),
-		certStatus: certStatus.tag === 0x80 ? 'good' : certStatus.tag === 0x82 ? 'unknown' : 'revoked',
+		certStatus: certStatus.tag === 0x82 ? 'unknown' : 'revoked',
 		thisUpdate: parseTime(thisUpdate),
 		...(nextUpdateElement === undefined
 			? {}

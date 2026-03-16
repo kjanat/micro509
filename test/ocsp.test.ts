@@ -24,6 +24,7 @@ import {
 	objectIdentifier,
 	octetString,
 	readElement,
+	readSequenceChildren,
 	sequence,
 	tlv,
 } from '#micro509/internal/asn1/der.ts';
@@ -836,6 +837,11 @@ describe('ocsp', () => {
 		const der = sequence([tlv(0x0a, Uint8Array.of(99))]);
 		const parsed = parseOcspResponseDer(der);
 		expect(parsed.responseStatus).toBe('internalError');
+	});
+
+	it('rejects non-ENUMERATED responseStatus tags', () => {
+		const der = sequence([tlv(0x02, Uint8Array.of(0x00))]);
+		expect(() => parseOcspResponseDer(der)).toThrow('responseStatus must use ENUMERATED');
 	});
 
 	it('parses response with non-basicResponse type OID', () => {
@@ -2327,6 +2333,99 @@ describe('ocsp', () => {
 		expect(() => parseOcspResponseDer(ocspResponseDer)).toThrow('Malformed OCSP extension');
 	});
 
+	it('parseOcspResponseDer rejects unsupported certStatus tags', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'OCSP Bad CertStatus CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'OCSP Bad CertStatus CA' },
+			subject: { commonName: 'bad-cert-status-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+
+		const issuerParsed = parseCertificatePem(issuer.certificate.pem);
+		const leafParsed = parseCertificatePem(leaf.pem);
+		const issuerNameHash = new Uint8Array(sha1(hexToBytes(issuerParsed.subject.derHex)));
+		const spkiDer = issuerParsed.subjectPublicKeyInfoDer;
+		const spkiTop = childrenOf(spkiDer, readElement(spkiDer));
+		const spkiBitString = spkiTop[1];
+		const publicKeyBytes =
+			spkiBitString !== undefined ? spkiBitString.value.slice(1) : new Uint8Array(0);
+		const issuerKeyHash = new Uint8Array(sha1(publicKeyBytes));
+
+		const certId = sequence([
+			sequence([objectIdentifier(OIDS.sha1), Uint8Array.of(0x05, 0x00)]),
+			octetString(issuerNameHash),
+			octetString(issuerKeyHash),
+			tlv(0x02, hexToBytes(leafParsed.serialNumberHex)),
+		]);
+		const singleResponse = sequence([
+			certId,
+			tlv(0x83, Uint8Array.of(0x00)),
+			generalizedTime(new Date()),
+		]);
+		const responseData = sequence([
+			tlv(0xa2, octetString(issuerKeyHash)),
+			generalizedTime(new Date()),
+			sequence([singleResponse]),
+		]);
+		const sigAlgIdentifier = sequence([
+			objectIdentifier(OIDS.sha256WithRSAEncryption),
+			Uint8Array.of(0x05, 0x00),
+		]);
+		const fakeSig = bitString(new Uint8Array(64));
+		const basicResponse = sequence([responseData, sigAlgIdentifier, fakeSig]);
+		const ocspResponseDer = sequence([
+			tlv(0x0a, Uint8Array.of(0x00)),
+			explicitContext(
+				0,
+				sequence([objectIdentifier(OIDS.ocspBasicResponse), octetString(basicResponse)]),
+			),
+		]);
+
+		expect(() => parseOcspResponseDer(ocspResponseDer)).toThrow('Unsupported OCSP certStatus tag');
+	});
+
+	it('parseOcspResponseDer rejects non-INTEGER CertID serialNumber tags', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'OCSP Bad CertID Serial CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'OCSP Bad CertID Serial CA' },
+			subject: { commonName: 'bad-certid-serial-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const response = await createOcspResponse({
+			signerPrivateKey: issuer.keyPair.privateKey,
+			signerCertificate: issuer.certificate.pem,
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: 'good',
+				},
+			],
+		});
+
+		expect(() =>
+			parseOcspResponseDer(rewriteOcspResponseCertIdSerialTag(response.der, 0x04)),
+		).toThrow('serialNumber must use INTEGER');
+	});
+
 	it('validateOcspResponse rejects invalid delegated responder chains for pre-parsed certs', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'OCSP Src CA' },
@@ -2569,6 +2668,95 @@ async function createSignedOcspResponseWithResponderId(input: {
 			sequence([objectIdentifier(OIDS.ocspBasicResponse), octetString(basicResponse)]),
 		),
 	]);
+}
+
+function rewriteOcspResponseCertIdSerialTag(ocspResponseDer: Uint8Array, tag: number): Uint8Array {
+	const topLevel = readSequenceChildren(ocspResponseDer);
+	const responseStatus = topLevel[0];
+	const responseBytes = topLevel[1];
+	if (responseStatus === undefined || responseBytes === undefined) {
+		throw new Error('OCSP response missing top-level fields');
+	}
+	const responseBytesSequence = childrenOf(ocspResponseDer, responseBytes)[0];
+	if (responseBytesSequence === undefined) {
+		throw new Error('OCSP response missing responseBytes sequence');
+	}
+	const responseBytesDer = sliceDer(ocspResponseDer, responseBytesSequence);
+	const responseBytesChildren = readSequenceChildren(responseBytesDer);
+	const responseType = responseBytesChildren[0];
+	const response = responseBytesChildren[1];
+	if (responseType === undefined || response === undefined) {
+		throw new Error('OCSP response missing responseType or response');
+	}
+	const basicResponseDer = response.value;
+	const basicChildren = readSequenceChildren(basicResponseDer);
+	const responseData = basicChildren[0];
+	if (responseData === undefined) {
+		throw new Error('OCSP response missing responseData');
+	}
+	const responseDataDer = sliceDer(basicResponseDer, responseData);
+	const responseDataChildren = readSequenceChildren(responseDataDer);
+	const responses = responseDataChildren[2];
+	if (responses === undefined) {
+		throw new Error('OCSP response missing responses');
+	}
+	const responseElements = childrenOf(responseDataDer, responses);
+	const firstResponse = responseElements[0];
+	if (firstResponse === undefined) {
+		throw new Error('OCSP response missing SingleResponse');
+	}
+	const firstResponseDer = sliceDer(responseDataDer, firstResponse);
+	const firstResponseChildren = readSequenceChildren(firstResponseDer);
+	const certId = firstResponseChildren[0];
+	if (certId === undefined) {
+		throw new Error('OCSP response missing CertID');
+	}
+	const certIdDer = sliceDer(firstResponseDer, certId);
+	const certIdChildren = readSequenceChildren(certIdDer);
+	const serialNumber = certIdChildren[3];
+	if (serialNumber === undefined) {
+		throw new Error('OCSP response missing serialNumber');
+	}
+	const rebuiltCertId = sequence(
+		certIdChildren.map((child: ReturnType<typeof readElement>, index: number) =>
+			index === 3 ? tlv(tag, child.value) : sliceDer(certIdDer, child),
+		),
+	);
+	const rebuiltFirstResponse = sequence([
+		rebuiltCertId,
+		...firstResponseChildren
+			.slice(1)
+			.map((child: ReturnType<typeof readElement>) => sliceDer(firstResponseDer, child)),
+	]);
+	const rebuiltResponses = sequence([
+		rebuiltFirstResponse,
+		...responseElements
+			.slice(1)
+			.map((entry: ReturnType<typeof readElement>) => sliceDer(responseDataDer, entry)),
+	]);
+	const rebuiltResponseData = sequence(
+		responseDataChildren.map((child: ReturnType<typeof readElement>, index: number) =>
+			index === 2 ? rebuiltResponses : sliceDer(responseDataDer, child),
+		),
+	);
+	const rebuiltBasicResponse = sequence([
+		rebuiltResponseData,
+		...basicChildren
+			.slice(1)
+			.map((child: ReturnType<typeof readElement>) => sliceDer(basicResponseDer, child)),
+	]);
+	const rebuiltResponseBytes = sequence([
+		sliceDer(responseBytesDer, responseType),
+		octetString(rebuiltBasicResponse),
+	]);
+	return sequence([
+		sliceDer(ocspResponseDer, responseStatus),
+		explicitContext(0, rebuiltResponseBytes),
+	]);
+}
+
+function sliceDer(source: Uint8Array, element: ReturnType<typeof readElement>): Uint8Array {
+	return source.slice(element.start - element.headerLength, element.end);
 }
 
 function extractSubjectPublicKeyBytes(spkiDer: Uint8Array): Uint8Array {
