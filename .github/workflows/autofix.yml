@@ -9,9 +9,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-ts
+        with: { install-bun: "true" }
       - uses: kjanat/install-dprint@v1
       - uses: kjanat/install-shfmt@v1
-      - run: npm i -g sort-package-json tombi
 
       - run: dprint config update
         if: github.ref == 'refs/heads/master' && github.event_name == 'push'
