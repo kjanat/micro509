@@ -25,6 +25,7 @@ import {
 	importPkcs1Der,
 	importPkcs1Pem,
 	importPkcs8Base64,
+	importPkcs8Der,
 	importPkcs8Pem,
 	importPrivateJwk,
 	importPublicJwk,
@@ -380,6 +381,63 @@ describe('keys: coverage — malformed inputs', () => {
 		).rejects.toThrow('Malformed EncryptedPrivateKeyInfo');
 	});
 
+	it('importEncryptedPkcs8Der throws when EncryptedPrivateKeyInfo has trailing children', async () => {
+		const { sequence, objectIdentifier, nullValue, octetString, integerFromNumber } = await import(
+			'#micro509/internal/asn1/der.ts'
+		);
+		const malformed = sequence([
+			sequence([objectIdentifier('1.2.840.113549.1.5.13'), nullValue()]),
+			octetString(Uint8Array.of(0x01, 0x02)),
+			integerFromNumber(7),
+		]);
+		expect(
+			importEncryptedPkcs8Der(malformed, 'pass', { kind: 'ecdsa', namedCurve: 'P-256' }),
+		).rejects.toThrow('Malformed EncryptedPrivateKeyInfo');
+	});
+
+	it('importSpkiBase64 throws on malformed SubjectPublicKeyInfo', async () => {
+		expect(importSpkiBase64('MAI=', { kind: 'rsa' })).rejects.toThrow(
+			'Malformed SubjectPublicKeyInfo',
+		);
+	});
+
+	it('importSpkiBase64 throws on SubjectPublicKeyInfo with trailing fields', async () => {
+		const { bitString, integerFromNumber, sequence, objectIdentifier } = await import(
+			'#micro509/internal/asn1/der.ts'
+		);
+		const malformed = sequence([
+			sequence([objectIdentifier('1.2.840.113549.1.1.1')]),
+			bitString(Uint8Array.of(0x00), 0),
+			integerFromNumber(1),
+		]);
+		expect(
+			importSpkiBase64(Buffer.from(malformed).toString('base64'), { kind: 'rsa' }),
+		).rejects.toThrow('Malformed SubjectPublicKeyInfo');
+	});
+
+	it('importPkcs8Base64 throws on malformed PKCS#8 private key', async () => {
+		expect(importPkcs8Base64('MAI=', { kind: 'rsa' })).rejects.toThrow(
+			'Malformed PKCS#8 private key',
+		);
+	});
+
+	it('importPkcs8Der and base64 throw on PKCS#8 with wrong privateKey tag', async () => {
+		const { integerFromNumber, nullValue, objectIdentifier, sequence } = await import(
+			'#micro509/internal/asn1/der.ts'
+		);
+		const malformed = sequence([
+			integerFromNumber(0),
+			sequence([objectIdentifier('1.2.840.113549.1.1.1'), nullValue()]),
+			integerFromNumber(1),
+		]);
+		expect(importPkcs8Der(malformed, { kind: 'rsa' })).rejects.toThrow(
+			'Malformed PKCS#8 private key',
+		);
+		expect(
+			importPkcs8Base64(Buffer.from(malformed).toString('base64'), { kind: 'rsa' }),
+		).rejects.toThrow('Malformed PKCS#8 private key');
+	});
+
 	it('encryptTraditionalPem throws on non-16-byte IV', async () => {
 		const keys = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
 		expect(
@@ -416,6 +474,15 @@ describe('keys: coverage — malformed inputs', () => {
 		const tampered = encrypted.replace('AES-256-CBC', 'DES-EDE3-CBC');
 		expect(importEncryptedPkcs1Pem(tampered, 'test', { kind: 'rsa' })).rejects.toThrow(
 			'Only AES-128-CBC, AES-192-CBC, and AES-256-CBC',
+		);
+	});
+
+	it('decryptTraditionalPem throws on malformed DEK-Info IV hex', async () => {
+		const rsa = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
+		const encrypted = await exportEncryptedPkcs1Pem(rsa.privateKey, { password: 'test' });
+		const tampered = encrypted.replace(/DEK-Info: [^,]+,.+/, 'DEK-Info: AES-256-CBC,XYZ');
+		expect(importEncryptedPkcs1Pem(tampered, 'test', { kind: 'rsa' })).rejects.toThrow(
+			'16-byte IV encoded as 32 hex characters',
 		);
 	});
 

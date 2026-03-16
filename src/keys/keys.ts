@@ -323,6 +323,7 @@ export async function importSpkiDer(
 	der: Uint8Array,
 	algorithm: PublicKeyImportInput,
 ): Promise<CryptoKey> {
+	assertSpkiDer(der);
 	return getCrypto().subtle.importKey(
 		'spki',
 		new Uint8Array(der),
@@ -345,7 +346,14 @@ export async function importSpkiBase64(
 	base64: string,
 	algorithm: PublicKeyImportInput,
 ): Promise<CryptoKey> {
-	return importSpkiDer(base64Decode(base64), algorithm);
+	try {
+		return importSpkiDer(base64Decode(base64), algorithm);
+	} catch (error) {
+		if (error instanceof Error && error.message === 'Malformed SubjectPublicKeyInfo') {
+			throw error;
+		}
+		throw new Error('Invalid base64 SubjectPublicKeyInfo');
+	}
 }
 
 /** Import a private key from DER-encoded PKCS#8 PrivateKeyInfo. */
@@ -353,6 +361,11 @@ export async function importPkcs8Der(
 	der: Uint8Array,
 	algorithm: PrivateKeyImportInput,
 ): Promise<CryptoKey> {
+	try {
+		parsePkcs8PrivateKey(der);
+	} catch {
+		throw new Error('Malformed PKCS#8 private key');
+	}
 	return getCrypto().subtle.importKey(
 		'pkcs8',
 		new Uint8Array(der),
@@ -383,10 +396,16 @@ export async function importEncryptedPkcs8Der(
 	password: string,
 	algorithm: PrivateKeyImportInput,
 ): Promise<CryptoKey> {
-	const children = readSequenceChildren(der);
+	let children: readonly ReturnType<typeof readSequenceChildren>[number][];
+	try {
+		children = readSequenceChildren(der);
+	} catch {
+		throw new Error('Malformed EncryptedPrivateKeyInfo');
+	}
 	const algorithmIdentifier = children[0];
 	const encryptedData = children[1];
 	if (
+		children.length !== 2 ||
 		algorithmIdentifier === undefined ||
 		encryptedData === undefined ||
 		encryptedData.tag !== 0x04
@@ -451,7 +470,14 @@ export async function importPkcs8Base64(
 	base64: string,
 	algorithm: PrivateKeyImportInput,
 ): Promise<CryptoKey> {
-	return importPkcs8Der(base64Decode(base64), algorithm);
+	try {
+		return importPkcs8Der(base64Decode(base64), algorithm);
+	} catch (error) {
+		if (error instanceof Error && error.message === 'Malformed PKCS#8 private key') {
+			throw error;
+		}
+		throw new Error('Invalid base64 PKCS#8 private key');
+	}
 }
 
 /** Import an EC private key from DER-encoded SEC 1 ECPrivateKey. */
@@ -558,7 +584,7 @@ function parsePkcs8PrivateKey(der: Uint8Array): {
 	const children = readSequenceChildren(der);
 	const algorithm = children[1];
 	const privateKey = children[2];
-	if (algorithm === undefined || privateKey === undefined) {
+	if (algorithm === undefined || privateKey === undefined || privateKey.tag !== 0x04) {
 		throw new Error('Malformed PKCS#8 private key');
 	}
 	const algorithmChildren = readSequenceChildren(
@@ -676,6 +702,11 @@ async function decryptTraditionalPem(
 			'Only AES-128-CBC, AES-192-CBC, and AES-256-CBC traditional PEM encryption is supported',
 		);
 	}
+	if (!isTraditionalPemIvHex(ivHex)) {
+		throw new Error(
+			'Traditional PEM encryption requires a 16-byte IV encoded as 32 hex characters',
+		);
+	}
 	const iv = hexToBytes(ivHex);
 	const key = await importTraditionalPemAesKey(password, iv.slice(0, 8), cipher, ['decrypt']);
 	try {
@@ -714,6 +745,10 @@ function isTraditionalPemCipher(
 	cipher: string | undefined,
 ): cipher is 'AES-128-CBC' | 'AES-192-CBC' | 'AES-256-CBC' {
 	return cipher === 'AES-128-CBC' || cipher === 'AES-192-CBC' || cipher === 'AES-256-CBC';
+}
+
+function isTraditionalPemIvHex(value: string): boolean {
+	return value.length === 32 && /^[0-9A-Fa-f]+$/.test(value);
 }
 
 /** Return the AES key size in bits for a given cipher name. */
@@ -803,4 +838,32 @@ function parseTraditionalPem(pem: string): {
 	}
 	const body = lines.slice(index, lines.length - 1).join('');
 	return { label, headers, base64Body: body };
+}
+
+function assertSpkiDer(der: Uint8Array): void {
+	try {
+		const children = readSequenceChildren(der);
+		if (children.length !== 2) {
+			throw new Error('Malformed SubjectPublicKeyInfo');
+		}
+		const algorithm = children[0];
+		const subjectPublicKey = children[1];
+		if (
+			algorithm === undefined ||
+			subjectPublicKey === undefined ||
+			subjectPublicKey.tag !== 0x03
+		) {
+			throw new Error('Malformed SubjectPublicKeyInfo');
+		}
+		const algorithmChildren = readSequenceChildren(
+			der.slice(algorithm.start - algorithm.headerLength, algorithm.end),
+		);
+		const algorithmOid = algorithmChildren[0];
+		if (algorithmOid === undefined) {
+			throw new Error('Malformed SubjectPublicKeyInfo');
+		}
+		decodeObjectIdentifier(algorithmOid.value);
+	} catch {
+		throw new Error('Malformed SubjectPublicKeyInfo');
+	}
 }
