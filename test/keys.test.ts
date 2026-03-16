@@ -415,6 +415,19 @@ describe('keys: coverage — malformed inputs', () => {
 		).rejects.toThrow('Malformed SubjectPublicKeyInfo');
 	});
 
+	it('importSpkiBase64 throws on algorithm identifiers missing an OID', async () => {
+		const { bitString, integerFromNumber, sequence } = await import(
+			'#micro509/internal/asn1/der.ts'
+		);
+		const malformed = sequence([
+			sequence([integerFromNumber(1)]),
+			bitString(Uint8Array.of(0x00), 0),
+		]);
+		expect(
+			importSpkiBase64(Buffer.from(malformed).toString('base64'), { kind: 'rsa' }),
+		).rejects.toThrow('Malformed SubjectPublicKeyInfo');
+	});
+
 	it('importPkcs8Base64 throws on malformed PKCS#8 private key', async () => {
 		expect(importPkcs8Base64('MAI=', { kind: 'rsa' })).rejects.toThrow(
 			'Malformed PKCS#8 private key',
@@ -436,6 +449,20 @@ describe('keys: coverage — malformed inputs', () => {
 		expect(
 			importPkcs8Base64(Buffer.from(malformed).toString('base64'), { kind: 'rsa' }),
 		).rejects.toThrow('Malformed PKCS#8 private key');
+	});
+
+	it('importPkcs8Der throws on algorithm identifiers missing an OID', async () => {
+		const { integerFromNumber, octetString, sequence } = await import(
+			'#micro509/internal/asn1/der.ts'
+		);
+		const malformed = sequence([
+			integerFromNumber(0),
+			sequence([integerFromNumber(1)]),
+			octetString(Uint8Array.of(0x01)),
+		]);
+		expect(importPkcs8Der(malformed, { kind: 'rsa' })).rejects.toThrow(
+			'Malformed PKCS#8 private key',
+		);
 	});
 
 	it('encryptTraditionalPem throws on non-16-byte IV', async () => {

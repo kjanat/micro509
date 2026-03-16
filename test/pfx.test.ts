@@ -618,6 +618,16 @@ describe('pfx', () => {
 		expect(result).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
+	it('parsePfxDer rejects friendlyName values with wrong string tag', async () => {
+		const safeBag = sequence([
+			objectIdentifier('1.2.3.4.5.6'),
+			explicitContext(0, octetString(Uint8Array.of(0x01))),
+			setOf([sequence([objectIdentifier(OIDS.friendlyName), setOf([integerFromNumber(7)])])]),
+		]);
+		const result = await parsePfxDer(wrapSafeBags([safeBag]));
+		expect(result).toMatchObject({ ok: false, code: 'malformed' });
+	});
+
 	it('parsePfxDer rejects malformed localKeyId attribute values', async () => {
 		const safeBag = sequence([
 			objectIdentifier('1.2.3.4.5.6'),
@@ -628,6 +638,16 @@ describe('pfx', () => {
 					setOf([integerFromNumber(1), octetString(Uint8Array.of(0x02))]),
 				]),
 			]),
+		]);
+		const result = await parsePfxDer(wrapSafeBags([safeBag]));
+		expect(result).toMatchObject({ ok: false, code: 'malformed' });
+	});
+
+	it('parsePfxDer rejects single localKeyId values with wrong tag', async () => {
+		const safeBag = sequence([
+			objectIdentifier('1.2.3.4.5.6'),
+			explicitContext(0, octetString(Uint8Array.of(0x01))),
+			setOf([sequence([objectIdentifier(OIDS.localKeyId), setOf([integerFromNumber(1)])])]),
 		]);
 		const result = await parsePfxDer(wrapSafeBags([safeBag]));
 		expect(result).toMatchObject({ ok: false, code: 'malformed' });

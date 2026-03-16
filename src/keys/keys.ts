@@ -591,8 +591,8 @@ function parsePkcs8PrivateKey(der: Uint8Array): {
 		der.slice(algorithm.start - algorithm.headerLength, algorithm.end),
 	);
 	const algorithmOid = algorithmChildren[0];
-	if (algorithmOid === undefined) {
-		throw new Error('PKCS#8 algorithm OID missing');
+	if (algorithmOid === undefined || algorithmOid.tag !== 0x06) {
+		throw new Error('Malformed PKCS#8 private key');
 	}
 	const parameters = algorithmChildren[1];
 	return {
@@ -859,7 +859,7 @@ function assertSpkiDer(der: Uint8Array): void {
 			der.slice(algorithm.start - algorithm.headerLength, algorithm.end),
 		);
 		const algorithmOid = algorithmChildren[0];
-		if (algorithmOid === undefined) {
+		if (algorithmOid === undefined || algorithmOid.tag !== 0x06) {
 			throw new Error('Malformed SubjectPublicKeyInfo');
 		}
 		decodeObjectIdentifier(algorithmOid.value);

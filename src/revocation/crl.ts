@@ -1477,10 +1477,11 @@ function parseRevokedCertificateExtensions(
 			invalidityDate = parseTime(readElement(valueElement.value));
 		}
 		if (oid === OIDS.certificateIssuer) {
-			certificateIssuer = childrenOf(
-				valueElement.value,
-				readRootElement(valueElement.value, { maxDepth: DEFAULT_MAX_DER_DEPTH }),
-			).map((name) => parseGeneralName(name));
+			const generalNames = readRootElement(valueElement.value, { maxDepth: DEFAULT_MAX_DER_DEPTH });
+			if (generalNames.tag !== 0x30) {
+				throw new Error('certificateIssuer must use SEQUENCE');
+			}
+			certificateIssuer = parseGeneralNames(valueElement.value, generalNames);
 		}
 	}
 	return {
@@ -1558,9 +1559,14 @@ function parseIssuingDistributionPoint(valueDer: Uint8Array): ParsedIssuingDistr
 /** Decodes a SEQUENCE OF DistributionPoint from DER. */
 function parseDistributionPoints(valueDer: Uint8Array): readonly ParsedDistributionPoint[] {
 	const sequenceElement = readRootElement(valueDer, { maxDepth: DEFAULT_MAX_DER_DEPTH });
-	return childrenOf(valueDer, sequenceElement).map((distributionPoint) =>
-		parseDistributionPoint(valueDer, distributionPoint),
-	);
+	if (sequenceElement.tag !== 0x30) {
+		throw new Error('DistributionPoints must use SEQUENCE');
+	}
+	const elements = childrenOf(valueDer, sequenceElement);
+	if (elements.length === 0) {
+		throw new Error('DistributionPoints must not be empty');
+	}
+	return elements.map((distributionPoint) => parseDistributionPoint(valueDer, distributionPoint));
 }
 
 /** Decodes a DistributionPointName (fullName or relativeName). */
@@ -1574,8 +1580,17 @@ function parseDistributionPointName(
 	}
 	const distributionPointName = requireElement(children[0], 'distributionPointName');
 	if (distributionPointName.tag === 0xa0) {
+		const fullName = childrenOf(valueDer, distributionPointName);
+		if (fullName.length === 0) {
+			throw new Error('distributionPointName fullName must not be empty');
+		}
+		for (const name of fullName) {
+			if ((name.tag & 0xc0) !== 0x80) {
+				throw new Error('distributionPointName fullName must contain GeneralName entries');
+			}
+		}
 		return {
-			fullName: childrenOf(valueDer, distributionPointName).map((name) => parseGeneralName(name)),
+			fullName: fullName.map((name) => parseGeneralName(name)),
 		};
 	}
 	if (distributionPointName.tag === 0xa1) {
@@ -1590,6 +1605,9 @@ function parseDistributionPoint(
 	valueDer: Uint8Array,
 	element: DerElement,
 ): ParsedDistributionPoint {
+	if (element.tag !== 0x30) {
+		throw new Error('DistributionPoint must use SEQUENCE');
+	}
 	let distributionPoint: ParsedDistributionPointName | undefined;
 	let reasons: ParsedBitFlags<DistributionPointReason> | undefined;
 	let crlIssuer: readonly GeneralName[] | undefined;
@@ -1611,7 +1629,7 @@ function parseDistributionPoint(
 			if (crlIssuer !== undefined) {
 				throw new Error('DistributionPoint crlIssuer must not repeat');
 			}
-			crlIssuer = childrenOf(valueDer, child).map((name) => parseGeneralName(name));
+			crlIssuer = parseGeneralNames(valueDer, child);
 		} else {
 			throw new Error(`Unsupported DistributionPoint field tag: ${String(child.tag)}`);
 		}
@@ -1645,6 +1663,19 @@ function parseGeneralName(element: DerElement): GeneralName {
 		default:
 			return { type: 'unknown' as const, tag: element.tag, value: new Uint8Array(element.value) };
 	}
+}
+
+function parseGeneralNames(valueDer: Uint8Array, element: DerElement): readonly GeneralName[] {
+	const names = childrenOf(valueDer, element);
+	if (names.length === 0) {
+		throw new Error('GeneralNames must not be empty');
+	}
+	for (const name of names) {
+		if ((name.tag & 0xc0) !== 0x80) {
+			throw new Error('GeneralNames must contain GeneralName entries');
+		}
+	}
+	return names.map((name) => parseGeneralName(name));
 }
 
 /** Decodes a RelativeDistinguishedName SET from an implicitly-tagged context element. */
@@ -1850,18 +1881,68 @@ function parseAuthorityKeyIdentifier(bytes: Uint8Array): string | undefined {
 		maxDepth: DEFAULT_MAX_DER_DEPTH,
 		allowOpaqueConstructedTags: [0xa1, 0xa2],
 	});
+	if (sequenceElement.tag !== 0x30) {
+		throw new Error('authorityKeyIdentifier must use SEQUENCE');
+	}
+	let keyIdentifier: string | undefined;
+	let sawAuthorityCertIssuer = false;
+	let sawAuthorityCertSerialNumber = false;
+	let lastFieldOrder = -1;
 	for (const child of childrenOf(bytes, sequenceElement)) {
 		if (child.tag === 0x80) {
-			return toHex(child.value);
-		}
-		if (child.tag === 0xa0) {
-			const keyIdentifier = readRootElement(child.value, { maxDepth: DEFAULT_MAX_DER_DEPTH });
-			if (keyIdentifier.tag === 0x04) {
-				return toHex(keyIdentifier.value);
+			if (keyIdentifier !== undefined) {
+				throw new Error('authorityKeyIdentifier keyIdentifier must not repeat');
 			}
+			if (lastFieldOrder >= 0) {
+				throw new Error('authorityKeyIdentifier fields must preserve DER order');
+			}
+			keyIdentifier = toHex(child.value);
+			lastFieldOrder = 0;
+			continue;
 		}
+		if (child.tag === 0xa1) {
+			if (sawAuthorityCertIssuer) {
+				throw new Error('authorityKeyIdentifier authorityCertIssuer must not repeat');
+			}
+			if (lastFieldOrder >= 1) {
+				throw new Error('authorityKeyIdentifier fields must preserve DER order');
+			}
+			parseGeneralNames(bytes, child);
+			sawAuthorityCertIssuer = true;
+			lastFieldOrder = 1;
+			continue;
+		}
+		if (child.tag === 0x82) {
+			if (sawAuthorityCertSerialNumber) {
+				throw new Error('authorityKeyIdentifier authorityCertSerialNumber must not repeat');
+			}
+			if (lastFieldOrder >= 2 || !sawAuthorityCertIssuer) {
+				throw new Error('authorityKeyIdentifier fields must preserve DER order');
+			}
+			validateImplicitSerialNumberEncoding(
+				child.value,
+				'authorityKeyIdentifier authorityCertSerialNumber',
+			);
+			sawAuthorityCertSerialNumber = true;
+			lastFieldOrder = 2;
+			continue;
+		}
+		throw new Error(`Unsupported authorityKeyIdentifier field tag: ${String(child.tag)}`);
 	}
-	return undefined;
+	return keyIdentifier;
+}
+
+function validateImplicitSerialNumberEncoding(bytes: Uint8Array, label: string): void {
+	const first = bytes[0];
+	if (first === undefined) {
+		throw new Error(`${label} must not be empty`);
+	}
+	if ((first & 0x80) !== 0) {
+		throw new Error(`${label} must be non-negative`);
+	}
+	if (bytes.length > 1 && first === 0 && ((bytes[1] ?? 0) & 0x80) === 0) {
+		throw new Error(`${label} must use minimal encoding`);
+	}
 }
 
 /** Extracts the algorithm OID from an AlgorithmIdentifier SEQUENCE. */

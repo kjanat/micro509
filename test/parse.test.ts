@@ -1149,6 +1149,142 @@ describe('parse', () => {
 		expect(() => parseCertificatePem(duplicateInhibit.certificate.pem)).toThrow(
 			'policyConstraints must not repeat inhibitPolicyMapping',
 		);
+
+		const emptyAia = await createSelfSignedCertificate({
+			subject: { commonName: 'bad-empty-aia.example' },
+			extensions: {
+				customExtensions: [{ oid: OIDS.authorityInfoAccess, critical: true, value: sequence([]) }],
+			},
+		});
+		expect(() => parseCertificatePem(emptyAia.certificate.pem)).toThrow(
+			'authorityInfoAccess must not be empty',
+		);
+
+		const trailingAia = await createSelfSignedCertificate({
+			subject: { commonName: 'bad-trailing-aia.example' },
+			extensions: {
+				customExtensions: [
+					{
+						oid: OIDS.authorityInfoAccess,
+						critical: true,
+						value: sequence([
+							sequence([
+								objectIdentifier(OIDS.ocspAccessMethod),
+								tlv(0x86, new TextEncoder().encode('http://example.test/ocsp')),
+								integerFromNumber(1),
+							]),
+						]),
+					},
+				],
+			},
+		});
+		expect(() => parseCertificatePem(trailingAia.certificate.pem)).toThrow(
+			'authorityInfoAccess entry must contain method and location only',
+		);
+
+		const badMethodAia = await createSelfSignedCertificate({
+			subject: { commonName: 'bad-method-aia.example' },
+			extensions: {
+				customExtensions: [
+					{
+						oid: OIDS.authorityInfoAccess,
+						critical: true,
+						value: sequence([
+							sequence([
+								integerFromNumber(1),
+								tlv(0x86, new TextEncoder().encode('http://example.test/ocsp')),
+							]),
+						]),
+					},
+				],
+			},
+		});
+		expect(() => parseCertificatePem(badMethodAia.certificate.pem)).toThrow(
+			'authorityInfoAccess method must use OBJECT IDENTIFIER',
+		);
+
+		const setWrappedAia = await createSelfSignedCertificate({
+			subject: { commonName: 'bad-set-aia.example' },
+			extensions: {
+				customExtensions: [
+					{
+						oid: OIDS.authorityInfoAccess,
+						critical: true,
+						value: setOf([
+							sequence([
+								objectIdentifier(OIDS.ocspAccessMethod),
+								tlv(0x86, new TextEncoder().encode('http://example.test/ocsp')),
+							]),
+						]),
+					},
+				],
+			},
+		});
+		expect(() => parseCertificatePem(setWrappedAia.certificate.pem)).toThrow(
+			'authorityInfoAccess must use SEQUENCE',
+		);
+
+		const badNoticeNumbersTag = await createSelfSignedCertificate({
+			subject: { commonName: 'bad-notice-numbers-tag.example' },
+			extensions: {
+				customExtensions: [
+					{
+						oid: OIDS.certificatePolicies,
+						critical: true,
+						value: sequence([
+							sequence([
+								objectIdentifier('1.2.3.4.1'),
+								sequence([
+									sequence([
+										objectIdentifier(OIDS.userNoticePolicyQualifier),
+										sequence([
+											sequence([
+												tlv(0x0c, new TextEncoder().encode('Example Org')),
+												integerFromNumber(1),
+											]),
+										]),
+									]),
+								]),
+							]),
+						]),
+					},
+				],
+			},
+		});
+		expect(() => parseCertificatePem(badNoticeNumbersTag.certificate.pem)).toThrow(
+			'noticeRef noticeNumbers must use SEQUENCE',
+		);
+
+		const badNoticeNumberElement = await createSelfSignedCertificate({
+			subject: { commonName: 'bad-notice-number-element.example' },
+			extensions: {
+				customExtensions: [
+					{
+						oid: OIDS.certificatePolicies,
+						critical: true,
+						value: sequence([
+							sequence([
+								objectIdentifier('1.2.3.4.1'),
+								sequence([
+									sequence([
+										objectIdentifier(OIDS.userNoticePolicyQualifier),
+										sequence([
+											sequence([
+												tlv(0x0c, new TextEncoder().encode('Example Org')),
+												sequence([tlv(0x01, Uint8Array.of(0xff))]),
+											]),
+										]),
+									]),
+								]),
+							]),
+						]),
+					},
+				],
+			},
+		});
+		expect(() => parseCertificatePem(badNoticeNumberElement.certificate.pem)).toThrow(
+			'noticeRef noticeNumber must use INTEGER',
+		);
 	});
 
 	it('rejects malformed distributionPointName, SRV-ID, and unsupported DisplayText tags', async () => {
@@ -1216,6 +1352,52 @@ describe('parse', () => {
 		});
 		expect(() => parseCertificatePem(badDisplayText.certificate.pem)).toThrow(
 			'Unsupported DisplayText tag: 2',
+		);
+	});
+
+	it('rejects empty CRLDistributionPoints and empty fullName GeneralNames during parse', async () => {
+		const emptyDistributionPoints = await createSelfSignedCertificate({
+			subject: { commonName: 'bad-empty-dp.example' },
+			extensions: {
+				customExtensions: [
+					{ oid: OIDS.cRLDistributionPoints, critical: true, value: sequence([]) },
+				],
+			},
+		});
+		expect(() => parseCertificatePem(emptyDistributionPoints.certificate.pem)).toThrow(
+			'CRLDistributionPoints must not be empty',
+		);
+
+		const emptyFullName = await createSelfSignedCertificate({
+			subject: { commonName: 'bad-empty-fullname.example' },
+			extensions: {
+				customExtensions: [
+					{
+						oid: OIDS.cRLDistributionPoints,
+						critical: true,
+						value: sequence([sequence([explicitContext(0, explicitContext(0, sequence([])))])]),
+					},
+				],
+			},
+		});
+		expect(() => parseCertificatePem(emptyFullName.certificate.pem)).toThrow(
+			'distributionPointName fullName must contain GeneralName entries',
+		);
+
+		const setWrappedDistributionPoint = await createSelfSignedCertificate({
+			subject: { commonName: 'bad-set-dp.example' },
+			extensions: {
+				customExtensions: [
+					{
+						oid: OIDS.cRLDistributionPoints,
+						critical: true,
+						value: sequence([setOf([])]),
+					},
+				],
+			},
+		});
+		expect(() => parseCertificatePem(setWrappedDistributionPoint.certificate.pem)).toThrow(
+			'DistributionPoint must use SEQUENCE',
 		);
 	});
 

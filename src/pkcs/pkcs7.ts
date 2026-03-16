@@ -528,13 +528,16 @@ function parseSignerInfos(
 		}
 		const signatureAlgorithm = parts[index];
 		const signature = parts[index + 1];
+		const unauthenticatedAttributes = parts[index + 2];
 		if (
 			version === undefined ||
 			sid === undefined ||
 			digestAlgorithm === undefined ||
 			signatureAlgorithm === undefined ||
 			signature === undefined ||
-			signature.tag !== 0x04
+			signature.tag !== 0x04 ||
+			parts.length > index + 3 ||
+			(unauthenticatedAttributes !== undefined && unauthenticatedAttributes.tag !== 0xa1)
 		) {
 			throw new Error('Malformed SignerInfo');
 		}

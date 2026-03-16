@@ -920,6 +920,35 @@ describe('pkcs7', () => {
 		expect(result).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
+	it('parsePkcs7SignedDataDer rejects SignerInfo trailing fields after unauthenticatedAttributes', async () => {
+		const signer = await createSelfSignedCertificate({
+			subject: { commonName: 'Trailing SignerInfo CMS' },
+		});
+		const parsedSigner = parseCertificatePem(signer.certificate.pem);
+		const signerInfo = sequence([
+			integerFromNumber(1),
+			sequence([
+				hexToBytes(parsedSigner.issuer.derHex),
+				tlv(0x02, hexToBytes(parsedSigner.serialNumberHex)),
+			]),
+			sequence([objectIdentifier(OIDS.sha256), nullValue()]),
+			sequence([objectIdentifier(OIDS.sha256WithRSAEncryption), nullValue()]),
+			octetString(new Uint8Array(64)),
+			explicitContext(1, setOf([])),
+			integerFromNumber(1),
+		]);
+		const signedData = sequence([
+			integerFromNumber(1),
+			setOf([sequence([objectIdentifier(OIDS.sha256)])]),
+			sequence([objectIdentifier(OIDS.pkcs7Data)]),
+			explicitContext(0, parsedSigner.der),
+			setOf([signerInfo]),
+		]);
+		const der = sequence([objectIdentifier(OIDS.pkcs7SignedData), explicitContext(0, signedData)]);
+		const result = parsePkcs7SignedDataDer(der);
+		expect(result).toMatchObject({ ok: false, code: 'malformed' });
+	});
+
 	it('parsePkcs7SignedDataDer rejects out-of-order certificates after crls', async () => {
 		const signer = await createSelfSignedCertificate({
 			subject: { commonName: 'Out Of Order PKCS7 Certs' },

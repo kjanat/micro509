@@ -18,6 +18,7 @@ import {
 	octetString,
 	readSequenceChildren,
 	sequence,
+	setOf,
 	tlv,
 } from '#micro509/internal/asn1/der.ts';
 import { OIDS } from '#micro509/internal/asn1/oids.ts';
@@ -2558,7 +2559,7 @@ describe('crl', () => {
 		}
 	});
 
-	it('parseCertificateRevocationListDer handles AKI with no keyIdentifier (lines 680-682)', async () => {
+	it('parseCertificateRevocationListDer rejects malformed AKI without keyIdentifier (lines 680-682)', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'AKI CRL CA' },
 			extensions: {
@@ -2595,9 +2596,57 @@ describe('crl', () => {
 		if (tagOffset < derBytes.length) {
 			derBytes[tagOffset] = 0x82; // Change keyIdentifier [0] to serialNumber [2]
 		}
-		const parsed = parseCertificateRevocationListDer(derBytes);
-		// AKI was parsed but without keyIdentifier → authorityKeyIdentifier should be undefined
-		expect(parsed.authorityKeyIdentifier).toBeUndefined();
+		expect(() => parseCertificateRevocationListDer(derBytes)).toThrow(
+			'authorityKeyIdentifier fields must preserve DER order',
+		);
+	});
+
+	it('parseCertificateRevocationListDer rejects malformed AKI ordering and shape', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Bad CRL AKI CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Bad CRL AKI CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+		expect(() =>
+			parseCertificateRevocationListDer(
+				rewriteCrlExtensionValuePayload(
+					new Uint8Array(pemDecode('X509 CRL', crl.pem)),
+					OIDS.authorityKeyIdentifier,
+					sequence([tlv(0x82, Uint8Array.of(0x01)), explicitContext(1, sequence([]))]),
+				),
+			),
+		).toThrow('authorityKeyIdentifier fields must preserve DER order');
+	});
+
+	it('parseCertificateRevocationListDer rejects non-SEQUENCE AKI payloads', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Bad CRL AKI Wrapper CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Bad CRL AKI Wrapper CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+		expect(() =>
+			parseCertificateRevocationListDer(
+				rewriteCrlExtensionValuePayload(
+					new Uint8Array(pemDecode('X509 CRL', crl.pem)),
+					OIDS.authorityKeyIdentifier,
+					setOf([tlv(0x80, Uint8Array.of(0x01))]),
+				),
+			),
+		).toThrow('authorityKeyIdentifier must use SEQUENCE');
 	});
 
 	it('parseCertificateRevocationListDer rejects duplicate CRL extension OIDs', async () => {
@@ -2745,6 +2794,33 @@ describe('crl', () => {
 		).toThrow('DistributionPoint must include distributionPoint or crlIssuer');
 	});
 
+	it('parseCertificateRevocationListDer rejects empty freshestCRL distribution point sequences', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Bad Empty Freshest CRL CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Bad Empty Freshest CRL CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			freshestCrlDistributionPoints: [
+				{ distributionPoint: { fullName: [{ type: 'uri', value: 'http://example.test/ok.crl' }] } },
+			],
+		});
+		expect(() =>
+			parseCertificateRevocationListDer(
+				rewriteCrlExtensionValuePayload(
+					new Uint8Array(pemDecode('X509 CRL', crl.pem)),
+					OIDS.freshestCRL,
+					sequence([]),
+				),
+			),
+		).toThrow('DistributionPoints must not be empty');
+	});
+
 	it('parseCertificateRevocationListDer rejects non-OCTET CRL extension values', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Bad CRL Extension Value CA' },
@@ -2876,6 +2952,84 @@ describe('crl', () => {
 				),
 			),
 		).toThrow('Revoked certificate extension value must use OCTET STRING');
+	});
+
+	it('parseCertificateRevocationListDer rejects empty certificateIssuer GeneralNames', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Bad CertIssuer Names CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Bad CertIssuer Names CA' },
+			subject: { commonName: 'bad-cert-issuer-names.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+		const parsedLeaf = parseCertificatePem(leaf.pem);
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Bad CertIssuer Names CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			revokedCertificates: [{ serialNumber: hexToBytes(parsedLeaf.serialNumberHex) }],
+		});
+		const withCertificateIssuer = await addRevokedEntryCertificateIssuers(
+			crl.der,
+			ca.keyPair.privateKey,
+			[{ entryIndex: 0, names: [{ type: 'dns', value: 'issuer.example.test' }] }],
+		);
+		expect(() =>
+			parseCertificateRevocationListDer(
+				rewriteFirstRevokedEntryExtensionValuePayload(
+					withCertificateIssuer,
+					OIDS.certificateIssuer,
+					sequence([]),
+				),
+			),
+		).toThrow('GeneralNames must not be empty');
+	});
+
+	it('parseCertificateRevocationListDer rejects non-SEQUENCE certificateIssuer wrappers', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Bad CertIssuer Wrapper CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Bad CertIssuer Wrapper CA' },
+			subject: { commonName: 'bad-cert-issuer-wrapper.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+		const parsedLeaf = parseCertificatePem(leaf.pem);
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Bad CertIssuer Wrapper CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			revokedCertificates: [{ serialNumber: hexToBytes(parsedLeaf.serialNumberHex) }],
+		});
+		const withCertificateIssuer = await addRevokedEntryCertificateIssuers(
+			crl.der,
+			ca.keyPair.privateKey,
+			[{ entryIndex: 0, names: [{ type: 'dns', value: 'issuer.example.test' }] }],
+		);
+		expect(() =>
+			parseCertificateRevocationListDer(
+				rewriteFirstRevokedEntryExtensionValuePayload(
+					withCertificateIssuer,
+					OIDS.certificateIssuer,
+					setOf([tlv(0x82, new TextEncoder().encode('issuer.example.test'))]),
+				),
+			),
+		).toThrow('certificateIssuer must use SEQUENCE');
 	});
 
 	it('parseCertificateRevocationListDer rejects non-INTEGER revoked serialNumber tags', async () => {
@@ -3231,6 +3385,16 @@ function rewriteFirstRevokedEntryExtensionValueTag(
 		sliceElement(crlDer, signatureAlgorithm),
 		sliceElement(crlDer, signatureValue),
 	]);
+}
+
+function rewriteFirstRevokedEntryExtensionValuePayload(
+	crlDer: Uint8Array,
+	oid: string,
+	extensionValueDer: Uint8Array,
+): Uint8Array {
+	return rewriteFirstRevokedEntryExtension(crlDer, (firstEntryDer, entryExtensions) =>
+		rewriteSequenceEntryValuePayload(firstEntryDer, entryExtensions, oid, extensionValueDer),
+	);
 }
 
 function rewriteFirstRevokedEntryExtensionMiddleFieldTag(

@@ -1193,6 +1193,9 @@ function parsePolicyNoticeReference(
 	readonly organization: string;
 	readonly noticeNumbers: readonly number[];
 } {
+	if (element.tag !== 0x30) {
+		throw new Error('noticeRef must use SEQUENCE');
+	}
 	const children = childrenOf(source, element);
 	const organization = parseDisplayText(requireElement(children[0], 'noticeRef organization'));
 	const noticeNumbersElement = requireElement(children[1], 'noticeRef noticeNumbers');
@@ -1207,13 +1210,19 @@ function parsePolicyNoticeReference(
 
 /** Decode a SEQUENCE OF INTEGER notice numbers. */
 function parsePolicyNoticeNumbers(source: Uint8Array, element: DerElement): readonly number[] {
+	if (element.tag !== 0x30) {
+		throw new Error('noticeRef noticeNumbers must use SEQUENCE');
+	}
 	const noticeNumberElements = childrenOf(source, element);
 	if (noticeNumberElements.length === 0) {
 		throw new Error('noticeRef noticeNumbers must not be empty');
 	}
-	return noticeNumberElements.map((noticeNumberElement) =>
-		decodeNonNegativeIntegerNumber(noticeNumberElement.value, 'noticeRef noticeNumber'),
-	);
+	return noticeNumberElements.map((noticeNumberElement) => {
+		if (noticeNumberElement.tag !== 0x02) {
+			throw new Error('noticeRef noticeNumber must use INTEGER');
+		}
+		return decodeNonNegativeIntegerNumber(noticeNumberElement.value, 'noticeRef noticeNumber');
+	});
 }
 
 /** @internal Decode the Policy Mappings extension value. */
@@ -1313,10 +1322,26 @@ export function parseAuthorityInfoAccess(bytes: Uint8Array): readonly AuthorityI
 		readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH }),
 		'authorityInfoAccess sequence',
 	);
-	return childrenOf(bytes, sequenceElement).map((element) => {
+	if (sequenceElement.tag !== 0x30) {
+		throw new Error('authorityInfoAccess must use SEQUENCE');
+	}
+	const accessDescriptions = childrenOf(bytes, sequenceElement);
+	if (accessDescriptions.length === 0) {
+		throw new Error('authorityInfoAccess must not be empty');
+	}
+	return accessDescriptions.map((element) => {
+		if (element.tag !== 0x30) {
+			throw new Error('authorityInfoAccess entry must use SEQUENCE');
+		}
 		const children = childrenOf(bytes, element);
+		if (children.length !== 2) {
+			throw new Error('authorityInfoAccess entry must contain method and location only');
+		}
 		const method = requireElement(children[0], 'authorityInfoAccess method');
 		const location = requireElement(children[1], 'authorityInfoAccess location');
+		if (method.tag !== 0x06) {
+			throw new Error('authorityInfoAccess method must use OBJECT IDENTIFIER');
+		}
 		if (location.tag !== 0x86) {
 			throw new Error(`Unsupported authorityInfoAccess location tag: ${location.tag}`);
 		}
@@ -1333,8 +1358,15 @@ export function parseCrlDistributionPoints(bytes: Uint8Array): readonly ParsedDi
 		readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH }),
 		'CRLDistributionPoints sequence',
 	);
+	if (sequenceElement.tag !== 0x30) {
+		throw new Error('CRLDistributionPoints must use SEQUENCE');
+	}
+	const elements = childrenOf(bytes, sequenceElement);
+	if (elements.length === 0) {
+		throw new Error('CRLDistributionPoints must not be empty');
+	}
 	const points: ParsedDistributionPoint[] = [];
-	for (const distributionPoint of childrenOf(bytes, sequenceElement)) {
+	for (const distributionPoint of elements) {
 		points.push(parseDistributionPoint(bytes, distributionPoint));
 	}
 	return points;
@@ -1342,6 +1374,9 @@ export function parseCrlDistributionPoints(bytes: Uint8Array): readonly ParsedDi
 
 /** Decode a single DistributionPoint SEQUENCE. */
 function parseDistributionPoint(source: Uint8Array, element: DerElement): ParsedDistributionPoint {
+	if (element.tag !== 0x30) {
+		throw new Error('DistributionPoint must use SEQUENCE');
+	}
 	let distributionPoint: ParsedDistributionPointName | undefined;
 	let reasons: ParsedBitFlags<DistributionPointReason> | undefined;
 	let crlIssuer: readonly GeneralName[] | undefined;
@@ -1386,10 +1421,17 @@ function parseDistributionPointName(
 	}
 	const distributionPointName = requireElement(children[0], 'distributionPointName');
 	if (distributionPointName.tag === 0xa0) {
+		const fullName = childrenOf(source, distributionPointName);
+		if (fullName.length === 0) {
+			throw new Error('distributionPointName fullName must not be empty');
+		}
+		for (const name of fullName) {
+			if ((name.tag & 0xc0) !== 0x80) {
+				throw new Error('distributionPointName fullName must contain GeneralName entries');
+			}
+		}
 		return {
-			fullName: childrenOf(source, distributionPointName).map((name) =>
-				parseGeneralName(source, name),
-			),
+			fullName: fullName.map((name) => parseGeneralName(source, name)),
 		};
 	}
 	if (distributionPointName.tag === 0xa1) {
@@ -1400,7 +1442,16 @@ function parseDistributionPointName(
 
 /** Decode a SEQUENCE OF GeneralName. */
 function parseGeneralNames(source: Uint8Array, element: DerElement): readonly GeneralName[] {
-	return childrenOf(source, element).map((name) => parseGeneralName(source, name));
+	const names = childrenOf(source, element);
+	if (names.length === 0) {
+		throw new Error('GeneralNames must not be empty');
+	}
+	for (const name of names) {
+		if ((name.tag & 0xc0) !== 0x80) {
+			throw new Error('GeneralNames must contain GeneralName entries');
+		}
+	}
+	return names.map((name) => parseGeneralName(source, name));
 }
 
 /** Decode a single GeneralName from its implicit context tag. */
