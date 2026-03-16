@@ -561,6 +561,21 @@ export function parseCertificatesFromSource<
 		: [parseCertificateDer(new Uint8Array(source), options)];
 }
 
+/** Normalizes a PEM, DER, or already-parsed certificate source into one parsed certificate. */
+export function parseCertificateFromSource<TMap extends ExtensionDecoderMap = Record<never, never>>(
+	source: ParsedCertificate<TMap> | string | Uint8Array,
+	options?: ParseOptions<TMap>,
+): ParsedCertificate<TMap> {
+	if (typeof source === 'string') {
+		return parseCertificatePem(source, options);
+	}
+	if (hasParsedCertificateShape(source)) {
+		return source;
+	}
+	const derSource: Uint8Array = source;
+	return parseCertificateDer(new Uint8Array(derSource), options);
+}
+
 /**
  * Decode a PEM bundle containing one or more certificates.
  *
@@ -678,6 +693,12 @@ function parseCertificatesFromPemBlocks<TMap extends ExtensionDecoderMap = Recor
 	return splitPemBlocks(pemBundle)
 		.filter((block) => block.label === 'CERTIFICATE')
 		.map((block) => parseCertificateDer(block.bytes, options));
+}
+
+function hasParsedCertificateShape<TMap extends ExtensionDecoderMap = Record<never, never>>(
+	value: ParsedCertificate<TMap> | Uint8Array,
+): value is ParsedCertificate<TMap> {
+	return 'subjectPublicKeyInfoDer' in value;
 }
 
 /**

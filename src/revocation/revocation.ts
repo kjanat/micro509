@@ -7,7 +7,7 @@
 
 import type { Result } from '#micro509/result/result.ts';
 import type { ParsedCertificate } from '#micro509/x509/parse.ts';
-import { parseCertificateDer, parseCertificatePem } from '#micro509/x509/parse.ts';
+import { parseCertificateFromSource } from '#micro509/x509/parse.ts';
 import type { CrlApplicabilityFailureReason, CrlSource, RevocationReason } from './crl.ts';
 import { checkCertificateRevocationAgainstCrl } from './crl.ts';
 import type { OcspCertificateSource, OcspRequestSource, ParsedOcspResponse } from './ocsp.ts';
@@ -442,13 +442,7 @@ async function checkCertificateRevocationWithOcsp(
 
 /** Accepts PEM, DER, or already-parsed certificate and returns a parsed certificate. */
 function normalizeCertificate(certificate: RevocationCertificateSource): ParsedCertificate {
-	if (typeof certificate === 'string') {
-		return parseCertificatePem(certificate);
-	}
-	if (certificate instanceof Uint8Array) {
-		return parseCertificateDer(certificate);
-	}
-	return certificate;
+	return parseCertificateFromSource(certificate);
 }
 
 /** Strips leading zeros and lowercases a hex string for comparison. */

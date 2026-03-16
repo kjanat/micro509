@@ -59,7 +59,7 @@ import type {
 	ParsedNameAttribute,
 	ParsedRelativeDistinguishedName,
 } from '#micro509/x509/parse.ts';
-import { parseCertificateDer, parseCertificatePem } from '#micro509/x509/parse.ts';
+import { parseCertificateDer, parseCertificateFromSource } from '#micro509/x509/parse.ts';
 
 /** Hash algorithm used to compute OCSP CertID fields. SHA-1 is the RFC 6960 default. */
 export type OcspHashAlgorithm = 'SHA-1' | 'SHA-256';
@@ -1088,13 +1088,10 @@ function encodeOcspCertStatus(input: CreateOcspSingleResponseInput): Uint8Array 
 
 /** Accepts PEM, DER, or already-parsed certificate and returns a parsed certificate. */
 function normalizeCertificate(source: OcspCertificateSource): ParsedCertificate {
-	if (typeof source === 'string') {
-		return parseCertificatePem(source);
-	}
 	if (hasParsedCertificateShape(source)) {
 		return source;
 	}
-	return parseCertificateDer(source);
+	return parseCertificateFromSource(source);
 }
 
 /** Type guard: distinguishes a `ParsedCertificate` from raw `Uint8Array`. */

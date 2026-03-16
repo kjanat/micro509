@@ -81,7 +81,7 @@ import type {
 	ParsedNameAttribute,
 	ParsedRelativeDistinguishedName,
 } from '#micro509/x509/parse.ts';
-import { parseCertificateDer, parseCertificatePem } from '#micro509/x509/parse.ts';
+import { parseCertificateFromSource } from '#micro509/x509/parse.ts';
 
 /**
  * Single revoked certificate entry for {@linkcode createCertificateRevocationList}.
@@ -1849,12 +1849,12 @@ function revocationReasonFromCode(code: number | undefined): RevocationReason | 
 
 /** Thin wrapper — parses a DER-encoded certificate for use as a CRL issuer. */
 function parseIssuerCertificateDer(der: Uint8Array): ParsedCertificate {
-	return parseCertificateDer(der);
+	return parseCertificateFromSource(der);
 }
 
 /** Thin wrapper — parses a PEM-encoded certificate for use as a CRL issuer. */
 function parseIssuerCertificatePem(pem: string): ParsedCertificate {
-	return parseCertificatePem(pem);
+	return parseCertificateFromSource(pem);
 }
 
 /** Accepts PEM, DER, or already-parsed CRL and returns a parsed CRL. */
@@ -2017,13 +2017,7 @@ function parseSignedCrlFields(tbsCertListDer: Uint8Array): {
 
 /** Accepts PEM, DER, or already-parsed certificate and returns a parsed certificate. */
 function normalizeCrlCertificate(source: CrlCertificateSource): ParsedCertificate {
-	if (typeof source === 'string') {
-		return parseCertificatePem(source);
-	}
-	if (source instanceof Uint8Array) {
-		return parseCertificateDer(new Uint8Array(source));
-	}
-	return source;
+	return parseCertificateFromSource(source);
 }
 
 /** Shared UTF-8 decoder instance. */
