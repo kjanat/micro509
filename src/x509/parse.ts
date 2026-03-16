@@ -552,6 +552,15 @@ export function parseCertificatePem<TMap extends ExtensionDecoderMap = Record<ne
 	return parseCertificateDer(pemDecode('CERTIFICATE', pem), options);
 }
 
+/** Normalizes a PEM bundle or single DER certificate source into parsed certificates. */
+export function parseCertificatesFromSource<
+	TMap extends ExtensionDecoderMap = Record<never, never>,
+>(source: string | Uint8Array, options?: ParseOptions<TMap>): readonly ParsedCertificate<TMap>[] {
+	return typeof source === 'string'
+		? parseCertificatesFromPemBlocks(source, options)
+		: [parseCertificateDer(new Uint8Array(source), options)];
+}
+
 /**
  * Decode a PEM bundle containing one or more certificates.
  *
@@ -564,9 +573,7 @@ export function parseCertificateChainPem<TMap extends ExtensionDecoderMap = Reco
 	pemBundle: string,
 	options?: ParseOptions<TMap>,
 ): readonly ParsedCertificate<TMap>[] {
-	return splitPemBlocks(pemBundle)
-		.filter((block) => block.label === 'CERTIFICATE')
-		.map((block) => parseCertificateDer(block.bytes, options));
+	return parseCertificatesFromPemBlocks(pemBundle, options);
 }
 
 /**
@@ -662,6 +669,15 @@ export function parseCertificateSigningRequestDer<
 		...(decodedExtensions !== undefined ? { decodedExtensions } : {}),
 		...(decodedExtensionMap !== undefined ? { decodedExtensionMap } : {}),
 	};
+}
+
+function parseCertificatesFromPemBlocks<TMap extends ExtensionDecoderMap = Record<never, never>>(
+	pemBundle: string,
+	options?: ParseOptions<TMap>,
+): readonly ParsedCertificate<TMap>[] {
+	return splitPemBlocks(pemBundle)
+		.filter((block) => block.label === 'CERTIFICATE')
+		.map((block) => parseCertificateDer(block.bytes, options));
 }
 
 /**

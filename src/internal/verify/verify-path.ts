@@ -14,7 +14,6 @@ import {
 	verifySignedDataDetailed,
 } from '#micro509/internal/crypto/sig-verify.ts';
 import { canonicalDnKey, compareDistinguishedNames } from '#micro509/internal/shared/dn.ts';
-import { splitPemBlocks } from '#micro509/pem/pem.ts';
 import type {
 	CertificateSource,
 	TrustAnchor,
@@ -23,7 +22,7 @@ import type {
 	VerifyFailureDetails,
 } from '#micro509/verify/verify.ts';
 import type { ParsedCertificate } from '#micro509/x509/parse.ts';
-import { parseCertificateDer } from '#micro509/x509/parse.ts';
+import { parseCertificatesFromSource } from '#micro509/x509/parse.ts';
 
 /** Result of the internal chain-building search. */
 export interface InternalBuildResult {
@@ -400,12 +399,7 @@ export async function buildChainInternal(
 
 /** Expands a PEM (possibly multi-block) or DER source into parsed certificates. */
 function expandSource(source: CertificateSource): readonly ParsedCertificate[] {
-	if (typeof source === 'string') {
-		return splitPemBlocks(source)
-			.filter((block) => block.label === 'CERTIFICATE')
-			.map((block) => parseCertificateDer(block.bytes));
-	}
-	return [parseCertificateDer(new Uint8Array(source))];
+	return parseCertificatesFromSource(source);
 }
 
 /** Filters and sorts issuer candidates: AKI match first, then roots, then input order. */
