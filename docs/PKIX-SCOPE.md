@@ -210,7 +210,7 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
 - full RFC 6960 OCSP compliance
 - full revocation checking
 - full WebCrypto algorithm parity
-- `DSA`, `Ed448`, `ECDH`, `X25519`, or generic symmetric-crypto API support
+- `DSA`, `Ed448`, `ECDH`, `X25519`, `RSA-OAEP`, or generic symmetric-crypto API support
 
 ### Honest wording
 
@@ -218,6 +218,15 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
 - “Revocation is a separate API; `matchServiceIdentity()` handles shipped RFC 6125 identifier matching, while verification helpers currently compose DNS/IP identity checks on top of path validation.”
 - “RFC 5280 path validation is partial: supported-form name constraints, initial subtree inputs, and RFC 9618 policy processing ship, but revocation stays separate and broader conformance evidence is still incomplete.” (IETF Datatracker[^rfc5280])
 - “Certificate and CSR signing support covers RSA PKCS#1 v1.5, constrained RSA-PSS, ECDSA `P-256` / `P-384` / `P-521`, and Ed25519; encrypted key-container interop is limited to the shipped AES-CBC + PBKDF2 profiles.”
+
+### Shipped algorithm constraints
+
+- Keep `RSA-PSS` support limited to the shipped parameter profile: `MGF1` only, matching digest and MGF hash, `trailerField` absent or `1`, and typed validation failures for unsupported-but-well-formed params instead of silent fallback.
+- Keep builder defaults explicit: omitted `RSA-PSS` `saltLength` means digest-size salt, and emitted `AlgorithmIdentifier` values stay explicit rather than relying on ASN.1 defaults.
+- Treat `P-521` as a first-class ECDSA curve in the current key/sign/verify surface, not as a precedent for broad WebCrypto-parity claims.
+- Keep encrypted-key interop limited to PBES2 PBKDF2 HMAC-SHA1/HMAC-SHA256 with AES-128/192/256-CBC plus traditional PEM AES-128/192/256-CBC until docs and fixtures expand.
+- Do not widen scope just because WebCrypto exposes an algorithm; `DSA`, `Ed448`, `X25519`, `ECDH`, `RSA-OAEP`, `AES`, and `HMAC` still need a PKI-specific product reason, docs, and tests before they belong here.
+- Regression coverage for this surface should keep `RSA-PSS` negative parameter cases, `P-521` end-to-end flows, and encrypted-key compatibility locked down. See [`test/verify.test.ts`](../test/verify.test.ts), [`test/certificate.test.ts`](../test/certificate.test.ts), [`test/csr.test.ts`](../test/csr.test.ts), [`test/keys.test.ts`](../test/keys.test.ts), [`test/internals.test.ts`](../test/internals.test.ts), and [`test/differential.test.ts`](../test/differential.test.ts).
 
 The main monster under the bed is simple: **once you say “full RFC 5280,” you've signed up for policy processing, name constraints, critical-extension behavior, trust-anchor semantics, and revocation integration - not just signatures and dates.** (IETF Datatracker[^rfc5280])
 
