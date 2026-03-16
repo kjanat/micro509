@@ -96,7 +96,7 @@ The original PEM text including `BEGIN`/`END` lines.
 
 > **categorizePemBlocks**(`input`): [`CategorizedPemBlocks`](#categorizedpemblocks)
 
-Defined in: [pem/pem.ts:101](https://github.com/kjanat/ts-x509/blob/vitepress/src/pem/pem.ts#L101)
+Defined in: [pem/pem.ts:115](https://github.com/kjanat/ts-x509/blob/vitepress/src/pem/pem.ts#L115)
 
 Groups PEM blocks by label into well-known PKI categories
 (certificates, CSRs, private keys, public keys, and everything else).
@@ -175,7 +175,7 @@ Raw DER-encoded content.
 
 > **splitPemBlocks**(`input`): readonly [`PemBlock`](#pemblock)[]
 
-Defined in: [pem/pem.ts:77](https://github.com/kjanat/ts-x509/blob/vitepress/src/pem/pem.ts#L77)
+Defined in: [pem/pem.ts:82](https://github.com/kjanat/ts-x509/blob/vitepress/src/pem/pem.ts#L82)
 
 Finds all `BEGIN`/`END`-delimited PEM blocks in a string and returns
 them as parsed [`PemBlock`](#pemblock) entries. Handles concatenated PEM files

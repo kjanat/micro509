@@ -72,7 +72,7 @@
 		"lint:biome": "biome lint",
 		"lint:deno": "deno lint --rules-exclude=no-node-globals,require-await,no-unused-vars src",
 		"publish:jsr": "[[ -n $GITHUB_ACTIONS ]] && bunx --bun jsr publish --provenance || bunx --bun jsr publish --dry-run",
-		"site:api": "typedoc --gitRevision \"$(git branch --show-current)\"",
+		"site:api": "typedoc --gitRevision \"$(git branch --show-current)\" && bun fmt site/**/*",
 		"site:build": "bun site:api && bunx --bun vitepress build site",
 		"site:dev": "bun site:api --watch & bunx --bun vitepress dev site --host & wait",
 		"site:preview": "bun site:api && bunx --bun vitepress preview site",

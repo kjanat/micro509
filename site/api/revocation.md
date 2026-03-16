@@ -437,7 +437,7 @@ Issuance timestamp. Defaults to `new Date()`.
 
 ### CreateOcspRequestInput
 
-Defined in: [revocation/ocsp.ts:85](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L85)
+Defined in: [revocation/ocsp.ts:86](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L86)
 
 Input for [`createOcspRequest`](#createocsprequest).
 
@@ -447,7 +447,7 @@ Input for [`createOcspRequest`](#createocsprequest).
 
 > `readonly` `optional` **hashAlgorithm**: [`OcspHashAlgorithm`](#ocsphashalgorithm)
 
-Defined in: [revocation/ocsp.ts:89](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L89)
+Defined in: [revocation/ocsp.ts:90](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L90)
 
 Hash algorithm for CertID computation. Defaults to `'SHA-1'`.
 
@@ -455,7 +455,7 @@ Hash algorithm for CertID computation. Defaults to `'SHA-1'`.
 
 > `readonly` `optional` **nonce**: `Uint8Array`\<`ArrayBufferLike`\>
 
-Defined in: [revocation/ocsp.ts:91](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L91)
+Defined in: [revocation/ocsp.ts:92](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L92)
 
 Random nonce for replay protection. Omit to skip the nonce extension.
 
@@ -463,7 +463,7 @@ Random nonce for replay protection. Omit to skip the nonce extension.
 
 > `readonly` **requests**: readonly [`CreateOcspRequestItemInput`](#createocsprequestiteminput)[]
 
-Defined in: [revocation/ocsp.ts:87](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L87)
+Defined in: [revocation/ocsp.ts:88](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L88)
 
 One or more certificates to query (batched into a single OCSP request).
 
@@ -471,7 +471,7 @@ One or more certificates to query (batched into a single OCSP request).
 
 ### CreateOcspRequestItemInput
 
-Defined in: [revocation/ocsp.ts:75](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L75)
+Defined in: [revocation/ocsp.ts:76](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L76)
 
 One certificate whose status to query in an OCSP request.
 Used as an element of [`CreateOcspRequestInput.requests`](#requests).
@@ -486,7 +486,7 @@ Used as an element of [`CreateOcspRequestInput.requests`](#requests).
 
 > `readonly` **certificate**: [`OcspCertificateSource`](#ocspcertificatesource)
 
-Defined in: [revocation/ocsp.ts:77](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L77)
+Defined in: [revocation/ocsp.ts:78](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L78)
 
 Certificate whose revocation status is being queried.
 
@@ -494,7 +494,7 @@ Certificate whose revocation status is being queried.
 
 > `readonly` **issuerCertificate**: [`OcspCertificateSource`](#ocspcertificatesource)
 
-Defined in: [revocation/ocsp.ts:79](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L79)
+Defined in: [revocation/ocsp.ts:80](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L80)
 
 Issuer of `certificate` — needed to compute the CertID hash.
 
@@ -502,7 +502,7 @@ Issuer of `certificate` — needed to compute the CertID hash.
 
 ### CreateOcspResponseInput
 
-Defined in: [revocation/ocsp.ts:230](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L230)
+Defined in: [revocation/ocsp.ts:231](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L231)
 
 Input for [`createOcspResponse`](#createocspresponse).
 
@@ -512,7 +512,7 @@ Input for [`createOcspResponse`](#createocspresponse).
 
 > `readonly` `optional` **hashAlgorithm**: [`OcspHashAlgorithm`](#ocsphashalgorithm)
 
-Defined in: [revocation/ocsp.ts:242](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L242)
+Defined in: [revocation/ocsp.ts:243](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L243)
 
 Hash algorithm for CertID computation. Defaults to `'SHA-1'`.
 
@@ -520,7 +520,7 @@ Hash algorithm for CertID computation. Defaults to `'SHA-1'`.
 
 > `readonly` `optional` **includedCertificates**: readonly [`OcspCertificateSource`](#ocspcertificatesource)[]
 
-Defined in: [revocation/ocsp.ts:244](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L244)
+Defined in: [revocation/ocsp.ts:245](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L245)
 
 Extra certificates to embed in the response (e.g. the responder's issuer chain).
 
@@ -528,7 +528,7 @@ Extra certificates to embed in the response (e.g. the responder's issuer chain).
 
 > `readonly` `optional` **nonce**: `Uint8Array`\<`ArrayBufferLike`\>
 
-Defined in: [revocation/ocsp.ts:240](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L240)
+Defined in: [revocation/ocsp.ts:241](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L241)
 
 Nonce to echo back for replay protection.
 
@@ -536,7 +536,7 @@ Nonce to echo back for replay protection.
 
 > `readonly` `optional` **producedAt**: `Date`
 
-Defined in: [revocation/ocsp.ts:238](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L238)
+Defined in: [revocation/ocsp.ts:239](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L239)
 
 Timestamp for the `producedAt` field. Defaults to `new Date()`.
 
@@ -544,7 +544,7 @@ Timestamp for the `producedAt` field. Defaults to `new Date()`.
 
 > `readonly` **responses**: readonly [`CreateOcspSingleResponseInput`](#createocspsingleresponseinput)[]
 
-Defined in: [revocation/ocsp.ts:236](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L236)
+Defined in: [revocation/ocsp.ts:237](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L237)
 
 Per-certificate status entries to include in the BasicOCSPResponse.
 
@@ -552,7 +552,7 @@ Per-certificate status entries to include in the BasicOCSPResponse.
 
 > `readonly` **signerCertificate**: [`OcspCertificateSource`](#ocspcertificatesource)
 
-Defined in: [revocation/ocsp.ts:234](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L234)
+Defined in: [revocation/ocsp.ts:235](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L235)
 
 Certificate of the OCSP responder — used to build the responder ID (by key hash).
 
@@ -560,7 +560,7 @@ Certificate of the OCSP responder — used to build the responder ID (by key has
 
 > `readonly` **signerPrivateKey**: `CryptoKey`
 
-Defined in: [revocation/ocsp.ts:232](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L232)
+Defined in: [revocation/ocsp.ts:233](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L233)
 
 Private key used to sign the response. Algorithm is inferred from the key.
 
@@ -568,7 +568,7 @@ Private key used to sign the response. Algorithm is inferred from the key.
 
 ### CreateOcspSingleResponseInput
 
-Defined in: [revocation/ocsp.ts:214](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L214)
+Defined in: [revocation/ocsp.ts:215](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L215)
 
 One certificate's status entry for [`CreateOcspResponseInput.responses`](#responses).
 Extends [`CreateOcspRequestItemInput`](#createocsprequestiteminput) with status and timing fields.
@@ -583,7 +583,7 @@ Extends [`CreateOcspRequestItemInput`](#createocsprequestiteminput) with status 
 
 > `readonly` **certificate**: [`OcspCertificateSource`](#ocspcertificatesource)
 
-Defined in: [revocation/ocsp.ts:77](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L77)
+Defined in: [revocation/ocsp.ts:78](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L78)
 
 Certificate whose revocation status is being queried.
 
@@ -595,7 +595,7 @@ Certificate whose revocation status is being queried.
 
 > `readonly` **certStatus**: [`OcspCertStatus`](#ocspcertstatus)
 
-Defined in: [revocation/ocsp.ts:216](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L216)
+Defined in: [revocation/ocsp.ts:217](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L217)
 
 Status to assert for this certificate.
 
@@ -603,7 +603,7 @@ Status to assert for this certificate.
 
 > `readonly` **issuerCertificate**: [`OcspCertificateSource`](#ocspcertificatesource)
 
-Defined in: [revocation/ocsp.ts:79](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L79)
+Defined in: [revocation/ocsp.ts:80](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L80)
 
 Issuer of `certificate` — needed to compute the CertID hash.
 
@@ -615,7 +615,7 @@ Issuer of `certificate` — needed to compute the CertID hash.
 
 > `readonly` `optional` **nextUpdate**: `Date`
 
-Defined in: [revocation/ocsp.ts:220](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L220)
+Defined in: [revocation/ocsp.ts:221](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L221)
 
 End of the validity window. Omit for open-ended assertions.
 
@@ -623,7 +623,7 @@ End of the validity window. Omit for open-ended assertions.
 
 > `readonly` `optional` **revocationReasonCode**: `number`
 
-Defined in: [revocation/ocsp.ts:224](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L224)
+Defined in: [revocation/ocsp.ts:225](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L225)
 
 CRLReason integer code (only meaningful when `certStatus` is `'revoked'`).
 
@@ -631,7 +631,7 @@ CRLReason integer code (only meaningful when `certStatus` is `'revoked'`).
 
 > `readonly` `optional` **revokedAt**: `Date`
 
-Defined in: [revocation/ocsp.ts:222](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L222)
+Defined in: [revocation/ocsp.ts:223](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L223)
 
 Revocation time (required when `certStatus` is `'revoked'`). Defaults to `thisUpdate`.
 
@@ -639,7 +639,7 @@ Revocation time (required when `certStatus` is `'revoked'`). Defaults to `thisUp
 
 > `readonly` `optional` **thisUpdate**: `Date`
 
-Defined in: [revocation/ocsp.ts:218](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L218)
+Defined in: [revocation/ocsp.ts:219](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L219)
 
 Start of the validity window for this status assertion. Defaults to `new Date()`.
 
@@ -647,7 +647,7 @@ Start of the validity window for this status assertion. Defaults to `new Date()`
 
 ### OcspRequestMaterial
 
-Defined in: [revocation/ocsp.ts:97](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L97)
+Defined in: [revocation/ocsp.ts:98](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L98)
 
 Encoded OCSP request in multiple serialisation formats, returned by [`createOcspRequest`](#createocsprequest).
 
@@ -657,7 +657,7 @@ Encoded OCSP request in multiple serialisation formats, returned by [`createOcsp
 
 > `readonly` **base64**: `string`
 
-Defined in: [revocation/ocsp.ts:103](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L103)
+Defined in: [revocation/ocsp.ts:104](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L104)
 
 Base64-encoded DER (no PEM armour).
 
@@ -665,7 +665,7 @@ Base64-encoded DER (no PEM armour).
 
 > `readonly` **der**: `Uint8Array`
 
-Defined in: [revocation/ocsp.ts:99](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L99)
+Defined in: [revocation/ocsp.ts:100](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L100)
 
 Raw DER bytes.
 
@@ -673,7 +673,7 @@ Raw DER bytes.
 
 > `readonly` **pem**: `string`
 
-Defined in: [revocation/ocsp.ts:101](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L101)
+Defined in: [revocation/ocsp.ts:102](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L102)
 
 PEM-encoded request (`-----BEGIN OCSP REQUEST-----`).
 
@@ -715,7 +715,7 @@ OCSP responder URI.
 
 ### OcspResponseMaterial
 
-Defined in: [revocation/ocsp.ts:250](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L250)
+Defined in: [revocation/ocsp.ts:251](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L251)
 
 Encoded OCSP response in multiple serialisation formats, returned by [`createOcspResponse`](#createocspresponse).
 
@@ -725,7 +725,7 @@ Encoded OCSP response in multiple serialisation formats, returned by [`createOcs
 
 > `readonly` **base64**: `string`
 
-Defined in: [revocation/ocsp.ts:256](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L256)
+Defined in: [revocation/ocsp.ts:257](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L257)
 
 Base64-encoded DER (no PEM armour).
 
@@ -733,7 +733,7 @@ Base64-encoded DER (no PEM armour).
 
 > `readonly` **der**: `Uint8Array`
 
-Defined in: [revocation/ocsp.ts:252](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L252)
+Defined in: [revocation/ocsp.ts:253](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L253)
 
 Raw DER bytes.
 
@@ -741,7 +741,7 @@ Raw DER bytes.
 
 > `readonly` **pem**: `string`
 
-Defined in: [revocation/ocsp.ts:254](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L254)
+Defined in: [revocation/ocsp.ts:255](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L255)
 
 PEM-encoded response (`-----BEGIN OCSP RESPONSE-----`).
 
@@ -888,7 +888,7 @@ CRL version (1 = v1, 2 = v2 with extensions).
 
 ### ParsedOcspCertId
 
-Defined in: [revocation/ocsp.ts:110](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L110)
+Defined in: [revocation/ocsp.ts:111](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L111)
 
 Decoded OCSP CertID — identifies a certificate by hashed issuer name,
 hashed issuer key, and serial number.
@@ -899,7 +899,7 @@ hashed issuer key, and serial number.
 
 > `readonly` **hashAlgorithmName**: `string`
 
-Defined in: [revocation/ocsp.ts:114](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L114)
+Defined in: [revocation/ocsp.ts:115](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L115)
 
 Human-readable hash algorithm name (e.g. `"SHA-256"`).
 
@@ -907,7 +907,7 @@ Human-readable hash algorithm name (e.g. `"SHA-256"`).
 
 > `readonly` **hashAlgorithmOid**: `string`
 
-Defined in: [revocation/ocsp.ts:112](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L112)
+Defined in: [revocation/ocsp.ts:113](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L113)
 
 OID of the hash algorithm used for the name and key hashes.
 
@@ -915,7 +915,7 @@ OID of the hash algorithm used for the name and key hashes.
 
 > `readonly` **issuerKeyHashHex**: `string`
 
-Defined in: [revocation/ocsp.ts:118](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L118)
+Defined in: [revocation/ocsp.ts:119](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L119)
 
 Hex-encoded hash of the issuer's SubjectPublicKey BIT STRING content.
 
@@ -923,7 +923,7 @@ Hex-encoded hash of the issuer's SubjectPublicKey BIT STRING content.
 
 > `readonly` **issuerNameHashHex**: `string`
 
-Defined in: [revocation/ocsp.ts:116](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L116)
+Defined in: [revocation/ocsp.ts:117](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L117)
 
 Hex-encoded hash of the issuer's distinguished name DER.
 
@@ -931,7 +931,7 @@ Hex-encoded hash of the issuer's distinguished name DER.
 
 > `readonly` **serialNumberHex**: `string`
 
-Defined in: [revocation/ocsp.ts:120](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L120)
+Defined in: [revocation/ocsp.ts:121](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L121)
 
 Hex-encoded serial number of the certificate.
 
@@ -939,7 +939,7 @@ Hex-encoded serial number of the certificate.
 
 ### ParsedOcspRequest
 
-Defined in: [revocation/ocsp.ts:126](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L126)
+Defined in: [revocation/ocsp.ts:127](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L127)
 
 Decoded OCSP request, returned by [`parseOcspRequestDer`](#parseocsprequestder) / [`parseOcspRequestPem`](#parseocsprequestpem).
 
@@ -949,7 +949,7 @@ Decoded OCSP request, returned by [`parseOcspRequestDer`](#parseocsprequestder) 
 
 > `readonly` `optional` **nonce**: `string`
 
-Defined in: [revocation/ocsp.ts:130](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L130)
+Defined in: [revocation/ocsp.ts:131](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L131)
 
 Hex-encoded nonce extension value, if present.
 
@@ -957,7 +957,7 @@ Hex-encoded nonce extension value, if present.
 
 > `readonly` **requests**: readonly [`ParsedOcspCertId`](#parsedocspcertid)[]
 
-Defined in: [revocation/ocsp.ts:128](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L128)
+Defined in: [revocation/ocsp.ts:129](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L129)
 
 CertIDs of the certificates being queried.
 
@@ -965,7 +965,7 @@ CertIDs of the certificates being queried.
 
 ### ParsedOcspResponse
 
-Defined in: [revocation/ocsp.ts:185](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L185)
+Defined in: [revocation/ocsp.ts:186](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L186)
 
 Decoded OCSP response, returned by [`parseOcspResponseDer`](#parseocspresponseder) / [`parseOcspResponsePem`](#parseocspresponsepem).
 
@@ -977,7 +977,7 @@ When `responseStatus` is not `'successful'`, most fields are absent.
 
 > `readonly` `optional` **certificates**: readonly [`ParsedCertificate`](x509.md#parsedcertificate)\<`Record`\<`never`, `never`\>\>[]
 
-Defined in: [revocation/ocsp.ts:207](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L207)
+Defined in: [revocation/ocsp.ts:208](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L208)
 
 Certificates embedded in the response (typically the responder's chain).
 
@@ -985,7 +985,7 @@ Certificates embedded in the response (typically the responder's chain).
 
 > `readonly` `optional` **nonce**: `string`
 
-Defined in: [revocation/ocsp.ts:205](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L205)
+Defined in: [revocation/ocsp.ts:206](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L206)
 
 Hex-encoded nonce, if the response echoed one.
 
@@ -993,7 +993,7 @@ Hex-encoded nonce, if the response echoed one.
 
 > `readonly` `optional` **producedAt**: `Date`
 
-Defined in: [revocation/ocsp.ts:201](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L201)
+Defined in: [revocation/ocsp.ts:202](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L202)
 
 Timestamp when the responder produced this response.
 
@@ -1001,7 +1001,7 @@ Timestamp when the responder produced this response.
 
 > `readonly` `optional` **responderId**: [`ParsedOcspResponderId`](#parsedocspresponderid)
 
-Defined in: [revocation/ocsp.ts:193](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L193)
+Defined in: [revocation/ocsp.ts:194](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L194)
 
 How the responder identifies itself.
 
@@ -1009,7 +1009,7 @@ How the responder identifies itself.
 
 > `readonly` `optional` **responseDataDer**: `Uint8Array`\<`ArrayBufferLike`\>
 
-Defined in: [revocation/ocsp.ts:191](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L191)
+Defined in: [revocation/ocsp.ts:192](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L192)
 
 DER-encoded ResponseData — the signed payload for signature verification.
 
@@ -1017,7 +1017,7 @@ DER-encoded ResponseData — the signed payload for signature verification.
 
 > `readonly` `optional` **responses**: readonly [`ParsedOcspSingleResponse`](#parsedocspsingleresponse)[]
 
-Defined in: [revocation/ocsp.ts:203](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L203)
+Defined in: [revocation/ocsp.ts:204](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L204)
 
 Per-certificate status entries.
 
@@ -1025,7 +1025,7 @@ Per-certificate status entries.
 
 > `readonly` **responseStatus**: [`OcspResponseStatus`](#ocspresponsestatus)
 
-Defined in: [revocation/ocsp.ts:187](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L187)
+Defined in: [revocation/ocsp.ts:188](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L188)
 
 Overall response status. Only `'successful'` carries a BasicOCSPResponse body.
 
@@ -1033,7 +1033,7 @@ Overall response status. Only `'successful'` carries a BasicOCSPResponse body.
 
 > `readonly` `optional` **responseTypeOid**: `string`
 
-Defined in: [revocation/ocsp.ts:189](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L189)
+Defined in: [revocation/ocsp.ts:190](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L190)
 
 OID of the response type (normally `id-pkix-ocsp-basic`).
 
@@ -1041,7 +1041,7 @@ OID of the response type (normally `id-pkix-ocsp-basic`).
 
 > `readonly` `optional` **signatureAlgorithmName**: `string`
 
-Defined in: [revocation/ocsp.ts:197](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L197)
+Defined in: [revocation/ocsp.ts:198](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L198)
 
 Human-readable signature algorithm name.
 
@@ -1049,7 +1049,7 @@ Human-readable signature algorithm name.
 
 > `readonly` `optional` **signatureAlgorithmOid**: `string`
 
-Defined in: [revocation/ocsp.ts:195](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L195)
+Defined in: [revocation/ocsp.ts:196](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L196)
 
 OID of the algorithm used to sign this response.
 
@@ -1057,7 +1057,7 @@ OID of the algorithm used to sign this response.
 
 > `readonly` `optional` **signatureValue**: `Uint8Array`\<`ArrayBufferLike`\>
 
-Defined in: [revocation/ocsp.ts:199](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L199)
+Defined in: [revocation/ocsp.ts:200](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L200)
 
 Raw signature bytes.
 
@@ -1065,7 +1065,7 @@ Raw signature bytes.
 
 ### ParsedOcspSingleResponse
 
-Defined in: [revocation/ocsp.ts:147](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L147)
+Defined in: [revocation/ocsp.ts:148](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L148)
 
 Status of one certificate inside an OCSP BasicResponse.
 
@@ -1075,7 +1075,7 @@ Status of one certificate inside an OCSP BasicResponse.
 
 > `readonly` **certId**: [`ParsedOcspCertId`](#parsedocspcertid)
 
-Defined in: [revocation/ocsp.ts:149](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L149)
+Defined in: [revocation/ocsp.ts:150](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L150)
 
 Which certificate this status applies to.
 
@@ -1083,7 +1083,7 @@ Which certificate this status applies to.
 
 > `readonly` **certStatus**: [`OcspCertStatus`](#ocspcertstatus)
 
-Defined in: [revocation/ocsp.ts:151](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L151)
+Defined in: [revocation/ocsp.ts:152](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L152)
 
 Responder's verdict: `good`, `revoked`, or `unknown`.
 
@@ -1091,7 +1091,7 @@ Responder's verdict: `good`, `revoked`, or `unknown`.
 
 > `readonly` `optional` **nextUpdate**: `Date`
 
-Defined in: [revocation/ocsp.ts:155](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L155)
+Defined in: [revocation/ocsp.ts:156](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L156)
 
 End of the validity window. Absent if the responder does not commit to a schedule.
 
@@ -1099,7 +1099,7 @@ End of the validity window. Absent if the responder does not commit to a schedul
 
 > `readonly` `optional` **revocationReasonCode**: `number`
 
-Defined in: [revocation/ocsp.ts:159](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L159)
+Defined in: [revocation/ocsp.ts:160](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L160)
 
 CRLReason integer (only for `certStatus === 'revoked'`).
 
@@ -1107,7 +1107,7 @@ CRLReason integer (only for `certStatus === 'revoked'`).
 
 > `readonly` `optional` **revokedAt**: `Date`
 
-Defined in: [revocation/ocsp.ts:157](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L157)
+Defined in: [revocation/ocsp.ts:158](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L158)
 
 When the certificate was revoked (only for `certStatus === 'revoked'`).
 
@@ -1115,7 +1115,7 @@ When the certificate was revoked (only for `certStatus === 'revoked'`).
 
 > `readonly` **thisUpdate**: `Date`
 
-Defined in: [revocation/ocsp.ts:153](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L153)
+Defined in: [revocation/ocsp.ts:154](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L154)
 
 Start of the validity window for this status assertion.
 
@@ -1595,7 +1595,7 @@ Certificate of the CA that should have signed the CRL.
 
 ### ValidateOcspResponseFailure
 
-Defined in: [revocation/ocsp.ts:306](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L306)
+Defined in: [revocation/ocsp.ts:307](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L307)
 
 Failure detail for [`validateOcspResponse`](#validateocspresponse).
 
@@ -1650,7 +1650,7 @@ Human-readable diagnostic message.
 
 > `readonly` **ok**: `false`
 
-Defined in: [revocation/ocsp.ts:319](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L319)
+Defined in: [revocation/ocsp.ts:320](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L320)
 
 Always `false` for failures.
 
@@ -1658,7 +1658,7 @@ Always `false` for failures.
 
 ### ValidateOcspResponseInput
 
-Defined in: [revocation/ocsp.ts:281](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L281)
+Defined in: [revocation/ocsp.ts:282](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L282)
 
 Input for [`validateOcspResponse`](#validateocspresponse).
 
@@ -1668,7 +1668,7 @@ Input for [`validateOcspResponse`](#validateocspresponse).
 
 > `readonly` `optional` **allowChainedResponderCertificate**: `boolean`
 
-Defined in: [revocation/ocsp.ts:291](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L291)
+Defined in: [revocation/ocsp.ts:292](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L292)
 
 When `true`, allows delegated responder chain validation beyond direct issuance.
 
@@ -1676,7 +1676,7 @@ When `true`, allows delegated responder chain validation beyond direct issuance.
 
 > `readonly` `optional` **at**: `Date`
 
-Defined in: [revocation/ocsp.ts:293](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L293)
+Defined in: [revocation/ocsp.ts:294](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L294)
 
 Evaluation time for freshness checks. Defaults to `new Date()`.
 
@@ -1684,7 +1684,7 @@ Evaluation time for freshness checks. Defaults to `new Date()`.
 
 > `readonly` `optional` **clockSkewMs**: `number`
 
-Defined in: [revocation/ocsp.ts:295](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L295)
+Defined in: [revocation/ocsp.ts:296](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L296)
 
 Clock-skew tolerance in milliseconds for `thisUpdate`/`nextUpdate`/`producedAt`.
 
@@ -1692,7 +1692,7 @@ Clock-skew tolerance in milliseconds for `thisUpdate`/`nextUpdate`/`producedAt`.
 
 > `readonly` **issuerCertificate**: [`OcspCertificateSource`](#ocspcertificatesource)
 
-Defined in: [revocation/ocsp.ts:285](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L285)
+Defined in: [revocation/ocsp.ts:286](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L286)
 
 Certificate of the CA that issued the target certificate.
 
@@ -1700,7 +1700,7 @@ Certificate of the CA that issued the target certificate.
 
 > `readonly` `optional` **request**: [`OcspRequestSource`](#ocsprequestsource)
 
-Defined in: [revocation/ocsp.ts:287](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L287)
+Defined in: [revocation/ocsp.ts:288](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L288)
 
 Original request — enables nonce and request-coverage checks.
 
@@ -1708,7 +1708,7 @@ Original request — enables nonce and request-coverage checks.
 
 > `readonly` `optional` **responderCertificate**: [`OcspCertificateSource`](#ocspcertificatesource)
 
-Defined in: [revocation/ocsp.ts:289](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L289)
+Defined in: [revocation/ocsp.ts:290](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L290)
 
 Explicit responder certificate — overrides embedded certificate discovery.
 
@@ -1716,7 +1716,7 @@ Explicit responder certificate — overrides embedded certificate discovery.
 
 > `readonly` **response**: `string` \| `Uint8Array`\<`ArrayBufferLike`\> \| [`ParsedOcspResponse`](#parsedocspresponse)
 
-Defined in: [revocation/ocsp.ts:283](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L283)
+Defined in: [revocation/ocsp.ts:284](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L284)
 
 The OCSP response to validate.
 
@@ -1782,7 +1782,7 @@ Always `false` for failures.
 
 ### VerifyOcspResponseFailure
 
-Defined in: [revocation/ocsp.ts:260](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L260)
+Defined in: [revocation/ocsp.ts:261](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L261)
 
 Failure detail when OCSP response signature verification fails.
 
@@ -1832,7 +1832,7 @@ Human-readable diagnostic message.
 
 > `readonly` **ok**: `false`
 
-Defined in: [revocation/ocsp.ts:262](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L262)
+Defined in: [revocation/ocsp.ts:263](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L263)
 
 Always `false` for failures.
 
@@ -1946,7 +1946,7 @@ PEM string, DER bytes, or already-parsed CRL.
 
 > **OcspCertificateSource** = `string` \| `Uint8Array` \| [`ParsedCertificate`](x509.md#parsedcertificate)
 
-Defined in: [revocation/ocsp.ts:67](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L67)
+Defined in: [revocation/ocsp.ts:68](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L68)
 
 PEM string, DER bytes, or already-parsed certificate.
 
@@ -1956,7 +1956,7 @@ PEM string, DER bytes, or already-parsed certificate.
 
 > **OcspCertStatus** = `"good"` \| `"revoked"` \| `"unknown"`
 
-Defined in: [revocation/ocsp.ts:134](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L134)
+Defined in: [revocation/ocsp.ts:135](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L135)
 
 RFC 6960 certificate status reported by the responder for a single CertID.
 
@@ -1966,7 +1966,7 @@ RFC 6960 certificate status reported by the responder for a single CertID.
 
 > **OcspHashAlgorithm** = `"SHA-1"` \| `"SHA-256"`
 
-Defined in: [revocation/ocsp.ts:65](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L65)
+Defined in: [revocation/ocsp.ts:66](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L66)
 
 Hash algorithm used to compute OCSP CertID fields. SHA-1 is the RFC 6960 default.
 
@@ -1976,7 +1976,7 @@ Hash algorithm used to compute OCSP CertID fields. SHA-1 is the RFC 6960 default
 
 > **OcspRequestSource** = `string` \| `Uint8Array` \| [`ParsedOcspRequest`](#parsedocsprequest)
 
-Defined in: [revocation/ocsp.ts:69](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L69)
+Defined in: [revocation/ocsp.ts:70](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L70)
 
 PEM string, DER bytes, or already-parsed OCSP request.
 
@@ -1996,7 +1996,7 @@ Where the OCSP responder URI came from.
 
 > **OcspResponseStatus** = `"successful"` \| `"malformedRequest"` \| `"internalError"` \| `"tryLater"` \| `"sigRequired"` \| `"unauthorized"`
 
-Defined in: [revocation/ocsp.ts:136](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L136)
+Defined in: [revocation/ocsp.ts:137](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L137)
 
 RFC 6960 overall response status — anything other than `'successful'` means the response body is absent or unusable.
 
@@ -2006,7 +2006,7 @@ RFC 6960 overall response status — anything other than `'successful'` means th
 
 > **ParsedOcspResponderId** = \{ `name`: [`ParsedName`](x509.md#parsedname); `type`: `"byName"`; \} \| \{ `keyHashHex`: `string`; `type`: `"byKeyHash"`; \}
 
-Defined in: [revocation/ocsp.ts:166](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L166)
+Defined in: [revocation/ocsp.ts:167](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L167)
 
 How the OCSP responder identifies itself — either by distinguished name or
 by SHA-1 hash of its public key.
@@ -2137,7 +2137,7 @@ Validated and parsed CRL.
 
 > **ValidateOcspResponseResult** = \{ `ok`: `true`; `value`: [`ParsedOcspResponse`](#parsedocspresponse); \} \| [`ErrorResult`](result.md#errorresult)\<`"response_status_invalid"` \| `"signature_invalid"` \| `"responder_id_mismatch"` \| `"nonce_mismatch"` \| `"request_mismatch"` \| `"issuer_mismatch"` \| `"responder_chain_invalid"` \| `"ocsp_signing_missing"` \| `"stale_response"`, `Record`\<`never`, `never`\>, [`ValidateOcspResponseFailure`](#validateocspresponsefailure)\>
 
-Defined in: [revocation/ocsp.ts:328](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L328)
+Defined in: [revocation/ocsp.ts:329](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L329)
 
 Result of [`validateOcspResponse`](#validateocspresponse).
 
@@ -2194,7 +2194,7 @@ Parsed CRL with a verified signature.
 
 > **VerifyOcspResponseResult** = \{ `ok`: `true`; `value`: [`ParsedOcspResponse`](#parsedocspresponse); \} \| [`ErrorResult`](result.md#errorresult)\<`"signature_invalid"`, `Record`\<`never`, `never`\>, [`VerifyOcspResponseFailure`](#verifyocspresponsefailure)\>
 
-Defined in: [revocation/ocsp.ts:270](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L270)
+Defined in: [revocation/ocsp.ts:271](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L271)
 
 Result of [`verifyOcspResponse`](#verifyocspresponse).
 
@@ -2222,7 +2222,7 @@ Parsed response with a verified signature.
 
 > **checkCertificateRevocation**(`input`): `Promise`\<[`CheckCertificateRevocationResult`](#checkcertificaterevocationresult)\>
 
-Defined in: [revocation/revocation.ts:273](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/revocation.ts#L273)
+Defined in: [revocation/revocation.ts:278](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/revocation.ts#L278)
 
 Evaluates all provided CRL and OCSP evidence to determine the certificate's
 revocation status. Returns the first `revoked` if any, else the first `good`,
@@ -2259,7 +2259,7 @@ if (result.ok && result.value.status === 'revoked') {
 
 > **checkCertificateRevocationAgainstCrl**(`input`): `Promise`\<[`CheckCertificateRevocationAgainstCrlResult`](#checkcertificaterevocationagainstcrlresult)\>
 
-Defined in: [revocation/crl.ts:650](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L650)
+Defined in: [revocation/crl.ts:667](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L667)
 
 End-to-end revocation check: validates the CRL (and optional delta CRL),
 verifies applicability via distribution-point and scope matching, then
@@ -2344,7 +2344,7 @@ const crl = await createCertificateRevocationList({
 
 > **createOcspRequest**(`input`): `Promise`\<[`OcspRequestMaterial`](#ocsprequestmaterial)\>
 
-Defined in: [revocation/ocsp.ts:364](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L364)
+Defined in: [revocation/ocsp.ts:365](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L365)
 
 Builds a DER-encoded OCSP request containing one or more CertID entries
 and an optional nonce extension.
@@ -2380,7 +2380,7 @@ const req = await createOcspRequest({
 
 > **createOcspResponse**(`input`): `Promise`\<[`OcspResponseMaterial`](#ocspresponsematerial)\>
 
-Defined in: [revocation/ocsp.ts:526](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L526)
+Defined in: [revocation/ocsp.ts:532](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L532)
 
 Signs and encodes an OCSP BasicResponse with a `successful` status.
 
@@ -2445,7 +2445,7 @@ readonly `string`[]
 
 > **isCertificateRevoked**(`certificateSerialNumber`, `crl`): `boolean`
 
-Defined in: [revocation/crl.ts:780](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L780)
+Defined in: [revocation/crl.ts:805](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L805)
 
 Quick serial-number lookup — returns `true` if the serial appears in the
 CRL's revoked entries. Does **not** validate the CRL or check applicability.
@@ -2525,7 +2525,7 @@ console.log(
 
 > **parseOcspRequestDer**(`der`): [`ParsedOcspRequest`](#parsedocsprequest)
 
-Defined in: [revocation/ocsp.ts:394](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L394)
+Defined in: [revocation/ocsp.ts:395](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L395)
 
 Decodes a DER-encoded OCSP request into a structured [`ParsedOcspRequest`](#parsedocsprequest).
 
@@ -2545,7 +2545,7 @@ Decodes a DER-encoded OCSP request into a structured [`ParsedOcspRequest`](#pars
 
 > **parseOcspRequestPem**(`pem`): [`ParsedOcspRequest`](#parsedocsprequest)
 
-Defined in: [revocation/ocsp.ts:416](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L416)
+Defined in: [revocation/ocsp.ts:417](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L417)
 
 Decodes a PEM-encoded OCSP request (`-----BEGIN OCSP REQUEST-----`).
 
@@ -2565,7 +2565,7 @@ Decodes a PEM-encoded OCSP request (`-----BEGIN OCSP REQUEST-----`).
 
 > **parseOcspResponseDer**(`der`): [`ParsedOcspResponse`](#parsedocspresponse)
 
-Defined in: [revocation/ocsp.ts:421](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L421)
+Defined in: [revocation/ocsp.ts:422](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L422)
 
 Decodes a DER-encoded OCSP response into a structured [`ParsedOcspResponse`](#parsedocspresponse). Does not verify the signature.
 
@@ -2585,7 +2585,7 @@ Decodes a DER-encoded OCSP response into a structured [`ParsedOcspResponse`](#pa
 
 > **parseOcspResponsePem**(`pem`): [`ParsedOcspResponse`](#parsedocspresponse)
 
-Defined in: [revocation/ocsp.ts:495](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L495)
+Defined in: [revocation/ocsp.ts:501](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L501)
 
 Decodes a PEM-encoded OCSP response (`-----BEGIN OCSP RESPONSE-----`).
 
@@ -2621,7 +2621,7 @@ if (resp.responseStatus === 'successful') {
 
 > **resolveOcspResponderCandidates**(`input`): readonly [`OcspResponderCandidate`](#ocsprespondercandidate)[]
 
-Defined in: [revocation/revocation.ts:215](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/revocation.ts#L215)
+Defined in: [revocation/revocation.ts:220](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/revocation.ts#L220)
 
 Merges configured OCSP responders with those discovered from the certificate's
 AIA extension. Configured responders take priority; duplicates are deduplicated by URI.
@@ -2642,7 +2642,7 @@ readonly [`OcspResponderCandidate`](#ocsprespondercandidate)[]
 
 > **validateCertificateRevocationList**(`input`): `Promise`\<[`ValidateCertificateRevocationListResult`](#validatecertificaterevocationlistresult)\>
 
-Defined in: [revocation/crl.ts:564](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L564)
+Defined in: [revocation/crl.ts:573](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L573)
 
 Full CRL validation: issuer name match, authority key identifier match,
 cRLSign key-usage check, signature verification, and `thisUpdate`/`nextUpdate`
@@ -2664,7 +2664,7 @@ freshness check (with optional clock-skew tolerance).
 
 > **validateOcspResponse**(`input`): `Promise`\<[`ValidateOcspResponseResult`](#validateocspresponseresult)\>
 
-Defined in: [revocation/ocsp.ts:654](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L654)
+Defined in: [revocation/ocsp.ts:668](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L668)
 
 Full OCSP response validation: response status check, signature verification,
 responder ID binding (byName or byKeyHash), delegated-responder chain and
@@ -2730,7 +2730,7 @@ Does **not** check issuer name match, key-usage, or freshness — use
 
 > **verifyOcspResponse**(`response`, `signerCertificate`): `Promise`\<[`VerifyOcspResponseResult`](#verifyocspresponseresult)\>
 
-Defined in: [revocation/ocsp.ts:595](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L595)
+Defined in: [revocation/ocsp.ts:601](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L601)
 
 Verifies the OCSP response signature against the given signer certificate.
 

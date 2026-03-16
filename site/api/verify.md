@@ -2122,7 +2122,7 @@ if (result.ok) {
 
 > **checkExtendedKeyUsage**(`chain`, `purpose`): [`EkuCheckResult`](#ekucheckresult)
 
-Defined in: [verify/verify.ts:967](https://github.com/kjanat/ts-x509/blob/vitepress/src/verify/verify.ts#L967)
+Defined in: [verify/verify.ts:990](https://github.com/kjanat/ts-x509/blob/vitepress/src/verify/verify.ts#L990)
 
 Standalone EKU check against a verified certificate chain.
 Validates that the leaf has the requested purpose and that
@@ -2236,7 +2236,7 @@ if (!result.ok) console.error(result.error.message);
 
 > **trustAnchorFromCertificate**(`certificate`): [`TrustAnchor`](#trustanchor)
 
-Defined in: [verify/verify.ts:1006](https://github.com/kjanat/ts-x509/blob/vitepress/src/verify/verify.ts#L1006)
+Defined in: [verify/verify.ts:1029](https://github.com/kjanat/ts-x509/blob/vitepress/src/verify/verify.ts#L1029)
 
 Extracts a [`TrustAnchor`](#trustanchor) from a parsed certificate, copying the subject, SPKI, and key identifiers.
 
@@ -2277,7 +2277,7 @@ optionally leaf purpose. Wrap the result of [`buildCandidatePath`](#buildcandida
 
 > **validateForCa**(`input`): `Promise`\<[`VerifyChainResult`](#verifychainresult)\>
 
-Defined in: [verify/verify.ts:1134](https://github.com/kjanat/ts-x509/blob/vitepress/src/verify/verify.ts#L1134)
+Defined in: [verify/verify.ts:1157](https://github.com/kjanat/ts-x509/blob/vitepress/src/verify/verify.ts#L1157)
 
 Validates a certificate chain for CA use:
 chain verification + `basicConstraints.ca` check on the leaf.
@@ -2309,7 +2309,7 @@ const result = await validateForCa({
 
 > **validateForCodeSigning**(`input`): `Promise`\<[`VerifyChainResult`](#verifychainresult)\>
 
-Defined in: [verify/verify.ts:1114](https://github.com/kjanat/ts-x509/blob/vitepress/src/verify/verify.ts#L1114)
+Defined in: [verify/verify.ts:1137](https://github.com/kjanat/ts-x509/blob/vitepress/src/verify/verify.ts#L1137)
 
 Validates a certificate chain for code signing:
 chain verification + `codeSigning` EKU (leaf + intermediate propagation).
@@ -2341,7 +2341,7 @@ const result = await validateForCodeSigning({
 
 > **validateForTlsClient**(`input`): `Promise`\<[`VerifyChainResult`](#verifychainresult)\>
 
-Defined in: [verify/verify.ts:1094](https://github.com/kjanat/ts-x509/blob/vitepress/src/verify/verify.ts#L1094)
+Defined in: [verify/verify.ts:1117](https://github.com/kjanat/ts-x509/blob/vitepress/src/verify/verify.ts#L1117)
 
 Validates a certificate chain for TLS client use:
 chain verification + `clientAuth` EKU (leaf + intermediate propagation).
@@ -2373,7 +2373,7 @@ const result = await validateForTlsClient({
 
 > **validateForTlsServer**(`input`): `Promise`\<[`VerifyChainResult`](#verifychainresult)\>
 
-Defined in: [verify/verify.ts:1064](https://github.com/kjanat/ts-x509/blob/vitepress/src/verify/verify.ts#L1064)
+Defined in: [verify/verify.ts:1087](https://github.com/kjanat/ts-x509/blob/vitepress/src/verify/verify.ts#L1087)
 
 Validates a certificate chain for TLS server use:
 chain verification + `serverAuth` EKU (leaf + intermediate propagation)

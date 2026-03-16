@@ -1320,7 +1320,7 @@ Decodes a DER-encoded PKCS#7 ContentInfo expecting `signedData` content type.
 
 > **parsePkcs7SignedDataPem**(`pem`): [`ParsePkcs7SignedDataResult`](#parsepkcs7signeddataresult)
 
-Defined in: [pkcs/pkcs7.ts:309](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L309)
+Defined in: [pkcs/pkcs7.ts:332](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L332)
 
 Decodes a PEM-armored PKCS#7 SignedData. Expects exactly one `PKCS7` PEM block.
 
@@ -1340,7 +1340,7 @@ Decodes a PEM-armored PKCS#7 SignedData. Expects exactly one `PKCS7` PEM block.
 
 > **verifyPkcs7SignedData**(`input`): `Promise`\<[`VerifyPkcs7SignedDataResult`](#verifypkcs7signeddataresult)\>
 
-Defined in: [pkcs/pkcs7.ts:343](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L343)
+Defined in: [pkcs/pkcs7.ts:366](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L366)
 
 Verifies all signer signatures in a PKCS#7 SignedData structure.
 
