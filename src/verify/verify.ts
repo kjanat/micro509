@@ -912,19 +912,42 @@ export async function verifyCertificateChain(
 export async function verifyCertificateSigningRequest(
 	input: CsrSource,
 ): Promise<VerifyRequestResult> {
-	const parsed =
-		typeof input === 'string'
-			? parseCertificateSigningRequestPem(input)
-			: parseCertificateSigningRequestDer(new Uint8Array(input));
-	const signatureResult = await verifySignedDataDetailed(
-		parsed.signatureAlgorithmOid,
-		parsed.signatureAlgorithmParametersDer,
-		parsed.publicKeyAlgorithmOid,
-		parsed.publicKeyParametersOid,
-		parsed.subjectPublicKeyInfoDer,
-		parsed.signatureValue,
-		parsed.certificationRequestInfoDer,
-	);
+	let parsed: ParsedCertificateSigningRequest;
+	try {
+		parsed =
+			typeof input === 'string'
+				? parseCertificateSigningRequestPem(input)
+				: parseCertificateSigningRequestDer(new Uint8Array(input));
+	} catch (error) {
+		return verifyRequestFailureResult(
+			'signature_invalid',
+			'certificate request input is malformed',
+			detail({
+				actual: error instanceof Error ? error.message : 'certificate request input is malformed',
+			}),
+		);
+	}
+	let signatureResult: Awaited<ReturnType<typeof verifySignedDataDetailed>>;
+	try {
+		signatureResult = await verifySignedDataDetailed(
+			parsed.signatureAlgorithmOid,
+			parsed.signatureAlgorithmParametersDer,
+			parsed.publicKeyAlgorithmOid,
+			parsed.publicKeyParametersOid,
+			parsed.subjectPublicKeyInfoDer,
+			parsed.signatureValue,
+			parsed.certificationRequestInfoDer,
+		);
+	} catch (error) {
+		return verifyRequestFailureResult(
+			'signature_invalid',
+			'certificate request input is malformed',
+			detail({
+				subjectCommonName: parsed.subject.values.commonName,
+				actual: error instanceof Error ? error.message : 'certificate request input is malformed',
+			}),
+		);
+	}
 	if (!signatureResult.ok) {
 		return verifyRequestFailureResult(
 			signatureResult.code,

@@ -1441,8 +1441,15 @@ function parseGeneralName(source: Uint8Array, element: DerElement): GeneralName 
 
 /** Attempt to decode an otherName [0] as a known type (currently only SRV-ID). */
 function parseOtherName(source: Uint8Array, element: DerElement): SubjectAltName | undefined {
-	const otherNameSequence = requireElement(childrenOf(source, element)[0], 'otherName sequence');
+	const otherNameElements = childrenOf(source, element);
+	if (otherNameElements.length !== 1) {
+		throw new Error('otherName must contain exactly one SEQUENCE');
+	}
+	const otherNameSequence = requireElement(otherNameElements[0], 'otherName sequence');
 	const otherNameChildren = childrenOf(source, otherNameSequence);
+	if (otherNameChildren.length !== 2) {
+		throw new Error('otherName must contain exactly type-id and value');
+	}
 	const typeId = requireElement(otherNameChildren[0], 'otherName type-id');
 	const valueElement = requireElement(otherNameChildren[1], 'otherName value');
 	const typeIdOid = decodeObjectIdentifier(typeId.value);
@@ -1452,7 +1459,11 @@ function parseOtherName(source: Uint8Array, element: DerElement): SubjectAltName
 	if (valueElement.tag !== 0xa0) {
 		throw new Error('SRV-ID otherName value must use explicit [0]');
 	}
-	const srvNameElement = requireElement(childrenOf(source, valueElement)[0], 'SRV-ID IA5String');
+	const valueChildren = childrenOf(source, valueElement);
+	if (valueChildren.length !== 1) {
+		throw new Error('SRV-ID otherName value must contain exactly one IA5String');
+	}
+	const srvNameElement = requireElement(valueChildren[0], 'SRV-ID IA5String');
 	if (srvNameElement.tag !== 0x16) {
 		throw new Error('SRV-ID otherName value must be an IA5String');
 	}
@@ -1652,6 +1663,10 @@ export function parseAuthorityKeyIdentifier(bytes: Uint8Array): string | undefin
 	if (sequenceElement.end !== bytes.length) {
 		throw new Error('Trailing data after DER element');
 	}
+	let keyIdentifier: string | undefined;
+	let sawAuthorityCertIssuer = false;
+	let sawAuthorityCertSerialNumber = false;
+	let lastFieldOrder = -1;
 	let offset = sequenceElement.start;
 	while (offset < sequenceElement.end) {
 		const child = readElement(bytes, offset);
@@ -1659,12 +1674,75 @@ export function parseAuthorityKeyIdentifier(bytes: Uint8Array): string | undefin
 			throw new Error('DER child exceeds parent length');
 		}
 		if (child.tag === 0x80) {
-			return toHex(child.value);
+			if (keyIdentifier !== undefined) {
+				throw new Error('authorityKeyIdentifier keyIdentifier must not repeat');
+			}
+			if (lastFieldOrder >= 0) {
+				throw new Error('authorityKeyIdentifier fields must preserve DER order');
+			}
+			keyIdentifier = toHex(child.value);
+			lastFieldOrder = 0;
+		} else if (child.tag === 0xa1) {
+			if (sawAuthorityCertIssuer) {
+				throw new Error('authorityKeyIdentifier authorityCertIssuer must not repeat');
+			}
+			if (lastFieldOrder >= 1) {
+				throw new Error('authorityKeyIdentifier fields must preserve DER order');
+			}
+			const issuerNames = childrenOf(bytes, child);
+			if (issuerNames.length === 0) {
+				throw new Error(
+					'authorityKeyIdentifier authorityCertIssuer must contain GeneralName entries',
+				);
+			}
+			for (const issuerName of issuerNames) {
+				if ((issuerName.tag & 0xc0) !== 0x80) {
+					throw new Error(
+						'authorityKeyIdentifier authorityCertIssuer must contain GeneralName entries',
+					);
+				}
+				parseGeneralName(bytes, issuerName);
+			}
+			sawAuthorityCertIssuer = true;
+			lastFieldOrder = 1;
+		} else if (child.tag === 0x82) {
+			if (sawAuthorityCertSerialNumber) {
+				throw new Error('authorityKeyIdentifier authorityCertSerialNumber must not repeat');
+			}
+			if (lastFieldOrder >= 2 || !sawAuthorityCertIssuer) {
+				throw new Error('authorityKeyIdentifier fields must preserve DER order');
+			}
+			validateImplicitSerialNumberEncoding(
+				child.value,
+				'authorityKeyIdentifier authorityCertSerialNumber',
+			);
+			sawAuthorityCertSerialNumber = true;
+			lastFieldOrder = 2;
+		} else {
+			throw new Error(`Unsupported authorityKeyIdentifier field tag: ${String(child.tag)}`);
 		}
 		offset = child.end;
 	}
 	if (offset !== sequenceElement.end) {
 		throw new Error('Malformed DER sequence');
 	}
-	return undefined;
+	if (sawAuthorityCertIssuer !== sawAuthorityCertSerialNumber) {
+		throw new Error(
+			'authorityKeyIdentifier authorityCertIssuer and authorityCertSerialNumber must appear together',
+		);
+	}
+	return keyIdentifier;
+}
+
+function validateImplicitSerialNumberEncoding(bytes: Uint8Array, label: string): void {
+	const first = bytes[0];
+	if (first === undefined) {
+		throw new Error(`${label} must not be empty`);
+	}
+	if ((first & 0x80) !== 0) {
+		throw new Error(`${label} must be non-negative`);
+	}
+	if (bytes.length > 1 && first === 0 && ((bytes[1] ?? 0) & 0x80) === 0) {
+		throw new Error(`${label} must use minimal encoding`);
+	}
 }

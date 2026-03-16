@@ -262,13 +262,36 @@ export function parsePkcs7SignedDataDer(der: Uint8Array): ParsePkcs7SignedDataRe
 		const version = signedDataChildren[0];
 		const digestAlgorithms = signedDataChildren[1];
 		const encapContentInfo = signedDataChildren[2];
-		const certificates = signedDataChildren[3];
-		const signerInfos = signedDataChildren[signedDataChildren.length - 1];
+		const trailingChildren = signedDataChildren.slice(3);
+		const signerInfos = trailingChildren[trailingChildren.length - 1];
+		let certificates: ReturnType<typeof readElement> | undefined;
+		let crls: ReturnType<typeof readElement> | undefined;
+		for (const child of trailingChildren.slice(0, -1)) {
+			if (child?.tag === 0xa0) {
+				if (crls !== undefined) {
+					return pkcs7Failure('malformed', 'SignedData certificates field must precede CRLs field');
+				}
+				if (certificates !== undefined) {
+					return pkcs7Failure('malformed', 'SignedData certificates field must not repeat');
+				}
+				certificates = child;
+				continue;
+			}
+			if (child?.tag === 0xa1) {
+				if (crls !== undefined) {
+					return pkcs7Failure('malformed', 'SignedData CRLs field must not repeat');
+				}
+				crls = child;
+				continue;
+			}
+			return pkcs7Failure('malformed', 'Malformed SignedData optional field');
+		}
 		if (
 			version === undefined ||
 			digestAlgorithms === undefined ||
 			encapContentInfo === undefined ||
-			signerInfos === undefined
+			signerInfos === undefined ||
+			signerInfos.tag !== 0x31
 		) {
 			return pkcs7Failure('malformed', 'Malformed SignedData');
 		}

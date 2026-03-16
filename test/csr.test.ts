@@ -344,7 +344,7 @@ describe('csr', () => {
 		});
 	});
 
-	it('throws on malformed RSA-PSS CSR parameters', async () => {
+	it('fails closed on malformed RSA-PSS CSR parameters', async () => {
 		const rsaKeys = await generateKeyPair({
 			kind: 'rsa',
 			modulusLength: 2048,
@@ -360,12 +360,10 @@ describe('csr', () => {
 			sequence([objectIdentifier(OIDS.rsassaPss), tlv(0x30, Uint8Array.of(0x80))]),
 		);
 
-		try {
-			await verifyCertificateSigningRequest(malformedCsrDer);
-			throw new Error('Expected malformed RSA-PSS CSR parameters to throw');
-		} catch (error) {
-			expect(error).toBeInstanceOf(Error);
-			expect(String(error)).toContain('DER child exceeds parent length');
-		}
+		expect(await verifyCertificateSigningRequest(malformedCsrDer)).toMatchObject({
+			ok: false,
+			code: 'signature_invalid',
+			details: { actual: 'DER child exceeds parent length' },
+		});
 	});
 });

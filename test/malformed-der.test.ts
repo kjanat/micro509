@@ -642,6 +642,18 @@ describe('malformed DER corpus', () => {
 				messagePattern:
 					/DistributionPoint must include distributionPoint or crlIssuer|Expected SEQUENCE/i,
 			},
+			{
+				name: 'authority key identifier fields out of order',
+				parse: () =>
+					parseCertificateDer(
+						replaceCertificateExtensionValue(
+							issuer.certificate.der,
+							OIDS.authorityKeyIdentifier,
+							sequence([tlv(0x82, Uint8Array.of(0x01)), explicitContext(1, sequence([]))]),
+						),
+					),
+				messagePattern: /authorityKeyIdentifier fields must preserve DER order|Expected SEQUENCE/i,
+			},
 		];
 
 		for (const testCase of corpus) {

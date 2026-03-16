@@ -31,7 +31,7 @@ import {
 	tlv,
 } from '#micro509/internal/asn1/der.ts';
 import { OIDS } from '#micro509/internal/asn1/oids.ts';
-import { parseNameConstraints } from '#micro509/x509/parse.ts';
+import { parseAuthorityKeyIdentifier, parseNameConstraints } from '#micro509/x509/parse.ts';
 import {
 	childrenOf,
 	importRsaPrivateKeyWithScheme,
@@ -787,6 +787,27 @@ describe('parse', () => {
 		});
 
 		expect(() => parseCertificatePem(certificate.pem)).toThrow(/SRV-ID/i);
+	});
+
+	it('rejects SRV-ID otherName values with trailing fields', async () => {
+		const { certificate } = await createSelfSignedCertificate({
+			subject: { commonName: 'bad-srv-id-trailing.example' },
+			extensions: {
+				subjectAltNames: [
+					{
+						type: 'unknown',
+						tag: 0xa0,
+						value: sequence([
+							objectIdentifier(OIDS.idOnDnsSrv),
+							tlv(0xa0, tlv(0x16, new TextEncoder().encode('_xmpp.example.com'))),
+							integerFromNumber(7),
+						]),
+					},
+				],
+			},
+		});
+
+		expect(() => parseCertificatePem(certificate.pem)).toThrow('otherName must contain exactly');
 	});
 
 	it('parses IPv6 name constraints', async () => {
@@ -1689,77 +1710,34 @@ describe('parse: coverage — error paths', () => {
 		}).toThrow('Unsupported authorityInfoAccess location tag');
 	});
 
-	it('parseAuthorityKeyIdentifier returns undefined for AKI without keyIdentifier', async () => {
-		// Create certificate without auto-AKI, then add custom AKI with only serialNumber
-		// Use createCertificate with a separate issuer to get an AKI, but we need to
-		// manually construct a cert DER with custom AKI. Instead, use parseCertificateDer
-		// on a manually-tweaked cert.
-		//
-		// Simplest: create a self-signed cert (which auto-adds AKI with keyId from SKI),
-		// then manually rebuild the extension with AKI that has no keyId.
-		// But actually, we can just create a CA cert and an issued cert WITHOUT
-		// passing issuerPublicKey (which should skip AKI).
-		// Actually, createSelfSignedCertificate always adds AKI from its own public key.
-		//
-		// Let's use a different approach: build a minimal TBS cert DER directly.
-		// Actually, the simplest approach is to use createCertificate (not self-signed)
-		// and NOT pass issuerPublicKey — but that won't add AKI at all.
-		//
-		// We need a cert WITH an AKI extension that has no 0x80 child. This requires
-		// manually constructing the DER. The function parseAuthorityKeyIdentifier in parse.ts
-		// is called during parseCertificateDer, so we need to feed it a DER certificate
-		// with a custom AKI. Let's just build a cert, get its DER, and splice in a
-		// custom AKI extension.
-		//
-		// Actually, there's an easier way: create a regular cert with AKI, parse the DER,
-		// find the AKI extension, replace its value, then re-parse.
-		//
-		// Simplest for coverage: test that parseCertificateDer with an AKI extension
-		// containing only authorityCertIssuer [1] returns undefined for AKI.
-		// Since we can't easily inject custom AKI into a signed cert (signature would
-		// break), and parseCertificateDer doesn't verify signature, we CAN modify the
-		// DER bytes.
-		const keys = await generateKeyPair();
-		const cert = await createSelfSignedCertificate({
-			subject: { commonName: 'aki-test.example' },
-			keyPair: keys,
-			extensions: {
-				keyUsage: ['digitalSignature'],
-			},
-		});
-		// The AKI extension value is SEQUENCE { [0] keyIdentifier }.
-		// We want to replace it with SEQUENCE { [1] authorityCertIssuer }.
-		// parseCertificateDer doesn't verify the signature, so we can modify the DER.
-		const { pemDecode } = await import('#micro509');
-		const derBytes = pemDecode('CERTIFICATE', cert.certificate.pem);
-		const der = new Uint8Array(derBytes);
-		// Find AKI OID bytes (2.5.29.35 = 55 1D 23) in the DER
-		const akiOidBytes = [0x55, 0x1d, 0x23];
-		let akiOffset = -1;
-		for (let i = 0; i < der.length - 3; i++) {
-			if (
-				der[i] === akiOidBytes[0] &&
-				der[i + 1] === akiOidBytes[1] &&
-				der[i + 2] === akiOidBytes[2]
-			) {
-				akiOffset = i;
-				break;
-			}
-		}
-		expect(akiOffset).not.toBe(-1);
-		// After the OID, there's an OCTET STRING containing SEQUENCE { [0] keyId }.
-		// Find the [0] tag (0x80) after the OID and change it to [1] (0xa1) so it's
-		// no longer a keyIdentifier.
-		let tagOffset = akiOffset + 3;
-		// Skip past the OCTET STRING wrapper to find the 0x80 tag
-		while (tagOffset < der.length && der[tagOffset] !== 0x80) {
-			tagOffset++;
-		}
-		if (tagOffset < der.length) {
-			der[tagOffset] = 0xa1; // Change [0] to [1] (authorityCertIssuer)
-		}
-		const parsed = parseCertificateDer(der);
-		expect(parsed.authorityKeyIdentifier).toBeUndefined();
+	it('parseAuthorityKeyIdentifier rejects malformed authorityCertIssuer shapes', () => {
+		expect(() => parseAuthorityKeyIdentifier(sequence([explicitContext(1, sequence([]))]))).toThrow(
+			'authorityKeyIdentifier authorityCertIssuer must contain GeneralName entries',
+		);
+	});
+
+	it('parseAuthorityKeyIdentifier rejects duplicate or incomplete issuer/serial fields', () => {
+		expect(() =>
+			parseAuthorityKeyIdentifier(
+				sequence([tlv(0x80, Uint8Array.of(0x01)), tlv(0x80, Uint8Array.of(0x02))]),
+			),
+		).toThrow('keyIdentifier must not repeat');
+		expect(() =>
+			parseAuthorityKeyIdentifier(
+				sequence([tlv(0xa1, Uint8Array.of(0xff)), tlv(0x82, Uint8Array.of(0x01))]),
+			),
+		).toThrow();
+		expect(() =>
+			parseAuthorityKeyIdentifier(
+				sequence([tlv(0x82, Uint8Array.of(0x01)), explicitContext(1, sequence([]))]),
+			),
+		).toThrow('authorityKeyIdentifier fields must preserve DER order');
+		expect(() => parseAuthorityKeyIdentifier(sequence([explicitContext(1, sequence([]))]))).toThrow(
+			'authorityKeyIdentifier authorityCertIssuer must contain GeneralName entries',
+		);
+		expect(() => parseAuthorityKeyIdentifier(sequence([tlv(0x82, Uint8Array.of(0x01))]))).toThrow(
+			'authorityKeyIdentifier fields must preserve DER order',
+		);
 	});
 
 	it('decodeIpAddress throws on unsupported IP address length', async () => {
