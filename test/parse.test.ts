@@ -22,6 +22,7 @@ import {
 	integerFromNumber,
 	nullValue,
 	objectIdentifier,
+	readSequenceChildren,
 	sequence,
 	setOf,
 	time,
@@ -30,9 +31,11 @@ import {
 import { OIDS } from '#micro509/internal/asn1/oids.ts';
 import { parseNameConstraints } from '#micro509/x509/parse.ts';
 import {
+	childrenOf,
 	importRsaPrivateKeyWithScheme,
 	rewriteCertificateSignatureAsRsaPss,
 	rewriteCsrSignatureAsRsaPss,
+	sliceElement,
 } from './helpers.ts';
 
 describe('parse', () => {
@@ -95,6 +98,67 @@ describe('parse', () => {
 				},
 			}),
 		).rejects.toThrow('Duplicate extension OID');
+	});
+
+	it('rejects duplicate extension OIDs during certificate parse', async () => {
+		const certificate = await createSelfSignedCertificate({
+			subject: { commonName: 'dup-parse-cert.example' },
+			extensions: {
+				keyUsage: ['digitalSignature'],
+			},
+		});
+		const duplicated = duplicateCertificateExtension(certificate.certificate.der, OIDS.keyUsage);
+
+		expect(() => parseCertificateDer(duplicated)).toThrow('Duplicate extension OID');
+	});
+
+	it('rejects duplicate extension OIDs during CSR parse', async () => {
+		const keyPair = await generateKeyPair();
+		const csr = await createCertificateSigningRequest({
+			subject: { commonName: 'dup-parse-csr.example' },
+			publicKey: keyPair.publicKey,
+			signerPrivateKey: keyPair.privateKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+			},
+		});
+		const duplicated = duplicateCsrRequestedExtension(csr.der, OIDS.keyUsage);
+
+		expect(() => parseCertificateSigningRequestDer(duplicated)).toThrow('Duplicate extension OID');
+	});
+
+	it('rejects repeated extensionRequest attributes during CSR parse', async () => {
+		const keyPair = await generateKeyPair();
+		const csr = await createCertificateSigningRequest({
+			subject: { commonName: 'dup-ext-request-csr.example' },
+			publicKey: keyPair.publicKey,
+			signerPrivateKey: keyPair.privateKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+			},
+		});
+		const duplicated = duplicateCsrExtensionRequestAttribute(csr.der);
+
+		expect(() => parseCertificateSigningRequestDer(duplicated)).toThrow(
+			'extensionRequest attribute must not repeat',
+		);
+	});
+
+	it('rejects multi-valued extensionRequest attributes during CSR parse', async () => {
+		const keyPair = await generateKeyPair();
+		const csr = await createCertificateSigningRequest({
+			subject: { commonName: 'multi-value-ext-request-csr.example' },
+			publicKey: keyPair.publicKey,
+			signerPrivateKey: keyPair.privateKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+			},
+		});
+		const duplicated = duplicateCsrExtensionRequestValue(csr.der);
+
+		expect(() => parseCertificateSigningRequestDer(duplicated)).toThrow(
+			'extensionRequest attribute must contain exactly one value',
+		);
 	});
 
 	it('runs decoder registries directly during parse', async () => {
@@ -1459,3 +1523,253 @@ describe('parse: coverage — error paths', () => {
 		expect(() => parseCertificatePem(cert.certificate.pem)).toThrow('Invalid BIT STRING');
 	});
 });
+
+function duplicateCertificateExtension(certificateDer: Uint8Array, oid: string): Uint8Array {
+	const topLevel = readSequenceChildren(certificateDer);
+	const tbsCertificate = topLevel[0];
+	const signatureAlgorithm = topLevel[1];
+	const signatureValue = topLevel[2];
+	if (
+		tbsCertificate === undefined ||
+		signatureAlgorithm === undefined ||
+		signatureValue === undefined
+	) {
+		throw new Error('Malformed Certificate');
+	}
+	const tbsDer = sliceElement(certificateDer, tbsCertificate);
+	const tbsChildren = readSequenceChildren(tbsDer);
+	const extensionIndex = tbsChildren.findIndex((child) => child.tag === 0xa3);
+	if (extensionIndex === -1) {
+		throw new Error('Certificate missing extensions');
+	}
+	const extensionsWrapper = tbsChildren[extensionIndex];
+	if (extensionsWrapper === undefined) {
+		throw new Error('Certificate missing extensions wrapper');
+	}
+	const duplicatedWrapper = duplicateExtensionWrapper(tbsDer, extensionsWrapper, oid);
+	const rebuiltTbs = sequence(
+		tbsChildren.map((child, index) =>
+			index === extensionIndex ? duplicatedWrapper : sliceElement(tbsDer, child),
+		),
+	);
+	return sequence([
+		rebuiltTbs,
+		sliceElement(certificateDer, signatureAlgorithm),
+		sliceElement(certificateDer, signatureValue),
+	]);
+}
+
+function duplicateCsrRequestedExtension(csrDer: Uint8Array, oid: string): Uint8Array {
+	const topLevel = readSequenceChildren(csrDer);
+	const certificationRequestInfo = topLevel[0];
+	const signatureAlgorithm = topLevel[1];
+	const signatureValue = topLevel[2];
+	if (
+		certificationRequestInfo === undefined ||
+		signatureAlgorithm === undefined ||
+		signatureValue === undefined
+	) {
+		throw new Error('Malformed CertificationRequest');
+	}
+	const criDer = sliceElement(csrDer, certificationRequestInfo);
+	const criChildren = readSequenceChildren(criDer);
+	const attributesIndex = criChildren.findIndex((child) => child.tag === 0xa0);
+	if (attributesIndex === -1) {
+		throw new Error('CSR missing attributes');
+	}
+	const attributes = criChildren[attributesIndex];
+	if (attributes === undefined) {
+		throw new Error('CSR missing attributes wrapper');
+	}
+	const attributeElements = childrenOf(criDer, attributes);
+	const rebuiltAttributes = tlv(
+		0xa0,
+		concatBytes(
+			attributeElements.map((attribute) => {
+				const attributeDer = sliceElement(criDer, attribute);
+				const attributeChildren = readSequenceChildren(attributeDer);
+				const oidElement = attributeChildren[0];
+				const valuesSet = attributeChildren[1];
+				if (
+					oidElement === undefined ||
+					valuesSet === undefined ||
+					decodeAttributeOid(attributeDer) !== OIDS.extensionRequest
+				) {
+					return attributeDer;
+				}
+				const valuesSetDer = sliceElement(attributeDer, valuesSet);
+				const requestedExtensions = childrenOf(attributeDer, valuesSet)[0];
+				if (requestedExtensions === undefined) {
+					return attributeDer;
+				}
+				const duplicatedRequested = duplicateExtensionSequence(
+					attributeDer,
+					requestedExtensions,
+					oid,
+				);
+				return sequence([sliceElement(attributeDer, oidElement), setOf([duplicatedRequested])]);
+			}),
+		),
+	);
+	const rebuiltCri = sequence(
+		criChildren.map((child, index) =>
+			index === attributesIndex ? rebuiltAttributes : sliceElement(criDer, child),
+		),
+	);
+	return sequence([
+		rebuiltCri,
+		sliceElement(csrDer, signatureAlgorithm),
+		sliceElement(csrDer, signatureValue),
+	]);
+}
+
+function duplicateCsrExtensionRequestAttribute(csrDer: Uint8Array): Uint8Array {
+	return rewriteCsrAttributes(csrDer, (attributesSource, attributeElements) => {
+		const extensionRequestAttribute = attributeElements.find(
+			(attribute) =>
+				decodeAttributeOid(sliceElement(attributesSource, attribute)) === OIDS.extensionRequest,
+		);
+		if (extensionRequestAttribute === undefined) {
+			throw new Error('Missing extensionRequest attribute');
+		}
+		const duplicate = sliceElement(attributesSource, extensionRequestAttribute);
+		return concatBytes([
+			...attributeElements.map((attribute) => sliceElement(attributesSource, attribute)),
+			duplicate,
+		]);
+	});
+}
+
+function duplicateCsrExtensionRequestValue(csrDer: Uint8Array): Uint8Array {
+	return rewriteCsrAttributes(csrDer, (attributesSource, attributeElements) =>
+		concatBytes(
+			attributeElements.map((attribute) => {
+				const attributeDer = sliceElement(attributesSource, attribute);
+				if (decodeAttributeOid(attributeDer) !== OIDS.extensionRequest) {
+					return attributeDer;
+				}
+				const attributeChildren = readSequenceChildren(attributeDer);
+				const oidElement = attributeChildren[0];
+				const valuesSet = attributeChildren[1];
+				if (oidElement === undefined || valuesSet === undefined) {
+					return attributeDer;
+				}
+				const requestedExtensions = childrenOf(attributeDer, valuesSet)[0];
+				if (requestedExtensions === undefined) {
+					return attributeDer;
+				}
+				const requestedDer = sliceElement(attributeDer, requestedExtensions);
+				return sequence([
+					sliceElement(attributeDer, oidElement),
+					setOf([requestedDer, requestedDer]),
+				]);
+			}),
+		),
+	);
+}
+
+function rewriteCsrAttributes(
+	csrDer: Uint8Array,
+	rewrite: (
+		attributesSource: Uint8Array,
+		attributeElements: readonly ReturnType<typeof readSequenceChildren>[number][],
+	) => Uint8Array,
+): Uint8Array {
+	const topLevel = readSequenceChildren(csrDer);
+	const certificationRequestInfo = topLevel[0];
+	const signatureAlgorithm = topLevel[1];
+	const signatureValue = topLevel[2];
+	if (
+		certificationRequestInfo === undefined ||
+		signatureAlgorithm === undefined ||
+		signatureValue === undefined
+	) {
+		throw new Error('Malformed CertificationRequest');
+	}
+	const criDer = sliceElement(csrDer, certificationRequestInfo);
+	const criChildren = readSequenceChildren(criDer);
+	const attributesIndex = criChildren.findIndex((child) => child.tag === 0xa0);
+	if (attributesIndex === -1) {
+		throw new Error('CSR missing attributes');
+	}
+	const attributes = criChildren[attributesIndex];
+	if (attributes === undefined) {
+		throw new Error('CSR missing attributes wrapper');
+	}
+	const attributeElements = childrenOf(criDer, attributes);
+	const rebuiltAttributes = tlv(0xa0, rewrite(criDer, attributeElements));
+	const rebuiltCri = sequence(
+		criChildren.map((child, index) =>
+			index === attributesIndex ? rebuiltAttributes : sliceElement(criDer, child),
+		),
+	);
+	return sequence([
+		rebuiltCri,
+		sliceElement(csrDer, signatureAlgorithm),
+		sliceElement(csrDer, signatureValue),
+	]);
+}
+
+function duplicateExtensionWrapper(
+	source: Uint8Array,
+	wrapper: ReturnType<typeof readSequenceChildren>[number],
+	oid: string,
+): Uint8Array {
+	const sequenceElement = childrenOf(source, wrapper)[0];
+	if (sequenceElement === undefined) {
+		throw new Error('Missing extensions sequence');
+	}
+	return tlv(0xa3, duplicateExtensionSequence(source, sequenceElement, oid));
+}
+
+function duplicateExtensionSequence(
+	source: Uint8Array,
+	sequenceElement: ReturnType<typeof readSequenceChildren>[number],
+	oid: string,
+): Uint8Array {
+	const entries = childrenOf(source, sequenceElement).map((entry) => sliceElement(source, entry));
+	const duplicate = entries.find((entryDer) => hasExtensionOidDer(entryDer, oid));
+	if (duplicate === undefined) {
+		throw new Error(`Missing extension OID: ${oid}`);
+	}
+	return sequence([...entries, duplicate]);
+}
+
+function hasExtensionOidDer(extensionDer: Uint8Array, oid: string): boolean {
+	const children = readSequenceChildren(extensionDer);
+	const oidElement = children[0];
+	if (oidElement === undefined || oidElement.tag !== 0x06) {
+		return false;
+	}
+	return decodeExtensionOid(oidElement.value) === oid;
+}
+
+function decodeExtensionOid(bytes: Uint8Array): string {
+	const first = bytes[0];
+	if (first === undefined) {
+		throw new Error('OID is empty');
+	}
+	const values = [Math.floor(first / 40), first % 40];
+	let current = 0;
+	for (let index = 1; index < bytes.length; index += 1) {
+		const next = bytes[index];
+		if (next === undefined) {
+			throw new Error('Malformed OID');
+		}
+		current = (current << 7) | (next & 0x7f);
+		if ((next & 0x80) === 0) {
+			values.push(current);
+			current = 0;
+		}
+	}
+	return values.join('.');
+}
+
+function decodeAttributeOid(attributeDer: Uint8Array): string {
+	const children = readSequenceChildren(attributeDer);
+	const oidElement = children[0];
+	if (oidElement === undefined || oidElement.tag !== 0x06) {
+		throw new Error('Missing attribute OID');
+	}
+	return decodeExtensionOid(oidElement.value);
+}

@@ -791,17 +791,25 @@ function parseRequestedExtensions(
 	if (attributes === undefined) {
 		return { all: [] };
 	}
+	let requestedExtensions: ParsedExtensions | undefined;
 	for (const attribute of childrenOf(source, attributes)) {
 		const attributeChildren = childrenOf(source, attribute);
 		const oid = requireElement(attributeChildren[0], 'attribute OID');
 		if (decodeObjectIdentifier(oid.value) !== OIDS.extensionRequest) {
 			continue;
 		}
+		if (requestedExtensions !== undefined) {
+			throw new Error('extensionRequest attribute must not repeat');
+		}
 		const valuesSet = requireElement(attributeChildren[1], 'attribute values');
-		const requested = requireElement(childrenOf(source, valuesSet)[0], 'requested extensions');
-		return parseExtensionSequence(source, requested, 'csr');
+		const values = childrenOf(source, valuesSet);
+		if (values.length !== 1) {
+			throw new Error('extensionRequest attribute must contain exactly one value');
+		}
+		const requested = requireElement(values[0], 'requested extensions');
+		requestedExtensions = parseExtensionSequence(source, requested, 'csr');
 	}
-	return { all: [] };
+	return requestedExtensions ?? { all: [] };
 }
 
 /** Walk a SEQUENCE OF Extension and decode each one, populating known-extension slots. */
@@ -812,11 +820,16 @@ function parseExtensionSequence(
 ): ParsedExtensions {
 	const parsed: ParsedExtension[] = [];
 	const knownParsed: MutableKnownParsedExtensionAccumulator = {};
+	const seenOids = new Set<string>();
 
 	for (const extension of childrenOf(source, sequenceElement)) {
 		const children = childrenOf(source, extension);
 		const oidElement = requireElement(children[0], 'extension OID');
 		const oid = decodeObjectIdentifier(oidElement.value);
+		if (seenOids.has(oid)) {
+			throw new Error(`Duplicate extension OID: ${oid}`);
+		}
+		seenOids.add(oid);
 		let offset = 1;
 		let critical = false;
 		const maybeCritical = children[offset];
