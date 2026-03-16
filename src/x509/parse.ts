@@ -1025,16 +1025,38 @@ function parseAlgorithmIdentifier(
 /** @internal Decode the Basic Constraints extension value DER. */
 export function parseBasicConstraints(bytes: Uint8Array): BasicConstraints {
 	const element = readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH });
+	if (element.tag !== 0x30) {
+		throw new Error('basicConstraints must use SEQUENCE');
+	}
 	const children = childrenOf(bytes, element);
 	let ca = false;
 	let pathLength: number | undefined;
+	let sawCa = false;
+	let sawPathLength = false;
 	for (const child of children) {
 		if (child.tag === 0x01) {
+			if (sawCa) {
+				throw new Error('basicConstraints cA must not repeat');
+			}
+			if (sawPathLength) {
+				throw new Error('basicConstraints cA must precede pathLength');
+			}
+			sawCa = true;
 			ca = decodeBoolean(child.value);
+			continue;
 		}
 		if (child.tag === 0x02) {
+			if (sawPathLength) {
+				throw new Error('basicConstraints pathLength must not repeat');
+			}
+			sawPathLength = true;
 			pathLength = decodeNonNegativeIntegerNumber(child.value, 'basicConstraints pathLength');
+			continue;
 		}
+		throw new Error(`Unsupported basicConstraints field tag: ${String(child.tag)}`);
+	}
+	if (pathLength !== undefined && ca !== true) {
+		throw new Error('basicConstraints pathLength requires cA = true');
 	}
 	return pathLength !== undefined ? { ca, pathLength } : { ca };
 }

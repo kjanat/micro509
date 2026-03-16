@@ -22,6 +22,7 @@ import {
 	integerFromNumber,
 	nullValue,
 	objectIdentifier,
+	octetString,
 	readSequenceChildren,
 	sequence,
 	setOf,
@@ -191,6 +192,75 @@ describe('parse', () => {
 		expect(() => parseCertificateSigningRequestDer(malformed)).toThrow(
 			'Extension value must use OCTET STRING',
 		);
+	});
+
+	it('rejects malformed basicConstraints structures during parse', async () => {
+		const certificate = await createSelfSignedCertificate({
+			subject: { commonName: 'bad-basic-constraints.example' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+			},
+		});
+
+		expect(() =>
+			parseCertificateDer(
+				rewriteCertificateExtensionValue(
+					certificate.certificate.der,
+					OIDS.basicConstraints,
+					sequence([tlv(0x01, Uint8Array.of(0xff)), tlv(0x01, Uint8Array.of(0x00))]),
+				),
+			),
+		).toThrow('basicConstraints cA must not repeat');
+
+		expect(() =>
+			parseCertificateDer(
+				rewriteCertificateExtensionValue(
+					certificate.certificate.der,
+					OIDS.basicConstraints,
+					sequence([tlv(0x02, Uint8Array.of(0x00)), tlv(0x02, Uint8Array.of(0x01))]),
+				),
+			),
+		).toThrow('basicConstraints pathLength must not repeat');
+
+		expect(() =>
+			parseCertificateDer(
+				rewriteCertificateExtensionValue(
+					certificate.certificate.der,
+					OIDS.basicConstraints,
+					sequence([tlv(0x02, Uint8Array.of(0x01))]),
+				),
+			),
+		).toThrow('basicConstraints pathLength requires cA = true');
+
+		expect(() =>
+			parseCertificateDer(
+				rewriteCertificateExtensionValue(
+					certificate.certificate.der,
+					OIDS.basicConstraints,
+					sequence([tlv(0x02, Uint8Array.of(0x01)), tlv(0x01, Uint8Array.of(0xff))]),
+				),
+			),
+		).toThrow('basicConstraints cA must precede pathLength');
+
+		expect(() =>
+			parseCertificateDer(
+				rewriteCertificateExtensionValue(
+					certificate.certificate.der,
+					OIDS.basicConstraints,
+					sequence([tlv(0x80, Uint8Array.of(0x00))]),
+				),
+			),
+		).toThrow('Unsupported basicConstraints field tag');
+
+		expect(() =>
+			parseCertificateDer(
+				rewriteCertificateExtensionValue(
+					certificate.certificate.der,
+					OIDS.basicConstraints,
+					tlv(0x01, Uint8Array.of(0xff)),
+				),
+			),
+		).toThrow('basicConstraints must use SEQUENCE');
 	});
 
 	it('rejects non-INTEGER certificate version and serialNumber tags', async () => {
@@ -1693,6 +1763,52 @@ function duplicateCertificateExtension(certificateDer: Uint8Array, oid: string):
 	]);
 }
 
+function rewriteCertificateExtensionValue(
+	certificateDer: Uint8Array,
+	oid: string,
+	extensionValueDer: Uint8Array,
+): Uint8Array {
+	const topLevel = readSequenceChildren(certificateDer);
+	const tbsCertificate = topLevel[0];
+	const signatureAlgorithm = topLevel[1];
+	const signatureValue = topLevel[2];
+	if (
+		tbsCertificate === undefined ||
+		signatureAlgorithm === undefined ||
+		signatureValue === undefined
+	) {
+		throw new Error('Malformed Certificate');
+	}
+	const tbsDer = sliceElement(certificateDer, tbsCertificate);
+	const tbsChildren = readSequenceChildren(tbsDer);
+	const extensionIndex = tbsChildren.findIndex((child) => child.tag === 0xa3);
+	if (extensionIndex === -1) {
+		throw new Error('Certificate missing extensions');
+	}
+	const extensionsWrapper = tbsChildren[extensionIndex];
+	if (extensionsWrapper === undefined) {
+		throw new Error('Certificate missing extensions wrapper');
+	}
+	const sequenceElement = childrenOf(tbsDer, extensionsWrapper)[0];
+	if (sequenceElement === undefined) {
+		throw new Error('Missing extensions sequence');
+	}
+	const rebuiltWrapper = tlv(
+		0xa3,
+		rewriteExtensionSequenceValuePayload(tbsDer, sequenceElement, oid, extensionValueDer),
+	);
+	const rebuiltTbs = sequence(
+		tbsChildren.map((child, index) =>
+			index === extensionIndex ? rebuiltWrapper : sliceElement(tbsDer, child),
+		),
+	);
+	return sequence([
+		rebuiltTbs,
+		sliceElement(certificateDer, signatureAlgorithm),
+		sliceElement(certificateDer, signatureValue),
+	]);
+}
+
 function rewriteCertificateExtensionValueTag(
 	certificateDer: Uint8Array,
 	oid: string,
@@ -2146,6 +2262,29 @@ function rewriteExtensionSequenceValueTag(
 		}
 		const middle = parts.slice(1, parts.length - 1).map((part) => sliceElement(entryDer, part));
 		return sequence([sliceElement(entryDer, oidElement), ...middle, tlv(tag, valueElement.value)]);
+	});
+	return sequence(entries);
+}
+
+function rewriteExtensionSequenceValuePayload(
+	source: Uint8Array,
+	sequenceElement: ReturnType<typeof readSequenceChildren>[number],
+	oid: string,
+	extensionValueDer: Uint8Array,
+): Uint8Array {
+	const entries = childrenOf(source, sequenceElement).map((entry) => {
+		const entryDer = sliceElement(source, entry);
+		const parts = readSequenceChildren(entryDer);
+		const oidElement = parts[0];
+		if (oidElement === undefined || decodeExtensionOid(oidElement.value) !== oid) {
+			return entryDer;
+		}
+		const criticalElement = parts.length === 3 ? parts[1] : undefined;
+		return sequence([
+			sliceElement(entryDer, oidElement),
+			...(criticalElement === undefined ? [] : [sliceElement(entryDer, criticalElement)]),
+			octetString(extensionValueDer),
+		]);
 	});
 	return sequence(entries);
 }
