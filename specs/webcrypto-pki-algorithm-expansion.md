@@ -1,18 +1,28 @@
 # WebCrypto PKI Algorithm Expansion - Implementation Spec
 
-**Status:** Ready for task breakdown
+**Status:** Largely implemented; kept for regression scope and historical context
 **Effort:** L
 **Date:** 2026-03-13
+
+**Role:** document the exact algorithm-expansion intent, negative cases, and
+fixture matrix behind the shipped `RSA-PSS`, `P-521`, and encrypted-key interop
+surface.
+
+**Use:** treat [`docs/PKIX-SCOPE.md`](../docs/PKIX-SCOPE.md) as the canonical
+current claim language. This spec remains useful mainly for constraints,
+negative-fixture planning, and historical design rationale.
 
 ## Problem Statement
 
 **Who:** maintainers and adopters who need `micro509` to interoperate with more real-world PKI artifacts without giving up browser/edge portability or strict validation behavior.
 
-**What:** `micro509` currently supports a narrow signing matrix: RSA PKCS#1 v1.5, ECDSA `P-256`/`P-384`, and `Ed25519`. WebCrypto can support more of the signature-relevant surface than the library currently exposes, but the repo leaves that value on the table.
+**What:** this spec covered the expansion from the original narrow signing
+matrix to the now-shipped `RSA-PSS`, `ECDSA P-521`, and wider encrypted-key
+interop surface.
 
 **Why it matters:** this is one of the cheapest adoption wins available. Supporting the missing WebCrypto-aligned PKI algorithms increases real-world interop while preserving the project's core posture: ESM-only, WebCrypto-first, strict typed failures, and no silent validation weakening.
 
-**Evidence:**
+**Original evidence:**
 
 - `src/sig-verify.ts` rejects anything outside RSA PKCS#1 v1.5, ECDSA `P-256`/`P-384`, and `Ed25519`.
 - `src/signing.ts` cannot emit `RSA-PSS` `AlgorithmIdentifier` values and rejects `P-521` signer keys.
@@ -21,11 +31,19 @@
 
 ## Discovery Summary
 
-- The highest-leverage architectural blocker is `AlgorithmIdentifier` parameter loss in `src/parse.ts`.
-- `P-521` is a low-churn expansion because the current ECDSA implementation already has the right structure for one more named curve and one more signature OID.
-- `RSA-PSS` is not free, but it is still a good fit because WebCrypto supports it directly and the main missing work is parameter modeling plus validation.
-- "Available in WebCrypto" is not sufficient scope by itself. `X25519`, `ECDH`, `RSA-OAEP`, `AES`, and `HMAC` do not slot cleanly into the repo's current cert/CSR signing and verification abstractions, so they are not part of this slice.
-- `DSA` and `Ed448` are not reasonable scope adds for this repo's browser-safe core.
+- The highest-leverage architectural blocker was `AlgorithmIdentifier`
+  parameter loss in `src/parse.ts`.
+- `P-521` was a low-churn expansion because the current ECDSA implementation
+  already had the right structure for one more named curve and one more
+  signature OID.
+- `RSA-PSS` was not free, but it fit the repo well because WebCrypto supports
+  it directly and the main missing work was parameter modeling plus validation.
+- "Available in WebCrypto" was not sufficient scope by itself. `X25519`,
+  `ECDH`, `RSA-OAEP`, `AES`, and `HMAC` still do not slot cleanly into the
+  repo's current cert/CSR signing and verification abstractions, so they remain
+  out of scope for this slice.
+- `DSA` and `Ed448` remain unreasonable scope adds for this repo's browser-safe
+  core.
 
 ## Recommendation
 

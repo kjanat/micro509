@@ -1,7 +1,7 @@
 # Internal Layout
 
 This tree is the implementation-only home for helper modules, engines, and
-low-level primitives during the exports-harmonization refactor.
+low-level primitives.
 
 Rules:
 

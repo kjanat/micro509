@@ -1,24 +1,43 @@
 # Full Standards Compliance and DX Plan - Implementation Spec
 
-**Status:** Ready for task breakdown
+**Status:** Active reference; early phases partly implemented
 **Effort:** XL
 **Date:** 2026-03-12
+
+**Role:** keep the deeper design notes and task sequencing for the remaining
+standards-compliance gaps.
+
+**Use:** treat [`docs/PKIX-SCOPE.md`](../docs/PKIX-SCOPE.md) as the canonical
+current support matrix and claim language. This spec is intentionally deeper and
+partly historical.
 
 ## Problem Statement
 
 **Who:** maintainers and consumers who need strict PKIX behavior without giving up DX, edge/web portability, or tree-shakeable imports.
 
-**What:** `micro509` already has strong core PKI behavior, but it is still partial against `RFC 5280`, `RFC 6960`, `RFC 6125`, and `RFC 9618`. Docs also currently overclaim a few behaviors the code does not fully enforce.
+**What:** `micro509` already has strong core PKI behavior, but it is still
+partial against `RFC 5280`, `RFC 6960`, `RFC 6125`, and `RFC 9618`.
 
 **Why it matters:** a library that claims standards compliance but accepts invalid chains, OCSP responders, or identity matches is harder to trust than a smaller, honest library. Full compliance work also risks bloating the root entry and hurting runtime/import DX unless package boundaries are locked first.
 
-**Evidence:** current code has no policy processing, partial name constraints, partial CRL validation, permissive OCSP delegated responder validation, DNS/IP-only identity matching, and user-facing docs that currently overstate a few OCSP and API-separation claims.
+**Evidence:** current code still has partial name-constraint support, partial
+CRL processing scope, incomplete OCSP local-responder and responder-revocation
+policy handling, incomplete RFC 6125 integration in verification helpers, and
+broader conformance evidence that is still incomplete.
 
 ## Discovery Summary
 
-- Existing strengths: strong candidate path building, trust-anchor model, signature/time/CA/pathLen/AKI-SKI checks, meaningful name-constraints groundwork, pure WebCrypto runtime, explicit named exports.
-- Main gaps: no `certificatePolicies` / `policyConstraints` / `policyMappings` / `inhibitAnyPolicy`, no full RFC 9618 policy engine, incomplete CRL processing, incomplete OCSP responder binding/authorization, incomplete RFC 6125 identity coverage, no subpath exports, bundled root-only package output.
-- Architectural risk: adding all missing RFC behavior to the current root barrel and bundled output would preserve correctness but degrade DX, tree-shaking, and edge import cost.
+- Existing strengths: strong candidate path building, trust-anchor model,
+  signature/time/CA/pathLen/AKI-SKI checks, RFC 9618-style policy processing,
+  extracted identity and revocation domains, pure WebCrypto runtime, and stable
+  domain entrypoints.
+- Main gaps: incomplete CRL processing, incomplete exhaustive OCSP responder
+  authorization and responder-cert policy, incomplete RFC 6125 integration in
+  verification helpers, incomplete support for unsupported/under-enforced
+  name-constraint forms, and incomplete conformance evidence.
+- Architectural risk: remaining standards work still spans validation,
+  revocation, and docs claims; keep the shipped domain boundaries intact so new
+  behavior does not leak back into a monolithic root-only surface.
 
 ## Recommendation
 

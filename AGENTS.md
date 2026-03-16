@@ -31,7 +31,7 @@ ts-x509/
 ├── docs/              # scope statements, harness docs, vendored RFC text
 ├── site/              # VitePress docs site + generated API pages
 ├── .github/actions/   # reusable CI setup/release validation actions
-├── specs/             # long-lived implementation planning docs
+├── specs/             # deep implementation notes for active/historical work
 ├── comparisons/       # competitor notes
 ├── dist/              # generated build output
 └── .opencode/         # local agent workflow state
