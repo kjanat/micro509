@@ -555,6 +555,250 @@ describe('pkcs7', () => {
 		if (!result.ok) expect(result.code).toBe('malformed');
 	});
 
+	it('rejects signedData with duplicate messageDigest attributes', async () => {
+		const rsaKeys = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
+		const signer = await createSelfSignedCertificate({
+			subject: { commonName: 'Duplicate Digest CMS' },
+			keyPair: rsaKeys,
+		});
+		const parsedSigner = parseCertificatePem(signer.certificate.pem);
+		const content = new TextEncoder().encode('content for duplicate digest');
+		const contentDigest = createHash('sha256').update(content).digest();
+		const signedAttrsContent = concatBytes([
+			sequence([objectIdentifier(OIDS.cmsContentType), setOf([objectIdentifier(OIDS.pkcs7Data)])]),
+			sequence([
+				objectIdentifier(OIDS.cmsMessageDigest),
+				setOf([octetString(new Uint8Array(contentDigest))]),
+			]),
+			sequence([
+				objectIdentifier(OIDS.cmsMessageDigest),
+				setOf([octetString(new Uint8Array(contentDigest))]),
+			]),
+		]);
+		const signedAttrsForSigning = tlv(0x31, signedAttrsContent);
+		const signedAttrsImplicit = tlv(0xa0, signedAttrsContent);
+		const sigAlgorithm = getSignatureAlgorithm(rsaKeys.privateKey);
+		const sig = await signBytes(rsaKeys.privateKey, sigAlgorithm, signedAttrsForSigning);
+		const signerInfo = sequence([
+			integerFromNumber(1),
+			sequence([
+				hexToBytes(parsedSigner.issuer.derHex),
+				tlv(0x02, hexToBytes(parsedSigner.serialNumberHex)),
+			]),
+			sequence([objectIdentifier(OIDS.sha256), nullValue()]),
+			signedAttrsImplicit,
+			sequence([
+				objectIdentifier(sigAlgorithm.algorithmOid),
+				...(sigAlgorithm.parameters !== undefined ? [sigAlgorithm.parameters] : []),
+			]),
+			octetString(sig),
+		]);
+		const signedData = sequence([
+			integerFromNumber(1),
+			setOf([sequence([objectIdentifier(OIDS.sha256), nullValue()])]),
+			sequence([objectIdentifier(OIDS.pkcs7Data), explicitContext(0, octetString(content))]),
+			explicitContext(0, parsedSigner.der),
+			setOf([signerInfo]),
+		]);
+		const der = sequence([objectIdentifier(OIDS.pkcs7SignedData), explicitContext(0, signedData)]);
+		const result = await verifyPkcs7SignedData(der);
+		expect(result).toMatchObject({ ok: false, code: 'malformed' });
+	});
+
+	it('rejects signedData with multi-valued messageDigest attributes', async () => {
+		const rsaKeys = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
+		const signer = await createSelfSignedCertificate({
+			subject: { commonName: 'Multi Digest CMS' },
+			keyPair: rsaKeys,
+		});
+		const parsedSigner = parseCertificatePem(signer.certificate.pem);
+		const content = new TextEncoder().encode('content for multi digest');
+		const contentDigest = createHash('sha256').update(content).digest();
+		const signedAttrsContent = concatBytes([
+			sequence([objectIdentifier(OIDS.cmsContentType), setOf([objectIdentifier(OIDS.pkcs7Data)])]),
+			sequence([
+				objectIdentifier(OIDS.cmsMessageDigest),
+				setOf([
+					octetString(new Uint8Array(contentDigest)),
+					octetString(new Uint8Array(contentDigest)),
+				]),
+			]),
+		]);
+		const signedAttrsForSigning = tlv(0x31, signedAttrsContent);
+		const signedAttrsImplicit = tlv(0xa0, signedAttrsContent);
+		const sigAlgorithm = getSignatureAlgorithm(rsaKeys.privateKey);
+		const sig = await signBytes(rsaKeys.privateKey, sigAlgorithm, signedAttrsForSigning);
+		const signerInfo = sequence([
+			integerFromNumber(1),
+			sequence([
+				hexToBytes(parsedSigner.issuer.derHex),
+				tlv(0x02, hexToBytes(parsedSigner.serialNumberHex)),
+			]),
+			sequence([objectIdentifier(OIDS.sha256), nullValue()]),
+			signedAttrsImplicit,
+			sequence([
+				objectIdentifier(sigAlgorithm.algorithmOid),
+				...(sigAlgorithm.parameters !== undefined ? [sigAlgorithm.parameters] : []),
+			]),
+			octetString(sig),
+		]);
+		const signedData = sequence([
+			integerFromNumber(1),
+			setOf([sequence([objectIdentifier(OIDS.sha256), nullValue()])]),
+			sequence([objectIdentifier(OIDS.pkcs7Data), explicitContext(0, octetString(content))]),
+			explicitContext(0, parsedSigner.der),
+			setOf([signerInfo]),
+		]);
+		const der = sequence([objectIdentifier(OIDS.pkcs7SignedData), explicitContext(0, signedData)]);
+		const result = await verifyPkcs7SignedData(der);
+		expect(result).toMatchObject({ ok: false, code: 'malformed' });
+	});
+
+	it('rejects signedData with mismatched contentType signed attributes', async () => {
+		const rsaKeys = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
+		const signer = await createSelfSignedCertificate({
+			subject: { commonName: 'Bad ContentType CMS' },
+			keyPair: rsaKeys,
+		});
+		const parsedSigner = parseCertificatePem(signer.certificate.pem);
+		const content = new TextEncoder().encode('content for bad contentType');
+		const contentDigest = createHash('sha256').update(content).digest();
+		const signedAttrsContent = concatBytes([
+			sequence([
+				objectIdentifier(OIDS.cmsContentType),
+				setOf([objectIdentifier(OIDS.pkcs7SignedData)]),
+			]),
+			sequence([
+				objectIdentifier(OIDS.cmsMessageDigest),
+				setOf([octetString(new Uint8Array(contentDigest))]),
+			]),
+		]);
+		const signedAttrsForSigning = tlv(0x31, signedAttrsContent);
+		const signedAttrsImplicit = tlv(0xa0, signedAttrsContent);
+		const sigAlgorithm = getSignatureAlgorithm(rsaKeys.privateKey);
+		const sig = await signBytes(rsaKeys.privateKey, sigAlgorithm, signedAttrsForSigning);
+		const signerInfo = sequence([
+			integerFromNumber(1),
+			sequence([
+				hexToBytes(parsedSigner.issuer.derHex),
+				tlv(0x02, hexToBytes(parsedSigner.serialNumberHex)),
+			]),
+			sequence([objectIdentifier(OIDS.sha256), nullValue()]),
+			signedAttrsImplicit,
+			sequence([
+				objectIdentifier(sigAlgorithm.algorithmOid),
+				...(sigAlgorithm.parameters !== undefined ? [sigAlgorithm.parameters] : []),
+			]),
+			octetString(sig),
+		]);
+		const signedData = sequence([
+			integerFromNumber(1),
+			setOf([sequence([objectIdentifier(OIDS.sha256), nullValue()])]),
+			sequence([objectIdentifier(OIDS.pkcs7Data), explicitContext(0, octetString(content))]),
+			explicitContext(0, parsedSigner.der),
+			setOf([signerInfo]),
+		]);
+		const der = sequence([objectIdentifier(OIDS.pkcs7SignedData), explicitContext(0, signedData)]);
+		const result = await verifyPkcs7SignedData(der);
+		expect(result).toMatchObject({ ok: false, code: 'malformed' });
+	});
+
+	it('rejects signedData with duplicate contentType attributes', async () => {
+		const rsaKeys = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
+		const signer = await createSelfSignedCertificate({
+			subject: { commonName: 'Duplicate ContentType CMS' },
+			keyPair: rsaKeys,
+		});
+		const parsedSigner = parseCertificatePem(signer.certificate.pem);
+		const content = new TextEncoder().encode('content for duplicate contentType');
+		const contentDigest = createHash('sha256').update(content).digest();
+		const signedAttrsContent = concatBytes([
+			sequence([objectIdentifier(OIDS.cmsContentType), setOf([objectIdentifier(OIDS.pkcs7Data)])]),
+			sequence([objectIdentifier(OIDS.cmsContentType), setOf([objectIdentifier(OIDS.pkcs7Data)])]),
+			sequence([
+				objectIdentifier(OIDS.cmsMessageDigest),
+				setOf([octetString(new Uint8Array(contentDigest))]),
+			]),
+		]);
+		const signedAttrsForSigning = tlv(0x31, signedAttrsContent);
+		const signedAttrsImplicit = tlv(0xa0, signedAttrsContent);
+		const sigAlgorithm = getSignatureAlgorithm(rsaKeys.privateKey);
+		const sig = await signBytes(rsaKeys.privateKey, sigAlgorithm, signedAttrsForSigning);
+		const signerInfo = sequence([
+			integerFromNumber(1),
+			sequence([
+				hexToBytes(parsedSigner.issuer.derHex),
+				tlv(0x02, hexToBytes(parsedSigner.serialNumberHex)),
+			]),
+			sequence([objectIdentifier(OIDS.sha256), nullValue()]),
+			signedAttrsImplicit,
+			sequence([
+				objectIdentifier(sigAlgorithm.algorithmOid),
+				...(sigAlgorithm.parameters !== undefined ? [sigAlgorithm.parameters] : []),
+			]),
+			octetString(sig),
+		]);
+		const signedData = sequence([
+			integerFromNumber(1),
+			setOf([sequence([objectIdentifier(OIDS.sha256), nullValue()])]),
+			sequence([objectIdentifier(OIDS.pkcs7Data), explicitContext(0, octetString(content))]),
+			explicitContext(0, parsedSigner.der),
+			setOf([signerInfo]),
+		]);
+		const der = sequence([objectIdentifier(OIDS.pkcs7SignedData), explicitContext(0, signedData)]);
+		const result = await verifyPkcs7SignedData(der);
+		expect(result).toMatchObject({ ok: false, code: 'malformed' });
+	});
+
+	it('rejects signedData with multi-valued contentType attributes', async () => {
+		const rsaKeys = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
+		const signer = await createSelfSignedCertificate({
+			subject: { commonName: 'Multi ContentType CMS' },
+			keyPair: rsaKeys,
+		});
+		const parsedSigner = parseCertificatePem(signer.certificate.pem);
+		const content = new TextEncoder().encode('content for multi contentType');
+		const contentDigest = createHash('sha256').update(content).digest();
+		const signedAttrsContent = concatBytes([
+			sequence([
+				objectIdentifier(OIDS.cmsContentType),
+				setOf([objectIdentifier(OIDS.pkcs7Data), objectIdentifier(OIDS.pkcs7Data)]),
+			]),
+			sequence([
+				objectIdentifier(OIDS.cmsMessageDigest),
+				setOf([octetString(new Uint8Array(contentDigest))]),
+			]),
+		]);
+		const signedAttrsForSigning = tlv(0x31, signedAttrsContent);
+		const signedAttrsImplicit = tlv(0xa0, signedAttrsContent);
+		const sigAlgorithm = getSignatureAlgorithm(rsaKeys.privateKey);
+		const sig = await signBytes(rsaKeys.privateKey, sigAlgorithm, signedAttrsForSigning);
+		const signerInfo = sequence([
+			integerFromNumber(1),
+			sequence([
+				hexToBytes(parsedSigner.issuer.derHex),
+				tlv(0x02, hexToBytes(parsedSigner.serialNumberHex)),
+			]),
+			sequence([objectIdentifier(OIDS.sha256), nullValue()]),
+			signedAttrsImplicit,
+			sequence([
+				objectIdentifier(sigAlgorithm.algorithmOid),
+				...(sigAlgorithm.parameters !== undefined ? [sigAlgorithm.parameters] : []),
+			]),
+			octetString(sig),
+		]);
+		const signedData = sequence([
+			integerFromNumber(1),
+			setOf([sequence([objectIdentifier(OIDS.sha256), nullValue()])]),
+			sequence([objectIdentifier(OIDS.pkcs7Data), explicitContext(0, octetString(content))]),
+			explicitContext(0, parsedSigner.der),
+			setOf([signerInfo]),
+		]);
+		const der = sequence([objectIdentifier(OIDS.pkcs7SignedData), explicitContext(0, signedData)]);
+		const result = await verifyPkcs7SignedData(der);
+		expect(result).toMatchObject({ ok: false, code: 'malformed' });
+	});
+
 	it('verifyPkcs7SignedData rejects when encapsulated content missing', async () => {
 		const signer = await createSelfSignedCertificate({
 			subject: { commonName: 'No Content Signer' },

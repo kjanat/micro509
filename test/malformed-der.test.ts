@@ -2,12 +2,14 @@ import { describe, expect, it } from 'bun:test';
 import {
 	createCertificate,
 	createCertificateRevocationList,
+	createCertificateSigningRequest,
 	createOcspRequest,
 	createOcspResponse,
 	createSelfSignedCertificate,
 	generateKeyPair,
 	parseCertificateDer,
 	parseCertificateRevocationListDer,
+	parseCertificateSigningRequestDer,
 	parseOcspRequestDer,
 	parseOcspResponseDer,
 } from 'micro509';
@@ -22,7 +24,7 @@ import {
 	tlv,
 } from '#micro509/internal/asn1/der.ts';
 import { OIDS } from '#micro509/internal/asn1/oids.ts';
-import { decodeObjectIdentifier, hexToBytes } from './helpers.ts';
+import { childrenOf, decodeObjectIdentifier, hexToBytes } from './helpers.ts';
 
 interface CorpusCase {
 	readonly name: string;
@@ -78,6 +80,62 @@ function replaceCertificateSubjectPublicKeyInfo(
 		sliceElement(certificateDer, signatureAlgorithm),
 		sliceElement(certificateDer, signatureValue),
 	]);
+}
+
+function rewriteCertificateVersionTag(certificateDer: Uint8Array, tag: number): Uint8Array {
+	const topLevel = readSequenceChildren(certificateDer);
+	const tbsCertificate = requireValue(topLevel[0], 'TBSCertificate');
+	const signatureAlgorithm = requireValue(topLevel[1], 'signatureAlgorithm');
+	const signatureValue = requireValue(topLevel[2], 'signatureValue');
+	const tbsDer = sliceElement(certificateDer, tbsCertificate);
+	const tbsChildren = readSequenceChildren(tbsDer);
+	const versionElement = requireValue(tbsChildren[0], 'version');
+	const innerVersion = requireValue(childrenOf(tbsDer, versionElement)[0], 'version INTEGER');
+	const rebuiltTbs = replaceSequenceChild(
+		tbsDer,
+		0,
+		explicitContext(0, tlv(tag, innerVersion.value)),
+	);
+	return sequence([
+		rebuiltTbs,
+		sliceElement(certificateDer, signatureAlgorithm),
+		sliceElement(certificateDer, signatureValue),
+	]);
+}
+
+function rewriteCsrVersionTag(csrDer: Uint8Array, tag: number): Uint8Array {
+	const topLevel = readSequenceChildren(csrDer);
+	const certificationRequestInfo = requireValue(topLevel[0], 'CertificationRequestInfo');
+	const signatureAlgorithm = requireValue(topLevel[1], 'signatureAlgorithm');
+	const signatureValue = requireValue(topLevel[2], 'signatureValue');
+	const criDer = sliceElement(csrDer, certificationRequestInfo);
+	const versionElement = requireValue(readSequenceChildren(criDer)[0], 'version');
+	const rebuiltCri = replaceSequenceChild(criDer, 0, tlv(tag, versionElement.value));
+	return sequence([
+		rebuiltCri,
+		sliceElement(csrDer, signatureAlgorithm),
+		sliceElement(csrDer, signatureValue),
+	]);
+}
+
+function rewriteCrlVersionTag(crlDer: Uint8Array, tag: number): Uint8Array {
+	const topLevel = readSequenceChildren(crlDer);
+	const tbsCertList = requireValue(topLevel[0], 'TBSCertList');
+	const signatureAlgorithm = requireValue(topLevel[1], 'signatureAlgorithm');
+	const signatureValue = requireValue(topLevel[2], 'signatureValue');
+	const tbsDer = sliceElement(crlDer, tbsCertList);
+	const versionElement = requireValue(readSequenceChildren(tbsDer)[0], 'version');
+	const rebuiltTbs = replaceSequenceChild(tbsDer, 0, tlv(tag, versionElement.value));
+	return sequence([
+		rebuiltTbs,
+		sliceElement(crlDer, signatureAlgorithm),
+		sliceElement(crlDer, signatureValue),
+	]);
+}
+
+function rewriteOcspResponseStatusTag(ocspResponseDer: Uint8Array, tag: number): Uint8Array {
+	const responseStatus = requireValue(readSequenceChildren(ocspResponseDer)[0], 'responseStatus');
+	return replaceSequenceChild(ocspResponseDer, 0, tlv(tag, responseStatus.value));
 }
 
 function replaceCertificateExtensionValue(
@@ -477,6 +535,67 @@ describe('malformed DER corpus', () => {
 						),
 					),
 				messagePattern: /inhibitAnyPolicy skipCerts|non-negative|SEQUENCE/i,
+			},
+		];
+
+		for (const testCase of corpus) {
+			expectDeterministicParseFailure(testCase);
+		}
+	});
+
+	it('rejects unsupported scalar/tag substitutions with deterministic parse errors', async () => {
+		const certificate = await createSelfSignedCertificate({
+			subject: { commonName: 'Scalar Root' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const csrKeys = await generateKeyPair();
+		const csr = await createCertificateSigningRequest({
+			subject: { commonName: 'Scalar CSR' },
+			publicKey: csrKeys.publicKey,
+			signerPrivateKey: csrKeys.privateKey,
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Scalar Root' },
+			signerPrivateKey: certificate.keyPair.privateKey,
+			issuerPublicKey: certificate.keyPair.publicKey,
+			crlNumber: 1,
+		});
+		const ocspResponse = await createOcspResponse({
+			signerPrivateKey: certificate.keyPair.privateKey,
+			signerCertificate: certificate.certificate.pem,
+			responses: [
+				{
+					certificate: certificate.certificate.pem,
+					issuerCertificate: certificate.certificate.pem,
+					certStatus: 'good',
+				},
+			],
+		});
+
+		const corpus: readonly CorpusCase[] = [
+			{
+				name: 'certificate version uses BOOLEAN',
+				parse: () =>
+					parseCertificateDer(rewriteCertificateVersionTag(certificate.certificate.der, 0x01)),
+				messagePattern: /version must use INTEGER/i,
+			},
+			{
+				name: 'csr version uses BOOLEAN',
+				parse: () => parseCertificateSigningRequestDer(rewriteCsrVersionTag(csr.der, 0x01)),
+				messagePattern: /version must use INTEGER/i,
+			},
+			{
+				name: 'crl version uses BOOLEAN',
+				parse: () => parseCertificateRevocationListDer(rewriteCrlVersionTag(crl.der, 0x01)),
+				messagePattern: /version must use INTEGER/i,
+			},
+			{
+				name: 'ocsp responseStatus uses INTEGER',
+				parse: () => parseOcspResponseDer(rewriteOcspResponseStatusTag(ocspResponse.der, 0x02)),
+				messagePattern: /responseStatus must use ENUMERATED/i,
 			},
 		];
 

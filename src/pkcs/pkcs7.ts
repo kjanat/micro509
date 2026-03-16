@@ -373,7 +373,12 @@ export async function verifyPkcs7SignedData(
 			);
 		}
 		if (signerInfo.hasSignedAttrs) {
-			const attrsResult = await verifySignedAttrs(signerInfo, signer, parsed.encapsulatedContent);
+			const attrsResult = await verifySignedAttrs(
+				signerInfo,
+				signer,
+				parsed.encapsulatedContent,
+				parsed.encapsulatedContentTypeOid,
+			);
 			if (!attrsResult.ok) {
 				return attrsResult;
 			}
@@ -702,28 +707,53 @@ function digestAlgorithmHash(digestAlgorithmOid: string): 'SHA-256' | 'SHA-384' 
 	}
 }
 
-/** Locates and returns the messageDigest OCTET STRING value from signedAttrs. */
-function extractMessageDigest(signedAttrsDer: Uint8Array): Uint8Array | undefined {
-	// signedAttrs is IMPLICIT [0] — parse children (each is a SEQUENCE of {OID, SET OF values})
+/** Parses required signed attributes and enforces uniqueness + exact-one-value shape. */
+function parseSignedAttributeRequirements(signedAttrsDer: Uint8Array): {
+	readonly messageDigest: Uint8Array;
+	readonly contentTypeOid: string;
+} {
 	const outer = readElement(signedAttrsDer);
+	let messageDigest: Uint8Array | undefined;
+	let contentTypeOid: string | undefined;
 	for (const attr of childrenOf(signedAttrsDer, outer)) {
 		const attrDer = signedAttrsDer.slice(attr.start - attr.headerLength, attr.end);
 		const parts = readSequenceChildren(attrDer);
 		const oid = parts[0];
 		const values = parts[1];
-		if (oid === undefined || values === undefined) {
+		if (oid === undefined || values === undefined || parts.length !== 2 || values.tag !== 0x31) {
+			throw new Error('Malformed signedAttrs attribute');
+		}
+		const attrOid = decodeObjectIdentifier(oid.value);
+		const valueElements = childrenOf(attrDer, values);
+		if (attrOid === OIDS.cmsMessageDigest) {
+			if (messageDigest !== undefined || valueElements.length !== 1) {
+				throw new Error('messageDigest attribute must appear exactly once with one value');
+			}
+			const digestElement = valueElements[0];
+			if (digestElement === undefined || digestElement.tag !== 0x04) {
+				throw new Error('messageDigest attribute value must use OCTET STRING');
+			}
+			messageDigest = digestElement.value;
 			continue;
 		}
-		if (decodeObjectIdentifier(oid.value) === OIDS.cmsMessageDigest) {
-			// values is SET OF, first child is the OCTET STRING digest
-			const digestElement = readElement(attrDer, values.start);
-			if (digestElement.tag !== 0x04) {
-				return undefined;
+		if (attrOid === OIDS.cmsContentType) {
+			if (contentTypeOid !== undefined || valueElements.length !== 1) {
+				throw new Error('contentType attribute must appear exactly once with one value');
 			}
-			return digestElement.value;
+			const contentType = valueElements[0];
+			if (contentType === undefined || contentType.tag !== 0x06) {
+				throw new Error('contentType attribute value must use OBJECT IDENTIFIER');
+			}
+			contentTypeOid = decodeObjectIdentifier(contentType.value);
 		}
 	}
-	return undefined;
+	if (messageDigest === undefined) {
+		throw new Error('Missing messageDigest attribute in signedAttrs');
+	}
+	if (contentTypeOid === undefined) {
+		throw new Error('Missing contentType attribute in signedAttrs');
+	}
+	return { messageDigest, contentTypeOid };
 }
 
 /** Replaces the IMPLICIT [0] tag (0xa0) with SET OF (0x31) per RFC 5652 Section 5.4. */
@@ -751,6 +781,7 @@ async function verifySignedAttrs(
 	signerInfo: ParsedPkcs7SignerInfo,
 	signer: ParsedCertificate,
 	encapsulatedContent: Uint8Array,
+	encapsulatedContentTypeOid: string,
 ): Promise<
 	| { readonly ok: true }
 	| ErrorResult<
@@ -766,16 +797,16 @@ async function verifySignedAttrs(
 	if (signerInfo.signedAttrsDer === undefined) {
 		return verifyPkcs7Failure('malformed', 'Missing signedAttrs DER');
 	}
-	// Step 1: Extract messageDigest attribute from signedAttrs
-	let expectedDigest: Uint8Array | undefined;
+	// Step 1: Parse required signed attributes from signedAttrs
+	let signedAttributes: { readonly messageDigest: Uint8Array; readonly contentTypeOid: string };
 	try {
 		assertImplicitSignedAttrsDer(signerInfo.signedAttrsDer);
-		expectedDigest = extractMessageDigest(signerInfo.signedAttrsDer);
+		signedAttributes = parseSignedAttributeRequirements(signerInfo.signedAttrsDer);
 	} catch {
 		return verifyPkcs7Failure('malformed', 'Malformed signedAttrs in SignedData');
 	}
-	if (expectedDigest === undefined) {
-		return verifyPkcs7Failure('malformed', 'Missing messageDigest attribute in signedAttrs');
+	if (signedAttributes.contentTypeOid !== encapsulatedContentTypeOid) {
+		return verifyPkcs7Failure('malformed', 'SignedData contentType attribute does not match');
 	}
 	// Step 2: Compute digest of encapsulated content
 	let actualDigest: Uint8Array;
@@ -788,7 +819,7 @@ async function verifySignedAttrs(
 		return verifyPkcs7Failure('malformed', 'Unsupported digest algorithm in SignedData');
 	}
 	// Step 3: Compare digests (constant-time)
-	if (!constantTimeEqual(actualDigest, expectedDigest)) {
+	if (!constantTimeEqual(actualDigest, signedAttributes.messageDigest)) {
 		return verifyPkcs7Failure(
 			'message_digest_mismatch',
 			'Content digest does not match messageDigest attribute',

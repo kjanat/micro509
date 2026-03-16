@@ -15,6 +15,7 @@ import {
 } from '#micro509';
 import {
 	explicitContext,
+	octetString,
 	readSequenceChildren,
 	sequence,
 	tlv,
@@ -2439,7 +2440,7 @@ describe('crl', () => {
 		expect(result.ok).toBe(true);
 	});
 
-	it('parseCertificateRevocationListDer handles IDP with no dist point name (lines 586-587)', async () => {
+	it('parseCertificateRevocationListDer rejects IDP with unsupported dist point name tags', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'IDP CRL CA' },
 			extensions: {
@@ -2493,8 +2494,9 @@ describe('crl', () => {
 		if (targetOffset !== -1) {
 			// Change [0] to [1] (onlyContainsUserCerts) — tag 0xa0 → 0x81
 			derBytes[targetOffset] = 0x81;
-			const modified = parseCertificateRevocationListDer(derBytes);
-			expect(modified.issuingDistributionPoint).toEqual({});
+			expect(() => parseCertificateRevocationListDer(derBytes)).toThrow(
+				'Unsupported distributionPointName tag',
+			);
 		}
 	});
 
@@ -2581,6 +2583,108 @@ describe('crl', () => {
 				rewriteCrlVersionTag(new Uint8Array(pemDecode('X509 CRL', crl.pem)), 0x01),
 			),
 		).toThrow('version must use INTEGER');
+	});
+
+	it('parseCertificateRevocationListDer rejects repeated issuingDistributionPoint fields', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Repeated IDP Field CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Repeated IDP Field CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			issuingDistributionPoint: { indirectCrl: true },
+		});
+		expect(() =>
+			parseCertificateRevocationListDer(
+				rewriteCrlExtensionValuePayload(
+					new Uint8Array(pemDecode('X509 CRL', crl.pem)),
+					OIDS.issuingDistributionPoint,
+					sequence([tlv(0x84, Uint8Array.of(0xff)), tlv(0x84, Uint8Array.of(0x00))]),
+				),
+			),
+		).toThrow('IssuingDistributionPoint indirectCrl must not repeat');
+	});
+
+	it('parseCertificateRevocationListDer rejects conflicting issuingDistributionPoint scope booleans', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Conflicting IDP Scope CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Conflicting IDP Scope CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			issuingDistributionPoint: { onlyContainsUserCerts: true },
+		});
+		expect(() =>
+			parseCertificateRevocationListDer(
+				rewriteCrlExtensionValuePayload(
+					new Uint8Array(pemDecode('X509 CRL', crl.pem)),
+					OIDS.issuingDistributionPoint,
+					sequence([tlv(0x81, Uint8Array.of(0xff)), tlv(0x82, Uint8Array.of(0xff))]),
+				),
+			),
+		).toThrow('IssuingDistributionPoint scope booleans are mutually exclusive');
+	});
+
+	it('parseCertificateRevocationListDer rejects unsupported issuingDistributionPoint distributionPointName tags', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Bad IDP Name Tag CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Bad IDP Name Tag CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			issuingDistributionPoint: { indirectCrl: true },
+		});
+		expect(() =>
+			parseCertificateRevocationListDer(
+				rewriteCrlExtensionValuePayload(
+					new Uint8Array(pemDecode('X509 CRL', crl.pem)),
+					OIDS.issuingDistributionPoint,
+					sequence([explicitContext(0, tlv(0x82, new TextEncoder().encode('bad.example')))]),
+				),
+			),
+		).toThrow('Unsupported distributionPointName tag');
+	});
+
+	it('parseCertificateRevocationListDer rejects freshestCRL distribution points with only reasons', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Bad Freshest CRL DP CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Bad Freshest CRL DP CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			freshestCrlDistributionPoints: [
+				{ distributionPoint: { fullName: [{ type: 'uri', value: 'http://example.test/ok.crl' }] } },
+			],
+		});
+		expect(() =>
+			parseCertificateRevocationListDer(
+				rewriteCrlExtensionValuePayload(
+					new Uint8Array(pemDecode('X509 CRL', crl.pem)),
+					OIDS.freshestCRL,
+					sequence([sequence([tlv(0x81, Uint8Array.of(0x00))])]),
+				),
+			),
+		).toThrow('DistributionPoint must include distributionPoint or crlIssuer');
 	});
 
 	it('parseCertificateRevocationListDer rejects non-OCTET CRL extension values', async () => {
@@ -2866,6 +2970,52 @@ function rewriteCrlExtensionValueTag(crlDer: Uint8Array, oid: string, tag: numbe
 	const rebuiltWrapper = explicitContext(
 		0,
 		rewriteSequenceEntryValueTag(tbsDer, extensionSequence, oid, tag),
+	);
+	const rebuiltTbs = sequence(
+		tbsChildren.map((child, index) =>
+			index === extensionIndex ? rebuiltWrapper : sliceElement(tbsDer, child),
+		),
+	);
+	return sequence([
+		rebuiltTbs,
+		sliceElement(crlDer, signatureAlgorithm),
+		sliceElement(crlDer, signatureValue),
+	]);
+}
+
+function rewriteCrlExtensionValuePayload(
+	crlDer: Uint8Array,
+	oid: string,
+	extensionValueDer: Uint8Array,
+): Uint8Array {
+	const topLevel = readSequenceChildren(crlDer);
+	const tbsCertList = topLevel[0];
+	const signatureAlgorithm = topLevel[1];
+	const signatureValue = topLevel[2];
+	if (
+		tbsCertList === undefined ||
+		signatureAlgorithm === undefined ||
+		signatureValue === undefined
+	) {
+		throw new Error('Malformed CRL');
+	}
+	const tbsDer = sliceElement(crlDer, tbsCertList);
+	const tbsChildren = readSequenceChildren(tbsDer);
+	const extensionIndex = tbsChildren.findIndex((child) => child.tag === 0xa0);
+	if (extensionIndex === -1) {
+		throw new Error('CRL missing extensions');
+	}
+	const extensionWrapper = tbsChildren[extensionIndex];
+	if (extensionWrapper === undefined) {
+		throw new Error('CRL missing extensions');
+	}
+	const extensionSequence = childrenOf(tbsDer, extensionWrapper)[0];
+	if (extensionSequence === undefined) {
+		throw new Error('CRL missing extension sequence');
+	}
+	const rebuiltWrapper = explicitContext(
+		0,
+		rewriteSequenceEntryValuePayload(tbsDer, extensionSequence, oid, extensionValueDer),
 	);
 	const rebuiltTbs = sequence(
 		tbsChildren.map((child, index) =>
@@ -3223,6 +3373,29 @@ function rewriteSequenceEntryValueTag(
 		}
 		const middle = parts.slice(1, parts.length - 1).map((part) => sliceElement(entryDer, part));
 		return sequence([sliceElement(entryDer, oidElement), ...middle, tlv(tag, valueElement.value)]);
+	});
+	return sequence(entries);
+}
+
+function rewriteSequenceEntryValuePayload(
+	source: Uint8Array,
+	sequenceElement: ReturnType<typeof readSequenceChildren>[number],
+	oid: string,
+	extensionValueDer: Uint8Array,
+): Uint8Array {
+	const entries = childrenOf(source, sequenceElement).map((entry) => {
+		const entryDer = sliceElement(source, entry);
+		const parts = readSequenceChildren(entryDer);
+		const oidElement = parts[0];
+		if (oidElement === undefined || decodeObjectIdentifier(oidElement.value) !== oid) {
+			return entryDer;
+		}
+		const criticalElement = parts.length === 3 ? parts[1] : undefined;
+		return sequence([
+			sliceElement(entryDer, oidElement),
+			...(criticalElement === undefined ? [] : [sliceElement(entryDer, criticalElement)]),
+			octetString(extensionValueDer),
+		]);
 	});
 	return sequence(entries);
 }

@@ -19,6 +19,7 @@ import { encodeName } from 'micro509/x509';
 import {
 	bitString,
 	concatBytes,
+	explicitContext,
 	integerFromNumber,
 	nullValue,
 	objectIdentifier,
@@ -261,6 +262,81 @@ describe('parse', () => {
 				),
 			),
 		).toThrow('basicConstraints must use SEQUENCE');
+	});
+
+	it('rejects repeated distribution point fields during parse', async () => {
+		const certificate = await createSelfSignedCertificate({
+			subject: { commonName: 'bad-dp-repeat.example' },
+			extensions: {
+				customExtensions: [
+					{
+						oid: OIDS.cRLDistributionPoints,
+						value: sequence([
+							sequence([
+								explicitContext(
+									0,
+									explicitContext(0, tlv(0x86, new TextEncoder().encode('http://one.example/crl'))),
+								),
+								explicitContext(
+									0,
+									explicitContext(0, tlv(0x86, new TextEncoder().encode('http://two.example/crl'))),
+								),
+							]),
+						]),
+					},
+				],
+			},
+		});
+		expect(() => parseCertificatePem(certificate.certificate.pem)).toThrow(
+			'DistributionPoint distributionPoint must not repeat',
+		);
+	});
+
+	it('rejects distributionPointName wrappers with multiple choices during parse', async () => {
+		const certificate = await createSelfSignedCertificate({
+			subject: { commonName: 'bad-dp-choice.example' },
+			extensions: {
+				customExtensions: [
+					{
+						oid: OIDS.cRLDistributionPoints,
+						value: sequence([
+							sequence([
+								explicitContext(
+									0,
+									concatBytes([
+										explicitContext(
+											0,
+											tlv(0x86, new TextEncoder().encode('http://one.example/crl')),
+										),
+										explicitContext(1, setOf([])),
+									]),
+								),
+							]),
+						]),
+					},
+				],
+			},
+		});
+		expect(() => parseCertificatePem(certificate.certificate.pem)).toThrow(
+			'distributionPointName must contain exactly one choice',
+		);
+	});
+
+	it('rejects CRL distribution points that contain only reasons', async () => {
+		const certificate = await createSelfSignedCertificate({
+			subject: { commonName: 'bad-dp-reasons.example' },
+			extensions: {
+				customExtensions: [
+					{
+						oid: OIDS.cRLDistributionPoints,
+						value: sequence([sequence([tlv(0x81, Uint8Array.of(0x00))])]),
+					},
+				],
+			},
+		});
+		expect(() => parseCertificatePem(certificate.certificate.pem)).toThrow(
+			'DistributionPoint must include distributionPoint or crlIssuer',
+		);
 	});
 
 	it('rejects non-INTEGER certificate version and serialNumber tags', async () => {

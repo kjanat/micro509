@@ -1347,12 +1347,26 @@ function parseDistributionPoint(source: Uint8Array, element: DerElement): Parsed
 	let crlIssuer: readonly GeneralName[] | undefined;
 	for (const child of childrenOf(source, element)) {
 		if (child.tag === 0xa0) {
+			if (distributionPoint !== undefined) {
+				throw new Error('DistributionPoint distributionPoint must not repeat');
+			}
 			distributionPoint = parseDistributionPointName(source, child);
 		} else if (child.tag === 0x81) {
+			if (reasons !== undefined) {
+				throw new Error('DistributionPoint reasons must not repeat');
+			}
 			reasons = parseDistributionPointReasonFlagsContent(child.value);
 		} else if (child.tag === 0xa2) {
+			if (crlIssuer !== undefined) {
+				throw new Error('DistributionPoint crlIssuer must not repeat');
+			}
 			crlIssuer = parseGeneralNames(source, child);
+		} else {
+			throw new Error(`Unsupported DistributionPoint field tag: ${String(child.tag)}`);
 		}
+	}
+	if (distributionPoint === undefined && crlIssuer === undefined) {
+		throw new Error('DistributionPoint must include distributionPoint or crlIssuer');
 	}
 	return {
 		...(distributionPoint === undefined ? {} : { distributionPoint }),
@@ -1366,10 +1380,11 @@ function parseDistributionPointName(
 	source: Uint8Array,
 	element: DerElement,
 ): ParsedDistributionPointName {
-	const distributionPointName = requireElement(
-		childrenOf(source, element)[0],
-		'distributionPointName',
-	);
+	const children = childrenOf(source, element);
+	if (children.length !== 1) {
+		throw new Error('distributionPointName must contain exactly one choice');
+	}
+	const distributionPointName = requireElement(children[0], 'distributionPointName');
 	if (distributionPointName.tag === 0xa0) {
 		return {
 			fullName: childrenOf(source, distributionPointName).map((name) =>

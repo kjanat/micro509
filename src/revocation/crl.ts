@@ -1476,21 +1476,49 @@ function parseIssuingDistributionPoint(valueDer: Uint8Array): ParsedIssuingDistr
 	let onlyContainsAttributeCerts: boolean | undefined;
 	for (const child of childrenOf(valueDer, sequenceElement)) {
 		if (child.tag === 0xa0) {
+			if (distributionPoint !== undefined) {
+				throw new Error('IssuingDistributionPoint distributionPoint must not repeat');
+			}
 			const parsedDistributionPoint = parseDistributionPointName(valueDer, child);
 			if (parsedDistributionPoint !== undefined) {
 				distributionPoint = parsedDistributionPoint;
 			}
 		} else if (child.tag === 0x81) {
+			if (onlyContainsUserCerts !== undefined) {
+				throw new Error('IssuingDistributionPoint onlyContainsUserCerts must not repeat');
+			}
 			onlyContainsUserCerts = parseImplicitBoolean(child);
 		} else if (child.tag === 0x82) {
+			if (onlyContainsCACerts !== undefined) {
+				throw new Error('IssuingDistributionPoint onlyContainsCACerts must not repeat');
+			}
 			onlyContainsCACerts = parseImplicitBoolean(child);
 		} else if (child.tag === 0x83) {
+			if (onlySomeReasons !== undefined) {
+				throw new Error('IssuingDistributionPoint onlySomeReasons must not repeat');
+			}
 			onlySomeReasons = parseDistributionPointReasonFlagsContent(child.value);
 		} else if (child.tag === 0x84) {
+			if (indirectCrl !== undefined) {
+				throw new Error('IssuingDistributionPoint indirectCrl must not repeat');
+			}
 			indirectCrl = parseImplicitBoolean(child);
 		} else if (child.tag === 0x85) {
+			if (onlyContainsAttributeCerts !== undefined) {
+				throw new Error('IssuingDistributionPoint onlyContainsAttributeCerts must not repeat');
+			}
 			onlyContainsAttributeCerts = parseImplicitBoolean(child);
+		} else {
+			throw new Error(`Unsupported IssuingDistributionPoint field tag: ${String(child.tag)}`);
 		}
+	}
+	const scopeFlags = [
+		onlyContainsUserCerts,
+		onlyContainsCACerts,
+		onlyContainsAttributeCerts,
+	].filter((value) => value === true).length;
+	if (scopeFlags > 1) {
+		throw new Error('IssuingDistributionPoint scope booleans are mutually exclusive');
 	}
 	return {
 		...(distributionPoint === undefined ? {} : { distributionPoint }),
@@ -1515,10 +1543,11 @@ function parseDistributionPointName(
 	valueDer: Uint8Array,
 	element: DerElement,
 ): ParsedDistributionPointName | undefined {
-	const distributionPointName = requireElement(
-		childrenOf(valueDer, element)[0],
-		'distributionPointName',
-	);
+	const children = childrenOf(valueDer, element);
+	if (children.length !== 1) {
+		throw new Error('distributionPointName must contain exactly one choice');
+	}
+	const distributionPointName = requireElement(children[0], 'distributionPointName');
 	if (distributionPointName.tag === 0xa0) {
 		return {
 			fullName: childrenOf(valueDer, distributionPointName).map((name) => parseGeneralName(name)),
@@ -1528,7 +1557,7 @@ function parseDistributionPointName(
 		const relativeName = parseRelativeName(valueDer, distributionPointName);
 		return { relativeName };
 	}
-	return undefined;
+	throw new Error(`Unsupported distributionPointName tag: ${String(distributionPointName.tag)}`);
 }
 
 /** Decodes a single DistributionPoint SEQUENCE. */
@@ -1541,15 +1570,29 @@ function parseDistributionPoint(
 	let crlIssuer: readonly GeneralName[] | undefined;
 	for (const child of childrenOf(valueDer, element)) {
 		if (child.tag === 0xa0) {
+			if (distributionPoint !== undefined) {
+				throw new Error('DistributionPoint distributionPoint must not repeat');
+			}
 			const parsedDistributionPoint = parseDistributionPointName(valueDer, child);
 			if (parsedDistributionPoint !== undefined) {
 				distributionPoint = parsedDistributionPoint;
 			}
 		} else if (child.tag === 0x81) {
+			if (reasons !== undefined) {
+				throw new Error('DistributionPoint reasons must not repeat');
+			}
 			reasons = parseDistributionPointReasonFlagsContent(child.value);
 		} else if (child.tag === 0xa2) {
+			if (crlIssuer !== undefined) {
+				throw new Error('DistributionPoint crlIssuer must not repeat');
+			}
 			crlIssuer = childrenOf(valueDer, child).map((name) => parseGeneralName(name));
+		} else {
+			throw new Error(`Unsupported DistributionPoint field tag: ${String(child.tag)}`);
 		}
+	}
+	if (distributionPoint === undefined && crlIssuer === undefined) {
+		throw new Error('DistributionPoint must include distributionPoint or crlIssuer');
 	}
 	return {
 		...(distributionPoint === undefined ? {} : { distributionPoint }),
