@@ -20,29 +20,21 @@ const textDecoder = new TextDecoder();
  * continuation octets.
  */
 export function decodeObjectIdentifier(bytes: Uint8Array): string {
-	const first = bytes[0];
-	if (first === undefined) {
+	if (bytes.length === 0) {
 		throw new Error('OID is empty');
 	}
-	const values = [Math.floor(first / 40), first % 40];
-	let current = 0;
-	let inContinuation = false;
-	for (let index = 1; index < bytes.length; index += 1) {
-		const next = bytes[index];
-		if (next === undefined) {
-			throw new Error('Malformed OID');
-		}
-		current = current * 128 + (next & 0x7f);
-		if ((next & 0x80) === 0) {
-			values.push(current);
-			current = 0;
-			inContinuation = false;
-		} else {
-			inContinuation = true;
-		}
-	}
-	if (inContinuation) {
-		throw new Error('Malformed OID: incomplete continuation');
+	const firstSubidentifier = decodeOidSubidentifier(bytes, 0);
+	let offset = firstSubidentifier.nextOffset;
+	const values =
+		firstSubidentifier.value < 40
+			? [0, firstSubidentifier.value]
+			: firstSubidentifier.value < 80
+				? [1, firstSubidentifier.value - 40]
+				: [2, firstSubidentifier.value - 80];
+	while (offset < bytes.length) {
+		const subidentifier = decodeOidSubidentifier(bytes, offset);
+		values.push(subidentifier.value);
+		offset = subidentifier.nextOffset;
 	}
 	return values.join('.');
 }
@@ -109,6 +101,13 @@ export function extractBitStringValue(element: DerElement): Uint8Array {
 	if (element.tag !== 0x03) {
 		throw new Error('Expected BIT STRING');
 	}
+	const unusedBits = element.value[0];
+	if (unusedBits === undefined || unusedBits > 7) {
+		throw new Error('Invalid BIT STRING');
+	}
+	if (unusedBits !== 0) {
+		throw new Error('BIT STRING must have zero unused bits');
+	}
 	return element.value.slice(1);
 }
 
@@ -122,20 +121,46 @@ export function extractBitStringValue(element: DerElement): Uint8Array {
 export function parseTime(element: DerElement): Date {
 	const value = textDecoder.decode(element.value);
 	if (element.tag === 0x17) {
-		const yearPrefix = Number.parseInt(value.slice(0, 2), 10) >= 50 ? '19' : '20';
-		return new Date(
-			`${yearPrefix}${value.slice(0, 2)}-${value.slice(2, 4)}-${value.slice(4, 6)}T${value.slice(6, 8)}:${value.slice(
-				8,
-				10,
-			)}:${value.slice(10, 12)}Z`,
+		const match = /^(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})Z$/.exec(value);
+		if (match === null) {
+			throw new Error('Invalid UTCTime');
+		}
+		const yearText = requireElement(match[1], 'UTCTime year');
+		const monthText = requireElement(match[2], 'UTCTime month');
+		const dayText = requireElement(match[3], 'UTCTime day');
+		const hourText = requireElement(match[4], 'UTCTime hour');
+		const minuteText = requireElement(match[5], 'UTCTime minute');
+		const secondText = requireElement(match[6], 'UTCTime second');
+		const year = Number.parseInt(yearText, 10);
+		return buildStrictUtcDate(
+			year >= 50 ? 1900 + year : 2000 + year,
+			monthText,
+			dayText,
+			hourText,
+			minuteText,
+			secondText,
+			'UTCTime',
 		);
 	}
 	if (element.tag === 0x18) {
-		return new Date(
-			`${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}T${value.slice(8, 10)}:${value.slice(10, 12)}:${value.slice(
-				12,
-				14,
-			)}Z`,
+		const match = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})Z$/.exec(value);
+		if (match === null) {
+			throw new Error('Invalid GeneralizedTime');
+		}
+		const yearText = requireElement(match[1], 'GeneralizedTime year');
+		const monthText = requireElement(match[2], 'GeneralizedTime month');
+		const dayText = requireElement(match[3], 'GeneralizedTime day');
+		const hourText = requireElement(match[4], 'GeneralizedTime hour');
+		const minuteText = requireElement(match[5], 'GeneralizedTime minute');
+		const secondText = requireElement(match[6], 'GeneralizedTime second');
+		return buildStrictUtcDate(
+			Number.parseInt(yearText, 10),
+			monthText,
+			dayText,
+			hourText,
+			minuteText,
+			secondText,
+			'GeneralizedTime',
 		);
 	}
 	throw new Error(`Unsupported time tag: ${element.tag}`);
@@ -147,6 +172,16 @@ export function parseTime(element: DerElement): Date {
  * boundary for lossless arithmetic.
  */
 export function decodeIntegerNumber(bytes: Uint8Array): number {
+	const first = bytes[0];
+	if (first === undefined) {
+		throw new Error('INTEGER is empty');
+	}
+	if ((first & 0x80) !== 0) {
+		throw new Error('INTEGER must be non-negative');
+	}
+	if (bytes.length > 1 && first === 0 && ((bytes[1] ?? 0) & 0x80) === 0) {
+		throw new Error('INTEGER must use minimal encoding');
+	}
 	if (bytes.length > 6) {
 		throw new Error(`Integer too large for safe number (${bytes.length} bytes)`);
 	}
@@ -193,7 +228,75 @@ export function hexToBytes(value: string): Uint8Array {
 
 /** Decodes a DER BOOLEAN value: any non-zero first byte is `true`. */
 export function decodeBoolean(bytes: Uint8Array): boolean {
-	return (bytes[0] ?? 0) !== 0;
+	if (bytes.length !== 1) {
+		throw new Error('BOOLEAN must contain exactly one octet');
+	}
+	const value = bytes[0];
+	if (value !== 0x00 && value !== 0xff) {
+		throw new Error('BOOLEAN must use DER encoding');
+	}
+	return value === 0xff;
+}
+
+function buildStrictUtcDate(
+	year: number,
+	monthText: string,
+	dayText: string,
+	hourText: string,
+	minuteText: string,
+	secondText: string,
+	label: 'UTCTime' | 'GeneralizedTime',
+): Date {
+	const month = Number.parseInt(monthText, 10);
+	const day = Number.parseInt(dayText, 10);
+	const hour = Number.parseInt(hourText, 10);
+	const minute = Number.parseInt(minuteText, 10);
+	const second = Number.parseInt(secondText, 10);
+	const date = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+	if (
+		Number.isNaN(date.getTime()) ||
+		date.getUTCFullYear() !== year ||
+		date.getUTCMonth() !== month - 1 ||
+		date.getUTCDate() !== day ||
+		date.getUTCHours() !== hour ||
+		date.getUTCMinutes() !== minute ||
+		date.getUTCSeconds() !== second
+	) {
+		throw new Error(`Invalid ${label}`);
+	}
+	return date;
+}
+
+function decodeOidSubidentifier(
+	bytes: Uint8Array,
+	start: number,
+): {
+	readonly value: number;
+	readonly nextOffset: number;
+} {
+	const first = bytes[start];
+	if (first === undefined) {
+		throw new Error('Malformed OID');
+	}
+	if (first === 0x80) {
+		throw new Error('Malformed OID: non-minimal base-128 encoding');
+	}
+	let value = 0;
+	let offset = start;
+	for (; offset < bytes.length; offset += 1) {
+		const next = bytes[offset];
+		if (next === undefined) {
+			throw new Error('Malformed OID');
+		}
+		value = value * 128 + (next & 0x7f);
+		if ((next & 0x80) === 0) {
+			return {
+				value,
+				nextOffset: offset + 1,
+			};
+		}
+	}
+	throw new Error('Malformed OID: incomplete continuation');
 }
 
 /**

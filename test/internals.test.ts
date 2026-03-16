@@ -9,6 +9,7 @@ import {
 	encodeSubjectAltName,
 } from 'micro509/x509';
 import {
+	decodeBoolean,
 	decodeIntegerNumber,
 	decodeNonNegativeIntegerNumber,
 	decodeObjectIdentifier,
@@ -203,6 +204,19 @@ describe('asn1 decoding', () => {
 		);
 	});
 
+	it('decodeObjectIdentifier decodes multi-octet first subidentifiers correctly', () => {
+		expect(decodeObjectIdentifier(Uint8Array.of(0x81, 0x34))).toBe('2.100');
+	});
+
+	it('decodeObjectIdentifier rejects non-minimal base-128 encodings', () => {
+		expect(() => decodeObjectIdentifier(Uint8Array.of(0x80, 0x50))).toThrow(
+			'non-minimal base-128 encoding',
+		);
+		expect(() => decodeObjectIdentifier(Uint8Array.of(0x2a, 0x80, 0x01))).toThrow(
+			'non-minimal base-128 encoding',
+		);
+	});
+
 	it('requireElement throws on undefined value', () => {
 		expect(() => requireElement(undefined, 'test field')).toThrow('Missing test field');
 	});
@@ -212,14 +226,38 @@ describe('asn1 decoding', () => {
 		expect(() => extractBitStringValue(element)).toThrow('Expected BIT STRING');
 	});
 
+	it('extractBitStringValue rejects malformed BIT STRING payloads', () => {
+		expect(() => extractBitStringValue(readElement(Uint8Array.of(0x03, 0x00)))).toThrow(
+			'Invalid BIT STRING',
+		);
+		expect(() => extractBitStringValue(readElement(Uint8Array.of(0x03, 0x02, 0x01, 0x80)))).toThrow(
+			'zero unused bits',
+		);
+	});
+
 	it('parseTime throws on unsupported tag', () => {
 		// Tag 0x0c = UTF8String, not a time type
 		const element = readElement(Uint8Array.of(0x0c, 0x01, 0x30));
 		expect(() => parseTime(element)).toThrow('Unsupported time tag');
 	});
 
+	it('parseTime rejects malformed UTCTime and GeneralizedTime values', () => {
+		expect(() => parseTime(readElement(asn1StringElement(0x17, '991332235959Z')))).toThrow(
+			'Invalid UTCTime',
+		);
+		expect(() => parseTime(readElement(asn1StringElement(0x18, '20240230010203Z')))).toThrow(
+			'Invalid GeneralizedTime',
+		);
+	});
+
 	it('decodeIntegerNumber throws on integers > 6 bytes', () => {
 		expect(() => decodeIntegerNumber(Uint8Array.of(1, 2, 3, 4, 5, 6, 7))).toThrow('too large');
+	});
+
+	it('decodeIntegerNumber rejects empty, negative, and non-minimal encodings', () => {
+		expect(() => decodeIntegerNumber(new Uint8Array())).toThrow('INTEGER is empty');
+		expect(() => decodeIntegerNumber(Uint8Array.of(0xff))).toThrow('non-negative');
+		expect(() => decodeIntegerNumber(Uint8Array.of(0x00, 0x01))).toThrow('minimal encoding');
 	});
 
 	it('decodeNonNegativeIntegerNumber rejects negative and non-minimal encodings', () => {
@@ -229,6 +267,13 @@ describe('asn1 decoding', () => {
 		expect(() => decodeNonNegativeIntegerNumber(Uint8Array.of(0x00, 0x01), 'test integer')).toThrow(
 			'minimal encoding',
 		);
+	});
+
+	it('decodeBoolean rejects malformed DER encodings', () => {
+		expect(() => decodeBoolean(new Uint8Array())).toThrow('exactly one octet');
+		expect(() => decodeBoolean(Uint8Array.of(0x01))).toThrow('DER encoding');
+		expect(decodeBoolean(Uint8Array.of(0x00))).toBe(false);
+		expect(decodeBoolean(Uint8Array.of(0xff))).toBe(true);
 	});
 });
 
@@ -1052,3 +1097,8 @@ describe('pkcs12-mac.ts edge cases', () => {
 		expect(() => rawEcdsaSignatureToDer(raw, 32)).toThrow('Unexpected ECDSA raw signature length');
 	});
 });
+
+function asn1StringElement(tag: number, value: string): Uint8Array {
+	const bytes = new TextEncoder().encode(value);
+	return new Uint8Array([tag, bytes.length, ...bytes]);
+}
