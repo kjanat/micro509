@@ -31,7 +31,7 @@ Defined in: [keys/keys.ts:64](https://github.com/kjanat/ts-x509/blob/vitepress/s
 
 NIST curve. Defaults to `'P-256'`.
 
----
+***
 
 ### Ed25519KeyAlgorithmInput
 
@@ -49,7 +49,7 @@ Defined in: [keys/keys.ts:70](https://github.com/kjanat/ts-x509/blob/vitepress/s
 
 Discriminant selecting Ed25519 key generation.
 
----
+***
 
 ### ImportEcPublicKeyInput
 
@@ -75,7 +75,7 @@ Defined in: [keys/keys.ts:114](https://github.com/kjanat/ts-x509/blob/vitepress/
 
 NIST curve the key belongs to. Required for EC import.
 
----
+***
 
 ### ImportEd25519PublicKeyInput
 
@@ -93,7 +93,7 @@ Defined in: [keys/keys.ts:120](https://github.com/kjanat/ts-x509/blob/vitepress/
 
 Discriminant selecting Ed25519 import.
 
----
+***
 
 ### ImportRsaPublicKeyInput
 
@@ -127,7 +127,7 @@ Defined in: [keys/keys.ts:106](https://github.com/kjanat/ts-x509/blob/vitepress/
 
 Signature padding scheme. Defaults to `'pkcs1-v1_5'`.
 
----
+***
 
 ### KeyPairMaterial
 
@@ -227,7 +227,7 @@ Export the public key as PEM-encoded SubjectPublicKeyInfo.
 
 `Promise`\<`string`\>
 
----
+***
 
 ### LegacyPemEncryptionOptions
 
@@ -261,7 +261,7 @@ Defined in: [keys/keys.ts:138](https://github.com/kjanat/ts-x509/blob/vitepress/
 
 Passphrase used to derive the encryption key.
 
----
+***
 
 ### Pbes2EncryptionOptions
 
@@ -319,7 +319,7 @@ Defined in: [internal/crypto/pbes2.ts:39](https://github.com/kjanat/ts-x509/blob
 
 PBKDF2 salt. Default: 16 cryptographically random bytes.
 
----
+***
 
 ### RsaKeyAlgorithmInput
 
@@ -371,7 +371,7 @@ Defined in: [keys/keys.ts:45](https://github.com/kjanat/ts-x509/blob/vitepress/s
 
 NIST elliptic curve for ECDSA keys.
 
----
+***
 
 ### EncryptedPkcs8Options
 
@@ -381,7 +381,7 @@ Defined in: [keys/keys.ts:133](https://github.com/kjanat/ts-x509/blob/vitepress/
 
 PBES2 encryption options for [`exportEncryptedPkcs8Der`](#exportencryptedpkcs8der) and [`exportEncryptedPkcs8Pem`](#exportencryptedpkcs8pem).
 
----
+***
 
 ### KeyAlgorithmInput
 
@@ -391,7 +391,7 @@ Defined in: [keys/keys.ts:74](https://github.com/kjanat/ts-x509/blob/vitepress/s
 
 Input for [`generateKeyPair`](#generatekeypair). Selects algorithm family and parameters.
 
----
+***
 
 ### Pbes2EncryptionScheme
 
@@ -401,7 +401,7 @@ Defined in: [internal/crypto/pbes2.ts:27](https://github.com/kjanat/ts-x509/blob
 
 AES-CBC key sizes supported by this PBES2 implementation.
 
----
+***
 
 ### Pbes2Prf
 
@@ -411,7 +411,7 @@ Defined in: [internal/crypto/pbes2.ts:30](https://github.com/kjanat/ts-x509/blob
 
 PBKDF2 pseudo-random function choices. `hmac-sha1` is the RFC default; `hmac-sha256` is preferred.
 
----
+***
 
 ### PrivateKeyImportInput
 
@@ -421,7 +421,7 @@ Defined in: [keys/keys.ts:130](https://github.com/kjanat/ts-x509/blob/vitepress/
 
 Algorithm descriptor for private key import functions. Same shape as [`PublicKeyImportInput`](#publickeyimportinput).
 
----
+***
 
 ### PublicKeyImportInput
 
@@ -431,7 +431,7 @@ Defined in: [keys/keys.ts:124](https://github.com/kjanat/ts-x509/blob/vitepress/
 
 Algorithm descriptor for public key import functions.
 
----
+***
 
 ### RsaHash
 
@@ -441,7 +441,7 @@ Defined in: [keys/keys.ts:39](https://github.com/kjanat/ts-x509/blob/vitepress/s
 
 Hash algorithm paired with an RSA key.
 
----
+***
 
 ### RsaScheme
 
@@ -471,7 +471,7 @@ Export a key as raw base64: SPKI for public keys, PKCS#8 for private keys.
 
 `Promise`\<`string`\>
 
----
+***
 
 ### exportEncryptedPkcs1Pem()
 
@@ -495,7 +495,7 @@ Export an RSA private key as legacy `Proc-Type: 4,ENCRYPTED` PEM (PKCS#1).
 
 `Promise`\<`string`\>
 
----
+***
 
 ### exportEncryptedPkcs8Der()
 
@@ -519,7 +519,7 @@ Export a private key as DER-encoded PBES2-encrypted PKCS#8 EncryptedPrivateKeyIn
 
 `Promise`\<`Uint8Array`\<`ArrayBufferLike`\>\>
 
----
+***
 
 ### exportEncryptedPkcs8Pem()
 
@@ -543,7 +543,7 @@ Export a private key as PEM-encoded PBES2-encrypted PKCS#8 EncryptedPrivateKeyIn
 
 `Promise`\<`string`\>
 
----
+***
 
 ### exportEncryptedSec1Pem()
 
@@ -567,7 +567,7 @@ Export an EC private key as legacy `Proc-Type: 4,ENCRYPTED` PEM (SEC 1).
 
 `Promise`\<`string`\>
 
----
+***
 
 ### exportPkcs1Der()
 
@@ -587,7 +587,7 @@ Export an RSA private key as DER-encoded PKCS#1 RSAPrivateKey. Throws for non-RS
 
 `Promise`\<`Uint8Array`\<`ArrayBufferLike`\>\>
 
----
+***
 
 ### exportPkcs1Pem()
 
@@ -607,7 +607,7 @@ Export an RSA private key as PEM-encoded PKCS#1 RSAPrivateKey. Throws for non-RS
 
 `Promise`\<`string`\>
 
----
+***
 
 ### exportPkcs8Der()
 
@@ -627,7 +627,7 @@ Export a private key as DER-encoded PKCS#8 PrivateKeyInfo.
 
 `Promise`\<`Uint8Array`\<`ArrayBufferLike`\>\>
 
----
+***
 
 ### exportPkcs8Pem()
 
@@ -647,7 +647,7 @@ Export a private key as a PEM-encoded PKCS#8 PrivateKeyInfo.
 
 `Promise`\<`string`\>
 
----
+***
 
 ### exportPrivateJwk()
 
@@ -667,7 +667,7 @@ Export a private key as a JSON Web Key.
 
 `Promise`\<`JsonWebKey`\>
 
----
+***
 
 ### exportPublicJwk()
 
@@ -690,14 +690,11 @@ Export a public key as a JSON Web Key.
 #### Example
 
 ```ts
-const keys = await generateKeyPair({
-  kind: 'ecdsa',
-  namedCurve: 'P-256',
-});
+const keys = await generateKeyPair({ kind: 'ecdsa', namedCurve: 'P-256' });
 const jwk = await exportPublicJwk(keys.publicKey);
 ```
 
----
+***
 
 ### exportSec1Der()
 
@@ -717,7 +714,7 @@ Export an EC private key as DER-encoded SEC 1 ECPrivateKey. Throws for non-EC ke
 
 `Promise`\<`Uint8Array`\<`ArrayBufferLike`\>\>
 
----
+***
 
 ### exportSec1Pem()
 
@@ -737,7 +734,7 @@ Export an EC private key as PEM-encoded SEC 1 ECPrivateKey.
 
 `Promise`\<`string`\>
 
----
+***
 
 ### exportSpkiDer()
 
@@ -757,7 +754,7 @@ Export a public key as DER-encoded SubjectPublicKeyInfo.
 
 `Promise`\<`Uint8Array`\<`ArrayBufferLike`\>\>
 
----
+***
 
 ### exportSpkiPem()
 
@@ -784,7 +781,7 @@ const keys = await generateKeyPair();
 const pem = await exportSpkiPem(keys.publicKey);
 ```
 
----
+***
 
 ### generateKeyPair()
 
@@ -807,14 +804,8 @@ Generate an asymmetric key pair for signing and verification.
 #### Example
 
 ```ts
-const ecKeys = await generateKeyPair({
-  kind: 'ecdsa',
-  namedCurve: 'P-384',
-});
-const rsaKeys = await generateKeyPair({
-  kind: 'rsa',
-  modulusLength: 4096,
-});
+const ecKeys = await generateKeyPair({ kind: 'ecdsa', namedCurve: 'P-384' });
+const rsaKeys = await generateKeyPair({ kind: 'rsa', modulusLength: 4096 });
 const edKeys = await generateKeyPair({ kind: 'ed25519' });
 
 // Default: ECDSA P-256
@@ -822,7 +813,7 @@ const keys = await generateKeyPair();
 const pem = await keys.exportPkcs8Pem();
 ```
 
----
+***
 
 ### importEncryptedPkcs1Pem()
 
@@ -850,7 +841,7 @@ Import an RSA private key from legacy `Proc-Type: 4,ENCRYPTED` PEM (PKCS#1).
 
 `Promise`\<`CryptoKey`\>
 
----
+***
 
 ### importEncryptedPkcs8Der()
 
@@ -878,7 +869,7 @@ Import a private key from DER-encoded PBES2-encrypted PKCS#8 EncryptedPrivateKey
 
 `Promise`\<`CryptoKey`\>
 
----
+***
 
 ### importEncryptedPkcs8Pem()
 
@@ -909,12 +900,10 @@ Import a private key from PEM-encoded PBES2-encrypted PKCS#8 EncryptedPrivateKey
 #### Example
 
 ```ts
-const key = await importEncryptedPkcs8Pem(pem, 'secret', {
-  kind: 'rsa',
-});
+const key = await importEncryptedPkcs8Pem(pem, 'secret', { kind: 'rsa' });
 ```
 
----
+***
 
 ### importEncryptedSec1Pem()
 
@@ -942,7 +931,7 @@ Import an EC private key from legacy `Proc-Type: 4,ENCRYPTED` PEM (SEC 1).
 
 `Promise`\<`CryptoKey`\>
 
----
+***
 
 ### importPkcs1Der()
 
@@ -966,7 +955,7 @@ Import an RSA private key from DER-encoded PKCS#1 RSAPrivateKey.
 
 `Promise`\<`CryptoKey`\>
 
----
+***
 
 ### importPkcs1Pem()
 
@@ -990,7 +979,7 @@ Import an RSA private key from PEM-encoded PKCS#1 RSAPrivateKey (`RSA PRIVATE KE
 
 `Promise`\<`CryptoKey`\>
 
----
+***
 
 ### importPkcs8Base64()
 
@@ -1014,7 +1003,7 @@ Import a private key from base64-encoded PKCS#8 PrivateKeyInfo (no PEM headers).
 
 `Promise`\<`CryptoKey`\>
 
----
+***
 
 ### importPkcs8Der()
 
@@ -1038,7 +1027,7 @@ Import a private key from DER-encoded PKCS#8 PrivateKeyInfo.
 
 `Promise`\<`CryptoKey`\>
 
----
+***
 
 ### importPkcs8Pem()
 
@@ -1065,13 +1054,10 @@ Import a private key from PEM-encoded PKCS#8 PrivateKeyInfo.
 #### Example
 
 ```ts
-const key = await importPkcs8Pem(pemString, {
-  kind: 'ecdsa',
-  namedCurve: 'P-256',
-});
+const key = await importPkcs8Pem(pemString, { kind: 'ecdsa', namedCurve: 'P-256' });
 ```
 
----
+***
 
 ### importPrivateJwk()
 
@@ -1098,20 +1084,11 @@ Import a private signing key from a JSON Web Key.
 #### Example
 
 ```ts
-const jwk = {
-  kty: 'EC',
-  crv: 'P-256',
-  x: '...',
-  y: '...',
-  d: '...',
-};
-const key = await importPrivateJwk(jwk, {
-  kind: 'ecdsa',
-  namedCurve: 'P-256',
-});
+const jwk = { kty: 'EC', crv: 'P-256', x: '...', y: '...', d: '...' };
+const key = await importPrivateJwk(jwk, { kind: 'ecdsa', namedCurve: 'P-256' });
 ```
 
----
+***
 
 ### importPublicJwk()
 
@@ -1135,7 +1112,7 @@ Import a public verification key from a JSON Web Key.
 
 `Promise`\<`CryptoKey`\>
 
----
+***
 
 ### importSec1Der()
 
@@ -1159,7 +1136,7 @@ Import an EC private key from DER-encoded SEC 1 ECPrivateKey.
 
 `Promise`\<`CryptoKey`\>
 
----
+***
 
 ### importSec1Pem()
 
@@ -1183,7 +1160,7 @@ Import an EC private key from PEM-encoded SEC 1 ECPrivateKey (`EC PRIVATE KEY` l
 
 `Promise`\<`CryptoKey`\>
 
----
+***
 
 ### importSpkiBase64()
 
@@ -1207,7 +1184,7 @@ Import a public key from base64-encoded SubjectPublicKeyInfo (no PEM headers).
 
 `Promise`\<`CryptoKey`\>
 
----
+***
 
 ### importSpkiDer()
 
@@ -1231,7 +1208,7 @@ Import a public key from DER-encoded SubjectPublicKeyInfo.
 
 `Promise`\<`CryptoKey`\>
 
----
+***
 
 ### importSpkiPem()
 

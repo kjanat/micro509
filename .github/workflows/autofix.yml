@@ -20,4 +20,6 @@ jobs:
         # autofix-ci will fail if the .github directory is touched
       - run: dprint fmt --allow-no-files --diff --excludes ".github"
 
+      - run: bun --bun site:api
+
       - uses: autofix-ci/action@v1

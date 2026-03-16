@@ -25,42 +25,39 @@ types stay in their owner domains instead of being headlined here.
 
 ```ts
 import {
-  createSelfSignedCertificate,
-  parseCertificatePem,
-  verifyCertificateChain,
+	createSelfSignedCertificate,
+	parseCertificatePem,
+	verifyCertificateChain,
 } from 'micro509';
 
 const { certificate } = await createSelfSignedCertificate({
-  subject: { commonName: 'example.com' },
-  algorithm: { kind: 'ecdsa', namedCurve: 'P-256' },
+	subject: { commonName: 'example.com' },
+	algorithm: { kind: 'ecdsa', namedCurve: 'P-256' },
 });
 
 const parsed = parseCertificatePem(certificate.pem);
 // parsed.subject.values.commonName === 'example.com'
 
 const result = await verifyCertificateChain({
-  leaf: certificate.pem,
-  roots: [certificate.pem],
-  allowSelfSignedLeaf: true,
+	leaf: certificate.pem,
+	roots: [certificate.pem],
+	allowSelfSignedLeaf: true,
 });
 // result.ok === true
 ```
 
 ```ts
 import {
-  generateKeyPair,
-  parseCertificateSigningRequestPem,
-  createCertificateSigningRequest,
+	generateKeyPair,
+	parseCertificateSigningRequestPem,
+	createCertificateSigningRequest,
 } from 'micro509';
 
-const keyPair = await generateKeyPair({
-  kind: 'ecdsa',
-  namedCurve: 'P-256',
-});
+const keyPair = await generateKeyPair({ kind: 'ecdsa', namedCurve: 'P-256' });
 const csr = await createCertificateSigningRequest({
-  subject: { commonName: 'example.com' },
-  publicKey: keyPair.publicKey,
-  signerPrivateKey: keyPair.privateKey,
+	subject: { commonName: 'example.com' },
+	publicKey: keyPair.publicKey,
+	signerPrivateKey: keyPair.privateKey,
 });
 
 const parsed = parseCertificateSigningRequestPem(csr.pem);

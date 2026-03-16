@@ -1378,13 +1378,24 @@ export function parseNameConstraints(bytes: Uint8Array): NameConstraints<ParsedN
 		}),
 		'nameConstraints sequence',
 	);
+	if (sequenceElement.tag !== 0x30) {
+		throw new Error('nameConstraints must use SEQUENCE');
+	}
 	let permittedSubtrees: readonly GeneralSubtree<ParsedNameConstraintForm>[] | undefined;
 	let excludedSubtrees: readonly GeneralSubtree<ParsedNameConstraintForm>[] | undefined;
 	for (const child of childrenOf(bytes, sequenceElement)) {
 		if (child.tag === 0xa0) {
+			if (permittedSubtrees !== undefined) {
+				throw new Error('nameConstraints permittedSubtrees must not repeat');
+			}
 			permittedSubtrees = parseGeneralSubtrees(bytes, child);
 		} else if (child.tag === 0xa1) {
+			if (excludedSubtrees !== undefined) {
+				throw new Error('nameConstraints excludedSubtrees must not repeat');
+			}
 			excludedSubtrees = parseGeneralSubtrees(bytes, child);
+		} else {
+			throw new Error(`Unsupported nameConstraints field tag: ${String(child.tag)}`);
 		}
 	}
 	return {
@@ -1399,28 +1410,47 @@ function parseGeneralSubtrees(
 	container: DerElement,
 ): readonly GeneralSubtree<ParsedNameConstraintForm>[] {
 	const subtrees: GeneralSubtree<ParsedNameConstraintForm>[] = [];
-	for (const subtreeElement of childrenOf(source, container)) {
+	const subtreeElements = childrenOf(source, container);
+	if (subtreeElements.length === 0) {
+		throw new Error('name constraints GeneralSubtrees must not be empty');
+	}
+	for (const subtreeElement of subtreeElements) {
+		if (subtreeElement.tag !== 0x30) {
+			throw new Error('name constraints GeneralSubtree must use SEQUENCE');
+		}
 		const children = childrenOf(source, subtreeElement);
 		const baseElement = children[0];
 		if (baseElement === undefined) {
-			continue;
+			throw new Error('name constraints GeneralSubtree base is required');
 		}
 
 		// RFC 5280 §4.2.1.10: minimum MUST be zero (default), maximum
 		// MUST be absent. Reject non-standard values.
+		let sawMinimum = false;
 		for (let i = 1; i < children.length; i += 1) {
 			const child = children[i];
 			if (child === undefined) {
 				continue;
 			}
 			if (child.tag === 0x80) {
+				if (sawMinimum) {
+					throw new Error('name constraints GeneralSubtree minimum must not repeat');
+				}
+				sawMinimum = true;
 				// minimum [0] INTEGER — must be 0
-				if (child.value.length !== 1 || child.value[0] !== 0) {
+				if (
+					decodeNonNegativeIntegerNumber(child.value, 'name constraints GeneralSubtree minimum') !==
+					0
+				) {
 					throw new Error('name constraints GeneralSubtree minimum must be 0');
 				}
 			} else if (child.tag === 0x81) {
 				// maximum [1] INTEGER — must be absent
 				throw new Error('name constraints GeneralSubtree maximum is not supported');
+			} else {
+				throw new Error(
+					`Unsupported name constraints GeneralSubtree field tag: ${String(child.tag)}`,
+				);
 			}
 		}
 
@@ -1477,7 +1507,7 @@ function parseNameConstraintGeneralName(
 		case 0x88:
 			return { type: 'registeredID', value: decodeObjectIdentifier(element.value) };
 	}
-	return undefined;
+	throw new Error(`Unsupported name constraint GeneralName tag: ${String(element.tag)}`);
 }
 
 /**

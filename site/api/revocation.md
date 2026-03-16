@@ -39,7 +39,7 @@ Defined in: [revocation/crl.ts:150](https://github.com/kjanat/ts-x509/blob/vitep
 
 PEM-encoded CRL (`-----BEGIN X509 CRL-----`).
 
----
+***
 
 ### CheckCertificateRevocationAgainstCrlFailure
 
@@ -97,7 +97,7 @@ Defined in: [revocation/crl.ts:354](https://github.com/kjanat/ts-x509/blob/vitep
 
 Always `false` for failures.
 
----
+***
 
 ### CheckCertificateRevocationAgainstCrlFailureDetails
 
@@ -115,7 +115,7 @@ Defined in: [revocation/crl.ts:344](https://github.com/kjanat/ts-x509/blob/vitep
 
 Why the CRL was non-applicable, when the error code is `non_applicable`.
 
----
+***
 
 ### CheckCertificateRevocationAgainstCrlGoodValue
 
@@ -141,7 +141,7 @@ Defined in: [revocation/crl.ts:360](https://github.com/kjanat/ts-x509/blob/vitep
 
 Certificate is not revoked.
 
----
+***
 
 ### CheckCertificateRevocationAgainstCrlInput
 
@@ -199,7 +199,7 @@ Defined in: [revocation/crl.ts:299](https://github.com/kjanat/ts-x509/blob/vitep
 
 Issuer of `certificate` — also expected signer of the CRL.
 
----
+***
 
 ### CheckCertificateRevocationAgainstCrlRevokedValue
 
@@ -241,7 +241,7 @@ Defined in: [revocation/crl.ts:368](https://github.com/kjanat/ts-x509/blob/vitep
 
 Certificate is revoked.
 
----
+***
 
 ### CheckCertificateRevocationFailureDetails
 
@@ -267,7 +267,7 @@ Defined in: [revocation/revocation.ts:135](https://github.com/kjanat/ts-x509/blo
 
 Per-evidence explanations of why no definitive answer was reached.
 
----
+***
 
 ### CheckCertificateRevocationInput
 
@@ -317,7 +317,7 @@ Defined in: [revocation/revocation.ts:87](https://github.com/kjanat/ts-x509/blob
 
 Issuer of `certificate`.
 
----
+***
 
 ### ConfiguredOcspResponder
 
@@ -343,7 +343,7 @@ Defined in: [revocation/revocation.ts:34](https://github.com/kjanat/ts-x509/blob
 
 OCSP responder URI (typically `http://...`).
 
----
+***
 
 ### CreateCertificateRevocationListInput
 
@@ -433,7 +433,7 @@ Defined in: [revocation/crl.ts:128](https://github.com/kjanat/ts-x509/blob/vitep
 
 Issuance timestamp. Defaults to `new Date()`.
 
----
+***
 
 ### CreateOcspRequestInput
 
@@ -467,7 +467,7 @@ Defined in: [revocation/ocsp.ts:87](https://github.com/kjanat/ts-x509/blob/vitep
 
 One or more certificates to query (batched into a single OCSP request).
 
----
+***
 
 ### CreateOcspRequestItemInput
 
@@ -498,7 +498,7 @@ Defined in: [revocation/ocsp.ts:79](https://github.com/kjanat/ts-x509/blob/vitep
 
 Issuer of `certificate` — needed to compute the CertID hash.
 
----
+***
 
 ### CreateOcspResponseInput
 
@@ -564,7 +564,7 @@ Defined in: [revocation/ocsp.ts:232](https://github.com/kjanat/ts-x509/blob/vite
 
 Private key used to sign the response. Algorithm is inferred from the key.
 
----
+***
 
 ### CreateOcspSingleResponseInput
 
@@ -643,7 +643,7 @@ Defined in: [revocation/ocsp.ts:218](https://github.com/kjanat/ts-x509/blob/vite
 
 Start of the validity window for this status assertion. Defaults to `new Date()`.
 
----
+***
 
 ### OcspRequestMaterial
 
@@ -677,7 +677,7 @@ Defined in: [revocation/ocsp.ts:101](https://github.com/kjanat/ts-x509/blob/vite
 
 PEM-encoded request (`-----BEGIN OCSP REQUEST-----`).
 
----
+***
 
 ### OcspResponderCandidate
 
@@ -711,7 +711,7 @@ Defined in: [revocation/revocation.ts:44](https://github.com/kjanat/ts-x509/blob
 
 OCSP responder URI.
 
----
+***
 
 ### OcspResponseMaterial
 
@@ -745,7 +745,7 @@ Defined in: [revocation/ocsp.ts:254](https://github.com/kjanat/ts-x509/blob/vite
 
 PEM-encoded response (`-----BEGIN OCSP RESPONSE-----`).
 
----
+***
 
 ### ParsedCertificateRevocationList
 
@@ -884,7 +884,7 @@ Defined in: [revocation/crl.ts:177](https://github.com/kjanat/ts-x509/blob/vitep
 
 CRL version (1 = v1, 2 = v2 with extensions).
 
----
+***
 
 ### ParsedOcspCertId
 
@@ -935,7 +935,7 @@ Defined in: [revocation/ocsp.ts:120](https://github.com/kjanat/ts-x509/blob/vite
 
 Hex-encoded serial number of the certificate.
 
----
+***
 
 ### ParsedOcspRequest
 
@@ -961,7 +961,7 @@ Defined in: [revocation/ocsp.ts:128](https://github.com/kjanat/ts-x509/blob/vite
 
 CertIDs of the certificates being queried.
 
----
+***
 
 ### ParsedOcspResponse
 
@@ -1061,7 +1061,7 @@ Defined in: [revocation/ocsp.ts:199](https://github.com/kjanat/ts-x509/blob/vite
 
 Raw signature bytes.
 
----
+***
 
 ### ParsedOcspSingleResponse
 
@@ -1119,7 +1119,7 @@ Defined in: [revocation/ocsp.ts:153](https://github.com/kjanat/ts-x509/blob/vite
 
 Start of the validity window for this status assertion.
 
----
+***
 
 ### ParsedRevokedCertificate
 
@@ -1169,7 +1169,7 @@ Defined in: [revocation/crl.ts:160](https://github.com/kjanat/ts-x509/blob/vitep
 
 Hex-encoded serial number of the revoked certificate.
 
----
+***
 
 ### ResolveOcspResponderCandidatesInput
 
@@ -1195,7 +1195,7 @@ Defined in: [revocation/revocation.ts:54](https://github.com/kjanat/ts-x509/blob
 
 Manually-configured responders — checked before AIA-derived ones.
 
----
+***
 
 ### RevocationCheckGoodValue
 
@@ -1229,7 +1229,7 @@ Defined in: [revocation/revocation.ts:153](https://github.com/kjanat/ts-x509/blo
 
 Certificate is not revoked.
 
----
+***
 
 ### RevocationCheckRevokedValue
 
@@ -1287,7 +1287,7 @@ Defined in: [revocation/revocation.ts:163](https://github.com/kjanat/ts-x509/blo
 
 Certificate is revoked.
 
----
+***
 
 ### RevocationCheckUnknownValue
 
@@ -1329,7 +1329,7 @@ Defined in: [revocation/revocation.ts:141](https://github.com/kjanat/ts-x509/blo
 
 Status is indeterminate.
 
----
+***
 
 ### RevocationCrlEvidenceInput
 
@@ -1363,7 +1363,7 @@ Defined in: [revocation/revocation.ts:60](https://github.com/kjanat/ts-x509/blob
 
 Discriminator for the CRL evidence variant.
 
----
+***
 
 ### RevocationIndeterminateEvidence
 
@@ -1405,7 +1405,7 @@ Defined in: [revocation/revocation.ts:121](https://github.com/kjanat/ts-x509/blo
 
 Whether this evidence was CRL or OCSP.
 
----
+***
 
 ### RevocationOcspEvidenceInput
 
@@ -1447,7 +1447,7 @@ Defined in: [revocation/revocation.ts:72](https://github.com/kjanat/ts-x509/blob
 
 OCSP response to validate.
 
----
+***
 
 ### RevokedCertificateInput
 
@@ -1489,7 +1489,7 @@ Defined in: [revocation/crl.ts:91](https://github.com/kjanat/ts-x509/blob/vitepr
 
 DER-encoded certificate serial number to revoke.
 
----
+***
 
 ### ValidateCertificateRevocationListFailure
 
@@ -1549,7 +1549,7 @@ Defined in: [revocation/crl.ts:272](https://github.com/kjanat/ts-x509/blob/vitep
 
 Always `false` for failures.
 
----
+***
 
 ### ValidateCertificateRevocationListInput
 
@@ -1591,7 +1591,7 @@ Defined in: [revocation/crl.ts:255](https://github.com/kjanat/ts-x509/blob/vitep
 
 Certificate of the CA that should have signed the CRL.
 
----
+***
 
 ### ValidateOcspResponseFailure
 
@@ -1654,7 +1654,7 @@ Defined in: [revocation/ocsp.ts:319](https://github.com/kjanat/ts-x509/blob/vite
 
 Always `false` for failures.
 
----
+***
 
 ### ValidateOcspResponseInput
 
@@ -1720,7 +1720,7 @@ Defined in: [revocation/ocsp.ts:283](https://github.com/kjanat/ts-x509/blob/vite
 
 The OCSP response to validate.
 
----
+***
 
 ### VerifyCertificateRevocationListFailure
 
@@ -1778,7 +1778,7 @@ Defined in: [revocation/crl.ts:232](https://github.com/kjanat/ts-x509/blob/vitep
 
 Always `false` for failures.
 
----
+***
 
 ### VerifyOcspResponseFailure
 
@@ -1846,7 +1846,7 @@ Defined in: [revocation/crl.ts:311](https://github.com/kjanat/ts-x509/blob/vitep
 
 Error codes that [`checkCertificateRevocationAgainstCrl`](#checkcertificaterevocationagainstcrl) may return.
 
----
+***
 
 ### CheckCertificateRevocationAgainstCrlResult
 
@@ -1859,7 +1859,7 @@ Result of [`checkCertificateRevocationAgainstCrl`](#checkcertificaterevocationag
 On success `value.status` is `'good'` or `'revoked'`.
 On failure the CRL could not be validated or was non-applicable.
 
----
+***
 
 ### CheckCertificateRevocationAgainstCrlValue
 
@@ -1869,7 +1869,7 @@ Defined in: [revocation/crl.ts:378](https://github.com/kjanat/ts-x509/blob/vitep
 
 Discriminated union of `good` and `revoked` outcomes.
 
----
+***
 
 ### CheckCertificateRevocationErrorCode
 
@@ -1879,7 +1879,7 @@ Defined in: [revocation/revocation.ts:97](https://github.com/kjanat/ts-x509/blob
 
 Error codes that [`checkCertificateRevocation`](#checkcertificaterevocation) may surface inside an `unknown` result.
 
----
+***
 
 ### CheckCertificateRevocationResult
 
@@ -1890,7 +1890,7 @@ Defined in: [revocation/revocation.ts:186](https://github.com/kjanat/ts-x509/blo
 Result of [`checkCertificateRevocation`](#checkcertificaterevocation). Always succeeds (`ok: true`) —
 the `value.status` discriminator carries the actual outcome.
 
----
+***
 
 ### CheckCertificateRevocationValue
 
@@ -1900,7 +1900,7 @@ Defined in: [revocation/revocation.ts:177](https://github.com/kjanat/ts-x509/blo
 
 Discriminated union of `good`, `revoked`, and `unknown` revocation outcomes.
 
----
+***
 
 ### ConfiguredOcspResponderCertificate
 
@@ -1910,7 +1910,7 @@ Defined in: [revocation/revocation.ts:29](https://github.com/kjanat/ts-x509/blob
 
 PEM or DER bytes of a pre-configured OCSP responder certificate.
 
----
+***
 
 ### CrlApplicabilityFailureReason
 
@@ -1920,7 +1920,7 @@ Defined in: [revocation/crl.ts:319](https://github.com/kjanat/ts-x509/blob/vitep
 
 Structured reason why a CRL was deemed non-applicable to a given certificate.
 
----
+***
 
 ### CrlCertificateSource
 
@@ -1930,7 +1930,7 @@ Defined in: [revocation/crl.ts:227](https://github.com/kjanat/ts-x509/blob/vitep
 
 PEM string, DER bytes, or already-parsed certificate.
 
----
+***
 
 ### CrlSource
 
@@ -1940,7 +1940,7 @@ Defined in: [revocation/crl.ts:225](https://github.com/kjanat/ts-x509/blob/vitep
 
 PEM string, DER bytes, or already-parsed CRL.
 
----
+***
 
 ### OcspCertificateSource
 
@@ -1950,7 +1950,7 @@ Defined in: [revocation/ocsp.ts:67](https://github.com/kjanat/ts-x509/blob/vitep
 
 PEM string, DER bytes, or already-parsed certificate.
 
----
+***
 
 ### OcspCertStatus
 
@@ -1960,7 +1960,7 @@ Defined in: [revocation/ocsp.ts:134](https://github.com/kjanat/ts-x509/blob/vite
 
 RFC 6960 certificate status reported by the responder for a single CertID.
 
----
+***
 
 ### OcspHashAlgorithm
 
@@ -1970,7 +1970,7 @@ Defined in: [revocation/ocsp.ts:65](https://github.com/kjanat/ts-x509/blob/vitep
 
 Hash algorithm used to compute OCSP CertID fields. SHA-1 is the RFC 6960 default.
 
----
+***
 
 ### OcspRequestSource
 
@@ -1980,7 +1980,7 @@ Defined in: [revocation/ocsp.ts:69](https://github.com/kjanat/ts-x509/blob/vitep
 
 PEM string, DER bytes, or already-parsed OCSP request.
 
----
+***
 
 ### OcspResponderSource
 
@@ -1990,7 +1990,7 @@ Defined in: [revocation/revocation.ts:27](https://github.com/kjanat/ts-x509/blob
 
 Where the OCSP responder URI came from.
 
----
+***
 
 ### OcspResponseStatus
 
@@ -2000,7 +2000,7 @@ Defined in: [revocation/ocsp.ts:136](https://github.com/kjanat/ts-x509/blob/vite
 
 RFC 6960 overall response status — anything other than `'successful'` means the response body is absent or unusable.
 
----
+***
 
 ### ParsedOcspResponderId
 
@@ -2041,7 +2041,7 @@ Hex-encoded SHA-1 hash of the responder's SubjectPublicKey content.
 
 Responder identified by public-key hash.
 
----
+***
 
 ### RevocationCertificateSource
 
@@ -2051,7 +2051,7 @@ Defined in: [revocation/revocation.ts:25](https://github.com/kjanat/ts-x509/blob
 
 PEM string, DER bytes, or already-parsed certificate.
 
----
+***
 
 ### RevocationEvidenceInput
 
@@ -2061,7 +2061,7 @@ Defined in: [revocation/revocation.ts:80](https://github.com/kjanat/ts-x509/blob
 
 Discriminated union of CRL and OCSP evidence inputs.
 
----
+***
 
 ### RevocationEvidenceKind
 
@@ -2071,7 +2071,7 @@ Defined in: [revocation/revocation.ts:23](https://github.com/kjanat/ts-x509/blob
 
 Which revocation mechanism produced the evidence.
 
----
+***
 
 ### RevocationIndeterminateReasonCode
 
@@ -2081,7 +2081,7 @@ Defined in: [revocation/revocation.ts:102](https://github.com/kjanat/ts-x509/blo
 
 Why a particular piece of evidence could not produce a definitive `good`/`revoked` answer.
 
----
+***
 
 ### RevocationReason
 
@@ -2093,7 +2093,7 @@ RFC 5280 §5.3.1 CRLReason code values.
 
 `removeFromCRL` is used in delta CRLs to un-hold a certificate.
 
----
+***
 
 ### RevocationStatus
 
@@ -2103,7 +2103,7 @@ Defined in: [revocation/revocation.ts:20](https://github.com/kjanat/ts-x509/blob
 
 Unified revocation outcome across CRL and OCSP evidence.
 
----
+***
 
 ### ValidateCertificateRevocationListResult
 
@@ -2131,7 +2131,7 @@ Validated and parsed CRL.
 
 [`ErrorResult`](result.md#errorresult)\<`"signature_invalid"` \| `"issuer_mismatch"` \| `"stale_crl"` \| `"crl_sign_not_permitted"`, `Record`\<`never`, `never`\>, [`ValidateCertificateRevocationListFailure`](#validatecertificaterevocationlistfailure)\>
 
----
+***
 
 ### ValidateOcspResponseResult
 
@@ -2160,7 +2160,7 @@ Fully validated OCSP response.
 
 [`ErrorResult`](result.md#errorresult)\<`"response_status_invalid"` \| `"signature_invalid"` \| `"responder_id_mismatch"` \| `"nonce_mismatch"` \| `"request_mismatch"` \| `"issuer_mismatch"` \| `"responder_chain_invalid"` \| `"ocsp_signing_missing"` \| `"stale_response"`, `Record`\<`never`, `never`\>, [`ValidateOcspResponseFailure`](#validateocspresponsefailure)\>
 
----
+***
 
 ### VerifyCertificateRevocationListResult
 
@@ -2188,7 +2188,7 @@ Parsed CRL with a verified signature.
 
 [`ErrorResult`](result.md#errorresult)\<`"signature_invalid"`, `Record`\<`never`, `never`\>, [`VerifyCertificateRevocationListFailure`](#verifycertificaterevocationlistfailure)\>
 
----
+***
 
 ### VerifyOcspResponseResult
 
@@ -2253,7 +2253,7 @@ if (result.ok && result.value.status === 'revoked') {
 }
 ```
 
----
+***
 
 ### checkCertificateRevocationAgainstCrl()
 
@@ -2293,7 +2293,7 @@ if (result.ok && result.value.status === 'revoked') {
 }
 ```
 
----
+***
 
 ### createCertificateRevocationList()
 
@@ -2329,16 +2329,13 @@ const crl = await createCertificateRevocationList({
   nextUpdate: new Date('2025-02-01'),
   crlNumber: 42,
   revokedCertificates: [
-    {
-      serialNumber: revokedSerial,
-      reasonCode: 'keyCompromise',
-    },
+    { serialNumber: revokedSerial, reasonCode: 'keyCompromise' },
   ],
 });
 // crl.pem, crl.der, crl.base64
 ```
 
----
+***
 
 ### createOcspRequest()
 
@@ -2365,16 +2362,14 @@ and an optional nonce extension.
 import { createOcspRequest } from 'micro509';
 
 const req = await createOcspRequest({
-  requests: [
-    { certificate: leafPem, issuerCertificate: caPem },
-  ],
+  requests: [{ certificate: leafPem, issuerCertificate: caPem }],
   hashAlgorithm: 'SHA-256',
   nonce: crypto.getRandomValues(new Uint8Array(16)),
 });
 // POST req.der to the OCSP responder URI
 ```
 
----
+***
 
 ### createOcspResponse()
 
@@ -2419,7 +2414,7 @@ const resp = await createOcspResponse({
 // resp.der, resp.pem, resp.base64
 ```
 
----
+***
 
 ### getCertificateOcspResponderUris()
 
@@ -2439,7 +2434,7 @@ Extracts OCSP responder URIs from the certificate's Authority Information Access
 
 readonly `string`[]
 
----
+***
 
 ### isCertificateRevoked()
 
@@ -2464,7 +2459,7 @@ CRL's revoked entries. Does **not** validate the CRL or check applicability.
 
 `boolean`
 
----
+***
 
 ### parseCertificateRevocationListDer()
 
@@ -2487,7 +2482,7 @@ Does not verify the signature — call [`verifyCertificateRevocationList`](#veri
 
 [`ParsedCertificateRevocationList`](#parsedcertificaterevocationlist)
 
----
+***
 
 ### parseCertificateRevocationListPem()
 
@@ -2513,13 +2508,10 @@ Decodes a PEM-encoded X.509 CRL (`-----BEGIN X509 CRL-----`).
 import { parseCertificateRevocationListPem } from 'micro509';
 
 const crl = parseCertificateRevocationListPem(pemString);
-console.log(
-  crl.issuer.values.commonName,
-  crl.revokedCertificates.length,
-);
+console.log(crl.issuer.values.commonName, crl.revokedCertificates.length);
 ```
 
----
+***
 
 ### parseOcspRequestDer()
 
@@ -2539,7 +2531,7 @@ Decodes a DER-encoded OCSP request into a structured [`ParsedOcspRequest`](#pars
 
 [`ParsedOcspRequest`](#parsedocsprequest)
 
----
+***
 
 ### parseOcspRequestPem()
 
@@ -2559,7 +2551,7 @@ Decodes a PEM-encoded OCSP request (`-----BEGIN OCSP REQUEST-----`).
 
 [`ParsedOcspRequest`](#parsedocsprequest)
 
----
+***
 
 ### parseOcspResponseDer()
 
@@ -2579,7 +2571,7 @@ Decodes a DER-encoded OCSP response into a structured [`ParsedOcspResponse`](#pa
 
 [`ParsedOcspResponse`](#parsedocspresponse)
 
----
+***
 
 ### parseOcspResponsePem()
 
@@ -2607,15 +2599,12 @@ import { parseOcspResponsePem } from 'micro509';
 const resp = parseOcspResponsePem(pemString);
 if (resp.responseStatus === 'successful') {
   for (const entry of resp.responses ?? []) {
-    console.log(
-      entry.certId.serialNumberHex,
-      entry.certStatus,
-    );
+    console.log(entry.certId.serialNumberHex, entry.certStatus);
   }
 }
 ```
 
----
+***
 
 ### resolveOcspResponderCandidates()
 
@@ -2636,7 +2625,7 @@ AIA extension. Configured responders take priority; duplicates are deduplicated 
 
 readonly [`OcspResponderCandidate`](#ocsprespondercandidate)[]
 
----
+***
 
 ### validateCertificateRevocationList()
 
@@ -2658,7 +2647,7 @@ freshness check (with optional clock-skew tolerance).
 
 `Promise`\<[`ValidateCertificateRevocationListResult`](#validatecertificaterevocationlistresult)\>
 
----
+***
 
 ### validateOcspResponse()
 
@@ -2697,7 +2686,7 @@ if (result.ok) {
 }
 ```
 
----
+***
 
 ### verifyCertificateRevocationList()
 
@@ -2724,7 +2713,7 @@ Does **not** check issuer name match, key-usage, or freshness — use
 
 `Promise`\<[`VerifyCertificateRevocationListResult`](#verifycertificaterevocationlistresult)\>
 
----
+***
 
 ### verifyOcspResponse()
 

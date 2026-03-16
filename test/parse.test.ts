@@ -962,7 +962,7 @@ describe('parse', () => {
 		);
 	});
 
-	it('preserves x400Address and ediPartyName name constraints and drops unknown tags', () => {
+	it('preserves x400Address and ediPartyName name constraints', () => {
 		const result = parseNameConstraints(
 			sequence([
 				tlv(
@@ -970,7 +970,6 @@ describe('parse', () => {
 					concatBytes([
 						sequence([tlv(0xa3, Uint8Array.of(0x01, 0x02))]),
 						sequence([tlv(0xa5, Uint8Array.of(0x03, 0x04))]),
-						sequence([tlv(0x89, Uint8Array.of(0x05, 0x06))]),
 					]),
 				),
 			]),
@@ -979,6 +978,12 @@ describe('parse', () => {
 			{ base: { type: 'x400Address', value: Uint8Array.of(0x01, 0x02) } },
 			{ base: { type: 'ediPartyName', value: Uint8Array.of(0x03, 0x04) } },
 		]);
+	});
+
+	it('rejects unsupported name constraint GeneralName tags', () => {
+		expect(() =>
+			parseNameConstraints(sequence([tlv(0xa0, sequence([tlv(0x89, Uint8Array.of(0x05, 0x06))]))])),
+		).toThrow('Unsupported name constraint GeneralName tag');
 	});
 
 	it('rejects empty policy noticeNumbers during parsing', async () => {
@@ -1159,6 +1164,45 @@ describe('parse', () => {
 		const subtree = sequence([tlv(0x87, Uint8Array.of(0x01, 0x02, 0x03))]);
 		const nameConstraints = sequence([tlv(0xa0, subtree)]);
 		expect(() => parseNameConstraints(nameConstraints)).toThrow('Invalid IP name constraint');
+	});
+
+	it('parseNameConstraints throws on repeated subtree containers', () => {
+		const nameConstraints = sequence([
+			tlv(0xa0, sequence([tlv(0x82, new TextEncoder().encode('first.example'))])),
+			tlv(0xa0, sequence([tlv(0x82, new TextEncoder().encode('second.example'))])),
+		]);
+		expect(() => parseNameConstraints(nameConstraints)).toThrow(
+			'permittedSubtrees must not repeat',
+		);
+	});
+
+	it('parseNameConstraints throws on empty GeneralSubtrees containers', () => {
+		const nameConstraints = sequence([tlv(0xa0, new Uint8Array())]);
+		expect(() => parseNameConstraints(nameConstraints)).toThrow(
+			'GeneralSubtrees must not be empty',
+		);
+	});
+
+	it('parseNameConstraints throws on empty GeneralSubtree sequences', () => {
+		const nameConstraints = sequence([tlv(0xa0, sequence([]))]);
+		expect(() => parseNameConstraints(nameConstraints)).toThrow('GeneralSubtree base is required');
+	});
+
+	it('parseNameConstraints throws on repeated minimum fields', () => {
+		const subtree = sequence([
+			tlv(0x82, new TextEncoder().encode('example.com')),
+			tlv(0x80, Uint8Array.of(0x00)),
+			tlv(0x80, Uint8Array.of(0x00)),
+		]);
+		const nameConstraints = sequence([tlv(0xa0, subtree)]);
+		expect(() => parseNameConstraints(nameConstraints)).toThrow('minimum must not repeat');
+	});
+
+	it('parseNameConstraints throws on unsupported top-level fields', () => {
+		const nameConstraints = sequence([tlv(0xa2, sequence([]))]);
+		expect(() => parseNameConstraints(nameConstraints)).toThrow(
+			'Unsupported nameConstraints field tag',
+		);
 	});
 
 	it('parseNameConstraints preserves unsupported GeneralName types', () => {
