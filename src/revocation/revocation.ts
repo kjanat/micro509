@@ -195,7 +195,12 @@ type RevocationEvidenceCheck =
 export function getCertificateOcspResponderUris(
 	certificate: RevocationCertificateSource,
 ): readonly string[] {
-	const parsedCertificate = normalizeCertificate(certificate);
+	let parsedCertificate: ParsedCertificate;
+	try {
+		parsedCertificate = normalizeCertificate(certificate);
+	} catch {
+		return [];
+	}
 	const uris: string[] = [];
 	const seen = new Set<string>();
 	for (const accessDescription of parsedCertificate.authorityInfoAccess ?? []) {
@@ -286,13 +291,27 @@ export async function checkCertificateRevocation(
 			},
 		});
 	}
+	let normalizedCertificate: ParsedCertificate;
+	try {
+		normalizedCertificate = normalizeCertificate(input.certificate);
+	} catch {
+		return revocationSuccess({
+			status: 'unknown',
+			code: 'revocation_status_unknown',
+			message: 'Certificate input is malformed',
+			details: {
+				checkedSources,
+				indeterminateEvidence: [],
+			},
+		});
+	}
 	let goodResult: RevocationCheckGoodValue | undefined;
 	const indeterminateEvidence: RevocationIndeterminateEvidence[] = [];
 	for (const entry of evidence) {
 		const result =
 			entry.kind === 'crl'
-				? await checkCertificateRevocationWithCrl(input, entry)
-				: await checkCertificateRevocationWithOcsp(input, entry);
+				? await checkCertificateRevocationWithCrl(input, entry, normalizedCertificate)
+				: await checkCertificateRevocationWithOcsp(input, entry, normalizedCertificate);
 		if (result.status === 'revoked') {
 			return revocationSuccess(result.result);
 		}
@@ -320,9 +339,10 @@ export async function checkCertificateRevocation(
 async function checkCertificateRevocationWithCrl(
 	input: CheckCertificateRevocationInput,
 	evidence: RevocationCrlEvidenceInput,
+	certificate: ParsedCertificate,
 ): Promise<RevocationEvidenceCheck> {
 	const result = await checkCertificateRevocationAgainstCrl({
-		certificate: input.certificate,
+		certificate,
 		issuerCertificate: input.issuerCertificate,
 		crl: evidence.crl,
 		...(evidence.deltaCrl === undefined ? {} : { deltaCrl: evidence.deltaCrl }),
@@ -368,6 +388,7 @@ async function checkCertificateRevocationWithCrl(
 async function checkCertificateRevocationWithOcsp(
 	input: CheckCertificateRevocationInput,
 	evidence: RevocationOcspEvidenceInput,
+	certificate: ParsedCertificate,
 ): Promise<RevocationEvidenceCheck> {
 	const response = await validateOcspResponse({
 		response: evidence.response,
@@ -389,7 +410,6 @@ async function checkCertificateRevocationWithOcsp(
 			},
 		};
 	}
-	const certificate = normalizeCertificate(input.certificate);
 	const matchedResponse = response.value.responses?.find(
 		(entry) =>
 			normalizeHex(entry.certId.serialNumberHex) === normalizeHex(certificate.serialNumberHex),

@@ -618,7 +618,15 @@ export async function verifyOcspResponse(
 	) {
 		return verifyOcspResponseFailureResult('signature_invalid', 'OCSP response is not signed');
 	}
-	const signer = await normalizeCertificate(signerCertificate);
+	let signer: ParsedCertificate;
+	try {
+		signer = await normalizeCertificate(signerCertificate);
+	} catch {
+		return verifyOcspResponseFailureResult(
+			'signature_invalid',
+			'OCSP signer certificate input is malformed',
+		);
+	}
 	const verified = await verifySignedData(
 		parsed.signatureAlgorithmOid,
 		undefined,
@@ -675,7 +683,15 @@ export async function validateOcspResponse(
 			`OCSP response status is ${parsedResponse.responseStatus}`,
 		);
 	}
-	const issuer = await normalizeCertificate(input.issuerCertificate);
+	let issuer: ParsedCertificate;
+	try {
+		issuer = await normalizeCertificate(input.issuerCertificate);
+	} catch {
+		return validateOcspResponseFailureResult(
+			'signature_invalid',
+			'issuer certificate input is malformed',
+		);
+	}
 	const resolvedResponder =
 		input.responderCertificate ??
 		(await findMatchingOcspResponderCertificate(
@@ -684,7 +700,15 @@ export async function validateOcspResponse(
 		)) ??
 		parsedResponse.certificates?.[0] ??
 		input.issuerCertificate;
-	const signer = await normalizeCertificate(resolvedResponder);
+	let signer: ParsedCertificate;
+	try {
+		signer = await normalizeCertificate(resolvedResponder);
+	} catch {
+		return validateOcspResponseFailureResult(
+			'signature_invalid',
+			'OCSP responder certificate input is malformed',
+		);
+	}
 	const signature = await verifyOcspResponse(parsedResponse, signer);
 	if (!signature.ok) {
 		return validateOcspResponseFailureResult(signature.code, signature.message);
@@ -733,11 +757,19 @@ export async function validateOcspResponse(
 		);
 	}
 	for (const response of parsedResponse.responses ?? []) {
-		const expected = await buildParsedOcspCertId(
-			response.certId.hashAlgorithmOid,
-			issuer,
-			response.certId.serialNumberHex,
-		);
+		let expected: ParsedOcspCertId;
+		try {
+			expected = await buildParsedOcspCertId(
+				response.certId.hashAlgorithmOid,
+				issuer,
+				response.certId.serialNumberHex,
+			);
+		} catch {
+			return validateOcspResponseFailureResult(
+				'signature_invalid',
+				'OCSP response CertID hash algorithm is unsupported',
+			);
+		}
 		if (
 			response.certId.issuerNameHashHex !== expected.issuerNameHashHex ||
 			response.certId.issuerKeyHashHex !== expected.issuerKeyHashHex
@@ -768,7 +800,15 @@ export async function validateOcspResponse(
 		}
 	}
 	if (input.request !== undefined) {
-		const request = normalizeOcspRequest(input.request);
+		let request: ParsedOcspRequest;
+		try {
+			request = normalizeOcspRequest(input.request);
+		} catch {
+			return validateOcspResponseFailureResult(
+				'request_mismatch',
+				'OCSP request input is malformed',
+			);
+		}
 		if (request.nonce !== undefined && request.nonce !== parsedResponse.nonce) {
 			return validateOcspResponseFailureResult(
 				'nonce_mismatch',

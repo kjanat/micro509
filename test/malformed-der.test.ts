@@ -230,6 +230,99 @@ function replaceFirstRevokedCertificateEntry(
 	]);
 }
 
+function replaceCrlExtensionValue(
+	crlDer: Uint8Array,
+	oid: string,
+	extensionValueDer: Uint8Array,
+): Uint8Array {
+	const topLevel = readSequenceChildren(crlDer);
+	const tbsCertList = requireValue(topLevel[0], 'TBSCertList');
+	const signatureAlgorithm = requireValue(topLevel[1], 'signatureAlgorithm');
+	const signatureValue = requireValue(topLevel[2], 'signatureValue');
+	const tbsDer = sliceElement(crlDer, tbsCertList);
+	const tbsChildren = readSequenceChildren(tbsDer);
+	const extensionIndex = tbsChildren.findIndex((child) => child.tag === 0xa0);
+	if (extensionIndex === -1) {
+		throw new Error('CRL missing extensions');
+	}
+	const extensionsWrapper = requireValue(tbsChildren[extensionIndex], 'extensions');
+	const extensionsWrapperDer = sliceElement(tbsDer, extensionsWrapper);
+	const extensionSequenceElement = requireValue(
+		readSequenceChildren(extensionsWrapperDer)[0],
+		'extensions sequence',
+	);
+	const extensionSequenceDer = sliceElement(extensionsWrapperDer, extensionSequenceElement);
+	const extensionEntries = readSequenceChildren(extensionSequenceDer);
+	let replaced = false;
+	const rebuiltEntries = extensionEntries.map((entry) => {
+		const entryDer = sliceElement(extensionSequenceDer, entry);
+		const parts = readSequenceChildren(entryDer);
+		const oidElement = requireValue(parts[0], 'extension OID');
+		if (decodeObjectIdentifier(oidElement.value) !== oid) {
+			return entryDer;
+		}
+		replaced = true;
+		const criticalElement = parts.length === 3 ? parts[1] : undefined;
+		return sequence([
+			sliceElement(entryDer, oidElement),
+			...(criticalElement === undefined ? [] : [sliceElement(entryDer, criticalElement)]),
+			octetString(extensionValueDer),
+		]);
+	});
+	if (!replaced) {
+		throw new Error(`CRL missing extension ${oid}`);
+	}
+	const rebuiltExtensions = explicitContext(0, sequence(rebuiltEntries));
+	const rebuiltTbs = replaceSequenceChild(tbsDer, extensionIndex, rebuiltExtensions);
+	return sequence([
+		rebuiltTbs,
+		sliceElement(crlDer, signatureAlgorithm),
+		sliceElement(crlDer, signatureValue),
+	]);
+}
+
+function rewriteOcspSingleResponseCertStatusTag(responseDer: Uint8Array, tag: number): Uint8Array {
+	const topLevel = readSequenceChildren(responseDer);
+	const responseBytes = requireValue(topLevel[1], 'responseBytes');
+	const responseBytesSequence = requireValue(
+		childrenOf(responseDer, responseBytes)[0],
+		'responseBytes sequence',
+	);
+	const responseBytesDer = sliceElement(responseDer, responseBytesSequence);
+	const responseBytesChildren = readSequenceChildren(responseBytesDer);
+	const responseType = requireValue(responseBytesChildren[0], 'responseType');
+	const response = requireValue(responseBytesChildren[1], 'response');
+	const basicResponseDer = response.value;
+	const basicChildren = readSequenceChildren(basicResponseDer);
+	const responseData = requireValue(basicChildren[0], 'responseData');
+	const responseDataDer = sliceElement(basicResponseDer, responseData);
+	const responseDataChildren = readSequenceChildren(responseDataDer);
+	const responses = requireValue(responseDataChildren[2], 'responses');
+	const responsesDer = sliceElement(responseDataDer, responses);
+	const responseElements = readSequenceChildren(responsesDer);
+	const firstResponse = requireValue(responseElements[0], 'SingleResponse');
+	const firstResponseDer = sliceElement(responsesDer, firstResponse);
+	const rebuiltFirstResponse = replaceSequenceChild(
+		firstResponseDer,
+		1,
+		tlv(tag, Uint8Array.of(0x00)),
+	);
+	const rebuiltResponses = sequence([
+		rebuiltFirstResponse,
+		...responseElements.slice(1).map((entry) => sliceElement(responsesDer, entry)),
+	]);
+	const rebuiltResponseData = replaceSequenceChild(responseDataDer, 2, rebuiltResponses);
+	const rebuiltBasicResponse = replaceSequenceChild(basicResponseDer, 0, rebuiltResponseData);
+	const rebuiltResponseBytes = sequence([
+		sliceElement(responseBytesDer, responseType),
+		octetString(rebuiltBasicResponse),
+	]);
+	return sequence([
+		sliceElement(responseDer, requireValue(topLevel[0], 'responseStatus')),
+		explicitContext(0, rebuiltResponseBytes),
+	]);
+}
+
 function nestedSequence(depth: number): Uint8Array {
 	let current = sequence([]);
 	for (let index = 0; index < depth; index += 1) {
@@ -536,6 +629,19 @@ describe('malformed DER corpus', () => {
 					),
 				messagePattern: /inhibitAnyPolicy skipCerts|non-negative|SEQUENCE/i,
 			},
+			{
+				name: 'distribution point with reasons only',
+				parse: () =>
+					parseCertificateDer(
+						replaceCertificateExtensionValue(
+							issuer.certificate.der,
+							OIDS.cRLDistributionPoints,
+							sequence([sequence([tlv(0x81, Uint8Array.of(0x00))])]),
+						),
+					),
+				messagePattern:
+					/DistributionPoint must include distributionPoint or crlIssuer|Expected SEQUENCE/i,
+			},
 		];
 
 		for (const testCase of corpus) {
@@ -596,6 +702,61 @@ describe('malformed DER corpus', () => {
 				name: 'ocsp responseStatus uses INTEGER',
 				parse: () => parseOcspResponseDer(rewriteOcspResponseStatusTag(ocspResponse.der, 0x02)),
 				messagePattern: /responseStatus must use ENUMERATED/i,
+			},
+		];
+
+		for (const testCase of corpus) {
+			expectDeterministicParseFailure(testCase);
+		}
+	});
+
+	it('rejects malformed CRL/OCSP nested structures with deterministic parse errors', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Nested Malformed CA' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Nested Malformed CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			freshestCrlDistributionPoints: [
+				{ distributionPoint: { fullName: [{ type: 'uri', value: 'http://example.test/ok.crl' }] } },
+			],
+		});
+		const ocspResponse = await createOcspResponse({
+			signerPrivateKey: ca.keyPair.privateKey,
+			signerCertificate: ca.certificate.pem,
+			responses: [
+				{
+					certificate: ca.certificate.pem,
+					issuerCertificate: ca.certificate.pem,
+					certStatus: 'good',
+				},
+			],
+		});
+
+		const corpus: readonly CorpusCase[] = [
+			{
+				name: 'freshestCRL distribution point with reasons only',
+				parse: () =>
+					parseCertificateRevocationListDer(
+						replaceCrlExtensionValue(
+							crl.der,
+							OIDS.freshestCRL,
+							sequence([sequence([tlv(0x81, Uint8Array.of(0x00))])]),
+						),
+					),
+				messagePattern:
+					/DistributionPoint must include distributionPoint or crlIssuer|Expected SEQUENCE/i,
+			},
+			{
+				name: 'ocsp SingleResponse unsupported certStatus tag',
+				parse: () =>
+					parseOcspResponseDer(rewriteOcspSingleResponseCertStatusTag(ocspResponse.der, 0x83)),
+				messagePattern: /Unsupported OCSP certStatus tag/i,
 			},
 		];
 

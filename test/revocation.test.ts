@@ -37,6 +37,39 @@ describe('revocation boundary', () => {
 		});
 	});
 
+	it('fails closed for malformed certificate input', async () => {
+		const { intermediate } = await issueChain();
+		const result = await checkCertificateRevocation({
+			certificate: Uint8Array.of(0xff, 0xff),
+			issuerCertificate: intermediate.pem,
+			evidence: [{ kind: 'crl', crl: intermediate.pem }],
+		});
+		expect(result).toMatchObject({
+			ok: true,
+			value: {
+				status: 'unknown',
+				code: 'revocation_status_unknown',
+				message: 'Certificate input is malformed',
+			},
+		});
+	});
+
+	it('still reports missing evidence before parsing malformed certificate input', async () => {
+		const { intermediate } = await issueChain();
+		const result = await checkCertificateRevocation({
+			certificate: Uint8Array.of(0xff, 0xff),
+			issuerCertificate: intermediate.pem,
+			evidence: [],
+		});
+		expect(result).toMatchObject({
+			ok: true,
+			value: {
+				status: 'unknown',
+				code: 'revocation_evidence_missing',
+			},
+		});
+	});
+
 	it('returns revoked when CRL evidence revokes the certificate', async () => {
 		const { leaf, intermediate, intermediateKeys } = await issueChain();
 		const certificate = parseCertificatePem(leaf.pem);
@@ -670,6 +703,10 @@ describe('revocation boundary', () => {
 		]);
 	});
 
+	it('getCertificateOcspResponderUris fails closed for malformed certificate input', () => {
+		expect(getCertificateOcspResponderUris(Uint8Array.of(0xff, 0xff))).toEqual([]);
+	});
+
 	it('resolves configured responders ahead of AIA discovery', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'Configured OCSP CA' },
@@ -732,5 +769,14 @@ describe('revocation boundary', () => {
 				uri: 'http://ocsp-aia.example.test',
 			},
 		]);
+	});
+
+	it('resolveOcspResponderCandidates preserves configured responders for malformed certificate input', () => {
+		expect(
+			resolveOcspResponderCandidates({
+				certificate: Uint8Array.of(0xff, 0xff),
+				configuredResponders: [{ uri: 'http://configured-only.example.test' }],
+			}),
+		).toEqual([{ source: 'configured', uri: 'http://configured-only.example.test' }]);
 	});
 });

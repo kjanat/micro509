@@ -1122,6 +1122,29 @@ describe('ocsp', () => {
 		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
 	});
 
+	it('verifyOcspResponse fails closed for malformed signer certificate input', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Malformed Verify Signer CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const response = await createOcspResponse({
+			signerPrivateKey: issuer.keyPair.privateKey,
+			signerCertificate: issuer.certificate.pem,
+			responses: [
+				{
+					certificate: issuer.certificate.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: 'good',
+				},
+			],
+		});
+		const result = await verifyOcspResponse(response.der, Uint8Array.of(0xff, 0xff));
+		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
+	});
+
 	it('validateOcspResponse rejects malformed signed content on pre-parsed response input', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'Malformed Parsed Validate CA' },
@@ -1154,6 +1177,149 @@ describe('ocsp', () => {
 
 		const result = await validateOcspResponse({
 			response: tampered,
+			issuerCertificate: issuer.certificate.pem,
+		});
+		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
+	});
+
+	it('validateOcspResponse fails closed for malformed issuer certificate input', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Malformed Validate Issuer CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const response = await createOcspResponse({
+			signerPrivateKey: issuer.keyPair.privateKey,
+			signerCertificate: issuer.certificate.pem,
+			responses: [
+				{
+					certificate: issuer.certificate.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: 'good',
+				},
+			],
+		});
+		const result = await validateOcspResponse({
+			response: response.der,
+			issuerCertificate: Uint8Array.of(0xff, 0xff),
+		});
+		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
+	});
+
+	it('validateOcspResponse fails closed for malformed responder certificate input', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Malformed Responder CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const response = await createOcspResponse({
+			signerPrivateKey: issuer.keyPair.privateKey,
+			signerCertificate: issuer.certificate.pem,
+			responses: [
+				{
+					certificate: issuer.certificate.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: 'good',
+				},
+			],
+		});
+		const result = await validateOcspResponse({
+			response: response.der,
+			issuerCertificate: issuer.certificate.pem,
+			responderCertificate: Uint8Array.of(0xff, 0xff),
+		});
+		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
+	});
+
+	it('validateOcspResponse fails closed for malformed request input', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Malformed Request CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const response = await createOcspResponse({
+			signerPrivateKey: issuer.keyPair.privateKey,
+			signerCertificate: issuer.certificate.pem,
+			responses: [
+				{
+					certificate: issuer.certificate.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: 'good',
+				},
+			],
+		});
+		const result = await validateOcspResponse({
+			response: response.der,
+			issuerCertificate: issuer.certificate.pem,
+			request: Uint8Array.of(0xff, 0xff),
+		});
+		expect(result).toMatchObject({ ok: false, code: 'request_mismatch' });
+	});
+
+	it('validateOcspResponse fails closed for unsupported CertID hash algorithms', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Unsupported CertID Hash CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Unsupported CertID Hash CA' },
+			subject: { commonName: 'unsupported-certid-hash.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const issuerParsed = parseCertificatePem(issuer.certificate.pem);
+		const leafParsed = parseCertificatePem(leaf.pem);
+		const issuerNameHash = new Uint8Array(sha1(hexToBytes(issuerParsed.subject.derHex)));
+		const spkiDer = issuerParsed.subjectPublicKeyInfoDer;
+		const spkiTop = childrenOf(spkiDer, readElement(spkiDer));
+		const spkiBitString = spkiTop[1];
+		const publicKeyBytes =
+			spkiBitString !== undefined ? spkiBitString.value.slice(1) : new Uint8Array(0);
+		const issuerKeyHash = new Uint8Array(sha1(publicKeyBytes));
+		const certId = sequence([
+			sequence([objectIdentifier('1.2.840.113549.2.5'), Uint8Array.of(0x05, 0x00)]),
+			octetString(issuerNameHash),
+			octetString(issuerKeyHash),
+			tlv(0x02, hexToBytes(leafParsed.serialNumberHex)),
+		]);
+		const singleResponse = sequence([
+			certId,
+			tlv(0x80, new Uint8Array(0)),
+			generalizedTime(new Date()),
+		]);
+		const responderId = explicitContext(1, hexToBytes(issuerParsed.subject.derHex));
+		const responseData = sequence([
+			responderId,
+			generalizedTime(new Date()),
+			sequence([singleResponse]),
+		]);
+		const signatureAlgorithm = getSignatureAlgorithm(issuer.keyPair.privateKey);
+		const signature = await signBytes(issuer.keyPair.privateKey, signatureAlgorithm, responseData);
+		const basicResponse = sequence([
+			responseData,
+			encodeAlgorithmIdentifier(signatureAlgorithm),
+			bitString(signature),
+		]);
+		const ocspResponseDer = sequence([
+			tlv(0x0a, Uint8Array.of(0x00)),
+			explicitContext(
+				0,
+				sequence([objectIdentifier(OIDS.ocspBasicResponse), octetString(basicResponse)]),
+			),
+		]);
+		const result = await validateOcspResponse({
+			response: ocspResponseDer,
 			issuerCertificate: issuer.certificate.pem,
 		});
 		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });

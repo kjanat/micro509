@@ -2250,6 +2250,26 @@ describe('crl', () => {
 		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
 	});
 
+	it('validateCertificateRevocationList fails closed for malformed issuer certificate input', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Malformed Validate Issuer CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Malformed Validate Issuer CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+		const result = await validateCertificateRevocationList({
+			crl: crl.pem,
+			issuerCertificate: Uint8Array.of(0xff, 0xff),
+		});
+		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
+	});
+
 	it('checkCertificateRevocationAgainstCrl ignores tampered revoked entries on pre-parsed CRL input', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Tampered Parsed CRL CA' },
@@ -2326,6 +2346,27 @@ describe('crl', () => {
 		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
 	});
 
+	it('checkCertificateRevocationAgainstCrl fails closed for malformed certificate input', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Malformed Target Cert CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Malformed Target Cert CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+		const result = await checkCertificateRevocationAgainstCrl({
+			certificate: Uint8Array.of(0xff, 0xff),
+			issuerCertificate: ca.certificate.pem,
+			crl: crl.pem,
+		});
+		expect(result).toMatchObject({ ok: false, code: 'non_applicable' });
+	});
+
 	it('verifyCertificateRevocationList rejects CRL signed by wrong key', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'CRL CA' },
@@ -2350,6 +2391,23 @@ describe('crl', () => {
 		const result = await verifyCertificateRevocationList(crl.pem, otherCa.certificate.pem);
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.code).toBe('signature_invalid');
+	});
+
+	it('verifyCertificateRevocationList fails closed for malformed issuer certificate input', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Malformed Verify Issuer CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Malformed Verify Issuer CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+		const result = await verifyCertificateRevocationList(crl.pem, Uint8Array.of(0xff, 0xff));
+		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
 	});
 
 	it('validateCertificateRevocationList rejects signature with wrong key', async () => {

@@ -531,14 +531,23 @@ export async function verifyCertificateRevocationList(
 	crl: string | Uint8Array,
 	issuerCertificate: string | Uint8Array,
 ): Promise<VerifyCertificateRevocationListResult> {
-	const parsedCrl =
-		typeof crl === 'string'
-			? parseCertificateRevocationListPem(crl)
-			: parseCertificateRevocationListDer(new Uint8Array(crl));
-	const issuer =
-		typeof issuerCertificate === 'string'
-			? parseIssuerCertificatePem(issuerCertificate)
-			: parseIssuerCertificateDer(new Uint8Array(issuerCertificate));
+	let parsedCrl: ParsedCertificateRevocationList;
+	let issuer: ParsedCertificate;
+	try {
+		parsedCrl =
+			typeof crl === 'string'
+				? parseCertificateRevocationListPem(crl)
+				: parseCertificateRevocationListDer(new Uint8Array(crl));
+		issuer =
+			typeof issuerCertificate === 'string'
+				? parseIssuerCertificatePem(issuerCertificate)
+				: parseIssuerCertificateDer(new Uint8Array(issuerCertificate));
+	} catch {
+		return verifyCertificateRevocationListFailureResult(
+			'signature_invalid',
+			'certificate revocation list or issuer certificate input is malformed',
+		);
+	}
 	const verified = await verifySignedData(
 		parsedCrl.signatureAlgorithmOid,
 		undefined,
@@ -573,7 +582,15 @@ export async function validateCertificateRevocationList(
 			'certificate revocation list signed content is malformed',
 		);
 	}
-	const issuer = normalizeCrlCertificate(input.issuerCertificate);
+	let issuer: ParsedCertificate;
+	try {
+		issuer = normalizeCrlCertificate(input.issuerCertificate);
+	} catch {
+		return validateCertificateRevocationListFailureResult(
+			'signature_invalid',
+			'issuer certificate input is malformed',
+		);
+	}
 	if (!compareDistinguishedNames(parsedCrl.issuer, issuer.subject)) {
 		return validateCertificateRevocationListFailureResult(
 			'issuer_mismatch',
@@ -650,7 +667,15 @@ export async function validateCertificateRevocationList(
 export async function checkCertificateRevocationAgainstCrl(
 	input: CheckCertificateRevocationAgainstCrlInput,
 ): Promise<CheckCertificateRevocationAgainstCrlResult> {
-	const certificate = normalizeCrlCertificate(input.certificate);
+	let certificate: ParsedCertificate;
+	try {
+		certificate = normalizeCrlCertificate(input.certificate);
+	} catch {
+		return checkCertificateRevocationAgainstCrlFailureResult(
+			'non_applicable',
+			'certificate input is malformed',
+		);
+	}
 	const validated = await validateCertificateRevocationList({
 		crl: input.crl,
 		issuerCertificate: input.issuerCertificate,
