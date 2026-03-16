@@ -56,7 +56,7 @@ Defined in: [pem/pem.ts:34](https://github.com/kjanat/ts-x509/blob/vitepress/src
 
 Blocks with label `PUBLIC KEY`.
 
-***
+---
 
 ### PemBlock
 
@@ -112,7 +112,7 @@ Accepts either raw PEM text or pre-split [`PemBlock`](#pemblock) entries.
 
 [`CategorizedPemBlocks`](#categorizedpemblocks)
 
-***
+---
 
 ### pemDecode()
 
@@ -141,7 +141,7 @@ PEM-encoded text (may contain `\r`).
 
 `Uint8Array`
 
-***
+---
 
 ### pemEncode()
 
@@ -169,7 +169,7 @@ Raw DER-encoded content.
 
 `string`
 
-***
+---
 
 ### splitPemBlocks()
 

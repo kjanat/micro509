@@ -1344,16 +1344,22 @@ function responderNameKeyFromOid(oid: string): ParsedNameAttribute['key'] {
 /** Extracts the nonce value (as hex) from an OCSP extensions wrapper, if present. */
 function parseOcspNonceFromExtensions(source: Uint8Array, element: DerElement): string | undefined {
 	const extensionsSequence = requireElement(childrenOf(source, element)[0], 'extensions');
+	const seenOids = new Set<string>();
+	let nonce: string | undefined;
 	for (const extension of childrenOf(source, extensionsSequence)) {
 		const parts = childrenOf(source, extension);
 		const oid = decodeObjectIdentifier(requireElement(parts[0], 'extension OID').value);
+		if (seenOids.has(oid)) {
+			throw new Error(`Duplicate OCSP extension OID: ${oid}`);
+		}
+		seenOids.add(oid);
 		if (oid !== OIDS.ocspNonce) {
 			continue;
 		}
 		const extnValue = requireElement(parts[parts.length - 1], 'extnValue');
-		return toHex(readElement(extnValue.value).value);
+		nonce = toHex(readElement(extnValue.value).value);
 	}
-	return undefined;
+	return nonce;
 }
 
 /** Decodes the optional `certs [0]` field from a BasicOCSPResponse. */

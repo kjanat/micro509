@@ -62,7 +62,7 @@ Defined in: [verify/verify.ts:234](https://github.com/kjanat/ts-x509/blob/vitepr
 
 Bare trust anchors to try when no root certificate matches.
 
-***
+---
 
 ### CandidatePath
 
@@ -96,7 +96,7 @@ Defined in: [verify/verify.ts:246](https://github.com/kjanat/ts-x509/blob/vitepr
 
 Trusted root that terminates the path.
 
-***
+---
 
 ### ConstrainedPolicy
 
@@ -122,7 +122,7 @@ Defined in: [verify/policy.ts:37](https://github.com/kjanat/ts-x509/blob/vitepre
 
 Qualifier info (CPS URIs, user notices) attached to this policy, if any.
 
-***
+---
 
 ### DnsServiceIdentityInput
 
@@ -144,7 +144,7 @@ dns/uri/srv entries. Suppressed when any supported SAN type is present.
 ###### Default
 
 ```ts
-false
+false;
 ```
 
 ##### type
@@ -163,7 +163,7 @@ Defined in: [verify/identity.ts:21](https://github.com/kjanat/ts-x509/blob/vitep
 
 The hostname to match (e.g. `"mail.example.com"`). Wildcard labels in the certificate are handled internally.
 
-***
+---
 
 ### EkuCheckFailure
 
@@ -229,7 +229,7 @@ Defined in: [verify/verify.ts:113](https://github.com/kjanat/ts-x509/blob/vitepr
 
 Always `false` for failures.
 
-***
+---
 
 ### InitialNameConstraintsInput
 
@@ -267,7 +267,7 @@ Defined in: [verify/name-constraints.ts:20](https://github.com/kjanat/ts-x509/bl
 
 Subtrees within which all subsequent subject names must fall. Default: unconstrained.
 
-***
+---
 
 ### IpServiceIdentityInput
 
@@ -293,7 +293,7 @@ Defined in: [verify/identity.ts:35](https://github.com/kjanat/ts-x509/blob/vitep
 
 IPv4 or IPv6 address string. Normalized before comparison.
 
-***
+---
 
 ### MatchServiceIdentityFailure
 
@@ -351,7 +351,7 @@ Defined in: [verify/identity.ts:97](https://github.com/kjanat/ts-x509/blob/vitep
 
 Always `false` for failures.
 
-***
+---
 
 ### MatchServiceIdentityFailureDetails
 
@@ -401,7 +401,7 @@ Defined in: [verify/identity.ts:78](https://github.com/kjanat/ts-x509/blob/vitep
 
 CN of the certificate that was being matched, if present.
 
-***
+---
 
 ### MatchServiceIdentityInput
 
@@ -427,7 +427,7 @@ Defined in: [verify/identity.ts:132](https://github.com/kjanat/ts-x509/blob/vite
 
 The reference identifier the client wants to verify.
 
-***
+---
 
 ### MatchServiceIdentitySuccess
 
@@ -453,7 +453,7 @@ Defined in: [verify/identity.ts:105](https://github.com/kjanat/ts-x509/blob/vite
 
 No payload on success — the match itself is the signal.
 
-***
+---
 
 ### PolicyValidationInput
 
@@ -508,7 +508,7 @@ Defined in: [verify/policy.ts:25](https://github.com/kjanat/ts-x509/blob/vitepre
 
 When `true`, the chain must assert at least one acceptable policy. Default: `false`.
 
-***
+---
 
 ### PolicyValidationOutcome
 
@@ -534,7 +534,7 @@ Defined in: [verify/policy.ts:45](https://github.com/kjanat/ts-x509/blob/vitepre
 
 Policies that also satisfy the caller's [`PolicyValidationInput.initialPolicySet`](#initialpolicyset).
 
-***
+---
 
 ### SrvServiceIdentityInput
 
@@ -560,7 +560,7 @@ Defined in: [verify/identity.ts:51](https://github.com/kjanat/ts-x509/blob/vitep
 
 SRV name in `_service.domain` form (e.g. `"_imap.example.com"`).
 
-***
+---
 
 ### TrustAnchor
 
@@ -612,7 +612,7 @@ Defined in: [verify/verify.ts:131](https://github.com/kjanat/ts-x509/blob/vitepr
 
 DER-encoded SubjectPublicKeyInfo used to verify signatures from this anchor.
 
-***
+---
 
 ### UriServiceIdentityInput
 
@@ -638,7 +638,7 @@ Defined in: [verify/identity.ts:43](https://github.com/kjanat/ts-x509/blob/vitep
 
 Full URI whose scheme and reg-name will be compared.
 
-***
+---
 
 ### ValidateCandidatePathInput
 
@@ -773,7 +773,7 @@ When `true`, the chain must assert at least one acceptable policy. Default: `fal
 
 [`PolicyValidationInput`](#policyvalidationinput).[`requireExplicitPolicy`](#requireexplicitpolicy)
 
-***
+---
 
 ### ValidateCandidatePathSuccess
 
@@ -791,7 +791,7 @@ Defined in: [verify/verify.ts:282](https://github.com/kjanat/ts-x509/blob/vitepr
 
 Final RFC 9618-constrained policy outputs for this validated path.
 
-***
+---
 
 ### ValidateForCaInput
 
@@ -954,7 +954,7 @@ Bare trust anchors to try when no root certificate matches.
 
 [`BuildCandidatePathInput`](#buildcandidatepathinput).[`trustAnchors`](#trustanchors)
 
-***
+---
 
 ### ValidateForCodeSigningInput
 
@@ -1117,7 +1117,7 @@ Bare trust anchors to try when no root certificate matches.
 
 [`BuildCandidatePathInput`](#buildcandidatepathinput).[`trustAnchors`](#trustanchors)
 
-***
+---
 
 ### ValidateForTlsClientInput
 
@@ -1280,7 +1280,7 @@ Bare trust anchors to try when no root certificate matches.
 
 [`BuildCandidatePathInput`](#buildcandidatepathinput).[`trustAnchors`](#trustanchors)
 
-***
+---
 
 ### ValidateForTlsServerInput
 
@@ -1451,7 +1451,7 @@ Bare trust anchors.
 
 [`BuildCandidatePathInput`](#buildcandidatepathinput).[`trustAnchors`](#trustanchors)
 
-***
+---
 
 ### VerifiedCertificateChain
 
@@ -1493,7 +1493,7 @@ Defined in: [verify/verify.ts:340](https://github.com/kjanat/ts-x509/blob/vitepr
 
 Trusted root that terminates the path.
 
-***
+---
 
 ### VerifyCertificateChainInput
 
@@ -1660,7 +1660,7 @@ Defined in: [verify/verify.ts:322](https://github.com/kjanat/ts-x509/blob/vitepr
 
 Bare trust anchors to try when no root certificate matches.
 
-***
+---
 
 ### VerifyChainFailure
 
@@ -1730,7 +1730,7 @@ Defined in: [verify/verify.ts:218](https://github.com/kjanat/ts-x509/blob/vitepr
 
 Always `false` for failures.
 
-***
+---
 
 ### VerifyFailureDetails
 
@@ -1796,7 +1796,7 @@ Defined in: [verify/verify.ts:195](https://github.com/kjanat/ts-x509/blob/vitepr
 
 CN of the certificate that triggered the failure.
 
-***
+---
 
 ### VerifyRequestFailure
 
@@ -1864,7 +1864,7 @@ Defined in: [verify/verify.ts:250](https://github.com/kjanat/ts-x509/blob/vitepr
 
 Result of [`buildCandidatePath`](#buildcandidatepath). On success, contains the [`CandidatePath`](#candidatepath).
 
-***
+---
 
 ### CertificateSource
 
@@ -1874,7 +1874,7 @@ Defined in: [verify/verify.ts:77](https://github.com/kjanat/ts-x509/blob/vitepre
 
 PEM string or DER bytes for a certificate. PEM may contain multiple blocks.
 
-***
+---
 
 ### CsrSource
 
@@ -1884,7 +1884,7 @@ Defined in: [verify/verify.ts:79](https://github.com/kjanat/ts-x509/blob/vitepre
 
 PEM string or DER bytes for a certificate signing request.
 
-***
+---
 
 ### EkuCheckPurpose
 
@@ -1894,7 +1894,7 @@ Defined in: [verify/verify.ts:89](https://github.com/kjanat/ts-x509/blob/vitepre
 
 Extended key usage purpose checked by [`checkExtendedKeyUsage`](#checkextendedkeyusage).
 
-***
+---
 
 ### EkuCheckResult
 
@@ -1904,7 +1904,7 @@ Defined in: [verify/verify.ts:98](https://github.com/kjanat/ts-x509/blob/vitepre
 
 Result of [`checkExtendedKeyUsage`](#checkextendedkeyusage). Success carries no value; failure identifies the offending certificate.
 
-***
+---
 
 ### MatchableServiceIdentityInput
 
@@ -1914,7 +1914,7 @@ Defined in: [verify/identity.ts:64](https://github.com/kjanat/ts-x509/blob/vitep
 
 Alias for the full identity union accepted by matching functions.
 
-***
+---
 
 ### MatchServiceIdentityErrorCode
 
@@ -1924,7 +1924,7 @@ Defined in: [verify/identity.ts:69](https://github.com/kjanat/ts-x509/blob/vitep
 
 Discriminant codes for identity-matching failures.
 
-***
+---
 
 ### MatchServiceIdentityEvaluation
 
@@ -1934,7 +1934,7 @@ Defined in: [verify/identity.ts:125](https://github.com/kjanat/ts-x509/blob/vite
 
 Void-valued result type used internally during identity evaluation.
 
-***
+---
 
 ### MatchServiceIdentityFailureResult
 
@@ -1944,7 +1944,7 @@ Defined in: [verify/identity.ts:109](https://github.com/kjanat/ts-x509/blob/vite
 
 Failure branch of [`MatchServiceIdentityResult`](#matchserviceidentityresult) with structured error details.
 
-***
+---
 
 ### MatchServiceIdentityResult
 
@@ -1954,7 +1954,7 @@ Defined in: [verify/identity.ts:116](https://github.com/kjanat/ts-x509/blob/vite
 
 Result of matching a reference identifier against a certificate's presented identifiers.
 
-***
+---
 
 ### ServiceIdentityInput
 
@@ -1964,7 +1964,7 @@ Defined in: [verify/identity.ts:55](https://github.com/kjanat/ts-x509/blob/vitep
 
 Discriminated union of all supported reference identifier types.
 
-***
+---
 
 ### ServiceIdentityType
 
@@ -1974,7 +1974,7 @@ Defined in: [verify/identity.ts:62](https://github.com/kjanat/ts-x509/blob/vitep
 
 The `type` discriminant values of [`ServiceIdentityInput`](#serviceidentityinput).
 
-***
+---
 
 ### ValidateCandidatePathResult
 
@@ -2004,7 +2004,7 @@ Shorthand duplicate of `value.policyValidation` for internal forwarding.
 
 [`IndexedErrorResult`](result.md#indexederrorresult)\<[`VerifyErrorCode`](#verifyerrorcode), [`VerifyFailureDetails`](#verifyfailuredetails), [`VerifyChainFailure`](#verifychainfailure)\>
 
-***
+---
 
 ### VerifyChainResult
 
@@ -2014,7 +2014,7 @@ Defined in: [verify/verify.ts:346](https://github.com/kjanat/ts-x509/blob/vitepr
 
 Result of [`verifyCertificateChain`](#verifycertificatechain). On success, contains the [`VerifiedCertificateChain`](#verifiedcertificatechain).
 
-***
+---
 
 ### VerifyErrorCode
 
@@ -2046,7 +2046,7 @@ Discriminant for every failure a verify operation can produce.
 - `name_constraints_violated` — a subject name violates a permitted/excluded subtree.
 - `unsupported_signature_algorithm_parameters` — the signature algorithm uses unrecognized parameters.
 
-***
+---
 
 ### VerifyPurpose
 
@@ -2056,7 +2056,7 @@ Defined in: [verify/verify.ts:86](https://github.com/kjanat/ts-x509/blob/vitepre
 
 High-level purpose applied during path validation to enforce leaf constraints.
 
-***
+---
 
 ### VerifyRequestResult
 
@@ -2066,7 +2066,7 @@ Defined in: [verify/verify.ts:368](https://github.com/kjanat/ts-x509/blob/vitepr
 
 Result of [`verifyCertificateSigningRequest`](#verifycertificatesigningrequest). On success, contains the parsed CSR.
 
-***
+---
 
 ### VerifyServiceIdentityInput
 
@@ -2116,7 +2116,7 @@ if (result.ok) {
 }
 ```
 
-***
+---
 
 ### checkExtendedKeyUsage()
 
@@ -2153,7 +2153,7 @@ if (!result.ok) {
 }
 ```
 
-***
+---
 
 ### matchCertificateServiceIdentity()
 
@@ -2197,7 +2197,7 @@ const result = matchCertificateServiceIdentity(parsed, {
 });
 ```
 
-***
+---
 
 ### matchServiceIdentity()
 
@@ -2230,7 +2230,7 @@ const result = matchServiceIdentity({
 if (!result.ok) console.error(result.error.message);
 ```
 
-***
+---
 
 ### trustAnchorFromCertificate()
 
@@ -2250,7 +2250,7 @@ Extracts a [`TrustAnchor`](#trustanchor) from a parsed certificate, copying the 
 
 [`TrustAnchor`](#trustanchor)
 
-***
+---
 
 ### validateCandidatePath()
 
@@ -2271,7 +2271,7 @@ optionally leaf purpose. Wrap the result of [`buildCandidatePath`](#buildcandida
 
 `Promise`\<[`ValidateCandidatePathResult`](#validatecandidatepathresult)\>
 
-***
+---
 
 ### validateForCa()
 
@@ -2303,7 +2303,7 @@ const result = await validateForCa({
 });
 ```
 
-***
+---
 
 ### validateForCodeSigning()
 
@@ -2335,7 +2335,7 @@ const result = await validateForCodeSigning({
 });
 ```
 
-***
+---
 
 ### validateForTlsClient()
 
@@ -2367,7 +2367,7 @@ const result = await validateForTlsClient({
 });
 ```
 
-***
+---
 
 ### validateForTlsServer()
 
@@ -2377,7 +2377,8 @@ Defined in: [verify/verify.ts:1064](https://github.com/kjanat/ts-x509/blob/vitep
 
 Validates a certificate chain for TLS server use:
 chain verification + `serverAuth` EKU (leaf + intermediate propagation)
-+ DNS/IP identity matching.
+
+- DNS/IP identity matching.
 
 #### Parameters
 
@@ -2400,11 +2401,14 @@ const result = await validateForTlsServer({
   serviceIdentity: { type: 'dns', value: 'example.com' },
 });
 if (result.ok) {
-  console.log('valid for', result.value.leaf.subject.values.commonName);
+  console.log(
+    'valid for',
+    result.value.leaf.subject.values.commonName,
+  );
 }
 ```
 
-***
+---
 
 ### verifyCertificateChain()
 
@@ -2445,7 +2449,7 @@ if (!result.ok) {
 }
 ```
 
-***
+---
 
 ### verifyCertificateSigningRequest()
 
@@ -2473,8 +2477,12 @@ against its own embedded public key.
 ```ts
 import { verifyCertificateSigningRequest } from 'micro509';
 
-const result = await verifyCertificateSigningRequest(csrPem);
+const result =
+  await verifyCertificateSigningRequest(csrPem);
 if (result.ok) {
-  console.log('subject:', result.value.subject.values.commonName);
+  console.log(
+    'subject:',
+    result.value.subject.values.commonName,
+  );
 }
 ```

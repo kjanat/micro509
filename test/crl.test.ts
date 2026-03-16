@@ -13,7 +13,15 @@ import {
 	validateCertificateRevocationList,
 	verifyCertificateRevocationList,
 } from '#micro509';
-import { addRevokedEntryCertificateIssuers, hexToBytes } from './helpers.ts';
+import { explicitContext, readSequenceChildren, sequence } from '#micro509/internal/asn1/der.ts';
+import { OIDS } from '#micro509/internal/asn1/oids.ts';
+import {
+	addRevokedEntryCertificateIssuers,
+	childrenOf,
+	decodeObjectIdentifier,
+	hexToBytes,
+	sliceElement,
+} from './helpers.ts';
 
 describe('crl', () => {
 	it('creates, parses, and verifies CRLs', async () => {
@@ -2526,4 +2534,191 @@ describe('crl', () => {
 		// AKI was parsed but without keyIdentifier → authorityKeyIdentifier should be undefined
 		expect(parsed.authorityKeyIdentifier).toBeUndefined();
 	});
+
+	it('parseCertificateRevocationListDer rejects duplicate CRL extension OIDs', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Duplicate CRL Extension CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Duplicate CRL Extension CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			crlNumber: 7,
+		});
+
+		expect(() =>
+			parseCertificateRevocationListDer(
+				duplicateCrlExtension(new Uint8Array(pemDecode('X509 CRL', crl.pem)), OIDS.cRLNumber),
+			),
+		).toThrow('Duplicate CRL extension OID');
+	});
+
+	it('parseCertificateRevocationListDer rejects duplicate revoked entry extension OIDs', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Duplicate Revoked Entry Extension CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Duplicate Revoked Entry Extension CA' },
+			subject: { commonName: 'duplicate-revoked-entry.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+		const parsedLeaf = parseCertificatePem(leaf.pem);
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Duplicate Revoked Entry Extension CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			revokedCertificates: [
+				{
+					serialNumber: hexToBytes(parsedLeaf.serialNumberHex),
+					revocationDate: new Date('2024-01-01T00:00:00Z'),
+					reasonCode: 'keyCompromise',
+				},
+			],
+		});
+
+		expect(() =>
+			parseCertificateRevocationListDer(
+				duplicateFirstRevokedEntryExtension(
+					new Uint8Array(pemDecode('X509 CRL', crl.pem)),
+					OIDS.cRLReason,
+				),
+			),
+		).toThrow('Duplicate revoked certificate extension OID');
+	});
 });
+
+function duplicateCrlExtension(crlDer: Uint8Array, oid: string): Uint8Array {
+	const topLevel = readSequenceChildren(crlDer);
+	const tbsCertList = topLevel[0];
+	const signatureAlgorithm = topLevel[1];
+	const signatureValue = topLevel[2];
+	if (
+		tbsCertList === undefined ||
+		signatureAlgorithm === undefined ||
+		signatureValue === undefined
+	) {
+		throw new Error('Malformed CRL');
+	}
+	const tbsDer = sliceElement(crlDer, tbsCertList);
+	const tbsChildren = readSequenceChildren(tbsDer);
+	const extensionIndex = tbsChildren.findIndex((child) => child.tag === 0xa0);
+	if (extensionIndex === -1) {
+		throw new Error('CRL missing extensions');
+	}
+	const extensionWrapper = tbsChildren[extensionIndex];
+	if (extensionWrapper === undefined) {
+		throw new Error('CRL missing extensions');
+	}
+	const extensionSequence = childrenOf(tbsDer, extensionWrapper)[0];
+	if (extensionSequence === undefined) {
+		throw new Error('CRL missing extension sequence');
+	}
+	const rebuiltWrapper = explicitContext(
+		0,
+		duplicateSequenceEntryByOid(tbsDer, extensionSequence, oid),
+	);
+	const rebuiltTbs = sequence(
+		tbsChildren.map((child, index) =>
+			index === extensionIndex ? rebuiltWrapper : sliceElement(tbsDer, child),
+		),
+	);
+	return sequence([
+		rebuiltTbs,
+		sliceElement(crlDer, signatureAlgorithm),
+		sliceElement(crlDer, signatureValue),
+	]);
+}
+
+function duplicateFirstRevokedEntryExtension(crlDer: Uint8Array, oid: string): Uint8Array {
+	const topLevel = readSequenceChildren(crlDer);
+	const tbsCertList = topLevel[0];
+	const signatureAlgorithm = topLevel[1];
+	const signatureValue = topLevel[2];
+	if (
+		tbsCertList === undefined ||
+		signatureAlgorithm === undefined ||
+		signatureValue === undefined
+	) {
+		throw new Error('Malformed CRL');
+	}
+	const tbsDer = sliceElement(crlDer, tbsCertList);
+	const tbsChildren = readSequenceChildren(tbsDer);
+	const revokedEntriesIndex = findRevokedEntriesIndex(tbsChildren);
+	const revokedEntries = tbsChildren[revokedEntriesIndex];
+	if (revokedEntries === undefined) {
+		throw new Error('CRL missing revokedCertificates');
+	}
+	const revokedEntryElements = childrenOf(tbsDer, revokedEntries);
+	const firstEntry = revokedEntryElements[0];
+	if (firstEntry === undefined) {
+		throw new Error('CRL missing revoked entry');
+	}
+	const firstEntryDer = sliceElement(tbsDer, firstEntry);
+	const firstEntryParts = readSequenceChildren(firstEntryDer);
+	const entryExtensions = firstEntryParts[2];
+	if (entryExtensions === undefined) {
+		throw new Error('Revoked entry missing extensions');
+	}
+	const rebuiltFirstEntry = sequence([
+		sliceElement(firstEntryDer, firstEntryParts[0] ?? fail('revoked serialNumber missing')),
+		sliceElement(firstEntryDer, firstEntryParts[1] ?? fail('revocationDate missing')),
+		duplicateSequenceEntryByOid(firstEntryDer, entryExtensions, oid),
+	]);
+	const rebuiltRevokedEntries = sequence([
+		rebuiltFirstEntry,
+		...revokedEntryElements.slice(1).map((entry) => sliceElement(tbsDer, entry)),
+	]);
+	const rebuiltTbs = sequence(
+		tbsChildren.map((child, index) =>
+			index === revokedEntriesIndex ? rebuiltRevokedEntries : sliceElement(tbsDer, child),
+		),
+	);
+	return sequence([
+		rebuiltTbs,
+		sliceElement(crlDer, signatureAlgorithm),
+		sliceElement(crlDer, signatureValue),
+	]);
+}
+
+function duplicateSequenceEntryByOid(
+	source: Uint8Array,
+	sequenceElement: ReturnType<typeof readSequenceChildren>[number],
+	oid: string,
+): Uint8Array {
+	const entries = childrenOf(source, sequenceElement).map((entry) => sliceElement(source, entry));
+	const duplicate = entries.find((entryDer) => {
+		const oidElement = readSequenceChildren(entryDer)[0];
+		return oidElement !== undefined && decodeObjectIdentifier(oidElement.value) === oid;
+	});
+	if (duplicate === undefined) {
+		throw new Error(`Missing extension OID: ${oid}`);
+	}
+	return sequence([...entries, duplicate]);
+}
+
+function findRevokedEntriesIndex(children: ReturnType<typeof readSequenceChildren>): number {
+	let index = children[0]?.tag === 0x02 ? 3 : 2;
+	const maybeNextUpdate = children[index + 1];
+	if (
+		maybeNextUpdate !== undefined &&
+		(maybeNextUpdate.tag === 0x17 || maybeNextUpdate.tag === 0x18)
+	) {
+		index += 1;
+	}
+	return index + 1;
+}
+
+function fail(message: string): never {
+	throw new Error(message);
+}

@@ -1422,11 +1422,16 @@ function parseRevokedCertificateExtensions(
 	let reasonCode: RevocationReason | undefined;
 	let invalidityDate: Date | undefined;
 	let certificateIssuer: readonly GeneralName[] | undefined;
+	const seenOids = new Set<string>();
 	for (const extension of childrenOf(entryDer, element)) {
 		const parts = childrenOf(entryDer, extension);
 		const oid = decodeObjectIdentifier(
 			requireElement(parts[0], 'revoked certificate extension OID').value,
 		);
+		if (seenOids.has(oid)) {
+			throw new Error(`Duplicate revoked certificate extension OID: ${oid}`);
+		}
+		seenOids.add(oid);
 		const valueElement = requireElement(
 			parts[parts.length - 1],
 			'revoked certificate extension value',
@@ -1948,6 +1953,7 @@ function parseSignedCrlFields(tbsCertListDer: Uint8Array): {
 	let freshestCrlDistributionPoints: readonly ParsedDistributionPoint[] | undefined;
 	const maybeExtensions = tbsChildren[cursor];
 	if (maybeExtensions?.tag === 0xa0) {
+		const seenOids = new Set<string>();
 		const extensionSequence = requireElement(
 			childrenOf(tbsCertListDer, maybeExtensions)[0],
 			'crl extensions',
@@ -1955,6 +1961,10 @@ function parseSignedCrlFields(tbsCertListDer: Uint8Array): {
 		for (const extension of childrenOf(tbsCertListDer, extensionSequence)) {
 			const parts = childrenOf(tbsCertListDer, extension);
 			const oid = decodeObjectIdentifier(requireElement(parts[0], 'extension OID').value);
+			if (seenOids.has(oid)) {
+				throw new Error(`Duplicate CRL extension OID: ${oid}`);
+			}
+			seenOids.add(oid);
 			const valueElement = requireElement(parts[parts.length - 1], 'extension value');
 			if (oid === OIDS.authorityKeyIdentifier) {
 				authorityKeyIdentifier = parseAuthorityKeyIdentifier(valueElement.value);
