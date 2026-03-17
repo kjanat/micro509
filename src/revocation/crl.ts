@@ -998,6 +998,7 @@ function checkCrlApplicability(
 			!matchesDistributionPointName(
 				distributionPoint.distributionPoint,
 				issuingDistributionPoint?.distributionPoint,
+				crl.issuer,
 			)
 		) {
 			sawDistributionMismatch = true;
@@ -1208,10 +1209,17 @@ function resolveCertificateRevocationStatus(
 	});
 }
 
-/** Returns `true` if the certificate's distribution-point name matches the CRL's IDP name. */
+/**
+ * Returns `true` if the certificate's distribution-point name matches the CRL's IDP name.
+ *
+ * Per RFC 5280 §4.2.1.13, when the certificate uses `nameRelativeToCRLIssuer` (relativeName),
+ * the full distribution point name is formed by appending that RDN to the CRL issuer's DN.
+ * This resolved name is then compared against the CRL's IDP fullName directoryName entries.
+ */
 function matchesDistributionPointName(
 	certificatePoint: ParsedDistributionPointName | undefined,
 	crlPoint: ParsedDistributionPointName | undefined,
+	crlIssuer: ParsedName,
 ): boolean {
 	if (crlPoint === undefined) {
 		return true;
@@ -1219,19 +1227,50 @@ function matchesDistributionPointName(
 	if (certificatePoint === undefined) {
 		return false;
 	}
-	if (certificatePoint.fullName !== undefined || crlPoint.fullName !== undefined) {
-		if (certificatePoint.fullName === undefined || crlPoint.fullName === undefined) {
-			return false;
-		}
+	// Both have fullName — direct comparison
+	if (certificatePoint.fullName !== undefined && crlPoint.fullName !== undefined) {
 		return certificatePoint.fullName.some(
 			(leftName) =>
 				crlPoint.fullName?.some((rightName) => compareGeneralNames(leftName, rightName)) === true,
 		);
 	}
-	if (certificatePoint.relativeName === undefined || crlPoint.relativeName === undefined) {
-		return false;
+	// Cert has relativeName, CRL has fullName — resolve relativeName to full DN
+	if (certificatePoint.relativeName !== undefined && crlPoint.fullName !== undefined) {
+		const resolvedDnHex = resolveRelativeNameToDnHex(crlIssuer, certificatePoint.relativeName);
+		return crlPoint.fullName.some(
+			(name) => name.type === 'directoryName' && name.derHex === resolvedDnHex,
+		);
 	}
-	return compareRelativeDistinguishedNames(certificatePoint.relativeName, crlPoint.relativeName);
+	// Both have relativeName — direct RDN comparison
+	if (certificatePoint.relativeName !== undefined && crlPoint.relativeName !== undefined) {
+		return compareRelativeDistinguishedNames(certificatePoint.relativeName, crlPoint.relativeName);
+	}
+	// Mismatched: cert has fullName but CRL has relativeName (unusual, treat as no match)
+	return false;
+}
+
+/** Constructs a full DN by appending an RDN to an existing Name, returning hex-encoded DER. */
+function resolveRelativeNameToDnHex(
+	issuer: ParsedName,
+	relativeName: ParsedRelativeDistinguishedName,
+): string {
+	// Collect existing RDN DER bytes from issuer
+	const rdnDerParts = issuer.rdns.map((rdn) => hexToBytes(rdn.derHex));
+	// The relativeName.derHex has implicit tag [1] (0xa1) from the CHOICE encoding.
+	// Extract the content and re-wrap as a proper RDN SET (tag 0x31).
+	const relativeNameDer = hexToBytes(relativeName.derHex);
+	const relativeNameRdnDer = rebuildRelativeNameAsSet(relativeNameDer);
+	rdnDerParts.push(relativeNameRdnDer);
+	// Wrap in a Name SEQUENCE
+	return toHex(sequence(rdnDerParts));
+}
+
+/** Converts an implicit-tagged [1] relativeName to a proper SET-tagged RDN. */
+function rebuildRelativeNameAsSet(implicitTaggedDer: Uint8Array): Uint8Array {
+	// The implicit tag [1] is 0xa1 (context-specific constructed).
+	// Parse the element to get content, then re-wrap with SET tag 0x31.
+	const element = readRootElement(implicitTaggedDer, DEFAULT_MAX_DER_DEPTH);
+	return tlv(0x31, element.value);
 }
 
 /** Deep-compares two issuing distribution point extensions for delta-CRL compatibility. */
@@ -1851,7 +1890,19 @@ function concatGeneralNames(names: readonly GeneralName[]): Uint8Array {
 }
 
 /** Re-wraps an implicitly-tagged directoryName as an explicit SEQUENCE (tag 0x30). */
+/**
+ * Extracts the Name SEQUENCE from an implicitly-tagged directoryName [4].
+ *
+ * Handles two encoding styles found in the wild:
+ * - Proper implicit: [4] replaces SEQUENCE tag, content is RDN SETs directly → wrap with 0x30
+ * - Explicit-like: [4] wraps entire SEQUENCE, content starts with 0x30 → return content as-is
+ */
 function rebuildDirectoryNameFromImplicit(element: DerElement): Uint8Array {
+	// If content already starts with SEQUENCE tag, it's explicit-style encoding
+	if (element.value.length > 0 && element.value[0] === 0x30) {
+		return new Uint8Array(element.value);
+	}
+	// Otherwise, wrap content with SEQUENCE tag (true implicit encoding)
 	return tlv(0x30, element.value);
 }
 

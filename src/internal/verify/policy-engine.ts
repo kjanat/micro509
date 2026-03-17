@@ -314,15 +314,16 @@ function collectAuthorityConstrainedPolicyRoots(
 				continue;
 			}
 			if (parent.depth === 0 && parent.validPolicy === OIDS.anyPolicy) {
-				if (node.validPolicy !== OIDS.anyPolicy) {
-					authorityPolicies.set(
+				// Record the depth-1 policy that connects to root
+				// If the depth-1 node is anyPolicy itself, record anyPolicy so it can satisfy
+				// any policy in the initial-policy-set via deriveUserConstrainedPolicies
+				authorityPolicies.set(
+					node.validPolicy,
+					buildConstrainedPolicy(
 						node.validPolicy,
-						buildConstrainedPolicy(
-							node.validPolicy,
-							currentKey === nodeKey ? node.qualifierSet : undefined,
-						),
-					);
-				}
+						currentKey === nodeKey ? node.qualifierSet : undefined,
+					),
+				);
 				continue;
 			}
 			pending.push(parentKey);
@@ -340,6 +341,8 @@ function deriveUserConstrainedPolicies(
 		return [...finalAuthorityConstrainedPolicies.values()].sort(comparePolicies);
 	}
 	const anyPolicy = rootDomainPolicies.get(OIDS.anyPolicy);
+	// If the EE asserts anyPolicy, it satisfies any policy in initial-policy-set
+	const eeHasAnyPolicy = finalAuthorityConstrainedPolicies.has(OIDS.anyPolicy);
 	const constrained = new Map<string, ConstrainedPolicy>();
 	for (const policyIdentifier of initialPolicySet) {
 		const direct = rootDomainPolicies.get(policyIdentifier);
@@ -347,7 +350,13 @@ function deriveUserConstrainedPolicies(
 			constrained.set(policyIdentifier, direct);
 			continue;
 		}
-		if (anyPolicy !== undefined) {
+		// anyPolicy can satisfy a requested policy if:
+		// 1. The EE asserts the specific policy (finalAuthorityConstrainedPolicies.has), OR
+		// 2. The EE itself asserts anyPolicy (eeHasAnyPolicy)
+		if (
+			anyPolicy !== undefined &&
+			(finalAuthorityConstrainedPolicies.has(policyIdentifier) || eeHasAnyPolicy)
+		) {
 			constrained.set(
 				policyIdentifier,
 				buildConstrainedPolicy(policyIdentifier, anyPolicy.policyQualifiers),
