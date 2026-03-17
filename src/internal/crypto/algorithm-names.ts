@@ -40,7 +40,7 @@ export function describeSignatureAlgorithm(
 			return 'RSA PKCS#1 v1.5 with SHA-512';
 		case OIDS.rsassaPss: {
 			const parsed = parseRsaPssParameters(parametersDer);
-			return parsed.ok ? `RSA-PSS with ${parsed.value.hash}` : 'RSA-PSS';
+			return parsed.ok ? `RSA-PSS with ${describeHashAlgorithm(parsed.value.hash)}` : 'RSA-PSS';
 		}
 		case OIDS.ecdsaWithSHA256:
 			return 'ECDSA with SHA-256';
