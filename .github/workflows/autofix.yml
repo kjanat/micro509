@@ -14,6 +14,7 @@ jobs:
       - uses: kjanat/install-dprint@v1
       - uses: kjanat/install-shfmt@v1
       - run: bun install --global --trust sort-package-json@latest tombi@latest
+      - run: bun install
 
       - run: dprint config update
         if: github.ref == 'refs/heads/master' && github.event_name == 'push'
