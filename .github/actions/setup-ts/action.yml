@@ -14,7 +14,7 @@ outputs:
   deno-version: { description: The installed Deno version, value: "${{ steps.setup-deno.outputs.deno-version }}" }
   bun-version: { description: The installed Bun version (if install-bun is true), value: "${{ steps.setup-bun.outputs.bun-version }}" }
   node-version: { description: The installed Node.js version (if install-node is true), value: "${{ steps.setup-node.outputs.node-version }}" }
-  npm-version: { description: The installed npm version (if install-node is true), value: "${{ steps.update-npm.outputs.npm-version }}" }
+  npm-version: { description: The installed npm version (if update-npm is true), value: "${{ steps.update-npm.outputs.npm-version }}" }
 
 runs:
   using: composite
