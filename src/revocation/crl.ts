@@ -1245,7 +1245,13 @@ function matchesDistributionPointName(
 	if (certificatePoint.relativeName !== undefined && crlPoint.relativeName !== undefined) {
 		return compareRelativeDistinguishedNames(certificatePoint.relativeName, crlPoint.relativeName);
 	}
-	// Mismatched: cert has fullName but CRL has relativeName (unusual, treat as no match)
+	// Cert has fullName, CRL has relativeName — resolve CRL relativeName to full DN
+	if (certificatePoint.fullName !== undefined && crlPoint.relativeName !== undefined) {
+		const resolvedDnHex = resolveRelativeNameToDnHex(crlIssuer, crlPoint.relativeName);
+		return certificatePoint.fullName.some(
+			(name) => name.type === 'directoryName' && name.derHex === resolvedDnHex,
+		);
+	}
 	return false;
 }
 

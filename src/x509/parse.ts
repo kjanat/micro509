@@ -1763,17 +1763,23 @@ function parseNameConstraintGeneralName(
 }
 
 /**
- * DirectoryName in GeneralName is IMPLICIT [4], meaning the outer tag
- * is 0xa4 but the content is a SEQUENCE of RDNs. We must reconstruct
- * the original SEQUENCE (tag 0x30) for DER hex comparison.
+ * Extracts the Name SEQUENCE from an implicitly-tagged directoryName [4].
+ *
+ * Handles two encoding styles found in the wild:
+ * - Proper implicit: [4] replaces SEQUENCE tag, content is RDN SETs directly → wrap with 0x30
+ * - Explicit-like: [4] wraps entire SEQUENCE, content starts with 0x30 → return content as-is
  */
-function rebuildDirectoryNameFromImplicit(element: DerElement, source: Uint8Array): Uint8Array {
-	const contentBytes = source.slice(element.start, element.end);
-	const lengthEncoded = encodeLength(contentBytes.length);
-	const result = new Uint8Array(1 + lengthEncoded.length + contentBytes.length);
+function rebuildDirectoryNameFromImplicit(element: DerElement, _source: Uint8Array): Uint8Array {
+	// If content already starts with SEQUENCE tag, it's explicit-style encoding
+	if (element.value.length > 0 && element.value[0] === 0x30) {
+		return new Uint8Array(element.value);
+	}
+	// Otherwise, wrap content with SEQUENCE tag (true implicit encoding)
+	const lengthEncoded = encodeLength(element.value.length);
+	const result = new Uint8Array(1 + lengthEncoded.length + element.value.length);
 	result[0] = 0x30;
 	result.set(lengthEncoded, 1);
-	result.set(contentBytes, 1 + lengthEncoded.length);
+	result.set(element.value, 1 + lengthEncoded.length);
 	return result;
 }
 
