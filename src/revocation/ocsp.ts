@@ -32,6 +32,7 @@ import {
 	objectIdentifier,
 	octetString,
 	readElement,
+	readRootElement,
 	readSequenceChildren,
 	sequence,
 	time,
@@ -42,7 +43,7 @@ import {
 	describeHashAlgorithm,
 	describeSignatureAlgorithm,
 } from '#micro509/internal/crypto/algorithm-names.ts';
-import { verifySignedData } from '#micro509/internal/crypto/sig-verify.ts';
+import { verifySignedDataDetailed } from '#micro509/internal/crypto/sig-verify.ts';
 import {
 	encodeAlgorithmIdentifier,
 	getSignatureAlgorithm,
@@ -125,6 +126,8 @@ export interface ParsedOcspCertId {
  * Decoded OCSP request, returned by {@linkcode parseOcspRequestDer} / {@linkcode parseOcspRequestPem}.
  */
 export interface ParsedOcspRequest {
+	/** Original DER bytes when this object came from {@linkcode parseOcspRequestDer} or PEM parsing. */
+	readonly der?: Uint8Array;
 	/** CertIDs of the certificates being queried. */
 	readonly requests: readonly ParsedOcspCertId[];
 	/** Hex-encoded nonce extension value, if present. */
@@ -184,6 +187,8 @@ export type ParsedOcspResponderId =
  * When `responseStatus` is not `'successful'`, most fields are absent.
  */
 export interface ParsedOcspResponse {
+	/** Original DER bytes when this object came from {@linkcode parseOcspResponseDer} or PEM parsing. */
+	readonly der?: Uint8Array;
 	/** Overall response status. Only `'successful'` carries a BasicOCSPResponse body. */
 	readonly responseStatus: OcspResponseStatus;
 	/** OID of the response type (normally `id-pkix-ocsp-basic`). */
@@ -394,20 +399,61 @@ export async function createOcspRequest(
 /** Decodes a DER-encoded OCSP request into a structured {@linkcode ParsedOcspRequest}. */
 export function parseOcspRequestDer(der: Uint8Array): ParsedOcspRequest {
 	const top = readSequenceChildren(der, { maxDepth: DEFAULT_MAX_DER_DEPTH });
+	if (top.length < 1 || top.length > 2) {
+		throw new Error('Malformed OCSP request');
+	}
 	const tbsRequest = requireElement(top[0], 'tbsRequest');
+	const optionalSignature = top[1];
+	if (optionalSignature !== undefined && optionalSignature.tag !== 0xa0) {
+		throw new Error('Malformed OCSP request');
+	}
 	const tbsChildren = childrenOf(der, tbsRequest);
-	const requestList = requireElement(
-		tbsChildren.find((child) => child.tag === 0x30),
-		'requestList',
-	);
+	let cursor = 0;
+	if (tbsChildren[cursor]?.tag === 0xa0) {
+		const versionWrapper = requireElement(tbsChildren[cursor], 'version');
+		const versionFields = childrenOf(der, versionWrapper);
+		const versionElement = requireElement(versionFields[0], 'version');
+		if (versionFields.length !== 1 || versionElement.tag !== 0x02) {
+			throw new Error('version must use INTEGER');
+		}
+		if (decodeNonNegativeIntegerNumber(versionElement.value, 'OCSP request version') !== 0) {
+			throw new Error('Unsupported OCSP request version');
+		}
+		cursor += 1;
+	}
+	if (tbsChildren[cursor]?.tag === 0xa1) {
+		cursor += 1;
+	}
+	const requestList = requireElement(tbsChildren[cursor], 'requestList');
+	if (requestList.tag !== 0x30) {
+		throw new Error('requestList must use SEQUENCE');
+	}
+	if (childrenOf(der, requestList).length === 0) {
+		throw new Error('requestList must not be empty');
+	}
 	const requests = childrenOf(der, requestList).map((request) => {
-		const certId = requireElement(childrenOf(der, request)[0], 'reqCert');
+		const requestChildren = childrenOf(der, request);
+		if (requestChildren.length < 1 || requestChildren.length > 2) {
+			throw new Error('Malformed OCSP request entry');
+		}
+		if (requestChildren[1] !== undefined && requestChildren[1].tag !== 0xa0) {
+			throw new Error('Malformed OCSP request entry');
+		}
+		const certId = requireElement(requestChildren[0], 'reqCert');
 		return parseOcspCertId(der.slice(certId.start - certId.headerLength, certId.end));
 	});
-	const extensions = tbsChildren.find((child) => child.tag === 0xa2);
+	cursor += 1;
+	const extensions = tbsChildren[cursor];
+	if (extensions !== undefined && extensions.tag !== 0xa2) {
+		throw new Error('Malformed OCSP request');
+	}
+	if (tbsChildren.length !== cursor + (extensions === undefined ? 0 : 1)) {
+		throw new Error('Malformed OCSP request');
+	}
 	const nonce =
 		extensions === undefined ? undefined : parseOcspNonceFromExtensions(der, extensions);
 	return {
+		der: new Uint8Array(der),
 		requests,
 		...(nonce === undefined ? {} : { nonce }),
 	};
@@ -421,6 +467,9 @@ export function parseOcspRequestPem(pem: string): ParsedOcspRequest {
 /** Decodes a DER-encoded OCSP response into a structured {@linkcode ParsedOcspResponse}. Does not verify the signature. */
 export function parseOcspResponseDer(der: Uint8Array): ParsedOcspResponse {
 	const top = readSequenceChildren(der, { maxDepth: DEFAULT_MAX_DER_DEPTH });
+	if (top.length < 1 || top.length > 2) {
+		throw new Error('Malformed OCSP response');
+	}
 	const statusElement = requireElement(top[0], 'responseStatus');
 	if (statusElement.tag !== 0x0a) {
 		throw new Error('responseStatus must use ENUMERATED');
@@ -430,22 +479,41 @@ export function parseOcspResponseDer(der: Uint8Array): ParsedOcspResponse {
 	);
 	const responseBytes = top[1];
 	if (responseBytes === undefined) {
-		return { responseStatus };
+		return { der: new Uint8Array(der), responseStatus };
 	}
-	const bytesSequence = requireElement(childrenOf(der, responseBytes)[0], 'responseBytes');
+	if (responseBytes.tag !== 0xa0) {
+		throw new Error('Malformed OCSP response');
+	}
+	const responseBytesWrapper = childrenOf(der, responseBytes);
+	const bytesSequence = requireElement(responseBytesWrapper[0], 'responseBytes');
+	if (responseBytesWrapper.length !== 1 || bytesSequence.tag !== 0x30) {
+		throw new Error('Malformed OCSP response');
+	}
 	const responseBytesChildren = childrenOf(der, bytesSequence);
+	if (responseBytesChildren.length !== 2) {
+		throw new Error('Malformed OCSP response');
+	}
 	const responseType = requireElement(responseBytesChildren[0], 'responseType');
 	const response = requireElement(responseBytesChildren[1], 'response');
+	if (response.tag !== 0x04) {
+		throw new Error('response must use OCTET STRING');
+	}
 	const responseTypeOid = decodeObjectIdentifier(responseType.value);
 	if (responseTypeOid !== OIDS.ocspBasicResponse) {
-		return { responseStatus, responseTypeOid };
+		return { der: new Uint8Array(der), responseStatus, responseTypeOid };
 	}
 	const basicResponse = response.value;
 	const basicChildren = readSequenceChildren(basicResponse);
+	if (basicChildren.length < 3 || basicChildren.length > 4) {
+		throw new Error('Malformed BasicOCSPResponse');
+	}
 	const responseData = requireElement(basicChildren[0], 'responseData');
 	const signatureAlgorithm = requireElement(basicChildren[1], 'signatureAlgorithm');
 	const signatureValue = requireElement(basicChildren[2], 'signatureValue');
 	const certificatesElement = basicChildren[3];
+	if (certificatesElement !== undefined && certificatesElement.tag !== 0xa0) {
+		throw new Error('Malformed BasicOCSPResponse');
+	}
 	const signatureAlgorithmChildren = childrenOf(basicResponse, signatureAlgorithm);
 	const signatureAlgorithmOid = decodeObjectIdentifier(
 		requireElement(signatureAlgorithmChildren[0], 'signatureAlgorithm OID').value,
@@ -457,6 +525,7 @@ export function parseOcspResponseDer(der: Uint8Array): ParsedOcspResponse {
 	);
 	const signedResponseData = parseSignedOcspResponseData(responseDataDer);
 	return {
+		der: new Uint8Array(der),
 		responseStatus,
 		responseTypeOid,
 		responseDataDer,
@@ -627,16 +696,30 @@ export async function verifyOcspResponse(
 			'OCSP signer certificate input is malformed',
 		);
 	}
-	const verified = await verifySignedData(
-		parsed.signatureAlgorithmOid,
-		undefined,
-		signer.publicKeyAlgorithmOid,
-		signer.publicKeyParametersOid,
-		signer.subjectPublicKeyInfoDer,
-		parsed.signatureValue,
-		parsed.responseDataDer,
-	);
-	return verified
+	let verifiedResult: Awaited<ReturnType<typeof verifySignedDataDetailed>>;
+	try {
+		verifiedResult = await verifySignedDataDetailed(
+			parsed.signatureAlgorithmOid,
+			undefined,
+			signer.publicKeyAlgorithmOid,
+			signer.publicKeyParametersOid,
+			signer.subjectPublicKeyInfoDer,
+			parsed.signatureValue,
+			parsed.responseDataDer,
+		);
+	} catch {
+		return verifyOcspResponseFailureResult(
+			'signature_invalid',
+			'OCSP response signature verification failed',
+		);
+	}
+	if (!verifiedResult.ok) {
+		return verifyOcspResponseFailureResult(
+			'signature_invalid',
+			'OCSP response signature uses unsupported algorithm parameters',
+		);
+	}
+	return verifiedResult.valid
 		? { ok: true, value: parsed }
 		: verifyOcspResponseFailureResult(
 				'signature_invalid',
@@ -692,14 +775,22 @@ export async function validateOcspResponse(
 			'issuer certificate input is malformed',
 		);
 	}
-	const resolvedResponder =
-		input.responderCertificate ??
-		(await findMatchingOcspResponderCertificate(
-			parsedResponse.certificates,
-			parsedResponse.responderId,
-		)) ??
-		parsedResponse.certificates?.[0] ??
-		input.issuerCertificate;
+	let resolvedResponder: OcspCertificateSource;
+	try {
+		resolvedResponder =
+			input.responderCertificate ??
+			(await findMatchingOcspResponderCertificate(
+				parsedResponse.certificates,
+				parsedResponse.responderId,
+			)) ??
+			parsedResponse.certificates?.[0] ??
+			input.issuerCertificate;
+	} catch {
+		return validateOcspResponseFailureResult(
+			'signature_invalid',
+			'OCSP responder certificate input is malformed',
+		);
+	}
 	let signer: ParsedCertificate;
 	try {
 		signer = await normalizeCertificate(resolvedResponder);
@@ -713,7 +804,17 @@ export async function validateOcspResponse(
 	if (!signature.ok) {
 		return validateOcspResponseFailureResult(signature.code, signature.message);
 	}
-	const responderBinding = await validateOcspResponderIdBinding(parsedResponse.responderId, signer);
+	let responderBinding:
+		| Extract<ValidateOcspResponseResult, { readonly ok: false }>
+		| { readonly ok: true };
+	try {
+		responderBinding = await validateOcspResponderIdBinding(parsedResponse.responderId, signer);
+	} catch {
+		return validateOcspResponseFailureResult(
+			'signature_invalid',
+			'OCSP responder certificate input is malformed',
+		);
+	}
 	if (!responderBinding.ok) {
 		return responderBinding;
 	}
@@ -896,18 +997,10 @@ function normalizeOcspResponse(
 	if (response instanceof Uint8Array) {
 		return parseOcspResponseDer(response);
 	}
-	if (response.responseDataDer === undefined) {
-		return response;
+	if (hasReparseableOcspResponseShape(response)) {
+		return parseOcspResponseDer(new Uint8Array(response.der));
 	}
-	const signedResponseData = parseSignedOcspResponseData(response.responseDataDer);
-	const { nonce: _ignoredNonce, ...responseWithoutNonce } = response;
-	return {
-		...responseWithoutNonce,
-		responderId: signedResponseData.responderId,
-		producedAt: signedResponseData.producedAt,
-		responses: signedResponseData.responses,
-		...(signedResponseData.nonce === undefined ? {} : { nonce: signedResponseData.nonce }),
-	};
+	throw new Error('OCSP response input is malformed');
 }
 
 /** Accepts PEM, DER, or already-parsed OCSP request and returns a parsed request. */
@@ -918,7 +1011,10 @@ function normalizeOcspRequest(request: OcspRequestSource): ParsedOcspRequest {
 	if (request instanceof Uint8Array) {
 		return parseOcspRequestDer(request);
 	}
-	return request;
+	if (hasReparseableOcspRequestShape(request)) {
+		return parseOcspRequestDer(new Uint8Array(request.der));
+	}
+	throw new Error('OCSP request input is malformed');
 }
 
 function parseSignedOcspResponseData(responseDataDer: Uint8Array): {
@@ -928,8 +1024,20 @@ function parseSignedOcspResponseData(responseDataDer: Uint8Array): {
 	readonly nonce?: string;
 } {
 	const responseDataChildren = readSequenceChildren(responseDataDer);
+	if (responseDataChildren.length < 3 || responseDataChildren.length > 5) {
+		throw new Error('Malformed OCSP responseData');
+	}
 	let index = 0;
 	if (responseDataChildren[index]?.tag === 0xa0) {
+		const versionWrapper = requireElement(responseDataChildren[index], 'version');
+		const versionFields = childrenOf(responseDataDer, versionWrapper);
+		const versionElement = requireElement(versionFields[0], 'version');
+		if (versionFields.length !== 1 || versionElement.tag !== 0x02) {
+			throw new Error('version must use INTEGER');
+		}
+		if (decodeNonNegativeIntegerNumber(versionElement.value, 'OCSP response version') !== 0) {
+			throw new Error('Unsupported OCSP response version');
+		}
 		index += 1;
 	}
 	const responderIdElement = requireElement(responseDataChildren[index], 'responderID');
@@ -937,7 +1045,19 @@ function parseSignedOcspResponseData(responseDataDer: Uint8Array): {
 	index += 1;
 	const producedAtElement = requireElement(responseDataChildren[index], 'producedAt');
 	const responsesElement = requireElement(responseDataChildren[index + 1], 'responses');
+	if (responsesElement.tag !== 0x30) {
+		throw new Error('responses must use SEQUENCE');
+	}
+	if (childrenOf(responseDataDer, responsesElement).length === 0) {
+		throw new Error('responses must not be empty');
+	}
 	const responseExtensions = responseDataChildren[index + 2];
+	if (responseExtensions !== undefined && responseExtensions.tag !== 0xa1) {
+		throw new Error('Malformed OCSP responseData');
+	}
+	if (responseDataChildren.length !== index + 2 + (responseExtensions === undefined ? 0 : 1)) {
+		throw new Error('Malformed OCSP responseData');
+	}
 	const nonce =
 		responseExtensions === undefined
 			? undefined
@@ -1135,7 +1255,7 @@ function encodeOcspCertStatus(input: CreateOcspSingleResponseInput): Uint8Array 
 /** Accepts PEM, DER, or already-parsed certificate and returns a parsed certificate. */
 function normalizeCertificate(source: OcspCertificateSource): ParsedCertificate {
 	if (hasParsedCertificateShape(source)) {
-		return source;
+		return parseCertificateDer(new Uint8Array(source.der));
 	}
 	return parseCertificateFromSource(source);
 }
@@ -1147,11 +1267,32 @@ function hasParsedCertificateShape(value: OcspCertificateSource): value is Parse
 
 /** Decodes a DER-encoded CertID SEQUENCE into a {@linkcode ParsedOcspCertId}. */
 function parseOcspCertId(der: Uint8Array): ParsedOcspCertId {
-	const children = childrenOf(der, readElement(der));
+	const root = readRootElement(der, { maxDepth: DEFAULT_MAX_DER_DEPTH });
+	if (root.tag !== 0x30) {
+		throw new Error('CertID must use SEQUENCE');
+	}
+	const children = childrenOf(der, root);
+	if (children.length !== 4) {
+		throw new Error(
+			'CertID must contain hashAlgorithm, issuerNameHash, issuerKeyHash, and serialNumber',
+		);
+	}
 	const hashAlgorithm = requireElement(children[0], 'hashAlgorithm');
+	if (hashAlgorithm.tag !== 0x30) {
+		throw new Error('hashAlgorithm must use SEQUENCE');
+	}
 	const algorithmChildren = childrenOf(der, hashAlgorithm);
+	if (algorithmChildren.length < 1 || algorithmChildren.length > 2) {
+		throw new Error('Malformed hashAlgorithm');
+	}
 	const algorithmOid = requireElement(algorithmChildren[0], 'hashAlgorithm OID');
 	const hashAlgorithmOid = decodeObjectIdentifier(algorithmOid.value);
+	if (requireElement(children[1], 'issuerNameHash').tag !== 0x04) {
+		throw new Error('issuerNameHash must use OCTET STRING');
+	}
+	if (requireElement(children[2], 'issuerKeyHash').tag !== 0x04) {
+		throw new Error('issuerKeyHash must use OCTET STRING');
+	}
 	const serialNumber = requireElement(children[3], 'serialNumber');
 	if (serialNumber.tag !== 0x02) {
 		throw new Error('serialNumber must use INTEGER');
@@ -1168,13 +1309,30 @@ function parseOcspCertId(der: Uint8Array): ParsedOcspCertId {
 /** Decodes a SingleResponse from its ASN.1 element within the ResponseData. */
 function parseSingleResponse(source: Uint8Array, element: DerElement): ParsedOcspSingleResponse {
 	const children = childrenOf(source, element);
+	if (children.length < 3 || children.length > 5) {
+		throw new Error('Malformed OCSP SingleResponse');
+	}
 	const certId = requireElement(children[0], 'certId');
 	const certStatus = requireElement(children[1], 'certStatus');
 	const thisUpdate = requireElement(children[2], 'thisUpdate');
-	const nextUpdateElement = children[3]?.tag === 0xa0 ? children[3] : undefined;
+	let cursor = 3;
+	const nextUpdateElement = children[cursor]?.tag === 0xa0 ? children[cursor] : undefined;
+	if (nextUpdateElement !== undefined) {
+		cursor += 1;
+	}
+	const singleExtensions = children[cursor];
+	if (singleExtensions !== undefined && singleExtensions.tag !== 0xa1) {
+		throw new Error('Malformed OCSP SingleResponse');
+	}
+	if (children.length !== cursor + (singleExtensions === undefined ? 0 : 1)) {
+		throw new Error('Malformed OCSP SingleResponse');
+	}
 	let revokedAt: Date | undefined;
 	let revocationReasonCode: number | undefined;
 	if (certStatus.tag === 0x80) {
+		if (certStatus.value.length !== 0) {
+			throw new Error('OCSP good certStatus must be empty');
+		}
 		return {
 			certId: parseOcspCertId(source.slice(certId.start - certId.headerLength, certId.end)),
 			certStatus: 'good',
@@ -1190,13 +1348,28 @@ function parseSingleResponse(source: Uint8Array, element: DerElement): ParsedOcs
 	}
 	if (certStatus.tag === 0xa1) {
 		const revokedInfo = childrenOf(source, certStatus);
+		if (revokedInfo.length < 1 || revokedInfo.length > 2) {
+			throw new Error('Malformed OCSP revoked certStatus');
+		}
 		revokedAt = parseTime(requireElement(revokedInfo[0], 'revocationTime'));
 		const reason = revokedInfo[1];
 		if (reason?.tag === 0xa0) {
-			revocationReasonCode = readElement(source, reason.start).value[0];
+			const reasonChildren = childrenOf(source, reason);
+			const enumerated = requireElement(reasonChildren[0], 'revocationReason');
+			if (reasonChildren.length !== 1 || enumerated.tag !== 0x0a) {
+				throw new Error('revocationReason must use ENUMERATED');
+			}
+			revocationReasonCode = decodeNonNegativeIntegerNumber(
+				enumerated.value,
+				'OCSP revocationReason',
+			);
+		} else if (reason !== undefined) {
+			throw new Error('Malformed OCSP revoked certStatus');
 		}
 	} else if (certStatus.tag !== 0x82) {
 		throw new Error(`Unsupported OCSP certStatus tag: ${String(certStatus.tag)}`);
+	} else if (certStatus.value.length !== 0) {
+		throw new Error('OCSP unknown certStatus must be empty');
 	}
 	return {
 		certId: parseOcspCertId(source.slice(certId.start - certId.headerLength, certId.end)),
@@ -1407,6 +1580,9 @@ function responderNameKeyFromOid(oid: string): ParsedNameAttribute['key'] {
 /** Extracts the nonce value (as hex) from an OCSP extensions wrapper, if present. */
 function parseOcspNonceFromExtensions(source: Uint8Array, element: DerElement): string | undefined {
 	const extensionsSequence = requireElement(childrenOf(source, element)[0], 'extensions');
+	if (childrenOf(source, element).length !== 1 || extensionsSequence.tag !== 0x30) {
+		throw new Error('Malformed OCSP extensions');
+	}
 	const seenOids = new Set<string>();
 	let nonce: string | undefined;
 	for (const extension of childrenOf(source, extensionsSequence)) {
@@ -1429,7 +1605,11 @@ function parseOcspNonceFromExtensions(source: Uint8Array, element: DerElement): 
 		if (oid !== OIDS.ocspNonce) {
 			continue;
 		}
-		nonce = toHex(readElement(extnValue.value).value);
+		const nonceElement = readRootElement(extnValue.value, { maxDepth: DEFAULT_MAX_DER_DEPTH });
+		if (nonceElement.tag !== 0x04) {
+			throw new Error('OCSP nonce extension value must use OCTET STRING');
+		}
+		nonce = toHex(nonceElement.value);
 	}
 	return nonce;
 }
@@ -1475,8 +1655,20 @@ function ocspResponseStatusFromCode(code: number | undefined): OcspResponseStatu
 		case 6:
 			return 'unauthorized';
 		default:
-			return 'internalError';
+			throw new Error(`Unsupported OCSP responseStatus value: ${String(code)}`);
 	}
+}
+
+function hasReparseableOcspRequestShape(
+	request: ParsedOcspRequest,
+): request is ParsedOcspRequest & { readonly der: Uint8Array } {
+	return 'der' in request && request.der instanceof Uint8Array;
+}
+
+function hasReparseableOcspResponseShape(
+	response: ParsedOcspResponse,
+): response is ParsedOcspResponse & { readonly der: Uint8Array } {
+	return 'der' in response && response.der instanceof Uint8Array;
 }
 
 /** Maps a hash algorithm OID to the WebCrypto algorithm name. Throws on unsupported OIDs. */

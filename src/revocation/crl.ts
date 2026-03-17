@@ -42,7 +42,7 @@ import {
 import { OIDS } from '#micro509/internal/asn1/oids.ts';
 import { describeSignatureAlgorithm } from '#micro509/internal/crypto/algorithm-names.ts';
 import { sha1 } from '#micro509/internal/crypto/hash.ts';
-import { verifySignedData } from '#micro509/internal/crypto/sig-verify.ts';
+import { verifySignedDataDetailed } from '#micro509/internal/crypto/sig-verify.ts';
 import {
 	encodeAlgorithmIdentifier,
 	getSignatureAlgorithm,
@@ -81,7 +81,7 @@ import type {
 	ParsedNameAttribute,
 	ParsedRelativeDistinguishedName,
 } from '#micro509/x509/parse.ts';
-import { parseCertificateFromSource } from '#micro509/x509/parse.ts';
+import { parseCertificateDer, parseCertificateFromSource } from '#micro509/x509/parse.ts';
 
 /**
  * Single revoked certificate entry for {@linkcode createCertificateRevocationList}.
@@ -173,6 +173,8 @@ export interface ParsedRevokedCertificate {
  * and {@linkcode parseCertificateRevocationListPem}.
  */
 export interface ParsedCertificateRevocationList {
+	/** Original DER bytes when this object came from {@linkcode parseCertificateRevocationListDer} or PEM parsing. */
+	readonly der?: Uint8Array;
 	/** CRL version (1 = v1, 2 = v2 with extensions). */
 	readonly version: number;
 	/** DER-encoded TBSCertList — the signed payload for signature verification. */
@@ -478,6 +480,7 @@ export function parseCertificateRevocationListDer(
 	);
 	const parsedSignatureAlgorithm = parseAlgorithmIdentifier(der, signatureAlgorithm);
 	return {
+		der: new Uint8Array(der),
 		version: signedFields.version,
 		tbsCertListDer: der.slice(tbsCertList.start - tbsCertList.headerLength, tbsCertList.end),
 		signatureValue: extractBitStringValue(signatureValue),
@@ -548,16 +551,30 @@ export async function verifyCertificateRevocationList(
 			'certificate revocation list or issuer certificate input is malformed',
 		);
 	}
-	const verified = await verifySignedData(
-		parsedCrl.signatureAlgorithmOid,
-		undefined,
-		issuer.publicKeyAlgorithmOid,
-		issuer.publicKeyParametersOid,
-		issuer.subjectPublicKeyInfoDer,
-		parsedCrl.signatureValue,
-		parsedCrl.tbsCertListDer,
-	);
-	return verified
+	let verifiedResult: Awaited<ReturnType<typeof verifySignedDataDetailed>>;
+	try {
+		verifiedResult = await verifySignedDataDetailed(
+			parsedCrl.signatureAlgorithmOid,
+			undefined,
+			issuer.publicKeyAlgorithmOid,
+			issuer.publicKeyParametersOid,
+			issuer.subjectPublicKeyInfoDer,
+			parsedCrl.signatureValue,
+			parsedCrl.tbsCertListDer,
+		);
+	} catch {
+		return verifyCertificateRevocationListFailureResult(
+			'signature_invalid',
+			'certificate revocation list signature verification failed',
+		);
+	}
+	if (!verifiedResult.ok) {
+		return verifyCertificateRevocationListFailureResult(
+			'signature_invalid',
+			'certificate revocation list signature uses unsupported algorithm parameters',
+		);
+	}
+	return verifiedResult.valid
 		? { ok: true, value: parsedCrl }
 		: verifyCertificateRevocationListFailureResult(
 				'signature_invalid',
@@ -613,16 +630,30 @@ export async function validateCertificateRevocationList(
 			'issuer certificate key usage does not permit CRL signing',
 		);
 	}
-	const verified = await verifySignedData(
-		parsedCrl.signatureAlgorithmOid,
-		undefined,
-		issuer.publicKeyAlgorithmOid,
-		issuer.publicKeyParametersOid,
-		issuer.subjectPublicKeyInfoDer,
-		parsedCrl.signatureValue,
-		parsedCrl.tbsCertListDer,
-	);
-	if (!verified) {
+	let verifiedResult: Awaited<ReturnType<typeof verifySignedDataDetailed>>;
+	try {
+		verifiedResult = await verifySignedDataDetailed(
+			parsedCrl.signatureAlgorithmOid,
+			undefined,
+			issuer.publicKeyAlgorithmOid,
+			issuer.publicKeyParametersOid,
+			issuer.subjectPublicKeyInfoDer,
+			parsedCrl.signatureValue,
+			parsedCrl.tbsCertListDer,
+		);
+	} catch {
+		return validateCertificateRevocationListFailureResult(
+			'signature_invalid',
+			'certificate revocation list signature verification failed',
+		);
+	}
+	if (!verifiedResult.ok) {
+		return validateCertificateRevocationListFailureResult(
+			'signature_invalid',
+			'certificate revocation list signature uses unsupported algorithm parameters',
+		);
+	}
+	if (!verifiedResult.valid) {
 		return validateCertificateRevocationListFailureResult(
 			'signature_invalid',
 			'certificate revocation list signature does not verify',
@@ -2014,38 +2045,10 @@ function normalizeCrl(source: CrlSource): ParsedCertificateRevocationList {
 	if (source instanceof Uint8Array) {
 		return parseCertificateRevocationListDer(new Uint8Array(source));
 	}
-	const {
-		authorityKeyIdentifier: _ignoredAuthorityKeyIdentifier,
-		baseCrlNumber: _ignoredBaseCrlNumber,
-		crlNumber: _ignoredCrlNumber,
-		freshestCrlDistributionPoints: _ignoredFreshestCrlDistributionPoints,
-		issuer: _ignoredIssuer,
-		issuingDistributionPoint: _ignoredIssuingDistributionPoint,
-		nextUpdate: _ignoredNextUpdate,
-		revokedCertificates: _ignoredRevokedCertificates,
-		thisUpdate: _ignoredThisUpdate,
-		version: _ignoredVersion,
-		...unsignedFields
-	} = source;
-	const signedFields = parseSignedCrlFields(source.tbsCertListDer);
-	return {
-		...unsignedFields,
-		...signedFields,
-		...(signedFields.nextUpdate === undefined ? {} : { nextUpdate: signedFields.nextUpdate }),
-		...(signedFields.authorityKeyIdentifier === undefined
-			? {}
-			: { authorityKeyIdentifier: signedFields.authorityKeyIdentifier }),
-		...(signedFields.crlNumber === undefined ? {} : { crlNumber: signedFields.crlNumber }),
-		...(signedFields.baseCrlNumber === undefined
-			? {}
-			: { baseCrlNumber: signedFields.baseCrlNumber }),
-		...(signedFields.issuingDistributionPoint === undefined
-			? {}
-			: { issuingDistributionPoint: signedFields.issuingDistributionPoint }),
-		...(signedFields.freshestCrlDistributionPoints === undefined
-			? {}
-			: { freshestCrlDistributionPoints: signedFields.freshestCrlDistributionPoints }),
-	};
+	if (hasReparseableCrlShape(source)) {
+		return parseCertificateRevocationListDer(new Uint8Array(source.der));
+	}
+	throw new Error('certificate revocation list input is malformed');
 }
 
 function parseSignedCrlFields(tbsCertListDer: Uint8Array): {
@@ -2178,7 +2181,19 @@ function parseSignedCrlFields(tbsCertListDer: Uint8Array): {
 
 /** Accepts PEM, DER, or already-parsed certificate and returns a parsed certificate. */
 function normalizeCrlCertificate(source: CrlCertificateSource): ParsedCertificate {
-	return parseCertificateFromSource(source);
+	return hasParsedCertificateShape(source)
+		? parseCertificateDer(new Uint8Array(source.der))
+		: parseCertificateFromSource(source);
+}
+
+function hasParsedCertificateShape(value: CrlCertificateSource): value is ParsedCertificate {
+	return typeof value !== 'string' && 'subjectPublicKeyInfoDer' in value;
+}
+
+function hasReparseableCrlShape(
+	crl: ParsedCertificateRevocationList,
+): crl is ParsedCertificateRevocationList & { readonly der: Uint8Array } {
+	return 'der' in crl && crl.der instanceof Uint8Array;
 }
 
 /** Shared UTF-8 decoder instance. */

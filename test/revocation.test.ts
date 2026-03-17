@@ -707,6 +707,36 @@ describe('revocation boundary', () => {
 		expect(getCertificateOcspResponderUris(Uint8Array.of(0xff, 0xff))).toEqual([]);
 	});
 
+	it('getCertificateOcspResponderUris ignores tampered parsed certificate AIA fields', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Tampered AIA OCSP CA' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Tampered AIA OCSP CA' },
+			subject: { commonName: 'tampered-aia-ocsp.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+			extensions: {
+				authorityInfoAccess: [{ method: 'ocsp', uri: 'http://real-ocsp.example.test' }],
+			},
+		});
+		const parsedLeaf = parseCertificatePem(leaf.pem);
+		const tamperedLeaf = {
+			...parsedLeaf,
+			authorityInfoAccess: [{ method: 'ocsp' as const, uri: 'http://attacker.example.test' }],
+		};
+
+		expect(getCertificateOcspResponderUris(tamperedLeaf)).toEqual([
+			'http://real-ocsp.example.test',
+		]);
+	});
+
 	it('resolves configured responders ahead of AIA discovery', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'Configured OCSP CA' },

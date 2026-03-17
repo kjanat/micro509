@@ -7,7 +7,7 @@
 
 import type { Result } from '#micro509/result/result.ts';
 import type { ParsedCertificate } from '#micro509/x509/parse.ts';
-import { parseCertificateFromSource } from '#micro509/x509/parse.ts';
+import { parseCertificateDer, parseCertificateFromSource } from '#micro509/x509/parse.ts';
 import type { CrlApplicabilityFailureReason, CrlSource, RevocationReason } from './crl.ts';
 import { checkCertificateRevocationAgainstCrl } from './crl.ts';
 import type { OcspCertificateSource, OcspRequestSource, ParsedOcspResponse } from './ocsp.ts';
@@ -308,10 +308,20 @@ export async function checkCertificateRevocation(
 	let goodResult: RevocationCheckGoodValue | undefined;
 	const indeterminateEvidence: RevocationIndeterminateEvidence[] = [];
 	for (const entry of evidence) {
-		const result =
-			entry.kind === 'crl'
-				? await checkCertificateRevocationWithCrl(input, entry, normalizedCertificate)
-				: await checkCertificateRevocationWithOcsp(input, entry, normalizedCertificate);
+		let result: RevocationEvidenceCheck;
+		try {
+			result =
+				entry.kind === 'crl'
+					? await checkCertificateRevocationWithCrl(input, entry, normalizedCertificate)
+					: await checkCertificateRevocationWithOcsp(input, entry, normalizedCertificate);
+		} catch {
+			indeterminateEvidence.push({
+				source: entry.kind,
+				code: 'signature_invalid',
+				message: `${entry.kind.toUpperCase()} evidence input is malformed`,
+			});
+			continue;
+		}
 		if (result.status === 'revoked') {
 			return revocationSuccess(result.result);
 		}
@@ -462,7 +472,13 @@ async function checkCertificateRevocationWithOcsp(
 
 /** Accepts PEM, DER, or already-parsed certificate and returns a parsed certificate. */
 function normalizeCertificate(certificate: RevocationCertificateSource): ParsedCertificate {
-	return parseCertificateFromSource(certificate);
+	return hasParsedCertificateShape(certificate)
+		? parseCertificateDer(new Uint8Array(certificate.der))
+		: parseCertificateFromSource(certificate);
+}
+
+function hasParsedCertificateShape(value: RevocationCertificateSource): value is ParsedCertificate {
+	return typeof value !== 'string' && 'subjectPublicKeyInfoDer' in value;
 }
 
 /** Strips leading zeros and lowercases a hex string for comparison. */
