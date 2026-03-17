@@ -97,6 +97,19 @@ async function evaluatePkitsRevocation(
 	return true;
 }
 
+// ReasonFlags from RFC 5280 §4.2.1.14 — onlySomeReasons uses this bitmap.
+// Note: 'unspecified' (CRLReason 0) is NOT in ReasonFlags, so we exclude it.
+const ALL_REASON_FLAGS = new Set([
+	'keyCompromise',
+	'cACompromise',
+	'affiliationChanged',
+	'superseded',
+	'cessationOfOperation',
+	'certificateHold',
+	'privilegeWithdrawn',
+	'aACompromise',
+]);
+
 async function evaluatePkitsCertificateRevocation(
 	certificate: ParsedCertificate,
 	issuerCertificate: ParsedCertificate,
@@ -105,26 +118,13 @@ async function evaluatePkitsCertificateRevocation(
 	allCertificates: readonly ParsedCertificate[],
 ): Promise<'good' | 'revoked' | 'unknown'> {
 	let sawGood = false;
+	const crlsWithAppliedDelta = new Set<ParsedCertificateRevocationList>();
+	const coveredReasons = new Set<string>();
 
-	for (const crl of completeCrls) {
-		const result = await evaluatePkitsCrlWithIssuerCandidates(
-			certificate,
-			issuerCertificate,
-			allCertificates,
-			crl,
-			undefined,
-		);
-		if (!result.ok) {
-			continue;
-		}
-		if (result.value.status === 'revoked') {
-			return 'revoked';
-		}
-		sawGood = true;
-	}
-
-	for (const crl of completeCrls) {
-		for (const deltaCrl of deltaCrls) {
+	// Process delta+complete pairs first — delta CRLs may contain removeFromCRL entries
+	// that override revocations in the base CRL (e.g., suspension lifted)
+	for (const deltaCrl of deltaCrls) {
+		for (const crl of completeCrls) {
 			const result = await evaluatePkitsCrlWithIssuerCandidates(
 				certificate,
 				issuerCertificate,
@@ -135,6 +135,15 @@ async function evaluatePkitsCertificateRevocation(
 			if (!result.ok) {
 				continue;
 			}
+			// Mark this base CRL as having a delta applied — don't re-check it alone
+			crlsWithAppliedDelta.add(crl);
+			// Track which reasons this CRL covers
+			const crlReasons = result.value.crl.issuingDistributionPoint?.onlySomeReasons?.flags;
+			if (crlReasons === undefined) {
+				for (const reason of ALL_REASON_FLAGS) coveredReasons.add(reason);
+			} else {
+				for (const reason of crlReasons) coveredReasons.add(reason);
+			}
 			if (result.value.status === 'revoked') {
 				return 'revoked';
 			}
@@ -142,7 +151,44 @@ async function evaluatePkitsCertificateRevocation(
 		}
 	}
 
-	return sawGood ? 'good' : 'unknown';
+	// Fall back to complete CRLs alone only if no applicable delta CRL was paired
+	for (const crl of completeCrls) {
+		if (crlsWithAppliedDelta.has(crl)) {
+			continue;
+		}
+		const result = await evaluatePkitsCrlWithIssuerCandidates(
+			certificate,
+			issuerCertificate,
+			allCertificates,
+			crl,
+			undefined,
+		);
+		if (!result.ok) {
+			continue;
+		}
+		// Track which reasons this CRL covers
+		const crlReasons = result.value.crl.issuingDistributionPoint?.onlySomeReasons?.flags;
+		if (crlReasons === undefined) {
+			for (const reason of ALL_REASON_FLAGS) coveredReasons.add(reason);
+		} else {
+			for (const reason of crlReasons) coveredReasons.add(reason);
+		}
+		if (result.value.status === 'revoked') {
+			return 'revoked';
+		}
+		sawGood = true;
+	}
+
+	// Only return 'good' if all revocation reasons have been covered
+	if (sawGood) {
+		for (const reason of ALL_REASON_FLAGS) {
+			if (!coveredReasons.has(reason)) {
+				return 'unknown';
+			}
+		}
+		return 'good';
+	}
+	return 'unknown';
 }
 
 async function evaluatePkitsCrlWithIssuerCandidates(
