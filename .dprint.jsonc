@@ -100,7 +100,6 @@
 	"excludes": [
 		"**/.venv",
 		"**/*-lock.json",
-		"**/bun.lock*",
 		"**/node_modules",
 		"**/worker-configuration.d.ts",
 		"**/bun.lock",

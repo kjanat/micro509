@@ -1,7 +1,6 @@
-import type { Plugin } from 'vite';
 import robotsTxt from 'vite-robots-txt';
 import svgToIco from 'vite-svg-to-ico';
-import { defineConfig } from 'vitepress';
+import { defineConfig, type Plugin } from 'vitepress';
 
 import jsr from '../../jsr.json' with { type: 'json' };
 import pkg from '../../package.json' with { type: 'json' };
@@ -9,7 +8,8 @@ import typedocSidebar from '../api/typedoc-sidebar.json' with { type: 'json' };
 
 const getRequiredEnv = (names: readonly string[]): string => {
 	for (const name of names) {
-		if (process.env[name]?.trim()) return process.env[name]?.trim();
+		const v = process.env[name]?.trim();
+		if (v) return v;
 	}
 
 	throw new Error(`Missing required env: ${names.join(' or ')}. Run via package scripts.`);
@@ -46,17 +46,19 @@ const gitEnv = {
  */
 const cdnBase = `https://esm.sh/pr/${gitEnv.githubRepo}/${pkg.name}@${gitEnv.commitHash}`;
 
-/** Import map JSON derived from package.json exports via the CDN. */
-const importMapJson = JSON.stringify({
-	imports: Object.fromEntries(
-		(Object.entries(pkg.exports) as [string, string | { default: string }][])
-			.filter((e): e is [string, { default: string }] => typeof e[1] === 'object')
-			.map(([key]) => [
-				key === '.' ? pkg.name : `${pkg.name}/${key.slice(2)}`,
-				key === '.' ? cdnBase : `${cdnBase}/${key.slice(2)}`,
-			]),
-	),
-});
+/** Import map entries derived from package.json exports via the CDN. */
+const importEntries = (Object.entries(pkg.exports) as [string, string | { default: string }][])
+	.filter((e): e is [string, { default: string }] => typeof e[1] === 'object')
+	.map(([key]): [string, string] => [
+		key === '.' ? pkg.name : `${pkg.name}/${key.slice(2)}`,
+		key === '.' ? cdnBase : `${cdnBase}/${key.slice(2)}`,
+	]);
+
+/** CDN URLs for prefetching. */
+const cdnUrls = importEntries.map(([, url]) => url);
+
+/** Import map JSON for browser module resolution. */
+const importMapJson = JSON.stringify({ imports: Object.fromEntries(importEntries) });
 
 /**
  * Vite plugin — injects import map in dev mode via `transformIndexHtml`.
@@ -69,11 +71,16 @@ function importMapPlugin(): Plugin {
 		transformIndexHtml: {
 			order: 'pre',
 			handler: () => [
+				...cdnUrls.map((url) => ({
+					tag: 'link' as const,
+					attrs: { rel: 'prefetch', as: 'script', href: url },
+					injectTo: 'head' as const,
+				})),
 				{
 					tag: 'script',
 					attrs: { type: 'importmap' },
 					children: importMapJson,
-					injectTo: 'head-prepend',
+					injectTo: 'head-prepend' as const,
 				},
 			],
 		},
@@ -107,7 +114,13 @@ export default defineConfig({
 
 	/** Inject import map before any module scripts (SSG build path). */
 	transformHtml(html) {
-		return html.replace('<head>', `<head>\n<script type="importmap">${importMapJson}</script>`);
+		const prefetchTags = cdnUrls
+			.map((url) => `<link rel="prefetch" as="script" href="${url}">`)
+			.join('\n');
+		return html.replace(
+			'<head>',
+			`<head>\n${prefetchTags}\n<script type="importmap">${importMapJson}</script>`,
+		);
 	},
 
 	themeConfig: {
