@@ -254,7 +254,7 @@ The main monster under the bed is simple: **once you say “full RFC 5280,” yo
 
 ### Revocation / status
 
-- [ ] OCSP response signer validation against explicit local responder configuration
+- See canonical backlog item above: "OCSP response signer validation against explicit local responder configuration"
 - [ ] OCSP responder revocation policy handling
 - [ ] OCSP request/response builders with richer extension support
 - [ ] CRL distribution point discovery / fetch hooks

@@ -3,7 +3,7 @@
 Broad PKITS gap-report coverage lives in [`test/pkits.test.ts`].
 
 - Source fixtures: vendored from BoringSSL's mirrored NIST PKITS corpus under [`test/fixtures/pkits/certs/`] and [`test/fixtures/pkits/crls/`].
-- Upstream metadata: vendored under [`test/fixtures/pkits/upstream/`], with the local manifest generated into [`test/fixtures/pkits/manifest.ts`].
+- Upstream metadata: vendored under [`test/fixtures/pkits/upstream/`]. The local manifest is generated into [`test/fixtures/pkits/manifest.ts`].
 - Runtime: `bun test test/pkits.test.ts`
 - Validation time: all cases run at `2011-04-15T00:00:00Z`, matching the PKITS publication-time convention used by BoringSSL's harness.
 - Scope: the harness now mirrors BoringSSL's testcase breadth, including CRL-driven sections, but it is still a gap-report harness, not a conformance claim.
