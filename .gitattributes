@@ -7,3 +7,4 @@ test/fixtures/pkits/certs/*    -diff    linguist-vendored
 site/api/**/*                  -diff    linguist-generated
 site/api/**/index.md            diff   -linguist-generated
 test/fixtures/pkits/manifest.ts         linguist-generated
+test/fixtures/pkits/nist/**/*           linguist-vendored

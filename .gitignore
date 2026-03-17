@@ -174,3 +174,4 @@ src/**/*.d.ts
 .playwright-cli
 .opencode/state/
 anal.md
+test/fixtures/pkits/nist/PKITS_data/
