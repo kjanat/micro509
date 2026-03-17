@@ -229,7 +229,7 @@ describe('pkcs7', () => {
 		expect(result.ok).toBe(true);
 	});
 
-	it('verifyPkcs7SignedData accepts signer lookup by subject key identifier', async () => {
+	it('verifyPkcs7SignedData ignores tampered signer lookup fields on pre-parsed input', async () => {
 		const signer = await createSelfSignedCertificate({
 			subject: { commonName: 'SKI Verify Signer' },
 		});
@@ -268,7 +268,7 @@ describe('pkcs7', () => {
 		expect(result.ok).toBe(true);
 	});
 
-	it('verifyPkcs7SignedData does not fall back to SKI when issuer-and-serial is present', async () => {
+	it('verifyPkcs7SignedData ignores tampered dual signer identifiers on pre-parsed input', async () => {
 		const signer = await createSelfSignedCertificate({
 			subject: { commonName: 'Dual Identifier Signer' },
 		});
@@ -300,38 +300,27 @@ describe('pkcs7', () => {
 				},
 			],
 		});
-		expect(result).toMatchObject({ ok: false, code: 'signer_not_found' });
+		expect(result.ok).toBe(true);
 	});
 
-	it('verifyPkcs7SignedData returns malformed for unsupported signature algorithm', async () => {
+	it('verifyPkcs7SignedData fails closed for pre-parsed input without DER', async () => {
 		const signer = await createSelfSignedCertificate({
-			subject: { commonName: 'Unsupported PKCS7 Signer' },
+			subject: { commonName: 'DER-less PKCS7 Signer' },
 		});
 		const parsed = parsePkcs7SignedDataDer(
 			createSyntheticPkcs7SignedData(parseCertificatePem(signer.certificate.pem)),
 		);
 		expect(parsed.ok).toBe(true);
 		if (!parsed.ok) throw new Error('unreachable');
-		const signerInfo = parsed.value.signerInfos[0];
-		if (signerInfo === undefined) throw new Error('expected signer info');
-		const result = await verifyPkcs7SignedData({
-			...parsed.value,
-			encapsulatedContent: new TextEncoder().encode('pkcs7-bad-sig-alg'),
-			signerInfos: [
-				((existingSignerInfo) => ({
-					...existingSignerInfo,
-					hasSignedAttrs: false,
-					signatureAlgorithmOid: '1.2.3.4.5',
-				}))(signerInfo),
-			],
-		});
+		const { der: _ignoredDer, ...parsedWithoutDer } = parsed.value;
+		const result = await verifyPkcs7SignedData(parsedWithoutDer);
 		expect(result).toMatchObject({ ok: false, code: 'malformed' });
 		if (!result.ok) {
 			expect(result.error.code).toBe('malformed');
 		}
 	});
 
-	it('verifyPkcs7SignedData rejects when signer not found', async () => {
+	it('verifyPkcs7SignedData ignores tampered embedded certificates on pre-parsed input', async () => {
 		const signer = await createSelfSignedCertificate({
 			subject: { commonName: 'Signer' },
 		});
@@ -339,9 +328,13 @@ describe('pkcs7', () => {
 			subject: { commonName: 'Other' },
 		});
 		const parsedSigner = parseCertificatePem(signer.certificate.pem);
-		const syntheticData = createSyntheticPkcs7SignedData(parsedSigner);
-		// Replace the embedded certificate with a different one
-		const parsed = parsePkcs7SignedDataDer(syntheticData);
+		const content = new TextEncoder().encode('PKCS7 parsed certificate trust');
+		const signedDataDer = await createCmsSignedDataWithSignedAttrs(
+			parsedSigner,
+			signer.keyPair.privateKey,
+			content,
+		);
+		const parsed = parsePkcs7SignedDataDer(signedDataDer);
 		expect(parsed.ok).toBe(true);
 		if (!parsed.ok) throw new Error('unreachable');
 		const otherParsed = parseCertificatePem(other.certificate.pem);
@@ -351,11 +344,10 @@ describe('pkcs7', () => {
 			encapsulatedContent: new TextEncoder().encode('test'),
 		};
 		const result = await verifyPkcs7SignedData(tampered);
-		expect(result.ok).toBe(false);
-		if (!result.ok) expect(result.code).toBe('signer_not_found');
+		expect(result.ok).toBe(true);
 	});
 
-	it('verifyPkcs7SignedData rejects malformed signedAttrs on pre-parsed input', async () => {
+	it('verifyPkcs7SignedData ignores tampered signedAttrs on pre-parsed input', async () => {
 		const signer = await createSelfSignedCertificate({
 			subject: { commonName: 'Malformed Attrs Signer' },
 		});
@@ -377,10 +369,10 @@ describe('pkcs7', () => {
 			...parsed.value,
 			signerInfos: [{ ...signerInfo, signedAttrsDer: Uint8Array.of(0x31, 0x80) }],
 		});
-		expect(result).toMatchObject({ ok: false, code: 'malformed' });
+		expect(result.ok).toBe(true);
 	});
 
-	it('verifyPkcs7SignedData rejects retagged signedAttrs on pre-parsed input', async () => {
+	it('verifyPkcs7SignedData ignores retagged signedAttrs on pre-parsed input', async () => {
 		const signer = await createSelfSignedCertificate({
 			subject: { commonName: 'Retagged Attrs Signer' },
 		});
@@ -404,7 +396,7 @@ describe('pkcs7', () => {
 			...parsed.value,
 			signerInfos: [{ ...signerInfo, signedAttrsDer: retagged }],
 		});
-		expect(result).toMatchObject({ ok: false, code: 'malformed' });
+		expect(result.ok).toBe(true);
 	});
 
 	it('verifies signedData with SHA-384 signed attrs', async () => {
@@ -432,6 +424,57 @@ describe('pkcs7', () => {
 		const signedAttrsImplicit = tlv(0xa0, signedAttrsContent);
 		const sigAlgorithm = getSignatureAlgorithm(rsaKeys.privateKey);
 		const sig = await signBytes(rsaKeys.privateKey, sigAlgorithm, signedAttrsForSigning);
+		const signerInfo = sequence([
+			integerFromNumber(1),
+			sequence([
+				hexToBytes(parsedSigner.issuer.derHex),
+				tlv(0x02, hexToBytes(parsedSigner.serialNumberHex)),
+			]),
+			sequence([objectIdentifier(OIDS.sha384), nullValue()]),
+			signedAttrsImplicit,
+			sequence([
+				objectIdentifier(sigAlgorithm.algorithmOid),
+				...(sigAlgorithm.parameters !== undefined ? [sigAlgorithm.parameters] : []),
+			]),
+			octetString(sig),
+		]);
+		const signedData = sequence([
+			integerFromNumber(1),
+			setOf([sequence([objectIdentifier(OIDS.sha384), nullValue()])]),
+			sequence([objectIdentifier(OIDS.pkcs7Data), explicitContext(0, octetString(content))]),
+			explicitContext(0, parsedSigner.der),
+			setOf([signerInfo]),
+		]);
+		const der = sequence([objectIdentifier(OIDS.pkcs7SignedData), explicitContext(0, signedData)]);
+		const result = await verifyPkcs7SignedData(der);
+		expect(result.ok).toBe(true);
+	});
+
+	it('verifies signedData with RSA-PSS signed attrs', async () => {
+		const signer = await createSelfSignedCertificate({
+			subject: { commonName: 'RSA-PSS CMS Signer' },
+			algorithm: {
+				kind: 'rsa',
+				modulusLength: 2048,
+				hash: 'SHA-384',
+				scheme: 'pss',
+			},
+			signature: { kind: 'rsa-pss' },
+		});
+		const parsedSigner = parseCertificatePem(signer.certificate.pem);
+		const content = new TextEncoder().encode('RSA-PSS signed attrs');
+		const contentDigest = createHash('sha384').update(content).digest();
+		const signedAttrsContent = concatBytes([
+			sequence([objectIdentifier(OIDS.cmsContentType), setOf([objectIdentifier(OIDS.pkcs7Data)])]),
+			sequence([
+				objectIdentifier(OIDS.cmsMessageDigest),
+				setOf([octetString(new Uint8Array(contentDigest))]),
+			]),
+		]);
+		const signedAttrsForSigning = tlv(0x31, signedAttrsContent);
+		const signedAttrsImplicit = tlv(0xa0, signedAttrsContent);
+		const sigAlgorithm = getSignatureAlgorithm(signer.keyPair.privateKey, { kind: 'rsa-pss' });
+		const sig = await signBytes(signer.keyPair.privateKey, sigAlgorithm, signedAttrsForSigning);
 		const signerInfo = sequence([
 			integerFromNumber(1),
 			sequence([
@@ -803,39 +846,51 @@ describe('pkcs7', () => {
 		const signer = await createSelfSignedCertificate({
 			subject: { commonName: 'No Content Signer' },
 		});
-		const parsedSigner = parseCertificatePem(signer.certificate.pem);
-		const syntheticData = createSyntheticPkcs7SignedData(parsedSigner);
-		const parsed = parsePkcs7SignedDataDer(syntheticData);
-		expect(parsed.ok).toBe(true);
-		if (!parsed.ok) throw new Error('unreachable');
-		// Build object without encapsulatedContent (exactOptionalPropertyTypes)
-		const noContent: import('#micro509').ParsedPkcs7SignedData = {
-			contentTypeOid: parsed.value.contentTypeOid,
-			version: parsed.value.version,
-			digestAlgorithmOids: parsed.value.digestAlgorithmOids,
-			digestAlgorithmNames: parsed.value.digestAlgorithmNames,
-			encapsulatedContentTypeOid: parsed.value.encapsulatedContentTypeOid,
-			certificates: parsed.value.certificates,
-			signerInfos: parsed.value.signerInfos,
-		};
-		const result = await verifyPkcs7SignedData(noContent);
+		const bag = createPkcs7CertBagPem([signer.certificate.pem]);
+		const result = await verifyPkcs7SignedData(bag.der);
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.code).toBe('content_missing');
 	});
 
-	it('verifyPkcs7SignedData rejects direct signature verification failure', async () => {
-		// Use RSA keys since synthetic data hard-codes sha256WithRSAEncryption
+	it('verifyPkcs7SignedData ignores tampered encapsulated content on pre-parsed input', async () => {
 		const rsaKeys = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
 		const signer = await createSelfSignedCertificate({
 			subject: { commonName: 'Direct Sig Signer' },
 			keyPair: rsaKeys,
 		});
 		const parsedSigner = parseCertificatePem(signer.certificate.pem);
-		const syntheticData = createSyntheticPkcs7SignedData(parsedSigner);
-		const parsed = parsePkcs7SignedDataDer(syntheticData);
+		const content = new Uint8Array([0x48, 0x65, 0x6c, 0x6c, 0x6f]);
+		const sigAlgorithm = getSignatureAlgorithm(rsaKeys.privateKey);
+		const badSig = await signBytes(rsaKeys.privateKey, sigAlgorithm, new Uint8Array([0xff]));
+		const signerInfo = sequence([
+			integerFromNumber(1),
+			sequence([
+				hexToBytes(parsedSigner.issuer.derHex),
+				tlv(0x02, hexToBytes(parsedSigner.serialNumberHex)),
+			]),
+			sequence([objectIdentifier(OIDS.sha256), nullValue()]),
+			sequence([
+				objectIdentifier(sigAlgorithm.algorithmOid),
+				...(sigAlgorithm.parameters !== undefined ? [sigAlgorithm.parameters] : []),
+			]),
+			octetString(badSig),
+		]);
+		const der = sequence([
+			objectIdentifier(OIDS.pkcs7SignedData),
+			explicitContext(
+				0,
+				sequence([
+					integerFromNumber(1),
+					setOf([sequence([objectIdentifier(OIDS.sha256), nullValue()])]),
+					sequence([objectIdentifier(OIDS.pkcs7Data), explicitContext(0, octetString(content))]),
+					explicitContext(0, parsedSigner.der),
+					setOf([signerInfo]),
+				]),
+			),
+		]);
+		const parsed = parsePkcs7SignedDataDer(der);
 		expect(parsed.ok).toBe(true);
 		if (!parsed.ok) throw new Error('unreachable');
-		// Synthetic data has fake signature — verification must fail
 		const withContent = {
 			...parsed.value,
 			encapsulatedContent: new TextEncoder().encode('test'),
@@ -967,7 +1022,7 @@ describe('pkcs7', () => {
 		expect(result).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
-	it('parsePkcs7SignedDataDer handles empty SignerIdentifier issuer/serial', async () => {
+	it('parsePkcs7SignedDataDer rejects empty SignerIdentifier issuer/serial', async () => {
 		// Build a SignerInfo with empty issuerAndSerialNumber (just empty SEQUENCE)
 		const content = new Uint8Array([0x01, 0x02, 0x03]);
 		const rsaKeys = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
@@ -993,11 +1048,7 @@ describe('pkcs7', () => {
 		]);
 		const der = sequence([objectIdentifier(OIDS.pkcs7SignedData), explicitContext(0, signedData)]);
 		const result = parsePkcs7SignedDataDer(der);
-		expect(result.ok).toBe(true);
-		if (!result.ok) throw new Error('unreachable');
-		// SignerInfo should have undefined issuer/serialNumberHex
-		expect(result.value.signerInfos[0]?.issuer).toBeUndefined();
-		expect(result.value.signerInfos[0]?.serialNumberHex).toBeUndefined();
+		expect(result).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
 	it('createPkcs7CertBagDer with DER certificate source', async () => {

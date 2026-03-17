@@ -64,7 +64,10 @@ import {
 	normalizeIpAddress,
 	parseIpAddressToBytes,
 } from '#micro509/internal/shared/ip.ts';
-import { parseKeyUsageExtension } from '#micro509/internal/x509/extension-bits.ts';
+import {
+	parseDistributionPointReasonFlagsContent,
+	parseKeyUsageExtension,
+} from '#micro509/internal/x509/extension-bits.ts';
 
 // ---------------------------------------------------------------------------
 // DER encoding edge cases
@@ -403,6 +406,18 @@ describe('ip helpers', () => {
 	it('rejects key usage values encoded with the wrong ASN.1 tag', () => {
 		expect(() => parseKeyUsageExtension(Uint8Array.of(0x04, 0x01, 0x00))).toThrow(
 			'keyUsage must be a BIT STRING',
+		);
+	});
+
+	it('rejects key usage values with non-zero padding bits', () => {
+		expect(() => parseKeyUsageExtension(Uint8Array.of(0x03, 0x02, 0x07, 0x01))).toThrow(
+			'keyUsage BIT STRING must not set padding bits',
+		);
+	});
+
+	it('rejects distribution point reason values with non-zero padding bits', () => {
+		expect(() => parseDistributionPointReasonFlagsContent(Uint8Array.of(0x01, 0x01))).toThrow(
+			'DistributionPoint reasons BIT STRING must not set padding bits',
 		);
 	});
 });

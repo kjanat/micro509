@@ -24,6 +24,7 @@ import {
 	integerFromNumber,
 	objectIdentifier,
 	readElement,
+	readRootElement,
 	readSequenceChildren,
 	sequence,
 	setOf,
@@ -33,7 +34,7 @@ import {
 	describeHashAlgorithm,
 	describeSignatureAlgorithm,
 } from '#micro509/internal/crypto/algorithm-names.ts';
-import { verifySignedData } from '#micro509/internal/crypto/sig-verify.ts';
+import { verifySignedDataDetailed } from '#micro509/internal/crypto/sig-verify.ts';
 import { getCrypto } from '#micro509/internal/crypto/webcrypto.ts';
 import { base64Encode } from '#micro509/internal/shared/base64.ts';
 import { compareDistinguishedNames } from '#micro509/internal/shared/dn.ts';
@@ -93,6 +94,8 @@ export interface ParsedPkcs7SignerInfo {
 
 /** Decoded PKCS#7 SignedData content, including certificates and signer info. */
 export interface ParsedPkcs7SignedData {
+	/** Original DER bytes when this object came from {@linkcode parsePkcs7SignedDataDer} or PEM parsing. */
+	readonly der?: Uint8Array;
 	/** Outer ContentInfo type OID (always `pkcs7-signedData`). */
 	readonly contentTypeOid: string;
 	/** SignedData version number. */
@@ -309,6 +312,7 @@ export function parsePkcs7SignedDataDer(der: Uint8Array): ParsePkcs7SignedDataRe
 		return {
 			ok: true,
 			value: {
+				der: new Uint8Array(der),
 				contentTypeOid,
 				version: decodeIntegerNumber(version.value),
 				digestAlgorithmOids,
@@ -380,7 +384,14 @@ export async function verifyPkcs7SignedData(
 		}
 		parsed = result.value;
 	} else {
-		parsed = input;
+		if (!hasReparseablePkcs7SignedData(input)) {
+			return verifyPkcs7Failure('malformed', 'SignedData parsed input is malformed');
+		}
+		const result = parsePkcs7SignedDataDer(new Uint8Array(input.der));
+		if (!result.ok) {
+			return result;
+		}
+		parsed = result.value;
 	}
 	if (parsed.encapsulatedContent === undefined) {
 		return verifyPkcs7Failure('content_missing', 'SignedData encapsulated content is missing');
@@ -409,15 +420,19 @@ export async function verifyPkcs7SignedData(
 		}
 		let verified: boolean;
 		try {
-			verified = await verifySignedData(
+			const verificationResult = await verifySignedDataDetailed(
 				signerInfo.signatureAlgorithmOid,
-				undefined,
+				signerInfo.signatureAlgorithmParametersDer,
 				signer.publicKeyAlgorithmOid,
 				signer.publicKeyParametersOid,
 				signer.subjectPublicKeyInfoDer,
 				signerInfo.signature,
 				parsed.encapsulatedContent,
 			);
+			if (!verificationResult.ok) {
+				return verifyPkcs7Failure('malformed', 'Unsupported signature algorithm in SignedData');
+			}
+			verified = verificationResult.valid;
 		} catch {
 			return verifyPkcs7Failure('malformed', 'Unsupported signature algorithm in SignedData');
 		}
@@ -630,9 +645,12 @@ function parseSignerIdentifier(der: Uint8Array): {
 	readonly serialNumberHex?: string;
 	readonly subjectKeyIdentifier?: string;
 } {
-	const element = readElement(der);
+	const element = readRootElement(der, { maxDepth: DEFAULT_MAX_DER_DEPTH });
 	// [0] IMPLICIT SubjectKeyIdentifier
 	if (element.tag === 0x80) {
+		if (element.value.length === 0) {
+			throw new Error('SignerIdentifier subjectKeyIdentifier must not be empty');
+		}
 		return {
 			subjectKeyIdentifier: toHex(element.value),
 		};
@@ -642,15 +660,22 @@ function parseSignerIdentifier(der: Uint8Array): {
 		const top = readSequenceChildren(der);
 		const issuerElement = top[0];
 		const serial = top[1];
-		if (issuerElement === undefined || serial === undefined) {
-			return {};
+		if (issuerElement === undefined || serial === undefined || top.length !== 2) {
+			throw new Error('SignerIdentifier issuerAndSerialNumber is malformed');
 		}
+		if (issuerElement.tag !== 0x30) {
+			throw new Error('SignerIdentifier issuer must use Name SEQUENCE');
+		}
+		if (serial.tag !== 0x02) {
+			throw new Error('SignerIdentifier serialNumber must use INTEGER');
+		}
+		assertImplicitSerialNumberEncoding(serial.value, 'SignerIdentifier serialNumber');
 		return {
 			issuer: parseSignerIssuerName(der, issuerElement),
 			serialNumberHex: toHex(serial.value),
 		};
 	}
-	return {};
+	throw new Error(`Unsupported SignerIdentifier tag: ${String(element.tag)}`);
 }
 
 const textDecoder = new TextDecoder();
@@ -860,15 +885,19 @@ async function verifySignedAttrs(
 	}
 	let verified: boolean;
 	try {
-		verified = await verifySignedData(
+		const verificationResult = await verifySignedDataDetailed(
 			signerInfo.signatureAlgorithmOid,
-			undefined,
+			signerInfo.signatureAlgorithmParametersDer,
 			signer.publicKeyAlgorithmOid,
 			signer.publicKeyParametersOid,
 			signer.subjectPublicKeyInfoDer,
 			signerInfo.signature,
 			signedData,
 		);
+		if (!verificationResult.ok) {
+			return verifyPkcs7Failure('malformed', 'Unsupported signature algorithm in SignedData');
+		}
+		verified = verificationResult.valid;
 	} catch {
 		return verifyPkcs7Failure('malformed', 'Unsupported signature algorithm in SignedData');
 	}
@@ -902,5 +931,24 @@ function signerIdentifierMatches(
 function assertImplicitSignedAttrsDer(signedAttrsDer: Uint8Array): void {
 	if (readElement(signedAttrsDer).tag !== 0xa0) {
 		throw new Error('signedAttrs must use IMPLICIT [0] tag');
+	}
+}
+
+function hasReparseablePkcs7SignedData(
+	value: ParsedPkcs7SignedData,
+): value is ParsedPkcs7SignedData & { readonly der: Uint8Array } {
+	return 'der' in value && value.der instanceof Uint8Array;
+}
+
+function assertImplicitSerialNumberEncoding(bytes: Uint8Array, label: string): void {
+	const first = bytes[0];
+	if (first === undefined) {
+		throw new Error(`${label} must not be empty`);
+	}
+	if ((first & 0x80) !== 0) {
+		throw new Error(`${label} must be non-negative`);
+	}
+	if (bytes.length > 1 && first === 0 && ((bytes[1] ?? 0) & 0x80) === 0) {
+		throw new Error(`${label} must use minimal encoding`);
 	}
 }

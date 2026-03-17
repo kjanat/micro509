@@ -72,7 +72,10 @@ export function parseKeyUsageExtension(bytes: Uint8Array): ParsedBitFlags<KeyUsa
 	if (bitStringElement.tag !== 0x03) {
 		throw new Error('keyUsage must be a BIT STRING');
 	}
-	return decodeBitFlags(bitStringElement.value, KEY_USAGE_ORDER, 0);
+	return requireCanonicalBitFlags(
+		decodeBitFlags(bitStringElement.value, KEY_USAGE_ORDER, 0),
+		'keyUsage',
+	);
 }
 
 /**
@@ -101,7 +104,10 @@ export function encodeDistributionPointReasonFlagsContent(
 export function parseDistributionPointReasonFlagsContent(
 	value: Uint8Array,
 ): ParsedBitFlags<DistributionPointReason> | undefined {
-	const result = decodeBitFlags(value, DISTRIBUTION_POINT_REASON_ORDER, 1);
+	const result = requireCanonicalBitFlags(
+		decodeBitFlags(value, DISTRIBUTION_POINT_REASON_ORDER, 1),
+		'DistributionPoint reasons',
+	);
 	return result.flags.length === 0 ? undefined : result;
 }
 
@@ -184,6 +190,16 @@ function decodeBitFlags<T extends string>(
 		}
 	}
 	return { flags, nonZeroPadding };
+}
+
+function requireCanonicalBitFlags<T extends string>(
+	parsed: ParsedBitFlags<T>,
+	label: string,
+): ParsedBitFlags<T> {
+	if (parsed.nonZeroPadding) {
+		throw new Error(`${label} BIT STRING must not set padding bits`);
+	}
+	return parsed;
 }
 
 /** Look up the bit position of a flag in its canonical order array. Throws on unknown flags. */
