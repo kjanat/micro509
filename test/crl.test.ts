@@ -2418,6 +2418,40 @@ describe('crl', () => {
 		expect(result).toMatchObject({ ok: false, code: 'non_applicable' });
 	});
 
+	it('checkCertificateRevocationAgainstCrl rejects duplicate revoked entries for the same certificate', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Duplicate Revoked Entry CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Duplicate Revoked Entry CA' },
+			subject: { commonName: 'duplicate-revoked-entry-check.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+		const parsedLeaf = parseCertificatePem(leaf.pem);
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Duplicate Revoked Entry CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			revokedCertificates: [
+				{ serialNumber: hexToBytes(parsedLeaf.serialNumberHex) },
+				{ serialNumber: hexToBytes(parsedLeaf.serialNumberHex) },
+			],
+		});
+		const result = await checkCertificateRevocationAgainstCrl({
+			certificate: leaf.pem,
+			issuerCertificate: ca.certificate.pem,
+			crl: crl.pem,
+		});
+		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
+	});
+
 	it('verifyCertificateRevocationList rejects CRL signed by wrong key', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'CRL CA' },

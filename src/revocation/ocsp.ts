@@ -905,6 +905,12 @@ export async function validateOcspResponse(
 			);
 		}
 	}
+	if (hasDuplicateOcspResponseCertificateSerial(parsedResponse.responses ?? [])) {
+		return validateOcspResponseFailureResult(
+			'signature_invalid',
+			'OCSP response contains multiple status entries for the same certificate',
+		);
+	}
 	if (input.request !== undefined) {
 		let request: ParsedOcspRequest;
 		try {
@@ -1693,6 +1699,20 @@ function assertUniqueOcspResponseCertIds(responses: readonly ParsedOcspSingleRes
 	}
 }
 
+function hasDuplicateOcspResponseCertificateSerial(
+	responses: readonly ParsedOcspSingleResponse[],
+): boolean {
+	const seen = new Set<string>();
+	for (const response of responses) {
+		const serial = normalizeHex(response.certId.serialNumberHex);
+		if (seen.has(serial)) {
+			return true;
+		}
+		seen.add(serial);
+	}
+	return false;
+}
+
 function validateOcspRequestorName(source: Uint8Array, element: DerElement): void {
 	const children = childrenOf(source, element);
 	const requestorName = requireElement(children[0], 'requestorName');
@@ -1752,6 +1772,10 @@ function validateAlgorithmIdentifierShape(
 		throw new Error(`${label} must use AlgorithmIdentifier SEQUENCE`);
 	}
 	decodeObjectIdentifier(requireElement(children[0], `${label} OID`).value);
+}
+
+function normalizeHex(value: string): string {
+	return value.replace(/^0+/, '').toLowerCase();
 }
 
 /** Maps a hash algorithm OID to the WebCrypto algorithm name. Throws on unsupported OIDs. */

@@ -2139,6 +2139,49 @@ describe('ocsp', () => {
 		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
 	});
 
+	it('validateOcspResponse rejects multiple status entries for the same certificate across hash algorithms', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Duplicate Serial Hash CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Duplicate Serial Hash CA' },
+			subject: { commonName: 'duplicate-serial-hash.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const parsedIssuer = parseCertificatePem(issuer.certificate.pem);
+		const responderKeyHash = new Uint8Array(
+			sha1(extractSubjectPublicKeyBytes(parsedIssuer.subjectPublicKeyInfoDer)),
+		);
+		const response = await createSignedOcspResponseWithSingleResponses({
+			signerPrivateKey: issuer.keyPair.privateKey,
+			responderIdDer: implicitPrimitiveContext(2, responderKeyHash),
+			singleResponses: [
+				await createOcspSingleResponseWithHashAlgorithm(
+					issuer.certificate.pem,
+					leaf.pem,
+					OIDS.sha1,
+				),
+				await createOcspSingleResponseWithHashAlgorithm(
+					issuer.certificate.pem,
+					leaf.pem,
+					OIDS.sha256,
+				),
+			],
+		});
+		const result = await validateOcspResponse({
+			response,
+			issuerCertificate: issuer.certificate.pem,
+		});
+		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
+	});
+
 	it('validateOcspResponse returns issuer_mismatch for wrong issuer cert', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'OCSP Mismatch CA' },
@@ -3139,6 +3182,63 @@ async function createSignedOcspResponseWithResponderId(input: {
 			0,
 			sequence([objectIdentifier(OIDS.ocspBasicResponse), octetString(basicResponse)]),
 		),
+	]);
+}
+
+async function createSignedOcspResponseWithSingleResponses(input: {
+	readonly signerPrivateKey: CryptoKey;
+	readonly responderIdDer: Uint8Array;
+	readonly singleResponses: readonly Uint8Array[];
+	readonly producedAt?: Date;
+}): Promise<Uint8Array> {
+	const responseData = sequence([
+		input.responderIdDer,
+		generalizedTime(input.producedAt ?? new Date('2024-01-01T00:00:00Z')),
+		sequence(input.singleResponses),
+	]);
+	const signatureAlgorithm = getSignatureAlgorithm(input.signerPrivateKey);
+	const signature = await signBytes(input.signerPrivateKey, signatureAlgorithm, responseData);
+	const basicResponse = sequence([
+		responseData,
+		encodeAlgorithmIdentifier(signatureAlgorithm),
+		bitString(signature),
+	]);
+	return sequence([
+		tlv(0x0a, Uint8Array.of(0x00)),
+		explicitContext(
+			0,
+			sequence([objectIdentifier(OIDS.ocspBasicResponse), octetString(basicResponse)]),
+		),
+	]);
+}
+
+async function createOcspSingleResponseWithHashAlgorithm(
+	issuerPem: string,
+	certificatePem: string,
+	hashAlgorithmOid: string,
+): Promise<Uint8Array> {
+	const issuer = parseCertificatePem(issuerPem);
+	const certificate = parseCertificatePem(certificatePem);
+	const hashName = hashAlgorithmOid === OIDS.sha256 ? 'SHA-256' : 'SHA-1';
+	const issuerNameBytes = new Uint8Array(hexToBytes(issuer.subject.derHex));
+	const subjectPublicKeyBytes = extractSubjectPublicKeyBytes(issuer.subjectPublicKeyInfoDer);
+	const issuerNameDigestInput = Uint8Array.from(issuerNameBytes);
+	const subjectPublicKeyDigestInput = Uint8Array.from(subjectPublicKeyBytes);
+	const issuerNameHash = new Uint8Array(
+		await globalThis.crypto.subtle.digest(hashName, issuerNameDigestInput),
+	);
+	const issuerKeyHash = new Uint8Array(
+		await globalThis.crypto.subtle.digest(hashName, subjectPublicKeyDigestInput),
+	);
+	return sequence([
+		sequence([
+			sequence([objectIdentifier(hashAlgorithmOid), Uint8Array.of(0x05, 0x00)]),
+			octetString(issuerNameHash),
+			octetString(issuerKeyHash),
+			tlv(0x02, hexToBytes(certificate.serialNumberHex)),
+		]),
+		tlv(0x80, new Uint8Array(0)),
+		generalizedTime(new Date('2024-01-01T00:00:00Z')),
 	]);
 }
 

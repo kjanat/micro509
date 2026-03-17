@@ -857,6 +857,7 @@ function findRevokedCertificateEntry(
 	const serialNumberHex = normalizeHex(certificate.serialNumberHex);
 	let effectiveIssuer: readonly GeneralName[] | undefined;
 	let sawUnsupportedIssuer = false;
+	let matchedEntry: ParsedRevokedCertificate | undefined;
 	for (const entry of crl.revokedCertificates) {
 		if (entry.certificateIssuer !== undefined) {
 			effectiveIssuer = entry.certificateIssuer;
@@ -866,11 +867,21 @@ function findRevokedCertificateEntry(
 		}
 		const issuerMatch = matchesRevokedEntryIssuer(certificate, crl, effectiveIssuer);
 		if (issuerMatch === 'match') {
-			return { ok: true, entry };
+			if (matchedEntry !== undefined) {
+				return checkCertificateRevocationAgainstCrlFailureResult(
+					'signature_invalid',
+					'CRL contains multiple revoked entries for certificate',
+				);
+			}
+			matchedEntry = entry;
+			continue;
 		}
 		if (issuerMatch === 'unsupported') {
 			sawUnsupportedIssuer = true;
 		}
+	}
+	if (matchedEntry !== undefined) {
+		return { ok: true, entry: matchedEntry };
 	}
 	if (sawUnsupportedIssuer) {
 		return nonApplicable(

@@ -833,7 +833,11 @@ function parseTraditionalPem(pem: string): {
 		if (delimiter === -1) {
 			break;
 		}
-		headers.set(line.slice(0, delimiter), line.slice(delimiter + 2));
+		const headerName = line.slice(0, delimiter);
+		if (headers.has(headerName)) {
+			throw new Error(`Duplicate PEM header: ${headerName}`);
+		}
+		headers.set(headerName, line.slice(delimiter + 2));
 		index += 1;
 	}
 	const body = lines.slice(index, lines.length - 1).join('');

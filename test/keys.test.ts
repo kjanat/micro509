@@ -513,6 +513,25 @@ describe('keys: coverage — malformed inputs', () => {
 		);
 	});
 
+	it('decryptTraditionalPem rejects duplicate encryption headers', async () => {
+		const rsa = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
+		const encrypted = await exportEncryptedPkcs1Pem(rsa.privateKey, { password: 'test' });
+		const withDuplicateProcType = encrypted.replace(
+			'Proc-Type: 4,ENCRYPTED',
+			'Proc-Type: 4,ENCRYPTED\nProc-Type: 4,ENCRYPTED',
+		);
+		expect(importEncryptedPkcs1Pem(withDuplicateProcType, 'test', { kind: 'rsa' })).rejects.toThrow(
+			'Duplicate PEM header: Proc-Type',
+		);
+		const withDuplicateDekInfo = encrypted.replace(
+			/DEK-Info: .+/,
+			(match) => `${match}\nDEK-Info: AES-128-CBC,00000000000000000000000000000000`,
+		);
+		expect(importEncryptedPkcs1Pem(withDuplicateDekInfo, 'test', { kind: 'rsa' })).rejects.toThrow(
+			'Duplicate PEM header: DEK-Info',
+		);
+	});
+
 	it('parseTraditionalPem throws on non-PEM input', async () => {
 		expect(importEncryptedPkcs1Pem('not a pem block', 'test', { kind: 'rsa' })).rejects.toThrow(
 			'Invalid PEM block',
