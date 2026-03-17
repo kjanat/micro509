@@ -12,6 +12,10 @@
 }
 
 .VPSocialLink:hover .vpi-social-jsr {
+  color: #1f4e78;
+}
+
+.dark .VPSocialLink:hover .vpi-social-jsr {
   color: #f7df1e;
 }
 
