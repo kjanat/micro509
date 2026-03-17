@@ -8,7 +8,11 @@ import pkg from '../../package.json' with { type: 'json' };
 import typedocSidebar from '../api/typedoc-sidebar.json' with { type: 'json' };
 
 const getGitBranch = async (): Promise<string> => {
-	return (await $`git branch --show-current`.text()).trim();
+	const branchFromEnv = process.env.GITHUB_REF_NAME?.trim();
+	if (branchFromEnv) return branchFromEnv;
+
+	const branchFromGit = (await $`git branch --show-current`.text()).trim();
+	return branchFromGit || 'master';
 };
 const getGitCommitHash = async (length: number = 7): Promise<string> => {
 	return (await $`git rev-parse HEAD`.text()).trim().slice(0, length);
