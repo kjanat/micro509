@@ -25,7 +25,9 @@ jobs:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/release-validate
         id: version
-        with: { event-name: "${{ github.event_name }}", ref-name: "${{ github.ref_name }}" }
+        with:
+          event-name: ${{ github.event_name }}
+          ref-name: ${{ github.ref_name }}
 
   publish-jsr:
     name: JSR (${{ needs.validate.outputs.mode }})
@@ -48,9 +50,9 @@ jobs:
               echo "::notice::${PKG_NAME}@${PKG_VERSION} already on JSR, skipping"
               exit 0
             fi
-            bunx --bun jsr publish --provenance && exit 0
+            bunx --bun jsr publish && exit 0
           fi
-          bunx --bun jsr publish --provenance --dry-run
+          bunx --bun jsr publish --dry-run
         env: { DRY_RUN: "${{ needs.validate.outputs.is_tag != 'true' }}" }
 
   publish-npm:
