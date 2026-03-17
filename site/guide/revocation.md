@@ -1,5 +1,7 @@
 # Revocation
 
+Examples below assume `ca`, `leaf`, `pem`, `der`, `request`, `crlPem`, and `ocspDer` are already defined.
+
 ## CRL lifecycle
 
 ### Create a CRL

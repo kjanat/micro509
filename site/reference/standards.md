@@ -33,6 +33,13 @@
 - Nonce matching
 - Freshness checks
 
+### CRL processing
+
+- Delta CRL merge
+- Indirect issuer handling
+- Scope matching
+- Basic CRL parsing and revocation checks
+
 ### RFC 6125 service identity
 
 - DNS-ID with single-level wildcard matching

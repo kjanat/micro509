@@ -107,6 +107,7 @@ Parse a certificate:
 ```ts
 import { parseCertificatePem } from 'micro509';
 
+// Using certificate from previous example
 const parsed = parseCertificatePem(certificate.pem);
 console.log(parsed.subject.values.commonName);
 console.log(parsed.extendedKeyUsage);

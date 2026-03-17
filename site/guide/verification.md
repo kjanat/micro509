@@ -34,16 +34,35 @@ Four built-in validation profiles:
 
 ```ts
 // TLS server (default)
-verifyCertificateChain({ ..., purpose: 'serverAuth' });
+await verifyCertificateChain({
+  leaf: leaf.pem,
+  intermediates: [intermediate.pem],
+  roots: [root.pem],
+  purpose: 'serverAuth',
+});
 
 // TLS client
-verifyCertificateChain({ ..., purpose: 'clientAuth' });
+await verifyCertificateChain({
+  leaf: leaf.pem,
+  intermediates: [intermediate.pem],
+  roots: [root.pem],
+  purpose: 'clientAuth',
+});
 
 // Code signing
-verifyCertificateChain({ ..., purpose: 'codeSigning' });
+await verifyCertificateChain({
+  leaf: leaf.pem,
+  intermediates: [intermediate.pem],
+  roots: [root.pem],
+  purpose: 'codeSigning',
+});
 
 // CA certificate
-verifyCertificateChain({ ..., purpose: 'ca' });
+await verifyCertificateChain({
+  leaf: intermediate.pem,
+  roots: [root.pem],
+  purpose: 'ca',
+});
 ```
 
 ## Service identity matching
