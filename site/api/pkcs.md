@@ -11,7 +11,7 @@ and PKCS#12 MAC integrity helpers.
 
 ### CreatePfxInput
 
-Defined in: [pkcs/pfx.ts:79](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L79)
+Defined in: [pkcs/pfx.ts:84](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L84)
 
 Input for [`createPfx`](#createpfx).
 
@@ -21,7 +21,7 @@ Input for [`createPfx`](#createpfx).
 
 > `readonly` `optional` **certificates**: readonly [`PfxCertificateBagInput`](#pfxcertificatebaginput)[]
 
-Defined in: [pkcs/pfx.ts:81](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L81)
+Defined in: [pkcs/pfx.ts:86](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L86)
 
 Certificates to include as certBag entries.
 
@@ -29,7 +29,7 @@ Certificates to include as certBag entries.
 
 > `readonly` `optional` **encryption**: [`Pbes2EncryptionOptions`](keys.md#pbes2encryptionoptions)
 
-Defined in: [pkcs/pfx.ts:85](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L85)
+Defined in: [pkcs/pfx.ts:90](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L90)
 
 PBES2 encryption settings for the key-bag ContentInfo. Omit for unencrypted.
 
@@ -37,7 +37,7 @@ PBES2 encryption settings for the key-bag ContentInfo. Omit for unencrypted.
 
 > `readonly` `optional` **mac**: [`Pkcs12MacOptions`](#pkcs12macoptions)
 
-Defined in: [pkcs/pfx.ts:87](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L87)
+Defined in: [pkcs/pfx.ts:92](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L92)
 
 PKCS#12 MAC integrity settings. Omit to skip MAC generation.
 
@@ -45,7 +45,7 @@ PKCS#12 MAC integrity settings. Omit to skip MAC generation.
 
 > `readonly` `optional` **privateKeys**: readonly [`PfxPrivateKeyBagInput`](#pfxprivatekeybaginput)[]
 
-Defined in: [pkcs/pfx.ts:83](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L83)
+Defined in: [pkcs/pfx.ts:88](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L88)
 
 Private keys to include as keyBag entries.
 
@@ -53,7 +53,7 @@ Private keys to include as keyBag entries.
 
 ### ParsedPfx
 
-Defined in: [pkcs/pfx.ts:167](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L167)
+Defined in: [pkcs/pfx.ts:172](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L172)
 
 Fully decoded PFX container returned by [`parsePfxDer`](#parsepfxder) / [`parsePfxPem`](#parsepfxpem).
 
@@ -63,7 +63,7 @@ Fully decoded PFX container returned by [`parsePfxDer`](#parsepfxder) / [`parseP
 
 > `readonly` **bags**: readonly [`ParsedPfxBag`](#parsedpfxbag)[]
 
-Defined in: [pkcs/pfx.ts:169](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L169)
+Defined in: [pkcs/pfx.ts:174](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L174)
 
 All SafeBags in the PFX, including unknown types.
 
@@ -71,7 +71,7 @@ All SafeBags in the PFX, including unknown types.
 
 > `readonly` **certificates**: readonly [`ParsedCertificate`](x509.md#parsedcertificate)\<`Record`\<`never`, `never`\>\>[]
 
-Defined in: [pkcs/pfx.ts:171](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L171)
+Defined in: [pkcs/pfx.ts:176](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L176)
 
 Convenience: only the parsed certificates extracted from certBag entries.
 
@@ -79,7 +79,7 @@ Convenience: only the parsed certificates extracted from certBag entries.
 
 > `readonly` `optional` **macData**: [`ParsedPkcs12MacData`](#parsedpkcs12macdata)
 
-Defined in: [pkcs/pfx.ts:175](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L175)
+Defined in: [pkcs/pfx.ts:180](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L180)
 
 MAC verification metadata, present when the PFX includes a MacData block.
 
@@ -87,7 +87,7 @@ MAC verification metadata, present when the PFX includes a MacData block.
 
 > `readonly` **privateKeys**: readonly `Uint8Array`\<`ArrayBufferLike`\>[]
 
-Defined in: [pkcs/pfx.ts:173](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L173)
+Defined in: [pkcs/pfx.ts:178](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L178)
 
 Convenience: raw PKCS#8 DER of each private key extracted from keyBag entries.
 
@@ -95,7 +95,7 @@ Convenience: raw PKCS#8 DER of each private key extracted from keyBag entries.
 
 ### ParsedPfxAttribute
 
-Defined in: [pkcs/pfx.ts:112](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L112)
+Defined in: [pkcs/pfx.ts:117](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L117)
 
 A single PKCS#12 bag attribute as decoded by [`parsePfxDer`](#parsepfxder).
 
@@ -105,7 +105,7 @@ A single PKCS#12 bag attribute as decoded by [`parsePfxDer`](#parsepfxder).
 
 > `readonly` **oid**: `string`
 
-Defined in: [pkcs/pfx.ts:114](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L114)
+Defined in: [pkcs/pfx.ts:119](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L119)
 
 Dotted-decimal OID identifying this attribute type.
 
@@ -113,7 +113,7 @@ Dotted-decimal OID identifying this attribute type.
 
 > `readonly` **valuesHex**: readonly `string`[]
 
-Defined in: [pkcs/pfx.ts:116](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L116)
+Defined in: [pkcs/pfx.ts:121](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L121)
 
 Hex-encoded DER of each attribute value.
 
@@ -121,7 +121,7 @@ Hex-encoded DER of each attribute value.
 
 ### ParsedPfxBagAttributes
 
-Defined in: [pkcs/pfx.ts:120](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L120)
+Defined in: [pkcs/pfx.ts:125](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L125)
 
 Decoded bag attributes for a single SafeBag inside a PFX.
 
@@ -131,7 +131,7 @@ Decoded bag attributes for a single SafeBag inside a PFX.
 
 > `readonly` **entries**: readonly [`ParsedPfxAttribute`](#parsedpfxattribute)[]
 
-Defined in: [pkcs/pfx.ts:122](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L122)
+Defined in: [pkcs/pfx.ts:127](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L127)
 
 All raw attributes as OID + hex-encoded values.
 
@@ -139,7 +139,7 @@ All raw attributes as OID + hex-encoded values.
 
 > `readonly` `optional` **friendlyName**: `string`
 
-Defined in: [pkcs/pfx.ts:124](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L124)
+Defined in: [pkcs/pfx.ts:129](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L129)
 
 Decoded BMPString friendly-name attribute, if present.
 
@@ -147,7 +147,7 @@ Decoded BMPString friendly-name attribute, if present.
 
 > `readonly` `optional` **localKeyId**: `string`
 
-Defined in: [pkcs/pfx.ts:126](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L126)
+Defined in: [pkcs/pfx.ts:131](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L131)
 
 Hex-encoded localKeyId attribute, if present.
 
@@ -213,7 +213,7 @@ MAC verification outcome. Present only when a password was supplied during parsi
 
 ### ParsedPkcs7SignedData
 
-Defined in: [pkcs/pkcs7.ts:95](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L95)
+Defined in: [pkcs/pkcs7.ts:96](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L96)
 
 Decoded PKCS#7 SignedData content, including certificates and signer info.
 
@@ -223,7 +223,7 @@ Decoded PKCS#7 SignedData content, including certificates and signer info.
 
 > `readonly` **certificates**: readonly [`ParsedCertificate`](x509.md#parsedcertificate)\<`Record`\<`never`, `never`\>\>[]
 
-Defined in: [pkcs/pkcs7.ts:109](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L109)
+Defined in: [pkcs/pkcs7.ts:112](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L112)
 
 Certificates included in the SignedData certificate set.
 
@@ -231,15 +231,23 @@ Certificates included in the SignedData certificate set.
 
 > `readonly` **contentTypeOid**: `string`
 
-Defined in: [pkcs/pkcs7.ts:97](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L97)
+Defined in: [pkcs/pkcs7.ts:100](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L100)
 
 Outer ContentInfo type OID (always `pkcs7-signedData`).
+
+##### der?
+
+> `readonly` `optional` **der**: `Uint8Array`\<`ArrayBufferLike`\>
+
+Defined in: [pkcs/pkcs7.ts:98](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L98)
+
+Original DER bytes when this object came from [`parsePkcs7SignedDataDer`](#parsepkcs7signeddatader) or PEM parsing.
 
 ##### digestAlgorithmNames
 
 > `readonly` **digestAlgorithmNames**: readonly `string`[]
 
-Defined in: [pkcs/pkcs7.ts:103](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L103)
+Defined in: [pkcs/pkcs7.ts:106](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L106)
 
 Human-readable digest algorithm names declared in `digestAlgorithms`.
 
@@ -247,7 +255,7 @@ Human-readable digest algorithm names declared in `digestAlgorithms`.
 
 > `readonly` **digestAlgorithmOids**: readonly `string`[]
 
-Defined in: [pkcs/pkcs7.ts:101](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L101)
+Defined in: [pkcs/pkcs7.ts:104](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L104)
 
 OIDs of digest algorithms declared in `digestAlgorithms`.
 
@@ -255,7 +263,7 @@ OIDs of digest algorithms declared in `digestAlgorithms`.
 
 > `readonly` `optional` **encapsulatedContent**: `Uint8Array`\<`ArrayBufferLike`\>
 
-Defined in: [pkcs/pkcs7.ts:107](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L107)
+Defined in: [pkcs/pkcs7.ts:110](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L110)
 
 Raw encapsulated content bytes. Absent in degenerate (certs-only) bags.
 
@@ -263,7 +271,7 @@ Raw encapsulated content bytes. Absent in degenerate (certs-only) bags.
 
 > `readonly` **encapsulatedContentTypeOid**: `string`
 
-Defined in: [pkcs/pkcs7.ts:105](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L105)
+Defined in: [pkcs/pkcs7.ts:108](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L108)
 
 OID of the encapsulated content type (e.g. `pkcs7-data`).
 
@@ -271,7 +279,7 @@ OID of the encapsulated content type (e.g. `pkcs7-data`).
 
 > `readonly` **signerInfos**: readonly [`ParsedPkcs7SignerInfo`](#parsedpkcs7signerinfo)[]
 
-Defined in: [pkcs/pkcs7.ts:111](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L111)
+Defined in: [pkcs/pkcs7.ts:114](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L114)
 
 Decoded signer info entries. Empty for degenerate cert bags.
 
@@ -279,7 +287,7 @@ Decoded signer info entries. Empty for degenerate cert bags.
 
 > `readonly` **version**: `number`
 
-Defined in: [pkcs/pkcs7.ts:99](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L99)
+Defined in: [pkcs/pkcs7.ts:102](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L102)
 
 SignedData version number.
 
@@ -287,7 +295,7 @@ SignedData version number.
 
 ### ParsedPkcs7SignerInfo
 
-Defined in: [pkcs/pkcs7.ts:65](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L65)
+Defined in: [pkcs/pkcs7.ts:66](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L66)
 
 A single SignerInfo decoded from a PKCS#7 SignedData structure.
 
@@ -297,7 +305,7 @@ A single SignerInfo decoded from a PKCS#7 SignedData structure.
 
 > `readonly` **digestAlgorithmName**: `string`
 
-Defined in: [pkcs/pkcs7.ts:77](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L77)
+Defined in: [pkcs/pkcs7.ts:78](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L78)
 
 Human-readable digest algorithm name (e.g. `"SHA-256"`).
 
@@ -305,7 +313,7 @@ Human-readable digest algorithm name (e.g. `"SHA-256"`).
 
 > `readonly` **digestAlgorithmOid**: `string`
 
-Defined in: [pkcs/pkcs7.ts:75](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L75)
+Defined in: [pkcs/pkcs7.ts:76](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L76)
 
 OID of the digest algorithm used to hash the content.
 
@@ -313,7 +321,7 @@ OID of the digest algorithm used to hash the content.
 
 > `readonly` **hasSignedAttrs**: `boolean`
 
-Defined in: [pkcs/pkcs7.ts:89](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L89)
+Defined in: [pkcs/pkcs7.ts:90](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L90)
 
 Whether this SignerInfo includes authenticated (signed) attributes.
 
@@ -321,7 +329,7 @@ Whether this SignerInfo includes authenticated (signed) attributes.
 
 > `readonly` `optional` **issuer**: [`ParsedName`](x509.md#parsedname)
 
-Defined in: [pkcs/pkcs7.ts:69](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L69)
+Defined in: [pkcs/pkcs7.ts:70](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L70)
 
 Parsed issuer distinguished name, if present (issuerAndSerialNumber signer identifier).
 
@@ -329,7 +337,7 @@ Parsed issuer distinguished name, if present (issuerAndSerialNumber signer ident
 
 > `readonly` `optional` **serialNumberHex**: `string`
 
-Defined in: [pkcs/pkcs7.ts:71](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L71)
+Defined in: [pkcs/pkcs7.ts:72](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L72)
 
 Hex-encoded serial number used to locate the signer certificate, if present.
 
@@ -337,7 +345,7 @@ Hex-encoded serial number used to locate the signer certificate, if present.
 
 > `readonly` **signature**: `Uint8Array`
 
-Defined in: [pkcs/pkcs7.ts:87](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L87)
+Defined in: [pkcs/pkcs7.ts:88](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L88)
 
 Raw signature bytes.
 
@@ -345,7 +353,7 @@ Raw signature bytes.
 
 > `readonly` **signatureAlgorithmName**: `string`
 
-Defined in: [pkcs/pkcs7.ts:81](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L81)
+Defined in: [pkcs/pkcs7.ts:82](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L82)
 
 Human-readable signature algorithm name.
 
@@ -353,7 +361,7 @@ Human-readable signature algorithm name.
 
 > `readonly` **signatureAlgorithmOid**: `string`
 
-Defined in: [pkcs/pkcs7.ts:79](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L79)
+Defined in: [pkcs/pkcs7.ts:80](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L80)
 
 OID of the algorithm used to produce the signature.
 
@@ -361,7 +369,7 @@ OID of the algorithm used to produce the signature.
 
 > `readonly` `optional` **signatureAlgorithmParametersDer**: `Uint8Array`\<`ArrayBufferLike`\>
 
-Defined in: [pkcs/pkcs7.ts:83](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L83)
+Defined in: [pkcs/pkcs7.ts:84](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L84)
 
 Raw DER of the signature AlgorithmIdentifier parameters, if present.
 
@@ -369,7 +377,7 @@ Raw DER of the signature AlgorithmIdentifier parameters, if present.
 
 > `readonly` **signatureHex**: `string`
 
-Defined in: [pkcs/pkcs7.ts:85](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L85)
+Defined in: [pkcs/pkcs7.ts:86](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L86)
 
 Hex-encoded raw signature bytes.
 
@@ -377,7 +385,7 @@ Hex-encoded raw signature bytes.
 
 > `readonly` `optional` **signedAttrsDer**: `Uint8Array`\<`ArrayBufferLike`\>
 
-Defined in: [pkcs/pkcs7.ts:91](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L91)
+Defined in: [pkcs/pkcs7.ts:92](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L92)
 
 Raw DER of signedAttrs with original IMPLICIT [0] tag (0xa0). Present only when `hasSignedAttrs` is true.
 
@@ -385,7 +393,7 @@ Raw DER of signedAttrs with original IMPLICIT [0] tag (0xa0). Present only when 
 
 > `readonly` `optional` **subjectKeyIdentifier**: `string`
 
-Defined in: [pkcs/pkcs7.ts:73](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L73)
+Defined in: [pkcs/pkcs7.ts:74](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L74)
 
 Hex-encoded SubjectKeyIdentifier used to locate the signer certificate, if present.
 
@@ -393,7 +401,7 @@ Hex-encoded SubjectKeyIdentifier used to locate the signer certificate, if prese
 
 > `readonly` **version**: `number`
 
-Defined in: [pkcs/pkcs7.ts:67](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L67)
+Defined in: [pkcs/pkcs7.ts:68](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L68)
 
 CMS SignerInfo version (typically 1 for issuerAndSerialNumber).
 
@@ -401,7 +409,7 @@ CMS SignerInfo version (typically 1 for issuerAndSerialNumber).
 
 ### ParsePfxFailure
 
-Defined in: [pkcs/pfx.ts:186](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L186)
+Defined in: [pkcs/pfx.ts:191](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L191)
 
 Error payload for a failed PFX parse.
 
@@ -451,7 +459,7 @@ Human-readable diagnostic message.
 
 > `readonly` **ok**: `false`
 
-Defined in: [pkcs/pfx.ts:188](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L188)
+Defined in: [pkcs/pfx.ts:193](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L193)
 
 Always `false` for failures.
 
@@ -459,7 +467,7 @@ Always `false` for failures.
 
 ### ParsePfxOptions
 
-Defined in: [pkcs/pfx.ts:94](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L94)
+Defined in: [pkcs/pfx.ts:99](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L99)
 
 Options for [`parsePfxDer`](#parsepfxder) and [`parsePfxPem`](#parsepfxpem).
 
@@ -469,7 +477,7 @@ Options for [`parsePfxDer`](#parsepfxder) and [`parsePfxPem`](#parsepfxpem).
 
 > `readonly` `optional` **macPassword**: `string`
 
-Defined in: [pkcs/pfx.ts:98](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L98)
+Defined in: [pkcs/pfx.ts:103](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L103)
 
 Separate password for MAC verification. Falls back to `password` when omitted.
 
@@ -477,7 +485,7 @@ Separate password for MAC verification. Falls back to `password` when omitted.
 
 > `readonly` `optional` **password**: `string`
 
-Defined in: [pkcs/pfx.ts:96](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L96)
+Defined in: [pkcs/pfx.ts:101](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L101)
 
 Password used to decrypt PBES2-encrypted ContentInfo entries. Also used for MAC verification when `macPassword` is omitted.
 
@@ -485,7 +493,7 @@ Password used to decrypt PBES2-encrypted ContentInfo entries. Also used for MAC 
 
 ### ParsePkcs7Failure
 
-Defined in: [pkcs/pkcs7.ts:122](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L122)
+Defined in: [pkcs/pkcs7.ts:125](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L125)
 
 Error payload for a failed PKCS#7 parse.
 
@@ -535,7 +543,7 @@ Human-readable diagnostic message.
 
 > `readonly` **ok**: `false`
 
-Defined in: [pkcs/pkcs7.ts:124](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L124)
+Defined in: [pkcs/pkcs7.ts:127](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L127)
 
 Always `false` for failures.
 
@@ -543,7 +551,7 @@ Always `false` for failures.
 
 ### PfxBagAttributesInput
 
-Defined in: [pkcs/pfx.ts:55](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L55)
+Defined in: [pkcs/pfx.ts:60](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L60)
 
 Optional metadata attached to a certificate or key bag inside a PFX.
 
@@ -553,7 +561,7 @@ Optional metadata attached to a certificate or key bag inside a PFX.
 
 > `readonly` `optional` **friendlyName**: `string`
 
-Defined in: [pkcs/pfx.ts:57](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L57)
+Defined in: [pkcs/pfx.ts:62](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L62)
 
 Human-readable label stored as a BMPString attribute.
 
@@ -561,7 +569,7 @@ Human-readable label stored as a BMPString attribute.
 
 > `readonly` `optional` **localKeyId**: `Uint8Array`\<`ArrayBufferLike`\>
 
-Defined in: [pkcs/pfx.ts:59](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L59)
+Defined in: [pkcs/pfx.ts:64](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L64)
 
 Opaque identifier linking a certificate bag to its corresponding key bag.
 
@@ -569,7 +577,7 @@ Opaque identifier linking a certificate bag to its corresponding key bag.
 
 ### PfxCertificateBagInput
 
-Defined in: [pkcs/pfx.ts:63](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L63)
+Defined in: [pkcs/pfx.ts:68](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L68)
 
 A certificate to embed in a PFX container. Input for [`createPfx`](#createpfx).
 
@@ -579,7 +587,7 @@ A certificate to embed in a PFX container. Input for [`createPfx`](#createpfx).
 
 > `readonly` `optional` **attributes**: [`PfxBagAttributesInput`](#pfxbagattributesinput)
 
-Defined in: [pkcs/pfx.ts:67](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L67)
+Defined in: [pkcs/pfx.ts:72](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L72)
 
 Optional bag-level attributes (friendly name, local key ID).
 
@@ -587,7 +595,7 @@ Optional bag-level attributes (friendly name, local key ID).
 
 > `readonly` **certificate**: [`PfxCertificateSource`](#pfxcertificatesource)
 
-Defined in: [pkcs/pfx.ts:65](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L65)
+Defined in: [pkcs/pfx.ts:70](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L70)
 
 Certificate as PEM text or DER bytes.
 
@@ -595,7 +603,7 @@ Certificate as PEM text or DER bytes.
 
 ### PfxMaterial
 
-Defined in: [pkcs/pfx.ts:102](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L102)
+Defined in: [pkcs/pfx.ts:107](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L107)
 
 DER, PEM, and base64 encodings of a PFX container produced by [`createPfx`](#createpfx).
 
@@ -605,7 +613,7 @@ DER, PEM, and base64 encodings of a PFX container produced by [`createPfx`](#cre
 
 > `readonly` **base64**: `string`
 
-Defined in: [pkcs/pfx.ts:108](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L108)
+Defined in: [pkcs/pfx.ts:113](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L113)
 
 Base64-encoded DER (no PEM armor).
 
@@ -613,7 +621,7 @@ Base64-encoded DER (no PEM armor).
 
 > `readonly` **der**: `Uint8Array`
 
-Defined in: [pkcs/pfx.ts:104](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L104)
+Defined in: [pkcs/pfx.ts:109](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L109)
 
 Raw DER-encoded PFX bytes.
 
@@ -621,7 +629,7 @@ Raw DER-encoded PFX bytes.
 
 > `readonly` **pem**: `string`
 
-Defined in: [pkcs/pfx.ts:106](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L106)
+Defined in: [pkcs/pfx.ts:111](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L111)
 
 PEM-armored PFX (`-----BEGIN PKCS12-----`).
 
@@ -629,7 +637,7 @@ PEM-armored PFX (`-----BEGIN PKCS12-----`).
 
 ### PfxPrivateKeyBagInput
 
-Defined in: [pkcs/pfx.ts:71](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L71)
+Defined in: [pkcs/pfx.ts:76](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L76)
 
 A private key to embed in a PFX container. Input for [`createPfx`](#createpfx).
 
@@ -639,7 +647,7 @@ A private key to embed in a PFX container. Input for [`createPfx`](#createpfx).
 
 > `readonly` `optional` **attributes**: [`PfxBagAttributesInput`](#pfxbagattributesinput)
 
-Defined in: [pkcs/pfx.ts:75](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L75)
+Defined in: [pkcs/pfx.ts:80](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L80)
 
 Optional bag-level attributes (friendly name, local key ID).
 
@@ -647,7 +655,7 @@ Optional bag-level attributes (friendly name, local key ID).
 
 > `readonly` **privateKey**: [`PfxPrivateKeySource`](#pfxprivatekeysource)
 
-Defined in: [pkcs/pfx.ts:73](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L73)
+Defined in: [pkcs/pfx.ts:78](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L78)
 
 Private key as a WebCrypto `CryptoKey` or raw PKCS#8 DER bytes.
 
@@ -689,7 +697,7 @@ Random salt. Default: 16 cryptographically random bytes.
 
 ### Pkcs7CertBag
 
-Defined in: [pkcs/pkcs7.ts:55](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L55)
+Defined in: [pkcs/pkcs7.ts:56](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L56)
 
 DER, PEM, and base64 encodings of a PKCS#7 certificate bag.
 
@@ -699,7 +707,7 @@ DER, PEM, and base64 encodings of a PKCS#7 certificate bag.
 
 > `readonly` **base64**: `string`
 
-Defined in: [pkcs/pkcs7.ts:61](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L61)
+Defined in: [pkcs/pkcs7.ts:62](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L62)
 
 Base64-encoded DER (no PEM armor).
 
@@ -707,7 +715,7 @@ Base64-encoded DER (no PEM armor).
 
 > `readonly` **der**: `Uint8Array`
 
-Defined in: [pkcs/pkcs7.ts:57](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L57)
+Defined in: [pkcs/pkcs7.ts:58](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L58)
 
 Raw DER-encoded PKCS#7 structure.
 
@@ -715,7 +723,7 @@ Raw DER-encoded PKCS#7 structure.
 
 > `readonly` **pem**: `string`
 
-Defined in: [pkcs/pkcs7.ts:59](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L59)
+Defined in: [pkcs/pkcs7.ts:60](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L60)
 
 PEM-armored PKCS#7 (`-----BEGIN PKCS7-----`).
 
@@ -723,7 +731,7 @@ PEM-armored PKCS#7 (`-----BEGIN PKCS7-----`).
 
 ### VerifyPkcs7SignedDataFailure
 
-Defined in: [pkcs/pkcs7.ts:148](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L148)
+Defined in: [pkcs/pkcs7.ts:151](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L151)
 
 Error payload for a failed [`verifyPkcs7SignedData`](#verifypkcs7signeddata) call.
 
@@ -773,7 +781,7 @@ Human-readable diagnostic message.
 
 > `readonly` **ok**: `false`
 
-Defined in: [pkcs/pkcs7.ts:157](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L157)
+Defined in: [pkcs/pkcs7.ts:160](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L160)
 
 Always `false` for failures.
 
@@ -783,7 +791,7 @@ Always `false` for failures.
 
 > **ParsedPfxBag** = \{ `attributes`: [`ParsedPfxBagAttributes`](#parsedpfxbagattributes); `bagId`: `string`; `certificate`: [`ParsedCertificate`](x509.md#parsedcertificate); `kind`: `"certificate"`; \} \| \{ `attributes`: [`ParsedPfxBagAttributes`](#parsedpfxbagattributes); `bagId`: `string`; `kind`: `"privateKey"`; `pkcs8Der`: `Uint8Array`; \} \| \{ `attributes`: [`ParsedPfxBagAttributes`](#parsedpfxbagattributes); `bagId`: `string`; `kind`: `"unknown"`; `valueDer`: `Uint8Array`; \}
 
-Defined in: [pkcs/pfx.ts:134](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L134)
+Defined in: [pkcs/pfx.ts:139](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L139)
 
 Discriminated union of SafeBag types decoded from a PFX container.
 
@@ -875,7 +883,7 @@ Raw DER of the unrecognized bag value.
 
 > **ParsePfxErrorCode** = `"malformed"` \| `"invalid_password"` \| `"password_required"`
 
-Defined in: [pkcs/pfx.ts:183](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L183)
+Defined in: [pkcs/pfx.ts:188](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L188)
 
 Error codes returned by [`parsePfxDer`](#parsepfxder) and [`parsePfxPem`](#parsepfxpem).
 
@@ -885,7 +893,7 @@ Error codes returned by [`parsePfxDer`](#parsepfxder) and [`parsePfxPem`](#parse
 
 > **ParsePfxResult** = \{ `ok`: `true`; `value`: [`ParsedPfx`](#parsedpfx); \} \| [`ErrorResult`](result.md#errorresult)\<[`ParsePfxErrorCode`](#parsepfxerrorcode), `Record`\<`never`, `never`\>, [`ParsePfxFailure`](#parsepfxfailure)\>
 
-Defined in: [pkcs/pfx.ts:192](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L192)
+Defined in: [pkcs/pfx.ts:197](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L197)
 
 Success-or-failure result from [`parsePfxDer`](#parsepfxder) / [`parsePfxPem`](#parsepfxpem).
 
@@ -913,7 +921,7 @@ Decoded PFX container.
 
 > **ParsePkcs7CertBagResult** = \{ `ok`: `true`; `value`: readonly [`ParsedCertificate`](x509.md#parsedcertificate)[]; \} \| [`ErrorResult`](result.md#errorresult)\<[`ParsePkcs7ErrorCode`](#parsepkcs7errorcode), `Record`\<`never`, `never`\>, [`ParsePkcs7Failure`](#parsepkcs7failure)\>
 
-Defined in: [pkcs/pkcs7.ts:138](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L138)
+Defined in: [pkcs/pkcs7.ts:141](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L141)
 
 Success-or-failure result from [`parsePkcs7CertBagDer`](#parsepkcs7certbagder) / [`parsePkcs7CertBagPem`](#parsepkcs7certbagpem).
 
@@ -941,7 +949,7 @@ Parsed certificates from the cert bag.
 
 > **ParsePkcs7ErrorCode** = `"malformed"` \| `"not_signed_data"`
 
-Defined in: [pkcs/pkcs7.ts:119](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L119)
+Defined in: [pkcs/pkcs7.ts:122](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L122)
 
 Error codes for PKCS#7 parse failures.
 
@@ -951,7 +959,7 @@ Error codes for PKCS#7 parse failures.
 
 > **ParsePkcs7SignedDataResult** = \{ `ok`: `true`; `value`: [`ParsedPkcs7SignedData`](#parsedpkcs7signeddata); \} \| [`ErrorResult`](result.md#errorresult)\<[`ParsePkcs7ErrorCode`](#parsepkcs7errorcode), `Record`\<`never`, `never`\>, [`ParsePkcs7Failure`](#parsepkcs7failure)\>
 
-Defined in: [pkcs/pkcs7.ts:128](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L128)
+Defined in: [pkcs/pkcs7.ts:131](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L131)
 
 Success-or-failure result from [`parsePkcs7SignedDataDer`](#parsepkcs7signeddatader) / [`parsePkcs7SignedDataPem`](#parsepkcs7signeddatapem).
 
@@ -979,7 +987,7 @@ Decoded SignedData.
 
 > **PfxCertificateSource** = `string` \| `Uint8Array`
 
-Defined in: [pkcs/pfx.ts:50](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L50)
+Defined in: [pkcs/pfx.ts:55](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L55)
 
 PEM string or DER bytes for a certificate to include in a PFX bag.
 
@@ -989,7 +997,7 @@ PEM string or DER bytes for a certificate to include in a PFX bag.
 
 > **PfxEncryptionOptions** = [`Pbes2EncryptionOptions`](keys.md#pbes2encryptionoptions)
 
-Defined in: [pkcs/pfx.ts:91](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L91)
+Defined in: [pkcs/pfx.ts:96](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L96)
 
 PBES2 encryption settings for PFX key-bag protection. Alias of [`Pbes2EncryptionOptions`](keys.md#pbes2encryptionoptions).
 
@@ -999,7 +1007,7 @@ PBES2 encryption settings for PFX key-bag protection. Alias of [`Pbes2Encryption
 
 > **PfxPrivateKeySource** = `CryptoKey` \| `Uint8Array`
 
-Defined in: [pkcs/pfx.ts:52](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L52)
+Defined in: [pkcs/pfx.ts:57](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L57)
 
 A WebCrypto private key or raw PKCS#8 DER bytes for a PFX key bag.
 
@@ -1009,7 +1017,7 @@ A WebCrypto private key or raw PKCS#8 DER bytes for a PFX key bag.
 
 > **Pkcs7CertificateSource** = `string` \| `Uint8Array`
 
-Defined in: [pkcs/pkcs7.ts:52](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L52)
+Defined in: [pkcs/pkcs7.ts:53](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L53)
 
 PEM text (may contain multiple CERTIFICATE blocks) or raw DER bytes.
 
@@ -1019,7 +1027,7 @@ PEM text (may contain multiple CERTIFICATE blocks) or raw DER bytes.
 
 > **VerifyPkcs7SignedDataResult** = \{ `ok`: `true`; `value`: [`ParsedPkcs7SignedData`](#parsedpkcs7signeddata); \} \| [`ErrorResult`](result.md#errorresult)\<`"signer_not_found"` \| `"signature_invalid"` \| `"message_digest_mismatch"` \| `"content_missing"` \| [`ParsePkcs7ErrorCode`](#parsepkcs7errorcode), `Record`\<`never`, `never`\>, [`VerifyPkcs7SignedDataFailure`](#verifypkcs7signeddatafailure)\>
 
-Defined in: [pkcs/pkcs7.ts:161](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L161)
+Defined in: [pkcs/pkcs7.ts:164](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L164)
 
 Success-or-failure result from [`verifyPkcs7SignedData`](#verifypkcs7signeddata).
 
@@ -1047,7 +1055,7 @@ The verified SignedData structure.
 
 > **createPfx**(`input`): `Promise`\<[`PfxMaterial`](#pfxmaterial)\>
 
-Defined in: [pkcs/pfx.ts:224](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L224)
+Defined in: [pkcs/pfx.ts:229](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L229)
 
 Builds a PKCS#12/PFX archive containing certificates and/or private keys.
 
@@ -1109,7 +1117,7 @@ the DER-encoded MacData block alongside its parsed representation.
 
 > **createPkcs7CertBagDer**(`certificates`): `Uint8Array`
 
-Defined in: [pkcs/pkcs7.ts:187](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L187)
+Defined in: [pkcs/pkcs7.ts:190](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L190)
 
 Creates a degenerate PKCS#7 SignedData structure containing only certificates (no signers).
 
@@ -1131,7 +1139,7 @@ readonly [`Pkcs7CertificateSource`](#pkcs7certificatesource)[]
 
 > **createPkcs7CertBagPem**(`certificates`): [`Pkcs7CertBag`](#pkcs7certbag)
 
-Defined in: [pkcs/pkcs7.ts:202](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L202)
+Defined in: [pkcs/pkcs7.ts:205](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L205)
 
 Creates a degenerate PKCS#7 SignedData certificate bag and returns DER, PEM, and base64 forms.
 
@@ -1151,7 +1159,7 @@ readonly [`Pkcs7CertificateSource`](#pkcs7certificatesource)[]
 
 > **parsePfxDer**(`der`, `options?`): `Promise`\<[`ParsePfxResult`](#parsepfxresult)\>
 
-Defined in: [pkcs/pfx.ts:285](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L285)
+Defined in: [pkcs/pfx.ts:290](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L290)
 
 Decodes a DER-encoded PKCS#12/PFX container into its constituent bags.
 
@@ -1192,7 +1200,7 @@ if (result.ok) {
 
 > **parsePfxPem**(`pem`, `options?`): `Promise`\<[`ParsePfxResult`](#parsepfxresult)\>
 
-Defined in: [pkcs/pfx.ts:359](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L359)
+Defined in: [pkcs/pfx.ts:371](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pfx.ts#L371)
 
 Decodes a PEM-armored PKCS#12/PFX container. Expects exactly one `PKCS12` block.
 
@@ -1260,7 +1268,7 @@ the MAC and sets the `valid` flag on the returned structure.
 
 > **parsePkcs7CertBagDer**(`der`): [`ParsePkcs7CertBagResult`](#parsepkcs7certbagresult)
 
-Defined in: [pkcs/pkcs7.ts:218](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L218)
+Defined in: [pkcs/pkcs7.ts:221](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L221)
 
 Parses a DER-encoded PKCS#7 cert bag, returning the contained certificates.
 
@@ -1280,7 +1288,7 @@ Parses a DER-encoded PKCS#7 cert bag, returning the contained certificates.
 
 > **parsePkcs7CertBagPem**(`pem`): [`ParsePkcs7CertBagResult`](#parsepkcs7certbagresult)
 
-Defined in: [pkcs/pkcs7.ts:227](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L227)
+Defined in: [pkcs/pkcs7.ts:230](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L230)
 
 Parses a PEM-armored PKCS#7 cert bag. Expects exactly one `PKCS7` PEM block.
 
@@ -1300,7 +1308,7 @@ Parses a PEM-armored PKCS#7 cert bag. Expects exactly one `PKCS7` PEM block.
 
 > **parsePkcs7SignedDataDer**(`der`): [`ParsePkcs7SignedDataResult`](#parsepkcs7signeddataresult)
 
-Defined in: [pkcs/pkcs7.ts:248](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L248)
+Defined in: [pkcs/pkcs7.ts:251](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L251)
 
 Decodes a DER-encoded PKCS#7 ContentInfo expecting `signedData` content type.
 
@@ -1320,7 +1328,7 @@ Decodes a DER-encoded PKCS#7 ContentInfo expecting `signedData` content type.
 
 > **parsePkcs7SignedDataPem**(`pem`): [`ParsePkcs7SignedDataResult`](#parsepkcs7signeddataresult)
 
-Defined in: [pkcs/pkcs7.ts:332](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L332)
+Defined in: [pkcs/pkcs7.ts:345](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L345)
 
 Decodes a PEM-armored PKCS#7 SignedData. Expects exactly one `PKCS7` PEM block.
 
@@ -1340,7 +1348,7 @@ Decodes a PEM-armored PKCS#7 SignedData. Expects exactly one `PKCS7` PEM block.
 
 > **verifyPkcs7SignedData**(`input`): `Promise`\<[`VerifyPkcs7SignedDataResult`](#verifypkcs7signeddataresult)\>
 
-Defined in: [pkcs/pkcs7.ts:366](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L366)
+Defined in: [pkcs/pkcs7.ts:379](https://github.com/kjanat/ts-x509/blob/vitepress/src/pkcs/pkcs7.ts#L379)
 
 Verifies all signer signatures in a PKCS#7 SignedData structure.
 
