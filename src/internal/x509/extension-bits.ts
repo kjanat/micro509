@@ -123,16 +123,17 @@ function encodeBitFlags<T extends string>(
 		return { bytes: new Uint8Array(0), unusedBits: 0 };
 	}
 	let highestBit = -1;
+	const bits: number[] = [];
 	for (const value of values) {
 		const bit = bitForValue(value);
+		bits.push(bit);
 		if (bit > highestBit) {
 			highestBit = bit;
 		}
 	}
 	const byteLength = Math.floor(highestBit / 8) + 1;
 	const bytes = new Uint8Array(byteLength);
-	for (const value of values) {
-		const bit = bitForValue(value);
+	for (const bit of bits) {
 		const byteIndex = Math.floor(bit / 8);
 		const bitIndex = bit % 8;
 		const current = bytes[byteIndex] ?? 0;
