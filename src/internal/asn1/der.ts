@@ -45,6 +45,7 @@ export function concatBytes(parts: readonly Uint8Array[]): Uint8Array {
  * the DER-encoded length, then the raw value bytes.
  */
 export function tlv(tag: number, value: Uint8Array): Uint8Array {
+	assertSingleOctetDerTag(tag);
 	return concatBytes([Uint8Array.of(tag), encodeLength(value.length), value]);
 }
 
@@ -74,6 +75,7 @@ export function setOf(parts: readonly Uint8Array[]): Uint8Array {
  * Used for optional SEQUENCE fields tagged with `[tag] EXPLICIT`.
  */
 export function explicitContext(tag: number, value: Uint8Array): Uint8Array {
+	assertContextSpecificTagNumber(tag);
 	return tlv(0xa0 + tag, value);
 }
 
@@ -82,6 +84,7 @@ export function explicitContext(tag: number, value: Uint8Array): Uint8Array {
  * Used for `[tag] IMPLICIT` fields whose underlying type is constructed (e.g. SEQUENCE).
  */
 export function implicitConstructedContext(tag: number, value: Uint8Array): Uint8Array {
+	assertContextSpecificTagNumber(tag);
 	return tlv(0xa0 + tag, value);
 }
 
@@ -90,6 +93,7 @@ export function implicitConstructedContext(tag: number, value: Uint8Array): Uint
  * Used for `[tag] IMPLICIT` fields whose underlying type is primitive (e.g. OCTET STRING).
  */
 export function implicitPrimitiveContext(tag: number, value: Uint8Array): Uint8Array {
+	assertContextSpecificTagNumber(tag);
 	return tlv(0x80 + tag, value);
 }
 
@@ -249,8 +253,13 @@ export function objectIdentifier(oid: string): Uint8Array {
  * Only the two-digit year is stored; suitable for dates in 1950–2049.
  */
 export function utcTime(date: Date): Uint8Array {
+	assertValidDate(date, 'UTCTime');
+	const year = date.getUTCFullYear();
+	if (year < 1950 || year > 2049) {
+		throw new RangeError('UTCTime year must be between 1950 and 2049');
+	}
 	const value = `${[
-		twoDigits(date.getUTCFullYear() % 100),
+		twoDigits(year % 100),
 		twoDigits(date.getUTCMonth() + 1),
 		twoDigits(date.getUTCDate()),
 		twoDigits(date.getUTCHours()),
@@ -265,8 +274,13 @@ export function utcTime(date: Date): Uint8Array {
  * Uses a four-digit year; required for dates outside the 1950–2049 range.
  */
 export function generalizedTime(date: Date): Uint8Array {
+	assertValidDate(date, 'GeneralizedTime');
+	const year = date.getUTCFullYear();
+	if (year < 0 || year > 9999) {
+		throw new RangeError('GeneralizedTime year must be between 0 and 9999');
+	}
 	const value = `${[
-		String(date.getUTCFullYear()).padStart(4, '0'),
+		String(year).padStart(4, '0'),
 		twoDigits(date.getUTCMonth() + 1),
 		twoDigits(date.getUTCDate()),
 		twoDigits(date.getUTCHours()),
@@ -348,6 +362,9 @@ export function readElement(bytes: Uint8Array, offset = 0): DerElement {
 	const tag = bytes[offset];
 	if (tag === undefined) {
 		throw new Error('Unexpected end of DER input');
+	}
+	if ((tag & 0x1f) === 0x1f) {
+		throw new Error('High-tag-number DER form is not supported');
 	}
 	const lengthByte = bytes[offset + 1];
 	if (lengthByte === undefined) {
@@ -515,6 +532,27 @@ export function readSequenceChildren(
 function assertNonNegativeSafeInteger(value: number, label: string): void {
 	if (!Number.isSafeInteger(value) || value < 0) {
 		throw new Error(`${label} must be a non-negative safe integer`);
+	}
+}
+
+function assertSingleOctetDerTag(tag: number): void {
+	if (!Number.isSafeInteger(tag) || tag < 0 || tag > 0xff) {
+		throw new RangeError('DER tag octet must be between 0 and 255');
+	}
+	if ((tag & 0x1f) === 0x1f) {
+		throw new Error('High-tag-number DER tags are not supported');
+	}
+}
+
+function assertContextSpecificTagNumber(tag: number): void {
+	if (!Number.isSafeInteger(tag) || tag < 0 || tag >= 31) {
+		throw new RangeError('Context-specific tag number must be between 0 and 30');
+	}
+}
+
+function assertValidDate(date: Date, label: 'UTCTime' | 'GeneralizedTime'): void {
+	if (Number.isNaN(date.getTime())) {
+		throw new RangeError(`${label} requires a valid Date`);
 	}
 }
 

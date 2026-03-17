@@ -2057,7 +2057,7 @@ describe('parse: coverage — error paths', () => {
 			parseAuthorityKeyIdentifier(
 				sequence([tlv(0xa1, Uint8Array.of(0xff)), tlv(0x82, Uint8Array.of(0x01))]),
 			),
-		).toThrow('DER element exceeds input length');
+		).toThrow('High-tag-number DER form is not supported');
 		expect(() =>
 			parseAuthorityKeyIdentifier(
 				sequence([tlv(0x82, Uint8Array.of(0x01)), explicitContext(1, sequence([]))]),

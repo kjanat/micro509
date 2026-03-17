@@ -439,6 +439,9 @@ export async function verifyPkcs7SignedData(
 				parsed.encapsulatedContent,
 			);
 			if (!verificationResult.ok) {
+				if (verificationResult.code === 'verification_error') {
+					return verifyPkcs7Failure('malformed', 'SignedData signature verification failed');
+				}
 				return verifyPkcs7Failure('malformed', 'Unsupported signature algorithm in SignedData');
 			}
 			verified = verificationResult.valid;
@@ -911,6 +914,9 @@ async function verifySignedAttrs(
 			signedData,
 		);
 		if (!verificationResult.ok) {
+			if (verificationResult.code === 'verification_error') {
+				return verifyPkcs7Failure('malformed', 'SignedData signature verification failed');
+			}
 			return verifyPkcs7Failure('malformed', 'Unsupported signature algorithm in SignedData');
 		}
 		verified = verificationResult.valid;

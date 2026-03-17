@@ -697,9 +697,13 @@ function parseDirectoryNameRdn(
 	if (setElement.tag !== 0x31) {
 		return undefined;
 	}
+	const children = childrenOf(source, setElement);
+	if (children.length === 0) {
+		return undefined;
+	}
 	const attributes: ParsedNameAttribute[] = [];
 	const values: ParsedName['values'] = {};
-	for (const attributeSequence of childrenOf(source, setElement)) {
+	for (const attributeSequence of children) {
 		if (attributeSequence.tag !== 0x30) {
 			return undefined;
 		}
@@ -731,6 +735,9 @@ function parseDirectoryNameRdn(
 		if (fieldKey !== undefined && values[fieldKey] === undefined) {
 			values[fieldKey] = fieldValue;
 		}
+	}
+	if (attributes.length === 0) {
+		return undefined;
 	}
 	return {
 		derHex: toHex(source.slice(setElement.start - setElement.headerLength, setElement.end)),

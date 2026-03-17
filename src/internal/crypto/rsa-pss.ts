@@ -157,7 +157,9 @@ export function encodeRsaPssParameters(parameters: RsaPssParameters): Uint8Array
 			sequence([objectIdentifier(OIDS.mgf1), encodeHashAlgorithmIdentifier(hashOid)]),
 		),
 		explicitContext(2, integerFromNumber(parameters.saltLength)),
-		explicitContext(3, integerFromNumber(parameters.trailerField)),
+		...(parameters.trailerField === 1
+			? []
+			: [explicitContext(3, integerFromNumber(parameters.trailerField))]),
 	]);
 }
 

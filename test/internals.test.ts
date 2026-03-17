@@ -24,7 +24,10 @@ import {
 	DEFAULT_MAX_DER_DEPTH,
 	encodeLength,
 	explicitContext,
+	generalizedTime,
 	ia5String,
+	implicitConstructedContext,
+	implicitPrimitiveContext,
 	integer,
 	integerFromNumber,
 	nullValue,
@@ -36,6 +39,8 @@ import {
 	sequence,
 	setOf,
 	time,
+	tlv,
+	utcTime,
 } from '#micro509/internal/asn1/der.ts';
 import { OIDS } from '#micro509/internal/asn1/oids.ts';
 import { parsePbes2AlgorithmIdentifier } from '#micro509/internal/crypto/pbes2.ts';
@@ -53,11 +58,13 @@ import {
 	rawEcdsaSignatureToDer,
 	requireEcPublicKey,
 	requireRsaPublicKey,
+	verifySignedDataDetailed,
 } from '#micro509/internal/crypto/sig-verify.ts';
 import {
 	encodeAlgorithmIdentifier,
 	getSignatureAlgorithm,
 } from '#micro509/internal/crypto/signing.ts';
+import { canonicalDnKey } from '#micro509/internal/shared/dn.ts';
 import {
 	allOnesMaskForIpAddress,
 	decodeIpAddress,
@@ -155,6 +162,13 @@ describe('der encoding', () => {
 		expect(result[0]).toBe(0x18);
 	});
 
+	it('utcTime and generalizedTime reject invalid or out-of-range dates', () => {
+		expect(() => utcTime(new Date(Number.NaN))).toThrow(RangeError);
+		expect(() => utcTime(new Date('2050-01-01T00:00:00Z'))).toThrow('1950 and 2049');
+		expect(() => generalizedTime(new Date(Number.NaN))).toThrow(RangeError);
+		expect(() => generalizedTime(new Date(Date.UTC(10_000, 0, 1, 0, 0, 0)))).toThrow('0 and 9999');
+	});
+
 	it('readElement throws on missing length byte', () => {
 		expect(() => readElement(Uint8Array.of(0x30))).toThrow('Unexpected end');
 	});
@@ -166,6 +180,18 @@ describe('der encoding', () => {
 	it('readElement rejects non-minimal long-form lengths', () => {
 		expect(() => readElement(Uint8Array.of(0x04, 0x81, 0x7f, 0x00))).toThrow('Non-minimal');
 		expect(() => readElement(Uint8Array.of(0x04, 0x82, 0x00, 0x80, 0x00))).toThrow('Non-minimal');
+	});
+
+	it('rejects unsupported high-tag-number DER encodings', () => {
+		expect(() => tlv(0x1f, Uint8Array.of(0x00))).toThrow('High-tag-number');
+		expect(() => explicitContext(31, Uint8Array.of(0x00))).toThrow('Context-specific tag number');
+		expect(() => implicitConstructedContext(31, Uint8Array.of(0x00))).toThrow(
+			'Context-specific tag number',
+		);
+		expect(() => implicitPrimitiveContext(31, Uint8Array.of(0x00))).toThrow(
+			'Context-specific tag number',
+		);
+		expect(() => readElement(Uint8Array.of(0x1f, 0x01, 0x00))).toThrow('High-tag-number');
 	});
 
 	it('encodeLength emits long-form lengths', () => {
@@ -345,8 +371,8 @@ describe('sig-verify', () => {
 		}
 	});
 
-	it('curveBytes throws for unsupported curve', () => {
-		expect(() => curveBytes('1.2.3.4.5')).toThrow('Unsupported EC curve');
+	it('curveBytes returns undefined for unsupported curve', () => {
+		expect(curveBytes('1.2.3.4.5')).toBeUndefined();
 	});
 
 	it('requireEcPublicKey and curveBytes support secp521r1', () => {
@@ -380,6 +406,19 @@ describe('sig-verify', () => {
 		);
 		expect(result.importAlgorithm).toEqual({ kind: 'rsa', hash: 'SHA-384', scheme: 'pss' });
 		expect(result.verifyParams).toEqual({ name: 'RSA-PSS', saltLength: 48 });
+	});
+
+	it('verifySignedDataDetailed returns a typed failure when verification setup throws', async () => {
+		const result = await verifySignedDataDetailed(
+			OIDS.sha256WithRSAEncryption,
+			undefined,
+			OIDS.rsaEncryption,
+			undefined,
+			Uint8Array.of(0x30, 0x00),
+			Uint8Array.of(0x00),
+			Uint8Array.of(0x00),
+		);
+		expect(result).toMatchObject({ ok: false, code: 'verification_error' });
 	});
 
 	it('rawEcdsaSignatureToDer throws on wrong length', () => {
@@ -447,6 +486,32 @@ describe('ip helpers', () => {
 		expect(() => parseDistributionPointReasonFlagsContent(Uint8Array.of(0x01, 0x01))).toThrow(
 			'DistributionPoint reasons BIT STRING must not set padding bits',
 		);
+	});
+
+	it('preserves empty distribution point reason values when the BIT STRING is present', () => {
+		expect(parseDistributionPointReasonFlagsContent(Uint8Array.of(0x00))).toEqual({
+			flags: [],
+			nonZeroPadding: false,
+		});
+	});
+
+	it('canonicalDnKey escapes separator characters in attribute values', () => {
+		const singleAttributeValue = {
+			derHex: '',
+			attributes: [{ oid: '1.2.3', valueTag: 0x13, value: 'a+2.5.4=b' }],
+			values: {},
+		};
+		const splitAttributes = {
+			derHex: '',
+			attributes: [
+				{ oid: '1.2.3', valueTag: 0x13, value: 'a' },
+				{ oid: '2.5.4', valueTag: 0x13, value: 'b' },
+			],
+			values: {},
+		};
+		expect(
+			canonicalDnKey({ derHex: '', rdns: [singleAttributeValue], attributes: [], values: {} }),
+		).not.toBe(canonicalDnKey({ derHex: '', rdns: [splitAttributes], attributes: [], values: {} }));
 	});
 });
 
@@ -703,6 +768,11 @@ describe('rsa-pss.ts edge cases', () => {
 				value: rsaPssParametersForHash(hash),
 			});
 		}
+	});
+
+	it('omits the default RSA-PSS trailerField from DER output', () => {
+		const encoded = encodeRsaPssParameters(rsaPssParametersForHash('SHA-256'));
+		expect(readSequenceChildren(encoded).some((child) => child.tag === 0xa3)).toBe(false);
 	});
 
 	it('treats omitted parameters as unsupported SHA-1 defaults', () => {

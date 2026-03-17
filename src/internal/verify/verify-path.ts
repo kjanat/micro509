@@ -9,10 +9,7 @@
  */
 
 import { toHex } from '#micro509/internal/asn1/asn1.ts';
-import {
-	type VerifySignedDataResult,
-	verifySignedDataDetailed,
-} from '#micro509/internal/crypto/sig-verify.ts';
+import { verifySignedDataDetailed } from '#micro509/internal/crypto/sig-verify.ts';
 import { canonicalDnKey, compareDistinguishedNames } from '#micro509/internal/shared/dn.ts';
 import type {
 	CertificateSource,
@@ -23,6 +20,14 @@ import type {
 } from '#micro509/verify/verify.ts';
 import type { ParsedCertificate } from '#micro509/x509/parse.ts';
 import { parseCertificatesFromSource } from '#micro509/x509/parse.ts';
+
+type VerifyCertificateSignatureResult =
+	| { readonly ok: true; readonly valid: boolean }
+	| {
+			readonly ok: false;
+			readonly code: 'signature_invalid' | 'unsupported_signature_algorithm_parameters';
+			readonly reason: string;
+	  };
 
 /** Result of the internal chain-building search. */
 export interface InternalBuildResult {
@@ -122,8 +127,8 @@ export function loadSingleCertificate(source: CertificateSource): ParsedCertific
 export async function verifyCertificateSignature(
 	certificate: ParsedCertificate,
 	issuer: ParsedCertificate,
-): Promise<VerifySignedDataResult> {
-	return verifySignedDataDetailed(
+): Promise<VerifyCertificateSignatureResult> {
+	const result = await verifySignedDataDetailed(
 		certificate.signatureAlgorithmOid,
 		certificate.signatureAlgorithmParametersDer,
 		issuer.publicKeyAlgorithmOid,
@@ -132,6 +137,14 @@ export async function verifyCertificateSignature(
 		certificate.signatureValue,
 		certificate.tbsCertificateDer,
 	);
+	if (!result.ok && result.code === 'verification_error') {
+		return {
+			ok: false,
+			code: 'signature_invalid',
+			reason: result.reason,
+		};
+	}
+	return result;
 }
 
 /**
@@ -478,9 +491,9 @@ async function matchTrustAnchor(
 		) {
 			continue;
 		}
-		let verified: VerifySignedDataResult;
+		let verified: VerifyCertificateSignatureResult;
 		try {
-			verified = await verifySignedDataDetailed(
+			const verificationResult = await verifySignedDataDetailed(
 				certificate.signatureAlgorithmOid,
 				certificate.signatureAlgorithmParametersDer,
 				anchor.publicKeyAlgorithmOid,
@@ -489,6 +502,14 @@ async function matchTrustAnchor(
 				certificate.signatureValue,
 				certificate.tbsCertificateDer,
 			);
+			verified =
+				!verificationResult.ok && verificationResult.code === 'verification_error'
+					? {
+							ok: false,
+							code: 'signature_invalid',
+							reason: verificationResult.reason,
+						}
+					: verificationResult;
 		} catch (error) {
 			if (firstFailure === undefined) {
 				firstFailure = callbacks.failure(

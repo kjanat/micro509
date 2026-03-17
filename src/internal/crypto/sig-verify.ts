@@ -40,6 +40,16 @@ export interface VerifySignatureConfigFailure {
 	readonly reason: string;
 }
 
+/** Failure: signature verification could not run to completion. */
+export interface VerifySignedDataFailure {
+	/** Discriminant for the failure branch. */
+	readonly ok: false;
+	/** Machine-readable failure code. */
+	readonly code: 'verification_error';
+	/** Human-readable explanation of the verification failure. */
+	readonly reason: string;
+}
+
 /** Success branch of {@linkcode VerifySignatureConfigResult}. */
 interface VerifySignatureConfigSuccess {
 	/** Discriminant for the success branch. */
@@ -61,8 +71,11 @@ interface VerifySignedDataSuccess {
 	readonly valid: boolean;
 }
 
-/** Result of a full signature verification: either a validity boolean or an algorithm-unsupported failure. */
-export type VerifySignedDataResult = VerifySignedDataSuccess | VerifySignatureConfigFailure;
+/** Result of a full signature verification: validity, unsupported params, or a runtime verification failure. */
+export type VerifySignedDataResult =
+	| VerifySignedDataSuccess
+	| VerifySignatureConfigFailure
+	| VerifySignedDataFailure;
 
 /**
  * Resolve algorithm OIDs into a {@linkcode VerifySignatureConfig}.
@@ -182,8 +195,8 @@ export function requireEcPublicKey(
 	}
 }
 
-/** Return the raw ECDSA signature byte count (r + s) for a given curve OID. */
-export function curveBytes(parametersOid: string | undefined): number {
+/** Return the raw ECDSA signature byte count (r + s) for a given curve OID, if supported. */
+export function curveBytes(parametersOid: string | undefined): number | undefined {
 	switch (parametersOid) {
 		case OIDS.prime256v1:
 			return 64;
@@ -192,7 +205,7 @@ export function curveBytes(parametersOid: string | undefined): number {
 		case OIDS.secp521r1:
 			return 132;
 		default:
-			throw new Error(`Unsupported EC curve OID: ${parametersOid ?? 'missing'}`);
+			return undefined;
 	}
 }
 
@@ -228,7 +241,8 @@ export async function verifySignedData(
 
 /**
  * Non-throwing variant of {@linkcode verifySignedData} — returns a typed
- * {@linkcode VerifySignedDataResult} instead of throwing on unsupported algorithms.
+ * {@linkcode VerifySignedDataResult} instead of throwing on unsupported algorithms
+ * or runtime verification failures.
  *
  * Tries both DER and raw ECDSA encodings when the first attempt fails.
  */
@@ -250,31 +264,37 @@ export async function verifySignedDataDetailed(
 	if (!config.ok) {
 		return config;
 	}
-	const key = await importSpkiDer(subjectPublicKeyInfoDer, config.value.importAlgorithm);
-	const subtle = getCrypto().subtle;
-	const signatureView = toArrayBuffer(signature);
-	const dataView = toArrayBuffer(signedData);
-	if (await subtle.verify(config.value.verifyParams, key, signatureView, dataView)) {
-		return { ok: true, valid: true };
-	}
-	if (config.value.ecdsaRawSignatureBytes !== undefined) {
-		const alternate = alternateEcdsaSignatureEncoding(
-			signature,
-			config.value.ecdsaRawSignatureBytes / 2,
-		);
-		if (alternate !== undefined) {
-			return {
-				ok: true,
-				valid: await subtle.verify(
-					config.value.verifyParams,
-					key,
-					toArrayBuffer(alternate),
-					dataView,
-				),
-			};
+	try {
+		const key = await importSpkiDer(subjectPublicKeyInfoDer, config.value.importAlgorithm);
+		const subtle = getCrypto().subtle;
+		const signatureView = toArrayBuffer(signature);
+		const dataView = toArrayBuffer(signedData);
+		if (await subtle.verify(config.value.verifyParams, key, signatureView, dataView)) {
+			return { ok: true, valid: true };
 		}
+		if (config.value.ecdsaRawSignatureBytes !== undefined) {
+			const alternate = alternateEcdsaSignatureEncoding(
+				signature,
+				config.value.ecdsaRawSignatureBytes / 2,
+			);
+			if (alternate !== undefined) {
+				return {
+					ok: true,
+					valid: await subtle.verify(
+						config.value.verifyParams,
+						key,
+						toArrayBuffer(alternate),
+						dataView,
+					),
+				};
+			}
+		}
+		return { ok: true, valid: false };
+	} catch (error) {
+		return verificationError(
+			error instanceof Error ? error.message : 'signature verification failed',
+		);
 	}
-	return { ok: true, valid: false };
 }
 
 /** Parse RSA-PSS algorithm parameters and build a verification config, or return failure. */
@@ -307,5 +327,13 @@ function unsupported(algorithm: string, reason: string): VerifySignatureConfigFa
 		ok: false,
 		code: 'unsupported_signature_algorithm_parameters',
 		reason: `${algorithm} parameters unsupported: ${reason}`,
+	};
+}
+
+function verificationError(reason: string): VerifySignedDataFailure {
+	return {
+		ok: false,
+		code: 'verification_error',
+		reason,
 	};
 }

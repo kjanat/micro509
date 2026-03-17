@@ -573,6 +573,12 @@ export async function verifyCertificateRevocationList(
 		);
 	}
 	if (!verifiedResult.ok) {
+		if (verifiedResult.code === 'verification_error') {
+			return verifyCertificateRevocationListFailureResult(
+				'signature_invalid',
+				'certificate revocation list signature verification failed',
+			);
+		}
 		return verifyCertificateRevocationListFailureResult(
 			'signature_invalid',
 			'certificate revocation list signature uses unsupported algorithm parameters',
@@ -652,6 +658,12 @@ export async function validateCertificateRevocationList(
 		);
 	}
 	if (!verifiedResult.ok) {
+		if (verifiedResult.code === 'verification_error') {
+			return validateCertificateRevocationListFailureResult(
+				'signature_invalid',
+				'certificate revocation list signature verification failed',
+			);
+		}
 		return validateCertificateRevocationListFailureResult(
 			'signature_invalid',
 			'certificate revocation list signature uses unsupported algorithm parameters',

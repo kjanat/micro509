@@ -965,8 +965,10 @@ export async function verifyCertificateSigningRequest(
 		);
 	}
 	if (!signatureResult.ok) {
+		const code =
+			signatureResult.code === 'verification_error' ? 'signature_invalid' : signatureResult.code;
 		return verifyRequestFailureResult(
-			signatureResult.code,
+			code,
 			signatureResult.reason,
 			detail({
 				subjectCommonName: parsed.subject.values.commonName,

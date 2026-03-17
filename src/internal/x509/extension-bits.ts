@@ -99,16 +99,15 @@ export function encodeDistributionPointReasonFlagsContent(
  * Decode BIT STRING content bytes into {@linkcode DistributionPointReason} flags.
  *
  * @param value Raw content bytes (unusedBits prefix + flag bytes).
- * @returns Decoded reason flags, or `undefined` if no bits are set.
+ * @returns Decoded reason flags, preserving empty-but-present values and padding metadata.
  */
 export function parseDistributionPointReasonFlagsContent(
 	value: Uint8Array,
-): ParsedBitFlags<DistributionPointReason> | undefined {
-	const result = requireCanonicalBitFlags(
+): ParsedBitFlags<DistributionPointReason> {
+	return requireCanonicalBitFlags(
 		decodeBitFlags(value, DISTRIBUTION_POINT_REASON_ORDER, 1),
 		'DistributionPoint reasons',
 	);
-	return result.flags.length === 0 ? undefined : result;
 }
 
 /** Pack named flags into a minimal byte array with DER BIT STRING unused-bits count. */

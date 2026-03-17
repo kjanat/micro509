@@ -25,6 +25,10 @@ import {
 	utf8String,
 } from '#micro509/internal/asn1/der.ts';
 import { OIDS } from '#micro509/internal/asn1/oids.ts';
+import {
+	createNameConstraintValidationState,
+	evaluateNameConstraints,
+} from '#micro509/internal/verify/name-constraints-engine.ts';
 import { parseNameConstraints } from '#micro509/x509/parse.ts';
 import {
 	importRsaPrivateKeyWithScheme,
@@ -4057,6 +4061,31 @@ describe('coverage: verify.ts internal edge cases', () => {
 			allowSelfSignedLeaf: true,
 		});
 		expect(result.ok).toBe(true);
+	});
+
+	it('rejects directoryName constraints that rely on empty RDN sets', async () => {
+		const { parsedRoot, parsedLeaf } = await makeSelfSignedChain();
+		const malformedDirectoryName = '30023100';
+		const tamperedRoot = {
+			...parsedRoot,
+			nameConstraints: {
+				permittedSubtrees: [
+					{ base: { type: 'directoryName' as const, derHex: malformedDirectoryName } },
+				],
+			},
+		};
+		const tamperedLeaf = {
+			...parsedLeaf,
+			subject: {
+				...parsedLeaf.subject,
+				derHex: malformedDirectoryName,
+			},
+		};
+		const result = evaluateNameConstraints(
+			[tamperedLeaf, tamperedRoot],
+			createNameConstraintValidationState({}),
+		);
+		expect(result).toMatchObject({ ok: false, code: 'name_constraints_violated' });
 	});
 
 	it('directoryName excluded constraint with malformed derHex (line 1739)', async () => {

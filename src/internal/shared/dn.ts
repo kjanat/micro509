@@ -143,8 +143,16 @@ function canonicalRdnKey(rdn: ParsedRelativeDistinguishedName): string {
 			const val = isDirectoryStringTag(attr.valueTag)
 				? (prepareNameCompareString(attr.value) ?? `[raw:${attr.valueTag}]${attr.value}`)
 				: `[${String(attr.valueTag)}]${attr.value}`;
-			return `${attr.oid}=${val}`;
+			return `${attr.oid}=${escapeCanonicalDnValue(val)}`;
 		})
 		.sort()
 		.join('+');
+}
+
+function escapeCanonicalDnValue(value: string): string {
+	return value
+		.replaceAll('\\', '\\\\')
+		.replaceAll(',', '\\,')
+		.replaceAll('+', '\\+')
+		.replaceAll('=', '\\=');
 }

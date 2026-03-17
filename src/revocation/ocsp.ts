@@ -719,6 +719,12 @@ export async function verifyOcspResponse(
 		);
 	}
 	if (!verifiedResult.ok) {
+		if (verifiedResult.code === 'verification_error') {
+			return verifyOcspResponseFailureResult(
+				'signature_invalid',
+				'OCSP response signature verification failed',
+			);
+		}
 		return verifyOcspResponseFailureResult(
 			'signature_invalid',
 			'OCSP response signature uses unsupported algorithm parameters',
