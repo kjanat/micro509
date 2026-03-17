@@ -12,7 +12,7 @@ import { compareDistinguishedNames } from '#micro509/internal/shared/dn.ts';
 import { PKITS_CASES, type PkitsCase } from './fixtures/pkits/manifest.ts';
 
 const PKITS_VALIDATION_TIME = new Date('2011-04-15T00:00:00Z');
-const REVOCATION_SECTIONS = new Set(['4.4', '4.14', '4.15']);
+const REVOCATION_SECTIONS = new Set(['4.4', '4.5', '4.14', '4.15']);
 const REVOCATION_TEST_NUMBERS = new Set(['4.7.4', '4.7.5']);
 
 const certificateDerCache = new Map<string, Promise<Uint8Array>>();
@@ -164,7 +164,10 @@ async function evaluatePkitsCrlWithIssuerCandidates(
 			(distributionPoint) => distributionPoint.crlIssuer !== undefined,
 		) ??
 			false) ||
-		!compareDistinguishedNames(fallbackIssuer.subject, crl.issuer);
+		!compareDistinguishedNames(fallbackIssuer.subject, crl.issuer) ||
+		// Self-issued cert case: subjects match but keys differ
+		(crl.authorityKeyIdentifier !== undefined &&
+			fallbackIssuer.subjectKeyIdentifier !== crl.authorityKeyIdentifier);
 	const candidates = allowsAlternateCrlIssuer
 		? [fallbackIssuer, ...issuerCandidates]
 		: [fallbackIssuer];
