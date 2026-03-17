@@ -177,10 +177,10 @@ export default defineConfig({
 			{ icon: 'jsr', link: `https://jsr.io/${jsr.name}`, ariaLabel: 'JSR' },
 		],
 
-		editLink: {
-			pattern: `${gitEnv.githubUrl}/edit/${gitEnv.branch}/site/:path`,
-			text: 'Edit this page on GitHub',
-		},
+		// editLink: {
+		// 	pattern: `${gitEnv.githubUrl}/edit/${gitEnv.branch}/site/:path`,
+		// 	text: 'Edit this page on GitHub',
+		// },
 
 		footer: {
 			message: `Released under the ${pkg.license} License.`,
