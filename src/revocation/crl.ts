@@ -1275,7 +1275,7 @@ function resolveRelativeNameToDnHex(
 function rebuildRelativeNameAsSet(implicitTaggedDer: Uint8Array): Uint8Array {
 	// The implicit tag [1] is 0xa1 (context-specific constructed).
 	// Parse the element to get content, then re-wrap with SET tag 0x31.
-	const element = readRootElement(implicitTaggedDer, DEFAULT_MAX_DER_DEPTH);
+	const element = readRootElement(implicitTaggedDer, { maxDepth: DEFAULT_MAX_DER_DEPTH });
 	return tlv(0x31, element.value);
 }
 
