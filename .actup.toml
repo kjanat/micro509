@@ -1,20 +1,11 @@
-# github.com/kjanat/actup-v2
+#:schema ../actup-v2/schemas/actup-config.schema.json
 
 update_policy    = "latest"
-ref_style        = "preserve"
-branch_policy    = "ignore"
+ref_style        = "sha"
+branch_policy    = "update"
 allow_prerelease = false
-ignore           = ["denoland/setup-deno@v2"]
-extra_paths      = []
-
-[actions]
-
-[cache]
-ttl     = 86400
-enabled = true
+# ignore           = ["denoland/setup-deno@v2"]
 
 [fetch]
 api_mode          = "graphql"
-max_tags_per_repo = 10
-
-[hosts]
+max_tags_per_repo = 100
