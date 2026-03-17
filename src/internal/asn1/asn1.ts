@@ -12,6 +12,8 @@ import { type DerElement, readElement } from './der.ts';
 /** Shared UTF-8 text decoder for ASN.1 string types. */
 const textDecoder = new TextDecoder();
 
+const PRINTABLE_STRING_PATTERN = /^[A-Za-z0-9 '()+,\-./:=?]*$/u;
+
 /**
  * Decodes a DER-encoded OBJECT IDENTIFIER value into its dotted-decimal string
  * form (e.g. `"1.2.840.113549.1.1.1"`).
@@ -193,24 +195,35 @@ export function decodeIntegerNumber(bytes: Uint8Array): number {
 }
 
 /**
- * Like {@linkcode decodeIntegerNumber} but additionally enforces DER rules for
- * non-negative integers: the high bit must be clear, and leading zero padding
- * must be minimal.
+ * Like {@linkcode decodeIntegerNumber}, but optionally rewrites thrown error
+ * messages with a caller-specific field label.
  *
  * @param label Field name for error messages (defaults to `"INTEGER"`).
  */
 export function decodeNonNegativeIntegerNumber(bytes: Uint8Array, label = 'INTEGER'): number {
-	const first = bytes[0];
-	if (first === undefined) {
-		throw new Error(`${label} is empty`);
+	if (label === 'INTEGER') {
+		return decodeIntegerNumber(bytes);
 	}
-	if ((first & 0x80) !== 0) {
-		throw new Error(`${label} must be non-negative`);
+	try {
+		return decodeIntegerNumber(bytes);
+	} catch (error) {
+		if (!(error instanceof Error)) {
+			throw error;
+		}
+		switch (error.message) {
+			case 'INTEGER is empty':
+				throw new Error(`${label} is empty`);
+			case 'INTEGER must be non-negative':
+				throw new Error(`${label} must be non-negative`);
+			case 'INTEGER must use minimal encoding':
+				throw new Error(`${label} must use minimal encoding`);
+			default:
+				if (error.message.startsWith('Integer too large for safe number')) {
+					throw new Error(`${label} too large for safe number (${bytes.length} bytes)`);
+				}
+				throw error;
+		}
 	}
-	if (bytes.length > 1 && first === 0 && ((bytes[1] ?? 0) & 0x80) === 0) {
-		throw new Error(`${label} must use minimal encoding`);
-	}
-	return decodeIntegerNumber(bytes);
 }
 
 /**
@@ -288,7 +301,11 @@ function decodeOidSubidentifier(
 		if (next === undefined) {
 			throw new Error('Malformed OID');
 		}
-		value = value * 128 + (next & 0x7f);
+		const digit = next & 0x7f;
+		if (value > Math.floor((Number.MAX_SAFE_INTEGER - digit) / 128)) {
+			throw new Error('Malformed OID: overflow/non-minimal or too-large subidentifier');
+		}
+		value = value * 128 + digit;
 		if ((next & 0x80) === 0) {
 			return {
 				value,
@@ -301,16 +318,95 @@ function decodeOidSubidentifier(
 
 /**
  * Decodes a DER string element by tag. Supports UTF8String (`0x0c`),
- * PrintableString (`0x13`), and IA5String (`0x16`).
+ * PrintableString (`0x13`), IA5String (`0x16`), UniversalString (`0x1c`),
+ * and BMPString (`0x1e`).
  * Throws on unsupported string tags.
  */
 export function decodeString(tag: number, bytes: Uint8Array): string {
 	switch (tag) {
 		case 0x0c:
-		case 0x13:
-		case 0x16:
 			return textDecoder.decode(bytes);
+		case 0x13:
+			return decodePrintableString(bytes);
+		case 0x16:
+			return decodeIa5String(bytes);
+		case 0x14:
+			throw new Error('Unsupported string tag: 20 (TeletexString)');
+		case 0x1c:
+			return decodeUniversalString(bytes);
+		case 0x1e:
+			return decodeBmpString(bytes);
 		default:
 			throw new Error(`Unsupported string tag: ${tag}`);
 	}
+}
+
+function decodeAsciiString(bytes: Uint8Array, label: 'IA5String' | 'PrintableString'): string {
+	let value = '';
+	for (const byte of bytes) {
+		if (byte > 0x7f) {
+			throw new Error(`Invalid ${label}: contains non-ASCII bytes`);
+		}
+		value += String.fromCharCode(byte);
+	}
+	return value;
+}
+
+function decodeIa5String(bytes: Uint8Array): string {
+	return decodeAsciiString(bytes, 'IA5String');
+}
+
+function decodePrintableString(bytes: Uint8Array): string {
+	const value = decodeAsciiString(bytes, 'PrintableString');
+	if (!PRINTABLE_STRING_PATTERN.test(value)) {
+		throw new Error('Invalid PrintableString: contains characters outside the allowed set');
+	}
+	return value;
+}
+
+function decodeBmpString(bytes: Uint8Array): string {
+	if (bytes.length % 2 !== 0) {
+		throw new Error('Invalid BMPString length');
+	}
+	let value = '';
+	for (let index = 0; index < bytes.length; index += 2) {
+		const left = bytes[index];
+		const right = bytes[index + 1];
+		if (left === undefined || right === undefined) {
+			throw new Error('Invalid BMPString content');
+		}
+		const codeUnit = (left << 8) | right;
+		if (codeUnit >= 0xd800 && codeUnit <= 0xdfff) {
+			throw new Error('Invalid BMPString code point');
+		}
+		value += String.fromCharCode(codeUnit);
+	}
+	return value;
+}
+
+function decodeUniversalString(bytes: Uint8Array): string {
+	if (bytes.length % 4 !== 0) {
+		throw new Error('Invalid UniversalString length');
+	}
+	let value = '';
+	for (let index = 0; index < bytes.length; index += 4) {
+		const first = bytes[index];
+		const second = bytes[index + 1];
+		const third = bytes[index + 2];
+		const fourth = bytes[index + 3];
+		if (
+			first === undefined ||
+			second === undefined ||
+			third === undefined ||
+			fourth === undefined
+		) {
+			throw new Error('Invalid UniversalString content');
+		}
+		const codePoint = ((first * 256 + second) * 256 + third) * 256 + fourth;
+		if (codePoint > 0x10ffff || (codePoint >= 0xd800 && codePoint <= 0xdfff)) {
+			throw new Error('Invalid UniversalString code point');
+		}
+		value += String.fromCodePoint(codePoint);
+	}
+	return value;
 }

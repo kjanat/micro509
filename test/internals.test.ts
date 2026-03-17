@@ -13,6 +13,7 @@ import {
 	decodeIntegerNumber,
 	decodeNonNegativeIntegerNumber,
 	decodeObjectIdentifier,
+	decodeString,
 	extractBitStringValue,
 	parseTime,
 	requireElement,
@@ -220,6 +221,14 @@ describe('asn1 decoding', () => {
 		);
 	});
 
+	it('decodeObjectIdentifier rejects too-large subidentifiers before number overflow', () => {
+		expect(() =>
+			decodeObjectIdentifier(
+				Uint8Array.of(0x2a, 0x82, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x00),
+			),
+		).toThrow('too-large subidentifier');
+	});
+
 	it('requireElement throws on undefined value', () => {
 		expect(() => requireElement(undefined, 'test field')).toThrow('Missing test field');
 	});
@@ -265,11 +274,30 @@ describe('asn1 decoding', () => {
 
 	it('decodeNonNegativeIntegerNumber rejects negative and non-minimal encodings', () => {
 		expect(() => decodeNonNegativeIntegerNumber(Uint8Array.of(0xff), 'test integer')).toThrow(
-			'non-negative',
+			'test integer must be non-negative',
 		);
 		expect(() => decodeNonNegativeIntegerNumber(Uint8Array.of(0x00, 0x01), 'test integer')).toThrow(
-			'minimal encoding',
+			'test integer must use minimal encoding',
 		);
+	});
+
+	it('decodeString validates ASCII-constrained tags and common ASN.1 string encodings', () => {
+		expect(decodeString(0x13, Uint8Array.of(0x4f, 0x4b))).toBe('OK');
+		expect(() => decodeString(0x13, Uint8Array.of(0x40))).toThrow('Invalid PrintableString');
+		expect(decodeString(0x16, Uint8Array.of(0x4f, 0x4b))).toBe('OK');
+		expect(() => decodeString(0x16, Uint8Array.of(0x80))).toThrow('Invalid IA5String');
+		expect(decodeString(0x1e, Uint8Array.of(0x00, 0x4f, 0x00, 0x4b))).toBe('OK');
+		expect(() => decodeString(0x1e, Uint8Array.of(0x00, 0x4f, 0x00))).toThrow(
+			'Invalid BMPString length',
+		);
+		expect(() => decodeString(0x1e, Uint8Array.of(0xd8, 0x00))).toThrow(
+			'Invalid BMPString code point',
+		);
+		expect(decodeString(0x1c, Uint8Array.of(0x00, 0x00, 0x00, 0x41))).toBe('A');
+		expect(() => decodeString(0x1c, Uint8Array.of(0x00, 0x11, 0x00, 0x00))).toThrow(
+			'Invalid UniversalString code point',
+		);
+		expect(() => decodeString(0x14, Uint8Array.of(0x41))).toThrow('TeletexString');
 	});
 
 	it('decodeBoolean rejects malformed DER encodings', () => {
