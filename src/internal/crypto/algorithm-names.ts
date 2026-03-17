@@ -46,6 +46,8 @@ export function describeSignatureAlgorithm(
 		}
 		case OIDS.ecdsaWithSHA1:
 			return 'ECDSA with SHA-1';
+		case OIDS.ecdsaWithSHA224:
+			return 'ECDSA with SHA-224';
 		case OIDS.ecdsaWithSHA256:
 			return 'ECDSA with SHA-256';
 		case OIDS.ecdsaWithSHA384:

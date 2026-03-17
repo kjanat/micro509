@@ -6,6 +6,7 @@
  */
 
 import { toArrayBuffer } from '#micro509/internal/asn1/asn1.ts';
+import { readElement } from '#micro509/internal/asn1/der.ts';
 import { OIDS } from '#micro509/internal/asn1/oids.ts';
 import type { PublicKeyImportInput, RsaHash, RsaScheme } from '#micro509/keys/keys.ts';
 import { importSpkiDer } from '#micro509/keys/keys.ts';
@@ -112,25 +113,80 @@ export function getVerifySignatureConfigResult(
 	context = 'issuer',
 ): VerifySignatureConfigResult {
 	switch (signatureAlgorithmOid) {
-		case OIDS.sha256WithRSAEncryption:
+		case OIDS.sha256WithRSAEncryption: {
+			const parameters = requireDerNullSignatureAlgorithmParameters(
+				signatureAlgorithmParametersDer,
+				'SHA-256 with RSA',
+			);
+			if (parameters !== undefined) {
+				return parameters;
+			}
 			return requireRsaPublicKey(publicKeyAlgorithmOid, 'SHA-256', 'pkcs1-v1_5', context);
-		case OIDS.sha384WithRSAEncryption:
+		}
+		case OIDS.sha384WithRSAEncryption: {
+			const parameters = requireDerNullSignatureAlgorithmParameters(
+				signatureAlgorithmParametersDer,
+				'SHA-384 with RSA',
+			);
+			if (parameters !== undefined) {
+				return parameters;
+			}
 			return requireRsaPublicKey(publicKeyAlgorithmOid, 'SHA-384', 'pkcs1-v1_5', context);
-		case OIDS.sha512WithRSAEncryption:
+		}
+		case OIDS.sha512WithRSAEncryption: {
+			const parameters = requireDerNullSignatureAlgorithmParameters(
+				signatureAlgorithmParametersDer,
+				'SHA-512 with RSA',
+			);
+			if (parameters !== undefined) {
+				return parameters;
+			}
 			return requireRsaPublicKey(publicKeyAlgorithmOid, 'SHA-512', 'pkcs1-v1_5', context);
+		}
 		case OIDS.rsassaPss:
 			return requireRsaPssVerifyConfig(
 				signatureAlgorithmParametersDer,
 				publicKeyAlgorithmOid,
 				context,
 			);
-		case OIDS.ecdsaWithSHA256:
+		case OIDS.ecdsaWithSHA256: {
+			const parameters = requireAbsentSignatureAlgorithmParameters(
+				signatureAlgorithmParametersDer,
+				'ECDSA with SHA-256',
+			);
+			if (parameters !== undefined) {
+				return parameters;
+			}
 			return requireEcPublicKey(publicKeyAlgorithmOid, publicKeyParametersOid, 'SHA-256', context);
-		case OIDS.ecdsaWithSHA384:
+		}
+		case OIDS.ecdsaWithSHA384: {
+			const parameters = requireAbsentSignatureAlgorithmParameters(
+				signatureAlgorithmParametersDer,
+				'ECDSA with SHA-384',
+			);
+			if (parameters !== undefined) {
+				return parameters;
+			}
 			return requireEcPublicKey(publicKeyAlgorithmOid, publicKeyParametersOid, 'SHA-384', context);
-		case OIDS.ecdsaWithSHA512:
+		}
+		case OIDS.ecdsaWithSHA512: {
+			const parameters = requireAbsentSignatureAlgorithmParameters(
+				signatureAlgorithmParametersDer,
+				'ECDSA with SHA-512',
+			);
+			if (parameters !== undefined) {
+				return parameters;
+			}
 			return requireEcPublicKey(publicKeyAlgorithmOid, publicKeyParametersOid, 'SHA-512', context);
-		case OIDS.ed25519:
+		}
+		case OIDS.ed25519: {
+			const parameters = requireAbsentSignatureAlgorithmParameters(
+				signatureAlgorithmParametersDer,
+				'Ed25519',
+			);
+			if (parameters !== undefined) {
+				return parameters;
+			}
 			if (publicKeyAlgorithmOid !== OIDS.ed25519) {
 				return unsupported('Ed25519', `requires Ed25519 ${context} public key`);
 			}
@@ -138,6 +194,7 @@ export function getVerifySignatureConfigResult(
 				importAlgorithm: { kind: 'ed25519' },
 				verifyParams: { name: 'Ed25519' },
 			});
+		}
 		default:
 			return unsupported(signatureAlgorithmOid, 'unrecognized signature algorithm OID');
 	}
@@ -314,6 +371,34 @@ function requireRsaPssVerifyConfig(
 		context,
 		parameters.value.saltLength,
 	);
+}
+
+function requireDerNullSignatureAlgorithmParameters(
+	parametersDer: Uint8Array | undefined,
+	algorithm: string,
+): VerifySignatureConfigFailure | undefined {
+	if (parametersDer === undefined) {
+		return unsupported(algorithm, 'signature AlgorithmIdentifier parameters must be DER NULL');
+	}
+	try {
+		const element = readElement(parametersDer);
+		if (element.tag !== 0x05 || element.length !== 0 || element.end !== parametersDer.length) {
+			return unsupported(algorithm, 'signature AlgorithmIdentifier parameters must be DER NULL');
+		}
+		return undefined;
+	} catch {
+		return unsupported(algorithm, 'signature AlgorithmIdentifier parameters must be DER NULL');
+	}
+}
+
+function requireAbsentSignatureAlgorithmParameters(
+	parametersDer: Uint8Array | undefined,
+	algorithm: string,
+): VerifySignatureConfigFailure | undefined {
+	if (parametersDer !== undefined) {
+		return unsupported(algorithm, 'signature AlgorithmIdentifier parameters must be absent');
+	}
+	return undefined;
 }
 
 /** Wrap a config in a success result. */

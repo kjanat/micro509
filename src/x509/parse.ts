@@ -446,6 +446,7 @@ export function parseCertificateDer<TMap extends ExtensionDecoderMap = Record<ne
 	if (serialNumber.tag !== 0x02) {
 		throw new Error('serialNumber must use INTEGER');
 	}
+	const tbsSignatureAlgorithm = requireElement(tbsChildren[index + 1], 'TBSCertificate signature');
 	const issuer = requireElement(tbsChildren[index + 2], 'issuer');
 	const validity = requireElement(tbsChildren[index + 3], 'validity');
 	const subject = requireElement(tbsChildren[index + 4], 'subject');
@@ -482,7 +483,12 @@ export function parseCertificateDer<TMap extends ExtensionDecoderMap = Record<ne
 	const parsedExtensions = parseExtensionContainer(der, extensions);
 	const parsedValidity = parseValidity(der, validity);
 	const parsedSpki = parseSubjectPublicKeyInfo(der, subjectPublicKeyInfo);
+	const parsedTbsSignatureAlgorithm = parseAlgorithmIdentifier(der, tbsSignatureAlgorithm);
 	const parsedSignatureAlgorithm = parseAlgorithmIdentifier(der, signatureAlgorithm);
+	assertMatchingCertificateSignatureAlgorithms(
+		parsedTbsSignatureAlgorithm,
+		parsedSignatureAlgorithm,
+	);
 	const decodedExtensions =
 		options?.decoders === undefined
 			? undefined
@@ -1087,6 +1093,33 @@ function parseAlgorithmIdentifier(
 		return { oid, parametersDer, parametersOid: decodeObjectIdentifier(parameters.value) };
 	}
 	return { oid, parametersDer };
+}
+
+function assertMatchingCertificateSignatureAlgorithms(
+	tbsSignatureAlgorithm: ParsedAlgorithmIdentifier,
+	signatureAlgorithm: ParsedAlgorithmIdentifier,
+): void {
+	if (
+		tbsSignatureAlgorithm.oid !== signatureAlgorithm.oid ||
+		!optionalBytesEqual(tbsSignatureAlgorithm.parametersDer, signatureAlgorithm.parametersDer)
+	) {
+		throw new Error('Certificate signatureAlgorithm must match TBSCertificate signature');
+	}
+}
+
+function optionalBytesEqual(left: Uint8Array | undefined, right: Uint8Array | undefined): boolean {
+	if (left === undefined || right === undefined) {
+		return left === right;
+	}
+	if (left.length !== right.length) {
+		return false;
+	}
+	for (let index = 0; index < left.length; index += 1) {
+		if (left[index] !== right[index]) {
+			return false;
+		}
+	}
+	return true;
 }
 
 /** @internal Decode the Basic Constraints extension value DER. */

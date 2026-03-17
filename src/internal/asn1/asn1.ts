@@ -10,7 +10,7 @@
 import { type DerElement, readElement } from './der.ts';
 
 /** Shared UTF-8 text decoder for ASN.1 string types. */
-const textDecoder = new TextDecoder();
+const textDecoder = new TextDecoder('utf-8', { fatal: true });
 
 const PRINTABLE_STRING_PATTERN = /^[A-Za-z0-9 '()+,\-./:=?]*$/u;
 
@@ -121,8 +121,8 @@ export function extractBitStringValue(element: DerElement): Uint8Array {
  * to 19xx, values < 50 map to 20xx. Throws on unrecognized time tags.
  */
 export function parseTime(element: DerElement): Date {
-	const value = textDecoder.decode(element.value);
 	if (element.tag === 0x17) {
+		const value = decodeUtf8Text(element.value, 'UTCTime');
 		const match = /^(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})Z$/.exec(value);
 		if (match === null) {
 			throw new Error('Invalid UTCTime');
@@ -145,6 +145,7 @@ export function parseTime(element: DerElement): Date {
 		);
 	}
 	if (element.tag === 0x18) {
+		const value = decodeUtf8Text(element.value, 'GeneralizedTime');
 		const match = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})Z$/.exec(value);
 		if (match === null) {
 			throw new Error('Invalid GeneralizedTime');
@@ -330,7 +331,7 @@ function decodeOidSubidentifier(
 export function decodeString(tag: number, bytes: Uint8Array): string {
 	switch (tag) {
 		case 0x0c:
-			return textDecoder.decode(bytes);
+			return decodeUtf8Text(bytes, 'UTF8String');
 		case 0x13:
 			return decodePrintableString(bytes);
 		case 0x16:
@@ -343,6 +344,20 @@ export function decodeString(tag: number, bytes: Uint8Array): string {
 			return decodeBmpString(bytes);
 		default:
 			throw new Error(`Unsupported string tag: ${tag}`);
+	}
+}
+
+function decodeUtf8Text(
+	bytes: Uint8Array,
+	label: 'GeneralizedTime' | 'UTCTime' | 'UTF8String',
+): string {
+	try {
+		return textDecoder.decode(bytes);
+	} catch (error) {
+		if (error instanceof Error) {
+			throw new Error(`Invalid ${label}: invalid UTF-8`, { cause: error });
+		}
+		throw error;
 	}
 }
 

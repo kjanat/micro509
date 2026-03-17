@@ -175,7 +175,7 @@ interface AccumulatedNameConstraints {
 }
 
 /**
- * Walks the chain root-to-leaf, accumulating namEConstraints from CA
+ * Walks the chain root-to-leaf, accumulating nameConstraints from CA
  * certificates and checking each non-self-issued certificate's names
  * against the accumulated constraints.
  *
@@ -189,7 +189,7 @@ export function evaluateNameConstraints(
 	let accumulated = seedInitialNameConstraints(state);
 
 	// Seed constraints from the root (trust anchor). The root's own
-	// names are not checked, but its namEConstraints apply to all
+	// names are not checked, but its nameConstraints apply to all
 	// certificates below it in the chain.
 	const root = chain[chain.length - 1];
 	if (root?.nameConstraints !== undefined) {
@@ -217,7 +217,7 @@ export function evaluateNameConstraints(
 			}
 		}
 
-		// (c) If this cert has namEConstraints, accumulate them.
+		// (c) If this cert has nameConstraints, accumulate them.
 		if (current.nameConstraints !== undefined) {
 			const unsupportedCurrent = failOnUnsupportedNameConstraints(current, index);
 			if (!unsupportedCurrent.ok) {
@@ -330,7 +330,7 @@ function isSupportedNameConstraintForm(form: ParsedNameConstraintForm): form is 
 			return false;
 		default: {
 			const exhaustive: never = form;
-			throw new Error(`Unhandled NamEConstraintForm type: ${String(exhaustive)}`);
+			throw new Error(`Unhandled NameConstraintForm type: ${String(exhaustive)}`);
 		}
 	}
 }

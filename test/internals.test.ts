@@ -60,6 +60,7 @@ import {
 	curveBytes,
 	derEcdsaSignatureToRaw,
 	getVerifySignatureConfig,
+	getVerifySignatureConfigResult,
 	rawEcdsaSignatureToDer,
 	requireEcPublicKey,
 	requireRsaPublicKey,
@@ -293,6 +294,15 @@ describe('asn1 decoding', () => {
 		);
 	});
 
+	it('parseTime rejects malformed UTF-8 in time values', () => {
+		expect(() => parseTime(readElement(Uint8Array.of(0x17, 0x02, 0xc3, 0x28)))).toThrow(
+			'Invalid UTCTime: invalid UTF-8',
+		);
+		expect(() => parseTime(readElement(Uint8Array.of(0x18, 0x02, 0xc3, 0x28)))).toThrow(
+			'Invalid GeneralizedTime: invalid UTF-8',
+		);
+	});
+
 	it('decodeIntegerNumber throws on integers > 6 bytes', () => {
 		expect(() => decodeIntegerNumber(Uint8Array.of(1, 2, 3, 4, 5, 6, 7))).toThrow('too large');
 	});
@@ -313,6 +323,9 @@ describe('asn1 decoding', () => {
 	});
 
 	it('decodeString validates ASCII-constrained tags and common ASN.1 string encodings', () => {
+		expect(() => decodeString(0x0c, Uint8Array.of(0xc3, 0x28))).toThrow(
+			'Invalid UTF8String: invalid UTF-8',
+		);
 		expect(decodeString(0x13, Uint8Array.of(0x4f, 0x4b))).toBe('OK');
 		expect(() => decodeString(0x13, Uint8Array.of(0x40))).toThrow('Invalid PrintableString');
 		expect(decodeString(0x16, Uint8Array.of(0x4f, 0x4b))).toBe('OK');
@@ -407,6 +420,107 @@ describe('sig-verify', () => {
 		).toThrow('Ed25519');
 	});
 
+	it('getVerifySignatureConfigResult rejects PKCS#1 v1.5 signatures without DER NULL parameters', () => {
+		const missingNull = getVerifySignatureConfigResult(
+			OIDS.sha256WithRSAEncryption,
+			undefined,
+			OIDS.rsaEncryption,
+			undefined,
+		);
+		expect(missingNull).toMatchObject({
+			ok: false,
+			code: 'unsupported_signature_algorithm_parameters',
+		});
+		if (!missingNull.ok) {
+			expect(missingNull.reason).toContain('DER NULL');
+		}
+
+		const malformedNull = getVerifySignatureConfigResult(
+			OIDS.sha256WithRSAEncryption,
+			Uint8Array.of(0x05),
+			OIDS.rsaEncryption,
+			undefined,
+		);
+		expect(malformedNull).toMatchObject({
+			ok: false,
+			code: 'unsupported_signature_algorithm_parameters',
+		});
+		if (!malformedNull.ok) {
+			expect(malformedNull.reason).toContain('DER NULL');
+		}
+
+		const wrongTag = getVerifySignatureConfigResult(
+			OIDS.sha256WithRSAEncryption,
+			Uint8Array.of(0x02, 0x01, 0x00),
+			OIDS.rsaEncryption,
+			undefined,
+		);
+		expect(wrongTag).toMatchObject({
+			ok: false,
+			code: 'unsupported_signature_algorithm_parameters',
+		});
+		if (!wrongTag.ok) {
+			expect(wrongTag.reason).toContain('DER NULL');
+		}
+
+		const trailingBytes = getVerifySignatureConfigResult(
+			OIDS.sha256WithRSAEncryption,
+			Uint8Array.of(0x05, 0x00, 0x00),
+			OIDS.rsaEncryption,
+			undefined,
+		);
+		expect(trailingBytes).toMatchObject({
+			ok: false,
+			code: 'unsupported_signature_algorithm_parameters',
+		});
+		if (!trailingBytes.ok) {
+			expect(trailingBytes.reason).toContain('DER NULL');
+		}
+
+		expect(
+			getVerifySignatureConfigResult(
+				OIDS.sha256WithRSAEncryption,
+				nullValue(),
+				OIDS.rsaEncryption,
+				undefined,
+			),
+		).toMatchObject({ ok: true });
+	});
+
+	it('getVerifySignatureConfigResult rejects unexpected parameters for ECDSA and Ed25519', () => {
+		const ecdsaWithParameters = getVerifySignatureConfigResult(
+			OIDS.ecdsaWithSHA256,
+			nullValue(),
+			OIDS.ecPublicKey,
+			OIDS.prime256v1,
+		);
+		expect(ecdsaWithParameters).toMatchObject({
+			ok: false,
+			code: 'unsupported_signature_algorithm_parameters',
+		});
+		if (!ecdsaWithParameters.ok) {
+			expect(ecdsaWithParameters.reason).toContain('must be absent');
+		}
+
+		const ed25519WithParameters = getVerifySignatureConfigResult(
+			OIDS.ed25519,
+			nullValue(),
+			OIDS.ed25519,
+			undefined,
+		);
+		expect(ed25519WithParameters).toMatchObject({
+			ok: false,
+			code: 'unsupported_signature_algorithm_parameters',
+		});
+		if (!ed25519WithParameters.ok) {
+			expect(ed25519WithParameters.reason).toContain('must be absent');
+		}
+
+		expect(
+			getVerifySignatureConfigResult(OIDS.ed25519, undefined, OIDS.ed25519, undefined),
+		).toMatchObject({ ok: true });
+	});
+
 	it('getVerifySignatureConfig returns RSA-PSS verify config for shipped parameters', () => {
 		const result = getVerifySignatureConfig(
 			OIDS.rsassaPss,
@@ -421,7 +535,7 @@ describe('sig-verify', () => {
 	it('verifySignedDataDetailed returns a typed failure when verification setup throws', async () => {
 		const result = await verifySignedDataDetailed(
 			OIDS.sha256WithRSAEncryption,
-			undefined,
+			nullValue(),
 			OIDS.rsaEncryption,
 			undefined,
 			Uint8Array.of(0x30, 0x00),
@@ -661,6 +775,9 @@ describe('signing.ts edge cases', () => {
 			'RSA PKCS#1 v1.5 with SHA-1',
 		);
 		expect(describeSignatureAlgorithm(OIDS.ecdsaWithSHA1, undefined)).toBe('ECDSA with SHA-1');
+		expect(OIDS.ecdsaWithSHA1).toBe('1.2.840.10045.4.1');
+		expect(OIDS.ecdsaWithSHA224).toBe('1.2.840.10045.4.3.1');
+		expect(describeSignatureAlgorithm(OIDS.ecdsaWithSHA224, undefined)).toBe('ECDSA with SHA-224');
 		expect(describeHashAlgorithm(OIDS.sha1)).toBe('SHA-1');
 	});
 

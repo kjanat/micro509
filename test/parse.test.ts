@@ -31,10 +31,15 @@ import {
 	tlv,
 } from '#micro509/internal/asn1/der.ts';
 import { OIDS } from '#micro509/internal/asn1/oids.ts';
+import {
+	encodeRsaPssParameters,
+	rsaPssParametersForHash,
+} from '#micro509/internal/crypto/rsa-pss.ts';
 import { parseAuthorityKeyIdentifier, parseNameConstraints } from '#micro509/x509/parse.ts';
 import {
 	childrenOf,
 	importRsaPrivateKeyWithScheme,
+	replaceCertificateSignatureAlgorithm,
 	rewriteCertificateSignatureAsRsaPss,
 	rewriteCsrSignatureAsRsaPss,
 	sliceElement,
@@ -504,6 +509,46 @@ describe('parse', () => {
 				),
 			),
 		).toThrow('Unsupported TBSCertificate field tag: 132');
+	});
+
+	it('rejects certificates whose outer signatureAlgorithm mismatches the signed TBSCertificate', async () => {
+		const certificate = await createSelfSignedCertificate({
+			subject: { commonName: 'bad-cert-signature-algorithm-mismatch.example' },
+			algorithm: { kind: 'rsa', modulusLength: 2048, hash: 'SHA-256' },
+		});
+		const mismatched = replaceCertificateSignatureAlgorithm(
+			certificate.certificate.der,
+			sequence([objectIdentifier(OIDS.sha512WithRSAEncryption), nullValue()]),
+		);
+
+		expect(() => parseCertificateDer(mismatched)).toThrow(
+			'Certificate signatureAlgorithm must match TBSCertificate signature',
+		);
+	});
+
+	it('rejects certificates whose outer signatureAlgorithm parameters mismatch the signed TBSCertificate', async () => {
+		const keyPair = await generateKeyPair({
+			kind: 'rsa',
+			modulusLength: 2048,
+			hash: 'SHA-256',
+			scheme: 'pss',
+		});
+		const certificate = await createSelfSignedCertificate({
+			subject: { commonName: 'bad-cert-signature-parameters-mismatch.example' },
+			keyPair,
+			signature: { kind: 'rsa-pss' },
+		});
+		const mismatched = replaceCertificateSignatureAlgorithm(
+			certificate.certificate.der,
+			sequence([
+				objectIdentifier(OIDS.rsassaPss),
+				encodeRsaPssParameters(rsaPssParametersForHash('SHA-384')),
+			]),
+		);
+
+		expect(() => parseCertificateDer(mismatched)).toThrow(
+			'Certificate signatureAlgorithm must match TBSCertificate signature',
+		);
 	});
 
 	it('rejects CSR structures with unexpected top-level or CertificationRequestInfo trailing fields', async () => {

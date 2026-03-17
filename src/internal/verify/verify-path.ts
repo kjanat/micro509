@@ -235,7 +235,8 @@ export async function buildChainInternal(
 		if (path.length > maxDepth) {
 			return undefined;
 		}
-		const memoKey = `${fingerprint(current)}:${caBelowCount}`;
+		const visitedKey = [...visited].sort().join(',');
+		const memoKey = `${fingerprint(current)}:${caBelowCount}:${visitedKey}`;
 		if (deadEnds.has(memoKey)) {
 			return undefined;
 		}
