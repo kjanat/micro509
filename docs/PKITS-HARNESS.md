@@ -17,8 +17,8 @@ Broad PKITS gap-report coverage lives in [`test/pkits.test.ts`].
 
 ## Syncing fixtures
 
-- Run `bash test/fixtures/pkits/download.sh` to sync the full cert + CRL corpus and regenerate the manifest.
-- The sync script requires `gh`, `curl`, and `bun`.
+- Run `bun test/fixtures/pkits/download.ts` to sync the full cert + CRL corpus and regenerate the manifest.
+- The sync script requires `git` and `bun` (uses a shallow sparse checkout of BoringSSL).
 
 ## Policy OIDs used by PKITS
 

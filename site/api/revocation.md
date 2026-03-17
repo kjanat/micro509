@@ -9,9 +9,9 @@ Owns CRL, OCSP, and revocation orchestration APIs.
 
 ### CertificateRevocationListMaterial
 
-Defined in: [revocation/crl.ts:146](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L146)
+Defined in: [revocation/crl.ts:147](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L147)
 
-Encoded CRL in multiple serialisation formats, returned by [`createCertificateRevocationList`](#createcertificaterevocationlist).
+Encoded CRL in multiple serialisation formats, returned by [`createCertificateRevocationList`](micro509.md#createcertificaterevocationlist).
 
 #### Properties
 
@@ -19,7 +19,7 @@ Encoded CRL in multiple serialisation formats, returned by [`createCertificateRe
 
 > `readonly` **base64**: `string`
 
-Defined in: [revocation/crl.ts:152](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L152)
+Defined in: [revocation/crl.ts:153](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L153)
 
 Base64-encoded DER (no PEM armour).
 
@@ -27,7 +27,7 @@ Base64-encoded DER (no PEM armour).
 
 > `readonly` **der**: `Uint8Array`
 
-Defined in: [revocation/crl.ts:148](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L148)
+Defined in: [revocation/crl.ts:149](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L149)
 
 Raw DER bytes of the signed CRL.
 
@@ -35,7 +35,7 @@ Raw DER bytes of the signed CRL.
 
 > `readonly` **pem**: `string`
 
-Defined in: [revocation/crl.ts:150](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L150)
+Defined in: [revocation/crl.ts:151](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L151)
 
 PEM-encoded CRL (`-----BEGIN X509 CRL-----`).
 
@@ -43,13 +43,13 @@ PEM-encoded CRL (`-----BEGIN X509 CRL-----`).
 
 ### CheckCertificateRevocationAgainstCrlFailure
 
-Defined in: [revocation/crl.ts:350](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L350)
+Defined in: [revocation/crl.ts:351](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L351)
 
-Failure detail for [`checkCertificateRevocationAgainstCrl`](#checkcertificaterevocationagainstcrl).
+Failure detail for [`checkCertificateRevocationAgainstCrl`](micro509.md#checkcertificaterevocationagainstcrl).
 
 #### Extends
 
-- [`Micro509Error`](result.md#micro509error)\<[`CheckCertificateRevocationAgainstCrlErrorCode`](#checkcertificaterevocationagainstcrlerrorcode), [`CheckCertificateRevocationAgainstCrlFailureDetails`](#checkcertificaterevocationagainstcrlfailuredetails-1)\>
+- [`Micro509Error`](micro509.md#micro509error)\<[`CheckCertificateRevocationAgainstCrlErrorCode`](#checkcertificaterevocationagainstcrlerrorcode), [`CheckCertificateRevocationAgainstCrlFailureDetails`](#checkcertificaterevocationagainstcrlfailuredetails-1)\>
 
 #### Properties
 
@@ -63,7 +63,7 @@ Machine-readable failure reason (e.g. `'malformed'`, `'expired'`).
 
 ###### Inherited from
 
-[`Micro509Error`](result.md#micro509error).[`code`](result.md#code-3)
+[`Micro509Error`](micro509.md#micro509error).[`code`](micro509.md#code-5)
 
 ##### details?
 
@@ -75,7 +75,7 @@ Optional structured context for the failure.
 
 ###### Inherited from
 
-[`Micro509Error`](result.md#micro509error).[`details`](result.md#details-3)
+[`Micro509Error`](micro509.md#micro509error).[`details`](micro509.md#details-5)
 
 ##### message
 
@@ -87,13 +87,13 @@ Human-readable diagnostic message.
 
 ###### Inherited from
 
-[`Micro509Error`](result.md#micro509error).[`message`](result.md#message-3)
+[`Micro509Error`](micro509.md#micro509error).[`message`](micro509.md#message-5)
 
 ##### ok
 
 > `readonly` **ok**: `false`
 
-Defined in: [revocation/crl.ts:356](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L356)
+Defined in: [revocation/crl.ts:357](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L357)
 
 Always `false` for failures.
 
@@ -101,7 +101,7 @@ Always `false` for failures.
 
 ### CheckCertificateRevocationAgainstCrlFailureDetails
 
-Defined in: [revocation/crl.ts:344](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L344)
+Defined in: [revocation/crl.ts:345](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L345)
 
 Structured details attached to a [`CheckCertificateRevocationAgainstCrlFailure`](#checkcertificaterevocationagainstcrlfailure).
 
@@ -111,7 +111,7 @@ Structured details attached to a [`CheckCertificateRevocationAgainstCrlFailure`]
 
 > `readonly` `optional` **reason**: [`CrlApplicabilityFailureReason`](#crlapplicabilityfailurereason)
 
-Defined in: [revocation/crl.ts:346](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L346)
+Defined in: [revocation/crl.ts:347](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L347)
 
 Why the CRL was non-applicable, when the error code is `non_applicable`.
 
@@ -119,7 +119,7 @@ Why the CRL was non-applicable, when the error code is `non_applicable`.
 
 ### CheckCertificateRevocationAgainstCrlGoodValue
 
-Defined in: [revocation/crl.ts:360](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L360)
+Defined in: [revocation/crl.ts:361](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L361)
 
 Success value when the certificate is not found in the CRL.
 
@@ -129,7 +129,7 @@ Success value when the certificate is not found in the CRL.
 
 > `readonly` **crl**: [`ParsedCertificateRevocationList`](#parsedcertificaterevocationlist)
 
-Defined in: [revocation/crl.ts:364](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L364)
+Defined in: [revocation/crl.ts:365](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L365)
 
 The validated CRL that was checked.
 
@@ -137,7 +137,7 @@ The validated CRL that was checked.
 
 > `readonly` **status**: `"good"`
 
-Defined in: [revocation/crl.ts:362](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L362)
+Defined in: [revocation/crl.ts:363](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L363)
 
 Certificate is not revoked.
 
@@ -145,9 +145,9 @@ Certificate is not revoked.
 
 ### CheckCertificateRevocationAgainstCrlInput
 
-Defined in: [revocation/crl.ts:297](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L297)
+Defined in: [revocation/crl.ts:298](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L298)
 
-Input for [`checkCertificateRevocationAgainstCrl`](#checkcertificaterevocationagainstcrl).
+Input for [`checkCertificateRevocationAgainstCrl`](micro509.md#checkcertificaterevocationagainstcrl).
 
 #### Properties
 
@@ -155,7 +155,7 @@ Input for [`checkCertificateRevocationAgainstCrl`](#checkcertificaterevocationag
 
 > `readonly` `optional` **at**: `Date`
 
-Defined in: [revocation/crl.ts:307](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L307)
+Defined in: [revocation/crl.ts:308](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L308)
 
 Evaluation time. Defaults to `new Date()`.
 
@@ -163,7 +163,7 @@ Evaluation time. Defaults to `new Date()`.
 
 > `readonly` **certificate**: [`CrlCertificateSource`](#crlcertificatesource)
 
-Defined in: [revocation/crl.ts:299](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L299)
+Defined in: [revocation/crl.ts:300](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L300)
 
 Certificate whose revocation status to check.
 
@@ -171,7 +171,7 @@ Certificate whose revocation status to check.
 
 > `readonly` `optional` **clockSkewMs**: `number`
 
-Defined in: [revocation/crl.ts:309](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L309)
+Defined in: [revocation/crl.ts:310](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L310)
 
 Clock-skew tolerance in milliseconds for freshness checks.
 
@@ -179,7 +179,7 @@ Clock-skew tolerance in milliseconds for freshness checks.
 
 > `readonly` **crl**: [`CrlSource`](#crlsource)
 
-Defined in: [revocation/crl.ts:303](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L303)
+Defined in: [revocation/crl.ts:304](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L304)
 
 Complete (base) CRL to check against.
 
@@ -187,7 +187,7 @@ Complete (base) CRL to check against.
 
 > `readonly` `optional` **deltaCrl**: [`CrlSource`](#crlsource)
 
-Defined in: [revocation/crl.ts:305](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L305)
+Defined in: [revocation/crl.ts:306](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L306)
 
 Optional delta CRL for more recent revocation information.
 
@@ -195,7 +195,7 @@ Optional delta CRL for more recent revocation information.
 
 > `readonly` **issuerCertificate**: [`CrlCertificateSource`](#crlcertificatesource)
 
-Defined in: [revocation/crl.ts:301](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L301)
+Defined in: [revocation/crl.ts:302](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L302)
 
 Issuer of `certificate` — also expected signer of the CRL.
 
@@ -203,7 +203,7 @@ Issuer of `certificate` — also expected signer of the CRL.
 
 ### CheckCertificateRevocationAgainstCrlRevokedValue
 
-Defined in: [revocation/crl.ts:368](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L368)
+Defined in: [revocation/crl.ts:369](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L369)
 
 Success value when the certificate is found as revoked in the CRL.
 
@@ -213,7 +213,7 @@ Success value when the certificate is found as revoked in the CRL.
 
 > `readonly` **crl**: [`ParsedCertificateRevocationList`](#parsedcertificaterevocationlist)
 
-Defined in: [revocation/crl.ts:372](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L372)
+Defined in: [revocation/crl.ts:373](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L373)
 
 The validated CRL that contained the revocation entry.
 
@@ -221,7 +221,7 @@ The validated CRL that contained the revocation entry.
 
 > `readonly` `optional` **reasonCode**: [`RevocationReason`](#revocationreason-1)
 
-Defined in: [revocation/crl.ts:376](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L376)
+Defined in: [revocation/crl.ts:377](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L377)
 
 CRLReason from the entry, if present.
 
@@ -229,7 +229,7 @@ CRLReason from the entry, if present.
 
 > `readonly` **revocationDate**: `Date`
 
-Defined in: [revocation/crl.ts:374](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L374)
+Defined in: [revocation/crl.ts:375](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L375)
 
 When the CA declared this certificate revoked.
 
@@ -237,7 +237,7 @@ When the CA declared this certificate revoked.
 
 > `readonly` **status**: `"revoked"`
 
-Defined in: [revocation/crl.ts:370](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L370)
+Defined in: [revocation/crl.ts:371](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L371)
 
 Certificate is revoked.
 
@@ -273,7 +273,7 @@ Per-evidence explanations of why no definitive answer was reached.
 
 Defined in: [revocation/revocation.ts:83](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/revocation.ts#L83)
 
-Input for [`checkCertificateRevocation`](#checkcertificaterevocation).
+Input for [`checkCertificateRevocation`](micro509.md#checkcertificaterevocation).
 
 #### Properties
 
@@ -347,9 +347,9 @@ OCSP responder URI (typically `http://...`).
 
 ### CreateCertificateRevocationListInput
 
-Defined in: [revocation/crl.ts:120](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L120)
+Defined in: [revocation/crl.ts:121](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L121)
 
-Input for [`createCertificateRevocationList`](#createcertificaterevocationlist).
+Input for [`createCertificateRevocationList`](micro509.md#createcertificaterevocationlist).
 
 #### Properties
 
@@ -357,7 +357,7 @@ Input for [`createCertificateRevocationList`](#createcertificaterevocationlist).
 
 > `readonly` `optional` **baseCrlNumber**: `number`
 
-Defined in: [revocation/crl.ts:136](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L136)
+Defined in: [revocation/crl.ts:137](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L137)
 
 If set, marks this CRL as a delta CRL referencing the given base CRL number.
 
@@ -365,23 +365,23 @@ If set, marks this CRL as a delta CRL referencing the given base CRL number.
 
 > `readonly` `optional` **crlNumber**: `number`
 
-Defined in: [revocation/crl.ts:134](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L134)
+Defined in: [revocation/crl.ts:135](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L135)
 
 Monotonically-increasing CRL sequence number (CRLNumber extension).
 
 ##### freshestCrlDistributionPoints?
 
-> `readonly` `optional` **freshestCrlDistributionPoints**: readonly [`DistributionPoint`](x509.md#distributionpoint-6)[]
+> `readonly` `optional` **freshestCrlDistributionPoints**: readonly [`DistributionPoint`](micro509.md#distributionpoint-2)[]
 
-Defined in: [revocation/crl.ts:140](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L140)
+Defined in: [revocation/crl.ts:141](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L141)
 
 Freshest CRL distribution points — tells relying parties where to find delta CRLs.
 
 ##### issuer
 
-> `readonly` **issuer**: [`NameInput`](x509.md#nameinput)
+> `readonly` **issuer**: [`NameInput`](micro509.md#nameinput)
 
-Defined in: [revocation/crl.ts:122](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L122)
+Defined in: [revocation/crl.ts:123](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L123)
 
 Distinguished name of the CRL issuer (typically the signing CA).
 
@@ -389,15 +389,15 @@ Distinguished name of the CRL issuer (typically the signing CA).
 
 > `readonly` `optional` **issuerPublicKey**: `CryptoKey`
 
-Defined in: [revocation/crl.ts:126](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L126)
+Defined in: [revocation/crl.ts:127](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L127)
 
 Issuer public key — used to embed an Authority Key Identifier extension.
 
 ##### issuingDistributionPoint?
 
-> `readonly` `optional` **issuingDistributionPoint**: [`IssuingDistributionPoint`](x509.md#issuingdistributionpoint)
+> `readonly` `optional` **issuingDistributionPoint**: [`IssuingDistributionPoint`](micro509.md#issuingdistributionpoint)
 
-Defined in: [revocation/crl.ts:138](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L138)
+Defined in: [revocation/crl.ts:139](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L139)
 
 Issuing distribution point extension — scopes this CRL to a subset of certificates.
 
@@ -405,7 +405,7 @@ Issuing distribution point extension — scopes this CRL to a subset of certific
 
 > `readonly` `optional` **nextUpdate**: `Date`
 
-Defined in: [revocation/crl.ts:130](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L130)
+Defined in: [revocation/crl.ts:131](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L131)
 
 Planned next issuance. Omit for an open-ended CRL.
 
@@ -413,7 +413,7 @@ Planned next issuance. Omit for an open-ended CRL.
 
 > `readonly` `optional` **revokedCertificates**: readonly [`RevokedCertificateInput`](#revokedcertificateinput)[]
 
-Defined in: [revocation/crl.ts:132](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L132)
+Defined in: [revocation/crl.ts:133](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L133)
 
 Certificates to list as revoked in this CRL.
 
@@ -421,7 +421,7 @@ Certificates to list as revoked in this CRL.
 
 > `readonly` **signerPrivateKey**: `CryptoKey`
 
-Defined in: [revocation/crl.ts:124](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L124)
+Defined in: [revocation/crl.ts:125](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L125)
 
 Private key used to sign the CRL. Algorithm is inferred from the key.
 
@@ -429,7 +429,7 @@ Private key used to sign the CRL. Algorithm is inferred from the key.
 
 > `readonly` `optional` **thisUpdate**: `Date`
 
-Defined in: [revocation/crl.ts:128](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L128)
+Defined in: [revocation/crl.ts:129](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L129)
 
 Issuance timestamp. Defaults to `new Date()`.
 
@@ -439,7 +439,7 @@ Issuance timestamp. Defaults to `new Date()`.
 
 Defined in: [revocation/ocsp.ts:87](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L87)
 
-Input for [`createOcspRequest`](#createocsprequest).
+Input for [`createOcspRequest`](micro509.md#createocsprequest).
 
 #### Properties
 
@@ -504,7 +504,7 @@ Issuer of `certificate` — needed to compute the CertID hash.
 
 Defined in: [revocation/ocsp.ts:236](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L236)
 
-Input for [`createOcspResponse`](#createocspresponse).
+Input for [`createOcspResponse`](micro509.md#createocspresponse).
 
 #### Properties
 
@@ -649,7 +649,7 @@ Start of the validity window for this status assertion. Defaults to `new Date()`
 
 Defined in: [revocation/ocsp.ts:99](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L99)
 
-Encoded OCSP request in multiple serialisation formats, returned by [`createOcspRequest`](#createocsprequest).
+Encoded OCSP request in multiple serialisation formats, returned by [`createOcspRequest`](micro509.md#createocsprequest).
 
 #### Properties
 
@@ -683,7 +683,7 @@ PEM-encoded request (`-----BEGIN OCSP REQUEST-----`).
 
 Defined in: [revocation/revocation.ts:40](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/revocation.ts#L40)
 
-One candidate OCSP responder resolved by [`resolveOcspResponderCandidates`](#resolveocsprespondercandidates).
+One candidate OCSP responder resolved by [`resolveOcspResponderCandidates`](micro509.md#resolveocsprespondercandidates).
 
 #### Properties
 
@@ -717,7 +717,7 @@ OCSP responder URI.
 
 Defined in: [revocation/ocsp.ts:256](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L256)
 
-Encoded OCSP response in multiple serialisation formats, returned by [`createOcspResponse`](#createocspresponse).
+Encoded OCSP response in multiple serialisation formats, returned by [`createOcspResponse`](micro509.md#createocspresponse).
 
 #### Properties
 
@@ -749,10 +749,10 @@ PEM-encoded response (`-----BEGIN OCSP RESPONSE-----`).
 
 ### ParsedCertificateRevocationList
 
-Defined in: [revocation/crl.ts:175](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L175)
+Defined in: [revocation/crl.ts:176](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L176)
 
-Decoded X.509 CRL, returned by [`parseCertificateRevocationListDer`](#parsecertificaterevocationlistder)
-and [`parseCertificateRevocationListPem`](#parsecertificaterevocationlistpem).
+Decoded X.509 CRL, returned by [`parseCertificateRevocationListDer`](micro509.md#parsecertificaterevocationlistder)
+and [`parseCertificateRevocationListPem`](micro509.md#parsecertificaterevocationlistpem).
 
 #### Properties
 
@@ -760,7 +760,7 @@ and [`parseCertificateRevocationListPem`](#parsecertificaterevocationlistpem).
 
 > `readonly` `optional` **authorityKeyIdentifier**: `string`
 
-Defined in: [revocation/crl.ts:199](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L199)
+Defined in: [revocation/crl.ts:200](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L200)
 
 Hex-encoded Authority Key Identifier, if the extension is present.
 
@@ -768,7 +768,7 @@ Hex-encoded Authority Key Identifier, if the extension is present.
 
 > `readonly` `optional` **baseCrlNumber**: `number`
 
-Defined in: [revocation/crl.ts:203](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L203)
+Defined in: [revocation/crl.ts:204](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L204)
 
 Delta CRL indicator — present only on delta CRLs, referencing the base CRL number.
 
@@ -776,7 +776,7 @@ Delta CRL indicator — present only on delta CRLs, referencing the base CRL num
 
 > `readonly` `optional` **crlNumber**: `number`
 
-Defined in: [revocation/crl.ts:201](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L201)
+Defined in: [revocation/crl.ts:202](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L202)
 
 CRLNumber extension value — monotonically increasing sequence number.
 
@@ -784,23 +784,23 @@ CRLNumber extension value — monotonically increasing sequence number.
 
 > `readonly` `optional` **der**: `Uint8Array`\<`ArrayBufferLike`\>
 
-Defined in: [revocation/crl.ts:177](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L177)
+Defined in: [revocation/crl.ts:178](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L178)
 
-Original DER bytes when this object came from [`parseCertificateRevocationListDer`](#parsecertificaterevocationlistder) or PEM parsing.
+Original DER bytes when this object came from [`parseCertificateRevocationListDer`](micro509.md#parsecertificaterevocationlistder) or PEM parsing.
 
 ##### freshestCrlDistributionPoints?
 
-> `readonly` `optional` **freshestCrlDistributionPoints**: readonly [`ParsedDistributionPoint`](x509.md#parseddistributionpoint)[]
+> `readonly` `optional` **freshestCrlDistributionPoints**: readonly [`ParsedDistributionPoint`](micro509.md#parseddistributionpoint)[]
 
-Defined in: [revocation/crl.ts:207](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L207)
+Defined in: [revocation/crl.ts:208](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L208)
 
 Freshest CRL extension — points to delta CRL locations.
 
 ##### issuer
 
-> `readonly` **issuer**: [`ParsedName`](x509.md#parsedname)
+> `readonly` **issuer**: [`ParsedName`](micro509.md#parsedname)
 
-Defined in: [revocation/crl.ts:185](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L185)
+Defined in: [revocation/crl.ts:186](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L186)
 
 CRL issuer distinguished name.
 
@@ -808,7 +808,7 @@ CRL issuer distinguished name.
 
 > `readonly` `optional` **issuerPublicKeyAlgorithmOid**: `string`
 
-Defined in: [revocation/crl.ts:195](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L195)
+Defined in: [revocation/crl.ts:196](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L196)
 
 OID of the issuer's public key algorithm, when available.
 
@@ -816,15 +816,15 @@ OID of the issuer's public key algorithm, when available.
 
 > `readonly` `optional` **issuerPublicKeyParametersOid**: `string`
 
-Defined in: [revocation/crl.ts:197](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L197)
+Defined in: [revocation/crl.ts:198](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L198)
 
 OID of the issuer's public key parameters (e.g. named curve), when available.
 
 ##### issuingDistributionPoint?
 
-> `readonly` `optional` **issuingDistributionPoint**: [`ParsedIssuingDistributionPoint`](x509.md#parsedissuingdistributionpoint)
+> `readonly` `optional` **issuingDistributionPoint**: [`ParsedIssuingDistributionPoint`](micro509.md#parsedissuingdistributionpoint)
 
-Defined in: [revocation/crl.ts:205](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L205)
+Defined in: [revocation/crl.ts:206](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L206)
 
 Issuing distribution point extension — scopes this CRL to a certificate subset.
 
@@ -832,7 +832,7 @@ Issuing distribution point extension — scopes this CRL to a certificate subset
 
 > `readonly` `optional` **nextUpdate**: `Date`
 
-Defined in: [revocation/crl.ts:189](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L189)
+Defined in: [revocation/crl.ts:190](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L190)
 
 End of the CRL validity window. Absent if the CA does not commit to a schedule.
 
@@ -840,7 +840,7 @@ End of the CRL validity window. Absent if the CA does not commit to a schedule.
 
 > `readonly` **revokedCertificates**: readonly [`ParsedRevokedCertificate`](#parsedrevokedcertificate)[]
 
-Defined in: [revocation/crl.ts:209](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L209)
+Defined in: [revocation/crl.ts:210](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L210)
 
 All revoked certificate entries (empty array if none).
 
@@ -848,7 +848,7 @@ All revoked certificate entries (empty array if none).
 
 > `readonly` **signatureAlgorithmName**: `string`
 
-Defined in: [revocation/crl.ts:193](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L193)
+Defined in: [revocation/crl.ts:194](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L194)
 
 Human-readable signature algorithm name (e.g. `"ECDSA with SHA-256"`).
 
@@ -856,7 +856,7 @@ Human-readable signature algorithm name (e.g. `"ECDSA with SHA-256"`).
 
 > `readonly` **signatureAlgorithmOid**: `string`
 
-Defined in: [revocation/crl.ts:191](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L191)
+Defined in: [revocation/crl.ts:192](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L192)
 
 OID of the algorithm used to sign this CRL.
 
@@ -864,7 +864,7 @@ OID of the algorithm used to sign this CRL.
 
 > `readonly` **signatureValue**: `Uint8Array`
 
-Defined in: [revocation/crl.ts:183](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L183)
+Defined in: [revocation/crl.ts:184](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L184)
 
 Raw signature bytes from the CRL outer wrapper.
 
@@ -872,7 +872,7 @@ Raw signature bytes from the CRL outer wrapper.
 
 > `readonly` **tbsCertListDer**: `Uint8Array`
 
-Defined in: [revocation/crl.ts:181](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L181)
+Defined in: [revocation/crl.ts:182](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L182)
 
 DER-encoded TBSCertList — the signed payload for signature verification.
 
@@ -880,7 +880,7 @@ DER-encoded TBSCertList — the signed payload for signature verification.
 
 > `readonly` **thisUpdate**: `Date`
 
-Defined in: [revocation/crl.ts:187](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L187)
+Defined in: [revocation/crl.ts:188](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L188)
 
 Start of the CRL validity window.
 
@@ -888,7 +888,7 @@ Start of the CRL validity window.
 
 > `readonly` **version**: `number`
 
-Defined in: [revocation/crl.ts:179](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L179)
+Defined in: [revocation/crl.ts:180](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L180)
 
 CRL version (1 = v1, 2 = v2 with extensions).
 
@@ -949,7 +949,7 @@ Hex-encoded serial number of the certificate.
 
 Defined in: [revocation/ocsp.ts:128](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L128)
 
-Decoded OCSP request, returned by [`parseOcspRequestDer`](#parseocsprequestder) / [`parseOcspRequestPem`](#parseocsprequestpem).
+Decoded OCSP request, returned by [`parseOcspRequestDer`](micro509.md#parseocsprequestder) / [`parseOcspRequestPem`](micro509.md#parseocsprequestpem).
 
 #### Properties
 
@@ -959,7 +959,7 @@ Decoded OCSP request, returned by [`parseOcspRequestDer`](#parseocsprequestder) 
 
 Defined in: [revocation/ocsp.ts:130](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L130)
 
-Original DER bytes when this object came from [`parseOcspRequestDer`](#parseocsprequestder) or PEM parsing.
+Original DER bytes when this object came from [`parseOcspRequestDer`](micro509.md#parseocsprequestder) or PEM parsing.
 
 ##### nonce?
 
@@ -983,7 +983,7 @@ CertIDs of the certificates being queried.
 
 Defined in: [revocation/ocsp.ts:189](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L189)
 
-Decoded OCSP response, returned by [`parseOcspResponseDer`](#parseocspresponseder) / [`parseOcspResponsePem`](#parseocspresponsepem).
+Decoded OCSP response, returned by [`parseOcspResponseDer`](micro509.md#parseocspresponseder) / [`parseOcspResponsePem`](micro509.md#parseocspresponsepem).
 
 When `responseStatus` is not `'successful'`, most fields are absent.
 
@@ -991,7 +991,7 @@ When `responseStatus` is not `'successful'`, most fields are absent.
 
 ##### certificates?
 
-> `readonly` `optional` **certificates**: readonly [`ParsedCertificate`](x509.md#parsedcertificate)\<`Record`\<`never`, `never`\>\>[]
+> `readonly` `optional` **certificates**: readonly [`ParsedCertificate`](micro509.md#parsedcertificate)\<`Record`\<`never`, `never`\>\>[]
 
 Defined in: [revocation/ocsp.ts:213](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L213)
 
@@ -1003,7 +1003,7 @@ Certificates embedded in the response (typically the responder's chain).
 
 Defined in: [revocation/ocsp.ts:191](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L191)
 
-Original DER bytes when this object came from [`parseOcspResponseDer`](#parseocspresponseder) or PEM parsing.
+Original DER bytes when this object came from [`parseOcspResponseDer`](micro509.md#parseocspresponseder) or PEM parsing.
 
 ##### nonce?
 
@@ -1147,7 +1147,7 @@ Start of the validity window for this status assertion.
 
 ### ParsedRevokedCertificate
 
-Defined in: [revocation/crl.ts:158](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L158)
+Defined in: [revocation/crl.ts:159](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L159)
 
 A single revoked-certificate entry decoded from a CRL.
 
@@ -1155,9 +1155,9 @@ A single revoked-certificate entry decoded from a CRL.
 
 ##### certificateIssuer?
 
-> `readonly` `optional` **certificateIssuer**: readonly [`SubjectAltName`](x509.md#subjectaltname)[]
+> `readonly` `optional` **certificateIssuer**: readonly [`SubjectAltName`](micro509.md#subjectaltname)[]
 
-Defined in: [revocation/crl.ts:168](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L168)
+Defined in: [revocation/crl.ts:169](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L169)
 
 Indirect-CRL certificate issuer override (RFC 5280 §5.3.3).
 
@@ -1165,7 +1165,7 @@ Indirect-CRL certificate issuer override (RFC 5280 §5.3.3).
 
 > `readonly` `optional` **invalidityDate**: `Date`
 
-Defined in: [revocation/crl.ts:166](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L166)
+Defined in: [revocation/crl.ts:167](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L167)
 
 When the key or certificate actually became suspect, if present.
 
@@ -1173,7 +1173,7 @@ When the key or certificate actually became suspect, if present.
 
 > `readonly` `optional` **reasonCode**: [`RevocationReason`](#revocationreason-1)
 
-Defined in: [revocation/crl.ts:164](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L164)
+Defined in: [revocation/crl.ts:165](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L165)
 
 RFC 5280 CRLReason, if the entry carries one.
 
@@ -1181,7 +1181,7 @@ RFC 5280 CRLReason, if the entry carries one.
 
 > `readonly` **revocationDate**: `Date`
 
-Defined in: [revocation/crl.ts:162](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L162)
+Defined in: [revocation/crl.ts:163](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L163)
 
 When the CA declared this certificate revoked.
 
@@ -1189,7 +1189,7 @@ When the CA declared this certificate revoked.
 
 > `readonly` **serialNumberHex**: `string`
 
-Defined in: [revocation/crl.ts:160](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L160)
+Defined in: [revocation/crl.ts:161](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L161)
 
 Hex-encoded serial number of the revoked certificate.
 
@@ -1199,7 +1199,7 @@ Hex-encoded serial number of the revoked certificate.
 
 Defined in: [revocation/revocation.ts:50](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/revocation.ts#L50)
 
-Input for [`resolveOcspResponderCandidates`](#resolveocsprespondercandidates).
+Input for [`resolveOcspResponderCandidates`](micro509.md#resolveocsprespondercandidates).
 
 #### Properties
 
@@ -1475,9 +1475,9 @@ OCSP response to validate.
 
 ### RevokedCertificateInput
 
-Defined in: [revocation/crl.ts:89](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L89)
+Defined in: [revocation/crl.ts:90](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L90)
 
-Single revoked certificate entry for [`createCertificateRevocationList`](#createcertificaterevocationlist).
+Single revoked certificate entry for [`createCertificateRevocationList`](micro509.md#createcertificaterevocationlist).
 
 #### Properties
 
@@ -1485,7 +1485,7 @@ Single revoked certificate entry for [`createCertificateRevocationList`](#create
 
 > `readonly` `optional` **invalidityDate**: `Date`
 
-Defined in: [revocation/crl.ts:97](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L97)
+Defined in: [revocation/crl.ts:98](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L98)
 
 When the key or certificate became suspect — may predate `revocationDate`.
 
@@ -1493,7 +1493,7 @@ When the key or certificate became suspect — may predate `revocationDate`.
 
 > `readonly` `optional` **reasonCode**: [`RevocationReason`](#revocationreason-1)
 
-Defined in: [revocation/crl.ts:95](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L95)
+Defined in: [revocation/crl.ts:96](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L96)
 
 RFC 5280 CRLReason code. Omit for `unspecified`.
 
@@ -1501,7 +1501,7 @@ RFC 5280 CRLReason code. Omit for `unspecified`.
 
 > `readonly` `optional` **revocationDate**: `Date`
 
-Defined in: [revocation/crl.ts:93](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L93)
+Defined in: [revocation/crl.ts:94](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L94)
 
 When the certificate was revoked. Defaults to `thisUpdate` of the CRL.
 
@@ -1509,7 +1509,7 @@ When the certificate was revoked. Defaults to `thisUpdate` of the CRL.
 
 > `readonly` **serialNumber**: `Uint8Array`
 
-Defined in: [revocation/crl.ts:91](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L91)
+Defined in: [revocation/crl.ts:92](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L92)
 
 DER-encoded certificate serial number to revoke.
 
@@ -1517,15 +1517,15 @@ DER-encoded certificate serial number to revoke.
 
 ### ValidateCertificateRevocationListFailure
 
-Defined in: [revocation/crl.ts:269](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L269)
+Defined in: [revocation/crl.ts:270](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L270)
 
-Failure detail for [`validateCertificateRevocationList`](#validatecertificaterevocationlist).
+Failure detail for [`validateCertificateRevocationList`](micro509.md#validatecertificaterevocationlist).
 
 Possible codes: `signature_invalid`, `issuer_mismatch`, `stale_crl`, `crl_sign_not_permitted`.
 
 #### Extends
 
-- [`Micro509Error`](result.md#micro509error)\<`"signature_invalid"` \| `"issuer_mismatch"` \| `"stale_crl"` \| `"crl_sign_not_permitted"`\>
+- [`Micro509Error`](micro509.md#micro509error)\<`"signature_invalid"` \| `"issuer_mismatch"` \| `"stale_crl"` \| `"crl_sign_not_permitted"`\>
 
 #### Properties
 
@@ -1539,7 +1539,7 @@ Machine-readable failure reason (e.g. `'malformed'`, `'expired'`).
 
 ###### Inherited from
 
-[`Micro509Error`](result.md#micro509error).[`code`](result.md#code-3)
+[`Micro509Error`](micro509.md#micro509error).[`code`](micro509.md#code-5)
 
 ##### details?
 
@@ -1551,7 +1551,7 @@ Optional structured context for the failure.
 
 ###### Inherited from
 
-[`Micro509Error`](result.md#micro509error).[`details`](result.md#details-3)
+[`Micro509Error`](micro509.md#micro509error).[`details`](micro509.md#details-5)
 
 ##### message
 
@@ -1563,13 +1563,13 @@ Human-readable diagnostic message.
 
 ###### Inherited from
 
-[`Micro509Error`](result.md#micro509error).[`message`](result.md#message-3)
+[`Micro509Error`](micro509.md#micro509error).[`message`](micro509.md#message-5)
 
 ##### ok
 
 > `readonly` **ok**: `false`
 
-Defined in: [revocation/crl.ts:274](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L274)
+Defined in: [revocation/crl.ts:275](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L275)
 
 Always `false` for failures.
 
@@ -1577,9 +1577,9 @@ Always `false` for failures.
 
 ### ValidateCertificateRevocationListInput
 
-Defined in: [revocation/crl.ts:253](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L253)
+Defined in: [revocation/crl.ts:254](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L254)
 
-Input for [`validateCertificateRevocationList`](#validatecertificaterevocationlist).
+Input for [`validateCertificateRevocationList`](micro509.md#validatecertificaterevocationlist).
 
 #### Properties
 
@@ -1587,7 +1587,7 @@ Input for [`validateCertificateRevocationList`](#validatecertificaterevocationli
 
 > `readonly` `optional` **at**: `Date`
 
-Defined in: [revocation/crl.ts:259](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L259)
+Defined in: [revocation/crl.ts:260](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L260)
 
 Evaluation time for freshness checks. Defaults to `new Date()`.
 
@@ -1595,7 +1595,7 @@ Evaluation time for freshness checks. Defaults to `new Date()`.
 
 > `readonly` `optional` **clockSkewMs**: `number`
 
-Defined in: [revocation/crl.ts:261](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L261)
+Defined in: [revocation/crl.ts:262](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L262)
 
 Tolerance in milliseconds for clock skew when checking `thisUpdate`/`nextUpdate`.
 
@@ -1603,7 +1603,7 @@ Tolerance in milliseconds for clock skew when checking `thisUpdate`/`nextUpdate`
 
 > `readonly` **crl**: [`CrlSource`](#crlsource)
 
-Defined in: [revocation/crl.ts:255](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L255)
+Defined in: [revocation/crl.ts:256](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L256)
 
 The CRL to validate.
 
@@ -1611,7 +1611,7 @@ The CRL to validate.
 
 > `readonly` **issuerCertificate**: [`CrlCertificateSource`](#crlcertificatesource)
 
-Defined in: [revocation/crl.ts:257](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L257)
+Defined in: [revocation/crl.ts:258](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L258)
 
 Certificate of the CA that should have signed the CRL.
 
@@ -1621,7 +1621,7 @@ Certificate of the CA that should have signed the CRL.
 
 Defined in: [revocation/ocsp.ts:312](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L312)
 
-Failure detail for [`validateOcspResponse`](#validateocspresponse).
+Failure detail for [`validateOcspResponse`](micro509.md#validateocspresponse).
 
 Possible codes: `response_status_invalid`, `signature_invalid`,
 `responder_id_mismatch`, `nonce_mismatch`, `request_mismatch`,
@@ -1630,7 +1630,7 @@ Possible codes: `response_status_invalid`, `signature_invalid`,
 
 #### Extends
 
-- [`Micro509Error`](result.md#micro509error)\<`"response_status_invalid"` \| `"signature_invalid"` \| `"responder_id_mismatch"` \| `"nonce_mismatch"` \| `"request_mismatch"` \| `"issuer_mismatch"` \| `"responder_chain_invalid"` \| `"ocsp_signing_missing"` \| `"stale_response"`\>
+- [`Micro509Error`](micro509.md#micro509error)\<`"response_status_invalid"` \| `"signature_invalid"` \| `"responder_id_mismatch"` \| `"nonce_mismatch"` \| `"request_mismatch"` \| `"issuer_mismatch"` \| `"responder_chain_invalid"` \| `"ocsp_signing_missing"` \| `"stale_response"`\>
 
 #### Properties
 
@@ -1644,7 +1644,7 @@ Machine-readable failure reason (e.g. `'malformed'`, `'expired'`).
 
 ###### Inherited from
 
-[`Micro509Error`](result.md#micro509error).[`code`](result.md#code-3)
+[`Micro509Error`](micro509.md#micro509error).[`code`](micro509.md#code-5)
 
 ##### details?
 
@@ -1656,7 +1656,7 @@ Optional structured context for the failure.
 
 ###### Inherited from
 
-[`Micro509Error`](result.md#micro509error).[`details`](result.md#details-3)
+[`Micro509Error`](micro509.md#micro509error).[`details`](micro509.md#details-5)
 
 ##### message
 
@@ -1668,7 +1668,7 @@ Human-readable diagnostic message.
 
 ###### Inherited from
 
-[`Micro509Error`](result.md#micro509error).[`message`](result.md#message-3)
+[`Micro509Error`](micro509.md#micro509error).[`message`](micro509.md#message-5)
 
 ##### ok
 
@@ -1684,7 +1684,7 @@ Always `false` for failures.
 
 Defined in: [revocation/ocsp.ts:287](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L287)
 
-Input for [`validateOcspResponse`](#validateocspresponse).
+Input for [`validateOcspResponse`](micro509.md#validateocspresponse).
 
 #### Properties
 
@@ -1748,13 +1748,13 @@ The OCSP response to validate.
 
 ### VerifyCertificateRevocationListFailure
 
-Defined in: [revocation/crl.ts:232](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L232)
+Defined in: [revocation/crl.ts:233](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L233)
 
 Failure detail when CRL signature verification fails.
 
 #### Extends
 
-- [`Micro509Error`](result.md#micro509error)\<`"signature_invalid"`\>
+- [`Micro509Error`](micro509.md#micro509error)\<`"signature_invalid"`\>
 
 #### Properties
 
@@ -1768,7 +1768,7 @@ Machine-readable failure reason (e.g. `'malformed'`, `'expired'`).
 
 ###### Inherited from
 
-[`Micro509Error`](result.md#micro509error).[`code`](result.md#code-3)
+[`Micro509Error`](micro509.md#micro509error).[`code`](micro509.md#code-5)
 
 ##### details?
 
@@ -1780,7 +1780,7 @@ Optional structured context for the failure.
 
 ###### Inherited from
 
-[`Micro509Error`](result.md#micro509error).[`details`](result.md#details-3)
+[`Micro509Error`](micro509.md#micro509error).[`details`](micro509.md#details-5)
 
 ##### message
 
@@ -1792,13 +1792,13 @@ Human-readable diagnostic message.
 
 ###### Inherited from
 
-[`Micro509Error`](result.md#micro509error).[`message`](result.md#message-3)
+[`Micro509Error`](micro509.md#micro509error).[`message`](micro509.md#message-5)
 
 ##### ok
 
 > `readonly` **ok**: `false`
 
-Defined in: [revocation/crl.ts:234](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L234)
+Defined in: [revocation/crl.ts:235](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L235)
 
 Always `false` for failures.
 
@@ -1812,7 +1812,7 @@ Failure detail when OCSP response signature verification fails.
 
 #### Extends
 
-- [`Micro509Error`](result.md#micro509error)\<`"signature_invalid"`\>
+- [`Micro509Error`](micro509.md#micro509error)\<`"signature_invalid"`\>
 
 #### Properties
 
@@ -1826,7 +1826,7 @@ Machine-readable failure reason (e.g. `'malformed'`, `'expired'`).
 
 ###### Inherited from
 
-[`Micro509Error`](result.md#micro509error).[`code`](result.md#code-3)
+[`Micro509Error`](micro509.md#micro509error).[`code`](micro509.md#code-5)
 
 ##### details?
 
@@ -1838,7 +1838,7 @@ Optional structured context for the failure.
 
 ###### Inherited from
 
-[`Micro509Error`](result.md#micro509error).[`details`](result.md#details-3)
+[`Micro509Error`](micro509.md#micro509error).[`details`](micro509.md#details-5)
 
 ##### message
 
@@ -1850,7 +1850,7 @@ Human-readable diagnostic message.
 
 ###### Inherited from
 
-[`Micro509Error`](result.md#micro509error).[`message`](result.md#message-3)
+[`Micro509Error`](micro509.md#micro509error).[`message`](micro509.md#message-5)
 
 ##### ok
 
@@ -1866,19 +1866,19 @@ Always `false` for failures.
 
 > **CheckCertificateRevocationAgainstCrlErrorCode** = `"signature_invalid"` \| `"issuer_mismatch"` \| `"stale_crl"` \| `"crl_sign_not_permitted"` \| `"non_applicable"`
 
-Defined in: [revocation/crl.ts:313](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L313)
+Defined in: [revocation/crl.ts:314](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L314)
 
-Error codes that [`checkCertificateRevocationAgainstCrl`](#checkcertificaterevocationagainstcrl) may return.
+Error codes that [`checkCertificateRevocationAgainstCrl`](micro509.md#checkcertificaterevocationagainstcrl) may return.
 
 ---
 
 ### CheckCertificateRevocationAgainstCrlResult
 
-> **CheckCertificateRevocationAgainstCrlResult** = \{ `ok`: `true`; `value`: [`CheckCertificateRevocationAgainstCrlValue`](#checkcertificaterevocationagainstcrlvalue); \} \| [`ErrorResult`](result.md#errorresult)\<[`CheckCertificateRevocationAgainstCrlErrorCode`](#checkcertificaterevocationagainstcrlerrorcode), [`CheckCertificateRevocationAgainstCrlFailureDetails`](#checkcertificaterevocationagainstcrlfailuredetails-1), [`CheckCertificateRevocationAgainstCrlFailure`](#checkcertificaterevocationagainstcrlfailure)\>
+> **CheckCertificateRevocationAgainstCrlResult** = \{ `ok`: `true`; `value`: [`CheckCertificateRevocationAgainstCrlValue`](#checkcertificaterevocationagainstcrlvalue); \} \| [`ErrorResult`](micro509.md#errorresult)\<[`CheckCertificateRevocationAgainstCrlErrorCode`](#checkcertificaterevocationagainstcrlerrorcode), [`CheckCertificateRevocationAgainstCrlFailureDetails`](#checkcertificaterevocationagainstcrlfailuredetails-1), [`CheckCertificateRevocationAgainstCrlFailure`](#checkcertificaterevocationagainstcrlfailure)\>
 
-Defined in: [revocation/crl.ts:390](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L390)
+Defined in: [revocation/crl.ts:391](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L391)
 
-Result of [`checkCertificateRevocationAgainstCrl`](#checkcertificaterevocationagainstcrl).
+Result of [`checkCertificateRevocationAgainstCrl`](micro509.md#checkcertificaterevocationagainstcrl).
 
 On success `value.status` is `'good'` or `'revoked'`.
 On failure the CRL could not be validated or was non-applicable.
@@ -1889,7 +1889,7 @@ On failure the CRL could not be validated or was non-applicable.
 
 > **CheckCertificateRevocationAgainstCrlValue** = [`CheckCertificateRevocationAgainstCrlGoodValue`](#checkcertificaterevocationagainstcrlgoodvalue) \| [`CheckCertificateRevocationAgainstCrlRevokedValue`](#checkcertificaterevocationagainstcrlrevokedvalue)
 
-Defined in: [revocation/crl.ts:380](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L380)
+Defined in: [revocation/crl.ts:381](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L381)
 
 Discriminated union of `good` and `revoked` outcomes.
 
@@ -1901,17 +1901,17 @@ Discriminated union of `good` and `revoked` outcomes.
 
 Defined in: [revocation/revocation.ts:97](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/revocation.ts#L97)
 
-Error codes that [`checkCertificateRevocation`](#checkcertificaterevocation) may surface inside an `unknown` result.
+Error codes that [`checkCertificateRevocation`](micro509.md#checkcertificaterevocation) may surface inside an `unknown` result.
 
 ---
 
 ### CheckCertificateRevocationResult
 
-> **CheckCertificateRevocationResult** = [`Result`](result.md#result)\<[`CheckCertificateRevocationValue`](#checkcertificaterevocationvalue), `never`\>
+> **CheckCertificateRevocationResult** = [`Result`](micro509.md#result)\<[`CheckCertificateRevocationValue`](#checkcertificaterevocationvalue), `never`\>
 
 Defined in: [revocation/revocation.ts:186](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/revocation.ts#L186)
 
-Result of [`checkCertificateRevocation`](#checkcertificaterevocation). Always succeeds (`ok: true`) —
+Result of [`checkCertificateRevocation`](micro509.md#checkcertificaterevocation). Always succeeds (`ok: true`) —
 the `value.status` discriminator carries the actual outcome.
 
 ---
@@ -1940,7 +1940,7 @@ PEM or DER bytes of a pre-configured OCSP responder certificate.
 
 > **CrlApplicabilityFailureReason** = `"certificate_scope_mismatch"` \| `"delta_crl_incompatible"` \| `"delta_crl_unsupported"` \| `"distribution_point_mismatch"` \| `"indirect_crl_unsupported"` \| `"issuer_mismatch"` \| `"reasons_mismatch"`
 
-Defined in: [revocation/crl.ts:321](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L321)
+Defined in: [revocation/crl.ts:322](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L322)
 
 Structured reason why a CRL was deemed non-applicable to a given certificate.
 
@@ -1948,9 +1948,9 @@ Structured reason why a CRL was deemed non-applicable to a given certificate.
 
 ### CrlCertificateSource
 
-> **CrlCertificateSource** = `string` \| `Uint8Array` \| [`ParsedCertificate`](x509.md#parsedcertificate)
+> **CrlCertificateSource** = `string` \| `Uint8Array` \| [`ParsedCertificate`](micro509.md#parsedcertificate)
 
-Defined in: [revocation/crl.ts:229](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L229)
+Defined in: [revocation/crl.ts:230](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L230)
 
 PEM string, DER bytes, or already-parsed certificate.
 
@@ -1960,7 +1960,7 @@ PEM string, DER bytes, or already-parsed certificate.
 
 > **CrlSource** = `string` \| `Uint8Array` \| [`ParsedCertificateRevocationList`](#parsedcertificaterevocationlist)
 
-Defined in: [revocation/crl.ts:227](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L227)
+Defined in: [revocation/crl.ts:228](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L228)
 
 PEM string, DER bytes, or already-parsed CRL.
 
@@ -1968,7 +1968,7 @@ PEM string, DER bytes, or already-parsed CRL.
 
 ### OcspCertificateSource
 
-> **OcspCertificateSource** = `string` \| `Uint8Array` \| [`ParsedCertificate`](x509.md#parsedcertificate)
+> **OcspCertificateSource** = `string` \| `Uint8Array` \| [`ParsedCertificate`](micro509.md#parsedcertificate)
 
 Defined in: [revocation/ocsp.ts:69](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L69)
 
@@ -2028,7 +2028,7 @@ RFC 6960 overall response status — anything other than `'successful'` means th
 
 ### ParsedOcspResponderId
 
-> **ParsedOcspResponderId** = \{ `name`: [`ParsedName`](x509.md#parsedname); `type`: `"byName"`; \} \| \{ `keyHashHex`: `string`; `type`: `"byKeyHash"`; \}
+> **ParsedOcspResponderId** = \{ `name`: [`ParsedName`](micro509.md#parsedname); `type`: `"byName"`; \} \| \{ `keyHashHex`: `string`; `type`: `"byKeyHash"`; \}
 
 Defined in: [revocation/ocsp.ts:170](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L170)
 
@@ -2037,11 +2037,11 @@ by SHA-1 hash of its public key.
 
 #### Type Declaration
 
-\{ `name`: [`ParsedName`](x509.md#parsedname); `type`: `"byName"`; \}
+\{ `name`: [`ParsedName`](micro509.md#parsedname); `type`: `"byName"`; \}
 
 ##### name
 
-> `readonly` **name**: [`ParsedName`](x509.md#parsedname)
+> `readonly` **name**: [`ParsedName`](micro509.md#parsedname)
 
 Parsed distinguished name of the responder.
 
@@ -2069,7 +2069,7 @@ Responder identified by public-key hash.
 
 ### RevocationCertificateSource
 
-> **RevocationCertificateSource** = `string` \| `Uint8Array` \| [`ParsedCertificate`](x509.md#parsedcertificate)
+> **RevocationCertificateSource** = `string` \| `Uint8Array` \| [`ParsedCertificate`](micro509.md#parsedcertificate)
 
 Defined in: [revocation/revocation.ts:25](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/revocation.ts#L25)
 
@@ -2111,7 +2111,7 @@ Why a particular piece of evidence could not produce a definitive `good`/`revoke
 
 > **RevocationReason** = `"unspecified"` \| `"keyCompromise"` \| `"cACompromise"` \| `"affiliationChanged"` \| `"superseded"` \| `"cessationOfOperation"` \| `"certificateHold"` \| `"removeFromCRL"` \| `"privilegeWithdrawn"` \| `"aACompromise"`
 
-Defined in: [revocation/crl.ts:105](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L105)
+Defined in: [revocation/crl.ts:106](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L106)
 
 RFC 5280 §5.3.1 CRLReason code values.
 
@@ -2131,11 +2131,11 @@ Unified revocation outcome across CRL and OCSP evidence.
 
 ### ValidateCertificateRevocationListResult
 
-> **ValidateCertificateRevocationListResult** = \{ `ok`: `true`; `value`: [`ParsedCertificateRevocationList`](#parsedcertificaterevocationlist); \} \| [`ErrorResult`](result.md#errorresult)\<`"signature_invalid"` \| `"issuer_mismatch"` \| `"stale_crl"` \| `"crl_sign_not_permitted"`, `Record`\<`never`, `never`\>, [`ValidateCertificateRevocationListFailure`](#validatecertificaterevocationlistfailure)\>
+> **ValidateCertificateRevocationListResult** = \{ `ok`: `true`; `value`: [`ParsedCertificateRevocationList`](#parsedcertificaterevocationlist); \} \| [`ErrorResult`](micro509.md#errorresult)\<`"signature_invalid"` \| `"issuer_mismatch"` \| `"stale_crl"` \| `"crl_sign_not_permitted"`, `Record`\<`never`, `never`\>, [`ValidateCertificateRevocationListFailure`](#validatecertificaterevocationlistfailure)\>
 
-Defined in: [revocation/crl.ts:282](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L282)
+Defined in: [revocation/crl.ts:283](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L283)
 
-Result of [`validateCertificateRevocationList`](#validatecertificaterevocationlist).
+Result of [`validateCertificateRevocationList`](micro509.md#validatecertificaterevocationlist).
 
 On success, the CRL has passed signature, issuer, key-usage, and freshness checks.
 
@@ -2153,17 +2153,17 @@ On success, the CRL has passed signature, issuer, key-usage, and freshness check
 
 Validated and parsed CRL.
 
-[`ErrorResult`](result.md#errorresult)\<`"signature_invalid"` \| `"issuer_mismatch"` \| `"stale_crl"` \| `"crl_sign_not_permitted"`, `Record`\<`never`, `never`\>, [`ValidateCertificateRevocationListFailure`](#validatecertificaterevocationlistfailure)\>
+[`ErrorResult`](micro509.md#errorresult)\<`"signature_invalid"` \| `"issuer_mismatch"` \| `"stale_crl"` \| `"crl_sign_not_permitted"`, `Record`\<`never`, `never`\>, [`ValidateCertificateRevocationListFailure`](#validatecertificaterevocationlistfailure)\>
 
 ---
 
 ### ValidateOcspResponseResult
 
-> **ValidateOcspResponseResult** = \{ `ok`: `true`; `value`: [`ParsedOcspResponse`](#parsedocspresponse); \} \| [`ErrorResult`](result.md#errorresult)\<`"response_status_invalid"` \| `"signature_invalid"` \| `"responder_id_mismatch"` \| `"nonce_mismatch"` \| `"request_mismatch"` \| `"issuer_mismatch"` \| `"responder_chain_invalid"` \| `"ocsp_signing_missing"` \| `"stale_response"`, `Record`\<`never`, `never`\>, [`ValidateOcspResponseFailure`](#validateocspresponsefailure)\>
+> **ValidateOcspResponseResult** = \{ `ok`: `true`; `value`: [`ParsedOcspResponse`](#parsedocspresponse); \} \| [`ErrorResult`](micro509.md#errorresult)\<`"response_status_invalid"` \| `"signature_invalid"` \| `"responder_id_mismatch"` \| `"nonce_mismatch"` \| `"request_mismatch"` \| `"issuer_mismatch"` \| `"responder_chain_invalid"` \| `"ocsp_signing_missing"` \| `"stale_response"`, `Record`\<`never`, `never`\>, [`ValidateOcspResponseFailure`](#validateocspresponsefailure)\>
 
 Defined in: [revocation/ocsp.ts:334](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L334)
 
-Result of [`validateOcspResponse`](#validateocspresponse).
+Result of [`validateOcspResponse`](micro509.md#validateocspresponse).
 
 On success, the response has passed status, signature, responder binding,
 freshness, nonce, and request-coverage checks.
@@ -2182,17 +2182,17 @@ freshness, nonce, and request-coverage checks.
 
 Fully validated OCSP response.
 
-[`ErrorResult`](result.md#errorresult)\<`"response_status_invalid"` \| `"signature_invalid"` \| `"responder_id_mismatch"` \| `"nonce_mismatch"` \| `"request_mismatch"` \| `"issuer_mismatch"` \| `"responder_chain_invalid"` \| `"ocsp_signing_missing"` \| `"stale_response"`, `Record`\<`never`, `never`\>, [`ValidateOcspResponseFailure`](#validateocspresponsefailure)\>
+[`ErrorResult`](micro509.md#errorresult)\<`"response_status_invalid"` \| `"signature_invalid"` \| `"responder_id_mismatch"` \| `"nonce_mismatch"` \| `"request_mismatch"` \| `"issuer_mismatch"` \| `"responder_chain_invalid"` \| `"ocsp_signing_missing"` \| `"stale_response"`, `Record`\<`never`, `never`\>, [`ValidateOcspResponseFailure`](#validateocspresponsefailure)\>
 
 ---
 
 ### VerifyCertificateRevocationListResult
 
-> **VerifyCertificateRevocationListResult** = \{ `ok`: `true`; `value`: [`ParsedCertificateRevocationList`](#parsedcertificaterevocationlist); \} \| [`ErrorResult`](result.md#errorresult)\<`"signature_invalid"`, `Record`\<`never`, `never`\>, [`VerifyCertificateRevocationListFailure`](#verifycertificaterevocationlistfailure)\>
+> **VerifyCertificateRevocationListResult** = \{ `ok`: `true`; `value`: [`ParsedCertificateRevocationList`](#parsedcertificaterevocationlist); \} \| [`ErrorResult`](micro509.md#errorresult)\<`"signature_invalid"`, `Record`\<`never`, `never`\>, [`VerifyCertificateRevocationListFailure`](#verifycertificaterevocationlistfailure)\>
 
-Defined in: [revocation/crl.ts:242](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L242)
+Defined in: [revocation/crl.ts:243](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L243)
 
-Result of [`verifyCertificateRevocationList`](#verifycertificaterevocationlist).
+Result of [`verifyCertificateRevocationList`](micro509.md#verifycertificaterevocationlist).
 
 On success, `value` is the parsed CRL whose signature has been verified.
 
@@ -2210,17 +2210,17 @@ On success, `value` is the parsed CRL whose signature has been verified.
 
 Parsed CRL with a verified signature.
 
-[`ErrorResult`](result.md#errorresult)\<`"signature_invalid"`, `Record`\<`never`, `never`\>, [`VerifyCertificateRevocationListFailure`](#verifycertificaterevocationlistfailure)\>
+[`ErrorResult`](micro509.md#errorresult)\<`"signature_invalid"`, `Record`\<`never`, `never`\>, [`VerifyCertificateRevocationListFailure`](#verifycertificaterevocationlistfailure)\>
 
 ---
 
 ### VerifyOcspResponseResult
 
-> **VerifyOcspResponseResult** = \{ `ok`: `true`; `value`: [`ParsedOcspResponse`](#parsedocspresponse); \} \| [`ErrorResult`](result.md#errorresult)\<`"signature_invalid"`, `Record`\<`never`, `never`\>, [`VerifyOcspResponseFailure`](#verifyocspresponsefailure)\>
+> **VerifyOcspResponseResult** = \{ `ok`: `true`; `value`: [`ParsedOcspResponse`](#parsedocspresponse); \} \| [`ErrorResult`](micro509.md#errorresult)\<`"signature_invalid"`, `Record`\<`never`, `never`\>, [`VerifyOcspResponseFailure`](#verifyocspresponsefailure)\>
 
 Defined in: [revocation/ocsp.ts:276](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L276)
 
-Result of [`verifyOcspResponse`](#verifyocspresponse).
+Result of [`verifyOcspResponse`](micro509.md#verifyocspresponse).
 
 On success, `value` is the parsed response whose signature has been verified.
 
@@ -2238,539 +2238,4 @@ On success, `value` is the parsed response whose signature has been verified.
 
 Parsed response with a verified signature.
 
-[`ErrorResult`](result.md#errorresult)\<`"signature_invalid"`, `Record`\<`never`, `never`\>, [`VerifyOcspResponseFailure`](#verifyocspresponsefailure)\>
-
-## Functions
-
-### checkCertificateRevocation()
-
-> **checkCertificateRevocation**(`input`): `Promise`\<[`CheckCertificateRevocationResult`](#checkcertificaterevocationresult)\>
-
-Defined in: [revocation/revocation.ts:278](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/revocation.ts#L278)
-
-Evaluates all provided CRL and OCSP evidence to determine the certificate's
-revocation status. Returns the first `revoked` if any, else the first `good`,
-else `unknown` with diagnostic details about each indeterminate evidence.
-
-#### Parameters
-
-##### input
-
-[`CheckCertificateRevocationInput`](#checkcertificaterevocationinput)
-
-#### Returns
-
-`Promise`\<[`CheckCertificateRevocationResult`](#checkcertificaterevocationresult)\>
-
-#### Example
-
-```ts
-import { checkCertificateRevocation } from 'micro509';
-
-const result = await checkCertificateRevocation({
-  certificate: leafPem,
-  issuerCertificate: caPem,
-  evidence: [{ kind: 'crl', crl: crlPem }],
-});
-if (result.ok && result.value.status === 'revoked') {
-  console.log('revoked at', result.value.revokedAt);
-}
-```
-
----
-
-### checkCertificateRevocationAgainstCrl()
-
-> **checkCertificateRevocationAgainstCrl**(`input`): `Promise`\<[`CheckCertificateRevocationAgainstCrlResult`](#checkcertificaterevocationagainstcrlresult)\>
-
-Defined in: [revocation/crl.ts:701](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L701)
-
-End-to-end revocation check: validates the CRL (and optional delta CRL),
-verifies applicability via distribution-point and scope matching, then
-resolves the certificate's revocation status.
-
-Returns `good` if the serial is absent, `revoked` with date/reason if present,
-or an error if the CRL cannot be validated or is non-applicable.
-
-#### Parameters
-
-##### input
-
-[`CheckCertificateRevocationAgainstCrlInput`](#checkcertificaterevocationagainstcrlinput)
-
-#### Returns
-
-`Promise`\<[`CheckCertificateRevocationAgainstCrlResult`](#checkcertificaterevocationagainstcrlresult)\>
-
-#### Example
-
-```ts
-import { checkCertificateRevocationAgainstCrl } from 'micro509';
-
-const result = await checkCertificateRevocationAgainstCrl({
-  certificate: leafPem,
-  issuerCertificate: caPem,
-  crl: crlPem,
-});
-if (result.ok && result.value.status === 'revoked') {
-  console.log('revoked on', result.value.revocationDate);
-}
-```
-
----
-
-### createCertificateRevocationList()
-
-> **createCertificateRevocationList**(`input`): `Promise`\<[`CertificateRevocationListMaterial`](#certificaterevocationlistmaterial)\>
-
-Defined in: [revocation/crl.ts:425](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L425)
-
-Signs and encodes an X.509 v2 CRL.
-
-Embeds Authority Key Identifier, CRLNumber, delta CRL indicator,
-issuing distribution point, and freshest-CRL extensions as configured.
-
-#### Parameters
-
-##### input
-
-[`CreateCertificateRevocationListInput`](#createcertificaterevocationlistinput)
-
-#### Returns
-
-`Promise`\<[`CertificateRevocationListMaterial`](#certificaterevocationlistmaterial)\>
-
-#### Example
-
-```ts
-import { createCertificateRevocationList } from 'micro509';
-
-const crl = await createCertificateRevocationList({
-  issuer: { commonName: 'Example CA' },
-  signerPrivateKey: caPrivateKey,
-  issuerPublicKey: caPublicKey,
-  thisUpdate: new Date('2025-01-01'),
-  nextUpdate: new Date('2025-02-01'),
-  crlNumber: 42,
-  revokedCertificates: [
-    {
-      serialNumber: revokedSerial,
-      reasonCode: 'keyCompromise',
-    },
-  ],
-});
-// crl.pem, crl.der, crl.base64
-```
-
----
-
-### createOcspRequest()
-
-> **createOcspRequest**(`input`): `Promise`\<[`OcspRequestMaterial`](#ocsprequestmaterial)\>
-
-Defined in: [revocation/ocsp.ts:370](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L370)
-
-Builds a DER-encoded OCSP request containing one or more CertID entries
-and an optional nonce extension.
-
-#### Parameters
-
-##### input
-
-[`CreateOcspRequestInput`](#createocsprequestinput)
-
-#### Returns
-
-`Promise`\<[`OcspRequestMaterial`](#ocsprequestmaterial)\>
-
-#### Example
-
-```ts
-import { createOcspRequest } from 'micro509';
-
-const req = await createOcspRequest({
-  requests: [
-    { certificate: leafPem, issuerCertificate: caPem },
-  ],
-  hashAlgorithm: 'SHA-256',
-  nonce: crypto.getRandomValues(new Uint8Array(16)),
-});
-// POST req.der to the OCSP responder URI
-```
-
----
-
-### createOcspResponse()
-
-> **createOcspResponse**(`input`): `Promise`\<[`OcspResponseMaterial`](#ocspresponsematerial)\>
-
-Defined in: [revocation/ocsp.ts:606](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L606)
-
-Signs and encodes an OCSP BasicResponse with a `successful` status.
-
-The responder is identified by key hash (SHA-1 of the signer's SubjectPublicKey).
-Use `includedCertificates` to embed the responder's chain for relying parties.
-
-#### Parameters
-
-##### input
-
-[`CreateOcspResponseInput`](#createocspresponseinput)
-
-#### Returns
-
-`Promise`\<[`OcspResponseMaterial`](#ocspresponsematerial)\>
-
-#### Example
-
-```ts
-import { createOcspResponse } from 'micro509';
-
-const resp = await createOcspResponse({
-  signerPrivateKey: responderPrivateKey,
-  signerCertificate: responderCertPem,
-  responses: [
-    {
-      certificate: leafPem,
-      issuerCertificate: caPem,
-      certStatus: 'good',
-      thisUpdate: new Date('2025-01-01'),
-      nextUpdate: new Date('2025-01-08'),
-    },
-  ],
-  nonce: requestNonce,
-});
-// resp.der, resp.pem, resp.base64
-```
-
----
-
-### getCertificateOcspResponderUris()
-
-> **getCertificateOcspResponderUris**(`certificate`): readonly `string`[]
-
-Defined in: [revocation/revocation.ts:195](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/revocation.ts#L195)
-
-Extracts OCSP responder URIs from the certificate's Authority Information Access extension.
-
-#### Parameters
-
-##### certificate
-
-[`RevocationCertificateSource`](#revocationcertificatesource)
-
-#### Returns
-
-readonly `string`[]
-
----
-
-### isCertificateRevoked()
-
-> **isCertificateRevoked**(`certificateSerialNumber`, `crl`): `boolean`
-
-Defined in: [revocation/crl.ts:839](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L839)
-
-Quick serial-number lookup — returns `true` if the serial appears in the
-CRL's revoked entries. Does **not** validate the CRL or check applicability.
-
-#### Parameters
-
-##### certificateSerialNumber
-
-`string` | `Uint8Array`\<`ArrayBufferLike`\>
-
-##### crl
-
-[`ParsedCertificateRevocationList`](#parsedcertificaterevocationlist)
-
-#### Returns
-
-`boolean`
-
----
-
-### parseCertificateRevocationListDer()
-
-> **parseCertificateRevocationListDer**(`der`): [`ParsedCertificateRevocationList`](#parsedcertificaterevocationlist)
-
-Defined in: [revocation/crl.ts:471](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L471)
-
-Decodes a DER-encoded X.509 CRL into a structured [`ParsedCertificateRevocationList`](#parsedcertificaterevocationlist).
-
-Does not verify the signature — call [`verifyCertificateRevocationList`](#verifycertificaterevocationlist) or
-[`validateCertificateRevocationList`](#validatecertificaterevocationlist) for that.
-
-#### Parameters
-
-##### der
-
-`Uint8Array`
-
-#### Returns
-
-[`ParsedCertificateRevocationList`](#parsedcertificaterevocationlist)
-
----
-
-### parseCertificateRevocationListPem()
-
-> **parseCertificateRevocationListPem**(`pem`): [`ParsedCertificateRevocationList`](#parsedcertificaterevocationlist)
-
-Defined in: [revocation/crl.ts:526](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L526)
-
-Decodes a PEM-encoded X.509 CRL (`-----BEGIN X509 CRL-----`).
-
-#### Parameters
-
-##### pem
-
-`string`
-
-#### Returns
-
-[`ParsedCertificateRevocationList`](#parsedcertificaterevocationlist)
-
-#### Example
-
-```ts
-import { parseCertificateRevocationListPem } from 'micro509';
-
-const crl = parseCertificateRevocationListPem(pemString);
-console.log(
-  crl.issuer.values.commonName,
-  crl.revokedCertificates.length,
-);
-```
-
----
-
-### parseOcspRequestDer()
-
-> **parseOcspRequestDer**(`der`): [`ParsedOcspRequest`](#parsedocsprequest)
-
-Defined in: [revocation/ocsp.ts:400](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L400)
-
-Decodes a DER-encoded OCSP request into a structured [`ParsedOcspRequest`](#parsedocsprequest).
-
-#### Parameters
-
-##### der
-
-`Uint8Array`
-
-#### Returns
-
-[`ParsedOcspRequest`](#parsedocsprequest)
-
----
-
-### parseOcspRequestPem()
-
-> **parseOcspRequestPem**(`pem`): [`ParsedOcspRequest`](#parsedocsprequest)
-
-Defined in: [revocation/ocsp.ts:468](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L468)
-
-Decodes a PEM-encoded OCSP request (`-----BEGIN OCSP REQUEST-----`).
-
-#### Parameters
-
-##### pem
-
-`string`
-
-#### Returns
-
-[`ParsedOcspRequest`](#parsedocsprequest)
-
----
-
-### parseOcspResponseDer()
-
-> **parseOcspResponseDer**(`der`): [`ParsedOcspResponse`](#parsedocspresponse)
-
-Defined in: [revocation/ocsp.ts:473](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L473)
-
-Decodes a DER-encoded OCSP response into a structured [`ParsedOcspResponse`](#parsedocspresponse). Does not verify the signature.
-
-#### Parameters
-
-##### der
-
-`Uint8Array`
-
-#### Returns
-
-[`ParsedOcspResponse`](#parsedocspresponse)
-
----
-
-### parseOcspResponsePem()
-
-> **parseOcspResponsePem**(`pem`): [`ParsedOcspResponse`](#parsedocspresponse)
-
-Defined in: [revocation/ocsp.ts:575](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L575)
-
-Decodes a PEM-encoded OCSP response (`-----BEGIN OCSP RESPONSE-----`).
-
-#### Parameters
-
-##### pem
-
-`string`
-
-#### Returns
-
-[`ParsedOcspResponse`](#parsedocspresponse)
-
-#### Example
-
-```ts
-import { parseOcspResponsePem } from 'micro509';
-
-const resp = parseOcspResponsePem(pemString);
-if (resp.responseStatus === 'successful') {
-  for (const entry of resp.responses ?? []) {
-    console.log(
-      entry.certId.serialNumberHex,
-      entry.certStatus,
-    );
-  }
-}
-```
-
----
-
-### resolveOcspResponderCandidates()
-
-> **resolveOcspResponderCandidates**(`input`): readonly [`OcspResponderCandidate`](#ocsprespondercandidate)[]
-
-Defined in: [revocation/revocation.ts:220](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/revocation.ts#L220)
-
-Merges configured OCSP responders with those discovered from the certificate's
-AIA extension. Configured responders take priority; duplicates are deduplicated by URI.
-
-#### Parameters
-
-##### input
-
-[`ResolveOcspResponderCandidatesInput`](#resolveocsprespondercandidatesinput)
-
-#### Returns
-
-readonly [`OcspResponderCandidate`](#ocsprespondercandidate)[]
-
----
-
-### validateCertificateRevocationList()
-
-> **validateCertificateRevocationList**(`input`): `Promise`\<[`ValidateCertificateRevocationListResult`](#validatecertificaterevocationlistresult)\>
-
-Defined in: [revocation/crl.ts:593](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L593)
-
-Full CRL validation: issuer name match, authority key identifier match,
-cRLSign key-usage check, signature verification, and `thisUpdate`/`nextUpdate`
-freshness check (with optional clock-skew tolerance).
-
-#### Parameters
-
-##### input
-
-[`ValidateCertificateRevocationListInput`](#validatecertificaterevocationlistinput)
-
-#### Returns
-
-`Promise`\<[`ValidateCertificateRevocationListResult`](#validatecertificaterevocationlistresult)\>
-
----
-
-### validateOcspResponse()
-
-> **validateOcspResponse**(`input`): `Promise`\<[`ValidateOcspResponseResult`](#validateocspresponseresult)\>
-
-Defined in: [revocation/ocsp.ts:756](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L756)
-
-Full OCSP response validation: response status check, signature verification,
-responder ID binding (byName or byKeyHash), delegated-responder chain and
-ocspSigning EKU checks, `producedAt`/`thisUpdate`/`nextUpdate` freshness,
-nonce match, and request-coverage completeness.
-
-#### Parameters
-
-##### input
-
-[`ValidateOcspResponseInput`](#validateocspresponseinput)
-
-#### Returns
-
-`Promise`\<[`ValidateOcspResponseResult`](#validateocspresponseresult)\>
-
-#### Example
-
-```ts
-import { validateOcspResponse } from 'micro509';
-
-const result = await validateOcspResponse({
-  response: ocspResponseDer,
-  issuerCertificate: caPem,
-  request: ocspRequestDer,
-});
-if (result.ok) {
-  const entry = result.value.responses?.[0];
-  console.log(entry?.certStatus); // 'good' | 'revoked' | 'unknown'
-}
-```
-
----
-
-### verifyCertificateRevocationList()
-
-> **verifyCertificateRevocationList**(`crl`, `issuerCertificate`): `Promise`\<[`VerifyCertificateRevocationListResult`](#verifycertificaterevocationlistresult)\>
-
-Defined in: [revocation/crl.ts:536](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/crl.ts#L536)
-
-Verifies the CRL signature against the issuer certificate's public key.
-
-Does **not** check issuer name match, key-usage, or freshness — use
-[`validateCertificateRevocationList`](#validatecertificaterevocationlist) for full validation.
-
-#### Parameters
-
-##### crl
-
-`string` | `Uint8Array`\<`ArrayBufferLike`\>
-
-##### issuerCertificate
-
-`string` | `Uint8Array`\<`ArrayBufferLike`\>
-
-#### Returns
-
-`Promise`\<[`VerifyCertificateRevocationListResult`](#verifycertificaterevocationlistresult)\>
-
----
-
-### verifyOcspResponse()
-
-> **verifyOcspResponse**(`response`, `signerCertificate`): `Promise`\<[`VerifyOcspResponseResult`](#verifyocspresponseresult)\>
-
-Defined in: [revocation/ocsp.ts:675](https://github.com/kjanat/ts-x509/blob/vitepress/src/revocation/ocsp.ts#L675)
-
-Verifies the OCSP response signature against the given signer certificate.
-
-Does **not** check responder binding, freshness, or nonce — use
-[`validateOcspResponse`](#validateocspresponse) for full validation.
-
-#### Parameters
-
-##### response
-
-`string` | `Uint8Array`\<`ArrayBufferLike`\> | [`ParsedOcspResponse`](#parsedocspresponse)
-
-##### signerCertificate
-
-[`OcspCertificateSource`](#ocspcertificatesource)
-
-#### Returns
-
-`Promise`\<[`VerifyOcspResponseResult`](#verifyocspresponseresult)\>
+[`ErrorResult`](micro509.md#errorresult)\<`"signature_invalid"`, `Record`\<`never`, `never`\>, [`VerifyOcspResponseFailure`](#verifyocspresponsefailure)\>

@@ -19,16 +19,16 @@ hero:
       text: GitHub
       link: https://github.com/kjanat/ts-x509
 features:
-  - icon: "\U0001F50F"
+  - icon: 🔏
     title: Typed Verification
     details: 21 typed error codes with chain index and structured failure details. Build certificate flows your code can actually reason about.
-  - icon: "\U0001F310"
+  - icon: 🌐
     title: Runs Everywhere
     details: Pure WebCrypto, zero dependencies. Node, Bun, Deno, browsers, Cloudflare Workers.
-  - icon: "\U0001F4E6"
+  - icon: 📦
     title: Full PKI Surface
     details: Certificates, CSRs, chain verification, service identity, CRLs, OCSP, PFX/PKCS#12, PKCS#7, encrypted keys.
-  - icon: "\U0001F6E1\uFE0F"
+  - icon: 🛡️
     title: Strict by Default
     details: No any, no type assertions, no non-null assertions. Narrow defaults, explicit escape hatches.
 ---

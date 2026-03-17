@@ -1,21 +1,42 @@
-import { $ } from 'bun';
 import type { Plugin } from 'vite';
-import { robotsTxt } from 'vite-robots-txt';
+import robotsTxt from 'vite-robots-txt';
 import svgToIco from 'vite-svg-to-ico';
 import { defineConfig } from 'vitepress';
 
+import jsr from '../../jsr.json' with { type: 'json' };
 import pkg from '../../package.json' with { type: 'json' };
 import typedocSidebar from '../api/typedoc-sidebar.json' with { type: 'json' };
 
-const getGitBranch = async (): Promise<string> => {
-	const branchFromEnv = process.env.GITHUB_REF_NAME?.trim();
-	if (branchFromEnv) return branchFromEnv;
+const getRequiredEnv = (names: readonly string[]): string => {
+	for (const name of names) {
+		if (process.env[name]?.trim()) return process.env[name]?.trim();
+	}
 
-	const branchFromGit = (await $`git branch --show-current`.text()).trim();
-	return branchFromGit || 'master';
+	throw new Error(`Missing required env: ${names.join(' or ')}. Run via package scripts.`);
 };
-const getGitCommitHash = async (length: number = 7): Promise<string> => {
-	return (await $`git rev-parse HEAD`.text()).trim().slice(0, length);
+
+/** Git info for edit links and cache-busting import map URLs. */
+const gitEnv = {
+	/** Branch name for edit links; also included in the import map URL to ensure cache invalidation on new commits. */
+	get branch(): string {
+		return getRequiredEnv(['MICRO509_GIT_BRANCH', 'GITHUB_REF_NAME']);
+	},
+	/** Short 7-char hash for display; full hash is available via `GITHUB_SHA` in the import map URL. */
+	get commitHash(): string {
+		return getRequiredEnv(['MICRO509_GIT_COMMIT', 'GITHUB_SHA']).slice(0, 7);
+	},
+
+	/** Cleaned GitHub url */
+	get githubUrl(): string {
+		return pkg.repository.url.replace('git+', '').replace(/\.git$/, '');
+	},
+
+	/** GitHub repo owner/name */
+	get githubRepo(): string {
+		const match = this.githubUrl.match(/github\.com[:/](.+\/.+?)(?:\.git)?$/);
+		if (!match) throw new Error(`Invalid GitHub URL: ${this.githubUrl}`);
+		return match[1];
+	},
 };
 
 /**
@@ -23,7 +44,7 @@ const getGitCommitHash = async (length: number = 7): Promise<string> => {
  * Uses pkg-pr-new via esm.sh while pre-release; switch to
  * `https://esm.sh/micro509@${pkg.version}` once published on npm.
  */
-const cdnBase = `https://esm.sh/pr/kjanat/ts-x509/micro509@${await getGitCommitHash()}`;
+const cdnBase = `https://esm.sh/pr/${gitEnv.githubRepo}/${pkg.name}@${gitEnv.commitHash}`;
 
 /** Import map JSON derived from package.json exports via the CDN. */
 const importMapJson = JSON.stringify({
@@ -44,7 +65,7 @@ const importMapJson = JSON.stringify({
  */
 function importMapPlugin(): Plugin {
 	return {
-		name: 'micro509-importmap',
+		name: `${pkg.name}-importmap`,
 		transformIndexHtml: {
 			order: 'pre',
 			handler: () => [
@@ -90,7 +111,7 @@ export default defineConfig({
 	},
 
 	themeConfig: {
-		logo: { light: '/icon.svg', dark: '/icon-light.svg', alt: 'micro509' },
+		logo: { light: '/icon.svg', dark: '/icon-light.svg', alt: pkg.name },
 		nav: [
 			{ text: 'Guide', link: '/guide/getting-started' },
 			{ text: 'API', link: '/api/' },
@@ -124,17 +145,17 @@ export default defineConfig({
 						{ text: 'Overview', link: '/api/' },
 						...(Array.isArray(typedocSidebar)
 							? typedocSidebar.flatMap((item: { text: string; link: string }) =>
-									item.text === 'micro509'
+									item.text === pkg.name
 										? []
 										: [
 												{
-													text: `micro509/${item.text}`,
+													text: `${pkg.name}/${item.text}`,
 													link: item.link.replace('/site/', '/').replace('.md', ''),
 												},
 											],
 								)
 							: []),
-						{ text: 'Root Import', link: '/api/micro509' },
+						{ text: 'Root Import', link: `/api/${pkg.name}` },
 					],
 				},
 			],
@@ -151,19 +172,19 @@ export default defineConfig({
 		},
 
 		socialLinks: [
-			{ icon: 'github', link: 'https://github.com/kjanat/ts-x509', ariaLabel: 'GitHub' },
-			{ icon: 'npm', link: 'https://npm.im/micro509', ariaLabel: 'NPM' },
-			{ icon: 'jsr', link: 'https://jsr.io/@kjanat/micro509', ariaLabel: 'JSR' },
+			{ icon: 'github', link: gitEnv.githubUrl, ariaLabel: 'GitHub' },
+			{ icon: 'npm', link: `https://npm.im/${pkg.name}`, ariaLabel: 'NPM' },
+			{ icon: 'jsr', link: `https://jsr.io/${jsr.name}`, ariaLabel: 'JSR' },
 		],
 
 		editLink: {
-			pattern: `https://github.com/kjanat/ts-x509/edit/${await getGitBranch()}/site/:path`,
+			pattern: `${gitEnv.githubUrl}/edit/${gitEnv.branch}/site/:path`,
 			text: 'Edit this page on GitHub',
 		},
 
 		footer: {
 			message: `Released under the ${pkg.license} License.`,
-			copyright: 'Copyright © 2026-present Kaj Kowalski',
+			copyright: `Copyright © 2026-present ${pkg.author}`,
 		},
 
 		search: {

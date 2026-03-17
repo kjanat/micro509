@@ -24,7 +24,6 @@ Usage:
   generate_tests.py <PKITS.pdf> <output.h>
 """
 
-import os
 import re
 import subprocess
 import sys
@@ -189,7 +188,7 @@ PAGE_NUMBER_MATCHER = re.compile("^\s*\d+\s*$")
 CRL_MATCHER = re.compile("^.*CRL\d*$")
 
 
-class TestSections(object):
+class TestSections:
     def __init__(self):
         self.description_lines = []
         self.procedure_lines = []
@@ -283,7 +282,7 @@ TEST_POLICY_6 = "NIST-test-policy-6"
 #
 #  * authorities-constrained-policy-set
 #  * explicit-policy-indicator
-class TestInfo(object):
+class TestInfo:
     """This structure describes a test inputs and outputs"""
 
     def __init__(

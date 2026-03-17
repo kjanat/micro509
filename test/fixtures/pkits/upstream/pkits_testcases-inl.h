@@ -8,9 +8,9 @@
 
 // Hack to allow disabling type parameterized test cases.
 // See https://github.com/google/googletest/issues/389
-#define WRAPPED_TYPED_TEST_P(CaseName, TestName) \
+#define WRAPPED_TYPED_TEST_P(CaseName, TestName)                               \
   TYPED_TEST_P(CaseName, TestName)
-#define WRAPPED_REGISTER_TYPED_TEST_SUITE_P(CaseName, ...) \
+#define WRAPPED_REGISTER_TYPED_TEST_SUITE_P(CaseName, ...)                     \
   REGISTER_TYPED_TEST_SUITE_P(CaseName, __VA_ARGS__)
 
 template <typename PkitsTestDelegate>
@@ -20,9 +20,9 @@ TYPED_TEST_SUITE_P(PkitsTest01SignatureVerification);
 // 4.1.1 Valid Signatures Test1
 WRAPPED_TYPED_TEST_P(PkitsTest01SignatureVerification,
                      Section1ValidSignaturesTest1) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
                                "ValidCertificatePathTest1EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "GoodCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "GoodCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.1.1";
   info.should_validate = true;
@@ -33,9 +33,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest01SignatureVerification,
 // 4.1.2 Invalid CA Signature Test2
 WRAPPED_TYPED_TEST_P(PkitsTest01SignatureVerification,
                      Section1InvalidCASignatureTest2) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "BadSignedCACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "BadSignedCACert",
                                "InvalidCASignatureTest2EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "BadSignedCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "BadSignedCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.1.2";
   info.should_validate = false;
@@ -46,9 +46,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest01SignatureVerification,
 // 4.1.3 Invalid EE Signature Test3
 WRAPPED_TYPED_TEST_P(PkitsTest01SignatureVerification,
                      Section1InvalidEESignatureTest3) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
                                "InvalidEESignatureTest3EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "GoodCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "GoodCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.1.3";
   info.should_validate = false;
@@ -59,9 +59,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest01SignatureVerification,
 // 4.1.4 Valid DSA Signatures Test4
 WRAPPED_TYPED_TEST_P(PkitsTest01SignatureVerification,
                      Section1ValidDSASignaturesTest4) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "DSACACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "DSACACert",
                                "ValidDSASignaturesTest4EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "DSACACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "DSACACRL"};
   PkitsTestInfo info;
   info.test_number = "4.1.4";
   info.should_validate = true;
@@ -72,10 +72,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest01SignatureVerification,
 // 4.1.5 Valid DSA Parameter Inheritance Test5
 WRAPPED_TYPED_TEST_P(PkitsTest01SignatureVerification,
                      Section1ValidDSAParameterInheritanceTest5) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "DSACACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "DSACACert",
                                "DSAParametersInheritedCACert",
                                "ValidDSAParameterInheritanceTest5EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "DSACACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "DSACACRL",
                               "DSAParametersInheritedCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.1.5";
@@ -87,9 +87,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest01SignatureVerification,
 // 4.1.6 Invalid DSA Signature Test6
 WRAPPED_TYPED_TEST_P(PkitsTest01SignatureVerification,
                      Section1InvalidDSASignatureTest6) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "DSACACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "DSACACert",
                                "InvalidDSASignatureTest6EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "DSACACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "DSACACRL"};
   PkitsTestInfo info;
   info.test_number = "4.1.6";
   info.should_validate = false;
@@ -112,10 +112,10 @@ TYPED_TEST_SUITE_P(PkitsTest02ValidityPeriods);
 // 4.2.1 Invalid CA notBefore Date Test1
 WRAPPED_TYPED_TEST_P(PkitsTest02ValidityPeriods,
                      Section2InvalidCAnotBeforeDateTest1) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "BadnotBeforeDateCACert",
                                "InvalidCAnotBeforeDateTest1EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "BadnotBeforeDateCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "BadnotBeforeDateCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.2.1";
   info.should_validate = false;
@@ -126,9 +126,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest02ValidityPeriods,
 // 4.2.2 Invalid EE notBefore Date Test2
 WRAPPED_TYPED_TEST_P(PkitsTest02ValidityPeriods,
                      Section2InvalidEEnotBeforeDateTest2) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
                                "InvalidEEnotBeforeDateTest2EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "GoodCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "GoodCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.2.2";
   info.should_validate = false;
@@ -139,9 +139,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest02ValidityPeriods,
 // 4.2.3 Valid pre2000 UTC notBefore Date Test3
 WRAPPED_TYPED_TEST_P(PkitsTest02ValidityPeriods,
                      Section2Validpre2000UTCnotBeforeDateTest3) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
                                "Validpre2000UTCnotBeforeDateTest3EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "GoodCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "GoodCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.2.3";
   info.should_validate = true;
@@ -152,9 +152,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest02ValidityPeriods,
 // 4.2.4 Valid GeneralizedTime notBefore Date Test4
 WRAPPED_TYPED_TEST_P(PkitsTest02ValidityPeriods,
                      Section2ValidGeneralizedTimenotBeforeDateTest4) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
                                "ValidGeneralizedTimenotBeforeDateTest4EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "GoodCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "GoodCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.2.4";
   info.should_validate = true;
@@ -165,10 +165,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest02ValidityPeriods,
 // 4.2.5 Invalid CA notAfter Date Test5
 WRAPPED_TYPED_TEST_P(PkitsTest02ValidityPeriods,
                      Section2InvalidCAnotAfterDateTest5) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "BadnotAfterDateCACert",
                                "InvalidCAnotAfterDateTest5EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "BadnotAfterDateCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "BadnotAfterDateCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.2.5";
   info.should_validate = false;
@@ -179,9 +179,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest02ValidityPeriods,
 // 4.2.6 Invalid EE notAfter Date Test6
 WRAPPED_TYPED_TEST_P(PkitsTest02ValidityPeriods,
                      Section2InvalidEEnotAfterDateTest6) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
                                "InvalidEEnotAfterDateTest6EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "GoodCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "GoodCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.2.6";
   info.should_validate = false;
@@ -192,9 +192,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest02ValidityPeriods,
 // 4.2.7 Invalid pre2000 UTC EE notAfter Date Test7
 WRAPPED_TYPED_TEST_P(PkitsTest02ValidityPeriods,
                      Section2Invalidpre2000UTCEEnotAfterDateTest7) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
                                "Invalidpre2000UTCEEnotAfterDateTest7EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "GoodCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "GoodCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.2.7";
   info.should_validate = false;
@@ -205,9 +205,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest02ValidityPeriods,
 // 4.2.8 Valid GeneralizedTime notAfter Date Test8
 WRAPPED_TYPED_TEST_P(PkitsTest02ValidityPeriods,
                      Section2ValidGeneralizedTimenotAfterDateTest8) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
                                "ValidGeneralizedTimenotAfterDateTest8EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "GoodCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "GoodCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.2.8";
   info.should_validate = true;
@@ -216,13 +216,11 @@ WRAPPED_TYPED_TEST_P(PkitsTest02ValidityPeriods,
 }
 
 WRAPPED_REGISTER_TYPED_TEST_SUITE_P(
-    PkitsTest02ValidityPeriods,
-    Section2InvalidCAnotBeforeDateTest1,
+    PkitsTest02ValidityPeriods, Section2InvalidCAnotBeforeDateTest1,
     Section2InvalidEEnotBeforeDateTest2,
     Section2Validpre2000UTCnotBeforeDateTest3,
     Section2ValidGeneralizedTimenotBeforeDateTest4,
-    Section2InvalidCAnotAfterDateTest5,
-    Section2InvalidEEnotAfterDateTest6,
+    Section2InvalidCAnotAfterDateTest5, Section2InvalidEEnotAfterDateTest6,
     Section2Invalidpre2000UTCEEnotAfterDateTest7,
     Section2ValidGeneralizedTimenotAfterDateTest8);
 
@@ -233,9 +231,9 @@ TYPED_TEST_SUITE_P(PkitsTest03VerifyingNameChaining);
 // 4.3.1 Invalid Name Chaining EE Test1
 WRAPPED_TYPED_TEST_P(PkitsTest03VerifyingNameChaining,
                      Section3InvalidNameChainingEETest1) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
                                "InvalidNameChainingTest1EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "GoodCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "GoodCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.3.1";
   info.should_validate = false;
@@ -246,10 +244,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest03VerifyingNameChaining,
 // 4.3.2 Invalid Name Chaining Order Test2
 WRAPPED_TYPED_TEST_P(PkitsTest03VerifyingNameChaining,
                      Section3InvalidNameChainingOrderTest2) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "NameOrderingCACert",
                                "InvalidNameChainingOrderTest2EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "NameOrderCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "NameOrderCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.3.2";
   info.should_validate = false;
@@ -260,9 +258,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest03VerifyingNameChaining,
 // 4.3.3 Valid Name Chaining Whitespace Test3
 WRAPPED_TYPED_TEST_P(PkitsTest03VerifyingNameChaining,
                      Section3ValidNameChainingWhitespaceTest3) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
                                "ValidNameChainingWhitespaceTest3EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "GoodCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "GoodCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.3.3";
   info.should_validate = true;
@@ -273,9 +271,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest03VerifyingNameChaining,
 // 4.3.4 Valid Name Chaining Whitespace Test4
 WRAPPED_TYPED_TEST_P(PkitsTest03VerifyingNameChaining,
                      Section3ValidNameChainingWhitespaceTest4) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
                                "ValidNameChainingWhitespaceTest4EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "GoodCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "GoodCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.3.4";
   info.should_validate = true;
@@ -286,9 +284,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest03VerifyingNameChaining,
 // 4.3.5 Valid Name Chaining Capitalization Test5
 WRAPPED_TYPED_TEST_P(PkitsTest03VerifyingNameChaining,
                      Section3ValidNameChainingCapitalizationTest5) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
                                "ValidNameChainingCapitalizationTest5EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "GoodCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "GoodCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.3.5";
   info.should_validate = true;
@@ -299,9 +297,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest03VerifyingNameChaining,
 // 4.3.6 Valid Name Chaining UIDs Test6
 WRAPPED_TYPED_TEST_P(PkitsTest03VerifyingNameChaining,
                      Section3ValidNameChainingUIDsTest6) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "UIDCACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "UIDCACert",
                                "ValidNameUIDsTest6EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "UIDCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "UIDCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.3.6";
   info.should_validate = true;
@@ -312,10 +310,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest03VerifyingNameChaining,
 // 4.3.7 Valid RFC3280 Mandatory Attribute Types Test7
 WRAPPED_TYPED_TEST_P(PkitsTest03VerifyingNameChaining,
                      Section3ValidRFC3280MandatoryAttributeTypesTest7) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "RFC3280MandatoryAttributeTypesCACert",
                                "ValidRFC3280MandatoryAttributeTypesTest7EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "RFC3280MandatoryAttributeTypesCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.3.7";
@@ -327,10 +325,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest03VerifyingNameChaining,
 // 4.3.8 Valid RFC3280 Optional Attribute Types Test8
 WRAPPED_TYPED_TEST_P(PkitsTest03VerifyingNameChaining,
                      Section3ValidRFC3280OptionalAttributeTypesTest8) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "RFC3280OptionalAttributeTypesCACert",
                                "ValidRFC3280OptionalAttributeTypesTest8EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "RFC3280OptionalAttributeTypesCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.3.8";
@@ -342,10 +340,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest03VerifyingNameChaining,
 // 4.3.9 Valid UTF8String Encoded Names Test9
 WRAPPED_TYPED_TEST_P(PkitsTest03VerifyingNameChaining,
                      Section3ValidUTF8StringEncodedNamesTest9) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "UTF8StringEncodedNamesCACert",
                                "ValidUTF8StringEncodedNamesTest9EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "UTF8StringEncodedNamesCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.3.9";
@@ -358,11 +356,11 @@ WRAPPED_TYPED_TEST_P(PkitsTest03VerifyingNameChaining,
 WRAPPED_TYPED_TEST_P(
     PkitsTest03VerifyingNameChaining,
     Section3ValidRolloverfromPrintableStringtoUTF8StringTest10) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate",
       "RolloverfromPrintableStringtoUTF8StringCACert",
       "ValidRolloverfromPrintableStringtoUTF8StringTest10EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "RolloverfromPrintableStringtoUTF8StringCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.3.10";
@@ -374,10 +372,10 @@ WRAPPED_TYPED_TEST_P(
 // 4.3.11 Valid UTF8String Case Insensitive Match Test11
 WRAPPED_TYPED_TEST_P(PkitsTest03VerifyingNameChaining,
                      Section3ValidUTF8StringCaseInsensitiveMatchTest11) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "UTF8StringCaseInsensitiveMatchCACert",
                                "ValidUTF8StringCaseInsensitiveMatchTest11EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "UTF8StringCaseInsensitiveMatchCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.3.11";
@@ -387,8 +385,7 @@ WRAPPED_TYPED_TEST_P(PkitsTest03VerifyingNameChaining,
 }
 
 WRAPPED_REGISTER_TYPED_TEST_SUITE_P(
-    PkitsTest03VerifyingNameChaining,
-    Section3InvalidNameChainingEETest1,
+    PkitsTest03VerifyingNameChaining, Section3InvalidNameChainingEETest1,
     Section3InvalidNameChainingOrderTest2,
     Section3ValidNameChainingWhitespaceTest3,
     Section3ValidNameChainingWhitespaceTest4,
@@ -408,9 +405,9 @@ TYPED_TEST_SUITE_P(PkitsTest04BasicCertificateRevocationTests);
 // 4.4.1 Missing CRL Test1
 WRAPPED_TYPED_TEST_P(PkitsTest04BasicCertificateRevocationTests,
                      Section4MissingCRLTest1) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "NoCRLCACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "NoCRLCACert",
                                "InvalidMissingCRLTest1EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL"};
   PkitsTestInfo info;
   info.test_number = "4.4.1";
   info.should_validate = false;
@@ -421,9 +418,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest04BasicCertificateRevocationTests,
 // 4.4.2 Invalid Revoked CA Test2
 WRAPPED_TYPED_TEST_P(PkitsTest04BasicCertificateRevocationTests,
                      Section4InvalidRevokedCATest2) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
                                "RevokedsubCACert", "InvalidRevokedCATest2EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "GoodCACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "GoodCACRL",
                               "RevokedsubCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.4.2";
@@ -435,9 +432,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest04BasicCertificateRevocationTests,
 // 4.4.3 Invalid Revoked EE Test3
 WRAPPED_TYPED_TEST_P(PkitsTest04BasicCertificateRevocationTests,
                      Section4InvalidRevokedEETest3) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
                                "InvalidRevokedEETest3EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "GoodCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "GoodCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.4.3";
   info.should_validate = false;
@@ -448,10 +445,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest04BasicCertificateRevocationTests,
 // 4.4.4 Invalid Bad CRL Signature Test4
 WRAPPED_TYPED_TEST_P(PkitsTest04BasicCertificateRevocationTests,
                      Section4InvalidBadCRLSignatureTest4) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "BadCRLSignatureCACert",
                                "InvalidBadCRLSignatureTest4EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "BadCRLSignatureCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "BadCRLSignatureCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.4.4";
   info.should_validate = false;
@@ -462,10 +459,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest04BasicCertificateRevocationTests,
 // 4.4.5 Invalid Bad CRL Issuer Name Test5
 WRAPPED_TYPED_TEST_P(PkitsTest04BasicCertificateRevocationTests,
                      Section4InvalidBadCRLIssuerNameTest5) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "BadCRLIssuerNameCACert",
                                "InvalidBadCRLIssuerNameTest5EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "BadCRLIssuerNameCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "BadCRLIssuerNameCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.4.5";
   info.should_validate = false;
@@ -476,9 +473,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest04BasicCertificateRevocationTests,
 // 4.4.6 Invalid Wrong CRL Test6
 WRAPPED_TYPED_TEST_P(PkitsTest04BasicCertificateRevocationTests,
                      Section4InvalidWrongCRLTest6) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "WrongCRLCACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "WrongCRLCACert",
                                "InvalidWrongCRLTest6EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "WrongCRLCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "WrongCRLCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.4.6";
   info.should_validate = false;
@@ -489,9 +486,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest04BasicCertificateRevocationTests,
 // 4.4.7 Valid Two CRLs Test7
 WRAPPED_TYPED_TEST_P(PkitsTest04BasicCertificateRevocationTests,
                      Section4ValidTwoCRLsTest7) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "TwoCRLsCACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "TwoCRLsCACert",
                                "ValidTwoCRLsTest7EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "TwoCRLsCAGoodCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "TwoCRLsCAGoodCRL",
                               "TwoCRLsCABadCRL"};
   PkitsTestInfo info;
   info.test_number = "4.4.7";
@@ -503,10 +500,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest04BasicCertificateRevocationTests,
 // 4.4.8 Invalid Unknown CRL Entry Extension Test8
 WRAPPED_TYPED_TEST_P(PkitsTest04BasicCertificateRevocationTests,
                      Section4InvalidUnknownCRLEntryExtensionTest8) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "UnknownCRLEntryExtensionCACert",
                                "InvalidUnknownCRLEntryExtensionTest8EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "UnknownCRLEntryExtensionCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.4.8";
@@ -518,10 +515,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest04BasicCertificateRevocationTests,
 // 4.4.9 Invalid Unknown CRL Extension Test9
 WRAPPED_TYPED_TEST_P(PkitsTest04BasicCertificateRevocationTests,
                      Section4InvalidUnknownCRLExtensionTest9) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "UnknownCRLExtensionCACert",
                                "InvalidUnknownCRLExtensionTest9EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "UnknownCRLExtensionCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "UnknownCRLExtensionCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.4.9";
   info.should_validate = false;
@@ -532,10 +529,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest04BasicCertificateRevocationTests,
 // 4.4.10 Invalid Unknown CRL Extension Test10
 WRAPPED_TYPED_TEST_P(PkitsTest04BasicCertificateRevocationTests,
                      Section4InvalidUnknownCRLExtensionTest10) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "UnknownCRLExtensionCACert",
                                "InvalidUnknownCRLExtensionTest10EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "UnknownCRLExtensionCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "UnknownCRLExtensionCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.4.10";
   info.should_validate = false;
@@ -546,10 +543,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest04BasicCertificateRevocationTests,
 // 4.4.11 Invalid Old CRL nextUpdate Test11
 WRAPPED_TYPED_TEST_P(PkitsTest04BasicCertificateRevocationTests,
                      Section4InvalidOldCRLnextUpdateTest11) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "OldCRLnextUpdateCACert",
                                "InvalidOldCRLnextUpdateTest11EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "OldCRLnextUpdateCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "OldCRLnextUpdateCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.4.11";
   info.should_validate = false;
@@ -560,10 +557,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest04BasicCertificateRevocationTests,
 // 4.4.12 Invalid pre2000 CRL nextUpdate Test12
 WRAPPED_TYPED_TEST_P(PkitsTest04BasicCertificateRevocationTests,
                      Section4Invalidpre2000CRLnextUpdateTest12) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "pre2000CRLnextUpdateCACert",
                                "Invalidpre2000CRLnextUpdateTest12EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "pre2000CRLnextUpdateCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.4.12";
@@ -575,10 +572,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest04BasicCertificateRevocationTests,
 // 4.4.13 Valid GeneralizedTime CRL nextUpdate Test13
 WRAPPED_TYPED_TEST_P(PkitsTest04BasicCertificateRevocationTests,
                      Section4ValidGeneralizedTimeCRLnextUpdateTest13) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "GeneralizedTimeCRLnextUpdateCACert",
                                "ValidGeneralizedTimeCRLnextUpdateTest13EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "GeneralizedTimeCRLnextUpdateCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.4.13";
@@ -590,10 +587,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest04BasicCertificateRevocationTests,
 // 4.4.14 Valid Negative Serial Number Test14
 WRAPPED_TYPED_TEST_P(PkitsTest04BasicCertificateRevocationTests,
                      Section4ValidNegativeSerialNumberTest14) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "NegativeSerialNumberCACert",
                                "ValidNegativeSerialNumberTest14EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "NegativeSerialNumberCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.4.14";
@@ -605,10 +602,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest04BasicCertificateRevocationTests,
 // 4.4.15 Invalid Negative Serial Number Test15
 WRAPPED_TYPED_TEST_P(PkitsTest04BasicCertificateRevocationTests,
                      Section4InvalidNegativeSerialNumberTest15) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "NegativeSerialNumberCACert",
                                "InvalidNegativeSerialNumberTest15EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "NegativeSerialNumberCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.4.15";
@@ -620,10 +617,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest04BasicCertificateRevocationTests,
 // 4.4.16 Valid Long Serial Number Test16
 WRAPPED_TYPED_TEST_P(PkitsTest04BasicCertificateRevocationTests,
                      Section4ValidLongSerialNumberTest16) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "LongSerialNumberCACert",
                                "ValidLongSerialNumberTest16EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "LongSerialNumberCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "LongSerialNumberCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.4.16";
   info.should_validate = true;
@@ -634,10 +631,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest04BasicCertificateRevocationTests,
 // 4.4.17 Valid Long Serial Number Test17
 WRAPPED_TYPED_TEST_P(PkitsTest04BasicCertificateRevocationTests,
                      Section4ValidLongSerialNumberTest17) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "LongSerialNumberCACert",
                                "ValidLongSerialNumberTest17EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "LongSerialNumberCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "LongSerialNumberCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.4.17";
   info.should_validate = true;
@@ -648,10 +645,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest04BasicCertificateRevocationTests,
 // 4.4.18 Invalid Long Serial Number Test18
 WRAPPED_TYPED_TEST_P(PkitsTest04BasicCertificateRevocationTests,
                      Section4InvalidLongSerialNumberTest18) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "LongSerialNumberCACert",
                                "InvalidLongSerialNumberTest18EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "LongSerialNumberCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "LongSerialNumberCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.4.18";
   info.should_validate = false;
@@ -662,12 +659,12 @@ WRAPPED_TYPED_TEST_P(PkitsTest04BasicCertificateRevocationTests,
 // 4.4.19 Valid Separate Certificate and CRL Keys Test19
 WRAPPED_TYPED_TEST_P(PkitsTest04BasicCertificateRevocationTests,
                      Section4ValidSeparateCertificateandCRLKeysTest19) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate",
       "SeparateCertificateandCRLKeysCertificateSigningCACert",
       "SeparateCertificateandCRLKeysCRLSigningCert",
       "ValidSeparateCertificateandCRLKeysTest19EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "SeparateCertificateandCRLKeysCRL"};
   PkitsTestInfo info;
   info.test_number = "4.4.19";
@@ -679,12 +676,12 @@ WRAPPED_TYPED_TEST_P(PkitsTest04BasicCertificateRevocationTests,
 // 4.4.20 Invalid Separate Certificate and CRL Keys Test20
 WRAPPED_TYPED_TEST_P(PkitsTest04BasicCertificateRevocationTests,
                      Section4InvalidSeparateCertificateandCRLKeysTest20) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate",
       "SeparateCertificateandCRLKeysCertificateSigningCACert",
       "SeparateCertificateandCRLKeysCRLSigningCert",
       "InvalidSeparateCertificateandCRLKeysTest20EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "SeparateCertificateandCRLKeysCRL"};
   PkitsTestInfo info;
   info.test_number = "4.4.20";
@@ -696,12 +693,12 @@ WRAPPED_TYPED_TEST_P(PkitsTest04BasicCertificateRevocationTests,
 // 4.4.21 Invalid Separate Certificate and CRL Keys Test21
 WRAPPED_TYPED_TEST_P(PkitsTest04BasicCertificateRevocationTests,
                      Section4InvalidSeparateCertificateandCRLKeysTest21) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate",
       "SeparateCertificateandCRLKeysCA2CertificateSigningCACert",
       "SeparateCertificateandCRLKeysCA2CRLSigningCert",
       "InvalidSeparateCertificateandCRLKeysTest21EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "SeparateCertificateandCRLKeysCA2CRL"};
   PkitsTestInfo info;
   info.test_number = "4.4.21";
@@ -711,14 +708,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest04BasicCertificateRevocationTests,
 }
 
 WRAPPED_REGISTER_TYPED_TEST_SUITE_P(
-    PkitsTest04BasicCertificateRevocationTests,
-    Section4MissingCRLTest1,
-    Section4InvalidRevokedCATest2,
-    Section4InvalidRevokedEETest3,
-    Section4InvalidBadCRLSignatureTest4,
-    Section4InvalidBadCRLIssuerNameTest5,
-    Section4InvalidWrongCRLTest6,
-    Section4ValidTwoCRLsTest7,
+    PkitsTest04BasicCertificateRevocationTests, Section4MissingCRLTest1,
+    Section4InvalidRevokedCATest2, Section4InvalidRevokedEETest3,
+    Section4InvalidBadCRLSignatureTest4, Section4InvalidBadCRLIssuerNameTest5,
+    Section4InvalidWrongCRLTest6, Section4ValidTwoCRLsTest7,
     Section4InvalidUnknownCRLEntryExtensionTest8,
     Section4InvalidUnknownCRLExtensionTest9,
     Section4InvalidUnknownCRLExtensionTest10,
@@ -727,8 +720,7 @@ WRAPPED_REGISTER_TYPED_TEST_SUITE_P(
     Section4ValidGeneralizedTimeCRLnextUpdateTest13,
     Section4ValidNegativeSerialNumberTest14,
     Section4InvalidNegativeSerialNumberTest15,
-    Section4ValidLongSerialNumberTest16,
-    Section4ValidLongSerialNumberTest17,
+    Section4ValidLongSerialNumberTest16, Section4ValidLongSerialNumberTest17,
     Section4InvalidLongSerialNumberTest18,
     Section4ValidSeparateCertificateandCRLKeysTest19,
     Section4InvalidSeparateCertificateandCRLKeysTest20,
@@ -742,11 +734,11 @@ TYPED_TEST_SUITE_P(PkitsTest05VerifyingPathswithSelfIssuedCertificates);
 // 4.5.1 Valid Basic Self-Issued Old With New Test1
 WRAPPED_TYPED_TEST_P(PkitsTest05VerifyingPathswithSelfIssuedCertificates,
                      Section5ValidBasicSelfIssuedOldWithNewTest1) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "BasicSelfIssuedNewKeyCACert",
                                "BasicSelfIssuedNewKeyOldWithNewCACert",
                                "ValidBasicSelfIssuedOldWithNewTest1EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "BasicSelfIssuedNewKeyCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.5.1";
@@ -758,11 +750,11 @@ WRAPPED_TYPED_TEST_P(PkitsTest05VerifyingPathswithSelfIssuedCertificates,
 // 4.5.2 Invalid Basic Self-Issued Old With New Test2
 WRAPPED_TYPED_TEST_P(PkitsTest05VerifyingPathswithSelfIssuedCertificates,
                      Section5InvalidBasicSelfIssuedOldWithNewTest2) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "BasicSelfIssuedNewKeyCACert",
                                "BasicSelfIssuedNewKeyOldWithNewCACert",
                                "InvalidBasicSelfIssuedOldWithNewTest2EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "BasicSelfIssuedNewKeyCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.5.2";
@@ -774,11 +766,11 @@ WRAPPED_TYPED_TEST_P(PkitsTest05VerifyingPathswithSelfIssuedCertificates,
 // 4.5.3 Valid Basic Self-Issued New With Old Test3
 WRAPPED_TYPED_TEST_P(PkitsTest05VerifyingPathswithSelfIssuedCertificates,
                      Section5ValidBasicSelfIssuedNewWithOldTest3) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "BasicSelfIssuedOldKeyCACert",
                                "BasicSelfIssuedOldKeyNewWithOldCACert",
                                "ValidBasicSelfIssuedNewWithOldTest3EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "BasicSelfIssuedOldKeySelfIssuedCertCRL",
                               "BasicSelfIssuedOldKeyCACRL"};
   PkitsTestInfo info;
@@ -791,11 +783,11 @@ WRAPPED_TYPED_TEST_P(PkitsTest05VerifyingPathswithSelfIssuedCertificates,
 // 4.5.4 Valid Basic Self-Issued New With Old Test4
 WRAPPED_TYPED_TEST_P(PkitsTest05VerifyingPathswithSelfIssuedCertificates,
                      Section5ValidBasicSelfIssuedNewWithOldTest4) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "BasicSelfIssuedOldKeyCACert",
                                "BasicSelfIssuedOldKeyNewWithOldCACert",
                                "ValidBasicSelfIssuedNewWithOldTest4EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "BasicSelfIssuedOldKeySelfIssuedCertCRL",
                               "BasicSelfIssuedOldKeyCACRL"};
   PkitsTestInfo info;
@@ -808,11 +800,11 @@ WRAPPED_TYPED_TEST_P(PkitsTest05VerifyingPathswithSelfIssuedCertificates,
 // 4.5.5 Invalid Basic Self-Issued New With Old Test5
 WRAPPED_TYPED_TEST_P(PkitsTest05VerifyingPathswithSelfIssuedCertificates,
                      Section5InvalidBasicSelfIssuedNewWithOldTest5) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "BasicSelfIssuedOldKeyCACert",
                                "BasicSelfIssuedOldKeyNewWithOldCACert",
                                "InvalidBasicSelfIssuedNewWithOldTest5EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "BasicSelfIssuedOldKeySelfIssuedCertCRL",
                               "BasicSelfIssuedOldKeyCACRL"};
   PkitsTestInfo info;
@@ -825,11 +817,11 @@ WRAPPED_TYPED_TEST_P(PkitsTest05VerifyingPathswithSelfIssuedCertificates,
 // 4.5.6 Valid Basic Self-Issued CRL Signing Key Test6
 WRAPPED_TYPED_TEST_P(PkitsTest05VerifyingPathswithSelfIssuedCertificates,
                      Section5ValidBasicSelfIssuedCRLSigningKeyTest6) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "BasicSelfIssuedCRLSigningKeyCACert",
                                "BasicSelfIssuedCRLSigningKeyCRLCert",
                                "ValidBasicSelfIssuedCRLSigningKeyTest6EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "BasicSelfIssuedCRLSigningKeyCRLCertCRL",
                               "BasicSelfIssuedCRLSigningKeyCACRL"};
   PkitsTestInfo info;
@@ -842,11 +834,11 @@ WRAPPED_TYPED_TEST_P(PkitsTest05VerifyingPathswithSelfIssuedCertificates,
 // 4.5.7 Invalid Basic Self-Issued CRL Signing Key Test7
 WRAPPED_TYPED_TEST_P(PkitsTest05VerifyingPathswithSelfIssuedCertificates,
                      Section5InvalidBasicSelfIssuedCRLSigningKeyTest7) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "BasicSelfIssuedCRLSigningKeyCACert",
                                "BasicSelfIssuedCRLSigningKeyCRLCert",
                                "InvalidBasicSelfIssuedCRLSigningKeyTest7EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "BasicSelfIssuedCRLSigningKeyCRLCertCRL",
                               "BasicSelfIssuedCRLSigningKeyCACRL"};
   PkitsTestInfo info;
@@ -859,11 +851,11 @@ WRAPPED_TYPED_TEST_P(PkitsTest05VerifyingPathswithSelfIssuedCertificates,
 // 4.5.8 Invalid Basic Self-Issued CRL Signing Key Test8
 WRAPPED_TYPED_TEST_P(PkitsTest05VerifyingPathswithSelfIssuedCertificates,
                      Section5InvalidBasicSelfIssuedCRLSigningKeyTest8) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "BasicSelfIssuedCRLSigningKeyCACert",
                                "BasicSelfIssuedCRLSigningKeyCRLCert",
                                "InvalidBasicSelfIssuedCRLSigningKeyTest8EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "BasicSelfIssuedCRLSigningKeyCRLCertCRL",
                               "BasicSelfIssuedCRLSigningKeyCACRL"};
   PkitsTestInfo info;
@@ -892,10 +884,10 @@ TYPED_TEST_SUITE_P(PkitsTest06VerifyingBasicConstraints);
 // 4.6.1 Invalid Missing basicConstraints Test1
 WRAPPED_TYPED_TEST_P(PkitsTest06VerifyingBasicConstraints,
                      Section6InvalidMissingbasicConstraintsTest1) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "MissingbasicConstraintsCACert",
                                "InvalidMissingbasicConstraintsTest1EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "MissingbasicConstraintsCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.6.1";
@@ -907,10 +899,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest06VerifyingBasicConstraints,
 // 4.6.2 Invalid cA False Test2
 WRAPPED_TYPED_TEST_P(PkitsTest06VerifyingBasicConstraints,
                      Section6InvalidcAFalseTest2) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "basicConstraintsCriticalcAFalseCACert",
                                "InvalidcAFalseTest2EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "basicConstraintsCriticalcAFalseCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.6.2";
@@ -922,10 +914,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest06VerifyingBasicConstraints,
 // 4.6.3 Invalid cA False Test3
 WRAPPED_TYPED_TEST_P(PkitsTest06VerifyingBasicConstraints,
                      Section6InvalidcAFalseTest3) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "basicConstraintsNotCriticalcAFalseCACert",
                                "InvalidcAFalseTest3EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "basicConstraintsNotCriticalcAFalseCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.6.3";
@@ -937,10 +929,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest06VerifyingBasicConstraints,
 // 4.6.4 Valid basicConstraints Not Critical Test4
 WRAPPED_TYPED_TEST_P(PkitsTest06VerifyingBasicConstraints,
                      Section6ValidbasicConstraintsNotCriticalTest4) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "basicConstraintsNotCriticalCACert",
                                "ValidbasicConstraintsNotCriticalTest4EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "basicConstraintsNotCriticalCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.6.4";
@@ -952,10 +944,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest06VerifyingBasicConstraints,
 // 4.6.5 Invalid pathLenConstraint Test5
 WRAPPED_TYPED_TEST_P(PkitsTest06VerifyingBasicConstraints,
                      Section6InvalidpathLenConstraintTest5) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate", "pathLenConstraint0CACert",
       "pathLenConstraint0subCACert", "InvalidpathLenConstraintTest5EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "pathLenConstraint0CACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "pathLenConstraint0CACRL",
                               "pathLenConstraint0subCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.6.5";
@@ -967,10 +959,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest06VerifyingBasicConstraints,
 // 4.6.6 Invalid pathLenConstraint Test6
 WRAPPED_TYPED_TEST_P(PkitsTest06VerifyingBasicConstraints,
                      Section6InvalidpathLenConstraintTest6) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate", "pathLenConstraint0CACert",
       "pathLenConstraint0subCACert", "InvalidpathLenConstraintTest6EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "pathLenConstraint0CACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "pathLenConstraint0CACRL",
                               "pathLenConstraint0subCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.6.6";
@@ -982,10 +974,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest06VerifyingBasicConstraints,
 // 4.6.7 Valid pathLenConstraint Test7
 WRAPPED_TYPED_TEST_P(PkitsTest06VerifyingBasicConstraints,
                      Section6ValidpathLenConstraintTest7) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "pathLenConstraint0CACert",
                                "ValidpathLenConstraintTest7EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "pathLenConstraint0CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "pathLenConstraint0CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.6.7";
   info.should_validate = true;
@@ -996,10 +988,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest06VerifyingBasicConstraints,
 // 4.6.8 Valid pathLenConstraint Test8
 WRAPPED_TYPED_TEST_P(PkitsTest06VerifyingBasicConstraints,
                      Section6ValidpathLenConstraintTest8) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "pathLenConstraint0CACert",
                                "ValidpathLenConstraintTest8EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "pathLenConstraint0CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "pathLenConstraint0CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.6.8";
   info.should_validate = true;
@@ -1010,11 +1002,11 @@ WRAPPED_TYPED_TEST_P(PkitsTest06VerifyingBasicConstraints,
 // 4.6.9 Invalid pathLenConstraint Test9
 WRAPPED_TYPED_TEST_P(PkitsTest06VerifyingBasicConstraints,
                      Section6InvalidpathLenConstraintTest9) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate", "pathLenConstraint6CACert",
       "pathLenConstraint6subCA0Cert", "pathLenConstraint6subsubCA00Cert",
       "InvalidpathLenConstraintTest9EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "pathLenConstraint6CACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "pathLenConstraint6CACRL",
                               "pathLenConstraint6subCA0CRL",
                               "pathLenConstraint6subsubCA00CRL"};
   PkitsTestInfo info;
@@ -1027,11 +1019,11 @@ WRAPPED_TYPED_TEST_P(PkitsTest06VerifyingBasicConstraints,
 // 4.6.10 Invalid pathLenConstraint Test10
 WRAPPED_TYPED_TEST_P(PkitsTest06VerifyingBasicConstraints,
                      Section6InvalidpathLenConstraintTest10) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate", "pathLenConstraint6CACert",
       "pathLenConstraint6subCA0Cert", "pathLenConstraint6subsubCA00Cert",
       "InvalidpathLenConstraintTest10EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "pathLenConstraint6CACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "pathLenConstraint6CACRL",
                               "pathLenConstraint6subCA0CRL",
                               "pathLenConstraint6subsubCA00CRL"};
   PkitsTestInfo info;
@@ -1044,13 +1036,13 @@ WRAPPED_TYPED_TEST_P(PkitsTest06VerifyingBasicConstraints,
 // 4.6.11 Invalid pathLenConstraint Test11
 WRAPPED_TYPED_TEST_P(PkitsTest06VerifyingBasicConstraints,
                      Section6InvalidpathLenConstraintTest11) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "pathLenConstraint6CACert",
                                "pathLenConstraint6subCA1Cert",
                                "pathLenConstraint6subsubCA11Cert",
                                "pathLenConstraint6subsubsubCA11XCert",
                                "InvalidpathLenConstraintTest11EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "pathLenConstraint6CACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "pathLenConstraint6CACRL",
                               "pathLenConstraint6subCA1CRL",
                               "pathLenConstraint6subsubCA11CRL",
                               "pathLenConstraint6subsubsubCA11XCRL"};
@@ -1064,13 +1056,13 @@ WRAPPED_TYPED_TEST_P(PkitsTest06VerifyingBasicConstraints,
 // 4.6.12 Invalid pathLenConstraint Test12
 WRAPPED_TYPED_TEST_P(PkitsTest06VerifyingBasicConstraints,
                      Section6InvalidpathLenConstraintTest12) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "pathLenConstraint6CACert",
                                "pathLenConstraint6subCA1Cert",
                                "pathLenConstraint6subsubCA11Cert",
                                "pathLenConstraint6subsubsubCA11XCert",
                                "InvalidpathLenConstraintTest12EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "pathLenConstraint6CACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "pathLenConstraint6CACRL",
                               "pathLenConstraint6subCA1CRL",
                               "pathLenConstraint6subsubCA11CRL",
                               "pathLenConstraint6subsubsubCA11XCRL"};
@@ -1084,13 +1076,13 @@ WRAPPED_TYPED_TEST_P(PkitsTest06VerifyingBasicConstraints,
 // 4.6.13 Valid pathLenConstraint Test13
 WRAPPED_TYPED_TEST_P(PkitsTest06VerifyingBasicConstraints,
                      Section6ValidpathLenConstraintTest13) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "pathLenConstraint6CACert",
                                "pathLenConstraint6subCA4Cert",
                                "pathLenConstraint6subsubCA41Cert",
                                "pathLenConstraint6subsubsubCA41XCert",
                                "ValidpathLenConstraintTest13EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "pathLenConstraint6CACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "pathLenConstraint6CACRL",
                               "pathLenConstraint6subCA4CRL",
                               "pathLenConstraint6subsubCA41CRL",
                               "pathLenConstraint6subsubsubCA41XCRL"};
@@ -1104,13 +1096,13 @@ WRAPPED_TYPED_TEST_P(PkitsTest06VerifyingBasicConstraints,
 // 4.6.14 Valid pathLenConstraint Test14
 WRAPPED_TYPED_TEST_P(PkitsTest06VerifyingBasicConstraints,
                      Section6ValidpathLenConstraintTest14) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "pathLenConstraint6CACert",
                                "pathLenConstraint6subCA4Cert",
                                "pathLenConstraint6subsubCA41Cert",
                                "pathLenConstraint6subsubsubCA41XCert",
                                "ValidpathLenConstraintTest14EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "pathLenConstraint6CACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "pathLenConstraint6CACRL",
                               "pathLenConstraint6subCA4CRL",
                               "pathLenConstraint6subsubCA41CRL",
                               "pathLenConstraint6subsubsubCA41XCRL"};
@@ -1124,11 +1116,11 @@ WRAPPED_TYPED_TEST_P(PkitsTest06VerifyingBasicConstraints,
 // 4.6.15 Valid Self-Issued pathLenConstraint Test15
 WRAPPED_TYPED_TEST_P(PkitsTest06VerifyingBasicConstraints,
                      Section6ValidSelfIssuedpathLenConstraintTest15) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "pathLenConstraint0CACert",
                                "pathLenConstraint0SelfIssuedCACert",
                                "ValidSelfIssuedpathLenConstraintTest15EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "pathLenConstraint0CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "pathLenConstraint0CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.6.15";
   info.should_validate = true;
@@ -1139,11 +1131,11 @@ WRAPPED_TYPED_TEST_P(PkitsTest06VerifyingBasicConstraints,
 // 4.6.16 Invalid Self-Issued pathLenConstraint Test16
 WRAPPED_TYPED_TEST_P(PkitsTest06VerifyingBasicConstraints,
                      Section6InvalidSelfIssuedpathLenConstraintTest16) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate", "pathLenConstraint0CACert",
       "pathLenConstraint0SelfIssuedCACert", "pathLenConstraint0subCA2Cert",
       "InvalidSelfIssuedpathLenConstraintTest16EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "pathLenConstraint0CACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "pathLenConstraint0CACRL",
                               "pathLenConstraint0subCA2CRL"};
   PkitsTestInfo info;
   info.test_number = "4.6.16";
@@ -1155,13 +1147,13 @@ WRAPPED_TYPED_TEST_P(PkitsTest06VerifyingBasicConstraints,
 // 4.6.17 Valid Self-Issued pathLenConstraint Test17
 WRAPPED_TYPED_TEST_P(PkitsTest06VerifyingBasicConstraints,
                      Section6ValidSelfIssuedpathLenConstraintTest17) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "pathLenConstraint1CACert",
                                "pathLenConstraint1SelfIssuedCACert",
                                "pathLenConstraint1subCACert",
                                "pathLenConstraint1SelfIssuedsubCACert",
                                "ValidSelfIssuedpathLenConstraintTest17EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "pathLenConstraint1CACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "pathLenConstraint1CACRL",
                               "pathLenConstraint1subCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.6.17";
@@ -1172,20 +1164,15 @@ WRAPPED_TYPED_TEST_P(PkitsTest06VerifyingBasicConstraints,
 
 WRAPPED_REGISTER_TYPED_TEST_SUITE_P(
     PkitsTest06VerifyingBasicConstraints,
-    Section6InvalidMissingbasicConstraintsTest1,
-    Section6InvalidcAFalseTest2,
-    Section6InvalidcAFalseTest3,
-    Section6ValidbasicConstraintsNotCriticalTest4,
+    Section6InvalidMissingbasicConstraintsTest1, Section6InvalidcAFalseTest2,
+    Section6InvalidcAFalseTest3, Section6ValidbasicConstraintsNotCriticalTest4,
     Section6InvalidpathLenConstraintTest5,
-    Section6InvalidpathLenConstraintTest6,
-    Section6ValidpathLenConstraintTest7,
-    Section6ValidpathLenConstraintTest8,
-    Section6InvalidpathLenConstraintTest9,
+    Section6InvalidpathLenConstraintTest6, Section6ValidpathLenConstraintTest7,
+    Section6ValidpathLenConstraintTest8, Section6InvalidpathLenConstraintTest9,
     Section6InvalidpathLenConstraintTest10,
     Section6InvalidpathLenConstraintTest11,
     Section6InvalidpathLenConstraintTest12,
-    Section6ValidpathLenConstraintTest13,
-    Section6ValidpathLenConstraintTest14,
+    Section6ValidpathLenConstraintTest13, Section6ValidpathLenConstraintTest14,
     Section6ValidSelfIssuedpathLenConstraintTest15,
     Section6InvalidSelfIssuedpathLenConstraintTest16,
     Section6ValidSelfIssuedpathLenConstraintTest17);
@@ -1197,10 +1184,10 @@ TYPED_TEST_SUITE_P(PkitsTest07KeyUsage);
 // 4.7.1 Invalid keyUsage Critical keyCertSign False Test1
 WRAPPED_TYPED_TEST_P(PkitsTest07KeyUsage,
                      Section7InvalidkeyUsageCriticalkeyCertSignFalseTest1) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate", "keyUsageCriticalkeyCertSignFalseCACert",
       "InvalidkeyUsageCriticalkeyCertSignFalseTest1EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "keyUsageCriticalkeyCertSignFalseCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.7.1";
@@ -1212,10 +1199,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest07KeyUsage,
 // 4.7.2 Invalid keyUsage Not Critical keyCertSign False Test2
 WRAPPED_TYPED_TEST_P(PkitsTest07KeyUsage,
                      Section7InvalidkeyUsageNotCriticalkeyCertSignFalseTest2) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate", "keyUsageNotCriticalkeyCertSignFalseCACert",
       "InvalidkeyUsageNotCriticalkeyCertSignFalseTest2EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "keyUsageNotCriticalkeyCertSignFalseCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.7.2";
@@ -1227,10 +1214,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest07KeyUsage,
 // 4.7.3 Valid keyUsage Not Critical Test3
 WRAPPED_TYPED_TEST_P(PkitsTest07KeyUsage,
                      Section7ValidkeyUsageNotCriticalTest3) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "keyUsageNotCriticalCACert",
                                "ValidkeyUsageNotCriticalTest3EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "keyUsageNotCriticalCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "keyUsageNotCriticalCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.7.3";
   info.should_validate = true;
@@ -1241,10 +1228,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest07KeyUsage,
 // 4.7.4 Invalid keyUsage Critical cRLSign False Test4
 WRAPPED_TYPED_TEST_P(PkitsTest07KeyUsage,
                      Section7InvalidkeyUsageCriticalcRLSignFalseTest4) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "keyUsageCriticalcRLSignFalseCACert",
                                "InvalidkeyUsageCriticalcRLSignFalseTest4EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "keyUsageCriticalcRLSignFalseCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.7.4";
@@ -1256,10 +1243,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest07KeyUsage,
 // 4.7.5 Invalid keyUsage Not Critical cRLSign False Test5
 WRAPPED_TYPED_TEST_P(PkitsTest07KeyUsage,
                      Section7InvalidkeyUsageNotCriticalcRLSignFalseTest5) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "keyUsageNotCriticalcRLSignFalseCACert",
                                "InvalidkeyUsageNotCriticalcRLSignFalseTest5EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "keyUsageNotCriticalcRLSignFalseCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.7.5";
@@ -1269,8 +1256,7 @@ WRAPPED_TYPED_TEST_P(PkitsTest07KeyUsage,
 }
 
 WRAPPED_REGISTER_TYPED_TEST_SUITE_P(
-    PkitsTest07KeyUsage,
-    Section7InvalidkeyUsageCriticalkeyCertSignFalseTest1,
+    PkitsTest07KeyUsage, Section7InvalidkeyUsageCriticalkeyCertSignFalseTest1,
     Section7InvalidkeyUsageNotCriticalkeyCertSignFalseTest2,
     Section7ValidkeyUsageNotCriticalTest3,
     Section7InvalidkeyUsageCriticalcRLSignFalseTest4,
@@ -1283,9 +1269,9 @@ TYPED_TEST_SUITE_P(PkitsTest08CertificatePolicies);
 // 4.8.1 All Certificates Same Policy Test1 (Subpart 1)
 WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
                      Section8AllCertificatesSamePolicyTest1Subpart1) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
                                "ValidCertificatePathTest1EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "GoodCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "GoodCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.8.1";
   info.should_validate = true;
@@ -1297,9 +1283,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
 // 4.8.1 All Certificates Same Policy Test1 (Subpart 2)
 WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
                      Section8AllCertificatesSamePolicyTest1Subpart2) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
                                "ValidCertificatePathTest1EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "GoodCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "GoodCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.8.1";
   info.should_validate = true;
@@ -1312,9 +1298,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
 // 4.8.1 All Certificates Same Policy Test1 (Subpart 3)
 WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
                      Section8AllCertificatesSamePolicyTest1Subpart3) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
                                "ValidCertificatePathTest1EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "GoodCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "GoodCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.8.1";
   info.should_validate = false;
@@ -1328,9 +1314,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
 // 4.8.1 All Certificates Same Policy Test1 (Subpart 4)
 WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
                      Section8AllCertificatesSamePolicyTest1Subpart4) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
                                "ValidCertificatePathTest1EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "GoodCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "GoodCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.8.1";
   info.should_validate = true;
@@ -1343,9 +1329,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
 // 4.8.2 All Certificates No Policies Test2 (Subpart 1)
 WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
                      Section8AllCertificatesNoPoliciesTest2Subpart1) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "NoPoliciesCACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "NoPoliciesCACert",
                                "AllCertificatesNoPoliciesTest2EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "NoPoliciesCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "NoPoliciesCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.8.2";
   info.should_validate = true;
@@ -1357,9 +1343,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
 // 4.8.2 All Certificates No Policies Test2 (Subpart 2)
 WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
                      Section8AllCertificatesNoPoliciesTest2Subpart2) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "NoPoliciesCACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "NoPoliciesCACert",
                                "AllCertificatesNoPoliciesTest2EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "NoPoliciesCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "NoPoliciesCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.8.2";
   info.should_validate = false;
@@ -1372,10 +1358,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
 // 4.8.3 Different Policies Test3 (Subpart 1)
 WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
                      Section8DifferentPoliciesTest3Subpart1) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
                                "PoliciesP2subCACert",
                                "DifferentPoliciesTest3EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "GoodCACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "GoodCACRL",
                               "PoliciesP2subCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.8.3";
@@ -1388,10 +1374,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
 // 4.8.3 Different Policies Test3 (Subpart 2)
 WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
                      Section8DifferentPoliciesTest3Subpart2) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
                                "PoliciesP2subCACert",
                                "DifferentPoliciesTest3EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "GoodCACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "GoodCACRL",
                               "PoliciesP2subCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.8.3";
@@ -1405,10 +1391,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
 // 4.8.3 Different Policies Test3 (Subpart 3)
 WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
                      Section8DifferentPoliciesTest3Subpart3) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
                                "PoliciesP2subCACert",
                                "DifferentPoliciesTest3EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "GoodCACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "GoodCACRL",
                               "PoliciesP2subCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.8.3";
@@ -1423,9 +1409,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
 // 4.8.4 Different Policies Test4
 WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
                      Section8DifferentPoliciesTest4) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
                                "GoodsubCACert", "DifferentPoliciesTest4EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "GoodCACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "GoodCACRL",
                               "GoodsubCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.8.4";
@@ -1438,10 +1424,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
 // 4.8.5 Different Policies Test5
 WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
                      Section8DifferentPoliciesTest5) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
                                "PoliciesP2subCA2Cert",
                                "DifferentPoliciesTest5EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "GoodCACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "GoodCACRL",
                               "PoliciesP2subCA2CRL"};
   PkitsTestInfo info;
   info.test_number = "4.8.5";
@@ -1454,11 +1440,11 @@ WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
 // 4.8.6 Overlapping Policies Test6 (Subpart 1)
 WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
                      Section8OverlappingPoliciesTest6Subpart1) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate", "PoliciesP1234CACert",
       "PoliciesP1234subCAP123Cert", "PoliciesP1234subsubCAP123P12Cert",
       "OverlappingPoliciesTest6EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "PoliciesP1234CACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "PoliciesP1234CACRL",
                               "PoliciesP1234subCAP123CRL",
                               "PoliciesP1234subsubCAP123P12CRL"};
   PkitsTestInfo info;
@@ -1471,11 +1457,11 @@ WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
 // 4.8.6 Overlapping Policies Test6 (Subpart 2)
 WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
                      Section8OverlappingPoliciesTest6Subpart2) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate", "PoliciesP1234CACert",
       "PoliciesP1234subCAP123Cert", "PoliciesP1234subsubCAP123P12Cert",
       "OverlappingPoliciesTest6EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "PoliciesP1234CACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "PoliciesP1234CACRL",
                               "PoliciesP1234subCAP123CRL",
                               "PoliciesP1234subsubCAP123P12CRL"};
   PkitsTestInfo info;
@@ -1489,11 +1475,11 @@ WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
 // 4.8.6 Overlapping Policies Test6 (Subpart 3)
 WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
                      Section8OverlappingPoliciesTest6Subpart3) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate", "PoliciesP1234CACert",
       "PoliciesP1234subCAP123Cert", "PoliciesP1234subsubCAP123P12Cert",
       "OverlappingPoliciesTest6EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "PoliciesP1234CACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "PoliciesP1234CACRL",
                               "PoliciesP1234subCAP123CRL",
                               "PoliciesP1234subsubCAP123P12CRL"};
   PkitsTestInfo info;
@@ -1508,11 +1494,11 @@ WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
 // 4.8.7 Different Policies Test7
 WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
                      Section8DifferentPoliciesTest7) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "PoliciesP123CACert", "PoliciesP123subCAP12Cert",
                                "PoliciesP123subsubCAP12P1Cert",
                                "DifferentPoliciesTest7EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "PoliciesP123CACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "PoliciesP123CACRL",
                               "PoliciesP123subCAP12CRL",
                               "PoliciesP123subsubCAP12P1CRL"};
   PkitsTestInfo info;
@@ -1526,11 +1512,11 @@ WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
 // 4.8.8 Different Policies Test8
 WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
                      Section8DifferentPoliciesTest8) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "PoliciesP12CACert", "PoliciesP12subCAP1Cert",
                                "PoliciesP12subsubCAP1P2Cert",
                                "DifferentPoliciesTest8EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "PoliciesP12CACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "PoliciesP12CACRL",
                               "PoliciesP12subCAP1CRL",
                               "PoliciesP12subsubCAP1P2CRL"};
   PkitsTestInfo info;
@@ -1544,11 +1530,11 @@ WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
 // 4.8.9 Different Policies Test9
 WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
                      Section8DifferentPoliciesTest9) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate",         "PoliciesP123CACert",
       "PoliciesP123subCAP12Cert",           "PoliciesP123subsubCAP12P2Cert",
       "PoliciesP123subsubsubCAP12P2P1Cert", "DifferentPoliciesTest9EE"};
-  const char* const crls[] = {
+  const char *const crls[] = {
       "TrustAnchorRootCRL", "PoliciesP123CACRL", "PoliciesP123subCAP12CRL",
       "PoliciesP123subsubCAP2P2CRL", "PoliciesP123subsubsubCAP12P2P1CRL"};
   PkitsTestInfo info;
@@ -1562,10 +1548,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
 // 4.8.10 All Certificates Same Policies Test10 (Subpart 1)
 WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
                      Section8AllCertificatesSamePoliciesTest10Subpart1) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "PoliciesP12CACert",
                                "AllCertificatesSamePoliciesTest10EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "PoliciesP12CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "PoliciesP12CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.8.10";
   info.should_validate = true;
@@ -1577,10 +1563,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
 // 4.8.10 All Certificates Same Policies Test10 (Subpart 2)
 WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
                      Section8AllCertificatesSamePoliciesTest10Subpart2) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "PoliciesP12CACert",
                                "AllCertificatesSamePoliciesTest10EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "PoliciesP12CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "PoliciesP12CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.8.10";
   info.should_validate = true;
@@ -1592,10 +1578,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
 // 4.8.10 All Certificates Same Policies Test10 (Subpart 3)
 WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
                      Section8AllCertificatesSamePoliciesTest10Subpart3) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "PoliciesP12CACert",
                                "AllCertificatesSamePoliciesTest10EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "PoliciesP12CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "PoliciesP12CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.8.10";
   info.should_validate = true;
@@ -1608,9 +1594,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
 // 4.8.11 All Certificates AnyPolicy Test11 (Subpart 1)
 WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
                      Section8AllCertificatesAnyPolicyTest11Subpart1) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "anyPolicyCACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "anyPolicyCACert",
                                "AllCertificatesanyPolicyTest11EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "anyPolicyCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "anyPolicyCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.8.11";
   info.should_validate = true;
@@ -1622,9 +1608,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
 // 4.8.11 All Certificates AnyPolicy Test11 (Subpart 2)
 WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
                      Section8AllCertificatesAnyPolicyTest11Subpart2) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "anyPolicyCACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "anyPolicyCACert",
                                "AllCertificatesanyPolicyTest11EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "anyPolicyCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "anyPolicyCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.8.11";
   info.should_validate = true;
@@ -1636,9 +1622,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
 // 4.8.12 Different Policies Test12
 WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
                      Section8DifferentPoliciesTest12) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "PoliciesP3CACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "PoliciesP3CACert",
                                "DifferentPoliciesTest12EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "PoliciesP3CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "PoliciesP3CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.8.12";
   info.should_validate = false;
@@ -1650,10 +1636,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
 // 4.8.13 All Certificates Same Policies Test13 (Subpart 1)
 WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
                      Section8AllCertificatesSamePoliciesTest13Subpart1) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "PoliciesP123CACert",
                                "AllCertificatesSamePoliciesTest13EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "PoliciesP123CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "PoliciesP123CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.8.13";
   info.should_validate = true;
@@ -1665,10 +1651,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
 // 4.8.13 All Certificates Same Policies Test13 (Subpart 2)
 WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
                      Section8AllCertificatesSamePoliciesTest13Subpart2) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "PoliciesP123CACert",
                                "AllCertificatesSamePoliciesTest13EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "PoliciesP123CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "PoliciesP123CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.8.13";
   info.should_validate = true;
@@ -1681,10 +1667,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
 // 4.8.13 All Certificates Same Policies Test13 (Subpart 3)
 WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
                      Section8AllCertificatesSamePoliciesTest13Subpart3) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "PoliciesP123CACert",
                                "AllCertificatesSamePoliciesTest13EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "PoliciesP123CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "PoliciesP123CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.8.13";
   info.should_validate = true;
@@ -1697,9 +1683,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
 // 4.8.14 AnyPolicy Test14 (Subpart 1)
 WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
                      Section8AnyPolicyTest14Subpart1) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "anyPolicyCACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "anyPolicyCACert",
                                "AnyPolicyTest14EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "anyPolicyCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "anyPolicyCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.8.14";
   info.should_validate = true;
@@ -1711,9 +1697,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
 // 4.8.14 AnyPolicy Test14 (Subpart 2)
 WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
                      Section8AnyPolicyTest14Subpart2) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "anyPolicyCACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "anyPolicyCACert",
                                "AnyPolicyTest14EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "anyPolicyCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "anyPolicyCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.8.14";
   info.should_validate = false;
@@ -1726,9 +1712,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
 // 4.8.15 User Notice Qualifier Test15
 WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
                      Section8UserNoticeQualifierTest15) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "UserNoticeQualifierTest15EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL"};
   PkitsTestInfo info;
   info.test_number = "4.8.15";
   info.should_validate = true;
@@ -1739,9 +1725,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
 // 4.8.16 User Notice Qualifier Test16
 WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
                      Section8UserNoticeQualifierTest16) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
                                "UserNoticeQualifierTest16EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "GoodCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "GoodCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.8.16";
   info.should_validate = true;
@@ -1752,9 +1738,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
 // 4.8.17 User Notice Qualifier Test17
 WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
                      Section8UserNoticeQualifierTest17) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
                                "UserNoticeQualifierTest17EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "GoodCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "GoodCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.8.17";
   info.should_validate = true;
@@ -1765,10 +1751,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
 // 4.8.18 User Notice Qualifier Test18 (Subpart 1)
 WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
                      Section8UserNoticeQualifierTest18Subpart1) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "PoliciesP12CACert",
                                "UserNoticeQualifierTest18EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "PoliciesP12CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "PoliciesP12CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.8.18";
   info.should_validate = true;
@@ -1780,10 +1766,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
 // 4.8.18 User Notice Qualifier Test18 (Subpart 2)
 WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
                      Section8UserNoticeQualifierTest18Subpart2) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "PoliciesP12CACert",
                                "UserNoticeQualifierTest18EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "PoliciesP12CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "PoliciesP12CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.8.18";
   info.should_validate = true;
@@ -1796,9 +1782,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
 // 4.8.19 User Notice Qualifier Test19
 WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
                      Section8UserNoticeQualifierTest19) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "UserNoticeQualifierTest19EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL"};
   PkitsTestInfo info;
   info.test_number = "4.8.19";
   info.should_validate = true;
@@ -1809,9 +1795,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
 // 4.8.20 CPS Pointer Qualifier Test20
 WRAPPED_TYPED_TEST_P(PkitsTest08CertificatePolicies,
                      Section8CPSPointerQualifierTest20) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
                                "CPSPointerQualifierTest20EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "GoodCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "GoodCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.8.20";
   info.should_validate = true;
@@ -1831,15 +1817,11 @@ WRAPPED_REGISTER_TYPED_TEST_SUITE_P(
     Section8AllCertificatesNoPoliciesTest2Subpart2,
     Section8DifferentPoliciesTest3Subpart1,
     Section8DifferentPoliciesTest3Subpart2,
-    Section8DifferentPoliciesTest3Subpart3,
-    Section8DifferentPoliciesTest4,
-    Section8DifferentPoliciesTest5,
-    Section8OverlappingPoliciesTest6Subpart1,
+    Section8DifferentPoliciesTest3Subpart3, Section8DifferentPoliciesTest4,
+    Section8DifferentPoliciesTest5, Section8OverlappingPoliciesTest6Subpart1,
     Section8OverlappingPoliciesTest6Subpart2,
-    Section8OverlappingPoliciesTest6Subpart3,
-    Section8DifferentPoliciesTest7,
-    Section8DifferentPoliciesTest8,
-    Section8DifferentPoliciesTest9,
+    Section8OverlappingPoliciesTest6Subpart3, Section8DifferentPoliciesTest7,
+    Section8DifferentPoliciesTest8, Section8DifferentPoliciesTest9,
     Section8AllCertificatesSamePoliciesTest10Subpart1,
     Section8AllCertificatesSamePoliciesTest10Subpart2,
     Section8AllCertificatesSamePoliciesTest10Subpart3,
@@ -1849,15 +1831,12 @@ WRAPPED_REGISTER_TYPED_TEST_SUITE_P(
     Section8AllCertificatesSamePoliciesTest13Subpart1,
     Section8AllCertificatesSamePoliciesTest13Subpart2,
     Section8AllCertificatesSamePoliciesTest13Subpart3,
-    Section8AnyPolicyTest14Subpart1,
-    Section8AnyPolicyTest14Subpart2,
-    Section8UserNoticeQualifierTest15,
-    Section8UserNoticeQualifierTest16,
+    Section8AnyPolicyTest14Subpart1, Section8AnyPolicyTest14Subpart2,
+    Section8UserNoticeQualifierTest15, Section8UserNoticeQualifierTest16,
     Section8UserNoticeQualifierTest17,
     Section8UserNoticeQualifierTest18Subpart1,
     Section8UserNoticeQualifierTest18Subpart2,
-    Section8UserNoticeQualifierTest19,
-    Section8CPSPointerQualifierTest20);
+    Section8UserNoticeQualifierTest19, Section8CPSPointerQualifierTest20);
 
 template <typename PkitsTestDelegate>
 class PkitsTest09RequireExplicitPolicy : public PkitsTest<PkitsTestDelegate> {};
@@ -1866,13 +1845,13 @@ TYPED_TEST_SUITE_P(PkitsTest09RequireExplicitPolicy);
 // 4.9.1 Valid RequireExplicitPolicy Test1
 WRAPPED_TYPED_TEST_P(PkitsTest09RequireExplicitPolicy,
                      Section9ValidRequireExplicitPolicyTest1) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "requireExplicitPolicy10CACert",
                                "requireExplicitPolicy10subCACert",
                                "requireExplicitPolicy10subsubCACert",
                                "requireExplicitPolicy10subsubsubCACert",
                                "ValidrequireExplicitPolicyTest1EE"};
-  const char* const crls[] = {
+  const char *const crls[] = {
       "TrustAnchorRootCRL", "requireExplicitPolicy10CACRL",
       "requireExplicitPolicy10subCACRL", "requireExplicitPolicy10subsubCACRL",
       "requireExplicitPolicy10subsubsubCACRL"};
@@ -1887,13 +1866,13 @@ WRAPPED_TYPED_TEST_P(PkitsTest09RequireExplicitPolicy,
 // 4.9.2 Valid RequireExplicitPolicy Test2
 WRAPPED_TYPED_TEST_P(PkitsTest09RequireExplicitPolicy,
                      Section9ValidRequireExplicitPolicyTest2) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "requireExplicitPolicy5CACert",
                                "requireExplicitPolicy5subCACert",
                                "requireExplicitPolicy5subsubCACert",
                                "requireExplicitPolicy5subsubsubCACert",
                                "ValidrequireExplicitPolicyTest2EE"};
-  const char* const crls[] = {
+  const char *const crls[] = {
       "TrustAnchorRootCRL", "requireExplicitPolicy5CACRL",
       "requireExplicitPolicy5subCACRL", "requireExplicitPolicy5subsubCACRL",
       "requireExplicitPolicy5subsubsubCACRL"};
@@ -1908,13 +1887,13 @@ WRAPPED_TYPED_TEST_P(PkitsTest09RequireExplicitPolicy,
 // 4.9.3 Invalid RequireExplicitPolicy Test3
 WRAPPED_TYPED_TEST_P(PkitsTest09RequireExplicitPolicy,
                      Section9InvalidRequireExplicitPolicyTest3) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "requireExplicitPolicy4CACert",
                                "requireExplicitPolicy4subCACert",
                                "requireExplicitPolicy4subsubCACert",
                                "requireExplicitPolicy4subsubsubCACert",
                                "InvalidrequireExplicitPolicyTest3EE"};
-  const char* const crls[] = {
+  const char *const crls[] = {
       "TrustAnchorRootCRL", "requireExplicitPolicy4CACRL",
       "requireExplicitPolicy4subCACRL", "requireExplicitPolicy4subsubCACRL",
       "requireExplicitPolicy4subsubsubCACRL"};
@@ -1929,13 +1908,13 @@ WRAPPED_TYPED_TEST_P(PkitsTest09RequireExplicitPolicy,
 // 4.9.4 Valid RequireExplicitPolicy Test4
 WRAPPED_TYPED_TEST_P(PkitsTest09RequireExplicitPolicy,
                      Section9ValidRequireExplicitPolicyTest4) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "requireExplicitPolicy0CACert",
                                "requireExplicitPolicy0subCACert",
                                "requireExplicitPolicy0subsubCACert",
                                "requireExplicitPolicy0subsubsubCACert",
                                "ValidrequireExplicitPolicyTest4EE"};
-  const char* const crls[] = {
+  const char *const crls[] = {
       "TrustAnchorRootCRL", "requireExplicitPolicy0CACRL",
       "requireExplicitPolicy0subCACRL", "requireExplicitPolicy0subsubCACRL",
       "requireExplicitPolicy0subsubsubCACRL"};
@@ -1949,13 +1928,13 @@ WRAPPED_TYPED_TEST_P(PkitsTest09RequireExplicitPolicy,
 // 4.9.5 Invalid RequireExplicitPolicy Test5
 WRAPPED_TYPED_TEST_P(PkitsTest09RequireExplicitPolicy,
                      Section9InvalidRequireExplicitPolicyTest5) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "requireExplicitPolicy7CACert",
                                "requireExplicitPolicy7subCARE2Cert",
                                "requireExplicitPolicy7subsubCARE2RE4Cert",
                                "requireExplicitPolicy7subsubsubCARE2RE4Cert",
                                "InvalidrequireExplicitPolicyTest5EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "requireExplicitPolicy7CACRL",
                               "requireExplicitPolicy7subCARE2CRL",
                               "requireExplicitPolicy7subsubCARE2RE4CRL",
@@ -1971,11 +1950,11 @@ WRAPPED_TYPED_TEST_P(PkitsTest09RequireExplicitPolicy,
 // 4.9.6 Valid Self-Issued requireExplicitPolicy Test6
 WRAPPED_TYPED_TEST_P(PkitsTest09RequireExplicitPolicy,
                      Section9ValidSelfIssuedrequireExplicitPolicyTest6) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "requireExplicitPolicy2CACert",
                                "requireExplicitPolicy2SelfIssuedCACert",
                                "ValidSelfIssuedrequireExplicitPolicyTest6EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "requireExplicitPolicy2CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.9.6";
@@ -1988,12 +1967,12 @@ WRAPPED_TYPED_TEST_P(PkitsTest09RequireExplicitPolicy,
 // 4.9.7 Invalid Self-Issued requireExplicitPolicy Test7
 WRAPPED_TYPED_TEST_P(PkitsTest09RequireExplicitPolicy,
                      Section9InvalidSelfIssuedrequireExplicitPolicyTest7) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "requireExplicitPolicy2CACert",
                                "requireExplicitPolicy2SelfIssuedCACert",
                                "requireExplicitPolicy2subCACert",
                                "InvalidSelfIssuedrequireExplicitPolicyTest7EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "requireExplicitPolicy2CACRL",
                               "requireExplicitPolicy2subCACRL"};
   PkitsTestInfo info;
@@ -2007,13 +1986,13 @@ WRAPPED_TYPED_TEST_P(PkitsTest09RequireExplicitPolicy,
 // 4.9.8 Invalid Self-Issued requireExplicitPolicy Test8
 WRAPPED_TYPED_TEST_P(PkitsTest09RequireExplicitPolicy,
                      Section9InvalidSelfIssuedrequireExplicitPolicyTest8) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "requireExplicitPolicy2CACert",
                                "requireExplicitPolicy2SelfIssuedCACert",
                                "requireExplicitPolicy2subCACert",
                                "requireExplicitPolicy2SelfIssuedsubCACert",
                                "InvalidSelfIssuedrequireExplicitPolicyTest8EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "requireExplicitPolicy2CACRL",
                               "requireExplicitPolicy2subCACRL"};
   PkitsTestInfo info;
@@ -2025,8 +2004,7 @@ WRAPPED_TYPED_TEST_P(PkitsTest09RequireExplicitPolicy,
 }
 
 WRAPPED_REGISTER_TYPED_TEST_SUITE_P(
-    PkitsTest09RequireExplicitPolicy,
-    Section9ValidRequireExplicitPolicyTest1,
+    PkitsTest09RequireExplicitPolicy, Section9ValidRequireExplicitPolicyTest1,
     Section9ValidRequireExplicitPolicyTest2,
     Section9InvalidRequireExplicitPolicyTest3,
     Section9ValidRequireExplicitPolicyTest4,
@@ -2042,10 +2020,10 @@ TYPED_TEST_SUITE_P(PkitsTest10PolicyMappings);
 // 4.10.1 Valid Policy Mapping Test1 (Subpart 1)
 WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
                      Section10ValidPolicyMappingTest1Subpart1) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "Mapping1to2CACert",
                                "ValidPolicyMappingTest1EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "Mapping1to2CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "Mapping1to2CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.10.1.1";
   info.should_validate = true;
@@ -2057,10 +2035,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
 // 4.10.1 Valid Policy Mapping Test1 (Subpart 2)
 WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
                      Section10ValidPolicyMappingTest1Subpart2) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "Mapping1to2CACert",
                                "ValidPolicyMappingTest1EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "Mapping1to2CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "Mapping1to2CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.10.1.2";
   info.should_validate = false;
@@ -2073,10 +2051,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
 // 4.10.1 Valid Policy Mapping Test1 (Subpart 3)
 WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
                      Section10ValidPolicyMappingTest1Subpart3) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "Mapping1to2CACert",
                                "ValidPolicyMappingTest1EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "Mapping1to2CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "Mapping1to2CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.10.1.3";
   info.should_validate = false;
@@ -2089,10 +2067,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
 // 4.10.2 Invalid Policy Mapping Test2 (Subpart 1)
 WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
                      Section10InvalidPolicyMappingTest2Subpart1) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "Mapping1to2CACert",
                                "InvalidPolicyMappingTest2EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "Mapping1to2CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "Mapping1to2CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.10.2";
   info.should_validate = false;
@@ -2104,10 +2082,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
 // 4.10.2 Invalid Policy Mapping Test2 (Subpart 2)
 WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
                      Section10InvalidPolicyMappingTest2Subpart2) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "Mapping1to2CACert",
                                "InvalidPolicyMappingTest2EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "Mapping1to2CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "Mapping1to2CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.10.2";
   info.should_validate = false;
@@ -2120,11 +2098,11 @@ WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
 // 4.10.3 Valid Policy Mapping Test3 (Subpart 1)
 WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
                      Section10ValidPolicyMappingTest3Subpart1) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate", "P12Mapping1to3CACert",
       "P12Mapping1to3subCACert", "P12Mapping1to3subsubCACert",
       "ValidPolicyMappingTest3EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "P12Mapping1to3CACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "P12Mapping1to3CACRL",
                               "P12Mapping1to3subCACRL",
                               "P12Mapping1to3subsubCACRL"};
   PkitsTestInfo info;
@@ -2139,11 +2117,11 @@ WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
 // 4.10.3 Valid Policy Mapping Test3 (Subpart 2)
 WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
                      Section10ValidPolicyMappingTest3Subpart2) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate", "P12Mapping1to3CACert",
       "P12Mapping1to3subCACert", "P12Mapping1to3subsubCACert",
       "ValidPolicyMappingTest3EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "P12Mapping1to3CACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "P12Mapping1to3CACRL",
                               "P12Mapping1to3subCACRL",
                               "P12Mapping1to3subsubCACRL"};
   PkitsTestInfo info;
@@ -2158,11 +2136,11 @@ WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
 // 4.10.4 Invalid Policy Mapping Test4
 WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
                      Section10InvalidPolicyMappingTest4) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate", "P12Mapping1to3CACert",
       "P12Mapping1to3subCACert", "P12Mapping1to3subsubCACert",
       "InvalidPolicyMappingTest4EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "P12Mapping1to3CACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "P12Mapping1to3CACRL",
                               "P12Mapping1to3subCACRL",
                               "P12Mapping1to3subsubCACRL"};
   PkitsTestInfo info;
@@ -2176,10 +2154,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
 // 4.10.5 Valid Policy Mapping Test5 (Subpart 1)
 WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
                      Section10ValidPolicyMappingTest5Subpart1) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate", "P1Mapping1to234CACert",
       "P1Mapping1to234subCACert", "ValidPolicyMappingTest5EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "P1Mapping1to234CACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "P1Mapping1to234CACRL",
                               "P1Mapping1to234subCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.10.5";
@@ -2192,10 +2170,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
 // 4.10.5 Valid Policy Mapping Test5 (Subpart 2)
 WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
                      Section10ValidPolicyMappingTest5Subpart2) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate", "P1Mapping1to234CACert",
       "P1Mapping1to234subCACert", "ValidPolicyMappingTest5EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "P1Mapping1to234CACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "P1Mapping1to234CACRL",
                               "P1Mapping1to234subCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.10.5";
@@ -2209,10 +2187,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
 // 4.10.6 Valid Policy Mapping Test6 (Subpart 1)
 WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
                      Section10ValidPolicyMappingTest6Subpart1) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate", "P1Mapping1to234CACert",
       "P1Mapping1to234subCACert", "ValidPolicyMappingTest6EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "P1Mapping1to234CACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "P1Mapping1to234CACRL",
                               "P1Mapping1to234subCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.10.6";
@@ -2225,10 +2203,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
 // 4.10.6 Valid Policy Mapping Test6 (Subpart 2)
 WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
                      Section10ValidPolicyMappingTest6Subpart2) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate", "P1Mapping1to234CACert",
       "P1Mapping1to234subCACert", "ValidPolicyMappingTest6EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "P1Mapping1to234CACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "P1Mapping1to234CACRL",
                               "P1Mapping1to234subCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.10.6";
@@ -2242,10 +2220,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
 // 4.10.7 Invalid Mapping From anyPolicy Test7
 WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
                      Section10InvalidMappingFromanyPolicyTest7) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "MappingFromanyPolicyCACert",
                                "InvalidMappingFromanyPolicyTest7EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "MappingFromanyPolicyCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.10.7";
@@ -2258,10 +2236,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
 // 4.10.8 Invalid Mapping To anyPolicy Test8
 WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
                      Section10InvalidMappingToanyPolicyTest8) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "MappingToanyPolicyCACert",
                                "InvalidMappingToanyPolicyTest8EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "MappingToanyPolicyCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "MappingToanyPolicyCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.10.8";
   info.should_validate = false;
@@ -2273,10 +2251,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
 // 4.10.9 Valid Policy Mapping Test9
 WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
                      Section10ValidPolicyMappingTest9) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "PanyPolicyMapping1to2CACert",
                                "ValidPolicyMappingTest9EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "PanyPolicyMapping1to2CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.10.9";
@@ -2288,10 +2266,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
 // 4.10.10 Invalid Policy Mapping Test10
 WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
                      Section10InvalidPolicyMappingTest10) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
                                "GoodsubCAPanyPolicyMapping1to2CACert",
                                "InvalidPolicyMappingTest10EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "GoodCACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "GoodCACRL",
                               "GoodsubCAPanyPolicyMapping1to2CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.10.10";
@@ -2304,10 +2282,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
 // 4.10.11 Valid Policy Mapping Test11
 WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
                      Section10ValidPolicyMappingTest11) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "GoodCACert",
                                "GoodsubCAPanyPolicyMapping1to2CACert",
                                "ValidPolicyMappingTest11EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "GoodCACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "GoodCACRL",
                               "GoodsubCAPanyPolicyMapping1to2CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.10.11";
@@ -2319,10 +2297,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
 // 4.10.12 Valid Policy Mapping Test12 (Subpart 1)
 WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
                      Section10ValidPolicyMappingTest12Subpart1) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "P12Mapping1to3CACert",
                                "ValidPolicyMappingTest12EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "P12Mapping1to3CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "P12Mapping1to3CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.10.12";
   info.should_validate = true;
@@ -2334,10 +2312,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
 // 4.10.12 Valid Policy Mapping Test12 (Subpart 2)
 WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
                      Section10ValidPolicyMappingTest12Subpart2) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "P12Mapping1to3CACert",
                                "ValidPolicyMappingTest12EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "P12Mapping1to3CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "P12Mapping1to3CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.10.12";
   info.should_validate = true;
@@ -2350,10 +2328,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
 // 4.10.13 Valid Policy Mapping Test13 (Subpart 1)
 WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
                      Section10ValidPolicyMappingTest13Subpart1) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "P1anyPolicyMapping1to2CACert",
                                "ValidPolicyMappingTest13EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "P1anyPolicyMapping1to2CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.10.13";
@@ -2365,10 +2343,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
 // 4.10.13 Valid Policy Mapping Test13 (Subpart 2)
 WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
                      Section10ValidPolicyMappingTest13Subpart2) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "P1anyPolicyMapping1to2CACert",
                                "ValidPolicyMappingTest13EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "P1anyPolicyMapping1to2CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.10.13";
@@ -2381,10 +2359,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
 // 4.10.13 Valid Policy Mapping Test13 (Subpart 3)
 WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
                      Section10ValidPolicyMappingTest13Subpart3) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "P1anyPolicyMapping1to2CACert",
                                "ValidPolicyMappingTest13EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "P1anyPolicyMapping1to2CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.10.13";
@@ -2398,10 +2376,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
 // 4.10.14 Valid Policy Mapping Test14
 WRAPPED_TYPED_TEST_P(PkitsTest10PolicyMappings,
                      Section10ValidPolicyMappingTest14) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "P1anyPolicyMapping1to2CACert",
                                "ValidPolicyMappingTest14EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "P1anyPolicyMapping1to2CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.10.14";
@@ -2442,10 +2420,10 @@ TYPED_TEST_SUITE_P(PkitsTest11InhibitPolicyMapping);
 // 4.11.1 Invalid inhibitPolicyMapping Test1
 WRAPPED_TYPED_TEST_P(PkitsTest11InhibitPolicyMapping,
                      Section11InvalidinhibitPolicyMappingTest1) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate", "inhibitPolicyMapping0CACert",
       "inhibitPolicyMapping0subCACert", "InvalidinhibitPolicyMappingTest1EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "inhibitPolicyMapping0CACRL",
                               "inhibitPolicyMapping0subCACRL"};
   PkitsTestInfo info;
@@ -2459,10 +2437,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest11InhibitPolicyMapping,
 // 4.11.2 Valid inhibitPolicyMapping Test2
 WRAPPED_TYPED_TEST_P(PkitsTest11InhibitPolicyMapping,
                      Section11ValidinhibitPolicyMappingTest2) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate", "inhibitPolicyMapping1P12CACert",
       "inhibitPolicyMapping1P12subCACert", "ValidinhibitPolicyMappingTest2EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "inhibitPolicyMapping1P12CACRL",
                               "inhibitPolicyMapping1P12subCACRL"};
   PkitsTestInfo info;
@@ -2475,12 +2453,12 @@ WRAPPED_TYPED_TEST_P(PkitsTest11InhibitPolicyMapping,
 // 4.11.3 Invalid inhibitPolicyMapping Test3
 WRAPPED_TYPED_TEST_P(PkitsTest11InhibitPolicyMapping,
                      Section11InvalidinhibitPolicyMappingTest3) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "inhibitPolicyMapping1P12CACert",
                                "inhibitPolicyMapping1P12subCACert",
                                "inhibitPolicyMapping1P12subsubCACert",
                                "InvalidinhibitPolicyMappingTest3EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "inhibitPolicyMapping1P12CACRL",
                               "inhibitPolicyMapping1P12subCACRL",
                               "inhibitPolicyMapping1P12subsubCACRL"};
@@ -2495,12 +2473,12 @@ WRAPPED_TYPED_TEST_P(PkitsTest11InhibitPolicyMapping,
 // 4.11.4 Valid inhibitPolicyMapping Test4
 WRAPPED_TYPED_TEST_P(PkitsTest11InhibitPolicyMapping,
                      Section11ValidinhibitPolicyMappingTest4) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "inhibitPolicyMapping1P12CACert",
                                "inhibitPolicyMapping1P12subCACert",
                                "inhibitPolicyMapping1P12subsubCACert",
                                "ValidinhibitPolicyMappingTest4EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "inhibitPolicyMapping1P12CACRL",
                               "inhibitPolicyMapping1P12subCACRL",
                               "inhibitPolicyMapping1P12subsubCACRL"};
@@ -2515,13 +2493,13 @@ WRAPPED_TYPED_TEST_P(PkitsTest11InhibitPolicyMapping,
 // 4.11.5 Invalid inhibitPolicyMapping Test5
 WRAPPED_TYPED_TEST_P(PkitsTest11InhibitPolicyMapping,
                      Section11InvalidinhibitPolicyMappingTest5) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "inhibitPolicyMapping5CACert",
                                "inhibitPolicyMapping5subCACert",
                                "inhibitPolicyMapping5subsubCACert",
                                "inhibitPolicyMapping5subsubsubCACert",
                                "InvalidinhibitPolicyMappingTest5EE"};
-  const char* const crls[] = {
+  const char *const crls[] = {
       "TrustAnchorRootCRL", "inhibitPolicyMapping5CACRL",
       "inhibitPolicyMapping5subCACRL", "inhibitPolicyMapping5subsubCACRL",
       "inhibitPolicyMapping5subsubsubCACRL"};
@@ -2536,12 +2514,12 @@ WRAPPED_TYPED_TEST_P(PkitsTest11InhibitPolicyMapping,
 // 4.11.6 Invalid inhibitPolicyMapping Test6
 WRAPPED_TYPED_TEST_P(PkitsTest11InhibitPolicyMapping,
                      Section11InvalidinhibitPolicyMappingTest6) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "inhibitPolicyMapping1P12CACert",
                                "inhibitPolicyMapping1P12subCAIPM5Cert",
                                "inhibitPolicyMapping1P12subsubCAIPM5Cert",
                                "InvalidinhibitPolicyMappingTest6EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "inhibitPolicyMapping1P12CACRL",
                               "inhibitPolicyMapping1P12subCAIPM5CRL",
                               "inhibitPolicyMapping1P12subsubCAIPM5CRL"};
@@ -2556,12 +2534,12 @@ WRAPPED_TYPED_TEST_P(PkitsTest11InhibitPolicyMapping,
 // 4.11.7 Valid Self-Issued inhibitPolicyMapping Test7
 WRAPPED_TYPED_TEST_P(PkitsTest11InhibitPolicyMapping,
                      Section11ValidSelfIssuedinhibitPolicyMappingTest7) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "inhibitPolicyMapping1P1CACert",
                                "inhibitPolicyMapping1P1SelfIssuedCACert",
                                "inhibitPolicyMapping1P1subCACert",
                                "ValidSelfIssuedinhibitPolicyMappingTest7EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "inhibitPolicyMapping1P1CACRL",
                               "inhibitPolicyMapping1P1subCACRL"};
   PkitsTestInfo info;
@@ -2574,13 +2552,13 @@ WRAPPED_TYPED_TEST_P(PkitsTest11InhibitPolicyMapping,
 // 4.11.8 Invalid Self-Issued inhibitPolicyMapping Test8
 WRAPPED_TYPED_TEST_P(PkitsTest11InhibitPolicyMapping,
                      Section11InvalidSelfIssuedinhibitPolicyMappingTest8) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "inhibitPolicyMapping1P1CACert",
                                "inhibitPolicyMapping1P1SelfIssuedCACert",
                                "inhibitPolicyMapping1P1subCACert",
                                "inhibitPolicyMapping1P1subsubCACert",
                                "InvalidSelfIssuedinhibitPolicyMappingTest8EE"};
-  const char* const crls[] = {
+  const char *const crls[] = {
       "TrustAnchorRootCRL", "inhibitPolicyMapping1P1CACRL",
       "inhibitPolicyMapping1P1subCACRL", "inhibitPolicyMapping1P1subsubCACRL"};
   PkitsTestInfo info;
@@ -2594,13 +2572,13 @@ WRAPPED_TYPED_TEST_P(PkitsTest11InhibitPolicyMapping,
 // 4.11.9 Invalid Self-Issued inhibitPolicyMapping Test9
 WRAPPED_TYPED_TEST_P(PkitsTest11InhibitPolicyMapping,
                      Section11InvalidSelfIssuedinhibitPolicyMappingTest9) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "inhibitPolicyMapping1P1CACert",
                                "inhibitPolicyMapping1P1SelfIssuedCACert",
                                "inhibitPolicyMapping1P1subCACert",
                                "inhibitPolicyMapping1P1subsubCACert",
                                "InvalidSelfIssuedinhibitPolicyMappingTest9EE"};
-  const char* const crls[] = {
+  const char *const crls[] = {
       "TrustAnchorRootCRL", "inhibitPolicyMapping1P1CACRL",
       "inhibitPolicyMapping1P1subCACRL", "inhibitPolicyMapping1P1subsubCACRL"};
   PkitsTestInfo info;
@@ -2614,13 +2592,13 @@ WRAPPED_TYPED_TEST_P(PkitsTest11InhibitPolicyMapping,
 // 4.11.10 Invalid Self-Issued inhibitPolicyMapping Test10
 WRAPPED_TYPED_TEST_P(PkitsTest11InhibitPolicyMapping,
                      Section11InvalidSelfIssuedinhibitPolicyMappingTest10) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "inhibitPolicyMapping1P1CACert",
                                "inhibitPolicyMapping1P1SelfIssuedCACert",
                                "inhibitPolicyMapping1P1subCACert",
                                "inhibitPolicyMapping1P1SelfIssuedsubCACert",
                                "InvalidSelfIssuedinhibitPolicyMappingTest10EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "inhibitPolicyMapping1P1CACRL",
                               "inhibitPolicyMapping1P1subCACRL"};
   PkitsTestInfo info;
@@ -2634,13 +2612,13 @@ WRAPPED_TYPED_TEST_P(PkitsTest11InhibitPolicyMapping,
 // 4.11.11 Invalid Self-Issued inhibitPolicyMapping Test11
 WRAPPED_TYPED_TEST_P(PkitsTest11InhibitPolicyMapping,
                      Section11InvalidSelfIssuedinhibitPolicyMappingTest11) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "inhibitPolicyMapping1P1CACert",
                                "inhibitPolicyMapping1P1SelfIssuedCACert",
                                "inhibitPolicyMapping1P1subCACert",
                                "inhibitPolicyMapping1P1SelfIssuedsubCACert",
                                "InvalidSelfIssuedinhibitPolicyMappingTest11EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "inhibitPolicyMapping1P1CACRL",
                               "inhibitPolicyMapping1P1subCACRL"};
   PkitsTestInfo info;
@@ -2652,8 +2630,7 @@ WRAPPED_TYPED_TEST_P(PkitsTest11InhibitPolicyMapping,
 }
 
 WRAPPED_REGISTER_TYPED_TEST_SUITE_P(
-    PkitsTest11InhibitPolicyMapping,
-    Section11InvalidinhibitPolicyMappingTest1,
+    PkitsTest11InhibitPolicyMapping, Section11InvalidinhibitPolicyMappingTest1,
     Section11ValidinhibitPolicyMappingTest2,
     Section11InvalidinhibitPolicyMappingTest3,
     Section11ValidinhibitPolicyMappingTest4,
@@ -2672,10 +2649,10 @@ TYPED_TEST_SUITE_P(PkitsTest12InhibitAnyPolicy);
 // 4.12.1 Invalid inhibitAnyPolicy Test1
 WRAPPED_TYPED_TEST_P(PkitsTest12InhibitAnyPolicy,
                      Section12InvalidinhibitAnyPolicyTest1) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "inhibitAnyPolicy0CACert",
                                "InvalidinhibitAnyPolicyTest1EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "inhibitAnyPolicy0CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "inhibitAnyPolicy0CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.12.1";
   info.should_validate = false;
@@ -2687,10 +2664,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest12InhibitAnyPolicy,
 // 4.12.2 Valid inhibitAnyPolicy Test2
 WRAPPED_TYPED_TEST_P(PkitsTest12InhibitAnyPolicy,
                      Section12ValidinhibitAnyPolicyTest2) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "inhibitAnyPolicy0CACert",
                                "ValidinhibitAnyPolicyTest2EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "inhibitAnyPolicy0CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "inhibitAnyPolicy0CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.12.2";
   info.should_validate = true;
@@ -2701,10 +2678,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest12InhibitAnyPolicy,
 // 4.12.3 inhibitAnyPolicy Test3 (Subpart 1)
 WRAPPED_TYPED_TEST_P(PkitsTest12InhibitAnyPolicy,
                      Section12inhibitAnyPolicyTest3Subpart1) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate", "inhibitAnyPolicy1CACert",
       "inhibitAnyPolicy1subCA1Cert", "inhibitAnyPolicyTest3EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "inhibitAnyPolicy1CACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "inhibitAnyPolicy1CACRL",
                               "inhibitAnyPolicy1subCA1CRL"};
   PkitsTestInfo info;
   info.test_number = "4.12.3";
@@ -2716,10 +2693,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest12InhibitAnyPolicy,
 // 4.12.3 inhibitAnyPolicy Test3 (Subpart 2)
 WRAPPED_TYPED_TEST_P(PkitsTest12InhibitAnyPolicy,
                      Section12inhibitAnyPolicyTest3Subpart2) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate", "inhibitAnyPolicy1CACert",
       "inhibitAnyPolicy1subCA1Cert", "inhibitAnyPolicyTest3EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "inhibitAnyPolicy1CACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "inhibitAnyPolicy1CACRL",
                               "inhibitAnyPolicy1subCA1CRL"};
   PkitsTestInfo info;
   info.test_number = "4.12.3";
@@ -2733,10 +2710,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest12InhibitAnyPolicy,
 // 4.12.4 Invalid inhibitAnyPolicy Test4
 WRAPPED_TYPED_TEST_P(PkitsTest12InhibitAnyPolicy,
                      Section12InvalidinhibitAnyPolicyTest4) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate", "inhibitAnyPolicy1CACert",
       "inhibitAnyPolicy1subCA1Cert", "InvalidinhibitAnyPolicyTest4EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "inhibitAnyPolicy1CACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "inhibitAnyPolicy1CACRL",
                               "inhibitAnyPolicy1subCA1CRL"};
   PkitsTestInfo info;
   info.test_number = "4.12.4";
@@ -2749,11 +2726,11 @@ WRAPPED_TYPED_TEST_P(PkitsTest12InhibitAnyPolicy,
 // 4.12.5 Invalid inhibitAnyPolicy Test5
 WRAPPED_TYPED_TEST_P(PkitsTest12InhibitAnyPolicy,
                      Section12InvalidinhibitAnyPolicyTest5) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate", "inhibitAnyPolicy5CACert",
       "inhibitAnyPolicy5subCACert", "inhibitAnyPolicy5subsubCACert",
       "InvalidinhibitAnyPolicyTest5EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "inhibitAnyPolicy5CACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "inhibitAnyPolicy5CACRL",
                               "inhibitAnyPolicy5subCACRL",
                               "inhibitAnyPolicy5subsubCACRL"};
   PkitsTestInfo info;
@@ -2767,10 +2744,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest12InhibitAnyPolicy,
 // 4.12.6 Invalid inhibitAnyPolicy Test6
 WRAPPED_TYPED_TEST_P(PkitsTest12InhibitAnyPolicy,
                      Section12InvalidinhibitAnyPolicyTest6) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate", "inhibitAnyPolicy1CACert",
       "inhibitAnyPolicy1subCAIAP5Cert", "InvalidinhibitAnyPolicyTest6EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "inhibitAnyPolicy1CACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "inhibitAnyPolicy1CACRL",
                               "inhibitAnyPolicy1subCAIAP5CRL"};
   PkitsTestInfo info;
   info.test_number = "4.12.6";
@@ -2783,11 +2760,11 @@ WRAPPED_TYPED_TEST_P(PkitsTest12InhibitAnyPolicy,
 // 4.12.7 Valid Self-Issued inhibitAnyPolicy Test7
 WRAPPED_TYPED_TEST_P(PkitsTest12InhibitAnyPolicy,
                      Section12ValidSelfIssuedinhibitAnyPolicyTest7) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate", "inhibitAnyPolicy1CACert",
       "inhibitAnyPolicy1SelfIssuedCACert", "inhibitAnyPolicy1subCA2Cert",
       "ValidSelfIssuedinhibitAnyPolicyTest7EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "inhibitAnyPolicy1CACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "inhibitAnyPolicy1CACRL",
                               "inhibitAnyPolicy1subCA2CRL"};
   PkitsTestInfo info;
   info.test_number = "4.12.7";
@@ -2799,13 +2776,13 @@ WRAPPED_TYPED_TEST_P(PkitsTest12InhibitAnyPolicy,
 // 4.12.8 Invalid Self-Issued inhibitAnyPolicy Test8
 WRAPPED_TYPED_TEST_P(PkitsTest12InhibitAnyPolicy,
                      Section12InvalidSelfIssuedinhibitAnyPolicyTest8) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "inhibitAnyPolicy1CACert",
                                "inhibitAnyPolicy1SelfIssuedCACert",
                                "inhibitAnyPolicy1subCA2Cert",
                                "inhibitAnyPolicy1subsubCA2Cert",
                                "InvalidSelfIssuedinhibitAnyPolicyTest8EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "inhibitAnyPolicy1CACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "inhibitAnyPolicy1CACRL",
                               "inhibitAnyPolicy1subCA2CRL",
                               "inhibitAnyPolicy1subsubCA2CRL"};
   PkitsTestInfo info;
@@ -2819,13 +2796,13 @@ WRAPPED_TYPED_TEST_P(PkitsTest12InhibitAnyPolicy,
 // 4.12.9 Valid Self-Issued inhibitAnyPolicy Test9
 WRAPPED_TYPED_TEST_P(PkitsTest12InhibitAnyPolicy,
                      Section12ValidSelfIssuedinhibitAnyPolicyTest9) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "inhibitAnyPolicy1CACert",
                                "inhibitAnyPolicy1SelfIssuedCACert",
                                "inhibitAnyPolicy1subCA2Cert",
                                "inhibitAnyPolicy1SelfIssuedsubCA2Cert",
                                "ValidSelfIssuedinhibitAnyPolicyTest9EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "inhibitAnyPolicy1CACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "inhibitAnyPolicy1CACRL",
                               "inhibitAnyPolicy1subCA2CRL"};
   PkitsTestInfo info;
   info.test_number = "4.12.9";
@@ -2837,11 +2814,11 @@ WRAPPED_TYPED_TEST_P(PkitsTest12InhibitAnyPolicy,
 // 4.12.10 Invalid Self-Issued inhibitAnyPolicy Test10
 WRAPPED_TYPED_TEST_P(PkitsTest12InhibitAnyPolicy,
                      Section12InvalidSelfIssuedinhibitAnyPolicyTest10) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate", "inhibitAnyPolicy1CACert",
       "inhibitAnyPolicy1SelfIssuedCACert", "inhibitAnyPolicy1subCA2Cert",
       "InvalidSelfIssuedinhibitAnyPolicyTest10EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "inhibitAnyPolicy1CACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "inhibitAnyPolicy1CACRL",
                               "inhibitAnyPolicy1subCA2CRL"};
   PkitsTestInfo info;
   info.test_number = "4.12.10";
@@ -2852,10 +2829,8 @@ WRAPPED_TYPED_TEST_P(PkitsTest12InhibitAnyPolicy,
 }
 
 WRAPPED_REGISTER_TYPED_TEST_SUITE_P(
-    PkitsTest12InhibitAnyPolicy,
-    Section12InvalidinhibitAnyPolicyTest1,
-    Section12ValidinhibitAnyPolicyTest2,
-    Section12inhibitAnyPolicyTest3Subpart1,
+    PkitsTest12InhibitAnyPolicy, Section12InvalidinhibitAnyPolicyTest1,
+    Section12ValidinhibitAnyPolicyTest2, Section12inhibitAnyPolicyTest3Subpart1,
     Section12inhibitAnyPolicyTest3Subpart2,
     Section12InvalidinhibitAnyPolicyTest4,
     Section12InvalidinhibitAnyPolicyTest5,
@@ -2872,10 +2847,10 @@ TYPED_TEST_SUITE_P(PkitsTest13NameConstraints);
 // 4.13.1 Valid DN nameConstraints Test1
 WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
                      Section13ValidDNnameConstraintsTest1) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "nameConstraintsDN1CACert",
                                "ValidDNnameConstraintsTest1EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN1CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN1CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.13.1";
   info.should_validate = true;
@@ -2886,10 +2861,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
 // 4.13.2 Invalid DN nameConstraints Test2
 WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
                      Section13InvalidDNnameConstraintsTest2) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "nameConstraintsDN1CACert",
                                "InvalidDNnameConstraintsTest2EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN1CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN1CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.13.2";
   info.should_validate = false;
@@ -2900,10 +2875,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
 // 4.13.3 Invalid DN nameConstraints Test3
 WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
                      Section13InvalidDNnameConstraintsTest3) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "nameConstraintsDN1CACert",
                                "InvalidDNnameConstraintsTest3EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN1CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN1CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.13.3";
   info.should_validate = false;
@@ -2914,10 +2889,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
 // 4.13.4 Valid DN nameConstraints Test4
 WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
                      Section13ValidDNnameConstraintsTest4) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "nameConstraintsDN1CACert",
                                "ValidDNnameConstraintsTest4EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN1CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN1CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.13.4";
   info.should_validate = true;
@@ -2928,10 +2903,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
 // 4.13.5 Valid DN nameConstraints Test5
 WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
                      Section13ValidDNnameConstraintsTest5) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "nameConstraintsDN2CACert",
                                "ValidDNnameConstraintsTest5EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN2CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN2CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.13.5";
   info.should_validate = true;
@@ -2942,10 +2917,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
 // 4.13.6 Valid DN nameConstraints Test6
 WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
                      Section13ValidDNnameConstraintsTest6) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "nameConstraintsDN3CACert",
                                "ValidDNnameConstraintsTest6EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN3CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN3CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.13.6";
   info.should_validate = true;
@@ -2956,10 +2931,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
 // 4.13.7 Invalid DN nameConstraints Test7
 WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
                      Section13InvalidDNnameConstraintsTest7) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "nameConstraintsDN3CACert",
                                "InvalidDNnameConstraintsTest7EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN3CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN3CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.13.7";
   info.should_validate = false;
@@ -2970,10 +2945,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
 // 4.13.8 Invalid DN nameConstraints Test8
 WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
                      Section13InvalidDNnameConstraintsTest8) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "nameConstraintsDN4CACert",
                                "InvalidDNnameConstraintsTest8EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN4CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN4CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.13.8";
   info.should_validate = false;
@@ -2984,10 +2959,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
 // 4.13.9 Invalid DN nameConstraints Test9
 WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
                      Section13InvalidDNnameConstraintsTest9) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "nameConstraintsDN4CACert",
                                "InvalidDNnameConstraintsTest9EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN4CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN4CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.13.9";
   info.should_validate = false;
@@ -2998,10 +2973,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
 // 4.13.10 Invalid DN nameConstraints Test10
 WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
                      Section13InvalidDNnameConstraintsTest10) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "nameConstraintsDN5CACert",
                                "InvalidDNnameConstraintsTest10EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN5CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN5CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.13.10";
   info.should_validate = false;
@@ -3012,10 +2987,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
 // 4.13.11 Valid DN nameConstraints Test11
 WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
                      Section13ValidDNnameConstraintsTest11) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "nameConstraintsDN5CACert",
                                "ValidDNnameConstraintsTest11EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN5CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN5CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.13.11";
   info.should_validate = true;
@@ -3026,10 +3001,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
 // 4.13.12 Invalid DN nameConstraints Test12
 WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
                      Section13InvalidDNnameConstraintsTest12) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate", "nameConstraintsDN1CACert",
       "nameConstraintsDN1subCA1Cert", "InvalidDNnameConstraintsTest12EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN1CACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN1CACRL",
                               "nameConstraintsDN1subCA1CRL"};
   PkitsTestInfo info;
   info.test_number = "4.13.12";
@@ -3041,10 +3016,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
 // 4.13.13 Invalid DN nameConstraints Test13
 WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
                      Section13InvalidDNnameConstraintsTest13) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate", "nameConstraintsDN1CACert",
       "nameConstraintsDN1subCA2Cert", "InvalidDNnameConstraintsTest13EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN1CACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN1CACRL",
                               "nameConstraintsDN1subCA2CRL"};
   PkitsTestInfo info;
   info.test_number = "4.13.13";
@@ -3056,10 +3031,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
 // 4.13.14 Valid DN nameConstraints Test14
 WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
                      Section13ValidDNnameConstraintsTest14) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate", "nameConstraintsDN1CACert",
       "nameConstraintsDN1subCA2Cert", "ValidDNnameConstraintsTest14EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN1CACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN1CACRL",
                               "nameConstraintsDN1subCA2CRL"};
   PkitsTestInfo info;
   info.test_number = "4.13.14";
@@ -3071,10 +3046,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
 // 4.13.15 Invalid DN nameConstraints Test15
 WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
                      Section13InvalidDNnameConstraintsTest15) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate", "nameConstraintsDN3CACert",
       "nameConstraintsDN3subCA1Cert", "InvalidDNnameConstraintsTest15EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN3CACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN3CACRL",
                               "nameConstraintsDN3subCA1CRL"};
   PkitsTestInfo info;
   info.test_number = "4.13.15";
@@ -3086,10 +3061,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
 // 4.13.16 Invalid DN nameConstraints Test16
 WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
                      Section13InvalidDNnameConstraintsTest16) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate", "nameConstraintsDN3CACert",
       "nameConstraintsDN3subCA1Cert", "InvalidDNnameConstraintsTest16EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN3CACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN3CACRL",
                               "nameConstraintsDN3subCA1CRL"};
   PkitsTestInfo info;
   info.test_number = "4.13.16";
@@ -3101,10 +3076,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
 // 4.13.17 Invalid DN nameConstraints Test17
 WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
                      Section13InvalidDNnameConstraintsTest17) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate", "nameConstraintsDN3CACert",
       "nameConstraintsDN3subCA2Cert", "InvalidDNnameConstraintsTest17EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN3CACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN3CACRL",
                               "nameConstraintsDN3subCA2CRL"};
   PkitsTestInfo info;
   info.test_number = "4.13.17";
@@ -3116,10 +3091,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
 // 4.13.18 Valid DN nameConstraints Test18
 WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
                      Section13ValidDNnameConstraintsTest18) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate", "nameConstraintsDN3CACert",
       "nameConstraintsDN3subCA2Cert", "ValidDNnameConstraintsTest18EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN3CACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN3CACRL",
                               "nameConstraintsDN3subCA2CRL"};
   PkitsTestInfo info;
   info.test_number = "4.13.18";
@@ -3131,10 +3106,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
 // 4.13.19 Valid Self-Issued DN nameConstraints Test19
 WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
                      Section13ValidSelfIssuedDNnameConstraintsTest19) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate", "nameConstraintsDN1CACert",
       "nameConstraintsDN1SelfIssuedCACert", "ValidDNnameConstraintsTest19EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN1CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN1CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.13.19";
   info.should_validate = true;
@@ -3145,10 +3120,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
 // 4.13.20 Invalid Self-Issued DN nameConstraints Test20
 WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
                      Section13InvalidSelfIssuedDNnameConstraintsTest20) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "nameConstraintsDN1CACert",
                                "InvalidDNnameConstraintsTest20EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN1CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN1CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.13.20";
   info.should_validate = false;
@@ -3159,10 +3134,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
 // 4.13.21 Valid RFC822 nameConstraints Test21
 WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
                      Section13ValidRFC822nameConstraintsTest21) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "nameConstraintsRFC822CA1Cert",
                                "ValidRFC822nameConstraintsTest21EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "nameConstraintsRFC822CA1CRL"};
   PkitsTestInfo info;
   info.test_number = "4.13.21";
@@ -3174,10 +3149,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
 // 4.13.22 Invalid RFC822 nameConstraints Test22
 WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
                      Section13InvalidRFC822nameConstraintsTest22) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "nameConstraintsRFC822CA1Cert",
                                "InvalidRFC822nameConstraintsTest22EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "nameConstraintsRFC822CA1CRL"};
   PkitsTestInfo info;
   info.test_number = "4.13.22";
@@ -3189,10 +3164,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
 // 4.13.23 Valid RFC822 nameConstraints Test23
 WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
                      Section13ValidRFC822nameConstraintsTest23) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "nameConstraintsRFC822CA2Cert",
                                "ValidRFC822nameConstraintsTest23EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "nameConstraintsRFC822CA2CRL"};
   PkitsTestInfo info;
   info.test_number = "4.13.23";
@@ -3204,10 +3179,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
 // 4.13.24 Invalid RFC822 nameConstraints Test24
 WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
                      Section13InvalidRFC822nameConstraintsTest24) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "nameConstraintsRFC822CA2Cert",
                                "InvalidRFC822nameConstraintsTest24EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "nameConstraintsRFC822CA2CRL"};
   PkitsTestInfo info;
   info.test_number = "4.13.24";
@@ -3219,10 +3194,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
 // 4.13.25 Valid RFC822 nameConstraints Test25
 WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
                      Section13ValidRFC822nameConstraintsTest25) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "nameConstraintsRFC822CA3Cert",
                                "ValidRFC822nameConstraintsTest25EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "nameConstraintsRFC822CA3CRL"};
   PkitsTestInfo info;
   info.test_number = "4.13.25";
@@ -3234,10 +3209,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
 // 4.13.26 Invalid RFC822 nameConstraints Test26
 WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
                      Section13InvalidRFC822nameConstraintsTest26) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "nameConstraintsRFC822CA3Cert",
                                "InvalidRFC822nameConstraintsTest26EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "nameConstraintsRFC822CA3CRL"};
   PkitsTestInfo info;
   info.test_number = "4.13.26";
@@ -3249,11 +3224,11 @@ WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
 // 4.13.27 Valid DN and RFC822 nameConstraints Test27
 WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
                      Section13ValidDNandRFC822nameConstraintsTest27) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "nameConstraintsDN1CACert",
                                "nameConstraintsDN1subCA3Cert",
                                "ValidDNandRFC822nameConstraintsTest27EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN1CACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN1CACRL",
                               "nameConstraintsDN1subCA3CRL"};
   PkitsTestInfo info;
   info.test_number = "4.13.27";
@@ -3265,11 +3240,11 @@ WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
 // 4.13.28 Invalid DN and RFC822 nameConstraints Test28
 WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
                      Section13InvalidDNandRFC822nameConstraintsTest28) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "nameConstraintsDN1CACert",
                                "nameConstraintsDN1subCA3Cert",
                                "InvalidDNandRFC822nameConstraintsTest28EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN1CACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN1CACRL",
                               "nameConstraintsDN1subCA3CRL"};
   PkitsTestInfo info;
   info.test_number = "4.13.28";
@@ -3281,11 +3256,11 @@ WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
 // 4.13.29 Invalid DN and RFC822 nameConstraints Test29
 WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
                      Section13InvalidDNandRFC822nameConstraintsTest29) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "nameConstraintsDN1CACert",
                                "nameConstraintsDN1subCA3Cert",
                                "InvalidDNandRFC822nameConstraintsTest29EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN1CACRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDN1CACRL",
                               "nameConstraintsDN1subCA3CRL"};
   PkitsTestInfo info;
   info.test_number = "4.13.29";
@@ -3297,10 +3272,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
 // 4.13.30 Valid DNS nameConstraints Test30
 WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
                      Section13ValidDNSnameConstraintsTest30) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "nameConstraintsDNS1CACert",
                                "ValidDNSnameConstraintsTest30EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDNS1CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDNS1CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.13.30";
   info.should_validate = true;
@@ -3311,10 +3286,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
 // 4.13.31 Invalid DNS nameConstraints Test31
 WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
                      Section13InvalidDNSnameConstraintsTest31) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "nameConstraintsDNS1CACert",
                                "InvalidDNSnameConstraintsTest31EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDNS1CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDNS1CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.13.31";
   info.should_validate = false;
@@ -3325,10 +3300,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
 // 4.13.32 Valid DNS nameConstraints Test32
 WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
                      Section13ValidDNSnameConstraintsTest32) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "nameConstraintsDNS2CACert",
                                "ValidDNSnameConstraintsTest32EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDNS2CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDNS2CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.13.32";
   info.should_validate = true;
@@ -3339,10 +3314,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
 // 4.13.33 Invalid DNS nameConstraints Test33
 WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
                      Section13InvalidDNSnameConstraintsTest33) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "nameConstraintsDNS2CACert",
                                "InvalidDNSnameConstraintsTest33EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDNS2CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDNS2CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.13.33";
   info.should_validate = false;
@@ -3353,10 +3328,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
 // 4.13.34 Valid URI nameConstraints Test34
 WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
                      Section13ValidURInameConstraintsTest34) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "nameConstraintsURI1CACert",
                                "ValidURInameConstraintsTest34EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "nameConstraintsURI1CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "nameConstraintsURI1CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.13.34";
   info.should_validate = true;
@@ -3367,10 +3342,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
 // 4.13.35 Invalid URI nameConstraints Test35
 WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
                      Section13InvalidURInameConstraintsTest35) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "nameConstraintsURI1CACert",
                                "InvalidURInameConstraintsTest35EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "nameConstraintsURI1CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "nameConstraintsURI1CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.13.35";
   info.should_validate = false;
@@ -3381,10 +3356,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
 // 4.13.36 Valid URI nameConstraints Test36
 WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
                      Section13ValidURInameConstraintsTest36) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "nameConstraintsURI2CACert",
                                "ValidURInameConstraintsTest36EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "nameConstraintsURI2CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "nameConstraintsURI2CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.13.36";
   info.should_validate = true;
@@ -3395,10 +3370,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
 // 4.13.37 Invalid URI nameConstraints Test37
 WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
                      Section13InvalidURInameConstraintsTest37) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "nameConstraintsURI2CACert",
                                "InvalidURInameConstraintsTest37EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "nameConstraintsURI2CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "nameConstraintsURI2CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.13.37";
   info.should_validate = false;
@@ -3409,10 +3384,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
 // 4.13.38 Invalid DNS nameConstraints Test38
 WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
                      Section13InvalidDNSnameConstraintsTest38) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "nameConstraintsDNS1CACert",
                                "InvalidDNSnameConstraintsTest38EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDNS1CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "nameConstraintsDNS1CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.13.38";
   info.should_validate = false;
@@ -3421,12 +3396,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest13NameConstraints,
 }
 
 WRAPPED_REGISTER_TYPED_TEST_SUITE_P(
-    PkitsTest13NameConstraints,
-    Section13ValidDNnameConstraintsTest1,
+    PkitsTest13NameConstraints, Section13ValidDNnameConstraintsTest1,
     Section13InvalidDNnameConstraintsTest2,
     Section13InvalidDNnameConstraintsTest3,
-    Section13ValidDNnameConstraintsTest4,
-    Section13ValidDNnameConstraintsTest5,
+    Section13ValidDNnameConstraintsTest4, Section13ValidDNnameConstraintsTest5,
     Section13ValidDNnameConstraintsTest6,
     Section13InvalidDNnameConstraintsTest7,
     Section13InvalidDNnameConstraintsTest8,
@@ -3468,10 +3441,10 @@ TYPED_TEST_SUITE_P(PkitsTest14DistributionPoints);
 // 4.14.1 Valid distributionPoint Test1
 WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
                      Section14ValiddistributionPointTest1) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "distributionPoint1CACert",
                                "ValiddistributionPointTest1EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "distributionPoint1CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "distributionPoint1CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.14.1";
   info.should_validate = true;
@@ -3482,10 +3455,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
 // 4.14.2 Invalid distributionPoint Test2
 WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
                      Section14InvaliddistributionPointTest2) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "distributionPoint1CACert",
                                "InvaliddistributionPointTest2EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "distributionPoint1CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "distributionPoint1CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.14.2";
   info.should_validate = false;
@@ -3496,10 +3469,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
 // 4.14.3 Invalid distributionPoint Test3
 WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
                      Section14InvaliddistributionPointTest3) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "distributionPoint1CACert",
                                "InvaliddistributionPointTest3EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "distributionPoint1CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "distributionPoint1CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.14.3";
   info.should_validate = false;
@@ -3510,10 +3483,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
 // 4.14.4 Valid distributionPoint Test4
 WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
                      Section14ValiddistributionPointTest4) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "distributionPoint1CACert",
                                "ValiddistributionPointTest4EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "distributionPoint1CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "distributionPoint1CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.14.4";
   info.should_validate = true;
@@ -3524,10 +3497,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
 // 4.14.5 Valid distributionPoint Test5
 WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
                      Section14ValiddistributionPointTest5) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "distributionPoint2CACert",
                                "ValiddistributionPointTest5EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "distributionPoint2CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "distributionPoint2CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.14.5";
   info.should_validate = true;
@@ -3538,10 +3511,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
 // 4.14.6 Invalid distributionPoint Test6
 WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
                      Section14InvaliddistributionPointTest6) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "distributionPoint2CACert",
                                "InvaliddistributionPointTest6EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "distributionPoint2CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "distributionPoint2CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.14.6";
   info.should_validate = false;
@@ -3552,10 +3525,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
 // 4.14.7 Valid distributionPoint Test7
 WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
                      Section14ValiddistributionPointTest7) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "distributionPoint2CACert",
                                "ValiddistributionPointTest7EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "distributionPoint2CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "distributionPoint2CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.14.7";
   info.should_validate = true;
@@ -3566,10 +3539,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
 // 4.14.8 Invalid distributionPoint Test8
 WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
                      Section14InvaliddistributionPointTest8) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "distributionPoint2CACert",
                                "InvaliddistributionPointTest8EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "distributionPoint2CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "distributionPoint2CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.14.8";
   info.should_validate = false;
@@ -3580,10 +3553,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
 // 4.14.9 Invalid distributionPoint Test9
 WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
                      Section14InvaliddistributionPointTest9) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "distributionPoint2CACert",
                                "InvaliddistributionPointTest9EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "distributionPoint2CACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "distributionPoint2CACRL"};
   PkitsTestInfo info;
   info.test_number = "4.14.9";
   info.should_validate = false;
@@ -3594,10 +3567,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
 // 4.14.10 Valid No issuingDistributionPoint Test10
 WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
                      Section14ValidNoissuingDistributionPointTest10) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "NoissuingDistributionPointCACert",
                                "ValidNoissuingDistributionPointTest10EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "NoissuingDistributionPointCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.14.10";
@@ -3609,10 +3582,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
 // 4.14.11 Invalid onlyContainsUserCerts CRL Test11
 WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
                      Section14InvalidonlyContainsUserCertsCRLTest11) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "onlyContainsUserCertsCACert",
                                "InvalidonlyContainsUserCertsTest11EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "onlyContainsUserCertsCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.14.11";
@@ -3624,10 +3597,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
 // 4.14.12 Invalid onlyContainsCACerts CRL Test12
 WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
                      Section14InvalidonlyContainsCACertsCRLTest12) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "onlyContainsCACertsCACert",
                                "InvalidonlyContainsCACertsTest12EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "onlyContainsCACertsCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "onlyContainsCACertsCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.14.12";
   info.should_validate = false;
@@ -3638,10 +3611,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
 // 4.14.13 Valid onlyContainsCACerts CRL Test13
 WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
                      Section14ValidonlyContainsCACertsCRLTest13) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "onlyContainsCACertsCACert",
                                "ValidonlyContainsCACertsTest13EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "onlyContainsCACertsCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "onlyContainsCACertsCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.14.13";
   info.should_validate = true;
@@ -3652,10 +3625,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
 // 4.14.14 Invalid onlyContainsAttributeCerts Test14
 WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
                      Section14InvalidonlyContainsAttributeCertsTest14) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "onlyContainsAttributeCertsCACert",
                                "InvalidonlyContainsAttributeCertsTest14EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "onlyContainsAttributeCertsCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.14.14";
@@ -3667,10 +3640,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
 // 4.14.15 Invalid onlySomeReasons Test15
 WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
                      Section14InvalidonlySomeReasonsTest15) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "onlySomeReasonsCA1Cert",
                                "InvalidonlySomeReasonsTest15EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "onlySomeReasonsCA1compromiseCRL",
                               "onlySomeReasonsCA1otherreasonsCRL"};
   PkitsTestInfo info;
@@ -3683,10 +3656,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
 // 4.14.16 Invalid onlySomeReasons Test16
 WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
                      Section14InvalidonlySomeReasonsTest16) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "onlySomeReasonsCA1Cert",
                                "InvalidonlySomeReasonsTest16EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "onlySomeReasonsCA1compromiseCRL",
                               "onlySomeReasonsCA1otherreasonsCRL"};
   PkitsTestInfo info;
@@ -3699,10 +3672,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
 // 4.14.17 Invalid onlySomeReasons Test17
 WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
                      Section14InvalidonlySomeReasonsTest17) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "onlySomeReasonsCA2Cert",
                                "InvalidonlySomeReasonsTest17EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "onlySomeReasonsCA2CRL1",
+  const char *const crls[] = {"TrustAnchorRootCRL", "onlySomeReasonsCA2CRL1",
                               "onlySomeReasonsCA2CRL2"};
   PkitsTestInfo info;
   info.test_number = "4.14.17";
@@ -3714,10 +3687,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
 // 4.14.18 Valid onlySomeReasons Test18
 WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
                      Section14ValidonlySomeReasonsTest18) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "onlySomeReasonsCA3Cert",
                                "ValidonlySomeReasonsTest18EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "onlySomeReasonsCA3compromiseCRL",
                               "onlySomeReasonsCA3otherreasonsCRL"};
   PkitsTestInfo info;
@@ -3730,10 +3703,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
 // 4.14.19 Valid onlySomeReasons Test19
 WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
                      Section14ValidonlySomeReasonsTest19) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "onlySomeReasonsCA4Cert",
                                "ValidonlySomeReasonsTest19EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "onlySomeReasonsCA4compromiseCRL",
                               "onlySomeReasonsCA4otherreasonsCRL"};
   PkitsTestInfo info;
@@ -3746,10 +3719,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
 // 4.14.20 Invalid onlySomeReasons Test20
 WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
                      Section14InvalidonlySomeReasonsTest20) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "onlySomeReasonsCA4Cert",
                                "InvalidonlySomeReasonsTest20EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "onlySomeReasonsCA4compromiseCRL",
                               "onlySomeReasonsCA4otherreasonsCRL"};
   PkitsTestInfo info;
@@ -3762,10 +3735,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
 // 4.14.21 Invalid onlySomeReasons Test21
 WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
                      Section14InvalidonlySomeReasonsTest21) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "onlySomeReasonsCA4Cert",
                                "InvalidonlySomeReasonsTest21EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "onlySomeReasonsCA4compromiseCRL",
                               "onlySomeReasonsCA4otherreasonsCRL"};
   PkitsTestInfo info;
@@ -3778,10 +3751,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
 // 4.14.22 Valid IDP with indirectCRL Test22
 WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
                      Section14ValidIDPwithindirectCRLTest22) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "indirectCRLCA1Cert",
                                "ValidIDPwithindirectCRLTest22EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "indirectCRLCA1CRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "indirectCRLCA1CRL"};
   PkitsTestInfo info;
   info.test_number = "4.14.22";
   info.should_validate = true;
@@ -3792,10 +3765,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
 // 4.14.23 Invalid IDP with indirectCRL Test23
 WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
                      Section14InvalidIDPwithindirectCRLTest23) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "indirectCRLCA1Cert",
                                "InvalidIDPwithindirectCRLTest23EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "indirectCRLCA1CRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "indirectCRLCA1CRL"};
   PkitsTestInfo info;
   info.test_number = "4.14.23";
   info.should_validate = false;
@@ -3806,10 +3779,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
 // 4.14.24 Valid IDP with indirectCRL Test24
 WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
                      Section14ValidIDPwithindirectCRLTest24) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "indirectCRLCA2Cert", "indirectCRLCA1Cert",
                                "ValidIDPwithindirectCRLTest24EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "indirectCRLCA1CRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "indirectCRLCA1CRL"};
   PkitsTestInfo info;
   info.test_number = "4.14.24";
   info.should_validate = true;
@@ -3820,10 +3793,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
 // 4.14.25 Valid IDP with indirectCRL Test25
 WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
                      Section14ValidIDPwithindirectCRLTest25) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "indirectCRLCA2Cert", "indirectCRLCA1Cert",
                                "ValidIDPwithindirectCRLTest25EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "indirectCRLCA1CRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "indirectCRLCA1CRL"};
   PkitsTestInfo info;
   info.test_number = "4.14.25";
   info.should_validate = true;
@@ -3834,10 +3807,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
 // 4.14.26 Invalid IDP with indirectCRL Test26
 WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
                      Section14InvalidIDPwithindirectCRLTest26) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "indirectCRLCA2Cert", "indirectCRLCA1Cert",
                                "InvalidIDPwithindirectCRLTest26EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "indirectCRLCA1CRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "indirectCRLCA1CRL"};
   PkitsTestInfo info;
   info.test_number = "4.14.26";
   info.should_validate = false;
@@ -3848,10 +3821,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
 // 4.14.27 Invalid cRLIssuer Test27
 WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
                      Section14InvalidcRLIssuerTest27) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "indirectCRLCA2Cert", "GoodCACert",
                                "InvalidcRLIssuerTest27EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "GoodCACRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "GoodCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.14.27";
   info.should_validate = false;
@@ -3862,10 +3835,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
 // 4.14.28 Valid cRLIssuer Test28
 WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
                      Section14ValidcRLIssuerTest28) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate", "indirectCRLCA3Cert",
       "indirectCRLCA3cRLIssuerCert", "ValidcRLIssuerTest28EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "indirectCRLCA3CRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "indirectCRLCA3CRL",
                               "indirectCRLCA3cRLIssuerCRL"};
   PkitsTestInfo info;
   info.test_number = "4.14.28";
@@ -3877,10 +3850,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
 // 4.14.29 Valid cRLIssuer Test29
 WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
                      Section14ValidcRLIssuerTest29) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate", "indirectCRLCA3Cert",
       "indirectCRLCA3cRLIssuerCert", "ValidcRLIssuerTest29EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "indirectCRLCA3CRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "indirectCRLCA3CRL",
                               "indirectCRLCA3cRLIssuerCRL"};
   PkitsTestInfo info;
   info.test_number = "4.14.29";
@@ -3892,10 +3865,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
 // 4.14.30 Valid cRLIssuer Test30
 WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
                      Section14ValidcRLIssuerTest30) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate", "indirectCRLCA4Cert",
       "indirectCRLCA4cRLIssuerCert", "ValidcRLIssuerTest30EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "indirectCRLCA4cRLIssuerCRL"};
   PkitsTestInfo info;
   info.test_number = "4.14.30";
@@ -3907,10 +3880,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
 // 4.14.31 Invalid cRLIssuer Test31
 WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
                      Section14InvalidcRLIssuerTest31) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "indirectCRLCA5Cert", "indirectCRLCA6Cert",
                                "InvalidcRLIssuerTest31EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "indirectCRLCA5CRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "indirectCRLCA5CRL"};
   PkitsTestInfo info;
   info.test_number = "4.14.31";
   info.should_validate = false;
@@ -3921,10 +3894,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
 // 4.14.32 Invalid cRLIssuer Test32
 WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
                      Section14InvalidcRLIssuerTest32) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "indirectCRLCA5Cert", "indirectCRLCA6Cert",
                                "InvalidcRLIssuerTest32EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "indirectCRLCA5CRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "indirectCRLCA5CRL"};
   PkitsTestInfo info;
   info.test_number = "4.14.32";
   info.should_validate = false;
@@ -3935,10 +3908,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
 // 4.14.33 Valid cRLIssuer Test33
 WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
                      Section14ValidcRLIssuerTest33) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "indirectCRLCA5Cert", "indirectCRLCA6Cert",
                                "ValidcRLIssuerTest33EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "indirectCRLCA5CRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "indirectCRLCA5CRL"};
   PkitsTestInfo info;
   info.test_number = "4.14.33";
   info.should_validate = true;
@@ -3949,10 +3922,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
 // 4.14.34 Invalid cRLIssuer Test34
 WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
                      Section14InvalidcRLIssuerTest34) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "indirectCRLCA5Cert",
                                "InvalidcRLIssuerTest34EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "indirectCRLCA5CRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "indirectCRLCA5CRL"};
   PkitsTestInfo info;
   info.test_number = "4.14.34";
   info.should_validate = false;
@@ -3963,10 +3936,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
 // 4.14.35 Invalid cRLIssuer Test35
 WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
                      Section14InvalidcRLIssuerTest35) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "indirectCRLCA5Cert",
                                "InvalidcRLIssuerTest35EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "indirectCRLCA5CRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL", "indirectCRLCA5CRL"};
   PkitsTestInfo info;
   info.test_number = "4.14.35";
   info.should_validate = false;
@@ -3975,12 +3948,10 @@ WRAPPED_TYPED_TEST_P(PkitsTest14DistributionPoints,
 }
 
 WRAPPED_REGISTER_TYPED_TEST_SUITE_P(
-    PkitsTest14DistributionPoints,
-    Section14ValiddistributionPointTest1,
+    PkitsTest14DistributionPoints, Section14ValiddistributionPointTest1,
     Section14InvaliddistributionPointTest2,
     Section14InvaliddistributionPointTest3,
-    Section14ValiddistributionPointTest4,
-    Section14ValiddistributionPointTest5,
+    Section14ValiddistributionPointTest4, Section14ValiddistributionPointTest5,
     Section14InvaliddistributionPointTest6,
     Section14ValiddistributionPointTest7,
     Section14InvaliddistributionPointTest8,
@@ -3992,25 +3963,18 @@ WRAPPED_REGISTER_TYPED_TEST_SUITE_P(
     Section14InvalidonlyContainsAttributeCertsTest14,
     Section14InvalidonlySomeReasonsTest15,
     Section14InvalidonlySomeReasonsTest16,
-    Section14InvalidonlySomeReasonsTest17,
-    Section14ValidonlySomeReasonsTest18,
-    Section14ValidonlySomeReasonsTest19,
-    Section14InvalidonlySomeReasonsTest20,
+    Section14InvalidonlySomeReasonsTest17, Section14ValidonlySomeReasonsTest18,
+    Section14ValidonlySomeReasonsTest19, Section14InvalidonlySomeReasonsTest20,
     Section14InvalidonlySomeReasonsTest21,
     Section14ValidIDPwithindirectCRLTest22,
     Section14InvalidIDPwithindirectCRLTest23,
     Section14ValidIDPwithindirectCRLTest24,
     Section14ValidIDPwithindirectCRLTest25,
-    Section14InvalidIDPwithindirectCRLTest26,
-    Section14InvalidcRLIssuerTest27,
-    Section14ValidcRLIssuerTest28,
-    Section14ValidcRLIssuerTest29,
-    Section14ValidcRLIssuerTest30,
-    Section14InvalidcRLIssuerTest31,
-    Section14InvalidcRLIssuerTest32,
-    Section14ValidcRLIssuerTest33,
-    Section14InvalidcRLIssuerTest34,
-    Section14InvalidcRLIssuerTest35);
+    Section14InvalidIDPwithindirectCRLTest26, Section14InvalidcRLIssuerTest27,
+    Section14ValidcRLIssuerTest28, Section14ValidcRLIssuerTest29,
+    Section14ValidcRLIssuerTest30, Section14InvalidcRLIssuerTest31,
+    Section14InvalidcRLIssuerTest32, Section14ValidcRLIssuerTest33,
+    Section14InvalidcRLIssuerTest34, Section14InvalidcRLIssuerTest35);
 
 template <typename PkitsTestDelegate>
 class PkitsTest15DeltaCRLs : public PkitsTest<PkitsTestDelegate> {};
@@ -4019,10 +3983,10 @@ TYPED_TEST_SUITE_P(PkitsTest15DeltaCRLs);
 // 4.15.1 Invalid deltaCRLIndicator No Base Test1
 WRAPPED_TYPED_TEST_P(PkitsTest15DeltaCRLs,
                      Section15InvaliddeltaCRLIndicatorNoBaseTest1) {
-  const char* const certs[] = {"TrustAnchorRootCertificate",
+  const char *const certs[] = {"TrustAnchorRootCertificate",
                                "deltaCRLIndicatorNoBaseCACert",
                                "InvaliddeltaCRLIndicatorNoBaseTest1EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL",
+  const char *const crls[] = {"TrustAnchorRootCRL",
                               "deltaCRLIndicatorNoBaseCACRL"};
   PkitsTestInfo info;
   info.test_number = "4.15.1";
@@ -4033,9 +3997,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest15DeltaCRLs,
 
 // 4.15.2 Valid delta-CRL Test2
 WRAPPED_TYPED_TEST_P(PkitsTest15DeltaCRLs, Section15ValiddeltaCRLTest2) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "deltaCRLCA1Cert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "deltaCRLCA1Cert",
                                "ValiddeltaCRLTest2EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "deltaCRLCA1CRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "deltaCRLCA1CRL",
                               "deltaCRLCA1deltaCRL"};
   PkitsTestInfo info;
   info.test_number = "4.15.2";
@@ -4046,9 +4010,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest15DeltaCRLs, Section15ValiddeltaCRLTest2) {
 
 // 4.15.3 Invalid delta-CRL Test3
 WRAPPED_TYPED_TEST_P(PkitsTest15DeltaCRLs, Section15InvaliddeltaCRLTest3) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "deltaCRLCA1Cert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "deltaCRLCA1Cert",
                                "InvaliddeltaCRLTest3EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "deltaCRLCA1CRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "deltaCRLCA1CRL",
                               "deltaCRLCA1deltaCRL"};
   PkitsTestInfo info;
   info.test_number = "4.15.3";
@@ -4059,9 +4023,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest15DeltaCRLs, Section15InvaliddeltaCRLTest3) {
 
 // 4.15.4 Invalid delta-CRL Test4
 WRAPPED_TYPED_TEST_P(PkitsTest15DeltaCRLs, Section15InvaliddeltaCRLTest4) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "deltaCRLCA1Cert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "deltaCRLCA1Cert",
                                "InvaliddeltaCRLTest4EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "deltaCRLCA1CRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "deltaCRLCA1CRL",
                               "deltaCRLCA1deltaCRL"};
   PkitsTestInfo info;
   info.test_number = "4.15.4";
@@ -4072,9 +4036,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest15DeltaCRLs, Section15InvaliddeltaCRLTest4) {
 
 // 4.15.5 Valid delta-CRL Test5
 WRAPPED_TYPED_TEST_P(PkitsTest15DeltaCRLs, Section15ValiddeltaCRLTest5) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "deltaCRLCA1Cert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "deltaCRLCA1Cert",
                                "ValiddeltaCRLTest5EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "deltaCRLCA1CRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "deltaCRLCA1CRL",
                               "deltaCRLCA1deltaCRL"};
   PkitsTestInfo info;
   info.test_number = "4.15.5";
@@ -4085,9 +4049,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest15DeltaCRLs, Section15ValiddeltaCRLTest5) {
 
 // 4.15.6 Invalid delta-CRL Test6
 WRAPPED_TYPED_TEST_P(PkitsTest15DeltaCRLs, Section15InvaliddeltaCRLTest6) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "deltaCRLCA1Cert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "deltaCRLCA1Cert",
                                "InvaliddeltaCRLTest6EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "deltaCRLCA1CRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "deltaCRLCA1CRL",
                               "deltaCRLCA1deltaCRL"};
   PkitsTestInfo info;
   info.test_number = "4.15.6";
@@ -4098,9 +4062,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest15DeltaCRLs, Section15InvaliddeltaCRLTest6) {
 
 // 4.15.7 Valid delta-CRL Test7
 WRAPPED_TYPED_TEST_P(PkitsTest15DeltaCRLs, Section15ValiddeltaCRLTest7) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "deltaCRLCA1Cert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "deltaCRLCA1Cert",
                                "ValiddeltaCRLTest7EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "deltaCRLCA1CRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "deltaCRLCA1CRL",
                               "deltaCRLCA1deltaCRL"};
   PkitsTestInfo info;
   info.test_number = "4.15.7";
@@ -4111,9 +4075,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest15DeltaCRLs, Section15ValiddeltaCRLTest7) {
 
 // 4.15.8 Valid delta-CRL Test8
 WRAPPED_TYPED_TEST_P(PkitsTest15DeltaCRLs, Section15ValiddeltaCRLTest8) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "deltaCRLCA2Cert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "deltaCRLCA2Cert",
                                "ValiddeltaCRLTest8EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "deltaCRLCA2CRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "deltaCRLCA2CRL",
                               "deltaCRLCA2deltaCRL"};
   PkitsTestInfo info;
   info.test_number = "4.15.8";
@@ -4124,9 +4088,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest15DeltaCRLs, Section15ValiddeltaCRLTest8) {
 
 // 4.15.9 Invalid delta-CRL Test9
 WRAPPED_TYPED_TEST_P(PkitsTest15DeltaCRLs, Section15InvaliddeltaCRLTest9) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "deltaCRLCA2Cert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "deltaCRLCA2Cert",
                                "InvaliddeltaCRLTest9EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "deltaCRLCA2CRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "deltaCRLCA2CRL",
                               "deltaCRLCA2deltaCRL"};
   PkitsTestInfo info;
   info.test_number = "4.15.9";
@@ -4137,9 +4101,9 @@ WRAPPED_TYPED_TEST_P(PkitsTest15DeltaCRLs, Section15InvaliddeltaCRLTest9) {
 
 // 4.15.10 Invalid delta-CRL Test10
 WRAPPED_TYPED_TEST_P(PkitsTest15DeltaCRLs, Section15InvaliddeltaCRLTest10) {
-  const char* const certs[] = {"TrustAnchorRootCertificate", "deltaCRLCA3Cert",
+  const char *const certs[] = {"TrustAnchorRootCertificate", "deltaCRLCA3Cert",
                                "InvaliddeltaCRLTest10EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL", "deltaCRLCA3CRL",
+  const char *const crls[] = {"TrustAnchorRootCRL", "deltaCRLCA3CRL",
                               "deltaCRLCA3deltaCRL"};
   PkitsTestInfo info;
   info.test_number = "4.15.10";
@@ -4149,16 +4113,11 @@ WRAPPED_TYPED_TEST_P(PkitsTest15DeltaCRLs, Section15InvaliddeltaCRLTest10) {
 }
 
 WRAPPED_REGISTER_TYPED_TEST_SUITE_P(
-    PkitsTest15DeltaCRLs,
-    Section15InvaliddeltaCRLIndicatorNoBaseTest1,
-    Section15ValiddeltaCRLTest2,
-    Section15InvaliddeltaCRLTest3,
-    Section15InvaliddeltaCRLTest4,
-    Section15ValiddeltaCRLTest5,
-    Section15InvaliddeltaCRLTest6,
-    Section15ValiddeltaCRLTest7,
-    Section15ValiddeltaCRLTest8,
-    Section15InvaliddeltaCRLTest9,
+    PkitsTest15DeltaCRLs, Section15InvaliddeltaCRLIndicatorNoBaseTest1,
+    Section15ValiddeltaCRLTest2, Section15InvaliddeltaCRLTest3,
+    Section15InvaliddeltaCRLTest4, Section15ValiddeltaCRLTest5,
+    Section15InvaliddeltaCRLTest6, Section15ValiddeltaCRLTest7,
+    Section15ValiddeltaCRLTest8, Section15InvaliddeltaCRLTest9,
     Section15InvaliddeltaCRLTest10);
 
 template <typename PkitsTestDelegate>
@@ -4170,10 +4129,10 @@ TYPED_TEST_SUITE_P(PkitsTest16PrivateCertificateExtensions);
 WRAPPED_TYPED_TEST_P(
     PkitsTest16PrivateCertificateExtensions,
     Section16ValidUnknownNotCriticalCertificateExtensionTest1) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate",
       "ValidUnknownNotCriticalCertificateExtensionTest1EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL"};
   PkitsTestInfo info;
   info.test_number = "4.16.1";
   info.should_validate = true;
@@ -4184,10 +4143,10 @@ WRAPPED_TYPED_TEST_P(
 // 4.16.2 Invalid Unknown Critical Certificate Extension Test2
 WRAPPED_TYPED_TEST_P(PkitsTest16PrivateCertificateExtensions,
                      Section16InvalidUnknownCriticalCertificateExtensionTest2) {
-  const char* const certs[] = {
+  const char *const certs[] = {
       "TrustAnchorRootCertificate",
       "InvalidUnknownCriticalCertificateExtensionTest2EE"};
-  const char* const crls[] = {"TrustAnchorRootCRL"};
+  const char *const crls[] = {"TrustAnchorRootCRL"};
   PkitsTestInfo info;
   info.test_number = "4.16.2";
   info.should_validate = false;
