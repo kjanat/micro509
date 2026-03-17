@@ -491,7 +491,7 @@ export function parseOcspResponseDer(der: Uint8Array): ParsedOcspResponse {
 	}
 	const responseBytesChildren = childrenOf(der, bytesSequence);
 	if (responseBytesChildren.length !== 2) {
-		throw new Error('Malformed OCSP response');
+		throw new Error('responseBytes must contain responseType and response');
 	}
 	const responseType = requireElement(responseBytesChildren[0], 'responseType');
 	const response = requireElement(responseBytesChildren[1], 'response');
