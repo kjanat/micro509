@@ -192,6 +192,8 @@ export interface ParsedCertificateRevocationList {
 	readonly signatureAlgorithmOid: string;
 	/** Human-readable signature algorithm name (e.g. `"ECDSA with SHA-256"`). */
 	readonly signatureAlgorithmName: string;
+	/** DER-encoded signature algorithm parameters (e.g. DER NULL for RSA PKCS#1 v1.5). */
+	readonly signatureAlgorithmParametersDer?: Uint8Array;
 	/** OID of the issuer's public key algorithm, when available. */
 	readonly issuerPublicKeyAlgorithmOid?: string;
 	/** OID of the issuer's public key parameters (e.g. named curve), when available. */
@@ -496,6 +498,9 @@ export function parseCertificateRevocationListDer(
 			parsedSignatureAlgorithm.oid,
 			parsedSignatureAlgorithm.parametersDer,
 		),
+		...(parsedSignatureAlgorithm.parametersDer === undefined
+			? {}
+			: { signatureAlgorithmParametersDer: parsedSignatureAlgorithm.parametersDer }),
 		...(signedFields.authorityKeyIdentifier === undefined
 			? {}
 			: { authorityKeyIdentifier: signedFields.authorityKeyIdentifier }),
@@ -559,7 +564,7 @@ export async function verifyCertificateRevocationList(
 	try {
 		verifiedResult = await verifySignedDataDetailed(
 			parsedCrl.signatureAlgorithmOid,
-			undefined,
+			parsedCrl.signatureAlgorithmParametersDer,
 			issuer.publicKeyAlgorithmOid,
 			issuer.publicKeyParametersOid,
 			issuer.subjectPublicKeyInfoDer,
@@ -644,7 +649,7 @@ export async function validateCertificateRevocationList(
 	try {
 		verifiedResult = await verifySignedDataDetailed(
 			parsedCrl.signatureAlgorithmOid,
-			undefined,
+			parsedCrl.signatureAlgorithmParametersDer,
 			issuer.publicKeyAlgorithmOid,
 			issuer.publicKeyParametersOid,
 			issuer.subjectPublicKeyInfoDer,
