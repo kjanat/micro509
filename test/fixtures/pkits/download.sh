@@ -1,47 +1,62 @@
 #!/usr/bin/env bash
 
+set -euo pipefail
+
 # Copyright 2026 The micro509 Authors
 #
-# This script downloads the certificates used in the PKITS test suite from the
-# BoringSSL repository. (`google/boringssl` on github.com, apache 2.0 licensed).
-#
-# The PKITS test suite is a collection of test cases for validating X.509
-# certificate path validation implementations against the NIST PKITS test cases.
+# This script vendors the full PKITS fixture corpus from the BoringSSL mirror of
+# the NIST PKITS inputs. It syncs certificates, CRLs, and the upstream testcase
+# metadata used to generate the local manifest.
 
-# Ensure we're at repo root
-REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
-	echo "Error: Not in a git repository." >&2
-	exit 1
-}
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+REPO_ROOT="$(CDPATH= cd -- "${SCRIPT_DIR}/../../.." && pwd)"
+PKITS_DIR="${REPO_ROOT}/test/fixtures/pkits"
+CERT_DIR="${PKITS_DIR}/certs"
+CRL_DIR="${PKITS_DIR}/crls"
+UPSTREAM_DIR="${PKITS_DIR}/upstream"
+UPSTREAM_API_ROOT="repos/google/boringssl/contents/pki/testdata/nist-pkits"
 
-CERT_DIR="${REPO_ROOT}/test/fixtures/pkits/certs"
-cd "${REPO_ROOT}" || {
-	echo "Error: Could not change to repo root." >&2
-	exit 1
-}
-
-mkdir -p "${CERT_DIR}" || {
-	echo "Error: Could not create cert directory." >&2
-	exit 1
-}
-
-files=(
-	GoodCACert InvalidDNandRFC822nameConstraintsTest28EE InvalidpathLenConstraintTest5EE
-	P12Mapping1to3CACert P1anyPolicyMapping1to2CACert TrustAnchorRootCertificate
-	ValidCertificatePathTest1EE ValidDNandRFC822nameConstraintsTest27EE ValidPolicyMappingTest12EE
-	ValidPolicyMappingTest13EE ValidRFC822nameConstraintsTest21EE ValidinhibitPolicyMappingTest4EE
-	ValidrequireExplicitPolicyTest1EE inhibitAnyPolicy1CACert inhibitAnyPolicy1subCA1Cert
-	inhibitAnyPolicyTest3EE inhibitPolicyMapping1P12CACert inhibitPolicyMapping1P12subCACert
-	inhibitPolicyMapping1P12subsubCACert nameConstraintsDN1CACert nameConstraintsDN1subCA3Cert
-	nameConstraintsRFC822CA1Cert pathLenConstraint0CACert pathLenConstraint0subCACert
-	requireExplicitPolicy10CACert requireExplicitPolicy10subCACert requireExplicitPolicy10subsubCACert
-	requireExplicitPolicy10subsubsubCACert
-)
-
-for file in "${files[@]}"; do
-	curl -fsSL "https://raw.githubusercontent.com/google/boringssl/main/pki/testdata/nist-pkits/certs/${file}.crt" \
-		-o "${CERT_DIR}/${file}.crt" || {
-		echo "Error: Failed to download ${file}.crt" >&2
+require_command() {
+	command -v "$1" >/dev/null 2>&1 || {
+		printf 'Error: missing required command: %s\n' "$1" >&2
 		exit 1
 	}
-done
+}
+
+sync_directory() {
+	local upstream_path="$1"
+	local destination_dir="$2"
+	local extension="$3"
+
+	mkdir -p "${destination_dir}"
+	rm -f -- "${destination_dir}"/*."${extension}"
+
+	gh api "${UPSTREAM_API_ROOT}/${upstream_path}" --jq '.[] | [.name, .download_url] | @tsv' \
+		| while IFS=$'\t' read -r file_name download_url; do
+			if [[ -z "${file_name}" || -z "${download_url}" ]]; then
+				printf 'Error: malformed directory entry for %s\n' "${upstream_path}" >&2
+				exit 1
+			fi
+			curl -fsSL "${download_url}" -o "${destination_dir}/${file_name}"
+		done
+}
+
+sync_file() {
+	local file_name="$1"
+	local destination_dir="$2"
+	mkdir -p "${destination_dir}"
+	curl -fsSL "https://raw.githubusercontent.com/google/boringssl/main/pki/testdata/nist-pkits/${file_name}" \
+		-o "${destination_dir}/${file_name}"
+}
+
+require_command bun
+require_command curl
+require_command gh
+
+sync_directory certs "${CERT_DIR}" crt
+sync_directory crls "${CRL_DIR}" crl
+sync_file README.md "${UPSTREAM_DIR}"
+sync_file generate_tests.py "${UPSTREAM_DIR}"
+sync_file pkits_testcases-inl.h "${UPSTREAM_DIR}"
+
+bun "${PKITS_DIR}/generate-manifest.ts"

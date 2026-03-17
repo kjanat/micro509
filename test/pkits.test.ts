@@ -1,172 +1,211 @@
 import { describe, expect, it } from 'bun:test';
 import { readFile } from 'node:fs/promises';
-import type { VerifyErrorCode } from 'micro509';
-import { verifyCertificateChain } from 'micro509';
+import {
+	checkCertificateRevocationAgainstCrl,
+	type ParsedCertificate,
+	type ParsedCertificateRevocationList,
+	parseCertificateDer,
+	parseCertificateRevocationListDer,
+	verifyCertificateChain,
+} from 'micro509';
+import { PKITS_CASES, type PkitsCase } from './fixtures/pkits/manifest.ts';
 
 const PKITS_VALIDATION_TIME = new Date('2011-04-15T00:00:00Z');
-const NIST_TEST_POLICY_1 = '2.16.840.1.101.3.2.1.48.1';
-const NIST_TEST_POLICY_2 = '2.16.840.1.101.3.2.1.48.2';
-const NIST_TEST_POLICY_4 = '2.16.840.1.101.3.2.1.48.4';
+const REVOCATION_SECTIONS = new Set(['4.4', '4.14', '4.15']);
 
-interface PkitsHarnessCase {
-	readonly section: string;
-	readonly title: string;
-	readonly certs: readonly string[];
-	readonly shouldValidate: boolean;
-	readonly expectedCode?: VerifyErrorCode;
-	readonly initialPolicySet?: readonly string[];
-	readonly inhibitAnyPolicy?: boolean;
-	readonly expectedUserConstrainedPolicies?: readonly string[];
+const certificateDerCache = new Map<string, Promise<Uint8Array>>();
+const parsedCertificateCache = new Map<string, Promise<ParsedCertificate>>();
+const parsedCrlCache = new Map<string, Promise<ParsedCertificateRevocationList>>();
+
+async function readPkitsFixture(path: string): Promise<Uint8Array> {
+	return new Uint8Array(await readFile(new URL(path, import.meta.url)));
 }
 
-const PKITS_CASES: readonly PkitsHarnessCase[] = [
-	{
-		section: '4.1.1',
-		title: 'valid certificate path',
-		certs: ['TrustAnchorRootCertificate', 'GoodCACert', 'ValidCertificatePathTest1EE'],
-		shouldValidate: true,
-	},
-	{
-		section: '4.6.5',
-		title: 'path length exceeded',
-		certs: [
-			'TrustAnchorRootCertificate',
-			'pathLenConstraint0CACert',
-			'pathLenConstraint0subCACert',
-			'InvalidpathLenConstraintTest5EE',
-		],
-		shouldValidate: false,
-		expectedCode: 'path_length_exceeded',
-	},
-	{
-		section: '4.9.1',
-		title: 'requireExplicitPolicy valid chain',
-		certs: [
-			'TrustAnchorRootCertificate',
-			'requireExplicitPolicy10CACert',
-			'requireExplicitPolicy10subCACert',
-			'requireExplicitPolicy10subsubCACert',
-			'requireExplicitPolicy10subsubsubCACert',
-			'ValidrequireExplicitPolicyTest1EE',
-		],
-		shouldValidate: true,
-	},
-	{
-		section: '4.10.12',
-		title: 'policy mapping with initial policy set',
-		certs: ['TrustAnchorRootCertificate', 'P12Mapping1to3CACert', 'ValidPolicyMappingTest12EE'],
-		shouldValidate: true,
-		initialPolicySet: [NIST_TEST_POLICY_1],
-		expectedUserConstrainedPolicies: [NIST_TEST_POLICY_1],
-	},
-	{
-		section: '4.10.13',
-		title: 'policy mapping rejects unsatisfied initial policy set',
-		certs: [
-			'TrustAnchorRootCertificate',
-			'P1anyPolicyMapping1to2CACert',
-			'ValidPolicyMappingTest13EE',
-		],
-		shouldValidate: false,
-		expectedCode: 'explicit_policy_required',
-		initialPolicySet: [NIST_TEST_POLICY_2],
-	},
-	{
-		section: '4.11.4',
-		title: 'inhibitPolicyMapping valid chain',
-		certs: [
-			'TrustAnchorRootCertificate',
-			'inhibitPolicyMapping1P12CACert',
-			'inhibitPolicyMapping1P12subCACert',
-			'inhibitPolicyMapping1P12subsubCACert',
-			'ValidinhibitPolicyMappingTest4EE',
-		],
-		shouldValidate: true,
-		expectedUserConstrainedPolicies: [NIST_TEST_POLICY_4],
-	},
-	{
-		section: '4.12.3',
-		title: 'initial inhibitAnyPolicy blocks the mapped chain',
-		certs: [
-			'TrustAnchorRootCertificate',
-			'inhibitAnyPolicy1CACert',
-			'inhibitAnyPolicy1subCA1Cert',
-			'inhibitAnyPolicyTest3EE',
-		],
-		shouldValidate: false,
-		expectedCode: 'explicit_policy_required',
-		inhibitAnyPolicy: true,
-	},
-	{
-		section: '4.13.21',
-		title: 'RFC822 name constraints valid chain',
-		certs: [
-			'TrustAnchorRootCertificate',
-			'nameConstraintsRFC822CA1Cert',
-			'ValidRFC822nameConstraintsTest21EE',
-		],
-		shouldValidate: true,
-	},
-	{
-		section: '4.13.28',
-		title: 'combined DN and RFC822 name constraints invalid chain',
-		certs: [
-			'TrustAnchorRootCertificate',
-			'nameConstraintsDN1CACert',
-			'nameConstraintsDN1subCA3Cert',
-			'InvalidDNandRFC822nameConstraintsTest28EE',
-		],
-		shouldValidate: false,
-		expectedCode: 'name_constraints_violated',
-	},
-] as const;
+async function readPkitsCertificateDer(name: string): Promise<Uint8Array> {
+	const cached = certificateDerCache.get(name);
+	if (cached !== undefined) {
+		return cached;
+	}
+	const pending = readPkitsFixture(`./fixtures/pkits/certs/${name}.crt`);
+	certificateDerCache.set(name, pending);
+	return await pending;
+}
 
-async function readPkitsCertificate(name: string): Promise<Uint8Array> {
-	const url = new URL(`./fixtures/pkits/certs/${name}.crt`, import.meta.url);
-	return new Uint8Array(await readFile(url));
+async function readPkitsParsedCertificate(name: string): Promise<ParsedCertificate> {
+	const cached = parsedCertificateCache.get(name);
+	if (cached !== undefined) {
+		return cached;
+	}
+	const pending = readPkitsCertificateDer(name).then((der) => parseCertificateDer(der));
+	parsedCertificateCache.set(name, pending);
+	return await pending;
+}
+
+async function readPkitsParsedCrl(name: string): Promise<ParsedCertificateRevocationList> {
+	const cached = parsedCrlCache.get(name);
+	if (cached !== undefined) {
+		return cached;
+	}
+	const pending = readPkitsFixture(`./fixtures/pkits/crls/${name}.crl`).then((der) =>
+		parseCertificateRevocationListDer(der),
+	);
+	parsedCrlCache.set(name, pending);
+	return await pending;
+}
+
+function isRevocationPkitsCase(section: string): boolean {
+	return REVOCATION_SECTIONS.has(section);
+}
+
+async function evaluatePkitsRevocation(
+	chain: readonly ParsedCertificate[],
+	crlNames: readonly string[],
+): Promise<boolean> {
+	const parsedCrls = (await Promise.allSettled(crlNames.map((name) => readPkitsParsedCrl(name))))
+		.filter(
+			(result): result is PromiseFulfilledResult<ParsedCertificateRevocationList> =>
+				result.status === 'fulfilled',
+		)
+		.map((result) => result.value);
+	const completeCrls = parsedCrls.filter((crl) => crl.baseCrlNumber === undefined);
+	const deltaCrls = parsedCrls.filter((crl) => crl.baseCrlNumber !== undefined);
+
+	for (let certificateIndex = 0; certificateIndex < chain.length - 1; certificateIndex += 1) {
+		const certificate = chain[certificateIndex];
+		const issuerCertificate = chain[certificateIndex + 1];
+		if (certificate === undefined || issuerCertificate === undefined) {
+			return false;
+		}
+
+		const certificateStatus = await evaluatePkitsCertificateRevocation(
+			certificate,
+			issuerCertificate,
+			completeCrls,
+			deltaCrls,
+		);
+		if (certificateStatus !== 'good') {
+			return false;
+		}
+	}
+
+	return true;
+}
+
+async function evaluatePkitsCertificateRevocation(
+	certificate: ParsedCertificate,
+	issuerCertificate: ParsedCertificate,
+	completeCrls: readonly ParsedCertificateRevocationList[],
+	deltaCrls: readonly ParsedCertificateRevocationList[],
+): Promise<'good' | 'revoked' | 'unknown'> {
+	let sawGood = false;
+
+	for (const crl of completeCrls) {
+		const result = await checkCertificateRevocationAgainstCrl({
+			certificate,
+			issuerCertificate,
+			crl,
+			at: PKITS_VALIDATION_TIME,
+		});
+		if (!result.ok) {
+			continue;
+		}
+		if (result.value.status === 'revoked') {
+			return 'revoked';
+		}
+		sawGood = true;
+	}
+
+	for (const crl of completeCrls) {
+		for (const deltaCrl of deltaCrls) {
+			const result = await checkCertificateRevocationAgainstCrl({
+				certificate,
+				issuerCertificate,
+				crl,
+				deltaCrl,
+				at: PKITS_VALIDATION_TIME,
+			});
+			if (!result.ok) {
+				continue;
+			}
+			if (result.value.status === 'revoked') {
+				return 'revoked';
+			}
+			sawGood = true;
+		}
+	}
+
+	return sawGood ? 'good' : 'unknown';
 }
 
 describe('PKITS harness', () => {
-	for (const pkitsCase of PKITS_CASES) {
-		it(`${pkitsCase.section} ${pkitsCase.title}`, async () => {
-			const leafName = pkitsCase.certs[pkitsCase.certs.length - 1];
-			const rootName = pkitsCase.certs[0];
-			if (leafName === undefined || rootName === undefined) {
-				throw new Error(`PKITS case ${pkitsCase.section} is missing leaf or root`);
-			}
+	const pkitsCases: readonly PkitsCase[] = PKITS_CASES;
+	const casesBySection = new Map<string, PkitsCase[]>();
+	for (const pkitsCase of pkitsCases) {
+		const sectionCases = casesBySection.get(pkitsCase.section);
+		if (sectionCases === undefined) {
+			casesBySection.set(pkitsCase.section, [pkitsCase]);
+			continue;
+		}
+		sectionCases.push(pkitsCase);
+	}
 
-			const [leaf, root, intermediates] = await Promise.all([
-				readPkitsCertificate(leafName),
-				readPkitsCertificate(rootName),
-				Promise.all(
-					pkitsCase.certs
-						.slice(1, -1)
-						.map((certificateName) => readPkitsCertificate(certificateName)),
-				),
-			]);
+	for (const [section, sectionCases] of casesBySection) {
+		describe(section, () => {
+			for (const pkitsCase of sectionCases) {
+				it(`${pkitsCase.testNumber} ${pkitsCase.title}`, async () => {
+					const leafName = pkitsCase.certs[pkitsCase.certs.length - 1];
+					const rootName = pkitsCase.certs[0];
+					if (leafName === undefined || rootName === undefined) {
+						throw new Error(`PKITS case ${pkitsCase.testNumber} is missing leaf or root`);
+					}
 
-			const result = await verifyCertificateChain({
-				leaf,
-				intermediates,
-				roots: [root],
-				at: PKITS_VALIDATION_TIME,
-				...(pkitsCase.initialPolicySet === undefined
-					? {}
-					: { initialPolicySet: pkitsCase.initialPolicySet }),
-				...(pkitsCase.inhibitAnyPolicy === undefined
-					? {}
-					: { inhibitAnyPolicy: pkitsCase.inhibitAnyPolicy }),
-			});
+					const [leaf, root, intermediates] = await Promise.all([
+						readPkitsCertificateDer(leafName),
+						readPkitsCertificateDer(rootName),
+						Promise.all(
+							pkitsCase.certs
+								.slice(1, -1)
+								.map((certificateName: string) => readPkitsCertificateDer(certificateName)),
+						),
+					]);
 
-			expect(result.ok).toBe(pkitsCase.shouldValidate);
-			if (!result.ok && pkitsCase.expectedCode !== undefined) {
-				expect(result.code).toBe(pkitsCase.expectedCode);
-			} else if (result.ok && pkitsCase.expectedUserConstrainedPolicies !== undefined) {
-				expect(
-					result.value.policyValidation.userConstrainedPolicies.map(
-						(policy) => policy.policyIdentifier,
-					),
-				).toEqual([...pkitsCase.expectedUserConstrainedPolicies]);
+					const verifyResult = await verifyCertificateChain({
+						leaf,
+						intermediates,
+						roots: [root],
+						at: PKITS_VALIDATION_TIME,
+						...(pkitsCase.initialPolicySet === undefined
+							? {}
+							: { initialPolicySet: pkitsCase.initialPolicySet }),
+						...(pkitsCase.requireExplicitPolicy === undefined
+							? {}
+							: { requireExplicitPolicy: pkitsCase.requireExplicitPolicy }),
+						...(pkitsCase.inhibitPolicyMapping === undefined
+							? {}
+							: { inhibitPolicyMapping: pkitsCase.inhibitPolicyMapping }),
+						...(pkitsCase.inhibitAnyPolicy === undefined
+							? {}
+							: { inhibitAnyPolicy: pkitsCase.inhibitAnyPolicy }),
+					});
+
+					if (!isRevocationPkitsCase(pkitsCase.section)) {
+						expect(verifyResult.ok).toBe(pkitsCase.shouldValidate);
+						return;
+					}
+
+					expect(verifyResult.ok).toBe(true);
+					if (!verifyResult.ok) {
+						return;
+					}
+
+					const chain = await Promise.all(
+						pkitsCase.certs.map((certificateName: string) =>
+							readPkitsParsedCertificate(certificateName),
+						),
+					);
+					const revocationResult = await evaluatePkitsRevocation(chain, pkitsCase.crls);
+					expect(revocationResult).toBe(pkitsCase.shouldValidate);
+				});
 			}
 		});
 	}

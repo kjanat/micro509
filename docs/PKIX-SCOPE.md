@@ -5,12 +5,12 @@ forward-work backlog for the PKIX-facing surface.
 
 ## Standards status
 
-| Area                       | Status    | Notes                                                                                                                                                                                                                                                    |
-| -------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| RFC 5280 path validation   | `partial` | core path validation, supported-form name constraints, initial subtree inputs, RFC 9618 policy processing, malformed-DER coverage, and focused PKITS coverage ship; revocation stays a separate API and broader conformance evidence is still incomplete |
-| RFC 6960 OCSP              | `partial` | request/response parsing, signature checks, responder binding/authorization, nonce/request matching, freshness checks, and full request coverage ship; local responder-policy acceptance is still incomplete                                             |
-| RFC 6125 service identity  | `partial` | `matchServiceIdentity()` ships DNS-ID, IP-ID, URI-ID, SRV-ID, wildcard, IDNA, and opt-in CN-compat checks; verification helpers still wire DNS/IP identities only                                                                                        |
-| RFC 9618 policy validation | `partial` | RFC 9618-style policy state, enforcement, outputs, and focused PKITS coverage ship; broader conformance evidence is still incomplete                                                                                                                     |
+| Area                       | Status    | Notes                                                                                                                                                                                                                                                          |
+| -------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| RFC 5280 path validation   | `partial` | core path validation, supported-form name constraints, initial subtree inputs, RFC 9618 policy processing, malformed-DER coverage, and broad PKITS harness coverage ship; revocation stays a separate API and broader conformance evidence is still incomplete |
+| RFC 6960 OCSP              | `partial` | request/response parsing, signature checks, responder binding/authorization, nonce/request matching, freshness checks, and full request coverage ship; local responder-policy acceptance is still incomplete                                                   |
+| RFC 6125 service identity  | `partial` | `matchServiceIdentity()` ships DNS-ID, IP-ID, URI-ID, SRV-ID, wildcard, IDNA, and opt-in CN-compat checks; verification helpers still wire DNS/IP identities only                                                                                              |
+| RFC 9618 policy validation | `partial` | RFC 9618-style policy state, enforcement, outputs, and broad PKITS harness coverage ship; broader conformance evidence is still incomplete                                                                                                                     |
 
 Current conformance evidence:
 
@@ -185,10 +185,10 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
 
 - [x] Add fixed RFC-style test vectors for builders, parsers, and validators.
 - [x] Add round-trip tests for certs, CSRs, names, and extensions.
-- [x] Add a focused PKITS harness for shipped path-validation claims. See [`docs/PKITS-HARNESS.md`](./PKITS-HARNESS.md) and [`test/pkits.test.ts`](../test/pkits.test.ts).
+- [x] Add a PKITS harness for shipped path-validation claims and gap reporting. See [`docs/PKITS-HARNESS.md`](./PKITS-HARNESS.md) and [`test/pkits.test.ts`](../test/pkits.test.ts).
 - [x] Add malformed DER / fuzz tests.
 - [x] Differential-test against at least one mature implementation. See [`docs/DIFF-HARNESS.md`](./DIFF-HARNESS.md) and [`test/differential.test.ts`](../test/differential.test.ts).
-- [ ] Run the validator against **NIST PKITS**, which NIST describes as a comprehensive X.509 path validation test suite for relying parties. (NIST Computer Security Resource Center[^x-509-path-validation])
+- [x] Run the validator against **NIST PKITS** as a gap-report harness, which NIST describes as a comprehensive X.509 path validation test suite for relying parties. (NIST Computer Security Resource Center[^x-509-path-validation])
 
 ## Recommended claim language
 
@@ -248,7 +248,7 @@ The main monster under the bed is simple: **once you say “full RFC 5280,” yo
   - [ ] Add regressions for mixed `PrintableString`/`UTF8String`, Unicode normalization, case/space normalization, multi-valued RDN reordering, and subtree suffix matching.
   - Sources: [`docs/rfc/rfc5280.txt`](./rfc/rfc5280.txt), [`src/x509/parse.ts`](../src/x509/parse.ts), [`src/verify/verify.ts`](../src/verify/verify.ts), [`test/name-constraints.test.ts`](../test/name-constraints.test.ts).
 - [ ] Broaden conformance evidence before any RFC 5280 / RFC 9618 claim moves past `partial`.
-  - [ ] Run broader NIST PKITS coverage beyond the current focused harness.
+  - [x] Run broad NIST PKITS harness coverage from the mirrored BoringSSL corpus.
   - [ ] Keep policy and name-constraint claim unlocks tied to fixture-backed regressions and differential evidence.
   - Sources: [`docs/PKITS-HARNESS.md`](./PKITS-HARNESS.md), [`test/pkits.test.ts`](../test/pkits.test.ts), [`test/policy.test.ts`](../test/policy.test.ts), [`test/differential.test.ts`](../test/differential.test.ts).
 
