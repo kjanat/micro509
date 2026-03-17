@@ -173,3 +173,4 @@ src/**/*.d.ts
 /site/.vitepress/dist/
 .playwright-cli
 .opencode/state/
+anal.md
