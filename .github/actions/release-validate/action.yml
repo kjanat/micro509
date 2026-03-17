@@ -11,7 +11,7 @@ outputs:
   is_tag: { description: Whether this is a version tag push (REF_NAME starts with "v"), value: "${{ steps.validate.outputs.is_tag }}" }
   prerelease: { description: Whether this is a prerelease version, value: "${{ steps.validate.outputs.prerelease }}" }
   is_stable: { description: Whether this is a stable tag release (is_tag && !prerelease), value: "${{ steps.validate.outputs.is_stable }}" }
-  mode: { description: Mode string - publish for tag pushes, dry-run for PRs, value: "${{ steps.validate.outputs.mode }}" }
+  mode: { description: "Mode string - publish for tag pushes, dry-run for PRs", value: "${{ steps.validate.outputs.mode }}" }
 
 runs:
   using: composite
