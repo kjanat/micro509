@@ -174,6 +174,18 @@ describe('keys', () => {
 		expect(await exportPkcs8Der(jwkPrivate)).toEqual(await original.exportPkcs8Der());
 	});
 
+	it('importPublicJwk rejects private-key material and algorithm mismatches', async () => {
+		const rsa = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
+		const publicJwk = await exportPublicJwk(rsa.publicKey);
+		const privateJwk = await exportPrivateJwk(rsa.privateKey);
+		expect(importPublicJwk(privateJwk, { kind: 'rsa' })).rejects.toThrow(
+			'Public JWK must not contain private key material',
+		);
+		expect(importPublicJwk(publicJwk, { kind: 'ecdsa', namedCurve: 'P-256' })).rejects.toThrow(
+			'Public JWK algorithm does not match requested import algorithm',
+		);
+	});
+
 	it('imports and exports keys via ecdsa and ed25519', async () => {
 		const ecP384 = await generateKeyPair({
 			kind: 'ecdsa',
@@ -428,6 +440,29 @@ describe('keys: coverage — malformed inputs', () => {
 		).rejects.toThrow('Malformed SubjectPublicKeyInfo');
 	});
 
+	it('importSpkiBase64 throws on invalid subjectPublicKey BIT STRING content', async () => {
+		const { sequence, objectIdentifier } = await import('#micro509/internal/asn1/der.ts');
+		const malformed = sequence([
+			sequence([objectIdentifier('1.2.840.113549.1.1.1')]),
+			Uint8Array.of(0x03, 0x02, 0x01, 0x01),
+		]);
+		expect(
+			importSpkiBase64(Buffer.from(malformed).toString('base64'), { kind: 'rsa' }),
+		).rejects.toThrow('Malformed SubjectPublicKeyInfo');
+	});
+
+	it('importSpki base64 and PEM preserve algorithm mismatch errors', async () => {
+		const rsa = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
+		const base64 = await exportBinaryBase64(rsa.publicKey);
+		const pem = await exportSpkiPem(rsa.publicKey);
+		expect(importSpkiBase64(base64, { kind: 'ecdsa', namedCurve: 'P-256' })).rejects.toThrow(
+			'SubjectPublicKeyInfo algorithm does not match requested import algorithm',
+		);
+		expect(importSpkiPem(pem, { kind: 'ecdsa', namedCurve: 'P-256' })).rejects.toThrow(
+			'SubjectPublicKeyInfo algorithm does not match requested import algorithm',
+		);
+	});
+
 	it('importPkcs8Base64 throws on malformed PKCS#8 private key', async () => {
 		expect(importPkcs8Base64('MAI=', { kind: 'rsa' })).rejects.toThrow(
 			'Malformed PKCS#8 private key',
@@ -462,6 +497,18 @@ describe('keys: coverage — malformed inputs', () => {
 		]);
 		expect(importPkcs8Der(malformed, { kind: 'rsa' })).rejects.toThrow(
 			'Malformed PKCS#8 private key',
+		);
+	});
+
+	it('importPkcs8 base64 and PEM preserve algorithm mismatch errors', async () => {
+		const rsa = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
+		const base64 = await exportBinaryBase64(rsa.privateKey);
+		const pem = await exportPkcs8Pem(rsa.privateKey);
+		expect(importPkcs8Base64(base64, { kind: 'ecdsa', namedCurve: 'P-256' })).rejects.toThrow(
+			'PKCS#8 private key algorithm does not match requested import algorithm',
+		);
+		expect(importPkcs8Pem(pem, { kind: 'ecdsa', namedCurve: 'P-256' })).rejects.toThrow(
+			'PKCS#8 private key algorithm does not match requested import algorithm',
 		);
 	});
 

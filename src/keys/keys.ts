@@ -7,6 +7,7 @@
 
 import {
 	decodeObjectIdentifier,
+	extractBitStringValue,
 	hexToBytes,
 	toArrayBuffer,
 	toHex,
@@ -323,14 +324,19 @@ export async function importSpkiDer(
 	der: Uint8Array,
 	algorithm: PublicKeyImportInput,
 ): Promise<CryptoKey> {
-	assertSpkiDer(der);
-	return getCrypto().subtle.importKey(
-		'spki',
-		new Uint8Array(der),
-		toImportAlgorithm(algorithm),
-		true,
-		['verify'],
-	);
+	const parsedSpki = parseSpkiDer(der);
+	assertSpkiMatchesRequestedAlgorithm(parsedSpki, algorithm);
+	try {
+		return await getCrypto().subtle.importKey(
+			'spki',
+			new Uint8Array(der),
+			toImportAlgorithm(algorithm),
+			true,
+			['verify'],
+		);
+	} catch {
+		throw new Error('Malformed SubjectPublicKeyInfo');
+	}
 }
 
 /** Import a public key from PEM-encoded SubjectPublicKeyInfo. */
@@ -346,14 +352,13 @@ export async function importSpkiBase64(
 	base64: string,
 	algorithm: PublicKeyImportInput,
 ): Promise<CryptoKey> {
+	let decoded: Uint8Array;
 	try {
-		return importSpkiDer(base64Decode(base64), algorithm);
-	} catch (error) {
-		if (error instanceof Error && error.message === 'Malformed SubjectPublicKeyInfo') {
-			throw error;
-		}
+		decoded = base64Decode(base64);
+	} catch {
 		throw new Error('Invalid base64 SubjectPublicKeyInfo');
 	}
+	return importSpkiDer(decoded, algorithm);
 }
 
 /** Import a private key from DER-encoded PKCS#8 PrivateKeyInfo. */
@@ -361,18 +366,24 @@ export async function importPkcs8Der(
 	der: Uint8Array,
 	algorithm: PrivateKeyImportInput,
 ): Promise<CryptoKey> {
+	let parsedPrivateKey: ReturnType<typeof parsePkcs8PrivateKey>;
 	try {
-		parsePkcs8PrivateKey(der);
+		parsedPrivateKey = parsePkcs8PrivateKey(der);
 	} catch {
 		throw new Error('Malformed PKCS#8 private key');
 	}
-	return getCrypto().subtle.importKey(
-		'pkcs8',
-		new Uint8Array(der),
-		toImportAlgorithm(algorithm),
-		true,
-		['sign'],
-	);
+	assertPkcs8MatchesRequestedAlgorithm(parsedPrivateKey, algorithm);
+	try {
+		return await getCrypto().subtle.importKey(
+			'pkcs8',
+			new Uint8Array(der),
+			toImportAlgorithm(algorithm),
+			true,
+			['sign'],
+		);
+	} catch {
+		throw new Error('Malformed PKCS#8 private key');
+	}
 }
 
 /**
@@ -470,14 +481,13 @@ export async function importPkcs8Base64(
 	base64: string,
 	algorithm: PrivateKeyImportInput,
 ): Promise<CryptoKey> {
+	let decoded: Uint8Array;
 	try {
-		return importPkcs8Der(base64Decode(base64), algorithm);
-	} catch (error) {
-		if (error instanceof Error && error.message === 'Malformed PKCS#8 private key') {
-			throw error;
-		}
+		decoded = base64Decode(base64);
+	} catch {
 		throw new Error('Invalid base64 PKCS#8 private key');
 	}
+	return importPkcs8Der(decoded, algorithm);
 }
 
 /** Import an EC private key from DER-encoded SEC 1 ECPrivateKey. */
@@ -511,7 +521,14 @@ export async function importPublicJwk(
 	jwk: JsonWebKey,
 	algorithm: PublicKeyImportInput,
 ): Promise<CryptoKey> {
-	return getCrypto().subtle.importKey('jwk', jwk, toImportAlgorithm(algorithm), true, ['verify']);
+	assertPublicJwkMatchesRequestedAlgorithm(jwk, algorithm);
+	try {
+		return await getCrypto().subtle.importKey('jwk', jwk, toImportAlgorithm(algorithm), true, [
+			'verify',
+		]);
+	} catch {
+		throw new Error('Malformed public JWK');
+	}
 }
 
 /**
@@ -578,25 +595,40 @@ function parsePkcs8PrivateKey(der: Uint8Array): {
 	readonly algorithmOid: string;
 	/** Optional algorithm parameter OID (e.g. named curve for EC keys). */
 	readonly parametersOid?: string;
+	/** Optional algorithm parameter tag. */
+	readonly parametersTag?: number;
 	/** Raw DER of the inner private key (PKCS#1 for RSA, SEC 1 for EC). */
 	readonly privateKeyDer: Uint8Array;
 } {
 	const children = readSequenceChildren(der);
 	const algorithm = children[1];
 	const privateKey = children[2];
-	if (algorithm === undefined || privateKey === undefined || privateKey.tag !== 0x04) {
+	if (
+		children.length < 3 ||
+		children.length > 4 ||
+		algorithm === undefined ||
+		algorithm.tag !== 0x30 ||
+		privateKey === undefined ||
+		privateKey.tag !== 0x04
+	) {
 		throw new Error('Malformed PKCS#8 private key');
 	}
 	const algorithmChildren = readSequenceChildren(
 		der.slice(algorithm.start - algorithm.headerLength, algorithm.end),
 	);
 	const algorithmOid = algorithmChildren[0];
-	if (algorithmOid === undefined || algorithmOid.tag !== 0x06) {
+	if (
+		algorithmOid === undefined ||
+		algorithmOid.tag !== 0x06 ||
+		algorithmChildren.length < 1 ||
+		algorithmChildren.length > 2
+	) {
 		throw new Error('Malformed PKCS#8 private key');
 	}
 	const parameters = algorithmChildren[1];
 	return {
 		algorithmOid: decodeObjectIdentifier(algorithmOid.value),
+		...(parameters === undefined ? {} : { parametersTag: parameters.tag }),
 		...(parameters?.tag === 0x06
 			? { parametersOid: decodeObjectIdentifier(parameters.value) }
 			: {}),
@@ -844,7 +876,11 @@ function parseTraditionalPem(pem: string): {
 	return { label, headers, base64Body: body };
 }
 
-function assertSpkiDer(der: Uint8Array): void {
+function parseSpkiDer(der: Uint8Array): {
+	readonly algorithmOid: string;
+	readonly parametersOid?: string;
+	readonly parametersTag?: number;
+} {
 	try {
 		const children = readSequenceChildren(der);
 		if (children.length !== 2) {
@@ -854,20 +890,145 @@ function assertSpkiDer(der: Uint8Array): void {
 		const subjectPublicKey = children[1];
 		if (
 			algorithm === undefined ||
+			algorithm.tag !== 0x30 ||
 			subjectPublicKey === undefined ||
 			subjectPublicKey.tag !== 0x03
 		) {
 			throw new Error('Malformed SubjectPublicKeyInfo');
 		}
+		extractBitStringValue(subjectPublicKey);
 		const algorithmChildren = readSequenceChildren(
 			der.slice(algorithm.start - algorithm.headerLength, algorithm.end),
 		);
 		const algorithmOid = algorithmChildren[0];
-		if (algorithmOid === undefined || algorithmOid.tag !== 0x06) {
+		if (
+			algorithmOid === undefined ||
+			algorithmOid.tag !== 0x06 ||
+			algorithmChildren.length < 1 ||
+			algorithmChildren.length > 2
+		) {
 			throw new Error('Malformed SubjectPublicKeyInfo');
 		}
-		decodeObjectIdentifier(algorithmOid.value);
+		const parameters = algorithmChildren[1];
+		return {
+			algorithmOid: decodeObjectIdentifier(algorithmOid.value),
+			...(parameters === undefined ? {} : { parametersTag: parameters.tag }),
+			...(parameters?.tag === 0x06
+				? { parametersOid: decodeObjectIdentifier(parameters.value) }
+				: {}),
+		};
 	} catch {
 		throw new Error('Malformed SubjectPublicKeyInfo');
+	}
+}
+
+function assertSpkiMatchesRequestedAlgorithm(
+	parsedSpki: {
+		readonly algorithmOid: string;
+		readonly parametersOid?: string;
+		readonly parametersTag?: number;
+	},
+	algorithm: PublicKeyImportInput,
+): void {
+	switch (algorithm.kind) {
+		case 'rsa':
+			if (
+				parsedSpki.algorithmOid !== OIDS.rsaEncryption ||
+				(parsedSpki.parametersTag !== undefined && parsedSpki.parametersTag !== 0x05)
+			) {
+				throw new Error('SubjectPublicKeyInfo algorithm does not match requested import algorithm');
+			}
+			return;
+		case 'ecdsa':
+			if (
+				parsedSpki.algorithmOid !== OIDS.ecPublicKey ||
+				parsedSpki.parametersTag !== 0x06 ||
+				parsedSpki.parametersOid !== namedCurveToOid(algorithm.namedCurve)
+			) {
+				throw new Error('SubjectPublicKeyInfo algorithm does not match requested import algorithm');
+			}
+			return;
+		case 'ed25519':
+			if (parsedSpki.algorithmOid !== OIDS.ed25519 || parsedSpki.parametersTag !== undefined) {
+				throw new Error('SubjectPublicKeyInfo algorithm does not match requested import algorithm');
+			}
+			return;
+	}
+}
+
+function assertPkcs8MatchesRequestedAlgorithm(
+	parsedPrivateKey: {
+		readonly algorithmOid: string;
+		readonly parametersOid?: string;
+		readonly parametersTag?: number;
+	},
+	algorithm: PrivateKeyImportInput,
+): void {
+	switch (algorithm.kind) {
+		case 'rsa':
+			if (
+				parsedPrivateKey.algorithmOid !== OIDS.rsaEncryption ||
+				(parsedPrivateKey.parametersTag !== undefined && parsedPrivateKey.parametersTag !== 0x05)
+			) {
+				throw new Error('PKCS#8 private key algorithm does not match requested import algorithm');
+			}
+			return;
+		case 'ecdsa':
+			if (
+				parsedPrivateKey.algorithmOid !== OIDS.ecPublicKey ||
+				parsedPrivateKey.parametersTag !== 0x06 ||
+				parsedPrivateKey.parametersOid !== namedCurveToOid(algorithm.namedCurve)
+			) {
+				throw new Error('PKCS#8 private key algorithm does not match requested import algorithm');
+			}
+			return;
+		case 'ed25519':
+			if (
+				parsedPrivateKey.algorithmOid !== OIDS.ed25519 ||
+				parsedPrivateKey.parametersTag !== undefined
+			) {
+				throw new Error('PKCS#8 private key algorithm does not match requested import algorithm');
+			}
+			return;
+	}
+}
+
+function assertPublicJwkMatchesRequestedAlgorithm(
+	jwk: JsonWebKey,
+	algorithm: PublicKeyImportInput,
+): void {
+	if (
+		jwk.k !== undefined ||
+		jwk.d !== undefined ||
+		jwk.p !== undefined ||
+		jwk.q !== undefined ||
+		jwk.dp !== undefined ||
+		jwk.dq !== undefined ||
+		jwk.qi !== undefined ||
+		jwk.oth !== undefined
+	) {
+		throw new Error('Public JWK must not contain private key material');
+	}
+	switch (algorithm.kind) {
+		case 'rsa':
+			if (jwk.kty !== 'RSA' || typeof jwk.n !== 'string' || typeof jwk.e !== 'string') {
+				throw new Error('Public JWK algorithm does not match requested import algorithm');
+			}
+			return;
+		case 'ecdsa':
+			if (
+				jwk.kty !== 'EC' ||
+				jwk.crv !== algorithm.namedCurve ||
+				typeof jwk.x !== 'string' ||
+				typeof jwk.y !== 'string'
+			) {
+				throw new Error('Public JWK algorithm does not match requested import algorithm');
+			}
+			return;
+		case 'ed25519':
+			if (jwk.kty !== 'OKP' || jwk.crv !== 'Ed25519' || typeof jwk.x !== 'string') {
+				throw new Error('Public JWK algorithm does not match requested import algorithm');
+			}
+			return;
 	}
 }
