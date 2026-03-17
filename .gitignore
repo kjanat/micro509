@@ -164,6 +164,11 @@ yarn.lock
 src/**/*.js
 src/**/*.d.ts
 /docs/deno/
+/site/api/*.md
+!/site/api/index.md
+/site/api/full/*.md
+!/site/api/full/index.md
+/site/api/typedoc-sidebar.json
 /site/.vitepress/cache/
 /site/.vitepress/dist/
 .playwright-cli

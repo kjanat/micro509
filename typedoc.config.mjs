@@ -9,7 +9,7 @@ const config = {
 	githubPages: false, // This inserts a .nojekyll file, but we deploy with an Action, so we don't need it.
 	entryPoints: ['src/**/index.ts'],
 	entryPointStrategy: 'resolve',
-	tsconfig: './tsconfig.src.json',
+	tsconfig: 'tsconfig.src.json',
 	out: 'site/api',
 	gitRevision: 'master',
 	excludePrivate: true,
