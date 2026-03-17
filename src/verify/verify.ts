@@ -57,6 +57,7 @@ import type {
 	ParsedName,
 } from '#micro509/x509/parse.ts';
 import {
+	parseCertificateDer,
 	parseCertificateSigningRequestDer,
 	parseCertificateSigningRequestPem,
 } from '#micro509/x509/parse.ts';
@@ -807,7 +808,22 @@ async function validateCandidatePathRaw(
 export async function validateCandidatePath(
 	input: ValidateCandidatePathInput,
 ): Promise<ValidateCandidatePathResult> {
-	const result = await validateCandidatePathRaw(input);
+	let normalizedChain: readonly ParsedCertificate[];
+	try {
+		normalizedChain = normalizeValidationChain(input.chain);
+	} catch (error) {
+		return verifyFailureResult(
+			failure(
+				'signature_invalid',
+				'certificate input is malformed',
+				0,
+				detail({
+					actual: error instanceof Error ? error.message : 'certificate input is malformed',
+				}),
+			),
+		);
+	}
+	const result = await validateCandidatePathRaw({ ...input, chain: normalizedChain });
 	return result.ok
 		? validateCandidatePathSuccessResult(result.policyValidation)
 		: verifyFailureResult(result);
@@ -991,7 +1007,13 @@ export function checkExtendedKeyUsage(
 	chain: readonly ParsedCertificate[],
 	purpose: EkuCheckPurpose,
 ): EkuCheckResult {
-	const leaf = chain[0];
+	let normalizedChain: readonly ParsedCertificate[];
+	try {
+		normalizedChain = normalizeValidationChain(chain);
+	} catch {
+		return ekuCheckFailureResult('leaf_eku_missing', 'certificate input is malformed', 0);
+	}
+	const leaf = normalizedChain[0];
 	if (leaf === undefined) {
 		return ekuCheckFailureResult('leaf_eku_missing', 'chain is empty', 0);
 	}
@@ -1002,8 +1024,8 @@ export function checkExtendedKeyUsage(
 			0,
 		);
 	}
-	for (let index = 1; index < chain.length; index += 1) {
-		const intermediate = chain[index];
+	for (let index = 1; index < normalizedChain.length; index += 1) {
+		const intermediate = normalizedChain[index];
 		if (intermediate === undefined) {
 			continue;
 		}
@@ -1027,16 +1049,22 @@ export function checkExtendedKeyUsage(
 
 /** Extracts a {@linkcode TrustAnchor} from a parsed certificate, copying the subject, SPKI, and key identifiers. */
 export function trustAnchorFromCertificate(certificate: ParsedCertificate): TrustAnchor {
+	let normalizedCertificate: ParsedCertificate;
+	try {
+		normalizedCertificate = reparseCertificateForTrust(certificate);
+	} catch {
+		throw new Error('certificate input is malformed');
+	}
 	return {
-		subject: certificate.subject,
-		subjectPublicKeyInfoDer: certificate.subjectPublicKeyInfoDer,
-		publicKeyAlgorithmOid: certificate.publicKeyAlgorithmOid,
-		...(certificate.publicKeyParametersOid === undefined
+		subject: normalizedCertificate.subject,
+		subjectPublicKeyInfoDer: normalizedCertificate.subjectPublicKeyInfoDer,
+		publicKeyAlgorithmOid: normalizedCertificate.publicKeyAlgorithmOid,
+		...(normalizedCertificate.publicKeyParametersOid === undefined
 			? {}
-			: { publicKeyParametersOid: certificate.publicKeyParametersOid }),
-		...(certificate.subjectKeyIdentifier === undefined
+			: { publicKeyParametersOid: normalizedCertificate.publicKeyParametersOid }),
+		...(normalizedCertificate.subjectKeyIdentifier === undefined
 			? {}
-			: { subjectKeyIdentifier: certificate.subjectKeyIdentifier }),
+			: { subjectKeyIdentifier: normalizedCertificate.subjectKeyIdentifier }),
 	};
 }
 
@@ -1211,7 +1239,10 @@ function validateServiceIdentity(
 	if (!malformedInput.ok) {
 		return malformedInput;
 	}
-	const result = matchServiceIdentity({ certificate: leaf, serviceIdentity });
+	const result = matchServiceIdentity({
+		certificate: reparseCertificateForTrust(leaf),
+		serviceIdentity,
+	});
 	if (result.ok) {
 		return { ok: true };
 	}
@@ -1356,6 +1387,16 @@ function validateCandidatePathSuccessResult(
 /** Describes a date in ISO format, or `'<invalid date>'` if invalid. */
 function describeDateTime(value: Date): string {
 	return Number.isNaN(value.getTime()) ? '<invalid date>' : value.toISOString();
+}
+
+function normalizeValidationChain(
+	chain: readonly ParsedCertificate[],
+): readonly ParsedCertificate[] {
+	return chain.map(reparseCertificateForTrust);
+}
+
+function reparseCertificateForTrust(certificate: ParsedCertificate): ParsedCertificate {
+	return parseCertificateDer(new Uint8Array(certificate.der));
 }
 
 /** Returns `true` if the value is a non-negative integer (including zero). */

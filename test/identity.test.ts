@@ -58,7 +58,7 @@ describe('identity boundary', () => {
 		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
 	});
 
-	it('rejects malformed IP SANs instead of throwing during identity matching', async () => {
+	it('ignores tampered malformed IP SANs during identity matching', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Identity CA' },
 			extensions: {
@@ -92,6 +92,51 @@ describe('identity boundary', () => {
 			matchServiceIdentity({
 				certificate: tamperedCertificate,
 				serviceIdentity: { type: 'ip', value: '2001:db8::1' },
+			}),
+		).toEqual({ ok: true, value: undefined });
+	});
+
+	it('ignores tampered SAN additions in ParsedCertificate identity matching', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Identity CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Identity CA' },
+			subject: { commonName: 'different.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['serverAuth'],
+			},
+		});
+		const certificate = parseCertificatePem(leaf.pem);
+		const tamperedCertificate = {
+			...certificate,
+			subjectAltNames: [{ type: 'dns' as const, value: 'forged.example' }],
+		};
+
+		expect(
+			matchServiceIdentity({
+				certificate: tamperedCertificate,
+				serviceIdentity: { type: 'dns', value: 'forged.example' },
+			}),
+		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
+	});
+
+	it('fails closed for malformed ParsedCertificate DER during identity matching', async () => {
+		const { leaf } = await issueChain();
+		const certificate = parseCertificatePem(leaf.pem);
+		expect(
+			matchServiceIdentity({
+				certificate: { ...certificate, der: Uint8Array.of(0xff, 0xff) },
+				serviceIdentity: { type: 'dns', value: 'verify.example' },
 			}),
 		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
 	});

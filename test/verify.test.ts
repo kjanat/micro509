@@ -2034,11 +2034,7 @@ describe('chain verification', () => {
 			],
 			allowSelfSignedLeaf: true,
 		});
-		expect(result).toMatchObject({
-			ok: false,
-			code: 'unsupported_name_constraints',
-			details: { actual: 'otherName' },
-		});
+		expect(result.ok).toBe(true);
 	});
 
 	it('checks subject emailAddress against rfc822Name constraints when no SAN email', async () => {
@@ -3972,7 +3968,7 @@ describe('coverage: verify.ts internal edge cases', () => {
 
 	// --- extractSequenceContent error paths (lines 1739-1760) ---
 
-	it('directoryName constraint with too-short derHex returns false (line 1746)', async () => {
+	it('ignores tampered directoryName constraint with too-short derHex (line 1746)', async () => {
 		const { parsedRoot, parsedLeaf } = await makeSelfSignedChain();
 		// Tamper root: add directoryName permittedSubtrees with derHex too short (<4 chars)
 		const tamperedRoot = {
@@ -3985,11 +3981,10 @@ describe('coverage: verify.ts internal edge cases', () => {
 			chain: [parsedLeaf, tamperedRoot],
 			allowSelfSignedLeaf: true,
 		});
-		expect(result.ok).toBe(false);
-		if (!result.ok) expect(result.code).toBe('name_constraints_violated');
+		expect(result.ok).toBe(true);
 	});
 
-	it('directoryName constraint with non-SEQUENCE tag returns false (line 1750)', async () => {
+	it('ignores tampered directoryName constraint with non-SEQUENCE tag (line 1750)', async () => {
 		const { parsedRoot, parsedLeaf } = await makeSelfSignedChain();
 		// Tag 0x31 (SET) instead of 0x30 (SEQUENCE)
 		const tamperedRoot = {
@@ -4002,11 +3997,10 @@ describe('coverage: verify.ts internal edge cases', () => {
 			chain: [parsedLeaf, tamperedRoot],
 			allowSelfSignedLeaf: true,
 		});
-		expect(result.ok).toBe(false);
-		if (!result.ok) expect(result.code).toBe('name_constraints_violated');
+		expect(result.ok).toBe(true);
 	});
 
-	it('directoryName constraint with NaN length byte returns false (line 1754)', async () => {
+	it('ignores tampered directoryName constraint with NaN length byte (line 1754)', async () => {
 		const { parsedRoot, parsedLeaf } = await makeSelfSignedChain();
 		// 0x30 tag but "zz" as length byte → NaN
 		const tamperedRoot = {
@@ -4019,11 +4013,10 @@ describe('coverage: verify.ts internal edge cases', () => {
 			chain: [parsedLeaf, tamperedRoot],
 			allowSelfSignedLeaf: true,
 		});
-		expect(result.ok).toBe(false);
-		if (!result.ok) expect(result.code).toBe('name_constraints_violated');
+		expect(result.ok).toBe(true);
 	});
 
-	it('directoryName constraint with long-form length (line 1758-1760)', async () => {
+	it('ignores tampered directoryName constraint with long-form length (line 1758-1760)', async () => {
 		const { parsedRoot, parsedLeaf } = await makeSelfSignedChain();
 		// 0x30 tag, 0x81 0x04 (long-form length = 4 bytes), then content
 		// This is valid DER, but the constraint content won't match the leaf subject
@@ -4037,8 +4030,7 @@ describe('coverage: verify.ts internal edge cases', () => {
 			chain: [parsedLeaf, tamperedRoot],
 			allowSelfSignedLeaf: true,
 		});
-		expect(result.ok).toBe(false);
-		if (!result.ok) expect(result.code).toBe('name_constraints_violated');
+		expect(result.ok).toBe(true);
 	});
 
 	it('directoryName excluded constraint with malformed derHex (line 1739)', async () => {
@@ -4065,7 +4057,7 @@ describe('coverage: verify.ts internal edge cases', () => {
 		expect(result.ok).toBe(true);
 	});
 
-	it('subject with malformed derHex fails directoryName prefix check (line 1739 subject branch)', async () => {
+	it('ignores tampered subject derHex during directoryName checks (line 1739 subject branch)', async () => {
 		const { parsedRoot, parsedLeaf } = await makeSelfSignedChain();
 		// Tamper the leaf's subject.derHex to be malformed
 		const tamperedLeaf = {
@@ -4087,8 +4079,7 @@ describe('coverage: verify.ts internal edge cases', () => {
 			chain: [tamperedLeaf, tamperedRoot],
 			allowSelfSignedLeaf: true,
 		});
-		expect(result.ok).toBe(false);
-		if (!result.ok) expect(result.code).toBe('name_constraints_violated');
+		expect(result.ok).toBe(true);
 	});
 
 	it('ignores malformed pathLength values in tampered ParsedCertificate input', async () => {
@@ -4104,7 +4095,7 @@ describe('coverage: verify.ts internal edge cases', () => {
 		expect(result.ok).toBe(true);
 	});
 
-	it('returns typed expiry failure for malformed validity dates in tampered ParsedCertificate input', async () => {
+	it('ignores tampered validity dates in ParsedCertificate input', async () => {
 		const { parsedRoot, parsedLeaf } = await makeSelfSignedChain();
 		const tamperedLeaf = {
 			...parsedLeaf,
@@ -4114,15 +4105,122 @@ describe('coverage: verify.ts internal edge cases', () => {
 			chain: [tamperedLeaf, parsedRoot],
 			allowSelfSignedLeaf: true,
 		});
-		expect(result).toMatchObject({ ok: false, code: 'certificate_expired' });
-		if (!result.ok) {
-			expect(result.details?.actual).toContain('<invalid date>');
-		}
+		expect(result.ok).toBe(true);
+	});
+
+	it('ignores tampered EKU additions in ParsedCertificate validation input', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Tampered EKU Root' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Tampered EKU Root' },
+			subject: { commonName: 'tampered-eku.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['clientAuth'],
+				subjectAltNames: [{ type: 'dns', value: 'tampered-eku.example' }],
+			},
+		});
+		const parsedRoot = parseCertificatePem(root.certificate.pem);
+		const parsedLeaf = parseCertificatePem(leaf.pem);
+		const result = await validateCandidatePath({
+			chain: [{ ...parsedLeaf, extendedKeyUsage: ['serverAuth' as const] }, parsedRoot],
+			purpose: 'serverAuth',
+		});
+		expect(result).toMatchObject({ ok: false, code: 'extended_key_usage_invalid' });
+	});
+
+	it('checkExtendedKeyUsage ignores tampered ParsedCertificate EKU fields', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Tampered EKU Check Root' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Tampered EKU Check Root' },
+			subject: { commonName: 'tampered-eku-check.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['clientAuth'],
+			},
+		});
+		const parsedRoot = parseCertificatePem(root.certificate.pem);
+		const parsedLeaf = parseCertificatePem(leaf.pem);
+		const result = checkExtendedKeyUsage(
+			[{ ...parsedLeaf, extendedKeyUsage: ['serverAuth' as const] }, parsedRoot],
+			'serverAuth',
+		);
+		expect(result).toMatchObject({ ok: false, code: 'leaf_eku_missing' });
+	});
+
+	it('trustAnchorFromCertificate reparses DER instead of trusting mutated fields', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Anchor Root' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const parsedRoot = parseCertificatePem(root.certificate.pem);
+		const anchor = trustAnchorFromCertificate({
+			...parsedRoot,
+			subject: {
+				...parsedRoot.subject,
+				values: { ...parsedRoot.subject.values, commonName: 'forged-anchor.example' },
+			},
+		});
+		expect(anchor.subject.values.commonName).toBe(parsedRoot.subject.values.commonName);
+	});
+
+	it('trustAnchorFromCertificate throws stable errors for malformed ParsedCertificate DER', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Anchor Error Root' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const parsedRoot = parseCertificatePem(root.certificate.pem);
+		expect(() =>
+			trustAnchorFromCertificate({ ...parsedRoot, der: Uint8Array.of(0xff, 0xff) }),
+		).toThrow('certificate input is malformed');
+	});
+
+	it('validateCandidatePath fails closed for malformed ParsedCertificate DER', async () => {
+		const { parsedRoot, parsedLeaf } = await makeSelfSignedChain();
+		const result = await validateCandidatePath({
+			chain: [{ ...parsedLeaf, der: Uint8Array.of(0xff, 0xff) }, parsedRoot],
+			allowSelfSignedLeaf: true,
+		});
+		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
+	});
+
+	it('checkExtendedKeyUsage fails closed for malformed ParsedCertificate DER', async () => {
+		const { parsedRoot, parsedLeaf } = await makeSelfSignedChain();
+		const result = checkExtendedKeyUsage(
+			[{ ...parsedLeaf, der: Uint8Array.of(0xff, 0xff) }, parsedRoot],
+			'serverAuth',
+		);
+		expect(result).toMatchObject({ ok: false, code: 'leaf_eku_missing' });
 	});
 
 	// --- parseIpAddressToBytes error paths (lines 1769, 1775) ---
 
-	it('rejects malformed IP SANs with wrong segment count (line 1769)', async () => {
+	it('ignores tampered malformed IP SANs with wrong segment count (line 1769)', async () => {
 		const { parsedRoot, parsedLeaf } = await makeSelfSignedChain();
 		// Tamper leaf to have an IP SAN with invalid value (3 segments)
 		const tamperedLeaf = {
@@ -4147,10 +4245,10 @@ describe('coverage: verify.ts internal edge cases', () => {
 			chain: [tamperedLeaf, tamperedRoot],
 			allowSelfSignedLeaf: true,
 		});
-		expect(result).toMatchObject({ ok: false, code: 'name_constraints_violated' });
+		expect(result.ok).toBe(true);
 	});
 
-	it('rejects malformed IP SANs with non-numeric segments (line 1775)', async () => {
+	it('ignores tampered malformed IP SANs with non-numeric segments (line 1775)', async () => {
 		const { parsedRoot, parsedLeaf } = await makeSelfSignedChain();
 		const tamperedLeaf = {
 			...parsedLeaf,
@@ -4174,10 +4272,10 @@ describe('coverage: verify.ts internal edge cases', () => {
 			chain: [tamperedLeaf, tamperedRoot],
 			allowSelfSignedLeaf: true,
 		});
-		expect(result).toMatchObject({ ok: false, code: 'name_constraints_violated' });
+		expect(result.ok).toBe(true);
 	});
 
-	it('rejects malformed IP SANs with out-of-range segments (line 1775)', async () => {
+	it('ignores tampered malformed IP SANs with out-of-range segments (line 1775)', async () => {
 		const { parsedRoot, parsedLeaf } = await makeSelfSignedChain();
 		const tamperedLeaf = {
 			...parsedLeaf,
@@ -4201,7 +4299,7 @@ describe('coverage: verify.ts internal edge cases', () => {
 			chain: [tamperedLeaf, tamperedRoot],
 			allowSelfSignedLeaf: true,
 		});
-		expect(result).toMatchObject({ ok: false, code: 'name_constraints_violated' });
+		expect(result.ok).toBe(true);
 	});
 
 	// --- rankIssuerCandidates tiebreakers (lines 1078-1088) ---
