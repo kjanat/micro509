@@ -102,10 +102,10 @@ import {
 const pem = `-----BEGIN CERTIFICATE-----
 ...
 -----END CERTIFICATE-----`;
-const der = pemDecode(pem);
+const der = pemDecode('CERTIFICATE', pem);
 
 // Encode DER as PEM
-const pemEncoded = pemEncode(der, 'CERTIFICATE');
+const pemEncoded = pemEncode('CERTIFICATE', der);
 
 // Split a multi-block PEM file
 const blocks = splitPemBlocks(multiPem);

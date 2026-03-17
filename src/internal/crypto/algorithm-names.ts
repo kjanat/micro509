@@ -32,6 +32,8 @@ export function describeSignatureAlgorithm(
 	parametersDer: Uint8Array | undefined,
 ): string {
 	switch (oid) {
+		case OIDS.sha1WithRSAEncryption:
+			return 'RSA PKCS#1 v1.5 with SHA-1';
 		case OIDS.sha256WithRSAEncryption:
 			return 'RSA PKCS#1 v1.5 with SHA-256';
 		case OIDS.sha384WithRSAEncryption:
@@ -42,6 +44,8 @@ export function describeSignatureAlgorithm(
 			const parsed = parseRsaPssParameters(parametersDer);
 			return parsed.ok ? `RSA-PSS with ${parsed.value.hash}` : 'RSA-PSS';
 		}
+		case OIDS.ecdsaWithSHA1:
+			return 'ECDSA with SHA-1';
 		case OIDS.ecdsaWithSHA256:
 			return 'ECDSA with SHA-256';
 		case OIDS.ecdsaWithSHA384:

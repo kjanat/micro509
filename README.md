@@ -119,7 +119,7 @@ Verify a chain:
 ```ts
 import { verifyCertificateChain } from 'micro509';
 
-// Assuming you have leaf, intermediate, and root certificates from previous examples
+// Assuming you have a self-signed certificate used as both leaf and root; no intermediates
 const result = await verifyCertificateChain({
   leaf: certificate.pem,
   intermediates: [],

@@ -66,7 +66,7 @@ import {
   validateOcspResponse,
 } from 'micro509/revocation';
 
-const response = parseOcspResponseDer(der);
+const response = parseOcspResponseDer(ocspDer);
 
 const result = await validateOcspResponse({
   response,

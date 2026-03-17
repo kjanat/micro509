@@ -234,7 +234,12 @@ export function hexToBytes(value: string): Uint8Array {
 	const normalized = value.length % 2 === 0 ? value : `0${value}`;
 	const out = new Uint8Array(normalized.length / 2);
 	for (let index = 0; index < out.length; index += 1) {
-		out[index] = Number.parseInt(normalized.slice(index * 2, index * 2 + 2), 16);
+		const chunk = normalized.slice(index * 2, index * 2 + 2);
+		if (!/^[0-9a-fA-F]{2}$/.test(chunk)) {
+			throw new Error(`Invalid hex byte: ${chunk}`);
+		}
+		const parsed = Number.parseInt(chunk, 16);
+		out[index] = parsed;
 	}
 	return out;
 }

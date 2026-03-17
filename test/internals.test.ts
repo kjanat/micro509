@@ -15,6 +15,7 @@ import {
 	decodeObjectIdentifier,
 	decodeString,
 	extractBitStringValue,
+	hexToBytes,
 	parseTime,
 	requireElement,
 } from '#micro509/internal/asn1/asn1.ts';
@@ -43,6 +44,10 @@ import {
 	utcTime,
 } from '#micro509/internal/asn1/der.ts';
 import { OIDS } from '#micro509/internal/asn1/oids.ts';
+import {
+	describeHashAlgorithm,
+	describeSignatureAlgorithm,
+} from '#micro509/internal/crypto/algorithm-names.ts';
 import { parsePbes2AlgorithmIdentifier } from '#micro509/internal/crypto/pbes2.ts';
 import {
 	encodeRsaPssParameters,
@@ -331,6 +336,11 @@ describe('asn1 decoding', () => {
 		expect(() => decodeBoolean(Uint8Array.of(0x01))).toThrow('DER encoding');
 		expect(decodeBoolean(Uint8Array.of(0x00))).toBe(false);
 		expect(decodeBoolean(Uint8Array.of(0xff))).toBe(true);
+	});
+
+	it('hexToBytes rejects malformed hex input', () => {
+		expect(() => hexToBytes('zz')).toThrow('Invalid hex byte: zz');
+		expect(() => hexToBytes('1g')).toThrow('Invalid hex byte: 1g');
 	});
 });
 
@@ -646,6 +656,14 @@ describe('extensions encoding', () => {
 // ---------------------------------------------------------------------------
 
 describe('signing.ts edge cases', () => {
+	it('describeSignatureAlgorithm recognizes SHA-1 signature OIDs', () => {
+		expect(describeSignatureAlgorithm(OIDS.sha1WithRSAEncryption, undefined)).toBe(
+			'RSA PKCS#1 v1.5 with SHA-1',
+		);
+		expect(describeSignatureAlgorithm(OIDS.ecdsaWithSHA1, undefined)).toBe('ECDSA with SHA-1');
+		expect(describeHashAlgorithm(OIDS.sha1)).toBe('SHA-1');
+	});
+
 	it('getSignatureAlgorithm throws for unsupported algorithm name', async () => {
 		const { generateKeyPair: genKp } = await import('#micro509');
 		// Use an ECDSA key but manually check the algorithm name guard
