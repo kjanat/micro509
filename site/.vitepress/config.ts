@@ -1,3 +1,4 @@
+import { $ } from 'bun';
 import type { Plugin } from 'vite';
 import { robotsTxt } from 'vite-robots-txt';
 import svgToIco from 'vite-svg-to-ico';
@@ -7,7 +8,10 @@ import pkg from '../../package.json' with { type: 'json' };
 import typedocSidebar from '../api/typedoc-sidebar.json' with { type: 'json' };
 
 const getGitBranch = async (): Promise<string> => {
-	return Bun.$`git branch --show-current`.text();
+	return (await $`git branch --show-current`.text()).trim();
+};
+const getGitCommitHash = async (length: number = 7): Promise<string> => {
+	return (await $`git rev-parse HEAD`.text()).trim().slice(0, length);
 };
 
 /**
@@ -15,7 +19,7 @@ const getGitBranch = async (): Promise<string> => {
  * Uses pkg-pr-new via esm.sh while pre-release; switch to
  * `https://esm.sh/micro509@${pkg.version}` once published on npm.
  */
-const cdnBase = 'https://esm.sh/pr/kjanat/ts-x509/micro509@1';
+const cdnBase = `https://esm.sh/pr/kjanat/ts-x509/micro509@${await getGitCommitHash()}`;
 
 /** Import map JSON derived from package.json exports via the CDN. */
 const importMapJson = JSON.stringify({

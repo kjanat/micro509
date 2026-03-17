@@ -8,13 +8,17 @@
 import { createPfx } from 'micro509/pkcs';
 
 const pfx = await createPfx({
-  certificate: cert.pem,
-  privateKey: keyPair.privateKey,
-  caCertificates: [ca.certificate.pem],
-  password: 'secret',
+  certificates: [
+    { certificate: cert.pem },
+    { certificate: ca.certificate.pem },
+  ],
+  privateKeys: [{ privateKey: keyPair.privateKey }],
+  encryption: { password: 'secret' },
+  mac: { password: 'secret' },
 });
 
 // pfx.der — Uint8Array
+// pfx.pem — PKCS12 PEM string
 // pfx.base64 — base64-encoded string
 ```
 
@@ -25,13 +29,14 @@ const pfx = await createPfx({
 ```ts
 import { parsePfxDer } from 'micro509/pkcs';
 
-const result = await parsePfxDer(der, 'secret');
+const result = await parsePfxDer(pfx.der, {
+  password: 'secret',
+});
 
 if (result.ok) {
-  // parsed certificates
-  result.value.certificates;
-  // CryptoKey
-  result.value.privateKey;
+  const certificates = result.value.certificates;
+  const privateKeys = result.value.privateKeys;
+  const bags = result.value.bags;
 }
 ```
 
@@ -45,6 +50,9 @@ if (result.ok) {
 import { createPkcs7CertBagPem } from 'micro509/pkcs';
 
 const bag = createPkcs7CertBagPem([cert1.pem, cert2.pem]);
+
+// bag.der — Uint8Array
+// bag.pem — PKCS7 PEM string
 ```
 
 ### Parse a certificate bag
@@ -52,11 +60,10 @@ const bag = createPkcs7CertBagPem([cert1.pem, cert2.pem]);
 ```ts
 import { parsePkcs7CertBagPem } from 'micro509/pkcs';
 
-const result = parsePkcs7CertBagPem(pem);
+const result = parsePkcs7CertBagPem(bag.pem);
 
 if (result.ok) {
-  // parsed certificates
-  result.value.certificates;
+  const certificates = result.value;
 }
 ```
 
