@@ -14,7 +14,9 @@ import {
 	verifyCertificateRevocationList,
 } from '#micro509';
 import {
+	bool,
 	explicitContext,
+	objectIdentifier,
 	octetString,
 	readSequenceChildren,
 	sequence,
@@ -2755,6 +2757,32 @@ describe('crl', () => {
 		).toThrow('Duplicate CRL extension OID');
 	});
 
+	it('parseCertificateRevocationListDer rejects unsupported critical CRL extensions', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Unknown Critical CRL Extension CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Unknown Critical CRL Extension CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			crlNumber: 7,
+		});
+
+		expect(() =>
+			parseCertificateRevocationListDer(
+				appendCriticalCrlExtension(
+					new Uint8Array(pemDecode('X509 CRL', crl.pem)),
+					'1.2.3.4.5.6',
+					Uint8Array.of(0x05, 0x00),
+				),
+			),
+		).toThrow('Unsupported critical CRL extension OID: 1.2.3.4.5.6');
+	});
+
 	it('parseCertificateRevocationListDer rejects non-INTEGER version tags', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Bad CRL Version Tag CA' },
@@ -3315,6 +3343,58 @@ function duplicateCrlExtension(crlDer: Uint8Array, oid: string): Uint8Array {
 	const rebuiltWrapper = explicitContext(
 		0,
 		duplicateSequenceEntryByOid(tbsDer, extensionSequence, oid),
+	);
+	const rebuiltTbs = sequence(
+		tbsChildren.map((child, index) =>
+			index === extensionIndex ? rebuiltWrapper : sliceElement(tbsDer, child),
+		),
+	);
+	return sequence([
+		rebuiltTbs,
+		sliceElement(crlDer, signatureAlgorithm),
+		sliceElement(crlDer, signatureValue),
+	]);
+}
+
+function appendCriticalCrlExtension(
+	crlDer: Uint8Array,
+	oid: string,
+	valueDer: Uint8Array,
+): Uint8Array {
+	const topLevel = readSequenceChildren(crlDer);
+	const tbsCertList = topLevel[0];
+	const signatureAlgorithm = topLevel[1];
+	const signatureValue = topLevel[2];
+	if (
+		tbsCertList === undefined ||
+		signatureAlgorithm === undefined ||
+		signatureValue === undefined
+	) {
+		throw new Error('Malformed CRL');
+	}
+	const tbsDer = sliceElement(crlDer, tbsCertList);
+	const tbsChildren = readSequenceChildren(tbsDer);
+	const extensionIndex = tbsChildren.findIndex((child) => child.tag === 0xa0);
+	if (extensionIndex === -1) {
+		throw new Error('CRL missing extensions');
+	}
+	const extensionWrapper = tbsChildren[extensionIndex];
+	if (extensionWrapper === undefined) {
+		throw new Error('CRL missing extensions');
+	}
+	const extensionSequence = childrenOf(tbsDer, extensionWrapper)[0];
+	if (extensionSequence === undefined) {
+		throw new Error('CRL missing extension sequence');
+	}
+	const extensionEntries = childrenOf(tbsDer, extensionSequence).map((entry) =>
+		sliceElement(tbsDer, entry),
+	);
+	const rebuiltWrapper = explicitContext(
+		0,
+		sequence([
+			...extensionEntries,
+			sequence([objectIdentifier(oid), bool(true), octetString(valueDer)]),
+		]),
 	);
 	const rebuiltTbs = sequence(
 		tbsChildren.map((child, index) =>

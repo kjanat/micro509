@@ -8,14 +8,22 @@ import {
 	parseCertificateRevocationListDer,
 	verifyCertificateChain,
 } from 'micro509';
+import { compareDistinguishedNames } from '#micro509/internal/shared/dn.ts';
 import { PKITS_CASES, type PkitsCase } from './fixtures/pkits/manifest.ts';
 
 const PKITS_VALIDATION_TIME = new Date('2011-04-15T00:00:00Z');
 const REVOCATION_SECTIONS = new Set(['4.4', '4.14', '4.15']);
+const REVOCATION_TEST_NUMBERS = new Set(['4.7.4', '4.7.5']);
 
 const certificateDerCache = new Map<string, Promise<Uint8Array>>();
 const parsedCertificateCache = new Map<string, Promise<ParsedCertificate>>();
 const parsedCrlCache = new Map<string, Promise<ParsedCertificateRevocationList>>();
+
+function shouldEvaluateRevocation(pkitsCase: PkitsCase): boolean {
+	return (
+		REVOCATION_SECTIONS.has(pkitsCase.section) || REVOCATION_TEST_NUMBERS.has(pkitsCase.testNumber)
+	);
+}
 
 async function readPkitsFixture(path: string): Promise<Uint8Array> {
 	return new Uint8Array(await readFile(new URL(path, import.meta.url)));
@@ -53,13 +61,10 @@ async function readPkitsParsedCrl(name: string): Promise<ParsedCertificateRevoca
 	return await pending;
 }
 
-function isRevocationPkitsCase(section: string): boolean {
-	return REVOCATION_SECTIONS.has(section);
-}
-
 async function evaluatePkitsRevocation(
 	chain: readonly ParsedCertificate[],
 	crlNames: readonly string[],
+	allCertificates: readonly ParsedCertificate[],
 ): Promise<boolean> {
 	const parsedCrls = (await Promise.allSettled(crlNames.map((name) => readPkitsParsedCrl(name))))
 		.filter(
@@ -82,6 +87,7 @@ async function evaluatePkitsRevocation(
 			issuerCertificate,
 			completeCrls,
 			deltaCrls,
+			allCertificates,
 		);
 		if (certificateStatus !== 'good') {
 			return false;
@@ -96,16 +102,18 @@ async function evaluatePkitsCertificateRevocation(
 	issuerCertificate: ParsedCertificate,
 	completeCrls: readonly ParsedCertificateRevocationList[],
 	deltaCrls: readonly ParsedCertificateRevocationList[],
+	allCertificates: readonly ParsedCertificate[],
 ): Promise<'good' | 'revoked' | 'unknown'> {
 	let sawGood = false;
 
 	for (const crl of completeCrls) {
-		const result = await checkCertificateRevocationAgainstCrl({
+		const result = await evaluatePkitsCrlWithIssuerCandidates(
 			certificate,
 			issuerCertificate,
+			allCertificates,
 			crl,
-			at: PKITS_VALIDATION_TIME,
-		});
+			undefined,
+		);
 		if (!result.ok) {
 			continue;
 		}
@@ -117,13 +125,13 @@ async function evaluatePkitsCertificateRevocation(
 
 	for (const crl of completeCrls) {
 		for (const deltaCrl of deltaCrls) {
-			const result = await checkCertificateRevocationAgainstCrl({
+			const result = await evaluatePkitsCrlWithIssuerCandidates(
 				certificate,
 				issuerCertificate,
+				allCertificates,
 				crl,
 				deltaCrl,
-				at: PKITS_VALIDATION_TIME,
-			});
+			);
 			if (!result.ok) {
 				continue;
 			}
@@ -135,6 +143,46 @@ async function evaluatePkitsCertificateRevocation(
 	}
 
 	return sawGood ? 'good' : 'unknown';
+}
+
+async function evaluatePkitsCrlWithIssuerCandidates(
+	certificate: ParsedCertificate,
+	fallbackIssuer: ParsedCertificate,
+	allCertificates: readonly ParsedCertificate[],
+	crl: ParsedCertificateRevocationList,
+	deltaCrl: ParsedCertificateRevocationList | undefined,
+) {
+	const issuerCandidates = allCertificates.filter(
+		(candidate) =>
+			compareDistinguishedNames(candidate.subject, crl.issuer) &&
+			(crl.authorityKeyIdentifier === undefined ||
+				candidate.subjectKeyIdentifier === crl.authorityKeyIdentifier),
+	);
+	const allowsAlternateCrlIssuer =
+		crl.issuingDistributionPoint?.indirectCrl === true ||
+		(certificate.crlDistributionPoints?.some(
+			(distributionPoint) => distributionPoint.crlIssuer !== undefined,
+		) ??
+			false) ||
+		!compareDistinguishedNames(fallbackIssuer.subject, crl.issuer);
+	const candidates = allowsAlternateCrlIssuer
+		? [fallbackIssuer, ...issuerCandidates]
+		: [fallbackIssuer];
+	for (const issuerCandidate of candidates) {
+		const result = await checkCertificateRevocationAgainstCrl({
+			certificate,
+			issuerCertificate: issuerCandidate,
+			crl,
+			...(deltaCrl === undefined ? {} : { deltaCrl }),
+			at: PKITS_VALIDATION_TIME,
+		});
+		if (result.ok) {
+			return result;
+		}
+	}
+	return {
+		ok: false as const,
+	};
 }
 
 describe('PKITS harness', () => {
@@ -187,23 +235,28 @@ describe('PKITS harness', () => {
 							? {}
 							: { inhibitAnyPolicy: pkitsCase.inhibitAnyPolicy }),
 					});
-
-					if (!isRevocationPkitsCase(pkitsCase.section)) {
-						expect(verifyResult.ok).toBe(pkitsCase.shouldValidate);
+					const chainValidated = verifyResult.ok;
+					if (!shouldEvaluateRevocation(pkitsCase)) {
+						expect(chainValidated).toBe(pkitsCase.shouldValidate);
 						return;
 					}
-
-					expect(verifyResult.ok).toBe(true);
 					if (!verifyResult.ok) {
+						expect(chainValidated).toBe(pkitsCase.shouldValidate);
 						return;
 					}
-
-					const chain = await Promise.all(
+					const allCertificates = await Promise.all(
 						pkitsCase.certs.map((certificateName: string) =>
 							readPkitsParsedCertificate(certificateName),
 						),
 					);
-					const revocationResult = await evaluatePkitsRevocation(chain, pkitsCase.crls);
+					const revocationResult =
+						pkitsCase.crls.length > 0
+							? await evaluatePkitsRevocation(
+									verifyResult.value.chain,
+									pkitsCase.crls,
+									allCertificates,
+								)
+							: true;
 					expect(revocationResult).toBe(pkitsCase.shouldValidate);
 				});
 			}

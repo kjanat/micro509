@@ -9,6 +9,7 @@
 
 import {
 	childrenOf,
+	decodeBoolean,
 	decodeIntegerNumber,
 	decodeObjectIdentifier,
 	decodeString,
@@ -1901,7 +1902,8 @@ function parseIssuer(source: Uint8Array, element: DerElement): ParsedName {
 function parseDerHexName(hex: string): ParsedName | undefined {
 	try {
 		const bytes = hexToBytes(hex);
-		const element = readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH });
+		const root = readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH });
+		const element = unwrapNameElement(bytes, root);
 		if (element.tag !== 0x30) {
 			return undefined;
 		}
@@ -1909,6 +1911,18 @@ function parseDerHexName(hex: string): ParsedName | undefined {
 	} catch {
 		return undefined;
 	}
+}
+
+function unwrapNameElement(source: Uint8Array, element: DerElement): DerElement {
+	if (element.tag !== 0x30) {
+		return element;
+	}
+	const children = childrenOf(source, element);
+	const child = children[0];
+	if (children.length === 1 && child?.tag === 0x30) {
+		return child;
+	}
+	return element;
 }
 
 /** Semantic comparison of a GeneralName directoryName `derHex` against a {@linkcode ParsedName}. */
@@ -2009,9 +2023,9 @@ function parseAlgorithmIdentifier(
 			};
 }
 
-/** Strips leading zeros and lowercases a hex string for comparison. */
+/** Lowercases a hex string for bytewise serial-number comparison. */
 function normalizeHex(value: string): string {
-	return value.replace(/^0+/, '').toLowerCase();
+	return value.toLowerCase();
 }
 
 /** Maps an integer CRLReason code back to its {@linkcode RevocationReason} string, or `undefined` for unknown codes. */
@@ -2167,9 +2181,23 @@ function parseSignedCrlFields(tbsCertListDer: Uint8Array): {
 				throw new Error(`Duplicate CRL extension OID: ${oid}`);
 			}
 			seenOids.add(oid);
+			const critical =
+				parts.length === 3
+					? decodeBoolean(requireElement(parts[1], 'extension critical').value)
+					: false;
 			const valueElement = requireElement(parts[parts.length - 1], 'extension value');
 			if (valueElement.tag !== 0x04) {
 				throw new Error('CRL extension value must use OCTET STRING');
+			}
+			if (
+				oid !== OIDS.authorityKeyIdentifier &&
+				oid !== OIDS.cRLNumber &&
+				oid !== OIDS.deltaCRLIndicator &&
+				oid !== OIDS.issuingDistributionPoint &&
+				oid !== OIDS.freshestCRL &&
+				critical
+			) {
+				throw new Error(`Unsupported critical CRL extension OID: ${oid}`);
 			}
 			if (oid === OIDS.authorityKeyIdentifier) {
 				authorityKeyIdentifier = parseAuthorityKeyIdentifier(valueElement.value);

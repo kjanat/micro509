@@ -85,7 +85,7 @@ export function countCaCertificatesBelowParsed(
 	index: number,
 ): number {
 	let total = 0;
-	for (let cursor = 0; cursor < index; cursor += 1) {
+	for (let cursor = 1; cursor < index; cursor += 1) {
 		const certificate = chain[cursor];
 		if (certificate?.basicConstraints?.ca === true && !isSelfIssued(certificate)) {
 			total += 1;
@@ -315,7 +315,10 @@ export async function buildChainInternal(
 				continue;
 			}
 			const nextCaBelowCount =
-				caBelowCount + (current.basicConstraints?.ca === true && !isSelfIssued(current) ? 1 : 0);
+				caBelowCount +
+				(current.basicConstraints?.ca === true && !isSelfIssued(current) && path.length > 1
+					? 1
+					: 0);
 			const pathLength = issuer.basicConstraints?.pathLength;
 			if (isNonNegativeInteger(pathLength) && nextCaBelowCount > pathLength) {
 				recordFailure(

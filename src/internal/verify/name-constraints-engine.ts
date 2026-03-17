@@ -645,7 +645,8 @@ function parseDirectoryNameDerHex(derHex: string): ParsedName | undefined {
 	}
 	try {
 		const bytes = hexToBytes(derHex);
-		const element = readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH });
+		const root = readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH });
+		const element = unwrapDirectoryNameElement(bytes, root);
 		if (element.tag !== 0x30) {
 			return undefined;
 		}
@@ -674,6 +675,18 @@ function parseDirectoryNameDerHex(derHex: string): ParsedName | undefined {
 	} catch {
 		return undefined;
 	}
+}
+
+function unwrapDirectoryNameElement(source: Uint8Array, element: DerElement): DerElement {
+	if (element.tag !== 0x30) {
+		return element;
+	}
+	const children = childrenOf(source, element);
+	const child = children[0];
+	if (children.length === 1 && child?.tag === 0x30) {
+		return child;
+	}
+	return element;
 }
 
 /** Parses one SET element (a single RDN) from the DER Name SEQUENCE. */

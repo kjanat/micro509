@@ -481,10 +481,9 @@ function hasParsedCertificateShape(value: RevocationCertificateSource): value is
 	return typeof value !== 'string' && 'subjectPublicKeyInfoDer' in value;
 }
 
-/** Strips leading zeros and lowercases a hex string for comparison. */
+/** Lowercases a hex string for bytewise serial-number comparison. */
 function normalizeHex(value: string): string {
-	const normalized = value.toLowerCase().replace(/^0+/, '');
-	return normalized === '' ? '0' : normalized;
+	return value.toLowerCase();
 }
 
 /** Wraps a value into a successful `CheckCertificateRevocationResult`. */

@@ -279,6 +279,32 @@ describe('chain verification', () => {
 			}),
 		).toMatchObject({ ok: false, code: 'path_length_exceeded', index: 2 });
 
+		const pathLengthLeafCaRoot = await createSelfSignedCertificate({
+			subject: { commonName: 'Path Length Leaf CA Root' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const pathLengthLeafCaKeys = await generateKeyPair();
+		const pathLengthLeafCa = await createCertificate({
+			issuer: { commonName: 'Path Length Leaf CA Root' },
+			subject: { commonName: 'Path Length Leaf CA' },
+			publicKey: pathLengthLeafCaKeys.publicKey,
+			signerPrivateKey: pathLengthLeafCaRoot.keyPair.privateKey,
+			issuerPublicKey: pathLengthLeafCaRoot.keyPair.publicKey,
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		expect(
+			await verifyCertificateChain({
+				leaf: pathLengthLeafCa.pem,
+				roots: [pathLengthLeafCaRoot.certificate.pem],
+			}),
+		).toMatchObject({ ok: true });
+
 		const wrongAkiKeys = await generateKeyPair();
 		const akiMismatchChain = await issueChain({
 			leafIssuerPublicKey: wrongAkiKeys.publicKey,

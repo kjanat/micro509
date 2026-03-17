@@ -1775,7 +1775,7 @@ function validateAlgorithmIdentifierShape(
 }
 
 function normalizeHex(value: string): string {
-	return value.replace(/^0+/, '').toLowerCase();
+	return value.toLowerCase();
 }
 
 /** Maps a hash algorithm OID to the WebCrypto algorithm name. Throws on unsupported OIDs. */
