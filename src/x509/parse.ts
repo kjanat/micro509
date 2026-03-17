@@ -418,6 +418,9 @@ export function parseCertificateDer<TMap extends ExtensionDecoderMap = Record<ne
 	options?: ParseOptions<TMap>,
 ): ParsedCertificate<TMap> {
 	const topLevel = readSequenceChildren(der, { maxDepth: DEFAULT_MAX_DER_DEPTH });
+	if (topLevel.length !== 3) {
+		throw new Error('Malformed Certificate');
+	}
 	const tbsCertificate = requireElement(topLevel[0], 'TBSCertificate');
 	const signatureAlgorithm = requireElement(topLevel[1], 'signatureAlgorithm');
 	const signatureValue = requireElement(topLevel[2], 'signatureValue');
@@ -427,8 +430,9 @@ export function parseCertificateDer<TMap extends ExtensionDecoderMap = Record<ne
 	let version = 1;
 	const maybeVersion = tbsChildren[index];
 	if (maybeVersion?.tag === 0xa0) {
-		const versionElement = requireElement(childrenOf(der, maybeVersion)[0], 'version INTEGER');
-		if (versionElement.tag !== 0x02) {
+		const versionChildren = childrenOf(der, maybeVersion);
+		const versionElement = requireElement(versionChildren[0], 'version INTEGER');
+		if (versionChildren.length !== 1 || versionElement.tag !== 0x02) {
 			throw new Error('version must use INTEGER');
 		}
 		version = decodeIntegerNumber(versionElement.value) + 1;
@@ -443,7 +447,22 @@ export function parseCertificateDer<TMap extends ExtensionDecoderMap = Record<ne
 	const validity = requireElement(tbsChildren[index + 3], 'validity');
 	const subject = requireElement(tbsChildren[index + 4], 'subject');
 	const subjectPublicKeyInfo = requireElement(tbsChildren[index + 5], 'subjectPublicKeyInfo');
-	const extensions = tbsChildren.find((element) => element.tag === 0xa3);
+	let cursor = index + 6;
+	if (tbsChildren[cursor]?.tag === 0x81) {
+		cursor += 1;
+	}
+	if (tbsChildren[cursor]?.tag === 0x82) {
+		cursor += 1;
+	}
+	const extensions = tbsChildren[cursor]?.tag === 0xa3 ? tbsChildren[cursor] : undefined;
+	if (extensions !== undefined) {
+		cursor += 1;
+	}
+	if (cursor !== tbsChildren.length) {
+		throw new Error(
+			`Unsupported TBSCertificate field tag: ${String(requireElement(tbsChildren[cursor], 'TBSCertificate field').tag)}`,
+		);
+	}
 	const parsedExtensions = parseExtensionContainer(der, extensions);
 	const parsedValidity = parseValidity(der, validity);
 	const parsedSpki = parseSubjectPublicKeyInfo(der, subjectPublicKeyInfo);
@@ -607,10 +626,16 @@ export function parseCertificateSigningRequestDer<
 	TMap extends ExtensionDecoderMap = Record<never, never>,
 >(der: Uint8Array, options?: ParseOptions<TMap>): ParsedCertificateSigningRequest<TMap> {
 	const topLevel = readSequenceChildren(der, { maxDepth: DEFAULT_MAX_DER_DEPTH });
+	if (topLevel.length !== 3) {
+		throw new Error('Malformed CertificationRequest');
+	}
 	const certificationRequestInfo = requireElement(topLevel[0], 'CertificationRequestInfo');
 	const signatureAlgorithm = requireElement(topLevel[1], 'signatureAlgorithm');
 	const signatureValue = requireElement(topLevel[2], 'signatureValue');
 	const criChildren = childrenOf(der, certificationRequestInfo);
+	if (criChildren.length < 3 || criChildren.length > 4) {
+		throw new Error('Malformed CertificationRequestInfo');
+	}
 	const versionElement = requireElement(criChildren[0], 'version');
 	if (versionElement.tag !== 0x02) {
 		throw new Error('version must use INTEGER');
@@ -619,6 +644,9 @@ export function parseCertificateSigningRequestDer<
 	const subject = requireElement(criChildren[1], 'subject');
 	const subjectPublicKeyInfo = requireElement(criChildren[2], 'subjectPublicKeyInfo');
 	const attributes = criChildren[3];
+	if (attributes !== undefined && attributes.tag !== 0xa0) {
+		throw new Error('CertificationRequestInfo attributes must use [0]');
+	}
 	const parsedExtensions = parseRequestedExtensions(der, attributes);
 	const parsedSpki = parseSubjectPublicKeyInfo(der, subjectPublicKeyInfo);
 	const parsedSignatureAlgorithm = parseAlgorithmIdentifier(der, signatureAlgorithm);
@@ -838,9 +866,15 @@ function parseRequestedExtensions(
 	if (attributes === undefined) {
 		return { all: [] };
 	}
+	if (attributes.tag !== 0xa0) {
+		throw new Error('CertificationRequestInfo attributes must use [0]');
+	}
 	let requestedExtensions: ParsedExtensions | undefined;
 	for (const attribute of childrenOf(source, attributes)) {
 		const attributeChildren = childrenOf(source, attribute);
+		if (attributeChildren.length !== 2) {
+			throw new Error('Malformed CSR attribute');
+		}
 		const oid = requireElement(attributeChildren[0], 'attribute OID');
 		if (decodeObjectIdentifier(oid.value) !== OIDS.extensionRequest) {
 			continue;
@@ -849,6 +883,9 @@ function parseRequestedExtensions(
 			throw new Error('extensionRequest attribute must not repeat');
 		}
 		const valuesSet = requireElement(attributeChildren[1], 'attribute values');
+		if (valuesSet.tag !== 0x31) {
+			throw new Error('extensionRequest attribute values must use SET');
+		}
 		const values = childrenOf(source, valuesSet);
 		if (values.length !== 1) {
 			throw new Error('extensionRequest attribute must contain exactly one value');
