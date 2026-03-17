@@ -363,6 +363,93 @@ describe('parse', () => {
 		);
 	});
 
+	it('rejects malformed SubjectPublicKeyInfo shapes in certificate and CSR parse', async () => {
+		const certificate = await createSelfSignedCertificate({
+			subject: { commonName: 'bad-cert-spki.example' },
+		});
+		const keyPair = await generateKeyPair();
+		const csr = await createCertificateSigningRequest({
+			subject: { commonName: 'bad-csr-spki.example' },
+			publicKey: keyPair.publicKey,
+			signerPrivateKey: keyPair.privateKey,
+		});
+		expect(() =>
+			parseCertificateDer(
+				rewriteCertificateSubjectPublicKeyInfo(
+					certificate.certificate.der,
+					buildMalformedCertificateSubjectPublicKeyInfoWrongTag(certificate.certificate.der),
+				),
+			),
+		).toThrow('SubjectPublicKeyInfo algorithm must use SEQUENCE');
+		expect(() =>
+			parseCertificateSigningRequestDer(
+				rewriteCsrSubjectPublicKeyInfo(
+					csr.der,
+					buildMalformedCsrSubjectPublicKeyInfoExtraField(csr.der),
+				),
+			),
+		).toThrow('SubjectPublicKeyInfo must contain algorithm and subjectPublicKey');
+	});
+
+	it('rejects unsupported certificate and CSR version values', async () => {
+		const certificate = await createSelfSignedCertificate({
+			subject: { commonName: 'bad-cert-version.example' },
+		});
+		const keyPair = await generateKeyPair();
+		const csr = await createCertificateSigningRequest({
+			subject: { commonName: 'bad-csr-version-value.example' },
+			publicKey: keyPair.publicKey,
+			signerPrivateKey: keyPair.privateKey,
+		});
+		expect(() =>
+			parseCertificateDer(
+				rewriteCertificateVersionValue(certificate.certificate.der, Uint8Array.of(0x03)),
+			),
+		).toThrow('Unsupported certificate version: 4');
+		expect(() =>
+			parseCertificateSigningRequestDer(rewriteCsrVersionValue(csr.der, Uint8Array.of(0x01))),
+		).toThrow('Unsupported CertificationRequestInfo version: 2');
+	});
+
+	it('rejects certificate unique IDs that violate version or BIT STRING rules', async () => {
+		const certificate = await createSelfSignedCertificate({
+			subject: { commonName: 'bad-cert-unique-id.example' },
+			extensions: {
+				basicConstraints: { ca: true },
+			},
+		});
+		expect(() =>
+			parseCertificateDer(
+				insertCertificateTbsFieldBeforeExtensions(
+					rewriteCertificateVersionValue(certificate.certificate.der, Uint8Array.of(0x00)),
+					tlv(0x81, Uint8Array.of(0x00)),
+				),
+			),
+		).toThrow('issuerUniqueID requires certificate version 2 or 3');
+		expect(() =>
+			parseCertificateDer(
+				insertCertificateTbsFieldBeforeExtensions(
+					rewriteCertificateVersionValue(certificate.certificate.der, Uint8Array.of(0x01)),
+					tlv(0x81, Uint8Array.of(0x07, 0x01)),
+				),
+			),
+		).toThrow('issuerUniqueID BIT STRING must not set padding bits');
+	});
+
+	it('rejects certificate extensions on versions below v3', async () => {
+		const certificate = await createSelfSignedCertificate({
+			subject: { commonName: 'bad-cert-extension-version.example' },
+			extensions: {
+				basicConstraints: { ca: true },
+			},
+		});
+		expect(() =>
+			parseCertificateDer(
+				rewriteCertificateVersionValue(certificate.certificate.der, Uint8Array.of(0x01)),
+			),
+		).toThrow('extensions require certificate version 3');
+	});
+
 	it('rejects repeated extensionRequest attributes during CSR parse', async () => {
 		const keyPair = await generateKeyPair();
 		const csr = await createCertificateSigningRequest({
@@ -2231,6 +2318,132 @@ function rewriteCertificateVersionIntegerTag(certificateDer: Uint8Array, tag: nu
 	]);
 }
 
+function rewriteCertificateVersionValue(
+	certificateDer: Uint8Array,
+	versionValue: Uint8Array,
+): Uint8Array {
+	const topLevel = readSequenceChildren(certificateDer);
+	const tbsCertificate = topLevel[0];
+	const signatureAlgorithm = topLevel[1];
+	const signatureValue = topLevel[2];
+	if (
+		tbsCertificate === undefined ||
+		signatureAlgorithm === undefined ||
+		signatureValue === undefined
+	) {
+		throw new Error('Malformed Certificate');
+	}
+	const tbsDer = sliceElement(certificateDer, tbsCertificate);
+	const tbsChildren = readSequenceChildren(tbsDer);
+	const versionWrapper = tbsChildren[0];
+	if (versionWrapper?.tag !== 0xa0) {
+		throw new Error('Certificate missing explicit version');
+	}
+	const rebuiltVersionWrapper = tlv(0xa0, tlv(0x02, versionValue));
+	const rebuiltTbs = sequence(
+		tbsChildren.map((child, index) =>
+			index === 0 ? rebuiltVersionWrapper : sliceElement(tbsDer, child),
+		),
+	);
+	return sequence([
+		rebuiltTbs,
+		sliceElement(certificateDer, signatureAlgorithm),
+		sliceElement(certificateDer, signatureValue),
+	]);
+}
+
+function rewriteCertificateSubjectPublicKeyInfo(
+	certificateDer: Uint8Array,
+	subjectPublicKeyInfoDer: Uint8Array,
+): Uint8Array {
+	const topLevel = readSequenceChildren(certificateDer);
+	const tbsCertificate = topLevel[0];
+	const signatureAlgorithm = topLevel[1];
+	const signatureValue = topLevel[2];
+	if (
+		tbsCertificate === undefined ||
+		signatureAlgorithm === undefined ||
+		signatureValue === undefined
+	) {
+		throw new Error('Malformed Certificate');
+	}
+	const tbsDer = sliceElement(certificateDer, tbsCertificate);
+	const tbsChildren = readSequenceChildren(tbsDer);
+	const serialNumberIndex = tbsChildren[0]?.tag === 0xa0 ? 1 : 0;
+	const subjectPublicKeyInfoIndex = serialNumberIndex + 5;
+	const rebuiltTbs = sequence(
+		tbsChildren.map((child, index) =>
+			index === subjectPublicKeyInfoIndex ? subjectPublicKeyInfoDer : sliceElement(tbsDer, child),
+		),
+	);
+	return sequence([
+		rebuiltTbs,
+		sliceElement(certificateDer, signatureAlgorithm),
+		sliceElement(certificateDer, signatureValue),
+	]);
+}
+
+function buildMalformedCertificateSubjectPublicKeyInfoWrongTag(
+	certificateDer: Uint8Array,
+): Uint8Array {
+	const topLevel = readSequenceChildren(certificateDer);
+	const tbsCertificate = topLevel[0];
+	if (tbsCertificate === undefined) {
+		throw new Error('Malformed Certificate');
+	}
+	const tbsDer = sliceElement(certificateDer, tbsCertificate);
+	const tbsChildren = readSequenceChildren(tbsDer);
+	const serialNumberIndex = tbsChildren[0]?.tag === 0xa0 ? 1 : 0;
+	const subjectPublicKeyInfo = tbsChildren[serialNumberIndex + 5];
+	if (subjectPublicKeyInfo === undefined) {
+		throw new Error('Certificate missing subjectPublicKeyInfo');
+	}
+	const spkiDer = sliceElement(tbsDer, subjectPublicKeyInfo);
+	const spkiChildren = readSequenceChildren(spkiDer);
+	const algorithm = spkiChildren[0];
+	const subjectPublicKey = spkiChildren[1];
+	if (algorithm === undefined) {
+		throw new Error('SubjectPublicKeyInfo missing algorithm');
+	}
+	if (subjectPublicKey === undefined) {
+		throw new Error('SubjectPublicKeyInfo missing subjectPublicKey');
+	}
+	return sequence([tlv(0x31, algorithm.value), sliceElement(spkiDer, subjectPublicKey)]);
+}
+
+function insertCertificateTbsFieldBeforeExtensions(
+	certificateDer: Uint8Array,
+	fieldDer: Uint8Array,
+): Uint8Array {
+	const topLevel = readSequenceChildren(certificateDer);
+	const tbsCertificate = topLevel[0];
+	const signatureAlgorithm = topLevel[1];
+	const signatureValue = topLevel[2];
+	if (
+		tbsCertificate === undefined ||
+		signatureAlgorithm === undefined ||
+		signatureValue === undefined
+	) {
+		throw new Error('Malformed Certificate');
+	}
+	const tbsDer = sliceElement(certificateDer, tbsCertificate);
+	const tbsChildren = readSequenceChildren(tbsDer);
+	const extensionIndex = tbsChildren.findIndex((child) => child.tag === 0xa3);
+	const rebuiltChildren =
+		extensionIndex === -1
+			? [...tbsChildren.map((child) => sliceElement(tbsDer, child)), fieldDer]
+			: [
+					...tbsChildren.slice(0, extensionIndex).map((child) => sliceElement(tbsDer, child)),
+					fieldDer,
+					...tbsChildren.slice(extensionIndex).map((child) => sliceElement(tbsDer, child)),
+				];
+	return sequence([
+		sequence(rebuiltChildren),
+		sliceElement(certificateDer, signatureAlgorithm),
+		sliceElement(certificateDer, signatureValue),
+	]);
+}
+
 function rewriteCertificateSerialNumberTag(certificateDer: Uint8Array, tag: number): Uint8Array {
 	const topLevel = readSequenceChildren(certificateDer);
 	const tbsCertificate = topLevel[0];
@@ -2458,6 +2671,81 @@ function rewriteCsrVersionTag(csrDer: Uint8Array, tag: number): Uint8Array {
 		rebuiltCri,
 		sliceElement(csrDer, signatureAlgorithm),
 		sliceElement(csrDer, signatureValue),
+	]);
+}
+
+function rewriteCsrVersionValue(csrDer: Uint8Array, versionValue: Uint8Array): Uint8Array {
+	const topLevel = readSequenceChildren(csrDer);
+	const certificationRequestInfo = topLevel[0];
+	const signatureAlgorithm = topLevel[1];
+	const signatureValue = topLevel[2];
+	if (
+		certificationRequestInfo === undefined ||
+		signatureAlgorithm === undefined ||
+		signatureValue === undefined
+	) {
+		throw new Error('Malformed CertificationRequest');
+	}
+	const criDer = sliceElement(csrDer, certificationRequestInfo);
+	const criChildren = readSequenceChildren(criDer);
+	const rebuiltCri = sequence(
+		criChildren.map((child, index) =>
+			index === 0 ? tlv(0x02, versionValue) : sliceElement(criDer, child),
+		),
+	);
+	return sequence([
+		rebuiltCri,
+		sliceElement(csrDer, signatureAlgorithm),
+		sliceElement(csrDer, signatureValue),
+	]);
+}
+
+function rewriteCsrSubjectPublicKeyInfo(
+	csrDer: Uint8Array,
+	subjectPublicKeyInfoDer: Uint8Array,
+): Uint8Array {
+	const topLevel = readSequenceChildren(csrDer);
+	const certificationRequestInfo = topLevel[0];
+	const signatureAlgorithm = topLevel[1];
+	const signatureValue = topLevel[2];
+	if (
+		certificationRequestInfo === undefined ||
+		signatureAlgorithm === undefined ||
+		signatureValue === undefined
+	) {
+		throw new Error('Malformed CertificationRequest');
+	}
+	const criDer = sliceElement(csrDer, certificationRequestInfo);
+	const criChildren = readSequenceChildren(criDer);
+	const rebuiltCri = sequence(
+		criChildren.map((child, index) =>
+			index === 2 ? subjectPublicKeyInfoDer : sliceElement(criDer, child),
+		),
+	);
+	return sequence([
+		rebuiltCri,
+		sliceElement(csrDer, signatureAlgorithm),
+		sliceElement(csrDer, signatureValue),
+	]);
+}
+
+function buildMalformedCsrSubjectPublicKeyInfoExtraField(csrDer: Uint8Array): Uint8Array {
+	const topLevel = readSequenceChildren(csrDer);
+	const certificationRequestInfo = topLevel[0];
+	if (certificationRequestInfo === undefined) {
+		throw new Error('Malformed CertificationRequest');
+	}
+	const criDer = sliceElement(csrDer, certificationRequestInfo);
+	const criChildren = readSequenceChildren(criDer);
+	const subjectPublicKeyInfo = criChildren[2];
+	if (subjectPublicKeyInfo === undefined) {
+		throw new Error('CertificationRequest missing subjectPublicKeyInfo');
+	}
+	const spkiDer = sliceElement(criDer, subjectPublicKeyInfo);
+	const spkiChildren = readSequenceChildren(spkiDer);
+	return sequence([
+		...spkiChildren.map((child) => sliceElement(spkiDer, child)),
+		integerFromNumber(0),
 	]);
 }
 

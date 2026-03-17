@@ -472,6 +472,9 @@ export function parseCertificateRevocationListDer(
 	der: Uint8Array,
 ): ParsedCertificateRevocationList {
 	const top = readSequenceChildren(der, { maxDepth: DEFAULT_MAX_DER_DEPTH });
+	if (top.length !== 3) {
+		throw new Error('Malformed CRL');
+	}
 	const tbsCertList = requireElement(top[0], 'TBSCertList');
 	const signatureAlgorithm = requireElement(top[1], 'signatureAlgorithm');
 	const signatureValue = requireElement(top[2], 'signatureValue');
@@ -2077,6 +2080,9 @@ function parseSignedCrlFields(tbsCertListDer: Uint8Array): {
 			throw new Error('version must use INTEGER');
 		}
 		version = decodeIntegerNumber(versionElement.value) + 1;
+		if (version !== 2) {
+			throw new Error(`Unsupported CRL version: ${String(version)}`);
+		}
 		index += 1;
 	}
 	index += 1;
@@ -2102,6 +2108,9 @@ function parseSignedCrlFields(tbsCertListDer: Uint8Array): {
 				throw new Error('revoked serialNumber must use INTEGER');
 			}
 			const entryExtensions = parts[2];
+			if (entryExtensions !== undefined && version !== 2) {
+				throw new Error('revoked certificate extensions require CRL version 2');
+			}
 			const parsedEntryExtensions = parseRevokedCertificateExtensions(entryDer, entryExtensions);
 			return {
 				serialNumberHex: toHex(serialNumber.value),
@@ -2126,6 +2135,9 @@ function parseSignedCrlFields(tbsCertListDer: Uint8Array): {
 	let freshestCrlDistributionPoints: readonly ParsedDistributionPoint[] | undefined;
 	const maybeExtensions = tbsChildren[cursor];
 	if (maybeExtensions?.tag === 0xa0) {
+		if (version !== 2) {
+			throw new Error('CRL extensions require version 2');
+		}
 		const seenOids = new Set<string>();
 		const extensionSequence = requireElement(
 			childrenOf(tbsCertListDer, maybeExtensions)[0],

@@ -148,6 +148,20 @@ describe('pfx', () => {
 		if (!result.ok) expect(result.code).toBe('malformed');
 	});
 
+	it('parsePfxDer rejects unsupported PFX versions and top-level trailing fields', async () => {
+		const authenticatedSafe = sequence([]);
+		const authSafe = sequence([
+			objectIdentifier(OIDS.pkcs7Data),
+			explicitContext(0, octetString(authenticatedSafe)),
+		]);
+		const unsupportedVersion = await parsePfxDer(sequence([integerFromNumber(2), authSafe]));
+		expect(unsupportedVersion).toMatchObject({ ok: false, code: 'malformed' });
+		const trailingField = await parsePfxDer(
+			sequence([integerFromNumber(3), authSafe, sequence([]), tlv(0x05, new Uint8Array())]),
+		);
+		expect(trailingField).toMatchObject({ ok: false, code: 'malformed' });
+	});
+
 	it('parsePfxPem rejects empty PEM', async () => {
 		const result = await parsePfxPem('not a PEM');
 		expect(result.ok).toBe(false);
@@ -732,6 +746,31 @@ describe('pfx', () => {
 		if (!result.ok) expect(result.code).toBe('malformed');
 	});
 
+	it('parsePfxDer rejects ContentInfo wrappers with trailing fields or multi-value contexts', async () => {
+		const malformedAuthSafe = sequence([
+			objectIdentifier(OIDS.pkcs7Data),
+			explicitContext(0, octetString(sequence([]))),
+			tlv(0x05, new Uint8Array()),
+		]);
+		const outerResult = await parsePfxDer(sequence([integerFromNumber(3), malformedAuthSafe]));
+		expect(outerResult).toMatchObject({ ok: false, code: 'malformed' });
+
+		const multiValueContentInfo = sequence([
+			objectIdentifier(OIDS.pkcs7Data),
+			explicitContext(0, new Uint8Array([0x04, 0x00, 0x04, 0x00])),
+		]);
+		const innerResult = await parsePfxDer(
+			sequence([
+				integerFromNumber(3),
+				sequence([
+					objectIdentifier(OIDS.pkcs7Data),
+					explicitContext(0, octetString(sequence([multiValueContentInfo]))),
+				]),
+			]),
+		);
+		expect(innerResult).toMatchObject({ ok: false, code: 'malformed' });
+	});
+
 	it('extractContentInfoData throws on non-pkcs7Data outer content type (line 284)', async () => {
 		// Outer ContentInfo with wrong content type OID
 		const wrongTypeAuthSafe = sequence([
@@ -798,6 +837,52 @@ describe('pfx', () => {
 		const result = await parsePfxDer(pfxDer, { password: 'test' });
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.code).toBe('malformed');
+	});
+
+	it('parsePfxDer rejects EncryptedData trailing fields and odd-length friendlyName BMPString values', async () => {
+		const encryptedContentInfo = sequence([
+			objectIdentifier(OIDS.pkcs7Data),
+			sequence([objectIdentifier(OIDS.pbes2), sequence([])]),
+			tlv(0x80, Uint8Array.of(0x01, 0x02)),
+		]);
+		const encryptedData = sequence([integerFromNumber(0), encryptedContentInfo, setOf([])]);
+		const encryptedResult = await parsePfxDer(
+			sequence([
+				integerFromNumber(3),
+				sequence([
+					objectIdentifier(OIDS.pkcs7Data),
+					explicitContext(
+						0,
+						octetString(
+							sequence([
+								sequence([
+									objectIdentifier(OIDS.pkcs7EncryptedData),
+									explicitContext(0, encryptedData),
+								]),
+							]),
+						),
+					),
+				]),
+			]),
+			{ password: 'test' },
+		);
+		expect(encryptedResult).toMatchObject({ ok: false, code: 'malformed' });
+
+		const oddFriendlyName = await parsePfxDer(
+			wrapSafeBags([
+				sequence([
+					objectIdentifier('1.2.3.4.5.6'),
+					explicitContext(0, octetString(Uint8Array.of(0x01))),
+					setOf([
+						sequence([
+							objectIdentifier(OIDS.friendlyName),
+							setOf([Uint8Array.of(0x1e, 0x01, 0x00)]),
+						]),
+					]),
+				]),
+			]),
+		);
+		expect(oddFriendlyName).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
 	it('parsePfxDer returns malformed for invalid PBES2 parameters', async () => {

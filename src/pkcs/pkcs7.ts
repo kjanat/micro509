@@ -253,7 +253,16 @@ export function parsePkcs7SignedDataDer(der: Uint8Array): ParsePkcs7SignedDataRe
 		const contentInfo = readSequenceChildren(der, { maxDepth: DEFAULT_MAX_DER_DEPTH });
 		const contentType = contentInfo[0];
 		const content = contentInfo[1];
-		if (contentType === undefined || content === undefined) {
+		if (
+			contentType === undefined ||
+			content === undefined ||
+			contentInfo.length !== 2 ||
+			contentType.tag !== 0x06 ||
+			content.tag !== 0xa0
+		) {
+			return pkcs7Failure('malformed', 'Malformed PKCS#7 content info');
+		}
+		if (childrenOf(der, content).length !== 1) {
 			return pkcs7Failure('malformed', 'Malformed PKCS#7 content info');
 		}
 		const contentTypeOid = decodeObjectIdentifier(contentType.value);
@@ -512,13 +521,20 @@ function parseDigestAlgorithms(
 	element: ReturnType<typeof readElement>,
 ): readonly string[] {
 	const digests: string[] = [];
+	if (element.tag !== 0x31) {
+		throw new Error('digestAlgorithms must use SET');
+	}
 	for (const child of childrenOf(source, element)) {
+		if (child.tag !== 0x30) {
+			throw new Error('digestAlgorithm must use AlgorithmIdentifier SEQUENCE');
+		}
 		const childDer = source.slice(child.start - child.headerLength, child.end);
 		const parts = readSequenceChildren(childDer);
 		const oid = parts[0];
-		if (oid !== undefined) {
-			digests.push(decodeObjectIdentifier(oid.value));
+		if (oid === undefined || parts.length < 1 || parts.length > 2 || oid.tag !== 0x06) {
+			throw new Error('Malformed digest AlgorithmIdentifier');
 		}
+		digests.push(decodeObjectIdentifier(oid.value));
 	}
 	return digests;
 }

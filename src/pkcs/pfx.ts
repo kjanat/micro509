@@ -7,7 +7,12 @@
  * @module
  */
 
-import { childrenOf, decodeObjectIdentifier, toHex } from '#micro509/internal/asn1/asn1.ts';
+import {
+	childrenOf,
+	decodeIntegerNumber,
+	decodeObjectIdentifier,
+	toHex,
+} from '#micro509/internal/asn1/asn1.ts';
 import type { DerElement } from '#micro509/internal/asn1/der.ts';
 import {
 	DEFAULT_MAX_DER_DEPTH,
@@ -288,9 +293,16 @@ export async function parsePfxDer(
 ): Promise<ParsePfxResult> {
 	try {
 		const topLevel = readSequenceChildren(der, { maxDepth: DEFAULT_MAX_DER_DEPTH });
-		const authSafe = topLevel[1];
-		if (authSafe === undefined) {
+		if (topLevel.length < 2 || topLevel.length > 3) {
 			return pfxFailure('malformed', 'Malformed PFX structure');
+		}
+		const version = topLevel[0];
+		const authSafe = topLevel[1];
+		if (version === undefined || authSafe === undefined || version.tag !== 0x02) {
+			return pfxFailure('malformed', 'Malformed PFX structure');
+		}
+		if (decodeIntegerNumber(version.value) !== 3) {
+			return pfxFailure('malformed', 'Unsupported PFX version');
 		}
 		const authSafeDer = der.slice(authSafe.start - authSafe.headerLength, authSafe.end);
 		const authenticatedSafeOctets = extractContentInfoData(authSafeDer);
@@ -387,7 +399,12 @@ function extractContentInfoData(contentInfoDer: Uint8Array): Uint8Array {
 	const contentInfoChildren = readSequenceChildren(contentInfoDer);
 	const contentType = contentInfoChildren[0];
 	const content = contentInfoChildren[1];
-	if (contentType === undefined || content === undefined) {
+	if (
+		contentType === undefined ||
+		content === undefined ||
+		contentInfoChildren.length !== 2 ||
+		contentType.tag !== 0x06
+	) {
 		throw new Error('Malformed ContentInfo');
 	}
 	if (decodeObjectIdentifier(contentType.value) !== OIDS.pkcs7Data) {
@@ -413,7 +430,12 @@ async function extractSafeContents(
 	const contentInfoChildren = readSequenceChildren(contentInfoDer);
 	const contentType = contentInfoChildren[0];
 	const content = contentInfoChildren[1];
-	if (contentType === undefined || content === undefined) {
+	if (
+		contentType === undefined ||
+		content === undefined ||
+		contentInfoChildren.length !== 2 ||
+		contentType.tag !== 0x06
+	) {
 		return { error: pfxFailure('malformed', 'Malformed ContentInfo') };
 	}
 	const oid = decodeObjectIdentifier(contentType.value);
@@ -667,7 +689,11 @@ async function decryptEncryptedData(
 ): Promise<Uint8Array> {
 	const topLevel = readSequenceChildren(encryptedDataDer);
 	const encryptedContentInfo = topLevel[1];
-	if (encryptedContentInfo === undefined) {
+	if (topLevel.length !== 2 || encryptedContentInfo === undefined) {
+		throw new Error('Malformed EncryptedData');
+	}
+	const version = topLevel[0];
+	if (version === undefined || version.tag !== 0x02 || decodeIntegerNumber(version.value) !== 0) {
 		throw new Error('Malformed EncryptedData');
 	}
 	const contentInfoDer = encryptedDataDer.slice(
@@ -677,7 +703,12 @@ async function decryptEncryptedData(
 	const contentInfoChildren = readSequenceChildren(contentInfoDer);
 	const algorithm = contentInfoChildren[1];
 	const encryptedContent = contentInfoChildren[2];
-	if (algorithm === undefined || encryptedContent === undefined) {
+	if (
+		algorithm === undefined ||
+		encryptedContent === undefined ||
+		contentInfoChildren.length !== 3 ||
+		contentInfoChildren[0]?.tag !== 0x06
+	) {
 		throw new Error('Malformed EncryptedContentInfo');
 	}
 	if (encryptedContent.tag !== 0x80) {
@@ -704,7 +735,12 @@ function extractContextChild(source: Uint8Array, element: DerElement): DerElemen
 	if ((element.tag & 0xe0) !== 0xa0) {
 		throw new Error('Expected context-specific constructed value');
 	}
-	return readElement(source, element.start);
+	const children = childrenOf(source, element);
+	const child = children[0];
+	if (children.length !== 1 || child === undefined) {
+		throw new Error('Expected context-specific wrapper with exactly one value');
+	}
+	return child;
 }
 
 /** Encodes a JS string as an ASN.1 BMPString (UCS-2 big-endian, tag 0x1e). */
@@ -723,6 +759,9 @@ function decodeBmpString(der: Uint8Array): string {
 	const element = readElement(der);
 	if (element.tag !== 0x1e) {
 		throw new Error('Expected BMPString');
+	}
+	if (element.value.length % 2 !== 0) {
+		throw new Error('BMPString must use an even number of bytes');
 	}
 	let value = '';
 	for (let index = 0; index < element.value.length; index += 2) {

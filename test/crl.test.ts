@@ -2742,6 +2742,97 @@ describe('crl', () => {
 		).toThrow('version must use INTEGER');
 	});
 
+	it('parseCertificateRevocationListDer rejects unsupported explicit version values', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Bad CRL Version Value CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Bad CRL Version Value CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			crlNumber: 1,
+		});
+		expect(() =>
+			parseCertificateRevocationListDer(
+				rewriteCrlVersionValue(new Uint8Array(pemDecode('X509 CRL', crl.pem)), Uint8Array.of(0x00)),
+			),
+		).toThrow('Unsupported CRL version: 1');
+	});
+
+	it('parseCertificateRevocationListDer rejects malformed top-level trailing fields', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Trailing CRL Field CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Trailing CRL Field CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+		expect(() =>
+			parseCertificateRevocationListDer(
+				rewriteCrlWithExtraTopLevelField(
+					new Uint8Array(pemDecode('X509 CRL', crl.pem)),
+					tlv(0x05, new Uint8Array()),
+				),
+			),
+		).toThrow('Malformed CRL');
+	});
+
+	it('parseCertificateRevocationListDer rejects v1 CRLs with CRL extensions', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'V1 CRL With Extensions CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'V1 CRL With Extensions CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			crlNumber: 9,
+		});
+		expect(() =>
+			parseCertificateRevocationListDer(
+				removeCrlVersion(new Uint8Array(pemDecode('X509 CRL', crl.pem))),
+			),
+		).toThrow('CRL extensions require version 2');
+	});
+
+	it('parseCertificateRevocationListDer rejects v1 CRLs with revoked entry extensions', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'V1 CRL With Entry Extensions CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'V1 CRL With Entry Extensions CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			revokedCertificates: [
+				{
+					serialNumber: Uint8Array.of(0x01),
+					reasonCode: 'keyCompromise',
+				},
+			],
+		});
+		expect(() =>
+			parseCertificateRevocationListDer(
+				removeCrlVersion(new Uint8Array(pemDecode('X509 CRL', crl.pem))),
+			),
+		).toThrow('revoked certificate extensions require CRL version 2');
+	});
+
 	it('parseCertificateRevocationListDer rejects repeated issuingDistributionPoint fields', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Repeated IDP Field CA' },
@@ -3323,6 +3414,70 @@ function rewriteCrlVersionTag(crlDer: Uint8Array, tag: number): Uint8Array {
 		tbsChildren.map((child, index) =>
 			index === 0 ? tlv(tag, child.value) : sliceElement(tbsDer, child),
 		),
+	);
+	return sequence([
+		rebuiltTbs,
+		sliceElement(crlDer, signatureAlgorithm),
+		sliceElement(crlDer, signatureValue),
+	]);
+}
+
+function rewriteCrlVersionValue(crlDer: Uint8Array, versionValue: Uint8Array): Uint8Array {
+	const topLevel = readSequenceChildren(crlDer);
+	const tbsCertList = topLevel[0];
+	const signatureAlgorithm = topLevel[1];
+	const signatureValue = topLevel[2];
+	if (
+		tbsCertList === undefined ||
+		signatureAlgorithm === undefined ||
+		signatureValue === undefined
+	) {
+		throw new Error('Malformed CRL');
+	}
+	const tbsDer = sliceElement(crlDer, tbsCertList);
+	const tbsChildren = readSequenceChildren(tbsDer);
+	const versionElement = tbsChildren[0];
+	if (versionElement?.tag !== 0x02) {
+		throw new Error('CRL missing version INTEGER');
+	}
+	const rebuiltTbs = sequence(
+		tbsChildren.map((child, index) =>
+			index === 0 ? tlv(0x02, versionValue) : sliceElement(tbsDer, child),
+		),
+	);
+	return sequence([
+		rebuiltTbs,
+		sliceElement(crlDer, signatureAlgorithm),
+		sliceElement(crlDer, signatureValue),
+	]);
+}
+
+function rewriteCrlWithExtraTopLevelField(
+	crlDer: Uint8Array,
+	extraFieldDer: Uint8Array,
+): Uint8Array {
+	const topLevel = readSequenceChildren(crlDer);
+	return sequence([...topLevel.map((child) => sliceElement(crlDer, child)), extraFieldDer]);
+}
+
+function removeCrlVersion(crlDer: Uint8Array): Uint8Array {
+	const topLevel = readSequenceChildren(crlDer);
+	const tbsCertList = topLevel[0];
+	const signatureAlgorithm = topLevel[1];
+	const signatureValue = topLevel[2];
+	if (
+		tbsCertList === undefined ||
+		signatureAlgorithm === undefined ||
+		signatureValue === undefined
+	) {
+		throw new Error('Malformed CRL');
+	}
+	const tbsDer = sliceElement(crlDer, tbsCertList);
+	const tbsChildren = readSequenceChildren(tbsDer);
+	const rebuiltTbs = sequence(
+		tbsChildren
+			.filter((child, index) => !(index === 0 && child.tag === 0x02))
+			.map((child) => sliceElement(tbsDer, child)),
 	);
 	return sequence([
 		rebuiltTbs,

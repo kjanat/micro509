@@ -168,6 +168,29 @@ describe('pkcs7', () => {
 		if (!result.ok) expect(result.code).toBe('malformed');
 	});
 
+	it('parsePkcs7SignedDataDer rejects content info wrappers with trailing fields or multiple explicit values', () => {
+		const signedData = sequence([
+			integerFromNumber(1),
+			setOf([sequence([objectIdentifier(OIDS.sha256)])]),
+			sequence([objectIdentifier(OIDS.pkcs7Data)]),
+			setOf([]),
+		]);
+		const extraField = sequence([
+			objectIdentifier(OIDS.pkcs7SignedData),
+			explicitContext(0, signedData),
+			tlv(0x05, new Uint8Array()),
+		]);
+		expect(parsePkcs7SignedDataDer(extraField)).toMatchObject({ ok: false, code: 'malformed' });
+		const multiValueWrapper = sequence([
+			objectIdentifier(OIDS.pkcs7SignedData),
+			explicitContext(0, new Uint8Array([0x30, 0x00, 0x30, 0x00])),
+		]);
+		expect(parsePkcs7SignedDataDer(multiValueWrapper)).toMatchObject({
+			ok: false,
+			code: 'malformed',
+		});
+	});
+
 	it('parsePkcs7SignedDataPem parses valid PEM', async () => {
 		const signer = await createSelfSignedCertificate({
 			subject: { commonName: 'PEM Parse Signer' },
@@ -911,6 +934,17 @@ describe('pkcs7', () => {
 		const result = parsePkcs7SignedDataDer(der);
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.code).toBe('malformed');
+	});
+
+	it('parsePkcs7SignedDataDer rejects malformed digest AlgorithmIdentifier entries', () => {
+		const signedData = sequence([
+			integerFromNumber(1),
+			setOf([sequence([integerFromNumber(1)])]),
+			sequence([objectIdentifier(OIDS.pkcs7Data)]),
+			setOf([]),
+		]);
+		const der = sequence([objectIdentifier(OIDS.pkcs7SignedData), explicitContext(0, signedData)]);
+		expect(parsePkcs7SignedDataDer(der)).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
 	it('parsePkcs7SignedDataDer rejects malformed EncapsulatedContentInfo', () => {

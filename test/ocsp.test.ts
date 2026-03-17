@@ -1922,6 +1922,51 @@ describe('ocsp', () => {
 		expect(parsed.nonce).toBeUndefined();
 	});
 
+	it('parseOcspRequestDer rejects malformed requestorName and optionalSignature wrappers', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Malformed Request Wrapper CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Malformed Request Wrapper CA' },
+			subject: { commonName: 'malformed-request-wrapper.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const request = await createOcspRequest({
+			requests: [{ certificate: leaf.pem, issuerCertificate: issuer.certificate.pem }],
+		});
+		expect(() =>
+			parseOcspRequestDer(
+				rewriteOcspRequestTbs(request.der, [explicitContext(1, sequence([integerFromNumber(1)]))]),
+			),
+		).toThrow('requestorName must wrap exactly one GeneralName');
+		expect(() =>
+			parseOcspRequestDer(
+				rewriteOcspRequestOptionalSignature(
+					request.der,
+					explicitContext(0, sequence([integerFromNumber(1)])),
+				),
+			),
+		).toThrow('Malformed optionalSignature');
+		expect(() =>
+			parseOcspRequestDer(
+				rewriteOcspRequestOptionalSignature(
+					request.der,
+					explicitContext(
+						0,
+						sequence([sequence([integerFromNumber(1)]), bitString(Uint8Array.of(0x01))]),
+					),
+				),
+			),
+		).toThrow('optionalSignature algorithm must use AlgorithmIdentifier SEQUENCE');
+	});
+
 	it('validates OCSP response with pre-parsed request input', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'Parsed Req CA' },
@@ -2058,6 +2103,40 @@ describe('ocsp', () => {
 			request: parsedRequestWithoutDer,
 		});
 		expect(result).toMatchObject({ ok: false, code: 'request_mismatch' });
+	});
+
+	it('validateOcspResponse fails closed for duplicate OCSP response CertIDs', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Duplicate Response CertID CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Duplicate Response CertID CA' },
+			subject: { commonName: 'duplicate-response-certid.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const response = await createOcspResponse({
+			signerPrivateKey: issuer.keyPair.privateKey,
+			signerCertificate: issuer.certificate.pem,
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: 'good',
+				},
+			],
+		});
+		const result = await validateOcspResponse({
+			response: duplicateFirstOcspSingleResponse(response.der),
+			issuerCertificate: issuer.certificate.pem,
+		});
+		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
 	});
 
 	it('validateOcspResponse returns issuer_mismatch for wrong issuer cert', async () => {
@@ -2317,7 +2396,7 @@ describe('ocsp', () => {
 		// Build ResponseData WITH explicit version [0]
 		const responseData = sequence([
 			explicitContext(0, integerFromNumber(0)), // version v1 = 0, explicit [0]
-			tlv(0xa2, octetString(issuerKeyHash)), // responderID byKeyHash [2]
+			implicitPrimitiveContext(2, issuerKeyHash), // responderID byKeyHash [2]
 			generalizedTime(new Date()), // producedAt
 			sequence([singleResponse]), // responses
 		]);
@@ -2455,7 +2534,7 @@ describe('ocsp', () => {
 			octetString(Uint8Array.of(0x05, 0x00)),
 		]);
 		const responseData = sequence([
-			tlv(0xa2, octetString(issuerKeyHash)), // responderID byKeyHash [2]
+			implicitPrimitiveContext(2, issuerKeyHash), // responderID byKeyHash [2]
 			generalizedTime(new Date()),
 			sequence([singleResponse]),
 			explicitContext(1, sequence([fakeExtension])), // responseExtensions [1]
@@ -2477,6 +2556,58 @@ describe('ocsp', () => {
 		expect(parsed.responseStatus).toBe('successful');
 		// Nonce should be undefined since extensions don't contain nonce OID
 		expect(parsed.nonce).toBeUndefined();
+	});
+
+	it('parseOcspResponseDer rejects malformed responderID and nextUpdate wrappers', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Malformed Responder Wrapper CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const parsedIssuer = parseCertificatePem(issuer.certificate.pem);
+		const responderKeyHash = new Uint8Array(
+			sha1(extractSubjectPublicKeyBytes(parsedIssuer.subjectPublicKeyInfoDer)),
+		);
+		const response = await createSignedOcspResponseWithResponderId({
+			signerPrivateKey: issuer.keyPair.privateKey,
+			certificatePem: issuer.certificate.pem,
+			issuerCertificatePem: issuer.certificate.pem,
+			responderId: {
+				type: 'byKeyHash',
+				keyHash: responderKeyHash,
+			},
+		});
+		expect(() =>
+			parseOcspResponseDer(
+				rewriteOcspResponseResponderId(
+					response,
+					explicitContext(2, octetString(Uint8Array.of(0x01))),
+				),
+			),
+		).toThrow('Unsupported OCSP responderID tag');
+
+		const responseWithNextUpdate = await createOcspResponse({
+			signerPrivateKey: issuer.keyPair.privateKey,
+			signerCertificate: issuer.certificate.pem,
+			responses: [
+				{
+					certificate: issuer.certificate.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: 'good',
+					nextUpdate: new Date('2024-01-02T00:00:00Z'),
+				},
+			],
+		});
+		expect(() =>
+			parseOcspResponseDer(
+				rewriteOcspResponseNextUpdate(
+					responseWithNextUpdate.der,
+					explicitContext(0, sequence([integerFromNumber(1)])),
+				),
+			),
+		).toThrow('nextUpdate must wrap exactly one time value');
 	});
 
 	it('parseOcspResponseDer rejects duplicate OCSP extension OIDs', async () => {
@@ -2522,7 +2653,7 @@ describe('ocsp', () => {
 			octetString(octetString(Uint8Array.of(0xaa, 0xbb))),
 		]);
 		const responseData = sequence([
-			tlv(0xa2, octetString(issuerKeyHash)),
+			implicitPrimitiveContext(2, issuerKeyHash),
 			generalizedTime(new Date()),
 			sequence([singleResponse]),
 			explicitContext(1, sequence([nonceExtension, nonceExtension])),
@@ -2584,7 +2715,7 @@ describe('ocsp', () => {
 		]);
 		const nonceExtension = sequence([objectIdentifier(OIDS.ocspNonce), integerFromNumber(1)]);
 		const responseData = sequence([
-			tlv(0xa2, octetString(issuerKeyHash)),
+			implicitPrimitiveContext(2, issuerKeyHash),
 			generalizedTime(new Date()),
 			sequence([singleResponse]),
 			explicitContext(1, sequence([nonceExtension])),
@@ -2652,7 +2783,7 @@ describe('ocsp', () => {
 			octetString(octetString(Uint8Array.of(0xaa, 0xbb))),
 		]);
 		const responseData = sequence([
-			tlv(0xa2, octetString(issuerKeyHash)),
+			implicitPrimitiveContext(2, issuerKeyHash),
 			generalizedTime(new Date()),
 			sequence([singleResponse]),
 			explicitContext(1, sequence([nonceExtension])),
@@ -2713,7 +2844,7 @@ describe('ocsp', () => {
 			generalizedTime(new Date()),
 		]);
 		const responseData = sequence([
-			tlv(0xa2, octetString(issuerKeyHash)),
+			implicitPrimitiveContext(2, issuerKeyHash),
 			generalizedTime(new Date()),
 			sequence([singleResponse]),
 		]);
@@ -3080,6 +3211,202 @@ function rewriteOcspResponseCertIdSerialTag(ocspResponseDer: Uint8Array, tag: nu
 			index === 2 ? rebuiltResponses : sliceDer(responseDataDer, child),
 		),
 	);
+	const rebuiltBasicResponse = sequence([
+		rebuiltResponseData,
+		...basicChildren
+			.slice(1)
+			.map((child: ReturnType<typeof readElement>) => sliceDer(basicResponseDer, child)),
+	]);
+	const rebuiltResponseBytes = sequence([
+		sliceDer(responseBytesDer, responseType),
+		octetString(rebuiltBasicResponse),
+	]);
+	return sequence([
+		sliceDer(ocspResponseDer, responseStatus),
+		explicitContext(0, rebuiltResponseBytes),
+	]);
+}
+
+function rewriteOcspRequestTbs(
+	ocspRequestDer: Uint8Array,
+	insertedFields: readonly Uint8Array[],
+): Uint8Array {
+	const topLevel = readSequenceChildren(ocspRequestDer);
+	const tbsRequest = topLevel[0];
+	if (tbsRequest === undefined) {
+		throw new Error('OCSP request missing tbsRequest');
+	}
+	const tbsRequestDer = sliceDer(ocspRequestDer, tbsRequest);
+	const tbsChildren = readSequenceChildren(tbsRequestDer);
+	const requestListIndex = tbsChildren[0]?.tag === 0xa0 ? 1 : 0;
+	const rebuiltTbsRequest = sequence([
+		...tbsChildren.slice(0, requestListIndex).map((child) => sliceDer(tbsRequestDer, child)),
+		...insertedFields,
+		...tbsChildren.slice(requestListIndex).map((child) => sliceDer(tbsRequestDer, child)),
+	]);
+	return sequence([
+		rebuiltTbsRequest,
+		...topLevel.slice(1).map((child) => sliceDer(ocspRequestDer, child)),
+	]);
+}
+
+function rewriteOcspRequestOptionalSignature(
+	ocspRequestDer: Uint8Array,
+	optionalSignatureDer: Uint8Array,
+): Uint8Array {
+	const topLevel = readSequenceChildren(ocspRequestDer);
+	const tbsRequest = topLevel[0];
+	if (tbsRequest === undefined) {
+		throw new Error('OCSP request missing tbsRequest');
+	}
+	return sequence([sliceDer(ocspRequestDer, tbsRequest), optionalSignatureDer]);
+}
+
+function duplicateFirstOcspSingleResponse(ocspResponseDer: Uint8Array): Uint8Array {
+	const topLevel = readSequenceChildren(ocspResponseDer);
+	const responseStatus = topLevel[0];
+	const responseBytes = topLevel[1];
+	if (responseStatus === undefined || responseBytes === undefined) {
+		throw new Error('OCSP response missing top-level fields');
+	}
+	const responseBytesSequence = childrenOf(ocspResponseDer, responseBytes)[0];
+	if (responseBytesSequence === undefined) {
+		throw new Error('OCSP response missing responseBytes sequence');
+	}
+	const responseBytesDer = sliceDer(ocspResponseDer, responseBytesSequence);
+	const responseBytesChildren = readSequenceChildren(responseBytesDer);
+	const responseType = responseBytesChildren[0];
+	const response = responseBytesChildren[1];
+	if (responseType === undefined || response === undefined) {
+		throw new Error('OCSP response missing responseType or response');
+	}
+	const basicResponseDer = response.value;
+	const basicChildren = readSequenceChildren(basicResponseDer);
+	const responseData = basicChildren[0];
+	if (responseData === undefined) {
+		throw new Error('OCSP response missing responseData');
+	}
+	const responseDataDer = sliceDer(basicResponseDer, responseData);
+	const responseDataChildren = readSequenceChildren(responseDataDer);
+	const responses = responseDataChildren[2];
+	if (responses === undefined) {
+		throw new Error('OCSP response missing responses');
+	}
+	const responseElements = childrenOf(responseDataDer, responses);
+	const firstResponse = responseElements[0];
+	if (firstResponse === undefined) {
+		throw new Error('OCSP response missing SingleResponse');
+	}
+	const firstResponseDer = sliceDer(responseDataDer, firstResponse);
+	const rebuiltResponses = sequence([
+		firstResponseDer,
+		firstResponseDer,
+		...responseElements
+			.slice(1)
+			.map((entry: ReturnType<typeof readElement>) => sliceDer(responseDataDer, entry)),
+	]);
+	const rebuiltResponseData = sequence(
+		responseDataChildren.map((child: ReturnType<typeof readElement>, index: number) =>
+			index === 2 ? rebuiltResponses : sliceDer(responseDataDer, child),
+		),
+	);
+	const rebuiltBasicResponse = sequence([
+		rebuiltResponseData,
+		...basicChildren
+			.slice(1)
+			.map((child: ReturnType<typeof readElement>) => sliceDer(basicResponseDer, child)),
+	]);
+	const rebuiltResponseBytes = sequence([
+		sliceDer(responseBytesDer, responseType),
+		octetString(rebuiltBasicResponse),
+	]);
+	return sequence([
+		sliceDer(ocspResponseDer, responseStatus),
+		explicitContext(0, rebuiltResponseBytes),
+	]);
+}
+
+function rewriteOcspResponseResponderId(
+	ocspResponseDer: Uint8Array,
+	responderIdDer: Uint8Array,
+): Uint8Array {
+	return rewriteOcspResponseData(ocspResponseDer, (responseDataDer, responseDataChildren) =>
+		sequence(
+			responseDataChildren.map((child: ReturnType<typeof readElement>, index: number) =>
+				index === 0 ? responderIdDer : sliceDer(responseDataDer, child),
+			),
+		),
+	);
+}
+
+function rewriteOcspResponseNextUpdate(
+	ocspResponseDer: Uint8Array,
+	nextUpdateDer: Uint8Array,
+): Uint8Array {
+	return rewriteOcspResponseData(ocspResponseDer, (responseDataDer, responseDataChildren) => {
+		const responses = responseDataChildren[2];
+		if (responses === undefined) {
+			throw new Error('OCSP response missing responses');
+		}
+		const responseElements = childrenOf(responseDataDer, responses);
+		const firstResponse = responseElements[0];
+		if (firstResponse === undefined) {
+			throw new Error('OCSP response missing SingleResponse');
+		}
+		const firstResponseDer = sliceDer(responseDataDer, firstResponse);
+		const firstResponseChildren = readSequenceChildren(firstResponseDer);
+		const rebuiltFirstResponse = sequence([
+			...firstResponseChildren.slice(0, 3).map((child) => sliceDer(firstResponseDer, child)),
+			nextUpdateDer,
+			...firstResponseChildren.slice(4).map((child) => sliceDer(firstResponseDer, child)),
+		]);
+		const rebuiltResponses = sequence([
+			rebuiltFirstResponse,
+			...responseElements
+				.slice(1)
+				.map((entry: ReturnType<typeof readElement>) => sliceDer(responseDataDer, entry)),
+		]);
+		return sequence(
+			responseDataChildren.map((child: ReturnType<typeof readElement>, index: number) =>
+				index === 2 ? rebuiltResponses : sliceDer(responseDataDer, child),
+			),
+		);
+	});
+}
+
+function rewriteOcspResponseData(
+	ocspResponseDer: Uint8Array,
+	rewrite: (
+		responseDataDer: Uint8Array,
+		responseDataChildren: readonly ReturnType<typeof readElement>[],
+	) => Uint8Array,
+): Uint8Array {
+	const topLevel = readSequenceChildren(ocspResponseDer);
+	const responseStatus = topLevel[0];
+	const responseBytes = topLevel[1];
+	if (responseStatus === undefined || responseBytes === undefined) {
+		throw new Error('OCSP response missing top-level fields');
+	}
+	const responseBytesSequence = childrenOf(ocspResponseDer, responseBytes)[0];
+	if (responseBytesSequence === undefined) {
+		throw new Error('OCSP response missing responseBytes sequence');
+	}
+	const responseBytesDer = sliceDer(ocspResponseDer, responseBytesSequence);
+	const responseBytesChildren = readSequenceChildren(responseBytesDer);
+	const responseType = responseBytesChildren[0];
+	const response = responseBytesChildren[1];
+	if (responseType === undefined || response === undefined) {
+		throw new Error('OCSP response missing responseType or response');
+	}
+	const basicResponseDer = response.value;
+	const basicChildren = readSequenceChildren(basicResponseDer);
+	const responseData = basicChildren[0];
+	if (responseData === undefined) {
+		throw new Error('OCSP response missing responseData');
+	}
+	const responseDataDer = sliceDer(basicResponseDer, responseData);
+	const responseDataChildren = readSequenceChildren(responseDataDer);
+	const rebuiltResponseData = rewrite(responseDataDer, responseDataChildren);
 	const rebuiltBasicResponse = sequence([
 		rebuiltResponseData,
 		...basicChildren

@@ -407,6 +407,9 @@ export function parseOcspRequestDer(der: Uint8Array): ParsedOcspRequest {
 	if (optionalSignature !== undefined && optionalSignature.tag !== 0xa0) {
 		throw new Error('Malformed OCSP request');
 	}
+	if (optionalSignature !== undefined) {
+		validateOcspOptionalSignature(der, optionalSignature);
+	}
 	const tbsChildren = childrenOf(der, tbsRequest);
 	let cursor = 0;
 	if (tbsChildren[cursor]?.tag === 0xa0) {
@@ -421,7 +424,9 @@ export function parseOcspRequestDer(der: Uint8Array): ParsedOcspRequest {
 		}
 		cursor += 1;
 	}
-	if (tbsChildren[cursor]?.tag === 0xa1) {
+	const requestorName = tbsChildren[cursor];
+	if (requestorName?.tag === 0xa1) {
+		validateOcspRequestorName(der, requestorName);
 		cursor += 1;
 	}
 	const requestList = requireElement(tbsChildren[cursor], 'requestList');
@@ -1062,12 +1067,14 @@ function parseSignedOcspResponseData(responseDataDer: Uint8Array): {
 		responseExtensions === undefined
 			? undefined
 			: parseOcspNonceFromExtensions(responseDataDer, responseExtensions);
+	const parsedResponses = childrenOf(responseDataDer, responsesElement).map((singleResponse) =>
+		parseSingleResponse(responseDataDer, singleResponse),
+	);
+	assertUniqueOcspResponseCertIds(parsedResponses);
 	return {
 		responderId,
 		producedAt: parseTime(producedAtElement),
-		responses: childrenOf(responseDataDer, responsesElement).map((singleResponse) =>
-			parseSingleResponse(responseDataDer, singleResponse),
-		),
+		responses: parsedResponses,
 		...(nonce === undefined ? {} : { nonce }),
 	};
 }
@@ -1318,6 +1325,7 @@ function parseSingleResponse(source: Uint8Array, element: DerElement): ParsedOcs
 	let cursor = 3;
 	const nextUpdateElement = children[cursor]?.tag === 0xa0 ? children[cursor] : undefined;
 	if (nextUpdateElement !== undefined) {
+		validateOcspSingleResponseNextUpdate(source, nextUpdateElement);
 		cursor += 1;
 	}
 	const singleExtensions = children[cursor];
@@ -1391,20 +1399,19 @@ function parseSingleResponse(source: Uint8Array, element: DerElement): ParsedOcs
 function parseOcspResponderId(source: Uint8Array, element: DerElement): ParsedOcspResponderId {
 	switch (element.tag) {
 		case 0x82:
+			if (element.value.length === 0) {
+				throw new Error('ResponderID byKeyHash must not be empty');
+			}
 			return { type: 'byKeyHash', keyHashHex: toHex(element.value) };
 		case 0xa1:
+			if (childrenOf(source, element).length !== 1) {
+				throw new Error('ResponderID byName must wrap exactly one Name');
+			}
 			return {
 				type: 'byName',
 				name: parseResponderName(
 					source,
 					requireElement(childrenOf(source, element)[0], 'ResponderID byName'),
-				),
-			};
-		case 0xa2:
-			return {
-				type: 'byKeyHash',
-				keyHashHex: toHex(
-					requireElement(childrenOf(source, element)[0], 'ResponderID byKeyHash').value,
 				),
 			};
 		default:
@@ -1414,6 +1421,9 @@ function parseOcspResponderId(source: Uint8Array, element: DerElement): ParsedOc
 
 /** Decodes a Name SEQUENCE from the ResponderID byName form. */
 function parseResponderName(source: Uint8Array, element: DerElement): ParsedName {
+	if (element.tag !== 0x30) {
+		throw new Error('ResponderID byName must use Name SEQUENCE');
+	}
 	const rdns: ParsedRelativeDistinguishedName[] = [];
 	const attributes: ParsedNameAttribute[] = [];
 	const values: ParsedName['values'] = {};
@@ -1579,8 +1589,9 @@ function responderNameKeyFromOid(oid: string): ParsedNameAttribute['key'] {
 
 /** Extracts the nonce value (as hex) from an OCSP extensions wrapper, if present. */
 function parseOcspNonceFromExtensions(source: Uint8Array, element: DerElement): string | undefined {
-	const extensionsSequence = requireElement(childrenOf(source, element)[0], 'extensions');
-	if (childrenOf(source, element).length !== 1 || extensionsSequence.tag !== 0x30) {
+	const extensionsChildren = childrenOf(source, element);
+	const extensionsSequence = requireElement(extensionsChildren[0], 'extensions');
+	if (extensionsChildren.length !== 1 || extensionsSequence.tag !== 0x30) {
 		throw new Error('Malformed OCSP extensions');
 	}
 	const seenOids = new Set<string>();
@@ -1669,6 +1680,78 @@ function hasReparseableOcspResponseShape(
 	response: ParsedOcspResponse,
 ): response is ParsedOcspResponse & { readonly der: Uint8Array } {
 	return 'der' in response && response.der instanceof Uint8Array;
+}
+
+function assertUniqueOcspResponseCertIds(responses: readonly ParsedOcspSingleResponse[]): void {
+	const seen = new Set<string>();
+	for (const response of responses) {
+		const key = serializeCertId(response.certId);
+		if (seen.has(key)) {
+			throw new Error('Duplicate OCSP response CertID');
+		}
+		seen.add(key);
+	}
+}
+
+function validateOcspRequestorName(source: Uint8Array, element: DerElement): void {
+	const children = childrenOf(source, element);
+	const requestorName = requireElement(children[0], 'requestorName');
+	if (children.length !== 1 || (requestorName.tag & 0xc0) !== 0x80) {
+		throw new Error('requestorName must wrap exactly one GeneralName');
+	}
+}
+
+function validateOcspOptionalSignature(source: Uint8Array, element: DerElement): void {
+	const wrapperChildren = childrenOf(source, element);
+	const signatureSequence = requireElement(wrapperChildren[0], 'optionalSignature');
+	if (wrapperChildren.length !== 1 || signatureSequence.tag !== 0x30) {
+		throw new Error('optionalSignature must wrap exactly one Signature');
+	}
+	const signatureChildren = childrenOf(source, signatureSequence);
+	if (
+		signatureChildren.length < 2 ||
+		signatureChildren.length > 3 ||
+		signatureChildren[0]?.tag !== 0x30 ||
+		(signatureChildren[2] !== undefined && signatureChildren[2]?.tag !== 0xa0)
+	) {
+		throw new Error('Malformed optionalSignature');
+	}
+	const signatureAlgorithm = requireElement(signatureChildren[0], 'signatureAlgorithm');
+	const signatureValue = requireElement(signatureChildren[1], 'signature');
+	const certificates = signatureChildren[2];
+	validateAlgorithmIdentifierShape(source, signatureAlgorithm, 'optionalSignature algorithm');
+	extractBitStringValue(signatureValue);
+	if (certificates !== undefined) {
+		const certificateChildren = childrenOf(source, certificates);
+		if (certificateChildren.length !== 1 || certificateChildren[0]?.tag !== 0x30) {
+			throw new Error('optionalSignature certs must use SEQUENCE OF Certificate');
+		}
+	}
+}
+
+function validateOcspSingleResponseNextUpdate(source: Uint8Array, element: DerElement): void {
+	const children = childrenOf(source, element);
+	const nextUpdate = requireElement(children[0], 'nextUpdate');
+	if (children.length !== 1 || (nextUpdate.tag !== 0x17 && nextUpdate.tag !== 0x18)) {
+		throw new Error('nextUpdate must wrap exactly one time value');
+	}
+}
+
+function validateAlgorithmIdentifierShape(
+	source: Uint8Array,
+	element: DerElement,
+	label: string,
+): void {
+	const children = childrenOf(source, element);
+	if (
+		element.tag !== 0x30 ||
+		children.length < 1 ||
+		children.length > 2 ||
+		children[0]?.tag !== 0x06
+	) {
+		throw new Error(`${label} must use AlgorithmIdentifier SEQUENCE`);
+	}
+	decodeObjectIdentifier(requireElement(children[0], `${label} OID`).value);
 }
 
 /** Maps a hash algorithm OID to the WebCrypto algorithm name. Throws on unsupported OIDs. */

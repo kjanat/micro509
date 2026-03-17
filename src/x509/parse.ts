@@ -436,6 +436,9 @@ export function parseCertificateDer<TMap extends ExtensionDecoderMap = Record<ne
 			throw new Error('version must use INTEGER');
 		}
 		version = decodeIntegerNumber(versionElement.value) + 1;
+		if (version < 1 || version > 3) {
+			throw new Error(`Unsupported certificate version: ${String(version)}`);
+		}
 		index += 1;
 	}
 
@@ -448,14 +451,27 @@ export function parseCertificateDer<TMap extends ExtensionDecoderMap = Record<ne
 	const subject = requireElement(tbsChildren[index + 4], 'subject');
 	const subjectPublicKeyInfo = requireElement(tbsChildren[index + 5], 'subjectPublicKeyInfo');
 	let cursor = index + 6;
-	if (tbsChildren[cursor]?.tag === 0x81) {
+	const issuerUniqueIdElement = tbsChildren[cursor];
+	if (issuerUniqueIdElement?.tag === 0x81) {
+		if (version < 2) {
+			throw new Error('issuerUniqueID requires certificate version 2 or 3');
+		}
+		validateImplicitBitStringContent(issuerUniqueIdElement.value, 'issuerUniqueID');
 		cursor += 1;
 	}
-	if (tbsChildren[cursor]?.tag === 0x82) {
+	const subjectUniqueIdElement = tbsChildren[cursor];
+	if (subjectUniqueIdElement?.tag === 0x82) {
+		if (version < 2) {
+			throw new Error('subjectUniqueID requires certificate version 2 or 3');
+		}
+		validateImplicitBitStringContent(subjectUniqueIdElement.value, 'subjectUniqueID');
 		cursor += 1;
 	}
 	const extensions = tbsChildren[cursor]?.tag === 0xa3 ? tbsChildren[cursor] : undefined;
 	if (extensions !== undefined) {
+		if (version !== 3) {
+			throw new Error('extensions require certificate version 3');
+		}
 		cursor += 1;
 	}
 	if (cursor !== tbsChildren.length) {
@@ -641,6 +657,9 @@ export function parseCertificateSigningRequestDer<
 		throw new Error('version must use INTEGER');
 	}
 	const version = decodeIntegerNumber(versionElement.value) + 1;
+	if (version !== 1) {
+		throw new Error(`Unsupported CertificationRequestInfo version: ${String(version)}`);
+	}
 	const subject = requireElement(criChildren[1], 'subject');
 	const subjectPublicKeyInfo = requireElement(criChildren[2], 'subjectPublicKeyInfo');
 	const attributes = criChildren[3];
@@ -1023,8 +1042,19 @@ function parseSubjectPublicKeyInfo(
 	source: Uint8Array,
 	element: DerElement,
 ): ParsedAlgorithmIdentifier {
+	if (element.tag !== 0x30) {
+		throw new Error('SubjectPublicKeyInfo must use SEQUENCE');
+	}
 	const children = childrenOf(source, element);
-	const algorithm = parseAlgorithmIdentifier(source, requireElement(children[0], 'SPKI algorithm'));
+	if (children.length !== 2) {
+		throw new Error('SubjectPublicKeyInfo must contain algorithm and subjectPublicKey');
+	}
+	const algorithmElement = requireElement(children[0], 'SPKI algorithm');
+	if (algorithmElement.tag !== 0x30) {
+		throw new Error('SubjectPublicKeyInfo algorithm must use SEQUENCE');
+	}
+	const algorithm = parseAlgorithmIdentifier(source, algorithmElement);
+	extractBitStringValue(requireElement(children[1], 'subjectPublicKey BIT STRING'));
 	return algorithm;
 }
 
@@ -1832,5 +1862,30 @@ function validateImplicitSerialNumberEncoding(bytes: Uint8Array, label: string):
 	}
 	if (bytes.length > 1 && first === 0 && ((bytes[1] ?? 0) & 0x80) === 0) {
 		throw new Error(`${label} must use minimal encoding`);
+	}
+}
+
+function validateImplicitBitStringContent(bytes: Uint8Array, label: string): void {
+	const unusedBits = bytes[0];
+	if (unusedBits === undefined || unusedBits > 7) {
+		throw new Error(`${label} must use BIT STRING encoding`);
+	}
+	const bitStringBytes = bytes.slice(1);
+	if (bitStringBytes.length === 0) {
+		if (unusedBits !== 0) {
+			throw new Error(`${label} must use BIT STRING encoding`);
+		}
+		return;
+	}
+	if (unusedBits === 0) {
+		return;
+	}
+	const lastByte = bitStringBytes[bitStringBytes.length - 1];
+	if (lastByte === undefined) {
+		throw new Error(`${label} must use BIT STRING encoding`);
+	}
+	const paddingMask = (1 << unusedBits) - 1;
+	if ((lastByte & paddingMask) !== 0) {
+		throw new Error(`${label} BIT STRING must not set padding bits`);
 	}
 }
