@@ -23,6 +23,7 @@ const config = {
 	hideBreadcrumbs: false,
 	typePrintWidth: 60,
 	commentStyle: 'jsdoc',
+	watch: process.env.WATCH === 'true',
 };
 
 export default config;
