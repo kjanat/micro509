@@ -90,4 +90,34 @@ describe('checkChainRevocation', () => {
 		expect(firstCert?.source?.type).toBe('crl');
 		expect(result.value.decision).toBe('allow');
 	});
+
+	it('returns revoked status and denies when cert is on CRL', async () => {
+		const root = await loadPkitsCert('TrustAnchorRootCertificate');
+		const goodCa = await loadPkitsCert('GoodCACert');
+		const revokedCa = await loadPkitsCert('RevokedsubCACert');
+		const rootCrl = await loadPkitsCrl('TrustAnchorRootCRL');
+		const goodCaCrl = await loadPkitsCrl('GoodCACRL');
+
+		// Chain: revokedCa → goodCa → root
+		// revokedCa is issued by goodCa and revoked in GoodCACRL
+		const result = await checkChainRevocation({
+			chain: [revokedCa, goodCa, root],
+			crls: [rootCrl, goodCaCrl],
+			at: new Date('2011-04-15T00:00:00Z'),
+		});
+
+		expect(result.ok).toBe(true);
+		expect(result.value.decision).toBe('deny');
+		expect(result.value.summary.revokedCertificates).toHaveLength(1);
+
+		// First cert (revokedCa) should be revoked
+		const revokedStatus = result.value.certificates[0];
+		expect(revokedStatus?.status).toBe('revoked');
+		expect(revokedStatus?.revocationInfo).toBeDefined();
+		expect(revokedStatus?.source?.type).toBe('crl');
+
+		// Second cert (goodCa) should be good
+		const goodStatus = result.value.certificates[1];
+		expect(goodStatus?.status).toBe('good');
+	});
 });
