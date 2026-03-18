@@ -420,8 +420,7 @@ function findSignerIssuer(
 		if (
 			signer.authorityKeyIdentifier !== undefined &&
 			candidate.subjectKeyIdentifier !== undefined &&
-			normalizeHex(signer.authorityKeyIdentifier) ===
-				normalizeHex(candidate.subjectKeyIdentifier)
+			normalizeHex(signer.authorityKeyIdentifier) === normalizeHex(candidate.subjectKeyIdentifier)
 		) {
 			return candidate;
 		}
@@ -789,12 +788,11 @@ export async function checkChainRevocation(
 	// Apply policy
 	const hasRevoked = revokedCertificates.length > 0;
 	const hasIndeterminate = indeterminateCertificates.length > 0;
-	const decision: 'allow' | 'deny' =
-		hasRevoked
+	const decision: 'allow' | 'deny' = hasRevoked
+		? 'deny'
+		: hasIndeterminate && mode === 'hard-fail'
 			? 'deny'
-			: hasIndeterminate && mode === 'hard-fail'
-				? 'deny'
-				: 'allow';
+			: 'allow';
 
 	return {
 		ok: true,
@@ -802,9 +800,7 @@ export async function checkChainRevocation(
 			decision,
 			summary: { revokedCertificates, indeterminateCertificates },
 			certificates,
-			...(allExecutionErrors.length > 0
-				? { executionErrors: allExecutionErrors }
-				: {}),
+			...(allExecutionErrors.length > 0 ? { executionErrors: allExecutionErrors } : {}),
 		},
 	};
 }

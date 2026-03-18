@@ -8,16 +8,12 @@ import {
 } from 'micro509';
 
 async function loadPkitsCert(name: string) {
-	const der = await readFile(
-		new URL(`./fixtures/pkits/certs/${name}.crt`, import.meta.url),
-	);
+	const der = await readFile(new URL(`./fixtures/pkits/certs/${name}.crt`, import.meta.url));
 	return parseCertificateDer(new Uint8Array(der));
 }
 
 async function loadPkitsCrl(name: string) {
-	const der = await readFile(
-		new URL(`./fixtures/pkits/crls/${name}.crl`, import.meta.url),
-	);
+	const der = await readFile(new URL(`./fixtures/pkits/crls/${name}.crl`, import.meta.url));
 	return parseCertificateRevocationListDer(new Uint8Array(der));
 }
 
@@ -148,9 +144,7 @@ describe('checkChainRevocation', () => {
 		expect(caStatus?.status).toBe('good');
 		expect(caStatus?.source?.type).toBe('crl');
 		// Signer should be root (chain issuer)
-		expect(caStatus?.source?.signerCertificate?.subject.derHex).toBe(
-			root.subject.derHex,
-		);
+		expect(caStatus?.source?.signerCertificate?.subject.derHex).toBe(root.subject.derHex);
 	});
 
 	it('tracks correct signer when CRL issuer found in chain', async () => {
@@ -176,16 +170,12 @@ describe('checkChainRevocation', () => {
 		// goodSubCa checked against goodCaCrl, signer is goodCa
 		const subCaStatus = result.value.certificates[0];
 		expect(subCaStatus?.status).toBe('good');
-		expect(subCaStatus?.source?.signerCertificate?.subject.derHex).toBe(
-			goodCa.subject.derHex,
-		);
+		expect(subCaStatus?.source?.signerCertificate?.subject.derHex).toBe(goodCa.subject.derHex);
 
 		// goodCa checked against rootCrl, signer is root
 		const caStatus = result.value.certificates[1];
 		expect(caStatus?.status).toBe('good');
-		expect(caStatus?.source?.signerCertificate?.subject.derHex).toBe(
-			root.subject.derHex,
-		);
+		expect(caStatus?.source?.signerCertificate?.subject.derHex).toBe(root.subject.derHex);
 	});
 
 	it('PKITS 4.4.21: denies when CRL signer is revoked', async () => {
@@ -196,12 +186,8 @@ describe('checkChainRevocation', () => {
 		const certSigningCa = await loadPkitsCert(
 			'SeparateCertificateandCRLKeysCA2CertificateSigningCACert',
 		);
-		const crlSigningCert = await loadPkitsCert(
-			'SeparateCertificateandCRLKeysCA2CRLSigningCert',
-		);
-		const leaf = await loadPkitsCert(
-			'InvalidSeparateCertificateandCRLKeysTest21EE',
-		);
+		const crlSigningCert = await loadPkitsCert('SeparateCertificateandCRLKeysCA2CRLSigningCert');
+		const leaf = await loadPkitsCert('InvalidSeparateCertificateandCRLKeysTest21EE');
 
 		const rootCrl = await loadPkitsCrl('TrustAnchorRootCRL');
 		const ca2Crl = await loadPkitsCrl('SeparateCertificateandCRLKeysCA2CRL');

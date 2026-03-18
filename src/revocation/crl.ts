@@ -46,7 +46,10 @@ import {
 	signBytes,
 } from '#micro509/internal/crypto/signing.ts';
 import { base64Encode } from '#micro509/internal/shared/base64.ts';
-import { compareDistinguishedNames, compareNameAttributeValue } from '#micro509/internal/shared/dn.ts';
+import {
+	compareDistinguishedNames,
+	compareNameAttributeValue,
+} from '#micro509/internal/shared/dn.ts';
 import { decodeIpAddress } from '#micro509/internal/shared/ip.ts';
 import {
 	encodeDistributionPointReasonFlagsContent,
