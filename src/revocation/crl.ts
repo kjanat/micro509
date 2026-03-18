@@ -22,7 +22,6 @@ import {
 import type { DerElement } from '#micro509/internal/asn1/der.ts';
 import {
 	bitString,
-	bool,
 	concatBytes,
 	DEFAULT_MAX_DER_DEPTH,
 	explicitContext,
@@ -31,8 +30,6 @@ import {
 	implicitPrimitiveContext,
 	integer,
 	integerFromNumber,
-	objectIdentifier,
-	octetString,
 	readElement,
 	readRootElement,
 	readSequenceChildren,
@@ -42,7 +39,6 @@ import {
 } from '#micro509/internal/asn1/der.ts';
 import { OIDS } from '#micro509/internal/asn1/oids.ts';
 import { describeSignatureAlgorithm } from '#micro509/internal/crypto/algorithm-names.ts';
-import { sha1 } from '#micro509/internal/crypto/hash.ts';
 import { verifySignedDataDetailed } from '#micro509/internal/crypto/sig-verify.ts';
 import {
 	encodeAlgorithmIdentifier,
@@ -50,7 +46,7 @@ import {
 	signBytes,
 } from '#micro509/internal/crypto/signing.ts';
 import { base64Encode } from '#micro509/internal/shared/base64.ts';
-import { compareDistinguishedNames } from '#micro509/internal/shared/dn.ts';
+import { compareDistinguishedNames, compareNameAttributeValue } from '#micro509/internal/shared/dn.ts';
 import { decodeIpAddress } from '#micro509/internal/shared/ip.ts';
 import {
 	encodeDistributionPointReasonFlagsContent,
@@ -66,7 +62,12 @@ import type {
 	GeneralName,
 	IssuingDistributionPoint,
 } from '#micro509/x509/extensions.ts';
-import { encodeCrlDistributionPoints, encodeSubjectAltName } from '#micro509/x509/extensions.ts';
+import {
+	buildSubjectKeyIdentifier,
+	encodeCrlDistributionPoints,
+	encodeExtension,
+	encodeSubjectAltName,
+} from '#micro509/x509/extensions.ts';
 import type { NameFieldKey, NameInput } from '#micro509/x509/name.ts';
 import {
 	encodeName,
@@ -1440,36 +1441,6 @@ function compareRelativeDistinguishedNames(
 	return true;
 }
 
-/** Compares two name attributes with RFC 4518 string preparation for directory-string types. */
-function compareNameAttributeValue(left: ParsedNameAttribute, right: ParsedNameAttribute): boolean {
-	if (left.oid !== right.oid) {
-		return false;
-	}
-	if (isDirectoryStringTag(left.valueTag) && isDirectoryStringTag(right.valueTag)) {
-		const preparedLeft = prepareNameCompareString(left.value);
-		const preparedRight = prepareNameCompareString(right.value);
-		if (preparedLeft === undefined || preparedRight === undefined) {
-			return false;
-		}
-		return preparedLeft === preparedRight;
-	}
-	return left.valueTag === right.valueTag && left.value === right.value;
-}
-
-/** Returns `true` for UTF8String (0x0c) and PrintableString (0x13) — the comparable directory-string types. */
-function isDirectoryStringTag(tag: number): boolean {
-	return tag === 0x0c || tag === 0x13;
-}
-
-/** NFKC-normalises, lowercases, trims, and collapses whitespace for RFC 4518 name comparison. Returns `undefined` if the string contains disallowed control characters. */
-function prepareNameCompareString(value: string): string | undefined {
-	const normalized = value.normalize('NFKC');
-	if (/[^\P{Cc}\t\n\r]/u.test(normalized)) {
-		return undefined;
-	}
-	return normalized.toLowerCase().trim().replace(/\s+/gu, ' ');
-}
-
 /** Assembles the CRL-level v2 extensions (AKI, CRLNumber, deltaCRLIndicator, IDP, freshestCRL). */
 async function buildCrlExtensions(
 	issuerPublicKey: CryptoKey | undefined,
@@ -1910,21 +1881,6 @@ function rebuildDirectoryNameFromImplicit(element: DerElement): Uint8Array {
 	}
 	// Otherwise, wrap content with SEQUENCE tag (true implicit encoding)
 	return tlv(0x30, element.value);
-}
-
-/** DER-encodes an X.509 extension (OID + optional critical flag + OCTET STRING value). */
-function encodeExtension(oid: string, value: Uint8Array, critical = false): Uint8Array {
-	return sequence([objectIdentifier(oid), ...(critical ? [bool(true)] : []), octetString(value)]);
-}
-
-/** SHA-1 hash of the SubjectPublicKey BIT STRING content, per RFC 5280 §4.2.1.2 method 1. */
-function buildSubjectKeyIdentifier(spki: Uint8Array): Uint8Array {
-	const top = readSequenceChildren(spki);
-	const keyBitString = top[1];
-	if (keyBitString === undefined || keyBitString.tag !== 0x03) {
-		throw new Error('SPKI missing subject public key bit string');
-	}
-	return sha1(keyBitString.value.slice(1));
 }
 
 /** Parses a Name SEQUENCE element into a full {@linkcode ParsedName}. */
