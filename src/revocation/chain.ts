@@ -5,6 +5,7 @@
  */
 
 import type { ParsedCertificate } from '#micro509/x509/parse.ts';
+import { parseCertificateFromSource } from '#micro509/x509/parse.ts';
 import {
 	checkCertificateRevocationAgainstCrl,
 	parseCertificateRevocationListDer,
@@ -143,8 +144,105 @@ function parseCrlFromSource(source: CrlSource): ParsedCertificateRevocationList 
 }
 
 /**
+ * Parses a certificate from various source formats, returning undefined on failure.
+ */
+function parseCertificateSafe(source: CertificateSource): ParsedCertificate | undefined {
+	try {
+		return parseCertificateFromSource(source);
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+ * Compares two certificates by DER bytes for identity.
+ * Reference equality fails when same cert is parsed from different sources.
+ */
+function sameCertificate(a: ParsedCertificate, b: ParsedCertificate): boolean {
+	if (a.der.length !== b.der.length) return false;
+	for (let i = 0; i < a.der.length; i++) {
+		if (a.der[i] !== b.der[i]) return false;
+	}
+	return true;
+}
+
+/**
+ * Searches for a certificate that could have signed the given CRL.
+ * Matches by AKI/SKI or issuer/subject DN.
+ */
+function findIndirectCrlIssuer(
+	crl: ParsedCertificateRevocationList,
+	extraCertificates: readonly CertificateSource[],
+	chain: readonly ParsedCertificate[],
+): ParsedCertificate | undefined {
+	// Combine extra certs with chain certs for searching
+	// Chain certs are already parsed; extra certs may need parsing
+	const parsedExtras: ParsedCertificate[] = [];
+	for (const source of extraCertificates) {
+		const parsed = parseCertificateSafe(source);
+		if (parsed !== undefined) {
+			parsedExtras.push(parsed);
+		}
+	}
+
+	const candidates = [...parsedExtras, ...chain];
+
+	for (const candidate of candidates) {
+		// Match by AKI → SKI (preferred, more specific)
+		if (
+			crl.authorityKeyIdentifier !== undefined &&
+			candidate.subjectKeyIdentifier !== undefined &&
+			normalizeHex(crl.authorityKeyIdentifier) === normalizeHex(candidate.subjectKeyIdentifier)
+		) {
+			return candidate;
+		}
+
+		// Match by issuer DN → subject DN
+		if (crl.issuer.derHex === candidate.subject.derHex) {
+			return candidate;
+		}
+	}
+
+	return undefined;
+}
+
+/** Lowercases a hex string for bytewise comparison. */
+function normalizeHex(value: string): string {
+	return value.toLowerCase();
+}
+
+/** Builds a CertificateRevocationStatus for a CRL check result. */
+function buildCrlStatus(
+	cert: ParsedCertificate,
+	signer: ParsedCertificate,
+	status: 'good' | 'revoked',
+	revocationDate?: Date,
+	reasonCode?: RevocationReason,
+): CertificateRevocationStatus {
+	if (status === 'revoked' && revocationDate !== undefined) {
+		return {
+			certificate: cert,
+			status: 'revoked',
+			source: { type: 'crl', signerCertificate: signer },
+			revocationInfo: {
+				date: revocationDate,
+				...(reasonCode !== undefined ? { reason: reasonCode } : {}),
+			},
+		};
+	}
+	return {
+		certificate: cert,
+		status: 'good',
+		source: { type: 'crl', signerCertificate: signer },
+	};
+}
+
+/**
  * Evaluates revocation status for a single certificate using available CRLs.
  * Returns both status and any execution errors encountered.
+ *
+ * Tries the chain issuer first; if that fails, searches extraCertificates
+ * and chain for an indirect CRL issuer that matches the CRL's AKI or issuer DN.
  */
 async function evaluateCertificateRevocation(
 	cert: ParsedCertificate,
@@ -154,7 +252,7 @@ async function evaluateCertificateRevocation(
 	status: CertificateRevocationStatus;
 	executionErrors: readonly RevocationExecutionError[];
 }> {
-	const { crls = [], at = new Date() } = input;
+	const { crls = [], extraCertificates = [], chain = [], at = new Date() } = input;
 	const executionErrors: RevocationExecutionError[] = [];
 
 	// Try each CRL
@@ -170,6 +268,7 @@ async function evaluateCertificateRevocation(
 			continue;
 		}
 
+		// Try chain issuer first
 		const result = await checkCertificateRevocationAgainstCrl({
 			certificate: cert,
 			issuerCertificate: issuer,
@@ -178,29 +277,41 @@ async function evaluateCertificateRevocation(
 		});
 
 		if (result.ok) {
-			if (result.value.status === 'revoked') {
+			return {
+				status: buildCrlStatus(
+					cert,
+					issuer,
+					result.value.status,
+					result.value.status === 'revoked' ? result.value.revocationDate : undefined,
+					result.value.status === 'revoked' ? result.value.reasonCode : undefined,
+				),
+				executionErrors,
+			};
+		}
+
+		// Chain issuer failed — try to find indirect CRL issuer
+		const indirectIssuer = findIndirectCrlIssuer(crl, extraCertificates, chain);
+		if (indirectIssuer !== undefined && !sameCertificate(indirectIssuer, issuer)) {
+			const indirectResult = await checkCertificateRevocationAgainstCrl({
+				certificate: cert,
+				issuerCertificate: indirectIssuer,
+				crl,
+				at,
+			});
+
+			if (indirectResult.ok) {
 				return {
-					status: {
-						certificate: cert,
-						status: 'revoked',
-						source: { type: 'crl', signerCertificate: issuer },
-						revocationInfo: {
-							date: result.value.revocationDate,
-							...(result.value.reasonCode !== undefined
-								? { reason: result.value.reasonCode }
-								: {}),
-						},
-					},
-					executionErrors,
-				};
-			}
-			if (result.value.status === 'good') {
-				return {
-					status: {
-						certificate: cert,
-						status: 'good',
-						source: { type: 'crl', signerCertificate: issuer },
-					},
+					status: buildCrlStatus(
+						cert,
+						indirectIssuer,
+						indirectResult.value.status,
+						indirectResult.value.status === 'revoked'
+							? indirectResult.value.revocationDate
+							: undefined,
+						indirectResult.value.status === 'revoked'
+							? indirectResult.value.reasonCode
+							: undefined,
+					),
 					executionErrors,
 				};
 			}
