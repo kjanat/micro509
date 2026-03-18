@@ -33,3 +33,5 @@ export {
 	getCertificateOcspResponderUris,
 	resolveOcspResponderCandidates,
 } from './revocation.ts';
+
+export type * from './chain.ts';
