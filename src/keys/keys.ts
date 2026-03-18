@@ -1,6 +1,20 @@
 /**
- * WebCrypto key generation plus import/export for PKCS#1, PKCS#8, SEC1, SPKI, and JWK
- * key containers.
+ * WebCrypto key generation plus import/export for PKCS#1, PKCS#8, SEC1, SPKI, and JWK.
+ *
+ * Supports RSA (PKCS#1v1.5 and PSS), ECDSA (P-256, P-384, P-521), and Ed25519 keys.
+ * All functions use the WebCrypto API and return extractable keys.
+ *
+ * @example
+ * ```ts
+ * import { generateKeyPair, exportPkcs8Pem, importSpkiPem } from 'micro509/keys';
+ *
+ * // Generate and export
+ * const keys = await generateKeyPair({ kind: 'ecdsa', namedCurve: 'P-256' });
+ * const privatePem = await exportPkcs8Pem(keys.privateKey);
+ *
+ * // Import
+ * const publicKey = await importSpkiPem(publicPem, { kind: 'ecdsa', namedCurve: 'P-256' });
+ * ```
  *
  * @module
  */
@@ -198,12 +212,23 @@ function wrapKeyPair(publicKey: CryptoKey, privateKey: CryptoKey): KeyPairMateri
 	};
 }
 
-/** Export a public key as DER-encoded SubjectPublicKeyInfo. */
+/**
+ * Export a public key as DER-encoded SubjectPublicKeyInfo.
+ *
+ * @see {@linkcode importSpkiDer} for the inverse operation
+ * @see {@linkcode exportSpkiPem} for PEM output
+ */
 export async function exportSpkiDer(publicKey: CryptoKey): Promise<Uint8Array> {
 	return new Uint8Array(await getCrypto().subtle.exportKey('spki', publicKey));
 }
 
-/** Export a private key as DER-encoded PKCS#8 PrivateKeyInfo. */
+/**
+ * Export a private key as DER-encoded PKCS#8 PrivateKeyInfo.
+ *
+ * @see {@linkcode importPkcs8Der} for the inverse operation
+ * @see {@linkcode exportPkcs8Pem} for PEM output
+ * @see {@linkcode exportEncryptedPkcs8Der} for password-protected export
+ */
 export async function exportPkcs8Der(privateKey: CryptoKey): Promise<Uint8Array> {
 	return new Uint8Array(await getCrypto().subtle.exportKey('pkcs8', privateKey));
 }
@@ -221,17 +246,46 @@ export async function exportPublicJwk(publicKey: CryptoKey): Promise<JsonWebKey>
 	return getCrypto().subtle.exportKey('jwk', publicKey);
 }
 
-/** Export a private key as a JSON Web Key. */
+/**
+ * Export a private key as a JSON Web Key.
+ *
+ * @see {@linkcode importPrivateJwk} for the inverse operation
+ * @see {@linkcode exportPublicJwk} for public key export
+ */
 export async function exportPrivateJwk(privateKey: CryptoKey): Promise<JsonWebKey> {
 	return getCrypto().subtle.exportKey('jwk', privateKey);
 }
 
-/** Export a private key as a PEM-encoded PKCS#8 PrivateKeyInfo. */
+/**
+ * Export a private key as PEM-encoded PKCS#8 PrivateKeyInfo.
+ *
+ * @example
+ * ```ts
+ * const keys = await generateKeyPair();
+ * const pem = await exportPkcs8Pem(keys.privateKey);
+ * // -----BEGIN PRIVATE KEY-----
+ * // MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEH...
+ * // -----END PRIVATE KEY-----
+ * ```
+ *
+ * @see {@linkcode importPkcs8Pem} for the inverse operation
+ * @see {@linkcode exportEncryptedPkcs8Pem} for password-protected export
+ */
 export async function exportPkcs8Pem(privateKey: CryptoKey): Promise<string> {
 	return pemEncode('PRIVATE KEY', await exportPkcs8Der(privateKey));
 }
 
-/** Export a private key as DER-encoded PBES2-encrypted PKCS#8 EncryptedPrivateKeyInfo. */
+/**
+ * Export a private key as DER-encoded PBES2-encrypted PKCS#8 EncryptedPrivateKeyInfo.
+ *
+ * Uses PBES2 (PKCS#5 v2.1) with AES-CBC and PBKDF2. Compatible with OpenSSL.
+ *
+ * @param privateKey - The private key to export
+ * @param options - Encryption options including password and optional algorithm settings
+ *
+ * @see {@linkcode importEncryptedPkcs8Der} for the inverse operation
+ * @see {@linkcode exportEncryptedPkcs8Pem} for PEM output
+ */
 export async function exportEncryptedPkcs8Der(
 	privateKey: CryptoKey,
 	options: EncryptedPkcs8Options,
@@ -241,7 +295,20 @@ export async function exportEncryptedPkcs8Der(
 	return sequence([encryption.algorithmIdentifierDer, octetString(encryption.encryptedData)]);
 }
 
-/** Export a private key as PEM-encoded PBES2-encrypted PKCS#8 EncryptedPrivateKeyInfo. */
+/**
+ * Export a private key as PEM-encoded PBES2-encrypted PKCS#8 EncryptedPrivateKeyInfo.
+ *
+ * @example
+ * ```ts
+ * const keys = await generateKeyPair();
+ * const pem = await exportEncryptedPkcs8Pem(keys.privateKey, { password: 'secret' });
+ * // -----BEGIN ENCRYPTED PRIVATE KEY-----
+ * // MIHsMFcGCSqGSIb3DQEFDTBKMCkGCSqGSIb3DQEFDDAc...
+ * // -----END ENCRYPTED PRIVATE KEY-----
+ * ```
+ *
+ * @see {@linkcode importEncryptedPkcs8Pem} for the inverse operation
+ */
 export async function exportEncryptedPkcs8Pem(
 	privateKey: CryptoKey,
 	options: EncryptedPkcs8Options,
@@ -249,7 +316,17 @@ export async function exportEncryptedPkcs8Pem(
 	return pemEncode('ENCRYPTED PRIVATE KEY', await exportEncryptedPkcs8Der(privateKey, options));
 }
 
-/** Export an RSA private key as DER-encoded PKCS#1 RSAPrivateKey. Throws for non-RSA keys. */
+/**
+ * Export an RSA private key as DER-encoded PKCS#1 RSAPrivateKey.
+ *
+ * PKCS#1 is the legacy RSA-only format. For algorithm-agnostic export, use
+ * {@linkcode exportPkcs8Der}.
+ *
+ * @throws {Error} If the key is not an RSA key
+ *
+ * @see {@linkcode importPkcs1Der} for the inverse operation
+ * @see {@linkcode exportPkcs1Pem} for PEM output
+ */
 export async function exportPkcs1Der(privateKey: CryptoKey): Promise<Uint8Array> {
 	const pkcs8 = await exportPkcs8Der(privateKey);
 	const parsed = parsePkcs8PrivateKey(pkcs8);
@@ -259,12 +336,28 @@ export async function exportPkcs1Der(privateKey: CryptoKey): Promise<Uint8Array>
 	return parsed.privateKeyDer;
 }
 
-/** Export an RSA private key as PEM-encoded PKCS#1 RSAPrivateKey. Throws for non-RSA keys. */
+/**
+ * Export an RSA private key as PEM-encoded PKCS#1 RSAPrivateKey.
+ *
+ * @throws {Error} If the key is not an RSA key
+ *
+ * @see {@linkcode importPkcs1Pem} for the inverse operation
+ * @see {@linkcode exportEncryptedPkcs1Pem} for password-protected export
+ */
 export async function exportPkcs1Pem(privateKey: CryptoKey): Promise<string> {
 	return pemEncode('RSA PRIVATE KEY', await exportPkcs1Der(privateKey));
 }
 
-/** Export an RSA private key as legacy `Proc-Type: 4,ENCRYPTED` PEM (PKCS#1). */
+/**
+ * Export an RSA private key as legacy `Proc-Type: 4,ENCRYPTED` PEM (PKCS#1).
+ *
+ * Uses OpenSSL's traditional PEM encryption with MD5-based key derivation.
+ * For modern encryption, prefer {@linkcode exportEncryptedPkcs8Pem}.
+ *
+ * @throws {Error} If the key is not an RSA key
+ *
+ * @see {@linkcode importEncryptedPkcs1Pem} for the inverse operation
+ */
 export async function exportEncryptedPkcs1Pem(
 	privateKey: CryptoKey,
 	options: LegacyPemEncryptionOptions,
@@ -272,7 +365,17 @@ export async function exportEncryptedPkcs1Pem(
 	return encryptTraditionalPem('RSA PRIVATE KEY', await exportPkcs1Der(privateKey), options);
 }
 
-/** Export an EC private key as DER-encoded SEC 1 ECPrivateKey. Throws for non-EC keys. */
+/**
+ * Export an EC private key as DER-encoded SEC 1 ECPrivateKey.
+ *
+ * SEC 1 is the legacy EC-only format. For algorithm-agnostic export, use
+ * {@linkcode exportPkcs8Der}.
+ *
+ * @throws {Error} If the key is not an EC key
+ *
+ * @see {@linkcode importSec1Der} for the inverse operation
+ * @see {@linkcode exportSec1Pem} for PEM output
+ */
 export async function exportSec1Der(privateKey: CryptoKey): Promise<Uint8Array> {
 	const pkcs8 = await exportPkcs8Der(privateKey);
 	const parsed = parsePkcs8PrivateKey(pkcs8);
@@ -282,12 +385,28 @@ export async function exportSec1Der(privateKey: CryptoKey): Promise<Uint8Array> 
 	return parsed.privateKeyDer;
 }
 
-/** Export an EC private key as PEM-encoded SEC 1 ECPrivateKey. */
+/**
+ * Export an EC private key as PEM-encoded SEC 1 ECPrivateKey.
+ *
+ * @throws {Error} If the key is not an EC key
+ *
+ * @see {@linkcode importSec1Pem} for the inverse operation
+ * @see {@linkcode exportEncryptedSec1Pem} for password-protected export
+ */
 export async function exportSec1Pem(privateKey: CryptoKey): Promise<string> {
 	return pemEncode('EC PRIVATE KEY', await exportSec1Der(privateKey));
 }
 
-/** Export an EC private key as legacy `Proc-Type: 4,ENCRYPTED` PEM (SEC 1). */
+/**
+ * Export an EC private key as legacy `Proc-Type: 4,ENCRYPTED` PEM (SEC 1).
+ *
+ * Uses OpenSSL's traditional PEM encryption with MD5-based key derivation.
+ * For modern encryption, prefer {@linkcode exportEncryptedPkcs8Pem}.
+ *
+ * @throws {Error} If the key is not an EC key
+ *
+ * @see {@linkcode importEncryptedSec1Pem} for the inverse operation
+ */
 export async function exportEncryptedSec1Pem(
 	privateKey: CryptoKey,
 	options: LegacyPemEncryptionOptions,
@@ -308,7 +427,17 @@ export async function exportSpkiPem(publicKey: CryptoKey): Promise<string> {
 	return pemEncode('PUBLIC KEY', await exportSpkiDer(publicKey));
 }
 
-/** Export a key as raw base64: SPKI for public keys, PKCS#8 for private keys. */
+/**
+ * Export a key as raw base64 (no PEM headers).
+ *
+ * Returns SPKI-encoded base64 for public keys, PKCS#8-encoded base64 for private keys.
+ * Useful for compact storage or transmission where PEM overhead is undesirable.
+ *
+ * @throws {Error} If the key is a symmetric/secret key
+ *
+ * @see {@linkcode importSpkiBase64} for public key import
+ * @see {@linkcode importPkcs8Base64} for private key import
+ */
 export async function exportBinaryBase64(key: CryptoKey): Promise<string> {
 	if (key.type === 'public') {
 		return base64Encode(await exportSpkiDer(key));
@@ -319,7 +448,18 @@ export async function exportBinaryBase64(key: CryptoKey): Promise<string> {
 	throw new Error('Cannot export secret/symmetric CryptoKey');
 }
 
-/** Import a public key from DER-encoded SubjectPublicKeyInfo. */
+/**
+ * Import a public key from DER-encoded SubjectPublicKeyInfo.
+ *
+ * @param der - DER-encoded SubjectPublicKeyInfo bytes
+ * @param algorithm - Expected algorithm (must match key contents)
+ * @returns Extractable CryptoKey with `verify` usage
+ *
+ * @throws {Error} If DER is malformed or algorithm doesn't match key
+ *
+ * @see {@linkcode exportSpkiDer} for the inverse operation
+ * @see {@linkcode importSpkiPem} for PEM input
+ */
 export async function importSpkiDer(
 	der: Uint8Array,
 	algorithm: PublicKeyImportInput,
@@ -339,7 +479,19 @@ export async function importSpkiDer(
 	}
 }
 
-/** Import a public key from PEM-encoded SubjectPublicKeyInfo. */
+/**
+ * Import a public key from PEM-encoded SubjectPublicKeyInfo.
+ *
+ * @example
+ * ```ts
+ * const pem = `-----BEGIN PUBLIC KEY-----
+ * MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE...
+ * -----END PUBLIC KEY-----`;
+ * const key = await importSpkiPem(pem, { kind: 'ecdsa', namedCurve: 'P-256' });
+ * ```
+ *
+ * @see {@linkcode exportSpkiPem} for the inverse operation
+ */
 export async function importSpkiPem(
 	pem: string,
 	algorithm: PublicKeyImportInput,
@@ -347,7 +499,12 @@ export async function importSpkiPem(
 	return importSpkiDer(pemDecode('PUBLIC KEY', pem), algorithm);
 }
 
-/** Import a public key from base64-encoded SubjectPublicKeyInfo (no PEM headers). */
+/**
+ * Import a public key from base64-encoded SubjectPublicKeyInfo (no PEM headers).
+ *
+ * @see {@linkcode exportBinaryBase64} for the inverse operation
+ * @see {@linkcode importSpkiPem} for PEM input with headers
+ */
 export async function importSpkiBase64(
 	base64: string,
 	algorithm: PublicKeyImportInput,
@@ -361,7 +518,19 @@ export async function importSpkiBase64(
 	return importSpkiDer(decoded, algorithm);
 }
 
-/** Import a private key from DER-encoded PKCS#8 PrivateKeyInfo. */
+/**
+ * Import a private key from DER-encoded PKCS#8 PrivateKeyInfo.
+ *
+ * @param der - DER-encoded PKCS#8 PrivateKeyInfo bytes
+ * @param algorithm - Expected algorithm (must match key contents)
+ * @returns Extractable CryptoKey with `sign` usage
+ *
+ * @throws {Error} If DER is malformed or algorithm doesn't match key
+ *
+ * @see {@linkcode exportPkcs8Der} for the inverse operation
+ * @see {@linkcode importPkcs8Pem} for PEM input
+ * @see {@linkcode importEncryptedPkcs8Der} for encrypted PKCS#8
+ */
 export async function importPkcs8Der(
 	der: Uint8Array,
 	algorithm: PrivateKeyImportInput,
@@ -401,7 +570,19 @@ export async function importPkcs8Pem(
 	return importPkcs8Der(pemDecode('PRIVATE KEY', pem), algorithm);
 }
 
-/** Import a private key from DER-encoded PBES2-encrypted PKCS#8 EncryptedPrivateKeyInfo. */
+/**
+ * Import a private key from DER-encoded PBES2-encrypted PKCS#8 EncryptedPrivateKeyInfo.
+ *
+ * Decrypts the PBES2 envelope using the provided password, then imports the key.
+ *
+ * @param der - DER-encoded EncryptedPrivateKeyInfo bytes
+ * @param password - Decryption password
+ * @param algorithm - Expected algorithm (must match decrypted key)
+ *
+ * @throws {Error} If DER is malformed, password is wrong, or algorithm doesn't match
+ *
+ * @see {@linkcode exportEncryptedPkcs8Der} for the inverse operation
+ */
 export async function importEncryptedPkcs8Der(
 	der: Uint8Array,
 	password: string,
@@ -450,7 +631,14 @@ export async function importEncryptedPkcs8Pem(
 	return importEncryptedPkcs8Der(pemDecode('ENCRYPTED PRIVATE KEY', pem), password, algorithm);
 }
 
-/** Import an RSA private key from DER-encoded PKCS#1 RSAPrivateKey. */
+/**
+ * Import an RSA private key from DER-encoded PKCS#1 RSAPrivateKey.
+ *
+ * PKCS#1 is the legacy RSA-only format. Internally converts to PKCS#8 for import.
+ *
+ * @see {@linkcode exportPkcs1Der} for the inverse operation
+ * @see {@linkcode importPkcs1Pem} for PEM input
+ */
 export async function importPkcs1Der(
 	der: Uint8Array,
 	algorithm: ImportRsaPublicKeyInput = { kind: 'rsa' },
@@ -458,7 +646,14 @@ export async function importPkcs1Der(
 	return importPkcs8Der(wrapPkcs1InPkcs8(der), algorithm);
 }
 
-/** Import an RSA private key from PEM-encoded PKCS#1 RSAPrivateKey (`RSA PRIVATE KEY` label). */
+/**
+ * Import an RSA private key from PEM-encoded PKCS#1 RSAPrivateKey.
+ *
+ * Expects the `-----BEGIN RSA PRIVATE KEY-----` PEM label.
+ *
+ * @see {@linkcode exportPkcs1Pem} for the inverse operation
+ * @see {@linkcode importEncryptedPkcs1Pem} for encrypted PEM
+ */
 export async function importPkcs1Pem(
 	pem: string,
 	algorithm: ImportRsaPublicKeyInput = { kind: 'rsa' },
@@ -466,7 +661,14 @@ export async function importPkcs1Pem(
 	return importPkcs1Der(pemDecode('RSA PRIVATE KEY', pem), algorithm);
 }
 
-/** Import an RSA private key from legacy `Proc-Type: 4,ENCRYPTED` PEM (PKCS#1). */
+/**
+ * Import an RSA private key from legacy `Proc-Type: 4,ENCRYPTED` PEM (PKCS#1).
+ *
+ * Decrypts OpenSSL's traditional PEM encryption format.
+ *
+ * @see {@linkcode exportEncryptedPkcs1Pem} for the inverse operation
+ * @see {@linkcode importEncryptedPkcs8Pem} for modern PBES2 encryption
+ */
 export async function importEncryptedPkcs1Pem(
 	pem: string,
 	password: string,
@@ -476,7 +678,12 @@ export async function importEncryptedPkcs1Pem(
 	return importPkcs1Der(decrypted, algorithm);
 }
 
-/** Import a private key from base64-encoded PKCS#8 PrivateKeyInfo (no PEM headers). */
+/**
+ * Import a private key from base64-encoded PKCS#8 PrivateKeyInfo (no PEM headers).
+ *
+ * @see {@linkcode exportBinaryBase64} for the inverse operation
+ * @see {@linkcode importPkcs8Pem} for PEM input with headers
+ */
 export async function importPkcs8Base64(
 	base64: string,
 	algorithm: PrivateKeyImportInput,
@@ -490,7 +697,14 @@ export async function importPkcs8Base64(
 	return importPkcs8Der(decoded, algorithm);
 }
 
-/** Import an EC private key from DER-encoded SEC 1 ECPrivateKey. */
+/**
+ * Import an EC private key from DER-encoded SEC 1 ECPrivateKey.
+ *
+ * SEC 1 is the legacy EC-only format. Internally converts to PKCS#8 for import.
+ *
+ * @see {@linkcode exportSec1Der} for the inverse operation
+ * @see {@linkcode importSec1Pem} for PEM input
+ */
 export async function importSec1Der(
 	der: Uint8Array,
 	algorithm: ImportEcPublicKeyInput,
@@ -498,7 +712,14 @@ export async function importSec1Der(
 	return importPkcs8Der(wrapSec1InPkcs8(der, algorithm.namedCurve), algorithm);
 }
 
-/** Import an EC private key from PEM-encoded SEC 1 ECPrivateKey (`EC PRIVATE KEY` label). */
+/**
+ * Import an EC private key from PEM-encoded SEC 1 ECPrivateKey.
+ *
+ * Expects the `-----BEGIN EC PRIVATE KEY-----` PEM label.
+ *
+ * @see {@linkcode exportSec1Pem} for the inverse operation
+ * @see {@linkcode importEncryptedSec1Pem} for encrypted PEM
+ */
 export async function importSec1Pem(
 	pem: string,
 	algorithm: ImportEcPublicKeyInput,
@@ -506,7 +727,14 @@ export async function importSec1Pem(
 	return importSec1Der(pemDecode('EC PRIVATE KEY', pem), algorithm);
 }
 
-/** Import an EC private key from legacy `Proc-Type: 4,ENCRYPTED` PEM (SEC 1). */
+/**
+ * Import an EC private key from legacy `Proc-Type: 4,ENCRYPTED` PEM (SEC 1).
+ *
+ * Decrypts OpenSSL's traditional PEM encryption format.
+ *
+ * @see {@linkcode exportEncryptedSec1Pem} for the inverse operation
+ * @see {@linkcode importEncryptedPkcs8Pem} for modern PBES2 encryption
+ */
 export async function importEncryptedSec1Pem(
 	pem: string,
 	password: string,
@@ -516,7 +744,17 @@ export async function importEncryptedSec1Pem(
 	return importSec1Der(decrypted, algorithm);
 }
 
-/** Import a public verification key from a JSON Web Key. */
+/**
+ * Import a public verification key from a JSON Web Key.
+ *
+ * @param jwk - JSON Web Key object with public key components
+ * @param algorithm - Expected algorithm (must match JWK's `kty` and `crv`)
+ * @returns Extractable CryptoKey with `verify` usage
+ *
+ * @throws {Error} If JWK is malformed or algorithm doesn't match
+ *
+ * @see {@linkcode exportPublicJwk} for the inverse operation
+ */
 export async function importPublicJwk(
 	jwk: JsonWebKey,
 	algorithm: PublicKeyImportInput,

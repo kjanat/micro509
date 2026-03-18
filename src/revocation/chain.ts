@@ -1,6 +1,10 @@
 /**
  * Chain-level revocation orchestration.
- * Evaluates CRL/OCSP evidence for an entire validated certificate chain.
+ *
+ * Evaluates CRL and OCSP evidence for an entire validated certificate chain,
+ * implementing the revocation checking portion of RFC 5280 §6.3.
+ *
+ * @see {@link https://datatracker.ietf.org/doc/html/rfc5280#section-6.3 | RFC 5280 §6.3 CRL Validation}
  * @module
  */
 
@@ -19,17 +23,43 @@ import {
 // Input Types
 // ---------------------------------------------------------------------------
 
-/** PEM, DER, or parsed certificate. */
+/**
+ * Certificate in any supported format.
+ *
+ * Accepts PEM string, DER bytes, or an already-parsed {@linkcode ParsedCertificate}.
+ * Used for {@linkcode CheckChainRevocationInput.extraCertificates}.
+ */
 export type CertificateSource = string | Uint8Array | ParsedCertificate;
 
-/** PEM or DER bytes of an OCSP response. */
+/**
+ * OCSP response in any supported format.
+ *
+ * Accepts PEM string or DER bytes. Reserved for future OCSP support in
+ * {@linkcode CheckChainRevocationInput.ocspResponses}.
+ */
 export type OcspResponseSource = string | Uint8Array;
 
-/** Revocation checking policy. */
+/**
+ * Revocation checking policy for {@linkcode checkChainRevocation}.
+ *
+ * Controls how indeterminate results (missing evidence, expired CRLs) affect
+ * the final {@linkcode CheckChainRevocationValue.decision | decision}.
+ */
 export interface RevocationPolicy {
-	/** 'soft-fail': indeterminate -> allow. 'hard-fail': indeterminate -> deny. Default: 'soft-fail'. */
+	/**
+	 * How to handle indeterminate status.
+	 *
+	 * - `'soft-fail'`: indeterminate certificates are allowed (default)
+	 * - `'hard-fail'`: indeterminate certificates cause denial
+	 */
 	readonly mode?: 'soft-fail' | 'hard-fail';
-	/** Evidence preference order. Default: 'best-available'. */
+	/**
+	 * Evidence preference when multiple sources are available.
+	 *
+	 * - `'best-available'`: use whichever evidence is freshest (default)
+	 * - `'ocsp'`: prefer OCSP over CRL
+	 * - `'crl'`: prefer CRL over OCSP
+	 */
 	readonly prefer?: 'ocsp' | 'crl' | 'best-available';
 }
 
@@ -53,7 +83,19 @@ export interface CheckChainRevocationInput {
 // Output Types
 // ---------------------------------------------------------------------------
 
-/** Granular reasons for indeterminate status. */
+/**
+ * Granular reasons why revocation status could not be determined.
+ *
+ * Returned in {@linkcode CertificateRevocationStatus.indeterminateReasons} when
+ * `status` is `'indeterminate'`. Grouped by category:
+ *
+ * - **Evidence not found**: `no_applicable_crl`, `no_applicable_ocsp`
+ * - **Scope mismatch**: `distribution_point_mismatch`, `issuer_name_mismatch`,
+ *   `reason_scope_mismatch`, `indirect_crl_scope_mismatch`, `reason_coverage_incomplete`
+ * - **Signer trust**: `crl_signer_not_found`, `crl_signer_not_authorized`,
+ *   `crl_signer_revoked`, `crl_signer_indeterminate`, and OCSP equivalents
+ * - **Freshness**: `crl_expired`, `ocsp_response_expired`
+ */
 export type RevocationIndeterminateReason =
 	// Evidence not found
 	| 'no_applicable_crl'
@@ -79,44 +121,94 @@ export type RevocationIndeterminateReason =
 	// OCSP specific
 	| 'ocsp_status_unknown';
 
-/** Where the revocation evidence came from. */
+/**
+ * Identifies the source of revocation evidence.
+ *
+ * Included in {@linkcode CertificateRevocationStatus.source} when status is
+ * `'good'` or `'revoked'` to indicate which CRL or OCSP response provided the answer.
+ */
 export interface RevocationSource {
+	/** Whether evidence came from a CRL or OCSP response. */
 	readonly type: 'crl' | 'ocsp';
+	/** Certificate that signed the evidence (CRL issuer or OCSP responder). */
 	readonly signerCertificate?: ParsedCertificate;
+	/** Identifier for debugging (e.g., CRL issuer DN or OCSP responder URL). */
 	readonly evidenceIdentifier?: string;
 }
 
-/** Per-certificate revocation status. */
+/**
+ * Revocation evaluation result for a single certificate.
+ *
+ * One entry per certificate in {@linkcode CheckChainRevocationValue.certificates}.
+ * The trust anchor is excluded (never checked for revocation).
+ */
 export interface CertificateRevocationStatus {
+	/** The certificate that was evaluated. */
 	readonly certificate: ParsedCertificate;
+	/**
+	 * Revocation status determination.
+	 *
+	 * - `'good'`: evidence confirms certificate is not revoked
+	 * - `'revoked'`: evidence confirms certificate is revoked
+	 * - `'indeterminate'`: could not determine status (see {@linkcode indeterminateReasons})
+	 */
 	readonly status: 'good' | 'revoked' | 'indeterminate';
+	/** Evidence source when status is `'good'` or `'revoked'`. */
 	readonly source?: RevocationSource;
+	/** Why status could not be determined. Present when `status` is `'indeterminate'`. */
 	readonly indeterminateReasons?: readonly RevocationIndeterminateReason[];
+	/** Revocation details. Present when `status` is `'revoked'`. */
 	readonly revocationInfo?: {
+		/** When the certificate was revoked. */
 		readonly date: Date;
+		/** RFC 5280 CRLReason code, if provided by the CRL/OCSP response. */
 		readonly reason?: RevocationReason;
 	};
 }
 
-/** Execution errors (code failures, not evaluation outcomes). */
+/**
+ * Errors encountered while processing revocation evidence.
+ *
+ * Distinct from {@linkcode RevocationIndeterminateReason}: execution errors are
+ * code failures (malformed CRL, unsupported extension) rather than evaluation
+ * outcomes (CRL doesn't cover this certificate).
+ *
+ * Collected in {@linkcode CheckChainRevocationValue.executionErrors}.
+ */
 export interface RevocationExecutionError {
+	/** Error category. */
 	readonly kind: 'parse_error' | 'unsupported_extension' | 'internal_error';
+	/** Human-readable error description. */
 	readonly message: string;
+	/** Which evidence caused the error (e.g., CRL issuer DN). */
 	readonly evidenceIdentifier?: string;
 }
 
-/** Successful result value. */
+/**
+ * Detailed revocation check results.
+ *
+ * Returned as {@linkcode CheckChainRevocationResult.value} from
+ * {@linkcode checkChainRevocation}. Contains both the policy decision and
+ * detailed per-certificate findings for debugging.
+ */
 export interface CheckChainRevocationValue {
-	/** Policy decision derived from findings. */
+	/**
+	 * Final policy decision based on {@linkcode RevocationPolicy}.
+	 *
+	 * - `'allow'`: chain passes revocation check
+	 * - `'deny'`: chain fails (revoked certificate or hard-fail on indeterminate)
+	 */
 	readonly decision: 'allow' | 'deny';
-	/** Summary for quick inspection. */
+	/** Quick-access summary of problematic certificates. */
 	readonly summary: {
+		/** Certificates confirmed as revoked. */
 		readonly revokedCertificates: readonly ParsedCertificate[];
+		/** Certificates whose status could not be determined. */
 		readonly indeterminateCertificates: readonly ParsedCertificate[];
 	};
-	/** Per-certificate detailed findings. */
+	/** Per-certificate evaluation results. See {@linkcode CertificateRevocationStatus}. */
 	readonly certificates: readonly CertificateRevocationStatus[];
-	/** Execution errors (evidence we couldn't evaluate). */
+	/** Evidence that could not be processed. See {@linkcode RevocationExecutionError}. */
 	readonly executionErrors?: readonly RevocationExecutionError[];
 }
 
