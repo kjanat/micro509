@@ -14,10 +14,12 @@ import {
 	checkCertificateRevocationAgainstCrl,
 	parseCertificateRevocationListDer,
 	parseCertificateRevocationListPem,
-	type CrlSource,
 	type ParsedCertificateRevocationList,
 	type RevocationReason,
 } from './crl.ts';
+import type { CrlSource } from './crl.ts';
+
+export type { CrlSource };
 
 // ---------------------------------------------------------------------------
 // Input Types
@@ -664,10 +666,9 @@ async function evaluateCertificateRevocation(
 				status: {
 					certificate: cert,
 					status: 'good',
-					source:
-						lastGoodSigner !== undefined
-							? { type: 'crl', signerCertificate: lastGoodSigner }
-							: undefined,
+					...(lastGoodSigner !== undefined
+						? { source: { type: 'crl', signerCertificate: lastGoodSigner } }
+						: {}),
 				},
 				executionErrors,
 			};

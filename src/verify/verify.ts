@@ -922,11 +922,15 @@ export async function verifyCertificateChain(
 	if (input.revocation !== undefined) {
 		const revocationResult = await checkChainRevocation({
 			chain: buildResult.value.chain,
-			crls: input.revocation.crls,
-			ocspResponses: input.revocation.ocspResponses,
-			extraCertificates: input.revocation.extraCertificates,
-			policy: input.revocation.policy,
-			at: input.at,
+			...(input.revocation.crls !== undefined ? { crls: input.revocation.crls } : {}),
+			...(input.revocation.ocspResponses !== undefined
+				? { ocspResponses: input.revocation.ocspResponses }
+				: {}),
+			...(input.revocation.extraCertificates !== undefined
+				? { extraCertificates: input.revocation.extraCertificates }
+				: {}),
+			...(input.revocation.policy !== undefined ? { policy: input.revocation.policy } : {}),
+			...(input.at !== undefined ? { at: input.at } : {}),
 		});
 
 		if (revocationResult.value.decision === 'deny') {
@@ -935,9 +939,9 @@ export async function verifyCertificateChain(
 				return verifyFailureResult(
 					failure(
 						'certificate_revoked',
-						`certificate revoked: ${firstRevoked.subject.text}`,
+						`certificate revoked: ${firstRevoked.subject.values.commonName ?? 'unknown'}`,
 						undefined,
-						detail({ certificate: firstRevoked.subject.text }),
+						detail({ subjectCommonName: firstRevoked.subject.values.commonName }),
 					),
 				);
 			}
@@ -949,10 +953,10 @@ export async function verifyCertificateChain(
 			return verifyFailureResult(
 				failure(
 					'revocation_indeterminate',
-					`revocation status indeterminate: ${firstIndeterminate?.subject.text ?? 'unknown'}`,
+					`revocation status indeterminate: ${firstIndeterminate?.subject.values.commonName ?? 'unknown'}`,
 					undefined,
 					detail({
-						certificate: firstIndeterminate?.subject.text,
+						subjectCommonName: firstIndeterminate?.subject.values.commonName,
 						actual: indeterminateReasons?.join(', '),
 					}),
 				),
