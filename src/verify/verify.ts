@@ -61,6 +61,12 @@ import {
 	parseCertificateSigningRequestDer,
 	parseCertificateSigningRequestPem,
 } from '#micro509/x509/parse.ts';
+import {
+	checkChainRevocation,
+	type CertificateSource as RevocationCertificateSource,
+	type CrlSource,
+	type RevocationPolicy,
+} from '#micro509/revocation/chain.ts';
 import type { VerifyServiceIdentityInput } from './identity.ts';
 import { matchServiceIdentity } from './identity.ts';
 import type { InitialNameConstraintsInput } from './name-constraints.ts';
@@ -188,7 +194,9 @@ export type VerifyErrorCode =
 	| 'initial_name_constraints_not_implemented'
 	| 'unsupported_name_constraints'
 	| 'name_constraints_violated'
-	| 'unsupported_signature_algorithm_parameters';
+	| 'unsupported_signature_algorithm_parameters'
+	| 'certificate_revoked'
+	| 'revocation_indeterminate';
 
 /** Diagnostic context attached to every {@linkcode VerifyChainFailure}. All fields are optional; presence depends on the error code. */
 export interface VerifyFailureDetails {
@@ -305,6 +313,18 @@ export type ValidateCandidatePathResult =
 // Verify chain (convenience composition)
 // ---------------------------------------------------------------------------
 
+/** Input for chain-level revocation checking in {@linkcode verifyCertificateChain}. */
+export interface ChainRevocationInput {
+	/** CRLs to evaluate. */
+	readonly crls?: readonly CrlSource[];
+	/** OCSP responses to evaluate (not yet implemented). */
+	readonly ocspResponses?: readonly (string | Uint8Array)[];
+	/** Extra certs for indirect CRL issuers / delegated OCSP responders. */
+	readonly extraCertificates?: readonly RevocationCertificateSource[];
+	/** Revocation policy. */
+	readonly policy?: RevocationPolicy;
+}
+
 /** Input for {@linkcode verifyCertificateChain}. Combines path-building, validation, and identity options. */
 export interface VerifyCertificateChainInput
 	extends PolicyValidationInput,
@@ -329,6 +349,8 @@ export interface VerifyCertificateChainInput
 	readonly serviceIdentity?: VerifyServiceIdentityInput;
 	/** When `true`, allows a self-signed leaf. Defaults to `false`. */
 	readonly allowSelfSignedLeaf?: boolean;
+	/** Optional revocation checking. */
+	readonly revocation?: ChainRevocationInput;
 }
 
 /** Fully verified certificate chain returned on success from {@linkcode verifyCertificateChain}. */
@@ -893,6 +915,48 @@ export async function verifyCertificateChain(
 		);
 		if (!serviceIdentityResult.ok) {
 			return verifyFailureResult(serviceIdentityResult);
+		}
+	}
+
+	// Revocation checking (optional)
+	if (input.revocation !== undefined) {
+		const revocationResult = await checkChainRevocation({
+			chain: buildResult.value.chain,
+			crls: input.revocation.crls,
+			ocspResponses: input.revocation.ocspResponses,
+			extraCertificates: input.revocation.extraCertificates,
+			policy: input.revocation.policy,
+			at: input.at,
+		});
+
+		if (revocationResult.value.decision === 'deny') {
+			const firstRevoked = revocationResult.value.summary.revokedCertificates[0];
+			if (firstRevoked !== undefined) {
+				return verifyFailureResult(
+					failure(
+						'certificate_revoked',
+						`certificate revoked: ${firstRevoked.subject.text}`,
+						undefined,
+						detail({ certificate: firstRevoked.subject.text }),
+					),
+				);
+			}
+			// Indeterminate with hard-fail policy
+			const firstIndeterminate = revocationResult.value.summary.indeterminateCertificates[0];
+			const indeterminateReasons = revocationResult.value.certificates.find(
+				(c) => c.status === 'indeterminate',
+			)?.indeterminateReasons;
+			return verifyFailureResult(
+				failure(
+					'revocation_indeterminate',
+					`revocation status indeterminate: ${firstIndeterminate?.subject.text ?? 'unknown'}`,
+					undefined,
+					detail({
+						certificate: firstIndeterminate?.subject.text,
+						actual: indeterminateReasons?.join(', '),
+					}),
+				),
+			);
 		}
 	}
 

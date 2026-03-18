@@ -259,6 +259,7 @@ export type {
 	BuildCandidatePathResult,
 	CandidatePath,
 	CertificateSource,
+	ChainRevocationInput,
 	CsrSource,
 	DnsServiceIdentityInput,
 	EkuCheckFailure,

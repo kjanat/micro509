@@ -4,6 +4,7 @@ import {
 	checkChainRevocation,
 	parseCertificateDer,
 	parseCertificateRevocationListDer,
+	verifyCertificateChain,
 } from 'micro509';
 
 async function loadPkitsCert(name: string) {
@@ -239,5 +240,86 @@ describe('checkChainRevocation', () => {
 
 		expect(hardFailResult.ok).toBe(true);
 		expect(hardFailResult.value.decision).toBe('deny');
+	});
+});
+
+describe('verifyCertificateChain with revocation option', () => {
+	it('denies revoked certificate', async () => {
+		const root = await loadPkitsCert('TrustAnchorRootCertificate');
+		const goodCa = await loadPkitsCert('GoodCACert');
+		const revokedCa = await loadPkitsCert('RevokedsubCACert');
+		const rootCrl = await loadPkitsCrl('TrustAnchorRootCRL');
+		const goodCaCrl = await loadPkitsCrl('GoodCACRL');
+
+		const result = await verifyCertificateChain({
+			leaf: revokedCa.der,
+			intermediates: [goodCa.der],
+			roots: [root.der],
+			at: new Date('2011-04-15T00:00:00Z'),
+			revocation: {
+				crls: [rootCrl, goodCaCrl],
+				policy: { mode: 'hard-fail' },
+			},
+		});
+
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.error.code).toBe('certificate_revoked');
+		}
+	});
+
+	it('allows valid certificate with revocation check', async () => {
+		const root = await loadPkitsCert('TrustAnchorRootCertificate');
+		const goodCa = await loadPkitsCert('GoodCACert');
+		const rootCrl = await loadPkitsCrl('TrustAnchorRootCRL');
+
+		const result = await verifyCertificateChain({
+			leaf: goodCa.der,
+			roots: [root.der],
+			at: new Date('2011-04-15T00:00:00Z'),
+			revocation: {
+				crls: [rootCrl],
+				policy: { mode: 'hard-fail' },
+			},
+		});
+
+		expect(result.ok).toBe(true);
+	});
+
+	it('returns revocation_indeterminate with hard-fail and no CRL', async () => {
+		const root = await loadPkitsCert('TrustAnchorRootCertificate');
+		const goodCa = await loadPkitsCert('GoodCACert');
+
+		const result = await verifyCertificateChain({
+			leaf: goodCa.der,
+			roots: [root.der],
+			at: new Date('2011-04-15T00:00:00Z'),
+			revocation: {
+				crls: [],
+				policy: { mode: 'hard-fail' },
+			},
+		});
+
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.error.code).toBe('revocation_indeterminate');
+		}
+	});
+
+	it('allows with soft-fail policy and no CRL', async () => {
+		const root = await loadPkitsCert('TrustAnchorRootCertificate');
+		const goodCa = await loadPkitsCert('GoodCACert');
+
+		const result = await verifyCertificateChain({
+			leaf: goodCa.der,
+			roots: [root.der],
+			at: new Date('2011-04-15T00:00:00Z'),
+			revocation: {
+				crls: [],
+				policy: { mode: 'soft-fail' },
+			},
+		});
+
+		expect(result.ok).toBe(true);
 	});
 });

@@ -38,6 +38,7 @@ export type {
 	BuildCandidatePathResult,
 	CandidatePath,
 	CertificateSource,
+	ChainRevocationInput,
 	CsrSource,
 	EkuCheckFailure,
 	EkuCheckPurpose,
