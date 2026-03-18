@@ -5,7 +5,14 @@
  */
 
 import type { ParsedCertificate } from '#micro509/x509/parse.ts';
-import type { CrlSource, RevocationReason } from './crl.ts';
+import {
+	checkCertificateRevocationAgainstCrl,
+	parseCertificateRevocationListDer,
+	parseCertificateRevocationListPem,
+	type CrlSource,
+	type ParsedCertificateRevocationList,
+	type RevocationReason,
+} from './crl.ts';
 
 // ---------------------------------------------------------------------------
 // Input Types
@@ -119,6 +126,102 @@ export type CheckChainRevocationResult = {
 };
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Parses a CRL from various source formats.
+ */
+function parseCrlFromSource(source: CrlSource): ParsedCertificateRevocationList {
+	if (typeof source === 'object' && 'issuer' in source) {
+		return source;
+	}
+	if (typeof source === 'string') {
+		return parseCertificateRevocationListPem(source);
+	}
+	return parseCertificateRevocationListDer(source);
+}
+
+/**
+ * Evaluates revocation status for a single certificate using available CRLs.
+ * Returns both status and any execution errors encountered.
+ */
+async function evaluateCertificateRevocation(
+	cert: ParsedCertificate,
+	issuer: ParsedCertificate,
+	input: CheckChainRevocationInput,
+): Promise<{
+	status: CertificateRevocationStatus;
+	executionErrors: readonly RevocationExecutionError[];
+}> {
+	const { crls = [], at = new Date() } = input;
+	const executionErrors: RevocationExecutionError[] = [];
+
+	// Try each CRL
+	for (const crlSource of crls) {
+		let crl: ParsedCertificateRevocationList;
+		try {
+			crl = parseCrlFromSource(crlSource);
+		} catch (e) {
+			executionErrors.push({
+				kind: 'parse_error',
+				message: e instanceof Error ? e.message : 'CRL parse failed',
+			});
+			continue;
+		}
+
+		const result = await checkCertificateRevocationAgainstCrl({
+			certificate: cert,
+			issuerCertificate: issuer,
+			crl,
+			at,
+		});
+
+		if (result.ok) {
+			if (result.value.status === 'revoked') {
+				return {
+					status: {
+						certificate: cert,
+						status: 'revoked',
+						source: { type: 'crl', signerCertificate: issuer },
+						revocationInfo: {
+							date: result.value.revocationDate,
+							...(result.value.reasonCode !== undefined
+								? { reason: result.value.reasonCode }
+								: {}),
+						},
+					},
+					executionErrors,
+				};
+			}
+			if (result.value.status === 'good') {
+				return {
+					status: {
+						certificate: cert,
+						status: 'good',
+						source: { type: 'crl', signerCertificate: issuer },
+					},
+					executionErrors,
+				};
+			}
+		}
+	}
+
+	// No applicable CRL found
+	return {
+		status: {
+			certificate: cert,
+			status: 'indeterminate',
+			indeterminateReasons:
+				crls.length === 0
+					? ['no_applicable_crl', 'no_applicable_ocsp']
+					: ['no_applicable_crl'], // CRLs provided but none covered this cert
+		},
+		executionErrors,
+	};
+}
+
+// ---------------------------------------------------------------------------
 // Function
 // ---------------------------------------------------------------------------
 
@@ -163,17 +266,28 @@ export async function checkChainRevocation(
 	const certificates: CertificateRevocationStatus[] = [];
 	const revokedCertificates: ParsedCertificate[] = [];
 	const indeterminateCertificates: ParsedCertificate[] = [];
+	const allExecutionErrors: RevocationExecutionError[] = [];
 
-	for (const cert of certsToCheck) {
-		// TODO: Evaluate evidence (Task 2.2)
-		// For now, return indeterminate since no evidence evaluation yet
-		const status: CertificateRevocationStatus = {
-			certificate: cert,
-			status: 'indeterminate',
-			indeterminateReasons: ['no_applicable_crl', 'no_applicable_ocsp'],
-		};
+	for (let i = 0; i < certsToCheck.length; i++) {
+		const cert = certsToCheck[i];
+		const issuer = chain[i + 1]; // Next cert in chain is the issuer
+		if (cert === undefined || issuer === undefined) {
+			continue; // Should never happen given loop bounds
+		}
+
+		const { status, executionErrors } = await evaluateCertificateRevocation(
+			cert,
+			issuer,
+			input,
+		);
 		certificates.push(status);
-		indeterminateCertificates.push(cert);
+		allExecutionErrors.push(...executionErrors);
+
+		if (status.status === 'revoked') {
+			revokedCertificates.push(cert);
+		} else if (status.status === 'indeterminate') {
+			indeterminateCertificates.push(cert);
+		}
 	}
 
 	// Apply policy
@@ -192,6 +306,9 @@ export async function checkChainRevocation(
 			decision,
 			summary: { revokedCertificates, indeterminateCertificates },
 			certificates,
+			...(allExecutionErrors.length > 0
+				? { executionErrors: allExecutionErrors }
+				: {}),
 		},
 	};
 }

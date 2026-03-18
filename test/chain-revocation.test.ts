@@ -1,12 +1,23 @@
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'bun:test';
-import { checkChainRevocation, parseCertificateDer } from 'micro509';
+import {
+	checkChainRevocation,
+	parseCertificateDer,
+	parseCertificateRevocationListDer,
+} from 'micro509';
 
 async function loadPkitsCert(name: string) {
 	const der = await readFile(
 		new URL(`./fixtures/pkits/certs/${name}.crt`, import.meta.url),
 	);
 	return parseCertificateDer(new Uint8Array(der));
+}
+
+async function loadPkitsCrl(name: string) {
+	const der = await readFile(
+		new URL(`./fixtures/pkits/crls/${name}.crl`, import.meta.url),
+	);
+	return parseCertificateRevocationListDer(new Uint8Array(der));
 }
 
 describe('checkChainRevocation', () => {
@@ -39,10 +50,10 @@ describe('checkChainRevocation', () => {
 		expect(result.ok).toBe(true);
 		// No CRLs provided → indeterminate for goodCa, but soft-fail allows
 		expect(result.value.certificates).toHaveLength(1);
-		expect(result.value.certificates[0].status).toBe('indeterminate');
-		expect(result.value.certificates[0].indeterminateReasons).toContain(
-			'no_applicable_crl',
-		);
+		const firstCert = result.value.certificates[0];
+		expect(firstCert).toBeDefined();
+		expect(firstCert?.status).toBe('indeterminate');
+		expect(firstCert?.indeterminateReasons).toContain('no_applicable_crl');
 		expect(result.value.decision).toBe('allow'); // soft-fail default
 	});
 
@@ -58,5 +69,25 @@ describe('checkChainRevocation', () => {
 		expect(result.ok).toBe(true);
 		expect(result.value.decision).toBe('deny');
 		expect(result.value.summary.indeterminateCertificates).toHaveLength(1);
+	});
+
+	it('evaluates good status when CRL covers cert and serial not listed', async () => {
+		const root = await loadPkitsCert('TrustAnchorRootCertificate');
+		const goodCa = await loadPkitsCert('GoodCACert');
+		const crl = await loadPkitsCrl('TrustAnchorRootCRL');
+
+		const result = await checkChainRevocation({
+			chain: [goodCa, root],
+			crls: [crl],
+			at: new Date('2011-04-15T00:00:00Z'),
+		});
+
+		expect(result.ok).toBe(true);
+		expect(result.value.certificates).toHaveLength(1);
+		const firstCert = result.value.certificates[0];
+		expect(firstCert).toBeDefined();
+		expect(firstCert?.status).toBe('good');
+		expect(firstCert?.source?.type).toBe('crl');
+		expect(result.value.decision).toBe('allow');
 	});
 });
