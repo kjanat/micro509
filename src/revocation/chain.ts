@@ -211,6 +211,178 @@ function normalizeHex(value: string): string {
 	return value.toLowerCase();
 }
 
+// ---------------------------------------------------------------------------
+// CRL Signer Validation (RFC 5280 §6.3.3)
+// ---------------------------------------------------------------------------
+
+/**
+ * State machine for CRL signer validation with memoization.
+ * - `visiting`: Currently being checked (cycle detection)
+ * - `resolved-valid`: Signer is not revoked
+ * - `resolved-revoked`: Signer is revoked
+ * - `resolved-indeterminate`: Can't determine signer status
+ */
+type SignerValidationState =
+	| 'visiting'
+	| 'resolved-valid'
+	| 'resolved-revoked'
+	| 'resolved-indeterminate';
+
+/** Context for CRL signer validation with memoization cache. */
+interface SignerValidationContext {
+	readonly cache: Map<string, SignerValidationState>;
+	readonly chain: readonly ParsedCertificate[];
+	readonly crls: readonly CrlSource[];
+	readonly extraCertificates: readonly CertificateSource[];
+	readonly at: Date;
+}
+
+/**
+ * Builds a unique cache key for a certificate.
+ * Uses issuer DN + serial number which uniquely identifies a cert.
+ */
+function certCacheKey(cert: ParsedCertificate): string {
+	return `${cert.issuer.derHex}:${cert.serialNumberHex}`;
+}
+
+/**
+ * Validates that a CRL signer certificate is not revoked.
+ * Uses memoization to avoid redundant checks and detect cycles.
+ */
+async function validateCrlSigner(
+	signer: ParsedCertificate,
+	ctx: SignerValidationContext,
+): Promise<SignerValidationState> {
+	// Use issuer+serial as cache key (unique per certificate)
+	const key = certCacheKey(signer);
+	const cached = ctx.cache.get(key);
+
+	// Cycle detection: if we're already visiting this signer, it's indeterminate
+	if (cached === 'visiting') {
+		return 'resolved-indeterminate';
+	}
+
+	// Return cached result if already resolved
+	if (cached !== undefined) {
+		return cached;
+	}
+
+	// Mark as visiting before recursive checks
+	ctx.cache.set(key, 'visiting');
+
+	// Trust anchor (last in chain) is trusted by definition
+	const trustAnchor = ctx.chain[ctx.chain.length - 1];
+	if (trustAnchor !== undefined && sameCertificate(signer, trustAnchor)) {
+		ctx.cache.set(key, 'resolved-valid');
+		return 'resolved-valid';
+	}
+
+	// If signer is in the validated chain, it's trusted
+	// (Chain was already validated before revocation checking)
+	const isInChain = ctx.chain.some((c) => sameCertificate(c, signer));
+	if (isInChain) {
+		ctx.cache.set(key, 'resolved-valid');
+		return 'resolved-valid';
+	}
+
+	// Signer is not in chain — need to check its revocation status
+	// Find signer's issuer to perform revocation check
+	const signerIssuer = findSignerIssuer(signer, ctx);
+	if (signerIssuer === undefined) {
+		ctx.cache.set(key, 'resolved-indeterminate');
+		return 'resolved-indeterminate';
+	}
+
+	// Check signer's revocation status (recursive)
+	const signerRevocation = await checkSignerRevocation(signer, signerIssuer, ctx);
+	ctx.cache.set(key, signerRevocation);
+	return signerRevocation;
+}
+
+/**
+ * Finds the issuer certificate for a CRL signer.
+ * Searches the chain and extraCertificates by AKI/SKI or DN matching.
+ */
+function findSignerIssuer(
+	signer: ParsedCertificate,
+	ctx: SignerValidationContext,
+): ParsedCertificate | undefined {
+	// Parse extra certificates
+	const parsedExtras: ParsedCertificate[] = [];
+	for (const source of ctx.extraCertificates) {
+		const parsed = parseCertificateSafe(source);
+		if (parsed !== undefined) {
+			parsedExtras.push(parsed);
+		}
+	}
+
+	const candidates = [...ctx.chain, ...parsedExtras];
+
+	for (const candidate of candidates) {
+		// Match by AKI → SKI (preferred, more specific)
+		if (
+			signer.authorityKeyIdentifier !== undefined &&
+			candidate.subjectKeyIdentifier !== undefined &&
+			normalizeHex(signer.authorityKeyIdentifier) ===
+				normalizeHex(candidate.subjectKeyIdentifier)
+		) {
+			return candidate;
+		}
+
+		// Match by issuer DN → subject DN
+		if (signer.issuer.derHex === candidate.subject.derHex) {
+			return candidate;
+		}
+	}
+
+	return undefined;
+}
+
+/**
+ * Checks if a CRL signer certificate is revoked by examining available CRLs.
+ * Recursively validates the CRL signer of any CRL used to check revocation.
+ */
+async function checkSignerRevocation(
+	signer: ParsedCertificate,
+	issuer: ParsedCertificate,
+	ctx: SignerValidationContext,
+): Promise<SignerValidationState> {
+	// Try each CRL to check signer's revocation
+	for (const crlSource of ctx.crls) {
+		let crl: ParsedCertificateRevocationList;
+		try {
+			crl = parseCrlFromSource(crlSource);
+		} catch {
+			continue;
+		}
+
+		// Check if this CRL can provide revocation info for the signer
+		const result = await checkCertificateRevocationAgainstCrl({
+			certificate: signer,
+			issuerCertificate: issuer,
+			crl,
+			at: ctx.at,
+		});
+
+		if (result.ok) {
+			if (result.value.status === 'revoked') {
+				return 'resolved-revoked';
+			}
+			if (result.value.status === 'good') {
+				// Before accepting this result, validate the CRL's signer
+				// The CRL's signer is the issuer we just used
+				const crlSignerStatus = await validateCrlSigner(issuer, ctx);
+				if (crlSignerStatus === 'resolved-valid') {
+					return 'resolved-valid';
+				}
+				// If CRL signer is revoked or indeterminate, can't trust this result
+			}
+		}
+	}
+
+	return 'resolved-indeterminate';
+}
+
 /** Builds a CertificateRevocationStatus for a CRL check result. */
 function buildCrlStatus(
 	cert: ParsedCertificate,
@@ -243,17 +415,22 @@ function buildCrlStatus(
  *
  * Tries the chain issuer first; if that fails, searches extraCertificates
  * and chain for an indirect CRL issuer that matches the CRL's AKI or issuer DN.
+ *
+ * Also validates that CRL signers are not revoked (RFC 5280 §6.3.3).
  */
 async function evaluateCertificateRevocation(
 	cert: ParsedCertificate,
 	issuer: ParsedCertificate,
 	input: CheckChainRevocationInput,
+	signerCtx: SignerValidationContext,
 ): Promise<{
 	status: CertificateRevocationStatus;
 	executionErrors: readonly RevocationExecutionError[];
 }> {
 	const { crls = [], extraCertificates = [], chain = [], at = new Date() } = input;
 	const executionErrors: RevocationExecutionError[] = [];
+	let sawCrlSignerRevoked = false;
+	let sawCrlSignerIndeterminate = false;
 
 	// Try each CRL
 	for (const crlSource of crls) {
@@ -277,6 +454,17 @@ async function evaluateCertificateRevocation(
 		});
 
 		if (result.ok) {
+			// Validate CRL signer is not revoked before accepting result
+			const signerStatus = await validateCrlSigner(issuer, signerCtx);
+			if (signerStatus === 'resolved-revoked') {
+				sawCrlSignerRevoked = true;
+				continue; // CRL signer revoked — can't trust this CRL
+			}
+			if (signerStatus === 'resolved-indeterminate') {
+				sawCrlSignerIndeterminate = true;
+				continue; // CRL signer status unknown — try other CRLs
+			}
+			// signerStatus === 'resolved-valid' — proceed with CRL result
 			return {
 				status: buildCrlStatus(
 					cert,
@@ -300,6 +488,17 @@ async function evaluateCertificateRevocation(
 			});
 
 			if (indirectResult.ok) {
+				// Validate indirect CRL signer is not revoked
+				const signerStatus = await validateCrlSigner(indirectIssuer, signerCtx);
+				if (signerStatus === 'resolved-revoked') {
+					sawCrlSignerRevoked = true;
+					continue; // CRL signer revoked — can't trust this CRL
+				}
+				if (signerStatus === 'resolved-indeterminate') {
+					sawCrlSignerIndeterminate = true;
+					continue; // CRL signer status unknown — try other CRLs
+				}
+				// signerStatus === 'resolved-valid' — proceed with CRL result
 				return {
 					status: buildCrlStatus(
 						cert,
@@ -318,15 +517,23 @@ async function evaluateCertificateRevocation(
 		}
 	}
 
-	// No applicable CRL found
+	// No applicable CRL found — determine most appropriate indeterminate reason
+	const reasons: RevocationIndeterminateReason[] = [];
+	if (sawCrlSignerRevoked) {
+		reasons.push('crl_signer_revoked');
+	} else if (sawCrlSignerIndeterminate) {
+		reasons.push('crl_signer_indeterminate');
+	} else if (crls.length === 0) {
+		reasons.push('no_applicable_crl', 'no_applicable_ocsp');
+	} else {
+		reasons.push('no_applicable_crl');
+	}
+
 	return {
 		status: {
 			certificate: cert,
 			status: 'indeterminate',
-			indeterminateReasons:
-				crls.length === 0
-					? ['no_applicable_crl', 'no_applicable_ocsp']
-					: ['no_applicable_crl'], // CRLs provided but none covered this cert
+			indeterminateReasons: reasons,
 		},
 		executionErrors,
 	};
@@ -357,7 +564,7 @@ async function evaluateCertificateRevocation(
 export async function checkChainRevocation(
 	input: CheckChainRevocationInput,
 ): Promise<CheckChainRevocationResult> {
-	const { chain, policy } = input;
+	const { chain, policy, crls = [], extraCertificates = [], at = new Date() } = input;
 	const mode = policy?.mode ?? 'soft-fail';
 
 	// Empty chain → allow
@@ -371,6 +578,16 @@ export async function checkChainRevocation(
 			},
 		};
 	}
+
+	// Create signer validation context with memoization cache
+	// This cache is shared across all certificate checks in this chain evaluation
+	const signerCtx: SignerValidationContext = {
+		cache: new Map(),
+		chain,
+		crls,
+		extraCertificates,
+		at,
+	};
 
 	// Skip trust anchor (last cert) — it's the trust base
 	const certsToCheck = chain.slice(0, -1);
@@ -390,6 +607,7 @@ export async function checkChainRevocation(
 			cert,
 			issuer,
 			input,
+			signerCtx,
 		);
 		certificates.push(status);
 		allExecutionErrors.push(...executionErrors);

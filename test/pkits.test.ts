@@ -88,6 +88,7 @@ async function evaluatePkitsRevocation(
 			completeCrls,
 			deltaCrls,
 			allCertificates,
+			chain,
 		);
 		if (certificateStatus !== 'good') {
 			return false;
@@ -116,6 +117,7 @@ async function evaluatePkitsCertificateRevocation(
 	completeCrls: readonly ParsedCertificateRevocationList[],
 	deltaCrls: readonly ParsedCertificateRevocationList[],
 	allCertificates: readonly ParsedCertificate[],
+	chain: readonly ParsedCertificate[],
 ): Promise<'good' | 'revoked' | 'unknown'> {
 	let sawGood = false;
 	const crlsWithAppliedDelta = new Set<ParsedCertificateRevocationList>();
@@ -131,6 +133,8 @@ async function evaluatePkitsCertificateRevocation(
 				allCertificates,
 				crl,
 				deltaCrl,
+				chain,
+				completeCrls,
 			);
 			if (!result.ok) {
 				continue;
@@ -162,6 +166,8 @@ async function evaluatePkitsCertificateRevocation(
 			allCertificates,
 			crl,
 			undefined,
+			chain,
+			completeCrls,
 		);
 		if (!result.ok) {
 			continue;
@@ -197,6 +203,8 @@ async function evaluatePkitsCrlWithIssuerCandidates(
 	allCertificates: readonly ParsedCertificate[],
 	crl: ParsedCertificateRevocationList,
 	deltaCrl: ParsedCertificateRevocationList | undefined,
+	chain: readonly ParsedCertificate[],
+	completeCrls: readonly ParsedCertificateRevocationList[],
 ) {
 	const issuerCandidates = allCertificates.filter(
 		(candidate) =>
@@ -226,12 +234,67 @@ async function evaluatePkitsCrlWithIssuerCandidates(
 			at: PKITS_VALIDATION_TIME,
 		});
 		if (result.ok) {
+			// RFC 5280 §6.3.3: Verify CRL signer is not revoked
+			const signerIsRevoked = await isCrlSignerRevoked(
+				issuerCandidate,
+				chain,
+				completeCrls,
+				allCertificates,
+			);
+			if (signerIsRevoked) {
+				continue; // CRL signer revoked — can't trust this CRL
+			}
 			return result;
 		}
 	}
 	return {
 		ok: false as const,
 	};
+}
+
+/**
+ * Checks if a CRL signer certificate is revoked.
+ * Chain certs are trusted (already validated). Non-chain signers need revocation check.
+ */
+async function isCrlSignerRevoked(
+	signer: ParsedCertificate,
+	chain: readonly ParsedCertificate[],
+	completeCrls: readonly ParsedCertificateRevocationList[],
+	allCertificates: readonly ParsedCertificate[],
+): Promise<boolean> {
+	// If signer is in the validated chain, it's trusted
+	const isInChain = chain.some(
+		(c) => c.serialNumberHex === signer.serialNumberHex && c.issuer.derHex === signer.issuer.derHex,
+	);
+	if (isInChain) {
+		return false;
+	}
+
+	// Find signer's issuer
+	const signerIssuer = allCertificates.find(
+		(candidate) =>
+			(signer.authorityKeyIdentifier !== undefined &&
+				candidate.subjectKeyIdentifier === signer.authorityKeyIdentifier) ||
+			signer.issuer.derHex === candidate.subject.derHex,
+	);
+	if (signerIssuer === undefined) {
+		return false; // Can't check — assume not revoked (soft-fail)
+	}
+
+	// Check signer's revocation status
+	for (const crl of completeCrls) {
+		const result = await checkCertificateRevocationAgainstCrl({
+			certificate: signer,
+			issuerCertificate: signerIssuer,
+			crl,
+			at: PKITS_VALIDATION_TIME,
+		});
+		if (result.ok && result.value.status === 'revoked') {
+			return true;
+		}
+	}
+
+	return false;
 }
 
 describe('PKITS harness', () => {

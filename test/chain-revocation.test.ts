@@ -186,4 +186,58 @@ describe('checkChainRevocation', () => {
 			root.subject.derHex,
 		);
 	});
+
+	it('PKITS 4.4.21: denies when CRL signer is revoked', async () => {
+		// PKITS 4.4.21: CRL signed by revoked certificate should not be trusted
+		// Chain: leaf → certSigningCA → root
+		// CRL signer: crlSigningCert (revoked in rootCrl)
+		const root = await loadPkitsCert('TrustAnchorRootCertificate');
+		const certSigningCa = await loadPkitsCert(
+			'SeparateCertificateandCRLKeysCA2CertificateSigningCACert',
+		);
+		const crlSigningCert = await loadPkitsCert(
+			'SeparateCertificateandCRLKeysCA2CRLSigningCert',
+		);
+		const leaf = await loadPkitsCert(
+			'InvalidSeparateCertificateandCRLKeysTest21EE',
+		);
+
+		const rootCrl = await loadPkitsCrl('TrustAnchorRootCRL');
+		const ca2Crl = await loadPkitsCrl('SeparateCertificateandCRLKeysCA2CRL');
+
+		// The validated chain is: leaf → certSigningCa → root
+		// The CRL for certSigningCa is rootCrl (signed by root) - OK
+		// The CRL for leaf is ca2Crl (signed by crlSigningCert) - REVOKED signer!
+		const result = await checkChainRevocation({
+			chain: [leaf, certSigningCa, root],
+			crls: [rootCrl, ca2Crl],
+			extraCertificates: [crlSigningCert], // CRL signer found in extras
+			at: new Date('2011-04-15T00:00:00Z'),
+		});
+
+		expect(result.ok).toBe(true);
+		// Should deny because CRL signer is revoked - can't trust that CRL
+		// Results in indeterminate (crl_signer_revoked) for leaf cert
+		expect(result.value.certificates).toHaveLength(2);
+
+		const leafStatus = result.value.certificates[0];
+		expect(leafStatus?.status).toBe('indeterminate');
+		expect(leafStatus?.indeterminateReasons).toContain('crl_signer_revoked');
+
+		// certSigningCa should be good (checked against rootCrl, signed by root)
+		const caStatus = result.value.certificates[1];
+		expect(caStatus?.status).toBe('good');
+
+		// With hard-fail policy, this should deny
+		const hardFailResult = await checkChainRevocation({
+			chain: [leaf, certSigningCa, root],
+			crls: [rootCrl, ca2Crl],
+			extraCertificates: [crlSigningCert],
+			at: new Date('2011-04-15T00:00:00Z'),
+			policy: { mode: 'hard-fail' },
+		});
+
+		expect(hardFailResult.ok).toBe(true);
+		expect(hardFailResult.value.decision).toBe('deny');
+	});
 });
