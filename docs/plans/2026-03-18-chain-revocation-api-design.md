@@ -117,7 +117,7 @@ interface RevocationSource {
 
 ### New Module: `src/revocation/chain.ts`
 
-```
+```text
 src/revocation/
 ├── index.ts          # re-exports
 ├── crl.ts            # existing primitives
@@ -138,7 +138,7 @@ src/revocation/
 
 ### Evidence Evaluation Pipeline
 
-```
+```text
 Stage 1: COLLECT candidate evidence (match by distribution points, AIA)
 Stage 2: VALIDATE evidence structurally & temporally (parse, signatures, freshness)
 Stage 3: DISCOVER & VALIDATE evidence signer (find signer, check authorization)

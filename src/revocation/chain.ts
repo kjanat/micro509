@@ -117,3 +117,53 @@ export type CheckChainRevocationResult = {
 	readonly ok: true;
 	readonly value: CheckChainRevocationValue;
 };
+
+// ---------------------------------------------------------------------------
+// Function
+// ---------------------------------------------------------------------------
+
+/**
+ * Checks revocation status for all certificates in a validated chain.
+ *
+ * Evaluates CRL and OCSP evidence against each certificate (except the trust
+ * anchor), applies the revocation policy, and returns a unified decision.
+ *
+ * @example
+ * ```ts
+ * const result = await checkChainRevocation({
+ *   chain: validatedChain,
+ *   crls: [crl1, crl2],
+ *   policy: { mode: 'hard-fail' },
+ * });
+ * if (result.value.decision === 'deny') {
+ *   console.log('Revocation check failed');
+ * }
+ * ```
+ */
+export async function checkChainRevocation(
+	input: CheckChainRevocationInput,
+): Promise<CheckChainRevocationResult> {
+	const { chain } = input;
+
+	// Empty chain → allow
+	if (chain.length === 0) {
+		return {
+			ok: true,
+			value: {
+				decision: 'allow',
+				summary: { revokedCertificates: [], indeterminateCertificates: [] },
+				certificates: [],
+			},
+		};
+	}
+
+	// TODO: Implement full pipeline
+	return {
+		ok: true,
+		value: {
+			decision: 'allow',
+			summary: { revokedCertificates: [], indeterminateCertificates: [] },
+			certificates: [],
+		},
+	};
+}

@@ -35,3 +35,4 @@ export {
 } from './revocation.ts';
 
 export type * from './chain.ts';
+export { checkChainRevocation } from './chain.ts';
