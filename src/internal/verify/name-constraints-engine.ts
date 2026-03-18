@@ -204,7 +204,7 @@ export function evaluateNameConstraints(
 	for (let index = chain.length - 2; index >= 0; index -= 1) {
 		const current = chain[index];
 		if (current === undefined) {
-			continue;
+			throw new Error(`Certificate chain contains undefined at index ${String(index)}`);
 		}
 
 		// (b) If not self-issued, check names against accumulated constraints.
@@ -677,6 +677,12 @@ function parseDirectoryNameDerHex(derHex: string): ParsedName | undefined {
 	}
 }
 
+/**
+ * Unwraps doubly-nested directoryName SEQUENCE encoding.
+ *
+ * Some encoders produce `[4] { SEQ { SEQ { SET... } } }` instead of `[4] { SEQ { SET... } }`.
+ * A single SEQUENCE child indicates the extra wrapper (valid Names have SET children).
+ */
 function unwrapDirectoryNameElement(source: Uint8Array, element: DerElement): DerElement {
 	if (element.tag !== 0x30) {
 		return element;

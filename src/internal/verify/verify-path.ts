@@ -554,9 +554,7 @@ async function matchTrustAnchor(
 			}
 			continue;
 		}
-		if (verified.valid) {
-			return { matched: true };
-		}
+		return { matched: true };
 	}
 	return firstFailure !== undefined
 		? { matched: false, failure: firstFailure }

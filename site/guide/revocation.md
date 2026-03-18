@@ -35,7 +35,7 @@ import {
   isCertificateRevoked,
 } from 'micro509/revocation';
 
-const parsed = parseCertificateRevocationListPem(pem);
+const parsed = parseCertificateRevocationListPem(crlPem);
 
 const verifyResult = await verifyCertificateRevocationList(
   parsed,
