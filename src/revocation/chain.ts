@@ -187,17 +187,20 @@ function findIndirectCrlIssuer(
 
 	const candidates = [...parsedExtras, ...chain];
 
-	for (const candidate of candidates) {
-		// Match by AKI → SKI (preferred, more specific)
-		if (
-			crl.authorityKeyIdentifier !== undefined &&
-			candidate.subjectKeyIdentifier !== undefined &&
-			normalizeHex(crl.authorityKeyIdentifier) === normalizeHex(candidate.subjectKeyIdentifier)
-		) {
-			return candidate;
+	// First pass: prefer AKI/SKI match (more specific)
+	if (crl.authorityKeyIdentifier !== undefined) {
+		for (const candidate of candidates) {
+			if (
+				candidate.subjectKeyIdentifier !== undefined &&
+				normalizeHex(crl.authorityKeyIdentifier) === normalizeHex(candidate.subjectKeyIdentifier)
+			) {
+				return candidate;
+			}
 		}
+	}
 
-		// Match by issuer DN → subject DN
+	// Second pass: fall back to DN match
+	for (const candidate of candidates) {
 		if (crl.issuer.derHex === candidate.subject.derHex) {
 			return candidate;
 		}
@@ -347,6 +350,11 @@ async function checkSignerRevocation(
 	issuer: ParsedCertificate,
 	ctx: SignerValidationContext,
 ): Promise<SignerValidationState> {
+	// If the signer's issuer is in the validated chain, the signer is trusted
+	// by virtue of being issued by a trusted CA. We only need to check if
+	// it's explicitly revoked, not prove "good" status.
+	const issuerInChain = ctx.chain.some((c) => sameCertificate(c, issuer));
+
 	// Try each CRL to check signer's revocation
 	for (const crlSource of ctx.crls) {
 		let crl: ParsedCertificateRevocationList;
@@ -378,6 +386,12 @@ async function checkSignerRevocation(
 				// If CRL signer is revoked or indeterminate, can't trust this result
 			}
 		}
+	}
+
+	// If the signer's issuer is in the chain and we found no revocation,
+	// trust the signer (issued by trusted CA, no evidence of revocation)
+	if (issuerInChain) {
+		return 'resolved-valid';
 	}
 
 	return 'resolved-indeterminate';
@@ -418,6 +432,18 @@ function buildCrlStatus(
  *
  * Also validates that CRL signers are not revoked (RFC 5280 §6.3.3).
  */
+// RFC 5280 ReasonFlags — all possible revocation reasons that CRLs can cover.
+const ALL_REASON_FLAGS: readonly string[] = [
+	'keyCompromise',
+	'cACompromise',
+	'affiliationChanged',
+	'superseded',
+	'cessationOfOperation',
+	'certificateHold',
+	'privilegeWithdrawn',
+	'aACompromise',
+];
+
 async function evaluateCertificateRevocation(
 	cert: ParsedCertificate,
 	issuer: ParsedCertificate,
@@ -431,90 +457,138 @@ async function evaluateCertificateRevocation(
 	const executionErrors: RevocationExecutionError[] = [];
 	let sawCrlSignerRevoked = false;
 	let sawCrlSignerIndeterminate = false;
+	let sawGood = false;
+	let lastGoodSigner: ParsedCertificate | undefined;
+	const coveredReasons = new Set<string>();
 
-	// Try each CRL
+	// Parse all CRLs and separate base CRLs from delta CRLs
+	const parsedCrls: ParsedCertificateRevocationList[] = [];
 	for (const crlSource of crls) {
-		let crl: ParsedCertificateRevocationList;
 		try {
-			crl = parseCrlFromSource(crlSource);
+			parsedCrls.push(parseCrlFromSource(crlSource));
 		} catch (e) {
 			executionErrors.push({
 				kind: 'parse_error',
 				message: e instanceof Error ? e.message : 'CRL parse failed',
 			});
-			continue;
 		}
+	}
 
-		// Try chain issuer first
-		const result = await checkCertificateRevocationAgainstCrl({
+	const baseCrls = parsedCrls.filter((crl) => crl.baseCrlNumber === undefined);
+	const deltaCrls = parsedCrls.filter((crl) => crl.baseCrlNumber !== undefined);
+
+	// Helper to check CRL with given issuer and optional delta
+	const checkWithIssuer = async (
+		crl: ParsedCertificateRevocationList,
+		deltaCrl: ParsedCertificateRevocationList | undefined,
+		crlIssuer: ParsedCertificate,
+	) => {
+		return checkCertificateRevocationAgainstCrl({
 			certificate: cert,
-			issuerCertificate: issuer,
+			issuerCertificate: crlIssuer,
 			crl,
+			...(deltaCrl !== undefined ? { deltaCrl } : {}),
 			at,
 		});
+	};
 
-		if (result.ok) {
-			// Validate CRL signer is not revoked before accepting result
-			const signerStatus = await validateCrlSigner(issuer, signerCtx);
-			if (signerStatus === 'resolved-revoked') {
-				sawCrlSignerRevoked = true;
-				continue; // CRL signer revoked — can't trust this CRL
+	// Process base CRLs (optionally paired with delta CRLs)
+	for (const baseCrl of baseCrls) {
+		// Find applicable delta CRL for this base CRL (if any)
+		// Delta CRL applies if it has the same issuer and crlNumber matches baseCrlNumber
+		const applicableDelta = deltaCrls.find(
+			(d) =>
+				d.issuer.derHex === baseCrl.issuer.derHex &&
+				d.baseCrlNumber !== undefined &&
+				baseCrl.crlNumber !== undefined &&
+				BigInt(d.baseCrlNumber) <= BigInt(baseCrl.crlNumber),
+		);
+
+		// Try chain issuer first
+		let result = await checkWithIssuer(baseCrl, applicableDelta, issuer);
+		let effectiveSigner = issuer;
+
+		// Chain issuer failed — try to find indirect CRL issuer
+		if (!result.ok) {
+			const indirectIssuer = findIndirectCrlIssuer(baseCrl, extraCertificates, chain);
+			if (indirectIssuer !== undefined && !sameCertificate(indirectIssuer, issuer)) {
+				result = await checkWithIssuer(baseCrl, applicableDelta, indirectIssuer);
+				effectiveSigner = indirectIssuer;
 			}
-			if (signerStatus === 'resolved-indeterminate') {
-				sawCrlSignerIndeterminate = true;
-				continue; // CRL signer status unknown — try other CRLs
-			}
-			// signerStatus === 'resolved-valid' — proceed with CRL result
+		}
+
+		if (!result.ok) {
+			continue; // CRL doesn't apply to this certificate
+		}
+
+		// Validate CRL signer is not revoked before accepting result
+		const signerStatus = await validateCrlSigner(effectiveSigner, signerCtx);
+		if (signerStatus === 'resolved-revoked') {
+			sawCrlSignerRevoked = true;
+			continue; // CRL signer revoked — can't trust this CRL
+		}
+		if (signerStatus === 'resolved-indeterminate') {
+			sawCrlSignerIndeterminate = true;
+			continue; // CRL signer status unknown — try other CRLs
+		}
+
+		// CRL is valid — check result
+		if (result.value.status === 'revoked') {
+			// Immediately return revoked status
 			return {
 				status: buildCrlStatus(
 					cert,
-					issuer,
-					result.value.status,
-					result.value.status === 'revoked' ? result.value.revocationDate : undefined,
-					result.value.status === 'revoked' ? result.value.reasonCode : undefined,
+					effectiveSigner,
+					'revoked',
+					result.value.revocationDate,
+					result.value.reasonCode,
 				),
 				executionErrors,
 			};
 		}
 
-		// Chain issuer failed — try to find indirect CRL issuer
-		const indirectIssuer = findIndirectCrlIssuer(crl, extraCertificates, chain);
-		if (indirectIssuer !== undefined && !sameCertificate(indirectIssuer, issuer)) {
-			const indirectResult = await checkCertificateRevocationAgainstCrl({
-				certificate: cert,
-				issuerCertificate: indirectIssuer,
-				crl,
-				at,
-			});
-
-			if (indirectResult.ok) {
-				// Validate indirect CRL signer is not revoked
-				const signerStatus = await validateCrlSigner(indirectIssuer, signerCtx);
-				if (signerStatus === 'resolved-revoked') {
-					sawCrlSignerRevoked = true;
-					continue; // CRL signer revoked — can't trust this CRL
-				}
-				if (signerStatus === 'resolved-indeterminate') {
-					sawCrlSignerIndeterminate = true;
-					continue; // CRL signer status unknown — try other CRLs
-				}
-				// signerStatus === 'resolved-valid' — proceed with CRL result
-				return {
-					status: buildCrlStatus(
-						cert,
-						indirectIssuer,
-						indirectResult.value.status,
-						indirectResult.value.status === 'revoked'
-							? indirectResult.value.revocationDate
-							: undefined,
-						indirectResult.value.status === 'revoked'
-							? indirectResult.value.reasonCode
-							: undefined,
-					),
-					executionErrors,
-				};
+		// Status is 'good' — track which reasons this CRL covers
+		sawGood = true;
+		lastGoodSigner = effectiveSigner;
+		const crlReasons = baseCrl.issuingDistributionPoint?.onlySomeReasons?.flags;
+		if (crlReasons === undefined) {
+			// CRL covers all reasons
+			for (const reason of ALL_REASON_FLAGS) {
+				coveredReasons.add(reason);
+			}
+		} else {
+			// CRL only covers specific reasons
+			for (const reason of crlReasons) {
+				coveredReasons.add(reason);
 			}
 		}
+	}
+
+	// Return 'good' only if we saw at least one good result AND all reasons are covered
+	if (sawGood) {
+		const allReasonsCovered = ALL_REASON_FLAGS.every((r) => coveredReasons.has(r));
+		if (allReasonsCovered) {
+			return {
+				status: {
+					certificate: cert,
+					status: 'good',
+					source:
+						lastGoodSigner !== undefined
+							? { type: 'crl', signerCertificate: lastGoodSigner }
+							: undefined,
+				},
+				executionErrors,
+			};
+		}
+		// Not all reasons covered — indeterminate
+		return {
+			status: {
+				certificate: cert,
+				status: 'indeterminate',
+				indeterminateReasons: ['reason_coverage_incomplete'],
+			},
+			executionErrors,
+		};
 	}
 
 	// No applicable CRL found — determine most appropriate indeterminate reason

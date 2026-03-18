@@ -1,14 +1,13 @@
 import { describe, expect, it } from 'bun:test';
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import {
-	checkCertificateRevocationAgainstCrl,
+	checkChainRevocation,
 	type ParsedCertificate,
 	type ParsedCertificateRevocationList,
 	parseCertificateDer,
 	parseCertificateRevocationListDer,
 	verifyCertificateChain,
 } from 'micro509';
-import { compareDistinguishedNames } from '#micro509/internal/shared/dn.ts';
 import { PKITS_CASES, type PkitsCase } from './fixtures/pkits/manifest.ts';
 
 const PKITS_VALIDATION_TIME = new Date('2011-04-15T00:00:00Z');
@@ -61,240 +60,51 @@ async function readPkitsParsedCrl(name: string): Promise<ParsedCertificateRevoca
 	return await pending;
 }
 
+let allPkitsCertificatesCache: ParsedCertificate[] | null = null;
+
+async function loadAllPkitsCertificates(): Promise<ParsedCertificate[]> {
+	if (allPkitsCertificatesCache !== null) {
+		return allPkitsCertificatesCache;
+	}
+
+	const certDir = new URL('./fixtures/pkits/certs/', import.meta.url);
+	const files = await readdir(certDir);
+	const results = await Promise.allSettled(
+		files
+			.filter((f) => f.endsWith('.crt'))
+			.map(async (f) => {
+				const name = f.replace('.crt', '');
+				return readPkitsParsedCertificate(name);
+			}),
+	);
+	const certs = results
+		.filter((r): r is PromiseFulfilledResult<ParsedCertificate> => r.status === 'fulfilled')
+		.map((r) => r.value);
+
+	allPkitsCertificatesCache = certs;
+	return certs;
+}
+
 async function evaluatePkitsRevocation(
 	chain: readonly ParsedCertificate[],
 	crlNames: readonly string[],
-	allCertificates: readonly ParsedCertificate[],
 ): Promise<boolean> {
-	const parsedCrls = (await Promise.allSettled(crlNames.map((name) => readPkitsParsedCrl(name))))
+	const crlResults = await Promise.allSettled(crlNames.map(readPkitsParsedCrl));
+	const crls = crlResults
 		.filter(
-			(result): result is PromiseFulfilledResult<ParsedCertificateRevocationList> =>
-				result.status === 'fulfilled',
+			(r): r is PromiseFulfilledResult<ParsedCertificateRevocationList> => r.status === 'fulfilled',
 		)
-		.map((result) => result.value);
-	const completeCrls = parsedCrls.filter((crl) => crl.baseCrlNumber === undefined);
-	const deltaCrls = parsedCrls.filter((crl) => crl.baseCrlNumber !== undefined);
+		.map((r) => r.value);
 
-	for (let certificateIndex = 0; certificateIndex < chain.length - 1; certificateIndex += 1) {
-		const certificate = chain[certificateIndex];
-		const issuerCertificate = chain[certificateIndex + 1];
-		if (certificate === undefined || issuerCertificate === undefined) {
-			return false;
-		}
+	const result = await checkChainRevocation({
+		chain,
+		crls,
+		extraCertificates: await loadAllPkitsCertificates(),
+		policy: { mode: 'hard-fail' },
+		at: PKITS_VALIDATION_TIME,
+	});
 
-		const certificateStatus = await evaluatePkitsCertificateRevocation(
-			certificate,
-			issuerCertificate,
-			completeCrls,
-			deltaCrls,
-			allCertificates,
-			chain,
-		);
-		if (certificateStatus !== 'good') {
-			return false;
-		}
-	}
-
-	return true;
-}
-
-// ReasonFlags from RFC 5280 §4.2.1.14 — onlySomeReasons uses this bitmap.
-// Note: 'unspecified' (CRLReason 0) is NOT in ReasonFlags, so we exclude it.
-const ALL_REASON_FLAGS = new Set([
-	'keyCompromise',
-	'cACompromise',
-	'affiliationChanged',
-	'superseded',
-	'cessationOfOperation',
-	'certificateHold',
-	'privilegeWithdrawn',
-	'aACompromise',
-]);
-
-async function evaluatePkitsCertificateRevocation(
-	certificate: ParsedCertificate,
-	issuerCertificate: ParsedCertificate,
-	completeCrls: readonly ParsedCertificateRevocationList[],
-	deltaCrls: readonly ParsedCertificateRevocationList[],
-	allCertificates: readonly ParsedCertificate[],
-	chain: readonly ParsedCertificate[],
-): Promise<'good' | 'revoked' | 'unknown'> {
-	let sawGood = false;
-	const crlsWithAppliedDelta = new Set<ParsedCertificateRevocationList>();
-	const coveredReasons = new Set<string>();
-
-	// Process delta+complete pairs first — delta CRLs may contain removeFromCRL entries
-	// that override revocations in the base CRL (e.g., suspension lifted)
-	for (const deltaCrl of deltaCrls) {
-		for (const crl of completeCrls) {
-			const result = await evaluatePkitsCrlWithIssuerCandidates(
-				certificate,
-				issuerCertificate,
-				allCertificates,
-				crl,
-				deltaCrl,
-				chain,
-				completeCrls,
-			);
-			if (!result.ok) {
-				continue;
-			}
-			// Mark this base CRL as having a delta applied — don't re-check it alone
-			crlsWithAppliedDelta.add(crl);
-			// Track which reasons this CRL covers
-			const crlReasons = result.value.crl.issuingDistributionPoint?.onlySomeReasons?.flags;
-			if (crlReasons === undefined) {
-				for (const reason of ALL_REASON_FLAGS) coveredReasons.add(reason);
-			} else {
-				for (const reason of crlReasons) coveredReasons.add(reason);
-			}
-			if (result.value.status === 'revoked') {
-				return 'revoked';
-			}
-			sawGood = true;
-		}
-	}
-
-	// Fall back to complete CRLs alone only if no applicable delta CRL was paired
-	for (const crl of completeCrls) {
-		if (crlsWithAppliedDelta.has(crl)) {
-			continue;
-		}
-		const result = await evaluatePkitsCrlWithIssuerCandidates(
-			certificate,
-			issuerCertificate,
-			allCertificates,
-			crl,
-			undefined,
-			chain,
-			completeCrls,
-		);
-		if (!result.ok) {
-			continue;
-		}
-		// Track which reasons this CRL covers
-		const crlReasons = result.value.crl.issuingDistributionPoint?.onlySomeReasons?.flags;
-		if (crlReasons === undefined) {
-			for (const reason of ALL_REASON_FLAGS) coveredReasons.add(reason);
-		} else {
-			for (const reason of crlReasons) coveredReasons.add(reason);
-		}
-		if (result.value.status === 'revoked') {
-			return 'revoked';
-		}
-		sawGood = true;
-	}
-
-	// Only return 'good' if all revocation reasons have been covered
-	if (sawGood) {
-		for (const reason of ALL_REASON_FLAGS) {
-			if (!coveredReasons.has(reason)) {
-				return 'unknown';
-			}
-		}
-		return 'good';
-	}
-	return 'unknown';
-}
-
-async function evaluatePkitsCrlWithIssuerCandidates(
-	certificate: ParsedCertificate,
-	fallbackIssuer: ParsedCertificate,
-	allCertificates: readonly ParsedCertificate[],
-	crl: ParsedCertificateRevocationList,
-	deltaCrl: ParsedCertificateRevocationList | undefined,
-	chain: readonly ParsedCertificate[],
-	completeCrls: readonly ParsedCertificateRevocationList[],
-) {
-	const issuerCandidates = allCertificates.filter(
-		(candidate) =>
-			compareDistinguishedNames(candidate.subject, crl.issuer) &&
-			(crl.authorityKeyIdentifier === undefined ||
-				candidate.subjectKeyIdentifier === crl.authorityKeyIdentifier),
-	);
-	const allowsAlternateCrlIssuer =
-		crl.issuingDistributionPoint?.indirectCrl === true ||
-		(certificate.crlDistributionPoints?.some(
-			(distributionPoint) => distributionPoint.crlIssuer !== undefined,
-		) ??
-			false) ||
-		!compareDistinguishedNames(fallbackIssuer.subject, crl.issuer) ||
-		// Self-issued cert case: subjects match but keys differ
-		(crl.authorityKeyIdentifier !== undefined &&
-			fallbackIssuer.subjectKeyIdentifier !== crl.authorityKeyIdentifier);
-	const candidates = allowsAlternateCrlIssuer
-		? [fallbackIssuer, ...issuerCandidates]
-		: [fallbackIssuer];
-	for (const issuerCandidate of candidates) {
-		const result = await checkCertificateRevocationAgainstCrl({
-			certificate,
-			issuerCertificate: issuerCandidate,
-			crl,
-			...(deltaCrl === undefined ? {} : { deltaCrl }),
-			at: PKITS_VALIDATION_TIME,
-		});
-		if (result.ok) {
-			// RFC 5280 §6.3.3: Verify CRL signer is not revoked
-			const signerIsRevoked = await isCrlSignerRevoked(
-				issuerCandidate,
-				chain,
-				completeCrls,
-				allCertificates,
-			);
-			if (signerIsRevoked) {
-				continue; // CRL signer revoked — can't trust this CRL
-			}
-			return result;
-		}
-	}
-	return {
-		ok: false as const,
-	};
-}
-
-/**
- * Checks if a CRL signer certificate is revoked.
- * Chain certs are trusted (already validated). Non-chain signers need revocation check.
- */
-async function isCrlSignerRevoked(
-	signer: ParsedCertificate,
-	chain: readonly ParsedCertificate[],
-	completeCrls: readonly ParsedCertificateRevocationList[],
-	allCertificates: readonly ParsedCertificate[],
-): Promise<boolean> {
-	// If signer is in the validated chain, it's trusted
-	const isInChain = chain.some(
-		(c) => c.serialNumberHex === signer.serialNumberHex && c.issuer.derHex === signer.issuer.derHex,
-	);
-	if (isInChain) {
-		return false;
-	}
-
-	// Find signer's issuer
-	const signerIssuer = allCertificates.find(
-		(candidate) =>
-			(signer.authorityKeyIdentifier !== undefined &&
-				candidate.subjectKeyIdentifier === signer.authorityKeyIdentifier) ||
-			signer.issuer.derHex === candidate.subject.derHex,
-	);
-	if (signerIssuer === undefined) {
-		return false; // Can't check — assume not revoked (soft-fail)
-	}
-
-	// Check signer's revocation status
-	for (const crl of completeCrls) {
-		const result = await checkCertificateRevocationAgainstCrl({
-			certificate: signer,
-			issuerCertificate: signerIssuer,
-			crl,
-			at: PKITS_VALIDATION_TIME,
-		});
-		if (result.ok && result.value.status === 'revoked') {
-			return true;
-		}
-	}
-
-	return false;
+	return result.value.decision === 'allow';
 }
 
 describe('PKITS harness', () => {
@@ -356,18 +166,9 @@ describe('PKITS harness', () => {
 						expect(chainValidated).toBe(pkitsCase.shouldValidate);
 						return;
 					}
-					const allCertificates = await Promise.all(
-						pkitsCase.certs.map((certificateName: string) =>
-							readPkitsParsedCertificate(certificateName),
-						),
-					);
 					const revocationResult =
 						pkitsCase.crls.length > 0
-							? await evaluatePkitsRevocation(
-									verifyResult.value.chain,
-									pkitsCase.crls,
-									allCertificates,
-								)
+							? await evaluatePkitsRevocation(verifyResult.value.chain, pkitsCase.crls)
 							: true;
 					expect(revocationResult).toBe(pkitsCase.shouldValidate);
 				});
