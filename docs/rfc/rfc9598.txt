@@ -1,4 +1,4 @@
-﻿Internet Engineering Task Force (IETF)                       A. Melnikov
+Internet Engineering Task Force (IETF)                       A. Melnikov
 Request for Comments: 9598                                     Isode Ltd
 Obsoletes: 8398                                                W. Chuang
 Updates: 5280                                               Google, Inc.

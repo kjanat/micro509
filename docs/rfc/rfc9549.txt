@@ -1,4 +1,4 @@
-﻿Internet Engineering Task Force (IETF)                        R. Housley
+Internet Engineering Task Force (IETF)                        R. Housley
 Request for Comments: 9549                                Vigil Security
 Obsoletes: 8399                                               March 2024
 Updates: 5280
