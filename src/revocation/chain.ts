@@ -143,7 +143,8 @@ export type CheckChainRevocationResult = {
 export async function checkChainRevocation(
 	input: CheckChainRevocationInput,
 ): Promise<CheckChainRevocationResult> {
-	const { chain } = input;
+	const { chain, policy } = input;
+	const mode = policy?.mode ?? 'soft-fail';
 
 	// Empty chain → allow
 	if (chain.length === 0) {
@@ -157,13 +158,40 @@ export async function checkChainRevocation(
 		};
 	}
 
-	// TODO: Implement full pipeline
+	// Skip trust anchor (last cert) — it's the trust base
+	const certsToCheck = chain.slice(0, -1);
+	const certificates: CertificateRevocationStatus[] = [];
+	const revokedCertificates: ParsedCertificate[] = [];
+	const indeterminateCertificates: ParsedCertificate[] = [];
+
+	for (const cert of certsToCheck) {
+		// TODO: Evaluate evidence (Task 2.2)
+		// For now, return indeterminate since no evidence evaluation yet
+		const status: CertificateRevocationStatus = {
+			certificate: cert,
+			status: 'indeterminate',
+			indeterminateReasons: ['no_applicable_crl', 'no_applicable_ocsp'],
+		};
+		certificates.push(status);
+		indeterminateCertificates.push(cert);
+	}
+
+	// Apply policy
+	const hasRevoked = revokedCertificates.length > 0;
+	const hasIndeterminate = indeterminateCertificates.length > 0;
+	const decision: 'allow' | 'deny' =
+		hasRevoked
+			? 'deny'
+			: hasIndeterminate && mode === 'hard-fail'
+				? 'deny'
+				: 'allow';
+
 	return {
 		ok: true,
 		value: {
-			decision: 'allow',
-			summary: { revokedCertificates: [], indeterminateCertificates: [] },
-			certificates: [],
+			decision,
+			summary: { revokedCertificates, indeterminateCertificates },
+			certificates,
 		},
 	};
 }
