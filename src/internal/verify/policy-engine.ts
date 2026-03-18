@@ -179,7 +179,9 @@ function processPolicyState(
 	for (let index = chain.length - 2; index >= 0; index -= 1) {
 		const certificate = chain[index];
 		if (certificate === undefined) {
-			continue;
+			throw new Error(
+				`missing certificate at chain index ${String(index)} (chain length ${String(chain.length)})`,
+			);
 		}
 		const depth = leafDepth - index;
 		processPolicyCertificate(state, certificate, depth, depth === leafDepth);
