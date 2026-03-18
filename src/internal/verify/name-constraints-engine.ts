@@ -764,7 +764,7 @@ function formatConstraintForm(form: NameConstraintForm): string {
 		case 'ip':
 			return `ip:${decodeIpAddress(form.addressBytes)}`;
 		case 'directoryName':
-			return `dn:${form.derHex.slice(0, 20)}...`;
+			return `dn:${form.derHex.slice(0, 20)}${form.derHex.length > 20 ? '...' : ''}`;
 		default: {
 			const exhaustive = form;
 			throw new Error(`Unhandled NameConstraintForm type: ${String(exhaustive)}`);

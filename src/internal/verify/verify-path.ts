@@ -408,8 +408,9 @@ export async function buildChainInternal(
 		candidateFailure: VerifyChainFailure,
 		path: readonly ParsedCertificate[],
 	): void {
-		if (preferredFailure === undefined || path.length >= deepestPath.length) {
+		if (preferredFailure === undefined || path.length > deepestPath.length) {
 			preferredFailure = candidateFailure;
+			deepestPath = path;
 		}
 	}
 }
@@ -569,7 +570,15 @@ function isNonNegativeInteger(value: number | undefined): value is number {
 	return value !== undefined && Number.isInteger(value) && value >= 0;
 }
 
+/** Cache for computed fingerprints to avoid repeated toHex() calls. */
+const fingerprintCache = new WeakMap<ParsedCertificate, string>();
+
 /** Returns a hex fingerprint of the certificate's raw DER, used for cycle detection and dedup. */
 function fingerprint(certificate: ParsedCertificate): string {
-	return toHex(certificate.der);
+	let cached = fingerprintCache.get(certificate);
+	if (cached === undefined) {
+		cached = toHex(certificate.der);
+		fingerprintCache.set(certificate, cached);
+	}
+	return cached;
 }

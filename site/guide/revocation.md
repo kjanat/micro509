@@ -1,6 +1,6 @@
 # Revocation
 
-Examples below assume `ca`, `leaf`, `pem`, `der`, `crlPem`, and `ocspDer` are already defined.
+Examples below assume `ca`, `leaf`, `crlPem`, and `ocspDer` are already defined.
 
 ## CRL lifecycle
 
@@ -93,4 +93,10 @@ const result = await checkCertificateRevocation({
     ocspResponses: [ocspDer],
   },
 });
+
+if (result.ok) {
+  console.log('Certificate is not revoked:', result.value);
+} else {
+  console.error('Revocation check failed:', result.error);
+}
 ```
