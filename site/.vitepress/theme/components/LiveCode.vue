@@ -3,7 +3,10 @@
 
 	The page's import map (derived from package.json exports, injected via
 	transformHtml in config.ts) resolves bare `micro509` specifiers through
-	esm.sh, so code runs exactly as written — no URL rewriting.
+	esm.sh. Subpath imports (e.g. `micro509/keys`) resolve to scoped modules
+	and are left untouched. Root barrel imports (`from 'micro509'`) are
+	rewritten at runtime to use esm.sh's `?exports=` tree-shaking so the
+	browser only downloads the members the snippet actually uses.
 
 	Usage in markdown:
 
@@ -75,6 +78,38 @@ function splitCode(src: string): { head: string; body: string } {
 	return { head: head.join('\n'), body: body.join('\n') };
 }
 
+/**
+ * Rewrite root barrel imports to use esm.sh `?exports=` tree-shaking.
+ *
+ * Reads the page's import map to resolve `'micro509'` → its CDN URL,
+ * then appends `?exports=member1,member2` so esm.sh serves only the
+ * requested bindings. Subpath imports (`micro509/keys`, etc.) are
+ * already scoped and left untouched.
+ */
+function rewriteBarrelImports(code: string): string {
+	const mapEl = document.querySelector('script[type="importmap"]');
+	if (!mapEl) return code;
+
+	const importMap: { imports?: Record<string, string> } = JSON.parse(mapEl.textContent ?? '{}');
+	const baseUrl = importMap.imports?.['micro509'];
+	if (!baseUrl) return code;
+
+	return code.replace(
+		/import\s*\{([^}]+)\}\s*from\s*(['"])micro509\2/g,
+		(match, namedGroup: string, quote: string) => {
+			const names = namedGroup
+				.split(',')
+				.map((s) => s.trim().replace(/\s+as\s+\S+/, ''))
+				.filter(Boolean);
+			if (names.length === 0) return match;
+
+			const sep = baseUrl.includes('?') ? '&' : '?';
+			const url = `${baseUrl}${sep}exports=${names.join(',')}`;
+			return `import {${namedGroup}} from ${quote}${url}${quote}`;
+		},
+	);
+}
+
 const TIMEOUT = 30_000;
 
 async function run() {
@@ -86,9 +121,10 @@ async function run() {
 		if (!raw) throw new Error('No code found');
 
 		const { head, body } = splitCode(raw);
+		const treeShaken = rewriteBarrelImports(head);
 		const eid = `__lc${Date.now()}${Math.random().toString(36).slice(2)}`;
 
-		const src = `${head}
+		const src = `${treeShaken}
 			const __out = [];
 			const console = Object.create(globalThis.console, {
 			  log: { value: (...a) => {

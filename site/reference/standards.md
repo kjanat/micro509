@@ -62,4 +62,4 @@
 - Broader PKITS conformance (ongoing)
 - Full name constraint processing for all GeneralName forms
 
-For the authoritative scope boundary, see [`PKIX-SCOPE.md`](https://github.com/kjanat/ts-x509/blob/master/docs/PKIX-SCOPE.md).
+For the authoritative scope boundary, see [`PKIX-SCOPE.md`](../docs/PKIX-SCOPE.md).

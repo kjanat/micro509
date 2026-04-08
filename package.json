@@ -15,7 +15,11 @@
 		"type": "git",
 		"url": "git+https://github.com/kjanat/ts-x509.git"
 	},
-	"author": "Kaj Kowalski",
+	"author": {
+		"name": "Kaj Kowalski",
+		"email": "info@kajkowalski.nl",
+		"url": "https://github.com/kjanat"
+	},
 	"license": "MIT",
 	"sideEffects": false,
 	"type": "module",
@@ -90,6 +94,7 @@
 		"@types/bun": "^1.3.10",
 		"@typescript/native-preview": "^7.0.0-dev.20260315.1",
 		"dprint": "^0.53.0",
+		"markdown-it-task-lists": "^2.1.1",
 		"oxc-minify": "^0.120.0",
 		"publint": "^0.3.18",
 		"tsdown": "^0.21.3",
@@ -100,7 +105,10 @@
 		"unplugin-unused": "^0.5.7",
 		"vite-robots-txt": "^1.0.0",
 		"vite-svg-to-ico": "^2.0.1",
-		"vitepress": "^2.0.0-alpha.16"
+		"vitepress": "^2.0.0-alpha.17"
+	},
+	"overrides": {
+		"vitepress": "next"
 	},
 	"packageManager": "bun@1.3.10",
 	"devEngines": {
@@ -129,8 +137,8 @@
 		]
 	},
 	"volta": {
-		"node": "25.8.0",
-		"npm": "11.11.0"
+		"node": "25.9.0",
+		"npm": "11.12.1"
 	},
 	"publishConfig": {
 		"exports": {

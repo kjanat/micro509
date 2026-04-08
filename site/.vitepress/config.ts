@@ -1,3 +1,4 @@
+import { dirname, join, normalize } from 'node:path';
 import robotsTxt from 'vite-robots-txt';
 import svgToIco from 'vite-svg-to-ico';
 import { defineConfig, type Plugin } from 'vitepress';
@@ -106,6 +107,56 @@ export default defineConfig({
 	cleanUrls: true,
 	lastUpdated: true,
 
+	srcDir: '../',
+	rewrites: { 'site/:path*': ':path*' },
+	srcExclude: [
+		'**/AGENTS.md',
+		'**/README.md',
+		'.opencode/**',
+		'.claude/**',
+		'comparisons/**',
+		'src/**',
+		'test/**',
+		'docs/rfc/**',
+		'docs/ARCHITECTURE.md',
+		'docs/API.md',
+		'CONTRIBUTING.md',
+		'anal.md',
+		'_gemini_*.md',
+	],
+	ignoreDeadLinks: [/test\/fixtures\//],
+
+	markdown: {
+		config(md) {
+			md.use(require('markdown-it-task-lists'));
+
+			/** Rewrite relative links to non-page files (`.ts`, `.txt`, etc.) as GitHub blob URLs. */
+			const defaultLinkOpen =
+				md.renderer.rules.link_open ??
+				((tokens, idx, options, _env, self) => self.renderToken(tokens, idx, options));
+
+			md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
+				const token = tokens[idx];
+				const href = token.attrGet('href');
+				if (
+					href &&
+					!href.startsWith('http') &&
+					!href.startsWith('//') &&
+					!href.startsWith('#') &&
+					!href.startsWith('/') &&
+					!href.endsWith('.md') &&
+					!/\.html(?:#|$)/.test(href)
+				) {
+					const rel: string = env.relativePath ?? '';
+					const resolved = normalize(join(dirname(rel), href));
+					const segment = resolved.endsWith('/') ? 'tree' : 'blob';
+					token.attrSet('href', `${gitEnv.githubUrl}/${segment}/${gitEnv.branch}/${resolved}`);
+				}
+				return defaultLinkOpen(tokens, idx, options, env, self);
+			};
+		},
+	},
+
 	head: /* biome-ignore format: X */ [
 		['meta', { name: 'theme-color', content: '#3c8772' }],
 		['link', { rel: 'icon', href: '/favicon.ico', type: 'image/x-icon', sizes: '16x16 32x32 48x48' }],
@@ -156,6 +207,7 @@ export default defineConfig({
 					text: 'API Reference',
 					items: [
 						{ text: 'Overview', link: '/api/' },
+						{ text: 'Root Import', link: `/api/${pkg.name}` },
 						...(Array.isArray(typedocSidebar)
 							? typedocSidebar.flatMap((item: { text: string; link: string }) =>
 									item.text === pkg.name
@@ -168,7 +220,6 @@ export default defineConfig({
 											],
 								)
 							: []),
-						{ text: 'Root Import', link: `/api/${pkg.name}` },
 					],
 				},
 			],
@@ -203,7 +254,7 @@ export default defineConfig({
 
 		footer: {
 			message: `Released under the ${pkg.license} License.`,
-			copyright: `Copyright © 2026-present ${pkg.author}`,
+			copyright: `Copyright © 2026-present ${pkg.author.name}`,
 		},
 
 		search: {
