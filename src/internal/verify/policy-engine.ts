@@ -107,6 +107,9 @@ export function evaluatePolicyChain(
 	chain: readonly ParsedCertificate[],
 	state: PolicyValidationState,
 ): PolicyValidationResult {
+	if (chain.length === 0) {
+		throw new RangeError('policy validation requires at least one certificate');
+	}
 	processPolicyState(chain, state);
 	const outcome = derivePolicyValidationOutcome(chain, state);
 	if (state.explicitPolicy === 0 && outcome.userConstrainedPolicies.length === 0) {
