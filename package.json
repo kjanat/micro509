@@ -105,12 +105,9 @@
 		"unplugin-unused": "^0.5.7",
 		"vite-robots-txt": "^1.0.0",
 		"vite-svg-to-ico": "^2.0.1",
-		"vitepress": "^2.0.0-alpha.17"
-	},
-	"overrides": {
 		"vitepress": "next"
 	},
-	"packageManager": "bun@1.3.10",
+	"packageManager": "bun@1.3.12",
 	"devEngines": {
 		"packageManager": [
 			{
