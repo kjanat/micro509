@@ -42,7 +42,9 @@ const verifyResult = await verifyCertificateRevocationList(
   ca.certificate,
 );
 
-const revoked = isCertificateRevoked('01', parsed);
+if (verifyResult.ok) {
+  const revoked = isCertificateRevoked('01', parsed);
+}
 ```
 
 ## OCSP
@@ -95,7 +97,7 @@ const result = await checkCertificateRevocation({
 });
 
 if (result.ok) {
-  console.log('Certificate is not revoked:', result.value);
+  console.log('Revocation status:', result.value.status);
 } else {
   console.error('Revocation check failed:', result.error);
 }

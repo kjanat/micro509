@@ -368,7 +368,7 @@ function deriveUserConstrainedPolicies(
 			);
 		}
 	}
-	return [...constrained.values()];
+	return [...constrained.values()].sort(comparePolicies);
 }
 
 /** Constructs a {@linkcode ConstrainedPolicy}, omitting qualifiers when absent. */
