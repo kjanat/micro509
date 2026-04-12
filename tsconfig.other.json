@@ -1,0 +1,33 @@
+{
+	"compilerOptions": {
+		"target": "ES2024",
+		"module": "NodeNext",
+		"moduleResolution": "NodeNext",
+		"lib": ["ES2024", "DOM"],
+		"types": ["bun-types", "node"],
+		"skipLibCheck": true,
+		"strict": true,
+		"noUncheckedIndexedAccess": true,
+		"exactOptionalPropertyTypes": true,
+		"noImplicitOverride": true,
+		"noFallthroughCasesInSwitch": true,
+		"forceConsistentCasingInFileNames": true,
+		"declaration": true,
+		"emitDeclarationOnly": true,
+		"composite": true,
+		"outDir": "./node_modules/.cache/tsc/other",
+		"tsBuildInfoFile": "./node_modules/.cache/tsc/tsconfig.other.tsbuildinfo",
+		"allowImportingTsExtensions": true,
+		"resolveJsonModule": true,
+		"isolatedDeclarations": false,
+		"allowJs": true,
+		"customConditions": ["bun"],
+		"paths": {
+			"micro509": ["./src/index.ts"],
+			"#micro509": ["./src/index.ts"],
+			"#micro509/*": ["./src/*"]
+		}
+	},
+	"include": ["src", "test", "scripts", "site", "*.config.ts", "*.json", "*.mjs"],
+	"exclude": ["dist", "node_modules"]
+}

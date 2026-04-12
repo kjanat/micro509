@@ -1,0 +1,25 @@
+name: autofix.ci
+on:
+  push: { branches: ["master"] }
+  pull_request:
+  workflow_call:
+permissions: { contents: read }
+jobs:
+  autofix:
+    if: ${{ github.actor != 'autofix-ci[bot]' && !contains(github.event.head_commit.message, '[autofix.ci]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6 # Trusted action, tag allowed
+      - uses: ./.github/actions/setup-ts
+        with: { install-bun: "true" }
+      - uses: kjanat/install-dprint@v1 # Trusted action, tag allowed
+      - uses: kjanat/install-shfmt@v1 # Trusted action, tag allowed
+      - run: bun install --global --trust sort-package-json@latest tombi@latest
+
+      - run: dprint config update
+        if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+
+        # autofix-ci will fail if the .github directory is touched
+      - run: dprint fmt --allow-no-files --diff --excludes ".github"
+
+      - uses: autofix-ci/action@7a166d7532b277f34e16238930461bf77f9d7ed8 # v1.3.3

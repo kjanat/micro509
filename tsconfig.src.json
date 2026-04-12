@@ -1,0 +1,31 @@
+{
+	"compilerOptions": {
+		"target": "ES2024",
+		"module": "NodeNext",
+		"moduleResolution": "NodeNext",
+		"lib": ["ES2024", "DOM"],
+		"strict": true,
+		"noUncheckedIndexedAccess": true,
+		"exactOptionalPropertyTypes": true,
+		"noImplicitOverride": true,
+		"noFallthroughCasesInSwitch": true,
+		"forceConsistentCasingInFileNames": true,
+		"declaration": true,
+		"skipLibCheck": true,
+		"composite": true,
+		"outDir": "./node_modules/.cache/tsc/src",
+		"tsBuildInfoFile": "./node_modules/.cache/tsc/tsconfig.src.tsbuildinfo",
+		"allowImportingTsExtensions": true,
+		"noEmit": true,
+		"isolatedDeclarations": true,
+		"stripInternal": true,
+		"types": [],
+		"paths": {
+			"micro509": ["./src/index.ts"],
+			"#micro509": ["./src/index.ts"],
+			"#micro509/*": ["./src/*"]
+		}
+	},
+	"include": ["src", "./package.json"],
+	"exclude": ["dist", "node_modules"]
+}

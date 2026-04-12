@@ -1,0 +1,46 @@
+name: Setup Js Runtime
+description: Setup Deno, Node.js, and/or Bun runtimes
+
+inputs:
+  install-deno: { description: Install Deno, required: false, default: "false" }
+  deno-version: { description: Deno version to install, required: false, default: "2.x" }
+  install-bun: { description: Install Bun, required: false, default: "true" }
+  bun-version: { description: Bun version to install, required: false, default: "latest" }
+  install-node: { description: Install Node.js, required: false, default: "false" }
+  node-version: { description: Node version to install, required: false, default: "latest" }
+  update-npm: { description: "Update npm to latest", required: false, default: "false" }
+
+outputs:
+  deno-version: { description: The installed Deno version, value: "${{ steps.setup-deno.outputs.deno-version }}" }
+  bun-version: { description: The installed Bun version (if install-bun is true), value: "${{ steps.setup-bun.outputs.bun-version }}" }
+  node-version: { description: The installed Node.js version (if install-node is true), value: "${{ steps.setup-node.outputs.node-version }}" }
+  npm-version: { description: The installed npm version (if update-npm is true), value: "${{ steps.update-npm.outputs.npm-version }}" }
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Deno
+      id: setup-deno
+      if: ${{ inputs.install-deno == 'true' }}
+      uses: denoland/setup-deno@e95548e56dfa95d4e1a28d6f422fafe75c4c26fb # v2.0.3
+      with: { deno-version: "${{ inputs.deno-version }}" }
+
+    - name: Setup Node
+      id: setup-node
+      if: ${{ inputs.install-node == 'true' }}
+      uses: actions/setup-node@v6 # Trusted action, tag allowed
+      with: { node-version: "${{ inputs.node-version }}", package-manager-cache: false }
+
+    - name: Setup Bun
+      id: setup-bun
+      if: ${{ inputs.install-bun == 'true' }}
+      uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      with: { bun-version: "${{ inputs.bun-version }}" }
+
+    - name: Update npm
+      id: update-npm
+      if: ${{ inputs.update-npm == 'true' }}
+      shell: bash
+      run: |
+        npm install -g npm@latest
+        echo "npm-version=$(npm --version)" >> "${GITHUB_OUTPUT}"

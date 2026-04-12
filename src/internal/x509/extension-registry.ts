@@ -1,0 +1,512 @@
+/**
+ * Internal extension registry for certificate and CSR parsing.
+ *
+ * Maps each supported extension OID to a definition that can decode DER,
+ * encode input, and apply parsed values to the accumulator used during
+ * certificate/CSR parsing.
+ *
+ * @module
+ */
+
+import { hexToBytes, toHex } from '#micro509/internal/asn1/asn1.ts';
+import {
+	DEFAULT_MAX_DER_DEPTH,
+	implicitPrimitiveContext,
+	octetString,
+	readRootElement,
+	sequence,
+} from '#micro509/internal/asn1/der.ts';
+import { OIDS } from '#micro509/internal/asn1/oids.ts';
+import type { ParsedBitFlags } from '#micro509/internal/x509/extension-bits.ts';
+import type {
+	AuthorityInformationAccess,
+	BasicConstraints,
+	CertificatePolicies,
+	DistributionPoint,
+	ExtendedKeyUsage,
+	InhibitAnyPolicy,
+	KeyUsage,
+	NameConstraints,
+	ParsedNameConstraintForm,
+	PolicyConstraints,
+	PolicyMappings,
+	SubjectAltName,
+} from '#micro509/x509/extensions.ts';
+import {
+	buildSubjectKeyIdentifier,
+	encodeAuthorityInfoAccess,
+	encodeBasicConstraints,
+	encodeCertificatePolicies,
+	encodeCrlDistributionPoints,
+	encodeExtendedKeyUsage,
+	encodeInhibitAnyPolicy,
+	encodeKeyUsage,
+	encodeNameConstraints,
+	encodePolicyConstraints,
+	encodePolicyMappings,
+	encodeSubjectAltName,
+} from '#micro509/x509/extensions.ts';
+import type { ParsedDistributionPoint } from '#micro509/x509/parse.ts';
+import {
+	parseAuthorityInfoAccess,
+	parseAuthorityKeyIdentifier,
+	parseBasicConstraints,
+	parseCertificatePolicies,
+	parseCrlDistributionPoints,
+	parseExtendedKeyUsage,
+	parseInhibitAnyPolicy,
+	parseKeyUsage,
+	parseNameConstraints,
+	parsePolicyConstraints,
+	parsePolicyMappings,
+	parseSubjectAltNames,
+} from '#micro509/x509/parse.ts';
+
+/** Whether an extension applies to certificate parsing, CSR parsing, or both. */
+export type ExtensionRegistryContext = 'certificate' | 'csr';
+
+/**
+ * Readonly snapshot of decoded known extensions collected during parsing.
+ *
+ * Fields mirror the extension slots on {@linkcode ParsedCertificate}.
+ */
+export interface KnownParsedExtensionAccumulator {
+	/** Basic Constraints (CA flag + optional pathLength). */
+	readonly basicConstraints?: BasicConstraints;
+	/** Key Usage flags (digitalSignature, keyCertSign, etc.). */
+	readonly keyUsage?: ParsedBitFlags<KeyUsage>;
+	/** Extended Key Usage purposes (serverAuth, clientAuth, etc.). */
+	readonly extendedKeyUsage?: readonly ExtendedKeyUsage[];
+	/** Subject Alternative Names (dns, ip, email, uri, srv, directoryName). */
+	readonly subjectAltNames?: readonly SubjectAltName[];
+	/** Name Constraints (permitted/excluded subtrees). */
+	readonly nameConstraints?: NameConstraints<ParsedNameConstraintForm>;
+	/** Certificate Policies extension values. */
+	readonly certificatePolicies?: CertificatePolicies;
+	/** Policy Mappings from issuer to subject policy domains. */
+	readonly policyMappings?: PolicyMappings;
+	/** Policy Constraints (requireExplicitPolicy / inhibitPolicyMapping). */
+	readonly policyConstraints?: PolicyConstraints;
+	/** Inhibit Any-Policy skip-certs value. */
+	readonly inhibitAnyPolicy?: InhibitAnyPolicy;
+	/** Authority Information Access (OCSP, CA issuers). */
+	readonly authorityInfoAccess?: readonly AuthorityInformationAccess[];
+	/** CRL Distribution Points. */
+	readonly crlDistributionPoints?: readonly ParsedDistributionPoint[];
+	/** Hex-encoded Subject Key Identifier. */
+	readonly subjectKeyIdentifier?: string;
+	/** Hex-encoded Authority Key Identifier. */
+	readonly authorityKeyIdentifier?: string;
+}
+
+/**
+ * Mutable version of {@linkcode KnownParsedExtensionAccumulator} used during
+ * extension parsing to progressively fill in decoded values.
+ */
+export interface MutableKnownParsedExtensionAccumulator extends KnownParsedExtensionAccumulator {
+	basicConstraints?: BasicConstraints;
+	keyUsage?: ParsedBitFlags<KeyUsage>;
+	extendedKeyUsage?: readonly ExtendedKeyUsage[];
+	subjectAltNames?: readonly SubjectAltName[];
+	nameConstraints?: NameConstraints<ParsedNameConstraintForm>;
+	certificatePolicies?: CertificatePolicies;
+	policyMappings?: PolicyMappings;
+	policyConstraints?: PolicyConstraints;
+	inhibitAnyPolicy?: InhibitAnyPolicy;
+	authorityInfoAccess?: readonly AuthorityInformationAccess[];
+	crlDistributionPoints?: readonly ParsedDistributionPoint[];
+	subjectKeyIdentifier?: string;
+	authorityKeyIdentifier?: string;
+}
+
+/**
+ * Full lifecycle definition for a known X.509 extension: decode, encode,
+ * and apply-to-accumulator during parsing.
+ *
+ * `TParsed` is the type produced when decoding DER; `TInput` is the type
+ * accepted when encoding (they may differ, e.g. for NameConstraints).
+ */
+export interface ExtensionDefinition<TParsed, TInput = TParsed> {
+	/** Dotted-decimal OID of the extension. */
+	readonly oid: string;
+	/** Contexts where this extension is valid (`'certificate'`, `'csr'`, or both). */
+	readonly contexts: readonly ExtensionRegistryContext[];
+	/** Whether the extension is marked critical by default when encoding. */
+	readonly defaultCritical: boolean;
+	/** When true, the extension is computed by the builder (e.g. SKI, AKI) rather than user-supplied. */
+	readonly autoGenerated?: boolean;
+	/** Decode the extension's DER extnValue into a typed value. */
+	decode(valueDer: Uint8Array): TParsed;
+	/** Encode a typed input into the extension's DER extnValue. */
+	encode(value: TInput): Uint8Array;
+	/** Store a decoded value into the parse-time accumulator. */
+	applyParsed(accumulator: MutableKnownParsedExtensionAccumulator, value: TParsed): void;
+}
+
+/**
+ * Module-internal decode-and-apply closures, captured at definition time.
+ *
+ * Each entry is keyed by OID and populated by {@linkcode defineExtensionDefinition}
+ * when the concrete generic type is known, avoiding the correlated-union problem
+ * that would arise from calling `decode` and `applyParsed` through a union type.
+ */
+const extensionAppliers = new Map<
+	string,
+	(accumulator: MutableKnownParsedExtensionAccumulator, valueDer: Uint8Array) => void
+>();
+
+/** Registry entry for Basic Constraints (OID 2.5.29.19). Critical by default. */
+export const BASIC_CONSTRAINTS_EXTENSION_DEFINITION: ExtensionDefinition<BasicConstraints> =
+	defineExtensionDefinition<BasicConstraints>({
+		oid: OIDS.basicConstraints,
+		contexts: ['certificate', 'csr'],
+		defaultCritical: true,
+		decode: (valueDer) => parseBasicConstraints(valueDer),
+		encode: (value) => encodeBasicConstraints(value),
+		applyParsed: (accumulator, value) => {
+			accumulator.basicConstraints = value;
+		},
+	});
+
+/** Registry entry for Key Usage (OID 2.5.29.15). Critical by default. */
+export const KEY_USAGE_EXTENSION_DEFINITION: ExtensionDefinition<
+	ParsedBitFlags<KeyUsage>,
+	readonly KeyUsage[]
+> = defineExtensionDefinition<ParsedBitFlags<KeyUsage>, readonly KeyUsage[]>({
+	oid: OIDS.keyUsage,
+	contexts: ['certificate', 'csr'],
+	defaultCritical: true,
+	decode: (valueDer) => parseKeyUsage(valueDer),
+	encode: (value) => encodeKeyUsage(value),
+	applyParsed: (accumulator, value) => {
+		accumulator.keyUsage = value;
+	},
+});
+
+/** Registry entry for Extended Key Usage (OID 2.5.29.37). Non-critical by default. */
+export const EXTENDED_KEY_USAGE_EXTENSION_DEFINITION: ExtensionDefinition<
+	readonly ExtendedKeyUsage[]
+> = defineExtensionDefinition<readonly ExtendedKeyUsage[]>({
+	oid: OIDS.extendedKeyUsage,
+	contexts: ['certificate', 'csr'],
+	defaultCritical: false,
+	decode: (valueDer) => parseExtendedKeyUsage(valueDer),
+	encode: (value) => encodeExtendedKeyUsage(value),
+	applyParsed: (accumulator, value) => {
+		accumulator.extendedKeyUsage = value;
+	},
+});
+
+/** Registry entry for Subject Alternative Name (OID 2.5.29.17). Non-critical by default. */
+export const SUBJECT_ALT_NAME_EXTENSION_DEFINITION: ExtensionDefinition<readonly SubjectAltName[]> =
+	defineExtensionDefinition<readonly SubjectAltName[]>({
+		oid: OIDS.subjectAltName,
+		contexts: ['certificate', 'csr'],
+		defaultCritical: false,
+		decode: (valueDer) => parseSubjectAltNames(valueDer),
+		encode: (value) => sequence(value.map(encodeSubjectAltName)),
+		applyParsed: (accumulator, value) => {
+			accumulator.subjectAltNames = value;
+		},
+	});
+
+/** Registry entry for Name Constraints (OID 2.5.29.30). Critical by default. */
+export const NAME_CONSTRAINTS_EXTENSION_DEFINITION: ExtensionDefinition<
+	NameConstraints<ParsedNameConstraintForm>,
+	NameConstraints
+> = defineExtensionDefinition<NameConstraints<ParsedNameConstraintForm>, NameConstraints>({
+	oid: OIDS.nameConstraints,
+	contexts: ['certificate', 'csr'],
+	defaultCritical: true,
+	decode: (valueDer) => parseNameConstraints(valueDer),
+	encode: (value) => encodeNameConstraints(value),
+	applyParsed: (accumulator, value) => {
+		accumulator.nameConstraints = value;
+	},
+});
+
+/** Registry entry for Certificate Policies (OID 2.5.29.32). Non-critical by default. */
+export const CERTIFICATE_POLICIES_EXTENSION_DEFINITION: ExtensionDefinition<CertificatePolicies> =
+	defineExtensionDefinition<CertificatePolicies>({
+		oid: OIDS.certificatePolicies,
+		contexts: ['certificate', 'csr'],
+		defaultCritical: false,
+		decode: (valueDer) => parseCertificatePolicies(valueDer),
+		encode: (value) => encodeCertificatePolicies(value),
+		applyParsed: (accumulator, value) => {
+			accumulator.certificatePolicies = value;
+		},
+	});
+
+/** Registry entry for Policy Mappings (OID 2.5.29.33). Critical by default. */
+export const POLICY_MAPPINGS_EXTENSION_DEFINITION: ExtensionDefinition<PolicyMappings> =
+	defineExtensionDefinition<PolicyMappings>({
+		oid: OIDS.policyMappings,
+		contexts: ['certificate', 'csr'],
+		defaultCritical: true,
+		decode: (valueDer) => parsePolicyMappings(valueDer),
+		encode: (value) => encodePolicyMappings(value),
+		applyParsed: (accumulator, value) => {
+			accumulator.policyMappings = value;
+		},
+	});
+
+/** Registry entry for Policy Constraints (OID 2.5.29.36). Critical by default. */
+export const POLICY_CONSTRAINTS_EXTENSION_DEFINITION: ExtensionDefinition<PolicyConstraints> =
+	defineExtensionDefinition<PolicyConstraints>({
+		oid: OIDS.policyConstraints,
+		contexts: ['certificate', 'csr'],
+		defaultCritical: true,
+		decode: (valueDer) => parsePolicyConstraints(valueDer),
+		encode: (value) => encodePolicyConstraints(value),
+		applyParsed: (accumulator, value) => {
+			accumulator.policyConstraints = value;
+		},
+	});
+
+/** Registry entry for Inhibit anyPolicy (OID 2.5.29.54). Critical by default. */
+export const INHIBIT_ANY_POLICY_EXTENSION_DEFINITION: ExtensionDefinition<InhibitAnyPolicy> =
+	defineExtensionDefinition<InhibitAnyPolicy>({
+		oid: OIDS.inhibitAnyPolicy,
+		contexts: ['certificate', 'csr'],
+		defaultCritical: true,
+		decode: (valueDer) => parseInhibitAnyPolicy(valueDer),
+		encode: (value) => encodeInhibitAnyPolicy(value),
+		applyParsed: (accumulator, value) => {
+			accumulator.inhibitAnyPolicy = value;
+		},
+	});
+
+/** Registry entry for Authority Information Access (OID 1.3.6.1.5.5.7.1.1). Non-critical. */
+export const AUTHORITY_INFO_ACCESS_EXTENSION_DEFINITION: ExtensionDefinition<
+	readonly AuthorityInformationAccess[]
+> = defineExtensionDefinition<readonly AuthorityInformationAccess[]>({
+	oid: OIDS.authorityInfoAccess,
+	contexts: ['certificate', 'csr'],
+	defaultCritical: false,
+	decode: (valueDer) => parseAuthorityInfoAccess(valueDer),
+	encode: (value) => encodeAuthorityInfoAccess(value),
+	applyParsed: (accumulator, value) => {
+		accumulator.authorityInfoAccess = value;
+	},
+});
+
+/** Registry entry for CRL Distribution Points (OID 2.5.29.31). Non-critical by default. */
+export const CRL_DISTRIBUTION_POINTS_EXTENSION_DEFINITION: ExtensionDefinition<
+	readonly ParsedDistributionPoint[],
+	readonly DistributionPoint[]
+> = defineExtensionDefinition<readonly ParsedDistributionPoint[], readonly DistributionPoint[]>({
+	oid: OIDS.cRLDistributionPoints,
+	contexts: ['certificate', 'csr'],
+	defaultCritical: false,
+	decode: (valueDer) => parseCrlDistributionPoints(valueDer),
+	encode: (value) => encodeCrlDistributionPoints(value),
+	applyParsed: (accumulator, value) => {
+		accumulator.crlDistributionPoints = value;
+	},
+});
+
+/** Registry entry for Subject Key Identifier (OID 2.5.29.14). Auto-generated; non-critical. */
+export const SUBJECT_KEY_IDENTIFIER_EXTENSION_DEFINITION: ExtensionDefinition<
+	string,
+	string | Uint8Array
+> = defineExtensionDefinition<string, string | Uint8Array>({
+	oid: OIDS.subjectKeyIdentifier,
+	contexts: ['certificate'],
+	defaultCritical: false,
+	autoGenerated: true,
+	decode: (valueDer) => decodeSubjectKeyIdentifier(valueDer),
+	encode: (value) => octetString(normalizeKeyIdentifier(value)),
+	applyParsed: (accumulator, value) => {
+		accumulator.subjectKeyIdentifier = value;
+	},
+});
+
+/** Registry entry for Authority Key Identifier (OID 2.5.29.35). Auto-generated; non-critical. */
+export const AUTHORITY_KEY_IDENTIFIER_EXTENSION_DEFINITION: ExtensionDefinition<
+	string | undefined,
+	string | Uint8Array
+> = defineExtensionDefinition<string | undefined, string | Uint8Array>({
+	oid: OIDS.authorityKeyIdentifier,
+	contexts: ['certificate'],
+	defaultCritical: false,
+	autoGenerated: true,
+	decode: (valueDer) => parseAuthorityKeyIdentifier(valueDer),
+	encode: (value) => sequence([implicitPrimitiveContext(0, normalizeKeyIdentifier(value))]),
+	applyParsed: (accumulator, value) => {
+		if (value !== undefined) {
+			accumulator.authorityKeyIdentifier = value;
+		}
+	},
+});
+
+/** Union of all built-in extension definition constants. */
+export type KnownExtensionDefinition =
+	| typeof BASIC_CONSTRAINTS_EXTENSION_DEFINITION
+	| typeof KEY_USAGE_EXTENSION_DEFINITION
+	| typeof EXTENDED_KEY_USAGE_EXTENSION_DEFINITION
+	| typeof SUBJECT_ALT_NAME_EXTENSION_DEFINITION
+	| typeof NAME_CONSTRAINTS_EXTENSION_DEFINITION
+	| typeof CERTIFICATE_POLICIES_EXTENSION_DEFINITION
+	| typeof POLICY_MAPPINGS_EXTENSION_DEFINITION
+	| typeof POLICY_CONSTRAINTS_EXTENSION_DEFINITION
+	| typeof INHIBIT_ANY_POLICY_EXTENSION_DEFINITION
+	| typeof AUTHORITY_INFO_ACCESS_EXTENSION_DEFINITION
+	| typeof CRL_DISTRIBUTION_POINTS_EXTENSION_DEFINITION
+	| typeof SUBJECT_KEY_IDENTIFIER_EXTENSION_DEFINITION
+	| typeof AUTHORITY_KEY_IDENTIFIER_EXTENSION_DEFINITION;
+
+/** All built-in extension definitions, in registration order. */
+export const CERT_CSR_EXTENSION_DEFINITIONS: readonly KnownExtensionDefinition[] = [
+	BASIC_CONSTRAINTS_EXTENSION_DEFINITION,
+	KEY_USAGE_EXTENSION_DEFINITION,
+	EXTENDED_KEY_USAGE_EXTENSION_DEFINITION,
+	SUBJECT_ALT_NAME_EXTENSION_DEFINITION,
+	NAME_CONSTRAINTS_EXTENSION_DEFINITION,
+	CERTIFICATE_POLICIES_EXTENSION_DEFINITION,
+	POLICY_MAPPINGS_EXTENSION_DEFINITION,
+	POLICY_CONSTRAINTS_EXTENSION_DEFINITION,
+	INHIBIT_ANY_POLICY_EXTENSION_DEFINITION,
+	AUTHORITY_INFO_ACCESS_EXTENSION_DEFINITION,
+	CRL_DISTRIBUTION_POINTS_EXTENSION_DEFINITION,
+	SUBJECT_KEY_IDENTIFIER_EXTENSION_DEFINITION,
+	AUTHORITY_KEY_IDENTIFIER_EXTENSION_DEFINITION,
+];
+
+/** OID-keyed lookup for known extension definitions. */
+const EXTENSION_DEFINITION_MAP = new Map<string, KnownExtensionDefinition>(
+	CERT_CSR_EXTENSION_DEFINITIONS.map((definition) => [definition.oid, definition]),
+);
+
+/**
+ * Return all known extension definitions, optionally filtered by context.
+ *
+ * @param context If provided, only definitions valid in that context are returned.
+ */
+export function listExtensionDefinitions(
+	context?: ExtensionRegistryContext,
+): readonly KnownExtensionDefinition[] {
+	if (context === undefined) {
+		return CERT_CSR_EXTENSION_DEFINITIONS;
+	}
+	return CERT_CSR_EXTENSION_DEFINITIONS.filter((definition) =>
+		definition.contexts.includes(context),
+	);
+}
+
+/**
+ * Look up a known extension definition by OID.
+ *
+ * Overloaded for each built-in OID constant to return the exact definition type.
+ *
+ * @param oid Dotted-decimal extension OID.
+ * @returns The matching definition, or `undefined` for unrecognized OIDs.
+ */
+export function getExtensionDefinition(
+	oid: typeof OIDS.basicConstraints,
+): typeof BASIC_CONSTRAINTS_EXTENSION_DEFINITION;
+export function getExtensionDefinition(
+	oid: typeof OIDS.keyUsage,
+): typeof KEY_USAGE_EXTENSION_DEFINITION;
+export function getExtensionDefinition(
+	oid: typeof OIDS.extendedKeyUsage,
+): typeof EXTENDED_KEY_USAGE_EXTENSION_DEFINITION;
+export function getExtensionDefinition(
+	oid: typeof OIDS.subjectAltName,
+): typeof SUBJECT_ALT_NAME_EXTENSION_DEFINITION;
+export function getExtensionDefinition(
+	oid: typeof OIDS.nameConstraints,
+): typeof NAME_CONSTRAINTS_EXTENSION_DEFINITION;
+export function getExtensionDefinition(
+	oid: typeof OIDS.certificatePolicies,
+): typeof CERTIFICATE_POLICIES_EXTENSION_DEFINITION;
+export function getExtensionDefinition(
+	oid: typeof OIDS.policyMappings,
+): typeof POLICY_MAPPINGS_EXTENSION_DEFINITION;
+export function getExtensionDefinition(
+	oid: typeof OIDS.policyConstraints,
+): typeof POLICY_CONSTRAINTS_EXTENSION_DEFINITION;
+export function getExtensionDefinition(
+	oid: typeof OIDS.inhibitAnyPolicy,
+): typeof INHIBIT_ANY_POLICY_EXTENSION_DEFINITION;
+export function getExtensionDefinition(
+	oid: typeof OIDS.authorityInfoAccess,
+): typeof AUTHORITY_INFO_ACCESS_EXTENSION_DEFINITION;
+export function getExtensionDefinition(
+	oid: typeof OIDS.cRLDistributionPoints,
+): typeof CRL_DISTRIBUTION_POINTS_EXTENSION_DEFINITION;
+export function getExtensionDefinition(
+	oid: typeof OIDS.subjectKeyIdentifier,
+): typeof SUBJECT_KEY_IDENTIFIER_EXTENSION_DEFINITION;
+export function getExtensionDefinition(
+	oid: typeof OIDS.authorityKeyIdentifier,
+): typeof AUTHORITY_KEY_IDENTIFIER_EXTENSION_DEFINITION;
+export function getExtensionDefinition(oid: string): KnownExtensionDefinition | undefined;
+export function getExtensionDefinition(oid: string): KnownExtensionDefinition | undefined {
+	return EXTENSION_DEFINITION_MAP.get(oid);
+}
+
+/**
+ * If `oid` matches a known extension valid in `context`, decode its DER
+ * value and store the result in the accumulator.
+ *
+ * @returns `true` if the extension was recognized and applied.
+ */
+export function decodeAndApplyKnownExtension(
+	context: ExtensionRegistryContext,
+	oid: string,
+	accumulator: MutableKnownParsedExtensionAccumulator,
+	valueDer: Uint8Array,
+): boolean {
+	const definition = getExtensionDefinition(oid);
+	if (definition === undefined || !definition.contexts.includes(context)) {
+		return false;
+	}
+	const applier = extensionAppliers.get(oid);
+	if (applier === undefined) {
+		return false;
+	}
+	applier(accumulator, valueDer);
+	return true;
+}
+
+/**
+ * Compute a Subject Key Identifier (SHA-1 of the public key bits) from
+ * a DER-encoded SubjectPublicKeyInfo.
+ */
+export function buildSubjectKeyIdentifierFromSubjectPublicKeyInfo(
+	subjectPublicKeyInfo: Uint8Array,
+): Uint8Array {
+	return buildSubjectKeyIdentifier(subjectPublicKeyInfo);
+}
+
+/**
+ * Identity helper that narrows the type of an {@linkcode ExtensionDefinition} literal
+ * and captures a decode-and-apply closure in {@linkcode extensionAppliers}.
+ *
+ * The closure is built here — where `TParsed` is concrete — so that
+ * `decodeAndApplyKnownExtension` can call it through the union-typed
+ * `KnownExtensionDefinition` without hitting TypeScript's correlated-union limitation.
+ */
+function defineExtensionDefinition<TParsed, TInput = TParsed>(
+	definition: ExtensionDefinition<TParsed, TInput>,
+): ExtensionDefinition<TParsed, TInput> {
+	extensionAppliers.set(definition.oid, (accumulator, valueDer) => {
+		definition.applyParsed(accumulator, definition.decode(valueDer));
+	});
+	return definition;
+}
+
+/** Accept hex string or Uint8Array and return raw bytes. */
+function normalizeKeyIdentifier(value: string | Uint8Array): Uint8Array {
+	return typeof value === 'string' ? hexToBytes(value) : value;
+}
+
+/** Decode an SKI extension value DER to a hex string. */
+function decodeSubjectKeyIdentifier(valueDer: Uint8Array): string {
+	const element = readRootElement(valueDer, { maxDepth: DEFAULT_MAX_DER_DEPTH });
+	if (element.tag !== 0x04) {
+		throw new Error('SubjectKeyIdentifier must be an OCTET STRING');
+	}
+	return toHex(element.value);
+}

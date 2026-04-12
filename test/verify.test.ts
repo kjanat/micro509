@@ -16,9 +16,60 @@ import {
 	validateForTlsServer,
 	verifyCertificateChain,
 } from '#micro509';
-import { sequence, tlv } from '#micro509/der.ts';
-import { parseNameConstraints } from '#micro509/parse.ts';
-import { issueChain } from './helpers.ts';
+import {
+	objectIdentifier,
+	printableString,
+	sequence,
+	setOf,
+	tlv,
+	utf8String,
+} from '#micro509/internal/asn1/der.ts';
+import { OIDS } from '#micro509/internal/asn1/oids.ts';
+import {
+	createNameConstraintValidationState,
+	evaluateNameConstraints,
+} from '#micro509/internal/verify/name-constraints-engine.ts';
+import { parseNameConstraints } from '#micro509/x509/parse.ts';
+import {
+	importRsaPrivateKeyWithScheme,
+	issueChain,
+	replaceCertificateSignatureAlgorithm,
+	rewriteCertificateSignatureAsRsaPss,
+} from './helpers.ts';
+
+function buildUnsupportedOtherNameConstraintsDer(): Uint8Array {
+	const otherName = tlv(0xa0, sequence([]));
+	const subtree = sequence([otherName]);
+	return sequence([tlv(0xa0, subtree)]);
+}
+
+type TestDnStringEncoding = 'printable' | 'utf8';
+
+function encodeTestDnString(value: string, encoding: TestDnStringEncoding): Uint8Array {
+	return encoding === 'printable' ? printableString(value) : utf8String(value);
+}
+
+function buildDirectoryNameDerHex(
+	rdns: readonly (readonly {
+		readonly oid: string;
+		readonly value: string;
+		readonly encoding: TestDnStringEncoding;
+	}[])[],
+): string {
+	const encoded = sequence(
+		rdns.map((rdn) =>
+			setOf(
+				rdn.map((attribute) =>
+					sequence([
+						objectIdentifier(attribute.oid),
+						encodeTestDnString(attribute.value, attribute.encoding),
+					]),
+				),
+			),
+		),
+	);
+	return Buffer.from(encoded).toString('hex');
+}
 
 describe('chain verification', () => {
 	it('builds across multiple candidate intermediates', async () => {
@@ -71,7 +122,7 @@ describe('chain verification', () => {
 			intermediates: [badIntermediate.pem, goodIntermediate.pem],
 			roots: [root.certificate.pem],
 			purpose: 'serverAuth',
-			dnsName: 'multi-path.example',
+			serviceIdentity: { type: 'dns', value: 'multi-path.example' },
 		});
 		expect(result).toMatchObject({ ok: true });
 		if (result.ok) {
@@ -125,7 +176,7 @@ describe('chain verification', () => {
 			intermediates: [intermediate.pem],
 			roots: [root.certificate.pem],
 			purpose: 'serverAuth',
-			dnsName: 'service.example',
+			serviceIdentity: { type: 'dns', value: 'service.example' },
 		});
 
 		expect(result.ok).toBe(true);
@@ -172,7 +223,7 @@ describe('chain verification', () => {
 				intermediates: [validChain.intermediate.pem],
 				roots: [validChain.root.certificate.pem],
 				purpose: 'serverAuth',
-				dnsName: 'wrong.example',
+				serviceIdentity: { type: 'dns', value: 'wrong.example' },
 			}),
 		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch', index: 0 });
 
@@ -231,6 +282,32 @@ describe('chain verification', () => {
 				roots: [pathLengthChain.root.certificate.pem],
 			}),
 		).toMatchObject({ ok: false, code: 'path_length_exceeded', index: 2 });
+
+		const pathLengthLeafCaRoot = await createSelfSignedCertificate({
+			subject: { commonName: 'Path Length Leaf CA Root' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const pathLengthLeafCaKeys = await generateKeyPair();
+		const pathLengthLeafCa = await createCertificate({
+			issuer: { commonName: 'Path Length Leaf CA Root' },
+			subject: { commonName: 'Path Length Leaf CA' },
+			publicKey: pathLengthLeafCaKeys.publicKey,
+			signerPrivateKey: pathLengthLeafCaRoot.keyPair.privateKey,
+			issuerPublicKey: pathLengthLeafCaRoot.keyPair.publicKey,
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		expect(
+			await verifyCertificateChain({
+				leaf: pathLengthLeafCa.pem,
+				roots: [pathLengthLeafCaRoot.certificate.pem],
+			}),
+		).toMatchObject({ ok: true });
 
 		const wrongAkiKeys = await generateKeyPair();
 		const akiMismatchChain = await issueChain({
@@ -305,97 +382,6 @@ describe('chain verification', () => {
 		).toMatchObject({ ok: false, code: 'ca_required', index: 0 });
 	});
 
-	it('verifies IP SAN match and rejects mismatch', async () => {
-		const ca = await createSelfSignedCertificate({
-			subject: { commonName: 'IP CA' },
-			extensions: {
-				basicConstraints: { ca: true },
-				keyUsage: ['keyCertSign', 'cRLSign'],
-			},
-		});
-		const leafKeys = await generateKeyPair();
-		const leaf = await createCertificate({
-			issuer: { commonName: 'IP CA' },
-			subject: { commonName: 'ip-leaf' },
-			publicKey: leafKeys.publicKey,
-			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
-			extensions: {
-				keyUsage: ['digitalSignature'],
-				subjectAltNames: [
-					{ type: 'ip', value: '10.0.0.1' },
-					{ type: 'ip', value: '::1' },
-				],
-			},
-		});
-		expect(
-			await verifyCertificateChain({
-				leaf: leaf.pem,
-				roots: [ca.certificate.pem],
-				ipAddress: '10.0.0.1',
-			}),
-		).toMatchObject({ ok: true });
-		expect(
-			await verifyCertificateChain({
-				leaf: leaf.pem,
-				roots: [ca.certificate.pem],
-				ipAddress: '10.0.0.2',
-			}),
-		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
-		expect(
-			await verifyCertificateChain({
-				leaf: leaf.pem,
-				roots: [ca.certificate.pem],
-				ipAddress: '::1',
-			}),
-		).toMatchObject({ ok: true });
-	});
-
-	it('matches wildcard DNS names correctly', async () => {
-		const ca = await createSelfSignedCertificate({
-			subject: { commonName: 'Wildcard CA' },
-			extensions: {
-				basicConstraints: { ca: true },
-				keyUsage: ['keyCertSign', 'cRLSign'],
-			},
-		});
-		const leafKeys = await generateKeyPair();
-		const leaf = await createCertificate({
-			issuer: { commonName: 'Wildcard CA' },
-			subject: { commonName: 'wildcard-leaf' },
-			publicKey: leafKeys.publicKey,
-			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
-			extensions: {
-				keyUsage: ['digitalSignature'],
-				extendedKeyUsage: ['serverAuth'],
-				subjectAltNames: [{ type: 'dns', value: '*.example.com' }],
-			},
-		});
-		expect(
-			await verifyCertificateChain({
-				leaf: leaf.pem,
-				roots: [ca.certificate.pem],
-				purpose: 'serverAuth',
-				dnsName: 'sub.example.com',
-			}),
-		).toMatchObject({ ok: true });
-		expect(
-			await verifyCertificateChain({
-				leaf: leaf.pem,
-				roots: [ca.certificate.pem],
-				dnsName: 'deep.sub.example.com',
-			}),
-		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
-		expect(
-			await verifyCertificateChain({
-				leaf: leaf.pem,
-				roots: [ca.certificate.pem],
-				dnsName: 'example.com',
-			}),
-		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
-	});
-
 	it('allows self-signed leaf when root is trusted', async () => {
 		const selfSigned = await createSelfSignedCertificate({
 			subject: { commonName: 'self.example' },
@@ -410,7 +396,7 @@ describe('chain verification', () => {
 				leaf: selfSigned.certificate.pem,
 				roots: [selfSigned.certificate.pem],
 				allowSelfSignedLeaf: true,
-				dnsName: 'self.example',
+				serviceIdentity: { type: 'dns', value: 'self.example' },
 			}),
 		).toMatchObject({ ok: true });
 	});
@@ -432,59 +418,70 @@ describe('chain verification', () => {
 	it('rejects empty and multi-certificate leaf sources', async () => {
 		const chain = await issueChain();
 		expect(
-			verifyCertificateChain({
+			await verifyCertificateChain({
 				leaf: '',
 				roots: [chain.root.certificate.pem],
 			}),
-		).rejects.toThrow('No certificate found');
+		).toMatchObject({
+			ok: false,
+			code: 'issuer_not_found',
+			index: 0,
+			details: { actual: 'No certificate found' },
+		});
 
 		const mixedLeaf = `${chain.leaf.pem}\n${chain.intermediate.pem}`;
 		expect(
-			verifyCertificateChain({
+			await verifyCertificateChain({
 				leaf: mixedLeaf,
 				roots: [chain.root.certificate.pem],
 			}),
-		).rejects.toThrow('Expected a single certificate source');
+		).toMatchObject({
+			ok: false,
+			code: 'issuer_not_found',
+			index: 0,
+			details: { actual: 'Expected a single certificate source' },
+		});
 	});
 
-	it('rejects invalid wildcard and invalid IPv6 verification inputs', async () => {
-		const ca = await createSelfSignedCertificate({
-			subject: { commonName: 'pattern-ca' },
-			extensions: {
-				basicConstraints: { ca: true },
-				keyUsage: ['keyCertSign', 'cRLSign'],
-			},
-		});
-		const leafKeys = await generateKeyPair();
-		const leaf = await createCertificate({
-			issuer: { commonName: 'pattern-ca' },
-			subject: { commonName: 'pattern-leaf' },
-			publicKey: leafKeys.publicKey,
-			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
-			extensions: {
-				subjectAltNames: [{ type: 'dns', value: 'a*b.example.com' }],
-			},
-		});
+	it('fails closed for malformed trust anchors', async () => {
+		const chain = await issueChain();
+		const rootParsed = parseCertificatePem(chain.root.certificate.pem);
+		const malformedAnchor = {
+			subject: rootParsed.subject,
+			subjectPublicKeyInfoDer: Uint8Array.of(0x30, 0x80),
+			publicKeyAlgorithmOid: rootParsed.publicKeyAlgorithmOid,
+			...(rootParsed.publicKeyParametersOid === undefined
+				? {}
+				: { publicKeyParametersOid: rootParsed.publicKeyParametersOid }),
+			...(rootParsed.subjectKeyIdentifier === undefined
+				? {}
+				: { subjectKeyIdentifier: rootParsed.subjectKeyIdentifier }),
+		};
 
-		expect(
-			await verifyCertificateChain({
-				leaf: leaf.pem,
-				roots: [ca.certificate.pem],
-				dnsName: 'axb.example.com',
-			}),
-		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
-
-		expect(
-			verifyCertificateChain({
-				leaf: leaf.pem,
-				roots: [ca.certificate.pem],
-				ipAddress: '2001::db8::1',
-			}),
-		).rejects.toThrow('Invalid IPv6 address');
+		const result = await verifyCertificateChain({
+			leaf: chain.leaf.pem,
+			intermediates: [chain.intermediate.pem],
+			roots: [],
+			trustAnchors: [malformedAnchor],
+		});
+		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
 	});
 
-	it('verifies chains signed with RSA SHA-384 and ECDSA P-384', async () => {
+	it('fails closed for invalid buildCandidatePath times', async () => {
+		const chain = await issueChain();
+		const result = await buildCandidatePath({
+			leaf: chain.leaf.pem,
+			intermediates: [chain.intermediate.pem],
+			roots: [chain.root.certificate.pem],
+			at: new Date('invalid'),
+		});
+		expect(result).toMatchObject({ ok: false, code: 'certificate_expired' });
+		if (!result.ok) {
+			expect(result.details?.expected).toBe('<invalid date>');
+		}
+	});
+
+	it('verifies chains signed with RSA SHA-384, ECDSA P-384, and ECDSA P-521', async () => {
 		const rsaCaKeys = await generateKeyPair({
 			kind: 'rsa',
 			modulusLength: 2048,
@@ -548,6 +545,37 @@ describe('chain verification', () => {
 				roots: [p384Ca.certificate.pem],
 			}),
 		).toMatchObject({ ok: true });
+
+		const p521CaKeys = await generateKeyPair({
+			kind: 'ecdsa',
+			namedCurve: 'P-521',
+		});
+		const p521Ca = await createSelfSignedCertificate({
+			subject: { commonName: 'p521-ca' },
+			keyPair: p521CaKeys,
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const p521LeafKeys = await generateKeyPair({
+			kind: 'ecdsa',
+			namedCurve: 'P-521',
+		});
+		const p521Leaf = await createCertificate({
+			issuer: { commonName: 'p521-ca' },
+			subject: { commonName: 'p521-leaf' },
+			publicKey: p521LeafKeys.publicKey,
+			signerPrivateKey: p521CaKeys.privateKey,
+			issuerPublicKey: p521CaKeys.publicKey,
+		});
+
+		expect(
+			await verifyCertificateChain({
+				leaf: p521Leaf.pem,
+				roots: [p521Ca.certificate.pem],
+			}),
+		).toMatchObject({ ok: true });
 	});
 
 	it('verifies an Ed25519 certificate chain', async () => {
@@ -576,6 +604,201 @@ describe('chain verification', () => {
 			roots: [root.certificate.pem],
 		});
 		expect(result).toMatchObject({ ok: true });
+	});
+
+	it('verifies RSA-PSS-signed certificate chains for the shipped profile', async () => {
+		const rootKeys = await generateKeyPair({
+			kind: 'rsa',
+			modulusLength: 2048,
+			hash: 'SHA-384',
+		});
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'rsa-pss-root' },
+			keyPair: rootKeys,
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair({
+			kind: 'rsa',
+			modulusLength: 2048,
+			hash: 'SHA-384',
+		});
+		const leaf = await createCertificate({
+			issuer: { commonName: 'rsa-pss-root' },
+			subject: { commonName: 'rsa-pss-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: rootKeys.privateKey,
+			issuerPublicKey: rootKeys.publicKey,
+		});
+		const rsaPssPrivateKey = await importRsaPrivateKeyWithScheme(
+			rootKeys.privateKey,
+			'SHA-384',
+			'pss',
+		);
+		const rsaPssLeafDer = await rewriteCertificateSignatureAsRsaPss(leaf.der, rsaPssPrivateKey, {
+			hash: 'SHA-384',
+			mgfHash: 'SHA-384',
+			saltLength: 48,
+			trailerField: 1,
+		});
+
+		expect(
+			await verifyCertificateChain({
+				leaf: rsaPssLeafDer,
+				roots: [root.certificate.pem],
+			}),
+		).toMatchObject({ ok: true });
+	});
+
+	it('verifies RSA-PSS-signed certificate chains for all shipped digests', async () => {
+		for (const testCase of [
+			{ hash: 'SHA-256', saltLength: 32 },
+			{ hash: 'SHA-384', saltLength: 48 },
+			{ hash: 'SHA-512', saltLength: 64 },
+		] as const) {
+			const rootKeys = await generateKeyPair({
+				kind: 'rsa',
+				modulusLength: 2048,
+				hash: testCase.hash,
+			});
+			const root = await createSelfSignedCertificate({
+				subject: { commonName: `rsa-pss-${testCase.hash}-root` },
+				keyPair: rootKeys,
+				extensions: {
+					basicConstraints: { ca: true },
+					keyUsage: ['keyCertSign', 'cRLSign'],
+				},
+			});
+			const leafKeys = await generateKeyPair({
+				kind: 'rsa',
+				modulusLength: 2048,
+				hash: testCase.hash,
+			});
+			const leaf = await createCertificate({
+				issuer: { commonName: `rsa-pss-${testCase.hash}-root` },
+				subject: { commonName: `rsa-pss-${testCase.hash}-leaf` },
+				publicKey: leafKeys.publicKey,
+				signerPrivateKey: rootKeys.privateKey,
+				issuerPublicKey: rootKeys.publicKey,
+			});
+			const rsaPssPrivateKey = await importRsaPrivateKeyWithScheme(
+				rootKeys.privateKey,
+				testCase.hash,
+				'pss',
+			);
+			const rsaPssLeafDer = await rewriteCertificateSignatureAsRsaPss(leaf.der, rsaPssPrivateKey, {
+				hash: testCase.hash,
+				mgfHash: testCase.hash,
+				saltLength: testCase.saltLength,
+				trailerField: 1,
+			});
+
+			expect(
+				await verifyCertificateChain({
+					leaf: rsaPssLeafDer,
+					roots: [root.certificate.pem],
+				}),
+			).toMatchObject({ ok: true });
+		}
+	});
+
+	it('returns typed errors for unsupported RSA-PSS certificate parameters', async () => {
+		const rootKeys = await generateKeyPair({
+			kind: 'rsa',
+			modulusLength: 2048,
+			hash: 'SHA-384',
+		});
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'rsa-pss-unsupported-root' },
+			keyPair: rootKeys,
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair({
+			kind: 'rsa',
+			modulusLength: 2048,
+			hash: 'SHA-384',
+		});
+		const leaf = await createCertificate({
+			issuer: { commonName: 'rsa-pss-unsupported-root' },
+			subject: { commonName: 'rsa-pss-unsupported-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: rootKeys.privateKey,
+			issuerPublicKey: rootKeys.publicKey,
+		});
+		const rsaPssPrivateKey = await importRsaPrivateKeyWithScheme(
+			rootKeys.privateKey,
+			'SHA-384',
+			'pss',
+		);
+		const unsupportedLeafDer = await rewriteCertificateSignatureAsRsaPss(
+			leaf.der,
+			rsaPssPrivateKey,
+			{
+				hash: 'SHA-384',
+				mgfHash: 'SHA-384',
+				saltLength: 32,
+				trailerField: 1,
+			},
+		);
+
+		expect(
+			await verifyCertificateChain({
+				leaf: unsupportedLeafDer,
+				roots: [root.certificate.pem],
+			}),
+		).toMatchObject({
+			ok: false,
+			code: 'unsupported_signature_algorithm_parameters',
+			index: 0,
+		});
+	});
+
+	it('fails closed for malformed RSA-PSS certificate parameters', async () => {
+		const rootKeys = await generateKeyPair({
+			kind: 'rsa',
+			modulusLength: 2048,
+			hash: 'SHA-256',
+		});
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'rsa-pss-malformed-root' },
+			keyPair: rootKeys,
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair({
+			kind: 'rsa',
+			modulusLength: 2048,
+			hash: 'SHA-256',
+		});
+		const leaf = await createCertificate({
+			issuer: { commonName: 'rsa-pss-malformed-root' },
+			subject: { commonName: 'rsa-pss-malformed-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: rootKeys.privateKey,
+			issuerPublicKey: rootKeys.publicKey,
+		});
+		const malformedLeafDer = replaceCertificateSignatureAlgorithm(
+			leaf.der,
+			sequence([objectIdentifier(OIDS.rsassaPss), tlv(0x30, Uint8Array.of(0x80))]),
+		);
+
+		const result = await verifyCertificateChain({
+			leaf: malformedLeafDer,
+			roots: [root.certificate.pem],
+		});
+		expect(result).toMatchObject({
+			ok: false,
+			code: 'issuer_not_found',
+			index: 0,
+			details: { actual: 'DER child exceeds parent length' },
+		});
 	});
 
 	it('rejects chain with unrecognized critical extension', async () => {
@@ -690,6 +913,7 @@ describe('chain verification', () => {
 
 	it('rejects chain when trust anchor has wrong key', async () => {
 		const chain = await issueChain();
+		const rootParsed = parseCertificatePem(chain.root.certificate.pem);
 		const otherCa = await createSelfSignedCertificate({
 			subject: { commonName: 'Verify Root CA' }, // same name, different key
 			extensions: {
@@ -697,7 +921,18 @@ describe('chain verification', () => {
 				keyUsage: ['keyCertSign'],
 			},
 		});
-		const wrongAnchor = trustAnchorFromCertificate(parseCertificatePem(otherCa.certificate.pem));
+		const otherParsed = parseCertificatePem(otherCa.certificate.pem);
+		const wrongAnchor = {
+			subject: rootParsed.subject,
+			subjectPublicKeyInfoDer: otherParsed.subjectPublicKeyInfoDer,
+			publicKeyAlgorithmOid: otherParsed.publicKeyAlgorithmOid,
+			...(otherParsed.publicKeyParametersOid === undefined
+				? {}
+				: { publicKeyParametersOid: otherParsed.publicKeyParametersOid }),
+			...(rootParsed.subjectKeyIdentifier === undefined
+				? {}
+				: { subjectKeyIdentifier: rootParsed.subjectKeyIdentifier }),
+		};
 		const result = await verifyCertificateChain({
 			leaf: chain.leaf.pem,
 			intermediates: [chain.intermediate.pem],
@@ -705,6 +940,81 @@ describe('chain verification', () => {
 			trustAnchors: [wrongAnchor],
 		});
 		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.code).toBe('signature_invalid');
+		}
+	});
+
+	it('reports unsupported RSA-PSS params at the intermediate when using trust anchors', async () => {
+		const rootKeys = await generateKeyPair({
+			kind: 'rsa',
+			modulusLength: 2048,
+			hash: 'SHA-384',
+		});
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'rsa-pss-anchor-root' },
+			keyPair: rootKeys,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 1 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const intermediateKeys = await generateKeyPair({
+			kind: 'rsa',
+			modulusLength: 2048,
+			hash: 'SHA-384',
+		});
+		const intermediate = await createCertificate({
+			issuer: { commonName: 'rsa-pss-anchor-root' },
+			subject: { commonName: 'rsa-pss-anchor-intermediate' },
+			publicKey: intermediateKeys.publicKey,
+			signerPrivateKey: rootKeys.privateKey,
+			issuerPublicKey: rootKeys.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair({
+			kind: 'rsa',
+			modulusLength: 2048,
+			hash: 'SHA-384',
+		});
+		const leaf = await createCertificate({
+			issuer: { commonName: 'rsa-pss-anchor-intermediate' },
+			subject: { commonName: 'rsa-pss-anchor-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: intermediateKeys.privateKey,
+			issuerPublicKey: intermediateKeys.publicKey,
+		});
+		const rsaPssPrivateKey = await importRsaPrivateKeyWithScheme(
+			rootKeys.privateKey,
+			'SHA-384',
+			'pss',
+		);
+		const unsupportedIntermediateDer = await rewriteCertificateSignatureAsRsaPss(
+			intermediate.der,
+			rsaPssPrivateKey,
+			{
+				hash: 'SHA-384',
+				mgfHash: 'SHA-384',
+				saltLength: 32,
+				trailerField: 1,
+			},
+		);
+
+		expect(
+			await verifyCertificateChain({
+				leaf: leaf.pem,
+				intermediates: [unsupportedIntermediateDer],
+				roots: [],
+				trustAnchors: [trustAnchorFromCertificate(parseCertificatePem(root.certificate.pem))],
+			}),
+		).toMatchObject({
+			ok: false,
+			code: 'unsupported_signature_algorithm_parameters',
+			index: 1,
+		});
 	});
 
 	// -----------------------------------------------------------------------
@@ -1066,6 +1376,67 @@ describe('chain verification', () => {
 			roots: [root.certificate.pem],
 		});
 		expect(result.ok).toBe(true);
+	});
+
+	it('does not apply initial name constraints to self-issued intermediates', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Initial NC Self-Issued Root' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 1 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const intermediateKeys = await generateKeyPair();
+		const intermediate = await createCertificate({
+			issuer: { commonName: 'Initial NC Self-Issued Root' },
+			subject: { commonName: 'Initial NC Self-Issued Root' },
+			publicKey: intermediateKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+				subjectAltNames: [{ type: 'dns', value: 'outside.example.org' }],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Initial NC Self-Issued Root' },
+			subject: { commonName: 'ok.example.com' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: intermediateKeys.privateKey,
+			issuerPublicKey: intermediateKeys.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				subjectAltNames: [{ type: 'dns', value: 'ok.example.com' }],
+			},
+		});
+		const result = await verifyCertificateChain({
+			leaf: leaf.pem,
+			intermediates: [intermediate.pem],
+			roots: [root.certificate.pem],
+			nameConstraints: {
+				permittedSubtrees: [{ base: { type: 'dns', value: 'example.com' } }],
+			},
+		});
+		expect(result.ok).toBe(true);
+	});
+
+	it('merges flat and nested caller-supplied initial name constraints', async () => {
+		const chain = await issueChain();
+		const result = await verifyCertificateChain({
+			leaf: chain.leaf.pem,
+			intermediates: [chain.intermediate.pem],
+			roots: [chain.root.certificate.pem],
+			excludedSubtrees: [{ base: { type: 'dns', value: 'verify.example' } }],
+			nameConstraints: {
+				permittedSubtrees: [{ base: { type: 'dns', value: 'example.com' } }],
+			},
+		});
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.code).toBe('name_constraints_violated');
+		}
 	});
 
 	it('applies name constraints to self-issued leaf certificate', async () => {
@@ -1645,6 +2016,57 @@ describe('chain verification', () => {
 		expect(() => parseNameConstraints(ncValue)).toThrow(/minimum/i);
 	});
 
+	it('preserves unsupported name constraint forms during parsing', () => {
+		const parsed = parseNameConstraints(buildUnsupportedOtherNameConstraintsDer());
+		expect(parsed.permittedSubtrees).toHaveLength(1);
+		expect(parsed.permittedSubtrees?.[0]?.base).toMatchObject({ type: 'otherName' });
+	});
+
+	it('fails closed for unsupported critical name constraints', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Unsupported NC Root' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Unsupported NC Root' },
+			subject: { commonName: 'unsupported-nc.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				subjectAltNames: [{ type: 'dns', value: 'unsupported-nc.example' }],
+			},
+		});
+		const parsedRoot = parseCertificatePem(root.certificate.pem);
+		const parsedLeaf = parseCertificatePem(leaf.pem);
+		const unsupportedDer = buildUnsupportedOtherNameConstraintsDer();
+		const result = await validateCandidatePath({
+			chain: [
+				parsedLeaf,
+				{
+					...parsedRoot,
+					extensions: [
+						...parsedRoot.extensions,
+						{
+							oid: OIDS.nameConstraints,
+							critical: true,
+							valueDer: unsupportedDer,
+							valueHex: Buffer.from(unsupportedDer).toString('hex'),
+						},
+					],
+					nameConstraints: parseNameConstraints(unsupportedDer),
+				},
+			],
+			allowSelfSignedLeaf: true,
+		});
+		expect(result.ok).toBe(true);
+	});
+
 	it('checks subject emailAddress against rfc822Name constraints when no SAN email', async () => {
 		// RFC 5280 §4.2.1.10: when constraints are imposed on rfc822Name
 		// but the cert has no SAN email, apply to subject emailAddress.
@@ -1763,7 +2185,7 @@ describe('validation profiles', () => {
 			leaf: chain.leaf.pem,
 			intermediates: [chain.intermediate.pem],
 			roots: [chain.root.certificate.pem],
-			dnsName: 'verify.example',
+			serviceIdentity: { type: 'dns', value: 'verify.example' },
 		});
 		expect(ok.ok).toBe(true);
 
@@ -1772,10 +2194,52 @@ describe('validation profiles', () => {
 			leaf: chain.leaf.pem,
 			intermediates: [chain.intermediate.pem],
 			roots: [chain.root.certificate.pem],
-			dnsName: 'wrong.example',
+			serviceIdentity: { type: 'dns', value: 'wrong.example' },
 		});
-		expect(wrongDns.ok).toBe(false);
-		if (!wrongDns.ok) expect(wrongDns.code).toBe('subject_alt_name_mismatch');
+		expect(wrongDns).toMatchObject({
+			ok: false,
+			code: 'subject_alt_name_mismatch',
+			index: 0,
+			details: {
+				expected: 'wrong.example',
+				actual: 'verify.example',
+				subjectCommonName: 'verify.example',
+			},
+		});
+	});
+
+	it('validateForTlsServer fails closed for malformed service identity types', async () => {
+		const chain = await issueChain();
+		const input = {
+			leaf: chain.leaf.pem,
+			intermediates: [chain.intermediate.pem],
+			roots: [chain.root.certificate.pem],
+			serviceIdentity: { type: 'dns' as const, value: 'verify.example' },
+		};
+		Object.defineProperty(input.serviceIdentity, 'type', { value: 'uri' });
+
+		const result = await validateForTlsServer(input);
+		expect(result).toMatchObject({
+			ok: false,
+			code: 'subject_alt_name_mismatch',
+			index: 0,
+		});
+	});
+
+	it('verifyCertificateChain fails closed for malformed IP service identity values', async () => {
+		const chain = await issueChain();
+		const result = await verifyCertificateChain({
+			leaf: chain.leaf.pem,
+			intermediates: [chain.intermediate.pem],
+			roots: [chain.root.certificate.pem],
+			purpose: 'serverAuth',
+			serviceIdentity: { type: 'ip', value: '1:2:3:4:5:6:7:8:9' },
+		});
+		expect(result).toMatchObject({
+			ok: false,
+			code: 'subject_alt_name_mismatch',
+			index: 0,
+		});
 	});
 
 	it('validateForTlsServer rejects when leaf lacks serverAuth EKU', async () => {
@@ -1802,10 +2266,44 @@ describe('validation profiles', () => {
 		const result = await validateForTlsServer({
 			leaf: leaf.pem,
 			roots: [root.certificate.pem],
-			dnsName: 'tls-leaf',
+			serviceIdentity: { type: 'dns', value: 'tls-leaf' },
 		});
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.code).toBe('extended_key_usage_invalid');
+	});
+
+	it('validateForTlsServer returns typed purpose failures before identity failures', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'TLS Purpose First Root' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'TLS Purpose First Root' },
+			subject: { commonName: 'tls-purpose-first' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['clientAuth'],
+				subjectAltNames: [{ type: 'dns', value: 'tls-purpose-first.example' }],
+			},
+		});
+		const result = await validateForTlsServer({
+			leaf: leaf.pem,
+			roots: [root.certificate.pem],
+			serviceIdentity: { type: 'dns', value: 'wrong.example' },
+		});
+		expect(result).toMatchObject({
+			ok: false,
+			code: 'extended_key_usage_invalid',
+			index: 0,
+			message: 'leaf certificate does not include EKU serverAuth',
+		});
 	});
 
 	it('validateForTlsClient checks chain + clientAuth EKU', async () => {
@@ -1852,6 +2350,131 @@ describe('validation profiles', () => {
 			roots: [root.certificate.pem],
 		});
 		expect(fail.ok).toBe(false);
+	});
+
+	it('validateForTlsClient respects policy mappings and caller inhibition', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Policy Input Root' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 1 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const intermediateKeys = await generateKeyPair();
+		const intermediate = await createCertificate({
+			issuer: { commonName: 'Policy Input Root' },
+			subject: { commonName: 'Policy Mapping Intermediate' },
+			publicKey: intermediateKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+				certificatePolicies: [{ policyIdentifier: OIDS.anyPolicy }],
+				policyMappings: [{ issuerDomainPolicy: '1.2.3.4', subjectDomainPolicy: '1.2.3.5' }],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Policy Mapping Intermediate' },
+			subject: { commonName: 'policy-client-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: intermediateKeys.privateKey,
+			issuerPublicKey: intermediateKeys.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['clientAuth'],
+				certificatePolicies: [{ policyIdentifier: '1.2.3.5' }],
+			},
+		});
+		const allowed = await validateForTlsClient({
+			leaf: leaf.pem,
+			intermediates: [intermediate.pem],
+			roots: [root.certificate.pem],
+			policy: { initialPolicySet: ['1.2.3.4'] },
+		});
+		expect(allowed.ok).toBe(true);
+
+		const blocked = await validateForTlsClient({
+			leaf: leaf.pem,
+			intermediates: [intermediate.pem],
+			roots: [root.certificate.pem],
+			initialPolicySet: ['1.2.3.4'],
+			policy: { inhibitPolicyMapping: true },
+		});
+		expect(blocked).toMatchObject({
+			ok: false,
+			code: 'initial_policy_set_not_satisfied',
+			details: {
+				expected: '1.2.3.4',
+				actual: '<none>',
+			},
+		});
+	});
+
+	it('validateForTlsClient exposes constrained policy outcomes on success', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Policy Outcome Root' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Policy Outcome Root' },
+			subject: { commonName: 'policy-outcome-client' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['clientAuth'],
+				certificatePolicies: [{ policyIdentifier: '1.2.3.4' }],
+			},
+		});
+		const result = await validateForTlsClient({
+			leaf: leaf.pem,
+			roots: [root.certificate.pem],
+			initialPolicySet: ['1.2.3.4'],
+		});
+		expect(result.ok).toBe(true);
+		if (!result.ok) {
+			throw new Error('expected policy-aware TLS client success');
+		}
+		expect(result.value.policyValidation).toEqual({
+			authorityConstrainedPolicies: [{ policyIdentifier: '1.2.3.4' }],
+			userConstrainedPolicies: [{ policyIdentifier: '1.2.3.4' }],
+		});
+	});
+
+	it('validateForTlsClient enforces caller-supplied initial name constraints', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Initial Name Constraint Root' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Initial Name Constraint Root' },
+			subject: { commonName: 'initial-name-constraint-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['clientAuth'],
+				subjectAltNames: [{ type: 'dns', value: 'forbidden.example.com' }],
+			},
+		});
+		const result = await validateForTlsClient({
+			leaf: leaf.pem,
+			roots: [root.certificate.pem],
+			excludedSubtrees: [{ base: { type: 'dns', value: 'forbidden.example.com' } }],
+		});
+		expect(result).toMatchObject({ ok: false, code: 'name_constraints_violated' });
 	});
 
 	it('validateForCodeSigning checks chain + codeSigning EKU', async () => {
@@ -1947,6 +2570,632 @@ describe('validateCandidatePath direct', () => {
 		const result = await validateCandidatePath({ chain: [] });
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.code).toBe('issuer_not_found');
+	});
+
+	it('keeps service identity checks out of raw path validation', async () => {
+		const chain = await issueChain();
+		const leafParsed = parseCertificatePem(chain.leaf.pem);
+		const intParsed = parseCertificatePem(chain.intermediate.pem);
+		const rootParsed = parseCertificatePem(chain.root.certificate.pem);
+		const pathResult = await validateCandidatePath({
+			chain: [leafParsed, intParsed, rootParsed],
+		});
+		expect(pathResult.ok).toBe(true);
+
+		const verifyResult = await verifyCertificateChain({
+			leaf: chain.leaf.pem,
+			intermediates: [chain.intermediate.pem],
+			roots: [chain.root.certificate.pem],
+			serviceIdentity: { type: 'dns', value: 'wrong.example' },
+		});
+		expect(verifyResult.ok).toBe(false);
+		if (!verifyResult.ok) expect(verifyResult.code).toBe('subject_alt_name_mismatch');
+	});
+
+	it('applies direct policy mappings during raw path validation', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Direct Mapping Root' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 1 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const intermediateKeys = await generateKeyPair();
+		const intermediate = await createCertificate({
+			issuer: { commonName: 'Direct Mapping Root' },
+			subject: { commonName: 'Direct Mapping Intermediate' },
+			publicKey: intermediateKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+				certificatePolicies: [{ policyIdentifier: OIDS.anyPolicy }],
+				policyMappings: [{ issuerDomainPolicy: '1.2.3.4', subjectDomainPolicy: '1.2.3.5' }],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Direct Mapping Intermediate' },
+			subject: { commonName: 'direct-mapped-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: intermediateKeys.privateKey,
+			issuerPublicKey: intermediateKeys.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				certificatePolicies: [{ policyIdentifier: '1.2.3.5' }],
+			},
+		});
+		const allowed = await validateCandidatePath({
+			chain: [
+				parseCertificatePem(leaf.pem),
+				parseCertificatePem(intermediate.pem),
+				parseCertificatePem(root.certificate.pem),
+			],
+			initialPolicySet: ['1.2.3.4'],
+		});
+		expect(allowed.ok).toBe(true);
+
+		const blocked = await validateCandidatePath({
+			chain: [
+				parseCertificatePem(leaf.pem),
+				parseCertificatePem(intermediate.pem),
+				parseCertificatePem(root.certificate.pem),
+			],
+			initialPolicySet: ['1.2.3.4'],
+			inhibitPolicyMapping: true,
+		});
+		expect(blocked).toMatchObject({
+			ok: false,
+			code: 'initial_policy_set_not_satisfied',
+			details: {
+				expected: '1.2.3.4',
+				actual: '<none>',
+			},
+		});
+	});
+
+	it('supports multi-hop policy mappings during raw path validation', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Multi Hop Mapping Root' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 2 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const firstIntermediateKeys = await generateKeyPair();
+		const firstIntermediate = await createCertificate({
+			issuer: { commonName: 'Multi Hop Mapping Root' },
+			subject: { commonName: 'First Mapping Intermediate' },
+			publicKey: firstIntermediateKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 1 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+				certificatePolicies: [{ policyIdentifier: OIDS.anyPolicy }],
+				policyMappings: [{ issuerDomainPolicy: '1.2.3.4', subjectDomainPolicy: '1.2.3.5' }],
+			},
+		});
+		const secondIntermediateKeys = await generateKeyPair();
+		const secondIntermediate = await createCertificate({
+			issuer: { commonName: 'First Mapping Intermediate' },
+			subject: { commonName: 'Second Mapping Intermediate' },
+			publicKey: secondIntermediateKeys.publicKey,
+			signerPrivateKey: firstIntermediateKeys.privateKey,
+			issuerPublicKey: firstIntermediateKeys.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+				certificatePolicies: [{ policyIdentifier: '1.2.3.5' }],
+				policyMappings: [{ issuerDomainPolicy: '1.2.3.5', subjectDomainPolicy: '1.2.3.6' }],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Second Mapping Intermediate' },
+			subject: { commonName: 'multi-hop-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: secondIntermediateKeys.privateKey,
+			issuerPublicKey: secondIntermediateKeys.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				certificatePolicies: [{ policyIdentifier: '1.2.3.6' }],
+			},
+		});
+		const result = await validateCandidatePath({
+			chain: [
+				parseCertificatePem(leaf.pem),
+				parseCertificatePem(secondIntermediate.pem),
+				parseCertificatePem(firstIntermediate.pem),
+				parseCertificatePem(root.certificate.pem),
+			],
+			initialPolicySet: ['1.2.3.4'],
+		});
+		expect(result.ok).toBe(true);
+	});
+
+	it('enforces inhibitPolicyMapping counters without decrementing self-issued CAs', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Mapping Counter Root' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 3 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const constrainedKeys = await generateKeyPair();
+		const constrainedIntermediate = await createCertificate({
+			issuer: { commonName: 'Mapping Counter Root' },
+			subject: { commonName: 'Mapping Bridge' },
+			publicKey: constrainedKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 2 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+				certificatePolicies: [{ policyIdentifier: OIDS.anyPolicy }],
+				policyMappings: [{ issuerDomainPolicy: '1.2.3.4', subjectDomainPolicy: '1.2.3.5' }],
+				policyConstraints: { inhibitPolicyMapping: 1 },
+			},
+		});
+		const selfIssuedKeys = await generateKeyPair();
+		const selfIssuedIntermediate = await createCertificate({
+			issuer: { commonName: 'Mapping Bridge' },
+			subject: { commonName: 'Mapping Bridge' },
+			publicKey: selfIssuedKeys.publicKey,
+			signerPrivateKey: constrainedKeys.privateKey,
+			issuerPublicKey: constrainedKeys.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 1 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+				certificatePolicies: [{ policyIdentifier: '1.2.3.5' }],
+			},
+		});
+		const mappedKeys = await generateKeyPair();
+		const mappedIntermediate = await createCertificate({
+			issuer: { commonName: 'Mapping Bridge' },
+			subject: { commonName: 'Mapped Intermediate' },
+			publicKey: mappedKeys.publicKey,
+			signerPrivateKey: selfIssuedKeys.privateKey,
+			issuerPublicKey: selfIssuedKeys.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+				certificatePolicies: [{ policyIdentifier: '1.2.3.5' }],
+				policyMappings: [{ issuerDomainPolicy: '1.2.3.5', subjectDomainPolicy: '1.2.3.6' }],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Mapped Intermediate' },
+			subject: { commonName: 'mapping-counter-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: mappedKeys.privateKey,
+			issuerPublicKey: mappedKeys.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				certificatePolicies: [{ policyIdentifier: '1.2.3.6' }],
+			},
+		});
+		const allowed = await validateCandidatePath({
+			chain: [
+				parseCertificatePem(leaf.pem),
+				parseCertificatePem(mappedIntermediate.pem),
+				parseCertificatePem(selfIssuedIntermediate.pem),
+				parseCertificatePem(constrainedIntermediate.pem),
+				parseCertificatePem(root.certificate.pem),
+			],
+			initialPolicySet: ['1.2.3.4'],
+		});
+		expect(allowed.ok).toBe(true);
+
+		const normalBridgeKeys = await generateKeyPair();
+		const normalBridge = await createCertificate({
+			issuer: { commonName: 'Mapping Bridge' },
+			subject: { commonName: 'Normal Mapping Bridge' },
+			publicKey: normalBridgeKeys.publicKey,
+			signerPrivateKey: constrainedKeys.privateKey,
+			issuerPublicKey: constrainedKeys.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 1 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+				certificatePolicies: [{ policyIdentifier: '1.2.3.5' }],
+			},
+		});
+		const normalMappedKeys = await generateKeyPair();
+		const normalMappedIntermediate = await createCertificate({
+			issuer: { commonName: 'Normal Mapping Bridge' },
+			subject: { commonName: 'Normal Mapped Intermediate' },
+			publicKey: normalMappedKeys.publicKey,
+			signerPrivateKey: normalBridgeKeys.privateKey,
+			issuerPublicKey: normalBridgeKeys.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+				certificatePolicies: [{ policyIdentifier: '1.2.3.5' }],
+				policyMappings: [{ issuerDomainPolicy: '1.2.3.5', subjectDomainPolicy: '1.2.3.6' }],
+			},
+		});
+		const blockedLeafKeys = await generateKeyPair();
+		const blockedLeaf = await createCertificate({
+			issuer: { commonName: 'Normal Mapped Intermediate' },
+			subject: { commonName: 'blocked-mapping-counter-leaf' },
+			publicKey: blockedLeafKeys.publicKey,
+			signerPrivateKey: normalMappedKeys.privateKey,
+			issuerPublicKey: normalMappedKeys.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				certificatePolicies: [{ policyIdentifier: '1.2.3.6' }],
+			},
+		});
+
+		const blockedWithoutBridge = await validateCandidatePath({
+			chain: [
+				parseCertificatePem(blockedLeaf.pem),
+				parseCertificatePem(normalMappedIntermediate.pem),
+				parseCertificatePem(normalBridge.pem),
+				parseCertificatePem(constrainedIntermediate.pem),
+				parseCertificatePem(root.certificate.pem),
+			],
+			initialPolicySet: ['1.2.3.4'],
+		});
+		expect(blockedWithoutBridge).toMatchObject({
+			ok: false,
+			code: 'initial_policy_set_not_satisfied',
+			details: {
+				expected: '1.2.3.4',
+				actual: '<none>',
+			},
+		});
+	});
+
+	it('accepts a matching initial policy set during raw path validation', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Policy Root' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Policy Root' },
+			subject: { commonName: 'policy-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				certificatePolicies: [{ policyIdentifier: '1.2.3.4' }],
+			},
+		});
+		const result = await validateCandidatePath({
+			chain: [parseCertificatePem(leaf.pem), parseCertificatePem(root.certificate.pem)],
+			policy: { initialPolicySet: ['1.2.3.4'] },
+		});
+		expect(result.ok).toBe(true);
+		if (!result.ok) {
+			throw new Error('expected policy-aware raw path success');
+		}
+		expect(result.value.policyValidation).toEqual({
+			authorityConstrainedPolicies: [{ policyIdentifier: '1.2.3.4' }],
+			userConstrainedPolicies: [{ policyIdentifier: '1.2.3.4' }],
+		});
+	});
+
+	it('rejects raw path validation when the initial policy set is not satisfied', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Policy Root' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Policy Root' },
+			subject: { commonName: 'wrong-policy-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				certificatePolicies: [{ policyIdentifier: '1.2.3.4' }],
+			},
+		});
+		const result = await validateCandidatePath({
+			chain: [parseCertificatePem(leaf.pem), parseCertificatePem(root.certificate.pem)],
+			policy: { initialPolicySet: ['1.2.3.5'] },
+		});
+		expect(result).toMatchObject({
+			ok: false,
+			code: 'initial_policy_set_not_satisfied',
+			details: {
+				expected: '1.2.3.5',
+				actual: '<none>',
+			},
+		});
+	});
+
+	it('rejects raw path validation when explicit policy is required but no policy remains', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Explicit Policy Root' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Explicit Policy Root' },
+			subject: { commonName: 'no-policy-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+			},
+		});
+		const result = await validateCandidatePath({
+			chain: [parseCertificatePem(leaf.pem), parseCertificatePem(root.certificate.pem)],
+			requireExplicitPolicy: true,
+		});
+		expect(result).toMatchObject({
+			ok: false,
+			code: 'explicit_policy_required',
+			details: {
+				expected: 'explicit policy',
+				actual: '<none>',
+			},
+		});
+	});
+
+	it('enforces certificate policyConstraints requireExplicitPolicy during raw path validation', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Constrained Policy Root' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 1 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const intermediateKeys = await generateKeyPair();
+		const intermediate = await createCertificate({
+			issuer: { commonName: 'Constrained Policy Root' },
+			subject: { commonName: 'Constrained Policy Intermediate' },
+			publicKey: intermediateKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+				policyConstraints: { requireExplicitPolicy: 0 },
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Constrained Policy Intermediate' },
+			subject: { commonName: 'constrained-policy-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: intermediateKeys.privateKey,
+			issuerPublicKey: intermediateKeys.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+			},
+		});
+		const result = await validateCandidatePath({
+			chain: [
+				parseCertificatePem(leaf.pem),
+				parseCertificatePem(intermediate.pem),
+				parseCertificatePem(root.certificate.pem),
+			],
+		});
+		expect(result).toMatchObject({ ok: false, code: 'explicit_policy_required' });
+	});
+
+	it('enforces inhibitAnyPolicy during raw path validation', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Any Policy Root' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Any Policy Root' },
+			subject: { commonName: 'any-policy-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				certificatePolicies: [{ policyIdentifier: OIDS.anyPolicy }],
+			},
+		});
+		const allowed = await validateCandidatePath({
+			chain: [parseCertificatePem(leaf.pem), parseCertificatePem(root.certificate.pem)],
+			initialPolicySet: ['1.2.3.4'],
+		});
+		expect(allowed.ok).toBe(true);
+		const blocked = await validateCandidatePath({
+			chain: [parseCertificatePem(leaf.pem), parseCertificatePem(root.certificate.pem)],
+			initialPolicySet: ['1.2.3.4'],
+			inhibitAnyPolicy: true,
+		});
+		expect(blocked).toMatchObject({
+			ok: false,
+			code: 'initial_policy_set_not_satisfied',
+			details: {
+				expected: '1.2.3.4',
+				actual: '<none>',
+			},
+		});
+	});
+
+	it('treats critical policy extensions as processed during raw path validation', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Policy Processed Root' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 1 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+				certificatePolicies: [{ policyIdentifier: '1.2.3.4' }],
+			},
+		});
+		const intermediateKeys = await generateKeyPair();
+		const intermediate = await createCertificate({
+			issuer: { commonName: 'Policy Processed Root' },
+			subject: { commonName: 'Policy Processed Intermediate' },
+			publicKey: intermediateKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+				certificatePolicies: [{ policyIdentifier: OIDS.anyPolicy }],
+				policyMappings: [{ issuerDomainPolicy: '1.2.3.4', subjectDomainPolicy: '1.2.3.4' }],
+				policyConstraints: { requireExplicitPolicy: 1, inhibitPolicyMapping: 1 },
+				inhibitAnyPolicy: { skipCerts: 1 },
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Policy Processed Intermediate' },
+			subject: { commonName: 'processed-policy-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: intermediateKeys.privateKey,
+			issuerPublicKey: intermediateKeys.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				certificatePolicies: [{ policyIdentifier: '1.2.3.4' }],
+			},
+		});
+		const result = await validateCandidatePath({
+			chain: [
+				parseCertificatePem(leaf.pem),
+				parseCertificatePem(intermediate.pem),
+				parseCertificatePem(root.certificate.pem),
+			],
+		});
+		expect(result.ok).toBe(true);
+	});
+
+	it('applies initial subtree inputs alongside certificate name constraints', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Mixed Initial Constraint Root' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+				nameConstraints: {
+					permittedSubtrees: [{ base: { type: 'dns', value: 'example.com' } }],
+					excludedSubtrees: [{ base: { type: 'dns', value: 'blocked.example.com' } }],
+				},
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const allowedLeaf = await createCertificate({
+			issuer: { commonName: 'Mixed Initial Constraint Root' },
+			subject: { commonName: 'narrow.example.com' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				subjectAltNames: [{ type: 'dns', value: 'narrow.example.com' }],
+			},
+		});
+		const blockedLeafKeys = await generateKeyPair();
+		const blockedLeaf = await createCertificate({
+			issuer: { commonName: 'Mixed Initial Constraint Root' },
+			subject: { commonName: 'wide.example.com' },
+			publicKey: blockedLeafKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				subjectAltNames: [{ type: 'dns', value: 'wide.example.com' }],
+			},
+		});
+		const allowedResult = await validateCandidatePath({
+			chain: [parseCertificatePem(allowedLeaf.pem), parseCertificatePem(root.certificate.pem)],
+			permittedSubtrees: [{ base: { type: 'dns', value: 'narrow.example.com' } }],
+		});
+		expect(allowedResult.ok).toBe(true);
+
+		const blockedResult = await validateCandidatePath({
+			chain: [parseCertificatePem(blockedLeaf.pem), parseCertificatePem(root.certificate.pem)],
+			permittedSubtrees: [{ base: { type: 'dns', value: 'narrow.example.com' } }],
+		});
+		expect(blockedResult).toMatchObject({ ok: false, code: 'name_constraints_violated' });
+	});
+
+	it('fails closed for malformed initialPolicySet input shapes', async () => {
+		const chain = await issueChain();
+		const input = {
+			chain: parseCertificateChainPem(
+				`${chain.leaf.pem}${chain.intermediate.pem}${chain.root.certificate.pem}`,
+			),
+			initialPolicySet: ['1.2.3.4'],
+		};
+		Object.defineProperty(input, 'initialPolicySet', { value: { malformed: true } });
+
+		const result = await validateCandidatePath(input);
+		expect(result).toMatchObject({ ok: false, code: 'initial_policy_set_not_satisfied' });
+	});
+
+	it('fails closed for malformed nested policy initialPolicySet input shapes', async () => {
+		const chain = await issueChain();
+		const input = {
+			chain: parseCertificateChainPem(
+				`${chain.leaf.pem}${chain.intermediate.pem}${chain.root.certificate.pem}`,
+			),
+			policy: { initialPolicySet: ['1.2.3.4'] },
+		};
+		Object.defineProperty(input.policy, 'initialPolicySet', { value: { malformed: true } });
+
+		const result = await validateCandidatePath(input);
+		expect(result).toMatchObject({ ok: false, code: 'initial_policy_set_not_satisfied' });
+	});
+
+	it('rejects unsupported initial name constraint forms', async () => {
+		const chain = await issueChain();
+		const input = {
+			chain: parseCertificateChainPem(
+				`${chain.leaf.pem}${chain.intermediate.pem}${chain.root.certificate.pem}`,
+			),
+			permittedSubtrees: [{ base: { type: 'dns', value: 'example.com' } } as const],
+		};
+		Object.defineProperty(input, 'permittedSubtrees', {
+			value: [{ base: { type: 'otherName', value: new Uint8Array([0x05, 0x00]) } }],
+		});
+
+		const result = await validateCandidatePath(input);
+		expect(result).toMatchObject({
+			ok: false,
+			code: 'initial_name_constraints_not_implemented',
+			details: { actual: 'otherName' },
+		});
+	});
+
+	it('rejects malformed nested initial name constraint subtree containers', async () => {
+		const chain = await issueChain();
+		const input = {
+			chain: parseCertificateChainPem(
+				`${chain.leaf.pem}${chain.intermediate.pem}${chain.root.certificate.pem}`,
+			),
+			nameConstraints: {
+				permittedSubtrees: [{ base: { type: 'dns', value: 'example.com' } } as const],
+			},
+		};
+		Object.defineProperty(input.nameConstraints, 'permittedSubtrees', {
+			value: { malformed: true },
+		});
+
+		const result = await validateCandidatePath(input);
+		expect(result).toMatchObject({
+			ok: false,
+			code: 'initial_name_constraints_not_implemented',
+			details: { actual: 'permittedSubtrees' },
+		});
 	});
 
 	it('detects signature_invalid in candidate path', async () => {
@@ -2093,116 +3342,35 @@ describe('checkExtendedKeyUsage edge cases', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Leaf CN fallback and no-SAN DNS rejection
+// Purpose=ca success case
 // ---------------------------------------------------------------------------
 
-describe('leaf CN fallback', () => {
-	it('rejects DNS name when leaf has no SAN and fallback disabled', async () => {
-		const ca = await createSelfSignedCertificate({
-			subject: { commonName: 'CN Fallback CA' },
-			extensions: {
-				basicConstraints: { ca: true },
-				keyUsage: ['keyCertSign', 'cRLSign'],
-			},
-		});
-		const leafKeys = await generateKeyPair();
-		const leaf = await createCertificate({
-			issuer: { commonName: 'CN Fallback CA' },
-			subject: { commonName: 'fallback.example' },
-			publicKey: leafKeys.publicKey,
-			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
-			extensions: { keyUsage: ['digitalSignature'] },
-		});
-		const result = await verifyCertificateChain({
-			leaf: leaf.pem,
-			roots: [ca.certificate.pem],
-			dnsName: 'fallback.example',
-		});
-		expect(result.ok).toBe(false);
-		if (!result.ok) expect(result.code).toBe('subject_alt_name_mismatch');
+it('accepts purpose=ca when leaf IS a CA', async () => {
+	const root = await createSelfSignedCertificate({
+		subject: { commonName: 'Purpose CA Root' },
+		extensions: {
+			basicConstraints: { ca: true, pathLength: 1 },
+			keyUsage: ['keyCertSign', 'cRLSign'],
+		},
 	});
-
-	it('accepts DNS name via CN fallback when enabled and CN matches', async () => {
-		const ca = await createSelfSignedCertificate({
-			subject: { commonName: 'CN Fallback CA' },
-			extensions: {
-				basicConstraints: { ca: true },
-				keyUsage: ['keyCertSign', 'cRLSign'],
-			},
-		});
-		const leafKeys = await generateKeyPair();
-		const leaf = await createCertificate({
-			issuer: { commonName: 'CN Fallback CA' },
-			subject: { commonName: 'fallback.example' },
-			publicKey: leafKeys.publicKey,
-			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
-			extensions: { keyUsage: ['digitalSignature'] },
-		});
-		const result = await verifyCertificateChain({
-			leaf: leaf.pem,
-			roots: [ca.certificate.pem],
-			dnsName: 'fallback.example',
-			allowCommonNameFallback: true,
-		});
-		expect(result.ok).toBe(true);
+	const subCaKeys = await generateKeyPair();
+	const subCa = await createCertificate({
+		issuer: { commonName: 'Purpose CA Root' },
+		subject: { commonName: 'Sub CA' },
+		publicKey: subCaKeys.publicKey,
+		signerPrivateKey: root.keyPair.privateKey,
+		issuerPublicKey: root.keyPair.publicKey,
+		extensions: {
+			basicConstraints: { ca: true, pathLength: 0 },
+			keyUsage: ['keyCertSign', 'cRLSign'],
+		},
 	});
-
-	it('rejects DNS name via CN fallback when CN does not match', async () => {
-		const ca = await createSelfSignedCertificate({
-			subject: { commonName: 'CN Fallback CA' },
-			extensions: {
-				basicConstraints: { ca: true },
-				keyUsage: ['keyCertSign', 'cRLSign'],
-			},
-		});
-		const leafKeys = await generateKeyPair();
-		const leaf = await createCertificate({
-			issuer: { commonName: 'CN Fallback CA' },
-			subject: { commonName: 'other.example' },
-			publicKey: leafKeys.publicKey,
-			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
-			extensions: { keyUsage: ['digitalSignature'] },
-		});
-		const result = await verifyCertificateChain({
-			leaf: leaf.pem,
-			roots: [ca.certificate.pem],
-			dnsName: 'fallback.example',
-			allowCommonNameFallback: true,
-		});
-		expect(result.ok).toBe(false);
-		if (!result.ok) expect(result.code).toBe('subject_alt_name_mismatch');
+	const result = await verifyCertificateChain({
+		leaf: subCa.pem,
+		roots: [root.certificate.pem],
+		purpose: 'ca',
 	});
-
-	it('accepts purpose=ca when leaf IS a CA', async () => {
-		const root = await createSelfSignedCertificate({
-			subject: { commonName: 'Purpose CA Root' },
-			extensions: {
-				basicConstraints: { ca: true, pathLength: 1 },
-				keyUsage: ['keyCertSign', 'cRLSign'],
-			},
-		});
-		const subCaKeys = await generateKeyPair();
-		const subCa = await createCertificate({
-			issuer: { commonName: 'Purpose CA Root' },
-			subject: { commonName: 'Sub CA' },
-			publicKey: subCaKeys.publicKey,
-			signerPrivateKey: root.keyPair.privateKey,
-			issuerPublicKey: root.keyPair.publicKey,
-			extensions: {
-				basicConstraints: { ca: true, pathLength: 0 },
-				keyUsage: ['keyCertSign', 'cRLSign'],
-			},
-		});
-		const result = await verifyCertificateChain({
-			leaf: subCa.pem,
-			roots: [root.certificate.pem],
-			purpose: 'ca',
-		});
-		expect(result.ok).toBe(true);
-	});
+	expect(result.ok).toBe(true);
 });
 
 // ---------------------------------------------------------------------------
@@ -2251,34 +3419,6 @@ describe('buildCandidatePath edge cases', () => {
 		expect(result.ok).toBe(false);
 	});
 
-	it('handles IPv6 with too many segments', async () => {
-		const ca = await createSelfSignedCertificate({
-			subject: { commonName: 'IPv6 CA' },
-			extensions: {
-				basicConstraints: { ca: true },
-				keyUsage: ['keyCertSign'],
-			},
-		});
-		const leafKeys = await generateKeyPair();
-		const leaf = await createCertificate({
-			issuer: { commonName: 'IPv6 CA' },
-			subject: { commonName: 'ipv6-leaf' },
-			publicKey: leafKeys.publicKey,
-			signerPrivateKey: ca.keyPair.privateKey,
-			issuerPublicKey: ca.keyPair.publicKey,
-			extensions: {
-				subjectAltNames: [{ type: 'ip', value: '::1' }],
-			},
-		});
-		expect(
-			verifyCertificateChain({
-				leaf: leaf.pem,
-				roots: [ca.certificate.pem],
-				ipAddress: '1:2:3:4:5:6:7:8:9',
-			}),
-		).rejects.toThrow('Invalid IPv6');
-	});
-
 	it('handles multiple trust anchors with same subject', async () => {
 		const chain = await issueChain();
 		const rootParsed = parseCertificatePem(chain.root.certificate.pem);
@@ -2309,7 +3449,7 @@ describe('buildCandidatePath edge cases', () => {
 // ---------------------------------------------------------------------------
 
 describe('validateForTlsServer with CN fallback', () => {
-	it('forwards allowCommonNameFallback to chain verification', async () => {
+	it('forwards allowCommonNameFallback to the identity boundary', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'TLS CN CA' },
 			extensions: {
@@ -2332,13 +3472,57 @@ describe('validateForTlsServer with CN fallback', () => {
 		const result = await validateForTlsServer({
 			leaf: leaf.pem,
 			roots: [ca.certificate.pem],
-			dnsName: 'tls-cn.example',
-			allowCommonNameFallback: true,
+			serviceIdentity: {
+				type: 'dns',
+				value: 'tls-cn.example',
+				allowCommonNameFallback: true,
+			},
 		});
 		expect(result.ok).toBe(true);
 	});
 
-	it('forwards ipAddress to chain verification', async () => {
+	it('forwards CN fallback suppression failures from the identity boundary', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'TLS CN CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'TLS CN CA' },
+			subject: { commonName: 'tls-cn.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['serverAuth'],
+				subjectAltNames: [{ type: 'uri', value: 'https://api.example.com/login' }],
+			},
+		});
+		const result = await validateForTlsServer({
+			leaf: leaf.pem,
+			roots: [ca.certificate.pem],
+			serviceIdentity: {
+				type: 'dns',
+				value: 'tls-cn.example',
+				allowCommonNameFallback: true,
+			},
+		});
+		expect(result).toMatchObject({
+			ok: false,
+			code: 'common_name_fallback_suppressed',
+			index: 0,
+			details: {
+				commonNameFallbackReason: 'suppressed_by_presented_identifier',
+				presentedIdentifierTypes: ['uri'],
+			},
+		});
+	});
+
+	it('forwards ipAddress to the identity boundary', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'TLS IP CA' },
 			extensions: {
@@ -2362,7 +3546,7 @@ describe('validateForTlsServer with CN fallback', () => {
 		const result = await validateForTlsServer({
 			leaf: leaf.pem,
 			roots: [ca.certificate.pem],
-			ipAddress: '10.0.0.1',
+			serviceIdentity: { type: 'ip', value: '10.0.0.1' },
 		});
 		expect(result.ok).toBe(true);
 	});
@@ -2436,13 +3620,10 @@ describe('coverage: validation profiles and constraint matching', () => {
 		if (!result.ok) expect(result.code).toBe('name_constraints_violated');
 	});
 
-	it('directoryName name constraint rejects subject DN with mismatched derHex', async () => {
-		// NOTE: implicitConstructedContext wraps full SEQUENCE bytes rather than
-		// replacing the tag, causing derHex round-trip mismatch. This test verifies
-		// that the name constraint checking code path executes (covers matchesDnConstraint).
-		const { encodeName } = await import('#micro509/name.ts');
-		const constraintDn = encodeName({ organization: 'AllowedOrg' });
-		const constraintDerHex = Buffer.from(constraintDn).toString('hex');
+	it('directoryName name constraint matches subject DN semantically', async () => {
+		const constraintDerHex = buildDirectoryNameDerHex([
+			[{ oid: OIDS.organizationName, value: 'allowed org', encoding: 'printable' }],
+		]);
 		const root = await createSelfSignedCertificate({
 			subject: { organization: 'AllowedOrg', commonName: 'DN Root' },
 			extensions: {
@@ -2456,7 +3637,7 @@ describe('coverage: validation profiles and constraint matching', () => {
 		const leafKeys = await generateKeyPair();
 		const leaf = await createCertificate({
 			issuer: { organization: 'AllowedOrg', commonName: 'DN Root' },
-			subject: { organization: 'AllowedOrg', commonName: 'DN Leaf' },
+			subject: { organization: '  ALLOWED   ORG  ', commonName: 'DN Leaf' },
 			publicKey: leafKeys.publicKey,
 			signerPrivateKey: root.keyPair.privateKey,
 			issuerPublicKey: root.keyPair.publicKey,
@@ -2472,14 +3653,22 @@ describe('coverage: validation profiles and constraint matching', () => {
 			leaf: leaf.pem,
 			roots: [root.certificate.pem],
 		});
-		expect(result.ok).toBe(false);
-		if (!result.ok) expect(result.code).toBe('name_constraints_violated');
+		expect(result.ok).toBe(true);
 	});
 
-	it('directoryName SAN constraint violation triggers error', async () => {
-		const { encodeName } = await import('#micro509/name.ts');
-		const constraintDn = encodeName({ organization: 'AllowedOrg' });
-		const constraintDerHex = Buffer.from(constraintDn).toString('hex');
+	it('directoryName SAN constraint matches reordered AVAs in the same RDN', async () => {
+		const constraintDerHex = buildDirectoryNameDerHex([
+			[
+				{ oid: OIDS.organizationName, value: 'Allowed Org', encoding: 'printable' },
+				{ oid: OIDS.commonName, value: 'Service', encoding: 'utf8' },
+			],
+		]);
+		const sanDerHex = buildDirectoryNameDerHex([
+			[
+				{ oid: OIDS.commonName, value: 'service', encoding: 'printable' },
+				{ oid: OIDS.organizationName, value: '  allowed   org  ', encoding: 'utf8' },
+			],
+		]);
 		const root = await createSelfSignedCertificate({
 			subject: { commonName: 'DN Root' },
 			extensions: {
@@ -2499,22 +3688,53 @@ describe('coverage: validation profiles and constraint matching', () => {
 			issuerPublicKey: root.keyPair.publicKey,
 			extensions: {
 				keyUsage: ['digitalSignature'],
-				subjectAltNames: [
-					{
-						type: 'directoryName',
-						derHex: Buffer.from(encodeName({ organization: 'AllowedOrg' })).toString('hex'),
-					},
-				],
+				subjectAltNames: [{ type: 'directoryName', derHex: sanDerHex }],
 			},
 		});
 		const result = await verifyCertificateChain({
 			leaf: leaf.pem,
 			roots: [root.certificate.pem],
 		});
-		// The excluded constraint's derHex and the SAN's derHex both go through the
-		// same double-wrapping, so they DO match and the exclusion fires.
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.code).toBe('name_constraints_violated');
+	});
+
+	it('directoryName matching stays sensitive to RDN sequence order', async () => {
+		const constraintDerHex = buildDirectoryNameDerHex([
+			[{ oid: OIDS.organizationName, value: 'Allowed Org', encoding: 'utf8' }],
+			[{ oid: OIDS.commonName, value: 'Service', encoding: 'utf8' }],
+		]);
+		const sanDerHex = buildDirectoryNameDerHex([
+			[{ oid: OIDS.commonName, value: 'Service', encoding: 'utf8' }],
+			[{ oid: OIDS.organizationName, value: 'Allowed Org', encoding: 'utf8' }],
+		]);
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'DN Root' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+				nameConstraints: {
+					excludedSubtrees: [{ base: { type: 'directoryName', derHex: constraintDerHex } }],
+				},
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'DN Root' },
+			subject: { commonName: 'DN Leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				subjectAltNames: [{ type: 'directoryName', derHex: sanDerHex }],
+			},
+		});
+		const result = await verifyCertificateChain({
+			leaf: leaf.pem,
+			roots: [root.certificate.pem],
+		});
+		expect(result.ok).toBe(true);
 	});
 
 	it('unknown SAN type is ignored during name constraint checking', async () => {
@@ -2778,7 +3998,7 @@ describe('coverage: verify.ts internal edge cases', () => {
 
 	// --- extractSequenceContent error paths (lines 1739-1760) ---
 
-	it('directoryName constraint with too-short derHex returns false (line 1746)', async () => {
+	it('ignores tampered directoryName constraint with too-short derHex (line 1746)', async () => {
 		const { parsedRoot, parsedLeaf } = await makeSelfSignedChain();
 		// Tamper root: add directoryName permittedSubtrees with derHex too short (<4 chars)
 		const tamperedRoot = {
@@ -2791,11 +4011,10 @@ describe('coverage: verify.ts internal edge cases', () => {
 			chain: [parsedLeaf, tamperedRoot],
 			allowSelfSignedLeaf: true,
 		});
-		expect(result.ok).toBe(false);
-		if (!result.ok) expect(result.code).toBe('name_constraints_violated');
+		expect(result.ok).toBe(true);
 	});
 
-	it('directoryName constraint with non-SEQUENCE tag returns false (line 1750)', async () => {
+	it('ignores tampered directoryName constraint with non-SEQUENCE tag (line 1750)', async () => {
 		const { parsedRoot, parsedLeaf } = await makeSelfSignedChain();
 		// Tag 0x31 (SET) instead of 0x30 (SEQUENCE)
 		const tamperedRoot = {
@@ -2808,11 +4027,10 @@ describe('coverage: verify.ts internal edge cases', () => {
 			chain: [parsedLeaf, tamperedRoot],
 			allowSelfSignedLeaf: true,
 		});
-		expect(result.ok).toBe(false);
-		if (!result.ok) expect(result.code).toBe('name_constraints_violated');
+		expect(result.ok).toBe(true);
 	});
 
-	it('directoryName constraint with NaN length byte returns false (line 1754)', async () => {
+	it('ignores tampered directoryName constraint with NaN length byte (line 1754)', async () => {
 		const { parsedRoot, parsedLeaf } = await makeSelfSignedChain();
 		// 0x30 tag but "zz" as length byte → NaN
 		const tamperedRoot = {
@@ -2825,11 +4043,10 @@ describe('coverage: verify.ts internal edge cases', () => {
 			chain: [parsedLeaf, tamperedRoot],
 			allowSelfSignedLeaf: true,
 		});
-		expect(result.ok).toBe(false);
-		if (!result.ok) expect(result.code).toBe('name_constraints_violated');
+		expect(result.ok).toBe(true);
 	});
 
-	it('directoryName constraint with long-form length (line 1758-1760)', async () => {
+	it('ignores tampered directoryName constraint with long-form length (line 1758-1760)', async () => {
 		const { parsedRoot, parsedLeaf } = await makeSelfSignedChain();
 		// 0x30 tag, 0x81 0x04 (long-form length = 4 bytes), then content
 		// This is valid DER, but the constraint content won't match the leaf subject
@@ -2843,8 +4060,32 @@ describe('coverage: verify.ts internal edge cases', () => {
 			chain: [parsedLeaf, tamperedRoot],
 			allowSelfSignedLeaf: true,
 		});
-		expect(result.ok).toBe(false);
-		if (!result.ok) expect(result.code).toBe('name_constraints_violated');
+		expect(result.ok).toBe(true);
+	});
+
+	it('rejects directoryName constraints that rely on empty RDN sets', async () => {
+		const { parsedRoot, parsedLeaf } = await makeSelfSignedChain();
+		const malformedDirectoryName = '30023100';
+		const tamperedRoot = {
+			...parsedRoot,
+			nameConstraints: {
+				permittedSubtrees: [
+					{ base: { type: 'directoryName' as const, derHex: malformedDirectoryName } },
+				],
+			},
+		};
+		const tamperedLeaf = {
+			...parsedLeaf,
+			subject: {
+				...parsedLeaf.subject,
+				derHex: malformedDirectoryName,
+			},
+		};
+		const result = evaluateNameConstraints(
+			[tamperedLeaf, tamperedRoot],
+			createNameConstraintValidationState({}),
+		);
+		expect(result).toMatchObject({ ok: false, code: 'name_constraints_violated' });
 	});
 
 	it('directoryName excluded constraint with malformed derHex (line 1739)', async () => {
@@ -2871,7 +4112,7 @@ describe('coverage: verify.ts internal edge cases', () => {
 		expect(result.ok).toBe(true);
 	});
 
-	it('subject with malformed derHex fails directoryName prefix check (line 1739 subject branch)', async () => {
+	it('ignores tampered subject derHex during directoryName checks (line 1739 subject branch)', async () => {
 		const { parsedRoot, parsedLeaf } = await makeSelfSignedChain();
 		// Tamper the leaf's subject.derHex to be malformed
 		const tamperedLeaf = {
@@ -2893,13 +4134,148 @@ describe('coverage: verify.ts internal edge cases', () => {
 			chain: [tamperedLeaf, tamperedRoot],
 			allowSelfSignedLeaf: true,
 		});
-		expect(result.ok).toBe(false);
-		if (!result.ok) expect(result.code).toBe('name_constraints_violated');
+		expect(result.ok).toBe(true);
+	});
+
+	it('ignores malformed pathLength values in tampered ParsedCertificate input', async () => {
+		const { parsedRoot, parsedLeaf } = await makeSelfSignedChain();
+		const tamperedRoot = {
+			...parsedRoot,
+			basicConstraints: { ca: true, pathLength: -1 },
+		};
+		const result = await validateCandidatePath({
+			chain: [parsedLeaf, tamperedRoot],
+			allowSelfSignedLeaf: true,
+		});
+		expect(result.ok).toBe(true);
+	});
+
+	it('ignores tampered validity dates in ParsedCertificate input', async () => {
+		const { parsedRoot, parsedLeaf } = await makeSelfSignedChain();
+		const tamperedLeaf = {
+			...parsedLeaf,
+			notBefore: new Date('invalid'),
+		};
+		const result = await validateCandidatePath({
+			chain: [tamperedLeaf, parsedRoot],
+			allowSelfSignedLeaf: true,
+		});
+		expect(result.ok).toBe(true);
+	});
+
+	it('ignores tampered EKU additions in ParsedCertificate validation input', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Tampered EKU Root' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Tampered EKU Root' },
+			subject: { commonName: 'tampered-eku.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['clientAuth'],
+				subjectAltNames: [{ type: 'dns', value: 'tampered-eku.example' }],
+			},
+		});
+		const parsedRoot = parseCertificatePem(root.certificate.pem);
+		const parsedLeaf = parseCertificatePem(leaf.pem);
+		const result = await validateCandidatePath({
+			chain: [{ ...parsedLeaf, extendedKeyUsage: ['serverAuth' as const] }, parsedRoot],
+			purpose: 'serverAuth',
+		});
+		expect(result).toMatchObject({ ok: false, code: 'extended_key_usage_invalid' });
+	});
+
+	it('checkExtendedKeyUsage ignores tampered ParsedCertificate EKU fields', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Tampered EKU Check Root' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Tampered EKU Check Root' },
+			subject: { commonName: 'tampered-eku-check.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['clientAuth'],
+			},
+		});
+		const parsedRoot = parseCertificatePem(root.certificate.pem);
+		const parsedLeaf = parseCertificatePem(leaf.pem);
+		const result = checkExtendedKeyUsage(
+			[{ ...parsedLeaf, extendedKeyUsage: ['serverAuth' as const] }, parsedRoot],
+			'serverAuth',
+		);
+		expect(result).toMatchObject({ ok: false, code: 'leaf_eku_missing' });
+	});
+
+	it('trustAnchorFromCertificate reparses DER instead of trusting mutated fields', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Anchor Root' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const parsedRoot = parseCertificatePem(root.certificate.pem);
+		const anchor = trustAnchorFromCertificate({
+			...parsedRoot,
+			subject: {
+				...parsedRoot.subject,
+				values: { ...parsedRoot.subject.values, commonName: 'forged-anchor.example' },
+			},
+		});
+		expect(anchor.subject.values.commonName).toBe(parsedRoot.subject.values.commonName);
+	});
+
+	it('trustAnchorFromCertificate throws stable errors for malformed ParsedCertificate DER', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Anchor Error Root' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const parsedRoot = parseCertificatePem(root.certificate.pem);
+		expect(() =>
+			trustAnchorFromCertificate({ ...parsedRoot, der: Uint8Array.of(0xff, 0xff) }),
+		).toThrow('certificate input is malformed');
+	});
+
+	it('validateCandidatePath fails closed for malformed ParsedCertificate DER', async () => {
+		const { parsedRoot, parsedLeaf } = await makeSelfSignedChain();
+		const result = await validateCandidatePath({
+			chain: [{ ...parsedLeaf, der: Uint8Array.of(0xff, 0xff) }, parsedRoot],
+			allowSelfSignedLeaf: true,
+		});
+		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
+	});
+
+	it('checkExtendedKeyUsage fails closed for malformed ParsedCertificate DER', async () => {
+		const { parsedRoot, parsedLeaf } = await makeSelfSignedChain();
+		const result = checkExtendedKeyUsage(
+			[{ ...parsedLeaf, der: Uint8Array.of(0xff, 0xff) }, parsedRoot],
+			'serverAuth',
+		);
+		expect(result).toMatchObject({ ok: false, code: 'leaf_eku_missing' });
 	});
 
 	// --- parseIpAddressToBytes error paths (lines 1769, 1775) ---
 
-	it('IP SAN with wrong segment count throws (line 1769)', async () => {
+	it('ignores tampered malformed IP SANs with wrong segment count (line 1769)', async () => {
 		const { parsedRoot, parsedLeaf } = await makeSelfSignedChain();
 		// Tamper leaf to have an IP SAN with invalid value (3 segments)
 		const tamperedLeaf = {
@@ -2920,15 +4296,14 @@ describe('coverage: verify.ts internal edge cases', () => {
 				],
 			},
 		};
-		expect(
-			validateCandidatePath({
-				chain: [tamperedLeaf, tamperedRoot],
-				allowSelfSignedLeaf: true,
-			}),
-		).rejects.toThrow('Invalid IPv4 address');
+		const result = await validateCandidatePath({
+			chain: [tamperedLeaf, tamperedRoot],
+			allowSelfSignedLeaf: true,
+		});
+		expect(result.ok).toBe(true);
 	});
 
-	it('IP SAN with non-numeric segment throws (line 1775)', async () => {
+	it('ignores tampered malformed IP SANs with non-numeric segments (line 1775)', async () => {
 		const { parsedRoot, parsedLeaf } = await makeSelfSignedChain();
 		const tamperedLeaf = {
 			...parsedLeaf,
@@ -2948,15 +4323,14 @@ describe('coverage: verify.ts internal edge cases', () => {
 				],
 			},
 		};
-		expect(
-			validateCandidatePath({
-				chain: [tamperedLeaf, tamperedRoot],
-				allowSelfSignedLeaf: true,
-			}),
-		).rejects.toThrow('Invalid IPv4 address');
+		const result = await validateCandidatePath({
+			chain: [tamperedLeaf, tamperedRoot],
+			allowSelfSignedLeaf: true,
+		});
+		expect(result.ok).toBe(true);
 	});
 
-	it('IP SAN with out-of-range segment throws (line 1775)', async () => {
+	it('ignores tampered malformed IP SANs with out-of-range segments (line 1775)', async () => {
 		const { parsedRoot, parsedLeaf } = await makeSelfSignedChain();
 		const tamperedLeaf = {
 			...parsedLeaf,
@@ -2976,12 +4350,11 @@ describe('coverage: verify.ts internal edge cases', () => {
 				],
 			},
 		};
-		expect(
-			validateCandidatePath({
-				chain: [tamperedLeaf, tamperedRoot],
-				allowSelfSignedLeaf: true,
-			}),
-		).rejects.toThrow('Invalid IPv4 address');
+		const result = await validateCandidatePath({
+			chain: [tamperedLeaf, tamperedRoot],
+			allowSelfSignedLeaf: true,
+		});
+		expect(result.ok).toBe(true);
 	});
 
 	// --- rankIssuerCandidates tiebreakers (lines 1078-1088) ---

@@ -1,3 +1,10 @@
-bun.lock -diff linguist-generated
-.zed/*.json linguist-language=JSON-With-Comments
-docs/rfc/* linguist-vendored
+.opencode/state/**/*.txt                linguist-language=Markdown
+.opencode/state/**/*           -diff    linguist-generated
+.zed/*.json                             linguist-language=JSON-With-Comments
+bun.lock                       -diff    linguist-generated
+docs/rfc/*                              linguist-vendored
+test/fixtures/pkits/certs/*    -diff    linguist-vendored
+site/api/**/*                  -diff    linguist-generated
+site/api/**/index.md            diff   -linguist-generated
+test/fixtures/pkits/manifest.ts         linguist-generated
+test/fixtures/pkits/nist/**/*           linguist-vendored

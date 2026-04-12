@@ -1,0 +1,27 @@
+{
+	"name": "@kjanat/micro509",
+	"version": "0.1.0",
+	"license": "MIT",
+	"exports": {
+		".": "./src/index.ts",
+		"./keys": "./src/keys/index.ts",
+		"./pem": "./src/pem/index.ts",
+		"./pkcs": "./src/pkcs/index.ts",
+		"./result": "./src/result/index.ts",
+		"./revocation": "./src/revocation/index.ts",
+		"./verify": "./src/verify/index.ts",
+		"./x509": "./src/x509/index.ts"
+	},
+	"publish": {
+		"include": [
+			"src/**/*.ts",
+			"package.json",
+			"LICENSE",
+			"README.md"
+		],
+		"exclude": [
+			"**/AGENTS.md",
+			"src/**/*.test.ts"
+		]
+	}
+}

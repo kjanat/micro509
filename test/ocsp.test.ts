@@ -13,21 +13,28 @@ import {
 	pemDecode,
 	validateOcspResponse,
 	verifyOcspResponse,
-} from '#micro509';
-import { childrenOf } from '#micro509/asn1.ts';
+} from 'micro509';
+import { childrenOf, toHex } from '#micro509/internal/asn1/asn1.ts';
 import {
 	bitString,
 	explicitContext,
 	generalizedTime,
+	implicitPrimitiveContext,
 	integerFromNumber,
 	objectIdentifier,
 	octetString,
 	readElement,
+	readSequenceChildren,
 	sequence,
 	tlv,
-} from '#micro509/der.ts';
-import { sha1 } from '#micro509/hash.ts';
-import { OIDS } from '#micro509/oids.ts';
+} from '#micro509/internal/asn1/der.ts';
+import { OIDS } from '#micro509/internal/asn1/oids.ts';
+import { sha1 } from '#micro509/internal/crypto/hash.ts';
+import {
+	encodeAlgorithmIdentifier,
+	getSignatureAlgorithm,
+	signBytes,
+} from '#micro509/internal/crypto/signing.ts';
 import { hexToBytes } from './helpers.ts';
 
 describe('ocsp', () => {
@@ -53,6 +60,7 @@ describe('ocsp', () => {
 		});
 		const parsedRequest = parseOcspRequestPem(request.pem);
 		expect(parsedRequest.requests).toHaveLength(1);
+		expect(parsedRequest.requests[0]?.hashAlgorithmName).toBe('SHA-1');
 		expect(parsedRequest.nonce).toBe('aabb');
 		const ocspResponse = await createOcspResponse({
 			signerPrivateKey: issuer.keyPair.privateKey,
@@ -69,8 +77,13 @@ describe('ocsp', () => {
 		});
 		const parsedResponse = parseOcspResponsePem(ocspResponse.pem);
 		expect(parsedResponse.responseStatus).toBe('successful');
+		expect(parsedResponse.signatureAlgorithmName).toBe('ECDSA with SHA-256');
 		expect(parsedResponse.responses?.[0]).toMatchObject({ certStatus: 'good' });
 		expect(parsedResponse.nonce).toBe('aabb');
+		expect(parsedResponse.responderId).toMatchObject({
+			type: 'byKeyHash',
+			keyHashHex: expect.any(String),
+		});
 		expect(await verifyOcspResponse(ocspResponse.der, issuer.certificate.pem)).toMatchObject({
 			ok: true,
 		});
@@ -146,6 +159,65 @@ describe('ocsp', () => {
 				request: request.pem,
 			}),
 		).toMatchObject({ ok: true });
+	});
+
+	it('validateOcspResponse resolves embedded responder certificate by responderID', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Embedded Responder CA' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 1 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const responderKeys = await generateKeyPair();
+		const otherResponderKeys = await generateKeyPair();
+		const responder = await createCertificate({
+			issuer: { commonName: 'Embedded Responder CA' },
+			subject: { commonName: 'Actual Embedded Responder' },
+			publicKey: responderKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['ocspSigning'],
+			},
+		});
+		const otherResponder = await createCertificate({
+			issuer: { commonName: 'Embedded Responder CA' },
+			subject: { commonName: 'Wrong Embedded Responder' },
+			publicKey: otherResponderKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['ocspSigning'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Embedded Responder CA' },
+			subject: { commonName: 'embedded-responder.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const response = await createOcspResponse({
+			signerPrivateKey: responderKeys.privateKey,
+			signerCertificate: responder.pem,
+			includedCertificates: [otherResponder.pem, responder.pem],
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: 'good',
+				},
+			],
+		});
+		const result = await validateOcspResponse({
+			response: response.der,
+			issuerCertificate: issuer.certificate.pem,
+		});
+		expect(result.ok).toBe(true);
 	});
 
 	it('parses OCSP responses with revoked and unknown cert status', async () => {
@@ -353,6 +425,258 @@ describe('ocsp', () => {
 		if (!result.ok) expect(result.code).toBe('ocsp_signing_missing');
 	});
 
+	it('validateOcspResponse rejects delegated responder without an EKU extension', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Missing EKU CA' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 1 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const responderKeys = await generateKeyPair();
+		const responder = await createCertificate({
+			issuer: { commonName: 'Missing EKU CA' },
+			subject: { commonName: 'No EKU Responder' },
+			publicKey: responderKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Missing EKU CA' },
+			subject: { commonName: 'missing-eku.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const response = await createOcspResponse({
+			signerPrivateKey: responderKeys.privateKey,
+			signerCertificate: responder.pem,
+			includedCertificates: [responder.pem],
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: 'good',
+				},
+			],
+		});
+		const result = await validateOcspResponse({
+			response: response.der,
+			issuerCertificate: issuer.certificate.pem,
+		});
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.code).toBe('ocsp_signing_missing');
+	});
+
+	it('validateOcspResponse accepts matching responderID byName', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'ResponderID ByName CA' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 1 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const responderKeys = await generateKeyPair();
+		const responder = await createCertificate({
+			issuer: { commonName: 'ResponderID ByName CA' },
+			subject: { commonName: 'Named Responder', organization: 'Example Org' },
+			publicKey: responderKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['ocspSigning'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'ResponderID ByName CA' },
+			subject: { commonName: 'byname-match.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const responderParsed = parseCertificatePem(responder.pem);
+		const response = await createSignedOcspResponseWithResponderId({
+			signerPrivateKey: responderKeys.privateKey,
+			certificatePem: leaf.pem,
+			issuerCertificatePem: issuer.certificate.pem,
+			responderId: {
+				type: 'byName',
+				nameDer: hexToBytes(responderParsed.subject.derHex),
+			},
+		});
+		const result = await validateOcspResponse({
+			response,
+			issuerCertificate: issuer.certificate.pem,
+			responderCertificate: responder.pem,
+		});
+		expect(result.ok).toBe(true);
+	});
+
+	it('validateOcspResponse rejects mismatched responderID byName', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'ResponderID Mismatch CA' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 1 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const responderKeys = await generateKeyPair();
+		const responder = await createCertificate({
+			issuer: { commonName: 'ResponderID Mismatch CA' },
+			subject: { commonName: 'Actual Responder' },
+			publicKey: responderKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['ocspSigning'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'ResponderID Mismatch CA' },
+			subject: { commonName: 'byname-mismatch.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const issuerParsed = parseCertificatePem(issuer.certificate.pem);
+		const response = await createSignedOcspResponseWithResponderId({
+			signerPrivateKey: responderKeys.privateKey,
+			certificatePem: leaf.pem,
+			issuerCertificatePem: issuer.certificate.pem,
+			responderId: {
+				type: 'byName',
+				nameDer: hexToBytes(issuerParsed.subject.derHex),
+			},
+		});
+		const result = await validateOcspResponse({
+			response,
+			issuerCertificate: issuer.certificate.pem,
+			responderCertificate: responder.pem,
+		});
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.code).toBe('responder_id_mismatch');
+	});
+
+	it('validateOcspResponse rejects mismatched responderID byKeyHash for same-subject different-key responders', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'ResponderID KeyHash CA' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 1 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const responderAKeys = await generateKeyPair();
+		const responderBKeys = await generateKeyPair();
+		const responderSubject = {
+			commonName: 'Shared Responder',
+			organization: 'Example Org',
+		};
+		const responderA = await createCertificate({
+			issuer: { commonName: 'ResponderID KeyHash CA' },
+			subject: responderSubject,
+			publicKey: responderAKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['ocspSigning'],
+			},
+		});
+		const responderB = await createCertificate({
+			issuer: { commonName: 'ResponderID KeyHash CA' },
+			subject: responderSubject,
+			publicKey: responderBKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['ocspSigning'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'ResponderID KeyHash CA' },
+			subject: { commonName: 'bykeyhash-mismatch.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const responderBParsed = parseCertificatePem(responderB.pem);
+		const response = await createSignedOcspResponseWithResponderId({
+			signerPrivateKey: responderAKeys.privateKey,
+			certificatePem: leaf.pem,
+			issuerCertificatePem: issuer.certificate.pem,
+			responderId: {
+				type: 'byKeyHash',
+				keyHash: new Uint8Array(
+					sha1(extractSubjectPublicKeyBytes(responderBParsed.subjectPublicKeyInfoDer)),
+				),
+			},
+		});
+		const result = await validateOcspResponse({
+			response,
+			issuerCertificate: issuer.certificate.pem,
+			responderCertificate: responderA.pem,
+		});
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.code).toBe('responder_id_mismatch');
+	});
+
+	it('validateOcspResponse still treats same-subject responderID byName cert as delegated', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Shared Subject CA' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 1 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const responderKeys = await generateKeyPair();
+		const responder = await createCertificate({
+			issuer: { commonName: 'Shared Subject CA' },
+			subject: { commonName: 'Shared Subject CA' },
+			publicKey: responderKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['serverAuth'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Shared Subject CA' },
+			subject: { commonName: 'shared-subject.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const issuerParsed = parseCertificatePem(issuer.certificate.pem);
+		const response = await createSignedOcspResponseWithResponderId({
+			signerPrivateKey: responderKeys.privateKey,
+			certificatePem: leaf.pem,
+			issuerCertificatePem: issuer.certificate.pem,
+			responderId: {
+				type: 'byName',
+				nameDer: hexToBytes(issuerParsed.subject.derHex),
+			},
+		});
+		const result = await validateOcspResponse({
+			response,
+			issuerCertificate: issuer.certificate.pem,
+			responderCertificate: responder.pem,
+		});
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.code).toBe('ocsp_signing_missing');
+	});
+
 	it('validateOcspResponse with DER request input', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'DER Request CA' },
@@ -509,10 +833,14 @@ describe('ocsp', () => {
 		}
 	});
 
-	it('parses response with unknown status code as internalError', () => {
+	it('rejects unknown OCSP response status codes', () => {
 		const der = sequence([tlv(0x0a, Uint8Array.of(99))]);
-		const parsed = parseOcspResponseDer(der);
-		expect(parsed.responseStatus).toBe('internalError');
+		expect(() => parseOcspResponseDer(der)).toThrow('Unsupported OCSP responseStatus value');
+	});
+
+	it('rejects non-ENUMERATED responseStatus tags', () => {
+		const der = sequence([tlv(0x02, Uint8Array.of(0x00))]);
+		expect(() => parseOcspResponseDer(der)).toThrow('responseStatus must use ENUMERATED');
 	});
 
 	it('parses response with non-basicResponse type OID', () => {
@@ -640,6 +968,62 @@ describe('ocsp', () => {
 		expect(result.ok).toBe(true);
 	});
 
+	it('validateOcspResponse ignores tampered signed fields on pre-parsed response input', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Tampered Parsed Response CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Tampered Parsed Response CA' },
+			subject: { commonName: 'tampered-parsed-resp.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const response = await createOcspResponse({
+			signerPrivateKey: issuer.keyPair.privateKey,
+			signerCertificate: issuer.certificate.pem,
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: 'good',
+				},
+			],
+		});
+		const parsed = parseOcspResponsePem(response.pem);
+		const future = new Date('2999-01-01T00:00:00Z');
+		const tampered = {
+			...parsed,
+			producedAt: future,
+			...(parsed.responses === undefined
+				? {}
+				: {
+						responses: parsed.responses.map((entry) => ({
+							...entry,
+							certStatus: 'revoked' as const,
+							thisUpdate: future,
+						})),
+					}),
+		};
+
+		const result = await validateOcspResponse({
+			response: tampered,
+			issuerCertificate: issuer.certificate.pem,
+		});
+		expect(result.ok).toBe(true);
+		if (!result.ok) {
+			throw new Error('expected tampered parsed OCSP response to validate');
+		}
+		expect(result.value.producedAt?.getTime()).not.toBe(future.getTime());
+		expect(result.value.responses?.[0]?.certStatus).toBe('good');
+		expect(result.value.responses?.[0]?.thisUpdate.getTime()).not.toBe(future.getTime());
+	});
+
 	it('verifyOcspResponse accepts PEM response input', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'PEM Verify CA' },
@@ -701,6 +1085,323 @@ describe('ocsp', () => {
 		const parsed = parseOcspResponsePem(response.pem);
 		const result = await verifyOcspResponse(parsed, issuer.certificate.pem);
 		expect(result.ok).toBe(true);
+	});
+
+	it('verifyOcspResponse ignores tampered parsed signer certificate fields', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Tampered Parsed Verify Signer CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const response = await createOcspResponse({
+			signerPrivateKey: issuer.keyPair.privateKey,
+			signerCertificate: issuer.certificate.pem,
+			responses: [
+				{
+					certificate: issuer.certificate.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: 'good',
+				},
+			],
+		});
+		const parsedSigner = parseCertificatePem(issuer.certificate.pem);
+		const tamperedSigner = {
+			...parsedSigner,
+			subjectPublicKeyInfoDer: Uint8Array.of(0x30, 0x00),
+			publicKeyAlgorithmOid: '1.2.3',
+		};
+		const result = await verifyOcspResponse(response.der, tamperedSigner);
+		expect(result.ok).toBe(true);
+	});
+
+	it('verifyOcspResponse ignores tampered signed content fields on pre-parsed response input', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Malformed Parsed Verify CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Malformed Parsed Verify CA' },
+			subject: { commonName: 'malformed-parsed-verify.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const response = await createOcspResponse({
+			signerPrivateKey: issuer.keyPair.privateKey,
+			signerCertificate: issuer.certificate.pem,
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: 'good',
+				},
+			],
+		});
+		const parsed = parseOcspResponsePem(response.pem);
+		const tampered = { ...parsed, responseDataDer: Uint8Array.of(0x30, 0x80) };
+
+		const result = await verifyOcspResponse(tampered, issuer.certificate.pem);
+		expect(result.ok).toBe(true);
+	});
+
+	it('verifyOcspResponse fails closed for pre-parsed response input without DER', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'DER-less Parsed Verify CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const response = await createOcspResponse({
+			signerPrivateKey: issuer.keyPair.privateKey,
+			signerCertificate: issuer.certificate.pem,
+			responses: [
+				{
+					certificate: issuer.certificate.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: 'good',
+				},
+			],
+		});
+		const { der: _ignoredDer, ...parsedWithoutDer } = parseOcspResponsePem(response.pem);
+		const result = await verifyOcspResponse(parsedWithoutDer, issuer.certificate.pem);
+		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
+	});
+
+	it('verifyOcspResponse fails closed for malformed signer certificate input', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Malformed Verify Signer CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const response = await createOcspResponse({
+			signerPrivateKey: issuer.keyPair.privateKey,
+			signerCertificate: issuer.certificate.pem,
+			responses: [
+				{
+					certificate: issuer.certificate.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: 'good',
+				},
+			],
+		});
+		const result = await verifyOcspResponse(response.der, Uint8Array.of(0xff, 0xff));
+		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
+	});
+
+	it('validateOcspResponse ignores tampered signed content fields on pre-parsed response input', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Malformed Parsed Validate CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Malformed Parsed Validate CA' },
+			subject: { commonName: 'malformed-parsed-validate.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const response = await createOcspResponse({
+			signerPrivateKey: issuer.keyPair.privateKey,
+			signerCertificate: issuer.certificate.pem,
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: 'good',
+				},
+			],
+		});
+		const parsed = parseOcspResponsePem(response.pem);
+		const tampered = { ...parsed, responseDataDer: Uint8Array.of(0x30, 0x80) };
+
+		const result = await validateOcspResponse({
+			response: tampered,
+			issuerCertificate: issuer.certificate.pem,
+		});
+		expect(result.ok).toBe(true);
+	});
+
+	it('validateOcspResponse fails closed for pre-parsed response input without DER', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'DER-less Parsed Validate CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const response = await createOcspResponse({
+			signerPrivateKey: issuer.keyPair.privateKey,
+			signerCertificate: issuer.certificate.pem,
+			responses: [
+				{
+					certificate: issuer.certificate.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: 'good',
+				},
+			],
+		});
+		const { der: _ignoredDer, ...parsedWithoutDer } = parseOcspResponsePem(response.pem);
+		const result = await validateOcspResponse({
+			response: parsedWithoutDer,
+			issuerCertificate: issuer.certificate.pem,
+		});
+		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
+	});
+
+	it('validateOcspResponse fails closed for malformed issuer certificate input', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Malformed Validate Issuer CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const response = await createOcspResponse({
+			signerPrivateKey: issuer.keyPair.privateKey,
+			signerCertificate: issuer.certificate.pem,
+			responses: [
+				{
+					certificate: issuer.certificate.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: 'good',
+				},
+			],
+		});
+		const result = await validateOcspResponse({
+			response: response.der,
+			issuerCertificate: Uint8Array.of(0xff, 0xff),
+		});
+		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
+	});
+
+	it('validateOcspResponse fails closed for malformed responder certificate input', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Malformed Responder CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const response = await createOcspResponse({
+			signerPrivateKey: issuer.keyPair.privateKey,
+			signerCertificate: issuer.certificate.pem,
+			responses: [
+				{
+					certificate: issuer.certificate.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: 'good',
+				},
+			],
+		});
+		const result = await validateOcspResponse({
+			response: response.der,
+			issuerCertificate: issuer.certificate.pem,
+			responderCertificate: Uint8Array.of(0xff, 0xff),
+		});
+		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
+	});
+
+	it('validateOcspResponse fails closed for malformed request input', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Malformed Request CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const response = await createOcspResponse({
+			signerPrivateKey: issuer.keyPair.privateKey,
+			signerCertificate: issuer.certificate.pem,
+			responses: [
+				{
+					certificate: issuer.certificate.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: 'good',
+				},
+			],
+		});
+		const result = await validateOcspResponse({
+			response: response.der,
+			issuerCertificate: issuer.certificate.pem,
+			request: Uint8Array.of(0xff, 0xff),
+		});
+		expect(result).toMatchObject({ ok: false, code: 'request_mismatch' });
+	});
+
+	it('validateOcspResponse fails closed for unsupported CertID hash algorithms', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Unsupported CertID Hash CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Unsupported CertID Hash CA' },
+			subject: { commonName: 'unsupported-certid-hash.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const issuerParsed = parseCertificatePem(issuer.certificate.pem);
+		const leafParsed = parseCertificatePem(leaf.pem);
+		const issuerNameHash = new Uint8Array(sha1(hexToBytes(issuerParsed.subject.derHex)));
+		const spkiDer = issuerParsed.subjectPublicKeyInfoDer;
+		const spkiTop = childrenOf(spkiDer, readElement(spkiDer));
+		const spkiBitString = spkiTop[1];
+		const publicKeyBytes =
+			spkiBitString !== undefined ? spkiBitString.value.slice(1) : new Uint8Array(0);
+		const issuerKeyHash = new Uint8Array(sha1(publicKeyBytes));
+		const certId = sequence([
+			sequence([objectIdentifier('1.2.840.113549.2.5'), Uint8Array.of(0x05, 0x00)]),
+			octetString(issuerNameHash),
+			octetString(issuerKeyHash),
+			tlv(0x02, hexToBytes(leafParsed.serialNumberHex)),
+		]);
+		const singleResponse = sequence([
+			certId,
+			tlv(0x80, new Uint8Array(0)),
+			generalizedTime(new Date()),
+		]);
+		const responderId = explicitContext(1, hexToBytes(issuerParsed.subject.derHex));
+		const responseData = sequence([
+			responderId,
+			generalizedTime(new Date()),
+			sequence([singleResponse]),
+		]);
+		const signatureAlgorithm = getSignatureAlgorithm(issuer.keyPair.privateKey);
+		const signature = await signBytes(issuer.keyPair.privateKey, signatureAlgorithm, responseData);
+		const basicResponse = sequence([
+			responseData,
+			encodeAlgorithmIdentifier(signatureAlgorithm),
+			bitString(signature),
+		]);
+		const ocspResponseDer = sequence([
+			tlv(0x0a, Uint8Array.of(0x00)),
+			explicitContext(
+				0,
+				sequence([objectIdentifier(OIDS.ocspBasicResponse), octetString(basicResponse)]),
+			),
+		]);
+		const result = await validateOcspResponse({
+			response: ocspResponseDer,
+			issuerCertificate: issuer.certificate.pem,
+		});
+		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
 	});
 
 	it('validateOcspResponse validates delegated responder chain with DER certs', async () => {
@@ -833,6 +1534,7 @@ describe('ocsp', () => {
 		const parsedRequest = parseOcspRequestDer(request.der);
 		expect(parsedRequest.requests).toHaveLength(1);
 		expect(parsedRequest.requests[0]?.hashAlgorithmOid).toBe(OIDS.sha256);
+		expect(parsedRequest.requests[0]?.hashAlgorithmName).toBe('SHA-256');
 
 		const response = await createOcspResponse({
 			signerPrivateKey: issuer.keyPair.privateKey,
@@ -849,6 +1551,15 @@ describe('ocsp', () => {
 		const parsed = parseOcspResponsePem(response.pem);
 		expect(parsed.responseStatus).toBe('successful');
 		expect(parsed.responses?.[0]?.certId.hashAlgorithmOid).toBe(OIDS.sha256);
+		expect(parsed.responses?.[0]?.certId.hashAlgorithmName).toBe('SHA-256');
+		expect(parsed.signatureAlgorithmName).toBe('ECDSA with SHA-256');
+		const issuerParsed = parseCertificatePem(issuer.certificate.pem);
+		expect(parsed.responderId).toMatchObject({
+			type: 'byKeyHash',
+			keyHashHex: toHex(
+				new Uint8Array(sha1(extractSubjectPublicKeyBytes(issuerParsed.subjectPublicKeyInfoDer))),
+			),
+		});
 
 		const valid = await validateOcspResponse({
 			response: response.der,
@@ -891,6 +1602,95 @@ describe('ocsp', () => {
 			response: response.der,
 			issuerCertificate: ca.certificate.pem,
 			at: new Date('2024-01-03T00:00:00Z'),
+		});
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.code).toBe('stale_response');
+	});
+
+	it('validateOcspResponse rejects future producedAt without enough clock skew', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Future producedAt CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Future producedAt CA' },
+			subject: { commonName: 'future-produced-at.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const at = new Date('2024-01-01T00:00:00Z');
+		const response = await createSignedOcspResponseWithResponderId({
+			signerPrivateKey: issuer.keyPair.privateKey,
+			certificatePem: leaf.pem,
+			issuerCertificatePem: issuer.certificate.pem,
+			responderId: {
+				type: 'byKeyHash',
+				keyHash: new Uint8Array(
+					sha1(
+						extractSubjectPublicKeyBytes(
+							parseCertificatePem(issuer.certificate.pem).subjectPublicKeyInfoDer,
+						),
+					),
+				),
+			},
+			thisUpdate: new Date('2023-12-31T23:59:00Z'),
+			producedAt: new Date('2024-01-01T00:00:10Z'),
+		});
+		const noSkew = await validateOcspResponse({
+			response,
+			issuerCertificate: issuer.certificate.pem,
+			at,
+		});
+		expect(noSkew.ok).toBe(false);
+		if (!noSkew.ok) expect(noSkew.code).toBe('stale_response');
+		const withSkew = await validateOcspResponse({
+			response,
+			issuerCertificate: issuer.certificate.pem,
+			at,
+			clockSkewMs: 15_000,
+		});
+		expect(withSkew.ok).toBe(true);
+	});
+
+	it('validateOcspResponse rejects producedAt later than nextUpdate', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Inconsistent producedAt CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Inconsistent producedAt CA' },
+			subject: { commonName: 'inconsistent-produced-at.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const response = await createOcspResponse({
+			signerPrivateKey: issuer.keyPair.privateKey,
+			signerCertificate: issuer.certificate.pem,
+			producedAt: new Date('2024-01-01T00:00:20Z'),
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: 'good',
+					thisUpdate: new Date('2024-01-01T00:00:00Z'),
+					nextUpdate: new Date('2024-01-01T00:00:10Z'),
+				},
+			],
+		});
+		const result = await validateOcspResponse({
+			response: response.der,
+			issuerCertificate: issuer.certificate.pem,
+			at: new Date('2024-01-01T00:00:05Z'),
 		});
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.code).toBe('stale_response');
@@ -945,7 +1745,111 @@ describe('ocsp', () => {
 		if (!result.ok) expect(result.code).toBe('request_mismatch');
 	});
 
-	it('certificateSourceToInput throws for pre-parsed cert', async () => {
+	it('validateOcspResponse rejects responses that omit a requested certId', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'ReqCoverage CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'ReqCoverage CA' },
+			subject: { commonName: 'req-coverage.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+		const otherLeafKeys = await generateKeyPair();
+		const otherLeaf = await createCertificate({
+			issuer: { commonName: 'ReqCoverage CA' },
+			subject: { commonName: 'req-coverage-other.example' },
+			publicKey: otherLeafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+		const request = await createOcspRequest({
+			requests: [
+				{ certificate: leaf.pem, issuerCertificate: ca.certificate.pem },
+				{ certificate: otherLeaf.pem, issuerCertificate: ca.certificate.pem },
+			],
+		});
+		const response = await createOcspResponse({
+			signerPrivateKey: ca.keyPair.privateKey,
+			signerCertificate: ca.certificate.pem,
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: ca.certificate.pem,
+					certStatus: 'good',
+				},
+			],
+		});
+		const result = await validateOcspResponse({
+			response: response.der,
+			issuerCertificate: ca.certificate.pem,
+			request: request.der,
+		});
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.code).toBe('request_mismatch');
+	});
+
+	it('validateOcspResponse accepts multi-cert responses that cover the full request set', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'ReqComplete CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const firstLeafKeys = await generateKeyPair();
+		const firstLeaf = await createCertificate({
+			issuer: { commonName: 'ReqComplete CA' },
+			subject: { commonName: 'req-complete-a.example' },
+			publicKey: firstLeafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+		const secondLeafKeys = await generateKeyPair();
+		const secondLeaf = await createCertificate({
+			issuer: { commonName: 'ReqComplete CA' },
+			subject: { commonName: 'req-complete-b.example' },
+			publicKey: secondLeafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+		const request = await createOcspRequest({
+			requests: [
+				{ certificate: firstLeaf.pem, issuerCertificate: ca.certificate.pem },
+				{ certificate: secondLeaf.pem, issuerCertificate: ca.certificate.pem },
+			],
+		});
+		const response = await createOcspResponse({
+			signerPrivateKey: ca.keyPair.privateKey,
+			signerCertificate: ca.certificate.pem,
+			responses: [
+				{
+					certificate: secondLeaf.pem,
+					issuerCertificate: ca.certificate.pem,
+					certStatus: 'good',
+				},
+				{
+					certificate: firstLeaf.pem,
+					issuerCertificate: ca.certificate.pem,
+					certStatus: 'good',
+				},
+			],
+		});
+		const result = await validateOcspResponse({
+			response: response.der,
+			issuerCertificate: ca.certificate.pem,
+			request: request.der,
+		});
+		expect(result).toMatchObject({ ok: true });
+	});
+
+	it('validateOcspResponse accepts delegated responder inputs as pre-parsed certificates', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'Parsed Source CA' },
 			extensions: {
@@ -984,21 +1888,13 @@ describe('ocsp', () => {
 				},
 			],
 		});
-		// Use a pre-parsed certificate as issuerCertificate — triggers
-		// the certificateSourceToInput throw when responder is different from issuer
 		const parsedIssuer = parseCertificatePem(issuer.certificate.pem);
 		const parsedResponder = parseCertificatePem(responder.pem);
-		// parsedResponder as responder with parsedIssuer — the responder
-		// differs from issuer, so chain validation is attempted but
-		// issuerCertificate is pre-parsed → throws
 		const result = await validateOcspResponse({
 			response: response.der,
 			issuerCertificate: parsedIssuer,
 			responderCertificate: parsedResponder,
 		});
-		// The delegated path can't validate chain because parsedResponder
-		// is a ParsedCertificate (not string/Uint8Array), so it skips
-		// chain validation but still checks EKU
 		expect(result.ok).toBe(true);
 	});
 
@@ -1024,6 +1920,51 @@ describe('ocsp', () => {
 		const parsed = parseOcspRequestDer(request.der);
 		expect(parsed.requests).toHaveLength(1);
 		expect(parsed.nonce).toBeUndefined();
+	});
+
+	it('parseOcspRequestDer rejects malformed requestorName and optionalSignature wrappers', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Malformed Request Wrapper CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Malformed Request Wrapper CA' },
+			subject: { commonName: 'malformed-request-wrapper.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const request = await createOcspRequest({
+			requests: [{ certificate: leaf.pem, issuerCertificate: issuer.certificate.pem }],
+		});
+		expect(() =>
+			parseOcspRequestDer(
+				rewriteOcspRequestTbs(request.der, [explicitContext(1, sequence([integerFromNumber(1)]))]),
+			),
+		).toThrow('requestorName must wrap exactly one GeneralName');
+		expect(() =>
+			parseOcspRequestDer(
+				rewriteOcspRequestOptionalSignature(
+					request.der,
+					explicitContext(0, sequence([integerFromNumber(1)])),
+				),
+			),
+		).toThrow('Malformed optionalSignature');
+		expect(() =>
+			parseOcspRequestDer(
+				rewriteOcspRequestOptionalSignature(
+					request.der,
+					explicitContext(
+						0,
+						sequence([sequence([integerFromNumber(1)]), bitString(Uint8Array.of(0x01))]),
+					),
+				),
+			),
+		).toThrow('optionalSignature algorithm must use AlgorithmIdentifier SEQUENCE');
 	});
 
 	it('validates OCSP response with pre-parsed request input', async () => {
@@ -1066,6 +2007,179 @@ describe('ocsp', () => {
 			request: parsedRequest,
 		});
 		expect(result.ok).toBe(true);
+	});
+
+	it('validateOcspResponse ignores tampered pre-parsed request fields', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Tampered Parsed Req CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Tampered Parsed Req CA' },
+			subject: { commonName: 'tampered-parsed-req.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const request = await createOcspRequest({
+			requests: [{ certificate: leaf.pem, issuerCertificate: issuer.certificate.pem }],
+			nonce: Uint8Array.of(0x11, 0x22),
+		});
+		const response = await createOcspResponse({
+			signerPrivateKey: issuer.keyPair.privateKey,
+			signerCertificate: issuer.certificate.pem,
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: 'good',
+				},
+			],
+			nonce: Uint8Array.of(0x11, 0x22),
+		});
+		const parsedRequest = parseOcspRequestPem(request.pem);
+		const firstRequest = parsedRequest.requests[0];
+		if (firstRequest === undefined) {
+			throw new Error('expected parsed OCSP request entry');
+		}
+		const tamperedRequest = {
+			...parsedRequest,
+			nonce: 'deadbeef',
+			requests: [
+				{
+					...firstRequest,
+					serialNumberHex: 'ff',
+				},
+			],
+		};
+		const result = await validateOcspResponse({
+			response: response.der,
+			issuerCertificate: issuer.certificate.pem,
+			request: tamperedRequest,
+		});
+		expect(result.ok).toBe(true);
+	});
+
+	it('validateOcspResponse fails closed for pre-parsed request input without DER', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'DER-less Parsed Req CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'DER-less Parsed Req CA' },
+			subject: { commonName: 'derless-parsed-req.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const request = await createOcspRequest({
+			requests: [{ certificate: leaf.pem, issuerCertificate: issuer.certificate.pem }],
+			nonce: Uint8Array.of(0x11, 0x22),
+		});
+		const response = await createOcspResponse({
+			signerPrivateKey: issuer.keyPair.privateKey,
+			signerCertificate: issuer.certificate.pem,
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: 'good',
+				},
+			],
+			nonce: Uint8Array.of(0x11, 0x22),
+		});
+		const { der: _ignoredDer, ...parsedRequestWithoutDer } = parseOcspRequestPem(request.pem);
+		const result = await validateOcspResponse({
+			response: response.der,
+			issuerCertificate: issuer.certificate.pem,
+			request: parsedRequestWithoutDer,
+		});
+		expect(result).toMatchObject({ ok: false, code: 'request_mismatch' });
+	});
+
+	it('validateOcspResponse fails closed for duplicate OCSP response CertIDs', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Duplicate Response CertID CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Duplicate Response CertID CA' },
+			subject: { commonName: 'duplicate-response-certid.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const response = await createOcspResponse({
+			signerPrivateKey: issuer.keyPair.privateKey,
+			signerCertificate: issuer.certificate.pem,
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: 'good',
+				},
+			],
+		});
+		const result = await validateOcspResponse({
+			response: duplicateFirstOcspSingleResponse(response.der),
+			issuerCertificate: issuer.certificate.pem,
+		});
+		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
+	});
+
+	it('validateOcspResponse rejects multiple status entries for the same certificate across hash algorithms', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Duplicate Serial Hash CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Duplicate Serial Hash CA' },
+			subject: { commonName: 'duplicate-serial-hash.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const parsedIssuer = parseCertificatePem(issuer.certificate.pem);
+		const responderKeyHash = new Uint8Array(
+			sha1(extractSubjectPublicKeyBytes(parsedIssuer.subjectPublicKeyInfoDer)),
+		);
+		const response = await createSignedOcspResponseWithSingleResponses({
+			signerPrivateKey: issuer.keyPair.privateKey,
+			responderIdDer: implicitPrimitiveContext(2, responderKeyHash),
+			singleResponses: [
+				await createOcspSingleResponseWithHashAlgorithm(
+					issuer.certificate.pem,
+					leaf.pem,
+					OIDS.sha1,
+				),
+				await createOcspSingleResponseWithHashAlgorithm(
+					issuer.certificate.pem,
+					leaf.pem,
+					OIDS.sha256,
+				),
+			],
+		});
+		const result = await validateOcspResponse({
+			response,
+			issuerCertificate: issuer.certificate.pem,
+		});
+		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
 	});
 
 	it('validateOcspResponse returns issuer_mismatch for wrong issuer cert', async () => {
@@ -1111,7 +2225,127 @@ describe('ocsp', () => {
 			responderCertificate: issuer.certificate.pem,
 		});
 		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.code).toBe('responder_chain_invalid');
+	});
+
+	it('validateOcspResponse returns issuer_mismatch when delegated responder chain is valid', async () => {
+		const actualIssuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Actual OCSP Issuer' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const validationIssuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Validation OCSP Issuer' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const responderKeys = await generateKeyPair();
+		const responder = await createCertificate({
+			issuer: { commonName: 'Validation OCSP Issuer' },
+			subject: { commonName: 'Delegated OCSP Responder' },
+			publicKey: responderKeys.publicKey,
+			signerPrivateKey: validationIssuer.keyPair.privateKey,
+			issuerPublicKey: validationIssuer.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['ocspSigning'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Actual OCSP Issuer' },
+			subject: { commonName: 'issuer-mismatch-valid-chain.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: actualIssuer.keyPair.privateKey,
+			issuerPublicKey: actualIssuer.keyPair.publicKey,
+		});
+		const response = await createOcspResponse({
+			signerPrivateKey: responderKeys.privateKey,
+			signerCertificate: responder.pem,
+			includedCertificates: [responder.pem],
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: actualIssuer.certificate.pem,
+					certStatus: 'good',
+				},
+			],
+		});
+
+		const result = await validateOcspResponse({
+			response: response.der,
+			issuerCertificate: validationIssuer.certificate.pem,
+			responderCertificate: responder.pem,
+		});
+		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.code).toBe('issuer_mismatch');
+	});
+
+	it('validateOcspResponse rejects chained responders when path validation fails', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Chained Responder Issuer' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 2 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const badIntermediateKeys = await generateKeyPair();
+		const badIntermediate = await createCertificate({
+			issuer: { commonName: 'Chained Responder Issuer' },
+			subject: { commonName: 'Bad OCSP Intermediate' },
+			publicKey: badIntermediateKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+			extensions: {
+				basicConstraints: { ca: false },
+				keyUsage: ['digitalSignature'],
+			},
+		});
+		const responderKeys = await generateKeyPair();
+		const responder = await createCertificate({
+			issuer: { commonName: 'Bad OCSP Intermediate' },
+			subject: { commonName: 'Bad Chain Responder' },
+			publicKey: responderKeys.publicKey,
+			signerPrivateKey: badIntermediateKeys.privateKey,
+			issuerPublicKey: badIntermediateKeys.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['ocspSigning'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Chained Responder Issuer' },
+			subject: { commonName: 'bad-chain.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const response = await createOcspResponse({
+			signerPrivateKey: responderKeys.privateKey,
+			signerCertificate: responder.pem,
+			includedCertificates: [responder.pem, badIntermediate.pem],
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: 'good',
+				},
+			],
+		});
+
+		const result = await validateOcspResponse({
+			response: response.der,
+			issuerCertificate: issuer.certificate.pem,
+			responderCertificate: responder.pem,
+			allowChainedResponderCertificate: true,
+		});
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.code).toBe('responder_chain_invalid');
 	});
 
 	it('createOcspResponse encodes revoked cert status with reason', async () => {
@@ -1205,7 +2439,7 @@ describe('ocsp', () => {
 		// Build ResponseData WITH explicit version [0]
 		const responseData = sequence([
 			explicitContext(0, integerFromNumber(0)), // version v1 = 0, explicit [0]
-			tlv(0xa2, octetString(issuerKeyHash)), // responderID byKeyHash [2]
+			implicitPrimitiveContext(2, issuerKeyHash), // responderID byKeyHash [2]
 			generalizedTime(new Date()), // producedAt
 			sequence([singleResponse]), // responses
 		]);
@@ -1227,6 +2461,75 @@ describe('ocsp', () => {
 		expect(parsed.responseStatus).toBe('successful');
 		expect(parsed.responses).toBeDefined();
 		expect(parsed.responses).toHaveLength(1);
+		expect(parsed.responderId).toMatchObject({
+			type: 'byKeyHash',
+			keyHashHex: toHex(issuerKeyHash),
+		});
+	});
+
+	it('parses OCSP responderID byName', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'OCSP ByName CA', organization: 'Example Org' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'OCSP ByName CA', organization: 'Example Org' },
+			subject: { commonName: 'byname-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const issuerParsed = parseCertificatePem(issuer.certificate.pem);
+		const leafParsed = parseCertificatePem(leaf.pem);
+		const issuerNameHash = new Uint8Array(sha1(hexToBytes(issuerParsed.subject.derHex)));
+		const spkiDer = issuerParsed.subjectPublicKeyInfoDer;
+		const spkiTop = childrenOf(spkiDer, readElement(spkiDer));
+		const spkiBitString = spkiTop[1];
+		const publicKeyBytes =
+			spkiBitString !== undefined ? spkiBitString.value.slice(1) : new Uint8Array(0);
+		const issuerKeyHash = new Uint8Array(sha1(publicKeyBytes));
+		const certId = sequence([
+			sequence([objectIdentifier(OIDS.sha1), Uint8Array.of(0x05, 0x00)]),
+			octetString(issuerNameHash),
+			octetString(issuerKeyHash),
+			tlv(0x02, hexToBytes(leafParsed.serialNumberHex)),
+		]);
+		const singleResponse = sequence([
+			certId,
+			tlv(0x80, new Uint8Array(0)),
+			generalizedTime(new Date()),
+		]);
+		const responseData = sequence([
+			explicitContext(1, hexToBytes(issuerParsed.subject.derHex)),
+			generalizedTime(new Date()),
+			sequence([singleResponse]),
+		]);
+		const sigAlgIdentifier = sequence([
+			objectIdentifier(OIDS.sha256WithRSAEncryption),
+			Uint8Array.of(0x05, 0x00),
+		]);
+		const basicResponse = sequence([responseData, sigAlgIdentifier, bitString(new Uint8Array(64))]);
+		const ocspResponseDer = sequence([
+			tlv(0x0a, Uint8Array.of(0x00)),
+			explicitContext(
+				0,
+				sequence([objectIdentifier(OIDS.ocspBasicResponse), octetString(basicResponse)]),
+			),
+		]);
+		const parsed = parseOcspResponseDer(ocspResponseDer);
+		expect(parsed.responderId).toMatchObject({
+			type: 'byName',
+			name: {
+				values: {
+					commonName: 'OCSP ByName CA',
+					organization: 'Example Org',
+				},
+			},
+		});
 	});
 
 	it('parseOcspNonceFromExtensions returns undefined when no nonce extension present (lines 716-717)', async () => {
@@ -1274,7 +2577,7 @@ describe('ocsp', () => {
 			octetString(Uint8Array.of(0x05, 0x00)),
 		]);
 		const responseData = sequence([
-			tlv(0xa2, octetString(issuerKeyHash)), // responderID byKeyHash [2]
+			implicitPrimitiveContext(2, issuerKeyHash), // responderID byKeyHash [2]
 			generalizedTime(new Date()),
 			sequence([singleResponse]),
 			explicitContext(1, sequence([fakeExtension])), // responseExtensions [1]
@@ -1298,12 +2601,347 @@ describe('ocsp', () => {
 		expect(parsed.nonce).toBeUndefined();
 	});
 
-	it('certificateSourceToInput throws when given ParsedCertificate (lines 792-795)', async () => {
-		// validateOcspResponse calls certificateSourceToInput when issuerCertificate is not PEM/DER
-		// and the responder chain needs validation. This requires:
-		// 1. A parsedResponse with a different responder than the issuer
-		// 2. The responderCertificate being string/Uint8Array (so chain validation is attempted)
-		// 3. The issuerCertificate being a ParsedCertificate
+	it('parseOcspResponseDer rejects malformed responderID and nextUpdate wrappers', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Malformed Responder Wrapper CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const parsedIssuer = parseCertificatePem(issuer.certificate.pem);
+		const responderKeyHash = new Uint8Array(
+			sha1(extractSubjectPublicKeyBytes(parsedIssuer.subjectPublicKeyInfoDer)),
+		);
+		const response = await createSignedOcspResponseWithResponderId({
+			signerPrivateKey: issuer.keyPair.privateKey,
+			certificatePem: issuer.certificate.pem,
+			issuerCertificatePem: issuer.certificate.pem,
+			responderId: {
+				type: 'byKeyHash',
+				keyHash: responderKeyHash,
+			},
+		});
+		expect(() =>
+			parseOcspResponseDer(
+				rewriteOcspResponseResponderId(
+					response,
+					explicitContext(2, octetString(Uint8Array.of(0x01))),
+				),
+			),
+		).toThrow('Unsupported OCSP responderID tag');
+
+		const responseWithNextUpdate = await createOcspResponse({
+			signerPrivateKey: issuer.keyPair.privateKey,
+			signerCertificate: issuer.certificate.pem,
+			responses: [
+				{
+					certificate: issuer.certificate.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: 'good',
+					nextUpdate: new Date('2024-01-02T00:00:00Z'),
+				},
+			],
+		});
+		expect(() =>
+			parseOcspResponseDer(
+				rewriteOcspResponseNextUpdate(
+					responseWithNextUpdate.der,
+					explicitContext(0, sequence([integerFromNumber(1)])),
+				),
+			),
+		).toThrow('nextUpdate must wrap exactly one time value');
+	});
+
+	it('parseOcspResponseDer rejects duplicate OCSP extension OIDs', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'OCSP Duplicate Nonce CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'OCSP Duplicate Nonce CA' },
+			subject: { commonName: 'duplicate-nonce-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+
+		const issuerParsed = parseCertificatePem(issuer.certificate.pem);
+		const leafParsed = parseCertificatePem(leaf.pem);
+		const issuerNameHash = new Uint8Array(sha1(hexToBytes(issuerParsed.subject.derHex)));
+		const spkiDer = issuerParsed.subjectPublicKeyInfoDer;
+		const spkiTop = childrenOf(spkiDer, readElement(spkiDer));
+		const spkiBitString = spkiTop[1];
+		const publicKeyBytes =
+			spkiBitString !== undefined ? spkiBitString.value.slice(1) : new Uint8Array(0);
+		const issuerKeyHash = new Uint8Array(sha1(publicKeyBytes));
+
+		const certId = sequence([
+			sequence([objectIdentifier(OIDS.sha1), Uint8Array.of(0x05, 0x00)]),
+			octetString(issuerNameHash),
+			octetString(issuerKeyHash),
+			tlv(0x02, hexToBytes(leafParsed.serialNumberHex)),
+		]);
+		const singleResponse = sequence([
+			certId,
+			tlv(0x80, new Uint8Array(0)),
+			generalizedTime(new Date()),
+		]);
+		const nonceExtension = sequence([
+			objectIdentifier(OIDS.ocspNonce),
+			octetString(octetString(Uint8Array.of(0xaa, 0xbb))),
+		]);
+		const responseData = sequence([
+			implicitPrimitiveContext(2, issuerKeyHash),
+			generalizedTime(new Date()),
+			sequence([singleResponse]),
+			explicitContext(1, sequence([nonceExtension, nonceExtension])),
+		]);
+		const sigAlgIdentifier = sequence([
+			objectIdentifier(OIDS.sha256WithRSAEncryption),
+			Uint8Array.of(0x05, 0x00),
+		]);
+		const fakeSig = bitString(new Uint8Array(64));
+		const basicResponse = sequence([responseData, sigAlgIdentifier, fakeSig]);
+		const ocspResponseDer = sequence([
+			tlv(0x0a, Uint8Array.of(0x00)),
+			explicitContext(
+				0,
+				sequence([objectIdentifier(OIDS.ocspBasicResponse), octetString(basicResponse)]),
+			),
+		]);
+
+		expect(() => parseOcspResponseDer(ocspResponseDer)).toThrow('Duplicate OCSP extension OID');
+	});
+
+	it('parseOcspResponseDer rejects non-OCTET OCSP extension values', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'OCSP Bad Extension Value CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'OCSP Bad Extension Value CA' },
+			subject: { commonName: 'bad-extension-value-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+
+		const issuerParsed = parseCertificatePem(issuer.certificate.pem);
+		const leafParsed = parseCertificatePem(leaf.pem);
+		const issuerNameHash = new Uint8Array(sha1(hexToBytes(issuerParsed.subject.derHex)));
+		const spkiDer = issuerParsed.subjectPublicKeyInfoDer;
+		const spkiTop = childrenOf(spkiDer, readElement(spkiDer));
+		const spkiBitString = spkiTop[1];
+		const publicKeyBytes =
+			spkiBitString !== undefined ? spkiBitString.value.slice(1) : new Uint8Array(0);
+		const issuerKeyHash = new Uint8Array(sha1(publicKeyBytes));
+
+		const certId = sequence([
+			sequence([objectIdentifier(OIDS.sha1), Uint8Array.of(0x05, 0x00)]),
+			octetString(issuerNameHash),
+			octetString(issuerKeyHash),
+			tlv(0x02, hexToBytes(leafParsed.serialNumberHex)),
+		]);
+		const singleResponse = sequence([
+			certId,
+			tlv(0x80, new Uint8Array(0)),
+			generalizedTime(new Date()),
+		]);
+		const nonceExtension = sequence([objectIdentifier(OIDS.ocspNonce), integerFromNumber(1)]);
+		const responseData = sequence([
+			implicitPrimitiveContext(2, issuerKeyHash),
+			generalizedTime(new Date()),
+			sequence([singleResponse]),
+			explicitContext(1, sequence([nonceExtension])),
+		]);
+		const sigAlgIdentifier = sequence([
+			objectIdentifier(OIDS.sha256WithRSAEncryption),
+			Uint8Array.of(0x05, 0x00),
+		]);
+		const fakeSig = bitString(new Uint8Array(64));
+		const basicResponse = sequence([responseData, sigAlgIdentifier, fakeSig]);
+		const ocspResponseDer = sequence([
+			tlv(0x0a, Uint8Array.of(0x00)),
+			explicitContext(
+				0,
+				sequence([objectIdentifier(OIDS.ocspBasicResponse), octetString(basicResponse)]),
+			),
+		]);
+
+		expect(() => parseOcspResponseDer(ocspResponseDer)).toThrow(
+			'OCSP extension value must use OCTET STRING',
+		);
+	});
+
+	it('parseOcspResponseDer rejects malformed OCSP extension middle fields', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'OCSP Bad Extension Middle Field CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'OCSP Bad Extension Middle Field CA' },
+			subject: { commonName: 'bad-extension-middle-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+
+		const issuerParsed = parseCertificatePem(issuer.certificate.pem);
+		const leafParsed = parseCertificatePem(leaf.pem);
+		const issuerNameHash = new Uint8Array(sha1(hexToBytes(issuerParsed.subject.derHex)));
+		const spkiDer = issuerParsed.subjectPublicKeyInfoDer;
+		const spkiTop = childrenOf(spkiDer, readElement(spkiDer));
+		const spkiBitString = spkiTop[1];
+		const publicKeyBytes =
+			spkiBitString !== undefined ? spkiBitString.value.slice(1) : new Uint8Array(0);
+		const issuerKeyHash = new Uint8Array(sha1(publicKeyBytes));
+
+		const certId = sequence([
+			sequence([objectIdentifier(OIDS.sha1), Uint8Array.of(0x05, 0x00)]),
+			octetString(issuerNameHash),
+			octetString(issuerKeyHash),
+			tlv(0x02, hexToBytes(leafParsed.serialNumberHex)),
+		]);
+		const singleResponse = sequence([
+			certId,
+			tlv(0x80, new Uint8Array(0)),
+			generalizedTime(new Date()),
+		]);
+		const nonceExtension = sequence([
+			objectIdentifier(OIDS.ocspNonce),
+			integerFromNumber(1),
+			octetString(octetString(Uint8Array.of(0xaa, 0xbb))),
+		]);
+		const responseData = sequence([
+			implicitPrimitiveContext(2, issuerKeyHash),
+			generalizedTime(new Date()),
+			sequence([singleResponse]),
+			explicitContext(1, sequence([nonceExtension])),
+		]);
+		const sigAlgIdentifier = sequence([
+			objectIdentifier(OIDS.sha256WithRSAEncryption),
+			Uint8Array.of(0x05, 0x00),
+		]);
+		const fakeSig = bitString(new Uint8Array(64));
+		const basicResponse = sequence([responseData, sigAlgIdentifier, fakeSig]);
+		const ocspResponseDer = sequence([
+			tlv(0x0a, Uint8Array.of(0x00)),
+			explicitContext(
+				0,
+				sequence([objectIdentifier(OIDS.ocspBasicResponse), octetString(basicResponse)]),
+			),
+		]);
+
+		expect(() => parseOcspResponseDer(ocspResponseDer)).toThrow('Malformed OCSP extension');
+	});
+
+	it('parseOcspResponseDer rejects unsupported certStatus tags', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'OCSP Bad CertStatus CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'OCSP Bad CertStatus CA' },
+			subject: { commonName: 'bad-cert-status-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+
+		const issuerParsed = parseCertificatePem(issuer.certificate.pem);
+		const leafParsed = parseCertificatePem(leaf.pem);
+		const issuerNameHash = new Uint8Array(sha1(hexToBytes(issuerParsed.subject.derHex)));
+		const spkiDer = issuerParsed.subjectPublicKeyInfoDer;
+		const spkiTop = childrenOf(spkiDer, readElement(spkiDer));
+		const spkiBitString = spkiTop[1];
+		const publicKeyBytes =
+			spkiBitString !== undefined ? spkiBitString.value.slice(1) : new Uint8Array(0);
+		const issuerKeyHash = new Uint8Array(sha1(publicKeyBytes));
+
+		const certId = sequence([
+			sequence([objectIdentifier(OIDS.sha1), Uint8Array.of(0x05, 0x00)]),
+			octetString(issuerNameHash),
+			octetString(issuerKeyHash),
+			tlv(0x02, hexToBytes(leafParsed.serialNumberHex)),
+		]);
+		const singleResponse = sequence([
+			certId,
+			tlv(0x83, Uint8Array.of(0x00)),
+			generalizedTime(new Date()),
+		]);
+		const responseData = sequence([
+			implicitPrimitiveContext(2, issuerKeyHash),
+			generalizedTime(new Date()),
+			sequence([singleResponse]),
+		]);
+		const sigAlgIdentifier = sequence([
+			objectIdentifier(OIDS.sha256WithRSAEncryption),
+			Uint8Array.of(0x05, 0x00),
+		]);
+		const fakeSig = bitString(new Uint8Array(64));
+		const basicResponse = sequence([responseData, sigAlgIdentifier, fakeSig]);
+		const ocspResponseDer = sequence([
+			tlv(0x0a, Uint8Array.of(0x00)),
+			explicitContext(
+				0,
+				sequence([objectIdentifier(OIDS.ocspBasicResponse), octetString(basicResponse)]),
+			),
+		]);
+
+		expect(() => parseOcspResponseDer(ocspResponseDer)).toThrow('Unsupported OCSP certStatus tag');
+	});
+
+	it('parseOcspResponseDer rejects non-INTEGER CertID serialNumber tags', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'OCSP Bad CertID Serial CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'OCSP Bad CertID Serial CA' },
+			subject: { commonName: 'bad-certid-serial-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const response = await createOcspResponse({
+			signerPrivateKey: issuer.keyPair.privateKey,
+			signerCertificate: issuer.certificate.pem,
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: 'good',
+				},
+			],
+		});
+
+		expect(() =>
+			parseOcspResponseDer(rewriteOcspResponseCertIdSerialTag(response.der, 0x04)),
+		).toThrow('serialNumber must use INTEGER');
+	});
+
+	it('validateOcspResponse rejects invalid delegated responder chains for pre-parsed certs', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'OCSP Src CA' },
 			extensions: {
@@ -1311,13 +2949,20 @@ describe('ocsp', () => {
 				keyUsage: ['keyCertSign', 'cRLSign'],
 			},
 		});
+		const otherCa = await createSelfSignedCertificate({
+			subject: { commonName: 'Other OCSP Src CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
 		const responderKeys = await generateKeyPair();
 		const responderCert = await createCertificate({
-			issuer: { commonName: 'OCSP Src CA' },
+			issuer: { commonName: 'Other OCSP Src CA' },
 			subject: { commonName: 'OCSP Responder' },
 			publicKey: responderKeys.publicKey,
-			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
+			signerPrivateKey: otherCa.keyPair.privateKey,
+			issuerPublicKey: otherCa.keyPair.publicKey,
 			extensions: {
 				extendedKeyUsage: ['ocspSigning'],
 			},
@@ -1330,7 +2975,6 @@ describe('ocsp', () => {
 			signerPrivateKey: issuer.keyPair.privateKey,
 			issuerPublicKey: issuer.keyPair.publicKey,
 		});
-		// Create OCSP response signed by responder (not issuer)
 		const response = await createOcspResponse({
 			signerCertificate: responderCert.pem,
 			signerPrivateKey: responderKeys.privateKey,
@@ -1343,14 +2987,551 @@ describe('ocsp', () => {
 			],
 			includedCertificates: [responderCert.pem],
 		});
-		// Validate with issuerCertificate as ParsedCertificate (not PEM/DER)
 		const issuerParsed = parseCertificatePem(issuer.certificate.pem);
-		expect(
-			validateOcspResponse({
-				response: response.der,
-				issuerCertificate: issuerParsed,
-				responderCertificate: responderCert.pem,
-			}),
-		).rejects.toThrow('Responder chain validation requires PEM or DER');
+		const responderParsed = parseCertificatePem(responderCert.pem);
+		const request = await createOcspRequest({
+			requests: [{ certificate: leaf.pem, issuerCertificate: issuer.certificate.pem }],
+		});
+		const result = await validateOcspResponse({
+			response: parseOcspResponseDer(response.der),
+			issuerCertificate: issuerParsed,
+			responderCertificate: responderParsed,
+			request: parseOcspRequestPem(request.pem),
+		});
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.code).toBe('responder_chain_invalid');
+	});
+
+	it('validateOcspResponse rejects delegated responder not directly issued by issuer by default', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Indirect Responder CA' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 2 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const intermediateKeys = await generateKeyPair();
+		const intermediate = await createCertificate({
+			issuer: { commonName: 'Indirect Responder CA' },
+			subject: { commonName: 'Indirect Responder Intermediate' },
+			publicKey: intermediateKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const responderKeys = await generateKeyPair();
+		const responder = await createCertificate({
+			issuer: { commonName: 'Indirect Responder Intermediate' },
+			subject: { commonName: 'Indirect Responder' },
+			publicKey: responderKeys.publicKey,
+			signerPrivateKey: intermediateKeys.privateKey,
+			issuerPublicKey: intermediateKeys.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['ocspSigning'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Indirect Responder CA' },
+			subject: { commonName: 'indirect-responder.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const response = await createOcspResponse({
+			signerPrivateKey: responderKeys.privateKey,
+			signerCertificate: responder.pem,
+			includedCertificates: [responder.pem, intermediate.pem],
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: 'good',
+				},
+			],
+		});
+		const result = await validateOcspResponse({
+			response: response.der,
+			issuerCertificate: issuer.certificate.pem,
+			responderCertificate: responder.pem,
+		});
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.code).toBe('responder_chain_invalid');
+	});
+
+	it('validateOcspResponse allows indirect delegated responder when local policy opts in', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Allowed Indirect Responder CA' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 2 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const intermediateKeys = await generateKeyPair();
+		const intermediate = await createCertificate({
+			issuer: { commonName: 'Allowed Indirect Responder CA' },
+			subject: { commonName: 'Allowed Indirect Intermediate' },
+			publicKey: intermediateKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const responderKeys = await generateKeyPair();
+		const responder = await createCertificate({
+			issuer: { commonName: 'Allowed Indirect Intermediate' },
+			subject: { commonName: 'Allowed Indirect Responder' },
+			publicKey: responderKeys.publicKey,
+			signerPrivateKey: intermediateKeys.privateKey,
+			issuerPublicKey: intermediateKeys.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['ocspSigning'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Allowed Indirect Responder CA' },
+			subject: { commonName: 'allowed-indirect-responder.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const response = await createOcspResponse({
+			signerPrivateKey: responderKeys.privateKey,
+			signerCertificate: responder.pem,
+			includedCertificates: [responder.pem, intermediate.pem],
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: 'good',
+				},
+			],
+		});
+		const result = await validateOcspResponse({
+			response: response.der,
+			issuerCertificate: issuer.certificate.pem,
+			responderCertificate: responder.pem,
+			allowChainedResponderCertificate: true,
+		});
+		expect(result.ok).toBe(true);
 	});
 });
+
+type TestResponderIdInput =
+	| {
+			readonly type: 'byName';
+			readonly nameDer: Uint8Array;
+	  }
+	| {
+			readonly type: 'byKeyHash';
+			readonly keyHash: Uint8Array;
+	  };
+
+async function createSignedOcspResponseWithResponderId(input: {
+	readonly signerPrivateKey: CryptoKey;
+	readonly certificatePem: string;
+	readonly issuerCertificatePem: string;
+	readonly responderId: TestResponderIdInput;
+	readonly producedAt?: Date;
+	readonly thisUpdate?: Date;
+}): Promise<Uint8Array> {
+	const issuer = parseCertificatePem(input.issuerCertificatePem);
+	const certificate = parseCertificatePem(input.certificatePem);
+	const issuerNameHash = new Uint8Array(sha1(hexToBytes(issuer.subject.derHex)));
+	const issuerKeyHash = new Uint8Array(
+		sha1(extractSubjectPublicKeyBytes(issuer.subjectPublicKeyInfoDer)),
+	);
+	const certId = sequence([
+		sequence([objectIdentifier(OIDS.sha1), Uint8Array.of(0x05, 0x00)]),
+		octetString(issuerNameHash),
+		octetString(issuerKeyHash),
+		tlv(0x02, hexToBytes(certificate.serialNumberHex)),
+	]);
+	const singleResponse = sequence([
+		certId,
+		tlv(0x80, new Uint8Array(0)),
+		generalizedTime(input.thisUpdate ?? new Date('2024-01-01T00:00:00Z')),
+	]);
+	const responderId =
+		input.responderId.type === 'byName'
+			? explicitContext(1, input.responderId.nameDer)
+			: implicitPrimitiveContext(2, input.responderId.keyHash);
+	const responseData = sequence([
+		responderId,
+		generalizedTime(input.producedAt ?? new Date('2024-01-01T00:00:00Z')),
+		sequence([singleResponse]),
+	]);
+	const signatureAlgorithm = getSignatureAlgorithm(input.signerPrivateKey);
+	const signature = await signBytes(input.signerPrivateKey, signatureAlgorithm, responseData);
+	const basicResponse = sequence([
+		responseData,
+		encodeAlgorithmIdentifier(signatureAlgorithm),
+		bitString(signature),
+	]);
+	return sequence([
+		tlv(0x0a, Uint8Array.of(0x00)),
+		explicitContext(
+			0,
+			sequence([objectIdentifier(OIDS.ocspBasicResponse), octetString(basicResponse)]),
+		),
+	]);
+}
+
+async function createSignedOcspResponseWithSingleResponses(input: {
+	readonly signerPrivateKey: CryptoKey;
+	readonly responderIdDer: Uint8Array;
+	readonly singleResponses: readonly Uint8Array[];
+	readonly producedAt?: Date;
+}): Promise<Uint8Array> {
+	const responseData = sequence([
+		input.responderIdDer,
+		generalizedTime(input.producedAt ?? new Date('2024-01-01T00:00:00Z')),
+		sequence(input.singleResponses),
+	]);
+	const signatureAlgorithm = getSignatureAlgorithm(input.signerPrivateKey);
+	const signature = await signBytes(input.signerPrivateKey, signatureAlgorithm, responseData);
+	const basicResponse = sequence([
+		responseData,
+		encodeAlgorithmIdentifier(signatureAlgorithm),
+		bitString(signature),
+	]);
+	return sequence([
+		tlv(0x0a, Uint8Array.of(0x00)),
+		explicitContext(
+			0,
+			sequence([objectIdentifier(OIDS.ocspBasicResponse), octetString(basicResponse)]),
+		),
+	]);
+}
+
+async function createOcspSingleResponseWithHashAlgorithm(
+	issuerPem: string,
+	certificatePem: string,
+	hashAlgorithmOid: string,
+): Promise<Uint8Array> {
+	const issuer = parseCertificatePem(issuerPem);
+	const certificate = parseCertificatePem(certificatePem);
+	const hashName = hashAlgorithmOid === OIDS.sha256 ? 'SHA-256' : 'SHA-1';
+	const issuerNameBytes = new Uint8Array(hexToBytes(issuer.subject.derHex));
+	const subjectPublicKeyBytes = extractSubjectPublicKeyBytes(issuer.subjectPublicKeyInfoDer);
+	const issuerNameDigestInput = Uint8Array.from(issuerNameBytes);
+	const subjectPublicKeyDigestInput = Uint8Array.from(subjectPublicKeyBytes);
+	const issuerNameHash = new Uint8Array(
+		await globalThis.crypto.subtle.digest(hashName, issuerNameDigestInput),
+	);
+	const issuerKeyHash = new Uint8Array(
+		await globalThis.crypto.subtle.digest(hashName, subjectPublicKeyDigestInput),
+	);
+	return sequence([
+		sequence([
+			sequence([objectIdentifier(hashAlgorithmOid), Uint8Array.of(0x05, 0x00)]),
+			octetString(issuerNameHash),
+			octetString(issuerKeyHash),
+			tlv(0x02, hexToBytes(certificate.serialNumberHex)),
+		]),
+		tlv(0x80, new Uint8Array(0)),
+		generalizedTime(new Date('2024-01-01T00:00:00Z')),
+	]);
+}
+
+function rewriteOcspResponseCertIdSerialTag(ocspResponseDer: Uint8Array, tag: number): Uint8Array {
+	const topLevel = readSequenceChildren(ocspResponseDer);
+	const responseStatus = topLevel[0];
+	const responseBytes = topLevel[1];
+	if (responseStatus === undefined || responseBytes === undefined) {
+		throw new Error('OCSP response missing top-level fields');
+	}
+	const responseBytesSequence = childrenOf(ocspResponseDer, responseBytes)[0];
+	if (responseBytesSequence === undefined) {
+		throw new Error('OCSP response missing responseBytes sequence');
+	}
+	const responseBytesDer = sliceDer(ocspResponseDer, responseBytesSequence);
+	const responseBytesChildren = readSequenceChildren(responseBytesDer);
+	const responseType = responseBytesChildren[0];
+	const response = responseBytesChildren[1];
+	if (responseType === undefined || response === undefined) {
+		throw new Error('OCSP response missing responseType or response');
+	}
+	const basicResponseDer = response.value;
+	const basicChildren = readSequenceChildren(basicResponseDer);
+	const responseData = basicChildren[0];
+	if (responseData === undefined) {
+		throw new Error('OCSP response missing responseData');
+	}
+	const responseDataDer = sliceDer(basicResponseDer, responseData);
+	const responseDataChildren = readSequenceChildren(responseDataDer);
+	const responses = responseDataChildren[2];
+	if (responses === undefined) {
+		throw new Error('OCSP response missing responses');
+	}
+	const responseElements = childrenOf(responseDataDer, responses);
+	const firstResponse = responseElements[0];
+	if (firstResponse === undefined) {
+		throw new Error('OCSP response missing SingleResponse');
+	}
+	const firstResponseDer = sliceDer(responseDataDer, firstResponse);
+	const firstResponseChildren = readSequenceChildren(firstResponseDer);
+	const certId = firstResponseChildren[0];
+	if (certId === undefined) {
+		throw new Error('OCSP response missing CertID');
+	}
+	const certIdDer = sliceDer(firstResponseDer, certId);
+	const certIdChildren = readSequenceChildren(certIdDer);
+	const serialNumber = certIdChildren[3];
+	if (serialNumber === undefined) {
+		throw new Error('OCSP response missing serialNumber');
+	}
+	const rebuiltCertId = sequence(
+		certIdChildren.map((child: ReturnType<typeof readElement>, index: number) =>
+			index === 3 ? tlv(tag, child.value) : sliceDer(certIdDer, child),
+		),
+	);
+	const rebuiltFirstResponse = sequence([
+		rebuiltCertId,
+		...firstResponseChildren
+			.slice(1)
+			.map((child: ReturnType<typeof readElement>) => sliceDer(firstResponseDer, child)),
+	]);
+	const rebuiltResponses = sequence([
+		rebuiltFirstResponse,
+		...responseElements
+			.slice(1)
+			.map((entry: ReturnType<typeof readElement>) => sliceDer(responseDataDer, entry)),
+	]);
+	const rebuiltResponseData = sequence(
+		responseDataChildren.map((child: ReturnType<typeof readElement>, index: number) =>
+			index === 2 ? rebuiltResponses : sliceDer(responseDataDer, child),
+		),
+	);
+	const rebuiltBasicResponse = sequence([
+		rebuiltResponseData,
+		...basicChildren
+			.slice(1)
+			.map((child: ReturnType<typeof readElement>) => sliceDer(basicResponseDer, child)),
+	]);
+	const rebuiltResponseBytes = sequence([
+		sliceDer(responseBytesDer, responseType),
+		octetString(rebuiltBasicResponse),
+	]);
+	return sequence([
+		sliceDer(ocspResponseDer, responseStatus),
+		explicitContext(0, rebuiltResponseBytes),
+	]);
+}
+
+function rewriteOcspRequestTbs(
+	ocspRequestDer: Uint8Array,
+	insertedFields: readonly Uint8Array[],
+): Uint8Array {
+	const topLevel = readSequenceChildren(ocspRequestDer);
+	const tbsRequest = topLevel[0];
+	if (tbsRequest === undefined) {
+		throw new Error('OCSP request missing tbsRequest');
+	}
+	const tbsRequestDer = sliceDer(ocspRequestDer, tbsRequest);
+	const tbsChildren = readSequenceChildren(tbsRequestDer);
+	const requestListIndex = tbsChildren[0]?.tag === 0xa0 ? 1 : 0;
+	const rebuiltTbsRequest = sequence([
+		...tbsChildren.slice(0, requestListIndex).map((child) => sliceDer(tbsRequestDer, child)),
+		...insertedFields,
+		...tbsChildren.slice(requestListIndex).map((child) => sliceDer(tbsRequestDer, child)),
+	]);
+	return sequence([
+		rebuiltTbsRequest,
+		...topLevel.slice(1).map((child) => sliceDer(ocspRequestDer, child)),
+	]);
+}
+
+function rewriteOcspRequestOptionalSignature(
+	ocspRequestDer: Uint8Array,
+	optionalSignatureDer: Uint8Array,
+): Uint8Array {
+	const topLevel = readSequenceChildren(ocspRequestDer);
+	const tbsRequest = topLevel[0];
+	if (tbsRequest === undefined) {
+		throw new Error('OCSP request missing tbsRequest');
+	}
+	return sequence([sliceDer(ocspRequestDer, tbsRequest), optionalSignatureDer]);
+}
+
+function duplicateFirstOcspSingleResponse(ocspResponseDer: Uint8Array): Uint8Array {
+	const topLevel = readSequenceChildren(ocspResponseDer);
+	const responseStatus = topLevel[0];
+	const responseBytes = topLevel[1];
+	if (responseStatus === undefined || responseBytes === undefined) {
+		throw new Error('OCSP response missing top-level fields');
+	}
+	const responseBytesSequence = childrenOf(ocspResponseDer, responseBytes)[0];
+	if (responseBytesSequence === undefined) {
+		throw new Error('OCSP response missing responseBytes sequence');
+	}
+	const responseBytesDer = sliceDer(ocspResponseDer, responseBytesSequence);
+	const responseBytesChildren = readSequenceChildren(responseBytesDer);
+	const responseType = responseBytesChildren[0];
+	const response = responseBytesChildren[1];
+	if (responseType === undefined || response === undefined) {
+		throw new Error('OCSP response missing responseType or response');
+	}
+	const basicResponseDer = response.value;
+	const basicChildren = readSequenceChildren(basicResponseDer);
+	const responseData = basicChildren[0];
+	if (responseData === undefined) {
+		throw new Error('OCSP response missing responseData');
+	}
+	const responseDataDer = sliceDer(basicResponseDer, responseData);
+	const responseDataChildren = readSequenceChildren(responseDataDer);
+	const responses = responseDataChildren[2];
+	if (responses === undefined) {
+		throw new Error('OCSP response missing responses');
+	}
+	const responseElements = childrenOf(responseDataDer, responses);
+	const firstResponse = responseElements[0];
+	if (firstResponse === undefined) {
+		throw new Error('OCSP response missing SingleResponse');
+	}
+	const firstResponseDer = sliceDer(responseDataDer, firstResponse);
+	const rebuiltResponses = sequence([
+		firstResponseDer,
+		firstResponseDer,
+		...responseElements
+			.slice(1)
+			.map((entry: ReturnType<typeof readElement>) => sliceDer(responseDataDer, entry)),
+	]);
+	const rebuiltResponseData = sequence(
+		responseDataChildren.map((child: ReturnType<typeof readElement>, index: number) =>
+			index === 2 ? rebuiltResponses : sliceDer(responseDataDer, child),
+		),
+	);
+	const rebuiltBasicResponse = sequence([
+		rebuiltResponseData,
+		...basicChildren
+			.slice(1)
+			.map((child: ReturnType<typeof readElement>) => sliceDer(basicResponseDer, child)),
+	]);
+	const rebuiltResponseBytes = sequence([
+		sliceDer(responseBytesDer, responseType),
+		octetString(rebuiltBasicResponse),
+	]);
+	return sequence([
+		sliceDer(ocspResponseDer, responseStatus),
+		explicitContext(0, rebuiltResponseBytes),
+	]);
+}
+
+function rewriteOcspResponseResponderId(
+	ocspResponseDer: Uint8Array,
+	responderIdDer: Uint8Array,
+): Uint8Array {
+	return rewriteOcspResponseData(ocspResponseDer, (responseDataDer, responseDataChildren) =>
+		sequence(
+			responseDataChildren.map((child: ReturnType<typeof readElement>, index: number) =>
+				index === 0 ? responderIdDer : sliceDer(responseDataDer, child),
+			),
+		),
+	);
+}
+
+function rewriteOcspResponseNextUpdate(
+	ocspResponseDer: Uint8Array,
+	nextUpdateDer: Uint8Array,
+): Uint8Array {
+	return rewriteOcspResponseData(ocspResponseDer, (responseDataDer, responseDataChildren) => {
+		const responses = responseDataChildren[2];
+		if (responses === undefined) {
+			throw new Error('OCSP response missing responses');
+		}
+		const responseElements = childrenOf(responseDataDer, responses);
+		const firstResponse = responseElements[0];
+		if (firstResponse === undefined) {
+			throw new Error('OCSP response missing SingleResponse');
+		}
+		const firstResponseDer = sliceDer(responseDataDer, firstResponse);
+		const firstResponseChildren = readSequenceChildren(firstResponseDer);
+		const rebuiltFirstResponse = sequence([
+			...firstResponseChildren.slice(0, 3).map((child) => sliceDer(firstResponseDer, child)),
+			nextUpdateDer,
+			...firstResponseChildren.slice(4).map((child) => sliceDer(firstResponseDer, child)),
+		]);
+		const rebuiltResponses = sequence([
+			rebuiltFirstResponse,
+			...responseElements
+				.slice(1)
+				.map((entry: ReturnType<typeof readElement>) => sliceDer(responseDataDer, entry)),
+		]);
+		return sequence(
+			responseDataChildren.map((child: ReturnType<typeof readElement>, index: number) =>
+				index === 2 ? rebuiltResponses : sliceDer(responseDataDer, child),
+			),
+		);
+	});
+}
+
+function rewriteOcspResponseData(
+	ocspResponseDer: Uint8Array,
+	rewrite: (
+		responseDataDer: Uint8Array,
+		responseDataChildren: readonly ReturnType<typeof readElement>[],
+	) => Uint8Array,
+): Uint8Array {
+	const topLevel = readSequenceChildren(ocspResponseDer);
+	const responseStatus = topLevel[0];
+	const responseBytes = topLevel[1];
+	if (responseStatus === undefined || responseBytes === undefined) {
+		throw new Error('OCSP response missing top-level fields');
+	}
+	const responseBytesSequence = childrenOf(ocspResponseDer, responseBytes)[0];
+	if (responseBytesSequence === undefined) {
+		throw new Error('OCSP response missing responseBytes sequence');
+	}
+	const responseBytesDer = sliceDer(ocspResponseDer, responseBytesSequence);
+	const responseBytesChildren = readSequenceChildren(responseBytesDer);
+	const responseType = responseBytesChildren[0];
+	const response = responseBytesChildren[1];
+	if (responseType === undefined || response === undefined) {
+		throw new Error('OCSP response missing responseType or response');
+	}
+	const basicResponseDer = response.value;
+	const basicChildren = readSequenceChildren(basicResponseDer);
+	const responseData = basicChildren[0];
+	if (responseData === undefined) {
+		throw new Error('OCSP response missing responseData');
+	}
+	const responseDataDer = sliceDer(basicResponseDer, responseData);
+	const responseDataChildren = readSequenceChildren(responseDataDer);
+	const rebuiltResponseData = rewrite(responseDataDer, responseDataChildren);
+	const rebuiltBasicResponse = sequence([
+		rebuiltResponseData,
+		...basicChildren
+			.slice(1)
+			.map((child: ReturnType<typeof readElement>) => sliceDer(basicResponseDer, child)),
+	]);
+	const rebuiltResponseBytes = sequence([
+		sliceDer(responseBytesDer, responseType),
+		octetString(rebuiltBasicResponse),
+	]);
+	return sequence([
+		sliceDer(ocspResponseDer, responseStatus),
+		explicitContext(0, rebuiltResponseBytes),
+	]);
+}
+
+function sliceDer(source: Uint8Array, element: ReturnType<typeof readElement>): Uint8Array {
+	return source.slice(element.start - element.headerLength, element.end);
+}
+
+function extractSubjectPublicKeyBytes(spkiDer: Uint8Array): Uint8Array {
+	const top = childrenOf(spkiDer, readElement(spkiDer));
+	const bitStringElement = top[1];
+	if (bitStringElement === undefined) {
+		throw new Error('SPKI missing subjectPublicKey BIT STRING');
+	}
+	return bitStringElement.value.slice(1);
+}

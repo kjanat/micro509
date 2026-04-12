@@ -1,0 +1,123 @@
+name: Publish
+
+on:
+  push: { tags: ["v*.*.*"] }
+  pull_request: { branches: [master] }
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  validate:
+    name: Validate version
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: { contents: read }
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      is_tag: ${{ steps.version.outputs.is_tag }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+      is_stable: ${{ steps.version.outputs.is_stable }}
+      mode: ${{ steps.version.outputs.mode }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/release-validate
+        id: version
+        with:
+          event-name: ${{ github.event_name }}
+          ref-name: ${{ github.ref_name }}
+
+  publish-jsr:
+    name: JSR (${{ needs.validate.outputs.mode }})
+    needs: [validate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions: { contents: read, id-token: write }
+    environment:
+      name: ${{ needs.validate.outputs.is_tag == 'true' && 'jsr' || '' }}
+      url: ${{ needs.validate.outputs.is_tag == 'true' && format('https://jsr.io/@kjanat/micro509/{0}', needs.validate.outputs.version) || '' }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-ts
+        with: { install-bun: "true" }
+      - run: |
+          PKG_NAME="$(jq -r '.name' jsr.json)"
+          PKG_VERSION="$(jq -r '.version' jsr.json)"
+
+          if [[ "${DRY_RUN}" != "true" ]]; then
+            PUBLISHED=$(curl -sf "https://jsr.io/${PKG_NAME}/meta.json" \
+              | jq -r ".versions[\"${PKG_VERSION}\"] // empty" || true)
+            if [[ -n "${PUBLISHED}" ]]; then
+              echo "::notice::${PKG_NAME}@${PKG_VERSION} already on JSR, skipping"
+              exit 0
+            fi
+            bunx --bun jsr publish
+            exit $?
+          fi
+          bunx --bun jsr publish --dry-run
+        env: { DRY_RUN: "${{ needs.validate.outputs.is_tag != 'true' }}" }
+
+  publish-npm:
+    name: npm (${{ needs.validate.outputs.mode }})
+    needs: [validate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions: { contents: read, id-token: write }
+    environment:
+      name: ${{ needs.validate.outputs.is_tag == 'true' && 'npm' || '' }}
+      url: ${{ needs.validate.outputs.is_tag == 'true' && format('https://www.npmjs.com/package/micro509/v/{0}', needs.validate.outputs.version) || '' }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup-ts
+        with: { install-bun: "true", install-node: "true", update-npm: "true" }
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - run: |
+          PKG_NAME="$(jq -r '.name' package.json)"
+          PKG_VERSION="$(jq -r '.version' package.json)"
+
+          if [[ "${DRY_RUN}" != "true" ]]; then
+            PUBLISHED=$(npm view "${PKG_NAME}" versions --json 2>/dev/null \
+              | jq -r ".[] | select(. == \"${PKG_VERSION}\")" || true)
+            if [[ -n "${PUBLISHED}" ]]; then
+              echo "::notice::${PKG_NAME}@${PKG_VERSION} already on npm, skipping"
+              exit 0
+            fi
+
+            PUBLISH_ARGS=(--provenance --access public)
+            if [[ "${IS_PRERELEASE}" == "true" ]]; then
+              PUBLISH_ARGS+=(--tag beta)
+            fi
+            npm publish "${PUBLISH_ARGS[@]}"
+            exit $?
+          fi
+          npm publish --dry-run
+        env:
+          NODE_AUTH_TOKEN: ${{ needs.validate.outputs.is_tag == 'true' && secrets.NPM_TOKEN || '' }}
+          DRY_RUN: "${{ needs.validate.outputs.is_tag != 'true' }}"
+          IS_PRERELEASE: "${{ needs.validate.outputs.prerelease }}"
+
+  release:
+    name: GitHub Release
+    needs: [validate, publish-jsr, publish-npm]
+    if: needs.validate.outputs.is_tag == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: { contents: write }
+    steps:
+      - name: Publish GitHub Release
+        run: |
+          RELEASE_ARGS=()
+          if [[ "${PRERELEASE}" == "true" ]]; then
+            RELEASE_ARGS+=(--prerelease)
+          fi
+
+          gh release edit "${TAG}" --repo "${REPO}" --draft=false "${RELEASE_ARGS[@]}" 2>/dev/null \
+          || gh release create "${TAG}" --repo "${REPO}" --generate-notes "${RELEASE_ARGS[@]}"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          PRERELEASE: ${{ needs.validate.outputs.prerelease }}

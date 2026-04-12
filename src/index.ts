@@ -1,52 +1,90 @@
-export {
-	type CertificateMaterial,
-	type CreateCertificateInput,
-	type CreateSelfSignedCertificateInput,
-	createCertificate,
-	createSelfSignedCertificate,
-	type SelfSignedCertificateResult,
-	type ValidityInput,
-} from './certificate.ts';
-export {
-	type CertificateRevocationListMaterial,
-	type CreateCertificateRevocationListInput,
-	type CrlCertificateSource,
-	type CrlSource,
-	createCertificateRevocationList,
-	isCertificateRevoked,
-	type ParsedCertificateRevocationList,
-	type ParsedRevokedCertificate,
-	parseCertificateRevocationListDer,
-	parseCertificateRevocationListPem,
-	type RevokedCertificateInput,
-	type ValidateCertificateRevocationListInput,
-	type ValidateCertificateRevocationListResult,
-	type VerifyCertificateRevocationListResult,
-	validateCertificateRevocationList,
-	verifyCertificateRevocationList,
-} from './crl.ts';
-export { type CreateCsrInput, type CsrMaterial, createCertificateSigningRequest } from './csr.ts';
+/**
+ * Stable root import for `micro509`.\
+ * Re-exports the common certificate, parsing, verification, revocation, key, and PKCS
+ * workflows from one package entrypoint.
+ *
+ * Reach for this module when you want the default workflow-first package surface.
+ * Use domain entrypoints such as `micro509/x509`, `micro509/verify`, and
+ * `micro509/revocation` when you need exhaustive advanced types.
+ *
+ * The root export is organized around common PKI flows:
+ *
+ * - create certificates, CSRs, CRLs, OCSP responses, PKCS#7, and PFX artifacts
+ * - parse DER or PEM inputs into typed certificate and request shapes
+ * - verify certificate chains, service identities, CRLs, OCSP, and signed data
+ * - import, export, generate, and encrypt key material with WebCrypto-safe algorithms
+ * - work with the common extension inputs, revocation evidence, and validation results
+ *
+ * Advanced PKCS#12 MAC plumbing, signature profile tuning, and other domain-specific helper
+ * types stay in their owner domains instead of being headlined here.
+ *
+ * @example
+ * ```ts
+ * import {
+ * 	createSelfSignedCertificate,
+ * 	parseCertificatePem,
+ * 	verifyCertificateChain,
+ * } from 'micro509';
+ *
+ * const { certificate } = await createSelfSignedCertificate({
+ * 	subject: { commonName: 'example.com' },
+ * 	algorithm: { kind: 'ecdsa', namedCurve: 'P-256' },
+ * });
+ *
+ * const parsed = parseCertificatePem(certificate.pem);
+ * // parsed.subject.values.commonName === 'example.com'
+ *
+ * const result = await verifyCertificateChain({
+ * 	leaf: certificate.pem,
+ * 	roots: [certificate.pem],
+ * 	allowSelfSignedLeaf: true,
+ * });
+ * // result.ok === true
+ * ```
+ *
+ * @example
+ * ```ts
+ * import {
+ * 	generateKeyPair,
+ * 	parseCertificateSigningRequestPem,
+ * 	createCertificateSigningRequest,
+ * } from 'micro509';
+ *
+ * const keyPair = await generateKeyPair({ kind: 'ecdsa', namedCurve: 'P-256' });
+ * const csr = await createCertificateSigningRequest({
+ * 	subject: { commonName: 'example.com' },
+ * 	publicKey: keyPair.publicKey,
+ * 	signerPrivateKey: keyPair.privateKey,
+ * });
+ *
+ * const parsed = parseCertificateSigningRequestPem(csr.pem);
+ * // parsed.subject.values.commonName === 'example.com'
+ * ```
+ * @module micro509
+ */
+
+// ── keys ─────────────────────────────────────────────────────────────
 export type {
-	AuthorityInfoAccessMethod,
-	AuthorityInformationAccess,
-	BasicConstraints,
-	CertificateExtensionsInput,
-	CustomAuthorityInfoAccessMethod,
-	CustomExtendedKeyUsage,
-	CustomExtension,
-	ExtendedKeyUsage,
-	GeneralSubtree,
-	KeyUsage,
-	KnownAuthorityInfoAccessMethod,
-	KnownExtendedKeyUsage,
-	NameConstraintForm,
-	NameConstraints,
-	SubjectAltName,
-} from './extensions.ts';
+	EcKeyAlgorithmInput,
+	EcNamedCurve,
+	Ed25519KeyAlgorithmInput,
+	EncryptedPkcs8Options,
+	ImportEcPublicKeyInput,
+	ImportEd25519PublicKeyInput,
+	ImportRsaPublicKeyInput,
+	KeyAlgorithmInput,
+	KeyPairMaterial,
+	LegacyPemEncryptionOptions,
+	Pbes2EncryptionOptions,
+	Pbes2EncryptionScheme,
+	Pbes2Prf,
+	PrivateKeyImportInput,
+	PublicKeyImportInput,
+	RsaHash,
+	RsaKeyAlgorithmInput,
+	RsaScheme,
+} from './keys/index.ts';
 export {
-	type EcKeyAlgorithmInput,
-	type Ed25519KeyAlgorithmInput,
-	type EncryptedPkcs8Options,
 	exportBinaryBase64,
 	exportEncryptedPkcs1Pem,
 	exportEncryptedPkcs8Der,
@@ -63,9 +101,6 @@ export {
 	exportSpkiDer,
 	exportSpkiPem,
 	generateKeyPair,
-	type ImportEcPublicKeyInput,
-	type ImportEd25519PublicKeyInput,
-	type ImportRsaPublicKeyInput,
 	importEncryptedPkcs1Pem,
 	importEncryptedPkcs8Der,
 	importEncryptedPkcs8Pem,
@@ -82,138 +117,191 @@ export {
 	importSpkiBase64,
 	importSpkiDer,
 	importSpkiPem,
-	type KeyAlgorithmInput,
-	type KeyPairMaterial,
-	type LegacyPemEncryptionOptions,
-	type PrivateKeyImportInput,
-	type PublicKeyImportInput,
-	type RsaKeyAlgorithmInput,
-} from './keys.ts';
-export type { NameAttribute, NameFieldKey, NameInput, NameObject } from './name.ts';
+} from './keys/index.ts';
+
+// ── pem ──────────────────────────────────────────────────────────────
+export type { CategorizedPemBlocks, PemBlock } from './pem/index.ts';
+export { categorizePemBlocks, pemDecode, pemEncode, splitPemBlocks } from './pem/index.ts';
+
+// ── pkcs ─────────────────────────────────────────────────────────────
+export type {
+	CreatePfxInput,
+	ParsedPfx,
+	ParsedPfxAttribute,
+	ParsedPfxBag,
+	ParsedPfxBagAttributes,
+	ParsedPkcs7SignedData,
+	ParsedPkcs7SignerInfo,
+	ParsePfxErrorCode,
+	ParsePfxFailure,
+	ParsePfxOptions,
+	ParsePfxResult,
+	ParsePkcs7CertBagResult,
+	ParsePkcs7ErrorCode,
+	ParsePkcs7Failure,
+	ParsePkcs7SignedDataResult,
+	PfxBagAttributesInput,
+	PfxCertificateBagInput,
+	PfxCertificateSource,
+	PfxEncryptionOptions,
+	PfxMaterial,
+	PfxPrivateKeyBagInput,
+	PfxPrivateKeySource,
+	Pkcs7CertBag,
+	Pkcs7CertificateSource,
+	VerifyPkcs7SignedDataFailure,
+	VerifyPkcs7SignedDataResult,
+} from './pkcs/index.ts';
 export {
-	type CreateOcspRequestInput,
-	type CreateOcspRequestItemInput,
-	type CreateOcspResponseInput,
-	type CreateOcspSingleResponseInput,
-	createOcspRequest,
-	createOcspResponse,
-	type OcspCertificateSource,
-	type OcspCertStatus,
-	type OcspHashAlgorithm,
-	type OcspRequestMaterial,
-	type OcspResponseMaterial,
-	type OcspResponseStatus,
-	type ParsedOcspCertId,
-	type ParsedOcspRequest,
-	type ParsedOcspResponse,
-	type ParsedOcspSingleResponse,
-	parseOcspRequestDer,
-	parseOcspRequestPem,
-	parseOcspResponseDer,
-	parseOcspResponsePem,
-	type ValidateOcspResponseInput,
-	type ValidateOcspResponseResult,
-	type VerifyOcspResponseResult,
-	validateOcspResponse,
-	verifyOcspResponse,
-} from './ocsp.ts';
-export {
-	type DecodedExtensionMap,
-	type DecodedExtensionValue,
-	decodeExtension,
-	decodeExtensionMap,
-	decodeExtensions,
-	defineExtensionDecoder,
-	defineExtensionDecoderMap,
-	type ExtensionDecoder,
-	type ExtensionDecoderMap,
-	findExtension,
-	type ParsedCertificate,
-	type ParsedCertificateSigningRequest,
-	type ParsedExtension,
-	type ParsedName,
-	type ParsedNameAttribute,
-	type ParseOptions,
-	parseCertificateChainPem,
-	parseCertificateDer,
-	parseCertificatePem,
-	parseCertificateSigningRequestDer,
-	parseCertificateSigningRequestPem,
-} from './parse.ts';
-export {
-	type CategorizedPemBlocks,
-	categorizePemBlocks,
-	type PemBlock,
-	pemDecode,
-	pemEncode,
-	splitPemBlocks,
-} from './pem.ts';
-export {
-	type CreatePfxInput,
 	createPfx,
-	type ParsedPfx,
-	type ParsedPfxAttribute,
-	type ParsedPfxBag,
-	type ParsedPfxBagAttributes,
-	type ParsePfxErrorCode,
-	type ParsePfxResult,
-	type PfxBagAttributesInput,
-	type PfxCertificateBagInput,
-	type PfxCertificateSource,
-	type PfxMaterial,
-	type PfxPrivateKeyBagInput,
-	type PfxPrivateKeySource,
-	parsePfxDer,
-	parsePfxPem,
-} from './pfx.ts';
-export {
 	createPkcs7CertBagDer,
 	createPkcs7CertBagPem,
-	type ParsedPkcs7SignedData,
-	type ParsedPkcs7SignerInfo,
-	type ParsePkcs7CertBagResult,
-	type ParsePkcs7ErrorCode,
-	type ParsePkcs7SignedDataResult,
-	type Pkcs7CertBag,
-	type Pkcs7CertificateSource,
+	parsePfxDer,
+	parsePfxPem,
 	parsePkcs7CertBagDer,
 	parsePkcs7CertBagPem,
 	parsePkcs7SignedDataDer,
 	parsePkcs7SignedDataPem,
-	type VerifyPkcs7SignedDataResult,
 	verifyPkcs7SignedData,
-} from './pkcs7.ts';
+} from './pkcs/index.ts';
+
+// ── result ───────────────────────────────────────────────────────────
+export type {
+	ErrorResult,
+	IndexedErrorResult,
+	IndexedMicro509Error,
+	Micro509Error,
+	Result,
+} from './result/index.ts';
+
+// ── revocation ───────────────────────────────────────────────────────
+export type {
+	CertificateRevocationListMaterial,
+	CertificateRevocationStatus,
+	CheckCertificateRevocationAgainstCrlInput,
+	CheckCertificateRevocationAgainstCrlResult,
+	CheckCertificateRevocationInput,
+	CheckCertificateRevocationResult,
+	CheckChainRevocationInput,
+	CheckChainRevocationResult,
+	CheckChainRevocationValue,
+	ConfiguredOcspResponder,
+	CreateCertificateRevocationListInput,
+	CreateOcspRequestInput,
+	CreateOcspRequestItemInput,
+	CreateOcspResponseInput,
+	CreateOcspSingleResponseInput,
+	CrlCertificateSource,
+	CrlSource,
+	OcspCertificateSource,
+	OcspCertStatus,
+	OcspRequestMaterial,
+	OcspRequestSource,
+	OcspResponderCandidate,
+	OcspResponderSource,
+	OcspResponseMaterial,
+	ParsedCertificateRevocationList,
+	ParsedOcspCertId,
+	ParsedOcspRequest,
+	ParsedOcspResponderId,
+	ParsedOcspResponse,
+	ParsedOcspSingleResponse,
+	ParsedRevokedCertificate,
+	ResolveOcspResponderCandidatesInput,
+	RevocationCertificateSource,
+	RevocationCrlEvidenceInput,
+	RevocationEvidenceInput,
+	RevocationEvidenceKind,
+	RevocationExecutionError,
+	RevocationIndeterminateReason,
+	RevocationOcspEvidenceInput,
+	RevocationPolicy,
+	RevocationReason,
+	RevocationSource,
+	RevocationStatus,
+	RevokedCertificateInput,
+	ValidateCertificateRevocationListFailure,
+	ValidateCertificateRevocationListInput,
+	ValidateCertificateRevocationListResult,
+	ValidateOcspResponseFailure,
+	ValidateOcspResponseInput,
+	ValidateOcspResponseResult,
+	VerifyCertificateRevocationListFailure,
+	VerifyCertificateRevocationListResult,
+	VerifyOcspResponseFailure,
+	VerifyOcspResponseResult,
+} from './revocation/index.ts';
 export {
-	createPkcs12MacData,
-	type ParsedPkcs12MacData,
-	type Pkcs12MacOptions,
-	parsePkcs12MacData,
-} from './pkcs12-mac.ts';
+	checkCertificateRevocation,
+	checkCertificateRevocationAgainstCrl,
+	checkChainRevocation,
+	createCertificateRevocationList,
+	createOcspRequest,
+	createOcspResponse,
+	getCertificateOcspResponderUris,
+	isCertificateRevoked,
+	parseCertificateRevocationListDer,
+	parseCertificateRevocationListPem,
+	parseOcspRequestDer,
+	parseOcspRequestPem,
+	parseOcspResponseDer,
+	parseOcspResponsePem,
+	resolveOcspResponderCandidates,
+	validateCertificateRevocationList,
+	validateOcspResponse,
+	verifyCertificateRevocationList,
+	verifyOcspResponse,
+} from './revocation/index.ts';
+
+// ── verify ───────────────────────────────────────────────────────────
+export type {
+	BuildCandidatePathInput,
+	BuildCandidatePathResult,
+	CandidatePath,
+	CertificateSource,
+	ChainRevocationInput,
+	CsrSource,
+	DnsServiceIdentityInput,
+	EkuCheckFailure,
+	EkuCheckPurpose,
+	EkuCheckResult,
+	InitialNameConstraintsInput,
+	IpServiceIdentityInput,
+	MatchServiceIdentityErrorCode,
+	MatchServiceIdentityFailure,
+	MatchServiceIdentityInput,
+	MatchServiceIdentityResult,
+	MatchServiceIdentitySuccess,
+	PolicyValidationInput,
+	ServiceIdentityInput,
+	ServiceIdentityType,
+	SrvServiceIdentityInput,
+	TrustAnchor,
+	UriServiceIdentityInput,
+	ValidateCandidatePathInput,
+	ValidateCandidatePathResult,
+	ValidateCandidatePathSuccess,
+	ValidateForCaInput,
+	ValidateForCodeSigningInput,
+	ValidateForTlsClientInput,
+	ValidateForTlsServerInput,
+	VerifiedCertificateChain,
+	VerifyCertificateChainInput,
+	VerifyChainFailure,
+	VerifyChainResult,
+	VerifyErrorCode,
+	VerifyFailureDetails,
+	VerifyPurpose,
+	VerifyRequestFailure,
+	VerifyRequestResult,
+	VerifyServiceIdentityInput,
+} from './verify/index.ts';
 export {
-	type BuildCandidatePathInput,
-	type BuildCandidatePathResult,
 	buildCandidatePath,
-	type CandidatePath,
-	type CertificateSource,
-	type CsrSource,
 	checkExtendedKeyUsage,
-	type EkuCheckPurpose,
-	type EkuCheckResult,
-	type TrustAnchor,
+	matchCertificateServiceIdentity,
+	matchServiceIdentity,
 	trustAnchorFromCertificate,
-	type ValidateCandidatePathInput,
-	type ValidateCandidatePathResult,
-	type ValidateForCaInput,
-	type ValidateForCodeSigningInput,
-	type ValidateForTlsClientInput,
-	type ValidateForTlsServerInput,
-	type VerifiedCertificateChain,
-	type VerifyCertificateChainInput,
-	type VerifyChainResult,
-	type VerifyErrorCode,
-	type VerifyFailureDetails,
-	type VerifyPurpose,
-	type VerifyRequestResult,
 	validateCandidatePath,
 	validateForCa,
 	validateForCodeSigning,
@@ -221,4 +309,72 @@ export {
 	validateForTlsServer,
 	verifyCertificateChain,
 	verifyCertificateSigningRequest,
-} from './verify.ts';
+} from './verify/index.ts';
+
+// ── x509 ─────────────────────────────────────────────────────────────
+export type {
+	AuthorityInformationAccess,
+	BasicConstraints,
+	CertificateExtensionsInput,
+	CertificateMaterial,
+	CertificatePolicies,
+	CreateCertificateInput,
+	CreateCsrInput,
+	CreateSelfSignedCertificateInput,
+	CsrMaterial,
+	DecodedExtensionMap,
+	DecodedExtensionValue,
+	DistributionPoint,
+	DistributionPointName,
+	ExtendedKeyUsage,
+	ExtensionDecoder,
+	ExtensionDecoderMap,
+	GeneralName,
+	GeneralSubtree,
+	InhibitAnyPolicy,
+	IssuingDistributionPoint,
+	KeyUsage,
+	NameAttribute,
+	NameConstraintForm,
+	NameConstraints,
+	NameFieldKey,
+	NameInput,
+	NameObject,
+	ParsedBitFlags,
+	ParsedCertificate,
+	ParsedCertificateSigningRequest,
+	ParsedDistributionPoint,
+	ParsedDistributionPointName,
+	ParsedExtension,
+	ParsedIssuingDistributionPoint,
+	ParsedName,
+	ParsedNameAttribute,
+	ParsedNameConstraintForm,
+	ParsedRelativeDistinguishedName,
+	ParseOptions,
+	PolicyConstraints,
+	PolicyInformation,
+	PolicyMapping,
+	PolicyMappings,
+	PolicyQualifierInfo,
+	RelativeDistinguishedNameInput,
+	SelfSignedCertificateResult,
+	SubjectAltName,
+	ValidityInput,
+} from './x509/index.ts';
+export {
+	createCertificate,
+	createCertificateSigningRequest,
+	createSelfSignedCertificate,
+	decodeExtension,
+	decodeExtensionMap,
+	decodeExtensions,
+	defineExtensionDecoder,
+	defineExtensionDecoderMap,
+	findExtension,
+	parseCertificateChainPem,
+	parseCertificateDer,
+	parseCertificatePem,
+	parseCertificateSigningRequestDer,
+	parseCertificateSigningRequestPem,
+} from './x509/index.ts';

@@ -1,14 +1,34 @@
 import { describe, expect, it } from 'bun:test';
+import { createPkcs12MacData, parsePkcs12MacData } from 'micro509/pkcs';
 import {
+	buildCertificateExtensions,
+	encodeCertificatePolicies,
+	encodeCrlDistributionPoints,
+	encodeNameConstraints,
+	encodePolicyMappings,
+	encodeSubjectAltName,
+} from 'micro509/x509';
+import {
+	decodeBoolean,
 	decodeIntegerNumber,
+	decodeNonNegativeIntegerNumber,
 	decodeObjectIdentifier,
+	decodeString,
 	extractBitStringValue,
+	hexToBytes,
 	parseTime,
 	requireElement,
-} from '#micro509/asn1.ts';
+} from '#micro509/internal/asn1/asn1.ts';
 import {
+	assertDerMaxDepth,
 	bitString,
+	DEFAULT_MAX_DER_DEPTH,
+	encodeLength,
+	explicitContext,
+	generalizedTime,
 	ia5String,
+	implicitConstructedContext,
+	implicitPrimitiveContext,
 	integer,
 	integerFromNumber,
 	nullValue,
@@ -20,22 +40,48 @@ import {
 	sequence,
 	setOf,
 	time,
-} from '#micro509/der.ts';
-import { buildCertificateExtensions, encodeSubjectAltName } from '#micro509/extensions.ts';
-import { OIDS } from '#micro509/oids.ts';
-import { parsePbes2AlgorithmIdentifier } from '#micro509/pbes2.ts';
-import { createPkcs12MacData, parsePkcs12MacData } from '#micro509/pkcs12-mac.ts';
+	tlv,
+	utcTime,
+} from '#micro509/internal/asn1/der.ts';
+import { OIDS } from '#micro509/internal/asn1/oids.ts';
+import {
+	describeHashAlgorithm,
+	describeSignatureAlgorithm,
+} from '#micro509/internal/crypto/algorithm-names.ts';
+import { parsePbes2AlgorithmIdentifier } from '#micro509/internal/crypto/pbes2.ts';
+import {
+	encodeRsaPssParameters,
+	parseRsaPssParameters,
+	rsaPssParametersForHash,
+} from '#micro509/internal/crypto/rsa-pss.ts';
 import {
 	alternateEcdsaSignatureEncoding,
 	concatFixedWidth,
 	curveBytes,
 	derEcdsaSignatureToRaw,
 	getVerifySignatureConfig,
+	getVerifySignatureConfigResult,
 	rawEcdsaSignatureToDer,
 	requireEcPublicKey,
 	requireRsaPublicKey,
-} from '#micro509/sig-verify.ts';
-import { encodeAlgorithmIdentifier, getSignatureAlgorithm } from '#micro509/signing.ts';
+	verifySignedDataDetailed,
+} from '#micro509/internal/crypto/sig-verify.ts';
+import {
+	encodeAlgorithmIdentifier,
+	getSignatureAlgorithm,
+} from '#micro509/internal/crypto/signing.ts';
+import { canonicalDnKey } from '#micro509/internal/shared/dn.ts';
+import {
+	allOnesMaskForIpAddress,
+	decodeIpAddress,
+	expandIpv6,
+	normalizeIpAddress,
+	parseIpAddressToBytes,
+} from '#micro509/internal/shared/ip.ts';
+import {
+	parseDistributionPointReasonFlagsContent,
+	parseKeyUsageExtension,
+} from '#micro509/internal/x509/extension-bits.ts';
 
 // ---------------------------------------------------------------------------
 // DER encoding edge cases
@@ -64,6 +110,11 @@ describe('der encoding', () => {
 	it('integerFromNumber rejects negative and non-integer values', () => {
 		expect(() => integerFromNumber(-1)).toThrow('non-negative');
 		expect(() => integerFromNumber(1.5)).toThrow('non-negative');
+	});
+
+	it('encodeLength and integerFromNumber reject unsafe integers', () => {
+		expect(() => encodeLength(Number.MAX_SAFE_INTEGER + 1)).toThrow('safe integer');
+		expect(() => integerFromNumber(Number.MAX_SAFE_INTEGER + 1)).toThrow('safe integer');
 	});
 
 	it('bitString rejects unusedBits out of range', () => {
@@ -117,6 +168,13 @@ describe('der encoding', () => {
 		expect(result[0]).toBe(0x18);
 	});
 
+	it('utcTime and generalizedTime reject invalid or out-of-range dates', () => {
+		expect(() => utcTime(new Date(Number.NaN))).toThrow(RangeError);
+		expect(() => utcTime(new Date('2050-01-01T00:00:00Z'))).toThrow('1950 and 2049');
+		expect(() => generalizedTime(new Date(Number.NaN))).toThrow(RangeError);
+		expect(() => generalizedTime(new Date(Date.UTC(10_000, 0, 1, 0, 0, 0)))).toThrow('0 and 9999');
+	});
+
 	it('readElement throws on missing length byte', () => {
 		expect(() => readElement(Uint8Array.of(0x30))).toThrow('Unexpected end');
 	});
@@ -125,11 +183,44 @@ describe('der encoding', () => {
 		expect(() => readElement(Uint8Array.of(0x30, 0x80))).toThrow('Indefinite');
 	});
 
+	it('readElement rejects non-minimal long-form lengths', () => {
+		expect(() => readElement(Uint8Array.of(0x04, 0x81, 0x7f, 0x00))).toThrow('Non-minimal');
+		expect(() => readElement(Uint8Array.of(0x04, 0x82, 0x00, 0x80, 0x00))).toThrow('Non-minimal');
+	});
+
+	it('rejects unsupported high-tag-number DER encodings', () => {
+		expect(() => tlv(0x1f, Uint8Array.of(0x00))).toThrow('High-tag-number');
+		expect(() => explicitContext(31, Uint8Array.of(0x00))).toThrow('Context-specific tag number');
+		expect(() => implicitConstructedContext(31, Uint8Array.of(0x00))).toThrow(
+			'Context-specific tag number',
+		);
+		expect(() => implicitPrimitiveContext(31, Uint8Array.of(0x00))).toThrow(
+			'Context-specific tag number',
+		);
+		expect(() => readElement(Uint8Array.of(0x1f, 0x01, 0x00))).toThrow('High-tag-number');
+	});
+
+	it('encodeLength emits long-form lengths', () => {
+		expect(encodeLength(256)).toEqual(Uint8Array.of(0x82, 0x01, 0x00));
+	});
+
 	it('readSequenceChildren throws on non-SEQUENCE input', () => {
 		// Tag 0x02 = INTEGER, not SEQUENCE
 		expect(() => readSequenceChildren(Uint8Array.of(0x02, 0x01, 0x00))).toThrow(
 			'Expected SEQUENCE',
 		);
+	});
+
+	it('readSequenceChildren rejects trailing data after the root sequence', () => {
+		expect(() => readSequenceChildren(Uint8Array.of(0x30, 0x00, 0x00))).toThrow('Trailing data');
+	});
+
+	it('assertDerMaxDepth rejects overly deep nesting', () => {
+		let der = sequence([]);
+		for (let index = 0; index < DEFAULT_MAX_DER_DEPTH; index += 1) {
+			der = sequence([der]);
+		}
+		expect(() => assertDerMaxDepth(der)).toThrow('max depth');
 	});
 });
 
@@ -149,6 +240,27 @@ describe('asn1 decoding', () => {
 		);
 	});
 
+	it('decodeObjectIdentifier decodes multi-octet first subidentifiers correctly', () => {
+		expect(decodeObjectIdentifier(Uint8Array.of(0x81, 0x34))).toBe('2.100');
+	});
+
+	it('decodeObjectIdentifier rejects non-minimal base-128 encodings', () => {
+		expect(() => decodeObjectIdentifier(Uint8Array.of(0x80, 0x50))).toThrow(
+			'non-minimal base-128 encoding',
+		);
+		expect(() => decodeObjectIdentifier(Uint8Array.of(0x2a, 0x80, 0x01))).toThrow(
+			'non-minimal base-128 encoding',
+		);
+	});
+
+	it('decodeObjectIdentifier rejects too-large subidentifiers before number overflow', () => {
+		expect(() =>
+			decodeObjectIdentifier(
+				Uint8Array.of(0x2a, 0x82, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x00),
+			),
+		).toThrow('too-large subidentifier');
+	});
+
 	it('requireElement throws on undefined value', () => {
 		expect(() => requireElement(undefined, 'test field')).toThrow('Missing test field');
 	});
@@ -158,14 +270,90 @@ describe('asn1 decoding', () => {
 		expect(() => extractBitStringValue(element)).toThrow('Expected BIT STRING');
 	});
 
+	it('extractBitStringValue rejects malformed BIT STRING payloads', () => {
+		expect(() => extractBitStringValue(readElement(Uint8Array.of(0x03, 0x00)))).toThrow(
+			'Invalid BIT STRING',
+		);
+		expect(() => extractBitStringValue(readElement(Uint8Array.of(0x03, 0x02, 0x01, 0x80)))).toThrow(
+			'zero unused bits',
+		);
+	});
+
 	it('parseTime throws on unsupported tag', () => {
 		// Tag 0x0c = UTF8String, not a time type
 		const element = readElement(Uint8Array.of(0x0c, 0x01, 0x30));
 		expect(() => parseTime(element)).toThrow('Unsupported time tag');
 	});
 
+	it('parseTime rejects malformed UTCTime and GeneralizedTime values', () => {
+		expect(() => parseTime(readElement(asn1StringElement(0x17, '991332235959Z')))).toThrow(
+			'Invalid UTCTime',
+		);
+		expect(() => parseTime(readElement(asn1StringElement(0x18, '20240230010203Z')))).toThrow(
+			'Invalid GeneralizedTime',
+		);
+	});
+
+	it('parseTime rejects malformed UTF-8 in time values', () => {
+		expect(() => parseTime(readElement(Uint8Array.of(0x17, 0x02, 0xc3, 0x28)))).toThrow(
+			'Invalid UTCTime: invalid UTF-8',
+		);
+		expect(() => parseTime(readElement(Uint8Array.of(0x18, 0x02, 0xc3, 0x28)))).toThrow(
+			'Invalid GeneralizedTime: invalid UTF-8',
+		);
+	});
+
 	it('decodeIntegerNumber throws on integers > 6 bytes', () => {
 		expect(() => decodeIntegerNumber(Uint8Array.of(1, 2, 3, 4, 5, 6, 7))).toThrow('too large');
+	});
+
+	it('decodeIntegerNumber rejects empty, negative, and non-minimal encodings', () => {
+		expect(() => decodeIntegerNumber(new Uint8Array())).toThrow('INTEGER is empty');
+		expect(() => decodeIntegerNumber(Uint8Array.of(0xff))).toThrow('non-negative');
+		expect(() => decodeIntegerNumber(Uint8Array.of(0x00, 0x01))).toThrow('minimal encoding');
+	});
+
+	it('decodeNonNegativeIntegerNumber rejects negative and non-minimal encodings', () => {
+		expect(() => decodeNonNegativeIntegerNumber(Uint8Array.of(0xff), 'test integer')).toThrow(
+			'test integer must be non-negative',
+		);
+		expect(() => decodeNonNegativeIntegerNumber(Uint8Array.of(0x00, 0x01), 'test integer')).toThrow(
+			'test integer must use minimal encoding',
+		);
+	});
+
+	it('decodeString validates ASCII-constrained tags and common ASN.1 string encodings', () => {
+		expect(() => decodeString(0x0c, Uint8Array.of(0xc3, 0x28))).toThrow(
+			'Invalid UTF8String: invalid UTF-8',
+		);
+		expect(decodeString(0x13, Uint8Array.of(0x4f, 0x4b))).toBe('OK');
+		expect(() => decodeString(0x13, Uint8Array.of(0x40))).toThrow('Invalid PrintableString');
+		expect(decodeString(0x16, Uint8Array.of(0x4f, 0x4b))).toBe('OK');
+		expect(() => decodeString(0x16, Uint8Array.of(0x80))).toThrow('Invalid IA5String');
+		expect(decodeString(0x1e, Uint8Array.of(0x00, 0x4f, 0x00, 0x4b))).toBe('OK');
+		expect(() => decodeString(0x1e, Uint8Array.of(0x00, 0x4f, 0x00))).toThrow(
+			'Invalid BMPString length',
+		);
+		expect(() => decodeString(0x1e, Uint8Array.of(0xd8, 0x00))).toThrow(
+			'Invalid BMPString code point',
+		);
+		expect(decodeString(0x1c, Uint8Array.of(0x00, 0x00, 0x00, 0x41))).toBe('A');
+		expect(() => decodeString(0x1c, Uint8Array.of(0x00, 0x11, 0x00, 0x00))).toThrow(
+			'Invalid UniversalString code point',
+		);
+		expect(() => decodeString(0x14, Uint8Array.of(0x41))).toThrow('TeletexString');
+	});
+
+	it('decodeBoolean rejects malformed DER encodings', () => {
+		expect(() => decodeBoolean(new Uint8Array())).toThrow('exactly one octet');
+		expect(() => decodeBoolean(Uint8Array.of(0x01))).toThrow('DER encoding');
+		expect(decodeBoolean(Uint8Array.of(0x00))).toBe(false);
+		expect(decodeBoolean(Uint8Array.of(0xff))).toBe(true);
+	});
+
+	it('hexToBytes rejects malformed hex input', () => {
+		expect(() => hexToBytes('zz')).toThrow('Invalid hex byte: zz');
+		expect(() => hexToBytes('1g')).toThrow('Invalid hex byte: 1g');
 	});
 });
 
@@ -174,36 +362,187 @@ describe('asn1 decoding', () => {
 // ---------------------------------------------------------------------------
 
 describe('sig-verify', () => {
-	it('requireRsaPublicKey throws for non-RSA OID', () => {
-		expect(() => requireRsaPublicKey(OIDS.ecPublicKey, 'SHA-256')).toThrow('RSA');
+	it('requireRsaPublicKey returns failure for non-RSA OID', () => {
+		const result = requireRsaPublicKey(OIDS.ecPublicKey, 'SHA-256');
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.reason).toContain('RSA');
+		}
 	});
 
-	it('requireEcPublicKey throws for non-EC OID', () => {
-		expect(() => requireEcPublicKey(OIDS.rsaEncryption, undefined)).toThrow('EC');
+	it('requireEcPublicKey returns failure for non-EC OID', () => {
+		const result = requireEcPublicKey(OIDS.rsaEncryption, undefined, 'SHA-256');
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.reason).toContain('EC');
+		}
 	});
 
-	it('requireEcPublicKey throws for unsupported curve OID', () => {
-		expect(() => requireEcPublicKey(OIDS.ecPublicKey, '1.2.3.4.5')).toThrow('Unsupported EC curve');
+	it('requireEcPublicKey returns failure for unsupported curve OID', () => {
+		const result = requireEcPublicKey(OIDS.ecPublicKey, '1.2.3.4.5', 'SHA-256');
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.reason).toContain('unsupported EC curve');
+		}
 	});
 
-	it('requireEcPublicKey throws for missing curve OID', () => {
-		expect(() => requireEcPublicKey(OIDS.ecPublicKey, undefined)).toThrow('Unsupported EC curve');
+	it('requireEcPublicKey returns failure for missing curve OID', () => {
+		const result = requireEcPublicKey(OIDS.ecPublicKey, undefined, 'SHA-256');
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.reason).toContain('unsupported EC curve');
+		}
 	});
 
-	it('curveBytes throws for unsupported curve', () => {
-		expect(() => curveBytes('1.2.3.4.5')).toThrow('Unsupported EC curve');
+	it('curveBytes returns undefined for unsupported curve', () => {
+		expect(curveBytes('1.2.3.4.5')).toBeUndefined();
+	});
+
+	it('requireEcPublicKey and curveBytes support secp521r1', () => {
+		const result = requireEcPublicKey(OIDS.ecPublicKey, OIDS.secp521r1, 'SHA-512');
+		expect(result.ok).toBe(true);
+		if (result.ok) {
+			expect(result.value.importAlgorithm).toEqual({ kind: 'ecdsa', namedCurve: 'P-521' });
+			expect(result.value.ecdsaRawSignatureBytes).toBe(132);
+		}
+		expect(curveBytes(OIDS.secp521r1)).toBe(132);
 	});
 
 	it('getVerifySignatureConfig throws for unknown signature algorithm', () => {
-		expect(() => getVerifySignatureConfig('1.2.3.4.999', OIDS.rsaEncryption, undefined)).toThrow(
-			'Unsupported signature algorithm',
-		);
+		expect(() =>
+			getVerifySignatureConfig('1.2.3.4.999', undefined, OIDS.rsaEncryption, undefined),
+		).toThrow('unrecognized signature algorithm OID');
 	});
 
 	it('getVerifySignatureConfig throws for Ed25519 sig with non-Ed25519 key', () => {
-		expect(() => getVerifySignatureConfig(OIDS.ed25519, OIDS.rsaEncryption, undefined)).toThrow(
-			'Ed25519',
+		expect(() =>
+			getVerifySignatureConfig(OIDS.ed25519, undefined, OIDS.rsaEncryption, undefined),
+		).toThrow('Ed25519');
+	});
+
+	it('getVerifySignatureConfigResult rejects PKCS#1 v1.5 signatures without DER NULL parameters', () => {
+		const missingNull = getVerifySignatureConfigResult(
+			OIDS.sha256WithRSAEncryption,
+			undefined,
+			OIDS.rsaEncryption,
+			undefined,
 		);
+		expect(missingNull).toMatchObject({
+			ok: false,
+			code: 'unsupported_signature_algorithm_parameters',
+		});
+		if (!missingNull.ok) {
+			expect(missingNull.reason).toContain('DER NULL');
+		}
+
+		const malformedNull = getVerifySignatureConfigResult(
+			OIDS.sha256WithRSAEncryption,
+			Uint8Array.of(0x05),
+			OIDS.rsaEncryption,
+			undefined,
+		);
+		expect(malformedNull).toMatchObject({
+			ok: false,
+			code: 'unsupported_signature_algorithm_parameters',
+		});
+		if (!malformedNull.ok) {
+			expect(malformedNull.reason).toContain('DER NULL');
+		}
+
+		const wrongTag = getVerifySignatureConfigResult(
+			OIDS.sha256WithRSAEncryption,
+			Uint8Array.of(0x02, 0x01, 0x00),
+			OIDS.rsaEncryption,
+			undefined,
+		);
+		expect(wrongTag).toMatchObject({
+			ok: false,
+			code: 'unsupported_signature_algorithm_parameters',
+		});
+		if (!wrongTag.ok) {
+			expect(wrongTag.reason).toContain('DER NULL');
+		}
+
+		const trailingBytes = getVerifySignatureConfigResult(
+			OIDS.sha256WithRSAEncryption,
+			Uint8Array.of(0x05, 0x00, 0x00),
+			OIDS.rsaEncryption,
+			undefined,
+		);
+		expect(trailingBytes).toMatchObject({
+			ok: false,
+			code: 'unsupported_signature_algorithm_parameters',
+		});
+		if (!trailingBytes.ok) {
+			expect(trailingBytes.reason).toContain('DER NULL');
+		}
+
+		expect(
+			getVerifySignatureConfigResult(
+				OIDS.sha256WithRSAEncryption,
+				nullValue(),
+				OIDS.rsaEncryption,
+				undefined,
+			),
+		).toMatchObject({ ok: true });
+	});
+
+	it('getVerifySignatureConfigResult rejects unexpected parameters for ECDSA and Ed25519', () => {
+		const ecdsaWithParameters = getVerifySignatureConfigResult(
+			OIDS.ecdsaWithSHA256,
+			nullValue(),
+			OIDS.ecPublicKey,
+			OIDS.prime256v1,
+		);
+		expect(ecdsaWithParameters).toMatchObject({
+			ok: false,
+			code: 'unsupported_signature_algorithm_parameters',
+		});
+		if (!ecdsaWithParameters.ok) {
+			expect(ecdsaWithParameters.reason).toContain('must be absent');
+		}
+
+		const ed25519WithParameters = getVerifySignatureConfigResult(
+			OIDS.ed25519,
+			nullValue(),
+			OIDS.ed25519,
+			undefined,
+		);
+		expect(ed25519WithParameters).toMatchObject({
+			ok: false,
+			code: 'unsupported_signature_algorithm_parameters',
+		});
+		if (!ed25519WithParameters.ok) {
+			expect(ed25519WithParameters.reason).toContain('must be absent');
+		}
+
+		expect(
+			getVerifySignatureConfigResult(OIDS.ed25519, undefined, OIDS.ed25519, undefined),
+		).toMatchObject({ ok: true });
+	});
+
+	it('getVerifySignatureConfig returns RSA-PSS verify config for shipped parameters', () => {
+		const result = getVerifySignatureConfig(
+			OIDS.rsassaPss,
+			encodeRsaPssParameters(rsaPssParametersForHash('SHA-384')),
+			OIDS.rsaEncryption,
+			undefined,
+		);
+		expect(result.importAlgorithm).toEqual({ kind: 'rsa', hash: 'SHA-384', scheme: 'pss' });
+		expect(result.verifyParams).toEqual({ name: 'RSA-PSS', saltLength: 48 });
+	});
+
+	it('verifySignedDataDetailed returns a typed failure when verification setup throws', async () => {
+		const result = await verifySignedDataDetailed(
+			OIDS.sha256WithRSAEncryption,
+			nullValue(),
+			OIDS.rsaEncryption,
+			undefined,
+			Uint8Array.of(0x30, 0x00),
+			Uint8Array.of(0x00),
+			Uint8Array.of(0x00),
+		);
+		expect(result).toMatchObject({ ok: false, code: 'verification_error' });
 	});
 
 	it('rawEcdsaSignatureToDer throws on wrong length', () => {
@@ -227,6 +566,76 @@ describe('sig-verify', () => {
 		// Manually build a SEQUENCE with just one INTEGER child (missing s component)
 		const justR = Uint8Array.of(0x30, 0x03, 0x02, 0x01, 0x42);
 		expect(() => derEcdsaSignatureToRaw(justR, 32)).toThrow('Malformed ECDSA DER signature');
+	});
+});
+
+describe('ip helpers', () => {
+	it('normalizes IPv6 addresses across expansion forms', () => {
+		expect(normalizeIpAddress('2001:db8::1')).toBe('2001:0db8:0000:0000:0000:0000:0000:0001');
+		expect(expandIpv6('2001:0db8::1')).toEqual([
+			'2001',
+			'0db8',
+			'0000',
+			'0000',
+			'0000',
+			'0000',
+			'0000',
+			'0001',
+		]);
+	});
+
+	it('round-trips IP bytes through shared helpers', () => {
+		expect(decodeIpAddress(parseIpAddressToBytes('10.0.0.7'))).toBe('10.0.0.7');
+		expect(decodeIpAddress(parseIpAddressToBytes('2001:db8::1'))).toBe('2001:db8:0:0:0:0:0:1');
+		expect(allOnesMaskForIpAddress('2001:db8::1')).toEqual(new Uint8Array(16).fill(0xff));
+	});
+
+	it('rejects invalid IPv6 segments', () => {
+		expect(() => parseIpAddressToBytes('2001:db8::zzzz')).toThrow('Invalid IPv6 address');
+	});
+
+	it('rejects key usage values encoded with the wrong ASN.1 tag', () => {
+		expect(() => parseKeyUsageExtension(Uint8Array.of(0x04, 0x01, 0x00))).toThrow(
+			'keyUsage must be a BIT STRING',
+		);
+	});
+
+	it('rejects key usage values with non-zero padding bits', () => {
+		expect(() => parseKeyUsageExtension(Uint8Array.of(0x03, 0x02, 0x07, 0x01))).toThrow(
+			'keyUsage BIT STRING must not set padding bits',
+		);
+	});
+
+	it('rejects distribution point reason values with non-zero padding bits', () => {
+		expect(() => parseDistributionPointReasonFlagsContent(Uint8Array.of(0x01, 0x01))).toThrow(
+			'DistributionPoint reasons BIT STRING must not set padding bits',
+		);
+	});
+
+	it('preserves empty distribution point reason values when the BIT STRING is present', () => {
+		expect(parseDistributionPointReasonFlagsContent(Uint8Array.of(0x00))).toEqual({
+			flags: [],
+			nonZeroPadding: false,
+		});
+	});
+
+	it('canonicalDnKey escapes separator characters in attribute values', () => {
+		const singleAttributeValue = {
+			derHex: '',
+			attributes: [{ oid: '1.2.3', valueTag: 0x13, value: 'a+2.5.4=b' }],
+			values: {},
+		};
+		const splitAttributes = {
+			derHex: '',
+			attributes: [
+				{ oid: '1.2.3', valueTag: 0x13, value: 'a' },
+				{ oid: '2.5.4', valueTag: 0x13, value: 'b' },
+			],
+			values: {},
+		};
+		expect(
+			canonicalDnKey({ derHex: '', rdns: [singleAttributeValue], attributes: [], values: {} }),
+		).not.toBe(canonicalDnKey({ derHex: '', rdns: [splitAttributes], attributes: [], values: {} }));
 	});
 });
 
@@ -258,6 +667,41 @@ describe('extensions encoding', () => {
 		expect(() => buildCertificateExtensions(malformedSpki, undefined, undefined)).toThrow(
 			'SPKI missing subject public key bit string',
 		);
+	});
+
+	it('rejects empty certificate policies and policy mappings', () => {
+		expect(() => encodeCertificatePolicies([])).toThrow('certificatePolicies must not be empty');
+		expect(() => encodePolicyMappings([])).toThrow('policyMappings must not be empty');
+	});
+
+	it('rejects invalid distribution point construction', () => {
+		expect(() =>
+			Reflect.apply(encodeCrlDistributionPoints, undefined, [[{ reasons: ['keyCompromise'] }]]),
+		).toThrow('DistributionPoint must contain distributionPoint or crlIssuer');
+		expect(() =>
+			encodeCrlDistributionPoints([
+				{
+					distributionPoint: {
+						fullName: [{ type: 'uri', value: 'http://example.test/crl' }],
+						relativeName: [{ type: 'commonName', value: 'bad' }],
+					},
+				},
+			]),
+		).toThrow('DistributionPointName cannot contain both fullName and relativeName');
+		expect(() => encodeCrlDistributionPoints([{ distributionPoint: {} }])).toThrow(
+			'DistributionPointName must contain fullName or relativeName',
+		);
+	});
+
+	it('rejects non-SEQUENCE directoryName DER when encoding names', () => {
+		expect(() => encodeSubjectAltName({ type: 'directoryName', derHex: '020100' })).toThrow(
+			'directoryName derHex must encode a DER SEQUENCE',
+		);
+		expect(() =>
+			encodeNameConstraints({
+				permittedSubtrees: [{ base: { type: 'directoryName', derHex: '020100' } }],
+			}),
+		).toThrow('directoryName derHex must encode a DER SEQUENCE');
 	});
 
 	it('rejects invalid IPv4 addresses during certificate creation', async () => {
@@ -326,6 +770,17 @@ describe('extensions encoding', () => {
 // ---------------------------------------------------------------------------
 
 describe('signing.ts edge cases', () => {
+	it('describeSignatureAlgorithm recognizes SHA-1 signature OIDs', () => {
+		expect(describeSignatureAlgorithm(OIDS.sha1WithRSAEncryption, undefined)).toBe(
+			'RSA PKCS#1 v1.5 with SHA-1',
+		);
+		expect(describeSignatureAlgorithm(OIDS.ecdsaWithSHA1, undefined)).toBe('ECDSA with SHA-1');
+		expect(OIDS.ecdsaWithSHA1).toBe('1.2.840.10045.4.1');
+		expect(OIDS.ecdsaWithSHA224).toBe('1.2.840.10045.4.3.1');
+		expect(describeSignatureAlgorithm(OIDS.ecdsaWithSHA224, undefined)).toBe('ECDSA with SHA-224');
+		expect(describeHashAlgorithm(OIDS.sha1)).toBe('SHA-1');
+	});
+
 	it('getSignatureAlgorithm throws for unsupported algorithm name', async () => {
 		const { generateKeyPair: genKp } = await import('#micro509');
 		// Use an ECDSA key but manually check the algorithm name guard
@@ -370,12 +825,60 @@ describe('signing.ts edge cases', () => {
 		expect(result.algorithmOid).toBe(OIDS.sha512WithRSAEncryption);
 	});
 
+	it('getSignatureAlgorithm returns RSA-PSS config for explicit profile input', async () => {
+		const { generateKeyPair: genKp } = await import('#micro509');
+		const keys = await genKp({
+			kind: 'rsa',
+			modulusLength: 2048,
+			hash: 'SHA-384',
+			scheme: 'pss',
+		});
+		const result = getSignatureAlgorithm(keys.privateKey, { kind: 'rsa-pss' });
+		expect(result.algorithmOid).toBe(OIDS.rsassaPss);
+		expect(result.parameters).toEqual(encodeRsaPssParameters(rsaPssParametersForHash('SHA-384')));
+		expect(result.signParams).toEqual({ name: 'RSA-PSS', saltLength: 48 });
+	});
+
+	it('getSignatureAlgorithm rejects unsupported RSA-PSS salt lengths', async () => {
+		const { generateKeyPair: genKp } = await import('#micro509');
+		const keys = await genKp({
+			kind: 'rsa',
+			modulusLength: 2048,
+			hash: 'SHA-384',
+			scheme: 'pss',
+		});
+		expect(() =>
+			getSignatureAlgorithm(keys.privateKey, { kind: 'rsa-pss', saltLength: 32 }),
+		).toThrow('Unsupported RSA-PSS saltLength 32');
+	});
+
 	it('getSignatureAlgorithm returns correct config for ECDSA P-384', async () => {
 		const { generateKeyPair: genKp } = await import('#micro509');
 		const keys = await genKp({ kind: 'ecdsa', namedCurve: 'P-384' });
 		const result = getSignatureAlgorithm(keys.privateKey);
 		expect(result.algorithmOid).toBe(OIDS.ecdsaWithSHA384);
 		expect(result.ecdsaRawSignatureBytes).toBe(96);
+	});
+
+	it('getSignatureAlgorithm returns correct config for ECDSA P-521', async () => {
+		const { generateKeyPair: genKp } = await import('#micro509');
+		const keys = await genKp({ kind: 'ecdsa', namedCurve: 'P-521' });
+		const result = getSignatureAlgorithm(keys.privateKey);
+		expect(result.algorithmOid).toBe(OIDS.ecdsaWithSHA512);
+		expect(result.ecdsaRawSignatureBytes).toBe(132);
+		expect(result.signParams).toEqual({ name: 'ECDSA', hash: 'SHA-512' });
+	});
+
+	it('getVerifySignatureConfig returns correct config for ECDSA P-521', () => {
+		const result = getVerifySignatureConfig(
+			OIDS.ecdsaWithSHA512,
+			undefined,
+			OIDS.ecPublicKey,
+			OIDS.secp521r1,
+		);
+		expect(result.importAlgorithm).toEqual({ kind: 'ecdsa', namedCurve: 'P-521' });
+		expect(result.verifyParams).toEqual({ name: 'ECDSA', hash: 'SHA-512' });
+		expect(result.ecdsaRawSignatureBytes).toBe(132);
 	});
 
 	it('getSignatureAlgorithm returns correct config for Ed25519', async () => {
@@ -386,6 +889,135 @@ describe('signing.ts edge cases', () => {
 		expect(result.ecdsaRawSignatureBytes).toBeUndefined();
 	});
 });
+
+// ---------------------------------------------------------------------------
+// rsa-pss.ts edge cases
+// ---------------------------------------------------------------------------
+
+describe('rsa-pss.ts edge cases', () => {
+	it('round-trips supported RSA-PSS profiles', () => {
+		for (const hash of ['SHA-256', 'SHA-384', 'SHA-512'] as const) {
+			const encoded = encodeRsaPssParameters(rsaPssParametersForHash(hash));
+			expect(parseRsaPssParameters(encoded)).toEqual({
+				ok: true,
+				value: rsaPssParametersForHash(hash),
+			});
+		}
+	});
+
+	it('omits the default RSA-PSS trailerField from DER output', () => {
+		const encoded = encodeRsaPssParameters(rsaPssParametersForHash('SHA-256'));
+		expect(readSequenceChildren(encoded).some((child) => child.tag === 0xa3)).toBe(false);
+	});
+
+	it('treats omitted parameters as unsupported SHA-1 defaults', () => {
+		expect(parseRsaPssParameters(undefined)).toEqual({
+			ok: false,
+			code: 'unsupported_rsa_pss_parameters',
+			reason: 'default_hash_sha1',
+		});
+	});
+
+	it('rejects unsupported hash, MGF, salt length, and trailer profiles', () => {
+		const unsupportedHash = sequence([
+			explicitContext(0, hashAlgorithmIdentifier('1.2.3.4.5')),
+			explicitContext(1, maskGenAlgorithmIdentifier(OIDS.mgf1, OIDS.sha256)),
+			explicitContext(2, integerFromNumber(32)),
+			explicitContext(3, integerFromNumber(1)),
+		]);
+		expect(parseRsaPssParameters(unsupportedHash)).toEqual({
+			ok: false,
+			code: 'unsupported_rsa_pss_parameters',
+			reason: 'unsupported_hash',
+		});
+
+		const mismatchedMgf = sequence([
+			explicitContext(0, hashAlgorithmIdentifier(OIDS.sha256)),
+			explicitContext(1, maskGenAlgorithmIdentifier(OIDS.mgf1, OIDS.sha384)),
+			explicitContext(2, integerFromNumber(32)),
+			explicitContext(3, integerFromNumber(1)),
+		]);
+		expect(parseRsaPssParameters(mismatchedMgf)).toEqual({
+			ok: false,
+			code: 'unsupported_rsa_pss_parameters',
+			reason: 'mgf_hash_mismatch',
+		});
+
+		const unsupportedMgf = sequence([
+			explicitContext(0, hashAlgorithmIdentifier(OIDS.sha256)),
+			explicitContext(1, maskGenAlgorithmIdentifier('1.2.3.4.5')),
+			explicitContext(2, integerFromNumber(32)),
+			explicitContext(3, integerFromNumber(1)),
+		]);
+		expect(parseRsaPssParameters(unsupportedMgf)).toEqual({
+			ok: false,
+			code: 'unsupported_rsa_pss_parameters',
+			reason: 'unsupported_mgf_algorithm',
+		});
+
+		const unsupportedSaltLength = sequence([
+			explicitContext(0, hashAlgorithmIdentifier(OIDS.sha256)),
+			explicitContext(1, maskGenAlgorithmIdentifier(OIDS.mgf1, OIDS.sha256)),
+			explicitContext(2, integerFromNumber(20)),
+			explicitContext(3, integerFromNumber(1)),
+		]);
+		expect(parseRsaPssParameters(unsupportedSaltLength)).toEqual({
+			ok: false,
+			code: 'unsupported_rsa_pss_parameters',
+			reason: 'unsupported_salt_length',
+		});
+
+		const unsupportedTrailer = sequence([
+			explicitContext(0, hashAlgorithmIdentifier(OIDS.sha512)),
+			explicitContext(1, maskGenAlgorithmIdentifier(OIDS.mgf1, OIDS.sha512)),
+			explicitContext(2, integerFromNumber(64)),
+			explicitContext(3, integerFromNumber(2)),
+		]);
+		expect(parseRsaPssParameters(unsupportedTrailer)).toEqual({
+			ok: false,
+			code: 'unsupported_rsa_pss_parameters',
+			reason: 'unsupported_trailer_field',
+		});
+	});
+
+	it('distinguishes malformed RSA-PSS parameters from unsupported ones', () => {
+		const notSequence = octetString(new Uint8Array());
+		expect(parseRsaPssParameters(notSequence)).toMatchObject({
+			ok: false,
+			code: 'malformed_rsa_pss_parameters',
+		});
+
+		const duplicateHash = sequence([
+			explicitContext(0, hashAlgorithmIdentifier(OIDS.sha256)),
+			explicitContext(0, hashAlgorithmIdentifier(OIDS.sha256)),
+		]);
+		expect(parseRsaPssParameters(duplicateHash)).toMatchObject({
+			ok: false,
+			code: 'malformed_rsa_pss_parameters',
+		});
+
+		const malformedSaltLength = sequence([
+			explicitContext(0, hashAlgorithmIdentifier(OIDS.sha256)),
+			explicitContext(1, maskGenAlgorithmIdentifier(OIDS.mgf1, OIDS.sha256)),
+			explicitContext(2, sequence([])),
+		]);
+		expect(parseRsaPssParameters(malformedSaltLength)).toMatchObject({
+			ok: false,
+			code: 'malformed_rsa_pss_parameters',
+		});
+	});
+});
+
+function hashAlgorithmIdentifier(oid: string): Uint8Array {
+	return sequence([objectIdentifier(oid), nullValue()]);
+}
+
+function maskGenAlgorithmIdentifier(oid: string, hashOid?: string): Uint8Array {
+	if (hashOid === undefined) {
+		return sequence([objectIdentifier(oid)]);
+	}
+	return sequence([objectIdentifier(oid), hashAlgorithmIdentifier(hashOid)]);
+}
 
 // ---------------------------------------------------------------------------
 // pbes2.ts edge cases
@@ -431,6 +1063,96 @@ describe('pbes2.ts edge cases', () => {
 			]),
 		]);
 		expect(() => parsePbes2AlgorithmIdentifier(badPbkdf2)).toThrow(/Malformed PBKDF2/);
+	});
+
+	it('parsePbes2AlgorithmIdentifier accepts shipped AES-CBC and PBKDF2 PRF variants', () => {
+		const cases = [
+			{
+				encryptionOid: OIDS.aes128Cbc,
+				encryption: 'aes128-cbc',
+				keyLength: 16,
+				prfOid: OIDS.hmacWithSHA1,
+				prf: 'hmac-sha1',
+			},
+			{
+				encryptionOid: OIDS.aes192Cbc,
+				encryption: 'aes192-cbc',
+				keyLength: 24,
+				prfOid: OIDS.hmacWithSHA256,
+				prf: 'hmac-sha256',
+			},
+			{
+				encryptionOid: OIDS.aes256Cbc,
+				encryption: 'aes256-cbc',
+				keyLength: 32,
+				prfOid: OIDS.hmacWithSHA1,
+				prf: 'hmac-sha1',
+			},
+		] as const;
+
+		for (const testCase of cases) {
+			const algorithmIdentifier = sequence([
+				objectIdentifier(OIDS.pbes2),
+				sequence([
+					sequence([
+						objectIdentifier(OIDS.pbkdf2),
+						sequence([
+							octetString(new Uint8Array(16).fill(0x11)),
+							integerFromNumber(2048),
+							integerFromNumber(testCase.keyLength),
+							sequence([objectIdentifier(testCase.prfOid), nullValue()]),
+						]),
+					]),
+					sequence([
+						objectIdentifier(testCase.encryptionOid),
+						octetString(new Uint8Array(16).fill(0x22)),
+					]),
+				]),
+			]);
+
+			expect(parsePbes2AlgorithmIdentifier(algorithmIdentifier)).toMatchObject({
+				iterations: 2048,
+				encryption: testCase.encryption,
+				prf: testCase.prf,
+			});
+		}
+	});
+
+	it('parsePbes2AlgorithmIdentifier defaults missing PRF to HMAC-SHA1', () => {
+		const algorithmIdentifier = sequence([
+			objectIdentifier(OIDS.pbes2),
+			sequence([
+				sequence([
+					objectIdentifier(OIDS.pbkdf2),
+					sequence([octetString(new Uint8Array(16).fill(0x11)), integerFromNumber(2048)]),
+				]),
+				sequence([objectIdentifier(OIDS.aes256Cbc), octetString(new Uint8Array(16).fill(0x22))]),
+			]),
+		]);
+
+		expect(parsePbes2AlgorithmIdentifier(algorithmIdentifier)).toMatchObject({
+			prf: 'hmac-sha1',
+			encryption: 'aes256-cbc',
+		});
+	});
+
+	it('parsePbes2AlgorithmIdentifier throws on unsupported PBKDF2 PRF', () => {
+		const badPrf = sequence([
+			objectIdentifier(OIDS.pbes2),
+			sequence([
+				sequence([
+					objectIdentifier(OIDS.pbkdf2),
+					sequence([
+						octetString(new Uint8Array(16)),
+						integerFromNumber(2048),
+						sequence([objectIdentifier('1.2.3.4.5'), nullValue()]),
+					]),
+				]),
+				sequence([objectIdentifier(OIDS.aes256Cbc), octetString(new Uint8Array(16))]),
+			]),
+		]);
+
+		expect(() => parsePbes2AlgorithmIdentifier(badPrf)).toThrow(/Unsupported PBKDF2 PRF/);
 	});
 
 	it('parsePbes2AlgorithmIdentifier throws on unsupported encryption scheme', () => {
@@ -557,6 +1279,40 @@ describe('pkcs12-mac.ts edge cases', () => {
 		expect(parsed.valid).toBeUndefined();
 	});
 
+	it('parsePkcs12MacData throws on zero iterations', async () => {
+		const malformed = sequence([
+			sequence([
+				sequence([objectIdentifier(OIDS.sha256), nullValue()]),
+				octetString(new Uint8Array(32)),
+			]),
+			octetString(new Uint8Array(16)),
+			integerFromNumber(0),
+		]);
+		expect(parsePkcs12MacData(malformed, dummySafe)).rejects.toThrow(
+			'MacData iterations must be a positive safe integer',
+		);
+	});
+
+	it('parsePkcs12MacData throws on negative iterations', async () => {
+		const malformed = sequence([
+			sequence([
+				sequence([objectIdentifier(OIDS.sha256), nullValue()]),
+				octetString(new Uint8Array(32)),
+			]),
+			octetString(new Uint8Array(16)),
+			new Uint8Array([0x02, 0x01, 0xff]),
+		]);
+		expect(parsePkcs12MacData(malformed, dummySafe)).rejects.toThrow(
+			'MacData iterations must be non-negative',
+		);
+	});
+
+	it('createPkcs12MacData rejects zero iterations', async () => {
+		expect(createPkcs12MacData(dummySafe, { password: 'test', iterations: 0 })).rejects.toThrow(
+			'MacData iterations must be a positive safe integer',
+		);
+	});
+
 	it('createPkcs12MacData supports empty salt', async () => {
 		const data = new Uint8Array([0x30, 0x03, 0x01, 0x01, 0xff]);
 		const mac = await createPkcs12MacData(data, {
@@ -589,3 +1345,8 @@ describe('pkcs12-mac.ts edge cases', () => {
 		expect(() => rawEcdsaSignatureToDer(raw, 32)).toThrow('Unexpected ECDSA raw signature length');
 	});
 });
+
+function asn1StringElement(tag: number, value: string): Uint8Array {
+	const bytes = new TextEncoder().encode(value);
+	return new Uint8Array([tag, bytes.length, ...bytes]);
+}

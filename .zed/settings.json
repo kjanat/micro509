@@ -2,22 +2,19 @@
 // see the documentation: https://zed.dev/docs/configuring-zed#settings-files
 {
 	"formatter": [
-		{
-			"external": {
-				"command": "dprint",
-				"arguments": ["fmt", "--stdin", "{buffer_path}"]
-			}
-		}
+		{ "external": { "command": "dprint", "arguments": ["fmt", "--stdin", "{buffer_path}"] } }
 	],
+	"wrap_guides": [100],
 	"prettier": { "allowed": false },
 	"languages": {
 		"TypeScript": {
-			"wrap_guides": [100],
-			"formatter": [
-				{ "code_action": "fixAll.biome" },
-				{ "code_action": "organizeImports.biome" },
-				{ "external": { "command": "dprint", "arguments": ["fmt", "--stdin", "{buffer_path}"] } }
-			]
-		}
+			"format_on_save": "on",
+			"language_servers": ["tsgo", "vtsls", "biome"],
+			"code_actions_on_format": {
+				"source.fixAll.biome": true,
+				"source.organizeImports.biome": true
+			}
+		},
+		"Markdown": { "wrap_guides": [80] }
 	}
 }

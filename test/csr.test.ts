@@ -6,9 +6,19 @@ import {
 	parseCertificateSigningRequestPem,
 	verifyCertificateSigningRequest,
 } from '#micro509';
-import { readElement } from '#micro509/der.ts';
-import { OIDS } from '#micro509/oids.ts';
-import { childrenOf, decodeObjectIdentifier } from './helpers.ts';
+import { objectIdentifier, readElement, sequence, tlv } from '#micro509/internal/asn1/der.ts';
+import { OIDS } from '#micro509/internal/asn1/oids.ts';
+import {
+	encodeRsaPssParameters,
+	rsaPssParametersForHash,
+} from '#micro509/internal/crypto/rsa-pss.ts';
+import {
+	childrenOf,
+	decodeObjectIdentifier,
+	importRsaPrivateKeyWithScheme,
+	replaceCsrSignatureAlgorithm,
+	rewriteCsrSignatureAsRsaPss,
+} from './helpers.ts';
 
 describe('csr', () => {
 	it('includes basicConstraints and customExtensions in CSR requested extensions', async () => {
@@ -61,6 +71,49 @@ describe('csr', () => {
 		});
 	});
 
+	it('creates RSA-PSS certificate requests with explicit parameters', async () => {
+		const keyPair = await generateKeyPair({
+			kind: 'rsa',
+			modulusLength: 2048,
+			hash: 'SHA-512',
+			scheme: 'pss',
+		});
+		const csr = await createCertificateSigningRequest({
+			subject: { commonName: 'rsa-pss-create.example' },
+			publicKey: keyPair.publicKey,
+			signerPrivateKey: keyPair.privateKey,
+			signature: { kind: 'rsa-pss' },
+		});
+
+		expect(parseCertificateSigningRequestPem(csr.pem)).toMatchObject({
+			signatureAlgorithmOid: OIDS.rsassaPss,
+			signatureAlgorithmParametersDer: encodeRsaPssParameters(rsaPssParametersForHash('SHA-512')),
+		});
+		expect(await verifyCertificateSigningRequest(csr.pem)).toMatchObject({ ok: true });
+	});
+
+	it('creates and verifies P-521 certificate requests', async () => {
+		const keyPair = await generateKeyPair({
+			kind: 'ecdsa',
+			namedCurve: 'P-521',
+		});
+		const csr = await createCertificateSigningRequest({
+			subject: { commonName: 'p521-csr.example' },
+			publicKey: keyPair.publicKey,
+			signerPrivateKey: keyPair.privateKey,
+			extensions: {
+				subjectAltNames: [{ type: 'dns', value: 'p521-csr.example' }],
+			},
+		});
+
+		expect(parseCertificateSigningRequestPem(csr.pem)).toMatchObject({
+			signatureAlgorithmOid: OIDS.ecdsaWithSHA512,
+			publicKeyParametersOid: OIDS.secp521r1,
+			subjectAltNames: [{ type: 'dns', value: 'p521-csr.example' }],
+		});
+		expect(await verifyCertificateSigningRequest(csr.pem)).toMatchObject({ ok: true });
+	});
+
 	it('parses CSR without extensionRequest attributes', async () => {
 		const keyPair = await generateKeyPair({ kind: 'ed25519' });
 		const csr = await createCertificateSigningRequest({
@@ -83,7 +136,13 @@ describe('csr', () => {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['clientAuth', { type: 'oid', value: '1.2.3.4.6' }],
 				authorityInfoAccess: [{ method: 'ocsp', uri: 'http://csr.example/ocsp' }],
-				crlDistributionPoints: ['http://csr.example/crl'],
+				crlDistributionPoints: [
+					{
+						distributionPoint: {
+							fullName: [{ type: 'uri', value: 'http://csr.example/crl' }],
+						},
+					},
+				],
 			},
 		});
 
@@ -111,12 +170,60 @@ describe('csr', () => {
 		const parsed = parseCertificateSigningRequestPem(csr.pem);
 		expect(parsed.subject.values.commonName).toBe('csr.example');
 		expect(parsed.subjectAltNames).toEqual([{ type: 'dns', value: 'csr.example' }]);
-		expect(parsed.keyUsage).toEqual(['digitalSignature']);
+		expect(parsed.keyUsage).toEqual({ flags: ['digitalSignature'], nonZeroPadding: false });
 		expect(parsed.extendedKeyUsage).toEqual(['clientAuth', { type: 'oid', value: '1.2.3.4.6' }]);
 		expect(parsed.authorityInfoAccess).toEqual([
 			{ method: 'ocsp', uri: 'http://csr.example/ocsp' },
 		]);
-		expect(parsed.crlDistributionPoints).toEqual(['http://csr.example/crl']);
+		expect(parsed.crlDistributionPoints).toEqual([
+			{
+				distributionPoint: {
+					fullName: [{ type: 'uri', value: 'http://csr.example/crl' }],
+				},
+			},
+		]);
+	});
+
+	it('round-trips policy extensions through CSR create/parse flows', async () => {
+		const keyPair = await generateKeyPair({ kind: 'ed25519' });
+		const csr = await createCertificateSigningRequest({
+			subject: { commonName: 'csr-policy.example' },
+			publicKey: keyPair.publicKey,
+			signerPrivateKey: keyPair.privateKey,
+			extensions: {
+				certificatePolicies: [
+					{
+						policyIdentifier: '1.2.3.4.1',
+						policyQualifiers: [{ type: 'cps', uri: 'https://example.com/cps' }],
+					},
+				],
+				policyMappings: [{ issuerDomainPolicy: '1.2.3.4.1', subjectDomainPolicy: '1.2.3.4.2' }],
+				policyConstraints: { requireExplicitPolicy: 1, inhibitPolicyMapping: 0 },
+				inhibitAnyPolicy: { skipCerts: 2 },
+			},
+		});
+
+		const parsed = parseCertificateSigningRequestPem(csr.pem);
+		expect(parsed.certificatePolicies).toEqual([
+			{
+				policyIdentifier: '1.2.3.4.1',
+				policyQualifiers: [{ type: 'cps', uri: 'https://example.com/cps' }],
+			},
+		]);
+		expect(parsed.policyMappings).toEqual([
+			{ issuerDomainPolicy: '1.2.3.4.1', subjectDomainPolicy: '1.2.3.4.2' },
+		]);
+		expect(parsed.policyConstraints).toEqual({
+			requireExplicitPolicy: 1,
+			inhibitPolicyMapping: 0,
+		});
+		expect(parsed.inhibitAnyPolicy).toEqual({ skipCerts: 2 });
+		expect(findExtension(parsed.requestedExtensions, OIDS.certificatePolicies)?.critical).toBe(
+			false,
+		);
+		expect(findExtension(parsed.requestedExtensions, OIDS.policyMappings)?.critical).toBe(true);
+		expect(findExtension(parsed.requestedExtensions, OIDS.policyConstraints)?.critical).toBe(true);
+		expect(findExtension(parsed.requestedExtensions, OIDS.inhibitAnyPolicy)?.critical).toBe(true);
 	});
 
 	it('verifies certificate request signatures with WebCrypto', async () => {
@@ -146,6 +253,117 @@ describe('csr', () => {
 			ok: false,
 			code: 'signature_invalid',
 			details: { subjectCommonName: 'bad-csr.example' },
+		});
+	});
+
+	it('verifies RSA-PSS certificate requests for the shipped profile', async () => {
+		const rsaKeys = await generateKeyPair({
+			kind: 'rsa',
+			modulusLength: 2048,
+			hash: 'SHA-512',
+		});
+		const csr = await createCertificateSigningRequest({
+			subject: { commonName: 'rsa-pss-csr' },
+			publicKey: rsaKeys.publicKey,
+			signerPrivateKey: rsaKeys.privateKey,
+		});
+		const rsaPssPrivateKey = await importRsaPrivateKeyWithScheme(
+			rsaKeys.privateKey,
+			'SHA-512',
+			'pss',
+		);
+		const rsaPssCsrDer = await rewriteCsrSignatureAsRsaPss(csr.der, rsaPssPrivateKey, {
+			hash: 'SHA-512',
+			mgfHash: 'SHA-512',
+			saltLength: 64,
+			trailerField: 1,
+		});
+
+		expect(await verifyCertificateSigningRequest(rsaPssCsrDer)).toMatchObject({ ok: true });
+	});
+
+	it('verifies RSA-PSS certificate requests for all shipped digests', async () => {
+		for (const testCase of [
+			{ hash: 'SHA-256', saltLength: 32 },
+			{ hash: 'SHA-384', saltLength: 48 },
+			{ hash: 'SHA-512', saltLength: 64 },
+		] as const) {
+			const rsaKeys = await generateKeyPair({
+				kind: 'rsa',
+				modulusLength: 2048,
+				hash: testCase.hash,
+			});
+			const csr = await createCertificateSigningRequest({
+				subject: { commonName: `rsa-pss-${testCase.hash}-csr` },
+				publicKey: rsaKeys.publicKey,
+				signerPrivateKey: rsaKeys.privateKey,
+			});
+			const rsaPssPrivateKey = await importRsaPrivateKeyWithScheme(
+				rsaKeys.privateKey,
+				testCase.hash,
+				'pss',
+			);
+			const rsaPssCsrDer = await rewriteCsrSignatureAsRsaPss(csr.der, rsaPssPrivateKey, {
+				hash: testCase.hash,
+				mgfHash: testCase.hash,
+				saltLength: testCase.saltLength,
+				trailerField: 1,
+			});
+
+			expect(await verifyCertificateSigningRequest(rsaPssCsrDer)).toMatchObject({ ok: true });
+		}
+	});
+
+	it('returns typed errors for unsupported RSA-PSS CSR parameters', async () => {
+		const rsaKeys = await generateKeyPair({
+			kind: 'rsa',
+			modulusLength: 2048,
+			hash: 'SHA-512',
+		});
+		const csr = await createCertificateSigningRequest({
+			subject: { commonName: 'rsa-pss-unsupported-csr' },
+			publicKey: rsaKeys.publicKey,
+			signerPrivateKey: rsaKeys.privateKey,
+		});
+		const rsaPssPrivateKey = await importRsaPrivateKeyWithScheme(
+			rsaKeys.privateKey,
+			'SHA-512',
+			'pss',
+		);
+		const unsupportedCsrDer = await rewriteCsrSignatureAsRsaPss(csr.der, rsaPssPrivateKey, {
+			hash: 'SHA-512',
+			mgfHash: 'SHA-512',
+			saltLength: 48,
+			trailerField: 1,
+		});
+
+		expect(await verifyCertificateSigningRequest(unsupportedCsrDer)).toMatchObject({
+			ok: false,
+			code: 'unsupported_signature_algorithm_parameters',
+			details: { subjectCommonName: 'rsa-pss-unsupported-csr' },
+		});
+	});
+
+	it('fails closed on malformed RSA-PSS CSR parameters', async () => {
+		const rsaKeys = await generateKeyPair({
+			kind: 'rsa',
+			modulusLength: 2048,
+			hash: 'SHA-256',
+		});
+		const csr = await createCertificateSigningRequest({
+			subject: { commonName: 'rsa-pss-malformed-csr' },
+			publicKey: rsaKeys.publicKey,
+			signerPrivateKey: rsaKeys.privateKey,
+		});
+		const malformedCsrDer = replaceCsrSignatureAlgorithm(
+			csr.der,
+			sequence([objectIdentifier(OIDS.rsassaPss), tlv(0x30, Uint8Array.of(0x80))]),
+		);
+
+		expect(await verifyCertificateSigningRequest(malformedCsrDer)).toMatchObject({
+			ok: false,
+			code: 'signature_invalid',
+			details: { actual: 'DER child exceeds parent length' },
 		});
 	});
 });

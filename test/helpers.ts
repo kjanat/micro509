@@ -1,11 +1,18 @@
 import { createHash } from 'node:crypto';
+import type { parseCertificatePem } from 'micro509';
 import {
 	createCertificate,
 	createSelfSignedCertificate,
+	exportPkcs8Der,
 	generateKeyPair,
-	type parseCertificatePem,
-} from '#micro509';
+	importPkcs8Der,
+} from 'micro509';
+import type { GeneralName } from 'micro509/x509';
+import { encodeSubjectAltName } from 'micro509/x509';
+import { toArrayBuffer } from '#micro509/internal/asn1/asn1.ts';
 import {
+	bitString,
+	bool,
 	concatBytes,
 	explicitContext,
 	integer,
@@ -14,12 +21,17 @@ import {
 	objectIdentifier,
 	octetString,
 	readElement,
+	readSequenceChildren,
 	sequence,
 	setOf,
 	tlv,
-} from '#micro509/der.ts';
-import { OIDS } from '#micro509/oids.ts';
-import { getSignatureAlgorithm, signBytes } from '#micro509/signing.ts';
+} from '#micro509/internal/asn1/der.ts';
+import { OIDS } from '#micro509/internal/asn1/oids.ts';
+import {
+	encodeAlgorithmIdentifier,
+	getSignatureAlgorithm,
+	signBytes,
+} from '#micro509/internal/crypto/signing.ts';
 
 export function childrenOf(
 	source: Uint8Array,
@@ -87,6 +99,223 @@ export function hasExtensionOid(certificateDer: Uint8Array, oid: string): boolea
 		}
 	}
 	return false;
+}
+
+export interface RevokedEntryCertificateIssuerOverride {
+	readonly entryIndex: number;
+	readonly names: readonly GeneralName[];
+}
+
+export function sliceElement(
+	source: Uint8Array,
+	element: { readonly start: number; readonly end: number; readonly headerLength: number },
+): Uint8Array {
+	return source.slice(element.start - element.headerLength, element.end);
+}
+
+export async function importRsaPrivateKeyWithScheme(
+	privateKey: CryptoKey,
+	hash: 'SHA-256' | 'SHA-384' | 'SHA-512',
+	scheme: 'pkcs1-v1_5' | 'pss',
+): Promise<CryptoKey> {
+	return importPkcs8Der(await exportPkcs8Der(privateKey), { kind: 'rsa', hash, scheme });
+}
+
+export async function rewriteCertificateSignatureAsRsaPss(
+	certificateDer: Uint8Array,
+	signerPrivateKey: CryptoKey,
+	parameters: TestRsaPssParameters,
+): Promise<Uint8Array> {
+	const topLevel = readSequenceChildren(certificateDer);
+	const tbsCertificate = topLevel[0];
+	if (tbsCertificate === undefined) {
+		throw new Error('Missing TBSCertificate');
+	}
+	const tbsDer = sliceElement(certificateDer, tbsCertificate);
+	const tbsChildren = readSequenceChildren(tbsDer);
+	const signatureIndex = tbsChildren[0]?.tag === 0xa0 ? 2 : 1;
+	const signatureAlgorithm = encodeRsaPssAlgorithmIdentifier(parameters);
+	const rebuiltTbs = sequence(
+		tbsChildren.map((child, childIndex) =>
+			childIndex === signatureIndex ? signatureAlgorithm : sliceElement(tbsDer, child),
+		),
+	);
+	const signature = new Uint8Array(
+		await globalThis.crypto.subtle.sign(
+			{ name: 'RSA-PSS', saltLength: parameters.saltLength },
+			signerPrivateKey,
+			toArrayBuffer(rebuiltTbs),
+		),
+	);
+	return sequence([rebuiltTbs, signatureAlgorithm, bitString(signature)]);
+}
+
+export async function rewriteCsrSignatureAsRsaPss(
+	csrDer: Uint8Array,
+	signerPrivateKey: CryptoKey,
+	parameters: TestRsaPssParameters,
+): Promise<Uint8Array> {
+	const topLevel = readSequenceChildren(csrDer);
+	const certificationRequestInfo = topLevel[0];
+	if (certificationRequestInfo === undefined) {
+		throw new Error('Missing CertificationRequestInfo');
+	}
+	const certificationRequestInfoDer = sliceElement(csrDer, certificationRequestInfo);
+	const signatureAlgorithm = encodeRsaPssAlgorithmIdentifier(parameters);
+	const signature = new Uint8Array(
+		await globalThis.crypto.subtle.sign(
+			{ name: 'RSA-PSS', saltLength: parameters.saltLength },
+			signerPrivateKey,
+			toArrayBuffer(certificationRequestInfoDer),
+		),
+	);
+	return sequence([certificationRequestInfoDer, signatureAlgorithm, bitString(signature)]);
+}
+
+export function replaceCertificateSignatureAlgorithm(
+	certificateDer: Uint8Array,
+	signatureAlgorithmDer: Uint8Array,
+): Uint8Array {
+	const topLevel = readSequenceChildren(certificateDer);
+	const tbsCertificate = topLevel[0];
+	const signatureValue = topLevel[2];
+	if (tbsCertificate === undefined || signatureValue === undefined) {
+		throw new Error('Malformed Certificate');
+	}
+	return sequence([
+		sliceElement(certificateDer, tbsCertificate),
+		signatureAlgorithmDer,
+		sliceElement(certificateDer, signatureValue),
+	]);
+}
+
+export function replaceCsrSignatureAlgorithm(
+	csrDer: Uint8Array,
+	signatureAlgorithmDer: Uint8Array,
+): Uint8Array {
+	const topLevel = readSequenceChildren(csrDer);
+	const certificationRequestInfo = topLevel[0];
+	const signatureValue = topLevel[2];
+	if (certificationRequestInfo === undefined || signatureValue === undefined) {
+		throw new Error('Malformed CertificationRequest');
+	}
+	return sequence([
+		sliceElement(csrDer, certificationRequestInfo),
+		signatureAlgorithmDer,
+		sliceElement(csrDer, signatureValue),
+	]);
+}
+
+export interface TestRsaPssParameters {
+	readonly hash: 'SHA-256' | 'SHA-384' | 'SHA-512';
+	readonly mgfHash: 'SHA-256' | 'SHA-384' | 'SHA-512';
+	readonly saltLength: number;
+	readonly trailerField: number;
+}
+
+function encodeRsaPssAlgorithmIdentifier(parameters: TestRsaPssParameters): Uint8Array {
+	const hashOid = hashNameToOid(parameters.hash);
+	const mgfHashOid = hashNameToOid(parameters.mgfHash);
+	return sequence([
+		objectIdentifier(OIDS.rsassaPss),
+		sequence([
+			explicitContext(0, sequence([objectIdentifier(hashOid), nullValue()])),
+			explicitContext(
+				1,
+				sequence([
+					objectIdentifier(OIDS.mgf1),
+					sequence([objectIdentifier(mgfHashOid), nullValue()]),
+				]),
+			),
+			explicitContext(2, integerFromNumber(parameters.saltLength)),
+			explicitContext(3, integerFromNumber(parameters.trailerField)),
+		]),
+	]);
+}
+
+function hashNameToOid(hash: TestRsaPssParameters['hash']): string {
+	switch (hash) {
+		case 'SHA-256':
+			return OIDS.sha256;
+		case 'SHA-384':
+			return OIDS.sha384;
+		case 'SHA-512':
+			return OIDS.sha512;
+	}
+}
+
+function encodeExtension(oid: string, value: Uint8Array, critical = false): Uint8Array {
+	return sequence([objectIdentifier(oid), ...(critical ? [bool(true)] : []), octetString(value)]);
+}
+
+export async function addRevokedEntryCertificateIssuers(
+	crlDer: Uint8Array,
+	signerPrivateKey: CryptoKey,
+	overrides: readonly RevokedEntryCertificateIssuerOverride[],
+): Promise<Uint8Array> {
+	const top = readSequenceChildren(crlDer);
+	const tbsCertList = top[0];
+	if (tbsCertList === undefined) {
+		throw new Error('CRL missing TBSCertList');
+	}
+	const tbsDer = sliceElement(crlDer, tbsCertList);
+	const tbsChildren = readSequenceChildren(tbsDer);
+	let cursor = 3;
+	if (tbsChildren[0]?.tag === 0x02) {
+		cursor += 1;
+	}
+	const maybeNextUpdate = tbsChildren[cursor];
+	if (
+		maybeNextUpdate !== undefined &&
+		(maybeNextUpdate.tag === 0x17 || maybeNextUpdate.tag === 0x18)
+	) {
+		cursor += 1;
+	}
+	const revokedCertificates = tbsChildren[cursor];
+	if (revokedCertificates === undefined || revokedCertificates.tag !== 0x30) {
+		throw new Error('CRL missing revokedCertificates sequence');
+	}
+	const rebuiltEntries = childrenOf(tbsDer, revokedCertificates).map((entry, entryIndex) => {
+		const entryDer = sliceElement(tbsDer, entry);
+		const entryChildren = readSequenceChildren(entryDer);
+		const serialNumber = entryChildren[0];
+		const revocationDate = entryChildren[1];
+		if (serialNumber === undefined || revocationDate === undefined) {
+			throw new Error('Revoked certificate entry is incomplete');
+		}
+		const override = overrides.find((candidate) => candidate.entryIndex === entryIndex);
+		if (override === undefined) {
+			return entryDer;
+		}
+		const existingExtensions = entryChildren[2];
+		const encodedExtensions =
+			existingExtensions === undefined
+				? []
+				: childrenOf(tbsDer, existingExtensions).map((extension) =>
+						sliceElement(entryDer, extension),
+					);
+		const certificateIssuerExtension = encodeExtension(
+			OIDS.certificateIssuer,
+			sequence(override.names.map((name) => encodeSubjectAltName(name))),
+			true,
+		);
+		return sequence([
+			sliceElement(entryDer, serialNumber),
+			sliceElement(entryDer, revocationDate),
+			sequence([...encodedExtensions, certificateIssuerExtension]),
+		]);
+	});
+	const rebuiltTbsChildren = tbsChildren.map((child, childIndex) =>
+		childIndex === cursor ? sequence(rebuiltEntries) : sliceElement(tbsDer, child),
+	);
+	const rebuiltTbsDer = sequence(rebuiltTbsChildren);
+	const signatureAlgorithm = getSignatureAlgorithm(signerPrivateKey);
+	const signatureValue = await signBytes(signerPrivateKey, signatureAlgorithm, rebuiltTbsDer);
+	return sequence([
+		rebuiltTbsDer,
+		encodeAlgorithmIdentifier(signatureAlgorithm),
+		bitString(signatureValue),
+	]);
 }
 
 export function createSyntheticPkcs7SignedData(

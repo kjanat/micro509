@@ -1,35 +1,28 @@
 name: Deploy Site
 
 on:
-  push: { branches: [master] }
+  push: { branches: [master, vitepress] }
   workflow_dispatch:
 
-permissions: { contents: read, pages: write, id-token: write }
-
-concurrency: { group: pages, cancel-in-progress: false }
+concurrency:
+  group: pages
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions: { contents: read }
     steps:
-      - uses: actions/checkout@v6
-        with: { fetch-depth: 0 }
-
-      - uses: oven-sh/setup-bun@v2
-        with: { bun-version: latest }
-
+      - uses: actions/checkout@v6 # Trusted action, tag allowed
+      - { uses: ./.github/actions/setup-ts, with: { install-bun: true } }
       - run: bun install --frozen-lockfile
-
-      - run: bun run site:build
-
-      - uses: actions/configure-pages@v6
-
-      - uses: actions/upload-pages-artifact@v5
+      - run: bun --bun site:build
+      - uses: actions/upload-pages-artifact@v5.0.0 # Trusted action, tag allowed
         with: { path: site/.vitepress/dist }
 
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    permissions: { pages: write, id-token: write }
     environment: { name: github-pages, url: "${{ steps.deployment.outputs.page_url }}" }
-    steps:
-      - { name: Deploy to GitHub Pages, id: deployment, uses: actions/deploy-pages@v5 }
+    steps: [{ name: Deploy to GitHub Pages, id: deployment, uses: actions/deploy-pages@v5 }] # Trusted action, tag allowed

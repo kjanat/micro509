@@ -1,7 +1,7 @@
 {
 	"name": "micro509",
 	"version": "0.1.0",
-	"description": "Small, typed X.509 builders for modern TypeScript",
+	"description": "The zero-dependency TypeScript PKI toolkit for real certificate workflows.",
 	"keywords": [
 		"x509",
 		"certificate",
@@ -10,18 +10,57 @@
 		"der",
 		"jwk"
 	],
+	"homepage": "https://micro509.kjanat.com",
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/kjanat/ts-x509.git"
 	},
+	"author": {
+		"name": "Kaj Kowalski",
+		"email": "info@kajkowalski.nl",
+		"url": "https://github.com/kjanat"
+	},
 	"license": "MIT",
+	"sideEffects": false,
 	"type": "module",
 	"imports": {
 		"#micro509": "./src/index.ts",
-		"#micro509/*": "./src/*"
+		"#micro509/*": "./src/*",
+		"#micro509/internal/*": "./src/internal/*"
 	},
 	"exports": {
-		".": "./dist/index.js",
+		".": {
+			"bun": "./src/index.ts",
+			"default": "./dist/index.js"
+		},
+		"./keys": {
+			"bun": "./src/keys/index.ts",
+			"default": "./dist/keys.js"
+		},
+		"./pem": {
+			"bun": "./src/pem/index.ts",
+			"default": "./dist/pem.js"
+		},
+		"./pkcs": {
+			"bun": "./src/pkcs/index.ts",
+			"default": "./dist/pkcs.js"
+		},
+		"./result": {
+			"bun": "./src/result/index.ts",
+			"default": "./dist/result.js"
+		},
+		"./revocation": {
+			"bun": "./src/revocation/index.ts",
+			"default": "./dist/revocation.js"
+		},
+		"./verify": {
+			"bun": "./src/verify/index.ts",
+			"default": "./dist/verify.js"
+		},
+		"./x509": {
+			"bun": "./src/x509/index.ts",
+			"default": "./dist/x509.js"
+		},
 		"./package.json": "./package.json"
 	},
 	"types": "./dist/index.d.ts",
@@ -31,23 +70,44 @@
 	"scripts": {
 		"bd": "tsdown --no-attw --no-publint --no-unused --no-report",
 		"build": "tsdown",
+		"docs:build": "rm -rf docs/deno 2>/dev/null; deno doc --html --output=docs/deno --name=micro509 src/**/index.ts",
+		"docs:lint": "rm -rf docs/deno 2>/dev/null; deno doc --html --output=docs/deno --name=micro509 --lint src/**/index.ts",
 		"fmt": "dprint fmt",
-		"lint": "biome lint",
-		"test": "AGENT=1 bun test --coverage",
-		"typecheck": "tsgo"
+		"lint": "bun lint:biome",
+		"lint:biome": "biome lint",
+		"lint:deno": "deno lint --rules-exclude=no-node-globals,require-await src",
+		"publish:jsr": "[[ -n $GITHUB_ACTIONS ]] && bunx --bun jsr publish || bunx --bun jsr publish --dry-run",
+		"site:api": "typedoc --gitRevision \"$(git branch --show-current)\"",
+		"site:build": "bun site:api && MICRO509_GIT_BRANCH=\"${GITHUB_REF_NAME:-$(git branch --show-current)}\" MICRO509_GIT_COMMIT=\"${GITHUB_SHA:-$(git rev-parse --short=7 HEAD)}\" bunx --bun vitepress build site",
+		"site:dev": "WATCH=true bun site:api & MICRO509_GIT_BRANCH=\"${GITHUB_REF_NAME:-$(git branch --show-current)}\" MICRO509_GIT_COMMIT=\"${GITHUB_SHA:-$(git rev-parse --short=7 HEAD)}\" bunx --bun vitepress dev site --host & wait",
+		"site:preview": "bun site:api && MICRO509_GIT_BRANCH=\"${GITHUB_REF_NAME:-$(git branch --show-current)}\" MICRO509_GIT_COMMIT=\"${GITHUB_SHA:-$(git rev-parse --short=7 HEAD)}\" bunx --bun vitepress preview site",
+		"test": "AGENT=1 bun test --coverage --concurrent",
+		"test:watch": "AGENT=1 bun test --watch --concurrent",
+		"test:differential": "bun test test/differential.test.ts",
+		"test:pkits": "bun test test/pkits.test.ts",
+		"typecheck": "tsgo --noEmit -p tsconfig.src.json && tsgo --noEmit -p tsconfig.other.json",
+		"typecheck:tsc": "tsc --noEmit -p tsconfig.src.json && tsc --noEmit -p tsconfig.other.json"
 	},
 	"devDependencies": {
 		"@arethetypeswrong/core": "^0.18.2",
-		"@biomejs/biome": "^2.4.6",
+		"@biomejs/biome": "^2.4.7",
 		"@types/bun": "^1.3.10",
-		"@typescript/native-preview": "^7.0.0-dev.20260311.1",
-		"dprint": "^0.52.0",
+		"@typescript/native-preview": "^7.0.0-dev.20260315.1",
+		"dprint": "^0.53.0",
+		"markdown-it-task-lists": "^2.1.1",
+		"oxc-minify": "^0.120.0",
 		"publint": "^0.3.18",
-		"tsdown": "^0.21.2",
-		"typescript": "^6.0.1-rc",
-		"unplugin-unused": "^0.5.7"
+		"tsdown": "^0.21.3",
+		"typedoc": "^0.28.17",
+		"typedoc-plugin-markdown": "^4.10.0",
+		"typedoc-vitepress-theme": "^1.1.2",
+		"typescript": "^5.9.3",
+		"unplugin-unused": "^0.5.7",
+		"vite-robots-txt": "^1.0.0",
+		"vite-svg-to-ico": "^2.0.1",
+		"vitepress": "next"
 	},
-	"packageManager": "bun@1.3.10",
+	"packageManager": "bun@1.3.12",
 	"devEngines": {
 		"packageManager": [
 			{
@@ -74,7 +134,20 @@
 		]
 	},
 	"volta": {
-		"node": "25.8.0",
-		"npm": "11.11.0"
+		"node": "25.9.0",
+		"npm": "11.12.1"
+	},
+	"publishConfig": {
+		"exports": {
+			".": "./dist/index.js",
+			"./keys": "./dist/keys.js",
+			"./pem": "./dist/pem.js",
+			"./pkcs": "./dist/pkcs.js",
+			"./result": "./dist/result.js",
+			"./revocation": "./dist/revocation.js",
+			"./verify": "./dist/verify.js",
+			"./x509": "./dist/x509.js",
+			"./package.json": "./package.json"
+		}
 	}
 }

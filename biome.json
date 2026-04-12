@@ -31,8 +31,16 @@
 			"source": { "organizeImports": "on" }
 		}
 	},
-	"overrides": [{
-		"includes": ["**/*.jsonc", "!biome.jsonc"],
-		"json": { "formatter": { "trailingCommas": "all" } }
-	}]
+	"overrides": [
+		{
+			"includes": ["**/*.jsonc", "!biome.jsonc"],
+			"json": { "formatter": { "trailingCommas": "all" } }
+		},
+		{
+			"includes": ["**/site"],
+			"formatter": {
+				"lineWidth": 60
+			}
+		}
+	]
 }
