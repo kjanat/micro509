@@ -95,7 +95,7 @@ jobs:
           fi
           npm publish --dry-run
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ needs.validate.outputs.is_tag == 'true' && secrets.NPM_TOKEN || '' }}
           DRY_RUN: "${{ needs.validate.outputs.is_tag != 'true' }}"
           IS_PRERELEASE: "${{ needs.validate.outputs.prerelease }}"
 
