@@ -70,6 +70,7 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run build
       - run: |
+          PKG_NAME="$(jq -r '.name' package.json)"
           PKG_VERSION="$(jq -r '.version' package.json)"
 
           if [[ "${DRY_RUN}" != "true" ]]; then
@@ -89,7 +90,6 @@ jobs:
           npm publish --dry-run
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          PKG_NAME: micro509
           PKG_VERSION: ${{ needs.validate.outputs.version }}
           DRY_RUN: "${{ needs.validate.outputs.is_tag != 'true' }}"
           IS_PRERELEASE: "${{ needs.validate.outputs.prerelease }}"

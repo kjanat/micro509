@@ -90,15 +90,15 @@ import { checkCertificateRevocation } from 'micro509/revocation';
 const result = await checkCertificateRevocation({
   certificate: leaf,
   issuerCertificate: ca.certificate,
-  evidence: {
-    crls: [crlPem],
-    ocspResponses: [ocspDer],
-  },
+  evidence: [
+    { kind: 'crl', crl: crlPem },
+    { kind: 'ocsp', response: ocspDer },
+  ],
 });
 
-if (result.ok) {
-  console.log('Revocation status:', result.value.status);
-} else {
-  console.error('Revocation check failed:', result.error);
+// Always succeeds — check status discriminator
+console.log('Revocation status:', result.value.status);
+if (result.value.status === 'revoked') {
+  console.log('Revoked at:', result.value.revokedAt);
 }
 ```

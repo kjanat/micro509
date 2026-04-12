@@ -4,11 +4,6 @@ on:
   push: { branches: [master, vitepress] }
   workflow_dispatch:
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
 concurrency:
   group: pages
   cancel-in-progress: false
@@ -16,6 +11,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions: { contents: read }
     steps:
       - uses: actions/checkout@v6 # Trusted action, tag allowed
       - { uses: ./.github/actions/setup-ts, with: { install-bun: true } }
@@ -27,5 +23,6 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    permissions: { pages: write, id-token: write }
     environment: { name: github-pages, url: "${{ steps.deployment.outputs.page_url }}" }
     steps: [{ name: Deploy to GitHub Pages, id: deployment, uses: actions/deploy-pages@v5 }] # Trusted action, tag allowed
