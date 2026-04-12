@@ -77,8 +77,8 @@ const result = await validateOcspResponse({
 });
 
 if (result.ok) {
-  // 'good' | 'revoked' | 'unknown'
-  console.log(result.value.status);
+  const entry = result.value.responses?.[0];
+  console.log(entry?.certStatus); // 'good' | 'revoked' | 'unknown'
 }
 ```
 

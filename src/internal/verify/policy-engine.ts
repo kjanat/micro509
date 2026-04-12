@@ -178,6 +178,13 @@ function processPolicyState(
 	chain: readonly ParsedCertificate[],
 	state: PolicyValidationState,
 ): void {
+	if (chain.length === 1) {
+		const certificate = chain[0];
+		if (certificate !== undefined) {
+			processPolicyCertificate(state, certificate, 1, true);
+		}
+		return;
+	}
 	const leafDepth = chain.length - 1;
 	for (let index = chain.length - 2; index >= 0; index -= 1) {
 		const certificate = chain[index];
@@ -219,7 +226,7 @@ function collectAuthorityConstrainedPolicies(
 	if (graph === null) {
 		return new Map<string, ConstrainedPolicy>();
 	}
-	const leafDepth = chain.length - 1;
+	const leafDepth = Math.max(1, chain.length - 1);
 	const finalDepth = graph.nodesByDepth[leafDepth];
 	if (finalDepth === undefined) {
 		return new Map<string, ConstrainedPolicy>();
@@ -279,7 +286,7 @@ function collectRootDomainPolicies(
 	if (graph === null) {
 		return new Map<string, ConstrainedPolicy>();
 	}
-	const leafDepth = chain.length - 1;
+	const leafDepth = Math.max(1, chain.length - 1);
 	const finalDepth = graph.nodesByDepth[leafDepth];
 	if (finalDepth === undefined) {
 		return new Map<string, ConstrainedPolicy>();
