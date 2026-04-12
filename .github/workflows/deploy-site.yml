@@ -21,11 +21,11 @@ jobs:
       - { uses: ./.github/actions/setup-ts, with: { install-bun: true } }
       - run: bun install --frozen-lockfile
       - run: bun --bun site:build
-      - uses: actions/upload-pages-artifact@v5 # Trusted action, tag allowed
+      - uses: actions/upload-pages-artifact@v5.0.0 # Trusted action, tag allowed
         with: { path: site/.vitepress/dist }
 
   deploy:
     needs: build
     runs-on: ubuntu-latest
     environment: { name: github-pages, url: "${{ steps.deployment.outputs.page_url }}" }
-    steps: [{ name: Deploy to GitHub Pages, id: deployment, uses: actions/deploy-pages@v4 }] # Trusted action, tag allowed
+    steps: [{ name: Deploy to GitHub Pages, id: deployment, uses: actions/deploy-pages@v5 }] # Trusted action, tag allowed
