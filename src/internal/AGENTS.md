@@ -24,6 +24,7 @@ internal/
 | ------------------------ | --------- | ------------------------------------------------- |
 | ASN.1 and OID core       | `asn1/`   | DER encoding/parsing + OID resolution             |
 | Crypto dispatch          | `crypto/` | algorithm/profile/sign/verify plumbing            |
+| Cross-domain utilities   | `shared/` | base64 + DN + IP helpers (pure, deterministic)    |
 | Name / extension helpers | `x509/`   | registry + field metadata + bit decoding          |
 | Verification engines     | `verify/` | high-complexity policy/name-constraint/path logic |
 

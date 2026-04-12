@@ -50,11 +50,12 @@ const leafKeyPair = await generateKeyPair({
 
 // Issue a leaf certificate
 const leaf = await createCertificate({
+  issuer: { commonName: 'My CA' },
   subject: { commonName: 'leaf.example.com' },
   validity: { days: 90 },
-  issuerCertificate: ca.certificate,
+  publicKey: leafKeyPair.publicKey,
   signerPrivateKey: ca.keyPair.privateKey,
-  subjectPublicKey: leafKeyPair.publicKey,
+  issuerPublicKey: ca.keyPair.publicKey,
   extensions: {
     keyUsage: ['digitalSignature'],
     subjectAltNames: [

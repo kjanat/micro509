@@ -10,8 +10,9 @@ Examples below assume `ca`, `leaf`, `crlPem`, and `ocspDer` are already defined.
 import { createCertificateRevocationList } from 'micro509/revocation';
 
 const crl = await createCertificateRevocationList({
-  issuerCertificate: ca.certificate,
+  issuer: { commonName: 'My CA' },
   signerPrivateKey: ca.keyPair.privateKey,
+  issuerPublicKey: ca.keyPair.publicKey,
   thisUpdate: new Date(),
   nextUpdate: new Date(
     Date.now() + 7 * 24 * 60 * 60 * 1000,
@@ -38,8 +39,8 @@ import {
 const parsed = parseCertificateRevocationListPem(crlPem);
 
 const verifyResult = await verifyCertificateRevocationList(
-  parsed,
-  ca.certificate,
+  crlPem,
+  ca.certificate.pem,
 );
 
 if (verifyResult.ok) {
@@ -55,8 +56,12 @@ if (verifyResult.ok) {
 import { createOcspRequest } from 'micro509/revocation';
 
 const request = await createOcspRequest({
-  issuerCertificate: ca.certificate,
-  serialNumber: leaf.serialNumber,
+  requests: [
+    {
+      certificate: leaf.pem,
+      issuerCertificate: ca.certificate.pem,
+    },
+  ],
 });
 ```
 
@@ -73,7 +78,7 @@ const response = parseOcspResponseDer(ocspDer);
 const result = await validateOcspResponse({
   response,
   request,
-  issuerCertificate: ca.certificate,
+  issuerCertificate: ca.certificate.pem,
 });
 
 if (result.ok) {
@@ -88,8 +93,8 @@ if (result.ok) {
 import { checkCertificateRevocation } from 'micro509/revocation';
 
 const result = await checkCertificateRevocation({
-  certificate: leaf,
-  issuerCertificate: ca.certificate,
+  certificate: leaf.pem,
+  issuerCertificate: ca.certificate.pem,
   evidence: [
     { kind: 'crl', crl: crlPem },
     { kind: 'ocsp', response: ocspDer },

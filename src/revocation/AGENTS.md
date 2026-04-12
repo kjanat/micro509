@@ -12,7 +12,8 @@ CRL and OCSP evidence collection, parsing, and proof checks.
 revocation/
 ├── crl.ts          # CRL parsing + lifecycle
 ├── ocsp.ts         # OCSP request/response lifecycle
-├── revocation.ts   # revocation orchestration
+├── revocation.ts   # single-cert evidence orchestration
+├── chain.ts        # chain-level revocation per RFC 5280 §6.3
 └── index.ts        # domain barrel
 ```
 
@@ -22,7 +23,8 @@ revocation/
 | ---------------------- | --------------- | --------------------------------------- |
 | CRL lifecycle          | `crl.ts`        | parse, create, validate, verify         |
 | OCSP lifecycle         | `ocsp.ts`       | request/create, parse, validate, verify |
-| Evidence orchestration | `revocation.ts` | top-level check and responder selection |
+| Single-cert evidence   | `revocation.ts` | top-level check and responder selection |
+| Chain-level revocation | `chain.ts`      | RFC 5280 §6.3 whole-chain evaluation    |
 
 ## CONVENTIONS
 

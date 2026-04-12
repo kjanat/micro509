@@ -11,7 +11,7 @@ const ed = await generateKeyPair({ kind: 'ed25519' });
 // ECDSA P-256
 const ec = await generateKeyPair({
   kind: 'ecdsa',
-  curve: 'P-256',
+  namedCurve: 'P-256',
 });
 
 // RSA 2048
@@ -33,7 +33,7 @@ import {
 
 const privateKey = await importPkcs8Pem(pem, {
   kind: 'ecdsa',
-  curve: 'P-256',
+  namedCurve: 'P-256',
 });
 const exported = await exportPkcs8Pem(privateKey);
 ```
@@ -48,7 +48,7 @@ import {
 
 const publicKey = await importSpkiPem(pem, {
   kind: 'ecdsa',
-  curve: 'P-256',
+  namedCurve: 'P-256',
 });
 const exported = await exportSpkiPem(publicKey);
 ```
@@ -63,11 +63,11 @@ import {
 
 const publicKey = await importPublicJwk(jwk, {
   kind: 'ecdsa',
-  curve: 'P-256',
+  namedCurve: 'P-256',
 });
 const privateKey = await importPrivateJwk(jwk, {
   kind: 'ecdsa',
-  curve: 'P-256',
+  namedCurve: 'P-256',
 });
 ```
 
@@ -96,7 +96,7 @@ import {
 
 const privateKey = await importSec1Pem(pem, {
   kind: 'ecdsa',
-  curve: 'P-256',
+  namedCurve: 'P-256',
 });
 const exported = await exportSec1Pem(privateKey);
 ```
@@ -117,7 +117,7 @@ const privateKey = await importEncryptedPkcs8Pem(
   'password',
   {
     kind: 'ecdsa',
-    curve: 'P-256',
+    namedCurve: 'P-256',
   },
 );
 
