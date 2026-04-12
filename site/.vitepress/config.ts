@@ -118,7 +118,6 @@ export default defineConfig({
 		'src/**',
 		'test/**',
 		'docs/rfc/**',
-		'docs/ARCHITECTURE.md',
 		'docs/API.md',
 		'CONTRIBUTING.md',
 		'anal.md',
