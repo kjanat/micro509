@@ -26,7 +26,7 @@ import type { ParsedCertificate } from '#micro509/x509/parse.ts';
  */
 export interface PolicyValidationState {
 	/** Caller-requested acceptable policies, or `'any'`. */
-	initialPolicySet: readonly string[] | 'any';
+	readonly initialPolicySet: readonly string[] | 'any';
 	/** Remaining certificates before explicit-policy enforcement kicks in. */
 	explicitPolicy: number;
 	/** Remaining certificates before policy mappings are disallowed. */
