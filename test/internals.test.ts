@@ -402,7 +402,7 @@ describe('sig-verify', () => {
 		const result = requireEcPublicKey(OIDS.ecPublicKey, OIDS.secp521r1, 'SHA-512');
 		expect(result.ok).toBe(true);
 		if (result.ok) {
-			expect(result.value.importAlgorithm).toEqual({ kind: 'ecdsa', namedCurve: 'P-521' });
+			expect(result.value.importAlgorithm).toEqual({ kind: 'ecdsa', curve: 'P-521' });
 			expect(result.value.ecdsaRawSignatureBytes).toBe(132);
 		}
 		expect(curveBytes(OIDS.secp521r1)).toBe(132);
@@ -784,7 +784,7 @@ describe('signing.ts edge cases', () => {
 	it('getSignatureAlgorithm throws for unsupported algorithm name', async () => {
 		const { generateKeyPair: genKp } = await import('#micro509');
 		// Use an ECDSA key but manually check the algorithm name guard
-		const keys = await genKp({ kind: 'ecdsa', namedCurve: 'P-256' });
+		const keys = await genKp({ kind: 'ecdsa', curve: 'P-256' });
 		// We can't easily create a CryptoKey with an unknown algorithm,
 		// but we can test the known algorithms work correctly
 		const result = getSignatureAlgorithm(keys.privateKey);
@@ -854,7 +854,7 @@ describe('signing.ts edge cases', () => {
 
 	it('getSignatureAlgorithm returns correct config for ECDSA P-384', async () => {
 		const { generateKeyPair: genKp } = await import('#micro509');
-		const keys = await genKp({ kind: 'ecdsa', namedCurve: 'P-384' });
+		const keys = await genKp({ kind: 'ecdsa', curve: 'P-384' });
 		const result = getSignatureAlgorithm(keys.privateKey);
 		expect(result.algorithmOid).toBe(OIDS.ecdsaWithSHA384);
 		expect(result.ecdsaRawSignatureBytes).toBe(96);
@@ -862,7 +862,7 @@ describe('signing.ts edge cases', () => {
 
 	it('getSignatureAlgorithm returns correct config for ECDSA P-521', async () => {
 		const { generateKeyPair: genKp } = await import('#micro509');
-		const keys = await genKp({ kind: 'ecdsa', namedCurve: 'P-521' });
+		const keys = await genKp({ kind: 'ecdsa', curve: 'P-521' });
 		const result = getSignatureAlgorithm(keys.privateKey);
 		expect(result.algorithmOid).toBe(OIDS.ecdsaWithSHA512);
 		expect(result.ecdsaRawSignatureBytes).toBe(132);
@@ -876,7 +876,7 @@ describe('signing.ts edge cases', () => {
 			OIDS.ecPublicKey,
 			OIDS.secp521r1,
 		);
-		expect(result.importAlgorithm).toEqual({ kind: 'ecdsa', namedCurve: 'P-521' });
+		expect(result.importAlgorithm).toEqual({ kind: 'ecdsa', curve: 'P-521' });
 		expect(result.verifyParams).toEqual({ name: 'ECDSA', hash: 'SHA-512' });
 		expect(result.ecdsaRawSignatureBytes).toBe(132);
 	});

@@ -9,11 +9,11 @@
  * import { generateKeyPair, exportPkcs8Pem, importSpkiPem } from 'micro509/keys';
  *
  * // Generate and export
- * const keys = await generateKeyPair({ kind: 'ecdsa', namedCurve: 'P-256' });
+ * const keys = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
  * const privatePem = await exportPkcs8Pem(keys.privateKey);
  *
  * // Import
- * const publicKey = await importSpkiPem(publicPem, { kind: 'ecdsa', namedCurve: 'P-256' });
+ * const publicKey = await importSpkiPem(publicPem, { kind: 'ecdsa', curve: 'P-256' });
  * ```
  *
  * @module
@@ -76,7 +76,7 @@ export interface EcKeyAlgorithmInput {
 	/** Discriminant selecting ECDSA key generation. */
 	readonly kind: 'ecdsa';
 	/** NIST curve. Defaults to `'P-256'`. */
-	readonly namedCurve?: EcNamedCurve;
+	readonly curve?: EcNamedCurve;
 }
 
 /** Ed25519 variant of {@linkcode KeyAlgorithmInput}. */
@@ -126,7 +126,7 @@ export interface ImportEcPublicKeyInput {
 	/** Discriminant selecting ECDSA import. */
 	readonly kind: 'ecdsa';
 	/** NIST curve the key belongs to. Required for EC import. */
-	readonly namedCurve: EcNamedCurve;
+	readonly curve: EcNamedCurve;
 }
 
 /** Ed25519 variant of {@linkcode PublicKeyImportInput}. */
@@ -162,7 +162,7 @@ export interface LegacyPemEncryptionOptions {
  *
  * @example
  * ```ts
- * const ecKeys = await generateKeyPair({ kind: 'ecdsa', namedCurve: 'P-384' });
+ * const ecKeys = await generateKeyPair({ kind: 'ecdsa', curve: 'P-384' });
  * const rsaKeys = await generateKeyPair({ kind: 'rsa', modulusLength: 4096 });
  * const edKeys = await generateKeyPair({ kind: 'ed25519' });
  *
@@ -172,7 +172,7 @@ export interface LegacyPemEncryptionOptions {
  * ```
  */
 export async function generateKeyPair(
-	algorithm: KeyAlgorithmInput = { kind: 'ecdsa', namedCurve: 'P-256' },
+	algorithm: KeyAlgorithmInput = { kind: 'ecdsa', curve: 'P-256' },
 ): Promise<KeyPairMaterial> {
 	const subtle = getCrypto().subtle;
 	const generated = await subtle.generateKey(toGenerateKeyAlgorithm(algorithm), true, [
@@ -238,7 +238,7 @@ export async function exportPkcs8Der(privateKey: CryptoKey): Promise<Uint8Array>
  *
  * @example
  * ```ts
- * const keys = await generateKeyPair({ kind: 'ecdsa', namedCurve: 'P-256' });
+ * const keys = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
  * const jwk = await exportPublicJwk(keys.publicKey);
  * ```
  */
@@ -487,7 +487,7 @@ export async function importSpkiDer(
  * const pem = `-----BEGIN PUBLIC KEY-----
  * MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE...
  * -----END PUBLIC KEY-----`;
- * const key = await importSpkiPem(pem, { kind: 'ecdsa', namedCurve: 'P-256' });
+ * const key = await importSpkiPem(pem, { kind: 'ecdsa', curve: 'P-256' });
  * ```
  *
  * @see {@linkcode exportSpkiPem} for the inverse operation
@@ -560,7 +560,7 @@ export async function importPkcs8Der(
  *
  * @example
  * ```ts
- * const key = await importPkcs8Pem(pemString, { kind: 'ecdsa', namedCurve: 'P-256' });
+ * const key = await importPkcs8Pem(pemString, { kind: 'ecdsa', curve: 'P-256' });
  * ```
  */
 export async function importPkcs8Pem(
@@ -709,7 +709,7 @@ export async function importSec1Der(
 	der: Uint8Array,
 	algorithm: ImportEcPublicKeyInput,
 ): Promise<CryptoKey> {
-	return importPkcs8Der(wrapSec1InPkcs8(der, algorithm.namedCurve), algorithm);
+	return importPkcs8Der(wrapSec1InPkcs8(der, algorithm.curve), algorithm);
 }
 
 /**
@@ -775,7 +775,7 @@ export async function importPublicJwk(
  * @example
  * ```ts
  * const jwk = { kty: 'EC', crv: 'P-256', x: '...', y: '...', d: '...' };
- * const key = await importPrivateJwk(jwk, { kind: 'ecdsa', namedCurve: 'P-256' });
+ * const key = await importPrivateJwk(jwk, { kind: 'ecdsa', curve: 'P-256' });
  * ```
  */
 export async function importPrivateJwk(
@@ -800,7 +800,7 @@ function toGenerateKeyAlgorithm(
 		case 'ecdsa':
 			return {
 				name: 'ECDSA',
-				namedCurve: algorithm.namedCurve ?? 'P-256',
+				namedCurve: algorithm.curve ?? 'P-256',
 			};
 		case 'ed25519':
 			return { name: 'Ed25519' };
@@ -820,7 +820,7 @@ function toImportAlgorithm(
 		case 'ecdsa':
 			return {
 				name: 'ECDSA',
-				namedCurve: algorithm.namedCurve,
+				namedCurve: algorithm.curve,
 			};
 		case 'ed25519':
 			return { name: 'Ed25519' };
@@ -884,20 +884,17 @@ function wrapPkcs1InPkcs8(der: Uint8Array): Uint8Array {
 }
 
 /** Wrap a SEC 1 ECPrivateKey in a PKCS#8 PrivateKeyInfo envelope for WebCrypto import. */
-function wrapSec1InPkcs8(
-	der: Uint8Array,
-	namedCurve: ImportEcPublicKeyInput['namedCurve'],
-): Uint8Array {
+function wrapSec1InPkcs8(der: Uint8Array, curve: ImportEcPublicKeyInput['curve']): Uint8Array {
 	return sequence([
 		Uint8Array.of(0x02, 0x01, 0x00),
-		sequence([objectIdentifier(OIDS.ecPublicKey), objectIdentifier(namedCurveToOid(namedCurve))]),
+		sequence([objectIdentifier(OIDS.ecPublicKey), objectIdentifier(curveToOid(curve))]),
 		octetString(new Uint8Array(der)),
 	]);
 }
 
-/** Map a WebCrypto named curve to its ASN.1 OID string. */
-function namedCurveToOid(namedCurve: ImportEcPublicKeyInput['namedCurve']): string {
-	switch (namedCurve) {
+/** Map a curve name to its ASN.1 OID string. */
+function curveToOid(curve: ImportEcPublicKeyInput['curve']): string {
+	switch (curve) {
 		case 'P-256':
 			return OIDS.prime256v1;
 		case 'P-384':
@@ -1181,7 +1178,7 @@ function assertSpkiMatchesRequestedAlgorithm(
 			if (
 				parsedSpki.algorithmOid !== OIDS.ecPublicKey ||
 				parsedSpki.parametersTag !== 0x06 ||
-				parsedSpki.parametersOid !== namedCurveToOid(algorithm.namedCurve)
+				parsedSpki.parametersOid !== curveToOid(algorithm.curve)
 			) {
 				throw new Error('SubjectPublicKeyInfo algorithm does not match requested import algorithm');
 			}
@@ -1215,7 +1212,7 @@ function assertPkcs8MatchesRequestedAlgorithm(
 			if (
 				parsedPrivateKey.algorithmOid !== OIDS.ecPublicKey ||
 				parsedPrivateKey.parametersTag !== 0x06 ||
-				parsedPrivateKey.parametersOid !== namedCurveToOid(algorithm.namedCurve)
+				parsedPrivateKey.parametersOid !== curveToOid(algorithm.curve)
 			) {
 				throw new Error('PKCS#8 private key algorithm does not match requested import algorithm');
 			}
@@ -1256,7 +1253,7 @@ function assertPublicJwkMatchesRequestedAlgorithm(
 		case 'ecdsa':
 			if (
 				jwk.kty !== 'EC' ||
-				jwk.crv !== algorithm.namedCurve ||
+				jwk.crv !== algorithm.curve ||
 				typeof jwk.x !== 'string' ||
 				typeof jwk.y !== 'string'
 			) {

@@ -9,7 +9,7 @@ describe('x509 domain', () => {
 	});
 
 	it('creates a self-signed cert with extensions and parses back decoded values', async () => {
-		const keyPair = await generateKeyPair({ kind: 'ecdsa', namedCurve: 'P-256' });
+		const keyPair = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
 		const subject: NameInput = {
 			commonName: 'test-ca.example',
 			organization: 'X509 Domain Test',
@@ -53,7 +53,7 @@ describe('x509 domain', () => {
 	});
 
 	it('creates a CSR and parses back subject fields', async () => {
-		const keyPair = await generateKeyPair({ kind: 'ecdsa', namedCurve: 'P-384' });
+		const keyPair = await generateKeyPair({ kind: 'ecdsa', curve: 'P-384' });
 
 		const csr = await x509.createCertificateSigningRequest({
 			subject: {

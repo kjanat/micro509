@@ -6,7 +6,7 @@ import * as result from '#micro509/result/index.ts';
 
 const ecAlgorithm = {
 	kind: 'ecdsa',
-	namedCurve: 'P-256',
+	curve: 'P-256',
 } as const satisfies ImportEcPublicKeyInput;
 
 describe('utility domains', () => {

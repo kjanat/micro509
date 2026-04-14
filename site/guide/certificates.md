@@ -45,7 +45,7 @@ const ca = await createSelfSignedCertificate({
 // Generate a key pair for the leaf certificate
 const leafKeyPair = await generateKeyPair({
   kind: 'ecdsa',
-  namedCurve: 'P-256',
+  curve: 'P-256',
 });
 
 // Issue a leaf certificate

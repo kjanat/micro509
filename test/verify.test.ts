@@ -517,7 +517,7 @@ describe('chain verification', () => {
 
 		const p384CaKeys = await generateKeyPair({
 			kind: 'ecdsa',
-			namedCurve: 'P-384',
+			curve: 'P-384',
 		});
 		const p384Ca = await createSelfSignedCertificate({
 			subject: { commonName: 'p384-ca' },
@@ -529,7 +529,7 @@ describe('chain verification', () => {
 		});
 		const p384LeafKeys = await generateKeyPair({
 			kind: 'ecdsa',
-			namedCurve: 'P-384',
+			curve: 'P-384',
 		});
 		const p384Leaf = await createCertificate({
 			issuer: { commonName: 'p384-ca' },
@@ -548,7 +548,7 @@ describe('chain verification', () => {
 
 		const p521CaKeys = await generateKeyPair({
 			kind: 'ecdsa',
-			namedCurve: 'P-521',
+			curve: 'P-521',
 		});
 		const p521Ca = await createSelfSignedCertificate({
 			subject: { commonName: 'p521-ca' },
@@ -560,7 +560,7 @@ describe('chain verification', () => {
 		});
 		const p521LeafKeys = await generateKeyPair({
 			kind: 'ecdsa',
-			namedCurve: 'P-521',
+			curve: 'P-521',
 		});
 		const p521Leaf = await createCertificate({
 			issuer: { commonName: 'p521-ca' },
