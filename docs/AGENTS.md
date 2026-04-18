@@ -11,28 +11,25 @@ concrete tests.
 
 ## WHERE TO LOOK
 
-| Task                          | File                 | Notes                                                 |
-| ----------------------------- | -------------------- | ----------------------------------------------------- |
-| Support boundary              | [`PKIX-SCOPE.md`]    | canonical claim language and partial/full scope lines |
-| PKITS harness contract        | [`PKITS-HARNESS.md`] | shipped PKITS subset and fixed validation time        |
-| Differential harness contract | [`DIFF-HARNESS.md`]  | OpenSSL oracle scope and non-goals                    |
-| RFC source text               | [`rfc/*.txt`][rfc]   | vendored references only                              |
+| Area             | File              | Notes                                                 |
+| ---------------- | ----------------- | ----------------------------------------------------- |
+| Support boundary | [`PKIX-SCOPE.md`] | canonical claim language and partial/full scope lines |
 
 ## STANDARDS MAPPING
 
-| Need                          | File          | Notes                                              |
-| ----------------------------- | ------------- | -------------------------------------------------- |
-| PKIX path validation baseline | `rfc5280.txt` | certificate/profile rules and validation language  |
-| Service identity matching     | `rfc6125.txt` | DNS/IP identity reference                          |
-| OCSP baseline                 | `rfc6960.txt` | request/response and responder rules               |
-| Policy processing updates     | `rfc9618.txt` | RFC 5280 policy updates referenced by current work |
-| RSA PKIX algorithm rules      | `rfc4055.txt` | RSA PKCS#1 v1.5, RSA-PSS, and OAEP identifiers     |
-| RSA parameter update          | `rfc5756.txt` | updates RFC 4055 SPKI and OAEP/PSS parameter rules |
-| DSA/ECDSA SHA-2 identifiers   | `rfc5758.txt` | SHA-224/256/384/512 signature OIDs and ASN.1       |
-| PKIX clarification update     | `rfc6818.txt` | RFC 5280 clarifications for policy and validation  |
-| I18N update to RFC 5280       | `rfc9549.txt` | current IDN and internationalized email updates    |
-| Intl email certificates       | `rfc9598.txt` | current SmtpUTF8Mailbox and matching rules         |
-| Revocation not published      | `rfc9608.txt` | `noRevAvail` extension and path validation update  |
+| Need                          | Standard | Notes                                              |
+| ----------------------------- | -------- | -------------------------------------------------- |
+| PKIX path validation baseline | RFC 5280 | certificate/profile rules and validation language  |
+| Service identity matching     | RFC 6125 | DNS/IP identity reference                          |
+| OCSP baseline                 | RFC 6960 | request/response and responder rules               |
+| Policy processing updates     | RFC 9618 | RFC 5280 policy updates referenced by current work |
+| RSA PKIX algorithm rules      | RFC 4055 | RSA PKCS#1 v1.5, RSA-PSS, and OAEP identifiers     |
+| RSA parameter update          | RFC 5756 | updates RFC 4055 SPKI and OAEP/PSS parameter rules |
+| DSA/ECDSA SHA-2 identifiers   | RFC 5758 | SHA-224/256/384/512 signature OIDs and ASN.1       |
+| PKIX clarification update     | RFC 6818 | RFC 5280 clarifications for policy and validation  |
+| I18N update to RFC 5280       | RFC 9549 | current IDN and internationalized email updates    |
+| Intl email certificates       | RFC 9598 | current SmtpUTF8Mailbox and matching rules         |
+| Revocation not published      | RFC 9608 | `noRevAvail` extension and path validation update  |
 
 ## LOCAL CONVENTIONS
 
