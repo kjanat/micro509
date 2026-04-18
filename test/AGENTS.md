@@ -42,6 +42,9 @@ test/
 - Shared helpers belong in `helpers.ts`; OpenSSL process wrappers belong in `oracles/`.
 - Differential tests compare normalized semantics only, never exact CLI stderr/stdout.
 - PKITS cases run at fixed `2011-04-15T00:00:00Z`; do not casually change harness time.
+- Keep upstream-style certificate filenames stable; the harness loads by exact stem.
+- Treat the PKITS corpus as vendored input data, not handcrafted test fixtures.
+- Preserve the fixed PKITS validation-time assumption.
 
 ## ANTI-PATTERNS
 

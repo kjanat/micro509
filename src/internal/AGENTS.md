@@ -36,8 +36,14 @@ internal/
 - Avoid public barrel dependence inside internal modules.
 - `shared/` helpers must stay pure and deterministic; do not add domain-specific
   policy logic there.
+- Keep parser limits explicit when traversing nested structures.
+- Use integer and length helpers from `asn1/` instead of local reimplementation.
+- Keep sign/verify dispatch symmetric in `signing.ts` and `sig-verify.ts`.
+- Preserve wire-level behavior in `shared/` helpers; tiny changes can fan out.
+- If a helper starts encoding protocol policy, move it to the owning domain or engine.
 
 ## ANTI-PATTERNS
 
 - Do not add public-level compatibility comments in internal modules.
 - Do not copy utility logic that already exists in another internal bucket.
+- Do not introduce new ad-hoc DER decoding inside domain modules.

@@ -59,3 +59,7 @@ Avoid the following:
 - Adding parse-tolerant behavior in validation layers
 - Bypassing result ADTs with `throw` for expected domain failures
 - Silently normalizing malformed PEM payloads
+- Treating revocation transport failures as hard certificate failures
+- Moving revocation semantics into parser-only modules
+- Placing path-constraint or trust logic in X.509 domain files
+- Adding ad-hoc extension decoding outside `extensions.ts`
