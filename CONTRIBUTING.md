@@ -11,7 +11,7 @@ Before changing behavior, read:
 
 - `README.md`
 - `docs/PKIX-SCOPE.md`
-- `docs/API.md` if you are changing the public API surface
+- `src/index.ts` if you are changing the public API surface
 
 Then read the files for the area you are touching:
 
@@ -89,7 +89,7 @@ If you change support boundaries, update both docs and tests in the same change.
 
 - keep parse tolerance separate from validation policy
 - if you add or change an algorithm, review both `src/internal/crypto/signing.ts` and `src/internal/crypto/sig-verify.ts`
-- if you add or change a public API, review `src/index.ts` and `docs/API.md`
+- if you add or change a public API, review `src/index.ts`
 - if you change extension parsing, review `src/x509/parse.ts`, `src/x509/extensions.ts`, and `src/internal/x509/extension-registry.ts`
 - keep user-facing docs about using the package, not about internal build machinery
 

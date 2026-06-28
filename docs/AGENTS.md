@@ -49,8 +49,6 @@ concrete tests.
 
 [docs]: ../docs/
 [`PKIX-SCOPE.md`]: ./PKIX-SCOPE.md
-[`PKITS-HARNESS.md`]: ./PKITS-HARNESS.md
-[`DIFF-HARNESS.md`]: ./DIFF-HARNESS.md
 [rfc]: ../docs/rfc/
 [pkits.test.ts]: ../test/pkits.test.ts
 [differential.test.ts]: ../test/differential.test.ts

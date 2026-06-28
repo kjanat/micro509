@@ -118,7 +118,6 @@ export default defineConfig({
 		'src/**',
 		'test/**',
 		'docs/rfc/**',
-		'docs/API.md',
 		'CONTRIBUTING.md',
 		'anal.md',
 		'_gemini_*.md',

@@ -185,9 +185,9 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
 
 - [x] Add fixed RFC-style test vectors for builders, parsers, and validators.
 - [x] Add round-trip tests for certs, CSRs, names, and extensions.
-- [x] Add a PKITS harness for shipped path-validation claims and gap reporting. See [`docs/PKITS-HARNESS.md`](./PKITS-HARNESS.md) and [`test/pkits.test.ts`](../test/pkits.test.ts).
+- [x] Add a PKITS harness for shipped path-validation claims and gap reporting. See [`test/pkits.test.ts`](../test/pkits.test.ts).
 - [x] Add malformed DER / fuzz tests.
-- [x] Differential-test against at least one mature implementation. See [`docs/DIFF-HARNESS.md`](./DIFF-HARNESS.md) and [`test/differential.test.ts`](../test/differential.test.ts).
+- [x] Differential-test against at least one mature implementation. See [`test/differential.test.ts`](../test/differential.test.ts).
 - [x] Run the validator against **NIST PKITS** as a gap-report harness, which NIST describes as a comprehensive X.509 path validation test suite for relying parties. (NIST Computer Security Resource Center[^x-509-path-validation])
 
 [^rfc5280]: https://datatracker.ietf.org/doc/html/rfc5280 "RFC 5280 - Internet X.509 Public Key Infrastructure Certificate and Certificate Revocation List (CRL) Profile"
