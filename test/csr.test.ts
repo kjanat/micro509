@@ -95,7 +95,7 @@ describe('csr', () => {
 	it('creates and verifies P-521 certificate requests', async () => {
 		const keyPair = await generateKeyPair({
 			kind: 'ecdsa',
-			namedCurve: 'P-521',
+			curve: 'P-521',
 		});
 		const csr = await createCertificateSigningRequest({
 			subject: { commonName: 'p521-csr.example' },
@@ -229,7 +229,7 @@ describe('csr', () => {
 	it('verifies certificate request signatures with WebCrypto', async () => {
 		const goodKeyPair = await generateKeyPair({
 			kind: 'ecdsa',
-			namedCurve: 'P-256',
+			curve: 'P-256',
 		});
 		const goodCsr = await createCertificateSigningRequest({
 			subject: { commonName: 'verify-csr.example' },
@@ -242,7 +242,7 @@ describe('csr', () => {
 
 		const wrongSigner = await generateKeyPair({
 			kind: 'ecdsa',
-			namedCurve: 'P-256',
+			curve: 'P-256',
 		});
 		const badCsr = await createCertificateSigningRequest({
 			subject: { commonName: 'bad-csr.example' },

@@ -162,7 +162,7 @@ describe('certificate', () => {
 			subject: { commonName: 'P-521 Root CA' },
 			algorithm: {
 				kind: 'ecdsa',
-				namedCurve: 'P-521',
+				curve: 'P-521',
 			},
 			extensions: {
 				basicConstraints: { ca: true, pathLength: 0 },
@@ -171,7 +171,7 @@ describe('certificate', () => {
 		});
 		const leafKeys = await generateKeyPair({
 			kind: 'ecdsa',
-			namedCurve: 'P-521',
+			curve: 'P-521',
 		});
 		const leaf = await createCertificate({
 			issuer: { commonName: 'P-521 Root CA' },
@@ -463,7 +463,7 @@ describe('certificate', () => {
 
 		const ecP384 = await createSelfSignedCertificate({
 			subject: { commonName: 'ecp384.example' },
-			algorithm: { kind: 'ecdsa', namedCurve: 'P-384' },
+			algorithm: { kind: 'ecdsa', curve: 'P-384' },
 		});
 		const parsedEc384 = parseCertificatePem(ecP384.certificate.pem);
 		expect(parsedEc384.signatureAlgorithmOid).toBe('1.2.840.10045.4.3.3');

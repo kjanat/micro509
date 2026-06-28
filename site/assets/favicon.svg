@@ -1,11 +1,16 @@
-<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
-	<style>
-		.bg { fill: #0B1120; }
-		@media (prefers-color-scheme: dark) {
-			.bg { fill: #E2E8F0; }
-		}
-	</style>
-	<circle cx="32" cy="32" r="28" class="bg" />
-	<polygon points="32,32 60,20 60,44" fill="#3178C6" />
-	<circle cx="32" cy="32" r="14" fill="#FB923C" />
+<svg width="64" height="64" viewBox="0 0 64 64"
+     xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .bg {
+      fill: #0b1120;
+    }
+    @media (prefers-color-scheme: dark) {
+      .bg {
+        fill: #e2e8f0;
+      }
+    }
+  </style>
+  <circle class="bg" cx="32" cy="32" r="28" />
+  <polygon points="32,32 60,20 60,44" fill="#3178C6" />
+  <circle cx="32" cy="32" r="14" fill="#FB923C" />
 </svg>

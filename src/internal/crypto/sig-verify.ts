@@ -231,19 +231,19 @@ export function requireEcPublicKey(
 	switch (parametersOid) {
 		case OIDS.prime256v1:
 			return ok({
-				importAlgorithm: { kind: 'ecdsa', namedCurve: 'P-256' },
+				importAlgorithm: { kind: 'ecdsa', curve: 'P-256' },
 				verifyParams: { name: 'ECDSA', hash },
 				ecdsaRawSignatureBytes: 64,
 			});
 		case OIDS.secp384r1:
 			return ok({
-				importAlgorithm: { kind: 'ecdsa', namedCurve: 'P-384' },
+				importAlgorithm: { kind: 'ecdsa', curve: 'P-384' },
 				verifyParams: { name: 'ECDSA', hash },
 				ecdsaRawSignatureBytes: 96,
 			});
 		case OIDS.secp521r1:
 			return ok({
-				importAlgorithm: { kind: 'ecdsa', namedCurve: 'P-521' },
+				importAlgorithm: { kind: 'ecdsa', curve: 'P-521' },
 				verifyParams: { name: 'ECDSA', hash },
 				ecdsaRawSignatureBytes: 132,
 			});

@@ -45,16 +45,16 @@ describe('keys', () => {
 		expect(await exportPkcs8Der(rsaFromPem)).toEqual(await exportPkcs8Der(rsa.privateKey));
 		expect(await exportPkcs8Der(rsaFromDer)).toEqual(await exportPkcs8Der(rsa.privateKey));
 
-		const ec = await generateKeyPair({ kind: 'ecdsa', namedCurve: 'P-256' });
+		const ec = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
 		const sec1Pem = await exportSec1Pem(ec.privateKey);
 		const sec1Der = await exportSec1Der(ec.privateKey);
 		const ecFromPem = await importSec1Pem(sec1Pem, {
 			kind: 'ecdsa',
-			namedCurve: 'P-256',
+			curve: 'P-256',
 		});
 		const ecFromDer = await importSec1Der(sec1Der, {
 			kind: 'ecdsa',
-			namedCurve: 'P-256',
+			curve: 'P-256',
 		});
 		expect(await exportPkcs8Der(ecFromPem)).toEqual(await exportPkcs8Der(ec.privateKey));
 		expect(await exportPkcs8Der(ecFromDer)).toEqual(await exportPkcs8Der(ec.privateKey));
@@ -110,13 +110,13 @@ describe('keys', () => {
 			'Invalid password or encrypted PEM content',
 		);
 
-		const ec = await generateKeyPair({ kind: 'ecdsa', namedCurve: 'P-256' });
+		const ec = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
 		const encryptedEcPem = await exportEncryptedSec1Pem(ec.privateKey, {
 			password: 'secret123',
 		});
 		const importedEc = await importEncryptedSec1Pem(encryptedEcPem, 'secret123', {
 			kind: 'ecdsa',
-			namedCurve: 'P-256',
+			curve: 'P-256',
 		});
 		expect(await exportPkcs8Der(importedEc)).toEqual(await exportPkcs8Der(ec.privateKey));
 	});
@@ -181,7 +181,7 @@ describe('keys', () => {
 		expect(importPublicJwk(privateJwk, { kind: 'rsa' })).rejects.toThrow(
 			'Public JWK must not contain private key material',
 		);
-		expect(importPublicJwk(publicJwk, { kind: 'ecdsa', namedCurve: 'P-256' })).rejects.toThrow(
+		expect(importPublicJwk(publicJwk, { kind: 'ecdsa', curve: 'P-256' })).rejects.toThrow(
 			'Public JWK algorithm does not match requested import algorithm',
 		);
 	});
@@ -189,15 +189,15 @@ describe('keys', () => {
 	it('imports and exports keys via ecdsa and ed25519', async () => {
 		const ecP384 = await generateKeyPair({
 			kind: 'ecdsa',
-			namedCurve: 'P-384',
+			curve: 'P-384',
 		});
 		const ecPub = await importSpkiBase64(await exportBinaryBase64(ecP384.publicKey), {
 			kind: 'ecdsa',
-			namedCurve: 'P-384',
+			curve: 'P-384',
 		});
 		const ecPriv = await importPkcs8Base64(await exportBinaryBase64(ecP384.privateKey), {
 			kind: 'ecdsa',
-			namedCurve: 'P-384',
+			curve: 'P-384',
 		});
 		expect(await exportSpkiDer(ecPub)).toEqual(await ecP384.exportSpkiDer());
 		expect(await exportPkcs8Der(ecPriv)).toEqual(await ecP384.exportPkcs8Der());
@@ -230,15 +230,15 @@ describe('keys', () => {
 
 		const ecP521 = await generateKeyPair({
 			kind: 'ecdsa',
-			namedCurve: 'P-521',
+			curve: 'P-521',
 		});
 		const ecP521Public = await importSpkiBase64(await exportBinaryBase64(ecP521.publicKey), {
 			kind: 'ecdsa',
-			namedCurve: 'P-521',
+			curve: 'P-521',
 		});
 		const ecP521Private = await importPkcs8Base64(await exportBinaryBase64(ecP521.privateKey), {
 			kind: 'ecdsa',
-			namedCurve: 'P-521',
+			curve: 'P-521',
 		});
 		expect(await exportSpkiDer(ecP521Public)).toEqual(await ecP521.exportSpkiDer());
 		expect(await exportPkcs8Der(ecP521Private)).toEqual(await ecP521.exportPkcs8Der());
@@ -253,7 +253,7 @@ describe('keys', () => {
 	});
 
 	it('exportPkcs1Der throws for non-RSA key', async () => {
-		const ecKeys = await generateKeyPair({ kind: 'ecdsa', namedCurve: 'P-256' });
+		const ecKeys = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
 		expect(exportPkcs1Der(ecKeys.privateKey)).rejects.toThrow(
 			'PKCS#1 export requires an RSA private key',
 		);
@@ -289,7 +289,7 @@ describe('keys', () => {
 	it('round-trips EC P-384 keys through SEC1', async () => {
 		const keys = await generateKeyPair({
 			kind: 'ecdsa',
-			namedCurve: 'P-384',
+			curve: 'P-384',
 		});
 		const sec1Der = await exportSec1Der(keys.privateKey);
 		expect(sec1Der.length).toBeGreaterThan(40);
@@ -297,7 +297,7 @@ describe('keys', () => {
 		expect(sec1Pem).toContain('BEGIN EC PRIVATE KEY');
 		const reimported = await importSec1Der(sec1Der, {
 			kind: 'ecdsa',
-			namedCurve: 'P-384',
+			curve: 'P-384',
 		});
 		expect(reimported.type).toBe('private');
 	});
@@ -305,7 +305,7 @@ describe('keys', () => {
 	it('round-trips EC P-521 keys through SEC1', async () => {
 		const keys = await generateKeyPair({
 			kind: 'ecdsa',
-			namedCurve: 'P-521',
+			curve: 'P-521',
 		});
 		const sec1Der = await exportSec1Der(keys.privateKey);
 		expect(sec1Der.length).toBeGreaterThan(60);
@@ -313,7 +313,7 @@ describe('keys', () => {
 		expect(sec1Pem).toContain('BEGIN EC PRIVATE KEY');
 		const reimported = await importSec1Pem(sec1Pem, {
 			kind: 'ecdsa',
-			namedCurve: 'P-521',
+			curve: 'P-521',
 		});
 		expect(await exportPkcs8Der(reimported)).toEqual(await exportPkcs8Der(keys.privateKey));
 	});
@@ -340,7 +340,7 @@ describe('keys', () => {
 	it('round-trips encrypted SEC1 PEM for EC keys', async () => {
 		const keys = await generateKeyPair({
 			kind: 'ecdsa',
-			namedCurve: 'P-256',
+			curve: 'P-256',
 		});
 		for (const cipher of ['AES-128-CBC', 'AES-192-CBC', 'AES-256-CBC'] as const) {
 			const encrypted = await exportEncryptedSec1Pem(keys.privateKey, {
@@ -351,7 +351,7 @@ describe('keys', () => {
 			expect(encrypted).toContain(`DEK-Info: ${cipher}`);
 			const reimported = await importEncryptedSec1Pem(encrypted, 'ecpass', {
 				kind: 'ecdsa',
-				namedCurve: 'P-256',
+				curve: 'P-256',
 			});
 			expect(reimported.type).toBe('private');
 		}
@@ -375,7 +375,7 @@ describe('keys: coverage — malformed inputs', () => {
 			sequence([objectIdentifier('1.2.840.113549.1.5.13'), nullValue()]),
 		]);
 		expect(
-			importEncryptedPkcs8Der(malformed, 'pass', { kind: 'ecdsa', namedCurve: 'P-256' }),
+			importEncryptedPkcs8Der(malformed, 'pass', { kind: 'ecdsa', curve: 'P-256' }),
 		).rejects.toThrow('Malformed EncryptedPrivateKeyInfo');
 	});
 
@@ -389,7 +389,7 @@ describe('keys: coverage — malformed inputs', () => {
 			integerFromNumber(42),
 		]);
 		expect(
-			importEncryptedPkcs8Der(malformed, 'pass', { kind: 'ecdsa', namedCurve: 'P-256' }),
+			importEncryptedPkcs8Der(malformed, 'pass', { kind: 'ecdsa', curve: 'P-256' }),
 		).rejects.toThrow('Malformed EncryptedPrivateKeyInfo');
 	});
 
@@ -403,7 +403,7 @@ describe('keys: coverage — malformed inputs', () => {
 			integerFromNumber(7),
 		]);
 		expect(
-			importEncryptedPkcs8Der(malformed, 'pass', { kind: 'ecdsa', namedCurve: 'P-256' }),
+			importEncryptedPkcs8Der(malformed, 'pass', { kind: 'ecdsa', curve: 'P-256' }),
 		).rejects.toThrow('Malformed EncryptedPrivateKeyInfo');
 	});
 
@@ -455,10 +455,10 @@ describe('keys: coverage — malformed inputs', () => {
 		const rsa = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
 		const base64 = await exportBinaryBase64(rsa.publicKey);
 		const pem = await exportSpkiPem(rsa.publicKey);
-		expect(importSpkiBase64(base64, { kind: 'ecdsa', namedCurve: 'P-256' })).rejects.toThrow(
+		expect(importSpkiBase64(base64, { kind: 'ecdsa', curve: 'P-256' })).rejects.toThrow(
 			'SubjectPublicKeyInfo algorithm does not match requested import algorithm',
 		);
-		expect(importSpkiPem(pem, { kind: 'ecdsa', namedCurve: 'P-256' })).rejects.toThrow(
+		expect(importSpkiPem(pem, { kind: 'ecdsa', curve: 'P-256' })).rejects.toThrow(
 			'SubjectPublicKeyInfo algorithm does not match requested import algorithm',
 		);
 	});
@@ -504,10 +504,10 @@ describe('keys: coverage — malformed inputs', () => {
 		const rsa = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
 		const base64 = await exportBinaryBase64(rsa.privateKey);
 		const pem = await exportPkcs8Pem(rsa.privateKey);
-		expect(importPkcs8Base64(base64, { kind: 'ecdsa', namedCurve: 'P-256' })).rejects.toThrow(
+		expect(importPkcs8Base64(base64, { kind: 'ecdsa', curve: 'P-256' })).rejects.toThrow(
 			'PKCS#8 private key algorithm does not match requested import algorithm',
 		);
-		expect(importPkcs8Pem(pem, { kind: 'ecdsa', namedCurve: 'P-256' })).rejects.toThrow(
+		expect(importPkcs8Pem(pem, { kind: 'ecdsa', curve: 'P-256' })).rejects.toThrow(
 			'PKCS#8 private key algorithm does not match requested import algorithm',
 		);
 	});
@@ -527,7 +527,7 @@ describe('keys: coverage — malformed inputs', () => {
 		const rsa = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
 		const encrypted = await exportEncryptedPkcs1Pem(rsa.privateKey, { password: 'test' });
 		expect(
-			importEncryptedSec1Pem(encrypted, 'test', { kind: 'ecdsa', namedCurve: 'P-256' }),
+			importEncryptedSec1Pem(encrypted, 'test', { kind: 'ecdsa', curve: 'P-256' }),
 		).rejects.toThrow('Expected EC PRIVATE KEY PEM block');
 	});
 

@@ -41,7 +41,11 @@ test/
   invariants.
 - Shared helpers belong in `helpers.ts`; OpenSSL process wrappers belong in `oracles/`.
 - Differential tests compare normalized semantics only, never exact CLI stderr/stdout.
+- OpenSSL oracle constraints: compare normalized verdicts only; restrict OCSP to issuer-signed responses and CRLs to complete direct CRLs.
 - PKITS cases run at fixed `2011-04-15T00:00:00Z`; do not casually change harness time.
+- PKITS policy OIDs: `anyPolicy` (2.5.29.32.0), NIST test policies 1-6 (2.16.840.1.101.3.2.1.48.1-6).
+- Keep upstream-style certificate filenames stable; the harness loads by exact stem.
+- Treat the PKITS corpus as vendored input data, not handcrafted test fixtures.
 
 ## ANTI-PATTERNS
 

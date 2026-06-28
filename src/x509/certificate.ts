@@ -192,7 +192,7 @@ export interface SelfSignedCertificateResult {
  * ```ts
  * const { certificate, keyPair } = await createSelfSignedCertificate({
  * 	subject: { commonName: 'example.com' },
- * 	algorithm: { kind: 'ecdsa', namedCurve: 'P-256' },
+ * 	algorithm: { kind: 'ecdsa', curve: 'P-256' },
  * });
  * ```
  *

@@ -1918,7 +1918,7 @@ describe('parse', () => {
 
 		const ecCertificate = await createSelfSignedCertificate({
 			subject: { commonName: 'algo-params-ec.example' },
-			keyPair: await generateKeyPair({ kind: 'ecdsa', namedCurve: 'P-384' }),
+			keyPair: await generateKeyPair({ kind: 'ecdsa', curve: 'P-384' }),
 		});
 		const parsedEc = parseCertificateDer(ecCertificate.certificate.der);
 		expect(parsedEc.signatureAlgorithmParametersDer).toBeUndefined();

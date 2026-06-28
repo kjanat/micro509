@@ -28,7 +28,7 @@
  *
  * const { certificate } = await createSelfSignedCertificate({
  * 	subject: { commonName: 'example.com' },
- * 	algorithm: { kind: 'ecdsa', namedCurve: 'P-256' },
+ * 	algorithm: { kind: 'ecdsa', curve: 'P-256' },
  * });
  *
  * const parsed = parseCertificatePem(certificate.pem);
@@ -50,7 +50,7 @@
  * 	createCertificateSigningRequest,
  * } from 'micro509';
  *
- * const keyPair = await generateKeyPair({ kind: 'ecdsa', namedCurve: 'P-256' });
+ * const keyPair = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
  * const csr = await createCertificateSigningRequest({
  * 	subject: { commonName: 'example.com' },
  * 	publicKey: keyPair.publicKey,

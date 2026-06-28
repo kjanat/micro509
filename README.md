@@ -170,7 +170,7 @@ It intentionally excludes niche, blockchain-specific, or key-agreement-only prim
 | RFC 9618 policy validation | partial |
 
 See [`docs/PKIX-SCOPE.md`](./docs/PKIX-SCOPE.md) for the detailed scope boundary
-and [`docs/API.md`](./docs/API.md) for the public module surface.
+and the [API reference](https://micro509.kjanat.com/api/) for the public module surface.
 
 ## Imports
 
@@ -193,14 +193,14 @@ import { pemDecode, pemEncode } from 'micro509/pem';
 import type { Micro509Error } from 'micro509/result';
 ```
 
-The full stable subpath list lives in [`docs/API.md`](./docs/API.md).
+The full stable subpath list lives in the [API reference](https://micro509.kjanat.com/api/).
 
 ## More docs
 
-- API reference: [`docs/API.md`](./docs/API.md)
+- API reference: [micro509.kjanat.com/api](https://micro509.kjanat.com/api/)
 - Standards scope: [`docs/PKIX-SCOPE.md`](./docs/PKIX-SCOPE.md)
-- PKITS harness notes: [`docs/PKITS-HARNESS.md`](./docs/PKITS-HARNESS.md)
-- Differential harness notes: [`docs/DIFF-HARNESS.md`](./docs/DIFF-HARNESS.md)
+- PKITS harness: [`test/pkits.test.ts`](./test/pkits.test.ts)
+- Differential harness: [`test/differential.test.ts`](./test/differential.test.ts)
 - Contributing: [`CONTRIBUTING.md`](./CONTRIBUTING.md)
 
 ## License

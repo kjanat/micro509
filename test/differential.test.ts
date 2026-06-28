@@ -205,13 +205,13 @@ differential('OpenSSL differential harness', () => {
 
 		const p521Root = await createSelfSignedCertificate({
 			subject: { commonName: 'Diff P-521 Root CA' },
-			algorithm: { kind: 'ecdsa', namedCurve: 'P-521' },
+			algorithm: { kind: 'ecdsa', curve: 'P-521' },
 			extensions: {
 				basicConstraints: { ca: true, pathLength: 0 },
 				keyUsage: ['keyCertSign', 'cRLSign'],
 			},
 		});
-		const p521LeafKeys = await generateKeyPair({ kind: 'ecdsa', namedCurve: 'P-521' });
+		const p521LeafKeys = await generateKeyPair({ kind: 'ecdsa', curve: 'P-521' });
 		const p521Leaf = await createCertificate({
 			issuer: { commonName: 'Diff P-521 Root CA' },
 			subject: { commonName: 'diff-p521.example' },

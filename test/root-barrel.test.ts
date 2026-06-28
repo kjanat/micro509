@@ -58,7 +58,7 @@ describe('root barrel', () => {
 	});
 
 	it('CSR round-trips through create and parse', async () => {
-		const keyPair = await generateKeyPair({ kind: 'ecdsa', namedCurve: 'P-256' });
+		const keyPair = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
 		const csr = await createCertificateSigningRequest({
 			subject: { commonName: 'csr-barrel.example' },
 			publicKey: keyPair.publicKey,
@@ -75,11 +75,11 @@ describe('root barrel', () => {
 	});
 
 	it('key pair export/import round-trips through PKCS#8 PEM', async () => {
-		const keyPair = await generateKeyPair({ kind: 'ecdsa', namedCurve: 'P-384' });
+		const keyPair = await generateKeyPair({ kind: 'ecdsa', curve: 'P-384' });
 		const pem = await exportPkcs8Pem(keyPair.privateKey);
 		expect(pem).toContain('-----BEGIN PRIVATE KEY-----');
 
-		const imported = await importPkcs8Pem(pem, { kind: 'ecdsa', namedCurve: 'P-384' });
+		const imported = await importPkcs8Pem(pem, { kind: 'ecdsa', curve: 'P-384' });
 		expect(imported.type).toBe('private');
 
 		// sign with imported key to prove it works

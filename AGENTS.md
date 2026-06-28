@@ -49,8 +49,6 @@ ts-x509/
 | Key import/export                 | `src/keys/keys.ts`                                         | PKCS#1/8, SEC1, SPKI, JWK flows                      |
 | Extension model/builders          | `src/x509/extensions.ts`                                   | typed extension schema and encoder helpers           |
 | Test helpers and internals probes | `test/helpers.ts`, `test/internals.test.ts`                | shared DER helpers, internal probing through imports |
-| Differential oracle               | `test/differential.test.ts`, `test/oracles/openssl.ts`     | normalized semantics against OpenSSL                 |
-| PKITS coverage                    | `test/pkits.test.ts`, `docs/PKITS-HARNESS.md`              | fixed-time conformance subset                        |
 | Standards scope                   | `docs/PKIX-SCOPE.md`                                       | claim boundaries                                     |
 | Docs site                         | `site/.vitepress/config.ts`, `site/guide/`, `site/api/`    | VitePress config, authored guides, generated API     |
 | Reusable CI actions               | `.github/actions/`                                         | shared setup + release version validation            |
