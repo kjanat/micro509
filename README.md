@@ -1,3 +1,9 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/kjanat/ts-x509/raw/c5720af044fd9cc8f3c33e3bb91f79e6d5567454/site/assets/icon-light.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://github.com/kjanat/ts-x509/raw/c5720af044fd9cc8f3c33e3bb91f79e6d5567454/site/assets/icon.svg">
+  <img alt="" src="https://github.com/kjanat/ts-x509/raw/c5720af044fd9cc8f3c33e3bb91f79e6d5567454/site/assets/icon.svg" width="64" height="64" align="left">
+</picture>
+
 # micro509
 
 [![NPM](https://img.shields.io/npm/v/micro509?logo=npm&labelColor=CB3837&color=black)][npm]
