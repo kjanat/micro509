@@ -6,7 +6,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions: { id-token: write, contents: read, pull-requests: write }
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - { uses: ./.github/actions/setup-ts, with: { install-bun: true } }
       - run: bun i
       - run: bun run build

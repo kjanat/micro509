@@ -1,5 +1,11 @@
 # micro509
 
+[![NPM](https://img.shields.io/npm/v/micro509?logo=npm&labelColor=CB3837&color=black)][npm]
+[![JSR](https://img.shields.io/jsr/v/@kjanat/micro509?logoColor=083344&logo=jsr&logoSize=auto&label=&labelColor=f7df1e&color=black)][jsr]
+
+[npm]: https://npm.im/micro509
+[jsr]: https://jsr.io/@kjanat/micro509
+
 A zero-dependency TypeScript PKI toolkit for certificates, verification, revocation, and PKCS workflows.
 
 Zero dependencies. Tree-shakeable subpath entrypoints. Pure WebCrypto. Runs everywhere: Node, Bun, Deno, browsers, Cloudflare Workers.

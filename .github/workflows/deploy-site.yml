@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions: { contents: read }
     steps:
-      - uses: actions/checkout@v6 # Trusted action, tag allowed
+      - uses: actions/checkout@v7 # Trusted action, tag allowed
       - { uses: ./.github/actions/setup-ts, with: { install-bun: true } }
       - run: bun install --frozen-lockfile
       - run: bun --bun site:build
