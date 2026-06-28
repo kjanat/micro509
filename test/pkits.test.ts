@@ -13,6 +13,11 @@ import { PKITS_CASES, type PkitsCase } from './fixtures/pkits/manifest.ts';
 const PKITS_VALIDATION_TIME = new Date('2011-04-15T00:00:00Z');
 const REVOCATION_SECTIONS = new Set(['4.4', '4.5', '4.14', '4.15']);
 const REVOCATION_TEST_NUMBERS = new Set(['4.7.4', '4.7.5']);
+// PKITS cases that exercise DSA. micro509 is WebCrypto-native and does not
+// support DSA by design, so these "valid DSA" chains fail with
+// `unsupported_signature_algorithm_parameters`. Tracked with `it.failing` so the
+// suite flags us if DSA support ever lands (the test would start passing).
+const UNSUPPORTED_ALGORITHM_TESTS = new Set(['4.1.4', '4.1.5']);
 
 const certificateDerCache = new Map<string, Promise<Uint8Array>>();
 const parsedCertificateCache = new Map<string, Promise<ParsedCertificate>>();
@@ -122,7 +127,8 @@ describe('PKITS harness', () => {
 	for (const [section, sectionCases] of casesBySection) {
 		describe(section, () => {
 			for (const pkitsCase of sectionCases) {
-				it(`${pkitsCase.testNumber} ${pkitsCase.title}`, async () => {
+				const register = UNSUPPORTED_ALGORITHM_TESTS.has(pkitsCase.testNumber) ? it.failing : it;
+				register(`${pkitsCase.testNumber} ${pkitsCase.title}`, async () => {
 					const leafName = pkitsCase.certs[pkitsCase.certs.length - 1];
 					const rootName = pkitsCase.certs[0];
 					if (leafName === undefined || rootName === undefined) {

@@ -126,4 +126,14 @@ describe('pem', () => {
 		const malformedBundle = `${first.certificate.pem}\n${second.certificate.pem}\n-----BEGIN CERTIFICATE-----\nAQID`;
 		expect(() => parseCertificateChainPem(malformedBundle)).toThrow('Malformed PEM block');
 	});
+
+	it('splitPemBlocks resists polynomial ReDoS on many unclosed BEGIN markers', () => {
+		// Pathological input: thousands of BEGIN openers with no matching END.
+		// The previous lazy-body regex was O(n^2) here and would hang; the linear
+		// indexOf scan completes in milliseconds.
+		const malicious = '-----BEGIN A-----\n'.repeat(100_000);
+		const start = performance.now();
+		expect(() => splitPemBlocks(malicious)).toThrow('Malformed PEM block');
+		expect(performance.now() - start).toBeLessThan(1000);
+	});
 });

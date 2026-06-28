@@ -82,16 +82,46 @@ export function pemDecode(label: string, pem: string): Uint8Array {
 export function splitPemBlocks(input: string): readonly PemBlock[] {
 	const normalized = input.replace(/\r/g, '');
 	const blocks: PemBlock[] = [];
-	const pattern = /-----BEGIN ([^-]+)-----\n([\s\S]*?)\n-----END \1-----/g;
+	const beginToken = '-----BEGIN ';
+	// Linear `indexOf` scan rather than a global regex with a lazy body: a
+	// backtracking pattern like `([\s\S]*?)…\1` is polynomial on many unclosed
+	// BEGIN markers (ReDoS). `indexOf` advances monotonically, so this stays O(n)
+	// while preserving the original block/gap/label semantics.
 	let cursor = 0;
-	for (const match of normalized.matchAll(pattern)) {
-		const pem = match[0];
-		const label = match[1];
-		const index = match.index;
-		if (pem === undefined || label === undefined || index === undefined) {
-			throw new Error('Invalid PEM block match');
+	let scan = 0;
+	while (scan < normalized.length) {
+		const beginIdx = normalized.indexOf(beginToken, scan);
+		if (beginIdx === -1) {
+			break;
 		}
-		if (containsPemMarker(normalized.slice(cursor, index))) {
+		const labelStart = beginIdx + beginToken.length;
+		const dashIdx = normalized.indexOf('-----', labelStart);
+		if (dashIdx === -1) {
+			break;
+		}
+		const label = normalized.slice(labelStart, dashIdx);
+		const beginLineEnd = dashIdx + 5;
+		// A well-formed begin line is `-----BEGIN <label>-----\n` with a dash-free,
+		// single-line label (RFC 7468). Anything else is not a block start; skip it
+		// so it surfaces in the stray-marker checks instead of being parsed.
+		if (
+			label.length === 0 ||
+			label.includes('-') ||
+			label.includes('\n') ||
+			normalized[beginLineEnd] !== '\n'
+		) {
+			scan = labelStart;
+			continue;
+		}
+		const bodyStart = beginLineEnd + 1;
+		const endToken = `\n-----END ${label}-----`;
+		const endIdx = normalized.indexOf(endToken, bodyStart);
+		if (endIdx === -1) {
+			break;
+		}
+		const blockEnd = endIdx + endToken.length;
+		const pem = normalized.slice(beginIdx, blockEnd);
+		if (containsPemMarker(normalized.slice(cursor, beginIdx))) {
 			throw new Error('Malformed PEM block');
 		}
 		blocks.push({
@@ -99,7 +129,8 @@ export function splitPemBlocks(input: string): readonly PemBlock[] {
 			bytes: pemDecode(label, pem),
 			pem,
 		});
-		cursor = index + pem.length;
+		cursor = blockEnd;
+		scan = blockEnd;
 	}
 	if (containsPemMarker(normalized.slice(cursor))) {
 		throw new Error('Malformed PEM block');
