@@ -13,7 +13,7 @@ Public barrels should stay in domain folders.
 internal/
 ├── asn1/    # DER/ASN.1 primitives, OID catalog
 ├── crypto/  # signature, hashing, encryption helpers
-├── shared/  # base64 + ip helpers with cross-domain use
+├── shared/  # base64 + DN + IP helpers with cross-domain use
 ├── verify/  # policy/path/constraint engines
 └── x509/    # extension/name metadata helpers
 ```

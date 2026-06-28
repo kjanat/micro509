@@ -137,7 +137,7 @@ Focused RFC 6125 identity fixtures live in [`test/identity-fixtures.test.ts`](..
 - [x] Validate the OCSP response signature.
 - [ ] Validate responder authorization exhaustively.
   - [ ] Land RFC 6960 §4.2.2.2 criterion 1: explicit local signer acceptance scoped to the issuing CA.
-  - [ ] Decide and enforce responder-certificate revocation policy (`id-pkix-ocsp-nocheck`, CA-signaled CRL/AIA, or caller-local policy).
+  - [ ] Decide and enforce responder-certificate revocation policy — see §11 for the canonical breakdown.
   - [ ] Add fixture coverage for configured-responder accept/reject and historical-time validation.
 - [x] Enforce response freshness using `thisUpdate` / `nextUpdate` and configurable clock skew.
 - [x] Return `good`, `revoked`, and `unknown` distinctly.

@@ -46,7 +46,6 @@ test/
 - PKITS policy OIDs: `anyPolicy` (2.5.29.32.0), NIST test policies 1-6 (2.16.840.1.101.3.2.1.48.1-6).
 - Keep upstream-style certificate filenames stable; the harness loads by exact stem.
 - Treat the PKITS corpus as vendored input data, not handcrafted test fixtures.
-- Preserve the fixed PKITS validation-time assumption.
 
 ## ANTI-PATTERNS
 
