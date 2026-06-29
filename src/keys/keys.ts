@@ -38,8 +38,9 @@ import { md5 } from '#micro509/internal/crypto/hash.ts';
 import {
 	decryptPbes2,
 	encryptPbes2,
+	isWrongPasswordError,
 	type Pbes2EncryptionOptions,
-	WrongPasswordError,
+	wrongPasswordError,
 } from '#micro509/internal/crypto/pbes2.ts';
 import { getCrypto } from '#micro509/internal/crypto/webcrypto.ts';
 import { base64Decode, base64Encode } from '#micro509/internal/shared/base64.ts';
@@ -757,7 +758,7 @@ export async function importEncryptedPkcs8Der(
 	try {
 		return successResult(await importEncryptedPkcs8DerOrThrow(der, password, algorithm));
 	} catch (error) {
-		if (error instanceof WrongPasswordError) {
+		if (isWrongPasswordError(error)) {
 			return failureResult('invalid_password', error.message);
 		}
 		return failureResult(
@@ -800,7 +801,7 @@ export async function importEncryptedPkcs8Pem(
 	try {
 		return successResult(await importEncryptedPkcs8PemOrThrow(pem, password, algorithm));
 	} catch (error) {
-		if (error instanceof WrongPasswordError) {
+		if (isWrongPasswordError(error)) {
 			return failureResult('invalid_password', error.message);
 		}
 		return failureResult(
@@ -902,7 +903,7 @@ export async function importEncryptedPkcs1Pem(
 	try {
 		return successResult(await importEncryptedPkcs1PemOrThrow(pem, password, algorithm));
 	} catch (error) {
-		if (error instanceof WrongPasswordError) {
+		if (isWrongPasswordError(error)) {
 			return failureResult('invalid_password', error.message);
 		}
 		return failureResult(
@@ -1039,7 +1040,7 @@ export async function importEncryptedSec1Pem(
 	try {
 		return successResult(await importEncryptedSec1PemOrThrow(pem, password, algorithm));
 	} catch (error) {
-		if (error instanceof WrongPasswordError) {
+		if (isWrongPasswordError(error)) {
 			return failureResult('invalid_password', error.message);
 		}
 		return failureResult(
@@ -1322,7 +1323,7 @@ async function decryptTraditionalPem(
 			),
 		);
 	} catch {
-		throw new WrongPasswordError('Invalid password or encrypted PEM content');
+		throw wrongPasswordError('Invalid password or encrypted PEM content');
 	}
 }
 

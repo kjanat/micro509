@@ -28,11 +28,20 @@ import { getCrypto } from './webcrypto.ts';
  * practice means the supplied password was wrong (or the ciphertext was
  * corrupted). Lets callers distinguish a bad password from malformed input.
  */
-export class WrongPasswordError extends Error {
-	constructor(message: string) {
-		super(message);
-		this.name = 'WrongPasswordError';
-	}
+/** Module-private brand so {@link isWrongPasswordError} cannot be fooled by look-alike errors. */
+const wrongPasswordBrand = Symbol('micro509.WrongPasswordError');
+
+/** Builds the branded `Error` (no class) thrown when decryption fails — a wrong password or corrupt content. */
+export function wrongPasswordError(message: string): Error {
+	return Object.assign(new Error(message), {
+		name: 'WrongPasswordError',
+		[wrongPasswordBrand]: true,
+	});
+}
+
+/** Type guard: was decryption rejected for a wrong password / corrupt content? */
+export function isWrongPasswordError(value: unknown): value is Error {
+	return value instanceof Error && wrongPasswordBrand in value;
 }
 
 /** AES-CBC key sizes supported by this PBES2 implementation. */
@@ -152,7 +161,7 @@ export async function decryptPbes2(
 			),
 		);
 	} catch {
-		throw new WrongPasswordError('Invalid password or encrypted content');
+		throw wrongPasswordError('Invalid password or encrypted content');
 	}
 }
 

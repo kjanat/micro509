@@ -84,20 +84,33 @@ export function successResult<TValue>(value: TValue): {
  * Carries the structured {@link Micro509Error} payload so callers using the
  * throwing escape hatch still get the machine-readable `code` and any details.
  */
-export class ResultError<
+export interface ResultError<
 	TError extends Micro509Error<string, unknown> = Micro509Error<string, unknown>,
 > extends Error {
 	/** Machine-readable failure reason, mirrored from `error.code`. */
 	readonly code: TError['code'];
 	/** The structured error payload that produced this exception. */
 	readonly error: TError;
+}
 
-	constructor(error: TError) {
-		super(`${error.code}: ${error.message}`);
-		this.name = 'ResultError';
-		this.code = error.code;
-		this.error = error;
-	}
+/** Module-private brand so {@link isResultError} cannot be fooled by look-alike objects. */
+const resultErrorBrand = Symbol('micro509.ResultError');
+
+/** Builds a {@link ResultError}: a branded `Error` (no class) carrying the structured failure. */
+function makeResultError<TError extends Micro509Error<string, unknown>>(
+	error: TError,
+): ResultError<TError> {
+	return Object.assign(new Error(`${error.code}: ${error.message}`), {
+		name: 'ResultError',
+		code: error.code,
+		error,
+		[resultErrorBrand]: true,
+	});
+}
+
+/** Type guard: was `value` thrown by {@link unwrap}? Narrows to {@link ResultError}. */
+export function isResultError(value: unknown): value is ResultError {
+	return value instanceof Error && resultErrorBrand in value;
 }
 
 /** A minimal fallible-result shape: `{ ok: true, value }` or `{ ok: false, error }`. */
@@ -118,7 +131,7 @@ export function unwrap<TValue, TError extends Micro509Error<string, unknown>>(
 	if (result.ok) {
 		return result.value;
 	}
-	throw new ResultError(result.error);
+	throw makeResultError(result.error);
 }
 
 /** Returns the success value, or `fallback` when the result is a failure. */

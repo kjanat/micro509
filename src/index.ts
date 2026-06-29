@@ -194,8 +194,9 @@ export type {
 	IndexedMicro509Error,
 	Micro509Error,
 	Result,
+	ResultError,
 } from './result/index.ts';
-export { ResultError, unwrap, unwrapOr } from './result/index.ts';
+export { isResultError, unwrap, unwrapOr } from './result/index.ts';
 
 // ── revocation ───────────────────────────────────────────────────────
 export type {
