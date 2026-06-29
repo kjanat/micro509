@@ -75,7 +75,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-ts
-        with: { install-bun: "true", install-node: "true", update-npm: "true" }
+        with:
+          install-bun: "true"
+          install-node: "true"
+          update-npm: "true"
+          node-registry-url: "https://registry.npmjs.org"
       - run: bun install --frozen-lockfile
       - run: bun run build
       - run: |
