@@ -4,7 +4,7 @@
 		"module": "NodeNext",
 		"moduleResolution": "NodeNext",
 		"lib": ["ES2024", "DOM"],
-		"types": ["bun", "node"],
+		"types": ["bun", "node", "vue", "vitepress"],
 		"skipLibCheck": true,
 		"strict": true,
 		"noUncheckedIndexedAccess": true,
@@ -21,6 +21,7 @@
 		"resolveJsonModule": true,
 		"isolatedDeclarations": false,
 		"allowJs": true,
+		"checkJs": true,
 		"customConditions": ["bun"],
 		"paths": {
 			"micro509": ["./src/index.ts"],
@@ -28,6 +29,16 @@
 			"#micro509/*": ["./src/*"]
 		}
 	},
-	"include": ["src", "test", "scripts", "site", "*.config.ts", "*.d.ts", "*.json", "*.mjs"],
+	"include": [
+		"src",
+		"test",
+		"scripts",
+		"site",
+		"*.config.ts",
+		"*.d.ts",
+		"*.json",
+		"*.mjs",
+		"./.config/*"
+	],
 	"exclude": ["dist", "node_modules"]
 }

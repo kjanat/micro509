@@ -2,6 +2,9 @@ import { dirname, join, normalize } from 'node:path';
 import robotsTxt from 'vite-robots-txt';
 import svgToIco from 'vite-svg-to-ico';
 import { defineConfig, type Plugin } from 'vitepress';
+import { cloudflare } from '@cloudflare/vite-plugin';
+// @ts-ignore
+import markdownItTaskLists from 'markdown-it-task-lists';
 
 import jsr from '#jsr' with { type: 'json' };
 import pkg from '#pkg' with { type: 'json' };
@@ -37,9 +40,9 @@ const gitEnv = {
 
 	/** GitHub repo owner/name */
 	get githubRepo(): string {
-		const match = this.githubUrl.match(/github\.com[:/](.+\/.+?)(?:\.git)?$/);
-		if (!match) throw new Error(`Invalid GitHub URL: ${this.githubUrl}`);
-		return match[1];
+		const repo = this.githubUrl.match(/github\.com[:/](.+\/.+?)(?:\.git)?$/)?.[1];
+		if (repo === undefined) throw new Error(`Invalid GitHub URL: ${this.githubUrl}`);
+		return repo;
 	},
 };
 
@@ -95,6 +98,7 @@ export default defineConfig({
 	vite: {
 		build: { chunkSizeWarningLimit: 1500 },
 		plugins: [
+			cloudflare(),
 			importMapPlugin(),
 			robotsTxt({ preset: 'allowAll' }),
 			svgToIco({
@@ -130,7 +134,7 @@ export default defineConfig({
 
 	markdown: {
 		config(md) {
-			md.use(require('markdown-it-task-lists'));
+			md.use(markdownItTaskLists);
 
 			/** Rewrite relative links to non-page files (`.ts`, `.txt`, etc.) as GitHub blob URLs. */
 			const defaultLinkOpen =
@@ -139,6 +143,7 @@ export default defineConfig({
 
 			md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
 				const token = tokens[idx];
+				if (!token) return defaultLinkOpen(tokens, idx, options, env, self);
 				const href = token.attrGet('href');
 				if (
 					href &&

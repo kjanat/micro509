@@ -18,6 +18,7 @@
 		"enabled": true,
 		"domains": {
 			"project": "recommended",
+			"types": "recommended",
 			"test": "recommended"
 		},
 		"rules": {
@@ -36,6 +37,7 @@
 	"javascript": {
 		"formatter": { "quoteStyle": "single" }
 	},
+	"json": { "formatter": { "enabled": false } },
 	"assist": {
 		"enabled": true,
 		"actions": {

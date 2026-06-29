@@ -175,3 +175,4 @@ src/**/*.d.ts
 .opencode/state/
 anal.md
 test/fixtures/pkits/nist/PKITS_data/
+.vitepress/
