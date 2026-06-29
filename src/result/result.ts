@@ -78,6 +78,57 @@ export function successResult<TValue>(value: TValue): {
 	return { ok: true, value };
 }
 
+/**
+ * Error thrown by {@link unwrap} when a result is a failure.
+ *
+ * Carries the structured {@link Micro509Error} payload so callers using the
+ * throwing escape hatch still get the machine-readable `code` and any details.
+ */
+export class ResultError<
+	TError extends Micro509Error<string, unknown> = Micro509Error<string, unknown>,
+> extends Error {
+	/** Machine-readable failure reason, mirrored from `error.code`. */
+	readonly code: TError['code'];
+	/** The structured error payload that produced this exception. */
+	readonly error: TError;
+
+	constructor(error: TError) {
+		super(`${error.code}: ${error.message}`);
+		this.name = 'ResultError';
+		this.code = error.code;
+		this.error = error;
+	}
+}
+
+/** A minimal fallible-result shape: `{ ok: true, value }` or `{ ok: false, error }`. */
+type UnwrappableResult<TValue, TError> =
+	| { readonly ok: true; readonly value: TValue }
+	| { readonly ok: false; readonly error: TError };
+
+/**
+ * Explicit escape hatch: returns the success value, or throws a
+ * {@link ResultError} carrying the structured failure.
+ *
+ * Use when you have already validated the input (or prefer exceptions) and the
+ * Result ceremony is noise. Accepts any of the library's `*Result` types.
+ */
+export function unwrap<TValue, TError extends Micro509Error<string, unknown>>(
+	result: UnwrappableResult<TValue, TError>,
+): TValue {
+	if (result.ok) {
+		return result.value;
+	}
+	throw new ResultError(result.error);
+}
+
+/** Returns the success value, or `fallback` when the result is a failure. */
+export function unwrapOr<TValue>(
+	result: UnwrappableResult<TValue, unknown>,
+	fallback: TValue,
+): TValue {
+	return result.ok ? result.value : fallback;
+}
+
 /** Constructs a {@link Micro509Error} payload. */
 export function micro509Error<TCode extends string, TDetails = Record<never, never>>(
 	code: TCode,

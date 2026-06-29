@@ -182,6 +182,7 @@ export type {
 	Micro509Error,
 	Result,
 } from './result/index.ts';
+export { ResultError, unwrap, unwrapOr } from './result/index.ts';
 
 // ── revocation ───────────────────────────────────────────────────────
 export type {
