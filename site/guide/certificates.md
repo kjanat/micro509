@@ -24,7 +24,7 @@ const { certificate, keyPair } =
     },
   });
 
-console.log(certificate.pem.split('\n')[0]);
+console.log(certificate.pem)
 console.log(await keyPair.exportPkcs8Pem());
 ```
 
@@ -104,7 +104,7 @@ const csr = await createCertificateSigningRequest({
   },
 });
 
-console.log(csr.pem.split('\n')[0]);
+console.log(csr.pem);
 ```
 
 </LiveCode>

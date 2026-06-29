@@ -65,8 +65,8 @@ const { certificate, keyPair } =
     },
   });
 
-console.log(certificate.pem, '\n');
-console.log(await keyPair.exportPkcs8Pem());
+console.log(certificate.pem);
+console.log(await keyPair.exportPkcs8Pem())
 ```
 
 </LiveCode>
@@ -137,8 +137,8 @@ org:       ${parsed.subject.values.organization}
 sig algo:  ${parsed.signatureAlgorithmName}
 pubkey:    ${parsed.publicKeyAlgorithmName}
 key usage: ${parsed.keyUsage.flags.join(', ')}
-SANs:      ${sans}`);
-}
+SANs:      ${sans}
+`);
 ```
 
 </LiveCode>
@@ -191,9 +191,11 @@ const result = await verifyCertificateChain({
 
 if (result.ok) {
   const { leaf: parsed } = result.value;
-  console.log(`verified ${parsed.subject.values.commonName}
+  console.log(`\
+verified ${parsed.subject.values.commonName}
   issuer:       ${parsed.issuer.values.commonName}
-  chain length: ${result.value.chain.length}`);
+  chain length: ${result.value.chain.length}
+`);
 }
 ```
 
@@ -229,7 +231,8 @@ const selfSigned = await verifyCertificateChain({
 
 console.log(`\
 trusted: ${trusted.ok} (${!trusted.ok && trusted.error.code})
-opt-in:  ${selfSigned.ok}`);
+opt-in:  ${selfSigned.ok}
+`);
 ```
 
 </LiveCode>

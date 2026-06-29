@@ -28,9 +28,11 @@ const pfx = await createPfx({
   mac: { password: 'secret' },
 });
 
-console.log(`der bytes:  ${pfx.der.length}`);
-console.log(`base64 len: ${pfx.base64.length}`);
-console.log(pfx.pem.slice(0, 24));
+console.log(`\
+der bytes:  ${pfx.der.length}
+base64 len: ${pfx.base64.length}`);
+
+console.log(pfx.pem)
 ```
 
 </LiveCode>
@@ -61,12 +63,12 @@ const result = await parsePfxDer(pfx.der, {
 if (result.ok) {
   const { certificates, privateKeys, bags } = result.value;
   const leafCert = certificates[0];
-  console.log(`certs:        ${certificates.length}`);
-  console.log(`private keys: ${privateKeys.length}`);
-  console.log(`bags:         ${bags.length}`);
-  console.log(
-    `subject: ${leafCert?.subject.values.commonName}`,
-  );
+  console.log(`\
+certs:        ${certificates.length}
+private keys: ${privateKeys.length}
+bags:         ${bags.length}
+subject:      ${leafCert?.subject.values.commonName}
+`);
 } else {
   console.log(`parse failed: ${result.error.code}`);
 }
@@ -98,7 +100,7 @@ const bag = createPkcs7CertBagPem([
 ]);
 
 console.log(`der bytes: ${bag.der.length}`);
-console.log(bag.pem.slice(0, 22));
+console.log(bag.pem);
 ```
 
 </LiveCode>
@@ -180,9 +182,10 @@ if (!signed.ok) {
   if (result.ok) {
     const sd = result.value;
     const info = sd.signerInfos[0];
-    console.log('verified: true');
-    console.log('signers: ', sd.signerInfos.length);
-    console.log('digest:  ', info?.digestAlgorithmName);
+    console.log("verified: true");
+    console.log(`\
+signers:  ${sd.signerInfos.length}
+digest:   ${info?.digestAlgorithmName}`);
   } else {
     console.log(`verify: ${result.error.code}`);
   }
@@ -224,12 +227,13 @@ const blocks = splitPemBlocks(multiPem);
 const { certificates, certificateRequests, privateKeys } =
   categorizePemBlocks(multiPem);
 
-console.log(`der bytes:    ${der.length}`);
-console.log(`round-trip:   ${pemEncoded === pem}`);
-console.log(`blocks:       ${blocks.length}`);
-console.log(`certs:        ${certificates.length}`);
-console.log(`csrs:         ${certificateRequests.length}`);
-console.log(`private keys: ${privateKeys.length}`);
+console.log(`\
+der bytes:    ${der.length}
+round-trip:   ${pemEncoded === pem}
+blocks:       ${blocks.length}
+certs:        ${certificates.length}
+csrs:         ${certificateRequests.length}
+private keys: ${privateKeys.length}`);
 ```
 
 </LiveCode>
