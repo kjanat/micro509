@@ -45,9 +45,7 @@ const leaf = await createCertificate({
   issuerPublicKey: intKeys.publicKey,
   extensions: {
     extendedKeyUsage: ['serverAuth'],
-    subjectAltNames: [
-      { type: 'dns', value: 'api.example.com' },
-    ],
+    subjectAltNames: [{ type: 'dns', value: 'api.example.com' }],
   },
 });
 
@@ -63,14 +61,11 @@ const result = await verifyCertificateChain({
 });
 
 if (result.ok) {
-  console.log(
-    'Valid chain:',
-    result.value.chain.length,
-    'certificates',
-  );
+  console.log(`Valid chain: ${result.value.chain.length} certificates`);
 } else {
-  console.log('Failed:', result.error.code);
-  console.log('At index:', result.error.index);
+  console.log(`\
+Failed: ${result.error.code}
+At index: ${result.error.index}`);
 }
 ```
 
@@ -161,22 +156,11 @@ const r4 = await verifyCertificateChain({
   purpose: 'ca',
 });
 
-console.log(
-  'serverAuth:',
-  r1.ok ? 'ok' : `${r1.error.code}@${r1.error.index}`,
-);
-console.log(
-  'clientAuth:',
-  r2.ok ? 'ok' : `${r2.error.code}@${r2.error.index}`,
-);
-console.log(
-  'codeSigning:',
-  r3.ok ? 'ok' : `${r3.error.code}@${r3.error.index}`,
-);
-console.log(
-  'ca:',
-  r4.ok ? 'ok' : `${r4.error.code}@${r4.error.index}`,
-);
+console.log(`\
+serverAuth:  ${r1.ok ? 'ok' : `${r1.error.code}@${r1.error.index}`}
+clientAuth:  ${r2.ok ? 'ok' : `${r2.error.code}@${r2.error.index}`}
+codeSigning: ${r3.ok ? 'ok' : `${r3.error.code}@${r3.error.index}`}
+ca:          ${r4.ok ? 'ok' : `${r4.error.code}@${r4.error.index}`}`);
 ```
 
 </LiveCode>
@@ -186,20 +170,14 @@ console.log(
 <LiveCode>
 
 ```ts
-import {
-  createSelfSignedCertificate,
-  parseCertificatePem,
-  unwrap,
-} from 'micro509';
+import { createSelfSignedCertificate, parseCertificatePem, unwrap } from 'micro509';
 import { matchServiceIdentity } from 'micro509/verify';
 
 // Create and parse a certificate to match against
 const { certificate } = await createSelfSignedCertificate({
   subject: { commonName: 'example.com' },
   extensions: {
-    subjectAltNames: [
-      { type: 'dns', value: 'example.com' },
-    ],
+    subjectAltNames: [{ type: 'dns', value: 'example.com' }],
   },
 });
 
@@ -273,15 +251,11 @@ const csr = await createCertificateSigningRequest({
   publicKey: keyPair.publicKey,
   signerPrivateKey: keyPair.privateKey,
   extensions: {
-    subjectAltNames: [
-      { type: 'dns', value: 'csr.example' },
-    ],
+    subjectAltNames: [{ type: 'dns', value: 'csr.example' }],
   },
 });
 
-const result = await verifyCertificateSigningRequest(
-  csr.pem,
-);
+const result = await verifyCertificateSigningRequest(csr.pem);
 
 if (result.ok) {
   console.log('CSR signature valid');

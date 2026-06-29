@@ -100,4 +100,3 @@ const OIDS = {
 } as const;
 
 export { OIDS };
-export default OIDS;
