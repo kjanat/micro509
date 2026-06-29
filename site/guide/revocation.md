@@ -40,7 +40,7 @@ const crl = await createCertificateRevocationList({
   ],
 });
 
-console.log(crl.pem.split('\n')[0]);
+console.log(crl.pem);
 ```
 
 </LiveCode>
@@ -136,7 +136,7 @@ const request = await createOcspRequest({
   ],
 });
 
-console.log(request.pem.split('\n')[0]);
+console.log(request.pem);
 ```
 
 </LiveCode>

@@ -103,11 +103,8 @@ const root = await createSelfSignedCertificate({
   },
 });
 
-// Issue a leaf with a given EKU
-async function issue(
-  cn: string,
-  eku: 'serverAuth' | 'clientAuth' | 'codeSigning',
-) {
+// Issue a leaf with a given EKU ('serverAuth' | 'clientAuth' | 'codeSigning')
+async function issue(cn, eku) {
   const keys = await generateKeyPair();
   return createCertificate({
     issuer: { commonName: 'Demo Root CA' },

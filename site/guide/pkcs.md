@@ -19,18 +19,17 @@ const cert = await createSelfSignedCertificate({
 });
 
 const pfx = await createPfx({
-  certificates: [
-    { certificate: cert.certificate.pem },
-    { certificate: ca.certificate.pem },
-  ],
+  certificates: [{ certificate: cert.certificate.pem }, { certificate: ca.certificate.pem }],
   privateKeys: [{ privateKey: cert.keyPair.privateKey }],
   encryption: { password: 'secret' },
   mac: { password: 'secret' },
 });
 
-console.log(`der bytes: ${pfx.der.length}`);
-console.log(`base64 len: ${pfx.base64.length}`);
-console.log(pfx.pem.slice(0, 24));
+console.log(`\
+der bytes:  ${pfx.der.length}
+base64 len: ${pfx.base64.length}
+${pfx.pem}
+`);
 ```
 
 </LiveCode>
@@ -61,12 +60,12 @@ const result = await parsePfxDer(pfx.der, {
 if (result.ok) {
   const { certificates, privateKeys, bags } = result.value;
   const leafCert = certificates[0];
-  console.log(`certs:       ${certificates.length}`);
-  console.log(`private keys: ${privateKeys.length}`);
-  console.log(`bags:         ${bags.length}`);
-  console.log(
-    `subject: ${leafCert?.subject.values.commonName}`,
-  );
+  console.log(`\
+certs:        ${certificates.length}
+private keys: ${privateKeys.length}
+bags:         ${bags.length}
+subject:      ${leafCert?.subject.values.commonName}
+`);
 } else {
   console.log(`parse failed: ${result.error.code}`);
 }
@@ -92,13 +91,12 @@ const b = await createSelfSignedCertificate({
   subject: { commonName: 'b.example' },
 });
 
-const bag = createPkcs7CertBagPem([
-  a.certificate.pem,
-  b.certificate.pem,
-]);
+const bag = createPkcs7CertBagPem([a.certificate.pem, b.certificate.pem]);
 
-console.log(`der bytes: ${bag.der.length}`);
-console.log(bag.pem.slice(0, 22));
+console.log(`\
+der bytes: ${bag.der.length}
+${bag.pem}
+`);
 ```
 
 </LiveCode>
@@ -109,10 +107,7 @@ console.log(bag.pem.slice(0, 22));
 
 ```ts
 import { createSelfSignedCertificate } from 'micro509';
-import {
-  createPkcs7CertBagPem,
-  parsePkcs7CertBagPem,
-} from 'micro509/pkcs';
+import { createPkcs7CertBagPem, parsePkcs7CertBagPem } from 'micro509/pkcs';
 
 // Build a real cert bag inline
 const a = await createSelfSignedCertificate({
@@ -121,10 +116,7 @@ const a = await createSelfSignedCertificate({
 const b = await createSelfSignedCertificate({
   subject: { commonName: 'b.example' },
 });
-const bag = createPkcs7CertBagPem([
-  a.certificate.pem,
-  b.certificate.pem,
-]);
+const bag = createPkcs7CertBagPem([a.certificate.pem, b.certificate.pem]);
 
 const result = parsePkcs7CertBagPem(bag.pem);
 
@@ -147,10 +139,7 @@ if (result.ok) {
 
 ```ts
 import { createSelfSignedCertificate } from 'micro509';
-import {
-  createPkcs7SignedDataPem,
-  verifyPkcs7SignedData,
-} from 'micro509/pkcs';
+import { createPkcs7SignedDataPem, verifyPkcs7SignedData } from 'micro509/pkcs';
 
 // A signer is a certificate + its matching private key
 const signer = await createSelfSignedCertificate({
@@ -174,15 +163,15 @@ const signed = await createPkcs7SignedDataPem({
 if (!signed.ok) {
   console.log(`sign failed: ${signed.error.code}`);
 } else {
-  const result = await verifyPkcs7SignedData(
-    signed.value.pem,
-  );
+  const result = await verifyPkcs7SignedData(signed.value.pem);
   if (result.ok) {
     const sd = result.value;
     const info = sd.signerInfos[0];
-    console.log('verified: true');
-    console.log('signers:', sd.signerInfos.length);
-    console.log('digest: ', info?.digestAlgorithmName);
+    console.log(`\
+verified: true
+signers:  ${sd.signerInfos.length}
+digest:   ${info?.digestAlgorithmName}
+`);
   } else {
     console.log(`verify: ${result.error.code}`);
   }
@@ -197,12 +186,7 @@ if (!signed.ok) {
 
 ```ts
 import { createSelfSignedCertificate } from 'micro509';
-import {
-  categorizePemBlocks,
-  pemDecode,
-  pemEncode,
-  splitPemBlocks,
-} from 'micro509/pem';
+import { categorizePemBlocks, pemDecode, pemEncode, splitPemBlocks } from 'micro509/pem';
 
 // A real certificate to feed the PEM helpers
 const { certificate } = await createSelfSignedCertificate({
@@ -221,15 +205,16 @@ const multiPem = `${pem}\n${pem}`;
 const blocks = splitPemBlocks(multiPem);
 
 // Categorize blocks by type
-const { certificates, certificateRequests, privateKeys } =
-  categorizePemBlocks(multiPem);
+const { certificates, certificateRequests, privateKeys } = categorizePemBlocks(multiPem);
 
-console.log(`der bytes:   ${der.length}`);
-console.log(`round-trip:  ${pemEncoded === pem}`);
-console.log(`blocks:      ${blocks.length}`);
-console.log(`certs:       ${certificates.length}`);
-console.log(`csrs:        ${certificateRequests.length}`);
-console.log(`private keys: ${privateKeys.length}`);
+console.log(`\
+der bytes:    ${der.length}
+round-trip:   ${pemEncoded === pem}
+blocks:       ${blocks.length}
+certs:        ${certificates.length}
+csrs:         ${certificateRequests.length}
+private keys: ${privateKeys.length}
+`);
 ```
 
 </LiveCode>

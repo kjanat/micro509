@@ -48,25 +48,26 @@ import * as micro509 from 'jsr:@kjanat/micro509';
 ```ts
 import { createSelfSignedCertificate } from 'micro509';
 
-const { certificate, keyPair } =
-  await createSelfSignedCertificate({
-    subject: {
-      commonName: 'example.com',
-      organization: 'Acme',
-      country: 'US',
-    },
-    validity: { days: 30 },
-    extensions: {
-      keyUsage: ['digitalSignature', 'keyEncipherment'],
-      subjectAltNames: [
-        { type: 'dns', value: 'example.com' },
-        { type: 'dns', value: 'www.example.com' },
-      ],
-    },
-  });
+const { certificate, keyPair } = await createSelfSignedCertificate({
+  subject: {
+    commonName: 'example.com',
+    organization: 'Acme',
+    country: 'US',
+  },
+  validity: { days: 30 },
+  extensions: {
+    keyUsage: ['digitalSignature', 'keyEncipherment'],
+    subjectAltNames: [
+      { type: 'dns', value: 'example.com' },
+      { type: 'dns', value: 'www.example.com' },
+    ],
+  },
+});
 
-console.log(certificate.pem, '\n');
-console.log(await keyPair.exportPkcs8Pem());
+console.log(`\
+${certificate.pem}
+${await keyPair.exportPkcs8Pem()}
+`);
 ```
 
 </LiveCode>
@@ -76,10 +77,7 @@ console.log(await keyPair.exportPkcs8Pem());
 <LiveCode>
 
 ```ts
-import {
-  createCertificateSigningRequest,
-  generateKeyPair,
-} from 'micro509';
+import { createCertificateSigningRequest, generateKeyPair } from 'micro509';
 
 const keyPair = await generateKeyPair({ kind: 'ed25519' });
 const csr = await createCertificateSigningRequest({
@@ -87,9 +85,7 @@ const csr = await createCertificateSigningRequest({
   publicKey: keyPair.publicKey,
   signerPrivateKey: keyPair.privateKey,
   extensions: {
-    subjectAltNames: [
-      { type: 'dns', value: 'csr.example' },
-    ],
+    subjectAltNames: [{ type: 'dns', value: 'csr.example' }],
   },
 });
 
@@ -103,10 +99,7 @@ console.log(csr.pem);
 <LiveCode>
 
 ```ts
-import {
-  parseCertificatePem,
-  createSelfSignedCertificate,
-} from 'micro509';
+import { parseCertificatePem, createSelfSignedCertificate } from 'micro509';
 
 const { certificate } = await createSelfSignedCertificate({
   subject: {
@@ -124,16 +117,15 @@ const { certificate } = await createSelfSignedCertificate({
 });
 
 const parsed = parseCertificatePem(certificate.pem);
-const sans = parsed.subjectAltNames
-  .map((name) => name.value)
-  .join(', ');
+const sans = parsed.subjectAltNames.map((name) => name.value).join(', ');
 console.log(`\
 subject:   ${parsed.subject.values.commonName}
 org:       ${parsed.subject.values.organization}
 sig algo:  ${parsed.signatureAlgorithmName}
 pubkey:    ${parsed.publicKeyAlgorithmName}
 key usage: ${parsed.keyUsage.flags.join(', ')}
-SANs:      ${sans}`);
+SANs:      ${sans}
+`);
 ```
 
 </LiveCode>
@@ -168,9 +160,7 @@ const leaf = await createCertificate({
   signerPrivateKey: ca.keyPair.privateKey,
   issuerPublicKey: ca.keyPair.publicKey,
   extensions: {
-    subjectAltNames: [
-      { type: 'dns', value: 'app.example.com' },
-    ],
+    subjectAltNames: [{ type: 'dns', value: 'app.example.com' }],
   },
 });
 
@@ -186,9 +176,11 @@ const result = await verifyCertificateChain({
 
 if (result.ok) {
   const { leaf: parsed } = result.value;
-  console.log(`verified ${parsed.subject.values.commonName}
+  console.log(`\
+verified ${parsed.subject.values.commonName}
   issuer:       ${parsed.issuer.values.commonName}
-  chain length: ${result.value.chain.length}`);
+  chain length: ${result.value.chain.length}
+`);
 }
 ```
 
@@ -199,10 +191,7 @@ if (result.ok) {
 <LiveCode>
 
 ```ts
-import {
-  createSelfSignedCertificate,
-  verifyCertificateChain,
-} from 'micro509';
+import { createSelfSignedCertificate, verifyCertificateChain } from 'micro509';
 
 const { certificate } = await createSelfSignedCertificate({
   subject: { commonName: 'rogue.example' },
@@ -224,7 +213,8 @@ const selfSigned = await verifyCertificateChain({
 
 console.log(`\
 trusted: ${trusted.ok} (${!trusted.ok && trusted.error.code})
-opt-in:  ${selfSigned.ok}`);
+opt-in:  ${selfSigned.ok}
+`);
 ```
 
 </LiveCode>
@@ -234,25 +224,15 @@ opt-in:  ${selfSigned.ok}`);
 Use the root package for most applications:
 
 ```ts
-import {
-  createCertificate,
-  parseCertificatePem,
-  verifyCertificateChain,
-} from 'micro509';
+import { createCertificate, parseCertificatePem, verifyCertificateChain } from 'micro509';
 ```
 
 Use domain entrypoints for exhaustive advanced types or a narrower workflow surface:
 
 ```ts
 import { parseCertificatePem } from 'micro509/x509';
-import {
-  verifyCertificateChain,
-  matchServiceIdentity,
-} from 'micro509/verify';
-import {
-  createOcspRequest,
-  checkCertificateRevocation,
-} from 'micro509/revocation';
+import { verifyCertificateChain, matchServiceIdentity } from 'micro509/verify';
+import { createOcspRequest, checkCertificateRevocation } from 'micro509/revocation';
 import { createPfx } from 'micro509/pkcs';
 import { generateKeyPair } from 'micro509/keys';
 import { pemDecode, pemEncode } from 'micro509/pem';
