@@ -34,6 +34,11 @@ export { createPfx, parsePfxDer, parsePfxPem } from './pfx.ts';
 
 // — pkcs7.ts ——————————————————————————————————————————
 export type {
+	CreatePkcs7SignedDataDerResult,
+	CreatePkcs7SignedDataErrorCode,
+	CreatePkcs7SignedDataFailure,
+	CreatePkcs7SignedDataInput,
+	CreatePkcs7SignedDataResult,
 	ParsedPkcs7SignedData,
 	ParsedPkcs7SignerInfo,
 	ParsePkcs7CertBagResult,
@@ -42,12 +47,16 @@ export type {
 	ParsePkcs7SignedDataResult,
 	Pkcs7CertBag,
 	Pkcs7CertificateSource,
+	Pkcs7SignedDataMaterial,
+	Pkcs7Signer,
 	VerifyPkcs7SignedDataFailure,
 	VerifyPkcs7SignedDataResult,
 } from './pkcs7.ts';
 export {
 	createPkcs7CertBagDer,
 	createPkcs7CertBagPem,
+	createPkcs7SignedDataDer,
+	createPkcs7SignedDataPem,
 	parsePkcs7CertBagDer,
 	parsePkcs7CertBagPem,
 	parsePkcs7SignedDataDer,

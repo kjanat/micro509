@@ -91,7 +91,7 @@ micro509 covers PKI surface that's hard to find in a single zero-dependency JS p
 | ----------------- | ---------------------------------------------------------------------------- |
 | OCSP              | Build requests, parse and validate responses, verify responder authorization |
 | PFX / PKCS#12     | Create and parse password-protected key+cert bundles                         |
-| PKCS#7 / CMS      | Parse SignedData, verify signer signatures, extract cert bags                |
+| PKCS#7 / CMS      | Sign content, parse and verify SignedData, extract cert bags                 |
 | CRLs              | Create, parse, verify, and check revocation status                           |
 | Encrypted keys    | PBES2 PKCS#8, legacy OpenSSL encrypted PEM, PKCS#1, SEC1                     |
 | Key import/export | PKCS#8, SPKI, JWK, PKCS#1, SEC1 with generation for RSA, ECDSA, Ed25519      |
