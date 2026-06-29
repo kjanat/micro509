@@ -9,6 +9,10 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  test:
+    name: Test
+    uses: ./.github/workflows/test.yml
+
   validate:
     name: Validate version
     runs-on: ubuntu-latest
@@ -31,7 +35,7 @@ jobs:
 
   publish-jsr:
     name: JSR (${{ needs.validate.outputs.mode }})
-    needs: [validate]
+    needs: [test, validate]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions: { contents: read, id-token: write }
@@ -61,7 +65,7 @@ jobs:
 
   publish-npm:
     name: npm (${{ needs.validate.outputs.mode }})
-    needs: [validate]
+    needs: [test, validate]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions: { contents: read, id-token: write }
