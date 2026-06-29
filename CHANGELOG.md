@@ -5,6 +5,17 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- PKCS#7 / CMS `SignedData` creation (`createPkcs7SignedDataDer`,
+  `createPkcs7SignedDataPem`): sign content with one or more signers via the
+  RFC 5652 §5.4 signed-attributes flow (`contentType` + `messageDigest`),
+  producing attached SignedData that round-trips through
+  `verifyPkcs7SignedData`. The content digest is derived per signer key
+  (ECDSA P-256/384/521, RSA, Ed25519 → SHA-512 per RFC 8419).
+
 ## [0.1.1] - 2026-06-29
 
 Maintenance release — release-pipeline fixes only, no library changes.

@@ -12,6 +12,7 @@ import {
 	decodeIntegerNumber,
 	decodeObjectIdentifier,
 	decodeString,
+	hexToBytes,
 	requireElement,
 	toArrayBuffer,
 	toHex,
@@ -21,8 +22,11 @@ import {
 	concatBytes,
 	DEFAULT_MAX_DER_DEPTH,
 	explicitContext,
+	integer,
 	integerFromNumber,
+	nullValue,
 	objectIdentifier,
+	octetString,
 	readElement,
 	readRootElement,
 	readSequenceChildren,
@@ -35,6 +39,12 @@ import {
 	describeSignatureAlgorithm,
 } from '#micro509/internal/crypto/algorithm-names.ts';
 import { verifySignedDataDetailed } from '#micro509/internal/crypto/sig-verify.ts';
+import {
+	encodeAlgorithmIdentifier,
+	getSignatureAlgorithm,
+	type SignatureProfileInput,
+	signBytes,
+} from '#micro509/internal/crypto/signing.ts';
 import { getCrypto } from '#micro509/internal/crypto/webcrypto.ts';
 import { base64Encode } from '#micro509/internal/shared/base64.ts';
 import { compareDistinguishedNames } from '#micro509/internal/shared/dn.ts';
@@ -211,6 +221,153 @@ export function createPkcs7CertBagPem(
 		pem: pemEncode('PKCS7', der),
 		base64: base64Encode(der),
 	};
+}
+
+// ---------------------------------------------------------------------------
+// createPkcs7SignedData
+// ---------------------------------------------------------------------------
+
+/** A single signer for {@linkcode createPkcs7SignedDataDer} / {@linkcode createPkcs7SignedDataPem}. */
+export interface Pkcs7Signer {
+	/**
+	 * Signer certificate (PEM text with one CERTIFICATE block, or raw DER).
+	 * Embedded in the SignedData certificate set and referenced by the
+	 * SignerInfo via issuerAndSerialNumber.
+	 */
+	readonly certificate: Pkcs7CertificateSource;
+	/** Private key matching the certificate's public key, used to sign. */
+	readonly privateKey: CryptoKey;
+	/**
+	 * Signature profile. Defaults to inferring the algorithm from the key
+	 * (e.g. ECDSA→ecdsa-with-SHA*, RSA→sha*WithRSAEncryption, Ed25519).
+	 * Pass `{ kind: 'rsa-pss' }` to force RSA-PSS padding for an RSA-PSS key.
+	 */
+	readonly signature?: SignatureProfileInput;
+}
+
+/** Input for {@linkcode createPkcs7SignedDataDer} / {@linkcode createPkcs7SignedDataPem}. */
+export interface CreatePkcs7SignedDataInput {
+	/** Content to encapsulate and sign (the eContent). */
+	readonly content: Uint8Array;
+	/** One or more signers. Each produces a SignerInfo with signed attributes. */
+	readonly signers: readonly Pkcs7Signer[];
+	/**
+	 * Additional certificates to embed (e.g. intermediates). Signer
+	 * certificates are always embedded; duplicate DER is removed.
+	 */
+	readonly additionalCertificates?: readonly Pkcs7CertificateSource[];
+	/**
+	 * Encapsulated content type OID.
+	 * @default `'1.2.840.113549.1.7.1'` (pkcs7-data)
+	 */
+	readonly encapsulatedContentTypeOid?: string;
+}
+
+/** DER, PEM, and base64 encodings of a PKCS#7 SignedData structure. */
+export interface Pkcs7SignedDataMaterial {
+	/** Raw DER-encoded PKCS#7 SignedData. */
+	readonly der: Uint8Array;
+	/** PEM-armored PKCS#7 (`-----BEGIN PKCS7-----`). */
+	readonly pem: string;
+	/** Base64-encoded DER (no PEM armor). */
+	readonly base64: string;
+}
+
+/**
+ * Creates a PKCS#7/CMS SignedData with one or more signers over `content`.
+ *
+ * Each signer uses the RFC 5652 Section 5.4 signed-attributes flow: the
+ * signature covers a `SET OF` authenticated attributes carrying `contentType`
+ * and `messageDigest` (the digest of the encapsulated content). The content is
+ * embedded (attached signature), so the result verifies with
+ * {@linkcode verifyPkcs7SignedData} without any external data.
+ *
+ * The content digest is derived from each signer's key (P-256/RSA-SHA256 →
+ * SHA-256, P-384 → SHA-384, P-521 → SHA-512, Ed25519 → SHA-512 per RFC 8419).
+ *
+ * Returns raw DER. Use {@linkcode createPkcs7SignedDataPem} for PEM + base64.
+ */
+export async function createPkcs7SignedDataDer(
+	input: CreatePkcs7SignedDataInput,
+): Promise<Uint8Array> {
+	if (input.signers.length === 0) {
+		throw new Error('createPkcs7SignedData requires at least one signer');
+	}
+	const encapsulatedContentTypeOid = input.encapsulatedContentTypeOid ?? OIDS.pkcs7Data;
+
+	const certificateDers: Uint8Array[] = [];
+	const seenCertificates = new Set<string>();
+	const addCertificate = (der: Uint8Array): void => {
+		const hex = toHex(der);
+		if (!seenCertificates.has(hex)) {
+			seenCertificates.add(hex);
+			certificateDers.push(der);
+		}
+	};
+
+	const digestAlgorithmOids = new Set<string>();
+	const signerInfos: Uint8Array[] = [];
+	for (const signer of input.signers) {
+		const signerCertDers = normalizeCertificateSource(signer.certificate);
+		const signerCertDer = signerCertDers[0];
+		if (signerCertDer === undefined || signerCertDers.length !== 1) {
+			throw new Error('Each PKCS#7 signer must provide exactly one certificate');
+		}
+		addCertificate(signerCertDer);
+		const certificate = parseCertificateDer(signerCertDer);
+		const signatureAlgorithm = getSignatureAlgorithm(signer.privateKey, signer.signature);
+		const { hashName, digestOid } = contentDigestForPrivateKey(signer.privateKey);
+		digestAlgorithmOids.add(digestOid);
+		const messageDigest = new Uint8Array(
+			await getCrypto().subtle.digest(hashName, toArrayBuffer(input.content)),
+		);
+		const { setForSigning, implicitForEmit } = buildSignedAttributes(
+			encapsulatedContentTypeOid,
+			messageDigest,
+		);
+		const signature = await signBytes(signer.privateKey, signatureAlgorithm, setForSigning);
+		signerInfos.push(
+			sequence([
+				integerFromNumber(1),
+				sequence([
+					hexToBytes(certificate.issuer.derHex),
+					integer(hexToBytes(certificate.serialNumberHex)),
+				]),
+				sequence([objectIdentifier(digestOid), nullValue()]),
+				implicitForEmit,
+				encodeAlgorithmIdentifier(signatureAlgorithm),
+				octetString(signature),
+			]),
+		);
+	}
+
+	for (const source of input.additionalCertificates ?? []) {
+		for (const der of normalizeCertificateSource(source)) {
+			addCertificate(der);
+		}
+	}
+
+	// SignedData version: 1 for id-data content, otherwise 3 (RFC 5652 Section 5.1).
+	const signedDataVersion = encapsulatedContentTypeOid === OIDS.pkcs7Data ? 1 : 3;
+	const signedData = sequence([
+		integerFromNumber(signedDataVersion),
+		setOf([...digestAlgorithmOids].map((oid) => sequence([objectIdentifier(oid), nullValue()]))),
+		sequence([
+			objectIdentifier(encapsulatedContentTypeOid),
+			explicitContext(0, octetString(input.content)),
+		]),
+		explicitContext(0, concatBytes(certificateDers)),
+		setOf(signerInfos),
+	]);
+	return sequence([objectIdentifier(OIDS.pkcs7SignedData), explicitContext(0, signedData)]);
+}
+
+/** Creates a PKCS#7/CMS SignedData over `content` and returns DER, PEM, and base64 forms. */
+export async function createPkcs7SignedDataPem(
+	input: CreatePkcs7SignedDataInput,
+): Promise<Pkcs7SignedDataMaterial> {
+	const der = await createPkcs7SignedDataDer(input);
+	return { der, pem: pemEncode('PKCS7', der), base64: base64Encode(der) };
 }
 
 // ---------------------------------------------------------------------------
@@ -498,6 +655,83 @@ function normalizeCertificateSource(source: Pkcs7CertificateSource): readonly Ui
 			.map((block) => new Uint8Array(block.bytes));
 	}
 	return [new Uint8Array(source)];
+}
+
+/** Type guard: key algorithm carries an RSA `hash`. */
+function signerHasHash(algorithm: KeyAlgorithm): algorithm is RsaHashedKeyAlgorithm {
+	return 'hash' in algorithm;
+}
+
+/** Type guard: key algorithm carries an EC `namedCurve`. */
+function signerHasNamedCurve(algorithm: KeyAlgorithm): algorithm is EcKeyAlgorithm {
+	return 'namedCurve' in algorithm;
+}
+
+/**
+ * Resolves the content-digest hash and its OID for a signer key.
+ *
+ * Pairs each key with the digest used by its signature algorithm (RFC 5754):
+ * P-256/RSA-SHA256 → SHA-256, P-384 → SHA-384, P-521 → SHA-512. Ed25519 uses
+ * SHA-512 for the messageDigest attribute, per RFC 8419.
+ */
+function contentDigestForPrivateKey(privateKey: CryptoKey): {
+	readonly hashName: 'SHA-256' | 'SHA-384' | 'SHA-512';
+	readonly digestOid: string;
+} {
+	const algorithm = privateKey.algorithm;
+	if (algorithm.name === 'ECDSA') {
+		if (!signerHasNamedCurve(algorithm)) {
+			throw new Error('ECDSA key is missing namedCurve metadata');
+		}
+		switch (algorithm.namedCurve) {
+			case 'P-256':
+				return { hashName: 'SHA-256', digestOid: OIDS.sha256 };
+			case 'P-384':
+				return { hashName: 'SHA-384', digestOid: OIDS.sha384 };
+			case 'P-521':
+				return { hashName: 'SHA-512', digestOid: OIDS.sha512 };
+			default:
+				throw new Error(`Unsupported curve: ${algorithm.namedCurve}`);
+		}
+	}
+	if (algorithm.name === 'RSASSA-PKCS1-v1_5' || algorithm.name === 'RSA-PSS') {
+		if (!signerHasHash(algorithm)) {
+			throw new Error('RSA key is missing hash metadata');
+		}
+		switch (algorithm.hash.name) {
+			case 'SHA-256':
+				return { hashName: 'SHA-256', digestOid: OIDS.sha256 };
+			case 'SHA-384':
+				return { hashName: 'SHA-384', digestOid: OIDS.sha384 };
+			case 'SHA-512':
+				return { hashName: 'SHA-512', digestOid: OIDS.sha512 };
+			default:
+				throw new Error(`Unsupported RSA hash: ${algorithm.hash.name}`);
+		}
+	}
+	if (algorithm.name === 'Ed25519') {
+		return { hashName: 'SHA-512', digestOid: OIDS.sha512 };
+	}
+	throw new Error(`Unsupported signing key algorithm: ${algorithm.name}`);
+}
+
+/**
+ * Builds CMS signed attributes (contentType + messageDigest) in two forms:
+ * `setForSigning` (SET OF, tag 0x31) is what the signature covers per RFC 5652
+ * Section 5.4; `implicitForEmit` (IMPLICIT [0], tag 0xa0) is what goes in the
+ * SignerInfo. The two differ only in the leading tag byte.
+ */
+function buildSignedAttributes(
+	contentTypeOid: string,
+	messageDigest: Uint8Array,
+): { readonly setForSigning: Uint8Array; readonly implicitForEmit: Uint8Array } {
+	const setForSigning = setOf([
+		sequence([objectIdentifier(OIDS.cmsContentType), setOf([objectIdentifier(contentTypeOid)])]),
+		sequence([objectIdentifier(OIDS.cmsMessageDigest), setOf([octetString(messageDigest)])]),
+	]);
+	const implicitForEmit = new Uint8Array(setForSigning);
+	implicitForEmit[0] = 0xa0;
+	return { setForSigning, implicitForEmit };
 }
 
 /** Parses the IMPLICIT [0] certificate set from a SignedData structure. */

@@ -126,6 +126,7 @@ export { categorizePemBlocks, pemDecode, pemEncode, splitPemBlocks } from './pem
 // ── pkcs ─────────────────────────────────────────────────────────────
 export type {
 	CreatePfxInput,
+	CreatePkcs7SignedDataInput,
 	ParsedPfx,
 	ParsedPfxAttribute,
 	ParsedPfxBag,
@@ -149,6 +150,8 @@ export type {
 	PfxPrivateKeySource,
 	Pkcs7CertBag,
 	Pkcs7CertificateSource,
+	Pkcs7SignedDataMaterial,
+	Pkcs7Signer,
 	VerifyPkcs7SignedDataFailure,
 	VerifyPkcs7SignedDataResult,
 } from './pkcs/index.ts';
@@ -156,6 +159,8 @@ export {
 	createPfx,
 	createPkcs7CertBagDer,
 	createPkcs7CertBagPem,
+	createPkcs7SignedDataDer,
+	createPkcs7SignedDataPem,
 	parsePfxDer,
 	parsePfxPem,
 	parsePkcs7CertBagDer,

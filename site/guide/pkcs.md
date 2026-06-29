@@ -141,48 +141,46 @@ if (result.ok) {
 
 </LiveCode>
 
-### Verify SignedData
+### Sign and verify content
 
 <LiveCode>
 
 ```ts
 import { createSelfSignedCertificate } from 'micro509';
 import {
-  createPkcs7CertBagDer,
-  parsePkcs7SignedDataDer,
+  createPkcs7SignedDataPem,
   verifyPkcs7SignedData,
 } from 'micro509/pkcs';
 
-// micro509 has no signer-producing creator, so build a
-// degenerate SignedData (a cert-only bag) as real
-// SignedData DER to parse and inspect.
-const cert = await createSelfSignedCertificate({
+// A signer is a certificate + its matching private key
+const signer = await createSelfSignedCertificate({
   subject: { commonName: 'signer.example' },
+  extensions: { keyUsage: ['digitalSignature'] },
 });
-const der = createPkcs7CertBagDer([cert.certificate.pem]);
 
-const result = parsePkcs7SignedDataDer(der);
+// Sign content -> attached CMS SignedData (RFC 5652)
+const content = new TextEncoder().encode('hello');
+const signed = await createPkcs7SignedDataPem({
+  content,
+  signers: [
+    {
+      certificate: signer.certificate.pem,
+      privateKey: signer.keyPair.privateKey,
+    },
+  ],
+});
+
+// Verify every signer signature
+const result = await verifyPkcs7SignedData(signed.pem);
 
 if (result.ok) {
-  console.log(
-    `signers: ${result.value.signerInfos.length}`,
-  );
-  console.log(
-    `certs:   ${result.value.certificates.length}`,
-  );
-
-  const verifyResult = await verifyPkcs7SignedData(
-    result.value,
-  );
-
-  if (verifyResult.ok) {
-    console.log('All signers verified');
-  } else {
-    // No encapsulated content in a cert-only bag
-    console.log(`verify: ${verifyResult.error.code}`);
-  }
+  const sd = result.value;
+  const info = sd.signerInfos[0];
+  console.log('verified: true');
+  console.log('signers:', sd.signerInfos.length);
+  console.log('digest: ', info?.digestAlgorithmName);
 } else {
-  console.log(`parse failed: ${result.error.code}`);
+  console.log(`verify failed: ${result.error.code}`);
 }
 ```
 
