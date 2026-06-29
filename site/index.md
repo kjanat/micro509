@@ -52,10 +52,10 @@ const { certificate, keyPair } =
     validity: { days: 365 },
   });
 
-console.log(`\
-${certificate.pem}
-key type: ${keyPair.publicKey.algorithm.name}
-`);
+console.log(certificate.pem);
+console.log(
+  `key type: ${keyPair.publicKey.algorithm.name}`,
+);
 ```
 
 </LiveCode>

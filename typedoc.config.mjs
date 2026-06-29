@@ -11,7 +11,7 @@ const config = {
 	entryPointStrategy: 'resolve',
 	tsconfig: 'tsconfig.src.json',
 	out: 'site/api',
-	gitRevision: 'master',
+	gitRevision: process.env.MICRO509_GIT_BRANCH?.trim() || 'master',
 	excludePrivate: true,
 	excludeInternal: true,
 	excludeReferences: true,
