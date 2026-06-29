@@ -35,7 +35,7 @@ import {
 import { base64Encode } from '#micro509/internal/shared/base64.ts';
 import { exportPkcs8Der } from '#micro509/keys/keys.ts';
 import { pemEncode, splitPemBlocks } from '#micro509/pem/pem.ts';
-import type { ErrorResult, Micro509Error } from '#micro509/result/result.ts';
+import { type ErrorResult, failureResult, type Micro509Error } from '#micro509/result/result.ts';
 import { type ParsedCertificate, parseCertificateDer } from '#micro509/x509/parse.ts';
 import {
 	createPkcs12MacData,
@@ -390,8 +390,7 @@ function pfxFailure(
 	code: ParsePfxErrorCode,
 	message: string,
 ): ErrorResult<ParsePfxErrorCode, Record<never, never>, ParsePfxFailure> {
-	const error: ParsePfxFailure = { ok: false, code, message };
-	return { ok: false, error, code, message };
+	return failureResult(code, message);
 }
 
 /** Unwraps a `data` ContentInfo to its inner OCTET STRING payload. */

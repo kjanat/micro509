@@ -50,7 +50,7 @@ import { getCrypto } from '#micro509/internal/crypto/webcrypto.ts';
 import { base64Encode } from '#micro509/internal/shared/base64.ts';
 import { compareDistinguishedNames } from '#micro509/internal/shared/dn.ts';
 import { pemEncode, splitPemBlocks } from '#micro509/pem/pem.ts';
-import type { ErrorResult, Micro509Error } from '#micro509/result/result.ts';
+import { type ErrorResult, failureResult, type Micro509Error } from '#micro509/result/result.ts';
 import { type NameFieldKey, nameFieldKeyFromOid } from '#micro509/x509/name.ts';
 import type {
 	ParsedCertificate,
@@ -712,8 +712,7 @@ function pkcs7Failure(
 	code: ParsePkcs7ErrorCode,
 	message: string,
 ): ErrorResult<ParsePkcs7ErrorCode, Record<never, never>, ParsePkcs7Failure> {
-	const error: ParsePkcs7Failure = { ok: false, code, message };
-	return { ok: false, error, code, message };
+	return failureResult(code, message);
 }
 
 /** Shorthand for constructing a PKCS#7 verification failure result. */
@@ -734,8 +733,7 @@ function verifyPkcs7Failure(
 	Record<never, never>,
 	VerifyPkcs7SignedDataFailure
 > {
-	const error: VerifyPkcs7SignedDataFailure = { ok: false, code, message };
-	return { ok: false, error, code, message };
+	return failureResult(code, message);
 }
 
 /** Shorthand for constructing a PKCS#7 SignedData creation failure result. */
@@ -743,8 +741,7 @@ function createPkcs7Failure(
 	code: CreatePkcs7SignedDataErrorCode,
 	message: string,
 ): ErrorResult<CreatePkcs7SignedDataErrorCode, Record<never, never>, CreatePkcs7SignedDataFailure> {
-	const error: CreatePkcs7SignedDataFailure = { ok: false, code, message };
-	return { ok: false, error, code, message };
+	return failureResult(code, message);
 }
 
 /** Converts PEM text to an array of DER certificate blobs, or wraps raw DER. */

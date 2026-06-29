@@ -121,6 +121,23 @@ export function errorResult<
 	};
 }
 
+/**
+ * Builds a flattened failure result in one step.
+ *
+ * Single source of truth for the `{ ok: false, error, code, message }` shape:
+ * modules should construct failures with this instead of hand-rolling the
+ * object literal. The `error` payload carries the redundant `ok: false`
+ * discriminant so it matches the per-operation `*Failure` interfaces
+ * (`interface XFailure extends Micro509Error<…> { ok: false }`).
+ */
+export function failureResult<TCode extends string, TDetails = Record<never, never>>(
+	code: TCode,
+	message: string,
+	details?: TDetails,
+): ErrorResult<TCode, TDetails, Micro509Error<TCode, TDetails> & { readonly ok: false }> {
+	return errorResult({ ok: false, ...micro509Error(code, message, details) });
+}
+
 /** Wraps an {@link IndexedMicro509Error} in a flattened {@link IndexedErrorResult}. */
 export function indexedErrorResult<
 	TCode extends string,

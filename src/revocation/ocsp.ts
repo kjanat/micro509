@@ -53,7 +53,7 @@ import { getCrypto } from '#micro509/internal/crypto/webcrypto.ts';
 import { base64Encode } from '#micro509/internal/shared/base64.ts';
 import { compareDistinguishedNames } from '#micro509/internal/shared/dn.ts';
 import { pemDecode, pemEncode } from '#micro509/pem/pem.ts';
-import type { ErrorResult, Micro509Error } from '#micro509/result/result.ts';
+import { type ErrorResult, failureResult, type Micro509Error } from '#micro509/result/result.ts';
 import { verifyCertificateChain } from '#micro509/verify/verify.ts';
 import type {
 	ParsedCertificate,
@@ -962,12 +962,7 @@ function verifyOcspResponseFailureResult(
 	code: 'signature_invalid',
 	message: string,
 ): ErrorResult<'signature_invalid', Record<never, never>, VerifyOcspResponseFailure> {
-	const error: VerifyOcspResponseFailure = {
-		ok: false,
-		code,
-		message,
-	};
-	return { ok: false, error, code, message };
+	return failureResult(code, message);
 }
 
 /** Builds a `ValidateOcspResponseFailureResult`. */
@@ -996,12 +991,7 @@ function validateOcspResponseFailureResult(
 	Record<never, never>,
 	ValidateOcspResponseFailure
 > {
-	const error: ValidateOcspResponseFailure = {
-		ok: false,
-		code,
-		message,
-	};
-	return { ok: false, error, code, message };
+	return failureResult(code, message);
 }
 
 /** Accepts PEM, DER, or already-parsed OCSP response and returns a parsed response. */
