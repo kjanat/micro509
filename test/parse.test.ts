@@ -121,6 +121,7 @@ describe('parse', () => {
 			const result = parseCertificateDer(duplicated);
 			expect(result.ok).toBe(false);
 			if (!result.ok) {
+				expect(result.error.code).toBe('malformed');
 				expect(result.error.message).toContain('Duplicate extension OID');
 			}
 		}
@@ -142,6 +143,7 @@ describe('parse', () => {
 			const result = parseCertificateSigningRequestDer(duplicated);
 			expect(result.ok).toBe(false);
 			if (!result.ok) {
+				expect(result.error.code).toBe('malformed');
 				expect(result.error.message).toContain('Duplicate extension OID');
 			}
 		}

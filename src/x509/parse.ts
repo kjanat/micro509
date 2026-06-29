@@ -50,6 +50,7 @@ import {
 	type ErrorResult,
 	failureResult,
 	type Micro509Error,
+	rethrowIfInvariant,
 	successResult,
 } from '#micro509/result/result.ts';
 import type {
@@ -631,6 +632,7 @@ export function parseCertificateDer<TMap extends ExtensionDecoderMap = Record<ne
 	try {
 		return successResult(parseCertificateDerOrThrow(der, options));
 	} catch (error) {
+		rethrowIfInvariant(error);
 		return failureResult(
 			'malformed',
 			error instanceof Error ? error.message : 'Malformed certificate',
@@ -645,13 +647,12 @@ export function parseCertificateDer<TMap extends ExtensionDecoderMap = Record<ne
  * containing multiple certificates, use {@linkcode parseCertificateChainPem}.
  *
  * @example
- * ```ts
- * import { parseCertificatePem } from 'micro509';
+ * Throws on malformed input. For a typed failure instead, use the
+ * Result-returning {@linkcode parseCertificatePem}.
  *
- * const result = parseCertificatePem(pemString);
- * if (result.ok) {
- * 	console.log(result.value.issuer.values.organization); // "Let's Encrypt"
- * }
+ * ```ts
+ * const certificate = parseCertificatePemOrThrow(pemString); // throws if malformed
+ * console.log(certificate.issuer.values.organization); // "Let's Encrypt"
  * ```
  *
  * @param pem PEM string with a CERTIFICATE block.
@@ -680,6 +681,7 @@ export function parseCertificatePem<TMap extends ExtensionDecoderMap = Record<ne
 	try {
 		return successResult(parseCertificatePemOrThrow(pem, options));
 	} catch (error) {
+		rethrowIfInvariant(error);
 		return failureResult(
 			'malformed',
 			error instanceof Error ? error.message : 'Malformed certificate',
@@ -849,6 +851,7 @@ export function parseCertificateSigningRequestDer<
 	try {
 		return successResult(parseCertificateSigningRequestDerOrThrow(der, options));
 	} catch (error) {
+		rethrowIfInvariant(error);
 		return failureResult(
 			'malformed',
 			error instanceof Error ? error.message : 'Malformed certificate signing request',
@@ -895,6 +898,7 @@ export function parseCertificateSigningRequestPem<
 	try {
 		return successResult(parseCertificateSigningRequestPemOrThrow(pem, options));
 	} catch (error) {
+		rethrowIfInvariant(error);
 		return failureResult(
 			'malformed',
 			error instanceof Error ? error.message : 'Malformed certificate signing request',

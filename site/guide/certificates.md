@@ -7,22 +7,21 @@
 ```ts
 import { createSelfSignedCertificate } from 'micro509';
 
-const { certificate, keyPair } =
-  await createSelfSignedCertificate({
-    subject: {
-      commonName: 'example.com',
-      organization: 'Acme',
-      country: 'US',
-    },
-    validity: { days: 365 },
-    extensions: {
-      keyUsage: ['digitalSignature', 'keyEncipherment'],
-      subjectAltNames: [
-        { type: 'dns', value: 'example.com' },
-        { type: 'dns', value: '*.example.com' },
-      ],
-    },
-  });
+const { certificate, keyPair } = await createSelfSignedCertificate({
+  subject: {
+    commonName: 'example.com',
+    organization: 'Acme',
+    country: 'US',
+  },
+  validity: { days: 365 },
+  extensions: {
+    keyUsage: ['digitalSignature', 'keyEncipherment'],
+    subjectAltNames: [
+      { type: 'dns', value: 'example.com' },
+      { type: 'dns', value: '*.example.com' },
+    ],
+  },
+});
 
 console.log(certificate.pem);
 console.log(await keyPair.exportPkcs8Pem());
@@ -69,15 +68,14 @@ const leaf = await createCertificate({
   issuerPublicKey: ca.keyPair.publicKey,
   extensions: {
     keyUsage: ['digitalSignature'],
-    subjectAltNames: [
-      { type: 'dns', value: 'leaf.example.com' },
-    ],
+    subjectAltNames: [{ type: 'dns', value: 'leaf.example.com' }],
   },
 });
 
 const parsed = unwrap(parseCertificatePem(leaf.pem));
-console.log('leaf:  ', parsed.subject.values.commonName);
-console.log('issuer:', parsed.issuer.values.commonName);
+console.log(`\
+leaf:   ${parsed.subject.values.commonName}
+issuer: ${parsed.issuer.values.commonName}`);
 ```
 
 </LiveCode>
@@ -87,10 +85,7 @@ console.log('issuer:', parsed.issuer.values.commonName);
 <LiveCode>
 
 ```ts
-import {
-  createCertificateSigningRequest,
-  generateKeyPair,
-} from 'micro509';
+import { createCertificateSigningRequest, generateKeyPair } from 'micro509';
 
 const keyPair = await generateKeyPair({ kind: 'ed25519' });
 const csr = await createCertificateSigningRequest({
@@ -98,9 +93,7 @@ const csr = await createCertificateSigningRequest({
   publicKey: keyPair.publicKey,
   signerPrivateKey: keyPair.privateKey,
   extensions: {
-    subjectAltNames: [
-      { type: 'dns', value: 'csr.example' },
-    ],
+    subjectAltNames: [{ type: 'dns', value: 'csr.example' }],
   },
 });
 
@@ -114,11 +107,7 @@ console.log(csr.pem);
 <LiveCode>
 
 ```ts
-import {
-  createSelfSignedCertificate,
-  parseCertificatePem,
-  unwrap,
-} from 'micro509';
+import { createSelfSignedCertificate, parseCertificatePem, unwrap } from 'micro509';
 
 // Build a certificate inline, then parse it back
 const { certificate } = await createSelfSignedCertificate({
@@ -174,15 +163,11 @@ const csr = await createCertificateSigningRequest({
   publicKey: keyPair.publicKey,
   signerPrivateKey: keyPair.privateKey,
   extensions: {
-    subjectAltNames: [
-      { type: 'dns', value: 'csr.example' },
-    ],
+    subjectAltNames: [{ type: 'dns', value: 'csr.example' }],
   },
 });
 
-const parsed = unwrap(
-  parseCertificateSigningRequestPem(csr.pem),
-);
+const parsed = unwrap(parseCertificateSigningRequestPem(csr.pem));
 const sans = parsed.subjectAltNames ?? [];
 console.log(`\
 subject:  ${parsed.subject.values.commonName}

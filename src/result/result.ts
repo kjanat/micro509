@@ -142,6 +142,23 @@ export function unwrapOr<TValue>(
 	return result.ok ? result.value : fallback;
 }
 
+/** JS error types that signal a programmer bug / broken invariant rather than malformed input. */
+const invariantErrorTypes = [TypeError, RangeError, ReferenceError, SyntaxError] as const;
+
+/**
+ * Rethrows `error` if it is an invariant/programmer error (`TypeError`,
+ * `RangeError`, `ReferenceError`, `SyntaxError`); otherwise returns.
+ *
+ * Boundary wrappers that turn an expected failure into a `Result` should call
+ * this first, so a genuine crash is never masked as a clean parse/decode
+ * failure (AGENTS.md: throw only for invariants).
+ */
+export function rethrowIfInvariant(error: unknown): void {
+	if (invariantErrorTypes.some((type) => error instanceof type)) {
+		throw error;
+	}
+}
+
 /** Constructs a {@link Micro509Error} payload. */
 export function micro509Error<TCode extends string, TDetails = Record<never, never>>(
 	code: TCode,
