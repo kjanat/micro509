@@ -2,13 +2,59 @@
 
 ## Chain verification
 
+<LiveCode>
+
 ```ts
-import { verifyCertificateChain } from 'micro509';
+import {
+  createSelfSignedCertificate,
+  createCertificate,
+  generateKeyPair,
+  verifyCertificateChain,
+} from 'micro509';
+
+// Build a root CA
+const root = await createSelfSignedCertificate({
+  subject: { commonName: 'Demo Root CA' },
+  extensions: {
+    basicConstraints: { ca: true },
+    keyUsage: ['keyCertSign', 'cRLSign'],
+  },
+});
+
+// Intermediate CA signed by the root
+const intKeys = await generateKeyPair();
+const intermediate = await createCertificate({
+  issuer: { commonName: 'Demo Root CA' },
+  subject: { commonName: 'Demo Intermediate CA' },
+  publicKey: intKeys.publicKey,
+  signerPrivateKey: root.keyPair.privateKey,
+  issuerPublicKey: root.keyPair.publicKey,
+  extensions: {
+    basicConstraints: { ca: true },
+    keyUsage: ['keyCertSign', 'cRLSign'],
+  },
+});
+
+// Leaf signed by the intermediate
+const leafKeys = await generateKeyPair();
+const leaf = await createCertificate({
+  issuer: { commonName: 'Demo Intermediate CA' },
+  subject: { commonName: 'api.example.com' },
+  publicKey: leafKeys.publicKey,
+  signerPrivateKey: intKeys.privateKey,
+  issuerPublicKey: intKeys.publicKey,
+  extensions: {
+    extendedKeyUsage: ['serverAuth'],
+    subjectAltNames: [
+      { type: 'dns', value: 'api.example.com' },
+    ],
+  },
+});
 
 const result = await verifyCertificateChain({
   leaf: leaf.pem,
   intermediates: [intermediate.pem],
-  roots: [root.pem],
+  roots: [root.certificate.pem],
   purpose: 'serverAuth',
   serviceIdentity: {
     type: 'dns',
@@ -28,58 +74,153 @@ if (result.ok) {
 }
 ```
 
+</LiveCode>
+
 ## Verification purposes
 
-Four built-in validation profiles:
+Four built-in validation profiles. `serverAuth`,
+`clientAuth`, and `ca` are passed as `purpose` to
+`verifyCertificateChain`; code signing has its own
+`validateForCodeSigning` profile:
+
+<LiveCode>
 
 ```ts
+import {
+  createSelfSignedCertificate,
+  createCertificate,
+  generateKeyPair,
+  verifyCertificateChain,
+  validateForCodeSigning,
+} from 'micro509';
+
+// Shared root CA
+const root = await createSelfSignedCertificate({
+  subject: { commonName: 'Demo Root CA' },
+  extensions: {
+    basicConstraints: { ca: true },
+    keyUsage: ['keyCertSign', 'cRLSign'],
+  },
+});
+
+// Issue a leaf with a given EKU
+async function issue(
+  cn: string,
+  eku: 'serverAuth' | 'clientAuth' | 'codeSigning',
+) {
+  const keys = await generateKeyPair();
+  return createCertificate({
+    issuer: { commonName: 'Demo Root CA' },
+    subject: { commonName: cn },
+    publicKey: keys.publicKey,
+    signerPrivateKey: root.keyPair.privateKey,
+    issuerPublicKey: root.keyPair.publicKey,
+    extensions: {
+      extendedKeyUsage: [eku],
+      subjectAltNames: [{ type: 'dns', value: cn }],
+    },
+  });
+}
+
 // TLS server (default)
-await verifyCertificateChain({
-  leaf: leaf.pem,
-  intermediates: [intermediate.pem],
-  roots: [root.pem],
+const server = await issue('srv.example', 'serverAuth');
+const r1 = await verifyCertificateChain({
+  leaf: server.pem,
+  roots: [root.certificate.pem],
   purpose: 'serverAuth',
 });
 
 // TLS client
-await verifyCertificateChain({
-  leaf: leaf.pem,
-  intermediates: [intermediate.pem],
-  roots: [root.pem],
+const client = await issue('cli.example', 'clientAuth');
+const r2 = await verifyCertificateChain({
+  leaf: client.pem,
+  roots: [root.certificate.pem],
   purpose: 'clientAuth',
 });
 
 // Code signing
-await verifyCertificateChain({
-  leaf: leaf.pem,
-  intermediates: [intermediate.pem],
-  roots: [root.pem],
-  purpose: 'codeSigning',
+const signer = await issue('sign.example', 'codeSigning');
+const r3 = await validateForCodeSigning({
+  leaf: signer.pem,
+  roots: [root.certificate.pem],
 });
 
-// CA certificate
-await verifyCertificateChain({
+// CA certificate (verify an intermediate as a CA)
+const caKeys = await generateKeyPair();
+const intermediate = await createCertificate({
+  issuer: { commonName: 'Demo Root CA' },
+  subject: { commonName: 'Demo Intermediate CA' },
+  publicKey: caKeys.publicKey,
+  signerPrivateKey: root.keyPair.privateKey,
+  issuerPublicKey: root.keyPair.publicKey,
+  extensions: {
+    basicConstraints: { ca: true },
+    keyUsage: ['keyCertSign', 'cRLSign'],
+  },
+});
+const r4 = await verifyCertificateChain({
   leaf: intermediate.pem,
-  roots: [root.pem],
+  roots: [root.certificate.pem],
   purpose: 'ca',
 });
+
+console.log(
+  'serverAuth:',
+  r1.ok ? 'ok' : `${r1.error.code}@${r1.error.index}`,
+);
+console.log(
+  'clientAuth:',
+  r2.ok ? 'ok' : `${r2.error.code}@${r2.error.index}`,
+);
+console.log(
+  'codeSigning:',
+  r3.ok ? 'ok' : `${r3.error.code}@${r3.error.index}`,
+);
+console.log(
+  'ca:',
+  r4.ok ? 'ok' : `${r4.error.code}@${r4.error.index}`,
+);
 ```
+
+</LiveCode>
 
 ## Service identity matching
 
+<LiveCode>
+
 ```ts
+import {
+  createSelfSignedCertificate,
+  parseCertificatePem,
+} from 'micro509';
 import { matchServiceIdentity } from 'micro509/verify';
+
+// Create and parse a certificate to match against
+const { certificate } = await createSelfSignedCertificate({
+  subject: { commonName: 'example.com' },
+  extensions: {
+    subjectAltNames: [
+      { type: 'dns', value: 'example.com' },
+    ],
+  },
+});
+
+const parsed = parseCertificatePem(certificate.pem);
 
 const result = matchServiceIdentity({
   certificate: parsed,
-  identity: { type: 'dns', value: 'example.com' },
+  serviceIdentity: { type: 'dns', value: 'example.com' },
 });
 
-if (!result.ok) {
+if (result.ok) {
+  console.log('Identity matches the certificate SAN');
+} else {
   console.log(result.error.code);
-  // 'san_mismatch' | 'no_san_extension' | ...
+  // 'subject_alt_name_mismatch' | ...
 }
 ```
+
+</LiveCode>
 
 Supported identity types:
 
@@ -118,8 +259,27 @@ The `VerifyErrorCode` type covers 21 failure modes:
 
 ## CSR verification
 
+<LiveCode>
+
 ```ts
-import { verifyCertificateSigningRequest } from 'micro509';
+import {
+  createCertificateSigningRequest,
+  generateKeyPair,
+  verifyCertificateSigningRequest,
+} from 'micro509';
+
+// Build a CSR to verify
+const keyPair = await generateKeyPair({ kind: 'ed25519' });
+const csr = await createCertificateSigningRequest({
+  subject: { commonName: 'csr.example' },
+  publicKey: keyPair.publicKey,
+  signerPrivateKey: keyPair.privateKey,
+  extensions: {
+    subjectAltNames: [
+      { type: 'dns', value: 'csr.example' },
+    ],
+  },
+});
 
 const result = await verifyCertificateSigningRequest(
   csr.pem,
@@ -127,5 +287,9 @@ const result = await verifyCertificateSigningRequest(
 
 if (result.ok) {
   console.log('CSR signature valid');
+} else {
+  console.log('CSR invalid:', result.error.code);
 }
 ```
+
+</LiveCode>

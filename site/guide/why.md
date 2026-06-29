@@ -63,14 +63,22 @@ const result = await verifyCertificateChain({
 });
 
 if (!result.ok) {
+  const e = result.error;
+  const det = JSON.stringify(e.details, null, '  ');
   console.log(`\
-code:    ${result.error.code}
-message: ${result.error.message}
-details: ${JSON.stringify(result.error.details, null, '  ')}`);
+code:    ${e.code}
+message: ${e.message}
+details: ${det}`);
 }
-// result.error.code: 'signature_invalid' | 'certificate_expired' | 'name_constraints_violated' | ...
-// result.error.index: which certificate in the chain failed
-// result.error.details: { expected, actual } for identity mismatches
+// result.error.code is a union of 21 codes, e.g.:
+//   'signature_invalid'
+//   'certificate_expired'
+//   'name_constraints_violated'
+//   ... (18 more)
+// result.error.index: which cert in the chain
+//   failed
+// result.error.details: { expected, actual }
+//   for identity mismatches
 ```
 
 </LiveCode>

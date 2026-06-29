@@ -93,7 +93,7 @@ export default defineConfig({
 		build: { chunkSizeWarningLimit: 1500 },
 		plugins: [
 			importMapPlugin(),
-			robotsTxt({ preset: 'disallowAll' }),
+			robotsTxt({ preset: 'allowAll' }),
 			svgToIco({
 				input: `${import.meta.dirname}/../assets/favicon.svg`,
 				emit: { source: true, inject: false },
@@ -106,6 +106,7 @@ export default defineConfig({
 	base: '/',
 	cleanUrls: true,
 	lastUpdated: true,
+	sitemap: { hostname: pkg.homepage },
 
 	srcDir: '../',
 	rewrites: { 'site/:path*': ':path*' },
@@ -159,6 +160,14 @@ export default defineConfig({
 		['meta', { name: 'theme-color', content: '#3c8772' }],
 		['link', { rel: 'icon', href: '/favicon.ico', type: 'image/x-icon', sizes: '16x16 32x32 48x48' }],
 		['link', { rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml' }],
+		['meta', { property: 'og:type', content: 'website' }],
+		['meta', { property: 'og:title', content: pkg.name }],
+		['meta', { property: 'og:description', content: pkg.description }],
+		['meta', { property: 'og:url', content: pkg.homepage }],
+		['meta', { property: 'og:image', content: `${pkg.homepage}/icon.svg` }],
+		['meta', { name: 'twitter:card', content: 'summary' }],
+		['meta', { name: 'twitter:title', content: pkg.name }],
+		['meta', { name: 'twitter:description', content: pkg.description }],
 	],
 
 	/** Inject import map before any module scripts (SSG build path). */

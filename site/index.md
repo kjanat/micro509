@@ -32,3 +32,29 @@ features:
     title: Strict by Default
     details: No any, no type assertions, no non-null assertions. Narrow defaults, explicit escape hatches.
 ---
+
+## See it run
+
+Typed, runnable PKI in a few lines. Install it and mint a self-signed cert right here:
+
+```bash
+npm install micro509
+```
+
+<LiveCode>
+
+```ts
+import { createSelfSignedCertificate } from 'micro509';
+
+const { certificate, keyPair } =
+  await createSelfSignedCertificate({
+    subject: { commonName: 'example.com' },
+    validity: { days: 365 },
+  });
+
+const [firstLine] = certificate.pem.split('\n');
+console.log(firstLine);
+console.log('key type:', keyPair.publicKey.algorithm.name);
+```
+
+</LiveCode>

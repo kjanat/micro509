@@ -6,21 +6,31 @@ micro509 is `0.x` — API may change before 1.0.
 
 ## Install
 
-```bash
+::: code-group
+
+```bash [npm]
 npm install micro509
 ```
 
-### Bun
+```bash [pnpm]
+pnpm add micro509
+```
 
-```bash
+```bash [yarn]
+yarn add micro509
+```
+
+```bash [bun]
 bun add micro509
 ```
 
-### Deno
-
-```bash
+```bash [deno]
 deno add jsr:@kjanat/micro509
 ```
+
+:::
+
+### Deno
 
 ```ts
 import * as micro509 from '@kjanat/micro509';
@@ -114,13 +124,16 @@ const { certificate } = await createSelfSignedCertificate({
 });
 
 const parsed = parseCertificatePem(certificate.pem);
+const sans = parsed.subjectAltNames
+  .map((name) => name.value)
+  .join(', ');
 console.log(`\
 subject:   ${parsed.subject.values.commonName}
 org:       ${parsed.subject.values.organization}
 sig algo:  ${parsed.signatureAlgorithmName}
 pubkey:    ${parsed.publicKeyAlgorithmName}
 key usage: ${parsed.keyUsage.flags.join(', ')}
-SANs:      ${parsed.subjectAltNames.map((name) => name.value).join(', ')}`);
+SANs:      ${sans}`);
 ```
 
 </LiveCode>
@@ -205,7 +218,7 @@ const trusted = await verifyCertificateChain({
 const selfSigned = await verifyCertificateChain({
   leaf: certificate.pem,
   roots: [certificate.pem],
-  /** When `true`, allows a self-signed leaf. @default false */
+  /** Allow a self-signed leaf. @default false */
   allowSelfSignedLeaf: true,
 });
 

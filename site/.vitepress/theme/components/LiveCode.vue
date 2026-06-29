@@ -19,7 +19,7 @@
 	  </LiveCode>
 -->
 <script setup lang="ts">
-import { nextTick, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, ref } from 'vue';
 
 const props = withDefaults(
   defineProps<{
@@ -136,11 +136,17 @@ async function run() {
 
     const src = `${treeShaken}
 			const __out = [];
+			const __fmt = (a) => a.map(v => typeof v === 'string' ? v : JSON.stringify(v, null, 2) ?? String(v)).join(' ');
+			const __mk = (m) => ({ value: (...a) => {
+			  globalThis.console[m](...a);
+			  __out.push(__fmt(a));
+			}});
 			const console = Object.create(globalThis.console, {
-			  log: { value: (...a) => {
-			    globalThis.console.log(...a);
-			    __out.push(a.map(v => typeof v === 'string' ? v : JSON.stringify(v, null, 2) ?? String(v)).join(' '));
-			  }},
+			  log: __mk('log'),
+			  error: __mk('error'),
+			  warn: __mk('warn'),
+			  info: __mk('info'),
+			  debug: __mk('debug'),
 			});
 			try {
 			${body}
@@ -197,6 +203,26 @@ async function run() {
   }
 }
 
+const hasOutput = computed(
+  () => err.value !== undefined || logs.value.length > 0,
+);
+const copied = ref(false);
+let copyTimer: ReturnType<typeof setTimeout> | undefined;
+
+async function copyOutput() {
+  const text = err.value ?? logs.value.join('\n');
+  try {
+    await navigator.clipboard.writeText(text);
+    copied.value = true;
+    if (copyTimer) clearTimeout(copyTimer);
+    copyTimer = setTimeout(() => {
+      copied.value = false;
+    }, 1200);
+  } catch {
+    /* clipboard unavailable; nothing to surface */
+  }
+}
+
 onMounted(() => {
   if (props.auto) nextTick(run);
 });
@@ -220,21 +246,32 @@ onMounted(() => {
         }}
       </button>
     </div>
-    <div v-if="ran" class="live-code-output">
+    <div v-if="ran" class="live-code-output" aria-live="polite">
       <div class="live-code-label">
         Output
-        <button
-          v-if="!busy"
-          class="live-code-close"
-          title="Clear output"
-          @click="
-            ran = false;
-            logs = [];
-            err = undefined;
-          "
-        >
-          &times;
-        </button>
+        <span class="live-code-actions">
+          <button
+            v-if="!busy && hasOutput"
+            class="live-code-copy"
+            type="button"
+            aria-label="Copy output to clipboard"
+            @click="copyOutput"
+          >
+            {{ copied ? 'Copied' : 'Copy' }}
+          </button>
+          <button
+            v-if="!busy"
+            class="live-code-close"
+            title="Clear output"
+            @click="
+              ran = false;
+              logs = [];
+              err = undefined;
+            "
+          >
+            &times;
+          </button>
+        </span>
       </div>
       <pre v-if="err" class="live-code-pre live-code-err">{{
         err
@@ -308,9 +345,15 @@ onMounted(() => {
   letter-spacing: 0.05em;
 }
 
-.live-code-close {
+.live-code-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.live-code-close,
+.live-code-copy {
   padding: 0 4px;
-  font-size: 16px;
   line-height: 1;
   color: var(--vp-c-text-3);
   background: none;
@@ -319,7 +362,19 @@ onMounted(() => {
   transition: color 0.15s;
 }
 
-.live-code-close:hover {
+.live-code-close {
+  font-size: 16px;
+}
+
+.live-code-copy {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.live-code-close:hover,
+.live-code-copy:hover {
   color: var(--vp-c-text-1);
 }
 
@@ -329,7 +384,7 @@ onMounted(() => {
   font-size: 13px;
   line-height: 1.6;
   white-space: pre-wrap;
-  word-break: break-all;
+  overflow-wrap: anywhere;
   overflow-y: auto;
   max-height: 400px;
   background: var(--vp-code-block-bg);

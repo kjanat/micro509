@@ -2,6 +2,8 @@
 
 ## Create a self-signed certificate
 
+<LiveCode>
+
 ```ts
 import { createSelfSignedCertificate } from 'micro509';
 
@@ -21,15 +23,23 @@ const { certificate, keyPair } =
       ],
     },
   });
+
+console.log(certificate.pem.split('\n')[0]);
+console.log(await keyPair.exportPkcs8Pem());
 ```
 
+</LiveCode>
+
 ## Create a CA-signed certificate
+
+<LiveCode>
 
 ```ts
 import {
   createCertificate,
   createSelfSignedCertificate,
   generateKeyPair,
+  parseCertificatePem,
 } from 'micro509';
 
 // Create a CA
@@ -63,9 +73,17 @@ const leaf = await createCertificate({
     ],
   },
 });
+
+const parsed = parseCertificatePem(leaf.pem);
+console.log('leaf:  ', parsed.subject.values.commonName);
+console.log('issuer:', parsed.issuer.values.commonName);
 ```
 
+</LiveCode>
+
 ## Create a CSR
+
+<LiveCode>
 
 ```ts
 import {
@@ -84,34 +102,87 @@ const csr = await createCertificateSigningRequest({
     ],
   },
 });
+
+console.log(csr.pem.split('\n')[0]);
 ```
+
+</LiveCode>
 
 ## Parse a certificate
 
-```ts
-import { parseCertificatePem } from 'micro509';
+<LiveCode>
 
-const parsed = parseCertificatePem(pem);
+```ts
+import {
+  createSelfSignedCertificate,
+  parseCertificatePem,
+} from 'micro509';
+
+// Build a certificate inline, then parse it back
+const { certificate } = await createSelfSignedCertificate({
+  subject: {
+    commonName: 'example.com',
+    organization: 'Acme',
+    country: 'US',
+  },
+  validity: { days: 365 },
+  extensions: {
+    keyUsage: ['digitalSignature', 'keyEncipherment'],
+    subjectAltNames: [
+      { type: 'dns', value: 'example.com' },
+      { type: 'dns', value: '*.example.com' },
+    ],
+  },
+});
+
+const parsed = parseCertificatePem(certificate.pem);
 
 // Typed metadata
-parsed.subject.values.commonName;
-parsed.issuer.values.organizationName;
-parsed.validity.notBefore;
-parsed.validity.notAfter;
-
-// Typed extensions
-parsed.basicConstraints; // { ca: boolean, pathLenConstraint?: number }
-parsed.keyUsage; // readonly KeyUsageFlag[]
-parsed.extendedKeyUsage; // readonly string[]
-parsed.subjectAltNames; // readonly SubjectAltName[]
-parsed.authorityInfoAccess; // readonly AuthorityInformationAccess[]
+const sans = parsed.subjectAltNames ?? [];
+console.log(`\
+subject:   ${parsed.subject.values.commonName}
+org:       ${parsed.subject.values.organization}
+issuer:    ${parsed.issuer.values.commonName}
+notBefore: ${parsed.notBefore.toISOString()}
+notAfter:  ${parsed.notAfter.toISOString()}
+sig algo:  ${parsed.signatureAlgorithmName}
+ca:        ${parsed.basicConstraints?.ca ?? false}
+key usage: ${parsed.keyUsage?.flags.join(', ')}
+SANs:      ${sans.map((n) => n.value).join(', ')}`);
 ```
+
+</LiveCode>
 
 ## Parse a CSR
 
-```ts
-import { parseCertificateSigningRequestPem } from 'micro509';
+<LiveCode>
 
-const parsed = parseCertificateSigningRequestPem(pem);
-parsed.subject.values.commonName;
+```ts
+import {
+  createCertificateSigningRequest,
+  generateKeyPair,
+  parseCertificateSigningRequestPem,
+} from 'micro509';
+
+// Build a CSR inline, then parse it back
+const keyPair = await generateKeyPair({ kind: 'ed25519' });
+const csr = await createCertificateSigningRequest({
+  subject: { commonName: 'csr.example' },
+  publicKey: keyPair.publicKey,
+  signerPrivateKey: keyPair.privateKey,
+  extensions: {
+    subjectAltNames: [
+      { type: 'dns', value: 'csr.example' },
+    ],
+  },
+});
+
+const parsed = parseCertificateSigningRequestPem(csr.pem);
+const sans = parsed.subjectAltNames ?? [];
+console.log(`\
+subject:  ${parsed.subject.values.commonName}
+sig algo: ${parsed.signatureAlgorithmName}
+SANs:     ${sans.map((n) => n.value).join(', ')}`);
 ```
+
+</LiveCode>
