@@ -32,7 +32,7 @@ console.log(`\
 der bytes:  ${pfx.der.length}
 base64 len: ${pfx.base64.length}`);
 
-console.log(pfx.pem)
+console.log(pfx.pem);
 ```
 
 </LiveCode>
@@ -182,7 +182,7 @@ if (!signed.ok) {
   if (result.ok) {
     const sd = result.value;
     const info = sd.signerInfos[0];
-    console.log("verified: true");
+    console.log('verified: true');
     console.log(`\
 signers:  ${sd.signerInfos.length}
 digest:   ${info?.digestAlgorithmName}`);

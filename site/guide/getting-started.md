@@ -66,7 +66,7 @@ const { certificate, keyPair } =
   });
 
 console.log(certificate.pem);
-console.log(await keyPair.exportPkcs8Pem())
+console.log(await keyPair.exportPkcs8Pem());
 ```
 
 </LiveCode>

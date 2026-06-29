@@ -24,7 +24,7 @@ const { certificate, keyPair } =
     },
   });
 
-console.log(certificate.pem)
+console.log(certificate.pem);
 console.log(await keyPair.exportPkcs8Pem());
 ```
 
