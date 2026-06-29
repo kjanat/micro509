@@ -34,7 +34,11 @@ export { createPfx, parsePfxDer, parsePfxPem } from './pfx.ts';
 
 // — pkcs7.ts ——————————————————————————————————————————
 export type {
+	CreatePkcs7SignedDataDerResult,
+	CreatePkcs7SignedDataErrorCode,
+	CreatePkcs7SignedDataFailure,
 	CreatePkcs7SignedDataInput,
+	CreatePkcs7SignedDataResult,
 	ParsedPkcs7SignedData,
 	ParsedPkcs7SignerInfo,
 	ParsePkcs7CertBagResult,

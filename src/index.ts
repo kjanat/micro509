@@ -126,7 +126,11 @@ export { categorizePemBlocks, pemDecode, pemEncode, splitPemBlocks } from './pem
 // ── pkcs ─────────────────────────────────────────────────────────────
 export type {
 	CreatePfxInput,
+	CreatePkcs7SignedDataDerResult,
+	CreatePkcs7SignedDataErrorCode,
+	CreatePkcs7SignedDataFailure,
 	CreatePkcs7SignedDataInput,
+	CreatePkcs7SignedDataResult,
 	ParsedPfx,
 	ParsedPfxAttribute,
 	ParsedPfxBag,

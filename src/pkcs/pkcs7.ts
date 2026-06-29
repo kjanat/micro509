@@ -42,6 +42,7 @@ import { verifySignedDataDetailed } from '#micro509/internal/crypto/sig-verify.t
 import {
 	encodeAlgorithmIdentifier,
 	getSignatureAlgorithm,
+	type SignatureAlgorithmIdentifier,
 	type SignatureProfileInput,
 	signBytes,
 } from '#micro509/internal/crypto/signing.ts';
@@ -273,6 +274,39 @@ export interface Pkcs7SignedDataMaterial {
 	readonly base64: string;
 }
 
+/** Caller-correctable failure codes from {@linkcode createPkcs7SignedDataDer} / {@linkcode createPkcs7SignedDataPem}. */
+export type CreatePkcs7SignedDataErrorCode =
+	| 'no_signers'
+	| 'invalid_signer_certificate'
+	| 'unsupported_signer_key';
+
+/** Error payload for a failed PKCS#7 SignedData creation. */
+export interface CreatePkcs7SignedDataFailure
+	extends Micro509Error<CreatePkcs7SignedDataErrorCode> {
+	/** Always `false` for failures. */
+	readonly ok: false;
+}
+
+/** Success-or-failure result from {@linkcode createPkcs7SignedDataDer}. */
+export type CreatePkcs7SignedDataDerResult =
+	| {
+			/** Creation succeeded. */
+			readonly ok: true;
+			/** Raw DER-encoded SignedData. */
+			readonly value: Uint8Array;
+	  }
+	| ErrorResult<CreatePkcs7SignedDataErrorCode, Record<never, never>, CreatePkcs7SignedDataFailure>;
+
+/** Success-or-failure result from {@linkcode createPkcs7SignedDataPem}. */
+export type CreatePkcs7SignedDataResult =
+	| {
+			/** Creation succeeded. */
+			readonly ok: true;
+			/** DER, PEM, and base64 forms of the SignedData. */
+			readonly value: Pkcs7SignedDataMaterial;
+	  }
+	| ErrorResult<CreatePkcs7SignedDataErrorCode, Record<never, never>, CreatePkcs7SignedDataFailure>;
+
 /**
  * Creates a PKCS#7/CMS SignedData with one or more signers over `content`.
  *
@@ -285,13 +319,16 @@ export interface Pkcs7SignedDataMaterial {
  * The content digest is derived from each signer's key (P-256/RSA-SHA256 →
  * SHA-256, P-384 → SHA-384, P-521 → SHA-512, Ed25519 → SHA-512 per RFC 8419).
  *
- * Returns raw DER. Use {@linkcode createPkcs7SignedDataPem} for PEM + base64.
+ * Returns a {@linkcode CreatePkcs7SignedDataDerResult}: the raw DER on success,
+ * or a typed failure for caller-correctable input (no signers, a signer source
+ * that is not exactly one certificate, or an unsupported signer key). Use
+ * {@linkcode createPkcs7SignedDataPem} for PEM + base64.
  */
 export async function createPkcs7SignedDataDer(
 	input: CreatePkcs7SignedDataInput,
-): Promise<Uint8Array> {
+): Promise<CreatePkcs7SignedDataDerResult> {
 	if (input.signers.length === 0) {
-		throw new Error('createPkcs7SignedData requires at least one signer');
+		return createPkcs7Failure('no_signers', 'createPkcs7SignedData requires at least one signer');
 	}
 	const encapsulatedContentTypeOid = input.encapsulatedContentTypeOid ?? OIDS.pkcs7Data;
 
@@ -311,15 +348,34 @@ export async function createPkcs7SignedDataDer(
 		const signerCertDers = normalizeCertificateSource(signer.certificate);
 		const signerCertDer = signerCertDers[0];
 		if (signerCertDer === undefined || signerCertDers.length !== 1) {
-			throw new Error('Each PKCS#7 signer must provide exactly one certificate');
+			return createPkcs7Failure(
+				'invalid_signer_certificate',
+				'Each PKCS#7 signer must provide exactly one certificate',
+			);
 		}
 		addCertificate(signerCertDer);
 		const certificate = parseCertificateDer(signerCertDer);
-		const signatureAlgorithm = getSignatureAlgorithm(signer.privateKey, signer.signature);
-		const { hashName, digestOid } = contentDigestForPrivateKey(signer.privateKey);
-		digestAlgorithmOids.add(digestOid);
+		// getSignatureAlgorithm throws only for unsupported/misconfigured keys —
+		// all caller-correctable, so map to a typed failure rather than propagate.
+		let signatureAlgorithm: SignatureAlgorithmIdentifier;
+		try {
+			signatureAlgorithm = getSignatureAlgorithm(signer.privateKey, signer.signature);
+		} catch {
+			return createPkcs7Failure(
+				'unsupported_signer_key',
+				'Unsupported signer key or signature profile',
+			);
+		}
+		const digest = contentDigestForPrivateKey(signer.privateKey);
+		if (digest === undefined) {
+			return createPkcs7Failure(
+				'unsupported_signer_key',
+				'Unsupported signer key algorithm for content digest',
+			);
+		}
+		digestAlgorithmOids.add(digest.digestOid);
 		const messageDigest = new Uint8Array(
-			await getCrypto().subtle.digest(hashName, toArrayBuffer(input.content)),
+			await getCrypto().subtle.digest(digest.hashName, toArrayBuffer(input.content)),
 		);
 		const { setForSigning, implicitForEmit } = buildSignedAttributes(
 			encapsulatedContentTypeOid,
@@ -333,7 +389,7 @@ export async function createPkcs7SignedDataDer(
 					hexToBytes(certificate.issuer.derHex),
 					integer(hexToBytes(certificate.serialNumberHex)),
 				]),
-				sequence([objectIdentifier(digestOid), nullValue()]),
+				sequence([objectIdentifier(digest.digestOid), nullValue()]),
 				implicitForEmit,
 				encodeAlgorithmIdentifier(signatureAlgorithm),
 				octetString(signature),
@@ -349,6 +405,10 @@ export async function createPkcs7SignedDataDer(
 
 	// SignedData version: 1 for id-data content, otherwise 3 (RFC 5652 Section 5.1).
 	const signedDataVersion = encapsulatedContentTypeOid === OIDS.pkcs7Data ? 1 : 3;
+	// certificates [0] IMPLICIT CertificateSet — a DER SET OF must be canonically
+	// ordered, so sort via setOf, then retag 0x31 -> 0xa0 for the IMPLICIT [0].
+	const certificateSet = new Uint8Array(setOf(certificateDers));
+	certificateSet[0] = 0xa0;
 	const signedData = sequence([
 		integerFromNumber(signedDataVersion),
 		setOf([...digestAlgorithmOids].map((oid) => sequence([objectIdentifier(oid), nullValue()]))),
@@ -356,18 +416,31 @@ export async function createPkcs7SignedDataDer(
 			objectIdentifier(encapsulatedContentTypeOid),
 			explicitContext(0, octetString(input.content)),
 		]),
-		explicitContext(0, concatBytes(certificateDers)),
+		certificateSet,
 		setOf(signerInfos),
 	]);
-	return sequence([objectIdentifier(OIDS.pkcs7SignedData), explicitContext(0, signedData)]);
+	return {
+		ok: true,
+		value: sequence([objectIdentifier(OIDS.pkcs7SignedData), explicitContext(0, signedData)]),
+	};
 }
 
-/** Creates a PKCS#7/CMS SignedData over `content` and returns DER, PEM, and base64 forms. */
+/**
+ * Creates a PKCS#7/CMS SignedData over `content` and returns DER, PEM, and
+ * base64 forms, or a typed {@linkcode CreatePkcs7SignedDataFailure} for
+ * caller-correctable input.
+ */
 export async function createPkcs7SignedDataPem(
 	input: CreatePkcs7SignedDataInput,
-): Promise<Pkcs7SignedDataMaterial> {
+): Promise<CreatePkcs7SignedDataResult> {
 	const der = await createPkcs7SignedDataDer(input);
-	return { der, pem: pemEncode('PKCS7', der), base64: base64Encode(der) };
+	if (!der.ok) {
+		return der;
+	}
+	return {
+		ok: true,
+		value: { der: der.value, pem: pemEncode('PKCS7', der.value), base64: base64Encode(der.value) },
+	};
 }
 
 // ---------------------------------------------------------------------------
@@ -647,6 +720,15 @@ function verifyPkcs7Failure(
 	return { ok: false, error, code, message };
 }
 
+/** Shorthand for constructing a PKCS#7 SignedData creation failure result. */
+function createPkcs7Failure(
+	code: CreatePkcs7SignedDataErrorCode,
+	message: string,
+): ErrorResult<CreatePkcs7SignedDataErrorCode, Record<never, never>, CreatePkcs7SignedDataFailure> {
+	const error: CreatePkcs7SignedDataFailure = { ok: false, code, message };
+	return { ok: false, error, code, message };
+}
+
 /** Converts PEM text to an array of DER certificate blobs, or wraps raw DER. */
 function normalizeCertificateSource(source: Pkcs7CertificateSource): readonly Uint8Array[] {
 	if (typeof source === 'string') {
@@ -674,14 +756,15 @@ function signerHasNamedCurve(algorithm: KeyAlgorithm): algorithm is EcKeyAlgorit
  * P-256/RSA-SHA256 → SHA-256, P-384 → SHA-384, P-521 → SHA-512. Ed25519 uses
  * SHA-512 for the messageDigest attribute, per RFC 8419.
  */
-function contentDigestForPrivateKey(privateKey: CryptoKey): {
-	readonly hashName: 'SHA-256' | 'SHA-384' | 'SHA-512';
-	readonly digestOid: string;
-} {
+function contentDigestForPrivateKey(
+	privateKey: CryptoKey,
+):
+	| { readonly hashName: 'SHA-256' | 'SHA-384' | 'SHA-512'; readonly digestOid: string }
+	| undefined {
 	const algorithm = privateKey.algorithm;
 	if (algorithm.name === 'ECDSA') {
 		if (!signerHasNamedCurve(algorithm)) {
-			throw new Error('ECDSA key is missing namedCurve metadata');
+			return undefined;
 		}
 		switch (algorithm.namedCurve) {
 			case 'P-256':
@@ -691,12 +774,12 @@ function contentDigestForPrivateKey(privateKey: CryptoKey): {
 			case 'P-521':
 				return { hashName: 'SHA-512', digestOid: OIDS.sha512 };
 			default:
-				throw new Error(`Unsupported curve: ${algorithm.namedCurve}`);
+				return undefined;
 		}
 	}
 	if (algorithm.name === 'RSASSA-PKCS1-v1_5' || algorithm.name === 'RSA-PSS') {
 		if (!signerHasHash(algorithm)) {
-			throw new Error('RSA key is missing hash metadata');
+			return undefined;
 		}
 		switch (algorithm.hash.name) {
 			case 'SHA-256':
@@ -706,13 +789,13 @@ function contentDigestForPrivateKey(privateKey: CryptoKey): {
 			case 'SHA-512':
 				return { hashName: 'SHA-512', digestOid: OIDS.sha512 };
 			default:
-				throw new Error(`Unsupported RSA hash: ${algorithm.hash.name}`);
+				return undefined;
 		}
 	}
 	if (algorithm.name === 'Ed25519') {
 		return { hashName: 'SHA-512', digestOid: OIDS.sha512 };
 	}
-	throw new Error(`Unsupported signing key algorithm: ${algorithm.name}`);
+	return undefined;
 }
 
 /**

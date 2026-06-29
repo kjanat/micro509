@@ -13,8 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `createPkcs7SignedDataPem`): sign content with one or more signers via the
   RFC 5652 §5.4 signed-attributes flow (`contentType` + `messageDigest`),
   producing attached SignedData that round-trips through
-  `verifyPkcs7SignedData`. The content digest is derived per signer key
-  (ECDSA P-256/384/521, RSA, Ed25519 → SHA-512 per RFC 8419).
+  `verifyPkcs7SignedData`. The content digest is selected per signer key:
+  SHA-256 for ECDSA P-256 and RSA-SHA256, SHA-384 for P-384, and SHA-512
+  for P-521 and Ed25519 (the latter per RFC 8419). Returns a typed result
+  (`no_signers` / `invalid_signer_certificate` / `unsupported_signer_key`)
+  for caller-correctable input.
 
 ## [0.1.1] - 2026-06-29
 

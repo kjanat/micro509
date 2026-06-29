@@ -170,17 +170,22 @@ const signed = await createPkcs7SignedDataPem({
   ],
 });
 
-// Verify every signer signature
-const result = await verifyPkcs7SignedData(signed.pem);
-
-if (result.ok) {
-  const sd = result.value;
-  const info = sd.signerInfos[0];
-  console.log('verified: true');
-  console.log('signers:', sd.signerInfos.length);
-  console.log('digest: ', info?.digestAlgorithmName);
+// Creation returns a typed result; verify on success
+if (!signed.ok) {
+  console.log(`sign failed: ${signed.error.code}`);
 } else {
-  console.log(`verify failed: ${result.error.code}`);
+  const result = await verifyPkcs7SignedData(
+    signed.value.pem,
+  );
+  if (result.ok) {
+    const sd = result.value;
+    const info = sd.signerInfos[0];
+    console.log('verified: true');
+    console.log('signers:', sd.signerInfos.length);
+    console.log('digest: ', info?.digestAlgorithmName);
+  } else {
+    console.log(`verify: ${result.error.code}`);
+  }
 }
 ```
 
