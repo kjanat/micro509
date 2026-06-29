@@ -23,6 +23,18 @@ import {
 import { OIDS } from '#micro509/internal/asn1/oids.ts';
 import { getCrypto } from './webcrypto.ts';
 
+/**
+ * Thrown when PBES2 / AES-CBC decryption fails its integrity check, which in
+ * practice means the supplied password was wrong (or the ciphertext was
+ * corrupted). Lets callers distinguish a bad password from malformed input.
+ */
+export class WrongPasswordError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = 'WrongPasswordError';
+	}
+}
+
 /** AES-CBC key sizes supported by this PBES2 implementation. */
 export type Pbes2EncryptionScheme = 'aes128-cbc' | 'aes192-cbc' | 'aes256-cbc';
 
@@ -140,7 +152,7 @@ export async function decryptPbes2(
 			),
 		);
 	} catch {
-		throw new Error('Invalid password or encrypted content');
+		throw new WrongPasswordError('Invalid password or encrypted content');
 	}
 }
 

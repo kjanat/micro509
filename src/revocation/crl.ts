@@ -58,7 +58,7 @@ import {
 } from '#micro509/internal/x509/extension-bits.ts';
 import { exportSpkiDer } from '#micro509/keys/keys.ts';
 import { pemDecode, pemEncode } from '#micro509/pem/pem.ts';
-import type { ErrorResult, Micro509Error } from '#micro509/result/result.ts';
+import { type ErrorResult, failureResult, type Micro509Error } from '#micro509/result/result.ts';
 import type {
 	DistributionPoint,
 	DistributionPointReason,
@@ -86,7 +86,7 @@ import type {
 	ParsedNameAttribute,
 	ParsedRelativeDistinguishedName,
 } from '#micro509/x509/parse.ts';
-import { parseCertificateDer, parseCertificateFromSource } from '#micro509/x509/parse.ts';
+import { parseCertificateDerOrThrow, parseCertificateFromSource } from '#micro509/x509/parse.ts';
 
 /**
  * Single revoked certificate entry for {@linkcode createCertificateRevocationList}.
@@ -797,12 +797,7 @@ function verifyCertificateRevocationListFailureResult(
 	code: 'signature_invalid',
 	message: string,
 ): ErrorResult<'signature_invalid', Record<never, never>, VerifyCertificateRevocationListFailure> {
-	const error: VerifyCertificateRevocationListFailure = {
-		ok: false,
-		code,
-		message,
-	};
-	return { ok: false, error, code, message };
+	return failureResult(code, message);
 }
 
 /** Builds a `ValidateCertificateRevocationListFailureResult`. */
@@ -814,12 +809,7 @@ function validateCertificateRevocationListFailureResult(
 	Record<never, never>,
 	ValidateCertificateRevocationListFailure
 > {
-	const error: ValidateCertificateRevocationListFailure = {
-		ok: false,
-		code,
-		message,
-	};
-	return { ok: false, error, code, message };
+	return failureResult(code, message);
 }
 
 /** Builds a `CheckCertificateRevocationAgainstCrlFailureResult`. */
@@ -832,19 +822,7 @@ function checkCertificateRevocationAgainstCrlFailureResult(
 	CheckCertificateRevocationAgainstCrlFailureDetails,
 	CheckCertificateRevocationAgainstCrlFailure
 > {
-	const error: CheckCertificateRevocationAgainstCrlFailure = {
-		ok: false,
-		code,
-		message,
-		...(details === undefined ? {} : { details }),
-	};
-	return {
-		ok: false,
-		error,
-		code,
-		message,
-		...(details === undefined ? {} : { details }),
-	};
+	return failureResult(code, message, details);
 }
 
 /** Wraps a success value into a `CheckCertificateRevocationAgainstCrlResult`. */
@@ -2266,7 +2244,7 @@ function parseSignedCrlFields(tbsCertListDer: Uint8Array): {
 /** Accepts PEM, DER, or already-parsed certificate and returns a parsed certificate. */
 function normalizeCrlCertificate(source: CrlCertificateSource): ParsedCertificate {
 	return hasParsedCertificateShape(source)
-		? parseCertificateDer(new Uint8Array(source.der))
+		? parseCertificateDerOrThrow(new Uint8Array(source.der))
 		: parseCertificateFromSource(source);
 }
 

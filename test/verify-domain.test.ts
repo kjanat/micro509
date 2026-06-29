@@ -4,6 +4,7 @@ import {
 	createSelfSignedCertificate,
 	generateKeyPair,
 	parseCertificatePem,
+	unwrap,
 } from '#micro509';
 import * as verify from '#micro509/verify/index.ts';
 
@@ -47,7 +48,7 @@ describe('verify domain', () => {
 					subjectAltNames: [{ type: 'dns', value: 'example.com' }],
 				},
 			});
-			const parsed = parseCertificatePem(certificate.pem);
+			const parsed = unwrap(parseCertificatePem(certificate.pem));
 			const result = verify.matchServiceIdentity({
 				certificate: parsed,
 				serviceIdentity: { type: 'dns', value: 'example.com' },
@@ -62,7 +63,7 @@ describe('verify domain', () => {
 					subjectAltNames: [{ type: 'dns', value: 'example.com' }],
 				},
 			});
-			const parsed = parseCertificatePem(certificate.pem);
+			const parsed = unwrap(parseCertificatePem(certificate.pem));
 			const result = verify.matchServiceIdentity({
 				certificate: parsed,
 				serviceIdentity: { type: 'dns', value: 'other.com' },
@@ -93,7 +94,10 @@ describe('verify domain', () => {
 					extendedKeyUsage: ['serverAuth'],
 				},
 			});
-			const chain = [parseCertificatePem(leaf.pem), parseCertificatePem(root.certificate.pem)];
+			const chain = [
+				unwrap(parseCertificatePem(leaf.pem)),
+				unwrap(parseCertificatePem(root.certificate.pem)),
+			];
 			const result = verify.checkExtendedKeyUsage(chain, 'serverAuth');
 			expect(result.ok).toBe(true);
 		});
@@ -117,7 +121,10 @@ describe('verify domain', () => {
 					extendedKeyUsage: ['serverAuth'],
 				},
 			});
-			const chain = [parseCertificatePem(leaf.pem), parseCertificatePem(root.certificate.pem)];
+			const chain = [
+				unwrap(parseCertificatePem(leaf.pem)),
+				unwrap(parseCertificatePem(root.certificate.pem)),
+			];
 			const result = verify.checkExtendedKeyUsage(chain, 'clientAuth');
 			expect(result.ok).toBe(false);
 			if (result.ok) return;

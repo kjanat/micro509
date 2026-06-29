@@ -35,8 +35,8 @@ import {
 import { base64Encode } from '#micro509/internal/shared/base64.ts';
 import { exportPkcs8Der } from '#micro509/keys/keys.ts';
 import { pemEncode, splitPemBlocks } from '#micro509/pem/pem.ts';
-import type { ErrorResult, Micro509Error } from '#micro509/result/result.ts';
-import { type ParsedCertificate, parseCertificateDer } from '#micro509/x509/parse.ts';
+import { type ErrorResult, failureResult, type Micro509Error } from '#micro509/result/result.ts';
+import { type ParsedCertificate, parseCertificateDerOrThrow } from '#micro509/x509/parse.ts';
 import {
 	createPkcs12MacData,
 	type ParsedPkcs12MacData,
@@ -204,6 +204,36 @@ export type ParsePfxResult =
 	| ErrorResult<ParsePfxErrorCode, Record<never, never>, ParsePfxFailure>;
 
 // ---------------------------------------------------------------------------
+// Result types for PFX creation
+// ---------------------------------------------------------------------------
+
+/**
+ * Caller-correctable failure code from {@linkcode createPfx}.
+ *
+ * The only parse boundary in creation is the certificate source: it is
+ * normalized from untrusted PEM/DER. Private keys are either a WebCrypto
+ * `CryptoKey` (platform errors stay throws) or raw PKCS#8 bytes passed through
+ * unvalidated, so there is no distinct `invalid_private_key` failure to model.
+ */
+export type CreatePfxErrorCode = 'invalid_certificate';
+
+/** Error payload for a failed PFX creation. */
+export interface CreatePfxFailure extends Micro509Error<CreatePfxErrorCode> {
+	/** Always `false` for failures. */
+	readonly ok: false;
+}
+
+/** Success-or-failure result from {@linkcode createPfx}. */
+export type CreatePfxResult =
+	| {
+			/** Creation succeeded. */
+			readonly ok: true;
+			/** DER, PEM, and base64 forms of the PFX container. */
+			readonly value: PfxMaterial;
+	  }
+	| ErrorResult<CreatePfxErrorCode, Record<never, never>, CreatePfxFailure>;
+
+// ---------------------------------------------------------------------------
 // createPfx
 // ---------------------------------------------------------------------------
 
@@ -213,26 +243,42 @@ export type ParsePfxResult =
  * When `encryption` is provided, the key-bag ContentInfo is PBES2-encrypted.
  * When `mac` is provided, a PKCS#12 MAC integrity block is appended.
  *
+ * Returns a {@linkcode CreatePfxResult}: the container material on success, or a
+ * typed `invalid_certificate` failure when a certificate source is not a single
+ * PEM/DER certificate.
+ *
  * @example
  * ```ts
- * import { createPfx } from 'micro509';
+ * import { createPfx, unwrap } from 'micro509';
  *
- * const pfx = await createPfx({
+ * const result = await createPfx({
  *   certificates: [{ certificate: certPem }],
  *   privateKeys: [{ privateKey: keyPair.privateKey }],
  *   encryption: { password: 's3cret' },
  *   mac: { password: 's3cret' },
  * });
- * // pfx.der, pfx.pem, pfx.base64
+ * if (result.ok) {
+ *   const pfx = result.value; // pfx.der, pfx.pem, pfx.base64
+ * }
+ * // or, when inputs are already validated: const pfx = unwrap(result);
  * ```
  */
-export async function createPfx(input: CreatePfxInput): Promise<PfxMaterial> {
+export async function createPfx(input: CreatePfxInput): Promise<CreatePfxResult> {
 	const certificateBags: Uint8Array[] = [];
 	const privateKeyBags: Uint8Array[] = [];
 	for (const certificate of input.certificates ?? []) {
-		certificateBags.push(
-			createCertificateBag(normalizeCertificate(certificate.certificate), certificate.attributes),
-		);
+		// normalizeCertificate parses untrusted PEM/DER and throws on malformed
+		// input — a caller-correctable trust boundary, so map it to a typed failure.
+		let certificateDer: Uint8Array;
+		try {
+			certificateDer = normalizeCertificate(certificate.certificate);
+		} catch {
+			return pfxCreationFailure(
+				'invalid_certificate',
+				'Each PFX certificate source must be a single PEM or DER certificate',
+			);
+		}
+		certificateBags.push(createCertificateBag(certificateDer, certificate.attributes));
 	}
 	for (const privateKey of input.privateKeys ?? []) {
 		privateKeyBags.push(
@@ -260,10 +306,21 @@ export async function createPfx(input: CreatePfxInput): Promise<PfxMaterial> {
 		...(macData === undefined ? [] : [macData.der]),
 	]);
 	return {
-		der,
-		pem: pemEncode('PKCS12', der),
-		base64: base64Encode(der),
+		ok: true,
+		value: {
+			der,
+			pem: pemEncode('PKCS12', der),
+			base64: base64Encode(der),
+		},
 	};
+}
+
+/** Shorthand for constructing a PFX creation failure result. */
+function pfxCreationFailure(
+	code: CreatePfxErrorCode,
+	message: string,
+): ErrorResult<CreatePfxErrorCode, Record<never, never>, CreatePfxFailure> {
+	return failureResult(code, message);
 }
 
 // ---------------------------------------------------------------------------
@@ -390,8 +447,7 @@ function pfxFailure(
 	code: ParsePfxErrorCode,
 	message: string,
 ): ErrorResult<ParsePfxErrorCode, Record<never, never>, ParsePfxFailure> {
-	const error: ParsePfxFailure = { ok: false, code, message };
-	return { ok: false, error, code, message };
+	return failureResult(code, message);
 }
 
 /** Unwraps a `data` ContentInfo to its inner OCTET STRING payload. */
@@ -571,7 +627,7 @@ function parseSafeBag(der: Uint8Array): ParsedPfxBag {
 			kind: 'certificate',
 			bagId: bagOid,
 			attributes,
-			certificate: parseCertificateDer(certificateDer),
+			certificate: parseCertificateDerOrThrow(certificateDer),
 		};
 	}
 	if (bagOid === OIDS.pkcs12KeyBag) {

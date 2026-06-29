@@ -53,7 +53,7 @@ import { getCrypto } from '#micro509/internal/crypto/webcrypto.ts';
 import { base64Encode } from '#micro509/internal/shared/base64.ts';
 import { compareDistinguishedNames } from '#micro509/internal/shared/dn.ts';
 import { pemDecode, pemEncode } from '#micro509/pem/pem.ts';
-import type { ErrorResult, Micro509Error } from '#micro509/result/result.ts';
+import { type ErrorResult, failureResult, type Micro509Error } from '#micro509/result/result.ts';
 import { verifyCertificateChain } from '#micro509/verify/verify.ts';
 import type {
 	ParsedCertificate,
@@ -61,7 +61,7 @@ import type {
 	ParsedNameAttribute,
 	ParsedRelativeDistinguishedName,
 } from '#micro509/x509/parse.ts';
-import { parseCertificateDer, parseCertificateFromSource } from '#micro509/x509/parse.ts';
+import { parseCertificateDerOrThrow, parseCertificateFromSource } from '#micro509/x509/parse.ts';
 
 /** Hash algorithm used to compute OCSP CertID fields. SHA-1 is the RFC 6960 default. */
 export type OcspHashAlgorithm = 'SHA-1' | 'SHA-256';
@@ -962,12 +962,7 @@ function verifyOcspResponseFailureResult(
 	code: 'signature_invalid',
 	message: string,
 ): ErrorResult<'signature_invalid', Record<never, never>, VerifyOcspResponseFailure> {
-	const error: VerifyOcspResponseFailure = {
-		ok: false,
-		code,
-		message,
-	};
-	return { ok: false, error, code, message };
+	return failureResult(code, message);
 }
 
 /** Builds a `ValidateOcspResponseFailureResult`. */
@@ -996,12 +991,7 @@ function validateOcspResponseFailureResult(
 	Record<never, never>,
 	ValidateOcspResponseFailure
 > {
-	const error: ValidateOcspResponseFailure = {
-		ok: false,
-		code,
-		message,
-	};
-	return { ok: false, error, code, message };
+	return failureResult(code, message);
 }
 
 /** Accepts PEM, DER, or already-parsed OCSP response and returns a parsed response. */
@@ -1274,7 +1264,7 @@ function encodeOcspCertStatus(input: CreateOcspSingleResponseInput): Uint8Array 
 /** Accepts PEM, DER, or already-parsed certificate and returns a parsed certificate. */
 function normalizeCertificate(source: OcspCertificateSource): ParsedCertificate {
 	if (hasParsedCertificateShape(source)) {
-		return parseCertificateDer(new Uint8Array(source.der));
+		return parseCertificateDerOrThrow(new Uint8Array(source.der));
 	}
 	return parseCertificateFromSource(source);
 }
@@ -1646,7 +1636,7 @@ function parseEmbeddedCertificates(
 	let offset = element.start;
 	while (offset < element.end) {
 		const child = readElement(source, offset);
-		certificates.push(parseCertificateDer(source.slice(offset, child.end)));
+		certificates.push(parseCertificateDerOrThrow(source.slice(offset, child.end)));
 		offset = child.end;
 	}
 	return certificates;

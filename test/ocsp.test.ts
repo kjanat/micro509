@@ -13,6 +13,7 @@ import {
 	pemDecode,
 	validateOcspResponse,
 	verifyOcspResponse,
+	unwrap,
 } from 'micro509';
 import { childrenOf, toHex } from '#micro509/internal/asn1/asn1.ts';
 import {
@@ -500,7 +501,7 @@ describe('ocsp', () => {
 			signerPrivateKey: issuer.keyPair.privateKey,
 			issuerPublicKey: issuer.keyPair.publicKey,
 		});
-		const responderParsed = parseCertificatePem(responder.pem);
+		const responderParsed = unwrap(parseCertificatePem(responder.pem));
 		const response = await createSignedOcspResponseWithResponderId({
 			signerPrivateKey: responderKeys.privateKey,
 			certificatePem: leaf.pem,
@@ -546,7 +547,7 @@ describe('ocsp', () => {
 			signerPrivateKey: issuer.keyPair.privateKey,
 			issuerPublicKey: issuer.keyPair.publicKey,
 		});
-		const issuerParsed = parseCertificatePem(issuer.certificate.pem);
+		const issuerParsed = unwrap(parseCertificatePem(issuer.certificate.pem));
 		const response = await createSignedOcspResponseWithResponderId({
 			signerPrivateKey: responderKeys.privateKey,
 			certificatePem: leaf.pem,
@@ -609,7 +610,7 @@ describe('ocsp', () => {
 			signerPrivateKey: issuer.keyPair.privateKey,
 			issuerPublicKey: issuer.keyPair.publicKey,
 		});
-		const responderBParsed = parseCertificatePem(responderB.pem);
+		const responderBParsed = unwrap(parseCertificatePem(responderB.pem));
 		const response = await createSignedOcspResponseWithResponderId({
 			signerPrivateKey: responderAKeys.privateKey,
 			certificatePem: leaf.pem,
@@ -658,7 +659,7 @@ describe('ocsp', () => {
 			signerPrivateKey: issuer.keyPair.privateKey,
 			issuerPublicKey: issuer.keyPair.publicKey,
 		});
-		const issuerParsed = parseCertificatePem(issuer.certificate.pem);
+		const issuerParsed = unwrap(parseCertificatePem(issuer.certificate.pem));
 		const response = await createSignedOcspResponseWithResponderId({
 			signerPrivateKey: responderKeys.privateKey,
 			certificatePem: leaf.pem,
@@ -1106,7 +1107,7 @@ describe('ocsp', () => {
 				},
 			],
 		});
-		const parsedSigner = parseCertificatePem(issuer.certificate.pem);
+		const parsedSigner = unwrap(parseCertificatePem(issuer.certificate.pem));
 		const tamperedSigner = {
 			...parsedSigner,
 			subjectPublicKeyInfoDer: Uint8Array.of(0x30, 0x00),
@@ -1357,8 +1358,8 @@ describe('ocsp', () => {
 			signerPrivateKey: issuer.keyPair.privateKey,
 			issuerPublicKey: issuer.keyPair.publicKey,
 		});
-		const issuerParsed = parseCertificatePem(issuer.certificate.pem);
-		const leafParsed = parseCertificatePem(leaf.pem);
+		const issuerParsed = unwrap(parseCertificatePem(issuer.certificate.pem));
+		const leafParsed = unwrap(parseCertificatePem(leaf.pem));
 		const issuerNameHash = new Uint8Array(sha1(hexToBytes(issuerParsed.subject.derHex)));
 		const spkiDer = issuerParsed.subjectPublicKeyInfoDer;
 		const spkiTop = childrenOf(spkiDer, readElement(spkiDer));
@@ -1553,7 +1554,7 @@ describe('ocsp', () => {
 		expect(parsed.responses?.[0]?.certId.hashAlgorithmOid).toBe(OIDS.sha256);
 		expect(parsed.responses?.[0]?.certId.hashAlgorithmName).toBe('SHA-256');
 		expect(parsed.signatureAlgorithmName).toBe('ECDSA with SHA-256');
-		const issuerParsed = parseCertificatePem(issuer.certificate.pem);
+		const issuerParsed = unwrap(parseCertificatePem(issuer.certificate.pem));
 		expect(parsed.responderId).toMatchObject({
 			type: 'byKeyHash',
 			keyHashHex: toHex(
@@ -1633,7 +1634,7 @@ describe('ocsp', () => {
 				keyHash: new Uint8Array(
 					sha1(
 						extractSubjectPublicKeyBytes(
-							parseCertificatePem(issuer.certificate.pem).subjectPublicKeyInfoDer,
+							unwrap(parseCertificatePem(issuer.certificate.pem)).subjectPublicKeyInfoDer,
 						),
 					),
 				),
@@ -1888,8 +1889,8 @@ describe('ocsp', () => {
 				},
 			],
 		});
-		const parsedIssuer = parseCertificatePem(issuer.certificate.pem);
-		const parsedResponder = parseCertificatePem(responder.pem);
+		const parsedIssuer = unwrap(parseCertificatePem(issuer.certificate.pem));
+		const parsedResponder = unwrap(parseCertificatePem(responder.pem));
 		const result = await validateOcspResponse({
 			response: response.der,
 			issuerCertificate: parsedIssuer,
@@ -2155,7 +2156,7 @@ describe('ocsp', () => {
 			signerPrivateKey: issuer.keyPair.privateKey,
 			issuerPublicKey: issuer.keyPair.publicKey,
 		});
-		const parsedIssuer = parseCertificatePem(issuer.certificate.pem);
+		const parsedIssuer = unwrap(parseCertificatePem(issuer.certificate.pem));
 		const responderKeyHash = new Uint8Array(
 			sha1(extractSubjectPublicKeyBytes(parsedIssuer.subjectPublicKeyInfoDer)),
 		);
@@ -2413,8 +2414,8 @@ describe('ocsp', () => {
 		//
 		// Actually, the simplest approach: create a new OCSP response DER with version.
 		// Let's manually build one using DER primitives.
-		const issuerParsed = parseCertificatePem(issuer.certificate.pem);
-		const leafParsed = parseCertificatePem(leaf.pem);
+		const issuerParsed = unwrap(parseCertificatePem(issuer.certificate.pem));
+		const leafParsed = unwrap(parseCertificatePem(leaf.pem));
 
 		// Compute cert ID hashes
 		const issuerNameHash = new Uint8Array(sha1(hexToBytes(issuerParsed.subject.derHex)));
@@ -2483,8 +2484,8 @@ describe('ocsp', () => {
 			signerPrivateKey: issuer.keyPair.privateKey,
 			issuerPublicKey: issuer.keyPair.publicKey,
 		});
-		const issuerParsed = parseCertificatePem(issuer.certificate.pem);
-		const leafParsed = parseCertificatePem(leaf.pem);
+		const issuerParsed = unwrap(parseCertificatePem(issuer.certificate.pem));
+		const leafParsed = unwrap(parseCertificatePem(leaf.pem));
 		const issuerNameHash = new Uint8Array(sha1(hexToBytes(issuerParsed.subject.derHex)));
 		const spkiDer = issuerParsed.subjectPublicKeyInfoDer;
 		const spkiTop = childrenOf(spkiDer, readElement(spkiDer));
@@ -2550,8 +2551,8 @@ describe('ocsp', () => {
 			issuerPublicKey: issuer.keyPair.publicKey,
 		});
 
-		const issuerParsed = parseCertificatePem(issuer.certificate.pem);
-		const leafParsed = parseCertificatePem(leaf.pem);
+		const issuerParsed = unwrap(parseCertificatePem(issuer.certificate.pem));
+		const leafParsed = unwrap(parseCertificatePem(leaf.pem));
 		const issuerNameHash = new Uint8Array(sha1(hexToBytes(issuerParsed.subject.derHex)));
 		const spkiDer = issuerParsed.subjectPublicKeyInfoDer;
 		const spkiTop = childrenOf(spkiDer, readElement(spkiDer));
@@ -2609,7 +2610,7 @@ describe('ocsp', () => {
 				keyUsage: ['keyCertSign', 'cRLSign'],
 			},
 		});
-		const parsedIssuer = parseCertificatePem(issuer.certificate.pem);
+		const parsedIssuer = unwrap(parseCertificatePem(issuer.certificate.pem));
 		const responderKeyHash = new Uint8Array(
 			sha1(extractSubjectPublicKeyBytes(parsedIssuer.subjectPublicKeyInfoDer)),
 		);
@@ -2670,8 +2671,8 @@ describe('ocsp', () => {
 			issuerPublicKey: issuer.keyPair.publicKey,
 		});
 
-		const issuerParsed = parseCertificatePem(issuer.certificate.pem);
-		const leafParsed = parseCertificatePem(leaf.pem);
+		const issuerParsed = unwrap(parseCertificatePem(issuer.certificate.pem));
+		const leafParsed = unwrap(parseCertificatePem(leaf.pem));
 		const issuerNameHash = new Uint8Array(sha1(hexToBytes(issuerParsed.subject.derHex)));
 		const spkiDer = issuerParsed.subjectPublicKeyInfoDer;
 		const spkiTop = childrenOf(spkiDer, readElement(spkiDer));
@@ -2735,8 +2736,8 @@ describe('ocsp', () => {
 			issuerPublicKey: issuer.keyPair.publicKey,
 		});
 
-		const issuerParsed = parseCertificatePem(issuer.certificate.pem);
-		const leafParsed = parseCertificatePem(leaf.pem);
+		const issuerParsed = unwrap(parseCertificatePem(issuer.certificate.pem));
+		const leafParsed = unwrap(parseCertificatePem(leaf.pem));
 		const issuerNameHash = new Uint8Array(sha1(hexToBytes(issuerParsed.subject.derHex)));
 		const spkiDer = issuerParsed.subjectPublicKeyInfoDer;
 		const spkiTop = childrenOf(spkiDer, readElement(spkiDer));
@@ -2799,8 +2800,8 @@ describe('ocsp', () => {
 			issuerPublicKey: issuer.keyPair.publicKey,
 		});
 
-		const issuerParsed = parseCertificatePem(issuer.certificate.pem);
-		const leafParsed = parseCertificatePem(leaf.pem);
+		const issuerParsed = unwrap(parseCertificatePem(issuer.certificate.pem));
+		const leafParsed = unwrap(parseCertificatePem(leaf.pem));
 		const issuerNameHash = new Uint8Array(sha1(hexToBytes(issuerParsed.subject.derHex)));
 		const spkiDer = issuerParsed.subjectPublicKeyInfoDer;
 		const spkiTop = childrenOf(spkiDer, readElement(spkiDer));
@@ -2865,8 +2866,8 @@ describe('ocsp', () => {
 			issuerPublicKey: issuer.keyPair.publicKey,
 		});
 
-		const issuerParsed = parseCertificatePem(issuer.certificate.pem);
-		const leafParsed = parseCertificatePem(leaf.pem);
+		const issuerParsed = unwrap(parseCertificatePem(issuer.certificate.pem));
+		const leafParsed = unwrap(parseCertificatePem(leaf.pem));
 		const issuerNameHash = new Uint8Array(sha1(hexToBytes(issuerParsed.subject.derHex)));
 		const spkiDer = issuerParsed.subjectPublicKeyInfoDer;
 		const spkiTop = childrenOf(spkiDer, readElement(spkiDer));
@@ -2987,8 +2988,8 @@ describe('ocsp', () => {
 			],
 			includedCertificates: [responderCert.pem],
 		});
-		const issuerParsed = parseCertificatePem(issuer.certificate.pem);
-		const responderParsed = parseCertificatePem(responderCert.pem);
+		const issuerParsed = unwrap(parseCertificatePem(issuer.certificate.pem));
+		const responderParsed = unwrap(parseCertificatePem(responderCert.pem));
 		const request = await createOcspRequest({
 			requests: [{ certificate: leaf.pem, issuerCertificate: issuer.certificate.pem }],
 		});
@@ -3143,8 +3144,8 @@ async function createSignedOcspResponseWithResponderId(input: {
 	readonly producedAt?: Date;
 	readonly thisUpdate?: Date;
 }): Promise<Uint8Array> {
-	const issuer = parseCertificatePem(input.issuerCertificatePem);
-	const certificate = parseCertificatePem(input.certificatePem);
+	const issuer = unwrap(parseCertificatePem(input.issuerCertificatePem));
+	const certificate = unwrap(parseCertificatePem(input.certificatePem));
 	const issuerNameHash = new Uint8Array(sha1(hexToBytes(issuer.subject.derHex)));
 	const issuerKeyHash = new Uint8Array(
 		sha1(extractSubjectPublicKeyBytes(issuer.subjectPublicKeyInfoDer)),
@@ -3217,8 +3218,8 @@ async function createOcspSingleResponseWithHashAlgorithm(
 	certificatePem: string,
 	hashAlgorithmOid: string,
 ): Promise<Uint8Array> {
-	const issuer = parseCertificatePem(issuerPem);
-	const certificate = parseCertificatePem(certificatePem);
+	const issuer = unwrap(parseCertificatePem(issuerPem));
+	const certificate = unwrap(parseCertificatePem(certificatePem));
 	const hashName = hashAlgorithmOid === OIDS.sha256 ? 'SHA-256' : 'SHA-1';
 	const issuerNameBytes = new Uint8Array(hexToBytes(issuer.subject.derHex));
 	const subjectPublicKeyBytes = extractSubjectPublicKeyBytes(issuer.subjectPublicKeyInfoDer);

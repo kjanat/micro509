@@ -71,6 +71,12 @@ export type {
 	EncryptedPkcs8Options,
 	ImportEcPublicKeyInput,
 	ImportEd25519PublicKeyInput,
+	ImportEncryptedKeyErrorCode,
+	ImportEncryptedKeyFailure,
+	ImportEncryptedKeyResult,
+	ImportKeyErrorCode,
+	ImportKeyFailure,
+	ImportKeyResult,
 	ImportRsaPublicKeyInput,
 	KeyAlgorithmInput,
 	KeyPairMaterial,
@@ -125,7 +131,14 @@ export { categorizePemBlocks, pemDecode, pemEncode, splitPemBlocks } from './pem
 
 // ── pkcs ─────────────────────────────────────────────────────────────
 export type {
+	CreatePfxErrorCode,
+	CreatePfxFailure,
 	CreatePfxInput,
+	CreatePfxResult,
+	CreatePkcs7CertBagDerResult,
+	CreatePkcs7CertBagErrorCode,
+	CreatePkcs7CertBagFailure,
+	CreatePkcs7CertBagResult,
 	CreatePkcs7SignedDataDerResult,
 	CreatePkcs7SignedDataErrorCode,
 	CreatePkcs7SignedDataFailure,
@@ -182,6 +195,7 @@ export type {
 	Micro509Error,
 	Result,
 } from './result/index.ts';
+export { ResultError, unwrap, unwrapOr } from './result/index.ts';
 
 // ── revocation ───────────────────────────────────────────────────────
 export type {
@@ -349,6 +363,12 @@ export type {
 	NameFieldKey,
 	NameInput,
 	NameObject,
+	ParseCertificateErrorCode,
+	ParseCertificateFailure,
+	ParseCertificateResult,
+	ParseCertificateSigningRequestErrorCode,
+	ParseCertificateSigningRequestFailure,
+	ParseCertificateSigningRequestResult,
 	ParsedBitFlags,
 	ParsedCertificate,
 	ParsedCertificateSigningRequest,

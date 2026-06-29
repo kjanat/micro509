@@ -5,6 +5,7 @@ import {
 	generateKeyPair,
 	parseCertificateSigningRequestPem,
 	verifyCertificateSigningRequest,
+	unwrap,
 } from '#micro509';
 import { objectIdentifier, readElement, sequence, tlv } from '#micro509/internal/asn1/der.ts';
 import { OIDS } from '#micro509/internal/asn1/oids.ts';
@@ -38,7 +39,7 @@ describe('csr', () => {
 				],
 			},
 		});
-		const parsed = parseCertificateSigningRequestPem(csr.pem);
+		const parsed = unwrap(parseCertificateSigningRequestPem(csr.pem));
 		expect(parsed.basicConstraints).toEqual({ ca: true, pathLength: 2 });
 		const custom = findExtension(parsed.requestedExtensions, '1.2.3.4.999');
 		expect(custom).toBeDefined();
@@ -85,7 +86,7 @@ describe('csr', () => {
 			signature: { kind: 'rsa-pss' },
 		});
 
-		expect(parseCertificateSigningRequestPem(csr.pem)).toMatchObject({
+		expect(unwrap(parseCertificateSigningRequestPem(csr.pem))).toMatchObject({
 			signatureAlgorithmOid: OIDS.rsassaPss,
 			signatureAlgorithmParametersDer: encodeRsaPssParameters(rsaPssParametersForHash('SHA-512')),
 		});
@@ -106,7 +107,7 @@ describe('csr', () => {
 			},
 		});
 
-		expect(parseCertificateSigningRequestPem(csr.pem)).toMatchObject({
+		expect(unwrap(parseCertificateSigningRequestPem(csr.pem))).toMatchObject({
 			signatureAlgorithmOid: OIDS.ecdsaWithSHA512,
 			publicKeyParametersOid: OIDS.secp521r1,
 			subjectAltNames: [{ type: 'dns', value: 'p521-csr.example' }],
@@ -121,7 +122,7 @@ describe('csr', () => {
 			publicKey: keyPair.publicKey,
 			signerPrivateKey: keyPair.privateKey,
 		});
-		const parsed = parseCertificateSigningRequestPem(csr.pem);
+		const parsed = unwrap(parseCertificateSigningRequestPem(csr.pem));
 		expect(parsed.requestedExtensions).toEqual([]);
 	});
 
@@ -167,7 +168,7 @@ describe('csr', () => {
 			throw new Error('Missing attribute OID');
 		}
 		expect(decodeObjectIdentifier(oidElement.value)).toBe(OIDS.extensionRequest);
-		const parsed = parseCertificateSigningRequestPem(csr.pem);
+		const parsed = unwrap(parseCertificateSigningRequestPem(csr.pem));
 		expect(parsed.subject.values.commonName).toBe('csr.example');
 		expect(parsed.subjectAltNames).toEqual([{ type: 'dns', value: 'csr.example' }]);
 		expect(parsed.keyUsage).toEqual({ flags: ['digitalSignature'], nonZeroPadding: false });
@@ -203,7 +204,7 @@ describe('csr', () => {
 			},
 		});
 
-		const parsed = parseCertificateSigningRequestPem(csr.pem);
+		const parsed = unwrap(parseCertificateSigningRequestPem(csr.pem));
 		expect(parsed.certificatePolicies).toEqual([
 			{
 				policyIdentifier: '1.2.3.4.1',

@@ -5,6 +5,7 @@ import {
 	generateKeyPair,
 	matchServiceIdentity,
 	parseCertificatePem,
+	unwrap,
 } from 'micro509';
 
 type CreateCertificateInput = Parameters<typeof createCertificate>[0];
@@ -44,7 +45,7 @@ async function matchIdentityFixture(input: {
 					} satisfies NonNullable<CreateCertificateInput['extensions']>),
 	});
 	return matchServiceIdentity({
-		certificate: parseCertificatePem(leaf.pem),
+		certificate: unwrap(parseCertificatePem(leaf.pem)),
 		serviceIdentity: input.serviceIdentity,
 	});
 }

@@ -14,7 +14,7 @@ describe('utility domains', () => {
 		it('round-trips a private key through PKCS#8 PEM', async () => {
 			const pair = await keys.generateKeyPair(ecAlgorithm);
 			const exported = await keys.exportPkcs8Pem(pair.privateKey);
-			const imported = await keys.importPkcs8Pem(exported, ecAlgorithm);
+			const imported = result.unwrap(await keys.importPkcs8Pem(exported, ecAlgorithm));
 			const reExported = await keys.exportPkcs8Pem(imported);
 			expect(reExported).toBe(exported);
 		});
@@ -22,7 +22,7 @@ describe('utility domains', () => {
 		it('round-trips a public key through SPKI PEM', async () => {
 			const pair = await keys.generateKeyPair(ecAlgorithm);
 			const exported = await keys.exportSpkiPem(pair.publicKey);
-			const imported = await keys.importSpkiPem(exported, ecAlgorithm);
+			const imported = result.unwrap(await keys.importSpkiPem(exported, ecAlgorithm));
 			const reExported = await keys.exportSpkiPem(imported);
 			expect(reExported).toBe(exported);
 		});
@@ -31,7 +31,9 @@ describe('utility domains', () => {
 			const pair = await keys.generateKeyPair(ecAlgorithm);
 			const password = 'test-passphrase';
 			const encrypted = await keys.exportEncryptedPkcs8Pem(pair.privateKey, { password });
-			const imported = await keys.importEncryptedPkcs8Pem(encrypted, password, ecAlgorithm);
+			const imported = result.unwrap(
+				await keys.importEncryptedPkcs8Pem(encrypted, password, ecAlgorithm),
+			);
 			const plainPem = await keys.exportPkcs8Pem(imported);
 			const originalPem = await keys.exportPkcs8Pem(pair.privateKey);
 			expect(plainPem).toBe(originalPem);

@@ -9,6 +9,7 @@ import {
 	parseOcspRequestPem,
 	parseOcspResponseDer,
 	validateOcspResponse,
+	unwrap,
 } from 'micro509';
 import { childrenOf } from '#micro509/internal/asn1/asn1.ts';
 import {
@@ -102,8 +103,8 @@ async function createSignedOcspFixtureResponse(input: {
 	readonly producedAt?: Date;
 	readonly thisUpdate?: Date;
 }): Promise<Uint8Array> {
-	const issuer = parseCertificatePem(input.issuerCertificatePem);
-	const certificate = parseCertificatePem(input.certificatePem);
+	const issuer = unwrap(parseCertificatePem(input.issuerCertificatePem));
+	const certificate = unwrap(parseCertificatePem(input.certificatePem));
 	const issuerNameHash = new Uint8Array(sha1(hexToBytes(issuer.subject.derHex)));
 	const issuerKeyHash = new Uint8Array(
 		sha1(extractSubjectPublicKeyBytes(issuer.subjectPublicKeyInfoDer)),
@@ -171,7 +172,7 @@ describe('ocsp fixtures', () => {
 			...responderSubject,
 			extendedKeyUsage: ['ocspSigning'],
 		});
-		const responderBParsed = parseCertificatePem(responderB.pem);
+		const responderBParsed = unwrap(parseCertificatePem(responderB.pem));
 		const response = await createSignedOcspFixtureResponse({
 			signerPrivateKey: responderAKeys.privateKey,
 			certificatePem: leaf.pem,
@@ -252,7 +253,7 @@ describe('ocsp fixtures', () => {
 				keyHash: new Uint8Array(
 					sha1(
 						extractSubjectPublicKeyBytes(
-							parseCertificatePem(issuer.certificate.pem).subjectPublicKeyInfoDer,
+							unwrap(parseCertificatePem(issuer.certificate.pem)).subjectPublicKeyInfoDer,
 						),
 					),
 				),
@@ -386,9 +387,9 @@ describe('ocsp fixtures', () => {
 		expect(
 			await validateOcspResponse({
 				response: parseOcspResponseDer(response.der),
-				issuerCertificate: parseCertificatePem(issuer.certificate.pem),
+				issuerCertificate: unwrap(parseCertificatePem(issuer.certificate.pem)),
 				request: parseOcspRequestPem(request.pem),
-				responderCertificate: parseCertificatePem(responder.pem),
+				responderCertificate: unwrap(parseCertificatePem(responder.pem)),
 			}),
 		).toMatchObject({ ok: true });
 	});

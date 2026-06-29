@@ -4,6 +4,7 @@ import {
 	createSelfSignedCertificate,
 	generateKeyPair,
 	parseCertificatePem,
+	unwrap,
 } from 'micro509';
 import { pemEncode } from 'micro509/pem';
 import {
@@ -39,21 +40,23 @@ describe('pkcs domain', () => {
 			issuerPublicKey: ca.keyPair.publicKey,
 		});
 
-		const pfx = await createPfx({
-			certificates: [
-				{
-					certificate: leaf.pem,
-					attributes: { friendlyName: 'leaf', localKeyId: Uint8Array.of(1, 2, 3) },
-				},
-				{ certificate: ca.certificate.pem, attributes: { friendlyName: 'root' } },
-			],
-			privateKeys: [
-				{
-					privateKey: leafKeys.privateKey,
-					attributes: { friendlyName: 'leaf-key', localKeyId: Uint8Array.of(1, 2, 3) },
-				},
-			],
-		});
+		const pfx = unwrap(
+			await createPfx({
+				certificates: [
+					{
+						certificate: leaf.pem,
+						attributes: { friendlyName: 'leaf', localKeyId: Uint8Array.of(1, 2, 3) },
+					},
+					{ certificate: ca.certificate.pem, attributes: { friendlyName: 'root' } },
+				],
+				privateKeys: [
+					{
+						privateKey: leafKeys.privateKey,
+						attributes: { friendlyName: 'leaf-key', localKeyId: Uint8Array.of(1, 2, 3) },
+					},
+				],
+			}),
+		);
 
 		const parsedPem = await parsePfxPem(pfx.pem);
 		expect(parsedPem.ok).toBe(true);
@@ -127,7 +130,7 @@ describe('pkcs domain', () => {
 			issuerPublicKey: root.keyPair.publicKey,
 		});
 
-		const bag = createPkcs7CertBagPem([leaf.pem, root.certificate.pem]);
+		const bag = unwrap(createPkcs7CertBagPem([leaf.pem, root.certificate.pem]));
 		expect(bag.pem).toContain('BEGIN PKCS7');
 
 		const parsedPem = parsePkcs7CertBagPem(bag.pem);
@@ -152,7 +155,7 @@ describe('pkcs domain', () => {
 		const signer = await createSelfSignedCertificate({
 			subject: { commonName: 'PKCS Domain Signer' },
 		});
-		const parsedSigner = parseCertificatePem(signer.certificate.pem);
+		const parsedSigner = unwrap(parseCertificatePem(signer.certificate.pem));
 		const content = new TextEncoder().encode('pkcs-domain-signed-content');
 		const signedDataDer = await createCmsSignedDataWithSignedAttrs(
 			parsedSigner,

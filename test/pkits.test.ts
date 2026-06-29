@@ -7,6 +7,7 @@ import {
 	parseCertificateDer,
 	parseCertificateRevocationListDer,
 	verifyCertificateChain,
+	unwrap,
 } from 'micro509';
 import { PKITS_CASES, type PkitsCase } from './fixtures/pkits/manifest.ts';
 
@@ -48,7 +49,7 @@ async function readPkitsParsedCertificate(name: string): Promise<ParsedCertifica
 	if (cached !== undefined) {
 		return cached;
 	}
-	const pending = readPkitsCertificateDer(name).then((der) => parseCertificateDer(der));
+	const pending = readPkitsCertificateDer(name).then((der) => unwrap(parseCertificateDer(der)));
 	parsedCertificateCache.set(name, pending);
 	return await pending;
 }

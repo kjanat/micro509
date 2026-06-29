@@ -24,10 +24,8 @@ const { certificate, keyPair } =
     },
   });
 
-console.log(`\
-${certificate.pem}
-${await keyPair.exportPkcs8Pem()}
-`);
+console.log(certificate.pem);
+console.log(await keyPair.exportPkcs8Pem());
 ```
 
 </LiveCode>
@@ -42,6 +40,7 @@ import {
   createSelfSignedCertificate,
   generateKeyPair,
   parseCertificatePem,
+  unwrap,
 } from 'micro509';
 
 // Create a CA
@@ -76,11 +75,9 @@ const leaf = await createCertificate({
   },
 });
 
-const parsed = parseCertificatePem(leaf.pem);
-console.log(`\
-leaf:   ${parsed.subject.values.commonName}
-issuer: ${parsed.issuer.values.commonName}
-`);
+const parsed = unwrap(parseCertificatePem(leaf.pem));
+console.log('leaf:  ', parsed.subject.values.commonName);
+console.log('issuer:', parsed.issuer.values.commonName);
 ```
 
 </LiveCode>
@@ -120,6 +117,7 @@ console.log(csr.pem);
 import {
   createSelfSignedCertificate,
   parseCertificatePem,
+  unwrap,
 } from 'micro509';
 
 // Build a certificate inline, then parse it back
@@ -139,7 +137,7 @@ const { certificate } = await createSelfSignedCertificate({
   },
 });
 
-const parsed = parseCertificatePem(certificate.pem);
+const parsed = unwrap(parseCertificatePem(certificate.pem));
 
 // Typed metadata
 const sans = parsed.subjectAltNames ?? [];
@@ -152,8 +150,7 @@ notAfter:  ${parsed.notAfter.toISOString()}
 sig algo:  ${parsed.signatureAlgorithmName}
 ca:        ${parsed.basicConstraints?.ca ?? false}
 key usage: ${parsed.keyUsage?.flags.join(', ')}
-SANs:      ${sans.map((n) => n.value).join(', ')}
-`);
+SANs:      ${sans.map((n) => n.value).join(', ')}`);
 ```
 
 </LiveCode>
@@ -167,6 +164,7 @@ import {
   createCertificateSigningRequest,
   generateKeyPair,
   parseCertificateSigningRequestPem,
+  unwrap,
 } from 'micro509';
 
 // Build a CSR inline, then parse it back
@@ -182,13 +180,14 @@ const csr = await createCertificateSigningRequest({
   },
 });
 
-const parsed = parseCertificateSigningRequestPem(csr.pem);
+const parsed = unwrap(
+  parseCertificateSigningRequestPem(csr.pem),
+);
 const sans = parsed.subjectAltNames ?? [];
 console.log(`\
 subject:  ${parsed.subject.values.commonName}
 sig algo: ${parsed.signatureAlgorithmName}
-SANs:     ${sans.map((n) => n.value).join(', ')}
-`);
+SANs:     ${sans.map((n) => n.value).join(', ')}`);
 ```
 
 </LiveCode>

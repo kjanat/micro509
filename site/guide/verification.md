@@ -189,6 +189,7 @@ console.log(
 import {
   createSelfSignedCertificate,
   parseCertificatePem,
+  unwrap,
 } from 'micro509';
 import { matchServiceIdentity } from 'micro509/verify';
 
@@ -202,7 +203,7 @@ const { certificate } = await createSelfSignedCertificate({
   },
 });
 
-const parsed = parseCertificatePem(certificate.pem);
+const parsed = unwrap(parseCertificatePem(certificate.pem));
 
 const result = matchServiceIdentity({
   certificate: parsed,

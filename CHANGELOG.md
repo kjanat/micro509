@@ -5,6 +5,40 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-06-29
+
+Typed-error rework: trust-boundary functions (which consume untrusted
+external input) now return a `Result` as the strict, correct default,
+with an explicit `unwrap()` escape hatch. Typed-config constructors keep
+throwing (a bad config is a programmer error, not a runtime condition).
+
+### Added
+
+- `unwrap(result)` / `unwrapOr(result, fallback)` and the `ResultError`
+  class (root + `micro509/result`): the explicit escape hatch for callers
+  who have already validated input or prefer exceptions. `unwrap` throws a
+  `ResultError` carrying the structured `code`.
+- `failureResult(code, message, details?)` factory in `micro509/result`:
+  one source of truth for the `{ ok, error, code, message }` shape.
+
+### Changed (BREAKING)
+
+- `parseCertificateDer`, `parseCertificatePem`,
+  `parseCertificateSigningRequestDer`, `parseCertificateSigningRequestPem`
+  now return a `Result` (`{ ok, value }` / `{ ok, error: { code:
+'malformed' } }`) instead of throwing. Wrap with `unwrap(...)` for the
+  previous throw-on-error behavior.
+- All 16 key `import*` functions now return a `Result` instead of
+  throwing. Non-encrypted failures use code `'malformed'`; encrypted
+  imports distinguish a typed `'invalid_password'` from `'malformed'`.
+  `export*` and `generateKeyPair` are unchanged (no untrusted input).
+- `createPfx`, `createPkcs7CertBagDer`, and `createPkcs7CertBagPem` now
+  return a `Result` (code `'invalid_certificate'`) instead of throwing
+  on a malformed certificate source — matching `createPkcs7SignedData`.
+  Pure typed-config constructors (`createCertificate`,
+  `createSelfSignedCertificate`, `createCertificateRevocationList`, …)
+  still throw: a bad config is a programmer error, not a runtime result.
+
 ## [0.2.0] - 2026-06-29
 
 ### Added
@@ -47,6 +81,7 @@ Initial prerelease. API may change before 1.0.
 - Zero runtime dependencies, WebCrypto-native, tree-shakeable subpath exports;
   runs on Node, Bun, Deno, browsers, and Cloudflare Workers.
 
+[0.3.0]: https://github.com/kjanat/ts-x509/releases/tag/v0.3.0
 [0.2.0]: https://github.com/kjanat/ts-x509/releases/tag/v0.2.0
 [0.1.1]: https://github.com/kjanat/ts-x509/releases/tag/v0.1.1
 [0.1.0]: https://github.com/kjanat/ts-x509/releases/tag/v0.1.0

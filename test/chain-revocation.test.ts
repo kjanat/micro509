@@ -5,11 +5,12 @@ import {
 	parseCertificateDer,
 	parseCertificateRevocationListDer,
 	verifyCertificateChain,
+	unwrap,
 } from 'micro509';
 
 async function loadPkitsCert(name: string) {
 	const der = await readFile(new URL(`./fixtures/pkits/certs/${name}.crt`, import.meta.url));
-	return parseCertificateDer(new Uint8Array(der));
+	return unwrap(parseCertificateDer(new Uint8Array(der)));
 }
 
 async function loadPkitsCrl(name: string) {

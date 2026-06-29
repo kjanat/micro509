@@ -12,7 +12,7 @@ import { decodeIpAddress, parseIpAddressToBytes } from '#micro509/internal/share
 import type { ErrorResult, Micro509Error, Result } from '#micro509/result/result.ts';
 import { errorResult, micro509Error, successResult } from '#micro509/result/result.ts';
 import type { ParsedCertificate } from '#micro509/x509/parse.ts';
-import { parseCertificateDer } from '#micro509/x509/parse.ts';
+import { parseCertificateDerOrThrow } from '#micro509/x509/parse.ts';
 
 /** DNS hostname reference identifier. */
 export interface DnsServiceIdentityInput {
@@ -181,7 +181,7 @@ export function matchCertificateServiceIdentity(
 ): MatchServiceIdentityResult {
 	let certificate: ParsedCertificate;
 	try {
-		certificate = parseCertificateDer(new Uint8Array(rawCertificate.der));
+		certificate = parseCertificateDerOrThrow(new Uint8Array(rawCertificate.der));
 	} catch {
 		return failure('subject_alt_name_mismatch', 'certificate input is malformed');
 	}

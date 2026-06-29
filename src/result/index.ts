@@ -13,8 +13,12 @@ export type {
 } from './result.ts';
 export {
 	errorResult,
+	failureResult,
 	indexedErrorResult,
 	indexedMicro509Error,
 	micro509Error,
+	ResultError,
 	successResult,
+	unwrap,
+	unwrapOr,
 } from './result.ts';

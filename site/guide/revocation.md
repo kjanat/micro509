@@ -224,6 +224,7 @@ import {
   createSelfSignedCertificate,
   generateKeyPair,
   parseCertificatePem,
+  unwrap,
 } from 'micro509';
 import {
   checkCertificateRevocation,
@@ -249,7 +250,7 @@ const leaf = await createCertificate({
 });
 
 // Leaf serial as bytes for the CRL entry
-const parsedLeaf = parseCertificatePem(leaf.pem);
+const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
 const serialHex = parsedLeaf.serialNumberHex;
 const leafSerial = Uint8Array.from(
   serialHex.match(/.{2}/g) ?? [],

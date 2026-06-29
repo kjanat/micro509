@@ -12,6 +12,7 @@ import {
 	parseCertificateSigningRequestDer,
 	parseOcspRequestDer,
 	parseOcspResponseDer,
+	unwrap,
 } from 'micro509';
 import {
 	bitString,
@@ -371,34 +372,41 @@ describe('malformed DER corpus', () => {
 		const corpus: readonly CorpusCase[] = [
 			{
 				name: 'truncated certificate',
-				parse: () => parseCertificateDer(certificate.der.slice(0, certificate.der.length - 7)),
+				parse: () =>
+					unwrap(parseCertificateDer(certificate.der.slice(0, certificate.der.length - 7))),
 			},
 			{
 				name: 'certificate with trailing DER data',
-				parse: () => parseCertificateDer(Uint8Array.of(...certificate.der, 0x00)),
+				parse: () => unwrap(parseCertificateDer(Uint8Array.of(...certificate.der, 0x00))),
 				messagePattern: /Trailing data/i,
 			},
 			{
 				name: 'certificate exceeding max DER depth',
 				parse: () =>
-					parseCertificateDer(
-						replaceCertificateSubjectPublicKeyInfo(certificate.der, nestedSequence(70)),
+					unwrap(
+						parseCertificateDer(
+							replaceCertificateSubjectPublicKeyInfo(certificate.der, nestedSequence(70)),
+						),
 					),
 				messagePattern: /max depth/i,
 			},
 			{
 				name: 'certificate missing subjectPublicKeyInfo fields',
 				parse: () =>
-					parseCertificateDer(
-						replaceCertificateSubjectPublicKeyInfo(certificate.der, sequence([])),
+					unwrap(
+						parseCertificateDer(
+							replaceCertificateSubjectPublicKeyInfo(certificate.der, sequence([])),
+						),
 					),
 				messagePattern: /subjectPublicKeyInfo|algorithm/i,
 			},
 			{
 				name: 'certificate skeletal structure missing serialNumber',
 				parse: () =>
-					parseCertificateDer(
-						sequence([sequence([]), sequence([]), bitString(Uint8Array.of(0x00))]),
+					unwrap(
+						parseCertificateDer(
+							sequence([sequence([]), sequence([]), bitString(Uint8Array.of(0x00))]),
+						),
 					),
 				messagePattern: /serialNumber/i,
 			},
@@ -425,7 +433,7 @@ describe('malformed DER corpus', () => {
 			signerPrivateKey: issuer.keyPair.privateKey,
 			issuerPublicKey: issuer.keyPair.publicKey,
 		});
-		const parsedLeaf = parseCertificateDer(leaf.der);
+		const parsedLeaf = unwrap(parseCertificateDer(leaf.der));
 		const crl = await createCertificateRevocationList({
 			issuer: { commonName: 'Malformed CRL CA' },
 			issuerPublicKey: issuer.keyPair.publicKey,
@@ -560,11 +568,13 @@ describe('malformed DER corpus', () => {
 			{
 				name: 'empty certificatePolicies sequence',
 				parse: () =>
-					parseCertificateDer(
-						replaceCertificateExtensionValue(
-							issuer.certificate.der,
-							OIDS.certificatePolicies,
-							sequence([]),
+					unwrap(
+						parseCertificateDer(
+							replaceCertificateExtensionValue(
+								issuer.certificate.der,
+								OIDS.certificatePolicies,
+								sequence([]),
+							),
 						),
 					),
 				messagePattern: /certificatePolicies|SEQUENCE/i,
@@ -572,11 +582,13 @@ describe('malformed DER corpus', () => {
 			{
 				name: 'empty policyMappings sequence',
 				parse: () =>
-					parseCertificateDer(
-						replaceCertificateExtensionValue(
-							issuer.certificate.der,
-							OIDS.policyMappings,
-							sequence([]),
+					unwrap(
+						parseCertificateDer(
+							replaceCertificateExtensionValue(
+								issuer.certificate.der,
+								OIDS.policyMappings,
+								sequence([]),
+							),
 						),
 					),
 				messagePattern: /policyMappings|SEQUENCE/i,
@@ -584,11 +596,13 @@ describe('malformed DER corpus', () => {
 			{
 				name: 'empty policyConstraints sequence',
 				parse: () =>
-					parseCertificateDer(
-						replaceCertificateExtensionValue(
-							issuer.certificate.der,
-							OIDS.policyConstraints,
-							sequence([]),
+					unwrap(
+						parseCertificateDer(
+							replaceCertificateExtensionValue(
+								issuer.certificate.der,
+								OIDS.policyConstraints,
+								sequence([]),
+							),
 						),
 					),
 				messagePattern: /policyConstraints|SEQUENCE/i,
@@ -596,11 +610,13 @@ describe('malformed DER corpus', () => {
 			{
 				name: 'negative policyConstraints requireExplicitPolicy',
 				parse: () =>
-					parseCertificateDer(
-						replaceCertificateExtensionValue(
-							issuer.certificate.der,
-							OIDS.policyConstraints,
-							sequence([implicitPrimitiveContext(0, Uint8Array.of(0xff))]),
+					unwrap(
+						parseCertificateDer(
+							replaceCertificateExtensionValue(
+								issuer.certificate.der,
+								OIDS.policyConstraints,
+								sequence([implicitPrimitiveContext(0, Uint8Array.of(0xff))]),
+							),
 						),
 					),
 				messagePattern: /policyConstraints requireExplicitPolicy|non-negative|SEQUENCE/i,
@@ -608,11 +624,13 @@ describe('malformed DER corpus', () => {
 			{
 				name: 'non-INTEGER inhibitAnyPolicy value',
 				parse: () =>
-					parseCertificateDer(
-						replaceCertificateExtensionValue(
-							issuer.certificate.der,
-							OIDS.inhibitAnyPolicy,
-							sequence([]),
+					unwrap(
+						parseCertificateDer(
+							replaceCertificateExtensionValue(
+								issuer.certificate.der,
+								OIDS.inhibitAnyPolicy,
+								sequence([]),
+							),
 						),
 					),
 				messagePattern: /inhibitAnyPolicy|INTEGER|SEQUENCE/i,
@@ -620,11 +638,13 @@ describe('malformed DER corpus', () => {
 			{
 				name: 'negative inhibitAnyPolicy value',
 				parse: () =>
-					parseCertificateDer(
-						replaceCertificateExtensionValue(
-							issuer.certificate.der,
-							OIDS.inhibitAnyPolicy,
-							tlv(0x02, Uint8Array.of(0xff)),
+					unwrap(
+						parseCertificateDer(
+							replaceCertificateExtensionValue(
+								issuer.certificate.der,
+								OIDS.inhibitAnyPolicy,
+								tlv(0x02, Uint8Array.of(0xff)),
+							),
 						),
 					),
 				messagePattern: /inhibitAnyPolicy skipCerts|non-negative|SEQUENCE/i,
@@ -632,11 +652,13 @@ describe('malformed DER corpus', () => {
 			{
 				name: 'distribution point with reasons only',
 				parse: () =>
-					parseCertificateDer(
-						replaceCertificateExtensionValue(
-							issuer.certificate.der,
-							OIDS.cRLDistributionPoints,
-							sequence([sequence([tlv(0x81, Uint8Array.of(0x00))])]),
+					unwrap(
+						parseCertificateDer(
+							replaceCertificateExtensionValue(
+								issuer.certificate.der,
+								OIDS.cRLDistributionPoints,
+								sequence([sequence([tlv(0x81, Uint8Array.of(0x00))])]),
+							),
 						),
 					),
 				messagePattern:
@@ -645,11 +667,13 @@ describe('malformed DER corpus', () => {
 			{
 				name: 'authority key identifier fields out of order',
 				parse: () =>
-					parseCertificateDer(
-						replaceCertificateExtensionValue(
-							issuer.certificate.der,
-							OIDS.authorityKeyIdentifier,
-							sequence([tlv(0x82, Uint8Array.of(0x01)), explicitContext(1, sequence([]))]),
+					unwrap(
+						parseCertificateDer(
+							replaceCertificateExtensionValue(
+								issuer.certificate.der,
+								OIDS.authorityKeyIdentifier,
+								sequence([tlv(0x82, Uint8Array.of(0x01)), explicitContext(1, sequence([]))]),
+							),
 						),
 					),
 				messagePattern: /authorityKeyIdentifier fields must preserve DER order|Expected SEQUENCE/i,
@@ -697,12 +721,14 @@ describe('malformed DER corpus', () => {
 			{
 				name: 'certificate version uses BOOLEAN',
 				parse: () =>
-					parseCertificateDer(rewriteCertificateVersionTag(certificate.certificate.der, 0x01)),
+					unwrap(
+						parseCertificateDer(rewriteCertificateVersionTag(certificate.certificate.der, 0x01)),
+					),
 				messagePattern: /version must use INTEGER/i,
 			},
 			{
 				name: 'csr version uses BOOLEAN',
-				parse: () => parseCertificateSigningRequestDer(rewriteCsrVersionTag(csr.der, 0x01)),
+				parse: () => unwrap(parseCertificateSigningRequestDer(rewriteCsrVersionTag(csr.der, 0x01))),
 				messagePattern: /version must use INTEGER/i,
 			},
 			{

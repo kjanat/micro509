@@ -13,6 +13,7 @@ import {
 	pemDecode,
 	pemEncode,
 	verifyCertificateChain,
+	unwrap,
 } from 'micro509';
 
 describe('root barrel', () => {
@@ -27,7 +28,7 @@ describe('root barrel', () => {
 		});
 		expect(certificate.pem).toContain('-----BEGIN CERTIFICATE-----');
 
-		const parsed = parseCertificatePem(certificate.pem);
+		const parsed = unwrap(parseCertificatePem(certificate.pem));
 		expect(parsed.subject.values.commonName).toBe('barrel.example');
 		expect(parsed.issuer.values.commonName).toBe('barrel.example');
 
@@ -69,7 +70,7 @@ describe('root barrel', () => {
 		});
 		expect(csr.pem).toContain('-----BEGIN CERTIFICATE REQUEST-----');
 
-		const parsed = parseCertificateSigningRequestPem(csr.pem);
+		const parsed = unwrap(parseCertificateSigningRequestPem(csr.pem));
 		expect(parsed.subject.values.commonName).toBe('csr-barrel.example');
 		expect(parsed.subjectPublicKeyInfoDer.byteLength).toBeGreaterThan(0);
 	});
@@ -79,7 +80,7 @@ describe('root barrel', () => {
 		const pem = await exportPkcs8Pem(keyPair.privateKey);
 		expect(pem).toContain('-----BEGIN PRIVATE KEY-----');
 
-		const imported = await importPkcs8Pem(pem, { kind: 'ecdsa', curve: 'P-384' });
+		const imported = unwrap(await importPkcs8Pem(pem, { kind: 'ecdsa', curve: 'P-384' }));
 		expect(imported.type).toBe('private');
 
 		// sign with imported key to prove it works
@@ -88,7 +89,7 @@ describe('root barrel', () => {
 			publicKey: keyPair.publicKey,
 			signerPrivateKey: imported,
 		});
-		const parsed = parseCertificateSigningRequestPem(csr.pem);
+		const parsed = unwrap(parseCertificateSigningRequestPem(csr.pem));
 		expect(parsed.subject.values.commonName).toBe('reimported.example');
 	});
 
@@ -111,20 +112,22 @@ describe('root barrel', () => {
 		const { certificate, keyPair } = await createSelfSignedCertificate({
 			subject: { commonName: 'pfx-barrel.example' },
 		});
-		const pfx = await createPfx({
-			certificates: [
-				{
-					certificate: certificate.pem,
-					attributes: { friendlyName: 'barrel-cert' },
-				},
-			],
-			privateKeys: [
-				{
-					privateKey: keyPair.privateKey,
-					attributes: { friendlyName: 'barrel-key' },
-				},
-			],
-		});
+		const pfx = unwrap(
+			await createPfx({
+				certificates: [
+					{
+						certificate: certificate.pem,
+						attributes: { friendlyName: 'barrel-cert' },
+					},
+				],
+				privateKeys: [
+					{
+						privateKey: keyPair.privateKey,
+						attributes: { friendlyName: 'barrel-key' },
+					},
+				],
+			}),
+		);
 		expect(pfx.pem).toContain('-----BEGIN PKCS12-----');
 
 		const parsed = await parsePfxPem(pfx.pem);

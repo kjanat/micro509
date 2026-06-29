@@ -5,6 +5,7 @@ import {
 	generateKeyPair,
 	parseCertificatePem,
 	validateCandidatePath,
+	unwrap,
 } from 'micro509';
 import { OIDS } from '#micro509/internal/asn1/oids.ts';
 
@@ -96,9 +97,9 @@ async function issuePolicyFixtureChain(options: {
 	});
 
 	return [
-		parseCertificatePem(leaf.pem),
-		...intermediatePems.toReversed().map((pem) => parseCertificatePem(pem)),
-		parseCertificatePem(root.certificate.pem),
+		unwrap(parseCertificatePem(leaf.pem)),
+		...intermediatePems.toReversed().map((pem) => unwrap(parseCertificatePem(pem))),
+		unwrap(parseCertificatePem(root.certificate.pem)),
 	] as const;
 }
 

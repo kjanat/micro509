@@ -14,6 +14,7 @@ import {
 	parseCertificatePem,
 	parseCertificateSigningRequestDer,
 	parseCertificateSigningRequestPem,
+	unwrap,
 } from 'micro509';
 import { encodeName } from 'micro509/x509';
 import {
@@ -61,7 +62,7 @@ describe('parse', () => {
 			},
 		});
 
-		const parsed = parseCertificatePem(certificate.certificate.pem);
+		const parsed = unwrap(parseCertificatePem(certificate.certificate.pem));
 		const extension = findExtension(parsed.extensions, '1.2.3.4.200');
 		if (extension === undefined) {
 			throw new Error('Missing custom extension');
@@ -116,7 +117,13 @@ describe('parse', () => {
 		});
 		const duplicated = duplicateCertificateExtension(certificate.certificate.der, OIDS.keyUsage);
 
-		expect(() => parseCertificateDer(duplicated)).toThrow('Duplicate extension OID');
+		{
+			const result = parseCertificateDer(duplicated);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('Duplicate extension OID');
+			}
+		}
 	});
 
 	it('rejects duplicate extension OIDs during CSR parse', async () => {
@@ -131,7 +138,13 @@ describe('parse', () => {
 		});
 		const duplicated = duplicateCsrRequestedExtension(csr.der, OIDS.keyUsage);
 
-		expect(() => parseCertificateSigningRequestDer(duplicated)).toThrow('Duplicate extension OID');
+		{
+			const result = parseCertificateSigningRequestDer(duplicated);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('Duplicate extension OID');
+			}
+		}
 	});
 
 	it('rejects non-OCTET certificate extension values during parse', async () => {
@@ -147,7 +160,13 @@ describe('parse', () => {
 			0x02,
 		);
 
-		expect(() => parseCertificateDer(malformed)).toThrow('Extension value must use OCTET STRING');
+		{
+			const result = parseCertificateDer(malformed);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('Extension value must use OCTET STRING');
+			}
+		}
 	});
 
 	it('rejects non-OCTET CSR extension values during parse', async () => {
@@ -162,9 +181,13 @@ describe('parse', () => {
 		});
 		const malformed = rewriteCsrRequestedExtensionValueTag(csr.der, OIDS.keyUsage, 0x02);
 
-		expect(() => parseCertificateSigningRequestDer(malformed)).toThrow(
-			'Extension value must use OCTET STRING',
-		);
+		{
+			const result = parseCertificateSigningRequestDer(malformed);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('Extension value must use OCTET STRING');
+			}
+		}
 	});
 
 	it('rejects malformed certificate extension middle fields during parse', async () => {
@@ -180,7 +203,13 @@ describe('parse', () => {
 			0x02,
 		);
 
-		expect(() => parseCertificateDer(malformed)).toThrow('Extension value must use OCTET STRING');
+		{
+			const result = parseCertificateDer(malformed);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('Extension value must use OCTET STRING');
+			}
+		}
 	});
 
 	it('rejects malformed CSR extension middle fields during parse', async () => {
@@ -195,9 +224,13 @@ describe('parse', () => {
 		});
 		const malformed = rewriteCsrRequestedExtensionMiddleFieldTag(csr.der, OIDS.keyUsage, 0x02);
 
-		expect(() => parseCertificateSigningRequestDer(malformed)).toThrow(
-			'Extension value must use OCTET STRING',
-		);
+		{
+			const result = parseCertificateSigningRequestDer(malformed);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('Extension value must use OCTET STRING');
+			}
+		}
 	});
 
 	it('rejects malformed basicConstraints structures during parse', async () => {
@@ -208,65 +241,89 @@ describe('parse', () => {
 			},
 		});
 
-		expect(() =>
-			parseCertificateDer(
+		{
+			const result = parseCertificateDer(
 				rewriteCertificateExtensionValue(
 					certificate.certificate.der,
 					OIDS.basicConstraints,
 					sequence([tlv(0x01, Uint8Array.of(0xff)), tlv(0x01, Uint8Array.of(0x00))]),
 				),
-			),
-		).toThrow('basicConstraints cA must not repeat');
+			);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('basicConstraints cA must not repeat');
+			}
+		}
 
-		expect(() =>
-			parseCertificateDer(
+		{
+			const result = parseCertificateDer(
 				rewriteCertificateExtensionValue(
 					certificate.certificate.der,
 					OIDS.basicConstraints,
 					sequence([tlv(0x02, Uint8Array.of(0x00)), tlv(0x02, Uint8Array.of(0x01))]),
 				),
-			),
-		).toThrow('basicConstraints pathLength must not repeat');
+			);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('basicConstraints pathLength must not repeat');
+			}
+		}
 
-		expect(() =>
-			parseCertificateDer(
+		{
+			const result = parseCertificateDer(
 				rewriteCertificateExtensionValue(
 					certificate.certificate.der,
 					OIDS.basicConstraints,
 					sequence([tlv(0x02, Uint8Array.of(0x01))]),
 				),
-			),
-		).toThrow('basicConstraints pathLength requires cA = true');
+			);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('basicConstraints pathLength requires cA = true');
+			}
+		}
 
-		expect(() =>
-			parseCertificateDer(
+		{
+			const result = parseCertificateDer(
 				rewriteCertificateExtensionValue(
 					certificate.certificate.der,
 					OIDS.basicConstraints,
 					sequence([tlv(0x02, Uint8Array.of(0x01)), tlv(0x01, Uint8Array.of(0xff))]),
 				),
-			),
-		).toThrow('basicConstraints cA must precede pathLength');
+			);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('basicConstraints cA must precede pathLength');
+			}
+		}
 
-		expect(() =>
-			parseCertificateDer(
+		{
+			const result = parseCertificateDer(
 				rewriteCertificateExtensionValue(
 					certificate.certificate.der,
 					OIDS.basicConstraints,
 					sequence([tlv(0x80, Uint8Array.of(0x00))]),
 				),
-			),
-		).toThrow('Unsupported basicConstraints field tag');
+			);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('Unsupported basicConstraints field tag');
+			}
+		}
 
-		expect(() =>
-			parseCertificateDer(
+		{
+			const result = parseCertificateDer(
 				rewriteCertificateExtensionValue(
 					certificate.certificate.der,
 					OIDS.basicConstraints,
 					tlv(0x01, Uint8Array.of(0xff)),
 				),
-			),
-		).toThrow('basicConstraints must use SEQUENCE');
+			);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('basicConstraints must use SEQUENCE');
+			}
+		}
 	});
 
 	it('rejects repeated distribution point fields during parse', async () => {
@@ -292,9 +349,15 @@ describe('parse', () => {
 				],
 			},
 		});
-		expect(() => parseCertificatePem(certificate.certificate.pem)).toThrow(
-			'DistributionPoint distributionPoint must not repeat',
-		);
+		{
+			const result = parseCertificatePem(certificate.certificate.pem);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain(
+					'DistributionPoint distributionPoint must not repeat',
+				);
+			}
+		}
 	});
 
 	it('rejects distributionPointName wrappers with multiple choices during parse', async () => {
@@ -322,9 +385,15 @@ describe('parse', () => {
 				],
 			},
 		});
-		expect(() => parseCertificatePem(certificate.certificate.pem)).toThrow(
-			'distributionPointName must contain exactly one choice',
-		);
+		{
+			const result = parseCertificatePem(certificate.certificate.pem);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain(
+					'distributionPointName must contain exactly one choice',
+				);
+			}
+		}
 	});
 
 	it('rejects CRL distribution points that contain only reasons', async () => {
@@ -339,21 +408,39 @@ describe('parse', () => {
 				],
 			},
 		});
-		expect(() => parseCertificatePem(certificate.certificate.pem)).toThrow(
-			'DistributionPoint must include distributionPoint or crlIssuer',
-		);
+		{
+			const result = parseCertificatePem(certificate.certificate.pem);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain(
+					'DistributionPoint must include distributionPoint or crlIssuer',
+				);
+			}
+		}
 	});
 
 	it('rejects non-INTEGER certificate version and serialNumber tags', async () => {
 		const certificate = await createSelfSignedCertificate({
 			subject: { commonName: 'bad-cert-scalars.example' },
 		});
-		expect(() =>
-			parseCertificateDer(rewriteCertificateVersionIntegerTag(certificate.certificate.der, 0x01)),
-		).toThrow('version must use INTEGER');
-		expect(() =>
-			parseCertificateDer(rewriteCertificateSerialNumberTag(certificate.certificate.der, 0x01)),
-		).toThrow('serialNumber must use INTEGER');
+		{
+			const result = parseCertificateDer(
+				rewriteCertificateVersionIntegerTag(certificate.certificate.der, 0x01),
+			);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('version must use INTEGER');
+			}
+		}
+		{
+			const result = parseCertificateDer(
+				rewriteCertificateSerialNumberTag(certificate.certificate.der, 0x01),
+			);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('serialNumber must use INTEGER');
+			}
+		}
 	});
 
 	it('rejects non-INTEGER CSR version tags', async () => {
@@ -363,9 +450,13 @@ describe('parse', () => {
 			publicKey: keyPair.publicKey,
 			signerPrivateKey: keyPair.privateKey,
 		});
-		expect(() => parseCertificateSigningRequestDer(rewriteCsrVersionTag(csr.der, 0x01))).toThrow(
-			'version must use INTEGER',
-		);
+		{
+			const result = parseCertificateSigningRequestDer(rewriteCsrVersionTag(csr.der, 0x01));
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('version must use INTEGER');
+			}
+		}
 	});
 
 	it('rejects malformed SubjectPublicKeyInfo shapes in certificate and CSR parse', async () => {
@@ -378,22 +469,32 @@ describe('parse', () => {
 			publicKey: keyPair.publicKey,
 			signerPrivateKey: keyPair.privateKey,
 		});
-		expect(() =>
-			parseCertificateDer(
+		{
+			const result = parseCertificateDer(
 				rewriteCertificateSubjectPublicKeyInfo(
 					certificate.certificate.der,
 					buildMalformedCertificateSubjectPublicKeyInfoWrongTag(certificate.certificate.der),
 				),
-			),
-		).toThrow('SubjectPublicKeyInfo algorithm must use SEQUENCE');
-		expect(() =>
-			parseCertificateSigningRequestDer(
+			);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('SubjectPublicKeyInfo algorithm must use SEQUENCE');
+			}
+		}
+		{
+			const result = parseCertificateSigningRequestDer(
 				rewriteCsrSubjectPublicKeyInfo(
 					csr.der,
 					buildMalformedCsrSubjectPublicKeyInfoExtraField(csr.der),
 				),
-			),
-		).toThrow('SubjectPublicKeyInfo must contain algorithm and subjectPublicKey');
+			);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain(
+					'SubjectPublicKeyInfo must contain algorithm and subjectPublicKey',
+				);
+			}
+		}
 	});
 
 	it('rejects unsupported certificate and CSR version values', async () => {
@@ -406,14 +507,24 @@ describe('parse', () => {
 			publicKey: keyPair.publicKey,
 			signerPrivateKey: keyPair.privateKey,
 		});
-		expect(() =>
-			parseCertificateDer(
+		{
+			const result = parseCertificateDer(
 				rewriteCertificateVersionValue(certificate.certificate.der, Uint8Array.of(0x03)),
-			),
-		).toThrow('Unsupported certificate version: 4');
-		expect(() =>
-			parseCertificateSigningRequestDer(rewriteCsrVersionValue(csr.der, Uint8Array.of(0x01))),
-		).toThrow('Unsupported CertificationRequestInfo version: 2');
+			);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('Unsupported certificate version: 4');
+			}
+		}
+		{
+			const result = parseCertificateSigningRequestDer(
+				rewriteCsrVersionValue(csr.der, Uint8Array.of(0x01)),
+			);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('Unsupported CertificationRequestInfo version: 2');
+			}
+		}
 	});
 
 	it('rejects certificate unique IDs that violate version or BIT STRING rules', async () => {
@@ -423,22 +534,34 @@ describe('parse', () => {
 				basicConstraints: { ca: true },
 			},
 		});
-		expect(() =>
-			parseCertificateDer(
+		{
+			const result = parseCertificateDer(
 				insertCertificateTbsFieldBeforeExtensions(
 					rewriteCertificateVersionValue(certificate.certificate.der, Uint8Array.of(0x00)),
 					tlv(0x81, Uint8Array.of(0x00)),
 				),
-			),
-		).toThrow('issuerUniqueID requires certificate version 2 or 3');
-		expect(() =>
-			parseCertificateDer(
+			);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain(
+					'issuerUniqueID requires certificate version 2 or 3',
+				);
+			}
+		}
+		{
+			const result = parseCertificateDer(
 				insertCertificateTbsFieldBeforeExtensions(
 					rewriteCertificateVersionValue(certificate.certificate.der, Uint8Array.of(0x01)),
 					tlv(0x81, Uint8Array.of(0x07, 0x01)),
 				),
-			),
-		).toThrow('issuerUniqueID BIT STRING must not set padding bits');
+			);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain(
+					'issuerUniqueID BIT STRING must not set padding bits',
+				);
+			}
+		}
 	});
 
 	it('rejects certificate extensions on versions below v3', async () => {
@@ -448,11 +571,15 @@ describe('parse', () => {
 				basicConstraints: { ca: true },
 			},
 		});
-		expect(() =>
-			parseCertificateDer(
+		{
+			const result = parseCertificateDer(
 				rewriteCertificateVersionValue(certificate.certificate.der, Uint8Array.of(0x01)),
-			),
-		).toThrow('extensions require certificate version 3');
+			);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('extensions require certificate version 3');
+			}
+		}
 	});
 
 	it('rejects repeated extensionRequest attributes during CSR parse', async () => {
@@ -467,9 +594,13 @@ describe('parse', () => {
 		});
 		const duplicated = duplicateCsrExtensionRequestAttribute(csr.der);
 
-		expect(() => parseCertificateSigningRequestDer(duplicated)).toThrow(
-			'extensionRequest attribute must not repeat',
-		);
+		{
+			const result = parseCertificateSigningRequestDer(duplicated);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('extensionRequest attribute must not repeat');
+			}
+		}
 	});
 
 	it('rejects multi-valued extensionRequest attributes during CSR parse', async () => {
@@ -484,31 +615,45 @@ describe('parse', () => {
 		});
 		const duplicated = duplicateCsrExtensionRequestValue(csr.der);
 
-		expect(() => parseCertificateSigningRequestDer(duplicated)).toThrow(
-			'extensionRequest attribute must contain exactly one value',
-		);
+		{
+			const result = parseCertificateSigningRequestDer(duplicated);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain(
+					'extensionRequest attribute must contain exactly one value',
+				);
+			}
+		}
 	});
 
 	it('rejects certificate structures with unexpected top-level or TBSCertificate trailing fields', async () => {
 		const certificate = await createSelfSignedCertificate({
 			subject: { commonName: 'bad-cert-trailing-fields.example' },
 		});
-		expect(() =>
-			parseCertificateDer(
+		{
+			const result = parseCertificateDer(
 				rewriteCertificateWithExtraTopLevelField(
 					certificate.certificate.der,
 					tlv(0x05, new Uint8Array()),
 				),
-			),
-		).toThrow('Malformed Certificate');
-		expect(() =>
-			parseCertificateDer(
+			);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('Malformed Certificate');
+			}
+		}
+		{
+			const result = parseCertificateDer(
 				rewriteCertificateTbsWithExtraField(
 					certificate.certificate.der,
 					tlv(0x84, Uint8Array.of(0x00)),
 				),
-			),
-		).toThrow('Unsupported TBSCertificate field tag: 132');
+			);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('Unsupported TBSCertificate field tag: 132');
+			}
+		}
 	});
 
 	it('rejects certificates whose outer signatureAlgorithm mismatches the signed TBSCertificate', async () => {
@@ -521,9 +666,15 @@ describe('parse', () => {
 			sequence([objectIdentifier(OIDS.sha512WithRSAEncryption), nullValue()]),
 		);
 
-		expect(() => parseCertificateDer(mismatched)).toThrow(
-			'Certificate signatureAlgorithm must match TBSCertificate signature',
-		);
+		{
+			const result = parseCertificateDer(mismatched);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain(
+					'Certificate signatureAlgorithm must match TBSCertificate signature',
+				);
+			}
+		}
 	});
 
 	it('rejects certificates whose outer signatureAlgorithm parameters mismatch the signed TBSCertificate', async () => {
@@ -546,9 +697,15 @@ describe('parse', () => {
 			]),
 		);
 
-		expect(() => parseCertificateDer(mismatched)).toThrow(
-			'Certificate signatureAlgorithm must match TBSCertificate signature',
-		);
+		{
+			const result = parseCertificateDer(mismatched);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain(
+					'Certificate signatureAlgorithm must match TBSCertificate signature',
+				);
+			}
+		}
 	});
 
 	it('rejects CSR structures with unexpected top-level or CertificationRequestInfo trailing fields', async () => {
@@ -561,16 +718,24 @@ describe('parse', () => {
 				keyUsage: ['digitalSignature'],
 			},
 		});
-		expect(() =>
-			parseCertificateSigningRequestDer(
+		{
+			const result = parseCertificateSigningRequestDer(
 				rewriteCsrWithExtraTopLevelField(csr.der, tlv(0x05, new Uint8Array())),
-			),
-		).toThrow('Malformed CertificationRequest');
-		expect(() =>
-			parseCertificateSigningRequestDer(
+			);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('Malformed CertificationRequest');
+			}
+		}
+		{
+			const result = parseCertificateSigningRequestDer(
 				rewriteCsrCriWithExtraField(csr.der, tlv(0x81, Uint8Array.of(0x00))),
-			),
-		).toThrow('Malformed CertificationRequestInfo');
+			);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('Malformed CertificationRequestInfo');
+			}
+		}
 	});
 
 	it('rejects malformed CSR attribute containers', async () => {
@@ -583,12 +748,22 @@ describe('parse', () => {
 				keyUsage: ['digitalSignature'],
 			},
 		});
-		expect(() => parseCertificateSigningRequestDer(rewriteCsrAttributesTag(csr.der, 0xa1))).toThrow(
-			'CertificationRequestInfo attributes must use [0]',
-		);
-		expect(() =>
-			parseCertificateSigningRequestDer(rewriteCsrExtensionRequestValuesSetTag(csr.der, 0x30)),
-		).toThrow('extensionRequest attribute values must use SET');
+		{
+			const result = parseCertificateSigningRequestDer(rewriteCsrAttributesTag(csr.der, 0xa1));
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('CertificationRequestInfo attributes must use [0]');
+			}
+		}
+		{
+			const result = parseCertificateSigningRequestDer(
+				rewriteCsrExtensionRequestValuesSetTag(csr.der, 0x30),
+			);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('extensionRequest attribute values must use SET');
+			}
+		}
 	});
 
 	it('runs decoder registries directly during parse', async () => {
@@ -599,28 +774,32 @@ describe('parse', () => {
 			},
 		});
 
-		const parsed = parseCertificatePem(certificate.certificate.pem, {
-			decoders: [
-				{
-					oid: '1.2.3.4.210',
-					decode(extension) {
-						return extension.valueHex;
+		const parsed = unwrap(
+			parseCertificatePem(certificate.certificate.pem, {
+				decoders: [
+					{
+						oid: '1.2.3.4.210',
+						decode(extension) {
+							return extension.valueHex;
+						},
 					},
-				},
-			],
-		});
+				],
+			}),
+		);
 
 		expect(parsed.decodedExtensions).toEqual([
 			{ oid: '1.2.3.4.210', critical: false, value: '0402aabb' },
 		]);
-		const typedParsed = parseCertificatePem(certificate.certificate.pem, {
-			decoderMap: defineExtensionDecoderMap({
-				customText: {
-					oid: '1.2.3.4.210',
-					decode: (extension: { readonly valueHex: string }) => extension.valueHex,
-				},
+		const typedParsed = unwrap(
+			parseCertificatePem(certificate.certificate.pem, {
+				decoderMap: defineExtensionDecoderMap({
+					customText: {
+						oid: '1.2.3.4.210',
+						decode: (extension: { readonly valueHex: string }) => extension.valueHex,
+					},
+				}),
 			}),
-		});
+		);
 		expect(typedParsed.decodedExtensionMap?.customText).toEqual({
 			oid: '1.2.3.4.210',
 			critical: false,
@@ -654,7 +833,7 @@ describe('parse', () => {
 				],
 			},
 		});
-		const parsed = parseCertificatePem(leaf.pem);
+		const parsed = unwrap(parseCertificatePem(leaf.pem));
 		expect(parsed.extendedKeyUsage).toEqual([
 			'serverAuth',
 			'clientAuth',
@@ -669,7 +848,7 @@ describe('parse', () => {
 		const { certificate } = await createSelfSignedCertificate({
 			subject: { commonName: 'decode-miss' },
 		});
-		const parsed = parseCertificatePem(certificate.pem);
+		const parsed = unwrap(parseCertificatePem(certificate.pem));
 		expect(
 			decodeExtension(parsed.extensions, {
 				oid: '1.2.3.4.999.888',
@@ -682,7 +861,7 @@ describe('parse', () => {
 		const { certificate } = await createSelfSignedCertificate({
 			subject: { commonName: 'decode-skip' },
 		});
-		const parsed = parseCertificatePem(certificate.pem);
+		const parsed = unwrap(parseCertificatePem(certificate.pem));
 		const result = decodeExtensions(parsed.extensions, [
 			{ oid: '1.2.3.4.999.777', decode: () => 'never' },
 			{ oid: '1.2.3.4.999.888', decode: () => 'never' },
@@ -707,7 +886,7 @@ describe('parse', () => {
 				emailAddress: 'jane@example.com',
 			},
 		});
-		const parsed = parseCertificatePem(certificate.pem);
+		const parsed = unwrap(parseCertificatePem(certificate.pem));
 		expect(parsed.subject.values).toMatchObject({
 			country: 'US',
 			state: 'CA',
@@ -752,7 +931,7 @@ describe('parse', () => {
 			},
 		});
 
-		const parsed = parseCertificatePem(certificate.certificate.pem);
+		const parsed = unwrap(parseCertificatePem(certificate.certificate.pem));
 		expect(parsed.certificatePolicies).toEqual([
 			{
 				policyIdentifier: '1.2.3.4.1',
@@ -792,7 +971,7 @@ describe('parse', () => {
 			},
 		});
 
-		const parsed = parseCertificateSigningRequestPem(csr.pem);
+		const parsed = unwrap(parseCertificateSigningRequestPem(csr.pem));
 		expect(parsed.certificatePolicies).toEqual([{ policyIdentifier: '1.2.3.4.1' }]);
 		expect(parsed.policyMappings).toEqual([
 			{ issuerDomainPolicy: '1.2.3.4.1', subjectDomainPolicy: '1.2.3.4.2' },
@@ -802,10 +981,22 @@ describe('parse', () => {
 	});
 
 	it('throws on malformed or truncated DER input', () => {
-		expect(() => parseCertificateDer(new Uint8Array([0x30, 0x03, 0x01]))).toThrow();
-		expect(() => parseCertificateDer(new Uint8Array([]))).toThrow();
-		expect(() => parseCertificatePem('not a pem')).toThrow();
-		expect(() => parseCertificateDer(new Uint8Array([0xff, 0xff]))).toThrow();
+		{
+			const result = parseCertificateDer(new Uint8Array([0x30, 0x03, 0x01]));
+			expect(result.ok).toBe(false);
+		}
+		{
+			const result = parseCertificateDer(new Uint8Array([]));
+			expect(result.ok).toBe(false);
+		}
+		{
+			const result = parseCertificatePem('not a pem');
+			expect(result.ok).toBe(false);
+		}
+		{
+			const result = parseCertificateDer(new Uint8Array([0xff, 0xff]));
+			expect(result.ok).toBe(false);
+		}
 	});
 
 	it('parses and round-trips nameConstraints extension', async () => {
@@ -823,7 +1014,7 @@ describe('parse', () => {
 				},
 			},
 		});
-		const parsed = parseCertificatePem(root.certificate.pem);
+		const parsed = unwrap(parseCertificatePem(root.certificate.pem));
 		expect(parsed.nameConstraints).toBeDefined();
 		expect(parsed.nameConstraints?.permittedSubtrees).toHaveLength(2);
 		expect(parsed.nameConstraints?.excludedSubtrees).toHaveLength(1);
@@ -885,7 +1076,7 @@ describe('parse', () => {
 				],
 			},
 		});
-		const parsed = parseCertificatePem(leaf.pem);
+		const parsed = unwrap(parseCertificatePem(leaf.pem));
 		expect(parsed.subjectAltNames?.some((san) => san.type === 'directoryName')).toBe(true);
 		const dirNameSan = parsed.subjectAltNames?.find((san) => san.type === 'directoryName');
 		if (dirNameSan?.type === 'directoryName') {
@@ -916,7 +1107,7 @@ describe('parse', () => {
 				],
 			},
 		});
-		const parsed = parseCertificatePem(leaf.pem);
+		const parsed = unwrap(parseCertificatePem(leaf.pem));
 		expect(parsed.subjectAltNames?.some((san) => san.type === 'unknown')).toBe(true);
 	});
 
@@ -928,7 +1119,7 @@ describe('parse', () => {
 			},
 		});
 
-		const parsed = parseCertificatePem(certificate.pem);
+		const parsed = unwrap(parseCertificatePem(certificate.pem));
 		expect(parsed.subjectAltNames).toEqual([{ type: 'srv', value: '_xmpp.example.com' }]);
 	});
 
@@ -943,7 +1134,7 @@ describe('parse', () => {
 			},
 		});
 
-		const parsed = parseCertificateSigningRequestPem(csr.pem);
+		const parsed = unwrap(parseCertificateSigningRequestPem(csr.pem));
 		expect(parsed.subjectAltNames).toEqual([{ type: 'srv', value: '_imap.example.com' }]);
 	});
 
@@ -961,7 +1152,7 @@ describe('parse', () => {
 			},
 		});
 
-		const parsed = parseCertificatePem(certificate.pem);
+		const parsed = unwrap(parseCertificatePem(certificate.pem));
 		expect(parsed.subjectAltNames).toHaveLength(1);
 		expect(parsed.subjectAltNames?.[0]).toMatchObject({ type: 'unknown', tag: 0xa0 });
 	});
@@ -980,7 +1171,13 @@ describe('parse', () => {
 			},
 		});
 
-		expect(() => parseCertificatePem(certificate.pem)).toThrow(/SRV-ID/i);
+		{
+			const result = parseCertificatePem(certificate.pem);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toMatch(/SRV-ID/i);
+			}
+		}
 	});
 
 	it('rejects SRV-ID otherName values with trailing fields', async () => {
@@ -1001,7 +1198,13 @@ describe('parse', () => {
 			},
 		});
 
-		expect(() => parseCertificatePem(certificate.pem)).toThrow('otherName must contain exactly');
+		{
+			const result = parseCertificatePem(certificate.pem);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('otherName must contain exactly');
+			}
+		}
 	});
 
 	it('parses IPv6 name constraints', async () => {
@@ -1030,7 +1233,7 @@ describe('parse', () => {
 				},
 			},
 		});
-		const parsed = parseCertificatePem(root.certificate.pem);
+		const parsed = unwrap(parseCertificatePem(root.certificate.pem));
 		expect(parsed.nameConstraints?.permittedSubtrees).toHaveLength(1);
 		const ipForm = parsed.nameConstraints?.permittedSubtrees?.[0]?.base;
 		expect(ipForm?.type).toBe('ip');
@@ -1043,9 +1246,13 @@ describe('parse', () => {
 				customExtensions: [{ oid: OIDS.certificatePolicies, critical: true, value: sequence([]) }],
 			},
 		});
-		expect(() => parseCertificatePem(certificate.certificate.pem)).toThrow(
-			'certificatePolicies must not be empty',
-		);
+		{
+			const result = parseCertificatePem(certificate.certificate.pem);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('certificatePolicies must not be empty');
+			}
+		}
 	});
 
 	it('rejects anyPolicy in policyMappings during parsing', async () => {
@@ -1063,9 +1270,13 @@ describe('parse', () => {
 				],
 			},
 		});
-		expect(() => parseCertificatePem(certificate.certificate.pem)).toThrow(
-			'policyMappings must not use anyPolicy',
-		);
+		{
+			const result = parseCertificatePem(certificate.certificate.pem);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('policyMappings must not use anyPolicy');
+			}
+		}
 	});
 
 	it('rejects malformed policy qualifiers during parsing', async () => {
@@ -1088,9 +1299,13 @@ describe('parse', () => {
 				],
 			},
 		});
-		expect(() => parseCertificatePem(certificate.certificate.pem)).toThrow(
-			'cps policy qualifier must use IA5String',
-		);
+		{
+			const result = parseCertificatePem(certificate.certificate.pem);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('cps policy qualifier must use IA5String');
+			}
+		}
 	});
 
 	it('rejects policyInformation with trailing fields and empty qualifier sequences', async () => {
@@ -1117,9 +1332,13 @@ describe('parse', () => {
 				],
 			},
 		});
-		expect(() => parseCertificatePem(trailing.certificate.pem)).toThrow(
-			'policyInformation has unexpected trailing fields',
-		);
+		{
+			const result = parseCertificatePem(trailing.certificate.pem);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('policyInformation has unexpected trailing fields');
+			}
+		}
 
 		const emptyQualifiers = await createSelfSignedCertificate({
 			subject: { commonName: 'bad-policy-empty-qualifiers.example' },
@@ -1133,9 +1352,13 @@ describe('parse', () => {
 				],
 			},
 		});
-		expect(() => parseCertificatePem(emptyQualifiers.certificate.pem)).toThrow(
-			'policyQualifiers must not be empty',
-		);
+		{
+			const result = parseCertificatePem(emptyQualifiers.certificate.pem);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('policyQualifiers must not be empty');
+			}
+		}
 	});
 
 	it('rejects malformed policy qualifier and userNotice structures during parsing', async () => {
@@ -1162,9 +1385,15 @@ describe('parse', () => {
 				],
 			},
 		});
-		expect(() => parseCertificatePem(qualifierTrailing.certificate.pem)).toThrow(
-			'policyQualifierInfo has unexpected trailing fields',
-		);
+		{
+			const result = parseCertificatePem(qualifierTrailing.certificate.pem);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain(
+					'policyQualifierInfo has unexpected trailing fields',
+				);
+			}
+		}
 
 		const duplicateNoticeRef = await createSelfSignedCertificate({
 			subject: { commonName: 'bad-user-notice-ref.example' },
@@ -1197,9 +1426,15 @@ describe('parse', () => {
 				],
 			},
 		});
-		expect(() => parseCertificatePem(duplicateNoticeRef.certificate.pem)).toThrow(
-			'userNotice must not contain multiple noticeRef values',
-		);
+		{
+			const result = parseCertificatePem(duplicateNoticeRef.certificate.pem);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain(
+					'userNotice must not contain multiple noticeRef values',
+				);
+			}
+		}
 
 		const duplicateExplicitText = await createSelfSignedCertificate({
 			subject: { commonName: 'bad-user-notice-text.example' },
@@ -1226,9 +1461,15 @@ describe('parse', () => {
 				],
 			},
 		});
-		expect(() => parseCertificatePem(duplicateExplicitText.certificate.pem)).toThrow(
-			'userNotice must not contain multiple explicitText values',
-		);
+		{
+			const result = parseCertificatePem(duplicateExplicitText.certificate.pem);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain(
+					'userNotice must not contain multiple explicitText values',
+				);
+			}
+		}
 	});
 
 	it('rejects malformed noticeRef, policyMappings, and policyConstraints structures', async () => {
@@ -1260,9 +1501,13 @@ describe('parse', () => {
 				],
 			},
 		});
-		expect(() => parseCertificatePem(noticeRefTrailing.certificate.pem)).toThrow(
-			'noticeRef has unexpected trailing fields',
-		);
+		{
+			const result = parseCertificatePem(noticeRefTrailing.certificate.pem);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('noticeRef has unexpected trailing fields');
+			}
+		}
 
 		const emptyMappings = await createSelfSignedCertificate({
 			subject: { commonName: 'bad-empty-mappings.example' },
@@ -1270,9 +1515,13 @@ describe('parse', () => {
 				customExtensions: [{ oid: OIDS.policyMappings, critical: true, value: sequence([]) }],
 			},
 		});
-		expect(() => parseCertificatePem(emptyMappings.certificate.pem)).toThrow(
-			'policyMappings must not be empty',
-		);
+		{
+			const result = parseCertificatePem(emptyMappings.certificate.pem);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('policyMappings must not be empty');
+			}
+		}
 
 		const trailingMapping = await createSelfSignedCertificate({
 			subject: { commonName: 'bad-trailing-mapping.example' },
@@ -1292,9 +1541,15 @@ describe('parse', () => {
 				],
 			},
 		});
-		expect(() => parseCertificatePem(trailingMapping.certificate.pem)).toThrow(
-			'policyMappings entry has unexpected trailing fields',
-		);
+		{
+			const result = parseCertificatePem(trailingMapping.certificate.pem);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain(
+					'policyMappings entry has unexpected trailing fields',
+				);
+			}
+		}
 
 		const duplicateRequire = await createSelfSignedCertificate({
 			subject: { commonName: 'bad-policy-constraints-require.example' },
@@ -1308,9 +1563,15 @@ describe('parse', () => {
 				],
 			},
 		});
-		expect(() => parseCertificatePem(duplicateRequire.certificate.pem)).toThrow(
-			'policyConstraints must not repeat requireExplicitPolicy',
-		);
+		{
+			const result = parseCertificatePem(duplicateRequire.certificate.pem);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain(
+					'policyConstraints must not repeat requireExplicitPolicy',
+				);
+			}
+		}
 
 		const unsupportedPolicyConstraint = await createSelfSignedCertificate({
 			subject: { commonName: 'bad-policy-constraints-tag.example' },
@@ -1324,9 +1585,13 @@ describe('parse', () => {
 				],
 			},
 		});
-		expect(() => parseCertificatePem(unsupportedPolicyConstraint.certificate.pem)).toThrow(
-			'Unsupported policyConstraints field tag: 130',
-		);
+		{
+			const result = parseCertificatePem(unsupportedPolicyConstraint.certificate.pem);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('Unsupported policyConstraints field tag: 130');
+			}
+		}
 
 		const duplicateInhibit = await createSelfSignedCertificate({
 			subject: { commonName: 'bad-policy-constraints-inhibit.example' },
@@ -1340,9 +1605,15 @@ describe('parse', () => {
 				],
 			},
 		});
-		expect(() => parseCertificatePem(duplicateInhibit.certificate.pem)).toThrow(
-			'policyConstraints must not repeat inhibitPolicyMapping',
-		);
+		{
+			const result = parseCertificatePem(duplicateInhibit.certificate.pem);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain(
+					'policyConstraints must not repeat inhibitPolicyMapping',
+				);
+			}
+		}
 
 		const emptyAia = await createSelfSignedCertificate({
 			subject: { commonName: 'bad-empty-aia.example' },
@@ -1350,9 +1621,13 @@ describe('parse', () => {
 				customExtensions: [{ oid: OIDS.authorityInfoAccess, critical: true, value: sequence([]) }],
 			},
 		});
-		expect(() => parseCertificatePem(emptyAia.certificate.pem)).toThrow(
-			'authorityInfoAccess must not be empty',
-		);
+		{
+			const result = parseCertificatePem(emptyAia.certificate.pem);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('authorityInfoAccess must not be empty');
+			}
+		}
 
 		const trailingAia = await createSelfSignedCertificate({
 			subject: { commonName: 'bad-trailing-aia.example' },
@@ -1372,9 +1647,15 @@ describe('parse', () => {
 				],
 			},
 		});
-		expect(() => parseCertificatePem(trailingAia.certificate.pem)).toThrow(
-			'authorityInfoAccess entry must contain method and location only',
-		);
+		{
+			const result = parseCertificatePem(trailingAia.certificate.pem);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain(
+					'authorityInfoAccess entry must contain method and location only',
+				);
+			}
+		}
 
 		const badMethodAia = await createSelfSignedCertificate({
 			subject: { commonName: 'bad-method-aia.example' },
@@ -1393,9 +1674,15 @@ describe('parse', () => {
 				],
 			},
 		});
-		expect(() => parseCertificatePem(badMethodAia.certificate.pem)).toThrow(
-			'authorityInfoAccess method must use OBJECT IDENTIFIER',
-		);
+		{
+			const result = parseCertificatePem(badMethodAia.certificate.pem);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain(
+					'authorityInfoAccess method must use OBJECT IDENTIFIER',
+				);
+			}
+		}
 
 		const setWrappedAia = await createSelfSignedCertificate({
 			subject: { commonName: 'bad-set-aia.example' },
@@ -1414,9 +1701,13 @@ describe('parse', () => {
 				],
 			},
 		});
-		expect(() => parseCertificatePem(setWrappedAia.certificate.pem)).toThrow(
-			'authorityInfoAccess must use SEQUENCE',
-		);
+		{
+			const result = parseCertificatePem(setWrappedAia.certificate.pem);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('authorityInfoAccess must use SEQUENCE');
+			}
+		}
 
 		const badNoticeNumbersTag = await createSelfSignedCertificate({
 			subject: { commonName: 'bad-notice-numbers-tag.example' },
@@ -1445,9 +1736,13 @@ describe('parse', () => {
 				],
 			},
 		});
-		expect(() => parseCertificatePem(badNoticeNumbersTag.certificate.pem)).toThrow(
-			'noticeRef noticeNumbers must use SEQUENCE',
-		);
+		{
+			const result = parseCertificatePem(badNoticeNumbersTag.certificate.pem);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('noticeRef noticeNumbers must use SEQUENCE');
+			}
+		}
 
 		const badNoticeNumberElement = await createSelfSignedCertificate({
 			subject: { commonName: 'bad-notice-number-element.example' },
@@ -1476,9 +1771,13 @@ describe('parse', () => {
 				],
 			},
 		});
-		expect(() => parseCertificatePem(badNoticeNumberElement.certificate.pem)).toThrow(
-			'noticeRef noticeNumber must use INTEGER',
-		);
+		{
+			const result = parseCertificatePem(badNoticeNumberElement.certificate.pem);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('noticeRef noticeNumber must use INTEGER');
+			}
+		}
 	});
 
 	it('rejects malformed distributionPointName, SRV-ID, and unsupported DisplayText tags', async () => {
@@ -1494,9 +1793,13 @@ describe('parse', () => {
 				],
 			},
 		});
-		expect(() => parseCertificatePem(badDistributionPointName.certificate.pem)).toThrow(
-			'Unsupported distributionPointName tag: 130',
-		);
+		{
+			const result = parseCertificatePem(badDistributionPointName.certificate.pem);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('Unsupported distributionPointName tag: 130');
+			}
+		}
 
 		const badSrvId = await createSelfSignedCertificate({
 			subject: { commonName: 'bad-srv-id.example' },
@@ -1518,9 +1821,13 @@ describe('parse', () => {
 				],
 			},
 		});
-		expect(() => parseCertificatePem(badSrvId.certificate.pem)).toThrow(
-			'SRV-ID otherName value must use explicit [0]',
-		);
+		{
+			const result = parseCertificatePem(badSrvId.certificate.pem);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('SRV-ID otherName value must use explicit [0]');
+			}
+		}
 
 		const badDisplayText = await createSelfSignedCertificate({
 			subject: { commonName: 'bad-display-text.example' },
@@ -1544,9 +1851,13 @@ describe('parse', () => {
 				],
 			},
 		});
-		expect(() => parseCertificatePem(badDisplayText.certificate.pem)).toThrow(
-			'Unsupported DisplayText tag: 2',
-		);
+		{
+			const result = parseCertificatePem(badDisplayText.certificate.pem);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('Unsupported DisplayText tag: 2');
+			}
+		}
 	});
 
 	it('rejects empty CRLDistributionPoints and empty fullName GeneralNames during parse', async () => {
@@ -1558,9 +1869,13 @@ describe('parse', () => {
 				],
 			},
 		});
-		expect(() => parseCertificatePem(emptyDistributionPoints.certificate.pem)).toThrow(
-			'CRLDistributionPoints must not be empty',
-		);
+		{
+			const result = parseCertificatePem(emptyDistributionPoints.certificate.pem);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('CRLDistributionPoints must not be empty');
+			}
+		}
 
 		const emptyFullName = await createSelfSignedCertificate({
 			subject: { commonName: 'bad-empty-fullname.example' },
@@ -1574,9 +1889,15 @@ describe('parse', () => {
 				],
 			},
 		});
-		expect(() => parseCertificatePem(emptyFullName.certificate.pem)).toThrow(
-			'distributionPointName fullName must contain GeneralName entries',
-		);
+		{
+			const result = parseCertificatePem(emptyFullName.certificate.pem);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain(
+					'distributionPointName fullName must contain GeneralName entries',
+				);
+			}
+		}
 
 		const setWrappedDistributionPoint = await createSelfSignedCertificate({
 			subject: { commonName: 'bad-set-dp.example' },
@@ -1590,9 +1911,13 @@ describe('parse', () => {
 				],
 			},
 		});
-		expect(() => parseCertificatePem(setWrappedDistributionPoint.certificate.pem)).toThrow(
-			'DistributionPoint must use SEQUENCE',
-		);
+		{
+			const result = parseCertificatePem(setWrappedDistributionPoint.certificate.pem);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('DistributionPoint must use SEQUENCE');
+			}
+		}
 	});
 
 	it('preserves x400Address and ediPartyName name constraints', () => {
@@ -1644,9 +1969,13 @@ describe('parse', () => {
 				],
 			},
 		});
-		expect(() => parseCertificatePem(certificate.certificate.pem)).toThrow(
-			'noticeRef noticeNumbers must not be empty',
-		);
+		{
+			const result = parseCertificatePem(certificate.certificate.pem);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('noticeRef noticeNumbers must not be empty');
+			}
+		}
 	});
 
 	it('parses BMPString DisplayText in certificate policies', async () => {
@@ -1673,7 +2002,7 @@ describe('parse', () => {
 			},
 		});
 
-		expect(parseCertificatePem(certificate.certificate.pem).certificatePolicies).toEqual([
+		expect(unwrap(parseCertificatePem(certificate.certificate.pem)).certificatePolicies).toEqual([
 			{
 				policyIdentifier: '1.2.3.4.1',
 				policyQualifiers: [{ type: 'userNotice', explicitText: 'OK' }],
@@ -1705,9 +2034,13 @@ describe('parse', () => {
 			},
 		});
 
-		expect(() => parseCertificatePem(certificate.certificate.pem)).toThrow(
-			'Invalid BMPString length',
-		);
+		{
+			const result = parseCertificatePem(certificate.certificate.pem);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('Invalid BMPString length');
+			}
+		}
 	});
 
 	it('rejects non-integer inhibitAnyPolicy during parsing', async () => {
@@ -1723,9 +2056,13 @@ describe('parse', () => {
 				],
 			},
 		});
-		expect(() => parseCertificatePem(certificate.certificate.pem)).toThrow(
-			'inhibitAnyPolicy must be an INTEGER',
-		);
+		{
+			const result = parseCertificatePem(certificate.certificate.pem);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('inhibitAnyPolicy must be an INTEGER');
+			}
+		}
 	});
 
 	it('rejects empty policyConstraints during parsing', async () => {
@@ -1741,9 +2078,15 @@ describe('parse', () => {
 				],
 			},
 		});
-		expect(() => parseCertificatePem(certificate.certificate.pem)).toThrow(
-			'policyConstraints must set requireExplicitPolicy or inhibitPolicyMapping',
-		);
+		{
+			const result = parseCertificatePem(certificate.certificate.pem);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain(
+					'policyConstraints must set requireExplicitPolicy or inhibitPolicyMapping',
+				);
+			}
+		}
 	});
 
 	it('parses nameConstraints with directoryName form', async () => {
@@ -1761,7 +2104,7 @@ describe('parse', () => {
 				},
 			},
 		});
-		const parsed = parseCertificatePem(root.certificate.pem);
+		const parsed = unwrap(parseCertificatePem(root.certificate.pem));
 		expect(parsed.nameConstraints?.permittedSubtrees).toHaveLength(1);
 		expect(parsed.nameConstraints?.permittedSubtrees?.[0]?.base.type).toBe('directoryName');
 	});
@@ -1875,7 +2218,7 @@ describe('parse', () => {
 			publicKey: keys.publicKey,
 			signerPrivateKey: keys.privateKey,
 		});
-		const parsed = parseCertificateSigningRequestPem(csr.pem);
+		const parsed = unwrap(parseCertificateSigningRequestPem(csr.pem));
 		expect(parsed.subject.values.commonName).toBe('no-ext-csr.example');
 		// No extensions → requestedExtensions should be empty
 		expect(parsed.requestedExtensions).toHaveLength(0);
@@ -1898,7 +2241,7 @@ describe('parse', () => {
 			spki,
 		]);
 		const der = sequence([tbsCertificate, signatureAlgorithm, bitString(Uint8Array.of(0x00))]);
-		const parsed = parseCertificateDer(der);
+		const parsed = unwrap(parseCertificateDer(der));
 		expect(parsed.subject.values.commonName).toBe('no-ext-cert.example');
 		expect(parsed.extensions).toHaveLength(0);
 	});
@@ -1908,7 +2251,7 @@ describe('parse', () => {
 			subject: { commonName: 'algo-params-rsa.example' },
 			keyPair: await generateKeyPair({ kind: 'rsa', modulusLength: 2048 }),
 		});
-		const parsedRsa = parseCertificateDer(rsaCertificate.certificate.der);
+		const parsedRsa = unwrap(parseCertificateDer(rsaCertificate.certificate.der));
 		expect(parsedRsa.signatureAlgorithmParametersDer).toEqual(nullValue());
 		expect(parsedRsa.publicKeyAlgorithmParametersDer).toEqual(nullValue());
 		expect(parsedRsa.signatureAlgorithmOid).toBe(OIDS.sha256WithRSAEncryption);
@@ -1920,7 +2263,7 @@ describe('parse', () => {
 			subject: { commonName: 'algo-params-ec.example' },
 			keyPair: await generateKeyPair({ kind: 'ecdsa', curve: 'P-384' }),
 		});
-		const parsedEc = parseCertificateDer(ecCertificate.certificate.der);
+		const parsedEc = unwrap(parseCertificateDer(ecCertificate.certificate.der));
 		expect(parsedEc.signatureAlgorithmParametersDer).toBeUndefined();
 		expect(parsedEc.signatureAlgorithmName).toBe('ECDSA with SHA-384');
 		expect(parsedEc.publicKeyAlgorithmParametersDer).toEqual(objectIdentifier(OIDS.secp384r1));
@@ -1945,7 +2288,7 @@ describe('parse', () => {
 			signatureAlgorithm,
 			bitString(Uint8Array.of(0x00)),
 		]);
-		const parsed = parseCertificateSigningRequestDer(der);
+		const parsed = unwrap(parseCertificateSigningRequestDer(der));
 		expect(parsed.subject.values.commonName).toBe('bare-csr.example');
 		expect(parsed.requestedExtensions).toHaveLength(0);
 	});
@@ -1957,7 +2300,7 @@ describe('parse', () => {
 			publicKey: keyPair.publicKey,
 			signerPrivateKey: keyPair.privateKey,
 		});
-		const parsed = parseCertificateSigningRequestDer(csr.der);
+		const parsed = unwrap(parseCertificateSigningRequestDer(csr.der));
 		expect(parsed.signatureAlgorithmParametersDer).toEqual(nullValue());
 		expect(parsed.publicKeyAlgorithmParametersDer).toEqual(nullValue());
 		expect(parsed.signatureAlgorithmOid).toBe(OIDS.sha256WithRSAEncryption);
@@ -1993,18 +2336,22 @@ describe('parse', () => {
 			trailerField: 1,
 		} as const;
 
-		const parsedCertificate = parseCertificateDer(
-			await rewriteCertificateSignatureAsRsaPss(
-				certificate.certificate.der,
-				rsaPssPrivateKey,
-				rsaPssParameters,
+		const parsedCertificate = unwrap(
+			parseCertificateDer(
+				await rewriteCertificateSignatureAsRsaPss(
+					certificate.certificate.der,
+					rsaPssPrivateKey,
+					rsaPssParameters,
+				),
 			),
 		);
 		expect(parsedCertificate.signatureAlgorithmName).toBe('RSA-PSS with SHA-384');
 		expect(parsedCertificate.publicKeyAlgorithmName).toBe('RSA');
 
-		const parsedCsr = parseCertificateSigningRequestDer(
-			await rewriteCsrSignatureAsRsaPss(csr.der, rsaPssPrivateKey, rsaPssParameters),
+		const parsedCsr = unwrap(
+			parseCertificateSigningRequestDer(
+				await rewriteCsrSignatureAsRsaPss(csr.der, rsaPssPrivateKey, rsaPssParameters),
+			),
 		);
 		expect(parsedCsr.signatureAlgorithmName).toBe('RSA-PSS with SHA-384');
 		expect(parsedCsr.publicKeyAlgorithmName).toBe('RSA');
@@ -2032,7 +2379,13 @@ describe('parse', () => {
 			malformedSignatureAlgorithm,
 			bitString(Uint8Array.of(0x00)),
 		]);
-		expect(() => parseCertificateDer(der)).toThrow('Malformed AlgorithmIdentifier');
+		{
+			const result = parseCertificateDer(der);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('Malformed AlgorithmIdentifier');
+			}
+		}
 	});
 
 	// -----------------------------------------------------------------------
@@ -2082,7 +2435,7 @@ describe('parse: coverage — error paths', () => {
 						},
 					],
 				},
-			}).then((cert) => parseCertificatePem(cert.certificate.pem));
+			}).then((cert) => unwrap(parseCertificatePem(cert.certificate.pem)));
 		}).toThrow('Unsupported authorityInfoAccess location tag');
 	});
 
@@ -2130,9 +2483,13 @@ describe('parse: coverage — error paths', () => {
 				],
 			},
 		});
-		expect(() => parseCertificatePem(cert.certificate.pem)).toThrow(
-			'Unsupported IP address length',
-		);
+		{
+			const result = parseCertificatePem(cert.certificate.pem);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('Unsupported IP address length');
+			}
+		}
 	});
 
 	it('parseKeyUsage throws on BIT STRING with unusedBits > 7', async () => {
@@ -2151,7 +2508,13 @@ describe('parse: coverage — error paths', () => {
 				],
 			},
 		});
-		expect(() => parseCertificatePem(cert.certificate.pem)).toThrow('Invalid BIT STRING');
+		{
+			const result = parseCertificatePem(cert.certificate.pem);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.message).toContain('Invalid BIT STRING');
+			}
+		}
 	});
 });
 

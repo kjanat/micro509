@@ -1,11 +1,12 @@
 import { createHash } from 'node:crypto';
-import type { parseCertificatePem } from 'micro509';
+import type { ParsedCertificate } from 'micro509';
 import {
 	createCertificate,
 	createSelfSignedCertificate,
 	exportPkcs8Der,
 	generateKeyPair,
 	importPkcs8Der,
+	unwrap,
 } from 'micro509';
 import type { GeneralName } from 'micro509/x509';
 import { encodeSubjectAltName } from 'micro509/x509';
@@ -118,7 +119,9 @@ export async function importRsaPrivateKeyWithScheme(
 	hash: 'SHA-256' | 'SHA-384' | 'SHA-512',
 	scheme: 'pkcs1-v1_5' | 'pss',
 ): Promise<CryptoKey> {
-	return importPkcs8Der(await exportPkcs8Der(privateKey), { kind: 'rsa', hash, scheme });
+	return unwrap(
+		await importPkcs8Der(await exportPkcs8Der(privateKey), { kind: 'rsa', hash, scheme }),
+	);
 }
 
 export async function rewriteCertificateSignatureAsRsaPss(
@@ -318,9 +321,7 @@ export async function addRevokedEntryCertificateIssuers(
 	]);
 }
 
-export function createSyntheticPkcs7SignedData(
-	signer: ReturnType<typeof parseCertificatePem>,
-): Uint8Array {
+export function createSyntheticPkcs7SignedData(signer: ParsedCertificate): Uint8Array {
 	const signerInfo = sequence([
 		integerFromNumber(1),
 		sequence([hexToBytes(signer.issuer.derHex), integer(hexToBytes(signer.serialNumberHex))]),
@@ -339,7 +340,7 @@ export function createSyntheticPkcs7SignedData(
 }
 
 export async function createCmsSignedDataWithSignedAttrs(
-	signer: ReturnType<typeof parseCertificatePem>,
+	signer: ParsedCertificate,
 	privateKey: CryptoKey,
 	content: Uint8Array,
 ): Promise<Uint8Array> {
