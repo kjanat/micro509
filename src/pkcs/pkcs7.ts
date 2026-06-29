@@ -332,6 +332,13 @@ export async function createPkcs7SignedDataDer(
 	}
 	const encapsulatedContentTypeOid = input.encapsulatedContentTypeOid ?? OIDS.pkcs7Data;
 
+	// Snapshot the caller-owned content into a private copy before any await.
+	// Every signer's messageDigest and the emitted eContent must derive from the
+	// same bytes; reading input.content across awaits could otherwise observe a
+	// caller mutation and yield a SignedData whose digest disagrees with its own
+	// encapsulated content.
+	const content = input.content.slice();
+
 	const certificateDers: Uint8Array[] = [];
 	const seenCertificates = new Set<string>();
 	const addCertificate = (der: Uint8Array): void => {
@@ -354,7 +361,18 @@ export async function createPkcs7SignedDataDer(
 			);
 		}
 		addCertificate(signerCertDer);
-		const certificate = parseCertificateDer(signerCertDer);
+		// parseCertificateDer throws on malformed DER — a caller-correctable input,
+		// so convert it to the typed invalid_signer_certificate failure rather than
+		// rejecting the public Promise.
+		let certificate: ParsedCertificate;
+		try {
+			certificate = parseCertificateDer(signerCertDer);
+		} catch {
+			return createPkcs7Failure(
+				'invalid_signer_certificate',
+				'Each PKCS#7 signer certificate must be a parseable X.509 certificate',
+			);
+		}
 		// getSignatureAlgorithm throws only for unsupported/misconfigured keys —
 		// all caller-correctable, so map to a typed failure rather than propagate.
 		let signatureAlgorithm: SignatureAlgorithmIdentifier;
@@ -375,7 +393,7 @@ export async function createPkcs7SignedDataDer(
 		}
 		digestAlgorithmOids.add(digest.digestOid);
 		const messageDigest = new Uint8Array(
-			await getCrypto().subtle.digest(digest.hashName, toArrayBuffer(input.content)),
+			await getCrypto().subtle.digest(digest.hashName, toArrayBuffer(content)),
 		);
 		const { setForSigning, implicitForEmit } = buildSignedAttributes(
 			encapsulatedContentTypeOid,
@@ -414,7 +432,7 @@ export async function createPkcs7SignedDataDer(
 		setOf([...digestAlgorithmOids].map((oid) => sequence([objectIdentifier(oid), nullValue()]))),
 		sequence([
 			objectIdentifier(encapsulatedContentTypeOid),
-			explicitContext(0, octetString(input.content)),
+			explicitContext(0, octetString(content)),
 		]),
 		certificateSet,
 		setOf(signerInfos),
