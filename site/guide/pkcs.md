@@ -19,7 +19,10 @@ const cert = await createSelfSignedCertificate({
 });
 
 const pfx = await createPfx({
-  certificates: [{ certificate: cert.certificate.pem }, { certificate: ca.certificate.pem }],
+  certificates: [
+    { certificate: cert.certificate.pem },
+    { certificate: ca.certificate.pem },
+  ],
   privateKeys: [{ privateKey: cert.keyPair.privateKey }],
   encryption: { password: 'secret' },
   mac: { password: 'secret' },
@@ -91,7 +94,10 @@ const b = await createSelfSignedCertificate({
   subject: { commonName: 'b.example' },
 });
 
-const bag = createPkcs7CertBagPem([a.certificate.pem, b.certificate.pem]);
+const bag = createPkcs7CertBagPem([
+  a.certificate.pem,
+  b.certificate.pem,
+]);
 
 console.log(`\
 der bytes: ${bag.der.length}
@@ -107,7 +113,10 @@ ${bag.pem}
 
 ```ts
 import { createSelfSignedCertificate } from 'micro509';
-import { createPkcs7CertBagPem, parsePkcs7CertBagPem } from 'micro509/pkcs';
+import {
+  createPkcs7CertBagPem,
+  parsePkcs7CertBagPem,
+} from 'micro509/pkcs';
 
 // Build a real cert bag inline
 const a = await createSelfSignedCertificate({
@@ -116,7 +125,10 @@ const a = await createSelfSignedCertificate({
 const b = await createSelfSignedCertificate({
   subject: { commonName: 'b.example' },
 });
-const bag = createPkcs7CertBagPem([a.certificate.pem, b.certificate.pem]);
+const bag = createPkcs7CertBagPem([
+  a.certificate.pem,
+  b.certificate.pem,
+]);
 
 const result = parsePkcs7CertBagPem(bag.pem);
 
@@ -139,7 +151,10 @@ if (result.ok) {
 
 ```ts
 import { createSelfSignedCertificate } from 'micro509';
-import { createPkcs7SignedDataPem, verifyPkcs7SignedData } from 'micro509/pkcs';
+import {
+  createPkcs7SignedDataPem,
+  verifyPkcs7SignedData,
+} from 'micro509/pkcs';
 
 // A signer is a certificate + its matching private key
 const signer = await createSelfSignedCertificate({
@@ -163,7 +178,9 @@ const signed = await createPkcs7SignedDataPem({
 if (!signed.ok) {
   console.log(`sign failed: ${signed.error.code}`);
 } else {
-  const result = await verifyPkcs7SignedData(signed.value.pem);
+  const result = await verifyPkcs7SignedData(
+    signed.value.pem,
+  );
   if (result.ok) {
     const sd = result.value;
     const info = sd.signerInfos[0];
@@ -186,7 +203,12 @@ digest:   ${info?.digestAlgorithmName}
 
 ```ts
 import { createSelfSignedCertificate } from 'micro509';
-import { categorizePemBlocks, pemDecode, pemEncode, splitPemBlocks } from 'micro509/pem';
+import {
+  categorizePemBlocks,
+  pemDecode,
+  pemEncode,
+  splitPemBlocks,
+} from 'micro509/pem';
 
 // A real certificate to feed the PEM helpers
 const { certificate } = await createSelfSignedCertificate({
@@ -205,7 +227,8 @@ const multiPem = `${pem}\n${pem}`;
 const blocks = splitPemBlocks(multiPem);
 
 // Categorize blocks by type
-const { certificates, certificateRequests, privateKeys } = categorizePemBlocks(multiPem);
+const { certificates, certificateRequests, privateKeys } =
+  categorizePemBlocks(multiPem);
 
 console.log(`\
 der bytes:    ${der.length}
