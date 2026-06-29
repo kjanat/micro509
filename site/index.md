@@ -17,7 +17,7 @@ hero:
       link: /api/
     - theme: alt
       text: GitHub
-      link: https://github.com/kjanat/ts-x509
+      link: https://github.com/kjanat/micro509
 features:
   - icon: 🔏
     title: Typed Verification

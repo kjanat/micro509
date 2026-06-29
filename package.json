@@ -10,10 +10,10 @@
 		"der",
 		"jwk"
 	],
-	"homepage": "https://micro509.kjanat.com",
+	"homepage": "https://micro509.kjanat.dev",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/kjanat/ts-x509.git"
+		"url": "git+https://github.com/kjanat/micro509.git"
 	},
 	"license": "MIT",
 	"author": {

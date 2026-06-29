@@ -1,7 +1,7 @@
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/kjanat/ts-x509/raw/c5720af044fd9cc8f3c33e3bb91f79e6d5567454/site/assets/icon-light.svg">
-  <source media="(prefers-color-scheme: light)" srcset="https://github.com/kjanat/ts-x509/raw/c5720af044fd9cc8f3c33e3bb91f79e6d5567454/site/assets/icon.svg">
-  <img alt="" src="https://github.com/kjanat/ts-x509/raw/c5720af044fd9cc8f3c33e3bb91f79e6d5567454/site/assets/icon.svg" width="64" height="64" align="left">
+  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/kjanat/micro509/raw/c5720af044fd9cc8f3c33e3bb91f79e6d5567454/site/assets/icon-light.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://github.com/kjanat/micro509/raw/c5720af044fd9cc8f3c33e3bb91f79e6d5567454/site/assets/icon.svg">
+  <img alt="" src="https://github.com/kjanat/micro509/raw/c5720af044fd9cc8f3c33e3bb91f79e6d5567454/site/assets/icon.svg" width="64" height="64" align="left">
 </picture>
 
 # micro509
@@ -43,7 +43,7 @@ And when verification fails, you get typed results your code
 can act on: [21 error codes], the failing certificate index,
 and structured failure details instead of `false`.
 
-[21 error codes]: https://micro509.kjanat.com/guide/verification#error-codes
+[21 error codes]: https://micro509.kjanat.dev/guide/verification#error-codes
 
 ```ts
 if (!result.ok) {
@@ -182,7 +182,7 @@ It intentionally excludes niche, blockchain-specific, or key-agreement-only prim
 | RFC 9618 policy validation | partial |
 
 See [`docs/PKIX-SCOPE.md`](./docs/PKIX-SCOPE.md) for the detailed scope boundary
-and the [API reference](https://micro509.kjanat.com/api/) for the public module surface.
+and the [API reference](https://micro509.kjanat.dev/api/) for the public module surface.
 
 ## Imports
 
@@ -205,11 +205,11 @@ import { pemDecode, pemEncode } from 'micro509/pem';
 import type { Micro509Error } from 'micro509/result';
 ```
 
-The full stable subpath list lives in the [API reference](https://micro509.kjanat.com/api/).
+The full stable subpath list lives in the [API reference](https://micro509.kjanat.dev/api/).
 
 ## More docs
 
-- API reference: [micro509.kjanat.com/api](https://micro509.kjanat.com/api/)
+- API reference: [micro509.kjanat.dev/api](https://micro509.kjanat.dev/api/)
 - Standards scope: [`docs/PKIX-SCOPE.md`](./docs/PKIX-SCOPE.md)
 - PKITS harness: [`test/pkits.test.ts`](./test/pkits.test.ts)
 - Differential harness: [`test/differential.test.ts`](./test/differential.test.ts)

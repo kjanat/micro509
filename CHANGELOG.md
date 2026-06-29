@@ -39,6 +39,14 @@ throwing (a bad config is a programmer error, not a runtime condition).
   `createSelfSignedCertificate`, `createCertificateRevocationList`, …)
   still throw: a bad config is a programmer error, not a runtime result.
 
+### Changed
+
+- Canonical docs site is now `micro509.kjanat.dev` (was `micro509.kjanat.com`,
+  which stays live as a mirror). `homepage` and all documentation links point at
+  the `.dev` domain.
+- GitHub repository renamed `kjanat/ts-x509` → `kjanat/micro509` to match the
+  published package name. `repository.url` updated; old URLs redirect.
+
 ## [0.2.0] - 2026-06-29
 
 ### Added
@@ -81,7 +89,7 @@ Initial prerelease. API may change before 1.0.
 - Zero runtime dependencies, WebCrypto-native, tree-shakeable subpath exports;
   runs on Node, Bun, Deno, browsers, and Cloudflare Workers.
 
-[0.3.0]: https://github.com/kjanat/ts-x509/releases/tag/v0.3.0
-[0.2.0]: https://github.com/kjanat/ts-x509/releases/tag/v0.2.0
-[0.1.1]: https://github.com/kjanat/ts-x509/releases/tag/v0.1.1
-[0.1.0]: https://github.com/kjanat/ts-x509/releases/tag/v0.1.0
+[0.3.0]: https://github.com/kjanat/micro509/releases/tag/v0.3.0
+[0.2.0]: https://github.com/kjanat/micro509/releases/tag/v0.2.0
+[0.1.1]: https://github.com/kjanat/micro509/releases/tag/v0.1.1
+[0.1.0]: https://github.com/kjanat/micro509/releases/tag/v0.1.0
