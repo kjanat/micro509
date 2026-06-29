@@ -112,20 +112,22 @@ describe('root barrel', () => {
 		const { certificate, keyPair } = await createSelfSignedCertificate({
 			subject: { commonName: 'pfx-barrel.example' },
 		});
-		const pfx = await createPfx({
-			certificates: [
-				{
-					certificate: certificate.pem,
-					attributes: { friendlyName: 'barrel-cert' },
-				},
-			],
-			privateKeys: [
-				{
-					privateKey: keyPair.privateKey,
-					attributes: { friendlyName: 'barrel-key' },
-				},
-			],
-		});
+		const pfx = unwrap(
+			await createPfx({
+				certificates: [
+					{
+						certificate: certificate.pem,
+						attributes: { friendlyName: 'barrel-cert' },
+					},
+				],
+				privateKeys: [
+					{
+						privateKey: keyPair.privateKey,
+						attributes: { friendlyName: 'barrel-key' },
+					},
+				],
+			}),
+		);
 		expect(pfx.pem).toContain('-----BEGIN PKCS12-----');
 
 		const parsed = await parsePfxPem(pfx.pem);

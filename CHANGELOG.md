@@ -32,6 +32,12 @@ throwing (a bad config is a programmer error, not a runtime condition).
   throwing. Non-encrypted failures use code `'malformed'`; encrypted
   imports distinguish a typed `'invalid_password'` from `'malformed'`.
   `export*` and `generateKeyPair` are unchanged (no untrusted input).
+- `createPfx`, `createPkcs7CertBagDer`, and `createPkcs7CertBagPem` now
+  return a `Result` (code `'invalid_certificate'`) instead of throwing
+  on a malformed certificate source — matching `createPkcs7SignedData`.
+  Pure typed-config constructors (`createCertificate`,
+  `createSelfSignedCertificate`, `createCertificateRevocationList`, …)
+  still throw: a bad config is a programmer error, not a runtime result.
 
 ## [0.2.0] - 2026-06-29
 

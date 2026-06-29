@@ -131,7 +131,14 @@ export { categorizePemBlocks, pemDecode, pemEncode, splitPemBlocks } from './pem
 
 // ── pkcs ─────────────────────────────────────────────────────────────
 export type {
+	CreatePfxErrorCode,
+	CreatePfxFailure,
 	CreatePfxInput,
+	CreatePfxResult,
+	CreatePkcs7CertBagDerResult,
+	CreatePkcs7CertBagErrorCode,
+	CreatePkcs7CertBagFailure,
+	CreatePkcs7CertBagResult,
 	CreatePkcs7SignedDataDerResult,
 	CreatePkcs7SignedDataErrorCode,
 	CreatePkcs7SignedDataFailure,

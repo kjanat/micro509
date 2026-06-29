@@ -10,7 +10,10 @@
 // — pfx.ts ————————————————————————————————————————————
 // Re-exports owned by pfx but sourced from internal (PBES2 encryption options)
 export type {
+	CreatePfxErrorCode,
+	CreatePfxFailure,
 	CreatePfxInput,
+	CreatePfxResult,
 	ParsedPfx,
 	ParsedPfxAttribute,
 	ParsedPfxBag,
@@ -34,6 +37,10 @@ export { createPfx, parsePfxDer, parsePfxPem } from './pfx.ts';
 
 // — pkcs7.ts ——————————————————————————————————————————
 export type {
+	CreatePkcs7CertBagDerResult,
+	CreatePkcs7CertBagErrorCode,
+	CreatePkcs7CertBagFailure,
+	CreatePkcs7CertBagResult,
 	CreatePkcs7SignedDataDerResult,
 	CreatePkcs7SignedDataErrorCode,
 	CreatePkcs7SignedDataFailure,

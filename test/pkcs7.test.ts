@@ -49,7 +49,7 @@ describe('pkcs7', () => {
 			signerPrivateKey: root.keyPair.privateKey,
 			issuerPublicKey: root.keyPair.publicKey,
 		});
-		const bag = createPkcs7CertBagPem([leaf.pem, root.certificate.pem]);
+		const bag = unwrap(createPkcs7CertBagPem([leaf.pem, root.certificate.pem]));
 		const parsed = parsePkcs7CertBagPem(bag.pem);
 		expect(parsed.ok).toBe(true);
 		if (!parsed.ok) throw new Error('unreachable');
@@ -196,7 +196,7 @@ describe('pkcs7', () => {
 		const signer = await createSelfSignedCertificate({
 			subject: { commonName: 'PEM Parse Signer' },
 		});
-		const bag = createPkcs7CertBagPem([signer.certificate.pem]);
+		const bag = unwrap(createPkcs7CertBagPem([signer.certificate.pem]));
 		const result = parsePkcs7SignedDataPem(bag.pem);
 		expect(result.ok).toBe(true);
 	});
@@ -870,7 +870,7 @@ describe('pkcs7', () => {
 		const signer = await createSelfSignedCertificate({
 			subject: { commonName: 'No Content Signer' },
 		});
-		const bag = createPkcs7CertBagPem([signer.certificate.pem]);
+		const bag = unwrap(createPkcs7CertBagPem([signer.certificate.pem]));
 		const result = await verifyPkcs7SignedData(bag.der);
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.code).toBe('content_missing');
@@ -1092,7 +1092,7 @@ describe('pkcs7', () => {
 			subject: { commonName: 'DER source' },
 		});
 		// Pass Uint8Array (covers normalizeCertificateSource Uint8Array branch)
-		const der = createPkcs7CertBagDer([cert.certificate.der]);
+		const der = unwrap(createPkcs7CertBagDer([cert.certificate.der]));
 		const result = parsePkcs7SignedDataDer(der);
 		expect(result.ok).toBe(true);
 		if (!result.ok) throw new Error('unreachable');

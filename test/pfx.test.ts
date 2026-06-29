@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import {
+	type CreatePfxInput,
 	createCertificate,
 	createPfx,
 	createSelfSignedCertificate,
@@ -7,6 +8,7 @@ import {
 	generateKeyPair,
 	parsePfxDer,
 	parsePfxPem,
+	unwrap,
 } from 'micro509';
 import {
 	explicitContext,
@@ -18,6 +20,11 @@ import {
 	tlv,
 } from '#micro509/internal/asn1/der.ts';
 import { OIDS } from '#micro509/internal/asn1/oids.ts';
+
+/** Success-path helper: builds a PFX and unwraps the typed result. */
+async function buildPfx(input: CreatePfxInput) {
+	return unwrap(await createPfx(input));
+}
 
 describe('pfx', () => {
 	it('creates and parses passwordless PFX bundles', async () => {
@@ -36,7 +43,7 @@ describe('pfx', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 		});
-		const pfx = await createPfx({
+		const pfx = await buildPfx({
 			certificates: [
 				{
 					certificate: leaf.pem,
@@ -79,7 +86,7 @@ describe('pfx', () => {
 			subject: { commonName: 'encrypted-pfx.example' },
 			keyPair,
 		});
-		const pfx = await createPfx({
+		const pfx = await buildPfx({
 			certificates: [
 				{
 					certificate: certificate.certificate.pem,
@@ -117,7 +124,7 @@ describe('pfx', () => {
 			subject: { commonName: 'mac-pfx.example' },
 			keyPair,
 		});
-		const pfx = await createPfx({
+		const pfx = await buildPfx({
 			certificates: [{ certificate: certificate.certificate.pem }],
 			privateKeys: [{ privateKey: keyPair.privateKey }],
 			mac: { password: 'integrity123' },
@@ -182,7 +189,7 @@ describe('pfx', () => {
 			subject: { commonName: 'multi-pfx' },
 			keyPair,
 		});
-		const pfx = await createPfx({
+		const pfx = await buildPfx({
 			certificates: [{ certificate: cert.certificate.pem }],
 			privateKeys: [{ privateKey: keyPair.privateKey }],
 		});
@@ -198,7 +205,7 @@ describe('pfx', () => {
 			subject: { commonName: 'enc-pfx-wrong' },
 			keyPair,
 		});
-		const pfx = await createPfx({
+		const pfx = await buildPfx({
 			certificates: [{ certificate: cert.certificate.pem }],
 			privateKeys: [{ privateKey: keyPair.privateKey }],
 			encryption: { password: 'correct' },
@@ -219,7 +226,7 @@ describe('pfx', () => {
 			keyPair,
 		});
 		// Pass CryptoKey directly (covers normalizePrivateKey CryptoKey path)
-		const pfx = await createPfx({
+		const pfx = await buildPfx({
 			certificates: [{ certificate: cert.certificate.pem }],
 			privateKeys: [{ privateKey: keyPair.privateKey }],
 		});
@@ -237,7 +244,7 @@ describe('pfx', () => {
 		});
 		// Pass Uint8Array PKCS#8 DER (covers normalizePrivateKey Uint8Array path)
 		const pkcs8 = await exportPkcs8Der(keyPair.privateKey);
-		const pfx = await createPfx({
+		const pfx = await buildPfx({
 			certificates: [{ certificate: cert.certificate.pem }],
 			privateKeys: [{ privateKey: pkcs8 }],
 		});
@@ -254,7 +261,7 @@ describe('pfx', () => {
 			keyPair,
 		});
 		// Pass Uint8Array certificate DER (covers normalizeCertificate Uint8Array path)
-		const pfx = await createPfx({
+		const pfx = await buildPfx({
 			certificates: [{ certificate: cert.certificate.der }],
 			privateKeys: [{ privateKey: keyPair.privateKey }],
 		});
@@ -272,7 +279,7 @@ describe('pfx', () => {
 			keyPair,
 		});
 		// No attributes — covers encodeBagAttributes returning []
-		const pfx = await createPfx({
+		const pfx = await buildPfx({
 			certificates: [{ certificate: cert.certificate.pem }],
 			privateKeys: [{ privateKey: keyPair.privateKey }],
 		});
@@ -292,7 +299,7 @@ describe('pfx', () => {
 			subject: { commonName: 'pw-required' },
 			keyPair,
 		});
-		const pfx = await createPfx({
+		const pfx = await buildPfx({
 			certificates: [{ certificate: cert.certificate.pem }],
 			privateKeys: [{ privateKey: keyPair.privateKey }],
 			encryption: { password: 'secret' },
@@ -311,7 +318,7 @@ describe('pfx', () => {
 			subject: { commonName: 'mac-no-pw' },
 			keyPair,
 		});
-		const pfx = await createPfx({
+		const pfx = await buildPfx({
 			certificates: [{ certificate: cert.certificate.pem }],
 			privateKeys: [{ privateKey: keyPair.privateKey }],
 			mac: { password: 'macpw' },
@@ -332,7 +339,7 @@ describe('pfx', () => {
 			subject: { commonName: 'mac-bad-pw' },
 			keyPair,
 		});
-		const pfx = await createPfx({
+		const pfx = await buildPfx({
 			certificates: [{ certificate: cert.certificate.pem }],
 			privateKeys: [{ privateKey: keyPair.privateKey }],
 			mac: { password: 'correct' },
@@ -349,7 +356,7 @@ describe('pfx', () => {
 			subject: { commonName: 'mac-enc-pfx' },
 			keyPair,
 		});
-		const pfx = await createPfx({
+		const pfx = await buildPfx({
 			certificates: [{ certificate: cert.certificate.pem }],
 			privateKeys: [{ privateKey: keyPair.privateKey }],
 			encryption: { password: 'content-pw' },
@@ -368,7 +375,7 @@ describe('pfx', () => {
 		const cert = await createSelfSignedCertificate({
 			subject: { commonName: 'certs-only' },
 		});
-		const pfx = await createPfx({
+		const pfx = await buildPfx({
 			certificates: [{ certificate: cert.certificate.pem }],
 		});
 		const parsed = await parsePfxDer(pfx.der);
@@ -380,7 +387,7 @@ describe('pfx', () => {
 
 	it('creates PFX with private keys only (no certificates)', async () => {
 		const keyPair = await generateKeyPair();
-		const pfx = await createPfx({
+		const pfx = await buildPfx({
 			privateKeys: [{ privateKey: keyPair.privateKey }],
 		});
 		const parsed = await parsePfxDer(pfx.der);
@@ -390,14 +397,16 @@ describe('pfx', () => {
 		expect(parsed.value.privateKeys).toHaveLength(1);
 	});
 
-	it('normalizeCertificate throws for PEM without CERTIFICATE block', async () => {
-		expect(
-			createPfx({
-				certificates: [
-					{ certificate: '-----BEGIN PRIVATE KEY-----\nMQ==\n-----END PRIVATE KEY-----' },
-				],
-			}),
-		).rejects.toThrow('Certificate PEM required');
+	it('createPfx returns invalid_certificate for PEM without CERTIFICATE block', async () => {
+		const result = await createPfx({
+			certificates: [
+				{ certificate: '-----BEGIN PRIVATE KEY-----\nMQ==\n-----END PRIVATE KEY-----' },
+			],
+		});
+		expect(result).toMatchObject({ ok: false, code: 'invalid_certificate' });
+		if (!result.ok) {
+			expect(result.error.code).toBe('invalid_certificate');
+		}
 	});
 
 	it('parses PFX with unknown bag type', async () => {

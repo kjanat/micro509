@@ -7,7 +7,10 @@
 <LiveCode>
 
 ```ts
-import { createSelfSignedCertificate } from 'micro509';
+import {
+  createSelfSignedCertificate,
+  unwrap,
+} from 'micro509';
 import { createPfx } from 'micro509/pkcs';
 
 const ca = await createSelfSignedCertificate({
@@ -18,15 +21,18 @@ const cert = await createSelfSignedCertificate({
   subject: { commonName: 'leaf.example' },
 });
 
-const pfx = await createPfx({
-  certificates: [
-    { certificate: cert.certificate.pem },
-    { certificate: ca.certificate.pem },
-  ],
-  privateKeys: [{ privateKey: cert.keyPair.privateKey }],
-  encryption: { password: 'secret' },
-  mac: { password: 'secret' },
-});
+// createPfx returns a typed result; unwrap once inputs are validated
+const pfx = unwrap(
+  await createPfx({
+    certificates: [
+      { certificate: cert.certificate.pem },
+      { certificate: ca.certificate.pem },
+    ],
+    privateKeys: [{ privateKey: cert.keyPair.privateKey }],
+    encryption: { password: 'secret' },
+    mac: { password: 'secret' },
+  }),
+);
 
 console.log(`\
 der bytes:  ${pfx.der.length}
@@ -42,19 +48,24 @@ console.log(pfx.pem);
 <LiveCode>
 
 ```ts
-import { createSelfSignedCertificate } from 'micro509';
+import {
+  createSelfSignedCertificate,
+  unwrap,
+} from 'micro509';
 import { createPfx, parsePfxDer } from 'micro509/pkcs';
 
 // Build a PFX inline to parse back
 const cert = await createSelfSignedCertificate({
   subject: { commonName: 'leaf.example' },
 });
-const pfx = await createPfx({
-  certificates: [{ certificate: cert.certificate.pem }],
-  privateKeys: [{ privateKey: cert.keyPair.privateKey }],
-  encryption: { password: 'secret' },
-  mac: { password: 'secret' },
-});
+const pfx = unwrap(
+  await createPfx({
+    certificates: [{ certificate: cert.certificate.pem }],
+    privateKeys: [{ privateKey: cert.keyPair.privateKey }],
+    encryption: { password: 'secret' },
+    mac: { password: 'secret' },
+  }),
+);
 
 const result = await parsePfxDer(pfx.der, {
   password: 'secret',
@@ -83,7 +94,10 @@ subject:      ${leafCert?.subject.values.commonName}
 <LiveCode>
 
 ```ts
-import { createSelfSignedCertificate } from 'micro509';
+import {
+  createSelfSignedCertificate,
+  unwrap,
+} from 'micro509';
 import { createPkcs7CertBagPem } from 'micro509/pkcs';
 
 // Two real certificates to bundle
@@ -94,10 +108,13 @@ const b = await createSelfSignedCertificate({
   subject: { commonName: 'b.example' },
 });
 
-const bag = createPkcs7CertBagPem([
-  a.certificate.pem,
-  b.certificate.pem,
-]);
+// createPkcs7CertBagPem returns a typed result; unwrap on the success path
+const bag = unwrap(
+  createPkcs7CertBagPem([
+    a.certificate.pem,
+    b.certificate.pem,
+  ]),
+);
 
 console.log(`der bytes: ${bag.der.length}`);
 console.log(bag.pem);
@@ -110,7 +127,10 @@ console.log(bag.pem);
 <LiveCode>
 
 ```ts
-import { createSelfSignedCertificate } from 'micro509';
+import {
+  createSelfSignedCertificate,
+  unwrap,
+} from 'micro509';
 import {
   createPkcs7CertBagPem,
   parsePkcs7CertBagPem,
@@ -123,10 +143,12 @@ const a = await createSelfSignedCertificate({
 const b = await createSelfSignedCertificate({
   subject: { commonName: 'b.example' },
 });
-const bag = createPkcs7CertBagPem([
-  a.certificate.pem,
-  b.certificate.pem,
-]);
+const bag = unwrap(
+  createPkcs7CertBagPem([
+    a.certificate.pem,
+    b.certificate.pem,
+  ]),
+);
 
 const result = parsePkcs7CertBagPem(bag.pem);
 
