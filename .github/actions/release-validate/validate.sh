@@ -5,7 +5,9 @@ EVENT_NAME="${EVENT_NAME:-}"
 REF_NAME="${REF_NAME:-}"
 GITHUB_OUTPUT="${GITHUB_OUTPUT:-/dev/stdout}"
 
-# Read versions from both manifests
+# Read names + versions from both manifests
+JSR_NAME=$(jq -r '.name // empty' jsr.json)
+PKG_NAME=$(jq -r '.name // empty' package.json)
 JSR_VERSION=$(jq -r '.version // empty' jsr.json)
 PKG_VERSION=$(jq -r '.version // empty' package.json)
 
@@ -62,15 +64,19 @@ fi
 
 if [[ "${IS_TAG}" == "true" ]]; then MODE="publish"; else MODE="dry-run"; fi
 
-# Bare semver (no leading "v") for registry URLs like jsr.io/@scope/pkg@1.2.3.
+# Registry URLs, built here (bare semver, no leading "v") so the workflow can
+# reference them directly instead of reconstructing strings in YAML expressions.
 VERSION_NUMBER="${VERSION#v}"
+JSR_URL="https://jsr.io/${JSR_NAME}@${VERSION_NUMBER}"
+NPM_URL="https://npm.im/package/${PKG_NAME}/v/${VERSION_NUMBER}"
 
 {
 	echo "version=${VERSION}"
-	echo "version_number=${VERSION_NUMBER}"
 	echo "is_push=${IS_PUSH}"
 	echo "is_tag=${IS_TAG}"
 	echo "prerelease=${IS_PRERELEASE}"
 	echo "is_stable=${IS_STABLE}"
 	echo "mode=${MODE}"
+	echo "jsr_url=${JSR_URL}"
+	echo "npm_url=${NPM_URL}"
 } >>"${GITHUB_OUTPUT}"
