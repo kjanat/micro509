@@ -1,0 +1,15 @@
+#:schema https://unpkg.com/wrangler@4/config-schema.json
+
+name               = "micro509"
+compatibility_date = "2026-06-29"
+
+preview_urls = true
+workers_dev  = true
+
+[[routes]]
+pattern       = "micro509.kjanat.dev"
+custom_domain = true
+enabled       = true
+
+[assets]
+directory = "site/.vitepress/dist"

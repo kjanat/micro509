@@ -1,17 +1,18 @@
-import pkg from './package.json' with { type: 'json' };
+import { argv, env } from 'node:process';
+import { name, homepage } from './package.json' with { type: 'json' };
 
 /** @type {Partial<import("typedoc").TypeDocOptions>} */
 const config = {
 	plugin: ['typedoc-plugin-markdown', 'typedoc-vitepress-theme'],
-	name: pkg.name,
-	cname: new URL(pkg.homepage).hostname,
+	name,
+	cname: new URL(homepage).hostname,
 	includeVersion: true,
 	githubPages: false, // This inserts a .nojekyll file, but we deploy with an Action, so we don't need it.
 	entryPoints: ['src/**/index.ts'],
 	entryPointStrategy: 'resolve',
 	tsconfig: 'tsconfig.src.json',
 	out: 'site/api',
-	gitRevision: process.env.MICRO509_GIT_BRANCH?.trim() || 'master',
+	gitRevision: env.MICRO509_GIT_BRANCH?.trim() || 'master',
 	excludePrivate: true,
 	excludeInternal: true,
 	excludeReferences: true,
@@ -23,7 +24,7 @@ const config = {
 	hideBreadcrumbs: false,
 	typePrintWidth: 60,
 	commentStyle: 'jsdoc',
-	watch: process.env.WATCH === 'true',
+	watch: env.WATCH === 'true' || argv.includes('--watch'),
 };
 
 export default config;

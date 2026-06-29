@@ -42,37 +42,26 @@
 			"source": { "organizeImports": "off" }
 		}
 	},
-	"overrides": [
-		{
-			"includes": ["**/*.jsonc", "!biome.jsonc"],
-			"json": { "formatter": { "trailingCommas": "all" } }
-		},
-		{
-			"includes": ["**/site"],
-			"formatter": {
-				"lineWidth": 60
-			}
-		},
-		{
-			"includes": ["**/*.svelte", "**/*.astro", "**/*.vue"],
-			"linter": {
-				"rules": {
-					"style": {
-						"useConst": "off",
-						"useImportType": "off"
-					},
-					"correctness": {
-						"noUnusedVariables": "off",
-						"noUnusedImports": "off"
-					}
-				}
-			}
-		},
-		{
-			"includes": ["site/**"],
-			"formatter": { "indentStyle": "space" },
-			"javascript": { "formatter": { "indentStyle": "tab" } },
-			"assist": { "enabled": false }
+	"overrides": [{
+		"includes": ["**/*.jsonc", "!biome.jsonc"],
+		"json": { "formatter": { "trailingCommas": "all" } }
+	}, {
+		"includes": ["**/site"],
+		"formatter": {
+			"lineWidth": 60
 		}
-	]
+	}, {
+		"includes": ["**/*.svelte", "**/*.astro", "**/*.vue"],
+		"linter": {
+			"rules": {
+				"style": { "useConst": "off", "useImportType": "off" },
+				"correctness": { "noUnusedVariables": "off", "noUnusedImports": "off" }
+			}
+		}
+	}, {
+		"includes": ["site/**"],
+		"formatter": { "indentStyle": "space" },
+		"javascript": { "formatter": { "indentStyle": "tab" } },
+		"assist": { "enabled": false }
+	}]
 }

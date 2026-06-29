@@ -26,7 +26,10 @@
 	"imports": {
 		"#micro509": "./src/index.ts",
 		"#micro509/*": "./src/*",
-		"#micro509/internal/*": "./src/internal/*"
+		"#micro509/internal/*": "./src/internal/*",
+		"#pkg": "./package.json",
+		"#jsr": "./jsr.json",
+		"#typedoc-sidebar": "./site/api/typedoc-sidebar.json"
 	},
 	"exports": {
 		".": {
@@ -70,6 +73,7 @@
 	"scripts": {
 		"bd": "tsdown --no-attw --no-publint --no-unused --no-report",
 		"build": "tsdown",
+		"check": "biome check",
 		"docs:build": "rm -rf docs/deno 2>/dev/null; deno doc --html --output=docs/deno --name=micro509 src/**/index.ts",
 		"docs:lint": "rm -rf docs/deno 2>/dev/null; deno doc --html --output=docs/deno --name=micro509 --lint src/**/index.ts",
 		"fmt": "dprint fmt",
@@ -87,6 +91,9 @@
 		"test:watch": "AGENT=1 bun test --watch --concurrent",
 		"typecheck": "tsgo --noEmit -p tsconfig.src.json && tsgo --noEmit -p tsconfig.other.json",
 		"typecheck:tsc": "tsc --noEmit -p tsconfig.src.json && tsc --noEmit -p tsconfig.other.json"
+	},
+	"overrides": {
+		"vitepress": "next"
 	},
 	"devDependencies": {
 		"@arethetypeswrong/core": "^0.18.4",
@@ -107,9 +114,6 @@
 		"vite-robots-txt": "^1.0.0",
 		"vite-svg-to-ico": "^3.1.6",
 		"vitepress": "2.0.0-alpha.17"
-	},
-	"overrides": {
-		"vitepress": "next"
 	},
 	"packageManager": "bun@1.3.14",
 	"devEngines": {

@@ -13,8 +13,17 @@
 			"code_actions_on_format": {
 				"source.fixAll.biome": true,
 				"source.organizeImports.biome": true
-			}
+			},
 		},
-		"Markdown": { "wrap_guides": [80] }
+		"Markdown": { "wrap_guides": [80] },
+		"TOML": { "wrap_guides": [140] }
+	},
+	"lsp": {
+		"tombi": {
+			"binary": {
+				"path": "~/.cargo/bin/tombi",
+				"arguments": ["lsp", "-vv"]
+			}
+		}
 	}
 }

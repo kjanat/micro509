@@ -3,9 +3,9 @@ import robotsTxt from 'vite-robots-txt';
 import svgToIco from 'vite-svg-to-ico';
 import { defineConfig, type Plugin } from 'vitepress';
 
-import jsr from '../../jsr.json' with { type: 'json' };
-import pkg from '../../package.json' with { type: 'json' };
-import typedocSidebar from '../api/typedoc-sidebar.json' with { type: 'json' };
+import jsr from '#jsr' with { type: 'json' };
+import pkg from '#pkg' with { type: 'json' };
+import typedocSidebar from '#typedoc-sidebar' with { type: 'json' };
 
 const getRequiredEnv = (names: readonly string[]): string => {
 	for (const name of names) {
@@ -20,11 +20,14 @@ const getRequiredEnv = (names: readonly string[]): string => {
 const gitEnv = {
 	/** Branch name for edit links; also included in the import map URL to ensure cache invalidation on new commits. */
 	get branch(): string {
-		return getRequiredEnv(['MICRO509_GIT_BRANCH', 'GITHUB_REF_NAME']);
+		return getRequiredEnv(['MICRO509_GIT_BRANCH', 'WORKERS_CI_BRANCH', 'GITHUB_REF_NAME']);
 	},
 	/** Short 7-char hash for display; full hash is available via `GITHUB_SHA` in the import map URL. */
 	get commitHash(): string {
-		return getRequiredEnv(['MICRO509_GIT_COMMIT', 'GITHUB_SHA']).slice(0, 7);
+		return getRequiredEnv(['MICRO509_GIT_COMMIT', 'WORKERS_CI_COMMIT_SHA', 'GITHUB_SHA']).slice(
+			0,
+			7,
+		);
 	},
 
 	/** Cleaned GitHub url */
@@ -261,7 +264,7 @@ export default defineConfig({
 
 		footer: {
 			message: `Released under the ${pkg.license} License.`,
-			copyright: `Copyright © 2026-present ${pkg.author.name}`,
+			copyright: `Copyright © ${new Date().getFullYear()}-present ${pkg.author.name}`,
 		},
 
 		search: {

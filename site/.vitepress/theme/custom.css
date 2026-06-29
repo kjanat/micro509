@@ -1,33 +1,33 @@
 .VPImage.image-src,
 .VPImage.logo {
-  -webkit-user-drag: none;
+	-webkit-user-drag: none;
 }
 
 .VPSocialLink:hover .vpi-social-github,
 .VPSocialLink:focus-visible .vpi-social-github {
-  color: #181717;
+	color: #181717;
 }
 
 .VPSocialLink:hover .vpi-social-npm,
 .VPSocialLink:focus-visible .vpi-social-npm {
-  color: #cb3837;
+	color: #cb3837;
 }
 
 .dark .VPSocialLink:hover .vpi-social-github,
 .dark .VPSocialLink:focus-visible .vpi-social-github {
-  color: #f0f0f0;
+	color: #f0f0f0;
 }
 
-.VPSocialLink [class^="vpi-social-"] {
-  transition: color 0.25s;
+.VPSocialLink [class^='vpi-social-'] {
+	transition: color 0.25s;
 }
 
-.VPSocialLink[aria-label="JSR"] svg {
-  filter: grayscale(1);
-  transition: filter 0.25s;
+.VPSocialLink[aria-label='JSR'] svg {
+	filter: grayscale(1);
+	transition: filter 0.25s;
 }
 
-.VPSocialLink[aria-label="JSR"]:hover svg,
-.VPSocialLink[aria-label="JSR"]:focus-visible svg {
-  filter: none;
+.VPSocialLink[aria-label='JSR']:hover svg,
+.VPSocialLink[aria-label='JSR']:focus-visible svg {
+	filter: none;
 }
