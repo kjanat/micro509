@@ -15,6 +15,7 @@ import {
 	validateForTlsClient,
 	validateForTlsServer,
 	verifyCertificateChain,
+	unwrap,
 } from '#micro509';
 import {
 	objectIdentifier,
@@ -445,7 +446,7 @@ describe('chain verification', () => {
 
 	it('fails closed for malformed trust anchors', async () => {
 		const chain = await issueChain();
-		const rootParsed = parseCertificatePem(chain.root.certificate.pem);
+		const rootParsed = unwrap(parseCertificatePem(chain.root.certificate.pem));
 		const malformedAnchor = {
 			subject: rootParsed.subject,
 			subjectPublicKeyInfoDer: Uint8Array.of(0x30, 0x80),
@@ -895,7 +896,7 @@ describe('chain verification', () => {
 
 	it('validates chain using trust anchors instead of root certificates', async () => {
 		const chain = await issueChain();
-		const rootParsed = parseCertificatePem(chain.root.certificate.pem);
+		const rootParsed = unwrap(parseCertificatePem(chain.root.certificate.pem));
 		const anchor = trustAnchorFromCertificate(rootParsed);
 		// Verify with trust anchor (no root cert needed in pool)
 		const result = await verifyCertificateChain({
@@ -913,7 +914,7 @@ describe('chain verification', () => {
 
 	it('rejects chain when trust anchor has wrong key', async () => {
 		const chain = await issueChain();
-		const rootParsed = parseCertificatePem(chain.root.certificate.pem);
+		const rootParsed = unwrap(parseCertificatePem(chain.root.certificate.pem));
 		const otherCa = await createSelfSignedCertificate({
 			subject: { commonName: 'Verify Root CA' }, // same name, different key
 			extensions: {
@@ -921,7 +922,7 @@ describe('chain verification', () => {
 				keyUsage: ['keyCertSign'],
 			},
 		});
-		const otherParsed = parseCertificatePem(otherCa.certificate.pem);
+		const otherParsed = unwrap(parseCertificatePem(otherCa.certificate.pem));
 		const wrongAnchor = {
 			subject: rootParsed.subject,
 			subjectPublicKeyInfoDer: otherParsed.subjectPublicKeyInfoDer,
@@ -1008,7 +1009,9 @@ describe('chain verification', () => {
 				leaf: leaf.pem,
 				intermediates: [unsupportedIntermediateDer],
 				roots: [],
-				trustAnchors: [trustAnchorFromCertificate(parseCertificatePem(root.certificate.pem))],
+				trustAnchors: [
+					trustAnchorFromCertificate(unwrap(parseCertificatePem(root.certificate.pem))),
+				],
 			}),
 		).toMatchObject({
 			ok: false,
@@ -1310,7 +1313,7 @@ describe('chain verification', () => {
 				},
 			},
 		});
-		const parsed = parseCertificatePem(root.certificate.pem);
+		const parsed = unwrap(parseCertificatePem(root.certificate.pem));
 		expect(parsed.nameConstraints).toBeDefined();
 		expect(parsed.nameConstraints?.permittedSubtrees).toHaveLength(2);
 		expect(parsed.nameConstraints?.excludedSubtrees).toHaveLength(1);
@@ -1540,7 +1543,7 @@ describe('chain verification', () => {
 				keyUsage: ['keyCertSign', 'cRLSign'],
 			},
 		});
-		const rootDnHex = parseCertificatePem(refCert.certificate.pem).subject.derHex;
+		const rootDnHex = unwrap(parseCertificatePem(refCert.certificate.pem)).subject.derHex;
 
 		const root = await createSelfSignedCertificate({
 			subject: { commonName: 'NC DN Root CA' },
@@ -1590,7 +1593,7 @@ describe('chain verification', () => {
 				keyUsage: ['keyCertSign'],
 			},
 		});
-		const rootDnHex = parseCertificatePem(refCert.certificate.pem).subject.derHex;
+		const rootDnHex = unwrap(parseCertificatePem(refCert.certificate.pem)).subject.derHex;
 
 		const root = await createSelfSignedCertificate({
 			subject: { commonName: 'NC DN SAN Root' },
@@ -2042,8 +2045,8 @@ describe('chain verification', () => {
 				subjectAltNames: [{ type: 'dns', value: 'unsupported-nc.example' }],
 			},
 		});
-		const parsedRoot = parseCertificatePem(root.certificate.pem);
-		const parsedLeaf = parseCertificatePem(leaf.pem);
+		const parsedRoot = unwrap(parseCertificatePem(root.certificate.pem));
+		const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
 		const unsupportedDer = buildUnsupportedOtherNameConstraintsDer();
 		const result = await validateCandidatePath({
 			chain: [
@@ -2574,9 +2577,9 @@ describe('validateCandidatePath direct', () => {
 
 	it('keeps service identity checks out of raw path validation', async () => {
 		const chain = await issueChain();
-		const leafParsed = parseCertificatePem(chain.leaf.pem);
-		const intParsed = parseCertificatePem(chain.intermediate.pem);
-		const rootParsed = parseCertificatePem(chain.root.certificate.pem);
+		const leafParsed = unwrap(parseCertificatePem(chain.leaf.pem));
+		const intParsed = unwrap(parseCertificatePem(chain.intermediate.pem));
+		const rootParsed = unwrap(parseCertificatePem(chain.root.certificate.pem));
 		const pathResult = await validateCandidatePath({
 			chain: [leafParsed, intParsed, rootParsed],
 		});
@@ -2628,9 +2631,9 @@ describe('validateCandidatePath direct', () => {
 		});
 		const allowed = await validateCandidatePath({
 			chain: [
-				parseCertificatePem(leaf.pem),
-				parseCertificatePem(intermediate.pem),
-				parseCertificatePem(root.certificate.pem),
+				unwrap(parseCertificatePem(leaf.pem)),
+				unwrap(parseCertificatePem(intermediate.pem)),
+				unwrap(parseCertificatePem(root.certificate.pem)),
 			],
 			initialPolicySet: ['1.2.3.4'],
 		});
@@ -2638,9 +2641,9 @@ describe('validateCandidatePath direct', () => {
 
 		const blocked = await validateCandidatePath({
 			chain: [
-				parseCertificatePem(leaf.pem),
-				parseCertificatePem(intermediate.pem),
-				parseCertificatePem(root.certificate.pem),
+				unwrap(parseCertificatePem(leaf.pem)),
+				unwrap(parseCertificatePem(intermediate.pem)),
+				unwrap(parseCertificatePem(root.certificate.pem)),
 			],
 			initialPolicySet: ['1.2.3.4'],
 			inhibitPolicyMapping: true,
@@ -2705,10 +2708,10 @@ describe('validateCandidatePath direct', () => {
 		});
 		const result = await validateCandidatePath({
 			chain: [
-				parseCertificatePem(leaf.pem),
-				parseCertificatePem(secondIntermediate.pem),
-				parseCertificatePem(firstIntermediate.pem),
-				parseCertificatePem(root.certificate.pem),
+				unwrap(parseCertificatePem(leaf.pem)),
+				unwrap(parseCertificatePem(secondIntermediate.pem)),
+				unwrap(parseCertificatePem(firstIntermediate.pem)),
+				unwrap(parseCertificatePem(root.certificate.pem)),
 			],
 			initialPolicySet: ['1.2.3.4'],
 		});
@@ -2779,11 +2782,11 @@ describe('validateCandidatePath direct', () => {
 		});
 		const allowed = await validateCandidatePath({
 			chain: [
-				parseCertificatePem(leaf.pem),
-				parseCertificatePem(mappedIntermediate.pem),
-				parseCertificatePem(selfIssuedIntermediate.pem),
-				parseCertificatePem(constrainedIntermediate.pem),
-				parseCertificatePem(root.certificate.pem),
+				unwrap(parseCertificatePem(leaf.pem)),
+				unwrap(parseCertificatePem(mappedIntermediate.pem)),
+				unwrap(parseCertificatePem(selfIssuedIntermediate.pem)),
+				unwrap(parseCertificatePem(constrainedIntermediate.pem)),
+				unwrap(parseCertificatePem(root.certificate.pem)),
 			],
 			initialPolicySet: ['1.2.3.4'],
 		});
@@ -2831,11 +2834,11 @@ describe('validateCandidatePath direct', () => {
 
 		const blockedWithoutBridge = await validateCandidatePath({
 			chain: [
-				parseCertificatePem(blockedLeaf.pem),
-				parseCertificatePem(normalMappedIntermediate.pem),
-				parseCertificatePem(normalBridge.pem),
-				parseCertificatePem(constrainedIntermediate.pem),
-				parseCertificatePem(root.certificate.pem),
+				unwrap(parseCertificatePem(blockedLeaf.pem)),
+				unwrap(parseCertificatePem(normalMappedIntermediate.pem)),
+				unwrap(parseCertificatePem(normalBridge.pem)),
+				unwrap(parseCertificatePem(constrainedIntermediate.pem)),
+				unwrap(parseCertificatePem(root.certificate.pem)),
 			],
 			initialPolicySet: ['1.2.3.4'],
 		});
@@ -2870,7 +2873,10 @@ describe('validateCandidatePath direct', () => {
 			},
 		});
 		const result = await validateCandidatePath({
-			chain: [parseCertificatePem(leaf.pem), parseCertificatePem(root.certificate.pem)],
+			chain: [
+				unwrap(parseCertificatePem(leaf.pem)),
+				unwrap(parseCertificatePem(root.certificate.pem)),
+			],
 			policy: { initialPolicySet: ['1.2.3.4'] },
 		});
 		expect(result.ok).toBe(true);
@@ -2904,7 +2910,10 @@ describe('validateCandidatePath direct', () => {
 			},
 		});
 		const result = await validateCandidatePath({
-			chain: [parseCertificatePem(leaf.pem), parseCertificatePem(root.certificate.pem)],
+			chain: [
+				unwrap(parseCertificatePem(leaf.pem)),
+				unwrap(parseCertificatePem(root.certificate.pem)),
+			],
 			policy: { initialPolicySet: ['1.2.3.5'] },
 		});
 		expect(result).toMatchObject({
@@ -2937,7 +2946,10 @@ describe('validateCandidatePath direct', () => {
 			},
 		});
 		const result = await validateCandidatePath({
-			chain: [parseCertificatePem(leaf.pem), parseCertificatePem(root.certificate.pem)],
+			chain: [
+				unwrap(parseCertificatePem(leaf.pem)),
+				unwrap(parseCertificatePem(root.certificate.pem)),
+			],
 			requireExplicitPolicy: true,
 		});
 		expect(result).toMatchObject({
@@ -2984,9 +2996,9 @@ describe('validateCandidatePath direct', () => {
 		});
 		const result = await validateCandidatePath({
 			chain: [
-				parseCertificatePem(leaf.pem),
-				parseCertificatePem(intermediate.pem),
-				parseCertificatePem(root.certificate.pem),
+				unwrap(parseCertificatePem(leaf.pem)),
+				unwrap(parseCertificatePem(intermediate.pem)),
+				unwrap(parseCertificatePem(root.certificate.pem)),
 			],
 		});
 		expect(result).toMatchObject({ ok: false, code: 'explicit_policy_required' });
@@ -3013,12 +3025,18 @@ describe('validateCandidatePath direct', () => {
 			},
 		});
 		const allowed = await validateCandidatePath({
-			chain: [parseCertificatePem(leaf.pem), parseCertificatePem(root.certificate.pem)],
+			chain: [
+				unwrap(parseCertificatePem(leaf.pem)),
+				unwrap(parseCertificatePem(root.certificate.pem)),
+			],
 			initialPolicySet: ['1.2.3.4'],
 		});
 		expect(allowed.ok).toBe(true);
 		const blocked = await validateCandidatePath({
-			chain: [parseCertificatePem(leaf.pem), parseCertificatePem(root.certificate.pem)],
+			chain: [
+				unwrap(parseCertificatePem(leaf.pem)),
+				unwrap(parseCertificatePem(root.certificate.pem)),
+			],
 			initialPolicySet: ['1.2.3.4'],
 			inhibitAnyPolicy: true,
 		});
@@ -3071,9 +3089,9 @@ describe('validateCandidatePath direct', () => {
 		});
 		const result = await validateCandidatePath({
 			chain: [
-				parseCertificatePem(leaf.pem),
-				parseCertificatePem(intermediate.pem),
-				parseCertificatePem(root.certificate.pem),
+				unwrap(parseCertificatePem(leaf.pem)),
+				unwrap(parseCertificatePem(intermediate.pem)),
+				unwrap(parseCertificatePem(root.certificate.pem)),
 			],
 		});
 		expect(result.ok).toBe(true);
@@ -3116,13 +3134,19 @@ describe('validateCandidatePath direct', () => {
 			},
 		});
 		const allowedResult = await validateCandidatePath({
-			chain: [parseCertificatePem(allowedLeaf.pem), parseCertificatePem(root.certificate.pem)],
+			chain: [
+				unwrap(parseCertificatePem(allowedLeaf.pem)),
+				unwrap(parseCertificatePem(root.certificate.pem)),
+			],
 			permittedSubtrees: [{ base: { type: 'dns', value: 'narrow.example.com' } }],
 		});
 		expect(allowedResult.ok).toBe(true);
 
 		const blockedResult = await validateCandidatePath({
-			chain: [parseCertificatePem(blockedLeaf.pem), parseCertificatePem(root.certificate.pem)],
+			chain: [
+				unwrap(parseCertificatePem(blockedLeaf.pem)),
+				unwrap(parseCertificatePem(root.certificate.pem)),
+			],
 			permittedSubtrees: [{ base: { type: 'dns', value: 'narrow.example.com' } }],
 		});
 		expect(blockedResult).toMatchObject({ ok: false, code: 'name_constraints_violated' });
@@ -3200,7 +3224,7 @@ describe('validateCandidatePath direct', () => {
 
 	it('detects signature_invalid in candidate path', async () => {
 		const chain = await issueChain();
-		const leafParsed = parseCertificatePem(chain.leaf.pem);
+		const leafParsed = unwrap(parseCertificatePem(chain.leaf.pem));
 		// Use a different CA as "issuer" — signature won't verify
 		const otherCa = await createSelfSignedCertificate({
 			subject: { commonName: 'Verify Intermediate CA' },
@@ -3209,7 +3233,7 @@ describe('validateCandidatePath direct', () => {
 				keyUsage: ['keyCertSign', 'cRLSign'],
 			},
 		});
-		const otherCaParsed = parseCertificatePem(otherCa.certificate.pem);
+		const otherCaParsed = unwrap(parseCertificatePem(otherCa.certificate.pem));
 		const result = await validateCandidatePath({
 			chain: [leafParsed, otherCaParsed],
 		});
@@ -3224,9 +3248,9 @@ describe('validateCandidatePath direct', () => {
 				keyUsage: ['digitalSignature'],
 			},
 		});
-		const leafParsed = parseCertificatePem(chain.leaf.pem);
-		const intParsed = parseCertificatePem(chain.intermediate.pem);
-		const rootParsed = parseCertificatePem(chain.root.certificate.pem);
+		const leafParsed = unwrap(parseCertificatePem(chain.leaf.pem));
+		const intParsed = unwrap(parseCertificatePem(chain.intermediate.pem));
+		const rootParsed = unwrap(parseCertificatePem(chain.root.certificate.pem));
 		const result = await validateCandidatePath({
 			chain: [leafParsed, intParsed, rootParsed],
 		});
@@ -3241,9 +3265,9 @@ describe('validateCandidatePath direct', () => {
 				keyUsage: ['digitalSignature'],
 			},
 		});
-		const leafParsed = parseCertificatePem(chain.leaf.pem);
-		const intParsed = parseCertificatePem(chain.intermediate.pem);
-		const rootParsed = parseCertificatePem(chain.root.certificate.pem);
+		const leafParsed = unwrap(parseCertificatePem(chain.leaf.pem));
+		const intParsed = unwrap(parseCertificatePem(chain.intermediate.pem));
+		const rootParsed = unwrap(parseCertificatePem(chain.root.certificate.pem));
 		const result = await validateCandidatePath({
 			chain: [leafParsed, intParsed, rootParsed],
 		});
@@ -3256,9 +3280,9 @@ describe('validateCandidatePath direct', () => {
 		const chain = await issueChain({
 			leafIssuerPublicKey: wrongAkiKeys.publicKey,
 		});
-		const leafParsed = parseCertificatePem(chain.leaf.pem);
-		const intParsed = parseCertificatePem(chain.intermediate.pem);
-		const rootParsed = parseCertificatePem(chain.root.certificate.pem);
+		const leafParsed = unwrap(parseCertificatePem(chain.leaf.pem));
+		const intParsed = unwrap(parseCertificatePem(chain.intermediate.pem));
+		const rootParsed = unwrap(parseCertificatePem(chain.root.certificate.pem));
 		const result = await validateCandidatePath({
 			chain: [leafParsed, intParsed, rootParsed],
 		});
@@ -3273,9 +3297,9 @@ describe('validateCandidatePath direct', () => {
 				keyUsage: ['keyCertSign', 'cRLSign'],
 			},
 		});
-		const leafParsed = parseCertificatePem(chain.leaf.pem);
-		const intParsed = parseCertificatePem(chain.intermediate.pem);
-		const rootParsed = parseCertificatePem(chain.root.certificate.pem);
+		const leafParsed = unwrap(parseCertificatePem(chain.leaf.pem));
+		const intParsed = unwrap(parseCertificatePem(chain.intermediate.pem));
+		const rootParsed = unwrap(parseCertificatePem(chain.root.certificate.pem));
 		const result = await validateCandidatePath({
 			chain: [leafParsed, intParsed, rootParsed],
 		});
@@ -3421,7 +3445,7 @@ describe('buildCandidatePath edge cases', () => {
 
 	it('handles multiple trust anchors with same subject', async () => {
 		const chain = await issueChain();
-		const rootParsed = parseCertificatePem(chain.root.certificate.pem);
+		const rootParsed = unwrap(parseCertificatePem(chain.root.certificate.pem));
 		const anchor1 = trustAnchorFromCertificate(rootParsed);
 		// Create another anchor with same subject but different key
 		const otherCa = await createSelfSignedCertificate({
@@ -3431,7 +3455,7 @@ describe('buildCandidatePath edge cases', () => {
 				keyUsage: ['keyCertSign'],
 			},
 		});
-		const otherParsed = parseCertificatePem(otherCa.certificate.pem);
+		const otherParsed = unwrap(parseCertificatePem(otherCa.certificate.pem));
 		const anchor2 = trustAnchorFromCertificate(otherParsed);
 		// Both anchors share the subject — should try both
 		const result = await verifyCertificateChain({
@@ -3991,8 +4015,8 @@ describe('coverage: verify.ts internal edge cases', () => {
 				subjectAltNames: [{ type: 'dns', value: 'tamper-leaf.example' }],
 			},
 		});
-		const parsedRoot = parseCertificatePem(root.certificate.pem);
-		const parsedLeaf = parseCertificatePem(leaf.pem);
+		const parsedRoot = unwrap(parseCertificatePem(root.certificate.pem));
+		const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
 		return { parsedRoot, parsedLeaf };
 	}
 
@@ -4184,8 +4208,8 @@ describe('coverage: verify.ts internal edge cases', () => {
 				subjectAltNames: [{ type: 'dns', value: 'tampered-eku.example' }],
 			},
 		});
-		const parsedRoot = parseCertificatePem(root.certificate.pem);
-		const parsedLeaf = parseCertificatePem(leaf.pem);
+		const parsedRoot = unwrap(parseCertificatePem(root.certificate.pem));
+		const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
 		const result = await validateCandidatePath({
 			chain: [{ ...parsedLeaf, extendedKeyUsage: ['serverAuth' as const] }, parsedRoot],
 			purpose: 'serverAuth',
@@ -4213,8 +4237,8 @@ describe('coverage: verify.ts internal edge cases', () => {
 				extendedKeyUsage: ['clientAuth'],
 			},
 		});
-		const parsedRoot = parseCertificatePem(root.certificate.pem);
-		const parsedLeaf = parseCertificatePem(leaf.pem);
+		const parsedRoot = unwrap(parseCertificatePem(root.certificate.pem));
+		const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
 		const result = checkExtendedKeyUsage(
 			[{ ...parsedLeaf, extendedKeyUsage: ['serverAuth' as const] }, parsedRoot],
 			'serverAuth',
@@ -4230,7 +4254,7 @@ describe('coverage: verify.ts internal edge cases', () => {
 				keyUsage: ['keyCertSign', 'cRLSign'],
 			},
 		});
-		const parsedRoot = parseCertificatePem(root.certificate.pem);
+		const parsedRoot = unwrap(parseCertificatePem(root.certificate.pem));
 		const anchor = trustAnchorFromCertificate({
 			...parsedRoot,
 			subject: {
@@ -4249,7 +4273,7 @@ describe('coverage: verify.ts internal edge cases', () => {
 				keyUsage: ['keyCertSign', 'cRLSign'],
 			},
 		});
-		const parsedRoot = parseCertificatePem(root.certificate.pem);
+		const parsedRoot = unwrap(parseCertificatePem(root.certificate.pem));
 		expect(() =>
 			trustAnchorFromCertificate({ ...parsedRoot, der: Uint8Array.of(0xff, 0xff) }),
 		).toThrow('certificate input is malformed');

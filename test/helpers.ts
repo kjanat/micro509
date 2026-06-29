@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { parseCertificatePem } from 'micro509';
+import type { ParsedCertificate } from 'micro509';
 import {
 	createCertificate,
 	createSelfSignedCertificate,
@@ -318,9 +318,7 @@ export async function addRevokedEntryCertificateIssuers(
 	]);
 }
 
-export function createSyntheticPkcs7SignedData(
-	signer: ReturnType<typeof parseCertificatePem>,
-): Uint8Array {
+export function createSyntheticPkcs7SignedData(signer: ParsedCertificate): Uint8Array {
 	const signerInfo = sequence([
 		integerFromNumber(1),
 		sequence([hexToBytes(signer.issuer.derHex), integer(hexToBytes(signer.serialNumberHex))]),
@@ -339,7 +337,7 @@ export function createSyntheticPkcs7SignedData(
 }
 
 export async function createCmsSignedDataWithSignedAttrs(
-	signer: ReturnType<typeof parseCertificatePem>,
+	signer: ParsedCertificate,
 	privateKey: CryptoKey,
 	content: Uint8Array,
 ): Promise<Uint8Array> {

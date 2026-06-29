@@ -9,14 +9,15 @@ import {
 	getCertificateOcspResponderUris,
 	parseCertificatePem,
 	resolveOcspResponderCandidates,
+	unwrap,
 } from 'micro509';
 import { addRevokedEntryCertificateIssuers, hexToBytes, issueChain } from './helpers.ts';
 
 describe('revocation boundary', () => {
 	it('returns unknown when no revocation evidence is provided', async () => {
 		const { leaf, intermediate } = await issueChain();
-		const certificate = parseCertificatePem(leaf.pem);
-		const issuerCertificate = parseCertificatePem(intermediate.pem);
+		const certificate = unwrap(parseCertificatePem(leaf.pem));
+		const issuerCertificate = unwrap(parseCertificatePem(intermediate.pem));
 
 		expect(
 			await checkCertificateRevocation({
@@ -72,8 +73,8 @@ describe('revocation boundary', () => {
 
 	it('returns revoked when CRL evidence revokes the certificate', async () => {
 		const { leaf, intermediate, intermediateKeys } = await issueChain();
-		const certificate = parseCertificatePem(leaf.pem);
-		const issuerCertificate = parseCertificatePem(intermediate.pem);
+		const certificate = unwrap(parseCertificatePem(leaf.pem));
+		const issuerCertificate = unwrap(parseCertificatePem(intermediate.pem));
 		const crl = await createCertificateRevocationList({
 			issuer: { commonName: 'Verify Intermediate CA' },
 			signerPrivateKey: intermediateKeys.privateKey,
@@ -109,8 +110,8 @@ describe('revocation boundary', () => {
 
 	it('returns good when CRL evidence conclusively clears the certificate', async () => {
 		const { leaf, intermediate, intermediateKeys } = await issueChain();
-		const certificate = parseCertificatePem(leaf.pem);
-		const issuerCertificate = parseCertificatePem(intermediate.pem);
+		const certificate = unwrap(parseCertificatePem(leaf.pem));
+		const issuerCertificate = unwrap(parseCertificatePem(intermediate.pem));
 		const crl = await createCertificateRevocationList({
 			issuer: { commonName: 'Verify Intermediate CA' },
 			signerPrivateKey: intermediateKeys.privateKey,
@@ -159,7 +160,7 @@ describe('revocation boundary', () => {
 				],
 			},
 		});
-		const certificate = parseCertificatePem(leaf.pem);
+		const certificate = unwrap(parseCertificatePem(leaf.pem));
 		const crl = await createCertificateRevocationList({
 			issuer: { commonName: 'Scoped Revocation CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
@@ -218,7 +219,7 @@ describe('revocation boundary', () => {
 				],
 			},
 		});
-		const certificate = parseCertificatePem(leaf.pem);
+		const certificate = unwrap(parseCertificatePem(leaf.pem));
 		const completeCrl = await createCertificateRevocationList({
 			issuer: { commonName: 'Delta Revocation CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
@@ -280,8 +281,8 @@ describe('revocation boundary', () => {
 				keyUsage: ['keyCertSign', 'cRLSign'],
 			},
 		});
-		const parsedCrlIssuer = parseCertificatePem(crlIssuer.certificate.pem);
-		const parsedCertificateIssuer = parseCertificatePem(certificateIssuer.certificate.pem);
+		const parsedCrlIssuer = unwrap(parseCertificatePem(crlIssuer.certificate.pem));
+		const parsedCertificateIssuer = unwrap(parseCertificatePem(certificateIssuer.certificate.pem));
 		const leafKeys = await generateKeyPair();
 		const serialNumber = Uint8Array.of(0x44);
 		const leaf = await createCertificate({
@@ -366,7 +367,7 @@ describe('revocation boundary', () => {
 				],
 			},
 		});
-		const certificate = parseCertificatePem(leaf.pem);
+		const certificate = unwrap(parseCertificatePem(leaf.pem));
 		const mismatchedCrl = await createCertificateRevocationList({
 			issuer: { commonName: 'Scope Mismatch CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
@@ -409,8 +410,8 @@ describe('revocation boundary', () => {
 
 	it('returns good when OCSP evidence is conclusive and CRL evidence is non-applicable', async () => {
 		const { leaf, intermediate, intermediateKeys } = await issueChain();
-		const certificate = parseCertificatePem(leaf.pem);
-		const issuerCertificate = parseCertificatePem(intermediate.pem);
+		const certificate = unwrap(parseCertificatePem(leaf.pem));
+		const issuerCertificate = unwrap(parseCertificatePem(intermediate.pem));
 		const nonApplicableCrl = await createCertificateRevocationList({
 			issuer: { commonName: 'Verify Intermediate CA' },
 			signerPrivateKey: intermediateKeys.privateKey,
@@ -458,8 +459,8 @@ describe('revocation boundary', () => {
 
 	it('returns revoked when OCSP evidence revokes the certificate', async () => {
 		const { leaf, intermediate, intermediateKeys } = await issueChain();
-		const certificate = parseCertificatePem(leaf.pem);
-		const issuerCertificate = parseCertificatePem(intermediate.pem);
+		const certificate = unwrap(parseCertificatePem(leaf.pem));
+		const issuerCertificate = unwrap(parseCertificatePem(intermediate.pem));
 		const revokedAt = new Date('2024-02-01T00:00:00Z');
 		const ocspResponse = await createOcspResponse({
 			signerPrivateKey: intermediateKeys.privateKey,
@@ -534,8 +535,8 @@ describe('revocation boundary', () => {
 
 		expect(
 			await checkCertificateRevocation({
-				certificate: parseCertificatePem(leaf.pem),
-				issuerCertificate: parseCertificatePem(issuer.certificate.pem),
+				certificate: unwrap(parseCertificatePem(leaf.pem)),
+				issuerCertificate: unwrap(parseCertificatePem(issuer.certificate.pem)),
 				evidence: [{ kind: 'ocsp', response: ocspResponse.pem }],
 			}),
 		).toEqual({
@@ -582,8 +583,8 @@ describe('revocation boundary', () => {
 
 		expect(
 			await checkCertificateRevocation({
-				certificate: parseCertificatePem(leaf.pem),
-				issuerCertificate: parseCertificatePem(intermediate.pem),
+				certificate: unwrap(parseCertificatePem(leaf.pem)),
+				issuerCertificate: unwrap(parseCertificatePem(intermediate.pem)),
 				evidence: [{ kind: 'ocsp', response: ocspResponse.pem }],
 			}),
 		).toEqual({
@@ -609,8 +610,8 @@ describe('revocation boundary', () => {
 
 	it('returns unknown with indeterminate evidence details when no source is conclusive', async () => {
 		const { leaf, intermediate, intermediateKeys } = await issueChain();
-		const certificate = parseCertificatePem(leaf.pem);
-		const issuerCertificate = parseCertificatePem(intermediate.pem);
+		const certificate = unwrap(parseCertificatePem(leaf.pem));
+		const issuerCertificate = unwrap(parseCertificatePem(intermediate.pem));
 		const nonApplicableCrl = await createCertificateRevocationList({
 			issuer: { commonName: 'Verify Intermediate CA' },
 			signerPrivateKey: intermediateKeys.privateKey,
@@ -726,7 +727,7 @@ describe('revocation boundary', () => {
 				authorityInfoAccess: [{ method: 'ocsp', uri: 'http://real-ocsp.example.test' }],
 			},
 		});
-		const parsedLeaf = parseCertificatePem(leaf.pem);
+		const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
 		const tamperedLeaf = {
 			...parsedLeaf,
 			authorityInfoAccess: [{ method: 'ocsp' as const, uri: 'http://attacker.example.test' }],
@@ -774,7 +775,7 @@ describe('revocation boundary', () => {
 
 		expect(
 			resolveOcspResponderCandidates({
-				certificate: parseCertificatePem(leaf.pem),
+				certificate: unwrap(parseCertificatePem(leaf.pem)),
 				configuredResponders: [
 					{
 						uri: 'http://ocsp-configured.example.test',

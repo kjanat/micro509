@@ -4,6 +4,7 @@ import {
 	createSelfSignedCertificate,
 	parseCertificateDer,
 	parseCertificateSigningRequestDer,
+	unwrap,
 } from 'micro509';
 import { exportSpkiDer, generateKeyPair } from 'micro509/keys';
 import { toHex } from '#micro509/internal/asn1/asn1.ts';
@@ -187,7 +188,7 @@ describe('extension registry', () => {
 			},
 		});
 
-		const parsed = parseCertificateDer(certificate.certificate.der);
+		const parsed = unwrap(parseCertificateDer(certificate.certificate.der));
 		expect(parsed.basicConstraints).toEqual({ ca: true, pathLength: 1 });
 		expect(parsed.keyUsage).toEqual({ flags: ['keyCertSign', 'cRLSign'], nonZeroPadding: false });
 		expect(parsed.extendedKeyUsage).toEqual(['serverAuth', { type: 'oid', value: '1.2.3.4.5.6' }]);
@@ -248,7 +249,7 @@ describe('extension registry', () => {
 				],
 			},
 		});
-		const parsed = parseCertificateSigningRequestDer(csr.der);
+		const parsed = unwrap(parseCertificateSigningRequestDer(csr.der));
 		expect(parsed.basicConstraints).toEqual({ ca: true, pathLength: 0 });
 		expect(parsed.keyUsage).toEqual({ flags: ['keyCertSign', 'cRLSign'], nonZeroPadding: false });
 		expect(parsed.extendedKeyUsage).toEqual(['clientAuth']);

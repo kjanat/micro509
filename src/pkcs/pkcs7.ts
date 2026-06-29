@@ -58,7 +58,7 @@ import type {
 	ParsedNameAttribute,
 	ParsedRelativeDistinguishedName,
 } from '#micro509/x509/parse.ts';
-import { parseCertificateDer } from '#micro509/x509/parse.ts';
+import { parseCertificateDerOrThrow } from '#micro509/x509/parse.ts';
 
 /** PEM text (may contain multiple CERTIFICATE blocks) or raw DER bytes. */
 export type Pkcs7CertificateSource = string | Uint8Array;
@@ -361,12 +361,12 @@ export async function createPkcs7SignedDataDer(
 			);
 		}
 		addCertificate(signerCertDer);
-		// parseCertificateDer throws on malformed DER — a caller-correctable input,
-		// so convert it to the typed invalid_signer_certificate failure rather than
-		// rejecting the public Promise.
+		// parseCertificateDerOrThrow throws on malformed DER — a caller-correctable
+		// input, so convert it to the typed invalid_signer_certificate failure
+		// rather than rejecting the public Promise.
 		let certificate: ParsedCertificate;
 		try {
-			certificate = parseCertificateDer(signerCertDer);
+			certificate = parseCertificateDerOrThrow(signerCertDer);
 		} catch {
 			return createPkcs7Failure(
 				'invalid_signer_certificate',
@@ -844,7 +844,7 @@ function parseCertificateSet(
 	let offset = certificates.start;
 	while (offset < certificates.end) {
 		const element = readElement(source, offset);
-		parsed.push(parseCertificateDer(source.slice(offset, element.end)));
+		parsed.push(parseCertificateDerOrThrow(source.slice(offset, element.end)));
 		offset = element.end;
 	}
 	return parsed;

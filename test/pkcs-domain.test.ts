@@ -4,6 +4,7 @@ import {
 	createSelfSignedCertificate,
 	generateKeyPair,
 	parseCertificatePem,
+	unwrap,
 } from 'micro509';
 import { pemEncode } from 'micro509/pem';
 import {
@@ -152,7 +153,7 @@ describe('pkcs domain', () => {
 		const signer = await createSelfSignedCertificate({
 			subject: { commonName: 'PKCS Domain Signer' },
 		});
-		const parsedSigner = parseCertificatePem(signer.certificate.pem);
+		const parsedSigner = unwrap(parseCertificatePem(signer.certificate.pem));
 		const content = new TextEncoder().encode('pkcs-domain-signed-content');
 		const signedDataDer = await createCmsSignedDataWithSignedAttrs(
 			parsedSigner,

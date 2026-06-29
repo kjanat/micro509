@@ -36,7 +36,7 @@ import { base64Encode } from '#micro509/internal/shared/base64.ts';
 import { exportPkcs8Der } from '#micro509/keys/keys.ts';
 import { pemEncode, splitPemBlocks } from '#micro509/pem/pem.ts';
 import { type ErrorResult, failureResult, type Micro509Error } from '#micro509/result/result.ts';
-import { type ParsedCertificate, parseCertificateDer } from '#micro509/x509/parse.ts';
+import { type ParsedCertificate, parseCertificateDerOrThrow } from '#micro509/x509/parse.ts';
 import {
 	createPkcs12MacData,
 	type ParsedPkcs12MacData,
@@ -570,7 +570,7 @@ function parseSafeBag(der: Uint8Array): ParsedPfxBag {
 			kind: 'certificate',
 			bagId: bagOid,
 			attributes,
-			certificate: parseCertificateDer(certificateDer),
+			certificate: parseCertificateDerOrThrow(certificateDer),
 		};
 	}
 	if (bagOid === OIDS.pkcs12KeyBag) {

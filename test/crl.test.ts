@@ -12,6 +12,7 @@ import {
 	pemDecode,
 	validateCertificateRevocationList,
 	verifyCertificateRevocationList,
+	unwrap,
 } from '#micro509';
 import {
 	bool,
@@ -49,7 +50,7 @@ describe('crl', () => {
 			signerPrivateKey: issuer.keyPair.privateKey,
 			issuerPublicKey: issuer.keyPair.publicKey,
 		});
-		const parsedLeaf = parseCertificatePem(leaf.pem);
+		const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
 		const crl = await createCertificateRevocationList({
 			issuer: { commonName: 'CRL Issuer' },
 			signerPrivateKey: issuer.keyPair.privateKey,
@@ -394,7 +395,7 @@ describe('crl', () => {
 				],
 			},
 		});
-		const parsedLeaf = parseCertificatePem(leaf.pem);
+		const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
 		const matchingCrl = await createCertificateRevocationList({
 			issuer: { commonName: 'Scoped CRL CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
@@ -464,7 +465,7 @@ describe('crl', () => {
 				],
 			},
 		});
-		const parsedLeaf = parseCertificatePem(leaf.pem);
+		const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
 		const reasonMismatchCrl = await createCertificateRevocationList({
 			issuer: { commonName: 'Reason Scope CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
@@ -896,7 +897,7 @@ describe('crl', () => {
 				indirectCrl: true,
 			},
 			revokedCertificates: [
-				{ serialNumber: hexToBytes(parseCertificatePem(leaf.pem).serialNumberHex) },
+				{ serialNumber: hexToBytes(unwrap(parseCertificatePem(leaf.pem)).serialNumberHex) },
 			],
 		});
 		expect(
@@ -969,7 +970,7 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 		});
-		const parsedLeaf = parseCertificatePem(leaf.pem);
+		const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
 		const completeCrl = await createCertificateRevocationList({
 			issuer: { commonName: 'Delta Merge CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
@@ -1039,9 +1040,9 @@ describe('crl', () => {
 				notAfter: new Date('2025-01-02T00:00:00Z'),
 			},
 		});
-		const parsedHeldLeaf = parseCertificatePem(heldLeaf.pem);
-		const parsedCompromisedLeaf = parseCertificatePem(compromisedLeaf.pem);
-		const parsedExpiredLeaf = parseCertificatePem(expiredLeaf.pem);
+		const parsedHeldLeaf = unwrap(parseCertificatePem(heldLeaf.pem));
+		const parsedCompromisedLeaf = unwrap(parseCertificatePem(compromisedLeaf.pem));
+		const parsedExpiredLeaf = unwrap(parseCertificatePem(expiredLeaf.pem));
 		const completeCrl = await createCertificateRevocationList({
 			issuer: { commonName: 'Delta Remove CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
@@ -1373,7 +1374,7 @@ describe('crl', () => {
 				keyUsage: ['keyCertSign', 'cRLSign'],
 			},
 		});
-		const parsedCertificateIssuer = parseCertificatePem(certificateIssuer.certificate.pem);
+		const parsedCertificateIssuer = unwrap(parseCertificatePem(certificateIssuer.certificate.pem));
 		const crl = await createCertificateRevocationList({
 			issuer: { commonName: 'Revoked Entry Parser CA' },
 			signerPrivateKey: crlIssuer.keyPair.privateKey,
@@ -1417,8 +1418,8 @@ describe('crl', () => {
 				keyUsage: ['keyCertSign', 'cRLSign'],
 			},
 		});
-		const parsedCrlIssuer = parseCertificatePem(crlIssuer.certificate.pem);
-		const parsedFirstIssuer = parseCertificatePem(firstIssuer.certificate.pem);
+		const parsedCrlIssuer = unwrap(parseCertificatePem(crlIssuer.certificate.pem));
+		const parsedFirstIssuer = unwrap(parseCertificatePem(firstIssuer.certificate.pem));
 		const sharedSerial = Uint8Array.of(0x44);
 		const firstLeafKeys = await generateKeyPair();
 		const secondLeafKeys = await generateKeyPair();
@@ -1665,7 +1666,7 @@ describe('crl', () => {
 				keyUsage: ['keyCertSign', 'cRLSign'],
 			},
 		});
-		const parsedCrlIssuer = parseCertificatePem(crlIssuer.certificate.pem);
+		const parsedCrlIssuer = unwrap(parseCertificatePem(crlIssuer.certificate.pem));
 		const leafKeys = await generateKeyPair();
 		const leaf = await createCertificate({
 			issuer: { commonName: 'Delta Unsupported Entry Leaf Issuer' },
@@ -1745,8 +1746,9 @@ describe('crl', () => {
 				keyUsage: ['keyCertSign', 'cRLSign'],
 			},
 		});
-		const { subjectKeyIdentifier: _ignoredSubjectKeyIdentifier, ...parsedIssuer } =
-			parseCertificatePem(ca.certificate.pem);
+		const { subjectKeyIdentifier: _ignoredSubjectKeyIdentifier, ...parsedIssuer } = unwrap(
+			parseCertificatePem(ca.certificate.pem),
+		);
 		const leafKeys = await generateKeyPair();
 		const leaf = await createCertificate({
 			issuer: { commonName: 'Parsed Delta Compatibility CA' },
@@ -1825,7 +1827,7 @@ describe('crl', () => {
 				keyUsage: ['keyCertSign', 'cRLSign'],
 			},
 		});
-		const parsedCa = parseCertificatePem(ca.certificate.pem);
+		const parsedCa = unwrap(parseCertificatePem(ca.certificate.pem));
 		const complexNames = [
 			{ type: 'dns', value: 'crl.example.test' },
 			{ type: 'email', value: 'pki@example.test' },
@@ -1905,7 +1907,7 @@ describe('crl', () => {
 				keyUsage: ['keyCertSign', 'cRLSign'],
 			},
 		});
-		const parsedCa = parseCertificatePem(ca.certificate.pem);
+		const parsedCa = unwrap(parseCertificatePem(ca.certificate.pem));
 		const names = [
 			{ type: 'uri', value: 'http://example.test/complex-idp-mismatch.crl' },
 			{ type: 'directoryName', derHex: parsedCa.subject.derHex },
@@ -2097,7 +2099,7 @@ describe('crl', () => {
 				keyUsage: ['keyCertSign', 'cRLSign'],
 			},
 		});
-		const parsedCrlIssuer = parseCertificatePem(crlIssuer.certificate.pem);
+		const parsedCrlIssuer = unwrap(parseCertificatePem(crlIssuer.certificate.pem));
 		const leafKeys = await generateKeyPair();
 		const sharedSerial = Uint8Array.of(0x66);
 		const leaf = await createCertificate({
@@ -2220,7 +2222,7 @@ describe('crl', () => {
 			nextUpdate: new Date(now.getTime() + 3_600_000),
 		});
 		const parsedCrl = parseCertificateRevocationListPem(crl.pem);
-		const parsedCa = parseCertificatePem(ca.certificate.pem);
+		const parsedCa = unwrap(parseCertificatePem(ca.certificate.pem));
 		const result = await validateCertificateRevocationList({
 			crl: parsedCrl,
 			issuerCertificate: parsedCa,
@@ -2243,7 +2245,7 @@ describe('crl', () => {
 			issuerPublicKey: ca.keyPair.publicKey,
 		});
 		const parsedCrl = parseCertificateRevocationListPem(crl.pem);
-		const parsedCa = parseCertificatePem(ca.certificate.pem);
+		const parsedCa = unwrap(parseCertificatePem(ca.certificate.pem));
 		const tamperedCrl = { ...parsedCrl, tbsCertListDer: Uint8Array.of(0x30, 0x80) };
 
 		const result = await validateCertificateRevocationList({
@@ -2309,7 +2311,7 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 		});
-		const parsedCa = parseCertificatePem(ca.certificate.pem);
+		const parsedCa = unwrap(parseCertificatePem(ca.certificate.pem));
 		const tamperedCa = {
 			...parsedCa,
 			keyUsage: { flags: [], nonZeroPadding: false },
@@ -2339,7 +2341,7 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 		});
-		const parsedLeaf = parseCertificatePem(leaf.pem);
+		const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
 		const crl = await createCertificateRevocationList({
 			issuer: { commonName: 'Tampered Parsed CRL CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
@@ -2436,7 +2438,7 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 		});
-		const parsedLeaf = parseCertificatePem(leaf.pem);
+		const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
 		const crl = await createCertificateRevocationList({
 			issuer: { commonName: 'Duplicate Revoked Entry CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
@@ -3092,7 +3094,7 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 		});
-		const parsedLeaf = parseCertificatePem(leaf.pem);
+		const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
 		const crl = await createCertificateRevocationList({
 			issuer: { commonName: 'Duplicate Revoked Entry Extension CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
@@ -3132,7 +3134,7 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 		});
-		const parsedLeaf = parseCertificatePem(leaf.pem);
+		const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
 		const crl = await createCertificateRevocationList({
 			issuer: { commonName: 'Bad Revoked Entry Extension Value CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
@@ -3173,7 +3175,7 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 		});
-		const parsedLeaf = parseCertificatePem(leaf.pem);
+		const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
 		const crl = await createCertificateRevocationList({
 			issuer: { commonName: 'Bad CertIssuer Names CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
@@ -3212,7 +3214,7 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 		});
-		const parsedLeaf = parseCertificatePem(leaf.pem);
+		const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
 		const crl = await createCertificateRevocationList({
 			issuer: { commonName: 'Bad CertIssuer Wrapper CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
@@ -3251,7 +3253,7 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 		});
-		const parsedLeaf = parseCertificatePem(leaf.pem);
+		const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
 		const crl = await createCertificateRevocationList({
 			issuer: { commonName: 'Bad Revoked Serial Tag CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
@@ -3288,7 +3290,7 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 		});
-		const parsedLeaf = parseCertificatePem(leaf.pem);
+		const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
 		const crl = await createCertificateRevocationList({
 			issuer: { commonName: 'Bad Revoked Entry Extension Middle Field CA' },
 			signerPrivateKey: ca.keyPair.privateKey,

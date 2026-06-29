@@ -46,6 +46,12 @@ import {
 	type MutableKnownParsedExtensionAccumulator,
 } from '#micro509/internal/x509/extension-registry.ts';
 import { pemDecode, splitPemBlocks } from '#micro509/pem/pem.ts';
+import {
+	type ErrorResult,
+	failureResult,
+	type Micro509Error,
+	successResult,
+} from '#micro509/result/result.ts';
 import type {
 	AuthorityInformationAccess,
 	BasicConstraints,
@@ -83,6 +89,42 @@ export type {
 	SubjectAltName,
 } from './extensions.ts';
 export type { NameFieldKey } from './name.ts';
+
+/** Machine-readable failure reason for {@linkcode parseCertificateDer} / {@linkcode parseCertificatePem}. */
+export type ParseCertificateErrorCode = 'malformed';
+
+/** Structured failure payload for certificate parsing. */
+export interface ParseCertificateFailure extends Micro509Error<ParseCertificateErrorCode> {
+	readonly ok: false;
+}
+
+/** Success-or-failure result from {@linkcode parseCertificateDer} / {@linkcode parseCertificatePem}. */
+export type ParseCertificateResult<TMap extends ExtensionDecoderMap = Record<never, never>> =
+	| { readonly ok: true; readonly value: ParsedCertificate<TMap> }
+	| ErrorResult<ParseCertificateErrorCode, Record<never, never>, ParseCertificateFailure>;
+
+/** Machine-readable failure reason for the CSR parsers. */
+export type ParseCertificateSigningRequestErrorCode = 'malformed';
+
+/** Structured failure payload for CSR parsing. */
+export interface ParseCertificateSigningRequestFailure
+	extends Micro509Error<ParseCertificateSigningRequestErrorCode> {
+	readonly ok: false;
+}
+
+/**
+ * Success-or-failure result from {@linkcode parseCertificateSigningRequestDer} /
+ * {@linkcode parseCertificateSigningRequestPem}.
+ */
+export type ParseCertificateSigningRequestResult<
+	TMap extends ExtensionDecoderMap = Record<never, never>,
+> =
+	| { readonly ok: true; readonly value: ParsedCertificateSigningRequest<TMap> }
+	| ErrorResult<
+			ParseCertificateSigningRequestErrorCode,
+			Record<never, never>,
+			ParseCertificateSigningRequestFailure
+	  >;
 
 /** Shared UTF-8 decoder for IA5String / UTF8String values. */
 const textDecoder = new TextDecoder();
@@ -395,25 +437,17 @@ export interface ParsedCertificateSigningRequest<
 }
 
 /**
- * Decode a DER-encoded X.509 certificate into a {@linkcode ParsedCertificate}.
+ * Throwing core for {@linkcode parseCertificateDer}.
  *
- * All built-in extensions (basicConstraints, keyUsage, subjectAltNames, etc.)
- * are decoded automatically.\
+ * Decodes a DER-encoded X.509 certificate into a {@linkcode ParsedCertificate},
+ * throwing on malformed input. All built-in extensions (basicConstraints,
+ * keyUsage, subjectAltNames, etc.) are decoded automatically.\
  * Pass {@linkcode ParseOptions} to also decode custom extensions.
- *
- * @example
- * ```ts
- * import { parseCertificateDer } from 'micro509';
- *
- * const cert = parseCertificateDer(derBytes);
- * console.log(cert.subject.values.commonName); // "example.com"
- * console.log(cert.keyUsage);                  // ["digitalSignature", "keyEncipherment"]
- * ```
  *
  * @param der Raw DER bytes of an X.509 certificate.
  * @param options Custom extension decoders to apply during parsing.
  */
-export function parseCertificateDer<TMap extends ExtensionDecoderMap = Record<never, never>>(
+export function parseCertificateDerOrThrow<TMap extends ExtensionDecoderMap = Record<never, never>>(
 	der: Uint8Array,
 	options?: ParseOptions<TMap>,
 ): ParsedCertificate<TMap> {
@@ -575,6 +609,36 @@ export function parseCertificateDer<TMap extends ExtensionDecoderMap = Record<ne
 }
 
 /**
+ * Decode a DER-encoded X.509 certificate into a {@linkcode ParsedCertificate}.
+ *
+ * @example
+ * ```ts
+ * import { parseCertificateDer } from 'micro509';
+ *
+ * const result = parseCertificateDer(derBytes);
+ * if (result.ok) {
+ * 	console.log(result.value.subject.values.commonName); // "example.com"
+ * }
+ * ```
+ *
+ * @param der Raw DER bytes of an X.509 certificate.
+ * @param options Custom extension decoders to apply during parsing.
+ */
+export function parseCertificateDer<TMap extends ExtensionDecoderMap = Record<never, never>>(
+	der: Uint8Array,
+	options?: ParseOptions<TMap>,
+): ParseCertificateResult<TMap> {
+	try {
+		return successResult(parseCertificateDerOrThrow(der, options));
+	} catch (error) {
+		return failureResult(
+			'malformed',
+			error instanceof Error ? error.message : 'Malformed certificate',
+		);
+	}
+}
+
+/**
  * Decode a PEM-encoded X.509 certificate into a {@linkcode ParsedCertificate}.
  *
  * Expects a single `-----BEGIN CERTIFICATE-----` block. For bundles
@@ -584,10 +648,27 @@ export function parseCertificateDer<TMap extends ExtensionDecoderMap = Record<ne
  * ```ts
  * import { parseCertificatePem } from 'micro509';
  *
- * const cert = parseCertificatePem(pemString);
- * console.log(cert.issuer.values.organization); // "Let's Encrypt"
- * console.log(cert.notAfter);          // Date
+ * const result = parseCertificatePem(pemString);
+ * if (result.ok) {
+ * 	console.log(result.value.issuer.values.organization); // "Let's Encrypt"
+ * }
  * ```
+ *
+ * @param pem PEM string with a CERTIFICATE block.
+ * @param options Custom extension decoders to apply during parsing.
+ */
+export function parseCertificatePemOrThrow<TMap extends ExtensionDecoderMap = Record<never, never>>(
+	pem: string,
+	options?: ParseOptions<TMap>,
+): ParsedCertificate<TMap> {
+	return parseCertificateDerOrThrow(pemDecode('CERTIFICATE', pem), options);
+}
+
+/**
+ * Decode a PEM-encoded X.509 certificate into a {@linkcode ParsedCertificate}.
+ *
+ * Expects a single `-----BEGIN CERTIFICATE-----` block. For bundles
+ * containing multiple certificates, use {@linkcode parseCertificateChainPem}.
  *
  * @param pem PEM string with a CERTIFICATE block.
  * @param options Custom extension decoders to apply during parsing.
@@ -595,8 +676,15 @@ export function parseCertificateDer<TMap extends ExtensionDecoderMap = Record<ne
 export function parseCertificatePem<TMap extends ExtensionDecoderMap = Record<never, never>>(
 	pem: string,
 	options?: ParseOptions<TMap>,
-): ParsedCertificate<TMap> {
-	return parseCertificateDer(pemDecode('CERTIFICATE', pem), options);
+): ParseCertificateResult<TMap> {
+	try {
+		return successResult(parseCertificatePemOrThrow(pem, options));
+	} catch (error) {
+		return failureResult(
+			'malformed',
+			error instanceof Error ? error.message : 'Malformed certificate',
+		);
+	}
 }
 
 /** Normalizes a PEM bundle or single DER certificate source into parsed certificates. */
@@ -605,7 +693,7 @@ export function parseCertificatesFromSource<
 >(source: string | Uint8Array, options?: ParseOptions<TMap>): readonly ParsedCertificate<TMap>[] {
 	return typeof source === 'string'
 		? parseCertificatesFromPemBlocks(source, options)
-		: [parseCertificateDer(new Uint8Array(source), options)];
+		: [parseCertificateDerOrThrow(new Uint8Array(source), options)];
 }
 
 /** Normalizes a PEM, DER, or already-parsed certificate source into one parsed certificate. */
@@ -614,13 +702,13 @@ export function parseCertificateFromSource<TMap extends ExtensionDecoderMap = Re
 	options?: ParseOptions<TMap>,
 ): ParsedCertificate<TMap> {
 	if (typeof source === 'string') {
-		return parseCertificatePem(source, options);
+		return parseCertificatePemOrThrow(source, options);
 	}
 	if (hasParsedCertificateShape(source)) {
 		return source;
 	}
 	const derSource: Uint8Array = source;
-	return parseCertificateDer(new Uint8Array(derSource), options);
+	return parseCertificateDerOrThrow(new Uint8Array(derSource), options);
 }
 
 /**
@@ -644,7 +732,7 @@ export function parseCertificateChainPem<TMap extends ExtensionDecoderMap = Reco
  * @param der Raw DER bytes of a PKCS#10 certificate signing request.
  * @param options Custom extension decoders to apply during parsing.
  */
-export function parseCertificateSigningRequestDer<
+export function parseCertificateSigningRequestDerOrThrow<
 	TMap extends ExtensionDecoderMap = Record<never, never>,
 >(der: Uint8Array, options?: ParseOptions<TMap>): ParsedCertificateSigningRequest<TMap> {
 	const topLevel = readSequenceChildren(der, { maxDepth: DEFAULT_MAX_DER_DEPTH });
@@ -749,13 +837,32 @@ export function parseCertificateSigningRequestDer<
 	};
 }
 
+/**
+ * Decode a DER-encoded PKCS#10 CSR into a {@linkcode ParsedCertificateSigningRequest}.
+ *
+ * @param der Raw DER bytes of a PKCS#10 certificate signing request.
+ * @param options Custom extension decoders to apply during parsing.
+ */
+export function parseCertificateSigningRequestDer<
+	TMap extends ExtensionDecoderMap = Record<never, never>,
+>(der: Uint8Array, options?: ParseOptions<TMap>): ParseCertificateSigningRequestResult<TMap> {
+	try {
+		return successResult(parseCertificateSigningRequestDerOrThrow(der, options));
+	} catch (error) {
+		return failureResult(
+			'malformed',
+			error instanceof Error ? error.message : 'Malformed certificate signing request',
+		);
+	}
+}
+
 function parseCertificatesFromPemBlocks<TMap extends ExtensionDecoderMap = Record<never, never>>(
 	pemBundle: string,
 	options?: ParseOptions<TMap>,
 ): readonly ParsedCertificate<TMap>[] {
 	return splitPemBlocks(pemBundle)
 		.filter((block) => block.label === 'CERTIFICATE')
-		.map((block) => parseCertificateDer(block.bytes, options));
+		.map((block) => parseCertificateDerOrThrow(block.bytes, options));
 }
 
 function hasParsedCertificateShape<TMap extends ExtensionDecoderMap = Record<never, never>>(
@@ -770,10 +877,29 @@ function hasParsedCertificateShape<TMap extends ExtensionDecoderMap = Record<nev
  * @param pem PEM string with a CERTIFICATE REQUEST block.
  * @param options Custom extension decoders to apply during parsing.
  */
-export function parseCertificateSigningRequestPem<
+export function parseCertificateSigningRequestPemOrThrow<
 	TMap extends ExtensionDecoderMap = Record<never, never>,
 >(pem: string, options?: ParseOptions<TMap>): ParsedCertificateSigningRequest<TMap> {
-	return parseCertificateSigningRequestDer(pemDecode('CERTIFICATE REQUEST', pem), options);
+	return parseCertificateSigningRequestDerOrThrow(pemDecode('CERTIFICATE REQUEST', pem), options);
+}
+
+/**
+ * Decode a PEM-encoded PKCS#10 CSR into a {@linkcode ParsedCertificateSigningRequest}.
+ *
+ * @param pem PEM string with a CERTIFICATE REQUEST block.
+ * @param options Custom extension decoders to apply during parsing.
+ */
+export function parseCertificateSigningRequestPem<
+	TMap extends ExtensionDecoderMap = Record<never, never>,
+>(pem: string, options?: ParseOptions<TMap>): ParseCertificateSigningRequestResult<TMap> {
+	try {
+		return successResult(parseCertificateSigningRequestPemOrThrow(pem, options));
+	} catch (error) {
+		return failureResult(
+			'malformed',
+			error instanceof Error ? error.message : 'Malformed certificate signing request',
+		);
+	}
 }
 
 /**

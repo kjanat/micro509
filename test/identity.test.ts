@@ -5,13 +5,14 @@ import {
 	generateKeyPair,
 	matchServiceIdentity,
 	parseCertificatePem,
+	unwrap,
 } from 'micro509';
 import { issueChain } from './helpers.ts';
 
 describe('identity boundary', () => {
 	it('matches DNS SANs through the dedicated identity API', async () => {
 		const { leaf } = await issueChain();
-		const certificate = parseCertificatePem(leaf.pem);
+		const certificate = unwrap(parseCertificatePem(leaf.pem));
 
 		expect(
 			matchServiceIdentity({
@@ -42,7 +43,7 @@ describe('identity boundary', () => {
 				subjectAltNames: [{ type: 'ip', value: '2001:db8::1' }],
 			},
 		});
-		const certificate = parseCertificatePem(leaf.pem);
+		const certificate = unwrap(parseCertificatePem(leaf.pem));
 
 		expect(
 			matchServiceIdentity({
@@ -79,7 +80,7 @@ describe('identity boundary', () => {
 				subjectAltNames: [{ type: 'ip', value: '2001:db8::1' }],
 			},
 		});
-		const certificate = parseCertificatePem(leaf.pem);
+		const certificate = unwrap(parseCertificatePem(leaf.pem));
 		const tamperedCertificate = {
 			...certificate,
 			subjectAltNames: [
@@ -116,7 +117,7 @@ describe('identity boundary', () => {
 				extendedKeyUsage: ['serverAuth'],
 			},
 		});
-		const certificate = parseCertificatePem(leaf.pem);
+		const certificate = unwrap(parseCertificatePem(leaf.pem));
 		const tamperedCertificate = {
 			...certificate,
 			subjectAltNames: [{ type: 'dns' as const, value: 'forged.example' }],
@@ -132,7 +133,7 @@ describe('identity boundary', () => {
 
 	it('fails closed for malformed ParsedCertificate DER during identity matching', async () => {
 		const { leaf } = await issueChain();
-		const certificate = parseCertificatePem(leaf.pem);
+		const certificate = unwrap(parseCertificatePem(leaf.pem));
 		expect(
 			matchServiceIdentity({
 				certificate: { ...certificate, der: Uint8Array.of(0xff, 0xff) },
@@ -162,7 +163,7 @@ describe('identity boundary', () => {
 				subjectAltNames: [{ type: 'dns', value: '*.example.com' }],
 			},
 		});
-		const certificate = parseCertificatePem(leaf.pem);
+		const certificate = unwrap(parseCertificatePem(leaf.pem));
 
 		expect(
 			matchServiceIdentity({
@@ -205,7 +206,7 @@ describe('identity boundary', () => {
 				subjectAltNames: [{ type: 'dns', value: '*.xn--bcher-kva.example' }],
 			},
 		});
-		const certificate = parseCertificatePem(leaf.pem);
+		const certificate = unwrap(parseCertificatePem(leaf.pem));
 
 		expect(
 			matchServiceIdentity({
@@ -240,7 +241,7 @@ describe('identity boundary', () => {
 				subjectAltNames: [{ type: 'dns', value: 'a*b.example.com' }],
 			},
 		});
-		const certificate = parseCertificatePem(leaf.pem);
+		const certificate = unwrap(parseCertificatePem(leaf.pem));
 
 		expect(
 			matchServiceIdentity({
@@ -270,7 +271,7 @@ describe('identity boundary', () => {
 				extendedKeyUsage: ['serverAuth'],
 			},
 		});
-		const certificate = parseCertificatePem(leaf.pem);
+		const certificate = unwrap(parseCertificatePem(leaf.pem));
 
 		expect(
 			matchServiceIdentity({
@@ -305,7 +306,7 @@ describe('identity boundary', () => {
 				subjectAltNames: [{ type: 'dns', value: 'other.example' }],
 			},
 		});
-		const certificate = parseCertificatePem(leaf.pem);
+		const certificate = unwrap(parseCertificatePem(leaf.pem));
 
 		expect(
 			matchServiceIdentity({
@@ -347,7 +348,7 @@ describe('identity boundary', () => {
 				subjectAltNames: [{ type: 'uri', value: 'https://api.example.com/login' }],
 			},
 		});
-		const certificate = parseCertificatePem(leaf.pem);
+		const certificate = unwrap(parseCertificatePem(leaf.pem));
 
 		expect(
 			matchServiceIdentity({
@@ -389,7 +390,7 @@ describe('identity boundary', () => {
 				subjectAltNames: [{ type: 'srv', value: '_xmpp-client.im.example.org' }],
 			},
 		});
-		const certificate = parseCertificatePem(leaf.pem);
+		const certificate = unwrap(parseCertificatePem(leaf.pem));
 
 		expect(
 			matchServiceIdentity({
@@ -431,7 +432,7 @@ describe('identity boundary', () => {
 				subjectAltNames: [{ type: 'ip', value: '10.0.0.1' }],
 			},
 		});
-		const certificate = parseCertificatePem(leaf.pem);
+		const certificate = unwrap(parseCertificatePem(leaf.pem));
 
 		expect(
 			matchServiceIdentity({
@@ -464,7 +465,7 @@ describe('identity boundary', () => {
 				keyUsage: ['digitalSignature'],
 			},
 		});
-		const certificate = parseCertificatePem(leaf.pem);
+		const certificate = unwrap(parseCertificatePem(leaf.pem));
 
 		expect(
 			matchServiceIdentity({
@@ -511,7 +512,7 @@ describe('identity boundary', () => {
 				subjectAltNames: [{ type: 'ip', value: '::1' }],
 			},
 		});
-		const certificate = parseCertificatePem(leaf.pem);
+		const certificate = unwrap(parseCertificatePem(leaf.pem));
 
 		expect(
 			matchServiceIdentity({
@@ -542,7 +543,7 @@ describe('identity boundary', () => {
 				subjectAltNames: [{ type: 'uri', value: 'https://api.example.com/admin' }],
 			},
 		});
-		const certificate = parseCertificatePem(leaf.pem);
+		const certificate = unwrap(parseCertificatePem(leaf.pem));
 
 		expect(
 			matchServiceIdentity({
@@ -579,7 +580,7 @@ describe('identity boundary', () => {
 				subjectAltNames: [{ type: 'uri', value: 'https://api.example.com/admin' }],
 			},
 		});
-		const certificate = parseCertificatePem(leaf.pem);
+		const certificate = unwrap(parseCertificatePem(leaf.pem));
 
 		expect(
 			matchServiceIdentity({
@@ -610,7 +611,7 @@ describe('identity boundary', () => {
 				subjectAltNames: [{ type: 'dns', value: 'uri-missing.example' }],
 			},
 		});
-		const certificate = parseCertificatePem(leaf.pem);
+		const certificate = unwrap(parseCertificatePem(leaf.pem));
 
 		expect(
 			matchServiceIdentity({
@@ -647,7 +648,7 @@ describe('identity boundary', () => {
 				subjectAltNames: [{ type: 'uri', value: 'HTTPS://xn--bcher-kva.example/admin' }],
 			},
 		});
-		const certificate = parseCertificatePem(leaf.pem);
+		const certificate = unwrap(parseCertificatePem(leaf.pem));
 
 		expect(
 			matchServiceIdentity({
@@ -678,7 +679,7 @@ describe('identity boundary', () => {
 				subjectAltNames: [{ type: 'srv', value: '_xmpp-client.im.example.org' }],
 			},
 		});
-		const certificate = parseCertificatePem(leaf.pem);
+		const certificate = unwrap(parseCertificatePem(leaf.pem));
 
 		expect(
 			matchServiceIdentity({
@@ -715,7 +716,7 @@ describe('identity boundary', () => {
 				subjectAltNames: [{ type: 'srv', value: '_xmpp-client.im.example.org' }],
 			},
 		});
-		const certificate = parseCertificatePem(leaf.pem);
+		const certificate = unwrap(parseCertificatePem(leaf.pem));
 
 		expect(
 			matchServiceIdentity({
@@ -746,7 +747,7 @@ describe('identity boundary', () => {
 				subjectAltNames: [{ type: 'dns', value: 'srv-missing.example' }],
 			},
 		});
-		const certificate = parseCertificatePem(leaf.pem);
+		const certificate = unwrap(parseCertificatePem(leaf.pem));
 
 		expect(
 			matchServiceIdentity({
@@ -782,7 +783,7 @@ describe('identity boundary', () => {
 				subjectAltNames: [{ type: 'dns', value: 'unsupported-type.example' }],
 			},
 		});
-		const certificate = parseCertificatePem(leaf.pem);
+		const certificate = unwrap(parseCertificatePem(leaf.pem));
 		const serviceIdentity = { type: 'dns' as const, value: 'unsupported-type.example' };
 		Object.defineProperty(serviceIdentity, 'type', { value: 'gopher' });
 
@@ -814,7 +815,7 @@ describe('identity boundary', () => {
 				subjectAltNames: [{ type: 'dns', value: 'hostile-value.example' }],
 			},
 		});
-		const certificate = parseCertificatePem(leaf.pem);
+		const certificate = unwrap(parseCertificatePem(leaf.pem));
 		const hostileValue = {
 			[Symbol.toPrimitive](): string {
 				throw new Error('should not coerce');
@@ -852,7 +853,7 @@ describe('identity boundary', () => {
 				subjectAltNames: [{ type: 'srv', value: '_xmpp-client.xn--bcher-kva.example' }],
 			},
 		});
-		const certificate = parseCertificatePem(leaf.pem);
+		const certificate = unwrap(parseCertificatePem(leaf.pem));
 
 		expect(
 			matchServiceIdentity({

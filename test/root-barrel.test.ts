@@ -13,6 +13,7 @@ import {
 	pemDecode,
 	pemEncode,
 	verifyCertificateChain,
+	unwrap,
 } from 'micro509';
 
 describe('root barrel', () => {
@@ -27,7 +28,7 @@ describe('root barrel', () => {
 		});
 		expect(certificate.pem).toContain('-----BEGIN CERTIFICATE-----');
 
-		const parsed = parseCertificatePem(certificate.pem);
+		const parsed = unwrap(parseCertificatePem(certificate.pem));
 		expect(parsed.subject.values.commonName).toBe('barrel.example');
 		expect(parsed.issuer.values.commonName).toBe('barrel.example');
 
@@ -69,7 +70,7 @@ describe('root barrel', () => {
 		});
 		expect(csr.pem).toContain('-----BEGIN CERTIFICATE REQUEST-----');
 
-		const parsed = parseCertificateSigningRequestPem(csr.pem);
+		const parsed = unwrap(parseCertificateSigningRequestPem(csr.pem));
 		expect(parsed.subject.values.commonName).toBe('csr-barrel.example');
 		expect(parsed.subjectPublicKeyInfoDer.byteLength).toBeGreaterThan(0);
 	});
@@ -88,7 +89,7 @@ describe('root barrel', () => {
 			publicKey: keyPair.publicKey,
 			signerPrivateKey: imported,
 		});
-		const parsed = parseCertificateSigningRequestPem(csr.pem);
+		const parsed = unwrap(parseCertificateSigningRequestPem(csr.pem));
 		expect(parsed.subject.values.commonName).toBe('reimported.example');
 	});
 

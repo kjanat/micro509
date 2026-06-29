@@ -11,6 +11,7 @@ import {
 	parsePkcs7SignedDataDer,
 	parsePkcs7SignedDataPem,
 	verifyPkcs7SignedData,
+	unwrap,
 } from 'micro509';
 import {
 	concatBytes,
@@ -62,7 +63,7 @@ describe('pkcs7', () => {
 		const signer = await createSelfSignedCertificate({
 			subject: { commonName: 'CMS SignedAttrs Signer' },
 		});
-		const parsedSigner = parseCertificatePem(signer.certificate.pem);
+		const parsedSigner = unwrap(parseCertificatePem(signer.certificate.pem));
 		const content = new TextEncoder().encode('Hello CMS signed attributes');
 		const signedDataDer = await createCmsSignedDataWithSignedAttrs(
 			parsedSigner,
@@ -82,7 +83,7 @@ describe('pkcs7', () => {
 		const signer = await createSelfSignedCertificate({
 			subject: { commonName: 'CMS Tamper Test' },
 		});
-		const parsedSigner = parseCertificatePem(signer.certificate.pem);
+		const parsedSigner = unwrap(parseCertificatePem(signer.certificate.pem));
 		const content = new TextEncoder().encode('Original content');
 		const signedDataDer = await createCmsSignedDataWithSignedAttrs(
 			parsedSigner,
@@ -113,7 +114,7 @@ describe('pkcs7', () => {
 		const signer = await createSelfSignedCertificate({
 			subject: { commonName: 'CMS Signer' },
 		});
-		const parsedSigner = parseCertificatePem(signer.certificate.pem);
+		const parsedSigner = unwrap(parseCertificatePem(signer.certificate.pem));
 		const signedDataDer = createSyntheticPkcs7SignedData(parsedSigner);
 		const parsed = parsePkcs7SignedDataDer(signedDataDer);
 		expect(parsed.ok).toBe(true);
@@ -222,7 +223,7 @@ describe('pkcs7', () => {
 		const signer = await createSelfSignedCertificate({
 			subject: { commonName: 'PEM Verify Signer' },
 		});
-		const parsedSigner = parseCertificatePem(signer.certificate.pem);
+		const parsedSigner = unwrap(parseCertificatePem(signer.certificate.pem));
 		const content = new TextEncoder().encode('PEM verify test');
 		const der = await createCmsSignedDataWithSignedAttrs(
 			parsedSigner,
@@ -238,7 +239,7 @@ describe('pkcs7', () => {
 		const signer = await createSelfSignedCertificate({
 			subject: { commonName: 'Parsed Verify Signer' },
 		});
-		const parsedSigner = parseCertificatePem(signer.certificate.pem);
+		const parsedSigner = unwrap(parseCertificatePem(signer.certificate.pem));
 		const content = new TextEncoder().encode('Parsed verify test');
 		const der = await createCmsSignedDataWithSignedAttrs(
 			parsedSigner,
@@ -256,7 +257,7 @@ describe('pkcs7', () => {
 		const signer = await createSelfSignedCertificate({
 			subject: { commonName: 'SKI Verify Signer' },
 		});
-		const parsedSigner = parseCertificatePem(signer.certificate.pem);
+		const parsedSigner = unwrap(parseCertificatePem(signer.certificate.pem));
 		const subjectKeyIdentifier = parsedSigner.subjectKeyIdentifier;
 		if (subjectKeyIdentifier === undefined) {
 			throw new Error('expected subjectKeyIdentifier');
@@ -295,7 +296,7 @@ describe('pkcs7', () => {
 		const signer = await createSelfSignedCertificate({
 			subject: { commonName: 'Dual Identifier Signer' },
 		});
-		const parsedSigner = parseCertificatePem(signer.certificate.pem);
+		const parsedSigner = unwrap(parseCertificatePem(signer.certificate.pem));
 		const subjectKeyIdentifier = parsedSigner.subjectKeyIdentifier;
 		if (subjectKeyIdentifier === undefined) {
 			throw new Error('expected subjectKeyIdentifier');
@@ -331,7 +332,7 @@ describe('pkcs7', () => {
 			subject: { commonName: 'DER-less PKCS7 Signer' },
 		});
 		const parsed = parsePkcs7SignedDataDer(
-			createSyntheticPkcs7SignedData(parseCertificatePem(signer.certificate.pem)),
+			createSyntheticPkcs7SignedData(unwrap(parseCertificatePem(signer.certificate.pem))),
 		);
 		expect(parsed.ok).toBe(true);
 		if (!parsed.ok) throw new Error('unreachable');
@@ -350,7 +351,7 @@ describe('pkcs7', () => {
 		const other = await createSelfSignedCertificate({
 			subject: { commonName: 'Other' },
 		});
-		const parsedSigner = parseCertificatePem(signer.certificate.pem);
+		const parsedSigner = unwrap(parseCertificatePem(signer.certificate.pem));
 		const content = new TextEncoder().encode('PKCS7 parsed certificate trust');
 		const signedDataDer = await createCmsSignedDataWithSignedAttrs(
 			parsedSigner,
@@ -360,7 +361,7 @@ describe('pkcs7', () => {
 		const parsed = parsePkcs7SignedDataDer(signedDataDer);
 		expect(parsed.ok).toBe(true);
 		if (!parsed.ok) throw new Error('unreachable');
-		const otherParsed = parseCertificatePem(other.certificate.pem);
+		const otherParsed = unwrap(parseCertificatePem(other.certificate.pem));
 		const tampered = {
 			...parsed.value,
 			certificates: [otherParsed],
@@ -374,7 +375,7 @@ describe('pkcs7', () => {
 		const signer = await createSelfSignedCertificate({
 			subject: { commonName: 'Malformed Attrs Signer' },
 		});
-		const parsedSigner = parseCertificatePem(signer.certificate.pem);
+		const parsedSigner = unwrap(parseCertificatePem(signer.certificate.pem));
 		const content = new TextEncoder().encode('Malformed attrs content');
 		const der = await createCmsSignedDataWithSignedAttrs(
 			parsedSigner,
@@ -399,7 +400,7 @@ describe('pkcs7', () => {
 		const signer = await createSelfSignedCertificate({
 			subject: { commonName: 'Retagged Attrs Signer' },
 		});
-		const parsedSigner = parseCertificatePem(signer.certificate.pem);
+		const parsedSigner = unwrap(parseCertificatePem(signer.certificate.pem));
 		const content = new TextEncoder().encode('Retagged attrs content');
 		const der = await createCmsSignedDataWithSignedAttrs(
 			parsedSigner,
@@ -432,7 +433,7 @@ describe('pkcs7', () => {
 			subject: { commonName: 'SHA384 CMS Signer' },
 			keyPair: rsaKeys,
 		});
-		const parsedSigner = parseCertificatePem(signer.certificate.pem);
+		const parsedSigner = unwrap(parseCertificatePem(signer.certificate.pem));
 		const content = new TextEncoder().encode('SHA-384 signed data');
 		// Build CMS with SHA-384 digest
 		const contentDigest = createHash('sha384').update(content).digest();
@@ -484,7 +485,7 @@ describe('pkcs7', () => {
 			},
 			signature: { kind: 'rsa-pss' },
 		});
-		const parsedSigner = parseCertificatePem(signer.certificate.pem);
+		const parsedSigner = unwrap(parseCertificatePem(signer.certificate.pem));
 		const content = new TextEncoder().encode('RSA-PSS signed attrs');
 		const contentDigest = createHash('sha384').update(content).digest();
 		const signedAttrsContent = concatBytes([
@@ -533,7 +534,7 @@ describe('pkcs7', () => {
 			subject: { commonName: 'Bad Sig CMS' },
 			keyPair: rsaKeys,
 		});
-		const parsedSigner = parseCertificatePem(signer.certificate.pem);
+		const parsedSigner = unwrap(parseCertificatePem(signer.certificate.pem));
 		const content = new TextEncoder().encode('content for bad sig test');
 		const contentDigest = createHash('sha256').update(content).digest();
 		const signedAttrsContent = concatBytes([
@@ -584,7 +585,7 @@ describe('pkcs7', () => {
 			subject: { commonName: 'No Digest CMS' },
 			keyPair: rsaKeys,
 		});
-		const parsedSigner = parseCertificatePem(signer.certificate.pem);
+		const parsedSigner = unwrap(parseCertificatePem(signer.certificate.pem));
 		const content = new TextEncoder().encode('content for no digest');
 		// signedAttrs without messageDigest attribute
 		const signedAttrsContent = concatBytes([
@@ -627,7 +628,7 @@ describe('pkcs7', () => {
 			subject: { commonName: 'Duplicate Digest CMS' },
 			keyPair: rsaKeys,
 		});
-		const parsedSigner = parseCertificatePem(signer.certificate.pem);
+		const parsedSigner = unwrap(parseCertificatePem(signer.certificate.pem));
 		const content = new TextEncoder().encode('content for duplicate digest');
 		const contentDigest = createHash('sha256').update(content).digest();
 		const signedAttrsContent = concatBytes([
@@ -677,7 +678,7 @@ describe('pkcs7', () => {
 			subject: { commonName: 'Multi Digest CMS' },
 			keyPair: rsaKeys,
 		});
-		const parsedSigner = parseCertificatePem(signer.certificate.pem);
+		const parsedSigner = unwrap(parseCertificatePem(signer.certificate.pem));
 		const content = new TextEncoder().encode('content for multi digest');
 		const contentDigest = createHash('sha256').update(content).digest();
 		const signedAttrsContent = concatBytes([
@@ -726,7 +727,7 @@ describe('pkcs7', () => {
 			subject: { commonName: 'Bad ContentType CMS' },
 			keyPair: rsaKeys,
 		});
-		const parsedSigner = parseCertificatePem(signer.certificate.pem);
+		const parsedSigner = unwrap(parseCertificatePem(signer.certificate.pem));
 		const content = new TextEncoder().encode('content for bad contentType');
 		const contentDigest = createHash('sha256').update(content).digest();
 		const signedAttrsContent = concatBytes([
@@ -775,7 +776,7 @@ describe('pkcs7', () => {
 			subject: { commonName: 'Duplicate ContentType CMS' },
 			keyPair: rsaKeys,
 		});
-		const parsedSigner = parseCertificatePem(signer.certificate.pem);
+		const parsedSigner = unwrap(parseCertificatePem(signer.certificate.pem));
 		const content = new TextEncoder().encode('content for duplicate contentType');
 		const contentDigest = createHash('sha256').update(content).digest();
 		const signedAttrsContent = concatBytes([
@@ -822,7 +823,7 @@ describe('pkcs7', () => {
 			subject: { commonName: 'Multi ContentType CMS' },
 			keyPair: rsaKeys,
 		});
-		const parsedSigner = parseCertificatePem(signer.certificate.pem);
+		const parsedSigner = unwrap(parseCertificatePem(signer.certificate.pem));
 		const content = new TextEncoder().encode('content for multi contentType');
 		const contentDigest = createHash('sha256').update(content).digest();
 		const signedAttrsContent = concatBytes([
@@ -881,7 +882,7 @@ describe('pkcs7', () => {
 			subject: { commonName: 'Direct Sig Signer' },
 			keyPair: rsaKeys,
 		});
-		const parsedSigner = parseCertificatePem(signer.certificate.pem);
+		const parsedSigner = unwrap(parseCertificatePem(signer.certificate.pem));
 		const content = new Uint8Array([0x48, 0x65, 0x6c, 0x6c, 0x6f]);
 		const sigAlgorithm = getSignatureAlgorithm(rsaKeys.privateKey);
 		const badSig = await signBytes(rsaKeys.privateKey, sigAlgorithm, new Uint8Array([0xff]));
@@ -981,7 +982,7 @@ describe('pkcs7', () => {
 		const signer = await createSelfSignedCertificate({
 			subject: { commonName: 'Duplicate PKCS7 Certs' },
 		});
-		const parsedSigner = parseCertificatePem(signer.certificate.pem);
+		const parsedSigner = unwrap(parseCertificatePem(signer.certificate.pem));
 		const signedData = sequence([
 			integerFromNumber(1),
 			setOf([sequence([objectIdentifier(OIDS.sha256)])]),
@@ -1013,7 +1014,7 @@ describe('pkcs7', () => {
 		const signer = await createSelfSignedCertificate({
 			subject: { commonName: 'Trailing SignerInfo CMS' },
 		});
-		const parsedSigner = parseCertificatePem(signer.certificate.pem);
+		const parsedSigner = unwrap(parseCertificatePem(signer.certificate.pem));
 		const signerInfo = sequence([
 			integerFromNumber(1),
 			sequence([
@@ -1042,7 +1043,7 @@ describe('pkcs7', () => {
 		const signer = await createSelfSignedCertificate({
 			subject: { commonName: 'Out Of Order PKCS7 Certs' },
 		});
-		const parsedSigner = parseCertificatePem(signer.certificate.pem);
+		const parsedSigner = unwrap(parseCertificatePem(signer.certificate.pem));
 		const signedData = sequence([
 			integerFromNumber(1),
 			setOf([sequence([objectIdentifier(OIDS.sha256)])]),
@@ -1064,7 +1065,7 @@ describe('pkcs7', () => {
 			subject: { commonName: 'EmptySID' },
 			keyPair: rsaKeys,
 		});
-		const parsedSigner = parseCertificatePem(cert.certificate.pem);
+		const parsedSigner = unwrap(parseCertificatePem(cert.certificate.pem));
 		// SignerInfo with empty issuerAndSerialNumber SEQUENCE
 		const signerInfo = sequence([
 			integerFromNumber(1),
@@ -1158,7 +1159,7 @@ describe('pkcs7', () => {
 			subject: { commonName: 'SHA512 CMS Signer' },
 			keyPair: rsaKeys,
 		});
-		const parsedSigner = parseCertificatePem(signer.certificate.pem);
+		const parsedSigner = unwrap(parseCertificatePem(signer.certificate.pem));
 		const content = new TextEncoder().encode('SHA-512 signed data');
 		const contentDigest = createHash('sha512').update(content).digest();
 		const signedAttrsContent = concatBytes([
@@ -1207,7 +1208,7 @@ describe('pkcs7: coverage — error paths', () => {
 			subject: { commonName: 'PKCS7 Bad Sig CA' },
 			keyPair: rsaKeys,
 		});
-		const parsedSigner = parseCertificatePem(ca.certificate.pem);
+		const parsedSigner = unwrap(parseCertificatePem(ca.certificate.pem));
 		const content = new Uint8Array([0x48, 0x65, 0x6c, 0x6c, 0x6f]);
 		const { getSignatureAlgorithm: getSigAlgo, signBytes: signB } = await import(
 			'#micro509/internal/crypto/signing.ts'
@@ -1249,7 +1250,7 @@ describe('pkcs7: coverage — error paths', () => {
 			subject: { commonName: 'PKCS7 Bad Digest CA' },
 			keyPair: rsaKeys,
 		});
-		const parsedSigner = parseCertificatePem(ca.certificate.pem);
+		const parsedSigner = unwrap(parseCertificatePem(ca.certificate.pem));
 		const content = new Uint8Array([0x41, 0x42, 0x43]);
 		const { getSignatureAlgorithm: getSigAlgo, signBytes: signB } = await import(
 			'#micro509/internal/crypto/signing.ts'
@@ -1316,7 +1317,7 @@ describe('pkcs7: coverage — error paths', () => {
 			subject: { commonName: 'PKCS7 Bad OID CA' },
 			keyPair: rsaKeys,
 		});
-		const parsedSigner = parseCertificatePem(ca.certificate.pem);
+		const parsedSigner = unwrap(parseCertificatePem(ca.certificate.pem));
 		const content = new Uint8Array([0x01]);
 		const { getSignatureAlgorithm: getSigAlgo, signBytes: signB } = await import(
 			'#micro509/internal/crypto/signing.ts'
@@ -1369,7 +1370,7 @@ describe('pkcs7: coverage — error paths', () => {
 			subject: { commonName: 'PKCS7 Bad Tag CA' },
 			keyPair: rsaKeys,
 		});
-		const parsedSigner = parseCertificatePem(ca.certificate.pem);
+		const parsedSigner = unwrap(parseCertificatePem(ca.certificate.pem));
 		const content = new Uint8Array([0x01]);
 		const { getSignatureAlgorithm: getSigAlgo, signBytes: signB } = await import(
 			'#micro509/internal/crypto/signing.ts'
@@ -1420,7 +1421,7 @@ describe('pkcs7: coverage — error paths', () => {
 			subject: { commonName: 'PKCS7 Bad Attr Shape CA' },
 			keyPair: rsaKeys,
 		});
-		const parsedSigner = parseCertificatePem(ca.certificate.pem);
+		const parsedSigner = unwrap(parseCertificatePem(ca.certificate.pem));
 		const content = new Uint8Array([0x01]);
 		const sigAlgorithm = getSignatureAlgorithm(rsaKeys.privateKey);
 		const signedAttrsContent = concatBytes([
@@ -1465,7 +1466,7 @@ describe('pkcs7: coverage — error paths', () => {
 			subject: { commonName: 'PKCS7 Bad ContentType Tag CA' },
 			keyPair: rsaKeys,
 		});
-		const parsedSigner = parseCertificatePem(ca.certificate.pem);
+		const parsedSigner = unwrap(parseCertificatePem(ca.certificate.pem));
 		const content = new Uint8Array([0x01]);
 		const sigAlgorithm = getSignatureAlgorithm(rsaKeys.privateKey);
 		const signedAttrsContent = concatBytes([

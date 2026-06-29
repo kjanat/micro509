@@ -57,9 +57,9 @@ import type {
 	ParsedName,
 } from '#micro509/x509/parse.ts';
 import {
-	parseCertificateDer,
-	parseCertificateSigningRequestDer,
-	parseCertificateSigningRequestPem,
+	parseCertificateDerOrThrow,
+	parseCertificateSigningRequestDerOrThrow,
+	parseCertificateSigningRequestPemOrThrow,
 } from '#micro509/x509/parse.ts';
 import {
 	checkChainRevocation,
@@ -1000,8 +1000,8 @@ export async function verifyCertificateSigningRequest(
 	try {
 		parsed =
 			typeof input === 'string'
-				? parseCertificateSigningRequestPem(input)
-				: parseCertificateSigningRequestDer(new Uint8Array(input));
+				? parseCertificateSigningRequestPemOrThrow(input)
+				: parseCertificateSigningRequestDerOrThrow(new Uint8Array(input));
 	} catch (error) {
 		return verifyRequestFailureResult(
 			'signature_invalid',
@@ -1466,7 +1466,7 @@ function normalizeValidationChain(
 }
 
 function reparseCertificateForTrust(certificate: ParsedCertificate): ParsedCertificate {
-	return parseCertificateDer(new Uint8Array(certificate.der));
+	return parseCertificateDerOrThrow(new Uint8Array(certificate.der));
 }
 
 /** Returns `true` if the value is a non-negative integer (including zero). */

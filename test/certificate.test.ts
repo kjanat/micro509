@@ -8,6 +8,7 @@ import {
 	parseCertificateDer,
 	parseCertificatePem,
 	verifyCertificateChain,
+	unwrap,
 } from '#micro509';
 import { readElement } from '#micro509/internal/asn1/der.ts';
 import { OIDS } from '#micro509/internal/asn1/oids.ts';
@@ -92,7 +93,7 @@ describe('certificate', () => {
 			}),
 		).toMatchObject({ ok: true });
 		expect(hasExtensionOid(leaf.der, OIDS.extendedKeyUsage)).toBe(true);
-		const parsed = parseCertificatePem(leaf.pem);
+		const parsed = unwrap(parseCertificatePem(leaf.pem));
 		expect(parsed.subject.values.commonName).toBe('leaf.example');
 		expect(parsed.issuer.values.commonName).toBe('Micro509 Test CA');
 		expect(parsed.subjectAltNames).toEqual([{ type: 'dns', value: 'leaf.example' }]);
@@ -139,11 +140,11 @@ describe('certificate', () => {
 		});
 
 		const expectedParameters = encodeRsaPssParameters(rsaPssParametersForHash('SHA-384'));
-		expect(parseCertificatePem(root.certificate.pem)).toMatchObject({
+		expect(unwrap(parseCertificatePem(root.certificate.pem))).toMatchObject({
 			signatureAlgorithmOid: OIDS.rsassaPss,
 			signatureAlgorithmParametersDer: expectedParameters,
 		});
-		expect(parseCertificatePem(leaf.pem)).toMatchObject({
+		expect(unwrap(parseCertificatePem(leaf.pem))).toMatchObject({
 			signatureAlgorithmOid: OIDS.rsassaPss,
 			signatureAlgorithmParametersDer: expectedParameters,
 		});
@@ -184,10 +185,10 @@ describe('certificate', () => {
 			},
 		});
 
-		expect(parseCertificatePem(root.certificate.pem).signatureAlgorithmOid).toBe(
+		expect(unwrap(parseCertificatePem(root.certificate.pem)).signatureAlgorithmOid).toBe(
 			OIDS.ecdsaWithSHA512,
 		);
-		expect(parseCertificatePem(leaf.pem)).toMatchObject({
+		expect(unwrap(parseCertificatePem(leaf.pem))).toMatchObject({
 			signatureAlgorithmOid: OIDS.ecdsaWithSHA512,
 			publicKeyParametersOid: OIDS.secp521r1,
 		});
@@ -244,7 +245,7 @@ describe('certificate', () => {
 			},
 		});
 
-		const parsed = parseCertificatePem(leaf.pem);
+		const parsed = unwrap(parseCertificatePem(leaf.pem));
 		expect(parsed.crlDistributionPoints).toHaveLength(2);
 		expect(parsed.crlDistributionPoints?.[0]).toMatchObject({
 			distributionPoint: {
@@ -287,7 +288,7 @@ describe('certificate', () => {
 			},
 		});
 
-		const parsed = parseCertificatePem(certificate.pem);
+		const parsed = unwrap(parseCertificatePem(certificate.pem));
 		expect(parsed.crlDistributionPoints).toEqual([
 			{
 				reasons: { flags: ['cACompromise'], nonZeroPadding: false },
@@ -310,7 +311,7 @@ describe('certificate', () => {
 				],
 			},
 		});
-		const parsed = parseCertificatePem(certificate.pem);
+		const parsed = unwrap(parseCertificatePem(certificate.pem));
 		expect(parsed.subjectAltNames).toEqual([
 			{ type: 'email', value: 'user@example.com' },
 			{ type: 'uri', value: 'https://example.com/path' },
@@ -330,7 +331,7 @@ describe('certificate', () => {
 				],
 			},
 		});
-		const parsed = parseCertificatePem(certificate.pem);
+		const parsed = unwrap(parseCertificatePem(certificate.pem));
 		expect(parsed.authorityInfoAccess).toEqual([
 			{
 				method: { type: 'oid', value: '1.3.6.1.5.5.7.48.99' },
@@ -368,7 +369,7 @@ describe('certificate', () => {
 			},
 		});
 
-		const parsed = parseCertificatePem(certificate.pem);
+		const parsed = unwrap(parseCertificatePem(certificate.pem));
 		const certificatePolicies = findExtension(parsed.extensions, OIDS.certificatePolicies);
 		const policyMappings = findExtension(parsed.extensions, OIDS.policyMappings);
 		const policyConstraints = findExtension(parsed.extensions, OIDS.policyConstraints);
@@ -431,7 +432,7 @@ describe('certificate', () => {
 				subjectAltNames: [{ type: 'dns', value: 'example.com' }],
 			},
 		});
-		const parsed = parseCertificateDer(certificate.der);
+		const parsed = unwrap(parseCertificateDer(certificate.der));
 		expect(parsed.subject.rdns).toHaveLength(0);
 		expect(parsed.subjectAltNames).toEqual([{ type: 'dns', value: 'example.com' }]);
 		// SAN must be critical when subject DN is empty
@@ -451,21 +452,21 @@ describe('certificate', () => {
 			algorithm: { kind: 'rsa', modulusLength: 2048, hash: 'SHA-384' },
 		});
 		expect(rsaSha384.certificate.pem).toContain('BEGIN CERTIFICATE');
-		const parsed384 = parseCertificatePem(rsaSha384.certificate.pem);
+		const parsed384 = unwrap(parseCertificatePem(rsaSha384.certificate.pem));
 		expect(parsed384.signatureAlgorithmOid).toBe('1.2.840.113549.1.1.12');
 
 		const rsaSha512 = await createSelfSignedCertificate({
 			subject: { commonName: 'rsa512.example' },
 			algorithm: { kind: 'rsa', modulusLength: 2048, hash: 'SHA-512' },
 		});
-		const parsed512 = parseCertificatePem(rsaSha512.certificate.pem);
+		const parsed512 = unwrap(parseCertificatePem(rsaSha512.certificate.pem));
 		expect(parsed512.signatureAlgorithmOid).toBe('1.2.840.113549.1.1.13');
 
 		const ecP384 = await createSelfSignedCertificate({
 			subject: { commonName: 'ecp384.example' },
 			algorithm: { kind: 'ecdsa', curve: 'P-384' },
 		});
-		const parsedEc384 = parseCertificatePem(ecP384.certificate.pem);
+		const parsedEc384 = unwrap(parseCertificatePem(ecP384.certificate.pem));
 		expect(parsedEc384.signatureAlgorithmOid).toBe('1.2.840.10045.4.3.3');
 	});
 

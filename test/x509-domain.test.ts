@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { generateKeyPair } from '#micro509';
+import { generateKeyPair, unwrap } from '#micro509';
 import type { NameInput } from '#micro509/x509/index.ts';
 import * as x509 from '#micro509/x509/index.ts';
 
@@ -32,7 +32,7 @@ describe('x509 domain', () => {
 		expect(certificate.pem).toStartWith('-----BEGIN CERTIFICATE-----');
 		expect(certificate.der.byteLength).toBeGreaterThan(0);
 
-		const parsed = x509.parseCertificatePem(certificate.pem);
+		const parsed = unwrap(x509.parseCertificatePem(certificate.pem));
 
 		expect(parsed.version).toBe(3);
 		expect(parsed.subject.values.commonName).toBe('test-ca.example');
@@ -70,7 +70,7 @@ describe('x509 domain', () => {
 
 		expect(csr.pem).toContain('CERTIFICATE REQUEST');
 
-		const parsed = x509.parseCertificateSigningRequestPem(csr.pem);
+		const parsed = unwrap(x509.parseCertificateSigningRequestPem(csr.pem));
 
 		expect(parsed.version).toBe(1);
 		expect(parsed.subject.values.commonName).toBe('leaf.example.com');

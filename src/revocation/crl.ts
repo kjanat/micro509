@@ -86,7 +86,7 @@ import type {
 	ParsedNameAttribute,
 	ParsedRelativeDistinguishedName,
 } from '#micro509/x509/parse.ts';
-import { parseCertificateDer, parseCertificateFromSource } from '#micro509/x509/parse.ts';
+import { parseCertificateDerOrThrow, parseCertificateFromSource } from '#micro509/x509/parse.ts';
 
 /**
  * Single revoked certificate entry for {@linkcode createCertificateRevocationList}.
@@ -2244,7 +2244,7 @@ function parseSignedCrlFields(tbsCertListDer: Uint8Array): {
 /** Accepts PEM, DER, or already-parsed certificate and returns a parsed certificate. */
 function normalizeCrlCertificate(source: CrlCertificateSource): ParsedCertificate {
 	return hasParsedCertificateShape(source)
-		? parseCertificateDer(new Uint8Array(source.der))
+		? parseCertificateDerOrThrow(new Uint8Array(source.der))
 		: parseCertificateFromSource(source);
 }
 

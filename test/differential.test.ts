@@ -12,6 +12,7 @@ import {
 	parseOcspResponseDer,
 	validateOcspResponse,
 	verifyCertificateChain,
+	unwrap,
 } from '#micro509';
 import { hexToBytes, issueChain } from './helpers.ts';
 import {
@@ -122,7 +123,7 @@ differential('OpenSSL differential harness', () => {
 			signerPrivateKey: issuer.keyPair.privateKey,
 			issuerPublicKey: issuer.keyPair.publicKey,
 		});
-		const parsedLeaf = parseCertificatePem(leaf.pem);
+		const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
 		const goodCrl = await createCertificateRevocationList({
 			issuer: { commonName: 'Diff CRL CA' },
 			signerPrivateKey: issuer.keyPair.privateKey,
@@ -286,7 +287,7 @@ differential('OpenSSL differential harness', () => {
 				],
 			},
 		});
-		const parsedDns = parseCertificatePem(dnsCertificate.certificate.pem);
+		const parsedDns = unwrap(parseCertificatePem(dnsCertificate.certificate.pem));
 		for (const dnsCase of [
 			{ value: 'api.example.com', expected: true },
 			{ value: 'service.wild.example.com', expected: true },
@@ -312,7 +313,7 @@ differential('OpenSSL differential harness', () => {
 				subjectAltNames: [{ type: 'ip', value: '2001:db8::1' }],
 			},
 		});
-		const parsedIp = parseCertificatePem(ipCertificate.certificate.pem);
+		const parsedIp = unwrap(parseCertificatePem(ipCertificate.certificate.pem));
 		const ipMicro = matchServiceIdentity({
 			certificate: parsedIp,
 			serviceIdentity: { type: 'ip', value: '2001:0db8:0:0:0:0:0:1' },
