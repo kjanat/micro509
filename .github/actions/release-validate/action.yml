@@ -7,6 +7,7 @@ inputs:
 
 outputs:
   version: { description: Validated version string (e.g. v1.2.3), value: "${{ steps.validate.outputs.version }}" }
+  version_number: { description: Validated version without leading v (e.g. 1.2.3), value: "${{ steps.validate.outputs.version_number }}" }
   is_push: { description: Whether this is a push event (vs pull_request), value: "${{ steps.validate.outputs.is_push }}" }
   is_tag: { description: Whether this is a version tag push (REF_NAME starts with "v"), value: "${{ steps.validate.outputs.is_tag }}" }
   prerelease: { description: Whether this is a prerelease version, value: "${{ steps.validate.outputs.prerelease }}" }

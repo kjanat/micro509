@@ -41,7 +41,7 @@ jobs:
     permissions: { contents: read, id-token: write }
     environment:
       name: ${{ needs.validate.outputs.is_tag == 'true' && 'jsr' || '' }}
-      url: ${{ needs.validate.outputs.is_tag == 'true' && format('https://jsr.io/@kjanat/micro509/{0}', needs.validate.outputs.version) || '' }}
+      url: ${{ needs.validate.outputs.is_tag == 'true' && format('https://jsr.io/@kjanat/micro509@{0}', needs.validate.outputs.version_number) || '' }}
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-ts
@@ -71,7 +71,7 @@ jobs:
     permissions: { contents: read, id-token: write }
     environment:
       name: ${{ needs.validate.outputs.is_tag == 'true' && 'npm' || '' }}
-      url: ${{ needs.validate.outputs.is_tag == 'true' && format('https://www.npmjs.com/package/micro509/v/{0}', needs.validate.outputs.version) || '' }}
+      url: ${{ needs.validate.outputs.is_tag == 'true' && format('https://npm.im/package/micro509/v/{0}', needs.validate.outputs.version_number) || '' }}
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-ts
@@ -79,7 +79,7 @@ jobs:
           install-bun: "true"
           install-node: "true"
           update-npm: "true"
-          node-registry-url: "https://registry.npmjs.org"
+          node-registry-url: https://registry.npmjs.org
       - run: bun install --frozen-lockfile
       - run: bun run build
       - run: |

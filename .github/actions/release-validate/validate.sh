@@ -62,8 +62,12 @@ fi
 
 if [[ "${IS_TAG}" == "true" ]]; then MODE="publish"; else MODE="dry-run"; fi
 
+# Bare semver (no leading "v") for registry URLs like jsr.io/@scope/pkg@1.2.3.
+VERSION_NUMBER="${VERSION#v}"
+
 {
 	echo "version=${VERSION}"
+	echo "version_number=${VERSION_NUMBER}"
 	echo "is_push=${IS_PUSH}"
 	echo "is_tag=${IS_TAG}"
 	echo "prerelease=${IS_PRERELEASE}"
