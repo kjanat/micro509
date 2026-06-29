@@ -114,7 +114,7 @@ export function isResultError(value: unknown): value is ResultError {
 }
 
 /** A minimal fallible-result shape: `{ ok: true, value }` or `{ ok: false, error }`. */
-type UnwrappableResult<TValue, TError> =
+export type UnwrappableResult<TValue, TError> =
 	| { readonly ok: true; readonly value: TValue }
 	| { readonly ok: false; readonly error: TError };
 

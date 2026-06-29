@@ -11,6 +11,7 @@ export type {
 	Micro509Error,
 	Result,
 	ResultError,
+	UnwrappableResult,
 } from './result.ts';
 export {
 	errorResult,

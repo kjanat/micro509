@@ -561,7 +561,7 @@ async function encryptedImportResult(
 /**
  * Import a public key from DER-encoded SubjectPublicKeyInfo.
  *
- * @see {@linkcode importSpkiDerOrThrow} for the throwing variant
+ * @see `importSpkiDerOrThrow` for the throwing variant
  */
 export function importSpkiDer(
 	der: Uint8Array,
@@ -593,7 +593,7 @@ export async function importSpkiPemOrThrow(
 /**
  * Import a public key from PEM-encoded SubjectPublicKeyInfo.
  *
- * @see {@linkcode importSpkiPemOrThrow} for the throwing variant
+ * @see `importSpkiPemOrThrow` for the throwing variant
  */
 export function importSpkiPem(
 	pem: string,
@@ -624,7 +624,7 @@ export async function importSpkiBase64OrThrow(
 /**
  * Import a public key from base64-encoded SubjectPublicKeyInfo (no PEM headers).
  *
- * @see {@linkcode importSpkiBase64OrThrow} for the throwing variant
+ * @see `importSpkiBase64OrThrow` for the throwing variant
  */
 export function importSpkiBase64(
 	base64: string,
@@ -673,7 +673,7 @@ export async function importPkcs8DerOrThrow(
 /**
  * Import a private key from DER-encoded PKCS#8 PrivateKeyInfo.
  *
- * @see {@linkcode importPkcs8DerOrThrow} for the throwing variant
+ * @see `importPkcs8DerOrThrow` for the throwing variant
  */
 export function importPkcs8Der(
 	der: Uint8Array,
@@ -700,7 +700,7 @@ export async function importPkcs8PemOrThrow(
 /**
  * Import a private key from PEM-encoded PKCS#8 PrivateKeyInfo.
  *
- * @see {@linkcode importPkcs8PemOrThrow} for the throwing variant
+ * @see `importPkcs8PemOrThrow` for the throwing variant
  */
 export function importPkcs8Pem(
 	pem: string,
@@ -757,7 +757,7 @@ export async function importEncryptedPkcs8DerOrThrow(
 /**
  * Import a private key from DER-encoded PBES2-encrypted PKCS#8 EncryptedPrivateKeyInfo.
  *
- * @see {@linkcode importEncryptedPkcs8DerOrThrow} for the throwing variant
+ * @see `importEncryptedPkcs8DerOrThrow` for the throwing variant
  */
 export function importEncryptedPkcs8Der(
 	der: Uint8Array,
@@ -790,7 +790,7 @@ export async function importEncryptedPkcs8PemOrThrow(
 /**
  * Import a private key from PEM-encoded PBES2-encrypted PKCS#8 EncryptedPrivateKeyInfo.
  *
- * @see {@linkcode importEncryptedPkcs8PemOrThrow} for the throwing variant
+ * @see `importEncryptedPkcs8PemOrThrow` for the throwing variant
  */
 export function importEncryptedPkcs8Pem(
 	pem: string,
@@ -818,7 +818,7 @@ export async function importPkcs1DerOrThrow(
 /**
  * Import an RSA private key from DER-encoded PKCS#1 RSAPrivateKey.
  *
- * @see {@linkcode importPkcs1DerOrThrow} for the throwing variant
+ * @see `importPkcs1DerOrThrow` for the throwing variant
  */
 export function importPkcs1Der(
 	der: Uint8Array,
@@ -845,7 +845,7 @@ export async function importPkcs1PemOrThrow(
 /**
  * Import an RSA private key from PEM-encoded PKCS#1 RSAPrivateKey.
  *
- * @see {@linkcode importPkcs1PemOrThrow} for the throwing variant
+ * @see `importPkcs1PemOrThrow` for the throwing variant
  */
 export function importPkcs1Pem(
 	pem: string,
@@ -874,7 +874,7 @@ export async function importEncryptedPkcs1PemOrThrow(
 /**
  * Import an RSA private key from legacy `Proc-Type: 4,ENCRYPTED` PEM (PKCS#1).
  *
- * @see {@linkcode importEncryptedPkcs1PemOrThrow} for the throwing variant
+ * @see `importEncryptedPkcs1PemOrThrow` for the throwing variant
  */
 export function importEncryptedPkcs1Pem(
 	pem: string,
@@ -906,7 +906,7 @@ export async function importPkcs8Base64OrThrow(
 /**
  * Import a private key from base64-encoded PKCS#8 PrivateKeyInfo (no PEM headers).
  *
- * @see {@linkcode importPkcs8Base64OrThrow} for the throwing variant
+ * @see `importPkcs8Base64OrThrow` for the throwing variant
  */
 export function importPkcs8Base64(
 	base64: string,
@@ -933,7 +933,7 @@ export async function importSec1DerOrThrow(
 /**
  * Import an EC private key from DER-encoded SEC 1 ECPrivateKey.
  *
- * @see {@linkcode importSec1DerOrThrow} for the throwing variant
+ * @see `importSec1DerOrThrow` for the throwing variant
  */
 export function importSec1Der(
 	der: Uint8Array,
@@ -960,7 +960,7 @@ export async function importSec1PemOrThrow(
 /**
  * Import an EC private key from PEM-encoded SEC 1 ECPrivateKey.
  *
- * @see {@linkcode importSec1PemOrThrow} for the throwing variant
+ * @see `importSec1PemOrThrow` for the throwing variant
  */
 export function importSec1Pem(
 	pem: string,
@@ -989,7 +989,7 @@ export async function importEncryptedSec1PemOrThrow(
 /**
  * Import an EC private key from legacy `Proc-Type: 4,ENCRYPTED` PEM (SEC 1).
  *
- * @see {@linkcode importEncryptedSec1PemOrThrow} for the throwing variant
+ * @see `importEncryptedSec1PemOrThrow` for the throwing variant
  */
 export function importEncryptedSec1Pem(
 	pem: string,
@@ -1027,7 +1027,7 @@ export async function importPublicJwkOrThrow(
 /**
  * Import a public verification key from a JSON Web Key.
  *
- * @see {@linkcode importPublicJwkOrThrow} for the throwing variant
+ * @see `importPublicJwkOrThrow` for the throwing variant
  */
 export function importPublicJwk(
 	jwk: JsonWebKey,
@@ -1055,7 +1055,7 @@ export async function importPrivateJwkOrThrow(
 /**
  * Import a private signing key from a JSON Web Key.
  *
- * @see {@linkcode importPrivateJwkOrThrow} for the throwing variant
+ * @see `importPrivateJwkOrThrow` for the throwing variant
  */
 export function importPrivateJwk(
 	jwk: JsonWebKey,
