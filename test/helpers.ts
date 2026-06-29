@@ -6,6 +6,7 @@ import {
 	exportPkcs8Der,
 	generateKeyPair,
 	importPkcs8Der,
+	unwrap,
 } from 'micro509';
 import type { GeneralName } from 'micro509/x509';
 import { encodeSubjectAltName } from 'micro509/x509';
@@ -118,7 +119,9 @@ export async function importRsaPrivateKeyWithScheme(
 	hash: 'SHA-256' | 'SHA-384' | 'SHA-512',
 	scheme: 'pkcs1-v1_5' | 'pss',
 ): Promise<CryptoKey> {
-	return importPkcs8Der(await exportPkcs8Der(privateKey), { kind: 'rsa', hash, scheme });
+	return unwrap(
+		await importPkcs8Der(await exportPkcs8Der(privateKey), { kind: 'rsa', hash, scheme }),
+	);
 }
 
 export async function rewriteCertificateSignatureAsRsaPss(

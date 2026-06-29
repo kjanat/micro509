@@ -39,7 +39,7 @@ console.log(
 <LiveCode>
 
 ```ts
-import { generateKeyPair } from 'micro509';
+import { generateKeyPair, unwrap } from 'micro509';
 import {
   exportPkcs8Pem,
   importPkcs8Pem,
@@ -51,10 +51,12 @@ const keys = await generateKeyPair({
 });
 const pem = await exportPkcs8Pem(keys.privateKey);
 
-const privateKey = await importPkcs8Pem(pem, {
-  kind: 'ecdsa',
-  curve: 'P-256',
-});
+const privateKey = unwrap(
+  await importPkcs8Pem(pem, {
+    kind: 'ecdsa',
+    curve: 'P-256',
+  }),
+);
 const exported = await exportPkcs8Pem(privateKey);
 
 console.log('pkcs8 round-trip ok:', exported === pem);
@@ -67,7 +69,7 @@ console.log('pkcs8 round-trip ok:', exported === pem);
 <LiveCode>
 
 ```ts
-import { generateKeyPair } from 'micro509';
+import { generateKeyPair, unwrap } from 'micro509';
 import {
   exportSpkiPem,
   importSpkiPem,
@@ -79,10 +81,12 @@ const keys = await generateKeyPair({
 });
 const pem = await exportSpkiPem(keys.publicKey);
 
-const publicKey = await importSpkiPem(pem, {
-  kind: 'ecdsa',
-  curve: 'P-256',
-});
+const publicKey = unwrap(
+  await importSpkiPem(pem, {
+    kind: 'ecdsa',
+    curve: 'P-256',
+  }),
+);
 const exported = await exportSpkiPem(publicKey);
 
 console.log('spki round-trip ok:', exported === pem);
@@ -95,7 +99,7 @@ console.log('spki round-trip ok:', exported === pem);
 <LiveCode>
 
 ```ts
-import { generateKeyPair } from 'micro509';
+import { generateKeyPair, unwrap } from 'micro509';
 import {
   exportPrivateJwk,
   exportPublicJwk,
@@ -110,14 +114,18 @@ const keys = await generateKeyPair({
 const pubJwk = await exportPublicJwk(keys.publicKey);
 const privJwk = await exportPrivateJwk(keys.privateKey);
 
-const publicKey = await importPublicJwk(pubJwk, {
-  kind: 'ecdsa',
-  curve: 'P-256',
-});
-const privateKey = await importPrivateJwk(privJwk, {
-  kind: 'ecdsa',
-  curve: 'P-256',
-});
+const publicKey = unwrap(
+  await importPublicJwk(pubJwk, {
+    kind: 'ecdsa',
+    curve: 'P-256',
+  }),
+);
+const privateKey = unwrap(
+  await importPrivateJwk(privJwk, {
+    kind: 'ecdsa',
+    curve: 'P-256',
+  }),
+);
 
 console.log(
   'jwk round-trip:',
@@ -133,7 +141,7 @@ console.log(
 <LiveCode>
 
 ```ts
-import { generateKeyPair } from 'micro509';
+import { generateKeyPair, unwrap } from 'micro509';
 import {
   exportPkcs1Pem,
   importPkcs1Pem,
@@ -145,10 +153,12 @@ const keys = await generateKeyPair({
 });
 const pem = await exportPkcs1Pem(keys.privateKey);
 
-const privateKey = await importPkcs1Pem(pem, {
-  kind: 'rsa',
-  scheme: 'pkcs1-v1_5',
-});
+const privateKey = unwrap(
+  await importPkcs1Pem(pem, {
+    kind: 'rsa',
+    scheme: 'pkcs1-v1_5',
+  }),
+);
 const exported = await exportPkcs1Pem(privateKey);
 
 console.log('pkcs1 round-trip ok:', exported === pem);
@@ -161,7 +171,7 @@ console.log('pkcs1 round-trip ok:', exported === pem);
 <LiveCode>
 
 ```ts
-import { generateKeyPair } from 'micro509';
+import { generateKeyPair, unwrap } from 'micro509';
 import {
   exportSec1Pem,
   importSec1Pem,
@@ -173,10 +183,12 @@ const keys = await generateKeyPair({
 });
 const pem = await exportSec1Pem(keys.privateKey);
 
-const privateKey = await importSec1Pem(pem, {
-  kind: 'ecdsa',
-  curve: 'P-256',
-});
+const privateKey = unwrap(
+  await importSec1Pem(pem, {
+    kind: 'ecdsa',
+    curve: 'P-256',
+  }),
+);
 const exported = await exportSec1Pem(privateKey);
 
 console.log('sec1 round-trip ok:', exported === pem);
@@ -207,8 +219,8 @@ const pem = await exportEncryptedPkcs8Pem(keys.privateKey, {
   password: 'password',
 });
 
-// Import with the same password
-const privateKey = await importEncryptedPkcs8Pem(
+// Import with the same password — returns a Result
+const result = await importEncryptedPkcs8Pem(
   pem,
   'password',
   {
@@ -217,7 +229,13 @@ const privateKey = await importEncryptedPkcs8Pem(
   },
 );
 
-console.log('encrypted pkcs8 imported:', privateKey.type);
+if (!result.ok) {
+  // result.error.code is 'invalid_password' on a wrong password,
+  // or 'malformed' on structurally invalid input
+  throw new Error(result.error.code);
+}
+
+console.log('encrypted pkcs8 imported:', result.value.type);
 ```
 
 </LiveCode>
@@ -227,7 +245,7 @@ console.log('encrypted pkcs8 imported:', privateKey.type);
 <LiveCode>
 
 ```ts
-import { generateKeyPair } from 'micro509';
+import { generateKeyPair, unwrap } from 'micro509';
 import {
   exportEncryptedPkcs1Pem,
   importEncryptedPkcs1Pem,
@@ -245,13 +263,11 @@ const pem = await exportEncryptedPkcs1Pem(keys.privateKey, {
 });
 
 // Import with the same password
-const privateKey = await importEncryptedPkcs1Pem(
-  pem,
-  'password',
-  {
+const privateKey = unwrap(
+  await importEncryptedPkcs1Pem(pem, 'password', {
     kind: 'rsa',
     scheme: 'pkcs1-v1_5',
-  },
+  }),
 );
 
 console.log('encrypted pkcs1 imported:', privateKey.type);

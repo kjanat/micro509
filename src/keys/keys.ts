@@ -39,10 +39,17 @@ import {
 	decryptPbes2,
 	encryptPbes2,
 	type Pbes2EncryptionOptions,
+	WrongPasswordError,
 } from '#micro509/internal/crypto/pbes2.ts';
 import { getCrypto } from '#micro509/internal/crypto/webcrypto.ts';
 import { base64Decode, base64Encode } from '#micro509/internal/shared/base64.ts';
 import { pemDecode, pemEncode } from '#micro509/pem/pem.ts';
+import {
+	type ErrorResult,
+	failureResult,
+	type Micro509Error,
+	successResult,
+} from '#micro509/result/result.ts';
 
 export type {
 	Pbes2EncryptionOptions,
@@ -156,6 +163,48 @@ export interface LegacyPemEncryptionOptions {
 	/** AES-CBC cipher. Defaults to `'AES-256-CBC'`. */
 	readonly cipher?: 'AES-128-CBC' | 'AES-192-CBC' | 'AES-256-CBC';
 }
+
+/** Machine-readable failure reason for the `import*` key functions. */
+export type ImportKeyErrorCode = 'malformed';
+
+/** Structured failure payload for key import. */
+export interface ImportKeyFailure extends Micro509Error<ImportKeyErrorCode> {
+	readonly ok: false;
+}
+
+/**
+ * Success-or-failure result returned by the public `import*` key functions.
+ *
+ * On failure, `code` is always `'malformed'`: structurally invalid input,
+ * algorithm mismatches, and wrong-password decryption failures all surface
+ * the same way (see the throwing `*OrThrow` variants for raw error messages).
+ */
+export type ImportKeyResult<T> =
+	| { readonly ok: true; readonly value: T }
+	| ErrorResult<ImportKeyErrorCode, Record<never, never>, ImportKeyFailure>;
+
+/**
+ * Machine-readable failure reason for the `importEncrypted*` key functions.
+ *
+ * Distinguishes a wrong decryption password (`'invalid_password'`) from
+ * structurally invalid input or algorithm mismatches (`'malformed'`).
+ */
+export type ImportEncryptedKeyErrorCode = 'malformed' | 'invalid_password';
+
+/** Structured failure payload for encrypted key import. */
+export interface ImportEncryptedKeyFailure extends Micro509Error<ImportEncryptedKeyErrorCode> {
+	readonly ok: false;
+}
+
+/**
+ * Success-or-failure result returned by the public `importEncrypted*` key functions.
+ *
+ * On failure, `code` is `'invalid_password'` when decryption failed (wrong
+ * password or corrupted ciphertext) and `'malformed'` for everything else.
+ */
+export type ImportEncryptedKeyResult<T> =
+	| { readonly ok: true; readonly value: T }
+	| ErrorResult<ImportEncryptedKeyErrorCode, Record<never, never>, ImportEncryptedKeyFailure>;
 
 /**
  * Generate an asymmetric key pair for signing and verification.
@@ -460,7 +509,7 @@ export async function exportBinaryBase64(key: CryptoKey): Promise<string> {
  * @see {@linkcode exportSpkiDer} for the inverse operation
  * @see {@linkcode importSpkiPem} for PEM input
  */
-export async function importSpkiDer(
+export async function importSpkiDerOrThrow(
 	der: Uint8Array,
 	algorithm: PublicKeyImportInput,
 ): Promise<CryptoKey> {
@@ -480,6 +529,22 @@ export async function importSpkiDer(
 }
 
 /**
+ * Import a public key from DER-encoded SubjectPublicKeyInfo.
+ *
+ * @see {@linkcode importSpkiDerOrThrow} for the throwing variant
+ */
+export async function importSpkiDer(
+	der: Uint8Array,
+	algorithm: PublicKeyImportInput,
+): Promise<ImportKeyResult<CryptoKey>> {
+	try {
+		return successResult(await importSpkiDerOrThrow(der, algorithm));
+	} catch (error) {
+		return failureResult('malformed', error instanceof Error ? error.message : 'Malformed key');
+	}
+}
+
+/**
  * Import a public key from PEM-encoded SubjectPublicKeyInfo.
  *
  * @example
@@ -492,11 +557,27 @@ export async function importSpkiDer(
  *
  * @see {@linkcode exportSpkiPem} for the inverse operation
  */
-export async function importSpkiPem(
+export async function importSpkiPemOrThrow(
 	pem: string,
 	algorithm: PublicKeyImportInput,
 ): Promise<CryptoKey> {
-	return importSpkiDer(pemDecode('PUBLIC KEY', pem), algorithm);
+	return importSpkiDerOrThrow(pemDecode('PUBLIC KEY', pem), algorithm);
+}
+
+/**
+ * Import a public key from PEM-encoded SubjectPublicKeyInfo.
+ *
+ * @see {@linkcode importSpkiPemOrThrow} for the throwing variant
+ */
+export async function importSpkiPem(
+	pem: string,
+	algorithm: PublicKeyImportInput,
+): Promise<ImportKeyResult<CryptoKey>> {
+	try {
+		return successResult(await importSpkiPemOrThrow(pem, algorithm));
+	} catch (error) {
+		return failureResult('malformed', error instanceof Error ? error.message : 'Malformed key');
+	}
 }
 
 /**
@@ -505,7 +586,7 @@ export async function importSpkiPem(
  * @see {@linkcode exportBinaryBase64} for the inverse operation
  * @see {@linkcode importSpkiPem} for PEM input with headers
  */
-export async function importSpkiBase64(
+export async function importSpkiBase64OrThrow(
 	base64: string,
 	algorithm: PublicKeyImportInput,
 ): Promise<CryptoKey> {
@@ -515,7 +596,23 @@ export async function importSpkiBase64(
 	} catch {
 		throw new Error('Invalid base64 SubjectPublicKeyInfo');
 	}
-	return importSpkiDer(decoded, algorithm);
+	return importSpkiDerOrThrow(decoded, algorithm);
+}
+
+/**
+ * Import a public key from base64-encoded SubjectPublicKeyInfo (no PEM headers).
+ *
+ * @see {@linkcode importSpkiBase64OrThrow} for the throwing variant
+ */
+export async function importSpkiBase64(
+	base64: string,
+	algorithm: PublicKeyImportInput,
+): Promise<ImportKeyResult<CryptoKey>> {
+	try {
+		return successResult(await importSpkiBase64OrThrow(base64, algorithm));
+	} catch (error) {
+		return failureResult('malformed', error instanceof Error ? error.message : 'Malformed key');
+	}
 }
 
 /**
@@ -531,7 +628,7 @@ export async function importSpkiBase64(
  * @see {@linkcode importPkcs8Pem} for PEM input
  * @see {@linkcode importEncryptedPkcs8Der} for encrypted PKCS#8
  */
-export async function importPkcs8Der(
+export async function importPkcs8DerOrThrow(
 	der: Uint8Array,
 	algorithm: PrivateKeyImportInput,
 ): Promise<CryptoKey> {
@@ -556,6 +653,22 @@ export async function importPkcs8Der(
 }
 
 /**
+ * Import a private key from DER-encoded PKCS#8 PrivateKeyInfo.
+ *
+ * @see {@linkcode importPkcs8DerOrThrow} for the throwing variant
+ */
+export async function importPkcs8Der(
+	der: Uint8Array,
+	algorithm: PrivateKeyImportInput,
+): Promise<ImportKeyResult<CryptoKey>> {
+	try {
+		return successResult(await importPkcs8DerOrThrow(der, algorithm));
+	} catch (error) {
+		return failureResult('malformed', error instanceof Error ? error.message : 'Malformed key');
+	}
+}
+
+/**
  * Import a private key from PEM-encoded PKCS#8 PrivateKeyInfo.
  *
  * @example
@@ -563,11 +676,27 @@ export async function importPkcs8Der(
  * const key = await importPkcs8Pem(pemString, { kind: 'ecdsa', curve: 'P-256' });
  * ```
  */
-export async function importPkcs8Pem(
+export async function importPkcs8PemOrThrow(
 	pem: string,
 	algorithm: PrivateKeyImportInput,
 ): Promise<CryptoKey> {
-	return importPkcs8Der(pemDecode('PRIVATE KEY', pem), algorithm);
+	return importPkcs8DerOrThrow(pemDecode('PRIVATE KEY', pem), algorithm);
+}
+
+/**
+ * Import a private key from PEM-encoded PKCS#8 PrivateKeyInfo.
+ *
+ * @see {@linkcode importPkcs8PemOrThrow} for the throwing variant
+ */
+export async function importPkcs8Pem(
+	pem: string,
+	algorithm: PrivateKeyImportInput,
+): Promise<ImportKeyResult<CryptoKey>> {
+	try {
+		return successResult(await importPkcs8PemOrThrow(pem, algorithm));
+	} catch (error) {
+		return failureResult('malformed', error instanceof Error ? error.message : 'Malformed key');
+	}
 }
 
 /**
@@ -583,7 +712,7 @@ export async function importPkcs8Pem(
  *
  * @see {@linkcode exportEncryptedPkcs8Der} for the inverse operation
  */
-export async function importEncryptedPkcs8Der(
+export async function importEncryptedPkcs8DerOrThrow(
 	der: Uint8Array,
 	password: string,
 	algorithm: PrivateKeyImportInput,
@@ -612,7 +741,30 @@ export async function importEncryptedPkcs8Der(
 		encryptedData.value,
 		password,
 	);
-	return importPkcs8Der(decrypted, algorithm);
+	return importPkcs8DerOrThrow(decrypted, algorithm);
+}
+
+/**
+ * Import a private key from DER-encoded PBES2-encrypted PKCS#8 EncryptedPrivateKeyInfo.
+ *
+ * @see {@linkcode importEncryptedPkcs8DerOrThrow} for the throwing variant
+ */
+export async function importEncryptedPkcs8Der(
+	der: Uint8Array,
+	password: string,
+	algorithm: PrivateKeyImportInput,
+): Promise<ImportEncryptedKeyResult<CryptoKey>> {
+	try {
+		return successResult(await importEncryptedPkcs8DerOrThrow(der, password, algorithm));
+	} catch (error) {
+		if (error instanceof WrongPasswordError) {
+			return failureResult('invalid_password', error.message);
+		}
+		return failureResult(
+			'malformed',
+			error instanceof Error ? error.message : 'Malformed encrypted key',
+		);
+	}
 }
 
 /**
@@ -623,12 +775,39 @@ export async function importEncryptedPkcs8Der(
  * const key = await importEncryptedPkcs8Pem(pem, 'secret', { kind: 'rsa' });
  * ```
  */
-export async function importEncryptedPkcs8Pem(
+export async function importEncryptedPkcs8PemOrThrow(
 	pem: string,
 	password: string,
 	algorithm: PrivateKeyImportInput,
 ): Promise<CryptoKey> {
-	return importEncryptedPkcs8Der(pemDecode('ENCRYPTED PRIVATE KEY', pem), password, algorithm);
+	return importEncryptedPkcs8DerOrThrow(
+		pemDecode('ENCRYPTED PRIVATE KEY', pem),
+		password,
+		algorithm,
+	);
+}
+
+/**
+ * Import a private key from PEM-encoded PBES2-encrypted PKCS#8 EncryptedPrivateKeyInfo.
+ *
+ * @see {@linkcode importEncryptedPkcs8PemOrThrow} for the throwing variant
+ */
+export async function importEncryptedPkcs8Pem(
+	pem: string,
+	password: string,
+	algorithm: PrivateKeyImportInput,
+): Promise<ImportEncryptedKeyResult<CryptoKey>> {
+	try {
+		return successResult(await importEncryptedPkcs8PemOrThrow(pem, password, algorithm));
+	} catch (error) {
+		if (error instanceof WrongPasswordError) {
+			return failureResult('invalid_password', error.message);
+		}
+		return failureResult(
+			'malformed',
+			error instanceof Error ? error.message : 'Malformed encrypted key',
+		);
+	}
 }
 
 /**
@@ -639,11 +818,27 @@ export async function importEncryptedPkcs8Pem(
  * @see {@linkcode exportPkcs1Der} for the inverse operation
  * @see {@linkcode importPkcs1Pem} for PEM input
  */
-export async function importPkcs1Der(
+export async function importPkcs1DerOrThrow(
 	der: Uint8Array,
 	algorithm: ImportRsaPublicKeyInput = { kind: 'rsa' },
 ): Promise<CryptoKey> {
-	return importPkcs8Der(wrapPkcs1InPkcs8(der), algorithm);
+	return importPkcs8DerOrThrow(wrapPkcs1InPkcs8(der), algorithm);
+}
+
+/**
+ * Import an RSA private key from DER-encoded PKCS#1 RSAPrivateKey.
+ *
+ * @see {@linkcode importPkcs1DerOrThrow} for the throwing variant
+ */
+export async function importPkcs1Der(
+	der: Uint8Array,
+	algorithm: ImportRsaPublicKeyInput = { kind: 'rsa' },
+): Promise<ImportKeyResult<CryptoKey>> {
+	try {
+		return successResult(await importPkcs1DerOrThrow(der, algorithm));
+	} catch (error) {
+		return failureResult('malformed', error instanceof Error ? error.message : 'Malformed key');
+	}
 }
 
 /**
@@ -654,11 +849,27 @@ export async function importPkcs1Der(
  * @see {@linkcode exportPkcs1Pem} for the inverse operation
  * @see {@linkcode importEncryptedPkcs1Pem} for encrypted PEM
  */
-export async function importPkcs1Pem(
+export async function importPkcs1PemOrThrow(
 	pem: string,
 	algorithm: ImportRsaPublicKeyInput = { kind: 'rsa' },
 ): Promise<CryptoKey> {
-	return importPkcs1Der(pemDecode('RSA PRIVATE KEY', pem), algorithm);
+	return importPkcs1DerOrThrow(pemDecode('RSA PRIVATE KEY', pem), algorithm);
+}
+
+/**
+ * Import an RSA private key from PEM-encoded PKCS#1 RSAPrivateKey.
+ *
+ * @see {@linkcode importPkcs1PemOrThrow} for the throwing variant
+ */
+export async function importPkcs1Pem(
+	pem: string,
+	algorithm: ImportRsaPublicKeyInput = { kind: 'rsa' },
+): Promise<ImportKeyResult<CryptoKey>> {
+	try {
+		return successResult(await importPkcs1PemOrThrow(pem, algorithm));
+	} catch (error) {
+		return failureResult('malformed', error instanceof Error ? error.message : 'Malformed key');
+	}
 }
 
 /**
@@ -669,13 +880,36 @@ export async function importPkcs1Pem(
  * @see {@linkcode exportEncryptedPkcs1Pem} for the inverse operation
  * @see {@linkcode importEncryptedPkcs8Pem} for modern PBES2 encryption
  */
-export async function importEncryptedPkcs1Pem(
+export async function importEncryptedPkcs1PemOrThrow(
 	pem: string,
 	password: string,
 	algorithm: ImportRsaPublicKeyInput = { kind: 'rsa' },
 ): Promise<CryptoKey> {
 	const decrypted = await decryptTraditionalPem('RSA PRIVATE KEY', pem, password);
-	return importPkcs1Der(decrypted, algorithm);
+	return importPkcs1DerOrThrow(decrypted, algorithm);
+}
+
+/**
+ * Import an RSA private key from legacy `Proc-Type: 4,ENCRYPTED` PEM (PKCS#1).
+ *
+ * @see {@linkcode importEncryptedPkcs1PemOrThrow} for the throwing variant
+ */
+export async function importEncryptedPkcs1Pem(
+	pem: string,
+	password: string,
+	algorithm: ImportRsaPublicKeyInput = { kind: 'rsa' },
+): Promise<ImportEncryptedKeyResult<CryptoKey>> {
+	try {
+		return successResult(await importEncryptedPkcs1PemOrThrow(pem, password, algorithm));
+	} catch (error) {
+		if (error instanceof WrongPasswordError) {
+			return failureResult('invalid_password', error.message);
+		}
+		return failureResult(
+			'malformed',
+			error instanceof Error ? error.message : 'Malformed encrypted key',
+		);
+	}
 }
 
 /**
@@ -684,7 +918,7 @@ export async function importEncryptedPkcs1Pem(
  * @see {@linkcode exportBinaryBase64} for the inverse operation
  * @see {@linkcode importPkcs8Pem} for PEM input with headers
  */
-export async function importPkcs8Base64(
+export async function importPkcs8Base64OrThrow(
 	base64: string,
 	algorithm: PrivateKeyImportInput,
 ): Promise<CryptoKey> {
@@ -694,7 +928,23 @@ export async function importPkcs8Base64(
 	} catch {
 		throw new Error('Invalid base64 PKCS#8 private key');
 	}
-	return importPkcs8Der(decoded, algorithm);
+	return importPkcs8DerOrThrow(decoded, algorithm);
+}
+
+/**
+ * Import a private key from base64-encoded PKCS#8 PrivateKeyInfo (no PEM headers).
+ *
+ * @see {@linkcode importPkcs8Base64OrThrow} for the throwing variant
+ */
+export async function importPkcs8Base64(
+	base64: string,
+	algorithm: PrivateKeyImportInput,
+): Promise<ImportKeyResult<CryptoKey>> {
+	try {
+		return successResult(await importPkcs8Base64OrThrow(base64, algorithm));
+	} catch (error) {
+		return failureResult('malformed', error instanceof Error ? error.message : 'Malformed key');
+	}
 }
 
 /**
@@ -705,11 +955,27 @@ export async function importPkcs8Base64(
  * @see {@linkcode exportSec1Der} for the inverse operation
  * @see {@linkcode importSec1Pem} for PEM input
  */
-export async function importSec1Der(
+export async function importSec1DerOrThrow(
 	der: Uint8Array,
 	algorithm: ImportEcPublicKeyInput,
 ): Promise<CryptoKey> {
-	return importPkcs8Der(wrapSec1InPkcs8(der, algorithm.curve), algorithm);
+	return importPkcs8DerOrThrow(wrapSec1InPkcs8(der, algorithm.curve), algorithm);
+}
+
+/**
+ * Import an EC private key from DER-encoded SEC 1 ECPrivateKey.
+ *
+ * @see {@linkcode importSec1DerOrThrow} for the throwing variant
+ */
+export async function importSec1Der(
+	der: Uint8Array,
+	algorithm: ImportEcPublicKeyInput,
+): Promise<ImportKeyResult<CryptoKey>> {
+	try {
+		return successResult(await importSec1DerOrThrow(der, algorithm));
+	} catch (error) {
+		return failureResult('malformed', error instanceof Error ? error.message : 'Malformed key');
+	}
 }
 
 /**
@@ -720,11 +986,27 @@ export async function importSec1Der(
  * @see {@linkcode exportSec1Pem} for the inverse operation
  * @see {@linkcode importEncryptedSec1Pem} for encrypted PEM
  */
-export async function importSec1Pem(
+export async function importSec1PemOrThrow(
 	pem: string,
 	algorithm: ImportEcPublicKeyInput,
 ): Promise<CryptoKey> {
-	return importSec1Der(pemDecode('EC PRIVATE KEY', pem), algorithm);
+	return importSec1DerOrThrow(pemDecode('EC PRIVATE KEY', pem), algorithm);
+}
+
+/**
+ * Import an EC private key from PEM-encoded SEC 1 ECPrivateKey.
+ *
+ * @see {@linkcode importSec1PemOrThrow} for the throwing variant
+ */
+export async function importSec1Pem(
+	pem: string,
+	algorithm: ImportEcPublicKeyInput,
+): Promise<ImportKeyResult<CryptoKey>> {
+	try {
+		return successResult(await importSec1PemOrThrow(pem, algorithm));
+	} catch (error) {
+		return failureResult('malformed', error instanceof Error ? error.message : 'Malformed key');
+	}
 }
 
 /**
@@ -735,13 +1017,36 @@ export async function importSec1Pem(
  * @see {@linkcode exportEncryptedSec1Pem} for the inverse operation
  * @see {@linkcode importEncryptedPkcs8Pem} for modern PBES2 encryption
  */
-export async function importEncryptedSec1Pem(
+export async function importEncryptedSec1PemOrThrow(
 	pem: string,
 	password: string,
 	algorithm: ImportEcPublicKeyInput,
 ): Promise<CryptoKey> {
 	const decrypted = await decryptTraditionalPem('EC PRIVATE KEY', pem, password);
-	return importSec1Der(decrypted, algorithm);
+	return importSec1DerOrThrow(decrypted, algorithm);
+}
+
+/**
+ * Import an EC private key from legacy `Proc-Type: 4,ENCRYPTED` PEM (SEC 1).
+ *
+ * @see {@linkcode importEncryptedSec1PemOrThrow} for the throwing variant
+ */
+export async function importEncryptedSec1Pem(
+	pem: string,
+	password: string,
+	algorithm: ImportEcPublicKeyInput,
+): Promise<ImportEncryptedKeyResult<CryptoKey>> {
+	try {
+		return successResult(await importEncryptedSec1PemOrThrow(pem, password, algorithm));
+	} catch (error) {
+		if (error instanceof WrongPasswordError) {
+			return failureResult('invalid_password', error.message);
+		}
+		return failureResult(
+			'malformed',
+			error instanceof Error ? error.message : 'Malformed encrypted key',
+		);
+	}
 }
 
 /**
@@ -755,7 +1060,7 @@ export async function importEncryptedSec1Pem(
  *
  * @see {@linkcode exportPublicJwk} for the inverse operation
  */
-export async function importPublicJwk(
+export async function importPublicJwkOrThrow(
 	jwk: JsonWebKey,
 	algorithm: PublicKeyImportInput,
 ): Promise<CryptoKey> {
@@ -770,6 +1075,22 @@ export async function importPublicJwk(
 }
 
 /**
+ * Import a public verification key from a JSON Web Key.
+ *
+ * @see {@linkcode importPublicJwkOrThrow} for the throwing variant
+ */
+export async function importPublicJwk(
+	jwk: JsonWebKey,
+	algorithm: PublicKeyImportInput,
+): Promise<ImportKeyResult<CryptoKey>> {
+	try {
+		return successResult(await importPublicJwkOrThrow(jwk, algorithm));
+	} catch (error) {
+		return failureResult('malformed', error instanceof Error ? error.message : 'Malformed key');
+	}
+}
+
+/**
  * Import a private signing key from a JSON Web Key.
  *
  * @example
@@ -778,11 +1099,27 @@ export async function importPublicJwk(
  * const key = await importPrivateJwk(jwk, { kind: 'ecdsa', curve: 'P-256' });
  * ```
  */
-export async function importPrivateJwk(
+export async function importPrivateJwkOrThrow(
 	jwk: JsonWebKey,
 	algorithm: PrivateKeyImportInput,
 ): Promise<CryptoKey> {
 	return getCrypto().subtle.importKey('jwk', jwk, toImportAlgorithm(algorithm), true, ['sign']);
+}
+
+/**
+ * Import a private signing key from a JSON Web Key.
+ *
+ * @see {@linkcode importPrivateJwkOrThrow} for the throwing variant
+ */
+export async function importPrivateJwk(
+	jwk: JsonWebKey,
+	algorithm: PrivateKeyImportInput,
+): Promise<ImportKeyResult<CryptoKey>> {
+	try {
+		return successResult(await importPrivateJwkOrThrow(jwk, algorithm));
+	} catch (error) {
+		return failureResult('malformed', error instanceof Error ? error.message : 'Malformed key');
+	}
 }
 
 /** Map a {@linkcode KeyAlgorithmInput} to the WebCrypto `generateKey` algorithm parameter. */
@@ -985,7 +1322,7 @@ async function decryptTraditionalPem(
 			),
 		);
 	} catch {
-		throw new Error('Invalid password or encrypted PEM content');
+		throw new WrongPasswordError('Invalid password or encrypted PEM content');
 	}
 }
 

@@ -80,7 +80,7 @@ describe('root barrel', () => {
 		const pem = await exportPkcs8Pem(keyPair.privateKey);
 		expect(pem).toContain('-----BEGIN PRIVATE KEY-----');
 
-		const imported = await importPkcs8Pem(pem, { kind: 'ecdsa', curve: 'P-384' });
+		const imported = unwrap(await importPkcs8Pem(pem, { kind: 'ecdsa', curve: 'P-384' }));
 		expect(imported.type).toBe('private');
 
 		// sign with imported key to prove it works

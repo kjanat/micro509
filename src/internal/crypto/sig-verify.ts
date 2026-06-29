@@ -9,7 +9,7 @@ import { toArrayBuffer } from '#micro509/internal/asn1/asn1.ts';
 import { readElement } from '#micro509/internal/asn1/der.ts';
 import { OIDS } from '#micro509/internal/asn1/oids.ts';
 import type { PublicKeyImportInput, RsaHash, RsaScheme } from '#micro509/keys/keys.ts';
-import { importSpkiDer } from '#micro509/keys/keys.ts';
+import { importSpkiDerOrThrow } from '#micro509/keys/keys.ts';
 import { alternateEcdsaSignatureEncoding } from './ecdsa.ts';
 import { parseRsaPssParameters } from './rsa-pss.ts';
 import { getCrypto } from './webcrypto.ts';
@@ -322,7 +322,7 @@ export async function verifySignedDataDetailed(
 		return config;
 	}
 	try {
-		const key = await importSpkiDer(subjectPublicKeyInfoDer, config.value.importAlgorithm);
+		const key = await importSpkiDerOrThrow(subjectPublicKeyInfoDer, config.value.importAlgorithm);
 		const subtle = getCrypto().subtle;
 		const signatureView = toArrayBuffer(signature);
 		const dataView = toArrayBuffer(signedData);
