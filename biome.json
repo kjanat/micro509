@@ -22,8 +22,15 @@
 		},
 		"rules": {
 			"complexity": {
-				"useLiteralKeys": "off"
-			}
+				"useLiteralKeys": "off",
+				"recommended": true
+			},
+			"correctness": { "recommended": true },
+			"performance": { "recommended": true },
+			"nursery": { "recommended": true },
+			"security": { "recommended": true },
+			"style": { "recommended": true },
+			"suspicious": { "recommended": true }
 		}
 	},
 	"javascript": {
@@ -60,6 +67,12 @@
 					}
 				}
 			}
+		},
+		{
+			"includes": ["site/**"],
+			"formatter": { "indentStyle": "space" },
+			"javascript": { "formatter": { "indentStyle": "tab" } },
+			"assist": { "enabled": false }
 		}
 	]
 }

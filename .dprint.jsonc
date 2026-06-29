@@ -105,7 +105,6 @@
 		"**/bun.lock",
 		"**/dist",
 		"**/docs/deno",
-		"site/"
 	],
 	"plugins": [
 		"https://plugins.dprint.dev/dockerfile-0.4.1.wasm",

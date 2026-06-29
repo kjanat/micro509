@@ -13,15 +13,7 @@
 		"./x509": "./src/x509/index.ts"
 	},
 	"publish": {
-		"include": [
-			"src/**/*.ts",
-			"package.json",
-			"LICENSE",
-			"README.md"
-		],
-		"exclude": [
-			"**/AGENTS.md",
-			"src/**/*.test.ts"
-		]
+		"include": ["src/**/*.ts", "package.json", "LICENSE", "README.md"],
+		"exclude": ["**/AGENTS.md", "src/**/*.test.ts"]
 	}
 }
