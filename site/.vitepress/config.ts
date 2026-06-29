@@ -99,7 +99,7 @@ export default defineConfig({
 			robotsTxt({ preset: 'allowAll' }),
 			svgToIco({
 				input: `${import.meta.dirname}/../assets/favicon.svg`,
-				emit: { source: true, inject: false },
+				emit: [{ format: 'ico' }, { format: 'svg' }],
 			}),
 		],
 		publicDir: `${import.meta.dirname}/../assets/`,
@@ -161,7 +161,6 @@ export default defineConfig({
 
 	head: /* biome-ignore format: X */ [
 		['meta', { name: 'theme-color', content: '#3c8772' }],
-		['link', { rel: 'icon', href: '/favicon.ico', type: 'image/x-icon', sizes: '16x16 32x32 48x48' }],
 		['link', { rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml' }],
 		['meta', { property: 'og:type', content: 'website' }],
 		['meta', { property: 'og:title', content: pkg.name }],
