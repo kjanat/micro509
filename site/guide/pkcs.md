@@ -28,7 +28,7 @@ const pfx = await createPfx({
   mac: { password: 'secret' },
 });
 
-console.log(`der bytes: ${pfx.der.length}`);
+console.log(`der bytes:  ${pfx.der.length}`);
 console.log(`base64 len: ${pfx.base64.length}`);
 console.log(pfx.pem.slice(0, 24));
 ```
@@ -61,7 +61,7 @@ const result = await parsePfxDer(pfx.der, {
 if (result.ok) {
   const { certificates, privateKeys, bags } = result.value;
   const leafCert = certificates[0];
-  console.log(`certs:       ${certificates.length}`);
+  console.log(`certs:        ${certificates.length}`);
   console.log(`private keys: ${privateKeys.length}`);
   console.log(`bags:         ${bags.length}`);
   console.log(
@@ -181,8 +181,8 @@ if (!signed.ok) {
     const sd = result.value;
     const info = sd.signerInfos[0];
     console.log('verified: true');
-    console.log('signers:', sd.signerInfos.length);
-    console.log('digest: ', info?.digestAlgorithmName);
+    console.log('signers: ', sd.signerInfos.length);
+    console.log('digest:  ', info?.digestAlgorithmName);
   } else {
     console.log(`verify: ${result.error.code}`);
   }
@@ -224,11 +224,11 @@ const blocks = splitPemBlocks(multiPem);
 const { certificates, certificateRequests, privateKeys } =
   categorizePemBlocks(multiPem);
 
-console.log(`der bytes:   ${der.length}`);
-console.log(`round-trip:  ${pemEncoded === pem}`);
-console.log(`blocks:      ${blocks.length}`);
-console.log(`certs:       ${certificates.length}`);
-console.log(`csrs:        ${certificateRequests.length}`);
+console.log(`der bytes:    ${der.length}`);
+console.log(`round-trip:   ${pemEncoded === pem}`);
+console.log(`blocks:       ${blocks.length}`);
+console.log(`certs:        ${certificates.length}`);
+console.log(`csrs:         ${certificateRequests.length}`);
 console.log(`private keys: ${privateKeys.length}`);
 ```
 
