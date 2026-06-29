@@ -5,9 +5,8 @@ on:
   push: { branches: [master] }
   workflow_call: # callable so Publish can gate releases on a green suite
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+# No `concurrency` here: when Publish calls this via workflow_call, `github.workflow`
+# resolves to the caller ("Publish"), so a shared group would deadlock caller vs callee.
 
 jobs:
   test:

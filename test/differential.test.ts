@@ -22,7 +22,12 @@ import {
 	verifyChainWithOpenSsl,
 } from './oracles/openssl.ts';
 
-const differential = (await probeOpenSsl()) ? describe : describe.skip;
+// The OpenSSL oracle is version-sensitive (name formatting `CN=` vs `CN =`, and
+// verdict drift across releases), so it runs locally as a gap-discovery tool but
+// is skipped in CI, where a moving system `openssl` would be a flaky publish
+// gate. Run it against your local OpenSSL with `bun run test:differential`.
+const differential =
+	(await probeOpenSsl()) && process.env.CI === undefined ? describe : describe.skip;
 differential('OpenSSL differential harness', () => {
 	it('matches OpenSSL path verdicts for valid and path-length-exceeded chains', async () => {
 		const validChain = await issueChain();
