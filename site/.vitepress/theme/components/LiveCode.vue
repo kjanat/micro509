@@ -246,7 +246,11 @@ onMounted(() => {
         }}
       </button>
     </div>
-    <div v-if="ran" class="live-code-output" aria-live="polite">
+    <div
+      v-if="ran"
+      class="live-code-output"
+      aria-live="polite"
+    >
       <div class="live-code-label">
         Output
         <span class="live-code-actions">
