@@ -3,7 +3,6 @@ import robotsTxt from 'vite-robots-txt';
 import svgToIco from 'vite-svg-to-ico';
 import { defineConfig, type Plugin } from 'vitepress';
 import { cloudflare } from '@cloudflare/vite-plugin';
-// @ts-ignore
 import markdownItTaskLists from 'markdown-it-task-lists';
 
 import jsr from '#jsr' with { type: 'json' };
@@ -103,7 +102,10 @@ export default defineConfig({
 			robotsTxt({ preset: 'allowAll' }),
 			svgToIco({
 				input: `${import.meta.dirname}/../assets/favicon.svg`,
-				emit: [{ format: 'ico' }, { format: 'svg' }],
+				// v4 emit array: generate favicon.ico only. The source favicon.svg is
+				// already shipped via publicDir and the favicon link is declared in
+				// `head` below, so no SVG re-emit and no auto-injection.
+				emit: [{ format: 'ico' }],
 			}),
 		],
 		publicDir: `${import.meta.dirname}/../assets/`,

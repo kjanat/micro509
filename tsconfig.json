@@ -1,4 +1,8 @@
 {
 	"files": [],
-	"references": [{ "path": "./tsconfig.src.json" }, { "path": "./tsconfig.other.json" }]
+	"references": [
+		{ "path": "./tsconfig.src.json" },
+		{ "path": "./tsconfig.other.json" },
+		{ "path": "./site/.vitepress/tsconfig.json" }
+	]
 }

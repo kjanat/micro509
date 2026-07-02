@@ -169,10 +169,9 @@ src/**/*.d.ts
 /site/api/full/*.md
 !/site/api/full/index.md
 /site/api/typedoc-sidebar.json
-/site/.vitepress/cache/
-/site/.vitepress/dist/
+.vitepress/cache/
+.vitepress/dist/
 .playwright-cli
 .opencode/state/
 anal.md
 test/fixtures/pkits/nist/PKITS_data/
-.vitepress/

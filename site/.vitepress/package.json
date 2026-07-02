@@ -1,0 +1,8 @@
+{
+  "name": "micro509-site",
+  "version": "",
+  "imports": {
+    "#/*": "./*",
+    "#/components/*": "./theme/components/*"
+  }
+}

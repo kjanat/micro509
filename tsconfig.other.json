@@ -33,12 +33,11 @@
 		"src",
 		"test",
 		"scripts",
-		"site",
 		"*.config.ts",
 		"*.d.ts",
 		"*.json",
 		"*.mjs",
-		"./.config/*"
+		"./.config/*",
 	],
-	"exclude": ["dist", "node_modules"]
+	"exclude": ["dist", "node_modules", "site"]
 }
