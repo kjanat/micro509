@@ -5,9 +5,9 @@ import { defineConfig, type Plugin } from 'vitepress';
 import { cloudflare } from '@cloudflare/vite-plugin';
 import markdownItTaskLists from 'markdown-it-task-lists';
 
-import jsr from '#jsr' with { type: 'json' };
-import pkg from '#pkg' with { type: 'json' };
-import typedocSidebar from '#typedoc-sidebar' with { type: 'json' };
+import jsr from '../../jsr.json' with { type: 'json' };
+import pkg from '../../package.json' with { type: 'json' };
+import typedocSidebar from '../api/typedoc-sidebar.json' with { type: 'json' };
 
 const getRequiredEnv = (names: readonly string[]): string => {
 	for (const name of names) {

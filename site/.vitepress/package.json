@@ -1,8 +1,15 @@
 {
   "name": "micro509-site",
   "version": "",
+  "type": "module",
   "imports": {
     "#/*": "./*",
     "#/components/*": "./theme/components/*"
+  },
+  "devDependencies": {
+    "@tsconfig/node24": "^24.0.4",
+    "@types/bun": "^1.3.14",
+    "@types/node": "^26.1.0",
+    "@vue/tsconfig": "^0.9.1"
   }
 }
