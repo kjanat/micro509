@@ -18,6 +18,7 @@
         "tsdown": "^0.22.3",
         "typescript": "^6.0.3",
         "unplugin-unused": "^0.5.7",
+        "wrangler": "^4.105.0",
       },
     },
     "site/.vitepress": {
@@ -37,7 +38,6 @@
         "vitepress": "2.0.0-alpha.17",
         "vue": "^3.5.27",
         "vue-tsc": "^3.3.5",
-        "wrangler": "^4.105.0",
       },
     },
   },
