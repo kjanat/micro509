@@ -4,7 +4,7 @@
 		"module": "NodeNext",
 		"moduleResolution": "NodeNext",
 		"lib": ["ES2024", "DOM"],
-		"types": ["bun", "node", "vue", "vitepress"],
+		"types": ["bun", "node"],
 		"skipLibCheck": true,
 		"strict": true,
 		"noUncheckedIndexedAccess": true,
@@ -37,7 +37,6 @@
 		"*.d.ts",
 		"*.json",
 		"*.mjs",
-		"./.config/*",
 	],
 	"exclude": ["dist", "node_modules", "site"]
 }

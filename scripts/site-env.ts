@@ -18,6 +18,8 @@
  * Usage: bun scripts/site-env.ts <command> [args...]
  */
 import { spawnSync } from 'node:child_process';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 /** Run a git command, returning trimmed stdout, or '' on any failure. */
 const gitOut = (args: readonly string[]): string => {
@@ -56,9 +58,29 @@ if (cmd === undefined) {
 	process.exit(2);
 }
 
+// Doc-site tools (vitepress, typedoc, vue-tsc) are devDeps of the
+// `site/.vitepress` workspace member, so their binaries live in that member's
+// node_modules, not the repo root. Prepend that .bin to PATH so bare tool names
+// resolve while cwd stays the repo root (typedoc/vitepress configs are
+// root-relative).
+const siteBin = join(
+	dirname(fileURLToPath(import.meta.url)),
+	'..',
+	'site',
+	'.vitepress',
+	'node_modules',
+	'.bin',
+);
+const pathSep = process.platform === 'win32' ? ';' : ':';
+
 const { status, error } = spawnSync(cmd, args, {
 	stdio: 'inherit',
-	env: { ...env, MICRO509_GIT_BRANCH: branch, MICRO509_GIT_COMMIT: commit },
+	env: {
+		...env,
+		PATH: `${siteBin}${pathSep}${env.PATH ?? ''}`,
+		MICRO509_GIT_BRANCH: branch,
+		MICRO509_GIT_COMMIT: commit,
+	},
 });
 
 if (error) {
