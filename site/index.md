@@ -21,7 +21,7 @@ hero:
 features:
   - icon: 🔏
     title: Typed Verification
-    details: 21 typed error codes with chain index and structured failure details. Build certificate flows your code can actually reason about.
+    details: Typed error codes with chain index and structured failure details. Build certificate flows your code can actually reason about.
   - icon: 🌐
     title: Runs Everywhere
     details: Pure WebCrypto, zero dependencies. Node, Bun, Deno, browsers, Cloudflare Workers.

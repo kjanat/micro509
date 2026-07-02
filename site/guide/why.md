@@ -17,7 +17,7 @@ show the user next.
 
 ## Typed verification results
 
-micro509 returns a discriminated union with 21 typed error codes, the failing certificate's index, and structured failure details:
+micro509 returns a discriminated union with typed error codes, the failing certificate's index, and structured failure details:
 
 <LiveCode>
 
