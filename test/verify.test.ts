@@ -3195,7 +3195,7 @@ describe('validateCandidatePath direct', () => {
 		const result = await validateCandidatePath(input);
 		expect(result).toMatchObject({
 			ok: false,
-			code: 'initial_name_constraints_not_implemented',
+			code: 'unsupported_initial_name_constraints',
 			details: { actual: 'otherName' },
 		});
 	});
@@ -3217,7 +3217,7 @@ describe('validateCandidatePath direct', () => {
 		const result = await validateCandidatePath(input);
 		expect(result).toMatchObject({
 			ok: false,
-			code: 'initial_name_constraints_not_implemented',
+			code: 'unsupported_initial_name_constraints',
 			details: { actual: 'permittedSubtrees' },
 		});
 	});

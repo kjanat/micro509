@@ -1,6 +1,7 @@
 import { Glob } from 'bun';
 import { describe, expect, it } from 'bun:test';
 import { readFileSync } from 'node:fs';
+import { VERIFY_ERROR_CODES } from 'micro509';
 
 /**
  * Guards the structural rules from AGENTS.md / CONTRIBUTING.md that neither
@@ -32,5 +33,12 @@ describe('repo conventions (AGENTS.md / CONTRIBUTING.md)', () => {
 
 	it('src/ has no default exports', () => {
 		expect(offendersMatching(/^[ \t]*export[ \t]+default\b/m)).toEqual([]);
+	});
+
+	it('site error-code table matches VERIFY_ERROR_CODES exactly', () => {
+		const guide = readFileSync(new URL('../site/guide/verification.md', import.meta.url), 'utf8');
+		// First backtick-wrapped snake_case token of each table row
+		const documented = [...guide.matchAll(/^\| `([a-z0-9_]+)`/gm)].map((m) => m[1]);
+		expect([...documented].sort()).toEqual([...VERIFY_ERROR_CODES].sort());
 	});
 });

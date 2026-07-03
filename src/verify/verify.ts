@@ -165,38 +165,42 @@ export interface TrustAnchor {
  * - `self_signed_leaf_not_allowed` — the leaf is self-signed and `allowSelfSignedLeaf` was not set.
  * - `unrecognized_critical_extension` — a certificate contains a critical extension the verifier cannot process.
  * - `intermediate_eku_constraint` — an intermediate CA's EKU set does not include the required purpose.
- * - `policy_processing_not_implemented` — policy processing encountered an unsupported construct.
  * - `explicit_policy_required` — `requireExplicitPolicy` was set but no acceptable policy was found.
  * - `initial_policy_set_not_satisfied` — the chain's policies do not intersect `initialPolicySet`.
- * - `initial_name_constraints_not_implemented` — caller-supplied initial name constraints are unsupported.
+ * - `unsupported_initial_name_constraints` — caller-supplied initial name constraints use unsupported or malformed forms.
  * - `unsupported_name_constraints` — a certificate's nameConstraints use an unsupported form.
  * - `name_constraints_violated` — a subject name violates a permitted/excluded subtree.
  * - `unsupported_signature_algorithm_parameters` — the signature algorithm uses unrecognized parameters.
+ * - `certificate_revoked` — revocation evidence confirms a chain certificate is revoked.
+ * - `revocation_indeterminate` — revocation status could not be determined under a hard-fail policy.
  */
-export type VerifyErrorCode =
-	| 'no_trusted_root'
-	| 'issuer_not_found'
-	| 'signature_invalid'
-	| 'certificate_expired'
-	| 'ca_required'
-	| 'key_cert_sign_required'
-	| 'path_length_exceeded'
-	| 'authority_key_identifier_mismatch'
-	| 'extended_key_usage_invalid'
-	| 'subject_alt_name_mismatch'
-	| 'common_name_fallback_suppressed'
-	| 'self_signed_leaf_not_allowed'
-	| 'unrecognized_critical_extension'
-	| 'intermediate_eku_constraint'
-	| 'policy_processing_not_implemented'
-	| 'explicit_policy_required'
-	| 'initial_policy_set_not_satisfied'
-	| 'initial_name_constraints_not_implemented'
-	| 'unsupported_name_constraints'
-	| 'name_constraints_violated'
-	| 'unsupported_signature_algorithm_parameters'
-	| 'certificate_revoked'
-	| 'revocation_indeterminate';
+export const VERIFY_ERROR_CODES = [
+	'no_trusted_root',
+	'issuer_not_found',
+	'signature_invalid',
+	'certificate_expired',
+	'ca_required',
+	'key_cert_sign_required',
+	'path_length_exceeded',
+	'authority_key_identifier_mismatch',
+	'extended_key_usage_invalid',
+	'subject_alt_name_mismatch',
+	'common_name_fallback_suppressed',
+	'self_signed_leaf_not_allowed',
+	'unrecognized_critical_extension',
+	'intermediate_eku_constraint',
+	'explicit_policy_required',
+	'initial_policy_set_not_satisfied',
+	'unsupported_initial_name_constraints',
+	'unsupported_name_constraints',
+	'name_constraints_violated',
+	'unsupported_signature_algorithm_parameters',
+	'certificate_revoked',
+	'revocation_indeterminate',
+] as const;
+
+/** See the doc comment above {@linkcode VERIFY_ERROR_CODES} for the meaning of each code. */
+export type VerifyErrorCode = (typeof VERIFY_ERROR_CODES)[number];
 
 /** Diagnostic context attached to every {@linkcode VerifyChainFailure}. All fields are optional; presence depends on the error code. */
 export interface VerifyFailureDetails {
@@ -317,7 +321,7 @@ export type ValidateCandidatePathResult =
 export interface ChainRevocationInput {
 	/** CRLs to evaluate. */
 	readonly crls?: readonly CrlSource[];
-	/** OCSP responses to evaluate (not yet implemented). */
+	/** OCSP responses to evaluate (PEM strings or DER bytes). */
 	readonly ocspResponses?: readonly (string | Uint8Array)[];
 	/** Extra certs for indirect CRL issuers / delegated OCSP responders. */
 	readonly extraCertificates?: readonly RevocationCertificateSource[];
@@ -1732,7 +1736,7 @@ function describeInvalidInitialNameConstraintForm(subtree: unknown): string | un
 
 function invalidInitialNameConstraintsFailure(actual: string): VerifyChainFailure {
 	return failure(
-		'initial_name_constraints_not_implemented',
+		'unsupported_initial_name_constraints',
 		'initial name constraints use unsupported or malformed forms',
 		undefined,
 		detail({ actual }),

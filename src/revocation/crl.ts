@@ -2040,7 +2040,7 @@ function normalizeHex(value: string): string {
 }
 
 /** Maps an integer CRLReason code back to its {@linkcode RevocationReason} string, or `undefined` for unknown codes. */
-function revocationReasonFromCode(code: number | undefined): RevocationReason | undefined {
+export function revocationReasonFromCode(code: number | undefined): RevocationReason | undefined {
 	switch (code) {
 		case 0:
 			return 'unspecified';

@@ -70,6 +70,7 @@ export {
 	validateForCodeSigning,
 	validateForTlsClient,
 	validateForTlsServer,
+	VERIFY_ERROR_CODES,
 	verifyCertificateChain,
 	verifyCertificateSigningRequest,
 } from './verify.ts';

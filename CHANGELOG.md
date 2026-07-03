@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- OCSP evidence is now consumed by chain-level revocation:
+  `checkChainRevocation()` (and `verifyCertificateChain({ revocation })`)
+  validates caller-supplied `ocspResponses` — signature, responder binding
+  and authorization, freshness — and combines them with CRL evidence. A
+  validated `revoked` verdict from either source always denies, regardless
+  of `policy.prefer` (fail-closed). Delegated responder certificates can be
+  supplied via `extraCertificates`.
+- `VERIFY_ERROR_CODES`: runtime array of every `VerifyErrorCode`, exported
+  from the root and `micro509/verify`. The docs error-code table is now
+  test-enforced against it.
+- CI now builds, validates the npm tarball against the published exports
+  map, and smoke-tests the dist output under Node and Deno.
+
+### Changed (BREAKING)
+
+- `VerifyErrorCode`: renamed `initial_name_constraints_not_implemented` →
+  `unsupported_initial_name_constraints` (it reports unsupported/malformed
+  initial-name-constraint forms, not a missing feature). Removed
+  `policy_processing_not_implemented`, which no code path emitted.
+
+### Fixed
+
+- npm packaging: the published `exports` map retained the dev-only
+  `bun → ./src/*.ts` conditions while the tarball ships only `dist/`,
+  breaking Bun consumers installing from npm (`npm publish` does not apply
+  `publishConfig.exports`). The publish workflow now rewrites `exports`
+  from `publishConfig.exports` before publishing, and CI fails if any
+  published export target is missing from the tarball.
+
 ## [0.3.0] - 2026-07-02
 
 Typed-error rework: trust-boundary functions (which consume untrusted

@@ -2,11 +2,18 @@ import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'bun:test';
 import {
 	checkChainRevocation,
+	createCertificate,
+	createCertificateRevocationList,
+	createOcspResponse,
+	createSelfSignedCertificate,
+	generateKeyPair,
 	parseCertificateDer,
+	parseCertificatePem,
 	parseCertificateRevocationListDer,
 	verifyCertificateChain,
 	unwrap,
 } from 'micro509';
+import { hexToBytes } from './helpers.ts';
 
 async function loadPkitsCert(name: string) {
 	const der = await readFile(new URL(`./fixtures/pkits/certs/${name}.crt`, import.meta.url));
@@ -227,6 +234,335 @@ describe('checkChainRevocation', () => {
 
 		expect(hardFailResult.ok).toBe(true);
 		expect(hardFailResult.value.decision).toBe('deny');
+	});
+});
+
+const HOUR_MS = 60 * 60 * 1000;
+
+async function createOcspChainFixture() {
+	const caName = 'OCSP Chain CA';
+	const ca = await createSelfSignedCertificate({
+		subject: { commonName: caName },
+		extensions: {
+			basicConstraints: { ca: true, pathLength: 1 },
+			keyUsage: ['keyCertSign', 'cRLSign'],
+		},
+	});
+	const leafKeys = await generateKeyPair();
+	const leaf = await createCertificate({
+		issuer: { commonName: caName },
+		subject: { commonName: 'ocsp-chain-leaf.example' },
+		publicKey: leafKeys.publicKey,
+		signerPrivateKey: ca.keyPair.privateKey,
+		issuerPublicKey: ca.keyPair.publicKey,
+	});
+	const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
+	const parsedCa = unwrap(parseCertificatePem(ca.certificate.pem));
+	const at = new Date();
+	return {
+		caName,
+		ca,
+		leaf,
+		chain: [parsedLeaf, parsedCa] as const,
+		parsedLeaf,
+		at,
+		fresh: {
+			thisUpdate: new Date(at.getTime() - HOUR_MS),
+			nextUpdate: new Date(at.getTime() + HOUR_MS),
+		},
+	};
+}
+
+describe('checkChainRevocation with OCSP evidence', () => {
+	it('returns good status from a validated OCSP response', async () => {
+		const { ca, leaf, chain, at, fresh } = await createOcspChainFixture();
+		const response = await createOcspResponse({
+			signerPrivateKey: ca.keyPair.privateKey,
+			signerCertificate: ca.certificate.pem,
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: ca.certificate.pem,
+					certStatus: 'good',
+					...fresh,
+				},
+			],
+		});
+
+		const result = await checkChainRevocation({
+			chain: [...chain],
+			ocspResponses: [response.der],
+			at,
+		});
+
+		expect(result.ok).toBe(true);
+		expect(result.value.decision).toBe('allow');
+		const leafStatus = result.value.certificates[0];
+		expect(leafStatus?.status).toBe('good');
+		expect(leafStatus?.source?.type).toBe('ocsp');
+	});
+
+	it('denies when a validated OCSP response reports revoked', async () => {
+		const { ca, leaf, chain, at, fresh } = await createOcspChainFixture();
+		const revokedAt = new Date(at.getTime() - HOUR_MS);
+		const response = await createOcspResponse({
+			signerPrivateKey: ca.keyPair.privateKey,
+			signerCertificate: ca.certificate.pem,
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: ca.certificate.pem,
+					certStatus: 'revoked',
+					revokedAt,
+					revocationReasonCode: 1,
+					...fresh,
+				},
+			],
+		});
+
+		const result = await checkChainRevocation({
+			chain: [...chain],
+			ocspResponses: [response.der],
+			at,
+		});
+
+		expect(result.ok).toBe(true);
+		expect(result.value.decision).toBe('deny');
+		const leafStatus = result.value.certificates[0];
+		expect(leafStatus?.status).toBe('revoked');
+		expect(leafStatus?.source?.type).toBe('ocsp');
+		expect(leafStatus?.revocationInfo?.reason).toBe('keyCompromise');
+		// DER time encoding truncates to whole seconds
+		expect(leafStatus?.revocationInfo?.date.getTime()).toBe(
+			Math.floor(revokedAt.getTime() / 1000) * 1000,
+		);
+	});
+
+	it('treats OCSP unknown status as indeterminate', async () => {
+		const { ca, leaf, chain, at, fresh } = await createOcspChainFixture();
+		const response = await createOcspResponse({
+			signerPrivateKey: ca.keyPair.privateKey,
+			signerCertificate: ca.certificate.pem,
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: ca.certificate.pem,
+					certStatus: 'unknown',
+					...fresh,
+				},
+			],
+		});
+
+		const softFail = await checkChainRevocation({
+			chain: [...chain],
+			ocspResponses: [response.der],
+			at,
+		});
+		expect(softFail.value.decision).toBe('allow');
+		expect(softFail.value.certificates[0]?.status).toBe('indeterminate');
+		expect(softFail.value.certificates[0]?.indeterminateReasons).toContain('ocsp_status_unknown');
+
+		const hardFail = await checkChainRevocation({
+			chain: [...chain],
+			ocspResponses: [response.der],
+			at,
+			policy: { mode: 'hard-fail' },
+		});
+		expect(hardFail.value.decision).toBe('deny');
+	});
+
+	it('treats an expired OCSP response as indeterminate', async () => {
+		const { ca, leaf, chain, at } = await createOcspChainFixture();
+		const response = await createOcspResponse({
+			signerPrivateKey: ca.keyPair.privateKey,
+			signerCertificate: ca.certificate.pem,
+			producedAt: new Date(at.getTime() - 3 * HOUR_MS),
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: ca.certificate.pem,
+					certStatus: 'good',
+					thisUpdate: new Date(at.getTime() - 3 * HOUR_MS),
+					nextUpdate: new Date(at.getTime() - 2 * HOUR_MS),
+				},
+			],
+		});
+
+		const result = await checkChainRevocation({
+			chain: [...chain],
+			ocspResponses: [response.der],
+			at,
+		});
+
+		expect(result.value.certificates[0]?.status).toBe('indeterminate');
+		expect(result.value.certificates[0]?.indeterminateReasons).toContain('ocsp_response_expired');
+	});
+
+	it('fails closed: CRL revoked verdict wins over OCSP good even with prefer ocsp', async () => {
+		const { caName, ca, leaf, chain, parsedLeaf, at, fresh } = await createOcspChainFixture();
+		const response = await createOcspResponse({
+			signerPrivateKey: ca.keyPair.privateKey,
+			signerCertificate: ca.certificate.pem,
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: ca.certificate.pem,
+					certStatus: 'good',
+					...fresh,
+				},
+			],
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: caName },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			...fresh,
+			revokedCertificates: [
+				{
+					serialNumber: hexToBytes(parsedLeaf.serialNumberHex),
+					revocationDate: fresh.thisUpdate,
+					reasonCode: 'keyCompromise',
+				},
+			],
+		});
+
+		const result = await checkChainRevocation({
+			chain: [...chain],
+			ocspResponses: [response.der],
+			crls: [crl.der],
+			at,
+			policy: { prefer: 'ocsp' },
+		});
+
+		expect(result.value.decision).toBe('deny');
+		const leafStatus = result.value.certificates[0];
+		expect(leafStatus?.status).toBe('revoked');
+		expect(leafStatus?.source?.type).toBe('crl');
+	});
+
+	it('honors prefer when both sources report good', async () => {
+		const { caName, ca, leaf, chain, at, fresh } = await createOcspChainFixture();
+		const response = await createOcspResponse({
+			signerPrivateKey: ca.keyPair.privateKey,
+			signerCertificate: ca.certificate.pem,
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: ca.certificate.pem,
+					certStatus: 'good',
+					...fresh,
+				},
+			],
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: caName },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			...fresh,
+		});
+
+		const preferOcsp = await checkChainRevocation({
+			chain: [...chain],
+			ocspResponses: [response.der],
+			crls: [crl.der],
+			at,
+		});
+		expect(preferOcsp.value.certificates[0]?.source?.type).toBe('ocsp');
+
+		const preferCrl = await checkChainRevocation({
+			chain: [...chain],
+			ocspResponses: [response.der],
+			crls: [crl.der],
+			at,
+			policy: { prefer: 'crl' },
+		});
+		expect(preferCrl.value.certificates[0]?.source?.type).toBe('crl');
+	});
+
+	it('validates a delegated responder provided via extraCertificates', async () => {
+		const { caName, ca, leaf, chain, at, fresh } = await createOcspChainFixture();
+		const responderKeys = await generateKeyPair();
+		const responder = await createCertificate({
+			issuer: { commonName: caName },
+			subject: { commonName: 'Delegated OCSP Responder' },
+			publicKey: responderKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: { extendedKeyUsage: ['ocspSigning'] },
+		});
+		// No embedded certificates — discovery must fall back to extraCertificates
+		const response = await createOcspResponse({
+			signerPrivateKey: responderKeys.privateKey,
+			signerCertificate: responder.pem,
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: ca.certificate.pem,
+					certStatus: 'good',
+					...fresh,
+				},
+			],
+		});
+
+		const withoutExtras = await checkChainRevocation({
+			chain: [...chain],
+			ocspResponses: [response.der],
+			at,
+		});
+		expect(withoutExtras.value.certificates[0]?.status).toBe('indeterminate');
+
+		const withExtras = await checkChainRevocation({
+			chain: [...chain],
+			ocspResponses: [response.der],
+			extraCertificates: [responder.pem],
+			at,
+		});
+		expect(withExtras.value.certificates[0]?.status).toBe('good');
+		expect(withExtras.value.certificates[0]?.source?.type).toBe('ocsp');
+	});
+
+	it('records parse errors for malformed OCSP responses', async () => {
+		const { chain, at } = await createOcspChainFixture();
+		const result = await checkChainRevocation({
+			chain: [...chain],
+			ocspResponses: [Uint8Array.of(0x30, 0x00)],
+			at,
+		});
+
+		expect(result.value.certificates[0]?.status).toBe('indeterminate');
+		expect(result.value.executionErrors?.some((e) => e.kind === 'parse_error')).toBe(true);
+	});
+
+	it('verifyCertificateChain denies via OCSP revocation evidence', async () => {
+		const { ca, leaf, at, fresh } = await createOcspChainFixture();
+		const response = await createOcspResponse({
+			signerPrivateKey: ca.keyPair.privateKey,
+			signerCertificate: ca.certificate.pem,
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: ca.certificate.pem,
+					certStatus: 'revoked',
+					revokedAt: fresh.thisUpdate,
+					...fresh,
+				},
+			],
+		});
+
+		const result = await verifyCertificateChain({
+			leaf: leaf.pem,
+			roots: [ca.certificate.pem],
+			at,
+			revocation: {
+				ocspResponses: [response.der],
+				policy: { mode: 'hard-fail' },
+			},
+		});
+
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.error.code).toBe('certificate_revoked');
+		}
 	});
 });
 

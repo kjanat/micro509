@@ -5,12 +5,12 @@ forward-work backlog for the PKIX-facing surface.
 
 ## Standards status
 
-| Area                       | Status    | Notes                                                                                                                                                                                                                                                          |
-| -------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| RFC 5280 path validation   | `partial` | core path validation, supported-form name constraints, initial subtree inputs, RFC 9618 policy processing, malformed-DER coverage, and broad PKITS harness coverage ship; revocation stays a separate API and broader conformance evidence is still incomplete |
-| RFC 6960 OCSP              | `partial` | request/response parsing, signature checks, responder binding/authorization, nonce/request matching, freshness checks, and full request coverage ship; local responder-policy acceptance is still incomplete                                                   |
-| RFC 6125 service identity  | `partial` | `matchServiceIdentity()` ships DNS-ID, IP-ID, URI-ID, SRV-ID, wildcard, IDNA, and opt-in CN-compat checks; verification helpers still wire DNS/IP identities only                                                                                              |
-| RFC 9618 policy validation | `partial` | RFC 9618-style policy state, enforcement, outputs, and broad PKITS harness coverage ship; broader conformance evidence is still incomplete                                                                                                                     |
+| Area                       | Status    | Notes                                                                                                                                                                                                                                                                       |
+| -------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| RFC 5280 path validation   | `partial` | core path validation, supported-form name constraints, initial subtree inputs, RFC 9618 policy processing, malformed-DER coverage, and broad PKITS harness coverage ship; revocation stays a separate API and broader conformance evidence is still incomplete              |
+| RFC 6960 OCSP              | `partial` | request/response parsing, signature checks, responder binding/authorization, nonce/request matching, freshness checks, full request coverage, and chain-level revocation orchestration (`checkChainRevocation`) ship; local responder-policy acceptance is still incomplete |
+| RFC 6125 service identity  | `partial` | `matchServiceIdentity()` ships DNS-ID, IP-ID, URI-ID, SRV-ID, wildcard, IDNA, and opt-in CN-compat checks; verification helpers still wire DNS/IP identities only                                                                                                           |
+| RFC 9618 policy validation | `partial` | RFC 9618-style policy state, enforcement, outputs, and broad PKITS harness coverage ship; broader conformance evidence is still incomplete                                                                                                                                  |
 
 Current conformance evidence:
 
@@ -142,6 +142,9 @@ Focused RFC 6125 identity fixtures live in [`test/identity-fixtures.test.ts`](..
 - [x] Enforce response freshness using `thisUpdate` / `nextUpdate` and configurable clock skew.
 - [x] Return `good`, `revoked`, and `unknown` distinctly.
 - [x] Support optional nonce handling if you want replay binding between request and response. RFC 9654 defines the updated nonce extension details. (IETF Datatracker[^rfc6960])
+- [x] Consume caller-supplied OCSP responses in chain-level revocation
+      orchestration (`checkChainRevocation()` / `verifyCertificateChain()`),
+      with fail-closed combination against CRL evidence.
 
 ## 11. OCSP responder authorization rules
 

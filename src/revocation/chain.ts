@@ -16,8 +16,17 @@ import {
 	parseCertificateRevocationListPem,
 	type ParsedCertificateRevocationList,
 	type RevocationReason,
+	revocationReasonFromCode,
 } from './crl.ts';
 import type { CrlSource } from './crl.ts';
+import {
+	type ParsedOcspResponse,
+	parseOcspResponseDer,
+	parseOcspResponsePem,
+	type ValidateOcspResponseFailure,
+	type ValidateOcspResponseResult,
+	validateOcspResponse,
+} from './ocsp.ts';
 
 export type { CrlSource };
 
@@ -36,7 +45,7 @@ export type CertificateSource = string | Uint8Array | ParsedCertificate;
 /**
  * OCSP response in any supported format.
  *
- * Accepts PEM string or DER bytes. Reserved for future OCSP support in
+ * Accepts PEM string or DER bytes. Used for
  * {@linkcode CheckChainRevocationInput.ocspResponses}.
  */
 export type OcspResponseSource = string | Uint8Array;
@@ -58,7 +67,12 @@ export interface RevocationPolicy {
 	/**
 	 * Evidence preference when multiple sources are available.
 	 *
-	 * - `'best-available'`: use whichever evidence is freshest (default)
+	 * Both evidence kinds are always evaluated, and a validated `revoked`
+	 * verdict from either source wins regardless of preference (fail-closed).
+	 * Preference only decides which source's `good` verdict is reported when
+	 * both yield one.
+	 *
+	 * - `'best-available'`: OCSP consulted first, CRL as fallback (default)
 	 * - `'ocsp'`: prefer OCSP over CRL
 	 * - `'crl'`: prefer CRL over OCSP
 	 */
@@ -516,6 +530,171 @@ function buildCrlStatus(
 	};
 }
 
+// ---------------------------------------------------------------------------
+// OCSP Evidence Evaluation (RFC 6960)
+// ---------------------------------------------------------------------------
+
+/** Per-certificate evidence evaluation outcome shared by the CRL and OCSP evaluators. */
+interface EvidenceEvaluation {
+	readonly status: CertificateRevocationStatus;
+	readonly executionErrors: readonly RevocationExecutionError[];
+}
+
+/** Parses an OCSP response from PEM string or DER bytes. */
+function parseOcspResponseFromSource(source: OcspResponseSource): ParsedOcspResponse {
+	if (typeof source === 'string') {
+		return parseOcspResponsePem(source);
+	}
+	return parseOcspResponseDer(source);
+}
+
+/** Maps a {@linkcode validateOcspResponse} failure code to an indeterminate reason. */
+function ocspIndeterminateReasonFromFailure(
+	code: ValidateOcspResponseFailure['code'],
+): RevocationIndeterminateReason {
+	switch (code) {
+		case 'stale_response':
+			return 'ocsp_response_expired';
+		case 'responder_id_mismatch':
+		case 'responder_chain_invalid':
+		case 'ocsp_signing_missing':
+			return 'ocsp_responder_not_authorized';
+		case 'signature_invalid':
+			return 'ocsp_responder_indeterminate';
+		case 'response_status_invalid':
+		case 'issuer_mismatch':
+		case 'nonce_mismatch':
+		case 'request_mismatch':
+			return 'no_applicable_ocsp';
+	}
+}
+
+/** Validation failures worth retrying with an explicit responder certificate. */
+const OCSP_RESPONDER_FAILURE_CODES: ReadonlySet<ValidateOcspResponseFailure['code']> = new Set([
+	'signature_invalid',
+	'responder_id_mismatch',
+	'responder_chain_invalid',
+	'ocsp_signing_missing',
+]);
+
+/**
+ * Validates an OCSP response, retrying with caller-provided extra certificates
+ * as explicit responder certificates when embedded discovery fails.
+ */
+async function validateOcspResponseWithResponderFallback(
+	response: ParsedOcspResponse,
+	issuer: ParsedCertificate,
+	extraCertificates: readonly CertificateSource[],
+	at: Date,
+): Promise<ValidateOcspResponseResult> {
+	const primary = await validateOcspResponse({ response, issuerCertificate: issuer, at });
+	if (primary.ok || !OCSP_RESPONDER_FAILURE_CODES.has(primary.code)) {
+		return primary;
+	}
+	for (const source of extraCertificates) {
+		const responder = parseCertificateSafe(source);
+		if (responder === undefined) {
+			continue;
+		}
+		const retry = await validateOcspResponse({
+			response,
+			issuerCertificate: issuer,
+			responderCertificate: responder,
+			at,
+		});
+		if (retry.ok) {
+			return retry;
+		}
+	}
+	return primary;
+}
+
+/**
+ * Evaluates OCSP evidence for a single certificate (RFC 6960).
+ *
+ * Every response is fully validated — signature, responder binding and
+ * authorization, and freshness — via {@linkcode validateOcspResponse} before
+ * its status entry is trusted. Issuer binding of each CertID is enforced by
+ * the validator, so a serial-number match on a validated response is
+ * sufficient to attribute the entry to `cert`.
+ */
+async function evaluateOcspEvidence(
+	cert: ParsedCertificate,
+	issuer: ParsedCertificate,
+	input: CheckChainRevocationInput,
+): Promise<EvidenceEvaluation> {
+	const { ocspResponses = [], extraCertificates = [], at = new Date() } = input;
+	const executionErrors: RevocationExecutionError[] = [];
+	const reasons = new Set<RevocationIndeterminateReason>();
+
+	for (const source of ocspResponses) {
+		let parsed: ParsedOcspResponse;
+		try {
+			parsed = parseOcspResponseFromSource(source);
+		} catch (e) {
+			executionErrors.push({
+				kind: 'parse_error',
+				message: e instanceof Error ? e.message : 'OCSP response parse failed',
+			});
+			continue;
+		}
+
+		const entry = (parsed.responses ?? []).find(
+			(single) =>
+				normalizeHex(single.certId.serialNumberHex) === normalizeHex(cert.serialNumberHex),
+		);
+		if (entry === undefined) {
+			continue; // Response does not cover this certificate
+		}
+
+		const validation = await validateOcspResponseWithResponderFallback(
+			parsed,
+			issuer,
+			extraCertificates,
+			at,
+		);
+		if (!validation.ok) {
+			reasons.add(ocspIndeterminateReasonFromFailure(validation.code));
+			continue;
+		}
+
+		if (entry.certStatus === 'revoked') {
+			const reason = revocationReasonFromCode(entry.revocationReasonCode);
+			return {
+				status: {
+					certificate: cert,
+					status: 'revoked',
+					source: { type: 'ocsp' },
+					revocationInfo: {
+						date: entry.revokedAt ?? entry.thisUpdate,
+						...(reason !== undefined ? { reason } : {}),
+					},
+				},
+				executionErrors,
+			};
+		}
+		if (entry.certStatus === 'good') {
+			return {
+				status: { certificate: cert, status: 'good', source: { type: 'ocsp' } },
+				executionErrors,
+			};
+		}
+		reasons.add('ocsp_status_unknown');
+	}
+
+	if (reasons.size === 0) {
+		reasons.add('no_applicable_ocsp');
+	}
+	return {
+		status: {
+			certificate: cert,
+			status: 'indeterminate',
+			indeterminateReasons: [...reasons],
+		},
+		executionErrors,
+	};
+}
+
 /**
  * Evaluates revocation status for a single certificate using available CRLs.
  * Returns both status and any execution errors encountered.
@@ -537,15 +716,12 @@ const ALL_REASON_FLAGS: readonly string[] = [
 	'aACompromise',
 ];
 
-async function evaluateCertificateRevocation(
+async function evaluateCrlEvidence(
 	cert: ParsedCertificate,
 	issuer: ParsedCertificate,
 	input: CheckChainRevocationInput,
 	signerCtx: SignerValidationContext,
-): Promise<{
-	status: CertificateRevocationStatus;
-	executionErrors: readonly RevocationExecutionError[];
-}> {
+): Promise<EvidenceEvaluation> {
 	const { crls = [], extraCertificates = [], chain = [], at = new Date() } = input;
 	const executionErrors: RevocationExecutionError[] = [];
 	let sawCrlSignerRevoked = false;
@@ -689,8 +865,6 @@ async function evaluateCertificateRevocation(
 		reasons.push('crl_signer_revoked');
 	} else if (sawCrlSignerIndeterminate) {
 		reasons.push('crl_signer_indeterminate');
-	} else if (crls.length === 0) {
-		reasons.push('no_applicable_crl', 'no_applicable_ocsp');
 	} else {
 		reasons.push('no_applicable_crl');
 	}
@@ -700,6 +874,52 @@ async function evaluateCertificateRevocation(
 			certificate: cert,
 			status: 'indeterminate',
 			indeterminateReasons: reasons,
+		},
+		executionErrors,
+	};
+}
+
+/**
+ * Evaluates revocation status for a single certificate by combining OCSP and
+ * CRL evidence.
+ *
+ * Both evidence kinds are always evaluated: a validated `revoked` verdict from
+ * either source wins regardless of {@linkcode RevocationPolicy.prefer}
+ * (fail-closed). Otherwise the preferred source's `good` verdict is reported;
+ * if neither source is definitive, indeterminate reasons from both are merged.
+ */
+async function evaluateCertificateRevocation(
+	cert: ParsedCertificate,
+	issuer: ParsedCertificate,
+	input: CheckChainRevocationInput,
+	signerCtx: SignerValidationContext,
+): Promise<EvidenceEvaluation> {
+	const prefer = input.policy?.prefer ?? 'best-available';
+	const ocsp = await evaluateOcspEvidence(cert, issuer, input);
+	const crl = await evaluateCrlEvidence(cert, issuer, input, signerCtx);
+	const executionErrors = [...ocsp.executionErrors, ...crl.executionErrors];
+
+	const ordered = prefer === 'crl' ? [crl, ocsp] : [ocsp, crl];
+	const revoked = ordered.find((evaluation) => evaluation.status.status === 'revoked');
+	if (revoked !== undefined) {
+		return { status: revoked.status, executionErrors };
+	}
+	const good = ordered.find((evaluation) => evaluation.status.status === 'good');
+	if (good !== undefined) {
+		return { status: good.status, executionErrors };
+	}
+
+	const reasons = new Set<RevocationIndeterminateReason>();
+	for (const evaluation of ordered) {
+		for (const reason of evaluation.status.indeterminateReasons ?? []) {
+			reasons.add(reason);
+		}
+	}
+	return {
+		status: {
+			certificate: cert,
+			status: 'indeterminate',
+			indeterminateReasons: [...reasons],
 		},
 		executionErrors,
 	};
@@ -720,6 +940,7 @@ async function evaluateCertificateRevocation(
  * const result = await checkChainRevocation({
  *   chain: validatedChain,
  *   crls: [crl1, crl2],
+ *   ocspResponses: [ocspResponseDer],
  *   policy: { mode: 'hard-fail' },
  * });
  * if (result.value.decision === 'deny') {
