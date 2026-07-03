@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Name constraints now handle every GeneralName form per RFC 5280
+  §4.2.1.10. A critical `nameConstraints` extension imposing `otherName`,
+  `x400Address`, `ediPartyName`, or `registeredID` constraints rejects a
+  subsequent certificate **only when a SAN of that form actually appears**
+  (`unsupported_name_constraints`); previously any such chain was rejected
+  outright, even when the constrained form never occurred. SRV-ID and
+  unknown-tag SANs now participate in that fail-closed check — they were
+  previously skipped. Unsupported forms in non-critical extensions are
+  ignored, and supported forms in the same extension are still enforced.
+
 ## [0.5.0] - 2026-07-03
 
 OCSP responder authorization, URI/SRV service identities, and a

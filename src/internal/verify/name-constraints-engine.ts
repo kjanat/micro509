@@ -37,6 +37,7 @@ import type {
 	NameConstraints,
 	ParsedNameConstraintForm,
 	SubjectAltName,
+	UnsupportedNameConstraintForm,
 } from '#micro509/x509/extensions.ts';
 import { nameFieldKeyFromOid } from '#micro509/x509/name.ts';
 import type {
@@ -172,6 +173,13 @@ interface AccumulatedNameConstraints {
 	readonly permittedLevels: readonly (readonly NameConstraintForm[])[];
 	/** Flat union of all excludedSubtrees seen so far. */
 	readonly excluded: readonly NameConstraintForm[];
+	/**
+	 * Name forms this engine cannot evaluate that were imposed by a
+	 * **critical** nameConstraints extension above. RFC 5280 §4.2.1.10:
+	 * a subsequent certificate carrying a name of such a form MUST be
+	 * rejected; certificates without one stay acceptable.
+	 */
+	readonly unsupportedCriticalForms: ReadonlySet<UnsupportedNameConstraintForm['type']>;
 }
 
 /**
@@ -193,11 +201,11 @@ export function evaluateNameConstraints(
 	// certificates below it in the chain.
 	const root = chain[chain.length - 1];
 	if (root?.nameConstraints !== undefined) {
-		const unsupportedRoot = failOnUnsupportedNameConstraints(root, chain.length - 1);
-		if (!unsupportedRoot.ok) {
-			return unsupportedRoot;
-		}
-		accumulated = accumulateConstraints(accumulated, root.nameConstraints);
+		accumulated = accumulateConstraints(
+			accumulated,
+			root.nameConstraints,
+			hasCriticalNameConstraintsExtension(root),
+		);
 	}
 
 	// Walk from just below root toward leaf.
@@ -219,15 +227,22 @@ export function evaluateNameConstraints(
 
 		// (c) If this cert has nameConstraints, accumulate them.
 		if (current.nameConstraints !== undefined) {
-			const unsupportedCurrent = failOnUnsupportedNameConstraints(current, index);
-			if (!unsupportedCurrent.ok) {
-				return unsupportedCurrent;
-			}
-			accumulated = accumulateConstraints(accumulated, current.nameConstraints);
+			accumulated = accumulateConstraints(
+				accumulated,
+				current.nameConstraints,
+				hasCriticalNameConstraintsExtension(current),
+			);
 		}
 	}
 
 	return { ok: true };
+}
+
+/** True when the certificate carries a critical nameConstraints extension. */
+function hasCriticalNameConstraintsExtension(certificate: ParsedCertificate): boolean {
+	return certificate.extensions.some(
+		(entry) => entry.oid === OIDS.nameConstraints && entry.critical,
+	);
 }
 
 /** Converts initial state into the starting accumulated-constraints snapshot. */
@@ -238,13 +253,23 @@ function seedInitialNameConstraints(
 		permittedLevels:
 			state.initialPermittedSubtrees.length > 0 ? [state.initialPermittedSubtrees] : [],
 		excluded: state.initialExcludedSubtrees,
+		unsupportedCriticalForms: new Set(),
 	};
 }
 
-/** Merges one certificate's nameConstraints extension into the running totals. */
+/**
+ * Merges one certificate's nameConstraints extension into the running totals.
+ *
+ * Unsupported constraint forms from a critical extension are recorded so
+ * subsequent certificates carrying a name of that form fail closed
+ * (RFC 5280 §4.2.1.10). Unsupported forms in a non-critical extension are
+ * dropped — the RFC's rejection requirement is scoped to critical
+ * extensions (conforming CAs MUST mark nameConstraints critical anyway).
+ */
 function accumulateConstraints(
 	current: AccumulatedNameConstraints,
 	constraints: NameConstraints<ParsedNameConstraintForm>,
+	critical: boolean,
 ): AccumulatedNameConstraints {
 	const permittedLevels =
 		constraints.permittedSubtrees !== undefined && constraints.permittedSubtrees.length > 0
@@ -264,43 +289,19 @@ function accumulateConstraints(
 					),
 				]
 			: current.excluded;
-	return { permittedLevels, excluded };
+	const newUnsupported = critical ? listUnsupportedNameConstraintTypes(constraints) : [];
+	const unsupportedCriticalForms =
+		newUnsupported.length > 0
+			? new Set([...current.unsupportedCriticalForms, ...newUnsupported])
+			: current.unsupportedCriticalForms;
+	return { permittedLevels, excluded, unsupportedCriticalForms };
 }
 
-/** Rejects the chain if a critical nameConstraints extension uses unsupported name forms. */
-function failOnUnsupportedNameConstraints(
-	certificate: ParsedCertificate,
-	index: number,
-): NameConstraintValidationResult {
-	if (certificate.nameConstraints === undefined) {
-		return { ok: true };
-	}
-	const hasCriticalNameConstraintsExtension = certificate.extensions.some(
-		(entry) => entry.oid === OIDS.nameConstraints && entry.critical,
-	);
-	if (!hasCriticalNameConstraintsExtension) {
-		return { ok: true };
-	}
-	const unsupportedTypes = listUnsupportedNameConstraintTypes(certificate.nameConstraints);
-	if (unsupportedTypes.length === 0) {
-		return { ok: true };
-	}
-	return nameConstraintFailure(
-		'unsupported_name_constraints',
-		'certificate contains unsupported critical name constraints',
-		index,
-		nameConstraintDetails({
-			subjectCommonName: certificate.subject.values.commonName,
-			actual: unsupportedTypes.join(', '),
-		}),
-	);
-}
-
-/** Collects the distinct unsupported GeneralName type strings from a nameConstraints extension. */
+/** Collects the distinct unsupported GeneralName form types from a nameConstraints extension. */
 function listUnsupportedNameConstraintTypes(
 	constraints: NameConstraints<ParsedNameConstraintForm>,
-): readonly string[] {
-	const unsupportedTypes = new Set<string>();
+): readonly UnsupportedNameConstraintForm['type'][] {
+	const unsupportedTypes = new Set<UnsupportedNameConstraintForm['type']>();
 	for (const subtree of constraints.permittedSubtrees ?? []) {
 		if (!isSupportedNameConstraintForm(subtree.base)) {
 			unsupportedTypes.add(subtree.base.type);
@@ -365,6 +366,24 @@ function checkCertificateNames(
 	// Check each SAN.
 	if (certificate.subjectAltNames !== undefined) {
 		for (const san of certificate.subjectAltNames) {
+			// RFC 5280 §4.2.1.10: a critical nameConstraints extension imposing
+			// constraints on a name form this engine cannot process forces
+			// rejection of any subsequent certificate carrying that form.
+			const unsupportedForm = sanUnsupportedFormType(san);
+			if (
+				unsupportedForm !== undefined &&
+				accumulated.unsupportedCriticalForms.has(unsupportedForm)
+			) {
+				return nameConstraintFailure(
+					'unsupported_name_constraints',
+					`critical name constraints impose ${unsupportedForm} constraints that cannot be processed, and the certificate contains a ${unsupportedForm} subject alternative name`,
+					index,
+					nameConstraintDetails({
+						subjectCommonName: certificate.subject.values.commonName,
+						actual: unsupportedForm,
+					}),
+				);
+			}
 			const checkableResult = sanToConstraintCheckable(san);
 			if (!checkableResult.ok) {
 				return nameConstraintFailure(
@@ -432,6 +451,36 @@ function accumulatedHasEmailConstraints(accumulated: AccumulatedNameConstraints)
 		}
 	}
 	return accumulated.excluded.some((c) => c.type === 'email');
+}
+
+/**
+ * Maps a SAN to the unsupported constraint form it instantiates, if any.
+ *
+ * SRV-ID SANs are otherName [0] instances. Unknown SANs carry the full DER
+ * tag byte: 0xa0 otherName [0], 0xa3 x400Address [3], 0xa5 ediPartyName [5],
+ * 0x88 registeredID [8].
+ */
+function sanUnsupportedFormType(
+	san: SubjectAltName,
+): UnsupportedNameConstraintForm['type'] | undefined {
+	if (san.type === 'srv') {
+		return 'otherName';
+	}
+	if (san.type !== 'unknown') {
+		return undefined;
+	}
+	switch (san.tag) {
+		case 0xa0:
+			return 'otherName';
+		case 0xa3:
+			return 'x400Address';
+		case 0xa5:
+			return 'ediPartyName';
+		case 0x88:
+			return 'registeredID';
+		default:
+			return undefined;
+	}
 }
 
 /**

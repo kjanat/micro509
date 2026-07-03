@@ -75,20 +75,26 @@ Current conformance evidence:
 - [x] Support initial permitted/excluded subtrees as validator inputs.
 - [x] Apply constraints across supported name forms, not just DNS SANs.
 - [x] Handle self-issued certificates correctly when evaluating constraints.
+- [x] Fail closed per RFC 5280 §4.2.1.10 when a **critical** nameConstraints
+      extension imposes a form the validator cannot process (`otherName`,
+      `x400Address`, `ediPartyName`, `registeredID`) **and** an instance of
+      that form appears in a subsequent certificate's SANs; chains where the
+      form never appears stay acceptable, and unsupported forms in
+      non-critical extensions are ignored.
       (IETF Datatracker[^rfc5280])
 
 Current GeneralName matrix for `nameConstraints`:
 
-| Form                        | Parser role                             | Validator role                         | Status    |
-| --------------------------- | --------------------------------------- | -------------------------------------- | --------- |
-| `rfc822Name` / `dNSName`    | decode to typed email/DNS values        | enforce                                | `partial` |
-| `uniformResourceIdentifier` | decode to typed URI values              | enforce host-based matching            | `partial` |
-| `iPAddress`                 | decode to address+mask bytes            | enforce                                | `partial` |
-| `directoryName`             | preserve structured DN payload          | enforce with RFC 5280 semantic compare | `partial` |
-| `otherName`                 | do not silently discard in final design | fail closed if critical                | `not yet` |
-| `x400Address`               | do not silently discard in final design | fail closed if critical                | `not yet` |
-| `ediPartyName`              | do not silently discard in final design | fail closed if critical                | `not yet` |
-| `registeredID`              | do not silently discard in final design | fail closed if critical                | `not yet` |
+| Form                        | Parser role                      | Validator role                             | Status     |
+| --------------------------- | -------------------------------- | ------------------------------------------ | ---------- |
+| `rfc822Name` / `dNSName`    | decode to typed email/DNS values | enforce                                    | `complete` |
+| `uniformResourceIdentifier` | decode to typed URI values       | enforce host-based matching                | `complete` |
+| `iPAddress`                 | decode to address+mask bytes     | enforce                                    | `complete` |
+| `directoryName`             | preserve structured DN payload   | enforce with RFC 5280 semantic compare     | `complete` |
+| `otherName`                 | preserved as raw payload         | fail closed when critical and form appears | `complete` |
+| `x400Address`               | preserved as raw payload         | fail closed when critical and form appears | `complete` |
+| `ediPartyName`              | preserved as raw payload         | fail closed when critical and form appears | `complete` |
+| `registeredID`              | decoded OID, preserved           | fail closed when critical and form appears | `complete` |
 
 - Parser responsibility: preserve enough tag/type information that validation can make a deterministic supported-vs-unsupported decision.
 - Validator responsibility: enforce supported forms and reject critical under-enforced cases instead of silently widening trust.

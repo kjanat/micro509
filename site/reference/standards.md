@@ -21,7 +21,9 @@
 - `pathLenConstraint` enforcement
 - `keyUsage` enforcement (`keyCertSign` for CAs)
 - Self-issued vs non-self-issued processing
-- Supported-form name constraints (DNS, URI, email, IP)
+- Name constraints: enforced for DNS, URI, email, IP, and directoryName;
+  fail-closed for otherName / x400Address / ediPartyName / registeredID when
+  a critical constraint meets a SAN of that form (RFC 5280 §4.2.1.10)
 - Critical extension rejection for unrecognized OIDs
 
 ### RFC 6960 OCSP
@@ -75,7 +77,9 @@ indeterminate status does **not** deny. See the
 - Full CRL distribution point processing
 - OCSP/CRL HTTP fetching (evidence is caller-provided by design)
 - Broader PKITS conformance (ongoing)
-- Full name constraint processing for all GeneralName forms
+- Semantic matching for otherName / x400Address / ediPartyName / registeredID
+  name constraints (they fail closed instead when a critical constraint
+  meets a name of that form)
 
 For the authoritative scope boundary, see
 [`PKIX-SCOPE.md`](https://github.com/kjanat/micro509/blob/master/docs/PKIX-SCOPE.md).
