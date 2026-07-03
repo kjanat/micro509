@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `policy.prefer: 'best-available'` (the default) now genuinely picks the
+  freshest evidence: when CRL and OCSP both yield a validated `good`
+  verdict, the source with the later `thisUpdate` is reported (an applied
+  delta CRL counts as its own `thisUpdate`; ties favor OCSP). Previously
+  `'best-available'` behaved identically to `'ocsp'`. Fail-closed
+  combination is unchanged — a validated `revoked` verdict from either
+  source still always wins.
+
 ### Added
 
 - URI-ID and SRV-ID service identities are now accepted by the verification

@@ -322,6 +322,11 @@ authorization, freshness — before its verdict is trusted, and a validated
 `revoked` verdict from either evidence kind always wins, regardless of
 `policy.prefer`.
 
+When both sources yield a validated `good` verdict, `policy.prefer` decides
+which one is reported: the default `'best-available'` picks the source with
+the fresher evidence (later `thisUpdate`, ties favoring OCSP), while `'ocsp'`
+and `'crl'` pin the reported source unconditionally.
+
 The same inputs are available on `verifyCertificateChain()` via the
 `revocation` option:
 

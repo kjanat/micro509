@@ -482,6 +482,125 @@ describe('checkChainRevocation with OCSP evidence', () => {
 		expect(preferCrl.value.certificates[0]?.source?.type).toBe('crl');
 	});
 
+	it('best-available reports the fresher CRL over a staler OCSP response', async () => {
+		const { caName, ca, leaf, chain, at, fresh } = await createOcspChainFixture();
+		// Valid but 12h-old OCSP evidence vs a 1h-old CRL
+		const stale = {
+			thisUpdate: new Date(at.getTime() - 12 * HOUR_MS),
+			nextUpdate: new Date(at.getTime() + HOUR_MS),
+		};
+		const response = await createOcspResponse({
+			signerPrivateKey: ca.keyPair.privateKey,
+			signerCertificate: ca.certificate.pem,
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: ca.certificate.pem,
+					certStatus: 'good',
+					...stale,
+				},
+			],
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: caName },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			...fresh,
+		});
+
+		const bestAvailable = await checkChainRevocation({
+			chain: [...chain],
+			ocspResponses: [response.der],
+			crls: [crl.der],
+			at,
+		});
+		expect(bestAvailable.value.certificates[0]?.status).toBe('good');
+		expect(bestAvailable.value.certificates[0]?.source?.type).toBe('crl');
+
+		// Explicit prefer still overrides freshness
+		const preferOcsp = await checkChainRevocation({
+			chain: [...chain],
+			ocspResponses: [response.der],
+			crls: [crl.der],
+			at,
+			policy: { prefer: 'ocsp' },
+		});
+		expect(preferOcsp.value.certificates[0]?.source?.type).toBe('ocsp');
+	});
+
+	it('best-available reports the fresher OCSP response over a staler CRL', async () => {
+		const { caName, ca, leaf, chain, at, fresh } = await createOcspChainFixture();
+		const response = await createOcspResponse({
+			signerPrivateKey: ca.keyPair.privateKey,
+			signerCertificate: ca.certificate.pem,
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: ca.certificate.pem,
+					certStatus: 'good',
+					...fresh,
+				},
+			],
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: caName },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			thisUpdate: new Date(at.getTime() - 12 * HOUR_MS),
+			nextUpdate: new Date(at.getTime() + HOUR_MS),
+		});
+
+		const result = await checkChainRevocation({
+			chain: [...chain],
+			ocspResponses: [response.der],
+			crls: [crl.der],
+			at,
+		});
+		expect(result.value.certificates[0]?.status).toBe('good');
+		expect(result.value.certificates[0]?.source?.type).toBe('ocsp');
+	});
+
+	it('best-available fails closed: staler CRL revoked beats fresher OCSP good', async () => {
+		const { caName, ca, leaf, chain, parsedLeaf, at, fresh } = await createOcspChainFixture();
+		const response = await createOcspResponse({
+			signerPrivateKey: ca.keyPair.privateKey,
+			signerCertificate: ca.certificate.pem,
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: ca.certificate.pem,
+					certStatus: 'good',
+					...fresh,
+				},
+			],
+		});
+		const staleThisUpdate = new Date(at.getTime() - 12 * HOUR_MS);
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: caName },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			thisUpdate: staleThisUpdate,
+			nextUpdate: new Date(at.getTime() + HOUR_MS),
+			revokedCertificates: [
+				{
+					serialNumber: hexToBytes(parsedLeaf.serialNumberHex),
+					revocationDate: staleThisUpdate,
+					reasonCode: 'keyCompromise',
+				},
+			],
+		});
+
+		const result = await checkChainRevocation({
+			chain: [...chain],
+			ocspResponses: [response.der],
+			crls: [crl.der],
+			at,
+		});
+		expect(result.value.decision).toBe('deny');
+		expect(result.value.certificates[0]?.status).toBe('revoked');
+		expect(result.value.certificates[0]?.source?.type).toBe('crl');
+	});
+
 	it('accepts a locally trusted responder via trustedOcspResponders', async () => {
 		const { ca, leaf, chain, at, fresh } = await createOcspChainFixture();
 		// Responder from an unrelated CA — only local trust can authorize it

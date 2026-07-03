@@ -73,7 +73,9 @@ export interface RevocationPolicy {
 	 * Preference only decides which source's `good` verdict is reported when
 	 * both yield one.
 	 *
-	 * - `'best-available'`: OCSP consulted first, CRL as fallback (default)
+	 * - `'best-available'`: the source with the fresher evidence — the later
+	 *   `thisUpdate` on the validated OCSP entry or CRL — is reported; ties
+	 *   favor OCSP (default)
 	 * - `'ocsp'`: prefer OCSP over CRL
 	 * - `'crl'`: prefer CRL over OCSP
 	 */
@@ -551,6 +553,12 @@ function buildCrlStatus(
 interface EvidenceEvaluation {
 	readonly status: CertificateRevocationStatus;
 	readonly executionErrors: readonly RevocationExecutionError[];
+	/**
+	 * `thisUpdate` of the evidence backing a `good`/`revoked` verdict.
+	 * Absent for indeterminate outcomes. Used by `'best-available'` to pick
+	 * the fresher source.
+	 */
+	readonly evidenceThisUpdate?: Date;
 }
 
 /** Parses an OCSP response from PEM string or DER bytes. */
@@ -693,12 +701,14 @@ async function evaluateOcspEvidence(
 					},
 				},
 				executionErrors,
+				evidenceThisUpdate: entry.thisUpdate,
 			};
 		}
 		if (entry.certStatus === 'good') {
 			return {
 				status: { certificate: cert, status: 'good', source: { type: 'ocsp' } },
 				executionErrors,
+				evidenceThisUpdate: entry.thisUpdate,
 			};
 		}
 		reasons.add('ocsp_status_unknown');
@@ -750,6 +760,7 @@ async function evaluateCrlEvidence(
 	let sawCrlSignerIndeterminate = false;
 	let sawGood = false;
 	let lastGoodSigner: ParsedCertificate | undefined;
+	let freshestGoodThisUpdate: Date | undefined;
 	const coveredReasons = new Set<string>();
 
 	// Parse all CRLs and separate base CRLs from delta CRLs
@@ -823,6 +834,13 @@ async function evaluateCrlEvidence(
 			continue; // CRL signer status unknown — try other CRLs
 		}
 
+		// Evidence freshness: an applied delta CRL supersedes its base
+		const crlThisUpdate =
+			applicableDelta !== undefined &&
+			applicableDelta.thisUpdate.getTime() > baseCrl.thisUpdate.getTime()
+				? applicableDelta.thisUpdate
+				: baseCrl.thisUpdate;
+
 		// CRL is valid — check result
 		if (result.value.status === 'revoked') {
 			// Immediately return revoked status
@@ -835,12 +853,19 @@ async function evaluateCrlEvidence(
 					result.value.reasonCode,
 				),
 				executionErrors,
+				evidenceThisUpdate: crlThisUpdate,
 			};
 		}
 
 		// Status is 'good' — track which reasons this CRL covers
 		sawGood = true;
 		lastGoodSigner = effectiveSigner;
+		if (
+			freshestGoodThisUpdate === undefined ||
+			crlThisUpdate.getTime() > freshestGoodThisUpdate.getTime()
+		) {
+			freshestGoodThisUpdate = crlThisUpdate;
+		}
 		const crlReasons = baseCrl.issuingDistributionPoint?.onlySomeReasons?.flags;
 		if (crlReasons === undefined) {
 			// CRL covers all reasons
@@ -868,6 +893,9 @@ async function evaluateCrlEvidence(
 						: {}),
 				},
 				executionErrors,
+				...(freshestGoodThisUpdate !== undefined
+					? { evidenceThisUpdate: freshestGoodThisUpdate }
+					: {}),
 			};
 		}
 		// Not all reasons covered — indeterminate
@@ -907,8 +935,10 @@ async function evaluateCrlEvidence(
  *
  * Both evidence kinds are always evaluated: a validated `revoked` verdict from
  * either source wins regardless of {@linkcode RevocationPolicy.prefer}
- * (fail-closed). Otherwise the preferred source's `good` verdict is reported;
- * if neither source is definitive, indeterminate reasons from both are merged.
+ * (fail-closed). Otherwise the preferred source's `good` verdict is reported —
+ * for `'best-available'` the source with the later evidence `thisUpdate` wins,
+ * ties favoring OCSP. If neither source is definitive, indeterminate reasons
+ * from both are merged.
  */
 async function evaluateCertificateRevocation(
 	cert: ParsedCertificate,
@@ -921,7 +951,17 @@ async function evaluateCertificateRevocation(
 	const crl = await evaluateCrlEvidence(cert, issuer, input, signerCtx);
 	const executionErrors = [...ocsp.executionErrors, ...crl.executionErrors];
 
-	const ordered = prefer === 'crl' ? [crl, ocsp] : [ocsp, crl];
+	// 'best-available' ranks by evidence freshness; the sort is stable, so
+	// equal (or absent) thisUpdate keeps OCSP first.
+	const ordered =
+		prefer === 'crl'
+			? [crl, ocsp]
+			: prefer === 'ocsp'
+				? [ocsp, crl]
+				: [ocsp, crl].sort(
+						(a, b) =>
+							(b.evidenceThisUpdate?.getTime() ?? 0) - (a.evidenceThisUpdate?.getTime() ?? 0),
+					);
 	const revoked = ordered.find((evaluation) => evaluation.status.status === 'revoked');
 	if (revoked !== undefined) {
 		return { status: revoked.status, executionErrors };
