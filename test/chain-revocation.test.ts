@@ -601,6 +601,100 @@ describe('checkChainRevocation with OCSP evidence', () => {
 		expect(result.value.certificates[0]?.source?.type).toBe('crl');
 	});
 
+	it('reports the signer of the freshest good CRL when multiple CRLs apply', async () => {
+		const { caName, ca, chain, parsedLeaf, at, fresh } = await createOcspChainFixture();
+		// Delegate CRL signer: same DN as the CA, different key (PKITS
+		// separate-certificate-and-CRL-keys pattern)
+		const delegateKeys = await generateKeyPair();
+		const delegate = await createCertificate({
+			issuer: { commonName: caName },
+			subject: { commonName: caName },
+			publicKey: delegateKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: { keyUsage: ['cRLSign'] },
+		});
+		const parsedDelegate = unwrap(parseCertificatePem(delegate.pem));
+
+		// Fresh CRL from the delegate, stale CRL from the chain CA — the
+		// reported signer must belong to the CRL whose freshness won, no
+		// matter the processing order.
+		const freshDelegateCrl = await createCertificateRevocationList({
+			issuer: { commonName: caName },
+			signerPrivateKey: delegateKeys.privateKey,
+			issuerPublicKey: delegateKeys.publicKey,
+			...fresh,
+		});
+		const staleCaCrl = await createCertificateRevocationList({
+			issuer: { commonName: caName },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			thisUpdate: new Date(at.getTime() - 12 * HOUR_MS),
+			nextUpdate: new Date(at.getTime() + HOUR_MS),
+		});
+
+		// Delegate CRL first, CA CRL last: a naive "last good signer" would
+		// report the CA while freshness came from the delegate.
+		const result = await checkChainRevocation({
+			chain: [...chain],
+			crls: [freshDelegateCrl.der, staleCaCrl.der],
+			extraCertificates: [delegate.pem],
+			at,
+		});
+		const leafStatus = result.value.certificates[0];
+		expect(leafStatus?.status).toBe('good');
+		expect(leafStatus?.source?.type).toBe('crl');
+		expect(leafStatus?.source?.signerCertificate?.serialNumberHex).toBe(
+			parsedDelegate.serialNumberHex,
+		);
+		expect(leafStatus?.certificate.serialNumberHex).toBe(parsedLeaf.serialNumberHex);
+	});
+
+	it('best-available counts an applied delta CRL as the CRL freshness', async () => {
+		const { caName, ca, leaf, chain, at } = await createOcspChainFixture();
+		// OCSP evidence is 6h old; the base CRL is 12h old but its delta is 1h
+		// old — the delta freshness must win for the CRL source.
+		const response = await createOcspResponse({
+			signerPrivateKey: ca.keyPair.privateKey,
+			signerCertificate: ca.certificate.pem,
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: ca.certificate.pem,
+					certStatus: 'good',
+					thisUpdate: new Date(at.getTime() - 6 * HOUR_MS),
+					nextUpdate: new Date(at.getTime() + HOUR_MS),
+				},
+			],
+		});
+		const baseCrl = await createCertificateRevocationList({
+			issuer: { commonName: caName },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			crlNumber: 5,
+			thisUpdate: new Date(at.getTime() - 12 * HOUR_MS),
+			nextUpdate: new Date(at.getTime() + HOUR_MS),
+		});
+		const deltaCrl = await createCertificateRevocationList({
+			issuer: { commonName: caName },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			crlNumber: 6,
+			baseCrlNumber: 5,
+			thisUpdate: new Date(at.getTime() - HOUR_MS),
+			nextUpdate: new Date(at.getTime() + HOUR_MS),
+		});
+
+		const result = await checkChainRevocation({
+			chain: [...chain],
+			ocspResponses: [response.der],
+			crls: [baseCrl.der, deltaCrl.der],
+			at,
+		});
+		expect(result.value.certificates[0]?.status).toBe('good');
+		expect(result.value.certificates[0]?.source?.type).toBe('crl');
+	});
+
 	it('accepts a locally trusted responder via trustedOcspResponders', async () => {
 		const { ca, leaf, chain, at, fresh } = await createOcspChainFixture();
 		// Responder from an unrelated CA — only local trust can authorize it

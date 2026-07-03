@@ -759,8 +759,9 @@ async function evaluateCrlEvidence(
 	let sawCrlSignerRevoked = false;
 	let sawCrlSignerIndeterminate = false;
 	let sawGood = false;
-	let lastGoodSigner: ParsedCertificate | undefined;
-	let freshestGoodThisUpdate: Date | undefined;
+	// Signer and thisUpdate are tracked together so the reported
+	// signerCertificate always belongs to the CRL whose freshness is reported.
+	let freshestGood: { readonly signer: ParsedCertificate; readonly thisUpdate: Date } | undefined;
 	const coveredReasons = new Set<string>();
 
 	// Parse all CRLs and separate base CRLs from delta CRLs
@@ -859,12 +860,8 @@ async function evaluateCrlEvidence(
 
 		// Status is 'good' — track which reasons this CRL covers
 		sawGood = true;
-		lastGoodSigner = effectiveSigner;
-		if (
-			freshestGoodThisUpdate === undefined ||
-			crlThisUpdate.getTime() > freshestGoodThisUpdate.getTime()
-		) {
-			freshestGoodThisUpdate = crlThisUpdate;
+		if (freshestGood === undefined || crlThisUpdate.getTime() > freshestGood.thisUpdate.getTime()) {
+			freshestGood = { signer: effectiveSigner, thisUpdate: crlThisUpdate };
 		}
 		const crlReasons = baseCrl.issuingDistributionPoint?.onlySomeReasons?.flags;
 		if (crlReasons === undefined) {
@@ -888,14 +885,12 @@ async function evaluateCrlEvidence(
 				status: {
 					certificate: cert,
 					status: 'good',
-					...(lastGoodSigner !== undefined
-						? { source: { type: 'crl', signerCertificate: lastGoodSigner } }
+					...(freshestGood !== undefined
+						? { source: { type: 'crl', signerCertificate: freshestGood.signer } }
 						: {}),
 				},
 				executionErrors,
-				...(freshestGoodThisUpdate !== undefined
-					? { evidenceThisUpdate: freshestGoodThisUpdate }
-					: {}),
+				...(freshestGood !== undefined ? { evidenceThisUpdate: freshestGood.thisUpdate } : {}),
 			};
 		}
 		// Not all reasons covered — indeterminate
