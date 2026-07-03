@@ -2026,9 +2026,10 @@ describe('chain verification', () => {
 	});
 
 	describe('unsupported name constraint forms (RFC 5280 §4.2.1.10)', () => {
-		/** Builds a permittedSubtrees NameConstraints DER with one raw GeneralName subtree. */
-		function buildRawConstraintDer(generalName: Uint8Array): Uint8Array {
-			return sequence([tlv(0xa0, sequence([generalName]))]);
+		/** Builds a permittedSubtrees NameConstraints DER from raw GeneralName subtrees. */
+		function buildRawConstraintDer(...generalNames: readonly Uint8Array[]): Uint8Array {
+			const subtrees = generalNames.map((name) => sequence([name]));
+			return sequence([tlv(0xa0, Uint8Array.from(subtrees.flatMap((subtree) => [...subtree])))]);
 		}
 
 		/** Root CA whose nameConstraints extension is supplied as raw DER. */
@@ -2107,19 +2108,20 @@ describe('chain verification', () => {
 			}
 		});
 
-		it('fails closed for x400Address and ediPartyName constraint/SAN pairs', async () => {
-			for (const tag of [0xa3, 0xa5]) {
-				const constraintDer = buildRawConstraintDer(tlv(tag, sequence([])));
-				const root = await createConstrainedRoot(constraintDer, true);
-				const leaf = await issueLeaf(root, [{ type: 'unknown', tag, value: sequence([]) }]);
-				const result = await verifyCertificateChain({
-					leaf: leaf.pem,
-					roots: [root.certificate.pem],
-				});
-				expect(result.ok).toBe(false);
-				if (!result.ok) {
-					expect(result.error.code).toBe('unsupported_name_constraints');
-				}
+		it.each([
+			['x400Address', 0xa3],
+			['ediPartyName', 0xa5],
+		] as const)('fails closed when a critical %s constraint meets a matching SAN', async (_form, tag) => {
+			const constraintDer = buildRawConstraintDer(tlv(tag, sequence([])));
+			const root = await createConstrainedRoot(constraintDer, true);
+			const leaf = await issueLeaf(root, [{ type: 'unknown', tag, value: sequence([]) }]);
+			const result = await verifyCertificateChain({
+				leaf: leaf.pem,
+				roots: [root.certificate.pem],
+			});
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.code).toBe('unsupported_name_constraints');
 			}
 		});
 
@@ -2135,11 +2137,10 @@ describe('chain verification', () => {
 
 		it('still enforces supported forms alongside unsupported ones', async () => {
 			// permittedSubtrees: dNSName "permitted.example" + otherName
-			const dnsSubtree = sequence([tlv(0x82, new TextEncoder().encode('permitted.example'))]);
-			const otherNameSubtree = sequence([tlv(0xa0, sequence([]))]);
-			const constraintDer = sequence([
-				tlv(0xa0, Uint8Array.from([...dnsSubtree, ...otherNameSubtree])),
-			]);
+			const constraintDer = buildRawConstraintDer(
+				tlv(0x82, new TextEncoder().encode('permitted.example')),
+				tlv(0xa0, sequence([])),
+			);
 			const root = await createConstrainedRoot(constraintDer, true);
 
 			const violating = await issueLeaf(root, [{ type: 'dns', value: 'other.example' }]);
