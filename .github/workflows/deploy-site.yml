@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v7 # Trusted action, tag allowed
       - { uses: ./.github/actions/setup-ts, with: { install-bun: true } }
       - run: bun install --frozen-lockfile
-      - run: bun --bun site:build
+      - run: bun site:build
       - uses: actions/upload-pages-artifact@v5.0.0 # Trusted action, tag allowed
         with: { path: site/.vitepress/dist }
 
