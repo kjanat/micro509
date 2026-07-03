@@ -62,6 +62,13 @@ import type {
 	ParsedRelativeDistinguishedName,
 } from '#micro509/x509/parse.ts';
 import { parseCertificateDerOrThrow, parseCertificateFromSource } from '#micro509/x509/parse.ts';
+import {
+	checkCertificateRevocationAgainstCrl,
+	type CrlSource,
+	type ParsedCertificateRevocationList,
+	parseCertificateRevocationListDer,
+	parseCertificateRevocationListPem,
+} from './crl.ts';
 
 /** Hash algorithm used to compute OCSP CertID fields. SHA-1 is the RFC 6960 default. */
 export type OcspHashAlgorithm = 'SHA-1' | 'SHA-256';
@@ -282,6 +289,20 @@ export type VerifyOcspResponseResult =
 	| ErrorResult<'signature_invalid', Record<never, never>, VerifyOcspResponseFailure>;
 
 /**
+ * Revocation policy for delegated OCSP responder certificates (RFC 6960 §4.2.2.2.1).
+ *
+ * - `'honor-nocheck'` (default): a responder carrying `id-pkix-ocsp-nocheck`
+ *   is exempt from revocation checking. Otherwise, CRL evidence from
+ *   {@linkcode ValidateOcspResponseInput.responderRevocationCrls} is consulted
+ *   when provided — a revoked responder rejects the response; missing or
+ *   unusable evidence is tolerated (soft).
+ * - `'require-evidence'`: `nocheck` is ignored; CRL evidence must positively
+ *   show the responder is not revoked, otherwise the response is rejected.
+ * - `'skip'`: no responder revocation checking.
+ */
+export type OcspResponderRevocationPolicy = 'honor-nocheck' | 'require-evidence' | 'skip';
+
+/**
  * Input for {@linkcode validateOcspResponse}.
  */
 export interface ValidateOcspResponseInput {
@@ -295,11 +316,40 @@ export interface ValidateOcspResponseInput {
 	readonly responderCertificate?: OcspCertificateSource;
 	/** When `true`, allows delegated responder chain validation beyond direct issuance. */
 	readonly allowChainedResponderCertificate?: boolean;
-	/** Evaluation time for freshness checks. Defaults to `new Date()`. */
+	/**
+	 * Explicitly trusted responder certificates for this issuer's scope
+	 * (RFC 6960 §4.2.2.2 criterion 1 — local responder configuration).
+	 *
+	 * A response signer matching one of these certificates is accepted without
+	 * the delegated-responder issuance, chain, EKU, and revocation checks.
+	 * Signature verification and responder-ID binding are still enforced.
+	 * Also consulted during responder discovery when the response embeds no
+	 * matching certificate.
+	 */
+	readonly trustedResponderCertificates?: readonly OcspCertificateSource[];
+	/** Revocation policy for delegated responder certificates. Defaults to `'honor-nocheck'`. */
+	readonly responderRevocationPolicy?: OcspResponderRevocationPolicy;
+	/** CRLs used as revocation evidence for delegated responder certificates. */
+	readonly responderRevocationCrls?: readonly CrlSource[];
+	/** Evaluation time for freshness checks and delegated responder chain validation. Defaults to `new Date()`. */
 	readonly at?: Date;
 	/** Clock-skew tolerance in milliseconds for `thisUpdate`/`nextUpdate`/`producedAt`. */
 	readonly clockSkewMs?: number;
 }
+
+/** Failure codes produced by {@linkcode validateOcspResponse}. */
+export type ValidateOcspResponseErrorCode =
+	| 'response_status_invalid'
+	| 'signature_invalid'
+	| 'responder_id_mismatch'
+	| 'nonce_mismatch'
+	| 'request_mismatch'
+	| 'issuer_mismatch'
+	| 'responder_chain_invalid'
+	| 'ocsp_signing_missing'
+	| 'responder_revoked'
+	| 'responder_revocation_unknown'
+	| 'stale_response';
 
 /**
  * Failure detail for {@linkcode validateOcspResponse}.
@@ -307,20 +357,9 @@ export interface ValidateOcspResponseInput {
  * Possible codes: `response_status_invalid`, `signature_invalid`,
  * `responder_id_mismatch`, `nonce_mismatch`, `request_mismatch`,
  * `issuer_mismatch`, `responder_chain_invalid`, `ocsp_signing_missing`,
- * `stale_response`.
+ * `responder_revoked`, `responder_revocation_unknown`, `stale_response`.
  */
-export interface ValidateOcspResponseFailure
-	extends Micro509Error<
-		| 'response_status_invalid'
-		| 'signature_invalid'
-		| 'responder_id_mismatch'
-		| 'nonce_mismatch'
-		| 'request_mismatch'
-		| 'issuer_mismatch'
-		| 'responder_chain_invalid'
-		| 'ocsp_signing_missing'
-		| 'stale_response'
-	> {
+export interface ValidateOcspResponseFailure extends Micro509Error<ValidateOcspResponseErrorCode> {
 	/** Always `false` for failures. */
 	readonly ok: false;
 }
@@ -329,7 +368,8 @@ export interface ValidateOcspResponseFailure
  * Result of {@linkcode validateOcspResponse}.
  *
  * On success, the response has passed status, signature, responder binding,
- * freshness, nonce, and request-coverage checks.
+ * authorization (including responder revocation policy), freshness, nonce,
+ * and request-coverage checks.
  */
 export type ValidateOcspResponseResult =
 	| {
@@ -337,19 +377,7 @@ export type ValidateOcspResponseResult =
 			/** Fully validated OCSP response. */
 			readonly value: ParsedOcspResponse;
 	  }
-	| ErrorResult<
-			| 'response_status_invalid'
-			| 'signature_invalid'
-			| 'responder_id_mismatch'
-			| 'nonce_mismatch'
-			| 'request_mismatch'
-			| 'issuer_mismatch'
-			| 'responder_chain_invalid'
-			| 'ocsp_signing_missing'
-			| 'stale_response',
-			Record<never, never>,
-			ValidateOcspResponseFailure
-	  >;
+	| ErrorResult<ValidateOcspResponseErrorCode, Record<never, never>, ValidateOcspResponseFailure>;
 
 /**
  * Builds a DER-encoded OCSP request containing one or more CertID entries
@@ -787,13 +815,16 @@ export async function validateOcspResponse(
 		);
 	}
 	let resolvedResponder: OcspCertificateSource;
+	let trustedResponders: readonly ParsedCertificate[];
 	try {
+		trustedResponders = (input.trustedResponderCertificates ?? []).map(normalizeCertificate);
 		resolvedResponder =
 			input.responderCertificate ??
 			(await findMatchingOcspResponderCertificate(
 				parsedResponse.certificates,
 				parsedResponse.responderId,
 			)) ??
+			(await findMatchingOcspResponderCertificate(trustedResponders, parsedResponse.responderId)) ??
 			parsedResponse.certificates?.[0] ??
 			input.issuerCertificate;
 	} catch {
@@ -829,7 +860,10 @@ export async function validateOcspResponse(
 	if (!responderBinding.ok) {
 		return responderBinding;
 	}
-	if (!isSameOcspCertificate(signer, issuer)) {
+	const isLocallyTrustedResponder = trustedResponders.some((trusted) =>
+		isSameOcspCertificate(signer, trusted),
+	);
+	if (!isSameOcspCertificate(signer, issuer) && !isLocallyTrustedResponder) {
 		const allowChainedResponderCertificate = input.allowChainedResponderCertificate === true;
 		if (!allowChainedResponderCertificate && !isDirectlyIssuedByOcspIssuer(signer, issuer)) {
 			return validateOcspResponseFailureResult(
@@ -843,6 +877,7 @@ export async function validateOcspResponse(
 				? buildOcspResponderIntermediates(parsedResponse.certificates, signer, issuer)
 				: [],
 			roots: [issuer.der],
+			...(input.at !== undefined ? { at: input.at } : {}),
 		});
 		if (!chain.ok) {
 			return validateOcspResponseFailureResult(
@@ -855,6 +890,10 @@ export async function validateOcspResponse(
 				'ocsp_signing_missing',
 				'Delegated OCSP responder lacks ocspSigning EKU',
 			);
+		}
+		const responderRevocation = await checkDelegatedResponderRevocation(signer, issuer, input);
+		if (!responderRevocation.ok) {
+			return responderRevocation;
 		}
 	}
 	const at = input.at ?? new Date();
@@ -967,31 +1006,86 @@ function verifyOcspResponseFailureResult(
 
 /** Builds a `ValidateOcspResponseFailureResult`. */
 function validateOcspResponseFailureResult(
-	code:
-		| 'response_status_invalid'
-		| 'signature_invalid'
-		| 'responder_id_mismatch'
-		| 'nonce_mismatch'
-		| 'request_mismatch'
-		| 'issuer_mismatch'
-		| 'responder_chain_invalid'
-		| 'ocsp_signing_missing'
-		| 'stale_response',
+	code: ValidateOcspResponseErrorCode,
 	message: string,
-): ErrorResult<
-	| 'response_status_invalid'
-	| 'signature_invalid'
-	| 'responder_id_mismatch'
-	| 'nonce_mismatch'
-	| 'request_mismatch'
-	| 'issuer_mismatch'
-	| 'responder_chain_invalid'
-	| 'ocsp_signing_missing'
-	| 'stale_response',
-	Record<never, never>,
-	ValidateOcspResponseFailure
-> {
+): ErrorResult<ValidateOcspResponseErrorCode, Record<never, never>, ValidateOcspResponseFailure> {
 	return failureResult(code, message);
+}
+
+/**
+ * Reports whether a certificate carries the `id-pkix-ocsp-nocheck` extension
+ * (RFC 6960 §4.2.2.2.1) — the CA's assertion that relying parties may trust
+ * this OCSP responder certificate for its lifetime without revocation checks.
+ */
+export function hasOcspNoCheckExtension(certificate: OcspCertificateSource): boolean {
+	const parsed = normalizeCertificate(certificate);
+	return parsed.extensions.some((extension) => extension.oid === OIDS.ocspNoCheck);
+}
+
+/** Parses a CRL from PEM string, DER bytes, or an already-parsed CRL. */
+function parseResponderCrlFromSource(source: CrlSource): ParsedCertificateRevocationList {
+	if (typeof source === 'object' && 'issuer' in source) {
+		return source;
+	}
+	if (typeof source === 'string') {
+		return parseCertificateRevocationListPem(source);
+	}
+	return parseCertificateRevocationListDer(source);
+}
+
+/**
+ * Applies the delegated-responder revocation policy (RFC 6960 §4.2.2.2.1).
+ * See {@linkcode OcspResponderRevocationPolicy} for the policy semantics.
+ */
+async function checkDelegatedResponderRevocation(
+	signer: ParsedCertificate,
+	issuer: ParsedCertificate,
+	input: ValidateOcspResponseInput,
+): Promise<{ readonly ok: true } | ReturnType<typeof validateOcspResponseFailureResult>> {
+	const policy = input.responderRevocationPolicy ?? 'honor-nocheck';
+	if (policy === 'skip') {
+		return { ok: true };
+	}
+	if (policy === 'honor-nocheck' && hasOcspNoCheckExtension(signer)) {
+		return { ok: true };
+	}
+	const at = input.at ?? new Date();
+	let sawGood = false;
+	for (const source of input.responderRevocationCrls ?? []) {
+		let crl: ParsedCertificateRevocationList;
+		try {
+			crl = parseResponderCrlFromSource(source);
+		} catch {
+			continue; // Unusable evidence — try remaining CRLs
+		}
+		const result = await checkCertificateRevocationAgainstCrl({
+			certificate: signer,
+			issuerCertificate: issuer,
+			crl,
+			at,
+		});
+		if (!result.ok) {
+			continue; // CRL does not apply to the responder certificate
+		}
+		if (result.value.status === 'revoked') {
+			return validateOcspResponseFailureResult(
+				'responder_revoked',
+				'Delegated OCSP responder certificate is revoked',
+			);
+		}
+		if (result.value.status === 'good') {
+			sawGood = true;
+		}
+	}
+	if (sawGood || policy === 'honor-nocheck') {
+		// honor-nocheck tolerates missing evidence (soft) — only a positive
+		// revoked verdict rejects when no usable evidence proves 'good'.
+		return { ok: true };
+	}
+	return validateOcspResponseFailureResult(
+		'responder_revocation_unknown',
+		'Delegated OCSP responder revocation status could not be established',
+	);
 }
 
 /** Accepts PEM, DER, or already-parsed OCSP response and returns a parsed response. */

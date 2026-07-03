@@ -263,6 +263,7 @@ export {
 	createOcspRequest,
 	createOcspResponse,
 	getCertificateOcspResponderUris,
+	hasOcspNoCheckExtension,
 	isCertificateRevoked,
 	parseCertificateRevocationListDer,
 	parseCertificateRevocationListPem,

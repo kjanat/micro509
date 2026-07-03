@@ -20,6 +20,7 @@ import {
 } from './crl.ts';
 import type { CrlSource } from './crl.ts';
 import {
+	type OcspResponderRevocationPolicy,
 	type ParsedOcspResponse,
 	parseOcspResponseDer,
 	parseOcspResponsePem,
@@ -77,6 +78,12 @@ export interface RevocationPolicy {
 	 * - `'crl'`: prefer CRL over OCSP
 	 */
 	readonly prefer?: 'ocsp' | 'crl' | 'best-available';
+	/**
+	 * Revocation policy for delegated OCSP responder certificates
+	 * (RFC 6960 §4.2.2.2.1). Supplied CRLs double as responder revocation
+	 * evidence. Defaults to `'honor-nocheck'`.
+	 */
+	readonly ocspResponderRevocation?: OcspResponderRevocationPolicy;
 }
 
 /** Input for {@linkcode checkChainRevocation}. */
@@ -89,6 +96,12 @@ export interface CheckChainRevocationInput {
 	readonly ocspResponses?: readonly OcspResponseSource[];
 	/** Extra certs for indirect CRL issuers / delegated OCSP responders. */
 	readonly extraCertificates?: readonly CertificateSource[];
+	/**
+	 * Explicitly trusted OCSP responder certificates (RFC 6960 §4.2.2.2
+	 * criterion 1). A response signed by one of these is accepted without
+	 * delegated-responder issuance, EKU, and revocation checks.
+	 */
+	readonly trustedOcspResponders?: readonly CertificateSource[];
 	/** Evaluation time. Defaults to `new Date()`. */
 	readonly at?: Date;
 	/** Revocation policy. */
@@ -559,7 +572,10 @@ function ocspIndeterminateReasonFromFailure(
 		case 'responder_chain_invalid':
 		case 'ocsp_signing_missing':
 			return 'ocsp_responder_not_authorized';
+		case 'responder_revoked':
+			return 'ocsp_responder_revoked';
 		case 'signature_invalid':
+		case 'responder_revocation_unknown':
 			return 'ocsp_responder_indeterminate';
 		case 'response_status_invalid':
 		case 'issuer_mismatch':
@@ -584,23 +600,34 @@ const OCSP_RESPONDER_FAILURE_CODES: ReadonlySet<ValidateOcspResponseFailure['cod
 async function validateOcspResponseWithResponderFallback(
 	response: ParsedOcspResponse,
 	issuer: ParsedCertificate,
-	extraCertificates: readonly CertificateSource[],
+	input: CheckChainRevocationInput,
 	at: Date,
 ): Promise<ValidateOcspResponseResult> {
-	const primary = await validateOcspResponse({ response, issuerCertificate: issuer, at });
+	const shared = {
+		issuerCertificate: issuer,
+		at,
+		...(input.trustedOcspResponders !== undefined
+			? { trustedResponderCertificates: input.trustedOcspResponders }
+			: {}),
+		...(input.policy?.ocspResponderRevocation !== undefined
+			? { responderRevocationPolicy: input.policy.ocspResponderRevocation }
+			: {}),
+		// Chain-level CRLs double as responder revocation evidence
+		...(input.crls !== undefined ? { responderRevocationCrls: input.crls } : {}),
+	};
+	const primary = await validateOcspResponse({ response, ...shared });
 	if (primary.ok || !OCSP_RESPONDER_FAILURE_CODES.has(primary.code)) {
 		return primary;
 	}
-	for (const source of extraCertificates) {
+	for (const source of input.extraCertificates ?? []) {
 		const responder = parseCertificateSafe(source);
 		if (responder === undefined) {
 			continue;
 		}
 		const retry = await validateOcspResponse({
 			response,
-			issuerCertificate: issuer,
+			...shared,
 			responderCertificate: responder,
-			at,
 		});
 		if (retry.ok) {
 			return retry;
@@ -623,7 +650,7 @@ async function evaluateOcspEvidence(
 	issuer: ParsedCertificate,
 	input: CheckChainRevocationInput,
 ): Promise<EvidenceEvaluation> {
-	const { ocspResponses = [], extraCertificates = [], at = new Date() } = input;
+	const { ocspResponses = [], at = new Date() } = input;
 	const executionErrors: RevocationExecutionError[] = [];
 	const reasons = new Set<RevocationIndeterminateReason>();
 
@@ -647,12 +674,7 @@ async function evaluateOcspEvidence(
 			continue; // Response does not cover this certificate
 		}
 
-		const validation = await validateOcspResponseWithResponderFallback(
-			parsed,
-			issuer,
-			extraCertificates,
-			at,
-		);
+		const validation = await validateOcspResponseWithResponderFallback(parsed, issuer, input, at);
 		if (!validation.ok) {
 			reasons.add(ocspIndeterminateReasonFromFailure(validation.code));
 			continue;

@@ -325,6 +325,8 @@ export interface ChainRevocationInput {
 	readonly ocspResponses?: readonly (string | Uint8Array)[];
 	/** Extra certs for indirect CRL issuers / delegated OCSP responders. */
 	readonly extraCertificates?: readonly RevocationCertificateSource[];
+	/** Explicitly trusted OCSP responder certificates (RFC 6960 §4.2.2.2 criterion 1). */
+	readonly trustedOcspResponders?: readonly RevocationCertificateSource[];
 	/** Revocation policy. */
 	readonly policy?: RevocationPolicy;
 }
@@ -932,6 +934,9 @@ export async function verifyCertificateChain(
 				: {}),
 			...(input.revocation.extraCertificates !== undefined
 				? { extraCertificates: input.revocation.extraCertificates }
+				: {}),
+			...(input.revocation.trustedOcspResponders !== undefined
+				? { trustedOcspResponders: input.revocation.trustedOcspResponders }
 				: {}),
 			...(input.revocation.policy !== undefined ? { policy: input.revocation.policy } : {}),
 			...(input.at !== undefined ? { at: input.at } : {}),

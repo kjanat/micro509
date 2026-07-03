@@ -110,6 +110,8 @@ export type RevocationIndeterminateReasonCode =
 	| 'request_mismatch'
 	| 'responder_id_mismatch'
 	| 'responder_chain_invalid'
+	| 'responder_revoked'
+	| 'responder_revocation_unknown'
 	| 'response_status_invalid'
 	| 'signature_invalid'
 	| 'stale_crl'

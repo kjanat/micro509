@@ -19,6 +19,7 @@ export type * from './ocsp.ts';
 export {
 	createOcspRequest,
 	createOcspResponse,
+	hasOcspNoCheckExtension,
 	parseOcspRequestDer,
 	parseOcspRequestPem,
 	parseOcspResponseDer,

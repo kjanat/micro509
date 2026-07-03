@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'bun:test';
 import {
 	createCertificate,
+	createCertificateRevocationList,
 	createOcspRequest,
 	createOcspResponse,
 	createSelfSignedCertificate,
 	generateKeyPair,
+	hasOcspNoCheckExtension,
 	parseCertificatePem,
 	parseOcspRequestPem,
 	parseOcspResponseDer,
@@ -392,5 +394,269 @@ describe('ocsp fixtures', () => {
 				responderCertificate: unwrap(parseCertificatePem(responder.pem)),
 			}),
 		).toMatchObject({ ok: true });
+	});
+});
+
+describe('ocsp responder authorization (RFC 6960 §4.2.2.2)', () => {
+	const HOUR_MS = 60 * 60 * 1000;
+	const OCSP_NOCHECK_OID = '1.3.6.1.5.5.7.48.1.5';
+	const DER_NULL = Uint8Array.of(0x05, 0x00);
+
+	async function issueAuthority(
+		commonName: string,
+		validity?: { notBefore: Date; notAfter: Date },
+	) {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName },
+			...(validity !== undefined ? { validity } : {}),
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 1 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName },
+			subject: { commonName: `${commonName} leaf` },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+		return { commonName, ca, leaf };
+	}
+
+	async function issueDelegatedResponder(
+		authority: Awaited<ReturnType<typeof issueAuthority>>,
+		options?: {
+			readonly noCheck?: boolean;
+			readonly validity?: { notBefore: Date; notAfter: Date };
+		},
+	) {
+		const keys = await generateKeyPair();
+		const certificate = await createCertificate({
+			issuer: { commonName: authority.commonName },
+			subject: { commonName: `${authority.commonName} responder` },
+			publicKey: keys.publicKey,
+			signerPrivateKey: authority.ca.keyPair.privateKey,
+			issuerPublicKey: authority.ca.keyPair.publicKey,
+			...(options?.validity !== undefined ? { validity: options.validity } : {}),
+			extensions: {
+				extendedKeyUsage: ['ocspSigning'],
+				...(options?.noCheck === true
+					? { customExtensions: [{ oid: OCSP_NOCHECK_OID, value: DER_NULL }] }
+					: {}),
+			},
+		});
+		return { keys, certificate };
+	}
+
+	function goodResponse(
+		authority: Awaited<ReturnType<typeof issueAuthority>>,
+		signerPrivateKey: CryptoKey,
+		signerCertificate: string,
+		embed: boolean,
+	) {
+		return createOcspResponse({
+			signerPrivateKey,
+			signerCertificate,
+			...(embed ? { includedCertificates: [signerCertificate] } : {}),
+			responses: [
+				{
+					certificate: authority.leaf.pem,
+					issuerCertificate: authority.ca.certificate.pem,
+					certStatus: 'good',
+				},
+			],
+		});
+	}
+
+	it('accepts a locally trusted responder that fails delegated rules (criterion 1)', async () => {
+		const authority = await issueAuthority('Criterion1 CA');
+		// Responder issued by an unrelated CA — delegated issuance rules reject it
+		const unrelated = await issueAuthority('Unrelated CA');
+		const rogueKeys = await generateKeyPair();
+		const responder = await createCertificate({
+			issuer: { commonName: 'Unrelated CA' },
+			subject: { commonName: 'Externally Trusted Responder' },
+			publicKey: rogueKeys.publicKey,
+			signerPrivateKey: unrelated.ca.keyPair.privateKey,
+			issuerPublicKey: unrelated.ca.keyPair.publicKey,
+		});
+		const response = await goodResponse(authority, rogueKeys.privateKey, responder.pem, true);
+
+		const withoutTrust = await validateOcspResponse({
+			response: response.der,
+			issuerCertificate: authority.ca.certificate.pem,
+		});
+		expect(withoutTrust).toMatchObject({ ok: false, code: 'responder_chain_invalid' });
+
+		const withTrust = await validateOcspResponse({
+			response: response.der,
+			issuerCertificate: authority.ca.certificate.pem,
+			trustedResponderCertificates: [responder.pem],
+		});
+		expect(withTrust).toMatchObject({ ok: true });
+	});
+
+	it('discovers a trusted responder when the response embeds no certificates', async () => {
+		const authority = await issueAuthority('Discovery CA');
+		const responder = await issueDelegatedResponder(authority);
+
+		const response = await goodResponse(
+			authority,
+			responder.keys.privateKey,
+			responder.certificate.pem,
+			false, // nothing embedded — discovery must use the trusted list
+		);
+
+		const blind = await validateOcspResponse({
+			response: response.der,
+			issuerCertificate: authority.ca.certificate.pem,
+		});
+		expect(blind).toMatchObject({ ok: false, code: 'signature_invalid' });
+
+		const discovered = await validateOcspResponse({
+			response: response.der,
+			issuerCertificate: authority.ca.certificate.pem,
+			trustedResponderCertificates: [responder.certificate.pem],
+		});
+		expect(discovered).toMatchObject({ ok: true });
+	});
+
+	it('honors id-pkix-ocsp-nocheck: revoked responder still accepted', async () => {
+		const authority = await issueAuthority('NoCheck CA');
+		const responder = await issueDelegatedResponder(authority, { noCheck: true });
+		expect(hasOcspNoCheckExtension(responder.certificate.pem)).toBe(true);
+
+		const responderSerial = unwrap(parseCertificatePem(responder.certificate.pem)).serialNumberHex;
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: authority.commonName },
+			signerPrivateKey: authority.ca.keyPair.privateKey,
+			issuerPublicKey: authority.ca.keyPair.publicKey,
+			revokedCertificates: [{ serialNumber: hexToBytes(responderSerial) }],
+		});
+		const response = await goodResponse(
+			authority,
+			responder.keys.privateKey,
+			responder.certificate.pem,
+			true,
+		);
+
+		const result = await validateOcspResponse({
+			response: response.der,
+			issuerCertificate: authority.ca.certificate.pem,
+			responderRevocationCrls: [crl.pem],
+		});
+		expect(result).toMatchObject({ ok: true });
+	});
+
+	it('rejects a revoked responder without nocheck under honor-nocheck', async () => {
+		const authority = await issueAuthority('Revoked Responder CA');
+		const responder = await issueDelegatedResponder(authority);
+		expect(hasOcspNoCheckExtension(responder.certificate.pem)).toBe(false);
+
+		const responderSerial = unwrap(parseCertificatePem(responder.certificate.pem)).serialNumberHex;
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: authority.commonName },
+			signerPrivateKey: authority.ca.keyPair.privateKey,
+			issuerPublicKey: authority.ca.keyPair.publicKey,
+			revokedCertificates: [{ serialNumber: hexToBytes(responderSerial) }],
+		});
+		const response = await goodResponse(
+			authority,
+			responder.keys.privateKey,
+			responder.certificate.pem,
+			true,
+		);
+
+		const result = await validateOcspResponse({
+			response: response.der,
+			issuerCertificate: authority.ca.certificate.pem,
+			responderRevocationCrls: [crl.pem],
+		});
+		expect(result).toMatchObject({ ok: false, code: 'responder_revoked' });
+	});
+
+	it('require-evidence: rejects without evidence, ignores nocheck, accepts with good CRL', async () => {
+		const authority = await issueAuthority('Evidence CA');
+		const withNoCheck = await issueDelegatedResponder(authority, { noCheck: true });
+		const response = await goodResponse(
+			authority,
+			withNoCheck.keys.privateKey,
+			withNoCheck.certificate.pem,
+			true,
+		);
+
+		// No evidence — rejected even though nocheck is present
+		expect(
+			await validateOcspResponse({
+				response: response.der,
+				issuerCertificate: authority.ca.certificate.pem,
+				responderRevocationPolicy: 'require-evidence',
+			}),
+		).toMatchObject({ ok: false, code: 'responder_revocation_unknown' });
+
+		// Empty CRL proves 'good' — accepted
+		const emptyCrl = await createCertificateRevocationList({
+			issuer: { commonName: authority.commonName },
+			signerPrivateKey: authority.ca.keyPair.privateKey,
+			issuerPublicKey: authority.ca.keyPair.publicKey,
+		});
+		expect(
+			await validateOcspResponse({
+				response: response.der,
+				issuerCertificate: authority.ca.certificate.pem,
+				responderRevocationPolicy: 'require-evidence',
+				responderRevocationCrls: [emptyCrl.pem],
+			}),
+		).toMatchObject({ ok: true });
+	});
+
+	it('validates delegated responder chain at the caller-supplied time', async () => {
+		const now = Date.now();
+		// CA validity must span the historical window too
+		const authority = await issueAuthority('Historical CA', {
+			notBefore: new Date(now - 30 * 24 * HOUR_MS),
+			notAfter: new Date(now + 30 * 24 * HOUR_MS),
+		});
+		// Responder valid only in a past window
+		const responder = await issueDelegatedResponder(authority, {
+			validity: {
+				notBefore: new Date(now - 10 * 24 * HOUR_MS),
+				notAfter: new Date(now - 5 * 24 * HOUR_MS),
+			},
+		});
+		const historicalAt = new Date(now - 7 * 24 * HOUR_MS);
+		const response = await createOcspResponse({
+			signerPrivateKey: responder.keys.privateKey,
+			signerCertificate: responder.certificate.pem,
+			includedCertificates: [responder.certificate.pem],
+			producedAt: historicalAt,
+			responses: [
+				{
+					certificate: authority.leaf.pem,
+					issuerCertificate: authority.ca.certificate.pem,
+					certStatus: 'good',
+					thisUpdate: historicalAt,
+				},
+			],
+		});
+
+		// At the historical time the responder chain is valid
+		expect(
+			await validateOcspResponse({
+				response: response.der,
+				issuerCertificate: authority.ca.certificate.pem,
+				at: historicalAt,
+			}),
+		).toMatchObject({ ok: true });
+
+		// Now the responder certificate is expired — chain must fail
+		expect(
+			await validateOcspResponse({
+				response: response.der,
+				issuerCertificate: authority.ca.certificate.pem,
+			}),
+		).toMatchObject({ ok: false, code: 'responder_chain_invalid' });
 	});
 });

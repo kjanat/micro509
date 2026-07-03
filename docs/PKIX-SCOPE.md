@@ -5,12 +5,12 @@ forward-work backlog for the PKIX-facing surface.
 
 ## Standards status
 
-| Area                       | Status    | Notes                                                                                                                                                                                                                                                                       |
-| -------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| RFC 5280 path validation   | `partial` | core path validation, supported-form name constraints, initial subtree inputs, RFC 9618 policy processing, malformed-DER coverage, and broad PKITS harness coverage ship; revocation stays a separate API and broader conformance evidence is still incomplete              |
-| RFC 6960 OCSP              | `partial` | request/response parsing, signature checks, responder binding/authorization, nonce/request matching, freshness checks, full request coverage, and chain-level revocation orchestration (`checkChainRevocation`) ship; local responder-policy acceptance is still incomplete |
-| RFC 6125 service identity  | `partial` | `matchServiceIdentity()` ships DNS-ID, IP-ID, URI-ID, SRV-ID, wildcard, IDNA, and opt-in CN-compat checks; verification helpers still wire DNS/IP identities only                                                                                                           |
-| RFC 9618 policy validation | `partial` | RFC 9618-style policy state, enforcement, outputs, and broad PKITS harness coverage ship; broader conformance evidence is still incomplete                                                                                                                                  |
+| Area                       | Status    | Notes                                                                                                                                                                                                                                                                                                                                 |
+| -------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| RFC 5280 path validation   | `partial` | core path validation, supported-form name constraints, initial subtree inputs, RFC 9618 policy processing, malformed-DER coverage, and broad PKITS harness coverage ship; revocation stays a separate API and broader conformance evidence is still incomplete                                                                        |
+| RFC 6960 OCSP              | `partial` | request/response parsing, signature checks, responder binding/authorization (incl. local trusted responders, `id-pkix-ocsp-nocheck`, and responder revocation policy), nonce/request matching, freshness checks, full request coverage, and chain-level revocation orchestration ship; HTTP transport stays caller-provided by design |
+| RFC 6125 service identity  | `partial` | `matchServiceIdentity()` ships DNS-ID, IP-ID, URI-ID, SRV-ID, wildcard, IDNA, and opt-in CN-compat checks; verification helpers still wire DNS/IP identities only                                                                                                                                                                     |
+| RFC 9618 policy validation | `partial` | RFC 9618-style policy state, enforcement, outputs, and broad PKITS harness coverage ship; broader conformance evidence is still incomplete                                                                                                                                                                                            |
 
 Current conformance evidence:
 
@@ -135,10 +135,11 @@ Focused RFC 6125 identity fixtures live in [`test/identity-fixtures.test.ts`](..
 - [x] Parse and verify `BasicOCSPResponse`.
 - [x] Check that the response fully and correctly refers to the requested certificate set.
 - [x] Validate the OCSP response signature.
-- [ ] Validate responder authorization exhaustively.
-  - [ ] Land RFC 6960 §4.2.2.2 criterion 1: explicit local signer acceptance scoped to the issuing CA.
-  - [ ] Decide and enforce responder-certificate revocation policy — see §11 for the canonical breakdown.
-  - [ ] Add fixture coverage for configured-responder accept/reject and historical-time validation.
+- [x] Validate responder authorization exhaustively.
+  - [x] Land RFC 6960 §4.2.2.2 criterion 1: explicit local signer acceptance scoped to the issuing CA
+        (`trustedResponderCertificates` on `validateOcspResponse()`, `trustedOcspResponders` on chain orchestration).
+  - [x] Decide and enforce responder-certificate revocation policy — see §11 for the canonical breakdown.
+  - [x] Add fixture coverage for configured-responder accept/reject and historical-time validation.
 - [x] Enforce response freshness using `thisUpdate` / `nextUpdate` and configurable clock skew.
 - [x] Return `good`, `revoked`, and `unknown` distinctly.
 - [x] Support optional nonce handling if you want replay binding between request and response. RFC 9654 defines the updated nonce extension details. (IETF Datatracker[^rfc6960])
@@ -148,18 +149,19 @@ Focused RFC 6125 identity fixtures live in [`test/identity-fixtures.test.ts`](..
 
 ## 11. OCSP responder authorization rules
 
-- [ ] Accept an OCSP response signer if it matches local responder configuration for the certificate in question.
-  - [ ] Add a validation input binding trusted responder certs to issuer CA scopes.
-  - [ ] Thread local responder policy through `validateOcspResponse()` before falling back to issuer-cert or delegated-responder rules.
-  - [ ] Add positive and negative fixtures for locally authorized signer scope.
+- [x] Accept an OCSP response signer if it matches local responder configuration for the certificate in question.
+  - [x] Add a validation input binding trusted responder certs to issuer CA scopes
+        (`trustedResponderCertificates` — per-call, and each call is scoped to one issuer).
+  - [x] Thread local responder policy through `validateOcspResponse()` before falling back to issuer-cert or delegated-responder rules.
+  - [x] Add positive and negative fixtures for locally authorized signer scope.
 - [x] Accept it if the signer is the issuing CA certificate itself.
 - [x] Accept it if the signer cert contains EKU `id-kp-OCSPSigning` **and** was issued directly by the CA that issued the target certificate.
 - [x] Reject the response if the signer certificate meets none of those conditions.
-- [ ] Decide and document responder-certificate revocation policy (RFC 6960 §4.2.2.2.1).
-  - [ ] Parse and expose `id-pkix-ocsp-nocheck`.
-  - [ ] Define validator policy knobs: honor `nocheck`, require CRL/OCSP evidence, or caller-local override.
-  - [ ] Add fixtures for each policy branch.
-  - [ ] Pass caller evaluation time through delegated responder chain validation.
+- [x] Decide and document responder-certificate revocation policy (RFC 6960 §4.2.2.2.1).
+  - [x] Parse and expose `id-pkix-ocsp-nocheck` (`hasOcspNoCheckExtension()`).
+  - [x] Define validator policy knobs: `responderRevocationPolicy` = `'honor-nocheck'` (default) / `'require-evidence'` / `'skip'`, with `responderRevocationCrls` as evidence and `trustedResponderCertificates` as the caller-local override.
+  - [x] Add fixtures for each policy branch.
+  - [x] Pass caller evaluation time through delegated responder chain validation.
 
 Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.test.ts`](../test/ocsp-fixtures.test.ts).
 

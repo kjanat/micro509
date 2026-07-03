@@ -479,6 +479,58 @@ describe('checkChainRevocation with OCSP evidence', () => {
 		expect(preferCrl.value.certificates[0]?.source?.type).toBe('crl');
 	});
 
+	it('accepts a locally trusted responder via trustedOcspResponders', async () => {
+		const { ca, leaf, chain, at, fresh } = await createOcspChainFixture();
+		// Responder from an unrelated CA — only local trust can authorize it
+		const outsiderCa = await createSelfSignedCertificate({
+			subject: { commonName: 'Outsider CA' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const responderKeys = await generateKeyPair();
+		const responder = await createCertificate({
+			issuer: { commonName: 'Outsider CA' },
+			subject: { commonName: 'Externally Trusted Responder' },
+			publicKey: responderKeys.publicKey,
+			signerPrivateKey: outsiderCa.keyPair.privateKey,
+			issuerPublicKey: outsiderCa.keyPair.publicKey,
+		});
+		const response = await createOcspResponse({
+			signerPrivateKey: responderKeys.privateKey,
+			signerCertificate: responder.pem,
+			includedCertificates: [responder.pem],
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: ca.certificate.pem,
+					certStatus: 'good',
+					...fresh,
+				},
+			],
+		});
+
+		const untrusted = await checkChainRevocation({
+			chain: [...chain],
+			ocspResponses: [response.der],
+			at,
+		});
+		expect(untrusted.value.certificates[0]?.status).toBe('indeterminate');
+		expect(untrusted.value.certificates[0]?.indeterminateReasons).toContain(
+			'ocsp_responder_not_authorized',
+		);
+
+		const trusted = await checkChainRevocation({
+			chain: [...chain],
+			ocspResponses: [response.der],
+			trustedOcspResponders: [responder.pem],
+			at,
+		});
+		expect(trusted.value.certificates[0]?.status).toBe('good');
+		expect(trusted.value.certificates[0]?.source?.type).toBe('ocsp');
+	});
+
 	it('validates a delegated responder provided via extraCertificates', async () => {
 		const { caName, ca, leaf, chain, at, fresh } = await createOcspChainFixture();
 		const responderKeys = await generateKeyPair();

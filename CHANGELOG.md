@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- OCSP responder authorization completed (RFC 6960 §4.2.2.2):
+  - `trustedResponderCertificates` on `validateOcspResponse()` and
+    `trustedOcspResponders` on `checkChainRevocation()` /
+    `verifyCertificateChain({ revocation })` — criterion-1 local responder
+    configuration; a matching signer skips delegated issuance/EKU checks and
+    is consulted during responder discovery.
+  - Delegated responder revocation policy (§4.2.2.2.1):
+    `responderRevocationPolicy` = `'honor-nocheck'` (default) /
+    `'require-evidence'` / `'skip'` with `responderRevocationCrls` as
+    evidence; chain orchestration reuses its CRLs automatically. New
+    failure codes `responder_revoked` and `responder_revocation_unknown`.
+  - `hasOcspNoCheckExtension()` — parses `id-pkix-ocsp-nocheck`.
+  - Delegated responder chains now validate at the caller-supplied `at`
+    (historical-time validation) instead of always at the current time.
+
 ## [0.4.0] - 2026-07-03
 
 OCSP joins chain-level revocation, and the npm package no longer ships

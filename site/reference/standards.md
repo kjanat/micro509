@@ -29,7 +29,13 @@
 - Request creation with CertID (issuer hash + serial)
 - Response parsing with status, certs, timestamps
 - Signature verification
-- Responder authorization (CA-signed, delegated with `ocspSigning` EKU)
+- Responder authorization (CA-signed, delegated with `ocspSigning` EKU,
+  locally trusted responders per RFC 6960 §4.2.2.2 criterion 1)
+- Delegated responder revocation policy: `id-pkix-ocsp-nocheck`
+  (`hasOcspNoCheckExtension()`), `honor-nocheck` / `require-evidence` /
+  `skip` knobs with CRL evidence
+- Historical-time responder chain validation (`at` flows through delegated
+  chain checks)
 - Nonce matching
 - Freshness checks
 - Chain-level orchestration: `checkChainRevocation()` /
@@ -67,7 +73,7 @@ indeterminate status does **not** deny. See the
 ## What doesn't ship
 
 - Full CRL distribution point processing
-- OCSP local responder-policy acceptance
+- OCSP/CRL HTTP fetching (evidence is caller-provided by design)
 - Broader PKITS conformance (ongoing)
 - Full name constraint processing for all GeneralName forms
 
