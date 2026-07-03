@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-03
+
+OCSP joins chain-level revocation, and the npm package no longer ships
+broken Bun export conditions.
+
 ### Added
 
 - OCSP evidence is now consumed by chain-level revocation:
@@ -122,7 +127,8 @@ Initial prerelease. API may change before 1.0.
 - Zero runtime dependencies, WebCrypto-native, tree-shakeable subpath exports;
   runs on Node, Bun, Deno, browsers, and Cloudflare Workers.
 
-[Unreleased]: https://github.com/kjanat/micro509/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/kjanat/micro509/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/kjanat/micro509/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/kjanat/micro509/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/kjanat/micro509/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/kjanat/micro509/compare/v0.1.0...v0.1.1
