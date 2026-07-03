@@ -325,7 +325,9 @@ authorization, freshness — before its verdict is trusted, and a validated
 When both sources yield a validated `good` verdict, `policy.prefer` decides
 which one is reported: the default `'best-available'` picks the source with
 the fresher evidence (later `thisUpdate`, ties favoring OCSP), while `'ocsp'`
-and `'crl'` pin the reported source unconditionally.
+and `'crl'` pin the reported source unconditionally. The winning evidence's
+timestamp is reported as `source.thisUpdate` on each certificate's status,
+so callers can enforce their own maximum evidence age.
 
 The same inputs are available on `verifyCertificateChain()` via the
 `revocation` option:
