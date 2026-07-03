@@ -17,7 +17,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-ts
-        with: { install-bun: "true" }
+        with: { install-bun: "true", install-node: "true", install-deno: "true" }
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
       - run: bun run test
+      - name: Build (runs attw + publint + unused-export checks)
+        run: bun run build
+      - name: Validate npm tarball against published exports
+        run: bun scripts/check-npm-pack.ts
+      - name: Node smoke test (dist)
+        run: node scripts/smoke.mjs
+      - name: Deno smoke test (dist)
+        run: deno run --allow-read scripts/smoke.mjs

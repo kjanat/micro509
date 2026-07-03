@@ -86,6 +86,12 @@ jobs:
           node-registry-url: https://registry.npmjs.org
       - run: bun install --frozen-lockfile
       - run: bun run build
+      - name: Apply publishConfig.exports (npm publish does not rewrite exports itself)
+        run: |
+          npm pkg set --json exports="$(jq -c '.publishConfig.exports' package.json)"
+          npm pkg delete publishConfig.exports
+      - name: Validate npm tarball against published exports
+        run: bun scripts/check-npm-pack.ts
       - run: |
           PKG_NAME="$(jq -r '.name' package.json)"
           PKG_VERSION="$(jq -r '.version' package.json)"
