@@ -100,7 +100,7 @@ jobs:
           # so the skip guard must run for both modes (PR dry-runs would
           # otherwise fail between a release and the next version bump).
           PUBLISHED=$(npm view "${PKG_NAME}" versions --json 2>/dev/null \
-            | jq -r ".[] | select(. == \"${PKG_VERSION}\")" || true)
+            | jq -r --arg v "${PKG_VERSION}" '.[] | select(. == $v)' || true)
           if [[ -n "${PUBLISHED}" ]]; then
             echo "::notice::${PKG_NAME}@${PKG_VERSION} already on npm, skipping"
             exit 0

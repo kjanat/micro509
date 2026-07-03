@@ -2262,6 +2262,31 @@ describe('validation profiles', () => {
 		expect(wrongScheme).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
 	});
 
+	it('verifyCertificateChain fails closed on malformed uri/srv identity values', async () => {
+		const chain = await issueChain({
+			leafSubjectAltNames: [{ type: 'uri', value: 'https://verify.example' }],
+		});
+		const base = {
+			leaf: chain.leaf.pem,
+			intermediates: [chain.intermediate.pem],
+			roots: [chain.root.certificate.pem],
+		};
+
+		for (const serviceIdentity of [
+			{ type: 'uri', value: 'no-scheme-at-all' } as const,
+			{ type: 'uri', value: '::::' } as const,
+			{ type: 'srv', value: 'no-underscore.example' } as const,
+		]) {
+			const result = await verifyCertificateChain({ ...base, serviceIdentity });
+			// Typed failure, never a throw
+			expect(result).toMatchObject({
+				ok: false,
+				code: 'subject_alt_name_mismatch',
+				index: 0,
+			});
+		}
+	});
+
 	it('verifyCertificateChain matches SRV-ID service identities', async () => {
 		const chain = await issueChain({
 			leafSubjectAltNames: [{ type: 'srv', value: '_imaps.verify.example' }],
