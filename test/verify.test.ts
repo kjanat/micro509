@@ -2219,7 +2219,7 @@ describe('validation profiles', () => {
 			roots: [chain.root.certificate.pem],
 			serviceIdentity: { type: 'dns' as const, value: 'verify.example' },
 		};
-		Object.defineProperty(input.serviceIdentity, 'type', { value: 'uri' });
+		Object.defineProperty(input.serviceIdentity, 'type', { value: 'email' });
 
 		const result = await validateForTlsServer(input);
 		expect(result).toMatchObject({
@@ -2227,6 +2227,73 @@ describe('validation profiles', () => {
 			code: 'subject_alt_name_mismatch',
 			index: 0,
 		});
+	});
+
+	it('verifyCertificateChain matches URI-ID service identities', async () => {
+		const chain = await issueChain({
+			leafSubjectAltNames: [{ type: 'uri', value: 'https://verify.example' }],
+		});
+		const base = {
+			leaf: chain.leaf.pem,
+			intermediates: [chain.intermediate.pem],
+			roots: [chain.root.certificate.pem],
+		};
+
+		const match = await verifyCertificateChain({
+			...base,
+			serviceIdentity: { type: 'uri', value: 'https://verify.example' },
+		});
+		expect(match.ok).toBe(true);
+
+		const wrongHost = await verifyCertificateChain({
+			...base,
+			serviceIdentity: { type: 'uri', value: 'https://wrong.example' },
+		});
+		expect(wrongHost).toMatchObject({
+			ok: false,
+			code: 'subject_alt_name_mismatch',
+			index: 0,
+		});
+
+		const wrongScheme = await verifyCertificateChain({
+			...base,
+			serviceIdentity: { type: 'uri', value: 'ldap://verify.example' },
+		});
+		expect(wrongScheme).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
+	});
+
+	it('verifyCertificateChain matches SRV-ID service identities', async () => {
+		const chain = await issueChain({
+			leafSubjectAltNames: [{ type: 'srv', value: '_imaps.verify.example' }],
+		});
+		const base = {
+			leaf: chain.leaf.pem,
+			intermediates: [chain.intermediate.pem],
+			roots: [chain.root.certificate.pem],
+		};
+
+		const match = await verifyCertificateChain({
+			...base,
+			serviceIdentity: { type: 'srv', value: '_imaps.verify.example' },
+		});
+		expect(match.ok).toBe(true);
+
+		// Same host, different service label — identity mismatch, not malformed input
+		const wrongService = await verifyCertificateChain({
+			...base,
+			serviceIdentity: { type: 'srv', value: '_pop3.verify.example' },
+		});
+		expect(wrongService).toMatchObject({
+			ok: false,
+			code: 'subject_alt_name_mismatch',
+			index: 0,
+		});
+
+		const wrongHost = await verifyCertificateChain({
+			...base,
+			serviceIdentity: { type: 'srv', value: '_imaps.wrong.example' },
+		});
+		expect(wrongHost).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
 	});
 
 	it('verifyCertificateChain fails closed for malformed IP service identity values', async () => {

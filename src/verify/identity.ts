@@ -63,8 +63,8 @@ export type ServiceIdentityInput =
 export type ServiceIdentityType = ServiceIdentityInput['type'];
 /** Alias for the full identity union accepted by matching functions. */
 export type MatchableServiceIdentityInput = ServiceIdentityInput;
-/** Subset of identities usable for TLS server verification (DNS and IP only). */
-export type VerifyServiceIdentityInput = DnsServiceIdentityInput | IpServiceIdentityInput;
+/** Identity union accepted by the verification helpers (DNS-ID, IP-ID, URI-ID, SRV-ID). */
+export type VerifyServiceIdentityInput = ServiceIdentityInput;
 
 /** Discriminant codes for identity-matching failures. */
 export type MatchServiceIdentityErrorCode =
