@@ -2,12 +2,12 @@
 
 ## Status
 
-| Area                       | Status  | Notes                                                                                                       |
-| -------------------------- | ------- | ----------------------------------------------------------------------------------------------------------- |
-| RFC 5280 path validation   | partial | Core path validation, name constraints, policy processing, malformed-DER coverage, PKITS conformance subset |
-| RFC 6960 OCSP              | partial | Request/response parsing, signature checks, responder authorization, nonce/freshness                        |
-| RFC 6125 service identity  | partial | DNS-ID, IP-ID, URI-ID, SRV-ID, wildcard, IDNA, opt-in CN-compat                                             |
-| RFC 9618 policy validation | partial | Policy state, enforcement, outputs, focused PKITS coverage                                                  |
+| Area                       | Status   | Notes                                                                                                                                                                     |
+| -------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| RFC 5280 path validation   | partial  | Core path validation, name constraints, policy processing, malformed-DER coverage, PKITS conformance subset                                                               |
+| RFC 6960 OCSP              | complete | Full validation surface: parsing, signatures, responder authorization, revocation policy, nonce, freshness, chain orchestration; HTTP transport caller-provided by design |
+| RFC 6125 service identity  | complete | Every identity type: DNS-ID, IP-ID, URI-ID, SRV-ID, wildcard, IDNA, opt-in CN-compat                                                                                      |
+| RFC 9618 policy validation | partial  | Policy state, enforcement, outputs, focused PKITS coverage                                                                                                                |
 
 ## What ships
 

@@ -177,12 +177,12 @@ It intentionally excludes niche, blockchain-specific, or key-agreement-only prim
 
 ## Standards status
 
-| Area                       | Status  |
-| -------------------------- | ------- |
-| RFC 5280 path validation   | partial |
-| RFC 6960 OCSP              | partial |
-| RFC 6125 service identity  | partial |
-| RFC 9618 policy validation | partial |
+| Area                       | Status   |
+| -------------------------- | -------- |
+| RFC 5280 path validation   | partial  |
+| RFC 6960 OCSP              | complete |
+| RFC 6125 service identity  | complete |
+| RFC 9618 policy validation | partial  |
 
 See [`docs/PKIX-SCOPE.md`](./docs/PKIX-SCOPE.md) for the detailed scope boundary
 and the [API reference](https://micro509.kjanat.dev/api/) for the public module surface.
