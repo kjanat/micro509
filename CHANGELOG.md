@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Conformance
+
+- PKITS sweep completed: the harness runs the full NIST PKITS suite — all
+  224 test procedures across sections 4.1–4.16, expanded to 249 runs
+  including every documented subtest variation — and every manifest
+  expectation was verified against the official PKITS document, now
+  vendored as `docs/rfc/pkits.txt`. 4.1.4/4.1.5 (DSA chains) are
+  expected-fail per the WebCrypto algorithm boundary. RFC 5280 path
+  validation and RFC 9618 policy validation are now claimed `complete`.
+
 ### Changed
 
 - Name constraints now fail closed for unsupported GeneralName forms per

@@ -7,10 +7,10 @@ forward-work backlog for the PKIX-facing surface.
 
 | Area                       | Status     | Notes                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | -------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| RFC 5280 path validation   | `partial`  | core path validation, supported-form name constraints, initial subtree inputs, RFC 9618 policy processing, malformed-DER coverage, and broad PKITS harness coverage ship; revocation stays a separate API and broader conformance evidence is still incomplete                                                                                                                                                                  |
+| RFC 5280 path validation   | `complete` | core path validation, name constraints across all GeneralName forms (enforce or fail-closed), initial subtree inputs, RFC 9618 policy processing, and malformed-DER coverage ship; validated against the full NIST PKITS suite (224 test procedures, 249 runs incl. documented subtest variations; 4.1.4/4.1.5 DSA chains expected-fail per the WebCrypto algorithm boundary). Revocation is a separate API by design           |
 | RFC 6960 OCSP              | `complete` | the full validation surface ships: request/response parsing, signature checks, responder binding/authorization (incl. local trusted responders, `id-pkix-ocsp-nocheck`, and responder revocation policy), nonce/request matching, freshness checks, full request coverage, and chain-level revocation orchestration with freshest-evidence combination; HTTP transport is caller-provided by design (scope boundary, not a gap) |
 | RFC 6125 service identity  | `complete` | `matchServiceIdentity()` and the verification helpers (`verifyCertificateChain`, `validateForTlsServer`, …) ship every RFC 6125/9525 identity type: DNS-ID, IP-ID, URI-ID, SRV-ID, wildcard, IDNA, and opt-in CN-compat checks                                                                                                                                                                                                  |
-| RFC 9618 policy validation | `partial`  | RFC 9618-style policy state, enforcement, outputs, and broad PKITS harness coverage ship; broader conformance evidence is still incomplete                                                                                                                                                                                                                                                                                      |
+| RFC 9618 policy validation | `complete` | RFC 9618-style policy state, enforcement, and outputs ship; the full PKITS policy sections (4.8–4.12, every documented subtest variation) pass                                                                                                                                                                                                                                                                                  |
 
 Current conformance evidence:
 
@@ -109,7 +109,9 @@ Current GeneralName matrix for `nameConstraints`:
       algorithm, because RFC 9618 replaced it with an equivalent, more efficient
       algorithm to avoid worst-case exponential blowups and DoS risk.
       (IETF Datatracker[^rfc9618])
-- [x] Keep public wording at `partial` until broader conformance evidence lands.
+- [x] Conformance evidence landed: the full PKITS policy sections (4.8–4.12)
+      pass, with every manifest expectation verified against the official
+      PKITS document ([`docs/rfc/pkits.txt`](./rfc/pkits.txt)).
 
 ## 7. Trust-anchor model
 
@@ -203,7 +205,12 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
 
 - [x] Add fixed RFC-style test vectors for builders, parsers, and validators.
 - [x] Add round-trip tests for certs, CSRs, names, and extensions.
-- [x] Add a PKITS harness for shipped path-validation claims and gap reporting. See [`test/pkits.test.ts`](../test/pkits.test.ts).
+- [x] Run the full NIST PKITS suite: all 224 test procedures across sections
+      4.1–4.16, expanded to 249 runs including every documented subtest
+      variation; manifest expectations verified against the official PKITS
+      document ([`docs/rfc/pkits.txt`](./rfc/pkits.txt)). 4.1.4/4.1.5 (DSA)
+      are expected-fail per the WebCrypto algorithm boundary and tracked with
+      `it.failing`. See [`test/pkits.test.ts`](../test/pkits.test.ts).
 - [x] Add malformed DER / fuzz tests.
 - [x] Differential-test against at least one mature implementation. See [`test/differential.test.ts`](../test/differential.test.ts).
 - [x] Run the validator against **NIST PKITS** as a gap-report harness, which NIST describes as a comprehensive X.509 path validation test suite for relying parties. (NIST Computer Security Resource Center[^x-509-path-validation])

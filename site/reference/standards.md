@@ -4,10 +4,10 @@
 
 | Area                       | Status   | Notes                                                                                                                                                                     |
 | -------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| RFC 5280 path validation   | partial  | Core path validation, name constraints, policy processing, malformed-DER coverage, PKITS conformance subset                                                               |
+| RFC 5280 path validation   | complete | Full NIST PKITS suite passes (224 procedures, 249 runs; DSA chains expected-fail per the WebCrypto algorithm boundary); revocation is a separate API by design            |
 | RFC 6960 OCSP              | complete | Full validation surface: parsing, signatures, responder authorization, revocation policy, nonce, freshness, chain orchestration; HTTP transport caller-provided by design |
 | RFC 6125 service identity  | complete | Every identity type: DNS-ID, IP-ID, URI-ID, SRV-ID, wildcard, IDNA, opt-in CN-compat                                                                                      |
-| RFC 9618 policy validation | partial  | Policy state, enforcement, outputs, focused PKITS coverage                                                                                                                |
+| RFC 9618 policy validation | complete | Full PKITS policy sections (4.8–4.12, every documented subtest variation) pass                                                                                            |
 
 ## What ships
 
@@ -76,7 +76,6 @@ indeterminate status does **not** deny. See the
 
 - Full CRL distribution point processing
 - OCSP/CRL HTTP fetching (evidence is caller-provided by design)
-- Broader PKITS conformance (ongoing)
 - Semantic matching for otherName / x400Address / ediPartyName / registeredID
   name constraints (they fail closed instead when a critical constraint
   meets a name of that form)
