@@ -32,6 +32,9 @@
 - Responder authorization (CA-signed, delegated with `ocspSigning` EKU)
 - Nonce matching
 - Freshness checks
+- Chain-level orchestration: `checkChainRevocation()` /
+  `verifyCertificateChain({ revocation })` consume caller-supplied OCSP
+  responses alongside CRLs
 
 ### CRL processing
 
@@ -39,6 +42,12 @@
 - Indirect issuer handling
 - Scope matching
 - Basic CRL parsing and revocation checks
+
+::: warning Soft-fail default
+Chain-level revocation checking defaults to `mode: 'soft-fail'` —
+indeterminate status does **not** deny. See the
+[revocation guide](/guide/revocation) before relying on it.
+:::
 
 ### RFC 6125 service identity
 
@@ -62,4 +71,5 @@
 - Broader PKITS conformance (ongoing)
 - Full name constraint processing for all GeneralName forms
 
-For the authoritative scope boundary, see [`PKIX-SCOPE.md`](../docs/PKIX-SCOPE.md).
+For the authoritative scope boundary, see
+[`PKIX-SCOPE.md`](https://github.com/kjanat/micro509/blob/master/docs/PKIX-SCOPE.md).

@@ -217,31 +217,33 @@ Supported identity types:
 
 ## Error codes
 
-The `VerifyErrorCode` type covers 21 failure modes:
+Every failure mode in the `VerifyErrorCode` type (the runtime list is exported
+as `VERIFY_ERROR_CODES`; this table is checked against it by a repo test):
 
-| Code                                         | Meaning                                      |
-| -------------------------------------------- | -------------------------------------------- |
-| `no_trusted_root`                            | No trust anchor matched the chain            |
-| `issuer_not_found`                           | Could not find issuer for a certificate      |
-| `signature_invalid`                          | Cryptographic signature check failed         |
-| `certificate_expired`                        | Certificate outside validity window          |
-| `ca_required`                                | Non-CA certificate used as issuer            |
-| `key_cert_sign_required`                     | Issuer missing `keyCertSign` key usage       |
-| `path_length_exceeded`                       | Chain exceeds `pathLenConstraint`            |
-| `authority_key_identifier_mismatch`          | AKI/SKI cross-check failed                   |
-| `extended_key_usage_invalid`                 | EKU doesn't match requested purpose          |
-| `subject_alt_name_mismatch`                  | SAN doesn't match service identity           |
-| `common_name_fallback_suppressed`            | CN match suppressed by presented identifiers |
-| `self_signed_leaf_not_allowed`               | Self-signed leaf without explicit opt-in     |
-| `unrecognized_critical_extension`            | Unknown critical extension                   |
-| `intermediate_eku_constraint`                | Intermediate has restrictive EKU             |
-| `policy_processing_not_implemented`          | Policy processing not implemented            |
-| `name_constraints_violated`                  | Name constraints check failed                |
-| `initial_name_constraints_not_implemented`   | Initial name constraints not implemented     |
-| `unsupported_name_constraints`               | Unsupported name constraint form             |
-| `explicit_policy_required`                   | Policy required but not satisfied            |
-| `initial_policy_set_not_satisfied`           | Initial policy set not met                   |
-| `unsupported_signature_algorithm_parameters` | Unknown signature algorithm                  |
+| Code                                         | Meaning                                        |
+| -------------------------------------------- | ---------------------------------------------- |
+| `no_trusted_root`                            | No trust anchor matched the chain              |
+| `issuer_not_found`                           | Could not find issuer for a certificate        |
+| `signature_invalid`                          | Cryptographic signature check failed           |
+| `certificate_expired`                        | Certificate outside validity window            |
+| `ca_required`                                | Non-CA certificate used as issuer              |
+| `key_cert_sign_required`                     | Issuer missing `keyCertSign` key usage         |
+| `path_length_exceeded`                       | Chain exceeds `pathLenConstraint`              |
+| `authority_key_identifier_mismatch`          | AKI/SKI cross-check failed                     |
+| `extended_key_usage_invalid`                 | EKU doesn't match requested purpose            |
+| `subject_alt_name_mismatch`                  | SAN doesn't match service identity             |
+| `common_name_fallback_suppressed`            | CN match suppressed by presented identifiers   |
+| `self_signed_leaf_not_allowed`               | Self-signed leaf without explicit opt-in       |
+| `unrecognized_critical_extension`            | Unknown critical extension                     |
+| `intermediate_eku_constraint`                | Intermediate has restrictive EKU               |
+| `explicit_policy_required`                   | Policy required but not satisfied              |
+| `initial_policy_set_not_satisfied`           | Initial policy set not met                     |
+| `unsupported_initial_name_constraints`       | Initial name constraints use unsupported forms |
+| `unsupported_name_constraints`               | Unsupported name constraint form               |
+| `name_constraints_violated`                  | Name constraints check failed                  |
+| `unsupported_signature_algorithm_parameters` | Unknown signature algorithm                    |
+| `certificate_revoked`                        | Revocation evidence confirms revocation        |
+| `revocation_indeterminate`                   | Revocation unknown under hard-fail policy      |
 
 ## CSR verification
 

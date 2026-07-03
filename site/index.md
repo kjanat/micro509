@@ -26,8 +26,10 @@ features:
     title: Runs Everywhere
     details: Pure WebCrypto, zero dependencies. Node, Bun, Deno, browsers, Cloudflare Workers.
   - icon: 📦
-    title: Full PKI Surface
-    details: Certificates, CSRs, chain verification, service identity, CRLs, OCSP, PFX/PKCS#12, PKCS#7, encrypted keys.
+    title: Broad PKI Workflow Coverage
+    details: Certificates, CSRs, chain verification, service identity, CRLs, OCSP, PFX/PKCS#12, PKCS#7, encrypted keys — with explicitly documented standards-conformance boundaries.
+    link: /reference/standards
+    linkText: Conformance status
   - icon: 🛡️
     title: Strict by Default
     details: No any, no type assertions, no non-null assertions. Narrow defaults, explicit escape hatches.

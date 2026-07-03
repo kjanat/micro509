@@ -3,6 +3,16 @@
 The examples below build their own `ca`, `leaf`, CRL, and OCSP material
 inline so each one runs on its own.
 
+::: warning Revocation checking defaults to soft-fail
+`RevocationPolicy.mode` defaults to `'soft-fail'`: certificates whose
+revocation status is **indeterminate** (no applicable CRL/OCSP evidence,
+expired evidence, untrusted signer) are **allowed**. Only a confirmed
+`revoked` verdict denies. If you need "no usable evidence ⇒ reject", set
+`policy: { mode: 'hard-fail' }` explicitly. Enabling revocation checking
+without `hard-fail` means "check revocation _if the evidence happens to be
+usable_" — that is the deliberate, but easy-to-miss, default.
+:::
+
 ## CRL lifecycle
 
 ### Create a CRL
@@ -299,6 +309,75 @@ console.log('status:', result.value.status);
 if (result.value.status === 'revoked') {
   console.log('revoked at:', result.value.revokedAt);
 }
+```
+
+</LiveCode>
+
+## Chain-level revocation
+
+`checkChainRevocation()` evaluates CRL **and** OCSP evidence for every
+certificate in a validated chain (the trust anchor is never checked). Each
+OCSP response is fully validated — signature, responder binding and
+authorization, freshness — before its verdict is trusted, and a validated
+`revoked` verdict from either evidence kind always wins, regardless of
+`policy.prefer`.
+
+The same inputs are available on `verifyCertificateChain()` via the
+`revocation` option:
+
+<LiveCode>
+
+```ts
+import {
+  createCertificate,
+  createOcspResponse,
+  createSelfSignedCertificate,
+  generateKeyPair,
+  verifyCertificateChain,
+} from 'micro509';
+
+const ca = await createSelfSignedCertificate({
+  subject: { commonName: 'Demo CA' },
+  extensions: {
+    basicConstraints: { ca: true },
+    keyUsage: ['keyCertSign', 'cRLSign'],
+  },
+});
+
+const leafKeys = await generateKeyPair();
+const leaf = await createCertificate({
+  issuer: { commonName: 'Demo CA' },
+  subject: { commonName: 'app.example.com' },
+  publicKey: leafKeys.publicKey,
+  signerPrivateKey: ca.keyPair.privateKey,
+  issuerPublicKey: ca.keyPair.publicKey,
+});
+
+const ocsp = await createOcspResponse({
+  signerPrivateKey: ca.keyPair.privateKey,
+  signerCertificate: ca.certificate.pem,
+  responses: [
+    {
+      certificate: leaf.pem,
+      issuerCertificate: ca.certificate.pem,
+      certStatus: 'good',
+      thisUpdate: new Date(Date.now() - 60_000),
+      nextUpdate: new Date(Date.now() + 3_600_000),
+    },
+  ],
+});
+
+const result = await verifyCertificateChain({
+  leaf: leaf.pem,
+  roots: [ca.certificate.pem],
+  revocation: {
+    ocspResponses: [ocsp.der],
+    // hard-fail: indeterminate status ⇒ verification fails
+    policy: { mode: 'hard-fail' },
+  },
+});
+
+console.log('verified:', result.ok);
 ```
 
 </LiveCode>
