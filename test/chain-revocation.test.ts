@@ -258,7 +258,10 @@ async function createOcspChainFixture() {
 	});
 	const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
 	const parsedCa = unwrap(parseCertificatePem(ca.certificate.pem));
-	const at = new Date();
+	// Tests create OCSP responses after this fixture returns; producedAt is
+	// stamped then (whole-second DER precision). Evaluate slightly in the
+	// future so producedAt can never exceed `at` on slow runners.
+	const at = new Date(Date.now() + 5_000);
 	return {
 		caName,
 		ca,
