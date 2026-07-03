@@ -4,14 +4,6 @@
 micro509 is `0.x` — API may change before 1.0.
 :::
 
-::: info Know the conformance boundaries
-RFC 6960 OCSP and RFC 6125 service identity are complete (OCSP transport is
-caller-provided by design); RFC 5280 path validation and RFC 9618 policy
-validation ship a documented subset. The
-[standards status](/reference/standards) is the authority. Revocation
-checking defaults to [soft-fail](/guide/revocation).
-:::
-
 ## Install
 
 ::: code-group
