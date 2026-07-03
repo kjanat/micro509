@@ -65,5 +65,8 @@
 		"formatter": { "indentStyle": "space" },
 		"javascript": { "formatter": { "indentStyle": "tab" } },
 		"assist": { "enabled": false }
+	}, {
+		"includes": ["site/.vitepress/**"],
+		"formatter": { "enabled": false }
 	}]
 }

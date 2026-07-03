@@ -9,7 +9,7 @@
     "types": ["node", "bun"],
     "paths": {
       "#/*": ["./*"],
-      "#/components/*": ["./theme/components/*"],
+      "#/components/*": ["./theme/components/*"]
     }
   },
   "exclude": ["./dist/", "./cache/"]
