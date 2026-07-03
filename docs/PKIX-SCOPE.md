@@ -20,6 +20,7 @@ Current conformance evidence:
 - [`test/ocsp-fixtures.test.ts`](../test/ocsp-fixtures.test.ts),
 - [`test/identity-fixtures.test.ts`](../test/identity-fixtures.test.ts),
 - [`test/revocation.test.ts`](../test/revocation.test.ts),
+- [`test/chain-revocation.test.ts`](../test/chain-revocation.test.ts),
 - [`test/malformed-der.test.ts`](../test/malformed-der.test.ts), and
 - [`test/differential.test.ts`](../test/differential.test.ts).
 
@@ -146,7 +147,12 @@ Focused RFC 6125 identity fixtures live in [`test/identity-fixtures.test.ts`](..
 - [x] Support optional nonce handling if you want replay binding between request and response. RFC 9654 defines the updated nonce extension details. (IETF Datatracker[^rfc6960])
 - [x] Consume caller-supplied OCSP responses in chain-level revocation
       orchestration (`checkChainRevocation()` / `verifyCertificateChain()`),
-      with fail-closed combination against CRL evidence.
+      with fail-closed combination against CRL evidence: a validated
+      `revoked` verdict from either source always wins; when both validate
+      as `good`, the default `'best-available'` preference reports the
+      source with the fresher `thisUpdate` (an applied delta CRL counts as
+      its own `thisUpdate`; ties favor OCSP), surfaced as
+      `source.thisUpdate` on the per-certificate status.
 
 ## 11. OCSP responder authorization rules
 
