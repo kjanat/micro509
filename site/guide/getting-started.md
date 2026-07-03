@@ -5,14 +5,11 @@ micro509 is `0.x` — API may change before 1.0.
 :::
 
 ::: info Know the conformance boundaries
-micro509 covers a broad slice of PKI workflows, but standards conformance is
-deliberately **bounded**: RFC 5280 path validation, RFC 6960 OCSP, RFC 6125
-service identity, and RFC 9618 policy validation are implemented to a
-documented subset. Before relying on it for production trust decisions, read
-the [standards conformance status](/reference/standards) — it is the
-authority on what ships, what is partial, and what is out of scope. Note in
-particular that revocation checking defaults to
-[soft-fail](/guide/revocation).
+RFC 6960 OCSP and RFC 6125 service identity are complete (OCSP transport is
+caller-provided by design); RFC 5280 path validation and RFC 9618 policy
+validation ship a documented subset. The
+[standards status](/reference/standards) is the authority. Revocation
+checking defaults to [soft-fail](/guide/revocation).
 :::
 
 ## Install
