@@ -126,7 +126,18 @@ export async function checkRevocationWithOpenSsl(input: {
 			writeFile(crlPath, input.crlPem, 'utf8'),
 		]);
 
-		const metadata = await runOpenSsl(['crl', '-in', crlPath, '-noout', '-crlnumber', '-issuer']);
+		// -nameopt RFC2253 pins DN formatting; the default drifted across
+		// OpenSSL versions ("CN = X" in 3.0, "CN=X" elsewhere).
+		const metadata = await runOpenSsl([
+			'crl',
+			'-in',
+			crlPath,
+			'-noout',
+			'-crlnumber',
+			'-issuer',
+			'-nameopt',
+			'RFC2253',
+		]);
 		const verifyArgs = [
 			'verify',
 			'-trusted',
@@ -178,10 +189,13 @@ export async function checkIdentityWithOpenSsl(input: {
 			input.kind === 'dns' ? '-checkhost' : '-checkip',
 			input.value,
 		]);
+		const output = mergeCommandOutput(result);
+		// OpenSSL < 3.4 exits 0 even on mismatch; the printed verdict text is
+		// version-stable, so parse that instead of the exit code.
 		return {
-			matches: result.exitCode === 0,
+			matches: !/does NOT match/i.test(output) && /does match/i.test(output),
 			exitCode: result.exitCode,
-			output: mergeCommandOutput(result),
+			output,
 		};
 	});
 }
