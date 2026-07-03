@@ -24,11 +24,15 @@ import {
 } from './oracles/openssl.ts';
 
 // The OpenSSL oracle is version-sensitive (name formatting `CN=` vs `CN =`, and
-// verdict drift across releases), so it runs locally as a gap-discovery tool but
-// is skipped in CI, where a moving system `openssl` would be a flaky publish
-// gate. Run it against your local OpenSSL with `bun run test:differential`.
+// verdict drift across releases), so a moving system `openssl` would be a
+// flaky gate. It runs locally against your OpenSSL (`bun run test:differential`)
+// and in CI only inside the digest-pinned container job, which sets
+// DIFFERENTIAL_OPENSSL=1 to opt in with a frozen OpenSSL version.
 const differential =
-	(await probeOpenSsl()) && process.env.CI === undefined ? describe : describe.skip;
+	(await probeOpenSsl()) &&
+	(process.env.CI === undefined || process.env.DIFFERENTIAL_OPENSSL === '1')
+		? describe
+		: describe.skip;
 differential('OpenSSL differential harness', () => {
 	it('matches OpenSSL path verdicts for valid and path-length-exceeded chains', async () => {
 		const validChain = await issueChain();
