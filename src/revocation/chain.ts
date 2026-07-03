@@ -165,6 +165,12 @@ export interface RevocationSource {
 	readonly signerCertificate?: ParsedCertificate;
 	/** Identifier for debugging (e.g., CRL issuer DN or OCSP responder URL). */
 	readonly evidenceIdentifier?: string;
+	/**
+	 * `thisUpdate` of the evidence backing the verdict — the OCSP single
+	 * response entry or the freshest contributing CRL (an applied delta CRL
+	 * supersedes its base). This is the timestamp `'best-available'` compares.
+	 */
+	readonly thisUpdate?: Date;
 }
 
 /**
@@ -524,6 +530,7 @@ function buildCrlStatus(
 	cert: ParsedCertificate,
 	signer: ParsedCertificate,
 	status: 'good' | 'revoked',
+	thisUpdate: Date,
 	revocationDate?: Date,
 	reasonCode?: RevocationReason,
 ): CertificateRevocationStatus {
@@ -531,7 +538,7 @@ function buildCrlStatus(
 		return {
 			certificate: cert,
 			status: 'revoked',
-			source: { type: 'crl', signerCertificate: signer },
+			source: { type: 'crl', signerCertificate: signer, thisUpdate },
 			revocationInfo: {
 				date: revocationDate,
 				...(reasonCode !== undefined ? { reason: reasonCode } : {}),
@@ -541,7 +548,7 @@ function buildCrlStatus(
 	return {
 		certificate: cert,
 		status: 'good',
-		source: { type: 'crl', signerCertificate: signer },
+		source: { type: 'crl', signerCertificate: signer, thisUpdate },
 	};
 }
 
@@ -553,12 +560,6 @@ function buildCrlStatus(
 interface EvidenceEvaluation {
 	readonly status: CertificateRevocationStatus;
 	readonly executionErrors: readonly RevocationExecutionError[];
-	/**
-	 * `thisUpdate` of the evidence backing a `good`/`revoked` verdict.
-	 * Absent for indeterminate outcomes. Used by `'best-available'` to pick
-	 * the fresher source.
-	 */
-	readonly evidenceThisUpdate?: Date;
 }
 
 /** Parses an OCSP response from PEM string or DER bytes. */
@@ -694,21 +695,23 @@ async function evaluateOcspEvidence(
 				status: {
 					certificate: cert,
 					status: 'revoked',
-					source: { type: 'ocsp' },
+					source: { type: 'ocsp', thisUpdate: entry.thisUpdate },
 					revocationInfo: {
 						date: entry.revokedAt ?? entry.thisUpdate,
 						...(reason !== undefined ? { reason } : {}),
 					},
 				},
 				executionErrors,
-				evidenceThisUpdate: entry.thisUpdate,
 			};
 		}
 		if (entry.certStatus === 'good') {
 			return {
-				status: { certificate: cert, status: 'good', source: { type: 'ocsp' } },
+				status: {
+					certificate: cert,
+					status: 'good',
+					source: { type: 'ocsp', thisUpdate: entry.thisUpdate },
+				},
 				executionErrors,
-				evidenceThisUpdate: entry.thisUpdate,
 			};
 		}
 		reasons.add('ocsp_status_unknown');
@@ -850,11 +853,11 @@ async function evaluateCrlEvidence(
 					cert,
 					effectiveSigner,
 					'revoked',
+					crlThisUpdate,
 					result.value.revocationDate,
 					result.value.reasonCode,
 				),
 				executionErrors,
-				evidenceThisUpdate: crlThisUpdate,
 			};
 		}
 
@@ -886,11 +889,16 @@ async function evaluateCrlEvidence(
 					certificate: cert,
 					status: 'good',
 					...(freshestGood !== undefined
-						? { source: { type: 'crl', signerCertificate: freshestGood.signer } }
+						? {
+								source: {
+									type: 'crl',
+									signerCertificate: freshestGood.signer,
+									thisUpdate: freshestGood.thisUpdate,
+								},
+							}
 						: {}),
 				},
 				executionErrors,
-				...(freshestGood !== undefined ? { evidenceThisUpdate: freshestGood.thisUpdate } : {}),
 			};
 		}
 		// Not all reasons covered — indeterminate
@@ -955,7 +963,8 @@ async function evaluateCertificateRevocation(
 				? [ocsp, crl]
 				: [ocsp, crl].sort(
 						(a, b) =>
-							(b.evidenceThisUpdate?.getTime() ?? 0) - (a.evidenceThisUpdate?.getTime() ?? 0),
+							(b.status.source?.thisUpdate?.getTime() ?? 0) -
+							(a.status.source?.thisUpdate?.getTime() ?? 0),
 					);
 	const revoked = ordered.find((evaluation) => evaluation.status.status === 'revoked');
 	if (revoked !== undefined) {

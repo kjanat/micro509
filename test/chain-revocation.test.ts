@@ -239,6 +239,11 @@ describe('checkChainRevocation', () => {
 
 const HOUR_MS = 60 * 60 * 1000;
 
+/** DER time encoding truncates to whole seconds. */
+function derSeconds(date: Date): number {
+	return Math.floor(date.getTime() / 1000) * 1000;
+}
+
 async function createOcspChainFixture() {
 	const caName = 'OCSP Chain CA';
 	const ca = await createSelfSignedCertificate({
@@ -516,6 +521,9 @@ describe('checkChainRevocation with OCSP evidence', () => {
 		});
 		expect(bestAvailable.value.certificates[0]?.status).toBe('good');
 		expect(bestAvailable.value.certificates[0]?.source?.type).toBe('crl');
+		expect(bestAvailable.value.certificates[0]?.source?.thisUpdate?.getTime()).toBe(
+			derSeconds(fresh.thisUpdate),
+		);
 
 		// Explicit prefer still overrides freshness
 		const preferOcsp = await checkChainRevocation({
@@ -558,6 +566,9 @@ describe('checkChainRevocation with OCSP evidence', () => {
 		});
 		expect(result.value.certificates[0]?.status).toBe('good');
 		expect(result.value.certificates[0]?.source?.type).toBe('ocsp');
+		expect(result.value.certificates[0]?.source?.thisUpdate?.getTime()).toBe(
+			derSeconds(fresh.thisUpdate),
+		);
 	});
 
 	it('best-available fails closed: staler CRL revoked beats fresher OCSP good', async () => {
@@ -647,6 +658,8 @@ describe('checkChainRevocation with OCSP evidence', () => {
 		expect(leafStatus?.source?.signerCertificate?.serialNumberHex).toBe(
 			parsedDelegate.serialNumberHex,
 		);
+		// The reported timestamp is the delegate CRL's, not the stale CA CRL's
+		expect(leafStatus?.source?.thisUpdate?.getTime()).toBe(derSeconds(fresh.thisUpdate));
 		expect(leafStatus?.certificate.serialNumberHex).toBe(parsedLeaf.serialNumberHex);
 	});
 
@@ -675,13 +688,14 @@ describe('checkChainRevocation with OCSP evidence', () => {
 			thisUpdate: new Date(at.getTime() - 12 * HOUR_MS),
 			nextUpdate: new Date(at.getTime() + HOUR_MS),
 		});
+		const deltaThisUpdate = new Date(at.getTime() - HOUR_MS);
 		const deltaCrl = await createCertificateRevocationList({
 			issuer: { commonName: caName },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 			crlNumber: 6,
 			baseCrlNumber: 5,
-			thisUpdate: new Date(at.getTime() - HOUR_MS),
+			thisUpdate: deltaThisUpdate,
 			nextUpdate: new Date(at.getTime() + HOUR_MS),
 		});
 
@@ -693,6 +707,10 @@ describe('checkChainRevocation with OCSP evidence', () => {
 		});
 		expect(result.value.certificates[0]?.status).toBe('good');
 		expect(result.value.certificates[0]?.source?.type).toBe('crl');
+		// The winning timestamp is the delta CRL's, not the 12h-old base's
+		expect(result.value.certificates[0]?.source?.thisUpdate?.getTime()).toBe(
+			derSeconds(deltaThisUpdate),
+		);
 	});
 
 	it('accepts a locally trusted responder via trustedOcspResponders', async () => {

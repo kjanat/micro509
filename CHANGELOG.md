@@ -17,6 +17,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   combination is unchanged — a validated `revoked` verdict from either
   source still always wins.
 
+- `RevocationSource` gained `thisUpdate` — the timestamp of the evidence
+  backing the verdict (OCSP single-response entry or freshest contributing
+  CRL), i.e. the value `'best-available'` compares. `signerCertificate` for
+  a multi-CRL `good` verdict is now the freshest contributing CRL's signer
+  rather than the last one processed, so it always matches the reported
+  freshness.
+
 ### Added
 
 - URI-ID and SRV-ID service identities are now accepted by the verification
