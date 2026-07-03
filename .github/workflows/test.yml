@@ -30,6 +30,23 @@ jobs:
       - name: Deno smoke test (dist)
         run: deno run --allow-read scripts/smoke.mjs
 
+  runtime-smoke:
+    name: Workerd + browser smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions: { contents: read }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-ts
+        with: { install-bun: "true", install-node: "true" }
+      - run: bun install --frozen-lockfile
+      - run: bun run bd
+      - run: npx playwright install --with-deps chromium
+      - name: Workers smoke test (workerd)
+        run: node scripts/smoke-workerd.mjs
+      - name: Browser smoke test (chromium, dist)
+        run: node scripts/smoke-browser.mjs
+
   differential:
     name: OpenSSL differential
     runs-on: ubuntu-latest

@@ -1,0 +1,5 @@
+#:schema https://unpkg.com/wrangler@4/config-schema.json
+
+name               = "micro509-smoke"
+main               = "smoke-worker.mjs"
+compatibility_date = "2026-06-29"
