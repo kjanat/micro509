@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-07-04
+
+Full standards surface claimed complete: all four RFC status rows — 5280,
+6960, 6125, 9618 — now read `complete`, backed by the full NIST PKITS
+suite and RFC-exact name-constraint handling.
+
 ### Conformance
 
 - PKITS sweep completed: the harness runs the full NIST PKITS suite — all
