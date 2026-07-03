@@ -40,10 +40,10 @@ PKCS#7 SignedData, PFX/PKCS#12, PEM handling, and key
 import/export.
 
 And when verification fails, you get typed results your code
-can act on: [21 error codes], the failing certificate index,
-and structured failure details instead of `false`.
+can act on: [a typed error code for every failure mode], the failing
+certificate index, and structured failure details instead of `false`.
 
-[21 error codes]: https://micro509.kjanat.dev/guide/verification#error-codes
+[a typed error code for every failure mode]: https://micro509.kjanat.dev/guide/verification#error-codes
 
 ```ts
 if (!result.ok) {
@@ -117,14 +117,17 @@ console.log(csr.pem);
 Parse a certificate:
 
 ```ts
-import { parseCertificatePem } from 'micro509';
+import { parseCertificatePem, unwrap } from 'micro509';
 
 // Using certificate from previous example
-const parsed = parseCertificatePem(certificate.pem);
+const parsed = unwrap(parseCertificatePem(certificate.pem));
 console.log(parsed.subject.values.commonName);
 console.log(parsed.extendedKeyUsage);
 console.log(parsed.authorityInfoAccess);
 ```
+
+`parseCertificatePem` returns a typed `Result` — check `result.ok`, or
+`unwrap()` to throw on malformed input.
 
 Verify a chain:
 
