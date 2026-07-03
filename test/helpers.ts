@@ -413,6 +413,10 @@ export interface IssueChainOptions {
 		readonly notBefore: Date;
 		readonly notAfter: Date;
 	};
+	readonly leafSubjectAltNames?: readonly {
+		readonly type: 'dns' | 'ip' | 'uri' | 'srv';
+		readonly value: string;
+	}[];
 	readonly leafIssuerPublicKey?: CryptoKey;
 	readonly leafSignerPrivateKey?: CryptoKey;
 }
@@ -448,7 +452,7 @@ export async function issueChain(options: IssueChainOptions = {}) {
 		extensions: {
 			keyUsage: ['digitalSignature'],
 			extendedKeyUsage: ['serverAuth'],
-			subjectAltNames: [{ type: 'dns', value: 'verify.example' }],
+			subjectAltNames: options.leafSubjectAltNames ?? [{ type: 'dns', value: 'verify.example' }],
 		},
 	} satisfies Parameters<typeof createCertificate>[0];
 	const leaf = await createCertificate(leafInput);

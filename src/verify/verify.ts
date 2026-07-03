@@ -1326,6 +1326,16 @@ function validateServiceIdentity(
 		return { ok: true };
 	}
 	const error = result.error;
+	if (error.code === 'service_identity_service_mismatch') {
+		// SRV-ID service label mismatch — an identity mismatch, not malformed input
+		return {
+			ok: false,
+			code: 'subject_alt_name_mismatch',
+			message: error.message,
+			index: 0,
+			...(error.details === undefined ? {} : { details: error.details }),
+		};
+	}
 	if (
 		error.code !== 'subject_alt_name_mismatch' &&
 		error.code !== 'common_name_fallback_suppressed'
@@ -1352,7 +1362,12 @@ function validateVerifyServiceIdentityInput(
 	if (!isRecord(serviceIdentity)) {
 		return failure('subject_alt_name_mismatch', 'service identity input is malformed', 0);
 	}
-	if (serviceIdentity.type !== 'dns' && serviceIdentity.type !== 'ip') {
+	if (
+		serviceIdentity.type !== 'dns' &&
+		serviceIdentity.type !== 'ip' &&
+		serviceIdentity.type !== 'uri' &&
+		serviceIdentity.type !== 'srv'
+	) {
 		return failure(
 			'subject_alt_name_mismatch',
 			'service identity input is malformed',

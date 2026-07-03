@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- URI-ID and SRV-ID service identities are now accepted by the verification
+  helpers: `VerifyServiceIdentityInput` widened to the full
+  `ServiceIdentityInput` union, so
+  `verifyCertificateChain({ serviceIdentity })` and `validateForTlsServer`
+  match `{ type: 'uri' | 'srv' }` alongside DNS/IP. An SRV service-label
+  mismatch surfaces as `subject_alt_name_mismatch` with the matcher's
+  details.
+
 - OCSP responder authorization completed (RFC 6960 §4.2.2.2):
   - `trustedResponderCertificates` on `validateOcspResponse()` and
     `trustedOcspResponders` on `checkChainRevocation()` /
