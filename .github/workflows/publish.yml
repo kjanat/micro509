@@ -96,14 +96,17 @@ jobs:
           PKG_NAME="$(jq -r '.name' package.json)"
           PKG_VERSION="$(jq -r '.version' package.json)"
 
-          if [[ "${DRY_RUN}" != "true" ]]; then
-            PUBLISHED=$(npm view "${PKG_NAME}" versions --json 2>/dev/null \
-              | jq -r ".[] | select(. == \"${PKG_VERSION}\")" || true)
-            if [[ -n "${PUBLISHED}" ]]; then
-              echo "::notice::${PKG_NAME}@${PKG_VERSION} already on npm, skipping"
-              exit 0
-            fi
+          # npm publish --dry-run also rejects already-published versions,
+          # so the skip guard must run for both modes (PR dry-runs would
+          # otherwise fail between a release and the next version bump).
+          PUBLISHED=$(npm view "${PKG_NAME}" versions --json 2>/dev/null \
+            | jq -r ".[] | select(. == \"${PKG_VERSION}\")" || true)
+          if [[ -n "${PUBLISHED}" ]]; then
+            echo "::notice::${PKG_NAME}@${PKG_VERSION} already on npm, skipping"
+            exit 0
+          fi
 
+          if [[ "${DRY_RUN}" != "true" ]]; then
             PUBLISH_ARGS=(--provenance --access public)
             if [[ "${IS_PRERELEASE}" == "true" ]]; then
               PUBLISH_ARGS+=(--tag beta)
