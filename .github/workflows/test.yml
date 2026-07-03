@@ -31,22 +31,15 @@ jobs:
         run: deno run --allow-read scripts/smoke.mjs
 
   differential:
-    name: OpenSSL differential (pinned)
+    name: OpenSSL differential
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions: { contents: read }
-    container:
-      # oven/bun:1.3.14-debian — digest-pinned so the bundled OpenSSL never
-      # moves under the oracle (version drift breaks name formatting/verdicts).
-      image: oven/bun@sha256:9dba1a1b43ce28c9d7931bfc4eb00feb63b0114720a0277a8f939ae4dfc9db6f
     steps:
       - uses: actions/checkout@v7
-      - name: Install openssl CLI (bookworm 3.0.x line; image ships only libssl)
-        run: apt-get update && apt-get install -y --no-install-recommends openssl
-      # Also the skip-guard: fails the job if the CLI is missing, instead of
-      # letting probeOpenSsl() silently skip the whole suite.
+      - uses: ./.github/actions/setup-ts
+        with: { install-bun: "true" }
       - run: openssl version
       - run: bun install --frozen-lockfile
-      - name: Run OpenSSL differential harness
-        run: bun run test:differential
+      - run: bun run test:differential
         env: { DIFFERENTIAL_OPENSSL: "1" }

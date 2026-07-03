@@ -23,11 +23,9 @@ import {
 	verifyChainWithOpenSsl,
 } from './oracles/openssl.ts';
 
-// The OpenSSL oracle is version-sensitive (name formatting `CN=` vs `CN =`, and
-// verdict drift across releases), so a moving system `openssl` would be a
-// flaky gate. It runs locally against your OpenSSL (`bun run test:differential`)
-// and in CI only inside the digest-pinned container job, which sets
-// DIFFERENTIAL_OPENSSL=1 to opt in with a frozen OpenSSL version.
+// The OpenSSL oracle is version-sensitive (name formatting, verdict drift),
+// so CI skips it by default; the dedicated differential job opts in with
+// DIFFERENTIAL_OPENSSL=1 against the runner's openssl.
 const differential =
 	(await probeOpenSsl()) &&
 	(process.env.CI === undefined || process.env.DIFFERENTIAL_OPENSSL === '1')
