@@ -1,5 +1,15 @@
 # Changelog
 
+<!--
+Release checklist — every box, every release:
+- [ ] Move [Unreleased] entries under a new `## [X.Y.Z] - YYYY-MM-DD` header + intro line
+- [ ] Bump version in package.json AND jsr.json
+- [ ] Link definitions at the BOTTOM of this file: add [X.Y.Z] compare link, repoint [Unreleased]
+- [ ] Signed tag on the release commit: git tag -s vX.Y.Z -m "vX.Y.Z — summary"
+- [ ] Push master + tag, gh release create with milestone notes
+- [ ] Verify npm dist-tag latest + JSR after the publish workflow
+-->
+
 All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
@@ -204,7 +214,9 @@ Initial prerelease. API may change before 1.0.
 - Zero runtime dependencies, WebCrypto-native, tree-shakeable subpath exports;
   runs on Node, Bun, Deno, browsers, and Cloudflare Workers.
 
-[Unreleased]: https://github.com/kjanat/micro509/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/kjanat/micro509/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/kjanat/micro509/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/kjanat/micro509/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/kjanat/micro509/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/kjanat/micro509/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/kjanat/micro509/compare/v0.1.1...v0.2.0
