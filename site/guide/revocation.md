@@ -64,7 +64,7 @@ import { createSelfSignedCertificate } from 'micro509';
 import {
   createCertificateRevocationList,
   isCertificateRevoked,
-  parseCertificateRevocationListPem,
+  parseCertificateRevocationListPemOrThrow,
   verifyCertificateRevocationListSignature,
 } from 'micro509/revocation';
 
@@ -88,7 +88,9 @@ const crl = await createCertificateRevocationList({
   ],
 });
 
-const parsed = parseCertificateRevocationListPem(crl.pem);
+const parsed = parseCertificateRevocationListPemOrThrow(
+  crl.pem,
+);
 
 const verifyResult =
   await verifyCertificateRevocationListSignature(
@@ -165,7 +167,7 @@ import {
 import {
   createOcspRequest,
   createOcspResponse,
-  parseOcspResponseDer,
+  parseOcspResponseDerOrThrow,
   validateOcspResponse,
 } from 'micro509/revocation';
 
@@ -208,7 +210,7 @@ const ocsp = await createOcspResponse({
   ],
 });
 
-const response = parseOcspResponseDer(ocsp.der);
+const response = parseOcspResponseDerOrThrow(ocsp.der);
 
 const result = await validateOcspResponse({
   response,
@@ -379,9 +381,8 @@ const result = await verifyCertificateChain({
   leaf: leaf.pem,
   roots: [ca.certificate.pem],
   revocation: {
+    // hard-fail is the default: indeterminate status ⇒ verification fails
     ocspResponses: [ocsp.der],
-    // hard-fail: indeterminate status ⇒ verification fails
-    policy: { mode: 'hard-fail' },
   },
 });
 

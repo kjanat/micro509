@@ -17,8 +17,116 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Pre-1.0 API freeze cleanup: one coherent breaking pass over vocabulary,
+error-handling doctrine, type shapes, and export surface, so 1.0 can freeze
+a surface with no known regrets. Every rename is in the migration table
+below.
+
+### Changed (BREAKING)
+
+- **Revocation defaults to hard-fail once enabled.** Revocation checking
+  remains opt-in (no evidence supplied ⇒ no check), but once `revocation`
+  is passed, `policy.mode` now defaults to `'hard-fail'`: indeterminate
+  status **denies**. Opt back into the old behavior explicitly with
+  `policy: { mode: 'soft-fail' }`. Mental model: no revocation input → no
+  check; revocation input → revocation matters.
+
+- **Vocabulary unified.** The CRL/OCSP discriminant is `kind` everywhere
+  (was a `kind`/`source`/`type` mix); the verifier-level can't-tell status
+  is `'indeterminate'` everywhere (was `'unknown'` in standalone checks vs
+  `'indeterminate'` in chain checks). Protocol-level reason codes that
+  quote RFC 6960's `unknown` certificate status keep the word
+  (`ocsp_status_unknown`, `certificate_status_unknown`,
+  `responder_revocation_unknown`), as does `OcspCertStatus`.
+
+- **Result doctrine completed.** The last public parsers consuming
+  untrusted input that still threw now return a typed `Result`
+  (`code: 'malformed'`): CRL, OCSP request/response, PKCS#12 MacData, and
+  the PEM primitives. Each has an `*OrThrow` twin (same convention as the
+  x509 parsers since 0.3.0).
+
+- **Illegal states made unrepresentable.** `ParsedPkcs7SignerInfo`
+  discriminates on `hasSignedAttrs` (when `true`, `signedAttrsDer` is
+  guaranteed); `CertificateRevocationStatus` is a discriminated union
+  (good/revoked always carry `source`, revoked always `revocationInfo`,
+  indeterminate always `indeterminateReasons`); `BasicConstraints` rejects
+  `{ ca: false, pathLength }` at compile time; `ParsedPkcs12MacData.valid`
+  (optional boolean tri-state) became
+  `verification: 'valid' | 'invalid' | 'unchecked'`; `ParsedName.values`
+  is a readonly map; `ValidateCandidatePathResult` lost its duplicate
+  top-level `policyValidation`.
+
+- **pkcs7 creators match the rest of the library.** `createPkcs7CertBag`
+  and `createPkcs7SignedData` return `{ der, pem, base64 }` material like
+  every other creator; the `Der`/`Pem` variants are gone.
+
+- **Signature-only verifiers say so.** `verifyOcspResponseSignature` /
+  `verifyCertificateRevocationListSignature` check the signature only —
+  the bare `verify*` names read as full validation, which is
+  `validateOcspResponse` / `validateCertificateRevocationList`.
+  (`verifyCertificateSigningRequest` and `verifyPkcs7SignedData` keep
+  their names: each is the complete operation for its object.)
+
+- **Export surface curated.** `micro509/revocation` and `micro509/verify`
+  list every export explicitly (no `export type *`); dead aliases removed
+  (`MatchableServiceIdentityInput`, `VerifyServiceIdentityInput`,
+  `MatchServiceIdentityEvaluation` — use `ServiceIdentityInput`);
+  `rethrowIfInvariant` (internal control flow) left `micro509/result`;
+  `Pbes2EncryptionOptions`/`Pbes2EncryptionScheme`/`Pbes2Prf` left the
+  public barrels (`EncryptedPkcs8Options` and `PfxEncryptionOptions` are
+  the canonical names); the duplicate `CertificateSource` alias on the
+  revocation subpath (which collided with the root-exported verify type
+  under a different shape) is gone — chain inputs use
+  `RevocationCertificateSource`. `IssuingDistributionPoint*` types moved
+  from the x509 surface to `micro509/revocation` (they are CRL types; the
+  root still exports them).
+
+#### Migration table
+
+| 0.6.0                                                          | 0.7.0                                                      |
+| -------------------------------------------------------------- | ---------------------------------------------------------- |
+| `RevocationStatus` `'unknown'`                                 | `'indeterminate'`                                          |
+| `RevocationCheckUnknownValue`                                  | `RevocationCheckIndeterminateValue`                        |
+| `revocation_status_unknown`                                    | `revocation_status_indeterminate`                          |
+| `RevocationSource.type`                                        | `RevocationSource.kind`                                    |
+| `RevocationCheck{Good,Revoked}Value.source`                    | `.kind`                                                    |
+| `RevocationIndeterminateEvidence.source`                       | `.kind`                                                    |
+| `revocationInfo.date`                                          | `revocationInfo.revocationDate`                            |
+| `policy.mode` default `'soft-fail'`                            | `'hard-fail'`                                              |
+| `verifyOcspResponse`                                           | `verifyOcspResponseSignature`                              |
+| `verifyCertificateRevocationList`                              | `verifyCertificateRevocationListSignature`                 |
+| `parseCertificateRevocationList{Der,Pem}` (throwing)           | Result-returning; `*OrThrow` for the old behavior          |
+| `parseOcsp{Request,Response}{Der,Pem}` (throwing)              | Result-returning; `*OrThrow` for the old behavior          |
+| `parsePkcs12MacData` (throwing)                                | Result-returning; `parsePkcs12MacDataOrThrow`              |
+| `pemDecode` / `splitPemBlocks` / `categorizePemBlocks`         | Result-returning; `*OrThrow` for the old behavior          |
+| `ParsedPkcs12MacData.valid?: boolean`                          | `verification: 'valid' \| 'invalid' \| 'unchecked'`        |
+| `createPkcs7CertBag{Der,Pem}`                                  | `createPkcs7CertBag` (returns `{ der, pem, base64 }`)      |
+| `createPkcs7SignedData{Der,Pem}`                               | `createPkcs7SignedData` (returns `{ der, pem, base64 }`)   |
+| `Pkcs7CertBag`                                                 | `Pkcs7CertBagMaterial`                                     |
+| `Import{Rsa,Ec,Ed25519}PublicKeyInput`                         | `Import{Rsa,Ec,Ed25519}KeyInput`                           |
+| PBES2 option `encryption: 'aes256-cbc'`                        | `cipher: 'AES-256-CBC'`                                    |
+| `trustedResponderCertificates` (validateOcspResponse)          | `trustedOcspResponders`                                    |
+| `delta_crl_unsupported` / `indirect_crl_unsupported`           | `unsupported_delta_crl` / `unsupported_indirect_crl`       |
+| `service_identity_type_unsupported`                            | `unsupported_service_identity_type`                        |
+| `service_identity_service_mismatch`                            | `service_identity_mismatch`                                |
+| `VerifyServiceIdentityInput` / `MatchableServiceIdentityInput` | `ServiceIdentityInput`                                     |
+| `VerifyOcspResponse{Result,Failure}`                           | `VerifyOcspResponseSignature{Result,Failure}`              |
+| `VerifyCertificateRevocationList{Result,Failure}`              | `VerifyCertificateRevocationListSignature{Result,Failure}` |
+
 ### Added
 
+- Runtime code arrays `REVOCATION_INDETERMINATE_REASON_CODES` and
+  `REVOCATION_INDETERMINATE_REASONS` (the `VERIFY_ERROR_CODES` pattern);
+  their unions now derive from the arrays.
+- Root entry point exports every type reachable from public signatures
+  that was previously subpath-only (MacData, policy-validation outcome,
+  identity failure details, revocation error codes/failure payloads, and
+  the new `Parse*Result` / `Pem*Result` types).
+- `Pkcs7CertificateSource` and `PfxCertificateSource` accept an
+  already-parsed `ParsedCertificate` (parity with the revocation source
+  unions).
+- Documented error-code stability policy: unions may gain members in
+  minor releases — treat them as non-exhaustive.
 - CI now smoke-tests the two previously untested runtime claims: Cloudflare
   Workers (real workerd via wrangler's test harness) and browsers (headless
   Chromium via Playwright, loading the built `dist/` output). All five

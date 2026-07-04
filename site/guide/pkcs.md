@@ -98,7 +98,7 @@ import {
   createSelfSignedCertificate,
   unwrap,
 } from 'micro509';
-import { createPkcs7CertBagPem } from 'micro509/pkcs';
+import { createPkcs7CertBag } from 'micro509/pkcs';
 
 // Two real certificates to bundle
 const a = await createSelfSignedCertificate({
@@ -108,9 +108,9 @@ const b = await createSelfSignedCertificate({
   subject: { commonName: 'b.example' },
 });
 
-// createPkcs7CertBagPem returns a typed result; unwrap on the success path
+// createPkcs7CertBag returns a typed result; unwrap on the success path
 const bag = unwrap(
-  createPkcs7CertBagPem([
+  createPkcs7CertBag([
     a.certificate.pem,
     b.certificate.pem,
   ]),
@@ -132,7 +132,7 @@ import {
   unwrap,
 } from 'micro509';
 import {
-  createPkcs7CertBagPem,
+  createPkcs7CertBag,
   parsePkcs7CertBagPem,
 } from 'micro509/pkcs';
 
@@ -144,7 +144,7 @@ const b = await createSelfSignedCertificate({
   subject: { commonName: 'b.example' },
 });
 const bag = unwrap(
-  createPkcs7CertBagPem([
+  createPkcs7CertBag([
     a.certificate.pem,
     b.certificate.pem,
   ]),
@@ -172,7 +172,7 @@ if (result.ok) {
 ```ts
 import { createSelfSignedCertificate } from 'micro509';
 import {
-  createPkcs7SignedDataPem,
+  createPkcs7SignedData,
   verifyPkcs7SignedData,
 } from 'micro509/pkcs';
 
@@ -184,7 +184,7 @@ const signer = await createSelfSignedCertificate({
 
 // Sign content -> attached CMS SignedData (RFC 5652)
 const content = new TextEncoder().encode('hello');
-const signed = await createPkcs7SignedDataPem({
+const signed = await createPkcs7SignedData({
   content,
   signers: [
     {
