@@ -102,6 +102,7 @@ export type ParsePkcs12MacDataErrorCode = 'malformed';
 
 /** Structured failure payload for MacData parsing. */
 export interface ParsePkcs12MacDataFailure extends Micro509Error<ParsePkcs12MacDataErrorCode> {
+	/** Always `false` for failures. */
 	readonly ok: false;
 }
 

@@ -486,6 +486,7 @@ export type ParseCertificateRevocationListErrorCode = 'malformed';
 /** Structured failure payload for CRL parsing. */
 export interface ParseCertificateRevocationListFailure
 	extends Micro509Error<ParseCertificateRevocationListErrorCode> {
+	/** Always `false` for failures. */
 	readonly ok: false;
 }
 

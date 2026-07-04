@@ -436,6 +436,7 @@ export type ParseOcspRequestErrorCode = 'malformed';
 
 /** Structured failure payload for OCSP request parsing. */
 export interface ParseOcspRequestFailure extends Micro509Error<ParseOcspRequestErrorCode> {
+	/** Always `false` for failures. */
 	readonly ok: false;
 }
 
@@ -558,6 +559,7 @@ export type ParseOcspResponseErrorCode = 'malformed';
 
 /** Structured failure payload for OCSP response parsing. */
 export interface ParseOcspResponseFailure extends Micro509Error<ParseOcspResponseErrorCode> {
+	/** Always `false` for failures. */
 	readonly ok: false;
 }
 

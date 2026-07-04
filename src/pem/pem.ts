@@ -60,6 +60,7 @@ export type PemErrorCode = 'malformed';
 
 /** Structured failure payload for PEM decoding. */
 export interface PemFailure extends Micro509Error<PemErrorCode> {
+	/** Always `false` for failures. */
 	readonly ok: false;
 }
 

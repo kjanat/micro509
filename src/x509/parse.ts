@@ -96,6 +96,7 @@ export type ParseCertificateErrorCode = 'malformed';
 
 /** Structured failure payload for certificate parsing. */
 export interface ParseCertificateFailure extends Micro509Error<ParseCertificateErrorCode> {
+	/** Always `false` for failures. */
 	readonly ok: false;
 }
 
@@ -110,6 +111,7 @@ export type ParseCertificateSigningRequestErrorCode = 'malformed';
 /** Structured failure payload for CSR parsing. */
 export interface ParseCertificateSigningRequestFailure
 	extends Micro509Error<ParseCertificateSigningRequestErrorCode> {
+	/** Always `false` for failures. */
 	readonly ok: false;
 }
 

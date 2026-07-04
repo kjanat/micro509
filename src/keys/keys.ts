@@ -168,6 +168,7 @@ export type ImportKeyErrorCode = 'malformed';
 
 /** Structured failure payload for key import. */
 export interface ImportKeyFailure extends Micro509Error<ImportKeyErrorCode> {
+	/** Always `false` for failures. */
 	readonly ok: false;
 }
 
@@ -192,6 +193,7 @@ export type ImportEncryptedKeyErrorCode = 'malformed' | 'invalid_password';
 
 /** Structured failure payload for encrypted key import. */
 export interface ImportEncryptedKeyFailure extends Micro509Error<ImportEncryptedKeyErrorCode> {
+	/** Always `false` for failures. */
 	readonly ok: false;
 }
 
