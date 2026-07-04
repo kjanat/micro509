@@ -44,11 +44,7 @@ import {
 	parsePkcs12MacDataOrThrow,
 } from './pkcs12-mac.ts';
 
-export type {
-	Pbes2EncryptionOptions,
-	Pbes2EncryptionScheme,
-	Pbes2Prf,
-} from '#micro509/internal/crypto/pbes2.ts';
+export type {} from '#micro509/internal/crypto/pbes2.ts';
 export type * from './pkcs12-mac.ts';
 
 /** PEM string or DER bytes for a certificate to include in a PFX bag. */

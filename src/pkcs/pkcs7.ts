@@ -64,7 +64,7 @@ import { parseCertificateDerOrThrow } from '#micro509/x509/parse.ts';
 export type Pkcs7CertificateSource = string | Uint8Array;
 
 /** DER, PEM, and base64 encodings of a PKCS#7 certificate bag. */
-export interface Pkcs7CertBag {
+export interface Pkcs7CertBagMaterial {
 	/** Raw DER-encoded PKCS#7 structure. */
 	readonly der: Uint8Array;
 	/** PEM-armored PKCS#7 (`-----BEGIN PKCS7-----`). */
@@ -209,7 +209,7 @@ export type VerifyPkcs7SignedDataResult =
 // createPkcs7CertBag
 // ---------------------------------------------------------------------------
 
-/** Caller-correctable failure code from {@linkcode createPkcs7CertBagDer} / {@linkcode createPkcs7CertBagPem}. */
+/** Caller-correctable failure code from {@linkcode createPkcs7CertBag}. */
 export type CreatePkcs7CertBagErrorCode = 'invalid_certificate';
 
 /** Error payload for a failed PKCS#7 certificate bag creation. */
@@ -218,36 +218,25 @@ export interface CreatePkcs7CertBagFailure extends Micro509Error<CreatePkcs7Cert
 	readonly ok: false;
 }
 
-/** Success-or-failure result from {@linkcode createPkcs7CertBagDer}. */
-export type CreatePkcs7CertBagDerResult =
-	| {
-			/** Creation succeeded. */
-			readonly ok: true;
-			/** Raw DER-encoded certificate bag. */
-			readonly value: Uint8Array;
-	  }
-	| ErrorResult<CreatePkcs7CertBagErrorCode, Record<never, never>, CreatePkcs7CertBagFailure>;
-
-/** Success-or-failure result from {@linkcode createPkcs7CertBagPem}. */
+/** Success-or-failure result from {@linkcode createPkcs7CertBag}. */
 export type CreatePkcs7CertBagResult =
 	| {
 			/** Creation succeeded. */
 			readonly ok: true;
 			/** DER, PEM, and base64 forms of the certificate bag. */
-			readonly value: Pkcs7CertBag;
+			readonly value: Pkcs7CertBagMaterial;
 	  }
 	| ErrorResult<CreatePkcs7CertBagErrorCode, Record<never, never>, CreatePkcs7CertBagFailure>;
 
 /**
- * Creates a degenerate PKCS#7 SignedData structure containing only certificates (no signers).
- *
- * Returns a {@linkcode CreatePkcs7CertBagDerResult}: the raw DER on success, or a
- * typed `invalid_certificate` failure when a certificate source is not valid
- * PEM/DER. Use {@linkcode createPkcs7CertBagPem} for PEM + base64.
+ * Creates a degenerate PKCS#7 SignedData structure containing only
+ * certificates (no signers), returning DER, PEM, and base64 forms, or a
+ * typed `invalid_certificate` failure when a certificate source is not
+ * valid PEM/DER.
  */
-export function createPkcs7CertBagDer(
+export function createPkcs7CertBag(
 	certificates: readonly Pkcs7CertificateSource[],
-): CreatePkcs7CertBagDerResult {
+): CreatePkcs7CertBagResult {
 	// normalizeCertificateSource parses untrusted PEM/DER and throws on malformed
 	// input — a caller-correctable trust boundary, so map it to a typed failure.
 	let certificateDers: Uint8Array[];
@@ -266,27 +255,10 @@ export function createPkcs7CertBagDer(
 		explicitContext(0, concatBytes(certificateDers)),
 		setOf([]),
 	]);
+	const der = sequence([objectIdentifier(OIDS.pkcs7SignedData), explicitContext(0, signedData)]);
 	return {
 		ok: true,
-		value: sequence([objectIdentifier(OIDS.pkcs7SignedData), explicitContext(0, signedData)]),
-	};
-}
-
-/**
- * Creates a degenerate PKCS#7 SignedData certificate bag and returns DER, PEM,
- * and base64 forms, or a typed {@linkcode CreatePkcs7CertBagFailure} when a
- * certificate source is not valid PEM/DER.
- */
-export function createPkcs7CertBagPem(
-	certificates: readonly Pkcs7CertificateSource[],
-): CreatePkcs7CertBagResult {
-	const der = createPkcs7CertBagDer(certificates);
-	if (!der.ok) {
-		return der;
-	}
-	return {
-		ok: true,
-		value: { der: der.value, pem: pemEncode('PKCS7', der.value), base64: base64Encode(der.value) },
+		value: { der, pem: pemEncode('PKCS7', der), base64: base64Encode(der) },
 	};
 }
 
@@ -294,7 +266,7 @@ export function createPkcs7CertBagPem(
 // createPkcs7SignedData
 // ---------------------------------------------------------------------------
 
-/** A single signer for {@linkcode createPkcs7SignedDataDer} / {@linkcode createPkcs7SignedDataPem}. */
+/** A single signer for {@linkcode createPkcs7SignedData}. */
 export interface Pkcs7Signer {
 	/**
 	 * Signer certificate (PEM text with one CERTIFICATE block, or raw DER).
@@ -312,7 +284,7 @@ export interface Pkcs7Signer {
 	readonly signature?: SignatureProfileInput;
 }
 
-/** Input for {@linkcode createPkcs7SignedDataDer} / {@linkcode createPkcs7SignedDataPem}. */
+/** Input for {@linkcode createPkcs7SignedData}. */
 export interface CreatePkcs7SignedDataInput {
 	/** Content to encapsulate and sign (the eContent). */
 	readonly content: Uint8Array;
@@ -340,7 +312,7 @@ export interface Pkcs7SignedDataMaterial {
 	readonly base64: string;
 }
 
-/** Caller-correctable failure codes from {@linkcode createPkcs7SignedDataDer} / {@linkcode createPkcs7SignedDataPem}. */
+/** Caller-correctable failure codes from {@linkcode createPkcs7SignedData}. */
 export type CreatePkcs7SignedDataErrorCode =
 	| 'no_signers'
 	| 'invalid_signer_certificate'
@@ -353,17 +325,7 @@ export interface CreatePkcs7SignedDataFailure
 	readonly ok: false;
 }
 
-/** Success-or-failure result from {@linkcode createPkcs7SignedDataDer}. */
-export type CreatePkcs7SignedDataDerResult =
-	| {
-			/** Creation succeeded. */
-			readonly ok: true;
-			/** Raw DER-encoded SignedData. */
-			readonly value: Uint8Array;
-	  }
-	| ErrorResult<CreatePkcs7SignedDataErrorCode, Record<never, never>, CreatePkcs7SignedDataFailure>;
-
-/** Success-or-failure result from {@linkcode createPkcs7SignedDataPem}. */
+/** Success-or-failure result from {@linkcode createPkcs7SignedData}. */
 export type CreatePkcs7SignedDataResult =
 	| {
 			/** Creation succeeded. */
@@ -385,14 +347,14 @@ export type CreatePkcs7SignedDataResult =
  * The content digest is derived from each signer's key (P-256/RSA-SHA256 →
  * SHA-256, P-384 → SHA-384, P-521 → SHA-512, Ed25519 → SHA-512 per RFC 8419).
  *
- * Returns a {@linkcode CreatePkcs7SignedDataDerResult}: the raw DER on success,
- * or a typed failure for caller-correctable input (no signers, a signer source
- * that is not exactly one certificate, or an unsupported signer key). Use
- * {@linkcode createPkcs7SignedDataPem} for PEM + base64.
+ * Returns a {@linkcode CreatePkcs7SignedDataResult}: DER, PEM, and base64
+ * forms on success, or a typed failure for caller-correctable input (no
+ * signers, a signer source that is not exactly one certificate, or an
+ * unsupported signer key).
  */
-export async function createPkcs7SignedDataDer(
+export async function createPkcs7SignedData(
 	input: CreatePkcs7SignedDataInput,
-): Promise<CreatePkcs7SignedDataDerResult> {
+): Promise<CreatePkcs7SignedDataResult> {
 	if (input.signers.length === 0) {
 		return createPkcs7Failure('no_signers', 'createPkcs7SignedData requires at least one signer');
 	}
@@ -503,27 +465,10 @@ export async function createPkcs7SignedDataDer(
 		certificateSet,
 		setOf(signerInfos),
 	]);
+	const der = sequence([objectIdentifier(OIDS.pkcs7SignedData), explicitContext(0, signedData)]);
 	return {
 		ok: true,
-		value: sequence([objectIdentifier(OIDS.pkcs7SignedData), explicitContext(0, signedData)]),
-	};
-}
-
-/**
- * Creates a PKCS#7/CMS SignedData over `content` and returns DER, PEM, and
- * base64 forms, or a typed {@linkcode CreatePkcs7SignedDataFailure} for
- * caller-correctable input.
- */
-export async function createPkcs7SignedDataPem(
-	input: CreatePkcs7SignedDataInput,
-): Promise<CreatePkcs7SignedDataResult> {
-	const der = await createPkcs7SignedDataDer(input);
-	if (!der.ok) {
-		return der;
-	}
-	return {
-		ok: true,
-		value: { der: der.value, pem: pemEncode('PKCS7', der.value), base64: base64Encode(der.value) },
+		value: { der, pem: pemEncode('PKCS7', der), base64: base64Encode(der) },
 	};
 }
 

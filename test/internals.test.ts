@@ -1069,21 +1069,21 @@ describe('pbes2.ts edge cases', () => {
 		const cases = [
 			{
 				encryptionOid: OIDS.aes128Cbc,
-				encryption: 'aes128-cbc',
+				cipher: 'AES-128-CBC',
 				keyLength: 16,
 				prfOid: OIDS.hmacWithSHA1,
 				prf: 'hmac-sha1',
 			},
 			{
 				encryptionOid: OIDS.aes192Cbc,
-				encryption: 'aes192-cbc',
+				cipher: 'AES-192-CBC',
 				keyLength: 24,
 				prfOid: OIDS.hmacWithSHA256,
 				prf: 'hmac-sha256',
 			},
 			{
 				encryptionOid: OIDS.aes256Cbc,
-				encryption: 'aes256-cbc',
+				cipher: 'AES-256-CBC',
 				keyLength: 32,
 				prfOid: OIDS.hmacWithSHA1,
 				prf: 'hmac-sha1',
@@ -1112,7 +1112,7 @@ describe('pbes2.ts edge cases', () => {
 
 			expect(parsePbes2AlgorithmIdentifier(algorithmIdentifier)).toMatchObject({
 				iterations: 2048,
-				encryption: testCase.encryption,
+				cipher: testCase.cipher,
 				prf: testCase.prf,
 			});
 		}
@@ -1132,7 +1132,7 @@ describe('pbes2.ts edge cases', () => {
 
 		expect(parsePbes2AlgorithmIdentifier(algorithmIdentifier)).toMatchObject({
 			prf: 'hmac-sha1',
-			encryption: 'aes256-cbc',
+			cipher: 'AES-256-CBC',
 		});
 	});
 

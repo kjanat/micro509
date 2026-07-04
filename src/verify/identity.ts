@@ -70,8 +70,8 @@ export type VerifyServiceIdentityInput = ServiceIdentityInput;
 export type MatchServiceIdentityErrorCode =
 	| 'subject_alt_name_mismatch'
 	| 'common_name_fallback_suppressed'
-	| 'service_identity_service_mismatch'
-	| 'service_identity_type_unsupported';
+	| 'service_identity_mismatch'
+	| 'unsupported_service_identity_type';
 
 /** Diagnostic context attached to an identity-matching failure. */
 export interface MatchServiceIdentityFailureDetails {
@@ -307,7 +307,7 @@ export function matchCertificateServiceIdentity(
 			}
 			if (sans.length > 0) {
 				return failure(
-					'service_identity_service_mismatch',
+					'service_identity_mismatch',
 					'URI scheme not present in SAN',
 					details(
 						certificate.subject.values.commonName,
@@ -359,7 +359,7 @@ export function matchCertificateServiceIdentity(
 			}
 			if (sans.length > 0) {
 				return failure(
-					'service_identity_service_mismatch',
+					'service_identity_mismatch',
 					'SRV service not present in SAN',
 					details(
 						certificate.subject.values.commonName,
@@ -380,7 +380,7 @@ export function matchCertificateServiceIdentity(
 			);
 		}
 		default: {
-			return failure('service_identity_type_unsupported', 'Unsupported service identity type');
+			return failure('unsupported_service_identity_type', 'Unsupported service identity type');
 		}
 	}
 }

@@ -9,7 +9,7 @@ import {
 import { pemEncode } from 'micro509/pem';
 import {
 	createPfx,
-	createPkcs7CertBagPem,
+	createPkcs7CertBag,
 	createPkcs12MacData,
 	parsePfxDer,
 	parsePfxPem,
@@ -130,7 +130,7 @@ describe('pkcs domain', () => {
 			issuerPublicKey: root.keyPair.publicKey,
 		});
 
-		const bag = unwrap(createPkcs7CertBagPem([leaf.pem, root.certificate.pem]));
+		const bag = unwrap(createPkcs7CertBag([leaf.pem, root.certificate.pem]));
 		expect(bag.pem).toContain('BEGIN PKCS7');
 
 		const parsedPem = parsePkcs7CertBagPem(bag.pem);

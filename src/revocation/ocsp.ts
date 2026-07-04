@@ -333,7 +333,7 @@ export interface ValidateOcspResponseInput {
 	 * Also consulted during responder discovery when the response embeds no
 	 * matching certificate.
 	 */
-	readonly trustedResponderCertificates?: readonly OcspCertificateSource[];
+	readonly trustedOcspResponders?: readonly OcspCertificateSource[];
 	/** Revocation policy for delegated responder certificates. Defaults to `'honor-nocheck'`. */
 	readonly responderRevocationPolicy?: OcspResponderRevocationPolicy;
 	/** CRLs used as revocation evidence for delegated responder certificates. */
@@ -923,7 +923,7 @@ export async function validateOcspResponse(
 	let resolvedResponder: OcspCertificateSource;
 	let trustedResponders: readonly ParsedCertificate[];
 	try {
-		trustedResponders = (input.trustedResponderCertificates ?? []).map(normalizeCertificate);
+		trustedResponders = (input.trustedOcspResponders ?? []).map(normalizeCertificate);
 		resolvedResponder =
 			input.responderCertificate ??
 			(await findMatchingOcspResponderCertificate(

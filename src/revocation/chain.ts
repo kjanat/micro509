@@ -625,7 +625,7 @@ async function validateOcspResponseWithResponderFallback(
 		issuerCertificate: issuer,
 		at,
 		...(input.trustedOcspResponders !== undefined
-			? { trustedResponderCertificates: input.trustedOcspResponders }
+			? { trustedOcspResponders: input.trustedOcspResponders }
 			: {}),
 		...(input.policy?.ocspResponderRevocation !== undefined
 			? { responderRevocationPolicy: input.policy.ocspResponderRevocation }

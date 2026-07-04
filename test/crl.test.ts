@@ -639,7 +639,7 @@ describe('crl', () => {
 			code: 'non_applicable',
 			message:
 				'certificate distribution points that name alternate CRL issuers are not supported yet',
-			details: { reason: 'indirect_crl_unsupported' },
+			details: { reason: 'unsupported_indirect_crl' },
 		});
 	});
 
@@ -937,7 +937,7 @@ describe('crl', () => {
 			ok: false,
 			code: 'non_applicable',
 			message: 'indirect CRL entry certificateIssuer must include a directoryName',
-			details: { reason: 'indirect_crl_unsupported' },
+			details: { reason: 'unsupported_indirect_crl' },
 		});
 
 		const deltaCrl = await createCertificateRevocationList({
@@ -956,7 +956,7 @@ describe('crl', () => {
 			ok: false,
 			code: 'non_applicable',
 			message: 'a delta CRL cannot be used as the primary complete CRL input',
-			details: { reason: 'delta_crl_unsupported' },
+			details: { reason: 'unsupported_delta_crl' },
 		});
 	});
 
@@ -1654,7 +1654,7 @@ describe('crl', () => {
 			ok: false,
 			code: 'non_applicable',
 			message: 'indirect CRL distribution points must identify the CRL issuer with directoryName',
-			details: { reason: 'indirect_crl_unsupported' },
+			details: { reason: 'unsupported_indirect_crl' },
 		});
 	});
 
@@ -1741,7 +1741,7 @@ describe('crl', () => {
 			ok: false,
 			code: 'non_applicable',
 			message: 'indirect CRL entry certificateIssuer must include a directoryName',
-			details: { reason: 'indirect_crl_unsupported' },
+			details: { reason: 'unsupported_indirect_crl' },
 		});
 	});
 

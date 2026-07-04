@@ -339,9 +339,9 @@ export type CheckCertificateRevocationAgainstCrlErrorCode =
 export type CrlApplicabilityFailureReason =
 	| 'certificate_scope_mismatch'
 	| 'delta_crl_incompatible'
-	| 'delta_crl_unsupported'
+	| 'unsupported_delta_crl'
 	| 'distribution_point_mismatch'
-	| 'indirect_crl_unsupported'
+	| 'unsupported_indirect_crl'
 	| 'issuer_mismatch'
 	| 'reasons_mismatch';
 
@@ -956,7 +956,7 @@ function findRevokedCertificateEntry(
 	}
 	if (sawUnsupportedIssuer) {
 		return nonApplicable(
-			'indirect_crl_unsupported',
+			'unsupported_indirect_crl',
 			'indirect CRL entry certificateIssuer must include a directoryName',
 		);
 	}
@@ -977,7 +977,7 @@ function checkCrlApplicability(
 	| undefined {
 	if (!allowDeltaCrl && crl.baseCrlNumber !== undefined) {
 		return nonApplicable(
-			'delta_crl_unsupported',
+			'unsupported_delta_crl',
 			'a delta CRL cannot be used as the primary complete CRL input',
 		);
 	}
@@ -1073,7 +1073,7 @@ function checkCrlApplicability(
 	}
 	if (sawIndirectIssuerUnsupported) {
 		return nonApplicable(
-			'indirect_crl_unsupported',
+			'unsupported_indirect_crl',
 			'indirect CRL distribution points must identify the CRL issuer with directoryName',
 		);
 	}
@@ -1091,7 +1091,7 @@ function checkCrlApplicability(
 	}
 	if (sawIndirectDistributionPoint) {
 		return nonApplicable(
-			'indirect_crl_unsupported',
+			'unsupported_indirect_crl',
 			'certificate distribution points that name alternate CRL issuers are not supported yet',
 		);
 	}

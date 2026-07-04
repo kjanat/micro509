@@ -120,7 +120,7 @@ describe('identity fixtures', () => {
 				subjectAltNames: [{ type: 'uri', value: 'https://api.example.com/login' }],
 				serviceIdentity: { type: 'uri', value: 'wss://api.example.com/socket' },
 			}),
-		).toMatchObject({ ok: false, code: 'service_identity_service_mismatch' });
+		).toMatchObject({ ok: false, code: 'service_identity_mismatch' });
 	});
 
 	it('covers SRV-ID fixtures', async () => {
@@ -138,7 +138,7 @@ describe('identity fixtures', () => {
 				subjectAltNames: [{ type: 'srv', value: '_xmpp-client.im.example.org' }],
 				serviceIdentity: { type: 'srv', value: '_xmpp-server.im.example.org' },
 			}),
-		).toMatchObject({ ok: false, code: 'service_identity_service_mismatch' });
+		).toMatchObject({ ok: false, code: 'service_identity_mismatch' });
 	});
 
 	it('covers IDNA fixtures across DNS-ID, URI-ID, and SRV-ID', async () => {

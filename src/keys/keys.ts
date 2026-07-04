@@ -120,8 +120,8 @@ export interface KeyPairMaterial {
 	exportPrivateJwk(): Promise<JsonWebKey>;
 }
 
-/** RSA variant of {@linkcode PublicKeyImportInput}. */
-export interface ImportRsaPublicKeyInput {
+/** RSA variant of {@linkcode PublicKeyImportInput} / {@linkcode PrivateKeyImportInput}. */
+export interface ImportRsaKeyInput {
 	/** Discriminant selecting RSA import. */
 	readonly kind: 'rsa';
 	/** Hash algorithm. Defaults to `'SHA-256'`. */
@@ -130,30 +130,27 @@ export interface ImportRsaPublicKeyInput {
 	readonly scheme?: RsaScheme;
 }
 
-/** ECDSA variant of {@linkcode PublicKeyImportInput}. */
-export interface ImportEcPublicKeyInput {
+/** ECDSA variant of {@linkcode PublicKeyImportInput} / {@linkcode PrivateKeyImportInput}. */
+export interface ImportEcKeyInput {
 	/** Discriminant selecting ECDSA import. */
 	readonly kind: 'ecdsa';
 	/** NIST curve the key belongs to. Required for EC import. */
 	readonly curve: EcNamedCurve;
 }
 
-/** Ed25519 variant of {@linkcode PublicKeyImportInput}. */
-export interface ImportEd25519PublicKeyInput {
+/** Ed25519 variant of {@linkcode PublicKeyImportInput} / {@linkcode PrivateKeyImportInput}. */
+export interface ImportEd25519KeyInput {
 	/** Discriminant selecting Ed25519 import. */
 	readonly kind: 'ed25519';
 }
 
 /** Algorithm descriptor for public key import functions. */
-export type PublicKeyImportInput =
-	| ImportRsaPublicKeyInput
-	| ImportEcPublicKeyInput
-	| ImportEd25519PublicKeyInput;
+export type PublicKeyImportInput = ImportRsaKeyInput | ImportEcKeyInput | ImportEd25519KeyInput;
 
 /** Algorithm descriptor for private key import functions. Same shape as {@linkcode PublicKeyImportInput}. */
 export type PrivateKeyImportInput = PublicKeyImportInput;
 
-/** PBES2 encryption options for {@linkcode exportEncryptedPkcs8Der} and {@linkcode exportEncryptedPkcs8Pem}. */
+/** PBES2 encryption options for the encrypted PKCS#8 export/import functions. */
 export type EncryptedPkcs8Options = Pbes2EncryptionOptions;
 
 /** Options for OpenSSL-style `Proc-Type: 4,ENCRYPTED` PEM encryption (PKCS#1/SEC1). */
@@ -810,7 +807,7 @@ export function importEncryptedPkcs8Pem(
  */
 export async function importPkcs1DerOrThrow(
 	der: Uint8Array,
-	algorithm: ImportRsaPublicKeyInput = { kind: 'rsa' },
+	algorithm: ImportRsaKeyInput = { kind: 'rsa' },
 ): Promise<CryptoKey> {
 	return importPkcs8DerOrThrow(wrapPkcs1InPkcs8(der), algorithm);
 }
@@ -822,7 +819,7 @@ export async function importPkcs1DerOrThrow(
  */
 export function importPkcs1Der(
 	der: Uint8Array,
-	algorithm: ImportRsaPublicKeyInput = { kind: 'rsa' },
+	algorithm: ImportRsaKeyInput = { kind: 'rsa' },
 ): Promise<ImportKeyResult<CryptoKey>> {
 	return importResult(() => importPkcs1DerOrThrow(der, algorithm));
 }
@@ -837,7 +834,7 @@ export function importPkcs1Der(
  */
 export async function importPkcs1PemOrThrow(
 	pem: string,
-	algorithm: ImportRsaPublicKeyInput = { kind: 'rsa' },
+	algorithm: ImportRsaKeyInput = { kind: 'rsa' },
 ): Promise<CryptoKey> {
 	return importPkcs1DerOrThrow(pemDecodeOrThrow('RSA PRIVATE KEY', pem), algorithm);
 }
@@ -849,7 +846,7 @@ export async function importPkcs1PemOrThrow(
  */
 export function importPkcs1Pem(
 	pem: string,
-	algorithm: ImportRsaPublicKeyInput = { kind: 'rsa' },
+	algorithm: ImportRsaKeyInput = { kind: 'rsa' },
 ): Promise<ImportKeyResult<CryptoKey>> {
 	return importResult(() => importPkcs1PemOrThrow(pem, algorithm));
 }
@@ -865,7 +862,7 @@ export function importPkcs1Pem(
 export async function importEncryptedPkcs1PemOrThrow(
 	pem: string,
 	password: string,
-	algorithm: ImportRsaPublicKeyInput = { kind: 'rsa' },
+	algorithm: ImportRsaKeyInput = { kind: 'rsa' },
 ): Promise<CryptoKey> {
 	const decrypted = await decryptTraditionalPem('RSA PRIVATE KEY', pem, password);
 	return importPkcs1DerOrThrow(decrypted, algorithm);
@@ -879,7 +876,7 @@ export async function importEncryptedPkcs1PemOrThrow(
 export function importEncryptedPkcs1Pem(
 	pem: string,
 	password: string,
-	algorithm: ImportRsaPublicKeyInput = { kind: 'rsa' },
+	algorithm: ImportRsaKeyInput = { kind: 'rsa' },
 ): Promise<ImportEncryptedKeyResult<CryptoKey>> {
 	return encryptedImportResult(() => importEncryptedPkcs1PemOrThrow(pem, password, algorithm));
 }
@@ -925,7 +922,7 @@ export function importPkcs8Base64(
  */
 export async function importSec1DerOrThrow(
 	der: Uint8Array,
-	algorithm: ImportEcPublicKeyInput,
+	algorithm: ImportEcKeyInput,
 ): Promise<CryptoKey> {
 	return importPkcs8DerOrThrow(wrapSec1InPkcs8(der, algorithm.curve), algorithm);
 }
@@ -937,7 +934,7 @@ export async function importSec1DerOrThrow(
  */
 export function importSec1Der(
 	der: Uint8Array,
-	algorithm: ImportEcPublicKeyInput,
+	algorithm: ImportEcKeyInput,
 ): Promise<ImportKeyResult<CryptoKey>> {
 	return importResult(() => importSec1DerOrThrow(der, algorithm));
 }
@@ -952,7 +949,7 @@ export function importSec1Der(
  */
 export async function importSec1PemOrThrow(
 	pem: string,
-	algorithm: ImportEcPublicKeyInput,
+	algorithm: ImportEcKeyInput,
 ): Promise<CryptoKey> {
 	return importSec1DerOrThrow(pemDecodeOrThrow('EC PRIVATE KEY', pem), algorithm);
 }
@@ -964,7 +961,7 @@ export async function importSec1PemOrThrow(
  */
 export function importSec1Pem(
 	pem: string,
-	algorithm: ImportEcPublicKeyInput,
+	algorithm: ImportEcKeyInput,
 ): Promise<ImportKeyResult<CryptoKey>> {
 	return importResult(() => importSec1PemOrThrow(pem, algorithm));
 }
@@ -980,7 +977,7 @@ export function importSec1Pem(
 export async function importEncryptedSec1PemOrThrow(
 	pem: string,
 	password: string,
-	algorithm: ImportEcPublicKeyInput,
+	algorithm: ImportEcKeyInput,
 ): Promise<CryptoKey> {
 	const decrypted = await decryptTraditionalPem('EC PRIVATE KEY', pem, password);
 	return importSec1DerOrThrow(decrypted, algorithm);
@@ -994,7 +991,7 @@ export async function importEncryptedSec1PemOrThrow(
 export function importEncryptedSec1Pem(
 	pem: string,
 	password: string,
-	algorithm: ImportEcPublicKeyInput,
+	algorithm: ImportEcKeyInput,
 ): Promise<ImportEncryptedKeyResult<CryptoKey>> {
 	return encryptedImportResult(() => importEncryptedSec1PemOrThrow(pem, password, algorithm));
 }
@@ -1163,7 +1160,7 @@ function wrapPkcs1InPkcs8(der: Uint8Array): Uint8Array {
 }
 
 /** Wrap a SEC 1 ECPrivateKey in a PKCS#8 PrivateKeyInfo envelope for WebCrypto import. */
-function wrapSec1InPkcs8(der: Uint8Array, curve: ImportEcPublicKeyInput['curve']): Uint8Array {
+function wrapSec1InPkcs8(der: Uint8Array, curve: ImportEcKeyInput['curve']): Uint8Array {
 	return sequence([
 		Uint8Array.of(0x02, 0x01, 0x00),
 		sequence([objectIdentifier(OIDS.ecPublicKey), objectIdentifier(curveToOid(curve))]),
@@ -1172,7 +1169,7 @@ function wrapSec1InPkcs8(der: Uint8Array, curve: ImportEcPublicKeyInput['curve']
 }
 
 /** Map a curve name to its ASN.1 OID string. */
-function curveToOid(curve: ImportEcPublicKeyInput['curve']): string {
+function curveToOid(curve: ImportEcKeyInput['curve']): string {
 	switch (curve) {
 		case 'P-256':
 			return OIDS.prime256v1;

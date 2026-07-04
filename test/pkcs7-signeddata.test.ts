@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import {
-	createPkcs7SignedDataDer,
-	createPkcs7SignedDataPem,
+	createPkcs7SignedData,
 	createSelfSignedCertificate,
 	parsePkcs7SignedDataDer,
 	verifyPkcs7SignedData,
@@ -36,7 +35,7 @@ describe('createPkcs7SignedData', () => {
 		it(`signs and verifies a round-trip (${testCase.name})`, async () => {
 			const signer = await signingIdentity(`Signer ${testCase.name}`, testCase.algorithm);
 			const content = encoder.encode('hello cms');
-			const signed = await createPkcs7SignedDataPem({
+			const signed = await createPkcs7SignedData({
 				content,
 				signers: [{ certificate: signer.certificate.pem, privateKey: signer.keyPair.privateKey }],
 			});
@@ -56,14 +55,14 @@ describe('createPkcs7SignedData', () => {
 	it('round-trips through parse before verify', async () => {
 		const signer = await signingIdentity('Parse Signer');
 		const content = encoder.encode('parse then verify');
-		const der = await createPkcs7SignedDataDer({
+		const der = await createPkcs7SignedData({
 			content,
 			signers: [{ certificate: signer.certificate.pem, privateKey: signer.keyPair.privateKey }],
 		});
 		expect(der.ok).toBe(true);
 		if (!der.ok) throw new Error(der.error.code);
 
-		const parsed = parsePkcs7SignedDataDer(der.value);
+		const parsed = parsePkcs7SignedDataDer(der.value.der);
 		expect(parsed.ok).toBe(true);
 		if (!parsed.ok) throw new Error(parsed.error.code);
 		expect(parsed.value.version).toBe(1);
@@ -76,13 +75,13 @@ describe('createPkcs7SignedData', () => {
 	it('rejects a tampered signature', async () => {
 		const signer = await signingIdentity('Tamper Signer');
 		const content = encoder.encode('original content');
-		const der = await createPkcs7SignedDataDer({
+		const der = await createPkcs7SignedData({
 			content,
 			signers: [{ certificate: signer.certificate.pem, privateKey: signer.keyPair.privateKey }],
 		});
 		expect(der.ok).toBe(true);
 		if (!der.ok) throw new Error(der.error.code);
-		const tampered = new Uint8Array(der.value);
+		const tampered = new Uint8Array(der.value.der);
 		// Corrupt the final byte (inside the signature OCTET STRING).
 		tampered[tampered.length - 1] = (tampered[tampered.length - 1] ?? 0) ^ 0xff;
 
@@ -96,7 +95,7 @@ describe('createPkcs7SignedData', () => {
 		const first = await signingIdentity('Signer A', { kind: 'ecdsa', curve: 'P-256' });
 		const second = await signingIdentity('Signer B', { kind: 'ed25519' });
 		const content = encoder.encode('two signers');
-		const der = await createPkcs7SignedDataDer({
+		const der = await createPkcs7SignedData({
 			content,
 			signers: [
 				{ certificate: first.certificate.pem, privateKey: first.keyPair.privateKey },
@@ -106,7 +105,7 @@ describe('createPkcs7SignedData', () => {
 		expect(der.ok).toBe(true);
 		if (!der.ok) throw new Error(der.error.code);
 
-		const result = await verifyPkcs7SignedData(der.value);
+		const result = await verifyPkcs7SignedData(der.value.der);
 		expect(result.ok).toBe(true);
 		if (!result.ok) throw new Error(result.error.code);
 		expect(result.value.signerInfos).toHaveLength(2);
@@ -119,7 +118,7 @@ describe('createPkcs7SignedData', () => {
 			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign'] },
 		});
 		const signer = await signingIdentity('Signer With Chain');
-		const der = await createPkcs7SignedDataDer({
+		const der = await createPkcs7SignedData({
 			content: encoder.encode('with chain'),
 			signers: [{ certificate: signer.certificate.pem, privateKey: signer.keyPair.privateKey }],
 			additionalCertificates: [ca.certificate.pem, signer.certificate.pem],
@@ -127,7 +126,7 @@ describe('createPkcs7SignedData', () => {
 		expect(der.ok).toBe(true);
 		if (!der.ok) throw new Error(der.error.code);
 
-		const result = await verifyPkcs7SignedData(der.value);
+		const result = await verifyPkcs7SignedData(der.value.der);
 		expect(result.ok).toBe(true);
 		if (!result.ok) throw new Error(result.error.code);
 		// signer + CA, deduplicated (signer also passed via additionalCertificates).
@@ -135,7 +134,7 @@ describe('createPkcs7SignedData', () => {
 	});
 
 	it('returns no_signers when no signers are provided', async () => {
-		const result = await createPkcs7SignedDataDer({ content: encoder.encode('x'), signers: [] });
+		const result = await createPkcs7SignedData({ content: encoder.encode('x'), signers: [] });
 		expect(result.ok).toBe(false);
 		if (result.ok) throw new Error('unreachable');
 		expect(result.error.code).toBe('no_signers');
@@ -144,7 +143,7 @@ describe('createPkcs7SignedData', () => {
 	it('returns invalid_signer_certificate when a signer source is not one cert', async () => {
 		const a = await signingIdentity('Multi A');
 		const b = await signingIdentity('Multi B');
-		const result = await createPkcs7SignedDataDer({
+		const result = await createPkcs7SignedData({
 			content: encoder.encode('x'),
 			signers: [
 				{

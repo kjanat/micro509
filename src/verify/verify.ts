@@ -1324,7 +1324,7 @@ function validateServiceIdentity(
 		return { ok: true };
 	}
 	const error = result.error;
-	if (error.code === 'service_identity_service_mismatch') {
+	if (error.code === 'service_identity_mismatch') {
 		// SRV-ID service label mismatch — an identity mismatch, not malformed input
 		return {
 			ok: false,

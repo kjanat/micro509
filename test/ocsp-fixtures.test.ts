@@ -493,7 +493,7 @@ describe('ocsp responder authorization (RFC 6960 §4.2.2.2)', () => {
 		const withTrust = await validateOcspResponse({
 			response: response.der,
 			issuerCertificate: authority.ca.certificate.pem,
-			trustedResponderCertificates: [responder.pem],
+			trustedOcspResponders: [responder.pem],
 		});
 		expect(withTrust).toMatchObject({ ok: true });
 	});
@@ -518,7 +518,7 @@ describe('ocsp responder authorization (RFC 6960 §4.2.2.2)', () => {
 		const discovered = await validateOcspResponse({
 			response: response.der,
 			issuerCertificate: authority.ca.certificate.pem,
-			trustedResponderCertificates: [responder.certificate.pem],
+			trustedOcspResponders: [responder.certificate.pem],
 		});
 		expect(discovered).toMatchObject({ ok: true });
 	});

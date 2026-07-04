@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import type { ImportEcPublicKeyInput } from '#micro509/keys/index.ts';
+import type { ImportEcKeyInput } from '#micro509/keys/index.ts';
 import * as keys from '#micro509/keys/index.ts';
 import * as pem from '#micro509/pem/index.ts';
 import * as result from '#micro509/result/index.ts';
@@ -7,7 +7,7 @@ import * as result from '#micro509/result/index.ts';
 const ecAlgorithm = {
 	kind: 'ecdsa',
 	curve: 'P-256',
-} as const satisfies ImportEcPublicKeyInput;
+} as const satisfies ImportEcKeyInput;
 
 describe('utility domains', () => {
 	describe('keys domain', () => {

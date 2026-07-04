@@ -40,7 +40,7 @@ export interface ErrorResult<
 	/** Human-readable diagnostic, mirrored from `error.message`. */
 	readonly message: string;
 	/** Optional structured context for the failure. */
-	readonly details?: TDetails | undefined;
+	readonly details?: TDetails;
 }
 
 /** Like {@link ErrorResult} but also carries an index into the collection that was being processed. */
@@ -50,7 +50,7 @@ export interface IndexedErrorResult<
 	TError extends IndexedMicro509Error<TCode, TDetails>,
 > extends ErrorResult<TCode, TDetails, TError> {
 	/** Zero-based position of the failing item in the input collection. */
-	readonly index?: number | undefined;
+	readonly index?: number;
 }
 
 /** Base error shape carried by all failure results in the library. */
