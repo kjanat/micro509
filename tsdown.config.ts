@@ -53,7 +53,6 @@ export default defineConfig({
 		customExports(exports) {
 			for (const [key, path] of Object.entries(exports)) {
 				const typesPath = path.replace(/\.([mc]?)js$/, '.d.$1ts');
-
 				if (typesPath !== path && existsSync(typesPath)) {
 					exports[key] = { types: typesPath, default: path };
 				}

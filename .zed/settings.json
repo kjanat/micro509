@@ -28,6 +28,13 @@
 					"linter": {}
 				}
 			}
+		},
+		"deno": {
+			"settings": {
+				"deno": {
+					"enable": true,
+				}
+			}
 		}
 	}
 }

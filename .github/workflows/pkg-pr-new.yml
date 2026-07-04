@@ -8,5 +8,5 @@ jobs:
     steps: [
       { uses: actions/checkout@v7, with: { persist-credentials: false } },
       { uses: ./.github/actions/setup-ts, with: { install-bun: true } },
-      run: runner install build publish:pkgprnew,
+      run: runner install -f build publish:pkgprnew,
     ]
