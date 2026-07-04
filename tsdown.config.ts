@@ -1,7 +1,9 @@
+import { existsSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
+import jsr from '#jsr' with { type: 'json' };
+import pkg from '#pkg' with { type: 'json' };
+
 import { defineConfig } from 'tsdown';
-import jsr from './jsr.json' with { type: 'json' };
-import pkg from './package.json' with { type: 'json' };
 
 const jsrJson: Omit<typeof jsr, 'exports' | 'version'> & {
 	exports: Record<string, string>;
@@ -47,7 +49,17 @@ export default defineConfig({
 	},
 	exports: {
 		enabled: true,
-		devExports: 'bun',
+		packageJson: true,
+		customExports(exports) {
+			for (const [key, path] of Object.entries(exports)) {
+				const typesPath = path.replace(/\.([mc]?)js$/, '.d.$1ts');
+
+				if (typesPath !== path && existsSync(typesPath)) {
+					exports[key] = { types: typesPath, default: path };
+				}
+			}
+			return exports;
+		},
 	},
 	onSuccess: 'bunx sort-package-json --quiet {package,jsr}.json',
 	attw: { profile: 'esm-only', ignoreRules: ['no-resolution'] },

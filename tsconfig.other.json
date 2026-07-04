@@ -22,7 +22,6 @@
 		"isolatedDeclarations": false,
 		"allowJs": true,
 		"checkJs": true,
-		"customConditions": ["bun"],
 		"paths": {
 			"micro509": ["./src/index.ts"],
 			"#micro509": ["./src/index.ts"],

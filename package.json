@@ -33,35 +33,35 @@
 	},
 	"exports": {
 		".": {
-			"bun": "./src/index.ts",
+			"types": "./dist/index.d.ts",
 			"default": "./dist/index.js"
 		},
 		"./keys": {
-			"bun": "./src/keys/index.ts",
+			"types": "./dist/keys.d.ts",
 			"default": "./dist/keys.js"
 		},
 		"./pem": {
-			"bun": "./src/pem/index.ts",
+			"types": "./dist/pem.d.ts",
 			"default": "./dist/pem.js"
 		},
 		"./pkcs": {
-			"bun": "./src/pkcs/index.ts",
+			"types": "./dist/pkcs.d.ts",
 			"default": "./dist/pkcs.js"
 		},
 		"./result": {
-			"bun": "./src/result/index.ts",
+			"types": "./dist/result.d.ts",
 			"default": "./dist/result.js"
 		},
 		"./revocation": {
-			"bun": "./src/revocation/index.ts",
+			"types": "./dist/revocation.d.ts",
 			"default": "./dist/revocation.js"
 		},
 		"./verify": {
-			"bun": "./src/verify/index.ts",
+			"types": "./dist/verify.d.ts",
 			"default": "./dist/verify.js"
 		},
 		"./x509": {
-			"bun": "./src/x509/index.ts",
+			"types": "./dist/x509.d.ts",
 			"default": "./dist/x509.js"
 		},
 		"./package.json": "./package.json"
@@ -163,19 +163,6 @@
 	"volta": {
 		"node": "26.4.0",
 		"npm": "11.17.0"
-	},
-	"publishConfig": {
-		"exports": {
-			".": "./dist/index.js",
-			"./keys": "./dist/keys.js",
-			"./pem": "./dist/pem.js",
-			"./pkcs": "./dist/pkcs.js",
-			"./result": "./dist/result.js",
-			"./revocation": "./dist/revocation.js",
-			"./verify": "./dist/verify.js",
-			"./x509": "./dist/x509.js",
-			"./package.json": "./package.json"
-		}
 	},
 	"typedocoptions": {
 		"extends": "./config/typedoc.config.mjs"
