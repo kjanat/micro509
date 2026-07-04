@@ -2,6 +2,7 @@ name: Setup Js Runtime
 description: Setup Deno, Node.js, and/or Bun runtimes
 
 inputs:
+  install-runner: { description: Install runner-run, required: false, default: "true" }
   install-deno: { description: Install Deno, required: false, default: "false" }
   deno-version: { description: Deno version to install, required: false, default: "2.x" }
   install-bun: { description: Install Bun, required: false, default: "true" }
@@ -12,28 +13,32 @@ inputs:
   update-npm: { description: "Update npm to latest", required: false, default: "false" }
 
 outputs:
+  runner-version: { description: The installed runner-run version, value: "${{ steps.setup-runner.outputs.version }}" }
   deno-version: { description: The installed Deno version, value: "${{ steps.setup-deno.outputs.deno-version }}" }
   bun-version: { description: The installed Bun version (if install-bun is true), value: "${{ steps.setup-bun.outputs.bun-version }}" }
+  bun-path: { description: The installed Bun path (if install-bun is true), value: "${{ steps.setup-bun.outputs.bun-path }}" }
   node-version: { description: The installed Node.js version (if install-node is true), value: "${{ steps.setup-node.outputs.node-version }}" }
   npm-version: { description: The installed npm version (if update-npm is true), value: "${{ steps.update-npm.outputs.npm-version }}" }
 
 runs:
   using: composite
   steps:
+    - name: Setup runner-run
+      id: setup-runner
+      if: ${{ inputs.install-runner == 'true' }}
+      uses: kjanat/runner@v0.16.1
+
     - name: Setup Deno
       id: setup-deno
       if: ${{ inputs.install-deno == 'true' }}
-      uses: denoland/setup-deno@667a34cdef165d8d2b2e98dde39547c9daac7282 # v2.0.4
+      uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
       with: { deno-version: "${{ inputs.deno-version }}" }
 
     - name: Setup Node
       id: setup-node
       if: ${{ inputs.install-node == 'true' }}
       uses: actions/setup-node@v6 # Trusted action, tag allowed
-      with:
-        node-version: "${{ inputs.node-version }}"
-        package-manager-cache: false
-        registry-url: "${{ inputs.node-registry-url }}"
+      with: { node-version: "${{ inputs.node-version }}", package-manager-cache: false, registry-url: "${{ inputs.node-registry-url }}" }
 
     - name: Setup Bun
       id: setup-bun
@@ -45,6 +50,4 @@ runs:
       id: update-npm
       if: ${{ inputs.update-npm == 'true' }}
       shell: bash
-      run: |
-        npm install -g npm@latest
-        echo "npm-version=$(npm --version)" >> "${GITHUB_OUTPUT}"
+      run: npm install -g npm@latest && echo "npm-version=$(npm --version)" >> "${GITHUB_OUTPUT}"
