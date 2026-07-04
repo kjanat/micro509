@@ -8,9 +8,11 @@
 
 [![NPM](https://img.shields.io/npm/v/micro509?logo=npm&labelColor=CB3837&color=black)][npm]
 [![JSR](https://img.shields.io/jsr/v/@kjanat/micro509?logoColor=083344&logo=jsr&logoSize=auto&label=&labelColor=f7df1e&color=black)][jsr]
+[![Socket](https://badge.socket.dev/npm/package/micro509)][socket]
 
 [npm]: https://npm.im/micro509
 [jsr]: https://jsr.io/@kjanat/micro509
+[socket]: https://socket.dev/npm/package/micro509
 
 A zero-dependency TypeScript PKI toolkit for certificates, verification, revocation, and PKCS workflows.
 
