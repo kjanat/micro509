@@ -265,10 +265,10 @@ function wrapKeyPair(publicKey: CryptoKey, privateKey: CryptoKey): KeyPairMateri
 		async exportPkcs8Pem() {
 			return pemEncode('PRIVATE KEY', await this.exportPkcs8Der());
 		},
-		async exportPublicJwk() {
+		exportPublicJwk() {
 			return getCrypto().subtle.exportKey('jwk', publicKey);
 		},
-		async exportPrivateJwk() {
+		exportPrivateJwk() {
 			return getCrypto().subtle.exportKey('jwk', privateKey);
 		},
 	};
@@ -304,7 +304,7 @@ export async function exportPkcs8Der(privateKey: CryptoKey): Promise<Uint8Array>
  * const jwk = await exportPublicJwk(keys.publicKey);
  * ```
  */
-export async function exportPublicJwk(publicKey: CryptoKey): Promise<JsonWebKey> {
+export function exportPublicJwk(publicKey: CryptoKey): Promise<JsonWebKey> {
 	return getCrypto().subtle.exportKey('jwk', publicKey);
 }
 
@@ -314,7 +314,7 @@ export async function exportPublicJwk(publicKey: CryptoKey): Promise<JsonWebKey>
  * @see {@linkcode importPrivateJwk} for the inverse operation
  * @see {@linkcode exportPublicJwk} for public key export
  */
-export async function exportPrivateJwk(privateKey: CryptoKey): Promise<JsonWebKey> {
+export function exportPrivateJwk(privateKey: CryptoKey): Promise<JsonWebKey> {
 	return getCrypto().subtle.exportKey('jwk', privateKey);
 }
 
@@ -594,7 +594,7 @@ export function importSpkiDer(
  *
  * @see {@linkcode exportSpkiPem} for the inverse operation
  */
-export async function importSpkiPemOrThrow(
+export function importSpkiPemOrThrow(
 	pem: string,
 	algorithm: PublicKeyImportInput,
 ): Promise<CryptoKey> {
@@ -619,7 +619,7 @@ export function importSpkiPem(
  * @see {@linkcode exportBinaryBase64} for the inverse operation
  * @see {@linkcode importSpkiPem} for PEM input with headers
  */
-export async function importSpkiBase64OrThrow(
+export function importSpkiBase64OrThrow(
 	base64: string,
 	algorithm: PublicKeyImportInput,
 ): Promise<CryptoKey> {
@@ -701,7 +701,7 @@ export function importPkcs8Der(
  * const key = await importPkcs8Pem(pemString, { kind: 'ecdsa', curve: 'P-256' });
  * ```
  */
-export async function importPkcs8PemOrThrow(
+export function importPkcs8PemOrThrow(
 	pem: string,
 	algorithm: PrivateKeyImportInput,
 ): Promise<CryptoKey> {
@@ -795,7 +795,7 @@ export function importEncryptedPkcs8Der(
  * const key = await importEncryptedPkcs8Pem(pem, 'secret', { kind: 'rsa' });
  * ```
  */
-export async function importEncryptedPkcs8PemOrThrow(
+export function importEncryptedPkcs8PemOrThrow(
 	pem: string,
 	password: string,
 	algorithm: PrivateKeyImportInput,
@@ -828,7 +828,7 @@ export function importEncryptedPkcs8Pem(
  * @see {@linkcode exportPkcs1Der} for the inverse operation
  * @see {@linkcode importPkcs1Pem} for PEM input
  */
-export async function importPkcs1DerOrThrow(
+export function importPkcs1DerOrThrow(
 	der: Uint8Array,
 	algorithm: ImportRsaKeyInput = { kind: 'rsa' },
 ): Promise<CryptoKey> {
@@ -855,7 +855,7 @@ export function importPkcs1Der(
  * @see {@linkcode exportPkcs1Pem} for the inverse operation
  * @see {@linkcode importEncryptedPkcs1Pem} for encrypted PEM
  */
-export async function importPkcs1PemOrThrow(
+export function importPkcs1PemOrThrow(
 	pem: string,
 	algorithm: ImportRsaKeyInput = { kind: 'rsa' },
 ): Promise<CryptoKey> {
@@ -910,7 +910,7 @@ export function importEncryptedPkcs1Pem(
  * @see {@linkcode exportBinaryBase64} for the inverse operation
  * @see {@linkcode importPkcs8Pem} for PEM input with headers
  */
-export async function importPkcs8Base64OrThrow(
+export function importPkcs8Base64OrThrow(
 	base64: string,
 	algorithm: PrivateKeyImportInput,
 ): Promise<CryptoKey> {
@@ -943,7 +943,7 @@ export function importPkcs8Base64(
  * @see {@linkcode exportSec1Der} for the inverse operation
  * @see {@linkcode importSec1Pem} for PEM input
  */
-export async function importSec1DerOrThrow(
+export function importSec1DerOrThrow(
 	der: Uint8Array,
 	algorithm: ImportEcKeyInput,
 ): Promise<CryptoKey> {
@@ -970,10 +970,7 @@ export function importSec1Der(
  * @see {@linkcode exportSec1Pem} for the inverse operation
  * @see {@linkcode importEncryptedSec1Pem} for encrypted PEM
  */
-export async function importSec1PemOrThrow(
-	pem: string,
-	algorithm: ImportEcKeyInput,
-): Promise<CryptoKey> {
+export function importSec1PemOrThrow(pem: string, algorithm: ImportEcKeyInput): Promise<CryptoKey> {
 	return importSec1DerOrThrow(pemDecodeOrThrow('EC PRIVATE KEY', pem), algorithm);
 }
 
@@ -1065,7 +1062,7 @@ export function importPublicJwk(
  * const key = await importPrivateJwk(jwk, { kind: 'ecdsa', curve: 'P-256' });
  * ```
  */
-export async function importPrivateJwkOrThrow(
+export function importPrivateJwkOrThrow(
 	jwk: JsonWebKey,
 	algorithm: PrivateKeyImportInput,
 ): Promise<CryptoKey> {
@@ -1289,7 +1286,7 @@ async function decryptTraditionalPem(
 }
 
 /** Derive and import an AES-CBC key for legacy PEM encryption using OpenSSL `EVP_BytesToKey`. */
-async function importTraditionalPemAesKey(
+function importTraditionalPemAesKey(
 	password: string,
 	salt: Uint8Array,
 	cipher: 'AES-128-CBC' | 'AES-192-CBC' | 'AES-256-CBC',

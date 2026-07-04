@@ -1219,9 +1219,7 @@ export async function validateForTlsServer(
  * });
  * ```
  */
-export async function validateForTlsClient(
-	input: ValidateForTlsClientInput,
-): Promise<VerifyChainResult> {
+export function validateForTlsClient(input: ValidateForTlsClientInput): Promise<VerifyChainResult> {
 	return verifyChainForExtendedKeyUsageProfile(input, 'clientAuth');
 }
 
@@ -1239,7 +1237,7 @@ export async function validateForTlsClient(
  * });
  * ```
  */
-export async function validateForCodeSigning(
+export function validateForCodeSigning(
 	input: ValidateForCodeSigningInput,
 ): Promise<VerifyChainResult> {
 	return verifyChainForExtendedKeyUsageProfile(input, 'codeSigning');
@@ -1259,7 +1257,7 @@ export async function validateForCodeSigning(
  * });
  * ```
  */
-export async function validateForCa(input: ValidateForCaInput): Promise<VerifyChainResult> {
+export function validateForCa(input: ValidateForCaInput): Promise<VerifyChainResult> {
 	return verifyCertificateChain({
 		...baseChainInput(input),
 		purpose: 'ca',

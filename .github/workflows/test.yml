@@ -21,6 +21,11 @@ jobs:
         with: { install-bun: "true", install-node: "true", install-deno: "true" }
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
+      - name: Deno lint + type-check + doc-lint (full source tree)
+        run: |
+          deno lint src
+          deno check src
+          deno doc --lint src
       - run: bun run test
       - name: Build (runs attw + publint + unused-export checks)
         run: bun run build
