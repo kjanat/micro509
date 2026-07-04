@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-07-04
+
 Pre-1.0 API freeze cleanup: one coherent breaking pass over vocabulary,
 error-handling doctrine, type shapes, and export surface, so 1.0 can freeze
 a surface with no known regrets. Every rename is in the migration table
@@ -338,7 +340,8 @@ Initial prerelease. API may change before 1.0.
 - Zero runtime dependencies, WebCrypto-native, tree-shakeable subpath exports;
   runs on Node, Bun, Deno, browsers, and Cloudflare Workers.
 
-[Unreleased]: https://github.com/kjanat/micro509/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/kjanat/micro509/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/kjanat/micro509/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/kjanat/micro509/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/kjanat/micro509/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/kjanat/micro509/compare/v0.3.0...v0.4.0
