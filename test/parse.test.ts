@@ -30,13 +30,10 @@ import {
 	setOf,
 	time,
 	tlv,
-} from '#micro509/internal/asn1/der.ts';
-import { OIDS } from '#micro509/internal/asn1/oids.ts';
-import {
-	encodeRsaPssParameters,
-	rsaPssParametersForHash,
-} from '#micro509/internal/crypto/rsa-pss.ts';
-import { parseAuthorityKeyIdentifier, parseNameConstraints } from '#micro509/x509/parse.ts';
+} from '#micro509/internal/asn1/der';
+import { OIDS } from '#micro509/internal/asn1/oids';
+import { encodeRsaPssParameters, rsaPssParametersForHash } from '#micro509/internal/crypto/rsa-pss';
+import { parseAuthorityKeyIdentifier, parseNameConstraints } from '#micro509/x509/parse';
 import {
 	childrenOf,
 	importRsaPrivateKeyWithScheme,

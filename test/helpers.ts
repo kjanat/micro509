@@ -10,7 +10,7 @@ import {
 } from '#micro509';
 import type { BasicConstraints, GeneralName } from '#micro509/x509';
 import { encodeSubjectAltName } from '#micro509/x509';
-import { toArrayBuffer } from '#micro509/internal/asn1/asn1.ts';
+import { toArrayBuffer } from '#micro509/internal/asn1/asn1';
 import {
 	bitString,
 	bool,
@@ -26,13 +26,13 @@ import {
 	sequence,
 	setOf,
 	tlv,
-} from '#micro509/internal/asn1/der.ts';
-import { OIDS } from '#micro509/internal/asn1/oids.ts';
+} from '#micro509/internal/asn1/der';
+import { OIDS } from '#micro509/internal/asn1/oids';
 import {
 	encodeAlgorithmIdentifier,
 	getSignatureAlgorithm,
 	signBytes,
-} from '#micro509/internal/crypto/signing.ts';
+} from '#micro509/internal/crypto/signing';
 
 export function childrenOf(
 	source: Uint8Array,

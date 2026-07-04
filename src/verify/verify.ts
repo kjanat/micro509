@@ -16,19 +16,19 @@
  * @module
  */
 
-import { OIDS } from '#micro509/internal/asn1/oids.ts';
-import { verifySignedDataDetailed } from '#micro509/internal/crypto/sig-verify.ts';
-import { parseIpAddressToBytes } from '#micro509/internal/shared/ip.ts';
+import { OIDS } from '#micro509/internal/asn1/oids';
+import { verifySignedDataDetailed } from '#micro509/internal/crypto/sig-verify';
+import { parseIpAddressToBytes } from '#micro509/internal/shared/ip';
 import {
 	createNameConstraintValidationState,
 	evaluateNameConstraints,
 	type NameConstraintValidationState,
-} from '#micro509/internal/verify/name-constraints-engine.ts';
+} from '#micro509/internal/verify/name-constraints-engine';
 import {
 	createPolicyValidationState,
 	evaluatePolicyChain,
 	type PolicyValidationState,
-} from '#micro509/internal/verify/policy-engine.ts';
+} from '#micro509/internal/verify/policy-engine';
 import {
 	buildChainInternal,
 	countCaCertificatesBelowParsed,
@@ -37,36 +37,36 @@ import {
 	loadCertificates,
 	loadSingleCertificate,
 	verifyCertificateSignature,
-} from '#micro509/internal/verify/verify-path.ts';
+} from '#micro509/internal/verify/verify-path';
 import type {
 	ErrorResult,
 	IndexedErrorResult,
 	IndexedMicro509Error,
 	Micro509Error,
-} from '#micro509/result/result.ts';
+} from '#micro509/result/result';
 import {
 	errorResult,
 	indexedErrorResult,
 	indexedMicro509Error,
 	micro509Error,
-} from '#micro509/result/result.ts';
-import type { ExtendedKeyUsage } from '#micro509/x509/extensions.ts';
+} from '#micro509/result/result';
+import type { ExtendedKeyUsage } from '#micro509/x509/extensions';
 import type {
 	ParsedCertificate,
 	ParsedCertificateSigningRequest,
 	ParsedName,
-} from '#micro509/x509/parse.ts';
+} from '#micro509/x509/parse';
 import {
 	parseCertificateDerOrThrow,
 	parseCertificateSigningRequestDerOrThrow,
 	parseCertificateSigningRequestPemOrThrow,
-} from '#micro509/x509/parse.ts';
+} from '#micro509/x509/parse';
 import {
 	checkChainRevocation,
 	type CrlSource,
 	type RevocationPolicy,
-} from '#micro509/revocation/chain.ts';
-import type { RevocationCertificateSource } from '#micro509/revocation/revocation.ts';
+} from '#micro509/revocation/chain';
+import type { RevocationCertificateSource } from '#micro509/revocation/revocation';
 import type { ServiceIdentityInput } from './identity.ts';
 import { matchServiceIdentity } from './identity.ts';
 import type { InitialNameConstraintsInput } from './name-constraints.ts';

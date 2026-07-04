@@ -7,16 +7,16 @@
  * @module
  */
 
-import { OIDS } from '#micro509/internal/asn1/oids.ts';
-import { compareDistinguishedNames } from '#micro509/internal/shared/dn.ts';
-import type { Micro509Error, Result } from '#micro509/result/result.ts';
+import { OIDS } from '#micro509/internal/asn1/oids';
+import { compareDistinguishedNames } from '#micro509/internal/shared/dn';
+import type { Micro509Error, Result } from '#micro509/result/result';
 import type {
 	ConstrainedPolicy,
 	PolicyValidationInput,
 	PolicyValidationOutcome,
-} from '#micro509/verify/policy.ts';
-import type { PolicyInformation, PolicyQualifierInfo } from '#micro509/x509/extensions.ts';
-import type { ParsedCertificate } from '#micro509/x509/parse.ts';
+} from '#micro509/verify/policy';
+import type { PolicyInformation, PolicyQualifierInfo } from '#micro509/x509/extensions';
+import type { ParsedCertificate } from '#micro509/x509/parse';
 
 /**
  * Mutable state threaded through each step of the policy-validation walk.

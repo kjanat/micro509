@@ -20,39 +20,39 @@ import {
 	parseTime,
 	requireElement,
 	toHex,
-} from '#micro509/internal/asn1/asn1.ts';
-import type { DerElement } from '#micro509/internal/asn1/der.ts';
+} from '#micro509/internal/asn1/asn1';
+import type { DerElement } from '#micro509/internal/asn1/der';
 import {
 	DEFAULT_MAX_DER_DEPTH,
 	encodeLength,
 	readElement,
 	readRootElement,
 	readSequenceChildren,
-} from '#micro509/internal/asn1/der.ts';
-import { OIDS } from '#micro509/internal/asn1/oids.ts';
+} from '#micro509/internal/asn1/der';
+import { OIDS } from '#micro509/internal/asn1/oids';
 import {
 	describePublicKeyAlgorithm,
 	describeSignatureAlgorithm,
-} from '#micro509/internal/crypto/algorithm-names.ts';
-import { decodeIpAddress } from '#micro509/internal/shared/ip.ts';
+} from '#micro509/internal/crypto/algorithm-names';
+import { decodeIpAddress } from '#micro509/internal/shared/ip';
 import {
 	type ParsedBitFlags,
 	parseDistributionPointReasonFlagsContent,
 	parseKeyUsageExtension,
-} from '#micro509/internal/x509/extension-bits.ts';
+} from '#micro509/internal/x509/extension-bits';
 import {
 	decodeAndApplyKnownExtension,
 	type KnownParsedExtensionAccumulator,
 	type MutableKnownParsedExtensionAccumulator,
-} from '#micro509/internal/x509/extension-registry.ts';
-import { pemDecodeOrThrow, splitPemBlocksOrThrow } from '#micro509/pem/pem.ts';
+} from '#micro509/internal/x509/extension-registry';
+import { pemDecodeOrThrow, splitPemBlocksOrThrow } from '#micro509/pem/pem';
 import {
 	type ErrorResult,
 	failureResult,
 	type Micro509Error,
 	rethrowIfInvariant,
 	successResult,
-} from '#micro509/result/result.ts';
+} from '#micro509/result/result';
 import type {
 	AuthorityInformationAccess,
 	BasicConstraints,

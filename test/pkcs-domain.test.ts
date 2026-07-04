@@ -19,7 +19,7 @@ import {
 	parsePkcs12MacDataOrThrow,
 	verifyPkcs7SignedData,
 } from '#micro509/pkcs';
-import { OIDS } from '#micro509/internal/asn1/oids.ts';
+import { OIDS } from '#micro509/internal/asn1/oids';
 import { createCmsSignedDataWithSignedAttrs } from './helpers.ts';
 
 describe('pkcs domain', () => {

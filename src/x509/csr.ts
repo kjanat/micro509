@@ -15,16 +15,16 @@ import {
 	objectIdentifier,
 	sequence,
 	setOf,
-} from '#micro509/internal/asn1/der.ts';
-import { OIDS } from '#micro509/internal/asn1/oids.ts';
+} from '#micro509/internal/asn1/der';
+import { OIDS } from '#micro509/internal/asn1/oids';
 import {
 	encodeAlgorithmIdentifier,
 	getSignatureAlgorithm,
 	signBytes,
-} from '#micro509/internal/crypto/signing.ts';
-import { base64Encode } from '#micro509/internal/shared/base64.ts';
-import { exportSpkiDer } from '#micro509/keys/keys.ts';
-import { pemEncode } from '#micro509/pem/pem.ts';
+} from '#micro509/internal/crypto/signing';
+import { base64Encode } from '#micro509/internal/shared/base64';
+import { exportSpkiDer } from '#micro509/keys/keys';
+import { pemEncode } from '#micro509/pem/pem';
 import type { SignatureProfileInput } from './certificate.ts';
 import { buildRequestedExtensions, type CertificateExtensionsInput } from './extensions.ts';
 import { encodeName, type NameInput } from './name.ts';

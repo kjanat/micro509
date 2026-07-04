@@ -19,8 +19,8 @@ import {
 	requireElement,
 	toArrayBuffer,
 	toHex,
-} from '#micro509/internal/asn1/asn1.ts';
-import type { DerElement } from '#micro509/internal/asn1/der.ts';
+} from '#micro509/internal/asn1/asn1';
+import type { DerElement } from '#micro509/internal/asn1/der';
 import {
 	bitString,
 	concatBytes,
@@ -37,38 +37,38 @@ import {
 	sequence,
 	time,
 	tlv,
-} from '#micro509/internal/asn1/der.ts';
-import { OIDS } from '#micro509/internal/asn1/oids.ts';
+} from '#micro509/internal/asn1/der';
+import { OIDS } from '#micro509/internal/asn1/oids';
 import {
 	describeHashAlgorithm,
 	describeSignatureAlgorithm,
-} from '#micro509/internal/crypto/algorithm-names.ts';
-import { verifySignedDataDetailed } from '#micro509/internal/crypto/sig-verify.ts';
+} from '#micro509/internal/crypto/algorithm-names';
+import { verifySignedDataDetailed } from '#micro509/internal/crypto/sig-verify';
 import {
 	encodeAlgorithmIdentifier,
 	getSignatureAlgorithm,
 	signBytes,
-} from '#micro509/internal/crypto/signing.ts';
-import { getCrypto } from '#micro509/internal/crypto/webcrypto.ts';
-import { base64Encode } from '#micro509/internal/shared/base64.ts';
-import { compareDistinguishedNames } from '#micro509/internal/shared/dn.ts';
-import { pemDecodeOrThrow, pemEncode } from '#micro509/pem/pem.ts';
+} from '#micro509/internal/crypto/signing';
+import { getCrypto } from '#micro509/internal/crypto/webcrypto';
+import { base64Encode } from '#micro509/internal/shared/base64';
+import { compareDistinguishedNames } from '#micro509/internal/shared/dn';
+import { pemDecodeOrThrow, pemEncode } from '#micro509/pem/pem';
 import {
 	type ErrorResult,
 	failureResult,
 	type Micro509Error,
 	rethrowIfInvariant,
 	successResult,
-} from '#micro509/result/result.ts';
-import { verifyCertificateChain } from '#micro509/verify/verify.ts';
+} from '#micro509/result/result';
+import { verifyCertificateChain } from '#micro509/verify/verify';
 import type {
 	NameFieldKey,
 	ParsedCertificate,
 	ParsedName,
 	ParsedNameAttribute,
 	ParsedRelativeDistinguishedName,
-} from '#micro509/x509/parse.ts';
-import { parseCertificateDerOrThrow, parseCertificateFromSource } from '#micro509/x509/parse.ts';
+} from '#micro509/x509/parse';
+import { parseCertificateDerOrThrow, parseCertificateFromSource } from '#micro509/x509/parse';
 import {
 	checkCertificateRevocationAgainstCrl,
 	type CrlSource,

@@ -10,12 +10,9 @@ import {
 	verifyCertificateChain,
 	unwrap,
 } from '#micro509';
-import { readElement } from '#micro509/internal/asn1/der.ts';
-import { OIDS } from '#micro509/internal/asn1/oids.ts';
-import {
-	encodeRsaPssParameters,
-	rsaPssParametersForHash,
-} from '#micro509/internal/crypto/rsa-pss.ts';
+import { readElement } from '#micro509/internal/asn1/der';
+import { OIDS } from '#micro509/internal/asn1/oids';
+import { encodeRsaPssParameters, rsaPssParametersForHash } from '#micro509/internal/crypto/rsa-pss';
 import { childrenOf, decodeObjectIdentifier, hasExtensionOid } from './helpers.ts';
 
 describe('certificate', () => {

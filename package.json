@@ -25,7 +25,7 @@
 	"type": "module",
 	"imports": {
 		"#micro509": "./src/index.ts",
-		"#micro509/*": "./src/*",
+		"#micro509/*": "./src/*.ts",
 		"#micro509/keys": "./src/keys/index.ts",
 		"#micro509/pem": "./src/pem/index.ts",
 		"#micro509/pkcs": "./src/pkcs/index.ts",
@@ -33,7 +33,7 @@
 		"#micro509/revocation": "./src/revocation/index.ts",
 		"#micro509/verify": "./src/verify/index.ts",
 		"#micro509/x509": "./src/x509/index.ts",
-		"#micro509/internal/*": "./src/internal/*",
+		"#micro509/internal/*": "./src/internal/*.ts",
 		"#pkg": "./package.json",
 		"#jsr": "./jsr.json",
 		"#typedoc-sidebar": "./site/api/typedoc-sidebar.json"

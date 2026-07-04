@@ -23,9 +23,9 @@ import {
 	sequence,
 	setOf,
 	tlv,
-} from '#micro509/internal/asn1/der.ts';
-import { OIDS } from '#micro509/internal/asn1/oids.ts';
-import { getSignatureAlgorithm, signBytes } from '#micro509/internal/crypto/signing.ts';
+} from '#micro509/internal/asn1/der';
+import { OIDS } from '#micro509/internal/asn1/oids';
+import { getSignatureAlgorithm, signBytes } from '#micro509/internal/crypto/signing';
 import {
 	createCmsSignedDataWithSignedAttrs,
 	createSyntheticPkcs7SignedData,
@@ -150,7 +150,7 @@ describe('pkcs7', () => {
 
 	it('parsePkcs7SignedDataDer rejects non-signedData content type', () => {
 		const { objectIdentifier, sequence, octetString, explicitContext } =
-			require('#micro509/internal/asn1/der.ts') as typeof import('#micro509/internal/asn1/der.ts');
+			require('#micro509/internal/asn1/der') as typeof import('#micro509/internal/asn1/der');
 		const wrong = sequence([
 			objectIdentifier(OIDS.pkcs7Data),
 			explicitContext(0, octetString(Uint8Array.of(0x01))),
@@ -162,7 +162,7 @@ describe('pkcs7', () => {
 
 	it('parsePkcs7SignedDataDer handles malformed content info', () => {
 		const { sequence, objectIdentifier } =
-			require('#micro509/internal/asn1/der.ts') as typeof import('#micro509/internal/asn1/der.ts');
+			require('#micro509/internal/asn1/der') as typeof import('#micro509/internal/asn1/der');
 		const truncated = sequence([objectIdentifier(OIDS.pkcs7SignedData)]);
 		const result = parsePkcs7SignedDataDer(truncated);
 		expect(result.ok).toBe(false);
@@ -1210,7 +1210,7 @@ describe('pkcs7: coverage — error paths', () => {
 		const parsedSigner = unwrap(parseCertificatePem(ca.certificate.pem));
 		const content = new Uint8Array([0x48, 0x65, 0x6c, 0x6c, 0x6f]);
 		const { getSignatureAlgorithm: getSigAlgo, signBytes: signB } = await import(
-			'#micro509/internal/crypto/signing.ts'
+			'#micro509/internal/crypto/signing'
 		);
 		const sigAlgorithm = getSigAlgo(rsaKeys.privateKey);
 		// Sign real content but put DIFFERENT content in encapsulated data
@@ -1252,7 +1252,7 @@ describe('pkcs7: coverage — error paths', () => {
 		const parsedSigner = unwrap(parseCertificatePem(ca.certificate.pem));
 		const content = new Uint8Array([0x41, 0x42, 0x43]);
 		const { getSignatureAlgorithm: getSigAlgo, signBytes: signB } = await import(
-			'#micro509/internal/crypto/signing.ts'
+			'#micro509/internal/crypto/signing'
 		);
 		const sigAlgorithm = getSigAlgo(rsaKeys.privateKey);
 		// Build signedAttrs with a WRONG-LENGTH messageDigest (16 bytes instead of 32)
@@ -1319,7 +1319,7 @@ describe('pkcs7: coverage — error paths', () => {
 		const parsedSigner = unwrap(parseCertificatePem(ca.certificate.pem));
 		const content = new Uint8Array([0x01]);
 		const { getSignatureAlgorithm: getSigAlgo, signBytes: signB } = await import(
-			'#micro509/internal/crypto/signing.ts'
+			'#micro509/internal/crypto/signing'
 		);
 		const sigAlgorithm = getSigAlgo(rsaKeys.privateKey);
 		// Use MD5 OID (1.2.840.113549.2.5) as digest algorithm — unsupported
@@ -1372,7 +1372,7 @@ describe('pkcs7: coverage — error paths', () => {
 		const parsedSigner = unwrap(parseCertificatePem(ca.certificate.pem));
 		const content = new Uint8Array([0x01]);
 		const { getSignatureAlgorithm: getSigAlgo, signBytes: signB } = await import(
-			'#micro509/internal/crypto/signing.ts'
+			'#micro509/internal/crypto/signing'
 		);
 		const sigAlgorithm = getSigAlgo(rsaKeys.privateKey);
 		// messageDigest attribute with INTEGER value instead of OCTET STRING

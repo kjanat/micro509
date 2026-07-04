@@ -24,13 +24,13 @@ import {
 	setOf,
 	tlv,
 	utf8String,
-} from '#micro509/internal/asn1/der.ts';
-import { OIDS } from '#micro509/internal/asn1/oids.ts';
+} from '#micro509/internal/asn1/der';
+import { OIDS } from '#micro509/internal/asn1/oids';
 import {
 	createNameConstraintValidationState,
 	evaluateNameConstraints,
-} from '#micro509/internal/verify/name-constraints-engine.ts';
-import { parseNameConstraints } from '#micro509/x509/parse.ts';
+} from '#micro509/internal/verify/name-constraints-engine';
+import { parseNameConstraints } from '#micro509/x509/parse';
 import {
 	importRsaPrivateKeyWithScheme,
 	issueChain,

@@ -13,7 +13,7 @@ import {
 	validateOcspResponse,
 	unwrap,
 } from '#micro509';
-import { childrenOf } from '#micro509/internal/asn1/asn1.ts';
+import { childrenOf } from '#micro509/internal/asn1/asn1';
 import {
 	bitString,
 	explicitContext,
@@ -24,14 +24,14 @@ import {
 	readElement,
 	sequence,
 	tlv,
-} from '#micro509/internal/asn1/der.ts';
-import { OIDS } from '#micro509/internal/asn1/oids.ts';
-import { sha1 } from '#micro509/internal/crypto/hash.ts';
+} from '#micro509/internal/asn1/der';
+import { OIDS } from '#micro509/internal/asn1/oids';
+import { sha1 } from '#micro509/internal/crypto/hash';
 import {
 	encodeAlgorithmIdentifier,
 	getSignatureAlgorithm,
 	signBytes,
-} from '#micro509/internal/crypto/signing.ts';
+} from '#micro509/internal/crypto/signing';
 import { hexToBytes } from './helpers.ts';
 
 interface FixtureResponderInput {

@@ -25,38 +25,38 @@ import {
 	hexToBytes,
 	toArrayBuffer,
 	toHex,
-} from '#micro509/internal/asn1/asn1.ts';
+} from '#micro509/internal/asn1/asn1';
 import {
 	nullValue,
 	objectIdentifier,
 	octetString,
 	readSequenceChildren,
 	sequence,
-} from '#micro509/internal/asn1/der.ts';
-import { OIDS } from '#micro509/internal/asn1/oids.ts';
-import { md5 } from '#micro509/internal/crypto/hash.ts';
+} from '#micro509/internal/asn1/der';
+import { OIDS } from '#micro509/internal/asn1/oids';
+import { md5 } from '#micro509/internal/crypto/hash';
 import {
 	decryptPbes2,
 	encryptPbes2,
 	isWrongPasswordError,
 	wrongPasswordError,
-} from '#micro509/internal/crypto/pbes2.ts';
-import { getCrypto } from '#micro509/internal/crypto/webcrypto.ts';
-import { base64Decode, base64Encode } from '#micro509/internal/shared/base64.ts';
-import { pemDecodeOrThrow, pemEncode } from '#micro509/pem/pem.ts';
+} from '#micro509/internal/crypto/pbes2';
+import { getCrypto } from '#micro509/internal/crypto/webcrypto';
+import { base64Decode, base64Encode } from '#micro509/internal/shared/base64';
+import { pemDecodeOrThrow, pemEncode } from '#micro509/pem/pem';
 import {
 	type ErrorResult,
 	failureResult,
 	type Micro509Error,
 	rethrowIfInvariant,
 	successResult,
-} from '#micro509/result/result.ts';
+} from '#micro509/result/result';
 
 export type {
 	Pbes2EncryptionOptions,
 	Pbes2EncryptionScheme,
 	Pbes2Prf,
-} from '#micro509/internal/crypto/pbes2.ts';
+} from '#micro509/internal/crypto/pbes2';
 
 /** Hash algorithm paired with an RSA key. */
 export type RsaHash = 'SHA-256' | 'SHA-384' | 'SHA-512';

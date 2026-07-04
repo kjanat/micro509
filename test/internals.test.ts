@@ -8,7 +8,7 @@ import {
 	unwrap,
 } from '#micro509';
 import { createPkcs12MacData, parsePkcs12MacDataOrThrow } from '#micro509/pkcs';
-import { ecdsaSignatureToDer } from '#micro509/internal/crypto/ecdsa.ts';
+import { ecdsaSignatureToDer } from '#micro509/internal/crypto/ecdsa';
 import {
 	buildCertificateExtensions,
 	encodeCertificatePolicies,
@@ -27,7 +27,7 @@ import {
 	hexToBytes,
 	parseTime,
 	requireElement,
-} from '#micro509/internal/asn1/asn1.ts';
+} from '#micro509/internal/asn1/asn1';
 import {
 	assertDerMaxDepth,
 	bitString,
@@ -51,18 +51,18 @@ import {
 	time,
 	tlv,
 	utcTime,
-} from '#micro509/internal/asn1/der.ts';
-import { OIDS } from '#micro509/internal/asn1/oids.ts';
+} from '#micro509/internal/asn1/der';
+import { OIDS } from '#micro509/internal/asn1/oids';
 import {
 	describeHashAlgorithm,
 	describeSignatureAlgorithm,
-} from '#micro509/internal/crypto/algorithm-names.ts';
-import { encryptPbes2, parsePbes2AlgorithmIdentifier } from '#micro509/internal/crypto/pbes2.ts';
+} from '#micro509/internal/crypto/algorithm-names';
+import { encryptPbes2, parsePbes2AlgorithmIdentifier } from '#micro509/internal/crypto/pbes2';
 import {
 	encodeRsaPssParameters,
 	parseRsaPssParameters,
 	rsaPssParametersForHash,
-} from '#micro509/internal/crypto/rsa-pss.ts';
+} from '#micro509/internal/crypto/rsa-pss';
 import {
 	alternateEcdsaSignatureEncoding,
 	concatFixedWidth,
@@ -74,23 +74,23 @@ import {
 	requireEcPublicKey,
 	requireRsaPublicKey,
 	verifySignedDataDetailed,
-} from '#micro509/internal/crypto/sig-verify.ts';
+} from '#micro509/internal/crypto/sig-verify';
 import {
 	encodeAlgorithmIdentifier,
 	getSignatureAlgorithm,
-} from '#micro509/internal/crypto/signing.ts';
-import { canonicalDnKey } from '#micro509/internal/shared/dn.ts';
+} from '#micro509/internal/crypto/signing';
+import { canonicalDnKey } from '#micro509/internal/shared/dn';
 import {
 	allOnesMaskForIpAddress,
 	decodeIpAddress,
 	expandIpv6,
 	normalizeIpAddress,
 	parseIpAddressToBytes,
-} from '#micro509/internal/shared/ip.ts';
+} from '#micro509/internal/shared/ip';
 import {
 	parseDistributionPointReasonFlagsContent,
 	parseKeyUsageExtension,
-} from '#micro509/internal/x509/extension-bits.ts';
+} from '#micro509/internal/x509/extension-bits';
 
 // ---------------------------------------------------------------------------
 // DER encoding edge cases

@@ -16,8 +16,8 @@ import {
 	requireElement,
 	toArrayBuffer,
 	toHex,
-} from '#micro509/internal/asn1/asn1.ts';
-import type { DerElement } from '#micro509/internal/asn1/der.ts';
+} from '#micro509/internal/asn1/asn1';
+import type { DerElement } from '#micro509/internal/asn1/der';
 import {
 	concatBytes,
 	DEFAULT_MAX_DER_DEPTH,
@@ -32,33 +32,33 @@ import {
 	readSequenceChildren,
 	sequence,
 	setOf,
-} from '#micro509/internal/asn1/der.ts';
-import { OIDS } from '#micro509/internal/asn1/oids.ts';
+} from '#micro509/internal/asn1/der';
+import { OIDS } from '#micro509/internal/asn1/oids';
 import {
 	describeHashAlgorithm,
 	describeSignatureAlgorithm,
-} from '#micro509/internal/crypto/algorithm-names.ts';
-import { verifySignedDataDetailed } from '#micro509/internal/crypto/sig-verify.ts';
+} from '#micro509/internal/crypto/algorithm-names';
+import { verifySignedDataDetailed } from '#micro509/internal/crypto/sig-verify';
 import {
 	encodeAlgorithmIdentifier,
 	getSignatureAlgorithm,
 	type SignatureAlgorithmIdentifier,
 	signBytes,
-} from '#micro509/internal/crypto/signing.ts';
-import { getCrypto } from '#micro509/internal/crypto/webcrypto.ts';
-import { base64Encode } from '#micro509/internal/shared/base64.ts';
-import { compareDistinguishedNames } from '#micro509/internal/shared/dn.ts';
-import { pemEncode, splitPemBlocksOrThrow } from '#micro509/pem/pem.ts';
-import { type ErrorResult, failureResult, type Micro509Error } from '#micro509/result/result.ts';
-import { type NameFieldKey, nameFieldKeyFromOid } from '#micro509/x509/name.ts';
+} from '#micro509/internal/crypto/signing';
+import { getCrypto } from '#micro509/internal/crypto/webcrypto';
+import { base64Encode } from '#micro509/internal/shared/base64';
+import { compareDistinguishedNames } from '#micro509/internal/shared/dn';
+import { pemEncode, splitPemBlocksOrThrow } from '#micro509/pem/pem';
+import { type ErrorResult, failureResult, type Micro509Error } from '#micro509/result/result';
+import { type NameFieldKey, nameFieldKeyFromOid } from '#micro509/x509/name';
 import type {
 	ParsedCertificate,
 	ParsedName,
 	ParsedNameAttribute,
 	ParsedRelativeDistinguishedName,
-} from '#micro509/x509/parse.ts';
-import { parseCertificateDerOrThrow } from '#micro509/x509/parse.ts';
-import type { SignatureProfileInput } from '#micro509/x509/certificate.ts';
+} from '#micro509/x509/parse';
+import { parseCertificateDerOrThrow } from '#micro509/x509/parse';
+import type { SignatureProfileInput } from '#micro509/x509/certificate';
 
 /** PEM text (may contain multiple CERTIFICATE blocks), raw DER bytes, or an already-parsed certificate. */
 export type Pkcs7CertificateSource = string | Uint8Array | ParsedCertificate;

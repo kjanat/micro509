@@ -7,7 +7,7 @@
  * @module
  */
 
-import type { PolicyQualifierInfo } from '#micro509/x509/extensions.ts';
+import type { PolicyQualifierInfo } from '#micro509/x509/extensions';
 
 /**
  * Input for the policy-validation engine.

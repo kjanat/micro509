@@ -12,8 +12,8 @@ import {
 	decodeIntegerNumber,
 	decodeObjectIdentifier,
 	toHex,
-} from '#micro509/internal/asn1/asn1.ts';
-import type { DerElement } from '#micro509/internal/asn1/der.ts';
+} from '#micro509/internal/asn1/asn1';
+import type { DerElement } from '#micro509/internal/asn1/der';
 import {
 	DEFAULT_MAX_DER_DEPTH,
 	explicitContext,
@@ -25,18 +25,14 @@ import {
 	sequence,
 	setOf,
 	tlv,
-} from '#micro509/internal/asn1/der.ts';
-import { OIDS } from '#micro509/internal/asn1/oids.ts';
-import {
-	decryptPbes2,
-	encryptPbes2,
-	isWrongPasswordError,
-} from '#micro509/internal/crypto/pbes2.ts';
-import { base64Encode } from '#micro509/internal/shared/base64.ts';
-import { type EncryptedPkcs8Options, exportPkcs8Der } from '#micro509/keys/keys.ts';
-import { pemEncode, splitPemBlocksOrThrow } from '#micro509/pem/pem.ts';
-import { type ErrorResult, failureResult, type Micro509Error } from '#micro509/result/result.ts';
-import { type ParsedCertificate, parseCertificateDerOrThrow } from '#micro509/x509/parse.ts';
+} from '#micro509/internal/asn1/der';
+import { OIDS } from '#micro509/internal/asn1/oids';
+import { decryptPbes2, encryptPbes2, isWrongPasswordError } from '#micro509/internal/crypto/pbes2';
+import { base64Encode } from '#micro509/internal/shared/base64';
+import { type EncryptedPkcs8Options, exportPkcs8Der } from '#micro509/keys/keys';
+import { pemEncode, splitPemBlocksOrThrow } from '#micro509/pem/pem';
+import { type ErrorResult, failureResult, type Micro509Error } from '#micro509/result/result';
+import { type ParsedCertificate, parseCertificateDerOrThrow } from '#micro509/x509/parse';
 import {
 	createPkcs12MacData,
 	type ParsedPkcs12MacData,

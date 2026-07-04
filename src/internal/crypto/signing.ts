@@ -5,8 +5,8 @@
  * @module
  */
 
-import { nullValue, objectIdentifier, sequence } from '#micro509/internal/asn1/der.ts';
-import { OIDS } from '#micro509/internal/asn1/oids.ts';
+import { nullValue, objectIdentifier, sequence } from '#micro509/internal/asn1/der';
+import { OIDS } from '#micro509/internal/asn1/oids';
 import { ecdsaSignatureToDer } from './ecdsa.ts';
 import { encodeRsaPssParameters, type RsaPssHash, rsaPssParametersForHash } from './rsa-pss.ts';
 import { getCrypto } from './webcrypto.ts';

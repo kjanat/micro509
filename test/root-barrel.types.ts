@@ -5,7 +5,7 @@ import type {
 	VerifyCertificateChainInput,
 } from 'micro509';
 import type { ParsedPkcs12MacData } from 'micro509/pkcs';
-import type { SignatureProfileInput } from '#micro509/internal/crypto/signing.ts';
+import type { SignatureProfileInput } from '#micro509/internal/crypto/signing';
 
 type RootPkcs12MacData = ParsedPkcs12MacData;
 type RootSignatureProfileInput = SignatureProfileInput;

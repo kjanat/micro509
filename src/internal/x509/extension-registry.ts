@@ -8,16 +8,16 @@
  * @module
  */
 
-import { hexToBytes, toHex } from '#micro509/internal/asn1/asn1.ts';
+import { hexToBytes, toHex } from '#micro509/internal/asn1/asn1';
 import {
 	DEFAULT_MAX_DER_DEPTH,
 	implicitPrimitiveContext,
 	octetString,
 	readRootElement,
 	sequence,
-} from '#micro509/internal/asn1/der.ts';
-import { OIDS } from '#micro509/internal/asn1/oids.ts';
-import type { ParsedBitFlags } from '#micro509/internal/x509/extension-bits.ts';
+} from '#micro509/internal/asn1/der';
+import { OIDS } from '#micro509/internal/asn1/oids';
+import type { ParsedBitFlags } from '#micro509/internal/x509/extension-bits';
 import type {
 	AuthorityInformationAccess,
 	BasicConstraints,
@@ -31,7 +31,7 @@ import type {
 	PolicyConstraints,
 	PolicyMappings,
 	SubjectAltName,
-} from '#micro509/x509/extensions.ts';
+} from '#micro509/x509/extensions';
 import {
 	buildSubjectKeyIdentifier,
 	encodeAuthorityInfoAccess,
@@ -45,8 +45,8 @@ import {
 	encodePolicyConstraints,
 	encodePolicyMappings,
 	encodeSubjectAltName,
-} from '#micro509/x509/extensions.ts';
-import type { ParsedDistributionPoint } from '#micro509/x509/parse.ts';
+} from '#micro509/x509/extensions';
+import type { ParsedDistributionPoint } from '#micro509/x509/parse';
 import {
 	parseAuthorityInfoAccess,
 	parseAuthorityKeyIdentifier,
@@ -60,7 +60,7 @@ import {
 	parsePolicyConstraints,
 	parsePolicyMappings,
 	parseSubjectAltNames,
-} from '#micro509/x509/parse.ts';
+} from '#micro509/x509/parse';
 
 /** Whether an extension applies to certificate parsing, CSR parsing, or both. */
 export type ExtensionRegistryContext = 'certificate' | 'csr';

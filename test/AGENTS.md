@@ -30,7 +30,7 @@ test/
 | Parse hardening           | `parse.test.ts`, `malformed-der.test.ts`        | malformed input and parser boundaries     |
 | Differential interop      | `differential.test.ts`                          | compares normalized results to OpenSSL    |
 | PKITS subset              | `pkits.test.ts`                                 | fixed-time conformance subset             |
-| Internal-only checks      | `internals.test.ts`                             | safe place for `#micro509/*.ts` internals |
+| Internal-only checks      | `internals.test.ts`                             | safe place for `#micro509/*` internals    |
 
 ## LOCAL CONVENTIONS
 

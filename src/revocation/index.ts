@@ -37,8 +37,8 @@ export type {
 	IssuingDistributionPointForAttributeCerts,
 	IssuingDistributionPointForCaCerts,
 	IssuingDistributionPointForUserCerts,
-} from '#micro509/x509/extensions.ts';
-export type { ParsedIssuingDistributionPoint } from '#micro509/x509/parse.ts';
+} from '#micro509/x509/extensions';
+export type { ParsedIssuingDistributionPoint } from '#micro509/x509/parse';
 export {
 	checkCertificateRevocationAgainstCrl,
 	createCertificateRevocationList,
