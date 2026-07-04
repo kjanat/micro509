@@ -60,7 +60,7 @@
  * const parsed = parseCertificateSigningRequestPem(csr.pem);
  * // parsed.subject.values.commonName === 'example.com'
  * ```
- * @module micro509
+ * @module
  */
 
 // ── keys ─────────────────────────────────────────────────────────────
