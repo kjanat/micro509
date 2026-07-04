@@ -53,26 +53,39 @@ describe('checkChainRevocation', () => {
 		const result = await checkChainRevocation({ chain: [goodCa, root] });
 
 		expect(result.ok).toBe(true);
-		// No CRLs provided → indeterminate for goodCa, but soft-fail allows
+		// No CRLs provided → indeterminate for goodCa; hard-fail default denies
 		expect(result.value.certificates).toHaveLength(1);
 		const firstCert = result.value.certificates[0];
 		expect(firstCert).toBeDefined();
 		expect(firstCert?.status).toBe('indeterminate');
 		expect(firstCert?.indeterminateReasons).toContain('no_applicable_crl');
-		expect(result.value.decision).toBe('allow'); // soft-fail default
+		expect(result.value.decision).toBe('deny'); // hard-fail default
 	});
 
-	it('denies with hard-fail policy when indeterminate', async () => {
+	it('denies by default when indeterminate (hard-fail is the default)', async () => {
 		const root = await loadPkitsCert('TrustAnchorRootCertificate');
 		const goodCa = await loadPkitsCert('GoodCACert');
 
 		const result = await checkChainRevocation({
 			chain: [goodCa, root],
-			policy: { mode: 'hard-fail' },
 		});
 
 		expect(result.ok).toBe(true);
 		expect(result.value.decision).toBe('deny');
+		expect(result.value.summary.indeterminateCertificates).toHaveLength(1);
+	});
+
+	it('allows indeterminate under explicit soft-fail', async () => {
+		const root = await loadPkitsCert('TrustAnchorRootCertificate');
+		const goodCa = await loadPkitsCert('GoodCACert');
+
+		const result = await checkChainRevocation({
+			chain: [goodCa, root],
+			policy: { mode: 'soft-fail' },
+		});
+
+		expect(result.ok).toBe(true);
+		expect(result.value.decision).toBe('allow');
 		expect(result.value.summary.indeterminateCertificates).toHaveLength(1);
 	});
 
@@ -365,6 +378,7 @@ describe('checkChainRevocation with OCSP evidence', () => {
 			chain: [...chain],
 			ocspResponses: [response.der],
 			at,
+			policy: { mode: 'soft-fail' },
 		});
 		expect(softFail.value.decision).toBe('allow');
 		expect(softFail.value.certificates[0]?.status).toBe('indeterminate');
@@ -374,7 +388,6 @@ describe('checkChainRevocation with OCSP evidence', () => {
 			chain: [...chain],
 			ocspResponses: [response.der],
 			at,
-			policy: { mode: 'hard-fail' },
 		});
 		expect(hardFail.value.decision).toBe('deny');
 	});

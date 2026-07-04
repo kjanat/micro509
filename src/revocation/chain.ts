@@ -37,7 +37,6 @@ export type { CrlSource };
 // Input Types
 // ---------------------------------------------------------------------------
 
-
 /**
  * OCSP response in any supported format.
  *
@@ -56,8 +55,12 @@ export interface RevocationPolicy {
 	/**
 	 * How to handle indeterminate status.
 	 *
-	 * - `'soft-fail'`: indeterminate certificates are allowed (default)
-	 * - `'hard-fail'`: indeterminate certificates cause denial
+	 * - `'hard-fail'`: indeterminate certificates cause denial (default)
+	 * - `'soft-fail'`: indeterminate certificates are allowed — an explicit
+	 *   availability/compatibility choice
+	 *
+	 * Revocation checking itself is opt-in: no check runs unless evidence is
+	 * supplied. Once it is, indeterminate status denies by default.
 	 */
 	readonly mode?: 'soft-fail' | 'hard-fail';
 	/**
@@ -1013,7 +1016,7 @@ export async function checkChainRevocation(
 	input: CheckChainRevocationInput,
 ): Promise<CheckChainRevocationResult> {
 	const { chain, policy, crls = [], extraCertificates = [], at = new Date() } = input;
-	const mode = policy?.mode ?? 'soft-fail';
+	const mode = policy?.mode ?? 'hard-fail';
 
 	// Empty chain → allow
 	if (chain.length === 0) {

@@ -3,14 +3,14 @@
 The examples below build their own `ca`, `leaf`, CRL, and OCSP material
 inline so each one runs on its own.
 
-::: warning Revocation checking defaults to soft-fail
-`RevocationPolicy.mode` defaults to `'soft-fail'`: certificates whose
+::: warning Revocation checking defaults to hard-fail
+Revocation checking only runs when you supply evidence — and once you do,
+`RevocationPolicy.mode` defaults to `'hard-fail'`: certificates whose
 revocation status is **indeterminate** (no applicable CRL/OCSP evidence,
-expired evidence, untrusted signer) are **allowed**. Only a confirmed
-`revoked` verdict denies. If you need "no usable evidence ⇒ reject", set
-`policy: { mode: 'hard-fail' }` explicitly. Enabling revocation checking
-without `hard-fail` means "check revocation _if the evidence happens to be
-usable_" — that is the deliberate, but easy-to-miss, default.
+expired evidence, untrusted signer) are **denied**. If availability matters
+more than strictness — partial evidence is normal in your setup — opt out
+explicitly with `policy: { mode: 'soft-fail' }`, which allows indeterminate
+status and denies only on a confirmed `revoked` verdict.
 :::
 
 ## CRL lifecycle

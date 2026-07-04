@@ -51,10 +51,11 @@
 - Scope matching
 - Basic CRL parsing and revocation checks
 
-::: warning Soft-fail default
-Chain-level revocation checking defaults to `mode: 'soft-fail'` —
-indeterminate status does **not** deny. See the
-[revocation guide](/guide/revocation) before relying on it.
+::: tip Hard-fail default
+Chain-level revocation checking runs only when evidence is supplied, and
+then defaults to `mode: 'hard-fail'` — indeterminate status denies. Set
+`mode: 'soft-fail'` explicitly to allow indeterminate results. See the
+[revocation guide](/guide/revocation).
 :::
 
 ### RFC 6125 service identity
