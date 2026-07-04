@@ -105,6 +105,7 @@ below.
 | `Pkcs7CertBag`                                                 | `Pkcs7CertBagMaterial`                                     |
 | `Import{Rsa,Ec,Ed25519}PublicKeyInput`                         | `Import{Rsa,Ec,Ed25519}KeyInput`                           |
 | PBES2 option `encryption: 'aes256-cbc'`                        | `cipher: 'AES-256-CBC'`                                    |
+| PBES2 option `prf: 'hmac-sha256'`                              | `prf: 'HMAC-SHA-256'`                                      |
 | `trustedResponderCertificates` (validateOcspResponse)          | `trustedOcspResponders`                                    |
 | `delta_crl_unsupported` / `indirect_crl_unsupported`           | `unsupported_delta_crl` / `unsupported_indirect_crl`       |
 | `service_identity_type_unsupported`                            | `unsupported_service_identity_type`                        |
