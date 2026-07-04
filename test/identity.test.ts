@@ -556,7 +556,7 @@ describe('identity boundary', () => {
 				certificate,
 				serviceIdentity: { type: 'uri', value: 'wss://api.example.com/socket' },
 			}),
-		).toMatchObject({ ok: false, code: 'service_identity_service_mismatch' });
+		).toMatchObject({ ok: false, code: 'service_identity_mismatch' });
 	});
 
 	it('rejects URI SANs with matching scheme but different host', async () => {
@@ -692,7 +692,7 @@ describe('identity boundary', () => {
 				certificate,
 				serviceIdentity: { type: 'srv', value: '_xmpp-server.im.example.org' },
 			}),
-		).toMatchObject({ ok: false, code: 'service_identity_service_mismatch' });
+		).toMatchObject({ ok: false, code: 'service_identity_mismatch' });
 	});
 
 	it('rejects SRV SANs with matching service but different domain', async () => {
@@ -792,7 +792,7 @@ describe('identity boundary', () => {
 				certificate,
 				serviceIdentity,
 			}),
-		).toMatchObject({ ok: false, code: 'service_identity_type_unsupported' });
+		).toMatchObject({ ok: false, code: 'unsupported_service_identity_type' });
 	});
 
 	it('fails closed for malformed identity values with hostile coercion', async () => {

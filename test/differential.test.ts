@@ -8,8 +8,8 @@ import {
 	generateKeyPair,
 	matchServiceIdentity,
 	parseCertificatePem,
-	parseCertificateRevocationListPem,
-	parseOcspResponseDer,
+	parseCertificateRevocationListPemOrThrow,
+	parseOcspResponseDerOrThrow,
 	validateOcspResponse,
 	verifyCertificateChain,
 	unwrap,
@@ -156,7 +156,9 @@ differential('OpenSSL differential harness', () => {
 		});
 		expect(goodMicro).toMatchObject({ ok: true, value: { status: 'good' } });
 		expect(goodOpenSsl.status).toBe('good');
-		expect(goodOpenSsl.crlNumber).toBe(parseCertificateRevocationListPem(goodCrl.pem).crlNumber);
+		expect(goodOpenSsl.crlNumber).toBe(
+			parseCertificateRevocationListPemOrThrow(goodCrl.pem).crlNumber,
+		);
 		expect(goodOpenSsl.issuer).toContain('CN=Diff CRL CA');
 
 		const revokedMicro = await checkCertificateRevocationAgainstCrl({
@@ -272,7 +274,7 @@ differential('OpenSSL differential harness', () => {
 				response: openSsl.responseDer,
 				issuerCertificate: issuer.certificate.pem,
 			});
-			const parsed = parseOcspResponseDer(openSsl.responseDer);
+			const parsed = parseOcspResponseDerOrThrow(openSsl.responseDer);
 			expect(openSsl.accepted).toBe(true);
 			expect(micro.ok).toBe(openSsl.accepted);
 			expect(parsed.responses?.[0]?.certStatus).toBe(openSsl.status);

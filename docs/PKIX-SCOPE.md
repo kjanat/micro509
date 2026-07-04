@@ -147,7 +147,7 @@ Focused RFC 6125 identity fixtures live in [`test/identity-fixtures.test.ts`](..
 - [x] Validate the OCSP response signature.
 - [x] Validate responder authorization exhaustively.
   - [x] Land RFC 6960 §4.2.2.2 criterion 1: explicit local signer acceptance scoped to the issuing CA
-        (`trustedResponderCertificates` on `validateOcspResponse()`, `trustedOcspResponders` on chain orchestration).
+        (`trustedOcspResponders` on `validateOcspResponse()`, `trustedOcspResponders` on chain orchestration).
   - [x] Decide and enforce responder-certificate revocation policy — see §11 for the canonical breakdown.
   - [x] Add fixture coverage for configured-responder accept/reject and historical-time validation.
 - [x] Enforce response freshness using `thisUpdate` / `nextUpdate` and configurable clock skew.
@@ -166,7 +166,7 @@ Focused RFC 6125 identity fixtures live in [`test/identity-fixtures.test.ts`](..
 
 - [x] Accept an OCSP response signer if it matches local responder configuration for the certificate in question.
   - [x] Add a validation input binding trusted responder certs to issuer CA scopes
-        (`trustedResponderCertificates` — per-call, and each call is scoped to one issuer).
+        (`trustedOcspResponders` — per-call, and each call is scoped to one issuer).
   - [x] Thread local responder policy through `validateOcspResponse()` before falling back to issuer-cert or delegated-responder rules.
   - [x] Add positive and negative fixtures for locally authorized signer scope.
 - [x] Accept it if the signer is the issuing CA certificate itself.
@@ -174,7 +174,7 @@ Focused RFC 6125 identity fixtures live in [`test/identity-fixtures.test.ts`](..
 - [x] Reject the response if the signer certificate meets none of those conditions.
 - [x] Decide and document responder-certificate revocation policy (RFC 6960 §4.2.2.2.1).
   - [x] Parse and expose `id-pkix-ocsp-nocheck` (`hasOcspNoCheckExtension()`).
-  - [x] Define validator policy knobs: `responderRevocationPolicy` = `'honor-nocheck'` (default) / `'require-evidence'` / `'skip'`, with `responderRevocationCrls` as evidence and `trustedResponderCertificates` as the caller-local override.
+  - [x] Define validator policy knobs: `responderRevocationPolicy` = `'honor-nocheck'` (default) / `'require-evidence'` / `'skip'`, with `responderRevocationCrls` as evidence and `trustedOcspResponders` as the caller-local override.
   - [x] Add fixtures for each policy branch.
   - [x] Pass caller evaluation time through delegated responder chain validation.
 

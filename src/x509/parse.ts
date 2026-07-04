@@ -45,7 +45,7 @@ import {
 	type KnownParsedExtensionAccumulator,
 	type MutableKnownParsedExtensionAccumulator,
 } from '#micro509/internal/x509/extension-registry.ts';
-import { pemDecode, splitPemBlocks } from '#micro509/pem/pem.ts';
+import { pemDecodeOrThrow, splitPemBlocksOrThrow } from '#micro509/pem/pem.ts';
 import {
 	type ErrorResult,
 	failureResult,
@@ -72,7 +72,7 @@ import type {
 import { parseAuthorityInfoAccessMethodOid, parseExtendedKeyUsageOid } from './extensions.ts';
 import { type NameFieldKey, nameFieldKeyFromOid } from './name.ts';
 
-export type { ParsedBitFlags } from '#micro509/internal/x509/extension-bits.ts';
+export type { ParsedBitFlags } from './extensions.ts';
 export type {
 	AuthorityInformationAccess,
 	BasicConstraints,
@@ -162,7 +162,7 @@ export interface ParsedName {
 	/** Flat list of every attribute across all RDNs, in encounter order. */
 	readonly attributes: readonly ParsedNameAttribute[];
 	/** First-occurrence map of well-known fields (CN, O, OU, etc.) for quick lookups. */
-	readonly values: Partial<Record<NameFieldKey, string>>;
+	readonly values: Readonly<Partial<Record<NameFieldKey, string>>>;
 }
 
 /** A single RelativeDistinguishedName SET from an X.501 Name. */
@@ -172,7 +172,7 @@ export interface ParsedRelativeDistinguishedName {
 	/** Attributes within this RDN (usually one, but multi-valued RDNs are legal). */
 	readonly attributes: readonly ParsedNameAttribute[];
 	/** First-occurrence map of well-known fields within this RDN. */
-	readonly values: Partial<Record<NameFieldKey, string>>;
+	readonly values: Readonly<Partial<Record<NameFieldKey, string>>>;
 }
 
 /**
@@ -662,7 +662,7 @@ export function parseCertificatePemOrThrow<TMap extends ExtensionDecoderMap = Re
 	pem: string,
 	options?: ParseOptions<TMap>,
 ): ParsedCertificate<TMap> {
-	return parseCertificateDerOrThrow(pemDecode('CERTIFICATE', pem), options);
+	return parseCertificateDerOrThrow(pemDecodeOrThrow('CERTIFICATE', pem), options);
 }
 
 /**
@@ -863,7 +863,7 @@ function parseCertificatesFromPemBlocks<TMap extends ExtensionDecoderMap = Recor
 	pemBundle: string,
 	options?: ParseOptions<TMap>,
 ): readonly ParsedCertificate<TMap>[] {
-	return splitPemBlocks(pemBundle)
+	return splitPemBlocksOrThrow(pemBundle)
 		.filter((block) => block.label === 'CERTIFICATE')
 		.map((block) => parseCertificateDerOrThrow(block.bytes, options));
 }
@@ -883,7 +883,10 @@ function hasParsedCertificateShape<TMap extends ExtensionDecoderMap = Record<nev
 export function parseCertificateSigningRequestPemOrThrow<
 	TMap extends ExtensionDecoderMap = Record<never, never>,
 >(pem: string, options?: ParseOptions<TMap>): ParsedCertificateSigningRequest<TMap> {
-	return parseCertificateSigningRequestDerOrThrow(pemDecode('CERTIFICATE REQUEST', pem), options);
+	return parseCertificateSigningRequestDerOrThrow(
+		pemDecodeOrThrow('CERTIFICATE REQUEST', pem),
+		options,
+	);
 }
 
 /**
@@ -1288,7 +1291,10 @@ export function parseBasicConstraints(bytes: Uint8Array): BasicConstraints {
 	if (pathLength !== undefined && ca !== true) {
 		throw new Error('basicConstraints pathLength requires cA = true');
 	}
-	return pathLength !== undefined ? { ca, pathLength } : { ca };
+	if (ca) {
+		return pathLength !== undefined ? { ca: true, pathLength } : { ca: true };
+	}
+	return { ca: false };
 }
 
 /** @internal Decode the Key Usage BIT STRING extension value. */

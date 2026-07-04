@@ -9,7 +9,7 @@
  */
 
 import { decodeIpAddress, parseIpAddressToBytes } from '#micro509/internal/shared/ip.ts';
-import type { ErrorResult, Micro509Error, Result } from '#micro509/result/result.ts';
+import type { ErrorResult, Micro509Error } from '#micro509/result/result.ts';
 import { errorResult, micro509Error, successResult } from '#micro509/result/result.ts';
 import type { ParsedCertificate } from '#micro509/x509/parse.ts';
 import { parseCertificateDerOrThrow } from '#micro509/x509/parse.ts';
@@ -61,17 +61,12 @@ export type ServiceIdentityInput =
 
 /** The `type` discriminant values of {@linkcode ServiceIdentityInput}. */
 export type ServiceIdentityType = ServiceIdentityInput['type'];
-/** Alias for the full identity union accepted by matching functions. */
-export type MatchableServiceIdentityInput = ServiceIdentityInput;
-/** Identity union accepted by the verification helpers (DNS-ID, IP-ID, URI-ID, SRV-ID). */
-export type VerifyServiceIdentityInput = ServiceIdentityInput;
-
 /** Discriminant codes for identity-matching failures. */
 export type MatchServiceIdentityErrorCode =
 	| 'subject_alt_name_mismatch'
 	| 'common_name_fallback_suppressed'
-	| 'service_identity_service_mismatch'
-	| 'service_identity_type_unsupported';
+	| 'service_identity_mismatch'
+	| 'unsupported_service_identity_type';
 
 /** Diagnostic context attached to an identity-matching failure. */
 export interface MatchServiceIdentityFailureDetails {
@@ -116,14 +111,7 @@ export type MatchServiceIdentityFailureResult = ErrorResult<
 /** Result of matching a reference identifier against a certificate's presented identifiers. */
 export type MatchServiceIdentityResult =
 	| MatchServiceIdentitySuccess
-	| ErrorResult<
-			MatchServiceIdentityErrorCode,
-			MatchServiceIdentityFailureDetails,
-			MatchServiceIdentityFailure
-	  >;
-
-/** Void-valued result type used internally during identity evaluation. */
-export type MatchServiceIdentityEvaluation = Result<void, MatchServiceIdentityFailure>;
+	| MatchServiceIdentityFailureResult;
 
 /** Input for {@linkcode matchServiceIdentity}. */
 export interface MatchServiceIdentityInput {
@@ -307,7 +295,7 @@ export function matchCertificateServiceIdentity(
 			}
 			if (sans.length > 0) {
 				return failure(
-					'service_identity_service_mismatch',
+					'service_identity_mismatch',
 					'URI scheme not present in SAN',
 					details(
 						certificate.subject.values.commonName,
@@ -359,7 +347,7 @@ export function matchCertificateServiceIdentity(
 			}
 			if (sans.length > 0) {
 				return failure(
-					'service_identity_service_mismatch',
+					'service_identity_mismatch',
 					'SRV service not present in SAN',
 					details(
 						certificate.subject.values.commonName,
@@ -380,7 +368,7 @@ export function matchCertificateServiceIdentity(
 			);
 		}
 		default: {
-			return failure('service_identity_type_unsupported', 'Unsupported service identity type');
+			return failure('unsupported_service_identity_type', 'Unsupported service identity type');
 		}
 	}
 }

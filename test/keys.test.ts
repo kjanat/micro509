@@ -88,12 +88,12 @@ describe('keys', () => {
 	it('roundtrips encrypted PKCS#8 helpers', async () => {
 		const keyPair = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
 		const cases = [
-			{ encryption: 'aes128-cbc', prf: 'hmac-sha1' },
-			{ encryption: 'aes128-cbc', prf: 'hmac-sha256' },
-			{ encryption: 'aes192-cbc', prf: 'hmac-sha1' },
-			{ encryption: 'aes192-cbc', prf: 'hmac-sha256' },
-			{ encryption: 'aes256-cbc', prf: 'hmac-sha1' },
-			{ encryption: 'aes256-cbc', prf: 'hmac-sha256' },
+			{ cipher: 'AES-128-CBC', prf: 'HMAC-SHA-1' },
+			{ cipher: 'AES-128-CBC', prf: 'HMAC-SHA-256' },
+			{ cipher: 'AES-192-CBC', prf: 'HMAC-SHA-1' },
+			{ cipher: 'AES-192-CBC', prf: 'HMAC-SHA-256' },
+			{ cipher: 'AES-256-CBC', prf: 'HMAC-SHA-1' },
+			{ cipher: 'AES-256-CBC', prf: 'HMAC-SHA-256' },
 		] as const;
 		for (const testCase of cases) {
 			const pem = await exportEncryptedPkcs8Pem(keyPair.privateKey, {

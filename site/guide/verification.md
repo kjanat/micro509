@@ -217,6 +217,14 @@ Supported identity types:
 
 ## Error codes
 
+::: info Stability
+Error-code unions (`VerifyErrorCode` and every other `*ErrorCode` /
+`*ReasonCode` union) may **gain new members in minor releases** as
+functionality grows. Treat them as non-exhaustive: keep a `default` branch
+in `switch` statements over codes. Renaming or removing a code is a
+breaking change and only happens in a major release.
+:::
+
 Every failure mode in the `VerifyErrorCode` type (the runtime list is exported
 as `VERIFY_ERROR_CODES`; this table is checked against it by a repo test):
 

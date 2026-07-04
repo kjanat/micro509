@@ -8,7 +8,7 @@ import {
 	importPkcs8Der,
 	unwrap,
 } from 'micro509';
-import type { GeneralName } from 'micro509/x509';
+import type { BasicConstraints, GeneralName } from 'micro509/x509';
 import { encodeSubjectAltName } from 'micro509/x509';
 import { toArrayBuffer } from '#micro509/internal/asn1/asn1.ts';
 import {
@@ -396,17 +396,11 @@ export async function createCmsSignedDataWithSignedAttrs(
 
 export interface IssueChainOptions {
 	readonly rootExtensions?: {
-		readonly basicConstraints: {
-			readonly ca: boolean;
-			readonly pathLength?: number;
-		};
+		readonly basicConstraints: BasicConstraints;
 		readonly keyUsage: readonly ('keyCertSign' | 'cRLSign' | 'digitalSignature')[];
 	};
 	readonly intermediateExtensions?: {
-		readonly basicConstraints: {
-			readonly ca: boolean;
-			readonly pathLength?: number;
-		};
+		readonly basicConstraints: BasicConstraints;
 		readonly keyUsage: readonly ('keyCertSign' | 'cRLSign' | 'digitalSignature')[];
 	};
 	readonly leafValidity?: {

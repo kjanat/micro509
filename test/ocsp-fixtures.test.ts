@@ -8,8 +8,8 @@ import {
 	generateKeyPair,
 	hasOcspNoCheckExtension,
 	parseCertificatePem,
-	parseOcspRequestPem,
-	parseOcspResponseDer,
+	parseOcspRequestPemOrThrow,
+	parseOcspResponseDerOrThrow,
 	validateOcspResponse,
 	unwrap,
 } from 'micro509';
@@ -388,9 +388,9 @@ describe('ocsp fixtures', () => {
 		).toMatchObject({ ok: true });
 		expect(
 			await validateOcspResponse({
-				response: parseOcspResponseDer(response.der),
+				response: parseOcspResponseDerOrThrow(response.der),
 				issuerCertificate: unwrap(parseCertificatePem(issuer.certificate.pem)),
-				request: parseOcspRequestPem(request.pem),
+				request: parseOcspRequestPemOrThrow(request.pem),
 				responderCertificate: unwrap(parseCertificatePem(responder.pem)),
 			}),
 		).toMatchObject({ ok: true });
@@ -493,7 +493,7 @@ describe('ocsp responder authorization (RFC 6960 §4.2.2.2)', () => {
 		const withTrust = await validateOcspResponse({
 			response: response.der,
 			issuerCertificate: authority.ca.certificate.pem,
-			trustedResponderCertificates: [responder.pem],
+			trustedOcspResponders: [responder.pem],
 		});
 		expect(withTrust).toMatchObject({ ok: true });
 	});
@@ -518,7 +518,7 @@ describe('ocsp responder authorization (RFC 6960 §4.2.2.2)', () => {
 		const discovered = await validateOcspResponse({
 			response: response.der,
 			issuerCertificate: authority.ca.certificate.pem,
-			trustedResponderCertificates: [responder.certificate.pem],
+			trustedOcspResponders: [responder.certificate.pem],
 		});
 		expect(discovered).toMatchObject({ ok: true });
 	});

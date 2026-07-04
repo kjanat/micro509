@@ -8,6 +8,13 @@
  */
 
 import { base64Decode, base64Encode } from '#micro509/internal/shared/base64.ts';
+import {
+	type ErrorResult,
+	failureResult,
+	type Micro509Error,
+	rethrowIfInvariant,
+	successResult,
+} from '#micro509/result/result.ts';
 
 /** A single decoded PEM block with its label, decoded DER bytes, and original PEM text. */
 export interface PemBlock {
@@ -48,14 +55,38 @@ export function pemEncode(label: string, der: Uint8Array): string {
 	return `-----BEGIN ${label}-----\n${lines.join('\n')}\n-----END ${label}-----`;
 }
 
+/** Machine-readable failure reason for the PEM decoders. */
+export type PemErrorCode = 'malformed';
+
+/** Structured failure payload for PEM decoding. */
+export interface PemFailure extends Micro509Error<PemErrorCode> {
+	readonly ok: false;
+}
+
+/** Success-or-failure result from {@linkcode pemDecode}. */
+export type PemDecodeResult =
+	| { readonly ok: true; readonly value: Uint8Array }
+	| ErrorResult<PemErrorCode, Record<never, never>, PemFailure>;
+
+/** Success-or-failure result from {@linkcode splitPemBlocks}. */
+export type SplitPemBlocksResult =
+	| { readonly ok: true; readonly value: readonly PemBlock[] }
+	| ErrorResult<PemErrorCode, Record<never, never>, PemFailure>;
+
+/** Success-or-failure result from {@linkcode categorizePemBlocks}. */
+export type CategorizePemBlocksResult =
+	| { readonly ok: true; readonly value: CategorizedPemBlocks }
+	| ErrorResult<PemErrorCode, Record<never, never>, PemFailure>;
+
 /**
- * Extracts and base64-decodes the DER content from a PEM string.
- * Throws if the `BEGIN`/`END` markers don't match `label`.
+ * Throwing core for {@linkcode pemDecode}: extracts and base64-decodes the
+ * DER content from a PEM string. Throws if the `BEGIN`/`END` markers don't
+ * match `label`.
  *
  * @param label Expected PEM type label.
  * @param pem PEM-encoded text (may contain `\r`).
  */
-export function pemDecode(label: string, pem: string): Uint8Array {
+export function pemDecodeOrThrow(label: string, pem: string): Uint8Array {
 	const normalized = pem.replace(/\r/g, '').trim();
 	const begin = `-----BEGIN ${label}-----`;
 	const end = `-----END ${label}-----`;
@@ -79,7 +110,7 @@ export function pemDecode(label: string, pem: string): Uint8Array {
  * them as parsed {@linkcode PemBlock} entries. Handles concatenated PEM files
  * and ignores non-PEM text between blocks.
  */
-export function splitPemBlocks(input: string): readonly PemBlock[] {
+export function splitPemBlocksOrThrow(input: string): readonly PemBlock[] {
 	const normalized = input.replace(/\r/g, '');
 	const blocks: PemBlock[] = [];
 	const beginToken = '-----BEGIN ';
@@ -126,7 +157,7 @@ export function splitPemBlocks(input: string): readonly PemBlock[] {
 		}
 		blocks.push({
 			label,
-			bytes: pemDecode(label, pem),
+			bytes: pemDecodeOrThrow(label, pem),
 			pem,
 		});
 		cursor = blockEnd;
@@ -143,8 +174,10 @@ export function splitPemBlocks(input: string): readonly PemBlock[] {
  * (certificates, CSRs, private keys, public keys, and everything else).
  * Accepts either raw PEM text or pre-split {@linkcode PemBlock} entries.
  */
-export function categorizePemBlocks(input: string | readonly PemBlock[]): CategorizedPemBlocks {
-	const blocks = typeof input === 'string' ? splitPemBlocks(input) : input;
+export function categorizePemBlocksOrThrow(
+	input: string | readonly PemBlock[],
+): CategorizedPemBlocks {
+	const blocks = typeof input === 'string' ? splitPemBlocksOrThrow(input) : input;
 	const certificates: PemBlock[] = [];
 	const certificateRequests: PemBlock[] = [];
 	const privateKeys: PemBlock[] = [];
@@ -186,4 +219,57 @@ function normalizePemBodyLines(lines: readonly string[]): readonly string[] | un
 
 function containsPemMarker(value: string): boolean {
 	return value.includes('-----BEGIN ') || value.includes('-----END ');
+}
+
+/**
+ * Extracts and base64-decodes the DER content from a PEM string.
+ *
+ * Returns a typed failure (`code: 'malformed'`) when the `BEGIN`/`END`
+ * markers don't match `label` or the body is not valid base64. For the
+ * throwing form use {@linkcode pemDecodeOrThrow}.
+ */
+export function pemDecode(label: string, pem: string): PemDecodeResult {
+	return toPemResult(() => pemDecodeOrThrow(label, pem), 'Invalid PEM');
+}
+
+/**
+ * Finds all `BEGIN`/`END`-delimited PEM blocks in a string and returns them
+ * as parsed {@linkcode PemBlock} entries. Handles concatenated PEM files and
+ * ignores non-PEM text between blocks.
+ *
+ * Returns a typed failure (`code: 'malformed'`) on stray or truncated PEM
+ * markers. For the throwing form use {@linkcode splitPemBlocksOrThrow}.
+ */
+export function splitPemBlocks(input: string): SplitPemBlocksResult {
+	return toPemResult(() => splitPemBlocksOrThrow(input), 'Malformed PEM block');
+}
+
+/**
+ * Groups PEM blocks by label into well-known PKI categories
+ * (certificates, CSRs, private keys, public keys, and everything else).
+ * Accepts either raw PEM text or pre-split {@linkcode PemBlock} entries.
+ *
+ * Returns a typed failure (`code: 'malformed'`) when raw text contains stray
+ * or truncated PEM markers. For the throwing form use
+ * {@linkcode categorizePemBlocksOrThrow}.
+ */
+export function categorizePemBlocks(
+	input: string | readonly PemBlock[],
+): CategorizePemBlocksResult {
+	return toPemResult(() => categorizePemBlocksOrThrow(input), 'Malformed PEM block');
+}
+
+/** Shared Result wrapper around the throwing PEM cores. */
+function toPemResult<TValue>(
+	operation: () => TValue,
+	fallbackMessage: string,
+):
+	| { readonly ok: true; readonly value: TValue }
+	| ErrorResult<PemErrorCode, Record<never, never>, PemFailure> {
+	try {
+		return successResult(operation());
+	} catch (error) {
+		rethrowIfInvariant(error);
+		return failureResult('malformed', error instanceof Error ? error.message : fallbackMessage);
+	}
 }

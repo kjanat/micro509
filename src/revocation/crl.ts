@@ -57,8 +57,14 @@ import {
 	parseDistributionPointReasonFlagsContent,
 } from '#micro509/internal/x509/extension-bits.ts';
 import { exportSpkiDer } from '#micro509/keys/keys.ts';
-import { pemDecode, pemEncode } from '#micro509/pem/pem.ts';
-import { type ErrorResult, failureResult, type Micro509Error } from '#micro509/result/result.ts';
+import { pemDecodeOrThrow, pemEncode } from '#micro509/pem/pem.ts';
+import {
+	type ErrorResult,
+	failureResult,
+	type Micro509Error,
+	rethrowIfInvariant,
+	successResult,
+} from '#micro509/result/result.ts';
 import type {
 	DistributionPoint,
 	DistributionPointReason,
@@ -236,23 +242,28 @@ export type CrlSource = string | Uint8Array | ParsedCertificateRevocationList;
 export type CrlCertificateSource = string | Uint8Array | ParsedCertificate;
 
 /** Failure detail when CRL signature verification fails. */
-export interface VerifyCertificateRevocationListFailure extends Micro509Error<'signature_invalid'> {
+export interface VerifyCertificateRevocationListSignatureFailure
+	extends Micro509Error<'signature_invalid'> {
 	/** Always `false` for failures. */
 	readonly ok: false;
 }
 
 /**
- * Result of {@linkcode verifyCertificateRevocationList}.
+ * Result of {@linkcode verifyCertificateRevocationListSignature}.
  *
  * On success, `value` is the parsed CRL whose signature has been verified.
  */
-export type VerifyCertificateRevocationListResult =
+export type VerifyCertificateRevocationListSignatureResult =
 	| {
 			readonly ok: true;
 			/** Parsed CRL with a verified signature. */
 			readonly value: ParsedCertificateRevocationList;
 	  }
-	| ErrorResult<'signature_invalid', Record<never, never>, VerifyCertificateRevocationListFailure>;
+	| ErrorResult<
+			'signature_invalid',
+			Record<never, never>,
+			VerifyCertificateRevocationListSignatureFailure
+	  >;
 
 /**
  * Input for {@linkcode validateCertificateRevocationList}.
@@ -328,9 +339,9 @@ export type CheckCertificateRevocationAgainstCrlErrorCode =
 export type CrlApplicabilityFailureReason =
 	| 'certificate_scope_mismatch'
 	| 'delta_crl_incompatible'
-	| 'delta_crl_unsupported'
+	| 'unsupported_delta_crl'
 	| 'distribution_point_mismatch'
-	| 'indirect_crl_unsupported'
+	| 'unsupported_indirect_crl'
 	| 'issuer_mismatch'
 	| 'reasons_mismatch';
 
@@ -469,13 +480,31 @@ export async function createCertificateRevocationList(
 	};
 }
 
+/** Machine-readable failure reason for the CRL parsers. */
+export type ParseCertificateRevocationListErrorCode = 'malformed';
+
+/** Structured failure payload for CRL parsing. */
+export interface ParseCertificateRevocationListFailure
+	extends Micro509Error<ParseCertificateRevocationListErrorCode> {
+	readonly ok: false;
+}
+
+/** Success-or-failure result from {@linkcode parseCertificateRevocationListDer} / {@linkcode parseCertificateRevocationListPem}. */
+export type ParseCertificateRevocationListResult =
+	| { readonly ok: true; readonly value: ParsedCertificateRevocationList }
+	| ErrorResult<
+			ParseCertificateRevocationListErrorCode,
+			Record<never, never>,
+			ParseCertificateRevocationListFailure
+	  >;
+
 /**
- * Decodes a DER-encoded X.509 CRL into a structured {@linkcode ParsedCertificateRevocationList}.
+ * Throwing core for {@linkcode parseCertificateRevocationListDer}.
  *
- * Does not verify the signature — call {@linkcode verifyCertificateRevocationList} or
+ * Does not verify the signature — call {@linkcode verifyCertificateRevocationListSignature} or
  * {@linkcode validateCertificateRevocationList} for that.
  */
-export function parseCertificateRevocationListDer(
+export function parseCertificateRevocationListDerOrThrow(
 	der: Uint8Array,
 ): ParsedCertificateRevocationList {
 	const top = readSequenceChildren(der, { maxDepth: DEFAULT_MAX_DER_DEPTH });
@@ -527,14 +556,52 @@ export function parseCertificateRevocationListDer(
  *
  * @example
  * ```ts
- * import { parseCertificateRevocationListPem } from 'micro509';
+ * import { parseCertificateRevocationListPemOrThrow } from 'micro509';
  *
- * const crl = parseCertificateRevocationListPem(pemString);
+ * const crl = parseCertificateRevocationListPemOrThrow(pemString); // throws if malformed
  * console.log(crl.issuer.values.commonName, crl.revokedCertificates.length);
  * ```
  */
-export function parseCertificateRevocationListPem(pem: string): ParsedCertificateRevocationList {
-	return parseCertificateRevocationListDer(pemDecode('X509 CRL', pem));
+export function parseCertificateRevocationListPemOrThrow(
+	pem: string,
+): ParsedCertificateRevocationList {
+	return parseCertificateRevocationListDerOrThrow(pemDecodeOrThrow('X509 CRL', pem));
+}
+
+/**
+ * Decodes a DER-encoded X.509 CRL into a structured {@linkcode ParsedCertificateRevocationList}.
+ *
+ * Returns a typed failure (`code: 'malformed'`) on malformed input. For the
+ * throwing form use {@linkcode parseCertificateRevocationListDerOrThrow}.
+ * Does not verify the signature — call {@linkcode verifyCertificateRevocationListSignature} or
+ * {@linkcode validateCertificateRevocationList} for that.
+ */
+export function parseCertificateRevocationListDer(
+	der: Uint8Array,
+): ParseCertificateRevocationListResult {
+	try {
+		return successResult(parseCertificateRevocationListDerOrThrow(der));
+	} catch (error) {
+		rethrowIfInvariant(error);
+		return failureResult('malformed', error instanceof Error ? error.message : 'Malformed CRL');
+	}
+}
+
+/**
+ * Decodes a PEM-encoded X.509 CRL (`-----BEGIN X509 CRL-----`).
+ *
+ * Returns a typed failure (`code: 'malformed'`) on malformed input. For the
+ * throwing form use {@linkcode parseCertificateRevocationListPemOrThrow}.
+ */
+export function parseCertificateRevocationListPem(
+	pem: string,
+): ParseCertificateRevocationListResult {
+	try {
+		return successResult(parseCertificateRevocationListPemOrThrow(pem));
+	} catch (error) {
+		rethrowIfInvariant(error);
+		return failureResult('malformed', error instanceof Error ? error.message : 'Malformed CRL');
+	}
 }
 
 /**
@@ -543,17 +610,17 @@ export function parseCertificateRevocationListPem(pem: string): ParsedCertificat
  * Does **not** check issuer name match, key-usage, or freshness — use
  * {@linkcode validateCertificateRevocationList} for full validation.
  */
-export async function verifyCertificateRevocationList(
+export async function verifyCertificateRevocationListSignature(
 	crl: string | Uint8Array,
 	issuerCertificate: string | Uint8Array,
-): Promise<VerifyCertificateRevocationListResult> {
+): Promise<VerifyCertificateRevocationListSignatureResult> {
 	let parsedCrl: ParsedCertificateRevocationList;
 	let issuer: ParsedCertificate;
 	try {
 		parsedCrl =
 			typeof crl === 'string'
-				? parseCertificateRevocationListPem(crl)
-				: parseCertificateRevocationListDer(new Uint8Array(crl));
+				? parseCertificateRevocationListPemOrThrow(crl)
+				: parseCertificateRevocationListDerOrThrow(new Uint8Array(crl));
 		issuer =
 			typeof issuerCertificate === 'string'
 				? parseIssuerCertificatePem(issuerCertificate)
@@ -792,11 +859,15 @@ export async function checkCertificateRevocationAgainstCrl(
 	);
 }
 
-/** Builds a `VerifyCertificateRevocationListFailureResult`. */
+/** Builds a `VerifyCertificateRevocationListSignatureFailureResult`. */
 function verifyCertificateRevocationListFailureResult(
 	code: 'signature_invalid',
 	message: string,
-): ErrorResult<'signature_invalid', Record<never, never>, VerifyCertificateRevocationListFailure> {
+): ErrorResult<
+	'signature_invalid',
+	Record<never, never>,
+	VerifyCertificateRevocationListSignatureFailure
+> {
 	return failureResult(code, message);
 }
 
@@ -885,7 +956,7 @@ function findRevokedCertificateEntry(
 	}
 	if (sawUnsupportedIssuer) {
 		return nonApplicable(
-			'indirect_crl_unsupported',
+			'unsupported_indirect_crl',
 			'indirect CRL entry certificateIssuer must include a directoryName',
 		);
 	}
@@ -906,7 +977,7 @@ function checkCrlApplicability(
 	| undefined {
 	if (!allowDeltaCrl && crl.baseCrlNumber !== undefined) {
 		return nonApplicable(
-			'delta_crl_unsupported',
+			'unsupported_delta_crl',
 			'a delta CRL cannot be used as the primary complete CRL input',
 		);
 	}
@@ -1002,7 +1073,7 @@ function checkCrlApplicability(
 	}
 	if (sawIndirectIssuerUnsupported) {
 		return nonApplicable(
-			'indirect_crl_unsupported',
+			'unsupported_indirect_crl',
 			'indirect CRL distribution points must identify the CRL issuer with directoryName',
 		);
 	}
@@ -1020,7 +1091,7 @@ function checkCrlApplicability(
 	}
 	if (sawIndirectDistributionPoint) {
 		return nonApplicable(
-			'indirect_crl_unsupported',
+			'unsupported_indirect_crl',
 			'certificate distribution points that name alternate CRL issuers are not supported yet',
 		);
 	}
@@ -2079,13 +2150,13 @@ function parseIssuerCertificatePem(pem: string): ParsedCertificate {
 /** Accepts PEM, DER, or already-parsed CRL and returns a parsed CRL. */
 function normalizeCrl(source: CrlSource): ParsedCertificateRevocationList {
 	if (typeof source === 'string') {
-		return parseCertificateRevocationListPem(source);
+		return parseCertificateRevocationListPemOrThrow(source);
 	}
 	if (source instanceof Uint8Array) {
-		return parseCertificateRevocationListDer(new Uint8Array(source));
+		return parseCertificateRevocationListDerOrThrow(new Uint8Array(source));
 	}
 	if (hasReparseableCrlShape(source)) {
-		return parseCertificateRevocationListDer(new Uint8Array(source.der));
+		return parseCertificateRevocationListDerOrThrow(new Uint8Array(source.der));
 	}
 	throw new Error('certificate revocation list input is malformed');
 }

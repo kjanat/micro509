@@ -3,14 +3,14 @@
 The examples below build their own `ca`, `leaf`, CRL, and OCSP material
 inline so each one runs on its own.
 
-::: warning Revocation checking defaults to soft-fail
-`RevocationPolicy.mode` defaults to `'soft-fail'`: certificates whose
+::: warning Revocation checking defaults to hard-fail
+Revocation checking only runs when you supply evidence — and once you do,
+`RevocationPolicy.mode` defaults to `'hard-fail'`: certificates whose
 revocation status is **indeterminate** (no applicable CRL/OCSP evidence,
-expired evidence, untrusted signer) are **allowed**. Only a confirmed
-`revoked` verdict denies. If you need "no usable evidence ⇒ reject", set
-`policy: { mode: 'hard-fail' }` explicitly. Enabling revocation checking
-without `hard-fail` means "check revocation _if the evidence happens to be
-usable_" — that is the deliberate, but easy-to-miss, default.
+expired evidence, untrusted signer) are **denied**. If availability matters
+more than strictness — partial evidence is normal in your setup — opt out
+explicitly with `policy: { mode: 'soft-fail' }`, which allows indeterminate
+status and denies only on a confirmed `revoked` verdict.
 :::
 
 ## CRL lifecycle
@@ -64,8 +64,8 @@ import { createSelfSignedCertificate } from 'micro509';
 import {
   createCertificateRevocationList,
   isCertificateRevoked,
-  parseCertificateRevocationListPem,
-  verifyCertificateRevocationList,
+  parseCertificateRevocationListPemOrThrow,
+  verifyCertificateRevocationListSignature,
 } from 'micro509/revocation';
 
 const ca = await createSelfSignedCertificate({
@@ -88,12 +88,15 @@ const crl = await createCertificateRevocationList({
   ],
 });
 
-const parsed = parseCertificateRevocationListPem(crl.pem);
-
-const verifyResult = await verifyCertificateRevocationList(
+const parsed = parseCertificateRevocationListPemOrThrow(
   crl.pem,
-  ca.certificate.pem,
 );
+
+const verifyResult =
+  await verifyCertificateRevocationListSignature(
+    crl.pem,
+    ca.certificate.pem,
+  );
 
 console.log('verified:', verifyResult.ok);
 if (verifyResult.ok) {
@@ -164,7 +167,7 @@ import {
 import {
   createOcspRequest,
   createOcspResponse,
-  parseOcspResponseDer,
+  parseOcspResponseDerOrThrow,
   validateOcspResponse,
 } from 'micro509/revocation';
 
@@ -207,7 +210,7 @@ const ocsp = await createOcspResponse({
   ],
 });
 
-const response = parseOcspResponseDer(ocsp.der);
+const response = parseOcspResponseDerOrThrow(ocsp.der);
 
 const result = await validateOcspResponse({
   response,
@@ -378,9 +381,8 @@ const result = await verifyCertificateChain({
   leaf: leaf.pem,
   roots: [ca.certificate.pem],
   revocation: {
+    // hard-fail is the default: indeterminate status ⇒ verification fails
     ocspResponses: [ocsp.der],
-    // hard-fail: indeterminate status ⇒ verification fails
-    policy: { mode: 'hard-fail' },
   },
 });
 

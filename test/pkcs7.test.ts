@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
 import {
 	createCertificate,
-	createPkcs7CertBagPem,
+	createPkcs7CertBag,
 	createSelfSignedCertificate,
 	generateKeyPair,
 	parseCertificatePem,
@@ -49,7 +49,7 @@ describe('pkcs7', () => {
 			signerPrivateKey: root.keyPair.privateKey,
 			issuerPublicKey: root.keyPair.publicKey,
 		});
-		const bag = unwrap(createPkcs7CertBagPem([leaf.pem, root.certificate.pem]));
+		const bag = unwrap(createPkcs7CertBag([leaf.pem, root.certificate.pem]));
 		const parsed = parsePkcs7CertBagPem(bag.pem);
 		expect(parsed.ok).toBe(true);
 		if (!parsed.ok) throw new Error('unreachable');
@@ -196,7 +196,7 @@ describe('pkcs7', () => {
 		const signer = await createSelfSignedCertificate({
 			subject: { commonName: 'PEM Parse Signer' },
 		});
-		const bag = unwrap(createPkcs7CertBagPem([signer.certificate.pem]));
+		const bag = unwrap(createPkcs7CertBag([signer.certificate.pem]));
 		const result = parsePkcs7SignedDataPem(bag.pem);
 		expect(result.ok).toBe(true);
 	});
@@ -386,8 +386,8 @@ describe('pkcs7', () => {
 		expect(parsed.ok).toBe(true);
 		if (!parsed.ok) throw new Error('unreachable');
 		const signerInfo = parsed.value.signerInfos[0];
-		if (signerInfo === undefined) {
-			throw new Error('expected signer info');
+		if (signerInfo === undefined || !signerInfo.hasSignedAttrs) {
+			throw new Error('expected signer info with signed attributes');
 		}
 		const result = await verifyPkcs7SignedData({
 			...parsed.value,
@@ -870,7 +870,7 @@ describe('pkcs7', () => {
 		const signer = await createSelfSignedCertificate({
 			subject: { commonName: 'No Content Signer' },
 		});
-		const bag = unwrap(createPkcs7CertBagPem([signer.certificate.pem]));
+		const bag = unwrap(createPkcs7CertBag([signer.certificate.pem]));
 		const result = await verifyPkcs7SignedData(bag.der);
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.code).toBe('content_missing');
@@ -1086,13 +1086,12 @@ describe('pkcs7', () => {
 		expect(result).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
-	it('createPkcs7CertBagDer with DER certificate source', async () => {
-		const { createPkcs7CertBagDer } = await import('#micro509');
+	it('createPkcs7CertBag with DER certificate source', async () => {
 		const cert = await createSelfSignedCertificate({
 			subject: { commonName: 'DER source' },
 		});
 		// Pass Uint8Array (covers normalizeCertificateSource Uint8Array branch)
-		const der = unwrap(createPkcs7CertBagDer([cert.certificate.der]));
+		const der = unwrap(createPkcs7CertBag([cert.certificate.der])).der;
 		const result = parsePkcs7SignedDataDer(der);
 		expect(result.ok).toBe(true);
 		if (!result.ok) throw new Error('unreachable');

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import type { ImportEcPublicKeyInput } from '#micro509/keys/index.ts';
+import type { ImportEcKeyInput } from '#micro509/keys/index.ts';
 import * as keys from '#micro509/keys/index.ts';
 import * as pem from '#micro509/pem/index.ts';
 import * as result from '#micro509/result/index.ts';
@@ -7,7 +7,7 @@ import * as result from '#micro509/result/index.ts';
 const ecAlgorithm = {
 	kind: 'ecdsa',
 	curve: 'P-256',
-} as const satisfies ImportEcPublicKeyInput;
+} as const satisfies ImportEcKeyInput;
 
 describe('utility domains', () => {
 	describe('keys domain', () => {
@@ -46,10 +46,10 @@ describe('utility domains', () => {
 	});
 
 	describe('pem domain', () => {
-		it('round-trips bytes through pemEncode / pemDecode', () => {
+		it('round-trips bytes through pemEncode / pemDecodeOrThrow', () => {
 			const original = Uint8Array.of(0x30, 0x82, 0x01, 0x22, 0x00, 0xff);
 			const encoded = pem.pemEncode('CERTIFICATE', original);
-			const decoded = pem.pemDecode('CERTIFICATE', encoded);
+			const decoded = pem.pemDecodeOrThrow('CERTIFICATE', encoded);
 			expect(decoded).toEqual(original);
 		});
 
@@ -61,7 +61,7 @@ describe('utility domains', () => {
 				pem.pemEncode('CERTIFICATE', cert2Bytes),
 			].join('\n');
 
-			const blocks = pem.splitPemBlocks(multiPem);
+			const blocks = pem.splitPemBlocksOrThrow(multiPem);
 			expect(blocks).toHaveLength(2);
 			expect(blocks[0]?.label).toBe('CERTIFICATE');
 			expect(blocks[1]?.label).toBe('CERTIFICATE');
@@ -75,7 +75,7 @@ describe('utility domains', () => {
 				pem.pemEncode('PRIVATE KEY', Uint8Array.of(2)),
 			].join('\n');
 
-			const categorized = pem.categorizePemBlocks(mixedPem);
+			const categorized = pem.categorizePemBlocksOrThrow(mixedPem);
 			expect(categorized.certificates).toHaveLength(1);
 			expect(categorized.privateKeys).toHaveLength(1);
 			expect(categorized.publicKeys).toHaveLength(0);

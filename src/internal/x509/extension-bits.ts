@@ -18,12 +18,9 @@ import type { DistributionPointReason, KeyUsage } from '#micro509/x509/extension
  * had non-zero bits in positions that DER (X.690 §11.2.2) requires to be zero.
  * Verification layers can use this signal to reject non-conformant encodings.
  */
-export interface ParsedBitFlags<T extends string> {
-	/** Decoded flag values, padding bits masked. */
-	readonly flags: readonly T[];
-	/** `true` when the original encoding had non-zero padding bits (DER violation). */
-	readonly nonZeroPadding: boolean;
-}
+import type { ParsedBitFlags } from '#micro509/x509/extensions.ts';
+
+export type { ParsedBitFlags };
 
 /** Canonical bit-position order for Key Usage flags (RFC 5280 §4.2.1.3). */
 const KEY_USAGE_ORDER = [

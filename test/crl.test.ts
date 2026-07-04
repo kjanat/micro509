@@ -8,10 +8,12 @@ import {
 	isCertificateRevoked,
 	parseCertificatePem,
 	parseCertificateRevocationListDer,
+	parseCertificateRevocationListDerOrThrow,
 	parseCertificateRevocationListPem,
-	pemDecode,
+	parseCertificateRevocationListPemOrThrow,
+	pemDecodeOrThrow,
 	validateCertificateRevocationList,
-	verifyCertificateRevocationList,
+	verifyCertificateRevocationListSignature,
 	unwrap,
 } from '#micro509';
 import {
@@ -58,13 +60,15 @@ describe('crl', () => {
 			crlNumber: 7,
 			revokedCertificates: [{ serialNumber: hexToBytes(parsedLeaf.serialNumberHex) }],
 		});
-		const parsedCrl = parseCertificateRevocationListPem(crl.pem);
+		const parsedCrl = parseCertificateRevocationListPemOrThrow(crl.pem);
 		expect(parsedCrl.issuer.values.commonName).toBe('CRL Issuer');
 		expect(parsedCrl.crlNumber).toBe(7);
 		expect(parsedCrl.signatureAlgorithmName).toBe('ECDSA with SHA-256');
 		expect(parsedCrl.revokedCertificates).toHaveLength(1);
 		expect(isCertificateRevoked(parsedLeaf.serialNumberHex, parsedCrl)).toBe(true);
-		expect(await verifyCertificateRevocationList(crl.pem, issuer.certificate.pem)).toMatchObject({
+		expect(
+			await verifyCertificateRevocationListSignature(crl.pem, issuer.certificate.pem),
+		).toMatchObject({
 			ok: true,
 		});
 
@@ -74,12 +78,12 @@ describe('crl', () => {
 			signerPrivateKey: wrongSigner.privateKey,
 			revokedCertificates: [{ serialNumber: hexToBytes(parsedLeaf.serialNumberHex) }],
 		});
-		expect(await verifyCertificateRevocationList(badCrl.der, issuer.certificate.der)).toMatchObject(
-			{
-				ok: false,
-				code: 'signature_invalid',
-			},
-		);
+		expect(
+			await verifyCertificateRevocationListSignature(badCrl.der, issuer.certificate.der),
+		).toMatchObject({
+			ok: false,
+			code: 'signature_invalid',
+		});
 	});
 
 	it('parses CRL entry extensions and delta CRL indicator', async () => {
@@ -119,7 +123,7 @@ describe('crl', () => {
 				},
 			],
 		});
-		const parsed = parseCertificateRevocationListPem(crl.pem);
+		const parsed = parseCertificateRevocationListPemOrThrow(crl.pem);
 		expect(parsed.baseCrlNumber).toBe(8);
 		expect(parsed.issuingDistributionPoint).toEqual({
 			distributionPoint: {
@@ -186,7 +190,7 @@ describe('crl', () => {
 			],
 		});
 
-		const parsed = parseCertificateRevocationListPem(crl.pem);
+		const parsed = parseCertificateRevocationListPemOrThrow(crl.pem);
 		expect(parsed.issuingDistributionPoint).toMatchObject({
 			distributionPoint: {
 				relativeName: {
@@ -237,7 +241,7 @@ describe('crl', () => {
 			},
 		});
 
-		const parsed = parseCertificateRevocationListPem(crl.pem);
+		const parsed = parseCertificateRevocationListPemOrThrow(crl.pem);
 		expect(parsed.issuingDistributionPoint).toEqual({
 			onlyContainsAttributeCerts: true,
 			indirectCrl: true,
@@ -269,17 +273,19 @@ describe('crl', () => {
 			],
 		});
 
-		expect(parseCertificateRevocationListPem(crl.pem).freshestCrlDistributionPoints).toEqual([
-			{
-				distributionPoint: {
-					fullName: [
-						{ type: 'email', value: 'pki@example.test' },
-						{ type: 'ip', value: '2001:db8:0:0:0:0:0:7' },
-						{ type: 'unknown', tag: 0x89, value: Uint8Array.of(0xde, 0xad) },
-					],
+		expect(parseCertificateRevocationListPemOrThrow(crl.pem).freshestCrlDistributionPoints).toEqual(
+			[
+				{
+					distributionPoint: {
+						fullName: [
+							{ type: 'email', value: 'pki@example.test' },
+							{ type: 'ip', value: '2001:db8:0:0:0:0:0:7' },
+							{ type: 'unknown', tag: 0x89, value: Uint8Array.of(0xde, 0xad) },
+						],
+					},
 				},
-			},
-		]);
+			],
+		);
 	});
 
 	it('validates CRL with issuer linkage and freshness', async () => {
@@ -633,7 +639,7 @@ describe('crl', () => {
 			code: 'non_applicable',
 			message:
 				'certificate distribution points that name alternate CRL issuers are not supported yet',
-			details: { reason: 'indirect_crl_unsupported' },
+			details: { reason: 'unsupported_indirect_crl' },
 		});
 	});
 
@@ -931,7 +937,7 @@ describe('crl', () => {
 			ok: false,
 			code: 'non_applicable',
 			message: 'indirect CRL entry certificateIssuer must include a directoryName',
-			details: { reason: 'indirect_crl_unsupported' },
+			details: { reason: 'unsupported_indirect_crl' },
 		});
 
 		const deltaCrl = await createCertificateRevocationList({
@@ -950,7 +956,7 @@ describe('crl', () => {
 			ok: false,
 			code: 'non_applicable',
 			message: 'a delta CRL cannot be used as the primary complete CRL input',
-			details: { reason: 'delta_crl_unsupported' },
+			details: { reason: 'unsupported_delta_crl' },
 		});
 	});
 
@@ -1392,7 +1398,8 @@ describe('crl', () => {
 			],
 		);
 		expect(
-			parseCertificateRevocationListDer(modifiedDer).revokedCertificates[0]?.certificateIssuer,
+			parseCertificateRevocationListDerOrThrow(modifiedDer).revokedCertificates[0]
+				?.certificateIssuer,
 		).toEqual([{ type: 'directoryName', derHex: parsedCertificateIssuer.subject.derHex }]);
 	});
 
@@ -1647,7 +1654,7 @@ describe('crl', () => {
 			ok: false,
 			code: 'non_applicable',
 			message: 'indirect CRL distribution points must identify the CRL issuer with directoryName',
-			details: { reason: 'indirect_crl_unsupported' },
+			details: { reason: 'unsupported_indirect_crl' },
 		});
 	});
 
@@ -1734,7 +1741,7 @@ describe('crl', () => {
 			ok: false,
 			code: 'non_applicable',
 			message: 'indirect CRL entry certificateIssuer must include a directoryName',
-			details: { reason: 'indirect_crl_unsupported' },
+			details: { reason: 'unsupported_indirect_crl' },
 		});
 	});
 
@@ -1766,7 +1773,7 @@ describe('crl', () => {
 				],
 			},
 		});
-		const complete = parseCertificateRevocationListPem(
+		const complete = parseCertificateRevocationListPemOrThrow(
 			(
 				await createCertificateRevocationList({
 					issuer: { commonName: 'Parsed Delta Compatibility CA' },
@@ -1781,7 +1788,7 @@ describe('crl', () => {
 				})
 			).pem,
 		);
-		const delta = parseCertificateRevocationListPem(
+		const delta = parseCertificateRevocationListPemOrThrow(
 			(
 				await createCertificateRevocationList({
 					issuer: { commonName: 'Parsed Delta Compatibility CA' },
@@ -1861,7 +1868,7 @@ describe('crl', () => {
 				],
 			},
 		});
-		const complete = parseCertificateRevocationListPem(
+		const complete = parseCertificateRevocationListPemOrThrow(
 			(
 				await createCertificateRevocationList({
 					issuer: { commonName: 'Complex IDP CA' },
@@ -1874,7 +1881,7 @@ describe('crl', () => {
 				})
 			).pem,
 		);
-		const delta = parseCertificateRevocationListPem(
+		const delta = parseCertificateRevocationListPemOrThrow(
 			(
 				await createCertificateRevocationList({
 					issuer: { commonName: 'Complex IDP CA' },
@@ -1930,7 +1937,7 @@ describe('crl', () => {
 				],
 			},
 		});
-		const complete = parseCertificateRevocationListPem(
+		const complete = parseCertificateRevocationListPemOrThrow(
 			(
 				await createCertificateRevocationList({
 					issuer: { commonName: 'Complex IDP Mismatch CA' },
@@ -1944,7 +1951,7 @@ describe('crl', () => {
 				})
 			).pem,
 		);
-		const delta = parseCertificateRevocationListPem(
+		const delta = parseCertificateRevocationListPemOrThrow(
 			(
 				await createCertificateRevocationList({
 					issuer: { commonName: 'Complex IDP Mismatch CA' },
@@ -2006,7 +2013,7 @@ describe('crl', () => {
 				],
 			},
 		});
-		const complete = parseCertificateRevocationListPem(
+		const complete = parseCertificateRevocationListPemOrThrow(
 			(
 				await createCertificateRevocationList({
 					issuer: { commonName: 'Relative Name Delta CA' },
@@ -2021,7 +2028,7 @@ describe('crl', () => {
 				})
 			).pem,
 		);
-		const delta = parseCertificateRevocationListPem(
+		const delta = parseCertificateRevocationListPemOrThrow(
 			(
 				await createCertificateRevocationList({
 					issuer: { commonName: 'Relative Name Delta CA' },
@@ -2172,7 +2179,7 @@ describe('crl', () => {
 			issuerPublicKey: ca.keyPair.publicKey,
 			revokedCertificates: revokedCerts,
 		});
-		const parsed = parseCertificateRevocationListPem(crl.pem);
+		const parsed = parseCertificateRevocationListPemOrThrow(crl.pem);
 		expect(parsed.revokedCertificates).toHaveLength(reasons.length);
 		for (let i = 0; i < reasons.length; i++) {
 			expect(parsed.revokedCertificates[i]?.reasonCode).toBe(reasons[i]);
@@ -2195,7 +2202,7 @@ describe('crl', () => {
 			thisUpdate: now,
 			nextUpdate: new Date(now.getTime() + 3_600_000),
 		});
-		const caDer = new Uint8Array(pemDecode('CERTIFICATE', ca.certificate.pem));
+		const caDer = new Uint8Array(pemDecodeOrThrow('CERTIFICATE', ca.certificate.pem));
 		// Use DER for both CRL and issuer
 		const result = await validateCertificateRevocationList({
 			crl: crl.der,
@@ -2221,7 +2228,7 @@ describe('crl', () => {
 			thisUpdate: now,
 			nextUpdate: new Date(now.getTime() + 3_600_000),
 		});
-		const parsedCrl = parseCertificateRevocationListPem(crl.pem);
+		const parsedCrl = parseCertificateRevocationListPemOrThrow(crl.pem);
 		const parsedCa = unwrap(parseCertificatePem(ca.certificate.pem));
 		const result = await validateCertificateRevocationList({
 			crl: parsedCrl,
@@ -2244,7 +2251,7 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 		});
-		const parsedCrl = parseCertificateRevocationListPem(crl.pem);
+		const parsedCrl = parseCertificateRevocationListPemOrThrow(crl.pem);
 		const parsedCa = unwrap(parseCertificatePem(ca.certificate.pem));
 		const tamperedCrl = { ...parsedCrl, tbsCertListDer: Uint8Array.of(0x30, 0x80) };
 
@@ -2268,7 +2275,7 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 		});
-		const parsedCrl = parseCertificateRevocationListPem(crl.pem);
+		const parsedCrl = parseCertificateRevocationListPemOrThrow(crl.pem);
 		const { der: _ignoredDer, ...parsedCrlWithoutDer } = parsedCrl;
 
 		const result = await validateCertificateRevocationList({
@@ -2347,7 +2354,7 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 		});
-		const parsedCrl = parseCertificateRevocationListPem(crl.pem);
+		const parsedCrl = parseCertificateRevocationListPemOrThrow(crl.pem);
 		const future = new Date('2999-01-01T00:00:00Z');
 		const tamperedCrl = {
 			...parsedCrl,
@@ -2390,7 +2397,7 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 		});
-		const parsedCrl = parseCertificateRevocationListPem(crl.pem);
+		const parsedCrl = parseCertificateRevocationListPemOrThrow(crl.pem);
 		const tamperedCrl = { ...parsedCrl, tbsCertListDer: Uint8Array.of(0x30, 0x80) };
 
 		const result = await checkCertificateRevocationAgainstCrl({
@@ -2456,7 +2463,7 @@ describe('crl', () => {
 		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
 	});
 
-	it('verifyCertificateRevocationList rejects CRL signed by wrong key', async () => {
+	it('verifyCertificateRevocationListSignature rejects CRL signed by wrong key', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'CRL CA' },
 			extensions: {
@@ -2477,12 +2484,12 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 		});
-		const result = await verifyCertificateRevocationList(crl.pem, otherCa.certificate.pem);
+		const result = await verifyCertificateRevocationListSignature(crl.pem, otherCa.certificate.pem);
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.code).toBe('signature_invalid');
 	});
 
-	it('verifyCertificateRevocationList fails closed for malformed issuer certificate input', async () => {
+	it('verifyCertificateRevocationListSignature fails closed for malformed issuer certificate input', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Malformed Verify Issuer CA' },
 			extensions: {
@@ -2495,7 +2502,10 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 		});
-		const result = await verifyCertificateRevocationList(crl.pem, Uint8Array.of(0xff, 0xff));
+		const result = await verifyCertificateRevocationListSignature(
+			crl.pem,
+			Uint8Array.of(0xff, 0xff),
+		);
 		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
 	});
 
@@ -2583,11 +2593,11 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 		});
-		const result = await verifyCertificateRevocationList(crl.pem, ca.certificate.pem);
+		const result = await verifyCertificateRevocationListSignature(crl.pem, ca.certificate.pem);
 		expect(result.ok).toBe(true);
 	});
 
-	it('parseCertificateRevocationListDer rejects IDP with unsupported dist point name tags', async () => {
+	it('parseCertificateRevocationListDerOrThrow rejects IDP with unsupported dist point name tags', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'IDP CRL CA' },
 			extensions: {
@@ -2606,7 +2616,7 @@ describe('crl', () => {
 				},
 			},
 		});
-		const derBytes = new Uint8Array(pemDecode('X509 CRL', crl.pem));
+		const derBytes = new Uint8Array(pemDecodeOrThrow('X509 CRL', crl.pem));
 		// Find the IDP OID bytes (2.5.29.28 = 55 1D 1C) in the CRL DER
 		const idpOidBytes = [0x55, 0x1d, 0x1c];
 		let idpOffset = -1;
@@ -2641,13 +2651,13 @@ describe('crl', () => {
 		if (targetOffset !== -1) {
 			// Change [0] to [1] (onlyContainsUserCerts) — tag 0xa0 → 0x81
 			derBytes[targetOffset] = 0x81;
-			expect(() => parseCertificateRevocationListDer(derBytes)).toThrow(
+			expect(() => parseCertificateRevocationListDerOrThrow(derBytes)).toThrow(
 				'Unsupported distributionPointName tag',
 			);
 		}
 	});
 
-	it('parseCertificateRevocationListDer rejects malformed AKI without keyIdentifier (lines 680-682)', async () => {
+	it('parseCertificateRevocationListDerOrThrow rejects malformed AKI without keyIdentifier (lines 680-682)', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'AKI CRL CA' },
 			extensions: {
@@ -2660,7 +2670,7 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 		});
-		const derBytes = new Uint8Array(pemDecode('X509 CRL', crl.pem));
+		const derBytes = new Uint8Array(pemDecodeOrThrow('X509 CRL', crl.pem));
 		// Find AKI OID bytes (2.5.29.35 = 55 1D 23)
 		const akiOidBytes = [0x55, 0x1d, 0x23];
 		let akiOffset = -1;
@@ -2684,12 +2694,12 @@ describe('crl', () => {
 		if (tagOffset < derBytes.length) {
 			derBytes[tagOffset] = 0x82; // Change keyIdentifier [0] to serialNumber [2]
 		}
-		expect(() => parseCertificateRevocationListDer(derBytes)).toThrow(
+		expect(() => parseCertificateRevocationListDerOrThrow(derBytes)).toThrow(
 			'authorityKeyIdentifier fields must preserve DER order',
 		);
 	});
 
-	it('parseCertificateRevocationListDer rejects malformed AKI ordering and shape', async () => {
+	it('parseCertificateRevocationListDerOrThrow rejects malformed AKI ordering and shape', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Bad CRL AKI CA' },
 			extensions: {
@@ -2703,9 +2713,9 @@ describe('crl', () => {
 			issuerPublicKey: ca.keyPair.publicKey,
 		});
 		expect(() =>
-			parseCertificateRevocationListDer(
+			parseCertificateRevocationListDerOrThrow(
 				rewriteCrlExtensionValuePayload(
-					new Uint8Array(pemDecode('X509 CRL', crl.pem)),
+					new Uint8Array(pemDecodeOrThrow('X509 CRL', crl.pem)),
 					OIDS.authorityKeyIdentifier,
 					sequence([tlv(0x82, Uint8Array.of(0x01)), explicitContext(1, sequence([]))]),
 				),
@@ -2713,7 +2723,7 @@ describe('crl', () => {
 		).toThrow('authorityKeyIdentifier fields must preserve DER order');
 	});
 
-	it('parseCertificateRevocationListDer rejects non-SEQUENCE AKI payloads', async () => {
+	it('parseCertificateRevocationListDerOrThrow rejects non-SEQUENCE AKI payloads', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Bad CRL AKI Wrapper CA' },
 			extensions: {
@@ -2727,9 +2737,9 @@ describe('crl', () => {
 			issuerPublicKey: ca.keyPair.publicKey,
 		});
 		expect(() =>
-			parseCertificateRevocationListDer(
+			parseCertificateRevocationListDerOrThrow(
 				rewriteCrlExtensionValuePayload(
-					new Uint8Array(pemDecode('X509 CRL', crl.pem)),
+					new Uint8Array(pemDecodeOrThrow('X509 CRL', crl.pem)),
 					OIDS.authorityKeyIdentifier,
 					setOf([tlv(0x80, Uint8Array.of(0x01))]),
 				),
@@ -2737,7 +2747,7 @@ describe('crl', () => {
 		).toThrow('authorityKeyIdentifier must use SEQUENCE');
 	});
 
-	it('parseCertificateRevocationListDer rejects duplicate CRL extension OIDs', async () => {
+	it('parseCertificateRevocationListDerOrThrow rejects duplicate CRL extension OIDs', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Duplicate CRL Extension CA' },
 			extensions: {
@@ -2753,13 +2763,16 @@ describe('crl', () => {
 		});
 
 		expect(() =>
-			parseCertificateRevocationListDer(
-				duplicateCrlExtension(new Uint8Array(pemDecode('X509 CRL', crl.pem)), OIDS.cRLNumber),
+			parseCertificateRevocationListDerOrThrow(
+				duplicateCrlExtension(
+					new Uint8Array(pemDecodeOrThrow('X509 CRL', crl.pem)),
+					OIDS.cRLNumber,
+				),
 			),
 		).toThrow('Duplicate CRL extension OID');
 	});
 
-	it('parseCertificateRevocationListDer rejects unsupported critical CRL extensions', async () => {
+	it('parseCertificateRevocationListDerOrThrow rejects unsupported critical CRL extensions', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Unknown Critical CRL Extension CA' },
 			extensions: {
@@ -2775,9 +2788,9 @@ describe('crl', () => {
 		});
 
 		expect(() =>
-			parseCertificateRevocationListDer(
+			parseCertificateRevocationListDerOrThrow(
 				appendCriticalCrlExtension(
-					new Uint8Array(pemDecode('X509 CRL', crl.pem)),
+					new Uint8Array(pemDecodeOrThrow('X509 CRL', crl.pem)),
 					'1.2.3.4.5.6',
 					Uint8Array.of(0x05, 0x00),
 				),
@@ -2785,7 +2798,7 @@ describe('crl', () => {
 		).toThrow('Unsupported critical CRL extension OID: 1.2.3.4.5.6');
 	});
 
-	it('parseCertificateRevocationListDer rejects non-INTEGER version tags', async () => {
+	it('parseCertificateRevocationListDerOrThrow rejects non-INTEGER version tags', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Bad CRL Version Tag CA' },
 			extensions: {
@@ -2800,13 +2813,13 @@ describe('crl', () => {
 			crlNumber: 1,
 		});
 		expect(() =>
-			parseCertificateRevocationListDer(
-				rewriteCrlVersionTag(new Uint8Array(pemDecode('X509 CRL', crl.pem)), 0x01),
+			parseCertificateRevocationListDerOrThrow(
+				rewriteCrlVersionTag(new Uint8Array(pemDecodeOrThrow('X509 CRL', crl.pem)), 0x01),
 			),
 		).toThrow('version must use INTEGER');
 	});
 
-	it('parseCertificateRevocationListDer rejects unsupported explicit version values', async () => {
+	it('parseCertificateRevocationListDerOrThrow rejects unsupported explicit version values', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Bad CRL Version Value CA' },
 			extensions: {
@@ -2821,13 +2834,16 @@ describe('crl', () => {
 			crlNumber: 1,
 		});
 		expect(() =>
-			parseCertificateRevocationListDer(
-				rewriteCrlVersionValue(new Uint8Array(pemDecode('X509 CRL', crl.pem)), Uint8Array.of(0x00)),
+			parseCertificateRevocationListDerOrThrow(
+				rewriteCrlVersionValue(
+					new Uint8Array(pemDecodeOrThrow('X509 CRL', crl.pem)),
+					Uint8Array.of(0x00),
+				),
 			),
 		).toThrow('Unsupported CRL version: 1');
 	});
 
-	it('parseCertificateRevocationListDer rejects malformed top-level trailing fields', async () => {
+	it('parseCertificateRevocationListDerOrThrow rejects malformed top-level trailing fields', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Trailing CRL Field CA' },
 			extensions: {
@@ -2841,16 +2857,16 @@ describe('crl', () => {
 			issuerPublicKey: ca.keyPair.publicKey,
 		});
 		expect(() =>
-			parseCertificateRevocationListDer(
+			parseCertificateRevocationListDerOrThrow(
 				rewriteCrlWithExtraTopLevelField(
-					new Uint8Array(pemDecode('X509 CRL', crl.pem)),
+					new Uint8Array(pemDecodeOrThrow('X509 CRL', crl.pem)),
 					tlv(0x05, new Uint8Array()),
 				),
 			),
 		).toThrow('Malformed CRL');
 	});
 
-	it('parseCertificateRevocationListDer rejects v1 CRLs with CRL extensions', async () => {
+	it('parseCertificateRevocationListDerOrThrow rejects v1 CRLs with CRL extensions', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'V1 CRL With Extensions CA' },
 			extensions: {
@@ -2865,13 +2881,13 @@ describe('crl', () => {
 			crlNumber: 9,
 		});
 		expect(() =>
-			parseCertificateRevocationListDer(
-				removeCrlVersion(new Uint8Array(pemDecode('X509 CRL', crl.pem))),
+			parseCertificateRevocationListDerOrThrow(
+				removeCrlVersion(new Uint8Array(pemDecodeOrThrow('X509 CRL', crl.pem))),
 			),
 		).toThrow('CRL extensions require version 2');
 	});
 
-	it('parseCertificateRevocationListDer rejects v1 CRLs with revoked entry extensions', async () => {
+	it('parseCertificateRevocationListDerOrThrow rejects v1 CRLs with revoked entry extensions', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'V1 CRL With Entry Extensions CA' },
 			extensions: {
@@ -2891,13 +2907,13 @@ describe('crl', () => {
 			],
 		});
 		expect(() =>
-			parseCertificateRevocationListDer(
-				removeCrlVersion(new Uint8Array(pemDecode('X509 CRL', crl.pem))),
+			parseCertificateRevocationListDerOrThrow(
+				removeCrlVersion(new Uint8Array(pemDecodeOrThrow('X509 CRL', crl.pem))),
 			),
 		).toThrow('revoked certificate extensions require CRL version 2');
 	});
 
-	it('parseCertificateRevocationListDer rejects repeated issuingDistributionPoint fields', async () => {
+	it('parseCertificateRevocationListDerOrThrow rejects repeated issuingDistributionPoint fields', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Repeated IDP Field CA' },
 			extensions: {
@@ -2912,9 +2928,9 @@ describe('crl', () => {
 			issuingDistributionPoint: { indirectCrl: true },
 		});
 		expect(() =>
-			parseCertificateRevocationListDer(
+			parseCertificateRevocationListDerOrThrow(
 				rewriteCrlExtensionValuePayload(
-					new Uint8Array(pemDecode('X509 CRL', crl.pem)),
+					new Uint8Array(pemDecodeOrThrow('X509 CRL', crl.pem)),
 					OIDS.issuingDistributionPoint,
 					sequence([tlv(0x84, Uint8Array.of(0xff)), tlv(0x84, Uint8Array.of(0x00))]),
 				),
@@ -2922,7 +2938,7 @@ describe('crl', () => {
 		).toThrow('IssuingDistributionPoint indirectCrl must not repeat');
 	});
 
-	it('parseCertificateRevocationListDer rejects conflicting issuingDistributionPoint scope booleans', async () => {
+	it('parseCertificateRevocationListDerOrThrow rejects conflicting issuingDistributionPoint scope booleans', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Conflicting IDP Scope CA' },
 			extensions: {
@@ -2937,9 +2953,9 @@ describe('crl', () => {
 			issuingDistributionPoint: { onlyContainsUserCerts: true },
 		});
 		expect(() =>
-			parseCertificateRevocationListDer(
+			parseCertificateRevocationListDerOrThrow(
 				rewriteCrlExtensionValuePayload(
-					new Uint8Array(pemDecode('X509 CRL', crl.pem)),
+					new Uint8Array(pemDecodeOrThrow('X509 CRL', crl.pem)),
 					OIDS.issuingDistributionPoint,
 					sequence([tlv(0x81, Uint8Array.of(0xff)), tlv(0x82, Uint8Array.of(0xff))]),
 				),
@@ -2947,7 +2963,7 @@ describe('crl', () => {
 		).toThrow('IssuingDistributionPoint scope booleans are mutually exclusive');
 	});
 
-	it('parseCertificateRevocationListDer rejects unsupported issuingDistributionPoint distributionPointName tags', async () => {
+	it('parseCertificateRevocationListDerOrThrow rejects unsupported issuingDistributionPoint distributionPointName tags', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Bad IDP Name Tag CA' },
 			extensions: {
@@ -2962,9 +2978,9 @@ describe('crl', () => {
 			issuingDistributionPoint: { indirectCrl: true },
 		});
 		expect(() =>
-			parseCertificateRevocationListDer(
+			parseCertificateRevocationListDerOrThrow(
 				rewriteCrlExtensionValuePayload(
-					new Uint8Array(pemDecode('X509 CRL', crl.pem)),
+					new Uint8Array(pemDecodeOrThrow('X509 CRL', crl.pem)),
 					OIDS.issuingDistributionPoint,
 					sequence([explicitContext(0, tlv(0x82, new TextEncoder().encode('bad.example')))]),
 				),
@@ -2972,7 +2988,7 @@ describe('crl', () => {
 		).toThrow('Unsupported distributionPointName tag');
 	});
 
-	it('parseCertificateRevocationListDer rejects freshestCRL distribution points with only reasons', async () => {
+	it('parseCertificateRevocationListDerOrThrow rejects freshestCRL distribution points with only reasons', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Bad Freshest CRL DP CA' },
 			extensions: {
@@ -2989,9 +3005,9 @@ describe('crl', () => {
 			],
 		});
 		expect(() =>
-			parseCertificateRevocationListDer(
+			parseCertificateRevocationListDerOrThrow(
 				rewriteCrlExtensionValuePayload(
-					new Uint8Array(pemDecode('X509 CRL', crl.pem)),
+					new Uint8Array(pemDecodeOrThrow('X509 CRL', crl.pem)),
 					OIDS.freshestCRL,
 					sequence([sequence([tlv(0x81, Uint8Array.of(0x00))])]),
 				),
@@ -2999,7 +3015,7 @@ describe('crl', () => {
 		).toThrow('DistributionPoint must include distributionPoint or crlIssuer');
 	});
 
-	it('parseCertificateRevocationListDer rejects empty freshestCRL distribution point sequences', async () => {
+	it('parseCertificateRevocationListDerOrThrow rejects empty freshestCRL distribution point sequences', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Bad Empty Freshest CRL CA' },
 			extensions: {
@@ -3016,9 +3032,9 @@ describe('crl', () => {
 			],
 		});
 		expect(() =>
-			parseCertificateRevocationListDer(
+			parseCertificateRevocationListDerOrThrow(
 				rewriteCrlExtensionValuePayload(
-					new Uint8Array(pemDecode('X509 CRL', crl.pem)),
+					new Uint8Array(pemDecodeOrThrow('X509 CRL', crl.pem)),
 					OIDS.freshestCRL,
 					sequence([]),
 				),
@@ -3026,7 +3042,7 @@ describe('crl', () => {
 		).toThrow('DistributionPoints must not be empty');
 	});
 
-	it('parseCertificateRevocationListDer rejects non-OCTET CRL extension values', async () => {
+	it('parseCertificateRevocationListDerOrThrow rejects non-OCTET CRL extension values', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Bad CRL Extension Value CA' },
 			extensions: {
@@ -3042,9 +3058,9 @@ describe('crl', () => {
 		});
 
 		expect(() =>
-			parseCertificateRevocationListDer(
+			parseCertificateRevocationListDerOrThrow(
 				rewriteCrlExtensionValueTag(
-					new Uint8Array(pemDecode('X509 CRL', crl.pem)),
+					new Uint8Array(pemDecodeOrThrow('X509 CRL', crl.pem)),
 					OIDS.cRLNumber,
 					0x02,
 				),
@@ -3052,7 +3068,7 @@ describe('crl', () => {
 		).toThrow('CRL extension value must use OCTET STRING');
 	});
 
-	it('parseCertificateRevocationListDer rejects malformed CRL extension middle fields', async () => {
+	it('parseCertificateRevocationListDerOrThrow rejects malformed CRL extension middle fields', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Bad CRL Extension Middle Field CA' },
 			extensions: {
@@ -3068,9 +3084,9 @@ describe('crl', () => {
 		});
 
 		expect(() =>
-			parseCertificateRevocationListDer(
+			parseCertificateRevocationListDerOrThrow(
 				rewriteCrlExtensionMiddleFieldTag(
-					new Uint8Array(pemDecode('X509 CRL', crl.pem)),
+					new Uint8Array(pemDecodeOrThrow('X509 CRL', crl.pem)),
 					OIDS.cRLNumber,
 					0x02,
 				),
@@ -3078,7 +3094,7 @@ describe('crl', () => {
 		).toThrow('Malformed CRL extension');
 	});
 
-	it('parseCertificateRevocationListDer rejects duplicate revoked entry extension OIDs', async () => {
+	it('parseCertificateRevocationListDerOrThrow rejects duplicate revoked entry extension OIDs', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Duplicate Revoked Entry Extension CA' },
 			extensions: {
@@ -3109,16 +3125,16 @@ describe('crl', () => {
 		});
 
 		expect(() =>
-			parseCertificateRevocationListDer(
+			parseCertificateRevocationListDerOrThrow(
 				duplicateFirstRevokedEntryExtension(
-					new Uint8Array(pemDecode('X509 CRL', crl.pem)),
+					new Uint8Array(pemDecodeOrThrow('X509 CRL', crl.pem)),
 					OIDS.cRLReason,
 				),
 			),
 		).toThrow('Duplicate revoked certificate extension OID');
 	});
 
-	it('parseCertificateRevocationListDer rejects non-OCTET revoked entry extension values', async () => {
+	it('parseCertificateRevocationListDerOrThrow rejects non-OCTET revoked entry extension values', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Bad Revoked Entry Extension Value CA' },
 			extensions: {
@@ -3149,9 +3165,9 @@ describe('crl', () => {
 		});
 
 		expect(() =>
-			parseCertificateRevocationListDer(
+			parseCertificateRevocationListDerOrThrow(
 				rewriteFirstRevokedEntryExtensionValueTag(
-					new Uint8Array(pemDecode('X509 CRL', crl.pem)),
+					new Uint8Array(pemDecodeOrThrow('X509 CRL', crl.pem)),
 					OIDS.cRLReason,
 					0x02,
 				),
@@ -3159,7 +3175,7 @@ describe('crl', () => {
 		).toThrow('Revoked certificate extension value must use OCTET STRING');
 	});
 
-	it('parseCertificateRevocationListDer rejects empty certificateIssuer GeneralNames', async () => {
+	it('parseCertificateRevocationListDerOrThrow rejects empty certificateIssuer GeneralNames', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Bad CertIssuer Names CA' },
 			extensions: {
@@ -3188,7 +3204,7 @@ describe('crl', () => {
 			[{ entryIndex: 0, names: [{ type: 'dns', value: 'issuer.example.test' }] }],
 		);
 		expect(() =>
-			parseCertificateRevocationListDer(
+			parseCertificateRevocationListDerOrThrow(
 				rewriteFirstRevokedEntryExtensionValuePayload(
 					withCertificateIssuer,
 					OIDS.certificateIssuer,
@@ -3198,7 +3214,7 @@ describe('crl', () => {
 		).toThrow('GeneralNames must not be empty');
 	});
 
-	it('parseCertificateRevocationListDer rejects non-SEQUENCE certificateIssuer wrappers', async () => {
+	it('parseCertificateRevocationListDerOrThrow rejects non-SEQUENCE certificateIssuer wrappers', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Bad CertIssuer Wrapper CA' },
 			extensions: {
@@ -3227,7 +3243,7 @@ describe('crl', () => {
 			[{ entryIndex: 0, names: [{ type: 'dns', value: 'issuer.example.test' }] }],
 		);
 		expect(() =>
-			parseCertificateRevocationListDer(
+			parseCertificateRevocationListDerOrThrow(
 				rewriteFirstRevokedEntryExtensionValuePayload(
 					withCertificateIssuer,
 					OIDS.certificateIssuer,
@@ -3237,7 +3253,7 @@ describe('crl', () => {
 		).toThrow('certificateIssuer must use SEQUENCE');
 	});
 
-	it('parseCertificateRevocationListDer rejects non-INTEGER revoked serialNumber tags', async () => {
+	it('parseCertificateRevocationListDerOrThrow rejects non-INTEGER revoked serialNumber tags', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Bad Revoked Serial Tag CA' },
 			extensions: {
@@ -3268,13 +3284,16 @@ describe('crl', () => {
 		});
 
 		expect(() =>
-			parseCertificateRevocationListDer(
-				rewriteFirstRevokedEntrySerialTag(new Uint8Array(pemDecode('X509 CRL', crl.pem)), 0x04),
+			parseCertificateRevocationListDerOrThrow(
+				rewriteFirstRevokedEntrySerialTag(
+					new Uint8Array(pemDecodeOrThrow('X509 CRL', crl.pem)),
+					0x04,
+				),
 			),
 		).toThrow('revoked serialNumber must use INTEGER');
 	});
 
-	it('parseCertificateRevocationListDer rejects malformed revoked entry extension middle fields', async () => {
+	it('parseCertificateRevocationListDerOrThrow rejects malformed revoked entry extension middle fields', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Bad Revoked Entry Extension Middle Field CA' },
 			extensions: {
@@ -3305,9 +3324,9 @@ describe('crl', () => {
 		});
 
 		expect(() =>
-			parseCertificateRevocationListDer(
+			parseCertificateRevocationListDerOrThrow(
 				rewriteFirstRevokedEntryExtensionMiddleFieldTag(
-					new Uint8Array(pemDecode('X509 CRL', crl.pem)),
+					new Uint8Array(pemDecodeOrThrow('X509 CRL', crl.pem)),
 					OIDS.cRLReason,
 					0x02,
 				),
@@ -3996,3 +4015,33 @@ function findRevokedEntriesIndex(children: ReturnType<typeof readSequenceChildre
 function fail(message: string): never {
 	throw new Error(message);
 }
+
+describe('crl Result forms', () => {
+	it('parseCertificateRevocationListDer/Pem return ok for valid CRLs and malformed otherwise', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Result Form CA' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Result Form CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			revokedCertificates: [],
+		});
+		const der = parseCertificateRevocationListDer(crl.der);
+		expect(der.ok).toBe(true);
+		if (der.ok) {
+			expect(der.value.issuer.values.commonName).toBe('Result Form CA');
+		}
+		const pem = parseCertificateRevocationListPem(crl.pem);
+		expect(pem.ok).toBe(true);
+
+		const badDer = parseCertificateRevocationListDer(Uint8Array.of(0x30, 0x00));
+		expect(badDer.ok).toBe(false);
+		if (!badDer.ok) {
+			expect(badDer.code).toBe('malformed');
+		}
+		const badPem = parseCertificateRevocationListPem('not pem');
+		expect(badPem.ok).toBe(false);
+	});
+});

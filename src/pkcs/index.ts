@@ -22,9 +22,6 @@ export type {
 	ParsePfxFailure,
 	ParsePfxOptions,
 	ParsePfxResult,
-	Pbes2EncryptionOptions,
-	Pbes2EncryptionScheme,
-	Pbes2Prf,
 	PfxBagAttributesInput,
 	PfxCertificateBagInput,
 	PfxCertificateSource,
@@ -37,11 +34,9 @@ export { createPfx, parsePfxDer, parsePfxPem } from './pfx.ts';
 
 // — pkcs7.ts ——————————————————————————————————————————
 export type {
-	CreatePkcs7CertBagDerResult,
 	CreatePkcs7CertBagErrorCode,
 	CreatePkcs7CertBagFailure,
 	CreatePkcs7CertBagResult,
-	CreatePkcs7SignedDataDerResult,
 	CreatePkcs7SignedDataErrorCode,
 	CreatePkcs7SignedDataFailure,
 	CreatePkcs7SignedDataInput,
@@ -52,7 +47,7 @@ export type {
 	ParsePkcs7ErrorCode,
 	ParsePkcs7Failure,
 	ParsePkcs7SignedDataResult,
-	Pkcs7CertBag,
+	Pkcs7CertBagMaterial,
 	Pkcs7CertificateSource,
 	Pkcs7SignedDataMaterial,
 	Pkcs7Signer,
@@ -60,10 +55,8 @@ export type {
 	VerifyPkcs7SignedDataResult,
 } from './pkcs7.ts';
 export {
-	createPkcs7CertBagDer,
-	createPkcs7CertBagPem,
-	createPkcs7SignedDataDer,
-	createPkcs7SignedDataPem,
+	createPkcs7CertBag,
+	createPkcs7SignedData,
 	parsePkcs7CertBagDer,
 	parsePkcs7CertBagPem,
 	parsePkcs7SignedDataDer,
@@ -72,5 +65,15 @@ export {
 } from './pkcs7.ts';
 
 // — pkcs12-mac.ts —————————————————————————————————————
-export type { ParsedPkcs12MacData, Pkcs12MacOptions } from './pkcs12-mac.ts';
-export { createPkcs12MacData, parsePkcs12MacData } from './pkcs12-mac.ts';
+export type {
+	ParsedPkcs12MacData,
+	ParsePkcs12MacDataErrorCode,
+	ParsePkcs12MacDataFailure,
+	ParsePkcs12MacDataResult,
+	Pkcs12MacOptions,
+} from './pkcs12-mac.ts';
+export {
+	createPkcs12MacData,
+	parsePkcs12MacData,
+	parsePkcs12MacDataOrThrow,
+} from './pkcs12-mac.ts';

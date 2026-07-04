@@ -8,6 +8,13 @@
  */
 
 import {
+	type ErrorResult,
+	failureResult,
+	type Micro509Error,
+	rethrowIfInvariant,
+	successResult,
+} from '#micro509/result/result.ts';
+import {
 	decodeNonNegativeIntegerNumber,
 	decodeObjectIdentifier,
 	toArrayBuffer,
@@ -48,8 +55,11 @@ export interface ParsedPkcs12MacData {
 	readonly saltHex: string;
 	/** Number of PKCS#12 KDF iterations. */
 	readonly iterations: number;
-	/** MAC verification outcome. Present only when a password was supplied during parsing. */
-	readonly valid?: boolean;
+	/**
+	 * MAC verification outcome: `'unchecked'` when no password was supplied
+	 * during parsing, otherwise `'valid'` or `'invalid'`.
+	 */
+	readonly verification: 'valid' | 'invalid' | 'unchecked';
 }
 
 /**
@@ -82,15 +92,29 @@ export async function createPkcs12MacData(
 			digestHex: toHex(mac),
 			saltHex: toHex(salt),
 			iterations,
+			verification: 'valid',
 		},
 	};
 }
 
+/** Machine-readable failure reason for {@linkcode parsePkcs12MacData}. */
+export type ParsePkcs12MacDataErrorCode = 'malformed';
+
+/** Structured failure payload for MacData parsing. */
+export interface ParsePkcs12MacDataFailure extends Micro509Error<ParsePkcs12MacDataErrorCode> {
+	readonly ok: false;
+}
+
+/** Success-or-failure result from {@linkcode parsePkcs12MacData}. */
+export type ParsePkcs12MacDataResult =
+	| { readonly ok: true; readonly value: ParsedPkcs12MacData }
+	| ErrorResult<ParsePkcs12MacDataErrorCode, Record<never, never>, ParsePkcs12MacDataFailure>;
+
 /**
- * Decodes a DER-encoded MacData block. When `password` is provided, verifies
- * the MAC and sets the `valid` flag on the returned structure.
+ * Throwing core for {@linkcode parsePkcs12MacData}. When `password` is
+ * provided, verifies the MAC and reports the outcome in `verification`.
  */
-export async function parsePkcs12MacData(
+export async function parsePkcs12MacDataOrThrow(
 	der: Uint8Array,
 	authenticatedSafe: Uint8Array,
 	password?: string,
@@ -135,23 +159,50 @@ export async function parsePkcs12MacData(
 	}
 	const parsedIterations = decodeNonNegativeIntegerNumber(iterations.value, 'MacData iterations');
 	assertPkcs12MacIterations(parsedIterations);
-	const parsed: ParsedPkcs12MacData = {
-		digestAlgorithmOid,
-		digestAlgorithmName: describeHashAlgorithm(digestAlgorithmOid),
-		digestHex: toHex(digest.value),
-		saltHex: toHex(salt.value),
-		iterations: parsedIterations,
-	};
 	if (password === undefined) {
-		return parsed;
+		return {
+			digestAlgorithmOid,
+			digestAlgorithmName: describeHashAlgorithm(digestAlgorithmOid),
+			digestHex: toHex(digest.value),
+			saltHex: toHex(salt.value),
+			iterations: parsedIterations,
+			verification: 'unchecked',
+		};
 	}
 	const expected = await computePkcs12Mac(
 		authenticatedSafe,
 		password,
 		salt.value,
-		parsed.iterations,
+		parsedIterations,
 	);
-	return { ...parsed, valid: equalBytes(expected, digest.value) };
+	return {
+		digestAlgorithmOid,
+		digestAlgorithmName: describeHashAlgorithm(digestAlgorithmOid),
+		digestHex: toHex(digest.value),
+		saltHex: toHex(salt.value),
+		iterations: parsedIterations,
+		verification: equalBytes(expected, digest.value) ? 'valid' : 'invalid',
+	};
+}
+
+/**
+ * Decodes a DER-encoded MacData block. When `password` is provided, verifies
+ * the MAC and reports the outcome in `verification`.
+ *
+ * Returns a typed failure (`code: 'malformed'`) on malformed input. For the
+ * throwing form use {@linkcode parsePkcs12MacDataOrThrow}.
+ */
+export async function parsePkcs12MacData(
+	der: Uint8Array,
+	authenticatedSafe: Uint8Array,
+	password?: string,
+): Promise<ParsePkcs12MacDataResult> {
+	try {
+		return successResult(await parsePkcs12MacDataOrThrow(der, authenticatedSafe, password));
+	} catch (error) {
+		rethrowIfInvariant(error);
+		return failureResult('malformed', error instanceof Error ? error.message : 'Malformed MacData');
+	}
 }
 
 function assertPkcs12MacIterations(iterations: number): void {

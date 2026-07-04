@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { createPkcs12MacData, parsePkcs12MacData } from 'micro509/pkcs';
+import { createPkcs12MacData, parsePkcs12MacDataOrThrow } from 'micro509/pkcs';
 import {
 	buildCertificateExtensions,
 	encodeCertificatePolicies,
@@ -1069,24 +1069,24 @@ describe('pbes2.ts edge cases', () => {
 		const cases = [
 			{
 				encryptionOid: OIDS.aes128Cbc,
-				encryption: 'aes128-cbc',
+				cipher: 'AES-128-CBC',
 				keyLength: 16,
 				prfOid: OIDS.hmacWithSHA1,
-				prf: 'hmac-sha1',
+				prf: 'HMAC-SHA-1',
 			},
 			{
 				encryptionOid: OIDS.aes192Cbc,
-				encryption: 'aes192-cbc',
+				cipher: 'AES-192-CBC',
 				keyLength: 24,
 				prfOid: OIDS.hmacWithSHA256,
-				prf: 'hmac-sha256',
+				prf: 'HMAC-SHA-256',
 			},
 			{
 				encryptionOid: OIDS.aes256Cbc,
-				encryption: 'aes256-cbc',
+				cipher: 'AES-256-CBC',
 				keyLength: 32,
 				prfOid: OIDS.hmacWithSHA1,
-				prf: 'hmac-sha1',
+				prf: 'HMAC-SHA-1',
 			},
 		] as const;
 
@@ -1112,7 +1112,7 @@ describe('pbes2.ts edge cases', () => {
 
 			expect(parsePbes2AlgorithmIdentifier(algorithmIdentifier)).toMatchObject({
 				iterations: 2048,
-				encryption: testCase.encryption,
+				cipher: testCase.cipher,
 				prf: testCase.prf,
 			});
 		}
@@ -1131,8 +1131,8 @@ describe('pbes2.ts edge cases', () => {
 		]);
 
 		expect(parsePbes2AlgorithmIdentifier(algorithmIdentifier)).toMatchObject({
-			prf: 'hmac-sha1',
-			encryption: 'aes256-cbc',
+			prf: 'HMAC-SHA-1',
+			cipher: 'AES-256-CBC',
 		});
 	});
 
@@ -1199,7 +1199,7 @@ describe('pbes2.ts edge cases', () => {
 describe('pkcs12-mac.ts edge cases', () => {
 	const dummySafe = new Uint8Array(10);
 
-	it('parsePkcs12MacData throws on malformed MacData (missing salt)', async () => {
+	it('parsePkcs12MacDataOrThrow throws on malformed MacData (missing salt)', async () => {
 		// Only digestInfo, no salt or iterations
 		const malformed = sequence([
 			sequence([
@@ -1207,10 +1207,10 @@ describe('pkcs12-mac.ts edge cases', () => {
 				octetString(new Uint8Array(32)),
 			]),
 		]);
-		expect(parsePkcs12MacData(malformed, dummySafe)).rejects.toThrow('Malformed MacData');
+		expect(parsePkcs12MacDataOrThrow(malformed, dummySafe)).rejects.toThrow('Malformed MacData');
 	});
 
-	it('parsePkcs12MacData throws on malformed MacData (salt wrong tag)', async () => {
+	it('parsePkcs12MacDataOrThrow throws on malformed MacData (salt wrong tag)', async () => {
 		// salt is INTEGER instead of OCTET STRING
 		const malformed = sequence([
 			sequence([
@@ -1220,20 +1220,20 @@ describe('pkcs12-mac.ts edge cases', () => {
 			integerFromNumber(16), // wrong tag — should be octetString
 			integerFromNumber(2048),
 		]);
-		expect(parsePkcs12MacData(malformed, dummySafe)).rejects.toThrow('Malformed MacData');
+		expect(parsePkcs12MacDataOrThrow(malformed, dummySafe)).rejects.toThrow('Malformed MacData');
 	});
 
-	it('parsePkcs12MacData throws on malformed DigestInfo (missing digest)', async () => {
+	it('parsePkcs12MacDataOrThrow throws on malformed DigestInfo (missing digest)', async () => {
 		// DigestInfo with only algorithm, no digest
 		const malformed = sequence([
 			sequence([sequence([objectIdentifier(OIDS.sha256), nullValue()])]),
 			octetString(new Uint8Array(16)),
 			integerFromNumber(2048),
 		]);
-		expect(parsePkcs12MacData(malformed, dummySafe)).rejects.toThrow('Malformed DigestInfo');
+		expect(parsePkcs12MacDataOrThrow(malformed, dummySafe)).rejects.toThrow('Malformed DigestInfo');
 	});
 
-	it('parsePkcs12MacData throws on malformed DigestInfo (digest wrong tag)', async () => {
+	it('parsePkcs12MacDataOrThrow throws on malformed DigestInfo (digest wrong tag)', async () => {
 		// digest is INTEGER instead of OCTET STRING
 		const malformed = sequence([
 			sequence([
@@ -1243,20 +1243,22 @@ describe('pkcs12-mac.ts edge cases', () => {
 			octetString(new Uint8Array(16)),
 			integerFromNumber(2048),
 		]);
-		expect(parsePkcs12MacData(malformed, dummySafe)).rejects.toThrow('Malformed DigestInfo');
+		expect(parsePkcs12MacDataOrThrow(malformed, dummySafe)).rejects.toThrow('Malformed DigestInfo');
 	});
 
-	it('parsePkcs12MacData throws when algorithm OID is missing', async () => {
+	it('parsePkcs12MacDataOrThrow throws when algorithm OID is missing', async () => {
 		// algorithmSequence is empty
 		const malformed = sequence([
 			sequence([sequence([]), octetString(new Uint8Array(32))]),
 			octetString(new Uint8Array(16)),
 			integerFromNumber(2048),
 		]);
-		expect(parsePkcs12MacData(malformed, dummySafe)).rejects.toThrow('MacData algorithm missing');
+		expect(parsePkcs12MacDataOrThrow(malformed, dummySafe)).rejects.toThrow(
+			'MacData algorithm missing',
+		);
 	});
 
-	it('parsePkcs12MacData throws on non-SHA-256 algorithm', async () => {
+	it('parsePkcs12MacDataOrThrow throws on non-SHA-256 algorithm', async () => {
 		// Use SHA-1 OID instead of SHA-256
 		const malformed = sequence([
 			sequence([
@@ -1266,20 +1268,20 @@ describe('pkcs12-mac.ts edge cases', () => {
 			octetString(new Uint8Array(16)),
 			integerFromNumber(2048),
 		]);
-		expect(parsePkcs12MacData(malformed, dummySafe)).rejects.toThrow('Only SHA-256');
+		expect(parsePkcs12MacDataOrThrow(malformed, dummySafe)).rejects.toThrow('Only SHA-256');
 	});
 
-	it('parsePkcs12MacData skips MAC verification when password is undefined', async () => {
-		// Build a valid-looking MacData — parsePkcs12MacData should return without 'valid' field
+	it('parsePkcs12MacDataOrThrow skips MAC verification when password is undefined', async () => {
+		// Build a valid-looking MacData — parsePkcs12MacDataOrThrow should report 'unchecked'
 		const data = new Uint8Array([0x30, 0x03, 0x01, 0x01, 0xff]);
 		const mac = await createPkcs12MacData(data, { password: 'test' });
 		// Parse without password — should succeed but no 'valid' field
-		const parsed = await parsePkcs12MacData(mac.der, data);
+		const parsed = await parsePkcs12MacDataOrThrow(mac.der, data);
 		expect(parsed.digestAlgorithmOid).toBe(OIDS.sha256);
-		expect(parsed.valid).toBeUndefined();
+		expect(parsed.verification).toBe('unchecked');
 	});
 
-	it('parsePkcs12MacData throws on zero iterations', async () => {
+	it('parsePkcs12MacDataOrThrow throws on zero iterations', async () => {
 		const malformed = sequence([
 			sequence([
 				sequence([objectIdentifier(OIDS.sha256), nullValue()]),
@@ -1288,12 +1290,12 @@ describe('pkcs12-mac.ts edge cases', () => {
 			octetString(new Uint8Array(16)),
 			integerFromNumber(0),
 		]);
-		expect(parsePkcs12MacData(malformed, dummySafe)).rejects.toThrow(
+		expect(parsePkcs12MacDataOrThrow(malformed, dummySafe)).rejects.toThrow(
 			'MacData iterations must be a positive safe integer',
 		);
 	});
 
-	it('parsePkcs12MacData throws on negative iterations', async () => {
+	it('parsePkcs12MacDataOrThrow throws on negative iterations', async () => {
 		const malformed = sequence([
 			sequence([
 				sequence([objectIdentifier(OIDS.sha256), nullValue()]),
@@ -1302,7 +1304,7 @@ describe('pkcs12-mac.ts edge cases', () => {
 			octetString(new Uint8Array(16)),
 			new Uint8Array([0x02, 0x01, 0xff]),
 		]);
-		expect(parsePkcs12MacData(malformed, dummySafe)).rejects.toThrow(
+		expect(parsePkcs12MacDataOrThrow(malformed, dummySafe)).rejects.toThrow(
 			'MacData iterations must be non-negative',
 		);
 	});
@@ -1320,9 +1322,9 @@ describe('pkcs12-mac.ts edge cases', () => {
 			salt: new Uint8Array(),
 		});
 		expect(mac.parsed.saltHex).toBe('');
-		const parsed = await parsePkcs12MacData(mac.der, data, 'test');
+		const parsed = await parsePkcs12MacDataOrThrow(mac.der, data, 'test');
 		expect(parsed.saltHex).toBe('');
-		expect(parsed.valid).toBe(true);
+		expect(parsed.verification).toBe('valid');
 	});
 
 	it('rawEcdsaSignatureToDer converts valid raw signature to DER', () => {

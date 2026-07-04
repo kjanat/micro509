@@ -15,10 +15,12 @@ import {
 	sequence,
 	time,
 } from '#micro509/internal/asn1/der.ts';
+import type { SignatureProfileInput } from '#micro509/internal/crypto/signing.ts';
+
+export type { SignatureProfileInput };
 import {
 	encodeAlgorithmIdentifier,
 	getSignatureAlgorithm,
-	type SignatureProfileInput,
 	signBytes,
 } from '#micro509/internal/crypto/signing.ts';
 import { getCrypto } from '#micro509/internal/crypto/webcrypto.ts';

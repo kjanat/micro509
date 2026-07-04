@@ -41,7 +41,7 @@ describe('revocation domain', () => {
 			crlNumber: 2,
 		});
 
-		const parsed = revocation.parseCertificateRevocationListPem(crl.pem);
+		const parsed = revocation.parseCertificateRevocationListPemOrThrow(crl.pem);
 		expect(parsed.issuer.values.commonName).toBe('Revocation Validate CA');
 		expect(parsed.revokedCertificates).toHaveLength(0);
 		expect(parsed.crlNumber).toBe(2);
@@ -109,8 +109,8 @@ describe('revocation domain', () => {
 
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
-		expect(result.value.status).toBe('unknown');
-		if (result.value.status !== 'unknown') return;
+		expect(result.value.status).toBe('indeterminate');
+		if (result.value.status !== 'indeterminate') return;
 		expect(result.value.code).toBe('revocation_evidence_missing');
 		expect(result.value.details.indeterminateEvidence).toHaveLength(0);
 	});

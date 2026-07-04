@@ -5,7 +5,7 @@ import {
 	type ParsedCertificate,
 	type ParsedCertificateRevocationList,
 	parseCertificateDer,
-	parseCertificateRevocationListDer,
+	parseCertificateRevocationListDerOrThrow,
 	verifyCertificateChain,
 	unwrap,
 } from 'micro509';
@@ -60,7 +60,7 @@ async function readPkitsParsedCrl(name: string): Promise<ParsedCertificateRevoca
 		return cached;
 	}
 	const pending = readPkitsFixture(`./fixtures/pkits/crls/${name}.crl`).then((der) =>
-		parseCertificateRevocationListDer(der),
+		parseCertificateRevocationListDerOrThrow(der),
 	);
 	parsedCrlCache.set(name, pending);
 	return await pending;

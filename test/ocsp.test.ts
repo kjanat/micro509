@@ -7,12 +7,16 @@ import {
 	generateKeyPair,
 	parseCertificatePem,
 	parseOcspRequestDer,
+	parseOcspRequestDerOrThrow,
 	parseOcspRequestPem,
+	parseOcspRequestPemOrThrow,
 	parseOcspResponseDer,
+	parseOcspResponseDerOrThrow,
 	parseOcspResponsePem,
-	pemDecode,
+	parseOcspResponsePemOrThrow,
+	pemDecodeOrThrow,
 	validateOcspResponse,
-	verifyOcspResponse,
+	verifyOcspResponseSignature,
 	unwrap,
 } from 'micro509';
 import { childrenOf, toHex } from '#micro509/internal/asn1/asn1.ts';
@@ -59,7 +63,7 @@ describe('ocsp', () => {
 			requests: [{ certificate: leaf.pem, issuerCertificate: issuer.certificate.pem }],
 			nonce: Uint8Array.of(0xaa, 0xbb),
 		});
-		const parsedRequest = parseOcspRequestPem(request.pem);
+		const parsedRequest = parseOcspRequestPemOrThrow(request.pem);
 		expect(parsedRequest.requests).toHaveLength(1);
 		expect(parsedRequest.requests[0]?.hashAlgorithmName).toBe('SHA-1');
 		expect(parsedRequest.nonce).toBe('aabb');
@@ -76,7 +80,7 @@ describe('ocsp', () => {
 			],
 			nonce: Uint8Array.of(0xaa, 0xbb),
 		});
-		const parsedResponse = parseOcspResponsePem(ocspResponse.pem);
+		const parsedResponse = parseOcspResponsePemOrThrow(ocspResponse.pem);
 		expect(parsedResponse.responseStatus).toBe('successful');
 		expect(parsedResponse.signatureAlgorithmName).toBe('ECDSA with SHA-256');
 		expect(parsedResponse.responses?.[0]).toMatchObject({ certStatus: 'good' });
@@ -85,7 +89,9 @@ describe('ocsp', () => {
 			type: 'byKeyHash',
 			keyHashHex: expect.any(String),
 		});
-		expect(await verifyOcspResponse(ocspResponse.der, issuer.certificate.pem)).toMatchObject({
+		expect(
+			await verifyOcspResponseSignature(ocspResponse.der, issuer.certificate.pem),
+		).toMatchObject({
 			ok: true,
 		});
 		expect(
@@ -250,7 +256,7 @@ describe('ocsp', () => {
 				},
 			],
 		});
-		const parsedRevoked = parseOcspResponsePem(revokedResponse.pem);
+		const parsedRevoked = parseOcspResponsePemOrThrow(revokedResponse.pem);
 		expect(parsedRevoked.responses?.[0]?.certStatus).toBe('revoked');
 		expect(parsedRevoked.responses?.[0]?.revokedAt?.toISOString()).toBe('2024-06-15T00:00:00.000Z');
 
@@ -266,7 +272,7 @@ describe('ocsp', () => {
 				},
 			],
 		});
-		const parsedUnknown = parseOcspResponsePem(unknownResponse.pem);
+		const parsedUnknown = parseOcspResponsePemOrThrow(unknownResponse.pem);
 		expect(parsedUnknown.responses?.[0]?.certStatus).toBe('unknown');
 	});
 
@@ -300,12 +306,12 @@ describe('ocsp', () => {
 				},
 			],
 		});
-		const parsed = parseOcspResponsePem(response.pem);
+		const parsed = parseOcspResponsePemOrThrow(response.pem);
 		expect(parsed.responses?.[0]?.certStatus).toBe('revoked');
 		expect(parsed.responses?.[0]?.revocationReasonCode).toBe(1);
 	});
 
-	it('verifyOcspResponse with DER input', async () => {
+	it('verifyOcspResponseSignature with DER input', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'DER Verify CA' },
 			extensions: {
@@ -333,12 +339,12 @@ describe('ocsp', () => {
 			],
 		});
 		// Use DER for both response and signer
-		const issuerDer = new Uint8Array(pemDecode('CERTIFICATE', issuer.certificate.pem));
-		const result = await verifyOcspResponse(response.der, issuerDer);
+		const issuerDer = new Uint8Array(pemDecodeOrThrow('CERTIFICATE', issuer.certificate.pem));
+		const result = await verifyOcspResponseSignature(response.der, issuerDer);
 		expect(result.ok).toBe(true);
 	});
 
-	it('verifyOcspResponse rejects wrong signer', async () => {
+	it('verifyOcspResponseSignature rejects wrong signer', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'Wrong Signer CA' },
 			extensions: {
@@ -373,7 +379,7 @@ describe('ocsp', () => {
 			],
 		});
 		// Verify against wrong signer
-		const result = await verifyOcspResponse(response.der, other.certificate.pem);
+		const result = await verifyOcspResponseSignature(response.der, other.certificate.pem);
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.code).toBe('signature_invalid');
 	});
@@ -826,7 +832,7 @@ describe('ocsp', () => {
 			[6, 'unauthorized'],
 		] as const) {
 			const der = sequence([tlv(0x0a, Uint8Array.of(code))]);
-			const parsed = parseOcspResponseDer(der);
+			const parsed = parseOcspResponseDerOrThrow(der);
 			expect(parsed.responseStatus).toBe(expected);
 			// These responses have no responseBytes
 			expect(parsed.responseDataDer).toBeUndefined();
@@ -836,12 +842,12 @@ describe('ocsp', () => {
 
 	it('rejects unknown OCSP response status codes', () => {
 		const der = sequence([tlv(0x0a, Uint8Array.of(99))]);
-		expect(() => parseOcspResponseDer(der)).toThrow('Unsupported OCSP responseStatus value');
+		expect(() => parseOcspResponseDerOrThrow(der)).toThrow('Unsupported OCSP responseStatus value');
 	});
 
 	it('rejects non-ENUMERATED responseStatus tags', () => {
 		const der = sequence([tlv(0x02, Uint8Array.of(0x00))]);
-		expect(() => parseOcspResponseDer(der)).toThrow('responseStatus must use ENUMERATED');
+		expect(() => parseOcspResponseDerOrThrow(der)).toThrow('responseStatus must use ENUMERATED');
 	});
 
 	it('parses response with non-basicResponse type OID', () => {
@@ -855,7 +861,7 @@ describe('ocsp', () => {
 			tlv(0x0a, Uint8Array.of(0x00)), // successful
 			explicitContext(0, responseBytes),
 		]);
-		const parsed = parseOcspResponseDer(der);
+		const parsed = parseOcspResponseDerOrThrow(der);
 		expect(parsed.responseStatus).toBe('successful');
 		expect(parsed.responseTypeOid).toBe(fakeTypeOid);
 		// Non-basic means no responseDataDer
@@ -884,7 +890,7 @@ describe('ocsp', () => {
 		}
 	});
 
-	it('verifyOcspResponse rejects unsigned response (no responseBytes)', async () => {
+	it('verifyOcspResponseSignature rejects unsigned response (no responseBytes)', async () => {
 		const der = sequence([tlv(0x0a, Uint8Array.of(0x00))]); // successful but no responseBytes
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'No Bytes CA' },
@@ -893,7 +899,7 @@ describe('ocsp', () => {
 				keyUsage: ['keyCertSign'],
 			},
 		});
-		const result = await verifyOcspResponse(der, ca.certificate.pem);
+		const result = await verifyOcspResponseSignature(der, ca.certificate.pem);
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.code).toBe('signature_invalid');
 	});
@@ -961,7 +967,7 @@ describe('ocsp', () => {
 			],
 		});
 		// Pre-parse and pass parsed object
-		const parsed = parseOcspResponsePem(response.pem);
+		const parsed = parseOcspResponsePemOrThrow(response.pem);
 		const result = await validateOcspResponse({
 			response: parsed,
 			issuerCertificate: issuer.certificate.pem,
@@ -996,7 +1002,7 @@ describe('ocsp', () => {
 				},
 			],
 		});
-		const parsed = parseOcspResponsePem(response.pem);
+		const parsed = parseOcspResponsePemOrThrow(response.pem);
 		const future = new Date('2999-01-01T00:00:00Z');
 		const tampered = {
 			...parsed,
@@ -1025,7 +1031,7 @@ describe('ocsp', () => {
 		expect(result.value.responses?.[0]?.thisUpdate.getTime()).not.toBe(future.getTime());
 	});
 
-	it('verifyOcspResponse accepts PEM response input', async () => {
+	it('verifyOcspResponseSignature accepts PEM response input', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'PEM Verify CA' },
 			extensions: {
@@ -1052,11 +1058,11 @@ describe('ocsp', () => {
 				},
 			],
 		});
-		const result = await verifyOcspResponse(response.pem, issuer.certificate.pem);
+		const result = await verifyOcspResponseSignature(response.pem, issuer.certificate.pem);
 		expect(result.ok).toBe(true);
 	});
 
-	it('verifyOcspResponse accepts pre-parsed response input', async () => {
+	it('verifyOcspResponseSignature accepts pre-parsed response input', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'Parsed Verify CA' },
 			extensions: {
@@ -1083,12 +1089,12 @@ describe('ocsp', () => {
 				},
 			],
 		});
-		const parsed = parseOcspResponsePem(response.pem);
-		const result = await verifyOcspResponse(parsed, issuer.certificate.pem);
+		const parsed = parseOcspResponsePemOrThrow(response.pem);
+		const result = await verifyOcspResponseSignature(parsed, issuer.certificate.pem);
 		expect(result.ok).toBe(true);
 	});
 
-	it('verifyOcspResponse ignores tampered parsed signer certificate fields', async () => {
+	it('verifyOcspResponseSignature ignores tampered parsed signer certificate fields', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'Tampered Parsed Verify Signer CA' },
 			extensions: {
@@ -1113,11 +1119,11 @@ describe('ocsp', () => {
 			subjectPublicKeyInfoDer: Uint8Array.of(0x30, 0x00),
 			publicKeyAlgorithmOid: '1.2.3',
 		};
-		const result = await verifyOcspResponse(response.der, tamperedSigner);
+		const result = await verifyOcspResponseSignature(response.der, tamperedSigner);
 		expect(result.ok).toBe(true);
 	});
 
-	it('verifyOcspResponse ignores tampered signed content fields on pre-parsed response input', async () => {
+	it('verifyOcspResponseSignature ignores tampered signed content fields on pre-parsed response input', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'Malformed Parsed Verify CA' },
 			extensions: {
@@ -1144,14 +1150,14 @@ describe('ocsp', () => {
 				},
 			],
 		});
-		const parsed = parseOcspResponsePem(response.pem);
+		const parsed = parseOcspResponsePemOrThrow(response.pem);
 		const tampered = { ...parsed, responseDataDer: Uint8Array.of(0x30, 0x80) };
 
-		const result = await verifyOcspResponse(tampered, issuer.certificate.pem);
+		const result = await verifyOcspResponseSignature(tampered, issuer.certificate.pem);
 		expect(result.ok).toBe(true);
 	});
 
-	it('verifyOcspResponse fails closed for pre-parsed response input without DER', async () => {
+	it('verifyOcspResponseSignature fails closed for pre-parsed response input without DER', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'DER-less Parsed Verify CA' },
 			extensions: {
@@ -1170,12 +1176,12 @@ describe('ocsp', () => {
 				},
 			],
 		});
-		const { der: _ignoredDer, ...parsedWithoutDer } = parseOcspResponsePem(response.pem);
-		const result = await verifyOcspResponse(parsedWithoutDer, issuer.certificate.pem);
+		const { der: _ignoredDer, ...parsedWithoutDer } = parseOcspResponsePemOrThrow(response.pem);
+		const result = await verifyOcspResponseSignature(parsedWithoutDer, issuer.certificate.pem);
 		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
 	});
 
-	it('verifyOcspResponse fails closed for malformed signer certificate input', async () => {
+	it('verifyOcspResponseSignature fails closed for malformed signer certificate input', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'Malformed Verify Signer CA' },
 			extensions: {
@@ -1194,7 +1200,7 @@ describe('ocsp', () => {
 				},
 			],
 		});
-		const result = await verifyOcspResponse(response.der, Uint8Array.of(0xff, 0xff));
+		const result = await verifyOcspResponseSignature(response.der, Uint8Array.of(0xff, 0xff));
 		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
 	});
 
@@ -1225,7 +1231,7 @@ describe('ocsp', () => {
 				},
 			],
 		});
-		const parsed = parseOcspResponsePem(response.pem);
+		const parsed = parseOcspResponsePemOrThrow(response.pem);
 		const tampered = { ...parsed, responseDataDer: Uint8Array.of(0x30, 0x80) };
 
 		const result = await validateOcspResponse({
@@ -1254,7 +1260,7 @@ describe('ocsp', () => {
 				},
 			],
 		});
-		const { der: _ignoredDer, ...parsedWithoutDer } = parseOcspResponsePem(response.pem);
+		const { der: _ignoredDer, ...parsedWithoutDer } = parseOcspResponsePemOrThrow(response.pem);
 		const result = await validateOcspResponse({
 			response: parsedWithoutDer,
 			issuerCertificate: issuer.certificate.pem,
@@ -1446,7 +1452,7 @@ describe('ocsp', () => {
 			],
 		});
 		// Use DER for responder to exercise `typeof resolvedResponder === "string" || ... instanceof Uint8Array` path
-		const responderDer = new Uint8Array(pemDecode('CERTIFICATE', responder.pem));
+		const responderDer = new Uint8Array(pemDecodeOrThrow('CERTIFICATE', responder.pem));
 		const result = await validateOcspResponse({
 			response: response.der,
 			issuerCertificate: issuer.certificate.pem,
@@ -1532,7 +1538,7 @@ describe('ocsp', () => {
 			requests: [{ certificate: leaf.pem, issuerCertificate: issuer.certificate.pem }],
 			hashAlgorithm: 'SHA-256',
 		});
-		const parsedRequest = parseOcspRequestDer(request.der);
+		const parsedRequest = parseOcspRequestDerOrThrow(request.der);
 		expect(parsedRequest.requests).toHaveLength(1);
 		expect(parsedRequest.requests[0]?.hashAlgorithmOid).toBe(OIDS.sha256);
 		expect(parsedRequest.requests[0]?.hashAlgorithmName).toBe('SHA-256');
@@ -1549,7 +1555,7 @@ describe('ocsp', () => {
 				},
 			],
 		});
-		const parsed = parseOcspResponsePem(response.pem);
+		const parsed = parseOcspResponsePemOrThrow(response.pem);
 		expect(parsed.responseStatus).toBe('successful');
 		expect(parsed.responses?.[0]?.certId.hashAlgorithmOid).toBe(OIDS.sha256);
 		expect(parsed.responses?.[0]?.certId.hashAlgorithmName).toBe('SHA-256');
@@ -1899,7 +1905,7 @@ describe('ocsp', () => {
 		expect(result.ok).toBe(true);
 	});
 
-	it('parseOcspRequestDer works with DER bytes directly', async () => {
+	it('parseOcspRequestDerOrThrow works with DER bytes directly', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'DER Parse CA' },
 			extensions: {
@@ -1918,12 +1924,12 @@ describe('ocsp', () => {
 		const request = await createOcspRequest({
 			requests: [{ certificate: leaf.pem, issuerCertificate: issuer.certificate.pem }],
 		});
-		const parsed = parseOcspRequestDer(request.der);
+		const parsed = parseOcspRequestDerOrThrow(request.der);
 		expect(parsed.requests).toHaveLength(1);
 		expect(parsed.nonce).toBeUndefined();
 	});
 
-	it('parseOcspRequestDer rejects malformed requestorName and optionalSignature wrappers', async () => {
+	it('parseOcspRequestDerOrThrow rejects malformed requestorName and optionalSignature wrappers', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'Malformed Request Wrapper CA' },
 			extensions: {
@@ -1943,12 +1949,12 @@ describe('ocsp', () => {
 			requests: [{ certificate: leaf.pem, issuerCertificate: issuer.certificate.pem }],
 		});
 		expect(() =>
-			parseOcspRequestDer(
+			parseOcspRequestDerOrThrow(
 				rewriteOcspRequestTbs(request.der, [explicitContext(1, sequence([integerFromNumber(1)]))]),
 			),
 		).toThrow('requestorName must wrap exactly one GeneralName');
 		expect(() =>
-			parseOcspRequestDer(
+			parseOcspRequestDerOrThrow(
 				rewriteOcspRequestOptionalSignature(
 					request.der,
 					explicitContext(0, sequence([integerFromNumber(1)])),
@@ -1956,7 +1962,7 @@ describe('ocsp', () => {
 			),
 		).toThrow('Malformed optionalSignature');
 		expect(() =>
-			parseOcspRequestDer(
+			parseOcspRequestDerOrThrow(
 				rewriteOcspRequestOptionalSignature(
 					request.der,
 					explicitContext(
@@ -2001,7 +2007,7 @@ describe('ocsp', () => {
 			nonce: Uint8Array.of(0x11, 0x22),
 		});
 		// Pre-parse request and pass as object
-		const parsedRequest = parseOcspRequestPem(request.pem);
+		const parsedRequest = parseOcspRequestPemOrThrow(request.pem);
 		const result = await validateOcspResponse({
 			response: response.der,
 			issuerCertificate: issuer.certificate.pem,
@@ -2042,7 +2048,7 @@ describe('ocsp', () => {
 			],
 			nonce: Uint8Array.of(0x11, 0x22),
 		});
-		const parsedRequest = parseOcspRequestPem(request.pem);
+		const parsedRequest = parseOcspRequestPemOrThrow(request.pem);
 		const firstRequest = parsedRequest.requests[0];
 		if (firstRequest === undefined) {
 			throw new Error('expected parsed OCSP request entry');
@@ -2097,7 +2103,9 @@ describe('ocsp', () => {
 			],
 			nonce: Uint8Array.of(0x11, 0x22),
 		});
-		const { der: _ignoredDer, ...parsedRequestWithoutDer } = parseOcspRequestPem(request.pem);
+		const { der: _ignoredDer, ...parsedRequestWithoutDer } = parseOcspRequestPemOrThrow(
+			request.pem,
+		);
 		const result = await validateOcspResponse({
 			response: response.der,
 			issuerCertificate: issuer.certificate.pem,
@@ -2379,7 +2387,7 @@ describe('ocsp', () => {
 				},
 			],
 		});
-		const parsed = parseOcspResponseDer(response.der);
+		const parsed = parseOcspResponseDerOrThrow(response.der);
 		expect(parsed.responseStatus).toBe('successful');
 		expect(parsed.responses).toBeDefined();
 		const certResponse = parsed.responses?.[0];
@@ -2388,7 +2396,7 @@ describe('ocsp', () => {
 		expect(certResponse?.revocationReasonCode).toBe(1);
 	});
 
-	it('parseOcspResponseDer skips version tag [0] if present (line 254)', async () => {
+	it('parseOcspResponseDerOrThrow skips version tag [0] if present (line 254)', async () => {
 		// Create a valid OCSP response, then inject a version [0] tag into the ResponseData
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'OCSP Version CA' },
@@ -2458,7 +2466,7 @@ describe('ocsp', () => {
 				sequence([objectIdentifier(OIDS.ocspBasicResponse), octetString(basicResponse)]),
 			),
 		]);
-		const parsed = parseOcspResponseDer(ocspResponseDer);
+		const parsed = parseOcspResponseDerOrThrow(ocspResponseDer);
 		expect(parsed.responseStatus).toBe('successful');
 		expect(parsed.responses).toBeDefined();
 		expect(parsed.responses).toHaveLength(1);
@@ -2521,7 +2529,7 @@ describe('ocsp', () => {
 				sequence([objectIdentifier(OIDS.ocspBasicResponse), octetString(basicResponse)]),
 			),
 		]);
-		const parsed = parseOcspResponseDer(ocspResponseDer);
+		const parsed = parseOcspResponseDerOrThrow(ocspResponseDer);
 		expect(parsed.responderId).toMatchObject({
 			type: 'byName',
 			name: {
@@ -2596,13 +2604,13 @@ describe('ocsp', () => {
 				sequence([objectIdentifier(OIDS.ocspBasicResponse), octetString(basicResponse)]),
 			),
 		]);
-		const parsed = parseOcspResponseDer(ocspResponseDer);
+		const parsed = parseOcspResponseDerOrThrow(ocspResponseDer);
 		expect(parsed.responseStatus).toBe('successful');
 		// Nonce should be undefined since extensions don't contain nonce OID
 		expect(parsed.nonce).toBeUndefined();
 	});
 
-	it('parseOcspResponseDer rejects malformed responderID and nextUpdate wrappers', async () => {
+	it('parseOcspResponseDerOrThrow rejects malformed responderID and nextUpdate wrappers', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'Malformed Responder Wrapper CA' },
 			extensions: {
@@ -2624,7 +2632,7 @@ describe('ocsp', () => {
 			},
 		});
 		expect(() =>
-			parseOcspResponseDer(
+			parseOcspResponseDerOrThrow(
 				rewriteOcspResponseResponderId(
 					response,
 					explicitContext(2, octetString(Uint8Array.of(0x01))),
@@ -2645,7 +2653,7 @@ describe('ocsp', () => {
 			],
 		});
 		expect(() =>
-			parseOcspResponseDer(
+			parseOcspResponseDerOrThrow(
 				rewriteOcspResponseNextUpdate(
 					responseWithNextUpdate.der,
 					explicitContext(0, sequence([integerFromNumber(1)])),
@@ -2654,7 +2662,7 @@ describe('ocsp', () => {
 		).toThrow('nextUpdate must wrap exactly one time value');
 	});
 
-	it('parseOcspResponseDer rejects duplicate OCSP extension OIDs', async () => {
+	it('parseOcspResponseDerOrThrow rejects duplicate OCSP extension OIDs', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'OCSP Duplicate Nonce CA' },
 			extensions: {
@@ -2716,10 +2724,12 @@ describe('ocsp', () => {
 			),
 		]);
 
-		expect(() => parseOcspResponseDer(ocspResponseDer)).toThrow('Duplicate OCSP extension OID');
+		expect(() => parseOcspResponseDerOrThrow(ocspResponseDer)).toThrow(
+			'Duplicate OCSP extension OID',
+		);
 	});
 
-	it('parseOcspResponseDer rejects non-OCTET OCSP extension values', async () => {
+	it('parseOcspResponseDerOrThrow rejects non-OCTET OCSP extension values', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'OCSP Bad Extension Value CA' },
 			extensions: {
@@ -2778,12 +2788,12 @@ describe('ocsp', () => {
 			),
 		]);
 
-		expect(() => parseOcspResponseDer(ocspResponseDer)).toThrow(
+		expect(() => parseOcspResponseDerOrThrow(ocspResponseDer)).toThrow(
 			'OCSP extension value must use OCTET STRING',
 		);
 	});
 
-	it('parseOcspResponseDer rejects malformed OCSP extension middle fields', async () => {
+	it('parseOcspResponseDerOrThrow rejects malformed OCSP extension middle fields', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'OCSP Bad Extension Middle Field CA' },
 			extensions: {
@@ -2846,10 +2856,10 @@ describe('ocsp', () => {
 			),
 		]);
 
-		expect(() => parseOcspResponseDer(ocspResponseDer)).toThrow('Malformed OCSP extension');
+		expect(() => parseOcspResponseDerOrThrow(ocspResponseDer)).toThrow('Malformed OCSP extension');
 	});
 
-	it('parseOcspResponseDer rejects unsupported certStatus tags', async () => {
+	it('parseOcspResponseDerOrThrow rejects unsupported certStatus tags', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'OCSP Bad CertStatus CA' },
 			extensions: {
@@ -2906,10 +2916,12 @@ describe('ocsp', () => {
 			),
 		]);
 
-		expect(() => parseOcspResponseDer(ocspResponseDer)).toThrow('Unsupported OCSP certStatus tag');
+		expect(() => parseOcspResponseDerOrThrow(ocspResponseDer)).toThrow(
+			'Unsupported OCSP certStatus tag',
+		);
 	});
 
-	it('parseOcspResponseDer rejects non-INTEGER CertID serialNumber tags', async () => {
+	it('parseOcspResponseDerOrThrow rejects non-INTEGER CertID serialNumber tags', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'OCSP Bad CertID Serial CA' },
 			extensions: {
@@ -2938,7 +2950,7 @@ describe('ocsp', () => {
 		});
 
 		expect(() =>
-			parseOcspResponseDer(rewriteOcspResponseCertIdSerialTag(response.der, 0x04)),
+			parseOcspResponseDerOrThrow(rewriteOcspResponseCertIdSerialTag(response.der, 0x04)),
 		).toThrow('serialNumber must use INTEGER');
 	});
 
@@ -2994,10 +3006,10 @@ describe('ocsp', () => {
 			requests: [{ certificate: leaf.pem, issuerCertificate: issuer.certificate.pem }],
 		});
 		const result = await validateOcspResponse({
-			response: parseOcspResponseDer(response.der),
+			response: parseOcspResponseDerOrThrow(response.der),
 			issuerCertificate: issuerParsed,
 			responderCertificate: responderParsed,
-			request: parseOcspRequestPem(request.pem),
+			request: parseOcspRequestPemOrThrow(request.pem),
 		});
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.code).toBe('responder_chain_invalid');
@@ -3536,3 +3548,57 @@ function extractSubjectPublicKeyBytes(spkiDer: Uint8Array): Uint8Array {
 	}
 	return bitStringElement.value.slice(1);
 }
+
+describe('ocsp Result forms', () => {
+	it('parseOcspRequestDer and parseOcspResponseDer return typed malformed failures', () => {
+		const badRequest = parseOcspRequestDer(Uint8Array.of(0x30, 0x00));
+		expect(badRequest.ok).toBe(false);
+		if (!badRequest.ok) {
+			expect(badRequest.code).toBe('malformed');
+		}
+		const badResponse = parseOcspResponseDer(Uint8Array.of(0x30, 0x00));
+		expect(badResponse.ok).toBe(false);
+		if (!badResponse.ok) {
+			expect(badResponse.code).toBe('malformed');
+		}
+	});
+
+	it('parseOcspRequestPem and parseOcspResponsePem round-trip ok results', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Result Form OCSP CA' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Result Form OCSP CA' },
+			subject: { commonName: 'result-form.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const request = await createOcspRequest({
+			requests: [{ certificate: leaf.pem, issuerCertificate: issuer.certificate.pem }],
+		});
+		const parsedRequest = parseOcspRequestPem(request.pem);
+		expect(parsedRequest.ok).toBe(true);
+		if (parsedRequest.ok) {
+			expect(parsedRequest.value.requests).toHaveLength(1);
+		}
+		const response = await createOcspResponse({
+			signerPrivateKey: issuer.keyPair.privateKey,
+			signerCertificate: issuer.certificate.pem,
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: 'good',
+				},
+			],
+		});
+		const parsedResponse = parseOcspResponsePem(response.pem);
+		expect(parsedResponse.ok).toBe(true);
+		if (parsedResponse.ok) {
+			expect(parsedResponse.value.responseStatus).toBe('successful');
+		}
+	});
+});

@@ -41,6 +41,7 @@ import type {
 } from '#micro509/x509/extensions.ts';
 import { nameFieldKeyFromOid } from '#micro509/x509/name.ts';
 import type {
+	NameFieldKey,
 	ParsedCertificate,
 	ParsedName,
 	ParsedNameAttribute,
@@ -701,7 +702,7 @@ function parseDirectoryNameDerHex(derHex: string): ParsedName | undefined {
 		}
 		const rdns: ParsedRelativeDistinguishedName[] = [];
 		const attributes: ParsedNameAttribute[] = [];
-		const values: ParsedName['values'] = {};
+		const values: Partial<Record<NameFieldKey, string>> = {};
 		for (const setElement of childrenOf(bytes, element)) {
 			const rdn = parseDirectoryNameRdn(bytes, setElement);
 			if (rdn === undefined) {
@@ -757,7 +758,7 @@ function parseDirectoryNameRdn(
 		return undefined;
 	}
 	const attributes: ParsedNameAttribute[] = [];
-	const values: ParsedName['values'] = {};
+	const values: Partial<Record<NameFieldKey, string>> = {};
 	for (const attributeSequence of children) {
 		if (attributeSequence.tag !== 0x30) {
 			return undefined;

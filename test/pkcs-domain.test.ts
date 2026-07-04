@@ -9,14 +9,14 @@ import {
 import { pemEncode } from 'micro509/pem';
 import {
 	createPfx,
-	createPkcs7CertBagPem,
+	createPkcs7CertBag,
 	createPkcs12MacData,
 	parsePfxDer,
 	parsePfxPem,
 	parsePkcs7CertBagDer,
 	parsePkcs7CertBagPem,
 	parsePkcs7SignedDataPem,
-	parsePkcs12MacData,
+	parsePkcs12MacDataOrThrow,
 	verifyPkcs7SignedData,
 } from 'micro509/pkcs';
 import { OIDS } from '#micro509/internal/asn1/oids.ts';
@@ -99,17 +99,17 @@ describe('pkcs domain', () => {
 			saltHex: '09080706',
 		});
 
-		const verified = await parsePkcs12MacData(mac.der, authenticatedSafe, 'integrity123');
+		const verified = await parsePkcs12MacDataOrThrow(mac.der, authenticatedSafe, 'integrity123');
 		expect(verified).toMatchObject({
 			digestAlgorithmOid: OIDS.sha256,
 			digestAlgorithmName: 'SHA-256',
 			iterations: 32,
 			saltHex: '09080706',
-			valid: true,
+			verification: 'valid',
 		});
 
-		const wrongPassword = await parsePkcs12MacData(mac.der, authenticatedSafe, 'wrong');
-		expect(wrongPassword.valid).toBe(false);
+		const wrongPassword = await parsePkcs12MacDataOrThrow(mac.der, authenticatedSafe, 'wrong');
+		expect(wrongPassword.verification).toBe('invalid');
 		expect(wrongPassword.digestHex).toBe(mac.parsed.digestHex);
 	});
 
@@ -130,7 +130,7 @@ describe('pkcs domain', () => {
 			issuerPublicKey: root.keyPair.publicKey,
 		});
 
-		const bag = unwrap(createPkcs7CertBagPem([leaf.pem, root.certificate.pem]));
+		const bag = unwrap(createPkcs7CertBag([leaf.pem, root.certificate.pem]));
 		expect(bag.pem).toContain('BEGIN PKCS7');
 
 		const parsedPem = parsePkcs7CertBagPem(bag.pem);

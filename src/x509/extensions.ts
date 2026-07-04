@@ -59,6 +59,21 @@ import { encodeRelativeDistinguishedName } from './name.ts';
 export type { NameAttribute, NameFieldKey, RelativeDistinguishedNameInput } from './name.ts';
 
 /**
+ * A decoded BIT STRING flag set.
+ *
+ * `flags` contains the recognized flag values with any non-zero padding bits
+ * masked out. `nonZeroPadding` is `true` when the original BIT STRING encoding
+ * had non-zero bits in positions that DER (X.690 §11.2.2) requires to be zero.
+ * Verification layers can use this signal to reject non-conformant encodings.
+ */
+export interface ParsedBitFlags<T extends string> {
+	/** Decoded flag values, padding bits masked. */
+	readonly flags: readonly T[];
+	/** `true` when the original encoding had non-zero padding bits (DER violation). */
+	readonly nonZeroPadding: boolean;
+}
+
+/**
  * RFC 5280 §4.2.1.3 Key Usage bit flag.
  *
  * Each value corresponds to one bit in the KeyUsage BIT STRING.
@@ -248,12 +263,19 @@ export type IssuingDistributionPoint =
  * A certificate with `ca: true` may issue other certificates; `pathLength`
  * limits how many additional CAs may appear below it in the chain.
  */
-export interface BasicConstraints {
-	/** Whether this certificate belongs to a CA. End-entity certs set this to `false`. */
-	readonly ca: boolean;
-	/** Maximum number of intermediate CA certificates allowed below this CA. Only valid when `ca` is `true`. */
-	readonly pathLength?: number;
-}
+export type BasicConstraints =
+	| {
+			/** End-entity certificate: not a CA. */
+			readonly ca: false;
+			/** Never present on end-entity certificates. */
+			readonly pathLength?: undefined;
+	  }
+	| {
+			/** CA certificate: may issue other certificates. */
+			readonly ca: true;
+			/** Maximum number of intermediate CA certificates allowed below this CA. */
+			readonly pathLength?: number;
+	  };
 
 /** A single certificate policy: an OID plus optional qualifiers. */
 export interface PolicyInformation {

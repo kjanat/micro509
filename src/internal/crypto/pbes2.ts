@@ -45,10 +45,10 @@ export function isWrongPasswordError(value: unknown): value is Error {
 }
 
 /** AES-CBC key sizes supported by this PBES2 implementation. */
-export type Pbes2EncryptionScheme = 'aes128-cbc' | 'aes192-cbc' | 'aes256-cbc';
+export type Pbes2EncryptionScheme = 'AES-128-CBC' | 'AES-192-CBC' | 'AES-256-CBC';
 
-/** PBKDF2 pseudo-random function choices. `hmac-sha1` is the RFC default; `hmac-sha256` is preferred. */
-export type Pbes2Prf = 'hmac-sha1' | 'hmac-sha256';
+/** PBKDF2 pseudo-random function choices. `HMAC-SHA-1` is the RFC default; `HMAC-SHA-256` is preferred. */
+export type Pbes2Prf = 'HMAC-SHA-1' | 'HMAC-SHA-256';
 
 /** Input for `encryptPbes2`. */
 export interface Pbes2EncryptionOptions {
@@ -60,9 +60,9 @@ export interface Pbes2EncryptionOptions {
 	readonly salt?: Uint8Array;
 	/** AES-CBC initialization vector. Default: 16 cryptographically random bytes. */
 	readonly iv?: Uint8Array;
-	/** AES key size. Default: `'aes256-cbc'`. */
-	readonly encryption?: Pbes2EncryptionScheme;
-	/** PBKDF2 PRF. Default: `'hmac-sha256'`. */
+	/** AES-CBC cipher. Default: `'AES-256-CBC'`. */
+	readonly cipher?: Pbes2EncryptionScheme;
+	/** PBKDF2 PRF. Default: `'HMAC-SHA-256'`. */
 	readonly prf?: Pbes2Prf;
 }
 
@@ -75,7 +75,7 @@ export interface Pbes2Parameters {
 	/** AES-CBC initialization vector. */
 	readonly iv: Uint8Array;
 	/** AES-CBC key-size variant. */
-	readonly encryption: Pbes2EncryptionScheme;
+	readonly cipher: Pbes2EncryptionScheme;
 	/** PBKDF2 pseudo-random function. */
 	readonly prf: Pbes2Prf;
 }
@@ -98,8 +98,8 @@ export async function encryptPbes2(
 	const iterations = options.iterations ?? 100_000;
 	const salt = options.salt ?? getCrypto().getRandomValues(new Uint8Array(16));
 	const iv = options.iv ?? getCrypto().getRandomValues(new Uint8Array(16));
-	const encryption = options.encryption ?? 'aes256-cbc';
-	const prf = options.prf ?? 'hmac-sha256';
+	const encryption = options.cipher ?? 'AES-256-CBC';
+	const prf = options.prf ?? 'HMAC-SHA-256';
 
 	// Validate inputs before any WebCrypto calls
 	if (!Number.isInteger(iterations) || iterations < 1) {
@@ -129,11 +129,11 @@ export async function encryptPbes2(
 			iterations,
 			salt,
 			iv,
-			encryption,
+			cipher: encryption,
 			prf,
 		}),
 		encryptedData,
-		parameters: { iterations, salt, iv, encryption, prf },
+		parameters: { iterations, salt, iv, cipher: encryption, prf },
 	};
 }
 
@@ -148,7 +148,7 @@ export async function decryptPbes2(
 		password,
 		parameters.salt,
 		parameters.iterations,
-		parameters.encryption,
+		parameters.cipher,
 		parameters.prf,
 		['decrypt'],
 	);
@@ -167,7 +167,7 @@ export async function decryptPbes2(
 
 /** DER-encodes a PBES2 AlgorithmIdentifier SEQUENCE from resolved parameters. */
 export function encodePbes2AlgorithmIdentifier(parameters: Pbes2Parameters): Uint8Array {
-	const encryption = resolveEncryptionProfile(parameters.encryption);
+	const encryption = resolveEncryptionProfile(parameters.cipher);
 	const prf = resolvePrfProfile(parameters.prf);
 	return sequence([
 		objectIdentifier(OIDS.pbes2),
@@ -266,7 +266,7 @@ export function parsePbes2AlgorithmIdentifier(algorithmIdentifierDer: Uint8Array
 		salt: saltValue,
 		iterations: iterationsValue,
 		iv: ivValue,
-		encryption: encryption.name,
+		cipher: encryption.name,
 		prf,
 	};
 }
@@ -309,7 +309,7 @@ function parsePbkdf2Prf(
 	element: ReturnType<typeof readSequenceChildren>[number] | undefined,
 ): Pbes2Prf {
 	if (element === undefined) {
-		return 'hmac-sha1';
+		return 'HMAC-SHA-1';
 	}
 	if (element.tag !== 0x30) {
 		throw new Error('Malformed PBKDF2 PRF');
@@ -339,11 +339,11 @@ function encryptionSchemeFromOid(oid: string):
 	| undefined {
 	switch (oid) {
 		case OIDS.aes128Cbc:
-			return { name: 'aes128-cbc', oid, keyLengthBits: 128, keyLengthBytes: 16 };
+			return { name: 'AES-128-CBC', oid, keyLengthBits: 128, keyLengthBytes: 16 };
 		case OIDS.aes192Cbc:
-			return { name: 'aes192-cbc', oid, keyLengthBits: 192, keyLengthBytes: 24 };
+			return { name: 'AES-192-CBC', oid, keyLengthBits: 192, keyLengthBytes: 24 };
 		case OIDS.aes256Cbc:
-			return { name: 'aes256-cbc', oid, keyLengthBits: 256, keyLengthBytes: 32 };
+			return { name: 'AES-256-CBC', oid, keyLengthBits: 256, keyLengthBytes: 32 };
 	}
 	return undefined;
 }
@@ -352,9 +352,9 @@ function encryptionSchemeFromOid(oid: string):
 function prfFromOid(oid: string): Pbes2Prf | undefined {
 	switch (oid) {
 		case OIDS.hmacWithSHA1:
-			return 'hmac-sha1';
+			return 'HMAC-SHA-1';
 		case OIDS.hmacWithSHA256:
-			return 'hmac-sha256';
+			return 'HMAC-SHA-256';
 	}
 	return undefined;
 }
@@ -367,9 +367,9 @@ function resolveEncryptionProfile(name: Pbes2EncryptionScheme): {
 	readonly keyLengthBytes: 16 | 24 | 32;
 } {
 	const profile = encryptionSchemeFromOid(
-		name === 'aes128-cbc'
+		name === 'AES-128-CBC'
 			? OIDS.aes128Cbc
-			: name === 'aes192-cbc'
+			: name === 'AES-192-CBC'
 				? OIDS.aes192Cbc
 				: OIDS.aes256Cbc,
 	);
@@ -385,9 +385,9 @@ function resolvePrfProfile(name: Pbes2Prf): {
 	readonly hash: 'SHA-1' | 'SHA-256';
 } {
 	switch (name) {
-		case 'hmac-sha1':
+		case 'HMAC-SHA-1':
 			return { oid: OIDS.hmacWithSHA1, hash: 'SHA-1' };
-		case 'hmac-sha256':
+		case 'HMAC-SHA-256':
 			return { oid: OIDS.hmacWithSHA256, hash: 'SHA-256' };
 	}
 }
