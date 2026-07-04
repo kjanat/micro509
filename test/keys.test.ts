@@ -34,7 +34,7 @@ import {
 	importSpkiBase64,
 	importSpkiPem,
 	unwrap,
-} from 'micro509';
+} from '#micro509';
 
 /** Minimal shape every `import*` Result satisfies, success or failure. */
 type FailableImport =

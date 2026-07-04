@@ -13,7 +13,7 @@ import {
 	parseOcspRequestDerOrThrow,
 	parseOcspResponseDerOrThrow,
 	unwrap,
-} from 'micro509';
+} from '#micro509';
 import {
 	bitString,
 	explicitContext,

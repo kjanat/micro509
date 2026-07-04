@@ -18,7 +18,7 @@ import {
 	validateOcspResponse,
 	verifyOcspResponseSignature,
 	unwrap,
-} from 'micro509';
+} from '#micro509';
 import { childrenOf, toHex } from '#micro509/internal/asn1/asn1.ts';
 import {
 	bitString,

@@ -9,7 +9,7 @@ import {
 	parsePfxDer,
 	parsePfxPem,
 	unwrap,
-} from 'micro509';
+} from '#micro509';
 import {
 	explicitContext,
 	integerFromNumber,

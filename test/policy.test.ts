@@ -6,7 +6,7 @@ import {
 	parseCertificatePem,
 	validateCandidatePath,
 	unwrap,
-} from 'micro509';
+} from '#micro509';
 import { OIDS } from '#micro509/internal/asn1/oids.ts';
 
 type PolicyIdentifier = string;

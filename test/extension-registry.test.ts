@@ -5,8 +5,8 @@ import {
 	parseCertificateDer,
 	parseCertificateSigningRequestDer,
 	unwrap,
-} from 'micro509';
-import { exportSpkiDer, generateKeyPair } from 'micro509/keys';
+} from '#micro509';
+import { exportSpkiDer, generateKeyPair } from '#micro509/keys';
 import { toHex } from '#micro509/internal/asn1/asn1.ts';
 import { OIDS } from '#micro509/internal/asn1/oids.ts';
 import {

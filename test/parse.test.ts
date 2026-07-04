@@ -15,8 +15,8 @@ import {
 	parseCertificateSigningRequestDer,
 	parseCertificateSigningRequestPem,
 	unwrap,
-} from 'micro509';
-import { encodeName } from 'micro509/x509';
+} from '#micro509';
+import { encodeName } from '#micro509/x509';
 import {
 	bitString,
 	concatBytes,

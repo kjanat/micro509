@@ -6,7 +6,7 @@ import {
 	matchServiceIdentity,
 	parseCertificatePem,
 	unwrap,
-} from 'micro509';
+} from '#micro509';
 import { issueChain } from './helpers.ts';
 
 describe('identity boundary', () => {

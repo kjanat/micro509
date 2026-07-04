@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { ParsedCertificate } from 'micro509';
+import type { ParsedCertificate } from '#micro509';
 import {
 	createCertificate,
 	createSelfSignedCertificate,
@@ -7,9 +7,9 @@ import {
 	generateKeyPair,
 	importPkcs8Der,
 	unwrap,
-} from 'micro509';
-import type { BasicConstraints, GeneralName } from 'micro509/x509';
-import { encodeSubjectAltName } from 'micro509/x509';
+} from '#micro509';
+import type { BasicConstraints, GeneralName } from '#micro509/x509';
+import { encodeSubjectAltName } from '#micro509/x509';
 import { toArrayBuffer } from '#micro509/internal/asn1/asn1.ts';
 import {
 	bitString,

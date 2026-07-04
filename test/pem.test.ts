@@ -11,7 +11,7 @@ import {
 	pemEncode,
 	splitPemBlocks,
 	splitPemBlocksOrThrow,
-} from 'micro509';
+} from '#micro509';
 
 describe('pem', () => {
 	it('splits mixed PEM bundles by label', async () => {

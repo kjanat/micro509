@@ -8,7 +8,7 @@ import {
 	parseCertificateRevocationListDerOrThrow,
 	verifyCertificateChain,
 	unwrap,
-} from 'micro509';
+} from '#micro509';
 import { PKITS_CASES, type PkitsCase } from './fixtures/pkits/manifest.ts';
 
 const PKITS_VALIDATION_TIME = new Date('2011-04-15T00:00:00Z');

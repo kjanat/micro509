@@ -5,8 +5,8 @@ import {
 	generateKeyPair,
 	parseCertificatePem,
 	unwrap,
-} from 'micro509';
-import { pemEncode } from 'micro509/pem';
+} from '#micro509';
+import { pemEncode } from '#micro509/pem';
 import {
 	createPfx,
 	createPkcs7CertBag,
@@ -18,7 +18,7 @@ import {
 	parsePkcs7SignedDataPem,
 	parsePkcs12MacDataOrThrow,
 	verifyPkcs7SignedData,
-} from 'micro509/pkcs';
+} from '#micro509/pkcs';
 import { OIDS } from '#micro509/internal/asn1/oids.ts';
 import { createCmsSignedDataWithSignedAttrs } from './helpers.ts';
 

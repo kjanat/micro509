@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'bun:test';
-import type { ImportEcKeyInput } from '#micro509/keys/index.ts';
-import * as keys from '#micro509/keys/index.ts';
-import * as pem from '#micro509/pem/index.ts';
-import * as result from '#micro509/result/index.ts';
+import type { ImportEcKeyInput } from '#micro509/keys';
+import * as keys from '#micro509/keys';
+import * as pem from '#micro509/pem';
+import * as result from '#micro509/result';
 
 const ecAlgorithm = {
 	kind: 'ecdsa',

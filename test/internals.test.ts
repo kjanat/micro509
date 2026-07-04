@@ -6,8 +6,8 @@ import {
 	parseCertificatePem,
 	parseCertificateRevocationListPemOrThrow,
 	unwrap,
-} from 'micro509';
-import { createPkcs12MacData, parsePkcs12MacDataOrThrow } from 'micro509/pkcs';
+} from '#micro509';
+import { createPkcs12MacData, parsePkcs12MacDataOrThrow } from '#micro509/pkcs';
 import { ecdsaSignatureToDer } from '#micro509/internal/crypto/ecdsa.ts';
 import {
 	buildCertificateExtensions,
@@ -16,7 +16,7 @@ import {
 	encodeNameConstraints,
 	encodePolicyMappings,
 	encodeSubjectAltName,
-} from 'micro509/x509';
+} from '#micro509/x509';
 import {
 	decodeBoolean,
 	decodeIntegerNumber,

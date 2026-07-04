@@ -4,8 +4,8 @@ import {
 	createSelfSignedCertificate,
 	parsePkcs7SignedDataDer,
 	verifyPkcs7SignedData,
-} from 'micro509';
-import type { KeyAlgorithmInput } from 'micro509/keys';
+} from '#micro509';
+import type { KeyAlgorithmInput } from '#micro509/keys';
 
 const encoder = new TextEncoder();
 
