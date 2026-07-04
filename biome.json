@@ -10,7 +10,7 @@
 		"includes": ["**", "!!**/dist", "!!**/*.svg"]
 	},
 	"formatter": {
-		"enabled": true,
+		"enabled": false,
 		"indentStyle": "tab",
 		"lineWidth": 100
 	},

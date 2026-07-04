@@ -4,19 +4,30 @@
 	"formatter": [
 		{ "external": { "command": "dprint", "arguments": ["fmt", "--stdin", "{buffer_path}"] } }
 	],
-	"wrap_guides": [100],
 	"prettier": { "allowed": false },
+	"wrap_guides": [100],
 	"languages": {
 		"TypeScript": {
 			"format_on_save": "on",
-			"language_servers": ["tsgo", "vtsls", "biome"],
+			"language_servers": ["vtsls", "tsgo", "deno", "biome"],
 			"code_actions_on_format": {
 				"source.fixAll.biome": true,
-				"source.organizeImports.biome": true
-			},
+				"source.organizeImports.biome": false
+			}
 		},
 		"Markdown": { "wrap_guides": [80] },
 		"TOML": { "wrap_guides": [140] }
 	},
-	"lsp": {}
+	"lsp": {
+		"biome": {
+			"settings": {
+				"config_path": "./biome.json",
+				"require_config_file": true,
+				"inline_config": {
+					"formatter": { "enabled": false },
+					"linter": {}
+				}
+			}
+		}
+	}
 }
