@@ -7,7 +7,7 @@
 
 import { nullValue, objectIdentifier, sequence } from '#micro509/internal/asn1/der.ts';
 import { OIDS } from '#micro509/internal/asn1/oids.ts';
-import { rawEcdsaSignatureToDer } from './ecdsa.ts';
+import { ecdsaSignatureToDer } from './ecdsa.ts';
 import { encodeRsaPssParameters, type RsaPssHash, rsaPssParametersForHash } from './rsa-pss.ts';
 import { getCrypto } from './webcrypto.ts';
 
@@ -168,10 +168,8 @@ export async function signBytes(
 	const signature = new Uint8Array(
 		await getCrypto().subtle.sign(algorithm.signParams, privateKey, view),
 	);
-	// For ECDSA keys, WebCrypto may return either raw (r || s) or DER format.
-	// If the signature doesn't start with SEQUENCE tag and we expect ECDSA, convert to DER.
-	if (algorithm.ecdsaRawSignatureBytes !== undefined && signature[0] !== 0x30) {
-		return rawEcdsaSignatureToDer(signature, algorithm.ecdsaRawSignatureBytes / 2);
+	if (algorithm.ecdsaRawSignatureBytes !== undefined) {
+		return ecdsaSignatureToDer(signature, algorithm.ecdsaRawSignatureBytes);
 	}
 	return signature;
 }

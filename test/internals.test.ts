@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'bun:test';
+import {
+	createCertificateRevocationList,
+	createSelfSignedCertificate,
+	parseCertificatePem,
+	parseCertificateRevocationListPemOrThrow,
+	unwrap,
+} from 'micro509';
 import { createPkcs12MacData, parsePkcs12MacDataOrThrow } from 'micro509/pkcs';
+import { ecdsaSignatureToDer } from '#micro509/internal/crypto/ecdsa.ts';
 import {
 	buildCertificateExtensions,
 	encodeCertificatePolicies,
@@ -1352,3 +1360,48 @@ function asn1StringElement(tag: number, value: string): Uint8Array {
 	const bytes = new TextEncoder().encode(value);
 	return new Uint8Array([tag, bytes.length, ...bytes]);
 }
+
+describe('ecdsaSignatureToDer', () => {
+	it('converts a raw signature to DER even when r starts with the SEQUENCE tag byte', () => {
+		// Regression: the old first-byte sniff left raw signatures whose r
+		// began with 0x30 unconverted, embedding an invalid DER signature
+		// (~1 in 256 ECDSA signatures; OpenSSL rejects the artifact).
+		const raw = new Uint8Array(64).fill(0x42);
+		raw[0] = 0x30;
+		const der = ecdsaSignatureToDer(raw, 64);
+		const parts = readSequenceChildren(der);
+		expect(parts).toHaveLength(2);
+		expect(parts[0]?.tag).toBe(0x02);
+		expect(parts[1]?.tag).toBe(0x02);
+		expect(new Uint8Array(derEcdsaSignatureToRaw(der, 32))).toEqual(raw);
+	});
+
+	it('passes through signatures that are not raw-length', () => {
+		const der = rawEcdsaSignatureToDer(new Uint8Array(64).fill(7), 32);
+		expect(ecdsaSignatureToDer(der, 64)).toBe(der);
+	});
+
+	it('emitted certificate and CRL ECDSA signatures always parse as DER r/s pairs', async () => {
+		for (let i = 0; i < 8; i++) {
+			const ca = await createSelfSignedCertificate({
+				subject: { commonName: `DER Sig CA ${i}` },
+				extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
+			});
+			const crl = await createCertificateRevocationList({
+				issuer: { commonName: `DER Sig CA ${i}` },
+				signerPrivateKey: ca.keyPair.privateKey,
+				issuerPublicKey: ca.keyPair.publicKey,
+				revokedCertificates: [],
+			});
+			for (const der of [
+				unwrap(parseCertificatePem(ca.certificate.pem)).signatureValue,
+				parseCertificateRevocationListPemOrThrow(crl.pem).signatureValue,
+			]) {
+				const parts = readSequenceChildren(new Uint8Array(der));
+				expect(parts).toHaveLength(2);
+				expect(parts[0]?.tag).toBe(0x02);
+				expect(parts[1]?.tag).toBe(0x02);
+			}
+		}
+	});
+});

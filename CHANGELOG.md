@@ -17,6 +17,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- ECDSA signing embedded an invalid signature roughly once per 256
+  signatures: WebCrypto's raw `r || s` output was detected by sniffing the
+  first byte for the DER SEQUENCE tag, so a raw signature whose `r` began
+  with `0x30` was emitted unconverted. OpenSSL rejects such certificates
+  and CRLs with a signature failure (micro509's own verifier masked the
+  bug by making the mirror-image guess). Detection is now by exact raw
+  length. Affects all ECDSA-signed artifacts from previous releases —
+  re-issue anything that fails external verification.
+
 ## [0.7.0] - 2026-07-04
 
 Pre-1.0 API freeze cleanup: one coherent breaking pass over vocabulary,
