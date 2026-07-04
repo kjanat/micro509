@@ -92,7 +92,7 @@ describe('checkChainRevocation', () => {
 		const firstCert = result.value.certificates[0];
 		expect(firstCert).toBeDefined();
 		expect(firstCert?.status).toBe('good');
-		expect(firstCert?.source?.type).toBe('crl');
+		expect(firstCert?.source?.kind).toBe('crl');
 		expect(result.value.decision).toBe('allow');
 	});
 
@@ -119,7 +119,7 @@ describe('checkChainRevocation', () => {
 		const revokedStatus = result.value.certificates[0];
 		expect(revokedStatus?.status).toBe('revoked');
 		expect(revokedStatus?.revocationInfo).toBeDefined();
-		expect(revokedStatus?.source?.type).toBe('crl');
+		expect(revokedStatus?.source?.kind).toBe('crl');
 
 		// Second cert (goodCa) should be good
 		const goodStatus = result.value.certificates[1];
@@ -150,7 +150,7 @@ describe('checkChainRevocation', () => {
 		// GoodCA should be good (checked against root CRL)
 		const caStatus = result.value.certificates[0];
 		expect(caStatus?.status).toBe('good');
-		expect(caStatus?.source?.type).toBe('crl');
+		expect(caStatus?.source?.kind).toBe('crl');
 		// Signer should be root (chain issuer)
 		expect(caStatus?.source?.signerCertificate?.subject.derHex).toBe(root.subject.derHex);
 	});
@@ -307,7 +307,7 @@ describe('checkChainRevocation with OCSP evidence', () => {
 		expect(result.value.decision).toBe('allow');
 		const leafStatus = result.value.certificates[0];
 		expect(leafStatus?.status).toBe('good');
-		expect(leafStatus?.source?.type).toBe('ocsp');
+		expect(leafStatus?.source?.kind).toBe('ocsp');
 	});
 
 	it('denies when a validated OCSP response reports revoked', async () => {
@@ -338,10 +338,10 @@ describe('checkChainRevocation with OCSP evidence', () => {
 		expect(result.value.decision).toBe('deny');
 		const leafStatus = result.value.certificates[0];
 		expect(leafStatus?.status).toBe('revoked');
-		expect(leafStatus?.source?.type).toBe('ocsp');
+		expect(leafStatus?.source?.kind).toBe('ocsp');
 		expect(leafStatus?.revocationInfo?.reason).toBe('keyCompromise');
 		// DER time encoding truncates to whole seconds
-		expect(leafStatus?.revocationInfo?.date.getTime()).toBe(
+		expect(leafStatus?.revocationInfo?.revocationDate.getTime()).toBe(
 			Math.floor(revokedAt.getTime() / 1000) * 1000,
 		);
 	});
@@ -445,7 +445,7 @@ describe('checkChainRevocation with OCSP evidence', () => {
 		expect(result.value.decision).toBe('deny');
 		const leafStatus = result.value.certificates[0];
 		expect(leafStatus?.status).toBe('revoked');
-		expect(leafStatus?.source?.type).toBe('crl');
+		expect(leafStatus?.source?.kind).toBe('crl');
 	});
 
 	it('honors prefer when both sources report good', async () => {
@@ -475,7 +475,7 @@ describe('checkChainRevocation with OCSP evidence', () => {
 			crls: [crl.der],
 			at,
 		});
-		expect(preferOcsp.value.certificates[0]?.source?.type).toBe('ocsp');
+		expect(preferOcsp.value.certificates[0]?.source?.kind).toBe('ocsp');
 
 		const preferCrl = await checkChainRevocation({
 			chain: [...chain],
@@ -484,7 +484,7 @@ describe('checkChainRevocation with OCSP evidence', () => {
 			at,
 			policy: { prefer: 'crl' },
 		});
-		expect(preferCrl.value.certificates[0]?.source?.type).toBe('crl');
+		expect(preferCrl.value.certificates[0]?.source?.kind).toBe('crl');
 	});
 
 	it('best-available reports the fresher CRL over a staler OCSP response', async () => {
@@ -520,7 +520,7 @@ describe('checkChainRevocation with OCSP evidence', () => {
 			at,
 		});
 		expect(bestAvailable.value.certificates[0]?.status).toBe('good');
-		expect(bestAvailable.value.certificates[0]?.source?.type).toBe('crl');
+		expect(bestAvailable.value.certificates[0]?.source?.kind).toBe('crl');
 		expect(bestAvailable.value.certificates[0]?.source?.thisUpdate?.getTime()).toBe(
 			derSeconds(fresh.thisUpdate),
 		);
@@ -533,7 +533,7 @@ describe('checkChainRevocation with OCSP evidence', () => {
 			at,
 			policy: { prefer: 'ocsp' },
 		});
-		expect(preferOcsp.value.certificates[0]?.source?.type).toBe('ocsp');
+		expect(preferOcsp.value.certificates[0]?.source?.kind).toBe('ocsp');
 	});
 
 	it('best-available reports the fresher OCSP response over a staler CRL', async () => {
@@ -565,7 +565,7 @@ describe('checkChainRevocation with OCSP evidence', () => {
 			at,
 		});
 		expect(result.value.certificates[0]?.status).toBe('good');
-		expect(result.value.certificates[0]?.source?.type).toBe('ocsp');
+		expect(result.value.certificates[0]?.source?.kind).toBe('ocsp');
 		expect(result.value.certificates[0]?.source?.thisUpdate?.getTime()).toBe(
 			derSeconds(fresh.thisUpdate),
 		);
@@ -609,7 +609,7 @@ describe('checkChainRevocation with OCSP evidence', () => {
 		});
 		expect(result.value.decision).toBe('deny');
 		expect(result.value.certificates[0]?.status).toBe('revoked');
-		expect(result.value.certificates[0]?.source?.type).toBe('crl');
+		expect(result.value.certificates[0]?.source?.kind).toBe('crl');
 	});
 
 	it('reports the signer of the freshest good CRL when multiple CRLs apply', async () => {
@@ -654,7 +654,7 @@ describe('checkChainRevocation with OCSP evidence', () => {
 		});
 		const leafStatus = result.value.certificates[0];
 		expect(leafStatus?.status).toBe('good');
-		expect(leafStatus?.source?.type).toBe('crl');
+		expect(leafStatus?.source?.kind).toBe('crl');
 		expect(leafStatus?.source?.signerCertificate?.serialNumberHex).toBe(
 			parsedDelegate.serialNumberHex,
 		);
@@ -706,7 +706,7 @@ describe('checkChainRevocation with OCSP evidence', () => {
 			at,
 		});
 		expect(result.value.certificates[0]?.status).toBe('good');
-		expect(result.value.certificates[0]?.source?.type).toBe('crl');
+		expect(result.value.certificates[0]?.source?.kind).toBe('crl');
 		// The winning timestamp is the delta CRL's, not the 12h-old base's
 		expect(result.value.certificates[0]?.source?.thisUpdate?.getTime()).toBe(
 			derSeconds(deltaThisUpdate),
@@ -762,7 +762,7 @@ describe('checkChainRevocation with OCSP evidence', () => {
 			at,
 		});
 		expect(trusted.value.certificates[0]?.status).toBe('good');
-		expect(trusted.value.certificates[0]?.source?.type).toBe('ocsp');
+		expect(trusted.value.certificates[0]?.source?.kind).toBe('ocsp');
 	});
 
 	it('validates a delegated responder provided via extraCertificates', async () => {
@@ -804,7 +804,7 @@ describe('checkChainRevocation with OCSP evidence', () => {
 			at,
 		});
 		expect(withExtras.value.certificates[0]?.status).toBe('good');
-		expect(withExtras.value.certificates[0]?.source?.type).toBe('ocsp');
+		expect(withExtras.value.certificates[0]?.source?.kind).toBe('ocsp');
 	});
 
 	it('records parse errors for malformed OCSP responses', async () => {

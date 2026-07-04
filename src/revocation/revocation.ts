@@ -1,6 +1,6 @@
 /**
  * Revocation orchestration: evaluates CRL and OCSP evidence to produce a
- * unified `good`/`revoked`/`unknown` status for a certificate.
+ * unified `good`/`revoked`/`indeterminate` status for a certificate.
  *
  * @module
  */
@@ -17,7 +17,7 @@ export type * from './crl.ts';
 export type * from './ocsp.ts';
 
 /** Unified revocation outcome across CRL and OCSP evidence. */
-export type RevocationStatus = 'good' | 'revoked' | 'unknown';
+export type RevocationStatus = 'good' | 'revoked' | 'indeterminate';
 
 /** Which revocation mechanism produced the evidence. */
 export type RevocationEvidenceKind = 'crl' | 'ocsp';
@@ -85,7 +85,7 @@ export interface CheckCertificateRevocationInput {
 	readonly certificate: RevocationCertificateSource;
 	/** Issuer of `certificate`. */
 	readonly issuerCertificate: RevocationCertificateSource;
-	/** CRL and/or OCSP evidence to evaluate. Returns `unknown` if empty. */
+	/** CRL and/or OCSP evidence to evaluate. Returns `indeterminate` if empty. */
 	readonly evidence?: readonly RevocationEvidenceInput[];
 	/** Evaluation time. Defaults to `new Date()`. */
 	readonly at?: Date;
@@ -93,10 +93,10 @@ export interface CheckCertificateRevocationInput {
 	readonly clockSkewMs?: number;
 }
 
-/** Error codes that {@linkcode checkCertificateRevocation} may surface inside an `unknown` result. */
+/** Error codes that {@linkcode checkCertificateRevocation} may surface inside an `indeterminate` result. */
 export type CheckCertificateRevocationErrorCode =
 	| 'revocation_evidence_missing'
-	| 'revocation_status_unknown';
+	| 'revocation_status_indeterminate';
 
 /** Why a particular piece of evidence could not produce a definitive `good`/`revoked` answer. */
 export type RevocationIndeterminateReasonCode =
@@ -120,16 +120,16 @@ export type RevocationIndeterminateReasonCode =
 /** One piece of evidence that failed to produce a definitive revocation answer. */
 export interface RevocationIndeterminateEvidence {
 	/** Whether this evidence was CRL or OCSP. */
-	readonly source: RevocationEvidenceKind;
+	readonly kind: RevocationEvidenceKind;
 	/** Machine-readable reason code. */
 	readonly code: RevocationIndeterminateReasonCode;
 	/** Human-readable explanation. */
 	readonly message: string;
-	/** CRL-specific applicability failure reason, when `source` is `'crl'`. */
+	/** CRL-specific applicability failure reason, when `kind` is `'crl'`. */
 	readonly reason?: CrlApplicabilityFailureReason;
 }
 
-/** Diagnostic details attached to an `unknown` revocation result. */
+/** Diagnostic details attached to an `indeterminate` revocation result. */
 export interface CheckCertificateRevocationFailureDetails {
 	/** Which evidence kinds were attempted (`'crl'`, `'ocsp'`, or both). */
 	readonly checkedSources: readonly RevocationEvidenceKind[];
@@ -138,10 +138,10 @@ export interface CheckCertificateRevocationFailureDetails {
 }
 
 /** Revocation status could not be determined from the provided evidence. */
-export interface RevocationCheckUnknownValue {
+export interface RevocationCheckIndeterminateValue {
 	/** Status is indeterminate. */
-	readonly status: Extract<RevocationStatus, 'unknown'>;
-	/** Why revocation status is unknown. */
+	readonly status: Extract<RevocationStatus, 'indeterminate'>;
+	/** Why revocation status is indeterminate. */
 	readonly code: CheckCertificateRevocationErrorCode;
 	/** Human-readable diagnostic message. */
 	readonly message: string;
@@ -154,7 +154,7 @@ export interface RevocationCheckGoodValue {
 	/** Certificate is not revoked. */
 	readonly status: Extract<RevocationStatus, 'good'>;
 	/** Which evidence kind confirmed the good status. */
-	readonly source: RevocationEvidenceKind;
+	readonly kind: RevocationEvidenceKind;
 	/** Human-readable diagnostic message. */
 	readonly message: string;
 }
@@ -164,7 +164,7 @@ export interface RevocationCheckRevokedValue {
 	/** Certificate is revoked. */
 	readonly status: Extract<RevocationStatus, 'revoked'>;
 	/** Which evidence kind reported the revocation. */
-	readonly source: RevocationEvidenceKind;
+	readonly kind: RevocationEvidenceKind;
 	/** Human-readable diagnostic message. */
 	readonly message: string;
 	/** When the certificate was revoked (from CRL entry or OCSP response). */
@@ -175,11 +175,11 @@ export interface RevocationCheckRevokedValue {
 	readonly revocationReasonCode?: number;
 }
 
-/** Discriminated union of `good`, `revoked`, and `unknown` revocation outcomes. */
+/** Discriminated union of `good`, `revoked`, and `indeterminate` revocation outcomes. */
 export type CheckCertificateRevocationValue =
 	| RevocationCheckGoodValue
 	| RevocationCheckRevokedValue
-	| RevocationCheckUnknownValue;
+	| RevocationCheckIndeterminateValue;
 
 /**
  * Result of {@linkcode checkCertificateRevocation}. Always succeeds (`ok: true`) —
@@ -191,7 +191,7 @@ export type CheckCertificateRevocationResult = Result<CheckCertificateRevocation
 type RevocationEvidenceCheck =
 	| { readonly status: 'good'; readonly result: RevocationCheckGoodValue }
 	| { readonly status: 'revoked'; readonly result: RevocationCheckRevokedValue }
-	| { readonly status: 'unknown'; readonly detail: RevocationIndeterminateEvidence };
+	| { readonly status: 'indeterminate'; readonly detail: RevocationIndeterminateEvidence };
 
 /** Extracts OCSP responder URIs from the certificate's Authority Information Access extension. */
 export function getCertificateOcspResponderUris(
@@ -261,7 +261,7 @@ export function resolveOcspResponderCandidates(
 /**
  * Evaluates all provided CRL and OCSP evidence to determine the certificate's
  * revocation status. Returns the first `revoked` if any, else the first `good`,
- * else `unknown` with diagnostic details about each indeterminate evidence.
+ * else `indeterminate` with diagnostic details about each indeterminate evidence.
  *
  * @example
  * ```ts
@@ -284,7 +284,7 @@ export async function checkCertificateRevocation(
 	const checkedSources = evidence.map((entry) => entry.kind);
 	if (evidence.length === 0) {
 		return revocationSuccess({
-			status: 'unknown',
+			status: 'indeterminate',
 			code: 'revocation_evidence_missing',
 			message: 'No CRL or OCSP evidence provided',
 			details: {
@@ -298,8 +298,8 @@ export async function checkCertificateRevocation(
 		normalizedCertificate = normalizeCertificate(input.certificate);
 	} catch {
 		return revocationSuccess({
-			status: 'unknown',
-			code: 'revocation_status_unknown',
+			status: 'indeterminate',
+			code: 'revocation_status_indeterminate',
 			message: 'Certificate input is malformed',
 			details: {
 				checkedSources,
@@ -318,7 +318,7 @@ export async function checkCertificateRevocation(
 					: await checkCertificateRevocationWithOcsp(input, entry, normalizedCertificate);
 		} catch {
 			indeterminateEvidence.push({
-				source: entry.kind,
+				kind: entry.kind,
 				code: 'signature_invalid',
 				message: `${entry.kind.toUpperCase()} evidence input is malformed`,
 			});
@@ -337,8 +337,8 @@ export async function checkCertificateRevocation(
 		return revocationSuccess(goodResult);
 	}
 	return revocationSuccess({
-		status: 'unknown',
-		code: 'revocation_status_unknown',
+		status: 'indeterminate',
+		code: 'revocation_status_indeterminate',
 		message: 'No revocation evidence established certificate status',
 		details: {
 			checkedSources,
@@ -367,7 +367,7 @@ async function checkCertificateRevocationWithCrl(
 				status: 'revoked',
 				result: {
 					status: 'revoked',
-					source: 'crl',
+					kind: 'crl',
 					message: 'Certificate is revoked according to CRL evidence',
 					revokedAt: result.value.revocationDate,
 					...(result.value.reasonCode === undefined
@@ -380,15 +380,15 @@ async function checkCertificateRevocationWithCrl(
 			status: 'good',
 			result: {
 				status: 'good',
-				source: 'crl',
+				kind: 'crl',
 				message: 'Certificate is not revoked according to CRL evidence',
 			},
 		};
 	}
 	return {
-		status: 'unknown',
+		status: 'indeterminate',
 		detail: {
-			source: 'crl',
+			kind: 'crl',
 			code: result.code,
 			message: result.message,
 			...(result.details?.reason === undefined ? {} : { reason: result.details.reason }),
@@ -414,9 +414,9 @@ async function checkCertificateRevocationWithOcsp(
 	});
 	if (!response.ok) {
 		return {
-			status: 'unknown',
+			status: 'indeterminate',
 			detail: {
-				source: 'ocsp',
+				kind: 'ocsp',
 				code: response.code,
 				message: response.message,
 			},
@@ -428,9 +428,9 @@ async function checkCertificateRevocationWithOcsp(
 	);
 	if (matchedResponse === undefined) {
 		return {
-			status: 'unknown',
+			status: 'indeterminate',
 			detail: {
-				source: 'ocsp',
+				kind: 'ocsp',
 				code: 'certificate_status_missing',
 				message: 'OCSP response does not include certificate status for the target certificate',
 			},
@@ -441,7 +441,7 @@ async function checkCertificateRevocationWithOcsp(
 			status: 'revoked',
 			result: {
 				status: 'revoked',
-				source: 'ocsp',
+				kind: 'ocsp',
 				message: 'Certificate is revoked according to OCSP evidence',
 				...(matchedResponse.revokedAt === undefined
 					? {}
@@ -457,15 +457,15 @@ async function checkCertificateRevocationWithOcsp(
 			status: 'good',
 			result: {
 				status: 'good',
-				source: 'ocsp',
+				kind: 'ocsp',
 				message: 'Certificate is not revoked according to OCSP evidence',
 			},
 		};
 	}
 	return {
-		status: 'unknown',
+		status: 'indeterminate',
 		detail: {
-			source: 'ocsp',
+			kind: 'ocsp',
 			code: 'certificate_status_unknown',
 			message: 'OCSP responder returned certificate status unknown',
 		},

@@ -29,19 +29,14 @@ import {
 	validateOcspResponse,
 } from './ocsp.ts';
 
+import type { RevocationCertificateSource } from './revocation.ts';
+
 export type { CrlSource };
 
 // ---------------------------------------------------------------------------
 // Input Types
 // ---------------------------------------------------------------------------
 
-/**
- * Certificate in any supported format.
- *
- * Accepts PEM string, DER bytes, or an already-parsed {@linkcode ParsedCertificate}.
- * Used for {@linkcode CheckChainRevocationInput.extraCertificates}.
- */
-export type CertificateSource = string | Uint8Array | ParsedCertificate;
 
 /**
  * OCSP response in any supported format.
@@ -97,13 +92,13 @@ export interface CheckChainRevocationInput {
 	/** OCSP responses to evaluate. */
 	readonly ocspResponses?: readonly OcspResponseSource[];
 	/** Extra certs for indirect CRL issuers / delegated OCSP responders. */
-	readonly extraCertificates?: readonly CertificateSource[];
+	readonly extraCertificates?: readonly RevocationCertificateSource[];
 	/**
 	 * Explicitly trusted OCSP responder certificates (RFC 6960 §4.2.2.2
 	 * criterion 1). A response signed by one of these is accepted without
 	 * delegated-responder issuance, EKU, and revocation checks.
 	 */
-	readonly trustedOcspResponders?: readonly CertificateSource[];
+	readonly trustedOcspResponders?: readonly RevocationCertificateSource[];
 	/** Evaluation time. Defaults to `new Date()`. */
 	readonly at?: Date;
 	/** Revocation policy. */
@@ -160,7 +155,7 @@ export type RevocationIndeterminateReason =
  */
 export interface RevocationSource {
 	/** Whether evidence came from a CRL or OCSP response. */
-	readonly type: 'crl' | 'ocsp';
+	readonly kind: 'crl' | 'ocsp';
 	/** Certificate that signed the evidence (CRL issuer or OCSP responder). */
 	readonly signerCertificate?: ParsedCertificate;
 	/** Identifier for debugging (e.g., CRL issuer DN or OCSP responder URL). */
@@ -197,7 +192,7 @@ export interface CertificateRevocationStatus {
 	/** Revocation details. Present when `status` is `'revoked'`. */
 	readonly revocationInfo?: {
 		/** When the certificate was revoked. */
-		readonly date: Date;
+		readonly revocationDate: Date;
 		/** RFC 5280 CRLReason code, if provided by the CRL/OCSP response. */
 		readonly reason?: RevocationReason;
 	};
@@ -275,7 +270,7 @@ function parseCrlFromSource(source: CrlSource): ParsedCertificateRevocationList 
 /**
  * Parses a certificate from various source formats, returning undefined on failure.
  */
-function parseCertificateSafe(source: CertificateSource): ParsedCertificate | undefined {
+function parseCertificateSafe(source: RevocationCertificateSource): ParsedCertificate | undefined {
 	try {
 		return parseCertificateFromSource(source);
 	} catch {
@@ -301,7 +296,7 @@ function sameCertificate(a: ParsedCertificate, b: ParsedCertificate): boolean {
  */
 function findIndirectCrlIssuer(
 	crl: ParsedCertificateRevocationList,
-	extraCertificates: readonly CertificateSource[],
+	extraCertificates: readonly RevocationCertificateSource[],
 	chain: readonly ParsedCertificate[],
 ): ParsedCertificate | undefined {
 	// Combine extra certs with chain certs for searching
@@ -365,7 +360,7 @@ interface SignerValidationContext {
 	readonly cache: Map<string, SignerValidationState>;
 	readonly chain: readonly ParsedCertificate[];
 	readonly crls: readonly CrlSource[];
-	readonly extraCertificates: readonly CertificateSource[];
+	readonly extraCertificates: readonly RevocationCertificateSource[];
 	readonly at: Date;
 }
 
@@ -538,9 +533,9 @@ function buildCrlStatus(
 		return {
 			certificate: cert,
 			status: 'revoked',
-			source: { type: 'crl', signerCertificate: signer, thisUpdate },
+			source: { kind: 'crl', signerCertificate: signer, thisUpdate },
 			revocationInfo: {
-				date: revocationDate,
+				revocationDate,
 				...(reasonCode !== undefined ? { reason: reasonCode } : {}),
 			},
 		};
@@ -548,7 +543,7 @@ function buildCrlStatus(
 	return {
 		certificate: cert,
 		status: 'good',
-		source: { type: 'crl', signerCertificate: signer, thisUpdate },
+		source: { kind: 'crl', signerCertificate: signer, thisUpdate },
 	};
 }
 
@@ -695,9 +690,9 @@ async function evaluateOcspEvidence(
 				status: {
 					certificate: cert,
 					status: 'revoked',
-					source: { type: 'ocsp', thisUpdate: entry.thisUpdate },
+					source: { kind: 'ocsp', thisUpdate: entry.thisUpdate },
 					revocationInfo: {
-						date: entry.revokedAt ?? entry.thisUpdate,
+						revocationDate: entry.revokedAt ?? entry.thisUpdate,
 						...(reason !== undefined ? { reason } : {}),
 					},
 				},
@@ -709,7 +704,7 @@ async function evaluateOcspEvidence(
 				status: {
 					certificate: cert,
 					status: 'good',
-					source: { type: 'ocsp', thisUpdate: entry.thisUpdate },
+					source: { kind: 'ocsp', thisUpdate: entry.thisUpdate },
 				},
 				executionErrors,
 			};
@@ -891,7 +886,7 @@ async function evaluateCrlEvidence(
 					...(freshestGood !== undefined
 						? {
 								source: {
-									type: 'crl',
+									kind: 'crl',
 									signerCertificate: freshestGood.signer,
 									thisUpdate: freshestGood.thisUpdate,
 								},

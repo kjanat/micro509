@@ -63,10 +63,10 @@ import {
 } from '#micro509/x509/parse.ts';
 import {
 	checkChainRevocation,
-	type CertificateSource as RevocationCertificateSource,
 	type CrlSource,
 	type RevocationPolicy,
 } from '#micro509/revocation/chain.ts';
+import type { RevocationCertificateSource } from '#micro509/revocation/revocation.ts';
 import type { VerifyServiceIdentityInput } from './identity.ts';
 import { matchServiceIdentity } from './identity.ts';
 import type { InitialNameConstraintsInput } from './name-constraints.ts';
