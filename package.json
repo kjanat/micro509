@@ -135,7 +135,7 @@
 		"oxc-minify": "^0.138.0",
 		"playwright": "^1.61.1",
 		"publint": "^0.3.21",
-		"runner-run": "^0.17.0",
+		"runner-run": "^0.18.1",
 		"tsdown": "^0.22.3",
 		"typescript": "^6.0.3",
 		"unplugin-unused": "^0.5.7",
@@ -169,7 +169,7 @@
 	},
 	"volta": {
 		"node": "26.4.0",
-		"npm": "11.17.0"
+		"npm": "11.18.0"
 	},
 	"typedocoptions": {
 		"extends": "./config/typedoc.config.mjs"
