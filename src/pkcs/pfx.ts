@@ -31,10 +31,9 @@ import {
 	decryptPbes2,
 	encryptPbes2,
 	isWrongPasswordError,
-	type Pbes2EncryptionOptions,
 } from '#micro509/internal/crypto/pbes2.ts';
 import { base64Encode } from '#micro509/internal/shared/base64.ts';
-import { exportPkcs8Der } from '#micro509/keys/keys.ts';
+import { type EncryptedPkcs8Options, exportPkcs8Der } from '#micro509/keys/keys.ts';
 import { pemEncode, splitPemBlocksOrThrow } from '#micro509/pem/pem.ts';
 import { type ErrorResult, failureResult, type Micro509Error } from '#micro509/result/result.ts';
 import { type ParsedCertificate, parseCertificateDerOrThrow } from '#micro509/x509/parse.ts';
@@ -88,8 +87,8 @@ export interface CreatePfxInput {
 	readonly mac?: Pkcs12MacOptions;
 }
 
-/** PBES2 encryption settings for PFX key-bag protection. Alias of {@linkcode Pbes2EncryptionOptions}. */
-export type PfxEncryptionOptions = Pbes2EncryptionOptions;
+/** PBES2 encryption settings for PFX key-bag protection. Alias of {@linkcode EncryptedPkcs8Options}. */
+export type PfxEncryptionOptions = EncryptedPkcs8Options;
 
 /** Options for {@linkcode parsePfxDer} and {@linkcode parsePfxPem}. */
 export interface ParsePfxOptions {

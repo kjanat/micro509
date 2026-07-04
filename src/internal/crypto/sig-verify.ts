@@ -52,7 +52,7 @@ export interface VerifySignedDataFailure {
 }
 
 /** Success branch of {@linkcode VerifySignatureConfigResult}. */
-interface VerifySignatureConfigSuccess {
+export interface VerifySignatureConfigSuccess {
 	/** Discriminant for the success branch. */
 	readonly ok: true;
 	/** The resolved verification configuration. */
@@ -65,7 +65,7 @@ export type VerifySignatureConfigResult =
 	| VerifySignatureConfigFailure;
 
 /** Success branch of {@linkcode VerifySignedDataResult}. */
-interface VerifySignedDataSuccess {
+export interface VerifySignedDataSuccess {
 	/** Discriminant for the success branch. */
 	readonly ok: true;
 	/** Whether the cryptographic signature is valid for the given data and key. */

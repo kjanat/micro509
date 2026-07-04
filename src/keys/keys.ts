@@ -39,7 +39,6 @@ import {
 	decryptPbes2,
 	encryptPbes2,
 	isWrongPasswordError,
-	type Pbes2EncryptionOptions,
 	wrongPasswordError,
 } from '#micro509/internal/crypto/pbes2.ts';
 import { getCrypto } from '#micro509/internal/crypto/webcrypto.ts';
@@ -151,7 +150,20 @@ export type PublicKeyImportInput = ImportRsaKeyInput | ImportEcKeyInput | Import
 export type PrivateKeyImportInput = PublicKeyImportInput;
 
 /** PBES2 encryption options for the encrypted PKCS#8 export/import functions. */
-export type EncryptedPkcs8Options = Pbes2EncryptionOptions;
+export interface EncryptedPkcs8Options {
+	/** Password fed to PBKDF2 for key derivation. */
+	readonly password: string;
+	/** PBKDF2 iteration count. Default: `100_000`. */
+	readonly iterations?: number;
+	/** PBKDF2 salt. Default: 16 cryptographically random bytes. */
+	readonly salt?: Uint8Array;
+	/** AES-CBC initialization vector. Default: 16 cryptographically random bytes. */
+	readonly iv?: Uint8Array;
+	/** AES-CBC cipher. Default: `'AES-256-CBC'`. */
+	readonly cipher?: 'AES-128-CBC' | 'AES-192-CBC' | 'AES-256-CBC';
+	/** PBKDF2 pseudo-random function. Default: `'HMAC-SHA-256'`. */
+	readonly prf?: 'HMAC-SHA-1' | 'HMAC-SHA-256';
+}
 
 /** Options for OpenSSL-style `Proc-Type: 4,ENCRYPTED` PEM encryption (PKCS#1/SEC1). */
 export interface LegacyPemEncryptionOptions {

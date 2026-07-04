@@ -33,6 +33,7 @@ export type {
 } from './crl.ts';
 export type {
 	IssuingDistributionPoint,
+	IssuingDistributionPointBase,
 	IssuingDistributionPointForAttributeCerts,
 	IssuingDistributionPointForCaCerts,
 	IssuingDistributionPointForUserCerts,
