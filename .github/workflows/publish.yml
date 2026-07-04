@@ -85,7 +85,7 @@ jobs:
           $outputs = ConvertFrom-Json $env:OUTPUTS
           $pkg = Get-Content package.json | ConvertFrom-Json
           $versionsJson = bun info $pkg.name versions --json 2>$null
-          $versions = if ($LASTEXITCODE -eq 0) { ConvertFrom-Json $versionsJson } else { @() }
+          $versions = if ($LASTEXITCODE -eq 0) { $versionsJson | ConvertFrom-Json } else { @() }
 
           if ($versions -contains $pkg.version) { "::notice::{0}@{1} already on npm, skipping" -f $pkg.name, $pkg.version; exit 0 }
           if ($outputs.is_tag -ne 'true') { npm publish --dry-run; exit $LASTEXITCODE }
