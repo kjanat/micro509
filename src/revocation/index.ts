@@ -10,7 +10,9 @@ export {
 	createCertificateRevocationList,
 	isCertificateRevoked,
 	parseCertificateRevocationListDer,
+	parseCertificateRevocationListDerOrThrow,
 	parseCertificateRevocationListPem,
+	parseCertificateRevocationListPemOrThrow,
 	validateCertificateRevocationList,
 	verifyCertificateRevocationListSignature,
 } from './crl.ts';
@@ -21,9 +23,13 @@ export {
 	createOcspResponse,
 	hasOcspNoCheckExtension,
 	parseOcspRequestDer,
+	parseOcspRequestDerOrThrow,
 	parseOcspRequestPem,
+	parseOcspRequestPemOrThrow,
 	parseOcspResponseDer,
+	parseOcspResponseDerOrThrow,
 	parseOcspResponsePem,
+	parseOcspResponsePemOrThrow,
 	validateOcspResponse,
 	verifyOcspResponseSignature,
 } from './ocsp.ts';

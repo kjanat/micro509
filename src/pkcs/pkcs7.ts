@@ -49,7 +49,7 @@ import {
 import { getCrypto } from '#micro509/internal/crypto/webcrypto.ts';
 import { base64Encode } from '#micro509/internal/shared/base64.ts';
 import { compareDistinguishedNames } from '#micro509/internal/shared/dn.ts';
-import { pemEncode, splitPemBlocks } from '#micro509/pem/pem.ts';
+import { pemEncode, splitPemBlocksOrThrow } from '#micro509/pem/pem.ts';
 import { type ErrorResult, failureResult, type Micro509Error } from '#micro509/result/result.ts';
 import { type NameFieldKey, nameFieldKeyFromOid } from '#micro509/x509/name.ts';
 import type {
@@ -527,7 +527,7 @@ export function parsePkcs7CertBagDer(der: Uint8Array): ParsePkcs7CertBagResult {
 /** Parses a PEM-armored PKCS#7 cert bag. Expects exactly one `PKCS7` PEM block. */
 export function parsePkcs7CertBagPem(pem: string): ParsePkcs7CertBagResult {
 	try {
-		const blocks = splitPemBlocks(pem).filter((block) => block.label === 'PKCS7');
+		const blocks = splitPemBlocksOrThrow(pem).filter((block) => block.label === 'PKCS7');
 		if (blocks.length !== 1) {
 			return pkcs7Failure('malformed', 'Expected exactly one PKCS7 PEM block');
 		}
@@ -642,7 +642,7 @@ export function parsePkcs7SignedDataDer(der: Uint8Array): ParsePkcs7SignedDataRe
 /** Decodes a PEM-armored PKCS#7 SignedData. Expects exactly one `PKCS7` PEM block. */
 export function parsePkcs7SignedDataPem(pem: string): ParsePkcs7SignedDataResult {
 	try {
-		const blocks = splitPemBlocks(pem).filter((block) => block.label === 'PKCS7');
+		const blocks = splitPemBlocksOrThrow(pem).filter((block) => block.label === 'PKCS7');
 		const block = blocks[0];
 		if (block === undefined || blocks.length !== 1) {
 			return pkcs7Failure('malformed', 'Expected exactly one PKCS7 PEM block');
@@ -805,7 +805,7 @@ function createPkcs7Failure(
 /** Converts PEM text to an array of DER certificate blobs, or wraps raw DER. */
 function normalizeCertificateSource(source: Pkcs7CertificateSource): readonly Uint8Array[] {
 	if (typeof source === 'string') {
-		return splitPemBlocks(source)
+		return splitPemBlocksOrThrow(source)
 			.filter((block) => block.label === 'CERTIFICATE')
 			.map((block) => new Uint8Array(block.bytes));
 	}

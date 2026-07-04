@@ -41,7 +41,7 @@ describe('revocation domain', () => {
 			crlNumber: 2,
 		});
 
-		const parsed = revocation.parseCertificateRevocationListPem(crl.pem);
+		const parsed = revocation.parseCertificateRevocationListPemOrThrow(crl.pem);
 		expect(parsed.issuer.values.commonName).toBe('Revocation Validate CA');
 		expect(parsed.revokedCertificates).toHaveLength(0);
 		expect(parsed.crlNumber).toBe(2);

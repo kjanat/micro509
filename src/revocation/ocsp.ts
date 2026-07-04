@@ -52,8 +52,14 @@ import {
 import { getCrypto } from '#micro509/internal/crypto/webcrypto.ts';
 import { base64Encode } from '#micro509/internal/shared/base64.ts';
 import { compareDistinguishedNames } from '#micro509/internal/shared/dn.ts';
-import { pemDecode, pemEncode } from '#micro509/pem/pem.ts';
-import { type ErrorResult, failureResult, type Micro509Error } from '#micro509/result/result.ts';
+import { pemDecodeOrThrow, pemEncode } from '#micro509/pem/pem.ts';
+import {
+	type ErrorResult,
+	failureResult,
+	type Micro509Error,
+	rethrowIfInvariant,
+	successResult,
+} from '#micro509/result/result.ts';
 import { verifyCertificateChain } from '#micro509/verify/verify.ts';
 import type {
 	ParsedCertificate,
@@ -66,8 +72,8 @@ import {
 	checkCertificateRevocationAgainstCrl,
 	type CrlSource,
 	type ParsedCertificateRevocationList,
-	parseCertificateRevocationListDer,
-	parseCertificateRevocationListPem,
+	parseCertificateRevocationListDerOrThrow,
+	parseCertificateRevocationListPemOrThrow,
 } from './crl.ts';
 
 /** Hash algorithm used to compute OCSP CertID fields. SHA-1 is the RFC 6960 default. */
@@ -424,8 +430,21 @@ export async function createOcspRequest(
 	};
 }
 
-/** Decodes a DER-encoded OCSP request into a structured {@linkcode ParsedOcspRequest}. */
-export function parseOcspRequestDer(der: Uint8Array): ParsedOcspRequest {
+/** Machine-readable failure reason for the OCSP request parsers. */
+export type ParseOcspRequestErrorCode = 'malformed';
+
+/** Structured failure payload for OCSP request parsing. */
+export interface ParseOcspRequestFailure extends Micro509Error<ParseOcspRequestErrorCode> {
+	readonly ok: false;
+}
+
+/** Success-or-failure result from {@linkcode parseOcspRequestDer} / {@linkcode parseOcspRequestPem}. */
+export type ParseOcspRequestResult =
+	| { readonly ok: true; readonly value: ParsedOcspRequest }
+	| ErrorResult<ParseOcspRequestErrorCode, Record<never, never>, ParseOcspRequestFailure>;
+
+/** Throwing core for {@linkcode parseOcspRequestDer}. */
+export function parseOcspRequestDerOrThrow(der: Uint8Array): ParsedOcspRequest {
 	const top = readSequenceChildren(der, { maxDepth: DEFAULT_MAX_DER_DEPTH });
 	if (top.length < 1 || top.length > 2) {
 		throw new Error('Malformed OCSP request');
@@ -493,12 +512,62 @@ export function parseOcspRequestDer(der: Uint8Array): ParsedOcspRequest {
 }
 
 /** Decodes a PEM-encoded OCSP request (`-----BEGIN OCSP REQUEST-----`). */
-export function parseOcspRequestPem(pem: string): ParsedOcspRequest {
-	return parseOcspRequestDer(pemDecode('OCSP REQUEST', pem));
+export function parseOcspRequestPemOrThrow(pem: string): ParsedOcspRequest {
+	return parseOcspRequestDerOrThrow(pemDecodeOrThrow('OCSP REQUEST', pem));
+}
+
+/**
+ * Decodes a DER-encoded OCSP request into a structured {@linkcode ParsedOcspRequest}.
+ *
+ * Returns a typed failure (`code: 'malformed'`) on malformed input. For the
+ * throwing form use {@linkcode parseOcspRequestDerOrThrow}.
+ */
+export function parseOcspRequestDer(der: Uint8Array): ParseOcspRequestResult {
+	try {
+		return successResult(parseOcspRequestDerOrThrow(der));
+	} catch (error) {
+		rethrowIfInvariant(error);
+		return failureResult(
+			'malformed',
+			error instanceof Error ? error.message : 'Malformed OCSP request',
+		);
+	}
+}
+
+/**
+ * Decodes a PEM-encoded OCSP request (`-----BEGIN OCSP REQUEST-----`).
+ *
+ * Returns a typed failure (`code: 'malformed'`) on malformed input. For the
+ * throwing form use {@linkcode parseOcspRequestPemOrThrow}.
+ */
+export function parseOcspRequestPem(pem: string): ParseOcspRequestResult {
+	try {
+		return successResult(parseOcspRequestPemOrThrow(pem));
+	} catch (error) {
+		rethrowIfInvariant(error);
+		return failureResult(
+			'malformed',
+			error instanceof Error ? error.message : 'Malformed OCSP request',
+		);
+	}
 }
 
 /** Decodes a DER-encoded OCSP response into a structured {@linkcode ParsedOcspResponse}. Does not verify the signature. */
-export function parseOcspResponseDer(der: Uint8Array): ParsedOcspResponse {
+/** Machine-readable failure reason for the OCSP response parsers. */
+export type ParseOcspResponseErrorCode = 'malformed';
+
+/** Structured failure payload for OCSP response parsing. */
+export interface ParseOcspResponseFailure extends Micro509Error<ParseOcspResponseErrorCode> {
+	readonly ok: false;
+}
+
+/** Success-or-failure result from {@linkcode parseOcspResponseDer} / {@linkcode parseOcspResponsePem}. */
+export type ParseOcspResponseResult =
+	| { readonly ok: true; readonly value: ParsedOcspResponse }
+	| ErrorResult<ParseOcspResponseErrorCode, Record<never, never>, ParseOcspResponseFailure>;
+
+/** Throwing core for {@linkcode parseOcspResponseDer}. */
+export function parseOcspResponseDerOrThrow(der: Uint8Array): ParsedOcspResponse {
 	const top = readSequenceChildren(der, { maxDepth: DEFAULT_MAX_DER_DEPTH });
 	if (top.length < 1 || top.length > 2) {
 		throw new Error('Malformed OCSP response');
@@ -600,8 +669,44 @@ export function parseOcspResponseDer(der: Uint8Array): ParsedOcspResponse {
  * }
  * ```
  */
-export function parseOcspResponsePem(pem: string): ParsedOcspResponse {
-	return parseOcspResponseDer(pemDecode('OCSP RESPONSE', pem));
+export function parseOcspResponsePemOrThrow(pem: string): ParsedOcspResponse {
+	return parseOcspResponseDerOrThrow(pemDecodeOrThrow('OCSP RESPONSE', pem));
+}
+
+/**
+ * Decodes a DER-encoded OCSP response into a structured {@linkcode ParsedOcspResponse}.
+ *
+ * Returns a typed failure (`code: 'malformed'`) on malformed input. For the
+ * throwing form use {@linkcode parseOcspResponseDerOrThrow}.
+ */
+export function parseOcspResponseDer(der: Uint8Array): ParseOcspResponseResult {
+	try {
+		return successResult(parseOcspResponseDerOrThrow(der));
+	} catch (error) {
+		rethrowIfInvariant(error);
+		return failureResult(
+			'malformed',
+			error instanceof Error ? error.message : 'Malformed OCSP response',
+		);
+	}
+}
+
+/**
+ * Decodes a PEM-encoded OCSP response (`-----BEGIN OCSP RESPONSE-----`).
+ *
+ * Returns a typed failure (`code: 'malformed'`) on malformed input. For the
+ * throwing form use {@linkcode parseOcspResponsePemOrThrow}.
+ */
+export function parseOcspResponsePem(pem: string): ParseOcspResponseResult {
+	try {
+		return successResult(parseOcspResponsePemOrThrow(pem));
+	} catch (error) {
+		rethrowIfInvariant(error);
+		return failureResult(
+			'malformed',
+			error instanceof Error ? error.message : 'Malformed OCSP response',
+		);
+	}
 }
 
 /**
@@ -1028,9 +1133,9 @@ function parseResponderCrlFromSource(source: CrlSource): ParsedCertificateRevoca
 		return source;
 	}
 	if (typeof source === 'string') {
-		return parseCertificateRevocationListPem(source);
+		return parseCertificateRevocationListPemOrThrow(source);
 	}
-	return parseCertificateRevocationListDer(source);
+	return parseCertificateRevocationListDerOrThrow(source);
 }
 
 /**
@@ -1093,13 +1198,13 @@ function normalizeOcspResponse(
 	response: string | Uint8Array | ParsedOcspResponse,
 ): ParsedOcspResponse {
 	if (typeof response === 'string') {
-		return parseOcspResponsePem(response);
+		return parseOcspResponsePemOrThrow(response);
 	}
 	if (response instanceof Uint8Array) {
-		return parseOcspResponseDer(response);
+		return parseOcspResponseDerOrThrow(response);
 	}
 	if (hasReparseableOcspResponseShape(response)) {
-		return parseOcspResponseDer(new Uint8Array(response.der));
+		return parseOcspResponseDerOrThrow(new Uint8Array(response.der));
 	}
 	throw new Error('OCSP response input is malformed');
 }
@@ -1107,13 +1212,13 @@ function normalizeOcspResponse(
 /** Accepts PEM, DER, or already-parsed OCSP request and returns a parsed request. */
 function normalizeOcspRequest(request: OcspRequestSource): ParsedOcspRequest {
 	if (typeof request === 'string') {
-		return parseOcspRequestPem(request);
+		return parseOcspRequestPemOrThrow(request);
 	}
 	if (request instanceof Uint8Array) {
-		return parseOcspRequestDer(request);
+		return parseOcspRequestDerOrThrow(request);
 	}
 	if (hasReparseableOcspRequestShape(request)) {
-		return parseOcspRequestDer(new Uint8Array(request.der));
+		return parseOcspRequestDerOrThrow(new Uint8Array(request.der));
 	}
 	throw new Error('OCSP request input is malformed');
 }

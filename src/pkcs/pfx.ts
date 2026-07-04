@@ -34,14 +34,14 @@ import {
 } from '#micro509/internal/crypto/pbes2.ts';
 import { base64Encode } from '#micro509/internal/shared/base64.ts';
 import { exportPkcs8Der } from '#micro509/keys/keys.ts';
-import { pemEncode, splitPemBlocks } from '#micro509/pem/pem.ts';
+import { pemEncode, splitPemBlocksOrThrow } from '#micro509/pem/pem.ts';
 import { type ErrorResult, failureResult, type Micro509Error } from '#micro509/result/result.ts';
 import { type ParsedCertificate, parseCertificateDerOrThrow } from '#micro509/x509/parse.ts';
 import {
 	createPkcs12MacData,
 	type ParsedPkcs12MacData,
 	type Pkcs12MacOptions,
-	parsePkcs12MacData,
+	parsePkcs12MacDataOrThrow,
 } from './pkcs12-mac.ts';
 
 export type {
@@ -367,7 +367,7 @@ export async function parsePfxDer(
 		let macData: ParsedPkcs12MacData | undefined;
 		if (macElement !== undefined) {
 			try {
-				macData = await parsePkcs12MacData(
+				macData = await parsePkcs12MacDataOrThrow(
 					der.slice(macElement.start - macElement.headerLength, macElement.end),
 					authenticatedSafeOctets,
 					options?.macPassword ?? options?.password,
@@ -427,7 +427,7 @@ export async function parsePfxDer(
  */
 export async function parsePfxPem(pem: string, options?: ParsePfxOptions): Promise<ParsePfxResult> {
 	try {
-		const blocks = splitPemBlocks(pem).filter((block) => block.label === 'PKCS12');
+		const blocks = splitPemBlocksOrThrow(pem).filter((block) => block.label === 'PKCS12');
 		const block = blocks[0];
 		if (block === undefined || blocks.length !== 1) {
 			return pfxFailure('malformed', 'Expected exactly one PKCS12 PEM block');
@@ -729,7 +729,9 @@ async function normalizePrivateKey(source: PfxPrivateKeySource): Promise<Uint8Ar
 /** Extracts DER bytes from a PEM string, or passes raw DER through. */
 function normalizeCertificate(source: PfxCertificateSource): Uint8Array {
 	if (typeof source === 'string') {
-		const block = splitPemBlocks(source).find((candidate) => candidate.label === 'CERTIFICATE');
+		const block = splitPemBlocksOrThrow(source).find(
+			(candidate) => candidate.label === 'CERTIFICATE',
+		);
 		if (block === undefined) {
 			throw new Error('Certificate PEM required');
 		}

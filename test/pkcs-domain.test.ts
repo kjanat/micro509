@@ -16,7 +16,7 @@ import {
 	parsePkcs7CertBagDer,
 	parsePkcs7CertBagPem,
 	parsePkcs7SignedDataPem,
-	parsePkcs12MacData,
+	parsePkcs12MacDataOrThrow,
 	verifyPkcs7SignedData,
 } from 'micro509/pkcs';
 import { OIDS } from '#micro509/internal/asn1/oids.ts';
@@ -99,7 +99,7 @@ describe('pkcs domain', () => {
 			saltHex: '09080706',
 		});
 
-		const verified = await parsePkcs12MacData(mac.der, authenticatedSafe, 'integrity123');
+		const verified = await parsePkcs12MacDataOrThrow(mac.der, authenticatedSafe, 'integrity123');
 		expect(verified).toMatchObject({
 			digestAlgorithmOid: OIDS.sha256,
 			digestAlgorithmName: 'SHA-256',
@@ -108,7 +108,7 @@ describe('pkcs domain', () => {
 			valid: true,
 		});
 
-		const wrongPassword = await parsePkcs12MacData(mac.der, authenticatedSafe, 'wrong');
+		const wrongPassword = await parsePkcs12MacDataOrThrow(mac.der, authenticatedSafe, 'wrong');
 		expect(wrongPassword.valid).toBe(false);
 		expect(wrongPassword.digestHex).toBe(mac.parsed.digestHex);
 	});

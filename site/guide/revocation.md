@@ -90,10 +90,11 @@ const crl = await createCertificateRevocationList({
 
 const parsed = parseCertificateRevocationListPem(crl.pem);
 
-const verifyResult = await verifyCertificateRevocationListSignature(
-  crl.pem,
-  ca.certificate.pem,
-);
+const verifyResult =
+  await verifyCertificateRevocationListSignature(
+    crl.pem,
+    ca.certificate.pem,
+  );
 
 console.log('verified:', verifyResult.ok);
 if (verifyResult.ok) {

@@ -45,7 +45,7 @@ import {
 	type KnownParsedExtensionAccumulator,
 	type MutableKnownParsedExtensionAccumulator,
 } from '#micro509/internal/x509/extension-registry.ts';
-import { pemDecode, splitPemBlocks } from '#micro509/pem/pem.ts';
+import { pemDecodeOrThrow, splitPemBlocksOrThrow } from '#micro509/pem/pem.ts';
 import {
 	type ErrorResult,
 	failureResult,
@@ -662,7 +662,7 @@ export function parseCertificatePemOrThrow<TMap extends ExtensionDecoderMap = Re
 	pem: string,
 	options?: ParseOptions<TMap>,
 ): ParsedCertificate<TMap> {
-	return parseCertificateDerOrThrow(pemDecode('CERTIFICATE', pem), options);
+	return parseCertificateDerOrThrow(pemDecodeOrThrow('CERTIFICATE', pem), options);
 }
 
 /**
@@ -863,7 +863,7 @@ function parseCertificatesFromPemBlocks<TMap extends ExtensionDecoderMap = Recor
 	pemBundle: string,
 	options?: ParseOptions<TMap>,
 ): readonly ParsedCertificate<TMap>[] {
-	return splitPemBlocks(pemBundle)
+	return splitPemBlocksOrThrow(pemBundle)
 		.filter((block) => block.label === 'CERTIFICATE')
 		.map((block) => parseCertificateDerOrThrow(block.bytes, options));
 }
@@ -883,7 +883,10 @@ function hasParsedCertificateShape<TMap extends ExtensionDecoderMap = Record<nev
 export function parseCertificateSigningRequestPemOrThrow<
 	TMap extends ExtensionDecoderMap = Record<never, never>,
 >(pem: string, options?: ParseOptions<TMap>): ParsedCertificateSigningRequest<TMap> {
-	return parseCertificateSigningRequestDerOrThrow(pemDecode('CERTIFICATE REQUEST', pem), options);
+	return parseCertificateSigningRequestDerOrThrow(
+		pemDecodeOrThrow('CERTIFICATE REQUEST', pem),
+		options,
+	);
 }
 
 /**

@@ -8,10 +8,10 @@ import {
 	createSelfSignedCertificate,
 	generateKeyPair,
 	parseCertificateDer,
-	parseCertificateRevocationListDer,
+	parseCertificateRevocationListDerOrThrow,
 	parseCertificateSigningRequestDer,
-	parseOcspRequestDer,
-	parseOcspResponseDer,
+	parseOcspRequestDerOrThrow,
+	parseOcspResponseDerOrThrow,
 	unwrap,
 } from 'micro509';
 import {
@@ -444,17 +444,17 @@ describe('malformed DER corpus', () => {
 		const corpus: readonly CorpusCase[] = [
 			{
 				name: 'truncated CRL',
-				parse: () => parseCertificateRevocationListDer(crl.der.slice(0, crl.der.length - 5)),
+				parse: () => parseCertificateRevocationListDerOrThrow(crl.der.slice(0, crl.der.length - 5)),
 			},
 			{
 				name: 'CRL with trailing DER data',
-				parse: () => parseCertificateRevocationListDer(Uint8Array.of(...crl.der, 0x00)),
+				parse: () => parseCertificateRevocationListDerOrThrow(Uint8Array.of(...crl.der, 0x00)),
 				messagePattern: /Trailing data/i,
 			},
 			{
 				name: 'CRL revoked entry missing revocationDate',
 				parse: () =>
-					parseCertificateRevocationListDer(
+					parseCertificateRevocationListDerOrThrow(
 						replaceFirstRevokedCertificateEntry(crl.der, sequence([integerFromNumber(1)])),
 					),
 				messagePattern: /revocationDate/i,
@@ -462,7 +462,7 @@ describe('malformed DER corpus', () => {
 			{
 				name: 'CRL skeletal structure missing issuer',
 				parse: () =>
-					parseCertificateRevocationListDer(
+					parseCertificateRevocationListDerOrThrow(
 						sequence([
 							sequence([integerFromNumber(1)]),
 							sequence([]),
@@ -515,31 +515,31 @@ describe('malformed DER corpus', () => {
 		const corpus: readonly CorpusCase[] = [
 			{
 				name: 'truncated OCSP request',
-				parse: () => parseOcspRequestDer(request.der.slice(0, request.der.length - 6)),
+				parse: () => parseOcspRequestDerOrThrow(request.der.slice(0, request.der.length - 6)),
 			},
 			{
 				name: 'OCSP request with trailing DER data',
-				parse: () => parseOcspRequestDer(Uint8Array.of(...request.der, 0x00)),
+				parse: () => parseOcspRequestDerOrThrow(Uint8Array.of(...request.der, 0x00)),
 				messagePattern: /Trailing data/i,
 			},
 			{
 				name: 'OCSP request missing requestList',
-				parse: () => parseOcspRequestDer(sequence([sequence([])])),
+				parse: () => parseOcspRequestDerOrThrow(sequence([sequence([])])),
 				messagePattern: /requestList/i,
 			},
 			{
 				name: 'truncated OCSP response',
-				parse: () => parseOcspResponseDer(response.der.slice(0, response.der.length - 9)),
+				parse: () => parseOcspResponseDerOrThrow(response.der.slice(0, response.der.length - 9)),
 			},
 			{
 				name: 'OCSP response with trailing DER data',
-				parse: () => parseOcspResponseDer(Uint8Array.of(...response.der, 0x00)),
+				parse: () => parseOcspResponseDerOrThrow(Uint8Array.of(...response.der, 0x00)),
 				messagePattern: /Trailing data/i,
 			},
 			{
 				name: 'OCSP response missing responseBytes sequence',
 				parse: () =>
-					parseOcspResponseDer(
+					parseOcspResponseDerOrThrow(
 						sequence([tlv(0x0a, Uint8Array.of(0x00)), explicitContext(0, sequence([]))]),
 					),
 				messagePattern: /response(Bytes|Type)/i,
@@ -733,12 +733,13 @@ describe('malformed DER corpus', () => {
 			},
 			{
 				name: 'crl version uses BOOLEAN',
-				parse: () => parseCertificateRevocationListDer(rewriteCrlVersionTag(crl.der, 0x01)),
+				parse: () => parseCertificateRevocationListDerOrThrow(rewriteCrlVersionTag(crl.der, 0x01)),
 				messagePattern: /version must use INTEGER/i,
 			},
 			{
 				name: 'ocsp responseStatus uses INTEGER',
-				parse: () => parseOcspResponseDer(rewriteOcspResponseStatusTag(ocspResponse.der, 0x02)),
+				parse: () =>
+					parseOcspResponseDerOrThrow(rewriteOcspResponseStatusTag(ocspResponse.der, 0x02)),
 				messagePattern: /responseStatus must use ENUMERATED/i,
 			},
 		];
@@ -780,7 +781,7 @@ describe('malformed DER corpus', () => {
 			{
 				name: 'freshestCRL distribution point with reasons only',
 				parse: () =>
-					parseCertificateRevocationListDer(
+					parseCertificateRevocationListDerOrThrow(
 						replaceCrlExtensionValue(
 							crl.der,
 							OIDS.freshestCRL,
@@ -793,7 +794,9 @@ describe('malformed DER corpus', () => {
 			{
 				name: 'ocsp SingleResponse unsupported certStatus tag',
 				parse: () =>
-					parseOcspResponseDer(rewriteOcspSingleResponseCertStatusTag(ocspResponse.der, 0x83)),
+					parseOcspResponseDerOrThrow(
+						rewriteOcspSingleResponseCertStatusTag(ocspResponse.der, 0x83),
+					),
 				messagePattern: /Unsupported OCSP certStatus tag/i,
 			},
 		];

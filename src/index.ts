@@ -127,7 +127,15 @@ export {
 
 // ── pem ──────────────────────────────────────────────────────────────
 export type { CategorizedPemBlocks, PemBlock } from './pem/index.ts';
-export { categorizePemBlocks, pemDecode, pemEncode, splitPemBlocks } from './pem/index.ts';
+export {
+	categorizePemBlocks,
+	categorizePemBlocksOrThrow,
+	pemDecode,
+	pemDecodeOrThrow,
+	pemEncode,
+	splitPemBlocks,
+	splitPemBlocksOrThrow,
+} from './pem/index.ts';
 
 // ── pkcs ─────────────────────────────────────────────────────────────
 export type {
@@ -266,11 +274,17 @@ export {
 	hasOcspNoCheckExtension,
 	isCertificateRevoked,
 	parseCertificateRevocationListDer,
+	parseCertificateRevocationListDerOrThrow,
 	parseCertificateRevocationListPem,
+	parseCertificateRevocationListPemOrThrow,
 	parseOcspRequestDer,
+	parseOcspRequestDerOrThrow,
 	parseOcspRequestPem,
+	parseOcspRequestPemOrThrow,
 	parseOcspResponseDer,
+	parseOcspResponseDerOrThrow,
 	parseOcspResponsePem,
+	parseOcspResponsePemOrThrow,
 	resolveOcspResponderCandidates,
 	validateCertificateRevocationList,
 	validateOcspResponse,

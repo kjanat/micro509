@@ -9,7 +9,7 @@ import {
 	generateKeyPair,
 	parseCertificateDer,
 	parseCertificatePem,
-	parseCertificateRevocationListDer,
+	parseCertificateRevocationListDerOrThrow,
 	verifyCertificateChain,
 	unwrap,
 } from 'micro509';
@@ -22,7 +22,7 @@ async function loadPkitsCert(name: string) {
 
 async function loadPkitsCrl(name: string) {
 	const der = await readFile(new URL(`./fixtures/pkits/crls/${name}.crl`, import.meta.url));
-	return parseCertificateRevocationListDer(new Uint8Array(der));
+	return parseCertificateRevocationListDerOrThrow(new Uint8Array(der));
 }
 
 describe('checkChainRevocation', () => {

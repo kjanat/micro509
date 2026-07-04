@@ -8,8 +8,8 @@ import {
 	generateKeyPair,
 	hasOcspNoCheckExtension,
 	parseCertificatePem,
-	parseOcspRequestPem,
-	parseOcspResponseDer,
+	parseOcspRequestPemOrThrow,
+	parseOcspResponseDerOrThrow,
 	validateOcspResponse,
 	unwrap,
 } from 'micro509';
@@ -388,9 +388,9 @@ describe('ocsp fixtures', () => {
 		).toMatchObject({ ok: true });
 		expect(
 			await validateOcspResponse({
-				response: parseOcspResponseDer(response.der),
+				response: parseOcspResponseDerOrThrow(response.der),
 				issuerCertificate: unwrap(parseCertificatePem(issuer.certificate.pem)),
-				request: parseOcspRequestPem(request.pem),
+				request: parseOcspRequestPemOrThrow(request.pem),
 				responderCertificate: unwrap(parseCertificatePem(responder.pem)),
 			}),
 		).toMatchObject({ ok: true });

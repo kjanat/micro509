@@ -7,7 +7,7 @@ import {
 	generateKeyPair,
 	parseCertificateChainPem,
 	parseCertificatePem,
-	pemDecode,
+	pemDecodeOrThrow,
 	trustAnchorFromCertificate,
 	validateCandidatePath,
 	validateForCa,
@@ -404,9 +404,9 @@ describe('chain verification', () => {
 
 	it('verifies chain with DER certificate sources', async () => {
 		const chain = await issueChain();
-		const leafDer = new Uint8Array(pemDecode('CERTIFICATE', chain.leaf.pem));
-		const intermediateDer = new Uint8Array(pemDecode('CERTIFICATE', chain.intermediate.pem));
-		const rootDer = new Uint8Array(pemDecode('CERTIFICATE', chain.root.certificate.pem));
+		const leafDer = new Uint8Array(pemDecodeOrThrow('CERTIFICATE', chain.leaf.pem));
+		const intermediateDer = new Uint8Array(pemDecodeOrThrow('CERTIFICATE', chain.intermediate.pem));
+		const rootDer = new Uint8Array(pemDecodeOrThrow('CERTIFICATE', chain.root.certificate.pem));
 		expect(
 			await verifyCertificateChain({
 				leaf: leafDer,

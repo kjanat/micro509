@@ -44,7 +44,7 @@ import {
 } from '#micro509/internal/crypto/pbes2.ts';
 import { getCrypto } from '#micro509/internal/crypto/webcrypto.ts';
 import { base64Decode, base64Encode } from '#micro509/internal/shared/base64.ts';
-import { pemDecode, pemEncode } from '#micro509/pem/pem.ts';
+import { pemDecodeOrThrow, pemEncode } from '#micro509/pem/pem.ts';
 import {
 	type ErrorResult,
 	failureResult,
@@ -587,7 +587,7 @@ export async function importSpkiPemOrThrow(
 	pem: string,
 	algorithm: PublicKeyImportInput,
 ): Promise<CryptoKey> {
-	return importSpkiDerOrThrow(pemDecode('PUBLIC KEY', pem), algorithm);
+	return importSpkiDerOrThrow(pemDecodeOrThrow('PUBLIC KEY', pem), algorithm);
 }
 
 /**
@@ -694,7 +694,7 @@ export async function importPkcs8PemOrThrow(
 	pem: string,
 	algorithm: PrivateKeyImportInput,
 ): Promise<CryptoKey> {
-	return importPkcs8DerOrThrow(pemDecode('PRIVATE KEY', pem), algorithm);
+	return importPkcs8DerOrThrow(pemDecodeOrThrow('PRIVATE KEY', pem), algorithm);
 }
 
 /**
@@ -781,7 +781,7 @@ export async function importEncryptedPkcs8PemOrThrow(
 	algorithm: PrivateKeyImportInput,
 ): Promise<CryptoKey> {
 	return importEncryptedPkcs8DerOrThrow(
-		pemDecode('ENCRYPTED PRIVATE KEY', pem),
+		pemDecodeOrThrow('ENCRYPTED PRIVATE KEY', pem),
 		password,
 		algorithm,
 	);
@@ -839,7 +839,7 @@ export async function importPkcs1PemOrThrow(
 	pem: string,
 	algorithm: ImportRsaPublicKeyInput = { kind: 'rsa' },
 ): Promise<CryptoKey> {
-	return importPkcs1DerOrThrow(pemDecode('RSA PRIVATE KEY', pem), algorithm);
+	return importPkcs1DerOrThrow(pemDecodeOrThrow('RSA PRIVATE KEY', pem), algorithm);
 }
 
 /**
@@ -954,7 +954,7 @@ export async function importSec1PemOrThrow(
 	pem: string,
 	algorithm: ImportEcPublicKeyInput,
 ): Promise<CryptoKey> {
-	return importSec1DerOrThrow(pemDecode('EC PRIVATE KEY', pem), algorithm);
+	return importSec1DerOrThrow(pemDecodeOrThrow('EC PRIVATE KEY', pem), algorithm);
 }
 
 /**

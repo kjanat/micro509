@@ -10,7 +10,7 @@ import {
 	parseCertificatePem,
 	parseCertificateSigningRequestPem,
 	parsePfxPem,
-	pemDecode,
+	pemDecodeOrThrow,
 	pemEncode,
 	verifyCertificateChain,
 	unwrap,
@@ -99,13 +99,13 @@ describe('root barrel', () => {
 		expect(pem).toContain('-----BEGIN TEST DATA-----');
 		expect(pem).toContain('-----END TEST DATA-----');
 
-		const decoded = pemDecode('TEST DATA', pem);
+		const decoded = pemDecodeOrThrow('TEST DATA', pem);
 		expect(new Uint8Array(decoded)).toEqual(original);
 	});
 
 	it('PEM decode rejects label mismatch', () => {
 		const pem = pemEncode('CERTIFICATE', new Uint8Array(16));
-		expect(() => pemDecode('PRIVATE KEY', pem)).toThrow();
+		expect(() => pemDecodeOrThrow('PRIVATE KEY', pem)).toThrow();
 	});
 
 	it('PFX round-trips through create and parse', async () => {

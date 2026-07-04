@@ -8,6 +8,13 @@
  */
 
 import {
+	type ErrorResult,
+	failureResult,
+	type Micro509Error,
+	rethrowIfInvariant,
+	successResult,
+} from '#micro509/result/result.ts';
+import {
 	decodeNonNegativeIntegerNumber,
 	decodeObjectIdentifier,
 	toArrayBuffer,
@@ -86,11 +93,25 @@ export async function createPkcs12MacData(
 	};
 }
 
+/** Machine-readable failure reason for {@linkcode parsePkcs12MacData}. */
+export type ParsePkcs12MacDataErrorCode = 'malformed';
+
+/** Structured failure payload for MacData parsing. */
+export interface ParsePkcs12MacDataFailure extends Micro509Error<ParsePkcs12MacDataErrorCode> {
+	readonly ok: false;
+}
+
+/** Success-or-failure result from {@linkcode parsePkcs12MacData}. */
+export type ParsePkcs12MacDataResult =
+	| { readonly ok: true; readonly value: ParsedPkcs12MacData }
+	| ErrorResult<ParsePkcs12MacDataErrorCode, Record<never, never>, ParsePkcs12MacDataFailure>;
+
 /**
- * Decodes a DER-encoded MacData block. When `password` is provided, verifies
- * the MAC and sets the `valid` flag on the returned structure.
+ * Throwing core for {@linkcode parsePkcs12MacData}. When `password` is
+ * provided, verifies the MAC and sets the `valid` flag on the returned
+ * structure.
  */
-export async function parsePkcs12MacData(
+export async function parsePkcs12MacDataOrThrow(
 	der: Uint8Array,
 	authenticatedSafe: Uint8Array,
 	password?: string,
@@ -152,6 +173,26 @@ export async function parsePkcs12MacData(
 		parsed.iterations,
 	);
 	return { ...parsed, valid: equalBytes(expected, digest.value) };
+}
+
+/**
+ * Decodes a DER-encoded MacData block. When `password` is provided, verifies
+ * the MAC and sets the `valid` flag on the returned structure.
+ *
+ * Returns a typed failure (`code: 'malformed'`) on malformed input. For the
+ * throwing form use {@linkcode parsePkcs12MacDataOrThrow}.
+ */
+export async function parsePkcs12MacData(
+	der: Uint8Array,
+	authenticatedSafe: Uint8Array,
+	password?: string,
+): Promise<ParsePkcs12MacDataResult> {
+	try {
+		return successResult(await parsePkcs12MacDataOrThrow(der, authenticatedSafe, password));
+	} catch (error) {
+		rethrowIfInvariant(error);
+		return failureResult('malformed', error instanceof Error ? error.message : 'Malformed MacData');
+	}
 }
 
 function assertPkcs12MacIterations(iterations: number): void {

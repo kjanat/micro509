@@ -12,8 +12,8 @@ import type { ParsedCertificate } from '#micro509/x509/parse.ts';
 import { parseCertificateFromSource } from '#micro509/x509/parse.ts';
 import {
 	checkCertificateRevocationAgainstCrl,
-	parseCertificateRevocationListDer,
-	parseCertificateRevocationListPem,
+	parseCertificateRevocationListDerOrThrow,
+	parseCertificateRevocationListPemOrThrow,
 	type ParsedCertificateRevocationList,
 	type RevocationReason,
 	revocationReasonFromCode,
@@ -22,8 +22,8 @@ import type { CrlSource } from './crl.ts';
 import {
 	type OcspResponderRevocationPolicy,
 	type ParsedOcspResponse,
-	parseOcspResponseDer,
-	parseOcspResponsePem,
+	parseOcspResponseDerOrThrow,
+	parseOcspResponsePemOrThrow,
 	type ValidateOcspResponseFailure,
 	type ValidateOcspResponseResult,
 	validateOcspResponse,
@@ -265,9 +265,9 @@ function parseCrlFromSource(source: CrlSource): ParsedCertificateRevocationList 
 		return source;
 	}
 	if (typeof source === 'string') {
-		return parseCertificateRevocationListPem(source);
+		return parseCertificateRevocationListPemOrThrow(source);
 	}
-	return parseCertificateRevocationListDer(source);
+	return parseCertificateRevocationListDerOrThrow(source);
 }
 
 /**
@@ -563,9 +563,9 @@ interface EvidenceEvaluation {
 /** Parses an OCSP response from PEM string or DER bytes. */
 function parseOcspResponseFromSource(source: OcspResponseSource): ParsedOcspResponse {
 	if (typeof source === 'string') {
-		return parseOcspResponsePem(source);
+		return parseOcspResponsePemOrThrow(source);
 	}
-	return parseOcspResponseDer(source);
+	return parseOcspResponseDerOrThrow(source);
 }
 
 /** Maps a {@linkcode validateOcspResponse} failure code to an indeterminate reason. */
