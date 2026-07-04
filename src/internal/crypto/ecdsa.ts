@@ -30,6 +30,23 @@ export function rawEcdsaSignatureToDer(signature: Uint8Array, partLength: number
 }
 
 /**
+ * Normalize a WebCrypto ECDSA signature to DER.
+ *
+ * Spec-compliant WebCrypto always returns fixed-width raw `r || s`
+ * (exactly `rawSignatureBytes` long), which needs conversion. Detection is
+ * by length, never by sniffing the first byte: a raw signature whose `r`
+ * happens to start with `0x30` (1-in-256 per signature) is
+ * indistinguishable from DER by tag, and embedding it unconverted produces
+ * a certificate/CRL that OpenSSL rejects with a signature failure.
+ */
+export function ecdsaSignatureToDer(signature: Uint8Array, rawSignatureBytes: number): Uint8Array {
+	if (signature.length === rawSignatureBytes) {
+		return rawEcdsaSignatureToDer(signature, rawSignatureBytes / 2);
+	}
+	return signature;
+}
+
+/**
  * Try the opposite ECDSA encoding: DER→raw or raw→DER.
  *
  * Returns `undefined` if conversion fails, letting callers retry verification
