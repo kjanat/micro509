@@ -375,7 +375,7 @@ export async function parsePfxDer(
 			} catch {
 				return pfxFailure('malformed', 'Malformed PFX MacData');
 			}
-			if (macData?.valid === false) {
+			if (macData?.verification === 'invalid') {
 				return pfxFailure('invalid_password', 'Invalid PFX MAC password or corrupted content');
 			}
 		}

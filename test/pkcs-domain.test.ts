@@ -105,11 +105,11 @@ describe('pkcs domain', () => {
 			digestAlgorithmName: 'SHA-256',
 			iterations: 32,
 			saltHex: '09080706',
-			valid: true,
+			verification: 'valid',
 		});
 
 		const wrongPassword = await parsePkcs12MacDataOrThrow(mac.der, authenticatedSafe, 'wrong');
-		expect(wrongPassword.valid).toBe(false);
+		expect(wrongPassword.verification).toBe('invalid');
 		expect(wrongPassword.digestHex).toBe(mac.parsed.digestHex);
 	});
 

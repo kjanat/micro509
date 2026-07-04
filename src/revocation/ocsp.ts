@@ -62,6 +62,7 @@ import {
 } from '#micro509/result/result.ts';
 import { verifyCertificateChain } from '#micro509/verify/verify.ts';
 import type {
+	NameFieldKey,
 	ParsedCertificate,
 	ParsedName,
 	ParsedNameAttribute,
@@ -1627,7 +1628,7 @@ function parseResponderName(source: Uint8Array, element: DerElement): ParsedName
 	}
 	const rdns: ParsedRelativeDistinguishedName[] = [];
 	const attributes: ParsedNameAttribute[] = [];
-	const values: ParsedName['values'] = {};
+	const values: Partial<Record<NameFieldKey, string>> = {};
 	for (const setElement of childrenOf(source, element)) {
 		const rdn = parseResponderNameAttributeSet(source, setElement);
 		rdns.push(rdn);
@@ -1652,7 +1653,7 @@ function parseResponderNameAttributeSet(
 	setElement: DerElement,
 ): ParsedRelativeDistinguishedName {
 	const attributes: ParsedNameAttribute[] = [];
-	const values: ParsedRelativeDistinguishedName['values'] = {};
+	const values: Partial<Record<NameFieldKey, string>> = {};
 	for (const attributeSequence of childrenOf(source, setElement)) {
 		const parts = childrenOf(source, attributeSequence);
 		const oid = decodeObjectIdentifier(requireElement(parts[0], 'name OID').value);

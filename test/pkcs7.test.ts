@@ -386,8 +386,8 @@ describe('pkcs7', () => {
 		expect(parsed.ok).toBe(true);
 		if (!parsed.ok) throw new Error('unreachable');
 		const signerInfo = parsed.value.signerInfos[0];
-		if (signerInfo === undefined) {
-			throw new Error('expected signer info');
+		if (signerInfo === undefined || !signerInfo.hasSignedAttrs) {
+			throw new Error('expected signer info with signed attributes');
 		}
 		const result = await verifyPkcs7SignedData({
 			...parsed.value,

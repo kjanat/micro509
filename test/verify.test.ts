@@ -4349,7 +4349,7 @@ describe('coverage: verify.ts internal edge cases', () => {
 		const { parsedRoot, parsedLeaf } = await makeSelfSignedChain();
 		const tamperedRoot = {
 			...parsedRoot,
-			basicConstraints: { ca: true, pathLength: -1 },
+			basicConstraints: { ca: true, pathLength: -1 } as const,
 		};
 		const result = await validateCandidatePath({
 			chain: [parsedLeaf, tamperedRoot],

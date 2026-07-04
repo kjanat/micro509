@@ -73,8 +73,8 @@ export interface Pkcs7CertBag {
 	readonly base64: string;
 }
 
-/** A single SignerInfo decoded from a PKCS#7 SignedData structure. */
-export interface ParsedPkcs7SignerInfo {
+/** Fields shared by every decoded SignerInfo, regardless of signed-attribute presence. */
+interface ParsedPkcs7SignerInfoBase {
 	/** CMS SignerInfo version (typically 1 for issuerAndSerialNumber). */
 	readonly version: number;
 	/** Parsed issuer distinguished name, if present (issuerAndSerialNumber signer identifier). */
@@ -97,11 +97,27 @@ export interface ParsedPkcs7SignerInfo {
 	readonly signatureHex: string;
 	/** Raw signature bytes. */
 	readonly signature: Uint8Array;
-	/** Whether this SignerInfo includes authenticated (signed) attributes. */
-	readonly hasSignedAttrs: boolean;
-	/** Raw DER of signedAttrs with original IMPLICIT [0] tag (0xa0). Present only when `hasSignedAttrs` is true. */
-	readonly signedAttrsDer?: Uint8Array;
 }
+
+/**
+ * A single SignerInfo decoded from a PKCS#7 SignedData structure.
+ *
+ * Discriminated on `hasSignedAttrs`: when `true`, `signedAttrsDer` is always
+ * present; when `false`, it cannot exist.
+ */
+export type ParsedPkcs7SignerInfo =
+	| (ParsedPkcs7SignerInfoBase & {
+			/** This SignerInfo includes authenticated (signed) attributes. */
+			readonly hasSignedAttrs: true;
+			/** Raw DER of signedAttrs with original IMPLICIT [0] tag (0xa0). */
+			readonly signedAttrsDer: Uint8Array;
+	  })
+	| (ParsedPkcs7SignerInfoBase & {
+			/** This SignerInfo has no authenticated attributes. */
+			readonly hasSignedAttrs: false;
+			/** Never present without signed attributes. */
+			readonly signedAttrsDer?: undefined;
+	  });
 
 /** Decoded PKCS#7 SignedData content, including certificates and signer info. */
 export interface ParsedPkcs7SignedData {
@@ -1017,10 +1033,10 @@ function parseSignerInfos(
 					}),
 			signatureHex: toHex(signature.value),
 			signature: new Uint8Array(signature.value),
-			hasSignedAttrs,
 			...(signedAttrsElement === undefined
-				? {}
+				? { hasSignedAttrs: false as const }
 				: {
+						hasSignedAttrs: true as const,
 						signedAttrsDer: new Uint8Array(
 							signerDer.slice(
 								signedAttrsElement.start - signedAttrsElement.headerLength,
@@ -1254,7 +1270,7 @@ async function verifySignedAttrs(
 			VerifyPkcs7SignedDataFailure
 	  >
 > {
-	if (signerInfo.signedAttrsDer === undefined) {
+	if (!signerInfo.hasSignedAttrs) {
 		return verifyPkcs7Failure('malformed', 'Missing signedAttrs DER');
 	}
 	// Step 1: Parse required signed attributes from signedAttrs

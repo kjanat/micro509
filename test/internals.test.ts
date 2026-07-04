@@ -1272,13 +1272,13 @@ describe('pkcs12-mac.ts edge cases', () => {
 	});
 
 	it('parsePkcs12MacDataOrThrow skips MAC verification when password is undefined', async () => {
-		// Build a valid-looking MacData — parsePkcs12MacDataOrThrow should return without 'valid' field
+		// Build a valid-looking MacData — parsePkcs12MacDataOrThrow should report 'unchecked'
 		const data = new Uint8Array([0x30, 0x03, 0x01, 0x01, 0xff]);
 		const mac = await createPkcs12MacData(data, { password: 'test' });
 		// Parse without password — should succeed but no 'valid' field
 		const parsed = await parsePkcs12MacDataOrThrow(mac.der, data);
 		expect(parsed.digestAlgorithmOid).toBe(OIDS.sha256);
-		expect(parsed.valid).toBeUndefined();
+		expect(parsed.verification).toBe('unchecked');
 	});
 
 	it('parsePkcs12MacDataOrThrow throws on zero iterations', async () => {
@@ -1324,7 +1324,7 @@ describe('pkcs12-mac.ts edge cases', () => {
 		expect(mac.parsed.saltHex).toBe('');
 		const parsed = await parsePkcs12MacDataOrThrow(mac.der, data, 'test');
 		expect(parsed.saltHex).toBe('');
-		expect(parsed.valid).toBe(true);
+		expect(parsed.verification).toBe('valid');
 	});
 
 	it('rawEcdsaSignatureToDer converts valid raw signature to DER', () => {

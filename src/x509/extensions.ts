@@ -248,12 +248,19 @@ export type IssuingDistributionPoint =
  * A certificate with `ca: true` may issue other certificates; `pathLength`
  * limits how many additional CAs may appear below it in the chain.
  */
-export interface BasicConstraints {
-	/** Whether this certificate belongs to a CA. End-entity certs set this to `false`. */
-	readonly ca: boolean;
-	/** Maximum number of intermediate CA certificates allowed below this CA. Only valid when `ca` is `true`. */
-	readonly pathLength?: number;
-}
+export type BasicConstraints =
+	| {
+			/** End-entity certificate: not a CA. */
+			readonly ca: false;
+			/** Never present on end-entity certificates. */
+			readonly pathLength?: undefined;
+	  }
+	| {
+			/** CA certificate: may issue other certificates. */
+			readonly ca: true;
+			/** Maximum number of intermediate CA certificates allowed below this CA. */
+			readonly pathLength?: number;
+	  };
 
 /** A single certificate policy: an OID plus optional qualifiers. */
 export interface PolicyInformation {

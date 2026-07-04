@@ -132,7 +132,7 @@ describe('pfx', () => {
 		const parsed = await parsePfxPem(pfx.pem, { macPassword: 'integrity123' });
 		expect(parsed.ok).toBe(true);
 		if (!parsed.ok) throw new Error('unreachable');
-		expect(parsed.value.macData?.valid).toBe(true);
+		expect(parsed.value.macData?.verification).toBe('valid');
 		const wrongMac = await parsePfxPem(pfx.pem, { macPassword: 'wrong' });
 		expect(wrongMac).toMatchObject({
 			ok: false,
@@ -366,7 +366,7 @@ describe('pfx', () => {
 		const result = await parsePfxDer(pfx.der, { password: 'content-pw', macPassword: 'mac-pw' });
 		expect(result.ok).toBe(true);
 		if (!result.ok) throw new Error('unreachable');
-		expect(result.value.macData?.valid).toBe(true);
+		expect(result.value.macData?.verification).toBe('valid');
 		expect(result.value.certificates).toHaveLength(1);
 		expect(result.value.privateKeys).toHaveLength(1);
 	});

@@ -308,8 +308,6 @@ export type ValidateCandidatePathResult =
 	| {
 			readonly ok: true;
 			readonly value: ValidateCandidatePathSuccess;
-			/** Shorthand duplicate of `value.policyValidation` for internal forwarding. */
-			readonly policyValidation: PolicyValidationOutcome;
 	  }
 	| IndexedErrorResult<VerifyErrorCode, VerifyFailureDetails, VerifyChainFailure>;
 
@@ -1474,7 +1472,6 @@ function validateCandidatePathSuccessResult(
 	return {
 		ok: true,
 		value: { policyValidation },
-		policyValidation,
 	};
 }
 

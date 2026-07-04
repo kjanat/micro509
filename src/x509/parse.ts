@@ -162,7 +162,7 @@ export interface ParsedName {
 	/** Flat list of every attribute across all RDNs, in encounter order. */
 	readonly attributes: readonly ParsedNameAttribute[];
 	/** First-occurrence map of well-known fields (CN, O, OU, etc.) for quick lookups. */
-	readonly values: Partial<Record<NameFieldKey, string>>;
+	readonly values: Readonly<Partial<Record<NameFieldKey, string>>>;
 }
 
 /** A single RelativeDistinguishedName SET from an X.501 Name. */
@@ -172,7 +172,7 @@ export interface ParsedRelativeDistinguishedName {
 	/** Attributes within this RDN (usually one, but multi-valued RDNs are legal). */
 	readonly attributes: readonly ParsedNameAttribute[];
 	/** First-occurrence map of well-known fields within this RDN. */
-	readonly values: Partial<Record<NameFieldKey, string>>;
+	readonly values: Readonly<Partial<Record<NameFieldKey, string>>>;
 }
 
 /**
@@ -1291,7 +1291,10 @@ export function parseBasicConstraints(bytes: Uint8Array): BasicConstraints {
 	if (pathLength !== undefined && ca !== true) {
 		throw new Error('basicConstraints pathLength requires cA = true');
 	}
-	return pathLength !== undefined ? { ca, pathLength } : { ca };
+	if (ca) {
+		return pathLength !== undefined ? { ca: true, pathLength } : { ca: true };
+	}
+	return { ca: false };
 }
 
 /** @internal Decode the Key Usage BIT STRING extension value. */

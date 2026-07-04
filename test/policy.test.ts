@@ -122,9 +122,11 @@ describe('policy fixtures', () => {
 		});
 		expect(allowed).toMatchObject({
 			ok: true,
-			policyValidation: {
-				authorityConstrainedPolicies: [{ policyIdentifier: '1.2.3.5' }],
-				userConstrainedPolicies: [{ policyIdentifier: '1.2.3.4' }],
+			value: {
+				policyValidation: {
+					authorityConstrainedPolicies: [{ policyIdentifier: '1.2.3.5' }],
+					userConstrainedPolicies: [{ policyIdentifier: '1.2.3.4' }],
+				},
 			},
 		});
 
@@ -175,9 +177,11 @@ describe('policy fixtures', () => {
 		});
 		expect(result).toMatchObject({
 			ok: true,
-			policyValidation: {
-				authorityConstrainedPolicies: [{ policyIdentifier: '1.2.3.5' }],
-				userConstrainedPolicies: [{ policyIdentifier: '1.2.3.5' }],
+			value: {
+				policyValidation: {
+					authorityConstrainedPolicies: [{ policyIdentifier: '1.2.3.5' }],
+					userConstrainedPolicies: [{ policyIdentifier: '1.2.3.5' }],
+				},
 			},
 		});
 	});
@@ -284,8 +288,10 @@ describe('policy fixtures', () => {
 		});
 		expect(result).toMatchObject({
 			ok: true,
-			policyValidation: {
-				userConstrainedPolicies: [{ policyIdentifier: '1.2.3.4' }],
+			value: {
+				policyValidation: {
+					userConstrainedPolicies: [{ policyIdentifier: '1.2.3.4' }],
+				},
 			},
 		});
 	});
@@ -333,8 +339,10 @@ describe('policy fixtures', () => {
 		});
 		expect(result).toMatchObject({
 			ok: true,
-			policyValidation: {
-				userConstrainedPolicies: [{ policyIdentifier: '1.2.3.4' }],
+			value: {
+				policyValidation: {
+					userConstrainedPolicies: [{ policyIdentifier: '1.2.3.4' }],
+				},
 			},
 		});
 	});
@@ -383,8 +391,10 @@ describe('policy fixtures', () => {
 		});
 		expect(result).toMatchObject({
 			ok: true,
-			policyValidation: {
-				userConstrainedPolicies: [{ policyIdentifier: '1.2.3.4' }],
+			value: {
+				policyValidation: {
+					userConstrainedPolicies: [{ policyIdentifier: '1.2.3.4' }],
+				},
 			},
 		});
 	});
@@ -440,8 +450,10 @@ describe('policy fixtures', () => {
 		});
 		expect(result).toMatchObject({
 			ok: true,
-			policyValidation: {
-				userConstrainedPolicies: [{ policyIdentifier: '1.2.3.4' }],
+			value: {
+				policyValidation: {
+					userConstrainedPolicies: [{ policyIdentifier: '1.2.3.4' }],
+				},
 			},
 		});
 	});
@@ -466,9 +478,11 @@ describe('policy fixtures', () => {
 		});
 		expect(anyPolicyAllowed).toMatchObject({
 			ok: true,
-			policyValidation: {
-				authorityConstrainedPolicies: [{ policyIdentifier: OIDS.anyPolicy }],
-				userConstrainedPolicies: [{ policyIdentifier: '1.2.3.8' }],
+			value: {
+				policyValidation: {
+					authorityConstrainedPolicies: [{ policyIdentifier: OIDS.anyPolicy }],
+					userConstrainedPolicies: [{ policyIdentifier: '1.2.3.8' }],
+				},
 			},
 		});
 
@@ -530,17 +544,19 @@ describe('policy fixtures', () => {
 		});
 		expect(result).toMatchObject({
 			ok: true,
-			policyValidation: {
-				authorityConstrainedPolicies: [
-					{ policyIdentifier: '1.2.3.21' },
-					{ policyIdentifier: '1.2.3.22' },
-					{ policyIdentifier: '1.2.3.23' },
-				],
-				userConstrainedPolicies: [
-					{ policyIdentifier: '1.2.3.1' },
-					{ policyIdentifier: '1.2.3.2' },
-					{ policyIdentifier: '1.2.3.3' },
-				],
+			value: {
+				policyValidation: {
+					authorityConstrainedPolicies: [
+						{ policyIdentifier: '1.2.3.21' },
+						{ policyIdentifier: '1.2.3.22' },
+						{ policyIdentifier: '1.2.3.23' },
+					],
+					userConstrainedPolicies: [
+						{ policyIdentifier: '1.2.3.1' },
+						{ policyIdentifier: '1.2.3.2' },
+						{ policyIdentifier: '1.2.3.3' },
+					],
+				},
 			},
 		});
 	});

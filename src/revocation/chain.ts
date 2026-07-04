@@ -177,29 +177,48 @@ export interface RevocationSource {
  * One entry per certificate in {@linkcode CheckChainRevocationValue.certificates}.
  * The trust anchor is excluded (never checked for revocation).
  */
-export interface CertificateRevocationStatus {
-	/** The certificate that was evaluated. */
-	readonly certificate: ParsedCertificate;
-	/**
-	 * Revocation status determination.
-	 *
-	 * - `'good'`: evidence confirms certificate is not revoked
-	 * - `'revoked'`: evidence confirms certificate is revoked
-	 * - `'indeterminate'`: could not determine status (see {@linkcode indeterminateReasons})
-	 */
-	readonly status: 'good' | 'revoked' | 'indeterminate';
-	/** Evidence source when status is `'good'` or `'revoked'`. */
-	readonly source?: RevocationSource;
-	/** Why status could not be determined. Present when `status` is `'indeterminate'`. */
-	readonly indeterminateReasons?: readonly RevocationIndeterminateReason[];
-	/** Revocation details. Present when `status` is `'revoked'`. */
-	readonly revocationInfo?: {
-		/** When the certificate was revoked. */
-		readonly revocationDate: Date;
-		/** RFC 5280 CRLReason code, if provided by the CRL/OCSP response. */
-		readonly reason?: RevocationReason;
-	};
-}
+export type CertificateRevocationStatus =
+	| {
+			/** The certificate that was evaluated. */
+			readonly certificate: ParsedCertificate;
+			/** Evidence confirms the certificate is not revoked. */
+			readonly status: 'good';
+			/** Evidence that produced the verdict. */
+			readonly source: RevocationSource;
+			/** Never present on a `good` verdict. */
+			readonly indeterminateReasons?: undefined;
+			/** Never present on a `good` verdict. */
+			readonly revocationInfo?: undefined;
+	  }
+	| {
+			/** The certificate that was evaluated. */
+			readonly certificate: ParsedCertificate;
+			/** Evidence confirms the certificate is revoked. */
+			readonly status: 'revoked';
+			/** Evidence that produced the verdict. */
+			readonly source: RevocationSource;
+			/** Revocation details from the CRL entry or OCSP response. */
+			readonly revocationInfo: {
+				/** When the certificate was revoked. */
+				readonly revocationDate: Date;
+				/** RFC 5280 CRLReason code, if provided by the CRL/OCSP response. */
+				readonly reason?: RevocationReason;
+			};
+			/** Never present on a `revoked` verdict. */
+			readonly indeterminateReasons?: undefined;
+	  }
+	| {
+			/** The certificate that was evaluated. */
+			readonly certificate: ParsedCertificate;
+			/** Revocation status could not be determined. */
+			readonly status: 'indeterminate';
+			/** Why status could not be determined. */
+			readonly indeterminateReasons: readonly RevocationIndeterminateReason[];
+			/** Never present on an `indeterminate` verdict. */
+			readonly source?: undefined;
+			/** Never present on an `indeterminate` verdict. */
+			readonly revocationInfo?: undefined;
+	  };
 
 /**
  * Errors encountered while processing revocation evidence.
@@ -523,30 +542,22 @@ async function checkSignerRevocation(
 	return 'resolved-indeterminate';
 }
 
-/** Builds a CertificateRevocationStatus for a CRL check result. */
-function buildCrlStatus(
+/** Builds the `revoked` CertificateRevocationStatus for a CRL hit. */
+function buildCrlRevokedStatus(
 	cert: ParsedCertificate,
 	signer: ParsedCertificate,
-	status: 'good' | 'revoked',
 	thisUpdate: Date,
-	revocationDate?: Date,
+	revocationDate: Date,
 	reasonCode?: RevocationReason,
 ): CertificateRevocationStatus {
-	if (status === 'revoked' && revocationDate !== undefined) {
-		return {
-			certificate: cert,
-			status: 'revoked',
-			source: { kind: 'crl', signerCertificate: signer, thisUpdate },
-			revocationInfo: {
-				revocationDate,
-				...(reasonCode !== undefined ? { reason: reasonCode } : {}),
-			},
-		};
-	}
 	return {
 		certificate: cert,
-		status: 'good',
+		status: 'revoked',
 		source: { kind: 'crl', signerCertificate: signer, thisUpdate },
+		revocationInfo: {
+			revocationDate,
+			...(reasonCode !== undefined ? { reason: reasonCode } : {}),
+		},
 	};
 }
 
@@ -847,10 +858,9 @@ async function evaluateCrlEvidence(
 		if (result.value.status === 'revoked') {
 			// Immediately return revoked status
 			return {
-				status: buildCrlStatus(
+				status: buildCrlRevokedStatus(
 					cert,
 					effectiveSigner,
-					'revoked',
 					crlThisUpdate,
 					result.value.revocationDate,
 					result.value.reasonCode,
@@ -879,22 +889,18 @@ async function evaluateCrlEvidence(
 	}
 
 	// Return 'good' only if we saw at least one good result AND all reasons are covered
-	if (sawGood) {
+	if (sawGood && freshestGood !== undefined) {
 		const allReasonsCovered = ALL_REASON_FLAGS.every((r) => coveredReasons.has(r));
 		if (allReasonsCovered) {
 			return {
 				status: {
 					certificate: cert,
 					status: 'good',
-					...(freshestGood !== undefined
-						? {
-								source: {
-									kind: 'crl',
-									signerCertificate: freshestGood.signer,
-									thisUpdate: freshestGood.thisUpdate,
-								},
-							}
-						: {}),
+					source: {
+						kind: 'crl',
+						signerCertificate: freshestGood.signer,
+						thisUpdate: freshestGood.thisUpdate,
+					},
 				},
 				executionErrors,
 			};

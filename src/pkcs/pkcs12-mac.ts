@@ -55,8 +55,11 @@ export interface ParsedPkcs12MacData {
 	readonly saltHex: string;
 	/** Number of PKCS#12 KDF iterations. */
 	readonly iterations: number;
-	/** MAC verification outcome. Present only when a password was supplied during parsing. */
-	readonly valid?: boolean;
+	/**
+	 * MAC verification outcome: `'unchecked'` when no password was supplied
+	 * during parsing, otherwise `'valid'` or `'invalid'`.
+	 */
+	readonly verification: 'valid' | 'invalid' | 'unchecked';
 }
 
 /**
@@ -89,6 +92,7 @@ export async function createPkcs12MacData(
 			digestHex: toHex(mac),
 			saltHex: toHex(salt),
 			iterations,
+			verification: 'valid',
 		},
 	};
 }
@@ -108,8 +112,7 @@ export type ParsePkcs12MacDataResult =
 
 /**
  * Throwing core for {@linkcode parsePkcs12MacData}. When `password` is
- * provided, verifies the MAC and sets the `valid` flag on the returned
- * structure.
+ * provided, verifies the MAC and reports the outcome in `verification`.
  */
 export async function parsePkcs12MacDataOrThrow(
 	der: Uint8Array,
@@ -156,28 +159,35 @@ export async function parsePkcs12MacDataOrThrow(
 	}
 	const parsedIterations = decodeNonNegativeIntegerNumber(iterations.value, 'MacData iterations');
 	assertPkcs12MacIterations(parsedIterations);
-	const parsed: ParsedPkcs12MacData = {
-		digestAlgorithmOid,
-		digestAlgorithmName: describeHashAlgorithm(digestAlgorithmOid),
-		digestHex: toHex(digest.value),
-		saltHex: toHex(salt.value),
-		iterations: parsedIterations,
-	};
 	if (password === undefined) {
-		return parsed;
+		return {
+			digestAlgorithmOid,
+			digestAlgorithmName: describeHashAlgorithm(digestAlgorithmOid),
+			digestHex: toHex(digest.value),
+			saltHex: toHex(salt.value),
+			iterations: parsedIterations,
+			verification: 'unchecked',
+		};
 	}
 	const expected = await computePkcs12Mac(
 		authenticatedSafe,
 		password,
 		salt.value,
-		parsed.iterations,
+		parsedIterations,
 	);
-	return { ...parsed, valid: equalBytes(expected, digest.value) };
+	return {
+		digestAlgorithmOid,
+		digestAlgorithmName: describeHashAlgorithm(digestAlgorithmOid),
+		digestHex: toHex(digest.value),
+		saltHex: toHex(salt.value),
+		iterations: parsedIterations,
+		verification: equalBytes(expected, digest.value) ? 'valid' : 'invalid',
+	};
 }
 
 /**
  * Decodes a DER-encoded MacData block. When `password` is provided, verifies
- * the MAC and sets the `valid` flag on the returned structure.
+ * the MAC and reports the outcome in `verification`.
  *
  * Returns a typed failure (`code: 'malformed'`) on malformed input. For the
  * throwing form use {@linkcode parsePkcs12MacDataOrThrow}.

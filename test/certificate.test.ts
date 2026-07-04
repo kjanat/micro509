@@ -470,17 +470,6 @@ describe('certificate', () => {
 		expect(parsedEc384.signatureAlgorithmOid).toBe('1.2.840.10045.4.3.3');
 	});
 
-	it('rejects pathLength without ca:true', async () => {
-		expect(
-			createSelfSignedCertificate({
-				subject: { commonName: 'bad-bc.example' },
-				extensions: {
-					basicConstraints: { ca: false, pathLength: 1 },
-				},
-			}),
-		).rejects.toThrow('pathLength requires ca=true');
-	});
-
 	it('rejects anyPolicy in policyMappings', async () => {
 		expect(
 			createSelfSignedCertificate({
