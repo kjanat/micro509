@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7 # Trusted action, tag allowed
+        with: { persist-credentials: false }
       - uses: ./.github/actions/setup-ts
         with: { install-bun: "true" }
       - uses: kjanat/install-dprint@v1 # Trusted action, tag allowed

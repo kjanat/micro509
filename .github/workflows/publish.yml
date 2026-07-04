@@ -31,6 +31,7 @@ jobs:
       mode: ${{ steps.version.outputs.mode }}
     steps:
       - uses: actions/checkout@v7
+        with: { persist-credentials: false }
       - uses: ./.github/actions/release-validate
         id: version
         with:
@@ -48,6 +49,7 @@ jobs:
       url: ${{ needs.validate.outputs.is_tag == 'true' && needs.validate.outputs.jsr_url || '' }}
     steps:
       - uses: actions/checkout@v7
+        with: { persist-credentials: false }
       - uses: ./.github/actions/setup-ts
         with: { install-bun: "true" }
       - run: |
@@ -78,6 +80,7 @@ jobs:
       url: ${{ needs.validate.outputs.is_tag == 'true' && needs.validate.outputs.npm_url || '' }}
     steps:
       - uses: actions/checkout@v7
+        with: { persist-credentials: false }
       - uses: ./.github/actions/setup-ts
         with:
           install-bun: "true"

@@ -17,6 +17,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- CI now smoke-tests the two previously untested runtime claims: Cloudflare
+  Workers (real workerd via wrangler's test harness) and browsers (headless
+  Chromium via Playwright, loading the built `dist/` output). All five
+  supported runtimes are now exercised in CI.
+
+### Fixed
+
+- Manual `npm publish` outside the release workflow now fails via a
+  `prepublishOnly` guard: only the workflow rewrites the dev-only
+  `bun → ./src/*.ts` export conditions, so a raw publish would ship an
+  exports map pointing at files missing from the dist-only tarball.
+
 ## [0.6.0] - 2026-07-04
 
 Full standards surface claimed complete: all four RFC status rows — 5280,
