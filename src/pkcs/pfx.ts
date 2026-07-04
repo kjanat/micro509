@@ -31,10 +31,9 @@ import {
 	decryptPbes2,
 	encryptPbes2,
 	isWrongPasswordError,
-	type Pbes2EncryptionOptions,
 } from '#micro509/internal/crypto/pbes2.ts';
 import { base64Encode } from '#micro509/internal/shared/base64.ts';
-import { exportPkcs8Der } from '#micro509/keys/keys.ts';
+import { type EncryptedPkcs8Options, exportPkcs8Der } from '#micro509/keys/keys.ts';
 import { pemEncode, splitPemBlocksOrThrow } from '#micro509/pem/pem.ts';
 import { type ErrorResult, failureResult, type Micro509Error } from '#micro509/result/result.ts';
 import { type ParsedCertificate, parseCertificateDerOrThrow } from '#micro509/x509/parse.ts';
@@ -88,8 +87,8 @@ export interface CreatePfxInput {
 	readonly mac?: Pkcs12MacOptions;
 }
 
-/** PBES2 encryption settings for PFX key-bag protection. Alias of {@linkcode Pbes2EncryptionOptions}. */
-export type PfxEncryptionOptions = Pbes2EncryptionOptions;
+/** PBES2 encryption settings for PFX key-bag protection. Alias of {@linkcode EncryptedPkcs8Options}. */
+export type PfxEncryptionOptions = EncryptedPkcs8Options;
 
 /** Options for {@linkcode parsePfxDer} and {@linkcode parsePfxPem}. */
 export interface ParsePfxOptions {
@@ -421,17 +420,19 @@ export async function parsePfxDer(
  * }
  * ```
  */
-export async function parsePfxPem(pem: string, options?: ParsePfxOptions): Promise<ParsePfxResult> {
+export function parsePfxPem(pem: string, options?: ParsePfxOptions): Promise<ParsePfxResult> {
+	let bytes: Uint8Array;
 	try {
 		const blocks = splitPemBlocksOrThrow(pem).filter((block) => block.label === 'PKCS12');
 		const block = blocks[0];
 		if (block === undefined || blocks.length !== 1) {
-			return pfxFailure('malformed', 'Expected exactly one PKCS12 PEM block');
+			return Promise.resolve(pfxFailure('malformed', 'Expected exactly one PKCS12 PEM block'));
 		}
-		return parsePfxDer(block.bytes, options);
+		bytes = block.bytes;
 	} catch {
-		return pfxFailure('malformed', 'Expected exactly one PKCS12 PEM block');
+		return Promise.resolve(pfxFailure('malformed', 'Expected exactly one PKCS12 PEM block'));
 	}
+	return parsePfxDer(bytes, options);
 }
 
 // ---------------------------------------------------------------------------
@@ -713,11 +714,10 @@ function decodeLocalKeyId(der: Uint8Array): string {
 }
 
 /** Exports a `CryptoKey` to PKCS#8 DER, or passes raw bytes through. */
-async function normalizePrivateKey(source: PfxPrivateKeySource): Promise<Uint8Array> {
-	if (source instanceof CryptoKey) {
-		return exportPkcs8Der(source);
-	}
-	return new Uint8Array(source);
+function normalizePrivateKey(source: PfxPrivateKeySource): Promise<Uint8Array> {
+	return source instanceof CryptoKey
+		? exportPkcs8Der(source)
+		: Promise.resolve(new Uint8Array(source));
 }
 
 /** Extracts DER bytes from a PEM string, or passes raw DER through. */
@@ -738,10 +738,7 @@ function normalizeCertificate(source: PfxCertificateSource): Uint8Array {
 }
 
 /** Decrypts a PKCS#7 EncryptedData structure using PBES2 with the given password. */
-async function decryptEncryptedData(
-	encryptedDataDer: Uint8Array,
-	password: string,
-): Promise<Uint8Array> {
+function decryptEncryptedData(encryptedDataDer: Uint8Array, password: string): Promise<Uint8Array> {
 	const topLevel = readSequenceChildren(encryptedDataDer);
 	const encryptedContentInfo = topLevel[1];
 	if (topLevel.length !== 2 || encryptedContentInfo === undefined) {

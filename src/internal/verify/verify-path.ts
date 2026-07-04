@@ -21,7 +21,8 @@ import type {
 import type { ParsedCertificate } from '#micro509/x509/parse.ts';
 import { parseCertificatesFromSource } from '#micro509/x509/parse.ts';
 
-type VerifyCertificateSignatureResult =
+/** Outcome of verifying one certificate's signature against its issuer's key. */
+export type VerifyCertificateSignatureResult =
 	| { readonly ok: true; readonly valid: boolean }
 	| {
 			readonly ok: false;
@@ -50,11 +51,16 @@ interface TrustAnchorMatchResult {
 }
 
 /** Loose input for constructing failure detail objects during path building. */
-interface VerifyPathFailureDetailsInput {
+export interface VerifyPathFailureDetailsInput {
+	/** Common name of the certificate under evaluation, if known. */
 	readonly subjectCommonName?: string | undefined;
+	/** Common name of the expected issuer, if known. */
 	readonly issuerCommonName?: string | undefined;
+	/** Description of what the check expected. */
 	readonly expected?: string | undefined;
+	/** Description of what the check actually observed. */
 	readonly actual?: string | undefined;
+	/** Common names of every certificate in the candidate chain. */
 	readonly chainCommonNames?: readonly string[] | undefined;
 }
 

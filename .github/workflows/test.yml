@@ -1,12 +1,8 @@
-name: Test
-
-on:
-  pull_request: { branches: [master] }
-  push: { branches: [master] }
-  workflow_call: # callable so Publish can gate releases on a green suite
-
 # No `concurrency` here: when Publish calls this via workflow_call, `github.workflow`
 # resolves to the caller ("Publish"), so a shared group would deadlock caller vs callee.
+---
+name: Test
+on: { pull_request: { branches: [master] }, push: { branches: [master] }, workflow_call: null }
 
 jobs:
   test:
@@ -18,9 +14,10 @@ jobs:
       - uses: actions/checkout@v7
         with: { persist-credentials: false }
       - uses: ./.github/actions/setup-ts
-        with: { install-bun: "true", install-node: "true", install-deno: "true" }
-      - run: bun install --frozen-lockfile
-      - run: bun run typecheck
+        with: { install-bun: true, install-node: true, install-deno: true }
+      - run: runner install -f typecheck
+      - name: Deno lint + type-check + doc-lint (full source tree)
+        run: run -p check:deno lint:deno docs:lint
       - run: bun run test
       - name: Build (runs attw + publint + unused-export checks)
         run: bun run build
@@ -40,26 +37,17 @@ jobs:
       - uses: actions/checkout@v7
         with: { persist-credentials: false }
       - uses: ./.github/actions/setup-ts
-        with: { install-bun: "true", install-node: "true" }
-      - run: bun install --frozen-lockfile
-      - run: bun run bd
-      - run: npx playwright install --with-deps chromium
-      - name: Workers smoke test (workerd)
-        run: node scripts/smoke-workerd.mjs
-      - name: Browser smoke test (chromium, dist)
-        run: node scripts/smoke-browser.mjs
+        with: { install-bun: true, install-node: true, install-deno: true }
+      - run: runner install -sf bd playwright:chromium smoke
 
   differential:
     name: OpenSSL differential
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions: { contents: read }
+    env: { DIFFERENTIAL_OPENSSL: "1" }
     steps:
-      - uses: actions/checkout@v7
-        with: { persist-credentials: false }
-      - uses: ./.github/actions/setup-ts
-        with: { install-bun: "true" }
+      - { uses: actions/checkout@v7, with: { persist-credentials: false } }
+      - { uses: ./.github/actions/setup-ts, with: { install-bun: "true" } }
       - run: openssl version
-      - run: bun install --frozen-lockfile
-      - run: bun run test:differential
-        env: { DIFFERENTIAL_OPENSSL: "1" }
+      - run: runner install -f test:differential

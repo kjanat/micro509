@@ -797,7 +797,7 @@ async function evaluateCrlEvidence(
 	const deltaCrls = parsedCrls.filter((crl) => crl.baseCrlNumber !== undefined);
 
 	// Helper to check CRL with given issuer and optional delta
-	const checkWithIssuer = async (
+	const checkWithIssuer = (
 		crl: ParsedCertificateRevocationList,
 		deltaCrl: ParsedCertificateRevocationList | undefined,
 		crlIssuer: ParsedCertificate,

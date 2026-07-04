@@ -58,7 +58,7 @@ export interface PolicyValidationFailure
 export type PolicyValidationResult = Result<PolicyValidationOutcome, PolicyValidationFailure>;
 
 /** One node in the RFC 9618 policy graph, keyed by `depth:policyOID`. */
-interface PolicyGraphNode {
+export interface PolicyGraphNode {
 	/** Graph depth (0 = root anyPolicy node). */
 	depth: number;
 	/** The policy OID this node represents at its depth. */
@@ -74,7 +74,7 @@ interface PolicyGraphNode {
 }
 
 /** The full RFC 9618 valid-policy graph, indexed by depth level. */
-interface PolicyGraph {
+export interface PolicyGraph {
 	/** Each index `i` holds the nodes at depth `i`, keyed by `"depth:oid"`. */
 	nodesByDepth: Map<string, PolicyGraphNode>[];
 }

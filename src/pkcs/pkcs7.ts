@@ -74,7 +74,7 @@ export interface Pkcs7CertBagMaterial {
 }
 
 /** Fields shared by every decoded SignerInfo, regardless of signed-attribute presence. */
-interface ParsedPkcs7SignerInfoBase {
+export interface ParsedPkcs7SignerInfoBase {
 	/** CMS SignerInfo version (typically 1 for issuerAndSerialNumber). */
 	readonly version: number;
 	/** Parsed issuer distinguished name, if present (issuerAndSerialNumber signer identifier). */

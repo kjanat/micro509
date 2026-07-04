@@ -103,21 +103,9 @@ export interface KnownParsedExtensionAccumulator {
  * Mutable version of {@linkcode KnownParsedExtensionAccumulator} used during
  * extension parsing to progressively fill in decoded values.
  */
-export interface MutableKnownParsedExtensionAccumulator extends KnownParsedExtensionAccumulator {
-	basicConstraints?: BasicConstraints;
-	keyUsage?: ParsedBitFlags<KeyUsage>;
-	extendedKeyUsage?: readonly ExtendedKeyUsage[];
-	subjectAltNames?: readonly SubjectAltName[];
-	nameConstraints?: NameConstraints<ParsedNameConstraintForm>;
-	certificatePolicies?: CertificatePolicies;
-	policyMappings?: PolicyMappings;
-	policyConstraints?: PolicyConstraints;
-	inhibitAnyPolicy?: InhibitAnyPolicy;
-	authorityInfoAccess?: readonly AuthorityInformationAccess[];
-	crlDistributionPoints?: readonly ParsedDistributionPoint[];
-	subjectKeyIdentifier?: string;
-	authorityKeyIdentifier?: string;
-}
+export type MutableKnownParsedExtensionAccumulator = {
+	-readonly [Key in keyof KnownParsedExtensionAccumulator]: KnownParsedExtensionAccumulator[Key];
+};
 
 /**
  * Full lifecycle definition for a known X.509 extension: decode, encode,
@@ -397,7 +385,8 @@ export function listExtensionDefinitions(
 /**
  * Look up a known extension definition by OID.
  *
- * Overloaded for each built-in OID constant to return the exact definition type.
+ * Overloaded for each built-in OID constant to return the exact definition type;
+ * the generic `string` form returns the union or `undefined`.
  *
  * @param oid Dotted-decimal extension OID.
  * @returns The matching definition, or `undefined` for unrecognized OIDs.
@@ -405,42 +394,55 @@ export function listExtensionDefinitions(
 export function getExtensionDefinition(
 	oid: typeof OIDS.basicConstraints,
 ): typeof BASIC_CONSTRAINTS_EXTENSION_DEFINITION;
+/** Exact definition for the Key Usage extension. */
 export function getExtensionDefinition(
 	oid: typeof OIDS.keyUsage,
 ): typeof KEY_USAGE_EXTENSION_DEFINITION;
+/** Exact definition for the Extended Key Usage extension. */
 export function getExtensionDefinition(
 	oid: typeof OIDS.extendedKeyUsage,
 ): typeof EXTENDED_KEY_USAGE_EXTENSION_DEFINITION;
+/** Exact definition for the Subject Alternative Name extension. */
 export function getExtensionDefinition(
 	oid: typeof OIDS.subjectAltName,
 ): typeof SUBJECT_ALT_NAME_EXTENSION_DEFINITION;
+/** Exact definition for the Name Constraints extension. */
 export function getExtensionDefinition(
 	oid: typeof OIDS.nameConstraints,
 ): typeof NAME_CONSTRAINTS_EXTENSION_DEFINITION;
+/** Exact definition for the Certificate Policies extension. */
 export function getExtensionDefinition(
 	oid: typeof OIDS.certificatePolicies,
 ): typeof CERTIFICATE_POLICIES_EXTENSION_DEFINITION;
+/** Exact definition for the Policy Mappings extension. */
 export function getExtensionDefinition(
 	oid: typeof OIDS.policyMappings,
 ): typeof POLICY_MAPPINGS_EXTENSION_DEFINITION;
+/** Exact definition for the Policy Constraints extension. */
 export function getExtensionDefinition(
 	oid: typeof OIDS.policyConstraints,
 ): typeof POLICY_CONSTRAINTS_EXTENSION_DEFINITION;
+/** Exact definition for the Inhibit Any-Policy extension. */
 export function getExtensionDefinition(
 	oid: typeof OIDS.inhibitAnyPolicy,
 ): typeof INHIBIT_ANY_POLICY_EXTENSION_DEFINITION;
+/** Exact definition for the Authority Information Access extension. */
 export function getExtensionDefinition(
 	oid: typeof OIDS.authorityInfoAccess,
 ): typeof AUTHORITY_INFO_ACCESS_EXTENSION_DEFINITION;
+/** Exact definition for the CRL Distribution Points extension. */
 export function getExtensionDefinition(
 	oid: typeof OIDS.cRLDistributionPoints,
 ): typeof CRL_DISTRIBUTION_POINTS_EXTENSION_DEFINITION;
+/** Exact definition for the Subject Key Identifier extension. */
 export function getExtensionDefinition(
 	oid: typeof OIDS.subjectKeyIdentifier,
 ): typeof SUBJECT_KEY_IDENTIFIER_EXTENSION_DEFINITION;
+/** Exact definition for the Authority Key Identifier extension. */
 export function getExtensionDefinition(
 	oid: typeof OIDS.authorityKeyIdentifier,
 ): typeof AUTHORITY_KEY_IDENTIFIER_EXTENSION_DEFINITION;
+/** Generic lookup: returns the matching definition, or `undefined` for unrecognized OIDs. */
 export function getExtensionDefinition(oid: string): KnownExtensionDefinition | undefined;
 export function getExtensionDefinition(oid: string): KnownExtensionDefinition | undefined {
 	return EXTENSION_DEFINITION_MAP.get(oid);

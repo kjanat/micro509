@@ -60,7 +60,7 @@
  * const parsed = parseCertificateSigningRequestPem(csr.pem);
  * // parsed.subject.values.commonName === 'example.com'
  * ```
- * @module
+ * @module micro509
  */
 
 // ── keys ─────────────────────────────────────────────────────────────
@@ -162,6 +162,7 @@ export type {
 	ParsedPkcs12MacData,
 	ParsedPkcs7SignedData,
 	ParsedPkcs7SignerInfo,
+	ParsedPkcs7SignerInfoBase,
 	ParsePfxErrorCode,
 	ParsePfxFailure,
 	ParsePfxOptions,
@@ -228,6 +229,7 @@ export type {
 	ConfiguredOcspResponderCertificate,
 	CrlApplicabilityFailureReason,
 	IssuingDistributionPoint,
+	IssuingDistributionPointBase,
 	IssuingDistributionPointForAttributeCerts,
 	IssuingDistributionPointForCaCerts,
 	IssuingDistributionPointForUserCerts,
