@@ -229,12 +229,7 @@ function containsPemMarker(value: string): boolean {
  * throwing form use {@linkcode pemDecodeOrThrow}.
  */
 export function pemDecode(label: string, pem: string): PemDecodeResult {
-	try {
-		return successResult(pemDecodeOrThrow(label, pem));
-	} catch (error) {
-		rethrowIfInvariant(error);
-		return failureResult('malformed', error instanceof Error ? error.message : 'Invalid PEM');
-	}
+	return toPemResult(() => pemDecodeOrThrow(label, pem), 'Invalid PEM');
 }
 
 /**
@@ -246,15 +241,7 @@ export function pemDecode(label: string, pem: string): PemDecodeResult {
  * markers. For the throwing form use {@linkcode splitPemBlocksOrThrow}.
  */
 export function splitPemBlocks(input: string): SplitPemBlocksResult {
-	try {
-		return successResult(splitPemBlocksOrThrow(input));
-	} catch (error) {
-		rethrowIfInvariant(error);
-		return failureResult(
-			'malformed',
-			error instanceof Error ? error.message : 'Malformed PEM block',
-		);
-	}
+	return toPemResult(() => splitPemBlocksOrThrow(input), 'Malformed PEM block');
 }
 
 /**
@@ -269,13 +256,20 @@ export function splitPemBlocks(input: string): SplitPemBlocksResult {
 export function categorizePemBlocks(
 	input: string | readonly PemBlock[],
 ): CategorizePemBlocksResult {
+	return toPemResult(() => categorizePemBlocksOrThrow(input), 'Malformed PEM block');
+}
+
+/** Shared Result wrapper around the throwing PEM cores. */
+function toPemResult<TValue>(
+	operation: () => TValue,
+	fallbackMessage: string,
+):
+	| { readonly ok: true; readonly value: TValue }
+	| ErrorResult<PemErrorCode, Record<never, never>, PemFailure> {
 	try {
-		return successResult(categorizePemBlocksOrThrow(input));
+		return successResult(operation());
 	} catch (error) {
 		rethrowIfInvariant(error);
-		return failureResult(
-			'malformed',
-			error instanceof Error ? error.message : 'Malformed PEM block',
-		);
+		return failureResult('malformed', error instanceof Error ? error.message : fallbackMessage);
 	}
 }

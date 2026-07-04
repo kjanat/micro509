@@ -48,8 +48,8 @@ below.
 - **Illegal states made unrepresentable.** `ParsedPkcs7SignerInfo`
   discriminates on `hasSignedAttrs` (when `true`, `signedAttrsDer` is
   guaranteed); `CertificateRevocationStatus` is a discriminated union
-  (good/revoked always carry `source`, revoked always `revocationInfo`,
-  indeterminate always `indeterminateReasons`); `BasicConstraints` rejects
+  (good/revoked always carry `source`, revoked always carries `revocationInfo`,
+  indeterminate always carries `indeterminateReasons`); `BasicConstraints` rejects
   `{ ca: false, pathLength }` at compile time; `ParsedPkcs12MacData.valid`
   (optional boolean tri-state) became
   `verification: 'valid' | 'invalid' | 'unchecked'`; `ParsedName.values`
@@ -57,8 +57,9 @@ below.
   top-level `policyValidation`.
 
 - **pkcs7 creators match the rest of the library.** `createPkcs7CertBag`
-  and `createPkcs7SignedData` return `{ der, pem, base64 }` material like
-  every other creator; the `Der`/`Pem` variants are gone.
+  and `createPkcs7SignedData` return a `Result` whose value is
+  `{ der, pem, base64 }` material like every other creator (check `.ok`,
+  then read `.value`); the `Der`/`Pem` variants are gone.
 
 - **Signature-only verifiers say so.** `verifyOcspResponseSignature` /
   `verifyCertificateRevocationListSignature` check the signature only —
@@ -100,8 +101,8 @@ below.
 | `parsePkcs12MacData` (throwing)                                | Result-returning; `parsePkcs12MacDataOrThrow`              |
 | `pemDecode` / `splitPemBlocks` / `categorizePemBlocks`         | Result-returning; `*OrThrow` for the old behavior          |
 | `ParsedPkcs12MacData.valid?: boolean`                          | `verification: 'valid' \| 'invalid' \| 'unchecked'`        |
-| `createPkcs7CertBag{Der,Pem}`                                  | `createPkcs7CertBag` (returns `{ der, pem, base64 }`)      |
-| `createPkcs7SignedData{Der,Pem}`                               | `createPkcs7SignedData` (returns `{ der, pem, base64 }`)   |
+| `createPkcs7CertBag{Der,Pem}`                                  | `createPkcs7CertBag` (Result of `{ der, pem, base64 }`)    |
+| `createPkcs7SignedData{Der,Pem}`                               | `createPkcs7SignedData` (Result of `{ der, pem, base64 }`) |
 | `Pkcs7CertBag`                                                 | `Pkcs7CertBagMaterial`                                     |
 | `Import{Rsa,Ec,Ed25519}PublicKeyInput`                         | `Import{Rsa,Ec,Ed25519}KeyInput`                           |
 | PBES2 option `encryption: 'aes256-cbc'`                        | `cipher: 'AES-256-CBC'`                                    |
@@ -119,8 +120,8 @@ below.
 - Runtime code arrays `REVOCATION_INDETERMINATE_REASON_CODES` and
   `REVOCATION_INDETERMINATE_REASONS` (the `VERIFY_ERROR_CODES` pattern);
   their unions now derive from the arrays.
-- Root entry point exports every type reachable from public signatures
-  that was previously subpath-only (MacData, policy-validation outcome,
+- The root entry point exports every type reachable from public signatures
+  that were previously subpath-only (MacData, policy-validation outcome,
   identity failure details, revocation error codes/failure payloads, and
   the new `Parse*Result` / `Pem*Result` types).
 - `Pkcs7CertificateSource` and `PfxCertificateSource` accept an

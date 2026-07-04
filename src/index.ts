@@ -159,12 +159,16 @@ export type {
 	ParsedPfxAttribute,
 	ParsedPfxBag,
 	ParsedPfxBagAttributes,
+	ParsedPkcs12MacData,
 	ParsedPkcs7SignedData,
 	ParsedPkcs7SignerInfo,
 	ParsePfxErrorCode,
 	ParsePfxFailure,
 	ParsePfxOptions,
 	ParsePfxResult,
+	ParsePkcs12MacDataErrorCode,
+	ParsePkcs12MacDataFailure,
+	ParsePkcs12MacDataResult,
 	ParsePkcs7CertBagResult,
 	ParsePkcs7ErrorCode,
 	ParsePkcs7Failure,
@@ -176,6 +180,7 @@ export type {
 	PfxMaterial,
 	PfxPrivateKeyBagInput,
 	PfxPrivateKeySource,
+	Pkcs12MacOptions,
 	Pkcs7CertBagMaterial,
 	Pkcs7CertificateSource,
 	Pkcs7SignedDataMaterial,
@@ -329,14 +334,6 @@ export {
 	verifyCertificateRevocationListSignature,
 	verifyOcspResponseSignature,
 } from './revocation/index.ts';
-
-export type {
-	ParsedPkcs12MacData,
-	ParsePkcs12MacDataErrorCode,
-	ParsePkcs12MacDataFailure,
-	ParsePkcs12MacDataResult,
-	Pkcs12MacOptions,
-} from './pkcs/index.ts';
 
 // ── verify ───────────────────────────────────────────────────────────
 export type {

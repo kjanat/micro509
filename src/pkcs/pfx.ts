@@ -41,10 +41,9 @@ import {
 	createPkcs12MacData,
 	type ParsedPkcs12MacData,
 	type Pkcs12MacOptions,
-	parsePkcs12MacDataOrThrow,
+	parsePkcs12MacData,
 } from './pkcs12-mac.ts';
 
-export type {} from '#micro509/internal/crypto/pbes2.ts';
 export type * from './pkcs12-mac.ts';
 
 /** PEM string or DER bytes for a certificate to include in a PFX bag. */
@@ -362,16 +361,16 @@ export async function parsePfxDer(
 		const macElement = topLevel[2];
 		let macData: ParsedPkcs12MacData | undefined;
 		if (macElement !== undefined) {
-			try {
-				macData = await parsePkcs12MacDataOrThrow(
-					der.slice(macElement.start - macElement.headerLength, macElement.end),
-					authenticatedSafeOctets,
-					options?.macPassword ?? options?.password,
-				);
-			} catch {
+			const macResult = await parsePkcs12MacData(
+				der.slice(macElement.start - macElement.headerLength, macElement.end),
+				authenticatedSafeOctets,
+				options?.macPassword ?? options?.password,
+			);
+			if (!macResult.ok) {
 				return pfxFailure('malformed', 'Malformed PFX MacData');
 			}
-			if (macData?.verification === 'invalid') {
+			macData = macResult.value;
+			if (macData.verification === 'invalid') {
 				return pfxFailure('invalid_password', 'Invalid PFX MAC password or corrupted content');
 			}
 		}

@@ -1087,7 +1087,6 @@ describe('pkcs7', () => {
 	});
 
 	it('createPkcs7CertBag with DER certificate source', async () => {
-		const { createPkcs7CertBag } = await import('#micro509');
 		const cert = await createSelfSignedCertificate({
 			subject: { commonName: 'DER source' },
 		});

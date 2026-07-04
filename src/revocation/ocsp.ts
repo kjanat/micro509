@@ -553,7 +553,6 @@ export function parseOcspRequestPem(pem: string): ParseOcspRequestResult {
 	}
 }
 
-/** Decodes a DER-encoded OCSP response into a structured {@linkcode ParsedOcspResponse}. Does not verify the signature. */
 /** Machine-readable failure reason for the OCSP response parsers. */
 export type ParseOcspResponseErrorCode = 'malformed';
 
