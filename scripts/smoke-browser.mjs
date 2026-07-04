@@ -24,7 +24,13 @@ const server = createServer((request, response) => {
 		response.end(pageHtml);
 		return;
 	}
-	readFile(new URL(`.${request.url}`, root))
+	const target = new URL(`.${request.url}`, root);
+	if (!target.pathname.startsWith(root.pathname)) {
+		response.statusCode = 403;
+		response.end();
+		return;
+	}
+	readFile(target)
 		.then((body) => {
 			response.setHeader('content-type', 'text/javascript');
 			response.end(body);

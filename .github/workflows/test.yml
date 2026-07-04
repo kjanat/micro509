@@ -16,6 +16,7 @@ jobs:
     permissions: { contents: read }
     steps:
       - uses: actions/checkout@v7
+        with: { persist-credentials: false }
       - uses: ./.github/actions/setup-ts
         with: { install-bun: "true", install-node: "true", install-deno: "true" }
       - run: bun install --frozen-lockfile
@@ -37,6 +38,7 @@ jobs:
     permissions: { contents: read }
     steps:
       - uses: actions/checkout@v7
+        with: { persist-credentials: false }
       - uses: ./.github/actions/setup-ts
         with: { install-bun: "true", install-node: "true" }
       - run: bun install --frozen-lockfile
@@ -54,6 +56,7 @@ jobs:
     permissions: { contents: read }
     steps:
       - uses: actions/checkout@v7
+        with: { persist-credentials: false }
       - uses: ./.github/actions/setup-ts
         with: { install-bun: "true" }
       - run: openssl version
