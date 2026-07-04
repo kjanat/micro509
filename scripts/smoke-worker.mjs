@@ -11,7 +11,8 @@ export default {
 		try {
 			return new Response(await runSmoke(micro509));
 		} catch (e) {
-			return new Response(String(e), { status: 500 });
+			console.error('smoke-worker fetch failed', e);
+			return new Response('smoke failed', { status: 500 });
 		}
 	},
 };
