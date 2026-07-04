@@ -326,7 +326,6 @@ export type {
 	VerifyPurpose,
 	VerifyRequestFailure,
 	VerifyRequestResult,
-	VerifyServiceIdentityInput,
 } from './verify/index.ts';
 export {
 	buildCandidatePath,

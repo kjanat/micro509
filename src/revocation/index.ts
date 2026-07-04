@@ -4,7 +4,33 @@
  * @module
  */
 
-export type * from './crl.ts';
+export type {
+	CertificateRevocationListMaterial,
+	CheckCertificateRevocationAgainstCrlErrorCode,
+	CheckCertificateRevocationAgainstCrlFailure,
+	CheckCertificateRevocationAgainstCrlFailureDetails,
+	CheckCertificateRevocationAgainstCrlGoodValue,
+	CheckCertificateRevocationAgainstCrlInput,
+	CheckCertificateRevocationAgainstCrlResult,
+	CheckCertificateRevocationAgainstCrlRevokedValue,
+	CheckCertificateRevocationAgainstCrlValue,
+	CreateCertificateRevocationListInput,
+	CrlApplicabilityFailureReason,
+	CrlCertificateSource,
+	CrlSource,
+	ParseCertificateRevocationListErrorCode,
+	ParseCertificateRevocationListFailure,
+	ParseCertificateRevocationListResult,
+	ParsedCertificateRevocationList,
+	ParsedRevokedCertificate,
+	RevocationReason,
+	RevokedCertificateInput,
+	ValidateCertificateRevocationListFailure,
+	ValidateCertificateRevocationListInput,
+	ValidateCertificateRevocationListResult,
+	VerifyCertificateRevocationListSignatureFailure,
+	VerifyCertificateRevocationListSignatureResult,
+} from './crl.ts';
 export {
 	checkCertificateRevocationAgainstCrl,
 	createCertificateRevocationList,
@@ -17,7 +43,37 @@ export {
 	verifyCertificateRevocationListSignature,
 } from './crl.ts';
 
-export type * from './ocsp.ts';
+export type {
+	CreateOcspRequestInput,
+	CreateOcspRequestItemInput,
+	CreateOcspResponseInput,
+	CreateOcspSingleResponseInput,
+	OcspCertificateSource,
+	OcspCertStatus,
+	OcspHashAlgorithm,
+	OcspRequestMaterial,
+	OcspRequestSource,
+	OcspResponderRevocationPolicy,
+	OcspResponseMaterial,
+	OcspResponseStatus,
+	ParsedOcspCertId,
+	ParsedOcspRequest,
+	ParsedOcspResponderId,
+	ParsedOcspResponse,
+	ParsedOcspSingleResponse,
+	ParseOcspRequestErrorCode,
+	ParseOcspRequestFailure,
+	ParseOcspRequestResult,
+	ParseOcspResponseErrorCode,
+	ParseOcspResponseFailure,
+	ParseOcspResponseResult,
+	ValidateOcspResponseErrorCode,
+	ValidateOcspResponseFailure,
+	ValidateOcspResponseInput,
+	ValidateOcspResponseResult,
+	VerifyOcspResponseSignatureFailure,
+	VerifyOcspResponseSignatureResult,
+} from './ocsp.ts';
 export {
 	createOcspRequest,
 	createOcspResponse,
@@ -34,12 +90,44 @@ export {
 	verifyOcspResponseSignature,
 } from './ocsp.ts';
 
-export type * from './revocation.ts';
+export type {
+	CheckCertificateRevocationErrorCode,
+	CheckCertificateRevocationFailureDetails,
+	CheckCertificateRevocationInput,
+	CheckCertificateRevocationResult,
+	CheckCertificateRevocationValue,
+	ConfiguredOcspResponder,
+	ConfiguredOcspResponderCertificate,
+	OcspResponderCandidate,
+	OcspResponderSource,
+	ResolveOcspResponderCandidatesInput,
+	RevocationCertificateSource,
+	RevocationCheckGoodValue,
+	RevocationCheckIndeterminateValue,
+	RevocationCheckRevokedValue,
+	RevocationCrlEvidenceInput,
+	RevocationEvidenceInput,
+	RevocationEvidenceKind,
+	RevocationIndeterminateEvidence,
+	RevocationIndeterminateReasonCode,
+	RevocationOcspEvidenceInput,
+	RevocationStatus,
+} from './revocation.ts';
 export {
 	checkCertificateRevocation,
 	getCertificateOcspResponderUris,
 	resolveOcspResponderCandidates,
 } from './revocation.ts';
 
-export type * from './chain.ts';
+export type {
+	CertificateRevocationStatus,
+	CheckChainRevocationInput,
+	CheckChainRevocationResult,
+	CheckChainRevocationValue,
+	OcspResponseSource,
+	RevocationExecutionError,
+	RevocationIndeterminateReason,
+	RevocationPolicy,
+	RevocationSource,
+} from './chain.ts';
 export { checkChainRevocation } from './chain.ts';

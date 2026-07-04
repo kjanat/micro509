@@ -4,13 +4,10 @@
  * @module
  */
 
-export type * from './identity.ts';
 export type {
 	DnsServiceIdentityInput,
 	IpServiceIdentityInput,
-	MatchableServiceIdentityInput,
 	MatchServiceIdentityErrorCode,
-	MatchServiceIdentityEvaluation,
 	MatchServiceIdentityFailure,
 	MatchServiceIdentityFailureDetails,
 	MatchServiceIdentityFailureResult,
@@ -21,18 +18,14 @@ export type {
 	ServiceIdentityType,
 	SrvServiceIdentityInput,
 	UriServiceIdentityInput,
-	VerifyServiceIdentityInput,
 } from './identity.ts';
 export { matchCertificateServiceIdentity, matchServiceIdentity } from './identity.ts';
-export type * from './name-constraints.ts';
 export type { InitialNameConstraintsInput } from './name-constraints.ts';
-export type * from './policy.ts';
 export type {
 	ConstrainedPolicy,
 	PolicyValidationInput,
 	PolicyValidationOutcome,
 } from './policy.ts';
-export type * from './verify.ts';
 export type {
 	BuildCandidatePathInput,
 	BuildCandidatePathResult,

@@ -67,7 +67,7 @@ import {
 	type RevocationPolicy,
 } from '#micro509/revocation/chain.ts';
 import type { RevocationCertificateSource } from '#micro509/revocation/revocation.ts';
-import type { VerifyServiceIdentityInput } from './identity.ts';
+import type { ServiceIdentityInput } from './identity.ts';
 import { matchServiceIdentity } from './identity.ts';
 import type { InitialNameConstraintsInput } from './name-constraints.ts';
 import type { PolicyValidationInput, PolicyValidationOutcome } from './policy.ts';
@@ -350,7 +350,7 @@ export interface VerifyCertificateChainInput
 	/** Leaf purpose constraint to enforce during validation. */
 	readonly purpose?: VerifyPurpose;
 	/** DNS/IP/URI/SRV identity to match against the leaf's SAN. */
-	readonly serviceIdentity?: VerifyServiceIdentityInput;
+	readonly serviceIdentity?: ServiceIdentityInput;
 	/** When `true`, allows a self-signed leaf. Defaults to `false`. */
 	readonly allowSelfSignedLeaf?: boolean;
 	/** Optional revocation checking. */
@@ -427,7 +427,7 @@ export interface ValidateForTlsServerInput
 	/** Validation time. Defaults to `new Date()`. */
 	readonly at?: Date;
 	/** DNS/IP identity to match against the leaf's SAN. */
-	readonly serviceIdentity?: VerifyServiceIdentityInput;
+	readonly serviceIdentity?: ServiceIdentityInput;
 }
 
 /** Input for {@linkcode validateForTlsClient}. Enforces `clientAuth` EKU. */
@@ -1310,9 +1310,9 @@ function validateLeaf(
 /** Matches the leaf's SAN against the requested service identity. */
 function validateServiceIdentity(
 	leaf: ParsedCertificate,
-	serviceIdentity: VerifyServiceIdentityInput,
+	serviceIdentity: ServiceIdentityInput,
 ): ValidationCheckResult {
-	const malformedInput = validateVerifyServiceIdentityInput(serviceIdentity);
+	const malformedInput = validateServiceIdentityInput(serviceIdentity);
 	if (!malformedInput.ok) {
 		return malformedInput;
 	}
@@ -1354,8 +1354,8 @@ function validateServiceIdentity(
 	};
 }
 
-function validateVerifyServiceIdentityInput(
-	serviceIdentity: VerifyServiceIdentityInput,
+function validateServiceIdentityInput(
+	serviceIdentity: ServiceIdentityInput,
 ): ValidationCheckResult {
 	if (!isRecord(serviceIdentity)) {
 		return failure('subject_alt_name_mismatch', 'service identity input is malformed', 0);
