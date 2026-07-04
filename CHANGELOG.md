@@ -17,6 +17,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-07-04
+
+Error-classification fix for encrypted-key imports with a wrong password.
+
+### Fixed
+
+- `importEncryptedPkcs8Der` / `importEncryptedPkcs8Pem` reported
+  `'malformed'` instead of `'invalid_password'` roughly once per 256
+  wrong-password attempts: AES-CBC padding is unauthenticated, so a wrong
+  key occasionally "decrypts" to random bytes that pass the padding check,
+  and the resulting PKCS#8 parse failure was misclassified. Decrypted
+  plaintext that is not a PrivateKeyInfo now reports `'invalid_password'`.
+- `parsePfx` had the same wrong-password tail (reporting `'malformed'`),
+  plus the reverse: structurally malformed EncryptedData could report
+  `'invalid_password'`. Classification now keys on the decryption failure
+  itself instead of error-message prefixes.
+
 ## [0.7.1] - 2026-07-04
 
 ECDSA signature-encoding bug fix — re-issue any ECDSA-signed artifacts
@@ -356,7 +373,8 @@ Initial prerelease. API may change before 1.0.
 - Zero runtime dependencies, WebCrypto-native, tree-shakeable subpath exports;
   runs on Node, Bun, Deno, browsers, and Cloudflare Workers.
 
-[Unreleased]: https://github.com/kjanat/micro509/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/kjanat/micro509/compare/v0.7.2...HEAD
+[0.7.2]: https://github.com/kjanat/micro509/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/kjanat/micro509/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/kjanat/micro509/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/kjanat/micro509/compare/v0.5.0...v0.6.0

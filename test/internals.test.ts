@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import {
 	createCertificateRevocationList,
 	createSelfSignedCertificate,
+	importEncryptedPkcs8Der,
 	parseCertificatePem,
 	parseCertificateRevocationListPemOrThrow,
 	unwrap,
@@ -56,7 +57,7 @@ import {
 	describeHashAlgorithm,
 	describeSignatureAlgorithm,
 } from '#micro509/internal/crypto/algorithm-names.ts';
-import { parsePbes2AlgorithmIdentifier } from '#micro509/internal/crypto/pbes2.ts';
+import { encryptPbes2, parsePbes2AlgorithmIdentifier } from '#micro509/internal/crypto/pbes2.ts';
 import {
 	encodeRsaPssParameters,
 	parseRsaPssParameters,
@@ -1197,6 +1198,21 @@ describe('pbes2.ts edge cases', () => {
 			]),
 		]);
 		expect(() => parsePbes2AlgorithmIdentifier(badScheme)).toThrow(/Malformed encryption scheme/);
+	});
+
+	it('reports invalid_password when a wrong key survives the CBC padding check', async () => {
+		// Deterministic stand-in for the ~1/256 padding fluke: the PBES2
+		// envelope decrypts cleanly, but the plaintext is not a PrivateKeyInfo.
+		const garbage = new Uint8Array(64).fill(0xaa);
+		const encrypted = await encryptPbes2(garbage, { password: 'hunter2', iterations: 1000 });
+		const der = sequence([encrypted.algorithmIdentifierDer, octetString(encrypted.encryptedData)]);
+		const result = await importEncryptedPkcs8Der(der, 'hunter2', { kind: 'rsa' });
+		expect(result.ok).toBe(false);
+		if (result.ok) {
+			return;
+		}
+		expect(result.error.code).toBe('invalid_password');
+		expect(result.error.message).toContain('Invalid password or encrypted content');
 	});
 });
 

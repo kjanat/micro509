@@ -748,6 +748,15 @@ export async function importEncryptedPkcs8DerOrThrow(
 		encryptedData.value,
 		password,
 	);
+	try {
+		parsePkcs8PrivateKey(decrypted);
+	} catch {
+		// AES-CBC padding is unauthenticated: a wrong key passes the padding
+		// check ~1/256 of the time and "decrypts" to random bytes. Plaintext
+		// that is not a PrivateKeyInfo means the password was wrong, not that
+		// the input was malformed.
+		throw wrongPasswordError('Invalid password or encrypted content');
+	}
 	return importPkcs8DerOrThrow(decrypted, algorithm);
 }
 

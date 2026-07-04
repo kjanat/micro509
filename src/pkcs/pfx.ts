@@ -30,6 +30,7 @@ import { OIDS } from '#micro509/internal/asn1/oids.ts';
 import {
 	decryptPbes2,
 	encryptPbes2,
+	isWrongPasswordError,
 	type Pbes2EncryptionOptions,
 } from '#micro509/internal/crypto/pbes2.ts';
 import { base64Encode } from '#micro509/internal/shared/base64.ts';
@@ -504,23 +505,33 @@ async function extractSafeContents(
 		};
 	}
 	const encryptedData = extractContextChild(contentInfoDer, content);
+	let decrypted: Uint8Array;
 	try {
-		const decrypted = await decryptEncryptedData(
+		decrypted = await decryptEncryptedData(
 			contentInfoDer.slice(encryptedData.start - encryptedData.headerLength, encryptedData.end),
 			options.password,
 		);
-		readSequenceChildren(decrypted);
-		return { data: decrypted };
 	} catch (error) {
-		if (isMalformedPfxEncryptedContentError(error)) {
+		if (isWrongPasswordError(error)) {
 			return {
-				error: pfxFailure('malformed', 'Malformed PFX encrypted content'),
+				error: pfxFailure('invalid_password', 'Invalid PFX password or encrypted content'),
 			};
 		}
+		return {
+			error: pfxFailure('malformed', 'Malformed PFX encrypted content'),
+		};
+	}
+	try {
+		readSequenceChildren(decrypted);
+	} catch {
+		// AES-CBC padding is unauthenticated: a wrong key passes the padding
+		// check ~1/256 of the time and "decrypts" to random bytes that are not
+		// a SafeContents SEQUENCE — a wrong password, not malformed input.
 		return {
 			error: pfxFailure('invalid_password', 'Invalid PFX password or encrypted content'),
 		};
 	}
+	return { data: decrypted };
 }
 
 /** Encodes a certBag SafeBag wrapping a DER certificate with optional attributes. */
@@ -699,18 +710,6 @@ function decodeLocalKeyId(der: Uint8Array): string {
 		throw new Error('localKeyId must use OCTET STRING');
 	}
 	return toHex(element.value);
-}
-
-function isMalformedPfxEncryptedContentError(error: unknown): boolean {
-	if (!(error instanceof Error)) {
-		return false;
-	}
-	return (
-		error.message.startsWith('Malformed ') ||
-		error.message.startsWith('Unsupported ') ||
-		error.message.startsWith('Invalid PBES2 ') ||
-		error.message === 'Only passwordless data ContentInfo is supported'
-	);
 }
 
 /** Exports a `CryptoKey` to PKCS#8 DER, or passes raw bytes through. */
