@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-07-04
+
+ECDSA signature-encoding bug fix — re-issue any ECDSA-signed artifacts
+that fail external verification.
+
 ### Fixed
 
 - ECDSA signing embedded an invalid signature roughly once per 256
@@ -351,7 +356,8 @@ Initial prerelease. API may change before 1.0.
 - Zero runtime dependencies, WebCrypto-native, tree-shakeable subpath exports;
   runs on Node, Bun, Deno, browsers, and Cloudflare Workers.
 
-[Unreleased]: https://github.com/kjanat/micro509/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/kjanat/micro509/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/kjanat/micro509/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/kjanat/micro509/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/kjanat/micro509/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/kjanat/micro509/compare/v0.4.0...v0.5.0
