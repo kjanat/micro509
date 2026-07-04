@@ -12,7 +12,7 @@ export {
 	parseCertificateRevocationListDer,
 	parseCertificateRevocationListPem,
 	validateCertificateRevocationList,
-	verifyCertificateRevocationList,
+	verifyCertificateRevocationListSignature,
 } from './crl.ts';
 
 export type * from './ocsp.ts';
@@ -25,7 +25,7 @@ export {
 	parseOcspResponseDer,
 	parseOcspResponsePem,
 	validateOcspResponse,
-	verifyOcspResponse,
+	verifyOcspResponseSignature,
 } from './ocsp.ts';
 
 export type * from './revocation.ts';

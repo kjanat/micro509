@@ -250,10 +250,10 @@ export type {
 	ValidateOcspResponseFailure,
 	ValidateOcspResponseInput,
 	ValidateOcspResponseResult,
-	VerifyCertificateRevocationListFailure,
-	VerifyCertificateRevocationListResult,
-	VerifyOcspResponseFailure,
-	VerifyOcspResponseResult,
+	VerifyCertificateRevocationListSignatureFailure,
+	VerifyCertificateRevocationListSignatureResult,
+	VerifyOcspResponseSignatureFailure,
+	VerifyOcspResponseSignatureResult,
 } from './revocation/index.ts';
 export {
 	checkCertificateRevocation,
@@ -274,8 +274,8 @@ export {
 	resolveOcspResponderCandidates,
 	validateCertificateRevocationList,
 	validateOcspResponse,
-	verifyCertificateRevocationList,
-	verifyOcspResponse,
+	verifyCertificateRevocationListSignature,
+	verifyOcspResponseSignature,
 } from './revocation/index.ts';
 
 // ── verify ───────────────────────────────────────────────────────────

@@ -65,7 +65,7 @@ import {
   createCertificateRevocationList,
   isCertificateRevoked,
   parseCertificateRevocationListPem,
-  verifyCertificateRevocationList,
+  verifyCertificateRevocationListSignature,
 } from 'micro509/revocation';
 
 const ca = await createSelfSignedCertificate({
@@ -90,7 +90,7 @@ const crl = await createCertificateRevocationList({
 
 const parsed = parseCertificateRevocationListPem(crl.pem);
 
-const verifyResult = await verifyCertificateRevocationList(
+const verifyResult = await verifyCertificateRevocationListSignature(
   crl.pem,
   ca.certificate.pem,
 );

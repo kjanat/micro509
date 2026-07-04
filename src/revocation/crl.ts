@@ -236,23 +236,23 @@ export type CrlSource = string | Uint8Array | ParsedCertificateRevocationList;
 export type CrlCertificateSource = string | Uint8Array | ParsedCertificate;
 
 /** Failure detail when CRL signature verification fails. */
-export interface VerifyCertificateRevocationListFailure extends Micro509Error<'signature_invalid'> {
+export interface VerifyCertificateRevocationListSignatureFailure extends Micro509Error<'signature_invalid'> {
 	/** Always `false` for failures. */
 	readonly ok: false;
 }
 
 /**
- * Result of {@linkcode verifyCertificateRevocationList}.
+ * Result of {@linkcode verifyCertificateRevocationListSignature}.
  *
  * On success, `value` is the parsed CRL whose signature has been verified.
  */
-export type VerifyCertificateRevocationListResult =
+export type VerifyCertificateRevocationListSignatureResult =
 	| {
 			readonly ok: true;
 			/** Parsed CRL with a verified signature. */
 			readonly value: ParsedCertificateRevocationList;
 	  }
-	| ErrorResult<'signature_invalid', Record<never, never>, VerifyCertificateRevocationListFailure>;
+	| ErrorResult<'signature_invalid', Record<never, never>, VerifyCertificateRevocationListSignatureFailure>;
 
 /**
  * Input for {@linkcode validateCertificateRevocationList}.
@@ -472,7 +472,7 @@ export async function createCertificateRevocationList(
 /**
  * Decodes a DER-encoded X.509 CRL into a structured {@linkcode ParsedCertificateRevocationList}.
  *
- * Does not verify the signature — call {@linkcode verifyCertificateRevocationList} or
+ * Does not verify the signature — call {@linkcode verifyCertificateRevocationListSignature} or
  * {@linkcode validateCertificateRevocationList} for that.
  */
 export function parseCertificateRevocationListDer(
@@ -543,10 +543,10 @@ export function parseCertificateRevocationListPem(pem: string): ParsedCertificat
  * Does **not** check issuer name match, key-usage, or freshness — use
  * {@linkcode validateCertificateRevocationList} for full validation.
  */
-export async function verifyCertificateRevocationList(
+export async function verifyCertificateRevocationListSignature(
 	crl: string | Uint8Array,
 	issuerCertificate: string | Uint8Array,
-): Promise<VerifyCertificateRevocationListResult> {
+): Promise<VerifyCertificateRevocationListSignatureResult> {
 	let parsedCrl: ParsedCertificateRevocationList;
 	let issuer: ParsedCertificate;
 	try {
@@ -792,11 +792,11 @@ export async function checkCertificateRevocationAgainstCrl(
 	);
 }
 
-/** Builds a `VerifyCertificateRevocationListFailureResult`. */
+/** Builds a `VerifyCertificateRevocationListSignatureFailureResult`. */
 function verifyCertificateRevocationListFailureResult(
 	code: 'signature_invalid',
 	message: string,
-): ErrorResult<'signature_invalid', Record<never, never>, VerifyCertificateRevocationListFailure> {
+): ErrorResult<'signature_invalid', Record<never, never>, VerifyCertificateRevocationListSignatureFailure> {
 	return failureResult(code, message);
 }
 

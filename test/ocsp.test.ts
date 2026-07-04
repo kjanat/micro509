@@ -12,7 +12,7 @@ import {
 	parseOcspResponsePem,
 	pemDecode,
 	validateOcspResponse,
-	verifyOcspResponse,
+	verifyOcspResponseSignature,
 	unwrap,
 } from 'micro509';
 import { childrenOf, toHex } from '#micro509/internal/asn1/asn1.ts';
@@ -85,7 +85,7 @@ describe('ocsp', () => {
 			type: 'byKeyHash',
 			keyHashHex: expect.any(String),
 		});
-		expect(await verifyOcspResponse(ocspResponse.der, issuer.certificate.pem)).toMatchObject({
+		expect(await verifyOcspResponseSignature(ocspResponse.der, issuer.certificate.pem)).toMatchObject({
 			ok: true,
 		});
 		expect(
@@ -305,7 +305,7 @@ describe('ocsp', () => {
 		expect(parsed.responses?.[0]?.revocationReasonCode).toBe(1);
 	});
 
-	it('verifyOcspResponse with DER input', async () => {
+	it('verifyOcspResponseSignature with DER input', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'DER Verify CA' },
 			extensions: {
@@ -334,11 +334,11 @@ describe('ocsp', () => {
 		});
 		// Use DER for both response and signer
 		const issuerDer = new Uint8Array(pemDecode('CERTIFICATE', issuer.certificate.pem));
-		const result = await verifyOcspResponse(response.der, issuerDer);
+		const result = await verifyOcspResponseSignature(response.der, issuerDer);
 		expect(result.ok).toBe(true);
 	});
 
-	it('verifyOcspResponse rejects wrong signer', async () => {
+	it('verifyOcspResponseSignature rejects wrong signer', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'Wrong Signer CA' },
 			extensions: {
@@ -373,7 +373,7 @@ describe('ocsp', () => {
 			],
 		});
 		// Verify against wrong signer
-		const result = await verifyOcspResponse(response.der, other.certificate.pem);
+		const result = await verifyOcspResponseSignature(response.der, other.certificate.pem);
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.code).toBe('signature_invalid');
 	});
@@ -884,7 +884,7 @@ describe('ocsp', () => {
 		}
 	});
 
-	it('verifyOcspResponse rejects unsigned response (no responseBytes)', async () => {
+	it('verifyOcspResponseSignature rejects unsigned response (no responseBytes)', async () => {
 		const der = sequence([tlv(0x0a, Uint8Array.of(0x00))]); // successful but no responseBytes
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'No Bytes CA' },
@@ -893,7 +893,7 @@ describe('ocsp', () => {
 				keyUsage: ['keyCertSign'],
 			},
 		});
-		const result = await verifyOcspResponse(der, ca.certificate.pem);
+		const result = await verifyOcspResponseSignature(der, ca.certificate.pem);
 		expect(result.ok).toBe(false);
 		if (!result.ok) expect(result.code).toBe('signature_invalid');
 	});
@@ -1025,7 +1025,7 @@ describe('ocsp', () => {
 		expect(result.value.responses?.[0]?.thisUpdate.getTime()).not.toBe(future.getTime());
 	});
 
-	it('verifyOcspResponse accepts PEM response input', async () => {
+	it('verifyOcspResponseSignature accepts PEM response input', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'PEM Verify CA' },
 			extensions: {
@@ -1052,11 +1052,11 @@ describe('ocsp', () => {
 				},
 			],
 		});
-		const result = await verifyOcspResponse(response.pem, issuer.certificate.pem);
+		const result = await verifyOcspResponseSignature(response.pem, issuer.certificate.pem);
 		expect(result.ok).toBe(true);
 	});
 
-	it('verifyOcspResponse accepts pre-parsed response input', async () => {
+	it('verifyOcspResponseSignature accepts pre-parsed response input', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'Parsed Verify CA' },
 			extensions: {
@@ -1084,11 +1084,11 @@ describe('ocsp', () => {
 			],
 		});
 		const parsed = parseOcspResponsePem(response.pem);
-		const result = await verifyOcspResponse(parsed, issuer.certificate.pem);
+		const result = await verifyOcspResponseSignature(parsed, issuer.certificate.pem);
 		expect(result.ok).toBe(true);
 	});
 
-	it('verifyOcspResponse ignores tampered parsed signer certificate fields', async () => {
+	it('verifyOcspResponseSignature ignores tampered parsed signer certificate fields', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'Tampered Parsed Verify Signer CA' },
 			extensions: {
@@ -1113,11 +1113,11 @@ describe('ocsp', () => {
 			subjectPublicKeyInfoDer: Uint8Array.of(0x30, 0x00),
 			publicKeyAlgorithmOid: '1.2.3',
 		};
-		const result = await verifyOcspResponse(response.der, tamperedSigner);
+		const result = await verifyOcspResponseSignature(response.der, tamperedSigner);
 		expect(result.ok).toBe(true);
 	});
 
-	it('verifyOcspResponse ignores tampered signed content fields on pre-parsed response input', async () => {
+	it('verifyOcspResponseSignature ignores tampered signed content fields on pre-parsed response input', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'Malformed Parsed Verify CA' },
 			extensions: {
@@ -1147,11 +1147,11 @@ describe('ocsp', () => {
 		const parsed = parseOcspResponsePem(response.pem);
 		const tampered = { ...parsed, responseDataDer: Uint8Array.of(0x30, 0x80) };
 
-		const result = await verifyOcspResponse(tampered, issuer.certificate.pem);
+		const result = await verifyOcspResponseSignature(tampered, issuer.certificate.pem);
 		expect(result.ok).toBe(true);
 	});
 
-	it('verifyOcspResponse fails closed for pre-parsed response input without DER', async () => {
+	it('verifyOcspResponseSignature fails closed for pre-parsed response input without DER', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'DER-less Parsed Verify CA' },
 			extensions: {
@@ -1171,11 +1171,11 @@ describe('ocsp', () => {
 			],
 		});
 		const { der: _ignoredDer, ...parsedWithoutDer } = parseOcspResponsePem(response.pem);
-		const result = await verifyOcspResponse(parsedWithoutDer, issuer.certificate.pem);
+		const result = await verifyOcspResponseSignature(parsedWithoutDer, issuer.certificate.pem);
 		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
 	});
 
-	it('verifyOcspResponse fails closed for malformed signer certificate input', async () => {
+	it('verifyOcspResponseSignature fails closed for malformed signer certificate input', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'Malformed Verify Signer CA' },
 			extensions: {
@@ -1194,7 +1194,7 @@ describe('ocsp', () => {
 				},
 			],
 		});
-		const result = await verifyOcspResponse(response.der, Uint8Array.of(0xff, 0xff));
+		const result = await verifyOcspResponseSignature(response.der, Uint8Array.of(0xff, 0xff));
 		expect(result).toMatchObject({ ok: false, code: 'signature_invalid' });
 	});
 

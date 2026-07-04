@@ -270,23 +270,23 @@ export interface OcspResponseMaterial {
 }
 
 /** Failure detail when OCSP response signature verification fails. */
-export interface VerifyOcspResponseFailure extends Micro509Error<'signature_invalid'> {
+export interface VerifyOcspResponseSignatureFailure extends Micro509Error<'signature_invalid'> {
 	/** Always `false` for failures. */
 	readonly ok: false;
 }
 
 /**
- * Result of {@linkcode verifyOcspResponse}.
+ * Result of {@linkcode verifyOcspResponseSignature}.
  *
  * On success, `value` is the parsed response whose signature has been verified.
  */
-export type VerifyOcspResponseResult =
+export type VerifyOcspResponseSignatureResult =
 	| {
 			readonly ok: true;
 			/** Parsed response with a verified signature. */
 			readonly value: ParsedOcspResponse;
 	  }
-	| ErrorResult<'signature_invalid', Record<never, never>, VerifyOcspResponseFailure>;
+	| ErrorResult<'signature_invalid', Record<never, never>, VerifyOcspResponseSignatureFailure>;
 
 /**
  * Revocation policy for delegated OCSP responder certificates (RFC 6960 §4.2.2.2.1).
@@ -700,10 +700,10 @@ export async function createOcspResponse(
  * Does **not** check responder binding, freshness, or nonce — use
  * {@linkcode validateOcspResponse} for full validation.
  */
-export async function verifyOcspResponse(
+export async function verifyOcspResponseSignature(
 	response: string | Uint8Array | ParsedOcspResponse,
 	signerCertificate: OcspCertificateSource,
-): Promise<VerifyOcspResponseResult> {
+): Promise<VerifyOcspResponseSignatureResult> {
 	let parsed: ParsedOcspResponse;
 	try {
 		parsed = normalizeOcspResponse(response);
@@ -842,7 +842,7 @@ export async function validateOcspResponse(
 			'OCSP responder certificate input is malformed',
 		);
 	}
-	const signature = await verifyOcspResponse(parsedResponse, signer);
+	const signature = await verifyOcspResponseSignature(parsedResponse, signer);
 	if (!signature.ok) {
 		return validateOcspResponseFailureResult(signature.code, signature.message);
 	}
@@ -996,11 +996,11 @@ export async function validateOcspResponse(
 	return { ok: true, value: parsedResponse };
 }
 
-/** Builds a `VerifyOcspResponseFailureResult`. */
+/** Builds a `VerifyOcspResponseSignatureFailureResult`. */
 function verifyOcspResponseFailureResult(
 	code: 'signature_invalid',
 	message: string,
-): ErrorResult<'signature_invalid', Record<never, never>, VerifyOcspResponseFailure> {
+): ErrorResult<'signature_invalid', Record<never, never>, VerifyOcspResponseSignatureFailure> {
 	return failureResult(code, message);
 }
 
