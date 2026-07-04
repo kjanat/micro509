@@ -125,30 +125,34 @@ export interface CheckChainRevocationInput {
  *   `crl_signer_revoked`, `crl_signer_indeterminate`, and OCSP equivalents
  * - **Freshness**: `crl_expired`, `ocsp_response_expired`
  */
-export type RevocationIndeterminateReason =
+export const REVOCATION_INDETERMINATE_REASONS = [
 	// Evidence not found
-	| 'no_applicable_crl'
-	| 'no_applicable_ocsp'
+	'no_applicable_crl',
+	'no_applicable_ocsp',
 	// Scope issues
-	| 'distribution_point_mismatch'
-	| 'issuer_name_mismatch'
-	| 'reason_scope_mismatch'
-	| 'indirect_crl_scope_mismatch'
-	| 'reason_coverage_incomplete'
+	'distribution_point_mismatch',
+	'issuer_name_mismatch',
+	'reason_scope_mismatch',
+	'indirect_crl_scope_mismatch',
+	'reason_coverage_incomplete',
 	// Signer trust issues
-	| 'crl_signer_not_found'
-	| 'crl_signer_not_authorized'
-	| 'crl_signer_revoked'
-	| 'crl_signer_indeterminate'
-	| 'ocsp_responder_not_found'
-	| 'ocsp_responder_not_authorized'
-	| 'ocsp_responder_revoked'
-	| 'ocsp_responder_indeterminate'
+	'crl_signer_not_found',
+	'crl_signer_not_authorized',
+	'crl_signer_revoked',
+	'crl_signer_indeterminate',
+	'ocsp_responder_not_found',
+	'ocsp_responder_not_authorized',
+	'ocsp_responder_revoked',
+	'ocsp_responder_indeterminate',
 	// Freshness
-	| 'crl_expired'
-	| 'ocsp_response_expired'
+	'crl_expired',
+	'ocsp_response_expired',
 	// OCSP specific
-	| 'ocsp_status_unknown';
+	'ocsp_status_unknown',
+] as const;
+
+/** See the doc comment above {@linkcode REVOCATION_INDETERMINATE_REASONS}. */
+export type RevocationIndeterminateReason = (typeof REVOCATION_INDETERMINATE_REASONS)[number];
 
 /**
  * Identifies the source of revocation evidence.

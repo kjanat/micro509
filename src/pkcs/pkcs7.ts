@@ -43,7 +43,6 @@ import {
 	encodeAlgorithmIdentifier,
 	getSignatureAlgorithm,
 	type SignatureAlgorithmIdentifier,
-	type SignatureProfileInput,
 	signBytes,
 } from '#micro509/internal/crypto/signing.ts';
 import { getCrypto } from '#micro509/internal/crypto/webcrypto.ts';
@@ -59,9 +58,10 @@ import type {
 	ParsedRelativeDistinguishedName,
 } from '#micro509/x509/parse.ts';
 import { parseCertificateDerOrThrow } from '#micro509/x509/parse.ts';
+import type { SignatureProfileInput } from '#micro509/x509/certificate.ts';
 
-/** PEM text (may contain multiple CERTIFICATE blocks) or raw DER bytes. */
-export type Pkcs7CertificateSource = string | Uint8Array;
+/** PEM text (may contain multiple CERTIFICATE blocks), raw DER bytes, or an already-parsed certificate. */
+export type Pkcs7CertificateSource = string | Uint8Array | ParsedCertificate;
 
 /** DER, PEM, and base64 encodings of a PKCS#7 certificate bag. */
 export interface Pkcs7CertBagMaterial {
@@ -770,7 +770,10 @@ function normalizeCertificateSource(source: Pkcs7CertificateSource): readonly Ui
 			.filter((block) => block.label === 'CERTIFICATE')
 			.map((block) => new Uint8Array(block.bytes));
 	}
-	return [new Uint8Array(source)];
+	if (source instanceof Uint8Array) {
+		return [new Uint8Array(source)];
+	}
+	return [new Uint8Array(source.der)];
 }
 
 /** Type guard: key algorithm carries an RSA `hash`. */

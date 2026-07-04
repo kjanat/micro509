@@ -20,12 +20,12 @@ import { OIDS } from '#micro509/internal/asn1/oids.ts';
 import {
 	encodeAlgorithmIdentifier,
 	getSignatureAlgorithm,
-	type SignatureProfileInput,
 	signBytes,
 } from '#micro509/internal/crypto/signing.ts';
 import { base64Encode } from '#micro509/internal/shared/base64.ts';
 import { exportSpkiDer } from '#micro509/keys/keys.ts';
 import { pemEncode } from '#micro509/pem/pem.ts';
+import type { SignatureProfileInput } from './certificate.ts';
 import { buildRequestedExtensions, type CertificateExtensionsInput } from './extensions.ts';
 import { encodeName, type NameInput } from './name.ts';
 

@@ -18,7 +18,6 @@ import {
 import {
 	encodeAlgorithmIdentifier,
 	getSignatureAlgorithm,
-	type SignatureProfileInput,
 	signBytes,
 } from '#micro509/internal/crypto/signing.ts';
 import { getCrypto } from '#micro509/internal/crypto/webcrypto.ts';
@@ -35,6 +34,24 @@ import { encodeName, isNameInputEmpty, type NameInput } from './name.ts';
 
 export type * from './extensions.ts';
 export type * from './name.ts';
+
+/**
+ * Controls how the signature algorithm is chosen.
+ *
+ * `'auto'` (default) infers the algorithm from the key. `'rsa-pss'` forces RSA-PSS
+ * padding and requires an RSA-PSS private key.
+ */
+export type SignatureProfileInput =
+	| {
+			/** Infer the signature algorithm from the private key. */
+			readonly kind?: 'auto';
+	  }
+	| {
+			/** Force RSA-PSS padding. */
+			readonly kind: 'rsa-pss';
+			/** Salt length in bytes. Must match the key's hash digest size. */
+			readonly saltLength?: 32 | 48 | 64;
+	  };
 
 /**
  * Configures the certificate validity window.

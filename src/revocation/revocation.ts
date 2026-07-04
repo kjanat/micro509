@@ -98,24 +98,29 @@ export type CheckCertificateRevocationErrorCode =
 	| 'revocation_evidence_missing'
 	| 'revocation_status_indeterminate';
 
+/** Every {@linkcode RevocationIndeterminateReasonCode}, as a runtime array. */
+export const REVOCATION_INDETERMINATE_REASON_CODES = [
+	'certificate_status_missing',
+	'certificate_status_unknown',
+	'crl_sign_not_permitted',
+	'issuer_mismatch',
+	'non_applicable',
+	'nonce_mismatch',
+	'ocsp_signing_missing',
+	'request_mismatch',
+	'responder_id_mismatch',
+	'responder_chain_invalid',
+	'responder_revoked',
+	'responder_revocation_unknown',
+	'response_status_invalid',
+	'signature_invalid',
+	'stale_crl',
+	'stale_response',
+] as const;
+
 /** Why a particular piece of evidence could not produce a definitive `good`/`revoked` answer. */
 export type RevocationIndeterminateReasonCode =
-	| 'certificate_status_missing'
-	| 'certificate_status_unknown'
-	| 'crl_sign_not_permitted'
-	| 'issuer_mismatch'
-	| 'non_applicable'
-	| 'nonce_mismatch'
-	| 'ocsp_signing_missing'
-	| 'request_mismatch'
-	| 'responder_id_mismatch'
-	| 'responder_chain_invalid'
-	| 'responder_revoked'
-	| 'responder_revocation_unknown'
-	| 'response_status_invalid'
-	| 'signature_invalid'
-	| 'stale_crl'
-	| 'stale_response';
+	(typeof REVOCATION_INDETERMINATE_REASON_CODES)[number];
 
 /** One piece of evidence that failed to produce a definitive revocation answer. */
 export interface RevocationIndeterminateEvidence {

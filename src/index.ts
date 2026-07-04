@@ -123,7 +123,15 @@ export {
 } from './keys/index.ts';
 
 // ── pem ──────────────────────────────────────────────────────────────
-export type { CategorizedPemBlocks, PemBlock } from './pem/index.ts';
+export type {
+	CategorizedPemBlocks,
+	CategorizePemBlocksResult,
+	PemBlock,
+	PemDecodeResult,
+	PemErrorCode,
+	PemFailure,
+	SplitPemBlocksResult,
+} from './pem/index.ts';
 export {
 	categorizePemBlocks,
 	categorizePemBlocksOrThrow,
@@ -203,6 +211,41 @@ export { isResultError, unwrap, unwrapOr } from './result/index.ts';
 export type {
 	CertificateRevocationListMaterial,
 	CertificateRevocationStatus,
+	CheckCertificateRevocationAgainstCrlErrorCode,
+	CheckCertificateRevocationAgainstCrlFailure,
+	CheckCertificateRevocationAgainstCrlFailureDetails,
+	CheckCertificateRevocationAgainstCrlGoodValue,
+	CheckCertificateRevocationAgainstCrlRevokedValue,
+	CheckCertificateRevocationAgainstCrlValue,
+	CheckCertificateRevocationErrorCode,
+	CheckCertificateRevocationFailureDetails,
+	CheckCertificateRevocationValue,
+	ConfiguredOcspResponderCertificate,
+	CrlApplicabilityFailureReason,
+	IssuingDistributionPoint,
+	IssuingDistributionPointForAttributeCerts,
+	IssuingDistributionPointForCaCerts,
+	IssuingDistributionPointForUserCerts,
+	ParsedIssuingDistributionPoint,
+	OcspHashAlgorithm,
+	OcspResponderRevocationPolicy,
+	OcspResponseSource,
+	OcspResponseStatus,
+	ParseCertificateRevocationListErrorCode,
+	ParseCertificateRevocationListFailure,
+	ParseCertificateRevocationListResult,
+	ParseOcspRequestErrorCode,
+	ParseOcspRequestFailure,
+	ParseOcspRequestResult,
+	ParseOcspResponseErrorCode,
+	ParseOcspResponseFailure,
+	ParseOcspResponseResult,
+	RevocationCheckGoodValue,
+	RevocationCheckIndeterminateValue,
+	RevocationCheckRevokedValue,
+	RevocationIndeterminateEvidence,
+	RevocationIndeterminateReasonCode,
+	ValidateOcspResponseErrorCode,
 	CheckCertificateRevocationAgainstCrlInput,
 	CheckCertificateRevocationAgainstCrlResult,
 	CheckCertificateRevocationInput,
@@ -279,11 +322,21 @@ export {
 	parseOcspResponsePem,
 	parseOcspResponsePemOrThrow,
 	resolveOcspResponderCandidates,
+	REVOCATION_INDETERMINATE_REASON_CODES,
+	REVOCATION_INDETERMINATE_REASONS,
 	validateCertificateRevocationList,
 	validateOcspResponse,
 	verifyCertificateRevocationListSignature,
 	verifyOcspResponseSignature,
 } from './revocation/index.ts';
+
+export type {
+	ParsedPkcs12MacData,
+	ParsePkcs12MacDataErrorCode,
+	ParsePkcs12MacDataFailure,
+	ParsePkcs12MacDataResult,
+	Pkcs12MacOptions,
+} from './pkcs/index.ts';
 
 // ── verify ───────────────────────────────────────────────────────────
 export type {
@@ -317,6 +370,10 @@ export type {
 	ValidateForCodeSigningInput,
 	ValidateForTlsClientInput,
 	ValidateForTlsServerInput,
+	ConstrainedPolicy,
+	MatchServiceIdentityFailureDetails,
+	MatchServiceIdentityFailureResult,
+	PolicyValidationOutcome,
 	VerifiedCertificateChain,
 	VerifyCertificateChainInput,
 	VerifyChainFailure,
@@ -364,7 +421,6 @@ export type {
 	GeneralName,
 	GeneralSubtree,
 	InhibitAnyPolicy,
-	IssuingDistributionPoint,
 	KeyUsage,
 	NameAttribute,
 	NameConstraintForm,
@@ -384,7 +440,6 @@ export type {
 	ParsedDistributionPoint,
 	ParsedDistributionPointName,
 	ParsedExtension,
-	ParsedIssuingDistributionPoint,
 	ParsedName,
 	ParsedNameAttribute,
 	ParsedNameConstraintForm,

@@ -65,7 +65,13 @@ export {
 } from './pkcs7.ts';
 
 // — pkcs12-mac.ts —————————————————————————————————————
-export type { ParsedPkcs12MacData, Pkcs12MacOptions } from './pkcs12-mac.ts';
+export type {
+	ParsedPkcs12MacData,
+	ParsePkcs12MacDataErrorCode,
+	ParsePkcs12MacDataFailure,
+	ParsePkcs12MacDataResult,
+	Pkcs12MacOptions,
+} from './pkcs12-mac.ts';
 export {
 	createPkcs12MacData,
 	parsePkcs12MacData,

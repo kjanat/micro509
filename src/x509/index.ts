@@ -4,7 +4,7 @@
  * @module
  */
 
-export type { SignatureProfileInput } from '#micro509/internal/crypto/signing.ts';
+export type { SignatureProfileInput } from './certificate.ts';
 export type {
 	CertificateMaterial,
 	CreateCertificateInput,
@@ -33,11 +33,6 @@ export type {
 	GeneralName,
 	GeneralSubtree,
 	InhibitAnyPolicy,
-	IssuingDistributionPoint,
-	IssuingDistributionPointBase,
-	IssuingDistributionPointForAttributeCerts,
-	IssuingDistributionPointForCaCerts,
-	IssuingDistributionPointForUserCerts,
 	KeyUsage,
 	KnownAuthorityInfoAccessMethod,
 	KnownExtendedKeyUsage,
@@ -99,7 +94,6 @@ export type {
 	ParsedDistributionPoint,
 	ParsedDistributionPointName,
 	ParsedExtension,
-	ParsedIssuingDistributionPoint,
 	ParsedName,
 	ParsedNameAttribute,
 	ParsedRelativeDistinguishedName,

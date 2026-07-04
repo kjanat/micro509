@@ -31,6 +31,13 @@ export type {
 	VerifyCertificateRevocationListSignatureFailure,
 	VerifyCertificateRevocationListSignatureResult,
 } from './crl.ts';
+export type {
+	IssuingDistributionPoint,
+	IssuingDistributionPointForAttributeCerts,
+	IssuingDistributionPointForCaCerts,
+	IssuingDistributionPointForUserCerts,
+} from '#micro509/x509/extensions.ts';
+export type { ParsedIssuingDistributionPoint } from '#micro509/x509/parse.ts';
 export {
 	checkCertificateRevocationAgainstCrl,
 	createCertificateRevocationList,
@@ -117,6 +124,7 @@ export {
 	checkCertificateRevocation,
 	getCertificateOcspResponderUris,
 	resolveOcspResponderCandidates,
+	REVOCATION_INDETERMINATE_REASON_CODES,
 } from './revocation.ts';
 
 export type {
@@ -130,4 +138,4 @@ export type {
 	RevocationPolicy,
 	RevocationSource,
 } from './chain.ts';
-export { checkChainRevocation } from './chain.ts';
+export { checkChainRevocation, REVOCATION_INDETERMINATE_REASONS } from './chain.ts';

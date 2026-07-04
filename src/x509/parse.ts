@@ -72,7 +72,7 @@ import type {
 import { parseAuthorityInfoAccessMethodOid, parseExtendedKeyUsageOid } from './extensions.ts';
 import { type NameFieldKey, nameFieldKeyFromOid } from './name.ts';
 
-export type { ParsedBitFlags } from '#micro509/internal/x509/extension-bits.ts';
+export type { ParsedBitFlags } from './extensions.ts';
 export type {
 	AuthorityInformationAccess,
 	BasicConstraints,

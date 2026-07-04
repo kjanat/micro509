@@ -59,6 +59,21 @@ import { encodeRelativeDistinguishedName } from './name.ts';
 export type { NameAttribute, NameFieldKey, RelativeDistinguishedNameInput } from './name.ts';
 
 /**
+ * A decoded BIT STRING flag set.
+ *
+ * `flags` contains the recognized flag values with any non-zero padding bits
+ * masked out. `nonZeroPadding` is `true` when the original BIT STRING encoding
+ * had non-zero bits in positions that DER (X.690 §11.2.2) requires to be zero.
+ * Verification layers can use this signal to reject non-conformant encodings.
+ */
+export interface ParsedBitFlags<T extends string> {
+	/** Decoded flag values, padding bits masked. */
+	readonly flags: readonly T[];
+	/** `true` when the original encoding had non-zero padding bits (DER violation). */
+	readonly nonZeroPadding: boolean;
+}
+
+/**
  * RFC 5280 §4.2.1.3 Key Usage bit flag.
  *
  * Each value corresponds to one bit in the KeyUsage BIT STRING.

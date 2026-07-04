@@ -11,23 +11,9 @@ import { rawEcdsaSignatureToDer } from './ecdsa.ts';
 import { encodeRsaPssParameters, type RsaPssHash, rsaPssParametersForHash } from './rsa-pss.ts';
 import { getCrypto } from './webcrypto.ts';
 
-/**
- * Controls how the signature algorithm is chosen.
- *
- * `'auto'` (default) infers the algorithm from the key. `'rsa-pss'` forces RSA-PSS
- * padding and requires an RSA-PSS private key.
- */
-export type SignatureProfileInput =
-	| {
-			/** Infer the signature algorithm from the private key. */
-			readonly kind?: 'auto';
-	  }
-	| {
-			/** Force RSA-PSS padding. */
-			readonly kind: 'rsa-pss';
-			/** Salt length in bytes. Must match the key's hash digest size. */
-			readonly saltLength?: 32 | 48 | 64;
-	  };
+import type { SignatureProfileInput } from '#micro509/x509/certificate.ts';
+
+export type { SignatureProfileInput };
 
 /** Resolved signature algorithm: the OID/parameters for DER encoding and the WebCrypto sign params. */
 export interface SignatureAlgorithmIdentifier {

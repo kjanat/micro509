@@ -48,7 +48,7 @@ export type {} from '#micro509/internal/crypto/pbes2.ts';
 export type * from './pkcs12-mac.ts';
 
 /** PEM string or DER bytes for a certificate to include in a PFX bag. */
-export type PfxCertificateSource = string | Uint8Array;
+export type PfxCertificateSource = string | Uint8Array | ParsedCertificate;
 /** A WebCrypto private key or raw PKCS#8 DER bytes for a PFX key bag. */
 export type PfxPrivateKeySource = CryptoKey | Uint8Array;
 
@@ -733,7 +733,10 @@ function normalizeCertificate(source: PfxCertificateSource): Uint8Array {
 		}
 		return new Uint8Array(block.bytes);
 	}
-	return new Uint8Array(source);
+	if (source instanceof Uint8Array) {
+		return new Uint8Array(source);
+	}
+	return new Uint8Array(source.der);
 }
 
 /** Decrypts a PKCS#7 EncryptedData structure using PBES2 with the given password. */
