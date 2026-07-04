@@ -47,8 +47,8 @@ export function isWrongPasswordError(value: unknown): value is Error {
 /** AES-CBC key sizes supported by this PBES2 implementation. */
 export type Pbes2EncryptionScheme = 'AES-128-CBC' | 'AES-192-CBC' | 'AES-256-CBC';
 
-/** PBKDF2 pseudo-random function choices. `hmac-sha1` is the RFC default; `hmac-sha256` is preferred. */
-export type Pbes2Prf = 'hmac-sha1' | 'hmac-sha256';
+/** PBKDF2 pseudo-random function choices. `HMAC-SHA-1` is the RFC default; `HMAC-SHA-256` is preferred. */
+export type Pbes2Prf = 'HMAC-SHA-1' | 'HMAC-SHA-256';
 
 /** Input for `encryptPbes2`. */
 export interface Pbes2EncryptionOptions {
@@ -62,7 +62,7 @@ export interface Pbes2EncryptionOptions {
 	readonly iv?: Uint8Array;
 	/** AES-CBC cipher. Default: `'AES-256-CBC'`. */
 	readonly cipher?: Pbes2EncryptionScheme;
-	/** PBKDF2 PRF. Default: `'hmac-sha256'`. */
+	/** PBKDF2 PRF. Default: `'HMAC-SHA-256'`. */
 	readonly prf?: Pbes2Prf;
 }
 
@@ -99,7 +99,7 @@ export async function encryptPbes2(
 	const salt = options.salt ?? getCrypto().getRandomValues(new Uint8Array(16));
 	const iv = options.iv ?? getCrypto().getRandomValues(new Uint8Array(16));
 	const encryption = options.cipher ?? 'AES-256-CBC';
-	const prf = options.prf ?? 'hmac-sha256';
+	const prf = options.prf ?? 'HMAC-SHA-256';
 
 	// Validate inputs before any WebCrypto calls
 	if (!Number.isInteger(iterations) || iterations < 1) {
@@ -309,7 +309,7 @@ function parsePbkdf2Prf(
 	element: ReturnType<typeof readSequenceChildren>[number] | undefined,
 ): Pbes2Prf {
 	if (element === undefined) {
-		return 'hmac-sha1';
+		return 'HMAC-SHA-1';
 	}
 	if (element.tag !== 0x30) {
 		throw new Error('Malformed PBKDF2 PRF');
@@ -352,9 +352,9 @@ function encryptionSchemeFromOid(oid: string):
 function prfFromOid(oid: string): Pbes2Prf | undefined {
 	switch (oid) {
 		case OIDS.hmacWithSHA1:
-			return 'hmac-sha1';
+			return 'HMAC-SHA-1';
 		case OIDS.hmacWithSHA256:
-			return 'hmac-sha256';
+			return 'HMAC-SHA-256';
 	}
 	return undefined;
 }
@@ -385,9 +385,9 @@ function resolvePrfProfile(name: Pbes2Prf): {
 	readonly hash: 'SHA-1' | 'SHA-256';
 } {
 	switch (name) {
-		case 'hmac-sha1':
+		case 'HMAC-SHA-1':
 			return { oid: OIDS.hmacWithSHA1, hash: 'SHA-1' };
-		case 'hmac-sha256':
+		case 'HMAC-SHA-256':
 			return { oid: OIDS.hmacWithSHA256, hash: 'SHA-256' };
 	}
 }
