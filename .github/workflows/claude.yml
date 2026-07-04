@@ -1,15 +1,10 @@
 name: Claude Code
-
 on:
-  issue_comment:
-    types: [created]
-  pull_request_review_comment:
-    types: [created]
-  issues:
-    types: [opened, assigned]
-  pull_request_review:
-    types: [submitted]
-
+  issue_comment: { types: [created] }
+  pull_request_review_comment: { types: [created] }
+  issues: { types: [opened, assigned] }
+  pull_request_review: { types: [submitted] }
+permissions: { contents: read }
 jobs:
   claude:
     if: |
@@ -18,39 +13,19 @@ jobs:
       (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
       (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-      issues: write
-      id-token: write
-      actions: read
+    permissions: { contents: write, pull-requests: write, issues: write, id-token: write, actions: read }
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Setup Bun
-        id: setup-bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Install dprint
-        uses: kjanat/install-dprint@v1
-
-      - name: Install shfmt
-        uses: kjanat/install-shfmt@v1
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - { uses: actions/checkout@v7, with: { fetch-depth: 0 } }
+      - uses: kjanat/install-dprint@v1
+      - { uses: ./.github/actions/setup-ts, id: setup-ts, with: { install-bun: "true", install-node: "true" } }
+      - run: runner install -f build
 
       - name: Run Claude Code
         id: claude
-        uses: anthropics/claude-code-action@v1.0.159
+        uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          path_to_bun_executable: ${{ steps.setup-bun.outputs.bun-path }}
+          path_to_bun_executable: ${{ steps.setup-ts.outputs.bun-path }}
           settings: ${{ vars.CLAUDE_SETTINGS }}
           additional_permissions: |
             actions: read

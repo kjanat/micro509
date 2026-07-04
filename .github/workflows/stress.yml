@@ -1,17 +1,16 @@
-name: Stress
-
 # Repeats every test with randomized ordering to surface probabilistic bugs
 # (wrong-key CBC padding flukes, raw-vs-DER ECDSA sniffing, and friends) that
 # a single pass has a ~1/256-class chance of hitting.
-
+---
+name: Stress
 on:
-  schedule:
-    - cron: "17 3 * * *"
+  schedule: [cron: "17 3 * * *"]
   workflow_dispatch:
     inputs:
       reruns:
         description: "Times to repeat each test (--rerun-each)"
-        default: "100"
+        type: number
+        default: 100
         required: false
 
 jobs:
@@ -20,13 +19,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions: { contents: read }
+    env: { RERUNS: "${{ inputs.reruns || '100' }}" }
     steps:
-      - uses: actions/checkout@v7
-        with: { persist-credentials: false }
-      - uses: ./.github/actions/setup-ts
-        with: { install-bun: "true" }
-      - run: bun install --frozen-lockfile
+      - { uses: actions/checkout@v7, with: { persist-credentials: false } }
+      - { uses: ./.github/actions/setup-ts, with: { install-bun: "true" } }
+      - run: runner install -f
       - name: Run suite with randomized order (failure output includes --seed for repro)
-        run: AGENT=1 bun test --rerun-each="$RERUNS" --randomize --concurrent
-        env:
-          RERUNS: ${{ inputs.reruns || '100' }}
+        run: bun test --randomize --concurrent --rerun-each="${RERUNS}"
