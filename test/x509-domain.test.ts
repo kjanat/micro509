@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { generateKeyPair, unwrap } from '#micro509';
-import type { NameInput } from '#micro509/x509/index.ts';
-import * as x509 from '#micro509/x509/index.ts';
+import type { NameInput } from '#micro509/x509';
+import * as x509 from '#micro509/x509';
 
 describe('x509 domain', () => {
 	it('does not expose internal helpers', () => {

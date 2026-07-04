@@ -8,18 +8,18 @@
  * @module
  */
 
-import { toHex } from '#micro509/internal/asn1/asn1.ts';
-import { verifySignedDataDetailed } from '#micro509/internal/crypto/sig-verify.ts';
-import { canonicalDnKey, compareDistinguishedNames } from '#micro509/internal/shared/dn.ts';
+import { toHex } from '#micro509/internal/asn1/asn1';
+import { verifySignedDataDetailed } from '#micro509/internal/crypto/sig-verify';
+import { canonicalDnKey, compareDistinguishedNames } from '#micro509/internal/shared/dn';
 import type {
 	CertificateSource,
 	TrustAnchor,
 	VerifyChainFailure,
 	VerifyErrorCode,
 	VerifyFailureDetails,
-} from '#micro509/verify/verify.ts';
-import type { ParsedCertificate } from '#micro509/x509/parse.ts';
-import { parseCertificatesFromSource } from '#micro509/x509/parse.ts';
+} from '#micro509/verify/verify';
+import type { ParsedCertificate } from '#micro509/x509/parse';
+import { parseCertificatesFromSource } from '#micro509/x509/parse';
 
 /** Outcome of verifying one certificate's signature against its issuer's key. */
 export type VerifyCertificateSignatureResult =

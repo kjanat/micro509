@@ -8,8 +8,8 @@
  * @module
  */
 
-import type { ParsedCertificate } from '#micro509/x509/parse.ts';
-import { parseCertificateFromSource } from '#micro509/x509/parse.ts';
+import type { ParsedCertificate } from '#micro509/x509/parse';
+import { parseCertificateFromSource } from '#micro509/x509/parse';
 import {
 	checkCertificateRevocationAgainstCrl,
 	parseCertificateRevocationListDerOrThrow,

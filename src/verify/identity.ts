@@ -8,11 +8,11 @@
  * @module
  */
 
-import { decodeIpAddress, parseIpAddressToBytes } from '#micro509/internal/shared/ip.ts';
-import type { ErrorResult, Micro509Error } from '#micro509/result/result.ts';
-import { errorResult, micro509Error, successResult } from '#micro509/result/result.ts';
-import type { ParsedCertificate } from '#micro509/x509/parse.ts';
-import { parseCertificateDerOrThrow } from '#micro509/x509/parse.ts';
+import { decodeIpAddress, parseIpAddressToBytes } from '#micro509/internal/shared/ip';
+import type { ErrorResult, Micro509Error } from '#micro509/result/result';
+import { errorResult, micro509Error, successResult } from '#micro509/result/result';
+import type { ParsedCertificate } from '#micro509/x509/parse';
+import { parseCertificateDerOrThrow } from '#micro509/x509/parse';
 
 /** DNS hostname reference identifier. */
 export interface DnsServiceIdentityInput {

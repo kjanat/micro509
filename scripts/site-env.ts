@@ -20,6 +20,8 @@
 import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { argv, env, exit, platform } from 'node:process';
+import { error } from 'node:console';
 
 /** Run a git command, returning trimmed stdout, or '' on any failure. */
 const gitOut = (args: readonly string[]): string => {
@@ -36,8 +38,6 @@ const firstNonEmpty = (...vals: readonly (string | undefined)[]): string => {
 	return '';
 };
 
-const env = process.env;
-
 const branch = firstNonEmpty(
 	env.MICRO509_GIT_BRANCH,
 	env.WORKERS_CI_BRANCH,
@@ -52,28 +52,21 @@ const commit = firstNonEmpty(
 	gitOut(['rev-parse', '--short=7', 'HEAD']),
 );
 
-const [cmd, ...args] = process.argv.slice(2);
+const [cmd, ...args] = argv.slice(2);
 if (cmd === undefined) {
-	console.error('site-env: no command given\nUsage: bun scripts/site-env.ts <command> [args...]');
-	process.exit(2);
+	error('site-env: no command given\nUsage: bun scripts/site-env.ts <command> [args...]');
+	exit(2);
 }
 
-// Doc-site tools (vitepress, typedoc, vue-tsc) are devDeps of the
-// `site/.vitepress` workspace member, so their binaries live in that member's
-// node_modules, not the repo root. Prepend that .bin to PATH so bare tool names
-// resolve while cwd stays the repo root (typedoc/vitepress configs are
-// root-relative).
-const siteBin = join(
-	dirname(fileURLToPath(import.meta.url)),
-	'..',
-	'site',
-	'.vitepress',
-	'node_modules',
-	'.bin',
-);
-const pathSep = process.platform === 'win32' ? ';' : ':';
+/** Doc-site tools (vitepress, typedoc, vue-tsc) are devDeps of the `site/.vitepress` workspace member,
+ * so their binaries live in that member's node_modules, not the repo root. Prepend that .bin to PATH
+ * so bare tool names resolve while cwd stays the repo root (typedoc/vitepress configs are root-relative).
+ *
+ * biome-ignore format: don't like it */
+const siteBin = join(dirname(fileURLToPath(import.meta.url)), '..', 'site', '.vitepress', 'node_modules', '.bin');
+const pathSep = platform === 'win32' ? ';' : ':';
 
-const { status, error } = spawnSync(cmd, args, {
+const { status, error: e } = spawnSync(cmd, args, {
 	stdio: 'inherit',
 	env: {
 		...env,
@@ -83,9 +76,9 @@ const { status, error } = spawnSync(cmd, args, {
 	},
 });
 
-if (error) {
-	console.error(`site-env: failed to spawn '${cmd}': ${error.message}`);
-	process.exit(1);
+if (e) {
+	error(`site-env: failed to spawn '${cmd}': ${e.message}`);
+	exit(1);
 }
 
-process.exit(status ?? 1);
+exit(status ?? 1);

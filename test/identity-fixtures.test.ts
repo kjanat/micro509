@@ -6,7 +6,7 @@ import {
 	matchServiceIdentity,
 	parseCertificatePem,
 	unwrap,
-} from 'micro509';
+} from '#micro509';
 
 type CreateCertificateInput = Parameters<typeof createCertificate>[0];
 type FixtureSubjectAltNames = NonNullable<

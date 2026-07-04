@@ -11,9 +11,7 @@ concurrency:
 permissions: { contents: read }
 
 jobs:
-  test:
-    name: Test
-    uses: ./.github/workflows/test.yml
+  test: { name: Test, uses: ./.github/workflows/test.yml }
 
   validate:
     name: Validate version
@@ -34,9 +32,7 @@ jobs:
         with: { persist-credentials: false }
       - uses: ./.github/actions/release-validate
         id: version
-        with:
-          event-name: ${{ github.event_name }}
-          ref-name: ${{ github.ref_name }}
+        with: { event-name: "${{ github.event_name }}", ref-name: "${{ github.ref_name }}" }
 
   publish-jsr:
     name: JSR (${{ needs.validate.outputs.mode }})
@@ -52,22 +48,19 @@ jobs:
         with: { persist-credentials: false }
       - uses: ./.github/actions/setup-ts
         with: { install-bun: "true" }
-      - run: |
-          PKG_NAME="$(jq -r '.name' jsr.json)"
-          PKG_VERSION="$(jq -r '.version' jsr.json)"
+      - name: Install dependencies and build (tsdown regenerates jsr.json)
+        run: runner install -f build
+      - shell: pwsh
+        env: { OUTPUTS: "${{ toJSON(needs.validate.outputs) }}" }
+        run: |
+          $outputs = ConvertFrom-Json $env:OUTPUTS
+          if ($outputs.is_tag -ne 'true') { bunx jsr publish --dry-run; exit $LASTEXITCODE }
 
-          if [[ "${DRY_RUN}" != "true" ]]; then
-            PUBLISHED=$(curl -sf "https://jsr.io/${PKG_NAME}/meta.json" \
-              | jq -r ".versions[\"${PKG_VERSION}\"] // empty" || true)
-            if [[ -n "${PUBLISHED}" ]]; then
-              echo "::notice::${PKG_NAME}@${PKG_VERSION} already on JSR, skipping"
-              exit 0
-            fi
-            bunx --bun jsr publish
-            exit $?
-          fi
-          bunx --bun jsr publish --dry-run
-        env: { DRY_RUN: "${{ needs.validate.outputs.is_tag != 'true' }}" }
+          $pkg = Get-Content jsr.json | ConvertFrom-Json
+          $meta = try { Invoke-RestMethod ("https://jsr.io/{0}/meta.json" -f $pkg.name) -ErrorAction Stop } catch {}
+          if ($meta.versions.PSObject.Properties.Name -contains $pkg.version) { "::notice::{0}@{1} already on JSR, skipping" -f $pkg.name, $pkg.version; exit 0 }
+
+          bunx jsr publish; exit $LASTEXITCODE
 
   publish-npm:
     name: npm (${{ needs.validate.outputs.mode }})
@@ -82,45 +75,25 @@ jobs:
       - uses: actions/checkout@v7
         with: { persist-credentials: false }
       - uses: ./.github/actions/setup-ts
-        with:
-          install-bun: "true"
-          install-node: "true"
-          update-npm: "true"
-          node-registry-url: https://registry.npmjs.org
-      - run: bun install --frozen-lockfile
-      - run: bun run build
-      - name: Apply publishConfig.exports (npm publish does not rewrite exports itself)
-        run: |
-          npm pkg set --json exports="$(jq -c '.publishConfig.exports' package.json)"
-          npm pkg delete publishConfig.exports
+        with: { install-bun: true, install-node: true, update-npm: true, node-registry-url: https://registry.npmjs.org }
+      - run: runner install -f build
       - name: Validate npm tarball against published exports
         run: bun scripts/check-npm-pack.ts
-      - run: |
-          PKG_NAME="$(jq -r '.name' package.json)"
-          PKG_VERSION="$(jq -r '.version' package.json)"
+      - shell: pwsh
+        env: { OUTPUTS: "${{ toJSON(needs.validate.outputs) }}" }
+        run: |
+          $outputs = ConvertFrom-Json $env:OUTPUTS
+          $pkg = Get-Content package.json | ConvertFrom-Json
+          $versionsJson = bun info $pkg.name versions --json 2>$null
+          $versions = if ($LASTEXITCODE -eq 0) { $versionsJson | ConvertFrom-Json } else { @() }
 
-          # npm publish --dry-run also rejects already-published versions,
-          # so the skip guard must run for both modes (PR dry-runs would
-          # otherwise fail between a release and the next version bump).
-          PUBLISHED=$(npm view "${PKG_NAME}" versions --json 2>/dev/null \
-            | jq -r --arg v "${PKG_VERSION}" '.[] | select(. == $v)' || true)
-          if [[ -n "${PUBLISHED}" ]]; then
-            echo "::notice::${PKG_NAME}@${PKG_VERSION} already on npm, skipping"
-            exit 0
-          fi
+          if ($versions -contains $pkg.version) { "::notice::{0}@{1} already on npm, skipping" -f $pkg.name, $pkg.version; exit 0 }
+          if ($outputs.is_tag -ne 'true') { npm publish --dry-run; exit $LASTEXITCODE }
 
-          if [[ "${DRY_RUN}" != "true" ]]; then
-            PUBLISH_ARGS=(--provenance --access public)
-            if [[ "${IS_PRERELEASE}" == "true" ]]; then
-              PUBLISH_ARGS+=(--tag beta)
-            fi
-            npm publish "${PUBLISH_ARGS[@]}"
-            exit $?
-          fi
-          npm publish --dry-run
-        env:
-          DRY_RUN: "${{ needs.validate.outputs.is_tag != 'true' }}"
-          IS_PRERELEASE: "${{ needs.validate.outputs.prerelease }}"
+          $publishArgs = @('--provenance', '--access', 'public')
+          if ($outputs.prerelease -eq 'true') { $publishArgs += @('--tag', 'beta') }
+
+          npm publish @publishArgs; exit $LASTEXITCODE
 
   release:
     name: GitHub Release
@@ -129,18 +102,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: { contents: write }
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ github.ref_name }}
+      PRERELEASE: ${{ needs.validate.outputs.prerelease }}
     steps:
       - name: Publish GitHub Release
         run: |
           RELEASE_ARGS=()
-          if [[ "${PRERELEASE}" == "true" ]]; then
-            RELEASE_ARGS+=(--prerelease)
-          fi
+          if [[ "${PRERELEASE}" == "true" ]]; then RELEASE_ARGS+=(--prerelease); fi
 
-          gh release edit "${TAG}" --repo "${REPO}" --draft=false "${RELEASE_ARGS[@]}" 2>/dev/null \
-          || gh release create "${TAG}" --repo "${REPO}" --generate-notes "${RELEASE_ARGS[@]}"
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          TAG: ${{ github.ref_name }}
-          PRERELEASE: ${{ needs.validate.outputs.prerelease }}
+          gh release edit "${TAG}" --draft=false "${RELEASE_ARGS[@]}" 2>/dev/null \
+          || gh release create "${TAG}" --generate-notes "${RELEASE_ARGS[@]}"

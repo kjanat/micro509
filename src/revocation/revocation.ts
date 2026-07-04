@@ -5,9 +5,9 @@
  * @module
  */
 
-import type { Result } from '#micro509/result/result.ts';
-import type { ParsedCertificate } from '#micro509/x509/parse.ts';
-import { parseCertificateDerOrThrow, parseCertificateFromSource } from '#micro509/x509/parse.ts';
+import type { Result } from '#micro509/result/result';
+import type { ParsedCertificate } from '#micro509/x509/parse';
+import { parseCertificateDerOrThrow, parseCertificateFromSource } from '#micro509/x509/parse';
 import type { CrlApplicabilityFailureReason, CrlSource, RevocationReason } from './crl.ts';
 import { checkCertificateRevocationAgainstCrl } from './crl.ts';
 import type { OcspCertificateSource, OcspRequestSource, ParsedOcspResponse } from './ocsp.ts';

@@ -13,7 +13,7 @@ import {
 	parseOcspRequestDerOrThrow,
 	parseOcspResponseDerOrThrow,
 	unwrap,
-} from 'micro509';
+} from '#micro509';
 import {
 	bitString,
 	explicitContext,
@@ -23,8 +23,8 @@ import {
 	readSequenceChildren,
 	sequence,
 	tlv,
-} from '#micro509/internal/asn1/der.ts';
-import { OIDS } from '#micro509/internal/asn1/oids.ts';
+} from '#micro509/internal/asn1/der';
+import { OIDS } from '#micro509/internal/asn1/oids';
 import { childrenOf, decodeObjectIdentifier, hexToBytes } from './helpers.ts';
 
 interface CorpusCase {

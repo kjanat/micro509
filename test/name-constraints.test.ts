@@ -4,15 +4,15 @@ import {
 	createSelfSignedCertificate,
 	generateKeyPair,
 	verifyCertificateChain,
-} from 'micro509';
+} from '#micro509';
 import {
 	objectIdentifier,
 	printableString,
 	sequence,
 	setOf,
 	utf8String,
-} from '#micro509/internal/asn1/der.ts';
-import { OIDS } from '#micro509/internal/asn1/oids.ts';
+} from '#micro509/internal/asn1/der';
+import { OIDS } from '#micro509/internal/asn1/oids';
 
 type TestDnStringEncoding = 'printable' | 'utf8';
 type DirectoryNameAttribute = {

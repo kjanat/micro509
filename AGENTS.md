@@ -57,7 +57,7 @@ micro509/
 
 - Domain entrypoints own feature ownership; concrete lifecycle modules do implementation.
 - `src/*/` barrels are re-export-only unless local file owners expand naturally.
-- `.ts` import extensions are used across source.
+- Relative imports use `.ts` extensions; `#micro509/*` subpath imports are extensionless (the `imports` map supplies `.ts`).
 - Import boundaries: public leaf modules may use `#micro509/internal/*`, not sibling barrels.
 - Return typed result unions for expected failures; throw only for invariants.
 - `readonly` and exhaustive ADTs with `never` checks.

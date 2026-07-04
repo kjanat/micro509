@@ -12,7 +12,7 @@ import {
 	parseCertificateRevocationListDerOrThrow,
 	verifyCertificateChain,
 	unwrap,
-} from 'micro509';
+} from '#micro509';
 import { hexToBytes } from './helpers.ts';
 
 async function loadPkitsCert(name: string) {

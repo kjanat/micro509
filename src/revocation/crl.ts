@@ -18,8 +18,8 @@ import {
 	parseTime,
 	requireElement,
 	toHex,
-} from '#micro509/internal/asn1/asn1.ts';
-import type { DerElement } from '#micro509/internal/asn1/der.ts';
+} from '#micro509/internal/asn1/asn1';
+import type { DerElement } from '#micro509/internal/asn1/der';
 import {
 	bitString,
 	concatBytes,
@@ -36,53 +36,50 @@ import {
 	sequence,
 	time,
 	tlv,
-} from '#micro509/internal/asn1/der.ts';
-import { OIDS } from '#micro509/internal/asn1/oids.ts';
-import { describeSignatureAlgorithm } from '#micro509/internal/crypto/algorithm-names.ts';
-import { verifySignedDataDetailed } from '#micro509/internal/crypto/sig-verify.ts';
+} from '#micro509/internal/asn1/der';
+import { OIDS } from '#micro509/internal/asn1/oids';
+import { describeSignatureAlgorithm } from '#micro509/internal/crypto/algorithm-names';
+import { verifySignedDataDetailed } from '#micro509/internal/crypto/sig-verify';
 import {
 	encodeAlgorithmIdentifier,
 	getSignatureAlgorithm,
 	signBytes,
-} from '#micro509/internal/crypto/signing.ts';
-import { base64Encode } from '#micro509/internal/shared/base64.ts';
-import {
-	compareDistinguishedNames,
-	compareNameAttributeValue,
-} from '#micro509/internal/shared/dn.ts';
-import { decodeIpAddress } from '#micro509/internal/shared/ip.ts';
+} from '#micro509/internal/crypto/signing';
+import { base64Encode } from '#micro509/internal/shared/base64';
+import { compareDistinguishedNames, compareNameAttributeValue } from '#micro509/internal/shared/dn';
+import { decodeIpAddress } from '#micro509/internal/shared/ip';
 import {
 	encodeDistributionPointReasonFlagsContent,
 	type ParsedBitFlags,
 	parseDistributionPointReasonFlagsContent,
-} from '#micro509/internal/x509/extension-bits.ts';
-import { exportSpkiDer } from '#micro509/keys/keys.ts';
-import { pemDecodeOrThrow, pemEncode } from '#micro509/pem/pem.ts';
+} from '#micro509/internal/x509/extension-bits';
+import { exportSpkiDer } from '#micro509/keys/keys';
+import { pemDecodeOrThrow, pemEncode } from '#micro509/pem/pem';
 import {
 	type ErrorResult,
 	failureResult,
 	type Micro509Error,
 	rethrowIfInvariant,
 	successResult,
-} from '#micro509/result/result.ts';
+} from '#micro509/result/result';
 import type {
 	DistributionPoint,
 	DistributionPointReason,
 	GeneralName,
 	IssuingDistributionPoint,
-} from '#micro509/x509/extensions.ts';
+} from '#micro509/x509/extensions';
 import {
 	buildSubjectKeyIdentifier,
 	encodeCrlDistributionPoints,
 	encodeExtension,
 	encodeSubjectAltName,
-} from '#micro509/x509/extensions.ts';
-import type { NameFieldKey, NameInput } from '#micro509/x509/name.ts';
+} from '#micro509/x509/extensions';
+import type { NameFieldKey, NameInput } from '#micro509/x509/name';
 import {
 	encodeName,
 	encodeRelativeDistinguishedName,
 	nameFieldKeyFromOid,
-} from '#micro509/x509/name.ts';
+} from '#micro509/x509/name';
 import type {
 	ParsedCertificate,
 	ParsedDistributionPoint,
@@ -91,8 +88,8 @@ import type {
 	ParsedName,
 	ParsedNameAttribute,
 	ParsedRelativeDistinguishedName,
-} from '#micro509/x509/parse.ts';
-import { parseCertificateDerOrThrow, parseCertificateFromSource } from '#micro509/x509/parse.ts';
+} from '#micro509/x509/parse';
+import { parseCertificateDerOrThrow, parseCertificateFromSource } from '#micro509/x509/parse';
 
 /**
  * Single revoked certificate entry for {@linkcode createCertificateRevocationList}.

@@ -13,13 +13,13 @@ import {
 	type Micro509Error,
 	rethrowIfInvariant,
 	successResult,
-} from '#micro509/result/result.ts';
+} from '#micro509/result/result';
 import {
 	decodeNonNegativeIntegerNumber,
 	decodeObjectIdentifier,
 	toArrayBuffer,
 	toHex,
-} from '#micro509/internal/asn1/asn1.ts';
+} from '#micro509/internal/asn1/asn1';
 import {
 	concatBytes,
 	integerFromNumber,
@@ -28,10 +28,10 @@ import {
 	octetString,
 	readSequenceChildren,
 	sequence,
-} from '#micro509/internal/asn1/der.ts';
-import { OIDS } from '#micro509/internal/asn1/oids.ts';
-import { describeHashAlgorithm } from '#micro509/internal/crypto/algorithm-names.ts';
-import { getCrypto } from '#micro509/internal/crypto/webcrypto.ts';
+} from '#micro509/internal/asn1/der';
+import { OIDS } from '#micro509/internal/asn1/oids';
+import { describeHashAlgorithm } from '#micro509/internal/crypto/algorithm-names';
+import { getCrypto } from '#micro509/internal/crypto/webcrypto';
 
 /** Input for {@linkcode createPkcs12MacData}. */
 export interface Pkcs12MacOptions {

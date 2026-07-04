@@ -12,7 +12,7 @@ import type {
 	ParsedName,
 	ParsedNameAttribute,
 	ParsedRelativeDistinguishedName,
-} from '#micro509/x509/parse.ts';
+} from '#micro509/x509/parse';
 
 // ---------------------------------------------------------------------------
 // Public API

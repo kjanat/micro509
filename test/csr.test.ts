@@ -7,12 +7,9 @@ import {
 	verifyCertificateSigningRequest,
 	unwrap,
 } from '#micro509';
-import { objectIdentifier, readElement, sequence, tlv } from '#micro509/internal/asn1/der.ts';
-import { OIDS } from '#micro509/internal/asn1/oids.ts';
-import {
-	encodeRsaPssParameters,
-	rsaPssParametersForHash,
-} from '#micro509/internal/crypto/rsa-pss.ts';
+import { objectIdentifier, readElement, sequence, tlv } from '#micro509/internal/asn1/der';
+import { OIDS } from '#micro509/internal/asn1/oids';
+import { encodeRsaPssParameters, rsaPssParametersForHash } from '#micro509/internal/crypto/rsa-pss';
 import {
 	childrenOf,
 	decodeObjectIdentifier,

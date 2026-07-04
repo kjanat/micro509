@@ -6,7 +6,7 @@ import {
 	parseCertificatePem,
 	unwrap,
 } from '#micro509';
-import * as verify from '#micro509/verify/index.ts';
+import * as verify from '#micro509/verify';
 
 describe('verify domain', () => {
 	describe('verifyCertificateChain', () => {

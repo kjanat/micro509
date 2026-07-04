@@ -7,7 +7,7 @@
  * @module
  */
 
-import { hexToBytes } from '#micro509/internal/asn1/asn1.ts';
+import { hexToBytes } from '#micro509/internal/asn1/asn1';
 import {
 	bool,
 	concatBytes,
@@ -25,18 +25,18 @@ import {
 	sequence,
 	tlv,
 	utf8String,
-} from '#micro509/internal/asn1/der.ts';
-import { OIDS } from '#micro509/internal/asn1/oids.ts';
-import { sha1 } from '#micro509/internal/crypto/hash.ts';
-import { parseIpAddressToBytes } from '#micro509/internal/shared/ip.ts';
+} from '#micro509/internal/asn1/der';
+import { OIDS } from '#micro509/internal/asn1/oids';
+import { sha1 } from '#micro509/internal/crypto/hash';
+import { parseIpAddressToBytes } from '#micro509/internal/shared/ip';
 import {
 	encodeDistributionPointReasonFlagsContent,
 	encodeKeyUsageExtension,
-} from '#micro509/internal/x509/extension-bits.ts';
+} from '#micro509/internal/x509/extension-bits';
 import type {
 	ExtensionDefinition,
 	ExtensionRegistryContext,
-} from '#micro509/internal/x509/extension-registry.ts';
+} from '#micro509/internal/x509/extension-registry';
 import {
 	AUTHORITY_INFO_ACCESS_EXTENSION_DEFINITION,
 	AUTHORITY_KEY_IDENTIFIER_EXTENSION_DEFINITION,
@@ -52,7 +52,7 @@ import {
 	POLICY_MAPPINGS_EXTENSION_DEFINITION,
 	SUBJECT_ALT_NAME_EXTENSION_DEFINITION,
 	SUBJECT_KEY_IDENTIFIER_EXTENSION_DEFINITION,
-} from '#micro509/internal/x509/extension-registry.ts';
+} from '#micro509/internal/x509/extension-registry';
 import type { RelativeDistinguishedNameInput } from './name.ts';
 import { encodeRelativeDistinguishedName } from './name.ts';
 

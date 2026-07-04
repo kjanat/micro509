@@ -1,14 +1,17 @@
+import { existsSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
+import jsr from '#jsr' with { type: 'json' };
+import pkg from '#pkg' with { type: 'json' };
+
 import { defineConfig } from 'tsdown';
-import jsr from './jsr.json' with { type: 'json' };
-import pkg from './package.json' with { type: 'json' };
+import type { UserConfig } from 'tsdown';
 
 const jsrJson: Omit<typeof jsr, 'exports' | 'version'> & {
 	exports: Record<string, string>;
 	version: string;
 } = { ...jsr, exports: {} };
 
-const entry = {
+const entries = {
 	index: 'src/index.ts',
 	keys: 'src/keys/index.ts',
 	pem: 'src/pem/index.ts',
@@ -17,26 +20,26 @@ const entry = {
 	revocation: 'src/revocation/index.ts',
 	verify: 'src/verify/index.ts',
 	x509: 'src/x509/index.ts',
-} as const satisfies Record<string, string>;
+} satisfies UserConfig['entry'];
 
 export default defineConfig({
-	entry,
+	entry: entries,
 	name: pkg.name,
 	format: 'esm',
 	dts: true,
 	clean: true,
 	platform: 'neutral',
 	target: 'es2024',
-	tsconfig: 'tsconfig.src.json',
-	sourcemap: true,
+	tsconfig: './tsconfig.src.json',
+	sourcemap: false,
 	unbundle: true,
 	hash: false,
-	minify: true,
+	minify: 'dce-only',
 	inputOptions: { resolve: { mainFields: ['browser', 'module', 'main'] } },
 	hooks: {
 		'build:done': async () => {
 			jsrJson.exports = Object.fromEntries(
-				Object.entries(entry).map(([name, sourcePath]) => [
+				Object.entries(entries).map(([name, sourcePath]) => [
 					name === 'index' ? '.' : `./${name}`,
 					`./${sourcePath}`,
 				]),
@@ -47,7 +50,16 @@ export default defineConfig({
 	},
 	exports: {
 		enabled: true,
-		devExports: 'bun',
+		packageJson: true,
+		customExports(exports) {
+			for (const [key, path] of Object.entries(exports)) {
+				const typesPath = path.replace(/\.([mc]?)js$/, '.d.$1ts');
+				if (typesPath !== path && existsSync(typesPath)) {
+					exports[key] = { types: typesPath, default: path };
+				}
+			}
+			return exports;
+		},
 	},
 	onSuccess: 'bunx sort-package-json --quiet {package,jsr}.json',
 	attw: { profile: 'esm-only', ignoreRules: ['no-resolution'] },

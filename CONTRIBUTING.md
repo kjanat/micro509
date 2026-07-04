@@ -64,7 +64,7 @@ bun test test/differential.test.ts
 - zero runtime dependencies
 - prefer domain-first layout: organize code into domain folders like `src/x509/`, `src/verify/`, `src/revocation/` rather than a flat structure; keep implementation details in `src/internal/` subdirectories
 - tabs, LF, single quotes
-- use `.ts` relative import extensions in source
+- use `.ts` extensions on relative imports; `#micro509/*` subpath imports are extensionless
 - no `any`
 - no non-null assertions
 - no `as Type`; only `as const` and `as const satisfies`

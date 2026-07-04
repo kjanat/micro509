@@ -34,7 +34,7 @@ import {
 	importSpkiBase64,
 	importSpkiPem,
 	unwrap,
-} from 'micro509';
+} from '#micro509';
 
 /** Minimal shape every `import*` Result satisfies, success or failure. */
 type FailableImport =
@@ -458,9 +458,7 @@ describe('keys', () => {
 describe('keys: coverage — malformed inputs', () => {
 	it('importEncryptedPkcs8Der throws on malformed EncryptedPrivateKeyInfo (missing OCTET STRING)', async () => {
 		// SEQUENCE with only one child (algorithmIdentifier) and no encryptedData
-		const { sequence, objectIdentifier, nullValue } = await import(
-			'#micro509/internal/asn1/der.ts'
-		);
+		const { sequence, objectIdentifier, nullValue } = await import('#micro509/internal/asn1/der');
 		const malformed = sequence([
 			sequence([objectIdentifier('1.2.840.113549.1.5.13'), nullValue()]),
 		]);
@@ -473,7 +471,7 @@ describe('keys: coverage — malformed inputs', () => {
 
 	it('importEncryptedPkcs8Der throws when second child is not OCTET STRING', async () => {
 		const { sequence, objectIdentifier, nullValue, integerFromNumber } = await import(
-			'#micro509/internal/asn1/der.ts'
+			'#micro509/internal/asn1/der'
 		);
 		// second child is INTEGER (tag 0x02), not OCTET STRING (tag 0x04)
 		const malformed = sequence([
@@ -489,7 +487,7 @@ describe('keys: coverage — malformed inputs', () => {
 
 	it('importEncryptedPkcs8Der throws when EncryptedPrivateKeyInfo has trailing children', async () => {
 		const { sequence, objectIdentifier, nullValue, octetString, integerFromNumber } = await import(
-			'#micro509/internal/asn1/der.ts'
+			'#micro509/internal/asn1/der'
 		);
 		const malformed = sequence([
 			sequence([objectIdentifier('1.2.840.113549.1.5.13'), nullValue()]),
@@ -513,7 +511,7 @@ describe('keys: coverage — malformed inputs', () => {
 
 	it('importSpkiBase64 throws on SubjectPublicKeyInfo with trailing fields', async () => {
 		const { bitString, integerFromNumber, sequence, objectIdentifier } = await import(
-			'#micro509/internal/asn1/der.ts'
+			'#micro509/internal/asn1/der'
 		);
 		const malformed = sequence([
 			sequence([objectIdentifier('1.2.840.113549.1.1.1')]),
@@ -528,9 +526,7 @@ describe('keys: coverage — malformed inputs', () => {
 	});
 
 	it('importSpkiBase64 throws on algorithm identifiers missing an OID', async () => {
-		const { bitString, integerFromNumber, sequence } = await import(
-			'#micro509/internal/asn1/der.ts'
-		);
+		const { bitString, integerFromNumber, sequence } = await import('#micro509/internal/asn1/der');
 		const malformed = sequence([
 			sequence([integerFromNumber(1)]),
 			bitString(Uint8Array.of(0x00), 0),
@@ -543,7 +539,7 @@ describe('keys: coverage — malformed inputs', () => {
 	});
 
 	it('importSpkiBase64 throws on invalid subjectPublicKey BIT STRING content', async () => {
-		const { sequence, objectIdentifier } = await import('#micro509/internal/asn1/der.ts');
+		const { sequence, objectIdentifier } = await import('#micro509/internal/asn1/der');
 		const malformed = sequence([
 			sequence([objectIdentifier('1.2.840.113549.1.1.1')]),
 			Uint8Array.of(0x03, 0x02, 0x01, 0x01),
@@ -581,7 +577,7 @@ describe('keys: coverage — malformed inputs', () => {
 
 	it('importPkcs8Der and base64 throw on PKCS#8 with wrong privateKey tag', async () => {
 		const { integerFromNumber, nullValue, objectIdentifier, sequence } = await import(
-			'#micro509/internal/asn1/der.ts'
+			'#micro509/internal/asn1/der'
 		);
 		const malformed = sequence([
 			integerFromNumber(0),
@@ -602,7 +598,7 @@ describe('keys: coverage — malformed inputs', () => {
 
 	it('importPkcs8Der throws on algorithm identifiers missing an OID', async () => {
 		const { integerFromNumber, octetString, sequence } = await import(
-			'#micro509/internal/asn1/der.ts'
+			'#micro509/internal/asn1/der'
 		);
 		const malformed = sequence([
 			integerFromNumber(0),

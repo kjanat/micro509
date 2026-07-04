@@ -25,43 +25,50 @@
 	"type": "module",
 	"imports": {
 		"#micro509": "./src/index.ts",
-		"#micro509/*": "./src/*",
-		"#micro509/internal/*": "./src/internal/*",
+		"#micro509/*": "./src/*.ts",
+		"#micro509/keys": "./src/keys/index.ts",
+		"#micro509/pem": "./src/pem/index.ts",
+		"#micro509/pkcs": "./src/pkcs/index.ts",
+		"#micro509/result": "./src/result/index.ts",
+		"#micro509/revocation": "./src/revocation/index.ts",
+		"#micro509/verify": "./src/verify/index.ts",
+		"#micro509/x509": "./src/x509/index.ts",
+		"#micro509/internal/*": "./src/internal/*.ts",
 		"#pkg": "./package.json",
 		"#jsr": "./jsr.json",
 		"#typedoc-sidebar": "./site/api/typedoc-sidebar.json"
 	},
 	"exports": {
 		".": {
-			"bun": "./src/index.ts",
+			"types": "./dist/index.d.ts",
 			"default": "./dist/index.js"
 		},
 		"./keys": {
-			"bun": "./src/keys/index.ts",
+			"types": "./dist/keys.d.ts",
 			"default": "./dist/keys.js"
 		},
 		"./pem": {
-			"bun": "./src/pem/index.ts",
+			"types": "./dist/pem.d.ts",
 			"default": "./dist/pem.js"
 		},
 		"./pkcs": {
-			"bun": "./src/pkcs/index.ts",
+			"types": "./dist/pkcs.d.ts",
 			"default": "./dist/pkcs.js"
 		},
 		"./result": {
-			"bun": "./src/result/index.ts",
+			"types": "./dist/result.d.ts",
 			"default": "./dist/result.js"
 		},
 		"./revocation": {
-			"bun": "./src/revocation/index.ts",
+			"types": "./dist/revocation.d.ts",
 			"default": "./dist/revocation.js"
 		},
 		"./verify": {
-			"bun": "./src/verify/index.ts",
+			"types": "./dist/verify.d.ts",
 			"default": "./dist/verify.js"
 		},
 		"./x509": {
-			"bun": "./src/x509/index.ts",
+			"types": "./dist/x509.d.ts",
 			"default": "./dist/x509.js"
 		},
 		"./package.json": "./package.json"
@@ -79,10 +86,10 @@
 		"check": "run -pK check:biome check:deno typecheck",
 		"check:biome": "biome check",
 		"check:deno": "deno check src",
+		"deno:cleandocs": "rm -rf docs/deno 2>/dev/null",
+		"deno:importsmap": "jq '{ imports: (.imports | with_entries(.key |= sub(\"/[*]$\"; \"/\") | .value |= if type == \"string\" then sub(\"/[*]$\"; \"/\") else . end)) }' package.json > deno.import_map.json",
 		"docs:build": "run -pk deno:importsmap deno:cleandocs; deno doc --no-npm --import-map deno.import_map.json --html --output=docs/deno --name=micro509 src/**/index.ts",
 		"docs:lint": "run -pk deno:importsmap deno:cleandocs; deno doc --no-npm --import-map deno.import_map.json --html --output=docs/deno --name=micro509 --lint src/**/index.ts",
-		"deno:importsmap": "jq '{ imports: (.imports | with_entries(.key |= sub(\"/[*]$\"; \"/\") | .value |= if type == \"string\" then sub(\"/[*]$\"; \"/\") else . end)) }' package.json > deno.import_map.json",
-		"deno:cleandocs": "rm -rf docs/deno 2>/dev/null",
 		"fmt": "dprint fmt",
 		"lint": "bun lint:biome",
 		"lint:biome": "biome lint",
@@ -119,20 +126,20 @@
 	},
 	"devDependencies": {
 		"@arethetypeswrong/core": "^0.18.4",
-		"@biomejs/biome": "^2.5.1",
+		"@biomejs/biome": "^2.5.2",
 		"@tsconfig/node24": "^24.0.4",
 		"@types/bun": "^1.3.14",
-		"@types/node": "26.0.1",
-		"@typescript/native-preview": "^7.0.0-dev.20260630.1",
+		"@types/node": "26.1.0",
+		"@typescript/native-preview": "^7.0.0-dev.20260704.1",
 		"dprint": "^0.55.1",
 		"oxc-minify": "^0.138.0",
 		"playwright": "^1.61.1",
 		"publint": "^0.3.21",
-		"runner-run": "^0.16.1",
+		"runner-run": "^0.18.1",
 		"tsdown": "^0.22.3",
 		"typescript": "^6.0.3",
 		"unplugin-unused": "^0.5.7",
-		"wrangler": "^4.106.0"
+		"wrangler": "^4.107.0"
 	},
 	"packageManager": "bun@1.3.14",
 	"devEngines": {
@@ -162,20 +169,7 @@
 	},
 	"volta": {
 		"node": "26.4.0",
-		"npm": "11.17.0"
-	},
-	"publishConfig": {
-		"exports": {
-			".": "./dist/index.js",
-			"./keys": "./dist/keys.js",
-			"./pem": "./dist/pem.js",
-			"./pkcs": "./dist/pkcs.js",
-			"./result": "./dist/result.js",
-			"./revocation": "./dist/revocation.js",
-			"./verify": "./dist/verify.js",
-			"./x509": "./dist/x509.js",
-			"./package.json": "./package.json"
-		}
+		"npm": "11.18.0"
 	},
 	"typedocoptions": {
 		"extends": "./config/typedoc.config.mjs"

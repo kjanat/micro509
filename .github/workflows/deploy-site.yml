@@ -1,29 +1,22 @@
 name: Deploy Site
 
-on:
-  push: { branches: [master, vitepress] }
-  workflow_dispatch:
-
-concurrency:
-  group: pages
-  cancel-in-progress: false
+on: { push: { branches: [master, vitepress] }, workflow_dispatch: null }
 
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions: { contents: read }
-    steps:
-      - uses: actions/checkout@v7 # Trusted action, tag allowed
-        with: { persist-credentials: false }
-      - { uses: ./.github/actions/setup-ts, with: { install-bun: true } }
-      - run: bun install --frozen-lockfile
-      - run: bun site:build
-      - uses: actions/upload-pages-artifact@v5.0.0 # Trusted action, tag allowed
-        with: { path: site/.vitepress/dist }
+    steps: [
+      { uses: actions/checkout@v7, with: { persist-credentials: false } },
+      { uses: ./.github/actions/setup-ts, with: { install-bun: true } },
+      run: runner install -f site:build,
+      { uses: actions/upload-pages-artifact@v5, with: { path: site/.vitepress/dist } },
+    ]
 
   deploy:
     needs: build
     runs-on: ubuntu-latest
     permissions: { pages: write, id-token: write }
+    concurrency: { group: pages-deploy, cancel-in-progress: false }
     environment: { name: github-pages, url: "${{ steps.deployment.outputs.page_url }}" }
-    steps: [{ name: Deploy to GitHub Pages, id: deployment, uses: actions/deploy-pages@v5 }] # Trusted action, tag allowed
+    steps: [{ name: Deploy to GitHub Pages, id: deployment, uses: actions/deploy-pages@v5 }]

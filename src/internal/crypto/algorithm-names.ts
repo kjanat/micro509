@@ -7,7 +7,7 @@
  * @module
  */
 
-import { OIDS } from '#micro509/internal/asn1/oids.ts';
+import { OIDS } from '#micro509/internal/asn1/oids';
 import { parseRsaPssParameters } from './rsa-pss.ts';
 
 /** Convert a hash or message-digest OID into a human-readable name. */

@@ -5,10 +5,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions: { id-token: write, contents: read, pull-requests: write }
-    steps:
-      - uses: actions/checkout@v7
-        with: { persist-credentials: false }
-      - { uses: ./.github/actions/setup-ts, with: { install-bun: true } }
-      - run: bun i
-      - run: bun run build
-      - run: bunx pkg-pr-new publish --packageManager="bun" --bun
+    steps: [
+      { uses: actions/checkout@v7, with: { persist-credentials: false } },
+      { uses: ./.github/actions/setup-ts, with: { install-bun: true } },
+      run: runner install -f build publish:pkgprnew,
+    ]

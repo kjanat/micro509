@@ -14,24 +14,24 @@ import {
 	integerFromNumber,
 	sequence,
 	time,
-} from '#micro509/internal/asn1/der.ts';
-import type { SignatureProfileInput } from '#micro509/internal/crypto/signing.ts';
+} from '#micro509/internal/asn1/der';
+import type { SignatureProfileInput } from '#micro509/internal/crypto/signing';
 
 export type { SignatureProfileInput };
 import {
 	encodeAlgorithmIdentifier,
 	getSignatureAlgorithm,
 	signBytes,
-} from '#micro509/internal/crypto/signing.ts';
-import { getCrypto } from '#micro509/internal/crypto/webcrypto.ts';
-import { base64Encode } from '#micro509/internal/shared/base64.ts';
+} from '#micro509/internal/crypto/signing';
+import { getCrypto } from '#micro509/internal/crypto/webcrypto';
+import { base64Encode } from '#micro509/internal/shared/base64';
 import {
 	exportSpkiDer,
 	generateKeyPair,
 	type KeyAlgorithmInput,
 	type KeyPairMaterial,
-} from '#micro509/keys/keys.ts';
-import { pemEncode } from '#micro509/pem/pem.ts';
+} from '#micro509/keys/keys';
+import { pemEncode } from '#micro509/pem/pem';
 import { buildCertificateExtensions, type CertificateExtensionsInput } from './extensions.ts';
 import { encodeName, isNameInputEmpty, type NameInput } from './name.ts';
 

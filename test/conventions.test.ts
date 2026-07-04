@@ -1,7 +1,7 @@
 import { Glob } from 'bun';
 import { describe, expect, it } from 'bun:test';
 import { readFileSync } from 'node:fs';
-import { VERIFY_ERROR_CODES } from 'micro509';
+import { VERIFY_ERROR_CODES } from '#micro509';
 
 /**
  * Guards the structural rules from AGENTS.md / CONTRIBUTING.md that neither

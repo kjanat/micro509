@@ -5,9 +5,9 @@
  * @module
  */
 
-import { ia5String, printableString, utf8String } from '#micro509/internal/asn1/der.ts';
-import { OIDS } from '#micro509/internal/asn1/oids.ts';
-import type { NameFieldKey } from '#micro509/x509/name.ts';
+import { ia5String, printableString, utf8String } from '#micro509/internal/asn1/der';
+import { OIDS } from '#micro509/internal/asn1/oids';
+import type { NameFieldKey } from '#micro509/x509/name';
 
 /**
  * OID and ASN.1 string encoder for one distinguished-name attribute type.
