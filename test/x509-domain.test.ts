@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { generateKeyPair, unwrap } from '#micro509';
+import { exportSpkiDer, generateKeyPair, type KeyAlgorithmInput, unwrap } from '#micro509';
 import type { NameInput } from '#micro509/x509';
 import * as x509 from '#micro509/x509';
 
@@ -114,6 +114,65 @@ describe('x509 domain', () => {
 		const dns = parsed.subjectAltNames?.find((s) => s.type === 'dns');
 		expect(dns).toBeDefined();
 		expect(dns?.type === 'dns' && dns.value).toBe('leaf.example.com');
+	});
+
+	it.each<[string, KeyAlgorithmInput]>([
+		['rsa', { kind: 'rsa', modulusLength: 2048 }],
+		['ecdsa P-256', { kind: 'ecdsa', curve: 'P-256' }],
+		['ed25519', { kind: 'ed25519' }],
+	])('getSubjectPublicKey imports a %s subject key from a parsed certificate', async (_label, algorithm) => {
+		const keyPair = await generateKeyPair(algorithm);
+		const { certificate } = await x509.createSelfSignedCertificate({
+			subject: { commonName: 'spki.example' },
+			keyPair,
+		});
+		const parsed = x509.parseCertificateDerOrThrow(certificate.der);
+
+		const publicKey = unwrap(await x509.getSubjectPublicKey(parsed));
+
+		expect(publicKey.type).toBe('public');
+		expect(await exportSpkiDer(publicKey)).toEqual(parsed.subjectPublicKeyInfoDer);
+	});
+
+	it('getSubjectPublicKeyOrThrow imports the subject key of a parsed CSR', async () => {
+		const keyPair = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
+		const csr = await x509.createCertificateSigningRequest({
+			subject: { commonName: 'spki-csr.example' },
+			publicKey: keyPair.publicKey,
+			signerPrivateKey: keyPair.privateKey,
+		});
+		const parsed = x509.parseCertificateSigningRequestDerOrThrow(csr.der);
+
+		const publicKey = await x509.getSubjectPublicKeyOrThrow(parsed);
+
+		expect(publicKey.type).toBe('public');
+		expect(await exportSpkiDer(publicKey)).toEqual(parsed.subjectPublicKeyInfoDer);
+	});
+
+	it('getSubjectPublicKey rejects an unsupported public key algorithm OID', async () => {
+		const keyPair = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
+		const { certificate } = await x509.createSelfSignedCertificate({
+			subject: { commonName: 'bogus-spki.example' },
+			keyPair,
+		});
+		// SPKI whose AlgorithmIdentifier carries the unassigned OID 1.2.3.4
+		const bogusSpki = new Uint8Array([
+			0x30, 0x0b, 0x30, 0x05, 0x06, 0x03, 0x2a, 0x03, 0x04, 0x03, 0x02, 0x00, 0x00,
+		]);
+		const parsed = {
+			...x509.parseCertificateDerOrThrow(certificate.der),
+			subjectPublicKeyInfoDer: bogusSpki,
+		};
+
+		const result = await x509.getSubjectPublicKey(parsed);
+
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.code).toBe('malformed');
+		}
+		await expect(x509.getSubjectPublicKeyOrThrow(parsed)).rejects.toThrow(
+			'Unsupported SubjectPublicKeyInfo algorithm',
+		);
 	});
 
 	it('encodeName produces DER bytes from a NameInput', () => {

@@ -107,6 +107,8 @@ export {
 	defineExtensionDecoder,
 	defineExtensionDecoderMap,
 	findExtension,
+	getSubjectPublicKey,
+	getSubjectPublicKeyOrThrow,
 	parseCertificateChainPem,
 	parseCertificateDer,
 	parseCertificateDerOrThrow,

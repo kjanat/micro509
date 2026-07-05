@@ -156,6 +156,43 @@ SANs:      ${sans.map((n) => n.value).join(', ')}`);
 
 </LiveCode>
 
+## Get the subject public key
+
+A parsed certificate (or CSR) exposes its SubjectPublicKeyInfo as raw DER plus
+algorithm OIDs. `getSubjectPublicKey` turns that into a usable WebCrypto
+`CryptoKey` directly — the algorithm, and for EC keys the curve, is inferred
+from the SPKI itself, so there is no OID mapping to hand-roll. The returned
+key is extractable with `verify` usage, ready for `exportSpkiPem`/
+`exportSpkiDer` or signature checks.
+
+<LiveCode>
+
+```ts
+import {
+  createSelfSignedCertificate,
+  exportSpkiPem,
+  getSubjectPublicKey,
+  parseCertificatePem,
+  unwrap,
+} from 'micro509';
+
+const { certificate } = await createSelfSignedCertificate({
+  subject: { commonName: 'spki.example' },
+});
+
+const parsed = unwrap(parseCertificatePem(certificate.pem));
+
+// Algorithm and curve are inferred from the certificate's own SPKI
+const publicKey = unwrap(await getSubjectPublicKey(parsed));
+
+console.log(
+  `${parsed.publicKeyAlgorithmName} -> ${publicKey.algorithm.name}`,
+);
+console.log(await exportSpkiPem(publicKey));
+```
+
+</LiveCode>
+
 ## Parse a CSR
 
 <LiveCode>

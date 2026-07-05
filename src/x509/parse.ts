@@ -45,6 +45,12 @@ import {
 	type KnownParsedExtensionAccumulator,
 	type MutableKnownParsedExtensionAccumulator,
 } from '#micro509/internal/x509/extension-registry';
+import {
+	type ImportKeyResult,
+	importSpkiDer,
+	importSpkiDerOrThrow,
+	type PublicKeyImportInput,
+} from '#micro509/keys/keys';
 import { pemDecodeOrThrow, splitPemBlocksOrThrow } from '#micro509/pem/pem';
 import {
 	type ErrorResult,
@@ -909,6 +915,53 @@ export function parseCertificateSigningRequestPem<
 			error instanceof Error ? error.message : 'Malformed certificate signing request',
 		);
 	}
+}
+
+/**
+ * Import the subject public key of a parsed certificate or CSR as a WebCrypto `CryptoKey`.
+ *
+ * The key algorithm — and, for EC keys, the curve — is inferred from the
+ * SubjectPublicKeyInfo's own AlgorithmIdentifier (the same resolution
+ * {@linkcode importSpkiDerOrThrow} applies when no algorithm is given), so
+ * callers never map {@linkcode ParsedCertificate.publicKeyAlgorithmOid} /
+ * {@linkcode ParsedCertificate.publicKeyParametersOid} by hand.\
+ * RSA keys import with the default `pkcs1-v1_5`/`SHA-256` parameters (a plain
+ * `rsaEncryption` SPKI encodes neither padding scheme nor hash); pass
+ * `algorithm` to choose other RSA parameters or to assert an expected
+ * algorithm.
+ *
+ * @param parsed Parsed certificate or CSR whose subject public key to import.
+ * @param algorithm Optional expected algorithm; must match the key contents when given.
+ * @returns Extractable `CryptoKey` with `verify` usage.
+ *
+ * @throws {Error} If the SubjectPublicKeyInfo is malformed, encodes an
+ * unsupported algorithm, or doesn't match `algorithm`
+ *
+ * @example
+ * ```ts
+ * const parsed = parseCertificatePemOrThrow(pem);
+ * const publicKey = await getSubjectPublicKeyOrThrow(parsed);
+ * ```
+ *
+ * @see {@linkcode getSubjectPublicKey} for the non-throwing variant
+ */
+export function getSubjectPublicKeyOrThrow<TMap extends ExtensionDecoderMap = Record<never, never>>(
+	parsed: ParsedCertificate<TMap> | ParsedCertificateSigningRequest<TMap>,
+	algorithm?: PublicKeyImportInput,
+): Promise<CryptoKey> {
+	return importSpkiDerOrThrow(parsed.subjectPublicKeyInfoDer, algorithm);
+}
+
+/**
+ * Import the subject public key of a parsed certificate or CSR as a WebCrypto `CryptoKey`.
+ *
+ * @see `getSubjectPublicKeyOrThrow` for the throwing variant
+ */
+export function getSubjectPublicKey<TMap extends ExtensionDecoderMap = Record<never, never>>(
+	parsed: ParsedCertificate<TMap> | ParsedCertificateSigningRequest<TMap>,
+	algorithm?: PublicKeyImportInput,
+): Promise<ImportKeyResult<CryptoKey>> {
+	return importSpkiDer(parsed.subjectPublicKeyInfoDer, algorithm);
 }
 
 /**
