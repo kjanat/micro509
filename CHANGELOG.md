@@ -32,6 +32,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   keys whose type isn't known ahead of time. Passing an explicit algorithm is
   unchanged and still asserts the key matches it.
   (https://github.com/kjanat/micro509/issues/20)
+- `getSubjectPublicKey(parsed)` / `getSubjectPublicKeyOrThrow(parsed)` import
+  the subject public key of a parsed certificate or CSR as a WebCrypto
+  `CryptoKey`, inferring the algorithm (and EC curve) from the embedded
+  SubjectPublicKeyInfo — callers no longer hand-roll the
+  `publicKeyAlgorithmOid` → import-algorithm mapping.
+  (https://github.com/kjanat/micro509/issues/21)
 
 ### Fixed
 
