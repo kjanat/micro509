@@ -7,7 +7,7 @@
 		"defaultBranch": "master"
 	},
 	"files": {
-		"includes": ["**", "!!**/dist", "!!**/*.svg", "!!**/worker-configuration.d.ts"]
+		"includes": ["**", "!!**/dist", "!!**/*.svg"]
 	},
 	"formatter": {
 		"enabled": false,
