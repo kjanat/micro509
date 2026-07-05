@@ -29,6 +29,7 @@ import {
 	importPkcs8Der,
 	importPkcs8Pem,
 	importPrivateJwk,
+	importPrivateJwkOrThrow,
 	importPublicJwk,
 	importSec1Der,
 	importSec1Pem,
@@ -252,6 +253,49 @@ describe('keys', () => {
 			'malformed',
 			'Public JWK algorithm does not match requested import algorithm',
 		);
+	});
+
+	it('importPrivateJwk rejects public-only JWKs and algorithm mismatches', async () => {
+		const rsa = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
+		const rsaPublicJwk = await exportPublicJwk(rsa.publicKey);
+		const rsaPrivateJwk = await exportPrivateJwk(rsa.privateKey);
+		const ec = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
+		const ecPrivateJwk = await exportPrivateJwk(ec.privateKey);
+		await expectImportFailure(
+			importPrivateJwk(rsaPublicJwk, { kind: 'rsa' }),
+			'malformed',
+			'Private JWK must contain private key material',
+		);
+		await expectImportFailure(
+			importPrivateJwk(ecPrivateJwk, { kind: 'ecdsa', curve: 'P-384' }),
+			'malformed',
+			'Private JWK algorithm does not match requested import algorithm',
+		);
+		await expectImportFailure(
+			importPrivateJwk(rsaPrivateJwk, { kind: 'ecdsa', curve: 'P-256' }),
+			'malformed',
+			'Private JWK algorithm does not match requested import algorithm',
+		);
+		await expect(importPrivateJwkOrThrow(rsaPublicJwk, { kind: 'rsa' })).rejects.toThrow(
+			'Private JWK must contain private key material',
+		);
+		await expect(
+			importPrivateJwkOrThrow(ecPrivateJwk, { kind: 'ecdsa', curve: 'P-384' }),
+		).rejects.toThrow('Private JWK algorithm does not match requested import algorithm');
+	});
+
+	it('roundtrips EC and Ed25519 private keys through JWK', async () => {
+		const ec = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
+		const ecFromJwk = unwrap(
+			await importPrivateJwk(await ec.exportPrivateJwk(), { kind: 'ecdsa', curve: 'P-256' }),
+		);
+		expect(await exportPkcs8Der(ecFromJwk)).toEqual(await ec.exportPkcs8Der());
+
+		const ed = await generateKeyPair({ kind: 'ed25519' });
+		const edFromJwk = unwrap(
+			await importPrivateJwk(await ed.exportPrivateJwk(), { kind: 'ed25519' }),
+		);
+		expect(await exportPkcs8Der(edFromJwk)).toEqual(await ed.exportPkcs8Der());
 	});
 
 	it('imports and exports keys via ecdsa and ed25519', async () => {

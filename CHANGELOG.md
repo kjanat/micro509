@@ -33,6 +33,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unchanged and still asserts the key matches it.
   (https://github.com/kjanat/micro509/issues/20)
 
+### Fixed
+
+- `importPrivateJwk` / `importPrivateJwkOrThrow` now validate the JWK against
+  the requested algorithm before handing it to WebCrypto, matching what
+  `importPublicJwk` already did: `kty`/`crv` must match the requested
+  `kind`/`curve`, the private material the kind implies must be present
+  (`d` everywhere, plus `n`/`e`/`p`/`q`/`dp`/`dq`/`qi` for RSA), and
+  symmetric (`k`) or multi-prime (`oth`) material is rejected.
+  Wrong-algorithm and public-only JWKs previously surfaced as opaque
+  WebCrypto errors instead of the library's `'malformed'` failures.
+  (https://github.com/kjanat/micro509/issues/23)
+
 ## [0.7.2] - 2026-07-04
 
 Error-classification fix for encrypted-key imports with a wrong password.
