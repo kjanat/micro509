@@ -94,6 +94,48 @@ console.log('spki round-trip ok:', exported === pem);
 
 </LiveCode>
 
+### Derive a public key from a private key
+
+The `import*` functions for private keys hand back a bare `CryptoKey` with only
+`sign` usage — there is no matching public handle. `derivePublicKey` bridges
+that gap, so a private key loaded from disk can go straight to
+`exportSpkiPem`/`exportSpkiDer` (e.g. to rebuild a self-signed certificate or
+distribute the public key). It supports RSA, ECDSA, and Ed25519.
+
+<LiveCode>
+
+```ts
+import { generateKeyPair, unwrap } from 'micro509';
+import {
+  derivePublicKey,
+  exportSpkiPem,
+  importPkcs8Pem,
+} from 'micro509/keys';
+
+const keys = await generateKeyPair({
+  kind: 'ecdsa',
+  curve: 'P-256',
+});
+
+// Start from a private key that carries no public handle.
+const privateKey = unwrap(
+  await importPkcs8Pem(await keys.exportPkcs8Pem(), {
+    kind: 'ecdsa',
+    curve: 'P-256',
+  }),
+);
+
+const publicKey = await derivePublicKey(privateKey);
+const spki = await exportSpkiPem(publicKey);
+
+console.log(
+  'derived spki matches:',
+  spki === (await keys.exportSpkiPem()),
+);
+```
+
+</LiveCode>
+
 ### JWK
 
 <LiveCode>

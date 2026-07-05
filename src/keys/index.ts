@@ -29,6 +29,7 @@ export type {
 	RsaScheme,
 } from './keys.ts';
 export {
+	derivePublicKey,
 	exportBinaryBase64,
 	exportEncryptedPkcs1Pem,
 	exportEncryptedPkcs8Der,

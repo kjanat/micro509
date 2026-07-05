@@ -490,6 +490,49 @@ export async function exportSpkiPem(publicKey: CryptoKey): Promise<string> {
 }
 
 /**
+ * Derive the matching public key from an imported (or generated) private key.
+ *
+ * The `import*` functions that read a PKCS#8 / PKCS#1 / SEC 1 / JWK private key
+ * return a bare `CryptoKey` with only `sign` usage — there is no accompanying
+ * public handle. This bridges that gap: it exports the private key's JWK,
+ * strips the private components, and re-imports the public half with `verify`
+ * usage, so callers can go straight to {@linkcode exportSpkiDer} /
+ * {@linkcode exportSpkiPem} (e.g. to rebuild a self-signed cert or distribute
+ * the public key when only the private key is on disk).
+ *
+ * Supports RSA (`n`/`e`), ECDSA (`x`/`y`), and Ed25519 (`x`). The derived key
+ * inherits the private key's algorithm parameters (hash, curve).
+ *
+ * @param privateKey - An extractable private `CryptoKey`
+ * @returns Extractable public `CryptoKey` with `verify` usage
+ *
+ * @throws {Error} If the key is not a private key, is non-extractable, or uses
+ * an unsupported key type
+ *
+ * @example
+ * ```ts
+ * const privateKey = await importPkcs8PemOrThrow(pem, { kind: 'ecdsa', curve: 'P-256' });
+ * const publicKey = await derivePublicKey(privateKey);
+ * const spkiPem = await exportSpkiPem(publicKey);
+ * ```
+ *
+ * @see {@linkcode exportSpkiDer} for exporting the derived key
+ */
+export async function derivePublicKey(privateKey: CryptoKey): Promise<CryptoKey> {
+	if (privateKey.type !== 'private') {
+		throw new Error('derivePublicKey requires a private CryptoKey');
+	}
+	const subtle = getCrypto().subtle;
+	let privateJwk: JsonWebKey;
+	try {
+		privateJwk = await subtle.exportKey('jwk', privateKey);
+	} catch {
+		throw new Error('Cannot derive public key from a non-extractable private key');
+	}
+	return subtle.importKey('jwk', toPublicJwk(privateJwk), privateKey.algorithm, true, ['verify']);
+}
+
+/**
  * Export a key as raw base64 (no PEM headers).
  *
  * Returns SPKI-encoded base64 for public keys, PKCS#8-encoded base64 for private keys.
@@ -1186,6 +1229,21 @@ function wrapSec1InPkcs8(der: Uint8Array, curve: ImportEcKeyInput['curve']): Uin
 		sequence([objectIdentifier(OIDS.ecPublicKey), objectIdentifier(curveToOid(curve))]),
 		octetString(new Uint8Array(der)),
 	]);
+}
+
+/** Project a private JWK onto its public-only members, discarding private key material. */
+function toPublicJwk(jwk: JsonWebKey): JsonWebKey {
+	if (jwk.kty !== 'RSA' && jwk.kty !== 'EC' && jwk.kty !== 'OKP') {
+		throw new Error(`Cannot derive public key: unsupported JWK key type ${String(jwk.kty)}`);
+	}
+	const publicJwk: JsonWebKey = { ...jwk };
+	// Strip every private component: RSA (d, p, q, dp, dq, qi, oth), EC/OKP (d).
+	for (const field of ['d', 'p', 'q', 'dp', 'dq', 'qi', 'oth', 'k'] as const) {
+		delete publicJwk[field];
+	}
+	publicJwk.key_ops = ['verify'];
+	publicJwk.ext = true;
+	return publicJwk;
 }
 
 /** Map a curve name to its ASN.1 OID string. */
