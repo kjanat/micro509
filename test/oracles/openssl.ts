@@ -302,7 +302,7 @@ export async function issueAndValidateOcspResponseWithOpenSsl(input: {
 	});
 }
 
-async function withTempDir<T>(fn: (directory: string) => Promise<T>): Promise<T> {
+export async function withTempDir<T>(fn: (directory: string) => Promise<T>): Promise<T> {
 	const directory = await mkdtemp(join(tmpdir(), 'micro509-openssl-'));
 	try {
 		return await fn(directory);
@@ -311,7 +311,7 @@ async function withTempDir<T>(fn: (directory: string) => Promise<T>): Promise<T>
 	}
 }
 
-async function runOpenSsl(args: readonly string[]): Promise<OpenSslCommandResult> {
+export async function runOpenSsl(args: readonly string[]): Promise<OpenSslCommandResult> {
 	try {
 		const process = Bun.spawn(['openssl', ...args], {
 			stdin: 'ignore',
