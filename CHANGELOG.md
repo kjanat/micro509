@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `importPkcs8*`/`importPkcs1*`/`importSec1*`/`importPrivateJwk` can go
   straight to `exportSpkiDer`/`exportSpkiPem` without hand-rolling JWK
   surgery. Supports RSA, ECDSA, and Ed25519.
+  (https://github.com/kjanat/micro509/issues/19)
 
 ## [0.7.2] - 2026-07-04
 
