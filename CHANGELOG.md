@@ -17,8 +17,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-07-05
+
+Key/certificate import ergonomics and validation hardening — every API
+finding from the OpenSSL differential fuzzer, shipped in one release.
+
 ### Added
 
+- The `keys` and `x509` domain barrels (and the root barrel) re-export the 20
+  `OrThrow` siblings that were implemented and documented but unreachable from
+  the published package — 16 key-import variants (`importSpkiDerOrThrow`,
+  `importPkcs8PemOrThrow`, …) and 4 certificate/CSR parsers
+  (`parseCertificateDerOrThrow`, …). A conventions test now fails whenever a
+  barrel exposes a function while omitting its `OrThrow` sibling.
+  (https://github.com/kjanat/micro509/issues/26)
 - `derivePublicKey(privateKey)` derives the matching public `CryptoKey` from
   an imported (or generated) private key, so a private key loaded via
   `importPkcs8*`/`importPkcs1*`/`importSec1*`/`importPrivateJwk` can go
@@ -50,9 +62,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Wrong-algorithm and public-only JWKs previously surfaced as opaque
   WebCrypto errors instead of the library's `'malformed'` failures.
   (https://github.com/kjanat/micro509/issues/23)
-
-### Fixed
-
 - `importSec1Der` / `importSec1Pem` / `importEncryptedSec1Pem` (and their
   `…OrThrow` variants) trusted the caller's `curve` without reading the SEC 1
   ECPrivateKey itself. The RFC 5915 `parameters [0]` field (OpenSSL always
@@ -419,7 +428,8 @@ Initial prerelease. API may change before 1.0.
 - Zero runtime dependencies, WebCrypto-native, tree-shakeable subpath exports;
   runs on Node, Bun, Deno, browsers, and Cloudflare Workers.
 
-[Unreleased]: https://github.com/kjanat/micro509/compare/v0.7.2...HEAD
+[Unreleased]: https://github.com/kjanat/micro509/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/kjanat/micro509/compare/v0.7.2...v0.8.0
 [0.7.2]: https://github.com/kjanat/micro509/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/kjanat/micro509/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/kjanat/micro509/compare/v0.6.0...v0.7.0
