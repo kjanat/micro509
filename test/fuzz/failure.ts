@@ -23,6 +23,8 @@ export interface FailureArtifact {
 	readonly keyPem: string;
 	readonly opensslVersion: string;
 	readonly mismatches: readonly Mismatch[];
+	/** Thrown-error message for failures with no field mismatches (parse/codec throws, expect misses). */
+	readonly error?: string;
 }
 
 /** Write a failing iteration to `test/fixtures/differential-failures/<seed>-<index>/`. */
@@ -41,6 +43,7 @@ export async function dumpFailure(artifact: FailureArtifact): Promise<string> {
 					opensslVersion: artifact.opensslVersion,
 					spec: artifact.spec,
 					mismatches: artifact.mismatches,
+					...(artifact.error === undefined ? {} : { error: artifact.error }),
 				},
 				null,
 				2,

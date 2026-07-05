@@ -33,6 +33,8 @@ export interface OpenSslCertFields {
 	readonly spkiDer: Uint8Array;
 	readonly sans: readonly FuzzSan[];
 	readonly skiHex?: string;
+	/** Full TLV of the outer signatureAlgorithm parameters (e.g. RSA-PSS params), if present. */
+	readonly sigAlgParamsDer?: Uint8Array;
 	readonly der: Uint8Array;
 	readonly pem: string;
 }
@@ -152,9 +154,13 @@ async function issueCert(input: {
 			writeFile(extPath, extConfig(input.spec), 'utf8'),
 		]);
 
+		// -utf8: without it OpenSSL reads the -subj bytes as Latin-1 and
+		// double-encodes multi-byte values (Müller → MÃ¼ller) — silently, on both
+		// sides of the differential.
 		const csr = await runOpenSsl([
 			'req',
 			'-new',
+			'-utf8',
 			'-key',
 			subjectKeyPath,
 			'-subj',
@@ -256,7 +262,7 @@ export async function readCertFields(certPem: string): Promise<OpenSslCertFields
 		await writeFile(certPath, certPem, 'utf8');
 		const base = ['x509', '-in', certPath, '-noout'] as const;
 
-		const [serial, subject, issuer, dates, pubkey, san, ski, derWrite] = await Promise.all([
+		const [serial, subject, issuer, dates, pubkey, san, ski, asn1, derWrite] = await Promise.all([
 			runOpenSsl([...base, '-serial']),
 			runOpenSsl([...base, '-subject', '-nameopt', NAME_OPT]),
 			runOpenSsl([...base, '-issuer', '-nameopt', NAME_OPT]),
@@ -264,6 +270,7 @@ export async function readCertFields(certPem: string): Promise<OpenSslCertFields
 			runOpenSsl([...base, '-pubkey']),
 			runOpenSsl([...base, '-ext', 'subjectAltName']),
 			runOpenSsl([...base, '-ext', 'subjectKeyIdentifier']),
+			runOpenSsl(['asn1parse', '-in', certPath]),
 			runOpenSsl(['x509', '-in', certPath, '-outform', 'DER', '-out', derPath]),
 		]);
 		for (const [name, r] of [
@@ -272,12 +279,15 @@ export async function readCertFields(certPem: string): Promise<OpenSslCertFields
 			['issuer', issuer],
 			['dates', dates],
 			['pubkey', pubkey],
+			['asn1parse', asn1],
 			['der', derWrite],
 		] as const) {
 			if (r.exitCode !== 0) throw new Error(`openssl ${name} read failed: ${r.stderr}`);
 		}
 
+		const der = new Uint8Array(await readFile(derPath));
 		const skiHex = parseSki(ski.stdout);
+		const sigAlgParamsDer = sigAlgParamsFromAsn1(asn1.stdout, der);
 		return {
 			serialHex: serial.stdout
 				.trim()
@@ -290,10 +300,63 @@ export async function readCertFields(certPem: string): Promise<OpenSslCertFields
 			spkiDer: decodePem('PUBLIC KEY', pubkey.stdout),
 			sans: parseSans(san.stdout),
 			...(skiHex === undefined ? {} : { skiHex }),
-			der: new Uint8Array(await readFile(derPath)),
+			...(sigAlgParamsDer === undefined ? {} : { sigAlgParamsDer }),
+			der,
 			pem: certPem,
 		};
 	});
+}
+
+interface Asn1Row {
+	readonly offset: number;
+	readonly depth: number;
+	readonly headerLength: number;
+	readonly length: number;
+}
+
+/** Structural rows of `openssl asn1parse` output (offset:d=depth hl=… l=…). */
+function parseAsn1Rows(output: string): readonly Asn1Row[] {
+	const rows: Asn1Row[] = [];
+	for (const line of output.split('\n')) {
+		const match = /^\s*(\d+):d=(\d+)\s+hl=(\d+)\s+l=\s*(\d+)/.exec(line);
+		if (match === null) continue;
+		const [, offset, depth, headerLength, length] = match;
+		if (
+			offset === undefined ||
+			depth === undefined ||
+			headerLength === undefined ||
+			length === undefined
+		) {
+			continue;
+		}
+		rows.push({
+			offset: Number(offset),
+			depth: Number(depth),
+			headerLength: Number(headerLength),
+			length: Number(length),
+		});
+	}
+	return rows;
+}
+
+/**
+ * Slice the outer signatureAlgorithm's parameters TLV out of the certificate
+ * DER using OpenSSL's own asn1parse offsets: Certificate ::= SEQUENCE {
+ * tbsCertificate, signatureAlgorithm, signatureValue }, so the second depth-1
+ * element is the AlgorithmIdentifier and its optional second child the params
+ * (NULL for RSA v1.5, a SEQUENCE for RSA-PSS, absent for ECDSA/Ed25519).
+ */
+function sigAlgParamsFromAsn1(output: string, der: Uint8Array): Uint8Array | undefined {
+	const rows = parseAsn1Rows(output);
+	const sigAlg = rows.filter((row) => row.depth === 1)[1];
+	if (sigAlg === undefined) throw new Error(`asn1parse: no signatureAlgorithm row in: ${output}`);
+	const sigAlgEnd = sigAlg.offset + sigAlg.headerLength + sigAlg.length;
+	const children = rows.filter(
+		(row) => row.depth === 2 && row.offset > sigAlg.offset && row.offset < sigAlgEnd,
+	);
+	const params = children[1];
+	if (params === undefined) return undefined;
+	return der.slice(params.offset, params.offset + params.headerLength + params.length);
 }
 
 function decodePem(label: string, pem: string): Uint8Array {

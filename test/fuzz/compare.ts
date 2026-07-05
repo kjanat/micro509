@@ -14,8 +14,23 @@ import { expectedSignatureOid } from './spec.ts';
 import type { CertSpec } from './spec.ts';
 import type { OpenSslCertFields } from '../oracles/openssl-gen.ts';
 
+/** Every field the comparator can report — closed so consumers can't test a typo'd name. */
+export type MismatchField =
+	| 'serial'
+	| 'subject'
+	| 'issuer'
+	| 'notBefore'
+	| 'notAfter'
+	| 'signatureAlgorithmOid'
+	| 'signatureAlgorithmParams'
+	| 'spkiDer'
+	| 'subjectAltName'
+	| 'subjectKeyIdentifier'
+	| 'pemDecode'
+	| 'pemEncodeRoundTrip';
+
 export interface Mismatch {
-	readonly field: string;
+	readonly field: MismatchField;
 	readonly openssl: string;
 	readonly micro509: string;
 }
@@ -97,7 +112,7 @@ export function compareCertificate(input: {
 }): readonly Mismatch[] {
 	const { micro, openssl, spec } = input;
 	const mismatches: Mismatch[] = [];
-	const add = (field: string, o: string, m: string): void => {
+	const add = (field: MismatchField, o: string, m: string): void => {
 		if (o !== m) mismatches.push({ field, openssl: o, micro509: m });
 	};
 
@@ -115,6 +130,16 @@ export function compareCertificate(input: {
 	add('notAfter', String(openssl.notAfterMs), String(micro.notAfter.getTime()));
 
 	add('signatureAlgorithmOid', expectedSignatureOid(spec.algo), micro.signatureAlgorithmOid);
+
+	// Parameters TLV byte-exact against what OpenSSL wrote into the cert, so an
+	// RSA-PSS hash/MGF/saltlen decode drift can't hide behind a matching OID.
+	add(
+		'signatureAlgorithmParams',
+		openssl.sigAlgParamsDer === undefined ? '<absent>' : toHex(openssl.sigAlgParamsDer),
+		micro.signatureAlgorithmParametersDer === undefined
+			? '<absent>'
+			: toHex(micro.signatureAlgorithmParametersDer),
+	);
 
 	if (!bytesEqual(micro.subjectPublicKeyInfoDer, openssl.spkiDer)) {
 		add('spkiDer', toHex(openssl.spkiDer), toHex(micro.subjectPublicKeyInfoDer));

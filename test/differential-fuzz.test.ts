@@ -1,3 +1,6 @@
+import { writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+
 import { describe, expect, it } from 'bun:test';
 import {
 	derivePublicKey,
@@ -5,14 +8,16 @@ import {
 	importPkcs8Pem,
 	importSpkiDer,
 	parseCertificateDer,
+	pemEncode,
 	unwrap,
 } from '#micro509';
 import { compareCertificate } from './fuzz/compare.ts';
+import type { Mismatch } from './fuzz/compare.ts';
 import { dumpFailure } from './fuzz/failure.ts';
 import { makeRng } from './fuzz/prng.ts';
 import { drawCase, importInputFor } from './fuzz/spec.ts';
 import { generateCertificate, readCertFields } from './oracles/openssl-gen.ts';
-import { probeOpenSsl, runOpenSsl } from './oracles/openssl.ts';
+import { probeOpenSsl, runOpenSsl, withTempDir } from './oracles/openssl.ts';
 
 // Same opt-in gate as the hand-written differential suite: OpenSSL is
 // version-sensitive, so CI runs this only in the dedicated differential job.
@@ -22,8 +27,14 @@ const differential =
 		? describe
 		: describe.skip;
 
-const SEED = Number.parseInt(process.env.FUZZ_SEED ?? '', 10) || 0x5eed;
-const ITERATIONS = Number.parseInt(process.env.FUZZ_ITERATIONS ?? '', 10) || 64;
+/** Env override, falling back only when the variable is missing or non-numeric (0 is honored). */
+function envInt(name: string, fallback: number): number {
+	const parsed = Number.parseInt(process.env[name] ?? '', 10);
+	return Number.isNaN(parsed) ? fallback : parsed;
+}
+
+const SEED = envInt('FUZZ_SEED', 0x5eed);
+const ITERATIONS = envInt('FUZZ_ITERATIONS', 64);
 
 /** Independent, order-stable seed per iteration so a failing case reproduces alone. */
 function iterationSeed(index: number): number {
@@ -36,12 +47,49 @@ differential('OpenSSL generation differential fuzz', () => {
 			const { spec } = drawCase(makeRng(iterationSeed(index)), index);
 			const { certPem, certDer, subjectKeyPem } = await generateCertificate(spec);
 
-			const micro = unwrap(parseCertificateDer(certDer));
-			const openssl = await readCertFields(certPem);
-			const mismatches = compareCertificate({ micro, openssl, spec });
+			// Every failure below — field mismatch, parse/codec throw, or a missed
+			// expect — must leave a repro dump, so the whole check runs under one
+			// catch with a single dump site.
+			let mismatches: readonly Mismatch[] = [];
+			try {
+				const micro = unwrap(parseCertificateDer(certDer));
+				const openssl = await readCertFields(certPem);
+				mismatches = compareCertificate({ micro, openssl, spec });
+				if (mismatches.length > 0) {
+					const summary = mismatches
+						.map(
+							(m) =>
+								`  ${m.field}: openssl=${m.openssl.slice(0, 80)} micro509=${m.micro509.slice(0, 80)}`,
+						)
+						.join('\n');
+					throw new Error(`decode divergence:\n${summary}`);
+				}
 
-			if (mismatches.length > 0) {
+				// Cross-parse interop: OpenSSL must accept micro509's PEM encoding of
+				// the same DER, so the codec is checked against the oracle rather than
+				// only against its own decoder.
+				await withTempDir(async (dir) => {
+					const reEncodedPath = join(dir, 'reencoded.pem');
+					await writeFile(reEncodedPath, pemEncode('CERTIFICATE', openssl.der), 'utf8');
+					const parsed = await runOpenSsl(['x509', '-in', reEncodedPath, '-noout']);
+					if (parsed.exitCode !== 0) {
+						throw new Error(`openssl rejected micro509 PEM encoding: ${parsed.stderr}`);
+					}
+				});
+
+				// Standalone key codec, exercising the shipped key ergonomics: the SPKI
+				// import infers its algorithm straight from the DER (no hint), and the
+				// PKCS#8 private key bridges to its public half via derivePublicKey. Both
+				// re-exported SPKIs must byte-match OpenSSL's.
+				const inferredSpki = await exportSpkiDer(unwrap(await importSpkiDer(openssl.spkiDer)));
+				expect(inferredSpki).toEqual(openssl.spkiDer);
+
+				const privateKey = unwrap(await importPkcs8Pem(subjectKeyPem, importInputFor(spec.algo)));
+				const derivedSpki = await exportSpkiDer(await derivePublicKey(privateKey));
+				expect(derivedSpki).toEqual(openssl.spkiDer);
+			} catch (error) {
 				const version = (await runOpenSsl(['version'])).stdout.trim();
+				const failure = error instanceof Error ? error.message : String(error);
 				const dir = await dumpFailure({
 					seed: SEED,
 					index,
@@ -50,28 +98,13 @@ differential('OpenSSL generation differential fuzz', () => {
 					keyPem: subjectKeyPem,
 					opensslVersion: version,
 					mismatches,
+					...(mismatches.length === 0 ? { error: failure } : {}),
 				});
-				const summary = mismatches
-					.map(
-						(m) =>
-							`  ${m.field}: openssl=${m.openssl.slice(0, 80)} micro509=${m.micro509.slice(0, 80)}`,
-					)
-					.join('\n');
 				throw new Error(
-					`decode divergence (${spec.algo.kind}/${spec.issuance}), repro in ${dir}:\n${summary}`,
+					`case ${index} (${spec.algo.kind}/${spec.issuance}) failed, repro in ${dir}:\n${failure}`,
+					{ cause: error },
 				);
 			}
-
-			// Standalone key codec, exercising the shipped key ergonomics: the SPKI
-			// import infers its algorithm straight from the DER (no hint), and the
-			// PKCS#8 private key bridges to its public half via derivePublicKey. Both
-			// re-exported SPKIs must byte-match OpenSSL's.
-			const inferredSpki = await exportSpkiDer(unwrap(await importSpkiDer(openssl.spkiDer)));
-			expect(inferredSpki).toEqual(openssl.spkiDer);
-
-			const privateKey = unwrap(await importPkcs8Pem(subjectKeyPem, importInputFor(spec.algo)));
-			const derivedSpki = await exportSpkiDer(await derivePublicKey(privateKey));
-			expect(derivedSpki).toEqual(openssl.spkiDer);
 		});
 	}
 

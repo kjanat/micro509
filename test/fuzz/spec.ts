@@ -18,17 +18,18 @@ export type FuzzKeyAlgo =
 	| {
 			readonly kind: 'rsa';
 			readonly bits: 2048 | 3072 | 4096;
-			readonly hash: RsaFuzzHash;
+			readonly hash: FuzzHash;
 			readonly pss: boolean;
 	  }
 	| {
 			readonly kind: 'ecdsa';
 			readonly curve: 'P-256' | 'P-384' | 'P-521';
-			readonly hash: RsaFuzzHash;
+			readonly hash: FuzzHash;
 	  }
 	| { readonly kind: 'ed25519' };
 
-type RsaFuzzHash = 'SHA-256' | 'SHA-384' | 'SHA-512';
+/** Signing hash shared by the RSA and ECDSA variants. */
+type FuzzHash = 'SHA-256' | 'SHA-384' | 'SHA-512';
 
 /** One relative distinguished name attribute (each becomes its own single-attr RDN). */
 export interface DnAttr {
@@ -67,7 +68,7 @@ export interface FuzzCase {
 	readonly spec: CertSpec;
 }
 
-const HASHES: readonly RsaFuzzHash[] = ['SHA-256', 'SHA-384', 'SHA-512'];
+const HASHES: readonly FuzzHash[] = ['SHA-256', 'SHA-384', 'SHA-512'];
 const RSA_BITS: readonly (2048 | 3072 | 4096)[] = [2048, 3072, 4096];
 const CURVES: readonly ('P-256' | 'P-384' | 'P-521')[] = ['P-256', 'P-384', 'P-521'];
 const COUNTRIES: readonly string[] = ['US', 'NL', 'DE', 'JP', 'BR'];
@@ -151,27 +152,44 @@ export function drawCase(rng: Rng, index: number): FuzzCase {
 	return { index, spec };
 }
 
+/** Compile-time exhaustiveness guard: only reachable if a FuzzKeyAlgo variant is unhandled. */
+function assertUnreachable(algo: never): never {
+	throw new Error(`unhandled FuzzKeyAlgo variant: ${JSON.stringify(algo)}`);
+}
+
 /** micro509 public-key import hint for a spec's algorithm (SPKI is scheme-agnostic). */
 export function importInputFor(algo: FuzzKeyAlgo): PublicKeyImportInput {
-	if (algo.kind === 'ed25519') return { kind: 'ed25519' };
-	if (algo.kind === 'ecdsa') return { kind: 'ecdsa', curve: algo.curve };
-	return { kind: 'rsa', hash: algo.hash };
+	switch (algo.kind) {
+		case 'ed25519':
+			return { kind: 'ed25519' };
+		case 'ecdsa':
+			return { kind: 'ecdsa', curve: algo.curve };
+		case 'rsa':
+			return { kind: 'rsa', hash: algo.hash };
+		default:
+			return assertUnreachable(algo);
+	}
 }
 
 /** Expected `signatureAlgorithmOid` micro509 must decode, derived from the issuer's algo. */
 export function expectedSignatureOid(algo: FuzzKeyAlgo): string {
-	if (algo.kind === 'ed25519') return '1.3.101.112';
-	if (algo.kind === 'ecdsa') {
-		return {
-			'SHA-256': '1.2.840.10045.4.3.2',
-			'SHA-384': '1.2.840.10045.4.3.3',
-			'SHA-512': '1.2.840.10045.4.3.4',
-		}[algo.hash];
+	switch (algo.kind) {
+		case 'ed25519':
+			return '1.3.101.112';
+		case 'ecdsa':
+			return {
+				'SHA-256': '1.2.840.10045.4.3.2',
+				'SHA-384': '1.2.840.10045.4.3.3',
+				'SHA-512': '1.2.840.10045.4.3.4',
+			}[algo.hash];
+		case 'rsa':
+			if (algo.pss) return '1.2.840.113549.1.1.10';
+			return {
+				'SHA-256': '1.2.840.113549.1.1.11',
+				'SHA-384': '1.2.840.113549.1.1.12',
+				'SHA-512': '1.2.840.113549.1.1.13',
+			}[algo.hash];
+		default:
+			return assertUnreachable(algo);
 	}
-	if (algo.pss) return '1.2.840.113549.1.1.10';
-	return {
-		'SHA-256': '1.2.840.113549.1.1.11',
-		'SHA-384': '1.2.840.113549.1.1.12',
-		'SHA-512': '1.2.840.113549.1.1.13',
-	}[algo.hash];
 }
