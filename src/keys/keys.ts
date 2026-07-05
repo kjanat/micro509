@@ -1108,17 +1108,32 @@ export function importPublicJwk(
 /**
  * Import a private signing key from a JSON Web Key.
  *
+ * @param jwk - JSON Web Key object with private key components
+ * @param algorithm - Expected algorithm (must match JWK's `kty` and `crv`)
+ * @returns Extractable CryptoKey with `sign` usage
+ *
+ * @throws {Error} If JWK is malformed, lacks private key material, or algorithm doesn't match
+ *
  * @example
  * ```ts
  * const jwk = { kty: 'EC', crv: 'P-256', x: '...', y: '...', d: '...' };
  * const key = await importPrivateJwk(jwk, { kind: 'ecdsa', curve: 'P-256' });
  * ```
+ *
+ * @see {@linkcode exportPrivateJwk} for the inverse operation
  */
-export function importPrivateJwkOrThrow(
+export async function importPrivateJwkOrThrow(
 	jwk: JsonWebKey,
 	algorithm: PrivateKeyImportInput,
 ): Promise<CryptoKey> {
-	return getCrypto().subtle.importKey('jwk', jwk, toImportAlgorithm(algorithm), true, ['sign']);
+	assertPrivateJwkMatchesRequestedAlgorithm(jwk, algorithm);
+	try {
+		return await getCrypto().subtle.importKey('jwk', jwk, toImportAlgorithm(algorithm), true, [
+			'sign',
+		]);
+	} catch {
+		throw new Error('Malformed private JWK');
+	}
 }
 
 /**
@@ -1681,6 +1696,49 @@ function assertPublicJwkMatchesRequestedAlgorithm(
 		case 'ed25519':
 			if (jwk.kty !== 'OKP' || jwk.crv !== 'Ed25519' || typeof jwk.x !== 'string') {
 				throw new Error('Public JWK algorithm does not match requested import algorithm');
+			}
+			return;
+	}
+}
+
+function assertPrivateJwkMatchesRequestedAlgorithm(
+	jwk: JsonWebKey,
+	algorithm: PrivateKeyImportInput,
+): void {
+	if (jwk.k !== undefined || jwk.oth !== undefined) {
+		throw new Error('Private JWK must not contain symmetric or multi-prime key material');
+	}
+	if (typeof jwk.d !== 'string') {
+		throw new Error('Private JWK must contain private key material');
+	}
+	switch (algorithm.kind) {
+		case 'rsa':
+			if (
+				jwk.kty !== 'RSA' ||
+				typeof jwk.n !== 'string' ||
+				typeof jwk.e !== 'string' ||
+				typeof jwk.p !== 'string' ||
+				typeof jwk.q !== 'string' ||
+				typeof jwk.dp !== 'string' ||
+				typeof jwk.dq !== 'string' ||
+				typeof jwk.qi !== 'string'
+			) {
+				throw new Error('Private JWK algorithm does not match requested import algorithm');
+			}
+			return;
+		case 'ecdsa':
+			if (
+				jwk.kty !== 'EC' ||
+				jwk.crv !== algorithm.curve ||
+				typeof jwk.x !== 'string' ||
+				typeof jwk.y !== 'string'
+			) {
+				throw new Error('Private JWK algorithm does not match requested import algorithm');
+			}
+			return;
+		case 'ed25519':
+			if (jwk.kty !== 'OKP' || jwk.crv !== 'Ed25519' || typeof jwk.x !== 'string') {
+				throw new Error('Private JWK algorithm does not match requested import algorithm');
 			}
 			return;
 	}
