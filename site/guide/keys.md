@@ -329,3 +329,62 @@ console.log('encrypted pkcs1 imported:', privateKey.type);
 ```
 
 </LiveCode>
+
+## RSA-OAEP encryption
+
+Generate or import RSA keys with `scheme: 'oaep'` to get an encryption pair
+(`encrypt`/`decrypt` usages instead of `sign`/`verify`), then use
+`encryptRsaOaep` / `decryptRsaOaep`. RSA-OAEP fits at most
+modulus bytes − 2 × hash bytes − 2 per call (190 bytes for RSA-2048 with
+SHA-256) — encrypt a symmetric key, not bulk data.
+
+An optional `label` is bound to the ciphertext: decryption fails unless the
+exact same label is presented. Decryption failures are deliberately opaque
+(`decryption_failed`) — OAEP does not reveal whether the key, label, or
+ciphertext was wrong.
+
+<LiveCode>
+
+```ts
+import { generateKeyPair, unwrap } from 'micro509';
+import {
+  decryptRsaOaep,
+  encryptRsaOaep,
+} from 'micro509/keys';
+
+const keys = await generateKeyPair({
+  kind: 'rsa',
+  scheme: 'oaep',
+  modulusLength: 2048,
+});
+
+const label = new TextEncoder().encode('context-v1');
+const ciphertext = unwrap(
+  await encryptRsaOaep(
+    keys.publicKey,
+    new TextEncoder().encode('session key'),
+    { label },
+  ),
+);
+
+const plaintext = unwrap(
+  await decryptRsaOaep(keys.privateKey, ciphertext, {
+    label,
+  }),
+);
+
+// Wrong label: opaque failure, never a partial plaintext
+const wrongLabel = await decryptRsaOaep(
+  keys.privateKey,
+  ciphertext,
+);
+
+console.log(
+  'roundtrip:',
+  new TextDecoder().decode(plaintext),
+  '| wrong label code:',
+  wrongLabel.ok ? 'unexpected' : wrongLabel.code,
+);
+```
+
+</LiveCode>

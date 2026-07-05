@@ -2,7 +2,11 @@ import { describe, expect, it } from 'bun:test';
 import { X509Certificate } from 'node:crypto';
 import {
 	createCertificate,
+	decryptRsaOaep,
+	decryptRsaOaepOrThrow,
 	derivePublicKey,
+	encryptRsaOaep,
+	encryptRsaOaepOrThrow,
 	exportBinaryBase64,
 	exportEncryptedPkcs1Pem,
 	exportEncryptedPkcs8Der,
@@ -40,6 +44,7 @@ import {
 	pemEncode,
 	unwrap,
 } from '#micro509';
+import type { KeyPairMaterial } from '#micro509';
 
 /** Minimal shape every `import*` Result satisfies, success or failure. */
 type FailableImport =
@@ -942,5 +947,176 @@ describe('keys: coverage — malformed inputs', () => {
 			'malformed',
 			'Unsupported SubjectPublicKeyInfo algorithm',
 		);
+	});
+
+	describe('RSA-OAEP', () => {
+		/** One shared OAEP pair — RSA keygen is the slow part, every test reuses it. */
+		let pairCache: Promise<KeyPairMaterial> | undefined;
+		function oaepPair(): Promise<KeyPairMaterial> {
+			pairCache ??= generateKeyPair({ kind: 'rsa', scheme: 'oaep', modulusLength: 2048 });
+			return pairCache;
+		}
+
+		/** Assert an OAEP Result failed with the given code and message substring. */
+		function expectOaepFailure(
+			result:
+				| { readonly ok: true; readonly value: Uint8Array }
+				| { readonly ok: false; readonly code: string; readonly message: string },
+			code: string,
+			messagePart: string,
+		): void {
+			expect(result.ok).toBe(false);
+			if (result.ok) {
+				return;
+			}
+			expect(result.code).toBe(code);
+			expect(result.message).toContain(messagePart);
+		}
+
+		it('generates encrypt/decrypt pairs and roundtrips a message', async () => {
+			const pair = await oaepPair();
+			expect(pair.publicKey.algorithm.name).toBe('RSA-OAEP');
+			expect(pair.publicKey.usages).toContain('encrypt');
+			expect(pair.privateKey.usages).toContain('decrypt');
+
+			const plaintext = new TextEncoder().encode('booga booga session key');
+			const ciphertext = unwrap(await encryptRsaOaep(pair.publicKey, plaintext));
+			expect(ciphertext.length).toBe(256); // always modulus-sized for RSA-2048
+			expect(unwrap(await decryptRsaOaep(pair.privateKey, ciphertext))).toEqual(plaintext);
+		});
+
+		it('binds the label: decryption requires the exact same label', async () => {
+			const pair = await oaepPair();
+			const plaintext = Uint8Array.of(1, 2, 3);
+			const label = new TextEncoder().encode('context-v1');
+			const ciphertext = unwrap(await encryptRsaOaep(pair.publicKey, plaintext, { label }));
+
+			expect(unwrap(await decryptRsaOaep(pair.privateKey, ciphertext, { label }))).toEqual(
+				plaintext,
+			);
+			expectOaepFailure(
+				await decryptRsaOaep(pair.privateKey, ciphertext),
+				'decryption_failed',
+				'RSA-OAEP decryption failed',
+			);
+			expectOaepFailure(
+				await decryptRsaOaep(pair.privateKey, ciphertext, {
+					label: new TextEncoder().encode('context-v2'),
+				}),
+				'decryption_failed',
+				'RSA-OAEP decryption failed',
+			);
+		});
+
+		it('fails with decryption_failed on tampered ciphertext', async () => {
+			const pair = await oaepPair();
+			const ciphertext = unwrap(await encryptRsaOaep(pair.publicKey, Uint8Array.of(42)));
+			const tampered = Uint8Array.from(ciphertext);
+			const first = tampered[0];
+			if (first === undefined) {
+				throw new Error('empty ciphertext');
+			}
+			tampered[0] = first ^ 0xff;
+			expectOaepFailure(
+				await decryptRsaOaep(pair.privateKey, tampered),
+				'decryption_failed',
+				'RSA-OAEP decryption failed',
+			);
+		});
+
+		it('rejects non-OAEP and wrong-type keys with invalid_key', async () => {
+			const pair = await oaepPair();
+			const signingRsa = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
+			const payload = Uint8Array.of(1);
+
+			expectOaepFailure(
+				await encryptRsaOaep(signingRsa.publicKey, payload),
+				'invalid_key',
+				"generate or import the key with scheme: 'oaep'",
+			);
+			expectOaepFailure(
+				await encryptRsaOaep(pair.privateKey, payload),
+				'invalid_key',
+				'requires a public CryptoKey',
+			);
+			expectOaepFailure(
+				await decryptRsaOaep(pair.publicKey, payload),
+				'invalid_key',
+				'requires a private CryptoKey',
+			);
+			expectOaepFailure(
+				await decryptRsaOaep(signingRsa.privateKey, payload),
+				'invalid_key',
+				"generate or import the key with scheme: 'oaep'",
+			);
+		});
+
+		it('reports message_too_long past the OAEP capacity boundary', async () => {
+			const pair = await oaepPair();
+			// RSA-2048 + SHA-256: capacity = 256 − 2·32 − 2 = 190 bytes.
+			const atCapacity = new Uint8Array(190).fill(7);
+			const roundTripped = unwrap(
+				await decryptRsaOaep(
+					pair.privateKey,
+					unwrap(await encryptRsaOaep(pair.publicKey, atCapacity)),
+				),
+			);
+			expect(roundTripped).toEqual(atCapacity);
+			expectOaepFailure(
+				await encryptRsaOaep(pair.publicKey, new Uint8Array(191)),
+				'message_too_long',
+				'exceeds the RSA-OAEP capacity',
+			);
+		});
+
+		it('OrThrow variants throw with the same diagnostics', async () => {
+			const pair = await oaepPair();
+			const plaintext = Uint8Array.of(9, 9, 9);
+			const ciphertext = await encryptRsaOaepOrThrow(pair.publicKey, plaintext);
+			expect(await decryptRsaOaepOrThrow(pair.privateKey, ciphertext)).toEqual(plaintext);
+			await expect(decryptRsaOaepOrThrow(pair.publicKey, ciphertext)).rejects.toThrow(
+				'requires a private CryptoKey',
+			);
+			await expect(
+				decryptRsaOaepOrThrow(pair.privateKey, ciphertext, { label: Uint8Array.of(1) }),
+			).rejects.toThrow('RSA-OAEP decryption failed');
+		});
+
+		it('roundtrips OAEP keys through PKCS#8, SPKI, and JWK', async () => {
+			const pair = await oaepPair();
+			const plaintext = Uint8Array.of(4, 5, 6);
+
+			const privatePem = await pair.exportPkcs8Pem();
+			const privateFromPem = unwrap(
+				await importPkcs8Pem(privatePem, { kind: 'rsa', scheme: 'oaep' }),
+			);
+			expect(privateFromPem.algorithm.name).toBe('RSA-OAEP');
+
+			const publicFromDer = unwrap(
+				await importSpkiDer(await pair.exportSpkiDer(), { kind: 'rsa', scheme: 'oaep' }),
+			);
+			const publicFromJwk = unwrap(
+				await importPublicJwk(await pair.exportPublicJwk(), { kind: 'rsa', scheme: 'oaep' }),
+			);
+			const privateFromJwk = unwrap(
+				await importPrivateJwk(await pair.exportPrivateJwk(), { kind: 'rsa', scheme: 'oaep' }),
+			);
+
+			for (const publicKey of [publicFromDer, publicFromJwk]) {
+				const ciphertext = unwrap(await encryptRsaOaep(publicKey, plaintext));
+				expect(unwrap(await decryptRsaOaep(privateFromPem, ciphertext))).toEqual(plaintext);
+				expect(unwrap(await decryptRsaOaep(privateFromJwk, ciphertext))).toEqual(plaintext);
+			}
+		});
+
+		it('derivePublicKey yields an encrypting public key from an OAEP private key', async () => {
+			const pair = await oaepPair();
+			const derived = await derivePublicKey(pair.privateKey);
+			expect(derived.algorithm.name).toBe('RSA-OAEP');
+			expect(derived.usages).toContain('encrypt');
+			const plaintext = Uint8Array.of(7, 8);
+			const ciphertext = unwrap(await encryptRsaOaep(derived, plaintext));
+			expect(unwrap(await decryptRsaOaep(pair.privateKey, ciphertext))).toEqual(plaintext);
+		});
 	});
 });

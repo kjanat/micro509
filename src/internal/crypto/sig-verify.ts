@@ -8,7 +8,7 @@
 import { toArrayBuffer } from '#micro509/internal/asn1/asn1';
 import { readElement } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
-import type { PublicKeyImportInput, RsaHash, RsaScheme } from '#micro509/keys/keys';
+import type { PublicKeyImportInput, RsaHash, RsaSignatureScheme } from '#micro509/keys/keys';
 import { importSpkiDerOrThrow } from '#micro509/keys/keys';
 import { alternateEcdsaSignatureEncoding } from './ecdsa.ts';
 import { parseRsaPssParameters } from './rsa-pss.ts';
@@ -204,7 +204,7 @@ export function getVerifySignatureConfigResult(
 export function requireRsaPublicKey(
 	algorithmOid: string,
 	hash: RsaHash,
-	scheme: RsaScheme = 'pkcs1-v1_5',
+	scheme: RsaSignatureScheme = 'pkcs1-v1_5',
 	context = 'issuer',
 	saltLength?: number,
 ): VerifySignatureConfigResult {
