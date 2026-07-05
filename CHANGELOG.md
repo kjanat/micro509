@@ -17,6 +17,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-07-06
+
+RSA-OAEP encryption support across the whole key lifecycle: generate, import,
+derive, encrypt, decrypt.
+
+### Added
+
+- `RsaScheme` accepts `'oaep'`: `generateKeyPair`, the SPKI / PKCS#8 / JWK
+  import functions, and `derivePublicKey` produce `RSA-OAEP` keys with
+  `encrypt`/`decrypt` usages when the scheme is `'oaep'` (signature schemes
+  keep `sign`/`verify`).
+  (https://github.com/kjanat/micro509/pull/36)
+- `encryptRsaOaep` / `decryptRsaOaep` (and their `…OrThrow` siblings) encrypt
+  and decrypt small messages with an RSA-OAEP key pair, with an optional OAEP
+  `label` bound to the ciphertext. Failures are typed:
+  `'invalid_key' | 'message_too_long'` on encrypt,
+  `'invalid_key' | 'decryption_failed'` on decrypt — ciphertext-level
+  decryption failures are deliberately opaque (no padding-oracle detail).
+- `RsaSignatureScheme` narrows `RsaScheme` to the signature schemes
+  (`'pkcs1-v1_5' | 'pss'`), so certificate signature verification can never
+  silently accept an OAEP key.
+
 ## [0.8.0] - 2026-07-05
 
 Key/certificate import ergonomics and validation hardening — every API
@@ -428,7 +450,8 @@ Initial prerelease. API may change before 1.0.
 - Zero runtime dependencies, WebCrypto-native, tree-shakeable subpath exports;
   runs on Node, Bun, Deno, browsers, and Cloudflare Workers.
 
-[Unreleased]: https://github.com/kjanat/micro509/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/kjanat/micro509/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/kjanat/micro509/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/kjanat/micro509/compare/v0.7.2...v0.8.0
 [0.7.2]: https://github.com/kjanat/micro509/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/kjanat/micro509/compare/v0.7.0...v0.7.1
