@@ -30,7 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   already encodes its algorithm OID — and the EC curve OID — so when no hint is
   given the algorithm is inferred straight from the DER, letting callers import
   keys whose type isn't known ahead of time. Passing an explicit algorithm is
-  unchanged and still asserts the key matches it. ([#20])
+  unchanged and still asserts the key matches it.
+  (https://github.com/kjanat/micro509/issues/20)
 
 ## [0.7.2] - 2026-07-04
 
@@ -388,7 +389,6 @@ Initial prerelease. API may change before 1.0.
 - Zero runtime dependencies, WebCrypto-native, tree-shakeable subpath exports;
   runs on Node, Bun, Deno, browsers, and Cloudflare Workers.
 
-[#20]: https://github.com/kjanat/micro509/issues/20
 [Unreleased]: https://github.com/kjanat/micro509/compare/v0.7.2...HEAD
 [0.7.2]: https://github.com/kjanat/micro509/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/kjanat/micro509/compare/v0.7.0...v0.7.1
