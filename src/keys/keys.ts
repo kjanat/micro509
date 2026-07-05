@@ -6,14 +6,15 @@
  *
  * @example
  * ```ts
- * import { generateKeyPair, exportPkcs8Pem, importSpkiPem } from 'micro509/keys';
+ * import { unwrap } from 'micro509';
+ * import { generateKeyPair, exportSpkiPem, importSpkiPem } from 'micro509/keys';
  *
  * // Generate and export
  * const keys = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
- * const privatePem = await exportPkcs8Pem(keys.privateKey);
+ * const publicPem = await exportSpkiPem(keys.publicKey);
  *
- * // Import
- * const publicKey = await importSpkiPem(publicPem, { kind: 'ecdsa', curve: 'P-256' });
+ * // Import — Result-returning; unwrap() throws on failure
+ * const publicKey = unwrap(await importSpkiPem(publicPem, { kind: 'ecdsa', curve: 'P-256' }));
  * ```
  *
  * @module
@@ -642,7 +643,7 @@ export function importSpkiDer(
  * const pem = `-----BEGIN PUBLIC KEY-----
  * MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE...
  * -----END PUBLIC KEY-----`;
- * const key = await importSpkiPem(pem, { kind: 'ecdsa', curve: 'P-256' });
+ * const key = await importSpkiPemOrThrow(pem, { kind: 'ecdsa', curve: 'P-256' });
  * ```
  *
  * @see {@linkcode exportSpkiPem} for the inverse operation
@@ -751,7 +752,7 @@ export function importPkcs8Der(
  *
  * @example
  * ```ts
- * const key = await importPkcs8Pem(pemString, { kind: 'ecdsa', curve: 'P-256' });
+ * const key = await importPkcs8PemOrThrow(pemString, { kind: 'ecdsa', curve: 'P-256' });
  * ```
  */
 export function importPkcs8PemOrThrow(
@@ -845,7 +846,7 @@ export function importEncryptedPkcs8Der(
  *
  * @example
  * ```ts
- * const key = await importEncryptedPkcs8Pem(pem, 'secret', { kind: 'rsa' });
+ * const key = await importEncryptedPkcs8PemOrThrow(pem, 'secret', { kind: 'rsa' });
  * ```
  */
 export function importEncryptedPkcs8PemOrThrow(
@@ -1130,7 +1131,7 @@ export function importPublicJwk(
  * @example
  * ```ts
  * const jwk = { kty: 'EC', crv: 'P-256', x: '...', y: '...', d: '...' };
- * const key = await importPrivateJwk(jwk, { kind: 'ecdsa', curve: 'P-256' });
+ * const key = await importPrivateJwkOrThrow(jwk, { kind: 'ecdsa', curve: 'P-256' });
  * ```
  *
  * @see {@linkcode exportPrivateJwk} for the inverse operation
