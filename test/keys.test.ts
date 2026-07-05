@@ -774,6 +774,14 @@ describe('keys: coverage — malformed inputs', () => {
 		);
 	});
 
+	/** Read `namedCurve` off a CryptoKey algorithm without a type assertion. */
+	function namedCurveOf(algorithm: KeyAlgorithm): string {
+		if ('namedCurve' in algorithm && typeof algorithm.namedCurve === 'string') {
+			return algorithm.namedCurve;
+		}
+		throw new Error('expected an EC key algorithm with a namedCurve');
+	}
+
 	it('importSpkiDer infers the algorithm and curve from the DER when none is given', async () => {
 		const rsa = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
 		const rsaDer = await rsa.exportSpkiDer();
@@ -786,7 +794,7 @@ describe('keys: coverage — malformed inputs', () => {
 			const ecDer = await ec.exportSpkiDer();
 			const ecPublic = unwrap(await importSpkiDer(ecDer));
 			expect(ecPublic.algorithm.name).toBe('ECDSA');
-			expect((ecPublic.algorithm as EcKeyAlgorithm).namedCurve).toBe(curve);
+			expect(namedCurveOf(ecPublic.algorithm)).toBe(curve);
 			expect(await exportSpkiDer(ecPublic)).toEqual(ecDer);
 		}
 
@@ -801,8 +809,8 @@ describe('keys: coverage — malformed inputs', () => {
 		const ec = await generateKeyPair({ kind: 'ecdsa', curve: 'P-384' });
 		const fromPem = unwrap(await importSpkiPem(await ec.exportSpkiPem()));
 		const fromBase64 = unwrap(await importSpkiBase64(await exportBinaryBase64(ec.publicKey)));
-		expect((fromPem.algorithm as EcKeyAlgorithm).namedCurve).toBe('P-384');
-		expect((fromBase64.algorithm as EcKeyAlgorithm).namedCurve).toBe('P-384');
+		expect(namedCurveOf(fromPem.algorithm)).toBe('P-384');
+		expect(namedCurveOf(fromBase64.algorithm)).toBe('P-384');
 	});
 
 	it('importSpkiDer still asserts against an explicitly requested algorithm', async () => {
