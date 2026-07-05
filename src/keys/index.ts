@@ -1,7 +1,8 @@
 /**
  * Canonical key generation and import/export domain surface.
  * Owns the stable `micro509/keys` entrypoint.
- * @module
+ *
+ * @module micro509/keys
  */
 
 export type {

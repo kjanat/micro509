@@ -11,7 +11,7 @@ const jsrJson: Omit<typeof jsr, 'exports' | 'version'> & {
 	version: string;
 } = { ...jsr, exports: {} };
 
-const entries = {
+export const entries = {
 	index: 'src/index.ts',
 	keys: 'src/keys/index.ts',
 	pem: 'src/pem/index.ts',

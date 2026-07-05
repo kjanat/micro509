@@ -7,6 +7,13 @@
     "#/*": "./*",
     "#/components/*": "./theme/components/*"
   },
+  "scripts": {
+    "dev": "vitepress dev .. --host",
+    "build": "vitepress build ..",
+    "preview": "vitepress preview ..",
+    "typecheck": "vue-tsc --noEmit -p tsconfig.json",
+    "wrangler:types": "wrangler types"
+  },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.42.3",
     "@tsconfig/node24": "^24.0.4",

@@ -39,5 +39,11 @@
 		"*.json",
 		"*.mjs",
 	],
-	"exclude": ["dist", "node_modules", "site"]
+	"files": ["site/.vitepress/api-gen.ts"],
+	"exclude": [
+		"dist",
+		"node_modules",
+		"site",
+		"scripts/render-deno-doc-with-deno.ts"
+	]
 }

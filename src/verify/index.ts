@@ -1,7 +1,8 @@
 /**
  * Canonical advanced verification domain surface.
  * Owns chain validation, service identity, policy, and name-constraint APIs.
- * @module
+ *
+ * @module micro509/verify
  */
 
 export type {

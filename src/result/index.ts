@@ -1,7 +1,8 @@
 /**
  * Canonical shared result surface.
  * Owns the stable `micro509/result` entrypoint.
- * @module
+ *
+ * @module micro509/result
  */
 
 export type {

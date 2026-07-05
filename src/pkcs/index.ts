@@ -4,7 +4,7 @@
  * Owns PFX archive creation and parsing, PKCS#7 certificate bags and SignedData,
  * and PKCS#12 MAC integrity helpers.
  *
- * @module
+ * @module micro509/pkcs
  */
 
 // — pfx.ts ————————————————————————————————————————————

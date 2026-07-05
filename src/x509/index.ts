@@ -1,7 +1,8 @@
 /**
  * Canonical advanced X.509 domain surface.
  * Owns certificate, CSR, extension, name, and parse APIs behind one stable entrypoint.
- * @module
+ *
+ * @module micro509/x509
  */
 
 export type { SignatureProfileInput } from './certificate.ts';

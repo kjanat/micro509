@@ -1,7 +1,8 @@
 /**
  * Canonical revocation domain surface.
  * Owns CRL, OCSP, and revocation orchestration APIs.
- * @module
+ *
+ * @module micro509/revocation
  */
 
 export type {

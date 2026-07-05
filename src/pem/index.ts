@@ -1,7 +1,8 @@
 /**
  * Canonical PEM boundary surface.
  * Owns the stable `micro509/pem` entrypoint.
- * @module
+ *
+ * @module micro509/pem
  */
 
 export type {

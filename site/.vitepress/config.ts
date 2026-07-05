@@ -1,35 +1,50 @@
+import { execFileSync } from 'node:child_process';
 import { dirname, join, normalize } from 'node:path';
 import robotsTxt from 'vite-robots-txt';
 import svgToIco from 'vite-svg-to-ico';
 import { defineConfig, type Plugin } from 'vitepress';
-import { cloudflare } from '@cloudflare/vite-plugin';
 import markdownItTaskLists from 'markdown-it-task-lists';
 
+import { apiDocsPlugin, generateApiDocs } from './api-gen.ts';
 import jsr from '../../jsr.json' with { type: 'json' };
 import pkg from '../../package.json' with { type: 'json' };
-import typedocSidebar from '../api/typedoc-sidebar.json' with { type: 'json' };
 
-const getRequiredEnv = (names: readonly string[]): string => {
+/** Trimmed stdout of a local git command, or '' if git is unavailable/fails. */
+const gitOut = (args: readonly string[]): string => {
+	try {
+		return execFileSync('git', args, { encoding: 'utf8' }).trim();
+	} catch {
+		return '';
+	}
+};
+
+/**
+ * First non-empty override env (CI provides these), else a local-git fallback.
+ * Precedence: explicit `MICRO509_*` > Cloudflare CI > GitHub Actions > local git.
+ */
+const resolveGit = (names: readonly string[], fallback: () => string): string => {
 	for (const name of names) {
 		const v = process.env[name]?.trim();
 		if (v) return v;
 	}
-
-	throw new Error(`Missing required env: ${names.join(' or ')}. Run via package scripts.`);
+	const local = fallback().trim();
+	if (local) return local;
+	throw new Error(`Cannot resolve git info: no env (${names.join(', ')}) and local git failed.`);
 };
 
 /** Git info for edit links and cache-busting import map URLs. */
 const gitEnv = {
 	/** Branch name for edit links; also included in the import map URL to ensure cache invalidation on new commits. */
 	get branch(): string {
-		return getRequiredEnv(['MICRO509_GIT_BRANCH', 'WORKERS_CI_BRANCH', 'GITHUB_REF_NAME']);
+		return resolveGit(['MICRO509_GIT_BRANCH', 'WORKERS_CI_BRANCH', 'GITHUB_REF_NAME'], () =>
+			gitOut(['branch', '--show-current']),
+		);
 	},
 	/** Short 7-char hash for display; full hash is available via `GITHUB_SHA` in the import map URL. */
 	get commitHash(): string {
-		return getRequiredEnv(['MICRO509_GIT_COMMIT', 'WORKERS_CI_COMMIT_SHA', 'GITHUB_SHA']).slice(
-			0,
-			7,
-		);
+		return resolveGit(['MICRO509_GIT_COMMIT', 'WORKERS_CI_COMMIT_SHA', 'GITHUB_SHA'], () =>
+			gitOut(['rev-parse', 'HEAD']),
+		).slice(0, 7);
 	},
 
 	/** Cleaned GitHub url */
@@ -93,11 +108,16 @@ function importMapPlugin(): Plugin {
 	};
 }
 
+// Generate the API reference pages (module + per-symbol) at config-load time,
+// before VitePress resolves its page list — so every generated `/api/...` page
+// exists when dead-link checking runs. The plugin below only handles dev HMR.
+generateApiDocs();
+
 export default defineConfig({
 	vite: {
 		build: { chunkSizeWarningLimit: 1500 },
 		plugins: [
-			cloudflare(),
+			apiDocsPlugin(),
 			importMapPlugin(),
 			robotsTxt({ preset: 'allowAll' }),
 			svgToIco({
@@ -129,8 +149,7 @@ export default defineConfig({
 		'test/**',
 		'docs/rfc/**',
 		'CONTRIBUTING.md',
-		'anal.md',
-		'_gemini_*.md',
+		'**/_*.md',
 	],
 	ignoreDeadLinks: [/test\/fixtures\//],
 
@@ -223,19 +242,11 @@ export default defineConfig({
 					text: 'API Reference',
 					items: [
 						{ text: 'Overview', link: '/api/' },
-						{ text: 'Root Import', link: `/api/${pkg.name}` },
-						...(Array.isArray(typedocSidebar)
-							? typedocSidebar.flatMap((item: { text: string; link: string }) =>
-									item.text === pkg.name
-										? []
-										: [
-												{
-													text: `${pkg.name}/${item.text}`,
-													link: item.link.replace('/site/', '/').replace('.md', ''),
-												},
-											],
-								)
-							: []),
+						...Object.keys(jsr.exports)
+							.filter((key) => key !== '.')
+							.map((key) => key.slice('./'.length))
+							.sort()
+							.map((mod) => ({ text: `${pkg.name}/${mod}`, link: `/api/${mod}` })),
 					],
 				},
 			],

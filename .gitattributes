@@ -8,3 +8,4 @@ site/api/**/*                  -diff    linguist-generated
 site/api/**/index.md            diff   -linguist-generated
 test/fixtures/pkits/manifest.ts         linguist-generated
 test/fixtures/pkits/nist/**/*           linguist-vendored
+*.ts                            diff    linguist-language=TypeScript
