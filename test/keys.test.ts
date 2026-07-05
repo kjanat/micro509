@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import { X509Certificate } from 'node:crypto';
 import {
 	createCertificate,
+	derivePublicKey,
 	exportBinaryBase64,
 	exportEncryptedPkcs1Pem,
 	exportEncryptedPkcs8Der,
@@ -285,6 +286,54 @@ describe('keys', () => {
 		);
 		expect(await exportSpkiDer(edPub)).toEqual(await ed.exportSpkiDer());
 		expect(await exportPkcs8Der(edPriv)).toEqual(await ed.exportPkcs8Der());
+	});
+
+	it('derivePublicKey reconstructs the SPKI from an imported private key', async () => {
+		const cases = [
+			{ kind: 'rsa', modulusLength: 2048 } as const,
+			{ kind: 'ecdsa', curve: 'P-256' } as const,
+			{ kind: 'ecdsa', curve: 'P-521' } as const,
+			{ kind: 'ed25519' } as const,
+		];
+		for (const algorithm of cases) {
+			const original = await generateKeyPair(algorithm);
+			// Round-trip through PKCS#8 so we start from a bare sign-only private key.
+			const importAlgorithm =
+				algorithm.kind === 'ecdsa'
+					? { kind: 'ecdsa' as const, curve: algorithm.curve }
+					: algorithm.kind === 'rsa'
+						? { kind: 'rsa' as const }
+						: { kind: 'ed25519' as const };
+			const privateKey = unwrap(
+				await importPkcs8Pem(await original.exportPkcs8Pem(), importAlgorithm),
+			);
+			expect(privateKey.type).toBe('private');
+
+			const publicKey = await derivePublicKey(privateKey);
+			expect(publicKey.type).toBe('public');
+			expect(publicKey.usages).toEqual(['verify']);
+			expect(publicKey.algorithm.name).toBe(original.publicKey.algorithm.name);
+			expect(await exportSpkiDer(publicKey)).toEqual(await original.exportSpkiDer());
+		}
+	});
+
+	it('derivePublicKey rejects public and non-extractable keys', async () => {
+		const ec = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
+		expect(derivePublicKey(ec.publicKey)).rejects.toThrow(
+			'derivePublicKey requires a private CryptoKey',
+		);
+
+		const nonExtractable = await crypto.subtle.generateKey(
+			{ name: 'ECDSA', namedCurve: 'P-256' },
+			false,
+			['sign', 'verify'],
+		);
+		if (!('privateKey' in nonExtractable)) {
+			throw new Error('expected an asymmetric key pair');
+		}
+		expect(derivePublicKey(nonExtractable.privateKey)).rejects.toThrow(
+			'Cannot derive public key from a non-extractable private key',
+		);
 	});
 
 	it('accepts RSA-PSS and ECDSA P-521 key inputs', async () => {
