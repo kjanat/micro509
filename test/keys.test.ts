@@ -33,6 +33,7 @@ import {
 	importSec1Der,
 	importSec1Pem,
 	importSpkiBase64,
+	importSpkiDer,
 	importSpkiPem,
 	unwrap,
 } from '#micro509';
@@ -770,6 +771,60 @@ describe('keys: coverage — malformed inputs', () => {
 			importEncryptedPkcs1Pem(badPem, 'test', { kind: 'rsa' }),
 			'malformed',
 			'PEM boundaries do not match',
+		);
+	});
+
+	it('importSpkiDer infers the algorithm and curve from the DER when none is given', async () => {
+		const rsa = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
+		const rsaDer = await rsa.exportSpkiDer();
+		const rsaPublic = unwrap(await importSpkiDer(rsaDer));
+		expect(rsaPublic.algorithm.name).toBe('RSASSA-PKCS1-v1_5');
+		expect(await exportSpkiDer(rsaPublic)).toEqual(rsaDer);
+
+		for (const curve of ['P-256', 'P-384', 'P-521'] as const) {
+			const ec = await generateKeyPair({ kind: 'ecdsa', curve });
+			const ecDer = await ec.exportSpkiDer();
+			const ecPublic = unwrap(await importSpkiDer(ecDer));
+			expect(ecPublic.algorithm.name).toBe('ECDSA');
+			expect((ecPublic.algorithm as EcKeyAlgorithm).namedCurve).toBe(curve);
+			expect(await exportSpkiDer(ecPublic)).toEqual(ecDer);
+		}
+
+		const ed = await generateKeyPair({ kind: 'ed25519' });
+		const edDer = await ed.exportSpkiDer();
+		const edPublic = unwrap(await importSpkiDer(edDer));
+		expect(edPublic.algorithm.name).toBe('Ed25519');
+		expect(await exportSpkiDer(edPublic)).toEqual(edDer);
+	});
+
+	it('importSpkiPem/Base64 infer the algorithm from the encoded key', async () => {
+		const ec = await generateKeyPair({ kind: 'ecdsa', curve: 'P-384' });
+		const fromPem = unwrap(await importSpkiPem(await ec.exportSpkiPem()));
+		const fromBase64 = unwrap(await importSpkiBase64(await exportBinaryBase64(ec.publicKey)));
+		expect((fromPem.algorithm as EcKeyAlgorithm).namedCurve).toBe('P-384');
+		expect((fromBase64.algorithm as EcKeyAlgorithm).namedCurve).toBe('P-384');
+	});
+
+	it('importSpkiDer still asserts against an explicitly requested algorithm', async () => {
+		const rsa = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
+		await expectImportFailure(
+			importSpkiDer(await rsa.exportSpkiDer(), { kind: 'ecdsa', curve: 'P-256' }),
+			'malformed',
+			'SubjectPublicKeyInfo algorithm does not match requested import algorithm',
+		);
+	});
+
+	it('importSpkiDer without a hint rejects an unsupported algorithm OID', async () => {
+		const { bitString, sequence, objectIdentifier } = await import('#micro509/internal/asn1/der');
+		// A well-formed SPKI whose AlgorithmIdentifier OID the library does not support (DSA).
+		const unsupported = sequence([
+			sequence([objectIdentifier('1.2.840.10040.4.1')]),
+			bitString(Uint8Array.of(0x00), 0),
+		]);
+		await expectImportFailure(
+			importSpkiDer(unsupported),
+			'malformed',
+			'Unsupported SubjectPublicKeyInfo algorithm',
 		);
 	});
 });
