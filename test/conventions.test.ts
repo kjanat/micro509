@@ -15,6 +15,31 @@ function sourceFiles(): readonly string[] {
 	return [...new Glob('**/*.ts').scanSync({ cwd: srcDir, absolute: true })];
 }
 
+/**
+ * Names a module actually exports: `export function`/`export const`
+ * declarations plus `export { … }` list entries (honoring `as` renames) — so
+ * a name mentioned only in a comment never counts, and list-only re-exports
+ * are not missed.
+ */
+function exportedNames(source: string): ReadonlySet<string> {
+	const names = new Set<string>();
+	for (const match of source.matchAll(/^export (?:async )?(?:function|const) (\w+)/gm)) {
+		if (match[1] !== undefined) names.add(match[1]);
+	}
+	for (const block of source.matchAll(/^export (?:type )?\{([^}]*)\}/gm)) {
+		const body = block[1];
+		if (body === undefined) continue;
+		for (const entry of body.split(',')) {
+			const token = entry.trim();
+			if (token.length === 0) continue;
+			const renamed = /(?:^|\s)as\s+(\w+)$/.exec(token);
+			const name = renamed?.[1] ?? /^(?:type\s+)?(\w+)/.exec(token)?.[1];
+			if (name !== undefined) names.add(name);
+		}
+	}
+	return names;
+}
+
 function offendersMatching(pattern: RegExp): readonly string[] {
 	const offenders: string[] = [];
 	for (const file of sourceFiles()) {
@@ -33,6 +58,45 @@ describe('repo conventions (AGENTS.md / CONTRIBUTING.md)', () => {
 
 	it('src/ has no default exports', () => {
 		expect(offendersMatching(/^[ \t]*export[ \t]+default\b/m)).toEqual([]);
+	});
+
+	it('barrels re-export the OrThrow sibling of every function they expose', () => {
+		// If a module defines `fooOrThrow` and a barrel re-exports `foo`, the barrel
+		// must re-export `fooOrThrow` too — otherwise the throwing variant is
+		// implemented and documented but unreachable from the published package.
+		const orThrowByDomain = new Map<string, Set<string>>();
+		for (const file of sourceFiles()) {
+			const relative = file.slice(srcDir.length);
+			if (relative.startsWith('internal/') || relative.endsWith('index.ts')) continue;
+			const domain = relative.split('/')[0];
+			if (domain === undefined || !relative.includes('/')) continue;
+			const names = orThrowByDomain.get(domain) ?? new Set<string>();
+			for (const name of exportedNames(readFileSync(file, 'utf8'))) {
+				if (name.endsWith('OrThrow')) names.add(name);
+			}
+			orThrowByDomain.set(domain, names);
+		}
+
+		const offenders: string[] = [];
+		const barrelMissing = (barrel: string, names: Iterable<string>): void => {
+			const exported = exportedNames(readFileSync(`${srcDir}${barrel}`, 'utf8'));
+			for (const orThrowName of names) {
+				const baseName = orThrowName.slice(0, -'OrThrow'.length);
+				if (exported.has(baseName) && !exported.has(orThrowName)) {
+					offenders.push(`${barrel}: ${orThrowName}`);
+				}
+			}
+		};
+
+		const allOrThrow = new Set<string>();
+		for (const [domain, names] of orThrowByDomain) {
+			if (names.size === 0) continue;
+			barrelMissing(`${domain}/index.ts`, names);
+			for (const name of names) allOrThrow.add(name);
+		}
+		barrelMissing('index.ts', allOrThrow);
+
+		expect(offenders).toEqual([]);
 	});
 
 	it('site error-code table matches VERIFY_ERROR_CODES exactly', () => {

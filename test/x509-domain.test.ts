@@ -52,6 +52,40 @@ describe('x509 domain', () => {
 		expect(ip?.type === 'ip' && ip.value).toBe('127.0.0.1');
 	});
 
+	it('exposes OrThrow parse variants alongside the Result variants', async () => {
+		const keyPair = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
+		const { certificate } = await x509.createSelfSignedCertificate({
+			subject: { commonName: 'orthrow.example' },
+			keyPair,
+		});
+
+		expect(x509.parseCertificatePemOrThrow(certificate.pem).subject.values.commonName).toBe(
+			'orthrow.example',
+		);
+		expect(x509.parseCertificateDerOrThrow(certificate.der).subject.values.commonName).toBe(
+			'orthrow.example',
+		);
+		expect(() => x509.parseCertificatePemOrThrow('not a pem')).toThrow();
+		expect(() => x509.parseCertificateDerOrThrow(new Uint8Array([0x30, 0x00]))).toThrow();
+
+		const csr = await x509.createCertificateSigningRequest({
+			subject: { commonName: 'orthrow-csr.example' },
+			publicKey: keyPair.publicKey,
+			signerPrivateKey: keyPair.privateKey,
+		});
+
+		expect(x509.parseCertificateSigningRequestPemOrThrow(csr.pem).subject.values.commonName).toBe(
+			'orthrow-csr.example',
+		);
+		expect(x509.parseCertificateSigningRequestDerOrThrow(csr.der).subject.values.commonName).toBe(
+			'orthrow-csr.example',
+		);
+		expect(() => x509.parseCertificateSigningRequestPemOrThrow('not a pem')).toThrow();
+		expect(() =>
+			x509.parseCertificateSigningRequestDerOrThrow(new Uint8Array([0x30, 0x00])),
+		).toThrow();
+	});
+
 	it('creates a CSR and parses back subject fields', async () => {
 		const keyPair = await generateKeyPair({ kind: 'ecdsa', curve: 'P-384' });
 
