@@ -23,6 +23,7 @@ jobs:
     steps:
       - { uses: actions/checkout@v7, with: { persist-credentials: false } }
       - { uses: ./.github/actions/setup-ts, with: { install-bun: "true" } }
-      - run: runner install -f
+      - name: Install and build dist (root-barrel test imports the `micro509` package name)
+        run: runner install -f build
       - name: Run suite with randomized order (failure output includes --seed for repro)
         run: bun test --randomize --concurrent --rerun-each="${RERUNS}"
