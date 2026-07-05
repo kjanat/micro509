@@ -522,13 +522,11 @@ export async function derivePublicKey(privateKey: CryptoKey): Promise<CryptoKey>
 	if (privateKey.type !== 'private') {
 		throw new Error('derivePublicKey requires a private CryptoKey');
 	}
-	const subtle = getCrypto().subtle;
-	let privateJwk: JsonWebKey;
-	try {
-		privateJwk = await subtle.exportKey('jwk', privateKey);
-	} catch {
+	if (!privateKey.extractable) {
 		throw new Error('Cannot derive public key from a non-extractable private key');
 	}
+	const subtle = getCrypto().subtle;
+	const privateJwk = await subtle.exportKey('jwk', privateKey);
 	return subtle.importKey('jwk', toPublicJwk(privateJwk), privateKey.algorithm, true, ['verify']);
 }
 

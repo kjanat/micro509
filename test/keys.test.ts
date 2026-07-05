@@ -319,16 +319,19 @@ describe('keys', () => {
 
 	it('derivePublicKey rejects public and non-extractable keys', async () => {
 		const ec = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
-		await expect(derivePublicKey(ec.publicKey)).rejects.toThrow(
+		expect(derivePublicKey(ec.publicKey)).rejects.toThrow(
 			'derivePublicKey requires a private CryptoKey',
 		);
 
-		const nonExtractable = (await crypto.subtle.generateKey(
+		const nonExtractable = await crypto.subtle.generateKey(
 			{ name: 'ECDSA', namedCurve: 'P-256' },
 			false,
 			['sign', 'verify'],
-		)) as CryptoKeyPair;
-		await expect(derivePublicKey(nonExtractable.privateKey)).rejects.toThrow(
+		);
+		if (!('privateKey' in nonExtractable)) {
+			throw new Error('expected an asymmetric key pair');
+		}
+		expect(derivePublicKey(nonExtractable.privateKey)).rejects.toThrow(
 			'Cannot derive public key from a non-extractable private key',
 		);
 	});
