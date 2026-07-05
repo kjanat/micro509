@@ -1255,30 +1255,34 @@ function toPublicJwk(jwk: JsonWebKey): JsonWebKey {
 	return publicJwk;
 }
 
+/**
+ * Single source of truth for the NIST curve ↔ named-curve OID mapping, read in
+ * both directions by {@linkcode curveToOid} and {@linkcode oidToCurve}.
+ */
+const EC_CURVE_OIDS = [
+	['P-256', OIDS.prime256v1],
+	['P-384', OIDS.secp384r1],
+	['P-521', OIDS.secp521r1],
+] as const satisfies readonly (readonly [EcNamedCurve, string])[];
+
 /** Map a curve name to its ASN.1 OID string. */
 function curveToOid(curve: ImportEcKeyInput['curve']): string {
-	switch (curve) {
-		case 'P-256':
-			return OIDS.prime256v1;
-		case 'P-384':
-			return OIDS.secp384r1;
-		case 'P-521':
-			return OIDS.secp521r1;
+	for (const [name, oid] of EC_CURVE_OIDS) {
+		if (name === curve) {
+			return oid;
+		}
 	}
+	throw new Error(`Unsupported EC curve: ${curve}`);
 }
 
 /** Map an ASN.1 curve OID string back to its curve name, or `undefined` if unrecognized. */
 function oidToCurve(oid: string): EcNamedCurve | undefined {
-	switch (oid) {
-		case OIDS.prime256v1:
-			return 'P-256';
-		case OIDS.secp384r1:
-			return 'P-384';
-		case OIDS.secp521r1:
-			return 'P-521';
-		default:
-			return undefined;
+	for (const [name, curveOid] of EC_CURVE_OIDS) {
+		if (curveOid === oid) {
+			return name;
+		}
 	}
+	return undefined;
 }
 
 /** Map an {@linkcode RsaScheme} to the WebCrypto algorithm name string. */
