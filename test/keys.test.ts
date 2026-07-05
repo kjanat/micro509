@@ -32,10 +32,12 @@ import {
 	importPrivateJwkOrThrow,
 	importPublicJwk,
 	importSec1Der,
+	importSec1DerOrThrow,
 	importSec1Pem,
 	importSpkiBase64,
 	importSpkiDer,
 	importSpkiPem,
+	pemEncode,
 	unwrap,
 } from '#micro509';
 
@@ -720,6 +722,68 @@ describe('keys: coverage — malformed inputs', () => {
 			'malformed',
 			'PKCS#8 private key algorithm does not match requested import algorithm',
 		);
+	});
+
+	it('importSec1Der cross-checks the embedded RFC 5915 parameters curve', async () => {
+		const { explicitContext, objectIdentifier, readSequenceChildren, sequence } = await import(
+			'#micro509/internal/asn1/der'
+		);
+		const { OIDS } = await import('#micro509/internal/asn1/oids');
+		const keys = await generateKeyPair({ kind: 'ecdsa', curve: 'P-384' });
+		const sec1Der = await exportSec1Der(keys.privateKey);
+		// Re-encode with the `parameters [0]` named-curve field OpenSSL always writes.
+		const children = readSequenceChildren(sec1Der);
+		const raw = (child: (typeof children)[number]): Uint8Array =>
+			sec1Der.slice(child.start - child.headerLength, child.end);
+		const withParameters = sequence([
+			...children.slice(0, 2).map(raw),
+			explicitContext(0, objectIdentifier(OIDS.secp384r1)),
+			...children
+				.slice(2)
+				.filter((child) => child.tag !== 0xa0)
+				.map(raw),
+		]);
+		// Matching curve with parameters present still imports.
+		const reimported = unwrap(
+			await importSec1Der(withParameters, { kind: 'ecdsa', curve: 'P-384' }),
+		);
+		expect(reimported.type).toBe('private');
+		// Claiming P-256 fails in the library, not with a WebCrypto internal error.
+		await expectImportFailure(
+			importSec1Der(withParameters, { kind: 'ecdsa', curve: 'P-256' }),
+			'malformed',
+			'SEC 1 private key curve does not match requested import algorithm',
+		);
+		await expectImportFailure(
+			importSec1Pem(pemEncode('EC PRIVATE KEY', withParameters), {
+				kind: 'ecdsa',
+				curve: 'P-256',
+			}),
+			'malformed',
+			'SEC 1 private key curve does not match requested import algorithm',
+		);
+		expect(importSec1DerOrThrow(withParameters, { kind: 'ecdsa', curve: 'P-256' })).rejects.toThrow(
+			'SEC 1 private key curve does not match requested import algorithm',
+		);
+	});
+
+	it('importSec1Der reports malformed for bytes that are not an ECPrivateKey', async () => {
+		const { integerFromNumber, sequence } = await import('#micro509/internal/asn1/der');
+		await expectImportFailure(
+			importSec1Der(Uint8Array.of(0x01, 0x02, 0x03), { kind: 'ecdsa', curve: 'P-256' }),
+			'malformed',
+			'Malformed SEC 1 private key',
+		);
+		// Valid DER SEQUENCE, but not an ECPrivateKey shape.
+		const notEcPrivateKey = sequence([integerFromNumber(1), integerFromNumber(2)]);
+		await expectImportFailure(
+			importSec1Der(notEcPrivateKey, { kind: 'ecdsa', curve: 'P-256' }),
+			'malformed',
+			'Malformed SEC 1 private key',
+		);
+		expect(
+			importSec1DerOrThrow(notEcPrivateKey, { kind: 'ecdsa', curve: 'P-256' }),
+		).rejects.toThrow('Malformed SEC 1 private key');
 	});
 
 	it('encryptTraditionalPem throws on non-16-byte IV', async () => {

@@ -51,6 +51,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   WebCrypto errors instead of the library's `'malformed'` failures.
   (https://github.com/kjanat/micro509/issues/23)
 
+### Fixed
+
+- `importSec1Der` / `importSec1Pem` / `importEncryptedSec1Pem` (and their
+  `…OrThrow` variants) trusted the caller's `curve` without reading the SEC 1
+  ECPrivateKey itself. The RFC 5915 `parameters [0]` field (OpenSSL always
+  writes it) is now parsed and cross-checked: a curve mismatch fails with
+  `SEC 1 private key curve does not match requested import algorithm`, and
+  bytes that are not an ECPrivateKey fail with `Malformed SEC 1 private key` —
+  instead of both surfacing as WebCrypto's opaque "Malformed PKCS#8" error.
+  Keys without the optional parameters field import as before.
+  (https://github.com/kjanat/micro509/issues/22)
+
 ## [0.7.2] - 2026-07-04
 
 Error-classification fix for encrypted-key imports with a wrong password.

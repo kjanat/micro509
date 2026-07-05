@@ -30,6 +30,7 @@ import {
 	nullValue,
 	objectIdentifier,
 	octetString,
+	readRootElement,
 	readSequenceChildren,
 	sequence,
 } from '#micro509/internal/asn1/der';
@@ -991,15 +992,27 @@ export function importPkcs8Base64(
  * Import an EC private key from DER-encoded SEC 1 ECPrivateKey.
  *
  * SEC 1 is the legacy EC-only format. Internally converts to PKCS#8 for import.
+ * When the ECPrivateKey carries the optional RFC 5915 `parameters [0]` field
+ * (OpenSSL always writes it), its named-curve OID must match `algorithm.curve`;
+ * when the field is absent, the caller-supplied curve is trusted.
+ *
+ * @throws {Error} If DER is not an ECPrivateKey or its embedded curve doesn't match `algorithm`
  *
  * @see {@linkcode exportSec1Der} for the inverse operation
  * @see {@linkcode importSec1Pem} for PEM input
  */
-export function importSec1DerOrThrow(
+export async function importSec1DerOrThrow(
 	der: Uint8Array,
 	algorithm: ImportEcKeyInput,
 ): Promise<CryptoKey> {
-	return importPkcs8DerOrThrow(wrapSec1InPkcs8(der, algorithm.curve), algorithm);
+	let parsedSec1: ReturnType<typeof parseSec1PrivateKey>;
+	try {
+		parsedSec1 = parseSec1PrivateKey(der);
+	} catch {
+		throw new Error('Malformed SEC 1 private key');
+	}
+	assertSec1MatchesRequestedAlgorithm(parsedSec1, algorithm);
+	return await importPkcs8DerOrThrow(wrapSec1InPkcs8(der, algorithm.curve), algorithm);
 }
 
 /**
@@ -1234,6 +1247,48 @@ function parsePkcs8PrivateKey(der: Uint8Array): {
 			? { parametersOid: decodeObjectIdentifier(parameters.value) }
 			: {}),
 		privateKeyDer: privateKey.value,
+	};
+}
+
+/**
+ * Extract the optional `parameters [0]` curve identifier from a SEC 1 ECPrivateKey.
+ *
+ * RFC 5915: `ECPrivateKey ::= SEQUENCE { version INTEGER, privateKey OCTET STRING,
+ * parameters [0] ECParameters OPTIONAL, publicKey [1] BIT STRING OPTIONAL }`.
+ */
+function parseSec1PrivateKey(der: Uint8Array): {
+	/** Optional ECParameters tag inside `parameters [0]` (0x06 for a named curve). */
+	readonly parametersTag?: number;
+	/** Optional named-curve OID when the ECParameters choice is an OBJECT IDENTIFIER. */
+	readonly parametersOid?: string;
+} {
+	const children = readSequenceChildren(der);
+	const version = children[0];
+	const privateKey = children[1];
+	const third = children[2];
+	const fourth = children[3];
+	if (
+		children.length < 2 ||
+		children.length > 4 ||
+		version === undefined ||
+		version.tag !== 0x02 ||
+		privateKey === undefined ||
+		privateKey.tag !== 0x04 ||
+		(third !== undefined && third.tag !== 0xa0 && third.tag !== 0xa1) ||
+		(fourth !== undefined && (third?.tag !== 0xa0 || fourth.tag !== 0xa1))
+	) {
+		throw new Error('Malformed SEC 1 private key');
+	}
+	const parameters = third?.tag === 0xa0 ? third : undefined;
+	if (parameters === undefined) {
+		return {};
+	}
+	const ecParameters = readRootElement(parameters.value);
+	return {
+		parametersTag: ecParameters.tag,
+		...(ecParameters.tag === 0x06
+			? { parametersOid: decodeObjectIdentifier(ecParameters.value) }
+			: {}),
 	};
 }
 
@@ -1658,6 +1713,25 @@ function assertPkcs8MatchesRequestedAlgorithm(
 				throw new Error('PKCS#8 private key algorithm does not match requested import algorithm');
 			}
 			return;
+	}
+}
+
+function assertSec1MatchesRequestedAlgorithm(
+	parsedSec1: {
+		readonly parametersTag?: number;
+		readonly parametersOid?: string;
+	},
+	algorithm: ImportEcKeyInput,
+): void {
+	if (parsedSec1.parametersTag === undefined) {
+		// Parameters field absent: nothing encoded to cross-check, trust the caller.
+		return;
+	}
+	if (
+		parsedSec1.parametersTag !== 0x06 ||
+		parsedSec1.parametersOid !== curveToOid(algorithm.curve)
+	) {
+		throw new Error('SEC 1 private key curve does not match requested import algorithm');
 	}
 }
 
