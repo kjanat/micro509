@@ -94,6 +94,19 @@ console.log('spki round-trip ok:', exported === pem);
 
 </LiveCode>
 
+The algorithm argument is optional for SPKI imports. A SubjectPublicKeyInfo
+already encodes its algorithm OID (and, for EC keys, the curve), so
+`importSpkiPem`, `importSpkiDer`, and `importSpkiBase64` infer it when no hint
+is given — handy when the key type isn't known ahead of time:
+
+```ts
+// Inferred from the DER — no { kind, curve } needed.
+const publicKey = unwrap(await importSpkiPem(pem));
+```
+
+Passing an explicit algorithm still works and additionally asserts that the key
+matches it, failing with a `'malformed'` result on a mismatch.
+
 ### Derive a public key from a private key
 
 The `import*` functions for private keys hand back a bare `CryptoKey` with only

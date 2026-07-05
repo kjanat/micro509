@@ -25,6 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   straight to `exportSpkiDer`/`exportSpkiPem` without hand-rolling JWK
   surgery. Supports RSA, ECDSA, and Ed25519.
   (https://github.com/kjanat/micro509/issues/19)
+- `importSpkiDer`, `importSpkiPem`, `importSpkiBase64` (and their `…OrThrow`
+  variants) now accept an optional algorithm argument. A SubjectPublicKeyInfo
+  already encodes its algorithm OID — and the EC curve OID — so when no hint is
+  given the algorithm is inferred straight from the DER, letting callers import
+  keys whose type isn't known ahead of time. Passing an explicit algorithm is
+  unchanged and still asserts the key matches it.
+  (https://github.com/kjanat/micro509/issues/20)
 
 ## [0.7.2] - 2026-07-04
 

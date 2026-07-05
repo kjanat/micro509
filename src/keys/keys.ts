@@ -554,26 +554,37 @@ export async function exportBinaryBase64(key: CryptoKey): Promise<string> {
 /**
  * Import a public key from DER-encoded SubjectPublicKeyInfo.
  *
+ * When `algorithm` is omitted, the algorithm (and, for EC keys, the curve) is
+ * inferred from the SPKI's own AlgorithmIdentifier — useful for keys whose type
+ * isn't known ahead of time. Pass `algorithm` to additionally assert that the
+ * DER matches an expected algorithm.
+ *
  * @param der - DER-encoded SubjectPublicKeyInfo bytes
- * @param algorithm - Expected algorithm (must match key contents)
+ * @param algorithm - Optional expected algorithm; must match key contents when given
  * @returns Extractable CryptoKey with `verify` usage
  *
- * @throws {Error} If DER is malformed or algorithm doesn't match key
+ * @throws {Error} If DER is malformed, encodes an unsupported algorithm, or doesn't match `algorithm`
  *
  * @see {@linkcode exportSpkiDer} for the inverse operation
  * @see {@linkcode importSpkiPem} for PEM input
  */
 export async function importSpkiDerOrThrow(
 	der: Uint8Array,
-	algorithm: PublicKeyImportInput,
+	algorithm?: PublicKeyImportInput,
 ): Promise<CryptoKey> {
 	const parsedSpki = parseSpkiDer(der);
-	assertSpkiMatchesRequestedAlgorithm(parsedSpki, algorithm);
+	let importInput: PublicKeyImportInput;
+	if (algorithm === undefined) {
+		importInput = inferPublicKeyImportInput(parsedSpki);
+	} else {
+		assertSpkiMatchesRequestedAlgorithm(parsedSpki, algorithm);
+		importInput = algorithm;
+	}
 	try {
 		return await getCrypto().subtle.importKey(
 			'spki',
 			new Uint8Array(der),
-			toImportAlgorithm(algorithm),
+			toImportAlgorithm(importInput),
 			true,
 			['verify'],
 		);
@@ -617,7 +628,7 @@ async function encryptedImportResult(
  */
 export function importSpkiDer(
 	der: Uint8Array,
-	algorithm: PublicKeyImportInput,
+	algorithm?: PublicKeyImportInput,
 ): Promise<ImportKeyResult<CryptoKey>> {
 	return importResult(() => importSpkiDerOrThrow(der, algorithm));
 }
@@ -637,7 +648,7 @@ export function importSpkiDer(
  */
 export function importSpkiPemOrThrow(
 	pem: string,
-	algorithm: PublicKeyImportInput,
+	algorithm?: PublicKeyImportInput,
 ): Promise<CryptoKey> {
 	return importSpkiDerOrThrow(pemDecodeOrThrow('PUBLIC KEY', pem), algorithm);
 }
@@ -649,7 +660,7 @@ export function importSpkiPemOrThrow(
  */
 export function importSpkiPem(
 	pem: string,
-	algorithm: PublicKeyImportInput,
+	algorithm?: PublicKeyImportInput,
 ): Promise<ImportKeyResult<CryptoKey>> {
 	return importResult(() => importSpkiPemOrThrow(pem, algorithm));
 }
@@ -662,7 +673,7 @@ export function importSpkiPem(
  */
 export function importSpkiBase64OrThrow(
 	base64: string,
-	algorithm: PublicKeyImportInput,
+	algorithm?: PublicKeyImportInput,
 ): Promise<CryptoKey> {
 	let decoded: Uint8Array;
 	try {
@@ -680,7 +691,7 @@ export function importSpkiBase64OrThrow(
  */
 export function importSpkiBase64(
 	base64: string,
-	algorithm: PublicKeyImportInput,
+	algorithm?: PublicKeyImportInput,
 ): Promise<ImportKeyResult<CryptoKey>> {
 	return importResult(() => importSpkiBase64OrThrow(base64, algorithm));
 }
@@ -1244,16 +1255,34 @@ function toPublicJwk(jwk: JsonWebKey): JsonWebKey {
 	return publicJwk;
 }
 
+/**
+ * Single source of truth for the NIST curve ↔ named-curve OID mapping, read in
+ * both directions by {@linkcode curveToOid} and {@linkcode oidToCurve}.
+ */
+const EC_CURVE_OIDS = [
+	['P-256', OIDS.prime256v1],
+	['P-384', OIDS.secp384r1],
+	['P-521', OIDS.secp521r1],
+] as const satisfies readonly (readonly [EcNamedCurve, string])[];
+
 /** Map a curve name to its ASN.1 OID string. */
 function curveToOid(curve: ImportEcKeyInput['curve']): string {
-	switch (curve) {
-		case 'P-256':
-			return OIDS.prime256v1;
-		case 'P-384':
-			return OIDS.secp384r1;
-		case 'P-521':
-			return OIDS.secp521r1;
+	for (const [name, oid] of EC_CURVE_OIDS) {
+		if (name === curve) {
+			return oid;
+		}
 	}
+	throw new Error(`Unsupported EC curve: ${curve}`);
+}
+
+/** Map an ASN.1 curve OID string back to its curve name, or `undefined` if unrecognized. */
+function oidToCurve(oid: string): EcNamedCurve | undefined {
+	for (const [name, curveOid] of EC_CURVE_OIDS) {
+		if (curveOid === oid) {
+			return name;
+		}
+	}
+	return undefined;
 }
 
 /** Map an {@linkcode RsaScheme} to the WebCrypto algorithm name string. */
@@ -1507,6 +1536,43 @@ function parseSpkiDer(der: Uint8Array): {
 	} catch {
 		throw new Error('Malformed SubjectPublicKeyInfo');
 	}
+}
+
+/**
+ * Derive the import algorithm from a parsed SPKI's own AlgorithmIdentifier.
+ *
+ * RSA keys default to the `pkcs1-v1_5`/`SHA-256` import parameters (a plain
+ * `rsaEncryption` SPKI does not encode padding scheme or hash); EC keys carry
+ * their curve in the DER; Ed25519 is fully determined by its OID.
+ */
+function inferPublicKeyImportInput(parsedSpki: {
+	readonly algorithmOid: string;
+	readonly parametersOid?: string;
+	readonly parametersTag?: number;
+}): PublicKeyImportInput {
+	switch (parsedSpki.algorithmOid) {
+		case OIDS.rsaEncryption:
+			if (parsedSpki.parametersTag === undefined || parsedSpki.parametersTag === 0x05) {
+				return { kind: 'rsa' };
+			}
+			break;
+		case OIDS.ecPublicKey: {
+			const curve =
+				parsedSpki.parametersTag === 0x06 && parsedSpki.parametersOid !== undefined
+					? oidToCurve(parsedSpki.parametersOid)
+					: undefined;
+			if (curve !== undefined) {
+				return { kind: 'ecdsa', curve };
+			}
+			break;
+		}
+		case OIDS.ed25519:
+			if (parsedSpki.parametersTag === undefined) {
+				return { kind: 'ed25519' };
+			}
+			break;
+	}
+	throw new Error('Unsupported SubjectPublicKeyInfo algorithm');
 }
 
 function assertSpkiMatchesRequestedAlgorithm(
