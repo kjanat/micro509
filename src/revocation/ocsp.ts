@@ -661,9 +661,9 @@ export function parseOcspResponseDerOrThrow(der: Uint8Array): ParsedOcspResponse
  *
  * @example
  * ```ts
- * import { parseOcspResponsePem } from 'micro509';
+ * import { parseOcspResponsePemOrThrow } from 'micro509';
  *
- * const resp = parseOcspResponsePem(pemString);
+ * const resp = parseOcspResponsePemOrThrow(pemString);
  * if (resp.responseStatus === 'successful') {
  *   for (const entry of resp.responses ?? []) {
  *     console.log(entry.certId.serialNumberHex, entry.certStatus);

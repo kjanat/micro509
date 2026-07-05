@@ -23,6 +23,7 @@
  * import {
  * 	createSelfSignedCertificate,
  * 	parseCertificatePem,
+ * 	unwrap,
  * 	verifyCertificateChain,
  * } from 'micro509';
  *
@@ -31,7 +32,7 @@
  * 	algorithm: { kind: 'ecdsa', curve: 'P-256' },
  * });
  *
- * const parsed = parseCertificatePem(certificate.pem);
+ * const parsed = unwrap(parseCertificatePem(certificate.pem));
  * // parsed.subject.values.commonName === 'example.com'
  *
  * const result = await verifyCertificateChain({
@@ -48,6 +49,7 @@
  * 	generateKeyPair,
  * 	parseCertificateSigningRequestPem,
  * 	createCertificateSigningRequest,
+ * 	unwrap,
  * } from 'micro509';
  *
  * const keyPair = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
@@ -57,7 +59,7 @@
  * 	signerPrivateKey: keyPair.privateKey,
  * });
  *
- * const parsed = parseCertificateSigningRequestPem(csr.pem);
+ * const parsed = unwrap(parseCertificateSigningRequestPem(csr.pem));
  * // parsed.subject.values.commonName === 'example.com'
  * ```
  * @module micro509
