@@ -1,7 +1,7 @@
 /**
  * WebCrypto key generation plus import/export for PKCS#1, PKCS#8, SEC1, SPKI, and JWK.
  *
- * Supports RSA (PKCS#1v1.5 and PSS), ECDSA (P-256, P-384, P-521), and Ed25519 keys.
+ * Supports RSA (PKCS#1v1.5, PSS, and OAEP), ECDSA (P-256, P-384, P-521), and Ed25519 keys.
  * All functions use the WebCrypto API and return extractable keys.
  *
  * @example
@@ -64,7 +64,13 @@ export type {
 export type RsaHash = 'SHA-256' | 'SHA-384' | 'SHA-512';
 
 /** RSA signature padding scheme. */
-export type RsaScheme = 'pkcs1-v1_5' | 'pss';
+export type RsaSignatureScheme = 'pkcs1-v1_5' | 'pss';
+
+/**
+ * RSA padding scheme: a signature scheme, or `'oaep'` for RSA-OAEP encryption
+ * keys (usable with {@linkcode encryptRsaOaep} / {@linkcode decryptRsaOaep}).
+ */
+export type RsaScheme = RsaSignatureScheme | 'oaep';
 
 /** NIST elliptic curve for ECDSA keys. */
 export type EcNamedCurve = 'P-256' | 'P-384' | 'P-521';
@@ -77,7 +83,10 @@ export interface RsaKeyAlgorithmInput {
 	readonly modulusLength?: 2048 | 3072 | 4096;
 	/** Hash algorithm for the key. Defaults to `'SHA-256'`. */
 	readonly hash?: RsaHash;
-	/** Signature padding scheme. Defaults to `'pkcs1-v1_5'`. */
+	/**
+	 * Padding scheme. Defaults to `'pkcs1-v1_5'`. Pass `'oaep'` to generate an
+	 * RSA-OAEP encryption pair (`encrypt`/`decrypt` usages instead of `sign`/`verify`).
+	 */
 	readonly scheme?: RsaScheme;
 }
 
@@ -103,9 +112,9 @@ export type KeyAlgorithmInput =
 
 /** Key pair with convenience export helpers. Returned by {@linkcode generateKeyPair}. */
 export interface KeyPairMaterial {
-	/** The WebCrypto public key (extractable, `verify` usage). */
+	/** The WebCrypto public key (extractable, `verify` usage; `encrypt` for RSA-OAEP). */
 	readonly publicKey: CryptoKey;
-	/** The WebCrypto private key (extractable, `sign` usage). */
+	/** The WebCrypto private key (extractable, `sign` usage; `decrypt` for RSA-OAEP). */
 	readonly privateKey: CryptoKey;
 	/** Export the public key as DER-encoded SubjectPublicKeyInfo. */
 	exportSpkiDer(): Promise<Uint8Array>;
@@ -127,7 +136,10 @@ export interface ImportRsaKeyInput {
 	readonly kind: 'rsa';
 	/** Hash algorithm. Defaults to `'SHA-256'`. */
 	readonly hash?: RsaHash;
-	/** Signature padding scheme. Defaults to `'pkcs1-v1_5'`. */
+	/**
+	 * Padding scheme. Defaults to `'pkcs1-v1_5'`. Pass `'oaep'` to import an
+	 * RSA-OAEP encryption key (`encrypt`/`decrypt` usage instead of `verify`/`sign`).
+	 */
 	readonly scheme?: RsaScheme;
 }
 
@@ -221,14 +233,66 @@ export type ImportEncryptedKeyResult<T> =
 	| { readonly ok: true; readonly value: T }
 	| ErrorResult<ImportEncryptedKeyErrorCode, Record<never, never>, ImportEncryptedKeyFailure>;
 
+/** Options shared by {@linkcode encryptRsaOaep} and {@linkcode decryptRsaOaep}. */
+export interface RsaOaepOptions {
+	/**
+	 * Optional OAEP label bound to the ciphertext. Not encrypted, but decryption
+	 * fails unless the exact same label is presented. Default: empty.
+	 */
+	readonly label?: Uint8Array;
+}
+
 /**
- * Generate an asymmetric key pair for signing and verification.
+ * Machine-readable failure reason for {@linkcode encryptRsaOaep}.
+ *
+ * `'invalid_key'` when the key is not an RSA-OAEP public key with `encrypt`
+ * usage; `'message_too_long'` when the plaintext exceeds the OAEP capacity of
+ * the key (modulus bytes − 2 × hash bytes − 2).
+ */
+export type EncryptRsaOaepErrorCode = 'invalid_key' | 'message_too_long';
+
+/** Structured failure payload for {@linkcode encryptRsaOaep}. */
+export interface EncryptRsaOaepFailure extends Micro509Error<EncryptRsaOaepErrorCode> {
+	/** Always `false` for failures. */
+	readonly ok: false;
+}
+
+/** Success-or-failure result returned by {@linkcode encryptRsaOaep}. */
+export type EncryptRsaOaepResult =
+	| { readonly ok: true; readonly value: Uint8Array }
+	| ErrorResult<EncryptRsaOaepErrorCode, Record<never, never>, EncryptRsaOaepFailure>;
+
+/**
+ * Machine-readable failure reason for {@linkcode decryptRsaOaep}.
+ *
+ * `'invalid_key'` when the key is not an RSA-OAEP private key with `decrypt`
+ * usage; `'decryption_failed'` for every ciphertext-level failure (wrong key,
+ * wrong label, tampered or truncated ciphertext) — OAEP deliberately does not
+ * reveal which.
+ */
+export type DecryptRsaOaepErrorCode = 'invalid_key' | 'decryption_failed';
+
+/** Structured failure payload for {@linkcode decryptRsaOaep}. */
+export interface DecryptRsaOaepFailure extends Micro509Error<DecryptRsaOaepErrorCode> {
+	/** Always `false` for failures. */
+	readonly ok: false;
+}
+
+/** Success-or-failure result returned by {@linkcode decryptRsaOaep}. */
+export type DecryptRsaOaepResult =
+	| { readonly ok: true; readonly value: Uint8Array }
+	| ErrorResult<DecryptRsaOaepErrorCode, Record<never, never>, DecryptRsaOaepFailure>;
+
+/**
+ * Generate an asymmetric key pair for signing and verification, or — with
+ * `{ kind: 'rsa', scheme: 'oaep' }` — for RSA-OAEP encryption and decryption.
  *
  * @example
  * ```ts
  * const ecKeys = await generateKeyPair({ kind: 'ecdsa', curve: 'P-384' });
  * const rsaKeys = await generateKeyPair({ kind: 'rsa', modulusLength: 4096 });
  * const edKeys = await generateKeyPair({ kind: 'ed25519' });
+ * const oaepKeys = await generateKeyPair({ kind: 'rsa', scheme: 'oaep' });
  *
  * // Default: ECDSA P-256
  * const keys = await generateKeyPair();
@@ -239,10 +303,10 @@ export async function generateKeyPair(
 	algorithm: KeyAlgorithmInput = { kind: 'ecdsa', curve: 'P-256' },
 ): Promise<KeyPairMaterial> {
 	const subtle = getCrypto().subtle;
-	const generated = await subtle.generateKey(toGenerateKeyAlgorithm(algorithm), true, [
-		'sign',
-		'verify',
-	]);
+	const usages: KeyUsage[] = isRsaOaepInput(algorithm)
+		? ['encrypt', 'decrypt']
+		: ['sign', 'verify'];
+	const generated = await subtle.generateKey(toGenerateKeyAlgorithm(algorithm), true, usages);
 
 	if (!('publicKey' in generated) || !('privateKey' in generated)) {
 		throw new Error('Expected an asymmetric key pair');
@@ -495,18 +559,19 @@ export async function exportSpkiPem(publicKey: CryptoKey): Promise<string> {
  * Derive the matching public key from an imported (or generated) private key.
  *
  * The `import*` functions that read a PKCS#8 / PKCS#1 / SEC 1 / JWK private key
- * return a bare `CryptoKey` with only `sign` usage — there is no accompanying
- * public handle. This bridges that gap: it exports the private key's JWK,
- * strips the private components, and re-imports the public half with `verify`
- * usage, so callers can go straight to {@linkcode exportSpkiDer} /
- * {@linkcode exportSpkiPem} (e.g. to rebuild a self-signed cert or distribute
- * the public key when only the private key is on disk).
+ * return a bare `CryptoKey` with only `sign` (or, for RSA-OAEP, `decrypt`)
+ * usage — there is no accompanying public handle. This bridges that gap: it
+ * exports the private key's JWK, strips the private components, and re-imports
+ * the public half with `verify` (RSA-OAEP: `encrypt`) usage, so callers can go
+ * straight to {@linkcode exportSpkiDer} / {@linkcode exportSpkiPem} (e.g. to
+ * rebuild a self-signed cert or distribute the public key when only the
+ * private key is on disk).
  *
  * Supports RSA (`n`/`e`), ECDSA (`x`/`y`), and Ed25519 (`x`). The derived key
  * inherits the private key's algorithm parameters (hash, curve).
  *
  * @param privateKey - An extractable private `CryptoKey`
- * @returns Extractable public `CryptoKey` with `verify` usage
+ * @returns Extractable public `CryptoKey` with `verify` (RSA-OAEP: `encrypt`) usage
  *
  * @throws {Error} If the key is not a private key, is non-extractable, or uses
  * an unsupported key type
@@ -528,8 +593,11 @@ export async function derivePublicKey(privateKey: CryptoKey): Promise<CryptoKey>
 		throw new Error('Cannot derive public key from a non-extractable private key');
 	}
 	const subtle = getCrypto().subtle;
+	const usage: KeyUsage = privateKey.algorithm.name === 'RSA-OAEP' ? 'encrypt' : 'verify';
 	const privateJwk = await subtle.exportKey('jwk', privateKey);
-	return subtle.importKey('jwk', toPublicJwk(privateJwk), privateKey.algorithm, true, ['verify']);
+	return subtle.importKey('jwk', toPublicJwk(privateJwk, usage), privateKey.algorithm, true, [
+		usage,
+	]);
 }
 
 /**
@@ -588,7 +656,7 @@ export async function importSpkiDerOrThrow(
 			new Uint8Array(der),
 			toImportAlgorithm(importInput),
 			true,
-			['verify'],
+			publicKeyUsages(importInput),
 		);
 	} catch {
 		throw new Error('Malformed SubjectPublicKeyInfo');
@@ -728,7 +796,7 @@ export async function importPkcs8DerOrThrow(
 			new Uint8Array(der),
 			toImportAlgorithm(algorithm),
 			true,
-			['sign'],
+			privateKeyUsages(algorithm),
 		);
 	} catch {
 		throw new Error('Malformed PKCS#8 private key');
@@ -1099,9 +1167,13 @@ export async function importPublicJwkOrThrow(
 ): Promise<CryptoKey> {
 	assertPublicJwkMatchesRequestedAlgorithm(jwk, algorithm);
 	try {
-		return await getCrypto().subtle.importKey('jwk', jwk, toImportAlgorithm(algorithm), true, [
-			'verify',
-		]);
+		return await getCrypto().subtle.importKey(
+			'jwk',
+			jwk,
+			toImportAlgorithm(algorithm),
+			true,
+			publicKeyUsages(algorithm),
+		);
 	} catch {
 		throw new Error('Malformed public JWK');
 	}
@@ -1142,9 +1214,13 @@ export async function importPrivateJwkOrThrow(
 ): Promise<CryptoKey> {
 	assertPrivateJwkMatchesRequestedAlgorithm(jwk, algorithm);
 	try {
-		return await getCrypto().subtle.importKey('jwk', jwk, toImportAlgorithm(algorithm), true, [
-			'sign',
-		]);
+		return await getCrypto().subtle.importKey(
+			'jwk',
+			jwk,
+			toImportAlgorithm(algorithm),
+			true,
+			privateKeyUsages(algorithm),
+		);
 	} catch {
 		throw new Error('Malformed private JWK');
 	}
@@ -1160,6 +1236,174 @@ export function importPrivateJwk(
 	algorithm: PrivateKeyImportInput,
 ): Promise<ImportKeyResult<CryptoKey>> {
 	return importResult(() => importPrivateJwkOrThrow(jwk, algorithm));
+}
+
+/**
+ * Encrypt a small message with an RSA-OAEP public key.
+ *
+ * The key must have been generated or imported with `{ kind: 'rsa', scheme: 'oaep' }`.
+ * RSA-OAEP encrypts at most modulus bytes − 2 × hash bytes − 2 per call
+ * (190 bytes for a 2048-bit key with SHA-256) — encrypt a symmetric key, not
+ * bulk data.
+ *
+ * @param publicKey - RSA-OAEP public `CryptoKey` with `encrypt` usage
+ * @param plaintext - Message bytes, at most the OAEP capacity of the key
+ * @param options - Optional OAEP label bound to the ciphertext
+ *
+ * @throws {Error} If the key is not an RSA-OAEP public encryption key, or the
+ * plaintext exceeds the key's OAEP capacity
+ *
+ * @example
+ * ```ts
+ * const keys = await generateKeyPair({ kind: 'rsa', scheme: 'oaep' });
+ * const ciphertext = await encryptRsaOaepOrThrow(
+ * 	keys.publicKey,
+ * 	new TextEncoder().encode('session key'),
+ * );
+ * ```
+ *
+ * @see {@linkcode decryptRsaOaepOrThrow} for the inverse operation
+ * @see `encryptRsaOaep` for the Result-returning variant
+ */
+export async function encryptRsaOaepOrThrow(
+	publicKey: CryptoKey,
+	plaintext: Uint8Array,
+	options: RsaOaepOptions = {},
+): Promise<Uint8Array> {
+	const keyProblem = validateRsaOaepKey(publicKey, 'public', 'encrypt');
+	if (keyProblem !== undefined) {
+		throw new Error(keyProblem);
+	}
+	try {
+		return new Uint8Array(
+			await getCrypto().subtle.encrypt(
+				toRsaOaepParams(options),
+				publicKey,
+				toArrayBuffer(plaintext),
+			),
+		);
+	} catch (error) {
+		rethrowIfInvariant(error);
+		throw new Error(
+			'Plaintext exceeds the RSA-OAEP capacity of the key (modulus bytes − 2 × hash bytes − 2)',
+		);
+	}
+}
+
+/**
+ * Encrypt a small message with an RSA-OAEP public key.
+ *
+ * @example
+ * ```ts
+ * const keys = await generateKeyPair({ kind: 'rsa', scheme: 'oaep' });
+ * const encrypted = await encryptRsaOaep(keys.publicKey, plaintext);
+ * if (!encrypted.ok) {
+ * 	// encrypted.code: 'invalid_key' | 'message_too_long'
+ * 	throw new Error(encrypted.message);
+ * }
+ * const ciphertext = encrypted.value;
+ * ```
+ *
+ * @see `encryptRsaOaepOrThrow` for the throwing variant
+ */
+export async function encryptRsaOaep(
+	publicKey: CryptoKey,
+	plaintext: Uint8Array,
+	options: RsaOaepOptions = {},
+): Promise<EncryptRsaOaepResult> {
+	const keyProblem = validateRsaOaepKey(publicKey, 'public', 'encrypt');
+	if (keyProblem !== undefined) {
+		return failureResult('invalid_key', keyProblem);
+	}
+	try {
+		return successResult(await encryptRsaOaepOrThrow(publicKey, plaintext, options));
+	} catch (error) {
+		rethrowIfInvariant(error);
+		return failureResult(
+			'message_too_long',
+			error instanceof Error ? error.message : 'Plaintext exceeds the RSA-OAEP capacity',
+		);
+	}
+}
+
+/**
+ * Decrypt an RSA-OAEP ciphertext with the matching private key.
+ *
+ * The key must have been generated or imported with `{ kind: 'rsa', scheme: 'oaep' }`,
+ * and `options.label` must repeat the label used at encryption time (if any).
+ *
+ * @param privateKey - RSA-OAEP private `CryptoKey` with `decrypt` usage
+ * @param ciphertext - Ciphertext produced by {@linkcode encryptRsaOaep} (or any RSA-OAEP encryptor)
+ * @param options - OAEP label matching the one bound at encryption
+ *
+ * @throws {Error} If the key is not an RSA-OAEP private decryption key, or
+ * decryption fails — wrong key, wrong label, or corrupted ciphertext (OAEP
+ * deliberately does not reveal which)
+ *
+ * @example
+ * ```ts
+ * const plaintext = await decryptRsaOaepOrThrow(keys.privateKey, ciphertext);
+ * ```
+ *
+ * @see {@linkcode encryptRsaOaepOrThrow} for the inverse operation
+ * @see `decryptRsaOaep` for the Result-returning variant
+ */
+export async function decryptRsaOaepOrThrow(
+	privateKey: CryptoKey,
+	ciphertext: Uint8Array,
+	options: RsaOaepOptions = {},
+): Promise<Uint8Array> {
+	const keyProblem = validateRsaOaepKey(privateKey, 'private', 'decrypt');
+	if (keyProblem !== undefined) {
+		throw new Error(keyProblem);
+	}
+	try {
+		return new Uint8Array(
+			await getCrypto().subtle.decrypt(
+				toRsaOaepParams(options),
+				privateKey,
+				toArrayBuffer(ciphertext),
+			),
+		);
+	} catch (error) {
+		rethrowIfInvariant(error);
+		throw new Error('RSA-OAEP decryption failed: wrong key, wrong label, or corrupted ciphertext');
+	}
+}
+
+/**
+ * Decrypt an RSA-OAEP ciphertext with the matching private key.
+ *
+ * @example
+ * ```ts
+ * const decrypted = await decryptRsaOaep(keys.privateKey, ciphertext);
+ * if (!decrypted.ok) {
+ * 	// decrypted.code: 'invalid_key' | 'decryption_failed'
+ * 	throw new Error(decrypted.message);
+ * }
+ * const plaintext = decrypted.value;
+ * ```
+ *
+ * @see `decryptRsaOaepOrThrow` for the throwing variant
+ */
+export async function decryptRsaOaep(
+	privateKey: CryptoKey,
+	ciphertext: Uint8Array,
+	options: RsaOaepOptions = {},
+): Promise<DecryptRsaOaepResult> {
+	const keyProblem = validateRsaOaepKey(privateKey, 'private', 'decrypt');
+	if (keyProblem !== undefined) {
+		return failureResult('invalid_key', keyProblem);
+	}
+	try {
+		return successResult(await decryptRsaOaepOrThrow(privateKey, ciphertext, options));
+	} catch (error) {
+		rethrowIfInvariant(error);
+		return failureResult(
+			'decryption_failed',
+			error instanceof Error ? error.message : 'RSA-OAEP decryption failed',
+		);
+	}
 }
 
 /** Map a {@linkcode KeyAlgorithmInput} to the WebCrypto `generateKey` algorithm parameter. */
@@ -1312,7 +1556,7 @@ function wrapSec1InPkcs8(der: Uint8Array, curve: ImportEcKeyInput['curve']): Uin
 }
 
 /** Project a private JWK onto its public-only members, discarding private key material. */
-function toPublicJwk(jwk: JsonWebKey): JsonWebKey {
+function toPublicJwk(jwk: JsonWebKey, usage: KeyUsage): JsonWebKey {
 	if (jwk.kty !== 'RSA' && jwk.kty !== 'EC' && jwk.kty !== 'OKP') {
 		throw new Error(`Cannot derive public key: unsupported JWK key type ${String(jwk.kty)}`);
 	}
@@ -1321,7 +1565,7 @@ function toPublicJwk(jwk: JsonWebKey): JsonWebKey {
 	for (const field of ['d', 'p', 'q', 'dp', 'dq', 'qi', 'oth', 'k'] as const) {
 		delete publicJwk[field];
 	}
-	publicJwk.key_ops = ['verify'];
+	publicJwk.key_ops = [usage];
 	publicJwk.ext = true;
 	return publicJwk;
 }
@@ -1359,11 +1603,62 @@ function oidToCurve(oid: string): EcNamedCurve | undefined {
 /** Map an {@linkcode RsaScheme} to the WebCrypto algorithm name string. */
 function rsaSchemeToWebCryptoAlgorithmName(
 	scheme: RsaScheme | undefined,
-): 'RSASSA-PKCS1-v1_5' | 'RSA-PSS' {
+): 'RSASSA-PKCS1-v1_5' | 'RSA-PSS' | 'RSA-OAEP' {
 	if (scheme === 'pss') {
 		return 'RSA-PSS';
 	}
+	if (scheme === 'oaep') {
+		return 'RSA-OAEP';
+	}
 	return 'RSASSA-PKCS1-v1_5';
+}
+
+/** `true` when the algorithm input selects RSA-OAEP, whose keys carry encrypt/decrypt usages. */
+function isRsaOaepInput(algorithm: KeyAlgorithmInput | PublicKeyImportInput): boolean {
+	return algorithm.kind === 'rsa' && algorithm.scheme === 'oaep';
+}
+
+/** Key usages for an imported public key: `verify`, or `encrypt` for RSA-OAEP. */
+function publicKeyUsages(algorithm: PublicKeyImportInput): KeyUsage[] {
+	return isRsaOaepInput(algorithm) ? ['encrypt'] : ['verify'];
+}
+
+/** Key usages for an imported private key: `sign`, or `decrypt` for RSA-OAEP. */
+function privateKeyUsages(algorithm: PrivateKeyImportInput): KeyUsage[] {
+	return isRsaOaepInput(algorithm) ? ['decrypt'] : ['sign'];
+}
+
+/**
+ * Diagnose a key unfit for the given RSA-OAEP operation.
+ *
+ * Returns a human-readable problem description, or `undefined` when the key is
+ * usable — keeping key-level failures (`'invalid_key'`) separable from
+ * ciphertext-level failures before WebCrypto is ever called.
+ */
+function validateRsaOaepKey(
+	key: CryptoKey,
+	type: 'public' | 'private',
+	usage: 'encrypt' | 'decrypt',
+): string | undefined {
+	const operation = usage === 'encrypt' ? 'encryption' : 'decryption';
+	if (key.type !== type) {
+		return `RSA-OAEP ${operation} requires a ${type} CryptoKey`;
+	}
+	if (key.algorithm.name !== 'RSA-OAEP') {
+		return `RSA-OAEP ${operation} requires an RSA-OAEP key (got ${key.algorithm.name}); generate or import the key with scheme: 'oaep'`;
+	}
+	if (!key.usages.includes(usage)) {
+		return `RSA-OAEP ${operation} requires a key with '${usage}' usage`;
+	}
+	return undefined;
+}
+
+/** Build the WebCrypto RSA-OAEP params, attaching the optional label. */
+function toRsaOaepParams(options: RsaOaepOptions): RsaOaepParams {
+	return {
+		name: 'RSA-OAEP',
+		...(options.label === undefined ? {} : { label: toArrayBuffer(options.label) }),
+	};
 }
 
 /** Encrypt DER key material as an OpenSSL-style `Proc-Type: 4,ENCRYPTED` PEM block. */

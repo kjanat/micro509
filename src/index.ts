@@ -67,10 +67,16 @@
 
 // ── keys ─────────────────────────────────────────────────────────────
 export type {
+	DecryptRsaOaepErrorCode,
+	DecryptRsaOaepFailure,
+	DecryptRsaOaepResult,
 	EcKeyAlgorithmInput,
 	EcNamedCurve,
 	Ed25519KeyAlgorithmInput,
 	EncryptedPkcs8Options,
+	EncryptRsaOaepErrorCode,
+	EncryptRsaOaepFailure,
+	EncryptRsaOaepResult,
 	ImportEcKeyInput,
 	ImportEd25519KeyInput,
 	ImportEncryptedKeyErrorCode,
@@ -87,10 +93,16 @@ export type {
 	PublicKeyImportInput,
 	RsaHash,
 	RsaKeyAlgorithmInput,
+	RsaOaepOptions,
 	RsaScheme,
+	RsaSignatureScheme,
 } from './keys/index.ts';
 export {
+	decryptRsaOaep,
+	decryptRsaOaepOrThrow,
 	derivePublicKey,
+	encryptRsaOaep,
+	encryptRsaOaepOrThrow,
 	exportBinaryBase64,
 	exportEncryptedPkcs1Pem,
 	exportEncryptedPkcs8Der,
