@@ -1,22 +1,20 @@
 // @ts-check
 import { argv, env } from 'node:process';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import pkg from '#pkg' with { type: 'json' };
 
-const root = resolve(dirname(fileURLToPath(import.meta.resolve('#pkg'))));
+const root = new URL('..', import.meta.url).pathname;
 
-/** @type {Partial<import("typedoc").TypeDocOptions> & Partial<import("typedoc-plugin-markdown").PluginOptions>} */
+/** @type {Partial<import("../site/.vitepress/node_modules/typedoc/dist/index.d.ts").TypeDocOptions> & Partial<import("../site/.vitepress/node_modules/typedoc-plugin-markdown/dist/index.d.ts").PluginOptions>} */
 const config = {
 	plugin: ['typedoc-plugin-markdown', 'typedoc-vitepress-theme'],
 	name: pkg.name,
 	cname: new URL(pkg.homepage).hostname,
 	includeVersion: true,
 	githubPages: false, // This inserts a .nojekyll file, but we deploy with an Action, so we don't need it.
-	entryPoints: [`${root}/src/**/index.ts`],
+	entryPoints: [`${root}src/**/index.ts`],
 	entryPointStrategy: 'resolve',
-	tsconfig: `${root}/tsconfig.src.json`,
-	out: `${root}/site/api`,
+	tsconfig: `${root}tsconfig.src.json`,
+	out: `${root}site/api`,
 	gitRevision: getRequiredEnv(),
 	excludePrivate: true,
 	excludeInternal: true,

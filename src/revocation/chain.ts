@@ -115,8 +115,8 @@ export interface CheckChainRevocationInput {
 /**
  * Granular reasons why revocation status could not be determined.
  *
- * Returned in {@linkcode CertificateRevocationStatus.indeterminateReasons} when
- * `status` is `'indeterminate'`. Grouped by category:
+ * Returned in {@linkcode CertificateRevocationStatus}'s `indeterminateReasons`
+ * when `status` is `'indeterminate'`. Grouped by category:
  *
  * - **Evidence not found**: `no_applicable_crl`, `no_applicable_ocsp`
  * - **Scope mismatch**: `distribution_point_mismatch`, `issuer_name_mismatch`,
@@ -157,7 +157,7 @@ export type RevocationIndeterminateReason = (typeof REVOCATION_INDETERMINATE_REA
 /**
  * Identifies the source of revocation evidence.
  *
- * Included in {@linkcode CertificateRevocationStatus.source} when status is
+ * Included in {@linkcode CertificateRevocationStatus}'s `source` when status is
  * `'good'` or `'revoked'` to indicate which CRL or OCSP response provided the answer.
  */
 export interface RevocationSource {

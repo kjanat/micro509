@@ -5,6 +5,7 @@
 		"moduleResolution": "NodeNext",
 		"lib": ["ES2024", "DOM"],
 		"types": ["bun", "node"],
+		"typeRoots": ["./node_modules/@types", "./site/.vitepress/node_modules/@types"],
 		"skipLibCheck": true,
 		"strict": true,
 		"noUncheckedIndexedAccess": true,
@@ -29,6 +30,7 @@
 		}
 	},
 	"include": [
+		".config",
 		"src",
 		"test",
 		"scripts",

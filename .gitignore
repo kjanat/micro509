@@ -173,6 +173,6 @@ src/**/*.d.ts
 .vitepress/dist/
 .playwright-cli
 .opencode/state/
-anal.md
 test/fixtures/pkits/nist/PKITS_data/
 *import_map.json
+/_*.md
