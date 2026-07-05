@@ -19,6 +19,20 @@ describe('utility domains', () => {
 			expect(reExported).toBe(exported);
 		});
 
+		it('exposes OrThrow import variants alongside the Result variants', async () => {
+			const pair = await keys.generateKeyPair(ecAlgorithm);
+			const exported = await keys.exportPkcs8Pem(pair.privateKey);
+			const imported = await keys.importPkcs8PemOrThrow(exported, ecAlgorithm);
+			expect(await keys.exportPkcs8Pem(imported)).toBe(exported);
+
+			const publicPem = await keys.exportSpkiPem(pair.publicKey);
+			const publicImported = await keys.importSpkiPemOrThrow(publicPem, ecAlgorithm);
+			expect(await keys.exportSpkiPem(publicImported)).toBe(publicPem);
+
+			expect(() => keys.importPkcs8PemOrThrow('not a pem', ecAlgorithm)).toThrow();
+			expect(() => keys.importSpkiPemOrThrow('not a pem', ecAlgorithm)).toThrow();
+		});
+
 		it('round-trips a public key through SPKI PEM', async () => {
 			const pair = await keys.generateKeyPair(ecAlgorithm);
 			const exported = await keys.exportSpkiPem(pair.publicKey);

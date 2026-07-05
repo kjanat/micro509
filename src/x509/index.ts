@@ -109,7 +109,11 @@ export {
 	findExtension,
 	parseCertificateChainPem,
 	parseCertificateDer,
+	parseCertificateDerOrThrow,
 	parseCertificatePem,
+	parseCertificatePemOrThrow,
 	parseCertificateSigningRequestDer,
+	parseCertificateSigningRequestDerOrThrow,
 	parseCertificateSigningRequestPem,
+	parseCertificateSigningRequestPemOrThrow,
 } from './parse.ts';
