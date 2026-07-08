@@ -1,8 +1,7 @@
 import { Glob } from 'bun';
 import { describe, expect, it } from 'bun:test';
-import { readFileSync } from 'node:fs';
-import { VERIFY_ERROR_CODES } from '#micro509';
-import { srcRoot } from '#test/helpers';
+import { VERIFY_ERROR_CODES } from '#micro509/verify';
+import { srcRoot, projectRoot } from '#test/helpers';
 
 function sourceFiles(): readonly string[] {
 	return [...new Glob('**/*.ts').scanSync({ cwd: srcRoot, absolute: true })];
@@ -33,10 +32,10 @@ function exportedNames(source: string): ReadonlySet<string> {
 	return names;
 }
 
-function offendersMatching(pattern: RegExp): readonly string[] {
+async function offendersMatching(pattern: RegExp): Promise<readonly string[]> {
 	const offenders: string[] = [];
 	for (const file of sourceFiles()) {
-		if (pattern.test(readFileSync(file, 'utf8'))) {
+		if (pattern.test(await Bun.file(file).text())) {
 			offenders.push(file.slice(srcRoot.length));
 		}
 	}
@@ -44,16 +43,18 @@ function offendersMatching(pattern: RegExp): readonly string[] {
 }
 
 describe('repo conventions (AGENTS.md / CONTRIBUTING.md)', () => {
-	it('src/ declares no classes', () => {
+	it('src/ declares no classes', async () => {
 		// Line must begin (after indentation, optional `export`/`abstract`) with `class`.
-		expect(offendersMatching(/^[ \t]*(?:export[ \t]+)?(?:abstract[ \t]+)?class[ \t]/m)).toEqual([]);
+		expect(
+			await offendersMatching(/^[ \t]*(?:export[ \t]+)?(?:abstract[ \t]+)?class[ \t]/m),
+		).toEqual([]);
 	});
 
-	it('src/ has no default exports', () => {
-		expect(offendersMatching(/^[ \t]*export[ \t]+default\b/m)).toEqual([]);
+	it('src/ has no default exports', async () => {
+		expect(await offendersMatching(/^[ \t]*export[ \t]+default\b/m)).toEqual([]);
 	});
 
-	it('barrels re-export the OrThrow sibling of every function they expose', () => {
+	it('barrels re-export the OrThrow sibling of every function they expose', async () => {
 		// If a module defines `fooOrThrow` and a barrel re-exports `foo`, the barrel
 		// must re-export `fooOrThrow` too — otherwise the throwing variant is
 		// implemented and documented but unreachable from the published package.
@@ -64,15 +65,15 @@ describe('repo conventions (AGENTS.md / CONTRIBUTING.md)', () => {
 			const domain = relative.split('/')[0];
 			if (domain === undefined || !relative.includes('/')) continue;
 			const names = orThrowByDomain.get(domain) ?? new Set<string>();
-			for (const name of exportedNames(readFileSync(file, 'utf8'))) {
+			for (const name of exportedNames(await Bun.file(file).text())) {
 				if (name.endsWith('OrThrow')) names.add(name);
 			}
 			orThrowByDomain.set(domain, names);
 		}
 
 		const offenders: string[] = [];
-		const barrelMissing = (barrel: string, names: Iterable<string>): void => {
-			const exported = exportedNames(readFileSync(`${srcRoot}${barrel}`, 'utf8'));
+		const barrelMissing = async (barrel: string, names: Iterable<string>): Promise<void> => {
+			const exported = exportedNames(await Bun.file(`${srcRoot}/${barrel}`).text());
 			for (const orThrowName of names) {
 				const baseName = orThrowName.slice(0, -'OrThrow'.length);
 				if (exported.has(baseName) && !exported.has(orThrowName)) {
@@ -84,16 +85,16 @@ describe('repo conventions (AGENTS.md / CONTRIBUTING.md)', () => {
 		const allOrThrow = new Set<string>();
 		for (const [domain, names] of orThrowByDomain) {
 			if (names.size === 0) continue;
-			barrelMissing(`${domain}/index.ts`, names);
+			await barrelMissing(`${domain}/index.ts`, names);
 			for (const name of names) allOrThrow.add(name);
 		}
-		barrelMissing('index.ts', allOrThrow);
+		await barrelMissing('index.ts', allOrThrow);
 
 		expect(offenders).toEqual([]);
 	});
 
-	it('site error-code table matches VERIFY_ERROR_CODES exactly', () => {
-		const guide = readFileSync(new URL('../site/guide/verification.md', import.meta.url), 'utf8');
+	it('site error-code table matches VERIFY_ERROR_CODES exactly', async () => {
+		const guide = await Bun.file(`${projectRoot}/site/guide/verification.md`).text();
 		// First backtick-wrapped snake_case token of each table row
 		const documented = [...guide.matchAll(/^\| `([a-z0-9_]+)`/gm)].map((m) => m[1]);
 		expect([...documented].sort()).toEqual([...VERIFY_ERROR_CODES].sort());

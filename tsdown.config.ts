@@ -45,7 +45,7 @@ export default defineConfig({
 				]),
 			);
 			jsrNext.version = pkg.version;
-			await writeFile('jsr.json', JSON.stringify(jsrNext, null, '\t') + '\n');
+			await writeFile('jsr.json', `${JSON.stringify(jsrNext, null, '\t')}\n`);
 		},
 	},
 	exports: {
