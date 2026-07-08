@@ -60,7 +60,7 @@
 		},
 		"vtsls": {
 			"settings": {
-				"typescript": { "tsdk": "./node_modules/typescript-6/lib/" }
+				"typescript": { "tsdk": "./node_modules/typescript/lib/" }
 			}
 		},
 		"dprint": {
