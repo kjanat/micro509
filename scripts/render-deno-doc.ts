@@ -16,16 +16,18 @@
  * @module
  */
 
-import { $, argv } from 'bun';
+import { $, argv, stdout } from 'bun';
+
+import pkg from '#pkg' with { type: 'json' };
 
 import type { ApiModule } from './render-deno-doc.shared.ts';
 import { publicEntrypoints, renderDocuments } from './render-deno-doc.shared.ts';
 
 await $`bun scripts/gen-deno-importmap.ts`.quiet();
 const raw =
-	await $`deno doc --no-npm --import-map deno.import_map.json --json --name=micro509 ${[...publicEntrypoints]}`.text();
+	await $`deno doc --no-npm --import-map deno.import_map.json --json --name=${pkg.name} ${[...publicEntrypoints]}`.text();
 
 // JSON.parse is untyped; the field read lands it on ApiModule without an assertion.
 const parsed: { nodes: Record<string, ApiModule> } = JSON.parse(raw);
 const md = renderDocuments(parsed.nodes, new Set(argv.slice(2)));
-process.stdout.write(await $`dprint fmt --stdin md < ${new Blob([md])}`.text());
+stdout.write(await $`dprint fmt --stdin md < ${new Blob([md])}`.text());

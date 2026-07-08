@@ -7,7 +7,8 @@
  * @module
  */
 
-import { type DerElement, readElement } from '#micro509/internal/asn1/der';
+import type { DerElement } from '#micro509/internal/asn1/der';
+import { readElement } from '#micro509/internal/asn1/der';
 
 /** Shared UTF-8 text decoder for ASN.1 string types. */
 const textDecoder = new TextDecoder('utf-8', { fatal: true });
