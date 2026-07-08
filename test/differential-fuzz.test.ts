@@ -39,7 +39,7 @@ function iterationSeed(index: number): number {
 	return (SEED ^ Math.imul(index + 1, 0x9e37_79b1)) >>> 0;
 }
 
-describe.skipIf(!openSslAvailable && !differentialEnabled)(
+describe.skipIf(openSslAvailable && differentialEnabled)(
 	'OpenSSL generation differential fuzz',
 	() => {
 		for (let index = 0; index < ITERATIONS; index += 1) {

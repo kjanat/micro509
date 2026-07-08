@@ -61,14 +61,18 @@ function isOidNode(value: unknown): value is OidNode {
 	return typeof value === 'object' && value !== null && 'arc' in value;
 }
 
+function hasOidName(oids: OidMap, name: string): boolean {
+	return Object.hasOwn(oids, name);
+}
+
 function addOidNode(oids: MutableOidMap, node: OidNode, basePrefix: string): void {
 	const prefix = joinOidPrefix(basePrefix, node.arc);
 
 	if (node.oids !== undefined) {
 		for (const [name, arc] of Object.entries(node.oids)) {
 			const path = joinOidPrefix(prefix, arc);
-			const existingPath = oids[name];
-			if (existingPath !== undefined) {
+			if (hasOidName(oids, name)) {
+				const existingPath = oids[name];
 				throw new TypeError(
 					`Duplicate OID name "${name}" at ${path}; already assigned to ${existingPath}`,
 				);
@@ -122,7 +126,7 @@ function collectOidNamesFromDocument(document: typeof OID_GROUP_SPECS): readonly
 
 function isOidRegistry(oids: OidMap, names: readonly string[]): oids is OidRegistry {
 	for (const name of names) {
-		if (oids[name] === undefined) {
+		if (!hasOidName(oids, name)) {
 			return false;
 		}
 	}
@@ -130,11 +134,11 @@ function isOidRegistry(oids: OidMap, names: readonly string[]): oids is OidRegis
 }
 
 function flattenOidTree(tree: typeof OID_GROUP_SPECS): OidRegistry {
-	const oids: MutableOidMap = {};
+	const oids: MutableOidMap = Object.create(null);
 	addOidDocument(oids, tree);
 	const names = collectOidNamesFromDocument(tree);
 	if (!isOidRegistry(oids, names)) {
-		const missingNames = names.filter((name) => oids[name] === undefined);
+		const missingNames = names.filter((name) => !hasOidName(oids, name));
 		throw new TypeError(`Incomplete OID registry; missing ${missingNames.join(', ')}`);
 	}
 	return oids;

@@ -19,30 +19,27 @@
  * (and `bun` for the import map). Fine for local dev; production/CF builds must
  * provide deno or precompute the pages.
  */
-
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
-
+import proc from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
 import type { Plugin } from 'vitepress';
-
-import type { ApiModule } from '../../scripts/render-deno-doc.shared.ts';
+import type { ApiModule } from '../../scripts/render-doc.shared.ts';
 import {
 	publicEntrypoints,
 	renderModulePages,
 	renderOverview,
 	renderSymbolPages,
-} from '../../scripts/render-deno-doc.shared.ts';
-const repoRoot = resolve(import.meta.dirname, '../..');
-const apiDir = join(repoRoot, 'site/api');
-const srcDir = join(repoRoot, 'src');
+} from '../../scripts/render-doc.shared.ts';
+const repoRoot = path.resolve(import.meta.dirname, '..', '..');
+const apiDir = path.join(repoRoot, 'site/api');
+const srcDir = path.join(repoRoot, 'src');
 
 /** Directories under `site/api/` that hold generated per-symbol pages. */
 const SYMBOL_BUCKETS = ['fn', 'type', 'var'] as const;
 
 function loadNodes(): Record<string, ApiModule> {
-	execFileSync('bun', ['scripts/gen-deno-importmap.bun.ts'], { cwd: repoRoot });
-	const raw = execFileSync(
+	proc.execFileSync('bun', ['scripts/gen-deno-importmap.bun.ts'], { cwd: repoRoot });
+	const raw = proc.execFileSync(
 		'deno',
 		[
 			'doc',
@@ -62,19 +59,19 @@ function loadNodes(): Record<string, ApiModule> {
 export function generateApiDocs(): void {
 	const nodes = loadNodes();
 	const { pages } = renderModulePages(nodes);
-	mkdirSync(apiDir, { recursive: true });
+	fs.mkdirSync(apiDir, { recursive: true });
 
-	for (const p of pages) writeFileSync(join(apiDir, `${p.pkg}.md`), `${p.markdown}\n`);
-	writeFileSync(join(apiDir, 'index.md'), `${renderOverview(nodes)}\n`);
+	for (const p of pages) fs.writeFileSync(path.join(apiDir, `${p.pkg}.md`), `${p.markdown}\n`);
+	fs.writeFileSync(path.join(apiDir, 'index.md'), `${renderOverview(nodes)}\n`);
 
 	// Clear stale bucket dirs so removed symbols don't leave orphan pages, then
 	// write each symbol as a real `site/api/<bucket>/<name>.md` page.
 	for (const bucket of SYMBOL_BUCKETS)
-		rmSync(join(apiDir, bucket), { recursive: true, force: true });
+		fs.rmSync(path.join(apiDir, bucket), { recursive: true, force: true });
 	for (const s of renderSymbolPages(nodes)) {
-		const dir = join(apiDir, s.bucket);
-		mkdirSync(dir, { recursive: true });
-		writeFileSync(join(dir, `${s.name}.md`), `${s.markdown}\n`);
+		const dir = path.join(apiDir, s.bucket);
+		fs.mkdirSync(dir, { recursive: true });
+		fs.writeFileSync(path.join(dir, `${s.name}.md`), `${s.markdown}\n`);
 	}
 }
 
@@ -83,7 +80,7 @@ export function apiDocsPlugin(): Plugin {
 	return {
 		name: 'micro509:api-docs',
 		configureServer(server) {
-			server.watcher.add(join(srcDir, '**/*.ts'));
+			server.watcher.add(path.join(srcDir, '**/*.ts'));
 			server.watcher.on('change', (file) => {
 				if (!file.startsWith(srcDir)) return;
 				clearTimeout(timer);

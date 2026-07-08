@@ -22,7 +22,7 @@ import {
 	verifyChainWithOpenSsl,
 } from '#test/oracles/openssl';
 
-describe.skipIf(!openSslAvailable && !differentialEnabled)('OpenSSL differential harness', () => {
+describe.skipIf(openSslAvailable && differentialEnabled)('OpenSSL differential harness', () => {
 	it('matches OpenSSL path verdicts for valid and path-length-exceeded chains', async () => {
 		const validChain = await issueChain();
 		const validMicro = await verifyCertificateChain({

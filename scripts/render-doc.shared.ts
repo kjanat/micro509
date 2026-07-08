@@ -3,8 +3,8 @@
  *
  * Runtime-agnostic and side-effect-free — no I/O, no data fetching. Both entry
  * scripts feed it the same node graph and print the result:
- *   - `render-deno-doc.bun.ts` (bun) sources it from the `deno doc --json` CLI.
- *   - `render-deno-doc.deno.ts` (deno) sources it from `@deno/doc`'s
+ *   - `render-doc.bun.ts` (bun) sources it from the `deno doc --json` CLI.
+ *   - `render-doc.deno.ts` (deno) sources it from `@deno/doc`'s
  *     `doc()` API, which returns byte-identical nodes at runtime.
  *
  * Types come from `@deno/doc` (installed as `npm:@jsr/deno__doc`), imported

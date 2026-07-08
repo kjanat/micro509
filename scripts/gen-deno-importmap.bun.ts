@@ -12,14 +12,14 @@
  *
  * @module
  */
-
 import pkg from '#pkg' with { type: 'json' };
+import path from 'node:path';
 
 const imports: Record<string, string> = {};
-const root = new URL('..', import.meta.url).pathname;
+const root = path.resolve(import.meta.dir, '..');
 const glob = new Bun.Glob('src/**/*.ts');
 
-const denoMap = Bun.file(`${root}deno.import_map.json`);
+const denoMap = Bun.file(path.join(root, 'deno.import_map.json'));
 
 // Copy the non-wildcard entries verbatim (barrels, #pkg, #jsr).
 for (const [key, value] of Object.entries(pkg.imports)) {

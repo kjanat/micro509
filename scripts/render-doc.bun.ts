@@ -5,10 +5,10 @@
  * Sources doc nodes from the `deno doc --json` CLI: regenerates the Deno import
  * map (the CLI needs it to resolve `#micro509/*`), runs `deno doc` over the
  * public entrypoints, and hands the JSON to the shared renderer. The Deno-native
- * companion `render-deno-doc.deno.ts` produces identical output without the
+ * companion `render-doc.deno.ts` produces identical output without the
  * subprocess or import map.
  *
- *     bun scripts/render-deno-doc.bun.ts [symbol...]
+ *     bun scripts/render-doc.bun.ts [symbol...]
  *
  * No `symbol` args renders every exported symbol; otherwise only the named ones.
  * Output is piped through dprint so it needs no downstream formatting.
@@ -21,8 +21,8 @@ import { $, argv, stdout } from 'bun';
 import pkg from '#pkg' with { type: 'json' };
 
 import { resolve } from 'node:path';
-import type { ApiModule } from './render-deno-doc.shared.ts';
-import { publicEntrypoints, renderDocuments } from './render-deno-doc.shared.ts';
+import type { ApiModule } from './render-doc.shared.ts';
+import { publicEntrypoints, renderDocuments } from './render-doc.shared.ts';
 
 const root = resolve(import.meta.dirname, '..');
 
