@@ -11,7 +11,7 @@ import {
 	resolveOcspResponderCandidates,
 	unwrap,
 } from '#micro509';
-import { addRevokedEntryCertificateIssuers, hexToBytes, issueChain } from './helpers.ts';
+import { addRevokedEntryCertificateIssuers, hexToBytes, issueChain } from '#test/helpers';
 
 describe('revocation boundary', () => {
 	it('returns unknown when no revocation evidence is provided', async () => {

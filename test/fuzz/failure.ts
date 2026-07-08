@@ -10,8 +10,8 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import type { Mismatch } from './compare.ts';
-import type { CertSpec } from './spec.ts';
+import type { Mismatch } from '#test/fuzz/compare';
+import type { CertSpec } from '#test/fuzz/spec';
 
 const FAILURE_ROOT = join(import.meta.dirname, '../fixtures/differential-failures');
 

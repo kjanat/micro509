@@ -26,6 +26,6 @@
 			"micro509": ["./src/index.ts"]
 		}
 	},
-	"include": ["src", "src/**/*.json", "./package.json"],
-	"exclude": ["dist", "node_modules", "test"]
+	"include": ["./src", "./src/**/*.json", "./package.json"],
+	"exclude": ["./dist", "./node_modules", "./test"]
 }

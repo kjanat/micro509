@@ -1,3 +1,4 @@
+// biome-ignore-all format: lsp overwrites formatting sometimes...
 /**
  * OpenSSL-as-generator oracle for the differential fuzzer.
  *
@@ -52,25 +53,9 @@ function digestFlag(hash: string): string {
 function keygenArgs(algo: FuzzKeyAlgo, outPath: string): readonly string[] {
 	if (algo.kind === 'ed25519') return ['genpkey', '-algorithm', 'ED25519', '-out', outPath];
 	if (algo.kind === 'ecdsa') {
-		return [
-			'genpkey',
-			'-algorithm',
-			'EC',
-			'-pkeyopt',
-			`ec_paramgen_curve:${CURVE_OSSL[algo.curve]}`,
-			'-out',
-			outPath,
-		];
+		return ['genpkey', '-algorithm', 'EC', '-pkeyopt', `ec_paramgen_curve:${CURVE_OSSL[algo.curve]}`, '-out', outPath];
 	}
-	return [
-		'genpkey',
-		'-algorithm',
-		'RSA',
-		'-pkeyopt',
-		`rsa_keygen_bits:${algo.bits}`,
-		'-out',
-		outPath,
-	];
+	return ['genpkey', '-algorithm', 'RSA', '-pkeyopt', `rsa_keygen_bits:${algo.bits}`, '-out', outPath];
 }
 
 /** Digest + PSS sigopts for signing with `algo`; empty for Ed25519 (PureEdDSA). */
@@ -157,36 +142,10 @@ async function issueCert(input: {
 		// -utf8: without it OpenSSL reads the -subj bytes as Latin-1 and
 		// double-encodes multi-byte values (Müller → MÃ¼ller) — silently, on both
 		// sides of the differential.
-		const csr = await runOpenSsl([
-			'req',
-			'-new',
-			'-utf8',
-			'-key',
-			subjectKeyPath,
-			'-subj',
-			subjectString(input.spec),
-			'-out',
-			csrPath,
-		]);
+		const csr = await runOpenSsl(['req', '-new', '-utf8', '-key', subjectKeyPath, '-subj', subjectString(input.spec), '-out', csrPath]);
 		if (csr.exitCode !== 0) throw new Error(`openssl req -new failed: ${csr.stderr}`);
 
-		const signArgs = [
-			'x509',
-			'-req',
-			'-in',
-			csrPath,
-			'-set_serial',
-			`0x${input.spec.serialHex}`,
-			'-days',
-			String(input.spec.validityDays),
-			'-extfile',
-			extPath,
-			'-extensions',
-			'ext',
-			...signingArgs(input.issuerAlgo),
-			'-out',
-			certPath,
-		];
+		const signArgs = ['x509', '-req', '-in', csrPath, '-set_serial', `0x${input.spec.serialHex}`, '-days', String(input.spec.validityDays), '-extfile', extPath, '-extensions', 'ext', ...signingArgs(input.issuerAlgo), '-out', certPath];
 		if (input.caCertPem === undefined) {
 			signArgs.push('-signkey', subjectKeyPath);
 		} else {

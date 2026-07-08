@@ -1,15 +1,14 @@
 import { describe, expect, it } from 'bun:test';
 import { readdir, readFile } from 'node:fs/promises';
+import type { ParsedCertificate, ParsedCertificateRevocationList } from '#micro509';
 import {
 	checkChainRevocation,
-	type ParsedCertificate,
-	type ParsedCertificateRevocationList,
 	parseCertificateDer,
 	parseCertificateRevocationListDerOrThrow,
 	verifyCertificateChain,
 	unwrap,
 } from '#micro509';
-import { PKITS_CASES, type PkitsCase } from './fixtures/pkits/manifest.ts';
+import { PKITS_CASES, type PkitsCase } from '#test/pkits/manifest';
 
 const PKITS_VALIDATION_TIME = new Date('2011-04-15T00:00:00Z');
 const REVOCATION_SECTIONS = new Set(['4.4', '4.5', '4.14', '4.15']);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
+import type { CreatePfxInput } from '#micro509';
 import {
-	type CreatePfxInput,
 	createCertificate,
 	createPfx,
 	createSelfSignedCertificate,

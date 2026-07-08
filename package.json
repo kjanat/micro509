@@ -34,8 +34,14 @@
 		"#micro509/verify": "./src/verify/index.ts",
 		"#micro509/x509": "./src/x509/index.ts",
 		"#micro509/internal/*": "./src/internal/*.ts",
+		"#micro509/internal/asn1/oidsJson": "./src/internal/asn1/oids.json",
 		"#pkg": "./package.json",
 		"#jsr": "./jsr.json",
+		"#smoke": "./scripts/smoke-core.mjs",
+		"#test/helpers": "./test/helpers.ts",
+		"#test/fuzz/*": "./test/fuzz/*.ts",
+		"#test/oracles/*": "./test/oracles/*.ts",
+		"#test/pkits/*": "./test/fixtures/pkits/*.ts",
 		"#typedoc-sidebar": "./site/api/typedoc-sidebar.json"
 	},
 	"exports": {
@@ -81,13 +87,14 @@
 		"site/.vitepress"
 	],
 	"scripts": {
-		"bd": "tsdown --no-attw --no-publint --no-unused --no-report",
+		"bd": "tsdown",
 		"build": "tsdown",
+		"build:watch": "tsdown --watch",
 		"check": "run -pK check:biome check:deno typecheck",
 		"check:biome": "biome check",
 		"check:deno": "deno check src",
 		"deno:cleandocs": "rm -rf docs/deno 2>/dev/null",
-		"deno:importsmap": "bun scripts/gen-deno-importmap.ts",
+		"deno:importsmap": "bun scripts/gen-deno-importmap.bun.ts",
 		"docs:build": "run -pk deno:importsmap deno:cleandocs; deno doc --no-npm --import-map deno.import_map.json --html --output=docs/deno --name=micro509 src/**/index.ts",
 		"docs:lint": "run -pk deno:importsmap deno:cleandocs; deno doc --no-npm --import-map deno.import_map.json --html --output=docs/deno --name=micro509 --lint src/**/index.ts",
 		"fmt": "dprint fmt",
@@ -113,8 +120,9 @@
 		"test:differential": "bun test test/differential.test.ts test/differential-fuzz.test.ts",
 		"test:pkits": "bun test test/pkits.test.ts",
 		"test:watch": "AGENT=1 bun test --watch --concurrent",
-		"typecheck": "tsgo --noEmit -p tsconfig.src.json && tsgo --noEmit -p tsconfig.other.json",
-		"typecheck:tsc": "tsc --noEmit -p tsconfig.src.json && tsc --noEmit -p tsconfig.other.json",
+		"typecheck": "run -pK typecheck:src typecheck:other",
+		"typecheck:other": "tsc --noEmit -p tsconfig.other.json",
+		"typecheck:src": "tsc --noEmit -p tsconfig.src.json",
 		"wrangler:build": "wrangler build",
 		"wrangler:deploy": "wrangler deploy",
 		"wrangler:deploy:versions": "wrangler versions upload",
@@ -122,23 +130,24 @@
 	},
 	"devDependencies": {
 		"@arethetypeswrong/core": "^0.18.4",
-		"@biomejs/biome": "^2.5.2",
+		"@biomejs/biome": "^2.5.3",
 		"@deno/doc": "npm:@jsr/deno__doc",
 		"@tsconfig/node24": "^24.0.4",
 		"@types/bun": "^1.3.14",
-		"@types/node": "26.1.0",
-		"@typescript/native-preview": "^7.0.0-dev.20260704.1",
-		"deno": "^2.9.1",
+		"@types/deno": "^2.7.0",
+		"@types/node": "26.1.1",
+		"deno": "^2.9.2",
 		"dprint": "^0.55.1",
-		"oxc-minify": "^0.138.0",
+		"oxc-minify": "^0.139.0",
 		"playwright": "^1.61.1",
 		"publint": "^0.3.21",
-		"runner-run": "^0.18.1",
-		"tsdown": "^0.22.3",
-		"typescript": "^6.0.3",
+		"runner-run": "^0.19.1",
+		"tsdown": "^0.22.4",
+		"typescript": "^7.0.2",
+		"typescript-6": "npm:typescript@6",
 		"unplugin-unused": "^0.5.7",
 		"vue": "^3.5.27",
-		"wrangler": "^4.107.0"
+		"wrangler": "^4.108.0"
 	},
 	"packageManager": "bun@1.3.14",
 	"devEngines": {
@@ -167,7 +176,7 @@
 		]
 	},
 	"volta": {
-		"node": "26.4.0",
+		"node": "26.5.0",
 		"npm": "11.18.0"
 	},
 	"typedocoptions": {

@@ -40,7 +40,7 @@ import {
 	getSignatureAlgorithm,
 	signBytes,
 } from '#micro509/internal/crypto/signing';
-import { hexToBytes } from './helpers.ts';
+import { hexToBytes } from '#test/helpers';
 
 describe('ocsp', () => {
 	it('builds, parses, and verifies OCSP responses', async () => {

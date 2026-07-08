@@ -2,13 +2,18 @@
 // see the documentation: https://zed.dev/docs/configuring-zed#settings-files
 {
 	"formatter": [
-		{ "external": { "command": "dprint", "arguments": ["fmt", "--stdin", "{buffer_path}"] } }
+		{ "external": { "command": "dprint", "arguments": ["fmt", "--stdin", "{buffer_path}"] } },
+		{ "language_server": { "name": "dprint" } }
 	],
 	"prettier": { "allowed": false },
 	"wrap_guides": [100],
 	"languages": {
 		"TypeScript": {
 			"format_on_save": "on",
+			"formatter": [
+				{ "external": { "command": "dprint", "arguments": ["fmt", "--stdin", "{buffer_path}"] } },
+				{ "language_server": { "name": "dprint" } }
+			],
 			"language_servers": ["vtsls", "tsgo", "deno", "biome"],
 			"code_actions_on_format": {
 				"source.fixAll.biome": true,
@@ -20,9 +25,14 @@
 	},
 	"lsp": {
 		"biome": {
+			"binary": {
+				"path": "./node_modules/.bin/biome",
+				"arguments": ["lsp-proxy"]
+			},
 			"settings": {
 				"config_path": "./biome.json",
 				"require_config_file": true,
+				"goto_definition": true,
 				"inline_config": {
 					"formatter": { "enabled": false },
 					"linter": {}
@@ -46,6 +56,17 @@
 						"url": "./src/internal/asn1/oids.schema.json"
 					}]
 				}
+			}
+		},
+		"vtsls": {
+			"settings": {
+				"typescript": { "tsdk": "./node_modules/typescript-6/lib/" }
+			}
+		},
+		"dprint": {
+			"binary": {
+				"path": "./node_modules/.bin/dprint",
+				"arguments": ["lsp"]
 			}
 		}
 	}

@@ -36,7 +36,7 @@ const importMap = /* dprint-ignore */ `${JSON.stringify({ imports: Object.fromEn
 
 try {
 	await Bun.write(denoMap, importMap);
-	console.error(`Wrote ${importMap.length} bytes to ${denoMap.name}`);
+	Bun.stderr.write(`Wrote ${importMap.length} bytes to ${denoMap.name}\n`);
 } catch (err) {
 	process.exitCode = 1;
 	console.error(`Failed to write ${denoMap.name}:`, err);

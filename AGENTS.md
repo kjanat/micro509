@@ -91,7 +91,7 @@ Avoid the following in this project:
 ```bash
 bun bd                 # fast build to dist/
 bun build              # full tsdown build
-bun typecheck          # tsgo type-check
+bun typecheck          # typescript
 bun test               # bun test --coverage
 bun lint               # biome lint
 bun fmt                # dprint fmt

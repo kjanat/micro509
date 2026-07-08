@@ -26,14 +26,13 @@ import { join, resolve } from 'node:path';
 
 import type { Plugin } from 'vitepress';
 
+import type { ApiModule } from '../../scripts/render-deno-doc.shared.ts';
 import {
-	type ApiModule,
 	publicEntrypoints,
 	renderModulePages,
 	renderOverview,
 	renderSymbolPages,
 } from '../../scripts/render-deno-doc.shared.ts';
-
 const repoRoot = resolve(import.meta.dirname, '../..');
 const apiDir = join(repoRoot, 'site/api');
 const srcDir = join(repoRoot, 'src');
@@ -42,7 +41,7 @@ const srcDir = join(repoRoot, 'src');
 const SYMBOL_BUCKETS = ['fn', 'type', 'var'] as const;
 
 function loadNodes(): Record<string, ApiModule> {
-	execFileSync('bun', ['scripts/gen-deno-importmap.ts'], { cwd: repoRoot });
+	execFileSync('bun', ['scripts/gen-deno-importmap.bun.ts'], { cwd: repoRoot });
 	const raw = execFileSync(
 		'deno',
 		[

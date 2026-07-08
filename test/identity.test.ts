@@ -7,7 +7,7 @@ import {
 	parseCertificatePem,
 	unwrap,
 } from '#micro509';
-import { issueChain } from './helpers.ts';
+import { issueChain } from '#test/helpers';
 
 describe('identity boundary', () => {
 	it('matches DNS SANs through the dedicated identity API', async () => {

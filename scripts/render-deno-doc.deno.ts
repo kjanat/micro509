@@ -1,5 +1,5 @@
 #!/usr/bin/env -S deno run --allow-read --allow-net --allow-env --allow-sys --allow-run
-/// <reference lib="deno.ns" />
+/// <reference types="deno" />
 /**
  * Renders the micro509 public API to cross-linked markdown (Deno entry).
  *
@@ -8,9 +8,9 @@
  * import map: `doc()` resolves `#micro509/*` via package.json imports natively.
  * Output is piped through dprint so it needs no downstream formatting.
  *
- *     deno run -A scripts/render-deno-doc-with-deno.ts [symbol...]
+ *     deno run -A scripts/render-deno-doc.deno.ts [symbol...]
  *
- * Caveats vs the bun/CLI companion `render-deno-doc.ts` (the authoritative one):
+ * Caveats vs the bun/CLI companion `render-deno-doc.bun.ts` (the authoritative one):
  *   - Coverage: `doc()` surfaces 406 of the CLI's 413 symbols. The 7 it drops
  *     are `export type` re-exports (e.g. `IssuingDistributionPoint*`) it doesn't
  *     follow the way the CLI does with an explicit import map. The 406 it emits
@@ -23,7 +23,8 @@
  *
  * @module
  */
-
+// deno-lint-ignore-file
+// @ts-ignore
 import { doc } from 'jsr:@deno/doc@0.199.0';
 
 import { publicEntrypoints, renderDocuments } from './render-deno-doc.shared.ts';

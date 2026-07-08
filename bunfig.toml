@@ -1,4 +1,9 @@
+[install]
+linker = "hoisted"
+
 [test]
-root                       = "test"
-coveragePathIgnorePatterns = ["test/helpers.ts", "test/oracles/*"]
+coveragePathIgnorePatterns = ["test/**", "dist/**"]
 coverageSkipTestFiles      = true
+
+[run]
+noOrphans = true

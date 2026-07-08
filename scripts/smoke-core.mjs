@@ -1,5 +1,7 @@
-// Shared smoke assertions, run in every supported runtime
-// (Node, Deno, workerd, browser).
+/**
+ * Shared smoke assertions, run in every supported runtime (Node, Deno, workerd, browser).
+ * @module
+ */
 
 /** @param {typeof import('#micro509')} micro509 */
 export async function runSmoke(micro509) {

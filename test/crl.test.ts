@@ -33,7 +33,7 @@ import {
 	decodeObjectIdentifier,
 	hexToBytes,
 	sliceElement,
-} from './helpers.ts';
+} from '#test/helpers';
 
 describe('crl', () => {
 	it('creates, parses, and verifies CRLs', async () => {

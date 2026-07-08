@@ -4,7 +4,7 @@ import pkg from '#pkg' with { type: 'json' };
 
 const root = new URL('..', import.meta.url).pathname;
 
-/** @type {Partial<import("../site/.vitepress/node_modules/typedoc/dist/index.d.ts").TypeDocOptions> & Partial<import("../site/.vitepress/node_modules/typedoc-plugin-markdown/dist/index.d.ts").PluginOptions>} */
+/** @type {Partial<import("typedoc").TypeDocOptions> & Partial<import("typedoc-plugin-markdown").PluginOptions>} */
 const config = {
 	plugin: ['typedoc-plugin-markdown', 'typedoc-vitepress-theme'],
 	name: pkg.name,

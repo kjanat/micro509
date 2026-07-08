@@ -26,7 +26,7 @@ runs:
     - name: Setup runner-run
       id: setup-runner
       if: ${{ inputs.install-runner == 'true' }}
-      uses: kjanat/runner@v0.16.1
+      uses: kjanat/runner@v0.19.1
 
     - name: Setup Deno
       id: setup-deno

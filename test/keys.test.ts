@@ -283,10 +283,10 @@ describe('keys', () => {
 			'malformed',
 			'Private JWK algorithm does not match requested import algorithm',
 		);
-		await expect(importPrivateJwkOrThrow(rsaPublicJwk, { kind: 'rsa' })).rejects.toThrow(
+		expect(importPrivateJwkOrThrow(rsaPublicJwk, { kind: 'rsa' })).rejects.toThrow(
 			'Private JWK must contain private key material',
 		);
-		await expect(
+		expect(
 			importPrivateJwkOrThrow(ecPrivateJwk, { kind: 'ecdsa', curve: 'P-384' }),
 		).rejects.toThrow('Private JWK algorithm does not match requested import algorithm');
 	});
@@ -1074,10 +1074,10 @@ describe('keys: coverage — malformed inputs', () => {
 			const plaintext = Uint8Array.of(9, 9, 9);
 			const ciphertext = await encryptRsaOaepOrThrow(pair.publicKey, plaintext);
 			expect(await decryptRsaOaepOrThrow(pair.privateKey, ciphertext)).toEqual(plaintext);
-			await expect(decryptRsaOaepOrThrow(pair.publicKey, ciphertext)).rejects.toThrow(
+			expect(decryptRsaOaepOrThrow(pair.publicKey, ciphertext)).rejects.toThrow(
 				'requires a private CryptoKey',
 			);
-			await expect(
+			expect(
 				decryptRsaOaepOrThrow(pair.privateKey, ciphertext, { label: Uint8Array.of(1) }),
 			).rejects.toThrow('RSA-OAEP decryption failed');
 		});

@@ -13,7 +13,7 @@ import {
 import { readElement } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { encodeRsaPssParameters, rsaPssParametersForHash } from '#micro509/internal/crypto/rsa-pss';
-import { childrenOf, decodeObjectIdentifier, hasExtensionOid } from './helpers.ts';
+import { childrenOf, decodeObjectIdentifier, hasExtensionOid } from '#test/helpers';
 
 describe('certificate', () => {
 	it('creates a self-signed certificate with SANs and exportable keys', async () => {

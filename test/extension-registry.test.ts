@@ -9,12 +9,14 @@ import {
 import { exportSpkiDer, generateKeyPair } from '#micro509/keys';
 import { toHex } from '#micro509/internal/asn1/asn1';
 import { OIDS } from '#micro509/internal/asn1/oids';
+import type {
+	ExtensionDefinition,
+	MutableKnownParsedExtensionAccumulator,
+} from '#micro509/internal/x509/extension-registry';
 import {
 	buildSubjectKeyIdentifierFromSubjectPublicKeyInfo,
-	type ExtensionDefinition,
 	getExtensionDefinition,
 	listExtensionDefinitions,
-	type MutableKnownParsedExtensionAccumulator,
 } from '#micro509/internal/x509/extension-registry';
 
 function applyDefinition<TParsed, TInput>(

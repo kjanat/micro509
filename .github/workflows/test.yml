@@ -21,8 +21,6 @@ jobs:
       - name: Deno lint + type-check + doc-lint (full source tree)
         run: run -p check:deno lint:deno docs:lint
       - run: bun run test
-      - name: Validate npm tarball against published exports
-        run: bun scripts/check-npm-pack.ts
       - name: Node smoke test (dist)
         run: node scripts/smoke.mjs
       - name: Deno smoke test (dist)

@@ -4,8 +4,8 @@
 		"target": "ES2024",
 		"module": "NodeNext",
 		"moduleResolution": "NodeNext",
-		"lib": ["ES2024", "DOM"],
-		"types": ["bun", "node"],
+		"lib": ["ESNext", "DOM"],
+		"types": ["bun", "node", "deno"],
 		"typeRoots": ["./node_modules/@types", "./site/.vitepress/node_modules/@types"],
 		"skipLibCheck": true,
 		"strict": true,
@@ -39,6 +39,6 @@
 		"*.json",
 		"*.mjs"
 	],
-	"files": ["site/.vitepress/api-gen.ts"],
-	"exclude": ["dist", "node_modules", "site", "scripts/render-deno-doc-with-deno.ts"]
+	"files": ["./site/.vitepress/api-gen.ts"],
+	"exclude": ["./dist", "./node_modules", "./site", "./**/*.deno.ts"]
 }

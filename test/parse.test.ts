@@ -41,7 +41,7 @@ import {
 	rewriteCertificateSignatureAsRsaPss,
 	rewriteCsrSignatureAsRsaPss,
 	sliceElement,
-} from './helpers.ts';
+} from '#test/helpers';
 
 describe('parse', () => {
 	it('supports custom extension encode and decode hooks', async () => {

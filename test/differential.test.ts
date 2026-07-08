@@ -14,14 +14,14 @@ import {
 	verifyCertificateChain,
 	unwrap,
 } from '#micro509';
-import { hexToBytes, issueChain } from './helpers.ts';
+import { hexToBytes, issueChain } from '#test/helpers';
 import {
 	checkIdentityWithOpenSsl,
 	checkRevocationWithOpenSsl,
 	issueAndValidateOcspResponseWithOpenSsl,
 	probeOpenSsl,
 	verifyChainWithOpenSsl,
-} from './oracles/openssl.ts';
+} from '#test/oracles/openssl';
 
 // The OpenSSL oracle is version-sensitive (name formatting, verdict drift),
 // so CI skips it by default; the dedicated differential job opts in with

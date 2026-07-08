@@ -171,7 +171,7 @@ describe('x509 domain', () => {
 		if (!result.ok) {
 			expect(result.code).toBe('malformed');
 		}
-		await expect(x509.getSubjectPublicKeyOrThrow(parsed)).rejects.toThrow(
+		expect(x509.getSubjectPublicKeyOrThrow(parsed)).rejects.toThrow(
 			'Unsupported SubjectPublicKeyInfo algorithm',
 		);
 	});

@@ -6,11 +6,6 @@ import pkg from '#pkg' with { type: 'json' };
 import { defineConfig } from 'tsdown';
 import type { UserConfig } from 'tsdown';
 
-const jsrJson: Omit<typeof jsr, 'exports' | 'version'> & {
-	exports: Record<string, string>;
-	version: string;
-} = { ...jsr, exports: {} };
-
 export const entries = {
 	index: 'src/index.ts',
 	keys: 'src/keys/index.ts',
@@ -29,23 +24,28 @@ export default defineConfig({
 	dts: true,
 	clean: true,
 	platform: 'neutral',
-	target: 'es2024',
+	target: 'baseline-widely-available',
 	tsconfig: './tsconfig.src.json',
-	sourcemap: false,
+	sourcemap: true,
 	unbundle: true,
 	hash: false,
-	minify: 'dce-only',
+	minify: {
+		compress: { joinVars: true, unused: true },
+		mangle: { keepNames: true },
+		codegen: { legalComments: 'external', removeWhitespace: false },
+	},
 	inputOptions: { resolve: { mainFields: ['browser', 'module', 'main'] } },
 	hooks: {
 		'build:done': async () => {
-			jsrJson.exports = Object.fromEntries(
+			const jsrNext = { ...jsr, exports: {} };
+			jsrNext.exports = Object.fromEntries(
 				Object.entries(entries).map(([name, sourcePath]) => [
 					name === 'index' ? '.' : `./${name}`,
 					`./${sourcePath}`,
 				]),
 			);
-			jsrJson.version = pkg.version;
-			await writeFile('jsr.json', `${JSON.stringify(jsrJson, null, '\t')}\n`);
+			jsrNext.version = pkg.version;
+			await writeFile('jsr.json', JSON.stringify(jsrNext, null, '\t') + '\n');
 		},
 	},
 	exports: {
@@ -62,7 +62,9 @@ export default defineConfig({
 		},
 	},
 	onSuccess: 'bunx sort-package-json --quiet {package,jsr}.json',
-	attw: { profile: 'esm-only', ignoreRules: ['no-resolution'] },
-	unused: true,
-	publint: true,
+	attw: { profile: 'esm-only', enabled: 'ci-only' },
+	report: 'ci-only',
+	publint: 'ci-only',
+	unused: 'ci-only',
+	failOnWarn: 'ci-only',
 });

@@ -1,10 +1,22 @@
-// Cloudflare Workers smoke test: runs scripts/smoke-worker.mjs in a local
-// workerd via wrangler's test harness (`node scripts/smoke-workerd.mjs`).
-
+#!/usr/bin/env node
+/**
+ * Cloudflare Workers smoke test: runs scripts/smoke-worker.mjs in a local workerd via wrangler's test harness.
+ * ```sh
+ * node scripts/smoke-workerd.mjs
+ * ```
+ */
 import { createTestHarness } from 'wrangler';
 
 const server = createTestHarness({
-	workers: [{ configPath: new URL('./wrangler.smoke.toml', import.meta.url) }],
+	workers: [
+		{
+			config: {
+				name: 'micro509-smoke',
+				main: `${import.meta.dirname}/smoke-worker.mjs`,
+				compatibility_date: Temporal.Now.plainDateISO().toString(),
+			},
+		},
+	],
 });
 
 try {

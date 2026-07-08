@@ -11,13 +11,13 @@ import {
 	pemEncode,
 	unwrap,
 } from '#micro509';
-import { compareCertificate } from './fuzz/compare.ts';
-import type { Mismatch } from './fuzz/compare.ts';
-import { dumpFailure } from './fuzz/failure.ts';
-import { makeRng } from './fuzz/prng.ts';
-import { drawCase, importInputFor } from './fuzz/spec.ts';
-import { generateCertificate, readCertFields } from './oracles/openssl-gen.ts';
-import { probeOpenSsl, runOpenSsl, withTempDir } from './oracles/openssl.ts';
+import type { Mismatch } from '#test/fuzz/compare';
+import { compareCertificate } from '#test/fuzz/compare';
+import { dumpFailure } from '#test/fuzz/failure';
+import { makeRng } from '#test/fuzz/prng';
+import { drawCase, importInputFor } from '#test/fuzz/spec';
+import { generateCertificate, readCertFields } from '#test/oracles/openssl-gen';
+import { probeOpenSsl, runOpenSsl, withTempDir } from '#test/oracles/openssl';
 
 // Same opt-in gate as the hand-written differential suite: OpenSSL is
 // version-sensitive, so CI runs this only in the dedicated differential job.

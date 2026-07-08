@@ -72,7 +72,9 @@ async function main(): Promise<void> {
 
 	await $`bun ${import.meta.dir}/generate-manifest.ts`;
 
-	await $`bunx dprint fmt --log-level error ${import.meta.dir}/**/*.{ts,md,py,h}`;
+	await $`bunx dprint fmt --log-level error ${import.meta.dir}/**/*.{ts,md,py,h}`.cwd(
+		path.resolve(import.meta.dir, '../../..'),
+	);
 }
 
 if (import.meta.main) await main();
