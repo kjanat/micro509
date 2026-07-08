@@ -2,3 +2,6 @@
 
 [install]
 pms = ["bun"]  # only install with these; each must be detected
+
+[github]
+group_output = false
