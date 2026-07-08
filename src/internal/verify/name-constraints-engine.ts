@@ -157,9 +157,7 @@ export function createNameConstraintValidationState(
 	};
 }
 
-// ---------------------------------------------------------------------------
 // Private: name constraint validation (RFC 5280 §4.2.1.10 / §6.1)
-// ---------------------------------------------------------------------------
 
 /** Empty SEQUENCE DER hex — represents an empty subject DN. */
 const EMPTY_SEQUENCE_HEX = '3000';

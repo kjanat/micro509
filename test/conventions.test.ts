@@ -2,17 +2,10 @@ import { Glob } from 'bun';
 import { describe, expect, it } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { VERIFY_ERROR_CODES } from '#micro509';
-
-/**
- * Guards the structural rules from AGENTS.md / CONTRIBUTING.md that neither
- * tsc nor biome enforce — so a banned construct can't be merged again (a class
- * and a default export both slipped through before this gate existed).
- */
-
-const srcDir = new URL('../src/', import.meta.url).pathname;
+import { srcRoot } from '#test/helpers';
 
 function sourceFiles(): readonly string[] {
-	return [...new Glob('**/*.ts').scanSync({ cwd: srcDir, absolute: true })];
+	return [...new Glob('**/*.ts').scanSync({ cwd: srcRoot, absolute: true })];
 }
 
 /**
@@ -44,7 +37,7 @@ function offendersMatching(pattern: RegExp): readonly string[] {
 	const offenders: string[] = [];
 	for (const file of sourceFiles()) {
 		if (pattern.test(readFileSync(file, 'utf8'))) {
-			offenders.push(file.slice(srcDir.length));
+			offenders.push(file.slice(srcRoot.length));
 		}
 	}
 	return offenders;
@@ -66,7 +59,7 @@ describe('repo conventions (AGENTS.md / CONTRIBUTING.md)', () => {
 		// implemented and documented but unreachable from the published package.
 		const orThrowByDomain = new Map<string, Set<string>>();
 		for (const file of sourceFiles()) {
-			const relative = file.slice(srcDir.length);
+			const relative = file.slice(srcRoot.length);
 			if (relative.startsWith('internal/') || relative.endsWith('index.ts')) continue;
 			const domain = relative.split('/')[0];
 			if (domain === undefined || !relative.includes('/')) continue;
@@ -79,7 +72,7 @@ describe('repo conventions (AGENTS.md / CONTRIBUTING.md)', () => {
 
 		const offenders: string[] = [];
 		const barrelMissing = (barrel: string, names: Iterable<string>): void => {
-			const exported = exportedNames(readFileSync(`${srcDir}${barrel}`, 'utf8'));
+			const exported = exportedNames(readFileSync(`${srcRoot}${barrel}`, 'utf8'));
 			for (const orThrowName of names) {
 				const baseName = orThrowName.slice(0, -'OrThrow'.length);
 				if (exported.has(baseName) && !exported.has(orThrowName)) {

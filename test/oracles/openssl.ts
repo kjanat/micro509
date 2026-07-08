@@ -1,5 +1,5 @@
 // biome-ignore-all format: lsp overwrites formatting sometimes...
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -63,14 +63,14 @@ export async function verifyChainWithOpenSsl(input: {
 		const leafPath = join(directory, 'leaf.pem');
 		const rootPath = join(directory, 'root.pem');
 		await Promise.all([
-			writeFile(leafPath, input.leafPem, 'utf8'),
-			writeFile(rootPath, input.rootPem, 'utf8'),
+			Bun.write(leafPath, input.leafPem),
+			Bun.write(rootPath, input.rootPem),
 		]);
 
 		const args = ['verify', '-trusted', rootPath, '-no-CApath', '-no-CAstore'];
 		if (input.intermediatePems !== undefined && input.intermediatePems.length > 0) {
 			const intermediatesPath = join(directory, 'intermediates.pem');
-			await writeFile(intermediatesPath, input.intermediatePems.join('\n'), 'utf8');
+			await Bun.write(intermediatesPath, input.intermediatePems.join('\n'));
 			args.push('-untrusted', intermediatesPath);
 		}
 		if (input.at !== undefined) {
@@ -122,9 +122,9 @@ export async function checkRevocationWithOpenSsl(input: {
 		const issuerPath = join(directory, 'issuer.pem');
 		const crlPath = join(directory, 'crl.pem');
 		await Promise.all([
-			writeFile(certificatePath, input.certificatePem, 'utf8'),
-			writeFile(issuerPath, input.issuerCertificatePem, 'utf8'),
-			writeFile(crlPath, input.crlPem, 'utf8'),
+			Bun.write(certificatePath, input.certificatePem),
+			Bun.write(issuerPath, input.issuerCertificatePem),
+			Bun.write(crlPath, input.crlPem),
 		]);
 
 		// -nameopt RFC2253 pins DN formatting; the default drifted across OpenSSL versions ("CN = X" in 3.0, "CN=X" elsewhere).
@@ -162,7 +162,7 @@ export async function checkIdentityWithOpenSsl(input: {
 }): Promise<OpenSslIdentityResult> {
 	return await withTempDir(async (directory) => {
 		const certificatePath = join(directory, 'certificate.pem');
-		await writeFile(certificatePath, input.certificatePem, 'utf8');
+		await Bun.write(certificatePath, input.certificatePem);
 		const result = await runOpenSsl(['x509', '-in', certificatePath, '-noout', input.kind === 'dns' ? '-checkhost' : '-checkip', input.value]);
 		const output = mergeCommandOutput(result);
 		// OpenSSL < 3.4 exits 0 even on mismatch; the printed verdict text is version-stable, so parse that instead of the exit code.
@@ -189,9 +189,9 @@ export async function issueAndValidateOcspResponseWithOpenSsl(input: {
 		const responsePath = join(directory, 'response.der');
 		const indexPath = join(directory, 'index.txt');
 		await Promise.all([
-			writeFile(issuerPath, input.issuerCertificatePem, 'utf8'),
-			writeFile(issuerKeyPath, input.issuerPrivateKeyPem, 'utf8'),
-			writeFile(certificatePath, input.certificatePem, 'utf8'),
+			Bun.write(issuerPath, input.issuerCertificatePem),
+			Bun.write(issuerKeyPath, input.issuerPrivateKeyPem),
+			Bun.write(certificatePath, input.certificatePem),
 		]);
 
 		const requestResult = await runOpenSsl(['ocsp', '-issuer', issuerPath, '-cert', certificatePath, '-no_nonce', '-reqout', requestPath]);
@@ -211,7 +211,7 @@ export async function issueAndValidateOcspResponseWithOpenSsl(input: {
 			input.certificateStatus === 'good'
 				? `V\t351231235959Z\t\t${serial}\tunknown\t${subject}\n`
 				: `R\t351231235959Z\t${formatOcspIndexTime(input.revocationTime ?? new Date('2026-03-12T00:00:00Z'))}\t${serial}\tunknown\t${subject}\n`;
-		await writeFile(indexPath, indexLine, 'utf8');
+		await Bun.write(indexPath, indexLine);
 
 		// dprint-ignore
 		const responseResult = await runOpenSsl([
@@ -245,7 +245,7 @@ export async function issueAndValidateOcspResponseWithOpenSsl(input: {
 			...(status === undefined ? {} : { status }),
 			exitCode: validation.exitCode,
 			output,
-			responseDer: new Uint8Array(await readFile(responsePath)),
+			responseDer: new Uint8Array(await Bun.file(responsePath).arrayBuffer()),
 		};
 	});
 }
@@ -255,7 +255,7 @@ export async function withTempDir<T>(fn: (directory: string) => Promise<T>): Pro
 	try {
 		return await fn(directory);
 	} finally {
-		await rm(directory, { recursive: true, force: true });
+		await Bun.$`rm -rf ${directory}`
 	}
 }
 

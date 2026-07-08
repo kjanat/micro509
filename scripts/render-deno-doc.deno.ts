@@ -24,6 +24,7 @@
  * @module
  */
 // deno-lint-ignore-file
+// biome-ignore lint/suspicious/noTsIgnore: SHUT UP
 // @ts-ignore
 import { doc } from 'jsr:@deno/doc@0.199.0';
 

@@ -442,9 +442,7 @@ export interface CustomExtension {
 	readonly critical?: boolean;
 }
 
-// ---------------------------------------------------------------------------
 // Name constraints (RFC 5280 §4.2.1.10)
-// ---------------------------------------------------------------------------
 
 /**
  * A name form used as a constraint base in namEConstraints.

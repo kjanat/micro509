@@ -33,6 +33,7 @@ import {
 	getSignatureAlgorithm,
 	signBytes,
 } from '#micro509/internal/crypto/signing';
+import path from 'node:path';
 
 export function childrenOf(
 	source: Uint8Array,
@@ -452,3 +453,8 @@ export async function issueChain(options: IssueChainOptions = {}) {
 	const leaf = await createCertificate(leafInput);
 	return { root, intermediate, intermediateKeys, leaf, leafKeys };
 }
+
+export const projectRoot = path.resolve(import.meta.dir, '..');
+export const srcRoot = path.join(projectRoot, 'src');
+export const testRoot = import.meta.dir;
+export const fixturesDir = path.join(testRoot, 'fixtures');

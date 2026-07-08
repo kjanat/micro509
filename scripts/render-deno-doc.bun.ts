@@ -32,7 +32,6 @@ const raw =
 		.cwd(root)
 		.text();
 
-// JSON.parse is untyped; the field read lands it on ApiModule without an assertion.
 const parsed: { nodes: Record<string, ApiModule> } = JSON.parse(raw);
 const md = renderDocuments(parsed.nodes, new Set(argv.slice(2)));
 stdout.write(await $`dprint fmt --stdin md < ${new Blob([md])}`.text());

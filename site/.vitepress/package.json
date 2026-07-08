@@ -8,6 +8,7 @@
     "#/components/*": "./theme/components/*"
   },
   "scripts": {
+    "fmt": "cd ../ && dprint fmt",
     "dev": "vitepress dev .. --host",
     "build": "vitepress build ..",
     "preview": "vitepress preview ..",
@@ -15,22 +16,20 @@
     "wrangler:types": "wrangler types"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "^1.42.3",
-    "@tsconfig/node24": "^24.0.4",
+    "@cloudflare/vite-plugin": "catalog:cloudflare",
+    "@tsconfig/node24": "catalog:ts",
     "@types/bun": "catalog:ts",
     "@types/node": "catalog:ts",
     "@vue/tsconfig": "catalog:ts",
-    "markdown-it-task-lists": "^2.1.1",
+    "dprint": "catalog:",
+    "markdown-it-task-lists": "catalog:site",
     "typescript": "catalog:ts",
     "typescript-7": "catalog:ts",
-    "typedoc": "^0.28.19",
-    "typedoc-plugin-markdown": "^4.12.0",
-    "typedoc-vitepress-theme": "^1.1.3",
-    "vite-robots-txt": "^1.0.0",
-    "vite-svg-to-ico": "^4.0.0",
-    "vitepress": "2.0.0-alpha.17",
+    "vite-robots-txt": "catalog:site",
+    "vite-svg-to-ico": "catalog:site",
+    "vitepress": "catalog:site",
     "vue": "catalog:",
     "vue-tsc": "catalog:ts",
-    "wrangler": "catalog:"
+    "wrangler": "catalog:cloudflare"
   }
 }

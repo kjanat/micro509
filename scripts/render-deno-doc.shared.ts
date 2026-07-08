@@ -15,7 +15,7 @@
  * Coverage: the full `TsTypeDef` grammar micro509's public surface uses (every
  * unhandled node falls back to its `.repr` source-text — never wrong, only
  * un-linked), plus `function` and `typeAlias` declarations and all JSDoc tags
- * the codebase emits. Still to add for a full typedoc replacement:
+ * the codebase emits. Still to add for fuller API coverage:
  * `interface`/`class`/`variable`/`enum` declarations, overload sets
  * (`declarations[1..]`), and a vitepress-shaped sidebar emitter.
  *
@@ -34,37 +34,36 @@ import type {
 
 import jsr from '#jsr' with { type: 'json' };
 
-// `doc()`/`deno doc --json` emit `module_doc`; @deno/doc's types call it
-// `moduleDoc`. Bridge that single divergence — everything else is faithfully
-// typed, so `Record<string, Document>` is assignable with no cast.
+/** `doc()`/`deno doc --json` emit `module_doc`; @deno/doc's types call it
+ * `moduleDoc`. Bridge that single divergence — everything else is faithfully
+ * typed, so `Record<string, Document>` is assignable with no cast. */
 export type ApiModule = Document & { readonly module_doc?: JsDoc };
 
-// Public entrypoints = jsr.json's `exports` — tsdown's materialized entry list
-// (its `build:done` hook writes them from `entries`), pointing straight at the
-// source `.ts` files. Skip `.` (the root barrel re-exports the 7 packages and
-// would duplicate every symbol).
+/** Public entrypoints = jsr.json's `exports` — tsdown's materialized entry list
+ * (its `build:done` hook writes them from `entries`), pointing straight at the source `.ts` files.
+ * Skip `.` (the root barrel re-exports the 7 packages and would duplicate every symbol). */
 export const publicEntrypoints: readonly string[] = Object.entries(jsr.exports)
 	.filter(([subpath]) => subpath !== '.')
 	.map(([, source]) => source.replace(/^\.\//, ''))
 	.sort();
 
-// --- link registry: symbol name -> its page bucket. Populated per render pass.
+/** link registry: symbol name -> its page bucket. Populated per render pass. */
 const symbolBucket = new Map<string, string>();
 
-// Bucket per declaration kind. This namespaces per-symbol page URLs so that
-// `Type`/`factory` pairs (ErrorResult vs errorResult) and symbol-vs-module names
-// (Result vs the `result` module page) don't collide — VitePress folds route
-// paths case-insensitively, so distinct buckets are what keep them apart.
+/** Bucket per declaration kind. This namespaces per-symbol page URLs so that
+ * `Type`/`factory` pairs (ErrorResult vs errorResult) and symbol-vs-module names
+ * (Result vs the `result` module page) don't collide — VitePress folds route
+ * paths case-insensitively, so distinct buckets are what keep them apart. */
 function bucketOf(kind: string): string {
 	if (kind === 'function') return 'fn';
 	if (kind === 'variable') return 'var';
 	return 'type';
 }
 
-// Per-symbol page at `/api/<bucket>/<name>` (a `[bucket]/[symbol]` dynamic
-// route). The `<bucket>/` segment keeps `Type`/`factory` pairs (ErrorResult vs
-// errorResult) and symbol-vs-module names on case-insensitively-distinct URLs —
-// VitePress folds route paths case-insensitively.
+/** Per-symbol page at `/api/<bucket>/<name>` (a `[bucket]/[symbol]` dynamic route).
+ * The `<bucket>/` segment keeps `Type`/`factory` pairs (ErrorResult vs errorResult) and
+ * symbol-vs-module names on case-insensitively-distinct URLs.
+ * VitePress folds route paths case-insensitively. */
 function symbolUrl(name: string): string {
 	return `/api/${symbolBucket.get(name) ?? 'type'}/${name}`;
 }
@@ -74,7 +73,7 @@ function link(name: string): string {
 	return `\`${name}\``;
 }
 
-// Narrow a tag list to one kind without a cast (filter doesn't narrow unions).
+/** Narrow a tag list to one kind without a cast (filter doesn't narrow unions). */
 function tagsOfKind<K extends JsDocTag['kind']>(
 	tags: readonly JsDocTag[],
 	kind: K,
@@ -82,14 +81,14 @@ function tagsOfKind<K extends JsDocTag['kind']>(
 	return tags.filter((tag): tag is Extract<JsDocTag, { kind: K }> => tag.kind === kind);
 }
 
-// @deno/doc's `JsDocTag` union omits `see`/`example` even though the wasm emits
-// them, so tagsOfKind can't reach them. Match by name and read `doc` defensively.
+/** @deno/doc's `JsDocTag` union omits `see`/`example` even though the wasm emits
+ * them, so tagsOfKind can't reach them. Match by name and read `doc` defensively. */
 function tagsByName(tags: readonly JsDocTag[], kind: string): { doc?: string }[] {
 	return tags.filter((tag): tag is JsDocTag & { doc?: string } => String(tag.kind) === kind);
 }
 
-// ParamDef is a union (identifier, rest, object pattern, ...); only some members
-// carry name/optional/tsType. Read them uniformly without a cast.
+/** ParamDef is a union (identifier, rest, object pattern, ...); only some members
+ * carry name/optional/tsType. Read them uniformly without a cast. */
 function paramInfo(p: ParamDef): {
 	name: string;
 	optional: boolean;
@@ -102,7 +101,7 @@ function paramInfo(p: ParamDef): {
 	};
 }
 
-// --- the core: TsTypeDef -> markdown, recursive. Each case narrows on `kind`.
+/* TsTypeDef -> markdown, recursive. Each case narrows on `kind`. */
 function renderType(t: TsTypeDef | undefined): string {
 	if (!t) return '`unknown`';
 	switch (t.kind) {
@@ -159,9 +158,9 @@ function renderType(t: TsTypeDef | undefined): string {
 	}
 }
 
-// One {@link}/{@linkcode}/{@linkplain}. Supports `target | label`, bare URLs,
-// `[module]`/`[module].symbol` module refs, and dotted symbol paths. `linkcode`
-// renders the visible text in monospace (per deno's inline-link semantics).
+/** One {@link}/{@linkcode}/{@linkplain}. Supports `target | label`, bare URLs,
+ * `[module]`/`[module].symbol` module refs, and dotted symbol paths. `linkcode`
+ * renders the visible text in monospace (per deno's inline-link semantics). */
 function renderInlineLink(code: boolean, target: string, label?: string): string {
 	const text = label ?? target.replace(/^\[|\]$/g, '');
 	const shown = code ? `\`${text}\`` : text;
@@ -194,14 +193,14 @@ function resolveInlineLinks(text: string): string {
 	);
 }
 
-// Keep multi-line doc content inside a `- ` list item: indent continuation lines
-// so blank lines / hard breaks don't float the tail out of the list.
+/** Keep multi-line doc content inside a `- ` list item: indent continuation lines
+ * so blank lines / hard breaks don't float the tail out of the list. */
 function bulletBody(doc: string): string {
 	return resolveInlineLinks(doc).replace(/\n/g, '\n  ');
 }
 
-// Strip links/backticks/escapes back to plain source text — for ```ts fences,
-// where markdown doesn't render and `[x](#y)` / `\<` would appear literally.
+/** Strip links/backticks/escapes back to plain source text — for ```ts fences,
+ * where markdown doesn't render and `[x](#y)` / `\<` would appear literally. */
 function plain(s: string): string {
 	return s
 		.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
@@ -213,7 +212,7 @@ function renderDescription(js: JsDoc | undefined): string {
 	return js?.doc ? resolveInlineLinks(js.doc) : '';
 }
 
-// Non-param tag blocks: returns, throws, see, examples, surfaced defaults.
+/** Non-param tag blocks: returns, throws, see, examples, surfaced defaults. */
 function renderTagBlocks(js: JsDoc | undefined): string {
 	const tags = js?.tags ?? [];
 	const out: string[] = [];
@@ -254,7 +253,7 @@ function renderTagBlocks(js: JsDoc | undefined): string {
 	return out.join('\n').trimEnd();
 }
 
-// module_doc: description + tag blocks, no params.
+/** module_doc: description + tag blocks, no params. */
 function renderModuleDoc(js: JsDoc | undefined): string {
 	return [renderDescription(js), renderTagBlocks(js)].filter(Boolean).join('\n\n');
 }
@@ -267,8 +266,7 @@ function renderTypeParams(tps: readonly TsTypeParamDef[] | undefined): string {
 	return `\\<${inner}>`;
 }
 
-// Parameters list — links live here (not in the fenced signature), merging the
-// declared param types with their @param docs.
+/** Parameters list — links live here (not in the fenced signature), merging the declared param types with their @param docs. */
 function renderParams(defParams: readonly ParamDef[], js: JsDoc | undefined): string {
 	if (!defParams.length) return '';
 	const docs = new Map<string, string>();
@@ -366,7 +364,7 @@ function pkgOf(url: string): string {
 	return url.replace(/^.*\/src\//, '').replace(/\/index\.ts$/, '');
 }
 
-// Register every symbol's page bucket so `{@link}`/typeRef links resolve.
+/** Register every symbol's page bucket so `{@link}`/typeRef links resolve. */
 function registerSymbols(nodes: Record<string, ApiModule>): void {
 	symbolBucket.clear();
 	for (const mod of Object.values(nodes)) {

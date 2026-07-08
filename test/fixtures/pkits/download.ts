@@ -2,11 +2,11 @@
 import { copyFile, mkdir, mkdtemp, readdir, rm, unlink } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { projectRoot } from '#test/helpers';
 import { $, which } from 'bun';
 
-// Vendors the full PKITS fixture corpus from the BoringSSL mirror of the NIST
-// PKITS inputs via a shallow blobless sparse checkout (~3 MB) instead of ~580
-// individual HTTP requests.
+/** Vendors the full PKITS fixture corpus from the BoringSSL mirror of the NIST PKITS inputs via a
+ * shallow blobless sparse checkout (~3 MB) instead of ~580 individual HTTP requests. */
 
 const UPSTREAM_REPO_URL = 'https://github.com/google/boringssl.git';
 const UPSTREAM_SPARSE_PATH = 'pki/testdata/nist-pkits';
@@ -72,9 +72,7 @@ async function main(): Promise<void> {
 
 	await $`bun ${import.meta.dir}/generate-manifest.ts`;
 
-	await $`bunx dprint fmt --log-level error ${import.meta.dir}/**/*.{ts,md,py,h}`.cwd(
-		path.resolve(import.meta.dir, '../../..'),
-	);
+	await $`bunx dprint fmt --log-level error ${import.meta.dir}/**/*.{ts,md,py,h}`.cwd(projectRoot);
 }
 
 if (import.meta.main) await main();

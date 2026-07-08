@@ -161,9 +161,9 @@ dist
 **/.vitepress/dist/
 **/.vitepress/worker-configuration.d.ts
 *import_map.json
-.opencode/state/
-.playwright-cli
 /.archive
+/.opencode/state/
+/.playwright-cli
 /_*.md
 /comparisons/*
 /docs/deno/

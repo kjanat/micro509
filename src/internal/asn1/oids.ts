@@ -7,7 +7,7 @@
  * @module
  */
 
-import OID_GROUP_SPECS from '#micro509/internal/asn1/oidsJson' with { type: 'json' };
+import OID_GROUP_SPECS from './oids.json' with { type: 'json' };
 
 type OidLeaves = { readonly [name: string]: string };
 type OidNode = {

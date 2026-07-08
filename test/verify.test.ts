@@ -36,7 +36,7 @@ import {
 	issueChain,
 	replaceCertificateSignatureAlgorithm,
 	rewriteCertificateSignatureAsRsaPss,
-} from './helpers.ts';
+} from '#test/helpers';
 
 function buildUnsupportedOtherNameConstraintsDer(): Uint8Array {
 	const otherName = tlv(0xa0, sequence([]));
@@ -2269,9 +2269,7 @@ describe('chain verification', () => {
 	});
 });
 
-// ---------------------------------------------------------------------------
 // Validation profiles
-// ---------------------------------------------------------------------------
 
 describe('validation profiles', () => {
 	it('validateForTlsServer checks chain + serverAuth EKU + DNS', async () => {
@@ -2748,9 +2746,7 @@ describe('validation profiles', () => {
 	});
 });
 
-// ---------------------------------------------------------------------------
 // validateCandidatePath direct
-// ---------------------------------------------------------------------------
 
 describe('validateCandidatePath direct', () => {
 	it('rejects empty chain', async () => {
@@ -3492,9 +3488,7 @@ describe('validateCandidatePath direct', () => {
 	});
 });
 
-// ---------------------------------------------------------------------------
 // checkExtendedKeyUsage edge cases
-// ---------------------------------------------------------------------------
 
 describe('checkExtendedKeyUsage edge cases', () => {
 	it('returns leaf_eku_missing for empty chain', () => {
@@ -3549,9 +3543,7 @@ describe('checkExtendedKeyUsage edge cases', () => {
 	});
 });
 
-// ---------------------------------------------------------------------------
 // Purpose=ca success case
-// ---------------------------------------------------------------------------
 
 it('accepts purpose=ca when leaf IS a CA', async () => {
 	const root = await createSelfSignedCertificate({
@@ -3581,9 +3573,7 @@ it('accepts purpose=ca when leaf IS a CA', async () => {
 	expect(result.ok).toBe(true);
 });
 
-// ---------------------------------------------------------------------------
 // buildCandidatePath edge cases
-// ---------------------------------------------------------------------------
 
 describe('buildCandidatePath edge cases', () => {
 	it('reports expired intermediate during path build', async () => {
@@ -3652,9 +3642,7 @@ describe('buildCandidatePath edge cases', () => {
 	});
 });
 
-// ---------------------------------------------------------------------------
 // validateForTlsServer with allowCommonNameFallback forwarding
-// ---------------------------------------------------------------------------
 
 describe('validateForTlsServer with CN fallback', () => {
 	it('forwards allowCommonNameFallback to the identity boundary', async () => {
@@ -4173,9 +4161,7 @@ describe('coverage: validation profiles and constraint matching', () => {
 	});
 });
 
-// ---------------------------------------------------------------------------
 // coverage: verify.ts internal edge cases via tampered ParsedCertificate
-// ---------------------------------------------------------------------------
 
 describe('coverage: verify.ts internal edge cases', () => {
 	// Helper: create a self-signed root + leaf chain and return parsed certs

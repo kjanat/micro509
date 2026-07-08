@@ -219,9 +219,7 @@ export type CreatePfxResult =
 	  }
 	| ErrorResult<CreatePfxErrorCode, Record<never, never>, CreatePfxFailure>;
 
-// ---------------------------------------------------------------------------
 // createPfx
-// ---------------------------------------------------------------------------
 
 /**
  * Builds a PKCS#12/PFX archive containing certificates and/or private keys.

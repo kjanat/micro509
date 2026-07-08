@@ -13,7 +13,7 @@
  * blank after load. Real pages hydrate correctly.
  *
  * The plugin regenerates on any `src/**\/*.ts` change (debounced) and triggers a
- * reload — a fast doc refresh in `site:dev` without typedoc's full rebuild.
+ * reload — a fast doc refresh in `site:dev` without a full site restart.
  *
  * NOTE: shells `deno doc`, so the environment running the build needs `deno`
  * (and `bun` for the import map). Fine for local dev; production/CF builds must

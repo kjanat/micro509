@@ -21,7 +21,7 @@ const glob = new Bun.Glob('src/**/*.ts');
 
 const denoMap = Bun.file(`${root}deno.import_map.json`);
 
-// Copy the non-wildcard entries verbatim (barrels, #pkg, #jsr, #typedoc-sidebar).
+// Copy the non-wildcard entries verbatim (barrels, #pkg, #jsr).
 for (const [key, value] of Object.entries(pkg.imports)) {
 	if (!key.includes('*')) {
 		imports[key] = value;

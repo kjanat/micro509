@@ -16,11 +16,10 @@
  */
 
 import { Buffer } from 'node:buffer';
-import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { runOpenSsl, withTempDir } from './openssl.ts';
-import type { CertSpec, FuzzKeyAlgo, FuzzSan } from '../fuzz/spec.ts';
+import { runOpenSsl, withTempDir } from '#test/oracles/openssl';
+import type { CertSpec, FuzzKeyAlgo, FuzzSan } from '#test/fuzz/spec';
 
 /** nameopt shared with the comparator: RFC2253-like but keeps UTF-8 raw. */
 export const NAME_OPT = 'esc_2253,utf8,sep_comma_plus,dn_rev,sname';
@@ -52,9 +51,7 @@ function digestFlag(hash: string): string {
 
 function keygenArgs(algo: FuzzKeyAlgo, outPath: string): readonly string[] {
 	if (algo.kind === 'ed25519') return ['genpkey', '-algorithm', 'ED25519', '-out', outPath];
-	if (algo.kind === 'ecdsa') {
-		return ['genpkey', '-algorithm', 'EC', '-pkeyopt', `ec_paramgen_curve:${CURVE_OSSL[algo.curve]}`, '-out', outPath];
-	}
+	if (algo.kind === 'ecdsa') return ['genpkey', '-algorithm', 'EC', '-pkeyopt', `ec_paramgen_curve:${CURVE_OSSL[algo.curve]}`, '-out', outPath];
 	return ['genpkey', '-algorithm', 'RSA', '-pkeyopt', `rsa_keygen_bits:${algo.bits}`, '-out', outPath];
 }
 
@@ -73,12 +70,7 @@ function subjectString(spec: CertSpec): string {
 }
 
 function sanValue(sans: readonly FuzzSan[]): string {
-	const label: Record<FuzzSan['type'], string> = {
-		dns: 'DNS',
-		ip: 'IP',
-		email: 'email',
-		uri: 'URI',
-	};
+	const label: Record<FuzzSan['type'], string> = { dns: 'DNS', ip: 'IP', email: 'email', uri: 'URI' };
 	return sans.map((s) => `${label[s.type]}:${s.value}`).join(',');
 }
 
@@ -99,7 +91,7 @@ export async function generateKeyPem(algo: FuzzKeyAlgo): Promise<string> {
 		const keyPath = join(dir, 'key.pem');
 		const result = await runOpenSsl(keygenArgs(algo, keyPath));
 		if (result.exitCode !== 0) throw new Error(`openssl genpkey failed: ${result.stderr}`);
-		return await readFile(keyPath, 'utf8');
+		return await Bun.file(keyPath).text();
 	});
 }
 
@@ -109,7 +101,7 @@ export async function publicSpki(
 ): Promise<{ readonly pem: string; readonly der: Uint8Array }> {
 	return await withTempDir(async (dir) => {
 		const keyPath = join(dir, 'key.pem');
-		await writeFile(keyPath, keyPem, 'utf8');
+		await Bun.write(keyPath, keyPem);
 		const result = await runOpenSsl(['pkey', '-in', keyPath, '-pubout']);
 		if (result.exitCode !== 0) throw new Error(`openssl pkey -pubout failed: ${result.stderr}`);
 		return { pem: result.stdout, der: decodePem('PUBLIC KEY', result.stdout) };
@@ -135,8 +127,8 @@ async function issueCert(input: {
 		const extPath = join(dir, 'ext.cnf');
 		const certPath = join(dir, 'cert.pem');
 		await Promise.all([
-			writeFile(subjectKeyPath, input.subjectKeyPem, 'utf8'),
-			writeFile(extPath, extConfig(input.spec), 'utf8'),
+			Bun.write(subjectKeyPath, input.subjectKeyPem),
+			Bun.write(extPath, extConfig(input.spec)),
 		]);
 
 		// -utf8: without it OpenSSL reads the -subj bytes as Latin-1 and
@@ -152,15 +144,15 @@ async function issueCert(input: {
 			const caCertPath = join(dir, 'ca.pem');
 			const caKeyPath = join(dir, 'ca.key');
 			await Promise.all([
-				writeFile(caCertPath, input.caCertPem, 'utf8'),
-				writeFile(caKeyPath, input.issuerKeyPem, 'utf8'),
+				Bun.write(caCertPath, input.caCertPem),
+				Bun.write(caKeyPath, input.issuerKeyPem),
 			]);
 			signArgs.push('-CA', caCertPath, '-CAkey', caKeyPath);
 		}
 
 		const signed = await runOpenSsl(signArgs);
 		if (signed.exitCode !== 0) throw new Error(`openssl x509 -req failed: ${signed.stderr}`);
-		const pem = await readFile(certPath, 'utf8');
+		const pem = await Bun.file(certPath).text();
 		return { pem, der: decodePem('CERTIFICATE', pem) };
 	});
 }
@@ -218,7 +210,7 @@ export async function readCertFields(certPem: string): Promise<OpenSslCertFields
 	return await withTempDir(async (dir) => {
 		const certPath = join(dir, 'cert.pem');
 		const derPath = join(dir, 'cert.der');
-		await writeFile(certPath, certPem, 'utf8');
+		await Bun.write(certPath, certPem);
 		const base = ['x509', '-in', certPath, '-noout'] as const;
 
 		const [serial, subject, issuer, dates, pubkey, san, ski, asn1, derWrite] = await Promise.all([
@@ -244,7 +236,7 @@ export async function readCertFields(certPem: string): Promise<OpenSslCertFields
 			if (r.exitCode !== 0) throw new Error(`openssl ${name} read failed: ${r.stderr}`);
 		}
 
-		const der = new Uint8Array(await readFile(derPath));
+		const der = new Uint8Array(await Bun.file(derPath).arrayBuffer());
 		const skiHex = parseSki(ski.stdout);
 		const sigAlgParamsDer = sigAlgParamsFromAsn1(asn1.stdout, der);
 		return {

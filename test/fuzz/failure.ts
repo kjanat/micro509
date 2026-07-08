@@ -8,11 +8,12 @@
  */
 
 import { join } from 'node:path';
+import { fixturesDir } from '#test/helpers';
 
 import type { Mismatch } from '#test/fuzz/compare';
 import type { CertSpec } from '#test/fuzz/spec';
 
-const FAILURE_ROOT = join(import.meta.dir, '../fixtures/differential-failures');
+const FAILURE_ROOT = join(fixturesDir, './differential-failures');
 
 export interface FailureArtifact {
 	readonly seed: number;
