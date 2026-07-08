@@ -18,7 +18,8 @@
 
 import { $, argv } from 'bun';
 
-import { type ApiModule, publicEntrypoints, renderDocuments } from './render-deno-doc.shared.ts';
+import type { ApiModule } from './render-deno-doc.shared.ts';
+import { publicEntrypoints, renderDocuments } from './render-deno-doc.shared.ts';
 
 await $`bun scripts/gen-deno-importmap.ts`.quiet();
 const raw =

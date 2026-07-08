@@ -65,7 +65,6 @@
  * @module micro509
  */
 
-// ── keys ─────────────────────────────────────────────────────────────
 export type {
 	DecryptRsaOaepErrorCode,
 	DecryptRsaOaepFailure,
@@ -96,7 +95,7 @@ export type {
 	RsaOaepOptions,
 	RsaScheme,
 	RsaSignatureScheme,
-} from './keys/index.ts';
+} from '#micro509/keys';
 export {
 	decryptRsaOaep,
 	decryptRsaOaepOrThrow,
@@ -151,9 +150,8 @@ export {
 	importSpkiDerOrThrow,
 	importSpkiPem,
 	importSpkiPemOrThrow,
-} from './keys/index.ts';
+} from '#micro509/keys';
 
-// ── pem ──────────────────────────────────────────────────────────────
 export type {
 	CategorizedPemBlocks,
 	CategorizePemBlocksResult,
@@ -162,7 +160,7 @@ export type {
 	PemErrorCode,
 	PemFailure,
 	SplitPemBlocksResult,
-} from './pem/index.ts';
+} from '#micro509/pem';
 export {
 	categorizePemBlocks,
 	categorizePemBlocksOrThrow,
@@ -171,9 +169,8 @@ export {
 	pemEncode,
 	splitPemBlocks,
 	splitPemBlocksOrThrow,
-} from './pem/index.ts';
+} from '#micro509/pem';
 
-// ── pkcs ─────────────────────────────────────────────────────────────
 export type {
 	CreatePfxErrorCode,
 	CreatePfxFailure,
@@ -219,7 +216,7 @@ export type {
 	Pkcs7Signer,
 	VerifyPkcs7SignedDataFailure,
 	VerifyPkcs7SignedDataResult,
-} from './pkcs/index.ts';
+} from '#micro509/pkcs';
 export {
 	createPfx,
 	createPkcs7CertBag,
@@ -231,9 +228,8 @@ export {
 	parsePkcs7SignedDataDer,
 	parsePkcs7SignedDataPem,
 	verifyPkcs7SignedData,
-} from './pkcs/index.ts';
+} from '#micro509/pkcs';
 
-// ── result ───────────────────────────────────────────────────────────
 export type {
 	ErrorResult,
 	IndexedErrorResult,
@@ -241,10 +237,9 @@ export type {
 	Micro509Error,
 	Result,
 	ResultError,
-} from './result/index.ts';
-export { isResultError, unwrap, unwrapOr } from './result/index.ts';
+} from '#micro509/result';
+export { isResultError, unwrap, unwrapOr } from '#micro509/result';
 
-// ── revocation ───────────────────────────────────────────────────────
 export type {
 	CertificateRevocationListMaterial,
 	CertificateRevocationStatus,
@@ -336,7 +331,7 @@ export type {
 	VerifyCertificateRevocationListSignatureResult,
 	VerifyOcspResponseSignatureFailure,
 	VerifyOcspResponseSignatureResult,
-} from './revocation/index.ts';
+} from '#micro509/revocation';
 export {
 	checkCertificateRevocation,
 	checkCertificateRevocationAgainstCrl,
@@ -366,9 +361,8 @@ export {
 	validateOcspResponse,
 	verifyCertificateRevocationListSignature,
 	verifyOcspResponseSignature,
-} from './revocation/index.ts';
+} from '#micro509/revocation';
 
-// ── verify ───────────────────────────────────────────────────────────
 export type {
 	BuildCandidatePathInput,
 	BuildCandidatePathResult,
@@ -413,7 +407,7 @@ export type {
 	VerifyPurpose,
 	VerifyRequestFailure,
 	VerifyRequestResult,
-} from './verify/index.ts';
+} from '#micro509/verify';
 export {
 	buildCandidatePath,
 	checkExtendedKeyUsage,
@@ -428,9 +422,8 @@ export {
 	VERIFY_ERROR_CODES,
 	verifyCertificateChain,
 	verifyCertificateSigningRequest,
-} from './verify/index.ts';
+} from '#micro509/verify';
 
-// ── x509 ─────────────────────────────────────────────────────────────
 export type {
 	AuthorityInformationAccess,
 	BasicConstraints,
@@ -484,7 +477,7 @@ export type {
 	SelfSignedCertificateResult,
 	SubjectAltName,
 	ValidityInput,
-} from './x509/index.ts';
+} from '#micro509/x509';
 export {
 	createCertificate,
 	createCertificateSigningRequest,
@@ -506,4 +499,4 @@ export {
 	parseCertificateSigningRequestDerOrThrow,
 	parseCertificateSigningRequestPem,
 	parseCertificateSigningRequestPemOrThrow,
-} from './x509/index.ts';
+} from '#micro509/x509';

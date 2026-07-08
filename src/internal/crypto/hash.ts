@@ -5,7 +5,7 @@
  * @module
  */
 
-// ── Shared Merkle–Damgård primitives ──────────────────────────────
+// Shared Merkle–Damgård primitives
 
 /** Unsigned 32-bit left-rotate. */
 function rotl(x: number, n: number): number {
@@ -40,7 +40,7 @@ function w32(arr: Uint32Array, i: number): number {
 	return v;
 }
 
-// ── MD5 (RFC 1321) ───────────────────────────────────────────────
+// MD5 (RFC 1321)
 
 /** Per-round left-rotate amounts for MD5 (RFC 1321 §3.4). */
 const MD5_S = /* dprint-ignore */ [
@@ -118,7 +118,7 @@ export function md5(data: Uint8Array): Uint8Array<ArrayBuffer> {
 	return out;
 }
 
-// ── SHA-1 (RFC 3174) ─────────────────────────────────────────────
+// SHA-1 (RFC 3174)
 
 /** Compute a 20-byte SHA-1 digest (RFC 3174). Used by PKCS#12 MAC verification. */
 export function sha1(data: Uint8Array): Uint8Array<ArrayBuffer> {

@@ -95,6 +95,7 @@
 		"lint:biome": "biome lint",
 		"lint:deno": "deno lint src",
 		"playwright:chromium": "npx playwright install --with-deps chromium",
+		"prepare": "run deno:importsmap",
 		"prepublishOnly": "[ -n \"${GITHUB_ACTIONS:-}\" ] || { printf '%s\\n' 'manual npm publish blocked; use release workflow for provenance' >&2; exit 1; }",
 		"publish:jsr": "[ -n \"${GITHUB_ACTIONS:-}\" ] || { printf '%s\\n' 'manual JSR publish blocked; use release workflow' >&2; exit 1; }; bunx jsr publish",
 		"publish:pkgprnew": "bunx pkg-pr-new publish --packageManager='npm,pnpm,bun' --bun",

@@ -8,7 +8,7 @@
  */
 
 import { OIDS } from '#micro509/internal/asn1/oids';
-import { parseRsaPssParameters } from './rsa-pss.ts';
+import { parseRsaPssParameters } from '#micro509/internal/crypto/rsa-pss';
 
 /** Convert a hash or message-digest OID into a human-readable name. */
 export function describeHashAlgorithm(oid: string): string {

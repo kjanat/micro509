@@ -32,7 +32,7 @@ import type {
 	TsTypeParamDef,
 } from '@deno/doc';
 
-import jsr from '../jsr.json' with { type: 'json' };
+import jsr from '#jsr' with { type: 'json' };
 
 // `doc()`/`deno doc --json` emit `module_doc`; @deno/doc's types call it
 // `moduleDoc`. Bridge that single divergence — everything else is faithfully

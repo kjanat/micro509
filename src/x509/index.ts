@@ -5,17 +5,19 @@
  * @module micro509/x509
  */
 
-export type { SignatureProfileInput } from './certificate.ts';
 export type {
 	CertificateMaterial,
 	CreateCertificateInput,
 	CreateSelfSignedCertificateInput,
 	SelfSignedCertificateResult,
+	SignatureProfileInput,
 	ValidityInput,
-} from './certificate.ts';
-export { createCertificate, createSelfSignedCertificate } from './certificate.ts';
-export type { CreateCsrInput, CsrMaterial } from './csr.ts';
-export { createCertificateSigningRequest } from './csr.ts';
+} from '#micro509/x509/certificate';
+export { createCertificate, createSelfSignedCertificate } from '#micro509/x509/certificate';
+
+export type { CreateCsrInput, CsrMaterial } from '#micro509/x509/csr';
+export { createCertificateSigningRequest } from '#micro509/x509/csr';
+
 export type {
 	AuthorityInfoAccessMethod,
 	AuthorityInformationAccess,
@@ -49,7 +51,7 @@ export type {
 	SubjectAltName,
 	UnsupportedNameConstraintForm,
 	UserNoticePolicyQualifierInfo,
-} from './extensions.ts';
+} from '#micro509/x509/extensions';
 export {
 	buildCertificateExtensions,
 	buildRequestedExtensions,
@@ -69,15 +71,17 @@ export {
 	getExtendedKeyUsageOid,
 	parseAuthorityInfoAccessMethodOid,
 	parseExtendedKeyUsageOid,
-} from './extensions.ts';
+} from '#micro509/x509/extensions';
+
 export type {
 	NameAttribute,
 	NameFieldKey,
 	NameInput,
 	NameObject,
 	RelativeDistinguishedNameInput,
-} from './name.ts';
-export { encodeName, encodeRelativeDistinguishedName } from './name.ts';
+} from '#micro509/x509/name';
+export { encodeName, encodeRelativeDistinguishedName } from '#micro509/x509/name';
+
 export type {
 	DecodedExtensionMap,
 	DecodedExtensionValue,
@@ -99,7 +103,7 @@ export type {
 	ParsedNameAttribute,
 	ParsedRelativeDistinguishedName,
 	ParseOptions,
-} from './parse.ts';
+} from '#micro509/x509/parse';
 export {
 	decodeExtension,
 	decodeExtensionMap,
@@ -118,4 +122,4 @@ export {
 	parseCertificateSigningRequestDerOrThrow,
 	parseCertificateSigningRequestPem,
 	parseCertificateSigningRequestPemOrThrow,
-} from './parse.ts';
+} from '#micro509/x509/parse';

@@ -16,8 +16,8 @@ import {
 	time,
 } from '#micro509/internal/asn1/der';
 import type { SignatureProfileInput } from '#micro509/internal/crypto/signing';
-
 export type { SignatureProfileInput };
+
 import {
 	encodeAlgorithmIdentifier,
 	getSignatureAlgorithm,
@@ -25,18 +25,16 @@ import {
 } from '#micro509/internal/crypto/signing';
 import { getCrypto } from '#micro509/internal/crypto/webcrypto';
 import { base64Encode } from '#micro509/internal/shared/base64';
-import {
-	exportSpkiDer,
-	generateKeyPair,
-	type KeyAlgorithmInput,
-	type KeyPairMaterial,
-} from '#micro509/keys/keys';
+import type { KeyAlgorithmInput, KeyPairMaterial } from '#micro509/keys/keys';
+import { exportSpkiDer, generateKeyPair } from '#micro509/keys/keys';
 import { pemEncode } from '#micro509/pem/pem';
-import { buildCertificateExtensions, type CertificateExtensionsInput } from './extensions.ts';
-import { encodeName, isNameInputEmpty, type NameInput } from './name.ts';
+import type { CertificateExtensionsInput } from '#micro509/x509/extensions';
+import { buildCertificateExtensions } from '#micro509/x509/extensions';
+import type { NameInput } from '#micro509/x509/name';
+import { encodeName, isNameInputEmpty } from '#micro509/x509/name';
 
-export type * from './extensions.ts';
-export type * from './name.ts';
+export type * from '#micro509/x509/extensions';
+export type * from '#micro509/x509/name';
 
 /**
  * Configures the certificate validity window.

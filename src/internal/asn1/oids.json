@@ -1,0 +1,352 @@
+{
+	"$schema": "./oids.schema.json",
+	"iso": {
+		"arc": "1",
+		"children": {
+			"memberBody": {
+				"arc": "2",
+				"children": {
+					"us": {
+						"arc": "840",
+						"children": {
+							"rsadsi": {
+								"arc": "113549",
+								"children": {
+									"pkcs": {
+										"arc": "1",
+										"children": {
+											"pkcs1": {
+												"arc": "1",
+												"oids": {
+													"rsaEncryption": "1",
+													"sha1WithRSAEncryption": "5",
+													"mgf1": "8",
+													"rsassaPss": "10",
+													"sha256WithRSAEncryption": "11",
+													"sha384WithRSAEncryption": "12",
+													"sha512WithRSAEncryption": "13"
+												}
+											},
+											"pkcs5": {
+												"arc": "5",
+												"oids": {
+													"pbkdf2": "12",
+													"pbes2": "13"
+												}
+											},
+											"pkcs7": {
+												"arc": "7",
+												"oids": {
+													"pkcs7Data": "1",
+													"pkcs7SignedData": "2",
+													"pkcs7EncryptedData": "6"
+												}
+											},
+											"pkcs9": {
+												"arc": "9",
+												"oids": {
+													"emailAddress": "1",
+													"cmsContentType": "3",
+													"cmsMessageDigest": "4",
+													"extensionRequest": "14",
+													"friendlyName": "20",
+													"localKeyId": "21"
+												},
+												"children": {
+													"certTypes": {
+														"arc": "22",
+														"oids": {
+															"x509CertificateBagType": "1"
+														}
+													}
+												}
+											},
+											"pkcs12Bags": {
+												"arc": "12",
+												"children": {
+													"bagTypes": {
+														"arc": "10",
+														"children": {
+															"bags": {
+																"arc": "1",
+																"oids": {
+																	"pkcs12KeyBag": "1",
+																	"pkcs12CertBag": "3"
+																}
+															}
+														}
+													}
+												}
+											}
+										}
+									},
+									"digestAlgorithm": {
+										"arc": "2",
+										"oids": {
+											"hmacWithSHA1": "7",
+											"hmacWithSHA256": "9"
+										}
+									}
+								}
+							},
+							"ansiX962": {
+								"arc": "10045",
+								"children": {
+									"keyType": {
+										"arc": "2",
+										"oids": {
+											"ecPublicKey": "1"
+										}
+									},
+									"curves": {
+										"arc": "3",
+										"children": {
+											"prime": {
+												"arc": "1",
+												"oids": {
+													"prime256v1": "7"
+												}
+											}
+										}
+									},
+									"signatures": {
+										"arc": "4",
+										"oids": {
+											"ecdsaWithSHA1": "1"
+										},
+										"children": {
+											"sha2": {
+												"arc": "3",
+												"oids": {
+													"ecdsaWithSHA224": "1",
+													"ecdsaWithSHA256": "2",
+													"ecdsaWithSHA384": "3",
+													"ecdsaWithSHA512": "4"
+												}
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			},
+			"identifiedOrganization": {
+				"arc": "3",
+				"children": {
+					"certicom": {
+						"arc": "132",
+						"children": {
+							"curve": {
+								"arc": "0",
+								"oids": {
+									"secp384r1": "34",
+									"secp521r1": "35"
+								}
+							}
+						}
+					},
+					"edwardsCurveAlgs": {
+						"arc": "101",
+						"oids": {
+							"ed25519": "112"
+						}
+					},
+					"dod": {
+						"arc": "6",
+						"children": {
+							"internet": {
+								"arc": "1",
+								"children": {
+									"security": {
+										"arc": "5",
+										"children": {
+											"mechanisms": {
+												"arc": "5",
+												"children": {
+													"pkix": {
+														"arc": "7",
+														"children": {
+															"extensions": {
+																"arc": "1",
+																"oids": {
+																	"authorityInfoAccess": "1"
+																}
+															},
+															"policyQualifiers": {
+																"arc": "2",
+																"oids": {
+																	"cpsPolicyQualifier": "1",
+																	"userNoticePolicyQualifier": "2"
+																}
+															},
+															"extendedKeyUsage": {
+																"arc": "3",
+																"oids": {
+																	"serverAuth": "1",
+																	"clientAuth": "2",
+																	"codeSigning": "3",
+																	"emailProtection": "4",
+																	"timeStamping": "8",
+																	"ocspSigning": "9"
+																}
+															},
+															"otherNameForms": {
+																"arc": "8",
+																"oids": {
+																	"idOnDnsSrv": "7"
+																}
+															},
+															"accessMethods": {
+																"arc": "48",
+																"oids": {
+																	"ocspAccessMethod": "1",
+																	"caIssuersAccessMethod": "2"
+																},
+																"children": {
+																	"ocsp": {
+																		"arc": "1",
+																		"oids": {
+																			"ocspBasicResponse": "1",
+																			"ocspNonce": "2",
+																			"ocspNoCheck": "5"
+																		}
+																	}
+																}
+															}
+														}
+													}
+												}
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"oiw": {
+						"arc": "14",
+						"children": {
+							"secsig": {
+								"arc": "3",
+								"children": {
+									"algorithms": {
+										"arc": "2",
+										"oids": {
+											"sha1": "26"
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	},
+	"jointIsoItuT": {
+		"arc": "2",
+		"children": {
+			"ds": {
+				"arc": "5",
+				"children": {
+					"attributeType": {
+						"arc": "4",
+						"oids": {
+							"commonName": "3",
+							"surname": "4",
+							"serialNumber": "5",
+							"countryName": "6",
+							"localityName": "7",
+							"stateOrProvinceName": "8",
+							"streetAddress": "9",
+							"organizationName": "10",
+							"organizationalUnitName": "11",
+							"title": "12",
+							"givenName": "42"
+						}
+					},
+					"certificateExtension": {
+						"arc": "29",
+						"oids": {
+							"subjectKeyIdentifier": "14",
+							"keyUsage": "15",
+							"subjectAltName": "17",
+							"basicConstraints": "19",
+							"cRLNumber": "20",
+							"cRLReason": "21",
+							"invalidityDate": "24",
+							"deltaCRLIndicator": "27",
+							"issuingDistributionPoint": "28",
+							"certificateIssuer": "29",
+							"nameConstraints": "30",
+							"cRLDistributionPoints": "31",
+							"certificatePolicies": "32",
+							"policyMappings": "33",
+							"authorityKeyIdentifier": "35",
+							"policyConstraints": "36",
+							"extendedKeyUsage": "37",
+							"freshestCRL": "46",
+							"inhibitAnyPolicy": "54"
+						},
+						"children": {
+							"certificatePolicies": {
+								"arc": "32",
+								"oids": {
+									"anyPolicy": "0"
+								}
+							}
+						}
+					}
+				}
+			},
+			"country": {
+				"arc": "16",
+				"children": {
+					"us": {
+						"arc": "840",
+						"children": {
+							"organization": {
+								"arc": "1",
+								"children": {
+									"gov": {
+										"arc": "101",
+										"children": {
+											"csor": {
+												"arc": "3",
+												"children": {
+													"nistAlgorithms": {
+														"arc": "4",
+														"children": {
+															"aes": {
+																"arc": "1",
+																"oids": {
+																	"aes128Cbc": "2",
+																	"aes192Cbc": "22",
+																	"aes256Cbc": "42"
+																}
+															},
+															"hashes": {
+																"arc": "2",
+																"oids": {
+																	"sha256": "1",
+																	"sha384": "2",
+																	"sha512": "3"
+																}
+															}
+														}
+													}
+												}
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}

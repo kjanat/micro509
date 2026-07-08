@@ -13,7 +13,7 @@ export type {
 	Result,
 	ResultError,
 	UnwrappableResult,
-} from './result.ts';
+} from '#micro509/result/result';
 export {
 	errorResult,
 	failureResult,
@@ -24,4 +24,4 @@ export {
 	successResult,
 	unwrap,
 	unwrapOr,
-} from './result.ts';
+} from '#micro509/result/result';

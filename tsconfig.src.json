@@ -1,4 +1,5 @@
 {
+	"$schema": "https://www.schemastore.org/tsconfig.json",
 	"compilerOptions": {
 		"target": "ES2024",
 		"module": "NodeNext",
@@ -16,16 +17,15 @@
 		"outDir": "./node_modules/.cache/tsc/src",
 		"tsBuildInfoFile": "./node_modules/.cache/tsc/tsconfig.src.tsbuildinfo",
 		"allowImportingTsExtensions": true,
+		"resolveJsonModule": true,
 		"noEmit": true,
 		"isolatedDeclarations": true,
 		"stripInternal": true,
 		"types": [],
 		"paths": {
-			"micro509": ["./src/index.ts"],
-			"#micro509": ["./src/index.ts"],
-			"#micro509/*": ["./src/*"]
+			"micro509": ["./src/index.ts"]
 		}
 	},
-	"include": ["src", "./package.json"],
-	"exclude": ["dist", "node_modules"]
+	"include": ["src", "src/**/*.json", "./package.json"],
+	"exclude": ["dist", "node_modules", "test"]
 }

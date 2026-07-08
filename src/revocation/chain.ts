@@ -10,32 +10,34 @@
 
 import type { ParsedCertificate } from '#micro509/x509/parse';
 import { parseCertificateFromSource } from '#micro509/x509/parse';
+import type {
+	CrlSource,
+	ParsedCertificateRevocationList,
+	RevocationReason,
+} from '#micro509/revocation/crl';
 import {
 	checkCertificateRevocationAgainstCrl,
 	parseCertificateRevocationListDerOrThrow,
 	parseCertificateRevocationListPemOrThrow,
-	type ParsedCertificateRevocationList,
-	type RevocationReason,
 	revocationReasonFromCode,
-} from './crl.ts';
-import type { CrlSource } from './crl.ts';
+} from '#micro509/revocation/crl';
+import type {
+	OcspResponderRevocationPolicy,
+	ParsedOcspResponse,
+	ValidateOcspResponseFailure,
+	ValidateOcspResponseResult,
+} from '#micro509/revocation/ocsp';
 import {
-	type OcspResponderRevocationPolicy,
-	type ParsedOcspResponse,
 	parseOcspResponseDerOrThrow,
 	parseOcspResponsePemOrThrow,
-	type ValidateOcspResponseFailure,
-	type ValidateOcspResponseResult,
 	validateOcspResponse,
-} from './ocsp.ts';
+} from '#micro509/revocation/ocsp';
 
-import type { RevocationCertificateSource } from './revocation.ts';
+import type { RevocationCertificateSource } from '#micro509/revocation/revocation';
 
 export type { CrlSource };
 
-// ---------------------------------------------------------------------------
 // Input Types
-// ---------------------------------------------------------------------------
 
 /**
  * OCSP response in any supported format.
@@ -108,9 +110,7 @@ export interface CheckChainRevocationInput {
 	readonly policy?: RevocationPolicy;
 }
 
-// ---------------------------------------------------------------------------
 // Output Types
-// ---------------------------------------------------------------------------
 
 /**
  * Granular reasons why revocation status could not be determined.
@@ -276,9 +276,7 @@ export type CheckChainRevocationResult = {
 	readonly value: CheckChainRevocationValue;
 };
 
-// ---------------------------------------------------------------------------
 // Helpers
-// ---------------------------------------------------------------------------
 
 /**
  * Parses a CRL from various source formats.
@@ -364,9 +362,7 @@ function normalizeHex(value: string): string {
 	return value.toLowerCase();
 }
 
-// ---------------------------------------------------------------------------
 // CRL Signer Validation (RFC 5280 §6.3.3)
-// ---------------------------------------------------------------------------
 
 /**
  * State machine for CRL signer validation with memoization.
@@ -565,9 +561,7 @@ function buildCrlRevokedStatus(
 	};
 }
 
-// ---------------------------------------------------------------------------
 // OCSP Evidence Evaluation (RFC 6960)
-// ---------------------------------------------------------------------------
 
 /** Per-certificate evidence evaluation outcome shared by the CRL and OCSP evaluators. */
 interface EvidenceEvaluation {
@@ -999,9 +993,7 @@ async function evaluateCertificateRevocation(
 	};
 }
 
-// ---------------------------------------------------------------------------
 // Function
-// ---------------------------------------------------------------------------
 
 /**
  * Checks revocation status for all certificates in a validated chain.

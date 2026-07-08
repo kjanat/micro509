@@ -90,4 +90,4 @@ export {
 	importSpkiDerOrThrow,
 	importSpkiPem,
 	importSpkiPemOrThrow,
-} from './keys.ts';
+} from '#micro509/keys/keys';

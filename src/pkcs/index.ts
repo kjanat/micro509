@@ -7,7 +7,6 @@
  * @module micro509/pkcs
  */
 
-// — pfx.ts ————————————————————————————————————————————
 // Re-exports owned by pfx but sourced from internal (PBES2 encryption options)
 export type {
 	CreatePfxErrorCode,
@@ -29,10 +28,9 @@ export type {
 	PfxMaterial,
 	PfxPrivateKeyBagInput,
 	PfxPrivateKeySource,
-} from './pfx.ts';
-export { createPfx, parsePfxDer, parsePfxPem } from './pfx.ts';
+} from '#micro509/pkcs/pfx';
+export { createPfx, parsePfxDer, parsePfxPem } from '#micro509/pkcs/pfx';
 
-// — pkcs7.ts ——————————————————————————————————————————
 export type {
 	CreatePkcs7CertBagErrorCode,
 	CreatePkcs7CertBagFailure,
@@ -54,7 +52,7 @@ export type {
 	Pkcs7Signer,
 	VerifyPkcs7SignedDataFailure,
 	VerifyPkcs7SignedDataResult,
-} from './pkcs7.ts';
+} from '#micro509/pkcs/pkcs7';
 export {
 	createPkcs7CertBag,
 	createPkcs7SignedData,
@@ -63,18 +61,17 @@ export {
 	parsePkcs7SignedDataDer,
 	parsePkcs7SignedDataPem,
 	verifyPkcs7SignedData,
-} from './pkcs7.ts';
+} from '#micro509/pkcs/pkcs7';
 
-// — pkcs12-mac.ts —————————————————————————————————————
 export type {
 	ParsedPkcs12MacData,
 	ParsePkcs12MacDataErrorCode,
 	ParsePkcs12MacDataFailure,
 	ParsePkcs12MacDataResult,
 	Pkcs12MacOptions,
-} from './pkcs12-mac.ts';
+} from '#micro509/pkcs/pkcs12-mac';
 export {
 	createPkcs12MacData,
 	parsePkcs12MacData,
 	parsePkcs12MacDataOrThrow,
-} from './pkcs12-mac.ts';
+} from '#micro509/pkcs/pkcs12-mac';

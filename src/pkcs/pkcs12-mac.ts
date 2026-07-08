@@ -7,13 +7,8 @@
  * @module
  */
 
-import {
-	type ErrorResult,
-	failureResult,
-	type Micro509Error,
-	rethrowIfInvariant,
-	successResult,
-} from '#micro509/result/result';
+import type { ErrorResult, Micro509Error } from '#micro509/result/result';
+import { rethrowIfInvariant, failureResult, successResult } from '#micro509/result/result';
 import {
 	decodeNonNegativeIntegerNumber,
 	decodeObjectIdentifier,

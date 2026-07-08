@@ -33,6 +33,18 @@
 			"settings": {
 				"deno": {
 					"enable": true,
+					"enablePaths": ["./src", "./scripts", "./site"],
+					"importMap": "./deno.import_map.json"
+				}
+			}
+		},
+		"json-language-server": {
+			"settings": {
+				"json": {
+					"schemas": [{
+						"fileMatch": ["src/internal/asn1/oids.json"],
+						"url": "./src/internal/asn1/oids.schema.json"
+					}]
 				}
 			}
 		}

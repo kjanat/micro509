@@ -25,12 +25,14 @@ import {
 import { base64Encode } from '#micro509/internal/shared/base64';
 import { exportSpkiDer } from '#micro509/keys/keys';
 import { pemEncode } from '#micro509/pem/pem';
-import type { SignatureProfileInput } from './certificate.ts';
-import { buildRequestedExtensions, type CertificateExtensionsInput } from './extensions.ts';
-import { encodeName, type NameInput } from './name.ts';
+import type { SignatureProfileInput } from '#micro509/x509/certificate';
+import type { CertificateExtensionsInput } from '#micro509/x509/extensions';
+import { buildRequestedExtensions } from '#micro509/x509/extensions';
+import type { NameInput } from '#micro509/x509/name';
+import { encodeName } from '#micro509/x509/name';
 
-export type * from './extensions.ts';
-export type * from './name.ts';
+export type * from '#micro509/x509/extensions';
+export type * from '#micro509/x509/name';
 
 /** Input for {@linkcode createCertificateSigningRequest}. */
 export interface CreateCsrInput {

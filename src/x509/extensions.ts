@@ -53,10 +53,14 @@ import {
 	SUBJECT_ALT_NAME_EXTENSION_DEFINITION,
 	SUBJECT_KEY_IDENTIFIER_EXTENSION_DEFINITION,
 } from '#micro509/internal/x509/extension-registry';
-import type { RelativeDistinguishedNameInput } from './name.ts';
-import { encodeRelativeDistinguishedName } from './name.ts';
+import type { RelativeDistinguishedNameInput } from '#micro509/x509/name';
+import { encodeRelativeDistinguishedName } from '#micro509/x509/name';
 
-export type { NameAttribute, NameFieldKey, RelativeDistinguishedNameInput } from './name.ts';
+export type {
+	NameAttribute,
+	NameFieldKey,
+	RelativeDistinguishedNameInput,
+} from '#micro509/x509/name';
 
 /**
  * A decoded BIT STRING flag set.

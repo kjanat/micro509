@@ -19,14 +19,14 @@ export type {
 	ServiceIdentityType,
 	SrvServiceIdentityInput,
 	UriServiceIdentityInput,
-} from './identity.ts';
-export { matchCertificateServiceIdentity, matchServiceIdentity } from './identity.ts';
-export type { InitialNameConstraintsInput } from './name-constraints.ts';
+} from '#micro509/verify/identity';
+export { matchCertificateServiceIdentity, matchServiceIdentity } from '#micro509/verify/identity';
+export type { InitialNameConstraintsInput } from '#micro509/verify/name-constraints';
 export type {
 	ConstrainedPolicy,
 	PolicyValidationInput,
 	PolicyValidationOutcome,
-} from './policy.ts';
+} from '#micro509/verify/policy';
 export type {
 	BuildCandidatePathInput,
 	BuildCandidatePathResult,
@@ -54,7 +54,7 @@ export type {
 	VerifyPurpose,
 	VerifyRequestFailure,
 	VerifyRequestResult,
-} from './verify.ts';
+} from '#micro509/verify/verify';
 export {
 	buildCandidatePath,
 	checkExtendedKeyUsage,
@@ -67,4 +67,4 @@ export {
 	VERIFY_ERROR_CODES,
 	verifyCertificateChain,
 	verifyCertificateSigningRequest,
-} from './verify.ts';
+} from '#micro509/verify/verify';

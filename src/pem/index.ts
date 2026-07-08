@@ -13,7 +13,7 @@ export type {
 	PemErrorCode,
 	PemFailure,
 	SplitPemBlocksResult,
-} from './pem.ts';
+} from '#micro509/pem/pem';
 export {
 	categorizePemBlocks,
 	categorizePemBlocksOrThrow,
@@ -22,4 +22,4 @@ export {
 	pemEncode,
 	splitPemBlocks,
 	splitPemBlocksOrThrow,
-} from './pem.ts';
+} from '#micro509/pem/pem';

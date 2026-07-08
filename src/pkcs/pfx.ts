@@ -33,14 +33,10 @@ import { type EncryptedPkcs8Options, exportPkcs8Der } from '#micro509/keys/keys'
 import { pemEncode, splitPemBlocksOrThrow } from '#micro509/pem/pem';
 import { type ErrorResult, failureResult, type Micro509Error } from '#micro509/result/result';
 import { type ParsedCertificate, parseCertificateDerOrThrow } from '#micro509/x509/parse';
-import {
-	createPkcs12MacData,
-	type ParsedPkcs12MacData,
-	type Pkcs12MacOptions,
-	parsePkcs12MacData,
-} from './pkcs12-mac.ts';
+import type { ParsedPkcs12MacData, Pkcs12MacOptions } from '#micro509/pkcs/pkcs12-mac';
+import { createPkcs12MacData, parsePkcs12MacData } from '#micro509/pkcs/pkcs12-mac';
 
-export type * from './pkcs12-mac.ts';
+export type * from '#micro509/pkcs/pkcs12-mac';
 
 /** PEM string or DER bytes for a certificate to include in a PFX bag. */
 export type PfxCertificateSource = string | Uint8Array | ParsedCertificate;
@@ -171,9 +167,7 @@ export interface ParsedPfx {
 	readonly macData?: ParsedPkcs12MacData;
 }
 
-// ---------------------------------------------------------------------------
 // Result types for PFX parsing
-// ---------------------------------------------------------------------------
 
 /** Error codes returned by {@linkcode parsePfxDer} and {@linkcode parsePfxPem}. */
 export type ParsePfxErrorCode = 'malformed' | 'invalid_password' | 'password_required';
@@ -194,9 +188,7 @@ export type ParsePfxResult =
 	  }
 	| ErrorResult<ParsePfxErrorCode, Record<never, never>, ParsePfxFailure>;
 
-// ---------------------------------------------------------------------------
 // Result types for PFX creation
-// ---------------------------------------------------------------------------
 
 /**
  * Caller-correctable failure code from {@linkcode createPfx}.
@@ -314,9 +306,7 @@ function pfxCreationFailure(
 	return failureResult(code, message);
 }
 
-// ---------------------------------------------------------------------------
 // parsePfxDer / parsePfxPem — Result-returning
-// ---------------------------------------------------------------------------
 
 /**
  * Decodes a DER-encoded PKCS#12/PFX container into its constituent bags.
@@ -431,9 +421,7 @@ export function parsePfxPem(pem: string, options?: ParsePfxOptions): Promise<Par
 	return parsePfxDer(bytes, options);
 }
 
-// ---------------------------------------------------------------------------
 // Private: PFX helpers
-// ---------------------------------------------------------------------------
 
 /** Shorthand for constructing a PFX parse failure result. */
 function pfxFailure(

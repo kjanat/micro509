@@ -35,30 +35,21 @@ import {
 	describeSignatureAlgorithm,
 } from '#micro509/internal/crypto/algorithm-names';
 import { decodeIpAddress } from '#micro509/internal/shared/ip';
+import type { ParsedBitFlags } from '#micro509/internal/x509/extension-bits';
 import {
-	type ParsedBitFlags,
 	parseDistributionPointReasonFlagsContent,
 	parseKeyUsageExtension,
 } from '#micro509/internal/x509/extension-bits';
-import {
-	decodeAndApplyKnownExtension,
-	type KnownParsedExtensionAccumulator,
-	type MutableKnownParsedExtensionAccumulator,
+import type {
+	KnownParsedExtensionAccumulator,
+	MutableKnownParsedExtensionAccumulator,
 } from '#micro509/internal/x509/extension-registry';
-import {
-	type ImportKeyResult,
-	importSpkiDer,
-	importSpkiDerOrThrow,
-	type PublicKeyImportInput,
-} from '#micro509/keys/keys';
+import { decodeAndApplyKnownExtension } from '#micro509/internal/x509/extension-registry';
+import type { ImportKeyResult, PublicKeyImportInput } from '#micro509/keys/keys';
+import { importSpkiDer, importSpkiDerOrThrow } from '#micro509/keys/keys';
 import { pemDecodeOrThrow, splitPemBlocksOrThrow } from '#micro509/pem/pem';
-import {
-	type ErrorResult,
-	failureResult,
-	type Micro509Error,
-	rethrowIfInvariant,
-	successResult,
-} from '#micro509/result/result';
+import type { ErrorResult, Micro509Error } from '#micro509/result/result';
+import { failureResult, rethrowIfInvariant, successResult } from '#micro509/result/result';
 import type {
 	AuthorityInformationAccess,
 	BasicConstraints,
@@ -74,11 +65,15 @@ import type {
 	PolicyConstraints,
 	PolicyMappings,
 	SubjectAltName,
-} from './extensions.ts';
-import { parseAuthorityInfoAccessMethodOid, parseExtendedKeyUsageOid } from './extensions.ts';
-import { type NameFieldKey, nameFieldKeyFromOid } from './name.ts';
+} from '#micro509/x509/extensions';
+import {
+	parseAuthorityInfoAccessMethodOid,
+	parseExtendedKeyUsageOid,
+} from '#micro509/x509/extensions';
+import type { NameFieldKey } from '#micro509/x509/name';
+import { nameFieldKeyFromOid } from '#micro509/x509/name';
 
-export type { ParsedBitFlags } from './extensions.ts';
+export type { ParsedBitFlags } from '#micro509/x509/extensions';
 export type {
 	AuthorityInformationAccess,
 	BasicConstraints,
@@ -94,8 +89,8 @@ export type {
 	PolicyConstraints,
 	PolicyMappings,
 	SubjectAltName,
-} from './extensions.ts';
-export type { NameFieldKey } from './name.ts';
+} from '#micro509/x509/extensions';
+export type { NameFieldKey } from '#micro509/x509/name';
 
 /** Machine-readable failure reason for {@linkcode parseCertificateDer} / {@linkcode parseCertificatePem}. */
 export type ParseCertificateErrorCode = 'malformed';

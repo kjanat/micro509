@@ -31,15 +31,7 @@ export type {
 	ValidateCertificateRevocationListResult,
 	VerifyCertificateRevocationListSignatureFailure,
 	VerifyCertificateRevocationListSignatureResult,
-} from './crl.ts';
-export type {
-	IssuingDistributionPoint,
-	IssuingDistributionPointBase,
-	IssuingDistributionPointForAttributeCerts,
-	IssuingDistributionPointForCaCerts,
-	IssuingDistributionPointForUserCerts,
-} from '#micro509/x509/extensions';
-export type { ParsedIssuingDistributionPoint } from '#micro509/x509/parse';
+} from '#micro509/revocation/crl';
 export {
 	checkCertificateRevocationAgainstCrl,
 	createCertificateRevocationList,
@@ -50,7 +42,16 @@ export {
 	parseCertificateRevocationListPemOrThrow,
 	validateCertificateRevocationList,
 	verifyCertificateRevocationListSignature,
-} from './crl.ts';
+} from '#micro509/revocation/crl';
+
+export type {
+	IssuingDistributionPoint,
+	IssuingDistributionPointBase,
+	IssuingDistributionPointForAttributeCerts,
+	IssuingDistributionPointForCaCerts,
+	IssuingDistributionPointForUserCerts,
+} from '#micro509/x509/extensions';
+export type { ParsedIssuingDistributionPoint } from '#micro509/x509/parse';
 
 export type {
 	CreateOcspRequestInput,
@@ -82,7 +83,7 @@ export type {
 	ValidateOcspResponseResult,
 	VerifyOcspResponseSignatureFailure,
 	VerifyOcspResponseSignatureResult,
-} from './ocsp.ts';
+} from '#micro509/revocation/ocsp';
 export {
 	createOcspRequest,
 	createOcspResponse,
@@ -97,7 +98,7 @@ export {
 	parseOcspResponsePemOrThrow,
 	validateOcspResponse,
 	verifyOcspResponseSignature,
-} from './ocsp.ts';
+} from '#micro509/revocation/ocsp';
 
 export type {
 	CheckCertificateRevocationErrorCode,
@@ -121,13 +122,13 @@ export type {
 	RevocationIndeterminateReasonCode,
 	RevocationOcspEvidenceInput,
 	RevocationStatus,
-} from './revocation.ts';
+} from '#micro509/revocation/revocation';
 export {
 	checkCertificateRevocation,
 	getCertificateOcspResponderUris,
 	resolveOcspResponderCandidates,
 	REVOCATION_INDETERMINATE_REASON_CODES,
-} from './revocation.ts';
+} from '#micro509/revocation/revocation';
 
 export type {
 	CertificateRevocationStatus,
@@ -139,5 +140,5 @@ export type {
 	RevocationIndeterminateReason,
 	RevocationPolicy,
 	RevocationSource,
-} from './chain.ts';
-export { checkChainRevocation, REVOCATION_INDETERMINATE_REASONS } from './chain.ts';
+} from '#micro509/revocation/chain';
+export { checkChainRevocation, REVOCATION_INDETERMINATE_REASONS } from '#micro509/revocation/chain';
