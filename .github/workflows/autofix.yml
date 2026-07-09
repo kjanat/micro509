@@ -1,8 +1,5 @@
 name: autofix.ci
-on:
-  push: { branches: ["master"] }
-  pull_request:
-  workflow_call:
+on: { push: { branches: ["master"] }, pull_request: null, workflow_call: null }
 permissions: { contents: read }
 jobs:
   autofix:
