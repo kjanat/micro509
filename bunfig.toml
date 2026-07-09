@@ -3,6 +3,7 @@ linker = "hoisted"
 
 [test]
 coveragePathIgnorePatterns = ["test/**", "dist/**"]
+coverageReporter           = ["text", "lcov"]
 coverageSkipTestFiles      = true
 
 [run]

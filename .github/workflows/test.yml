@@ -9,7 +9,7 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    permissions: { contents: read }
+    permissions: { contents: read, id-token: write }
     steps:
       - uses: actions/checkout@v7
         with: { persist-credentials: false }
@@ -21,6 +21,9 @@ jobs:
       - name: Deno lint + type-check + doc-lint (full source tree)
         run: run -p check:deno lint:deno docs:lint
       - run: run test
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v7
+        with: { flags: bun, fail_ci_if_error: true, use_oidc: true }
       - name: Node smoke test (dist)
         run: node scripts/smoke.mjs
       - name: Deno smoke test (dist)
