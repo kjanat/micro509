@@ -19,15 +19,15 @@
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { verifySignedDataDetailed } from '#micro509/internal/crypto/sig-verify';
 import { parseIpAddressToBytes } from '#micro509/internal/shared/ip';
+import type { NameConstraintValidationState } from '#micro509/internal/verify/name-constraints-engine';
 import {
 	createNameConstraintValidationState,
 	evaluateNameConstraints,
-	type NameConstraintValidationState,
 } from '#micro509/internal/verify/name-constraints-engine';
+import type { PolicyValidationState } from '#micro509/internal/verify/policy-engine';
 import {
 	createPolicyValidationState,
 	evaluatePolicyChain,
-	type PolicyValidationState,
 } from '#micro509/internal/verify/policy-engine';
 import {
 	buildChainInternal,
@@ -61,33 +61,26 @@ import {
 	parseCertificateSigningRequestDerOrThrow,
 	parseCertificateSigningRequestPemOrThrow,
 } from '#micro509/x509/parse';
-import {
-	checkChainRevocation,
-	type CrlSource,
-	type RevocationPolicy,
-} from '#micro509/revocation/chain';
+import type { CrlSource, RevocationPolicy } from '#micro509/revocation/chain';
+import { checkChainRevocation } from '#micro509/revocation/chain';
 import type { RevocationCertificateSource } from '#micro509/revocation/revocation';
-import type { ServiceIdentityInput } from './identity.ts';
-import { matchServiceIdentity } from './identity.ts';
-import type { InitialNameConstraintsInput } from './name-constraints.ts';
-import type { PolicyValidationInput, PolicyValidationOutcome } from './policy.ts';
+import type { ServiceIdentityInput } from '#micro509/verify/identity';
+import { matchServiceIdentity } from '#micro509/verify/identity';
+import type { InitialNameConstraintsInput } from '#micro509/verify/name-constraints';
+import type { PolicyValidationInput, PolicyValidationOutcome } from '#micro509/verify/policy';
 
-export type * from './identity.ts';
-export type * from './name-constraints.ts';
-export type * from './policy.ts';
+export type * from '#micro509/verify/identity';
+export type * from '#micro509/verify/name-constraints';
+export type * from '#micro509/verify/policy';
 
-// ---------------------------------------------------------------------------
 // Source types
-// ---------------------------------------------------------------------------
 
 /** PEM string or DER bytes for a certificate. PEM may contain multiple blocks. */
 export type CertificateSource = string | Uint8Array;
 /** PEM string or DER bytes for a certificate signing request. */
 export type CsrSource = string | Uint8Array;
 
-// ---------------------------------------------------------------------------
 // Purpose & EKU types
-// ---------------------------------------------------------------------------
 
 /** High-level purpose applied during path validation to enforce leaf constraints. */
 export type VerifyPurpose = 'serverAuth' | 'clientAuth' | 'ca';
@@ -122,9 +115,7 @@ export interface EkuCheckFailure
 	readonly index: number;
 }
 
-// ---------------------------------------------------------------------------
 // Trust anchor
-// ---------------------------------------------------------------------------
 
 /**
  * Bare trust anchor — subject identity and public key material without a
@@ -144,9 +135,7 @@ export interface TrustAnchor {
 	readonly subjectKeyIdentifier?: string;
 }
 
-// ---------------------------------------------------------------------------
 // Error & failure types
-// ---------------------------------------------------------------------------
 
 /**
  * Discriminant for every failure a verify operation can produce.
@@ -231,9 +220,7 @@ export interface VerifyChainFailure
 	readonly ok: false;
 }
 
-// ---------------------------------------------------------------------------
 // Build candidate path
-// ---------------------------------------------------------------------------
 
 /** Input for {@linkcode buildCandidatePath}. */
 export interface BuildCandidatePathInput {
@@ -267,9 +254,7 @@ export type BuildCandidatePathResult =
 	  }
 	| IndexedErrorResult<VerifyErrorCode, VerifyFailureDetails, VerifyChainFailure>;
 
-// ---------------------------------------------------------------------------
 // Validate candidate path
-// ---------------------------------------------------------------------------
 
 /** Input for {@linkcode validateCandidatePath}. */
 export interface ValidateCandidatePathInput
@@ -311,9 +296,7 @@ export type ValidateCandidatePathResult =
 	  }
 	| IndexedErrorResult<VerifyErrorCode, VerifyFailureDetails, VerifyChainFailure>;
 
-// ---------------------------------------------------------------------------
 // Verify chain (convenience composition)
-// ---------------------------------------------------------------------------
 
 /** Input for chain-level revocation checking in {@linkcode verifyCertificateChain}. */
 export interface ChainRevocationInput {
@@ -377,9 +360,7 @@ export type VerifyChainResult =
 	  }
 	| IndexedErrorResult<VerifyErrorCode, VerifyFailureDetails, VerifyChainFailure>;
 
-// ---------------------------------------------------------------------------
 // CSR verification
-// ---------------------------------------------------------------------------
 
 /** Failure from {@linkcode verifyCertificateSigningRequest}. */
 export interface VerifyRequestFailure
@@ -403,9 +384,7 @@ export type VerifyRequestResult =
 			VerifyRequestFailure
 	  >;
 
-// ---------------------------------------------------------------------------
 // Validation profile inputs
-// ---------------------------------------------------------------------------
 
 /** Input for {@linkcode validateForTlsServer}. Enforces `serverAuth` EKU and optional DNS/IP identity matching. */
 export interface ValidateForTlsServerInput
@@ -461,9 +440,7 @@ export interface ValidateForCaInput
 	readonly nameConstraints?: InitialNameConstraintsInput;
 }
 
-// ---------------------------------------------------------------------------
 // Internal constants
-// ---------------------------------------------------------------------------
 
 /**
  * OIDs of extensions this verifier processes during path validation.
@@ -486,9 +463,7 @@ const PROCESSED_EXTENSION_OIDS: ReadonlySet<string> = new Set([
 	OIDS.inhibitAnyPolicy,
 ]);
 
-// ---------------------------------------------------------------------------
 // Internal types
-// ---------------------------------------------------------------------------
 
 /** Loose input for building a {@linkcode VerifyFailureDetails} — accepts `undefined` values that get stripped. */
 interface VerifyFailureDetailsInput {
@@ -533,9 +508,7 @@ type ValidationCheckResult =
 	  }
 	| VerifyChainFailure;
 
-// ---------------------------------------------------------------------------
 // buildCandidatePath
-// ---------------------------------------------------------------------------
 
 /**
  * Discovers and signature-verifies a candidate certification path from a
@@ -643,9 +616,7 @@ export async function buildCandidatePath(
 	return result.ok ? result : verifyFailureResult(result);
 }
 
-// ---------------------------------------------------------------------------
 // validatECandidatePath
-// ---------------------------------------------------------------------------
 
 /**
  * Validates a pre-built candidate path: time window, critical extensions,
@@ -855,9 +826,7 @@ export async function validateCandidatePath(
 		: verifyFailureResult(result);
 }
 
-// ---------------------------------------------------------------------------
 // verifyCertificateChain (convenience composition)
-// ---------------------------------------------------------------------------
 
 /**
  * All-in-one certificate chain verification: builds a candidate path then
@@ -980,9 +949,7 @@ export async function verifyCertificateChain(
 	};
 }
 
-// ---------------------------------------------------------------------------
 // verifyCertificateSigningRequest
-// ---------------------------------------------------------------------------
 
 /**
  * Verifies the self-signature of a PKCS#10 certificate signing request.
@@ -1061,9 +1028,7 @@ export async function verifyCertificateSigningRequest(
 	return { ok: true, value: parsed };
 }
 
-// ---------------------------------------------------------------------------
 // checkExtendedKeyUsage
-// ---------------------------------------------------------------------------
 
 /**
  * Standalone EKU check against a verified certificate chain.
@@ -1120,9 +1085,7 @@ export function checkExtendedKeyUsage(
 	return { ok: true, value: undefined };
 }
 
-// ---------------------------------------------------------------------------
 // trustAnchorFromCertificate
-// ---------------------------------------------------------------------------
 
 /** Extracts a {@linkcode TrustAnchor} from a parsed certificate, copying the subject, SPKI, and key identifiers. */
 export function trustAnchorFromCertificate(certificate: ParsedCertificate): TrustAnchor {
@@ -1145,9 +1108,7 @@ export function trustAnchorFromCertificate(certificate: ParsedCertificate): Trus
 	};
 }
 
-// ---------------------------------------------------------------------------
 // Validation profiles
-// ---------------------------------------------------------------------------
 
 /** Extracts defined optional fields from a base input for safe forwarding. */
 function baseChainInput(
@@ -1264,9 +1225,7 @@ export function validateForCa(input: ValidateForCaInput): Promise<VerifyChainRes
 	});
 }
 
-// ---------------------------------------------------------------------------
 // Private: leaf validation
-// ---------------------------------------------------------------------------
 
 /** Enforces purpose-specific constraints on the leaf certificate (CA flag or EKU). */
 function validateLeaf(
@@ -1394,9 +1353,7 @@ function validateServiceIdentityInput(
 	return { ok: true };
 }
 
-// ---------------------------------------------------------------------------
 // Private: helpers
-// ---------------------------------------------------------------------------
 
 /** Applies an EKU check to a successfully verified chain and maps failures to verify error codes. */
 function applyEkuCheck(

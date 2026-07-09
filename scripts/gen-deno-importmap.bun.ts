@@ -12,17 +12,16 @@
  *
  * @module
  */
-
-import { Glob } from 'bun';
-import { readFileSync, writeFileSync } from 'node:fs';
-
-const pkg: { readonly imports: Record<string, string> } = JSON.parse(
-	readFileSync('package.json', 'utf8'),
-);
+import pkg from '#pkg' with { type: 'json' };
+import path from 'node:path';
 
 const imports: Record<string, string> = {};
+const root = path.resolve(import.meta.dir, '..');
+const glob = new Bun.Glob('src/**/*.ts');
 
-// Copy the non-wildcard entries verbatim (barrels, #pkg, #jsr, #typedoc-sidebar).
+const denoMap = Bun.file(path.join(root, 'deno.import_map.json'));
+
+// Copy the non-wildcard entries verbatim (barrels, #pkg, #jsr).
 for (const [key, value] of Object.entries(pkg.imports)) {
 	if (!key.includes('*')) {
 		imports[key] = value;
@@ -30,10 +29,15 @@ for (const [key, value] of Object.entries(pkg.imports)) {
 }
 
 // Expand `#micro509/*` -> `./src/*.ts` into an explicit entry per source file.
-const files = [...new Glob('src/**/*.ts').scanSync('.')].sort();
-for (const file of files) {
-	const specifier = `#micro509/${file.slice('src/'.length).replace(/\.ts$/, '')}`;
-	imports[specifier] = `./${file}`;
+for (const file of await Array.fromAsync(glob.scan({ cwd: root }))) {
+	imports[`#micro509/${file.slice('src/'.length).replace(/\.ts$/, '')}`] = `./${file}`;
 }
+const importMap = /* dprint-ignore */ `${JSON.stringify({ imports: Object.fromEntries(Object.entries(imports).sort(([a], [b]) => a.localeCompare(b))) }, null, '\t')}\n`;
 
-writeFileSync('deno.import_map.json', `${JSON.stringify({ imports }, null, 2)}\n`);
+try {
+	await Bun.write(denoMap, importMap);
+	Bun.stderr.write(`Wrote ${importMap.length} bytes to ${denoMap.name}\n`);
+} catch (err) {
+	process.exitCode = 1;
+	console.error(`Failed to write ${denoMap.name}:`, err);
+}

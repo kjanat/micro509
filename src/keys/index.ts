@@ -35,7 +35,7 @@ export type {
 	RsaOaepOptions,
 	RsaScheme,
 	RsaSignatureScheme,
-} from './keys.ts';
+} from '#micro509/keys/keys';
 export {
 	decryptRsaOaep,
 	decryptRsaOaepOrThrow,
@@ -90,4 +90,4 @@ export {
 	importSpkiDerOrThrow,
 	importSpkiPem,
 	importSpkiPemOrThrow,
-} from './keys.ts';
+} from '#micro509/keys/keys';

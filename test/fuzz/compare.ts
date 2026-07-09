@@ -8,11 +8,12 @@
  * or a genuinely divergent-but-legal encoding worth a fixture.
  */
 
-import { pemDecodeOrThrow, pemEncode } from '#micro509';
 import type { ParsedCertificate, ParsedName, SubjectAltName } from '#micro509';
-import { expectedSignatureOid } from './spec.ts';
-import type { CertSpec } from './spec.ts';
-import type { OpenSslCertFields } from '../oracles/openssl-gen.ts';
+import { pemDecodeOrThrow, pemEncode } from '#micro509';
+
+import type { CertSpec } from '#test/fuzz/spec';
+import { expectedSignatureOid } from '#test/fuzz/spec';
+import type { OpenSslCertFields } from '#test/oracles/openssl-gen';
 
 /** Every field the comparator can report — closed so consumers can't test a typo'd name. */
 export type MismatchField =

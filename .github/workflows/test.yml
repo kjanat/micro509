@@ -17,12 +17,10 @@ jobs:
         with: { install-bun: true, install-node: true, install-deno: true }
       - name: Build (runs attw + publint + unused-export checks)
         run: runner install -f build
-      - run: bun run typecheck
+      - run: run typecheck
       - name: Deno lint + type-check + doc-lint (full source tree)
         run: run -p check:deno lint:deno docs:lint
-      - run: bun run test
-      - name: Validate npm tarball against published exports
-        run: bun scripts/check-npm-pack.ts
+      - run: run test
       - name: Node smoke test (dist)
         run: node scripts/smoke.mjs
       - name: Deno smoke test (dist)

@@ -75,7 +75,7 @@ import {
 	type ParsedCertificateRevocationList,
 	parseCertificateRevocationListDerOrThrow,
 	parseCertificateRevocationListPemOrThrow,
-} from './crl.ts';
+} from '#micro509/revocation/crl';
 
 /** Hash algorithm used to compute OCSP CertID fields. SHA-1 is the RFC 6960 default. */
 export type OcspHashAlgorithm = 'SHA-1' | 'SHA-256';
@@ -408,8 +408,8 @@ export async function createOcspRequest(
 	const hashAlgorithm = input.hashAlgorithm ?? 'SHA-1';
 	const requestEntries: Uint8Array[] = [];
 	for (const request of input.requests) {
-		const certificate = await normalizeCertificate(request.certificate);
-		const issuer = await normalizeCertificate(request.issuerCertificate);
+		const certificate = normalizeCertificate(request.certificate);
+		const issuer = normalizeCertificate(request.issuerCertificate);
 		requestEntries.push(sequence([await encodeOcspCertId(certificate, issuer, hashAlgorithm)]));
 	}
 	const tbsRequestFields: Uint8Array[] = [sequence(requestEntries)];
@@ -741,14 +741,14 @@ export function parseOcspResponsePem(pem: string): ParseOcspResponseResult {
 export async function createOcspResponse(
 	input: CreateOcspResponseInput,
 ): Promise<OcspResponseMaterial> {
-	const signerCertificate = await normalizeCertificate(input.signerCertificate);
+	const signerCertificate = normalizeCertificate(input.signerCertificate);
 	const signatureAlgorithm = getSignatureAlgorithm(input.signerPrivateKey);
 	const producedAt = input.producedAt ?? new Date();
 	const hashAlgorithm = input.hashAlgorithm ?? 'SHA-1';
 	const responses: Uint8Array[] = [];
 	for (const response of input.responses) {
-		const certificate = await normalizeCertificate(response.certificate);
-		const issuer = await normalizeCertificate(response.issuerCertificate);
+		const certificate = normalizeCertificate(response.certificate);
+		const issuer = normalizeCertificate(response.issuerCertificate);
 		responses.push(await encodeSingleResponse(certificate, issuer, response, hashAlgorithm));
 	}
 	const responderKeyHash = await digestBytes(
@@ -829,7 +829,7 @@ export async function verifyOcspResponseSignature(
 	}
 	let signer: ParsedCertificate;
 	try {
-		signer = await normalizeCertificate(signerCertificate);
+		signer = normalizeCertificate(signerCertificate);
 	} catch {
 		return verifyOcspResponseFailureResult(
 			'signature_invalid',
@@ -914,7 +914,7 @@ export async function validateOcspResponse(
 	}
 	let issuer: ParsedCertificate;
 	try {
-		issuer = await normalizeCertificate(input.issuerCertificate);
+		issuer = normalizeCertificate(input.issuerCertificate);
 	} catch {
 		return validateOcspResponseFailureResult(
 			'signature_invalid',
@@ -942,7 +942,7 @@ export async function validateOcspResponse(
 	}
 	let signer: ParsedCertificate;
 	try {
-		signer = await normalizeCertificate(resolvedResponder);
+		signer = normalizeCertificate(resolvedResponder);
 	} catch {
 		return validateOcspResponseFailureResult(
 			'signature_invalid',

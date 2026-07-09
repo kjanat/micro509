@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import * as micro509 from 'micro509';
+import * as micro509 from '#micro509';
 import {
 	createCertificateSigningRequest,
 	createPfx,
@@ -14,7 +14,7 @@ import {
 	pemEncode,
 	verifyCertificateChain,
 	unwrap,
-} from 'micro509';
+} from '#micro509';
 
 describe('root barrel', () => {
 	it('self-signed cert round-trips through parse and chain verify', async () => {

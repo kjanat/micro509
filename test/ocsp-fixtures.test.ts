@@ -32,7 +32,7 @@ import {
 	getSignatureAlgorithm,
 	signBytes,
 } from '#micro509/internal/crypto/signing';
-import { hexToBytes } from './helpers.ts';
+import { hexToBytes } from '#test/helpers';
 
 interface FixtureResponderInput {
 	readonly commonName: string;

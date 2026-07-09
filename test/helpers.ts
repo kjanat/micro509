@@ -1,15 +1,12 @@
 import { createHash } from 'node:crypto';
-import type { ParsedCertificate } from '#micro509';
+import { exportPkcs8Der, generateKeyPair, importPkcs8Der } from '#micro509/keys';
+import { unwrap } from '#micro509/result';
+import type { BasicConstraints, GeneralName, ParsedCertificate } from '#micro509/x509';
 import {
 	createCertificate,
 	createSelfSignedCertificate,
-	exportPkcs8Der,
-	generateKeyPair,
-	importPkcs8Der,
-	unwrap,
-} from '#micro509';
-import type { BasicConstraints, GeneralName } from '#micro509/x509';
-import { encodeSubjectAltName } from '#micro509/x509';
+	encodeSubjectAltName,
+} from '#micro509/x509';
 import { toArrayBuffer } from '#micro509/internal/asn1/asn1';
 import {
 	bitString,
@@ -33,6 +30,8 @@ import {
 	getSignatureAlgorithm,
 	signBytes,
 } from '#micro509/internal/crypto/signing';
+import { probeOpenSsl } from '#test/oracles/openssl';
+import path from 'node:path';
 
 export function childrenOf(
 	source: Uint8Array,
@@ -452,3 +451,15 @@ export async function issueChain(options: IssueChainOptions = {}) {
 	const leaf = await createCertificate(leafInput);
 	return { root, intermediate, intermediateKeys, leaf, leafKeys };
 }
+
+const projectRoot = path.resolve(import.meta.dir, '..');
+const srcRoot = path.join(projectRoot, 'src');
+const testRoot = import.meta.dir;
+const fixturesDir = path.join(testRoot, 'fixtures');
+export { projectRoot, srcRoot, testRoot, fixturesDir };
+
+export const isCi = Bun.env.CI !== undefined;
+
+const openSslAvailable = await probeOpenSsl();
+const differentialEnabled = isCi ? Bun.env.DIFFERENTIAL_OPENSSL === '1' : true;
+export { openSslAvailable, differentialEnabled };

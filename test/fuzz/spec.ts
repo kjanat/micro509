@@ -11,7 +11,7 @@
  */
 
 import type { PublicKeyImportInput } from '#micro509';
-import type { Rng } from './prng.ts';
+import type { Rng } from '#test/fuzz/prng';
 
 /** Key + signing-hash choice. Hash is irrelevant for Ed25519 (PureEdDSA). */
 export type FuzzKeyAlgo =

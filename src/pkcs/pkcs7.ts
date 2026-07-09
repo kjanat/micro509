@@ -39,18 +39,20 @@ import {
 	describeSignatureAlgorithm,
 } from '#micro509/internal/crypto/algorithm-names';
 import { verifySignedDataDetailed } from '#micro509/internal/crypto/sig-verify';
+import type { SignatureAlgorithmIdentifier } from '#micro509/internal/crypto/signing';
 import {
 	encodeAlgorithmIdentifier,
 	getSignatureAlgorithm,
-	type SignatureAlgorithmIdentifier,
 	signBytes,
 } from '#micro509/internal/crypto/signing';
 import { getCrypto } from '#micro509/internal/crypto/webcrypto';
 import { base64Encode } from '#micro509/internal/shared/base64';
 import { compareDistinguishedNames } from '#micro509/internal/shared/dn';
 import { pemEncode, splitPemBlocksOrThrow } from '#micro509/pem/pem';
-import { type ErrorResult, failureResult, type Micro509Error } from '#micro509/result/result';
-import { type NameFieldKey, nameFieldKeyFromOid } from '#micro509/x509/name';
+import type { ErrorResult, Micro509Error } from '#micro509/result/result';
+import { failureResult } from '#micro509/result/result';
+import type { NameFieldKey } from '#micro509/x509/name';
+import { nameFieldKeyFromOid } from '#micro509/x509/name';
 import type {
 	ParsedCertificate,
 	ParsedName,
@@ -141,9 +143,7 @@ export interface ParsedPkcs7SignedData {
 	readonly signerInfos: readonly ParsedPkcs7SignerInfo[];
 }
 
-// ---------------------------------------------------------------------------
 // Result types for PKCS#7 parsing
-// ---------------------------------------------------------------------------
 
 /** Error codes for PKCS#7 parse failures. */
 export type ParsePkcs7ErrorCode = 'malformed' | 'not_signed_data';
@@ -205,9 +205,7 @@ export type VerifyPkcs7SignedDataResult =
 			VerifyPkcs7SignedDataFailure
 	  >;
 
-// ---------------------------------------------------------------------------
 // createPkcs7CertBag
-// ---------------------------------------------------------------------------
 
 /** Caller-correctable failure code from {@linkcode createPkcs7CertBag}. */
 export type CreatePkcs7CertBagErrorCode = 'invalid_certificate';
@@ -262,9 +260,7 @@ export function createPkcs7CertBag(
 	};
 }
 
-// ---------------------------------------------------------------------------
 // createPkcs7SignedData
-// ---------------------------------------------------------------------------
 
 /** A single signer for {@linkcode createPkcs7SignedData}. */
 export interface Pkcs7Signer {
@@ -472,9 +468,7 @@ export async function createPkcs7SignedData(
 	};
 }
 
-// ---------------------------------------------------------------------------
 // parsePkcs7CertBag — Result-returning
-// ---------------------------------------------------------------------------
 
 /** Parses a DER-encoded PKCS#7 cert bag, returning the contained certificates. */
 export function parsePkcs7CertBagDer(der: Uint8Array): ParsePkcs7CertBagResult {
@@ -502,9 +496,7 @@ export function parsePkcs7CertBagPem(pem: string): ParsePkcs7CertBagResult {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // parsePkcs7SignedData — Result-returning
-// ---------------------------------------------------------------------------
 
 /** Decodes a DER-encoded PKCS#7 ContentInfo expecting `signedData` content type. */
 export function parsePkcs7SignedDataDer(der: Uint8Array): ParsePkcs7SignedDataResult {
@@ -614,9 +606,7 @@ export function parsePkcs7SignedDataPem(pem: string): ParsePkcs7SignedDataResult
 	}
 }
 
-// ---------------------------------------------------------------------------
 // verifyPkcs7SignedData
-// ---------------------------------------------------------------------------
 
 /**
  * Verifies all signer signatures in a PKCS#7 SignedData structure.
@@ -714,9 +704,7 @@ export async function verifyPkcs7SignedData(
 	return { ok: true, value: parsed };
 }
 
-// ---------------------------------------------------------------------------
 // Private helpers
-// ---------------------------------------------------------------------------
 
 /** Shorthand for constructing a PKCS#7 parse failure result. */
 function pkcs7Failure(
@@ -1113,9 +1101,7 @@ function childAt(source: Uint8Array, parent: DerElement, index: number, label: s
 	throw new Error(`Missing ${label}`);
 }
 
-// ---------------------------------------------------------------------------
 // CMS signed attributes verification (RFC 5652 Section 5.4)
-// ---------------------------------------------------------------------------
 
 /** Maps a digest algorithm OID to the WebCrypto hash name. */
 function digestAlgorithmHash(digestAlgorithmOid: string): 'SHA-256' | 'SHA-384' | 'SHA-512' {

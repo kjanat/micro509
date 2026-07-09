@@ -13,7 +13,7 @@ import {
 	verifyCertificateChain,
 	unwrap,
 } from '#micro509';
-import { hexToBytes } from './helpers.ts';
+import { hexToBytes } from '#test/helpers';
 
 async function loadPkitsCert(name: string) {
 	const der = await readFile(new URL(`./fixtures/pkits/certs/${name}.crt`, import.meta.url));

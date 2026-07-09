@@ -1,0 +1,121 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://github.com/kjanat/micro509/raw/master/src/internal/asn1/oids.schema.json",
+	"title": "OID tree",
+	"description": "A recursively nested object identifier (OID) tree.",
+	"type": "object",
+	"minProperties": 1,
+	"properties": {
+		"$schema": {
+			"type": "string"
+		}
+	},
+	"patternProperties": {
+		"^(?!\\$schema$)[A-Za-z_$][A-Za-z0-9_$]*$": {
+			"$ref": "#/$defs/rootNode"
+		}
+	},
+	"additionalProperties": false,
+	"not": {
+		"required": [
+			"$schema"
+		],
+		"maxProperties": 1
+	},
+	"$defs": {
+		"name": {
+			"type": "string",
+			"minLength": 1,
+			"pattern": "^[A-Za-z_$][A-Za-z0-9_$]*$"
+		},
+		"arc": {
+			"type": "string",
+			"description": "A non-negative decimal OID arc, without leading zeroes.",
+			"pattern": "^(?:0|[1-9][0-9]*)$"
+		},
+		"rootArc": {
+			"type": "string",
+			"description": "An OID root arc.",
+			"enum": [
+				"0",
+				"1",
+				"2"
+			]
+		},
+		"oidMap": {
+			"type": "object",
+			"description": "OID aliases defined under this node. Each property name is the exported OID key; each value is the final numeric arc below the current node.",
+			"minProperties": 1,
+			"propertyNames": {
+				"$ref": "#/$defs/name"
+			},
+			"additionalProperties": {
+				"description": "Final numeric arc for this exported OID alias, relative to the containing node.",
+				"$ref": "#/$defs/arc"
+			}
+		},
+		"children": {
+			"type": "object",
+			"description": "Nested OID tree nodes below this node. Each property groups a semantic namespace or branch.",
+			"minProperties": 1,
+			"propertyNames": {
+				"$ref": "#/$defs/name"
+			},
+			"additionalProperties": {
+				"description": "Nested OID namespace node.",
+				"$ref": "#/$defs/node"
+			}
+		},
+		"rootNode": {
+			"description": "Top-level OID root node. Root arcs are limited to 0, 1, or 2.",
+			"$ref": "#/$defs/nodeBase",
+			"properties": {
+				"arc": {
+					"$ref": "#/$defs/rootArc"
+				}
+			}
+		},
+		"node": {
+			"description": "OID namespace node. The node arc extends the parent path and may contain exported OIDs, child nodes, or both.",
+			"$ref": "#/$defs/nodeBase",
+			"properties": {
+				"arc": {
+					"$ref": "#/$defs/arc"
+				}
+			}
+		},
+		"nodeBase": {
+			"type": "object",
+			"description": "OID tree node with one numeric arc and optional OID aliases and child namespaces.",
+			"required": [
+				"arc"
+			],
+			"properties": {
+				"arc": {
+					"description": "Single numeric OID arc for this node, relative to the parent node. Do not include dots."
+				},
+				"oids": {
+					"description": "Exported OID aliases located directly below this node.",
+					"$ref": "#/$defs/oidMap"
+				},
+				"children": {
+					"description": "Nested OID namespace branches below this node.",
+					"$ref": "#/$defs/children"
+				}
+			},
+			"additionalProperties": false,
+			"anyOf": [
+				{
+					"required": [
+						"oids"
+					]
+				},
+				{
+					"required": [
+						"children"
+					]
+				}
+			]
+		}
+	}
+}

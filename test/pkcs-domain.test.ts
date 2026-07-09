@@ -20,7 +20,7 @@ import {
 	verifyPkcs7SignedData,
 } from '#micro509/pkcs';
 import { OIDS } from '#micro509/internal/asn1/oids';
-import { createCmsSignedDataWithSignedAttrs } from './helpers.ts';
+import { createCmsSignedDataWithSignedAttrs } from '#test/helpers';
 
 describe('pkcs domain', () => {
 	it('roundtrips passwordless PFX bundles via the PKCS domain', async () => {

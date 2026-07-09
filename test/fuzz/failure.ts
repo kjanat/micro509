@@ -7,13 +7,13 @@
  * permanent regression fixture.
  */
 
-import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { fixturesDir } from '#test/helpers';
 
-import type { Mismatch } from './compare.ts';
-import type { CertSpec } from './spec.ts';
+import type { Mismatch } from '#test/fuzz/compare';
+import type { CertSpec } from '#test/fuzz/spec';
 
-const FAILURE_ROOT = join(import.meta.dirname, '../fixtures/differential-failures');
+const FAILURE_ROOT = join(fixturesDir, './differential-failures');
 
 export interface FailureArtifact {
 	readonly seed: number;
@@ -30,26 +30,18 @@ export interface FailureArtifact {
 /** Write a failing iteration to `test/fixtures/differential-failures/<seed>-<index>/`. */
 export async function dumpFailure(artifact: FailureArtifact): Promise<string> {
 	const dir = join(FAILURE_ROOT, `${artifact.seed}-${artifact.index}`);
-	await mkdir(dir, { recursive: true });
+	const repro = {
+		seed: artifact.seed,
+		index: artifact.index,
+		opensslVersion: artifact.opensslVersion,
+		spec: artifact.spec,
+		mismatches: artifact.mismatches,
+		...(artifact.error === undefined ? {} : { error: artifact.error }),
+	};
 	await Promise.all([
-		writeFile(join(dir, 'cert.pem'), artifact.certPem, 'utf8'),
-		writeFile(join(dir, 'key.pem'), artifact.keyPem, 'utf8'),
-		writeFile(
-			join(dir, 'repro.json'),
-			`${JSON.stringify(
-				{
-					seed: artifact.seed,
-					index: artifact.index,
-					opensslVersion: artifact.opensslVersion,
-					spec: artifact.spec,
-					mismatches: artifact.mismatches,
-					...(artifact.error === undefined ? {} : { error: artifact.error }),
-				},
-				null,
-				2,
-			)}\n`,
-			'utf8',
-		),
+		Bun.write(`${dir}/cert.pem`, artifact.certPem, { createPath: true }),
+		Bun.write(`${dir}/key.pem`, artifact.keyPem, { createPath: true }),
+		Bun.write(`${dir}/repro.json`, `${JSON.stringify(repro, null, '\t')}\n`, { createPath: true }),
 	]);
 	return dir;
 }

@@ -14,11 +14,9 @@ import type {
 	ParsedRelativeDistinguishedName,
 } from '#micro509/x509/parse';
 
-// ---------------------------------------------------------------------------
 // Public API
-// ---------------------------------------------------------------------------
 
-/** RFC 5280 §7.1 semantic equality: same RDN count, each pair matches attribute-by-attribute. */
+/** RFC 5280 [§7.1](https://datatracker.ietf.org/doc/html/rfc5280#section-7.1) semantic equality: same RDN count, each pair matches attribute-by-attribute. */
 export function compareDistinguishedNames(left: ParsedName, right: ParsedName): boolean {
 	if (left.rdns.length !== right.rdns.length) {
 		return false;
@@ -38,10 +36,9 @@ export function compareDistinguishedNames(left: ParsedName, right: ParsedName): 
 
 /**
  * Produces a deterministic string key for a parsed DN, suitable as a Map key.
- * Semantically equal DNs (per RFC 5280 §7.1) produce identical keys.
+ * Semantically equal DNs (per RFC 5280 [§7.1](https://datatracker.ietf.org/doc/html/rfc5280#section-7.1)) produce identical keys.
  *
- * Format: RDNs joined by `,`, attributes within each RDN sorted by OID then
- * by prepared value, joined by `+`.
+ * Format: RDNs joined by `,`, attributes within each RDN sorted by OID then by prepared value, joined by `+`.
  */
 export function canonicalDnKey(name: ParsedName): string {
 	return name.rdns.map(canonicalRdnKey).join(',');
@@ -65,9 +62,7 @@ export function isWithinDirectoryNameSubtree(subject: ParsedName, constraint: Pa
 	return true;
 }
 
-// ---------------------------------------------------------------------------
 // RDN / attribute comparison
-// ---------------------------------------------------------------------------
 
 /** Order-independent RDN equality: same attribute count, each pair matched exactly once. */
 export function compareRelativeDistinguishedNames(
@@ -99,7 +94,7 @@ export function compareRelativeDistinguishedNames(
 	return true;
 }
 
-/** Compares two AttributeTypeAndValue pairs using RFC 5280 §7.1 string-prep for DirectoryString tags. */
+/** Compares two AttributeTypeAndValue pairs using RFC 5280 [§7.1](https://datatracker.ietf.org/doc/html/rfc5280#section-7.1) string-prep for DirectoryString tags. */
 export function compareNameAttributeValue(
 	left: ParsedNameAttribute,
 	right: ParsedNameAttribute,
@@ -118,9 +113,7 @@ export function compareNameAttributeValue(
 	return left.valueTag === right.valueTag && left.value === right.value;
 }
 
-// ---------------------------------------------------------------------------
 // Helpers
-// ---------------------------------------------------------------------------
 
 /** True for UTF8String (0x0C) and PrintableString (0x13) — the DirectoryString types we normalize. */
 export function isDirectoryStringTag(tag: number): boolean {

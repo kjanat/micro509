@@ -77,8 +77,6 @@ jobs:
       - uses: ./.github/actions/setup-ts
         with: { install-bun: true, install-node: true, update-npm: true, node-registry-url: https://registry.npmjs.org }
       - run: runner install -f build
-      - name: Validate npm tarball against published exports
-        run: bun scripts/check-npm-pack.ts
       - shell: pwsh
         env: { OUTPUTS: "${{ toJSON(needs.validate.outputs) }}" }
         run: |

@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { $, file, write } from 'bun';
+import { projectRoot } from '#test/helpers';
 
 interface PkitsCaseRecord {
 	readonly section: string;
@@ -229,7 +230,7 @@ export const PKITS_CASES = [
 	await write(manifestPath, manifest).then(() => {
 		console.info(`Wrote manifest with ${cases.length} cases to ${manifestPath}`);
 	});
-	await $`bunx dprint fmt --log-level error ${manifestPath}`;
+	await $`bunx dprint fmt --log-level error ${manifestPath}`.cwd(projectRoot);
 }
 
 if (import.meta.main) await main();

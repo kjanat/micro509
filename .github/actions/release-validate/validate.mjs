@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // @ts-check
-
+/// <reference types="node" />
 import { readFileSync, writeFileSync } from 'node:fs';
 import { env as processEnv, exit } from 'node:process';
 import { log, error } from 'node:console';
@@ -51,7 +51,7 @@ const readJson = (path) => {
 		return parsed;
 	} catch (e) {
 		const message = e instanceof Error ? e.message : String(e);
-		fail(`Failed to read ${path}: ${message}`);
+		return fail(`Failed to read ${path}: ${message}`);
 	}
 };
 
@@ -85,7 +85,9 @@ const stringField = (source, path, key) => {
  */
 const parseSemver = (value, label) => {
 	const match = SEMVER_PATTERN.exec(value);
-	if (match === null) fail(`Invalid SemVer in ${label}: ${value}`);
+	if (match === null) {
+		return fail(`Invalid SemVer in ${label}: ${value}`);
+	}
 	return { value, prerelease: match.groups?.prerelease !== undefined };
 };
 

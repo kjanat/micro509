@@ -8,7 +8,7 @@ inputs:
   install-bun: { description: Install Bun, required: false, default: "true" }
   bun-version: { description: Bun version to install, required: false, default: "latest" }
   install-node: { description: Install Node.js, required: false, default: "false" }
-  node-version: { description: Node version to install, required: false, default: "latest" }
+  node-version: { description: Node version to install, required: false, default: "file" }
   node-registry-url: { description: "npm registry URL for Node (writes auth-enabled .npmrc reading NODE_AUTH_TOKEN)", required: false, default: "" }
   update-npm: { description: "Update npm to latest", required: false, default: "false" }
 
@@ -26,7 +26,7 @@ runs:
     - name: Setup runner-run
       id: setup-runner
       if: ${{ inputs.install-runner == 'true' }}
-      uses: kjanat/runner@v0.16.1
+      uses: kjanat/runner@v0.19.1
 
     - name: Setup Deno
       id: setup-deno
@@ -37,8 +37,12 @@ runs:
     - name: Setup Node
       id: setup-node
       if: ${{ inputs.install-node == 'true' }}
-      uses: actions/setup-node@v6 # Trusted action, tag allowed
-      with: { node-version: "${{ inputs.node-version }}", package-manager-cache: false, registry-url: "${{ inputs.node-registry-url }}" }
+      uses: actions/setup-node@v6
+      with:
+        node-version: ${{ inputs.node-version != 'file' && inputs.node-version || '' }}
+        node-version-file: ${{ inputs.node-version == 'file' && '.node-version' || '' }}
+        package-manager-cache: false
+        registry-url: ${{ inputs.node-registry-url }}
 
     - name: Setup Bun
       id: setup-bun

@@ -92,9 +92,7 @@ import {
 	parseKeyUsageExtension,
 } from '#micro509/internal/x509/extension-bits';
 
-// ---------------------------------------------------------------------------
 // DER encoding edge cases
-// ---------------------------------------------------------------------------
 
 describe('der encoding', () => {
 	it('setOf sorts elements with different lengths sharing a prefix', () => {
@@ -233,9 +231,7 @@ describe('der encoding', () => {
 	});
 });
 
-// ---------------------------------------------------------------------------
 // ASN.1 decoding edge cases
-// ---------------------------------------------------------------------------
 
 describe('asn1 decoding', () => {
 	it('decodeObjectIdentifier throws on empty bytes', () => {
@@ -366,9 +362,7 @@ describe('asn1 decoding', () => {
 	});
 });
 
-// ---------------------------------------------------------------------------
 // sig-verify edge cases
-// ---------------------------------------------------------------------------
 
 describe('sig-verify', () => {
 	it('requireRsaPublicKey returns failure for non-RSA OID', () => {
@@ -648,9 +642,7 @@ describe('ip helpers', () => {
 	});
 });
 
-// ---------------------------------------------------------------------------
 // Extension encoding edge cases
-// ---------------------------------------------------------------------------
 
 describe('extensions encoding', () => {
 	it('encodeSubjectAltName handles directoryName type', () => {
@@ -774,9 +766,7 @@ describe('extensions encoding', () => {
 	});
 });
 
-// ---------------------------------------------------------------------------
 // signing.ts edge cases
-// ---------------------------------------------------------------------------
 
 describe('signing.ts edge cases', () => {
 	it('describeSignatureAlgorithm recognizes SHA-1 signature OIDs', () => {
@@ -899,9 +889,7 @@ describe('signing.ts edge cases', () => {
 	});
 });
 
-// ---------------------------------------------------------------------------
 // rsa-pss.ts edge cases
-// ---------------------------------------------------------------------------
 
 describe('rsa-pss.ts edge cases', () => {
 	it('round-trips supported RSA-PSS profiles', () => {
@@ -1028,9 +1016,7 @@ function maskGenAlgorithmIdentifier(oid: string, hashOid?: string): Uint8Array {
 	return sequence([objectIdentifier(oid), hashAlgorithmIdentifier(hashOid)]);
 }
 
-// ---------------------------------------------------------------------------
 // pbes2.ts edge cases
-// ---------------------------------------------------------------------------
 
 describe('pbes2.ts edge cases', () => {
 	it('parsePbes2AlgorithmIdentifier throws on malformed input', () => {
@@ -1216,9 +1202,7 @@ describe('pbes2.ts edge cases', () => {
 	});
 });
 
-// ---------------------------------------------------------------------------
 // pkcs12-mac.ts edge cases
-// ---------------------------------------------------------------------------
 
 describe('pkcs12-mac.ts edge cases', () => {
 	const dummySafe = new Uint8Array(10);

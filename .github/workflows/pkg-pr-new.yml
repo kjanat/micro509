@@ -1,12 +1,14 @@
 name: Publish Any Commit
 on: [push, pull_request]
-
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency: { group: "pkgpr${{ github.event.pull_request.head.ref || github.ref_name }}", cancel-in-progress: true }
     permissions: { id-token: write, contents: read, pull-requests: write }
-    steps: [
-      { uses: actions/checkout@v7, with: { persist-credentials: false } },
-      { uses: ./.github/actions/setup-ts, with: { install-bun: true } },
-      run: runner install -f build publish:pkgprnew,
-    ]
+    steps:
+      - { uses: actions/checkout@v7, with: { persist-credentials: false } }
+      - { uses: ./.github/actions/setup-ts, with: { install-bun: true, install-node: true } }
+      - run: runner install -f build
+      - id: pkg-pr
+        run: run -q publish:pkgprnew --json pkgpr.json; echo "meta=$(jq -c . pkgpr.json)" >> "${GITHUB_OUTPUT}"

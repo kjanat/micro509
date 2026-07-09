@@ -1,4 +1,5 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+// biome-ignore-all format: lsp overwrites formatting sometimes...
+import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -62,14 +63,14 @@ export async function verifyChainWithOpenSsl(input: {
 		const leafPath = join(directory, 'leaf.pem');
 		const rootPath = join(directory, 'root.pem');
 		await Promise.all([
-			writeFile(leafPath, input.leafPem, 'utf8'),
-			writeFile(rootPath, input.rootPem, 'utf8'),
+			Bun.write(leafPath, input.leafPem),
+			Bun.write(rootPath, input.rootPem),
 		]);
 
 		const args = ['verify', '-trusted', rootPath, '-no-CApath', '-no-CAstore'];
 		if (input.intermediatePems !== undefined && input.intermediatePems.length > 0) {
 			const intermediatesPath = join(directory, 'intermediates.pem');
-			await writeFile(intermediatesPath, input.intermediatePems.join('\n'), 'utf8');
+			await Bun.write(intermediatesPath, input.intermediatePems.join('\n'));
 			args.push('-untrusted', intermediatesPath);
 		}
 		if (input.at !== undefined) {
@@ -102,11 +103,11 @@ export async function verifyChainWithOpenSsl(input: {
 		return result.exitCode === 0
 			? { valid: true, exitCode: result.exitCode, output }
 			: {
-					valid: false,
-					exitCode: result.exitCode,
-					failureClass: classifyVerifyFailure(output),
-					output,
-				};
+				valid: false,
+				exitCode: result.exitCode,
+				failureClass: classifyVerifyFailure(output),
+				output,
+			};
 	});
 }
 
@@ -121,33 +122,14 @@ export async function checkRevocationWithOpenSsl(input: {
 		const issuerPath = join(directory, 'issuer.pem');
 		const crlPath = join(directory, 'crl.pem');
 		await Promise.all([
-			writeFile(certificatePath, input.certificatePem, 'utf8'),
-			writeFile(issuerPath, input.issuerCertificatePem, 'utf8'),
-			writeFile(crlPath, input.crlPem, 'utf8'),
+			Bun.write(certificatePath, input.certificatePem),
+			Bun.write(issuerPath, input.issuerCertificatePem),
+			Bun.write(crlPath, input.crlPem),
 		]);
 
-		// -nameopt RFC2253 pins DN formatting; the default drifted across
-		// OpenSSL versions ("CN = X" in 3.0, "CN=X" elsewhere).
-		const metadata = await runOpenSsl([
-			'crl',
-			'-in',
-			crlPath,
-			'-noout',
-			'-crlnumber',
-			'-issuer',
-			'-nameopt',
-			'RFC2253',
-		]);
-		const verifyArgs = [
-			'verify',
-			'-trusted',
-			issuerPath,
-			'-CRLfile',
-			crlPath,
-			'-crl_check',
-			'-no-CApath',
-			'-no-CAstore',
-		];
+		// -nameopt RFC2253 pins DN formatting; the default drifted across OpenSSL versions ("CN = X" in 3.0, "CN=X" elsewhere).
+		const metadata = await runOpenSsl(['crl', '-in', crlPath, '-noout', '-crlnumber', '-issuer', '-nameopt', 'RFC2253']);
+		const verifyArgs = ['verify', '-trusted', issuerPath, '-CRLfile', crlPath, '-crl_check', '-no-CApath', '-no-CAstore'];
 		if (input.at !== undefined) {
 			verifyArgs.push('-attime', String(Math.floor(input.at.getTime() / 1000)));
 		}
@@ -180,18 +162,10 @@ export async function checkIdentityWithOpenSsl(input: {
 }): Promise<OpenSslIdentityResult> {
 	return await withTempDir(async (directory) => {
 		const certificatePath = join(directory, 'certificate.pem');
-		await writeFile(certificatePath, input.certificatePem, 'utf8');
-		const result = await runOpenSsl([
-			'x509',
-			'-in',
-			certificatePath,
-			'-noout',
-			input.kind === 'dns' ? '-checkhost' : '-checkip',
-			input.value,
-		]);
+		await Bun.write(certificatePath, input.certificatePem);
+		const result = await runOpenSsl(['x509', '-in', certificatePath, '-noout', input.kind === 'dns' ? '-checkhost' : '-checkip', input.value]);
 		const output = mergeCommandOutput(result);
-		// OpenSSL < 3.4 exits 0 even on mismatch; the printed verdict text is
-		// version-stable, so parse that instead of the exit code.
+		// OpenSSL < 3.4 exits 0 even on mismatch; the printed verdict text is version-stable, so parse that instead of the exit code.
 		return {
 			matches: !/does NOT match/i.test(output) && /does match/i.test(output),
 			exitCode: result.exitCode,
@@ -215,35 +189,18 @@ export async function issueAndValidateOcspResponseWithOpenSsl(input: {
 		const responsePath = join(directory, 'response.der');
 		const indexPath = join(directory, 'index.txt');
 		await Promise.all([
-			writeFile(issuerPath, input.issuerCertificatePem, 'utf8'),
-			writeFile(issuerKeyPath, input.issuerPrivateKeyPem, 'utf8'),
-			writeFile(certificatePath, input.certificatePem, 'utf8'),
+			Bun.write(issuerPath, input.issuerCertificatePem),
+			Bun.write(issuerKeyPath, input.issuerPrivateKeyPem),
+			Bun.write(certificatePath, input.certificatePem),
 		]);
 
-		const requestResult = await runOpenSsl([
-			'ocsp',
-			'-issuer',
-			issuerPath,
-			'-cert',
-			certificatePath,
-			'-no_nonce',
-			'-reqout',
-			requestPath,
-		]);
+		const requestResult = await runOpenSsl(['ocsp', '-issuer', issuerPath, '-cert', certificatePath, '-no_nonce', '-reqout', requestPath]);
 		if (requestResult.exitCode !== 0) {
 			throw new Error(mergeCommandOutput(requestResult));
 		}
 
 		const serialResult = await runOpenSsl(['x509', '-in', certificatePath, '-noout', '-serial']);
-		const subjectResult = await runOpenSsl([
-			'x509',
-			'-in',
-			certificatePath,
-			'-noout',
-			'-subject',
-			'-nameopt',
-			'RFC2253',
-		]);
+		const subjectResult = await runOpenSsl(['x509', '-in', certificatePath, '-noout', '-subject', '-nameopt', 'RFC2253']);
 		if (serialResult.exitCode !== 0 || subjectResult.exitCode !== 0) {
 			throw new Error(`${mergeCommandOutput(serialResult)}\n${mergeCommandOutput(subjectResult)}`);
 		}
@@ -254,23 +211,18 @@ export async function issueAndValidateOcspResponseWithOpenSsl(input: {
 			input.certificateStatus === 'good'
 				? `V\t351231235959Z\t\t${serial}\tunknown\t${subject}\n`
 				: `R\t351231235959Z\t${formatOcspIndexTime(input.revocationTime ?? new Date('2026-03-12T00:00:00Z'))}\t${serial}\tunknown\t${subject}\n`;
-		await writeFile(indexPath, indexLine, 'utf8');
+		await Bun.write(indexPath, indexLine);
 
+		// dprint-ignore
 		const responseResult = await runOpenSsl([
 			'ocsp',
-			'-index',
-			indexPath,
+			'-index', indexPath,
 			'-resp_no_certs',
-			'-rsigner',
-			issuerPath,
-			'-rkey',
-			issuerKeyPath,
-			'-CA',
-			issuerPath,
-			'-reqin',
-			requestPath,
-			'-respout',
-			responsePath,
+			'-rsigner', issuerPath,
+			'-rkey', issuerKeyPath,
+			'-CA', issuerPath,
+			'-reqin', requestPath,
+			'-respout', responsePath,
 		]);
 		if (responseResult.exitCode !== 0) {
 			throw new Error(mergeCommandOutput(responseResult));
@@ -278,14 +230,10 @@ export async function issueAndValidateOcspResponseWithOpenSsl(input: {
 
 		const validation = await runOpenSsl([
 			'ocsp',
-			'-issuer',
-			issuerPath,
-			'-cert',
-			certificatePath,
-			'-respin',
-			responsePath,
-			'-CAfile',
-			issuerPath,
+			'-issuer', issuerPath,
+			'-cert', certificatePath,
+			'-respin', responsePath,
+			'-CAfile', issuerPath,
 			'-no-CApath',
 			'-no-CAstore',
 			'-no_nonce',
@@ -297,7 +245,7 @@ export async function issueAndValidateOcspResponseWithOpenSsl(input: {
 			...(status === undefined ? {} : { status }),
 			exitCode: validation.exitCode,
 			output,
-			responseDer: new Uint8Array(await readFile(responsePath)),
+			responseDer: new Uint8Array(await Bun.file(responsePath).arrayBuffer()),
 		};
 	});
 }
@@ -307,7 +255,7 @@ export async function withTempDir<T>(fn: (directory: string) => Promise<T>): Pro
 	try {
 		return await fn(directory);
 	} finally {
-		await rm(directory, { recursive: true, force: true });
+		await Bun.$`rm -rf ${directory}`
 	}
 }
 

@@ -4,7 +4,7 @@ VitePress site for guides, reference pages, and generated API docs.
 
 ## OVERVIEW
 
-`site/` is the published documentation surface. Authored content lives beside generated API markdown, with `.vitepress/config.ts` stitching package metadata, TypeDoc output, and browser import-map examples together.
+`site/` is the published documentation surface. Authored content lives beside generated API markdown, with `.vitepress/config.ts` stitching package metadata, Deno doc output, and browser import-map examples together.
 
 ## STRUCTURE
 
@@ -13,20 +13,20 @@ site/
 ├── .vitepress/config.ts  # nav, sidebar, plugins, import-map injection
 ├── guide/                # authored workflow guides
 ├── reference/            # standards, algorithms, runtime support
-├── api/                  # generated TypeDoc markdown + sidebar JSON
+├── api/                  # generated API markdown
 ├── assets/               # icons and static assets
 └── index.md              # home page
 ```
 
 ## WHERE TO LOOK
 
-| Task                  | Location                               | Notes                                       |
-| --------------------- | -------------------------------------- | ------------------------------------------- |
-| Site config           | `.vitepress/config.ts`                 | VitePress theme config, plugins, edit links |
-| Landing page          | `index.md`                             | home hero and feature claims                |
-| User guides           | `guide/*.md`                           | workflow-focused docs by domain             |
-| Reference pages       | `reference/*.md`                       | scope, algorithms, runtime support          |
-| API docs input/output | `api/typedoc-sidebar.json`, `api/*.md` | generated from `bun site:api`               |
+| Task                  | Location                            | Notes                                       |
+| --------------------- | ----------------------------------- | ------------------------------------------- |
+| Site config           | `.vitepress/config.ts`              | VitePress theme config, plugins, edit links |
+| Landing page          | `index.md`                          | home hero and feature claims                |
+| User guides           | `guide/*.md`                        | workflow-focused docs by domain             |
+| Reference pages       | `reference/*.md`                    | scope, algorithms, runtime support          |
+| API docs input/output | `.vitepress/api-gen.ts`, `api/*.md` | generated during site build/dev             |
 
 ## CONVENTIONS
 

@@ -16,7 +16,7 @@ import {
 	importRsaPrivateKeyWithScheme,
 	replaceCsrSignatureAlgorithm,
 	rewriteCsrSignatureAsRsaPss,
-} from './helpers.ts';
+} from '#test/helpers';
 
 describe('csr', () => {
 	it('includes basicConstraints and customExtensions in CSR requested extensions', async () => {

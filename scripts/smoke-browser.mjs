@@ -1,12 +1,15 @@
-// Browser smoke test: serves the built dist output to a headless Chromium
-// via Playwright and runs the shared smoke assertions against real browser
-// WebCrypto (`node scripts/smoke-browser.mjs`, needs `bun run build` first).
-
+#!/usr/bin/env node
+/**
+ * Browser smoke test: serves the built dist output to a headless Chromium via Playwright and runs
+ * the shared smoke assertions against real browser WebCrypto (`node scripts/smoke-browser.mjs`,
+ * needs `bun run build` first). @module
+ */
+// deno-lint-ignore-file
 import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { chromium } from 'playwright';
 
-const root = new URL('..', import.meta.url);
+const root = new URL('.', import.meta.resolve('#pkg'));
 
 const pageHtml = `\
 <!DOCTYPE html>
@@ -27,13 +30,13 @@ const server = createServer((request, response) => {
 		response.end(pageHtml);
 		return;
 	}
-	const target = new URL(`.${request.url}`, root);
+	const target = new URL(`${request.url}`.replace(/^\//, ''), root);
 	if (!target.pathname.startsWith(root.pathname)) {
 		response.statusCode = 403;
 		response.end();
 		return;
 	}
-	readFile(target)
+	readFile(target.pathname)
 		.then((body) => {
 			response.setHeader('content-type', 'text/javascript');
 			response.end(body);

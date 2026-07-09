@@ -10,16 +10,16 @@ import { readElement } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
 import type { PublicKeyImportInput, RsaHash, RsaSignatureScheme } from '#micro509/keys/keys';
 import { importSpkiDerOrThrow } from '#micro509/keys/keys';
-import { alternateEcdsaSignatureEncoding } from './ecdsa.ts';
-import { parseRsaPssParameters } from './rsa-pss.ts';
-import { getCrypto } from './webcrypto.ts';
+import { alternateEcdsaSignatureEncoding } from '#micro509/internal/crypto/ecdsa';
+import { parseRsaPssParameters } from '#micro509/internal/crypto/rsa-pss';
+import { getCrypto } from '#micro509/internal/crypto/webcrypto';
 
 export {
 	alternateEcdsaSignatureEncoding,
 	concatFixedWidth,
 	derEcdsaSignatureToRaw,
 	rawEcdsaSignatureToDer,
-} from './ecdsa.ts';
+} from '#micro509/internal/crypto/ecdsa';
 
 /** Resolved WebCrypto parameters needed to verify a signature. */
 export interface VerifySignatureConfig {

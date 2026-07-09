@@ -36,7 +36,11 @@
 		"#micro509/internal/*": "./src/internal/*.ts",
 		"#pkg": "./package.json",
 		"#jsr": "./jsr.json",
-		"#typedoc-sidebar": "./site/api/typedoc-sidebar.json"
+		"#smoke": "./scripts/smoke-core.mjs",
+		"#test/helpers": "./test/helpers.ts",
+		"#test/fuzz/*": "./test/fuzz/*.ts",
+		"#test/oracles/*": "./test/oracles/*.ts",
+		"#test/pkits/*": "./test/fixtures/pkits/*.ts"
 	},
 	"exports": {
 		".": {
@@ -81,13 +85,14 @@
 		"site/.vitepress"
 	],
 	"scripts": {
-		"bd": "tsdown --no-attw --no-publint --no-unused --no-report",
+		"bd": "tsdown",
 		"build": "tsdown",
+		"build:watch": "tsdown --watch",
 		"check": "run -pK check:biome check:deno typecheck",
 		"check:biome": "biome check",
 		"check:deno": "deno check src",
 		"deno:cleandocs": "rm -rf docs/deno 2>/dev/null",
-		"deno:importsmap": "bun scripts/gen-deno-importmap.ts",
+		"deno:importsmap": "bun scripts/gen-deno-importmap.bun.ts",
 		"docs:build": "run -pk deno:importsmap deno:cleandocs; deno doc --no-npm --import-map deno.import_map.json --html --output=docs/deno --name=micro509 src/**/index.ts",
 		"docs:lint": "run -pk deno:importsmap deno:cleandocs; deno doc --no-npm --import-map deno.import_map.json --html --output=docs/deno --name=micro509 --lint src/**/index.ts",
 		"fmt": "dprint fmt",
@@ -95,6 +100,7 @@
 		"lint:biome": "biome lint",
 		"lint:deno": "deno lint src",
 		"playwright:chromium": "npx playwright install --with-deps chromium",
+		"prepare": "run -q deno:importsmap",
 		"prepublishOnly": "[ -n \"${GITHUB_ACTIONS:-}\" ] || { printf '%s\\n' 'manual npm publish blocked; use release workflow for provenance' >&2; exit 1; }",
 		"publish:jsr": "[ -n \"${GITHUB_ACTIONS:-}\" ] || { printf '%s\\n' 'manual JSR publish blocked; use release workflow' >&2; exit 1; }; bunx jsr publish",
 		"publish:pkgprnew": "bunx pkg-pr-new publish --packageManager='npm,pnpm,bun' --bun",
@@ -112,32 +118,34 @@
 		"test:differential": "bun test test/differential.test.ts test/differential-fuzz.test.ts",
 		"test:pkits": "bun test test/pkits.test.ts",
 		"test:watch": "AGENT=1 bun test --watch --concurrent",
-		"typecheck": "tsgo --noEmit -p tsconfig.src.json && tsgo --noEmit -p tsconfig.other.json",
-		"typecheck:tsc": "tsc --noEmit -p tsconfig.src.json && tsc --noEmit -p tsconfig.other.json",
+		"typecheck": "run -pk typecheck:src typecheck:other typecheck:regular site:typecheck",
+		"typecheck:other": "tsc --noEmit -p tsconfig.other.json",
+		"typecheck:regular": "tsc --noEmit -p tsconfig.json",
+		"typecheck:src": "tsc --noEmit -p tsconfig.src.json",
 		"wrangler:build": "wrangler build",
 		"wrangler:deploy": "wrangler deploy",
 		"wrangler:deploy:versions": "wrangler versions upload",
 		"wrangler:dev": "wrangler dev"
 	},
 	"devDependencies": {
-		"@arethetypeswrong/core": "^0.18.4",
-		"@biomejs/biome": "^2.5.2",
-		"@deno/doc": "npm:@jsr/deno__doc",
-		"@tsconfig/node24": "^24.0.4",
-		"@types/bun": "^1.3.14",
-		"@types/node": "26.1.0",
-		"@typescript/native-preview": "^7.0.0-dev.20260704.1",
-		"deno": "^2.9.1",
-		"dprint": "^0.55.1",
-		"oxc-minify": "^0.138.0",
+		"@arethetypeswrong/core": "catalog:build",
+		"@biomejs/biome": "catalog:",
+		"@deno/doc": "catalog:deno",
+		"@tsconfig/node24": "catalog:ts",
+		"@types/bun": "catalog:ts",
+		"@types/deno": "catalog:deno",
+		"@types/node": "catalog:ts",
+		"deno": "catalog:deno",
+		"dprint": "catalog:",
 		"playwright": "^1.61.1",
-		"publint": "^0.3.21",
-		"runner-run": "^0.18.1",
-		"tsdown": "^0.22.3",
-		"typescript": "^6.0.3",
-		"unplugin-unused": "^0.5.7",
-		"vue": "^3.5.27",
-		"wrangler": "^4.107.0"
+		"publint": "catalog:build",
+		"runner-run": "catalog:",
+		"tsdown": "catalog:build",
+		"typescript": "catalog:ts",
+		"typescript-7": "catalog:ts",
+		"unplugin-unused": "catalog:build",
+		"vue": "catalog:",
+		"wrangler": "catalog:cloudflare"
 	},
 	"packageManager": "bun@1.3.14",
 	"devEngines": {
@@ -166,10 +174,55 @@
 		]
 	},
 	"volta": {
-		"node": "26.4.0",
+		"node": "26.5.0",
 		"npm": "11.18.0"
 	},
-	"typedocoptions": {
-		"extends": "./config/typedoc.config.mjs"
-	}
+	"catalog": {
+		"@biomejs/biome": "^2.5.3",
+		"dprint": "^0.55.1",
+		"runner-run": "^0.19.1",
+		"vue": "^3.5.27"
+	},
+	"catalogs": {
+		"build": {
+			"@arethetypeswrong/core": "^0.18.4",
+			"publint": "^0.3.21",
+			"tsdown": "^0.22.4",
+			"unplugin-unused": "^0.5.7"
+		},
+		"cloudflare": {
+			"@cloudflare/vite-plugin": "^1.42.3",
+			"wrangler": "^4.108.0"
+		},
+		"deno": {
+			"@deno/doc": "npm:@jsr/deno__doc",
+			"@types/deno": "^2.7.0",
+			"deno": "^2.9.2"
+		},
+		"site": {
+			"markdown-it-task-lists": "^2.1.1",
+			"vite-robots-txt": "^1.0.0",
+			"vite-svg-to-ico": "^4.0.0",
+			"vitepress": "2.0.0-alpha.18"
+		},
+		"ts": {
+			"@arethetypeswrong/core": "^0.18.4",
+			"@tsconfig/node24": "^24.0.4",
+			"@types/bun": "^1.3.14",
+			"@types/deno": "^2.7.0",
+			"@types/node": "^26.1.0",
+			"@vue/tsconfig": "^0.9.1",
+			"typescript": "npm:typescript@>=6,<7",
+			"typescript-6": "npm:@typescript/typescript6@^6.0.2",
+			"typescript-7": "npm:typescript@^7.0.2",
+			"vue-tsc": "^3.3.5"
+		}
+	},
+	"trustedDependencies": [
+		"deno",
+		"dprint",
+		"esbuild",
+		"sharp",
+		"workerd"
+	]
 }

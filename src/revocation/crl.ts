@@ -48,20 +48,15 @@ import {
 import { base64Encode } from '#micro509/internal/shared/base64';
 import { compareDistinguishedNames, compareNameAttributeValue } from '#micro509/internal/shared/dn';
 import { decodeIpAddress } from '#micro509/internal/shared/ip';
+import type { ParsedBitFlags } from '#micro509/internal/x509/extension-bits';
 import {
 	encodeDistributionPointReasonFlagsContent,
-	type ParsedBitFlags,
 	parseDistributionPointReasonFlagsContent,
 } from '#micro509/internal/x509/extension-bits';
 import { exportSpkiDer } from '#micro509/keys/keys';
 import { pemDecodeOrThrow, pemEncode } from '#micro509/pem/pem';
-import {
-	type ErrorResult,
-	failureResult,
-	type Micro509Error,
-	rethrowIfInvariant,
-	successResult,
-} from '#micro509/result/result';
+import type { ErrorResult, Micro509Error } from '#micro509/result/result';
+import { failureResult, rethrowIfInvariant, successResult } from '#micro509/result/result';
 import type {
 	DistributionPoint,
 	DistributionPointReason,
@@ -106,7 +101,7 @@ export interface RevokedCertificateInput {
 }
 
 /**
- * RFC 5280 §5.3.1 CRLReason code values.
+ * RFC 5280 [§5.3.1](https://datatracker.ietf.org/doc/html/rfc5280#section-5.3.1) CRLReason code values.
  *
  * `removeFromCRL` is used in delta CRLs to un-hold a certificate.
  */

@@ -25,7 +25,7 @@ import {
 	tlv,
 } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
-import { childrenOf, decodeObjectIdentifier, hexToBytes } from './helpers.ts';
+import { childrenOf, decodeObjectIdentifier, hexToBytes } from '#test/helpers';
 
 interface CorpusCase {
 	readonly name: string;

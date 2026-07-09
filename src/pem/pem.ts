@@ -8,13 +8,8 @@
  */
 
 import { base64Decode, base64Encode } from '#micro509/internal/shared/base64';
-import {
-	type ErrorResult,
-	failureResult,
-	type Micro509Error,
-	rethrowIfInvariant,
-	successResult,
-} from '#micro509/result/result';
+import type { ErrorResult, Micro509Error } from '#micro509/result/result';
+import { failureResult, rethrowIfInvariant, successResult } from '#micro509/result/result';
 
 /** A single decoded PEM block with its label, decoded DER bytes, and original PEM text. */
 export interface PemBlock {

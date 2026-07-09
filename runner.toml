@@ -1,0 +1,7 @@
+#:schema https://kjanat.github.io/runner/schemas/runner.toml.schema.json
+
+[install]
+pms = ["bun"]  # only install with these; each must be detected
+
+[github]
+group_output = false

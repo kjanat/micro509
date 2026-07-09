@@ -21,7 +21,7 @@ import {
 	sequence,
 } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
-import { getCrypto } from './webcrypto.ts';
+import { getCrypto } from '#micro509/internal/crypto/webcrypto';
 
 /**
  * Thrown when PBES2 / AES-CBC decryption fails its integrity check, which in

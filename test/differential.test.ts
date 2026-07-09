@@ -14,24 +14,15 @@ import {
 	verifyCertificateChain,
 	unwrap,
 } from '#micro509';
-import { hexToBytes, issueChain } from './helpers.ts';
+import { hexToBytes, issueChain, openSslAvailable, differentialEnabled } from '#test/helpers';
 import {
 	checkIdentityWithOpenSsl,
 	checkRevocationWithOpenSsl,
 	issueAndValidateOcspResponseWithOpenSsl,
-	probeOpenSsl,
 	verifyChainWithOpenSsl,
-} from './oracles/openssl.ts';
+} from '#test/oracles/openssl';
 
-// The OpenSSL oracle is version-sensitive (name formatting, verdict drift),
-// so CI skips it by default; the dedicated differential job opts in with
-// DIFFERENTIAL_OPENSSL=1 against the runner's openssl.
-const differential =
-	(await probeOpenSsl()) &&
-	(process.env.CI === undefined || process.env.DIFFERENTIAL_OPENSSL === '1')
-		? describe
-		: describe.skip;
-differential('OpenSSL differential harness', () => {
+describe.skipIf(openSslAvailable && differentialEnabled)('OpenSSL differential harness', () => {
 	it('matches OpenSSL path verdicts for valid and path-length-exceeded chains', async () => {
 		const validChain = await issueChain();
 		const validMicro = await verifyCertificateChain({

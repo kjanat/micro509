@@ -1,13 +1,13 @@
+import markdownItTaskLists from 'markdown-it-task-lists';
 import { execFileSync } from 'node:child_process';
 import { dirname, join, normalize } from 'node:path';
 import robotsTxt from 'vite-robots-txt';
 import svgToIco from 'vite-svg-to-ico';
 import { defineConfig, type Plugin } from 'vitepress';
-import markdownItTaskLists from 'markdown-it-task-lists';
 
-import { apiDocsPlugin, generateApiDocs } from './api-gen.ts';
 import jsr from '../../jsr.json' with { type: 'json' };
 import pkg from '../../package.json' with { type: 'json' };
+import { apiDocsPlugin, generateApiDocs } from './api-gen.ts';
 
 /** Trimmed stdout of a local git command, or '' if git is unavailable/fails. */
 const gitOut = (args: readonly string[]): string => {

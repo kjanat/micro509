@@ -30,7 +30,7 @@ import {
 	createCmsSignedDataWithSignedAttrs,
 	createSyntheticPkcs7SignedData,
 	hexToBytes,
-} from './helpers.ts';
+} from '#test/helpers';
 
 describe('pkcs7', () => {
 	it('creates and parses PKCS#7 certificate bags', async () => {
