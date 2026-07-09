@@ -139,6 +139,7 @@ pubkey:    ${parsed.publicKeyAlgorithmName}
 key usage: ${parsed.keyUsage.flags.join(', ')}
 SANs:      ${sans}
 `);
+}
 ```
 
 </LiveCode>
