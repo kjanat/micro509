@@ -173,6 +173,7 @@ package-lock.json
 pnpm-*.yaml
 src/**/*.d.ts
 src/**/*.js
+test-results.xml
 test/fixtures/differential-failures/
 test/fixtures/pkits/nist/PKITS_data/
 yarn.lock

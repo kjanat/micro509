@@ -5,6 +5,7 @@ linker = "hoisted"
 coveragePathIgnorePatterns = ["test/**", "dist/**"]
 coverageReporter           = ["text", "lcov"]
 coverageSkipTestFiles      = true
+reporter.junit             = "test-results.xml"
 
 [run]
 noOrphans = true

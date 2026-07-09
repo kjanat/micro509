@@ -23,7 +23,10 @@ jobs:
       - run: run test
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v7
-        with: { flags: bun, fail_ci_if_error: true, use_oidc: true }
+        with: { flags: bun, fail_ci_if_error: true, use_oidc: true, report_type: "coverage" }
+      - name: Upload test-results to Codecov
+        uses: codecov/codecov-action@v7
+        with: { flags: bun, fail_ci_if_error: true, use_oidc: true, report_type: "test_results", files: "test-results.xml" }
       - name: Node smoke test (dist)
         run: node scripts/smoke.mjs
       - name: Deno smoke test (dist)
