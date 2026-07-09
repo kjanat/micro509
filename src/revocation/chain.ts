@@ -758,6 +758,20 @@ const ALL_REASON_FLAGS: readonly string[] = [
 	'aACompromise',
 ];
 
+interface CrlEvidenceState {
+	readonly executionErrors: RevocationExecutionError[];
+	readonly coveredReasons: Set<string>;
+	sawCrlSignerRevoked: boolean;
+	sawCrlSignerIndeterminate: boolean;
+	sawGood: boolean;
+	freshestGood?: { readonly signer: ParsedCertificate; readonly thisUpdate: Date };
+}
+
+interface ApplicableCrlCheck {
+	readonly result: Awaited<ReturnType<typeof checkCertificateRevocationAgainstCrl>>;
+	readonly signer: ParsedCertificate;
+}
+
 async function evaluateCrlEvidence(
 	cert: ParsedCertificate,
 	issuer: ParsedCertificate,
@@ -765,83 +779,44 @@ async function evaluateCrlEvidence(
 	signerCtx: SignerValidationContext,
 ): Promise<EvidenceEvaluation> {
 	const { crls = [], extraCertificates = [], chain = [], at = new Date() } = input;
-	const executionErrors: RevocationExecutionError[] = [];
-	let sawCrlSignerRevoked = false;
-	let sawCrlSignerIndeterminate = false;
-	let sawGood = false;
-	// Signer and thisUpdate are tracked together so the reported
-	// signerCertificate always belongs to the CRL whose freshness is reported.
-	let freshestGood: { readonly signer: ParsedCertificate; readonly thisUpdate: Date } | undefined;
-	const coveredReasons = new Set<string>();
+	const state: CrlEvidenceState = {
+		executionErrors: [],
+		coveredReasons: new Set(),
+		sawCrlSignerRevoked: false,
+		sawCrlSignerIndeterminate: false,
+		sawGood: false,
+	};
 
 	// Parse all CRLs and separate base CRLs from delta CRLs
-	const parsedCrls: ParsedCertificateRevocationList[] = [];
-	for (const crlSource of crls) {
-		try {
-			parsedCrls.push(parseCrlFromSource(crlSource));
-		} catch (e) {
-			executionErrors.push({
-				kind: 'parse_error',
-				message: e instanceof Error ? e.message : 'CRL parse failed',
-			});
-		}
-	}
+	const parsedCrls = parseCrlEvidenceSources(crls, state.executionErrors);
 
 	const baseCrls = parsedCrls.filter((crl) => crl.baseCrlNumber === undefined);
 	const deltaCrls = parsedCrls.filter((crl) => crl.baseCrlNumber !== undefined);
 
-	// Helper to check CRL with given issuer and optional delta
-	const checkWithIssuer = (
-		crl: ParsedCertificateRevocationList,
-		deltaCrl: ParsedCertificateRevocationList | undefined,
-		crlIssuer: ParsedCertificate,
-	) => {
-		return checkCertificateRevocationAgainstCrl({
-			certificate: cert,
-			issuerCertificate: crlIssuer,
-			crl,
-			...(deltaCrl !== undefined ? { deltaCrl } : {}),
-			at,
-		});
-	};
-
 	// Process base CRLs (optionally paired with delta CRLs)
 	for (const baseCrl of baseCrls) {
-		// Find applicable delta CRL for this base CRL (if any)
-		// Delta CRL applies if it has the same issuer and crlNumber matches baseCrlNumber
-		const applicableDelta = deltaCrls.find(
-			(d) =>
-				d.issuer.derHex === baseCrl.issuer.derHex &&
-				d.baseCrlNumber !== undefined &&
-				baseCrl.crlNumber !== undefined &&
-				BigInt(d.baseCrlNumber) <= BigInt(baseCrl.crlNumber),
+		const applicableDelta = findApplicableDeltaCrl(baseCrl, deltaCrls);
+		const checked = await checkCrlWithAvailableIssuers(
+			cert,
+			baseCrl,
+			applicableDelta,
+			issuer,
+			extraCertificates,
+			chain,
+			at,
 		);
-
-		// Try chain issuer first
-		let result = await checkWithIssuer(baseCrl, applicableDelta, issuer);
-		let effectiveSigner = issuer;
-
-		// Chain issuer failed — try to find indirect CRL issuer
-		if (!result.ok) {
-			const indirectIssuer = findIndirectCrlIssuer(baseCrl, extraCertificates, chain);
-			if (indirectIssuer !== undefined && !sameCertificate(indirectIssuer, issuer)) {
-				result = await checkWithIssuer(baseCrl, applicableDelta, indirectIssuer);
-				effectiveSigner = indirectIssuer;
-			}
-		}
-
-		if (!result.ok) {
+		if (!checked.result.ok) {
 			continue; // CRL doesn't apply to this certificate
 		}
 
 		// Validate CRL signer is not revoked before accepting result
-		const signerStatus = await validateCrlSigner(effectiveSigner, signerCtx);
+		const signerStatus = await validateCrlSigner(checked.signer, signerCtx);
 		if (signerStatus === 'resolved-revoked') {
-			sawCrlSignerRevoked = true;
+			state.sawCrlSignerRevoked = true;
 			continue; // CRL signer revoked — can't trust this CRL
 		}
 		if (signerStatus === 'resolved-indeterminate') {
-			sawCrlSignerIndeterminate = true;
+			state.sawCrlSignerIndeterminate = true;
 			continue; // CRL signer status unknown — try other CRLs
 		}
 
@@ -853,42 +828,27 @@ async function evaluateCrlEvidence(
 				: baseCrl.thisUpdate;
 
 		// CRL is valid — check result
-		if (result.value.status === 'revoked') {
+		if (checked.result.value.status === 'revoked') {
 			// Immediately return revoked status
 			return {
 				status: buildCrlRevokedStatus(
 					cert,
-					effectiveSigner,
+					checked.signer,
 					crlThisUpdate,
-					result.value.revocationDate,
-					result.value.reasonCode,
+					checked.result.value.revocationDate,
+					checked.result.value.reasonCode,
 				),
-				executionErrors,
+				executionErrors: state.executionErrors,
 			};
 		}
 
 		// Status is 'good' — track which reasons this CRL covers
-		sawGood = true;
-		if (freshestGood === undefined || crlThisUpdate.getTime() > freshestGood.thisUpdate.getTime()) {
-			freshestGood = { signer: effectiveSigner, thisUpdate: crlThisUpdate };
-		}
-		const crlReasons = baseCrl.issuingDistributionPoint?.onlySomeReasons?.flags;
-		if (crlReasons === undefined) {
-			// CRL covers all reasons
-			for (const reason of ALL_REASON_FLAGS) {
-				coveredReasons.add(reason);
-			}
-		} else {
-			// CRL only covers specific reasons
-			for (const reason of crlReasons) {
-				coveredReasons.add(reason);
-			}
-		}
+		recordGoodCrlEvidence(state, checked.signer, crlThisUpdate, baseCrl);
 	}
 
 	// Return 'good' only if we saw at least one good result AND all reasons are covered
-	if (sawGood && freshestGood !== undefined) {
-		const allReasonsCovered = ALL_REASON_FLAGS.every((r) => coveredReasons.has(r));
+	if (state.sawGood && state.freshestGood !== undefined) {
+		const allReasonsCovered = ALL_REASON_FLAGS.every((r) => state.coveredReasons.has(r));
 		if (allReasonsCovered) {
 			return {
 				status: {
@@ -896,11 +856,11 @@ async function evaluateCrlEvidence(
 					status: 'good',
 					source: {
 						kind: 'crl',
-						signerCertificate: freshestGood.signer,
-						thisUpdate: freshestGood.thisUpdate,
+						signerCertificate: state.freshestGood.signer,
+						thisUpdate: state.freshestGood.thisUpdate,
 					},
 				},
-				executionErrors,
+				executionErrors: state.executionErrors,
 			};
 		}
 		// Not all reasons covered — indeterminate
@@ -910,15 +870,15 @@ async function evaluateCrlEvidence(
 				status: 'indeterminate',
 				indeterminateReasons: ['reason_coverage_incomplete'],
 			},
-			executionErrors,
+			executionErrors: state.executionErrors,
 		};
 	}
 
 	// No applicable CRL found — determine most appropriate indeterminate reason
 	const reasons: RevocationIndeterminateReason[] = [];
-	if (sawCrlSignerRevoked) {
+	if (state.sawCrlSignerRevoked) {
 		reasons.push('crl_signer_revoked');
-	} else if (sawCrlSignerIndeterminate) {
+	} else if (state.sawCrlSignerIndeterminate) {
 		reasons.push('crl_signer_indeterminate');
 	} else {
 		reasons.push('no_applicable_crl');
@@ -930,8 +890,97 @@ async function evaluateCrlEvidence(
 			status: 'indeterminate',
 			indeterminateReasons: reasons,
 		},
-		executionErrors,
+		executionErrors: state.executionErrors,
 	};
+}
+
+function parseCrlEvidenceSources(
+	crls: readonly CrlSource[],
+	executionErrors: RevocationExecutionError[],
+): readonly ParsedCertificateRevocationList[] {
+	const parsedCrls: ParsedCertificateRevocationList[] = [];
+	for (const crlSource of crls) {
+		try {
+			parsedCrls.push(parseCrlFromSource(crlSource));
+		} catch (e) {
+			executionErrors.push({
+				kind: 'parse_error',
+				message: e instanceof Error ? e.message : 'CRL parse failed',
+			});
+		}
+	}
+	return parsedCrls;
+}
+
+function findApplicableDeltaCrl(
+	baseCrl: ParsedCertificateRevocationList,
+	deltaCrls: readonly ParsedCertificateRevocationList[],
+): ParsedCertificateRevocationList | undefined {
+	return deltaCrls.find(
+		(deltaCrl) =>
+			deltaCrl.issuer.derHex === baseCrl.issuer.derHex &&
+			deltaCrl.baseCrlNumber !== undefined &&
+			baseCrl.crlNumber !== undefined &&
+			BigInt(deltaCrl.baseCrlNumber) <= BigInt(baseCrl.crlNumber),
+	);
+}
+
+async function checkCrlWithAvailableIssuers(
+	cert: ParsedCertificate,
+	baseCrl: ParsedCertificateRevocationList,
+	applicableDelta: ParsedCertificateRevocationList | undefined,
+	issuer: ParsedCertificate,
+	extraCertificates: readonly RevocationCertificateSource[],
+	chain: readonly ParsedCertificate[],
+	at: Date,
+): Promise<ApplicableCrlCheck> {
+	const direct = await checkCrlWithIssuer(cert, baseCrl, applicableDelta, issuer, at);
+	if (direct.ok) {
+		return { result: direct, signer: issuer };
+	}
+	const indirectIssuer = findIndirectCrlIssuer(baseCrl, extraCertificates, chain);
+	if (indirectIssuer === undefined || sameCertificate(indirectIssuer, issuer)) {
+		return { result: direct, signer: issuer };
+	}
+	return {
+		result: await checkCrlWithIssuer(cert, baseCrl, applicableDelta, indirectIssuer, at),
+		signer: indirectIssuer,
+	};
+}
+
+function checkCrlWithIssuer(
+	cert: ParsedCertificate,
+	crl: ParsedCertificateRevocationList,
+	deltaCrl: ParsedCertificateRevocationList | undefined,
+	crlIssuer: ParsedCertificate,
+	at: Date,
+): ReturnType<typeof checkCertificateRevocationAgainstCrl> {
+	return checkCertificateRevocationAgainstCrl({
+		certificate: cert,
+		issuerCertificate: crlIssuer,
+		crl,
+		...(deltaCrl !== undefined ? { deltaCrl } : {}),
+		at,
+	});
+}
+
+function recordGoodCrlEvidence(
+	state: CrlEvidenceState,
+	signer: ParsedCertificate,
+	thisUpdate: Date,
+	baseCrl: ParsedCertificateRevocationList,
+): void {
+	state.sawGood = true;
+	if (
+		state.freshestGood === undefined ||
+		thisUpdate.getTime() > state.freshestGood.thisUpdate.getTime()
+	) {
+		state.freshestGood = { signer, thisUpdate };
+	}
+	for (const reason of baseCrl.issuingDistributionPoint?.onlySomeReasons?.flags ??
+		ALL_REASON_FLAGS) {
+		state.coveredReasons.add(reason);
+	}
 }
 
 /**

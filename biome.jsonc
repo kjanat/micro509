@@ -23,8 +23,12 @@
 		},
 		"rules": {
 			"complexity": {
+				"recommended": true,
 				"useLiteralKeys": "off",
-				"recommended": true
+				"noExcessiveCognitiveComplexity": {
+					"options": { "maxAllowedComplexity": 30 },
+					"level": "info"
+				},
 			},
 			"correctness": { "recommended": true },
 			"performance": { "recommended": true },

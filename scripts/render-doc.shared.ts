@@ -282,6 +282,95 @@ function renderParams(defParams: readonly ParamDef[], js: JsDoc | undefined): st
 	return lines.join('\n');
 }
 
+type SymbolDeclaration = DocSymbol['declarations'][number];
+
+function renderFunctionSymbol(
+	sym: DocSymbol,
+	d: Extract<SymbolDeclaration, { readonly kind: 'function' }>,
+): string[] {
+	const tp = plain(renderTypeParams(d.def.typeParams));
+	const sigParams = d.def.params
+		.map((p) => {
+			const { name, optional, tsType } = paramInfo(p);
+			return `\t${name}${optional ? '?' : ''}: ${plain(renderType(tsType))}`;
+		})
+		.join(',\n');
+	const head = `function ${sym.name}${tp}`;
+	const ret = plain(renderType(d.def.returnType));
+	const out = [
+		'```ts',
+		sigParams ? `${head}(\n${sigParams},\n): ${ret}` : `${head}(): ${ret}`,
+		'```',
+		'',
+	];
+	const params = renderParams(d.def.params, d.jsDoc);
+	if (params) out.push(params, '');
+	return out;
+}
+
+function renderTypeAliasSymbol(
+	sym: DocSymbol,
+	d: Extract<SymbolDeclaration, { readonly kind: 'typeAlias' }>,
+): string[] {
+	const tp = plain(renderTypeParams(d.def.typeParams));
+	return ['```ts', `type ${sym.name}${tp} = ${plain(renderType(d.def.tsType))}`, '```', ''];
+}
+
+function renderInterfaceSignature(
+	sym: DocSymbol,
+	d: Extract<SymbolDeclaration, { readonly kind: 'interface' }>,
+): string[] {
+	const tp = plain(renderTypeParams(d.def.typeParams));
+	const ext = d.def.extends?.length
+		? ` extends ${d.def.extends.map((e) => plain(renderType(e))).join(', ')}`
+		: '';
+	const members: string[] = [];
+	for (const p of d.def.properties ?? []) {
+		const ro = p.readonly ? 'readonly ' : '';
+		members.push(`\t${ro}${p.name}${p.optional ? '?' : ''}: ${plain(renderType(p.tsType))};`);
+	}
+	for (const m of d.def.methods ?? []) {
+		const mp = m.params
+			.map((p) => {
+				const { name, optional, tsType } = paramInfo(p);
+				return `${name}${optional ? '?' : ''}: ${plain(renderType(tsType))}`;
+			})
+			.join(', ');
+		members.push(`\t${m.name}${m.optional ? '?' : ''}(${mp}): ${plain(renderType(m.returnType))};`);
+	}
+	const body = members.length ? ` {\n${members.join('\n')}\n}` : '';
+	return ['```ts', `interface ${sym.name}${tp}${ext}${body}`, '```', ''];
+}
+
+function renderInterfaceProperties(
+	d: Extract<SymbolDeclaration, { readonly kind: 'interface' }>,
+): string[] {
+	const props = d.def.properties ?? [];
+	if (!props.length) return [];
+	const lines = ['**Properties**'];
+	for (const p of props) {
+		const ro = p.readonly ? '`readonly` ' : '';
+		const label = `\`${p.name}${p.optional ? '?' : ''}\``;
+		const pdoc = p.jsDoc?.doc ? ` — ${bulletBody(p.jsDoc.doc)}` : '';
+		lines.push(`- ${ro}${label}: ${renderType(p.tsType)}${pdoc}`);
+	}
+	return [lines.join('\n'), ''];
+}
+
+function renderInterfaceSymbol(
+	sym: DocSymbol,
+	d: Extract<SymbolDeclaration, { readonly kind: 'interface' }>,
+): string[] {
+	return [...renderInterfaceSignature(sym, d), ...renderInterfaceProperties(d)];
+}
+
+function renderVariableSymbol(
+	sym: DocSymbol,
+	d: Extract<SymbolDeclaration, { readonly kind: 'variable' }>,
+): string[] {
+	return ['```ts', `${d.def.kind} ${sym.name}: ${plain(renderType(d.def.tsType))}`, '```', ''];
+}
+
 function renderSymbol(sym: DocSymbol, level = 3): string {
 	const d = sym.declarations[0];
 	if (!d) return '';
@@ -291,66 +380,13 @@ function renderSymbol(sym: DocSymbol, level = 3): string {
 	if (description) out.push(description, '');
 
 	if (d.kind === 'function') {
-		// Signature as a plain, multi-line ```ts fence — real newlines, readable
-		// shape. Cross-links live in Parameters below, where markdown renders them
-		// (inside a fence a link would show up as literal `[x](#y)`).
-		const tp = plain(renderTypeParams(d.def.typeParams));
-		const sigParams = d.def.params
-			.map((p) => {
-				const { name, optional, tsType } = paramInfo(p);
-				return `\t${name}${optional ? '?' : ''}: ${plain(renderType(tsType))}`;
-			})
-			.join(',\n');
-		const head = `function ${sym.name}${tp}`;
-		const ret = plain(renderType(d.def.returnType));
-		out.push(
-			'```ts',
-			sigParams ? `${head}(\n${sigParams},\n): ${ret}` : `${head}(): ${ret}`,
-			'```',
-			'',
-		);
-		const params = renderParams(d.def.params, d.jsDoc);
-		if (params) out.push(params, '');
+		out.push(...renderFunctionSymbol(sym, d));
 	} else if (d.kind === 'typeAlias') {
-		const tp = plain(renderTypeParams(d.def.typeParams));
-		out.push('```ts', `type ${sym.name}${tp} = ${plain(renderType(d.def.tsType))}`, '```', '');
+		out.push(...renderTypeAliasSymbol(sym, d));
 	} else if (d.kind === 'interface') {
-		const tp = plain(renderTypeParams(d.def.typeParams));
-		const ext = d.def.extends?.length
-			? ` extends ${d.def.extends.map((e) => plain(renderType(e))).join(', ')}`
-			: '';
-		const members: string[] = [];
-		for (const p of d.def.properties ?? []) {
-			const ro = p.readonly ? 'readonly ' : '';
-			members.push(`\t${ro}${p.name}${p.optional ? '?' : ''}: ${plain(renderType(p.tsType))};`);
-		}
-		for (const m of d.def.methods ?? []) {
-			const mp = m.params
-				.map((p) => {
-					const { name, optional, tsType } = paramInfo(p);
-					return `${name}${optional ? '?' : ''}: ${plain(renderType(tsType))}`;
-				})
-				.join(', ');
-			members.push(
-				`\t${m.name}${m.optional ? '?' : ''}(${mp}): ${plain(renderType(m.returnType))};`,
-			);
-		}
-		const body = members.length ? ` {\n${members.join('\n')}\n}` : '';
-		out.push('```ts', `interface ${sym.name}${tp}${ext}${body}`, '```', '');
-		// Linked property list — the fence is plain, so cross-links live here.
-		const props = d.def.properties ?? [];
-		if (props.length) {
-			const lines = ['**Properties**'];
-			for (const p of props) {
-				const ro = p.readonly ? '`readonly` ' : '';
-				const label = `\`${p.name}${p.optional ? '?' : ''}\``;
-				const pdoc = p.jsDoc?.doc ? ` — ${bulletBody(p.jsDoc.doc)}` : '';
-				lines.push(`- ${ro}${label}: ${renderType(p.tsType)}${pdoc}`);
-			}
-			out.push(lines.join('\n'), '');
-		}
+		out.push(...renderInterfaceSymbol(sym, d));
 	} else if (d.kind === 'variable') {
-		out.push('```ts', `${d.def.kind} ${sym.name}: ${plain(renderType(d.def.tsType))}`, '```', '');
+		out.push(...renderVariableSymbol(sym, d));
 	} else {
 		out.push(`_(kind: ${d.kind} — renderer not yet extended)_`, '');
 	}

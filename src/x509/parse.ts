@@ -440,6 +440,22 @@ export interface ParsedCertificateSigningRequest<
 	readonly decodedExtensionMap?: DecodedExtensionMap<TMap>;
 }
 
+interface ParsedTbsCertificateFields {
+	readonly version: number;
+	readonly serialNumber: DerElement;
+	readonly tbsSignatureAlgorithm: DerElement;
+	readonly issuer: DerElement;
+	readonly validity: DerElement;
+	readonly subject: DerElement;
+	readonly subjectPublicKeyInfo: DerElement;
+	readonly extensions?: DerElement;
+}
+
+interface ParsedCertificateVersionField {
+	readonly version: number;
+	readonly nextIndex: number;
+}
+
 /**
  * Throwing core for {@linkcode parseCertificateDer}.
  *
@@ -462,66 +478,11 @@ export function parseCertificateDerOrThrow<TMap extends ExtensionDecoderMap = Re
 	const tbsCertificate = requireElement(topLevel[0], 'TBSCertificate');
 	const signatureAlgorithm = requireElement(topLevel[1], 'signatureAlgorithm');
 	const signatureValue = requireElement(topLevel[2], 'signatureValue');
-	const tbsChildren = childrenOf(der, tbsCertificate);
-
-	let index = 0;
-	let version = 1;
-	const maybeVersion = tbsChildren[index];
-	if (maybeVersion?.tag === 0xa0) {
-		const versionChildren = childrenOf(der, maybeVersion);
-		const versionElement = requireElement(versionChildren[0], 'version INTEGER');
-		if (versionChildren.length !== 1 || versionElement.tag !== 0x02) {
-			throw new Error('version must use INTEGER');
-		}
-		version = decodeIntegerNumber(versionElement.value) + 1;
-		if (version < 1 || version > 3) {
-			throw new Error(`Unsupported certificate version: ${String(version)}`);
-		}
-		index += 1;
-	}
-
-	const serialNumber = requireElement(tbsChildren[index], 'serialNumber');
-	if (serialNumber.tag !== 0x02) {
-		throw new Error('serialNumber must use INTEGER');
-	}
-	const tbsSignatureAlgorithm = requireElement(tbsChildren[index + 1], 'TBSCertificate signature');
-	const issuer = requireElement(tbsChildren[index + 2], 'issuer');
-	const validity = requireElement(tbsChildren[index + 3], 'validity');
-	const subject = requireElement(tbsChildren[index + 4], 'subject');
-	const subjectPublicKeyInfo = requireElement(tbsChildren[index + 5], 'subjectPublicKeyInfo');
-	let cursor = index + 6;
-	const issuerUniqueIdElement = tbsChildren[cursor];
-	if (issuerUniqueIdElement?.tag === 0x81) {
-		if (version < 2) {
-			throw new Error('issuerUniqueID requires certificate version 2 or 3');
-		}
-		validateImplicitBitStringContent(issuerUniqueIdElement.value, 'issuerUniqueID');
-		cursor += 1;
-	}
-	const subjectUniqueIdElement = tbsChildren[cursor];
-	if (subjectUniqueIdElement?.tag === 0x82) {
-		if (version < 2) {
-			throw new Error('subjectUniqueID requires certificate version 2 or 3');
-		}
-		validateImplicitBitStringContent(subjectUniqueIdElement.value, 'subjectUniqueID');
-		cursor += 1;
-	}
-	const extensions = tbsChildren[cursor]?.tag === 0xa3 ? tbsChildren[cursor] : undefined;
-	if (extensions !== undefined) {
-		if (version !== 3) {
-			throw new Error('extensions require certificate version 3');
-		}
-		cursor += 1;
-	}
-	if (cursor !== tbsChildren.length) {
-		throw new Error(
-			`Unsupported TBSCertificate field tag: ${String(requireElement(tbsChildren[cursor], 'TBSCertificate field').tag)}`,
-		);
-	}
-	const parsedExtensions = parseExtensionContainer(der, extensions);
-	const parsedValidity = parseValidity(der, validity);
-	const parsedSpki = parseSubjectPublicKeyInfo(der, subjectPublicKeyInfo);
-	const parsedTbsSignatureAlgorithm = parseAlgorithmIdentifier(der, tbsSignatureAlgorithm);
+	const fields = parseTbsCertificateFields(der, tbsCertificate);
+	const parsedExtensions = parseExtensionContainer(der, fields.extensions);
+	const parsedValidity = parseValidity(der, fields.validity);
+	const parsedSpki = parseSubjectPublicKeyInfo(der, fields.subjectPublicKeyInfo);
+	const parsedTbsSignatureAlgorithm = parseAlgorithmIdentifier(der, fields.tbsSignatureAlgorithm);
 	const parsedSignatureAlgorithm = parseAlgorithmIdentifier(der, signatureAlgorithm);
 	assertMatchingCertificateSignatureAlgorithms(
 		parsedTbsSignatureAlgorithm,
@@ -538,19 +499,19 @@ export function parseCertificateDerOrThrow<TMap extends ExtensionDecoderMap = Re
 
 	return {
 		der: new Uint8Array(der),
-		version,
-		serialNumberHex: toHex(serialNumber.value),
+		version: fields.version,
+		serialNumberHex: toHex(fields.serialNumber.value),
 		tbsCertificateDer: der.slice(
 			tbsCertificate.start - tbsCertificate.headerLength,
 			tbsCertificate.end,
 		),
 		subjectPublicKeyInfoDer: der.slice(
-			subjectPublicKeyInfo.start - subjectPublicKeyInfo.headerLength,
-			subjectPublicKeyInfo.end,
+			fields.subjectPublicKeyInfo.start - fields.subjectPublicKeyInfo.headerLength,
+			fields.subjectPublicKeyInfo.end,
 		),
 		signatureValue: extractBitStringValue(signatureValue),
-		issuer: parseName(der, issuer),
-		subject: parseName(der, subject),
+		issuer: parseName(der, fields.issuer),
+		subject: parseName(der, fields.subject),
 		notBefore: parsedValidity.notBefore,
 		notAfter: parsedValidity.notAfter,
 		signatureAlgorithmOid: parsedSignatureAlgorithm.oid,
@@ -610,6 +571,91 @@ export function parseCertificateDerOrThrow<TMap extends ExtensionDecoderMap = Re
 			? { authorityKeyIdentifier: parsedExtensions.authorityKeyIdentifier }
 			: {}),
 	};
+}
+
+function parseTbsCertificateFields(
+	der: Uint8Array,
+	tbsCertificate: DerElement,
+): ParsedTbsCertificateFields {
+	const tbsChildren = childrenOf(der, tbsCertificate);
+	const versionField = parseCertificateVersionField(der, tbsChildren);
+	const version = versionField.version;
+	const index = versionField.nextIndex;
+	const serialNumber = requireElement(tbsChildren[index], 'serialNumber');
+	if (serialNumber.tag !== 0x02) {
+		throw new Error('serialNumber must use INTEGER');
+	}
+	const cursor = validateOptionalTbsCertificateFields(tbsChildren, index + 6, version);
+	return {
+		version,
+		serialNumber,
+		tbsSignatureAlgorithm: requireElement(tbsChildren[index + 1], 'TBSCertificate signature'),
+		issuer: requireElement(tbsChildren[index + 2], 'issuer'),
+		validity: requireElement(tbsChildren[index + 3], 'validity'),
+		subject: requireElement(tbsChildren[index + 4], 'subject'),
+		subjectPublicKeyInfo: requireElement(tbsChildren[index + 5], 'subjectPublicKeyInfo'),
+		...(tbsChildren[cursor - 1]?.tag === 0xa3 ? { extensions: tbsChildren[cursor - 1] } : {}),
+	};
+}
+
+function parseCertificateVersionField(
+	der: Uint8Array,
+	tbsChildren: readonly DerElement[],
+): ParsedCertificateVersionField {
+	const maybeVersion = tbsChildren[0];
+	if (maybeVersion?.tag !== 0xa0) {
+		return { version: 1, nextIndex: 0 };
+	}
+	const versionChildren = childrenOf(der, maybeVersion);
+	const versionElement = requireElement(versionChildren[0], 'version INTEGER');
+	if (versionChildren.length !== 1 || versionElement.tag !== 0x02) {
+		throw new Error('version must use INTEGER');
+	}
+	const version = decodeIntegerNumber(versionElement.value) + 1;
+	if (version < 1 || version > 3) {
+		throw new Error(`Unsupported certificate version: ${String(version)}`);
+	}
+	return { version, nextIndex: 1 };
+}
+
+function validateOptionalTbsCertificateFields(
+	tbsChildren: readonly DerElement[],
+	startCursor: number,
+	version: number,
+): number {
+	let cursor = startCursor;
+	if (tbsChildren[cursor]?.tag === 0x81) {
+		validateCertificateUniqueId(tbsChildren[cursor], version, 'issuerUniqueID');
+		cursor += 1;
+	}
+	if (tbsChildren[cursor]?.tag === 0x82) {
+		validateCertificateUniqueId(tbsChildren[cursor], version, 'subjectUniqueID');
+		cursor += 1;
+	}
+	if (tbsChildren[cursor]?.tag === 0xa3) {
+		if (version !== 3) {
+			throw new Error('extensions require certificate version 3');
+		}
+		cursor += 1;
+	}
+	if (cursor !== tbsChildren.length) {
+		throw new Error(
+			`Unsupported TBSCertificate field tag: ${String(requireElement(tbsChildren[cursor], 'TBSCertificate field').tag)}`,
+		);
+	}
+	return cursor;
+}
+
+function validateCertificateUniqueId(
+	element: DerElement | undefined,
+	version: number,
+	label: string,
+): void {
+	const uniqueIdElement = requireElement(element, label);
+	if (version < 2) {
+		throw new Error(`${label} requires certificate version 2 or 3`);
+	}
+	validateImplicitBitStringContent(uniqueIdElement.value, label);
 }
 
 /**
@@ -2001,80 +2047,120 @@ function decodeBmpString(bytes: Uint8Array): string {
 }
 
 /** @internal Decode the Authority Key Identifier extension, returning the keyIdentifier hex or undefined. */
+interface MutableAuthorityKeyIdentifierState {
+	keyIdentifier?: string;
+	sawAuthorityCertIssuer: boolean;
+	sawAuthorityCertSerialNumber: boolean;
+	lastFieldOrder: number;
+}
+
 export function parseAuthorityKeyIdentifier(bytes: Uint8Array): string | undefined {
 	const sequenceElement = requireElement(readElement(bytes, 0), 'authorityKeyIdentifier sequence');
 	if (sequenceElement.end !== bytes.length) {
 		throw new Error('Trailing data after DER element');
 	}
-	let keyIdentifier: string | undefined;
-	let sawAuthorityCertIssuer = false;
-	let sawAuthorityCertSerialNumber = false;
-	let lastFieldOrder = -1;
+	const state: MutableAuthorityKeyIdentifierState = {
+		sawAuthorityCertIssuer: false,
+		sawAuthorityCertSerialNumber: false,
+		lastFieldOrder: -1,
+	};
 	let offset = sequenceElement.start;
 	while (offset < sequenceElement.end) {
 		const child = readElement(bytes, offset);
 		if (child.end > sequenceElement.end) {
 			throw new Error('DER child exceeds parent length');
 		}
-		if (child.tag === 0x80) {
-			if (keyIdentifier !== undefined) {
-				throw new Error('authorityKeyIdentifier keyIdentifier must not repeat');
-			}
-			if (lastFieldOrder >= 0) {
-				throw new Error('authorityKeyIdentifier fields must preserve DER order');
-			}
-			keyIdentifier = toHex(child.value);
-			lastFieldOrder = 0;
-		} else if (child.tag === 0xa1) {
-			if (sawAuthorityCertIssuer) {
-				throw new Error('authorityKeyIdentifier authorityCertIssuer must not repeat');
-			}
-			if (lastFieldOrder >= 1) {
-				throw new Error('authorityKeyIdentifier fields must preserve DER order');
-			}
-			const issuerNames = childrenOf(bytes, child);
-			if (issuerNames.length === 0) {
-				throw new Error(
-					'authorityKeyIdentifier authorityCertIssuer must contain GeneralName entries',
-				);
-			}
-			for (const issuerName of issuerNames) {
-				if ((issuerName.tag & 0xc0) !== 0x80) {
-					throw new Error(
-						'authorityKeyIdentifier authorityCertIssuer must contain GeneralName entries',
-					);
-				}
-				parseGeneralName(bytes, issuerName);
-			}
-			sawAuthorityCertIssuer = true;
-			lastFieldOrder = 1;
-		} else if (child.tag === 0x82) {
-			if (sawAuthorityCertSerialNumber) {
-				throw new Error('authorityKeyIdentifier authorityCertSerialNumber must not repeat');
-			}
-			if (lastFieldOrder >= 2 || !sawAuthorityCertIssuer) {
-				throw new Error('authorityKeyIdentifier fields must preserve DER order');
-			}
-			validateImplicitSerialNumberEncoding(
-				child.value,
-				'authorityKeyIdentifier authorityCertSerialNumber',
-			);
-			sawAuthorityCertSerialNumber = true;
-			lastFieldOrder = 2;
-		} else {
-			throw new Error(`Unsupported authorityKeyIdentifier field tag: ${String(child.tag)}`);
-		}
+		parseAuthorityKeyIdentifierField(bytes, child, state);
 		offset = child.end;
 	}
 	if (offset !== sequenceElement.end) {
 		throw new Error('Malformed DER sequence');
 	}
-	if (sawAuthorityCertIssuer !== sawAuthorityCertSerialNumber) {
+	if (state.sawAuthorityCertIssuer !== state.sawAuthorityCertSerialNumber) {
 		throw new Error(
 			'authorityKeyIdentifier authorityCertIssuer and authorityCertSerialNumber must appear together',
 		);
 	}
-	return keyIdentifier;
+	return state.keyIdentifier;
+}
+
+function parseAuthorityKeyIdentifierField(
+	bytes: Uint8Array,
+	child: DerElement,
+	state: MutableAuthorityKeyIdentifierState,
+): void {
+	switch (child.tag) {
+		case 0x80:
+			parseAuthorityKeyIdentifierKeyId(child, state);
+			return;
+		case 0xa1:
+			parseAuthorityKeyIdentifierIssuer(bytes, child, state);
+			return;
+		case 0x82:
+			parseAuthorityKeyIdentifierSerial(child, state);
+			return;
+		default:
+			throw new Error(`Unsupported authorityKeyIdentifier field tag: ${String(child.tag)}`);
+	}
+}
+
+function parseAuthorityKeyIdentifierKeyId(
+	child: DerElement,
+	state: MutableAuthorityKeyIdentifierState,
+): void {
+	if (state.keyIdentifier !== undefined) {
+		throw new Error('authorityKeyIdentifier keyIdentifier must not repeat');
+	}
+	if (state.lastFieldOrder >= 0) {
+		throw new Error('authorityKeyIdentifier fields must preserve DER order');
+	}
+	state.keyIdentifier = toHex(child.value);
+	state.lastFieldOrder = 0;
+}
+
+function parseAuthorityKeyIdentifierIssuer(
+	bytes: Uint8Array,
+	child: DerElement,
+	state: MutableAuthorityKeyIdentifierState,
+): void {
+	if (state.sawAuthorityCertIssuer) {
+		throw new Error('authorityKeyIdentifier authorityCertIssuer must not repeat');
+	}
+	if (state.lastFieldOrder >= 1) {
+		throw new Error('authorityKeyIdentifier fields must preserve DER order');
+	}
+	const issuerNames = childrenOf(bytes, child);
+	if (issuerNames.length === 0) {
+		throw new Error('authorityKeyIdentifier authorityCertIssuer must contain GeneralName entries');
+	}
+	for (const issuerName of issuerNames) {
+		if ((issuerName.tag & 0xc0) !== 0x80) {
+			throw new Error(
+				'authorityKeyIdentifier authorityCertIssuer must contain GeneralName entries',
+			);
+		}
+		parseGeneralName(bytes, issuerName);
+	}
+	state.sawAuthorityCertIssuer = true;
+	state.lastFieldOrder = 1;
+}
+
+function parseAuthorityKeyIdentifierSerial(
+	child: DerElement,
+	state: MutableAuthorityKeyIdentifierState,
+): void {
+	if (state.sawAuthorityCertSerialNumber) {
+		throw new Error('authorityKeyIdentifier authorityCertSerialNumber must not repeat');
+	}
+	if (state.lastFieldOrder >= 2 || !state.sawAuthorityCertIssuer) {
+		throw new Error('authorityKeyIdentifier fields must preserve DER order');
+	}
+	validateImplicitSerialNumberEncoding(
+		child.value,
+		'authorityKeyIdentifier authorityCertSerialNumber',
+	);
+	state.sawAuthorityCertSerialNumber = true;
+	state.lastFieldOrder = 2;
 }
 
 function validateImplicitSerialNumberEncoding(bytes: Uint8Array, label: string): void {

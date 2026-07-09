@@ -461,73 +461,132 @@ function applyCertificatePolicyStep(
 	graph.nodesByDepth[depth] = currentDepth;
 	const anyPolicyInfo = certificatePolicies.get(OIDS.anyPolicy);
 	const previousAnyPolicy = previousDepth.get(policyNodeKey(depth - 1, OIDS.anyPolicy));
+	const previousAnyPolicyKey = policyNodeKey(depth - 1, OIDS.anyPolicy);
 
+	addPolicyNodesFromExpectedParents(graph, currentDepth, previousDepth, certificatePolicies, depth);
+
+	if (previousAnyPolicy !== undefined) {
+		addPolicyNodesFromPreviousAnyPolicy(
+			graph,
+			currentDepth,
+			certificatePolicies,
+			depth,
+			previousAnyPolicyKey,
+		);
+	}
+
+	if (anyPolicyInfo !== undefined && allowAnyPolicyExpansion) {
+		addAnyPolicyExpansionNodes(
+			graph,
+			currentDepth,
+			previousDepth,
+			depth,
+			anyPolicyInfo,
+			previousAnyPolicyKey,
+			previousAnyPolicy !== undefined,
+		);
+	}
+
+	prunePolicyGraph(graph, depth - 1);
+}
+
+function addPolicyNodesFromExpectedParents(
+	graph: PolicyGraph,
+	currentDepth: Map<string, PolicyGraphNode>,
+	previousDepth: ReadonlyMap<string, PolicyGraphNode>,
+	certificatePolicies: ReadonlyMap<string, PolicyInformation>,
+	depth: number,
+): void {
 	for (const policy of certificatePolicies.values()) {
 		if (policy.policyIdentifier === OIDS.anyPolicy) {
 			continue;
 		}
 		const matchingParents = collectParentsForExpectedPolicy(previousDepth, policy.policyIdentifier);
-		if (matchingParents.length > 0) {
-			addOrMergePolicyNode(
-				graph,
-				currentDepth,
-				depth,
-				policy.policyIdentifier,
-				policy.policyQualifiers,
-				matchingParents,
-				[policy.policyIdentifier],
-			);
+		if (matchingParents.length === 0) {
+			continue;
 		}
+		addOrMergePolicyNode(
+			graph,
+			currentDepth,
+			depth,
+			policy.policyIdentifier,
+			policy.policyQualifiers,
+			matchingParents,
+			[policy.policyIdentifier],
+		);
 	}
+}
 
-	if (previousAnyPolicy !== undefined) {
-		const previousAnyPolicyKey = policyNodeKey(depth - 1, OIDS.anyPolicy);
-		for (const policy of certificatePolicies.values()) {
-			if (policy.policyIdentifier === OIDS.anyPolicy) {
-				continue;
-			}
-			if (currentDepth.has(policyNodeKey(depth, policy.policyIdentifier))) {
-				continue;
-			}
-			addOrMergePolicyNode(
-				graph,
-				currentDepth,
-				depth,
-				policy.policyIdentifier,
-				policy.policyQualifiers,
-				[previousAnyPolicyKey],
-				[policy.policyIdentifier],
-			);
+function addPolicyNodesFromPreviousAnyPolicy(
+	graph: PolicyGraph,
+	currentDepth: Map<string, PolicyGraphNode>,
+	certificatePolicies: ReadonlyMap<string, PolicyInformation>,
+	depth: number,
+	previousAnyPolicyKey: string,
+): void {
+	for (const policy of certificatePolicies.values()) {
+		if (policy.policyIdentifier === OIDS.anyPolicy) {
+			continue;
 		}
-	}
-
-	if (anyPolicyInfo !== undefined && allowAnyPolicyExpansion) {
-		for (const [validPolicy, parentKeys] of collectExpectedPolicyParents(previousDepth)) {
-			if (currentDepth.has(policyNodeKey(depth, validPolicy))) {
-				continue;
-			}
-			const expansionParents =
-				validPolicy === OIDS.anyPolicy
-					? previousAnyPolicy === undefined
-						? []
-						: [policyNodeKey(depth - 1, OIDS.anyPolicy)]
-					: parentKeys;
-			if (expansionParents.length === 0) {
-				continue;
-			}
-			addOrMergePolicyNode(
-				graph,
-				currentDepth,
-				depth,
-				validPolicy,
-				anyPolicyInfo.policyQualifiers,
-				expansionParents,
-				[validPolicy],
-			);
+		if (currentDepth.has(policyNodeKey(depth, policy.policyIdentifier))) {
+			continue;
 		}
+		addOrMergePolicyNode(
+			graph,
+			currentDepth,
+			depth,
+			policy.policyIdentifier,
+			policy.policyQualifiers,
+			[previousAnyPolicyKey],
+			[policy.policyIdentifier],
+		);
 	}
+}
 
-	prunePolicyGraph(graph, depth - 1);
+function addAnyPolicyExpansionNodes(
+	graph: PolicyGraph,
+	currentDepth: Map<string, PolicyGraphNode>,
+	previousDepth: ReadonlyMap<string, PolicyGraphNode>,
+	depth: number,
+	anyPolicyInfo: PolicyInformation,
+	previousAnyPolicyKey: string,
+	hasPreviousAnyPolicy: boolean,
+): void {
+	for (const [validPolicy, parentKeys] of collectExpectedPolicyParents(previousDepth)) {
+		if (currentDepth.has(policyNodeKey(depth, validPolicy))) {
+			continue;
+		}
+		const expansionParents = collectAnyPolicyExpansionParents(
+			validPolicy,
+			parentKeys,
+			previousAnyPolicyKey,
+			hasPreviousAnyPolicy,
+		);
+		if (expansionParents.length === 0) {
+			continue;
+		}
+		addOrMergePolicyNode(
+			graph,
+			currentDepth,
+			depth,
+			validPolicy,
+			anyPolicyInfo.policyQualifiers,
+			expansionParents,
+			[validPolicy],
+		);
+	}
+}
+
+function collectAnyPolicyExpansionParents(
+	validPolicy: string,
+	parentKeys: readonly string[],
+	previousAnyPolicyKey: string,
+	hasPreviousAnyPolicy: boolean,
+): readonly string[] {
+	if (validPolicy !== OIDS.anyPolicy) {
+		return parentKeys;
+	}
+	return hasPreviousAnyPolicy ? [previousAnyPolicyKey] : [];
 }
 
 /** Finds all previous-depth nodes whose expectedPolicySet contains the given OID. */

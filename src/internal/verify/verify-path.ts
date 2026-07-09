@@ -50,6 +50,10 @@ interface TrustAnchorMatchResult {
 	readonly failure?: VerifyChainFailure;
 }
 
+type IssuerCandidateEvaluation =
+	| { readonly ok: true; readonly nextCaBelowCount: number }
+	| { readonly ok: false; readonly failure: VerifyChainFailure };
+
 /** Loose input for constructing failure detail objects during path building. */
 export interface VerifyPathFailureDetailsInput {
 	/** Common name of the certificate under evaluation, if known. */
@@ -253,11 +257,10 @@ export async function buildChainInternal(
 			rootFingerprints,
 		);
 		if (issuers.length === 0) {
-			const wasDeepest = path.length > deepestPath.length;
-			updateDeepest(path);
 			if (isSelfIssued(current)) {
+				updateDeepest(path);
 				sawUntrustedAnchor = true;
-			} else if (wasDeepest) {
+			} else if (updateDeepest(path)) {
 				deepestMissingIssuerAt = path.length - 1;
 			}
 			deadEnds.add(memoKey);
@@ -269,129 +272,22 @@ export async function buildChainInternal(
 			if (visited.has(issuerFingerprint)) {
 				continue;
 			}
-			if (!isWithinValidity(issuer, at)) {
-				recordFailure(
-					callbacks.failure(
-						'certificate_expired',
-						'certificate not valid at requested time',
-						path.length,
-						callbacks.detail({
-							subjectCommonName: issuer.subject.values.commonName,
-							expected: describeDateTime(at),
-							actual: `${describeDateTime(issuer.notBefore)}..${describeDateTime(issuer.notAfter)}`,
-						}),
-					),
-					path,
-				);
-				continue;
-			}
-			if (issuer.basicConstraints?.ca !== true) {
-				recordFailure(
-					callbacks.failure(
-						'ca_required',
-						'issuer must be a CA certificate',
-						path.length,
-						callbacks.detail({
-							subjectCommonName: issuer.subject.values.commonName,
-						}),
-					),
-					path,
-				);
-				continue;
-			}
-			if (issuer.keyUsage !== undefined && !issuer.keyUsage.flags.includes('keyCertSign')) {
-				recordFailure(
-					callbacks.failure(
-						'key_cert_sign_required',
-						'issuer missing keyCertSign',
-						path.length,
-						callbacks.detail({
-							subjectCommonName: issuer.subject.values.commonName,
-						}),
-					),
-					path,
-				);
-				continue;
-			}
-			if (
-				current.authorityKeyIdentifier !== undefined &&
-				issuer.subjectKeyIdentifier !== undefined &&
-				current.authorityKeyIdentifier !== issuer.subjectKeyIdentifier
-			) {
-				recordFailure(
-					callbacks.failure(
-						'authority_key_identifier_mismatch',
-						'authorityKeyIdentifier does not match issuer subjectKeyIdentifier',
-						path.length - 1,
-						callbacks.detail({
-							subjectCommonName: current.subject.values.commonName,
-							issuerCommonName: issuer.subject.values.commonName,
-							expected: issuer.subjectKeyIdentifier,
-							actual: current.authorityKeyIdentifier,
-						}),
-					),
-					path,
-				);
-				continue;
-			}
-			const nextCaBelowCount =
-				caBelowCount +
-				(current.basicConstraints?.ca === true && !isSelfIssued(current) && path.length > 1
-					? 1
-					: 0);
-			const pathLength = issuer.basicConstraints?.pathLength;
-			if (isNonNegativeInteger(pathLength) && nextCaBelowCount > pathLength) {
-				recordFailure(
-					callbacks.failure(
-						'path_length_exceeded',
-						'path length constraint exceeded',
-						path.length,
-						callbacks.detail({
-							subjectCommonName: issuer.subject.values.commonName,
-							expected: String(pathLength),
-							actual: String(nextCaBelowCount),
-						}),
-					),
-					path,
-				);
-				continue;
-			}
-			const signatureResult = await verifyCertificateSignature(current, issuer);
-			if (!signatureResult.ok) {
-				recordFailure(
-					callbacks.failure(
-						signatureResult.code,
-						signatureResult.reason,
-						path.length - 1,
-						callbacks.detail({
-							subjectCommonName: current.subject.values.commonName,
-							issuerCommonName: issuer.subject.values.commonName,
-							actual: signatureResult.reason,
-						}),
-					),
-					path,
-				);
-				continue;
-			}
-			if (!signatureResult.valid) {
-				recordFailure(
-					callbacks.failure(
-						'signature_invalid',
-						'certificate signature does not verify',
-						path.length - 1,
-						callbacks.detail({
-							subjectCommonName: current.subject.values.commonName,
-							issuerCommonName: issuer.subject.values.commonName,
-						}),
-					),
-					path,
-				);
+			const candidate = await evaluateIssuerCandidate(
+				current,
+				issuer,
+				path,
+				caBelowCount,
+				at,
+				callbacks,
+			);
+			if (!candidate.ok) {
+				recordFailure(candidate.failure, path);
 				continue;
 			}
 			const nextVisited = new Set(visited);
 			nextVisited.add(issuerFingerprint);
 			const nextPath = [...path, issuer];
-			const result = await search(issuer, nextPath, nextVisited, nextCaBelowCount);
+			const result = await search(issuer, nextPath, nextVisited, candidate.nextCaBelowCount);
 			if (result !== undefined) {
 				return result;
 			}
@@ -419,6 +315,162 @@ export async function buildChainInternal(
 			deepestPath = path;
 		}
 	}
+}
+
+async function evaluateIssuerCandidate(
+	current: ParsedCertificate,
+	issuer: ParsedCertificate,
+	path: readonly ParsedCertificate[],
+	caBelowCount: number,
+	at: Date,
+	callbacks: VerifyPathCallbacks,
+): Promise<IssuerCandidateEvaluation> {
+	const issuerConstraints = evaluateIssuerConstraints(
+		current,
+		issuer,
+		path,
+		caBelowCount,
+		at,
+		callbacks,
+	);
+	if (!issuerConstraints.ok) {
+		return issuerConstraints;
+	}
+	const signatureResult = await verifyCertificateSignature(current, issuer);
+	if (!signatureResult.ok) {
+		return {
+			ok: false,
+			failure: callbacks.failure(
+				signatureResult.code,
+				signatureResult.reason,
+				path.length - 1,
+				callbacks.detail({
+					subjectCommonName: current.subject.values.commonName,
+					issuerCommonName: issuer.subject.values.commonName,
+					actual: signatureResult.reason,
+				}),
+			),
+		};
+	}
+	if (!signatureResult.valid) {
+		return {
+			ok: false,
+			failure: callbacks.failure(
+				'signature_invalid',
+				'certificate signature does not verify',
+				path.length - 1,
+				callbacks.detail({
+					subjectCommonName: current.subject.values.commonName,
+					issuerCommonName: issuer.subject.values.commonName,
+				}),
+			),
+		};
+	}
+	return issuerConstraints;
+}
+
+function evaluateIssuerConstraints(
+	current: ParsedCertificate,
+	issuer: ParsedCertificate,
+	path: readonly ParsedCertificate[],
+	caBelowCount: number,
+	at: Date,
+	callbacks: VerifyPathCallbacks,
+): IssuerCandidateEvaluation {
+	if (!isWithinValidity(issuer, at)) {
+		return {
+			ok: false,
+			failure: callbacks.failure(
+				'certificate_expired',
+				'certificate not valid at requested time',
+				path.length,
+				callbacks.detail({
+					subjectCommonName: issuer.subject.values.commonName,
+					expected: describeDateTime(at),
+					actual: `${describeDateTime(issuer.notBefore)}..${describeDateTime(issuer.notAfter)}`,
+				}),
+			),
+		};
+	}
+	if (issuer.basicConstraints?.ca !== true) {
+		return {
+			ok: false,
+			failure: callbacks.failure(
+				'ca_required',
+				'issuer must be a CA certificate',
+				path.length,
+				callbacks.detail({ subjectCommonName: issuer.subject.values.commonName }),
+			),
+		};
+	}
+	return evaluateIssuerKeyConstraints(current, issuer, path, caBelowCount, callbacks);
+}
+
+function evaluateIssuerKeyConstraints(
+	current: ParsedCertificate,
+	issuer: ParsedCertificate,
+	path: readonly ParsedCertificate[],
+	caBelowCount: number,
+	callbacks: VerifyPathCallbacks,
+): IssuerCandidateEvaluation {
+	if (issuer.keyUsage !== undefined && !issuer.keyUsage.flags.includes('keyCertSign')) {
+		return {
+			ok: false,
+			failure: callbacks.failure(
+				'key_cert_sign_required',
+				'issuer missing keyCertSign',
+				path.length,
+				callbacks.detail({ subjectCommonName: issuer.subject.values.commonName }),
+			),
+		};
+	}
+	if (authorityKeyIdentifierMismatch(current, issuer)) {
+		return {
+			ok: false,
+			failure: callbacks.failure(
+				'authority_key_identifier_mismatch',
+				'authorityKeyIdentifier does not match issuer subjectKeyIdentifier',
+				path.length - 1,
+				callbacks.detail({
+					subjectCommonName: current.subject.values.commonName,
+					issuerCommonName: issuer.subject.values.commonName,
+					expected: issuer.subjectKeyIdentifier,
+					actual: current.authorityKeyIdentifier,
+				}),
+			),
+		};
+	}
+	const nextCaBelowCount =
+		caBelowCount +
+		(current.basicConstraints?.ca === true && !isSelfIssued(current) && path.length > 1 ? 1 : 0);
+	const pathLength = issuer.basicConstraints?.pathLength;
+	if (isNonNegativeInteger(pathLength) && nextCaBelowCount > pathLength) {
+		return {
+			ok: false,
+			failure: callbacks.failure(
+				'path_length_exceeded',
+				'path length constraint exceeded',
+				path.length,
+				callbacks.detail({
+					subjectCommonName: issuer.subject.values.commonName,
+					expected: String(pathLength),
+					actual: String(nextCaBelowCount),
+				}),
+			),
+		};
+	}
+	return { ok: true, nextCaBelowCount };
+}
+
+function authorityKeyIdentifierMismatch(
+	current: ParsedCertificate,
+	issuer: ParsedCertificate,
+): boolean {
+	return (
+		current.authorityKeyIdentifier !== undefined &&
+		issuer.subjectKeyIdentifier !== undefined &&
+		current.authorityKeyIdentifier !== issuer.subjectKeyIdentifier
+	);
 }
 
 /** Expands a PEM (possibly multi-block) or DER source into parsed certificates. */

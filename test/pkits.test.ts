@@ -128,57 +128,50 @@ describe('PKITS harness', () => {
 		describe(section, () => {
 			for (const pkitsCase of sectionCases) {
 				const register = UNSUPPORTED_ALGORITHM_TESTS.has(pkitsCase.testNumber) ? it.failing : it;
-				register(`${pkitsCase.testNumber} ${pkitsCase.title}`, async () => {
-					const leafName = pkitsCase.certs[pkitsCase.certs.length - 1];
-					const rootName = pkitsCase.certs[0];
-					if (leafName === undefined || rootName === undefined) {
-						throw new Error(`PKITS case ${pkitsCase.testNumber} is missing leaf or root`);
-					}
-
-					const [leaf, root, intermediates] = await Promise.all([
-						readPkitsCertificateDer(leafName),
-						readPkitsCertificateDer(rootName),
-						Promise.all(
-							pkitsCase.certs
-								.slice(1, -1)
-								.map((certificateName: string) => readPkitsCertificateDer(certificateName)),
-						),
-					]);
-
-					const verifyResult = await verifyCertificateChain({
-						leaf,
-						intermediates,
-						roots: [root],
-						at: PKITS_VALIDATION_TIME,
-						...(pkitsCase.initialPolicySet === undefined
-							? {}
-							: { initialPolicySet: pkitsCase.initialPolicySet }),
-						...(pkitsCase.requireExplicitPolicy === undefined
-							? {}
-							: { requireExplicitPolicy: pkitsCase.requireExplicitPolicy }),
-						...(pkitsCase.inhibitPolicyMapping === undefined
-							? {}
-							: { inhibitPolicyMapping: pkitsCase.inhibitPolicyMapping }),
-						...(pkitsCase.inhibitAnyPolicy === undefined
-							? {}
-							: { inhibitAnyPolicy: pkitsCase.inhibitAnyPolicy }),
-					});
-					const chainValidated = verifyResult.ok;
-					if (!shouldEvaluateRevocation(pkitsCase)) {
-						expect(chainValidated).toBe(pkitsCase.shouldValidate);
-						return;
-					}
-					if (!verifyResult.ok) {
-						expect(chainValidated).toBe(pkitsCase.shouldValidate);
-						return;
-					}
-					const revocationResult =
-						pkitsCase.crls.length > 0
-							? await evaluatePkitsRevocation(verifyResult.value.chain, pkitsCase.crls)
-							: true;
-					expect(revocationResult).toBe(pkitsCase.shouldValidate);
-				});
+				register(`${pkitsCase.testNumber} ${pkitsCase.title}`, () => runPkitsCase(pkitsCase));
 			}
 		});
 	}
 });
+
+async function runPkitsCase(pkitsCase: PkitsCase): Promise<void> {
+	const leafName = pkitsCase.certs[pkitsCase.certs.length - 1];
+	const rootName = pkitsCase.certs[0];
+	if (leafName === undefined || rootName === undefined) {
+		throw new Error(`PKITS case ${pkitsCase.testNumber} is missing leaf or root`);
+	}
+
+	const [leaf, root, intermediates] = await Promise.all([
+		readPkitsCertificateDer(leafName),
+		readPkitsCertificateDer(rootName),
+		Promise.all(pkitsCase.certs.slice(1, -1).map(readPkitsCertificateDer)),
+	]);
+
+	const verifyResult = await verifyCertificateChain({
+		leaf,
+		intermediates,
+		roots: [root],
+		at: PKITS_VALIDATION_TIME,
+		...(pkitsCase.initialPolicySet === undefined
+			? {}
+			: { initialPolicySet: pkitsCase.initialPolicySet }),
+		...(pkitsCase.requireExplicitPolicy === undefined
+			? {}
+			: { requireExplicitPolicy: pkitsCase.requireExplicitPolicy }),
+		...(pkitsCase.inhibitPolicyMapping === undefined
+			? {}
+			: { inhibitPolicyMapping: pkitsCase.inhibitPolicyMapping }),
+		...(pkitsCase.inhibitAnyPolicy === undefined
+			? {}
+			: { inhibitAnyPolicy: pkitsCase.inhibitAnyPolicy }),
+	});
+	if (!shouldEvaluateRevocation(pkitsCase) || !verifyResult.ok) {
+		expect(verifyResult.ok).toBe(pkitsCase.shouldValidate);
+		return;
+	}
+	const revocationResult =
+		pkitsCase.crls.length > 0
+			? await evaluatePkitsRevocation(verifyResult.value.chain, pkitsCase.crls)
+			: true;
+	expect(revocationResult).toBe(pkitsCase.shouldValidate);
+}
