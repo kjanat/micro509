@@ -8,6 +8,7 @@ jobs:
   autofix:
     if: ${{ github.actor != 'autofix-ci[bot]' && !contains(github.event.head_commit.message, '[autofix.ci]') }}
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - { uses: actions/checkout@v7, with: { persist-credentials: false } }
       - { uses: ./.github/actions/setup-ts, with: { install-bun: "true" } }

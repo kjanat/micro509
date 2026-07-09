@@ -22,6 +22,7 @@
  *
  * @module
  */
+// biome-ignore lint/suspicious/noTsIgnore: SHUT UP
 // @ts-ignore DENO WITH TYPESCRIPT
 // deno-lint-ignore no-import-prefix
 import { doc } from 'jsr:@deno/doc@0.199.0';
