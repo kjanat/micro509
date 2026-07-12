@@ -1242,18 +1242,58 @@ describe('keys: algorithm inference', () => {
 			throw new Error('expected an RSA public JWK');
 		}
 		const rsaCases = [
-			{ expectedName: 'RSASSA-PKCS1-v1_5', expectedHash: 'SHA-256' },
-			{ alg: 'RS256', expectedName: 'RSASSA-PKCS1-v1_5', expectedHash: 'SHA-256' },
-			{ alg: 'RS384', expectedName: 'RSASSA-PKCS1-v1_5', expectedHash: 'SHA-384' },
-			{ alg: 'RS512', expectedName: 'RSASSA-PKCS1-v1_5', expectedHash: 'SHA-512' },
-			{ alg: 'PS256', expectedName: 'RSA-PSS', expectedHash: 'SHA-256' },
-			{ alg: 'PS512', expectedName: 'RSA-PSS', expectedHash: 'SHA-512' },
-			{ alg: 'RSA-OAEP-384', expectedName: 'RSA-OAEP', expectedHash: 'SHA-384' },
-			{ alg: 'RSA-OAEP-512', expectedName: 'RSA-OAEP', expectedHash: 'SHA-512' },
+			{
+				expectedName: 'RSASSA-PKCS1-v1_5',
+				expectedHash: 'SHA-256',
+				expectedUsages: ['verify'],
+			},
+			{
+				alg: 'RS256',
+				expectedName: 'RSASSA-PKCS1-v1_5',
+				expectedHash: 'SHA-256',
+				expectedUsages: ['verify'],
+			},
+			{
+				alg: 'RS384',
+				expectedName: 'RSASSA-PKCS1-v1_5',
+				expectedHash: 'SHA-384',
+				expectedUsages: ['verify'],
+			},
+			{
+				alg: 'RS512',
+				expectedName: 'RSASSA-PKCS1-v1_5',
+				expectedHash: 'SHA-512',
+				expectedUsages: ['verify'],
+			},
+			{
+				alg: 'PS256',
+				expectedName: 'RSA-PSS',
+				expectedHash: 'SHA-256',
+				expectedUsages: ['verify'],
+			},
+			{
+				alg: 'PS512',
+				expectedName: 'RSA-PSS',
+				expectedHash: 'SHA-512',
+				expectedUsages: ['verify'],
+			},
+			{
+				alg: 'RSA-OAEP-384',
+				expectedName: 'RSA-OAEP',
+				expectedHash: 'SHA-384',
+				expectedUsages: ['encrypt'],
+			},
+			{
+				alg: 'RSA-OAEP-512',
+				expectedName: 'RSA-OAEP',
+				expectedHash: 'SHA-512',
+				expectedUsages: ['encrypt'],
+			},
 		] as const satisfies readonly {
 			readonly alg?: string;
 			readonly expectedName: string;
 			readonly expectedHash: string;
+			readonly expectedUsages: readonly KeyUsage[];
 		}[];
 		for (const rsaCase of rsaCases) {
 			const imported = unwrap(
@@ -1268,6 +1308,7 @@ describe('keys: algorithm inference', () => {
 				name: rsaCase.expectedName,
 				hash: { name: rsaCase.expectedHash },
 			});
+			expect(imported.usages).toEqual([...rsaCase.expectedUsages]);
 		}
 	});
 
