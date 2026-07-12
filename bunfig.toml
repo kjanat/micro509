@@ -2,9 +2,11 @@
 linker = "hoisted"
 
 [test]
+concurrentTestGlob         = "**/*{differential,fuzz}*.test.ts"
 coveragePathIgnorePatterns = ["test/**", "dist/**"]
 coverageReporter           = ["text", "lcov"]
 coverageSkipTestFiles      = true
+coverageThreshold          = 0.80                                # prevents bun from exiting non-zero
 reporter.junit             = "test-results.xml"
 
 [run]

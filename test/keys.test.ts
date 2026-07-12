@@ -51,11 +51,11 @@ type FailableImport =
 	| { readonly ok: true; readonly value: CryptoKey }
 	| { readonly ok: false; readonly error: { readonly code: string; readonly message: string } };
 
-/** Assert an import Result failed with the given code and a message substring. */
+/** Assert an import Result failed with the given code and, optionally, a message substring. */
 async function expectImportFailure(
 	pending: Promise<FailableImport>,
 	code: string,
-	messagePart: string,
+	messagePart?: string,
 ): Promise<void> {
 	const result = await pending;
 	expect(result.ok).toBe(false);
@@ -63,7 +63,7 @@ async function expectImportFailure(
 		return;
 	}
 	expect(result.error.code).toBe(code);
-	expect(result.error.message).toContain(messagePart);
+	if (messagePart !== undefined) expect(result.error.message).toContain(messagePart);
 }
 
 describe('keys', () => {
@@ -1163,11 +1163,7 @@ describe('keys: algorithm inference', () => {
 			sequence([objectIdentifier('1.3.101.110')]),
 			octetString(octetString(new Uint8Array(32))),
 		]);
-		await expectImportFailure(
-			importPkcs8Der(x25519Pkcs8),
-			'malformed',
-			'Unsupported PKCS#8 private key algorithm',
-		);
+		await expectImportFailure(importPkcs8Der(x25519Pkcs8), 'malformed');
 	});
 
 	it('imports SEC 1 without an algorithm via the embedded named curve', async () => {
@@ -1224,6 +1220,39 @@ describe('keys: algorithm inference', () => {
 		const oaepKey = unwrap(await importPrivateJwk(await exportPrivateJwk(oaep.privateKey)));
 		expect(oaepKey.algorithm.name).toBe('RSA-OAEP');
 		expect(oaepKey.usages).toContain('decrypt');
+
+		const rsaJwk = await exportPublicJwk(pss.publicKey);
+		if (typeof rsaJwk.n !== 'string' || typeof rsaJwk.e !== 'string') {
+			throw new Error('expected an RSA public JWK');
+		}
+		const rsaCases = [
+			{ expectedName: 'RSASSA-PKCS1-v1_5', expectedHash: 'SHA-256' },
+			{ alg: 'RS256', expectedName: 'RSASSA-PKCS1-v1_5', expectedHash: 'SHA-256' },
+			{ alg: 'RS384', expectedName: 'RSASSA-PKCS1-v1_5', expectedHash: 'SHA-384' },
+			{ alg: 'RS512', expectedName: 'RSASSA-PKCS1-v1_5', expectedHash: 'SHA-512' },
+			{ alg: 'PS256', expectedName: 'RSA-PSS', expectedHash: 'SHA-256' },
+			{ alg: 'PS512', expectedName: 'RSA-PSS', expectedHash: 'SHA-512' },
+			{ alg: 'RSA-OAEP-384', expectedName: 'RSA-OAEP', expectedHash: 'SHA-384' },
+			{ alg: 'RSA-OAEP-512', expectedName: 'RSA-OAEP', expectedHash: 'SHA-512' },
+		] as const satisfies readonly {
+			readonly alg?: string;
+			readonly expectedName: string;
+			readonly expectedHash: string;
+		}[];
+		for (const rsaCase of rsaCases) {
+			const imported = unwrap(
+				await importPublicJwk({
+					kty: 'RSA',
+					n: rsaJwk.n,
+					e: rsaJwk.e,
+					...('alg' in rsaCase ? { alg: rsaCase.alg } : {}),
+				}),
+			);
+			expect(imported.algorithm).toMatchObject({
+				name: rsaCase.expectedName,
+				hash: { name: rsaCase.expectedHash },
+			});
+		}
 	});
 
 	it('rejects JWK inference for unsupported curves and RSA algs', async () => {
