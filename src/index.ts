@@ -214,7 +214,9 @@ export type {
 	Pkcs7CertificateSource,
 	Pkcs7SignedDataMaterial,
 	Pkcs7Signer,
+	VerifyPkcs7SignedDataErrorCode,
 	VerifyPkcs7SignedDataFailure,
+	VerifyPkcs7SignedDataOptions,
 	VerifyPkcs7SignedDataResult,
 } from '#micro509/pkcs';
 export {

@@ -184,17 +184,35 @@ export type ParsePkcs7CertBagResult =
 	  }
 	| ErrorResult<ParsePkcs7ErrorCode, Record<never, never>, ParsePkcs7Failure>;
 
+/**
+ * Error codes for {@linkcode verifyPkcs7SignedData} failures.
+ *
+ * `detached_content_required` means the SignedData carries no `eContent`
+ * (detached signature or degenerate cert bag) and no external content was
+ * supplied via {@linkcode VerifyPkcs7SignedDataOptions}.
+ */
+export type VerifyPkcs7SignedDataErrorCode =
+	| 'signer_not_found'
+	| 'signature_invalid'
+	| 'message_digest_mismatch'
+	| 'detached_content_required'
+	| ParsePkcs7ErrorCode;
+
 /** Error payload for a failed {@linkcode verifyPkcs7SignedData} call. */
 export interface VerifyPkcs7SignedDataFailure
-	extends Micro509Error<
-		| 'signer_not_found'
-		| 'signature_invalid'
-		| 'message_digest_mismatch'
-		| 'content_missing'
-		| ParsePkcs7ErrorCode
-	> {
+	extends Micro509Error<VerifyPkcs7SignedDataErrorCode> {
 	/** Always `false` for failures. */
 	readonly ok: false;
+}
+
+/** Options for {@linkcode verifyPkcs7SignedData}. */
+export interface VerifyPkcs7SignedDataOptions {
+	/**
+	 * External content for a detached SignedData (RFC 5652 Section 5.2, absent
+	 * `eContent`). Required to verify a detached signature; ignored when the
+	 * SignedData embeds its own content.
+	 */
+	readonly content?: Uint8Array;
 }
 
 /** Success-or-failure result from {@linkcode verifyPkcs7SignedData}. */
@@ -205,15 +223,7 @@ export type VerifyPkcs7SignedDataResult =
 			/** The verified SignedData structure. */
 			readonly value: ParsedPkcs7SignedData;
 	  }
-	| ErrorResult<
-			| 'signer_not_found'
-			| 'signature_invalid'
-			| 'message_digest_mismatch'
-			| 'content_missing'
-			| ParsePkcs7ErrorCode,
-			Record<never, never>,
-			VerifyPkcs7SignedDataFailure
-	  >;
+	| ErrorResult<VerifyPkcs7SignedDataErrorCode, Record<never, never>, VerifyPkcs7SignedDataFailure>;
 
 // createPkcs7CertBag
 
@@ -306,6 +316,14 @@ export interface CreatePkcs7SignedDataInput {
 	 * @default `'1.2.840.113549.1.7.1'` (pkcs7-data)
 	 */
 	readonly encapsulatedContentTypeOid?: string;
+	/**
+	 * Omit `eContent` from `encapContentInfo` (RFC 5652 Section 5.2 detached
+	 * form). The signature still covers `content` via the messageDigest signed
+	 * attribute, but the bytes are not embedded — the verifier must supply them
+	 * externally (e.g. git x509 commit signing, S/MIME detached signatures).
+	 * @default false
+	 */
+	readonly detached?: boolean;
 }
 
 /** DER, PEM, and base64 encodings of a PKCS#7 SignedData structure. */
@@ -346,9 +364,11 @@ export type CreatePkcs7SignedDataResult =
  *
  * Each signer uses the RFC 5652 Section 5.4 signed-attributes flow: the
  * signature covers a `SET OF` authenticated attributes carrying `contentType`
- * and `messageDigest` (the digest of the encapsulated content). The content is
- * embedded (attached signature), so the result verifies with
- * {@linkcode verifyPkcs7SignedData} without any external data.
+ * and `messageDigest` (the digest of the encapsulated content). By default the
+ * content is embedded (attached signature), so the result verifies with
+ * {@linkcode verifyPkcs7SignedData} without any external data. With
+ * `detached: true` the `eContent` is omitted (RFC 5652 Section 5.2) and the
+ * verifier must supply the content externally.
  *
  * The content digest is derived from each signer's key (P-256/RSA-SHA256 →
  * SHA-256, P-384 → SHA-384, P-521 → SHA-512, Ed25519 → SHA-512 per RFC 8419).
@@ -464,10 +484,12 @@ export async function createPkcs7SignedData(
 	const signedData = sequence([
 		integerFromNumber(signedDataVersion),
 		setOf([...digestAlgorithmOids].map((oid) => sequence([objectIdentifier(oid), nullValue()]))),
-		sequence([
-			objectIdentifier(encapsulatedContentTypeOid),
-			explicitContext(0, octetString(content)),
-		]),
+		input.detached === true
+			? sequence([objectIdentifier(encapsulatedContentTypeOid)])
+			: sequence([
+					objectIdentifier(encapsulatedContentTypeOid),
+					explicitContext(0, octetString(content)),
+				]),
 		certificateSet,
 		setOf(signerInfos),
 	]);
@@ -638,6 +660,11 @@ export function parsePkcs7SignedDataPem(pem: string): ParsePkcs7SignedDataResult
  * For each signer, locates the matching certificate in the embedded set and
  * verifies the signature (including signed-attribute digest checks per RFC 5652 Section 5.4).
  *
+ * For a detached SignedData (absent `eContent`), pass the externally-held
+ * content via `options.content`; without it, verification fails with the
+ * typed `detached_content_required` code. When the SignedData embeds its own
+ * content, that embedded content is verified and `options.content` is ignored.
+ *
  * @example
  * ```ts
  * import { verifyPkcs7SignedData } from 'micro509';
@@ -646,19 +673,29 @@ export function parsePkcs7SignedDataPem(pem: string): ParsePkcs7SignedDataResult
  * if (result.ok) {
  *   console.log('all signers verified');
  * }
+ *
+ * // Detached signature: supply the content externally
+ * const detached = await verifyPkcs7SignedData(cmsBlob, { content: signedBytes });
  * ```
  */
 export async function verifyPkcs7SignedData(
 	input: string | Uint8Array | ParsedPkcs7SignedData,
+	options: VerifyPkcs7SignedDataOptions = {},
 ): Promise<VerifyPkcs7SignedDataResult> {
 	const parsedResult = normalizePkcs7SignedDataForVerification(input);
 	if (!parsedResult.ok) return parsedResult;
 	const parsed = parsedResult.value;
-	if (parsed.encapsulatedContent === undefined) {
-		return verifyPkcs7Failure('content_missing', 'SignedData encapsulated content is missing');
+	// Snapshot caller-owned external content before any await so every signer
+	// verifies against the same bytes (mirrors the create-side content copy).
+	const content = parsed.encapsulatedContent ?? options.content?.slice();
+	if (content === undefined) {
+		return verifyPkcs7Failure(
+			'detached_content_required',
+			'SignedData has no encapsulated content; supply the detached content via options.content',
+		);
 	}
 	for (const signerInfo of parsed.signerInfos) {
-		const result = await verifyPkcs7SignerInfo(parsed, signerInfo, parsed.encapsulatedContent);
+		const result = await verifyPkcs7SignerInfo(parsed, signerInfo, content);
 		if (!result.ok) return result;
 	}
 	return { ok: true, value: parsed };
@@ -678,7 +715,7 @@ function normalizePkcs7SignedDataForVerification(
 async function verifyPkcs7SignerInfo(
 	parsed: ParsedPkcs7SignedData,
 	signerInfo: ParsedPkcs7SignerInfo,
-	encapsulatedContent: Uint8Array,
+	content: Uint8Array,
 ): Promise<{ readonly ok: true } | Extract<VerifyPkcs7SignedDataResult, { readonly ok: false }>> {
 	const signer = parsed.certificates.find((certificate) =>
 		signerIdentifierMatches(certificate, signerInfo),
@@ -690,19 +727,14 @@ async function verifyPkcs7SignerInfo(
 		);
 	}
 	return signerInfo.hasSignedAttrs
-		? await verifySignedAttrs(
-				signerInfo,
-				signer,
-				encapsulatedContent,
-				parsed.encapsulatedContentTypeOid,
-			)
-		: await verifyPkcs7BareSignerInfo(signerInfo, signer, encapsulatedContent);
+		? await verifySignedAttrs(signerInfo, signer, content, parsed.encapsulatedContentTypeOid)
+		: await verifyPkcs7BareSignerInfo(signerInfo, signer, content);
 }
 
 async function verifyPkcs7BareSignerInfo(
 	signerInfo: ParsedPkcs7SignerInfo,
 	signer: ParsedCertificate,
-	encapsulatedContent: Uint8Array,
+	content: Uint8Array,
 ): Promise<{ readonly ok: true } | Extract<VerifyPkcs7SignedDataResult, { readonly ok: false }>> {
 	try {
 		const verificationResult = await verifySignedDataDetailed(
@@ -712,7 +744,7 @@ async function verifyPkcs7BareSignerInfo(
 			signer.publicKeyParametersOid,
 			signer.subjectPublicKeyInfoDer,
 			signerInfo.signature,
-			encapsulatedContent,
+			content,
 		);
 		if (!verificationResult.ok) {
 			return verificationResult.code === 'verification_error'
@@ -739,22 +771,9 @@ function pkcs7Failure(
 
 /** Shorthand for constructing a PKCS#7 verification failure result. */
 function verifyPkcs7Failure(
-	code:
-		| 'signer_not_found'
-		| 'signature_invalid'
-		| 'message_digest_mismatch'
-		| 'content_missing'
-		| ParsePkcs7ErrorCode,
+	code: VerifyPkcs7SignedDataErrorCode,
 	message: string,
-): ErrorResult<
-	| 'signer_not_found'
-	| 'signature_invalid'
-	| 'message_digest_mismatch'
-	| 'content_missing'
-	| ParsePkcs7ErrorCode,
-	Record<never, never>,
-	VerifyPkcs7SignedDataFailure
-> {
+): ErrorResult<VerifyPkcs7SignedDataErrorCode, Record<never, never>, VerifyPkcs7SignedDataFailure> {
 	return failureResult(code, message);
 }
 
@@ -1243,19 +1262,11 @@ function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
 async function verifySignedAttrs(
 	signerInfo: ParsedPkcs7SignerInfo,
 	signer: ParsedCertificate,
-	encapsulatedContent: Uint8Array,
+	content: Uint8Array,
 	encapsulatedContentTypeOid: string,
 ): Promise<
 	| { readonly ok: true }
-	| ErrorResult<
-			| 'signer_not_found'
-			| 'signature_invalid'
-			| 'message_digest_mismatch'
-			| 'content_missing'
-			| ParsePkcs7ErrorCode,
-			Record<never, never>,
-			VerifyPkcs7SignedDataFailure
-	  >
+	| ErrorResult<VerifyPkcs7SignedDataErrorCode, Record<never, never>, VerifyPkcs7SignedDataFailure>
 > {
 	if (!signerInfo.hasSignedAttrs) {
 		return verifyPkcs7Failure('malformed', 'Missing signedAttrs DER');
@@ -1271,13 +1282,11 @@ async function verifySignedAttrs(
 	if (signedAttributes.contentTypeOid !== encapsulatedContentTypeOid) {
 		return verifyPkcs7Failure('malformed', 'SignedData contentType attribute does not match');
 	}
-	// Step 2: Compute digest of encapsulated content
+	// Step 2: Compute digest of the content (embedded, or external for detached)
 	let actualDigest: Uint8Array;
 	try {
 		const hash = digestAlgorithmHash(signerInfo.digestAlgorithmOid);
-		actualDigest = new Uint8Array(
-			await getCrypto().subtle.digest(hash, toArrayBuffer(encapsulatedContent)),
-		);
+		actualDigest = new Uint8Array(await getCrypto().subtle.digest(hash, toArrayBuffer(content)));
 	} catch {
 		return verifyPkcs7Failure('malformed', 'Unsupported digest algorithm in SignedData');
 	}

@@ -216,6 +216,78 @@ digest:   ${info?.digestAlgorithmName}`);
 
 </LiveCode>
 
+### Detached signatures
+
+Pass `detached: true` to omit the content from the SignedData (RFC 5652 §5.2):
+the signature still covers it via the `messageDigest` signed attribute, but
+the verifier must supply the bytes externally. This is the shape git x509
+commit signing and S/MIME detached signatures use — git stores only the CMS
+blob in the commit header and provides the commit bytes at verification time.
+
+<LiveCode>
+
+```ts
+import { createSelfSignedCertificate } from 'micro509';
+import {
+  createPkcs7SignedData,
+  verifyPkcs7SignedData,
+} from 'micro509/pkcs';
+
+const signer = await createSelfSignedCertificate({
+  subject: { commonName: 'detached.example' },
+  extensions: { keyUsage: ['digitalSignature'] },
+});
+
+const content = new TextEncoder().encode('tree abc…');
+const signed = await createPkcs7SignedData({
+  content,
+  detached: true,
+  signers: [
+    {
+      certificate: signer.certificate.pem,
+      privateKey: signer.keyPair.privateKey,
+    },
+  ],
+});
+
+if (!signed.ok) {
+  console.log(`sign failed: ${signed.error.code}`);
+} else {
+  // Without the content, verification fails typed:
+  const missing = await verifyPkcs7SignedData(
+    signed.value.der,
+  );
+
+  // Tampered content: digest check catches it
+  const forged = await verifyPkcs7SignedData(
+    signed.value.der,
+    { content: new TextEncoder().encode('tree evil…') },
+  );
+
+  // The externally-held original bytes verify
+  const result = await verifyPkcs7SignedData(
+    signed.value.der,
+    { content },
+  );
+
+  const info = result.ok
+    ? result.value.signerInfos[0]
+    : undefined;
+  console.log(`\
+blob size:   ${signed.value.der.length} bytes (no eContent)
+no content:  ok=${missing.ok} (${missing.ok ? '' : missing.error.code})
+forged:      ok=${forged.ok} (${forged.ok ? '' : forged.error.code})
+original:    ok=${result.ok}
+signature:   ${info?.signatureAlgorithmName}
+digest:      ${info?.digestAlgorithmName}`);
+}
+```
+
+</LiveCode>
+
+When the SignedData embeds its own content (the attached default), the
+embedded content is what gets verified and `options.content` is ignored.
+
 ## PEM utilities
 
 <LiveCode>
