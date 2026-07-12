@@ -59,7 +59,11 @@ const privateKey = unwrap(
 );
 const exported = await exportPkcs8Pem(privateKey);
 
-console.log('pkcs8 round-trip ok:', exported === pem);
+console.log(`\
+algorithm:  ${JSON.stringify(privateKey.algorithm)}
+usages:     ${privateKey.usages.join(', ')}
+PEM base64: ${pem.split('\n')[1]?.slice(0, 44)}…
+round-trip: ${exported === pem}`);
 ```
 
 </LiveCode>
@@ -107,7 +111,11 @@ const publicKey = unwrap(
 );
 const exported = await exportSpkiPem(publicKey);
 
-console.log('spki round-trip ok:', exported === pem);
+console.log(`\
+algorithm:  ${JSON.stringify(publicKey.algorithm)}
+usages:     ${publicKey.usages.join(', ')}
+PEM base64: ${pem.split('\n')[1]?.slice(0, 44)}…
+round-trip: ${exported === pem}`);
 ```
 
 </LiveCode>
@@ -200,11 +208,11 @@ const privateKey = unwrap(
   }),
 );
 
-console.log(
-  'jwk round-trip:',
-  publicKey.type,
-  privateKey.type,
-);
+console.log(`\
+kty/crv: ${pubJwk.kty}/${pubJwk.crv}
+x:       ${pubJwk.x?.slice(0, 22)}…
+y:       ${pubJwk.y?.slice(0, 22)}…
+usages:  ${publicKey.usages.join(', ')} | ${privateKey.usages.join(', ')}`);
 ```
 
 </LiveCode>
@@ -241,7 +249,11 @@ const privateKey = unwrap(
 );
 const exported = await exportPkcs1Pem(privateKey);
 
-console.log('pkcs1 round-trip ok:', exported === pem);
+console.log(`\
+algorithm:  ${privateKey.algorithm.name}
+pem lines:  ${pem.split('\n').length}
+PEM base64: ${pem.split('\n')[2]?.slice(0, 44)}…
+round-trip: ${exported === pem}`);
 ```
 
 </LiveCode>
@@ -271,7 +283,10 @@ const privateKey = unwrap(
 );
 const exported = await exportSec1Pem(privateKey);
 
-console.log('sec1 round-trip ok:', exported === pem);
+console.log(`\
+algorithm:  ${JSON.stringify(privateKey.algorithm)}
+PEM base64: ${pem.split('\n')[1]?.slice(0, 44)}…
+round-trip: ${exported === pem}`);
 ```
 
 </LiveCode>
@@ -320,7 +335,13 @@ if (!result.ok) {
   throw new Error(result.error.code);
 }
 
-console.log('encrypted pkcs8 imported:', result.value.type);
+// A wrong password is a typed failure, not an exception
+const wrong = await importEncryptedPkcs8Pem(pem, 'nope');
+
+console.log(`\
+algorithm:  ${JSON.stringify(result.value.algorithm)}
+ciphertext: ${pem.split('\n')[1]?.slice(0, 44)}…
+wrong pw:   ok=${wrong.ok} (${wrong.ok ? '' : wrong.error.code})`);
 ```
 
 </LiveCode>
@@ -355,7 +376,15 @@ const privateKey = unwrap(
   }),
 );
 
-console.log('encrypted pkcs1 imported:', privateKey.type);
+// The DEK-Info header carries the (random) AES-CBC IV
+const dekInfo = pem
+  .split('\n')
+  .find((line) => line.startsWith('DEK-Info'));
+
+console.log(`\
+DEK-Info:  ${dekInfo?.slice('DEK-Info: '.length)}
+algorithm: ${privateKey.algorithm.name}
+usages:    ${privateKey.usages.join(', ')}`);
 ```
 
 </LiveCode>
@@ -409,12 +438,10 @@ const wrongLabel = await decryptRsaOaep(
   ciphertext,
 );
 
-console.log(
-  'roundtrip:',
-  new TextDecoder().decode(plaintext),
-  '| wrong label code:',
-  wrongLabel.ok ? 'unexpected' : wrongLabel.code,
-);
+console.log(`\
+ciphertext:  ${ciphertext.length} bytes, starts ${[...ciphertext.slice(0, 4)].join(' ')}
+roundtrip:   ${new TextDecoder().decode(plaintext)}
+wrong label: ok=${wrongLabel.ok} (${wrongLabel.ok ? '' : wrongLabel.code})`);
 ```
 
 </LiveCode>

@@ -128,7 +128,8 @@ if (!result.ok) {
   console.log(`parse failed: ${result.error.code}`);
 } else {
   const parsed = result.value;
-  const sans = parsed.subjectAltNames
+  const sans = (parsed.subjectAltNames ?? [])
+    .filter((name) => name.type !== 'directoryName')
     .map((name) => name.value)
     .join(', ');
   console.log(`\
@@ -136,7 +137,7 @@ subject:   ${parsed.subject.values.commonName}
 org:       ${parsed.subject.values.organization}
 sig algo:  ${parsed.signatureAlgorithmName}
 pubkey:    ${parsed.publicKeyAlgorithmName}
-key usage: ${parsed.keyUsage.flags.join(', ')}
+key usage: ${parsed.keyUsage?.flags.join(', ') ?? 'none'}
 SANs:      ${sans}
 `);
 }
@@ -195,6 +196,7 @@ if (result.ok) {
   console.log(`\
 verified ${parsed.subject.values.commonName}
   issuer:       ${parsed.issuer.values.commonName}
+  serial:       ${parsed.serialNumberHex}
   chain length: ${result.value.chain.length}
 `);
 }

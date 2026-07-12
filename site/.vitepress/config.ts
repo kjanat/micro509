@@ -1,6 +1,8 @@
 import markdownItTaskLists from 'markdown-it-task-lists';
 import { execFileSync } from 'node:child_process';
-import { dirname, join, normalize } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { cp } from 'node:fs/promises';
+import { dirname, extname, join, normalize, resolve, sep } from 'node:path';
 import robotsTxt from 'vite-robots-txt';
 import svgToIco from 'vite-svg-to-ico';
 import { defineConfig, type Plugin } from 'vitepress';
@@ -32,69 +34,90 @@ const resolveGit = (names: readonly string[], fallback: () => string): string =>
 	throw new Error(`Cannot resolve git info: no env (${names.join(', ')}) and local git failed.`);
 };
 
-/** Git info for edit links and cache-busting import map URLs. */
+/** Git info for edit links. */
 const gitEnv = {
-	/** Branch name for edit links; also included in the import map URL to ensure cache invalidation on new commits. */
+	/** Branch name for edit links. */
 	get branch(): string {
 		return resolveGit(['MICRO509_GIT_BRANCH', 'WORKERS_CI_BRANCH', 'GITHUB_REF_NAME'], () =>
 			gitOut(['branch', '--show-current']),
 		);
-	},
-	/** Short 7-char hash for display; full hash is available via `GITHUB_SHA` in the import map URL. */
-	get commitHash(): string {
-		return resolveGit(['MICRO509_GIT_COMMIT', 'WORKERS_CI_COMMIT_SHA', 'GITHUB_SHA'], () =>
-			gitOut(['rev-parse', 'HEAD']),
-		).slice(0, 7);
 	},
 
 	/** Cleaned GitHub url */
 	get githubUrl(): string {
 		return pkg.repository.url.replace('git+', '').replace(/\.git$/, '');
 	},
-
-	/** GitHub repo owner/name */
-	get githubRepo(): string {
-		const repo = this.githubUrl.match(/github\.com[:/](.+\/.+?)(?:\.git)?$/)?.[1];
-		if (repo === undefined) throw new Error(`Invalid GitHub URL: ${this.githubUrl}`);
-		return repo;
-	},
 };
 
-/**
- * CDN base for the micro509 package in browser import maps.
- * Uses pkg-pr-new via esm.sh while pre-release; switch to
- * `https://esm.sh/micro509@${pkg.version}` once published on npm.
- */
-const cdnBase = `https://esm.sh/pr/${gitEnv.githubRepo}/${pkg.name}@${gitEnv.commitHash}`;
+// ── Co-hosted library ─────────────────────────────────────────────────────
+//
+// LiveCode snippets import the library built from THIS git tree, served by
+// the site itself under /vendor/micro509 — not a per-commit pkg-pr-new blob
+// via esm.sh. Docs and library can never drift apart at build time, and the
+// site build no longer depends on every commit having a successful package
+// publish.
 
-/** Import map entries derived from package.json exports via the CDN. */
+const repoRoot = resolve(import.meta.dirname, '../..');
+const distDir = join(repoRoot, 'dist');
+const vendorBase = `/vendor/${pkg.name}`;
+
+/** Build the library so dist/ matches the checked-out sources. */
+function buildLibrary(): void {
+	execFileSync('bun', ['run', 'bd'], { cwd: repoRoot, stdio: 'inherit' });
+}
+
+/** Import map entries derived from package.json exports, served from /vendor. */
 const importEntries = (Object.entries(pkg.exports) as [string, string | { default: string }][])
 	.filter((e): e is [string, { default: string }] => typeof e[1] === 'object')
-	.map(([key]): [string, string] => [
+	.map(([key, value]): [string, string] => [
 		key === '.' ? pkg.name : `${pkg.name}/${key.slice(2)}`,
-		key === '.' ? cdnBase : `${cdnBase}/${key.slice(2)}`,
+		`${vendorBase}/${value.default.replace('./dist/', '')}`,
 	]);
 
-/** CDN URLs for prefetching. */
-const cdnUrls = importEntries.map(([, url]) => url);
+/** Entry-point URLs for module preloading. */
+const entryUrls = importEntries.map(([, url]) => url);
 
 /** Import map JSON for browser module resolution. */
 const importMapJson = JSON.stringify({ imports: Object.fromEntries(importEntries) });
 
+const VENDOR_CONTENT_TYPES: Record<string, string> = {
+	'.js': 'text/javascript; charset=utf-8',
+	'.mjs': 'text/javascript; charset=utf-8',
+	'.map': 'application/json; charset=utf-8',
+	'.ts': 'text/plain; charset=utf-8',
+	'.txt': 'text/plain; charset=utf-8',
+};
+
 /**
- * Vite plugin — injects import map in dev mode via `transformIndexHtml`.
- * This hook fires in dev but NOT during VitePress SSG; the SSG path is
- * covered by `transformHtml` below.
+ * Vite plugin — serves the built library from dist/ under /vendor in dev
+ * mode, and injects the import map via `transformIndexHtml` (fires in dev
+ * but NOT during VitePress SSG; the SSG path is covered by `transformHtml`
+ * below). The production build gets its /vendor files copied into outDir by
+ * the `buildEnd` hook.
  */
-function importMapPlugin(): Plugin {
+function cohostedLibraryPlugin(): Plugin {
 	return {
-		name: `${pkg.name}-importmap`,
+		name: `${pkg.name}-cohosted-library`,
+		configureServer(server) {
+			server.middlewares.use((req, res, next) => {
+				const url = (req.url ?? '').split('?')[0] ?? '';
+				if (!url.startsWith(`${vendorBase}/`)) return next();
+				const file = resolve(distDir, url.slice(vendorBase.length + 1));
+				// Containment check: never serve outside dist/ (e.g. /vendor/micro509/../..).
+				if (!file.startsWith(distDir + sep) || !existsSync(file)) return next();
+				res.setHeader(
+					'Content-Type',
+					VENDOR_CONTENT_TYPES[extname(file)] ?? 'application/octet-stream',
+				);
+				res.end(readFileSync(file));
+			});
+		},
 		transformIndexHtml: {
 			order: 'pre',
 			handler: () => [
-				...cdnUrls.map((url) => ({
+				...entryUrls.map((url) => ({
 					tag: 'link' as const,
-					attrs: { rel: 'prefetch', as: 'script', href: url },
+					attrs: { rel: 'modulepreload', href: url },
 					injectTo: 'head' as const,
 				})),
 				{
@@ -113,12 +136,16 @@ function importMapPlugin(): Plugin {
 // exists when dead-link checking runs. The plugin below only handles dev HMR.
 generateApiDocs();
 
+// Build the co-hosted library at config-load time so /vendor always serves
+// dist/ compiled from the checked-out sources (fast: ~300ms incremental).
+buildLibrary();
+
 export default defineConfig({
 	vite: {
 		build: { chunkSizeWarningLimit: 1500 },
 		plugins: [
 			apiDocsPlugin(),
-			importMapPlugin(),
+			cohostedLibraryPlugin(),
 			robotsTxt({ preset: 'allowAll' }),
 			svgToIco({
 				input: `${import.meta.dirname}/../assets/favicon.svg`,
@@ -200,13 +227,18 @@ export default defineConfig({
 
 	/** Inject import map before any module scripts (SSG build path). */
 	transformHtml(html) {
-		const prefetchTags = cdnUrls
-			.map((url) => `<link rel="prefetch" as="script" href="${url}">`)
+		const preloadTags = entryUrls
+			.map((url) => `<link rel="modulepreload" href="${url}">`)
 			.join('\n');
 		return html.replace(
 			'<head>',
-			`<head>\n${prefetchTags}\n<script type="importmap">${importMapJson}</script>`,
+			`<head>\n${preloadTags}\n<script type="importmap">${importMapJson}</script>`,
 		);
+	},
+
+	/** Ship the co-hosted library: copy the built dist/ into the site output. */
+	async buildEnd(siteConfig) {
+		await cp(distDir, join(siteConfig.outDir, 'vendor', pkg.name), { recursive: true });
 	},
 
 	themeConfig: {

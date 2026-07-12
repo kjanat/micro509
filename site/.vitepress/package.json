@@ -10,7 +10,7 @@
   "scripts": {
     "fmt": "cd ../ && dprint fmt",
     "dev": "vitepress dev .. --host",
-    "build": "vitepress build ..",
+    "build": "bun ../../scripts/check-doc-examples.bun.ts && vitepress build ..",
     "preview": "vitepress preview ..",
     "typecheck": "vue-tsc --noEmit -p tsconfig.json",
     "wrangler:types": "wrangler types"

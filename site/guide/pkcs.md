@@ -204,10 +204,13 @@ if (!signed.ok) {
   if (result.ok) {
     const sd = result.value;
     const info = sd.signerInfos[0];
-    console.log('verified: true');
     console.log(`\
-signers:  ${sd.signerInfos.length}
-digest:   ${info?.digestAlgorithmName}`);
+verified:  true
+signers:   ${sd.signerInfos.length}
+digest:    ${info?.digestAlgorithmName}
+signature: ${info?.signatureAlgorithmName}
+sig bytes: ${info?.signatureHex.slice(0, 24)}…
+der size:  ${signed.value.der.length} bytes`);
   } else {
     console.log(`verify: ${result.error.code}`);
   }
@@ -293,7 +296,10 @@ embedded content is what gets verified and `options.content` is ignored.
 <LiveCode>
 
 ```ts
-import { createSelfSignedCertificate } from 'micro509';
+import {
+  createSelfSignedCertificate,
+  unwrap,
+} from 'micro509';
 import {
   categorizePemBlocks,
   pemDecode,
@@ -307,24 +313,27 @@ const { certificate } = await createSelfSignedCertificate({
 });
 const pem = certificate.pem;
 
-// Decode a single PEM block to DER
-const der = pemDecode('CERTIFICATE', pem);
+// Decode a single PEM block to DER (typed result)
+const der = unwrap(pemDecode('CERTIFICATE', pem));
 
 // Encode DER back to PEM
 const pemEncoded = pemEncode('CERTIFICATE', der);
 
 // Split a multi-block PEM file
 const multiPem = `${pem}\n${pem}`;
-const blocks = splitPemBlocks(multiPem);
+const blocks = unwrap(splitPemBlocks(multiPem));
 
 // Categorize blocks by type
 const { certificates, certificateRequests, privateKeys } =
-  categorizePemBlocks(multiPem);
+  unwrap(categorizePemBlocks(multiPem));
 
 console.log(`\
 der bytes:    ${der.length}
+der head:     ${[...der.slice(0, 8)]
+  .map((byte) => byte.toString(16).padStart(2, '0'))
+  .join(' ')}
 round-trip:   ${pemEncoded === pem}
-blocks:       ${blocks.length}
+blocks:       ${blocks.map((block) => block.label).join(', ')}
 certs:        ${certificates.length}
 csrs:         ${certificateRequests.length}
 private keys: ${privateKeys.length}`);

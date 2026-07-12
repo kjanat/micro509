@@ -77,8 +77,11 @@ const leaf = await createCertificate({
 
 const parsed = unwrap(parseCertificatePem(leaf.pem));
 console.log(`\
-leaf:   ${parsed.subject.values.commonName}
-issuer: ${parsed.issuer.values.commonName}`);
+leaf:    ${parsed.subject.values.commonName}
+issuer:  ${parsed.issuer.values.commonName}
+serial:  ${parsed.serialNumberHex}
+expires: ${parsed.notAfter.toISOString()}
+sig:     ${parsed.signatureAlgorithmName}`);
 ```
 
 </LiveCode>
@@ -141,7 +144,9 @@ const { certificate } = await createSelfSignedCertificate({
 const parsed = unwrap(parseCertificatePem(certificate.pem));
 
 // Typed metadata
-const sans = parsed.subjectAltNames ?? [];
+const sans = (parsed.subjectAltNames ?? [])
+  .filter((name) => name.type !== 'directoryName')
+  .map((name) => name.value);
 console.log(`\
 subject:   ${parsed.subject.values.commonName}
 org:       ${parsed.subject.values.organization}
@@ -151,7 +156,7 @@ notAfter:  ${parsed.notAfter.toISOString()}
 sig algo:  ${parsed.signatureAlgorithmName}
 ca:        ${parsed.basicConstraints?.ca ?? false}
 key usage: ${parsed.keyUsage?.flags.join(', ')}
-SANs:      ${sans.map((n) => n.value).join(', ')}`);
+SANs:      ${sans.join(', ')}`);
 ```
 
 </LiveCode>
@@ -221,11 +226,13 @@ const csr = await createCertificateSigningRequest({
 const parsed = unwrap(
   parseCertificateSigningRequestPem(csr.pem),
 );
-const sans = parsed.subjectAltNames ?? [];
+const sans = (parsed.subjectAltNames ?? [])
+  .filter((name) => name.type !== 'directoryName')
+  .map((name) => name.value);
 console.log(`\
 subject:  ${parsed.subject.values.commonName}
 sig algo: ${parsed.signatureAlgorithmName}
-SANs:     ${sans.map((n) => n.value).join(', ')}`);
+SANs:     ${sans.join(', ')}`);
 ```
 
 </LiveCode>

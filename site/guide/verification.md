@@ -63,12 +63,15 @@ const result = await verifyCertificateChain({
 });
 
 if (result.ok) {
-  console.log(
-    `Valid chain: ${result.value.chain.length} certificates`,
-  );
+  const parsedLeaf = result.value.leaf;
+  console.log(`\
+Valid chain: ${result.value.chain.length} certificates
+leaf:        ${parsedLeaf.subject.values.commonName}
+serial:      ${parsedLeaf.serialNumberHex}
+expires:     ${parsedLeaf.notAfter.toISOString()}`);
 } else {
   console.log(`\
-Failed: ${result.error.code}
+Failed:   ${result.error.code}
 At index: ${result.error.index}`);
 }
 ```
@@ -102,8 +105,15 @@ const root = await createSelfSignedCertificate({
   },
 });
 
-// Issue a leaf with a given EKU ('serverAuth' | 'clientAuth' | 'codeSigning')
-async function issue(cn, eku) {
+// Issue a leaf with the extended key usage under test
+async function issue(cn = '', eku = '') {
+  if (
+    eku !== 'serverAuth' &&
+    eku !== 'clientAuth' &&
+    eku !== 'codeSigning'
+  ) {
+    throw new Error(`Unsupported EKU: ${eku}`);
+  }
   const keys = await generateKeyPair();
   return createCertificate({
     issuer: { commonName: 'Demo Root CA' },
@@ -198,8 +208,16 @@ const result = matchServiceIdentity({
   serviceIdentity: { type: 'dns', value: 'example.com' },
 });
 
+const sans = (parsed.subjectAltNames ?? [])
+  .filter((name) => name.type !== 'directoryName')
+  .map((name) => `${name.type} ${name.value}`)
+  .join(', ');
+
 if (result.ok) {
-  console.log('Identity matches the certificate SAN');
+  console.log(`\
+matched: dns example.com
+SANs:    ${sans}
+serial:  ${parsed.serialNumberHex}`);
 } else {
   console.log(result.error.code);
   // 'subject_alt_name_mismatch' | ...
@@ -282,7 +300,15 @@ const result = await verifyCertificateSigningRequest(
 );
 
 if (result.ok) {
-  console.log('CSR signature valid');
+  const sans = (result.value.subjectAltNames ?? [])
+    .filter((name) => name.type !== 'directoryName')
+    .map((name) => name.value)
+    .join(', ');
+  console.log(`\
+subject:  ${result.value.subject.values.commonName}
+sig algo: ${result.value.signatureAlgorithmName}
+SANs:     ${sans}
+PEM line: ${csr.pem.split('\n')[1]?.slice(0, 44)}…`);
 } else {
   console.log('CSR invalid:', result.error.code);
 }
