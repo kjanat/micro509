@@ -173,6 +173,22 @@ describe('createPkcs7SignedData', () => {
 		expect(result.error.code).toBe('invalid_signer_certificate');
 	});
 
+	it('returns unsupported_signer_key when the signing operation rejects', async () => {
+		const signer = await signingIdentity('Public Key Signer');
+		const result = await createPkcs7SignedData({
+			content: encoder.encode('x'),
+			signers: [
+				{
+					certificate: signer.certificate.pem,
+					privateKey: signer.keyPair.publicKey,
+				},
+			],
+		});
+		expect(result.ok).toBe(false);
+		if (result.ok) throw new Error('unreachable');
+		expect(result.error.code).toBe('unsupported_signer_key');
+	});
+
 	it('returns invalid_certificate for a truncated additional certificate PEM', async () => {
 		const signer = await signingIdentity('Additional PEM Signer');
 		const result = await createPkcs7SignedData({

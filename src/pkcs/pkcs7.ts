@@ -528,7 +528,15 @@ async function buildPkcs7SignerInfo(
 		encapsulatedContentTypeOid,
 		messageDigest,
 	);
-	const signature = await signBytes(signer.privateKey, signatureAlgorithm, setForSigning);
+	let signature: Uint8Array;
+	try {
+		signature = await signBytes(signer.privateKey, signatureAlgorithm, setForSigning);
+	} catch {
+		return createPkcs7Failure(
+			'unsupported_signer_key',
+			'Signer key could not produce a PKCS#7 signature',
+		);
+	}
 	return {
 		ok: true,
 		signerInfoDer: sequence([

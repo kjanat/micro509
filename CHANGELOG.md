@@ -49,7 +49,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `createPkcs7SignedData` returns the typed `'invalid_signer_certificate'` /
   `'invalid_certificate'` (new code) failures for malformed signer and
-  `additionalCertificates` PEM sources instead of rejecting the promise.
+  additional-certificate inputs instead of rejecting the promise. Each
+  `additionalCertificates` value is structurally validated as a real X.509
+  certificate, so malformed DER also returns `'invalid_certificate'`.
 
 ### Changed
 

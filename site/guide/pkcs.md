@@ -209,7 +209,7 @@ verified:  true
 signers:   ${sd.signerInfos.length}
 digest:    ${info?.digestAlgorithmName}
 signature: ${info?.signatureAlgorithmName}
-sig bytes: ${info?.signatureHex.slice(0, 24)}…
+sig hex:   ${info?.signatureHex.slice(0, 24)}…
 der size:  ${signed.value.der.length} bytes`);
   } else {
     console.log(`verify: ${result.error.code}`);
