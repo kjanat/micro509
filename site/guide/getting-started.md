@@ -137,7 +137,7 @@ subject:   ${parsed.subject.values.commonName}
 org:       ${parsed.subject.values.organization}
 sig algo:  ${parsed.signatureAlgorithmName}
 pubkey:    ${parsed.publicKeyAlgorithmName}
-key usage: ${parsed.keyUsage?.flags.join(', ')}
+key usage: ${parsed.keyUsage?.flags.join(', ') ?? 'none'}
 SANs:      ${sans}
 `);
 }

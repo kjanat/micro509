@@ -62,7 +62,7 @@ const exported = await exportPkcs8Pem(privateKey);
 console.log(`\
 algorithm:  ${JSON.stringify(privateKey.algorithm)}
 usages:     ${privateKey.usages.join(', ')}
-key bytes:  ${pem.split('\n')[1]?.slice(0, 44)}…
+PEM base64: ${pem.split('\n')[1]?.slice(0, 44)}…
 round-trip: ${exported === pem}`);
 ```
 
@@ -114,7 +114,7 @@ const exported = await exportSpkiPem(publicKey);
 console.log(`\
 algorithm:  ${JSON.stringify(publicKey.algorithm)}
 usages:     ${publicKey.usages.join(', ')}
-key bytes:  ${pem.split('\n')[1]?.slice(0, 44)}…
+PEM base64: ${pem.split('\n')[1]?.slice(0, 44)}…
 round-trip: ${exported === pem}`);
 ```
 
@@ -252,7 +252,7 @@ const exported = await exportPkcs1Pem(privateKey);
 console.log(`\
 algorithm:  ${privateKey.algorithm.name}
 pem lines:  ${pem.split('\n').length}
-modulus:    ${pem.split('\n')[2]?.slice(0, 44)}…
+PEM base64: ${pem.split('\n')[2]?.slice(0, 44)}…
 round-trip: ${exported === pem}`);
 ```
 
@@ -285,7 +285,7 @@ const exported = await exportSec1Pem(privateKey);
 
 console.log(`\
 algorithm:  ${JSON.stringify(privateKey.algorithm)}
-key bytes:  ${pem.split('\n')[1]?.slice(0, 44)}…
+PEM base64: ${pem.split('\n')[1]?.slice(0, 44)}…
 round-trip: ${exported === pem}`);
 ```
 
@@ -382,7 +382,7 @@ const dekInfo = pem
   .find((line) => line.startsWith('DEK-Info'));
 
 console.log(`\
-${dekInfo}
+DEK-Info:  ${dekInfo?.slice('DEK-Info: '.length)}
 algorithm: ${privateKey.algorithm.name}
 usages:    ${privateKey.usages.join(', ')}`);
 ```
@@ -439,8 +439,8 @@ const wrongLabel = await decryptRsaOaep(
 );
 
 console.log(`\
-ciphertext: ${ciphertext.length} bytes, starts ${[...ciphertext.slice(0, 4)].join(' ')}
-roundtrip:  ${new TextDecoder().decode(plaintext)}
+ciphertext:  ${ciphertext.length} bytes, starts ${[...ciphertext.slice(0, 4)].join(' ')}
+roundtrip:   ${new TextDecoder().decode(plaintext)}
 wrong label: ok=${wrongLabel.ok} (${wrongLabel.ok ? '' : wrongLabel.code})`);
 ```
 

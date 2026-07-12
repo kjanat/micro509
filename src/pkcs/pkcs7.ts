@@ -415,17 +415,16 @@ export async function createPkcs7SignedData(
 	}
 
 	for (const source of input.additionalCertificates ?? []) {
-		let ders: readonly Uint8Array[];
 		try {
-			ders = normalizeCertificateSource(source);
+			for (const der of normalizeCertificateSource(source)) {
+				parseCertificateDerOrThrow(der);
+				addCertificate(der);
+			}
 		} catch {
 			return createPkcs7Failure(
 				'invalid_certificate',
 				'Each additional PKCS#7 certificate source must be valid PEM or DER',
 			);
-		}
-		for (const der of ders) {
-			addCertificate(der);
 		}
 	}
 

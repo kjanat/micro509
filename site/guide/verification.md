@@ -106,10 +106,14 @@ const root = await createSelfSignedCertificate({
 });
 
 // Issue a leaf with the extended key usage under test
-async function issue(
-  cn: string,
-  eku: 'serverAuth' | 'clientAuth' | 'codeSigning',
-) {
+async function issue(cn = '', eku = '') {
+  if (
+    eku !== 'serverAuth' &&
+    eku !== 'clientAuth' &&
+    eku !== 'codeSigning'
+  ) {
+    throw new Error(`Unsupported EKU: ${eku}`);
+  }
   const keys = await generateKeyPair();
   return createCertificate({
     issuer: { commonName: 'Demo Root CA' },
@@ -304,7 +308,7 @@ if (result.ok) {
 subject:  ${result.value.subject.values.commonName}
 sig algo: ${result.value.signatureAlgorithmName}
 SANs:     ${sans}
-pubkey:   ${csr.pem.split('\n')[1]?.slice(0, 44)}…`);
+PEM line: ${csr.pem.split('\n')[1]?.slice(0, 44)}…`);
 } else {
   console.log('CSR invalid:', result.error.code);
 }

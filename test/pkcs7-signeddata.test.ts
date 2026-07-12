@@ -184,6 +184,18 @@ describe('createPkcs7SignedData', () => {
 		if (result.ok) throw new Error('unreachable');
 		expect(result.error.code).toBe('invalid_certificate');
 	});
+
+	it('returns invalid_certificate for structurally invalid additional certificate DER', async () => {
+		const signer = await signingIdentity('Additional DER Signer');
+		const result = await createPkcs7SignedData({
+			content: encoder.encode('x'),
+			signers: [{ certificate: signer.certificate.pem, privateKey: signer.keyPair.privateKey }],
+			additionalCertificates: [new Uint8Array([0x30, 0x00])],
+		});
+		expect(result.ok).toBe(false);
+		if (result.ok) throw new Error('unreachable');
+		expect(result.error.code).toBe('invalid_certificate');
+	});
 });
 
 describe('createPkcs7SignedData: detached (RFC 5652 §5.2)', () => {
