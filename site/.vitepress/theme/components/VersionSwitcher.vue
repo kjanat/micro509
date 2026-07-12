@@ -70,6 +70,17 @@ function hrefFor(base: string): string {
     .replace(/\.md$/, '');
   return base + path;
 }
+
+/**
+ * Cross-channel links leave this build's base, so the SPA router must not
+ * handle them: it would push the URL and resolve it against ITS OWN route
+ * table, soft-404ing without ever fetching the other channel's app. Force a
+ * full document navigation instead.
+ */
+function switchTo(event: MouseEvent, base: string): void {
+  event.preventDefault();
+  window.location.assign(hrefFor(base));
+}
 </script>
 
 <template>
@@ -101,6 +112,7 @@ function hrefFor(base: string): string {
             'vs-active': entry.base === site.base,
           }"
           :href="hrefFor(entry.base)"
+          @click="switchTo($event, entry.base)"
           >{{ entry.label }}</a
         >
       </li>
