@@ -47,6 +47,7 @@ const label = computed(() => {
 
 const entries = computed<readonly VersionEntry[]>(() => {
   if (manifest.value === undefined) return [];
+  // Latest release first — it IS the site; next is a secondary channel.
   return [
     manifest.value.latest,
     manifest.value.next,
