@@ -14,7 +14,7 @@
 				{ "external": { "command": "dprint", "arguments": ["fmt", "--stdin", "{buffer_path}"] } },
 				{ "language_server": { "name": "dprint" } }
 			],
-			"language_servers": ["vtsls", "tsgo", "deno", "biome"],
+			"language_servers": ["typescript", "deno", "biome"],
 			"code_actions_on_format": {
 				"source.fixAll.biome": true,
 				"source.organizeImports.biome": false
@@ -68,6 +68,7 @@
 				"path": "./node_modules/.bin/dprint",
 				"arguments": ["lsp"]
 			}
-		}
+		},
+		"typescript": {}
 	}
 }

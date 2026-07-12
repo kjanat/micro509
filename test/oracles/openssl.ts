@@ -38,6 +38,17 @@ export interface OpenSslOcspStatusResult {
 	readonly responseDer: Uint8Array;
 }
 
+interface VerifyChainWithOpenSslInput {
+	readonly leafPem: string;
+	readonly rootPem: string;
+	readonly intermediatePems?: readonly string[];
+	readonly at?: Date;
+	readonly initialPolicySet?: readonly string[];
+	readonly requireExplicitPolicy?: boolean;
+	readonly inhibitPolicyMapping?: boolean;
+	readonly inhibitAnyPolicy?: boolean;
+}
+
 let cachedOpenSslAvailable: boolean | undefined;
 
 export async function probeOpenSsl(): Promise<boolean> {
@@ -49,66 +60,78 @@ export async function probeOpenSsl(): Promise<boolean> {
 	return cachedOpenSslAvailable;
 }
 
-export async function verifyChainWithOpenSsl(input: {
-	readonly leafPem: string;
-	readonly rootPem: string;
-	readonly intermediatePems?: readonly string[];
-	readonly at?: Date;
-	readonly initialPolicySet?: readonly string[];
-	readonly requireExplicitPolicy?: boolean;
-	readonly inhibitPolicyMapping?: boolean;
-	readonly inhibitAnyPolicy?: boolean;
-}): Promise<OpenSslPathValidationResult> {
+export async function verifyChainWithOpenSsl(
+	input: VerifyChainWithOpenSslInput,
+): Promise<OpenSslPathValidationResult> {
 	return await withTempDir(async (directory) => {
-		const leafPath = join(directory, 'leaf.pem');
-		const rootPath = join(directory, 'root.pem');
-		await Promise.all([
-			Bun.write(leafPath, input.leafPem),
-			Bun.write(rootPath, input.rootPem),
-		]);
-
+		const { leafPath, rootPath } = await writeVerifyChainCertificates(directory, input);
 		const args = ['verify', '-trusted', rootPath, '-no-CApath', '-no-CAstore'];
-		if (input.intermediatePems !== undefined && input.intermediatePems.length > 0) {
-			const intermediatesPath = join(directory, 'intermediates.pem');
-			await Bun.write(intermediatesPath, input.intermediatePems.join('\n'));
-			args.push('-untrusted', intermediatesPath);
-		}
+		await appendVerifyChainIntermediates(args, directory, input.intermediatePems);
 		if (input.at !== undefined) {
 			args.push('-attime', String(Math.floor(input.at.getTime() / 1000)));
 		}
-		const shouldCheckPolicy =
-			(input.initialPolicySet?.length ?? 0) > 0 ||
-			input.requireExplicitPolicy === true ||
-			input.inhibitPolicyMapping === true ||
-			input.inhibitAnyPolicy === true;
-		if (shouldCheckPolicy) {
-			args.push('-policy_check');
-			for (const policyOid of input.initialPolicySet ?? []) {
-				args.push('-policy', policyOid);
-			}
-			if (input.requireExplicitPolicy === true) {
-				args.push('-explicit_policy');
-			}
-			if (input.inhibitPolicyMapping === true) {
-				args.push('-inhibit_map');
-			}
-			if (input.inhibitAnyPolicy === true) {
-				args.push('-inhibit_any');
-			}
-		}
+		appendVerifyChainPolicyArgs(args, input);
 		args.push(leafPath);
 
 		const result = await runOpenSsl(args);
-		const output = mergeCommandOutput(result);
-		return result.exitCode === 0
-			? { valid: true, exitCode: result.exitCode, output }
-			: {
-				valid: false,
-				exitCode: result.exitCode,
-				failureClass: classifyVerifyFailure(output),
-				output,
-			};
+		return formatVerifyChainResult(result);
 	});
+}
+
+async function writeVerifyChainCertificates(
+	directory: string,
+	input: VerifyChainWithOpenSslInput,
+): Promise<{ readonly leafPath: string; readonly rootPath: string }> {
+	const leafPath = join(directory, 'leaf.pem');
+	const rootPath = join(directory, 'root.pem');
+	await Promise.all([
+		Bun.write(leafPath, input.leafPem),
+		Bun.write(rootPath, input.rootPem),
+	]);
+	return { leafPath, rootPath };
+}
+
+async function appendVerifyChainIntermediates(
+	args: string[],
+	directory: string,
+	intermediatePems: readonly string[] | undefined,
+): Promise<void> {
+	if (intermediatePems === undefined || intermediatePems.length === 0) return;
+	const intermediatesPath = join(directory, 'intermediates.pem');
+	await Bun.write(intermediatesPath, intermediatePems.join('\n'));
+	args.push('-untrusted', intermediatesPath);
+}
+
+function appendVerifyChainPolicyArgs(args: string[], input: VerifyChainWithOpenSslInput): void {
+	if (!verifyChainShouldCheckPolicy(input)) return;
+	args.push('-policy_check');
+	for (const policyOid of input.initialPolicySet ?? []) {
+		args.push('-policy', policyOid);
+	}
+	if (input.requireExplicitPolicy === true) args.push('-explicit_policy');
+	if (input.inhibitPolicyMapping === true) args.push('-inhibit_map');
+	if (input.inhibitAnyPolicy === true) args.push('-inhibit_any');
+}
+
+function verifyChainShouldCheckPolicy(input: VerifyChainWithOpenSslInput): boolean {
+	return (
+		(input.initialPolicySet?.length ?? 0) > 0 ||
+		input.requireExplicitPolicy === true ||
+		input.inhibitPolicyMapping === true ||
+		input.inhibitAnyPolicy === true
+	);
+}
+
+function formatVerifyChainResult(result: OpenSslCommandResult): OpenSslPathValidationResult {
+	const output = mergeCommandOutput(result);
+	return result.exitCode === 0
+		? { valid: true, exitCode: result.exitCode, output }
+		: {
+			valid: false,
+			exitCode: result.exitCode,
+			failureClass: classifyVerifyFailure(output),
+			output,
+		};
 }
 
 export async function checkRevocationWithOpenSsl(input: {

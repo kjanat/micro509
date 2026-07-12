@@ -386,6 +386,25 @@ export type ValidateOcspResponseResult =
 	  }
 	| ErrorResult<ValidateOcspResponseErrorCode, Record<never, never>, ValidateOcspResponseFailure>;
 
+type ValidateOcspResponseFailureBranch = Extract<
+	ValidateOcspResponseResult,
+	{ readonly ok: false }
+>;
+
+interface NormalizedOcspValidationInput {
+	readonly ok: true;
+	readonly parsedResponse: ParsedOcspResponse;
+	readonly issuer: ParsedCertificate;
+	readonly trustedResponders: readonly ParsedCertificate[];
+	readonly signer: ParsedCertificate;
+}
+
+interface ParsedOcspCertStatusFields {
+	readonly certStatus: ParsedOcspSingleResponse['certStatus'];
+	readonly revokedAt?: Date;
+	readonly revocationReasonCode?: number;
+}
+
 /**
  * Builds a DER-encoded OCSP request containing one or more CertID entries
  * and an optional nonce extension.
@@ -460,24 +479,8 @@ export function parseOcspRequestDerOrThrow(der: Uint8Array): ParsedOcspRequest {
 		validateOcspOptionalSignature(der, optionalSignature);
 	}
 	const tbsChildren = childrenOf(der, tbsRequest);
-	let cursor = 0;
-	if (tbsChildren[cursor]?.tag === 0xa0) {
-		const versionWrapper = requireElement(tbsChildren[cursor], 'version');
-		const versionFields = childrenOf(der, versionWrapper);
-		const versionElement = requireElement(versionFields[0], 'version');
-		if (versionFields.length !== 1 || versionElement.tag !== 0x02) {
-			throw new Error('version must use INTEGER');
-		}
-		if (decodeNonNegativeIntegerNumber(versionElement.value, 'OCSP request version') !== 0) {
-			throw new Error('Unsupported OCSP request version');
-		}
-		cursor += 1;
-	}
-	const requestorName = tbsChildren[cursor];
-	if (requestorName?.tag === 0xa1) {
-		validateOcspRequestorName(der, requestorName);
-		cursor += 1;
-	}
+	let cursor = skipOcspRequestVersion(der, tbsChildren, 0);
+	cursor = skipOcspRequestorName(der, tbsChildren, cursor);
 	const requestList = requireElement(tbsChildren[cursor], 'requestList');
 	if (requestList.tag !== 0x30) {
 		throw new Error('requestList must use SEQUENCE');
@@ -511,6 +514,35 @@ export function parseOcspRequestDerOrThrow(der: Uint8Array): ParsedOcspRequest {
 		requests,
 		...(nonce === undefined ? {} : { nonce }),
 	};
+}
+
+function skipOcspRequestVersion(
+	der: Uint8Array,
+	tbsChildren: readonly DerElement[],
+	cursor: number,
+): number {
+	if (tbsChildren[cursor]?.tag !== 0xa0) return cursor;
+	const versionWrapper = requireElement(tbsChildren[cursor], 'version');
+	const versionFields = childrenOf(der, versionWrapper);
+	const versionElement = requireElement(versionFields[0], 'version');
+	if (versionFields.length !== 1 || versionElement.tag !== 0x02) {
+		throw new Error('version must use INTEGER');
+	}
+	if (decodeNonNegativeIntegerNumber(versionElement.value, 'OCSP request version') !== 0) {
+		throw new Error('Unsupported OCSP request version');
+	}
+	return cursor + 1;
+}
+
+function skipOcspRequestorName(
+	der: Uint8Array,
+	tbsChildren: readonly DerElement[],
+	cursor: number,
+): number {
+	const requestorName = tbsChildren[cursor];
+	if (requestorName?.tag !== 0xa1) return cursor;
+	validateOcspRequestorName(der, requestorName);
+	return cursor + 1;
 }
 
 /** Decodes a PEM-encoded OCSP request (`-----BEGIN OCSP REQUEST-----`). */
@@ -912,6 +944,45 @@ export async function validateOcspResponse(
 			`OCSP response status is ${parsedResponse.responseStatus}`,
 		);
 	}
+	const normalized = await normalizeOcspValidationInput(input, parsedResponse);
+	if (!normalized.ok) {
+		return normalized;
+	}
+	const { issuer, trustedResponders, signer } = normalized;
+	const signature = await verifyOcspResponseSignature(parsedResponse, signer);
+	if (!signature.ok) {
+		return validateOcspResponseFailureResult(signature.code, signature.message);
+	}
+	const responderAuthorization = await validateOcspResponderAuthorization(
+		input,
+		parsedResponse,
+		issuer,
+		signer,
+		trustedResponders,
+	);
+	if (responderAuthorization !== undefined) return responderAuthorization;
+	const at = input.at ?? new Date();
+	const skew = input.clockSkewMs ?? 0;
+	const freshness = await validateOcspResponseFreshness(parsedResponse, issuer, at, skew);
+	if (freshness !== undefined) return freshness;
+	if (hasDuplicateOcspResponseCertificateSerial(parsedResponse.responses ?? [])) {
+		return validateOcspResponseFailureResult(
+			'signature_invalid',
+			'OCSP response contains multiple status entries for the same certificate',
+		);
+	}
+	if (input.request !== undefined) {
+		const requestMatch = validateOcspRequestCoverage(input.request, parsedResponse);
+		if (requestMatch !== undefined) return requestMatch;
+	}
+	return { ok: true, value: parsedResponse };
+}
+
+/** Re-parses OCSP validation certificates and resolves the response signer. */
+async function normalizeOcspValidationInput(
+	input: ValidateOcspResponseInput,
+	parsedResponse: ParsedOcspResponse,
+): Promise<NormalizedOcspValidationInput | ValidateOcspResponseFailureBranch> {
 	let issuer: ParsedCertificate;
 	try {
 		issuer = normalizeCertificate(input.issuerCertificate);
@@ -921,90 +992,124 @@ export async function validateOcspResponse(
 			'issuer certificate input is malformed',
 		);
 	}
-	let resolvedResponder: OcspCertificateSource;
-	let trustedResponders: readonly ParsedCertificate[];
 	try {
-		trustedResponders = (input.trustedOcspResponders ?? []).map(normalizeCertificate);
-		resolvedResponder =
-			input.responderCertificate ??
-			(await findMatchingOcspResponderCertificate(
-				parsedResponse.certificates,
-				parsedResponse.responderId,
-			)) ??
-			(await findMatchingOcspResponderCertificate(trustedResponders, parsedResponse.responderId)) ??
-			parsedResponse.certificates?.[0] ??
-			input.issuerCertificate;
+		const trustedResponders = (input.trustedOcspResponders ?? []).map(normalizeCertificate);
+		const resolvedResponder = await resolveOcspResponderCertificate(
+			input,
+			parsedResponse,
+			trustedResponders,
+		);
+		return {
+			ok: true,
+			parsedResponse,
+			issuer,
+			trustedResponders,
+			signer: normalizeCertificate(resolvedResponder),
+		};
 	} catch {
 		return validateOcspResponseFailureResult(
 			'signature_invalid',
 			'OCSP responder certificate input is malformed',
 		);
 	}
-	let signer: ParsedCertificate;
-	try {
-		signer = normalizeCertificate(resolvedResponder);
-	} catch {
-		return validateOcspResponseFailureResult(
-			'signature_invalid',
-			'OCSP responder certificate input is malformed',
-		);
-	}
-	const signature = await verifyOcspResponseSignature(parsedResponse, signer);
-	if (!signature.ok) {
-		return validateOcspResponseFailureResult(signature.code, signature.message);
-	}
-	let responderBinding:
-		| Extract<ValidateOcspResponseResult, { readonly ok: false }>
-		| { readonly ok: true };
-	try {
-		responderBinding = await validateOcspResponderIdBinding(parsedResponse.responderId, signer);
-	} catch {
-		return validateOcspResponseFailureResult(
-			'signature_invalid',
-			'OCSP responder certificate input is malformed',
-		);
-	}
+}
+
+/** Selects the responder certificate from explicit, embedded, trusted, or issuer inputs. */
+async function resolveOcspResponderCertificate(
+	input: ValidateOcspResponseInput,
+	parsedResponse: ParsedOcspResponse,
+	trustedResponders: readonly ParsedCertificate[],
+): Promise<OcspCertificateSource> {
+	return (
+		input.responderCertificate ??
+		(await findMatchingOcspResponderCertificate(
+			parsedResponse.certificates,
+			parsedResponse.responderId,
+		)) ??
+		(await findMatchingOcspResponderCertificate(trustedResponders, parsedResponse.responderId)) ??
+		parsedResponse.certificates?.[0] ??
+		input.issuerCertificate
+	);
+}
+
+async function validateOcspResponderAuthorization(
+	input: ValidateOcspResponseInput,
+	parsedResponse: ParsedOcspResponse,
+	issuer: ParsedCertificate,
+	signer: ParsedCertificate,
+	trustedResponders: readonly ParsedCertificate[],
+): Promise<ValidateOcspResponseFailureBranch | undefined> {
+	const responderBinding = await safeValidateOcspResponderIdBinding(parsedResponse, signer);
 	if (!responderBinding.ok) {
 		return responderBinding;
 	}
 	const isLocallyTrustedResponder = trustedResponders.some((trusted) =>
 		isSameOcspCertificate(signer, trusted),
 	);
-	if (!isSameOcspCertificate(signer, issuer) && !isLocallyTrustedResponder) {
-		const allowChainedResponderCertificate = input.allowChainedResponderCertificate === true;
-		if (!allowChainedResponderCertificate && !isDirectlyIssuedByOcspIssuer(signer, issuer)) {
-			return validateOcspResponseFailureResult(
-				'responder_chain_invalid',
-				'Delegated OCSP responder must be directly issued by issuer certificate',
-			);
-		}
-		const chain = await verifyCertificateChain({
-			leaf: signer.der,
-			intermediates: allowChainedResponderCertificate
-				? buildOcspResponderIntermediates(parsedResponse.certificates, signer, issuer)
-				: [],
-			roots: [issuer.der],
-			...(input.at !== undefined ? { at: input.at } : {}),
-		});
-		if (!chain.ok) {
-			return validateOcspResponseFailureResult(
-				'responder_chain_invalid',
-				'OCSP responder certificate chain does not validate',
-			);
-		}
-		if (signer.extendedKeyUsage === undefined || !signer.extendedKeyUsage.includes('ocspSigning')) {
-			return validateOcspResponseFailureResult(
-				'ocsp_signing_missing',
-				'Delegated OCSP responder lacks ocspSigning EKU',
-			);
-		}
-		const responderRevocation = await checkDelegatedResponderRevocation(signer, issuer, input);
-		if (!responderRevocation.ok) {
-			return responderRevocation;
-		}
+	if (isSameOcspCertificate(signer, issuer) || isLocallyTrustedResponder) {
+		return undefined;
 	}
-	const at = input.at ?? new Date();
-	const skew = input.clockSkewMs ?? 0;
+	return await validateDelegatedOcspResponder(input, parsedResponse, issuer, signer);
+}
+
+async function safeValidateOcspResponderIdBinding(
+	parsedResponse: ParsedOcspResponse,
+	signer: ParsedCertificate,
+): Promise<ValidateOcspResponseFailureBranch | { readonly ok: true }> {
+	try {
+		return await validateOcspResponderIdBinding(parsedResponse.responderId, signer);
+	} catch {
+		return validateOcspResponseFailureResult(
+			'signature_invalid',
+			'OCSP responder certificate input is malformed',
+		);
+	}
+}
+
+async function validateDelegatedOcspResponder(
+	input: ValidateOcspResponseInput,
+	parsedResponse: ParsedOcspResponse,
+	issuer: ParsedCertificate,
+	signer: ParsedCertificate,
+): Promise<ValidateOcspResponseFailureBranch | undefined> {
+	const allowChainedResponderCertificate = input.allowChainedResponderCertificate === true;
+	if (!allowChainedResponderCertificate && !isDirectlyIssuedByOcspIssuer(signer, issuer)) {
+		return validateOcspResponseFailureResult(
+			'responder_chain_invalid',
+			'Delegated OCSP responder must be directly issued by issuer certificate',
+		);
+	}
+	const chain = await verifyCertificateChain({
+		leaf: signer.der,
+		intermediates: allowChainedResponderCertificate
+			? buildOcspResponderIntermediates(parsedResponse.certificates, signer, issuer)
+			: [],
+		roots: [issuer.der],
+		...(input.at !== undefined ? { at: input.at } : {}),
+	});
+	if (!chain.ok) {
+		return validateOcspResponseFailureResult(
+			'responder_chain_invalid',
+			'OCSP responder certificate chain does not validate',
+		);
+	}
+	if (signer.extendedKeyUsage === undefined || !signer.extendedKeyUsage.includes('ocspSigning')) {
+		return validateOcspResponseFailureResult(
+			'ocsp_signing_missing',
+			'Delegated OCSP responder lacks ocspSigning EKU',
+		);
+	}
+	const responderRevocation = await checkDelegatedResponderRevocation(signer, issuer, input);
+	return responderRevocation.ok ? undefined : responderRevocation;
+}
+
+/** Checks response-level and per-certificate OCSP timestamps against the validation time. */
+async function validateOcspResponseFreshness(
+	parsedResponse: ParsedOcspResponse,
+	issuer: ParsedCertificate,
+	at: Date,
+	skew: number,
+): Promise<ValidateOcspResponseFailureBranch | undefined> {
 	if (
 		parsedResponse.producedAt !== undefined &&
 		parsedResponse.producedAt.getTime() - skew > at.getTime()
@@ -1015,92 +1120,123 @@ export async function validateOcspResponse(
 		);
 	}
 	for (const response of parsedResponse.responses ?? []) {
-		let expected: ParsedOcspCertId;
-		try {
-			expected = await buildParsedOcspCertId(
-				response.certId.hashAlgorithmOid,
-				issuer,
-				response.certId.serialNumberHex,
-			);
-		} catch {
-			return validateOcspResponseFailureResult(
-				'signature_invalid',
-				'OCSP response CertID hash algorithm is unsupported',
-			);
-		}
-		if (
-			response.certId.issuerNameHashHex !== expected.issuerNameHashHex ||
-			response.certId.issuerKeyHashHex !== expected.issuerKeyHashHex
-		) {
-			return validateOcspResponseFailureResult(
-				'issuer_mismatch',
-				'OCSP response certId does not match issuer certificate',
-			);
-		}
-		if (
-			response.thisUpdate.getTime() - skew > at.getTime() ||
-			(response.nextUpdate !== undefined && response.nextUpdate.getTime() + skew < at.getTime())
-		) {
-			return validateOcspResponseFailureResult(
-				'stale_response',
-				'OCSP response is not valid at requested time',
-			);
-		}
-		if (
-			parsedResponse.producedAt !== undefined &&
-			response.nextUpdate !== undefined &&
-			parsedResponse.producedAt.getTime() - skew > response.nextUpdate.getTime()
-		) {
-			return validateOcspResponseFailureResult(
-				'stale_response',
-				'OCSP response producedAt is later than nextUpdate',
-			);
-		}
+		const responseFreshness = await validateOcspSingleResponseFreshness(
+			response,
+			parsedResponse.producedAt,
+			issuer,
+			at,
+			skew,
+		);
+		if (responseFreshness !== undefined) return responseFreshness;
 	}
-	if (hasDuplicateOcspResponseCertificateSerial(parsedResponse.responses ?? [])) {
+	return undefined;
+}
+
+async function validateOcspSingleResponseFreshness(
+	response: ParsedOcspSingleResponse,
+	producedAt: Date | undefined,
+	issuer: ParsedCertificate,
+	at: Date,
+	skew: number,
+): Promise<ValidateOcspResponseFailureBranch | undefined> {
+	let expected: ParsedOcspCertId;
+	try {
+		expected = await buildParsedOcspCertId(
+			response.certId.hashAlgorithmOid,
+			issuer,
+			response.certId.serialNumberHex,
+		);
+	} catch {
 		return validateOcspResponseFailureResult(
 			'signature_invalid',
-			'OCSP response contains multiple status entries for the same certificate',
+			'OCSP response CertID hash algorithm is unsupported',
 		);
 	}
-	if (input.request !== undefined) {
-		let request: ParsedOcspRequest;
-		try {
-			request = normalizeOcspRequest(input.request);
-		} catch {
+	if (
+		response.certId.issuerNameHashHex !== expected.issuerNameHashHex ||
+		response.certId.issuerKeyHashHex !== expected.issuerKeyHashHex
+	) {
+		return validateOcspResponseFailureResult(
+			'issuer_mismatch',
+			'OCSP response certId does not match issuer certificate',
+		);
+	}
+	return validateOcspSingleResponseTimes(response, producedAt, at, skew);
+}
+
+function validateOcspSingleResponseTimes(
+	response: ParsedOcspSingleResponse,
+	producedAt: Date | undefined,
+	at: Date,
+	skew: number,
+): ValidateOcspResponseFailureBranch | undefined {
+	if (
+		response.thisUpdate.getTime() - skew > at.getTime() ||
+		(response.nextUpdate !== undefined && response.nextUpdate.getTime() + skew < at.getTime())
+	) {
+		return validateOcspResponseFailureResult(
+			'stale_response',
+			'OCSP response is not valid at requested time',
+		);
+	}
+	if (
+		producedAt !== undefined &&
+		response.nextUpdate !== undefined &&
+		producedAt.getTime() - skew > response.nextUpdate.getTime()
+	) {
+		return validateOcspResponseFailureResult(
+			'stale_response',
+			'OCSP response producedAt is later than nextUpdate',
+		);
+	}
+	return undefined;
+}
+
+function validateOcspRequestCoverage(
+	requestSource: OcspRequestSource,
+	parsedResponse: ParsedOcspResponse,
+): ValidateOcspResponseFailureBranch | undefined {
+	let request: ParsedOcspRequest;
+	try {
+		request = normalizeOcspRequest(requestSource);
+	} catch {
+		return validateOcspResponseFailureResult('request_mismatch', 'OCSP request input is malformed');
+	}
+	if (request.nonce !== undefined && request.nonce !== parsedResponse.nonce) {
+		return validateOcspResponseFailureResult(
+			'nonce_mismatch',
+			'OCSP response nonce does not match request nonce',
+		);
+	}
+	const requestIds = new Set(request.requests.map((entry) => serializeCertId(entry)));
+	const responseIds = new Set(
+		(parsedResponse.responses ?? []).map((response) => serializeCertId(response.certId)),
+	);
+	return validateOcspRequestIdCoverage(requestIds, responseIds, parsedResponse.responses ?? []);
+}
+
+function validateOcspRequestIdCoverage(
+	requestIds: ReadonlySet<string>,
+	responseIds: ReadonlySet<string>,
+	responses: readonly ParsedOcspSingleResponse[],
+): ValidateOcspResponseFailureBranch | undefined {
+	for (const response of responses) {
+		if (!requestIds.has(serializeCertId(response.certId))) {
 			return validateOcspResponseFailureResult(
 				'request_mismatch',
-				'OCSP request input is malformed',
+				'OCSP response includes a certId not present in request',
 			);
-		}
-		if (request.nonce !== undefined && request.nonce !== parsedResponse.nonce) {
-			return validateOcspResponseFailureResult(
-				'nonce_mismatch',
-				'OCSP response nonce does not match request nonce',
-			);
-		}
-		const requestIds = new Set(request.requests.map((entry) => serializeCertId(entry)));
-		const responseIds = new Set(
-			(parsedResponse.responses ?? []).map((response) => serializeCertId(response.certId)),
-		);
-		for (const response of parsedResponse.responses ?? []) {
-			if (!requestIds.has(serializeCertId(response.certId))) {
-				return validateOcspResponseFailureResult(
-					'request_mismatch',
-					'OCSP response includes a certId not present in request',
-				);
-			}
-		}
-		for (const requestId of requestIds) {
-			if (!responseIds.has(requestId)) {
-				return validateOcspResponseFailureResult(
-					'request_mismatch',
-					'OCSP response does not cover every requested certId',
-				);
-			}
 		}
 	}
-	return { ok: true, value: parsedResponse };
+	for (const requestId of requestIds) {
+		if (!responseIds.has(requestId)) {
+			return validateOcspResponseFailureResult(
+				'request_mismatch',
+				'OCSP response does not cover every requested certId',
+			);
+		}
+	}
+	return undefined;
 }
 
 /** Builds a `VerifyOcspResponseSignatureFailureResult`. */
@@ -1538,63 +1674,79 @@ function parseSingleResponse(source: Uint8Array, element: DerElement): ParsedOcs
 	if (children.length !== cursor + (singleExtensions === undefined ? 0 : 1)) {
 		throw new Error('Malformed OCSP SingleResponse');
 	}
-	let revokedAt: Date | undefined;
-	let revocationReasonCode: number | undefined;
+	const statusFields = parseOcspCertStatusFields(source, certStatus);
+	return {
+		certId: parseOcspCertId(source.slice(certId.start - certId.headerLength, certId.end)),
+		certStatus: statusFields.certStatus,
+		thisUpdate: parseTime(thisUpdate),
+		...parseOcspSingleResponseNextUpdate(source, nextUpdateElement),
+		...(statusFields.revokedAt === undefined ? {} : { revokedAt: statusFields.revokedAt }),
+		...(statusFields.revocationReasonCode === undefined
+			? {}
+			: { revocationReasonCode: statusFields.revocationReasonCode }),
+	};
+}
+
+function parseOcspSingleResponseNextUpdate(
+	source: Uint8Array,
+	nextUpdateElement: DerElement | undefined,
+): { readonly nextUpdate?: Date } {
+	return nextUpdateElement === undefined
+		? {}
+		: {
+				nextUpdate: parseTime(
+					requireElement(childrenOf(source, nextUpdateElement)[0], 'nextUpdate'),
+				),
+			};
+}
+
+function parseOcspCertStatusFields(
+	source: Uint8Array,
+	certStatus: DerElement,
+): ParsedOcspCertStatusFields {
 	if (certStatus.tag === 0x80) {
 		if (certStatus.value.length !== 0) {
 			throw new Error('OCSP good certStatus must be empty');
 		}
-		return {
-			certId: parseOcspCertId(source.slice(certId.start - certId.headerLength, certId.end)),
-			certStatus: 'good',
-			thisUpdate: parseTime(thisUpdate),
-			...(nextUpdateElement === undefined
-				? {}
-				: {
-						nextUpdate: parseTime(
-							requireElement(childrenOf(source, nextUpdateElement)[0], 'nextUpdate'),
-						),
-					}),
-		};
+		return { certStatus: 'good' };
 	}
-	if (certStatus.tag === 0xa1) {
-		const revokedInfo = childrenOf(source, certStatus);
-		if (revokedInfo.length < 1 || revokedInfo.length > 2) {
-			throw new Error('Malformed OCSP revoked certStatus');
+	if (certStatus.tag === 0x82) {
+		if (certStatus.value.length !== 0) {
+			throw new Error('OCSP unknown certStatus must be empty');
 		}
-		revokedAt = parseTime(requireElement(revokedInfo[0], 'revocationTime'));
-		const reason = revokedInfo[1];
-		if (reason?.tag === 0xa0) {
-			const reasonChildren = childrenOf(source, reason);
-			const enumerated = requireElement(reasonChildren[0], 'revocationReason');
-			if (reasonChildren.length !== 1 || enumerated.tag !== 0x0a) {
-				throw new Error('revocationReason must use ENUMERATED');
-			}
-			revocationReasonCode = decodeNonNegativeIntegerNumber(
-				enumerated.value,
-				'OCSP revocationReason',
-			);
-		} else if (reason !== undefined) {
-			throw new Error('Malformed OCSP revoked certStatus');
-		}
-	} else if (certStatus.tag !== 0x82) {
+		return { certStatus: 'unknown' };
+	}
+	if (certStatus.tag !== 0xa1) {
 		throw new Error(`Unsupported OCSP certStatus tag: ${String(certStatus.tag)}`);
-	} else if (certStatus.value.length !== 0) {
-		throw new Error('OCSP unknown certStatus must be empty');
+	}
+	const revokedInfo = childrenOf(source, certStatus);
+	if (revokedInfo.length < 1 || revokedInfo.length > 2) {
+		throw new Error('Malformed OCSP revoked certStatus');
 	}
 	return {
-		certId: parseOcspCertId(source.slice(certId.start - certId.headerLength, certId.end)),
-		certStatus: certStatus.tag === 0x82 ? 'unknown' : 'revoked',
-		thisUpdate: parseTime(thisUpdate),
-		...(nextUpdateElement === undefined
-			? {}
-			: {
-					nextUpdate: parseTime(
-						requireElement(childrenOf(source, nextUpdateElement)[0], 'nextUpdate'),
-					),
-				}),
-		...(revokedAt === undefined ? {} : { revokedAt }),
-		...(revocationReasonCode === undefined ? {} : { revocationReasonCode }),
+		certStatus: 'revoked',
+		revokedAt: parseTime(requireElement(revokedInfo[0], 'revocationTime')),
+		...parseOcspRevocationReason(source, revokedInfo[1]),
+	};
+}
+
+function parseOcspRevocationReason(
+	source: Uint8Array,
+	reason: DerElement | undefined,
+): { readonly revocationReasonCode?: number } {
+	if (reason === undefined) {
+		return {};
+	}
+	if (reason.tag !== 0xa0) {
+		throw new Error('Malformed OCSP revoked certStatus');
+	}
+	const reasonChildren = childrenOf(source, reason);
+	const enumerated = requireElement(reasonChildren[0], 'revocationReason');
+	if (reasonChildren.length !== 1 || enumerated.tag !== 0x0a) {
+		throw new Error('revocationReason must use ENUMERATED');
+	}
+	return {
+		revocationReasonCode: decodeNonNegativeIntegerNumber(enumerated.value, 'OCSP revocationReason'),
 	};
 }
 

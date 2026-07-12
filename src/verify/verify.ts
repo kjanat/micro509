@@ -30,6 +30,7 @@ import {
 	evaluatePolicyChain,
 } from '#micro509/internal/verify/policy-engine';
 import {
+	authorityKeyIdentifierMismatch,
 	buildChainInternal,
 	countCaCertificatesBelowParsed,
 	isSelfIssued,
@@ -287,6 +288,8 @@ type ValidateCandidatePathRawResult =
 			readonly policyValidation: PolicyValidationOutcome;
 	  }
 	| VerifyChainFailure;
+
+type ValidateCandidatePathFailure = VerifyChainFailure;
 
 /** Result of {@linkcode validateCandidatePath}. */
 export type ValidateCandidatePathResult =
@@ -641,140 +644,98 @@ async function validateCandidatePathRaw(
 		return failure('issuer_not_found', 'chain is empty', 0);
 	}
 
-	if (chain.length === 1 && isSelfIssued(leaf)) {
-		if (input.allowSelfSignedLeaf !== true) {
-			return failure(
-				'self_signed_leaf_not_allowed',
-				'self-signed leaf not allowed',
-				0,
-				detail({
-					subjectCommonName: leaf.subject.values.commonName,
-				}),
-			);
-		}
-	}
+	const selfSignedLeafFailure = validateSelfSignedLeafAllowed(leaf, chain.length, input);
+	if (selfSignedLeafFailure !== undefined) return selfSignedLeafFailure;
+	const certificateFailure = await validatePathCertificates(chain, at);
+	if (certificateFailure !== undefined) return certificateFailure;
+	const pathLengthFailure = validatePathLengthConstraints(chain);
+	if (pathLengthFailure !== undefined) return pathLengthFailure;
+	const policyResult = validatePolicyAndNameConstraints(chain, validationStateResult.value);
+	if (!policyResult.ok) return policyResult;
 
+	return validateLeaf(leaf, input, policyResult.policyValidation);
+}
+
+function validateSelfSignedLeafAllowed(
+	leaf: ParsedCertificate,
+	chainLength: number,
+	input: ValidateCandidatePathInput,
+): ValidateCandidatePathFailure | undefined {
+	if (chainLength !== 1 || !isSelfIssued(leaf) || input.allowSelfSignedLeaf === true)
+		return undefined;
+	return failure(
+		'self_signed_leaf_not_allowed',
+		'self-signed leaf not allowed',
+		0,
+		detail({ subjectCommonName: leaf.subject.values.commonName }),
+	);
+}
+
+/** Validates every certificate and issuer relationship in a candidate path. */
+async function validatePathCertificates(
+	chain: readonly ParsedCertificate[],
+	at: Date,
+): Promise<ValidateCandidatePathFailure | undefined> {
 	for (let index = 0; index < chain.length; index += 1) {
 		const current = chain[index];
-		if (current === undefined) {
-			return failure('issuer_not_found', 'chain element missing', index);
-		}
-		if (!isWithinValidity(current, at)) {
-			return failure(
-				'certificate_expired',
-				'certificate not valid at requested time',
-				index,
-				detail({
-					subjectCommonName: current.subject.values.commonName,
-					expected: describeDateTime(at),
-					actual: `${describeDateTime(current.notBefore)}..${describeDateTime(current.notAfter)}`,
-				}),
-			);
-		}
-		const unprocessedCritical = findUnprocessedCriticalExtension(current);
-		if (unprocessedCritical !== undefined) {
-			return failure(
-				'unrecognized_critical_extension',
-				`certificate contains unrecognized critical extension ${unprocessedCritical}`,
-				index,
-				detail({
-					subjectCommonName: current.subject.values.commonName,
-					actual: unprocessedCritical,
-				}),
-			);
-		}
-		if (index === chain.length - 1) {
-			continue;
-		}
-		const issuer = chain[index + 1];
-		if (issuer === undefined) {
-			return failure('issuer_not_found', 'issuer missing', index);
-		}
-		const signatureResult = await verifyCertificateSignature(current, issuer);
-		if (!signatureResult.ok) {
-			return failure(
-				signatureResult.code,
-				signatureResult.reason,
-				index,
-				detail({
-					subjectCommonName: current.subject.values.commonName,
-					issuerCommonName: issuer.subject.values.commonName,
-					actual: signatureResult.reason,
-				}),
-			);
-		}
-		if (!signatureResult.valid) {
-			return failure(
-				'signature_invalid',
-				'certificate signature does not verify',
-				index,
-				detail({
-					subjectCommonName: current.subject.values.commonName,
-					issuerCommonName: issuer.subject.values.commonName,
-				}),
-			);
-		}
-		if (issuer.basicConstraints?.ca !== true) {
-			return failure(
-				'ca_required',
-				'issuer must be a CA certificate',
-				index + 1,
-				detail({
-					subjectCommonName: issuer.subject.values.commonName,
-				}),
-			);
-		}
-		if (issuer.keyUsage !== undefined && !issuer.keyUsage.flags.includes('keyCertSign')) {
-			return failure(
-				'key_cert_sign_required',
-				'issuer missing keyCertSign',
-				index + 1,
-				detail({
-					subjectCommonName: issuer.subject.values.commonName,
-				}),
-			);
-		}
-		if (
-			current.authorityKeyIdentifier !== undefined &&
-			issuer.subjectKeyIdentifier !== undefined &&
-			current.authorityKeyIdentifier !== issuer.subjectKeyIdentifier
-		) {
-			return failure(
-				'authority_key_identifier_mismatch',
-				'authorityKeyIdentifier does not match issuer subjectKeyIdentifier',
-				index,
-				detail({
-					subjectCommonName: current.subject.values.commonName,
-					issuerCommonName: issuer.subject.values.commonName,
-					expected: issuer.subjectKeyIdentifier,
-					actual: current.authorityKeyIdentifier,
-				}),
-			);
-		}
+		if (current === undefined) return failure('issuer_not_found', 'chain element missing', index);
+		const certificateValidation = validateCertificateAtPathIndex(current, index, at);
+		if (certificateValidation !== undefined) return certificateValidation;
+		const issuerValidation = await validatePathIssuerAtIndex(chain, current, index);
+		if (issuerValidation !== undefined) return issuerValidation;
 	}
+	return undefined;
+}
 
+async function validatePathIssuerAtIndex(
+	chain: readonly ParsedCertificate[],
+	current: ParsedCertificate,
+	index: number,
+): Promise<ValidateCandidatePathFailure | undefined> {
+	if (index === chain.length - 1) return undefined;
+	const issuer = chain[index + 1];
+	if (issuer === undefined) return failure('issuer_not_found', 'issuer missing', index);
+	return await validateIssuerAtPathIndex(current, issuer, index);
+}
+
+function validatePathLengthConstraints(
+	chain: readonly ParsedCertificate[],
+): ValidateCandidatePathFailure | undefined {
 	for (let index = 1; index < chain.length; index += 1) {
 		const current = chain[index];
-		if (current === undefined) {
-			return failure('issuer_not_found', 'chain element missing', index);
-		}
+		if (current === undefined) return failure('issuer_not_found', 'chain element missing', index);
 		const maxCaBelow = countCaCertificatesBelowParsed(chain, index);
 		const pathLength = current.basicConstraints?.pathLength;
 		if (isNonNegativeInteger(pathLength) && maxCaBelow > pathLength) {
-			return failure(
-				'path_length_exceeded',
-				'path length constraint exceeded',
-				index,
-				detail({
-					subjectCommonName: current.subject.values.commonName,
-					expected: String(pathLength),
-					actual: String(maxCaBelow),
-				}),
-			);
+			return pathLengthExceededFailure(current, index, pathLength, maxCaBelow);
 		}
 	}
+	return undefined;
+}
 
-	const policyResult = evaluatePolicyChain(chain, validationStateResult.value.policy);
+function pathLengthExceededFailure(
+	certificate: ParsedCertificate,
+	index: number,
+	pathLength: number,
+	maxCaBelow: number,
+): ValidateCandidatePathFailure {
+	return failure(
+		'path_length_exceeded',
+		'path length constraint exceeded',
+		index,
+		detail({
+			subjectCommonName: certificate.subject.values.commonName,
+			expected: String(pathLength),
+			actual: String(maxCaBelow),
+		}),
+	);
+}
+
+function validatePolicyAndNameConstraints(
+	chain: readonly ParsedCertificate[],
+	validationState: ValidationState,
+): ValidateCandidatePathRawResult {
+	const policyResult = evaluatePolicyChain(chain, validationState.policy);
 	if (!policyResult.ok) {
 		return failure(
 			policyResult.error.code,
@@ -786,16 +747,115 @@ async function validateCandidatePathRaw(
 			}),
 		);
 	}
+	const nameConstraintResult = evaluateNameConstraints(chain, validationState.nameConstraints);
+	return nameConstraintResult.ok
+		? { ok: true, policyValidation: policyResult.value }
+		: nameConstraintResult;
+}
 
-	const nameConstraintResult = evaluateNameConstraints(
-		chain,
-		validationStateResult.value.nameConstraints,
-	);
-	if (!nameConstraintResult.ok) {
-		return nameConstraintResult;
+function validateCertificateAtPathIndex(
+	current: ParsedCertificate,
+	index: number,
+	at: Date,
+): ValidateCandidatePathFailure | undefined {
+	if (!isWithinValidity(current, at)) {
+		return failure(
+			'certificate_expired',
+			'certificate not valid at requested time',
+			index,
+			detail({
+				subjectCommonName: current.subject.values.commonName,
+				expected: describeDateTime(at),
+				actual: `${describeDateTime(current.notBefore)}..${describeDateTime(current.notAfter)}`,
+			}),
+		);
 	}
+	const unprocessedCritical = findUnprocessedCriticalExtension(current);
+	if (unprocessedCritical === undefined) {
+		return undefined;
+	}
+	return failure(
+		'unrecognized_critical_extension',
+		`certificate contains unrecognized critical extension ${unprocessedCritical}`,
+		index,
+		detail({
+			subjectCommonName: current.subject.values.commonName,
+			actual: unprocessedCritical,
+		}),
+	);
+}
 
-	return validateLeaf(leaf, input, policyResult.value);
+async function validateIssuerAtPathIndex(
+	current: ParsedCertificate,
+	issuer: ParsedCertificate,
+	index: number,
+): Promise<ValidateCandidatePathFailure | undefined> {
+	const signatureResult = await verifyCertificateSignature(current, issuer);
+	if (!signatureResult.ok) {
+		return failure(
+			signatureResult.code,
+			signatureResult.reason,
+			index,
+			detail({
+				subjectCommonName: current.subject.values.commonName,
+				issuerCommonName: issuer.subject.values.commonName,
+				actual: signatureResult.reason,
+			}),
+		);
+	}
+	if (!signatureResult.valid) {
+		return failure(
+			'signature_invalid',
+			'certificate signature does not verify',
+			index,
+			detail({
+				subjectCommonName: current.subject.values.commonName,
+				issuerCommonName: issuer.subject.values.commonName,
+			}),
+		);
+	}
+	return validateIssuerConstraintsAtPathIndex(current, issuer, index);
+}
+
+function validateIssuerConstraintsAtPathIndex(
+	current: ParsedCertificate,
+	issuer: ParsedCertificate,
+	index: number,
+): ValidateCandidatePathFailure | undefined {
+	if (issuer.basicConstraints?.ca !== true) {
+		return failure(
+			'ca_required',
+			'issuer must be a CA certificate',
+			index + 1,
+			detail({
+				subjectCommonName: issuer.subject.values.commonName,
+			}),
+		);
+	}
+	if (issuer.keyUsage !== undefined && !issuer.keyUsage.flags.includes('keyCertSign')) {
+		return failure(
+			'key_cert_sign_required',
+			'issuer missing keyCertSign',
+			index + 1,
+			detail({
+				subjectCommonName: issuer.subject.values.commonName,
+			}),
+		);
+	}
+	if (!authorityKeyIdentifierMismatch(current, issuer)) {
+		return undefined;
+	}
+	return failure(
+		'authority_key_identifier_mismatch',
+		'authorityKeyIdentifier does not match issuer subjectKeyIdentifier',
+		index,
+		detail({
+			subjectCommonName: current.subject.values.commonName,
+			issuerCommonName: issuer.subject.values.commonName,
+			expected: issuer.subjectKeyIdentifier,
+			actual: current.authorityKeyIdentifier,
+		}),
+	);
 }
 
 /**
@@ -893,51 +953,8 @@ export async function verifyCertificateChain(
 
 	// Revocation checking (optional)
 	if (input.revocation !== undefined) {
-		const revocationResult = await checkChainRevocation({
-			chain: buildResult.value.chain,
-			...(input.revocation.crls !== undefined ? { crls: input.revocation.crls } : {}),
-			...(input.revocation.ocspResponses !== undefined
-				? { ocspResponses: input.revocation.ocspResponses }
-				: {}),
-			...(input.revocation.extraCertificates !== undefined
-				? { extraCertificates: input.revocation.extraCertificates }
-				: {}),
-			...(input.revocation.trustedOcspResponders !== undefined
-				? { trustedOcspResponders: input.revocation.trustedOcspResponders }
-				: {}),
-			...(input.revocation.policy !== undefined ? { policy: input.revocation.policy } : {}),
-			...(input.at !== undefined ? { at: input.at } : {}),
-		});
-
-		if (revocationResult.value.decision === 'deny') {
-			const firstRevoked = revocationResult.value.summary.revokedCertificates[0];
-			if (firstRevoked !== undefined) {
-				return verifyFailureResult(
-					failure(
-						'certificate_revoked',
-						`certificate revoked: ${firstRevoked.subject.values.commonName ?? 'unknown'}`,
-						undefined,
-						detail({ subjectCommonName: firstRevoked.subject.values.commonName }),
-					),
-				);
-			}
-			// Indeterminate with hard-fail policy
-			const firstIndeterminate = revocationResult.value.summary.indeterminateCertificates[0];
-			const indeterminateReasons = revocationResult.value.certificates.find(
-				(c) => c.status === 'indeterminate',
-			)?.indeterminateReasons;
-			return verifyFailureResult(
-				failure(
-					'revocation_indeterminate',
-					`revocation status indeterminate: ${firstIndeterminate?.subject.values.commonName ?? 'unknown'}`,
-					undefined,
-					detail({
-						subjectCommonName: firstIndeterminate?.subject.values.commonName,
-						actual: indeterminateReasons?.join(', '),
-					}),
-				),
-			);
-		}
+		const revocationFailure = await validateVerifiedChainRevocation(input, buildResult.value.chain);
+		if (revocationFailure !== undefined) return revocationFailure;
 	}
 
 	return {
@@ -947,6 +964,63 @@ export async function verifyCertificateChain(
 			policyValidation: validateResult.value.policyValidation,
 		},
 	};
+}
+
+/** Applies optional revocation evidence to an otherwise verified certificate chain. */
+async function validateVerifiedChainRevocation(
+	input: VerifyCertificateChainInput,
+	chain: readonly ParsedCertificate[],
+): Promise<VerifyChainResult | undefined> {
+	if (input.revocation === undefined) return undefined;
+	const revocationResult = await checkChainRevocation({
+		chain,
+		...(input.revocation.crls !== undefined ? { crls: input.revocation.crls } : {}),
+		...(input.revocation.ocspResponses !== undefined
+			? { ocspResponses: input.revocation.ocspResponses }
+			: {}),
+		...(input.revocation.extraCertificates !== undefined
+			? { extraCertificates: input.revocation.extraCertificates }
+			: {}),
+		...(input.revocation.trustedOcspResponders !== undefined
+			? { trustedOcspResponders: input.revocation.trustedOcspResponders }
+			: {}),
+		...(input.revocation.policy !== undefined ? { policy: input.revocation.policy } : {}),
+		...(input.at !== undefined ? { at: input.at } : {}),
+	});
+	return revocationResult.value.decision === 'deny'
+		? revocationFailureResult(revocationResult.value)
+		: undefined;
+}
+
+function revocationFailureResult(
+	value: Awaited<ReturnType<typeof checkChainRevocation>>['value'],
+): VerifyChainResult {
+	const firstRevoked = value.summary.revokedCertificates[0];
+	if (firstRevoked !== undefined) {
+		return verifyFailureResult(
+			failure(
+				'certificate_revoked',
+				`certificate revoked: ${firstRevoked.subject.values.commonName ?? 'unknown'}`,
+				undefined,
+				detail({ subjectCommonName: firstRevoked.subject.values.commonName }),
+			),
+		);
+	}
+	const firstIndeterminate = value.summary.indeterminateCertificates[0];
+	const indeterminateReasons = value.certificates.find(
+		(certificate) => certificate.status === 'indeterminate',
+	)?.indeterminateReasons;
+	return verifyFailureResult(
+		failure(
+			'revocation_indeterminate',
+			`revocation status indeterminate: ${firstIndeterminate?.subject.values.commonName ?? 'unknown'}`,
+			undefined,
+			detail({
+				subjectCommonName: firstIndeterminate?.subject.values.commonName,
+				actual: indeterminateReasons?.join(', '),
+			}),
+		),
+	);
 }
 
 // verifyCertificateSigningRequest
@@ -1621,8 +1695,11 @@ function buildValidationState(
 
 function normalizeInitialPolicySet(
 	initialPolicySet: PolicyValidationInput['initialPolicySet'] | undefined,
-): PolicyValidationInput['initialPolicySet'] | undefined {
-	if (initialPolicySet === undefined || initialPolicySet === 'any') {
+): PolicyValidationInput['initialPolicySet'] {
+	if (initialPolicySet === undefined) {
+		return undefined;
+	}
+	if (initialPolicySet === 'any') {
 		return initialPolicySet;
 	}
 	if (!Array.isArray(initialPolicySet)) {

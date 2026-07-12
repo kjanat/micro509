@@ -11,6 +11,7 @@
 import { decodeIpAddress, parseIpAddressToBytes } from '#micro509/internal/shared/ip';
 import type { ErrorResult, Micro509Error } from '#micro509/result/result';
 import { errorResult, micro509Error, successResult } from '#micro509/result/result';
+import type { SubjectAltName } from '#micro509/x509/extensions';
 import type { ParsedCertificate } from '#micro509/x509/parse';
 import { parseCertificateDerOrThrow } from '#micro509/x509/parse';
 
@@ -174,203 +175,253 @@ export function matchCertificateServiceIdentity(
 		return failure('subject_alt_name_mismatch', 'certificate input is malformed');
 	}
 	switch (serviceIdentity.type) {
-		case 'dns': {
-			if (typeof serviceIdentity.value !== 'string') {
-				return malformedServiceIdentityFailure(certificate, 'dns', serviceIdentity.value);
-			}
-			const expected = serviceIdentity.value;
-			const sans = certificate.subjectAltNames?.filter((entry) => entry.type === 'dns') ?? [];
-			if (sans.some((entry) => matchesDnsName(entry.value, expected))) {
-				return success();
-			}
-			const presentedIdentifierTypes = presentedDnsIdentifierTypes(certificate);
-			if (serviceIdentity.allowCommonNameFallback === true && presentedIdentifierTypes.length > 0) {
-				return failure(
-					'common_name_fallback_suppressed',
-					'DNS name not present in SAN; CN fallback suppressed because supported SAN identifiers exist',
-					details(
-						certificate.subject.values.commonName,
-						expected,
-						sans.map((entry) => entry.value).join(','),
-						{
-							presentedIdentifierTypes,
-							commonNameFallbackReason: 'suppressed_by_presented_identifier',
-						},
-					),
-				);
-			}
-			if (sans.length > 0) {
-				return failure(
-					'subject_alt_name_mismatch',
-					'DNS name not present in SAN',
-					details(
-						certificate.subject.values.commonName,
-						expected,
-						sans.map((entry) => entry.value).join(','),
-					),
-				);
-			}
-			if (serviceIdentity.allowCommonNameFallback === true) {
-				const commonName = certificate.subject.values.commonName;
-				if (commonName === undefined || !matchesDnsName(commonName, expected)) {
-					return failure(
-						'subject_alt_name_mismatch',
-						'DNS name not present in SAN or CN',
-						details(commonName, expected, commonName ?? '', {
-							commonNameFallbackReason:
-								commonName === undefined ? 'common_name_missing' : 'common_name_mismatch',
-						}),
-					);
-				}
-				return success();
-			}
-			return failure(
-				'subject_alt_name_mismatch',
-				'DNS name not present in SAN',
-				details(certificate.subject.values.commonName, expected, '', {
-					commonNameFallbackReason: 'disabled',
-				}),
-			);
-		}
-		case 'ip': {
-			if (typeof serviceIdentity.value !== 'string') {
-				return malformedServiceIdentityFailure(certificate, 'ip', serviceIdentity.value);
-			}
-			const expectedBytes = tryParsePresentedIpAddress(serviceIdentity.value);
-			if (expectedBytes === undefined) {
-				return malformedServiceIdentityFailure(certificate, 'ip', serviceIdentity.value);
-			}
-			const expected = decodeIpAddress(expectedBytes);
-			const sans = certificate.subjectAltNames?.filter((entry) => entry.type === 'ip') ?? [];
-			const presentedAddresses: string[] = [];
-			for (const entry of sans) {
-				const presentedBytes = tryParsePresentedIpAddress(entry.value);
-				if (presentedBytes === undefined) {
-					return failure(
-						'subject_alt_name_mismatch',
-						'IP address SAN is malformed',
-						details(certificate.subject.values.commonName, expected, `ip:${entry.value}`),
-					);
-				}
-				presentedAddresses.push(decodeIpAddress(presentedBytes));
-				if (sameIpAddressBytes(presentedBytes, expectedBytes)) {
-					return success();
-				}
-			}
-			return failure(
-				'subject_alt_name_mismatch',
-				'IP address not present in SAN',
-				details(certificate.subject.values.commonName, expected, presentedAddresses.join(',')),
-			);
-		}
-		case 'uri': {
-			if (typeof serviceIdentity.value !== 'string') {
-				return malformedServiceIdentityFailure(certificate, 'uri', serviceIdentity.value);
-			}
-			const expected = tryParseUriServiceIdentity(serviceIdentity.value);
-			if (expected === undefined) {
-				return malformedServiceIdentityFailure(certificate, 'uri', serviceIdentity.value);
-			}
-			const sans = certificate.subjectAltNames?.filter((entry) => entry.type === 'uri') ?? [];
-			const matchingService = sans.flatMap((entry) => {
-				const parsed = tryParseUriServiceIdentity(entry.value);
-				if (parsed === undefined || parsed.serviceType !== expected.serviceType) {
-					return [];
-				}
-				return [parsed];
+		case 'dns':
+			return matchDnsServiceIdentity(certificate, serviceIdentity);
+		case 'ip':
+			return matchIpServiceIdentity(certificate, serviceIdentity);
+		case 'uri':
+			return matchScopedServiceIdentity(certificate, serviceIdentity, {
+				parse: tryParseUriServiceIdentity,
+				sanType: 'uri',
+				missingMessage: 'URI-ID not present in SAN',
+				serviceMismatchMessage: 'URI scheme not present in SAN',
+				domainMismatchMessage: 'URI host not present in SAN',
 			});
-			if (matchingService.some((entry) => matchesDnsName(entry.domainName, expected.domainName))) {
-				return success();
-			}
-			if (matchingService.length > 0) {
-				return failure(
-					'subject_alt_name_mismatch',
-					'URI host not present in SAN',
-					details(
-						certificate.subject.values.commonName,
-						expected.domainName,
-						matchingService.map((entry) => entry.domainName).join(','),
-					),
-				);
-			}
-			if (sans.length > 0) {
-				return failure(
-					'service_identity_mismatch',
-					'URI scheme not present in SAN',
-					details(
-						certificate.subject.values.commonName,
-						expected.serviceType,
-						sans
-							.flatMap((entry) => {
-								const parsed = tryParseUriServiceIdentity(entry.value);
-								return parsed === undefined ? [] : [parsed.serviceType];
-							})
-							.join(','),
-					),
-				);
-			}
-			return failure(
-				'subject_alt_name_mismatch',
-				'URI-ID not present in SAN',
-				details(certificate.subject.values.commonName, expected.domainName, ''),
-			);
-		}
-		case 'srv': {
-			if (typeof serviceIdentity.value !== 'string') {
-				return malformedServiceIdentityFailure(certificate, 'srv', serviceIdentity.value);
-			}
-			const expected = tryParseSrvServiceIdentity(serviceIdentity.value);
-			if (expected === undefined) {
-				return malformedServiceIdentityFailure(certificate, 'srv', serviceIdentity.value);
-			}
-			const sans = certificate.subjectAltNames?.filter((entry) => entry.type === 'srv') ?? [];
-			const matchingService = sans.flatMap((entry) => {
-				const parsed = tryParseSrvServiceIdentity(entry.value);
-				if (parsed === undefined || parsed.serviceType !== expected.serviceType) {
-					return [];
-				}
-				return [parsed];
+		case 'srv':
+			return matchScopedServiceIdentity(certificate, serviceIdentity, {
+				parse: tryParseSrvServiceIdentity,
+				sanType: 'srv',
+				missingMessage: 'SRV-ID not present in SAN',
+				serviceMismatchMessage: 'SRV service not present in SAN',
+				domainMismatchMessage: 'SRV domain not present in SAN',
 			});
-			if (matchingService.some((entry) => matchesDnsName(entry.domainName, expected.domainName))) {
-				return success();
-			}
-			if (matchingService.length > 0) {
-				return failure(
-					'subject_alt_name_mismatch',
-					'SRV domain not present in SAN',
-					details(
-						certificate.subject.values.commonName,
-						expected.domainName,
-						matchingService.map((entry) => entry.domainName).join(','),
-					),
-				);
-			}
-			if (sans.length > 0) {
-				return failure(
-					'service_identity_mismatch',
-					'SRV service not present in SAN',
-					details(
-						certificate.subject.values.commonName,
-						expected.serviceType,
-						sans
-							.flatMap((entry) => {
-								const parsed = tryParseSrvServiceIdentity(entry.value);
-								return parsed === undefined ? [] : [parsed.serviceType];
-							})
-							.join(','),
-					),
-				);
-			}
-			return failure(
-				'subject_alt_name_mismatch',
-				'SRV-ID not present in SAN',
-				details(certificate.subject.values.commonName, expected.domainName, ''),
-			);
-		}
 		default: {
 			return failure('unsupported_service_identity_type', 'Unsupported service identity type');
 		}
 	}
+}
+
+/** Matches a DNS service identity against SANs and the explicitly enabled CN fallback. */
+function matchDnsServiceIdentity(
+	certificate: ParsedCertificate,
+	serviceIdentity: DnsServiceIdentityInput,
+): MatchServiceIdentityResult {
+	if (typeof serviceIdentity.value !== 'string') {
+		return malformedServiceIdentityFailure(certificate, 'dns', serviceIdentity.value);
+	}
+	const expected = serviceIdentity.value;
+	const sans = certificate.subjectAltNames?.filter((entry) => entry.type === 'dns') ?? [];
+	if (sans.some((entry) => matchesDnsName(entry.value, expected))) {
+		return success();
+	}
+	return matchDnsFallback(
+		certificate,
+		expected,
+		sans,
+		serviceIdentity.allowCommonNameFallback === true,
+	);
+}
+
+function matchDnsFallback(
+	certificate: ParsedCertificate,
+	expected: string,
+	sans: readonly { readonly value: string }[],
+	allowCommonNameFallback: boolean,
+): MatchServiceIdentityResult {
+	const presentedIdentifierTypes = presentedDnsIdentifierTypes(certificate);
+	if (allowCommonNameFallback && presentedIdentifierTypes.length > 0) {
+		return failure(
+			'common_name_fallback_suppressed',
+			'DNS name not present in SAN; CN fallback suppressed because supported SAN identifiers exist',
+			details(
+				certificate.subject.values.commonName,
+				expected,
+				sans.map((entry) => entry.value).join(','),
+				{
+					presentedIdentifierTypes,
+					commonNameFallbackReason: 'suppressed_by_presented_identifier',
+				},
+			),
+		);
+	}
+	if (sans.length > 0) {
+		return failure(
+			'subject_alt_name_mismatch',
+			'DNS name not present in SAN',
+			details(
+				certificate.subject.values.commonName,
+				expected,
+				sans.map((entry) => entry.value).join(','),
+			),
+		);
+	}
+	if (!allowCommonNameFallback) {
+		return failure(
+			'subject_alt_name_mismatch',
+			'DNS name not present in SAN',
+			details(certificate.subject.values.commonName, expected, '', {
+				commonNameFallbackReason: 'disabled',
+			}),
+		);
+	}
+	return matchCommonNameFallback(certificate, expected);
+}
+
+function matchCommonNameFallback(
+	certificate: ParsedCertificate,
+	expected: string,
+): MatchServiceIdentityResult {
+	const commonName = certificate.subject.values.commonName;
+	if (commonName !== undefined && matchesDnsName(commonName, expected)) {
+		return success();
+	}
+	return failure(
+		'subject_alt_name_mismatch',
+		'DNS name not present in SAN or CN',
+		details(commonName, expected, commonName ?? '', {
+			commonNameFallbackReason:
+				commonName === undefined ? 'common_name_missing' : 'common_name_mismatch',
+		}),
+	);
+}
+
+function matchIpServiceIdentity(
+	certificate: ParsedCertificate,
+	serviceIdentity: IpServiceIdentityInput,
+): MatchServiceIdentityResult {
+	if (typeof serviceIdentity.value !== 'string') {
+		return malformedServiceIdentityFailure(certificate, 'ip', serviceIdentity.value);
+	}
+	const expectedBytes = tryParsePresentedIpAddress(serviceIdentity.value);
+	if (expectedBytes === undefined) {
+		return malformedServiceIdentityFailure(certificate, 'ip', serviceIdentity.value);
+	}
+	return matchParsedIpServiceIdentity(certificate, expectedBytes);
+}
+
+function matchParsedIpServiceIdentity(
+	certificate: ParsedCertificate,
+	expectedBytes: Uint8Array,
+): MatchServiceIdentityResult {
+	const expected = decodeIpAddress(expectedBytes);
+	const sans = certificate.subjectAltNames?.filter((entry) => entry.type === 'ip') ?? [];
+	const presentedAddresses: string[] = [];
+	for (const entry of sans) {
+		const presentedBytes = tryParsePresentedIpAddress(entry.value);
+		if (presentedBytes === undefined) {
+			return failure(
+				'subject_alt_name_mismatch',
+				'IP address SAN is malformed',
+				details(certificate.subject.values.commonName, expected, `ip:${entry.value}`),
+			);
+		}
+		presentedAddresses.push(decodeIpAddress(presentedBytes));
+		if (sameIpAddressBytes(presentedBytes, expectedBytes)) {
+			return success();
+		}
+	}
+	return failure(
+		'subject_alt_name_mismatch',
+		'IP address not present in SAN',
+		details(certificate.subject.values.commonName, expected, presentedAddresses.join(',')),
+	);
+}
+
+interface ScopedServiceIdentityOptions {
+	readonly parse: (value: string) => ServiceScopedIdentity | undefined;
+	readonly sanType: 'uri' | 'srv';
+	readonly missingMessage: string;
+	readonly serviceMismatchMessage: string;
+	readonly domainMismatchMessage: string;
+}
+
+type ScopedSubjectAltName =
+	| Extract<SubjectAltName, { readonly type: 'uri' }>
+	| Extract<SubjectAltName, { readonly type: 'srv' }>;
+
+function matchScopedServiceIdentity(
+	certificate: ParsedCertificate,
+	serviceIdentity: UriServiceIdentityInput | SrvServiceIdentityInput,
+	options: ScopedServiceIdentityOptions,
+): MatchServiceIdentityResult {
+	if (typeof serviceIdentity.value !== 'string') {
+		return malformedServiceIdentityFailure(
+			certificate,
+			serviceIdentity.type,
+			serviceIdentity.value,
+		);
+	}
+	const expected = options.parse(serviceIdentity.value);
+	if (expected === undefined) {
+		return malformedServiceIdentityFailure(
+			certificate,
+			serviceIdentity.type,
+			serviceIdentity.value,
+		);
+	}
+	const sans =
+		certificate.subjectAltNames?.filter((entry) =>
+			isScopedSubjectAltName(entry, options.sanType),
+		) ?? [];
+	const matchingService = sans.flatMap((entry) => {
+		const parsed = options.parse(entry.value);
+		return parsed === undefined || parsed.serviceType !== expected.serviceType ? [] : [parsed];
+	});
+	if (matchingService.some((entry) => matchesDnsName(entry.domainName, expected.domainName))) {
+		return success();
+	}
+	return scopedServiceIdentityFailure(certificate, expected, sans, matchingService, options);
+}
+
+function isScopedSubjectAltName(
+	entry: SubjectAltName,
+	sanType: 'uri' | 'srv',
+): entry is ScopedSubjectAltName {
+	return entry.type === sanType;
+}
+
+function scopedServiceIdentityFailure(
+	certificate: ParsedCertificate,
+	expected: ServiceScopedIdentity,
+	sans: readonly { readonly value: string }[],
+	matchingService: readonly ServiceScopedIdentity[],
+	options: ScopedServiceIdentityOptions,
+): MatchServiceIdentityResult {
+	if (matchingService.length > 0) {
+		return failure(
+			'subject_alt_name_mismatch',
+			options.domainMismatchMessage,
+			details(
+				certificate.subject.values.commonName,
+				expected.domainName,
+				matchingService.map((entry) => entry.domainName).join(','),
+			),
+		);
+	}
+	if (sans.length > 0) {
+		return failure(
+			'service_identity_mismatch',
+			options.serviceMismatchMessage,
+			details(
+				certificate.subject.values.commonName,
+				expected.serviceType,
+				sans.flatMap((entry) => serviceTypeFromSanValue(entry.value, options.parse)).join(','),
+			),
+		);
+	}
+	return failure(
+		'subject_alt_name_mismatch',
+		options.missingMessage,
+		details(certificate.subject.values.commonName, expected.domainName, ''),
+	);
+}
+
+function serviceTypeFromSanValue(
+	value: string,
+	parse: (value: string) => ServiceScopedIdentity | undefined,
+): readonly string[] {
+	const parsed = parse(value);
+	return parsed === undefined ? [] : [parsed.serviceType];
 }
 
 /** Compares a presented DNS identifier (possibly wildcarded) against a reference name. */

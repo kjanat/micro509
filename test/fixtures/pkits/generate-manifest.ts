@@ -16,6 +16,23 @@ interface PkitsCaseRecord {
 	readonly expectedUserConstrainedPolicies?: readonly string[];
 }
 
+interface ParsedPkitsCase {
+	readonly pkitsCase: PkitsCaseRecord;
+	readonly nextLineIndex: number;
+}
+
+interface MutablePkitsCaseRecord {
+	certs: readonly string[];
+	crls: readonly string[];
+	emittedTestNumber: string;
+	shouldValidate?: boolean;
+	initialPolicySet?: readonly string[] | 'any';
+	requireExplicitPolicy?: boolean;
+	inhibitPolicyMapping?: boolean;
+	inhibitAnyPolicy?: boolean;
+	expectedUserConstrainedPolicies?: readonly string[];
+}
+
 const POLICY_NAME_TO_OID = {
 	anyPolicy: '2.5.29.32.0',
 	'NIST-test-policy-1': '2.16.840.1.101.3.2.1.48.1',
@@ -102,105 +119,10 @@ async function main(): Promise<void> {
 	const cases: PkitsCaseRecord[] = [];
 
 	for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
-		const commentLine = lines[lineIndex]?.trim();
-		const commentMatch = commentLine?.match(
-			/^\/\/ (?<testNumber>\d+\.\d+\.\d+(?:\.\d+)?) (?<title>.+?)(?: \(Subpart \d+\))?$/u,
-		);
-		if (commentMatch === null || commentMatch === undefined) {
-			continue;
-		}
-		if (!lines[lineIndex + 1]?.includes('WRAPPED_TYPED_TEST_P(')) {
-			continue;
-		}
-
-		const title = commentMatch.groups?.title;
-		if (title === undefined) {
-			throw new Error(`Malformed PKITS comment line: ${commentLine}`);
-		}
-
-		let certs: readonly string[] = [];
-		let crls: readonly string[] = [];
-		let emittedTestNumber = commentMatch.groups?.testNumber ?? '';
-		let shouldValidate: boolean | undefined;
-		let initialPolicySet: readonly string[] | 'any' | undefined;
-		let requireExplicitPolicy: boolean | undefined;
-		let inhibitPolicyMapping: boolean | undefined;
-		let inhibitAnyPolicy: boolean | undefined;
-		let expectedUserConstrainedPolicies: readonly string[] | undefined;
-
-		for (lineIndex += 2; lineIndex < lines.length; lineIndex += 1) {
-			const line = lines[lineIndex]?.trim();
-			if (line === undefined) {
-				break;
-			}
-			if (line.startsWith('const char* const certs[] = {')) {
-				certs = parseQuotedNames(lines, lineIndex);
-				continue;
-			}
-			if (line.startsWith('const char* const crls[] = {')) {
-				crls = parseQuotedNames(lines, lineIndex);
-				continue;
-			}
-			if (line.startsWith('info.test_number = ')) {
-				emittedTestNumber = line.match(/"([^"]+)"/u)?.[1] ?? emittedTestNumber;
-				continue;
-			}
-			if (line.startsWith('info.should_validate = ')) {
-				shouldValidate = line.includes('true');
-				continue;
-			}
-			if (line.startsWith('info.SetInitialPolicySet(')) {
-				const rawPolicies = line.match(/"([^"]*)"/u)?.[1];
-				if (rawPolicies === undefined) {
-					throw new Error(`Missing policy set on line: ${line}`);
-				}
-				initialPolicySet = mapPolicyNames(rawPolicies);
-				continue;
-			}
-			if (line.startsWith('info.SetInitialExplicitPolicy(')) {
-				requireExplicitPolicy = line.includes('true');
-				continue;
-			}
-			if (line.startsWith('info.SetInitialPolicyMappingInhibit(')) {
-				inhibitPolicyMapping = line.includes('true');
-				continue;
-			}
-			if (line.startsWith('info.SetInitialInhibitAnyPolicy(')) {
-				inhibitAnyPolicy = line.includes('true');
-				continue;
-			}
-			if (line.startsWith('info.SetUserConstrainedPolicySet(')) {
-				const rawPolicies = line.match(/"([^"]*)"/u)?.[1];
-				if (rawPolicies === undefined) {
-					throw new Error(`Missing constrained policy set on line: ${line}`);
-				}
-				const mappedPolicies = mapPolicyNames(rawPolicies);
-				expectedUserConstrainedPolicies =
-					mappedPolicies === 'any' ? ['2.5.29.32.0'] : mappedPolicies;
-				continue;
-			}
-			if (line === 'this->RunTest(certs, crls, info);') {
-				break;
-			}
-		}
-
-		if (shouldValidate === undefined) {
-			throw new Error(`Missing should_validate for PKITS case ${emittedTestNumber}`);
-		}
-
-		cases.push({
-			section: emittedTestNumber.split('.').slice(0, 2).join('.'),
-			testNumber: emittedTestNumber,
-			title,
-			certs,
-			crls,
-			shouldValidate,
-			...(initialPolicySet === undefined ? {} : { initialPolicySet }),
-			...(requireExplicitPolicy === undefined ? {} : { requireExplicitPolicy }),
-			...(inhibitPolicyMapping === undefined ? {} : { inhibitPolicyMapping }),
-			...(inhibitAnyPolicy === undefined ? {} : { inhibitAnyPolicy }),
-			...(expectedUserConstrainedPolicies === undefined ? {} : { expectedUserConstrainedPolicies }),
-		});
+		const parsedCase = parsePkitsCase(lines, lineIndex);
+		if (parsedCase === undefined) continue;
+		cases.push(parsedCase.pkitsCase);
+		lineIndex = parsedCase.nextLineIndex;
 	}
 
 	const manifest = `\
@@ -231,6 +153,116 @@ export const PKITS_CASES = [
 		console.info(`Wrote manifest with ${cases.length} cases to ${manifestPath}`);
 	});
 	await $`bunx dprint fmt --log-level error ${manifestPath}`.cwd(projectRoot);
+}
+
+function parsePkitsCase(lines: readonly string[], lineIndex: number): ParsedPkitsCase | undefined {
+	const commentLine = lines[lineIndex]?.trim();
+	const commentMatch = commentLine?.match(
+		/^\/\/ (?<testNumber>\d+\.\d+\.\d+(?:\.\d+)?) (?<title>.+?)(?: \(Subpart \d+\))?$/u,
+	);
+	if (commentMatch === null || commentMatch === undefined) return undefined;
+	if (!lines[lineIndex + 1]?.includes('WRAPPED_TYPED_TEST_P(')) return undefined;
+	const title = commentMatch.groups?.title;
+	const emittedTestNumber = commentMatch.groups?.testNumber;
+	if (title === undefined || emittedTestNumber === undefined) {
+		throw new Error(`Malformed PKITS comment line: ${commentLine}`);
+	}
+	const record: MutablePkitsCaseRecord = {
+		certs: [],
+		crls: [],
+		emittedTestNumber,
+	};
+	let cursor = lineIndex + 2;
+	for (; cursor < lines.length; cursor += 1) {
+		const line = lines[cursor]?.trim();
+		if (line === undefined || line === 'this->RunTest(certs, crls, info);') break;
+		applyPkitsCaseLine(lines, cursor, line, record);
+	}
+	if (record.shouldValidate === undefined) {
+		throw new Error(`Missing should_validate for PKITS case ${record.emittedTestNumber}`);
+	}
+	return {
+		pkitsCase: buildPkitsCaseRecord(title, record),
+		nextLineIndex: cursor,
+	};
+}
+
+function applyPkitsCaseLine(
+	lines: readonly string[],
+	lineIndex: number,
+	line: string,
+	record: MutablePkitsCaseRecord,
+): void {
+	if (line.startsWith('const char* const certs[] = {')) {
+		record.certs = parseQuotedNames(lines, lineIndex);
+		return;
+	}
+	if (line.startsWith('const char* const crls[] = {')) {
+		record.crls = parseQuotedNames(lines, lineIndex);
+		return;
+	}
+	if (line.startsWith('info.test_number = ')) {
+		record.emittedTestNumber = line.match(/"([^"]+)"/u)?.[1] ?? record.emittedTestNumber;
+		return;
+	}
+	if (line.startsWith('info.should_validate = ')) {
+		record.shouldValidate = line.includes('true');
+		return;
+	}
+	applyPkitsPolicyLine(line, record);
+}
+
+function applyPkitsPolicyLine(line: string, record: MutablePkitsCaseRecord): void {
+	if (line.startsWith('info.SetInitialPolicySet(')) {
+		record.initialPolicySet = mapPolicyNames(readQuotedPolicySet(line, 'policy set'));
+	}
+	if (line.startsWith('info.SetInitialExplicitPolicy(')) {
+		record.requireExplicitPolicy = line.includes('true');
+	}
+	if (line.startsWith('info.SetInitialPolicyMappingInhibit(')) {
+		record.inhibitPolicyMapping = line.includes('true');
+	}
+	if (line.startsWith('info.SetInitialInhibitAnyPolicy(')) {
+		record.inhibitAnyPolicy = line.includes('true');
+	}
+	if (line.startsWith('info.SetUserConstrainedPolicySet(')) {
+		const mappedPolicies = mapPolicyNames(readQuotedPolicySet(line, 'constrained policy set'));
+		record.expectedUserConstrainedPolicies =
+			mappedPolicies === 'any' ? ['2.5.29.32.0'] : mappedPolicies;
+	}
+}
+
+function readQuotedPolicySet(line: string, label: string): string {
+	const rawPolicies = line.match(/"([^"]*)"/u)?.[1];
+	if (rawPolicies === undefined) {
+		throw new Error(`Missing ${label} on line: ${line}`);
+	}
+	return rawPolicies;
+}
+
+function buildPkitsCaseRecord(title: string, record: MutablePkitsCaseRecord): PkitsCaseRecord {
+	if (record.shouldValidate === undefined) {
+		throw new Error(`Missing should_validate for PKITS case ${record.emittedTestNumber}`);
+	}
+	return {
+		section: record.emittedTestNumber.split('.').slice(0, 2).join('.'),
+		testNumber: record.emittedTestNumber,
+		title,
+		certs: record.certs,
+		crls: record.crls,
+		shouldValidate: record.shouldValidate,
+		...(record.initialPolicySet === undefined ? {} : { initialPolicySet: record.initialPolicySet }),
+		...(record.requireExplicitPolicy === undefined
+			? {}
+			: { requireExplicitPolicy: record.requireExplicitPolicy }),
+		...(record.inhibitPolicyMapping === undefined
+			? {}
+			: { inhibitPolicyMapping: record.inhibitPolicyMapping }),
+		...(record.inhibitAnyPolicy === undefined ? {} : { inhibitAnyPolicy: record.inhibitAnyPolicy }),
+		...(record.expectedUserConstrainedPolicies === undefined
+			? {}
+			: { expectedUserConstrainedPolicies: record.expectedUserConstrainedPolicies }),
+	};
 }
 
 if (import.meta.main) await main();

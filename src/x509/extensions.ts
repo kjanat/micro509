@@ -767,7 +767,20 @@ function appendConfiguredExtensions(
 	if (input === undefined) {
 		return;
 	}
-	if (options.includeBasicConstraints && input.basicConstraints !== undefined) {
+	appendConstraintExtensions(encoded, seen, input, options.includeBasicConstraints);
+	appendIdentityExtensions(encoded, seen, input, options.subjectIsEmpty === true);
+	appendPolicyExtensions(encoded, seen, input);
+	appendAccessExtensions(encoded, seen, input);
+	appendCustomExtensions(encoded, seen, input, context);
+}
+
+function appendConstraintExtensions(
+	encoded: Uint8Array[],
+	seen: Set<string>,
+	input: CertificateExtensionsInput,
+	includeBasicConstraints: boolean,
+): void {
+	if (includeBasicConstraints && input.basicConstraints !== undefined) {
 		pushKnownExtension(
 			encoded,
 			seen,
@@ -778,9 +791,20 @@ function appendConfiguredExtensions(
 	if (input.keyUsage !== undefined && input.keyUsage.length > 0) {
 		pushKnownExtension(encoded, seen, KEY_USAGE_EXTENSION_DEFINITION, input.keyUsage);
 	}
+	if (input.nameConstraints !== undefined) {
+		pushKnownExtension(encoded, seen, NAME_CONSTRAINTS_EXTENSION_DEFINITION, input.nameConstraints);
+	}
+}
+
+function appendIdentityExtensions(
+	encoded: Uint8Array[],
+	seen: Set<string>,
+	input: CertificateExtensionsInput,
+	subjectIsEmpty: boolean,
+): void {
 	if (input.subjectAltNames !== undefined && input.subjectAltNames.length > 0) {
 		// RFC 5280 §4.2.1.6: SAN MUST be critical when subject DN is empty.
-		const sanCritical = options.subjectIsEmpty === true ? true : undefined;
+		const sanCritical = subjectIsEmpty ? true : undefined;
 		pushKnownExtension(
 			encoded,
 			seen,
@@ -797,9 +821,14 @@ function appendConfiguredExtensions(
 			input.extendedKeyUsage,
 		);
 	}
-	if (input.nameConstraints !== undefined) {
-		pushKnownExtension(encoded, seen, NAME_CONSTRAINTS_EXTENSION_DEFINITION, input.nameConstraints);
-	}
+}
+
+/** Appends configured certificate-policy extensions while enforcing unique OIDs. */
+function appendPolicyExtensions(
+	encoded: Uint8Array[],
+	seen: Set<string>,
+	input: CertificateExtensionsInput,
+): void {
 	if (input.certificatePolicies !== undefined && input.certificatePolicies.length > 0) {
 		pushKnownExtension(
 			encoded,
@@ -827,6 +856,13 @@ function appendConfiguredExtensions(
 			input.inhibitAnyPolicy,
 		);
 	}
+}
+
+function appendAccessExtensions(
+	encoded: Uint8Array[],
+	seen: Set<string>,
+	input: CertificateExtensionsInput,
+): void {
 	if (input.authorityInfoAccess !== undefined && input.authorityInfoAccess.length > 0) {
 		pushKnownExtension(
 			encoded,
@@ -843,6 +879,14 @@ function appendConfiguredExtensions(
 			input.crlDistributionPoints,
 		);
 	}
+}
+
+function appendCustomExtensions(
+	encoded: Uint8Array[],
+	seen: Set<string>,
+	input: CertificateExtensionsInput,
+	context: ExtensionRegistryContext,
+): void {
 	if (input.customExtensions !== undefined) {
 		for (const extension of input.customExtensions) {
 			const knownDefinition = getExtensionDefinition(extension.oid);

@@ -116,6 +116,17 @@ interface ParsedMaskGenAlgorithm {
 	readonly hashOid?: string;
 }
 
+interface MutableRsaPssParameterState {
+	hashOid: string;
+	maskGenAlgorithm: ParsedMaskGenAlgorithm;
+	saltLength: number;
+	trailerField: number;
+	sawHash: boolean;
+	sawMaskGen: boolean;
+	sawSaltLength: boolean;
+	sawTrailerField: boolean;
+}
+
 /** RFC 3447 default salt length when hash is SHA-1 (used to detect the unsupported default). */
 const SHA1_SALT_LENGTH = 20;
 
@@ -181,98 +192,8 @@ export function parseRsaPssParameters(
 		if (element.tag !== 0x30) {
 			throw new Error('RSA-PSS parameters must be a SEQUENCE');
 		}
-		const children = childrenOf(parametersDer, element);
-		let hashOid: string = OIDS.sha1;
-		let maskGenAlgorithm: ParsedMaskGenAlgorithm = {
-			oid: OIDS.mgf1,
-			hashOid: OIDS.sha1,
-		};
-		let saltLength = SHA1_SALT_LENGTH;
-		let trailerField = 1;
-		let sawHash = false;
-		let sawMaskGen = false;
-		let sawSaltLength = false;
-		let sawTrailerField = false;
-
-		for (const child of children) {
-			switch (child.tag) {
-				case 0xa0:
-					if (sawHash) {
-						throw new Error('RSA-PSS parameters contain duplicate hashAlgorithm');
-					}
-					hashOid = parseHashAlgorithmIdentifier(
-						parametersDer,
-						requireSingleExplicitChild(parametersDer, child, 'hashAlgorithm'),
-						'hashAlgorithm',
-					);
-					sawHash = true;
-					break;
-				case 0xa1:
-					if (sawMaskGen) {
-						throw new Error('RSA-PSS parameters contain duplicate maskGenAlgorithm');
-					}
-					maskGenAlgorithm = parseMaskGenAlgorithmIdentifier(
-						parametersDer,
-						requireSingleExplicitChild(parametersDer, child, 'maskGenAlgorithm'),
-					);
-					sawMaskGen = true;
-					break;
-				case 0xa2:
-					if (sawSaltLength) {
-						throw new Error('RSA-PSS parameters contain duplicate saltLength');
-					}
-					saltLength = parseExplicitInteger(
-						parametersDer,
-						child,
-						'saltLength',
-						'RSA-PSS saltLength',
-					);
-					sawSaltLength = true;
-					break;
-				case 0xa3:
-					if (sawTrailerField) {
-						throw new Error('RSA-PSS parameters contain duplicate trailerField');
-					}
-					trailerField = parseExplicitInteger(
-						parametersDer,
-						child,
-						'trailerField',
-						'RSA-PSS trailerField',
-					);
-					sawTrailerField = true;
-					break;
-				default:
-					throw new Error(
-						`RSA-PSS parameters contain unexpected field tag 0x${child.tag.toString(16)}`,
-					);
-			}
-		}
-
-		const supportedHash = hashNameFromOid(hashOid);
-		if (supportedHash === undefined) {
-			if (hashOid === OIDS.sha1) {
-				return unsupportedResult('default_hash_sha1');
-			}
-			return unsupportedResult('unsupported_hash');
-		}
-		if (maskGenAlgorithm.oid !== OIDS.mgf1) {
-			return unsupportedResult('unsupported_mgf_algorithm');
-		}
-		const mgfHash = hashNameFromOid(maskGenAlgorithm.hashOid);
-		if (mgfHash === undefined) {
-			return unsupportedResult('unsupported_mgf_hash');
-		}
-		if (mgfHash !== supportedHash) {
-			return unsupportedResult('mgf_hash_mismatch');
-		}
-		const supported = rsaPssParametersForHash(supportedHash);
-		if (saltLength !== supported.saltLength) {
-			return unsupportedResult('unsupported_salt_length');
-		}
-		if (trailerField !== 1) {
-			return unsupportedResult('unsupported_trailer_field');
-		}
-		return { ok: true, value: supported };
+		const state = parseRsaPssParameterFields(parametersDer, element);
+		return validateRsaPssParameterProfile(state);
 	} catch (error) {
 		return {
 			ok: false,
@@ -280,6 +201,110 @@ export function parseRsaPssParameters(
 			reason: error instanceof Error ? error.message : 'Malformed RSA-PSS parameters',
 		};
 	}
+}
+
+/** Parses the optional context-specific RSA-PSS fields into their defaulted state. */
+function parseRsaPssParameterFields(
+	parametersDer: Uint8Array,
+	element: ReturnType<typeof readRootElement>,
+): MutableRsaPssParameterState {
+	const state: MutableRsaPssParameterState = {
+		hashOid: OIDS.sha1,
+		maskGenAlgorithm: { oid: OIDS.mgf1, hashOid: OIDS.sha1 },
+		saltLength: SHA1_SALT_LENGTH,
+		trailerField: 1,
+		sawHash: false,
+		sawMaskGen: false,
+		sawSaltLength: false,
+		sawTrailerField: false,
+	};
+	for (const child of childrenOf(parametersDer, element)) {
+		parseRsaPssParameterField(parametersDer, child, state);
+	}
+	return state;
+}
+
+function parseRsaPssParameterField(
+	parametersDer: Uint8Array,
+	child: ReturnType<typeof readRootElement>,
+	state: MutableRsaPssParameterState,
+): void {
+	switch (child.tag) {
+		case 0xa0:
+			if (state.sawHash) throw new Error('RSA-PSS parameters contain duplicate hashAlgorithm');
+			state.hashOid = parseHashAlgorithmIdentifier(
+				parametersDer,
+				requireSingleExplicitChild(parametersDer, child, 'hashAlgorithm'),
+				'hashAlgorithm',
+			);
+			state.sawHash = true;
+			return;
+		case 0xa1:
+			if (state.sawMaskGen)
+				throw new Error('RSA-PSS parameters contain duplicate maskGenAlgorithm');
+			state.maskGenAlgorithm = parseMaskGenAlgorithmIdentifier(
+				parametersDer,
+				requireSingleExplicitChild(parametersDer, child, 'maskGenAlgorithm'),
+			);
+			state.sawMaskGen = true;
+			return;
+		case 0xa2:
+			state.saltLength = parseUniqueRsaPssIntegerField(
+				parametersDer,
+				child,
+				state.sawSaltLength,
+				'saltLength',
+				'RSA-PSS saltLength',
+			);
+			state.sawSaltLength = true;
+			return;
+		case 0xa3:
+			state.trailerField = parseUniqueRsaPssIntegerField(
+				parametersDer,
+				child,
+				state.sawTrailerField,
+				'trailerField',
+				'RSA-PSS trailerField',
+			);
+			state.sawTrailerField = true;
+			return;
+		default:
+			throw new Error(
+				`RSA-PSS parameters contain unexpected field tag 0x${child.tag.toString(16)}`,
+			);
+	}
+}
+
+function parseUniqueRsaPssIntegerField(
+	parametersDer: Uint8Array,
+	child: ReturnType<typeof readRootElement>,
+	alreadySeen: boolean,
+	fieldName: string,
+	integerLabel: string,
+): number {
+	if (alreadySeen) throw new Error(`RSA-PSS parameters contain duplicate ${fieldName}`);
+	return parseExplicitInteger(parametersDer, child, fieldName, integerLabel);
+}
+
+function validateRsaPssParameterProfile(
+	state: MutableRsaPssParameterState,
+): ParsedRsaPssParametersResult {
+	const supportedHash = hashNameFromOid(state.hashOid);
+	if (supportedHash === undefined) {
+		return state.hashOid === OIDS.sha1
+			? unsupportedResult('default_hash_sha1')
+			: unsupportedResult('unsupported_hash');
+	}
+	if (state.maskGenAlgorithm.oid !== OIDS.mgf1)
+		return unsupportedResult('unsupported_mgf_algorithm');
+	const mgfHash = hashNameFromOid(state.maskGenAlgorithm.hashOid);
+	if (mgfHash === undefined) return unsupportedResult('unsupported_mgf_hash');
+	if (mgfHash !== supportedHash) return unsupportedResult('mgf_hash_mismatch');
+	const supported = rsaPssParametersForHash(supportedHash);
+	if (state.saltLength !== supported.saltLength)
+		return unsupportedResult('unsupported_salt_length');
+	if (state.trailerField !== 1) return unsupportedResult('unsupported_trailer_field');
+	return { ok: true, value: supported };
 }
 
 /** Unwrap an explicit context tag and assert it contains exactly one child element. */

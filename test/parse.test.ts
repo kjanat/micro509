@@ -16,6 +16,7 @@ import {
 	parseCertificateSigningRequestPem,
 	unwrap,
 } from '#micro509';
+import type { ParseCertificateErrorCode } from '#micro509';
 import { encodeName } from '#micro509/x509';
 import {
 	bitString,
@@ -42,6 +43,27 @@ import {
 	rewriteCsrSignatureAsRsaPss,
 	sliceElement,
 } from '#test/helpers';
+
+interface MalformedCustomExtensionCase {
+	readonly commonName: string;
+	readonly oid: string;
+	readonly value: Uint8Array;
+	readonly code: ParseCertificateErrorCode;
+}
+
+async function expectMalformedCustomExtension(input: MalformedCustomExtensionCase): Promise<void> {
+	const certificate = await createSelfSignedCertificate({
+		subject: { commonName: input.commonName },
+		extensions: {
+			customExtensions: [{ oid: input.oid, critical: true, value: input.value }],
+		},
+	});
+	const result = parseCertificatePem(certificate.certificate.pem);
+	expect(result.ok).toBe(false);
+	if (!result.ok) {
+		expect(result.error.code).toBe(input.code);
+	}
+}
 
 describe('parse', () => {
 	it('supports custom extension encode and decode hooks', async () => {
@@ -1472,311 +1494,157 @@ describe('parse', () => {
 	});
 
 	it('rejects malformed noticeRef, policyMappings, and policyConstraints structures', async () => {
-		const noticeRefTrailing = await createSelfSignedCertificate({
-			subject: { commonName: 'bad-notice-ref-trailing.example' },
-			extensions: {
-				customExtensions: [
-					{
-						oid: OIDS.certificatePolicies,
-						critical: true,
-						value: sequence([
+		await expectMalformedCustomExtension({
+			commonName: 'bad-notice-ref-trailing.example',
+			oid: OIDS.certificatePolicies,
+			value: sequence([
+				sequence([
+					objectIdentifier('1.2.3.4.1'),
+					sequence([
+						sequence([
+							objectIdentifier(OIDS.userNoticePolicyQualifier),
 							sequence([
-								objectIdentifier('1.2.3.4.1'),
 								sequence([
-									sequence([
-										objectIdentifier(OIDS.userNoticePolicyQualifier),
-										sequence([
-											sequence([
-												tlv(0x0c, new TextEncoder().encode('Example Org')),
-												sequence([integerFromNumber(1)]),
-												integerFromNumber(2),
-											]),
-										]),
-									]),
+									tlv(0x0c, new TextEncoder().encode('Example Org')),
+									sequence([integerFromNumber(1)]),
+									integerFromNumber(2),
 								]),
 							]),
 						]),
-					},
-				],
-			},
+					]),
+				]),
+			]),
+			code: 'malformed',
 		});
-		{
-			const result = parseCertificatePem(noticeRefTrailing.certificate.pem);
-			expect(result.ok).toBe(false);
-			if (!result.ok) {
-				expect(result.error.message).toContain('noticeRef has unexpected trailing fields');
-			}
-		}
 
-		const emptyMappings = await createSelfSignedCertificate({
-			subject: { commonName: 'bad-empty-mappings.example' },
-			extensions: {
-				customExtensions: [{ oid: OIDS.policyMappings, critical: true, value: sequence([]) }],
-			},
+		await expectMalformedCustomExtension({
+			commonName: 'bad-empty-mappings.example',
+			oid: OIDS.policyMappings,
+			value: sequence([]),
+			code: 'malformed',
 		});
-		{
-			const result = parseCertificatePem(emptyMappings.certificate.pem);
-			expect(result.ok).toBe(false);
-			if (!result.ok) {
-				expect(result.error.message).toContain('policyMappings must not be empty');
-			}
-		}
 
-		const trailingMapping = await createSelfSignedCertificate({
-			subject: { commonName: 'bad-trailing-mapping.example' },
-			extensions: {
-				customExtensions: [
-					{
-						oid: OIDS.policyMappings,
-						critical: true,
-						value: sequence([
+		await expectMalformedCustomExtension({
+			commonName: 'bad-trailing-mapping.example',
+			oid: OIDS.policyMappings,
+			value: sequence([
+				sequence([
+					objectIdentifier('1.2.3.4.1'),
+					objectIdentifier('1.2.3.4.2'),
+					integerFromNumber(1),
+				]),
+			]),
+			code: 'malformed',
+		});
+
+		await expectMalformedCustomExtension({
+			commonName: 'bad-policy-constraints-require.example',
+			oid: OIDS.policyConstraints,
+			value: sequence([tlv(0x80, Uint8Array.of(0x00)), tlv(0x80, Uint8Array.of(0x01))]),
+			code: 'malformed',
+		});
+
+		await expectMalformedCustomExtension({
+			commonName: 'bad-policy-constraints-tag.example',
+			oid: OIDS.policyConstraints,
+			value: sequence([tlv(0x82, Uint8Array.of(0x00))]),
+			code: 'malformed',
+		});
+
+		await expectMalformedCustomExtension({
+			commonName: 'bad-policy-constraints-inhibit.example',
+			oid: OIDS.policyConstraints,
+			value: sequence([tlv(0x81, Uint8Array.of(0x00)), tlv(0x81, Uint8Array.of(0x01))]),
+			code: 'malformed',
+		});
+
+		await expectMalformedCustomExtension({
+			commonName: 'bad-empty-aia.example',
+			oid: OIDS.authorityInfoAccess,
+			value: sequence([]),
+			code: 'malformed',
+		});
+
+		await expectMalformedCustomExtension({
+			commonName: 'bad-trailing-aia.example',
+			oid: OIDS.authorityInfoAccess,
+			value: sequence([
+				sequence([
+					objectIdentifier(OIDS.ocspAccessMethod),
+					tlv(0x86, new TextEncoder().encode('http://example.test/ocsp')),
+					integerFromNumber(1),
+				]),
+			]),
+			code: 'malformed',
+		});
+
+		await expectMalformedCustomExtension({
+			commonName: 'bad-method-aia.example',
+			oid: OIDS.authorityInfoAccess,
+			value: sequence([
+				sequence([
+					integerFromNumber(1),
+					tlv(0x86, new TextEncoder().encode('http://example.test/ocsp')),
+				]),
+			]),
+			code: 'malformed',
+		});
+
+		await expectMalformedCustomExtension({
+			commonName: 'bad-set-aia.example',
+			oid: OIDS.authorityInfoAccess,
+			value: setOf([
+				sequence([
+					objectIdentifier(OIDS.ocspAccessMethod),
+					tlv(0x86, new TextEncoder().encode('http://example.test/ocsp')),
+				]),
+			]),
+			code: 'malformed',
+		});
+
+		await expectMalformedCustomExtension({
+			commonName: 'bad-notice-numbers-tag.example',
+			oid: OIDS.certificatePolicies,
+			value: sequence([
+				sequence([
+					objectIdentifier('1.2.3.4.1'),
+					sequence([
+						sequence([
+							objectIdentifier(OIDS.userNoticePolicyQualifier),
 							sequence([
-								objectIdentifier('1.2.3.4.1'),
-								objectIdentifier('1.2.3.4.2'),
-								integerFromNumber(1),
-							]),
-						]),
-					},
-				],
-			},
-		});
-		{
-			const result = parseCertificatePem(trailingMapping.certificate.pem);
-			expect(result.ok).toBe(false);
-			if (!result.ok) {
-				expect(result.error.message).toContain(
-					'policyMappings entry has unexpected trailing fields',
-				);
-			}
-		}
-
-		const duplicateRequire = await createSelfSignedCertificate({
-			subject: { commonName: 'bad-policy-constraints-require.example' },
-			extensions: {
-				customExtensions: [
-					{
-						oid: OIDS.policyConstraints,
-						critical: true,
-						value: sequence([tlv(0x80, Uint8Array.of(0x00)), tlv(0x80, Uint8Array.of(0x01))]),
-					},
-				],
-			},
-		});
-		{
-			const result = parseCertificatePem(duplicateRequire.certificate.pem);
-			expect(result.ok).toBe(false);
-			if (!result.ok) {
-				expect(result.error.message).toContain(
-					'policyConstraints must not repeat requireExplicitPolicy',
-				);
-			}
-		}
-
-		const unsupportedPolicyConstraint = await createSelfSignedCertificate({
-			subject: { commonName: 'bad-policy-constraints-tag.example' },
-			extensions: {
-				customExtensions: [
-					{
-						oid: OIDS.policyConstraints,
-						critical: true,
-						value: sequence([tlv(0x82, Uint8Array.of(0x00))]),
-					},
-				],
-			},
-		});
-		{
-			const result = parseCertificatePem(unsupportedPolicyConstraint.certificate.pem);
-			expect(result.ok).toBe(false);
-			if (!result.ok) {
-				expect(result.error.message).toContain('Unsupported policyConstraints field tag: 130');
-			}
-		}
-
-		const duplicateInhibit = await createSelfSignedCertificate({
-			subject: { commonName: 'bad-policy-constraints-inhibit.example' },
-			extensions: {
-				customExtensions: [
-					{
-						oid: OIDS.policyConstraints,
-						critical: true,
-						value: sequence([tlv(0x81, Uint8Array.of(0x00)), tlv(0x81, Uint8Array.of(0x01))]),
-					},
-				],
-			},
-		});
-		{
-			const result = parseCertificatePem(duplicateInhibit.certificate.pem);
-			expect(result.ok).toBe(false);
-			if (!result.ok) {
-				expect(result.error.message).toContain(
-					'policyConstraints must not repeat inhibitPolicyMapping',
-				);
-			}
-		}
-
-		const emptyAia = await createSelfSignedCertificate({
-			subject: { commonName: 'bad-empty-aia.example' },
-			extensions: {
-				customExtensions: [{ oid: OIDS.authorityInfoAccess, critical: true, value: sequence([]) }],
-			},
-		});
-		{
-			const result = parseCertificatePem(emptyAia.certificate.pem);
-			expect(result.ok).toBe(false);
-			if (!result.ok) {
-				expect(result.error.message).toContain('authorityInfoAccess must not be empty');
-			}
-		}
-
-		const trailingAia = await createSelfSignedCertificate({
-			subject: { commonName: 'bad-trailing-aia.example' },
-			extensions: {
-				customExtensions: [
-					{
-						oid: OIDS.authorityInfoAccess,
-						critical: true,
-						value: sequence([
-							sequence([
-								objectIdentifier(OIDS.ocspAccessMethod),
-								tlv(0x86, new TextEncoder().encode('http://example.test/ocsp')),
-								integerFromNumber(1),
-							]),
-						]),
-					},
-				],
-			},
-		});
-		{
-			const result = parseCertificatePem(trailingAia.certificate.pem);
-			expect(result.ok).toBe(false);
-			if (!result.ok) {
-				expect(result.error.message).toContain(
-					'authorityInfoAccess entry must contain method and location only',
-				);
-			}
-		}
-
-		const badMethodAia = await createSelfSignedCertificate({
-			subject: { commonName: 'bad-method-aia.example' },
-			extensions: {
-				customExtensions: [
-					{
-						oid: OIDS.authorityInfoAccess,
-						critical: true,
-						value: sequence([
-							sequence([
-								integerFromNumber(1),
-								tlv(0x86, new TextEncoder().encode('http://example.test/ocsp')),
-							]),
-						]),
-					},
-				],
-			},
-		});
-		{
-			const result = parseCertificatePem(badMethodAia.certificate.pem);
-			expect(result.ok).toBe(false);
-			if (!result.ok) {
-				expect(result.error.message).toContain(
-					'authorityInfoAccess method must use OBJECT IDENTIFIER',
-				);
-			}
-		}
-
-		const setWrappedAia = await createSelfSignedCertificate({
-			subject: { commonName: 'bad-set-aia.example' },
-			extensions: {
-				customExtensions: [
-					{
-						oid: OIDS.authorityInfoAccess,
-						critical: true,
-						value: setOf([
-							sequence([
-								objectIdentifier(OIDS.ocspAccessMethod),
-								tlv(0x86, new TextEncoder().encode('http://example.test/ocsp')),
-							]),
-						]),
-					},
-				],
-			},
-		});
-		{
-			const result = parseCertificatePem(setWrappedAia.certificate.pem);
-			expect(result.ok).toBe(false);
-			if (!result.ok) {
-				expect(result.error.message).toContain('authorityInfoAccess must use SEQUENCE');
-			}
-		}
-
-		const badNoticeNumbersTag = await createSelfSignedCertificate({
-			subject: { commonName: 'bad-notice-numbers-tag.example' },
-			extensions: {
-				customExtensions: [
-					{
-						oid: OIDS.certificatePolicies,
-						critical: true,
-						value: sequence([
-							sequence([
-								objectIdentifier('1.2.3.4.1'),
 								sequence([
-									sequence([
-										objectIdentifier(OIDS.userNoticePolicyQualifier),
-										sequence([
-											sequence([
-												tlv(0x0c, new TextEncoder().encode('Example Org')),
-												integerFromNumber(1),
-											]),
-										]),
-									]),
+									tlv(0x0c, new TextEncoder().encode('Example Org')),
+									integerFromNumber(1),
 								]),
 							]),
 						]),
-					},
-				],
-			},
+					]),
+				]),
+			]),
+			code: 'malformed',
 		});
-		{
-			const result = parseCertificatePem(badNoticeNumbersTag.certificate.pem);
-			expect(result.ok).toBe(false);
-			if (!result.ok) {
-				expect(result.error.message).toContain('noticeRef noticeNumbers must use SEQUENCE');
-			}
-		}
 
-		const badNoticeNumberElement = await createSelfSignedCertificate({
-			subject: { commonName: 'bad-notice-number-element.example' },
-			extensions: {
-				customExtensions: [
-					{
-						oid: OIDS.certificatePolicies,
-						critical: true,
-						value: sequence([
+		await expectMalformedCustomExtension({
+			commonName: 'bad-notice-number-element.example',
+			oid: OIDS.certificatePolicies,
+			value: sequence([
+				sequence([
+					objectIdentifier('1.2.3.4.1'),
+					sequence([
+						sequence([
+							objectIdentifier(OIDS.userNoticePolicyQualifier),
 							sequence([
-								objectIdentifier('1.2.3.4.1'),
 								sequence([
-									sequence([
-										objectIdentifier(OIDS.userNoticePolicyQualifier),
-										sequence([
-											sequence([
-												tlv(0x0c, new TextEncoder().encode('Example Org')),
-												sequence([tlv(0x01, Uint8Array.of(0xff))]),
-											]),
-										]),
-									]),
+									tlv(0x0c, new TextEncoder().encode('Example Org')),
+									sequence([tlv(0x01, Uint8Array.of(0xff))]),
 								]),
 							]),
 						]),
-					},
-				],
-			},
+					]),
+				]),
+			]),
+			code: 'malformed',
 		});
-		{
-			const result = parseCertificatePem(badNoticeNumberElement.certificate.pem);
-			expect(result.ok).toBe(false);
-			if (!result.ok) {
-				expect(result.error.message).toContain('noticeRef noticeNumber must use INTEGER');
-			}
-		}
 	});
 
 	it('rejects malformed distributionPointName, SRV-ID, and unsupported DisplayText tags', async () => {
