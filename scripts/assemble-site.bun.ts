@@ -35,8 +35,12 @@ const buildOutput = path.join(siteDir, 'dist');
 const args = process.argv.slice(2);
 const offline = args.includes('--offline');
 const outDir = path.resolve(root, argValue('--out') ?? 'site/.vitepress/dist');
-const keepMinors = Number(argValue('--keep') ?? '2');
-if (!Number.isInteger(keepMinors) || keepMinors < 0) {
+// Every archived minor is served by default; --keep N caps it if the
+// 20k-file Workers assets ceiling ever forces a choice (the guardrail at the
+// bottom fails the build loudly before that happens silently).
+const keepFlag = argValue('--keep');
+const keepMinors = keepFlag === undefined ? Number.POSITIVE_INFINITY : Number(keepFlag);
+if (keepFlag !== undefined && (!Number.isInteger(keepMinors) || keepMinors < 0)) {
 	console.error(`--keep must be a non-negative integer`);
 	process.exit(1);
 }
@@ -139,9 +143,11 @@ async function fetchDocsReleases(): Promise<readonly DocsRelease[]> {
 			if (release.draft || release.prerelease) return [];
 			const version = parseStableVersion(release.tag_name);
 			if (version === undefined) return [];
-			const rootAsset = release.assets.find((asset) => asset.name === 'docs-root.tar.gz');
+			const rootAsset = release.assets.find(
+				(asset) => asset.name === `docs-${release.tag_name}-root.tar.gz`,
+			);
 			if (rootAsset === undefined) return [];
-			const archiveName = `docs-v${version[0]}.${version[1]}.tar.gz`;
+			const archiveName = `docs-v${version[0]}.${version[1]}-archive.tar.gz`;
 			const archiveAsset = release.assets.find((asset) => asset.name === archiveName);
 			return [
 				{
