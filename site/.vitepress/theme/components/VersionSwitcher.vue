@@ -22,7 +22,8 @@ interface VersionEntry {
 
 interface VersionsManifest {
   readonly schemaVersion: number;
-  readonly latest: VersionEntry | null;
+  /** The root site — a release build, or the HEAD bootstrap. Always present. */
+  readonly latest: VersionEntry;
   readonly next: VersionEntry;
   readonly archived: readonly VersionEntry[];
 }
@@ -41,9 +42,7 @@ const label = computed(() => {
 const entries = computed<readonly VersionEntry[]>(() => {
   if (manifest.value === undefined) return [];
   return [
-    ...(manifest.value.latest === null
-      ? []
-      : [manifest.value.latest]),
+    manifest.value.latest,
     manifest.value.next,
     ...manifest.value.archived,
   ];

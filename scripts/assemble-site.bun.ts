@@ -259,11 +259,16 @@ if (latest !== undefined) {
 await cp(nextBuild, path.join(outDir, 'next'), { recursive: true });
 await rm(path.dirname(nextBuild), { recursive: true, force: true });
 
+// The root always exists (release build or HEAD bootstrap), so `latest` is
+// always present — every channel's switcher must offer the way back to root
+// and show which version it is.
 const manifest = {
 	schemaVersion: 1,
 	generatedAt: new Date().toISOString(),
 	latest:
-		latest === undefined ? null : { label: latest.tag, version: latest.tag.slice(1), base: '/' },
+		latest === undefined
+			? { label: `v${pkg.version}`, version: pkg.version, base: '/' }
+			: { label: latest.tag, version: latest.tag.slice(1), base: '/' },
 	next: { label: 'next', commit: headCommit(), base: '/next/' },
 	archived,
 };
@@ -272,7 +277,7 @@ await writeFile(path.join(outDir, 'versions.json'), `${JSON.stringify(manifest, 
 // 6. Guardrail against the 20k-file Workers assets ceiling.
 const totalFiles = await countFiles(outDir);
 console.log(
-	`assembled ${totalFiles} files: root=${manifest.latest?.label ?? `HEAD (v${pkg.version})`}, next=${manifest.next.commit}, archived=[${archived.map((entry) => entry.label).join(', ')}]`,
+	`assembled ${totalFiles} files: root=${manifest.latest.label}${latest === undefined ? ' (HEAD bootstrap)' : ''}, next=${manifest.next.commit}, archived=[${archived.map((entry) => entry.label).join(', ')}]`,
 );
 if (totalFiles > 19_500) {
 	console.error(`file count ${totalFiles} exceeds the Workers assets safety ceiling (19500)`);
