@@ -5,7 +5,13 @@ import { cp } from 'node:fs/promises';
 import { dirname, extname, join, normalize, resolve, sep } from 'node:path';
 import robotsTxt from 'vite-robots-txt';
 import svgToIco from 'vite-svg-to-ico';
-import { defineConfig, type Plugin } from 'vitepress';
+import { type DefaultTheme, defineConfigWithTheme, type HeadConfig, type Plugin } from 'vitepress';
+
+/** DefaultTheme config plus the channel fields read by VersionSwitcher.vue. */
+interface DocsThemeConfig extends DefaultTheme.Config {
+	readonly docsChannel: string;
+	readonly docsVersion: string;
+}
 
 import jsr from '../../jsr.json' with { type: 'json' };
 import pkg from '../../package.json' with { type: 'json' };
@@ -34,6 +40,26 @@ const resolveGit = (names: readonly string[], fallback: () => string): string =>
 	throw new Error(`Cannot resolve git info: no env (${names.join(', ')}) and local git failed.`);
 };
 
+// ── Docs channel ──────────────────────────────────────────────────────────
+//
+// One site build = one channel flavor. The assembly script
+// (scripts/assemble-site.bun.ts) composes flavors into the deployed tree:
+// root '/' = latest stable npm release, '/next/' = master canary,
+// '/vX.Y/' = archived minors.
+
+/** URL prefix this build is served under: '/', '/next/', or '/vX.Y/'. */
+const docsBase = process.env.DOCS_BASE ?? '/';
+/** Which channel this build represents; non-latest builds get noindex. */
+const docsChannel = process.env.DOCS_CHANNEL ?? 'latest';
+/** Display label for the navbar version switcher. */
+const docsVersion = process.env.DOCS_VERSION ?? `v${pkg.version}`;
+if (!/^\/(?:[\w.-]+\/)?$/.test(docsBase)) {
+	throw new Error(`DOCS_BASE must be '/' or '/<segment>/', got: ${docsBase}`);
+}
+if (docsChannel !== 'latest' && docsChannel !== 'next' && docsChannel !== 'archive') {
+	throw new Error(`DOCS_CHANNEL must be latest|next|archive, got: ${docsChannel}`);
+}
+
 /** Git info for edit links. */
 const gitEnv = {
 	/** Branch name for edit links. */
@@ -59,7 +85,9 @@ const gitEnv = {
 
 const repoRoot = resolve(import.meta.dirname, '../..');
 const distDir = join(repoRoot, 'dist');
-const vendorBase = `/vendor/${pkg.name}`;
+// docsBase ends in '/'; raw head URLs and the import map are NOT base-rewritten
+// by VitePress, so the channel prefix must be baked in here.
+const vendorBase = `${docsBase}vendor/${pkg.name}`;
 
 /** Build the library so dist/ matches the checked-out sources. */
 function buildLibrary(): void {
@@ -140,7 +168,11 @@ generateApiDocs();
 // dist/ compiled from the checked-out sources (fast: ~300ms incremental).
 buildLibrary();
 
-export default defineConfig({
+/** Only the latest-release channel is indexable; /next/ and /vX.Y/ are not. */
+const noindexHead: HeadConfig[] =
+	docsChannel === 'latest' ? [] : [['meta', { name: 'robots', content: 'noindex' }]];
+
+export default defineConfigWithTheme<DocsThemeConfig>({
 	vite: {
 		build: { chunkSizeWarningLimit: 1500 },
 		plugins: [
@@ -159,10 +191,10 @@ export default defineConfig({
 	},
 	title: pkg.name,
 	description: pkg.description,
-	base: '/',
+	base: docsBase,
 	cleanUrls: true,
 	lastUpdated: true,
-	sitemap: { hostname: pkg.homepage },
+	sitemap: { hostname: pkg.homepage + docsBase },
 
 	srcDir: '../',
 	rewrites: { 'site/:path*': ':path*' },
@@ -214,15 +246,17 @@ export default defineConfig({
 
 	head: /* biome-ignore format: X */ [
 		['meta', { name: 'theme-color', content: '#3c8772' }],
-		['link', { rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml' }],
+		['link', { rel: 'icon', href: `${docsBase}favicon.svg`, type: 'image/svg+xml' }],
 		['meta', { property: 'og:type', content: 'website' }],
 		['meta', { property: 'og:title', content: pkg.name }],
 		['meta', { property: 'og:description', content: pkg.description }],
-		['meta', { property: 'og:url', content: pkg.homepage }],
+		['meta', { property: 'og:url', content: pkg.homepage + docsBase }],
 		['meta', { property: 'og:image', content: `${pkg.homepage}/icon.svg` }],
 		['meta', { name: 'twitter:card', content: 'summary' }],
 		['meta', { name: 'twitter:title', content: pkg.name }],
 		['meta', { name: 'twitter:description', content: pkg.description }],
+		// Only the latest-release channel is indexable; /next/ and /vX.Y/ are not.
+		...noindexHead,
 	],
 
 	/** Inject import map before any module scripts (SSG build path). */
@@ -243,10 +277,14 @@ export default defineConfig({
 
 	themeConfig: {
 		logo: { light: '/icon.svg', dark: '/icon-light.svg', alt: pkg.name },
+		// Read by VersionSwitcher.vue for the SSR-safe navbar label.
+		docsChannel,
+		docsVersion,
 		nav: [
 			{ text: 'Guide', link: '/guide/getting-started' },
 			{ text: 'API', link: '/api/' },
 			{ text: 'Reference', link: '/reference/standards' },
+			{ component: 'VersionSwitcher' },
 		],
 
 		sidebar: {
