@@ -277,14 +277,20 @@ await rm(path.dirname(nextBuild), { recursive: true, force: true });
 // The root always exists (release build or HEAD bootstrap), so `latest` is
 // always present — every channel's switcher must offer the way back to root
 // and show which version it is.
+const latestEntry =
+	latest === undefined
+		? { label: `v${pkg.version}-dev`, version: pkg.version, base: '/' }
+		: { label: latest.tag, version: latest.tag.slice(1), base: '/' };
+const nextEntry = { label: 'next', commit: headCommit(), base: '/next/' };
 const manifest = {
-	schemaVersion: 1,
+	schemaVersion: 2,
 	generatedAt: new Date().toISOString(),
-	latest:
-		latest === undefined
-			? { label: `v${pkg.version}-dev`, version: pkg.version, base: '/' }
-			: { label: latest.tag, version: latest.tag.slice(1), base: '/' },
-	next: { label: 'next', commit: headCommit(), base: '/next/' },
+	// The manifest owns the dropdown ORDER: frozen builds render `entries`
+	// verbatim, so presentation changes never require re-baking tarballs.
+	// Timeline, newest first: next (future), latest (present), archives (past).
+	entries: [nextEntry, latestEntry, ...archived],
+	latest: latestEntry,
+	next: nextEntry,
 	archived,
 };
 await writeFile(path.join(outDir, 'versions.json'), `${JSON.stringify(manifest, null, '\t')}\n`);

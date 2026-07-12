@@ -22,6 +22,8 @@ interface VersionEntry {
 
 interface VersionsManifest {
   readonly schemaVersion: number;
+  /** Pre-ordered dropdown entries — the manifest owns the order. */
+  readonly entries?: readonly VersionEntry[];
   /** The root site — a release build, or the HEAD bootstrap. Always present. */
   readonly latest: VersionEntry;
   readonly next: VersionEntry;
@@ -47,13 +49,16 @@ const label = computed(() => {
 
 const entries = computed<readonly VersionEntry[]>(() => {
   if (manifest.value === undefined) return [];
-  // Strict timeline, newest first: next (future) above latest (present)
-  // above the archived releases (past).
-  return [
-    manifest.value.next,
-    manifest.value.latest,
-    ...manifest.value.archived,
-  ];
+  // Render the manifest's pre-ordered entries verbatim — ordering is a
+  // deploy-time decision, never baked into frozen builds. The composition
+  // fallback covers pre-schema-2 manifests only.
+  return (
+    manifest.value.entries ?? [
+      manifest.value.next,
+      manifest.value.latest,
+      ...manifest.value.archived,
+    ]
+  );
 });
 
 onMounted(async () => {
