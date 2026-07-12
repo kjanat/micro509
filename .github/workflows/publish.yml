@@ -113,3 +113,51 @@ jobs:
 
           gh release edit "${TAG}" --draft=false "${RELEASE_ARGS[@]}" 2>/dev/null \
           || gh release create "${TAG}" --generate-notes "${RELEASE_ARGS[@]}"
+
+  # Freeze this release's docs as tarballs on the GitHub Release, then poke
+  # the Cloudflare deploy hook so scripts/assemble-site.bun.ts re-assembles
+  # the live site with the new root. Stable releases only: prereleases live
+  # on /next/. Runs after publish-npm so the site root can never claim a
+  # version npm does not have.
+  docs-assets:
+    name: Docs assets
+    needs: [validate, publish-npm, release]
+    if: needs.validate.outputs.is_tag == 'true' && needs.validate.outputs.is_stable == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions: { contents: write }
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ github.ref_name }}
+      VERSION: ${{ needs.validate.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with: { persist-credentials: false }
+      - uses: ./.github/actions/setup-ts
+        with: { install-bun: "true" }
+      - run: runner install -f
+      - name: Build root flavor (served at /)
+        env:
+          DOCS_BASE: /
+          DOCS_CHANNEL: latest
+          DOCS_VERSION: v${{ needs.validate.outputs.version }}
+        run: |
+          bun run site:build:flavor
+          tar -czf docs-root.tar.gz -C site/.vitepress/dist .
+      - name: Build archive flavor (served at /vX.Y/ once superseded)
+        run: |
+          MINOR="v$(cut -d. -f1-2 <<<"${VERSION}")"
+          echo "MINOR=${MINOR}" >> "${GITHUB_ENV}"
+          DOCS_BASE="/${MINOR}/" DOCS_CHANNEL=archive DOCS_VERSION="${MINOR}" bun run site:build:flavor
+          tar -czf "docs-${MINOR}.tar.gz" -C site/.vitepress/dist .
+      - name: Attach tarballs to the release
+        run: gh release upload "${TAG}" docs-root.tar.gz "docs-${MINOR}.tar.gz" --clobber
+      - name: Trigger docs deploy
+        env: { HOOK: "${{ secrets.CF_DEPLOY_HOOK_URL }}" }
+        run: |
+          if [ -n "${HOOK}" ]; then
+            curl -fsS -X POST "${HOOK}"
+          else
+            echo "::warning::CF_DEPLOY_HOOK_URL unset; the next master push refreshes the site root"
+          fi
