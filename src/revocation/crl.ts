@@ -453,6 +453,25 @@ interface MutableParsedCrlExtensionFields {
 	freshestCrlDistributionPoints?: readonly ParsedDistributionPoint[];
 }
 
+interface MutableRevokedCertificateExtensionFields {
+	reasonCode?: RevocationReason;
+	invalidityDate?: Date;
+	certificateIssuer?: readonly GeneralName[];
+}
+
+interface MutableDistributionPointFields {
+	distributionPoint?: ParsedDistributionPointName;
+	reasons?: ParsedBitFlags<DistributionPointReason>;
+	crlIssuer?: readonly GeneralName[];
+}
+
+interface MutableAuthorityKeyIdentifierState {
+	keyIdentifier?: string;
+	sawAuthorityCertIssuer: boolean;
+	sawAuthorityCertSerialNumber: boolean;
+	lastFieldOrder: number;
+}
+
 /**
  * Signs and encodes an X.509 v2 CRL.
  *
@@ -846,43 +865,21 @@ export async function checkCertificateRevocationAgainstCrl(
 	if (!validated.ok) {
 		return checkCertificateRevocationAgainstCrlFailureResult(validated.code, validated.message);
 	}
-	let validatedDelta: ParsedCertificateRevocationList | undefined;
-	if (input.deltaCrl !== undefined) {
-		const deltaValidation = await validateCertificateRevocationList({
-			crl: input.deltaCrl,
-			issuerCertificate: input.issuerCertificate,
-			...(input.at === undefined ? {} : { at: input.at }),
-			...(input.clockSkewMs === undefined ? {} : { clockSkewMs: input.clockSkewMs }),
-		});
-		if (!deltaValidation.ok) {
-			return checkCertificateRevocationAgainstCrlFailureResult(
-				deltaValidation.code,
-				deltaValidation.message,
-			);
-		}
-		const compatibilityFailure = checkDeltaCrlCompatibility(validated.value, deltaValidation.value);
-		if (compatibilityFailure !== undefined) {
-			return compatibilityFailure;
-		}
-		validatedDelta = deltaValidation.value;
-	}
-	const applicabilityFailure = checkCrlApplicability(certificate, validated.value);
-	if (applicabilityFailure !== undefined) {
-		return applicabilityFailure;
-	}
-	if (validatedDelta !== undefined) {
-		const deltaApplicabilityFailure = checkCrlApplicability(certificate, validatedDelta, true);
-		if (deltaApplicabilityFailure !== undefined) {
-			return deltaApplicabilityFailure;
-		}
-	}
+	const deltaResult = await validateOptionalDeltaCrl(input, validated.value);
+	if (!deltaResult.ok) return deltaResult;
+	const applicabilityFailure = checkCrlAndDeltaApplicability(
+		certificate,
+		validated.value,
+		deltaResult.value,
+	);
+	if (applicabilityFailure !== undefined) return applicabilityFailure;
 	const completeRevoked = findRevokedCertificateEntry(certificate, validated.value);
 	if (!completeRevoked.ok) {
 		return completeRevoked;
 	}
 	let deltaRevoked: ParsedRevokedCertificate | undefined;
-	if (validatedDelta !== undefined) {
-		const deltaLookup = findRevokedCertificateEntry(certificate, validatedDelta);
+	if (deltaResult.value !== undefined) {
+		const deltaLookup = findRevokedCertificateEntry(certificate, deltaResult.value);
 		if (!deltaLookup.ok) {
 			return deltaLookup;
 		}
@@ -895,6 +892,39 @@ export async function checkCertificateRevocationAgainstCrl(
 		completeRevoked.entry,
 		deltaRevoked,
 	);
+}
+
+async function validateOptionalDeltaCrl(
+	input: CheckCertificateRevocationAgainstCrlInput,
+	completeCrl: ParsedCertificateRevocationList,
+): Promise<
+	{ readonly ok: true; readonly value?: ParsedCertificateRevocationList } | CrlApplicabilityFailure
+> {
+	if (input.deltaCrl === undefined) return { ok: true };
+	const deltaValidation = await validateCertificateRevocationList({
+		crl: input.deltaCrl,
+		issuerCertificate: input.issuerCertificate,
+		...(input.at === undefined ? {} : { at: input.at }),
+		...(input.clockSkewMs === undefined ? {} : { clockSkewMs: input.clockSkewMs }),
+	});
+	if (!deltaValidation.ok) {
+		return checkCertificateRevocationAgainstCrlFailureResult(
+			deltaValidation.code,
+			deltaValidation.message,
+		);
+	}
+	const compatibilityFailure = checkDeltaCrlCompatibility(completeCrl, deltaValidation.value);
+	return compatibilityFailure ?? { ok: true, value: deltaValidation.value };
+}
+
+function checkCrlAndDeltaApplicability(
+	certificate: ParsedCertificate,
+	crl: ParsedCertificateRevocationList,
+	deltaCrl: ParsedCertificateRevocationList | undefined,
+): CrlApplicabilityFailure | undefined {
+	const applicabilityFailure = checkCrlApplicability(certificate, crl);
+	if (applicabilityFailure !== undefined) return applicabilityFailure;
+	return deltaCrl === undefined ? undefined : checkCrlApplicability(certificate, deltaCrl, true);
 }
 
 /** Builds a `VerifyCertificateRevocationListSignatureFailureResult`. */
@@ -1076,43 +1106,19 @@ function scanCrlDistributionPoints(
 	let sawIndirectIssuerUnsupported = false;
 	let sawReasonsMismatch = false;
 	for (const distributionPoint of distributionPoints) {
-		if (!isIndirectCrl && distributionPoint.crlIssuer !== undefined) {
-			sawIndirectDistributionPoint = true;
-			continue;
-		}
-		if (isIndirectCrl) {
-			if (
-				!compareDistinguishedNames(certificate.issuer, crl.issuer) ||
-				distributionPoint.crlIssuer !== undefined
-			) {
-				const issuerMatch = matchesIndirectCrlIssuer(distributionPoint.crlIssuer, crl);
-				if (issuerMatch === 'unsupported') {
-					sawIndirectIssuerUnsupported = true;
-					continue;
-				}
-				if (!issuerMatch) {
-					sawIndirectIssuerMismatch = true;
-					continue;
-				}
-			}
-		}
-		if (
-			!matchesDistributionPointName(
-				distributionPoint.distributionPoint,
-				issuingDistributionPoint?.distributionPoint,
-				crl.issuer,
-			)
-		) {
-			sawDistributionMismatch = true;
-			continue;
-		}
-		if (
-			!hasOverlappingReasons(distributionPoint.reasons, issuingDistributionPoint?.onlySomeReasons)
-		) {
-			sawReasonsMismatch = true;
-			continue;
-		}
-		return 'matched';
+		const result = scanCrlDistributionPoint(
+			distributionPoint,
+			certificate,
+			crl,
+			issuingDistributionPoint,
+			isIndirectCrl,
+		);
+		if (result === 'matched') return result;
+		if (result === 'indirect_distribution_point') sawIndirectDistributionPoint = true;
+		if (result === 'distribution_point_mismatch') sawDistributionMismatch = true;
+		if (result === 'indirect_issuer_mismatch') sawIndirectIssuerMismatch = true;
+		if (result === 'unsupported_indirect_crl_issuer') sawIndirectIssuerUnsupported = true;
+		if (result === 'reasons_mismatch') sawReasonsMismatch = true;
 	}
 	if (sawReasonsMismatch) {
 		return 'reasons_mismatch';
@@ -1127,6 +1133,54 @@ function scanCrlDistributionPoints(
 		return 'distribution_point_mismatch';
 	}
 	return sawIndirectDistributionPoint ? 'indirect_distribution_point' : 'scope_mismatch';
+}
+
+function scanCrlDistributionPoint(
+	distributionPoint: ParsedDistributionPoint,
+	certificate: ParsedCertificate,
+	crl: ParsedCertificateRevocationList,
+	issuingDistributionPoint: ParsedIssuingDistributionPoint | undefined,
+	isIndirectCrl: boolean,
+): CrlDistributionPointScanResult {
+	const issuerResult = scanCrlDistributionPointIssuer(
+		distributionPoint,
+		certificate,
+		crl,
+		isIndirectCrl,
+	);
+	if (issuerResult !== undefined) return issuerResult;
+	if (
+		!matchesDistributionPointName(
+			distributionPoint.distributionPoint,
+			issuingDistributionPoint?.distributionPoint,
+			crl.issuer,
+		)
+	) {
+		return 'distribution_point_mismatch';
+	}
+	return hasOverlappingReasons(distributionPoint.reasons, issuingDistributionPoint?.onlySomeReasons)
+		? 'matched'
+		: 'reasons_mismatch';
+}
+
+function scanCrlDistributionPointIssuer(
+	distributionPoint: ParsedDistributionPoint,
+	certificate: ParsedCertificate,
+	crl: ParsedCertificateRevocationList,
+	isIndirectCrl: boolean,
+): CrlDistributionPointScanResult | undefined {
+	if (!isIndirectCrl) {
+		return distributionPoint.crlIssuer === undefined ? undefined : 'indirect_distribution_point';
+	}
+	if (
+		compareDistinguishedNames(certificate.issuer, crl.issuer) &&
+		distributionPoint.crlIssuer === undefined
+	) {
+		return undefined;
+	}
+	const issuerMatch = matchesIndirectCrlIssuer(distributionPoint.crlIssuer, crl);
+	if (issuerMatch === 'unsupported') return 'unsupported_indirect_crl_issuer';
+	return issuerMatch ? undefined : 'indirect_issuer_mismatch';
 }
 
 function crlDistributionPointScanFailure(
@@ -1645,51 +1699,69 @@ function parseRevokedCertificateExtensions(
 	if (entryDer === undefined || element === undefined) {
 		return {};
 	}
-	let reasonCode: RevocationReason | undefined;
-	let invalidityDate: Date | undefined;
-	let certificateIssuer: readonly GeneralName[] | undefined;
+	const fields: MutableRevokedCertificateExtensionFields = {};
 	const seenOids = new Set<string>();
 	for (const extension of childrenOf(entryDer, element)) {
-		const parts = childrenOf(entryDer, extension);
-		if (parts.length < 2 || parts.length > 3) {
-			throw new Error('Malformed revoked certificate extension');
-		}
-		if (parts.length === 3 && parts[1]?.tag !== 0x01) {
-			throw new Error('Malformed revoked certificate extension');
-		}
-		const oid = decodeObjectIdentifier(
-			requireElement(parts[0], 'revoked certificate extension OID').value,
-		);
-		if (seenOids.has(oid)) {
-			throw new Error(`Duplicate revoked certificate extension OID: ${oid}`);
-		}
-		seenOids.add(oid);
-		const valueElement = requireElement(
-			parts[parts.length - 1],
-			'revoked certificate extension value',
-		);
-		if (valueElement.tag !== 0x04) {
-			throw new Error('Revoked certificate extension value must use OCTET STRING');
-		}
-		if (oid === OIDS.cRLReason) {
-			reasonCode = revocationReasonFromCode(readElement(valueElement.value).value[0]);
-		}
-		if (oid === OIDS.invalidityDate) {
-			invalidityDate = parseTime(readElement(valueElement.value));
-		}
-		if (oid === OIDS.certificateIssuer) {
-			const generalNames = readRootElement(valueElement.value, { maxDepth: DEFAULT_MAX_DER_DEPTH });
-			if (generalNames.tag !== 0x30) {
-				throw new Error('certificateIssuer must use SEQUENCE');
-			}
-			certificateIssuer = parseGeneralNames(valueElement.value, generalNames);
-		}
+		parseRevokedCertificateExtension(entryDer, extension, seenOids, fields);
 	}
 	return {
-		...(reasonCode === undefined ? {} : { reasonCode }),
-		...(invalidityDate === undefined ? {} : { invalidityDate }),
-		...(certificateIssuer === undefined ? {} : { certificateIssuer }),
+		...(fields.reasonCode === undefined ? {} : { reasonCode: fields.reasonCode }),
+		...(fields.invalidityDate === undefined ? {} : { invalidityDate: fields.invalidityDate }),
+		...(fields.certificateIssuer === undefined
+			? {}
+			: { certificateIssuer: fields.certificateIssuer }),
 	};
+}
+
+function parseRevokedCertificateExtension(
+	entryDer: Uint8Array,
+	extension: DerElement,
+	seenOids: Set<string>,
+	fields: MutableRevokedCertificateExtensionFields,
+): void {
+	const parts = childrenOf(entryDer, extension);
+	if (parts.length < 2 || parts.length > 3) {
+		throw new Error('Malformed revoked certificate extension');
+	}
+	if (parts.length === 3 && parts[1]?.tag !== 0x01) {
+		throw new Error('Malformed revoked certificate extension');
+	}
+	const oid = decodeObjectIdentifier(
+		requireElement(parts[0], 'revoked certificate extension OID').value,
+	);
+	if (seenOids.has(oid)) {
+		throw new Error(`Duplicate revoked certificate extension OID: ${oid}`);
+	}
+	seenOids.add(oid);
+	const valueElement = requireElement(
+		parts[parts.length - 1],
+		'revoked certificate extension value',
+	);
+	if (valueElement.tag !== 0x04) {
+		throw new Error('Revoked certificate extension value must use OCTET STRING');
+	}
+	applyRevokedCertificateExtensionValue(oid, valueElement.value, fields);
+}
+
+function applyRevokedCertificateExtensionValue(
+	oid: string,
+	value: Uint8Array,
+	fields: MutableRevokedCertificateExtensionFields,
+): void {
+	if (oid === OIDS.cRLReason) {
+		const reasonCode = revocationReasonFromCode(readElement(value).value[0]);
+		if (reasonCode !== undefined) fields.reasonCode = reasonCode;
+	}
+	if (oid === OIDS.invalidityDate) {
+		fields.invalidityDate = parseTime(readElement(value));
+	}
+	if (oid === OIDS.certificateIssuer) {
+		const generalNames = readRootElement(value, { maxDepth: DEFAULT_MAX_DER_DEPTH });
+		if (generalNames.tag !== 0x30) {
+			throw new Error('certificateIssuer must use SEQUENCE');
+		}
+		fields.certificateIssuer = parseGeneralNames(value, generalNames);
+	}
 }
 
 /** Decodes the IssuingDistributionPoint extension from its OCTET STRING content. */
@@ -1843,40 +1915,49 @@ function parseDistributionPoint(
 	if (element.tag !== 0x30) {
 		throw new Error('DistributionPoint must use SEQUENCE');
 	}
-	let distributionPoint: ParsedDistributionPointName | undefined;
-	let reasons: ParsedBitFlags<DistributionPointReason> | undefined;
-	let crlIssuer: readonly GeneralName[] | undefined;
+	const fields: MutableDistributionPointFields = {};
 	for (const child of childrenOf(valueDer, element)) {
-		if (child.tag === 0xa0) {
-			if (distributionPoint !== undefined) {
-				throw new Error('DistributionPoint distributionPoint must not repeat');
-			}
-			const parsedDistributionPoint = parseDistributionPointName(valueDer, child);
-			if (parsedDistributionPoint !== undefined) {
-				distributionPoint = parsedDistributionPoint;
-			}
-		} else if (child.tag === 0x81) {
-			if (reasons !== undefined) {
-				throw new Error('DistributionPoint reasons must not repeat');
-			}
-			reasons = parseDistributionPointReasonFlagsContent(child.value);
-		} else if (child.tag === 0xa2) {
-			if (crlIssuer !== undefined) {
-				throw new Error('DistributionPoint crlIssuer must not repeat');
-			}
-			crlIssuer = parseGeneralNames(valueDer, child);
-		} else {
-			throw new Error(`Unsupported DistributionPoint field tag: ${String(child.tag)}`);
-		}
+		parseDistributionPointField(valueDer, child, fields);
 	}
-	if (distributionPoint === undefined && crlIssuer === undefined) {
+	if (fields.distributionPoint === undefined && fields.crlIssuer === undefined) {
 		throw new Error('DistributionPoint must include distributionPoint or crlIssuer');
 	}
 	return {
-		...(distributionPoint === undefined ? {} : { distributionPoint }),
-		...(reasons === undefined ? {} : { reasons }),
-		...(crlIssuer === undefined ? {} : { crlIssuer }),
+		...(fields.distributionPoint === undefined
+			? {}
+			: { distributionPoint: fields.distributionPoint }),
+		...(fields.reasons === undefined ? {} : { reasons: fields.reasons }),
+		...(fields.crlIssuer === undefined ? {} : { crlIssuer: fields.crlIssuer }),
 	};
+}
+
+function parseDistributionPointField(
+	valueDer: Uint8Array,
+	child: DerElement,
+	fields: MutableDistributionPointFields,
+): void {
+	switch (child.tag) {
+		case 0xa0: {
+			if (fields.distributionPoint !== undefined) {
+				throw new Error('DistributionPoint distributionPoint must not repeat');
+			}
+			const distributionPoint = parseDistributionPointName(valueDer, child);
+			if (distributionPoint !== undefined) fields.distributionPoint = distributionPoint;
+			return;
+		}
+		case 0x81:
+			if (fields.reasons !== undefined)
+				throw new Error('DistributionPoint reasons must not repeat');
+			fields.reasons = parseDistributionPointReasonFlagsContent(child.value);
+			return;
+		case 0xa2:
+			if (fields.crlIssuer !== undefined)
+				throw new Error('DistributionPoint crlIssuer must not repeat');
+			fields.crlIssuer = parseGeneralNames(valueDer, child);
+			return;
+		default:
+			throw new Error(`Unsupported DistributionPoint field tag: ${String(child.tag)}`);
+	}
 }
 
 /** Decodes a GeneralName from its context-tagged ASN.1 element. */
@@ -2129,52 +2210,80 @@ function parseAuthorityKeyIdentifier(bytes: Uint8Array): string | undefined {
 	if (sequenceElement.tag !== 0x30) {
 		throw new Error('authorityKeyIdentifier must use SEQUENCE');
 	}
-	let keyIdentifier: string | undefined;
-	let sawAuthorityCertIssuer = false;
-	let sawAuthorityCertSerialNumber = false;
-	let lastFieldOrder = -1;
+	const state: MutableAuthorityKeyIdentifierState = {
+		sawAuthorityCertIssuer: false,
+		sawAuthorityCertSerialNumber: false,
+		lastFieldOrder: -1,
+	};
 	for (const child of childrenOf(bytes, sequenceElement)) {
-		if (child.tag === 0x80) {
-			if (keyIdentifier !== undefined) {
-				throw new Error('authorityKeyIdentifier keyIdentifier must not repeat');
-			}
-			if (lastFieldOrder >= 0) {
-				throw new Error('authorityKeyIdentifier fields must preserve DER order');
-			}
-			keyIdentifier = toHex(child.value);
-			lastFieldOrder = 0;
-			continue;
-		}
-		if (child.tag === 0xa1) {
-			if (sawAuthorityCertIssuer) {
-				throw new Error('authorityKeyIdentifier authorityCertIssuer must not repeat');
-			}
-			if (lastFieldOrder >= 1) {
-				throw new Error('authorityKeyIdentifier fields must preserve DER order');
-			}
-			parseGeneralNames(bytes, child);
-			sawAuthorityCertIssuer = true;
-			lastFieldOrder = 1;
-			continue;
-		}
-		if (child.tag === 0x82) {
-			if (sawAuthorityCertSerialNumber) {
-				throw new Error('authorityKeyIdentifier authorityCertSerialNumber must not repeat');
-			}
-			if (lastFieldOrder >= 2 || !sawAuthorityCertIssuer) {
-				throw new Error('authorityKeyIdentifier fields must preserve DER order');
-			}
-			validateImplicitSerialNumberEncoding(
-				child.value,
-				'authorityKeyIdentifier authorityCertSerialNumber',
-			);
-			sawAuthorityCertSerialNumber = true;
-			lastFieldOrder = 2;
-			continue;
-		}
-		throw new Error(`Unsupported authorityKeyIdentifier field tag: ${String(child.tag)}`);
+		parseAuthorityKeyIdentifierField(bytes, child, state);
 	}
-	return keyIdentifier;
+	return state.keyIdentifier;
+}
+
+function parseAuthorityKeyIdentifierField(
+	bytes: Uint8Array,
+	child: DerElement,
+	state: MutableAuthorityKeyIdentifierState,
+): void {
+	switch (child.tag) {
+		case 0x80:
+			parseAuthorityKeyIdentifierKeyId(child, state);
+			return;
+		case 0xa1:
+			parseAuthorityKeyIdentifierIssuer(bytes, child, state);
+			return;
+		case 0x82:
+			parseAuthorityKeyIdentifierSerial(child, state);
+			return;
+		default:
+			throw new Error(`Unsupported authorityKeyIdentifier field tag: ${String(child.tag)}`);
+	}
+}
+
+function parseAuthorityKeyIdentifierKeyId(
+	child: DerElement,
+	state: MutableAuthorityKeyIdentifierState,
+): void {
+	if (state.keyIdentifier !== undefined)
+		throw new Error('authorityKeyIdentifier keyIdentifier must not repeat');
+	if (state.lastFieldOrder >= 0)
+		throw new Error('authorityKeyIdentifier fields must preserve DER order');
+	state.keyIdentifier = toHex(child.value);
+	state.lastFieldOrder = 0;
+}
+
+function parseAuthorityKeyIdentifierIssuer(
+	bytes: Uint8Array,
+	child: DerElement,
+	state: MutableAuthorityKeyIdentifierState,
+): void {
+	if (state.sawAuthorityCertIssuer) {
+		throw new Error('authorityKeyIdentifier authorityCertIssuer must not repeat');
+	}
+	if (state.lastFieldOrder >= 1)
+		throw new Error('authorityKeyIdentifier fields must preserve DER order');
+	parseGeneralNames(bytes, child);
+	state.sawAuthorityCertIssuer = true;
+	state.lastFieldOrder = 1;
+}
+
+function parseAuthorityKeyIdentifierSerial(
+	child: DerElement,
+	state: MutableAuthorityKeyIdentifierState,
+): void {
+	if (state.sawAuthorityCertSerialNumber) {
+		throw new Error('authorityKeyIdentifier authorityCertSerialNumber must not repeat');
+	}
+	if (state.lastFieldOrder >= 2 || !state.sawAuthorityCertIssuer) {
+		throw new Error('authorityKeyIdentifier fields must preserve DER order');
+	}
+	validateImplicitSerialNumberEncoding(
+		child.value,
+		'authorityKeyIdentifier authorityCertSerialNumber',
+	);
+	state.sawAuthorityCertSerialNumber = true;
+	state.lastFieldOrder = 2;
 }
 
 function validateImplicitSerialNumberEncoding(bytes: Uint8Array, label: string): void {

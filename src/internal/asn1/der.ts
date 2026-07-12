@@ -371,37 +371,7 @@ export function readElement(bytes: Uint8Array, offset = 0): DerElement {
 		throw new Error('Unexpected end of DER input');
 	}
 
-	let headerLength = 2;
-	let length = 0;
-	if ((lengthByte & 0x80) === 0) {
-		length = lengthByte;
-	} else {
-		const octets = lengthByte & 0x7f;
-		if (octets === 0) {
-			throw new Error('Indefinite lengths are not supported');
-		}
-		const firstLengthOctet = bytes[offset + 2];
-		if (firstLengthOctet === undefined) {
-			throw new Error('Unexpected end of DER input');
-		}
-		if (firstLengthOctet === 0) {
-			throw new Error('Non-minimal DER length encoding');
-		}
-		headerLength += octets;
-		for (let index = 0; index < octets; index += 1) {
-			const next = bytes[offset + 2 + index];
-			if (next === undefined) {
-				throw new Error('Unexpected end of DER input');
-			}
-			if (length > Math.floor((Number.MAX_SAFE_INTEGER - next) / 256)) {
-				throw new Error('DER length exceeds safe integer range');
-			}
-			length = length * 256 + next;
-		}
-		if (length < 128) {
-			throw new Error('Non-minimal DER length encoding');
-		}
-	}
+	const { headerLength, length } = readDerLength(bytes, offset, lengthByte);
 
 	const start = offset + headerLength;
 	const end = start + length;
@@ -417,6 +387,47 @@ export function readElement(bytes: Uint8Array, offset = 0): DerElement {
 		end,
 		value: bytes.slice(start, end),
 	};
+}
+
+function readDerLength(
+	bytes: Uint8Array,
+	offset: number,
+	lengthByte: number,
+): { readonly headerLength: number; readonly length: number } {
+	if ((lengthByte & 0x80) === 0) {
+		return { headerLength: 2, length: lengthByte };
+	}
+	const octets = lengthByte & 0x7f;
+	if (octets === 0) {
+		throw new Error('Indefinite lengths are not supported');
+	}
+	const firstLengthOctet = bytes[offset + 2];
+	if (firstLengthOctet === undefined) {
+		throw new Error('Unexpected end of DER input');
+	}
+	if (firstLengthOctet === 0) {
+		throw new Error('Non-minimal DER length encoding');
+	}
+	const length = readLongFormDerLength(bytes, offset, octets);
+	if (length < 128) {
+		throw new Error('Non-minimal DER length encoding');
+	}
+	return { headerLength: 2 + octets, length };
+}
+
+function readLongFormDerLength(bytes: Uint8Array, offset: number, octets: number): number {
+	let length = 0;
+	for (let index = 0; index < octets; index += 1) {
+		const next = bytes[offset + 2 + index];
+		if (next === undefined) {
+			throw new Error('Unexpected end of DER input');
+		}
+		if (length > Math.floor((Number.MAX_SAFE_INTEGER - next) / 256)) {
+			throw new Error('DER length exceeds safe integer range');
+		}
+		length = length * 256 + next;
+	}
+	return length;
 }
 
 /**
@@ -454,35 +465,55 @@ export function assertDerMaxDepth(
 		if ((current.element.tag & 0x20) === 0) {
 			continue;
 		}
-		let offset = current.element.start;
-		let treatedAsOpaqueLeaf = false;
-		while (offset < current.element.end) {
-			let child: DerElement;
-			try {
-				child = readElement(bytes, offset);
-			} catch (error) {
-				if (canTreatAsOpaqueLeaf(current.element, offset, options)) {
-					treatedAsOpaqueLeaf = true;
-					offset = current.element.end;
-					break;
-				}
-				throw error;
-			}
-			if (child.end > current.element.end) {
-				if (canTreatAsOpaqueLeaf(current.element, offset, options)) {
-					treatedAsOpaqueLeaf = true;
-					offset = current.element.end;
-					break;
-				}
-				throw new Error('DER child exceeds parent length');
-			}
-			stack.push({ element: child, depth: current.depth + 1 });
-			offset = child.end;
-		}
-		if (!treatedAsOpaqueLeaf && offset !== current.element.end) {
-			throw new Error('Malformed DER container');
-		}
+		pushDerChildren(bytes, current, stack, options);
 	}
+}
+
+function pushDerChildren(
+	bytes: Uint8Array,
+	current: { readonly element: DerElement; readonly depth: number },
+	stack: { readonly element: DerElement; readonly depth: number }[],
+	options?: {
+		readonly allowOpaqueConstructedTags?: readonly number[];
+	},
+): void {
+	let offset = current.element.start;
+	let treatedAsOpaqueLeaf = false;
+	while (offset < current.element.end) {
+		const child = readDerChildOrOpaque(bytes, current.element, offset, options);
+		if (child === undefined) {
+			treatedAsOpaqueLeaf = true;
+			offset = current.element.end;
+			break;
+		}
+		stack.push({ element: child, depth: current.depth + 1 });
+		offset = child.end;
+	}
+	if (!treatedAsOpaqueLeaf && offset !== current.element.end) {
+		throw new Error('Malformed DER container');
+	}
+}
+
+function readDerChildOrOpaque(
+	bytes: Uint8Array,
+	parent: DerElement,
+	offset: number,
+	options?: {
+		readonly allowOpaqueConstructedTags?: readonly number[];
+	},
+): DerElement | undefined {
+	let child: DerElement;
+	try {
+		child = readElement(bytes, offset);
+	} catch (error) {
+		if (canTreatAsOpaqueLeaf(parent, offset, options)) return undefined;
+		throw error;
+	}
+	if (child.end <= parent.end) {
+		return child;
+	}
+	if (canTreatAsOpaqueLeaf(parent, offset, options)) return undefined;
+	throw new Error('DER child exceeds parent length');
 }
 
 /**

@@ -121,6 +121,16 @@ export type ParsedPkcs7SignerInfo =
 			readonly signedAttrsDer?: undefined;
 	  });
 
+interface ParsedSignedDataOptionalFields {
+	readonly certificates?: DerElement;
+	readonly crls?: DerElement;
+}
+
+interface ParsedSignedAttributeFields {
+	messageDigest?: Uint8Array;
+	contentTypeOid?: string;
+}
+
 /** Decoded PKCS#7 SignedData content, including certificates and signer info. */
 export interface ParsedPkcs7SignedData {
 	/** Original DER bytes when this object came from {@linkcode parsePkcs7SignedDataDer} or PEM parsing. */
@@ -527,28 +537,8 @@ export function parsePkcs7SignedDataDer(der: Uint8Array): ParsePkcs7SignedDataRe
 		const encapContentInfo = signedDataChildren[2];
 		const trailingChildren = signedDataChildren.slice(3);
 		const signerInfos = trailingChildren[trailingChildren.length - 1];
-		let certificates: ReturnType<typeof readElement> | undefined;
-		let crls: ReturnType<typeof readElement> | undefined;
-		for (const child of trailingChildren.slice(0, -1)) {
-			if (child?.tag === 0xa0) {
-				if (crls !== undefined) {
-					return pkcs7Failure('malformed', 'SignedData certificates field must precede CRLs field');
-				}
-				if (certificates !== undefined) {
-					return pkcs7Failure('malformed', 'SignedData certificates field must not repeat');
-				}
-				certificates = child;
-				continue;
-			}
-			if (child?.tag === 0xa1) {
-				if (crls !== undefined) {
-					return pkcs7Failure('malformed', 'SignedData CRLs field must not repeat');
-				}
-				crls = child;
-				continue;
-			}
-			return pkcs7Failure('malformed', 'Malformed SignedData optional field');
-		}
+		const optionalFields = parseSignedDataOptionalFields(trailingChildren.slice(0, -1));
+		if (!optionalFields.ok) return optionalFields;
 		if (
 			version === undefined ||
 			digestAlgorithms === undefined ||
@@ -583,13 +573,46 @@ export function parsePkcs7SignedDataDer(der: Uint8Array): ParsePkcs7SignedDataRe
 					: {
 							encapsulatedContent: extractEncapsulatedContent(encapDer, encapContent),
 						}),
-				certificates: parseCertificateSet(der, certificates),
+				certificates: parseCertificateSet(der, optionalFields.value.certificates),
 				signerInfos: parseSignerInfos(der, signerInfos),
 			},
 		};
 	} catch {
 		return pkcs7Failure('malformed', 'Malformed PKCS#7 structure');
 	}
+}
+
+function parseSignedDataOptionalFields(
+	children: readonly DerElement[],
+):
+	| { readonly ok: true; readonly value: ParsedSignedDataOptionalFields }
+	| ErrorResult<ParsePkcs7ErrorCode, Record<never, never>, ParsePkcs7Failure> {
+	let certificates: DerElement | undefined;
+	let crls: DerElement | undefined;
+	for (const child of children) {
+		if (child.tag === 0xa0) {
+			if (crls !== undefined)
+				return pkcs7Failure('malformed', 'SignedData certificates field must precede CRLs field');
+			if (certificates !== undefined)
+				return pkcs7Failure('malformed', 'SignedData certificates field must not repeat');
+			certificates = child;
+			continue;
+		}
+		if (child.tag === 0xa1) {
+			if (crls !== undefined)
+				return pkcs7Failure('malformed', 'SignedData CRLs field must not repeat');
+			crls = child;
+			continue;
+		}
+		return pkcs7Failure('malformed', 'Malformed SignedData optional field');
+	}
+	return {
+		ok: true,
+		value: {
+			...(certificates === undefined ? {} : { certificates }),
+			...(crls === undefined ? {} : { crls }),
+		},
+	};
 }
 
 /** Decodes a PEM-armored PKCS#7 SignedData. Expects exactly one `PKCS7` PEM block. */
@@ -628,80 +651,80 @@ export function parsePkcs7SignedDataPem(pem: string): ParsePkcs7SignedDataResult
 export async function verifyPkcs7SignedData(
 	input: string | Uint8Array | ParsedPkcs7SignedData,
 ): Promise<VerifyPkcs7SignedDataResult> {
-	let parsed: ParsedPkcs7SignedData;
-	if (typeof input === 'string') {
-		const result = parsePkcs7SignedDataPem(input);
-		if (!result.ok) {
-			return result;
-		}
-		parsed = result.value;
-	} else if (input instanceof Uint8Array) {
-		const result = parsePkcs7SignedDataDer(input);
-		if (!result.ok) {
-			return result;
-		}
-		parsed = result.value;
-	} else {
-		if (!hasReparseablePkcs7SignedData(input)) {
-			return verifyPkcs7Failure('malformed', 'SignedData parsed input is malformed');
-		}
-		const result = parsePkcs7SignedDataDer(new Uint8Array(input.der));
-		if (!result.ok) {
-			return result;
-		}
-		parsed = result.value;
-	}
+	const parsedResult = normalizePkcs7SignedDataForVerification(input);
+	if (!parsedResult.ok) return parsedResult;
+	const parsed = parsedResult.value;
 	if (parsed.encapsulatedContent === undefined) {
 		return verifyPkcs7Failure('content_missing', 'SignedData encapsulated content is missing');
 	}
 	for (const signerInfo of parsed.signerInfos) {
-		const signer = parsed.certificates.find((certificate) =>
-			signerIdentifierMatches(certificate, signerInfo),
-		);
-		if (signer === undefined) {
-			return verifyPkcs7Failure(
-				'signer_not_found',
-				'Signer certificate not found in SignedData certificates',
-			);
-		}
-		if (signerInfo.hasSignedAttrs) {
-			const attrsResult = await verifySignedAttrs(
-				signerInfo,
-				signer,
-				parsed.encapsulatedContent,
-				parsed.encapsulatedContentTypeOid,
-			);
-			if (!attrsResult.ok) {
-				return attrsResult;
-			}
-			continue;
-		}
-		let verified: boolean;
-		try {
-			const verificationResult = await verifySignedDataDetailed(
-				signerInfo.signatureAlgorithmOid,
-				signerInfo.signatureAlgorithmParametersDer,
-				signer.publicKeyAlgorithmOid,
-				signer.publicKeyParametersOid,
-				signer.subjectPublicKeyInfoDer,
-				signerInfo.signature,
-				parsed.encapsulatedContent,
-			);
-			if (!verificationResult.ok) {
-				if (verificationResult.code === 'verification_error') {
-					return verifyPkcs7Failure('malformed', 'SignedData signature verification failed');
-				}
-				return verifyPkcs7Failure('malformed', 'Unsupported signature algorithm in SignedData');
-			}
-			verified = verificationResult.valid;
-		} catch {
-			return verifyPkcs7Failure('malformed', 'Unsupported signature algorithm in SignedData');
-		}
-		if (!verified) {
-			return verifyPkcs7Failure('signature_invalid', 'SignedData signature does not verify');
-		}
+		const result = await verifyPkcs7SignerInfo(parsed, signerInfo, parsed.encapsulatedContent);
+		if (!result.ok) return result;
 	}
 	return { ok: true, value: parsed };
+}
+
+function normalizePkcs7SignedDataForVerification(
+	input: string | Uint8Array | ParsedPkcs7SignedData,
+): ParsePkcs7SignedDataResult | VerifyPkcs7SignedDataResult {
+	if (typeof input === 'string') return parsePkcs7SignedDataPem(input);
+	if (input instanceof Uint8Array) return parsePkcs7SignedDataDer(input);
+	if (!hasReparseablePkcs7SignedData(input)) {
+		return verifyPkcs7Failure('malformed', 'SignedData parsed input is malformed');
+	}
+	return parsePkcs7SignedDataDer(new Uint8Array(input.der));
+}
+
+async function verifyPkcs7SignerInfo(
+	parsed: ParsedPkcs7SignedData,
+	signerInfo: ParsedPkcs7SignerInfo,
+	encapsulatedContent: Uint8Array,
+): Promise<{ readonly ok: true } | Extract<VerifyPkcs7SignedDataResult, { readonly ok: false }>> {
+	const signer = parsed.certificates.find((certificate) =>
+		signerIdentifierMatches(certificate, signerInfo),
+	);
+	if (signer === undefined) {
+		return verifyPkcs7Failure(
+			'signer_not_found',
+			'Signer certificate not found in SignedData certificates',
+		);
+	}
+	return signerInfo.hasSignedAttrs
+		? await verifySignedAttrs(
+				signerInfo,
+				signer,
+				encapsulatedContent,
+				parsed.encapsulatedContentTypeOid,
+			)
+		: await verifyPkcs7BareSignerInfo(signerInfo, signer, encapsulatedContent);
+}
+
+async function verifyPkcs7BareSignerInfo(
+	signerInfo: ParsedPkcs7SignerInfo,
+	signer: ParsedCertificate,
+	encapsulatedContent: Uint8Array,
+): Promise<{ readonly ok: true } | Extract<VerifyPkcs7SignedDataResult, { readonly ok: false }>> {
+	try {
+		const verificationResult = await verifySignedDataDetailed(
+			signerInfo.signatureAlgorithmOid,
+			signerInfo.signatureAlgorithmParametersDer,
+			signer.publicKeyAlgorithmOid,
+			signer.publicKeyParametersOid,
+			signer.subjectPublicKeyInfoDer,
+			signerInfo.signature,
+			encapsulatedContent,
+		);
+		if (!verificationResult.ok) {
+			return verificationResult.code === 'verification_error'
+				? verifyPkcs7Failure('malformed', 'SignedData signature verification failed')
+				: verifyPkcs7Failure('malformed', 'Unsupported signature algorithm in SignedData');
+		}
+		return verificationResult.valid
+			? { ok: true }
+			: verifyPkcs7Failure('signature_invalid', 'SignedData signature does not verify');
+	} catch {
+		return verifyPkcs7Failure('malformed', 'Unsupported signature algorithm in SignedData');
+	}
 }
 
 // Private helpers
@@ -889,100 +912,100 @@ function parseSignerInfos(
 	source: Uint8Array,
 	element: ReturnType<typeof readElement>,
 ): readonly ParsedPkcs7SignerInfo[] {
-	const signers: ParsedPkcs7SignerInfo[] = [];
-	for (const signerInfo of childrenOf(source, element)) {
-		const signerDer = source.slice(signerInfo.start - signerInfo.headerLength, signerInfo.end);
-		const parts = readSequenceChildren(signerDer);
-		const version = parts[0];
-		const sid = parts[1];
-		const digestAlgorithm = parts[2];
-		let index = 3;
-		const signedAttrsElement = parts[index]?.tag === 0xa0 ? parts[index] : undefined;
-		const hasSignedAttrs = signedAttrsElement !== undefined;
-		if (hasSignedAttrs) {
-			index += 1;
-		}
-		const signatureAlgorithm = parts[index];
-		const signature = parts[index + 1];
-		const unauthenticatedAttributes = parts[index + 2];
-		if (
-			version === undefined ||
-			sid === undefined ||
-			digestAlgorithm === undefined ||
-			signatureAlgorithm === undefined ||
-			signature === undefined ||
-			signature.tag !== 0x04 ||
-			parts.length > index + 3 ||
-			(unauthenticatedAttributes !== undefined && unauthenticatedAttributes.tag !== 0xa1)
-		) {
-			throw new Error('Malformed SignerInfo');
-		}
-		const digestAlgorithmDer = signerDer.slice(
-			digestAlgorithm.start - digestAlgorithm.headerLength,
-			digestAlgorithm.end,
-		);
-		const digestAlgorithmOid = decodeObjectIdentifier(
-			requireElement(readSequenceChildren(digestAlgorithmDer)[0], 'digest algorithm OID').value,
-		);
-		const signatureAlgorithmDer = signerDer.slice(
-			signatureAlgorithm.start - signatureAlgorithm.headerLength,
-			signatureAlgorithm.end,
-		);
-		const signatureAlgorithmChildren = readSequenceChildren(signatureAlgorithmDer);
-		const signatureAlgorithmOid = decodeObjectIdentifier(
-			requireElement(signatureAlgorithmChildren[0], 'signature algorithm OID').value,
-		);
-		const signatureAlgorithmParams = signatureAlgorithmChildren[1];
-		const parsedSid = parseSignerIdentifier(signerDer.slice(sid.start - sid.headerLength, sid.end));
-		signers.push({
-			version: decodeIntegerNumber(version.value),
-			...(parsedSid.issuer === undefined ? {} : { issuer: parsedSid.issuer }),
-			...(parsedSid.serialNumberHex === undefined
-				? {}
-				: { serialNumberHex: parsedSid.serialNumberHex }),
-			...(parsedSid.subjectKeyIdentifier === undefined
-				? {}
-				: { subjectKeyIdentifier: parsedSid.subjectKeyIdentifier }),
-			digestAlgorithmOid,
-			digestAlgorithmName: describeHashAlgorithm(digestAlgorithmOid),
-			signatureAlgorithmOid,
-			signatureAlgorithmName: describeSignatureAlgorithm(
-				signatureAlgorithmOid,
-				signatureAlgorithmParams === undefined
-					? undefined
-					: new Uint8Array(
-							signatureAlgorithmDer.slice(
-								signatureAlgorithmParams.start - signatureAlgorithmParams.headerLength,
-								signatureAlgorithmParams.end,
-							),
-						),
-			),
-			...(signatureAlgorithmParams === undefined
-				? {}
-				: {
-						signatureAlgorithmParametersDer: new Uint8Array(
-							signatureAlgorithmDer.slice(
-								signatureAlgorithmParams.start - signatureAlgorithmParams.headerLength,
-								signatureAlgorithmParams.end,
-							),
-						),
-					}),
-			signatureHex: toHex(signature.value),
-			signature: new Uint8Array(signature.value),
-			...(signedAttrsElement === undefined
-				? { hasSignedAttrs: false as const }
-				: {
-						hasSignedAttrs: true as const,
-						signedAttrsDer: new Uint8Array(
-							signerDer.slice(
-								signedAttrsElement.start - signedAttrsElement.headerLength,
-								signedAttrsElement.end,
-							),
-						),
-					}),
-		});
+	return childrenOf(source, element).map((signerInfo) => parseSignerInfo(source, signerInfo));
+}
+
+function parseSignerInfo(source: Uint8Array, signerInfo: DerElement): ParsedPkcs7SignerInfo {
+	const signerDer = source.slice(signerInfo.start - signerInfo.headerLength, signerInfo.end);
+	const parts = readSequenceChildren(signerDer);
+	const version = parts[0];
+	const sid = parts[1];
+	const digestAlgorithm = parts[2];
+	let index = 3;
+	const signedAttrsElement = parts[index]?.tag === 0xa0 ? parts[index] : undefined;
+	if (signedAttrsElement !== undefined) index += 1;
+	const signatureAlgorithm = parts[index];
+	const signature = parts[index + 1];
+	const unauthenticatedAttributes = parts[index + 2];
+	if (
+		version === undefined ||
+		sid === undefined ||
+		digestAlgorithm === undefined ||
+		signatureAlgorithm === undefined ||
+		signature === undefined ||
+		signature.tag !== 0x04 ||
+		parts.length > index + 3 ||
+		(unauthenticatedAttributes !== undefined && unauthenticatedAttributes.tag !== 0xa1)
+	) {
+		throw new Error('Malformed SignerInfo');
 	}
-	return signers;
+	const digestAlgorithmOid = parsePkcs7AlgorithmOid(
+		signerDer,
+		digestAlgorithm,
+		'digest algorithm OID',
+	);
+	const signatureAlgorithmDer = signerDer.slice(
+		signatureAlgorithm.start - signatureAlgorithm.headerLength,
+		signatureAlgorithm.end,
+	);
+	const signatureAlgorithmChildren = readSequenceChildren(signatureAlgorithmDer);
+	const signatureAlgorithmOid = decodeObjectIdentifier(
+		requireElement(signatureAlgorithmChildren[0], 'signature algorithm OID').value,
+	);
+	const signatureAlgorithmParams = signatureAlgorithmChildren[1];
+	const parsedSid = parseSignerIdentifier(signerDer.slice(sid.start - sid.headerLength, sid.end));
+	return {
+		version: decodeIntegerNumber(version.value),
+		...(parsedSid.issuer === undefined ? {} : { issuer: parsedSid.issuer }),
+		...(parsedSid.serialNumberHex === undefined
+			? {}
+			: { serialNumberHex: parsedSid.serialNumberHex }),
+		...(parsedSid.subjectKeyIdentifier === undefined
+			? {}
+			: { subjectKeyIdentifier: parsedSid.subjectKeyIdentifier }),
+		digestAlgorithmOid,
+		digestAlgorithmName: describeHashAlgorithm(digestAlgorithmOid),
+		signatureAlgorithmOid,
+		signatureAlgorithmName: describeSignatureAlgorithm(
+			signatureAlgorithmOid,
+			signatureAlgorithmParams === undefined
+				? undefined
+				: new Uint8Array(
+						signatureAlgorithmDer.slice(
+							signatureAlgorithmParams.start - signatureAlgorithmParams.headerLength,
+							signatureAlgorithmParams.end,
+						),
+					),
+		),
+		...(signatureAlgorithmParams === undefined
+			? {}
+			: {
+					signatureAlgorithmParametersDer: new Uint8Array(
+						signatureAlgorithmDer.slice(
+							signatureAlgorithmParams.start - signatureAlgorithmParams.headerLength,
+							signatureAlgorithmParams.end,
+						),
+					),
+				}),
+		signatureHex: toHex(signature.value),
+		signature: new Uint8Array(signature.value),
+		...(signedAttrsElement === undefined
+			? { hasSignedAttrs: false as const }
+			: {
+					hasSignedAttrs: true as const,
+					signedAttrsDer: new Uint8Array(
+						signerDer.slice(
+							signedAttrsElement.start - signedAttrsElement.headerLength,
+							signedAttrsElement.end,
+						),
+					),
+				}),
+	};
+}
+
+function parsePkcs7AlgorithmOid(source: Uint8Array, element: DerElement, label: string): string {
+	const algorithmDer = source.slice(element.start - element.headerLength, element.end);
+	return decodeObjectIdentifier(requireElement(readSequenceChildren(algorithmDer)[0], label).value);
 }
 
 /** Unwraps the OCTET STRING inside the IMPLICIT [0] encapsulated content. */
@@ -1123,47 +1146,77 @@ function parseSignedAttributeRequirements(signedAttrsDer: Uint8Array): {
 	readonly contentTypeOid: string;
 } {
 	const outer = readElement(signedAttrsDer);
-	let messageDigest: Uint8Array | undefined;
-	let contentTypeOid: string | undefined;
+	const fields: ParsedSignedAttributeFields = {};
 	for (const attr of childrenOf(signedAttrsDer, outer)) {
-		const attrDer = signedAttrsDer.slice(attr.start - attr.headerLength, attr.end);
-		const parts = readSequenceChildren(attrDer);
-		const oid = parts[0];
-		const values = parts[1];
-		if (oid === undefined || values === undefined || parts.length !== 2 || values.tag !== 0x31) {
-			throw new Error('Malformed signedAttrs attribute');
-		}
-		const attrOid = decodeObjectIdentifier(oid.value);
-		const valueElements = childrenOf(attrDer, values);
-		if (attrOid === OIDS.cmsMessageDigest) {
-			if (messageDigest !== undefined || valueElements.length !== 1) {
-				throw new Error('messageDigest attribute must appear exactly once with one value');
-			}
-			const digestElement = valueElements[0];
-			if (digestElement === undefined || digestElement.tag !== 0x04) {
-				throw new Error('messageDigest attribute value must use OCTET STRING');
-			}
-			messageDigest = digestElement.value;
-			continue;
-		}
-		if (attrOid === OIDS.cmsContentType) {
-			if (contentTypeOid !== undefined || valueElements.length !== 1) {
-				throw new Error('contentType attribute must appear exactly once with one value');
-			}
-			const contentType = valueElements[0];
-			if (contentType === undefined || contentType.tag !== 0x06) {
-				throw new Error('contentType attribute value must use OBJECT IDENTIFIER');
-			}
-			contentTypeOid = decodeObjectIdentifier(contentType.value);
-		}
+		parseSignedAttributeRequirement(signedAttrsDer, attr, fields);
 	}
-	if (messageDigest === undefined) {
+	if (fields.messageDigest === undefined) {
 		throw new Error('Missing messageDigest attribute in signedAttrs');
 	}
-	if (contentTypeOid === undefined) {
+	if (fields.contentTypeOid === undefined) {
 		throw new Error('Missing contentType attribute in signedAttrs');
 	}
-	return { messageDigest, contentTypeOid };
+	return { messageDigest: fields.messageDigest, contentTypeOid: fields.contentTypeOid };
+}
+
+function parseSignedAttributeRequirement(
+	signedAttrsDer: Uint8Array,
+	attr: DerElement,
+	fields: ParsedSignedAttributeFields,
+): void {
+	const attrDer = signedAttrsDer.slice(attr.start - attr.headerLength, attr.end);
+	const parts = readSequenceChildren(attrDer);
+	const oid = parts[0];
+	const values = parts[1];
+	if (oid === undefined || values === undefined || parts.length !== 2 || values.tag !== 0x31) {
+		throw new Error('Malformed signedAttrs attribute');
+	}
+	const attrOid = decodeObjectIdentifier(oid.value);
+	const valueElements = childrenOf(attrDer, values);
+	if (attrOid === OIDS.cmsMessageDigest) {
+		fields.messageDigest = parseUniqueSignedAttributeOctetString(
+			fields.messageDigest,
+			valueElements,
+			'messageDigest',
+		);
+	}
+	if (attrOid === OIDS.cmsContentType) {
+		fields.contentTypeOid = parseUniqueSignedAttributeOid(
+			fields.contentTypeOid,
+			valueElements,
+			'contentType',
+		);
+	}
+}
+
+function parseUniqueSignedAttributeOctetString(
+	existing: Uint8Array | undefined,
+	valueElements: readonly DerElement[],
+	label: string,
+): Uint8Array {
+	if (existing !== undefined || valueElements.length !== 1) {
+		throw new Error(`${label} attribute must appear exactly once with one value`);
+	}
+	const value = requireElement(valueElements[0], `${label} attribute value`);
+	if (value.tag !== 0x04) {
+		throw new Error(`${label} attribute value must use OCTET STRING`);
+	}
+	return value.value;
+}
+
+function parseUniqueSignedAttributeOid(
+	existing: string | undefined,
+	valueElements: readonly DerElement[],
+	label: string,
+): string {
+	if (existing !== undefined || valueElements.length !== 1) {
+		throw new Error(`${label} attribute must appear exactly once with one value`);
+	}
+	const value = requireElement(valueElements[0], `${label} attribute value`);
+	if (value.tag !== 0x06) {
+		throw new Error(`${label} attribute value must use OBJECT IDENTIFIER`);
+	}
+	return decodeObjectIdentifier(value.value);
 }
 
 /** Replaces the IMPLICIT [0] tag (0xa0) with SET OF (0x31) per RFC 5652 Section 5.4. */

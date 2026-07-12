@@ -643,59 +643,97 @@ async function validateCandidatePathRaw(
 		return failure('issuer_not_found', 'chain is empty', 0);
 	}
 
-	if (chain.length === 1 && isSelfIssued(leaf)) {
-		if (input.allowSelfSignedLeaf !== true) {
-			return failure(
-				'self_signed_leaf_not_allowed',
-				'self-signed leaf not allowed',
-				0,
-				detail({
-					subjectCommonName: leaf.subject.values.commonName,
-				}),
-			);
-		}
-	}
+	const selfSignedLeafFailure = validateSelfSignedLeafAllowed(leaf, chain.length, input);
+	if (selfSignedLeafFailure !== undefined) return selfSignedLeafFailure;
+	const certificateFailure = await validatePathCertificates(chain, at);
+	if (certificateFailure !== undefined) return certificateFailure;
+	const pathLengthFailure = validatePathLengthConstraints(chain);
+	if (pathLengthFailure !== undefined) return pathLengthFailure;
+	const policyResult = validatePolicyAndNameConstraints(chain, validationStateResult.value);
+	if (!policyResult.ok) return policyResult;
 
+	return validateLeaf(leaf, input, policyResult.policyValidation);
+}
+
+function validateSelfSignedLeafAllowed(
+	leaf: ParsedCertificate,
+	chainLength: number,
+	input: ValidateCandidatePathInput,
+): ValidateCandidatePathFailure | undefined {
+	if (chainLength !== 1 || !isSelfIssued(leaf) || input.allowSelfSignedLeaf === true)
+		return undefined;
+	return failure(
+		'self_signed_leaf_not_allowed',
+		'self-signed leaf not allowed',
+		0,
+		detail({ subjectCommonName: leaf.subject.values.commonName }),
+	);
+}
+
+async function validatePathCertificates(
+	chain: readonly ParsedCertificate[],
+	at: Date,
+): Promise<ValidateCandidatePathFailure | undefined> {
 	for (let index = 0; index < chain.length; index += 1) {
 		const current = chain[index];
-		if (current === undefined) {
-			return failure('issuer_not_found', 'chain element missing', index);
-		}
+		if (current === undefined) return failure('issuer_not_found', 'chain element missing', index);
 		const certificateValidation = validateCertificateAtPathIndex(current, index, at);
 		if (certificateValidation !== undefined) return certificateValidation;
-		if (index === chain.length - 1) {
-			continue;
-		}
-		const issuer = chain[index + 1];
-		if (issuer === undefined) {
-			return failure('issuer_not_found', 'issuer missing', index);
-		}
-		const issuerValidation = await validateIssuerAtPathIndex(current, issuer, index);
+		const issuerValidation = await validatePathIssuerAtIndex(chain, current, index);
 		if (issuerValidation !== undefined) return issuerValidation;
 	}
+	return undefined;
+}
 
+async function validatePathIssuerAtIndex(
+	chain: readonly ParsedCertificate[],
+	current: ParsedCertificate,
+	index: number,
+): Promise<ValidateCandidatePathFailure | undefined> {
+	if (index === chain.length - 1) return undefined;
+	const issuer = chain[index + 1];
+	if (issuer === undefined) return failure('issuer_not_found', 'issuer missing', index);
+	return await validateIssuerAtPathIndex(current, issuer, index);
+}
+
+function validatePathLengthConstraints(
+	chain: readonly ParsedCertificate[],
+): ValidateCandidatePathFailure | undefined {
 	for (let index = 1; index < chain.length; index += 1) {
 		const current = chain[index];
-		if (current === undefined) {
-			return failure('issuer_not_found', 'chain element missing', index);
-		}
+		if (current === undefined) return failure('issuer_not_found', 'chain element missing', index);
 		const maxCaBelow = countCaCertificatesBelowParsed(chain, index);
 		const pathLength = current.basicConstraints?.pathLength;
 		if (isNonNegativeInteger(pathLength) && maxCaBelow > pathLength) {
-			return failure(
-				'path_length_exceeded',
-				'path length constraint exceeded',
-				index,
-				detail({
-					subjectCommonName: current.subject.values.commonName,
-					expected: String(pathLength),
-					actual: String(maxCaBelow),
-				}),
-			);
+			return pathLengthExceededFailure(current, index, pathLength, maxCaBelow);
 		}
 	}
+	return undefined;
+}
 
-	const policyResult = evaluatePolicyChain(chain, validationStateResult.value.policy);
+function pathLengthExceededFailure(
+	certificate: ParsedCertificate,
+	index: number,
+	pathLength: number,
+	maxCaBelow: number,
+): ValidateCandidatePathFailure {
+	return failure(
+		'path_length_exceeded',
+		'path length constraint exceeded',
+		index,
+		detail({
+			subjectCommonName: certificate.subject.values.commonName,
+			expected: String(pathLength),
+			actual: String(maxCaBelow),
+		}),
+	);
+}
+
+function validatePolicyAndNameConstraints(
+	chain: readonly ParsedCertificate[],
+	validationState: ValidationState,
+): ValidateCandidatePathRawResult {
+	const policyResult = evaluatePolicyChain(chain, validationState.policy);
 	if (!policyResult.ok) {
 		return failure(
 			policyResult.error.code,
@@ -707,16 +745,10 @@ async function validateCandidatePathRaw(
 			}),
 		);
 	}
-
-	const nameConstraintResult = evaluateNameConstraints(
-		chain,
-		validationStateResult.value.nameConstraints,
-	);
-	if (!nameConstraintResult.ok) {
-		return nameConstraintResult;
-	}
-
-	return validateLeaf(leaf, input, policyResult.value);
+	const nameConstraintResult = evaluateNameConstraints(chain, validationState.nameConstraints);
+	return nameConstraintResult.ok
+		? { ok: true, policyValidation: policyResult.value }
+		: nameConstraintResult;
 }
 
 function validateCertificateAtPathIndex(
@@ -1671,9 +1703,9 @@ function buildValidationState(
 
 function normalizeInitialPolicySet(
 	initialPolicySet: PolicyValidationInput['initialPolicySet'] | undefined,
-): PolicyValidationInput['initialPolicySet'] | undefined {
-	if (initialPolicySet === undefined || initialPolicySet === 'any') {
-		return initialPolicySet;
+): PolicyValidationInput['initialPolicySet'] {
+	if (initialPolicySet === undefined) {
+		return undefined;
 	}
 	if (!Array.isArray(initialPolicySet)) {
 		return [];

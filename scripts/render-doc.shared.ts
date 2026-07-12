@@ -215,42 +215,56 @@ function renderDescription(js: JsDoc | undefined): string {
 /** Non-param tag blocks: returns, throws, see, examples, surfaced defaults. */
 function renderTagBlocks(js: JsDoc | undefined): string {
 	const tags = js?.tags ?? [];
-	const out: string[] = [];
+	return [
+		...renderReturnTags(tags),
+		...renderThrowsTags(tags),
+		...renderSeeTags(tags),
+		...renderUnsupportedTags(tags),
+		...renderExampleTags(tags),
+	]
+		.join('\n')
+		.trimEnd();
+}
 
+function renderReturnTags(tags: readonly JsDocTag[]): string[] {
+	const out: string[] = [];
 	for (const r of tagsOfKind(tags, 'return')) {
 		if (r.doc) out.push(`**Returns** — ${resolveInlineLinks(r.doc)}`, '');
 	}
+	return out;
+}
 
+function renderThrowsTags(tags: readonly JsDocTag[]): string[] {
 	const throws = tagsOfKind(tags, 'throws');
-	if (throws.length) {
-		out.push('**Throws**');
-		for (const t of throws) {
-			const ty = t.tsType ? `${renderType(t.tsType)} — ` : '';
-			out.push(`- ${ty}${bulletBody(t.doc ?? '')}`);
-		}
-		out.push('');
+	if (!throws.length) return [];
+	const out = ['**Throws**'];
+	for (const t of throws) {
+		const ty = t.tsType ? `${renderType(t.tsType)} — ` : '';
+		out.push(`- ${ty}${bulletBody(t.doc ?? '')}`);
 	}
+	return [...out, ''];
+}
 
+function renderSeeTags(tags: readonly JsDocTag[]): string[] {
 	const see = tagsByName(tags, 'see');
-	if (see.length) {
-		out.push('**See also**');
-		for (const s of see) out.push(`- ${bulletBody(s.doc ?? '')}`);
-		out.push('');
-	}
+	if (!see.length) return [];
+	return ['**See also**', ...see.map((s) => `- ${bulletBody(s.doc ?? '')}`), ''];
+}
 
-	// deno emits unclassified tags (e.g. `@default X`) as `unsupported`.
+function renderUnsupportedTags(tags: readonly JsDocTag[]): string[] {
+	const out: string[] = [];
 	for (const u of tagsOfKind(tags, 'unsupported')) {
 		if (u.value) out.push(resolveInlineLinks(u.value), '');
 	}
+	return out;
+}
 
+function renderExampleTags(tags: readonly JsDocTag[]): string[] {
 	const examples = tagsByName(tags, 'example');
-	if (examples.length) {
-		out.push('**Examples**', '');
-		// example.doc is already fenced markdown — emit verbatim, never touch the code
-		for (const e of examples) if (e.doc) out.push(e.doc.trimEnd(), '');
-	}
-
-	return out.join('\n').trimEnd();
+	if (!examples.length) return [];
+	const out = ['**Examples**', ''];
+	for (const e of examples) if (e.doc) out.push(e.doc.trimEnd(), '');
+	return out;
 }
 
 /** module_doc: description + tag blocks, no params. */

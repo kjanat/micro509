@@ -188,35 +188,9 @@ export function encodePbes2AlgorithmIdentifier(parameters: Pbes2Parameters): Uin
 
 /** Decodes a DER-encoded PBES2 AlgorithmIdentifier into structured {@linkcode Pbes2Parameters}. */
 export function parsePbes2AlgorithmIdentifier(algorithmIdentifierDer: Uint8Array): Pbes2Parameters {
-	const topLevel = readSequenceChildren(algorithmIdentifierDer);
-	const oid = topLevel[0];
-	const params = topLevel[1];
-	if (oid === undefined || params === undefined) {
-		throw new Error('Malformed PBES2 algorithm identifier');
-	}
-	if (decodeObjectIdentifier(oid.value) !== OIDS.pbes2) {
-		throw new Error('Unsupported encryption algorithm');
-	}
-	const paramsDer = algorithmIdentifierDer.slice(params.start - params.headerLength, params.end);
-	const pbes2Params = readSequenceChildren(paramsDer);
-	const kdf = pbes2Params[0];
-	const scheme = pbes2Params[1];
-	if (kdf === undefined || scheme === undefined) {
-		throw new Error('Malformed PBES2 params');
-	}
-	const kdfDer = paramsDer.slice(kdf.start - kdf.headerLength, kdf.end);
-	const kdfChildren = readSequenceChildren(kdfDer);
-	const kdfOid = kdfChildren[0];
-	const kdfParams = kdfChildren[1];
-	if (kdfOid === undefined || kdfParams === undefined) {
-		throw new Error('Malformed KDF params');
-	}
-	if (decodeObjectIdentifier(kdfOid.value) !== OIDS.pbkdf2) {
-		throw new Error('Unsupported KDF');
-	}
+	const { paramsDer, kdf, scheme } = parsePbes2OuterFields(algorithmIdentifierDer);
+	const { pbkdf2Der, pbkdf2Params } = parsePbes2KdfFields(paramsDer, kdf);
 	// PBKDF2 params: SEQUENCE { salt OCTET STRING, iterationCount INTEGER, [keyLength INTEGER], [prf AlgorithmIdentifier] }
-	const pbkdf2Der = kdfDer.slice(kdfParams.start - kdfParams.headerLength, kdfParams.end);
-	const pbkdf2Params = readSequenceChildren(pbkdf2Der);
 	const salt = pbkdf2Params[0];
 	const iterations = pbkdf2Params[1];
 	if (salt === undefined || iterations === undefined || salt.tag !== 0x04) {
@@ -269,6 +243,51 @@ export function parsePbes2AlgorithmIdentifier(algorithmIdentifierDer: Uint8Array
 		cipher: encryption.name,
 		prf,
 	};
+}
+
+function parsePbes2OuterFields(algorithmIdentifierDer: Uint8Array): {
+	readonly paramsDer: Uint8Array;
+	readonly kdf: ReturnType<typeof readSequenceChildren>[number];
+	readonly scheme: ReturnType<typeof readSequenceChildren>[number];
+} {
+	const topLevel = readSequenceChildren(algorithmIdentifierDer);
+	const oid = topLevel[0];
+	const params = topLevel[1];
+	if (oid === undefined || params === undefined) {
+		throw new Error('Malformed PBES2 algorithm identifier');
+	}
+	if (decodeObjectIdentifier(oid.value) !== OIDS.pbes2) {
+		throw new Error('Unsupported encryption algorithm');
+	}
+	const paramsDer = algorithmIdentifierDer.slice(params.start - params.headerLength, params.end);
+	const pbes2Params = readSequenceChildren(paramsDer);
+	const kdf = pbes2Params[0];
+	const scheme = pbes2Params[1];
+	if (kdf === undefined || scheme === undefined) {
+		throw new Error('Malformed PBES2 params');
+	}
+	return { paramsDer, kdf, scheme };
+}
+
+function parsePbes2KdfFields(
+	paramsDer: Uint8Array,
+	kdf: ReturnType<typeof readSequenceChildren>[number],
+): {
+	readonly pbkdf2Der: Uint8Array;
+	readonly pbkdf2Params: ReturnType<typeof readSequenceChildren>;
+} {
+	const kdfDer = paramsDer.slice(kdf.start - kdf.headerLength, kdf.end);
+	const kdfChildren = readSequenceChildren(kdfDer);
+	const kdfOid = kdfChildren[0];
+	const kdfParams = kdfChildren[1];
+	if (kdfOid === undefined || kdfParams === undefined) {
+		throw new Error('Malformed KDF params');
+	}
+	if (decodeObjectIdentifier(kdfOid.value) !== OIDS.pbkdf2) {
+		throw new Error('Unsupported KDF');
+	}
+	const pbkdf2Der = kdfDer.slice(kdfParams.start - kdfParams.headerLength, kdfParams.end);
+	return { pbkdf2Der, pbkdf2Params: readSequenceChildren(pbkdf2Der) };
 }
 
 /** Derives an AES-CBC `CryptoKey` from a password via PBKDF2. */

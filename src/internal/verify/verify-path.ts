@@ -257,45 +257,69 @@ export async function buildChainInternal(
 			rootFingerprints,
 		);
 		if (issuers.length === 0) {
-			if (isSelfIssued(current)) {
-				updateDeepest(path);
-				sawUntrustedAnchor = true;
-			} else if (updateDeepest(path)) {
-				deepestMissingIssuerAt = path.length - 1;
-			}
+			recordMissingIssuers(current, path);
 			deadEnds.add(memoKey);
 			return undefined;
 		}
 
-		for (const issuer of issuers) {
-			const issuerFingerprint = fingerprint(issuer);
-			if (visited.has(issuerFingerprint)) {
-				continue;
-			}
-			const candidate = await evaluateIssuerCandidate(
-				current,
-				issuer,
-				path,
-				caBelowCount,
-				at,
-				callbacks,
-			);
-			if (!candidate.ok) {
-				recordFailure(candidate.failure, path);
-				continue;
-			}
-			const nextVisited = new Set(visited);
-			nextVisited.add(issuerFingerprint);
-			const nextPath = [...path, issuer];
-			const result = await search(issuer, nextPath, nextVisited, candidate.nextCaBelowCount);
-			if (result !== undefined) {
-				return result;
-			}
-		}
+		const issuerPath = await searchIssuerCandidates(current, issuers, path, visited, caBelowCount);
+		if (issuerPath !== undefined) return issuerPath;
 
 		deadEnds.add(memoKey);
 		updateDeepest(path);
 		return undefined;
+	}
+
+	function recordMissingIssuers(
+		current: ParsedCertificate,
+		path: readonly ParsedCertificate[],
+	): void {
+		if (isSelfIssued(current)) {
+			updateDeepest(path);
+			sawUntrustedAnchor = true;
+		} else if (updateDeepest(path)) {
+			deepestMissingIssuerAt = path.length - 1;
+		}
+	}
+
+	async function searchIssuerCandidates(
+		current: ParsedCertificate,
+		issuers: readonly ParsedCertificate[],
+		path: readonly ParsedCertificate[],
+		visited: ReadonlySet<string>,
+		caBelowCount: number,
+	): Promise<readonly ParsedCertificate[] | undefined> {
+		for (const issuer of issuers) {
+			const result = await searchIssuerCandidate(current, issuer, path, visited, caBelowCount);
+			if (result !== undefined) return result;
+		}
+		return undefined;
+	}
+
+	async function searchIssuerCandidate(
+		current: ParsedCertificate,
+		issuer: ParsedCertificate,
+		path: readonly ParsedCertificate[],
+		visited: ReadonlySet<string>,
+		caBelowCount: number,
+	): Promise<readonly ParsedCertificate[] | undefined> {
+		const issuerFingerprint = fingerprint(issuer);
+		if (visited.has(issuerFingerprint)) return undefined;
+		const candidate = await evaluateIssuerCandidate(
+			current,
+			issuer,
+			path,
+			caBelowCount,
+			at,
+			callbacks,
+		);
+		if (!candidate.ok) {
+			recordFailure(candidate.failure, path);
+			return undefined;
+		}
+		const nextVisited = new Set(visited);
+		nextVisited.add(issuerFingerprint);
+		return await search(issuer, [...path, issuer], nextVisited, candidate.nextCaBelowCount);
 	}
 
 	function updateDeepest(path: readonly ParsedCertificate[]): boolean {
@@ -544,33 +568,9 @@ async function matchTrustAnchor(
 	}
 	let firstFailure: VerifyChainFailure | undefined;
 	for (const anchor of anchors) {
-		if (
-			anchor.subjectKeyIdentifier !== undefined &&
-			certificate.authorityKeyIdentifier !== undefined &&
-			anchor.subjectKeyIdentifier !== certificate.authorityKeyIdentifier
-		) {
-			continue;
-		}
-		let verified: VerifyCertificateSignatureResult;
-		try {
-			const verificationResult = await verifySignedDataDetailed(
-				certificate.signatureAlgorithmOid,
-				certificate.signatureAlgorithmParametersDer,
-				anchor.publicKeyAlgorithmOid,
-				anchor.publicKeyParametersOid,
-				anchor.subjectPublicKeyInfoDer,
-				certificate.signatureValue,
-				certificate.tbsCertificateDer,
-			);
-			verified =
-				!verificationResult.ok && verificationResult.code === 'verification_error'
-					? {
-							ok: false,
-							code: 'signature_invalid',
-							reason: verificationResult.reason,
-						}
-					: verificationResult;
-		} catch (error) {
+		if (trustAnchorAkiMismatch(certificate, anchor)) continue;
+		const verified = await verifyTrustAnchorSignature(certificate, anchor);
+		if (verified instanceof Error) {
 			if (firstFailure === undefined) {
 				firstFailure = callbacks.failure(
 					'signature_invalid',
@@ -578,7 +578,7 @@ async function matchTrustAnchor(
 					index,
 					callbacks.detail({
 						subjectCommonName: certificate.subject.values.commonName,
-						actual: error instanceof Error ? error.message : 'trust anchor key is malformed',
+						actual: verified.message,
 					}),
 				);
 			}
@@ -618,6 +618,36 @@ async function matchTrustAnchor(
 	return firstFailure !== undefined
 		? { matched: false, failure: firstFailure }
 		: { matched: false };
+}
+
+function trustAnchorAkiMismatch(certificate: ParsedCertificate, anchor: TrustAnchor): boolean {
+	return (
+		anchor.subjectKeyIdentifier !== undefined &&
+		certificate.authorityKeyIdentifier !== undefined &&
+		anchor.subjectKeyIdentifier !== certificate.authorityKeyIdentifier
+	);
+}
+
+async function verifyTrustAnchorSignature(
+	certificate: ParsedCertificate,
+	anchor: TrustAnchor,
+): Promise<VerifyCertificateSignatureResult | Error> {
+	try {
+		const verificationResult = await verifySignedDataDetailed(
+			certificate.signatureAlgorithmOid,
+			certificate.signatureAlgorithmParametersDer,
+			anchor.publicKeyAlgorithmOid,
+			anchor.publicKeyParametersOid,
+			anchor.subjectPublicKeyInfoDer,
+			certificate.signatureValue,
+			certificate.tbsCertificateDer,
+		);
+		return !verificationResult.ok && verificationResult.code === 'verification_error'
+			? { ok: false, code: 'signature_invalid', reason: verificationResult.reason }
+			: verificationResult;
+	} catch (error) {
+		return new Error(error instanceof Error ? error.message : 'trust anchor key is malformed');
+	}
 }
 
 function describeDateTime(value: Date): string {

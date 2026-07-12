@@ -26,7 +26,7 @@
 				"recommended": true,
 				"useLiteralKeys": "off",
 				"noExcessiveCognitiveComplexity": {
-					"options": { "maxAllowedComplexity": 30 },
+					"options": { "maxAllowedComplexity": 20 },
 					"level": "info"
 				},
 			},

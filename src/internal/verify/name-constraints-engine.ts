@@ -345,75 +345,95 @@ function checkCertificateNames(
 	accumulated: AccumulatedNameConstraints,
 	index: number,
 ): NameConstraintValidationResult {
-	// Check subject DN as directoryName (if non-empty).
-	if (certificate.subject.derHex !== EMPTY_SEQUENCE_HEX) {
-		const dnResult = isNamePermitted(
-			{ type: 'directoryName', derHex: certificate.subject.derHex },
-			accumulated,
-		);
-		if (!dnResult) {
-			return nameConstraintFailure(
+	const subjectResult = checkCertificateSubjectName(certificate, accumulated, index);
+	if (!subjectResult.ok) return subjectResult;
+	const sanResult = checkCertificateSubjectAltNames(certificate, accumulated, index);
+	if (!sanResult.ok) return sanResult;
+	const subjectEmailResult = checkCertificateSubjectEmailFallback(certificate, accumulated, index);
+	if (!subjectEmailResult.ok) return subjectEmailResult;
+	return { ok: true };
+}
+
+function checkCertificateSubjectName(
+	certificate: ParsedCertificate,
+	accumulated: AccumulatedNameConstraints,
+	index: number,
+): NameConstraintValidationResult {
+	if (certificate.subject.derHex === EMPTY_SEQUENCE_HEX) return { ok: true };
+	const dnResult = isNamePermitted(
+		{ type: 'directoryName', derHex: certificate.subject.derHex },
+		accumulated,
+	);
+	return dnResult
+		? { ok: true }
+		: nameConstraintFailure(
 				'name_constraints_violated',
 				'subject distinguished name violates name constraints',
 				index,
-				nameConstraintDetails({
-					subjectCommonName: certificate.subject.values.commonName,
-				}),
+				nameConstraintDetails({ subjectCommonName: certificate.subject.values.commonName }),
 			);
-		}
-	}
+}
 
-	// Check each SAN.
-	if (certificate.subjectAltNames !== undefined) {
-		for (const san of certificate.subjectAltNames) {
-			// RFC 5280 §4.2.1.10: a critical nameConstraints extension imposing
-			// constraints on a name form this engine cannot process forces
-			// rejection of any subsequent certificate carrying that form.
-			const unsupportedForm = sanUnsupportedFormType(san);
-			if (
-				unsupportedForm !== undefined &&
-				accumulated.unsupportedCriticalForms.has(unsupportedForm)
-			) {
-				return nameConstraintFailure(
-					'unsupported_name_constraints',
-					`critical name constraints impose ${unsupportedForm} constraints that cannot be processed, and the certificate contains a ${unsupportedForm} subject alternative name`,
-					index,
-					nameConstraintDetails({
-						subjectCommonName: certificate.subject.values.commonName,
-						actual: unsupportedForm,
-					}),
-				);
-			}
-			const checkableResult = sanToConstraintCheckable(san);
-			if (!checkableResult.ok) {
-				return nameConstraintFailure(
-					'name_constraints_violated',
-					`SAN ${checkableResult.actual} is malformed and cannot be checked against name constraints`,
-					index,
-					nameConstraintDetails({
-						subjectCommonName: certificate.subject.values.commonName,
-						actual: checkableResult.actual,
-					}),
-				);
-			}
-			const checkable = checkableResult.value;
-			if (checkable === undefined) {
-				continue;
-			}
-			if (!isNamePermitted(checkable, accumulated)) {
-				return nameConstraintFailure(
-					'name_constraints_violated',
-					`SAN ${formatConstraintForm(checkable)} violates name constraints`,
-					index,
-					nameConstraintDetails({
-						subjectCommonName: certificate.subject.values.commonName,
-						actual: formatConstraintForm(checkable),
-					}),
-				);
-			}
-		}
+function checkCertificateSubjectAltNames(
+	certificate: ParsedCertificate,
+	accumulated: AccumulatedNameConstraints,
+	index: number,
+): NameConstraintValidationResult {
+	for (const san of certificate.subjectAltNames ?? []) {
+		const result = checkCertificateSubjectAltName(certificate, accumulated, san, index);
+		if (!result.ok) return result;
 	}
+	return { ok: true };
+}
 
+function checkCertificateSubjectAltName(
+	certificate: ParsedCertificate,
+	accumulated: AccumulatedNameConstraints,
+	san: SubjectAltName,
+	index: number,
+): NameConstraintValidationResult {
+	const unsupportedForm = sanUnsupportedFormType(san);
+	if (unsupportedForm !== undefined && accumulated.unsupportedCriticalForms.has(unsupportedForm)) {
+		return nameConstraintFailure(
+			'unsupported_name_constraints',
+			`critical name constraints impose ${unsupportedForm} constraints that cannot be processed, and the certificate contains a ${unsupportedForm} subject alternative name`,
+			index,
+			nameConstraintDetails({
+				subjectCommonName: certificate.subject.values.commonName,
+				actual: unsupportedForm,
+			}),
+		);
+	}
+	const checkableResult = sanToConstraintCheckable(san);
+	if (!checkableResult.ok) {
+		return nameConstraintFailure(
+			'name_constraints_violated',
+			`SAN ${checkableResult.actual} is malformed and cannot be checked against name constraints`,
+			index,
+			nameConstraintDetails({
+				subjectCommonName: certificate.subject.values.commonName,
+				actual: checkableResult.actual,
+			}),
+		);
+	}
+	const checkable = checkableResult.value;
+	if (checkable === undefined || isNamePermitted(checkable, accumulated)) return { ok: true };
+	return nameConstraintFailure(
+		'name_constraints_violated',
+		`SAN ${formatConstraintForm(checkable)} violates name constraints`,
+		index,
+		nameConstraintDetails({
+			subjectCommonName: certificate.subject.values.commonName,
+			actual: formatConstraintForm(checkable),
+		}),
+	);
+}
+
+function checkCertificateSubjectEmailFallback(
+	certificate: ParsedCertificate,
+	accumulated: AccumulatedNameConstraints,
+	index: number,
+): NameConstraintValidationResult {
 	// RFC 5280 §4.2.1.10: When constraints are imposed on the rfc822Name
 	// name form, but the certificate does not include a SAN email, the
 	// constraint MUST be applied to the emailAddress attribute in the

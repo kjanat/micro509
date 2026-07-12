@@ -479,24 +479,8 @@ export function parseOcspRequestDerOrThrow(der: Uint8Array): ParsedOcspRequest {
 		validateOcspOptionalSignature(der, optionalSignature);
 	}
 	const tbsChildren = childrenOf(der, tbsRequest);
-	let cursor = 0;
-	if (tbsChildren[cursor]?.tag === 0xa0) {
-		const versionWrapper = requireElement(tbsChildren[cursor], 'version');
-		const versionFields = childrenOf(der, versionWrapper);
-		const versionElement = requireElement(versionFields[0], 'version');
-		if (versionFields.length !== 1 || versionElement.tag !== 0x02) {
-			throw new Error('version must use INTEGER');
-		}
-		if (decodeNonNegativeIntegerNumber(versionElement.value, 'OCSP request version') !== 0) {
-			throw new Error('Unsupported OCSP request version');
-		}
-		cursor += 1;
-	}
-	const requestorName = tbsChildren[cursor];
-	if (requestorName?.tag === 0xa1) {
-		validateOcspRequestorName(der, requestorName);
-		cursor += 1;
-	}
+	let cursor = skipOcspRequestVersion(der, tbsChildren, 0);
+	cursor = skipOcspRequestorName(der, tbsChildren, cursor);
 	const requestList = requireElement(tbsChildren[cursor], 'requestList');
 	if (requestList.tag !== 0x30) {
 		throw new Error('requestList must use SEQUENCE');
@@ -530,6 +514,35 @@ export function parseOcspRequestDerOrThrow(der: Uint8Array): ParsedOcspRequest {
 		requests,
 		...(nonce === undefined ? {} : { nonce }),
 	};
+}
+
+function skipOcspRequestVersion(
+	der: Uint8Array,
+	tbsChildren: readonly DerElement[],
+	cursor: number,
+): number {
+	if (tbsChildren[cursor]?.tag !== 0xa0) return cursor;
+	const versionWrapper = requireElement(tbsChildren[cursor], 'version');
+	const versionFields = childrenOf(der, versionWrapper);
+	const versionElement = requireElement(versionFields[0], 'version');
+	if (versionFields.length !== 1 || versionElement.tag !== 0x02) {
+		throw new Error('version must use INTEGER');
+	}
+	if (decodeNonNegativeIntegerNumber(versionElement.value, 'OCSP request version') !== 0) {
+		throw new Error('Unsupported OCSP request version');
+	}
+	return cursor + 1;
+}
+
+function skipOcspRequestorName(
+	der: Uint8Array,
+	tbsChildren: readonly DerElement[],
+	cursor: number,
+): number {
+	const requestorName = tbsChildren[cursor];
+	if (requestorName?.tag !== 0xa1) return cursor;
+	validateOcspRequestorName(der, requestorName);
+	return cursor + 1;
 }
 
 /** Decodes a PEM-encoded OCSP request (`-----BEGIN OCSP REQUEST-----`). */

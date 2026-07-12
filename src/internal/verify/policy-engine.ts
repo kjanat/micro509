@@ -774,27 +774,44 @@ function updatePolicyCounters(
 	isLeaf: boolean,
 ): void {
 	if (isLeaf) {
-		if (state.explicitPolicy > 0) {
-			state.explicitPolicy -= 1;
-		}
-		if (isNonNegativeInteger(certificate.policyConstraints?.requireExplicitPolicy)) {
-			if (certificate.policyConstraints.requireExplicitPolicy === 0) {
-				state.explicitPolicy = 0;
-			}
-		}
+		updateLeafPolicyCounter(state, certificate);
 		return;
 	}
 	if (!isSelfIssued(certificate)) {
-		if (state.explicitPolicy > 0) {
-			state.explicitPolicy -= 1;
-		}
-		if (state.inhibitPolicyMapping > 0) {
-			state.inhibitPolicyMapping -= 1;
-		}
-		if (state.inhibitAnyPolicy > 0) {
-			state.inhibitAnyPolicy -= 1;
-		}
+		decrementPolicyCounters(state);
 	}
+	applyPolicyCounterOverrides(state, certificate);
+}
+
+function updateLeafPolicyCounter(
+	state: PolicyValidationState,
+	certificate: ParsedCertificate,
+): void {
+	decrementPositiveCounter(state, 'explicitPolicy');
+	if (certificate.policyConstraints?.requireExplicitPolicy === 0) {
+		state.explicitPolicy = 0;
+	}
+}
+
+function decrementPolicyCounters(state: PolicyValidationState): void {
+	decrementPositiveCounter(state, 'explicitPolicy');
+	decrementPositiveCounter(state, 'inhibitPolicyMapping');
+	decrementPositiveCounter(state, 'inhibitAnyPolicy');
+}
+
+function decrementPositiveCounter(
+	state: PolicyValidationState,
+	key: 'explicitPolicy' | 'inhibitPolicyMapping' | 'inhibitAnyPolicy',
+): void {
+	if (state[key] > 0) {
+		state[key] -= 1;
+	}
+}
+
+function applyPolicyCounterOverrides(
+	state: PolicyValidationState,
+	certificate: ParsedCertificate,
+): void {
 	const policyConstraints = certificate.policyConstraints;
 	if (
 		isNonNegativeInteger(policyConstraints?.requireExplicitPolicy) &&

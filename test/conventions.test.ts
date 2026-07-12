@@ -42,6 +42,37 @@ async function offendersMatching(pattern: RegExp): Promise<readonly string[]> {
 	return offenders;
 }
 
+async function orThrowExportsByDomain(): Promise<ReadonlyMap<string, ReadonlySet<string>>> {
+	const orThrowByDomain = new Map<string, Set<string>>();
+	for (const file of sourceFiles()) {
+		const relative = file.slice(srcRoot.length);
+		if (relative.startsWith('internal/') || relative.endsWith('index.ts')) continue;
+		const domain = relative.split('/')[0];
+		if (domain === undefined || !relative.includes('/')) continue;
+		const names = orThrowByDomain.get(domain) ?? new Set<string>();
+		for (const name of exportedNames(await Bun.file(file).text())) {
+			if (name.endsWith('OrThrow')) names.add(name);
+		}
+		orThrowByDomain.set(domain, names);
+	}
+	return orThrowByDomain;
+}
+
+async function missingOrThrowExports(
+	barrel: string,
+	names: Iterable<string>,
+): Promise<readonly string[]> {
+	const exported = exportedNames(await Bun.file(`${srcRoot}/${barrel}`).text());
+	const offenders: string[] = [];
+	for (const orThrowName of names) {
+		const baseName = orThrowName.slice(0, -'OrThrow'.length);
+		if (exported.has(baseName) && !exported.has(orThrowName)) {
+			offenders.push(`${barrel}: ${orThrowName}`);
+		}
+	}
+	return offenders;
+}
+
 describe('repo conventions (AGENTS.md / CONTRIBUTING.md)', () => {
 	it('src/ declares no classes', async () => {
 		// Line must begin (after indentation, optional `export`/`abstract`) with `class`.
@@ -58,37 +89,15 @@ describe('repo conventions (AGENTS.md / CONTRIBUTING.md)', () => {
 		// If a module defines `fooOrThrow` and a barrel re-exports `foo`, the barrel
 		// must re-export `fooOrThrow` too — otherwise the throwing variant is
 		// implemented and documented but unreachable from the published package.
-		const orThrowByDomain = new Map<string, Set<string>>();
-		for (const file of sourceFiles()) {
-			const relative = file.slice(srcRoot.length);
-			if (relative.startsWith('internal/') || relative.endsWith('index.ts')) continue;
-			const domain = relative.split('/')[0];
-			if (domain === undefined || !relative.includes('/')) continue;
-			const names = orThrowByDomain.get(domain) ?? new Set<string>();
-			for (const name of exportedNames(await Bun.file(file).text())) {
-				if (name.endsWith('OrThrow')) names.add(name);
-			}
-			orThrowByDomain.set(domain, names);
-		}
-
+		const orThrowByDomain = await orThrowExportsByDomain();
 		const offenders: string[] = [];
-		const barrelMissing = async (barrel: string, names: Iterable<string>): Promise<void> => {
-			const exported = exportedNames(await Bun.file(`${srcRoot}/${barrel}`).text());
-			for (const orThrowName of names) {
-				const baseName = orThrowName.slice(0, -'OrThrow'.length);
-				if (exported.has(baseName) && !exported.has(orThrowName)) {
-					offenders.push(`${barrel}: ${orThrowName}`);
-				}
-			}
-		};
-
 		const allOrThrow = new Set<string>();
 		for (const [domain, names] of orThrowByDomain) {
 			if (names.size === 0) continue;
-			await barrelMissing(`${domain}/index.ts`, names);
+			offenders.push(...(await missingOrThrowExports(`${domain}/index.ts`, names)));
 			for (const name of names) allOrThrow.add(name);
 		}
-		await barrelMissing('index.ts', allOrThrow);
+		offenders.push(...(await missingOrThrowExports('index.ts', allOrThrow)));
 
 		expect(offenders).toEqual([]);
 	});

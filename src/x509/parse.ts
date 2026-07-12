@@ -456,6 +456,24 @@ interface ParsedCertificateVersionField {
 	readonly nextIndex: number;
 }
 
+interface ParsedCustomExtensions<TMap extends ExtensionDecoderMap> {
+	readonly decodedExtensions?: readonly DecodedExtensionValue<unknown>[];
+	readonly decodedExtensionMap?: DecodedExtensionMap<TMap>;
+}
+
+interface ParsedCertificationRequestInfoFields {
+	readonly version: number;
+	readonly subject: DerElement;
+	readonly subjectPublicKeyInfo: DerElement;
+	readonly attributes?: DerElement;
+}
+
+interface MutableDistributionPointFields {
+	distributionPoint?: ParsedDistributionPointName;
+	reasons?: ParsedBitFlags<DistributionPointReason>;
+	crlIssuer?: readonly GeneralName[];
+}
+
 /**
  * Throwing core for {@linkcode parseCertificateDer}.
  *
@@ -488,14 +506,7 @@ export function parseCertificateDerOrThrow<TMap extends ExtensionDecoderMap = Re
 		parsedTbsSignatureAlgorithm,
 		parsedSignatureAlgorithm,
 	);
-	const decodedExtensions =
-		options?.decoders === undefined
-			? undefined
-			: decodeExtensions(parsedExtensions.all, options.decoders);
-	const decodedExtensionMap =
-		options?.decoderMap === undefined
-			? undefined
-			: decodeExtensionMap(parsedExtensions.all, options.decoderMap);
+	const customExtensions = parseCustomExtensions(parsedExtensions.all, options);
 
 	return {
 		der: new Uint8Array(der),
@@ -562,14 +573,32 @@ export function parseCertificateDerOrThrow<TMap extends ExtensionDecoderMap = Re
 		...(parsedExtensions.crlDistributionPoints !== undefined
 			? { crlDistributionPoints: parsedExtensions.crlDistributionPoints }
 			: {}),
-		...(decodedExtensions !== undefined ? { decodedExtensions } : {}),
-		...(decodedExtensionMap !== undefined ? { decodedExtensionMap } : {}),
+		...(customExtensions.decodedExtensions === undefined
+			? {}
+			: { decodedExtensions: customExtensions.decodedExtensions }),
+		...(customExtensions.decodedExtensionMap === undefined
+			? {}
+			: { decodedExtensionMap: customExtensions.decodedExtensionMap }),
 		...(parsedExtensions.subjectKeyIdentifier !== undefined
 			? { subjectKeyIdentifier: parsedExtensions.subjectKeyIdentifier }
 			: {}),
 		...(parsedExtensions.authorityKeyIdentifier !== undefined
 			? { authorityKeyIdentifier: parsedExtensions.authorityKeyIdentifier }
 			: {}),
+	};
+}
+
+function parseCustomExtensions<TMap extends ExtensionDecoderMap>(
+	extensions: readonly ParsedExtension[],
+	options: ParseOptions<TMap> | undefined,
+): ParsedCustomExtensions<TMap> {
+	return {
+		...(options?.decoders === undefined
+			? {}
+			: { decodedExtensions: decodeExtensions(extensions, options.decoders) }),
+		...(options?.decoderMap === undefined
+			? {}
+			: { decodedExtensionMap: decodeExtensionMap(extensions, options.decoderMap) }),
 	};
 }
 
@@ -793,48 +822,24 @@ export function parseCertificateSigningRequestDerOrThrow<
 	const certificationRequestInfo = requireElement(topLevel[0], 'CertificationRequestInfo');
 	const signatureAlgorithm = requireElement(topLevel[1], 'signatureAlgorithm');
 	const signatureValue = requireElement(topLevel[2], 'signatureValue');
-	const criChildren = childrenOf(der, certificationRequestInfo);
-	if (criChildren.length < 3 || criChildren.length > 4) {
-		throw new Error('Malformed CertificationRequestInfo');
-	}
-	const versionElement = requireElement(criChildren[0], 'version');
-	if (versionElement.tag !== 0x02) {
-		throw new Error('version must use INTEGER');
-	}
-	const version = decodeIntegerNumber(versionElement.value) + 1;
-	if (version !== 1) {
-		throw new Error(`Unsupported CertificationRequestInfo version: ${String(version)}`);
-	}
-	const subject = requireElement(criChildren[1], 'subject');
-	const subjectPublicKeyInfo = requireElement(criChildren[2], 'subjectPublicKeyInfo');
-	const attributes = criChildren[3];
-	if (attributes !== undefined && attributes.tag !== 0xa0) {
-		throw new Error('CertificationRequestInfo attributes must use [0]');
-	}
-	const parsedExtensions = parseRequestedExtensions(der, attributes);
-	const parsedSpki = parseSubjectPublicKeyInfo(der, subjectPublicKeyInfo);
+	const fields = parseCertificationRequestInfoFields(der, certificationRequestInfo);
+	const parsedExtensions = parseRequestedExtensions(der, fields.attributes);
+	const parsedSpki = parseSubjectPublicKeyInfo(der, fields.subjectPublicKeyInfo);
 	const parsedSignatureAlgorithm = parseAlgorithmIdentifier(der, signatureAlgorithm);
-	const decodedExtensions =
-		options?.decoders === undefined
-			? undefined
-			: decodeExtensions(parsedExtensions.all, options.decoders);
-	const decodedExtensionMap =
-		options?.decoderMap === undefined
-			? undefined
-			: decodeExtensionMap(parsedExtensions.all, options.decoderMap);
+	const customExtensions = parseCustomExtensions(parsedExtensions.all, options);
 
 	return {
-		version,
+		version: fields.version,
 		certificationRequestInfoDer: der.slice(
 			certificationRequestInfo.start - certificationRequestInfo.headerLength,
 			certificationRequestInfo.end,
 		),
 		subjectPublicKeyInfoDer: der.slice(
-			subjectPublicKeyInfo.start - subjectPublicKeyInfo.headerLength,
-			subjectPublicKeyInfo.end,
+			fields.subjectPublicKeyInfo.start - fields.subjectPublicKeyInfo.headerLength,
+			fields.subjectPublicKeyInfo.end,
 		),
 		signatureValue: extractBitStringValue(signatureValue),
-		subject: parseName(der, subject),
+		subject: parseName(der, fields.subject),
 		signatureAlgorithmOid: parsedSignatureAlgorithm.oid,
 		signatureAlgorithmName: describeSignatureAlgorithm(
 			parsedSignatureAlgorithm.oid,
@@ -883,8 +888,40 @@ export function parseCertificateSigningRequestDerOrThrow<
 		...(parsedExtensions.crlDistributionPoints !== undefined
 			? { crlDistributionPoints: parsedExtensions.crlDistributionPoints }
 			: {}),
-		...(decodedExtensions !== undefined ? { decodedExtensions } : {}),
-		...(decodedExtensionMap !== undefined ? { decodedExtensionMap } : {}),
+		...(customExtensions.decodedExtensions === undefined
+			? {}
+			: { decodedExtensions: customExtensions.decodedExtensions }),
+		...(customExtensions.decodedExtensionMap === undefined
+			? {}
+			: { decodedExtensionMap: customExtensions.decodedExtensionMap }),
+	};
+}
+
+function parseCertificationRequestInfoFields(
+	der: Uint8Array,
+	certificationRequestInfo: DerElement,
+): ParsedCertificationRequestInfoFields {
+	const criChildren = childrenOf(der, certificationRequestInfo);
+	if (criChildren.length < 3 || criChildren.length > 4) {
+		throw new Error('Malformed CertificationRequestInfo');
+	}
+	const versionElement = requireElement(criChildren[0], 'version');
+	if (versionElement.tag !== 0x02) {
+		throw new Error('version must use INTEGER');
+	}
+	const version = decodeIntegerNumber(versionElement.value) + 1;
+	if (version !== 1) {
+		throw new Error(`Unsupported CertificationRequestInfo version: ${String(version)}`);
+	}
+	const attributes = criChildren[3];
+	if (attributes !== undefined && attributes.tag !== 0xa0) {
+		throw new Error('CertificationRequestInfo attributes must use [0]');
+	}
+	return {
+		version,
+		subject: requireElement(criChildren[1], 'subject'),
+		subjectPublicKeyInfo: requireElement(criChildren[2], 'subjectPublicKeyInfo'),
+		...(attributes === undefined ? {} : { attributes }),
 	};
 }
 
@@ -1709,37 +1746,46 @@ function parseDistributionPoint(source: Uint8Array, element: DerElement): Parsed
 	if (element.tag !== 0x30) {
 		throw new Error('DistributionPoint must use SEQUENCE');
 	}
-	let distributionPoint: ParsedDistributionPointName | undefined;
-	let reasons: ParsedBitFlags<DistributionPointReason> | undefined;
-	let crlIssuer: readonly GeneralName[] | undefined;
+	const fields: MutableDistributionPointFields = {};
 	for (const child of childrenOf(source, element)) {
-		if (child.tag === 0xa0) {
-			if (distributionPoint !== undefined) {
-				throw new Error('DistributionPoint distributionPoint must not repeat');
-			}
-			distributionPoint = parseDistributionPointName(source, child);
-		} else if (child.tag === 0x81) {
-			if (reasons !== undefined) {
-				throw new Error('DistributionPoint reasons must not repeat');
-			}
-			reasons = parseDistributionPointReasonFlagsContent(child.value);
-		} else if (child.tag === 0xa2) {
-			if (crlIssuer !== undefined) {
-				throw new Error('DistributionPoint crlIssuer must not repeat');
-			}
-			crlIssuer = parseGeneralNames(source, child);
-		} else {
-			throw new Error(`Unsupported DistributionPoint field tag: ${String(child.tag)}`);
-		}
+		parseDistributionPointField(source, child, fields);
 	}
-	if (distributionPoint === undefined && crlIssuer === undefined) {
+	if (fields.distributionPoint === undefined && fields.crlIssuer === undefined) {
 		throw new Error('DistributionPoint must include distributionPoint or crlIssuer');
 	}
 	return {
-		...(distributionPoint === undefined ? {} : { distributionPoint }),
-		...(reasons === undefined ? {} : { reasons }),
-		...(crlIssuer === undefined ? {} : { crlIssuer }),
+		...(fields.distributionPoint === undefined
+			? {}
+			: { distributionPoint: fields.distributionPoint }),
+		...(fields.reasons === undefined ? {} : { reasons: fields.reasons }),
+		...(fields.crlIssuer === undefined ? {} : { crlIssuer: fields.crlIssuer }),
 	};
+}
+
+function parseDistributionPointField(
+	source: Uint8Array,
+	child: DerElement,
+	fields: MutableDistributionPointFields,
+): void {
+	switch (child.tag) {
+		case 0xa0:
+			if (fields.distributionPoint !== undefined)
+				throw new Error('DistributionPoint distributionPoint must not repeat');
+			fields.distributionPoint = parseDistributionPointName(source, child);
+			return;
+		case 0x81:
+			if (fields.reasons !== undefined)
+				throw new Error('DistributionPoint reasons must not repeat');
+			fields.reasons = parseDistributionPointReasonFlagsContent(child.value);
+			return;
+		case 0xa2:
+			if (fields.crlIssuer !== undefined)
+				throw new Error('DistributionPoint crlIssuer must not repeat');
+			fields.crlIssuer = parseGeneralNames(source, child);
+			return;
+		default:
+			throw new Error(`Unsupported DistributionPoint field tag: ${String(child.tag)}`);
+	}
 }
 
 /** Decode a DistributionPointName (fullName or relativeName). */
@@ -1899,51 +1945,47 @@ function parseGeneralSubtrees(
 		throw new Error('name constraints GeneralSubtrees must not be empty');
 	}
 	for (const subtreeElement of subtreeElements) {
-		if (subtreeElement.tag !== 0x30) {
-			throw new Error('name constraints GeneralSubtree must use SEQUENCE');
-		}
-		const children = childrenOf(source, subtreeElement);
-		const baseElement = children[0];
-		if (baseElement === undefined) {
-			throw new Error('name constraints GeneralSubtree base is required');
-		}
-
-		// RFC 5280 §4.2.1.10: minimum MUST be zero (default), maximum
-		// MUST be absent. Reject non-standard values.
-		let sawMinimum = false;
-		for (let i = 1; i < children.length; i += 1) {
-			const child = children[i];
-			if (child === undefined) {
-				continue;
-			}
-			if (child.tag === 0x80) {
-				if (sawMinimum) {
-					throw new Error('name constraints GeneralSubtree minimum must not repeat');
-				}
-				sawMinimum = true;
-				// minimum [0] INTEGER — must be 0
-				if (
-					decodeNonNegativeIntegerNumber(child.value, 'name constraints GeneralSubtree minimum') !==
-					0
-				) {
-					throw new Error('name constraints GeneralSubtree minimum must be 0');
-				}
-			} else if (child.tag === 0x81) {
-				// maximum [1] INTEGER — must be absent
-				throw new Error('name constraints GeneralSubtree maximum is not supported');
-			} else {
-				throw new Error(
-					`Unsupported name constraints GeneralSubtree field tag: ${String(child.tag)}`,
-				);
-			}
-		}
-
-		const form = parseNameConstraintGeneralName(source, baseElement);
+		const form = parseGeneralSubtree(source, subtreeElement);
 		if (form !== undefined) {
 			subtrees.push({ base: form });
 		}
 	}
 	return subtrees;
+}
+
+function parseGeneralSubtree(
+	source: Uint8Array,
+	subtreeElement: DerElement,
+): ParsedNameConstraintForm | undefined {
+	if (subtreeElement.tag !== 0x30) {
+		throw new Error('name constraints GeneralSubtree must use SEQUENCE');
+	}
+	const children = childrenOf(source, subtreeElement);
+	const baseElement = children[0];
+	if (baseElement === undefined) {
+		throw new Error('GeneralSubtree base is required');
+	}
+	validateGeneralSubtreeBounds(children.slice(1));
+	return parseNameConstraintGeneralName(source, baseElement);
+}
+
+function validateGeneralSubtreeBounds(children: readonly DerElement[]): void {
+	let sawMinimum = false;
+	for (const child of children) {
+		if (child.tag === 0x80) {
+			if (sawMinimum) throw new Error('name constraints GeneralSubtree minimum must not repeat');
+			sawMinimum = true;
+			if (
+				decodeNonNegativeIntegerNumber(child.value, 'name constraints GeneralSubtree minimum') !== 0
+			) {
+				throw new Error('name constraints GeneralSubtree minimum must be 0');
+			}
+			continue;
+		}
+		if (child.tag === 0x81)
+			throw new Error('name constraints GeneralSubtree maximum is not supported');
+		throw new Error(`Unsupported name constraints GeneralSubtree field tag: ${String(child.tag)}`);
+	}
 }
 
 /** Decode a GeneralName for use in name constraints (IP carries address+mask). */
