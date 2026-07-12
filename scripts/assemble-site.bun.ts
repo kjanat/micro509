@@ -244,21 +244,29 @@ if (latest !== undefined) {
 	await rm(path.dirname(bootstrapRoot), { recursive: true, force: true });
 }
 
-// 4. Archives: newest patch per superseded minor, capped at --keep.
+// 4. Archives. Extraction: newest patch per superseded minor (the tarballs
+// are base-baked per minor), capped at --keep. Manifest: EVERY docs-bearing
+// release is listed under its actual tag; same-minor patches share the
+// per-minor path, which serves that minor's newest patch.
 const archived: VersionEntry[] = [];
 if (latest !== undefined) {
-	const seenMinors = new Set<string>([`${latest.version[0]}.${latest.version[1]}`]);
+	const extractedMinors = new Set<string>([`${latest.version[0]}.${latest.version[1]}`]);
+	let extractedCount = 0;
 	for (const release of releases.slice(1)) {
 		const minor = `${release.version[0]}.${release.version[1]}`;
-		if (seenMinors.has(minor)) continue;
-		seenMinors.add(minor);
-		if (archived.length >= keepMinors) continue;
-		if (release.archiveAsset === undefined) {
-			console.warn(`release ${release.tag} has no archive-flavor tarball; skipping /v${minor}/`);
-			continue;
+		if (!extractedMinors.has(minor)) {
+			extractedMinors.add(minor);
+			if (extractedCount >= keepMinors) {
+				console.warn(`--keep ${keepMinors} reached; not serving /v${minor}/`);
+			} else if (release.archiveAsset === undefined) {
+				console.warn(`release ${release.tag} has no archive-flavor tarball; skipping /v${minor}/`);
+			} else {
+				await extractTarball(release.archiveAsset, path.join(outDir, `v${minor}`));
+				extractedCount += 1;
+			}
 		}
-		await extractTarball(release.archiveAsset, path.join(outDir, `v${minor}`));
-		archived.push({ label: `v${minor}`, base: `/v${minor}/` });
+		// TODO: config filter (regex) for which releases are listed.
+		archived.push({ label: release.tag, base: `/v${minor}/` });
 	}
 }
 
