@@ -3346,6 +3346,18 @@ describe('validateCandidatePath direct', () => {
 		expect(result).toMatchObject({ ok: false, code: 'initial_policy_set_not_satisfied' });
 	});
 
+	it("preserves the 'any' initial policy set", async () => {
+		const chain = await issueChain();
+		const result = await validateCandidatePath({
+			chain: parseCertificateChainPem(
+				`${chain.leaf.pem}${chain.intermediate.pem}${chain.root.certificate.pem}`,
+			),
+			initialPolicySet: 'any',
+		});
+
+		expect(result.ok).toBe(true);
+	});
+
 	it('fails closed for malformed nested policy initialPolicySet input shapes', async () => {
 		const chain = await issueChain();
 		const input = {

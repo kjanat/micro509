@@ -45,7 +45,7 @@ async function offendersMatching(pattern: RegExp): Promise<readonly string[]> {
 async function orThrowExportsByDomain(): Promise<ReadonlyMap<string, ReadonlySet<string>>> {
 	const orThrowByDomain = new Map<string, Set<string>>();
 	for (const file of sourceFiles()) {
-		const relative = file.slice(srcRoot.length);
+		const relative = file.slice(srcRoot.length + 1);
 		if (relative.startsWith('internal/') || relative.endsWith('index.ts')) continue;
 		const domain = relative.split('/')[0];
 		if (domain === undefined || !relative.includes('/')) continue;

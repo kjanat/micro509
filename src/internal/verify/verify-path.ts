@@ -486,7 +486,7 @@ function evaluateIssuerKeyConstraints(
 	return { ok: true, nextCaBelowCount };
 }
 
-function authorityKeyIdentifierMismatch(
+export function authorityKeyIdentifierMismatch(
 	current: ParsedCertificate,
 	issuer: ParsedCertificate,
 ): boolean {

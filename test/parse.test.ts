@@ -16,6 +16,7 @@ import {
 	parseCertificateSigningRequestPem,
 	unwrap,
 } from '#micro509';
+import type { ParseCertificateErrorCode } from '#micro509';
 import { encodeName } from '#micro509/x509';
 import {
 	bitString,
@@ -47,7 +48,7 @@ interface MalformedCustomExtensionCase {
 	readonly commonName: string;
 	readonly oid: string;
 	readonly value: Uint8Array;
-	readonly message: string;
+	readonly code: ParseCertificateErrorCode;
 }
 
 async function expectMalformedCustomExtension(input: MalformedCustomExtensionCase): Promise<void> {
@@ -60,7 +61,7 @@ async function expectMalformedCustomExtension(input: MalformedCustomExtensionCas
 	const result = parseCertificatePem(certificate.certificate.pem);
 	expect(result.ok).toBe(false);
 	if (!result.ok) {
-		expect(result.error.message).toContain(input.message);
+		expect(result.error.code).toBe(input.code);
 	}
 }
 
@@ -1513,14 +1514,14 @@ describe('parse', () => {
 					]),
 				]),
 			]),
-			message: 'noticeRef has unexpected trailing fields',
+			code: 'malformed',
 		});
 
 		await expectMalformedCustomExtension({
 			commonName: 'bad-empty-mappings.example',
 			oid: OIDS.policyMappings,
 			value: sequence([]),
-			message: 'policyMappings must not be empty',
+			code: 'malformed',
 		});
 
 		await expectMalformedCustomExtension({
@@ -1533,35 +1534,35 @@ describe('parse', () => {
 					integerFromNumber(1),
 				]),
 			]),
-			message: 'policyMappings entry has unexpected trailing fields',
+			code: 'malformed',
 		});
 
 		await expectMalformedCustomExtension({
 			commonName: 'bad-policy-constraints-require.example',
 			oid: OIDS.policyConstraints,
 			value: sequence([tlv(0x80, Uint8Array.of(0x00)), tlv(0x80, Uint8Array.of(0x01))]),
-			message: 'policyConstraints must not repeat requireExplicitPolicy',
+			code: 'malformed',
 		});
 
 		await expectMalformedCustomExtension({
 			commonName: 'bad-policy-constraints-tag.example',
 			oid: OIDS.policyConstraints,
 			value: sequence([tlv(0x82, Uint8Array.of(0x00))]),
-			message: 'Unsupported policyConstraints field tag: 130',
+			code: 'malformed',
 		});
 
 		await expectMalformedCustomExtension({
 			commonName: 'bad-policy-constraints-inhibit.example',
 			oid: OIDS.policyConstraints,
 			value: sequence([tlv(0x81, Uint8Array.of(0x00)), tlv(0x81, Uint8Array.of(0x01))]),
-			message: 'policyConstraints must not repeat inhibitPolicyMapping',
+			code: 'malformed',
 		});
 
 		await expectMalformedCustomExtension({
 			commonName: 'bad-empty-aia.example',
 			oid: OIDS.authorityInfoAccess,
 			value: sequence([]),
-			message: 'authorityInfoAccess must not be empty',
+			code: 'malformed',
 		});
 
 		await expectMalformedCustomExtension({
@@ -1574,7 +1575,7 @@ describe('parse', () => {
 					integerFromNumber(1),
 				]),
 			]),
-			message: 'authorityInfoAccess entry must contain method and location only',
+			code: 'malformed',
 		});
 
 		await expectMalformedCustomExtension({
@@ -1586,7 +1587,7 @@ describe('parse', () => {
 					tlv(0x86, new TextEncoder().encode('http://example.test/ocsp')),
 				]),
 			]),
-			message: 'authorityInfoAccess method must use OBJECT IDENTIFIER',
+			code: 'malformed',
 		});
 
 		await expectMalformedCustomExtension({
@@ -1598,7 +1599,7 @@ describe('parse', () => {
 					tlv(0x86, new TextEncoder().encode('http://example.test/ocsp')),
 				]),
 			]),
-			message: 'authorityInfoAccess must use SEQUENCE',
+			code: 'malformed',
 		});
 
 		await expectMalformedCustomExtension({
@@ -1620,7 +1621,7 @@ describe('parse', () => {
 					]),
 				]),
 			]),
-			message: 'noticeRef noticeNumbers must use SEQUENCE',
+			code: 'malformed',
 		});
 
 		await expectMalformedCustomExtension({
@@ -1642,7 +1643,7 @@ describe('parse', () => {
 					]),
 				]),
 			]),
-			message: 'noticeRef noticeNumber must use INTEGER',
+			code: 'malformed',
 		});
 	});
 

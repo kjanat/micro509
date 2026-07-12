@@ -30,6 +30,7 @@ import {
 	evaluatePolicyChain,
 } from '#micro509/internal/verify/policy-engine';
 import {
+	authorityKeyIdentifierMismatch,
 	buildChainInternal,
 	countCaCertificatesBelowParsed,
 	isSelfIssued,
@@ -853,17 +854,6 @@ function validateIssuerConstraintsAtPathIndex(
 			expected: issuer.subjectKeyIdentifier,
 			actual: current.authorityKeyIdentifier,
 		}),
-	);
-}
-
-function authorityKeyIdentifierMismatch(
-	current: ParsedCertificate,
-	issuer: ParsedCertificate,
-): boolean {
-	return (
-		current.authorityKeyIdentifier !== undefined &&
-		issuer.subjectKeyIdentifier !== undefined &&
-		current.authorityKeyIdentifier !== issuer.subjectKeyIdentifier
 	);
 }
 
@@ -1706,6 +1696,9 @@ function normalizeInitialPolicySet(
 ): PolicyValidationInput['initialPolicySet'] {
 	if (initialPolicySet === undefined) {
 		return undefined;
+	}
+	if (initialPolicySet === 'any') {
+		return initialPolicySet;
 	}
 	if (!Array.isArray(initialPolicySet)) {
 		return [];

@@ -352,7 +352,7 @@ function renderInterfaceSignature(
 			.join(', ');
 		members.push(`\t${m.name}${m.optional ? '?' : ''}(${mp}): ${plain(renderType(m.returnType))};`);
 	}
-	const body = members.length ? ` {\n${members.join('\n')}\n}` : '';
+	const body = members.length ? ` {\n${members.join('\n')}\n}` : ' {}';
 	return ['```ts', `interface ${sym.name}${tp}${ext}${body}`, '```', ''];
 }
 
