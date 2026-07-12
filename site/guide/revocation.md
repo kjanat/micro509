@@ -311,7 +311,10 @@ const result = await checkCertificateRevocation({
   ],
 });
 
-// Always succeeds — check status discriminator
+// Check ok, then the status discriminator
+if (!result.ok) {
+  throw new Error('unreachable: evidence was supplied');
+}
 if (result.value.status === 'revoked') {
   console.log(`\
 status:     revoked

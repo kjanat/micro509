@@ -105,8 +105,11 @@ const root = await createSelfSignedCertificate({
   },
 });
 
-// Issue a leaf with a given EKU ('serverAuth' | 'clientAuth' | 'codeSigning')
-async function issue(cn, eku) {
+// Issue a leaf with the extended key usage under test
+async function issue(
+  cn: string,
+  eku: 'serverAuth' | 'clientAuth' | 'codeSigning',
+) {
   const keys = await generateKeyPair();
   return createCertificate({
     issuer: { commonName: 'Demo Root CA' },
@@ -202,6 +205,7 @@ const result = matchServiceIdentity({
 });
 
 const sans = (parsed.subjectAltNames ?? [])
+  .filter((name) => name.type !== 'directoryName')
   .map((name) => `${name.type} ${name.value}`)
   .join(', ');
 
@@ -293,6 +297,7 @@ const result = await verifyCertificateSigningRequest(
 
 if (result.ok) {
   const sans = (result.value.subjectAltNames ?? [])
+    .filter((name) => name.type !== 'directoryName')
     .map((name) => name.value)
     .join(', ');
   console.log(`\
