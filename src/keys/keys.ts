@@ -27,7 +27,9 @@ import {
 	toArrayBuffer,
 	toHex,
 } from '#micro509/internal/asn1/asn1';
+import type { DerElement } from '#micro509/internal/asn1/der';
 import {
+	explicitContext,
 	nullValue,
 	objectIdentifier,
 	octetString,
@@ -499,6 +501,10 @@ export async function exportEncryptedPkcs1Pem(
  * SEC 1 is the legacy EC-only format. For algorithm-agnostic export, use
  * {@linkcode exportPkcs8Der}.
  *
+ * The output always carries the RFC 5915 `parameters [0]` named curve
+ * (matching OpenSSL), so it re-imports via {@linkcode importSec1Der} without
+ * an explicit curve.
+ *
  * @throws {Error} If the key is not an EC key
  *
  * @see {@linkcode importSec1Der} for the inverse operation
@@ -510,7 +516,7 @@ export async function exportSec1Der(privateKey: CryptoKey): Promise<Uint8Array> 
 	if (parsed.algorithmOid !== OIDS.ecPublicKey) {
 		throw new Error('SEC1 export requires an EC private key');
 	}
-	return parsed.privateKeyDer;
+	return ensureSec1NamedCurveParameters(parsed.privateKeyDer, parsed.parametersOid);
 }
 
 /**
@@ -645,7 +651,7 @@ export async function importSpkiDerOrThrow(
 	const parsedSpki = parseSpkiDer(der);
 	let importInput: PublicKeyImportInput;
 	if (algorithm === undefined) {
-		importInput = inferPublicKeyImportInput(parsedSpki);
+		importInput = inferKeyImportInput(parsedSpki, 'Unsupported SubjectPublicKeyInfo algorithm');
 	} else {
 		assertSpkiMatchesRequestedAlgorithm(parsedSpki, algorithm);
 		importInput = algorithm;
@@ -769,11 +775,16 @@ export function importSpkiBase64(
 /**
  * Import a private key from DER-encoded PKCS#8 PrivateKeyInfo.
  *
+ * When `algorithm` is omitted, the algorithm (and, for EC keys, the curve) is
+ * inferred from the PrivateKeyInfo's own `privateKeyAlgorithm` — useful for
+ * keys whose type isn't known ahead of time. Pass `algorithm` to additionally
+ * assert that the DER matches an expected algorithm.
+ *
  * @param der - DER-encoded PKCS#8 PrivateKeyInfo bytes
- * @param algorithm - Expected algorithm (must match key contents)
+ * @param algorithm - Optional expected algorithm; must match key contents when given
  * @returns Extractable CryptoKey with `sign` usage
  *
- * @throws {Error} If DER is malformed or algorithm doesn't match key
+ * @throws {Error} If DER is malformed, encodes an unsupported algorithm, or doesn't match `algorithm`
  *
  * @see {@linkcode exportPkcs8Der} for the inverse operation
  * @see {@linkcode importPkcs8Pem} for PEM input
@@ -781,7 +792,7 @@ export function importSpkiBase64(
  */
 export async function importPkcs8DerOrThrow(
 	der: Uint8Array,
-	algorithm: PrivateKeyImportInput,
+	algorithm?: PrivateKeyImportInput,
 ): Promise<CryptoKey> {
 	let parsedPrivateKey: ReturnType<typeof parsePkcs8PrivateKey>;
 	try {
@@ -789,14 +800,20 @@ export async function importPkcs8DerOrThrow(
 	} catch {
 		throw new Error('Malformed PKCS#8 private key');
 	}
-	assertPkcs8MatchesRequestedAlgorithm(parsedPrivateKey, algorithm);
+	let importInput: PrivateKeyImportInput;
+	if (algorithm === undefined) {
+		importInput = inferKeyImportInput(parsedPrivateKey, 'Unsupported PKCS#8 private key algorithm');
+	} else {
+		assertPkcs8MatchesRequestedAlgorithm(parsedPrivateKey, algorithm);
+		importInput = algorithm;
+	}
 	try {
 		return await getCrypto().subtle.importKey(
 			'pkcs8',
 			new Uint8Array(der),
-			toImportAlgorithm(algorithm),
+			toImportAlgorithm(importInput),
 			true,
-			privateKeyUsages(algorithm),
+			privateKeyUsages(importInput),
 		);
 	} catch {
 		throw new Error('Malformed PKCS#8 private key');
@@ -810,7 +827,7 @@ export async function importPkcs8DerOrThrow(
  */
 export function importPkcs8Der(
 	der: Uint8Array,
-	algorithm: PrivateKeyImportInput,
+	algorithm?: PrivateKeyImportInput,
 ): Promise<ImportKeyResult<CryptoKey>> {
 	return importResult(() => importPkcs8DerOrThrow(der, algorithm));
 }
@@ -818,14 +835,18 @@ export function importPkcs8Der(
 /**
  * Import a private key from PEM-encoded PKCS#8 PrivateKeyInfo.
  *
+ * When `algorithm` is omitted, it is inferred from the key's own
+ * `privateKeyAlgorithm` (see {@linkcode importPkcs8DerOrThrow}).
+ *
  * @example
  * ```ts
  * const key = await importPkcs8PemOrThrow(pemString, { kind: 'ecdsa', curve: 'P-256' });
+ * const inferred = await importPkcs8PemOrThrow(pemString);
  * ```
  */
 export function importPkcs8PemOrThrow(
 	pem: string,
-	algorithm: PrivateKeyImportInput,
+	algorithm?: PrivateKeyImportInput,
 ): Promise<CryptoKey> {
 	return importPkcs8DerOrThrow(pemDecodeOrThrow('PRIVATE KEY', pem), algorithm);
 }
@@ -837,7 +858,7 @@ export function importPkcs8PemOrThrow(
  */
 export function importPkcs8Pem(
 	pem: string,
-	algorithm: PrivateKeyImportInput,
+	algorithm?: PrivateKeyImportInput,
 ): Promise<ImportKeyResult<CryptoKey>> {
 	return importResult(() => importPkcs8PemOrThrow(pem, algorithm));
 }
@@ -847,9 +868,12 @@ export function importPkcs8Pem(
  *
  * Decrypts the PBES2 envelope using the provided password, then imports the key.
  *
+ * When `algorithm` is omitted, it is inferred from the decrypted key's own
+ * `privateKeyAlgorithm` (see {@linkcode importPkcs8DerOrThrow}).
+ *
  * @param der - DER-encoded EncryptedPrivateKeyInfo bytes
  * @param password - Decryption password
- * @param algorithm - Expected algorithm (must match decrypted key)
+ * @param algorithm - Optional expected algorithm; must match decrypted key when given
  *
  * @throws {Error} If DER is malformed, password is wrong, or algorithm doesn't match
  *
@@ -858,7 +882,7 @@ export function importPkcs8Pem(
 export async function importEncryptedPkcs8DerOrThrow(
 	der: Uint8Array,
 	password: string,
-	algorithm: PrivateKeyImportInput,
+	algorithm?: PrivateKeyImportInput,
 ): Promise<CryptoKey> {
 	let children: readonly ReturnType<typeof readSequenceChildren>[number][];
 	try {
@@ -904,7 +928,7 @@ export async function importEncryptedPkcs8DerOrThrow(
 export function importEncryptedPkcs8Der(
 	der: Uint8Array,
 	password: string,
-	algorithm: PrivateKeyImportInput,
+	algorithm?: PrivateKeyImportInput,
 ): Promise<ImportEncryptedKeyResult<CryptoKey>> {
 	return encryptedImportResult(() => importEncryptedPkcs8DerOrThrow(der, password, algorithm));
 }
@@ -912,15 +936,19 @@ export function importEncryptedPkcs8Der(
 /**
  * Import a private key from PEM-encoded PBES2-encrypted PKCS#8 EncryptedPrivateKeyInfo.
  *
+ * When `algorithm` is omitted, it is inferred from the decrypted key's own
+ * `privateKeyAlgorithm` (see {@linkcode importPkcs8DerOrThrow}).
+ *
  * @example
  * ```ts
  * const key = await importEncryptedPkcs8PemOrThrow(pem, 'secret', { kind: 'rsa' });
+ * const inferred = await importEncryptedPkcs8PemOrThrow(pem, 'secret');
  * ```
  */
 export function importEncryptedPkcs8PemOrThrow(
 	pem: string,
 	password: string,
-	algorithm: PrivateKeyImportInput,
+	algorithm?: PrivateKeyImportInput,
 ): Promise<CryptoKey> {
 	return importEncryptedPkcs8DerOrThrow(
 		pemDecodeOrThrow('ENCRYPTED PRIVATE KEY', pem),
@@ -937,7 +965,7 @@ export function importEncryptedPkcs8PemOrThrow(
 export function importEncryptedPkcs8Pem(
 	pem: string,
 	password: string,
-	algorithm: PrivateKeyImportInput,
+	algorithm?: PrivateKeyImportInput,
 ): Promise<ImportEncryptedKeyResult<CryptoKey>> {
 	return encryptedImportResult(() => importEncryptedPkcs8PemOrThrow(pem, password, algorithm));
 }
@@ -1034,7 +1062,7 @@ export function importEncryptedPkcs1Pem(
  */
 export function importPkcs8Base64OrThrow(
 	base64: string,
-	algorithm: PrivateKeyImportInput,
+	algorithm?: PrivateKeyImportInput,
 ): Promise<CryptoKey> {
 	let decoded: Uint8Array;
 	try {
@@ -1052,7 +1080,7 @@ export function importPkcs8Base64OrThrow(
  */
 export function importPkcs8Base64(
 	base64: string,
-	algorithm: PrivateKeyImportInput,
+	algorithm?: PrivateKeyImportInput,
 ): Promise<ImportKeyResult<CryptoKey>> {
 	return importResult(() => importPkcs8Base64OrThrow(base64, algorithm));
 }
@@ -1065,14 +1093,18 @@ export function importPkcs8Base64(
  * (OpenSSL always writes it), its named-curve OID must match `algorithm.curve`;
  * when the field is absent, the caller-supplied curve is trusted.
  *
- * @throws {Error} If DER is not an ECPrivateKey or its embedded curve doesn't match `algorithm`
+ * When `algorithm` is omitted, the curve is inferred from the embedded
+ * `parameters [0]` field; a key without a supported named curve then fails.
+ *
+ * @throws {Error} If DER is not an ECPrivateKey, its embedded curve doesn't
+ * match `algorithm`, or no curve is available (neither embedded nor supplied)
  *
  * @see {@linkcode exportSec1Der} for the inverse operation
  * @see {@linkcode importSec1Pem} for PEM input
  */
 export async function importSec1DerOrThrow(
 	der: Uint8Array,
-	algorithm: ImportEcKeyInput,
+	algorithm?: ImportEcKeyInput,
 ): Promise<CryptoKey> {
 	let parsedSec1: ReturnType<typeof parseSec1PrivateKey>;
 	try {
@@ -1080,8 +1112,14 @@ export async function importSec1DerOrThrow(
 	} catch {
 		throw new Error('Malformed SEC 1 private key');
 	}
-	assertSec1MatchesRequestedAlgorithm(parsedSec1, algorithm);
-	return await importPkcs8DerOrThrow(wrapSec1InPkcs8(der, algorithm.curve), algorithm);
+	let importInput: ImportEcKeyInput;
+	if (algorithm === undefined) {
+		importInput = inferSec1ImportInput(parsedSec1);
+	} else {
+		assertSec1MatchesRequestedAlgorithm(parsedSec1, algorithm);
+		importInput = algorithm;
+	}
+	return await importPkcs8DerOrThrow(wrapSec1InPkcs8(der, importInput.curve), importInput);
 }
 
 /**
@@ -1091,7 +1129,7 @@ export async function importSec1DerOrThrow(
  */
 export function importSec1Der(
 	der: Uint8Array,
-	algorithm: ImportEcKeyInput,
+	algorithm?: ImportEcKeyInput,
 ): Promise<ImportKeyResult<CryptoKey>> {
 	return importResult(() => importSec1DerOrThrow(der, algorithm));
 }
@@ -1099,12 +1137,17 @@ export function importSec1Der(
 /**
  * Import an EC private key from PEM-encoded SEC 1 ECPrivateKey.
  *
- * Expects the `-----BEGIN EC PRIVATE KEY-----` PEM label.
+ * Expects the `-----BEGIN EC PRIVATE KEY-----` PEM label. When `algorithm` is
+ * omitted, the curve is inferred from the embedded `parameters [0]` field
+ * (see {@linkcode importSec1DerOrThrow}).
  *
  * @see {@linkcode exportSec1Pem} for the inverse operation
  * @see {@linkcode importEncryptedSec1Pem} for encrypted PEM
  */
-export function importSec1PemOrThrow(pem: string, algorithm: ImportEcKeyInput): Promise<CryptoKey> {
+export function importSec1PemOrThrow(
+	pem: string,
+	algorithm?: ImportEcKeyInput,
+): Promise<CryptoKey> {
 	return importSec1DerOrThrow(pemDecodeOrThrow('EC PRIVATE KEY', pem), algorithm);
 }
 
@@ -1115,7 +1158,7 @@ export function importSec1PemOrThrow(pem: string, algorithm: ImportEcKeyInput): 
  */
 export function importSec1Pem(
 	pem: string,
-	algorithm: ImportEcKeyInput,
+	algorithm?: ImportEcKeyInput,
 ): Promise<ImportKeyResult<CryptoKey>> {
 	return importResult(() => importSec1PemOrThrow(pem, algorithm));
 }
@@ -1131,7 +1174,7 @@ export function importSec1Pem(
 export async function importEncryptedSec1PemOrThrow(
 	pem: string,
 	password: string,
-	algorithm: ImportEcKeyInput,
+	algorithm?: ImportEcKeyInput,
 ): Promise<CryptoKey> {
 	const decrypted = await decryptTraditionalPem('EC PRIVATE KEY', pem, password);
 	return importSec1DerOrThrow(decrypted, algorithm);
@@ -1145,7 +1188,7 @@ export async function importEncryptedSec1PemOrThrow(
 export function importEncryptedSec1Pem(
 	pem: string,
 	password: string,
-	algorithm: ImportEcKeyInput,
+	algorithm?: ImportEcKeyInput,
 ): Promise<ImportEncryptedKeyResult<CryptoKey>> {
 	return encryptedImportResult(() => importEncryptedSec1PemOrThrow(pem, password, algorithm));
 }
@@ -1153,26 +1196,32 @@ export function importEncryptedSec1Pem(
 /**
  * Import a public verification key from a JSON Web Key.
  *
+ * When `algorithm` is omitted, it is inferred from the JWK's own `kty`, `crv`,
+ * and `alg` members (e.g. `PS256` → RSA-PSS/SHA-256, `RSA-OAEP-256` →
+ * RSA-OAEP/SHA-256; an RSA JWK without `alg` defaults to PKCS#1 v1.5 with
+ * SHA-256). Pass `algorithm` to additionally assert an expected algorithm.
+ *
  * @param jwk - JSON Web Key object with public key components
- * @param algorithm - Expected algorithm (must match JWK's `kty` and `crv`)
+ * @param algorithm - Optional expected algorithm; must match JWK's `kty` and `crv` when given
  * @returns Extractable CryptoKey with `verify` usage
  *
- * @throws {Error} If JWK is malformed or algorithm doesn't match
+ * @throws {Error} If JWK is malformed, encodes an unsupported algorithm, or doesn't match `algorithm`
  *
  * @see {@linkcode exportPublicJwk} for the inverse operation
  */
 export async function importPublicJwkOrThrow(
 	jwk: JsonWebKey,
-	algorithm: PublicKeyImportInput,
+	algorithm?: PublicKeyImportInput,
 ): Promise<CryptoKey> {
-	assertPublicJwkMatchesRequestedAlgorithm(jwk, algorithm);
+	const importInput = algorithm ?? inferJwkImportInput(jwk);
+	assertPublicJwkMatchesRequestedAlgorithm(jwk, importInput);
 	try {
 		return await getCrypto().subtle.importKey(
 			'jwk',
 			jwk,
-			toImportAlgorithm(algorithm),
+			toImportAlgorithm(importInput),
 			true,
-			publicKeyUsages(algorithm),
+			publicKeyUsages(importInput),
 		);
 	} catch {
 		throw new Error('Malformed public JWK');
@@ -1186,7 +1235,7 @@ export async function importPublicJwkOrThrow(
  */
 export function importPublicJwk(
 	jwk: JsonWebKey,
-	algorithm: PublicKeyImportInput,
+	algorithm?: PublicKeyImportInput,
 ): Promise<ImportKeyResult<CryptoKey>> {
 	return importResult(() => importPublicJwkOrThrow(jwk, algorithm));
 }
@@ -1194,32 +1243,38 @@ export function importPublicJwk(
 /**
  * Import a private signing key from a JSON Web Key.
  *
+ * When `algorithm` is omitted, it is inferred from the JWK's own `kty`, `crv`,
+ * and `alg` members (see {@linkcode importPublicJwkOrThrow}).
+ *
  * @param jwk - JSON Web Key object with private key components
- * @param algorithm - Expected algorithm (must match JWK's `kty` and `crv`)
+ * @param algorithm - Optional expected algorithm; must match JWK's `kty` and `crv` when given
  * @returns Extractable CryptoKey with `sign` usage
  *
- * @throws {Error} If JWK is malformed, lacks private key material, or algorithm doesn't match
+ * @throws {Error} If JWK is malformed, lacks private key material, encodes an
+ * unsupported algorithm, or doesn't match `algorithm`
  *
  * @example
  * ```ts
  * const jwk = { kty: 'EC', crv: 'P-256', x: '...', y: '...', d: '...' };
  * const key = await importPrivateJwkOrThrow(jwk, { kind: 'ecdsa', curve: 'P-256' });
+ * const inferred = await importPrivateJwkOrThrow(jwk);
  * ```
  *
  * @see {@linkcode exportPrivateJwk} for the inverse operation
  */
 export async function importPrivateJwkOrThrow(
 	jwk: JsonWebKey,
-	algorithm: PrivateKeyImportInput,
+	algorithm?: PrivateKeyImportInput,
 ): Promise<CryptoKey> {
-	assertPrivateJwkMatchesRequestedAlgorithm(jwk, algorithm);
+	const importInput = algorithm ?? inferJwkImportInput(jwk);
+	assertPrivateJwkMatchesRequestedAlgorithm(jwk, importInput);
 	try {
 		return await getCrypto().subtle.importKey(
 			'jwk',
 			jwk,
-			toImportAlgorithm(algorithm),
+			toImportAlgorithm(importInput),
 			true,
-			privateKeyUsages(algorithm),
+			privateKeyUsages(importInput),
 		);
 	} catch {
 		throw new Error('Malformed private JWK');
@@ -1233,7 +1288,7 @@ export async function importPrivateJwkOrThrow(
  */
 export function importPrivateJwk(
 	jwk: JsonWebKey,
-	algorithm: PrivateKeyImportInput,
+	algorithm?: PrivateKeyImportInput,
 ): Promise<ImportKeyResult<CryptoKey>> {
 	return importResult(() => importPrivateJwkOrThrow(jwk, algorithm));
 }
@@ -1535,6 +1590,34 @@ function parseSec1PrivateKey(der: Uint8Array): {
 			? { parametersOid: decodeObjectIdentifier(ecParameters.value) }
 			: {}),
 	};
+}
+
+/**
+ * Ensure a SEC 1 ECPrivateKey carries the RFC 5915 `parameters [0]` named
+ * curve. WebCrypto's PKCS#8 export omits it from the inner ECPrivateKey (the
+ * curve lives in the envelope's privateKeyAlgorithm), but RFC 5915 wants it in
+ * standalone SEC 1 — and OpenSSL always writes it. Injecting it keeps exports
+ * self-describing, so they re-import without an explicit curve.
+ */
+function ensureSec1NamedCurveParameters(
+	sec1Der: Uint8Array,
+	curveOid: string | undefined,
+): Uint8Array {
+	const children = readSequenceChildren(sec1Der);
+	if (children.some((child) => child.tag === 0xa0)) {
+		return new Uint8Array(sec1Der);
+	}
+	if (curveOid === undefined) {
+		throw new Error('SEC1 export requires a named curve in the PKCS#8 privateKeyAlgorithm');
+	}
+	const raw = (child: DerElement): Uint8Array =>
+		sec1Der.slice(child.start - child.headerLength, child.end);
+	// RFC 5915 field order: version, privateKey, parameters [0], publicKey [1].
+	return sequence([
+		...children.slice(0, 2).map(raw),
+		explicitContext(0, objectIdentifier(curveOid)),
+		...children.slice(2).map(raw),
+	]);
 }
 
 /** Wrap a PKCS#1 RSAPrivateKey in a PKCS#8 PrivateKeyInfo envelope for WebCrypto import. */
@@ -1905,27 +1988,31 @@ function parseSpkiDer(der: Uint8Array): {
 }
 
 /**
- * Derive the import algorithm from a parsed SPKI's own AlgorithmIdentifier.
+ * Derive the import algorithm from a key envelope's own AlgorithmIdentifier
+ * (SPKI `algorithm` or PKCS#8 `privateKeyAlgorithm` — both share the shape).
  *
  * RSA keys default to the `pkcs1-v1_5`/`SHA-256` import parameters (a plain
- * `rsaEncryption` SPKI does not encode padding scheme or hash); EC keys carry
- * their curve in the DER; Ed25519 is fully determined by its OID.
+ * `rsaEncryption` AlgorithmIdentifier does not encode padding scheme or hash);
+ * EC keys carry their curve in the DER; Ed25519 is fully determined by its OID.
  */
-function inferPublicKeyImportInput(parsedSpki: {
-	readonly algorithmOid: string;
-	readonly parametersOid?: string;
-	readonly parametersTag?: number;
-}): PublicKeyImportInput {
-	switch (parsedSpki.algorithmOid) {
+function inferKeyImportInput(
+	parsed: {
+		readonly algorithmOid: string;
+		readonly parametersOid?: string;
+		readonly parametersTag?: number;
+	},
+	unsupportedMessage: string,
+): PublicKeyImportInput {
+	switch (parsed.algorithmOid) {
 		case OIDS.rsaEncryption:
-			if (parsedSpki.parametersTag === undefined || parsedSpki.parametersTag === 0x05) {
+			if (parsed.parametersTag === undefined || parsed.parametersTag === 0x05) {
 				return { kind: 'rsa' };
 			}
 			break;
 		case OIDS.ecPublicKey: {
 			const curve =
-				parsedSpki.parametersTag === 0x06 && parsedSpki.parametersOid !== undefined
-					? oidToCurve(parsedSpki.parametersOid)
+				parsed.parametersTag === 0x06 && parsed.parametersOid !== undefined
+					? oidToCurve(parsed.parametersOid)
 					: undefined;
 			if (curve !== undefined) {
 				return { kind: 'ecdsa', curve };
@@ -1933,12 +2020,86 @@ function inferPublicKeyImportInput(parsedSpki: {
 			break;
 		}
 		case OIDS.ed25519:
-			if (parsedSpki.parametersTag === undefined) {
+			if (parsed.parametersTag === undefined) {
 				return { kind: 'ed25519' };
 			}
 			break;
 	}
-	throw new Error('Unsupported SubjectPublicKeyInfo algorithm');
+	throw new Error(unsupportedMessage);
+}
+
+/**
+ * Derive the import curve from a SEC 1 ECPrivateKey's own RFC 5915
+ * `parameters [0]` field. SEC 1 encodes no algorithm family (it is EC by
+ * definition), so only the named curve needs recovering — and it may be
+ * absent, in which case the caller must supply it.
+ */
+function inferSec1ImportInput(parsedSec1: {
+	readonly parametersTag?: number;
+	readonly parametersOid?: string;
+}): ImportEcKeyInput {
+	const curve =
+		parsedSec1.parametersTag === 0x06 && parsedSec1.parametersOid !== undefined
+			? oidToCurve(parsedSec1.parametersOid)
+			: undefined;
+	if (curve === undefined) {
+		throw new Error(
+			'SEC 1 private key does not encode a supported named curve; pass the algorithm explicitly',
+		);
+	}
+	return { kind: 'ecdsa', curve };
+}
+
+/**
+ * Derive the import algorithm from a JWK's own `kty`, `crv`, and `alg` members.
+ *
+ * `alg` disambiguates the RSA scheme and hash (`RS*`, `PS*`, `RSA-OAEP-*`) —
+ * WebCrypto rejects a JWK whose `alg` disagrees with the import algorithm, so
+ * it must be honored rather than defaulted over. An RSA JWK without `alg`
+ * defaults to `pkcs1-v1_5`/`SHA-256`, mirroring SPKI inference.
+ */
+function inferJwkImportInput(jwk: JsonWebKey): PublicKeyImportInput {
+	if (jwk.kty === 'RSA') {
+		return rsaImportInputFromJwkAlg(jwk.alg);
+	}
+	if (jwk.kty === 'EC') {
+		if (jwk.crv === 'P-256' || jwk.crv === 'P-384' || jwk.crv === 'P-521') {
+			return { kind: 'ecdsa', curve: jwk.crv };
+		}
+		throw new Error(`Unsupported EC JWK curve: ${String(jwk.crv)}`);
+	}
+	if (jwk.kty === 'OKP' && jwk.crv === 'Ed25519') {
+		return { kind: 'ed25519' };
+	}
+	throw new Error('Unsupported JWK key type');
+}
+
+/** Map a JWA `alg` identifier to the RSA scheme + hash it pins down. */
+function rsaImportInputFromJwkAlg(alg: string | undefined): ImportRsaKeyInput {
+	switch (alg) {
+		case undefined:
+		case 'RS256':
+			return { kind: 'rsa' };
+		case 'RS384':
+			return { kind: 'rsa', hash: 'SHA-384' };
+		case 'RS512':
+			return { kind: 'rsa', hash: 'SHA-512' };
+		case 'PS256':
+			return { kind: 'rsa', scheme: 'pss' };
+		case 'PS384':
+			return { kind: 'rsa', scheme: 'pss', hash: 'SHA-384' };
+		case 'PS512':
+			return { kind: 'rsa', scheme: 'pss', hash: 'SHA-512' };
+		case 'RSA-OAEP-256':
+			return { kind: 'rsa', scheme: 'oaep' };
+		case 'RSA-OAEP-384':
+			return { kind: 'rsa', scheme: 'oaep', hash: 'SHA-384' };
+		case 'RSA-OAEP-512':
+			return { kind: 'rsa', scheme: 'oaep', hash: 'SHA-512' };
+		default:
+			// Includes plain 'RSA-OAEP' (SHA-1) — this library supports SHA-2 only.
+			throw new Error(`Unsupported RSA JWK alg: ${alg}`);
+	}
 }
 
 function assertSpkiMatchesRequestedAlgorithm(

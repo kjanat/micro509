@@ -873,7 +873,7 @@ describe('pkcs7', () => {
 		const bag = unwrap(createPkcs7CertBag([signer.certificate.pem]));
 		const result = await verifyPkcs7SignedData(bag.der);
 		expect(result.ok).toBe(false);
-		if (!result.ok) expect(result.code).toBe('content_missing');
+		if (!result.ok) expect(result.code).toBe('detached_content_required');
 	});
 
 	it('verifyPkcs7SignedData ignores tampered encapsulated content on pre-parsed input', async () => {

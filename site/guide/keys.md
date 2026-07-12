@@ -64,6 +64,24 @@ console.log('pkcs8 round-trip ok:', exported === pem);
 
 </LiveCode>
 
+The algorithm argument is optional. A PKCS#8 PrivateKeyInfo encodes its own
+`privateKeyAlgorithm` (and, for EC keys, the curve), so `importPkcs8Pem`,
+`importPkcs8Der`, and `importPkcs8Base64` — and their encrypted siblings —
+infer it when no hint is given, which is what you want for user-provided key
+material whose type isn't known ahead of time:
+
+```ts
+// Inferred from the DER — no { kind, curve } needed.
+const privateKey = unwrap(await importPkcs8Pem(pem));
+```
+
+Passing an explicit algorithm still works and additionally asserts that the key
+matches it, failing with a `'malformed'` result on a mismatch. An RSA key
+inferred without a hint defaults to `pkcs1-v1_5` with SHA-256 (a plain
+`rsaEncryption` envelope encodes neither padding scheme nor hash) — pass
+`{ kind: 'rsa', scheme: 'pss' }` or an explicit `hash` when you need
+something else.
+
 ### SPKI (public keys)
 
 <LiveCode>
@@ -191,6 +209,13 @@ console.log(
 
 </LiveCode>
 
+The algorithm argument is optional for JWK imports too: `kty`, `crv`, and
+`alg` already describe the key, so `importPublicJwk(jwk)` and
+`importPrivateJwk(jwk)` infer it. The JWA `alg` member selects the RSA scheme
+and hash (`RS384` → PKCS#1 v1.5/SHA-384, `PS256` → PSS/SHA-256,
+`RSA-OAEP-256` → OAEP/SHA-256); an RSA JWK without `alg` defaults to
+PKCS#1 v1.5 with SHA-256.
+
 ### PKCS#1 (RSA-specific)
 
 <LiveCode>
@@ -250,6 +275,11 @@ console.log('sec1 round-trip ok:', exported === pem);
 ```
 
 </LiveCode>
+
+Exported SEC1 keys always embed the RFC 5915 `parameters [0]` named curve
+(matching OpenSSL), so `importSec1Pem(pem)` infers the curve when the
+algorithm argument is omitted. A minimal SEC1 encoding without the embedded
+curve still needs the explicit `{ kind: 'ecdsa', curve }`.
 
 ## Encrypted keys
 

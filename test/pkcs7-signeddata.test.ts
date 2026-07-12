@@ -157,3 +157,106 @@ describe('createPkcs7SignedData', () => {
 		expect(result.error.code).toBe('invalid_signer_certificate');
 	});
 });
+
+describe('createPkcs7SignedData: detached (RFC 5652 §5.2)', () => {
+	it('omits eContent and verifies against externally supplied content', async () => {
+		const signer = await signingIdentity('Detached Signer');
+		const content = encoder.encode('commit bytes live outside the CMS blob');
+		const signed = await createPkcs7SignedData({
+			content,
+			detached: true,
+			signers: [{ certificate: signer.certificate.pem, privateKey: signer.keyPair.privateKey }],
+		});
+		expect(signed.ok).toBe(true);
+		if (!signed.ok) throw new Error(signed.error.code);
+
+		// The eContent is absent, but the encapContentInfo type survives.
+		const parsed = parsePkcs7SignedDataDer(signed.value.der);
+		expect(parsed.ok).toBe(true);
+		if (!parsed.ok) throw new Error(parsed.error.code);
+		expect(parsed.value.encapsulatedContent).toBeUndefined();
+		expect(parsed.value.encapsulatedContentTypeOid).toBe('1.2.840.113549.1.7.1');
+		expect(parsed.value.signerInfos).toHaveLength(1);
+
+		const verified = await verifyPkcs7SignedData(signed.value.der, { content });
+		expect(verified.ok).toBe(true);
+		if (!verified.ok) throw new Error(verified.error.code);
+		expect(verified.value.encapsulatedContent).toBeUndefined();
+
+		// Pre-parsed input verifies the same way.
+		const reverified = await verifyPkcs7SignedData(parsed.value, { content });
+		expect(reverified.ok).toBe(true);
+	});
+
+	it('verifies a detached signature from multiple signers', async () => {
+		const first = await signingIdentity('Detached A', { kind: 'ecdsa', curve: 'P-384' });
+		const second = await signingIdentity('Detached B', { kind: 'ed25519' });
+		const content = encoder.encode('two detached signers');
+		const signed = await createPkcs7SignedData({
+			content,
+			detached: true,
+			signers: [
+				{ certificate: first.certificate.pem, privateKey: first.keyPair.privateKey },
+				{ certificate: second.certificate.pem, privateKey: second.keyPair.privateKey },
+			],
+		});
+		expect(signed.ok).toBe(true);
+		if (!signed.ok) throw new Error(signed.error.code);
+
+		const verified = await verifyPkcs7SignedData(signed.value.pem, { content });
+		expect(verified.ok).toBe(true);
+		if (!verified.ok) throw new Error(verified.error.code);
+		expect(verified.value.signerInfos).toHaveLength(2);
+	});
+
+	it('fails with detached_content_required when no content is supplied', async () => {
+		const signer = await signingIdentity('Detached No Content');
+		const signed = await createPkcs7SignedData({
+			content: encoder.encode('detached'),
+			detached: true,
+			signers: [{ certificate: signer.certificate.pem, privateKey: signer.keyPair.privateKey }],
+		});
+		expect(signed.ok).toBe(true);
+		if (!signed.ok) throw new Error(signed.error.code);
+
+		const result = await verifyPkcs7SignedData(signed.value.der);
+		expect(result.ok).toBe(false);
+		if (result.ok) throw new Error('unreachable');
+		expect(result.error.code).toBe('detached_content_required');
+	});
+
+	it('fails with message_digest_mismatch for tampered external content', async () => {
+		const signer = await signingIdentity('Detached Tamper');
+		const content = encoder.encode('authentic bytes');
+		const signed = await createPkcs7SignedData({
+			content,
+			detached: true,
+			signers: [{ certificate: signer.certificate.pem, privateKey: signer.keyPair.privateKey }],
+		});
+		expect(signed.ok).toBe(true);
+		if (!signed.ok) throw new Error(signed.error.code);
+
+		const result = await verifyPkcs7SignedData(signed.value.der, {
+			content: encoder.encode('forged bytes'),
+		});
+		expect(result.ok).toBe(false);
+		if (result.ok) throw new Error('unreachable');
+		expect(result.error.code).toBe('message_digest_mismatch');
+	});
+
+	it('ignores external content when the SignedData embeds its own', async () => {
+		const signer = await signingIdentity('Attached Precedence');
+		const content = encoder.encode('embedded content wins');
+		const signed = await createPkcs7SignedData({
+			content,
+			signers: [{ certificate: signer.certificate.pem, privateKey: signer.keyPair.privateKey }],
+		});
+		expect(signed.ok).toBe(true);
+		if (!signed.ok) throw new Error(signed.error.code);
+
+		const result = await verifyPkcs7SignedData(signed.value.der, {
+			content: encoder.encode('unrelated external bytes'),
+		});
+		expect(result.ok).toBe(true);
+	});
+});
