@@ -224,7 +224,7 @@ if (latest === undefined) {
 	console.log(
 		offline ? 'offline mode: HEAD build as root' : 'no docs-bearing release: HEAD build as root',
 	);
-	buildFlavor({ DOCS_BASE: '/', DOCS_CHANNEL: 'latest', DOCS_VERSION: `v${pkg.version}` });
+	buildFlavor({ DOCS_BASE: '/', DOCS_CHANNEL: 'latest', DOCS_VERSION: `v${pkg.version}-dev` });
 	bootstrapRoot = await stashBuild('bootstrap-root');
 }
 
@@ -267,7 +267,7 @@ const manifest = {
 	generatedAt: new Date().toISOString(),
 	latest:
 		latest === undefined
-			? { label: `v${pkg.version}`, version: pkg.version, base: '/' }
+			? { label: `v${pkg.version}-dev`, version: pkg.version, base: '/' }
 			: { label: latest.tag, version: latest.tag.slice(1), base: '/' },
 	next: { label: 'next', commit: headCommit(), base: '/next/' },
 	archived,

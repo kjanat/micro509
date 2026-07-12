@@ -51,8 +51,12 @@ const resolveGit = (names: readonly string[], fallback: () => string): string =>
 const docsBase = process.env.DOCS_BASE ?? '/';
 /** Which channel this build represents; non-latest builds get noindex. */
 const docsChannel = process.env.DOCS_CHANNEL ?? 'latest';
-/** Display label for the navbar version switcher. */
-const docsVersion = process.env.DOCS_VERSION ?? `v${pkg.version}`;
+/**
+ * Display label for the navbar version switcher. Only release tooling passes
+ * an explicit DOCS_VERSION; every other build (local dev, bootstrap root) is
+ * an unreleased tree and says so.
+ */
+const docsVersion = process.env.DOCS_VERSION ?? `v${pkg.version}-dev`;
 if (!/^\/(?:[\w.-]+\/)?$/.test(docsBase)) {
 	throw new Error(`DOCS_BASE must be '/' or '/<segment>/', got: ${docsBase}`);
 }
