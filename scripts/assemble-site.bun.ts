@@ -198,7 +198,8 @@ async function countFiles(dir: string): Promise<number> {
 function headCommit(): string {
 	for (const name of ['MICRO509_GIT_COMMIT', 'WORKERS_CI_COMMIT_SHA', 'GITHUB_SHA']) {
 		const value = process.env[name]?.trim();
-		if (value) return value.slice(0, 7);
+		// Shape-check: some environments put a ref name where a sha belongs.
+		if (value !== undefined && /^[0-9a-f]{7,40}$/i.test(value)) return value.slice(0, 7);
 	}
 	const result = Bun.spawnSync(['git', 'rev-parse', '--short', 'HEAD'], { cwd: root });
 	return result.exitCode === 0 ? result.stdout.toString().trim() : 'unknown';
