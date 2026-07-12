@@ -77,8 +77,11 @@ const leaf = await createCertificate({
 
 const parsed = unwrap(parseCertificatePem(leaf.pem));
 console.log(`\
-leaf:   ${parsed.subject.values.commonName}
-issuer: ${parsed.issuer.values.commonName}`);
+leaf:    ${parsed.subject.values.commonName}
+issuer:  ${parsed.issuer.values.commonName}
+serial:  ${parsed.serialNumberHex}
+expires: ${parsed.notAfter.toISOString()}
+sig:     ${parsed.signatureAlgorithmName}`);
 ```
 
 </LiveCode>

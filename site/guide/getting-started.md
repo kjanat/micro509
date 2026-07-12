@@ -195,6 +195,7 @@ if (result.ok) {
   console.log(`\
 verified ${parsed.subject.values.commonName}
   issuer:       ${parsed.issuer.values.commonName}
+  serial:       ${parsed.serialNumberHex}
   chain length: ${result.value.chain.length}
 `);
 }

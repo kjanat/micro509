@@ -98,13 +98,12 @@ const verifyResult =
     ca.certificate.pem,
   );
 
-console.log('verified:', verifyResult.ok);
-if (verifyResult.ok) {
-  console.log(
-    'revoked 01:',
-    isCertificateRevoked('01', parsed),
-  );
-}
+console.log(`\
+verified:   ${verifyResult.ok}
+sig algo:   ${parsed.signatureAlgorithmName}
+thisUpdate: ${parsed.thisUpdate.toISOString()}
+entries:    ${parsed.revokedCertificates.length}
+revoked 01: ${isCertificateRevoked('01', parsed)}`);
 ```
 
 </LiveCode>
@@ -218,10 +217,15 @@ const result = await validateOcspResponse({
   issuerCertificate: ca.certificate.pem,
 });
 
-console.log('valid:', result.ok);
 if (result.ok) {
   const entry = result.value.responses?.[0];
-  console.log(entry?.certStatus);
+  console.log(`\
+valid:      true
+status:     ${entry?.certStatus}
+sig algo:   ${response.signatureAlgorithmName}
+producedAt: ${response.producedAt?.toISOString()}`);
+} else {
+  console.log(`invalid: ${result.error.code}`);
 }
 ```
 
@@ -308,9 +312,13 @@ const result = await checkCertificateRevocation({
 });
 
 // Always succeeds — check status discriminator
-console.log('status:', result.value.status);
 if (result.value.status === 'revoked') {
-  console.log('revoked at:', result.value.revokedAt);
+  console.log(`\
+status:     revoked
+serial:     ${serialHex}
+revoked at: ${result.value.revokedAt?.toISOString()}`);
+} else {
+  console.log('status:', result.value.status);
 }
 ```
 
@@ -386,7 +394,16 @@ const result = await verifyCertificateChain({
   },
 });
 
-console.log('verified:', result.ok);
+if (result.ok) {
+  const parsedLeaf = result.value.leaf;
+  console.log(`\
+verified: true
+leaf:     ${parsedLeaf.subject.values.commonName}
+serial:   ${parsedLeaf.serialNumberHex}
+chain:    ${result.value.chain.length} certificates`);
+} else {
+  console.log(`verified: false (${result.error.code})`);
+}
 ```
 
 </LiveCode>

@@ -63,9 +63,12 @@ const result = await verifyCertificateChain({
 });
 
 if (result.ok) {
-  console.log(
-    `Valid chain: ${result.value.chain.length} certificates`,
-  );
+  const parsedLeaf = result.value.leaf;
+  console.log(`\
+Valid chain: ${result.value.chain.length} certificates
+leaf:    ${parsedLeaf.subject.values.commonName}
+serial:  ${parsedLeaf.serialNumberHex}
+expires: ${parsedLeaf.notAfter.toISOString()}`);
 } else {
   console.log(`\
 Failed: ${result.error.code}
@@ -198,8 +201,15 @@ const result = matchServiceIdentity({
   serviceIdentity: { type: 'dns', value: 'example.com' },
 });
 
+const sans = (parsed.subjectAltNames ?? [])
+  .map((name) => `${name.type} ${name.value}`)
+  .join(', ');
+
 if (result.ok) {
-  console.log('Identity matches the certificate SAN');
+  console.log(`\
+matched: dns example.com
+SANs:    ${sans}
+serial:  ${parsed.serialNumberHex}`);
 } else {
   console.log(result.error.code);
   // 'subject_alt_name_mismatch' | ...
@@ -282,7 +292,14 @@ const result = await verifyCertificateSigningRequest(
 );
 
 if (result.ok) {
-  console.log('CSR signature valid');
+  const sans = (result.value.subjectAltNames ?? [])
+    .map((name) => name.value)
+    .join(', ');
+  console.log(`\
+subject:  ${result.value.subject.values.commonName}
+sig algo: ${result.value.signatureAlgorithmName}
+SANs:     ${sans}
+pubkey:   ${csr.pem.split('\n')[1]?.slice(0, 44)}…`);
 } else {
   console.log('CSR invalid:', result.error.code);
 }
