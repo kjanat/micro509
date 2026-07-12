@@ -203,6 +203,7 @@ export function parseRsaPssParameters(
 	}
 }
 
+/** Parses the optional context-specific RSA-PSS fields into their defaulted state. */
 function parseRsaPssParameterFields(
 	parametersDer: Uint8Array,
 	element: ReturnType<typeof readRootElement>,

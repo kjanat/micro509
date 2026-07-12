@@ -201,6 +201,7 @@ export function matchCertificateServiceIdentity(
 	}
 }
 
+/** Matches a DNS service identity against SANs and the explicitly enabled CN fallback. */
 function matchDnsServiceIdentity(
 	certificate: ParsedCertificate,
 	serviceIdentity: DnsServiceIdentityInput,

@@ -51,6 +51,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   RFC 5915 `parameters [0]` named curve (WebCrypto's inner ECPrivateKey omits
   it; OpenSSL writes it), so exported SEC 1 keys are self-describing and
   re-import without an explicit curve.
+- Preserve public API behavior while decomposing DER, parsing, verification,
+  revocation, PKCS#7, and API-documentation flows into focused helpers that
+  satisfy the stricter cognitive-complexity limit. (https://github.com/kjanat/micro509/pull/39)
 
 ## [0.9.0] - 2026-07-06
 

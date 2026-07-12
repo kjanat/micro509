@@ -245,6 +245,7 @@ export function parsePbes2AlgorithmIdentifier(algorithmIdentifierDer: Uint8Array
 	};
 }
 
+/** Extracts the KDF and encryption-scheme fields from a PBES2 AlgorithmIdentifier. */
 function parsePbes2OuterFields(algorithmIdentifierDer: Uint8Array): {
 	readonly paramsDer: Uint8Array;
 	readonly kdf: ReturnType<typeof readSequenceChildren>[number];

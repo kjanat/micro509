@@ -894,6 +894,7 @@ export async function checkCertificateRevocationAgainstCrl(
 	);
 }
 
+/** Validates an optional delta CRL and checks compatibility with its complete CRL. */
 async function validateOptionalDeltaCrl(
 	input: CheckCertificateRevocationAgainstCrlInput,
 	completeCrl: ParsedCertificateRevocationList,
@@ -1093,6 +1094,7 @@ function checkCrlApplicability(
 	return crlDistributionPointScanFailure(scanResult);
 }
 
+/** Aggregates distribution-point matching outcomes across a certificate. */
 function scanCrlDistributionPoints(
 	distributionPoints: readonly ParsedDistributionPoint[],
 	certificate: ParsedCertificate,

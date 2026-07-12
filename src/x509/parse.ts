@@ -602,6 +602,7 @@ function parseCustomExtensions<TMap extends ExtensionDecoderMap>(
 	};
 }
 
+/** Extracts and validates the structural fields of a TBSCertificate sequence. */
 function parseTbsCertificateFields(
 	der: Uint8Array,
 	tbsCertificate: DerElement,

@@ -701,6 +701,7 @@ export async function verifyPkcs7SignedData(
 	return { ok: true, value: parsed };
 }
 
+/** Normalizes encoded or parsed SignedData into a freshly parsed verification input. */
 function normalizePkcs7SignedDataForVerification(
 	input: string | Uint8Array | ParsedPkcs7SignedData,
 ): ParsePkcs7SignedDataResult | VerifyPkcs7SignedDataResult {
@@ -712,6 +713,7 @@ function normalizePkcs7SignedDataForVerification(
 	return parsePkcs7SignedDataDer(new Uint8Array(input.der));
 }
 
+/** Resolves and verifies one signer entry in a parsed PKCS#7 SignedData value. */
 async function verifyPkcs7SignerInfo(
 	parsed: ParsedPkcs7SignedData,
 	signerInfo: ParsedPkcs7SignerInfo,

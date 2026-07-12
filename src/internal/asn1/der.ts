@@ -389,6 +389,7 @@ export function readElement(bytes: Uint8Array, offset = 0): DerElement {
 	};
 }
 
+/** Decodes and validates the definite-length field of a DER element. */
 function readDerLength(
 	bytes: Uint8Array,
 	offset: number,
