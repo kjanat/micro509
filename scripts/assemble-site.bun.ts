@@ -147,8 +147,9 @@ async function fetchDocsReleases(): Promise<readonly DocsRelease[]> {
 				(asset) => asset.name === `docs-${release.tag_name}-root.tar.gz`,
 			);
 			if (rootAsset === undefined) return [];
-			const archiveName = `docs-v${version[0]}.${version[1]}-archive.tar.gz`;
-			const archiveAsset = release.assets.find((asset) => asset.name === archiveName);
+			const archiveAsset = release.assets.find(
+				(asset) => asset.name === `docs-${release.tag_name}-archive.tar.gz`,
+			);
 			return [
 				{
 					version,
