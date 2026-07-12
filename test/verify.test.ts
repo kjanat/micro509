@@ -3347,11 +3347,36 @@ describe('validateCandidatePath direct', () => {
 	});
 
 	it("preserves the 'any' initial policy set", async () => {
-		const chain = await issueChain();
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Any Initial Policy Root' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Any Initial Policy Root' },
+			subject: { commonName: 'any-initial-policy-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				certificatePolicies: [{ policyIdentifier: '1.2.3.4' }],
+			},
+		});
+		const chain = [
+			unwrap(parseCertificatePem(leaf.pem)),
+			unwrap(parseCertificatePem(root.certificate.pem)),
+		];
+
+		expect(await validateCandidatePath({ chain, initialPolicySet: ['1.2.3.5'] })).toMatchObject({
+			ok: false,
+			code: 'initial_policy_set_not_satisfied',
+		});
 		const result = await validateCandidatePath({
-			chain: parseCertificateChainPem(
-				`${chain.leaf.pem}${chain.intermediate.pem}${chain.root.certificate.pem}`,
-			),
+			chain,
 			initialPolicySet: 'any',
 		});
 

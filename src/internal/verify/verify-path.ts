@@ -570,20 +570,6 @@ async function matchTrustAnchor(
 	for (const anchor of anchors) {
 		if (trustAnchorAkiMismatch(certificate, anchor)) continue;
 		const verified = await verifyTrustAnchorSignature(certificate, anchor);
-		if (verified instanceof Error) {
-			if (firstFailure === undefined) {
-				firstFailure = callbacks.failure(
-					'signature_invalid',
-					'certificate signature does not verify',
-					index,
-					callbacks.detail({
-						subjectCommonName: certificate.subject.values.commonName,
-						actual: verified.message,
-					}),
-				);
-			}
-			continue;
-		}
 		if (!verified.ok) {
 			// Capture the first failure but continue trying other anchors
 			if (firstFailure === undefined) {
@@ -631,23 +617,19 @@ function trustAnchorAkiMismatch(certificate: ParsedCertificate, anchor: TrustAnc
 async function verifyTrustAnchorSignature(
 	certificate: ParsedCertificate,
 	anchor: TrustAnchor,
-): Promise<VerifyCertificateSignatureResult | Error> {
-	try {
-		const verificationResult = await verifySignedDataDetailed(
-			certificate.signatureAlgorithmOid,
-			certificate.signatureAlgorithmParametersDer,
-			anchor.publicKeyAlgorithmOid,
-			anchor.publicKeyParametersOid,
-			anchor.subjectPublicKeyInfoDer,
-			certificate.signatureValue,
-			certificate.tbsCertificateDer,
-		);
-		return !verificationResult.ok && verificationResult.code === 'verification_error'
-			? { ok: false, code: 'signature_invalid', reason: verificationResult.reason }
-			: verificationResult;
-	} catch (error) {
-		return new Error(error instanceof Error ? error.message : 'trust anchor key is malformed');
-	}
+): Promise<VerifyCertificateSignatureResult> {
+	const verificationResult = await verifySignedDataDetailed(
+		certificate.signatureAlgorithmOid,
+		certificate.signatureAlgorithmParametersDer,
+		anchor.publicKeyAlgorithmOid,
+		anchor.publicKeyParametersOid,
+		anchor.subjectPublicKeyInfoDer,
+		certificate.signatureValue,
+		certificate.tbsCertificateDer,
+	);
+	return !verificationResult.ok && verificationResult.code === 'verification_error'
+		? { ok: false, code: 'signature_invalid', reason: verificationResult.reason }
+		: verificationResult;
 }
 
 function describeDateTime(value: Date): string {
