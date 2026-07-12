@@ -45,6 +45,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `alg` (`RS*`/`PS*`/`RSA-OAEP-256/384/512` select the RSA scheme and hash).
     (https://github.com/kjanat/micro509/issues/41)
 
+### Fixed
+
+- `createPkcs7SignedData` returns the typed `'invalid_signer_certificate'` /
+  `'invalid_certificate'` (new code) failures for malformed signer and
+  `additionalCertificates` PEM sources instead of rejecting the promise.
+
 ### Changed
 
 - `exportSec1Der`/`exportSec1Pem`/`exportEncryptedSec1Pem` always embed the

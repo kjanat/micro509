@@ -340,6 +340,7 @@ export interface Pkcs7SignedDataMaterial {
 export type CreatePkcs7SignedDataErrorCode =
 	| 'no_signers'
 	| 'invalid_signer_certificate'
+	| 'invalid_certificate'
 	| 'unsupported_signer_key';
 
 /** Error payload for a failed PKCS#7 SignedData creation. */
@@ -406,71 +407,24 @@ export async function createPkcs7SignedData(
 	const digestAlgorithmOids = new Set<string>();
 	const signerInfos: Uint8Array[] = [];
 	for (const signer of input.signers) {
-		const signerCertDers = normalizeCertificateSource(signer.certificate);
-		const signerCertDer = signerCertDers[0];
-		if (signerCertDer === undefined || signerCertDers.length !== 1) {
-			return createPkcs7Failure(
-				'invalid_signer_certificate',
-				'Each PKCS#7 signer must provide exactly one certificate',
-			);
-		}
-		addCertificate(signerCertDer);
-		// parseCertificateDerOrThrow throws on malformed DER — a caller-correctable
-		// input, so convert it to the typed invalid_signer_certificate failure
-		// rather than rejecting the public Promise.
-		let certificate: ParsedCertificate;
-		try {
-			certificate = parseCertificateDerOrThrow(signerCertDer);
-		} catch {
-			return createPkcs7Failure(
-				'invalid_signer_certificate',
-				'Each PKCS#7 signer certificate must be a parseable X.509 certificate',
-			);
-		}
-		// getSignatureAlgorithm throws only for unsupported/misconfigured keys —
-		// all caller-correctable, so map to a typed failure rather than propagate.
-		let signatureAlgorithm: SignatureAlgorithmIdentifier;
-		try {
-			signatureAlgorithm = getSignatureAlgorithm(signer.privateKey, signer.signature);
-		} catch {
-			return createPkcs7Failure(
-				'unsupported_signer_key',
-				'Unsupported signer key or signature profile',
-			);
-		}
-		const digest = contentDigestForPrivateKey(signer.privateKey);
-		if (digest === undefined) {
-			return createPkcs7Failure(
-				'unsupported_signer_key',
-				'Unsupported signer key algorithm for content digest',
-			);
-		}
-		digestAlgorithmOids.add(digest.digestOid);
-		const messageDigest = new Uint8Array(
-			await getCrypto().subtle.digest(digest.hashName, toArrayBuffer(content)),
-		);
-		const { setForSigning, implicitForEmit } = buildSignedAttributes(
-			encapsulatedContentTypeOid,
-			messageDigest,
-		);
-		const signature = await signBytes(signer.privateKey, signatureAlgorithm, setForSigning);
-		signerInfos.push(
-			sequence([
-				integerFromNumber(1),
-				sequence([
-					hexToBytes(certificate.issuer.derHex),
-					integer(hexToBytes(certificate.serialNumberHex)),
-				]),
-				sequence([objectIdentifier(digest.digestOid), nullValue()]),
-				implicitForEmit,
-				encodeAlgorithmIdentifier(signatureAlgorithm),
-				octetString(signature),
-			]),
-		);
+		const built = await buildPkcs7SignerInfo(signer, content, encapsulatedContentTypeOid);
+		if (!built.ok) return built;
+		addCertificate(built.certificateDer);
+		digestAlgorithmOids.add(built.digestOid);
+		signerInfos.push(built.signerInfoDer);
 	}
 
 	for (const source of input.additionalCertificates ?? []) {
-		for (const der of normalizeCertificateSource(source)) {
+		let ders: readonly Uint8Array[];
+		try {
+			ders = normalizeCertificateSource(source);
+		} catch {
+			return createPkcs7Failure(
+				'invalid_certificate',
+				'Each additional PKCS#7 certificate source must be valid PEM or DER',
+			);
+		}
+		for (const der of ders) {
 			addCertificate(der);
 		}
 	}
@@ -497,6 +451,100 @@ export async function createPkcs7SignedData(
 	return {
 		ok: true,
 		value: { der, pem: pemEncode('PKCS7', der), base64: base64Encode(der) },
+	};
+}
+
+/** One built SignerInfo plus what the SignedData envelope needs from it. */
+type Pkcs7SignerInfoBuild =
+	| {
+			/** Build succeeded. */
+			readonly ok: true;
+			/** DER-encoded SignerInfo. */
+			readonly signerInfoDer: Uint8Array;
+			/** Digest algorithm OID for the digestAlgorithms SET. */
+			readonly digestOid: string;
+			/** Signer certificate DER for the certificate set. */
+			readonly certificateDer: Uint8Array;
+	  }
+	| ErrorResult<CreatePkcs7SignedDataErrorCode, Record<never, never>, CreatePkcs7SignedDataFailure>;
+
+/**
+ * Builds one signer's SignerInfo over `content` (RFC 5652 Section 5.4
+ * signed-attributes flow). Every throwing step here reacts to
+ * caller-correctable input — malformed PEM/DER, unsupported key — so each is
+ * mapped to a typed failure rather than rejecting the public Promise.
+ */
+async function buildPkcs7SignerInfo(
+	signer: Pkcs7Signer,
+	content: Uint8Array,
+	encapsulatedContentTypeOid: string,
+): Promise<Pkcs7SignerInfoBuild> {
+	// normalizeCertificateSource throws on malformed PEM (stray or truncated markers).
+	let signerCertDers: readonly Uint8Array[];
+	try {
+		signerCertDers = normalizeCertificateSource(signer.certificate);
+	} catch {
+		return createPkcs7Failure(
+			'invalid_signer_certificate',
+			'Each PKCS#7 signer certificate source must be valid PEM or DER',
+		);
+	}
+	const signerCertDer = signerCertDers[0];
+	if (signerCertDer === undefined || signerCertDers.length !== 1) {
+		return createPkcs7Failure(
+			'invalid_signer_certificate',
+			'Each PKCS#7 signer must provide exactly one certificate',
+		);
+	}
+	let certificate: ParsedCertificate;
+	try {
+		certificate = parseCertificateDerOrThrow(signerCertDer);
+	} catch {
+		return createPkcs7Failure(
+			'invalid_signer_certificate',
+			'Each PKCS#7 signer certificate must be a parseable X.509 certificate',
+		);
+	}
+	// getSignatureAlgorithm throws only for unsupported/misconfigured keys.
+	let signatureAlgorithm: SignatureAlgorithmIdentifier;
+	try {
+		signatureAlgorithm = getSignatureAlgorithm(signer.privateKey, signer.signature);
+	} catch {
+		return createPkcs7Failure(
+			'unsupported_signer_key',
+			'Unsupported signer key or signature profile',
+		);
+	}
+	const digest = contentDigestForPrivateKey(signer.privateKey);
+	if (digest === undefined) {
+		return createPkcs7Failure(
+			'unsupported_signer_key',
+			'Unsupported signer key algorithm for content digest',
+		);
+	}
+	const messageDigest = new Uint8Array(
+		await getCrypto().subtle.digest(digest.hashName, toArrayBuffer(content)),
+	);
+	const { setForSigning, implicitForEmit } = buildSignedAttributes(
+		encapsulatedContentTypeOid,
+		messageDigest,
+	);
+	const signature = await signBytes(signer.privateKey, signatureAlgorithm, setForSigning);
+	return {
+		ok: true,
+		signerInfoDer: sequence([
+			integerFromNumber(1),
+			sequence([
+				hexToBytes(certificate.issuer.derHex),
+				integer(hexToBytes(certificate.serialNumberHex)),
+			]),
+			sequence([objectIdentifier(digest.digestOid), nullValue()]),
+			implicitForEmit,
+			encodeAlgorithmIdentifier(signatureAlgorithm),
+			octetString(signature),
+		]),
+		digestOid: digest.digestOid,
+		certificateDer: signerCertDer,
 	};
 }
 

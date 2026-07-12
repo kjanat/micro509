@@ -156,6 +156,34 @@ describe('createPkcs7SignedData', () => {
 		if (result.ok) throw new Error('unreachable');
 		expect(result.error.code).toBe('invalid_signer_certificate');
 	});
+
+	it('returns invalid_signer_certificate for a truncated signer PEM instead of rejecting', async () => {
+		const signer = await signingIdentity('Truncated PEM Signer');
+		const result = await createPkcs7SignedData({
+			content: encoder.encode('x'),
+			signers: [
+				{
+					certificate: '-----BEGIN CERTIFICATE-----\nnot base64!!\n',
+					privateKey: signer.keyPair.privateKey,
+				},
+			],
+		});
+		expect(result.ok).toBe(false);
+		if (result.ok) throw new Error('unreachable');
+		expect(result.error.code).toBe('invalid_signer_certificate');
+	});
+
+	it('returns invalid_certificate for a truncated additional certificate PEM', async () => {
+		const signer = await signingIdentity('Additional PEM Signer');
+		const result = await createPkcs7SignedData({
+			content: encoder.encode('x'),
+			signers: [{ certificate: signer.certificate.pem, privateKey: signer.keyPair.privateKey }],
+			additionalCertificates: ['-----BEGIN CERTIFICATE-----\nnot base64!!\n'],
+		});
+		expect(result.ok).toBe(false);
+		if (result.ok) throw new Error('unreachable');
+		expect(result.error.code).toBe('invalid_certificate');
+	});
 });
 
 describe('createPkcs7SignedData: detached (RFC 5652 §5.2)', () => {
