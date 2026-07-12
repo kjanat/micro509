@@ -1166,6 +1166,22 @@ describe('keys: algorithm inference', () => {
 		await expectImportFailure(importPkcs8Der(x25519Pkcs8), 'malformed');
 	});
 
+	it('returns typed failures when inferred key material is malformed', async () => {
+		const { integerFromNumber, nullValue, objectIdentifier, octetString, sequence } = await import(
+			'#micro509/internal/asn1/der'
+		);
+		const malformedRsaPkcs8 = sequence([
+			integerFromNumber(0),
+			sequence([objectIdentifier('1.2.840.113549.1.1.1'), nullValue()]),
+			octetString(Uint8Array.of(0x01)),
+		]);
+		await expectImportFailure(importPkcs8Der(malformedRsaPkcs8), 'malformed');
+		await expectImportFailure(
+			importPublicJwk({ kty: 'EC', crv: 'P-256', x: 'AA', y: 'AA' }),
+			'malformed',
+		);
+	});
+
 	it('imports SEC 1 without an algorithm via the embedded named curve', async () => {
 		const keys = await generateKeyPair({ kind: 'ecdsa', curve: 'P-521' });
 		// exportSec1Der injects RFC 5915 `parameters [0]`, so the curve is self-describing.
