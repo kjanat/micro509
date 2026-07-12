@@ -40,6 +40,8 @@ test/
 - Internal imports through `#micro509/internal/*` are acceptable when validating low-level
   invariants.
 - Shared helpers belong in `helpers.ts`; OpenSSL process wrappers belong in `oracles/`.
+- Gate OpenSSL differential suites with the shared `openSslAvailable` and
+  `differentialEnabled` values from `helpers.ts`.
 - Differential tests compare normalized semantics only, never exact CLI stderr/stdout.
 - OpenSSL oracle constraints: compare normalized verdicts only; restrict OCSP to issuer-signed responses and CRLs to complete direct CRLs.
 - PKITS cases run at fixed `2011-04-15T00:00:00Z`; do not casually change harness time.

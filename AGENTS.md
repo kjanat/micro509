@@ -1,6 +1,6 @@
 # PROJECT KNOWLEDGE BASE
 
-**Last updated:** 2026-03-15
+**Last updated:** 2026-07-12
 
 ## OVERVIEW
 
@@ -61,6 +61,8 @@ micro509/
 - Import boundaries: public leaf modules may use `#micro509/internal/*`, not sibling barrels.
 - Return typed result unions for expected failures; throw only for invariants.
 - `readonly` and exhaustive ADTs with `never` checks.
+- Keep complexity-reduction helpers beside their owning codec, engine, or
+  lifecycle module so behavior and failure mapping remain locally traceable.
 
 ## ANTI-PATTERNS (THIS PROJECT)
 

@@ -978,6 +978,7 @@ export async function validateOcspResponse(
 	return { ok: true, value: parsedResponse };
 }
 
+/** Re-parses OCSP validation certificates and resolves the response signer. */
 async function normalizeOcspValidationInput(
 	input: ValidateOcspResponseInput,
 	parsedResponse: ParsedOcspResponse,
@@ -1013,6 +1014,7 @@ async function normalizeOcspValidationInput(
 	}
 }
 
+/** Selects the responder certificate from explicit, embedded, trusted, or issuer inputs. */
 async function resolveOcspResponderCertificate(
 	input: ValidateOcspResponseInput,
 	parsedResponse: ParsedOcspResponse,
@@ -1101,6 +1103,7 @@ async function validateDelegatedOcspResponder(
 	return responderRevocation.ok ? undefined : responderRevocation;
 }
 
+/** Checks response-level and per-certificate OCSP timestamps against the validation time. */
 async function validateOcspResponseFreshness(
 	parsedResponse: ParsedOcspResponse,
 	issuer: ParsedCertificate,

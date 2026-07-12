@@ -41,6 +41,8 @@ internal/
 - Keep sign/verify dispatch symmetric in `signing.ts` and `sig-verify.ts`.
 - Preserve wire-level behavior in `shared/` helpers; tiny changes can fan out.
 - If a helper starts encoding protocol policy, move it to the owning domain or engine.
+- Keep complexity-reduction helpers in the codec or engine that owns their
+  invariants; a lint-driven extraction is not by itself a reason for a new bucket.
 
 ## ANTI-PATTERNS
 

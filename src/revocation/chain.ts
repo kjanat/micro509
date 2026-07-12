@@ -894,6 +894,7 @@ async function evaluateCrlEvidence(
 	};
 }
 
+/** Parses complete and delta CRL evidence while retaining source provenance. */
 function parseCrlEvidenceSources(
 	crls: readonly CrlSource[],
 	executionErrors: RevocationExecutionError[],
@@ -925,6 +926,7 @@ function findApplicableDeltaCrl(
 	);
 }
 
+/** Evaluates a CRL against each available issuer until applicable evidence is found. */
 async function checkCrlWithAvailableIssuers(
 	cert: ParsedCertificate,
 	baseCrl: ParsedCertificateRevocationList,

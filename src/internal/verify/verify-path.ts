@@ -282,6 +282,7 @@ export async function buildChainInternal(
 		}
 	}
 
+	/** Searches ranked issuer candidates until one produces a trusted path. */
 	async function searchIssuerCandidates(
 		current: ParsedCertificate,
 		issuers: readonly ParsedCertificate[],
@@ -341,6 +342,7 @@ export async function buildChainInternal(
 	}
 }
 
+/** Applies issuer constraints and signature verification to one path candidate. */
 async function evaluateIssuerCandidate(
 	current: ParsedCertificate,
 	issuer: ParsedCertificate,

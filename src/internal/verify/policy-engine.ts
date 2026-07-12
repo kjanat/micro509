@@ -490,6 +490,7 @@ function applyCertificatePolicyStep(
 	prunePolicyGraph(graph, depth - 1);
 }
 
+/** Adds explicit certificate-policy nodes whose expected policies match parent nodes. */
 function addPolicyNodesFromExpectedParents(
 	graph: PolicyGraph,
 	currentDepth: Map<string, PolicyGraphNode>,
@@ -543,6 +544,7 @@ function addPolicyNodesFromPreviousAnyPolicy(
 	}
 }
 
+/** Expands an accepted anyPolicy entry into the policies expected by the previous depth. */
 function addAnyPolicyExpansionNodes(
 	graph: PolicyGraph,
 	currentDepth: Map<string, PolicyGraphNode>,

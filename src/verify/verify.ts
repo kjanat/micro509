@@ -671,6 +671,7 @@ function validateSelfSignedLeafAllowed(
 	);
 }
 
+/** Validates every certificate and issuer relationship in a candidate path. */
 async function validatePathCertificates(
 	chain: readonly ParsedCertificate[],
 	at: Date,
@@ -965,6 +966,7 @@ export async function verifyCertificateChain(
 	};
 }
 
+/** Applies optional revocation evidence to an otherwise verified certificate chain. */
 async function validateVerifiedChainRevocation(
 	input: VerifyCertificateChainInput,
 	chain: readonly ParsedCertificate[],

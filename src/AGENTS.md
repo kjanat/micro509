@@ -40,6 +40,8 @@ barrels under `x509`, `verify`, `revocation`, `keys`, `pem`, `pkcs`, and
   options explicit and typed in `keys/keys.ts`.
 - Do not return raw string errors in new result code; do not widen `Result`
   without callers handling the new branch.
+- Split dense lifecycle functions into local normalization, parsing, and
+  validation helpers before introducing another cross-domain utility module.
 
 ## HOTSPOTS
 

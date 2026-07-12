@@ -354,6 +354,7 @@ function checkCertificateNames(
 	return { ok: true };
 }
 
+/** Checks a certificate subject DN against the accumulated directory-name constraints. */
 function checkCertificateSubjectName(
 	certificate: ParsedCertificate,
 	accumulated: AccumulatedNameConstraints,

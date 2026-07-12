@@ -823,6 +823,7 @@ function appendIdentityExtensions(
 	}
 }
 
+/** Appends configured certificate-policy extensions while enforcing unique OIDs. */
 function appendPolicyExtensions(
 	encoded: Uint8Array[],
 	seen: Set<string>,

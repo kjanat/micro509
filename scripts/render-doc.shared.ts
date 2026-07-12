@@ -298,6 +298,7 @@ function renderParams(defParams: readonly ParamDef[], js: JsDoc | undefined): st
 
 type SymbolDeclaration = DocSymbol['declarations'][number];
 
+/** Renders a function signature and its parameter documentation as Markdown. */
 function renderFunctionSymbol(
 	sym: DocSymbol,
 	d: Extract<SymbolDeclaration, { readonly kind: 'function' }>,
@@ -330,6 +331,7 @@ function renderTypeAliasSymbol(
 	return ['```ts', `type ${sym.name}${tp} = ${plain(renderType(d.def.tsType))}`, '```', ''];
 }
 
+/** Renders an interface declaration, including an inline body for empty interfaces. */
 function renderInterfaceSignature(
 	sym: DocSymbol,
 	d: Extract<SymbolDeclaration, { readonly kind: 'interface' }>,

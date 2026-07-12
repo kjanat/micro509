@@ -17,6 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Preserve public API behavior while decomposing DER, parsing, verification,
+  revocation, PKCS#7, and API-documentation flows into focused helpers that
+  satisfy the stricter cognitive-complexity limit.
+
 ## [0.9.0] - 2026-07-06
 
 RSA-OAEP encryption support across the whole key lifecycle: generate, import,
