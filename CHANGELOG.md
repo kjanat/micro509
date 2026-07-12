@@ -17,6 +17,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `createPkcs7SignedData` accepts `detached: true` to omit `eContent` from
+  `encapContentInfo` (RFC 5652 §5.2 detached form), and
+  `verifyPkcs7SignedData` accepts an options bag with `content` to supply the
+  externally-held bytes when verifying a detached signature — the shape git
+  x509 commit signing (`gpg.format=x509`) and S/MIME detached signatures use.
+  Verifying a SignedData without `eContent` and without external content is a
+  typed `'detached_content_required'` failure (replaces the former
+  `'content_missing'` code); the error-code union is now exported as
+  `VerifyPkcs7SignedDataErrorCode`, the options as
+  `VerifyPkcs7SignedDataOptions`. Interop with `openssl cms` verified in both
+  directions.
+  (https://github.com/kjanat/micro509/issues/40)
+- The private-key import families infer the algorithm from the container when
+  the `algorithm` parameter is omitted, mirroring the existing SPKI behavior;
+  passing it still asserts and fails typed on mismatch:
+  - `importPkcs8Der/Pem/Base64(+OrThrow)` and
+    `importEncryptedPkcs8Der/Pem(+OrThrow)` read the PKCS#8
+    `privateKeyAlgorithm` (RSA defaults to `pkcs1-v1_5`/`SHA-256`, as with
+    SPKI inference).
+  - `importSec1Der/Pem(+OrThrow)` and `importEncryptedSec1Pem(+OrThrow)` read
+    the RFC 5915 `parameters [0]` named curve; a SEC 1 key without one still
+    requires the explicit curve.
+  - `importPublicJwk`/`importPrivateJwk`(+`OrThrow`) read `kty`, `crv`, and
+    `alg` (`RS*`/`PS*`/`RSA-OAEP-256/384/512` select the RSA scheme and hash).
+    (https://github.com/kjanat/micro509/issues/41)
+
+### Changed
+
+- `exportSec1Der`/`exportSec1Pem`/`exportEncryptedSec1Pem` always embed the
+  RFC 5915 `parameters [0]` named curve (WebCrypto's inner ECPrivateKey omits
+  it; OpenSSL writes it), so exported SEC 1 keys are self-describing and
+  re-import without an explicit curve.
+
 ## [0.9.0] - 2026-07-06
 
 RSA-OAEP encryption support across the whole key lifecycle: generate, import,
