@@ -66,12 +66,12 @@ if (result.ok) {
   const parsedLeaf = result.value.leaf;
   console.log(`\
 Valid chain: ${result.value.chain.length} certificates
-leaf:    ${parsedLeaf.subject.values.commonName}
-serial:  ${parsedLeaf.serialNumberHex}
-expires: ${parsedLeaf.notAfter.toISOString()}`);
+leaf:        ${parsedLeaf.subject.values.commonName}
+serial:      ${parsedLeaf.serialNumberHex}
+expires:     ${parsedLeaf.notAfter.toISOString()}`);
 } else {
   console.log(`\
-Failed: ${result.error.code}
+Failed:   ${result.error.code}
 At index: ${result.error.index}`);
 }
 ```
