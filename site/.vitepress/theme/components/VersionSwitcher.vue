@@ -33,6 +33,12 @@ const manifest = ref<VersionsManifest>();
 const open = ref(false);
 
 const label = computed(() => {
+  // Prefer the live manifest's label for this build's own base — the baked
+  // themeConfig label is frozen inside old tarballs and can go stale.
+  const fromManifest = entries.value.find(
+    (entry) => entry.base === site.value.base,
+  );
+  if (fromManifest !== undefined) return fromManifest.label;
   const configured: unknown = theme.value.docsVersion;
   return typeof configured === 'string'
     ? configured

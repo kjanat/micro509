@@ -149,7 +149,7 @@ jobs:
         run: |
           MINOR="v$(cut -d. -f1-2 <<<"${VERSION}")"
           echo "MINOR=${MINOR}" >> "${GITHUB_ENV}"
-          DOCS_BASE="/${MINOR}/" DOCS_CHANNEL=archive DOCS_VERSION="${MINOR}" bun run site:build:flavor
+          DOCS_BASE="/${MINOR}/" DOCS_CHANNEL=archive DOCS_VERSION="${TAG}" bun run site:build:flavor
           tar -czf "docs-${TAG}-archive.tar.gz" -C site/.vitepress/dist .
       - name: Attach tarballs to the release
         run: gh release upload "${TAG}" "docs-${TAG}-root.tar.gz" "docs-${TAG}-archive.tar.gz" --clobber
