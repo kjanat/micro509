@@ -1120,3 +1120,128 @@ describe('keys: coverage — malformed inputs', () => {
 		});
 	});
 });
+
+describe('keys: algorithm inference', () => {
+	it('imports PKCS#8 without an algorithm across key families', async () => {
+		const ec = await generateKeyPair({ kind: 'ecdsa', curve: 'P-384' });
+		const ecKey = unwrap(await importPkcs8Pem(await exportPkcs8Pem(ec.privateKey)));
+		expect(ecKey.algorithm).toMatchObject({ name: 'ECDSA', namedCurve: 'P-384' });
+		expect(ecKey.usages).toContain('sign');
+
+		const ed = await generateKeyPair({ kind: 'ed25519' });
+		const edKey = unwrap(await importPkcs8Der(await exportPkcs8Der(ed.privateKey)));
+		expect(edKey.algorithm.name).toBe('Ed25519');
+
+		const rsa = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
+		const rsaKey = unwrap(await importPkcs8Base64(await exportBinaryBase64(rsa.privateKey)));
+		expect(rsaKey.algorithm).toMatchObject({
+			name: 'RSASSA-PKCS1-v1_5',
+			hash: { name: 'SHA-256' },
+		});
+	});
+
+	it('imports encrypted PKCS#8 without an algorithm and keeps the invalid_password code', async () => {
+		const ec = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
+		const pem = await exportEncryptedPkcs8Pem(ec.privateKey, {
+			password: 'secret',
+			iterations: 1000,
+		});
+		const key = unwrap(await importEncryptedPkcs8Pem(pem, 'secret'));
+		expect(key.algorithm).toMatchObject({ name: 'ECDSA', namedCurve: 'P-256' });
+
+		const wrongPassword = await importEncryptedPkcs8Pem(pem, 'not-the-password');
+		expect(wrongPassword.ok).toBe(false);
+		if (!wrongPassword.ok) expect(wrongPassword.code).toBe('invalid_password');
+	});
+
+	it('rejects PKCS#8 inference for an unsupported private key algorithm', async () => {
+		const { objectIdentifier, octetString, sequence } = await import('#micro509/internal/asn1/der');
+		// PrivateKeyInfo with the X25519 OID (1.3.101.110) — valid envelope,
+		// unsupported algorithm family.
+		const x25519Pkcs8 = sequence([
+			Uint8Array.of(0x02, 0x01, 0x00),
+			sequence([objectIdentifier('1.3.101.110')]),
+			octetString(octetString(new Uint8Array(32))),
+		]);
+		await expectImportFailure(
+			importPkcs8Der(x25519Pkcs8),
+			'malformed',
+			'Unsupported PKCS#8 private key algorithm',
+		);
+	});
+
+	it('imports SEC 1 without an algorithm via the embedded named curve', async () => {
+		const keys = await generateKeyPair({ kind: 'ecdsa', curve: 'P-521' });
+		// exportSec1Der injects RFC 5915 `parameters [0]`, so the curve is self-describing.
+		const sec1Der = await exportSec1Der(keys.privateKey);
+		const fromDer = unwrap(await importSec1Der(sec1Der));
+		expect(fromDer.algorithm).toMatchObject({ name: 'ECDSA', namedCurve: 'P-521' });
+		const fromPem = unwrap(await importSec1Pem(await exportSec1Pem(keys.privateKey)));
+		expect(await exportPkcs8Der(fromPem)).toEqual(await exportPkcs8Der(keys.privateKey));
+	});
+
+	it('rejects SEC 1 inference when the parameters field is absent', async () => {
+		const { readSequenceChildren, sequence } = await import('#micro509/internal/asn1/der');
+		const keys = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
+		const sec1Der = await exportSec1Der(keys.privateKey);
+		// Strip `parameters [0]` to model a minimal RFC 5915 encoding.
+		const children = readSequenceChildren(sec1Der);
+		const withoutParameters = sequence(
+			children
+				.filter((child) => child.tag !== 0xa0)
+				.map((child) => sec1Der.slice(child.start - child.headerLength, child.end)),
+		);
+		await expectImportFailure(
+			importSec1Der(withoutParameters),
+			'malformed',
+			'SEC 1 private key does not encode a supported named curve',
+		);
+		// The explicit curve keeps working for minimal encodings.
+		const explicit = unwrap(
+			await importSec1Der(withoutParameters, { kind: 'ecdsa', curve: 'P-256' }),
+		);
+		expect(explicit.type).toBe('private');
+	});
+
+	it('imports JWKs without an algorithm using kty, crv, and alg', async () => {
+		const ec = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
+		const ecPrivate = unwrap(await importPrivateJwk(await exportPrivateJwk(ec.privateKey)));
+		expect(ecPrivate.algorithm).toMatchObject({ name: 'ECDSA', namedCurve: 'P-256' });
+		const ecPublic = unwrap(await importPublicJwk(await exportPublicJwk(ec.publicKey)));
+		expect(ecPublic.usages).toContain('verify');
+
+		const ed = await generateKeyPair({ kind: 'ed25519' });
+		const edKey = unwrap(await importPrivateJwk(await exportPrivateJwk(ed.privateKey)));
+		expect(edKey.algorithm.name).toBe('Ed25519');
+
+		const pss = await generateKeyPair({ kind: 'rsa', scheme: 'pss', hash: 'SHA-384' });
+		// Bun exports alg: 'PS384' — inference must honor it or WebCrypto rejects the JWK.
+		const pssKey = unwrap(await importPrivateJwk(await exportPrivateJwk(pss.privateKey)));
+		expect(pssKey.algorithm).toMatchObject({ name: 'RSA-PSS', hash: { name: 'SHA-384' } });
+
+		const oaep = await generateKeyPair({ kind: 'rsa', scheme: 'oaep' });
+		// alg: 'RSA-OAEP-256' selects the OAEP scheme and decrypt usage.
+		const oaepKey = unwrap(await importPrivateJwk(await exportPrivateJwk(oaep.privateKey)));
+		expect(oaepKey.algorithm.name).toBe('RSA-OAEP');
+		expect(oaepKey.usages).toContain('decrypt');
+	});
+
+	it('rejects JWK inference for unsupported curves and RSA algs', async () => {
+		await expectImportFailure(
+			importPublicJwk({ kty: 'EC', crv: 'secp256k1', x: 'AA', y: 'AA' }),
+			'malformed',
+			'Unsupported EC JWK curve',
+		);
+		// Plain 'RSA-OAEP' means OAEP with SHA-1, which this library does not support.
+		await expectImportFailure(
+			importPublicJwk({ kty: 'RSA', alg: 'RSA-OAEP', n: 'AA', e: 'AQAB' }),
+			'malformed',
+			'Unsupported RSA JWK alg',
+		);
+		await expectImportFailure(
+			importPublicJwk({ kty: 'oct', k: 'AA' }),
+			'malformed',
+			'Unsupported JWK key type',
+		);
+	});
+});
