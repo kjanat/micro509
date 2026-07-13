@@ -53,6 +53,20 @@ export interface ApiDocsTarget {
 	readonly apiBase?: string;
 }
 
+/** The shape `deno doc --json` promises: modules keyed by URL, each with symbols. */
+function isModuleGraph(value: unknown): value is { readonly nodes: Record<string, ApiModule> } {
+	if (typeof value !== 'object' || value === null || !('nodes' in value)) return false;
+	const { nodes } = value;
+	if (typeof nodes !== 'object' || nodes === null) return false;
+	return Object.values(nodes).every(
+		(module) =>
+			typeof module === 'object' &&
+			module !== null &&
+			'symbols' in module &&
+			Array.isArray(module.symbols),
+	);
+}
+
 /** Extract the doc-node graph for a tree's entrypoints. */
 function loadNodes(target: ApiDocsTarget): Record<string, ApiModule> {
 	const importMap = target.importMap === undefined ? [] : ['--import-map', target.importMap];
@@ -61,12 +75,20 @@ function loadNodes(target: ApiDocsTarget): Record<string, ApiModule> {
 		['doc', '--no-npm', ...importMap, '--json', `--name=${target.name}`, ...target.entrypoints],
 		{ cwd: target.root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
 	);
-	return (JSON.parse(raw) as { nodes: Record<string, ApiModule> }).nodes;
+
+	const parsed: unknown = JSON.parse(raw);
+	if (!isModuleGraph(parsed)) {
+		throw new Error(
+			`[api-docs] deno doc did not return a module graph for ${target.name} (${target.root})`,
+		);
+	}
+	return parsed.nodes;
 }
 
 /** A generated page states its own title, so a sidebar can read it off the page. */
 function withTitle(title: string, markdown: string): string {
-	return `---\ntitle: ${title}\n---\n\n${markdown}\n`;
+	// Quoted: a title carrying `:` or `#` is not a plain YAML scalar.
+	return `---\ntitle: ${JSON.stringify(title)}\n---\n\n${markdown}\n`;
 }
 
 /** Regenerate one API reference from one source tree. */
@@ -106,12 +128,19 @@ export function apiDocsPlugin(options: {
 	readonly regenerate: () => void;
 }): Plugin {
 	let timer: ReturnType<typeof setTimeout> | undefined;
+
+	// `startsWith` would also match a sibling: `src-other/x.ts` starts with `src`.
+	const watched = (file: string): boolean => {
+		const rel = path.relative(options.watchDir, file);
+		return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+	};
+
 	return {
 		name: 'vitepress-api-docs',
 		configureServer(server) {
 			server.watcher.add(path.join(options.watchDir, '**/*.ts'));
 			server.watcher.on('change', (file) => {
-				if (!file.startsWith(options.watchDir)) return;
+				if (!watched(file)) return;
 				clearTimeout(timer);
 				timer = setTimeout(() => {
 					options.regenerate();

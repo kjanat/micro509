@@ -38,18 +38,22 @@ export function githubLinks(options: GithubLinksOptions): (md: MarkdownRenderer)
 				return previous(tokens, idx, opts, env, self);
 			}
 
+			// `?query`/`#fragment` are not part of the path: `keys.md#generate` is a
+			// page link, and whatever follows a repository path must survive rewriting.
+			const [, location = '', suffix = ''] = /^([^?#]*)([?#].*)?$/.exec(href) ?? [];
+
 			const isRepositoryFile =
-				!href.startsWith('/') &&
-				!href.startsWith('http') &&
-				!href.startsWith('//') &&
-				!href.startsWith('#') &&
-				!href.endsWith('.md') &&
-				!/\.html(?:#|$)/.test(href);
+				location !== '' &&
+				!location.startsWith('/') &&
+				!location.startsWith('//') &&
+				// Any scheme — http(s), but also mailto, tel, data, ftp.
+				!/^[a-z][a-z0-9+.-]*:/i.test(location) &&
+				!/\.(?:md|html)$/i.test(location);
 
 			if (isRepositoryFile) {
-				const target = path.posix.normalize(path.posix.join(path.posix.dirname(page), href));
+				const target = path.posix.normalize(path.posix.join(path.posix.dirname(page), location));
 				const kind = target.endsWith('/') ? 'tree' : 'blob';
-				token.attrSet('href', `${options.repoUrl}/${kind}/${options.ref}/${target}`);
+				token.attrSet('href', `${options.repoUrl}/${kind}/${options.ref}/${target}${suffix}`);
 			}
 			return previous(tokens, idx, opts, env, self);
 		};
