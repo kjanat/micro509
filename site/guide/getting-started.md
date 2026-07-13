@@ -57,8 +57,8 @@ a release cannot change under you.
 a certificate and parses it back, with nothing installed and nothing built. For the
 same demo with types and a dev server, see [`examples/vite`][vite-example].
 
-[browser-example]: https://github.com/kjanat/micro509/tree/master/examples/browser/README.md
-[vite-example]: https://github.com/kjanat/micro509/tree/master/examples/vite/README.md
+[browser-example]: https://github.com/kjanat/micro509/tree/HEAD/examples/browser/README.md
+[vite-example]: https://github.com/kjanat/micro509/tree/HEAD/examples/vite/README.md
 
 ### Deno
 

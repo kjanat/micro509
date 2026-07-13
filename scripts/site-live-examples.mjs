@@ -223,8 +223,11 @@ async function runVersion(browser, baseUrl, { version, route }) {
 	/** @type {string[]} */
 	const refused = [];
 	/** @type {string[]} */
+	const refusedBeforeRun = [];
+	/** @type {string[]} */
 	const imported = [];
 
+	let running = false;
 	let source = '';
 	let output = '';
 	let started;
@@ -247,7 +250,7 @@ async function runVersion(browser, baseUrl, { version, route }) {
 			return;
 		}
 
-		refused.push(`${url} (matches ${rule})`);
+		(running ? refused : refusedBeforeRun).push(`${url} (matches ${rule})`);
 		await intercepted.abort('blockedbyclient');
 	});
 
@@ -261,15 +264,23 @@ async function runVersion(browser, baseUrl, { version, route }) {
 		source = (await block.locator('pre code').first().innerText()).trim();
 
 		started = performance.now();
+		running = true;
 		await button.click();
 		await outputBlock.waitFor({ state: 'visible' });
 		await page.waitForFunction(
 			(selector) => !document.querySelector(selector)?.textContent?.includes('Running'),
 			'.live-code .live-code-btn',
 		);
+		running = false;
 
 		const ms = Math.round(performance.now() - started);
 		output = (await outputBlock.innerText()).trim();
+
+		if (refusedBeforeRun.length > 0) {
+			console.warn(
+				`[live-examples] ${version}: page assets refused before the run: ${refusedBeforeRun.join(', ')}`,
+			);
+		}
 
 		let why = '';
 

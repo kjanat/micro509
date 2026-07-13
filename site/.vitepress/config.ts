@@ -97,16 +97,27 @@ function commitSha(): string | undefined {
 	return envOf('WORKERS_CI_COMMIT_SHA') ?? git('rev-parse', 'HEAD');
 }
 
+const GITHUB_TIMEOUT_MS = 10_000;
+
 async function pullRequestOf(sha: string): Promise<string | undefined> {
 	const url = `https://api.github.com/repos${repoUrl.pathname}/commits/${sha}/pulls`;
-	const response = await fetch(url, {
-		headers: { accept: 'application/vnd.github+json', 'user-agent': repo.name },
-	});
-	if (!response.ok) return undefined;
+	try {
+		const response = await fetch(url, {
+			headers: { accept: 'application/vnd.github+json', 'user-agent': repo.name },
+			signal: AbortSignal.timeout(GITHUB_TIMEOUT_MS),
+		});
+		if (!response.ok) {
+			console.warn(`[versions] ${url}: ${response.status} ${response.statusText}`);
+			return undefined;
+		}
 
-	const pulls: ReadonlyArray<{ readonly number: number }> = await response.json();
-	const first = pulls[0];
-	return first === undefined ? undefined : String(first.number);
+		const pulls: ReadonlyArray<{ readonly number: number }> = await response.json();
+		const first = pulls[0];
+		return first === undefined ? undefined : String(first.number);
+	} catch (error) {
+		console.warn(`[versions] ${url}: ${String(error)}`);
+		return undefined;
+	}
 }
 
 const pull = await (async (): Promise<string | undefined> => {
@@ -122,7 +133,7 @@ const pull = await (async (): Promise<string | undefined> => {
 })();
 
 /** pkg.pr.new republishes a pull request's ref on every head of that pull request. */
-const nextRef = (pull ?? gitRef).replace(/\/\w+$/, '');
+const nextRef = (pull ?? gitRef).replace(/\/(?:merge|head)$/, '');
 
 const devLabel = pull === undefined ? `v${repo.version}-dev` : `#${pull}`;
 

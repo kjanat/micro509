@@ -12,8 +12,8 @@ npm install
 npm run dev
 ```
 
-For the same demo with nothing to install and nothing to build, see [`../browser`] — one
-HTML file you can open.
+For the same demo with nothing to install and nothing to build, see [`examples/browser`],
+one HTML file you can open.
 
 ## What it does
 
@@ -27,6 +27,6 @@ Nothing is carried over from step 1 to step 2: what the page shows is what the c
 says about itself.
 
 [`src/main.ts`]: ./src/main.ts
-[`../browser`]: ../browser/README.md
+[`examples/browser`]: https://github.com/kjanat/micro509/tree/HEAD/examples/browser
 [Open in StackBlitz]: https://developer.stackblitz.com/img/open_in_stackblitz_small.svg
-[stackblitz]: https://stackblitz.com/github/kjanat/micro509/tree/stackblitz/examples/vite?title=micro509%20with%20Vite
+[stackblitz]: https://stackblitz.com/github/kjanat/micro509/tree/master/examples/vite?title=micro509%20with%20Vite
