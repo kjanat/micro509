@@ -1,6 +1,6 @@
 import type { KeyAlgorithmInput, KeyUsage, ParsedCertificate, SubjectAltName } from 'micro509';
 import { certificateFingerprint, createSelfSignedCertificate } from 'micro509';
-import { parseCertificatePem } from 'micro509/x509';
+import { parseCertificatePem, subjectAltNameToString } from 'micro509/x509';
 
 const form = document.querySelector<HTMLFormElement>('#form');
 const pemPane = document.querySelector<HTMLPreElement>('#pem');
@@ -22,14 +22,10 @@ function keyAlgorithm(choice: string): KeyAlgorithmInput {
 	return { kind: 'ecdsa', curve: 'P-256' };
 }
 
-function nameOf(name: SubjectAltName): string {
-	if (!('value' in name)) return name.derHex;
-	if (typeof name.value === 'string') return name.value;
-	return [...name.value].map((byte) => byte.toString(16).padStart(2, '0')).join('');
-}
-
 function describe(certificate: ParsedCertificate, fingerprint: string): Array<[string, string]> {
-	const names = (certificate.subjectAltNames ?? []).map(nameOf).join(', ');
+	const names = (certificate.subjectAltNames ?? [])
+		.map((name) => subjectAltNameToString(name))
+		.join(', ');
 	return [
 		['subject', certificate.subject.values.commonName ?? '—'],
 		['organization', certificate.subject.values.organization ?? '—'],

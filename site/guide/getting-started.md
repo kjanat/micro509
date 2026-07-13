@@ -136,6 +136,7 @@ console.log(csr.pem);
 import {
   parseCertificatePem,
   createSelfSignedCertificate,
+  subjectAltNameToString,
 } from 'micro509';
 
 const { certificate } = await createSelfSignedCertificate({
@@ -159,8 +160,7 @@ if (!result.ok) {
 } else {
   const parsed = result.value;
   const sans = (parsed.subjectAltNames ?? [])
-    .filter((name) => name.type !== 'directoryName')
-    .map((name) => name.value)
+    .map((name) => subjectAltNameToString(name))
     .join(', ');
   console.log(`\
 subject:   ${parsed.subject.values.commonName}

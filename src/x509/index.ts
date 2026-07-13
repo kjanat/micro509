@@ -86,6 +86,13 @@ export type {
 	RelativeDistinguishedNameInput,
 } from '#micro509/x509/name';
 export { encodeName, encodeRelativeDistinguishedName } from '#micro509/x509/name';
+export type { SubjectAltNameTextOptions } from '#micro509/x509/name-text';
+export {
+	distinguishedNameToString,
+	relativeDistinguishedNameToString,
+	subjectAltNameLabel,
+	subjectAltNameToString,
+} from '#micro509/x509/name-text';
 
 export type {
 	DecodedExtensionMap,

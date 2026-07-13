@@ -121,6 +121,7 @@ console.log(csr.pem);
 import {
   createSelfSignedCertificate,
   parseCertificatePem,
+  subjectAltNameToString,
   unwrap,
 } from 'micro509';
 
@@ -144,9 +145,9 @@ const { certificate } = await createSelfSignedCertificate({
 const parsed = unwrap(parseCertificatePem(certificate.pem));
 
 // Typed metadata
-const sans = (parsed.subjectAltNames ?? [])
-  .filter((name) => name.type !== 'directoryName')
-  .map((name) => name.value);
+const sans = (parsed.subjectAltNames ?? []).map((name) =>
+  subjectAltNameToString(name),
+);
 console.log(`\
 subject:   ${parsed.subject.values.commonName}
 org:       ${parsed.subject.values.organization}
@@ -331,6 +332,7 @@ import {
   createCertificateSigningRequest,
   generateKeyPair,
   parseCertificateSigningRequestPem,
+  subjectAltNameToString,
   unwrap,
 } from 'micro509';
 
@@ -350,9 +352,9 @@ const csr = await createCertificateSigningRequest({
 const parsed = unwrap(
   parseCertificateSigningRequestPem(csr.pem),
 );
-const sans = (parsed.subjectAltNames ?? [])
-  .filter((name) => name.type !== 'directoryName')
-  .map((name) => name.value);
+const sans = (parsed.subjectAltNames ?? []).map((name) =>
+  subjectAltNameToString(name),
+);
 console.log(`\
 subject:  ${parsed.subject.values.commonName}
 sig algo: ${parsed.signatureAlgorithmName}
