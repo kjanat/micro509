@@ -1,6 +1,6 @@
 {
 	"name": "@micro509/doc-render",
-	"version": "0.0.0",
+	"version": "",
 	"private": true,
 	"description": "Renders deno-doc nodes to cross-linked markdown, and the Deno import map deno doc needs to read them.",
 	"type": "module",

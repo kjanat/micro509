@@ -185,7 +185,7 @@
 			"wrangler": "^4.108.0"
 		},
 		"deno": {
-			"@deno/doc": "npm:@jsr/deno__doc",
+			"@deno/doc": "npm:@jsr/deno__doc@0.199.0",
 			"@types/deno": "^2.7.0",
 			"deno": "^2.9.2"
 		},

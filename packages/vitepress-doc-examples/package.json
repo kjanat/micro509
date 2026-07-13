@@ -1,6 +1,6 @@
 {
 	"name": "@micro509/vitepress-doc-examples",
-	"version": "0.0.0",
+	"version": "",
 	"private": true,
 	"description": "VitePress plugin: typecheck and lint the runnable examples embedded in docs pages.",
 	"type": "module",
