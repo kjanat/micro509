@@ -24,7 +24,7 @@
  * @module
  */
 // deno-lint-ignore-file
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import path from 'node:path';
 import { chromium } from 'playwright';
@@ -62,6 +62,44 @@ if (!existsSync(DIST)) {
 }
 
 /**
+ * Every file the build produced, under each route that serves it: its own path, that path
+ * without the `.html`, and — for an index — the directory it indexes. A request picks an
+ * entry out of this map; it never names a path of its own, so the only files the server
+ * can read are the ones the build wrote.
+ *
+ * @returns {Map<string, string>}
+ */
+function routes() {
+	/** @type {Map<string, string>} */
+	const files = new Map();
+
+	/** @param {string} dir */
+	const walk = (dir) => {
+		for (const entry of readdirSync(dir, { withFileTypes: true })) {
+			const file = path.join(dir, entry.name);
+			if (entry.isDirectory()) walk(file);
+			else files.set(`/${path.relative(DIST, file).split(path.sep).join('/')}`, file);
+		}
+	};
+	walk(DIST);
+
+	const served = new Map(files);
+	for (const [route, file] of files) {
+		if (!route.endsWith('/index.html')) continue;
+		served.set(route.slice(0, -'index.html'.length), file);
+		served.set(route.slice(0, -'/index.html'.length) || '/', file);
+	}
+	for (const [route, file] of files) {
+		if (!route.endsWith('.html')) continue;
+		const bare = route.slice(0, -'.html'.length);
+		if (!served.has(bare)) served.set(bare, file);
+	}
+	return served;
+}
+
+const SERVED = routes();
+
+/**
  * Every version the site serves, in the order the switcher lists them: the root release,
  * the tree, then the archives newest first.
  *
@@ -77,7 +115,7 @@ function versions() {
 		{ version: '(latest)', route: '/guide/getting-started' },
 		{ version: 'next', route: '/next/guide/getting-started' },
 		...archives.map((version) => ({ version, route: `/${version}/guide/getting-started` })),
-	].filter(({ route }) => existsSync(path.join(DIST, `${route}.html`)));
+	].filter(({ route }) => SERVED.has(route));
 }
 
 /**
@@ -100,14 +138,8 @@ function elide(text, head, tail) {
 /** 127.0.0.1 is a secure context, so the page gets crypto.subtle. file:// does not. */
 const server = createServer((request, response) => {
 	const url = `${request.url ?? '/'}`.split('?')[0] ?? '/';
-	let file = path.join(DIST, decodeURIComponent(url));
-	if (!file.startsWith(DIST)) {
-		response.writeHead(403).end();
-		return;
-	}
-	if (existsSync(file) && statSync(file).isDirectory()) file = path.join(file, 'index.html');
-	if (!existsSync(file) && existsSync(`${file}.html`)) file = `${file}.html`;
-	if (!existsSync(file)) {
+	const file = SERVED.get(decodeURIComponent(url));
+	if (file === undefined) {
 		response.writeHead(404).end('not found');
 		return;
 	}
