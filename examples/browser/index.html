@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<title>micro509 in the browser</title>
+		<!-- dprint-ignore -->
+		<link rel="icon" href="https://cdn.jsdelivr.net/gh/kjanat/micro509@e7e2007bfd7a18f6f247864b14ef60d54ed91dd6/site/assets/favicon.svg" type="image/svg+xml">
+		<!-- dprint-ignore -->
+		<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/kjanat/micro509@e7e2007bfd7a18f6f247864b14ef60d54ed91dd6/examples/vite/src/main.css">
+	</head>
+	<body>
+		<script type="importmap">
+		{
+			"imports": {
+				"micro509": "https://esm.run/micro509@0.11.0",
+				"micro509/x509": "https://esm.run/micro509@0.11.0/x509"
+			}
+		}
+		</script>
+		<h1>micro509 in the browser</h1>
+		<p class="lede">
+			Issue a self-signed certificate and parse it back out of its own PEM. One HTML file, imported straight from a CDN
+			— nothing installed, nothing built.
+		</p>
+
+		<form id="form">
+			<fieldset>
+				<legend>Certificate details</legend>
+				<label>
+					Common name
+					<input name="commonName" value="example.com" required>
+				</label>
+				<label>
+					Organization
+					<input name="organization" value="Acme">
+				</label>
+				<label>
+					Subject alt name (DNS)
+					<input name="san" value="www.example.com">
+				</label>
+				<label>
+					Key
+					<select name="algorithm">
+						<option value="P-256">ECDSA P-256</option>
+						<option value="P-384">ECDSA P-384</option>
+						<option value="RSA">RSA 2048</option>
+					</select>
+				</label>
+				<label>
+					Valid for (days)
+					<input name="days" type="number" value="30" min="1" max="3650">
+				</label>
+			</fieldset>
+			<button type="submit">Issue certificate</button>
+		</form>
+
+		<div class="panes">
+			<section>
+				<h2>Certificate (PEM)</h2>
+				<pre id="pem">Press “Issue certificate”.</pre>
+			</section>
+			<section>
+				<h2>Parsed back</h2>
+				<dl id="parsed"></dl>
+			</section>
+		</div>
+		<script type="module">
+			import { certificateFingerprint, createSelfSignedCertificate } from 'micro509';
+			import { parseCertificatePem } from 'micro509/x509';
+
+			const form = document.querySelector('#form');
+			const pemPane = document.querySelector('#pem');
+			const parsedPane = document.querySelector('#parsed');
+			const button = document.querySelector('button[type="submit"]');
+
+			const field = (data, name) => (data.get(name) ?? '').toString().trim();
+
+			function keyAlgorithm(choice) {
+				if (choice === 'RSA') return { kind: 'rsa', modulusLength: 2048 };
+				if (choice === 'P-384') return { kind: 'ecdsa', curve: 'P-384' };
+				return { kind: 'ecdsa', curve: 'P-256' };
+			}
+
+			function nameOf(name) {
+				if (!('value' in name)) return name.derHex;
+				if (typeof name.value === 'string') return name.value;
+				return [...name.value].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+			}
+
+			const COLON_HEX = /^[0-9A-F]{2}(:[0-9A-F]{2})+$/;
+
+			function row(term, value) {
+				const fragment = document.createDocumentFragment();
+				const dt = document.createElement('dt');
+				dt.textContent = term;
+
+				const dd = document.createElement('dd');
+				if (COLON_HEX.test(value)) {
+					for (const [index, byte] of value.split(':').entries()) {
+						if (index > 0) {
+							dd.append(':');
+							dd.append(document.createElement('wbr'));
+						}
+						dd.append(byte);
+					}
+				} else {
+					dd.textContent = value;
+				}
+
+				fragment.append(dt, dd);
+				return fragment;
+			}
+
+			function describe(certificate, fingerprint) {
+				const names = (certificate.subjectAltNames ?? []).map(nameOf).join(', ');
+				return [
+					['subject', certificate.subject.values.commonName ?? '—'],
+					['organization', certificate.subject.values.organization ?? '—'],
+					['serial', certificate.serialNumberHex],
+					['not before', certificate.notBefore.toISOString()],
+					['not after', certificate.notAfter.toISOString()],
+					['signature', certificate.signatureAlgorithmName ?? '—'],
+					['public key', certificate.publicKeyAlgorithmName ?? '—'],
+					['key usage', certificate.keyUsage?.flags.join(', ') || '—'],
+					['alt names', names || '—'],
+					['sha-256', fingerprint],
+				];
+			}
+
+			form.addEventListener('submit', async (event) => {
+				event.preventDefault();
+				button.disabled = true;
+				pemPane.textContent = 'Generating a key and signing…';
+				parsedPane.replaceChildren();
+
+				try {
+					const data = new FormData(form);
+					const commonName = field(data, 'commonName');
+					const organization = field(data, 'organization');
+					const san = field(data, 'san');
+					const days = Number(field(data, 'days')) || 30;
+
+					const subjectAltNames = [{ type: 'dns', value: commonName }];
+					if (san !== '') subjectAltNames.push({ type: 'dns', value: san });
+
+					const algorithm = keyAlgorithm(field(data, 'algorithm'));
+					const keyUsage =
+						algorithm.kind === 'rsa' ? ['digitalSignature', 'keyEncipherment'] : ['digitalSignature'];
+
+					const { certificate } = await createSelfSignedCertificate({
+						subject: { commonName, ...(organization === '' ? {} : { organization }) },
+						algorithm,
+						validity: { days },
+						extensions: {
+							keyUsage,
+							subjectAltNames,
+						},
+					});
+
+					pemPane.textContent = certificate.pem;
+
+					const parsed = parseCertificatePem(certificate.pem);
+					if (!parsed.ok) {
+						parsedPane.append(row('parse failed', parsed.error.code));
+						return;
+					}
+
+					const { colonHex } = await certificateFingerprint(certificate.pem);
+					parsedPane.append(...describe(parsed.value, colonHex).map(([term, value]) => row(term, value)));
+				} catch (error) {
+					pemPane.textContent = error instanceof Error ? error.message : String(error);
+				} finally {
+					button.disabled = false;
+				}
+			});
+		</script>
+	</body>
+</html>

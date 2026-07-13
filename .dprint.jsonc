@@ -21,12 +21,14 @@
 			"**/.vscode/*.json",
 			"**/.zed/*.json",
 			"**/tsconfig*.json"
-		]
+		],
+		"associations": [".stackblitzrc"]
 	},
 	"shfmt": { "useTabs": true, "binaryNextLine": true, "switchCaseIndent": true },
 	"markdown": { "textWrap": "always", "associations": ["!*.md"] },
 	"prettier": { "useTabs": false, "associations": ["*.md"], "singleQuote": true },
 	"markup": {
+		"printWidth": 120,
 		"html.void.selfClosing": false,
 		"formatComments": true,
 		"scriptIndent": true,
@@ -88,7 +90,8 @@
 		"**/worker-configuration.d.ts",
 		"**/bun.lock",
 		"**/dist",
-		"**/docs/deno"
+		"**/docs/deno",
+		"examples/vite/src/favicon.svg"
 	],
 	"plugins": [
 		"https://plugins.dprint.dev/kjanat/shfmt-1.0.0.wasm",

@@ -22,6 +22,7 @@
 			"test": "recommended"
 		},
 		"rules": {
+			"a11y": { "recommended": true },
 			"complexity": {
 				"recommended": true,
 				"useLiteralKeys": "off",

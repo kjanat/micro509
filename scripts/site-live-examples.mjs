@@ -1,41 +1,38 @@
 #!/usr/bin/env node
 /**
- * The docs site's examples run in the reader's browser, against a library it imports
- * from a CDN. `site-import-maps.deno.ts` proves those URLs resolve and that the code
- * runs; it cannot prove the page does — the LiveCode component, the blob module it
- * builds, the secure context WebCrypto needs, or the reader's content blocker.
+ * Runs the getting-started example from every built documentation version,
+ * requiring non-empty output while simulating a content blocker.
  *
- * Against the built site (`run site:build` first): for every version the site serves,
- * click Run on its getting-started example and require a certificate out of it. Each
- * version's page carries the example written against the API that release shipped, and
- * imports the library that release published — so this runs fifteen different libraries
- * against the fifteen examples written for them.
- *
- * A content blocker is simulated, because a headless browser has none — and without one
- * this test would have passed happily while the bug that motivated it was live. The site
- * used to serve the library from its own origin, where `x509/fingerprint.js` matched an
- * EasyPrivacy rule blocking that path on every domain but github.com. That file is a
- * static import of the root entry, so one refused request killed every example on the
- * site, for every reader running uBlock — while the server returned 200 throughout.
- *
- * So: abort what a blocker aborts, and require the examples to run anyway. This guards
- * the class, not the filename — any module whose URL a filter list happens to match.
+ * Run `site:build` first.
  *
  * @module
  */
-// deno-lint-ignore-file
+import { once } from 'node:events';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import path from 'node:path';
+import { performance } from 'node:perf_hooks';
 import { chromium } from 'playwright';
 
-const DIST = path.resolve('site/.vitepress/dist');
-
 /**
- * Generic path rules from EasyPrivacy — the ones that apply to every domain, not to a
- * named tracker. A URL containing any of these is one a large share of readers' browsers
- * will refuse. The first is the rule this site actually tripped.
+ * @typedef {{ version: string, route: string }} Version
+ *
+ * @typedef {{
+ *   version: string,
+ *   source: string,
+ *   output: string,
+ *   failed: boolean,
+ *   why: string,
+ *   ms: number,
+ *   imported: string[]
+ * }} Result
  */
+
+const DIST = path.resolve(import.meta.dirname, '..', 'site/.vitepress/dist');
+const HOST = '127.0.0.1';
+const EXAMPLE_TIMEOUT_MS = 60_000;
+
+/** EasyPrivacy path rules. */
 const BLOCKER_RULES = [
 	'/fingerprint.js',
 	'/fingerprint.min.js',
@@ -45,265 +42,435 @@ const BLOCKER_RULES = [
 	'/telemetry.js',
 ];
 
-/** @type {Readonly<Record<string, string>>} */
-const TYPES = {
-	'.html': 'text/html',
-	'.js': 'text/javascript',
-	'.css': 'text/css',
-	'.svg': 'image/svg+xml',
-	'.json': 'application/json',
+/** @type {Record<string, string>} */
+const MIME_TYPES = {
+	'.css': 'text/css; charset=utf-8',
+	'.html': 'text/html; charset=utf-8',
 	'.ico': 'image/x-icon',
+	'.jpeg': 'image/jpeg',
+	'.jpg': 'image/jpeg',
+	'.js': 'text/javascript; charset=utf-8',
+	'.json': 'application/json; charset=utf-8',
+	'.map': 'application/json; charset=utf-8',
+	'.mjs': 'text/javascript; charset=utf-8',
+	'.png': 'image/png',
+	'.svg': 'image/svg+xml',
+	'.txt': 'text/plain; charset=utf-8',
+	'.wasm': 'application/wasm',
+	'.webmanifest': 'application/manifest+json',
+	'.webp': 'image/webp',
 	'.woff2': 'font/woff2',
 };
 
-if (!existsSync(DIST)) {
-	console.error(`[live-examples] no built site at ${DIST} — run \`run site:build\` first`);
-	process.exit(1);
-}
-
 /**
- * Every file the build produced, under each route that serves it: its own path, that path
- * without the `.html`, and — for an index — the directory it indexes. A request picks an
- * entry out of this map; it never names a path of its own, so the only files the server
- * can read are the ones the build wrote.
- *
  * @returns {Map<string, string>}
  */
-function routes() {
+function buildRoutes() {
 	/** @type {Map<string, string>} */
 	const files = new Map();
 
-	/** @param {string} dir */
-	const walk = (dir) => {
-		for (const entry of readdirSync(dir, { withFileTypes: true })) {
-			const file = path.join(dir, entry.name);
-			if (entry.isDirectory()) walk(file);
-			else files.set(`/${path.relative(DIST, file).split(path.sep).join('/')}`, file);
+	/** @param {string} directory */
+	function walk(directory) {
+		for (const entry of readdirSync(directory, { withFileTypes: true })) {
+			const file = path.join(directory, entry.name);
+
+			if (entry.isDirectory()) {
+				walk(file);
+				continue;
+			}
+
+			const relative = path.relative(DIST, file).split(path.sep).join('/');
+			files.set(`/${relative}`, file);
 		}
-	};
+	}
+
 	walk(DIST);
 
-	const served = new Map(files);
+	const routes = new Map(files);
+
 	for (const [route, file] of files) {
-		if (!route.endsWith('/index.html')) continue;
-		served.set(route.slice(0, -'index.html'.length), file);
-		served.set(route.slice(0, -'/index.html'.length) || '/', file);
+		if (route.endsWith('/index.html')) {
+			routes.set(route.slice(0, -'index.html'.length), file);
+			routes.set(route.slice(0, -'/index.html'.length) || '/', file);
+		}
+
+		if (route.endsWith('.html')) {
+			const extensionless = route.slice(0, -'.html'.length);
+			if (!routes.has(extensionless)) routes.set(extensionless, file);
+		}
 	}
-	for (const [route, file] of files) {
-		if (!route.endsWith('.html')) continue;
-		const bare = route.slice(0, -'.html'.length);
-		if (!served.has(bare)) served.set(bare, file);
-	}
-	return served;
+
+	return routes;
 }
 
-const SERVED = routes();
-
 /**
- * Every version the site serves, in the order the switcher lists them: the root release,
- * the tree, then the archives newest first.
- *
- * @returns {Array<{ version: string, route: string }>}
+ * @param {Map<string, string>} routes
+ * @returns {Version[]}
  */
-function versions() {
-	const archives = readdirSync(DIST, { withFileTypes: true })
+function findVersions(routes) {
+	const archived = readdirSync(DIST, { withFileTypes: true })
 		.filter((entry) => entry.isDirectory() && /^v\d+\.\d+\.\d+$/.test(entry.name))
 		.map((entry) => entry.name)
 		.sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
 
+	const broken = archived.filter((version) => !routes.has(`/${version}/guide/getting-started`));
+
+	if (broken.length > 0) {
+		throw new Error(`[live-examples] ${broken.join(', ')} built no /guide/getting-started page`);
+	}
+
 	return [
 		{ version: '(latest)', route: '/guide/getting-started' },
 		{ version: 'next', route: '/next/guide/getting-started' },
-		...archives.map((version) => ({ version, route: `/${version}/guide/getting-started` })),
-	].filter(({ route }) => SERVED.has(route));
+		...archived.map((version) => ({
+			version,
+			route: `/${version}/guide/getting-started`,
+		})),
+	].filter(({ version, route }) => {
+		if (routes.has(route)) return true;
+		console.warn(`[live-examples] ${version}: the built site serves no ${route}, skipping`);
+		return false;
+	});
 }
 
 /**
- * Long output, shown as its head and its tail — a certificate is mostly base64.
- *
  * @param {string} text
- * @param {number} head
- * @param {number} tail
- * @returns {string}
+ * @param {number} [head]
+ * @param {number} [tail]
  */
-function elide(text, head, tail) {
+function elide(text, head = 3, tail = 2) {
 	const lines = text.split('\n');
-	const kept =
+
+	const visible =
 		lines.length <= head + tail + 1
 			? lines
 			: [...lines.slice(0, head), `… ${lines.length - head - tail} more`, ...lines.slice(-tail)];
-	return kept.map((line) => `    ${line}`).join('\n');
-}
 
-/** 127.0.0.1 is a secure context, so the page gets crypto.subtle. file:// does not. */
-const server = createServer((request, response) => {
-	const url = `${request.url ?? '/'}`.split('?')[0] ?? '/';
-	const file = SERVED.get(decodeURIComponent(url));
-	if (file === undefined) {
-		response.writeHead(404).end('not found');
-		return;
-	}
-	response.writeHead(200, {
-		'content-type': TYPES[path.extname(file)] ?? 'application/octet-stream',
-	});
-	response.end(readFileSync(file));
-});
-await new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve(undefined)));
-const address = server.address();
-if (address === null || typeof address === 'string') {
-	throw new Error('[live-examples] no server port');
-}
-const base = `http://127.0.0.1:${address.port}`;
-
-const browser = await chromium.launch();
-
-/** Close everything, whatever happened. An open server handle keeps node alive forever. */
-let closed = false;
-async function teardown() {
-	if (closed) return;
-	closed = true;
-	await browser.close().catch(() => {});
-	server.close();
-}
-for (const signal of ['SIGINT', 'SIGTERM']) {
-	process.once(signal, () => {
-		console.log(`\n[live-examples] ${signal} — closing browser`);
-		teardown().then(() => process.exit(130));
-	});
+	return visible.map((line) => `    ${line}`).join('\n');
 }
 
 /**
- * @typedef {{ version: string, source: string, output: string, failed: boolean,
- *             why: string, ms: number, imported: string[] }} Result
+ * @param {string[]} urls
  */
+function hostsOf(urls) {
+	return [...new Set(urls.map((url) => new URL(url).host))].join(', ');
+}
 
 /**
- * Click Run on one version's getting-started example, and keep what it printed.
+ * crypto.subtle requires a secure context; loopback addresses qualify.
  *
- * @param {string} version
- * @param {string} route
+ * @param {Map<string, string>} routes
+ */
+async function startServer(routes) {
+	const server = createServer((request, response) => {
+		let route;
+
+		try {
+			route = decodeURIComponent(new URL(request.url ?? '/', `http://${HOST}`).pathname);
+		} catch {
+			response.writeHead(400).end('bad request');
+			return;
+		}
+
+		const file = routes.get(route);
+
+		if (file === undefined) {
+			response.writeHead(404).end('not found');
+			return;
+		}
+
+		response.writeHead(200, {
+			'content-type': MIME_TYPES[path.extname(file)] ?? 'application/octet-stream',
+		});
+		response.end(readFileSync(file));
+	});
+
+	server.listen(0, HOST);
+	await once(server, 'listening');
+
+	const address = server.address();
+
+	if (address === null || typeof address === 'string') {
+		throw new Error('[live-examples] server started without a TCP port');
+	}
+
+	return {
+		server,
+		baseUrl: `http://${HOST}:${address.port}`,
+	};
+}
+
+/**
+ * @param {import('node:http').Server} server
+ */
+async function closeServer(server) {
+	if (!server.listening) return;
+
+	await new Promise((resolve, reject) => {
+		server.close((error) => {
+			if (error) reject(error);
+			else resolve(undefined);
+		});
+	});
+}
+
+/**
+ * @param {import('playwright').Browser} browser
+ * @param {string} baseUrl
+ * @param {Version} target
  * @returns {Promise<Result>}
  */
-async function runVersion(version, route) {
-	const page = await browser.newPage();
+async function runVersion(browser, baseUrl, { version, route }) {
+	const context = await browser.newContext({
+		baseURL: baseUrl,
+		serviceWorkers: 'block',
+	});
+	const page = await context.newPage();
+
+	page.setDefaultTimeout(EXAMPLE_TIMEOUT_MS);
+	page.setDefaultNavigationTimeout(EXAMPLE_TIMEOUT_MS);
 
 	/** @type {string[]} */
 	const refused = [];
 	/** @type {string[]} */
+	const refusedBeforeRun = [];
+	/** @type {string[]} */
 	const imported = [];
+
+	let running = false;
+	let source = '';
+	let output = '';
+	let started;
 
 	page.on('request', (request) => {
 		const url = request.url();
-		if (!url.startsWith(base) && /^https?:/.test(url)) imported.push(url);
+		const parsed = new URL(url);
+
+		if (/^https?:$/.test(parsed.protocol) && parsed.origin !== baseUrl) {
+			imported.push(url);
+		}
 	});
 
-	// The reader's content blocker, which a headless browser does not have.
-	await page.route('**/*', (route_) => {
-		const url = route_.request().url();
-		const rule = BLOCKER_RULES.find((pattern) => url.includes(pattern));
+	await page.route('**/*', async (intercepted) => {
+		const url = intercepted.request().url();
+		const rule = BLOCKER_RULES.find((candidate) => url.includes(candidate));
+
 		if (rule === undefined) {
-			route_.continue();
+			await intercepted.continue();
 			return;
 		}
-		refused.push(`${url} (matches ${rule})`);
-		route_.abort('blockedbyclient');
+
+		(running ? refused : refusedBeforeRun).push(`${url} (matches ${rule})`);
+		await intercepted.abort('blockedbyclient');
 	});
 
 	try {
-		await page.goto(`${base}${route}`, { waitUntil: 'networkidle' });
+		await page.goto(route, { waitUntil: 'domcontentloaded' });
 
 		const block = page.locator('.live-code').first();
-		const source = (await block.locator('pre code').first().innerText()).trim();
+		const button = block.locator('.live-code-btn').first();
+		const outputBlock = block.locator('.live-code-pre').first();
 
-		const started = Date.now();
-		await page.locator('.live-code-btn').first().click();
-		await block.locator('.live-code-pre').first().waitFor({ state: 'visible', timeout: 60_000 });
+		source = (await block.locator('pre code').first().innerText()).trim();
+
+		started = performance.now();
+		running = true;
+		await button.click();
+		await outputBlock.waitFor({ state: 'visible' });
 		await page.waitForFunction(
-			() => !document.querySelector('.live-code-btn')?.textContent?.includes('Running'),
-			{ timeout: 60_000 },
+			(selector) => !document.querySelector(selector)?.textContent?.includes('Running'),
+			'.live-code .live-code-btn',
 		);
-		const ms = Date.now() - started;
+		running = false;
 
-		const output = (await block.locator('.live-code-pre').first().innerText()).trim();
-		const errored = (await block.locator('.live-code-err').count()) > 0;
+		const ms = Math.round(performance.now() - started);
+		output = (await outputBlock.innerText()).trim();
 
-		const why =
-			refused.length > 0
-				? `a content blocker would refuse ${refused.join(', ')}`
-				: errored
-					? 'the example errored'
-					: output === ''
-						? 'the example printed nothing'
-						: '';
+		if (refusedBeforeRun.length > 0) {
+			console.warn(
+				`[live-examples] ${version}: page assets refused before the run: ${refusedBeforeRun.join(', ')}`,
+			);
+		}
 
-		return { version, source, output, failed: why !== '', why, ms, imported };
+		let why = '';
+
+		if (refused.length > 0) {
+			why = `a content blocker would refuse ${refused.join(', ')}`;
+		} else if ((await block.locator('.live-code-err').count()) > 0) {
+			why = 'the example errored';
+		} else if (output === '') {
+			why = 'the example printed nothing';
+		}
+
+		return {
+			version,
+			source,
+			output,
+			failed: why !== '',
+			why,
+			ms,
+			imported,
+		};
 	} catch (error) {
 		return {
 			version,
-			source: '',
-			output: '',
+			source,
+			output,
 			failed: true,
-			why: String(error).split('\n')[0] ?? 'threw',
-			ms: 0,
+			why: String(error).split('\n')[0] || 'threw',
+			ms: started === undefined ? 0 : Math.round(performance.now() - started),
 			imported,
 		};
 	} finally {
-		await page.close().catch(() => {});
+		await context.close().catch((error) => {
+			console.warn(`[live-examples] ${version}: failed to close context: ${error}`);
+		});
 	}
 }
 
-/** @type {Result[]} */
-const results = [];
+/**
+ * @param {import('playwright').Browser} browser
+ * @param {import('node:http').Server} server
+ */
+function createTeardown(browser, server) {
+	/** @type {Promise<void> | undefined} */
+	let pending;
 
-try {
-	const all = versions();
-	console.log(`[live-examples] ${all.length} versions, one example each\n`);
+	return () =>
+		(pending ??= (async () => {
+			await browser.close().catch((error) => {
+				console.warn(`[live-examples] failed to close browser: ${error}`);
+			});
 
-	for (const { version, route } of all) {
-		const result = await runVersion(version, route);
-		results.push(result);
-		console.log(
-			`  ${result.failed ? 'FAIL' : ' ok '} ${version.padEnd(10)} ${String(result.ms).padStart(5)}ms  ` +
-				`${result.imported.length} request${result.imported.length === 1 ? ' ' : 's'} to ` +
-				`${[...new Set(result.imported.map((url) => new URL(url).host))].join(', ') || '(none)'}`,
-		);
+			await closeServer(server).catch((error) => {
+				console.warn(`[live-examples] failed to close server: ${error}`);
+			});
+		})());
+}
+
+/**
+ * @param {Result[]} results
+ * @param {string} baseUrl
+ */
+function printSuccessfulOutputs(results, baseUrl) {
+	/** @type {Map<string, Result[]>} */
+	const bySource = new Map();
+
+	for (const result of results) {
+		if (result.failed) continue;
+
+		const group = bySource.get(result.source) ?? [];
+		group.push(result);
+		bySource.set(result.source, group);
 	}
-} finally {
-	await teardown();
-}
 
-// The example is the same source across versions that share it, so print each once.
-/** @type {Map<string, string[]>} */
-const bySource = new Map();
-for (const result of results.filter((candidate) => !candidate.failed)) {
-	bySource.set(result.source, [...(bySource.get(result.source) ?? []), result.version]);
-}
+	for (const [source, group] of bySource) {
+		console.log(`\n${'─'.repeat(78)}`);
+		console.log(`\nthe example published by ${group.map(({ version }) => version).join(', ')}:\n`);
+		console.log(source.replace(/^/gm, '    '));
+		console.log(`\n  what each version printed in the browser:\n`);
 
-for (const [source, sharing] of bySource) {
-	console.log(`\n${'─'.repeat(78)}`);
-	console.log(
-		`the example, as ${sharing.join(', ')} publish${sharing.length === 1 ? 'es' : ''} it:\n`,
-	);
-	console.log(source.replace(/^/gm, '    '));
-	console.log(`\n  what each of them printed, in the browser:\n`);
-	for (const version of sharing) {
-		const result = results.find((candidate) => candidate.version === version);
-		if (result === undefined) continue;
-		console.log(`  ${version} — from ${new URL(result.imported[0] ?? base).host}, ${result.ms} ms`);
-		console.log(elide(result.output, 3, 2));
-		console.log('');
+		for (const result of group) {
+			const hosts = hostsOf(result.imported) || new URL(baseUrl).host;
+
+			console.log(`  ${result.version} — ${hosts}, ${result.ms} ms`);
+			console.log(elide(result.output));
+			console.log('');
+		}
 	}
-}
-console.log('─'.repeat(78));
 
-const failures = results.filter((result) => result.failed);
-if (failures.length > 0) {
-	console.error(`\n[live-examples] ${failures.length} of ${results.length} failed:`);
-	for (const result of failures) {
-		console.error(`\n  ${result.version} — ${result.why}`);
-		console.error((result.output || '(no output)').replace(/^/gm, '    '));
+	console.log('─'.repeat(78));
+}
+
+async function main() {
+	if (!existsSync(DIST)) {
+		throw new Error(`[live-examples] no built site at ${DIST} — run \`run site:build\` first`);
 	}
-	process.exit(1);
+
+	const routes = buildRoutes();
+	const versions = findVersions(routes);
+	const { server, baseUrl } = await startServer(routes);
+
+	let browser;
+
+	try {
+		browser = await chromium.launch();
+	} catch (error) {
+		await closeServer(server);
+		throw error;
+	}
+
+	const teardown = createTeardown(browser, server);
+	const signalHandlers = new Map();
+
+	/** @type {Array<[NodeJS.Signals, number]>} */
+	const signals = [
+		['SIGINT', 130],
+		['SIGTERM', 143],
+	];
+
+	for (const [signal, exitCode] of signals) {
+		const handler = () => {
+			console.log(`\n[live-examples] ${signal} — shutting down`);
+			void teardown().finally(() => process.exit(exitCode));
+		};
+
+		signalHandlers.set(signal, handler);
+		process.once(signal, handler);
+	}
+
+	/** @type {Result[]} */
+	const results = [];
+
+	try {
+		for (const version of versions) {
+			const result = await runVersion(browser, baseUrl, version);
+			results.push(result);
+
+			const requests = result.imported.length;
+			const hosts = hostsOf(result.imported) || '(none)';
+
+			console.log(
+				`  ${result.failed ? 'FAIL' : ' ok '} ${result.version.padEnd(10)} ` +
+					`${String(result.ms).padStart(5)}ms  ` +
+					`${requests} external request${requests === 1 ? '' : 's'} to ${hosts}`,
+			);
+		}
+
+		const count = versions.length;
+		const label = count === 1 ? 'version' : 'versions';
+		console.log(`\n[live-examples] ${count} ${label}:\n`);
+	} finally {
+		for (const [signal, handler] of signalHandlers) {
+			process.off(signal, handler);
+		}
+
+		await teardown();
+	}
+
+	printSuccessfulOutputs(results, baseUrl);
+
+	const failures = results.filter(({ failed }) => failed);
+
+	if (failures.length > 0) {
+		console.error(`\n[live-examples] ${failures.length} of ${results.length} failed:`);
+
+		for (const result of failures) {
+			console.error(`\n  ${result.version} — ${result.why}`);
+			console.error((result.output || '(no output)').replace(/^/gm, '    '));
+		}
+
+		process.exitCode = 1;
+		return;
+	}
+
+	const count = results.length;
+	const label = count === 1 ? 'version' : 'versions';
+	const pronoun = count === 1 ? 'its' : 'their';
+	console.log(`\n[live-examples] ${count} ${label} each ran ${pronoun} own example`);
 }
 
-console.log(`\n[live-examples] ${results.length} versions each ran their own example`);
+main().catch((error) => {
+	console.error(error instanceof Error ? error.message : error);
+	process.exitCode = 1;
+});

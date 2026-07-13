@@ -53,6 +53,13 @@ Subpaths work the same way — `https://esm.run/micro509/x509` — and pinning a
 version (`https://esm.run/micro509@0.11.0`) is what you want in production, so
 a release cannot change under you.
 
+[`examples/browser`][browser-example] is that, in full: one HTML file that issues
+a certificate and parses it back, with nothing installed and nothing built. For the
+same demo with types and a dev server, see [`examples/vite`][vite-example].
+
+[browser-example]: https://github.com/kjanat/micro509/tree/HEAD/examples/browser/README.md
+[vite-example]: https://github.com/kjanat/micro509/tree/HEAD/examples/vite/README.md
+
 ### Deno
 
 ```ts

@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<title>micro509 with Vite</title>
+		<link rel="stylesheet" href="/src/main.css">
+		<link rel="icon" href="/src/favicon.svg" type="image/svg+xml">
+	</head>
+	<body>
+		<h1>micro509 with Vite</h1>
+		<p class="lede">
+			Issue a self-signed certificate and parse it back out of its own PEM. TypeScript, hot reload, and micro509 from
+			npm.
+		</p>
+
+		<form id="form">
+			<fieldset>
+				<legend>Certificate details</legend>
+				<label>
+					Common name
+					<input name="commonName" value="example.com" required>
+				</label>
+				<label>
+					Organization
+					<input name="organization" value="Acme">
+				</label>
+				<label>
+					Subject alt name (DNS)
+					<input name="san" value="www.example.com">
+				</label>
+				<label>
+					Key
+					<select name="algorithm">
+						<option value="P-256">ECDSA P-256</option>
+						<option value="P-384">ECDSA P-384</option>
+						<option value="RSA">RSA 2048</option>
+					</select>
+				</label>
+				<label>
+					Valid for (days)
+					<input name="days" type="number" value="30" min="1" max="3650">
+				</label>
+			</fieldset>
+			<button type="submit">Issue certificate</button>
+		</form>
+
+		<div class="panes">
+			<section>
+				<h2>Certificate (PEM)</h2>
+				<pre id="pem">Press “Issue certificate”.</pre>
+			</section>
+			<section>
+				<h2>Parsed back</h2>
+				<dl id="parsed"></dl>
+			</section>
+		</div>
+
+		<script type="module" src="/src/main.ts"></script>
+	</body>
+</html>

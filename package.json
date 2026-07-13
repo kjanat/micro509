@@ -73,7 +73,7 @@
 	"jsdelivr": "./dist/index.js",
 	"types": "./dist/index.d.ts",
 	"files": ["dist"],
-	"workspaces": ["packages/*", "site/.vitepress"],
+	"workspaces": ["examples/*", "packages/*", "site/.vitepress"],
 	"scripts": {
 		"bd": "tsdown",
 		"build": "tsdown",
@@ -93,7 +93,7 @@
 		"prepare": "run -q deno:importsmap",
 		"prepublishOnly": "[ -n \"${GITHUB_ACTIONS:-}\" ] || { printf '%s\\n' 'manual npm publish blocked; use release workflow for provenance' >&2; exit 1; }",
 		"publish:jsr": "[ -n \"${GITHUB_ACTIONS:-}\" ] || { printf '%s\\n' 'manual JSR publish blocked; use release workflow' >&2; exit 1; }; bunx jsr publish",
-		"publish:pkgprnew": "bunx pkg-pr-new publish --packageManager='npm,pnpm,bun' --bun",
+		"publish:pkgprnew": "bunx pkg-pr-new publish --packageManager='npm,pnpm,bun' --bun --template './examples/vite'",
 		"site:build": "run --dir site/.vitepress build",
 		"site:dev": "run --dir site/.vitepress dev",
 		"site:import-maps": "deno run --allow-read --allow-net --allow-write --allow-run scripts/site-import-maps.deno.ts",
@@ -171,7 +171,7 @@
 		"npm": "11.18.0"
 	},
 	"catalog": {
-		"@biomejs/biome": "^2.5.3",
+		"@biomejs/biome": "2.5.2 || ^2.5.4",
 		"dprint": "^0.55.1",
 		"runner-run": "^0.19.1",
 		"vue": "^3.5.27"

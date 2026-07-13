@@ -6,6 +6,7 @@
 		{ "language_server": { "name": "dprint" } }
 	],
 	"prettier": { "allowed": false },
+	"file_types": { "JSON": [".stackblitzrc"] },
 	"wrap_guides": [100],
 	"languages": {
 		"TypeScript": {
@@ -14,7 +15,15 @@
 				{ "external": { "command": "dprint", "arguments": ["fmt", "--stdin", "{buffer_path}"] } },
 				{ "language_server": { "name": "dprint" } }
 			],
-			"language_servers": ["typescript", "deno", "biome", "..."],
+			"language_servers": [
+				"typescript",
+				"deno",
+				"biome",
+				"oxlint",
+				"!vtsls",
+				"!oxfmt",
+				"!tailwindcss-language-server"
+			],
 			"code_actions_on_format": {
 				"source.fixAll.biome": true,
 				"source.organizeImports.biome": true
@@ -30,7 +39,7 @@
 				"arguments": ["lsp-proxy"]
 			},
 			"settings": {
-				"config_path": "./biome.json",
+				"config_path": "./biome.jsonc",
 				"require_config_file": true,
 				"goto_definition": true,
 				"inline_config": {
@@ -43,7 +52,7 @@
 			"settings": {
 				"deno": {
 					"enable": true,
-					"enablePaths": ["./src", "./scripts", "./site"],
+					"enablePaths": ["./src", "./scripts", "./site", "./packages"],
 					"importMap": "./deno.import_map.json"
 				}
 			}
@@ -55,21 +64,20 @@
 						{
 							"fileMatch": ["src/internal/asn1/oids.json"],
 							"url": "./src/internal/asn1/oids.schema.json"
+						},
+						{
+							"fileMatch": [".stackblitzrc"],
+							"url": "https://www.schemastore.org/stackblitzrc.json"
 						}
 					]
 				}
 			}
 		},
 		"vtsls": {
-			"settings": {
-				"typescript": { "tsdk": "./node_modules/typescript/lib/" }
-			}
+			"settings": { "typescript": { "tsdk": "./node_modules/typescript/lib/" } }
 		},
 		"dprint": {
-			"binary": {
-				"path": "./node_modules/.bin/dprint",
-				"arguments": ["lsp"]
-			}
+			"binary": { "path": "bunx", "arguments": ["dprint", "lsp"] }
 		},
 		"typescript": {}
 	}

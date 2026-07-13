@@ -1,7 +1,7 @@
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/kjanat/micro509/raw/c5720af044fd9cc8f3c33e3bb91f79e6d5567454/site/assets/icon-light.svg">
-  <source media="(prefers-color-scheme: light)" srcset="https://github.com/kjanat/micro509/raw/c5720af044fd9cc8f3c33e3bb91f79e6d5567454/site/assets/icon.svg">
-  <img alt="" src="https://github.com/kjanat/micro509/raw/c5720af044fd9cc8f3c33e3bb91f79e6d5567454/site/assets/icon.svg" width="64" height="64" align="left">
+  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/kjanat/micro509/raw/e7e2007bfd7a18f6f247864b14ef60d54ed91dd6/site/assets/icon-light.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://github.com/kjanat/micro509/raw/e7e2007bfd7a18f6f247864b14ef60d54ed91dd6/site/assets/icon.svg">
+  <img alt="" src="https://github.com/kjanat/micro509/raw/e7e2007bfd7a18f6f247864b14ef60d54ed91dd6/site/assets/icon.svg" width="64" height="64" align="left">
 </picture>
 
 # micro509
@@ -33,6 +33,12 @@ In a browser, no build step — it is WebCrypto and nothing else:
   import { createSelfSignedCertificate } from 'https://esm.run/micro509';
 </script>
 ```
+
+Two runnable examples: [`examples/browser`] is one HTML file you can open, and
+[`examples/vite`] is the same demo with types and a dev server. Both open in StackBlitz.
+
+[`examples/browser`]: ./examples/browser/README.md
+[`examples/vite`]: ./examples/vite/README.md
 
 ## Why micro509
 
