@@ -1,6 +1,6 @@
 {
 	"name": "@micro509/vitepress-github-links",
-	"version": "",
+	"version": "0.0.0",
 	"private": true,
 	"description": "VitePress markdown rule: relative links to repository files resolve to the repository host.",
 	"type": "module",
