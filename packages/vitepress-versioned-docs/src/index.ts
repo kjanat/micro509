@@ -13,10 +13,19 @@
  * between versions. Nothing about the presentation is baked into an artifact,
  * so nothing needs re-baking when the presentation changes.
  *
- * The one thing that cannot be re-derived is the *compiled library* an old
- * version's runnable examples import. That comes from the registry tarball the
- * release published (`releases.index`), extracted to `<prefix>vendor/<name>/` —
- * the exact bytes that release shipped, never a rebuild of old sources.
+ * The *compiled library* a version's runnable examples import is not built or
+ * hosted here: each version's pages get an import map binding the library's bare
+ * specifiers to an ESM CDN, at the version that page documents. The caller says
+ * where a version's modules live (`library.moduleBase`); a released version
+ * points at what it published, and the checked-out tree points at a build of the
+ * commit being deployed.
+ *
+ * Serving the library ourselves is what this replaced. A package's own file
+ * layout then became URLs under our origin, and a single unlucky filename could
+ * be refused by the reader's browser — content blockers match on URL paths, and
+ * `x509/fingerprint.js` is on their lists. Binding to package *subpaths* and
+ * letting the CDN resolve each version's `exports` keeps the library's internal
+ * layout out of our URL space entirely.
  *
  * Nothing here knows the host project: every path, manifest and name arrives
  * through `VersionedDocsOptions`. The caller owns the layout; this owns the
@@ -45,10 +54,8 @@ export interface VersionedDocsOptions {
 	readonly siteRoot: string;
 	/** Where materialized per-version pages are written (gitignore this). */
 	readonly versionsDir: string;
-	/** Where downloaded tag trees and artifacts are kept between builds. */
+	/** Where downloaded tag trees are kept between builds. */
 	readonly cacheDir: string;
-	/** The checked-out tree's compiled library, served at `/next/vendor/`. */
-	readonly distDir: string;
 	/** Version label for the checked-out tree, e.g. `v1.4.0-dev`. */
 	readonly devLabel: string;
 
@@ -64,12 +71,10 @@ export interface VersionedDocsOptions {
 	/** The published releases that become versions. */
 	readonly releases: {
 		/**
-		 * Registry document listing every published version and its library
-		 * tarball, e.g. `https://registry.npmjs.org/micro509`.
+		 * Registry document listing every published version, e.g.
+		 * `https://registry.npmjs.org/micro509`.
 		 */
 		readonly index: string;
-		/** Path within a library tarball to extract, e.g. `package/dist`. */
-		readonly libraryPath: string;
 		/** The tag a published version was cut from. */
 		readonly tag: (version: string) => string;
 		/** Source archive of that tag, e.g. a codeload tarball. */
@@ -80,14 +85,23 @@ export interface VersionedDocsOptions {
 		readonly offline?: boolean;
 	};
 
-	/** The library each version serves, and how pages import it. */
+	/** The library each version's examples import, and where it is served from. */
 	readonly library: {
 		/** Bare specifier root, e.g. `micro509` — becomes `<name>/keys`. */
 		readonly name: string;
-		/** Subpath -> file within the library, as a package.json `exports` map. */
-		readonly exports: Readonly<Record<string, string | { readonly default: string }>>;
-		/** Prefix to strip from those files, e.g. `./dist/`. */
-		readonly exportsPrefix: string;
+		/**
+		 * The public subpaths, as package.json `exports` keys: `.`, `./x509`.
+		 *
+		 * Only the keys: the files behind them are the CDN's business, and each
+		 * version's are its own.
+		 */
+		readonly exports: readonly string[];
+		/**
+		 * The ESM base a version's examples import from — no trailing slash, e.g.
+		 * `https://esm.sh/micro509@0.8.0`. Subpaths are appended to it, so it must
+		 * resolve the library's own `exports` map.
+		 */
+		readonly moduleBase: (version: DocsVersion) => string;
 	};
 
 	/** Regenerate one version's API reference. Called per tag, and for the tree. */
@@ -121,8 +135,6 @@ export interface DocsVersion {
 	readonly prefix: string;
 	/** srcDir-relative directory holding this version's markdown. */
 	readonly srcRoot: string;
-	/** This version's compiled library, copied to `<prefix>vendor/`. */
-	readonly distDir: string;
 	/** The pages this version ships — not the pages the tree ships. */
 	readonly sections: DocsSections;
 	/** The release this version was cut from; absent for the checked-out tree. */
@@ -133,16 +145,15 @@ export interface DocsVersion {
 }
 
 interface Packument {
-	readonly versions: Readonly<Record<string, { readonly dist: { readonly tarball: string } }>>;
+	readonly versions: Readonly<Record<string, unknown>>;
 	readonly time?: Readonly<Record<string, string>>;
 }
 
-/** A published release: its tag, its sources, and the library it shipped. */
+/** A published release: its tag, and its sources. */
 interface DocsRelease {
 	readonly tag: string;
 	readonly version: readonly [number, number, number];
 	readonly sourceUrl: string;
-	readonly libraryUrl: string;
 	readonly url: string;
 	readonly published: string | null;
 }
@@ -156,10 +167,10 @@ function parseStableVersion(version: string): readonly [number, number, number] 
 /**
  * Published stable releases, newest first.
  *
- * The registry is the source of truth for what shipped, and it serves the
- * library bytes it published — no repository API, no token, no rate limit that
- * a shared CI address can exhaust. A failure here fails the build: a docs site
- * missing every version is worse than a docs site that does not deploy.
+ * The registry is the source of truth for what shipped — no repository API, no
+ * token, no rate limit that a shared CI address can exhaust. A failure here
+ * fails the build: a docs site missing every version is worse than a docs site
+ * that does not deploy.
  */
 async function fetchReleases(options: VersionedDocsOptions): Promise<readonly DocsRelease[]> {
 	const response = await fetch(options.releases.index, {
@@ -172,8 +183,8 @@ async function fetchReleases(options: VersionedDocsOptions): Promise<readonly Do
 	}
 
 	const packument: Packument = await response.json();
-	return Object.entries(packument.versions)
-		.flatMap(([published, entry]): DocsRelease[] => {
+	return Object.keys(packument.versions)
+		.flatMap((published): DocsRelease[] => {
 			const version = parseStableVersion(published);
 			if (version === undefined) return [];
 			const tag = options.releases.tag(published);
@@ -182,7 +193,6 @@ async function fetchReleases(options: VersionedDocsOptions): Promise<readonly Do
 					tag,
 					version,
 					sourceUrl: options.releases.source(tag),
-					libraryUrl: entry.dist.tarball,
 					url: options.releases.url(tag),
 					published: packument.time?.[published] ?? null,
 				},
@@ -257,24 +267,6 @@ async function ensureTagTree(release: DocsRelease, options: VersionedDocsOptions
 	});
 	await fsp.writeFile(marker, '');
 	return tree;
-}
-
-/** The library that release published, downloaded from the registry once. */
-async function ensureTagLibrary(
-	release: DocsRelease,
-	options: VersionedDocsOptions,
-): Promise<string> {
-	const lib = path.join(options.cacheDir, release.tag, 'lib');
-	const marker = path.join(lib, '.complete');
-	if (fs.existsSync(marker)) return lib;
-
-	const libraryPath = options.releases.libraryPath;
-	await unpack(release.libraryUrl, lib, {
-		strip: libraryPath.split('/').length,
-		wanted: (entry) => under([libraryPath], entry),
-	});
-	await fsp.writeFile(marker, '');
-	return lib;
 }
 
 /** Copy a tag's authored pages into the version's page directory. */
@@ -354,7 +346,6 @@ async function resolveVersions(options: VersionedDocsOptions): Promise<readonly 
 				channel: 'latest',
 				prefix: '',
 				srcRoot: options.siteRoot,
-				distDir: options.distDir,
 				sections: treeSections,
 			},
 		];
@@ -367,7 +358,6 @@ async function resolveVersions(options: VersionedDocsOptions): Promise<readonly 
 			channel: 'next',
 			prefix: 'next/',
 			srcRoot: options.siteRoot,
-			distDir: options.distDir,
 			sections: treeSections,
 		},
 	];
@@ -381,7 +371,6 @@ async function resolveVersions(options: VersionedDocsOptions): Promise<readonly 
 		const pageRoot = path.join(options.versionsDir, key);
 
 		const tree = await ensureTagTree(release, options);
-		const library = await ensureTagLibrary(release, options);
 		await materializePages(tree, pageRoot, options);
 		options.generateApi({ root: tree, outDir: path.join(pageRoot, 'api') });
 
@@ -391,7 +380,6 @@ async function resolveVersions(options: VersionedDocsOptions): Promise<readonly 
 			channel: isLatest ? 'latest' : 'archive',
 			prefix: isLatest ? '' : `${release.tag}/`,
 			srcRoot: path.posix.join(versionsRoot, key),
-			distDir: library,
 			sections: sectionsOf(pageRoot),
 			release: { url: release.url, published: release.published },
 		});
@@ -413,75 +401,73 @@ function versionOfPage(page: string, versions: readonly DocsVersion[]): DocsVers
 		.find((version) => page.startsWith(version.prefix));
 }
 
-/** Where a version's library is served from, e.g. `/v0.8.0/vendor/micro509`. */
-function vendorBase(version: DocsVersion, options: VersionedDocsOptions): string {
-	return `/${version.prefix}vendor/${options.library.name}`;
-}
-
 /**
- * The import map resolving a page's bare specifiers to its own version's
- * library, plus the entry URLs worth preloading.
+ * The import map resolving a page's bare specifiers to the library the version
+ * it belongs to documents, and the origin serving it.
  *
- * Import maps are not base-rewritten by VitePress, so the version prefix is
- * baked in here.
+ * Specifiers are bound to package *subpaths* (`micro509/x509`), never to files.
+ * Which file a subpath resolves to is the released version's own `exports` map,
+ * and the CDN is the thing that reads it — so a page keeps working against a
+ * release whose internal file layout no longer resembles today's, and no part of
+ * the library's layout becomes a URL under this origin.
  */
 function importMapFor(
 	version: DocsVersion,
 	options: VersionedDocsOptions,
-): { readonly importMap: string; readonly entries: readonly string[] } {
-	const base = vendorBase(version, options);
+): { readonly importMap: string; readonly origin: string | undefined } {
+	const base = options.library.moduleBase(version);
 	const imports = Object.fromEntries(
-		Object.entries(options.library.exports)
-			.filter(
-				(entry): entry is [string, { readonly default: string }] => typeof entry[1] === 'object',
-			)
-			.map(([subpath, target]): [string, string] => [
-				subpath === '.'
-					? options.library.name
-					: `${options.library.name}/${subpath.slice('./'.length)}`,
-				`${base}/${target.default.replace(options.library.exportsPrefix, '')}`,
-			]),
+		options.library.exports
+			.filter((subpath) => subpath === '.' || subpath.startsWith('./'))
+			// A manifest exports its own manifest; nothing imports it.
+			.filter((subpath) => subpath !== './package.json')
+			.map((subpath): [string, string] => {
+				if (subpath === '.') return [options.library.name, base];
+				const tail = subpath.slice('./'.length);
+				return [`${options.library.name}/${tail}`, `${base}/${tail}`];
+			}),
 	);
-	return { importMap: JSON.stringify({ imports }), entries: Object.values(imports) };
+	return {
+		importMap: JSON.stringify({ imports }),
+		origin: URL.canParse(base) ? new URL(base).origin : undefined,
+	};
 }
 
-const VENDOR_CONTENT_TYPES: Record<string, string> = {
-	'.js': 'text/javascript; charset=utf-8',
-	'.mjs': 'text/javascript; charset=utf-8',
-	'.map': 'application/json; charset=utf-8',
-	'.ts': 'text/plain; charset=utf-8',
-	'.txt': 'text/plain; charset=utf-8',
-};
+/**
+ * What a version's pages carry in their head: its import map, and a connection
+ * to the origin serving it, opened before an example needs it.
+ *
+ * No `modulepreload`: an example's modules are fetched when a reader runs one,
+ * and most readers never do. Preconnect pays the handshake up front and nothing
+ * else.
+ */
+function headFor(version: DocsVersion, options: VersionedDocsOptions): string {
+	const { importMap, origin } = importMapFor(version, options);
+	const preconnect =
+		origin === undefined ? '' : `<link rel="preconnect" href="${origin}" crossorigin>\n`;
+	return `${preconnect}<script type="importmap">${importMap}</script>`;
+}
+
+/** Put the import map first in the head, ahead of anything that resolves against it. */
+function withImportMap(html: string, version: DocsVersion, options: VersionedDocsOptions): string {
+	return html.replace('<head>', `<head>\n${headFor(version, options)}`);
+}
 
 /**
- * Dev-server half: serve every version's library under its own `/vendor/` path.
+ * Dev-server half: the same import map, on every page.
  *
- * The build gets these files from `buildEnd`; in dev they are read from disk.
- * The import map injected in dev is the root version's, so a versioned page's
- * examples run the root library while the dev server is up — only the static
- * build maps each page to its own version, and that is what ships.
+ * `transformHtml` is a build-only hook, so the dev server needs its own
+ * injection or its pages have nothing to resolve a bare `micro509` against. The
+ * tree's map serves all of them — dev renders the tree's pages, and only the
+ * build materializes a page per version to give each its own.
  */
-function vendorPlugin(versions: readonly DocsVersion[], options: VersionedDocsOptions): Plugin {
+function importMapPlugin(versions: readonly DocsVersion[], options: VersionedDocsOptions): Plugin {
 	return {
 		name: 'vitepress-versioned-docs',
-		configureServer(server) {
-			server.middlewares.use((req, res, next) => {
-				const url = (req.url ?? '').split('?')[0] ?? '';
-				for (const version of versions) {
-					const base = `${vendorBase(version, options)}/`;
-					if (!url.startsWith(base)) continue;
-					const file = path.resolve(version.distDir, url.slice(base.length));
-					// Containment: never serve outside the version's library.
-					if (!file.startsWith(version.distDir + path.sep) || !fs.existsSync(file)) break;
-					res.setHeader(
-						'Content-Type',
-						VENDOR_CONTENT_TYPES[path.extname(file)] ?? 'application/octet-stream',
-					);
-					res.end(fs.readFileSync(file));
-					return;
-				}
-				next();
-			});
+		apply: 'serve',
+		transformIndexHtml: (html) => {
+			const tree = versions.find((version) => version.srcRoot === options.siteRoot);
+			return tree === undefined ? html : withImportMap(html, tree, options);
 		},
 	};
 }
@@ -494,26 +480,13 @@ async function countFiles(dir: string): Promise<number> {
 	return count;
 }
 
-/** Ship each version's library, publish the version index, hold the file budget. */
-async function emitAssets(
+/** Publish the version index, hold the file budget. */
+async function emitVersionIndex(
 	versions: readonly DocsVersion[],
 	options: VersionedDocsOptions,
 	siteConfig: SiteConfig,
 ): Promise<void> {
 	const outDir = siteConfig.outDir;
-
-	for (const version of versions) {
-		if (!fs.existsSync(version.distDir)) {
-			throw new Error(
-				`[versions] ${version.label} has no library at ${version.distDir}. A release's comes from its artifact; the checked-out tree's has to be built before the site.`,
-			);
-		}
-		await fsp.cp(
-			version.distDir,
-			path.join(outDir, version.prefix, 'vendor', options.library.name),
-			{ recursive: true },
-		);
-	}
 
 	const index = {
 		schemaVersion: 3,
@@ -629,7 +602,7 @@ function routeOf(
 export interface VersionedDocs {
 	/** Every version, in timeline order: next, the root release, then archives. */
 	readonly versions: readonly DocsVersion[];
-	/** Dev-server support: each version's library under its own `/vendor/`. */
+	/** Dev-server support: the import map, which the build-only hook cannot give it. */
 	readonly plugin: Plugin;
 	/** Source path -> route path. */
 	readonly rewrites: (id: string) => string;
@@ -641,7 +614,7 @@ export interface VersionedDocs {
 	readonly head: (page: string) => HeadConfig[];
 	/** Points a page's bare imports at its own version's library. */
 	readonly html: (html: string, page: string) => string;
-	/** Ships each version's library, writes the index, enforces the budget. */
+	/** Writes the version index, enforces the budget. */
 	readonly buildEnd: (siteConfig: SiteConfig) => Promise<void>;
 	/** Every version's sidebar, keyed by the paths it serves. */
 	readonly sidebar: (order: SidebarOrder) => DefaultTheme.SidebarMulti;
@@ -665,7 +638,7 @@ export async function versionedDocs(options: VersionedDocsOptions): Promise<Vers
 
 	return {
 		versions,
-		plugin: vendorPlugin(versions, options),
+		plugin: importMapPlugin(versions, options),
 
 		rewrites: (id) => {
 			for (const version of versions) {
@@ -718,16 +691,10 @@ export async function versionedDocs(options: VersionedDocsOptions): Promise<Vers
 
 		html: (html, page) => {
 			const version = at(page);
-			if (version === undefined) return html;
-			const { importMap, entries } = importMapFor(version, options);
-			const preloads = entries.map((url) => `<link rel="modulepreload" href="${url}">`).join('\n');
-			return html.replace(
-				'<head>',
-				`<head>\n${preloads}\n<script type="importmap">${importMap}</script>`,
-			);
+			return version === undefined ? html : withImportMap(html, version, options);
 		},
 
-		buildEnd: (siteConfig) => emitAssets(versions, options, siteConfig),
+		buildEnd: (siteConfig) => emitVersionIndex(versions, options, siteConfig),
 
 		sidebar: (order) =>
 			Object.fromEntries(

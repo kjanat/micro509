@@ -44,6 +44,8 @@ jobs:
       - uses: ./.github/actions/setup-ts
         with: { install-bun: true, install-node: true, install-deno: true }
       - run: runner install -f site:build
+      - name: Every version's examples import the library that version documents
+        run: run site:import-maps
 
   runtime-smoke:
     name: Workerd + browser smoke

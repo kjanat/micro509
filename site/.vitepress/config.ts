@@ -33,8 +33,8 @@ interface Manifests {
 	readonly license: string;
 	readonly author: { readonly name: string };
 	readonly repository: { readonly url: string };
-	/** Subpath -> built file, for the library the docs co-host. */
-	readonly exports: Readonly<Record<string, string | { readonly default: string }>>;
+	/** The public subpaths. Only the keys: the files behind them are the CDN's business. */
+	readonly exports: Readonly<Record<string, unknown>>;
 	/** jsr.json: the registry name, and the public entrypoints in source form. */
 	readonly registry: {
 		readonly name: string;
@@ -94,14 +94,47 @@ function generateApi(target: { readonly root: string; readonly outDir: string })
 	});
 }
 
+/** Version label for the checked-out tree — the one version npm has never seen. */
+const devLabel = `v${repo.version}-dev`;
+
+/** The commit being documented: CI states it, a local build asks git. */
+function commitSha(): string | undefined {
+	const ci = process.env.WORKERS_CI_COMMIT_SHA?.trim();
+	if (ci !== undefined && ci !== '') return ci.slice(0, 7);
+	try {
+		const sha = execFileSync('git', ['rev-parse', '--short=7', 'HEAD'], {
+			cwd: repoRoot,
+			encoding: 'utf8',
+		}).trim();
+		return sha === '' ? undefined : sha;
+	} catch {
+		return undefined;
+	}
+}
+
 /**
- * The library `/next/` serves, compiled from the sources being documented.
+ * The pkg.pr.new ref `/next/` imports.
  *
- * A fresh checkout has no `dist/`, so this is what a build machine is missing
- * when it has never run the library's own build.
+ * On master, the branch itself: `/next/` documents the newest master build, and
+ * naming the branch rather than a commit means it keeps up without a rebuild.
+ * A preview deployment documents *its* commit, so it pins the sha — a preview
+ * whose examples ran master's library would be showing the wrong library.
+ *
+ * pkg.pr.new only publishes master commits and pull request heads, so a branch
+ * pushed without a pull request has no build to import. That is a preview with
+ * no library, not a build failure: fall back to master and say so.
  */
-const distDir = path.join(repoRoot, 'dist');
-execFileSync('bun', ['run', 'bd'], { cwd: repoRoot, stdio: 'inherit' });
+const nextRef = await (async (): Promise<string> => {
+	const sha = commitSha();
+	if (process.env.DOCS_OFFLINE === '1' || gitRef === 'master' || sha === undefined) return 'master';
+
+	const url = `https://esm.sh/pr/${repo.name}@${sha}`;
+	const response = await fetch(url, { method: 'HEAD' });
+	if (response.ok) return sha;
+
+	console.log(`[versions] ${url} -> ${response.status}; /next/ imports master instead`);
+	return 'master';
+})();
 
 /** Markdown files directly under `dir`. */
 function pagesIn(dir: string): readonly string[] {
@@ -145,19 +178,30 @@ const docs = await versionedDocs({
 	siteRoot,
 	versionsDir: path.join(repoRoot, siteRoot, 'versions'),
 	cacheDir: path.join(import.meta.dirname, 'cache/versions'),
-	distDir,
-	devLabel: `v${repo.version}-dev`,
+	devLabel,
 	pages: ['site/guide', 'site/reference', 'site/index.md'],
 	sources: ['src', 'package.json', 'jsr.json'],
 	releases: {
 		index: `https://registry.npmjs.org/${repo.name}`,
-		libraryPath: 'package/dist',
 		tag: (version) => `v${version}`,
 		source: (tag) => `https://codeload.github.com${repoUrl.pathname}/tar.gz/refs/tags/${tag}`,
 		url: (tag) => `${repoUrl.href}/releases/tag/${tag}`,
 		offline: process.env.DOCS_OFFLINE === '1',
 	},
-	library: { name: repo.name, exports: repo.exports, exportsPrefix: './dist/' },
+	/**
+	 * A released version imports the release it documents, straight from npm.
+	 * The tree has published nothing, so it imports the commit it *is* — every
+	 * master commit and pull request head is built by pkg.pr.new, and esm.sh
+	 * serves those builds under `/pr/`.
+	 */
+	library: {
+		name: repo.name,
+		exports: Object.keys(repo.exports),
+		moduleBase: (version) =>
+			version.tag === devLabel
+				? `https://esm.sh/pr/${repo.name}@${nextRef}`
+				: `https://esm.sh/${repo.name}@${version.tag.replace(/^v/, '')}`,
+	},
 	generateApi,
 	fileGuardrail: 19_500,
 });

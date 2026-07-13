@@ -3,8 +3,10 @@
 
 	The page's import map (derived from package.json exports, injected via
 	config.ts) resolves bare `micro509` specifiers — including subpaths like
-	`micro509/keys` — to the co-hosted library under /vendor/micro509, built
-	from this same git tree. No CDN, no published package required.
+	`micro509/keys` — to the library the page's version documents: a release
+	imports what it published, and /next/ imports a build of the commit it
+	documents. Examples stay written in bare specifiers, so a reader can copy
+	one and run it.
 
 	Usage in markdown:
 

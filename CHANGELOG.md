@@ -17,6 +17,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The docs site no longer co-hosts the library: each version's runnable examples
+  import it from esm.sh, bound to the version that page documents — a release to
+  what it published, `/next/` to a pkg.pr.new build of the commit deployed. The
+  co-hosted copy put the library's own file layout in the site's URL space, where
+  `x509/fingerprint.js` matched an EasyPrivacy rule blocking that path on every
+  domain (`/fingerprint.js^$domain=~github.com`). Content blockers refused it, and
+  because it is a static import of the root entry, every example on the site died
+  for readers running one. `run site:import-maps` now gates CI on every version's
+  examples resolving to that version's library.
+
 ## [0.11.0] - 2026-07-13
 
 Certificate fingerprinting and private-key ownership checks for certificate
