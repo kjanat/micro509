@@ -1,25 +1,9 @@
 #!/usr/bin/env node
 /**
- * The docs site's examples run in the reader's browser, against a library it imports
- * from a CDN. `site-import-maps.deno.ts` proves those URLs resolve and that the code
- * runs; it cannot prove the page does — the LiveCode component, the blob module it
- * builds, the secure context WebCrypto needs, or the reader's content blocker.
+ * Clicks Run on each version's getting-started example in the built site and
+ * requires a certificate out of it. A content blocker is simulated throughout.
  *
- * Against the built site (`run site:build` first): for every version the site serves,
- * click Run on its getting-started example and require a certificate out of it. Each
- * version's page carries the example written against the API that release shipped, and
- * imports the library that release published — so this runs fifteen different libraries
- * against the fifteen examples written for them.
- *
- * A content blocker is simulated, because a headless browser has none — and without one
- * this test would have passed happily while the bug that motivated it was live. The site
- * used to serve the library from its own origin, where `x509/fingerprint.js` matched an
- * EasyPrivacy rule blocking that path on every domain but github.com. That file is a
- * static import of the root entry, so one refused request killed every example on the
- * site, for every reader running uBlock — while the server returned 200 throughout.
- *
- * So: abort what a blocker aborts, and require the examples to run anyway. This guards
- * the class, not the filename — any module whose URL a filter list happens to match.
+ * Run `site:build` first.
  *
  * @module
  */
@@ -31,11 +15,7 @@ import { chromium } from 'playwright';
 
 const DIST = path.resolve('site/.vitepress/dist');
 
-/**
- * Generic path rules from EasyPrivacy — the ones that apply to every domain, not to a
- * named tracker. A URL containing any of these is one a large share of readers' browsers
- * will refuse. The first is the rule this site actually tripped.
- */
+/** EasyPrivacy path rules that apply to every domain. */
 const BLOCKER_RULES = [
 	'/fingerprint.js',
 	'/fingerprint.min.js',
@@ -61,12 +41,7 @@ if (!existsSync(DIST)) {
 	process.exit(1);
 }
 
-/**
- * Every version the site serves, in the order the switcher lists them: the root release,
- * the tree, then the archives newest first.
- *
- * @returns {Array<{ version: string, route: string }>}
- */
+/** @returns {Array<{ version: string, route: string }>} */
 function versions() {
 	const archives = readdirSync(DIST, { withFileTypes: true })
 		.filter((entry) => entry.isDirectory() && /^v\d+\.\d+\.\d+$/.test(entry.name))
@@ -81,8 +56,6 @@ function versions() {
 }
 
 /**
- * Long output, shown as its head and its tail — a certificate is mostly base64.
- *
  * @param {string} text
  * @param {number} head
  * @param {number} tail
@@ -97,7 +70,7 @@ function elide(text, head, tail) {
 	return kept.map((line) => `    ${line}`).join('\n');
 }
 
-/** 127.0.0.1 is a secure context, so the page gets crypto.subtle. file:// does not. */
+/** crypto.subtle needs a secure context. 127.0.0.1 is one. */
 const server = createServer((request, response) => {
 	const url = `${request.url ?? '/'}`.split('?')[0] ?? '/';
 	let file = path.join(DIST, decodeURIComponent(url));
@@ -125,12 +98,12 @@ const base = `http://127.0.0.1:${address.port}`;
 
 const browser = await chromium.launch();
 
-/** Close everything, whatever happened. An open server handle keeps node alive forever. */
+/** An open server handle keeps node alive. */
 let closed = false;
 async function teardown() {
 	if (closed) return;
 	closed = true;
-	await browser.close().catch(() => {});
+	await browser.close().catch((error) => console.warn(`[live-examples] browser: ${error}`));
 	server.close();
 }
 for (const signal of ['SIGINT', 'SIGTERM']) {
@@ -146,8 +119,6 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
  */
 
 /**
- * Click Run on one version's getting-started example, and keep what it printed.
- *
  * @param {string} version
  * @param {string} route
  * @returns {Promise<Result>}
@@ -165,7 +136,6 @@ async function runVersion(version, route) {
 		if (!url.startsWith(base) && /^https?:/.test(url)) imported.push(url);
 	});
 
-	// The reader's content blocker, which a headless browser does not have.
 	await page.route('**/*', (route_) => {
 		const url = route_.request().url();
 		const rule = BLOCKER_RULES.find((pattern) => url.includes(pattern));
@@ -216,7 +186,7 @@ async function runVersion(version, route) {
 			imported,
 		};
 	} finally {
-		await page.close().catch(() => {});
+		await page.close().catch((error) => console.warn(`[live-examples] ${version}: ${error}`));
 	}
 }
 
@@ -240,7 +210,6 @@ try {
 	await teardown();
 }
 
-// The example is the same source across versions that share it, so print each once.
 /** @type {Map<string, string[]>} */
 const bySource = new Map();
 for (const result of results.filter((candidate) => !candidate.failed)) {

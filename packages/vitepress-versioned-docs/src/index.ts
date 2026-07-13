@@ -1,35 +1,15 @@
 /**
- * VitePress plugin: every released version of the docs, served from one build.
+ * VitePress plugin. One `vitepress build` renders every version of the docs:
  *
- * One `vitepress build` renders, side by side:
- *   - `/`           the newest release (its pages, its API, its library)
+ *   - `/`           the newest release
  *   - `/next/`      the checked-out tree
- *   - `/vX.Y.Z/`    every superseded release, one route tree each
+ *   - `/vX.Y.Z/`    every superseded release
  *
- * A version's pages are *materialized*, not frozen: each release's markdown is
- * read straight out of its git tag, and its API reference is regenerated from
- * that tag's sources. VitePress renders them like any other page, so archived
- * versions get today's theme, today's version switcher, and in-app routing
- * between versions. Nothing about the presentation is baked into an artifact,
- * so nothing needs re-baking when the presentation changes.
+ * It reads each release's markdown from its git tag and regenerates its API
+ * reference from that tag's sources.
  *
- * The *compiled library* a version's runnable examples import is not built or
- * hosted here: each version's pages get an import map binding the library's bare
- * specifiers to an ESM CDN, at the version that page documents. The caller says
- * where a version's modules live (`library.moduleBase`); a released version
- * points at what it published, and the checked-out tree points at a build of the
- * commit being deployed.
- *
- * Serving the library ourselves is what this replaced. A package's own file
- * layout then became URLs under our origin, and a single unlucky filename could
- * be refused by the reader's browser — content blockers match on URL paths, and
- * `x509/fingerprint.js` is on their lists. Binding to package *subpaths* and
- * letting the CDN resolve each version's `exports` keeps the library's internal
- * layout out of our URL space entirely.
- *
- * Nothing here knows the host project: every path, manifest and name arrives
- * through `VersionedDocsOptions`. The caller owns the layout; this owns the
- * routing.
+ * Every page gets an import map for the library it documents. `library.moduleUrl`
+ * gives the URLs.
  *
  * @module
  */
@@ -61,11 +41,7 @@ export interface VersionedDocsOptions {
 
 	/** Page paths taken verbatim from a tag, relative to the repository root. */
 	readonly pages: readonly string[];
-	/**
-	 * Everything else a tag needs for `generateApi` to run against it — sources,
-	 * manifests. Together with `pages`, this is all that is taken from a tag: the
-	 * rest of the repository (tool configs above all) stays out of the cache.
-	 */
+	/** Source and manifest paths `generateApi` needs from a tag. */
 	readonly sources: readonly string[];
 
 	/** The published releases that become versions. */
@@ -90,10 +66,8 @@ export interface VersionedDocsOptions {
 		/** Bare specifier root, e.g. `micro509` — becomes `<name>/keys`. */
 		readonly name: string;
 		/**
-		 * Where a version's examples import one subpath from, keyed as `exports` keys
-		 * it: `.`, `./x509`. A whole URL rather than a base to append to — a CDN's
-		 * URL for a subpath is its own business, and not every one is a prefix
-		 * (jsDelivr wants `.../micro509@0.8.0/x509/+esm`).
+		 * The whole URL a version imports one subpath from. `subpath` is an `exports`
+		 * key such as `.` or `./x509`.
 		 */
 		readonly moduleUrl: (version: DocsVersion, subpath: string) => string;
 	};
@@ -129,15 +103,8 @@ export interface DocsVersion {
 	readonly prefix: string;
 	/** srcDir-relative directory holding this version's markdown. */
 	readonly srcRoot: string;
-	/**
-	 * The subpaths *this version* exported, as its own `exports` keys: `.`, `./x509`.
-	 *
-	 * Read from the version's own manifest, never the tree's. A subpath the library
-	 * grew later did not exist at an old tag, and mapping a page to one would bind it
-	 * to a module its release never published.
-	 */
+	/** This version's `exports` keys, such as `.` or `./x509`. */
 	readonly exports: readonly string[];
-	/** The pages this version ships — not the pages the tree ships. */
 	readonly sections: DocsSections;
 	/** The release this version was cut from; absent for the checked-out tree. */
 	readonly release?: {
@@ -166,14 +133,7 @@ function parseStableVersion(version: string): readonly [number, number, number] 
 	return [Number(match[1]), Number(match[2]), Number(match[3])];
 }
 
-/**
- * Published stable releases, newest first.
- *
- * The registry is the source of truth for what shipped — no repository API, no
- * token, no rate limit that a shared CI address can exhaust. A failure here
- * fails the build: a docs site missing every version is worse than a docs site
- * that does not deploy.
- */
+/** Published stable releases, newest first. Throws on a failed fetch. */
 async function fetchReleases(options: VersionedDocsOptions): Promise<readonly DocsRelease[]> {
 	const response = await fetch(options.releases.index, {
 		headers: { accept: 'application/json', 'user-agent': 'vitepress-versioned-docs' },
@@ -206,26 +166,14 @@ async function fetchReleases(options: VersionedDocsOptions): Promise<readonly Do
 		);
 }
 
-/**
- * Download a gzipped tarball and unpack it into `into`.
- *
- * Extraction goes through the `tar` dependency rather than a `tar` binary: the
- * binary is whatever the build machine happens to have (and Windows has none),
- * while the dependency is pinned by the lockfile and identical everywhere.
- */
+/** Download a gzipped tarball and unpack it into `into`. */
 async function unpack(
 	url: string,
 	into: string,
 	options: {
 		/** Leading path components to drop when writing files out. */
 		readonly strip: number;
-		/**
-		 * Which archive entries to take, by their path *inside the archive*.
-		 *
-		 * Never "all of them" for a repository archive: it carries the project's
-		 * tool configs (biome.json, tsconfig.json), and anything later scanning the
-		 * cache directory would find them and honor them.
-		 */
+		/** Which archive entries to take, by their path inside the archive. */
 		readonly wanted: (entry: string) => boolean;
 	},
 ): Promise<void> {
@@ -251,12 +199,6 @@ function under(paths: readonly string[], entry: string): boolean {
 	return paths.some((wanted) => entry === wanted || entry.startsWith(`${wanted}/`));
 }
 
-/**
- * A release's source tree, downloaded once into the build cache.
- *
- * Fetched rather than read out of the local clone: CI clones shallow, so the tag
- * object is not there, and `git` is not a dependency of this package.
- */
 async function ensureTagTree(release: DocsRelease, options: VersionedDocsOptions): Promise<string> {
 	const tree = path.join(options.cacheDir, release.tag, 'tree');
 	const marker = path.join(tree, '.complete');
@@ -295,13 +237,7 @@ function titleOf(file: string, slug: string): string {
 	return source.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? slug;
 }
 
-/**
- * The pages a directory holds, titled by the pages themselves.
- *
- * Read off disk rather than declared by the caller: each version ships the pages
- * that existed at its tag, and a hardcoded list would link an old version at
- * pages it never had, and hide the ones it did.
- */
+/** The pages a directory holds, titled by the pages themselves. */
 function sectionPages(dir: string): readonly DocsPage[] {
 	if (!fs.existsSync(dir)) return [];
 	return fs
@@ -325,11 +261,8 @@ function sectionsOf(pageRoot: string): DocsSections {
 }
 
 /**
- * Resolve every version the site serves, in timeline order:
- * next (the tree), latest (the newest release), then archives newest-first.
- *
- * Materializes as it goes, so by the time VitePress globs for pages they are
- * files on disk like any other.
+ * Every version the site serves, in timeline order: next, latest, archives
+ * newest-first. Writes each version's pages to disk before VitePress globs them.
  */
 async function resolveVersions(options: VersionedDocsOptions): Promise<readonly DocsVersion[]> {
 	const releases = options.releases.offline === true ? [] : await fetchReleases(options);
@@ -399,12 +332,6 @@ async function resolveVersions(options: VersionedDocsOptions): Promise<readonly 
 	return versions;
 }
 
-/**
- * The public subpaths a tree exported, from its own `package.json`.
- *
- * A released version's manifest comes down with its tag, so the answer to "what did
- * this release export" is the release's, not today's.
- */
 function exportsOf(root: string): readonly string[] {
 	const manifest: { readonly exports?: Readonly<Record<string, unknown>> } = JSON.parse(
 		fs.readFileSync(path.join(root, 'package.json'), 'utf8'),
@@ -419,16 +346,7 @@ function versionOfPage(page: string, versions: readonly DocsVersion[]): DocsVers
 		.find((version) => page.startsWith(version.prefix));
 }
 
-/**
- * The import map resolving a page's bare specifiers to the library the version
- * it belongs to documents, and the origin serving it.
- *
- * Specifiers are bound to package *subpaths* (`micro509/x509`), never to files.
- * Which file a subpath resolves to is the released version's own `exports` map,
- * and the CDN is the thing that reads it — so a page keeps working against a
- * release whose internal file layout no longer resembles today's, and no part of
- * the library's layout becomes a URL under this origin.
- */
+/** A page's import map and its origin. */
 function importMapFor(
 	version: DocsVersion,
 	options: VersionedDocsOptions,
@@ -452,14 +370,7 @@ function importMapFor(
 	};
 }
 
-/**
- * What a version's pages carry in their head: its import map, and a connection
- * to the origin serving it, opened before an example needs it.
- *
- * No `modulepreload`: an example's modules are fetched when a reader runs one,
- * and most readers never do. Preconnect pays the handshake up front and nothing
- * else.
- */
+/** A version's import map and a preconnect to its origin. */
 function headFor(version: DocsVersion, options: VersionedDocsOptions): string {
 	const { importMap, origin } = importMapFor(version, options);
 	const preconnect =
@@ -472,14 +383,7 @@ function withImportMap(html: string, version: DocsVersion, options: VersionedDoc
 	return html.replace('<head>', `<head>\n${headFor(version, options)}`);
 }
 
-/**
- * Dev-server half: the same import map, on every page.
- *
- * `transformHtml` is a build-only hook, so the dev server needs its own
- * injection or its pages have nothing to resolve a bare `micro509` against. The
- * tree's map serves all of them — dev renders the tree's pages, and only the
- * build materializes a page per version to give each its own.
- */
+/** `transformHtml` is build-only. The dev server gets the import map from here. */
 function importMapPlugin(versions: readonly DocsVersion[], options: VersionedDocsOptions): Plugin {
 	return {
 		name: 'vitepress-versioned-docs',
@@ -543,10 +447,7 @@ function linkTo(section: string, page: DocsPage): string {
 	return page.slug === 'index' ? `/${section}/` : `/${section}/${page.slug}`;
 }
 
-/**
- * One section's sidebar for one version: the declared reading order, filled with
- * the pages that version ships, titled as those pages title themselves.
- */
+/** One section's sidebar for one version, in the reading order `order` declares. */
 function sectionSidebar(
 	section: string,
 	groups: readonly SidebarGroup[],
@@ -586,15 +487,7 @@ function isPageLink(href: string): boolean {
 	return href.endsWith('.md') || /\.html(?:#|$)/.test(href);
 }
 
-/**
- * A relative page link, resolved against the routes its version serves.
- *
- * Pages of an old version reach files that sit outside any version (a repository
- * doc, a directory up). Under a version prefix such a link resolves to
- * `/v0.3.0/docs/…`, which nothing serves — and those files are not versioned, so
- * the link belongs to the one copy at the root. Links within the version's own
- * sections already resolve correctly and are left alone.
- */
+/** Rewrites a relative link out of a version's own sections to the root copy. */
 function outOfVersionLink(href: string, page: string, version: DocsVersion): string {
 	const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(page), href));
 	if (!resolved.startsWith(version.prefix)) return href;

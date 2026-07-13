@@ -14,17 +14,13 @@ import svgToIco from 'vite-svg-to-ico';
 import type { DefaultTheme } from 'vitepress';
 import { defineConfig } from 'vitepress';
 
-/** DefaultTheme config plus the versions the navbar components render. */
 interface DocsThemeConfig extends DefaultTheme.Config {
-	/** Timeline order: next, the release the root serves, then archives. */
 	readonly versions: readonly DocsVersion[];
 }
 
 const repoRoot = path.resolve(import.meta.dirname, '../..');
-/** Where the authored pages live, relative to VitePress's srcDir (the repo). */
 const siteRoot = 'site';
 
-/** What a tree declares about itself. */
 interface Manifests {
 	readonly name: string;
 	readonly version: string;
@@ -33,23 +29,14 @@ interface Manifests {
 	readonly license: string;
 	readonly author: { readonly name: string };
 	readonly repository: { readonly url: string };
-	/** The public subpaths. Only the keys: the files behind them are the CDN's business. */
 	readonly exports: Readonly<Record<string, unknown>>;
-	/** jsr.json: the registry name, and the public entrypoints in source form. */
+	/** From jsr.json. Its exports point at source files. */
 	readonly registry: {
 		readonly name: string;
 		readonly exports: Readonly<Record<string, string>>;
 	};
 }
 
-/**
- * Read a tree's manifests.
- *
- * Off disk, for every tree — including this one. Importing this repository's
- * manifests would be typed and free, but the same questions get asked of each
- * released tag ("what were you called, what did you export"), and a tag's
- * answers are its own. One reader, one answer per tree.
- */
 function manifestsOf(root: string): Manifests {
 	const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 	const jsr = JSON.parse(fs.readFileSync(path.join(root, 'jsr.json'), 'utf8'));
@@ -59,23 +46,30 @@ function manifestsOf(root: string): Manifests {
 const repo = manifestsOf(repoRoot);
 const repoUrl = new URL(repo.repository.url.replace('git+', '').replace(/\.git$/, ''));
 
-/** The ref source links point at: CI states it, a local build asks git. */
-const gitRef = ((): string => {
-	for (const name of ['MICRO509_GIT_BRANCH', 'WORKERS_CI_BRANCH', 'GITHUB_REF_NAME']) {
+function git(...args: readonly string[]): string | undefined {
+	try {
+		const out = execFileSync('git', args, { cwd: repoRoot, encoding: 'utf8' }).trim();
+		return out === '' ? undefined : out;
+	} catch (error) {
+		console.warn(`[versions] git ${args.join(' ')}: ${String(error)}`);
+		return undefined;
+	}
+}
+
+function envOf(...names: readonly string[]): string | undefined {
+	for (const name of names) {
 		const value = process.env[name]?.trim();
 		if (value !== undefined && value !== '') return value;
 	}
-	try {
-		const branch = execFileSync('git', ['branch', '--show-current'], {
-			cwd: repoRoot,
-			encoding: 'utf8',
-		}).trim();
-		if (branch !== '') return branch;
-	} catch {}
-	return 'master';
-})();
+	return undefined;
+}
 
-/** One tree's API reference, generated the way this project is laid out. */
+/** The ref source links point at. */
+const gitRef =
+	envOf('MICRO509_GIT_BRANCH', 'WORKERS_CI_BRANCH', 'GITHUB_REF_NAME') ??
+	git('branch', '--show-current') ??
+	'master';
+
 function generateApi(target: { readonly root: string; readonly outDir: string }): void {
 	const tree = manifestsOf(target.root);
 	const importMap = 'deno.import_map.json';
@@ -86,7 +80,6 @@ function generateApi(target: { readonly root: string; readonly outDir: string })
 		outDir: target.outDir,
 		name: tree.name,
 		importMap,
-		// The `.` barrel re-exports every subpath and would document each symbol twice.
 		entrypoints: Object.entries(tree.registry.exports)
 			.filter(([subpath]) => subpath !== '.')
 			.map(([, source]) => source.replace(/^\.\//, ''))
@@ -94,47 +87,34 @@ function generateApi(target: { readonly root: string; readonly outDir: string })
 	});
 }
 
-/** Version label for the checked-out tree — the one version npm has never seen. */
-const devLabel = `v${repo.version}-dev`;
-
-/** The commit being documented: CI states it, a local build asks git. */
 function commitSha(): string | undefined {
-	const ci = process.env.WORKERS_CI_COMMIT_SHA?.trim();
-	if (ci !== undefined && ci !== '') return ci.slice(0, 7);
-	try {
-		const sha = execFileSync('git', ['rev-parse', '--short=7', 'HEAD'], {
-			cwd: repoRoot,
-			encoding: 'utf8',
-		}).trim();
-		return sha === '' ? undefined : sha;
-	} catch {
-		return undefined;
-	}
+	return envOf('WORKERS_CI_COMMIT_SHA') ?? git('rev-parse', 'HEAD');
 }
 
-/**
- * The pkg.pr.new ref `/next/` imports.
- *
- * On master, the branch itself: `/next/` documents the newest master build, and
- * naming the branch rather than a commit means it keeps up without a rebuild.
- * A preview deployment documents *its* commit, so it pins the sha — a preview
- * whose examples ran master's library would be showing the wrong library.
- *
- * pkg.pr.new only publishes master commits and pull request heads, so a branch
- * pushed without a pull request has no build to import. That is a preview with
- * no library, not a build failure: fall back to master and say so.
- */
-const nextRef = await (async (): Promise<string> => {
+async function pullRequestOf(sha: string): Promise<string | undefined> {
+	const url = `https://api.github.com/repos${repoUrl.pathname}/commits/${sha}/pulls`;
+	const response = await fetch(url, {
+		headers: { accept: 'application/vnd.github+json', 'user-agent': repo.name },
+	});
+	if (!response.ok) return undefined;
+
+	const pulls: ReadonlyArray<{ readonly number: number }> = await response.json();
+	const first = pulls[0];
+	return first === undefined ? undefined : String(first.number);
+}
+
+const pull = await (async (): Promise<string | undefined> => {
+	if (process.env.DOCS_OFFLINE === '1' || gitRef === 'master') return undefined;
 	const sha = commitSha();
-	if (process.env.DOCS_OFFLINE === '1' || gitRef === 'master' || sha === undefined) return 'master';
-
-	const url = `https://esm.sh/pr/${repo.name}@${sha}`;
-	const response = await fetch(url, { method: 'HEAD' });
-	if (response.ok) return sha;
-
-	console.log(`[versions] ${url} -> ${response.status}; /next/ imports master instead`);
-	return 'master';
+	return sha === undefined ? undefined : await pullRequestOf(sha);
 })();
+
+/** pkg.pr.new republishes a pull request's ref on every head of that pull request. */
+const nextRef = pull ?? gitRef;
+
+const devLabel = pull === undefined ? `v${repo.version}-dev` : `#${pull}`;
+
+console.log(`[versions] tree -> pkg.pr.new @${nextRef}, labelled ${devLabel}`);
 
 /** Markdown files directly under `dir`. */
 function pagesIn(dir: string): readonly string[] {
@@ -145,13 +125,6 @@ function pagesIn(dir: string): readonly string[] {
 		.map((entry) => path.join(dir, entry));
 }
 
-/**
- * The runnable examples, and what they may import.
- *
- * Only the tree's own pages: an archived version's examples were written against
- * that release's API and were checked by the build that shipped it, and the API
- * pages are generated from the very sources the examples are checked against.
- */
 const examples: DocExamplesOptions = {
 	root: repoRoot,
 	pages: [
@@ -160,7 +133,7 @@ const examples: DocExamplesOptions = {
 		...pagesIn(path.join(repoRoot, siteRoot, 'reference')),
 	],
 	outDir: path.join(import.meta.dirname, 'cache/examples'),
-	/** A `<LiveCode>` tag wrapping a ts fence; the fence's source is the example. */
+	/** Matches a `<LiveCode>` tag wrapping a ts fence. The capture is the example. */
 	block: /<LiveCode[^>]*>\s*\n\n```ts\n([\s\S]*?)```/g,
 	paths: {
 		[repo.name]: [path.join(repoRoot, 'src/index.ts')],
@@ -168,11 +141,6 @@ const examples: DocExamplesOptions = {
 	},
 };
 
-/**
- * Every version this site serves, and the hooks that route them: the checked-out
- * tree at `/next/`, the newest release at `/`, one tree per superseded release at
- * `/vX.Y.Z/`. Resolved before VitePress globs for pages.
- */
 const docs = await versionedDocs({
 	repoRoot,
 	siteRoot,
@@ -186,23 +154,10 @@ const docs = await versionedDocs({
 		tag: (version) => `v${version}`,
 		source: (tag) => `https://codeload.github.com${repoUrl.pathname}/tar.gz/refs/tags/${tag}`,
 		url: (tag) => `${repoUrl.href}/releases/tag/${tag}`,
-		offline: process.env.DOCS_OFFLINE === '1',
+		/** A preview serves only its pull request. */
+		offline: process.env.DOCS_OFFLINE === '1' || pull !== undefined,
 	},
-	/**
-	 * A released version imports the release it documents from jsDelivr, whose
-	 * `+esm` builds arrive bundled: one file per subpath, two requests where
-	 * esm.sh mirrors the package's module graph and costs thirty-nine — measured
-	 * at a third of the time to load, and twenty kilobytes lighter.
-	 *
-	 * The tree has published nothing, so it imports the commit it *is*. Every
-	 * master commit and pull request head is built by pkg.pr.new, which jsDelivr
-	 * cannot serve — it carries npm and GitHub, and a pkg.pr.new build is on
-	 * neither. esm.sh serves them under `/pr/`, and `?standalone` bundles them
-	 * the way jsDelivr bundles a release: four requests rather than thirty-nine.
-	 * Safe to bundle here because the library has no exported classes and no
-	 * registry a caller mutates — duplicating its internals across two bundles
-	 * costs a cold cache and nothing else.
-	 */
+	/** jsDelivr serves the releases. esm.sh serves pkg.pr.new builds. */
 	library: {
 		name: repo.name,
 		moduleUrl: (version, subpath) => {
@@ -216,12 +171,7 @@ const docs = await versionedDocs({
 	fileGuardrail: 19_500,
 });
 
-/**
- * Reading order within each section — the only thing about a version's pages
- * this file decides. Which pages exist, and what each is called, comes from the
- * version being rendered: an archived release lists the pages it shipped, under
- * the titles it gave them. Unlisted pages append to their section's last group.
- */
+/** Reading order within each section. Unlisted pages append to the last group. */
 const ORDER: SidebarOrder = {
 	guide: [
 		{ text: 'Introduction', slugs: ['getting-started', 'why'] },

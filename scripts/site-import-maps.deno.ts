@@ -1,47 +1,32 @@
 #!/usr/bin/env -S deno run --allow-read --allow-net --allow-write --allow-run
 /**
- * The docs site does not host the library: each version's pages carry an import map
- * binding `micro509` to the library that version documents, on esm.sh. Nothing in the
- * build proves those URLs exist, or that a page ended up bound to its own version —
- * a wrong map ships a site whose every example is dead, and looks fine doing it.
+ * Checks the import map each version of the built site ships. Every version's map must
+ * name the library version that page documents, and every URL in it must resolve to a
+ * JavaScript module. Versions that speak today's API also run an example under their
+ * own map.
  *
- * Against the built site (`run site:build` first), for every version:
- *   - the map names the version the page serves, not another one
- *   - every URL in it resolves, and resolves to a module
- * and against the versions that speak today's API, that an example actually runs.
- *
- * Deno resolves import maps natively, so an example runs here exactly as a browser
- * runs it: same map, same URLs, same module graph.
+ * Run `site:build` first. Deno resolves import maps natively.
  *
  * @module
  */
+/// <reference types="deno" />
 const DIST = new URL('../site/.vitepress/dist/', import.meta.url).pathname;
 
-/** The library the site documents, as it is published. */
 const LIBRARY: string = JSON.parse(
 	await Deno.readTextFile(new URL('../package.json', import.meta.url).pathname),
 ).name;
 
-/** The directories a version is served from: the root, the tree, one per release. */
 function isVersionDir(name: string): boolean {
 	return name === 'next' || /^v\d+\.\d+\.\d+$/.test(name);
 }
 
-/** A version's page, and the import map it shipped. */
 interface Shipped {
-	/** URL prefix the page is served under: `''`, `'next/'`, `'v0.8.0/'`. */
+	/** URL prefix the page is served under, such as `''` or `'v0.8.0/'`. */
 	readonly prefix: string;
 	readonly imports: Readonly<Record<string, string>>;
 }
 
-/**
- * An example written against today's API, to run against the versions that have it.
- *
- * Not run against archives: an old release's examples were written against the API it
- * shipped (v0.1.0's `parseCertificatePem` returns the certificate, where today's returns
- * a `Result`), and those pages carry their own. What is checked for every version is that
- * its map resolves — which library it resolves to is the point.
- */
+/** Written against today's API. Archives shipped a different one. */
 const EXAMPLE = `
 import { createSelfSignedCertificate } from 'micro509';
 import { parseCertificatePem } from 'micro509/x509';
@@ -58,7 +43,6 @@ const cn = parsed.value.subject.values.commonName;
 if (cn !== 'import-maps.example') throw new Error(\`wrong subject: \${cn}\`);
 `;
 
-/** One version's map, read back out of the landing page that ships it. */
 async function mapOf(prefix: string): Promise<Shipped> {
 	const html = await Deno.readTextFile(`${DIST}${prefix}index.html`);
 	const found = html.match(/<script type="importmap">(.*?)<\/script>/s);
@@ -66,7 +50,7 @@ async function mapOf(prefix: string): Promise<Shipped> {
 	return { prefix, imports: JSON.parse(found[1]).imports };
 }
 
-/** Every version's map. Each version has a landing page; one page per version is enough. */
+/** Every version's map, read out of each version's landing page. */
 async function shipped(): Promise<readonly Shipped[]> {
 	const prefixes = [''];
 	for await (const entry of Deno.readDir(DIST)) {
@@ -76,25 +60,18 @@ async function shipped(): Promise<readonly Shipped[]> {
 	return pages;
 }
 
-/**
- * The library a version's map points at: `0.8.0`, or `master`/a commit for the tree.
- *
- * Read out of the URL rather than off the end of it: a CDN puts its own things after
- * the version (`.../micro509@0.8.0/x509/+esm`), and only the `@ref` is ours.
- */
+/** The library ref a version's map points at, such as `0.8.0` or `master`. */
 function boundTo(page: Shipped): string {
 	const root = Object.values(page.imports)[0] ?? '';
 	return root.match(/@([^/@?]+)/)?.[1] ?? '';
 }
 
-/** A page must import the version it documents — `/v0.8.0/` must not serve v0.11.0's library. */
+/** A page must import the version it documents. */
 function bindsToItsOwnVersion(page: Shipped): boolean {
 	const version = page.prefix.replace(/^v/, '').replace(/\/$/, '');
-	// The tree and the root release document what they build from, not a tag in their path.
 	return version === '' || version === 'next' || boundTo(page) === version;
 }
 
-/** Run the example under a map, the way the browser will. */
 async function runs(page: Shipped): Promise<string | undefined> {
 	const dir = await Deno.makeTempDir();
 	try {
@@ -120,13 +97,7 @@ async function runs(page: Shipped): Promise<string | undefined> {
 	}
 }
 
-/**
- * Every release jsDelivr carries, newest first.
- *
- * The CDN's own inventory, not npm's: a release npm has published but jsDelivr has not
- * yet mirrored is a version whose pages would import nothing, and asking the CDN we
- * actually import from is the only way to know that.
- */
+/** Every release jsDelivr carries. */
 async function published(): Promise<readonly string[]> {
 	const response = await fetch(`https://data.jsdelivr.com/v1/packages/npm/${LIBRARY}`, {
 		headers: { accept: 'application/json' },
@@ -147,7 +118,6 @@ if (pages.length === 0) {
 
 const failures: string[] = [];
 
-// Every release the CDN carries should have a page, and every page a release.
 const releases = new Set(await published());
 const served = new Set(
 	pages.map((page) => boundTo(page)).filter((version) => /^\d+\.\d+\.\d+$/.test(version)),
@@ -180,9 +150,6 @@ for (const page of pages) {
 				const body = await response.text();
 				if (!response.ok) return `${specifier} -> ${url} (${response.status})`;
 
-				// A CDN that 404s into an HTML page is still a dead import. What every CDN's
-				// output has in common is that it is JavaScript and it exports something —
-				// not a shape: esm.sh leads with an import, jsDelivr with a build banner.
 				const javascript = response.headers.get('content-type')?.includes('javascript');
 				return javascript === true && /\bexport\b/.test(body)
 					? undefined

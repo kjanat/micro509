@@ -11,32 +11,23 @@ if (form === null || pemPane === null || parsedPane === null || button === null)
 	throw new Error('the page is missing an element the demo needs');
 }
 
-/** A form field, as a string. Empty means "not given". */
 function field(data: FormData, name: string): string {
 	const value = data.get(name);
 	return typeof value === 'string' ? value.trim() : '';
 }
 
-/** The key the certificate is signed with, from the dropdown. */
 function keyAlgorithm(choice: string): KeyAlgorithmInput {
 	if (choice === 'RSA') return { kind: 'rsa', modulusLength: 2048 };
 	if (choice === 'P-384') return { kind: 'ecdsa', curve: 'P-384' };
 	return { kind: 'ecdsa', curve: 'P-256' };
 }
 
-/**
- * A subject alternative name as text.
- *
- * Most kinds carry a string. A directoryName carries a DN, which only has DER to show,
- * and the raw kinds carry bytes — show those as hex rather than mangling them into text.
- */
 function nameOf(name: SubjectAltName): string {
 	if (!('value' in name)) return name.derHex;
 	if (typeof name.value === 'string') return name.value;
 	return [...name.value].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
-/** What the certificate turned out to say, once parsed back out of its own PEM. */
 function describe(certificate: ParsedCertificate, fingerprint: string): Array<[string, string]> {
 	const names = (certificate.subjectAltNames ?? []).map(nameOf).join(', ');
 	return [
@@ -84,7 +75,6 @@ form.addEventListener('submit', async (event) => {
 
 		pemPane.textContent = certificate.pem;
 
-		// Parse the certificate we just issued, from its own PEM — nothing is taken on trust.
 		const parsed = parseCertificatePem(certificate.pem);
 		if (!parsed.ok) {
 			parsedPane.append(row('parse failed', parsed.error.code));
@@ -100,16 +90,8 @@ form.addEventListener('submit', async (event) => {
 	}
 });
 
-/** Colon-separated hex, e.g. a fingerprint: `AB:CD:EF:…`. */
 const COLON_HEX = /^[0-9A-F]{2}(:[0-9A-F]{2})+$/;
 
-/**
- * One `<dt>`/`<dd>` pair.
- *
- * A fingerprint gets a break opportunity after each colon, so a line that has to wrap
- * wraps between bytes rather than through one. `<wbr>` rather than a zero-width space:
- * it is not part of the text, so what you copy is still the fingerprint.
- */
 function row(term: string, value: string): DocumentFragment {
 	const fragment = document.createDocumentFragment();
 	const dt = document.createElement('dt');

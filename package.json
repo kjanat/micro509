@@ -171,7 +171,7 @@
 		"npm": "11.18.0"
 	},
 	"catalog": {
-		"@biomejs/biome": "^2.5.3",
+		"@biomejs/biome": "2.5.2 | ^2.5.4",
 		"dprint": "^0.55.1",
 		"runner-run": "^0.19.1",
 		"vue": "^3.5.27"
