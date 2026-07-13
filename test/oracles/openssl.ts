@@ -197,6 +197,23 @@ export async function checkIdentityWithOpenSsl(input: {
 	});
 }
 
+export async function fingerprintCertificateWithOpenSsl(input: {
+	readonly certificatePem: string;
+	readonly algorithm: 'sha1' | 'sha256' | 'sha384' | 'sha512';
+}): Promise<string> {
+	return await withTempDir(async (directory) => {
+		const certificatePath = join(directory, 'certificate.pem');
+		await Bun.write(certificatePath, input.certificatePem);
+		const result = await runOpenSsl(['x509', '-in', certificatePath, '-noout', '-fingerprint', `-${input.algorithm}`]);
+		// Output looks like: "sha256 Fingerprint=AB:CD:...". Return the colon-hex portion.
+		const match = /Fingerprint=([0-9A-Fa-f:]+)/.exec(result.stdout);
+		if (match?.[1] === undefined) {
+			throw new Error(`unexpected openssl fingerprint output: ${mergeCommandOutput(result)}`);
+		}
+		return match[1];
+	});
+}
+
 export async function issueAndValidateOcspResponseWithOpenSsl(input: {
 	readonly issuerCertificatePem: string;
 	readonly issuerPrivateKeyPem: string;

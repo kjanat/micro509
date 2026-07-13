@@ -17,7 +17,6 @@ export { createCertificate, createSelfSignedCertificate } from '#micro509/x509/c
 
 export type { CreateCsrInput, CsrMaterial } from '#micro509/x509/csr';
 export { createCertificateSigningRequest } from '#micro509/x509/csr';
-
 export type {
 	AuthorityInfoAccessMethod,
 	AuthorityInformationAccess,
@@ -72,6 +71,12 @@ export {
 	parseAuthorityInfoAccessMethodOid,
 	parseExtendedKeyUsageOid,
 } from '#micro509/x509/extensions';
+export type {
+	CertificateFingerprint,
+	CertificateFingerprintAlgorithm,
+	CertificateFingerprintSource,
+} from '#micro509/x509/fingerprint';
+export { certificateFingerprint } from '#micro509/x509/fingerprint';
 
 export type {
 	NameAttribute,
