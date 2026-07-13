@@ -682,7 +682,7 @@ function prunePolicyGraph(graph: PolicyGraph, maxDepth: number): void {
 		if (nodes === undefined) {
 			continue;
 		}
-		for (const key of [...nodes.keys()]) {
+		for (const key of nodes.keys()) {
 			const node = nodes.get(key);
 			if (node === undefined || node.childKeys.size > 0) {
 				continue;

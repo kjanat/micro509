@@ -1501,7 +1501,7 @@ function sameGeneralNameSet(left: readonly GeneralName[], right: readonly Genera
 	if (left.length !== right.length) {
 		return false;
 	}
-	const matched = new Array(right.length).fill(false);
+	const matched = Array.from({ length: right.length }, () => false);
 	for (const leftName of left) {
 		let found = false;
 		for (let index = 0; index < right.length; index += 1) {
@@ -1597,7 +1597,7 @@ function compareRelativeDistinguishedNames(
 	if (left.attributes.length !== right.attributes.length) {
 		return false;
 	}
-	const matched = new Array(right.attributes.length).fill(false);
+	const matched = Array.from({ length: right.attributes.length }, () => false);
 	for (const leftAttribute of left.attributes) {
 		let found = false;
 		for (let index = 0; index < right.attributes.length; index += 1) {
