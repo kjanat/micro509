@@ -57,7 +57,9 @@ export interface ApiDocsTarget {
 function isModuleGraph(value: unknown): value is { readonly nodes: Record<string, ApiModule> } {
 	if (typeof value !== 'object' || value === null || !('nodes' in value)) return false;
 	const { nodes } = value;
-	if (typeof nodes !== 'object' || nodes === null) return false;
+	// An array is an object whose `every` is vacuously true: `nodes: []` would
+	// pass, and document nothing, in a build that reported success.
+	if (typeof nodes !== 'object' || nodes === null || Array.isArray(nodes)) return false;
 	return Object.values(nodes).every(
 		(module) =>
 			typeof module === 'object' &&
