@@ -1,4 +1,4 @@
-import type { KeyAlgorithmInput, ParsedCertificate, SubjectAltName } from 'micro509';
+import type { KeyAlgorithmInput, KeyUsage, ParsedCertificate, SubjectAltName } from 'micro509';
 import { certificateFingerprint, createSelfSignedCertificate } from 'micro509';
 import { parseCertificatePem } from 'micro509/x509';
 
@@ -60,15 +60,19 @@ form.addEventListener('submit', async (event) => {
 		const subjectAltNames: SubjectAltName[] = [{ type: 'dns', value: commonName }];
 		if (san !== '') subjectAltNames.push({ type: 'dns', value: san });
 
+		const algorithm = keyAlgorithm(field(data, 'algorithm'));
+		const keyUsage: KeyUsage[] =
+			algorithm.kind === 'rsa' ? ['digitalSignature', 'keyEncipherment'] : ['digitalSignature'];
+
 		const { certificate } = await createSelfSignedCertificate({
 			subject: {
 				commonName,
 				...(organization === '' ? {} : { organization }),
 			},
-			algorithm: keyAlgorithm(field(data, 'algorithm')),
+			algorithm,
 			validity: { days },
 			extensions: {
-				keyUsage: ['digitalSignature', 'keyEncipherment'],
+				keyUsage,
 				subjectAltNames,
 			},
 		});

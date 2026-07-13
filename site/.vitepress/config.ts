@@ -101,9 +101,15 @@ const GITHUB_TIMEOUT_MS = 10_000;
 
 async function pullRequestOf(sha: string): Promise<string | undefined> {
 	const url = `https://api.github.com/repos${repoUrl.pathname}/commits/${sha}/pulls`;
+	const token = envOf('GITHUB_TOKEN');
+
 	try {
 		const response = await fetch(url, {
-			headers: { accept: 'application/vnd.github+json', 'user-agent': repo.name },
+			headers: {
+				accept: 'application/vnd.github+json',
+				'user-agent': repo.name,
+				...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
+			},
 			signal: AbortSignal.timeout(GITHUB_TIMEOUT_MS),
 		});
 		if (!response.ok) {

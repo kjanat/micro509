@@ -10,7 +10,7 @@ jobs:
     steps: [
       { uses: actions/checkout@v7, with: { persist-credentials: false } },
       { uses: ./.github/actions/setup-ts, with: { install-bun: true, install-deno: true } },
-      run: runner install -f site:build,
+      { run: runner install -f site:build, env: { GITHUB_TOKEN: "${{ github.token }}" } },
       { name: Verify import maps, run: run site:import-maps },
       { uses: actions/upload-pages-artifact@v5, with: { path: site/.vitepress/dist } },
     ]

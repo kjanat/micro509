@@ -37,13 +37,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions: { contents: read }
-    env: { GITHUB_TOKEN: "${{ github.token }}" }
     steps:
       - uses: actions/checkout@v7
         with: { persist-credentials: false }
       - uses: ./.github/actions/setup-ts
         with: { install-bun: true, install-node: true, install-deno: true }
       - run: runner install -f site:build
+        env: { GITHUB_TOKEN: "${{ github.token }}" }
       - name: Every version's examples import the library that version documents
         run: run site:import-maps
       - run: run playwright:chromium
