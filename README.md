@@ -26,6 +26,14 @@ Zero dependencies. Tree-shakeable subpath entrypoints. Pure WebCrypto. Runs ever
 npm install micro509
 ```
 
+In a browser, no build step — it is WebCrypto and nothing else:
+
+```html
+<script type="module">
+  import { createSelfSignedCertificate } from 'https://esm.run/micro509';
+</script>
+```
+
 ## Why micro509
 
 JavaScript PKI libraries usually force a bad tradeoff:

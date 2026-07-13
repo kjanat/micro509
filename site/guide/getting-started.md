@@ -30,6 +30,29 @@ deno add jsr:@kjanat/micro509
 
 :::
 
+### Browser
+
+No build step: micro509 is WebCrypto and nothing else, so a module script can
+import it straight from a CDN.
+
+```html
+<script type="module">
+  import { createSelfSignedCertificate } from 'https://esm.run/micro509';
+
+  const { certificate } = await createSelfSignedCertificate(
+    {
+      subject: { commonName: 'example.com' },
+      validity: { days: 30 },
+    },
+  );
+  console.log(certificate.pem);
+</script>
+```
+
+Subpaths work the same way — `https://esm.run/micro509/x509` — and pinning a
+version (`https://esm.run/micro509@0.11.0`) is what you want in production, so
+a release cannot change under you.
+
 ### Deno
 
 ```ts
