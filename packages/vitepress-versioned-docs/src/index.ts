@@ -14,9 +14,9 @@
  * so nothing needs re-baking when the presentation changes.
  *
  * The one thing that cannot be re-derived is the *compiled library* an old
- * version's runnable examples import. That comes from an artifact attached to
- * the release (`releases.asset`), extracted to `<prefix>vendor/<name>/` — the
- * exact bytes that release published, never a rebuild of old sources.
+ * version's runnable examples import. That comes from the registry tarball the
+ * release published (`releases.index`), extracted to `<prefix>vendor/<name>/` —
+ * the exact bytes that release shipped, never a rebuild of old sources.
  *
  * Nothing here knows the host project: every path, manifest and name arrives
  * through `VersionedDocsOptions`. The caller owns the layout; this owns the
@@ -61,18 +61,23 @@ export interface VersionedDocsOptions {
 	 */
 	readonly sources: readonly string[];
 
-	/** The GitHub releases that become versions. */
+	/** The published releases that become versions. */
 	readonly releases: {
-		/** `owner/repo`. */
-		readonly slug: string;
-		/** Release asset holding the compiled library, e.g. `dist.tar.gz`. */
-		readonly asset: string;
-		/** Path within that asset to extract, e.g. `package/dist`. */
-		readonly assetPath: string;
-		/** Skip the releases API entirely; build the tree unversioned. */
+		/**
+		 * Registry document listing every published version and its library
+		 * tarball, e.g. `https://registry.npmjs.org/micro509`.
+		 */
+		readonly index: string;
+		/** Path within a library tarball to extract, e.g. `package/dist`. */
+		readonly libraryPath: string;
+		/** The tag a published version was cut from. */
+		readonly tag: (version: string) => string;
+		/** Source archive of that tag, e.g. a codeload tarball. */
+		readonly source: (tag: string) => string;
+		/** Where a human reads about the release. */
+		readonly url: (tag: string) => string;
+		/** Resolve no versions; build the checked-out tree alone. */
 		readonly offline?: boolean;
-		/** Bearer token for the releases API, if any. */
-		readonly token?: string | undefined;
 	};
 
 	/** The library each version serves, and how pages import it. */
@@ -127,89 +132,59 @@ export interface DocsVersion {
 	};
 }
 
-interface ReleaseAsset {
-	readonly name: string;
-	readonly browser_download_url: string;
+interface Packument {
+	readonly versions: Readonly<Record<string, { readonly dist: { readonly tarball: string } }>>;
+	readonly time?: Readonly<Record<string, string>>;
 }
 
-interface Release {
-	readonly tag_name: string;
-	readonly draft: boolean;
-	readonly prerelease: boolean;
-	readonly assets: readonly ReleaseAsset[];
-	/** The source archive of the tag, as the API addresses it. */
-	readonly tarball_url: string;
-	readonly html_url: string;
-	readonly published_at: string | null;
-}
-
-/** A stable release carrying the library artifact. */
+/** A published release: its tag, its sources, and the library it shipped. */
 interface DocsRelease {
 	readonly tag: string;
 	readonly version: readonly [number, number, number];
-	/** The release's own source archive — not a URL this reconstructs. */
-	readonly tarballUrl: string;
-	readonly assetUrl: string;
+	readonly sourceUrl: string;
+	readonly libraryUrl: string;
 	readonly url: string;
 	readonly published: string | null;
 }
 
-function parseStableVersion(tag: string): readonly [number, number, number] | undefined {
-	const match = tag.match(/^v(\d+)\.(\d+)\.(\d+)$/);
+function parseStableVersion(version: string): readonly [number, number, number] | undefined {
+	const match = version.match(/^(\d+)\.(\d+)\.(\d+)$/);
 	if (!match) return undefined;
 	return [Number(match[1]), Number(match[2]), Number(match[3])];
 }
 
 /**
- * Stable releases carrying the library artifact, newest first.
+ * Published stable releases, newest first.
  *
- * Empty on any failure (no token, rate limit, no network): the site then builds
- * as a single unversioned tree rather than failing, so a docs deploy never
- * hinges on the releases API being up.
+ * The registry is the source of truth for what shipped, and it serves the
+ * library bytes it published — no repository API, no token, no rate limit that
+ * a shared CI address can exhaust. A failure here fails the build: a docs site
+ * missing every version is worse than a docs site that does not deploy.
  */
 async function fetchReleases(options: VersionedDocsOptions): Promise<readonly DocsRelease[]> {
-	const headers: Record<string, string> = {
-		accept: 'application/vnd.github+json',
-		'user-agent': 'vitepress-versioned-docs',
-	};
-	if (options.releases.token !== undefined && options.releases.token !== '') {
-		headers.authorization = `Bearer ${options.releases.token}`;
-	}
-
-	let releases: readonly Release[];
-	try {
-		const response = await fetch(
-			`https://api.github.com/repos/${options.releases.slug}/releases?per_page=100`,
-			{ headers },
+	const response = await fetch(options.releases.index, {
+		headers: { accept: 'application/json', 'user-agent': 'vitepress-versioned-docs' },
+	});
+	if (!response.ok) {
+		throw new Error(
+			`[versions] ${options.releases.index} -> ${response.status} ${response.statusText}. Set DOCS_OFFLINE=1 to build the checked-out tree alone.`,
 		);
-		if (!response.ok) {
-			console.warn(`[versions] releases API ${response.status}; building unversioned`);
-			return [];
-		}
-		releases = await response.json();
-	} catch (error) {
-		console.warn(`[versions] releases API unreachable (${String(error)}); building unversioned`);
-		return [];
 	}
 
-	return releases
-		.flatMap((release): DocsRelease[] => {
-			if (release.draft || release.prerelease) return [];
-			const version = parseStableVersion(release.tag_name);
+	const packument: Packument = await response.json();
+	return Object.entries(packument.versions)
+		.flatMap(([published, entry]): DocsRelease[] => {
+			const version = parseStableVersion(published);
 			if (version === undefined) return [];
-			const asset = release.assets.find((candidate) => candidate.name === options.releases.asset);
-			if (asset === undefined) {
-				console.warn(`[versions] ${release.tag_name} has no ${options.releases.asset}; skipping`);
-				return [];
-			}
+			const tag = options.releases.tag(published);
 			return [
 				{
-					tag: release.tag_name,
+					tag,
 					version,
-					tarballUrl: release.tarball_url,
-					assetUrl: asset.browser_download_url,
-					url: release.html_url,
-					published: release.published_at,
+					sourceUrl: options.releases.source(tag),
+					libraryUrl: entry.dist.tarball,
+					url: options.releases.url(tag),
+					published: packument.time?.[published] ?? null,
 				},
 			];
 		})
@@ -240,15 +215,14 @@ async function unpack(
 		 * cache directory would find them and honor them.
 		 */
 		readonly wanted: (entry: string) => boolean;
-		readonly token?: string | undefined;
 	},
 ): Promise<void> {
-	const headers: Record<string, string> = { 'user-agent': 'vitepress-versioned-docs' };
-	if (options.token !== undefined && options.token !== '') {
-		headers.authorization = `Bearer ${options.token}`;
+	const response = await fetch(url, {
+		headers: { 'user-agent': 'vitepress-versioned-docs' },
+	});
+	if (!response.ok) {
+		throw new Error(`[versions] ${url} -> ${response.status} ${response.statusText}`);
 	}
-	const response = await fetch(url, { headers });
-	if (!response.ok) throw new Error(`[versions] ${url} -> ${response.status}`);
 
 	const blob = `${into}.tar.gz`;
 	await fsp.mkdir(path.dirname(blob), { recursive: true });
@@ -268,29 +242,24 @@ function under(paths: readonly string[], entry: string): boolean {
 /**
  * A release's source tree, downloaded once into the build cache.
  *
- * Fetched from the release's own `tarball_url` rather than read out of the local
- * clone: CI clones shallow (the tag object isn't there), `git` is not a
- * dependency of this package, and the URL is the one the API gave us for that
- * release — not one reconstructed from a slug and a tag.
+ * Fetched rather than read out of the local clone: CI clones shallow, so the tag
+ * object is not there, and `git` is not a dependency of this package.
  */
 async function ensureTagTree(release: DocsRelease, options: VersionedDocsOptions): Promise<string> {
 	const tree = path.join(options.cacheDir, release.tag, 'tree');
 	const marker = path.join(tree, '.complete');
 	if (fs.existsSync(marker)) return tree;
 
-	// The archive nests everything under `<owner>-<repo>-<sha>/`, so entries match
-	// against their path with that first component dropped.
 	const paths = [...options.sources, ...options.pages];
-	await unpack(release.tarballUrl, tree, {
+	await unpack(release.sourceUrl, tree, {
 		strip: 1,
 		wanted: (entry) => under(paths, entry.split('/').slice(1).join('/')),
-		token: options.releases.token,
 	});
 	await fsp.writeFile(marker, '');
 	return tree;
 }
 
-/** The release's library artifact, downloaded and unpacked once. */
+/** The library that release published, downloaded from the registry once. */
 async function ensureTagLibrary(
 	release: DocsRelease,
 	options: VersionedDocsOptions,
@@ -299,11 +268,10 @@ async function ensureTagLibrary(
 	const marker = path.join(lib, '.complete');
 	if (fs.existsSync(marker)) return lib;
 
-	const assetPath = options.releases.assetPath;
-	await unpack(release.assetUrl, lib, {
-		strip: assetPath.split('/').length,
-		wanted: (entry) => under([assetPath], entry),
-		token: options.releases.token,
+	const libraryPath = options.releases.libraryPath;
+	await unpack(release.libraryUrl, lib, {
+		strip: libraryPath.split('/').length,
+		wanted: (entry) => under([libraryPath], entry),
 	});
 	await fsp.writeFile(marker, '');
 	return lib;
