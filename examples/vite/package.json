@@ -1,0 +1,23 @@
+{
+	"name": "micro509-vite-demo",
+	"private": true,
+	"description": "Issue and inspect an X.509 certificate in the browser, with micro509.",
+	"type": "module",
+	"scripts": {
+		"build": "tsc --noEmit && vite build",
+		"dev": "vite",
+		"preview": "vite preview",
+		"typecheck": "tsc --noEmit"
+	},
+	"dependencies": {
+		"micro509": "^0.11.0"
+	},
+	"devDependencies": {
+		"typescript": "^7.0.2",
+		"vite": "^7.1.5"
+	},
+	"stackblitz": {
+		"installDependencies": true,
+		"startCommand": "npm run dev"
+	}
+}

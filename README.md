@@ -34,6 +34,12 @@ In a browser, no build step — it is WebCrypto and nothing else:
 </script>
 ```
 
+Two runnable examples: [`examples/browser`] is one HTML file you can open, and
+[`examples/vite`] is the same demo with types and a dev server. Both open in StackBlitz.
+
+[`examples/browser`]: ./examples/browser/README.md
+[`examples/vite`]: ./examples/vite/README.md
+
 ## Why micro509
 
 JavaScript PKI libraries usually force a bad tradeoff:
