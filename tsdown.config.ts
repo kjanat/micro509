@@ -65,5 +65,5 @@ export default defineConfig({
 	publint: 'ci-only',
 	unused: 'ci-only',
 	failOnWarn: 'ci-only',
-	onSuccess: 'dprint fmt {jsr,package}.json'
+	onSuccess: 'dprint fmt {jsr,package}.json',
 });
