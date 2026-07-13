@@ -2,14 +2,7 @@
 	"name": "micro509",
 	"version": "0.9.0",
 	"description": "The zero-dependency TypeScript PKI toolkit for real certificate workflows.",
-	"keywords": [
-		"x509",
-		"certificate",
-		"csr",
-		"pem",
-		"der",
-		"jwk"
-	],
+	"keywords": ["x509", "certificate", "csr", "pem", "der", "jwk"],
 	"homepage": "https://micro509.kjanat.dev",
 	"repository": {
 		"type": "git",
@@ -78,13 +71,8 @@
 		"./package.json": "./package.json"
 	},
 	"types": "./dist/index.d.ts",
-	"files": [
-		"dist"
-	],
-	"workspaces": [
-		"packages/*",
-		"site/.vitepress"
-	],
+	"files": ["dist"],
+	"workspaces": ["packages/*", "site/.vitepress"],
 	"scripts": {
 		"bd": "tsdown",
 		"build": "tsdown",
@@ -221,11 +209,5 @@
 			"vue-tsc": "^3.3.5"
 		}
 	},
-	"trustedDependencies": [
-		"deno",
-		"dprint",
-		"esbuild",
-		"sharp",
-		"workerd"
-	]
+	"trustedDependencies": ["deno", "dprint", "esbuild", "sharp", "workerd"]
 }
