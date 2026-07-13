@@ -31,6 +31,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `CertificateFingerprintAlgorithm`, and `CertificateFingerprintSource` types.
   Interop with `openssl x509 -fingerprint` verified across all four algorithms.
   (https://github.com/kjanat/micro509/issues/45)
+- `certificateMatchesPrivateKey(certificate, privateKey)` checks whether an
+  uploaded private key belongs to a certificate — the first thing any
+  key-intake or issuance endpoint must do. It derives the public half of the
+  private key, exports it as SubjectPublicKeyInfo DER, and byte-compares it
+  against the certificate's own SPKI (the canonical, algorithm-agnostic
+  ownership test), returning a plain `boolean`. `certificate` accepts a PEM
+  string, DER bytes, or an already-parsed `ParsedCertificate`; a private key of
+  a different type simply produces different SPKI and returns `false`.
+  `matchCertificatePrivateKey` is the `Result`-returning companion: `ok: true`
+  on a match, or a typed failure carrying `key_mismatch`, `key_type_mismatch`,
+  `malformed_certificate`, or `unsupported_private_key` — so trust boundaries
+  get the reason (and no thrown errors on untrusted input). The error-code
+  union is exported as `MatchCertificatePrivateKeyErrorCode`.
+  (https://github.com/kjanat/micro509/issues/46)
 
 ## [0.10.0] - 2026-07-13
 

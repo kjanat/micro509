@@ -92,6 +92,11 @@ export type {
 	DecodedExtensionValue,
 	ExtensionDecoder,
 	ExtensionDecoderMap,
+	MatchCertificatePrivateKeyErrorCode,
+	MatchCertificatePrivateKeyFailure,
+	MatchCertificatePrivateKeyFailureResult,
+	MatchCertificatePrivateKeyResult,
+	MatchCertificatePrivateKeySuccess,
 	ParseCertificateErrorCode,
 	ParseCertificateFailure,
 	ParseCertificateResult,
@@ -110,6 +115,7 @@ export type {
 	ParseOptions,
 } from '#micro509/x509/parse';
 export {
+	certificateMatchesPrivateKey,
 	decodeExtension,
 	decodeExtensionMap,
 	decodeExtensions,
@@ -118,6 +124,7 @@ export {
 	findExtension,
 	getSubjectPublicKey,
 	getSubjectPublicKeyOrThrow,
+	matchCertificatePrivateKey,
 	parseCertificateChainPem,
 	parseCertificateDer,
 	parseCertificateDerOrThrow,

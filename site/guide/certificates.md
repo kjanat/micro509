@@ -235,6 +235,93 @@ SHA-1:   ${sha1.colonHex}`);
 
 </LiveCode>
 
+## Match a certificate to a private key
+
+Before a key-intake or issuance endpoint trusts an uploaded private key, it has
+to confirm the key actually belongs to the certificate it arrived with.
+`certificateMatchesPrivateKey` is that check: it derives the public half of the
+private key, exports it as SubjectPublicKeyInfo DER, and byte-compares it
+against the certificate's own SPKI — the canonical, algorithm-agnostic way to
+prove ownership. It returns a plain `boolean`, and a key of a different type (or
+a different key of the same type) simply produces different SPKI and returns
+`false`. The certificate argument accepts a PEM string, DER bytes, or an
+already-parsed certificate.
+
+<LiveCode>
+
+```ts
+import {
+  certificateMatchesPrivateKey,
+  createSelfSignedCertificate,
+  generateKeyPair,
+} from 'micro509';
+
+const { certificate, keyPair } =
+  await createSelfSignedCertificate({
+    subject: { commonName: 'match.example' },
+    algorithm: { kind: 'ecdsa', curve: 'P-256' },
+  });
+
+// The key that issued the certificate matches...
+console.log(
+  'own key matches:',
+  await certificateMatchesPrivateKey(
+    certificate.pem,
+    keyPair.privateKey,
+  ),
+);
+
+// ...an unrelated key of the same type does not.
+const impostor = await generateKeyPair({
+  kind: 'ecdsa',
+  curve: 'P-256',
+});
+console.log(
+  'impostor key matches:',
+  await certificateMatchesPrivateKey(
+    certificate.pem,
+    impostor.privateKey,
+  ),
+);
+```
+
+</LiveCode>
+
+When you need the _reason_ a match failed rather than a bare `false` — or a typed
+failure instead of a thrown error on untrusted input — reach for
+`matchCertificatePrivateKey`, the `Result`-returning companion. It succeeds
+(`ok: true`) on a match, or fails with a code of `key_mismatch` (right algorithm,
+wrong key), `key_type_mismatch` (wrong algorithm), `malformed_certificate`, or
+`unsupported_private_key`:
+
+<LiveCode>
+
+```ts
+import {
+  generateKeyPair,
+  matchCertificatePrivateKey,
+  createSelfSignedCertificate,
+} from 'micro509';
+
+const { certificate } = await createSelfSignedCertificate({
+  subject: { commonName: 'reason.example' },
+  algorithm: { kind: 'ecdsa', curve: 'P-256' },
+});
+
+// A key of the wrong algorithm reports why, without throwing.
+const rsa = await generateKeyPair({
+  kind: 'rsa',
+  modulusLength: 2048,
+});
+const result = await matchCertificatePrivateKey(
+  certificate.pem,
+  rsa.privateKey,
+);
+console.log(result.ok ? 'match' : result.code);
+```
+
+</LiveCode>
+
 ## Parse a CSR
 
 <LiveCode>

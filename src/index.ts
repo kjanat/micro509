@@ -450,6 +450,11 @@ export type {
 	GeneralSubtree,
 	InhibitAnyPolicy,
 	KeyUsage,
+	MatchCertificatePrivateKeyErrorCode,
+	MatchCertificatePrivateKeyFailure,
+	MatchCertificatePrivateKeyFailureResult,
+	MatchCertificatePrivateKeyResult,
+	MatchCertificatePrivateKeySuccess,
 	NameAttribute,
 	NameConstraintForm,
 	NameConstraints,
@@ -485,6 +490,7 @@ export type {
 } from '#micro509/x509';
 export {
 	certificateFingerprint,
+	certificateMatchesPrivateKey,
 	createCertificate,
 	createCertificateSigningRequest,
 	createSelfSignedCertificate,
@@ -496,6 +502,7 @@ export {
 	findExtension,
 	getSubjectPublicKey,
 	getSubjectPublicKeyOrThrow,
+	matchCertificatePrivateKey,
 	parseCertificateChainPem,
 	parseCertificateDer,
 	parseCertificateDerOrThrow,

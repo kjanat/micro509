@@ -46,7 +46,12 @@ import type {
 } from '#micro509/internal/x509/extension-registry';
 import { decodeAndApplyKnownExtension } from '#micro509/internal/x509/extension-registry';
 import type { ImportKeyResult, PublicKeyImportInput } from '#micro509/keys/keys';
-import { importSpkiDer, importSpkiDerOrThrow } from '#micro509/keys/keys';
+import {
+	derivePublicKey,
+	exportSpkiDer,
+	importSpkiDer,
+	importSpkiDerOrThrow,
+} from '#micro509/keys/keys';
 import { pemDecodeOrThrow, splitPemBlocksOrThrow } from '#micro509/pem/pem';
 import type { ErrorResult, Micro509Error } from '#micro509/result/result';
 import { failureResult, rethrowIfInvariant, successResult } from '#micro509/result/result';
@@ -1041,6 +1046,214 @@ export function getSubjectPublicKey<TMap extends ExtensionDecoderMap = Record<ne
 	algorithm?: PublicKeyImportInput,
 ): Promise<ImportKeyResult<CryptoKey>> {
 	return importSpkiDer(parsed.subjectPublicKeyInfoDer, algorithm);
+}
+
+/** Outcome of comparing a private key's derived public half to a certificate's SPKI. */
+type CertificatePrivateKeyComparison = 'match' | 'key_mismatch' | 'key_type_mismatch';
+
+/** Extract the AlgorithmIdentifier TLV from a SubjectPublicKeyInfo DER buffer. */
+function subjectPublicKeyInfoAlgorithmDer(subjectPublicKeyInfoDer: Uint8Array): Uint8Array {
+	const children = readSequenceChildren(subjectPublicKeyInfoDer, {
+		maxDepth: DEFAULT_MAX_DER_DEPTH,
+	});
+	const algorithm = requireElement(children[0], 'SubjectPublicKeyInfo algorithm');
+	return subjectPublicKeyInfoDer.slice(
+		algorithm.start - algorithm.headerLength,
+		algorithm.end,
+	);
+}
+
+/**
+ * Derive the public half of `privateKey`, export it as SPKI DER, and classify
+ * how it relates to a certificate's SubjectPublicKeyInfo. Single source of truth
+ * for {@linkcode certificateMatchesPrivateKey} and {@linkcode matchCertificatePrivateKey}.
+ *
+ * Equal SPKI bytes mean the key owns the certificate. When they differ, the
+ * AlgorithmIdentifier portions decide whether it is a same-algorithm key
+ * mismatch or a cross-algorithm (`key_type_mismatch`) one.
+ */
+async function compareCertificateToPrivateKey(
+	subjectPublicKeyInfoDer: Uint8Array,
+	privateKey: CryptoKey,
+): Promise<CertificatePrivateKeyComparison> {
+	const derivedSpki = await exportSpkiDer(await derivePublicKey(privateKey));
+	if (optionalBytesEqual(derivedSpki, subjectPublicKeyInfoDer)) {
+		return 'match';
+	}
+	const sameAlgorithm = optionalBytesEqual(
+		subjectPublicKeyInfoAlgorithmDer(derivedSpki),
+		subjectPublicKeyInfoAlgorithmDer(subjectPublicKeyInfoDer),
+	);
+	return sameAlgorithm ? 'key_mismatch' : 'key_type_mismatch';
+}
+
+/**
+ * Check whether a certificate's subject public key belongs to a private key.
+ *
+ * Confirming that an uploaded private key actually matches the certificate it
+ * was submitted with is the first thing a key-intake or issuance endpoint must
+ * do. This derives the public half of `privateKey`, exports it as
+ * SubjectPublicKeyInfo DER, and compares those bytes against the certificate's
+ * own SubjectPublicKeyInfo — the canonical, algorithm-agnostic way to test key
+ * ownership. (Comparing JWKs field by field, or signing a probe and verifying
+ * it, are both more fragile.)
+ *
+ * A private key of a different type — e.g. an ECDSA key against an RSA
+ * certificate — simply produces different SPKI DER and returns `false`, so
+ * callers get a single boolean without branching on the kind of mismatch. Reach
+ * for {@linkcode matchCertificatePrivateKey} when you need the reason a match
+ * failed (or a typed failure instead of a thrown error) at a trust boundary.
+ *
+ * The comparison is over the exact DER encoding. A certificate whose
+ * SubjectPublicKeyInfo pins RSASSA-PSS parameters (rather than the plain
+ * `rsaEncryption` OID that WebCrypto emits) therefore will not match even for
+ * the same modulus; such certificates are rare in practice.
+ *
+ * @param certificate PEM string, DER bytes, or an already-parsed certificate.
+ * @param privateKey An extractable private `CryptoKey`.
+ * @returns `true` when the private key's public half matches the certificate's
+ * subject public key.
+ *
+ * @throws {Error} If `certificate` is malformed, or `privateKey` is not an
+ * extractable private key of a supported type (propagated from
+ * {@linkcode derivePublicKey}). Use {@linkcode matchCertificatePrivateKey} for a
+ * typed `Result` instead of thrown errors.
+ *
+ * @example
+ * ```ts
+ * const privateKey = await importPkcs8PemOrThrow(keyPem, { kind: 'ecdsa', curve: 'P-256' });
+ * if (!(await certificateMatchesPrivateKey(certificatePem, privateKey))) {
+ *   throw new Error('uploaded key does not match the certificate');
+ * }
+ * ```
+ *
+ * @see {@linkcode matchCertificatePrivateKey} for the typed-`Result` variant with a mismatch reason
+ * @see {@linkcode getSubjectPublicKeyOrThrow} to obtain the certificate's public key directly
+ * @see {@linkcode derivePublicKey} for the private-to-public bridge this builds on
+ */
+export async function certificateMatchesPrivateKey<
+	TMap extends ExtensionDecoderMap = Record<never, never>,
+>(
+	certificate: ParsedCertificate<TMap> | string | Uint8Array,
+	privateKey: CryptoKey,
+): Promise<boolean> {
+	const parsed = parseCertificateFromSource(certificate);
+	return (await compareCertificateToPrivateKey(parsed.subjectPublicKeyInfoDer, privateKey)) === 'match';
+}
+
+/** Machine-readable failure reason for {@linkcode matchCertificatePrivateKey}. */
+export type MatchCertificatePrivateKeyErrorCode =
+	| 'malformed_certificate'
+	| 'unsupported_private_key'
+	| 'key_type_mismatch'
+	| 'key_mismatch';
+
+/** Structured failure payload for {@linkcode matchCertificatePrivateKey}. */
+export interface MatchCertificatePrivateKeyFailure
+	extends Micro509Error<MatchCertificatePrivateKeyErrorCode> {
+	/** Always `false` for failures. */
+	readonly ok: false;
+}
+
+/** A successful match: the private key's public half is the certificate's subject public key. */
+export interface MatchCertificatePrivateKeySuccess {
+	/** Always `true` for success. */
+	readonly ok: true;
+	/** No payload on success — the match itself is the signal. */
+	readonly value: undefined;
+}
+
+/** Failure branch of {@linkcode MatchCertificatePrivateKeyResult} with structured error details. */
+export type MatchCertificatePrivateKeyFailureResult = ErrorResult<
+	MatchCertificatePrivateKeyErrorCode,
+	Record<never, never>,
+	MatchCertificatePrivateKeyFailure
+>;
+
+/** Result of {@linkcode matchCertificatePrivateKey}. */
+export type MatchCertificatePrivateKeyResult =
+	| MatchCertificatePrivateKeySuccess
+	| MatchCertificatePrivateKeyFailureResult;
+
+/**
+ * Check whether a certificate's subject public key belongs to a private key,
+ * returning a typed {@linkcode MatchCertificatePrivateKeyResult}.
+ *
+ * The `Result`-returning companion to {@linkcode certificateMatchesPrivateKey}:
+ * where the boolean helper answers only "does it match?" (and throws on bad
+ * input), this surfaces the expected failures a key-intake or issuance endpoint
+ * meets on untrusted input as typed codes rather than exceptions — matching the
+ * house rule of returning `Result` for expected failures and throwing only for
+ * invariants. `ok: true` means the key owns the certificate; a failure carries
+ * one of:
+ *
+ * - `malformed_certificate` — `certificate` could not be parsed.
+ * - `unsupported_private_key` — `privateKey` is not an extractable private key
+ *   of a supported type (from {@linkcode derivePublicKey}).
+ * - `key_type_mismatch` — the key is a different algorithm than the
+ *   certificate's subject public key.
+ * - `key_mismatch` — the key is the right algorithm but a different key.
+ *
+ * As with {@linkcode certificateMatchesPrivateKey}, the comparison is over exact
+ * SPKI DER, so a certificate pinning RSASSA-PSS parameters reports
+ * `key_type_mismatch` against the `rsaEncryption` SPKI WebCrypto emits.
+ *
+ * @param certificate PEM string, DER bytes, or an already-parsed certificate.
+ * @param privateKey An extractable private `CryptoKey`.
+ * @returns A success when the key matches, or a typed failure otherwise.
+ *
+ * @example
+ * ```ts
+ * const result = await matchCertificatePrivateKey(certificatePem, privateKey);
+ * if (!result.ok) {
+ *   // result.code is 'malformed_certificate' | 'unsupported_private_key'
+ *   //              | 'key_type_mismatch' | 'key_mismatch'
+ *   throw new Error(`key does not match certificate: ${result.code}`);
+ * }
+ * ```
+ *
+ * @see {@linkcode certificateMatchesPrivateKey} for the plain-boolean variant
+ */
+export async function matchCertificatePrivateKey<
+	TMap extends ExtensionDecoderMap = Record<never, never>,
+>(
+	certificate: ParsedCertificate<TMap> | string | Uint8Array,
+	privateKey: CryptoKey,
+): Promise<MatchCertificatePrivateKeyResult> {
+	let parsed: ParsedCertificate<TMap>;
+	try {
+		parsed = parseCertificateFromSource(certificate);
+	} catch (error) {
+		rethrowIfInvariant(error);
+		return failureResult(
+			'malformed_certificate',
+			error instanceof Error ? error.message : 'Malformed certificate',
+		);
+	}
+	let comparison: CertificatePrivateKeyComparison;
+	try {
+		comparison = await compareCertificateToPrivateKey(parsed.subjectPublicKeyInfoDer, privateKey);
+	} catch (error) {
+		rethrowIfInvariant(error);
+		return failureResult(
+			'unsupported_private_key',
+			error instanceof Error ? error.message : 'Unsupported private key',
+		);
+	}
+	switch (comparison) {
+		case 'match':
+			return successResult(undefined);
+		case 'key_mismatch':
+			return failureResult(
+				'key_mismatch',
+				"Private key does not match the certificate's subject public key",
+			);
+		case 'key_type_mismatch':
+			return failureResult(
+				'key_type_mismatch',
+				"Private key algorithm does not match the certificate's subject public key algorithm",
+			);
+	}
 }
 
 /**
