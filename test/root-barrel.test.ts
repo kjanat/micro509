@@ -12,8 +12,8 @@ import {
 	parsePfxPem,
 	pemDecodeOrThrow,
 	pemEncode,
-	verifyCertificateChain,
 	unwrap,
+	verifyCertificateChain,
 } from '#micro509';
 
 describe('root barrel', () => {

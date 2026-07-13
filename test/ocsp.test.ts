@@ -15,9 +15,9 @@ import {
 	parseOcspResponsePem,
 	parseOcspResponsePemOrThrow,
 	pemDecodeOrThrow,
+	unwrap,
 	validateOcspResponse,
 	verifyOcspResponseSignature,
-	unwrap,
 } from '#micro509';
 import { childrenOf, toHex } from '#micro509/internal/asn1/asn1';
 import {

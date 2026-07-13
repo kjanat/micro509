@@ -7,8 +7,8 @@ import {
 	generateKeyPair,
 	parseCertificateDer,
 	parseCertificatePem,
-	verifyCertificateChain,
 	unwrap,
+	verifyCertificateChain,
 } from '#micro509';
 import { readElement } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';

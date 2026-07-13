@@ -53,13 +53,14 @@ import { getCrypto } from '#micro509/internal/crypto/webcrypto';
 import { base64Encode } from '#micro509/internal/shared/base64';
 import { compareDistinguishedNames } from '#micro509/internal/shared/dn';
 import { pemDecodeOrThrow, pemEncode } from '#micro509/pem/pem';
+import type { ErrorResult, Micro509Error } from '#micro509/result/result';
+import { failureResult, rethrowIfInvariant, successResult } from '#micro509/result/result';
+import type { CrlSource, ParsedCertificateRevocationList } from '#micro509/revocation/crl';
 import {
-	type ErrorResult,
-	failureResult,
-	type Micro509Error,
-	rethrowIfInvariant,
-	successResult,
-} from '#micro509/result/result';
+	checkCertificateRevocationAgainstCrl,
+	parseCertificateRevocationListDerOrThrow,
+	parseCertificateRevocationListPemOrThrow,
+} from '#micro509/revocation/crl';
 import { verifyCertificateChain } from '#micro509/verify/verify';
 import type {
 	NameFieldKey,
@@ -69,13 +70,6 @@ import type {
 	ParsedRelativeDistinguishedName,
 } from '#micro509/x509/parse';
 import { parseCertificateDerOrThrow, parseCertificateFromSource } from '#micro509/x509/parse';
-import {
-	checkCertificateRevocationAgainstCrl,
-	type CrlSource,
-	type ParsedCertificateRevocationList,
-	parseCertificateRevocationListDerOrThrow,
-	parseCertificateRevocationListPemOrThrow,
-} from '#micro509/revocation/crl';
 
 /** Hash algorithm used to compute OCSP CertID fields. SHA-1 is the RFC 6960 default. */
 export type OcspHashAlgorithm = 'SHA-1' | 'SHA-256';

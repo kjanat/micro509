@@ -8,11 +8,11 @@
 import { toArrayBuffer } from '#micro509/internal/asn1/asn1';
 import { readElement } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
-import type { PublicKeyImportInput, RsaHash, RsaSignatureScheme } from '#micro509/keys/keys';
-import { importSpkiDerOrThrow } from '#micro509/keys/keys';
 import { alternateEcdsaSignatureEncoding } from '#micro509/internal/crypto/ecdsa';
 import { parseRsaPssParameters } from '#micro509/internal/crypto/rsa-pss';
 import { getCrypto } from '#micro509/internal/crypto/webcrypto';
+import type { PublicKeyImportInput, RsaHash, RsaSignatureScheme } from '#micro509/keys/keys';
+import { importSpkiDerOrThrow } from '#micro509/keys/keys';
 
 export {
 	alternateEcdsaSignatureEncoding,

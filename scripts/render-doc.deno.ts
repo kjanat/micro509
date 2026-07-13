@@ -22,17 +22,20 @@
  *
  * @module
  */
+/// <reference types="deno"/>
 // biome-ignore lint/suspicious/noTsIgnore: SHUT UP
 // @ts-ignore DENO WITH TYPESCRIPT
 // deno-lint-ignore no-import-prefix
 import { doc } from 'jsr:@deno/doc@0.199.0';
+import { entrypointsOf, renderDocuments } from '@micro509/doc-render';
+import jsr from '#jsr' with { type: 'json' };
+import pkg from '#pkg' with { type: 'json' };
 
-import { publicEntrypoints, renderDocuments } from './render-doc.shared.ts';
-
+const publicEntrypoints = entrypointsOf(jsr);
 const urls = publicEntrypoints.map((src) => new URL(`../${src}`, import.meta.url).href);
 const importMap = new URL('../deno.import_map.json', import.meta.url).href;
 const nodes = await doc(urls, { importMap, printImportMapDiagnostics: false });
-const md = renderDocuments(nodes, new Set(Deno.args));
+const md = renderDocuments(nodes, { packageName: pkg.name }, new Set(Deno.args));
 
 // Format through dprint so downstream doesn't have to.
 const dprint = new Deno.Command('dprint', {

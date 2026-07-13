@@ -14,10 +14,10 @@
 				{ "external": { "command": "dprint", "arguments": ["fmt", "--stdin", "{buffer_path}"] } },
 				{ "language_server": { "name": "dprint" } }
 			],
-			"language_servers": ["typescript", "deno", "biome"],
+			"language_servers": ["typescript", "deno", "biome", "..."],
 			"code_actions_on_format": {
 				"source.fixAll.biome": true,
-				"source.organizeImports.biome": false
+				"source.organizeImports.biome": true
 			}
 		},
 		"Markdown": { "wrap_guides": [80] },
@@ -51,10 +51,12 @@
 		"json-language-server": {
 			"settings": {
 				"json": {
-					"schemas": [{
-						"fileMatch": ["src/internal/asn1/oids.json"],
-						"url": "./src/internal/asn1/oids.schema.json"
-					}]
+					"schemas": [
+						{
+							"fileMatch": ["src/internal/asn1/oids.json"],
+							"url": "./src/internal/asn1/oids.schema.json"
+						}
+					]
 				}
 			}
 		},

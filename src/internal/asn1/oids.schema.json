@@ -17,9 +17,7 @@
 	},
 	"additionalProperties": false,
 	"not": {
-		"required": [
-			"$schema"
-		],
+		"required": ["$schema"],
 		"maxProperties": 1
 	},
 	"$defs": {
@@ -36,11 +34,7 @@
 		"rootArc": {
 			"type": "string",
 			"description": "An OID root arc.",
-			"enum": [
-				"0",
-				"1",
-				"2"
-			]
+			"enum": ["0", "1", "2"]
 		},
 		"oidMap": {
 			"type": "object",
@@ -87,9 +81,7 @@
 		"nodeBase": {
 			"type": "object",
 			"description": "OID tree node with one numeric arc and optional OID aliases and child namespaces.",
-			"required": [
-				"arc"
-			],
+			"required": ["arc"],
 			"properties": {
 				"arc": {
 					"description": "Single numeric OID arc for this node, relative to the parent node. Do not include dots."
@@ -106,14 +98,10 @@
 			"additionalProperties": false,
 			"anyOf": [
 				{
-					"required": [
-						"oids"
-					]
+					"required": ["oids"]
 				},
 				{
-					"required": [
-						"children"
-					]
+					"required": ["children"]
 				}
 			]
 		}

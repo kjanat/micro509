@@ -1,87 +1,62 @@
 <!--
-	VersionSwitcher — navbar dropdown between docs channels.
+	VersionSwitcher — navbar dropdown between the versions this site serves.
 
-	The label ('v0.9.0', 'next', …) comes from themeConfig at build time, so it
-	renders during SSG without any fetch. The dropdown entries come from
-	/versions.json, fetched ORIGIN-ABSOLUTE on purpose: the manifest is written
-	by scripts/assemble-site.bun.ts at the deployed site root, so frozen
-	archived builds always list the live set of versions without rebuilds.
-	When the manifest is unreachable (dev server, offline), only the label
-	renders.
+	Every version is part of one app, so the entries come from themeConfig at
+	build time (no fetch, no manifest, nothing frozen into an old artifact) and
+	switching versions is ordinary SPA routing: the reader stays on the same
+	page, in a different version, without a document reload.
+
+	Order is the timeline, newest first: next (the unreleased tree), then the
+	release the root serves, then superseded releases. The plugin hands them over
+	in that order — this renders them as given.
 -->
 <script setup lang="ts">
-import { useData } from 'vitepress';
-import { computed, onMounted, ref } from 'vue';
+import { useData, useRoute } from 'vitepress';
+import { computed, ref } from 'vue';
 
 interface VersionEntry {
-  /** Dropdown text, e.g. 'v0.9' or 'next'. */
+  /** Dropdown text: 'next', 'v0.9.0', … */
   readonly label: string;
-  /** URL prefix the version is served under: '/', '/next/', '/v0.9/'. */
-  readonly base: string;
+  /** URL prefix without the leading slash: '', 'next/', 'v0.8.0/'. */
+  readonly prefix: string;
 }
 
-interface VersionsManifest {
-  readonly schemaVersion: number;
-  /** Pre-ordered dropdown entries — the manifest owns the order. */
-  readonly entries?: readonly VersionEntry[];
-  /** The root site — a release build, or the HEAD bootstrap. Always present. */
-  readonly latest: VersionEntry;
-  readonly next: VersionEntry;
-  readonly archived: readonly VersionEntry[];
-}
-
-const { theme, page, site } = useData();
-const manifest = ref<VersionsManifest>();
+const { theme } = useData();
+const route = useRoute();
 const open = ref(false);
 
-const label = computed(() => {
-  // Prefer the live manifest's label for this build's own base — the baked
-  // themeConfig label is frozen inside old tarballs and can go stale.
-  const fromManifest = entries.value.find(
-    (entry) => entry.base === site.value.base,
-  );
-  if (fromManifest !== undefined) return fromManifest.label;
-  const configured: unknown = theme.value.docsVersion;
-  return typeof configured === 'string'
-    ? configured
-    : 'dev';
+const versions = computed<readonly VersionEntry[]>(
+  () => theme.value.versions ?? [],
+);
+
+/** Path within the current version, e.g. 'guide/keys' on /v0.8.0/guide/keys. */
+const current = computed(() => {
+  const path = route.path.replace(/^\//, '');
+  // Longest prefix wins: '' matches everything and must lose to 'v0.8.0/'.
+  const version = [...versions.value]
+    .sort((a, b) => b.prefix.length - a.prefix.length)
+    .find((entry) => path.startsWith(entry.prefix));
+  return {
+    version,
+    page:
+      version === undefined
+        ? path
+        : path.slice(version.prefix.length),
+  };
 });
 
-const entries = computed<readonly VersionEntry[]>(() => {
-  if (manifest.value === undefined) return [];
-  // Render the manifest's pre-ordered entries verbatim — ordering is a
-  // deploy-time decision, never baked into frozen builds. The composition
-  // fallback covers pre-schema-2 manifests only.
-  return (
-    manifest.value.entries ?? [
-      manifest.value.next,
-      manifest.value.latest,
-      ...manifest.value.archived,
-    ]
-  );
-});
-
-onMounted(async () => {
-  try {
-    const response = await fetch('/versions.json');
-    if (response.ok) {
-      manifest.value = await response.json();
-    }
-  } catch {
-    // No manifest reachable: render the label without a dropdown.
-  }
-});
+const label = computed(
+  () => current.value.version?.label ?? 'dev',
+);
 
 /**
- * Same page in another channel; a page that does not exist there falls
- * through to that channel's own 404 (assets 404.html lookup walks up
- * directories, so each version serves its version-scoped 404 page).
+ * The same page in another version. Every version serves the same guide and
+ * reference tree, so the reader lands where they were; a page that a version
+ * doesn't have (an API module added later) falls through to the 404, which is
+ * the honest answer — that page did not exist in that version.
  */
-function hrefFor(base: string): string {
-  const path = page.value.relativePath
-    .replace(/index\.md$/, '')
-    .replace(/\.md$/, '');
-  return base + path;
+function hrefFor(entry: VersionEntry): string {
+  return `/${entry.prefix}${current.value.page}`;
 }
 </script>
 
@@ -100,27 +75,22 @@ function hrefFor(base: string): string {
     >
       {{ label }}
       <span
-        v-if="entries.length"
+        v-if="versions.length > 1"
         class="vs-caret"
         aria-hidden="true"
         >▾</span
       >
     </button>
-    <ul v-if="open && entries.length" class="vs-menu">
-      <li v-for="entry in entries" :key="entry.base">
-        <!--
-          target="_self" is VitePress's documented opt-out from SPA routing
-          (docs/en/guide/routing.md, "linking to non-VitePress pages"): other
-          channels are separate apps under a different base, so the click must
-          be a full document navigation, not a router push.
-        -->
+    <ul v-if="open && versions.length > 1" class="vs-menu">
+      <li v-for="entry in versions" :key="entry.prefix">
+        <!-- In-app routing: versions are pages of one site, not separate apps. -->
         <a
           class="vs-link"
           :class="{
-            'vs-active': entry.base === site.base,
+            'vs-active':
+              entry.prefix === current.version?.prefix,
           }"
-          :href="hrefFor(entry.base)"
-          target="_self"
+          :href="hrefFor(entry)"
           >{{ entry.label }}</a
         >
       </li>

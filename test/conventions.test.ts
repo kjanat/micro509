@@ -1,7 +1,7 @@
-import { Glob } from 'bun';
 import { describe, expect, it } from 'bun:test';
+import { Glob } from 'bun';
 import { VERIFY_ERROR_CODES } from '#micro509/verify';
-import { srcRoot, projectRoot } from '#test/helpers';
+import { projectRoot, srcRoot } from '#test/helpers';
 
 function sourceFiles(): readonly string[] {
 	return [...new Glob('**/*.ts').scanSync({ cwd: srcRoot, absolute: true })];

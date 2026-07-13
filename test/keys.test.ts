@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { X509Certificate } from 'node:crypto';
+import type { KeyPairMaterial } from '#micro509';
 import {
 	createCertificate,
 	decryptRsaOaep,
@@ -44,7 +45,6 @@ import {
 	pemEncode,
 	unwrap,
 } from '#micro509';
-import type { KeyPairMaterial } from '#micro509';
 
 /** Minimal shape every `import*` Result satisfies, success or failure. */
 type FailableImport =

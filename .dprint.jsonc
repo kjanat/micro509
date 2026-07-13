@@ -8,21 +8,20 @@
 		"associations": ["!**/*.*{ts,js}"],
 		"lineWidth": 100,
 		"useTabs": true,
-		"module.sortImportDeclarations": "caseSensitive",
-		"module.sortExportDeclarations": "caseSensitive",
-		"exportDeclaration.sortNamedExports": "caseSensitive",
-		"exportDeclaration.sortTypeOnlyExports": "last",
-		"importDeclaration.sortNamedImports": "caseSensitive",
-		"importDeclaration.sortTypeOnlyImports": "last",
+		"module.sortImportDeclarations": "maintain",
+		"module.sortExportDeclarations": "maintain",
+		"exportDeclaration.sortNamedExports": "maintain",
+		"exportDeclaration.sortTypeOnlyExports": "maintain",
+		"importDeclaration.sortNamedImports": "maintain",
+		"importDeclaration.sortTypeOnlyImports": "maintain"
 	},
 	"json": {
 		"jsonTrailingCommaFiles": [
 			"!biome.jsonc",
 			"**/.vscode/*.json",
 			"**/.zed/*.json",
-			"**/tsconfig*.json",
-		],
-		"associations": ["!**/.openclaw/*.json*", "*.json", "*.jsonc"],
+			"**/tsconfig*.json"
+		]
 	},
 	"shfmt": { "useTabs": true, "binaryNextLine": true, "switchCaseIndent": true },
 	"markdown": { "textWrap": "always", "associations": ["!*.md"] },
@@ -39,10 +38,10 @@
 		"ignoreCommentDirective": "dprint-ignore",
 		"ignoreFileCommentDirective": "dprint-ignore-file",
 		"scriptFormatter": "biome",
-		"associations": ["!**/*.svg", "!**/*.vue"],
+		"associations": ["!**/*.svg", "!**/*.vue"]
 	},
 	"yaml": {
-		"printWidth": 160,
+		"printWidth": 160
 	},
 	"biome": {
 		"lineEnding": "lf",
@@ -69,16 +68,18 @@
 		"javascript.lineWidth": 100,
 		"json.indentWidth": 2,
 		"json.indentStyle": "tab",
-		"json.lineWidth": 100,
+		"json.lineWidth": 100
 	},
 	"exec": {
 		"cwd": "${configDir}",
-		"commands": [{
-			"command": "tombi format - --stdin-filename {{file_path}}",
-			"exts": ["toml"],
-			"cacheKeyFiles": ["tombi.toml"],
-			"setupCommand": "npm i -g tombi"
-		}],
+		"commands": [
+			{
+				"command": "tombi format - --stdin-filename {{file_path}}",
+				"exts": ["toml"],
+				"cacheKeyFiles": ["tombi.toml"],
+				"setupCommand": "npm i -g tombi"
+			}
+		]
 	},
 	"excludes": [
 		"**/.venv",
@@ -87,7 +88,7 @@
 		"**/worker-configuration.d.ts",
 		"**/bun.lock",
 		"**/dist",
-		"**/docs/deno",
+		"**/docs/deno"
 	],
 	"plugins": [
 		"https://plugins.dprint.dev/kjanat/shfmt-1.0.0.wasm",
@@ -101,6 +102,6 @@
 		"https://plugins.dprint.dev/g-plane/markup_fmt-v0.27.3.wasm",
 		"https://plugins.dprint.dev/g-plane/pretty_yaml-v0.6.0.wasm",
 		"https://plugins.dprint.dev/exec-0.7.2.json@6c30bd00dfb176774ece412d0fbf149478269ecc92c55ab2d6f4116938ed993e",
-		"https://plugins.dprint.dev/prettier-0.72.0.json@6e7af2cb2182a5a11358d3adde9ae0ef3b94b7d2e5dcfdd252e3f7c3916541fe",
-	],
+		"https://plugins.dprint.dev/prettier-0.72.0.json@6e7af2cb2182a5a11358d3adde9ae0ef3b94b7d2e5dcfdd252e3f7c3916541fe"
+	]
 }

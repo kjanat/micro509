@@ -168,6 +168,7 @@ dist
 /comparisons/*
 /docs/deno/
 /site/api/**/*.md
+/site/versions/
 deno.lock
 package-lock.json
 pnpm-*.yaml

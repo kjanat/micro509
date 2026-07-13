@@ -51,6 +51,7 @@ import { compareDistinguishedNames } from '#micro509/internal/shared/dn';
 import { pemEncode, splitPemBlocksOrThrow } from '#micro509/pem/pem';
 import type { ErrorResult, Micro509Error } from '#micro509/result/result';
 import { failureResult } from '#micro509/result/result';
+import type { SignatureProfileInput } from '#micro509/x509/certificate';
 import type { NameFieldKey } from '#micro509/x509/name';
 import { nameFieldKeyFromOid } from '#micro509/x509/name';
 import type {
@@ -60,7 +61,6 @@ import type {
 	ParsedRelativeDistinguishedName,
 } from '#micro509/x509/parse';
 import { parseCertificateDerOrThrow } from '#micro509/x509/parse';
-import type { SignatureProfileInput } from '#micro509/x509/certificate';
 
 /** PEM text (may contain multiple CERTIFICATE blocks), raw DER bytes, or an already-parsed certificate. */
 export type Pkcs7CertificateSource = string | Uint8Array | ParsedCertificate;

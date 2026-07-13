@@ -6,6 +6,7 @@ import {
 	parseCertificatePem,
 	unwrap,
 } from '#micro509';
+import { OIDS } from '#micro509/internal/asn1/oids';
 import { pemEncode } from '#micro509/pem';
 import {
 	createPfx,
@@ -19,7 +20,6 @@ import {
 	parsePkcs12MacDataOrThrow,
 	verifyPkcs7SignedData,
 } from '#micro509/pkcs';
-import { OIDS } from '#micro509/internal/asn1/oids';
 import { createCmsSignedDataWithSignedAttrs } from '#test/helpers';
 
 describe('pkcs domain', () => {

@@ -13,4 +13,5 @@ jobs:
       - run: dprint config update -yr
         if: github.ref == 'refs/heads/master' && github.event_name == 'push'
       - run: dprint fmt --allow-no-files --diff --excludes .github
+      - run: bunx @biomejs/biome check --fix
       - uses: autofix-ci/action@c5b2d67aa2274e7b5a18224e8171550871fc7e4a # v1.3.4

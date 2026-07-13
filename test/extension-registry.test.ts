@@ -6,7 +6,6 @@ import {
 	parseCertificateSigningRequestDer,
 	unwrap,
 } from '#micro509';
-import { exportSpkiDer, generateKeyPair } from '#micro509/keys';
 import { toHex } from '#micro509/internal/asn1/asn1';
 import { OIDS } from '#micro509/internal/asn1/oids';
 import type {
@@ -18,6 +17,7 @@ import {
 	getExtensionDefinition,
 	listExtensionDefinitions,
 } from '#micro509/internal/x509/extension-registry';
+import { exportSpkiDer, generateKeyPair } from '#micro509/keys';
 
 function applyDefinition<TParsed, TInput>(
 	definition: ExtensionDefinition<TParsed, TInput>,

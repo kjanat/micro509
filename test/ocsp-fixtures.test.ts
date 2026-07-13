@@ -10,8 +10,8 @@ import {
 	parseCertificatePem,
 	parseOcspRequestPemOrThrow,
 	parseOcspResponseDerOrThrow,
-	validateOcspResponse,
 	unwrap,
+	validateOcspResponse,
 } from '#micro509';
 import { childrenOf } from '#micro509/internal/asn1/asn1';
 import {

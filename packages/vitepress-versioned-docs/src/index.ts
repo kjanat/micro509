@@ -1,0 +1,776 @@
+/**
+ * VitePress plugin: every released version of the docs, served from one build.
+ *
+ * One `vitepress build` renders, side by side:
+ *   - `/`           the newest release (its pages, its API, its library)
+ *   - `/next/`      the checked-out tree
+ *   - `/vX.Y.Z/`    every superseded release, one route tree each
+ *
+ * A version's pages are *materialized*, not frozen: each release's markdown is
+ * read straight out of its git tag, and its API reference is regenerated from
+ * that tag's sources. VitePress renders them like any other page, so archived
+ * versions get today's theme, today's version switcher, and in-app routing
+ * between versions. Nothing about the presentation is baked into an artifact,
+ * so nothing needs re-baking when the presentation changes.
+ *
+ * The one thing that cannot be re-derived is the *compiled library* an old
+ * version's runnable examples import. That comes from an artifact attached to
+ * the release (`releases.asset`), extracted to `<prefix>vendor/<name>/` — the
+ * exact bytes that release published, never a rebuild of old sources.
+ *
+ * Nothing here knows the host project: every path, manifest and name arrives
+ * through `VersionedDocsOptions`. The caller owns the layout; this owns the
+ * routing.
+ *
+ * @module
+ */
+import fs from 'node:fs';
+import fsp from 'node:fs/promises';
+import path from 'node:path';
+import * as tar from 'tar';
+import type {
+	DefaultTheme,
+	HeadConfig,
+	MarkdownRenderer,
+	PageData,
+	Plugin,
+	SiteConfig,
+} from 'vitepress';
+
+/** Where the versions come from, and where their pieces are put. */
+export interface VersionedDocsOptions {
+	/** Working tree of the project being documented — the `/next/` channel. */
+	readonly repoRoot: string;
+	/** Directory VitePress globs for pages, relative to its `srcDir`. */
+	readonly siteRoot: string;
+	/** Where materialized per-version pages are written (gitignore this). */
+	readonly versionsDir: string;
+	/** Where downloaded tag trees and artifacts are kept between builds. */
+	readonly cacheDir: string;
+	/** The checked-out tree's compiled library, served at `/next/vendor/`. */
+	readonly distDir: string;
+	/** Version label for the checked-out tree, e.g. `v1.4.0-dev`. */
+	readonly devLabel: string;
+
+	/** Page paths taken verbatim from a tag, relative to the repository root. */
+	readonly pages: readonly string[];
+	/**
+	 * Everything else a tag needs for `generateApi` to run against it — sources,
+	 * manifests. Together with `pages`, this is all that is taken from a tag: the
+	 * rest of the repository (tool configs above all) stays out of the cache.
+	 */
+	readonly sources: readonly string[];
+
+	/** The GitHub releases that become versions. */
+	readonly releases: {
+		/** `owner/repo`. */
+		readonly slug: string;
+		/** Release asset holding the compiled library, e.g. `dist.tar.gz`. */
+		readonly asset: string;
+		/** Path within that asset to extract, e.g. `package/dist`. */
+		readonly assetPath: string;
+		/** Skip the releases API entirely; build the tree unversioned. */
+		readonly offline?: boolean;
+		/** Bearer token for the releases API, if any. */
+		readonly token?: string | undefined;
+	};
+
+	/** The library each version serves, and how pages import it. */
+	readonly library: {
+		/** Bare specifier root, e.g. `micro509` — becomes `<name>/keys`. */
+		readonly name: string;
+		/** Subpath -> file within the library, as a package.json `exports` map. */
+		readonly exports: Readonly<Record<string, string | { readonly default: string }>>;
+		/** Prefix to strip from those files, e.g. `./dist/`. */
+		readonly exportsPrefix: string;
+	};
+
+	/** Regenerate one version's API reference. Called per tag, and for the tree. */
+	readonly generateApi: (target: { readonly root: string; readonly outDir: string }) => void;
+
+	/** Fail the build above this many output files. */
+	readonly fileGuardrail: number;
+}
+
+export type DocsChannel = 'latest' | 'next' | 'archive';
+
+/** A page a version ships, as it titles itself. */
+export interface DocsPage {
+	/** File stem: `keys` for `guide/keys.md`, `index` for a section landing. */
+	readonly slug: string;
+	/** The page's own title — frontmatter `title`, else its first heading. */
+	readonly title: string;
+}
+
+/** The pages a version ships, per section. Sidebars are built from these. */
+export type DocsSections = Readonly<Record<string, readonly DocsPage[]>>;
+
+/** One version of the docs, as served. */
+export interface DocsVersion {
+	/** Release tag, or the dev label for the checked-out tree. */
+	readonly tag: string;
+	/** Dropdown text. */
+	readonly label: string;
+	readonly channel: DocsChannel;
+	/** URL prefix without the leading slash: `''`, `'next/'`, `'v0.8.0/'`. */
+	readonly prefix: string;
+	/** srcDir-relative directory holding this version's markdown. */
+	readonly srcRoot: string;
+	/** This version's compiled library, copied to `<prefix>vendor/`. */
+	readonly distDir: string;
+	/** The pages this version ships — not the pages the tree ships. */
+	readonly sections: DocsSections;
+	/** The release this version was cut from; absent for the checked-out tree. */
+	readonly release?: {
+		readonly url: string;
+		readonly published: string | null;
+	};
+}
+
+interface ReleaseAsset {
+	readonly name: string;
+	readonly browser_download_url: string;
+}
+
+interface Release {
+	readonly tag_name: string;
+	readonly draft: boolean;
+	readonly prerelease: boolean;
+	readonly assets: readonly ReleaseAsset[];
+	/** The source archive of the tag, as the API addresses it. */
+	readonly tarball_url: string;
+	readonly html_url: string;
+	readonly published_at: string | null;
+}
+
+/** A stable release carrying the library artifact. */
+interface DocsRelease {
+	readonly tag: string;
+	readonly version: readonly [number, number, number];
+	/** The release's own source archive — not a URL this reconstructs. */
+	readonly tarballUrl: string;
+	readonly assetUrl: string;
+	readonly url: string;
+	readonly published: string | null;
+}
+
+function parseStableVersion(tag: string): readonly [number, number, number] | undefined {
+	const match = tag.match(/^v(\d+)\.(\d+)\.(\d+)$/);
+	if (!match) return undefined;
+	return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+/**
+ * Stable releases carrying the library artifact, newest first.
+ *
+ * Empty on any failure (no token, rate limit, no network): the site then builds
+ * as a single unversioned tree rather than failing, so a docs deploy never
+ * hinges on the releases API being up.
+ */
+async function fetchReleases(options: VersionedDocsOptions): Promise<readonly DocsRelease[]> {
+	const headers: Record<string, string> = {
+		accept: 'application/vnd.github+json',
+		'user-agent': 'vitepress-versioned-docs',
+	};
+	if (options.releases.token !== undefined && options.releases.token !== '') {
+		headers.authorization = `Bearer ${options.releases.token}`;
+	}
+
+	let releases: readonly Release[];
+	try {
+		const response = await fetch(
+			`https://api.github.com/repos/${options.releases.slug}/releases?per_page=100`,
+			{ headers },
+		);
+		if (!response.ok) {
+			console.warn(`[versions] releases API ${response.status}; building unversioned`);
+			return [];
+		}
+		releases = await response.json();
+	} catch (error) {
+		console.warn(`[versions] releases API unreachable (${String(error)}); building unversioned`);
+		return [];
+	}
+
+	return releases
+		.flatMap((release): DocsRelease[] => {
+			if (release.draft || release.prerelease) return [];
+			const version = parseStableVersion(release.tag_name);
+			if (version === undefined) return [];
+			const asset = release.assets.find((candidate) => candidate.name === options.releases.asset);
+			if (asset === undefined) {
+				console.warn(`[versions] ${release.tag_name} has no ${options.releases.asset}; skipping`);
+				return [];
+			}
+			return [
+				{
+					tag: release.tag_name,
+					version,
+					tarballUrl: release.tarball_url,
+					assetUrl: asset.browser_download_url,
+					url: release.html_url,
+					published: release.published_at,
+				},
+			];
+		})
+		.sort(
+			(a, b) =>
+				b.version[0] - a.version[0] || b.version[1] - a.version[1] || b.version[2] - a.version[2],
+		);
+}
+
+/**
+ * Download a gzipped tarball and unpack it into `into`.
+ *
+ * Extraction goes through the `tar` dependency rather than a `tar` binary: the
+ * binary is whatever the build machine happens to have (and Windows has none),
+ * while the dependency is pinned by the lockfile and identical everywhere.
+ */
+async function unpack(
+	url: string,
+	into: string,
+	options: {
+		/** Leading path components to drop when writing files out. */
+		readonly strip: number;
+		/**
+		 * Which archive entries to take, by their path *inside the archive*.
+		 *
+		 * Never "all of them" for a repository archive: it carries the project's
+		 * tool configs (biome.json, tsconfig.json), and anything later scanning the
+		 * cache directory would find them and honor them.
+		 */
+		readonly wanted: (entry: string) => boolean;
+		readonly token?: string | undefined;
+	},
+): Promise<void> {
+	const headers: Record<string, string> = { 'user-agent': 'vitepress-versioned-docs' };
+	if (options.token !== undefined && options.token !== '') {
+		headers.authorization = `Bearer ${options.token}`;
+	}
+	const response = await fetch(url, { headers });
+	if (!response.ok) throw new Error(`[versions] ${url} -> ${response.status}`);
+
+	const blob = `${into}.tar.gz`;
+	await fsp.mkdir(path.dirname(blob), { recursive: true });
+	await fsp.writeFile(blob, Buffer.from(await response.arrayBuffer()));
+
+	await fsp.rm(into, { recursive: true, force: true });
+	await fsp.mkdir(into, { recursive: true });
+	await tar.x({ file: blob, cwd: into, strip: options.strip, filter: options.wanted });
+	await fsp.rm(blob, { force: true });
+}
+
+/** `src` matches `src` and `src/x509/parse.ts`, but not `srcery`. */
+function under(paths: readonly string[], entry: string): boolean {
+	return paths.some((wanted) => entry === wanted || entry.startsWith(`${wanted}/`));
+}
+
+/**
+ * A release's source tree, downloaded once into the build cache.
+ *
+ * Fetched from the release's own `tarball_url` rather than read out of the local
+ * clone: CI clones shallow (the tag object isn't there), `git` is not a
+ * dependency of this package, and the URL is the one the API gave us for that
+ * release — not one reconstructed from a slug and a tag.
+ */
+async function ensureTagTree(release: DocsRelease, options: VersionedDocsOptions): Promise<string> {
+	const tree = path.join(options.cacheDir, release.tag, 'tree');
+	const marker = path.join(tree, '.complete');
+	if (fs.existsSync(marker)) return tree;
+
+	// The archive nests everything under `<owner>-<repo>-<sha>/`, so entries match
+	// against their path with that first component dropped.
+	const paths = [...options.sources, ...options.pages];
+	await unpack(release.tarballUrl, tree, {
+		strip: 1,
+		wanted: (entry) => under(paths, entry.split('/').slice(1).join('/')),
+		token: options.releases.token,
+	});
+	await fsp.writeFile(marker, '');
+	return tree;
+}
+
+/** The release's library artifact, downloaded and unpacked once. */
+async function ensureTagLibrary(
+	release: DocsRelease,
+	options: VersionedDocsOptions,
+): Promise<string> {
+	const lib = path.join(options.cacheDir, release.tag, 'lib');
+	const marker = path.join(lib, '.complete');
+	if (fs.existsSync(marker)) return lib;
+
+	const assetPath = options.releases.assetPath;
+	await unpack(release.assetUrl, lib, {
+		strip: assetPath.split('/').length,
+		wanted: (entry) => under([assetPath], entry),
+		token: options.releases.token,
+	});
+	await fsp.writeFile(marker, '');
+	return lib;
+}
+
+/** Copy a tag's authored pages into the version's page directory. */
+async function materializePages(
+	tree: string,
+	target: string,
+	options: VersionedDocsOptions,
+): Promise<void> {
+	await fsp.rm(target, { recursive: true, force: true });
+	await fsp.mkdir(target, { recursive: true });
+	for (const page of options.pages) {
+		const source = path.join(tree, page);
+		if (!fs.existsSync(source)) continue;
+		await fsp.cp(source, path.join(target, path.basename(page)), { recursive: true });
+	}
+}
+
+/** What a page calls itself: frontmatter `title`, else its first heading, else its slug. */
+function titleOf(file: string, slug: string): string {
+	const source = fs.readFileSync(file, 'utf8');
+	const frontmatter = source.match(/^---\n([\s\S]*?)\n---/);
+	const declared = frontmatter?.[1]?.match(/^title:\s*(.+)$/m)?.[1]?.trim();
+	if (declared !== undefined && declared !== '') return declared.replace(/^['"]|['"]$/g, '');
+	return source.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? slug;
+}
+
+/**
+ * The pages a directory holds, titled by the pages themselves.
+ *
+ * Read off disk rather than declared by the caller: each version ships the pages
+ * that existed at its tag, and a hardcoded list would link an old version at
+ * pages it never had, and hide the ones it did.
+ */
+function sectionPages(dir: string): readonly DocsPage[] {
+	if (!fs.existsSync(dir)) return [];
+	return fs
+		.readdirSync(dir)
+		.filter((entry) => entry.endsWith('.md'))
+		.map((entry) => {
+			const slug = entry.replace(/\.md$/, '');
+			return { slug, title: titleOf(path.join(dir, entry), slug) };
+		})
+		.sort((a, b) => a.slug.localeCompare(b.slug));
+}
+
+/** Every section directly under a version's page root. */
+function sectionsOf(pageRoot: string): DocsSections {
+	if (!fs.existsSync(pageRoot)) return {};
+	const sections: Record<string, readonly DocsPage[]> = {};
+	for (const entry of fs.readdirSync(pageRoot, { withFileTypes: true })) {
+		if (entry.isDirectory()) sections[entry.name] = sectionPages(path.join(pageRoot, entry.name));
+	}
+	return sections;
+}
+
+/**
+ * Resolve every version the site serves, in timeline order:
+ * next (the tree), latest (the newest release), then archives newest-first.
+ *
+ * Materializes as it goes, so by the time VitePress globs for pages they are
+ * files on disk like any other.
+ */
+async function resolveVersions(options: VersionedDocsOptions): Promise<readonly DocsVersion[]> {
+	const releases = options.releases.offline === true ? [] : await fetchReleases(options);
+
+	const treeRoot = path.join(options.repoRoot, options.siteRoot);
+	options.generateApi({ root: options.repoRoot, outDir: path.join(treeRoot, 'api') });
+	const treeSections = sectionsOf(treeRoot);
+
+	if (releases.length === 0) {
+		console.log('[versions] no releases resolved; serving the checked-out tree');
+		await fsp.rm(options.versionsDir, { recursive: true, force: true });
+		return [
+			{
+				tag: options.devLabel,
+				label: options.devLabel,
+				channel: 'latest',
+				prefix: '',
+				srcRoot: options.siteRoot,
+				distDir: options.distDir,
+				sections: treeSections,
+			},
+		];
+	}
+
+	const versions: DocsVersion[] = [
+		{
+			tag: options.devLabel,
+			label: 'next',
+			channel: 'next',
+			prefix: 'next/',
+			srcRoot: options.siteRoot,
+			distDir: options.distDir,
+			sections: treeSections,
+		},
+	];
+
+	await fsp.rm(options.versionsDir, { recursive: true, force: true });
+	const versionsRoot = path.relative(options.repoRoot, options.versionsDir);
+
+	for (const [index, release] of releases.entries()) {
+		const isLatest = index === 0;
+		const key = isLatest ? 'latest' : release.tag;
+		const pageRoot = path.join(options.versionsDir, key);
+
+		const tree = await ensureTagTree(release, options);
+		const library = await ensureTagLibrary(release, options);
+		await materializePages(tree, pageRoot, options);
+		options.generateApi({ root: tree, outDir: path.join(pageRoot, 'api') });
+
+		versions.push({
+			tag: release.tag,
+			label: release.tag,
+			channel: isLatest ? 'latest' : 'archive',
+			prefix: isLatest ? '' : `${release.tag}/`,
+			srcRoot: path.posix.join(versionsRoot, key),
+			distDir: library,
+			sections: sectionsOf(pageRoot),
+			release: { url: release.url, published: release.published },
+		});
+	}
+
+	console.log(
+		`[versions] root=${versions[1]?.label}, next, archives=[${versions
+			.slice(2)
+			.map((version) => version.label)
+			.join(', ')}]`,
+	);
+	return versions;
+}
+
+/** The version a page belongs to, by its (post-rewrite) route path. */
+function versionOfPage(page: string, versions: readonly DocsVersion[]): DocsVersion | undefined {
+	return [...versions]
+		.sort((a, b) => b.prefix.length - a.prefix.length)
+		.find((version) => page.startsWith(version.prefix));
+}
+
+/** Where a version's library is served from, e.g. `/v0.8.0/vendor/micro509`. */
+function vendorBase(version: DocsVersion, options: VersionedDocsOptions): string {
+	return `/${version.prefix}vendor/${options.library.name}`;
+}
+
+/**
+ * The import map resolving a page's bare specifiers to its own version's
+ * library, plus the entry URLs worth preloading.
+ *
+ * Import maps are not base-rewritten by VitePress, so the version prefix is
+ * baked in here.
+ */
+function importMapFor(
+	version: DocsVersion,
+	options: VersionedDocsOptions,
+): { readonly importMap: string; readonly entries: readonly string[] } {
+	const base = vendorBase(version, options);
+	const imports = Object.fromEntries(
+		Object.entries(options.library.exports)
+			.filter(
+				(entry): entry is [string, { readonly default: string }] => typeof entry[1] === 'object',
+			)
+			.map(([subpath, target]): [string, string] => [
+				subpath === '.'
+					? options.library.name
+					: `${options.library.name}/${subpath.slice('./'.length)}`,
+				`${base}/${target.default.replace(options.library.exportsPrefix, '')}`,
+			]),
+	);
+	return { importMap: JSON.stringify({ imports }), entries: Object.values(imports) };
+}
+
+const VENDOR_CONTENT_TYPES: Record<string, string> = {
+	'.js': 'text/javascript; charset=utf-8',
+	'.mjs': 'text/javascript; charset=utf-8',
+	'.map': 'application/json; charset=utf-8',
+	'.ts': 'text/plain; charset=utf-8',
+	'.txt': 'text/plain; charset=utf-8',
+};
+
+/**
+ * Dev-server half: serve every version's library under its own `/vendor/` path.
+ *
+ * The build gets these files from `buildEnd`; in dev they are read from disk.
+ * The import map injected in dev is the root version's, so a versioned page's
+ * examples run the root library while the dev server is up — only the static
+ * build maps each page to its own version, and that is what ships.
+ */
+function vendorPlugin(versions: readonly DocsVersion[], options: VersionedDocsOptions): Plugin {
+	return {
+		name: 'vitepress-versioned-docs',
+		configureServer(server) {
+			server.middlewares.use((req, res, next) => {
+				const url = (req.url ?? '').split('?')[0] ?? '';
+				for (const version of versions) {
+					const base = `${vendorBase(version, options)}/`;
+					if (!url.startsWith(base)) continue;
+					const file = path.resolve(version.distDir, url.slice(base.length));
+					// Containment: never serve outside the version's library.
+					if (!file.startsWith(version.distDir + path.sep) || !fs.existsSync(file)) break;
+					res.setHeader(
+						'Content-Type',
+						VENDOR_CONTENT_TYPES[path.extname(file)] ?? 'application/octet-stream',
+					);
+					res.end(fs.readFileSync(file));
+					return;
+				}
+				next();
+			});
+		},
+	};
+}
+
+async function countFiles(dir: string): Promise<number> {
+	let count = 0;
+	for (const entry of await fsp.readdir(dir, { withFileTypes: true, recursive: true })) {
+		if (entry.isFile()) count += 1;
+	}
+	return count;
+}
+
+/** Ship each version's library, publish the version index, hold the file budget. */
+async function emitAssets(
+	versions: readonly DocsVersion[],
+	options: VersionedDocsOptions,
+	siteConfig: SiteConfig,
+): Promise<void> {
+	const outDir = siteConfig.outDir;
+
+	for (const version of versions) {
+		await fsp.cp(
+			version.distDir,
+			path.join(outDir, version.prefix, 'vendor', options.library.name),
+			{
+				recursive: true,
+			},
+		);
+	}
+
+	const index = {
+		schemaVersion: 3,
+		versions: versions.map((version) => ({
+			label: version.label,
+			tag: version.tag,
+			channel: version.channel,
+			base: `/${version.prefix}`,
+			releasedAt: version.release?.published ?? null,
+			releaseUrl: version.release?.url ?? null,
+		})),
+	};
+	await fsp.writeFile(path.join(outDir, 'versions.json'), `${JSON.stringify(index, null, '\t')}\n`);
+
+	const files = await countFiles(outDir);
+	console.log(`[versions] ${files} files across ${versions.length} versions`);
+	if (files > options.fileGuardrail) {
+		throw new Error(
+			`[versions] ${files} files exceeds the ${options.fileGuardrail}-file budget. Serve fewer versions, or ship less per version.`,
+		);
+	}
+}
+
+/** A named group of pages, in reading order, by slug. */
+export interface SidebarGroup {
+	readonly text: string;
+	readonly slugs: readonly string[];
+}
+
+/** Reading order per section. Pages a version lacks are skipped; extras append. */
+export type SidebarOrder = Readonly<Record<string, readonly SidebarGroup[]>>;
+
+/** `index` is a section's landing page: `/guide/`, never `/guide/index`. */
+function linkTo(section: string, page: DocsPage): string {
+	return page.slug === 'index' ? `/${section}/` : `/${section}/${page.slug}`;
+}
+
+/**
+ * One section's sidebar for one version: the declared reading order, filled with
+ * the pages that version ships, titled as those pages title themselves.
+ */
+function sectionSidebar(
+	section: string,
+	groups: readonly SidebarGroup[],
+	pages: readonly DocsPage[],
+): DefaultTheme.SidebarItem[] {
+	const bySlug = new Map(pages.map((page) => [page.slug, page]));
+	const ordered = new Set(groups.flatMap((group) => group.slugs));
+
+	const items: DefaultTheme.SidebarItem[] = groups.map((group) => ({
+		text: group.text,
+		items: group.slugs
+			.map((slug) => bySlug.get(slug))
+			.filter((page) => page !== undefined)
+			.map((page) => ({ text: page.title, link: linkTo(section, page) })),
+	}));
+
+	const rest = pages.filter((page) => !ordered.has(page.slug));
+	const last = items.at(-1);
+	if (rest.length > 0 && last?.items !== undefined) {
+		last.items = [
+			...last.items,
+			...rest.map((page) => ({ text: page.title, link: linkTo(section, page) })),
+		];
+	}
+	return items.filter((group) => (group.items?.length ?? 0) > 0);
+}
+
+/** A frontmatter entry carrying a link — a hero action, as authored. */
+function isLinked(value: unknown): value is { readonly link: string } {
+	return (
+		typeof value === 'object' && value !== null && 'link' in value && typeof value.link === 'string'
+	);
+}
+
+/** A link to a page rather than to a file. */
+function isPageLink(href: string): boolean {
+	return href.endsWith('.md') || /\.html(?:#|$)/.test(href);
+}
+
+/**
+ * A relative page link, resolved against the routes its version serves.
+ *
+ * Pages of an old version reach files that sit outside any version (a repository
+ * doc, a directory up). Under a version prefix such a link resolves to
+ * `/v0.3.0/docs/…`, which nothing serves — and those files are not versioned, so
+ * the link belongs to the one copy at the root. Links within the version's own
+ * sections already resolve correctly and are left alone.
+ */
+function outOfVersionLink(href: string, page: string, version: DocsVersion): string {
+	const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(page), href));
+	if (!resolved.startsWith(version.prefix)) return href;
+
+	const target = resolved.slice(version.prefix.length);
+	const section = target.split('/')[0] ?? '';
+	if (section in version.sections || target === 'index.md') return href;
+	return `/${target}`;
+}
+
+/** Where a link on a page actually points, once its version is accounted for. */
+function routeOf(
+	href: string,
+	page: string,
+	version: DocsVersion | undefined,
+	versionedLink: (href: string, page: string) => string,
+): string {
+	if (href.startsWith('/')) return versionedLink(href, page);
+	if (version === undefined || version.prefix === '' || !isPageLink(href)) return href;
+	return outOfVersionLink(href, page, version);
+}
+
+/** Everything a VitePress config needs to serve all versions from one app. */
+export interface VersionedDocs {
+	/** Every version, in timeline order: next, the root release, then archives. */
+	readonly versions: readonly DocsVersion[];
+	/** Dev-server support: each version's library under its own `/vendor/`. */
+	readonly plugin: Plugin;
+	/** Source path -> route path. */
+	readonly rewrites: (id: string) => string;
+	/** Keeps a page's links inside the version it belongs to. */
+	readonly markdown: (md: MarkdownRenderer) => void;
+	/** Versions the hero actions, which are frontmatter rather than links. */
+	readonly transformPageData: (pageData: PageData) => void;
+	/** Only the root version is indexable; the rest are copies of it. */
+	readonly head: (page: string) => HeadConfig[];
+	/** Points a page's bare imports at its own version's library. */
+	readonly html: (html: string, page: string) => string;
+	/** Ships each version's library, writes the index, enforces the budget. */
+	readonly buildEnd: (siteConfig: SiteConfig) => Promise<void>;
+	/** Every version's sidebar, keyed by the paths it serves. */
+	readonly sidebar: (order: SidebarOrder) => DefaultTheme.SidebarMulti;
+	/** True for pages the root version serves — the sitemap's only entries. */
+	readonly isIndexable: (page: string) => boolean;
+}
+
+export async function versionedDocs(options: VersionedDocsOptions): Promise<VersionedDocs> {
+	const versions = await resolveVersions(options);
+	const at = (page: string): DocsVersion | undefined => versionOfPage(page, versions);
+	const tree = versions.find((version) => version.srcRoot === options.siteRoot);
+
+	const sectionLink = new RegExp(`^/(${Object.keys(tree?.sections ?? {}).join('|')})(/|#|$)`);
+	const versionedLink = (href: string, page: string): string => {
+		if (!sectionLink.test(href)) return href;
+		const version = at(page);
+		return version === undefined || version.prefix === ''
+			? href
+			: `/${version.prefix}${href.slice(1)}`;
+	};
+
+	return {
+		versions,
+		plugin: vendorPlugin(versions, options),
+
+		rewrites: (id) => {
+			for (const version of versions) {
+				if (version.srcRoot === options.siteRoot) continue;
+				const prefix = `${version.srcRoot}/`;
+				if (id.startsWith(prefix)) return `${version.prefix}${id.slice(prefix.length)}`;
+			}
+			const treePrefix = `${options.siteRoot}/`;
+			if (id.startsWith(treePrefix)) {
+				return `${tree?.prefix ?? ''}${id.slice(treePrefix.length)}`;
+			}
+			return id;
+		},
+
+		markdown: (md) => {
+			const previous =
+				md.renderer.rules.link_open ??
+				((tokens, idx, opts, _env, self) => self.renderToken(tokens, idx, opts));
+
+			md.renderer.rules.link_open = (tokens, idx, opts, env, self) => {
+				const token = tokens[idx];
+				const href = token?.attrGet('href');
+				const page: string = env.relativePath ?? '';
+				if (token !== undefined && href !== null && href !== undefined) {
+					token.attrSet('href', routeOf(href, page, at(page), versionedLink));
+				}
+				return previous(tokens, idx, opts, env, self);
+			};
+		},
+
+		transformPageData: (pageData) => {
+			const hero: { readonly actions?: unknown } | undefined = pageData.frontmatter.hero;
+			const actions: unknown = hero?.actions;
+			if (hero === undefined || !Array.isArray(actions)) return;
+			pageData.frontmatter = {
+				...pageData.frontmatter,
+				hero: {
+					...hero,
+					actions: actions.map((action: unknown) =>
+						isLinked(action)
+							? { ...action, link: versionedLink(action.link, pageData.relativePath) }
+							: action,
+					),
+				},
+			};
+		},
+
+		head: (page) =>
+			at(page)?.channel === 'latest' ? [] : [['meta', { name: 'robots', content: 'noindex' }]],
+
+		html: (html, page) => {
+			const version = at(page);
+			if (version === undefined) return html;
+			const { importMap, entries } = importMapFor(version, options);
+			const preloads = entries.map((url) => `<link rel="modulepreload" href="${url}">`).join('\n');
+			return html.replace(
+				'<head>',
+				`<head>\n${preloads}\n<script type="importmap">${importMap}</script>`,
+			);
+		},
+
+		buildEnd: (siteConfig) => emitAssets(versions, options, siteConfig),
+
+		sidebar: (order) =>
+			Object.fromEntries(
+				versions.flatMap((version) =>
+					Object.entries(order).map(([section, groups]) => [
+						`/${version.prefix}${section}/`,
+						{
+							base: version.prefix === '' ? '' : `/${version.prefix.slice(0, -1)}`,
+							items: sectionSidebar(section, groups, version.sections[section] ?? []),
+						},
+					]),
+				),
+			),
+
+		isIndexable: (page) => at(page)?.channel === 'latest',
+	};
+}

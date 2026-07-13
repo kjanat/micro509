@@ -10,8 +10,8 @@ import {
 	parsePkcs7CertBagPem,
 	parsePkcs7SignedDataDer,
 	parsePkcs7SignedDataPem,
-	verifyPkcs7SignedData,
 	unwrap,
+	verifyPkcs7SignedData,
 } from '#micro509';
 import {
 	concatBytes,

@@ -17,9 +17,8 @@
 
 import { Buffer } from 'node:buffer';
 import { join } from 'node:path';
-
-import { runOpenSsl, withTempDir } from '#test/oracles/openssl';
 import type { CertSpec, FuzzKeyAlgo, FuzzSan } from '#test/fuzz/spec';
+import { runOpenSsl, withTempDir } from '#test/oracles/openssl';
 
 /** nameopt shared with the comparator: RFC2253-like but keeps UTF-8 raw. */
 export const NAME_OPT = 'esc_2253,utf8,sep_comma_plus,dn_rev,sname';

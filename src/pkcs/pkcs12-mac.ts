@@ -7,8 +7,6 @@
  * @module
  */
 
-import type { ErrorResult, Micro509Error } from '#micro509/result/result';
-import { rethrowIfInvariant, failureResult, successResult } from '#micro509/result/result';
 import {
 	decodeNonNegativeIntegerNumber,
 	decodeObjectIdentifier,
@@ -27,6 +25,8 @@ import {
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { describeHashAlgorithm } from '#micro509/internal/crypto/algorithm-names';
 import { getCrypto } from '#micro509/internal/crypto/webcrypto';
+import type { ErrorResult, Micro509Error } from '#micro509/result/result';
+import { failureResult, rethrowIfInvariant, successResult } from '#micro509/result/result';
 
 /** Input for {@linkcode createPkcs12MacData}. */
 export interface Pkcs12MacOptions {

@@ -98,66 +98,74 @@ jobs:
     needs: [validate, publish-jsr, publish-npm]
     if: needs.validate.outputs.is_tag == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions: { contents: write }
-    env:
-      GH_TOKEN: ${{ github.token }}
-      GH_REPO: ${{ github.repository }}
-      TAG: ${{ github.ref_name }}
-      PRERELEASE: ${{ needs.validate.outputs.prerelease }}
-    steps:
-      - name: Publish GitHub Release
-        run: |
-          RELEASE_ARGS=()
-          if [[ "${PRERELEASE}" == "true" ]]; then RELEASE_ARGS+=(--prerelease); fi
-
-          gh release edit "${TAG}" --draft=false "${RELEASE_ARGS[@]}" 2>/dev/null \
-          || gh release create "${TAG}" --generate-notes "${RELEASE_ARGS[@]}"
-
-  # Freeze this release's docs as tarballs on the GitHub Release, then poke
-  # the Cloudflare deploy hook so scripts/assemble-site.bun.ts re-assembles
-  # the live site with the new root. Stable releases only: prereleases live
-  # on /next/. Runs after publish-npm so the site root can never claim a
-  # version npm does not have.
-  docs-assets:
-    name: Docs assets
-    needs: [validate, publish-npm, release]
-    if: needs.validate.outputs.is_tag == 'true' && needs.validate.outputs.is_stable == 'true'
-    runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions: { contents: write }
-    env:
-      GH_TOKEN: ${{ github.token }}
-      GH_REPO: ${{ github.repository }}
-      TAG: ${{ github.ref_name }}
-      VERSION: ${{ needs.validate.outputs.version }}
     steps:
       - uses: actions/checkout@v7
         with: { persist-credentials: false }
       - uses: ./.github/actions/setup-ts
-        with: { install-bun: "true" }
-      - run: runner install -f
-      - name: Build root flavor (served at /)
+        with: { install-node: true, update-npm: true }
+      - shell: pwsh
         env:
-          DOCS_BASE: /
-          DOCS_CHANNEL: latest
-          DOCS_VERSION: v${{ needs.validate.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          OUTPUTS: "${{ toJSON(needs.validate.outputs) }}"
         run: |
-          bun run site:build:flavor
-          tar -czf "docs-${TAG}-root.tar.gz" -C site/.vitepress/dist .
-      - name: Build archive flavor (served at /vX.Y/ once superseded)
-        run: |
-          MINOR="v$(cut -d. -f1-2 <<<"${VERSION}")"
-          echo "MINOR=${MINOR}" >> "${GITHUB_ENV}"
-          DOCS_BASE="/${MINOR}/" DOCS_CHANNEL=archive DOCS_VERSION="${TAG}" bun run site:build:flavor
-          tar -czf "docs-${TAG}-archive.tar.gz" -C site/.vitepress/dist .
-      - name: Attach tarballs to the release
-        run: gh release upload "${TAG}" "docs-${TAG}-root.tar.gz" "docs-${TAG}-archive.tar.gz" --clobber
-      - name: Trigger docs deploy
+          $outputs = ConvertFrom-Json $env:OUTPUTS
+          $pkg = Get-Content package.json | ConvertFrom-Json
+          $spec = "{0}@{1}" -f $pkg.name, $pkg.version
+          $asset = 'dist.tar.gz'
+
+          $release = gh release view $env:TAG --json isDraft,isImmutable,assets 2>$null | ConvertFrom-Json
+          $attached = $release.assets.name -contains $asset
+          $needsAsset = $outputs.is_stable -eq 'true' -and -not $attached
+
+          if ($needsAsset -and $release -and -not $release.isDraft -and $release.isImmutable) {
+            "::error::{0} is published and immutable, and carries no {1}" -f $env:TAG, $asset
+            exit 1
+          }
+
+          $files = @()
+          if ($needsAsset) {
+            $blob = $null
+            foreach ($attempt in 1..10) {
+              $blob = npm pack $spec --silent 2>$null
+              if ($LASTEXITCODE -eq 0 -and $blob) { break }
+              "::notice::{0} not on the registry yet (attempt {1}/10)" -f $spec, $attempt
+              $blob = $null
+              Start-Sleep -Seconds 15
+            }
+            if (-not $blob) { "::error::{0} never appeared on the registry" -f $spec; exit 1 }
+
+            Move-Item -Force $blob $asset
+            $files = @($asset)
+          }
+
+          $releaseArgs = @()
+          if ($outputs.prerelease -eq 'true') { $releaseArgs += '--prerelease' }
+
+          if ($release) {
+            if ($files) { gh release upload $env:TAG @files --clobber; if ($LASTEXITCODE -ne 0) { exit 1 } }
+            gh release edit $env:TAG --draft=false @releaseArgs
+          } else {
+            gh release create $env:TAG --generate-notes @releaseArgs @files
+          }
+          exit $LASTEXITCODE
+
+  deploy-docs:
+    name: Deploy docs
+    needs: [validate, release]
+    if: needs.validate.outputs.is_tag == 'true' && needs.validate.outputs.is_stable == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - shell: pwsh
         env: { HOOK: "${{ secrets.CF_DEPLOY_HOOK_URL }}" }
         run: |
-          if [ -n "${HOOK}" ]; then
-            curl -fsS -X POST "${HOOK}"
-          else
-            echo "::warning::CF_DEPLOY_HOOK_URL unset; the next master push refreshes the site root"
-          fi
+          if (-not $env:HOOK) {
+            "::warning::CF_DEPLOY_HOOK_URL unset; the next master push refreshes the site root"
+            exit 0
+          }
+          Invoke-RestMethod -Method Post -Uri $env:HOOK | Out-Null

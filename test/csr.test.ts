@@ -4,8 +4,8 @@ import {
 	findExtension,
 	generateKeyPair,
 	parseCertificateSigningRequestPem,
-	verifyCertificateSigningRequest,
 	unwrap,
+	verifyCertificateSigningRequest,
 } from '#micro509';
 import { objectIdentifier, readElement, sequence, tlv } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';

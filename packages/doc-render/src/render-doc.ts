@@ -1,75 +1,143 @@
 /**
- * Shared renderer: deno-doc node graph -> cross-linked markdown.
+ * Renderer: deno-doc node graph -> cross-linked markdown.
  *
- * Runtime-agnostic and side-effect-free — no I/O, no data fetching. Both entry
- * scripts feed it the same node graph and print the result:
- *   - `render-doc.bun.ts` (bun) sources it from the `deno doc --json` CLI.
- *   - `render-doc.deno.ts` (deno) sources it from `@deno/doc`'s
- *     `doc()` API, which returns byte-identical nodes at runtime.
+ * Runtime-agnostic and side-effect-free — no I/O, no data fetching, and no
+ * knowledge of the project being documented. Everything project-shaped (the
+ * package name in headings, the URL space the pages are served under, how a
+ * module URL becomes a page slug) is a `RenderOptions` field, so the same
+ * renderer serves any deno-doc graph.
  *
  * Types come from `@deno/doc` (installed as `npm:@jsr/deno__doc`), imported
  * type-only so they resolve under tsgo/bun/deno and erase at runtime. The one
  * place its types diverge from the wasm's actual output is the module doc field:
  * declared `moduleDoc`, emitted `module_doc`. `ApiModule` bridges that.
  *
- * Coverage: the full `TsTypeDef` grammar micro509's public surface uses (every
+ * Coverage: the `TsTypeDef` grammar a typical public surface uses (every
  * unhandled node falls back to its `.repr` source-text — never wrong, only
- * un-linked), plus `function` and `typeAlias` declarations and all JSDoc tags
- * the codebase emits. Still to add for fuller API coverage:
- * `interface`/`class`/`variable`/`enum` declarations, overload sets
- * (`declarations[1..]`), and a vitepress-shaped sidebar emitter.
+ * un-linked), plus `function`, `typeAlias`, `interface` and `variable`
+ * declarations and the JSDoc tags they carry. Still to add for fuller coverage:
+ * `class`/`enum` declarations and overload sets (`declarations[1..]`).
  *
  * @module
  */
 
 import type {
-	Symbol as DocSymbol,
 	Document,
 	JsDoc,
 	JsDocTag,
 	ParamDef,
+	Symbol,
 	TsTypeDef,
 	TsTypeParamDef,
 } from '@deno/doc';
-
-import jsr from '#jsr' with { type: 'json' };
 
 /** `doc()`/`deno doc --json` emit `module_doc`; @deno/doc's types call it
  * `moduleDoc`. Bridge that single divergence — everything else is faithfully
  * typed, so `Record<string, Document>` is assignable with no cast. */
 export type ApiModule = Document & { readonly module_doc?: JsDoc };
 
-/** Public entrypoints = jsr.json's `exports` — tsdown's materialized entry list
- * (its `build:done` hook writes them from `entries`), pointing straight at the source `.ts` files.
- * Skip `.` (the root barrel re-exports the 7 packages and would duplicate every symbol). */
-export const publicEntrypoints: readonly string[] = Object.entries(jsr.exports)
-	.filter(([subpath]) => subpath !== '.')
-	.map(([, source]) => source.replace(/^\.\//, ''))
-	.sort();
+/** How the rendered markdown addresses the project it documents. */
+export interface RenderOptions {
+	/** Package name shown in headings and module titles, e.g. `micro509/x509`. */
+	readonly packageName: string;
+	/** URL space the module pages are served under. Default `/api/`. */
+	readonly apiBase?: string;
+	/**
+	 * Module URL -> page slug. Default: the path between `/src/` and a trailing
+	 * `/index.ts`, which is the shape a `src/<module>/index.ts` layout produces.
+	 */
+	readonly slugOf?: (url: string) => string;
+}
 
-/** link registry: symbol name -> its page bucket. Populated per render pass. */
-const symbolBucket = new Map<string, string>();
+/** Resolved options — defaults applied once per render pass. */
+interface Renderer {
+	readonly packageName: string;
+	readonly apiBase: string;
+	readonly slugOf: (url: string) => string;
+}
 
-/** Bucket per declaration kind. This namespaces per-symbol page URLs so that
- * `Type`/`factory` pairs (ErrorResult vs errorResult) and symbol-vs-module names
- * (Result vs the `result` module page) don't collide — VitePress folds route
- * paths case-insensitively, so distinct buckets are what keep them apart. */
+function defaultSlug(url: string): string {
+	return url.replace(/^.*\/src\//, '').replace(/\/index\.ts$/, '');
+}
+
+function resolve(options: RenderOptions): Renderer {
+	return {
+		packageName: options.packageName,
+		apiBase: options.apiBase ?? '/api/',
+		slugOf: options.slugOf ?? defaultSlug,
+	};
+}
+
+/** The `exports` map of a jsr.json / deno.json — the only field entrypoints need. */
+export interface ExportsManifest {
+	readonly exports: Readonly<Record<string, string>>;
+}
+
+/**
+ * Public entrypoints = the manifest's `exports`, pointing at source files.
+ * The `.` barrel is skipped: it re-exports the other subpaths and would
+ * duplicate every symbol.
+ *
+ * Taken as a parameter rather than read from disk, so a past release's
+ * entrypoints can be resolved from that release's manifest.
+ */
+export function entrypointsOf(manifest: ExportsManifest): readonly string[] {
+	return Object.entries(manifest.exports)
+		.filter(([subpath]) => subpath !== '.')
+		.map(([, source]) => source.replace(/^\.\//, ''))
+		.sort();
+}
+
+/** Where a symbol lives: which module page, under which anchor bucket. */
+interface SymbolSite {
+	/** Module page slug, e.g. `x509` for `/api/x509`. */
+	readonly pkg: string;
+	/** Anchor namespace for the declaration kind. */
+	readonly bucket: string;
+}
+
+/** link registry: symbol name -> its module page + anchor. Populated per render pass. */
+const symbolIndex = new Map<string, SymbolSite>();
+
+/** Options of the pass in flight; set by `registerSymbols`, read by the link helpers. */
+let renderer: Renderer = resolve({ packageName: '' });
+
+/** Bucket per declaration kind. It namespaces the heading anchor so that
+ * `Type`/`factory` pairs (ErrorResult vs errorResult) don't collide once anchors
+ * are lowercased: `#fn-errorresult` vs `#type-errorresult`. */
 function bucketOf(kind: string): string {
 	if (kind === 'function') return 'fn';
 	if (kind === 'variable') return 'var';
 	return 'type';
 }
 
-/** Per-symbol page at `/api/<bucket>/<name>` (a `[bucket]/[symbol]` dynamic route).
- * The `<bucket>/` segment keeps `Type`/`factory` pairs (ErrorResult vs errorResult) and
- * symbol-vs-module names on case-insensitively-distinct URLs.
- * VitePress folds route paths case-insensitively. */
+/**
+ * The heading anchor a symbol renders under, e.g. `fn-parsecertificate`.
+ *
+ * Lowercase, because VitePress lowercases the hash of every internal link it
+ * rewrites while leaving an explicit `{#id}` anchor's case alone — a mixed-case
+ * anchor produces a link that matches no element. The bucket prefix (not the
+ * casing) is what keeps `errorResult` and `ErrorResult` apart.
+ */
+function symbolAnchor(name: string, bucket: string): string {
+	return `${bucket}-${name}`.toLowerCase();
+}
+
+/**
+ * Deep-link target for a symbol: its section on the owning module page.
+ *
+ * Symbols are documented in full on the module page, so a link points at that
+ * section rather than at a standalone page — a page per symbol would duplicate
+ * the content, and cost the consumer a build artifact (or three) each.
+ */
 function symbolUrl(name: string): string {
-	return `/api/${symbolBucket.get(name) ?? 'type'}/${name}`;
+	const site = symbolIndex.get(name);
+	if (site === undefined) return `${renderer.apiBase}#${name}`;
+	return `${renderer.apiBase}${site.pkg}#${symbolAnchor(name, site.bucket)}`;
 }
 
 function link(name: string): string {
-	if (symbolBucket.has(name)) return `[\`${name}\`](${symbolUrl(name)})`;
+	if (symbolIndex.has(name)) return `[\`${name}\`](${symbolUrl(name)})`;
 	return `\`${name}\``;
 }
 
@@ -166,8 +234,8 @@ function renderInlineLink(code: boolean, target: string, label?: string): string
 	const shown = code ? `\`${text}\`` : text;
 	if (/^https?:\/\//.test(target)) return `[${shown}](${target})`;
 	if (target.startsWith('[')) return shown; // module ref — no page anchor in flat output yet
-	const anchor = target.split('.')[0] ?? target;
-	if (anchor && symbolBucket.has(anchor)) return `[${shown}](${symbolUrl(anchor)})`;
+	const symbol = target.split('.')[0] ?? target;
+	if (symbol && symbolIndex.has(symbol)) return `[${shown}](${symbolUrl(symbol)})`;
 	return shown;
 }
 
@@ -296,11 +364,11 @@ function renderParams(defParams: readonly ParamDef[], js: JsDoc | undefined): st
 	return lines.join('\n');
 }
 
-type SymbolDeclaration = DocSymbol['declarations'][number];
+type SymbolDeclaration = Symbol['declarations'][number];
 
 /** Renders a function signature and its parameter documentation as Markdown. */
 function renderFunctionSymbol(
-	sym: DocSymbol,
+	sym: Symbol,
 	d: Extract<SymbolDeclaration, { readonly kind: 'function' }>,
 ): string[] {
 	const tp = plain(renderTypeParams(d.def.typeParams));
@@ -324,7 +392,7 @@ function renderFunctionSymbol(
 }
 
 function renderTypeAliasSymbol(
-	sym: DocSymbol,
+	sym: Symbol,
 	d: Extract<SymbolDeclaration, { readonly kind: 'typeAlias' }>,
 ): string[] {
 	const tp = plain(renderTypeParams(d.def.typeParams));
@@ -333,7 +401,7 @@ function renderTypeAliasSymbol(
 
 /** Renders an interface declaration, including an inline body for empty interfaces. */
 function renderInterfaceSignature(
-	sym: DocSymbol,
+	sym: Symbol,
 	d: Extract<SymbolDeclaration, { readonly kind: 'interface' }>,
 ): string[] {
 	const tp = plain(renderTypeParams(d.def.typeParams));
@@ -374,23 +442,29 @@ function renderInterfaceProperties(
 }
 
 function renderInterfaceSymbol(
-	sym: DocSymbol,
+	sym: Symbol,
 	d: Extract<SymbolDeclaration, { readonly kind: 'interface' }>,
 ): string[] {
 	return [...renderInterfaceSignature(sym, d), ...renderInterfaceProperties(d)];
 }
 
 function renderVariableSymbol(
-	sym: DocSymbol,
+	sym: Symbol,
 	d: Extract<SymbolDeclaration, { readonly kind: 'variable' }>,
 ): string[] {
 	return ['```ts', `${d.def.kind} ${sym.name}: ${plain(renderType(d.def.tsType))}`, '```', ''];
 }
 
-function renderSymbol(sym: DocSymbol, level = 3): string {
+function renderSymbol(sym: Symbol, level = 3): string {
 	const d = sym.declarations[0];
 	if (!d) return '';
-	const out: string[] = [`${'#'.repeat(level)} \`${sym.name}\``, ''];
+	// Explicit `{#id}` anchor (VitePress custom-anchor syntax): the slugified
+	// default folds case, which would collide `errorResult` with `ErrorResult`
+	// and silently renumber one of them (`#errorresult-1`). `symbolUrl` links here.
+	const site = symbolIndex.get(sym.name);
+	const anchor = site === undefined ? undefined : symbolAnchor(sym.name, site.bucket);
+	const heading = `${'#'.repeat(level)} \`${sym.name}\``;
+	const out: string[] = [anchor === undefined ? heading : `${heading} {#${anchor}}`, ''];
 
 	const description = renderDescription(d.jsDoc);
 	if (description) out.push(description, '');
@@ -412,37 +486,39 @@ function renderSymbol(sym: DocSymbol, level = 3): string {
 	return out.join('\n');
 }
 
-function pkgOf(url: string): string {
-	return url.replace(/^.*\/src\//, '').replace(/\/index\.ts$/, '');
-}
-
-/** Register every symbol's page bucket so `{@link}`/typeRef links resolve. */
-function registerSymbols(nodes: Record<string, ApiModule>): void {
-	symbolBucket.clear();
-	for (const mod of Object.values(nodes)) {
+/**
+ * Open a render pass: resolve the options and index every symbol's module page
+ * and anchor, so `{@link}` and typeRef links can resolve while rendering.
+ */
+function beginPass(nodes: Record<string, ApiModule>, options: RenderOptions): void {
+	renderer = resolve(options);
+	symbolIndex.clear();
+	for (const [url, mod] of Object.entries(nodes)) {
+		const pkg = renderer.slugOf(url);
 		for (const s of mod.symbols) {
 			const kind = s.declarations[0]?.kind ?? 'type';
-			symbolBucket.set(s.name, bucketOf(kind));
+			symbolIndex.set(s.name, { pkg, bucket: bucketOf(kind) });
 		}
 	}
 }
 
 /**
  * Render a `{ url -> ApiModule }` node graph to a single markdown string.
- * With `filters` non-empty, only the named symbols are emitted. Used by the
- * stdout preview scripts; the site uses the page emitters below.
+ * With `filters` non-empty, only the named symbols are emitted — a flat dump for
+ * previewing on stdout; the page emitters below are what a docs site consumes.
  */
 export function renderDocuments(
 	nodes: Record<string, ApiModule>,
+	options: RenderOptions,
 	filters: ReadonlySet<string> = new Set(),
 ): string {
-	registerSymbols(nodes);
+	beginPass(nodes, options);
 	const out: string[] = [];
 	for (const [url, mod] of Object.entries(nodes)) {
 		const symbols = filters.size ? mod.symbols.filter((s) => filters.has(s.name)) : mod.symbols;
 		if (!symbols.length) continue;
 
-		out.push(`## \`micro509/${pkgOf(url)}\`\n`);
+		out.push(`## \`${renderer.packageName}/${renderer.slugOf(url)}\`\n`);
 		const moduleDoc = renderModuleDoc(mod.module_doc);
 		if (moduleDoc) out.push(`${moduleDoc}\n`);
 
@@ -454,49 +530,45 @@ export function renderDocuments(
 export type ApiModulePage = { pkg: string; markdown: string };
 
 /** Per-module reference pages (sidebar-visible). Symbols are `##` sections. */
-export function renderModulePages(nodes: Record<string, ApiModule>): {
+export function renderModulePages(
+	nodes: Record<string, ApiModule>,
+	options: RenderOptions,
+): {
 	pages: ApiModulePage[];
 	sidebar: { text: string; link: string }[];
 } {
-	registerSymbols(nodes);
+	beginPass(nodes, options);
 	const pages: ApiModulePage[] = [];
 	for (const [url, mod] of Object.entries(nodes)) {
 		if (!mod.symbols.length) continue;
-		const pkg = pkgOf(url);
-		const out = [`# \`micro509/${pkg}\``, ''];
+		const pkg = renderer.slugOf(url);
+		const out = [`# \`${renderer.packageName}/${pkg}\``, ''];
 		const moduleDoc = renderModuleDoc(mod.module_doc);
 		if (moduleDoc) out.push(moduleDoc, '');
 		for (const sym of mod.symbols) out.push(renderSymbol(sym, 2), '');
 		pages.push({ pkg, markdown: out.join('\n') });
 	}
 	pages.sort((a, b) => a.pkg.localeCompare(b.pkg));
-	return { pages, sidebar: pages.map((p) => ({ text: p.pkg, link: `/api/${p.pkg}` })) };
+	return {
+		pages,
+		sidebar: pages.map((page) => ({
+			text: page.pkg,
+			link: `${renderer.apiBase}${page.pkg}`,
+		})),
+	};
 }
 
-export type ApiSymbolPage = { name: string; pkg: string; bucket: string; markdown: string };
-
-/** Per-symbol pages — dynamic-route deep-link targets, not in the sidebar. */
-export function renderSymbolPages(nodes: Record<string, ApiModule>): ApiSymbolPage[] {
-	registerSymbols(nodes);
-	const pages: ApiSymbolPage[] = [];
-	for (const [url, mod] of Object.entries(nodes)) {
-		const pkg = pkgOf(url);
-		for (const sym of mod.symbols) {
-			const bucket = symbolBucket.get(sym.name) ?? 'type';
-			pages.push({ name: sym.name, pkg, bucket, markdown: renderSymbol(sym, 1) });
-		}
-	}
-	return pages;
-}
-
-/** The single `/api/` landing page: modules with one-line descriptions. */
-export function renderOverview(nodes: Record<string, ApiModule>): string {
-	const out = ['# micro509 API Reference', ''];
+/** The API landing page: every module with its one-line description. */
+export function renderOverview(nodes: Record<string, ApiModule>, options: RenderOptions): string {
+	beginPass(nodes, options);
+	const out = [`# ${renderer.packageName} API Reference`, ''];
 	for (const [url, mod] of Object.entries(nodes)) {
 		if (!mod.symbols.length) continue;
-		const pkg = pkgOf(url);
+		const pkg = renderer.slugOf(url);
 		const desc = (mod.module_doc?.doc ?? '').split('\n')[0]?.trim();
-		out.push(`- [\`micro509/${pkg}\`](/api/${pkg})${desc ? ` — ${desc}` : ''}`);
+		out.push(
+			`- [\`${renderer.packageName}/${pkg}\`](${renderer.apiBase}${pkg})${desc ? ` — ${desc}` : ''}`,
+		);
 	}
 	return out.join('\n');
 }

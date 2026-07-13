@@ -4,8 +4,8 @@ import {
 	createSelfSignedCertificate,
 	generateKeyPair,
 	parseCertificatePem,
-	validateCandidatePath,
 	unwrap,
+	validateCandidatePath,
 } from '#micro509';
 import { OIDS } from '#micro509/internal/asn1/oids';
 

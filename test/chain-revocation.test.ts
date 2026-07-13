@@ -1,5 +1,5 @@
-import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'bun:test';
+import { readFile } from 'node:fs/promises';
 import {
 	checkChainRevocation,
 	createCertificate,
@@ -10,8 +10,8 @@ import {
 	parseCertificateDer,
 	parseCertificatePem,
 	parseCertificateRevocationListDerOrThrow,
-	verifyCertificateChain,
 	unwrap,
+	verifyCertificateChain,
 } from '#micro509';
 import { hexToBytes } from '#test/helpers';
 

@@ -1,5 +1,5 @@
 {
-	"$schema": "https://biomejs.dev/schemas/latest/schema.json",
+	"$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
 	"vcs": {
 		"enabled": true,
 		"clientKind": "git",
@@ -28,7 +28,7 @@
 				"noExcessiveCognitiveComplexity": {
 					"options": { "maxAllowedComplexity": 20 },
 					"level": "info"
-				},
+				}
 			},
 			"correctness": { "recommended": true },
 			"performance": { "recommended": true },
@@ -45,32 +45,42 @@
 	"assist": {
 		"enabled": true,
 		"actions": {
-			"source": { "organizeImports": "off" }
+			"source": { "organizeImports": "on" }
 		}
 	},
-	"overrides": [{
-		"includes": ["**/*.jsonc", "!biome.jsonc"],
-		"json": { "formatter": { "trailingCommas": "all" } }
-	}, {
-		"includes": ["**/site"],
-		"formatter": {
-			"lineWidth": 60
-		}
-	}, {
-		"includes": ["**/*.svelte", "**/*.astro", "**/*.vue"],
-		"linter": {
-			"rules": {
-				"style": { "useConst": "off", "useImportType": "off" },
-				"correctness": { "noUnusedVariables": "off", "noUnusedImports": "off" }
+	"overrides": [
+		{
+			"includes": ["**/*.jsonc", "!biome.jsonc"],
+			"json": { "formatter": { "trailingCommas": "all" } }
+		},
+		{
+			"includes": ["**/site"],
+			"formatter": {
+				"lineWidth": 60
 			}
+		},
+		{
+			"includes": ["**/*.svelte", "**/*.astro", "**/*.vue"],
+			"linter": {
+				"rules": {
+					"style": { "useConst": "off", "useImportType": "off" },
+					"correctness": { "noUnusedVariables": "off", "noUnusedImports": "off" }
+				}
+			}
+		},
+		{
+			"includes": ["site/**"],
+			"formatter": { "indentStyle": "space" },
+			"javascript": { "formatter": { "indentStyle": "tab" } },
+			"assist": { "enabled": false }
+		},
+		{
+			"includes": ["site/.vitepress/**"],
+			"formatter": { "enabled": false }
+		},
+		{
+			"includes": ["packages/**"],
+			"linter": { "rules": { "suspicious": { "noShadowRestrictedNames": "off" } } }
 		}
-	}, {
-		"includes": ["site/**"],
-		"formatter": { "indentStyle": "space" },
-		"javascript": { "formatter": { "indentStyle": "tab" } },
-		"assist": { "enabled": false }
-	}, {
-		"includes": ["site/.vitepress/**"],
-		"formatter": { "enabled": false }
-	}]
+	]
 }

@@ -1,43 +1,18 @@
 #!/usr/bin/env bun
 /**
- * Generates `deno.import_map.json` for `deno doc`.
+ * Writes `deno.import_map.json` for the checked-out tree (`deno doc`/`docs:*`).
  *
- * `deno check` and `deno lint` honor the package.json `imports` subpath
- * patterns (`#micro509/*` -> `./src/*.ts`) natively, but `deno doc` does not —
- * it reports every `#micro509/*` import as "not a dependency". A Deno import
- * map can bridge that, except import maps cannot append an extension (a `/`
- * prefix key must map to a `/` prefix value, and globs are unsupported). So the
- * `#micro509/*` pattern is expanded here into one explicit entry per source
- * file, alongside the non-wildcard entries copied straight from package.json.
+ * CLI over `writeDenoImportMap`; the site's API-doc plugin calls the same
+ * function for each released tag's sources, with that tag's manifest.
  *
  * @module
  */
-import pkg from '#pkg' with { type: 'json' };
 import path from 'node:path';
+import { writeDenoImportMap } from '@micro509/doc-render/import-map';
 
-const imports: Record<string, string> = {};
-const root = path.resolve(import.meta.dir, '..');
-const glob = new Bun.Glob('src/**/*.ts');
-
-const denoMap = Bun.file(path.join(root, 'deno.import_map.json'));
-
-// Copy the non-wildcard entries verbatim (barrels, #pkg, #jsr).
-for (const [key, value] of Object.entries(pkg.imports)) {
-	if (!key.includes('*')) {
-		imports[key] = value;
-	}
-}
-
-// Expand `#micro509/*` -> `./src/*.ts` into an explicit entry per source file.
-for (const file of await Array.fromAsync(glob.scan({ cwd: root }))) {
-	imports[`#micro509/${file.slice('src/'.length).replace(/\.ts$/, '')}`] = `./${file}`;
-}
-const importMap = /* dprint-ignore */ `${JSON.stringify({ imports: Object.fromEntries(Object.entries(imports).sort(([a], [b]) => a.localeCompare(b))) }, null, '\t')}\n`;
-
-try {
-	await Bun.write(denoMap, importMap);
-	Bun.stderr.write(`Wrote ${importMap.length} bytes to ${denoMap.name}\n`);
-} catch (err) {
-	process.exitCode = 1;
-	console.error(`Failed to write ${denoMap.name}:`, err);
-}
+const target = writeDenoImportMap({
+	root: path.resolve(import.meta.dir, '..'),
+	manifest: 'package.json',
+	out: 'deno.import_map.json',
+});
+Bun.stderr.write(`Wrote ${target}\n`);

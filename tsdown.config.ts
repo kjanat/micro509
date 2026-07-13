@@ -1,10 +1,9 @@
 import { existsSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
+import type { UserConfig } from 'tsdown';
+import { defineConfig } from 'tsdown';
 import jsr from '#jsr' with { type: 'json' };
 import pkg from '#pkg' with { type: 'json' };
-
-import { defineConfig } from 'tsdown';
-import type { UserConfig } from 'tsdown';
 
 export const entries = {
 	index: 'src/index.ts',

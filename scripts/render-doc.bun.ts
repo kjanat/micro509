@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+
 /**
  * Renders the micro509 public API to cross-linked markdown (bun entry).
  *
@@ -16,13 +17,14 @@
  * @module
  */
 
+import { resolve } from 'node:path';
+import type { ApiModule } from '@micro509/doc-render';
+import { entrypointsOf, renderDocuments } from '@micro509/doc-render';
 import { $, argv, stdout } from 'bun';
-
+import jsr from '#jsr' with { type: 'json' };
 import pkg from '#pkg' with { type: 'json' };
 
-import { resolve } from 'node:path';
-import type { ApiModule } from './render-doc.shared.ts';
-import { publicEntrypoints, renderDocuments } from './render-doc.shared.ts';
+const publicEntrypoints = entrypointsOf(jsr);
 
 const root = resolve(import.meta.dirname, '..');
 
@@ -33,5 +35,5 @@ const raw =
 		.text();
 
 const parsed: { nodes: Record<string, ApiModule> } = JSON.parse(raw);
-const md = renderDocuments(parsed.nodes, new Set(argv.slice(2)));
+const md = renderDocuments(parsed.nodes, { packageName: pkg.name }, new Set(argv.slice(2)));
 stdout.write(await $`dprint fmt --stdin md < ${new Blob([md])}`.text());
