@@ -13,12 +13,13 @@ import { fingerprintCertificateWithOpenSsl } from '#test/oracles/openssl';
 
 const ALGORITHMS: CertificateFingerprintAlgorithm[] = ['SHA-1', 'SHA-256', 'SHA-384', 'SHA-512'];
 
-const NODE_HASH: Record<CertificateFingerprintAlgorithm, string> = {
-	'SHA-1': 'sha1',
-	'SHA-256': 'sha256',
-	'SHA-384': 'sha384',
-	'SHA-512': 'sha512',
-};
+const NODE_HASH: Record<CertificateFingerprintAlgorithm, 'sha1' | 'sha256' | 'sha384' | 'sha512'> =
+	{
+		'SHA-1': 'sha1',
+		'SHA-256': 'sha256',
+		'SHA-384': 'sha384',
+		'SHA-512': 'sha512',
+	};
 
 async function sampleCertificate() {
 	const keyPair = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
@@ -94,8 +95,8 @@ describe('certificateFingerprint', () => {
 	});
 
 	it('throws on malformed input', async () => {
-		await expect(certificateFingerprint('not a pem')).rejects.toThrow();
-		await expect(certificateFingerprint(new Uint8Array([0x30, 0x00]))).rejects.toThrow();
+		expect(certificateFingerprint('not a pem')).rejects.toThrow();
+		expect(certificateFingerprint(new Uint8Array([0x30, 0x00]))).rejects.toThrow();
 	});
 
 	it('is unaffected by extra fields on a parsed certificate (hashes der only)', async () => {
@@ -124,7 +125,7 @@ describe.skipIf(!openSslAvailable || !differentialEnabled)(
 			const fingerprint = await certificateFingerprint(certificate.pem, algorithm);
 			const opensslColonHex = await fingerprintCertificateWithOpenSsl({
 				certificatePem: certificate.pem,
-				algorithm: NODE_HASH[algorithm] as 'sha1' | 'sha256' | 'sha384' | 'sha512',
+				algorithm: NODE_HASH[algorithm],
 			});
 
 			expect(fingerprint.colonHex).toBe(opensslColonHex);
