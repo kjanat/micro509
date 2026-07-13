@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'bun:test';
 import { toHex } from '#micro509/internal/asn1/asn1';
-import { objectIdentifier, sequence, setOf, utf8String } from '#micro509/internal/asn1/der';
+import {
+	ia5String,
+	objectIdentifier,
+	sequence,
+	setOf,
+	utf8String,
+} from '#micro509/internal/asn1/der';
+import { OIDS } from '#micro509/internal/asn1/oids';
 import type { SubjectAltName } from '#micro509/x509';
 import {
 	createSelfSignedCertificate,
@@ -144,6 +151,16 @@ describe('distinguishedNameToString', () => {
 
 	it('renders an empty name as the empty string', () => {
 		expect(subjectAltNameToString({ type: 'directoryName', derHex: '3000' })).toBe('');
+	});
+
+	it('renders the domainComponent and userId keywords', () => {
+		const derHex = toHex(
+			sequence([
+				setOf([sequence([objectIdentifier(OIDS.domainComponent), ia5String('example')])]),
+				setOf([sequence([objectIdentifier(OIDS.userId), utf8String('jdoe')])]),
+			]),
+		);
+		expect(subjectAltNameToString({ type: 'directoryName', derHex })).toBe('UID=jdoe,DC=example');
 	});
 });
 

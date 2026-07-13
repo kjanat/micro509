@@ -8,6 +8,7 @@
  */
 
 import { hexToBytes, toHex } from '#micro509/internal/asn1/asn1';
+import { DN_ATTRIBUTE_KEYWORDS } from '#micro509/internal/x509/name-fields';
 import type { SubjectAltName } from '#micro509/x509/extensions';
 import type {
 	ParsedName,
@@ -95,32 +96,11 @@ export function relativeDistinguishedNameToString(rdn: ParsedRelativeDistinguish
 	return rdn.attributes.map((attribute) => attributeToString(attribute)).join('+');
 }
 
-/**
- * RFC 4514 [§3](https://datatracker.ietf.org/doc/html/rfc4514#section-3) keyword table,
- * extended with the short names `openssl` prints for attribute types the RFC leaves to the dotted OID.
- */
-const ATTRIBUTE_KEYWORDS: Readonly<Record<string, string>> = {
-	'2.5.4.3': 'CN',
-	'2.5.4.4': 'SN',
-	'2.5.4.5': 'serialNumber',
-	'2.5.4.6': 'C',
-	'2.5.4.7': 'L',
-	'2.5.4.8': 'ST',
-	'2.5.4.9': 'STREET',
-	'2.5.4.10': 'O',
-	'2.5.4.11': 'OU',
-	'2.5.4.12': 'title',
-	'2.5.4.42': 'GN',
-	'1.2.840.113549.1.9.1': 'emailAddress',
-	'0.9.2342.19200300.100.1.1': 'UID',
-	'0.9.2342.19200300.100.1.25': 'DC',
-};
-
 /** Characters RFC 4514 [§2.4](https://datatracker.ietf.org/doc/html/rfc4514#section-2.4) escapes wherever they appear. */
 const ESCAPED_CHARACTERS = new Set(['"', '+', ',', ';', '<', '>', '\\']);
 
 function attributeToString(attribute: ParsedNameAttribute): string {
-	const keyword = ATTRIBUTE_KEYWORDS[attribute.oid] ?? attribute.oid;
+	const keyword = DN_ATTRIBUTE_KEYWORDS[attribute.oid] ?? attribute.oid;
 	return `${keyword}=${escapeAttributeValue(attribute.value)}`;
 }
 
