@@ -29,4 +29,4 @@ says about itself.
 [`src/main.ts`]: ./src/main.ts
 [`../browser`]: ../browser/README.md
 [Open in StackBlitz]: https://developer.stackblitz.com/img/open_in_stackblitz_small.svg
-[stackblitz]: https://stackblitz.com/fork/github/kjanat/micro509/tree/stackblitz/examples/vite?title=micro509%20with%20Vite
+[stackblitz]: https://stackblitz.com/github/kjanat/micro509/tree/stackblitz/examples/vite?title=micro509%20with%20Vite

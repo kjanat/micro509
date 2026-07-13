@@ -21,4 +21,4 @@ For the same demo with types, hot reload and micro509 as an npm dependency, see 
 [`../vite`]: ../vite/README.md
 [https://esm.sh/gh/kjanat/micro509/examples/browser/index.html]: https://esm.sh/gh/kjanat/micro509@cf4bed8429010b6f68cf6fe92d9f0570bb08adf4/examples/browser/index.html
 [Open in StackBlitz]: https://developer.stackblitz.com/img/open_in_stackblitz_small.svg
-[stackblitz]: https://stackblitz.com/fork/github/kjanat/micro509/tree/stackblitz/examples/browser?title=micro509%20in%20the%20browser
+[stackblitz]: https://stackblitz.com/github/kjanat/micro509/tree/stackblitz/examples/browser?title=micro509%20in%20the%20browser
