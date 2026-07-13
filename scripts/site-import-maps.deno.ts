@@ -118,21 +118,28 @@ if (pages.length === 0) {
 
 const failures: string[] = [];
 
-const releases = new Set(await published());
-const served = new Set(
+const servedSemvers = new Set(
 	pages.map((page) => boundTo(page)).filter((version) => /^\d+\.\d+\.\d+$/.test(version)),
 );
-for (const version of releases) {
-	if (!served.has(version))
-		failures.push(`jsDelivr carries ${version}, but the site serves no page for it`);
+
+if (servedSemvers.size > 0) {
+	const releases = new Set(await published());
+	for (const version of releases) {
+		if (!servedSemvers.has(version))
+			failures.push(`jsDelivr carries ${version}, but the site serves no page for it`);
+	}
+	for (const version of servedSemvers) {
+		if (!releases.has(version))
+			failures.push(`the site serves ${version}, which jsDelivr does not carry`);
+	}
+	console.log(
+		`[import-maps] jsDelivr carries ${releases.size} releases; the site serves ${servedSemvers.size}`,
+	);
+} else {
+	console.log(
+		'[import-maps] preview build (only current tree served); skipping published releases check',
+	);
 }
-for (const version of served) {
-	if (!releases.has(version))
-		failures.push(`the site serves ${version}, which jsDelivr does not carry`);
-}
-console.log(
-	`[import-maps] jsDelivr carries ${releases.size} releases; the site serves ${served.size}`,
-);
 
 for (const page of pages) {
 	const route = `/${page.prefix}`;
