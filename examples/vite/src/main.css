@@ -48,7 +48,8 @@ button {
 	border-radius: 6px;
 	background: #3c8772;
 	color: #fff;
-	font: 600 inherit;
+	font: inherit;
+	font-weight: 600;
 	cursor: pointer;
 }
 button:disabled {
