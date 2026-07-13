@@ -1057,10 +1057,7 @@ function subjectPublicKeyInfoAlgorithmDer(subjectPublicKeyInfoDer: Uint8Array): 
 		maxDepth: DEFAULT_MAX_DER_DEPTH,
 	});
 	const algorithm = requireElement(children[0], 'SubjectPublicKeyInfo algorithm');
-	return subjectPublicKeyInfoDer.slice(
-		algorithm.start - algorithm.headerLength,
-		algorithm.end,
-	);
+	return subjectPublicKeyInfoDer.slice(algorithm.start - algorithm.headerLength, algorithm.end);
 }
 
 /**
@@ -1138,7 +1135,9 @@ export async function certificateMatchesPrivateKey<
 	privateKey: CryptoKey,
 ): Promise<boolean> {
 	const parsed = parseCertificateFromSource(certificate);
-	return (await compareCertificateToPrivateKey(parsed.subjectPublicKeyInfoDer, privateKey)) === 'match';
+	return (
+		(await compareCertificateToPrivateKey(parsed.subjectPublicKeyInfoDer, privateKey)) === 'match'
+	);
 }
 
 /** Machine-readable failure reason for {@linkcode matchCertificatePrivateKey}. */
