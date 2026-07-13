@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-07-13
+
+Detached PKCS#7 / CMS signatures — the form git x509 commit signing and S/MIME
+rely on — and algorithm inference across every private-key import family.
+
 ### Added
 
 - `createPkcs7SignedData` accepts `detached: true` to omit `eContent` from
@@ -24,12 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `verifyPkcs7SignedData` accepts an options bag with `content` to supply the
   externally-held bytes when verifying a detached signature — the shape git
   x509 commit signing (`gpg.format=x509`) and S/MIME detached signatures use.
-  Verifying a SignedData without `eContent` and without external content is a
-  typed `'detached_content_required'` failure (replaces the former
-  `'content_missing'` code); the error-code union is now exported as
-  `VerifyPkcs7SignedDataErrorCode`, the options as
-  `VerifyPkcs7SignedDataOptions`. Interop with `openssl cms` verified in both
-  directions.
+  The error-code union is now exported as `VerifyPkcs7SignedDataErrorCode`, the
+  options as `VerifyPkcs7SignedDataOptions`. Interop with `openssl cms`
+  verified in both directions.
   (https://github.com/kjanat/micro509/issues/40)
 - The private-key import families infer the algorithm from the container when
   the `algorithm` parameter is omitted, mirroring the existing SPKI behavior;
@@ -55,6 +57,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **BREAKING** — `verifyPkcs7SignedData` reports a SignedData that carries no
+  `eContent` as `'detached_content_required'`; the `'content_missing'` code is
+  gone. Such a message is not malformed, it is a detached signature awaiting
+  its external content, and it is now only a failure when no `content` option
+  is supplied. Rename any match on `'content_missing'`; matches against the
+  exported `VerifyPkcs7SignedDataErrorCode` union fail to typecheck until you
+  do.
 - `exportSec1Der`/`exportSec1Pem`/`exportEncryptedSec1Pem` always embed the
   RFC 5915 `parameters [0]` named curve (WebCrypto's inner ECPrivateKey omits
   it; OpenSSL writes it), so exported SEC 1 keys are self-describing and
@@ -496,7 +505,8 @@ Initial prerelease. API may change before 1.0.
 - Zero runtime dependencies, WebCrypto-native, tree-shakeable subpath exports;
   runs on Node, Bun, Deno, browsers, and Cloudflare Workers.
 
-[Unreleased]: https://github.com/kjanat/micro509/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/kjanat/micro509/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/kjanat/micro509/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/kjanat/micro509/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/kjanat/micro509/compare/v0.7.2...v0.8.0
 [0.7.2]: https://github.com/kjanat/micro509/compare/v0.7.1...v0.7.2
