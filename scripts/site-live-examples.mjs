@@ -113,6 +113,12 @@ function findVersions(routes) {
 		.map((entry) => entry.name)
 		.sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
 
+	const broken = archived.filter((version) => !routes.has(`/${version}/guide/getting-started`));
+
+	if (broken.length > 0) {
+		throw new Error(`[live-examples] ${broken.join(', ')} built no /guide/getting-started page`);
+	}
+
 	return [
 		{ version: '(latest)', route: '/guide/getting-started' },
 		{ version: 'next', route: '/next/guide/getting-started' },
@@ -120,7 +126,11 @@ function findVersions(routes) {
 			version,
 			route: `/${version}/guide/getting-started`,
 		})),
-	].filter(({ route }) => routes.has(route));
+	].filter(({ version, route }) => {
+		if (routes.has(route)) return true;
+		console.warn(`[live-examples] ${version}: the built site serves no ${route}, skipping`);
+		return false;
+	});
 }
 
 /**
