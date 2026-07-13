@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import type { ParseCertificateErrorCode } from '#micro509';
 import {
+	certificateMatchesPrivateKey,
 	createCertificate,
 	createCertificateSigningRequest,
 	createSelfSignedCertificate,
@@ -11,6 +12,8 @@ import {
 	exportSpkiDer,
 	findExtension,
 	generateKeyPair,
+	importPkcs8Pem,
+	matchCertificatePrivateKey,
 	parseCertificateDer,
 	parseCertificatePem,
 	parseCertificateSigningRequestDer,
@@ -2381,6 +2384,172 @@ describe('parse: coverage — error paths', () => {
 			if (!result.ok) {
 				expect(result.error.message).toContain('Invalid BIT STRING');
 			}
+		}
+	});
+});
+
+describe('certificateMatchesPrivateKey', () => {
+	it('returns true for a certificate and its own private key across algorithms', async () => {
+		const algorithms = [
+			{ kind: 'ecdsa', curve: 'P-256' } as const,
+			{ kind: 'ecdsa', curve: 'P-521' } as const,
+			{ kind: 'rsa', modulusLength: 2048 } as const,
+			{ kind: 'ed25519' } as const,
+		];
+		for (const algorithm of algorithms) {
+			const { certificate, keyPair } = await createSelfSignedCertificate({
+				subject: { commonName: 'match.example' },
+				algorithm,
+			});
+			expect(await certificateMatchesPrivateKey(certificate.pem, keyPair.privateKey)).toBe(true);
+		}
+	});
+
+	it('accepts PEM, DER, and already-parsed certificate inputs', async () => {
+		const { certificate, keyPair } = await createSelfSignedCertificate({
+			subject: { commonName: 'match-inputs.example' },
+			algorithm: { kind: 'ecdsa', curve: 'P-256' },
+		});
+		const parsed = unwrap(parseCertificatePem(certificate.pem));
+		expect(await certificateMatchesPrivateKey(certificate.pem, keyPair.privateKey)).toBe(true);
+		expect(await certificateMatchesPrivateKey(certificate.der, keyPair.privateKey)).toBe(true);
+		expect(await certificateMatchesPrivateKey(parsed, keyPair.privateKey)).toBe(true);
+	});
+
+	it('matches a private key re-imported from PKCS#8 (bare sign-only key)', async () => {
+		const { certificate, keyPair } = await createSelfSignedCertificate({
+			subject: { commonName: 'match-reimport.example' },
+			algorithm: { kind: 'ecdsa', curve: 'P-256' },
+		});
+		const reimported = unwrap(
+			await importPkcs8Pem(await keyPair.exportPkcs8Pem(), { kind: 'ecdsa', curve: 'P-256' }),
+		);
+		expect(await certificateMatchesPrivateKey(certificate.pem, reimported)).toBe(true);
+	});
+
+	it('returns false for a private key from a different pair of the same type', async () => {
+		const { certificate } = await createSelfSignedCertificate({
+			subject: { commonName: 'mismatch-same.example' },
+			algorithm: { kind: 'ecdsa', curve: 'P-256' },
+		});
+		const other = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
+		expect(await certificateMatchesPrivateKey(certificate.pem, other.privateKey)).toBe(false);
+	});
+
+	it('returns false when the private key algorithm differs from the certificate', async () => {
+		const { certificate } = await createSelfSignedCertificate({
+			subject: { commonName: 'mismatch-type.example' },
+			algorithm: { kind: 'ecdsa', curve: 'P-256' },
+		});
+		const rsa = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
+		expect(await certificateMatchesPrivateKey(certificate.pem, rsa.privateKey)).toBe(false);
+	});
+
+	it('throws on malformed certificate input', async () => {
+		const keyPair = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
+		expect(certificateMatchesPrivateKey('not a certificate', keyPair.privateKey)).rejects.toThrow();
+	});
+
+	it('throws when the private key is non-extractable', async () => {
+		const { certificate } = await createSelfSignedCertificate({
+			subject: { commonName: 'nonextractable.example' },
+			algorithm: { kind: 'ecdsa', curve: 'P-256' },
+		});
+		const nonExtractable = await crypto.subtle.generateKey(
+			{ name: 'ECDSA', namedCurve: 'P-256' },
+			false,
+			['sign', 'verify'],
+		);
+		if (!('privateKey' in nonExtractable)) {
+			throw new Error('expected an asymmetric key pair');
+		}
+		expect(
+			certificateMatchesPrivateKey(certificate.pem, nonExtractable.privateKey),
+		).rejects.toThrow('Cannot derive public key from a non-extractable private key');
+	});
+});
+
+describe('matchCertificatePrivateKey', () => {
+	it('succeeds for a certificate and its own private key, across input forms', async () => {
+		const { certificate, keyPair } = await createSelfSignedCertificate({
+			subject: { commonName: 'match-result.example' },
+			algorithm: { kind: 'ecdsa', curve: 'P-256' },
+		});
+		const parsed = unwrap(parseCertificatePem(certificate.pem));
+		for (const input of [certificate.pem, certificate.der, parsed]) {
+			const result = await matchCertificatePrivateKey(input, keyPair.privateKey);
+			expect(result.ok).toBe(true);
+			if (result.ok) {
+				expect(result.value).toBeUndefined();
+			}
+		}
+	});
+
+	it('reports key_mismatch for a different key of the same algorithm', async () => {
+		const { certificate } = await createSelfSignedCertificate({
+			subject: { commonName: 'result-key-mismatch.example' },
+			algorithm: { kind: 'ecdsa', curve: 'P-256' },
+		});
+		const other = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
+		const result = await matchCertificatePrivateKey(certificate.pem, other.privateKey);
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.error.code).toBe('key_mismatch');
+		}
+	});
+
+	it('reports key_type_mismatch for a different algorithm', async () => {
+		const { certificate } = await createSelfSignedCertificate({
+			subject: { commonName: 'result-type-mismatch.example' },
+			algorithm: { kind: 'ecdsa', curve: 'P-256' },
+		});
+		const rsa = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
+		const result = await matchCertificatePrivateKey(certificate.pem, rsa.privateKey);
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.error.code).toBe('key_type_mismatch');
+		}
+	});
+
+	it('reports key_type_mismatch for the same family but a different curve', async () => {
+		const { certificate } = await createSelfSignedCertificate({
+			subject: { commonName: 'result-curve-mismatch.example' },
+			algorithm: { kind: 'ecdsa', curve: 'P-256' },
+		});
+		const other = await generateKeyPair({ kind: 'ecdsa', curve: 'P-384' });
+		const result = await matchCertificatePrivateKey(certificate.pem, other.privateKey);
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.error.code).toBe('key_type_mismatch');
+		}
+	});
+
+	it('reports malformed_certificate for unparseable input instead of throwing', async () => {
+		const keyPair = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
+		const result = await matchCertificatePrivateKey('not a certificate', keyPair.privateKey);
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.error.code).toBe('malformed_certificate');
+		}
+	});
+
+	it('reports unsupported_private_key for a non-extractable key instead of throwing', async () => {
+		const { certificate } = await createSelfSignedCertificate({
+			subject: { commonName: 'result-nonextractable.example' },
+			algorithm: { kind: 'ecdsa', curve: 'P-256' },
+		});
+		const nonExtractable = await crypto.subtle.generateKey(
+			{ name: 'ECDSA', namedCurve: 'P-256' },
+			false,
+			['sign', 'verify'],
+		);
+		if (!('privateKey' in nonExtractable)) {
+			throw new Error('expected an asymmetric key pair');
+		}
+		const result = await matchCertificatePrivateKey(certificate.pem, nonExtractable.privateKey);
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.error.code).toBe('unsupported_private_key');
 		}
 	});
 });
