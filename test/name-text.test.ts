@@ -57,6 +57,11 @@ describe('subjectAltNameToString', () => {
 		expect(subjectAltNameToString(name)).toBe('3021deadbeef');
 	});
 
+	it('falls back to the hex when a directoryName is not a SEQUENCE', () => {
+		const name: SubjectAltName = { type: 'directoryName', derHex: '0403010203' };
+		expect(subjectAltNameToString(name)).toBe('0403010203');
+	});
+
 	it('prefixes with the OpenSSL label on request', () => {
 		expect(subjectAltNameToString({ type: 'dns', value: 'example.com' }, { prefix: true })).toBe(
 			'DNS:example.com',
