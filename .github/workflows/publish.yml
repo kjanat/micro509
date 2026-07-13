@@ -11,7 +11,10 @@ concurrency:
 permissions: { contents: read }
 
 jobs:
-  test: { name: Test, uses: ./.github/workflows/test.yml }
+  test:
+    name: Test
+    uses: ./.github/workflows/test.yml
+    permissions: { contents: read, id-token: write }
 
   validate:
     name: Validate version
