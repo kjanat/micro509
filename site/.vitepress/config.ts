@@ -64,7 +64,13 @@ function envOf(...names: readonly string[]): string | undefined {
 	return undefined;
 }
 
-/** The ref source links point at. */
+/** The ref source links point at.
+ *
+ * Supported environments for the docs site build:
+ * - Workers CI (WORKERS_CI_BRANCH / WORKERS_CI_COMMIT_SHA)
+ * - GitHub Actions (GITHUB_REF_NAME / GITHUB_SHA)
+ * - Local / manual (git branch or MICRO509_GIT_BRANCH override)
+ */
 const gitRef =
 	envOf('MICRO509_GIT_BRANCH', 'WORKERS_CI_BRANCH', 'GITHUB_REF_NAME') ??
 	git('branch', '--show-current') ??
@@ -105,12 +111,18 @@ async function pullRequestOf(sha: string): Promise<string | undefined> {
 
 const pull = await (async (): Promise<string | undefined> => {
 	if (process.env.DOCS_OFFLINE === '1' || gitRef === 'master') return undefined;
+
+	// Some CI environments pass PR refs in the form "NN/merge" or "NN/head".
+	// Extract the PR number so pkg.pr.new gets a clean ref like "54" instead of "54/merge".
+	const prMatch = gitRef.match(/^(\d+)\/(merge|head)$/);
+	if (prMatch) return prMatch[1];
+
 	const sha = commitSha();
 	return sha === undefined ? undefined : await pullRequestOf(sha);
 })();
 
 /** pkg.pr.new republishes a pull request's ref on every head of that pull request. */
-const nextRef = pull ?? gitRef;
+const nextRef = (pull ?? gitRef).replace(/\/\w+$/, '');
 
 const devLabel = pull === undefined ? `v${repo.version}-dev` : `#${pull}`;
 
