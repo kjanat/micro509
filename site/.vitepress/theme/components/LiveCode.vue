@@ -128,8 +128,24 @@ async function run() {
           reject(new Error('Execution timed out'));
         }, TIMEOUT);
 
+        /*
+         * A module that does not parse never runs, so it never reports back, and
+         * without this the example would sit here until the timeout with nothing to
+         * show for it. The parse error does not reach the script's own `error` event
+         * — that one is for a module that failed to load — it is thrown at the
+         * window. Take it and say what it was.
+         */
+        const onWindowError = (event: ErrorEvent) => {
+          cleanup();
+          reject(new Error(event.message));
+        };
+
         const cleanup = () => {
           clearTimeout(timer);
+          window.removeEventListener(
+            'error',
+            onWindowError,
+          );
           script.remove();
         };
 
@@ -150,6 +166,8 @@ async function run() {
           },
           { once: true },
         );
+
+        window.addEventListener('error', onWindowError);
 
         script.type = 'module';
         script.textContent = src;

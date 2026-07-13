@@ -17,6 +17,11 @@
  */
 const DIST = new URL('../site/.vitepress/dist/', import.meta.url).pathname;
 
+/** The library the site documents, as it is published. */
+const LIBRARY: string = JSON.parse(
+	await Deno.readTextFile(new URL('../package.json', import.meta.url).pathname),
+).name;
+
 /** The directories a version is served from: the root, the tree, one per release. */
 function isVersionDir(name: string): boolean {
 	return name === 'next' || /^v\d+\.\d+\.\d+$/.test(name);
@@ -115,6 +120,25 @@ async function runs(page: Shipped): Promise<string | undefined> {
 	}
 }
 
+/**
+ * Every release jsDelivr carries, newest first.
+ *
+ * The CDN's own inventory, not npm's: a release npm has published but jsDelivr has not
+ * yet mirrored is a version whose pages would import nothing, and asking the CDN we
+ * actually import from is the only way to know that.
+ */
+async function published(): Promise<readonly string[]> {
+	const response = await fetch(`https://data.jsdelivr.com/v1/packages/npm/${LIBRARY}`, {
+		headers: { accept: 'application/json' },
+	});
+	if (!response.ok) {
+		throw new Error(`[import-maps] jsDelivr metadata -> ${response.status} ${response.statusText}`);
+	}
+	const metadata: { readonly versions: ReadonlyArray<{ readonly version: string }> } =
+		await response.json();
+	return metadata.versions.map((entry) => entry.version);
+}
+
 const pages = await shipped();
 if (pages.length === 0) {
 	console.error('[import-maps] no built site at site/.vitepress/dist — run `run site:build` first');
@@ -122,6 +146,23 @@ if (pages.length === 0) {
 }
 
 const failures: string[] = [];
+
+// Every release the CDN carries should have a page, and every page a release.
+const releases = new Set(await published());
+const served = new Set(
+	pages.map((page) => boundTo(page)).filter((version) => /^\d+\.\d+\.\d+$/.test(version)),
+);
+for (const version of releases) {
+	if (!served.has(version))
+		failures.push(`jsDelivr carries ${version}, but the site serves no page for it`);
+}
+for (const version of served) {
+	if (!releases.has(version))
+		failures.push(`the site serves ${version}, which jsDelivr does not carry`);
+}
+console.log(
+	`[import-maps] jsDelivr carries ${releases.size} releases; the site serves ${served.size}`,
+);
 
 for (const page of pages) {
 	const route = `/${page.prefix}`;

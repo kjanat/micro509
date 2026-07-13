@@ -205,7 +205,6 @@ const docs = await versionedDocs({
 	 */
 	library: {
 		name: repo.name,
-		exports: Object.keys(repo.exports),
 		moduleUrl: (version, subpath) => {
 			const tail = subpath === '.' ? '' : `/${subpath.slice('./'.length)}`;
 			return version.tag === devLabel

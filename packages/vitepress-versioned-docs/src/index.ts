@@ -90,13 +90,6 @@ export interface VersionedDocsOptions {
 		/** Bare specifier root, e.g. `micro509` — becomes `<name>/keys`. */
 		readonly name: string;
 		/**
-		 * The public subpaths, as package.json `exports` keys: `.`, `./x509`.
-		 *
-		 * Only the keys: the files behind them are the CDN's business, and each
-		 * version's are its own.
-		 */
-		readonly exports: readonly string[];
-		/**
 		 * Where a version's examples import one subpath from, keyed as `exports` keys
 		 * it: `.`, `./x509`. A whole URL rather than a base to append to — a CDN's
 		 * URL for a subpath is its own business, and not every one is a prefix
@@ -136,6 +129,14 @@ export interface DocsVersion {
 	readonly prefix: string;
 	/** srcDir-relative directory holding this version's markdown. */
 	readonly srcRoot: string;
+	/**
+	 * The subpaths *this version* exported, as its own `exports` keys: `.`, `./x509`.
+	 *
+	 * Read from the version's own manifest, never the tree's. A subpath the library
+	 * grew later did not exist at an old tag, and mapping a page to one would bind it
+	 * to a module its release never published.
+	 */
+	readonly exports: readonly string[];
 	/** The pages this version ships — not the pages the tree ships. */
 	readonly sections: DocsSections;
 	/** The release this version was cut from; absent for the checked-out tree. */
@@ -347,6 +348,7 @@ async function resolveVersions(options: VersionedDocsOptions): Promise<readonly 
 				channel: 'latest',
 				prefix: '',
 				srcRoot: options.siteRoot,
+				exports: exportsOf(options.repoRoot),
 				sections: treeSections,
 			},
 		];
@@ -359,6 +361,7 @@ async function resolveVersions(options: VersionedDocsOptions): Promise<readonly 
 			channel: 'next',
 			prefix: 'next/',
 			srcRoot: options.siteRoot,
+			exports: exportsOf(options.repoRoot),
 			sections: treeSections,
 		},
 	];
@@ -381,6 +384,7 @@ async function resolveVersions(options: VersionedDocsOptions): Promise<readonly 
 			channel: isLatest ? 'latest' : 'archive',
 			prefix: isLatest ? '' : `${release.tag}/`,
 			srcRoot: path.posix.join(versionsRoot, key),
+			exports: exportsOf(tree),
 			sections: sectionsOf(pageRoot),
 			release: { url: release.url, published: release.published },
 		});
@@ -393,6 +397,19 @@ async function resolveVersions(options: VersionedDocsOptions): Promise<readonly 
 			.join(', ')}]`,
 	);
 	return versions;
+}
+
+/**
+ * The public subpaths a tree exported, from its own `package.json`.
+ *
+ * A released version's manifest comes down with its tag, so the answer to "what did
+ * this release export" is the release's, not today's.
+ */
+function exportsOf(root: string): readonly string[] {
+	const manifest: { readonly exports?: Readonly<Record<string, unknown>> } = JSON.parse(
+		fs.readFileSync(path.join(root, 'package.json'), 'utf8'),
+	);
+	return Object.keys(manifest.exports ?? {});
 }
 
 /** The version a page belongs to, by its (post-rewrite) route path. */
@@ -417,7 +434,7 @@ function importMapFor(
 	options: VersionedDocsOptions,
 ): { readonly importMap: string; readonly origin: string | undefined } {
 	const imports = Object.fromEntries(
-		options.library.exports
+		version.exports
 			.filter((subpath) => subpath === '.' || subpath.startsWith('./'))
 			// A manifest exports its own manifest; nothing imports it.
 			.filter((subpath) => subpath !== './package.json')
