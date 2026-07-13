@@ -198,6 +198,43 @@ console.log(await exportSpkiPem(publicKey));
 
 </LiveCode>
 
+## Fingerprint a certificate
+
+The certificate fingerprint is a hash over the DER encoding — the identifier
+`openssl x509 -fingerprint` and every TLS UI display. `certificateFingerprint`
+accepts a PEM string, DER bytes, or an already-parsed certificate and returns
+the digest as raw `bytes`, lowercase `hex`, and uppercase colon-separated
+`colonHex` (the openssl form). It defaults to SHA-256; pass `'SHA-1'`,
+`'SHA-384'`, or `'SHA-512'` for legacy interop.
+
+<LiveCode>
+
+```ts
+import {
+  certificateFingerprint,
+  createSelfSignedCertificate,
+} from 'micro509';
+
+const { certificate } = await createSelfSignedCertificate({
+  subject: { commonName: 'fingerprint.example' },
+});
+
+const sha256 = await certificateFingerprint(
+  certificate.pem,
+);
+const sha1 = await certificateFingerprint(
+  certificate.der,
+  'SHA-1',
+);
+
+console.log(`\
+SHA-256: ${sha256.colonHex}
+hex:     ${sha256.hex}
+SHA-1:   ${sha1.colonHex}`);
+```
+
+</LiveCode>
+
 ## Parse a CSR
 
 <LiveCode>

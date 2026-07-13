@@ -17,6 +17,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `certificateFingerprint(certificate, algorithm?)` computes the standard
+  certificate fingerprint — a hash over the DER encoding, the identifier
+  `openssl x509 -fingerprint` and TLS UIs display. It accepts the same
+  `string | Uint8Array | ParsedCertificate` source union as the verification
+  APIs and returns `{ bytes, hex, colonHex }`: the raw digest, lowercase hex
+  with no separators, and uppercase colon-separated hex (openssl style). It
+  defaults to SHA-256; SHA-1/384/512 are also supported for legacy interop
+  (older certificate pinning, PGP-adjacent tooling). Exported from the root and
+  `micro509/x509` as `certificateFingerprint`, with `CertificateFingerprint`,
+  `CertificateFingerprintAlgorithm`, and `CertificateFingerprintSource` types.
+  Interop with `openssl x509 -fingerprint` verified across all four algorithms.
+  (https://github.com/kjanat/micro509/issues/45)
+
 ## [0.10.0] - 2026-07-13
 
 Detached PKCS#7 / CMS signatures — the form git x509 commit signing and S/MIME

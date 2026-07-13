@@ -430,6 +430,9 @@ export type {
 	AuthorityInformationAccess,
 	BasicConstraints,
 	CertificateExtensionsInput,
+	CertificateFingerprint,
+	CertificateFingerprintAlgorithm,
+	CertificateFingerprintSource,
 	CertificateMaterial,
 	CertificatePolicies,
 	CreateCertificateInput,
@@ -481,6 +484,7 @@ export type {
 	ValidityInput,
 } from '#micro509/x509';
 export {
+	certificateFingerprint,
 	createCertificate,
 	createCertificateSigningRequest,
 	createSelfSignedCertificate,
