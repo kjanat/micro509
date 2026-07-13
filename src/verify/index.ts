@@ -21,12 +21,15 @@ export type {
 	UriServiceIdentityInput,
 } from '#micro509/verify/identity';
 export { matchCertificateServiceIdentity, matchServiceIdentity } from '#micro509/verify/identity';
+
 export type { InitialNameConstraintsInput } from '#micro509/verify/name-constraints';
+
 export type {
 	ConstrainedPolicy,
 	PolicyValidationInput,
 	PolicyValidationOutcome,
 } from '#micro509/verify/policy';
+
 export type {
 	BuildCandidatePathInput,
 	BuildCandidatePathResult,
@@ -59,12 +62,12 @@ export {
 	buildCandidatePath,
 	checkExtendedKeyUsage,
 	trustAnchorFromCertificate,
+	VERIFY_ERROR_CODES,
 	validateCandidatePath,
 	validateForCa,
 	validateForCodeSigning,
 	validateForTlsClient,
 	validateForTlsServer,
-	VERIFY_ERROR_CODES,
 	verifyCertificateChain,
 	verifyCertificateSigningRequest,
 } from '#micro509/verify/verify';

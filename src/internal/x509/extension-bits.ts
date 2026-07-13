@@ -7,9 +7,6 @@
  * @module
  */
 
-import { bitString, DEFAULT_MAX_DER_DEPTH, readRootElement } from '#micro509/internal/asn1/der';
-import type { DistributionPointReason, KeyUsage } from '#micro509/x509/extensions';
-
 /**
  * Decoded BIT STRING flags with DER conformance metadata.
  *
@@ -18,7 +15,8 @@ import type { DistributionPointReason, KeyUsage } from '#micro509/x509/extension
  * had non-zero bits in positions that DER (X.690 §11.2.2) requires to be zero.
  * Verification layers can use this signal to reject non-conformant encodings.
  */
-import type { ParsedBitFlags } from '#micro509/x509/extensions';
+import { bitString, DEFAULT_MAX_DER_DEPTH, readRootElement } from '#micro509/internal/asn1/der';
+import type { DistributionPointReason, KeyUsage, ParsedBitFlags } from '#micro509/x509/extensions';
 
 export type { ParsedBitFlags };
 

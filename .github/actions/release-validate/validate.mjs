@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // @ts-check
 /// <reference types="node" />
+import { error, log } from 'node:console';
 import { readFileSync, writeFileSync } from 'node:fs';
-import { env as processEnv, exit } from 'node:process';
-import { log, error } from 'node:console';
+import { exit, env as processEnv } from 'node:process';
 
 // biome-ignore format: don't like it
 const SEMVER_PATTERN = /^(?<major>0|[1-9]\d*)\.(?<minor>0|[1-9]\d*)\.(?<patch>0|[1-9]\d*)(?:-(?<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+(?<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/;

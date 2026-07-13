@@ -32,6 +32,19 @@ jobs:
       - name: Deno smoke test (dist)
         run: deno run --allow-read scripts/smoke.mjs
 
+  docs:
+    name: Docs site
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions: { contents: read }
+    env: { GITHUB_TOKEN: "${{ github.token }}" }
+    steps:
+      - uses: actions/checkout@v7
+        with: { persist-credentials: false }
+      - uses: ./.github/actions/setup-ts
+        with: { install-bun: true, install-node: true, install-deno: true }
+      - run: runner install -f site:build
+
   runtime-smoke:
     name: Workerd + browser smoke
     runs-on: ubuntu-latest

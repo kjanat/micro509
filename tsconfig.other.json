@@ -34,11 +34,11 @@
 		"src/**/*.json",
 		"test/**/*.ts",
 		"scripts",
+		"packages/*/src/**/*.ts",
 		"*.config.ts",
 		"*.d.ts",
 		"*.json",
 		"*.mjs"
 	],
-	"files": ["./site/.vitepress/api-gen.ts"],
 	"exclude": ["./dist", "./node_modules", "./site", "./**/*.deno.ts"]
 }

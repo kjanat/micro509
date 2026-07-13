@@ -6,6 +6,19 @@
  */
 
 export type {
+	CertificateRevocationStatus,
+	CheckChainRevocationInput,
+	CheckChainRevocationResult,
+	CheckChainRevocationValue,
+	OcspResponseSource,
+	RevocationExecutionError,
+	RevocationIndeterminateReason,
+	RevocationPolicy,
+	RevocationSource,
+} from '#micro509/revocation/chain';
+export { checkChainRevocation, REVOCATION_INDETERMINATE_REASONS } from '#micro509/revocation/chain';
+
+export type {
 	CertificateRevocationListMaterial,
 	CheckCertificateRevocationAgainstCrlErrorCode,
 	CheckCertificateRevocationAgainstCrlFailure,
@@ -43,15 +56,6 @@ export {
 	validateCertificateRevocationList,
 	verifyCertificateRevocationListSignature,
 } from '#micro509/revocation/crl';
-
-export type {
-	IssuingDistributionPoint,
-	IssuingDistributionPointBase,
-	IssuingDistributionPointForAttributeCerts,
-	IssuingDistributionPointForCaCerts,
-	IssuingDistributionPointForUserCerts,
-} from '#micro509/x509/extensions';
-export type { ParsedIssuingDistributionPoint } from '#micro509/x509/parse';
 
 export type {
 	CreateOcspRequestInput,
@@ -126,19 +130,16 @@ export type {
 export {
 	checkCertificateRevocation,
 	getCertificateOcspResponderUris,
-	resolveOcspResponderCandidates,
 	REVOCATION_INDETERMINATE_REASON_CODES,
+	resolveOcspResponderCandidates,
 } from '#micro509/revocation/revocation';
 
 export type {
-	CertificateRevocationStatus,
-	CheckChainRevocationInput,
-	CheckChainRevocationResult,
-	CheckChainRevocationValue,
-	OcspResponseSource,
-	RevocationExecutionError,
-	RevocationIndeterminateReason,
-	RevocationPolicy,
-	RevocationSource,
-} from '#micro509/revocation/chain';
-export { checkChainRevocation, REVOCATION_INDETERMINATE_REASONS } from '#micro509/revocation/chain';
+	IssuingDistributionPoint,
+	IssuingDistributionPointBase,
+	IssuingDistributionPointForAttributeCerts,
+	IssuingDistributionPointForCaCerts,
+	IssuingDistributionPointForUserCerts,
+} from '#micro509/x509/extensions';
+
+export type { ParsedIssuingDistributionPoint } from '#micro509/x509/parse';

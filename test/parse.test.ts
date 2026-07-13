@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import type { ParseCertificateErrorCode } from '#micro509';
 import {
 	createCertificate,
 	createCertificateSigningRequest,
@@ -16,8 +17,6 @@ import {
 	parseCertificateSigningRequestPem,
 	unwrap,
 } from '#micro509';
-import type { ParseCertificateErrorCode } from '#micro509';
-import { encodeName } from '#micro509/x509';
 import {
 	bitString,
 	concatBytes,
@@ -34,6 +33,7 @@ import {
 } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { encodeRsaPssParameters, rsaPssParametersForHash } from '#micro509/internal/crypto/rsa-pss';
+import { encodeName } from '#micro509/x509';
 import { parseAuthorityKeyIdentifier, parseNameConstraints } from '#micro509/x509/parse';
 import {
 	childrenOf,

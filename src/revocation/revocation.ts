@@ -6,8 +6,6 @@
  */
 
 import type { Result } from '#micro509/result/result';
-import type { ParsedCertificate } from '#micro509/x509/parse';
-import { parseCertificateDerOrThrow, parseCertificateFromSource } from '#micro509/x509/parse';
 import type {
 	CrlApplicabilityFailureReason,
 	CrlSource,
@@ -20,6 +18,8 @@ import type {
 	ParsedOcspResponse,
 } from '#micro509/revocation/ocsp';
 import { validateOcspResponse } from '#micro509/revocation/ocsp';
+import type { ParsedCertificate } from '#micro509/x509/parse';
+import { parseCertificateDerOrThrow, parseCertificateFromSource } from '#micro509/x509/parse';
 
 export type * from '#micro509/revocation/crl';
 export type * from '#micro509/revocation/ocsp';

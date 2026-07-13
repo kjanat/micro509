@@ -73,7 +73,6 @@ import {
 import type { NameFieldKey } from '#micro509/x509/name';
 import { nameFieldKeyFromOid } from '#micro509/x509/name';
 
-export type { ParsedBitFlags } from '#micro509/x509/extensions';
 export type {
 	AuthorityInformationAccess,
 	BasicConstraints,
@@ -85,6 +84,7 @@ export type {
 	InhibitAnyPolicy,
 	KeyUsage,
 	NameConstraints,
+	ParsedBitFlags,
 	ParsedNameConstraintForm,
 	PolicyConstraints,
 	PolicyMappings,

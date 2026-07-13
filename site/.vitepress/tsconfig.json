@@ -1,16 +1,8 @@
 {
-  "extends": [
-    "@tsconfig/node24/tsconfig.json",
-    "@vue/tsconfig",
-    "@vue/tsconfig/tsconfig.dom.json"
-  ],
-  "compilerOptions": {
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": ["node", "bun"],
-    "paths": {
-      "#/*": ["./*"],
-      "#/components/*": ["./theme/components/*"]
-    }
-  },
-  "exclude": ["./dist/", "./cache/"]
+	"extends": ["@tsconfig/node24/tsconfig.json", "@vue/tsconfig", "@vue/tsconfig/tsconfig.dom.json"],
+	"compilerOptions": {
+		"lib": ["ES2022", "DOM", "DOM.Iterable"],
+		"types": ["node", "bun"]
+	},
+	"exclude": ["./dist/", "./cache/"]
 }

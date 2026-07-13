@@ -9,13 +9,13 @@ import {
 	parseCertificatePem,
 	pemDecodeOrThrow,
 	trustAnchorFromCertificate,
+	unwrap,
 	validateCandidatePath,
 	validateForCa,
 	validateForCodeSigning,
 	validateForTlsClient,
 	validateForTlsServer,
 	verifyCertificateChain,
-	unwrap,
 } from '#micro509';
 import {
 	objectIdentifier,

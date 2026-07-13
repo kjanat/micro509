@@ -1,0 +1,16 @@
+{
+	"name": "@micro509/vitepress-versioned-docs",
+	"version": "0.0.0",
+	"private": true,
+	"description": "VitePress plugin: serve every released version of the docs from one build, materialized from release tags.",
+	"type": "module",
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"dependencies": {
+		"tar": "catalog:site"
+	},
+	"peerDependencies": {
+		"vitepress": ">=2.0.0-alpha.18"
+	}
+}

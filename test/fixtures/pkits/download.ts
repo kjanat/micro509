@@ -2,8 +2,8 @@
 import { copyFile, mkdir, mkdtemp, readdir, rm, unlink } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { projectRoot } from '#test/helpers';
 import { $, which } from 'bun';
+import { projectRoot } from '#test/helpers';
 
 /** Vendors the full PKITS fixture corpus from the BoringSSL mirror of the NIST PKITS inputs via a
  * shallow blobless sparse checkout (~3 MB) instead of ~580 individual HTTP requests. */

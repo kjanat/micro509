@@ -8,8 +8,6 @@
  * @module
  */
 
-import type { ParsedCertificate } from '#micro509/x509/parse';
-import { parseCertificateFromSource } from '#micro509/x509/parse';
 import type {
 	CrlSource,
 	ParsedCertificateRevocationList,
@@ -32,8 +30,9 @@ import {
 	parseOcspResponsePemOrThrow,
 	validateOcspResponse,
 } from '#micro509/revocation/ocsp';
-
 import type { RevocationCertificateSource } from '#micro509/revocation/revocation';
+import type { ParsedCertificate } from '#micro509/x509/parse';
+import { parseCertificateFromSource } from '#micro509/x509/parse';
 
 export type { CrlSource };
 

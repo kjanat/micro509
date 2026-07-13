@@ -10,11 +10,11 @@ import {
 	parseCertificatePem,
 	parseCertificateRevocationListPemOrThrow,
 	parseOcspResponseDerOrThrow,
+	unwrap,
 	validateOcspResponse,
 	verifyCertificateChain,
-	unwrap,
 } from '#micro509';
-import { hexToBytes, issueChain, openSslAvailable, differentialEnabled } from '#test/helpers';
+import { differentialEnabled, hexToBytes, issueChain, openSslAvailable } from '#test/helpers';
 import {
 	checkIdentityWithOpenSsl,
 	checkRevocationWithOpenSsl,

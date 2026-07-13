@@ -32,12 +32,12 @@ import { base64Encode } from '#micro509/internal/shared/base64';
 import type { EncryptedPkcs8Options } from '#micro509/keys/keys';
 import { exportPkcs8Der } from '#micro509/keys/keys';
 import { pemEncode, splitPemBlocksOrThrow } from '#micro509/pem/pem';
+import type { ParsedPkcs12MacData, Pkcs12MacOptions } from '#micro509/pkcs/pkcs12-mac';
+import { createPkcs12MacData, parsePkcs12MacData } from '#micro509/pkcs/pkcs12-mac';
 import type { ErrorResult, Micro509Error } from '#micro509/result/result';
 import { failureResult } from '#micro509/result/result';
 import type { ParsedCertificate } from '#micro509/x509/parse';
 import { parseCertificateDerOrThrow } from '#micro509/x509/parse';
-import type { ParsedPkcs12MacData, Pkcs12MacOptions } from '#micro509/pkcs/pkcs12-mac';
-import { createPkcs12MacData, parsePkcs12MacData } from '#micro509/pkcs/pkcs12-mac';
 
 export type * from '#micro509/pkcs/pkcs12-mac';
 

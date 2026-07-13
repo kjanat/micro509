@@ -1,35 +1,40 @@
 {
-  "name": "micro509-site",
-  "version": "",
-  "private": true,
-  "type": "module",
-  "imports": {
-    "#/*": "./*",
-    "#/components/*": "./theme/components/*"
-  },
-  "scripts": {
-    "fmt": "cd ../ && dprint fmt",
-    "dev": "vitepress dev .. --host",
-    "build": "bun ../../scripts/check-doc-examples.bun.ts && vitepress build ..",
-    "preview": "vitepress preview ..",
-    "typecheck": "vue-tsc --noEmit -p tsconfig.json",
-    "wrangler:types": "wrangler types"
-  },
-  "devDependencies": {
-    "@cloudflare/vite-plugin": "catalog:cloudflare",
-    "@tsconfig/node24": "catalog:ts",
-    "@types/bun": "catalog:ts",
-    "@types/node": "catalog:ts",
-    "@vue/tsconfig": "catalog:ts",
-    "dprint": "catalog:",
-    "markdown-it-task-lists": "catalog:site",
-    "typescript": "catalog:ts",
-    "typescript-7": "catalog:ts",
-    "vite-robots-txt": "catalog:site",
-    "vite-svg-to-ico": "catalog:site",
-    "vitepress": "catalog:site",
-    "vue": "catalog:",
-    "vue-tsc": "catalog:ts",
-    "wrangler": "catalog:cloudflare"
-  }
+	"name": "micro509-site",
+	"version": "",
+	"private": true,
+	"type": "module",
+	"imports": {
+		"#*": "./*",
+		"#components/*": "./theme/components/*"
+	},
+	"scripts": {
+		"build": "vitepress build ..",
+		"dev": "vitepress dev .. --host",
+		"fmt": "cd ../ && dprint fmt",
+		"preview": "vitepress preview ..",
+		"typecheck": "vue-tsc --noEmit -p tsconfig.json",
+		"wrangler:types": "wrangler types"
+	},
+	"devDependencies": {
+		"@cloudflare/vite-plugin": "catalog:cloudflare",
+		"@micro509/doc-render": "workspace:*",
+		"@micro509/vitepress-api-docs": "workspace:*",
+		"@micro509/vitepress-doc-examples": "workspace:*",
+		"@micro509/vitepress-github-links": "workspace:*",
+		"@micro509/vitepress-versioned-docs": "workspace:*",
+		"@tsconfig/node24": "catalog:ts",
+		"@types/bun": "catalog:ts",
+		"@types/node": "catalog:ts",
+		"@vue/tsconfig": "catalog:ts",
+		"dprint": "catalog:",
+		"markdown-it-task-lists": "catalog:site",
+		"typescript": "catalog:ts",
+		"typescript-7": "catalog:ts",
+		"vite-robots-txt": "catalog:site",
+		"vite-svg-to-ico": "catalog:site",
+		"vitepress": "catalog:site",
+		"vue": "catalog:",
+		"vue-tsc": "catalog:ts",
+		"wrangler": "catalog:cloudflare"
+	}
 }

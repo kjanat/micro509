@@ -12,9 +12,9 @@ import {
 	parseCertificateRevocationListPem,
 	parseCertificateRevocationListPemOrThrow,
 	pemDecodeOrThrow,
+	unwrap,
 	validateCertificateRevocationList,
 	verifyCertificateRevocationListSignature,
-	unwrap,
 } from '#micro509';
 import {
 	bool,

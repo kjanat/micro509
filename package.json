@@ -2,14 +2,7 @@
 	"name": "micro509",
 	"version": "0.9.0",
 	"description": "The zero-dependency TypeScript PKI toolkit for real certificate workflows.",
-	"keywords": [
-		"x509",
-		"certificate",
-		"csr",
-		"pem",
-		"der",
-		"jwk"
-	],
+	"keywords": ["x509", "certificate", "csr", "pem", "der", "jwk"],
 	"homepage": "https://micro509.kjanat.dev",
 	"repository": {
 		"type": "git",
@@ -78,12 +71,8 @@
 		"./package.json": "./package.json"
 	},
 	"types": "./dist/index.d.ts",
-	"files": [
-		"dist"
-	],
-	"workspaces": [
-		"site/.vitepress"
-	],
+	"files": ["dist"],
+	"workspaces": ["packages/*", "site/.vitepress"],
 	"scripts": {
 		"bd": "tsdown",
 		"build": "tsdown",
@@ -91,7 +80,6 @@
 		"check": "run -pK check:biome check:deno typecheck",
 		"check:biome": "biome check",
 		"check:deno": "deno check src",
-		"check:examples": "bun scripts/check-doc-examples.bun.ts",
 		"deno:cleandocs": "rm -rf docs/deno 2>/dev/null",
 		"deno:importsmap": "bun scripts/gen-deno-importmap.bun.ts",
 		"docs:build": "run -pk deno:importsmap deno:cleandocs; deno doc --no-npm --import-map deno.import_map.json --html --output=docs/deno --name=micro509 src/**/index.ts",
@@ -119,7 +107,7 @@
 		"test:differential": "bun test test/differential.test.ts test/differential-fuzz.test.ts",
 		"test:pkits": "bun test test/pkits.test.ts",
 		"test:watch": "AGENT=1 bun test --watch --concurrent",
-		"typecheck": "run -pk typecheck:src typecheck:other typecheck:regular site:typecheck check:examples",
+		"typecheck": "run -pk typecheck:src typecheck:other typecheck:regular site:typecheck",
 		"typecheck:other": "tsc --noEmit -p tsconfig.other.json",
 		"typecheck:regular": "tsc --noEmit -p tsconfig.json",
 		"typecheck:src": "tsc --noEmit -p tsconfig.src.json",
@@ -132,6 +120,7 @@
 		"@arethetypeswrong/core": "catalog:build",
 		"@biomejs/biome": "catalog:",
 		"@deno/doc": "catalog:deno",
+		"@micro509/doc-render": "workspace:*",
 		"@tsconfig/node24": "catalog:ts",
 		"@types/bun": "catalog:ts",
 		"@types/deno": "catalog:deno",
@@ -202,6 +191,7 @@
 		},
 		"site": {
 			"markdown-it-task-lists": "^2.1.1",
+			"tar": "^7.5.20",
 			"vite-robots-txt": "^1.0.0",
 			"vite-svg-to-ico": "^4.0.0",
 			"vitepress": "2.0.0-alpha.18"
@@ -219,11 +209,5 @@
 			"vue-tsc": "^3.3.5"
 		}
 	},
-	"trustedDependencies": [
-		"deno",
-		"dprint",
-		"esbuild",
-		"sharp",
-		"workerd"
-	]
+	"trustedDependencies": ["deno", "dprint", "esbuild", "sharp", "workerd"]
 }

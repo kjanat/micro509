@@ -1,6 +1,5 @@
-import { join } from 'node:path';
-
 import { describe, expect, it } from 'bun:test';
+import { join } from 'node:path';
 import {
 	derivePublicKey,
 	exportSpkiDer,
@@ -15,9 +14,9 @@ import { compareCertificate } from '#test/fuzz/compare';
 import { dumpFailure } from '#test/fuzz/failure';
 import { makeRng } from '#test/fuzz/prng';
 import { drawCase, importInputFor } from '#test/fuzz/spec';
-import { generateCertificate, readCertFields } from '#test/oracles/openssl-gen';
+import { differentialEnabled, openSslAvailable } from '#test/helpers';
 import { runOpenSsl, withTempDir } from '#test/oracles/openssl';
-import { openSslAvailable, differentialEnabled } from '#test/helpers';
+import { generateCertificate, readCertFields } from '#test/oracles/openssl-gen';
 
 /** Env override, falling back only when the variable is missing or non-numeric (0 is honored). */
 function envInt(name: string, fallback: number): number {

@@ -5,8 +5,8 @@ import {
 	checkChainRevocation,
 	parseCertificateDer,
 	parseCertificateRevocationListDerOrThrow,
-	verifyCertificateChain,
 	unwrap,
+	verifyCertificateChain,
 } from '#micro509';
 import { PKITS_CASES, type PkitsCase } from '#test/pkits/manifest';
 

@@ -150,4 +150,4 @@ function flattenOidTree(tree: typeof OID_GROUP_SPECS): OidRegistry {
  */
 const OIDS: OidRegistry = flattenOidTree(OID_GROUP_SPECS);
 
-export { OIDS, OID_GROUP_SPECS };
+export { OID_GROUP_SPECS, OIDS };

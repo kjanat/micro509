@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import { exportSpkiDer, generateKeyPair, unwrap } from '#micro509';
 import type { KeyAlgorithmInput } from '#micro509';
+import { exportSpkiDer, generateKeyPair, unwrap } from '#micro509';
 import type { NameInput } from '#micro509/x509';
 import * as x509 from '#micro509/x509';
 

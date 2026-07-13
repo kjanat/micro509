@@ -16,6 +16,7 @@ import {
 	time,
 } from '#micro509/internal/asn1/der';
 import type { SignatureProfileInput } from '#micro509/internal/crypto/signing';
+
 export type { SignatureProfileInput };
 
 import {
