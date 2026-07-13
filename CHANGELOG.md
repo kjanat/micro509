@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-07-13
+
+Certificate fingerprinting and private-key ownership checks for certificate
+inspection, intake, and issuance workflows.
+
 ### Added
 
 - `certificateFingerprint(certificate, algorithm?)` computes the standard
@@ -534,7 +539,8 @@ Initial prerelease. API may change before 1.0.
 - Zero runtime dependencies, WebCrypto-native, tree-shakeable subpath exports;
   runs on Node, Bun, Deno, browsers, and Cloudflare Workers.
 
-[Unreleased]: https://github.com/kjanat/micro509/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/kjanat/micro509/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/kjanat/micro509/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/kjanat/micro509/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/kjanat/micro509/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/kjanat/micro509/compare/v0.7.2...v0.8.0
