@@ -10,8 +10,8 @@
 import { once } from 'node:events';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { performance } from 'node:perf_hooks';
 import path from 'node:path';
+import { performance } from 'node:perf_hooks';
 import { chromium } from 'playwright';
 
 /**
