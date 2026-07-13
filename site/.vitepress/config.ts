@@ -94,6 +94,15 @@ function generateApi(target: { readonly root: string; readonly outDir: string })
 	});
 }
 
+/**
+ * The library `/next/` serves, compiled from the sources being documented.
+ *
+ * A fresh checkout has no `dist/`, so this is what a build machine is missing
+ * when it has never run the library's own build.
+ */
+const distDir = path.join(repoRoot, 'dist');
+execFileSync('bun', ['run', 'bd'], { cwd: repoRoot, stdio: 'inherit' });
+
 /** Markdown files directly under `dir`. */
 function pagesIn(dir: string): readonly string[] {
 	if (!fs.existsSync(dir)) return [];
@@ -136,7 +145,7 @@ const docs = await versionedDocs({
 	siteRoot,
 	versionsDir: path.join(repoRoot, siteRoot, 'versions'),
 	cacheDir: path.join(import.meta.dirname, 'cache/versions'),
-	distDir: path.join(repoRoot, 'dist'),
+	distDir,
 	devLabel: `v${repo.version}-dev`,
 	pages: ['site/guide', 'site/reference', 'site/index.md'],
 	sources: ['src', 'package.json', 'jsr.json'],

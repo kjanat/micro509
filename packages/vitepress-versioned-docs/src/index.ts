@@ -535,12 +535,15 @@ async function emitAssets(
 	const outDir = siteConfig.outDir;
 
 	for (const version of versions) {
+		if (!fs.existsSync(version.distDir)) {
+			throw new Error(
+				`[versions] ${version.label} has no library at ${version.distDir}. A release's comes from its artifact; the checked-out tree's has to be built before the site.`,
+			);
+		}
 		await fsp.cp(
 			version.distDir,
 			path.join(outDir, version.prefix, 'vendor', options.library.name),
-			{
-				recursive: true,
-			},
+			{ recursive: true },
 		);
 	}
 

@@ -270,8 +270,11 @@ function bulletBody(doc: string): string {
 /** Strip links/backticks/escapes back to plain source text — for ```ts fences,
  * where markdown doesn't render and `[x](#y)` / `\<` would appear literally. */
 function plain(s: string): string {
+	// The label and target classes exclude their own opening delimiter: with
+	// `[^\]]*`, a run of `[` makes every start position rescan the rest of the
+	// string (polynomial backtracking).
 	return s
-		.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+		.replace(/\[([^[\]]*)\]\(([^()]*)\)/g, '$1')
 		.replace(/`/g, '')
 		.replace(/\\([<>|[\]])/g, '$1');
 }
