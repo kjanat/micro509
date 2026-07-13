@@ -3,7 +3,7 @@
 Issue a self-signed certificate, then parse it back out of its own PEM. TypeScript, hot
 reload, and `micro509` as an npm dependency.
 
-[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/kjanat/micro509/tree/master/examples/vite)
+[![Open in StackBlitz]][stackblitz]
 
 ## Locally
 
@@ -28,3 +28,5 @@ says about itself.
 
 [`src/main.ts`]: ./src/main.ts
 [`../browser`]: ../browser/README.md
+[Open in StackBlitz]: https://developer.stackblitz.com/img/open_in_stackblitz_small.svg
+[stackblitz]: https://stackblitz.com/fork/github/kjanat/micro509/tree/stackblitz/examples/vite?title=micro509%20with%20Vite
