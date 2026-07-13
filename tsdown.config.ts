@@ -60,7 +60,6 @@ export default defineConfig({
 			return exports;
 		},
 	},
-	onSuccess: 'bunx sort-package-json --quiet {package,jsr}.json',
 	attw: { profile: 'esm-only', enabled: 'ci-only' },
 	report: 'ci-only',
 	publint: 'ci-only',
