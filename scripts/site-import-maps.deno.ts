@@ -71,10 +71,15 @@ async function shipped(): Promise<readonly Shipped[]> {
 	return pages;
 }
 
-/** The library a version's map points at: `0.8.0`, or `master`/a commit for the tree. */
+/**
+ * The library a version's map points at: `0.8.0`, or `master`/a commit for the tree.
+ *
+ * Read out of the URL rather than off the end of it: a CDN puts its own things after
+ * the version (`.../micro509@0.8.0/x509/+esm`), and only the `@ref` is ours.
+ */
 function boundTo(page: Shipped): string {
 	const root = Object.values(page.imports)[0] ?? '';
-	return root.split('@').at(-1) ?? '';
+	return root.match(/@([^/@?]+)/)?.[1] ?? '';
 }
 
 /** A page must import the version it documents — `/v0.8.0/` must not serve v0.11.0's library. */
@@ -133,8 +138,12 @@ for (const page of pages) {
 				if (typeof response === 'string') return `${specifier} -> ${url} (${response})`;
 				const body = await response.text();
 				if (!response.ok) return `${specifier} -> ${url} (${response.status})`;
-				// A registry that 404s into an HTML page is still a dead import.
-				return /^(\/\* esm\.sh|import|export)/.test(body.trim())
+
+				// A CDN that 404s into an HTML page is still a dead import. What every CDN's
+				// output has in common is that it is JavaScript and it exports something —
+				// not a shape: esm.sh leads with an import, jsDelivr with a build banner.
+				const javascript = response.headers.get('content-type')?.includes('javascript');
+				return javascript === true && /\bexport\b/.test(body)
 					? undefined
 					: `${specifier} -> ${url} (not a module)`;
 			}),

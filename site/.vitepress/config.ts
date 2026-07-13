@@ -189,18 +189,29 @@ const docs = await versionedDocs({
 		offline: process.env.DOCS_OFFLINE === '1',
 	},
 	/**
-	 * A released version imports the release it documents, straight from npm.
-	 * The tree has published nothing, so it imports the commit it *is* — every
-	 * master commit and pull request head is built by pkg.pr.new, and esm.sh
-	 * serves those builds under `/pr/`.
+	 * A released version imports the release it documents from jsDelivr, whose
+	 * `+esm` builds arrive bundled: one file per subpath, two requests where
+	 * esm.sh mirrors the package's module graph and costs thirty-nine — measured
+	 * at a third of the time to load, and twenty kilobytes lighter.
+	 *
+	 * The tree has published nothing, so it imports the commit it *is*. Every
+	 * master commit and pull request head is built by pkg.pr.new, which jsDelivr
+	 * cannot serve — it carries npm and GitHub, and a pkg.pr.new build is on
+	 * neither. esm.sh serves them under `/pr/`, and `?standalone` bundles them
+	 * the way jsDelivr bundles a release: four requests rather than thirty-nine.
+	 * Safe to bundle here because the library has no exported classes and no
+	 * registry a caller mutates — duplicating its internals across two bundles
+	 * costs a cold cache and nothing else.
 	 */
 	library: {
 		name: repo.name,
 		exports: Object.keys(repo.exports),
-		moduleBase: (version) =>
-			version.tag === devLabel
-				? `https://esm.sh/pr/${repo.name}@${nextRef}`
-				: `https://esm.sh/${repo.name}@${version.tag.replace(/^v/, '')}`,
+		moduleUrl: (version, subpath) => {
+			const tail = subpath === '.' ? '' : `/${subpath.slice('./'.length)}`;
+			return version.tag === devLabel
+				? `https://esm.sh/pr/${repo.name}@${nextRef}${tail}?standalone`
+				: `https://cdn.jsdelivr.net/npm/${repo.name}@${version.tag.replace(/^v/, '')}${tail}/+esm`;
+		},
 	},
 	generateApi,
 	fileGuardrail: 19_500,

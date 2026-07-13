@@ -46,6 +46,9 @@ jobs:
       - run: runner install -f site:build
       - name: Every version's examples import the library that version documents
         run: run site:import-maps
+      - run: run playwright:chromium
+      - name: Examples run in a browser, with a content blocker simulated
+        run: run site:live-examples
 
   runtime-smoke:
     name: Workerd + browser smoke

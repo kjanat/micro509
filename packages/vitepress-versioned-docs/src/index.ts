@@ -97,11 +97,12 @@ export interface VersionedDocsOptions {
 		 */
 		readonly exports: readonly string[];
 		/**
-		 * The ESM base a version's examples import from — no trailing slash, e.g.
-		 * `https://esm.sh/micro509@0.8.0`. Subpaths are appended to it, so it must
-		 * resolve the library's own `exports` map.
+		 * Where a version's examples import one subpath from, keyed as `exports` keys
+		 * it: `.`, `./x509`. A whole URL rather than a base to append to — a CDN's
+		 * URL for a subpath is its own business, and not every one is a prefix
+		 * (jsDelivr wants `.../micro509@0.8.0/x509/+esm`).
 		 */
-		readonly moduleBase: (version: DocsVersion) => string;
+		readonly moduleUrl: (version: DocsVersion, subpath: string) => string;
 	};
 
 	/** Regenerate one version's API reference. Called per tag, and for the tree. */
@@ -415,21 +416,22 @@ function importMapFor(
 	version: DocsVersion,
 	options: VersionedDocsOptions,
 ): { readonly importMap: string; readonly origin: string | undefined } {
-	const base = options.library.moduleBase(version);
 	const imports = Object.fromEntries(
 		options.library.exports
 			.filter((subpath) => subpath === '.' || subpath.startsWith('./'))
 			// A manifest exports its own manifest; nothing imports it.
 			.filter((subpath) => subpath !== './package.json')
-			.map((subpath): [string, string] => {
-				if (subpath === '.') return [options.library.name, base];
-				const tail = subpath.slice('./'.length);
-				return [`${options.library.name}/${tail}`, `${base}/${tail}`];
-			}),
+			.map((subpath): [string, string] => [
+				subpath === '.'
+					? options.library.name
+					: `${options.library.name}/${subpath.slice('./'.length)}`,
+				options.library.moduleUrl(version, subpath),
+			]),
 	);
+	const root = imports[options.library.name];
 	return {
 		importMap: JSON.stringify({ imports }),
-		origin: URL.canParse(base) ? new URL(base).origin : undefined,
+		origin: root !== undefined && URL.canParse(root) ? new URL(root).origin : undefined,
 	};
 }
 

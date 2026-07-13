@@ -20,14 +20,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - The docs site no longer co-hosts the library: each version's runnable examples
-  import it from esm.sh, bound to the version that page documents — a release to
-  what it published, `/next/` to a pkg.pr.new build of the commit deployed. The
-  co-hosted copy put the library's own file layout in the site's URL space, where
-  `x509/fingerprint.js` matched an EasyPrivacy rule blocking that path on every
-  domain (`/fingerprint.js^$domain=~github.com`). Content blockers refused it, and
-  because it is a static import of the root entry, every example on the site died
-  for readers running one. `run site:import-maps` now gates CI on every version's
-  examples resolving to that version's library.
+  import it from a CDN, bound to the version that page documents. A release imports
+  what it published, from jsDelivr, whose `+esm` builds arrive bundled — one request
+  where esm.sh's module graph took thirty-nine, and a third of the time to load.
+  `/next/` imports a pkg.pr.new build of the deployed commit, which only esm.sh can
+  serve, bundled with `?standalone`. The co-hosted copy put the library's own file
+  layout in the site's URL space, where `x509/fingerprint.js` matched an EasyPrivacy
+  rule blocking that path on every domain (`/fingerprint.js^$domain=~github.com`).
+  Content blockers refused it, and because it is a static import of the root entry,
+  every example on the site died for readers running one.
+- CI gates the docs site on its examples actually working: `run site:import-maps`
+  checks every version's map names its own library and that every URL in it resolves,
+  and `run site:live-examples` clicks Run in a real browser with a content blocker
+  simulated — a headless browser has none, and would have passed while the bug above
+  was live.
 
 ## [0.11.0] - 2026-07-13
 

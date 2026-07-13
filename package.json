@@ -96,6 +96,7 @@
 		"site:build": "run --dir site/.vitepress build",
 		"site:dev": "run --dir site/.vitepress dev",
 		"site:import-maps": "deno run --allow-read --allow-net --allow-write --allow-run scripts/site-import-maps.deno.ts",
+		"site:live-examples": "node scripts/site-live-examples.mjs",
 		"site:preview": "run --dir site/.vitepress preview",
 		"site:typecheck": "run --dir site/.vitepress typecheck",
 		"smoke": "run build -l silent; run -p smoke:browser smoke:bun smoke:deno smoke:node smoke:workerd",
