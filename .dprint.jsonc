@@ -21,7 +21,8 @@
 			"**/.vscode/*.json",
 			"**/.zed/*.json",
 			"**/tsconfig*.json"
-		]
+		],
+		"associations": [".stackblitzrc"]
 	},
 	"shfmt": { "useTabs": true, "binaryNextLine": true, "switchCaseIndent": true },
 	"markdown": { "textWrap": "always", "associations": ["!*.md"] },

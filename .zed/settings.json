@@ -6,6 +6,7 @@
 		{ "language_server": { "name": "dprint" } }
 	],
 	"prettier": { "allowed": false },
+	"file_types": { "JSON": [".stackblitzrc"] },
 	"wrap_guides": [100],
 	"languages": {
 		"TypeScript": {
@@ -55,6 +56,10 @@
 						{
 							"fileMatch": ["src/internal/asn1/oids.json"],
 							"url": "./src/internal/asn1/oids.schema.json"
+						},
+						{
+							"fileMatch": [".stackblitzrc"],
+							"url": "https://www.schemastore.org/stackblitzrc.json"
 						}
 					]
 				}
