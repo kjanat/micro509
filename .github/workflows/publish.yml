@@ -52,7 +52,7 @@ jobs:
       - uses: ./.github/actions/setup-ts
         with: { install-bun: "true" }
       - name: Install dependencies and build (tsdown regenerates jsr.json)
-        run: runner install -f build
+        run: runner install -f build fmt
       - shell: pwsh
         env: { OUTPUTS: "${{ toJSON(needs.validate.outputs) }}" }
         run: |
