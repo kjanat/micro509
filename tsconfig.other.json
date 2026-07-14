@@ -34,7 +34,7 @@
 		"src/**/*.json",
 		"test/**/*.ts",
 		"scripts",
-		"packages/*/src/**/*.ts",
+		"packages/**/*.ts",
 		"*.config.ts",
 		"*.d.ts",
 		"*.json",
