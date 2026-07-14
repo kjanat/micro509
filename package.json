@@ -81,6 +81,7 @@
 		"check": "run -pK check:biome check:deno typecheck",
 		"check:biome": "biome check",
 		"check:deno": "deno check src",
+		"deno:cache": "deno cache --import-map=deno.import_map.json {src,docs,packages}/",
 		"deno:cleandocs": "rm -rf docs/deno 2>/dev/null",
 		"deno:importsmap": "bun scripts/gen-deno-importmap.bun.ts",
 		"docs:build": "run -pk deno:importsmap deno:cleandocs; deno doc --no-npm --import-map deno.import_map.json --html --output=docs/deno --name=micro509 src/**/index.ts",
@@ -90,7 +91,7 @@
 		"lint:biome": "biome lint",
 		"lint:deno": "deno lint src",
 		"playwright:chromium": "npx playwright install --with-deps chromium",
-		"prepare": "run -q deno:importsmap",
+		"prepare": "run -q deno:importsmap deno:cache",
 		"prepublishOnly": "[ -n \"${GITHUB_ACTIONS:-}\" ] || { printf '%s\\n' 'manual npm publish blocked; use release workflow for provenance' >&2; exit 1; }",
 		"publish:jsr": "[ -n \"${GITHUB_ACTIONS:-}\" ] || { printf '%s\\n' 'manual JSR publish blocked; use release workflow' >&2; exit 1; }; bunx jsr publish",
 		"publish:pkgprnew": "bunx pkg-pr-new publish --packageManager='npm,pnpm,bun' --bun --template './examples/vite'",
@@ -146,11 +147,13 @@
 		"packageManager": [
 			{
 				"name": "bun",
-				"onFail": "download"
+				"version": ">=1.3",
+				"onFail": "warn"
 			},
 			{
 				"name": "npm",
-				"version": ">=11"
+				"version": ">=11,<12",
+				"onFail": "warn"
 			}
 		],
 		"runtime": [

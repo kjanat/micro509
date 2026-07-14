@@ -74,6 +74,9 @@ import { writeDenoImportMap } from '@micro509/deno-import-map';
 const importMap = writeDenoImportMap({
   root: path.resolve(import.meta.dirname, '..'),
   out: 'deno.import_map.json',
+  additionalImports: {
+    'bun:test': './node_modules/bun-types/test.d.ts',
+  },
 });
 
 console.log(importMap); // absolute because root is absolute
@@ -83,15 +86,18 @@ console.log(importMap); // absolute because root is absolute
 `path.join(root, out)`. Pass an absolute `root` when the returned path must be
 absolute.
 
-| Option     | Meaning                                                             |
-| ---------- | ------------------------------------------------------------------- |
-| `root`     | Base directory for manifest, source targets, and output paths.      |
-| `manifest` | Optional manifest path relative to `root`. Default: `package.json`. |
-| `out`      | Output path relative to `root`.                                     |
+| Option              | Meaning                                                             |
+| ------------------- | ------------------------------------------------------------------- |
+| `root`              | Base directory for manifest, source targets, and output paths.      |
+| `manifest`          | Optional manifest path relative to `root`. Default: `package.json`. |
+| `out`               | Output path relative to `root`.                                     |
+| `additionalImports` | Extra import-map entries. These override generated keys.            |
 
 Missing output directories are created recursively. When the manifest uses
 relative targets, write the import map beside the manifest: the function copies
 target values without rebasing them relative to a nested output directory.
+Additional imports are merged after manifest expansion and participate in the
+same sorted output.
 
 ### A generator script
 

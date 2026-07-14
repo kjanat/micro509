@@ -39,6 +39,7 @@ export interface ImportMapTarget {
 	readonly root: string;
 	readonly manifest?: string;
 	readonly out: string;
+	readonly additionalImports?: Readonly<Record<string, string>>;
 }
 
 export function writeDenoImportMap(target: ImportMapTarget): string {
@@ -63,6 +64,7 @@ export function writeDenoImportMap(target: ImportMapTarget): string {
 			imports[`${pattern.keyPrefix}${file}${pattern.keySuffix}`] = resolved;
 		}
 	}
+	for (const [key, value] of Object.entries(target.additionalImports ?? {})) imports[key] = value;
 
 	const sorted = Object.fromEntries(
 		Object.entries(imports).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),

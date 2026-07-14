@@ -12,6 +12,11 @@ import { writeDenoImportMap } from '@micro509/deno-import-map';
 
 const target = writeDenoImportMap({
 	root: path.resolve(import.meta.dir, '..'),
+	manifest: 'package.json',
 	out: 'deno.import_map.json',
+	additionalImports: {
+		'bun:test': './node_modules/bun-types/test.d.ts', //'https://cdn.jsdelivr.net/npm/bun-types@1.3/test.d.ts',
+		'@deno/doc': 'jsr:@deno/doc@0.199.0',
+	},
 });
 Bun.stderr.write(`Wrote ${target}\n`);

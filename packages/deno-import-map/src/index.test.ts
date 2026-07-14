@@ -68,6 +68,27 @@ describe('writeDenoImportMap', () => {
 		});
 	});
 
+	it('merges additional imports after manifest mappings', () => {
+		const root = fixture({ '#config': './src/config.ts' });
+		const out = writeDenoImportMap({
+			root,
+			out: 'deno.import_map.json',
+			additionalImports: {
+				'#config': './types/config.d.ts',
+				'bun:test': './node_modules/bun-types/test.d.ts',
+				virtual: 'https://example.com/virtual.ts',
+			},
+		});
+
+		expect(JSON.parse(fs.readFileSync(out, 'utf8'))).toEqual({
+			imports: {
+				'#config': './types/config.d.ts',
+				'bun:test': './node_modules/bun-types/test.d.ts',
+				virtual: 'https://example.com/virtual.ts',
+			},
+		});
+	});
+
 	it('writes stable code-unit-sorted tab-indented output', () => {
 		const first = fixture({
 			'#z': './z.ts',
