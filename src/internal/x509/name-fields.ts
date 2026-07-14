@@ -60,6 +60,30 @@ export const NAME_OBJECT_ORDER: readonly NameFieldKey[] = [
 	'emailAddress',
 ];
 
+/**
+ * Display keyword for a DN attribute type, keyed by OID.
+ *
+ * RFC 4514 [§3](https://datatracker.ietf.org/doc/html/rfc4514#section-3) defines
+ * `CN`, `L`, `ST`, `O`, `OU`, `C`, `STREET`, `DC`, and `UID`; the rest are the short
+ * names `openssl` prints for attribute types the RFC leaves to the dotted OID.
+ */
+export const DN_ATTRIBUTE_KEYWORDS: Readonly<Record<string, string>> = {
+	[OIDS.commonName]: 'CN',
+	[OIDS.surname]: 'SN',
+	[OIDS.serialNumber]: 'serialNumber',
+	[OIDS.countryName]: 'C',
+	[OIDS.localityName]: 'L',
+	[OIDS.stateOrProvinceName]: 'ST',
+	[OIDS.streetAddress]: 'STREET',
+	[OIDS.organizationName]: 'O',
+	[OIDS.organizationalUnitName]: 'OU',
+	[OIDS.title]: 'title',
+	[OIDS.givenName]: 'GN',
+	[OIDS.emailAddress]: 'emailAddress',
+	[OIDS.userId]: 'UID',
+	[OIDS.domainComponent]: 'DC',
+};
+
 /** Reverse lookup table: OID string → friendly {@linkcode NameFieldKey}. */
 const NAME_FIELD_KEYS_BY_OID = new Map<string, NameFieldKey>();
 for (const key of NAME_OBJECT_ORDER) {

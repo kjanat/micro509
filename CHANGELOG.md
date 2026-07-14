@@ -4,6 +4,7 @@
 Release checklist — every box, every release:
 - [ ] Move [Unreleased] entries under a new `## [X.Y.Z] - YYYY-MM-DD` header + intro line
 - [ ] Bump version in package.json AND jsr.json
+- [ ] Bump the `micro509` range in examples/vite/package.json — StackBlitz installs it from npm
 - [ ] Link definitions at the BOTTOM of this file: add [X.Y.Z] compare link, repoint [Unreleased]
 - [ ] Signed tag on the release commit: git tag -s vX.Y.Z -m "vX.Y.Z — summary"
 - [ ] Push master + tag, gh release create with milestone notes
@@ -16,6 +17,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+### Added
+
+- `subjectAltNameToString(name, options?)` renders one `SubjectAltName` as text.
+  Printing a SAN is the most ordinary thing to do with one after parsing, and it
+  took a hand-written narrowing in every consumer: `dns`/`ip`/`email`/`uri`/`srv`
+  carry a `string` value, `directoryName` carries only `derHex` and has no `value`
+  at all, and `unknown` carries a `Uint8Array` that stringifies itself as
+  `192,0,2,1` inside a `join()`. A `directoryName` now renders as an RFC 4514
+  distinguished name (`CN=Example CA,O=Acme\, Inc.,C=US`), falling back to its hex
+  when the DER does not decode, and an `unknown` renders as hex. Pass
+  `{ prefix: true }` for the `openssl x509 -text` labels (`DNS:`, `IP Address:`,
+  `DirName:`), or call `subjectAltNameLabel(name)` for the label alone. Companion
+  `distinguishedNameToString(name)` and `relativeDistinguishedNameToString(rdn)`
+  render a parsed subject or issuer, which until now had no public renderer either.
+  Exported from the root and `micro509/x509`, with the `SubjectAltNameTextOptions`
+  type. (https://github.com/kjanat/micro509/issues/50)
 
 ### Changed
 

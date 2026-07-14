@@ -486,6 +486,7 @@ export type {
 	RelativeDistinguishedNameInput,
 	SelfSignedCertificateResult,
 	SubjectAltName,
+	SubjectAltNameTextOptions,
 	ValidityInput,
 } from '#micro509/x509';
 export {
@@ -499,6 +500,7 @@ export {
 	decodeExtensions,
 	defineExtensionDecoder,
 	defineExtensionDecoderMap,
+	distinguishedNameToString,
 	findExtension,
 	getSubjectPublicKey,
 	getSubjectPublicKeyOrThrow,
@@ -512,4 +514,7 @@ export {
 	parseCertificateSigningRequestDerOrThrow,
 	parseCertificateSigningRequestPem,
 	parseCertificateSigningRequestPemOrThrow,
+	relativeDistinguishedNameToString,
+	subjectAltNameLabel,
+	subjectAltNameToString,
 } from '#micro509/x509';

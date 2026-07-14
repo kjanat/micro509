@@ -1898,6 +1898,18 @@ export function parseSubjectAltNames(bytes: Uint8Array): readonly SubjectAltName
 	return childrenOf(bytes, sequenceElement).map((element) => parseGeneralName(bytes, element));
 }
 
+/** @internal Decode a bare DER-encoded X.501 Name, as carried in a `directoryName` GeneralName. */
+export function parseDistinguishedNameDer(bytes: Uint8Array): ParsedName {
+	const nameElement = requireElement(
+		readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH }),
+		'distinguished name sequence',
+	);
+	if (nameElement.tag !== 0x30) {
+		throw new Error('distinguished name must use SEQUENCE');
+	}
+	return parseName(bytes, nameElement);
+}
+
 /** @internal Decode the Authority Information Access extension value. */
 export function parseAuthorityInfoAccess(bytes: Uint8Array): readonly AuthorityInformationAccess[] {
 	const sequenceElement = requireElement(

@@ -187,6 +187,7 @@ ca:          ${r4.ok ? 'ok' : `${r4.error.code}@${r4.error.index}`}`);
 import {
   createSelfSignedCertificate,
   parseCertificatePem,
+  subjectAltNameToString,
   unwrap,
 } from 'micro509';
 import { matchServiceIdentity } from 'micro509/verify';
@@ -209,8 +210,9 @@ const result = matchServiceIdentity({
 });
 
 const sans = (parsed.subjectAltNames ?? [])
-  .filter((name) => name.type !== 'directoryName')
-  .map((name) => `${name.type} ${name.value}`)
+  .map((name) =>
+    subjectAltNameToString(name, { prefix: true }),
+  )
   .join(', ');
 
 if (result.ok) {
@@ -279,6 +281,7 @@ as `VERIFY_ERROR_CODES`; this table is checked against it by a repo test):
 import {
   createCertificateSigningRequest,
   generateKeyPair,
+  subjectAltNameToString,
   verifyCertificateSigningRequest,
 } from 'micro509';
 
@@ -301,8 +304,7 @@ const result = await verifyCertificateSigningRequest(
 
 if (result.ok) {
   const sans = (result.value.subjectAltNames ?? [])
-    .filter((name) => name.type !== 'directoryName')
-    .map((name) => name.value)
+    .map((name) => subjectAltNameToString(name))
     .join(', ');
   console.log(`\
 subject:  ${result.value.subject.values.commonName}

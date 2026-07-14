@@ -1,5 +1,37 @@
 {
 	"$schema": "./oids.schema.json",
+	"ituT": {
+		"arc": "0",
+		"children": {
+			"data": {
+				"arc": "9",
+				"children": {
+					"pss": {
+						"arc": "2342",
+						"children": {
+							"ucl": {
+								"arc": "19200300",
+								"children": {
+									"pilot": {
+										"arc": "100",
+										"children": {
+											"pilotAttributeType": {
+												"arc": "1",
+												"oids": {
+													"userId": "1",
+													"domainComponent": "25"
+												}
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	},
 	"iso": {
 		"arc": "1",
 		"children": {
