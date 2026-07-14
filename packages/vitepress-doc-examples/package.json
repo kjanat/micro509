@@ -5,7 +5,8 @@
 	"description": "VitePress plugin: typecheck and lint the runnable examples embedded in docs pages.",
 	"type": "module",
 	"exports": {
-		".": "./src/index.ts"
+		".": "./src/index.ts",
+		"./package.json": "./package.json"
 	},
 	"dependencies": {
 		"@biomejs/biome": "catalog:",

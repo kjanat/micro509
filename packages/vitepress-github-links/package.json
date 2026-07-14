@@ -5,7 +5,8 @@
 	"description": "VitePress markdown rule: relative links to repository files resolve to the repository host.",
 	"type": "module",
 	"exports": {
-		".": "./src/index.ts"
+		".": "./src/index.ts",
+		"./package.json": "./package.json"
 	},
 	"peerDependencies": {
 		"vitepress": ">=2.0.0-alpha.18"

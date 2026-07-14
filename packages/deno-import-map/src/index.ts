@@ -58,9 +58,9 @@ function filesUnder(dir: string, prefix = ''): string[] {
 export interface ImportMapTarget {
 	/** Tree the map's relative targets resolve against. */
 	readonly root: string;
-	/** Manifest holding the `imports` map, relative to `root`. */
-	readonly manifest: string;
-	/** Where the import map is written, relative to `root`. */
+	/** Manifest holding the `imports` map, relative to `root`. Default `package.json`. */
+	readonly manifest?: string;
+	/** Where the import map is written, relative to `root`; parent directories are created. */
 	readonly out: string;
 }
 
@@ -74,7 +74,7 @@ export interface ImportMapTarget {
  */
 export function writeDenoImportMap(target: ImportMapTarget): string {
 	const manifest: PackageImports = JSON.parse(
-		fs.readFileSync(path.join(target.root, target.manifest), 'utf8'),
+		fs.readFileSync(path.join(target.root, target.manifest ?? 'package.json'), 'utf8'),
 	);
 	const imports: Record<string, string> = {};
 
@@ -96,6 +96,7 @@ export function writeDenoImportMap(target: ImportMapTarget): string {
 
 	const sorted = Object.fromEntries(Object.entries(imports).sort(([a], [b]) => a.localeCompare(b)));
 	const out = path.join(target.root, target.out);
+	fs.mkdirSync(path.dirname(out), { recursive: true });
 	fs.writeFileSync(out, `${JSON.stringify({ imports: sorted }, null, '\t')}\n`);
 	return out;
 }

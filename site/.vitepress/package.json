@@ -17,7 +17,7 @@
 	},
 	"devDependencies": {
 		"@cloudflare/vite-plugin": "catalog:cloudflare",
-		"@micro509/doc-render": "workspace:*",
+		"@micro509/deno-import-map": "workspace:*",
 		"@micro509/vitepress-api-docs": "workspace:*",
 		"@micro509/vitepress-doc-examples": "workspace:*",
 		"@micro509/vitepress-github-links": "workspace:*",

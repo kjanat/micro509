@@ -1,4 +1,4 @@
-import { writeDenoImportMap } from '@micro509/doc-render/import-map';
+import { writeDenoImportMap } from '@micro509/deno-import-map';
 import { apiDocsPlugin, generateApiDocs } from '@micro509/vitepress-api-docs';
 import type { DocExamplesOptions } from '@micro509/vitepress-doc-examples';
 import { docExamplesPlugin } from '@micro509/vitepress-doc-examples';
@@ -79,7 +79,7 @@ const gitRef =
 function generateApi(target: { readonly root: string; readonly outDir: string }): void {
 	const tree = manifestsOf(target.root);
 	const importMap = 'deno.import_map.json';
-	writeDenoImportMap({ root: target.root, manifest: 'package.json', out: importMap });
+	writeDenoImportMap({ root: target.root, out: importMap });
 
 	generateApiDocs({
 		root: target.root,

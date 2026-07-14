@@ -123,6 +123,7 @@
 		"@arethetypeswrong/core": "catalog:build",
 		"@biomejs/biome": "catalog:",
 		"@deno/doc": "catalog:deno",
+		"@micro509/deno-import-map": "workspace:*",
 		"@micro509/doc-render": "workspace:*",
 		"@tsconfig/node24": "catalog:ts",
 		"@types/bun": "catalog:ts",

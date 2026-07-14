@@ -1,0 +1,11 @@
+{
+	"name": "@micro509/deno-import-map",
+	"version": "0.0.0",
+	"private": true,
+	"description": "Expands package imports into the explicit entries required by Deno import maps.",
+	"type": "module",
+	"exports": {
+		".": "./src/index.ts",
+		"./package.json": "./package.json"
+	}
+}

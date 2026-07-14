@@ -5,7 +5,8 @@
 	"description": "VitePress plugin: serve every released version of the docs from one build, materialized from release tags.",
 	"type": "module",
 	"exports": {
-		".": "./src/index.ts"
+		".": "./src/index.ts",
+		"./package.json": "./package.json"
 	},
 	"dependencies": {
 		"tar": "catalog:site"

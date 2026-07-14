@@ -5,7 +5,8 @@
 	"description": "VitePress plugin: an API reference, generated from a source tree's jsdoc.",
 	"type": "module",
 	"exports": {
-		".": "./src/index.ts"
+		".": "./src/index.ts",
+		"./package.json": "./package.json"
 	},
 	"dependencies": {
 		"@micro509/doc-render": "workspace:*",
