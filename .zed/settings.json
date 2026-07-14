@@ -34,10 +34,6 @@
 	},
 	"lsp": {
 		"biome": {
-			"binary": {
-				"path": "./node_modules/.bin/biome",
-				"arguments": ["lsp-proxy"]
-			},
 			"settings": {
 				"config_path": "./biome.jsonc",
 				"require_config_file": true,
