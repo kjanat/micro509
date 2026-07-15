@@ -52,6 +52,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and `run site:live-examples` clicks Run in a real browser with a content blocker
   simulated — a headless browser has none, and would have passed while the bug above
   was live.
+- Materializing an archived version's pages now repairs a runnable example the tag
+  shipped with a syntax error, so its Run button executes valid code. Each `<LiveCode>`
+  block is parsed, and one missing the brace that closes a block gets it restored at
+  the position the TypeScript parser expects. Nine `guide/getting-started` examples
+  across v0.3.0 through v0.9.0 were affected. The archived page then differs from the
+  code that release published. (https://github.com/kjanat/micro509/issues/53)
 
 ## [0.11.0] - 2026-07-13
 

@@ -43,6 +43,8 @@ export interface VersionedDocsOptions {
 	readonly pages: readonly string[];
 	/** Source and manifest paths `generateApi` needs from a tag. */
 	readonly sources: readonly string[];
+	/** Rewrite each materialized markdown page before it is served. */
+	readonly transformPage?: (markdown: string) => string;
 
 	/** The published releases that become versions. */
 	readonly releases: {
@@ -225,6 +227,15 @@ async function materializePages(
 		const source = path.join(tree, page);
 		if (!fs.existsSync(source)) continue;
 		await fsp.cp(source, path.join(target, path.basename(page)), { recursive: true });
+	}
+	const transform = options.transformPage;
+	if (transform === undefined) return;
+	for (const file of await fsp.readdir(target, { recursive: true })) {
+		if (!file.endsWith('.md')) continue;
+		const full = path.join(target, file);
+		const markdown = await fsp.readFile(full, 'utf8');
+		const rewritten = transform(markdown);
+		if (rewritten !== markdown) await fsp.writeFile(full, rewritten);
 	}
 }
 
