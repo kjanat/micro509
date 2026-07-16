@@ -17,7 +17,6 @@
 	},
 	"devDependencies": {
 		"@cloudflare/vite-plugin": "catalog:cloudflare",
-		"@micro509/deno-import-map": "workspace:*",
 		"@micro509/vitepress-api-docs": "workspace:*",
 		"@micro509/vitepress-doc-examples": "workspace:*",
 		"@micro509/vitepress-github-links": "workspace:*",
@@ -27,6 +26,7 @@
 		"@types/node": "catalog:ts",
 		"@vue/tsconfig": "catalog:ts",
 		"dprint": "catalog:",
+		"importmapify": "catalog:deno",
 		"markdown-it-task-lists": "catalog:site",
 		"typescript": "catalog:ts",
 		"typescript-7": "catalog:ts",

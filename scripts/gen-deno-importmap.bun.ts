@@ -2,15 +2,15 @@
 /**
  * Writes `deno.import_map.json` for the checked-out tree (`deno doc`/`docs:*`).
  *
- * CLI over `writeDenoImportMap`; the site's API-doc plugin calls the same
+ * CLI over `writeImportMap`; the site's API-doc plugin calls the same
  * function for each released tag's source tree.
  *
  * @module
  */
 import path from 'node:path';
-import { writeDenoImportMap } from '@micro509/deno-import-map';
+import { writeImportMap } from 'importmapify';
 
-const target = writeDenoImportMap({
+const target = writeImportMap({
 	root: path.resolve(import.meta.dir, '..'),
 	manifest: 'package.json',
 	out: 'deno.import_map.json',

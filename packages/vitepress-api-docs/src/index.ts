@@ -45,7 +45,7 @@ export interface ApiDocsTarget {
 	readonly entrypoints: readonly string[];
 	/**
 	 * Import map the extractor resolves the tree's specifiers with, relative to
-	 * `root`. Omit when the sources need none. `@micro509/deno-import-map`
+	 * `root`. Omit when the sources need none. `importmapify`
 	 * writes one from a package.json `imports` map.
 	 */
 	readonly importMap?: string | undefined;
