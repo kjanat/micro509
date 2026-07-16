@@ -98,6 +98,8 @@ function commitSha(): string | undefined {
 	return envOf('WORKERS_CI_COMMIT_SHA') ?? git('rev-parse', 'HEAD');
 }
 
+const treeSha = commitSha();
+
 const GITHUB_TIMEOUT_MS = 10_000;
 
 async function pullRequestOf(sha: string): Promise<string | undefined> {
@@ -135,16 +137,15 @@ const pull = await (async (): Promise<string | undefined> => {
 	const prMatch = gitRef.match(/^(\d+)\/(merge|head)$/);
 	if (prMatch) return prMatch[1];
 
-	const sha = commitSha();
-	return sha === undefined ? undefined : await pullRequestOf(sha);
+	return treeSha === undefined ? undefined : await pullRequestOf(treeSha);
 })();
 
-/** pkg.pr.new republishes a pull request's ref on every head of that pull request. */
-const nextRef = (pull ?? gitRef).replace(/\/(?:merge|head)$/, '');
+/** An immutable ref for the library that the current-tree docs execute. */
+const nextRef = treeSha ?? (pull ?? gitRef).replace(/\/(?:merge|head)$/, '');
 
 const devLabel = pull === undefined ? `v${repo.version}-dev` : `#${pull}`;
 
-console.log(`[versions] tree -> pkg.pr.new @${nextRef}, labelled ${devLabel}`);
+console.log(`[versions] tree -> GitHub @${nextRef}, labelled ${devLabel}`);
 
 /** Markdown files directly under `dir`. */
 function pagesIn(dir: string): readonly string[] {
@@ -224,13 +225,13 @@ const docs = await versionedDocs({
 		/** A preview serves only its pull request. */
 		offline: process.env.DOCS_OFFLINE === '1' || pull !== undefined,
 	},
-	/** jsDelivr serves the releases. esm.sh serves pkg.pr.new builds. */
+	/** jsDelivr serves releases. esm.sh builds the current GitHub tree by commit. */
 	library: {
 		name: repo.name,
 		moduleUrl: (version, subpath) => {
 			const tail = subpath === '.' ? '' : `/${subpath.slice('./'.length)}`;
 			return version.tag === devLabel
-				? `https://esm.sh/pr/${repo.name}@${nextRef}${tail}?standalone`
+				? `https://esm.sh/gh${repoUrl.pathname}@${nextRef}${tail}?standalone`
 				: `https://cdn.jsdelivr.net/npm/${repo.name}@${version.tag.replace(/^v/, '')}${tail}/+esm`;
 		},
 	},
@@ -244,7 +245,12 @@ const ORDER: SidebarOrder = {
 		{ text: 'Introduction', slugs: ['getting-started', 'why'] },
 		{ text: 'Workflows', slugs: ['certificates', 'verification', 'keys', 'revocation', 'pkcs'] },
 	],
-	reference: [{ text: 'Reference', slugs: ['index', 'standards', 'algorithms', 'runtimes'] }],
+	reference: [
+		{
+			text: 'Reference',
+			slugs: ['index', 'standards', 'algorithms', 'runtimes', 'execution-model'],
+		},
+	],
 	api: [{ text: 'API Reference', slugs: ['index'] }],
 };
 

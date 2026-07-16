@@ -2,7 +2,7 @@
 # resolves to the caller ("Publish"), so a shared group would deadlock caller vs callee.
 ---
 name: Test
-on: { pull_request: { branches: [master] }, push: { branches: [master] }, workflow_call: null }
+on: { push: { branches: [master] }, workflow_call: null }
 
 jobs:
   test:

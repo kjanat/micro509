@@ -2,6 +2,10 @@
  * Canonical advanced X.509 domain surface.
  * Owns certificate, CSR, extension, name, and parse APIs behind one stable entrypoint.
  *
+ * DER/PEM parsing, encoding, extension decoding, and text rendering return
+ * synchronously. Certificate/CSR creation and WebCrypto-backed hashing and key
+ * operations return promises and must be awaited.
+ *
  * @module micro509/x509
  */
 

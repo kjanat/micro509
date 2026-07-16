@@ -49,6 +49,9 @@ export interface CertificateFingerprint {
  * a well-formed certificate. Malformed input throws, matching the other DER/PEM
  * boundaries in the library.
  *
+ * **Asynchronous:** hashing uses WebCrypto's `crypto.subtle.digest`. Await the
+ * returned promise before reading `bytes`, `hex`, or `colonHex`.
+ *
  * @example
  * ```ts
  * const fingerprint = await certificateFingerprint(pemString);
