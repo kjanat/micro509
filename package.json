@@ -124,7 +124,6 @@
 		"@arethetypeswrong/core": "catalog:build",
 		"@biomejs/biome": "catalog:",
 		"@deno/doc": "catalog:deno",
-		"@micro509/deno-import-map": "workspace:*",
 		"@micro509/doc-render": "workspace:*",
 		"@tsconfig/node24": "catalog:ts",
 		"@types/bun": "catalog:ts",
@@ -132,6 +131,7 @@
 		"@types/node": "catalog:ts",
 		"deno": "catalog:deno",
 		"dprint": "catalog:",
+		"importmapify": "catalog:deno",
 		"playwright": "^1.61.1",
 		"publint": "catalog:build",
 		"runner-run": "catalog:",
@@ -194,7 +194,8 @@
 		"deno": {
 			"@deno/doc": "npm:@jsr/deno__doc@0.199.0",
 			"@types/deno": "^2.7.0",
-			"deno": "^2.9.2"
+			"deno": "^2.9.2",
+			"importmapify": "^1.0.1"
 		},
 		"site": {
 			"markdown-it-task-lists": "^2.1.1",
