@@ -117,18 +117,19 @@ describe('certificateFingerprint', () => {
 describe.skipIf(!openSslAvailable || !differentialEnabled)(
 	'certificateFingerprint OpenSSL differential',
 	() => {
-		it.each(
-			ALGORITHMS,
-		)('colonHex matches `openssl x509 -fingerprint` for %s', async (algorithm) => {
-			const { certificate } = await sampleCertificate();
+		it.each(ALGORITHMS)(
+			'colonHex matches `openssl x509 -fingerprint` for %s',
+			async (algorithm) => {
+				const { certificate } = await sampleCertificate();
 
-			const fingerprint = await certificateFingerprint(certificate.pem, algorithm);
-			const opensslColonHex = await fingerprintCertificateWithOpenSsl({
-				certificatePem: certificate.pem,
-				algorithm: NODE_HASH[algorithm],
-			});
+				const fingerprint = await certificateFingerprint(certificate.pem, algorithm);
+				const opensslColonHex = await fingerprintCertificateWithOpenSsl({
+					certificatePem: certificate.pem,
+					algorithm: NODE_HASH[algorithm],
+				});
 
-			expect(fingerprint.colonHex).toBe(opensslColonHex);
-		});
+				expect(fingerprint.colonHex).toBe(opensslColonHex);
+			},
+		);
 	},
 );

@@ -2111,19 +2111,22 @@ describe('chain verification', () => {
 		it.each([
 			['x400Address', 0xa3],
 			['ediPartyName', 0xa5],
-		] as const)('fails closed when a critical %s constraint meets a matching SAN', async (_form, tag) => {
-			const constraintDer = buildRawConstraintDer(tlv(tag, sequence([])));
-			const root = await createConstrainedRoot(constraintDer, true);
-			const leaf = await issueLeaf(root, [{ type: 'unknown', tag, value: sequence([]) }]);
-			const result = await verifyCertificateChain({
-				leaf: leaf.pem,
-				roots: [root.certificate.pem],
-			});
-			expect(result.ok).toBe(false);
-			if (!result.ok) {
-				expect(result.error.code).toBe('unsupported_name_constraints');
-			}
-		});
+		] as const)(
+			'fails closed when a critical %s constraint meets a matching SAN',
+			async (_form, tag) => {
+				const constraintDer = buildRawConstraintDer(tlv(tag, sequence([])));
+				const root = await createConstrainedRoot(constraintDer, true);
+				const leaf = await issueLeaf(root, [{ type: 'unknown', tag, value: sequence([]) }]);
+				const result = await verifyCertificateChain({
+					leaf: leaf.pem,
+					roots: [root.certificate.pem],
+				});
+				expect(result.ok).toBe(false);
+				if (!result.ok) {
+					expect(result.error.code).toBe('unsupported_name_constraints');
+				}
+			},
+		);
 
 		it('ignores unsupported forms in a non-critical name constraints extension', async () => {
 			const root = await createConstrainedRoot(buildUnsupportedOtherNameConstraintsDer(), false);

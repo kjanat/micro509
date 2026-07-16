@@ -121,19 +121,22 @@ describe('x509 domain', () => {
 		['rsa', { kind: 'rsa', modulusLength: 2048 }],
 		['ecdsa P-256', { kind: 'ecdsa', curve: 'P-256' }],
 		['ed25519', { kind: 'ed25519' }],
-	])('getSubjectPublicKey imports a %s subject key from a parsed certificate', async (_label, algorithm) => {
-		const keyPair = await generateKeyPair(algorithm);
-		const { certificate } = await x509.createSelfSignedCertificate({
-			subject: { commonName: 'spki.example' },
-			keyPair,
-		});
-		const parsed = x509.parseCertificateDerOrThrow(certificate.der);
+	])(
+		'getSubjectPublicKey imports a %s subject key from a parsed certificate',
+		async (_label, algorithm) => {
+			const keyPair = await generateKeyPair(algorithm);
+			const { certificate } = await x509.createSelfSignedCertificate({
+				subject: { commonName: 'spki.example' },
+				keyPair,
+			});
+			const parsed = x509.parseCertificateDerOrThrow(certificate.der);
 
-		const publicKey = unwrap(await x509.getSubjectPublicKey(parsed));
+			const publicKey = unwrap(await x509.getSubjectPublicKey(parsed));
 
-		expect(publicKey.type).toBe('public');
-		expect(await exportSpkiDer(publicKey)).toEqual(parsed.subjectPublicKeyInfoDer);
-	});
+			expect(publicKey.type).toBe('public');
+			expect(await exportSpkiDer(publicKey)).toEqual(parsed.subjectPublicKeyInfoDer);
+		},
+	);
 
 	it('getSubjectPublicKeyOrThrow imports the subject key of a parsed CSR', async () => {
 		const keyPair = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
