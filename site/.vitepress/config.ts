@@ -244,7 +244,12 @@ const ORDER: SidebarOrder = {
 		{ text: 'Introduction', slugs: ['getting-started', 'why'] },
 		{ text: 'Workflows', slugs: ['certificates', 'verification', 'keys', 'revocation', 'pkcs'] },
 	],
-	reference: [{ text: 'Reference', slugs: ['index', 'standards', 'algorithms', 'runtimes'] }],
+	reference: [
+		{
+			text: 'Reference',
+			slugs: ['index', 'standards', 'algorithms', 'runtimes', 'execution-model'],
+		},
+	],
 	api: [{ text: 'API Reference', slugs: ['index'] }],
 };
 

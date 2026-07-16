@@ -755,6 +755,9 @@ export function parseCertificatePemOrThrow<TMap extends ExtensionDecoderMap = Re
  * Expects a single `-----BEGIN CERTIFICATE-----` block. For bundles
  * containing multiple certificates, use {@linkcode parseCertificateChainPem}.
  *
+ * **Synchronous:** returns a {@linkcode ParseCertificateResult} directly. Do
+ * not `await` this function.
+ *
  * @param pem PEM string with a CERTIFICATE block.
  * @param options Custom extension decoders to apply during parsing.
  */

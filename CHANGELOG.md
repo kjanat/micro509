@@ -37,6 +37,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The X.509 reference now identifies every asynchronous operation in one place
+  and explains the split: PEM/DER parsing and transformation are synchronous,
+  while hashing, signing, and key operations backed by WebCrypto return promises.
+  The API summaries for `parseCertificatePem` and `certificateFingerprint` make
+  their return timing explicit, avoiding a no-op `await` on the parser or reading
+  properties from an unawaited fingerprint promise.
+  (https://github.com/kjanat/micro509/issues/51)
 - The docs site no longer co-hosts the library: each version's runnable examples
   import it from a CDN, bound to the version that page documents. A release imports
   what it published, from jsDelivr, whose `+esm` builds arrive bundled — one request
