@@ -28,7 +28,7 @@ const publicEntrypoints = entrypointsOf(jsr);
 
 const root = resolve(import.meta.dirname, '..');
 
-await $`bun scripts/gen-deno-importmap.bun.ts`.cwd(root).quiet();
+await $`bunx importmapify`.cwd(root).quiet();
 const raw =
 	await $`deno doc --no-npm --import-map deno.import_map.json --json --name=${pkg.name} ${[...publicEntrypoints]}`
 		.cwd(root)
