@@ -120,6 +120,9 @@
 		"wrangler:deploy:versions": "wrangler versions upload",
 		"wrangler:dev": "wrangler dev"
 	},
+	"overrides": {
+		"micro509": "link:."
+	},
 	"devDependencies": {
 		"@arethetypeswrong/core": "catalog:build",
 		"@biomejs/biome": "catalog:",
