@@ -8,8 +8,8 @@
  * It reads each release's markdown from its git tag and regenerates its API
  * reference from that tag's sources.
  *
- * Every page gets an import map for the library it documents. `library.moduleUrl`
- * gives the URLs.
+ * Every page gets the same import map: top-level imports for the root version and
+ * a scope per version prefix. `library.moduleUrl` gives the URLs.
  *
  * @module
  */
@@ -357,12 +357,8 @@ function versionOfPage(page: string, versions: readonly DocsVersion[]): DocsVers
 		.find((version) => page.startsWith(version.prefix));
 }
 
-/** A page's import map and its origin. */
-function importMapFor(
-	version: DocsVersion,
-	options: VersionedDocsOptions,
-): { readonly importMap: string; readonly origin: string | undefined } {
-	const imports = Object.fromEntries(
+function entriesFor(version: DocsVersion, options: VersionedDocsOptions): Record<string, string> {
+	return Object.fromEntries(
 		version.exports
 			.filter((subpath) => subpath === '.' || subpath.startsWith('./'))
 			// A manifest exports its own manifest; nothing imports it.
@@ -374,24 +370,53 @@ function importMapFor(
 				options.library.moduleUrl(version, subpath),
 			]),
 	);
-	const root = imports[options.library.name];
-	return {
-		importMap: JSON.stringify({ imports }),
-		origin: root !== undefined && URL.canParse(root) ? new URL(root).origin : undefined,
-	};
 }
 
-/** A version's import map and a preconnect to its origin. */
-function headFor(version: DocsVersion, options: VersionedDocsOptions): string {
-	const { importMap, origin } = importMapFor(version, options);
-	const preconnect =
-		origin === undefined ? '' : `<link rel="preconnect" href="${origin}" crossorigin>\n`;
+/**
+ * One import map for the whole site: top-level imports for the root version, a scope
+ * per prefixed version. Scopes match on the referring module's URL, so an example run
+ * after client-side navigation still resolves the version of the page it runs on.
+ */
+function siteImportMap(
+	versions: readonly DocsVersion[],
+	options: VersionedDocsOptions,
+): { readonly importMap: string; readonly origins: readonly string[] } {
+	const root = versions.find((version) => version.prefix === '');
+	const imports = root === undefined ? {} : entriesFor(root, options);
+	const scopes = Object.fromEntries(
+		versions
+			.filter((version) => version.prefix !== '')
+			.map((version) => [`/${version.prefix}`, entriesFor(version, options)]),
+	);
+	const targets = [
+		...Object.values(imports),
+		...Object.values(scopes).flatMap((scope) => Object.values(scope)),
+	];
+	const origins = [
+		...new Set(targets.filter((url) => URL.canParse(url)).map((url) => new URL(url).origin)),
+	];
+	const map =
+		Object.keys(scopes).length === 0
+			? JSON.stringify({ imports })
+			: JSON.stringify({ imports, scopes });
+	return { importMap: map, origins };
+}
+
+function headFor(versions: readonly DocsVersion[], options: VersionedDocsOptions): string {
+	const { importMap, origins } = siteImportMap(versions, options);
+	const preconnect = origins
+		.map((origin) => `<link rel="preconnect" href="${origin}" crossorigin>\n`)
+		.join('');
 	return `${preconnect}<script type="importmap">${importMap}</script>`;
 }
 
 /** Put the import map first in the head, ahead of anything that resolves against it. */
-function withImportMap(html: string, version: DocsVersion, options: VersionedDocsOptions): string {
-	return html.replace('<head>', `<head>\n${headFor(version, options)}`);
+function withImportMap(
+	html: string,
+	versions: readonly DocsVersion[],
+	options: VersionedDocsOptions,
+): string {
+	return html.replace('<head>', `<head>\n${headFor(versions, options)}`);
 }
 
 /** `transformHtml` is build-only. The dev server gets the import map from here. */
@@ -399,10 +424,7 @@ function importMapPlugin(versions: readonly DocsVersion[], options: VersionedDoc
 	return {
 		name: 'vitepress-versioned-docs',
 		apply: 'serve',
-		transformIndexHtml: (html) => {
-			const tree = versions.find((version) => version.srcRoot === options.siteRoot);
-			return tree === undefined ? html : withImportMap(html, tree, options);
-		},
+		transformIndexHtml: (html) => withImportMap(html, versions, options),
 	};
 }
 
@@ -434,6 +456,16 @@ async function emitVersionIndex(
 		})),
 	};
 	await fsp.writeFile(path.join(outDir, 'versions.json'), `${JSON.stringify(index, null, '\t')}\n`);
+
+	const latest = versions.find(
+		(version) => version.channel === 'latest' && version.release !== undefined,
+	);
+	if (latest !== undefined) {
+		await fsp.writeFile(
+			path.join(outDir, '_redirects'),
+			`/${latest.tag} / 302\n/${latest.tag}/* /:splat 302\n`,
+		);
+	}
 
 	const files = await countFiles(outDir);
 	console.log(`[versions] ${files} files across ${versions.length} versions`);
@@ -612,10 +644,7 @@ export async function versionedDocs(options: VersionedDocsOptions): Promise<Vers
 		head: (page) =>
 			at(page)?.channel === 'latest' ? [] : [['meta', { name: 'robots', content: 'noindex' }]],
 
-		html: (html, page) => {
-			const version = at(page);
-			return version === undefined ? html : withImportMap(html, version, options);
-		},
+		html: (html) => withImportMap(html, versions, options),
 
 		buildEnd: (siteConfig) => emitVersionIndex(versions, options, siteConfig),
 

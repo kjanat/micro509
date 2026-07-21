@@ -329,6 +329,122 @@ async function runVersion(browser, baseUrl, { version, route }) {
 }
 
 /**
+ * The scoped import map resolves by the URL of the page an example runs on. A reader
+ * who lands on the root docs and clicks through to an archived version never reloads,
+ * so the run after that client-side navigation must import the archive's library.
+ *
+ * @param {import('playwright').Browser} browser
+ * @param {string} baseUrl
+ * @param {Version} target
+ * @returns {Promise<Result>}
+ */
+async function runAfterClientNavigation(browser, baseUrl, { version, route }) {
+	const label = `spa:${version}`;
+	const context = await browser.newContext({
+		baseURL: baseUrl,
+		serviceWorkers: 'block',
+	});
+	const page = await context.newPage();
+
+	page.setDefaultTimeout(EXAMPLE_TIMEOUT_MS);
+	page.setDefaultNavigationTimeout(EXAMPLE_TIMEOUT_MS);
+
+	/** @type {string[]} */
+	const imported = [];
+	let source = '';
+	let output = '';
+	let started;
+
+	page.on('request', (request) => {
+		const url = request.url();
+		const parsed = new URL(url);
+
+		if (/^https?:$/.test(parsed.protocol) && parsed.origin !== baseUrl) {
+			imported.push(url);
+		}
+	});
+
+	try {
+		await page.goto('/', { waitUntil: 'networkidle' });
+
+		await page.evaluate((href) => {
+			/** @type {Window & { __liveExamplesSpa?: boolean }} */ (window).__liveExamplesSpa = true;
+			const anchor = document.createElement('a');
+			anchor.href = href;
+			anchor.textContent = href;
+			document.body.append(anchor);
+			anchor.click();
+		}, route);
+		await page.waitForURL(`**${route}`);
+
+		const survived = await page.evaluate(
+			() =>
+				/** @type {Window & { __liveExamplesSpa?: boolean }} */ (window).__liveExamplesSpa === true,
+		);
+		if (!survived) {
+			throw new Error('navigation reloaded the page; the client-side route was never exercised');
+		}
+
+		const block = page.locator('.live-code').first();
+		const button = block.locator('.live-code-btn').first();
+		const outputBlock = block.locator('.live-code-pre').first();
+
+		await block.waitFor({ state: 'visible' });
+		source = (await block.locator('pre code').first().innerText()).trim();
+
+		started = performance.now();
+		await button.click();
+		await outputBlock.waitFor({ state: 'visible' });
+		await page.waitForFunction(
+			(selector) => !document.querySelector(selector)?.textContent?.includes('Running'),
+			'.live-code .live-code-btn',
+		);
+
+		const ms = Math.round(performance.now() - started);
+		output = (await outputBlock.innerText()).trim();
+
+		const marker = `@${version.slice(1)}`;
+		const misdirected = imported.filter((url) => !url.includes(marker));
+
+		let why = '';
+
+		if (misdirected.length > 0) {
+			why = `after client-side navigation to ${route}, the example imported ${misdirected.join(', ')}`;
+		} else if (imported.length === 0) {
+			why = 'the example imported nothing external';
+		} else if ((await block.locator('.live-code-err').count()) > 0) {
+			why = 'the example errored';
+		} else if (output === '') {
+			why = 'the example printed nothing';
+		}
+
+		return {
+			version: label,
+			source,
+			output,
+			failed: why !== '',
+			why,
+			ms,
+			imported,
+		};
+	} catch (error) {
+		return {
+			version: label,
+			source,
+			output,
+			failed: true,
+			why: String(error).split('\n')[0] || 'threw',
+			ms: started === undefined ? 0 : Math.round(performance.now() - started),
+			imported,
+		};
+	} finally {
+		await context.close().catch((error) => {
+			console.warn(`[live-examples] ${label}: failed to close context: ${error}`);
+		});
+	}
+}
+
+/**
  * @param {import('playwright').Browser} browser
  * @param {import('node:http').Server} server
  */
@@ -422,22 +538,31 @@ async function main() {
 	/** @type {Result[]} */
 	const results = [];
 
+	/** @param {Result} result */
+	function report(result) {
+		results.push(result);
+
+		const requests = result.imported.length;
+		const hosts = hostsOf(result.imported) || '(none)';
+
+		console.log(
+			`  ${result.failed ? 'FAIL' : ' ok '} ${result.version.padEnd(10)} ` +
+				`${String(result.ms).padStart(5)}ms  ` +
+				`${requests} external request${requests === 1 ? '' : 's'} to ${hosts}`,
+		);
+	}
+
 	try {
 		for (const version of versions) {
-			const result = await runVersion(browser, baseUrl, version);
-			results.push(result);
-
-			const requests = result.imported.length;
-			const hosts = hostsOf(result.imported) || '(none)';
-
-			console.log(
-				`  ${result.failed ? 'FAIL' : ' ok '} ${result.version.padEnd(10)} ` +
-					`${String(result.ms).padStart(5)}ms  ` +
-					`${requests} external request${requests === 1 ? '' : 's'} to ${hosts}`,
-			);
+			report(await runVersion(browser, baseUrl, version));
 		}
 
-		const count = versions.length;
+		const navigable = versions.find(({ version }) => /^v\d/.test(version));
+		if (navigable !== undefined) {
+			report(await runAfterClientNavigation(browser, baseUrl, navigable));
+		}
+
+		const count = results.length;
 		const label = count === 1 ? 'version' : 'versions';
 		console.log(`\n[live-examples] ${count} ${label}:\n`);
 	} finally {

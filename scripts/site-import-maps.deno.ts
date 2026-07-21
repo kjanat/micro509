@@ -1,9 +1,9 @@
 #!/usr/bin/env -S deno run --allow-read --allow-net --allow-write --allow-run
 /**
- * Checks the import map each version of the built site ships. Every version's map must
- * name the library version that page documents, and every URL in it must resolve to a
- * JavaScript module. Versions that speak today's API also run an example under their
- * own map.
+ * Checks the import map the built site ships. Every page must carry the same map:
+ * top-level imports bound to the root version, and a scope per version prefix bound
+ * to the version that prefix documents. Every URL in it must resolve to a JavaScript
+ * module. Versions that speak today's API also run an example under their own scope.
  *
  * Run `site:build` first. Deno resolves import maps natively.
  *
@@ -20,10 +20,9 @@ function isVersionDir(name: string): boolean {
 	return name === 'next' || /^v\d+\.\d+\.\d+$/.test(name);
 }
 
-interface Shipped {
-	/** URL prefix the page is served under, such as `''` or `'v0.8.0/'`. */
-	readonly prefix: string;
+interface SiteMap {
 	readonly imports: Readonly<Record<string, string>>;
+	readonly scopes: Readonly<Record<string, Readonly<Record<string, string>>>>;
 }
 
 /** Written against today's API. Archives shipped a different one. */
@@ -43,39 +42,49 @@ const cn = parsed.value.subject.values.commonName;
 if (cn !== 'import-maps.example') throw new Error(\`wrong subject: \${cn}\`);
 `;
 
-async function mapOf(prefix: string): Promise<Shipped> {
+async function rawMapOf(prefix: string): Promise<string> {
 	const html = await Deno.readTextFile(`${DIST}${prefix}index.html`);
 	const found = html.match(/<script type="importmap">(.*?)<\/script>/s);
 	if (found?.[1] === undefined) throw new Error(`/${prefix} ships no import map`);
-	return { prefix, imports: JSON.parse(found[1]).imports };
+	return found[1];
 }
 
-/** Every version's map, read out of each version's landing page. */
-async function shipped(): Promise<readonly Shipped[]> {
+/** URL prefixes of every version the site serves, such as `''` or `'v0.8.0/'`. */
+async function servedPrefixes(): Promise<readonly string[]> {
 	const prefixes = [''];
 	for await (const entry of Deno.readDir(DIST)) {
 		if (entry.isDirectory && isVersionDir(entry.name)) prefixes.push(`${entry.name}/`);
 	}
-	const pages = await Promise.all(prefixes.sort().map(mapOf));
-	return pages;
+	return prefixes.sort();
 }
 
-/** The library ref a version's map points at, such as `0.8.0` or `master`. */
-function boundTo(page: Shipped): string {
-	const root = Object.values(page.imports)[0] ?? '';
+function parseMap(raw: string): SiteMap {
+	const parsed = JSON.parse(raw);
+	return { imports: parsed.imports ?? {}, scopes: parsed.scopes ?? {} };
+}
+
+/** What a module under `prefix` resolves: its scope over the top-level imports. */
+function effectiveImports(map: SiteMap, prefix: string): Readonly<Record<string, string>> {
+	return prefix === '' ? map.imports : { ...map.imports, ...map.scopes[`/${prefix}`] };
+}
+
+/** The library ref a mapping points at, such as `0.8.0` or `master`. */
+function boundTo(imports: Readonly<Record<string, string>>): string {
+	const root = imports[LIBRARY] ?? '';
 	return root.match(/@([^/@?]+)/)?.[1] ?? '';
 }
 
-/** A page must import the version it documents. */
-function bindsToItsOwnVersion(page: Shipped): boolean {
-	const version = page.prefix.replace(/^v/, '').replace(/\/$/, '');
-	return version === '' || version === 'next' || boundTo(page) === version;
+/** A prefix must resolve the version it documents. */
+function bindsToItsOwnVersion(map: SiteMap, prefix: string): boolean {
+	const version = prefix.replace(/^v/, '').replace(/\/$/, '');
+	if (version === '' || version === 'next') return true;
+	return boundTo(effectiveImports(map, prefix)) === version;
 }
 
-async function runs(page: Shipped): Promise<string | undefined> {
+async function runs(imports: Readonly<Record<string, string>>): Promise<string | undefined> {
 	const dir = await Deno.makeTempDir();
 	try {
-		await Deno.writeTextFile(`${dir}/import_map.json`, JSON.stringify({ imports: page.imports }));
+		await Deno.writeTextFile(`${dir}/import_map.json`, JSON.stringify({ imports }));
 		await Deno.writeTextFile(`${dir}/example.ts`, EXAMPLE);
 
 		const { success, stderr } = await new Deno.Command(Deno.execPath(), {
@@ -110,16 +119,40 @@ async function published(): Promise<readonly string[]> {
 	return metadata.versions.map((entry) => entry.version);
 }
 
-const pages = await shipped();
-if (pages.length === 0) {
+async function resolvesAsModule([specifier, url]: readonly [string, string]): Promise<
+	string | undefined
+> {
+	const response = await fetch(url).catch((error: unknown) => String(error));
+	if (typeof response === 'string') return `${specifier} -> ${url} (${response})`;
+	const body = await response.text();
+	if (!response.ok) return `${specifier} -> ${url} (${response.status})`;
+
+	const javascript = response.headers.get('content-type')?.includes('javascript');
+	return javascript === true && /\bexport\b/.test(body)
+		? undefined
+		: `${specifier} -> ${url} (not a module)`;
+}
+
+const prefixes = await servedPrefixes().catch(() => []);
+if (prefixes.length === 0) {
 	console.error('[import-maps] no built site at site/.vitepress/dist — run `run site:build` first');
 	Deno.exit(1);
 }
 
 const failures: string[] = [];
 
+const rawRoot = await rawMapOf('');
+const map = parseMap(rawRoot);
+
+for (const prefix of prefixes.slice(1)) {
+	const raw = await rawMapOf(prefix);
+	if (raw !== rawRoot) failures.push(`/${prefix} ships a different map than /`);
+}
+
 const servedSemvers = new Set(
-	pages.map((page) => boundTo(page)).filter((version) => /^\d+\.\d+\.\d+$/.test(version)),
+	prefixes
+		.map((prefix) => boundTo(effectiveImports(map, prefix)))
+		.filter((version) => /^\d+\.\d+\.\d+$/.test(version)),
 );
 
 if (servedSemvers.size > 0) {
@@ -141,44 +174,37 @@ if (servedSemvers.size > 0) {
 	);
 }
 
-for (const page of pages) {
-	const route = `/${page.prefix}`;
-
-	if (!bindsToItsOwnVersion(page)) {
-		failures.push(`${route} imports ${boundTo(page)}, not the version it documents`);
-		continue;
+const entries = new Map<string, readonly [string, string]>();
+for (const prefix of prefixes) {
+	for (const entry of Object.entries(effectiveImports(map, prefix))) {
+		entries.set(entry[1], [entry[0], entry[1]]);
 	}
+}
+const unresolved = (await Promise.all([...entries.values()].map(resolvesAsModule))).filter(
+	(problem) => problem !== undefined,
+);
+if (unresolved.length > 0) {
+	failures.push(`dead imports:\n    ${unresolved.join('\n    ')}`);
+}
 
-	const unresolved = (
-		await Promise.all(
-			Object.entries(page.imports).map(async ([specifier, url]) => {
-				const response = await fetch(url).catch((error: unknown) => String(error));
-				if (typeof response === 'string') return `${specifier} -> ${url} (${response})`;
-				const body = await response.text();
-				if (!response.ok) return `${specifier} -> ${url} (${response.status})`;
+for (const prefix of prefixes) {
+	const route = `/${prefix}`;
+	const imports = effectiveImports(map, prefix);
 
-				const javascript = response.headers.get('content-type')?.includes('javascript');
-				return javascript === true && /\bexport\b/.test(body)
-					? undefined
-					: `${specifier} -> ${url} (not a module)`;
-			}),
-		)
-	).filter((problem) => problem !== undefined);
-
-	if (unresolved.length > 0) {
-		failures.push(`${route} has dead imports:\n    ${unresolved.join('\n    ')}`);
+	if (!bindsToItsOwnVersion(map, prefix)) {
+		failures.push(`${route} resolves ${boundTo(imports)}, not the version it documents`);
 		continue;
 	}
 
 	// Archives answer to their own API; running today's example against them proves nothing.
-	const executable = page.prefix === '' || page.prefix === 'next/';
-	const broke = executable ? await runs(page) : undefined;
-	if (broke !== undefined)
-		failures.push(`${route} (${boundTo(page)}) cannot run an example: ${broke}`);
+	const executable = prefix === '' || prefix === 'next/';
+	const broke = executable && unresolved.length === 0 ? await runs(imports) : undefined;
+	if (broke !== undefined) {
+		failures.push(`${route} (${boundTo(imports)}) cannot run an example: ${broke}`);
+	}
 
-	const count = Object.keys(page.imports).length;
 	console.log(
-		`[import-maps] ${route.padEnd(10)} -> ${boundTo(page).padEnd(8)} ${count} imports resolve${executable ? ', example runs' : ''}`,
+		`[import-maps] ${route.padEnd(10)} -> ${boundTo(imports).padEnd(8)} ${Object.keys(imports).length} imports${executable && broke === undefined ? ', example runs' : ''}`,
 	);
 }
 
@@ -186,4 +212,4 @@ if (failures.length > 0) {
 	console.error(`\n[import-maps] ${failures.length} failed:\n  ${failures.join('\n  ')}`);
 	Deno.exit(1);
 }
-console.log(`\n[import-maps] ${pages.length} versions bound to their own library`);
+console.log(`\n[import-maps] ${prefixes.length} versions bound to their own library`);

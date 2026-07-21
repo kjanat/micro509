@@ -35,6 +35,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Exported from the root and `micro509/x509`, with the `SubjectAltNameTextOptions`
   type. (https://github.com/kjanat/micro509/issues/50)
 
+- The docs site serves a permalink for the newest release. `/v0.11.0/…` used to
+  404 while 0.11.0 sat at the root, then silently come into existence as an
+  archive one release later, so a link to the root changed meaning on every
+  release. The build now emits a `_redirects` file sending `/v<latest>/*` to the
+  root with a 302; once the next release takes the root, the rule disappears and
+  the same URL serves the archived copy. Temporary on purpose: browsers cache a
+  301 past the release that makes it wrong.
+
+### Fixed
+
+- Runnable examples now execute the version of the page they run on after
+  client-side navigation. Each page shipped its own `<script type="importmap">`,
+  which the browser reads once per document, so navigating from the landing page
+  to an archived version and pressing Run resolved `micro509` against the entry
+  page's map and imported the wrong release; only a hard refresh picked up the
+  right one. Every page now ships one identical map: top-level imports for the
+  root version and a scope per version prefix. Scopes match the URL of the
+  importing module, and the injected example module inherits the document URL,
+  so resolution follows the page at run time with no map swapping. `run
+site:import-maps` now verifies the map is identical on every page and each
+  scope binds its own version, and `run site:live-examples` replays the failing
+  flow: enter at the root, navigate client-side to an archive, run its example,
+  and require every import to carry that archive's version.
+
 ### Changed
 
 - The X.509 reference now identifies every asynchronous operation in one place
