@@ -13,7 +13,7 @@ const server = createTestHarness({
 			config: {
 				name: 'micro509-smoke',
 				main: `${import.meta.dirname}/smoke-worker.mjs`,
-				compatibility_date: Temporal.Now.plainDateISO('UTC').subtract({ days: 1 }).toString(),
+				compatibility_date: '2026-06-29',
 			},
 		},
 	],
