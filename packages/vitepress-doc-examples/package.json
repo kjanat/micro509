@@ -9,7 +9,7 @@
 		"./package.json": "./package.json"
 	},
 	"dependencies": {
-		"@biomejs/biome": "catalog:",
+		"biome": "catalog:",
 		"typescript": "catalog:ts"
 	},
 	"peerDependencies": {

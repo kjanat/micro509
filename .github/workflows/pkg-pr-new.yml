@@ -16,4 +16,4 @@ jobs:
       - run: runner install -f build
       - id: pkg-pr
         continue-on-error: true # pkg.pr.new intermittently returns unrelated Cloudflare 500/1101 errors; previews are non-critical.
-        run: run -q publish:pkgprnew --json pkgpr.json; echo "meta=$(jq -c . pkgpr.json)" >> "${GITHUB_OUTPUT}"
+        run: run -q publish:pkgprnew --json pkgpr.json; echo "meta=$(jq -c . pkgpr.json)" | tee -a "${GITHUB_OUTPUT}"

@@ -125,13 +125,13 @@
 	},
 	"devDependencies": {
 		"@arethetypeswrong/core": "catalog:build",
-		"@biomejs/biome": "catalog:",
 		"@deno/doc": "catalog:deno",
 		"@micro509/doc-render": "workspace:*",
 		"@tsconfig/node24": "catalog:ts",
 		"@types/bun": "catalog:ts",
 		"@types/deno": "catalog:deno",
 		"@types/node": "catalog:ts",
+		"biome": "catalog:",
 		"deno": "catalog:deno",
 		"dprint": "catalog:",
 		"importmapify": "catalog:deno",
@@ -178,33 +178,33 @@
 		"npm": "11.18.0"
 	},
 	"catalog": {
-		"@biomejs/biome": "2.5.2 || ^2.5.4",
-		"dprint": "^0.55.1",
-		"runner-run": "^0.19.1",
-		"vue": "^3.5.27"
+		"biome": "npm:@biomejs/biome@^2.5.5",
+		"dprint": "^0.55.2",
+		"runner-run": "^0.21.0",
+		"vue": "^3.5.40"
 	},
 	"catalogs": {
 		"build": {
 			"@arethetypeswrong/core": "^0.18.4",
 			"publint": "^0.3.21",
-			"tsdown": "^0.22.4",
+			"tsdown": "^0.22.13",
 			"unplugin-unused": "^0.5.7"
 		},
 		"cloudflare": {
-			"@cloudflare/vite-plugin": "^1.42.3",
-			"wrangler": "^4.108.0"
+			"@cloudflare/vite-plugin": "^1.46.0",
+			"wrangler": "^4.113.0"
 		},
 		"deno": {
 			"@deno/doc": "npm:@jsr/deno__doc@0.199.0",
 			"@types/deno": "^2.7.0",
-			"deno": "^2.9.2",
-			"importmapify": "^1.6.0"
+			"deno": "^2.9.3",
+			"importmapify": "^1.6.1"
 		},
 		"site": {
 			"markdown-it-task-lists": "^2.1.1",
-			"tar": "^7.5.20",
+			"tar": "^7.5.21",
 			"vite-robots-txt": "^1.0.0",
-			"vite-svg-to-ico": "^4.0.0",
+			"vite-svg-to-ico": "^4.1.0",
 			"vitepress": "2.0.0-alpha.18"
 		},
 		"ts": {
@@ -215,8 +215,8 @@
 			"@types/node": "^26.1.0",
 			"@vue/tsconfig": "^0.9.1",
 			"typescript": "npm:typescript@>=6,<7",
-			"typescript-6": "npm:@typescript/typescript6@^6.0.2",
-			"typescript-7": "npm:typescript@^7.0.2",
+			"typescript-6": "npm:@typescript/typescript6@^6",
+			"typescript-7": "npm:typescript@>=7",
 			"vue-tsc": "^3.3.5"
 		}
 	},

@@ -16,16 +16,15 @@ jobs:
     permissions: { contents: write, pull-requests: write, issues: write, id-token: write, actions: read }
     steps:
       - { uses: actions/checkout@v7, with: { fetch-depth: 0 } }
-      - uses: kjanat/install-dprint@v1
+      - uses: kjanat/install-dprint@v2
       - { uses: ./.github/actions/setup-ts, id: setup-ts, with: { install-bun: "true", install-node: "true" } }
       - run: runner install -f build
 
       - name: Run Claude Code
         id: claude
-        uses: anthropics/claude-code-action@v1.0.171
+        uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           path_to_bun_executable: ${{ steps.setup-ts.outputs.bun-path }}
           settings: ${{ vars.CLAUDE_SETTINGS }}
-          additional_permissions: |
-            actions: read
+          additional_permissions: "actions: read"
