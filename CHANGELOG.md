@@ -47,6 +47,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The old limit cited 48 bits as the safe-integer boundary; that boundary is 53.
   A 7- or 8-byte INTEGER inside a certificate that previously threw now parses.
 
+### Security
+
+- `validateCandidatePath` compares each certificate's issuer DN against the
+  candidate issuer's subject DN, per RFC 5280 §6.1.3(a)(4). It verified only the
+  signature, so a leaf whose issuer DN was unrelated to the signing CA validated
+  as ok on the pre-built-path API. `buildChainInternal` already compared them,
+  so `verifyCertificateChain` was unaffected.
+  (https://github.com/kjanat/micro509/pull/72)
+
 ## [0.12.0] - 2026-07-21
 
 Text rendering for subject alternative names and distinguished names, and
