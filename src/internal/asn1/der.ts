@@ -202,6 +202,46 @@ export function ia5String(value: string): Uint8Array {
 	return tlv(0x16, new TextEncoder().encode(value));
 }
 
+/**
+ * Encodes a DER BMPString (tag `0x1e`) as big-endian UTF-16.
+ * Throws on lone surrogates and on code points above the Basic Multilingual Plane.
+ */
+export function bmpString(value: string): Uint8Array {
+	const units: number[] = [];
+	for (const character of value) {
+		const codePoint = character.codePointAt(0) ?? 0;
+		if (codePoint > 0xffff) {
+			throw new Error('Invalid BMPString: code point above the Basic Multilingual Plane');
+		}
+		if (codePoint >= 0xd800 && codePoint <= 0xdfff) {
+			throw new Error('Invalid BMPString: lone surrogate');
+		}
+		units.push((codePoint >> 8) & 0xff, codePoint & 0xff);
+	}
+	return tlv(0x1e, Uint8Array.from(units));
+}
+
+/**
+ * Encodes a DER UniversalString (tag `0x1c`) as big-endian UTF-32.
+ * Throws on lone surrogates.
+ */
+export function universalString(value: string): Uint8Array {
+	const bytes: number[] = [];
+	for (const character of value) {
+		const codePoint = character.codePointAt(0) ?? 0;
+		if (codePoint >= 0xd800 && codePoint <= 0xdfff) {
+			throw new Error('Invalid UniversalString: lone surrogate');
+		}
+		bytes.push(
+			(codePoint >> 24) & 0xff,
+			(codePoint >> 16) & 0xff,
+			(codePoint >> 8) & 0xff,
+			codePoint & 0xff,
+		);
+	}
+	return tlv(0x1c, Uint8Array.from(bytes));
+}
+
 /** Encode a non-negative integer as a base-128 sub-identifier (X.690 §8.19.2). */
 function encodeBase128(value: bigint): number[] {
 	const encoded: number[] = [Number(value & 0x7fn)];

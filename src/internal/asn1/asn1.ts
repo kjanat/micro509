@@ -16,11 +16,10 @@ const textDecoder = new TextDecoder('utf-8', { fatal: true });
 const PRINTABLE_STRING_PATTERN = /^[A-Za-z0-9 '()+,\-./:=?]*$/u;
 
 /**
- * Decodes a DER-encoded OBJECT IDENTIFIER value into its dotted-decimal string
- * form (e.g. `"1.2.840.113549.1.1.1"`).
+ * Decodes a DER-encoded OBJECT IDENTIFIER value into its dotted-decimal string form (e.g. `"1.2.840.113549.1.1.1"`).
  *
- * Throws on empty input, truncated multi-byte sub-identifiers, or incomplete
- * continuation octets.
+ * @example
+ * Throws on empty input, truncated multi-byte sub-identifiers, or incomplete continuation octets.
  */
 export function decodeObjectIdentifier(bytes: Uint8Array): string {
 	if (bytes.length === 0) {
@@ -48,7 +47,7 @@ export function toHex(bytes: Uint8Array): string {
 }
 
 /**
- * Copies a `Uint8Array` into a standalone `ArrayBuffer` suitable for
+ * Copies a {@linkcode Uint8Array} into a standalone {@linkcode ArrayBuffer} suitable for
  * Web Crypto operations that require a non-shared backing buffer.
  */
 export function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
@@ -58,10 +57,10 @@ export function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
 }
 
 /**
- * Iterates through all direct child TLV elements inside a constructed
- * {@linkcode DerElement} (SEQUENCE, SET, or context-tagged container).
+ * Iterates through all direct child TLV elements inside a constructed {@linkcode DerElement}
+ * (SEQUENCE, SET, or context-tagged container).
  *
- * Throws if any child overflows the parent boundary or if there is
+ * @throws if any child overflows the parent boundary or if there is
  * leftover data between the last child and the parent end offset.
  */
 export function childrenOf(source: Uint8Array, parent: DerElement): DerElement[] {
@@ -96,7 +95,7 @@ export function requireElement<T>(value: T | undefined, label: string): T {
 
 /**
  * Strips the leading "unused bits" octet from a BIT STRING element,
- * returning just the payload bytes. Throws if the tag is not `0x03`.
+ * returning just the payload bytes. @throws if the tag is not `0x03`.
  *
  * Used to extract signature values and public keys from their BIT STRING wrapper.
  */
@@ -114,12 +113,41 @@ export function extractBitStringValue(element: DerElement): Uint8Array {
 	return element.value.slice(1);
 }
 
+/** A BIT STRING payload and the number of unused trailing bits in its final byte. */
+export interface DerBitString {
+	/** Payload bytes, excluding the leading unused-bit count octet. */
+	readonly bytes: Uint8Array;
+	/** Unused trailing bits in the final byte, 0 through 7. */
+	readonly unusedBits: number;
+}
+
 /**
- * Parses a {@linkcode DerElement} with tag UTCTime (`0x17`) or GeneralizedTime (`0x18`)
- * into a `Date`.
+ * Decodes a BIT STRING element into its payload and unused-bit count.
  *
- * For UTCTime, the two-digit year is interpreted per RFC 5280: values >= 50 map
- * to 19xx, values < 50 map to 20xx. Throws on unrecognized time tags.
+ * Accepts a non-zero unused-bit count, so it reads flag strings such as KeyUsage,
+ * which {@linkcode extractBitStringValue} rejects.
+ */
+export function decodeBitString(element: DerElement): DerBitString {
+	if (element.tag !== 0x03) {
+		throw new Error('Expected BIT STRING');
+	}
+	const unusedBits = element.value[0];
+	if (unusedBits === undefined || unusedBits > 7) {
+		throw new Error('Invalid BIT STRING');
+	}
+	const bytes = element.value.slice(1);
+	if (bytes.length === 0 && unusedBits !== 0) {
+		throw new Error('Invalid BIT STRING');
+	}
+	return { bytes, unusedBits };
+}
+
+/**
+ * Parses a {@linkcode DerElement} with tag UTCTime (`0x17`) or GeneralizedTime (`0x18`) into a {@linkcode Date}.
+ *
+ * For UTCTime, the two-digit year is interpreted per RFC 5280: values >= 50 map to 19xx, values < 50 map to 20xx.
+ *
+ * @throws on unrecognized time tags.
  */
 export function parseTime(element: DerElement): Date {
 	if (element.tag === 0x17) {
@@ -172,8 +200,8 @@ export function parseTime(element: DerElement): Date {
 
 /**
  * Decodes a big-endian unsigned byte sequence into a JavaScript `number`.
- * Throws if the value exceeds 6 bytes (48 bits), which is the safe-integer
- * boundary for lossless arithmetic.
+ *
+ * Throws if the value exceeds `Number.MAX_SAFE_INTEGER`, the boundary for lossless arithmetic.
  */
 export function decodeIntegerNumber(bytes: Uint8Array): number {
 	const first = bytes[0];
@@ -186,11 +214,11 @@ export function decodeIntegerNumber(bytes: Uint8Array): number {
 	if (bytes.length > 1 && first === 0 && ((bytes[1] ?? 0) & 0x80) === 0) {
 		throw new Error('INTEGER must use minimal encoding');
 	}
-	if (bytes.length > 6) {
-		throw new Error(`Integer too large for safe number (${bytes.length} bytes)`);
-	}
 	let value = 0;
 	for (const byte of bytes) {
+		if (value > Math.floor((Number.MAX_SAFE_INTEGER - byte) / 256)) {
+			throw new Error(`Integer too large for safe number (${bytes.length} bytes)`);
+		}
 		value = value * 256 + byte;
 	}
 	return value;

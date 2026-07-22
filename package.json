@@ -19,6 +19,7 @@
 	"imports": {
 		"#micro509": "./src/index.ts",
 		"#micro509/*": "./src/*.ts",
+		"#micro509/der": "./src/der/index.ts",
 		"#micro509/keys": "./src/keys/index.ts",
 		"#micro509/pem": "./src/pem/index.ts",
 		"#micro509/pkcs": "./src/pkcs/index.ts",
@@ -39,6 +40,10 @@
 		".": {
 			"types": "./dist/index.d.ts",
 			"default": "./dist/index.js"
+		},
+		"./der": {
+			"types": "./dist/der.d.ts",
+			"default": "./dist/der.js"
 		},
 		"./keys": {
 			"types": "./dist/keys.d.ts",
