@@ -1,4 +1,5 @@
 import { writeImportMap } from 'importmapify';
+import { entrypointsOf } from '@micro509/doc-render';
 import { apiDocsPlugin, generateApiDocs } from '@micro509/vitepress-api-docs';
 import type { DocExamplesOptions } from '@micro509/vitepress-doc-examples';
 import { docExamplesPlugin } from '@micro509/vitepress-doc-examples';
@@ -87,9 +88,7 @@ function generateApi(target: { readonly root: string; readonly outDir: string })
 		outDir: target.outDir,
 		name: tree.name,
 		importMap,
-		entrypoints: Object.entries(tree.registry.exports)
-			.map(([, source]) => source.replace(/^\.\//, ''))
-			.sort(),
+		entrypoints: entrypointsOf(tree.registry),
 	});
 }
 

@@ -60,7 +60,7 @@ export function sequence(parts: readonly Uint8Array[]): Uint8Array {
 
 /**
  * Wraps children in a SET (tag `0x31`) after DER-sorting them lexicographically by encoded bytes,
- * as required by X.690 DER.
+ * as required by {@linkcode https://www.itu.int/rec/T-REC-X.690-202102-I/en | X.690} DER.
  */
 export function setOf(parts: readonly Uint8Array[]): Uint8Array {
 	const sorted = parts.slice().sort((a, b) => {
@@ -256,7 +256,7 @@ export function universalString(value: string): Uint8Array {
 	return tlv(0x1c, Uint8Array.from(bytes));
 }
 
-/** Encode a non-negative integer as a base-128 sub-identifier (X.690 §8.19.2). */
+/** Encode a non-negative integer as a base-128 sub-identifier ({@linkcode https://www.itu.int/rec/T-REC-X.690-202102-I/en | X.690 §8.19.2}). */
 function encodeBase128(value: bigint): number[] {
 	const encoded: number[] = [Number(value & 0x7fn)];
 	let current = value >> 7n;

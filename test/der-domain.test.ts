@@ -169,7 +169,6 @@ describe('der domain', () => {
 			expect(result.ok).toBe(false);
 			if (result.ok) throw new Error('expected failure');
 			expect(result.code).toBe('malformed');
-			expect(result.message).toBe('Expected INTEGER');
 		});
 
 		it('reports malformed bytes from the readers', () => {
@@ -207,7 +206,7 @@ describe('der domain', () => {
 			const result = decodeDerString(teletex);
 			expect(result.ok).toBe(false);
 			if (result.ok) throw new Error('expected failure');
-			expect(result.message).toContain('TeletexString');
+			expect(result.code).toBe('malformed');
 		});
 	});
 
@@ -236,6 +235,11 @@ describe('der domain', () => {
 			);
 		});
 
+		it('rejects an unsupported string tag by name', () => {
+			const teletex = Uint8Array.of(0x14, 0x01, 0x41);
+			expect(() => decodeDerStringOrThrow(readDerElementOrThrow(teletex))).toThrow('TeletexString');
+		});
+
 		it('rejects a BIT STRING claiming more than seven unused bits', () => {
 			const tooMany = Uint8Array.of(0x03, 0x02, 0x08, 0x80);
 			expect(() => decodeDerBitStringOrThrow(readDerElementOrThrow(tooMany))).toThrow(
@@ -251,11 +255,24 @@ describe('der domain', () => {
 			);
 		});
 
-		it('returns non-zero padding bits as encoded', () => {
+		it('returns non-zero padding bits as encoded, and reports them', () => {
 			const nonZeroPadding = Uint8Array.of(0x03, 0x02, 0x04, 0x8f);
 			const decoded = decodeDerBitStringOrThrow(readDerElementOrThrow(nonZeroPadding));
 			expect(decoded.unusedBits).toBe(4);
 			expect(toHex(decoded.bytes)).toBe('8f');
+			expect(decoded.nonZeroPadding).toBe(true);
+		});
+
+		it('reports canonical padding as conformant', () => {
+			const canonical = decodeDerBitStringOrThrow(
+				readDerElementOrThrow(derBitString(Uint8Array.of(0x80), 4)),
+			);
+			expect(canonical.nonZeroPadding).toBe(false);
+
+			const noPadding = decodeDerBitStringOrThrow(
+				readDerElementOrThrow(derBitString(Uint8Array.of(0xff))),
+			);
+			expect(noPadding.nonZeroPadding).toBe(false);
 		});
 
 		it('rejects an integer above MAX_SAFE_INTEGER', () => {

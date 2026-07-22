@@ -647,9 +647,15 @@ export function renderDocuments(
 	return out.join('\n');
 }
 
-export type ApiModulePage = { pkg: string; markdown: string };
+export type ApiModulePage = {
+	/** Module page slug, e.g. `x509` for `/api/x509`. */
+	pkg: string;
+	/** Whether this page documents the package root. */
+	root: boolean;
+	markdown: string;
+};
 
-type RenderedModulePage = ApiModulePage & { title: string; root: boolean };
+type RenderedModulePage = ApiModulePage & { title: string };
 
 /** Per-module reference pages (sidebar-visible). Symbols are `##` sections. */
 export function renderModulePages(
@@ -684,7 +690,7 @@ export function renderModulePages(
 	}
 	pages.sort((a, b) => Number(b.root) - Number(a.root) || a.pkg.localeCompare(b.pkg));
 	return {
-		pages: pages.map(({ pkg, markdown }) => ({ pkg, markdown })),
+		pages: pages.map(({ pkg, root, markdown }) => ({ pkg, root, markdown })),
 		sidebar: pages.map((page) => ({
 			text: page.title,
 			link: `${renderer.apiBase}${page.pkg}`,

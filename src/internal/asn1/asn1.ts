@@ -119,6 +119,8 @@ export interface DerBitString {
 	readonly bytes: Uint8Array;
 	/** Unused trailing bits in the final byte, 0 through 7. */
 	readonly unusedBits: number;
+	/** `true` when the original encoding had non-zero padding bits (DER violation). */
+	readonly nonZeroPadding: boolean;
 }
 
 /**
@@ -126,6 +128,9 @@ export interface DerBitString {
  *
  * Accepts a non-zero unused-bit count, so it reads flag strings such as {@linkcode KeyUsage},
  * which {@linkcode extractBitStringValue} rejects.
+ *
+ * Padding bits that {@linkcode https://www.itu.int/rec/T-REC-X.690-202102-I/en | X.690 §11.2.1} requires to be zero are reported through
+ * {@linkcode DerBitString.nonZeroPadding} rather than rejected, so a caller can decide.
  */
 export function decodeBitString(element: DerElement): DerBitString {
 	if (element.tag !== 0x03) {
@@ -139,7 +144,10 @@ export function decodeBitString(element: DerElement): DerBitString {
 	if (bytes.length === 0 && unusedBits !== 0) {
 		throw new Error('Invalid BIT STRING');
 	}
-	return { bytes, unusedBits };
+	const paddingMask = (1 << unusedBits) - 1;
+	const nonZeroPadding =
+		unusedBits > 0 && bytes.length > 0 && ((bytes[bytes.length - 1] ?? 0) & paddingMask) !== 0;
+	return { bytes, unusedBits, nonZeroPadding };
 }
 
 /**

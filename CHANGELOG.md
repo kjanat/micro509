@@ -22,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `micro509/der` exposes the DER reader, writer, and value decoders that back
   every built-in parser. `defineExtensionDecoder` hands a consumer `valueDer` and
-  expects raw DER back from `encode`, and nothing in the package could read or
+  expects raw DER back from `encode`, and nothing in the public API could read or
   write those bytes, so a custom extension needed a second ASN.1 library.
   Readers and decoders take untrusted bytes and come in pairs: `decodeDerInteger`
   returns a `Result`, `decodeDerIntegerOrThrow` throws. Writers take typed input
@@ -39,9 +39,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- `decodeIntegerNumber` accepts any INTEGER up to `Number.MAX_SAFE_INTEGER` and
-  rejects above it. It stopped at 6 bytes while `integerFromNumber` encoded any
-  non-negative safe integer, so values from 2^47 up encoded and would not decode.
+- `decodeIntegerNumber` accepts a non-negative, minimally encoded INTEGER up to
+  `Number.MAX_SAFE_INTEGER` and rejects above it. Negative and non-minimal
+  encodings are still rejected, as before. It stopped at 6 bytes while
+  `integerFromNumber` encoded any non-negative safe integer, so values from 2^47
+  up encoded and would not decode.
   The old limit cited 48 bits as the safe-integer boundary; that boundary is 53.
   A 7- or 8-byte INTEGER inside a certificate that previously threw now parses.
 

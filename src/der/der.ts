@@ -192,8 +192,8 @@ export function decodeDerOid(element: DerElement): DecodeDerResult<string> {
 /**
  * Decodes a BIT STRING element (tag `0x03`) into a {@linkcode DerBitString}.
  *
- * Unused trailing bits are returned as encoded. X.690 §11.2.2 requires them to be zero,
- * and certificates in the wild violate it, so the check is left to the caller.
+ * Unused trailing bits are returned as encoded, with a violation of {@linkcode https://www.itu.int/rec/T-REC-X.690-202102-I/en | X.690 §11.2.1} reported
+ * through {@linkcode DerBitString.nonZeroPadding}, since certificates in the wild carry them.
  *
  * @throws if {@linkcode element} is mis-tagged, or claims more than seven unused bits.
  */
@@ -204,8 +204,8 @@ export function decodeDerBitStringOrThrow(element: DerElement): DerBitString {
 /**
  * Decodes a BIT STRING element (tag `0x03`) into a {@linkcode DerBitString}.
  *
- * Unused trailing bits are returned as encoded. X.690 §11.2.2 requires them to be zero,
- * and certificates in the wild violate it, so the check is left to the caller.
+ * Unused trailing bits are returned as encoded, with a violation of {@linkcode https://www.itu.int/rec/T-REC-X.690-202102-I/en | X.690 §11.2.1} reported
+ * through {@linkcode DerBitString.nonZeroPadding}, since certificates in the wild carry them.
  */
 export function decodeDerBitString(element: DerElement): DecodeDerResult<DerBitString> {
 	return attempt(() => decodeDerBitStringOrThrow(element), 'Malformed BIT STRING');

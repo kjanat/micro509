@@ -73,6 +73,8 @@ function isModuleGraph(value: unknown): value is { readonly nodes: Record<string
 function loadNodes(target: ApiDocsTarget): Record<string, ApiModule> {
 	const importMap = target.importMap === undefined ? [] : ['--import-map', target.importMap];
 	const nodes: Record<string, ApiModule> = {};
+	// One pass per entrypoint: a single pass over all of them deduplicates symbols
+	// across the merged graph, dropping re-exports from every page but one.
 	for (const entrypoint of target.entrypoints) {
 		const raw = proc.execFileSync(
 			'deno',
@@ -89,6 +91,23 @@ function loadNodes(target: ApiDocsTarget): Record<string, ApiModule> {
 		Object.assign(nodes, parsed.nodes);
 	}
 	return nodes;
+}
+
+/**
+ * Resolves a page slug to its file inside {@linkcode outDir}.
+ *
+ * A slug reaches this from a module URL, so a nested slug is legitimate while an
+ * absolute one or a `..` segment is not.
+ *
+ * @throws if {@linkcode pkg} resolves outside {@linkcode outDir}.
+ */
+function pageFile(outDir: string, pkg: string): string {
+	const file = path.resolve(outDir, `${pkg}.md`);
+	const root = path.resolve(outDir);
+	if (file !== root && !file.startsWith(`${root}${path.sep}`)) {
+		throw new Error(`[api-docs] page slug escapes the output directory: ${pkg}`);
+	}
+	return file;
 }
 
 /** A generated page states its own title, so a sidebar can read it off the page. */
@@ -109,9 +128,11 @@ export function generateApiDocs(target: ApiDocsTarget): void {
 	fs.mkdirSync(target.outDir, { recursive: true });
 
 	for (const page of pages) {
+		const file = pageFile(target.outDir, page.pkg);
+		fs.mkdirSync(path.dirname(file), { recursive: true });
 		fs.writeFileSync(
-			path.join(target.outDir, `${page.pkg}.md`),
-			withTitle(page.pkg === 'root' ? target.name : `${target.name}/${page.pkg}`, page.markdown),
+			file,
+			withTitle(page.root ? target.name : `${target.name}/${page.pkg}`, page.markdown),
 		);
 	}
 	fs.writeFileSync(
