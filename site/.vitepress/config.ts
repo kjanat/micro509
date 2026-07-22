@@ -241,6 +241,19 @@ const docs = await versionedDocs({
 	fileGuardrail: 19_500,
 });
 
+const versionPrefixes = docs.versions
+	.map((version) => version.prefix)
+	.sort((left, right) => right.length - left.length);
+
+function versionPrefixOfPath(pathname: string): string {
+	const path = pathname.replace(/^\//, '');
+	return (
+		versionPrefixes.find(
+			(prefix) => prefix === '' || path === prefix.slice(0, -1) || path.startsWith(prefix),
+		) ?? ''
+	);
+}
+
 /** Reading order within each section. Unlisted pages append to the last group. */
 const ORDER: SidebarOrder = {
 	guide: [
@@ -351,6 +364,28 @@ export default defineConfig<DocsThemeConfig>({
 			copyright: `Copyright © ${new Date().getFullYear()}-present ${repo.author.name}`,
 		},
 
-		search: { provider: 'local' },
+		search: {
+			provider: 'local',
+			options: {
+				miniSearch: {
+					/** @type {Pick<import('minisearch').Options, 'extractField' | 'tokenize' | 'processTerm'>} */
+					options: {},
+					/**
+					 * @type {import('minisearch').SearchOptions}
+					 * @default
+					 * { fuzzy: 0.2, prefix: true, boost: {title: 4, text: 2, titles: 1}}
+					 */
+					searchOptions: {
+						filter: (result) => {
+							const pathname = globalThis.location?.pathname;
+							return (
+								pathname === undefined ||
+								versionPrefixOfPath(String(result.id)) === versionPrefixOfPath(pathname)
+							);
+						},
+					},
+				},
+			},
+		},
 	},
 });

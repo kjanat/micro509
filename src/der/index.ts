@@ -1,11 +1,10 @@
 /**
  * DER reading and writing primitives.
  *
- * The building blocks every other entrypoint is made of, for the cases the typed APIs
- * do not cover:
+ * The building blocks every other entrypoint is made of, for the cases the typed APIs do not cover:
  *
- * - decoding a private extension's `extnValue` inside an {@linkcode ExtensionDecoder}
- * - encoding the bytes a {@linkcode CustomExtension} carries
+ * - decoding a private extension's {@linkcode https://www.rfc-editor.org/info/rfc5280/#section-4.1 | extnValue} inside an {@linkcode https://micro509.kjanat.dev/next/api/x509#type-extensiondecoder | ExtensionDecoder}
+ * - encoding the bytes a {@linkcode https://micro509.kjanat.dev/next/api/x509#type-customextension | CustomExtension} carries
  * - inspecting a structure this library does not model
  *
  * Reading accepts definite lengths and minimal length encodings, rejects the high-tag-number form,
