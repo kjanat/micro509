@@ -19,6 +19,8 @@ interface VersionEntry {
   readonly label: string;
   /** URL prefix without the leading slash: '', 'next/', 'v0.8.0/'. */
   readonly prefix: string;
+  /** External destination when this label identifies a pull request. */
+  readonly labelUrl?: string;
 }
 
 const { theme } = useData();
@@ -49,6 +51,12 @@ const label = computed(
   () => current.value.version?.label ?? 'dev',
 );
 
+const labelUrl = computed(() =>
+  versions.value.length === 1
+    ? current.value.version?.labelUrl
+    : undefined,
+);
+
 /**
  * The same page in another version. Every version serves the same guide and
  * reference tree, so the reader lands where they were; a page that a version
@@ -66,7 +74,18 @@ function hrefFor(entry: VersionEntry): string {
     @mouseenter="open = true"
     @mouseleave="open = false"
   >
+    <a
+      v-if="labelUrl !== undefined"
+      class="vs-button"
+      :href="labelUrl"
+      target="_blank"
+      rel="noreferrer"
+      :aria-label="`Open pull request ${label}`"
+    >
+      {{ label }}
+    </a>
     <button
+      v-else
       type="button"
       class="vs-button"
       aria-haspopup="true"
@@ -117,6 +136,7 @@ function hrefFor(entry: VersionEntry): string {
   background: transparent;
   border: none;
   cursor: pointer;
+  text-decoration: none;
   transition: color 0.25s;
 }
 

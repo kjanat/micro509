@@ -12,7 +12,7 @@
  *
  * `flags` contains the recognized flag values with any non-zero padding bits
  * masked out. `nonZeroPadding` is `true` when the original BIT STRING encoding
- * had non-zero bits in positions that DER (X.690 §11.2.2) requires to be zero.
+ * had non-zero bits in positions that DER ({@linkcode https://www.itu.int/rec/T-REC-X.690-202102-I/en | X.690 §11.2.1}) requires to be zero.
  * Verification layers can use this signal to reject non-conformant encodings.
  */
 import { bitString, DEFAULT_MAX_DER_DEPTH, readRootElement } from '#micro509/internal/asn1/der';
@@ -159,7 +159,7 @@ function decodeBitFlags<T extends string>(
 		throw new Error('Invalid BIT STRING');
 	}
 	// Detect non-zero padding bits in the unused positions of the last byte.
-	// DER X.690 §11.2.2 requires these to be zero. Rather than rejecting here
+	// DER X.690 §11.2.1 requires these to be zero. Rather than rejecting here
 	// (which would break interop with real-world non-conformant certificates),
 	// we record the violation so verification layers can decide.
 	let nonZeroPadding = false;

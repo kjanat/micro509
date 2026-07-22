@@ -2,7 +2,7 @@
 	"name": "micro509",
 	"version": "0.12.0",
 	"description": "The zero-dependency TypeScript PKI toolkit for real certificate workflows.",
-	"keywords": ["x509", "certificate", "csr", "pem", "der", "jwk"],
+	"keywords": ["x509", "certificate", "csr", "pem", "der", "jwk", "importmapify"],
 	"homepage": "https://micro509.kjanat.dev",
 	"repository": {
 		"type": "git",
@@ -19,6 +19,7 @@
 	"imports": {
 		"#micro509": "./src/index.ts",
 		"#micro509/*": "./src/*.ts",
+		"#micro509/der": "./src/der/index.ts",
 		"#micro509/keys": "./src/keys/index.ts",
 		"#micro509/pem": "./src/pem/index.ts",
 		"#micro509/pkcs": "./src/pkcs/index.ts",
@@ -39,6 +40,10 @@
 		".": {
 			"types": "./dist/index.d.ts",
 			"default": "./dist/index.js"
+		},
+		"./der": {
+			"types": "./dist/der.d.ts",
+			"default": "./dist/der.js"
 		},
 		"./keys": {
 			"types": "./dist/keys.d.ts",
@@ -82,10 +87,12 @@
 		"check:biome": "biome check",
 		"check:deno": "deno check src",
 		"deno:cache": "deno cache --import-map=deno.import_map.json {src,docs,packages}/",
-		"deno:cleandocs": "rm -rf docs/deno 2>/dev/null",
-		"deno:importsmap": "importmapify",
-		"docs:build": "run -pk deno:importsmap deno:cleandocs; deno doc --no-npm --import-map deno.import_map.json --html --output=docs/deno --name=micro509 src/**/index.ts",
-		"docs:lint": "run -pk deno:importsmap deno:cleandocs; deno doc --no-npm --import-map deno.import_map.json --html --output=docs/deno --name=micro509 --lint src/**/index.ts",
+		"deno:cleandocs": "rm -rf ./.denodocs 2>/dev/null",
+		"deno:doc": "run -qpk deno:importsmap deno:cleandocs; deno doc --import-map deno.import_map.json --no-npm --name=\"$(jq -r '.name' package.json)\"",
+		"deno:importsmap": "npx -y importmapify@latest --quiet --out deno.import_map.json --import 'bun:test=./node_modules/bun-types/test.d.ts' --import '@deno/doc=jsr:@deno/doc@0.199.0'",
+		"dev": "run -pK build:watch site:dev",
+		"docs:build": "run -q deno:doc --html --output=.denodocs $(jq -r '.exports | .[]? // .' jsr.json) 2>/dev/null",
+		"docs:lint": "run -q deno:doc --lint $(jq -r '.exports | .[]? // .' jsr.json)",
 		"fmt": "dprint fmt",
 		"lint": "bun lint:biome",
 		"lint:biome": "biome lint",
@@ -134,6 +141,7 @@
 		"biome": "catalog:",
 		"deno": "catalog:deno",
 		"dprint": "catalog:",
+		"dreamcli": "npm:@kjanat/dreamcli@3.0.1",
 		"importmapify": "catalog:deno",
 		"playwright": "^1.61.1",
 		"publint": "catalog:build",
@@ -155,7 +163,7 @@
 			},
 			{
 				"name": "npm",
-				"version": ">=11,<12",
+				"version": ">=11 <12",
 				"onFail": "warn"
 			}
 		],

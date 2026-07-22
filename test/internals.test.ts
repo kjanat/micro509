@@ -308,8 +308,16 @@ describe('asn1 decoding', () => {
 		);
 	});
 
-	it('decodeIntegerNumber throws on integers > 6 bytes', () => {
-		expect(() => decodeIntegerNumber(Uint8Array.of(1, 2, 3, 4, 5, 6, 7))).toThrow('too large');
+	it('decodeIntegerNumber accepts any value up to MAX_SAFE_INTEGER', () => {
+		expect(decodeIntegerNumber(Uint8Array.of(1, 2, 3, 4, 5, 6, 7))).toBe(283686952306183);
+		expect(decodeIntegerNumber(Uint8Array.of(0x1f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff))).toBe(
+			Number.MAX_SAFE_INTEGER,
+		);
+	});
+
+	it('decodeIntegerNumber throws above MAX_SAFE_INTEGER', () => {
+		expect(() => decodeIntegerNumber(Uint8Array.of(0x20, 0, 0, 0, 0, 0, 0))).toThrow('too large');
+		expect(() => decodeIntegerNumber(Uint8Array.of(1, 2, 3, 4, 5, 6, 7, 8))).toThrow('too large');
 	});
 
 	it('decodeIntegerNumber rejects empty, negative, and non-minimal encodings', () => {

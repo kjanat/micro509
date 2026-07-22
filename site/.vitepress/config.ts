@@ -1,4 +1,5 @@
 import { writeImportMap } from 'importmapify';
+import { entrypointsOf } from '@micro509/doc-render';
 import { apiDocsPlugin, generateApiDocs } from '@micro509/vitepress-api-docs';
 import type { DocExamplesOptions } from '@micro509/vitepress-doc-examples';
 import { docExamplesPlugin } from '@micro509/vitepress-doc-examples';
@@ -87,10 +88,7 @@ function generateApi(target: { readonly root: string; readonly outDir: string })
 		outDir: target.outDir,
 		name: tree.name,
 		importMap,
-		entrypoints: Object.entries(tree.registry.exports)
-			.filter(([subpath]) => subpath !== '.')
-			.map(([, source]) => source.replace(/^\.\//, ''))
-			.sort(),
+		entrypoints: entrypointsOf(tree.registry),
 	});
 }
 
@@ -144,6 +142,8 @@ const pull = await (async (): Promise<string | undefined> => {
 const nextRef = treeSha ?? (pull ?? gitRef).replace(/\/(?:merge|head)$/, '');
 
 const devLabel = pull === undefined ? `v${repo.version}-dev` : `#${pull}`;
+const devLabelUrl =
+	pull === undefined ? undefined : `${repoUrl.origin}${repoUrl.pathname}/pull/${pull}`;
 
 console.log(`[versions] tree -> GitHub @${nextRef}, labelled ${devLabel}`);
 
@@ -214,6 +214,7 @@ const docs = await versionedDocs({
 	versionsDir: path.join(repoRoot, siteRoot, 'versions'),
 	cacheDir: path.join(import.meta.dirname, 'cache/versions'),
 	devLabel,
+	...(devLabelUrl === undefined ? {} : { devLabelUrl }),
 	pages: ['site/guide', 'site/reference', 'site/index.md'],
 	sources: ['src', 'package.json', 'jsr.json'],
 	transformPage: repairExamples,
@@ -239,6 +240,19 @@ const docs = await versionedDocs({
 	fileGuardrail: 19_500,
 });
 
+const versionPrefixes = docs.versions
+	.map((version) => version.prefix)
+	.sort((left, right) => right.length - left.length);
+
+function versionPrefixOfPath(pathname: string): string {
+	const path = pathname.replace(/^\//, '');
+	return (
+		versionPrefixes.find(
+			(prefix) => prefix === '' || path === prefix.slice(0, -1) || path.startsWith(prefix),
+		) ?? ''
+	);
+}
+
 /** Reading order within each section. Unlisted pages append to the last group. */
 const ORDER: SidebarOrder = {
 	guide: [
@@ -251,7 +265,7 @@ const ORDER: SidebarOrder = {
 			slugs: ['index', 'standards', 'algorithms', 'runtimes', 'execution-model'],
 		},
 	],
-	api: [{ text: 'API Reference', slugs: ['index'] }],
+	api: [{ text: 'API Reference', slugs: ['index', 'root'] }],
 };
 
 export default defineConfig<DocsThemeConfig>({
@@ -349,6 +363,28 @@ export default defineConfig<DocsThemeConfig>({
 			copyright: `Copyright © ${new Date().getFullYear()}-present ${repo.author.name}`,
 		},
 
-		search: { provider: 'local' },
+		search: {
+			provider: 'local',
+			options: {
+				miniSearch: {
+					/** @type {Pick<import('minisearch').Options, 'extractField' | 'tokenize' | 'processTerm'>} */
+					options: {},
+					/**
+					 * @type {import('minisearch').SearchOptions}
+					 * @default
+					 * { fuzzy: 0.2, prefix: true, boost: {title: 4, text: 2, titles: 1}}
+					 */
+					searchOptions: {
+						filter: (result) => {
+							const pathname = globalThis.location?.pathname;
+							return (
+								pathname === undefined ||
+								versionPrefixOfPath(String(result.id)) === versionPrefixOfPath(pathname)
+							);
+						},
+					},
+				},
+			},
+		},
 	},
 });

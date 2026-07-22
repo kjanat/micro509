@@ -67,7 +67,7 @@ export type {
  *
  * `flags` contains the recognized flag values with any non-zero padding bits
  * masked out. `nonZeroPadding` is `true` when the original BIT STRING encoding
- * had non-zero bits in positions that DER (X.690 §11.2.2) requires to be zero.
+ * had non-zero bits in positions that DER ({@linkcode https://www.itu.int/rec/T-REC-X.690-202102-I/en | X.690 §11.2.1}) requires to be zero.
  * Verification layers can use this signal to reject non-conformant encodings.
  */
 export interface ParsedBitFlags<T extends string> {

@@ -62,6 +62,7 @@
  * const parsed = unwrap(parseCertificateSigningRequestPem(csr.pem));
  * // parsed.subject.values.commonName === 'example.com'
  * ```
+ *
  * @module micro509
  */
 

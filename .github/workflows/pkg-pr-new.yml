@@ -15,5 +15,7 @@ jobs:
       - { uses: ./.github/actions/setup-ts, with: { install-bun: true, install-node: true } }
       - run: runner install -f build
       - id: pkg-pr
-        continue-on-error: true # pkg.pr.new intermittently returns unrelated Cloudflare 500/1101 errors; previews are non-critical.
+        timeout-minutes: 1
+        continue-on-error: true # pkg.pr.new intermittently returns unrelated Cloudflare 500/1101 errors and hangs; previews are non-critical.
         run: run -q publish:pkgprnew --json pkgpr.json; echo "meta=$(jq -c . pkgpr.json)" | tee -a "${GITHUB_OUTPUT}"
+      - { run: echo boo, if: always() }

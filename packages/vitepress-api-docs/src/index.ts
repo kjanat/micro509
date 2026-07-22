@@ -30,7 +30,7 @@ import proc from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { ApiModule, RenderOptions } from '@micro509/doc-render';
-import { renderModulePages, renderOverview } from '@micro509/doc-render';
+import { assertApiPageSlug, renderModulePages, renderOverview } from '@micro509/doc-render';
 import type { Plugin } from 'vitepress';
 
 /** One API reference: sources in, markdown pages out. */
@@ -72,19 +72,46 @@ function isModuleGraph(value: unknown): value is { readonly nodes: Record<string
 /** Extract the doc-node graph for a tree's entrypoints. */
 function loadNodes(target: ApiDocsTarget): Record<string, ApiModule> {
 	const importMap = target.importMap === undefined ? [] : ['--import-map', target.importMap];
-	const raw = proc.execFileSync(
-		'deno',
-		['doc', '--no-npm', ...importMap, '--json', `--name=${target.name}`, ...target.entrypoints],
-		{ cwd: target.root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
-	);
-
-	const parsed: unknown = JSON.parse(raw);
-	if (!isModuleGraph(parsed)) {
-		throw new Error(
-			`[api-docs] deno doc did not return a module graph for ${target.name} (${target.root})`,
+	const nodes: Record<string, ApiModule> = {};
+	// One pass per entrypoint: a single pass over all of them deduplicates symbols
+	// across the merged graph, dropping re-exports from every page but one.
+	for (const entrypoint of target.entrypoints) {
+		const raw = proc.execFileSync(
+			'deno',
+			['doc', '--no-npm', ...importMap, '--json', `--name=${target.name}`, entrypoint],
+			{ cwd: target.root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
 		);
+
+		const parsed: unknown = JSON.parse(raw);
+		if (!isModuleGraph(parsed)) {
+			throw new Error(
+				`[api-docs] deno doc did not return a module graph for ${entrypoint} (${target.root})`,
+			);
+		}
+		Object.assign(nodes, parsed.nodes);
 	}
-	return parsed.nodes;
+	return nodes;
+}
+
+/**
+ * Resolves a page slug to its file inside {@linkcode outDir}.
+ *
+ * A slug reaches this from a module URL, so a nested slug is legitimate while an
+ * absolute one or a `..` segment is not.
+ *
+ * @throws if {@linkcode pkg} resolves outside {@linkcode outDir}.
+ */
+function pageFile(outDir: string, pkg: string): string {
+	assertApiPageSlug(pkg);
+	const root = path.resolve(outDir);
+	const file = path.resolve(root, `${pkg}.md`);
+	if (file !== root && !file.startsWith(`${root}${path.sep}`)) {
+		throw new Error(`[api-docs] page slug escapes the output directory: ${pkg}`);
+	}
+	if (file === path.join(root, 'index.md')) {
+		throw new Error(`[api-docs] page slug resolves to the reserved Overview page: ${pkg}`);
+	}
+	return file;
 }
 
 /** A generated page states its own title, so a sidebar can read it off the page. */
@@ -105,9 +132,11 @@ export function generateApiDocs(target: ApiDocsTarget): void {
 	fs.mkdirSync(target.outDir, { recursive: true });
 
 	for (const page of pages) {
+		const file = pageFile(target.outDir, page.pkg);
+		fs.mkdirSync(path.dirname(file), { recursive: true });
 		fs.writeFileSync(
-			path.join(target.outDir, `${page.pkg}.md`),
-			withTitle(`${target.name}/${page.pkg}`, page.markdown),
+			file,
+			withTitle(page.root ? target.name : `${target.name}/${page.pkg}`, page.markdown),
 		);
 	}
 	fs.writeFileSync(

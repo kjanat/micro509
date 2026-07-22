@@ -38,6 +38,8 @@ export interface VersionedDocsOptions {
 	readonly cacheDir: string;
 	/** Version label for the checked-out tree, e.g. `v1.4.0-dev`. */
 	readonly devLabel: string;
+	/** External destination for the checked-out tree label, e.g. its pull request. */
+	readonly devLabelUrl?: string;
 
 	/** Page paths taken verbatim from a tag, relative to the repository root. */
 	readonly pages: readonly string[];
@@ -100,6 +102,8 @@ export interface DocsVersion {
 	readonly tag: string;
 	/** Dropdown text. */
 	readonly label: string;
+	/** Optional external destination for the label when no version switching is available. */
+	readonly labelUrl?: string;
 	readonly channel: DocsChannel;
 	/** URL prefix without the leading slash: `''`, `'next/'`, `'v0.8.0/'`. */
 	readonly prefix: string;
@@ -289,6 +293,7 @@ async function resolveVersions(options: VersionedDocsOptions): Promise<readonly 
 			{
 				tag: options.devLabel,
 				label: options.devLabel,
+				...(options.devLabelUrl === undefined ? {} : { labelUrl: options.devLabelUrl }),
 				channel: 'latest',
 				prefix: '',
 				srcRoot: options.siteRoot,

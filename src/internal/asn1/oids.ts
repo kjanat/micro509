@@ -145,8 +145,15 @@ function flattenOidTree(tree: typeof OID_GROUP_SPECS): OidRegistry {
 }
 
 /**
- * Dotted-decimal OID constants for X.500 attributes, PKCS algorithms,
- * X.509v3 extensions, EKU purposes, hash algorithms, and PKIX access methods.
+ * Dotted-decimal OID constants.
+ *
+ * Includes:
+ * - EKU purposes,
+ * - PKCS algorithms,
+ * - PKIX access methods,
+ * - X.500 attributes,
+ * - X.509v3 extensions, and
+ * - hash algorithms.
  */
 const OIDS: OidRegistry = flattenOidTree(OID_GROUP_SPECS);
 

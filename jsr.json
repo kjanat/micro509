@@ -4,6 +4,7 @@
 	"license": "MIT",
 	"exports": {
 		".": "./src/index.ts",
+		"./der": "./src/der/index.ts",
 		"./keys": "./src/keys/index.ts",
 		"./pem": "./src/pem/index.ts",
 		"./pkcs": "./src/pkcs/index.ts",

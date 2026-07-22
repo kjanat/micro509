@@ -164,7 +164,7 @@ dist
 /.archive
 /.opencode/state/
 /.playwright-cli
-/_*.md
+/_*.*
 /comparisons/*
 /docs/deno/
 /site/api/**/*.md
@@ -180,3 +180,7 @@ test/fixtures/pkits/nist/PKITS_data/
 yarn.lock
 /*.mjs
 !/importmapify.config.mjs
+/.denodocs/
+# ITU-T Recommendations are free to download, not to redistribute:
+# "No part of this publication may be reproduced ... without the prior written permission of ITU."
+docs/itu/

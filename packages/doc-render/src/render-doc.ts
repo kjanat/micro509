@@ -42,9 +42,12 @@ export interface RenderOptions {
 	readonly packageName: string;
 	/** URL space the module pages are served under. Default `/api/`. */
 	readonly apiBase?: string;
+	/** Whether a module URL is the package root. Default: `src/index.ts`. */
+	readonly rootOf?: (url: string) => boolean;
 	/**
 	 * Module URL -> page slug. Default: the path between `/src/` and a trailing
-	 * `/index.ts`, which is the shape a `src/<module>/index.ts` layout produces.
+	 * `/index.ts`, which is the shape a `src/<module>/index.ts` layout produces;
+	 * the root `src/index.ts` maps to `root`.
 	 */
 	readonly slugOf?: (url: string) => string;
 }
@@ -54,10 +57,19 @@ interface Renderer {
 	readonly packageName: string;
 	readonly apiBase: string;
 	readonly slugOf: (url: string) => string;
+	readonly rootOf: (url: string) => boolean;
+}
+
+function defaultRoot(url: string): boolean {
+	return url.replace(/^.*\/src\//, '') === 'index.ts';
 }
 
 function defaultSlug(url: string): string {
-	return url.replace(/^.*\/src\//, '').replace(/\/index\.ts$/, '');
+	const sourcePath = url.replace(/^.*\/src\//, '');
+	if (defaultRoot(url)) return 'root';
+	return sourcePath.endsWith('/index.ts')
+		? sourcePath.slice(0, -'/index.ts'.length)
+		: sourcePath.replace(/\.ts$/, '');
 }
 
 function resolve(options: RenderOptions): Renderer {
@@ -65,6 +77,7 @@ function resolve(options: RenderOptions): Renderer {
 		packageName: options.packageName,
 		apiBase: options.apiBase ?? '/api/',
 		slugOf: options.slugOf ?? defaultSlug,
+		rootOf: options.rootOf ?? defaultRoot,
 	};
 }
 
@@ -75,17 +88,30 @@ export interface ExportsManifest {
 
 /**
  * Public entrypoints = the manifest's `exports`, pointing at source files.
- * The `.` barrel is skipped: it re-exports the other subpaths and would
- * duplicate every symbol.
- *
  * Taken as a parameter rather than read from disk, so a past release's
  * entrypoints can be resolved from that release's manifest.
  */
 export function entrypointsOf(manifest: ExportsManifest): readonly string[] {
 	return Object.entries(manifest.exports)
-		.filter(([subpath]) => subpath !== '.')
 		.map(([, source]) => source.replace(/^\.\//, ''))
 		.sort();
+}
+
+/** Rejects ambiguous or traversal-bearing API page slugs before path resolution. */
+export function assertApiPageSlug(pkg: string): void {
+	const invalidSegment = pkg
+		.split(/[\\/]/)
+		.find((segment) => segment === '' || segment === '.' || segment === '..');
+	if (invalidSegment !== undefined) {
+		throw new Error(`API page slug contains invalid path segment "${invalidSegment}": ${pkg}`);
+	}
+	if (pkg === 'index') {
+		throw new Error('API page slug "index" is reserved for Overview');
+	}
+}
+
+function moduleTitle(url: string, pkg: string): string {
+	return renderer.rootOf(url) ? renderer.packageName : `${renderer.packageName}/${pkg}`;
 }
 
 /** Where a symbol lives: which module page, under which anchor bucket. */
@@ -94,13 +120,22 @@ interface SymbolSite {
 	readonly pkg: string;
 	/** Anchor namespace for the declaration kind. */
 	readonly bucket: string;
+	/** Whether this declaration comes from the package root re-export barrel. */
+	readonly root: boolean;
+	/** Whether deno_doc emitted only a re-export reference at this site. */
+	readonly reference: boolean;
+	/** Unique heading anchor on this module page. */
+	readonly anchor: string;
 }
 
-/** link registry: symbol name -> its module page + anchor. Populated per render pass. */
-const symbolIndex = new Map<string, SymbolSite>();
+/** link registry: symbol name -> every module page exposing it. Populated per render pass. */
+const symbolIndex = new Map<string, SymbolSite[]>();
 
 /** Options of the pass in flight; set by `registerSymbols`, read by the link helpers. */
 let renderer: Renderer = resolve({ packageName: '' });
+
+/** Module currently being rendered, used to prefer its local declaration. */
+let activePkg: string | undefined;
 
 /** Bucket per declaration kind. It namespaces the heading anchor so that
  * `Type`/`factory` pairs (ErrorResult vs errorResult) don't collide once anchors
@@ -123,6 +158,17 @@ function symbolAnchor(name: string, bucket: string): string {
 	return `${bucket}-${name}`.toLowerCase();
 }
 
+function parameterAnchorSegment(value: string): string {
+	const hex = Array.from(new TextEncoder().encode(value), (byte) =>
+		byte.toString(16).padStart(2, '0'),
+	).join('');
+	return `x${hex}`;
+}
+
+function parameterAnchor(pkg: string, symbolName: string, parameterName: string): string {
+	return `fn-${parameterAnchorSegment(pkg)}-${parameterAnchorSegment(symbolName)}-param-${parameterAnchorSegment(parameterName)}`;
+}
+
 /**
  * Deep-link target for a symbol: its section on the owning module page.
  *
@@ -131,9 +177,12 @@ function symbolAnchor(name: string, bucket: string): string {
  * the content, and cost the consumer a build artifact (or three) each.
  */
 function symbolUrl(name: string): string {
-	const site = symbolIndex.get(name);
+	const sites = symbolIndex.get(name);
+	const domainSites = sites?.filter((site) => !site.root) ?? [];
+	const candidates = domainSites.length > 0 ? domainSites : (sites ?? []);
+	const site = candidates.find((candidate) => candidate.pkg === activePkg) ?? candidates[0];
 	if (site === undefined) return `${renderer.apiBase}#${name}`;
-	return `${renderer.apiBase}${site.pkg}#${symbolAnchor(name, site.bucket)}`;
+	return `${renderer.apiBase}${site.pkg}#${site.anchor}`;
 }
 
 function link(name: string): string {
@@ -158,15 +207,38 @@ function tagsByName(tags: readonly JsDocTag[], kind: string): { doc?: string }[]
 /** ParamDef is a union (identifier, rest, object pattern, ...); only some members
  * carry name/optional/tsType. Read them uniformly without a cast. */
 function paramInfo(p: ParamDef): {
-	name: string;
+	name: string | undefined;
 	optional: boolean;
 	tsType: TsTypeDef | undefined;
 } {
+	if (p.kind === 'assign' || p.kind === 'rest') {
+		const nested = paramInfo(p.kind === 'assign' ? p.left : p.arg);
+		return { ...nested, tsType: p.tsType ?? nested.tsType };
+	}
 	return {
-		name: 'name' in p ? p.name : '_',
+		name: 'name' in p ? p.name : undefined,
 		optional: 'optional' in p && p.optional === true,
 		tsType: 'tsType' in p ? p.tsType : undefined,
 	};
+}
+
+interface InlineLinkContext {
+	readonly parameters: ReadonlyMap<string, string>;
+}
+
+function functionLinkContext(
+	pkg: string,
+	symbolName: string,
+	params: readonly ParamDef[],
+): InlineLinkContext {
+	const parameters = new Map<string, string>();
+	for (const param of params) {
+		const { name } = paramInfo(param);
+		if (name === undefined) continue;
+		const anchor = parameterAnchor(pkg, symbolName, name);
+		parameters.set(name, `#${anchor}`);
+	}
+	return { parameters };
 }
 
 /* TsTypeDef -> markdown, recursive. Each case narrows on `kind`. */
@@ -215,7 +287,7 @@ function renderType(t: TsTypeDef | undefined): string {
 			const params = t.value.params
 				.map((p) => {
 					const { name, tsType } = paramInfo(p);
-					return `\`${name}\`: ${renderType(tsType)}`;
+					return `\`${name ?? '_'}\`: ${renderType(tsType)}`;
 				})
 				.join(', ');
 			return `(${params}) => ${renderType(t.value.tsType)}`;
@@ -229,17 +301,25 @@ function renderType(t: TsTypeDef | undefined): string {
 /** One {@link}/{@linkcode}/{@linkplain}. Supports `target | label`, bare URLs,
  * `[module]`/`[module].symbol` module refs, and dotted symbol paths. `linkcode`
  * renders the visible text in monospace (per deno's inline-link semantics). */
-function renderInlineLink(code: boolean, target: string, label?: string): string {
+function renderInlineLink(
+	code: boolean,
+	target: string,
+	label?: string,
+	context?: InlineLinkContext,
+): string {
 	const text = label ?? target.replace(/^\[|\]$/g, '');
 	const shown = code ? `\`${text}\`` : text;
 	if (/^https?:\/\//.test(target)) return `[${shown}](${target})`;
 	if (target.startsWith('[')) return shown; // module ref — no page anchor in flat output yet
+	const localName = target.split(/[.[]/, 1)[0];
+	const localUrl = localName === undefined ? undefined : context?.parameters.get(localName);
+	if (localUrl !== undefined) return `[${shown}](${localUrl})`;
 	const symbol = target.split('.')[0] ?? target;
 	if (symbol && symbolIndex.has(symbol)) return `[${shown}](${symbolUrl(symbol)})`;
 	return shown;
 }
 
-function resolveInlineLinks(text: string): string {
+function resolveInlineLinks(text: string, context?: InlineLinkContext): string {
 	return text.replace(
 		/\{@(link|linkcode|linkplain)\s+([^}]+)\}/g,
 		(_m, kind: string, inner: string) => {
@@ -256,15 +336,15 @@ function resolveInlineLinks(text: string): string {
 				target = sp === -1 ? trimmed : trimmed.slice(0, sp);
 				label = sp === -1 ? undefined : trimmed.slice(sp + 1).trim();
 			}
-			return renderInlineLink(kind === 'linkcode', target, label);
+			return renderInlineLink(kind === 'linkcode', target, label, context);
 		},
 	);
 }
 
 /** Keep multi-line doc content inside a `- ` list item: indent continuation lines
  * so blank lines / hard breaks don't float the tail out of the list. */
-function bulletBody(doc: string): string {
-	return resolveInlineLinks(doc).replace(/\n/g, '\n  ');
+function bulletBody(doc: string, context?: InlineLinkContext): string {
+	return resolveInlineLinks(doc, context).replace(/\n/g, '\n  ');
 }
 
 /** Strip links/backticks/escapes back to plain source text — for ```ts fences,
@@ -279,53 +359,53 @@ function plain(s: string): string {
 		.replace(/\\([<>|[\]])/g, '$1');
 }
 
-function renderDescription(js: JsDoc | undefined): string {
-	return js?.doc ? resolveInlineLinks(js.doc) : '';
+function renderDescription(js: JsDoc | undefined, context?: InlineLinkContext): string {
+	return js?.doc ? resolveInlineLinks(js.doc, context) : '';
 }
 
 /** Non-param tag blocks: returns, throws, see, examples, surfaced defaults. */
-function renderTagBlocks(js: JsDoc | undefined): string {
+function renderTagBlocks(js: JsDoc | undefined, context?: InlineLinkContext): string {
 	const tags = js?.tags ?? [];
 	return [
-		...renderReturnTags(tags),
-		...renderThrowsTags(tags),
-		...renderSeeTags(tags),
-		...renderUnsupportedTags(tags),
+		...renderReturnTags(tags, context),
+		...renderThrowsTags(tags, context),
+		...renderSeeTags(tags, context),
+		...renderUnsupportedTags(tags, context),
 		...renderExampleTags(tags),
 	]
 		.join('\n')
 		.trimEnd();
 }
 
-function renderReturnTags(tags: readonly JsDocTag[]): string[] {
+function renderReturnTags(tags: readonly JsDocTag[], context?: InlineLinkContext): string[] {
 	const out: string[] = [];
 	for (const r of tagsOfKind(tags, 'return')) {
-		if (r.doc) out.push(`**Returns** — ${resolveInlineLinks(r.doc)}`, '');
+		if (r.doc) out.push(`**Returns** — ${resolveInlineLinks(r.doc, context)}`, '');
 	}
 	return out;
 }
 
-function renderThrowsTags(tags: readonly JsDocTag[]): string[] {
+function renderThrowsTags(tags: readonly JsDocTag[], context?: InlineLinkContext): string[] {
 	const throws = tagsOfKind(tags, 'throws');
 	if (!throws.length) return [];
 	const out = ['**Throws**'];
 	for (const t of throws) {
 		const ty = t.tsType ? `${renderType(t.tsType)} — ` : '';
-		out.push(`- ${ty}${bulletBody(t.doc ?? '')}`);
+		out.push(`- ${ty}${bulletBody(t.doc ?? '', context)}`);
 	}
 	return [...out, ''];
 }
 
-function renderSeeTags(tags: readonly JsDocTag[]): string[] {
+function renderSeeTags(tags: readonly JsDocTag[], context?: InlineLinkContext): string[] {
 	const see = tagsByName(tags, 'see');
 	if (!see.length) return [];
-	return ['**See also**', ...see.map((s) => `- ${bulletBody(s.doc ?? '')}`), ''];
+	return ['**See also**', ...see.map((s) => `- ${bulletBody(s.doc ?? '', context)}`), ''];
 }
 
-function renderUnsupportedTags(tags: readonly JsDocTag[]): string[] {
+function renderUnsupportedTags(tags: readonly JsDocTag[], context?: InlineLinkContext): string[] {
 	const out: string[] = [];
 	for (const u of tagsOfKind(tags, 'unsupported')) {
-		if (u.value) out.push(resolveInlineLinks(u.value), '');
+		if (u.value) out.push(resolveInlineLinks(u.value, context), '');
 	}
 	return out;
 }
@@ -352,7 +432,13 @@ function renderTypeParams(tps: readonly TsTypeParamDef[] | undefined): string {
 }
 
 /** Parameters list — links live here (not in the fenced signature), merging the declared param types with their @param docs. */
-function renderParams(defParams: readonly ParamDef[], js: JsDoc | undefined): string {
+function renderParams(
+	pkg: string,
+	symbolName: string,
+	defParams: readonly ParamDef[],
+	js: JsDoc | undefined,
+	context: InlineLinkContext,
+): string {
 	if (!defParams.length) return '';
 	const docs = new Map<string, string>();
 	for (const tag of tagsOfKind(js?.tags ?? [], 'param')) docs.set(tag.name, tag.doc ?? '');
@@ -360,9 +446,14 @@ function renderParams(defParams: readonly ParamDef[], js: JsDoc | undefined): st
 	const lines = ['**Parameters**'];
 	for (const p of defParams) {
 		const { name, optional, tsType } = paramInfo(p);
-		const doc = docs.get(name);
-		const label = `\`${name}${optional ? '?' : ''}\``;
-		lines.push(`- ${label}: ${renderType(tsType)}${doc ? ` — ${bulletBody(doc)}` : ''}`);
+		const displayName = name ?? '_';
+		const doc = docs.get(displayName);
+		const label = `\`${displayName}${optional ? '?' : ''}\``;
+		const anchor =
+			name === undefined ? '' : `<span id="${parameterAnchor(pkg, symbolName, name)}"></span>`;
+		lines.push(
+			`- ${anchor}${label}: ${renderType(tsType)}${doc ? ` — ${bulletBody(doc, context)}` : ''}`,
+		);
 	}
 	return lines.join('\n');
 }
@@ -371,14 +462,16 @@ type SymbolDeclaration = Symbol['declarations'][number];
 
 /** Renders a function signature and its parameter documentation as Markdown. */
 function renderFunctionSymbol(
+	pkg: string,
 	sym: Symbol,
 	d: Extract<SymbolDeclaration, { readonly kind: 'function' }>,
+	context: InlineLinkContext,
 ): string[] {
 	const tp = plain(renderTypeParams(d.def.typeParams));
 	const sigParams = d.def.params
 		.map((p) => {
 			const { name, optional, tsType } = paramInfo(p);
-			return `\t${name}${optional ? '?' : ''}: ${plain(renderType(tsType))}`;
+			return `\t${name ?? '_'}${optional ? '?' : ''}: ${plain(renderType(tsType))}`;
 		})
 		.join(',\n');
 	const head = `function ${sym.name}${tp}`;
@@ -389,7 +482,7 @@ function renderFunctionSymbol(
 		'```',
 		'',
 	];
-	const params = renderParams(d.def.params, d.jsDoc);
+	const params = renderParams(pkg, sym.name, d.def.params, d.jsDoc, context);
 	if (params) out.push(params, '');
 	return out;
 }
@@ -420,7 +513,7 @@ function renderInterfaceSignature(
 		const mp = m.params
 			.map((p) => {
 				const { name, optional, tsType } = paramInfo(p);
-				return `${name}${optional ? '?' : ''}: ${plain(renderType(tsType))}`;
+				return `${name ?? '_'}${optional ? '?' : ''}: ${plain(renderType(tsType))}`;
 			})
 			.join(', ');
 		members.push(`\t${m.name}${m.optional ? '?' : ''}(${mp}): ${plain(renderType(m.returnType))};`);
@@ -458,22 +551,27 @@ function renderVariableSymbol(
 	return ['```ts', `${d.def.kind} ${sym.name}: ${plain(renderType(d.def.tsType))}`, '```', ''];
 }
 
-function renderSymbol(sym: Symbol, level = 3): string {
+function renderSymbol(pkg: string, sym: Symbol, level = 3): string {
 	const d = sym.declarations[0];
 	if (!d) return '';
 	// Explicit `{#id}` anchor (VitePress custom-anchor syntax): the slugified
 	// default folds case, which would collide `errorResult` with `ErrorResult`
 	// and silently renumber one of them (`#errorresult-1`). `symbolUrl` links here.
-	const site = symbolIndex.get(sym.name);
-	const anchor = site === undefined ? undefined : symbolAnchor(sym.name, site.bucket);
+	const anchor =
+		symbolIndex.get(sym.name)?.find((site) => site.pkg === pkg)?.anchor ??
+		symbolAnchor(sym.name, bucketOf(d.kind));
 	const heading = `${'#'.repeat(level)} \`${sym.name}\``;
-	const out: string[] = [anchor === undefined ? heading : `${heading} {#${anchor}}`, ''];
+	const out: string[] = [`${heading} {#${anchor}}`, ''];
 
-	const description = renderDescription(d.jsDoc);
+	const context =
+		d.kind === 'function' ? functionLinkContext(pkg, sym.name, d.def.params) : undefined;
+	const description = renderDescription(d.jsDoc, context);
 	if (description) out.push(description, '');
 
 	if (d.kind === 'function') {
-		out.push(...renderFunctionSymbol(sym, d));
+		out.push(
+			...renderFunctionSymbol(pkg, sym, d, functionLinkContext(pkg, sym.name, d.def.params)),
+		);
 	} else if (d.kind === 'typeAlias') {
 		out.push(...renderTypeAliasSymbol(sym, d));
 	} else if (d.kind === 'interface') {
@@ -484,7 +582,7 @@ function renderSymbol(sym: Symbol, level = 3): string {
 		out.push(`_(kind: ${d.kind} — renderer not yet extended)_`, '');
 	}
 
-	const tail = renderTagBlocks(d.jsDoc);
+	const tail = renderTagBlocks(d.jsDoc, context);
 	if (tail) out.push(tail, '');
 	return out.join('\n');
 }
@@ -495,13 +593,46 @@ function renderSymbol(sym: Symbol, level = 3): string {
  */
 function beginPass(nodes: Record<string, ApiModule>, options: RenderOptions): void {
 	renderer = resolve(options);
+	activePkg = undefined;
 	symbolIndex.clear();
 	for (const [url, mod] of Object.entries(nodes)) {
 		const pkg = renderer.slugOf(url);
 		for (const s of mod.symbols) {
 			const kind = s.declarations[0]?.kind ?? 'type';
-			symbolIndex.set(s.name, { pkg, bucket: bucketOf(kind) });
+			const sites = symbolIndex.get(s.name) ?? [];
+			sites.push({
+				pkg,
+				bucket: bucketOf(kind),
+				root: renderer.rootOf(url),
+				reference: kind === 'reference',
+				anchor: '',
+			});
+			symbolIndex.set(s.name, sites);
 		}
+	}
+	for (const [name, sites] of symbolIndex) {
+		const concreteBucket = sites.find((site) => !site.reference)?.bucket;
+		const resolved = sites.map((site) =>
+			concreteBucket === undefined || !site.reference ? site : { ...site, bucket: concreteBucket },
+		);
+		resolved.sort(
+			(left, right) => Number(left.root) - Number(right.root) || left.pkg.localeCompare(right.pkg),
+		);
+		symbolIndex.set(name, resolved);
+	}
+	const usedAnchors = new Map<string, Set<string>>();
+	for (const [name, sites] of symbolIndex) {
+		symbolIndex.set(
+			name,
+			sites.map((site) => {
+				const used = usedAnchors.get(site.pkg) ?? new Set<string>();
+				usedAnchors.set(site.pkg, used);
+				const base = symbolAnchor(name, site.bucket);
+				const anchor = used.has(base) ? `${base}-${parameterAnchorSegment(name)}` : base;
+				used.add(anchor);
+				return { ...site, anchor };
+			}),
+		);
 	}
 }
 
@@ -521,16 +652,26 @@ export function renderDocuments(
 		const symbols = filters.size ? mod.symbols.filter((s) => filters.has(s.name)) : mod.symbols;
 		if (!symbols.length) continue;
 
-		out.push(`## \`${renderer.packageName}/${renderer.slugOf(url)}\`\n`);
+		const pkg = renderer.slugOf(url);
+		activePkg = pkg;
+		out.push(`## \`${moduleTitle(url, pkg)}\`\n`);
 		const moduleDoc = renderModuleDoc(mod.module_doc);
 		if (moduleDoc) out.push(`${moduleDoc}\n`);
 
-		for (const sym of symbols) out.push(renderSymbol(sym, 3), '\n---\n');
+		for (const sym of symbols) out.push(renderSymbol(pkg, sym, 3), '\n---\n');
 	}
 	return out.join('\n');
 }
 
-export type ApiModulePage = { pkg: string; markdown: string };
+export type ApiModulePage = {
+	/** Module page slug, e.g. `x509` for `/api/x509`. */
+	pkg: string;
+	/** Whether this page documents the package root. */
+	root: boolean;
+	markdown: string;
+};
+
+type RenderedModulePage = ApiModulePage & { title: string };
 
 /** Per-module reference pages (sidebar-visible). Symbols are `##` sections. */
 export function renderModulePages(
@@ -541,21 +682,31 @@ export function renderModulePages(
 	sidebar: { text: string; link: string }[];
 } {
 	beginPass(nodes, options);
-	const pages: ApiModulePage[] = [];
+	const pages: RenderedModulePage[] = [];
+	const pageUrls = new Map<string, string>();
 	for (const [url, mod] of Object.entries(nodes)) {
 		if (!mod.symbols.length) continue;
 		const pkg = renderer.slugOf(url);
-		const out = [`# \`${renderer.packageName}/${pkg}\``, ''];
+		assertApiPageSlug(pkg);
+		const previousUrl = pageUrls.get(pkg);
+		if (previousUrl !== undefined) {
+			throw new Error(`API page slug collision: ${previousUrl} and ${url} both map to ${pkg}`);
+		}
+		pageUrls.set(pkg, url);
+		activePkg = pkg;
+		const root = renderer.rootOf(url);
+		const title = moduleTitle(url, pkg);
+		const out = [`# \`${title}\``, ''];
 		const moduleDoc = renderModuleDoc(mod.module_doc);
 		if (moduleDoc) out.push(moduleDoc, '');
-		for (const sym of mod.symbols) out.push(renderSymbol(sym, 2), '');
-		pages.push({ pkg, markdown: out.join('\n') });
+		for (const sym of mod.symbols) out.push(renderSymbol(pkg, sym, 2), '');
+		pages.push({ pkg, title, root, markdown: out.join('\n') });
 	}
-	pages.sort((a, b) => a.pkg.localeCompare(b.pkg));
+	pages.sort((a, b) => Number(b.root) - Number(a.root) || a.pkg.localeCompare(b.pkg));
 	return {
-		pages,
+		pages: pages.map(({ pkg, root, markdown }) => ({ pkg, root, markdown })),
 		sidebar: pages.map((page) => ({
-			text: page.pkg,
+			text: page.title,
 			link: `${renderer.apiBase}${page.pkg}`,
 		})),
 	};
@@ -565,13 +716,19 @@ export function renderModulePages(
 export function renderOverview(nodes: Record<string, ApiModule>, options: RenderOptions): string {
 	beginPass(nodes, options);
 	const out = [`# ${renderer.packageName} API Reference`, ''];
-	for (const [url, mod] of Object.entries(nodes)) {
+	const modules = Object.entries(nodes).sort(([left], [right]) => {
+		const leftRoot = renderer.rootOf(left);
+		const rightRoot = renderer.rootOf(right);
+		const leftSlug = renderer.slugOf(left);
+		const rightSlug = renderer.slugOf(right);
+		return Number(rightRoot) - Number(leftRoot) || leftSlug.localeCompare(rightSlug);
+	});
+	for (const [url, mod] of modules) {
 		if (!mod.symbols.length) continue;
 		const pkg = renderer.slugOf(url);
-		const desc = (mod.module_doc?.doc ?? '').split('\n')[0]?.trim();
-		out.push(
-			`- [\`${renderer.packageName}/${pkg}\`](${renderer.apiBase}${pkg})${desc ? ` — ${desc}` : ''}`,
-		);
+		const title = moduleTitle(url, pkg);
+		const desc = (mod.module_doc?.doc ?? '').split('\n')[0]?.trim().replace(/\\$/, '');
+		out.push(`- [\`${title}\`](${renderer.apiBase}${pkg})${desc ? ` — ${desc}` : ''}`);
 	}
 	return out.join('\n');
 }
