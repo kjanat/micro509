@@ -94,6 +94,7 @@
 		"docs:build": "run -q deno:doc --html --output=.denodocs $(jq -r '.exports | .[]? // .' jsr.json) 2>/dev/null",
 		"docs:lint": "run -q deno:doc --lint $(jq -r '.exports | .[]? // .' jsr.json)",
 		"fmt": "dprint fmt",
+		"format": "run -q fmt",
 		"lint": "bun lint:biome",
 		"lint:biome": "biome lint",
 		"lint:deno": "deno lint src",

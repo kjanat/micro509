@@ -57,6 +57,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   replaced by RFC 9549 §7.5.1), so `admin@example.com` no longer matches
   `ADMIN@example.com` and widens the permitted subtrees.
   (https://github.com/kjanat/micro509/pull/71)
+- `validateCandidatePath` compares each certificate's issuer DN against the
+  candidate issuer's subject DN, per RFC 5280 §6.1.3(a)(4). It verified only the
+  signature, so a leaf whose issuer DN was unrelated to the signing CA validated
+  as ok on the pre-built-path API. `buildChainInternal` already compared them,
+  so `verifyCertificateChain` was unaffected.
+  (https://github.com/kjanat/micro509/pull/72)
 
 ## [0.12.0] - 2026-07-21
 

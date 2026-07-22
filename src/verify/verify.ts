@@ -18,6 +18,7 @@
 
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { verifySignedDataDetailed } from '#micro509/internal/crypto/sig-verify';
+import { compareDistinguishedNames } from '#micro509/internal/shared/dn';
 import { parseIpAddressToBytes } from '#micro509/internal/shared/ip';
 import type { NameConstraintValidationState } from '#micro509/internal/verify/name-constraints-engine';
 import {
@@ -142,7 +143,7 @@ export interface TrustAnchor {
  * Discriminant for every failure a verify operation can produce.
  *
  * - `no_trusted_root` — chain could not be anchored to any root or {@linkcode TrustAnchor}.
- * - `issuer_not_found` — an intermediate's issuer was not in the candidate set.
+ * - `issuer_not_found` — an intermediate's issuer was not in the candidate set, or its issuer DN does not match the candidate issuer's subject DN.
  * - `signature_invalid` — a certificate's signature failed cryptographic verification.
  * - `certificate_expired` — a certificate's notBefore/notAfter window excludes the validation time.
  * - `ca_required` — an issuer lacks `basicConstraints.ca = true`.
@@ -790,6 +791,17 @@ async function validateIssuerAtPathIndex(
 	issuer: ParsedCertificate,
 	index: number,
 ): Promise<ValidateCandidatePathFailure | undefined> {
+	if (!compareDistinguishedNames(current.issuer, issuer.subject)) {
+		return failure(
+			'issuer_not_found',
+			'issuer distinguished name does not match the candidate issuer subject',
+			index,
+			detail({
+				subjectCommonName: current.subject.values.commonName,
+				issuerCommonName: issuer.subject.values.commonName,
+			}),
+		);
+	}
 	const signatureResult = await verifyCertificateSignature(current, issuer);
 	if (!signatureResult.ok) {
 		return failure(
