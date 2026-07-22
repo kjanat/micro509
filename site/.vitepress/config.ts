@@ -88,7 +88,6 @@ function generateApi(target: { readonly root: string; readonly outDir: string })
 		name: tree.name,
 		importMap,
 		entrypoints: Object.entries(tree.registry.exports)
-			.filter(([subpath]) => subpath !== '.')
 			.map(([, source]) => source.replace(/^\.\//, ''))
 			.sort(),
 	});
@@ -144,6 +143,8 @@ const pull = await (async (): Promise<string | undefined> => {
 const nextRef = treeSha ?? (pull ?? gitRef).replace(/\/(?:merge|head)$/, '');
 
 const devLabel = pull === undefined ? `v${repo.version}-dev` : `#${pull}`;
+const devLabelUrl =
+	pull === undefined ? undefined : `${repoUrl.origin}${repoUrl.pathname}/pull/${pull}`;
 
 console.log(`[versions] tree -> GitHub @${nextRef}, labelled ${devLabel}`);
 
@@ -214,6 +215,7 @@ const docs = await versionedDocs({
 	versionsDir: path.join(repoRoot, siteRoot, 'versions'),
 	cacheDir: path.join(import.meta.dirname, 'cache/versions'),
 	devLabel,
+	...(devLabelUrl === undefined ? {} : { devLabelUrl }),
 	pages: ['site/guide', 'site/reference', 'site/index.md'],
 	sources: ['src', 'package.json', 'jsr.json'],
 	transformPage: repairExamples,
@@ -251,7 +253,7 @@ const ORDER: SidebarOrder = {
 			slugs: ['index', 'standards', 'algorithms', 'runtimes', 'execution-model'],
 		},
 	],
-	api: [{ text: 'API Reference', slugs: ['index'] }],
+	api: [{ text: 'API Reference', slugs: ['index', 'root'] }],
 };
 
 export default defineConfig<DocsThemeConfig>({

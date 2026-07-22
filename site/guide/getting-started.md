@@ -1,10 +1,16 @@
+---
+outline: [2, 3]
+---
+
 # Getting Started
 
 ::: warning Prerelease
 micro509 is `0.x` — API may change before 1.0.
 :::
 
-## Install
+## Usage
+
+### Install
 
 ::: code-group
 

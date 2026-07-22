@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import type { ApiModule } from './render-doc.ts';
-import { renderModulePages } from './render-doc.ts';
+import { entrypointsOf, renderModulePages, renderOverview } from './render-doc.ts';
 
 const location = {
 	filename: 'file:///workspace/src/example/index.ts',
@@ -20,7 +20,7 @@ const modules = {
 						declarationKind: 'export',
 						kind: 'function',
 						jsDoc: {
-							doc: 'Uses {@linkcode options | allowOpaqueConstructedTags}, {@linkcode options.allowOpaqueConstructedTags}, {@linkcode $options}, {@linkcode café}, or {@linkcode _}.',
+							doc: 'Uses {@linkcode options | allowOpaqueConstructedTags}, {@linkcode options.allowOpaqueConstructedTags}, {@linkcode $options}, {@linkcode café}, or {@linkcode _}. Related: {@linkcode walk}.',
 							tags: [
 								{
 									kind: 'throws',
@@ -124,5 +124,141 @@ describe('renderModulePages inline links', () => {
 		expect(other).toContain('id="fn-x6f74686572-x77616c6b-param-');
 		expect(example).not.toContain('id="fn-x6f74686572-');
 		expect(other).not.toContain('id="fn-x6578616d706c65-');
+		expect(example).toContain('[`walk`](/api/example#fn-walk)');
+		expect(other).toContain('[`walk`](/api/other#fn-walk)');
+	});
+});
+
+describe('root entrypoint', () => {
+	it('includes and renders the package root without colliding with Overview', () => {
+		expect(
+			entrypointsOf({
+				exports: { '.': './src/index.ts', './example': './src/example/index.ts' },
+			}),
+		).toEqual(['src/example/index.ts', 'src/index.ts']);
+
+		const rootModules = {
+			'file:///workspace/src/index.ts': {
+				...modules['file:///workspace/src/example/index.ts'],
+				module_doc: { doc: 'Stable root import.\\\nMore detail.' },
+			},
+			...modules,
+		} satisfies Record<string, ApiModule>;
+		const result = renderModulePages(rootModules, { packageName: 'example' });
+		const root = result.pages[0];
+
+		expect(root?.pkg).toBe('root');
+		expect(root?.markdown).toStartWith('# `example`');
+		expect(root?.markdown).toContain('[`walk`](/api/example#fn-walk)');
+		expect(result.sidebar[0]).toEqual({ text: 'example', link: '/api/root' });
+		expect(renderOverview(rootModules, { packageName: 'example' })).toContain(
+			'- [`example`](/api/root) — Stable root import.',
+		);
+		expect(renderOverview(rootModules, { packageName: 'example' })).not.toContain(
+			'Stable root import.\\',
+		);
+	});
+
+	it('keeps root identity independent from its route slug', () => {
+		const rootModules = {
+			...modules,
+			'file:///workspace/src/index.ts': modules['file:///workspace/src/example/index.ts'],
+		} satisfies Record<string, ApiModule>;
+		const result = renderModulePages(rootModules, {
+			packageName: 'example',
+			slugOf: (url) => (url.endsWith('/src/index.ts') ? 'package-entry' : 'example'),
+		});
+		const root = result.pages[0];
+
+		expect(root?.pkg).toBe('package-entry');
+		expect(root?.markdown).toStartWith('# `example`');
+		expect(result.sidebar[0]).toEqual({ text: 'example', link: '/api/package-entry' });
+	});
+
+	it('rejects colliding page slugs before output', () => {
+		const collidingModules = {
+			'file:///workspace/src/index.ts': modules['file:///workspace/src/example/index.ts'],
+			'file:///workspace/src/root/index.ts': modules['file:///workspace/src/example/index.ts'],
+		} satisfies Record<string, ApiModule>;
+
+		expect(() => renderModulePages(collidingModules, { packageName: 'example' })).toThrow(
+			'API page slug collision',
+		);
+	});
+
+	it('reserves the Overview route', () => {
+		const rootModules = {
+			'file:///workspace/src/index.ts': modules['file:///workspace/src/example/index.ts'],
+		} satisfies Record<string, ApiModule>;
+
+		expect(() =>
+			renderModulePages(rootModules, {
+				packageName: 'example',
+				slugOf: () => 'index',
+			}),
+		).toThrow('API page slug "index" is reserved for Overview');
+	});
+});
+
+describe('reference anchors', () => {
+	it('uses concrete declaration kinds for re-export references', () => {
+		const referenceModules = {
+			'file:///workspace/src/index.ts': {
+				symbols: [
+					{
+						name: 'NamePair',
+						declarations: [{ location, declarationKind: 'export', kind: 'interface', def: {} }],
+					},
+					{
+						name: 'namePair',
+						declarations: [
+							{
+								location,
+								declarationKind: 'export',
+								kind: 'function',
+								def: {
+									params: [],
+									returnType: { kind: 'keyword', repr: 'void', value: 'void' },
+									hasBody: true,
+								},
+							},
+						],
+					},
+				],
+			},
+			'file:///workspace/src/domain/index.ts': {
+				symbols: [
+					{
+						name: 'NamePair',
+						declarations: [
+							{
+								location,
+								declarationKind: 'export',
+								kind: 'reference',
+								reference_def: { target: location },
+							},
+						],
+					},
+					{
+						name: 'namePair',
+						declarations: [
+							{
+								location,
+								declarationKind: 'export',
+								kind: 'reference',
+								jsDoc: { doc: 'Returns {@linkcode NamePair}.' },
+								reference_def: { target: location },
+							},
+						],
+					},
+				],
+			},
+		} satisfies Record<string, ApiModule>;
+		const result = renderModulePages(referenceModules, { packageName: 'example' });
+		const domain = result.pages.find((page) => page.pkg === 'domain')?.markdown ?? '';
+
+		expect(domain).toContain('## `NamePair` {#type-namepair}');
+		expect(domain).toContain('## `namePair` {#fn-namepair}');
+		expect(domain).toContain('[`NamePair`](/api/domain#type-namepair)');
 	});
 });

@@ -72,19 +72,23 @@ function isModuleGraph(value: unknown): value is { readonly nodes: Record<string
 /** Extract the doc-node graph for a tree's entrypoints. */
 function loadNodes(target: ApiDocsTarget): Record<string, ApiModule> {
 	const importMap = target.importMap === undefined ? [] : ['--import-map', target.importMap];
-	const raw = proc.execFileSync(
-		'deno',
-		['doc', '--no-npm', ...importMap, '--json', `--name=${target.name}`, ...target.entrypoints],
-		{ cwd: target.root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
-	);
-
-	const parsed: unknown = JSON.parse(raw);
-	if (!isModuleGraph(parsed)) {
-		throw new Error(
-			`[api-docs] deno doc did not return a module graph for ${target.name} (${target.root})`,
+	const nodes: Record<string, ApiModule> = {};
+	for (const entrypoint of target.entrypoints) {
+		const raw = proc.execFileSync(
+			'deno',
+			['doc', '--no-npm', ...importMap, '--json', `--name=${target.name}`, entrypoint],
+			{ cwd: target.root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
 		);
+
+		const parsed: unknown = JSON.parse(raw);
+		if (!isModuleGraph(parsed)) {
+			throw new Error(
+				`[api-docs] deno doc did not return a module graph for ${entrypoint} (${target.root})`,
+			);
+		}
+		Object.assign(nodes, parsed.nodes);
 	}
-	return parsed.nodes;
+	return nodes;
 }
 
 /** A generated page states its own title, so a sidebar can read it off the page. */
@@ -107,7 +111,7 @@ export function generateApiDocs(target: ApiDocsTarget): void {
 	for (const page of pages) {
 		fs.writeFileSync(
 			path.join(target.outDir, `${page.pkg}.md`),
-			withTitle(`${target.name}/${page.pkg}`, page.markdown),
+			withTitle(page.pkg === 'root' ? target.name : `${target.name}/${page.pkg}`, page.markdown),
 		);
 	}
 	fs.writeFileSync(

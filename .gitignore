@@ -164,7 +164,7 @@ dist
 /.archive
 /.opencode/state/
 /.playwright-cli
-/_*.md
+/_*.*
 /comparisons/*
 /docs/deno/
 /site/api/**/*.md

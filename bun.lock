@@ -15,6 +15,7 @@
         "biome": "catalog:",
         "deno": "catalog:deno",
         "dprint": "catalog:",
+        "dreamcli": "npm:@kjanat/dreamcli@3.0.1",
         "importmapify": "catalog:deno",
         "playwright": "^1.61.1",
         "publint": "catalog:build",

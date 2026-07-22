@@ -42,9 +42,12 @@ export interface RenderOptions {
 	readonly packageName: string;
 	/** URL space the module pages are served under. Default `/api/`. */
 	readonly apiBase?: string;
+	/** Whether a module URL is the package root. Default: `src/index.ts`. */
+	readonly rootOf?: (url: string) => boolean;
 	/**
 	 * Module URL -> page slug. Default: the path between `/src/` and a trailing
-	 * `/index.ts`, which is the shape a `src/<module>/index.ts` layout produces.
+	 * `/index.ts`, which is the shape a `src/<module>/index.ts` layout produces;
+	 * the root `src/index.ts` maps to `root`.
 	 */
 	readonly slugOf?: (url: string) => string;
 }
@@ -54,10 +57,16 @@ interface Renderer {
 	readonly packageName: string;
 	readonly apiBase: string;
 	readonly slugOf: (url: string) => string;
+	readonly rootOf: (url: string) => boolean;
+}
+
+function defaultRoot(url: string): boolean {
+	return url.replace(/^.*\/src\//, '') === 'index.ts';
 }
 
 function defaultSlug(url: string): string {
-	return url.replace(/^.*\/src\//, '').replace(/\/index\.ts$/, '');
+	const sourcePath = url.replace(/^.*\/src\//, '');
+	return defaultRoot(url) ? 'root' : sourcePath.replace(/\/index\.ts$/, '');
 }
 
 function resolve(options: RenderOptions): Renderer {
@@ -65,6 +74,7 @@ function resolve(options: RenderOptions): Renderer {
 		packageName: options.packageName,
 		apiBase: options.apiBase ?? '/api/',
 		slugOf: options.slugOf ?? defaultSlug,
+		rootOf: options.rootOf ?? defaultRoot,
 	};
 }
 
@@ -75,17 +85,17 @@ export interface ExportsManifest {
 
 /**
  * Public entrypoints = the manifest's `exports`, pointing at source files.
- * The `.` barrel is skipped: it re-exports the other subpaths and would
- * duplicate every symbol.
- *
  * Taken as a parameter rather than read from disk, so a past release's
  * entrypoints can be resolved from that release's manifest.
  */
 export function entrypointsOf(manifest: ExportsManifest): readonly string[] {
 	return Object.entries(manifest.exports)
-		.filter(([subpath]) => subpath !== '.')
 		.map(([, source]) => source.replace(/^\.\//, ''))
 		.sort();
+}
+
+function moduleTitle(url: string, pkg: string): string {
+	return renderer.rootOf(url) ? renderer.packageName : `${renderer.packageName}/${pkg}`;
 }
 
 /** Where a symbol lives: which module page, under which anchor bucket. */
@@ -94,13 +104,22 @@ interface SymbolSite {
 	readonly pkg: string;
 	/** Anchor namespace for the declaration kind. */
 	readonly bucket: string;
+	/** Whether this declaration comes from the package root re-export barrel. */
+	readonly root: boolean;
+	/** Whether deno_doc emitted only a re-export reference at this site. */
+	readonly reference: boolean;
+	/** Unique heading anchor on this module page. */
+	readonly anchor: string;
 }
 
-/** link registry: symbol name -> its module page + anchor. Populated per render pass. */
-const symbolIndex = new Map<string, SymbolSite>();
+/** link registry: symbol name -> every module page exposing it. Populated per render pass. */
+const symbolIndex = new Map<string, SymbolSite[]>();
 
 /** Options of the pass in flight; set by `registerSymbols`, read by the link helpers. */
 let renderer: Renderer = resolve({ packageName: '' });
+
+/** Module currently being rendered, used to prefer its local declaration. */
+let activePkg: string | undefined;
 
 /** Bucket per declaration kind. It namespaces the heading anchor so that
  * `Type`/`factory` pairs (ErrorResult vs errorResult) don't collide once anchors
@@ -142,9 +161,12 @@ function parameterAnchor(pkg: string, symbolName: string, parameterName: string)
  * the content, and cost the consumer a build artifact (or three) each.
  */
 function symbolUrl(name: string): string {
-	const site = symbolIndex.get(name);
+	const sites = symbolIndex.get(name);
+	const domainSites = sites?.filter((site) => !site.root) ?? [];
+	const candidates = domainSites.length > 0 ? domainSites : (sites ?? []);
+	const site = candidates.find((candidate) => candidate.pkg === activePkg) ?? candidates[0];
 	if (site === undefined) return `${renderer.apiBase}#${name}`;
-	return `${renderer.apiBase}${site.pkg}#${symbolAnchor(name, site.bucket)}`;
+	return `${renderer.apiBase}${site.pkg}#${site.anchor}`;
 }
 
 function link(name: string): string {
@@ -519,10 +541,11 @@ function renderSymbol(pkg: string, sym: Symbol, level = 3): string {
 	// Explicit `{#id}` anchor (VitePress custom-anchor syntax): the slugified
 	// default folds case, which would collide `errorResult` with `ErrorResult`
 	// and silently renumber one of them (`#errorresult-1`). `symbolUrl` links here.
-	const site = symbolIndex.get(sym.name);
-	const anchor = site === undefined ? undefined : symbolAnchor(sym.name, site.bucket);
+	const anchor =
+		symbolIndex.get(sym.name)?.find((site) => site.pkg === pkg)?.anchor ??
+		symbolAnchor(sym.name, bucketOf(d.kind));
 	const heading = `${'#'.repeat(level)} \`${sym.name}\``;
-	const out: string[] = [anchor === undefined ? heading : `${heading} {#${anchor}}`, ''];
+	const out: string[] = [`${heading} {#${anchor}}`, ''];
 
 	const context =
 		d.kind === 'function' ? functionLinkContext(pkg, sym.name, d.def.params) : undefined;
@@ -554,13 +577,46 @@ function renderSymbol(pkg: string, sym: Symbol, level = 3): string {
  */
 function beginPass(nodes: Record<string, ApiModule>, options: RenderOptions): void {
 	renderer = resolve(options);
+	activePkg = undefined;
 	symbolIndex.clear();
 	for (const [url, mod] of Object.entries(nodes)) {
 		const pkg = renderer.slugOf(url);
 		for (const s of mod.symbols) {
 			const kind = s.declarations[0]?.kind ?? 'type';
-			symbolIndex.set(s.name, { pkg, bucket: bucketOf(kind) });
+			const sites = symbolIndex.get(s.name) ?? [];
+			sites.push({
+				pkg,
+				bucket: bucketOf(kind),
+				root: renderer.rootOf(url),
+				reference: kind === 'reference',
+				anchor: '',
+			});
+			symbolIndex.set(s.name, sites);
 		}
+	}
+	for (const [name, sites] of symbolIndex) {
+		const concreteBucket = sites.find((site) => !site.reference)?.bucket;
+		const resolved = sites.map((site) =>
+			concreteBucket === undefined || !site.reference ? site : { ...site, bucket: concreteBucket },
+		);
+		resolved.sort(
+			(left, right) => Number(left.root) - Number(right.root) || left.pkg.localeCompare(right.pkg),
+		);
+		symbolIndex.set(name, resolved);
+	}
+	const usedAnchors = new Map<string, Set<string>>();
+	for (const [name, sites] of symbolIndex) {
+		symbolIndex.set(
+			name,
+			sites.map((site) => {
+				const used = usedAnchors.get(site.pkg) ?? new Set<string>();
+				usedAnchors.set(site.pkg, used);
+				const base = symbolAnchor(name, site.bucket);
+				const anchor = used.has(base) ? `${base}-${parameterAnchorSegment(name)}` : base;
+				used.add(anchor);
+				return { ...site, anchor };
+			}),
+		);
 	}
 }
 
@@ -580,16 +636,20 @@ export function renderDocuments(
 		const symbols = filters.size ? mod.symbols.filter((s) => filters.has(s.name)) : mod.symbols;
 		if (!symbols.length) continue;
 
-		out.push(`## \`${renderer.packageName}/${renderer.slugOf(url)}\`\n`);
+		const pkg = renderer.slugOf(url);
+		activePkg = pkg;
+		out.push(`## \`${moduleTitle(url, pkg)}\`\n`);
 		const moduleDoc = renderModuleDoc(mod.module_doc);
 		if (moduleDoc) out.push(`${moduleDoc}\n`);
 
-		for (const sym of symbols) out.push(renderSymbol(renderer.slugOf(url), sym, 3), '\n---\n');
+		for (const sym of symbols) out.push(renderSymbol(pkg, sym, 3), '\n---\n');
 	}
 	return out.join('\n');
 }
 
 export type ApiModulePage = { pkg: string; markdown: string };
+
+type RenderedModulePage = ApiModulePage & { title: string; root: boolean };
 
 /** Per-module reference pages (sidebar-visible). Symbols are `##` sections. */
 export function renderModulePages(
@@ -600,21 +660,33 @@ export function renderModulePages(
 	sidebar: { text: string; link: string }[];
 } {
 	beginPass(nodes, options);
-	const pages: ApiModulePage[] = [];
+	const pages: RenderedModulePage[] = [];
+	const pageUrls = new Map<string, string>();
 	for (const [url, mod] of Object.entries(nodes)) {
 		if (!mod.symbols.length) continue;
 		const pkg = renderer.slugOf(url);
-		const out = [`# \`${renderer.packageName}/${pkg}\``, ''];
+		if (pkg === 'index') {
+			throw new Error(`API page slug "index" is reserved for Overview: ${url}`);
+		}
+		const previousUrl = pageUrls.get(pkg);
+		if (previousUrl !== undefined) {
+			throw new Error(`API page slug collision: ${previousUrl} and ${url} both map to ${pkg}`);
+		}
+		pageUrls.set(pkg, url);
+		activePkg = pkg;
+		const root = renderer.rootOf(url);
+		const title = moduleTitle(url, pkg);
+		const out = [`# \`${title}\``, ''];
 		const moduleDoc = renderModuleDoc(mod.module_doc);
 		if (moduleDoc) out.push(moduleDoc, '');
 		for (const sym of mod.symbols) out.push(renderSymbol(pkg, sym, 2), '');
-		pages.push({ pkg, markdown: out.join('\n') });
+		pages.push({ pkg, title, root, markdown: out.join('\n') });
 	}
-	pages.sort((a, b) => a.pkg.localeCompare(b.pkg));
+	pages.sort((a, b) => Number(b.root) - Number(a.root) || a.pkg.localeCompare(b.pkg));
 	return {
-		pages,
+		pages: pages.map(({ pkg, markdown }) => ({ pkg, markdown })),
 		sidebar: pages.map((page) => ({
-			text: page.pkg,
+			text: page.title,
 			link: `${renderer.apiBase}${page.pkg}`,
 		})),
 	};
@@ -624,13 +696,19 @@ export function renderModulePages(
 export function renderOverview(nodes: Record<string, ApiModule>, options: RenderOptions): string {
 	beginPass(nodes, options);
 	const out = [`# ${renderer.packageName} API Reference`, ''];
-	for (const [url, mod] of Object.entries(nodes)) {
+	const modules = Object.entries(nodes).sort(([left], [right]) => {
+		const leftRoot = renderer.rootOf(left);
+		const rightRoot = renderer.rootOf(right);
+		const leftSlug = renderer.slugOf(left);
+		const rightSlug = renderer.slugOf(right);
+		return Number(rightRoot) - Number(leftRoot) || leftSlug.localeCompare(rightSlug);
+	});
+	for (const [url, mod] of modules) {
 		if (!mod.symbols.length) continue;
 		const pkg = renderer.slugOf(url);
-		const desc = (mod.module_doc?.doc ?? '').split('\n')[0]?.trim();
-		out.push(
-			`- [\`${renderer.packageName}/${pkg}\`](${renderer.apiBase}${pkg})${desc ? ` — ${desc}` : ''}`,
-		);
+		const title = moduleTitle(url, pkg);
+		const desc = (mod.module_doc?.doc ?? '').split('\n')[0]?.trim().replace(/\\$/, '');
+		out.push(`- [\`${title}\`](${renderer.apiBase}${pkg})${desc ? ` — ${desc}` : ''}`);
 	}
 	return out.join('\n');
 }
