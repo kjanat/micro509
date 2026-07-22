@@ -2758,6 +2758,33 @@ describe('validateCandidatePath direct', () => {
 		if (!result.ok) expect(result.code).toBe('issuer_not_found');
 	});
 
+	it('rejects a leaf whose issuer DN does not match the candidate issuer subject', async () => {
+		const realCa = await createSelfSignedCertificate({
+			subject: { commonName: 'Real CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Totally Different Name' },
+			subject: { commonName: 'mismatched-issuer-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: realCa.keyPair.privateKey,
+			issuerPublicKey: realCa.keyPair.publicKey,
+			extensions: { keyUsage: ['digitalSignature'] },
+		});
+		const result = await validateCandidatePath({
+			chain: [
+				unwrap(parseCertificatePem(leaf.pem)),
+				unwrap(parseCertificatePem(realCa.certificate.pem)),
+			],
+		});
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.code).toBe('issuer_not_found');
+	});
+
 	it('keeps service identity checks out of raw path validation', async () => {
 		const chain = await issueChain();
 		const leafParsed = unwrap(parseCertificatePem(chain.leaf.pem));
