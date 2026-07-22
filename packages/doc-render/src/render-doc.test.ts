@@ -1,0 +1,128 @@
+import { describe, expect, it } from 'bun:test';
+import type { ApiModule } from './render-doc.ts';
+import { renderModulePages } from './render-doc.ts';
+
+const location = {
+	filename: 'file:///workspace/src/example/index.ts',
+	line: 1,
+	col: 0,
+	byteIndex: 0,
+};
+
+const modules = {
+	'file:///workspace/src/example/index.ts': {
+		symbols: [
+			{
+				name: 'walk',
+				declarations: [
+					{
+						location,
+						declarationKind: 'export',
+						kind: 'function',
+						jsDoc: {
+							doc: 'Uses {@linkcode options | allowOpaqueConstructedTags}, {@linkcode options.allowOpaqueConstructedTags}, {@linkcode $options}, {@linkcode café}, or {@linkcode _}.',
+							tags: [
+								{
+									kind: 'throws',
+									doc: 'if nesting exceeds {@linkcode maxDepth}.',
+								},
+							],
+						},
+						def: {
+							params: [
+								{
+									kind: 'assign',
+									left: {
+										kind: 'identifier',
+										name: 'maxDepth',
+										optional: false,
+										tsType: { kind: 'keyword', repr: 'number', value: 'number' },
+									},
+									right: 'DEFAULT_MAX_DEPTH',
+								},
+								{
+									kind: 'identifier',
+									name: 'options',
+									optional: true,
+									tsType: { kind: 'keyword', repr: 'object', value: 'object' },
+								},
+								{
+									kind: 'identifier',
+									name: '$options',
+									optional: false,
+									tsType: { kind: 'keyword', repr: 'object', value: 'object' },
+								},
+								{
+									kind: 'identifier',
+									name: 'café',
+									optional: false,
+									tsType: { kind: 'keyword', repr: 'string', value: 'string' },
+								},
+								{
+									kind: 'rest',
+									arg: {
+										kind: 'identifier',
+										name: 'args',
+										optional: false,
+									},
+									tsType: {
+										kind: 'array',
+										value: { kind: 'keyword', repr: 'string', value: 'string' },
+									},
+								},
+								{
+									kind: 'identifier',
+									name: '_',
+									optional: false,
+									tsType: { kind: 'keyword', repr: 'boolean', value: 'boolean' },
+								},
+							],
+							returnType: { kind: 'keyword', repr: 'void', value: 'void' },
+							hasBody: true,
+						},
+					},
+				],
+			},
+		],
+	},
+} satisfies Record<string, ApiModule>;
+
+describe('renderModulePages inline links', () => {
+	it('links function parameters and their property paths to parameter anchors', () => {
+		const result = renderModulePages(modules, { packageName: 'example' });
+		const markdown = result.pages[0]?.markdown ?? '';
+		const prefix = 'fn-x6578616d706c65-x77616c6b-param-';
+		const optionsUrl = `#${prefix}x6f7074696f6e73`;
+
+		expect(markdown).toContain(
+			`[\`allowOpaqueConstructedTags\`](${optionsUrl}), [\`options.allowOpaqueConstructedTags\`](${optionsUrl})`,
+		);
+		expect(markdown).toContain(`[\`maxDepth\`](#${prefix}x6d61784465707468)`);
+		expect(markdown).toContain(`<span id="${prefix}x6d61784465707468"></span>\`maxDepth\``);
+		expect(markdown).toContain(`[\`$options\`](#${prefix}x246f7074696f6e73)`);
+		expect(markdown).toContain(`<span id="${prefix}x246f7074696f6e73"></span>\`$options\``);
+		expect(markdown).toContain(`[\`café\`](#${prefix}x636166c3a9)`);
+		expect(markdown).toContain(`<span id="${prefix}x636166c3a9"></span>\`café\``);
+		expect(markdown).toContain(`[\`_\`](#${prefix}x5f)`);
+		expect(markdown).toContain(`<span id="${prefix}x5f"></span>\`_\``);
+		expect(markdown).toContain('\tmaxDepth: number');
+		expect(markdown).not.toContain('\t_: number');
+		expect(markdown).toContain('\targs: string[]');
+		expect(markdown).not.toContain('\targs: unknown');
+	});
+
+	it('namespaces parameter anchors by module', () => {
+		const duplicateModules = {
+			...modules,
+			'file:///workspace/src/other/index.ts': modules['file:///workspace/src/example/index.ts'],
+		} satisfies Record<string, ApiModule>;
+		const result = renderModulePages(duplicateModules, { packageName: 'example' });
+		const example = result.pages.find((page) => page.pkg === 'example')?.markdown ?? '';
+		const other = result.pages.find((page) => page.pkg === 'other')?.markdown ?? '';
+
+		expect(example).toContain('id="fn-x6578616d706c65-x77616c6b-param-');
+		expect(other).toContain('id="fn-x6f74686572-x77616c6b-param-');
+		expect(example).not.toContain('id="fn-x6f74686572-');
+		expect(other).not.toContain('id="fn-x6578616d706c65-');
+	});
+});

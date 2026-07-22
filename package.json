@@ -2,7 +2,7 @@
 	"name": "micro509",
 	"version": "0.12.0",
 	"description": "The zero-dependency TypeScript PKI toolkit for real certificate workflows.",
-	"keywords": ["x509", "certificate", "csr", "pem", "der", "jwk"],
+	"keywords": ["x509", "certificate", "csr", "pem", "der", "jwk", "importmapify"],
 	"homepage": "https://micro509.kjanat.dev",
 	"repository": {
 		"type": "git",
@@ -87,10 +87,11 @@
 		"check:biome": "biome check",
 		"check:deno": "deno check src",
 		"deno:cache": "deno cache --import-map=deno.import_map.json {src,docs,packages}/",
-		"deno:cleandocs": "rm -rf docs/deno 2>/dev/null",
-		"deno:importsmap": "importmapify",
-		"docs:build": "run -pk deno:importsmap deno:cleandocs; deno doc --no-npm --import-map deno.import_map.json --html --output=docs/deno --name=micro509 src/**/index.ts",
-		"docs:lint": "run -pk deno:importsmap deno:cleandocs; deno doc --no-npm --import-map deno.import_map.json --html --output=docs/deno --name=micro509 --lint src/**/index.ts",
+		"deno:cleandocs": "rm -rf ./.denodocs 2>/dev/null",
+		"deno:doc": "run -qpk deno:importsmap deno:cleandocs; deno doc --import-map deno.import_map.json --no-npm --name=\"$(jq -r '.name' package.json)\"",
+		"deno:importsmap": "npx -y importmapify@latest --quiet --out deno.import_map.json --import 'bun:test=./node_modules/bun-types/test.d.ts' --import '@deno/doc=jsr:@deno/doc@0.199.0'",
+		"docs:build": "run -q deno:doc --html --output=.denodocs $(jq -r '.exports | .[]? // .' jsr.json) 2>/dev/null",
+		"docs:lint": "run -q deno:doc --lint $(jq -r '.exports | .[]? // .' jsr.json)",
 		"fmt": "dprint fmt",
 		"lint": "bun lint:biome",
 		"lint:biome": "biome lint",
@@ -160,7 +161,7 @@
 			},
 			{
 				"name": "npm",
-				"version": ">=11,<12",
+				"version": ">=11 <12",
 				"onFail": "warn"
 			}
 		],

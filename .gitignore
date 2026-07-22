@@ -180,3 +180,4 @@ test/fixtures/pkits/nist/PKITS_data/
 yarn.lock
 /*.mjs
 !/importmapify.config.mjs
+/.denodocs/

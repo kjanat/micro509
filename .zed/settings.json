@@ -17,6 +17,7 @@
 			],
 			"language_servers": [
 				"typescript",
+				"typescript-ls",
 				"deno",
 				"biome",
 				"oxlint",

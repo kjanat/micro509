@@ -123,6 +123,17 @@ function symbolAnchor(name: string, bucket: string): string {
 	return `${bucket}-${name}`.toLowerCase();
 }
 
+function parameterAnchorSegment(value: string): string {
+	const hex = Array.from(new TextEncoder().encode(value), (byte) =>
+		byte.toString(16).padStart(2, '0'),
+	).join('');
+	return `x${hex}`;
+}
+
+function parameterAnchor(pkg: string, symbolName: string, parameterName: string): string {
+	return `fn-${parameterAnchorSegment(pkg)}-${parameterAnchorSegment(symbolName)}-param-${parameterAnchorSegment(parameterName)}`;
+}
+
 /**
  * Deep-link target for a symbol: its section on the owning module page.
  *
@@ -158,15 +169,38 @@ function tagsByName(tags: readonly JsDocTag[], kind: string): { doc?: string }[]
 /** ParamDef is a union (identifier, rest, object pattern, ...); only some members
  * carry name/optional/tsType. Read them uniformly without a cast. */
 function paramInfo(p: ParamDef): {
-	name: string;
+	name: string | undefined;
 	optional: boolean;
 	tsType: TsTypeDef | undefined;
 } {
+	if (p.kind === 'assign' || p.kind === 'rest') {
+		const nested = paramInfo(p.kind === 'assign' ? p.left : p.arg);
+		return { ...nested, tsType: p.tsType ?? nested.tsType };
+	}
 	return {
-		name: 'name' in p ? p.name : '_',
+		name: 'name' in p ? p.name : undefined,
 		optional: 'optional' in p && p.optional === true,
 		tsType: 'tsType' in p ? p.tsType : undefined,
 	};
+}
+
+interface InlineLinkContext {
+	readonly parameters: ReadonlyMap<string, string>;
+}
+
+function functionLinkContext(
+	pkg: string,
+	symbolName: string,
+	params: readonly ParamDef[],
+): InlineLinkContext {
+	const parameters = new Map<string, string>();
+	for (const param of params) {
+		const { name } = paramInfo(param);
+		if (name === undefined) continue;
+		const anchor = parameterAnchor(pkg, symbolName, name);
+		parameters.set(name, `#${anchor}`);
+	}
+	return { parameters };
 }
 
 /* TsTypeDef -> markdown, recursive. Each case narrows on `kind`. */
@@ -215,7 +249,7 @@ function renderType(t: TsTypeDef | undefined): string {
 			const params = t.value.params
 				.map((p) => {
 					const { name, tsType } = paramInfo(p);
-					return `\`${name}\`: ${renderType(tsType)}`;
+					return `\`${name ?? '_'}\`: ${renderType(tsType)}`;
 				})
 				.join(', ');
 			return `(${params}) => ${renderType(t.value.tsType)}`;
@@ -229,17 +263,25 @@ function renderType(t: TsTypeDef | undefined): string {
 /** One {@link}/{@linkcode}/{@linkplain}. Supports `target | label`, bare URLs,
  * `[module]`/`[module].symbol` module refs, and dotted symbol paths. `linkcode`
  * renders the visible text in monospace (per deno's inline-link semantics). */
-function renderInlineLink(code: boolean, target: string, label?: string): string {
+function renderInlineLink(
+	code: boolean,
+	target: string,
+	label?: string,
+	context?: InlineLinkContext,
+): string {
 	const text = label ?? target.replace(/^\[|\]$/g, '');
 	const shown = code ? `\`${text}\`` : text;
 	if (/^https?:\/\//.test(target)) return `[${shown}](${target})`;
 	if (target.startsWith('[')) return shown; // module ref — no page anchor in flat output yet
+	const localName = target.split(/[.[]/, 1)[0];
+	const localUrl = localName === undefined ? undefined : context?.parameters.get(localName);
+	if (localUrl !== undefined) return `[${shown}](${localUrl})`;
 	const symbol = target.split('.')[0] ?? target;
 	if (symbol && symbolIndex.has(symbol)) return `[${shown}](${symbolUrl(symbol)})`;
 	return shown;
 }
 
-function resolveInlineLinks(text: string): string {
+function resolveInlineLinks(text: string, context?: InlineLinkContext): string {
 	return text.replace(
 		/\{@(link|linkcode|linkplain)\s+([^}]+)\}/g,
 		(_m, kind: string, inner: string) => {
@@ -256,15 +298,15 @@ function resolveInlineLinks(text: string): string {
 				target = sp === -1 ? trimmed : trimmed.slice(0, sp);
 				label = sp === -1 ? undefined : trimmed.slice(sp + 1).trim();
 			}
-			return renderInlineLink(kind === 'linkcode', target, label);
+			return renderInlineLink(kind === 'linkcode', target, label, context);
 		},
 	);
 }
 
 /** Keep multi-line doc content inside a `- ` list item: indent continuation lines
  * so blank lines / hard breaks don't float the tail out of the list. */
-function bulletBody(doc: string): string {
-	return resolveInlineLinks(doc).replace(/\n/g, '\n  ');
+function bulletBody(doc: string, context?: InlineLinkContext): string {
+	return resolveInlineLinks(doc, context).replace(/\n/g, '\n  ');
 }
 
 /** Strip links/backticks/escapes back to plain source text — for ```ts fences,
@@ -279,53 +321,53 @@ function plain(s: string): string {
 		.replace(/\\([<>|[\]])/g, '$1');
 }
 
-function renderDescription(js: JsDoc | undefined): string {
-	return js?.doc ? resolveInlineLinks(js.doc) : '';
+function renderDescription(js: JsDoc | undefined, context?: InlineLinkContext): string {
+	return js?.doc ? resolveInlineLinks(js.doc, context) : '';
 }
 
 /** Non-param tag blocks: returns, throws, see, examples, surfaced defaults. */
-function renderTagBlocks(js: JsDoc | undefined): string {
+function renderTagBlocks(js: JsDoc | undefined, context?: InlineLinkContext): string {
 	const tags = js?.tags ?? [];
 	return [
-		...renderReturnTags(tags),
-		...renderThrowsTags(tags),
-		...renderSeeTags(tags),
-		...renderUnsupportedTags(tags),
+		...renderReturnTags(tags, context),
+		...renderThrowsTags(tags, context),
+		...renderSeeTags(tags, context),
+		...renderUnsupportedTags(tags, context),
 		...renderExampleTags(tags),
 	]
 		.join('\n')
 		.trimEnd();
 }
 
-function renderReturnTags(tags: readonly JsDocTag[]): string[] {
+function renderReturnTags(tags: readonly JsDocTag[], context?: InlineLinkContext): string[] {
 	const out: string[] = [];
 	for (const r of tagsOfKind(tags, 'return')) {
-		if (r.doc) out.push(`**Returns** — ${resolveInlineLinks(r.doc)}`, '');
+		if (r.doc) out.push(`**Returns** — ${resolveInlineLinks(r.doc, context)}`, '');
 	}
 	return out;
 }
 
-function renderThrowsTags(tags: readonly JsDocTag[]): string[] {
+function renderThrowsTags(tags: readonly JsDocTag[], context?: InlineLinkContext): string[] {
 	const throws = tagsOfKind(tags, 'throws');
 	if (!throws.length) return [];
 	const out = ['**Throws**'];
 	for (const t of throws) {
 		const ty = t.tsType ? `${renderType(t.tsType)} — ` : '';
-		out.push(`- ${ty}${bulletBody(t.doc ?? '')}`);
+		out.push(`- ${ty}${bulletBody(t.doc ?? '', context)}`);
 	}
 	return [...out, ''];
 }
 
-function renderSeeTags(tags: readonly JsDocTag[]): string[] {
+function renderSeeTags(tags: readonly JsDocTag[], context?: InlineLinkContext): string[] {
 	const see = tagsByName(tags, 'see');
 	if (!see.length) return [];
-	return ['**See also**', ...see.map((s) => `- ${bulletBody(s.doc ?? '')}`), ''];
+	return ['**See also**', ...see.map((s) => `- ${bulletBody(s.doc ?? '', context)}`), ''];
 }
 
-function renderUnsupportedTags(tags: readonly JsDocTag[]): string[] {
+function renderUnsupportedTags(tags: readonly JsDocTag[], context?: InlineLinkContext): string[] {
 	const out: string[] = [];
 	for (const u of tagsOfKind(tags, 'unsupported')) {
-		if (u.value) out.push(resolveInlineLinks(u.value), '');
+		if (u.value) out.push(resolveInlineLinks(u.value, context), '');
 	}
 	return out;
 }
@@ -352,7 +394,13 @@ function renderTypeParams(tps: readonly TsTypeParamDef[] | undefined): string {
 }
 
 /** Parameters list — links live here (not in the fenced signature), merging the declared param types with their @param docs. */
-function renderParams(defParams: readonly ParamDef[], js: JsDoc | undefined): string {
+function renderParams(
+	pkg: string,
+	symbolName: string,
+	defParams: readonly ParamDef[],
+	js: JsDoc | undefined,
+	context: InlineLinkContext,
+): string {
 	if (!defParams.length) return '';
 	const docs = new Map<string, string>();
 	for (const tag of tagsOfKind(js?.tags ?? [], 'param')) docs.set(tag.name, tag.doc ?? '');
@@ -360,9 +408,14 @@ function renderParams(defParams: readonly ParamDef[], js: JsDoc | undefined): st
 	const lines = ['**Parameters**'];
 	for (const p of defParams) {
 		const { name, optional, tsType } = paramInfo(p);
-		const doc = docs.get(name);
-		const label = `\`${name}${optional ? '?' : ''}\``;
-		lines.push(`- ${label}: ${renderType(tsType)}${doc ? ` — ${bulletBody(doc)}` : ''}`);
+		const displayName = name ?? '_';
+		const doc = docs.get(displayName);
+		const label = `\`${displayName}${optional ? '?' : ''}\``;
+		const anchor =
+			name === undefined ? '' : `<span id="${parameterAnchor(pkg, symbolName, name)}"></span>`;
+		lines.push(
+			`- ${anchor}${label}: ${renderType(tsType)}${doc ? ` — ${bulletBody(doc, context)}` : ''}`,
+		);
 	}
 	return lines.join('\n');
 }
@@ -371,14 +424,16 @@ type SymbolDeclaration = Symbol['declarations'][number];
 
 /** Renders a function signature and its parameter documentation as Markdown. */
 function renderFunctionSymbol(
+	pkg: string,
 	sym: Symbol,
 	d: Extract<SymbolDeclaration, { readonly kind: 'function' }>,
+	context: InlineLinkContext,
 ): string[] {
 	const tp = plain(renderTypeParams(d.def.typeParams));
 	const sigParams = d.def.params
 		.map((p) => {
 			const { name, optional, tsType } = paramInfo(p);
-			return `\t${name}${optional ? '?' : ''}: ${plain(renderType(tsType))}`;
+			return `\t${name ?? '_'}${optional ? '?' : ''}: ${plain(renderType(tsType))}`;
 		})
 		.join(',\n');
 	const head = `function ${sym.name}${tp}`;
@@ -389,7 +444,7 @@ function renderFunctionSymbol(
 		'```',
 		'',
 	];
-	const params = renderParams(d.def.params, d.jsDoc);
+	const params = renderParams(pkg, sym.name, d.def.params, d.jsDoc, context);
 	if (params) out.push(params, '');
 	return out;
 }
@@ -420,7 +475,7 @@ function renderInterfaceSignature(
 		const mp = m.params
 			.map((p) => {
 				const { name, optional, tsType } = paramInfo(p);
-				return `${name}${optional ? '?' : ''}: ${plain(renderType(tsType))}`;
+				return `${name ?? '_'}${optional ? '?' : ''}: ${plain(renderType(tsType))}`;
 			})
 			.join(', ');
 		members.push(`\t${m.name}${m.optional ? '?' : ''}(${mp}): ${plain(renderType(m.returnType))};`);
@@ -458,7 +513,7 @@ function renderVariableSymbol(
 	return ['```ts', `${d.def.kind} ${sym.name}: ${plain(renderType(d.def.tsType))}`, '```', ''];
 }
 
-function renderSymbol(sym: Symbol, level = 3): string {
+function renderSymbol(pkg: string, sym: Symbol, level = 3): string {
 	const d = sym.declarations[0];
 	if (!d) return '';
 	// Explicit `{#id}` anchor (VitePress custom-anchor syntax): the slugified
@@ -469,11 +524,15 @@ function renderSymbol(sym: Symbol, level = 3): string {
 	const heading = `${'#'.repeat(level)} \`${sym.name}\``;
 	const out: string[] = [anchor === undefined ? heading : `${heading} {#${anchor}}`, ''];
 
-	const description = renderDescription(d.jsDoc);
+	const context =
+		d.kind === 'function' ? functionLinkContext(pkg, sym.name, d.def.params) : undefined;
+	const description = renderDescription(d.jsDoc, context);
 	if (description) out.push(description, '');
 
 	if (d.kind === 'function') {
-		out.push(...renderFunctionSymbol(sym, d));
+		out.push(
+			...renderFunctionSymbol(pkg, sym, d, functionLinkContext(pkg, sym.name, d.def.params)),
+		);
 	} else if (d.kind === 'typeAlias') {
 		out.push(...renderTypeAliasSymbol(sym, d));
 	} else if (d.kind === 'interface') {
@@ -484,7 +543,7 @@ function renderSymbol(sym: Symbol, level = 3): string {
 		out.push(`_(kind: ${d.kind} — renderer not yet extended)_`, '');
 	}
 
-	const tail = renderTagBlocks(d.jsDoc);
+	const tail = renderTagBlocks(d.jsDoc, context);
 	if (tail) out.push(tail, '');
 	return out.join('\n');
 }
@@ -525,7 +584,7 @@ export function renderDocuments(
 		const moduleDoc = renderModuleDoc(mod.module_doc);
 		if (moduleDoc) out.push(`${moduleDoc}\n`);
 
-		for (const sym of symbols) out.push(renderSymbol(sym, 3), '\n---\n');
+		for (const sym of symbols) out.push(renderSymbol(renderer.slugOf(url), sym, 3), '\n---\n');
 	}
 	return out.join('\n');
 }
@@ -548,7 +607,7 @@ export function renderModulePages(
 		const out = [`# \`${renderer.packageName}/${pkg}\``, ''];
 		const moduleDoc = renderModuleDoc(mod.module_doc);
 		if (moduleDoc) out.push(moduleDoc, '');
-		for (const sym of mod.symbols) out.push(renderSymbol(sym, 2), '');
+		for (const sym of mod.symbols) out.push(renderSymbol(pkg, sym, 2), '');
 		pages.push({ pkg, markdown: out.join('\n') });
 	}
 	pages.sort((a, b) => a.pkg.localeCompare(b.pkg));
