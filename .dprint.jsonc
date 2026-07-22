@@ -84,6 +84,7 @@
 		]
 	},
 	"excludes": [
+		"**/.claude/",
 		"**/.venv",
 		"**/*-lock.json",
 		"**/node_modules",

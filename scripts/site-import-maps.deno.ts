@@ -106,11 +106,48 @@ async function runs(imports: Readonly<Record<string, string>>): Promise<string |
 	}
 }
 
+const ATTEMPTS = 4;
+const CONCURRENCY = 8;
+
+async function fetchRetrying(url: string, init?: RequestInit): Promise<Response | string> {
+	let problem = '';
+	for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
+		if (attempt > 1) {
+			await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** (attempt - 2)));
+		}
+		const response = await fetch(url, init).catch((error: unknown) => String(error));
+		if (typeof response === 'string') {
+			problem = response;
+			continue;
+		}
+		if (response.status !== 429 && response.status < 500) return response;
+		await response.body?.cancel();
+		problem = `${response.status} ${response.statusText}`;
+	}
+	return `${problem} after ${ATTEMPTS} attempts`;
+}
+
+async function pooled<T, R>(
+	items: readonly T[],
+	run: (item: T) => Promise<R>,
+): Promise<readonly R[]> {
+	const queue = items.entries();
+	const results: R[] = [];
+	const worker = async (): Promise<void> => {
+		for (const [index, item] of queue) results[index] = await run(item);
+	};
+	await Promise.all(Array.from({ length: Math.min(CONCURRENCY, items.length) }, worker));
+	return results;
+}
+
 /** Every release jsDelivr carries. */
 async function published(): Promise<readonly string[]> {
-	const response = await fetch(`https://data.jsdelivr.com/v1/packages/npm/${LIBRARY}`, {
+	const response = await fetchRetrying(`https://data.jsdelivr.com/v1/packages/npm/${LIBRARY}`, {
 		headers: { accept: 'application/json' },
 	});
+	if (typeof response === 'string') {
+		throw new Error(`[import-maps] jsDelivr metadata -> ${response}`);
+	}
 	if (!response.ok) {
 		throw new Error(`[import-maps] jsDelivr metadata -> ${response.status} ${response.statusText}`);
 	}
@@ -122,7 +159,7 @@ async function published(): Promise<readonly string[]> {
 async function resolvesAsModule([specifier, url]: readonly [string, string]): Promise<
 	string | undefined
 > {
-	const response = await fetch(url).catch((error: unknown) => String(error));
+	const response = await fetchRetrying(url);
 	if (typeof response === 'string') return `${specifier} -> ${url} (${response})`;
 	const body = await response.text();
 	if (!response.ok) return `${specifier} -> ${url} (${response.status})`;
@@ -180,7 +217,7 @@ for (const prefix of prefixes) {
 		entries.set(entry[1], [entry[0], entry[1]]);
 	}
 }
-const unresolved = (await Promise.all([...entries.values()].map(resolvesAsModule))).filter(
+const unresolved = (await pooled([...entries.values()], resolvesAsModule)).filter(
 	(problem) => problem !== undefined,
 );
 if (unresolved.length > 0) {
@@ -197,14 +234,14 @@ for (const prefix of prefixes) {
 	}
 
 	// Archives answer to their own API; running today's example against them proves nothing.
-	const executable = prefix === '' || prefix === 'next/';
-	const broke = executable && unresolved.length === 0 ? await runs(imports) : undefined;
+	const ran = (prefix === '' || prefix === 'next/') && unresolved.length === 0;
+	const broke = ran ? await runs(imports) : undefined;
 	if (broke !== undefined) {
 		failures.push(`${route} (${boundTo(imports)}) cannot run an example: ${broke}`);
 	}
 
 	console.log(
-		`[import-maps] ${route.padEnd(10)} -> ${boundTo(imports).padEnd(8)} ${Object.keys(imports).length} imports${executable && broke === undefined ? ', example runs' : ''}`,
+		`[import-maps] ${route.padEnd(10)} -> ${boundTo(imports).padEnd(8)} ${Object.keys(imports).length} imports${ran && broke === undefined ? ', example runs' : ''}`,
 	);
 }
 
