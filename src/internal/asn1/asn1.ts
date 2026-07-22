@@ -16,10 +16,10 @@ const textDecoder = new TextDecoder('utf-8', { fatal: true });
 const PRINTABLE_STRING_PATTERN = /^[A-Za-z0-9 '()+,\-./:=?]*$/u;
 
 /**
- * Decodes a DER-encoded OBJECT IDENTIFIER value into its dotted-decimal string form (e.g. `"1.2.840.113549.1.1.1"`).
+ * Decodes a DER-encoded OBJECT IDENTIFIER value into its dotted-decimal string form.
  *
- * @example
- * Throws on empty input, truncated multi-byte sub-identifiers, or incomplete continuation octets.
+ * @example "1.2.840.113549.1.1.1"
+ * @throws on empty input, truncated multi-byte sub-identifiers, or incomplete continuation octets.
  */
 export function decodeObjectIdentifier(bytes: Uint8Array): string {
 	if (bytes.length === 0) {
@@ -60,8 +60,7 @@ export function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
  * Iterates through all direct child TLV elements inside a constructed {@linkcode DerElement}
  * (SEQUENCE, SET, or context-tagged container).
  *
- * @throws if any child overflows the parent boundary or if there is
- * leftover data between the last child and the parent end offset.
+ * @throws if any child overflows the parent boundary or if there is leftover data between the last child and the parent end offset.
  */
 export function childrenOf(source: Uint8Array, parent: DerElement): DerElement[] {
 	const children: DerElement[] = [];
@@ -81,7 +80,7 @@ export function childrenOf(source: Uint8Array, parent: DerElement): DerElement[]
 }
 
 /**
- * Asserts that a value is not `undefined`, returning it narrowed.
+ * Asserts that a value is not `undefined`, returning it narrowed.\
  * Used to enforce the presence of mandatory ASN.1 fields during parsing.
  *
  * @param label Human-readable field name included in the error message on failure.
@@ -94,10 +93,11 @@ export function requireElement<T>(value: T | undefined, label: string): T {
 }
 
 /**
- * Strips the leading "unused bits" octet from a BIT STRING element,
- * returning just the payload bytes. @throws if the tag is not `0x03`.
+ * Strips the leading "unused bits" octet from a BIT STRING element, returning just the payload bytes.
  *
  * Used to extract signature values and public keys from their BIT STRING wrapper.
+ *
+ * @throws if the tag is not `0x03`.
  */
 export function extractBitStringValue(element: DerElement): Uint8Array {
 	if (element.tag !== 0x03) {
@@ -124,7 +124,7 @@ export interface DerBitString {
 /**
  * Decodes a BIT STRING element into its payload and unused-bit count.
  *
- * Accepts a non-zero unused-bit count, so it reads flag strings such as KeyUsage,
+ * Accepts a non-zero unused-bit count, so it reads flag strings such as {@linkcode KeyUsage},
  * which {@linkcode extractBitStringValue} rejects.
  */
 export function decodeBitString(element: DerElement): DerBitString {
@@ -145,7 +145,9 @@ export function decodeBitString(element: DerElement): DerBitString {
 /**
  * Parses a {@linkcode DerElement} with tag UTCTime (`0x17`) or GeneralizedTime (`0x18`) into a {@linkcode Date}.
  *
- * For UTCTime, the two-digit year is interpreted per RFC 5280: values >= 50 map to 19xx, values < 50 map to 20xx.
+ * For UTCTime, the two-digit year is interpreted per RFC 5280:
+ * - values >= 50 map to 19xx,
+ * - values < 50 map to 20xx.
  *
  * @throws on unrecognized time tags.
  */
@@ -201,7 +203,7 @@ export function parseTime(element: DerElement): Date {
 /**
  * Decodes a big-endian unsigned byte sequence into a JavaScript `number`.
  *
- * Throws if the value exceeds `Number.MAX_SAFE_INTEGER`, the boundary for lossless arithmetic.
+ * @throws if the value exceeds {@linkcode Number.MAX_SAFE_INTEGER}, the boundary for lossless arithmetic.
  */
 export function decodeIntegerNumber(bytes: Uint8Array): number {
 	const first = bytes[0];
@@ -225,10 +227,11 @@ export function decodeIntegerNumber(bytes: Uint8Array): number {
 }
 
 /**
- * Like {@linkcode decodeIntegerNumber}, but optionally rewrites thrown error
- * messages with a caller-specific field label.
+ * Like {@linkcode decodeIntegerNumber}, but optionally rewrites thrown error messages with a caller-specific field label.
  *
+ * @param bytes DER INTEGER content octets to decode.
  * @param label Field name for error messages (defaults to `"INTEGER"`).
+ * @throws if the value is empty, negative, non-minimally encoded, or exceeds {@linkcode Number.MAX_SAFE_INTEGER}.
  */
 export function decodeNonNegativeIntegerNumber(bytes: Uint8Array, label = 'INTEGER'): number {
 	if (label === 'INTEGER') {
@@ -257,7 +260,7 @@ export function decodeNonNegativeIntegerNumber(bytes: Uint8Array, label = 'INTEG
 }
 
 /**
- * Converts a hex string (even or odd length) to a `Uint8Array`.
+ * Converts a hex string (even or odd length) to a {@linkcode Uint8Array}.
  * Odd-length strings are left-padded with a zero nibble.
  */
 export function hexToBytes(value: string): Uint8Array {
@@ -352,10 +355,16 @@ function decodeOidSubidentifier(
 }
 
 /**
- * Decodes a DER string element by tag. Supports UTF8String (`0x0c`),
- * PrintableString (`0x13`), IA5String (`0x16`), UniversalString (`0x1c`),
- * and BMPString (`0x1e`).
- * Throws on unsupported string tags.
+ * Decodes a DER string element by tag.
+ *
+ * Supports:
+ * - UTF8String (`0x0c`),
+ * - PrintableString (`0x13`),
+ * - IA5String (`0x16`),
+ * - UniversalString (`0x1c`), and
+ * - BMPString (`0x1e`).
+ *
+ * @throws on unsupported string tags.
  */
 export function decodeString(tag: number, bytes: Uint8Array): string {
 	switch (tag) {
