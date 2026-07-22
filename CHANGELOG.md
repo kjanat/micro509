@@ -18,6 +18,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `micro509/der` exposes the DER reader, writer, and value decoders that back
+  every built-in parser. `defineExtensionDecoder` hands a consumer `valueDer` and
+  expects raw DER back from `encode`, and nothing in the package could read or
+  write those bytes, so a custom extension needed a second ASN.1 library.
+  Readers and decoders take untrusted bytes and come in pairs: `decodeDerInteger`
+  returns a `Result`, `decodeDerIntegerOrThrow` throws. Writers take typed input
+  and throw, matching `encodeName` and `pemEncode`.
+  (https://github.com/kjanat/micro509/issues/63)
+- `bmpString` and `universalString` encode the two string types that already
+  decoded, so a PKCS#12 `friendlyName` can now be written as well as read. Both
+  reject lone surrogates, and `bmpString` rejects code points above U+FFFF.
+- `decodeBitString` returns a BIT STRING's payload with its unused-bit count.
+  `extractBitStringValue` rejects a non-zero count, which excluded KeyUsage, the
+  most common BIT STRING in a certificate. Unused trailing bits are returned as
+  encoded, matching how the extension decoders already treat non-conformant
+  certificates.
+
+### Changed
+
+- `decodeIntegerNumber` accepts any INTEGER up to `Number.MAX_SAFE_INTEGER` and
+  rejects above it. It stopped at 6 bytes while `integerFromNumber` encoded any
+  non-negative safe integer, so values from 2^47 up encoded and would not decode.
+  The old limit cited 48 bits as the safe-integer boundary; that boundary is 53.
+  A 7- or 8-byte INTEGER inside a certificate that previously threw now parses.
+
 ## [0.12.0] - 2026-07-21
 
 Text rendering for subject alternative names and distinguished names, and

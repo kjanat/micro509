@@ -1,36 +1,61 @@
 /**
  * DER reading and writing primitives.
  *
- * The building blocks every other entrypoint is made of, for the cases the typed
- * APIs do not cover: decoding a private extension's `extnValue` inside an
- * {@linkcode ExtensionDecoder}, encoding the bytes a `CustomExtension` carries, or
- * inspecting a structure this library does not model.
+ * The building blocks every other entrypoint is made of, for the cases the typed APIs
+ * do not cover:
  *
- * Reading is strict DER: definite lengths only, minimal length encodings, no
- * high-tag-number form, and a nesting-depth guard. BER-only constructs are
- * rejected rather than tolerated.
+ * - decoding a private extension's `extnValue` inside an {@linkcode ExtensionDecoder}
+ * - encoding the bytes a {@linkcode CustomExtension} carries
+ * - inspecting a structure this library does not model
  *
- * All operations are synchronous, and every function throws on malformed input.
+ * Reading accepts definite lengths and minimal length encodings, rejects the high-tag-number form,
+ * and applies a nesting-depth guard capped at {@linkcode DEFAULT_MAX_DER_DEPTH}.
+ * BER-only constructs fail.
+ *
+ * Readers and decoders take untrusted bytes, so each one comes as a pair:
+ *
+ * - {@linkcode https://micro509.kjanat.dev/next/api/der#fn-decodederinteger | decodeDerInteger} returns a {@linkcode https://micro509.kjanat.dev/next/api/der#type-decodederresult | DecodeDerResult}
+ * - {@linkcode https://micro509.kjanat.dev/next/api/der#fn-decodederintegerorthrow | decodeDerIntegerOrThrow} throws
+ *
+ * Writers take typed input and throw, matching {@linkcode https://micro509.kjanat.dev/next/api/x509#fn-encodename | encodeName} and {@linkcode https://micro509.kjanat.dev/next/api/pem#fn-pemencode | pemEncode}.
+ *
+ * All operations are synchronous.
  *
  * @module micro509/der
  */
 
+export type {
+	DecodeDerErrorCode,
+	DecodeDerFailure,
+	DecodeDerResult,
+} from '#micro509/der/der';
 export {
+	decodeDerBitString,
+	decodeDerBitStringOrThrow,
 	decodeDerBoolean,
+	decodeDerBooleanOrThrow,
 	decodeDerInteger,
+	decodeDerIntegerOrThrow,
 	decodeDerOctetString,
+	decodeDerOctetStringOrThrow,
 	decodeDerOid,
+	decodeDerOidOrThrow,
 	decodeDerString,
+	decodeDerStringOrThrow,
 	decodeDerTime,
+	decodeDerTimeOrThrow,
+	derChildren,
+	derChildrenOrThrow,
+	readDerElement,
+	readDerElementOrThrow,
+	readDerRoot,
+	readDerRootOrThrow,
+	readDerSequence,
+	readDerSequenceOrThrow,
 } from '#micro509/der/der';
 
 export type { DerBitString } from '#micro509/internal/asn1/asn1';
-export {
-	childrenOf as derChildren,
-	decodeBitString as decodeDerBitString,
-	hexToBytes,
-	toHex,
-} from '#micro509/internal/asn1/asn1';
+export { hexToBytes, toHex } from '#micro509/internal/asn1/asn1';
 
 export type {
 	DerElement,
@@ -55,9 +80,6 @@ export {
 	objectIdentifier as derOid,
 	octetString as derOctetString,
 	printableString as derPrintableString,
-	readElement as readDerElement,
-	readRootElement as readDerRoot,
-	readSequenceChildren as readDerSequence,
 	sequence as derSequence,
 	setOf as derSet,
 	time as derTime,
