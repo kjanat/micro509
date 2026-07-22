@@ -130,6 +130,16 @@ describe('renderModulePages inline links', () => {
 });
 
 describe('root entrypoint', () => {
+	it('supports directory and flat-file entrypoint layouts', () => {
+		const layoutModules = {
+			'file:///workspace/src/directory/index.ts': modules['file:///workspace/src/example/index.ts'],
+			'file:///workspace/src/flat.ts': modules['file:///workspace/src/example/index.ts'],
+		} satisfies Record<string, ApiModule>;
+		const result = renderModulePages(layoutModules, { packageName: 'example' });
+
+		expect(result.pages.map((page) => page.pkg)).toEqual(['directory', 'flat']);
+	});
+
 	it('includes and renders the package root without colliding with Overview', () => {
 		expect(
 			entrypointsOf({
@@ -197,6 +207,34 @@ describe('root entrypoint', () => {
 				slugOf: () => 'index',
 			}),
 		).toThrow('API page slug "index" is reserved for Overview');
+	});
+
+	it('rejects ambiguous and traversal-bearing page slugs', () => {
+		const rootModules = {
+			'file:///workspace/src/index.ts': modules['file:///workspace/src/example/index.ts'],
+		} satisfies Record<string, ApiModule>;
+		const invalidSlugs = ['foo/../index', './index', 'foo//bar', 'foo\\..\\index', '/absolute'];
+
+		for (const slug of invalidSlugs) {
+			expect(() =>
+				renderModulePages(rootModules, {
+					packageName: 'example',
+					slugOf: () => slug,
+				}),
+			).toThrow('API page slug contains invalid path segment');
+		}
+	});
+
+	it('allows canonical nested page slugs', () => {
+		const rootModules = {
+			'file:///workspace/src/index.ts': modules['file:///workspace/src/example/index.ts'],
+		} satisfies Record<string, ApiModule>;
+		const result = renderModulePages(rootModules, {
+			packageName: 'example',
+			slugOf: () => 'nested/index',
+		});
+
+		expect(result.pages[0]?.pkg).toBe('nested/index');
 	});
 });
 

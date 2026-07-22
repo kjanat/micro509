@@ -30,7 +30,7 @@ import proc from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { ApiModule, RenderOptions } from '@micro509/doc-render';
-import { renderModulePages, renderOverview } from '@micro509/doc-render';
+import { assertApiPageSlug, renderModulePages, renderOverview } from '@micro509/doc-render';
 import type { Plugin } from 'vitepress';
 
 /** One API reference: sources in, markdown pages out. */
@@ -102,10 +102,14 @@ function loadNodes(target: ApiDocsTarget): Record<string, ApiModule> {
  * @throws if {@linkcode pkg} resolves outside {@linkcode outDir}.
  */
 function pageFile(outDir: string, pkg: string): string {
-	const file = path.resolve(outDir, `${pkg}.md`);
+	assertApiPageSlug(pkg);
 	const root = path.resolve(outDir);
+	const file = path.resolve(root, `${pkg}.md`);
 	if (file !== root && !file.startsWith(`${root}${path.sep}`)) {
 		throw new Error(`[api-docs] page slug escapes the output directory: ${pkg}`);
+	}
+	if (file === path.join(root, 'index.md')) {
+		throw new Error(`[api-docs] page slug resolves to the reserved Overview page: ${pkg}`);
 	}
 	return file;
 }

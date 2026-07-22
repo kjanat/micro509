@@ -66,7 +66,10 @@ function defaultRoot(url: string): boolean {
 
 function defaultSlug(url: string): string {
 	const sourcePath = url.replace(/^.*\/src\//, '');
-	return defaultRoot(url) ? 'root' : sourcePath.replace(/\/index\.ts$/, '');
+	if (defaultRoot(url)) return 'root';
+	return sourcePath.endsWith('/index.ts')
+		? sourcePath.slice(0, -'/index.ts'.length)
+		: sourcePath.replace(/\.ts$/, '');
 }
 
 function resolve(options: RenderOptions): Renderer {
@@ -92,6 +95,19 @@ export function entrypointsOf(manifest: ExportsManifest): readonly string[] {
 	return Object.entries(manifest.exports)
 		.map(([, source]) => source.replace(/^\.\//, ''))
 		.sort();
+}
+
+/** Rejects ambiguous or traversal-bearing API page slugs before path resolution. */
+export function assertApiPageSlug(pkg: string): void {
+	const invalidSegment = pkg
+		.split(/[\\/]/)
+		.find((segment) => segment === '' || segment === '.' || segment === '..');
+	if (invalidSegment !== undefined) {
+		throw new Error(`API page slug contains invalid path segment "${invalidSegment}": ${pkg}`);
+	}
+	if (pkg === 'index') {
+		throw new Error('API page slug "index" is reserved for Overview');
+	}
 }
 
 function moduleTitle(url: string, pkg: string): string {
@@ -671,9 +687,7 @@ export function renderModulePages(
 	for (const [url, mod] of Object.entries(nodes)) {
 		if (!mod.symbols.length) continue;
 		const pkg = renderer.slugOf(url);
-		if (pkg === 'index') {
-			throw new Error(`API page slug "index" is reserved for Overview: ${url}`);
-		}
+		assertApiPageSlug(pkg);
 		const previousUrl = pageUrls.get(pkg);
 		if (previousUrl !== undefined) {
 			throw new Error(`API page slug collision: ${previousUrl} and ${url} both map to ${pkg}`);
