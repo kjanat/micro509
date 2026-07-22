@@ -248,6 +248,59 @@ describe('checkChainRevocation', () => {
 		expect(hardFailResult.ok).toBe(true);
 		expect(hardFailResult.value.decision).toBe('deny');
 	});
+
+	it('rejects a forged CRL whose signer does not chain to the trust anchor', async () => {
+		const anchorName = 'Revocation Anchor CA';
+		const realCa = await createSelfSignedCertificate({
+			subject: { commonName: anchorName },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		// Same subject DN as the real CA, unrelated key. The forged CRL it signs
+		// therefore reads as a direct CRL for the leaf's issuer.
+		const forgedSigner = await createSelfSignedCertificate({
+			subject: { commonName: anchorName },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: anchorName },
+			subject: { commonName: 'revoked-leaf.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: realCa.keyPair.privateKey,
+			issuerPublicKey: realCa.keyPair.publicKey,
+		});
+		const at = new Date(Date.now() + 5_000);
+		const forgedCrl = await createCertificateRevocationList({
+			issuer: { commonName: anchorName },
+			signerPrivateKey: forgedSigner.keyPair.privateKey,
+			issuerPublicKey: forgedSigner.keyPair.publicKey,
+			thisUpdate: new Date(at.getTime() - HOUR_MS),
+			nextUpdate: new Date(at.getTime() + HOUR_MS),
+			revokedCertificates: [],
+		});
+
+		const result = await checkChainRevocation({
+			chain: [
+				unwrap(parseCertificatePem(leaf.pem)),
+				unwrap(parseCertificatePem(realCa.certificate.pem)),
+			],
+			crls: [forgedCrl.der],
+			extraCertificates: [forgedSigner.certificate.pem],
+			at,
+			policy: { mode: 'soft-fail' },
+		});
+
+		expect(result.ok).toBe(true);
+		const leafStatus = result.value.certificates[0];
+		expect(leafStatus?.status).toBe('indeterminate');
+		expect(leafStatus?.indeterminateReasons).toContain('crl_signer_not_authorized');
+	});
 });
 
 const HOUR_MS = 60 * 60 * 1000;

@@ -47,6 +47,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The old limit cited 48 bits as the safe-integer boundary; that boundary is 53.
   A 7- or 8-byte INTEGER inside a certificate that previously threw now parses.
 
+### Security
+
+- CRL evidence validates the CRL issuer's own certification path to the trust
+  anchor before trusting its verdict (RFC 5280 §6.3.3(f)). A forged
+  indirect-CRL signer whose subject DN collided with a chain certificate was
+  accepted on a name match, its signature never checked against a trusted key,
+  so a forged empty CRL reported a revoked certificate as `good`. Every
+  candidate CRL issuer is now tried rather than only the first, so a DN
+  collision cannot shadow the genuine issuer.
+  (https://github.com/kjanat/micro509/pull/73)
+
 ## [0.12.0] - 2026-07-21
 
 Text rendering for subject alternative names and distinguished names, and
