@@ -205,4 +205,61 @@ describe('name constraint fixtures', () => {
 		});
 		expect(rejectedSan).toMatchObject({ ok: false, code: 'name_constraints_violated' });
 	});
+
+	it('rejects a URI SAN without an FQDN authority under URI constraints', async () => {
+		const ipv4 = await verifyNameConstraintFixture({
+			rootNameConstraints: {
+				excludedSubtrees: [{ base: { type: 'uri', value: '.example.com' } }],
+			},
+			leafSubjectAltNames: [{ type: 'uri', value: 'https://192.0.2.1/x' }],
+		});
+		expect(ipv4).toMatchObject({ ok: false, code: 'name_constraints_violated' });
+
+		const ipv6 = await verifyNameConstraintFixture({
+			rootNameConstraints: {
+				permittedSubtrees: [{ base: { type: 'uri', value: '.example.com' } }],
+			},
+			leafSubjectAltNames: [{ type: 'uri', value: 'https://[2001:db8::1]/x' }],
+		});
+		expect(ipv6).toMatchObject({ ok: false, code: 'name_constraints_violated' });
+
+		const noAuthority = await verifyNameConstraintFixture({
+			rootNameConstraints: {
+				permittedSubtrees: [{ base: { type: 'uri', value: '.example.com' } }],
+			},
+			leafSubjectAltNames: [{ type: 'uri', value: 'urn:example:resource' }],
+		});
+		expect(noAuthority).toMatchObject({ ok: false, code: 'name_constraints_violated' });
+	});
+
+	it('accepts a non-FQDN URI SAN when no URI constraints apply', async () => {
+		const result = await verifyNameConstraintFixture({
+			rootNameConstraints: {
+				permittedSubtrees: [{ base: { type: 'dns', value: '.example.com' } }],
+			},
+			leafSubjectAltNames: [
+				{ type: 'dns', value: 'api.example.com' },
+				{ type: 'uri', value: 'https://192.0.2.1/x' },
+			],
+		});
+		expect(result).toMatchObject({ ok: true });
+	});
+
+	it('matches rfc822Name local-part case-sensitively and host case-insensitively', async () => {
+		const localMismatch = await verifyNameConstraintFixture({
+			rootNameConstraints: {
+				permittedSubtrees: [{ base: { type: 'email', value: 'admin@example.com' } }],
+			},
+			leafSubjectAltNames: [{ type: 'email', value: 'ADMIN@example.com' }],
+		});
+		expect(localMismatch).toMatchObject({ ok: false, code: 'name_constraints_violated' });
+
+		const hostCaseFold = await verifyNameConstraintFixture({
+			rootNameConstraints: {
+				permittedSubtrees: [{ base: { type: 'email', value: 'admin@example.com' } }],
+			},
+			leafSubjectAltNames: [{ type: 'email', value: 'admin@EXAMPLE.com' }],
+		});
+		expect(hostCaseFold).toMatchObject({ ok: true });
+	});
 });
