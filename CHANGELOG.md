@@ -47,6 +47,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The old limit cited 48 bits as the safe-integer boundary; that boundary is 53.
   A 7- or 8-byte INTEGER inside a certificate that previously threw now parses.
 
+### Security
+
+- Name constraints reject a URI SAN whose authority has no FQDN host (an IP
+  literal, or no authority at all) when a uniformResourceIdentifier constraint
+  applies, per RFC 5280 §4.2.1.10. Such a URI previously slipped past the
+  constraint. Email constraint matching now compares the local part
+  case-sensitively and only the host case-insensitively (RFC 5280 §7.5, as
+  replaced by RFC 9549 §7.5.1), so `admin@example.com` no longer matches
+  `ADMIN@example.com` and widens the permitted subtrees.
+  (https://github.com/kjanat/micro509/pull/71)
+
 ## [0.12.0] - 2026-07-21
 
 Text rendering for subject alternative names and distinguished names, and
