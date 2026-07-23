@@ -53,10 +53,14 @@ describe('pkcs7', () => {
 		const parsed = parsePkcs7CertBagPem(bag.pem);
 		expect(parsed.ok).toBe(true);
 		if (!parsed.ok) throw new Error('unreachable');
-		expect(parsed.value.map((certificate) => certificate.subject.values.commonName)).toEqual([
-			'pkcs7-leaf.example',
-			'PKCS7 Root',
-		]);
+		// CertificateSet is a DER SET OF: canonically ordered, so compare as a set.
+		expect(parsed.value.map((certificate) => certificate.subject.values.commonName).sort()).toEqual(
+			['PKCS7 Root', 'pkcs7-leaf.example'],
+		);
+
+		// The SET OF ordering is canonical, so input order does not affect the bytes.
+		const reversed = unwrap(createPkcs7CertBag([root.certificate.pem, leaf.pem]));
+		expect(reversed.der).toEqual(bag.der);
 	});
 
 	it('verifies PKCS#7 signedData with signed attributes (CMS digest-then-sign)', async () => {

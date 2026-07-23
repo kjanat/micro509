@@ -19,12 +19,10 @@ import {
 } from '#micro509/internal/asn1/asn1';
 import type { DerElement } from '#micro509/internal/asn1/der';
 import {
-	concatBytes,
 	DEFAULT_MAX_DER_DEPTH,
 	explicitContext,
 	integer,
 	integerFromNumber,
-	nullValue,
 	objectIdentifier,
 	octetString,
 	readElement,
@@ -266,11 +264,15 @@ export function createPkcs7CertBag(
 			'Each PKCS#7 certificate source must be valid PEM or DER',
 		);
 	}
+	// certificates [0] IMPLICIT CertificateSet — a DER SET OF must be canonically
+	// ordered, so sort via setOf, then retag 0x31 -> 0xa0 for the IMPLICIT [0].
+	const certificateSet = new Uint8Array(setOf(certificateDers));
+	certificateSet[0] = 0xa0;
 	const signedData = sequence([
 		integerFromNumber(1),
 		setOf([]),
 		sequence([objectIdentifier(OIDS.pkcs7Data)]),
-		explicitContext(0, concatBytes(certificateDers)),
+		certificateSet,
 		setOf([]),
 	]);
 	const der = sequence([objectIdentifier(OIDS.pkcs7SignedData), explicitContext(0, signedData)]);
@@ -436,7 +438,7 @@ export async function createPkcs7SignedData(
 	certificateSet[0] = 0xa0;
 	const signedData = sequence([
 		integerFromNumber(signedDataVersion),
-		setOf([...digestAlgorithmOids].map((oid) => sequence([objectIdentifier(oid), nullValue()]))),
+		setOf([...digestAlgorithmOids].map((oid) => sequence([objectIdentifier(oid)]))),
 		input.detached === true
 			? sequence([objectIdentifier(encapsulatedContentTypeOid)])
 			: sequence([
@@ -545,7 +547,7 @@ async function buildPkcs7SignerInfo(
 				hexToBytes(certificate.issuer.derHex),
 				integer(hexToBytes(certificate.serialNumberHex)),
 			]),
-			sequence([objectIdentifier(digest.digestOid), nullValue()]),
+			sequence([objectIdentifier(digest.digestOid)]),
 			implicitForEmit,
 			encodeAlgorithmIdentifier(signatureAlgorithm),
 			octetString(signature),
