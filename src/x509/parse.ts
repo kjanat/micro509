@@ -1653,13 +1653,16 @@ export function parseKeyUsage(bytes: Uint8Array): ParsedBitFlags<KeyUsage> {
 
 /** @internal Decode the Extended Key Usage SEQUENCE OF OIDs. */
 export function parseExtendedKeyUsage(bytes: Uint8Array): readonly ExtendedKeyUsage[] {
-	const sequenceElement = requireElement(
-		readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH }),
-		'extendedKeyUsage sequence',
-	);
-	return childrenOf(bytes, sequenceElement).map((element) =>
-		parseExtendedKeyUsageOid(decodeObjectIdentifier(element.value)),
-	);
+	const children = readSequenceChildren(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH });
+	if (children.length === 0) {
+		throw new Error('extendedKeyUsage must not be empty');
+	}
+	return children.map((element) => {
+		if (element.tag !== 0x06) {
+			throw new Error('extendedKeyUsage entry must use OBJECT IDENTIFIER');
+		}
+		return parseExtendedKeyUsageOid(decodeObjectIdentifier(element.value));
+	});
 }
 
 /** @internal Decode the Certificate Policies extension value. */
@@ -1898,7 +1901,10 @@ export function parseSubjectAltNames(bytes: Uint8Array): readonly SubjectAltName
 		readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH }),
 		'subjectAltName sequence',
 	);
-	return childrenOf(bytes, sequenceElement).map((element) => parseGeneralName(bytes, element));
+	if (sequenceElement.tag !== 0x30) {
+		throw new Error('subjectAltName must use SEQUENCE');
+	}
+	return parseGeneralNames(bytes, sequenceElement);
 }
 
 /** @internal Decode a bare DER-encoded X.501 Name, as carried in a `directoryName` GeneralName. */

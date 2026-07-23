@@ -37,7 +37,12 @@ import {
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { encodeRsaPssParameters, rsaPssParametersForHash } from '#micro509/internal/crypto/rsa-pss';
 import { encodeName } from '#micro509/x509';
-import { parseAuthorityKeyIdentifier, parseNameConstraints } from '#micro509/x509/parse';
+import {
+	parseAuthorityKeyIdentifier,
+	parseExtendedKeyUsage,
+	parseNameConstraints,
+	parseSubjectAltNames,
+} from '#micro509/x509/parse';
 import {
 	childrenOf,
 	importRsaPrivateKeyWithScheme,
@@ -2551,6 +2556,30 @@ describe('matchCertificatePrivateKey', () => {
 		if (!result.ok) {
 			expect(result.error.code).toBe('unsupported_private_key');
 		}
+	});
+});
+
+describe('subjectAltName and extendedKeyUsage parse strictness', () => {
+	it('rejects an empty or non-SEQUENCE subjectAltName', () => {
+		expect(() => parseSubjectAltNames(Uint8Array.of(0x30, 0x00))).toThrow(
+			'GeneralNames must not be empty',
+		);
+		expect(() => parseSubjectAltNames(Uint8Array.of(0x31, 0x00))).toThrow(
+			'subjectAltName must use SEQUENCE',
+		);
+		expect(() => parseSubjectAltNames(Uint8Array.of(0x04, 0x02, 0x82, 0x00))).toThrow(
+			'subjectAltName must use SEQUENCE',
+		);
+	});
+
+	it('rejects an empty extendedKeyUsage or a non-OID entry', () => {
+		expect(() => parseExtendedKeyUsage(Uint8Array.of(0x30, 0x00))).toThrow(
+			'extendedKeyUsage must not be empty',
+		);
+		// SEQUENCE { INTEGER 1 } — an INTEGER is not a KeyPurposeId OID
+		expect(() => parseExtendedKeyUsage(sequence([integerFromNumber(1)]))).toThrow(
+			'extendedKeyUsage entry must use OBJECT IDENTIFIER',
+		);
 	});
 });
 
