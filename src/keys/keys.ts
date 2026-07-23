@@ -1899,7 +1899,7 @@ function parseTraditionalPem(pem: string): {
 	/** Base64-encoded payload after the headers. */
 	readonly base64Body: string;
 } {
-	const normalized = pem.replace(/\r/g, '').trim();
+	const normalized = pem.replace(/\r\n?/g, '\n').trim();
 	const lines = normalized.split('\n');
 	const begin = lines[0];
 	const end = lines[lines.length - 1];

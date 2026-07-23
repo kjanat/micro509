@@ -38,6 +38,10 @@ export interface CategorizedPemBlocks {
 	readonly others: readonly PemBlock[];
 }
 
+// RFC 7468 §3 label ABNF: labelchar = %x21-2C / %x2E-7E, joined by an optional
+// single "-" or SP; an empty label is legal.
+const PEM_LABEL_PATTERN = /^(?:[!-,.-~](?:[- ]?[!-,.-~])*)?$/;
+
 /**
  * Wraps DER bytes in a PEM envelope with 64-character base64 lines.
  *
@@ -45,14 +49,13 @@ export interface CategorizedPemBlocks {
  * @param der Raw DER-encoded content.
  */
 export function pemEncode(label: string, der: Uint8Array): string {
+	if (!isPemLabel(label)) {
+		throw new Error('Invalid PEM label');
+	}
 	const body = base64Encode(der);
 	const lines = body.match(/.{1,64}/g) ?? [];
 	return `-----BEGIN ${label}-----\n${lines.join('\n')}\n-----END ${label}-----\n`;
 }
-
-// RFC 7468 §3 label ABNF: labelchar = %x21-2C / %x2E-7E, joined by an optional
-// single "-" or SP; an empty label is legal.
-const PEM_LABEL_PATTERN = /^(?:[!-,.-~](?:[- ]?[!-,.-~])*)?$/;
 
 /** Machine-readable failure reason for the PEM decoders. */
 export type PemErrorCode = 'malformed';
@@ -88,10 +91,12 @@ export type CategorizePemBlocksResult =
  */
 export function pemDecodeOrThrow(label: string, pem: string): Uint8Array {
 	const normalized = pem.replace(/\r\n?/g, '\n').trim();
-	const begin = `-----BEGIN ${label}-----`;
-	const end = `-----END ${label}-----`;
 	const lines = normalized.split('\n');
-	if (lines[0] !== begin || lines[lines.length - 1] !== end || lines.length < 3) {
+	if (
+		parsePemBoundaryLine(lines[0] ?? '', 'BEGIN') !== label ||
+		parsePemBoundaryLine(lines[lines.length - 1] ?? '', 'END') !== label ||
+		lines.length < 3
+	) {
 		throw new Error(`Invalid PEM for ${label}`);
 	}
 	const bodyLines = normalizePemBodyLines(lines.slice(1, -1));
@@ -111,58 +116,57 @@ export function pemDecodeOrThrow(label: string, pem: string): Uint8Array {
  * and ignores non-PEM text between blocks.
  */
 export function splitPemBlocksOrThrow(input: string): readonly PemBlock[] {
-	const normalized = input.replace(/\r\n?/g, '\n');
+	const normalized = input.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
 	const blocks: PemBlock[] = [];
-	const beginToken = '-----BEGIN ';
-	// Linear `indexOf` scan rather than a global regex with a lazy body: a
-	// backtracking pattern like `([\s\S]*?)…\1` is polynomial on many unclosed
-	// BEGIN markers (ReDoS). `indexOf` advances monotonically, so this stays O(n)
-	// while preserving the original block/gap/label semantics.
-	let cursor = 0;
-	let scan = 0;
-	while (scan < normalized.length) {
-		const beginIdx = normalized.indexOf(beginToken, scan);
-		if (beginIdx === -1) {
-			break;
-		}
-		const labelStart = beginIdx + beginToken.length;
-		const dashIdx = normalized.indexOf('-----', labelStart);
-		if (dashIdx === -1) {
-			break;
-		}
-		const label = normalized.slice(labelStart, dashIdx);
-		const beginLineEnd = dashIdx + 5;
-		// A well-formed begin line is `-----BEGIN <label>-----\n` with an RFC 7468
-		// label. Anything else is not a block start; skip it so it surfaces in the
-		// stray-marker checks instead of being parsed.
-		if (!PEM_LABEL_PATTERN.test(label) || normalized[beginLineEnd] !== '\n') {
-			scan = labelStart;
-			continue;
-		}
-		const bodyStart = beginLineEnd + 1;
-		const endToken = `\n-----END ${label}-----`;
-		const endIdx = normalized.indexOf(endToken, bodyStart);
-		if (endIdx === -1) {
-			break;
-		}
-		const markerEnd = endIdx + endToken.length;
-		const blockEnd = normalized[markerEnd] === '\n' ? markerEnd + 1 : markerEnd;
-		const pem = normalized.slice(beginIdx, blockEnd);
-		if (containsPemMarker(normalized.slice(cursor, beginIdx))) {
+	let openBlock: { readonly label: string; readonly start: number } | undefined;
+	let lineStart = 0;
+	while (lineStart < normalized.length) {
+		const newline = normalized.indexOf('\n', lineStart);
+		const lineEnd = newline === -1 ? normalized.length : newline;
+		const nextLineStart = newline === -1 ? normalized.length : newline + 1;
+		const line = normalized.slice(lineStart, lineEnd);
+		const beginLine = line.replace(/^[ \t]+/, '');
+		const beginLabel = parsePemBoundaryLine(beginLine, 'BEGIN');
+		const endLabel = parsePemBoundaryLine(line, 'END');
+
+		if (beginLabel !== undefined) {
+			if (openBlock !== undefined) {
+				throw new Error('Malformed PEM block');
+			}
+			openBlock = { label: beginLabel, start: lineStart + line.length - beginLine.length };
+		} else if (endLabel !== undefined) {
+			blocks.push(closePemBlock(normalized, openBlock, endLabel, nextLineStart));
+			openBlock = undefined;
+		} else if (looksLikePemBoundary(line)) {
 			throw new Error('Malformed PEM block');
 		}
-		blocks.push({
-			label,
-			bytes: pemDecodeOrThrow(label, pem),
-			pem,
-		});
-		cursor = blockEnd;
-		scan = blockEnd;
+
+		if (newline === -1) {
+			break;
+		}
+		lineStart = nextLineStart;
 	}
-	if (containsPemMarker(normalized.slice(cursor))) {
+	if (openBlock !== undefined) {
 		throw new Error('Malformed PEM block');
 	}
 	return blocks;
+}
+
+function closePemBlock(
+	input: string,
+	openBlock: { readonly label: string; readonly start: number } | undefined,
+	endLabel: string,
+	end: number,
+): PemBlock {
+	if (openBlock === undefined || openBlock.label !== endLabel) {
+		throw new Error('Malformed PEM block');
+	}
+	const pem = input.slice(openBlock.start, end);
+	return {
+		label: openBlock.label,
+		bytes: pemDecodeOrThrow(openBlock.label, pem),
+		pem,
+	};
 }
 
 /**
@@ -213,8 +217,22 @@ function normalizePemBodyLines(lines: readonly string[]): readonly string[] | un
 	return nonEmptyLines.every((line) => /^[A-Za-z0-9+/=]+$/.test(line)) ? nonEmptyLines : undefined;
 }
 
-function containsPemMarker(value: string): boolean {
-	return value.includes('-----BEGIN ') || value.includes('-----END ');
+function parsePemBoundaryLine(line: string, kind: 'BEGIN' | 'END'): string | undefined {
+	const prefix = `-----${kind} `;
+	const withoutTrailingWsp = line.replace(/[ \t]+$/, '');
+	if (!withoutTrailingWsp.startsWith(prefix) || !withoutTrailingWsp.endsWith('-----')) {
+		return undefined;
+	}
+	const label = withoutTrailingWsp.slice(prefix.length, -5);
+	return isPemLabel(label) ? label : undefined;
+}
+
+function looksLikePemBoundary(line: string): boolean {
+	return /^[ \t]*-{5,}(?:BEGIN|END)/.test(line);
+}
+
+function isPemLabel(label: string): boolean {
+	return PEM_LABEL_PATTERN.exec(label)?.[0] === label;
 }
 
 /**

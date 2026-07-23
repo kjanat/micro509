@@ -112,6 +112,11 @@ export type ParseCertificateResult<TMap extends ExtensionDecoderMap = Record<nev
 	| { readonly ok: true; readonly value: ParsedCertificate<TMap> }
 	| ErrorResult<ParseCertificateErrorCode, Record<never, never>, ParseCertificateFailure>;
 
+/** Success-or-failure result from {@linkcode parseCertificateChainPem}. */
+export type ParseCertificateChainResult<TMap extends ExtensionDecoderMap = Record<never, never>> =
+	| { readonly ok: true; readonly value: readonly ParsedCertificate<TMap>[] }
+	| ErrorResult<ParseCertificateErrorCode, Record<never, never>, ParseCertificateFailure>;
+
 /** Machine-readable failure reason for the CSR parsers. */
 export type ParseCertificateSigningRequestErrorCode = 'malformed';
 
@@ -802,9 +807,24 @@ export function parseCertificateFromSource<TMap extends ExtensionDecoderMap = Re
 }
 
 /**
- * Decode a PEM bundle containing one or more certificates.
+ * Decode a PEM bundle containing one or more certificates, throwing on malformed input.
  *
  * Non-CERTIFICATE blocks (e.g. private keys) are silently skipped.
+ *
+ * @param pemBundle PEM text that may contain multiple CERTIFICATE blocks.
+ * @param options Custom extension decoders to apply during parsing.
+ */
+export function parseCertificateChainPemOrThrow<
+	TMap extends ExtensionDecoderMap = Record<never, never>,
+>(pemBundle: string, options?: ParseOptions<TMap>): readonly ParsedCertificate<TMap>[] {
+	return parseCertificatesFromPemBlocks(pemBundle, options);
+}
+
+/**
+ * Decode a PEM bundle containing one or more certificates.
+ *
+ * Non-CERTIFICATE blocks (e.g. private keys) are silently skipped. Returns a
+ * typed `malformed` failure for invalid PEM or certificate DER.
  *
  * @param pemBundle PEM text that may contain multiple CERTIFICATE blocks.
  * @param options Custom extension decoders to apply during parsing.
@@ -812,8 +832,16 @@ export function parseCertificateFromSource<TMap extends ExtensionDecoderMap = Re
 export function parseCertificateChainPem<TMap extends ExtensionDecoderMap = Record<never, never>>(
 	pemBundle: string,
 	options?: ParseOptions<TMap>,
-): readonly ParsedCertificate<TMap>[] {
-	return parseCertificatesFromPemBlocks(pemBundle, options);
+): ParseCertificateChainResult<TMap> {
+	try {
+		return successResult(parseCertificateChainPemOrThrow(pemBundle, options));
+	} catch (error) {
+		rethrowIfInvariant(error);
+		return failureResult(
+			'malformed',
+			error instanceof Error ? error.message : 'Malformed certificate chain',
+		);
+	}
 }
 
 /**

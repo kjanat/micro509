@@ -169,7 +169,7 @@ describe('chain verification', () => {
 		});
 
 		const bundle = `${leaf.pem}\n${intermediate.pem}\n${root.certificate.pem}`;
-		const parsedBundle = parseCertificateChainPem(bundle);
+		const parsedBundle = unwrap(parseCertificateChainPem(bundle));
 		expect(parsedBundle).toHaveLength(3);
 		expect(parsedBundle[0]?.subject.values.commonName).toBe('service.example');
 
@@ -3559,8 +3559,10 @@ describe('validateCandidatePath direct', () => {
 	it('fails closed for malformed initialPolicySet input shapes', async () => {
 		const chain = await issueChain();
 		const input = {
-			chain: parseCertificateChainPem(
-				`${chain.leaf.pem}${chain.intermediate.pem}${chain.root.certificate.pem}`,
+			chain: unwrap(
+				parseCertificateChainPem(
+					`${chain.leaf.pem}${chain.intermediate.pem}${chain.root.certificate.pem}`,
+				),
 			),
 			initialPolicySet: ['1.2.3.4'],
 		};
@@ -3610,8 +3612,10 @@ describe('validateCandidatePath direct', () => {
 	it('fails closed for malformed nested policy initialPolicySet input shapes', async () => {
 		const chain = await issueChain();
 		const input = {
-			chain: parseCertificateChainPem(
-				`${chain.leaf.pem}${chain.intermediate.pem}${chain.root.certificate.pem}`,
+			chain: unwrap(
+				parseCertificateChainPem(
+					`${chain.leaf.pem}${chain.intermediate.pem}${chain.root.certificate.pem}`,
+				),
 			),
 			policy: { initialPolicySet: ['1.2.3.4'] },
 		};
@@ -3624,8 +3628,10 @@ describe('validateCandidatePath direct', () => {
 	it('rejects unsupported initial name constraint forms', async () => {
 		const chain = await issueChain();
 		const input = {
-			chain: parseCertificateChainPem(
-				`${chain.leaf.pem}${chain.intermediate.pem}${chain.root.certificate.pem}`,
+			chain: unwrap(
+				parseCertificateChainPem(
+					`${chain.leaf.pem}${chain.intermediate.pem}${chain.root.certificate.pem}`,
+				),
 			),
 			permittedSubtrees: [{ base: { type: 'dns', value: 'example.com' } } as const],
 		};
@@ -3644,8 +3650,10 @@ describe('validateCandidatePath direct', () => {
 	it('rejects malformed nested initial name constraint subtree containers', async () => {
 		const chain = await issueChain();
 		const input = {
-			chain: parseCertificateChainPem(
-				`${chain.leaf.pem}${chain.intermediate.pem}${chain.root.certificate.pem}`,
+			chain: unwrap(
+				parseCertificateChainPem(
+					`${chain.leaf.pem}${chain.intermediate.pem}${chain.root.certificate.pem}`,
+				),
 			),
 			nameConstraints: {
 				permittedSubtrees: [{ base: { type: 'dns', value: 'example.com' } } as const],

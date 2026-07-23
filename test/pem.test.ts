@@ -6,6 +6,7 @@ import {
 	createSelfSignedCertificate,
 	generateKeyPair,
 	parseCertificateChainPem,
+	parseCertificateChainPemOrThrow,
 	pemDecode,
 	pemDecodeOrThrow,
 	pemEncode,
@@ -128,7 +129,12 @@ describe('pem', () => {
 			subject: { commonName: 'second-chain.example' },
 		});
 		const malformedBundle = `${first.certificate.pem}\n${second.certificate.pem}\n-----BEGIN CERTIFICATE-----\nAQID`;
-		expect(() => parseCertificateChainPem(malformedBundle)).toThrow('Malformed PEM block');
+		const result = parseCertificateChainPem(malformedBundle);
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.code).toBe('malformed');
+		}
+		expect(() => parseCertificateChainPemOrThrow(malformedBundle)).toThrow('Malformed PEM block');
 	});
 
 	it('splitPemBlocksOrThrow resists polynomial ReDoS on many unclosed BEGIN markers', () => {
@@ -213,5 +219,52 @@ describe('RFC 7468 conformance', () => {
 			'X-TEST',
 			'CERTIFICATE',
 		]);
+	});
+
+	it('accepts horizontal whitespace after encapsulation boundaries', () => {
+		const pem = pemEncode('X-TEST', der).replaceAll('-----\n', '----- \t\n');
+		expect(Array.from(pemDecodeOrThrow('X-TEST', pem))).toEqual([1, 2, 3]);
+		expect(splitPemBlocksOrThrow(pem).map((block) => block.label)).toEqual(['X-TEST']);
+	});
+
+	it('accepts horizontal whitespace before a begin boundary', () => {
+		const blocks = splitPemBlocksOrThrow(` \t${pemEncode('X-TEST', der)}`);
+		expect(blocks.map((block) => block.label)).toEqual(['X-TEST']);
+		expect(blocks[0]?.pem.startsWith('-----BEGIN X-TEST-----')).toBe(true);
+	});
+
+	it('accepts a UTF-8 BOM before the first boundary', () => {
+		expect(
+			splitPemBlocksOrThrow(`\uFEFF${pemEncode('X-TEST', der)}`).map((block) => block.label),
+		).toEqual(['X-TEST']);
+	});
+
+	it('rejects malformed boundary prefixes and suffixes', () => {
+		const malformedBlocks = [
+			'------BEGIN X-TEST-----\nAQID\n-----END X-TEST-----',
+			'-----BEGINX-TEST-----\nAQID\n-----ENDX-TEST-----',
+			'-----BEGIN X-TEST------\nAQID\n-----END X-TEST-----',
+			'-----BEGIN -----suffix\nAQID\n-----END -----',
+			'-----BEGIN X-TEST-----\nAQID\n-----END X-TEST-----suffix',
+		];
+		for (const malformed of malformedBlocks) {
+			const result = splitPemBlocks(malformed);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.code).toBe('malformed');
+			}
+		}
+	});
+
+	it('ignores marker examples embedded in prose', () => {
+		const input = `Example: -----BEGIN CERTIFICATE----- starts a block.\n${pemEncode('X-TEST', der)}`;
+		expect(splitPemBlocksOrThrow(input).map((block) => block.label)).toEqual(['X-TEST']);
+	});
+
+	it('validates labels when encoding while preserving the legal empty label', () => {
+		expect(splitPemBlocksOrThrow(pemEncode('', der)).map((block) => block.label)).toEqual(['']);
+		for (const label of ['BAD--LABEL', ' BAD', 'BAD ', 'BAD\tLABEL', 'BAD\nLABEL', 'BAD\n']) {
+			expect(() => pemEncode(label, der)).toThrow('Invalid PEM label');
+		}
 	});
 });
