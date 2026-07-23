@@ -911,6 +911,15 @@ describe('extensions encoding', () => {
 		);
 	});
 
+	it('rejects an unsupported relative distinguished name field', () => {
+		const attribute = { type: 'commonName', value: 'example.test' } as const;
+		Object.defineProperty(attribute, 'type', { value: 'unsupported' });
+		expectEncoderErrorCode(
+			() => encodeRelativeDistinguishedName([attribute]),
+			'unsupported_name_field',
+		);
+	});
+
 	it('rejects invalid IPv4 addresses during certificate creation', async () => {
 		const { createSelfSignedCertificate } = await import('#micro509');
 		expect(
