@@ -23,6 +23,7 @@ import { childrenOf, toHex } from '#micro509/internal/asn1/asn1';
 import type { DerElement } from '#micro509/internal/asn1/der';
 import {
 	bitString,
+	concatBytes,
 	explicitContext,
 	generalizedTime,
 	integerFromNumber,
@@ -2641,6 +2642,22 @@ describe('ocsp', () => {
 				rewriteOcspResponseResponderId(response, explicitContext(2, integerFromNumber(1))),
 			),
 		).toThrow('ResponderID byKey must wrap an OCTET STRING');
+		expect(() =>
+			parseOcspResponseDerOrThrow(
+				rewriteOcspResponseResponderId(
+					response,
+					explicitContext(
+						2,
+						concatBytes([octetString(responderKeyHash), octetString(responderKeyHash)]),
+					),
+				),
+			),
+		).toThrow('ResponderID byKey must wrap exactly one OCTET STRING');
+		expect(() =>
+			parseOcspResponseDerOrThrow(
+				rewriteOcspResponseResponderId(response, explicitContext(2, octetString(new Uint8Array()))),
+			),
+		).toThrow('ResponderID byKey must not be empty');
 
 		const responseWithNextUpdate = await createOcspResponse({
 			signerPrivateKey: issuer.keyPair.privateKey,
