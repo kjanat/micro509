@@ -1253,6 +1253,34 @@ describe('parse', () => {
 		}
 	});
 
+	it('degrades non-conformant otherName shapes to unknown entries', async () => {
+		const srvName = tlv(0xa0, tlv(0x16, new TextEncoder().encode('_xmpp.example.com')));
+		const shapes = [
+			// type-id is not an OBJECT IDENTIFIER
+			concatBytes([integerFromNumber(1), srvName]),
+			// two children, but the type-id is not id-on-dnsSRV
+			concatBytes([objectIdentifier('1.2.3.4.5'), tlv(0xa0, tlv(0x16, Uint8Array.of(0x61)))]),
+			// SRV-ID type-id but the value is not wrapped in [0]
+			concatBytes([objectIdentifier(OIDS.idOnDnsSrv), tlv(0x81, Uint8Array.of(0x61))]),
+			// SRV-ID [0] wrapping two elements rather than one IA5String
+			concatBytes([
+				objectIdentifier(OIDS.idOnDnsSrv),
+				tlv(0xa0, concatBytes([tlv(0x16, Uint8Array.of(0x61)), tlv(0x16, Uint8Array.of(0x62))])),
+			]),
+		];
+		const { certificate } = await createSelfSignedCertificate({
+			subject: { commonName: 'othername-degrade.example' },
+			extensions: {
+				subjectAltNames: shapes.map((value) => ({ type: 'unknown' as const, tag: 0xa0, value })),
+			},
+		});
+		const parsed = unwrap(parseCertificatePem(certificate.pem));
+		expect(parsed.subjectAltNames).toHaveLength(shapes.length);
+		for (const san of parsed.subjectAltNames ?? []) {
+			expect(san).toMatchObject({ type: 'unknown', tag: 0xa0 });
+		}
+	});
+
 	it('parses IPv6 name constraints', async () => {
 		// IPv6 constraint is 32 bytes: 16 for address + 16 for mask
 		const ipv6Address = new Uint8Array(16);
