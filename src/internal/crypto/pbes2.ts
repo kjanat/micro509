@@ -169,18 +169,20 @@ export async function decryptPbes2(
 export function encodePbes2AlgorithmIdentifier(parameters: Pbes2Parameters): Uint8Array {
 	const encryption = resolveEncryptionProfile(parameters.cipher);
 	const prf = resolvePrfProfile(parameters.prf);
+	const pbkdf2Params = [
+		octetString(parameters.salt),
+		integerFromNumber(parameters.iterations),
+		// keyLength is OPTIONAL (kept); prf AlgorithmIdentifier DEFAULT
+		// algid-hmacWithSHA1, which X.690 §11.5 forbids encoding.
+		integerFromNumber(encryption.keyLengthBytes),
+		...(parameters.prf === 'HMAC-SHA-1'
+			? []
+			: [sequence([objectIdentifier(prf.oid), nullValue()])]),
+	];
 	return sequence([
 		objectIdentifier(OIDS.pbes2),
 		sequence([
-			sequence([
-				objectIdentifier(OIDS.pbkdf2),
-				sequence([
-					octetString(parameters.salt),
-					integerFromNumber(parameters.iterations),
-					integerFromNumber(encryption.keyLengthBytes),
-					sequence([objectIdentifier(prf.oid), nullValue()]),
-				]),
-			]),
+			sequence([objectIdentifier(OIDS.pbkdf2), sequence(pbkdf2Params)]),
 			sequence([objectIdentifier(encryption.oid), octetString(parameters.iv)]),
 		]),
 	]);
