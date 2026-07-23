@@ -17,6 +17,7 @@ import {
 	hexToBytes,
 	parseTime,
 	requireElement,
+	toHex,
 } from '#micro509/internal/asn1/asn1';
 import {
 	assertDerMaxDepth,
@@ -779,16 +780,15 @@ describe('extensions encoding', () => {
 	});
 
 	it('encodes a genuine custom policy qualifier OID as raw DER', () => {
-		expect(() =>
-			encodeCertificatePolicies([
-				{
-					policyIdentifier: '1.2.3.4',
-					policyQualifiers: [
-						{ type: 'oid', oid: '1.3.6.1.4.1.99999.1', qualifierDer: new Uint8Array([0x05, 0x00]) },
-					],
-				},
-			]),
-		).not.toThrow();
+		const der = encodeCertificatePolicies([
+			{
+				policyIdentifier: '1.2.3.4',
+				policyQualifiers: [
+					{ type: 'oid', oid: '1.3.6.1.4.1.99999.1', qualifierDer: new Uint8Array([0x05, 0x00]) },
+				],
+			},
+		]);
+		expect(toHex(der)).toContain(`${toHex(objectIdentifier('1.3.6.1.4.1.99999.1'))}0500`);
 	});
 
 	it('rejects a DisplayText outside SIZE (1..200)', () => {
