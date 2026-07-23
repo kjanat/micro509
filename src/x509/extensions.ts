@@ -34,6 +34,7 @@ import {
 	encodeDistributionPointReasonFlagsContent,
 	encodeKeyUsageExtension,
 } from '#micro509/internal/x509/extension-bits';
+import { throwExtensionEncoderError } from '#micro509/internal/x509/extension-errors';
 import type {
 	ExtensionDefinition,
 	ExtensionRegistryContext,
@@ -54,7 +55,6 @@ import {
 	SUBJECT_ALT_NAME_EXTENSION_DEFINITION,
 	SUBJECT_KEY_IDENTIFIER_EXTENSION_DEFINITION,
 } from '#micro509/internal/x509/extension-registry';
-import { throwExtensionEncoderError } from '#micro509/internal/x509/extension-errors';
 import { GENERAL_NAME_WIRE_TAGS } from '#micro509/internal/x509/general-name-tags';
 import type { RelativeDistinguishedNameInput } from '#micro509/x509/name';
 import { encodeRelativeDistinguishedName } from '#micro509/x509/name';
