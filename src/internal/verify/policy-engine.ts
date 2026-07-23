@@ -106,12 +106,13 @@ export function createPolicyValidationState(
 export function evaluatePolicyChain(
 	chain: readonly ParsedCertificate[],
 	state: PolicyValidationState,
+	anchorInChain = true,
 ): PolicyValidationResult {
 	if (chain.length === 0) {
 		throw new RangeError('policy validation requires at least one certificate');
 	}
-	processPolicyState(chain, state);
-	const outcome = derivePolicyValidationOutcome(chain, state);
+	processPolicyState(chain, state, anchorInChain);
+	const outcome = derivePolicyValidationOutcome(state);
 	if (state.explicitPolicy === 0 && outcome.userConstrainedPolicies.length === 0) {
 		return {
 			ok: false,
@@ -173,10 +174,16 @@ function policyNodeKey(depth: number, validPolicy: string): string {
 	return `${String(depth)}:${validPolicy}`;
 }
 
-/** Iterates root-to-leaf (skipping root), applying each certificate's policies to the state. */
+/**
+ * Applies each path certificate's policies to the state, top CA first. When
+ * `anchorInChain` is true the terminal certificate is the trust anchor and is
+ * excluded; a bare anchor leaves the terminal certificate a path certificate
+ * that must be processed.
+ */
 function processPolicyState(
 	chain: readonly ParsedCertificate[],
 	state: PolicyValidationState,
+	anchorInChain: boolean,
 ): void {
 	if (chain.length === 1) {
 		const certificate = chain[0];
@@ -188,8 +195,8 @@ function processPolicyState(
 		processPolicyCertificate(state, certificate, 1, true);
 		return;
 	}
-	const leafDepth = chain.length - 1;
-	for (let index = chain.length - 2; index >= 0; index -= 1) {
+	const leafDepth = anchorInChain ? chain.length - 1 : chain.length;
+	for (let index = leafDepth - 1; index >= 0; index -= 1) {
 		const certificate = chain[index];
 		if (certificate === undefined) {
 			throw new Error(
@@ -202,11 +209,8 @@ function processPolicyState(
 }
 
 /** Extracts the authority- and user-constrained policy sets from the completed graph (RFC 9618 §5.5 step (g)). */
-function derivePolicyValidationOutcome(
-	chain: readonly ParsedCertificate[],
-	state: PolicyValidationState,
-): PolicyValidationOutcome {
-	const authority = collectAuthorityConstrainedPolicies(chain, state.validPolicyGraph);
+function derivePolicyValidationOutcome(state: PolicyValidationState): PolicyValidationOutcome {
+	const authority = collectAuthorityConstrainedPolicies(state.validPolicyGraph);
 	return {
 		authorityConstrainedPolicies: [...authority.values()].sort(comparePolicies),
 		userConstrainedPolicies: deriveUserConstrainedPolicies(authority, state.initialPolicySet),
@@ -221,35 +225,37 @@ function derivePolicyValidationOutcome(
  * the leaf, so the whole graph is the final tree.
  */
 function collectAuthorityConstrainedPolicies(
-	chain: readonly ParsedCertificate[],
 	graph: PolicyGraph | null,
 ): ReadonlyMap<string, ConstrainedPolicy> {
-	const authority = new Map<string, ConstrainedPolicy>();
 	if (graph === null) {
-		return authority;
+		return new Map<string, ConstrainedPolicy>();
 	}
+	const qualifiersByOid = new Map<string, PolicyQualifierInfo[]>();
+	const record = (node: PolicyGraphNode): void => {
+		const collected = qualifiersByOid.get(node.validPolicy) ?? [];
+		collected.push(...gatherLineageQualifiers(graph, node));
+		qualifiersByOid.set(node.validPolicy, collected);
+	};
 	for (const depthNodes of graph.nodesByDepth) {
 		for (const node of depthNodes.values()) {
 			if (node.validPolicy === OIDS.anyPolicy || node.parentKeys.size !== 1) {
 				continue;
 			}
 			if (getSingleParent(graph, node)?.validPolicy === OIDS.anyPolicy) {
-				authority.set(
-					node.validPolicy,
-					buildConstrainedPolicy(node.validPolicy, node.qualifierSet),
-				);
+				record(node);
 			}
 		}
 	}
-	const leafDepth = Math.max(1, chain.length - 1);
+	const leafDepth = graph.nodesByDepth.length - 1;
 	const leafAnyPolicy = graph.nodesByDepth[leafDepth]?.get(
 		policyNodeKey(leafDepth, OIDS.anyPolicy),
 	);
 	if (leafAnyPolicy !== undefined) {
-		authority.set(
-			OIDS.anyPolicy,
-			buildConstrainedPolicy(OIDS.anyPolicy, leafAnyPolicy.qualifierSet),
-		);
+		record(leafAnyPolicy);
+	}
+	const authority = new Map<string, ConstrainedPolicy>();
+	for (const [oid, qualifiers] of qualifiersByOid) {
+		authority.set(oid, buildConstrainedPolicy(oid, dedupeQualifiers(qualifiers)));
 	}
 	return authority;
 }
@@ -258,6 +264,63 @@ function collectAuthorityConstrainedPolicies(
 function getSingleParent(graph: PolicyGraph, node: PolicyGraphNode): PolicyGraphNode | undefined {
 	const parentKey = [...node.parentKeys][0];
 	return parentKey === undefined ? undefined : getPolicyGraphNode(graph, parentKey);
+}
+
+/** RFC 9618 §5.5 (g)(4)(ii): qualifiers from a node, its ancestors, and its descendants. */
+function gatherLineageQualifiers(
+	graph: PolicyGraph,
+	node: PolicyGraphNode,
+): readonly PolicyQualifierInfo[] {
+	const qualifiers: PolicyQualifierInfo[] = [...(node.qualifierSet ?? [])];
+	collectDirectionalQualifiers(graph, node.parentKeys, (visited) => visited.parentKeys, qualifiers);
+	collectDirectionalQualifiers(graph, node.childKeys, (visited) => visited.childKeys, qualifiers);
+	return qualifiers;
+}
+
+/** Follows one edge direction transitively, appending each visited node's qualifiers. */
+function collectDirectionalQualifiers(
+	graph: PolicyGraph,
+	startKeys: ReadonlySet<string>,
+	next: (node: PolicyGraphNode) => ReadonlySet<string>,
+	out: PolicyQualifierInfo[],
+): void {
+	const visited = new Set<string>();
+	const stack = [...startKeys];
+	while (stack.length > 0) {
+		const key = stack.pop();
+		if (key === undefined || visited.has(key)) {
+			continue;
+		}
+		visited.add(key);
+		const node = getPolicyGraphNode(graph, key);
+		if (node === undefined) {
+			continue;
+		}
+		if (node.qualifierSet !== undefined) {
+			out.push(...node.qualifierSet);
+		}
+		for (const nextKey of next(node)) {
+			stack.push(nextKey);
+		}
+	}
+}
+
+/** Deduplicates qualifiers by value, returning `undefined` when none remain. */
+function dedupeQualifiers(
+	qualifiers: readonly PolicyQualifierInfo[],
+): readonly PolicyQualifierInfo[] | undefined {
+	const seen = new Set<string>();
+	const unique: PolicyQualifierInfo[] = [];
+	for (const qualifier of qualifiers) {
+		const key = JSON.stringify(qualifier, (_field, value) =>
+			value instanceof Uint8Array ? Array.from(value) : value,
+		);
+		if (!seen.has(key)) {
+			seen.add(key);
+			unique.push(qualifier);
+		}
+	}
+	return unique.length === 0 ? undefined : unique;
 }
 
 /**

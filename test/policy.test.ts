@@ -560,4 +560,70 @@ describe('policy fixtures', () => {
 			},
 		});
 	});
+
+	it('aggregates policy qualifiers from a selected authority policy and its descendants', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Qualifier Root' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 1 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const intermediateKeys = await generateKeyPair();
+		const intermediate = await createCertificate({
+			issuer: { commonName: 'Qualifier Root' },
+			subject: { commonName: 'Qualifier Intermediate' },
+			publicKey: intermediateKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+				certificatePolicies: [
+					{
+						policyIdentifier: OIDS.anyPolicy,
+						policyQualifiers: [{ type: 'cps', uri: 'https://ca.example/cps' }],
+					},
+				],
+				policyMappings: [{ issuerDomainPolicy: '1.2.3.4', subjectDomainPolicy: '1.2.3.5' }],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Qualifier Intermediate' },
+			subject: { commonName: 'qualifier-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: intermediateKeys.privateKey,
+			issuerPublicKey: intermediateKeys.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				certificatePolicies: [
+					{
+						policyIdentifier: '1.2.3.5',
+						policyQualifiers: [{ type: 'cps', uri: 'https://leaf.example/cps' }],
+					},
+				],
+			},
+		});
+
+		const result = await validateCandidatePath({
+			chain: [
+				unwrap(parseCertificatePem(leaf.pem)),
+				unwrap(parseCertificatePem(intermediate.pem)),
+				unwrap(parseCertificatePem(root.certificate.pem)),
+			],
+			initialPolicySet: ['1.2.3.4'],
+		});
+		expect(result.ok).toBe(true);
+		if (!result.ok) {
+			throw new Error('expected policy validation to succeed');
+		}
+		const authority = result.value.policyValidation.authorityConstrainedPolicies.find(
+			(policy) => policy.policyIdentifier === '1.2.3.4',
+		);
+		expect(authority?.policyQualifiers ?? []).toContainEqual({
+			type: 'cps',
+			uri: 'https://leaf.example/cps',
+		});
+	});
 });

@@ -73,7 +73,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `1.2.3.4` to `1.2.3.5` reported `authorityConstrainedPolicies` of `1.2.3.5`
   where the spec requires `1.2.3.4` (NIST PKITS 4.10.1), so a chain validated
   against the mapped policy instead of the authority's. `userConstrainedPolicies`
-  now follows §5.5(g)(5)-(6) from the corrected set.
+  now follows §5.5(g)(5)-(6) from the corrected set. Policy validation also
+  processes the terminal certificate when a bare trust anchor is used: a path
+  built to an out-of-band anchor ends at a real CA, and skipping it let a leaf
+  policy satisfy `initialPolicySet` even when that CA omitted or contradicted
+  the policy. `authorityConstrainedPolicies` now aggregates each policy's
+  qualifiers from its node, ancestors, and descendants per §5.5(g)(4)(ii)
+  rather than reporting one arbitrary node's set.
   (https://github.com/kjanat/micro509/pull/75)
 
 ## [0.12.0] - 2026-07-21
