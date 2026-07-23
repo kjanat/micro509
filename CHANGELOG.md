@@ -24,9 +24,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   full accessLocation RFC 5280 §4.2.2.1 defines. The parser threw
   `Unsupported authorityInfoAccess location tag` for any location that was not a
   URI, so a certificate carrying a directoryName or dNSName accessLocation (both
-  conformant) failed to parse entirely. A URI location is now
-  `{ type: 'uri', value }`; OCSP responder discovery reads only URI locations.
+  conformant) failed to parse entirely. An OCSP entry requires a URI location
+  (its discovery reads only URIs); `directoryName` is defined for `caIssuers`,
+  and other GeneralName forms are syntactically representable.
   (https://github.com/kjanat/micro509/pull/78)
+
+### Fixed
+
+- A `directoryName` SubjectAltName or name constraint now encodes the complete
+  Name TLV inside `[4]`, per RFC 5280 §4.2.1.6 (Name is an untagged CHOICE, so
+  `[4]` is EXPLICIT). The encoder stripped the Name's SEQUENCE header, emitting
+  `a4 12 31 10 ...` where OpenSSL emits `a4 14 30 12 31 10 ...`.
+- An `otherName` SubjectAltName now decodes with the type-id and value as the
+  direct children of `[0]`, per RFC 5280 §4.2.1.6 (`otherName [0]` is IMPLICIT,
+  so `[0]` replaces the SEQUENCE tag). The parser required an inner SEQUENCE, so
+  any real `otherName` (an SRV-ID, a Microsoft UPN) failed the whole certificate
+  parse; the SRV-ID encoder emitted the same non-conformant nesting. A
+  structurally valid `otherName` with an unsupported type is preserved as
+  `{ type: 'unknown' }`, but a malformed `otherName` envelope or a malformed
+  value of a recognised `id-on-dnsSRV` is rejected rather than erased to
+  `unknown`. Path validation rejects a critical `subjectAltName` carrying a
+  GeneralName the verifier cannot interpret (RFC 5280 §4.2), while a
+  non-critical one keeps the unknown entry.
+  (https://github.com/kjanat/micro509/pull/77)
+- OCSP responses now encode `ResponderID` `byKey` as `[2]` EXPLICIT wrapping an
+  OCTET STRING and every time field as GeneralizedTime, per RFC 6960 Appendix
+  B.1. The `byKey` responder was written as `[2]` IMPLICIT over the raw hash and
+  the times as UTCTime, so OpenSSL and Go's `crypto/ocsp` could not parse a
+  response this library produced. The parser reads the EXPLICIT form and
+  requires the `byKey` hash to be a 20-byte SHA-1 digest. Embedded certificates
+  are wrapped in the `certs [0] EXPLICIT SEQUENCE OF Certificate` the field's
+  syntax requires rather than concatenated, so a response with `includedCertificates`
+  is parseable. An end-to-end differential test confirms OpenSSL accepts a
+  micro509-produced response.
+  (https://github.com/kjanat/micro509/pull/76)
+  > > > > > > > master
 
 ## [0.13.0] - 2026-07-23
 

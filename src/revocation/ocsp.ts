@@ -26,7 +26,7 @@ import {
 	concatBytes,
 	DEFAULT_MAX_DER_DEPTH,
 	explicitContext,
-	implicitPrimitiveContext,
+	generalizedTime,
 	integer,
 	nullValue,
 	objectIdentifier,
@@ -35,7 +35,6 @@ import {
 	readRootElement,
 	readSequenceChildren,
 	sequence,
-	time,
 	tlv,
 } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
@@ -782,8 +781,8 @@ export async function createOcspResponse(
 		extractSubjectPublicKeyBytes(signerCertificate.subjectPublicKeyInfoDer),
 	);
 	const responseDataFields: Uint8Array[] = [
-		implicitPrimitiveContext(2, responderKeyHash),
-		time(producedAt),
+		explicitContext(2, octetString(responderKeyHash)),
+		generalizedTime(producedAt),
 		sequence(responses),
 	];
 	if (input.nonce !== undefined) {
@@ -808,8 +807,9 @@ export async function createOcspResponse(
 		bitString(signature),
 	];
 	if (includedCertificates.length > 0) {
+		// certs [0] EXPLICIT SEQUENCE OF Certificate (RFC 6960 §4.2.1).
 		basicResponseFields.push(
-			explicitContext(0, concatBytes(includedCertificates.map((certificate) => certificate.der))),
+			explicitContext(0, sequence(includedCertificates.map((certificate) => certificate.der))),
 		);
 	}
 	const basicResponse = sequence(basicResponseFields);
@@ -1568,8 +1568,10 @@ async function encodeSingleResponse(
 	return sequence([
 		certId,
 		certStatus,
-		time(input.thisUpdate ?? new Date()),
-		...(input.nextUpdate === undefined ? [] : [explicitContext(0, time(input.nextUpdate))]),
+		generalizedTime(input.thisUpdate ?? new Date()),
+		...(input.nextUpdate === undefined
+			? []
+			: [explicitContext(0, generalizedTime(input.nextUpdate))]),
 	]);
 }
 
@@ -1581,7 +1583,9 @@ function encodeOcspCertStatus(input: CreateOcspSingleResponseInput): Uint8Array 
 		case 'unknown':
 			return tlv(0x82, new Uint8Array());
 		case 'revoked': {
-			const revokedFields: Uint8Array[] = [time(input.revokedAt ?? input.thisUpdate ?? new Date())];
+			const revokedFields: Uint8Array[] = [
+				generalizedTime(input.revokedAt ?? input.thisUpdate ?? new Date()),
+			];
 			if (input.revocationReasonCode !== undefined) {
 				revokedFields.push(
 					explicitContext(0, tlv(0x0a, Uint8Array.of(input.revocationReasonCode))),
@@ -1747,11 +1751,21 @@ function parseOcspRevocationReason(
 /** Decodes a ResponderID from its context-tagged ASN.1 element (byName [1] or byKeyHash [2]). */
 function parseOcspResponderId(source: Uint8Array, element: DerElement): ParsedOcspResponderId {
 	switch (element.tag) {
-		case 0x82:
-			if (element.value.length === 0) {
-				throw new Error('ResponderID byKeyHash must not be empty');
+		case 0xa2: {
+			const inner = childrenOf(source, element);
+			if (inner.length !== 1) {
+				throw new Error('ResponderID byKey must wrap exactly one OCTET STRING');
 			}
-			return { type: 'byKeyHash', keyHashHex: toHex(element.value) };
+			const keyHash = requireElement(inner[0], 'ResponderID byKey');
+			if (keyHash.tag !== 0x04) {
+				throw new Error('ResponderID byKey must wrap an OCTET STRING');
+			}
+			// KeyHash is the SHA-1 hash of the responder's public key (RFC 6960 §4.2.1).
+			if (keyHash.value.length !== 20) {
+				throw new Error('ResponderID byKey must be a 20-byte SHA-1 KeyHash');
+			}
+			return { type: 'byKeyHash', keyHashHex: toHex(keyHash.value) };
+		}
 		case 0xa1:
 			if (childrenOf(source, element).length !== 1) {
 				throw new Error('ResponderID byName must wrap exactly one Name');
@@ -1980,8 +1994,14 @@ function parseEmbeddedCertificates(
 	element: DerElement,
 ): readonly ParsedCertificate[] {
 	const certificates: ParsedCertificate[] = [];
-	let offset = element.start;
-	while (offset < element.end) {
+	// certs [0] EXPLICIT SEQUENCE OF Certificate (RFC 6960 §4.2.1): the single
+	// child of [0] is the SEQUENCE whose elements are the certificates.
+	const sequenceElement = childrenOf(source, element)[0];
+	if (sequenceElement === undefined || sequenceElement.tag !== 0x30) {
+		throw new Error('Malformed BasicOCSPResponse certs');
+	}
+	let offset = sequenceElement.start;
+	while (offset < sequenceElement.end) {
 		const child = readElement(source, offset);
 		certificates.push(parseCertificateDerOrThrow(source.slice(offset, child.end)));
 		offset = child.end;

@@ -2093,35 +2093,41 @@ function parseGeneralName(source: Uint8Array, element: DerElement): GeneralName 
 	}
 }
 
-/** Attempt to decode an otherName [0] as a known type (currently only SRV-ID). */
+/**
+ * Decode an otherName [0] as a known type (currently only SRV-ID).
+ *
+ * `otherName [0] OtherName` is in the IMPLICIT-TAGS module, so the [0] tag
+ * replaces OtherName's SEQUENCE tag: the type-id and `value [0] EXPLICIT` are
+ * the direct children, with no inner SEQUENCE. A malformed envelope, or a
+ * malformed payload of a recognised OID, throws. A structurally valid OtherName
+ * with an unsupported OID returns `undefined`, so the caller preserves it as
+ * `{ type: 'unknown' }`.
+ */
 function parseOtherName(source: Uint8Array, element: DerElement): SubjectAltName | undefined {
-	const otherNameElements = childrenOf(source, element);
-	if (otherNameElements.length !== 1) {
-		throw new Error('otherName must contain exactly one SEQUENCE');
-	}
-	const otherNameSequence = requireElement(otherNameElements[0], 'otherName sequence');
-	const otherNameChildren = childrenOf(source, otherNameSequence);
-	if (otherNameChildren.length !== 2) {
-		throw new Error('otherName must contain exactly type-id and value');
-	}
-	const typeId = requireElement(otherNameChildren[0], 'otherName type-id');
-	const valueElement = requireElement(otherNameChildren[1], 'otherName value');
-	const typeIdOid = decodeObjectIdentifier(typeId.value);
-	if (typeIdOid !== OIDS.idOnDnsSrv) {
-		return undefined;
-	}
-	if (valueElement.tag !== 0xa0) {
-		throw new Error('SRV-ID otherName value must use explicit [0]');
+	const children = childrenOf(source, element);
+	const typeId = children[0];
+	const valueElement = children[1];
+	if (
+		children.length !== 2 ||
+		typeId === undefined ||
+		valueElement === undefined ||
+		typeId.tag !== 0x06 ||
+		valueElement.tag !== 0xa0
+	) {
+		throw new Error('Malformed otherName');
 	}
 	const valueChildren = childrenOf(source, valueElement);
-	if (valueChildren.length !== 1) {
-		throw new Error('SRV-ID otherName value must contain exactly one IA5String');
+	const value = valueChildren[0];
+	if (valueChildren.length !== 1 || value === undefined) {
+		throw new Error('otherName value [0] must wrap exactly one element');
 	}
-	const srvNameElement = requireElement(valueChildren[0], 'SRV-ID IA5String');
-	if (srvNameElement.tag !== 0x16) {
-		throw new Error('SRV-ID otherName value must be an IA5String');
+	if (decodeObjectIdentifier(typeId.value) !== OIDS.idOnDnsSrv) {
+		return undefined;
 	}
-	return { type: 'srv', value: decodeString(srvNameElement.tag, srvNameElement.value) };
+	if (value.tag !== 0x16 || value.value.length === 0) {
+		throw new Error('SRV-ID otherName must wrap a non-empty IA5String');
+	}
+	return { type: 'srv', value: decodeString(value.tag, value.value) };
 }
 
 /** @internal Decode the Name Constraints extension value. */
@@ -2261,19 +2267,11 @@ function parseNameConstraintGeneralName(
 	throw new Error(`Unsupported name constraint GeneralName tag: ${String(element.tag)}`);
 }
 
-/**
- * Extracts the Name SEQUENCE from an implicitly-tagged directoryName [4].
- *
- * Handles two encoding styles found in the wild:
- * - Proper implicit: [4] replaces SEQUENCE tag, content is RDN SETs directly → wrap with 0x30
- * - Explicit-like: [4] wraps entire SEQUENCE, content starts with 0x30 → return content as-is
- */
+/** Returns the Name TLV from a directoryName [4]. RFC 5280 makes [4] EXPLICIT, but some certificates encode the RDNSequence content directly. */
 function rebuildDirectoryNameFromImplicit(element: DerElement, _source: Uint8Array): Uint8Array {
-	// If content already starts with SEQUENCE tag, it's explicit-style encoding
 	if (element.value.length > 0 && element.value[0] === 0x30) {
 		return new Uint8Array(element.value);
 	}
-	// Otherwise, wrap content with SEQUENCE tag (true implicit encoding)
 	const lengthEncoded = encodeLength(element.value.length);
 	const result = new Uint8Array(1 + lengthEncoded.length + element.value.length);
 	result[0] = 0x30;

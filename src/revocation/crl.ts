@@ -2105,20 +2105,11 @@ function concatGeneralNames(names: readonly GeneralName[]): Uint8Array {
 	return concatBytes(names.map((name) => encodeSubjectAltName(name)));
 }
 
-/** Re-wraps an implicitly-tagged directoryName as an explicit SEQUENCE (tag 0x30). */
-/**
- * Extracts the Name SEQUENCE from an implicitly-tagged directoryName [4].
- *
- * Handles two encoding styles found in the wild:
- * - Proper implicit: [4] replaces SEQUENCE tag, content is RDN SETs directly → wrap with 0x30
- * - Explicit-like: [4] wraps entire SEQUENCE, content starts with 0x30 → return content as-is
- */
+/** Returns the Name TLV from a directoryName [4]. RFC 5280 makes [4] EXPLICIT, but some certificates encode the RDNSequence content directly. */
 function rebuildDirectoryNameFromImplicit(element: DerElement): Uint8Array {
-	// If content already starts with SEQUENCE tag, it's explicit-style encoding
 	if (element.value.length > 0 && element.value[0] === 0x30) {
 		return new Uint8Array(element.value);
 	}
-	// Otherwise, wrap content with SEQUENCE tag (true implicit encoding)
 	return tlv(0x30, element.value);
 }
 
