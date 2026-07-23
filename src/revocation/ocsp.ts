@@ -26,7 +26,7 @@ import {
 	concatBytes,
 	DEFAULT_MAX_DER_DEPTH,
 	explicitContext,
-	implicitPrimitiveContext,
+	generalizedTime,
 	integer,
 	nullValue,
 	objectIdentifier,
@@ -35,7 +35,6 @@ import {
 	readRootElement,
 	readSequenceChildren,
 	sequence,
-	time,
 	tlv,
 } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
@@ -782,8 +781,8 @@ export async function createOcspResponse(
 		extractSubjectPublicKeyBytes(signerCertificate.subjectPublicKeyInfoDer),
 	);
 	const responseDataFields: Uint8Array[] = [
-		implicitPrimitiveContext(2, responderKeyHash),
-		time(producedAt),
+		explicitContext(2, octetString(responderKeyHash)),
+		generalizedTime(producedAt),
 		sequence(responses),
 	];
 	if (input.nonce !== undefined) {
@@ -1568,8 +1567,10 @@ async function encodeSingleResponse(
 	return sequence([
 		certId,
 		certStatus,
-		time(input.thisUpdate ?? new Date()),
-		...(input.nextUpdate === undefined ? [] : [explicitContext(0, time(input.nextUpdate))]),
+		generalizedTime(input.thisUpdate ?? new Date()),
+		...(input.nextUpdate === undefined
+			? []
+			: [explicitContext(0, generalizedTime(input.nextUpdate))]),
 	]);
 }
 
@@ -1581,7 +1582,9 @@ function encodeOcspCertStatus(input: CreateOcspSingleResponseInput): Uint8Array 
 		case 'unknown':
 			return tlv(0x82, new Uint8Array());
 		case 'revoked': {
-			const revokedFields: Uint8Array[] = [time(input.revokedAt ?? input.thisUpdate ?? new Date())];
+			const revokedFields: Uint8Array[] = [
+				generalizedTime(input.revokedAt ?? input.thisUpdate ?? new Date()),
+			];
 			if (input.revocationReasonCode !== undefined) {
 				revokedFields.push(
 					explicitContext(0, tlv(0x0a, Uint8Array.of(input.revocationReasonCode))),
@@ -1747,11 +1750,20 @@ function parseOcspRevocationReason(
 /** Decodes a ResponderID from its context-tagged ASN.1 element (byName [1] or byKeyHash [2]). */
 function parseOcspResponderId(source: Uint8Array, element: DerElement): ParsedOcspResponderId {
 	switch (element.tag) {
-		case 0x82:
-			if (element.value.length === 0) {
-				throw new Error('ResponderID byKeyHash must not be empty');
+		case 0xa2: {
+			const inner = childrenOf(source, element);
+			if (inner.length !== 1) {
+				throw new Error('ResponderID byKey must wrap exactly one OCTET STRING');
 			}
-			return { type: 'byKeyHash', keyHashHex: toHex(element.value) };
+			const keyHash = requireElement(inner[0], 'ResponderID byKey');
+			if (keyHash.tag !== 0x04) {
+				throw new Error('ResponderID byKey must wrap an OCTET STRING');
+			}
+			if (keyHash.value.length === 0) {
+				throw new Error('ResponderID byKey must not be empty');
+			}
+			return { type: 'byKeyHash', keyHashHex: toHex(keyHash.value) };
+		}
 		case 0xa1:
 			if (childrenOf(source, element).length !== 1) {
 				throw new Error('ResponderID byName must wrap exactly one Name');

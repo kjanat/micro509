@@ -18,6 +18,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- OCSP responses now encode `ResponderID` `byKey` as `[2]` EXPLICIT wrapping an
+  OCTET STRING and every time field as GeneralizedTime, per RFC 6960 Appendix
+  B.1. The `byKey` responder was written as `[2]` IMPLICIT over the raw hash and
+  the times as UTCTime, so OpenSSL and Go's `crypto/ocsp` could not parse a
+  response this library produced. The parser reads the EXPLICIT form.
+  (https://github.com/kjanat/micro509/pull/76)
+
 ## [0.13.0] - 2026-07-23
 
 A public `micro509/der` entrypoint, and RFC-conformance fixes across path
