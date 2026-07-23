@@ -840,6 +840,71 @@ describe('chain verification', () => {
 		}
 	});
 
+	it('rejects a chain whose critical subjectAltName carries an unknown GeneralName', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Critical SAN CA' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign'] },
+		});
+		const leafKeys = await generateKeyPair();
+		// A conformant but unsupported otherName (Microsoft UPN) in a critical SAN.
+		const upnOtherName = tlv(
+			0xa0,
+			Uint8Array.of(
+				...objectIdentifier('1.3.6.1.4.1.311.20.2.3'),
+				...tlv(0xa0, utf8String('user@example.com')),
+			),
+		);
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Critical SAN CA' },
+			subject: { commonName: 'critical-san.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				customExtensions: [
+					{ oid: OIDS.subjectAltName, critical: true, value: sequence([upnOtherName]) },
+				],
+			},
+		});
+		const result = await verifyCertificateChain({ leaf: leaf.pem, roots: [ca.certificate.pem] });
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.code).toBe('unrecognized_critical_extension');
+			expect(result.details?.actual).toBe(OIDS.subjectAltName);
+		}
+	});
+
+	it('accepts a chain whose non-critical subjectAltName carries an unknown GeneralName', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'NonCritical SAN CA' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign'] },
+		});
+		const leafKeys = await generateKeyPair();
+		const upnOtherName = tlv(
+			0xa0,
+			Uint8Array.of(
+				...objectIdentifier('1.3.6.1.4.1.311.20.2.3'),
+				...tlv(0xa0, utf8String('user@example.com')),
+			),
+		);
+		const leaf = await createCertificate({
+			issuer: { commonName: 'NonCritical SAN CA' },
+			subject: { commonName: 'noncritical-san.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				customExtensions: [
+					{ oid: OIDS.subjectAltName, critical: false, value: sequence([upnOtherName]) },
+				],
+			},
+		});
+		const result = await verifyCertificateChain({ leaf: leaf.pem, roots: [ca.certificate.pem] });
+		expect(result.ok).toBe(true);
+	});
+
 	it('allows chain with non-critical unknown extension', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'NonCritical Ext CA' },

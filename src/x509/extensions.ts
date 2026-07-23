@@ -1256,7 +1256,7 @@ function encodeNameConstraintForm(form: NameConstraintForm): Uint8Array {
 	}
 }
 
-/** Extract the content bytes from a hex-encoded DER SEQUENCE (strips the outer TLV). */
+/** Returns the complete Name TLV from a hex-encoded DER SEQUENCE, validating the root tag. */
 function readDirectoryNameTlv(derHex: string): Uint8Array {
 	const bytes = hexToBytes(derHex);
 	const element = readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH });

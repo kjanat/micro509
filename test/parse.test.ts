@@ -1162,7 +1162,10 @@ describe('parse', () => {
 		expect(parsed.subjectAltNames).toEqual([{ type: 'srv', value: '_imap.example.com' }]);
 	});
 
-	it('preserves unsupported otherName subjectAltName values as unknown entries', async () => {
+	it('preserves a conformant unsupported otherName OID as an unknown entry', async () => {
+		// A structurally valid OtherName (type-id + [0] EXPLICIT value) carrying an
+		// OID the parser does not recognise is preserved, not rejected — a Microsoft
+		// UPN here.
 		const { certificate } = await createSelfSignedCertificate({
 			subject: { commonName: 'unknown-othername.example' },
 			extensions: {
@@ -1170,7 +1173,10 @@ describe('parse', () => {
 					{
 						type: 'unknown',
 						tag: 0xa0,
-						value: sequence([objectIdentifier('1.2.3.4.5'), tlv(0xa0, integerFromNumber(7))]),
+						value: concatBytes([
+							objectIdentifier('1.3.6.1.4.1.311.20.2.3'),
+							tlv(0xa0, tlv(0x0c, new TextEncoder().encode('user@example.com'))),
+						]),
 					},
 				],
 			},
@@ -1204,80 +1210,35 @@ describe('parse', () => {
 		expect(parsed.subjectAltNames).toEqual([{ type: 'srv', value: '_xmpp.example.com' }]);
 	});
 
-	it('degrades a malformed SRV-ID otherName to an unknown entry', async () => {
-		const { certificate } = await createSelfSignedCertificate({
-			subject: { commonName: 'bad-srv-id.example' },
-			extensions: {
-				subjectAltNames: [
-					{
-						type: 'unknown',
-						tag: 0xa0,
-						value: concatBytes([
-							objectIdentifier(OIDS.idOnDnsSrv),
-							tlv(0xa0, integerFromNumber(7)),
-						]),
-					},
-				],
-			},
-		});
-
-		const parsed = unwrap(parseCertificatePem(certificate.pem));
-		expect(parsed.subjectAltNames).toHaveLength(1);
-		expect(parsed.subjectAltNames?.[0]).toMatchObject({ type: 'unknown', tag: 0xa0 });
-	});
-
-	it('degrades an SRV-ID otherName with trailing fields to an unknown entry', async () => {
-		const { certificate } = await createSelfSignedCertificate({
-			subject: { commonName: 'bad-srv-id-trailing.example' },
-			extensions: {
-				subjectAltNames: [
-					{
-						type: 'unknown',
-						tag: 0xa0,
-						value: concatBytes([
-							objectIdentifier(OIDS.idOnDnsSrv),
-							tlv(0xa0, tlv(0x16, new TextEncoder().encode('_xmpp.example.com'))),
-							integerFromNumber(7),
-						]),
-					},
-				],
-			},
-		});
-
-		{
-			const result = parseCertificatePem(certificate.pem);
-			expect(result.ok).toBe(true);
-			if (result.ok) {
-				expect(result.value.subjectAltNames?.[0]).toMatchObject({ type: 'unknown', tag: 0xa0 });
-			}
-		}
-	});
-
-	it('degrades non-conformant otherName shapes to unknown entries', async () => {
-		const srvName = tlv(0xa0, tlv(0x16, new TextEncoder().encode('_xmpp.example.com')));
-		const shapes = [
+	it('rejects a malformed otherName envelope or a malformed recognised SRV-ID', async () => {
+		const srvOid = objectIdentifier(OIDS.idOnDnsSrv);
+		const badShapes = [
 			// type-id is not an OBJECT IDENTIFIER
-			concatBytes([integerFromNumber(1), srvName]),
-			// two children, but the type-id is not id-on-dnsSRV
-			concatBytes([objectIdentifier('1.2.3.4.5'), tlv(0xa0, tlv(0x16, Uint8Array.of(0x61)))]),
-			// SRV-ID type-id but the value is not wrapped in [0]
-			concatBytes([objectIdentifier(OIDS.idOnDnsSrv), tlv(0x81, Uint8Array.of(0x61))]),
-			// SRV-ID [0] wrapping two elements rather than one IA5String
+			concatBytes([integerFromNumber(1), tlv(0xa0, tlv(0x16, Uint8Array.of(0x61)))]),
+			// value is not wrapped in [0] EXPLICIT
+			concatBytes([srvOid, tlv(0x81, Uint8Array.of(0x61))]),
+			// [0] wraps two elements rather than exactly one
 			concatBytes([
-				objectIdentifier(OIDS.idOnDnsSrv),
+				srvOid,
 				tlv(0xa0, concatBytes([tlv(0x16, Uint8Array.of(0x61)), tlv(0x16, Uint8Array.of(0x62))])),
 			]),
+			// three direct children (trailing field after the value)
+			concatBytes([srvOid, tlv(0xa0, tlv(0x16, Uint8Array.of(0x61))), integerFromNumber(7)]),
+			// recognised SRV-ID whose value is not an IA5String
+			concatBytes([srvOid, tlv(0xa0, integerFromNumber(7))]),
+			// recognised SRV-ID whose IA5String is empty
+			concatBytes([srvOid, tlv(0xa0, tlv(0x16, new Uint8Array()))]),
 		];
-		const { certificate } = await createSelfSignedCertificate({
-			subject: { commonName: 'othername-degrade.example' },
-			extensions: {
-				subjectAltNames: shapes.map((value) => ({ type: 'unknown' as const, tag: 0xa0, value })),
-			},
-		});
-		const parsed = unwrap(parseCertificatePem(certificate.pem));
-		expect(parsed.subjectAltNames).toHaveLength(shapes.length);
-		for (const san of parsed.subjectAltNames ?? []) {
-			expect(san).toMatchObject({ type: 'unknown', tag: 0xa0 });
+		for (const value of badShapes) {
+			const { certificate } = await createSelfSignedCertificate({
+				subject: { commonName: 'bad-othername.example' },
+				extensions: { subjectAltNames: [{ type: 'unknown', tag: 0xa0, value }] },
+			});
+			const result = parseCertificatePem(certificate.pem);
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.code).toBe('malformed');
+			}
 		}
 	});
 

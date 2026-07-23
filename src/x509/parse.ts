@@ -2097,38 +2097,40 @@ function parseGeneralName(source: Uint8Array, element: DerElement): GeneralName 
 }
 
 /**
- * Attempt to decode an otherName [0] as a known type (currently only SRV-ID).
+ * Decode an otherName [0] as a known type (currently only SRV-ID).
  *
  * `otherName [0] OtherName` is in the IMPLICIT-TAGS module, so the [0] tag
- * replaces OtherName's SEQUENCE tag: the contents are type-id and value
- * directly, with no inner SEQUENCE. Any shape this does not recognise returns
- * `undefined`, so the caller preserves it as `{ type: 'unknown' }`.
+ * replaces OtherName's SEQUENCE tag: the type-id and `value [0] EXPLICIT` are
+ * the direct children, with no inner SEQUENCE. A malformed envelope, or a
+ * malformed payload of a recognised OID, throws. A structurally valid OtherName
+ * with an unsupported OID returns `undefined`, so the caller preserves it as
+ * `{ type: 'unknown' }`.
  */
 function parseOtherName(source: Uint8Array, element: DerElement): SubjectAltName | undefined {
-	const otherNameChildren = childrenOf(source, element);
-	if (otherNameChildren.length !== 2) {
-		return undefined;
+	const children = childrenOf(source, element);
+	const typeId = children[0];
+	const valueElement = children[1];
+	if (
+		children.length !== 2 ||
+		typeId === undefined ||
+		valueElement === undefined ||
+		typeId.tag !== 0x06 ||
+		valueElement.tag !== 0xa0
+	) {
+		throw new Error('Malformed otherName');
 	}
-	const typeId = otherNameChildren[0];
-	const valueElement = otherNameChildren[1];
-	if (typeId === undefined || valueElement === undefined || typeId.tag !== 0x06) {
-		return undefined;
+	const valueChildren = childrenOf(source, valueElement);
+	const value = valueChildren[0];
+	if (valueChildren.length !== 1 || value === undefined) {
+		throw new Error('otherName value [0] must wrap exactly one element');
 	}
 	if (decodeObjectIdentifier(typeId.value) !== OIDS.idOnDnsSrv) {
 		return undefined;
 	}
-	if (valueElement.tag !== 0xa0) {
-		return undefined;
+	if (value.tag !== 0x16 || value.value.length === 0) {
+		throw new Error('SRV-ID otherName must wrap a non-empty IA5String');
 	}
-	const valueChildren = childrenOf(source, valueElement);
-	if (valueChildren.length !== 1) {
-		return undefined;
-	}
-	const srvNameElement = valueChildren[0];
-	if (srvNameElement === undefined || srvNameElement.tag !== 0x16) {
-		return undefined;
-	}
-	return { type: 'srv', value: decodeString(srvNameElement.tag, srvNameElement.value) };
+	return { type: 'srv', value: decodeString(value.tag, value.value) };
 }
 
 /** @internal Decode the Name Constraints extension value. */

@@ -28,9 +28,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   direct children of `[0]`, per RFC 5280 §4.2.1.6 (`otherName [0]` is IMPLICIT,
   so `[0]` replaces the SEQUENCE tag). The parser required an inner SEQUENCE, so
   any real `otherName` (an SRV-ID, a Microsoft UPN) failed the whole certificate
-  parse; the SRV-ID encoder emitted the same non-conformant nesting. An
-  unrecognised `otherName` shape now degrades to `{ type: 'unknown' }` instead
-  of throwing.
+  parse; the SRV-ID encoder emitted the same non-conformant nesting. A
+  structurally valid `otherName` with an unsupported type is preserved as
+  `{ type: 'unknown' }`, but a malformed `otherName` envelope or a malformed
+  value of a recognised `id-on-dnsSRV` is rejected rather than erased to
+  `unknown`. Path validation rejects a critical `subjectAltName` carrying a
+  GeneralName the verifier cannot interpret (RFC 5280 §4.2), while a
+  non-critical one keeps the unknown entry.
   (https://github.com/kjanat/micro509/pull/77)
 - OCSP responses now encode `ResponderID` `byKey` as `[2]` EXPLICIT wrapping an
   OCTET STRING and every time field as GeneralizedTime, per RFC 6960 Appendix

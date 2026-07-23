@@ -333,6 +333,28 @@ export async function validateMicro509OcspResponseWithOpenSsl(input: {
 	});
 }
 
+/**
+ * Renders a micro509-produced certificate with `openssl x509 -text`, proving the
+ * emitted DER (including SubjectAltName encodings) parses in OpenSSL.
+ */
+export async function renderCertificateWithOpenSsl(
+	certificatePem: string,
+): Promise<{ readonly accepted: boolean; readonly exitCode: number; readonly output: string }> {
+	return await withTempDir(async (directory) => {
+		const certificatePath = join(directory, 'certificate.pem');
+		await Bun.write(certificatePath, certificatePem);
+		// dprint-ignore
+		const result = await runOpenSsl([
+			'x509',
+			'-in', certificatePath,
+			'-noout',
+			'-text',
+			'-nameopt', 'RFC2253',
+		]);
+		return { accepted: result.exitCode === 0, exitCode: result.exitCode, output: mergeCommandOutput(result) };
+	});
+}
+
 export async function withTempDir<T>(fn: (directory: string) => Promise<T>): Promise<T> {
 	const directory = await mkdtemp(join(tmpdir(), 'micro509-openssl-'));
 	try {
