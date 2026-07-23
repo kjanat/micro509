@@ -22,6 +22,7 @@ import {
 	checkIdentityWithOpenSsl,
 	checkRevocationWithOpenSsl,
 	issueAndValidateOcspResponseWithOpenSsl,
+	readCertificateAiaWithOpenSsl,
 	readCertificateSanWithOpenSsl,
 	validateMicro509OcspResponseWithOpenSsl,
 	verifyChainWithOpenSsl,
@@ -300,6 +301,27 @@ describe.skipIf(!openSslAvailable || !differentialEnabled)('OpenSSL differential
 		expect(san).toContain('Diff Dir CA');
 		expect(san).toContain('SRVName');
 		expect(san).toContain('_xmpp.example.com');
+	});
+
+	it('OpenSSL parses a micro509 certificate with URI and directoryName AIA locations', async () => {
+		const issuerNameDer = toHex(encodeName([{ type: 'commonName', value: 'AIA Issuer CA' }]));
+		const { certificate } = await createSelfSignedCertificate({
+			subject: { commonName: 'aia-encode.example' },
+			extensions: {
+				authorityInfoAccess: [
+					{ method: 'ocsp', location: { type: 'uri', value: 'http://ocsp.example.test' } },
+					{ method: 'caIssuers', location: { type: 'directoryName', derHex: issuerNameDer } },
+				],
+			},
+		});
+		const openSsl = await readCertificateAiaWithOpenSsl(certificate.pem);
+		expect(openSsl.accepted).toBe(true);
+		// OpenSSL decodes the URI OCSP responder and the directoryName caIssuers.
+		const aia = openSsl.authorityInfoAccess ?? '';
+		expect(aia).toContain('http://ocsp.example.test');
+		expect(aia).toContain('CA Issuers');
+		expect(aia).toContain('DirName');
+		expect(aia).toContain('AIA Issuer CA');
 	});
 
 	it('OpenSSL accepts an OCSP response produced by micro509', async () => {

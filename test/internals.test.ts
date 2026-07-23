@@ -85,6 +85,7 @@ import {
 import { createPkcs12MacData, parsePkcs12MacDataOrThrow } from '#micro509/pkcs';
 import {
 	buildCertificateExtensions,
+	encodeAuthorityInfoAccess,
 	encodeCertificatePolicies,
 	encodeCrlDistributionPoints,
 	encodeNameConstraints,
@@ -684,6 +685,41 @@ describe('extensions encoding', () => {
 			value: Uint8Array.of(0x01, 0x02),
 		});
 		expect(result[0]).toBe(0x88);
+	});
+
+	it('encodeSubjectAltName rejects an unknown GeneralName with an invalid wire tag', () => {
+		// x400Address [3], ediPartyName [5], and registeredID [8] are valid but
+		// unsupported alternatives and round-trip as their own tag.
+		for (const tag of [0xa3, 0xa5, 0x88]) {
+			expect(encodeSubjectAltName({ type: 'unknown', tag, value: new Uint8Array() })[0]).toBe(tag);
+		}
+		// A universal INTEGER (0x02), an application-class tag (0x42), context [9]
+		// (0x89), and wrong constructedness (0xa2 dNSName) are not GeneralNames.
+		for (const tag of [0x02, 0x42, 0x89, 0xa2, 0x30]) {
+			expect(() =>
+				encodeSubjectAltName({ type: 'unknown', tag, value: Uint8Array.of(0x00) }),
+			).toThrow('Invalid GeneralName tag');
+		}
+	});
+
+	it('encodeSubjectAltName rejects a non-ASCII IA5String value', () => {
+		expect(() => encodeSubjectAltName({ type: 'dns', value: 'café.example' })).toThrow(
+			'Invalid IA5String',
+		);
+		expect(() => encodeSubjectAltName({ type: 'uri', value: 'http://café.example' })).toThrow(
+			'Invalid IA5String',
+		);
+	});
+
+	it('encodeAuthorityInfoAccess rejects a non-URI OCSP location wrapped in a custom OID', () => {
+		expect(() =>
+			encodeAuthorityInfoAccess([
+				{
+					method: { type: 'oid', value: OIDS.ocspAccessMethod },
+					location: { type: 'dns', value: 'ocsp.example' },
+				},
+			]),
+		).toThrow('OCSP location must be a URI');
 	});
 
 	it('buildCertificateExtensions throws on SPKI without subject public key bit string', () => {

@@ -2271,8 +2271,8 @@ describe('parse', () => {
 });
 
 describe('parse: coverage — error paths', () => {
-	it('parseAuthorityInfoAccess throws on non-URI location tag', async () => {
-		// Build AIA extension with dNSName (tag 0x82) instead of URI (tag 0x86)
+	it('parseAuthorityInfoAccess accepts a non-URI accessLocation GeneralName', async () => {
+		// RFC 5280 §4.2.2.1: accessLocation is a full GeneralName, not only a URI.
 		const ocspOid = '1.3.6.1.5.5.7.48.1'; // id-ad-ocsp
 		const aiaValue = sequence([
 			sequence([
@@ -2280,19 +2280,46 @@ describe('parse: coverage — error paths', () => {
 				tlv(0x82, new TextEncoder().encode('ocsp.example.com')), // dNSName, not URI
 			]),
 		]);
-		expect(async () => {
-			await createSelfSignedCertificate({
-				subject: { commonName: 'aia-test.example' },
-				extensions: {
-					customExtensions: [
-						{
-							oid: '1.3.6.1.5.5.7.1.1', // authorityInfoAccess
-							value: aiaValue,
-						},
-					],
-				},
-			}).then((cert) => unwrap(parseCertificatePem(cert.certificate.pem)));
-		}).toThrow('Unsupported authorityInfoAccess location tag');
+		const cert = await createSelfSignedCertificate({
+			subject: { commonName: 'aia-test.example' },
+			extensions: {
+				customExtensions: [{ oid: '1.3.6.1.5.5.7.1.1', value: aiaValue }],
+			},
+		});
+		const parsed = unwrap(parseCertificatePem(cert.certificate.pem));
+		expect(parsed.authorityInfoAccess).toEqual([
+			{ method: 'ocsp', location: { type: 'dns', value: 'ocsp.example.com' } },
+		]);
+	});
+
+	it('rejects an authorityInfoAccess location with an invalid GeneralName tag', async () => {
+		const caIssuers = '1.3.6.1.5.5.7.48.2';
+		for (const badLocation of [
+			tlv(0x02, Uint8Array.of(0x01)), // universal INTEGER
+			tlv(0x89, new TextEncoder().encode('x')), // context [9]
+			tlv(0xa2, tlv(0x82, new TextEncoder().encode('x'))), // dNSName with wrong constructedness
+		]) {
+			const aiaValue = sequence([sequence([objectIdentifier(caIssuers), badLocation])]);
+			const cert = await createSelfSignedCertificate({
+				subject: { commonName: 'bad-aia.example' },
+				extensions: { customExtensions: [{ oid: OIDS.authorityInfoAccess, value: aiaValue }] },
+			});
+			const result = parseCertificatePem(cert.certificate.pem);
+			expect(result.ok).toBe(false);
+		}
+	});
+
+	it('preserves a valid unsupported authorityInfoAccess GeneralName as unknown', async () => {
+		const aiaValue = sequence([
+			// x400Address [3] is a valid but unsupported GeneralName alternative.
+			sequence([objectIdentifier('1.3.6.1.5.5.7.48.2'), tlv(0xa3, new Uint8Array())]),
+		]);
+		const cert = await createSelfSignedCertificate({
+			subject: { commonName: 'unsupported-aia.example' },
+			extensions: { customExtensions: [{ oid: OIDS.authorityInfoAccess, value: aiaValue }] },
+		});
+		const parsed = unwrap(parseCertificatePem(cert.certificate.pem));
+		expect(parsed.authorityInfoAccess?.[0]?.location).toMatchObject({ type: 'unknown', tag: 0xa3 });
 	});
 
 	it('parseAuthorityKeyIdentifier rejects malformed authorityCertIssuer shapes', () => {
