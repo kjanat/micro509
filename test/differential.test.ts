@@ -3,6 +3,7 @@ import {
 	checkCertificateRevocationAgainstCrl,
 	createCertificate,
 	createCertificateRevocationList,
+	createOcspResponse,
 	createSelfSignedCertificate,
 	exportPkcs8Pem,
 	generateKeyPair,
@@ -19,6 +20,7 @@ import {
 	checkIdentityWithOpenSsl,
 	checkRevocationWithOpenSsl,
 	issueAndValidateOcspResponseWithOpenSsl,
+	validateMicro509OcspResponseWithOpenSsl,
 	verifyChainWithOpenSsl,
 } from '#test/oracles/openssl';
 
@@ -270,6 +272,45 @@ describe.skipIf(!openSslAvailable || !differentialEnabled)('OpenSSL differential
 			expect(micro.ok).toBe(openSsl.accepted);
 			expect(parsed.responses?.[0]?.certStatus).toBe(openSsl.status);
 		}
+	});
+
+	it('OpenSSL accepts an OCSP response produced by micro509', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Reverse OCSP CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign', 'digitalSignature'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Reverse OCSP CA' },
+			subject: { commonName: 'reverse-ocsp.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const material = await createOcspResponse({
+			signerPrivateKey: issuer.keyPair.privateKey,
+			signerCertificate: issuer.certificate.pem,
+			includedCertificates: [issuer.certificate.pem],
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: 'good',
+					thisUpdate: new Date(),
+					nextUpdate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+				},
+			],
+		});
+		const openSsl = await validateMicro509OcspResponseWithOpenSsl({
+			issuerCertificatePem: issuer.certificate.pem,
+			certificatePem: leaf.pem,
+			responseDer: material.der,
+		});
+		expect(openSsl.accepted).toBe(true);
+		expect(openSsl.status).toBe('good');
 	});
 
 	it('matches OpenSSL DNS and IP identity verdicts', async () => {
