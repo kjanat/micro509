@@ -266,7 +266,7 @@ describe('crl', () => {
 						fullName: [
 							{ type: 'email', value: 'pki@example.test' },
 							{ type: 'ip', value: '2001:db8::7' },
-							{ type: 'unknown', tag: 0x89, value: Uint8Array.of(0xde, 0xad) },
+							{ type: 'unknown', tag: 0x88, value: Uint8Array.of(0xde, 0xad) },
 						],
 					},
 				},
@@ -280,7 +280,7 @@ describe('crl', () => {
 						fullName: [
 							{ type: 'email', value: 'pki@example.test' },
 							{ type: 'ip', value: '2001:db8:0:0:0:0:0:7' },
-							{ type: 'unknown', tag: 0x89, value: Uint8Array.of(0xde, 0xad) },
+							{ type: 'unknown', tag: 0x88, value: Uint8Array.of(0xde, 0xad) },
 						],
 					},
 				},
@@ -1841,7 +1841,7 @@ describe('crl', () => {
 			{ type: 'ip', value: '2001:db8::7' },
 			{ type: 'uri', value: 'http://example.test/complex-idp.crl' },
 			{ type: 'directoryName', derHex: parsedCa.subject.derHex },
-			{ type: 'unknown', tag: 0x89, value: Uint8Array.of(0xde, 0xad) },
+			{ type: 'unknown', tag: 0x88, value: Uint8Array.of(0xde, 0xad) },
 		] as const;
 		const shuffledNames = [
 			complexNames[3],
@@ -1918,7 +1918,7 @@ describe('crl', () => {
 		const names = [
 			{ type: 'uri', value: 'http://example.test/complex-idp-mismatch.crl' },
 			{ type: 'directoryName', derHex: parsedCa.subject.derHex },
-			{ type: 'unknown', tag: 0x89, value: Uint8Array.of(0xde, 0xad) },
+			{ type: 'unknown', tag: 0x88, value: Uint8Array.of(0xde, 0xad) },
 		] as const;
 		const leafKeys = await generateKeyPair();
 		const leaf = await createCertificate({
@@ -1964,7 +1964,7 @@ describe('crl', () => {
 							fullName: [
 								{ type: 'uri', value: 'http://example.test/complex-idp-mismatch.crl' },
 								{ type: 'directoryName', derHex: parsedCa.subject.derHex },
-								{ type: 'unknown', tag: 0x89, value: Uint8Array.of(0xde, 0xae) },
+								{ type: 'unknown', tag: 0x88, value: Uint8Array.of(0xde, 0xae) },
 							],
 						},
 						onlySomeReasons: ['keyCompromise', 'cessationOfOperation'],

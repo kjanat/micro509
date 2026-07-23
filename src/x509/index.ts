@@ -24,6 +24,7 @@ export { createCertificateSigningRequest } from '#micro509/x509/csr';
 export type {
 	AuthorityInfoAccessMethod,
 	AuthorityInformationAccess,
+	AuthorityInformationAccessInput,
 	BasicConstraints,
 	CertificateExtensionsInput,
 	CertificatePolicies,

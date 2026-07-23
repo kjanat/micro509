@@ -1167,7 +1167,10 @@ describe('parse', () => {
 		expect(parsed.subjectAltNames).toEqual([{ type: 'srv', value: '_imap.example.com' }]);
 	});
 
-	it('preserves unsupported otherName subjectAltName values as unknown entries', async () => {
+	it('preserves a conformant unsupported otherName OID as an unknown entry', async () => {
+		// A structurally valid OtherName (type-id + [0] EXPLICIT value) carrying an
+		// OID the parser does not recognise is preserved, not rejected — a Microsoft
+		// UPN here.
 		const { certificate } = await createSelfSignedCertificate({
 			subject: { commonName: 'unknown-othername.example' },
 			extensions: {
@@ -1175,7 +1178,10 @@ describe('parse', () => {
 					{
 						type: 'unknown',
 						tag: 0xa0,
-						value: sequence([objectIdentifier('1.2.3.4.5'), tlv(0xa0, integerFromNumber(7))]),
+						value: concatBytes([
+							objectIdentifier('1.3.6.1.4.1.311.20.2.3'),
+							tlv(0xa0, tlv(0x0c, new TextEncoder().encode('user@example.com'))),
+						]),
 					},
 				],
 			},
@@ -1186,52 +1192,60 @@ describe('parse', () => {
 		expect(parsed.subjectAltNames?.[0]).toMatchObject({ type: 'unknown', tag: 0xa0 });
 	});
 
-	it('rejects malformed SRV-ID otherName values', async () => {
+	it('parses a conformant SRV-ID otherName carrying no inner SEQUENCE', async () => {
+		// RFC 5280 §4.2.1.6: otherName [0] is IMPLICIT, so the [0] tag replaces
+		// OtherName's SEQUENCE tag and type-id/value are its direct children.
 		const { certificate } = await createSelfSignedCertificate({
-			subject: { commonName: 'bad-srv-id.example' },
+			subject: { commonName: 'raw-srv-id.example' },
 			extensions: {
 				subjectAltNames: [
 					{
 						type: 'unknown',
 						tag: 0xa0,
-						value: sequence([objectIdentifier(OIDS.idOnDnsSrv), tlv(0xa0, integerFromNumber(7))]),
-					},
-				],
-			},
-		});
-
-		{
-			const result = parseCertificatePem(certificate.pem);
-			expect(result.ok).toBe(false);
-			if (!result.ok) {
-				expect(result.error.message).toMatch(/SRV-ID/i);
-			}
-		}
-	});
-
-	it('rejects SRV-ID otherName values with trailing fields', async () => {
-		const { certificate } = await createSelfSignedCertificate({
-			subject: { commonName: 'bad-srv-id-trailing.example' },
-			extensions: {
-				subjectAltNames: [
-					{
-						type: 'unknown',
-						tag: 0xa0,
-						value: sequence([
+						value: concatBytes([
 							objectIdentifier(OIDS.idOnDnsSrv),
 							tlv(0xa0, tlv(0x16, new TextEncoder().encode('_xmpp.example.com'))),
-							integerFromNumber(7),
 						]),
 					},
 				],
 			},
 		});
 
-		{
+		const parsed = unwrap(parseCertificatePem(certificate.pem));
+		expect(parsed.subjectAltNames).toEqual([{ type: 'srv', value: '_xmpp.example.com' }]);
+	});
+
+	it('rejects a malformed otherName envelope or a malformed recognised SRV-ID', async () => {
+		const srvOid = objectIdentifier(OIDS.idOnDnsSrv);
+		const badShapes = [
+			// type-id is not an OBJECT IDENTIFIER
+			concatBytes([integerFromNumber(1), tlv(0xa0, tlv(0x16, Uint8Array.of(0x61)))]),
+			// type-id has the OID tag but an empty (malformed) value — fails closed,
+			// it is not erased to a still-processed `unknown` name.
+			concatBytes([tlv(0x06, new Uint8Array()), tlv(0xa0, tlv(0x16, Uint8Array.of(0x61)))]),
+			// value is not wrapped in [0] EXPLICIT
+			concatBytes([srvOid, tlv(0x81, Uint8Array.of(0x61))]),
+			// [0] wraps two elements rather than exactly one
+			concatBytes([
+				srvOid,
+				tlv(0xa0, concatBytes([tlv(0x16, Uint8Array.of(0x61)), tlv(0x16, Uint8Array.of(0x62))])),
+			]),
+			// three direct children (trailing field after the value)
+			concatBytes([srvOid, tlv(0xa0, tlv(0x16, Uint8Array.of(0x61))), integerFromNumber(7)]),
+			// recognised SRV-ID whose value is not an IA5String
+			concatBytes([srvOid, tlv(0xa0, integerFromNumber(7))]),
+			// recognised SRV-ID whose IA5String is empty
+			concatBytes([srvOid, tlv(0xa0, tlv(0x16, new Uint8Array()))]),
+		];
+		for (const value of badShapes) {
+			const { certificate } = await createSelfSignedCertificate({
+				subject: { commonName: 'bad-othername.example' },
+				extensions: { subjectAltNames: [{ type: 'unknown', tag: 0xa0, value }] },
+			});
 			const result = parseCertificatePem(certificate.pem);
 			expect(result.ok).toBe(false);
 			if (!result.ok) {
-				expect(result.error.message).toContain('otherName must contain exactly');
+				expect(result.error.code).toBe('malformed');
 			}
 		}
 	});
@@ -1655,7 +1669,7 @@ describe('parse', () => {
 		});
 	});
 
-	it('rejects malformed distributionPointName, SRV-ID, and unsupported DisplayText tags', async () => {
+	it('rejects malformed distributionPointName and unsupported DisplayText tags', async () => {
 		const badDistributionPointName = await createSelfSignedCertificate({
 			subject: { commonName: 'bad-dp-name.example' },
 			extensions: {
@@ -1673,34 +1687,6 @@ describe('parse', () => {
 			expect(result.ok).toBe(false);
 			if (!result.ok) {
 				expect(result.error.message).toContain('Unsupported distributionPointName tag: 130');
-			}
-		}
-
-		const badSrvId = await createSelfSignedCertificate({
-			subject: { commonName: 'bad-srv-id.example' },
-			extensions: {
-				customExtensions: [
-					{
-						oid: OIDS.subjectAltName,
-						critical: true,
-						value: sequence([
-							tlv(
-								0xa0,
-								sequence([
-									objectIdentifier(OIDS.idOnDnsSrv),
-									tlv(0x81, new TextEncoder().encode('_xmpp.example.test')),
-								]),
-							),
-						]),
-					},
-				],
-			},
-		});
-		{
-			const result = parseCertificatePem(badSrvId.certificate.pem);
-			expect(result.ok).toBe(false);
-			if (!result.ok) {
-				expect(result.error.message).toContain('SRV-ID otherName value must use explicit [0]');
 			}
 		}
 
@@ -2290,8 +2276,8 @@ describe('parse', () => {
 });
 
 describe('parse: coverage — error paths', () => {
-	it('parseAuthorityInfoAccess throws on non-URI location tag', async () => {
-		// Build AIA extension with dNSName (tag 0x82) instead of URI (tag 0x86)
+	it('parseAuthorityInfoAccess accepts a non-URI accessLocation GeneralName', async () => {
+		// RFC 5280 §4.2.2.1: accessLocation is a full GeneralName, not only a URI.
 		const ocspOid = '1.3.6.1.5.5.7.48.1'; // id-ad-ocsp
 		const aiaValue = sequence([
 			sequence([
@@ -2299,19 +2285,46 @@ describe('parse: coverage — error paths', () => {
 				tlv(0x82, new TextEncoder().encode('ocsp.example.com')), // dNSName, not URI
 			]),
 		]);
-		expect(async () => {
-			await createSelfSignedCertificate({
-				subject: { commonName: 'aia-test.example' },
-				extensions: {
-					customExtensions: [
-						{
-							oid: '1.3.6.1.5.5.7.1.1', // authorityInfoAccess
-							value: aiaValue,
-						},
-					],
-				},
-			}).then((cert) => unwrap(parseCertificatePem(cert.certificate.pem)));
-		}).toThrow('Unsupported authorityInfoAccess location tag');
+		const cert = await createSelfSignedCertificate({
+			subject: { commonName: 'aia-test.example' },
+			extensions: {
+				customExtensions: [{ oid: '1.3.6.1.5.5.7.1.1', value: aiaValue }],
+			},
+		});
+		const parsed = unwrap(parseCertificatePem(cert.certificate.pem));
+		expect(parsed.authorityInfoAccess).toEqual([
+			{ method: 'ocsp', location: { type: 'dns', value: 'ocsp.example.com' } },
+		]);
+	});
+
+	it('rejects an authorityInfoAccess location with an invalid GeneralName tag', async () => {
+		const caIssuers = '1.3.6.1.5.5.7.48.2';
+		for (const badLocation of [
+			tlv(0x02, Uint8Array.of(0x01)), // universal INTEGER
+			tlv(0x89, new TextEncoder().encode('x')), // context [9]
+			tlv(0xa2, tlv(0x82, new TextEncoder().encode('x'))), // dNSName with wrong constructedness
+		]) {
+			const aiaValue = sequence([sequence([objectIdentifier(caIssuers), badLocation])]);
+			const cert = await createSelfSignedCertificate({
+				subject: { commonName: 'bad-aia.example' },
+				extensions: { customExtensions: [{ oid: OIDS.authorityInfoAccess, value: aiaValue }] },
+			});
+			const result = parseCertificatePem(cert.certificate.pem);
+			expect(result.ok).toBe(false);
+		}
+	});
+
+	it('preserves a valid unsupported authorityInfoAccess GeneralName as unknown', async () => {
+		const aiaValue = sequence([
+			// x400Address [3] is a valid but unsupported GeneralName alternative.
+			sequence([objectIdentifier('1.3.6.1.5.5.7.48.2'), tlv(0xa3, new Uint8Array())]),
+		]);
+		const cert = await createSelfSignedCertificate({
+			subject: { commonName: 'unsupported-aia.example' },
+			extensions: { customExtensions: [{ oid: OIDS.authorityInfoAccess, value: aiaValue }] },
+		});
+		const parsed = unwrap(parseCertificatePem(cert.certificate.pem));
+		expect(parsed.authorityInfoAccess?.[0]?.location).toMatchObject({ type: 'unknown', tag: 0xa3 });
 	});
 
 	it('parseAuthorityKeyIdentifier rejects malformed authorityCertIssuer shapes', () => {
