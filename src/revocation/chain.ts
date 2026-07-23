@@ -31,6 +31,7 @@ import {
 	validateOcspResponse,
 } from '#micro509/revocation/ocsp';
 import type { RevocationCertificateSource } from '#micro509/revocation/revocation';
+import { verifyCertificateChain } from '#micro509/verify/verify';
 import type { ParsedCertificate } from '#micro509/x509/parse';
 import { parseCertificateFromSource } from '#micro509/x509/parse';
 
@@ -314,16 +315,16 @@ function sameCertificate(a: ParsedCertificate, b: ParsedCertificate): boolean {
 }
 
 /**
- * Searches for a certificate that could have signed the given CRL.
- * Matches by AKI/SKI or issuer/subject DN.
+ * Yields every certificate that could have signed the given CRL, AKI/SKI
+ * matches before DN matches. All candidates are returned so a certificate whose
+ * subject DN collides with the genuine CRL issuer cannot shadow it: each is
+ * tried against the CRL signature and its own path to the trust anchor.
  */
-function findIndirectCrlIssuer(
+function findIndirectCrlIssuers(
 	crl: ParsedCertificateRevocationList,
 	extraCertificates: readonly RevocationCertificateSource[],
 	chain: readonly ParsedCertificate[],
-): ParsedCertificate | undefined {
-	// Combine extra certs with chain certs for searching
-	// Chain certs are already parsed; extra certs may need parsing
+): readonly ParsedCertificate[] {
 	const parsedExtras: ParsedCertificate[] = [];
 	for (const source of extraCertificates) {
 		const parsed = parseCertificateSafe(source);
@@ -333,32 +334,87 @@ function findIndirectCrlIssuer(
 	}
 
 	const candidates = [...parsedExtras, ...chain];
+	const matches: ParsedCertificate[] = [];
+	const push = (candidate: ParsedCertificate): void => {
+		if (!matches.some((existing) => sameCertificate(existing, candidate))) {
+			matches.push(candidate);
+		}
+	};
 
-	// First pass: prefer AKI/SKI match (more specific)
 	if (crl.authorityKeyIdentifier !== undefined) {
 		for (const candidate of candidates) {
 			if (
 				candidate.subjectKeyIdentifier !== undefined &&
 				normalizeHex(crl.authorityKeyIdentifier) === normalizeHex(candidate.subjectKeyIdentifier)
 			) {
-				return candidate;
+				push(candidate);
 			}
 		}
 	}
-
-	// Second pass: fall back to DN match
 	for (const candidate of candidates) {
 		if (crl.issuer.derHex === candidate.subject.derHex) {
-			return candidate;
+			push(candidate);
 		}
 	}
 
-	return undefined;
+	return matches;
 }
 
 /** Lowercases a hex string for bytewise comparison. */
 function normalizeHex(value: string): string {
 	return value.toLowerCase();
+}
+
+/**
+ * RFC 5280 §6.3.3(f): confirms the CRL issuer certificate has a valid
+ * certification path to the same trust anchor as the certificate under test. A
+ * signer already inside the validated chain is authorized by construction. The
+ * path check runs without revocation to avoid unbounded recursion.
+ */
+async function crlSignerChainsToAnchor(
+	signer: ParsedCertificate,
+	chain: readonly ParsedCertificate[],
+	extraCertificates: readonly RevocationCertificateSource[],
+	at: Date,
+): Promise<boolean> {
+	if (chain.some((c) => sameCertificate(c, signer))) {
+		return true;
+	}
+	const trustAnchor = chain[chain.length - 1];
+	if (trustAnchor === undefined) {
+		return false;
+	}
+	// The signer's issuer may be a validated chain certificate (a delegated
+	// signer issued by an intermediate), so pool the non-anchor chain members
+	// with the extras. Exclude the signer and the anchor.
+	const pool: ParsedCertificate[] = [];
+	const addCandidate = (parsed: ParsedCertificate): void => {
+		if (sameCertificate(parsed, signer) || sameCertificate(parsed, trustAnchor)) {
+			return;
+		}
+		if (!pool.some((existing) => sameCertificate(existing, parsed))) {
+			pool.push(parsed);
+		}
+	};
+	for (let index = 0; index < chain.length - 1; index += 1) {
+		const certificate = chain[index];
+		if (certificate !== undefined) {
+			addCandidate(certificate);
+		}
+	}
+	for (const source of extraCertificates) {
+		const parsed = parseCertificateSafe(source);
+		if (parsed !== undefined) {
+			addCandidate(parsed);
+		}
+	}
+	const result = await verifyCertificateChain({
+		leaf: signer.der,
+		intermediates: pool.map((certificate) => certificate.der),
+		roots: [trustAnchor.der],
+		at,
+	});
+	return result.ok;
 }
 
 // CRL Signer Validation (RFC 5280 §6.3.3)
@@ -762,13 +818,79 @@ interface CrlEvidenceState {
 	readonly coveredReasons: Set<string>;
 	sawCrlSignerRevoked: boolean;
 	sawCrlSignerIndeterminate: boolean;
+	sawCrlSignerNotAuthorized: boolean;
 	sawGood: boolean;
 	freshestGood?: { readonly signer: ParsedCertificate; readonly thisUpdate: Date };
 }
 
-interface ApplicableCrlCheck {
-	readonly result: Awaited<ReturnType<typeof checkCertificateRevocationAgainstCrl>>;
-	readonly signer: ParsedCertificate;
+/** Inputs for resolving one base CRL against its candidate signers. */
+interface BaseCrlResolution {
+	readonly cert: ParsedCertificate;
+	readonly baseCrl: ParsedCertificateRevocationList;
+	readonly applicableDelta: ParsedCertificateRevocationList | undefined;
+	readonly crlThisUpdate: Date;
+	readonly issuer: ParsedCertificate;
+	readonly extraCertificates: readonly RevocationCertificateSource[];
+	readonly chain: readonly ParsedCertificate[];
+	readonly at: Date;
+	readonly signerCtx: SignerValidationContext;
+	readonly state: CrlEvidenceState;
+}
+
+/**
+ * Runs each candidate signer through the full pipeline for one base CRL:
+ * signature/applicability, RFC 5280 §6.3.3(f) path to the anchor, then signer
+ * revocation. A candidate that verifies the signature but fails a later step
+ * does not shadow a subsequent usable signer, so the search continues. Returns
+ * a revoked status when one is found; otherwise records good or diagnostic
+ * evidence into `state`.
+ */
+async function resolveBaseCrlAgainstSigners(
+	params: BaseCrlResolution,
+): Promise<ReturnType<typeof buildCrlRevokedStatus> | undefined> {
+	const {
+		cert,
+		baseCrl,
+		applicableDelta,
+		crlThisUpdate,
+		issuer,
+		extraCertificates,
+		chain,
+		at,
+		signerCtx,
+		state,
+	} = params;
+	for (const candidate of collectCrlSignerCandidates(baseCrl, issuer, extraCertificates, chain)) {
+		const checked = await checkCrlWithIssuer(cert, baseCrl, applicableDelta, candidate, at);
+		if (!checked.ok) {
+			continue;
+		}
+		if (!(await crlSignerChainsToAnchor(candidate, chain, extraCertificates, at))) {
+			state.sawCrlSignerNotAuthorized = true;
+			continue;
+		}
+		const signerStatus = await validateCrlSigner(candidate, signerCtx);
+		if (signerStatus === 'resolved-revoked') {
+			state.sawCrlSignerRevoked = true;
+			continue;
+		}
+		if (signerStatus === 'resolved-indeterminate') {
+			state.sawCrlSignerIndeterminate = true;
+			continue;
+		}
+		if (checked.value.status === 'revoked') {
+			return buildCrlRevokedStatus(
+				cert,
+				candidate,
+				crlThisUpdate,
+				checked.value.revocationDate,
+				checked.value.reasonCode,
+			);
+		}
+		recordGoodCrlEvidence(state, candidate, crlThisUpdate, baseCrl);
+		return undefined;
+	}
+	return undefined;
 }
 
 async function evaluateCrlEvidence(
@@ -783,6 +905,7 @@ async function evaluateCrlEvidence(
 		coveredReasons: new Set(),
 		sawCrlSignerRevoked: false,
 		sawCrlSignerIndeterminate: false,
+		sawCrlSignerNotAuthorized: false,
 		sawGood: false,
 	};
 
@@ -795,54 +918,27 @@ async function evaluateCrlEvidence(
 	// Process base CRLs (optionally paired with delta CRLs)
 	for (const baseCrl of baseCrls) {
 		const applicableDelta = findApplicableDeltaCrl(baseCrl, deltaCrls);
-		const checked = await checkCrlWithAvailableIssuers(
-			cert,
-			baseCrl,
-			applicableDelta,
-			issuer,
-			extraCertificates,
-			chain,
-			at,
-		);
-		if (!checked.result.ok) {
-			continue; // CRL doesn't apply to this certificate
-		}
-
-		// Validate CRL signer is not revoked before accepting result
-		const signerStatus = await validateCrlSigner(checked.signer, signerCtx);
-		if (signerStatus === 'resolved-revoked') {
-			state.sawCrlSignerRevoked = true;
-			continue; // CRL signer revoked — can't trust this CRL
-		}
-		if (signerStatus === 'resolved-indeterminate') {
-			state.sawCrlSignerIndeterminate = true;
-			continue; // CRL signer status unknown — try other CRLs
-		}
-
 		// Evidence freshness: an applied delta CRL supersedes its base
 		const crlThisUpdate =
 			applicableDelta !== undefined &&
 			applicableDelta.thisUpdate.getTime() > baseCrl.thisUpdate.getTime()
 				? applicableDelta.thisUpdate
 				: baseCrl.thisUpdate;
-
-		// CRL is valid — check result
-		if (checked.result.value.status === 'revoked') {
-			// Immediately return revoked status
-			return {
-				status: buildCrlRevokedStatus(
-					cert,
-					checked.signer,
-					crlThisUpdate,
-					checked.result.value.revocationDate,
-					checked.result.value.reasonCode,
-				),
-				executionErrors: state.executionErrors,
-			};
+		const revoked = await resolveBaseCrlAgainstSigners({
+			cert,
+			baseCrl,
+			applicableDelta,
+			crlThisUpdate,
+			issuer,
+			extraCertificates,
+			chain,
+			at,
+			signerCtx,
+			state,
+		});
+		if (revoked !== undefined) {
+			return { status: revoked, executionErrors: state.executionErrors };
 		}
-
-		// Status is 'good' — track which reasons this CRL covers
-		recordGoodCrlEvidence(state, checked.signer, crlThisUpdate, baseCrl);
 	}
 
 	// Return 'good' only if we saw at least one good result AND all reasons are covered
@@ -873,24 +969,28 @@ async function evaluateCrlEvidence(
 		};
 	}
 
-	// No applicable CRL found — determine most appropriate indeterminate reason
-	const reasons: RevocationIndeterminateReason[] = [];
-	if (state.sawCrlSignerRevoked) {
-		reasons.push('crl_signer_revoked');
-	} else if (state.sawCrlSignerIndeterminate) {
-		reasons.push('crl_signer_indeterminate');
-	} else {
-		reasons.push('no_applicable_crl');
-	}
-
 	return {
 		status: {
 			certificate: cert,
 			status: 'indeterminate',
-			indeterminateReasons: reasons,
+			indeterminateReasons: [crlUnavailableReason(state)],
 		},
 		executionErrors: state.executionErrors,
 	};
+}
+
+/** Most specific indeterminate reason when no CRL yielded a usable verdict. */
+function crlUnavailableReason(state: CrlEvidenceState): RevocationIndeterminateReason {
+	if (state.sawCrlSignerRevoked) {
+		return 'crl_signer_revoked';
+	}
+	if (state.sawCrlSignerNotAuthorized) {
+		return 'crl_signer_not_authorized';
+	}
+	if (state.sawCrlSignerIndeterminate) {
+		return 'crl_signer_indeterminate';
+	}
+	return 'no_applicable_crl';
 }
 
 /** Parses complete and delta CRL evidence while retaining source provenance. */
@@ -925,28 +1025,20 @@ function findApplicableDeltaCrl(
 	);
 }
 
-/** Evaluates a CRL against each available issuer until applicable evidence is found. */
-async function checkCrlWithAvailableIssuers(
-	cert: ParsedCertificate,
+/** The direct issuer first, then deduplicated indirect CRL-issuer candidates. */
+function collectCrlSignerCandidates(
 	baseCrl: ParsedCertificateRevocationList,
-	applicableDelta: ParsedCertificateRevocationList | undefined,
 	issuer: ParsedCertificate,
 	extraCertificates: readonly RevocationCertificateSource[],
 	chain: readonly ParsedCertificate[],
-	at: Date,
-): Promise<ApplicableCrlCheck> {
-	const direct = await checkCrlWithIssuer(cert, baseCrl, applicableDelta, issuer, at);
-	if (direct.ok) {
-		return { result: direct, signer: issuer };
+): readonly ParsedCertificate[] {
+	const candidates: ParsedCertificate[] = [issuer];
+	for (const indirect of findIndirectCrlIssuers(baseCrl, extraCertificates, chain)) {
+		if (!candidates.some((existing) => sameCertificate(existing, indirect))) {
+			candidates.push(indirect);
+		}
 	}
-	const indirectIssuer = findIndirectCrlIssuer(baseCrl, extraCertificates, chain);
-	if (indirectIssuer === undefined || sameCertificate(indirectIssuer, issuer)) {
-		return { result: direct, signer: issuer };
-	}
-	return {
-		result: await checkCrlWithIssuer(cert, baseCrl, applicableDelta, indirectIssuer, at),
-		signer: indirectIssuer,
-	};
+	return candidates;
 }
 
 function checkCrlWithIssuer(

@@ -49,6 +49,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- CRL evidence validates the CRL issuer's own certification path to the trust
+  anchor before trusting its verdict (RFC 5280 §6.3.3(f)). A forged
+  indirect-CRL signer whose subject DN collided with a chain certificate was
+  accepted on a name match, its signature never checked against a trusted key,
+  so a forged empty CRL reported a revoked certificate as `good`. Each
+  candidate CRL issuer runs the full pipeline as one step (signature, then
+  §6.3.3(f) path, then signer revocation), so an unusable candidate no longer
+  shadows a later authorized one, and the signer's path is validated against a
+  pool that includes the validated chain intermediates, so a delegated signer
+  issued by a chain CA authorizes. Without these, a genuine revoked CRL became
+  `crl_signer_not_authorized` and soft-fail allowed the revoked certificate.
+  (https://github.com/kjanat/micro509/pull/73)
+- `validateCandidatePath` compares each certificate's issuer DN against the
+  candidate issuer's subject DN, per RFC 5280 §6.1.3(a)(4). It verified only the
+  signature, so a leaf whose issuer DN was unrelated to the signing CA validated
+  as ok on the pre-built-path API. `buildChainInternal` already compared them,
+  so `verifyCertificateChain` was unaffected.
+  (https://github.com/kjanat/micro509/pull/72)
 - Name constraints reject a URI SAN whose authority has no FQDN host (an IP
   literal, a single-label host such as `localhost`, or no authority at all)
   when a uniformResourceIdentifier constraint applies, per RFC 5280 §4.2.1.10.
@@ -58,12 +76,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   replaced by RFC 9549 §7.5.1), so `admin@example.com` no longer matches
   `ADMIN@example.com` and widens the permitted subtrees.
   (https://github.com/kjanat/micro509/pull/71)
-- `validateCandidatePath` compares each certificate's issuer DN against the
-  candidate issuer's subject DN, per RFC 5280 §6.1.3(a)(4). It verified only the
-  signature, so a leaf whose issuer DN was unrelated to the signing CA validated
-  as ok on the pre-built-path API. `buildChainInternal` already compared them,
-  so `verifyCertificateChain` was unaffected.
-  (https://github.com/kjanat/micro509/pull/72)
 
 - Certificate policy validation computes the RFC 9618 §5.5(g)
   `valid_policy_node_set` correctly: the nodes at any depth whose valid_policy

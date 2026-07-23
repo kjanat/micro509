@@ -20,13 +20,13 @@ jobs:
       - run: run typecheck
       - name: Deno lint + type-check + doc-lint (full source tree)
         run: run -p check:deno lint:deno docs:lint
-      - run: run test
+      - run: run test:coverage
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v7
-        with: { flags: bun, fail_ci_if_error: true, use_oidc: true, report_type: "coverage" }
+        with: { flags: bun, fail_ci_if_error: true, use_oidc: true, report_type: coverage }
       - name: Upload test-results to Codecov
         uses: codecov/codecov-action@v7
-        with: { flags: bun, fail_ci_if_error: true, use_oidc: true, report_type: "test_results", files: "test-results.xml" }
+        with: { flags: bun, fail_ci_if_error: true, use_oidc: true, report_type: test_results, files: test-results.xml }
       - name: Node smoke test (dist)
         run: node scripts/smoke.mjs
       - name: Deno smoke test (dist)
