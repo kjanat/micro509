@@ -51,6 +51,9 @@ const DISTRIBUTION_POINT_REASON_ORDER = [
  * @param usages Flags to set. Bit positions follow RFC 5280 §4.2.1.3 order.
  */
 export function encodeKeyUsageExtension(usages: readonly KeyUsage[]): Uint8Array {
+	if (usages.length === 0) {
+		throw new Error('keyUsage must set at least one bit');
+	}
 	const encoded = encodeBitFlags(usages, (usage) =>
 		indexInOrder(KEY_USAGE_ORDER, usage, 'key usage'),
 	);

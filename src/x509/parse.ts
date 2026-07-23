@@ -24,7 +24,6 @@ import {
 import type { DerElement } from '#micro509/internal/asn1/der';
 import {
 	DEFAULT_MAX_DER_DEPTH,
-	encodeLength,
 	readElement,
 	readRootElement,
 	readSequenceChildren,
@@ -35,6 +34,7 @@ import {
 	describeSignatureAlgorithm,
 } from '#micro509/internal/crypto/algorithm-names';
 import { decodeIpAddress } from '#micro509/internal/shared/ip';
+import { readDirectoryNameTlv } from '#micro509/internal/x509/directory-name';
 import type { ParsedBitFlags } from '#micro509/internal/x509/extension-bits';
 import {
 	parseDistributionPointReasonFlagsContent,
@@ -45,6 +45,7 @@ import type {
 	MutableKnownParsedExtensionAccumulator,
 } from '#micro509/internal/x509/extension-registry';
 import { decodeAndApplyKnownExtension } from '#micro509/internal/x509/extension-registry';
+import { GENERAL_NAME_WIRE_TAGS } from '#micro509/internal/x509/general-name-tags';
 import type { ImportKeyResult, PublicKeyImportInput } from '#micro509/keys/keys';
 import {
 	derivePublicKey,
@@ -368,7 +369,7 @@ export interface ParsedCertificate<TMap extends ExtensionDecoderMap = Record<nev
 	readonly policyConstraints?: PolicyConstraints;
 	/** Decoded Inhibit anyPolicy (RFC 5280 §4.2.1.14). */
 	readonly inhibitAnyPolicy?: InhibitAnyPolicy;
-	/** Decoded Authority Information Access — OCSP and CA Issuer URIs (RFC 5280 §4.2.2.1). */
+	/** Decoded Authority Information Access — GeneralName access locations (RFC 5280 §4.2.2.1). */
 	readonly authorityInfoAccess?: readonly AuthorityInformationAccess[];
 	/** Decoded CRL Distribution Points (RFC 5280 §4.2.1.13). */
 	readonly crlDistributionPoints?: readonly ParsedDistributionPoint[];
@@ -1653,13 +1654,16 @@ export function parseKeyUsage(bytes: Uint8Array): ParsedBitFlags<KeyUsage> {
 
 /** @internal Decode the Extended Key Usage SEQUENCE OF OIDs. */
 export function parseExtendedKeyUsage(bytes: Uint8Array): readonly ExtendedKeyUsage[] {
-	const sequenceElement = requireElement(
-		readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH }),
-		'extendedKeyUsage sequence',
-	);
-	return childrenOf(bytes, sequenceElement).map((element) =>
-		parseExtendedKeyUsageOid(decodeObjectIdentifier(element.value)),
-	);
+	const children = readSequenceChildren(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH });
+	if (children.length === 0) {
+		throw new Error('extendedKeyUsage must not be empty');
+	}
+	return children.map((element) => {
+		if (element.tag !== 0x06) {
+			throw new Error('extendedKeyUsage entry must use OBJECT IDENTIFIER');
+		}
+		return parseExtendedKeyUsageOid(decodeObjectIdentifier(element.value));
+	});
 }
 
 /** @internal Decode the Certificate Policies extension value. */
@@ -1898,7 +1902,10 @@ export function parseSubjectAltNames(bytes: Uint8Array): readonly SubjectAltName
 		readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH }),
 		'subjectAltName sequence',
 	);
-	return childrenOf(bytes, sequenceElement).map((element) => parseGeneralName(bytes, element));
+	if (sequenceElement.tag !== 0x30) {
+		throw new Error('subjectAltName must use SEQUENCE');
+	}
+	return parseGeneralNames(bytes, sequenceElement);
 }
 
 /** @internal Decode a bare DER-encoded X.501 Name, as carried in a `directoryName` GeneralName. */
@@ -1939,12 +1946,9 @@ export function parseAuthorityInfoAccess(bytes: Uint8Array): readonly AuthorityI
 		if (method.tag !== 0x06) {
 			throw new Error('authorityInfoAccess method must use OBJECT IDENTIFIER');
 		}
-		if (location.tag !== 0x86) {
-			throw new Error(`Unsupported authorityInfoAccess location tag: ${location.tag}`);
-		}
 		return {
 			method: parseAuthorityInfoAccessMethodOid(decodeObjectIdentifier(method.value)),
-			uri: textDecoder.decode(location.value),
+			location: parseGeneralName(bytes, location),
 		};
 	});
 }
@@ -2075,19 +2079,24 @@ function parseGeneralName(source: Uint8Array, element: DerElement): GeneralName 
 			};
 		}
 		case 0x81:
-			return { type: 'email' as const, value: textDecoder.decode(element.value) };
+			return { type: 'email' as const, value: decodeString(0x16, element.value) };
 		case 0x82:
-			return { type: 'dns' as const, value: textDecoder.decode(element.value) };
+			return { type: 'dns' as const, value: decodeString(0x16, element.value) };
 		case 0x86:
-			return { type: 'uri' as const, value: textDecoder.decode(element.value) };
+			return { type: 'uri' as const, value: decodeString(0x16, element.value) };
 		case 0x87:
 			return { type: 'ip' as const, value: decodeIpAddress(element.value) };
 		case 0xa4:
 			return {
 				type: 'directoryName' as const,
-				derHex: toHex(rebuildDirectoryNameFromImplicit(element, source)),
+				derHex: toHex(readDirectoryNameTlv(element)),
 			};
 		default:
+			// x400Address [3], ediPartyName [5], and registeredID [8] are valid but
+			// unsupported; any other tag/class/constructedness is not a GeneralName.
+			if (!GENERAL_NAME_WIRE_TAGS.has(element.tag)) {
+				throw new Error(`Invalid GeneralName tag: ${element.tag}`);
+			}
 			return {
 				type: 'unknown' as const,
 				tag: element.tag,
@@ -2096,35 +2105,41 @@ function parseGeneralName(source: Uint8Array, element: DerElement): GeneralName 
 	}
 }
 
-/** Attempt to decode an otherName [0] as a known type (currently only SRV-ID). */
+/**
+ * Decode an otherName [0] as a known type (currently only SRV-ID).
+ *
+ * `otherName [0] OtherName` is in the IMPLICIT-TAGS module, so the [0] tag
+ * replaces OtherName's SEQUENCE tag: the type-id and `value [0] EXPLICIT` are
+ * the direct children, with no inner SEQUENCE. A malformed envelope, or a
+ * malformed payload of a recognised OID, throws. A structurally valid OtherName
+ * with an unsupported OID returns `undefined`, so the caller preserves it as
+ * `{ type: 'unknown' }`.
+ */
 function parseOtherName(source: Uint8Array, element: DerElement): SubjectAltName | undefined {
-	const otherNameElements = childrenOf(source, element);
-	if (otherNameElements.length !== 1) {
-		throw new Error('otherName must contain exactly one SEQUENCE');
-	}
-	const otherNameSequence = requireElement(otherNameElements[0], 'otherName sequence');
-	const otherNameChildren = childrenOf(source, otherNameSequence);
-	if (otherNameChildren.length !== 2) {
-		throw new Error('otherName must contain exactly type-id and value');
-	}
-	const typeId = requireElement(otherNameChildren[0], 'otherName type-id');
-	const valueElement = requireElement(otherNameChildren[1], 'otherName value');
-	const typeIdOid = decodeObjectIdentifier(typeId.value);
-	if (typeIdOid !== OIDS.idOnDnsSrv) {
-		return undefined;
-	}
-	if (valueElement.tag !== 0xa0) {
-		throw new Error('SRV-ID otherName value must use explicit [0]');
+	const children = childrenOf(source, element);
+	const typeId = children[0];
+	const valueElement = children[1];
+	if (
+		children.length !== 2 ||
+		typeId === undefined ||
+		valueElement === undefined ||
+		typeId.tag !== 0x06 ||
+		valueElement.tag !== 0xa0
+	) {
+		throw new Error('Malformed otherName');
 	}
 	const valueChildren = childrenOf(source, valueElement);
-	if (valueChildren.length !== 1) {
-		throw new Error('SRV-ID otherName value must contain exactly one IA5String');
+	const value = valueChildren[0];
+	if (valueChildren.length !== 1 || value === undefined) {
+		throw new Error('otherName value [0] must wrap exactly one element');
 	}
-	const srvNameElement = requireElement(valueChildren[0], 'SRV-ID IA5String');
-	if (srvNameElement.tag !== 0x16) {
-		throw new Error('SRV-ID otherName value must be an IA5String');
+	if (decodeObjectIdentifier(typeId.value) !== OIDS.idOnDnsSrv) {
+		return undefined;
 	}
-	return { type: 'srv', value: decodeString(srvNameElement.tag, srvNameElement.value) };
+	if (value.tag !== 0x16 || value.value.length === 0) {
+		throw new Error('SRV-ID otherName must wrap a non-empty IA5String');
+	}
+	return { type: 'srv', value: decodeString(value.tag, value.value) };
 }
 
 /** @internal Decode the Name Constraints extension value. */
@@ -2194,7 +2209,7 @@ function parseGeneralSubtree(
 		throw new Error('GeneralSubtree base is required');
 	}
 	validateGeneralSubtreeBounds(children.slice(1));
-	return parseNameConstraintGeneralName(source, baseElement);
+	return parseNameConstraintGeneralName(baseElement);
 }
 
 function validateGeneralSubtreeBounds(children: readonly DerElement[]): void {
@@ -2217,21 +2232,18 @@ function validateGeneralSubtreeBounds(children: readonly DerElement[]): void {
 }
 
 /** Decode a GeneralName for use in name constraints (IP carries address+mask). */
-function parseNameConstraintGeneralName(
-	source: Uint8Array,
-	element: DerElement,
-): ParsedNameConstraintForm | undefined {
+function parseNameConstraintGeneralName(element: DerElement): ParsedNameConstraintForm | undefined {
 	switch (element.tag) {
 		case 0xa0:
 			return { type: 'otherName', value: new Uint8Array(element.value) };
 		case 0x81:
-			return { type: 'email', value: textDecoder.decode(element.value) };
+			return { type: 'email', value: decodeString(0x16, element.value) };
 		case 0x82:
-			return { type: 'dns', value: textDecoder.decode(element.value) };
+			return { type: 'dns', value: decodeString(0x16, element.value) };
 		case 0xa3:
 			return { type: 'x400Address', value: new Uint8Array(element.value) };
 		case 0x86:
-			return { type: 'uri', value: textDecoder.decode(element.value) };
+			return { type: 'uri', value: decodeString(0x16, element.value) };
 		case 0x87: {
 			if (element.value.length === 8) {
 				return {
@@ -2254,7 +2266,7 @@ function parseNameConstraintGeneralName(
 		case 0xa4:
 			return {
 				type: 'directoryName',
-				derHex: toHex(rebuildDirectoryNameFromImplicit(element, source)),
+				derHex: toHex(readDirectoryNameTlv(element)),
 			};
 		case 0xa5:
 			return { type: 'ediPartyName', value: new Uint8Array(element.value) };
@@ -2262,27 +2274,6 @@ function parseNameConstraintGeneralName(
 			return { type: 'registeredID', value: decodeObjectIdentifier(element.value) };
 	}
 	throw new Error(`Unsupported name constraint GeneralName tag: ${String(element.tag)}`);
-}
-
-/**
- * Extracts the Name SEQUENCE from an implicitly-tagged directoryName [4].
- *
- * Handles two encoding styles found in the wild:
- * - Proper implicit: [4] replaces SEQUENCE tag, content is RDN SETs directly → wrap with 0x30
- * - Explicit-like: [4] wraps entire SEQUENCE, content starts with 0x30 → return content as-is
- */
-function rebuildDirectoryNameFromImplicit(element: DerElement, _source: Uint8Array): Uint8Array {
-	// If content already starts with SEQUENCE tag, it's explicit-style encoding
-	if (element.value.length > 0 && element.value[0] === 0x30) {
-		return new Uint8Array(element.value);
-	}
-	// Otherwise, wrap content with SEQUENCE tag (true implicit encoding)
-	const lengthEncoded = encodeLength(element.value.length);
-	const result = new Uint8Array(1 + lengthEncoded.length + element.value.length);
-	result[0] = 0x30;
-	result.set(lengthEncoded, 1);
-	result.set(element.value, 1 + lengthEncoded.length);
-	return result;
 }
 
 /** Decode a DisplayText (UTF8String, IA5String, VisibleString, or BMPString). */

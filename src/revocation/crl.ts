@@ -48,6 +48,7 @@ import {
 import { base64Encode } from '#micro509/internal/shared/base64';
 import { compareDistinguishedNames, compareNameAttributeValue } from '#micro509/internal/shared/dn';
 import { decodeIpAddress } from '#micro509/internal/shared/ip';
+import { readDirectoryNameTlv } from '#micro509/internal/x509/directory-name';
 import type { ParsedBitFlags } from '#micro509/internal/x509/extension-bits';
 import {
 	encodeDistributionPointReasonFlagsContent,
@@ -1976,7 +1977,7 @@ function parseGeneralName(element: DerElement): GeneralName {
 		case 0xa4:
 			return {
 				type: 'directoryName' as const,
-				derHex: toHex(rebuildDirectoryNameFromImplicit(element)),
+				derHex: toHex(readDirectoryNameTlv(element)),
 			};
 		default:
 			return { type: 'unknown' as const, tag: element.tag, value: new Uint8Array(element.value) };
@@ -2103,23 +2104,6 @@ function encodeDistributionPointName(
 /** DER-encodes and concatenates a list of GeneralName values. */
 function concatGeneralNames(names: readonly GeneralName[]): Uint8Array {
 	return concatBytes(names.map((name) => encodeSubjectAltName(name)));
-}
-
-/** Re-wraps an implicitly-tagged directoryName as an explicit SEQUENCE (tag 0x30). */
-/**
- * Extracts the Name SEQUENCE from an implicitly-tagged directoryName [4].
- *
- * Handles two encoding styles found in the wild:
- * - Proper implicit: [4] replaces SEQUENCE tag, content is RDN SETs directly → wrap with 0x30
- * - Explicit-like: [4] wraps entire SEQUENCE, content starts with 0x30 → return content as-is
- */
-function rebuildDirectoryNameFromImplicit(element: DerElement): Uint8Array {
-	// If content already starts with SEQUENCE tag, it's explicit-style encoding
-	if (element.value.length > 0 && element.value[0] === 0x30) {
-		return new Uint8Array(element.value);
-	}
-	// Otherwise, wrap content with SEQUENCE tag (true implicit encoding)
-	return tlv(0x30, element.value);
 }
 
 /** Parses a Name SEQUENCE element into a full {@linkcode ParsedName}. */
