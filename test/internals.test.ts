@@ -3,6 +3,7 @@ import {
 	createCertificateRevocationList,
 	createSelfSignedCertificate,
 	importEncryptedPkcs8Der,
+	isResultError,
 	parseCertificatePem,
 	parseCertificateRevocationListPemOrThrow,
 	unwrap,
@@ -95,6 +96,17 @@ import {
 	encodePolicyMappings,
 	encodeSubjectAltName,
 } from '#micro509/x509';
+
+function expectEncoderErrorCode(fn: () => unknown, code: string): void {
+	try {
+		fn();
+	} catch (error) {
+		expect(isResultError(error)).toBe(true);
+		expect(isResultError(error) ? error.code : undefined).toBe(code);
+		return;
+	}
+	throw new Error(`expected a ResultError with code '${code}', but nothing was thrown`);
+}
 
 // DER encoding edge cases
 
@@ -699,9 +711,10 @@ describe('extensions encoding', () => {
 		// A universal INTEGER (0x02), an application-class tag (0x42), context [9]
 		// (0x89), and wrong constructedness (0xa2 dNSName) are not GeneralNames.
 		for (const tag of [0x02, 0x42, 0x89, 0xa2, 0x30]) {
-			expect(() =>
-				encodeSubjectAltName({ type: 'unknown', tag, value: Uint8Array.of(0x00) }),
-			).toThrow('Invalid GeneralName tag');
+			expectEncoderErrorCode(
+				() => encodeSubjectAltName({ type: 'unknown', tag, value: Uint8Array.of(0x00) }),
+				'invalid_general_name_tag',
+			);
 		}
 	});
 
@@ -733,50 +746,59 @@ describe('extensions encoding', () => {
 	});
 
 	it('rejects empty certificate policies and policy mappings', () => {
-		expect(() => encodeCertificatePolicies([])).toThrow('certificatePolicies must not be empty');
-		expect(() => encodePolicyMappings([])).toThrow('policyMappings must not be empty');
+		expectEncoderErrorCode(() => encodeCertificatePolicies([]), 'certificate_policies_empty');
+		expectEncoderErrorCode(() => encodePolicyMappings([]), 'policy_mappings_empty');
 	});
 
 	it('rejects a duplicate certificate policy OID', () => {
-		expect(() =>
-			encodeCertificatePolicies([{ policyIdentifier: '1.2.3.4' }, { policyIdentifier: '1.2.3.4' }]),
-		).toThrow('Duplicate certificate policy OID: 1.2.3.4');
+		expectEncoderErrorCode(
+			() =>
+				encodeCertificatePolicies([
+					{ policyIdentifier: '1.2.3.4' },
+					{ policyIdentifier: '1.2.3.4' },
+				]),
+			'duplicate_policy_oid',
+		);
 	});
 
 	it('rejects duplicate policy OIDs that differ only by leading-zero arc aliasing', () => {
-		expect(() =>
-			encodeCertificatePolicies([
-				{ policyIdentifier: '1.2.3.4' },
-				{ policyIdentifier: '1.2.03.4' },
-			]),
-		).toThrow('Duplicate certificate policy OID: 1.2.03.4');
+		expectEncoderErrorCode(
+			() =>
+				encodeCertificatePolicies([
+					{ policyIdentifier: '1.2.3.4' },
+					{ policyIdentifier: '1.2.03.4' },
+				]),
+			'duplicate_policy_oid',
+		);
 	});
 
 	it('rejects a policy qualifier reusing a built-in OID in the opaque variant', () => {
 		const qualifierDer = new Uint8Array([0x05, 0x00]);
 		for (const oid of [OIDS.cpsPolicyQualifier, OIDS.userNoticePolicyQualifier]) {
-			expect(() =>
-				encodeCertificatePolicies([
-					{ policyIdentifier: '1.2.3.4', policyQualifiers: [{ type: 'oid', oid, qualifierDer }] },
-				]),
-			).toThrow(
-				'Policy qualifier must use the typed cps or userNotice variant, not a built-in OID',
+			expectEncoderErrorCode(
+				() =>
+					encodeCertificatePolicies([
+						{ policyIdentifier: '1.2.3.4', policyQualifiers: [{ type: 'oid', oid, qualifierDer }] },
+					]),
+				'reserved_policy_qualifier_oid',
 			);
 		}
 	});
 
 	it('rejects a built-in qualifier OID smuggled through a leading-zero alias', () => {
 		const alias = OIDS.userNoticePolicyQualifier.replace(/\.(\d+)$/, '.0$1');
-		expect(() =>
-			encodeCertificatePolicies([
-				{
-					policyIdentifier: '1.2.3.4',
-					policyQualifiers: [
-						{ type: 'oid', oid: alias, qualifierDer: new Uint8Array([0x05, 0x00]) },
-					],
-				},
-			]),
-		).toThrow('Policy qualifier must use the typed cps or userNotice variant, not a built-in OID');
+		expectEncoderErrorCode(
+			() =>
+				encodeCertificatePolicies([
+					{
+						policyIdentifier: '1.2.3.4',
+						policyQualifiers: [
+							{ type: 'oid', oid: alias, qualifierDer: new Uint8Array([0x05, 0x00]) },
+						],
+					},
+				]),
+			'reserved_policy_qualifier_oid',
+		);
 	});
 
 	it('encodes a genuine custom policy qualifier OID as raw DER', () => {
@@ -793,82 +815,92 @@ describe('extensions encoding', () => {
 
 	it('rejects a DisplayText outside SIZE (1..200)', () => {
 		const overLong = 'a'.repeat(201);
-		expect(() =>
-			encodeCertificatePolicies([
-				{
-					policyIdentifier: '1.2.3.4',
-					policyQualifiers: [{ type: 'userNotice', explicitText: overLong }],
-				},
-			]),
-		).toThrow('DisplayText must be 1 to 200 characters');
-		expect(() =>
-			encodeCertificatePolicies([
-				{
-					policyIdentifier: '1.2.3.4',
-					policyQualifiers: [
-						{ type: 'userNotice', noticeRef: { organization: '', noticeNumbers: [1] } },
-					],
-				},
-			]),
-		).toThrow('DisplayText must be 1 to 200 characters');
+		expectEncoderErrorCode(
+			() =>
+				encodeCertificatePolicies([
+					{
+						policyIdentifier: '1.2.3.4',
+						policyQualifiers: [{ type: 'userNotice', explicitText: overLong }],
+					},
+				]),
+			'display_text_out_of_range',
+		);
+		expectEncoderErrorCode(
+			() =>
+				encodeCertificatePolicies([
+					{
+						policyIdentifier: '1.2.3.4',
+						policyQualifiers: [
+							{ type: 'userNotice', noticeRef: { organization: '', noticeNumbers: [1] } },
+						],
+					},
+				]),
+			'display_text_out_of_range',
+		);
 	});
 
 	it('rejects empty SEQUENCE-valued extension encoders', () => {
-		expect(() => encodeKeyUsage([])).toThrow('keyUsage must set at least one bit');
-		expect(() => encodeExtendedKeyUsage([])).toThrow('extendedKeyUsage must not be empty');
-		expect(() => encodeAuthorityInfoAccess([])).toThrow('authorityInfoAccess must not be empty');
-		expect(() => encodeCrlDistributionPoints([])).toThrow(
-			'cRLDistributionPoints must not be empty',
-		);
-		expect(() => encodeNameConstraints({})).toThrow(
-			'nameConstraints must set permittedSubtrees or excludedSubtrees',
-		);
+		expectEncoderErrorCode(() => encodeKeyUsage([]), 'key_usage_empty');
+		expectEncoderErrorCode(() => encodeExtendedKeyUsage([]), 'extended_key_usage_empty');
+		expectEncoderErrorCode(() => encodeAuthorityInfoAccess([]), 'authority_info_access_empty');
+		expectEncoderErrorCode(() => encodeCrlDistributionPoints([]), 'crl_distribution_points_empty');
+		expectEncoderErrorCode(() => encodeNameConstraints({}), 'name_constraints_empty');
 	});
 
 	it('rejects an IP name constraint whose address and mask do not form 8 or 32 octets', () => {
-		expect(() =>
-			encodeNameConstraints({
-				permittedSubtrees: [
-					{
-						base: {
-							type: 'ip',
-							addressBytes: Uint8Array.of(10, 0, 0, 0),
-							maskBytes: Uint8Array.of(255, 0),
+		expectEncoderErrorCode(
+			() =>
+				encodeNameConstraints({
+					permittedSubtrees: [
+						{
+							base: {
+								type: 'ip',
+								addressBytes: Uint8Array.of(10, 0, 0, 0),
+								maskBytes: Uint8Array.of(255, 0),
+							},
 						},
-					},
-				],
-			}),
-		).toThrow('IP name constraint must be 8 octets (IPv4) or 32 octets (IPv6)');
+					],
+				}),
+			'invalid_ip_name_constraint',
+		);
 	});
 
 	it('rejects invalid distribution point construction', () => {
-		expect(() =>
-			Reflect.apply(encodeCrlDistributionPoints, undefined, [[{ reasons: ['keyCompromise'] }]]),
-		).toThrow('DistributionPoint must contain distributionPoint or crlIssuer');
-		expect(() =>
-			encodeCrlDistributionPoints([
-				{
-					distributionPoint: {
-						fullName: [{ type: 'uri', value: 'http://example.test/crl' }],
-						relativeName: [{ type: 'commonName', value: 'bad' }],
+		expectEncoderErrorCode(
+			() =>
+				Reflect.apply(encodeCrlDistributionPoints, undefined, [[{ reasons: ['keyCompromise'] }]]),
+			'distribution_point_empty',
+		);
+		expectEncoderErrorCode(
+			() =>
+				encodeCrlDistributionPoints([
+					{
+						distributionPoint: {
+							fullName: [{ type: 'uri', value: 'http://example.test/crl' }],
+							relativeName: [{ type: 'commonName', value: 'bad' }],
+						},
 					},
-				},
-			]),
-		).toThrow('DistributionPointName cannot contain both fullName and relativeName');
-		expect(() => encodeCrlDistributionPoints([{ distributionPoint: {} }])).toThrow(
-			'DistributionPointName must contain fullName or relativeName',
+				]),
+			'distribution_point_name_conflict',
+		);
+		expectEncoderErrorCode(
+			() => encodeCrlDistributionPoints([{ distributionPoint: {} }]),
+			'distribution_point_name_empty',
 		);
 	});
 
 	it('rejects non-SEQUENCE directoryName DER when encoding names', () => {
-		expect(() => encodeSubjectAltName({ type: 'directoryName', derHex: '020100' })).toThrow(
-			'directoryName derHex must encode a DER SEQUENCE',
+		expectEncoderErrorCode(
+			() => encodeSubjectAltName({ type: 'directoryName', derHex: '020100' }),
+			'directory_name_not_sequence',
 		);
-		expect(() =>
-			encodeNameConstraints({
-				permittedSubtrees: [{ base: { type: 'directoryName', derHex: '020100' } }],
-			}),
-		).toThrow('directoryName derHex must encode a DER SEQUENCE');
+		expectEncoderErrorCode(
+			() =>
+				encodeNameConstraints({
+					permittedSubtrees: [{ base: { type: 'directoryName', derHex: '020100' } }],
+				}),
+			'directory_name_not_sequence',
+		);
 	});
 
 	it('rejects invalid IPv4 addresses during certificate creation', async () => {
@@ -1373,7 +1405,7 @@ describe('pbes2.ts edge cases', () => {
 describe('pkcs12-mac.ts edge cases', () => {
 	const dummySafe = new Uint8Array(10);
 
-	it('parsePkcs12MacDataOrThrow throws on malformed MacData (missing salt)', async () => {
+	it('parsePkcs12MacDataOrThrow throws on malformed MacData (missing salt)', () => {
 		// Only digestInfo, no salt or iterations
 		const malformed = sequence([
 			sequence([
@@ -1384,7 +1416,7 @@ describe('pkcs12-mac.ts edge cases', () => {
 		expect(parsePkcs12MacDataOrThrow(malformed, dummySafe)).rejects.toThrow('Malformed MacData');
 	});
 
-	it('parsePkcs12MacDataOrThrow throws on malformed MacData (salt wrong tag)', async () => {
+	it('parsePkcs12MacDataOrThrow throws on malformed MacData (salt wrong tag)', () => {
 		// salt is INTEGER instead of OCTET STRING
 		const malformed = sequence([
 			sequence([
@@ -1397,7 +1429,7 @@ describe('pkcs12-mac.ts edge cases', () => {
 		expect(parsePkcs12MacDataOrThrow(malformed, dummySafe)).rejects.toThrow('Malformed MacData');
 	});
 
-	it('parsePkcs12MacDataOrThrow throws on malformed DigestInfo (missing digest)', async () => {
+	it('parsePkcs12MacDataOrThrow throws on malformed DigestInfo (missing digest)', () => {
 		// DigestInfo with only algorithm, no digest
 		const malformed = sequence([
 			sequence([sequence([objectIdentifier(OIDS.sha256), nullValue()])]),
@@ -1407,7 +1439,7 @@ describe('pkcs12-mac.ts edge cases', () => {
 		expect(parsePkcs12MacDataOrThrow(malformed, dummySafe)).rejects.toThrow('Malformed DigestInfo');
 	});
 
-	it('parsePkcs12MacDataOrThrow throws on malformed DigestInfo (digest wrong tag)', async () => {
+	it('parsePkcs12MacDataOrThrow throws on malformed DigestInfo (digest wrong tag)', () => {
 		// digest is INTEGER instead of OCTET STRING
 		const malformed = sequence([
 			sequence([
@@ -1420,7 +1452,7 @@ describe('pkcs12-mac.ts edge cases', () => {
 		expect(parsePkcs12MacDataOrThrow(malformed, dummySafe)).rejects.toThrow('Malformed DigestInfo');
 	});
 
-	it('parsePkcs12MacDataOrThrow throws when algorithm OID is missing', async () => {
+	it('parsePkcs12MacDataOrThrow throws when algorithm OID is missing', () => {
 		// algorithmSequence is empty
 		const malformed = sequence([
 			sequence([sequence([]), octetString(new Uint8Array(32))]),
@@ -1432,7 +1464,7 @@ describe('pkcs12-mac.ts edge cases', () => {
 		);
 	});
 
-	it('parsePkcs12MacDataOrThrow throws on non-SHA-256 algorithm', async () => {
+	it('parsePkcs12MacDataOrThrow throws on non-SHA-256 algorithm', () => {
 		// Use SHA-1 OID instead of SHA-256
 		const malformed = sequence([
 			sequence([
@@ -1455,7 +1487,7 @@ describe('pkcs12-mac.ts edge cases', () => {
 		expect(parsed.verification).toBe('unchecked');
 	});
 
-	it('parsePkcs12MacDataOrThrow throws on zero iterations', async () => {
+	it('parsePkcs12MacDataOrThrow throws on zero iterations', () => {
 		const malformed = sequence([
 			sequence([
 				sequence([objectIdentifier(OIDS.sha256), nullValue()]),
@@ -1469,7 +1501,7 @@ describe('pkcs12-mac.ts edge cases', () => {
 		);
 	});
 
-	it('parsePkcs12MacDataOrThrow throws on negative iterations', async () => {
+	it('parsePkcs12MacDataOrThrow throws on negative iterations', () => {
 		const malformed = sequence([
 			sequence([
 				sequence([objectIdentifier(OIDS.sha256), nullValue()]),
@@ -1483,7 +1515,7 @@ describe('pkcs12-mac.ts edge cases', () => {
 		);
 	});
 
-	it('createPkcs12MacData rejects zero iterations', async () => {
+	it('createPkcs12MacData rejects zero iterations', () => {
 		expect(createPkcs12MacData(dummySafe, { password: 'test', iterations: 0 })).rejects.toThrow(
 			'MacData iterations must be a positive safe integer',
 		);

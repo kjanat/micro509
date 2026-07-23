@@ -77,7 +77,7 @@ async function loadAllPkitsCertificates(): Promise<ParsedCertificate[]> {
 	const results = await Promise.allSettled(
 		files
 			.filter((f) => f.endsWith('.crt'))
-			.map(async (f) => {
+			.map((f) => {
 				const name = f.replace('.crt', '');
 				return readPkitsParsedCertificate(name);
 			}),

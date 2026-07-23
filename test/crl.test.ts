@@ -6,6 +6,7 @@ import {
 	createSelfSignedCertificate,
 	generateKeyPair,
 	isCertificateRevoked,
+	isResultError,
 	parseCertificatePem,
 	parseCertificateRevocationListDer,
 	parseCertificateRevocationListDerOrThrow,
@@ -34,6 +35,17 @@ import {
 	hexToBytes,
 	sliceElement,
 } from '#test/helpers';
+
+async function expectRejectedErrorCode(promise: Promise<unknown>, code: string): Promise<void> {
+	try {
+		await promise;
+	} catch (error) {
+		expect(isResultError(error)).toBe(true);
+		expect(isResultError(error) ? error.code : undefined).toBe(code);
+		return;
+	}
+	throw new Error(`expected a ResultError with code '${code}', but the promise resolved`);
+}
 
 describe('crl', () => {
 	it('creates, parses, and verifies CRLs', async () => {
@@ -2547,7 +2559,7 @@ describe('crl', () => {
 			},
 		});
 
-		expect(
+		await expectRejectedErrorCode(
 			createCertificateRevocationList({
 				issuer: { commonName: 'Bad Scope CRL Issuer' },
 				signerPrivateKey: issuer.keyPair.privateKey,
@@ -2558,7 +2570,8 @@ describe('crl', () => {
 					},
 				},
 			}),
-		).rejects.toThrow('DistributionPointName fullName must not be empty');
+			'distribution_point_full_name_empty',
+		);
 	});
 
 	it('rejects empty freshest CRL issuer lists', async () => {
@@ -2570,14 +2583,15 @@ describe('crl', () => {
 			},
 		});
 
-		expect(
+		await expectRejectedErrorCode(
 			createCertificateRevocationList({
 				issuer: { commonName: 'Bad Freshest CRL Issuer' },
 				signerPrivateKey: issuer.keyPair.privateKey,
 				issuerPublicKey: issuer.keyPair.publicKey,
 				freshestCrlDistributionPoints: [{ crlIssuer: [] }],
 			}),
-		).rejects.toThrow('DistributionPoint crlIssuer must not be empty');
+			'distribution_point_crl_issuer_empty',
+		);
 	});
 
 	it('verifies CRL with PEM string sources', async () => {

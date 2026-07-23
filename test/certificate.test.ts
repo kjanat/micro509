@@ -5,6 +5,7 @@ import {
 	createSelfSignedCertificate,
 	findExtension,
 	generateKeyPair,
+	isResultError,
 	parseCertificateDer,
 	parseCertificatePem,
 	unwrap,
@@ -14,6 +15,17 @@ import { readElement } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { encodeRsaPssParameters, rsaPssParametersForHash } from '#micro509/internal/crypto/rsa-pss';
 import { childrenOf, decodeObjectIdentifier, hasExtensionOid } from '#test/helpers';
+
+async function expectRejectedErrorCode(promise: Promise<unknown>, code: string): Promise<void> {
+	try {
+		await promise;
+	} catch (error) {
+		expect(isResultError(error)).toBe(true);
+		expect(isResultError(error) ? error.code : undefined).toBe(code);
+		return;
+	}
+	throw new Error(`expected a ResultError with code '${code}', but the promise resolved`);
+}
 
 describe('certificate', () => {
 	it('creates a self-signed certificate with SANs and exportable keys', async () => {
@@ -417,7 +429,7 @@ describe('certificate', () => {
 	});
 
 	it('rejects notAfter <= notBefore', async () => {
-		expect(
+		await expectRejectedErrorCode(
 			createSelfSignedCertificate({
 				subject: { commonName: 'bad-validity' },
 				validity: {
@@ -425,7 +437,8 @@ describe('certificate', () => {
 					notAfter: new Date('2025-01-01T00:00:00Z'),
 				},
 			}),
-		).rejects.toThrow('notAfter must be after notBefore');
+			'validity_not_after_before_not_before',
+		);
 	});
 
 	it('allows empty subject DN when SAN is present and marks SAN critical (RFC 5280 §4.2.1.6)', async () => {
@@ -444,8 +457,9 @@ describe('certificate', () => {
 	});
 
 	it('rejects invalid country code length', async () => {
-		expect(createSelfSignedCertificate({ subject: { country: 'USA' } })).rejects.toThrow(
-			'Country must be a 2-character code',
+		await expectRejectedErrorCode(
+			createSelfSignedCertificate({ subject: { country: 'USA' } }),
+			'invalid_country_code',
 		);
 	});
 
@@ -474,7 +488,7 @@ describe('certificate', () => {
 	});
 
 	it('rejects anyPolicy in policyMappings', async () => {
-		expect(
+		await expectRejectedErrorCode(
 			createSelfSignedCertificate({
 				subject: { commonName: 'bad-policy-mapping.example' },
 				extensions: {
@@ -486,40 +500,44 @@ describe('certificate', () => {
 					],
 				},
 			}),
-		).rejects.toThrow('policyMappings must not use anyPolicy');
+			'policy_mappings_any_policy',
+		);
 	});
 
 	it('rejects empty policyConstraints input', async () => {
-		expect(
+		await expectRejectedErrorCode(
 			createSelfSignedCertificate({
 				subject: { commonName: 'bad-policy-constraints.example' },
 				extensions: {
 					policyConstraints: {},
 				},
 			}),
-		).rejects.toThrow('policyConstraints must set requireExplicitPolicy or inhibitPolicyMapping');
+			'policy_constraints_empty',
+		);
 	});
 
 	it('rejects empty structured distribution point names', async () => {
-		expect(
+		await expectRejectedErrorCode(
 			createSelfSignedCertificate({
 				subject: { commonName: 'bad-dp.example' },
 				extensions: {
 					crlDistributionPoints: [{ distributionPoint: { fullName: [] } }],
 				},
 			}),
-		).rejects.toThrow('DistributionPointName fullName must not be empty');
+			'distribution_point_full_name_empty',
+		);
 	});
 
 	it('rejects empty structured CRL issuer lists', async () => {
-		expect(
+		await expectRejectedErrorCode(
 			createSelfSignedCertificate({
 				subject: { commonName: 'bad-crl-issuer.example' },
 				extensions: {
 					crlDistributionPoints: [{ crlIssuer: [] }],
 				},
 			}),
-		).rejects.toThrow('DistributionPoint crlIssuer must not be empty');
+			'distribution_point_crl_issuer_empty',
+		);
 	});
 });
 
