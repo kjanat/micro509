@@ -65,6 +65,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   so `verifyCertificateChain` was unaffected.
   (https://github.com/kjanat/micro509/pull/72)
 
+- Certificate policy validation computes the RFC 9618 §5.5(g)
+  `valid_policy_node_set` correctly: the nodes at any depth whose valid_policy
+  is not anyPolicy and whose single parent is an anyPolicy node, plus a depth-n
+  anyPolicy node. It previously took depth-n nodes tracing back to the depth-0
+  anyPolicy root, which diverges under policy mapping. A CA that mapped
+  `1.2.3.4` to `1.2.3.5` reported `authorityConstrainedPolicies` of `1.2.3.5`
+  where the spec requires `1.2.3.4` (NIST PKITS 4.10.1), so a chain validated
+  against the mapped policy instead of the authority's. `userConstrainedPolicies`
+  now follows §5.5(g)(5)-(6) from the corrected set.
+  (https://github.com/kjanat/micro509/pull/75)
+
 ## [0.12.0] - 2026-07-21
 
 Text rendering for subject alternative names and distinguished names, and

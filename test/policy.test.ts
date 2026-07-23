@@ -124,7 +124,7 @@ describe('policy fixtures', () => {
 			ok: true,
 			value: {
 				policyValidation: {
-					authorityConstrainedPolicies: [{ policyIdentifier: '1.2.3.5' }],
+					authorityConstrainedPolicies: [{ policyIdentifier: '1.2.3.4' }],
 					userConstrainedPolicies: [{ policyIdentifier: '1.2.3.4' }],
 				},
 			},
@@ -547,9 +547,9 @@ describe('policy fixtures', () => {
 			value: {
 				policyValidation: {
 					authorityConstrainedPolicies: [
-						{ policyIdentifier: '1.2.3.21' },
-						{ policyIdentifier: '1.2.3.22' },
-						{ policyIdentifier: '1.2.3.23' },
+						{ policyIdentifier: '1.2.3.1' },
+						{ policyIdentifier: '1.2.3.2' },
+						{ policyIdentifier: '1.2.3.3' },
 					],
 					userConstrainedPolicies: [
 						{ policyIdentifier: '1.2.3.1' },
