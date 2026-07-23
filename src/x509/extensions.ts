@@ -976,12 +976,15 @@ export function encodeSubjectAltName(value: SubjectAltName): Uint8Array {
 		case 'srv':
 			return implicitConstructedContext(
 				0,
-				sequence([objectIdentifier(OIDS.idOnDnsSrv), explicitContext(0, ia5String(value.value))]),
+				concatBytes([
+					objectIdentifier(OIDS.idOnDnsSrv),
+					explicitContext(0, ia5String(value.value)),
+				]),
 			);
 		case 'ip':
 			return implicitPrimitiveContext(7, encodeIpAddress(value.value));
 		case 'directoryName':
-			return implicitConstructedContext(4, extractDirectoryNameContent(value.derHex));
+			return implicitConstructedContext(4, readDirectoryNameTlv(value.derHex));
 		case 'unknown':
 			return tlv(value.tag, value.value);
 		default: {
@@ -1245,7 +1248,7 @@ function encodeNameConstraintForm(form: NameConstraintForm): Uint8Array {
 		case 'ip':
 			return implicitPrimitiveContext(7, concatBytes([form.addressBytes, form.maskBytes]));
 		case 'directoryName':
-			return implicitConstructedContext(4, extractDirectoryNameContent(form.derHex));
+			return implicitConstructedContext(4, readDirectoryNameTlv(form.derHex));
 		default: {
 			const _exhaustive: never = form;
 			throw new Error(`Unhandled NameConstraintForm type: ${String(_exhaustive)}`);
@@ -1254,12 +1257,13 @@ function encodeNameConstraintForm(form: NameConstraintForm): Uint8Array {
 }
 
 /** Extract the content bytes from a hex-encoded DER SEQUENCE (strips the outer TLV). */
-function extractDirectoryNameContent(derHex: string): Uint8Array {
-	const element = readRootElement(hexToBytes(derHex), { maxDepth: DEFAULT_MAX_DER_DEPTH });
+function readDirectoryNameTlv(derHex: string): Uint8Array {
+	const bytes = hexToBytes(derHex);
+	const element = readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH });
 	if (element.tag !== 0x30) {
 		throw new Error('directoryName derHex must encode a DER SEQUENCE');
 	}
-	return new Uint8Array(element.value);
+	return bytes.slice(element.start - element.headerLength, element.end);
 }
 
 /**

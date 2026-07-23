@@ -662,6 +662,21 @@ describe('extensions encoding', () => {
 		expect(result[0]).toBe(0xa4);
 	});
 
+	it('encodeSubjectAltName wraps the whole directoryName Name TLV, header included', () => {
+		// RFC 5280 §4.2.1.6 makes directoryName [4] EXPLICIT, so its contents are the
+		// complete Name TLV: OpenSSL emits `a4 05 30 03 ...`, not the stripped `a4 03 ...`.
+		const result = encodeSubjectAltName({ type: 'directoryName', derHex: '3003020101' });
+		expect(Array.from(result)).toEqual([0xa4, 0x05, 0x30, 0x03, 0x02, 0x01, 0x01]);
+	});
+
+	it('encodeSubjectAltName encodes an srv otherName with no inner SEQUENCE', () => {
+		// otherName [0] is IMPLICIT, so the [0] content is type-id then value: its
+		// first inner element is the OID (0x06), never a nested SEQUENCE (0x30).
+		const result = encodeSubjectAltName({ type: 'srv', value: '_imaps.example.com' });
+		expect(result[0]).toBe(0xa0);
+		expect(result[2]).toBe(0x06);
+	});
+
 	it('encodeSubjectAltName handles unknown type', () => {
 		const result = encodeSubjectAltName({
 			type: 'unknown',

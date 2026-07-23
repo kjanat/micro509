@@ -1181,7 +1181,30 @@ describe('parse', () => {
 		expect(parsed.subjectAltNames?.[0]).toMatchObject({ type: 'unknown', tag: 0xa0 });
 	});
 
-	it('rejects malformed SRV-ID otherName values', async () => {
+	it('parses a conformant SRV-ID otherName carrying no inner SEQUENCE', async () => {
+		// RFC 5280 §4.2.1.6: otherName [0] is IMPLICIT, so the [0] tag replaces
+		// OtherName's SEQUENCE tag and type-id/value are its direct children.
+		const { certificate } = await createSelfSignedCertificate({
+			subject: { commonName: 'raw-srv-id.example' },
+			extensions: {
+				subjectAltNames: [
+					{
+						type: 'unknown',
+						tag: 0xa0,
+						value: concatBytes([
+							objectIdentifier(OIDS.idOnDnsSrv),
+							tlv(0xa0, tlv(0x16, new TextEncoder().encode('_xmpp.example.com'))),
+						]),
+					},
+				],
+			},
+		});
+
+		const parsed = unwrap(parseCertificatePem(certificate.pem));
+		expect(parsed.subjectAltNames).toEqual([{ type: 'srv', value: '_xmpp.example.com' }]);
+	});
+
+	it('degrades a malformed SRV-ID otherName to an unknown entry', async () => {
 		const { certificate } = await createSelfSignedCertificate({
 			subject: { commonName: 'bad-srv-id.example' },
 			extensions: {
@@ -1189,22 +1212,21 @@ describe('parse', () => {
 					{
 						type: 'unknown',
 						tag: 0xa0,
-						value: sequence([objectIdentifier(OIDS.idOnDnsSrv), tlv(0xa0, integerFromNumber(7))]),
+						value: concatBytes([
+							objectIdentifier(OIDS.idOnDnsSrv),
+							tlv(0xa0, integerFromNumber(7)),
+						]),
 					},
 				],
 			},
 		});
 
-		{
-			const result = parseCertificatePem(certificate.pem);
-			expect(result.ok).toBe(false);
-			if (!result.ok) {
-				expect(result.error.message).toMatch(/SRV-ID/i);
-			}
-		}
+		const parsed = unwrap(parseCertificatePem(certificate.pem));
+		expect(parsed.subjectAltNames).toHaveLength(1);
+		expect(parsed.subjectAltNames?.[0]).toMatchObject({ type: 'unknown', tag: 0xa0 });
 	});
 
-	it('rejects SRV-ID otherName values with trailing fields', async () => {
+	it('degrades an SRV-ID otherName with trailing fields to an unknown entry', async () => {
 		const { certificate } = await createSelfSignedCertificate({
 			subject: { commonName: 'bad-srv-id-trailing.example' },
 			extensions: {
@@ -1212,7 +1234,7 @@ describe('parse', () => {
 					{
 						type: 'unknown',
 						tag: 0xa0,
-						value: sequence([
+						value: concatBytes([
 							objectIdentifier(OIDS.idOnDnsSrv),
 							tlv(0xa0, tlv(0x16, new TextEncoder().encode('_xmpp.example.com'))),
 							integerFromNumber(7),
@@ -1224,9 +1246,9 @@ describe('parse', () => {
 
 		{
 			const result = parseCertificatePem(certificate.pem);
-			expect(result.ok).toBe(false);
-			if (!result.ok) {
-				expect(result.error.message).toContain('otherName must contain exactly');
+			expect(result.ok).toBe(true);
+			if (result.ok) {
+				expect(result.value.subjectAltNames?.[0]).toMatchObject({ type: 'unknown', tag: 0xa0 });
 			}
 		}
 	});
@@ -1650,7 +1672,7 @@ describe('parse', () => {
 		});
 	});
 
-	it('rejects malformed distributionPointName, SRV-ID, and unsupported DisplayText tags', async () => {
+	it('rejects malformed distributionPointName and unsupported DisplayText tags', async () => {
 		const badDistributionPointName = await createSelfSignedCertificate({
 			subject: { commonName: 'bad-dp-name.example' },
 			extensions: {
@@ -1668,34 +1690,6 @@ describe('parse', () => {
 			expect(result.ok).toBe(false);
 			if (!result.ok) {
 				expect(result.error.message).toContain('Unsupported distributionPointName tag: 130');
-			}
-		}
-
-		const badSrvId = await createSelfSignedCertificate({
-			subject: { commonName: 'bad-srv-id.example' },
-			extensions: {
-				customExtensions: [
-					{
-						oid: OIDS.subjectAltName,
-						critical: true,
-						value: sequence([
-							tlv(
-								0xa0,
-								sequence([
-									objectIdentifier(OIDS.idOnDnsSrv),
-									tlv(0x81, new TextEncoder().encode('_xmpp.example.test')),
-								]),
-							),
-						]),
-					},
-				],
-			},
-		});
-		{
-			const result = parseCertificatePem(badSrvId.certificate.pem);
-			expect(result.ok).toBe(false);
-			if (!result.ok) {
-				expect(result.error.message).toContain('SRV-ID otherName value must use explicit [0]');
 			}
 		}
 

@@ -18,6 +18,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A `directoryName` SubjectAltName or name constraint now encodes the complete
+  Name TLV inside `[4]`, per RFC 5280 §4.2.1.6 (Name is an untagged CHOICE, so
+  `[4]` is EXPLICIT). The encoder stripped the Name's SEQUENCE header, emitting
+  `a4 12 31 10 ...` where OpenSSL emits `a4 14 30 12 31 10 ...`.
+- An `otherName` SubjectAltName now decodes with the type-id and value as the
+  direct children of `[0]`, per RFC 5280 §4.2.1.6 (`otherName [0]` is IMPLICIT,
+  so `[0]` replaces the SEQUENCE tag). The parser required an inner SEQUENCE, so
+  any real `otherName` (an SRV-ID, a Microsoft UPN) failed the whole certificate
+  parse; the SRV-ID encoder emitted the same non-conformant nesting. An
+  unrecognised `otherName` shape now degrades to `{ type: 'unknown' }` instead
+  of throwing.
+  (https://github.com/kjanat/micro509/pull/77)
+
 ## [0.13.0] - 2026-07-23
 
 A public `micro509/der` entrypoint, and RFC-conformance fixes across path
