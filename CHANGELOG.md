@@ -18,6 +18,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `importPkcs8Der` accepts a `OneAsymmetricKey` (RFC 5958 §2 / RFC 8410 §7) that
+  carries both `attributes [0]` and `publicKey [1]`. The parser capped at four
+  elements, so a five-element v2 key that OpenSSL and Node WebCrypto both accept
+  returned `malformed`. It now bounds the tail by ASN.1 class and checks the
+  version tag.
+- SEC1 `ECPrivateKey` parsing rejects a version other than 1, comparing content
+  octets (RFC 5915 §3, "version SHALL be ... one"). Only the tag was checked, so
+  version 0 or 2 was deferred to the WebCrypto backend as a misleading error.
+- PBES2 decryption no longer rejects a PBKDF2 salt shorter than eight bytes. RFC
+  8018 §4.1 makes the eight-octet minimum a "should" for salt _selection_ and
+  says the salt need not be checked on receipt, so `openssl pkcs8 -saltlen 4`
+  could not be decrypted. The encrypt path keeps the minimum.
+  (https://github.com/kjanat/micro509/pull/85)
+
 ## [0.13.0] - 2026-07-23
 
 A public `micro509/der` entrypoint, and RFC-conformance fixes across path

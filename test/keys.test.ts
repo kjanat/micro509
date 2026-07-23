@@ -487,6 +487,17 @@ describe('keys', () => {
 		expect(reimported.type).toBe('private');
 	});
 
+	it('rejects a SEC1 ECPrivateKey whose version is not 1 (RFC 5915 §3)', async () => {
+		const { sequence, integerFromNumber, octetString } = await import(
+			'#micro509/internal/asn1/der'
+		);
+		const versionTwo = sequence([integerFromNumber(2), octetString(new Uint8Array(32))]);
+		const result = await importSec1Der(versionTwo, { kind: 'ecdsa', curve: 'P-256' });
+		expect(result.ok).toBe(false);
+		if (result.ok) throw new Error('unreachable');
+		expect(result.error.message).toContain('Malformed SEC 1');
+	});
+
 	it('round-trips EC P-521 keys through SEC1', async () => {
 		const keys = await generateKeyPair({
 			kind: 'ecdsa',

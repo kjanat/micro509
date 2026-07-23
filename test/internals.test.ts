@@ -48,7 +48,11 @@ import {
 	describeSignatureAlgorithm,
 } from '#micro509/internal/crypto/algorithm-names';
 import { ecdsaSignatureToDer } from '#micro509/internal/crypto/ecdsa';
-import { encryptPbes2, parsePbes2AlgorithmIdentifier } from '#micro509/internal/crypto/pbes2';
+import {
+	encodePbes2AlgorithmIdentifier,
+	encryptPbes2,
+	parsePbes2AlgorithmIdentifier,
+} from '#micro509/internal/crypto/pbes2';
 import {
 	encodeRsaPssParameters,
 	parseRsaPssParameters,
@@ -1029,6 +1033,19 @@ function maskGenAlgorithmIdentifier(oid: string, hashOid?: string): Uint8Array {
 describe('pbes2.ts edge cases', () => {
 	it('parsePbes2AlgorithmIdentifier throws on malformed input', () => {
 		expect(() => parsePbes2AlgorithmIdentifier(Uint8Array.of(0x30, 0x00))).toThrow();
+	});
+
+	it('accepts a PBES2 salt shorter than 8 bytes on decode (RFC 8018 §4.1)', () => {
+		// The salt "need not be checked for a particular format by the party
+		// receiving the salt", so `openssl pkcs8 -saltlen 4` must decode.
+		const der = encodePbes2AlgorithmIdentifier({
+			iterations: 2048,
+			salt: new Uint8Array(4),
+			iv: new Uint8Array(16),
+			cipher: 'AES-256-CBC',
+			prf: 'HMAC-SHA-256',
+		});
+		expect(parsePbes2AlgorithmIdentifier(der).salt.length).toBe(4);
 	});
 
 	it('parsePbes2AlgorithmIdentifier throws on non-PBES2 OID', () => {

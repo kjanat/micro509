@@ -1515,15 +1515,19 @@ function parsePkcs8PrivateKey(der: Uint8Array): {
 	readonly privateKeyDer: Uint8Array;
 } {
 	const children = readSequenceChildren(der);
+	const version = children[0];
 	const algorithm = children[1];
 	const privateKey = children[2];
 	if (
 		children.length < 3 ||
-		children.length > 4 ||
+		version === undefined ||
+		version.tag !== 0x02 ||
 		algorithm === undefined ||
 		algorithm.tag !== 0x30 ||
 		privateKey === undefined ||
-		privateKey.tag !== 0x04
+		privateKey.tag !== 0x04 ||
+		// The only trailing OneAsymmetricKey fields are attributes [0] and publicKey [1].
+		children.slice(3).some((child) => (child.tag & 0xc0) !== 0x80)
 	) {
 		throw new Error('Malformed PKCS#8 private key');
 	}
@@ -1572,6 +1576,8 @@ function parseSec1PrivateKey(der: Uint8Array): {
 		children.length > 4 ||
 		version === undefined ||
 		version.tag !== 0x02 ||
+		version.value.length !== 1 ||
+		version.value[0] !== 0x01 ||
 		privateKey === undefined ||
 		privateKey.tag !== 0x04 ||
 		(third !== undefined && third.tag !== 0xa0 && third.tag !== 0xa1) ||

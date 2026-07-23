@@ -229,9 +229,6 @@ export function parsePbes2AlgorithmIdentifier(algorithmIdentifierDer: Uint8Array
 	if (iterationsValue < 1) {
 		throw new RangeError(`Invalid PBES2 iterations: must be >= 1, got ${iterationsValue}`);
 	}
-	if (saltValue.length < 8) {
-		throw new RangeError(`Invalid PBES2 salt: must be >= 8 bytes, got ${saltValue.length}`);
-	}
 	if (ivValue.length !== 16) {
 		throw new RangeError(`Invalid PBES2 IV: must be exactly 16 bytes, got ${ivValue.length}`);
 	}
