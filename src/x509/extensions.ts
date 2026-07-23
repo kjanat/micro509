@@ -997,6 +997,9 @@ export function encodeSubjectAltName(value: SubjectAltName): Uint8Array {
  * @param usages EKU purposes to encode.
  */
 export function encodeExtendedKeyUsage(usages: readonly ExtendedKeyUsage[]): Uint8Array {
+	if (usages.length === 0) {
+		throw new Error('extendedKeyUsage must not be empty');
+	}
 	return sequence(usages.map((usage) => objectIdentifier(getExtendedKeyUsageOid(usage))));
 }
 
@@ -1008,6 +1011,9 @@ export function encodeExtendedKeyUsage(usages: readonly ExtendedKeyUsage[]): Uin
 export function encodeAuthorityInfoAccess(
 	entries: readonly AuthorityInformationAccess[],
 ): Uint8Array {
+	if (entries.length === 0) {
+		throw new Error('authorityInfoAccess must not be empty');
+	}
 	return sequence(
 		entries.map((entry) =>
 			sequence([
@@ -1024,6 +1030,9 @@ export function encodeAuthorityInfoAccess(
  * @param points Distribution points to encode.
  */
 export function encodeCrlDistributionPoints(points: readonly DistributionPoint[]): Uint8Array {
+	if (points.length === 0) {
+		throw new Error('cRLDistributionPoints must not be empty');
+	}
 	return sequence(points.map((point) => sequence(encodeDistributionPoint(point))));
 }
 
@@ -1050,6 +1059,9 @@ export function encodeNameConstraints(constraints: NameConstraints): Uint8Array 
 			),
 		);
 	}
+	if (parts.length === 0) {
+		throw new Error('nameConstraints must set permittedSubtrees or excludedSubtrees');
+	}
 	return sequence(parts);
 }
 
@@ -1061,6 +1073,13 @@ export function encodeNameConstraints(constraints: NameConstraints): Uint8Array 
 export function encodeCertificatePolicies(policies: CertificatePolicies): Uint8Array {
 	if (policies.length === 0) {
 		throw new Error('certificatePolicies must not be empty');
+	}
+	const seen = new Set<string>();
+	for (const policy of policies) {
+		if (seen.has(policy.policyIdentifier)) {
+			throw new Error(`Duplicate certificate policy OID: ${policy.policyIdentifier}`);
+		}
+		seen.add(policy.policyIdentifier);
 	}
 	return sequence(policies.map(encodePolicyInformation));
 }
@@ -1155,12 +1174,20 @@ function encodePolicyQualifierInfo(qualifier: PolicyQualifierInfo): Uint8Array {
 }
 
 /** DER-encode a UserNotice qualifier SEQUENCE. */
+function assertDisplayText(value: string): void {
+	const length = [...value].length;
+	if (length === 0 || length > 200) {
+		throw new Error('DisplayText must be 1 to 200 characters');
+	}
+}
+
 function encodeUserNoticePolicyQualifierInfo(qualifier: UserNoticePolicyQualifierInfo): Uint8Array {
 	const fields: Uint8Array[] = [];
 	if (qualifier.noticeRef !== undefined) {
 		fields.push(encodePolicyNoticeReference(qualifier.noticeRef));
 	}
 	if (qualifier.explicitText !== undefined) {
+		assertDisplayText(qualifier.explicitText);
 		fields.push(utf8String(qualifier.explicitText));
 	}
 	return sequence(fields);
@@ -1168,6 +1195,7 @@ function encodeUserNoticePolicyQualifierInfo(qualifier: UserNoticePolicyQualifie
 
 /** DER-encode a NoticeReference SEQUENCE. */
 function encodePolicyNoticeReference(reference: PolicyNoticeReference): Uint8Array {
+	assertDisplayText(reference.organization);
 	return sequence([
 		utf8String(reference.organization),
 		sequence(reference.noticeNumbers.map((noticeNumber) => integerFromNumber(noticeNumber))),
@@ -1242,8 +1270,13 @@ function encodeNameConstraintForm(form: NameConstraintForm): Uint8Array {
 			return implicitPrimitiveContext(1, new TextEncoder().encode(form.value));
 		case 'uri':
 			return implicitPrimitiveContext(6, new TextEncoder().encode(form.value));
-		case 'ip':
+		case 'ip': {
+			const total = form.addressBytes.length + form.maskBytes.length;
+			if (form.addressBytes.length !== form.maskBytes.length || (total !== 8 && total !== 32)) {
+				throw new Error('IP name constraint must be 8 octets (IPv4) or 32 octets (IPv6)');
+			}
 			return implicitPrimitiveContext(7, concatBytes([form.addressBytes, form.maskBytes]));
+		}
 		case 'directoryName':
 			return implicitConstructedContext(4, extractDirectoryNameContent(form.derHex));
 		default: {

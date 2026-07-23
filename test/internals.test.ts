@@ -85,8 +85,11 @@ import {
 import { createPkcs12MacData, parsePkcs12MacDataOrThrow } from '#micro509/pkcs';
 import {
 	buildCertificateExtensions,
+	encodeAuthorityInfoAccess,
 	encodeCertificatePolicies,
 	encodeCrlDistributionPoints,
+	encodeExtendedKeyUsage,
+	encodeKeyUsage,
 	encodeNameConstraints,
 	encodePolicyMappings,
 	encodeSubjectAltName,
@@ -681,6 +684,62 @@ describe('extensions encoding', () => {
 	it('rejects empty certificate policies and policy mappings', () => {
 		expect(() => encodeCertificatePolicies([])).toThrow('certificatePolicies must not be empty');
 		expect(() => encodePolicyMappings([])).toThrow('policyMappings must not be empty');
+	});
+
+	it('rejects a duplicate certificate policy OID', () => {
+		expect(() =>
+			encodeCertificatePolicies([{ policyIdentifier: '1.2.3.4' }, { policyIdentifier: '1.2.3.4' }]),
+		).toThrow('Duplicate certificate policy OID: 1.2.3.4');
+	});
+
+	it('rejects a DisplayText outside SIZE (1..200)', () => {
+		const overLong = 'a'.repeat(201);
+		expect(() =>
+			encodeCertificatePolicies([
+				{
+					policyIdentifier: '1.2.3.4',
+					policyQualifiers: [{ type: 'userNotice', explicitText: overLong }],
+				},
+			]),
+		).toThrow('DisplayText must be 1 to 200 characters');
+		expect(() =>
+			encodeCertificatePolicies([
+				{
+					policyIdentifier: '1.2.3.4',
+					policyQualifiers: [
+						{ type: 'userNotice', noticeRef: { organization: '', noticeNumbers: [1] } },
+					],
+				},
+			]),
+		).toThrow('DisplayText must be 1 to 200 characters');
+	});
+
+	it('rejects empty SEQUENCE-valued extension encoders', () => {
+		expect(() => encodeKeyUsage([])).toThrow('keyUsage must set at least one bit');
+		expect(() => encodeExtendedKeyUsage([])).toThrow('extendedKeyUsage must not be empty');
+		expect(() => encodeAuthorityInfoAccess([])).toThrow('authorityInfoAccess must not be empty');
+		expect(() => encodeCrlDistributionPoints([])).toThrow(
+			'cRLDistributionPoints must not be empty',
+		);
+		expect(() => encodeNameConstraints({})).toThrow(
+			'nameConstraints must set permittedSubtrees or excludedSubtrees',
+		);
+	});
+
+	it('rejects an IP name constraint whose address and mask do not form 8 or 32 octets', () => {
+		expect(() =>
+			encodeNameConstraints({
+				permittedSubtrees: [
+					{
+						base: {
+							type: 'ip',
+							addressBytes: Uint8Array.of(10, 0, 0, 0),
+							maskBytes: Uint8Array.of(255, 0),
+						},
+					},
+				],
+			}),
+		).toThrow('IP name constraint must be 8 octets (IPv4) or 32 octets (IPv6)');
 	});
 
 	it('rejects invalid distribution point construction', () => {

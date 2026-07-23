@@ -18,6 +18,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Extension encoders reject input RFC 5280 forbids rather than emitting
+  non-conformant DER: an empty `keyUsage` (§4.2.1.3), `extendedKeyUsage`
+  (§4.2.1.12), `authorityInfoAccess`/`cRLDistributionPoints` (§4.2.2.1,
+  §4.2.1.13) or `nameConstraints` (§4.2.1.10) SEQUENCE, a duplicate certificate
+  policy OID (§4.2.1.4), a `DisplayText` outside SIZE (1..200) (§4.2.1.4), and an
+  IP name constraint whose address and mask do not total 8 or 32 octets
+  (§4.2.1.10). Each previously encoded a structure the library's own parser, or
+  OpenSSL, rejects.
+  (https://github.com/kjanat/micro509/pull/79)
+
 ## [0.13.0] - 2026-07-23
 
 A public `micro509/der` entrypoint, and RFC-conformance fixes across path
