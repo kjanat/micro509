@@ -22,7 +22,7 @@ import {
 	checkIdentityWithOpenSsl,
 	checkRevocationWithOpenSsl,
 	issueAndValidateOcspResponseWithOpenSsl,
-	renderCertificateWithOpenSsl,
+	readCertificateSanWithOpenSsl,
 	validateMicro509OcspResponseWithOpenSsl,
 	verifyChainWithOpenSsl,
 } from '#test/oracles/openssl';
@@ -289,11 +289,12 @@ describe.skipIf(!openSslAvailable || !differentialEnabled)('OpenSSL differential
 				],
 			},
 		});
-		const openSsl = await renderCertificateWithOpenSsl(certificate.pem);
+		const openSsl = await readCertificateSanWithOpenSsl(certificate.pem);
 		expect(openSsl.accepted).toBe(true);
-		// OpenSSL decodes the directoryName [4] SAN — proof the full Name TLV is wrapped.
-		expect(openSsl.output).toContain('DirName');
-		expect(openSsl.output).toContain('Diff Dir CA');
+		// OpenSSL decodes the directoryName [4] SAN (full Name TLV wrapped) and the
+		// SRV-ID otherName [0] (direct type-id/value fields).
+		expect(openSsl.subjectAltName).toContain('DirName:/CN=Diff Dir CA');
+		expect(openSsl.subjectAltName).toContain('SRVName:_xmpp.example.com');
 	});
 
 	it('OpenSSL accepts an OCSP response produced by micro509', async () => {

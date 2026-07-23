@@ -333,13 +333,22 @@ export async function validateMicro509OcspResponseWithOpenSsl(input: {
 	});
 }
 
+/** A normalized view of the SubjectAltName extension as OpenSSL decodes it. */
+export interface OpenSslSanObservation {
+	/** `true` when OpenSSL parsed the certificate and its SAN extension. */
+	readonly accepted: boolean;
+	/** The whitespace-normalized SAN value (`"DNS:…, DirName:CN=…"`), or `undefined`. */
+	readonly subjectAltName?: string;
+}
+
 /**
- * Renders a micro509-produced certificate with `openssl x509 -text`, proving the
- * emitted DER (including SubjectAltName encodings) parses in OpenSSL.
+ * Reads the SubjectAltName a micro509-produced certificate encodes, as OpenSSL
+ * decodes it, proving the emitted SAN (directoryName [4], otherName [0]) is
+ * interoperable. Returns a normalized SAN string rather than raw CLI text.
  */
-export async function renderCertificateWithOpenSsl(
+export async function readCertificateSanWithOpenSsl(
 	certificatePem: string,
-): Promise<{ readonly accepted: boolean; readonly exitCode: number; readonly output: string }> {
+): Promise<OpenSslSanObservation> {
 	return await withTempDir(async (directory) => {
 		const certificatePath = join(directory, 'certificate.pem');
 		await Bun.write(certificatePath, certificatePem);
@@ -348,10 +357,23 @@ export async function renderCertificateWithOpenSsl(
 			'x509',
 			'-in', certificatePath,
 			'-noout',
-			'-text',
+			'-ext', 'subjectAltName',
 			'-nameopt', 'RFC2253',
 		]);
-		return { accepted: result.exitCode === 0, exitCode: result.exitCode, output: mergeCommandOutput(result) };
+		if (result.exitCode !== 0) {
+			return { accepted: false };
+		}
+		const text = mergeCommandOutput(result);
+		const marker = 'Subject Alternative Name:';
+		const markerIndex = text.indexOf(marker);
+		if (markerIndex === -1) {
+			return { accepted: true };
+		}
+		const subjectAltName = text
+			.slice(markerIndex + marker.length)
+			.replace(/\s+/g, ' ')
+			.trim();
+		return { accepted: true, subjectAltName };
 	});
 }
 

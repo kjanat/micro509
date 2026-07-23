@@ -1215,6 +1215,9 @@ describe('parse', () => {
 		const badShapes = [
 			// type-id is not an OBJECT IDENTIFIER
 			concatBytes([integerFromNumber(1), tlv(0xa0, tlv(0x16, Uint8Array.of(0x61)))]),
+			// type-id has the OID tag but an empty (malformed) value — fails closed,
+			// it is not erased to a still-processed `unknown` name.
+			concatBytes([tlv(0x06, new Uint8Array()), tlv(0xa0, tlv(0x16, Uint8Array.of(0x61)))]),
 			// value is not wrapped in [0] EXPLICIT
 			concatBytes([srvOid, tlv(0x81, Uint8Array.of(0x61))]),
 			// [0] wraps two elements rather than exactly one
