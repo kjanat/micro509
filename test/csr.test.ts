@@ -133,7 +133,9 @@ describe('csr', () => {
 				subjectAltNames: [{ type: 'dns', value: 'csr.example' }],
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['clientAuth', { type: 'oid', value: '1.2.3.4.6' }],
-				authorityInfoAccess: [{ method: 'ocsp', location: { type: 'uri', value: 'http://csr.example/ocsp' } }],
+				authorityInfoAccess: [
+					{ method: 'ocsp', location: { type: 'uri', value: 'http://csr.example/ocsp' } },
+				],
 				crlDistributionPoints: [
 					{
 						distributionPoint: {
