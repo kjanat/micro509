@@ -23,15 +23,14 @@ import {
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { getCrypto } from '#micro509/internal/crypto/webcrypto';
 
+/** Module-private brand so {@link isWrongPasswordError} cannot be fooled by look-alike errors. */
+const wrongPasswordBrand = Symbol('micro509.WrongPasswordError');
+
 /**
  * Thrown when PBES2 / AES-CBC decryption fails its integrity check, which in
  * practice means the supplied password was wrong (or the ciphertext was
  * corrupted). Lets callers distinguish a bad password from malformed input.
  */
-/** Module-private brand so {@link isWrongPasswordError} cannot be fooled by look-alike errors. */
-const wrongPasswordBrand = Symbol('micro509.WrongPasswordError');
-
-/** Builds the branded `Error` (no class) thrown when decryption fails — a wrong password or corrupt content. */
 export function wrongPasswordError(message: string): Error {
 	return Object.assign(new Error(message), {
 		name: 'WrongPasswordError',
