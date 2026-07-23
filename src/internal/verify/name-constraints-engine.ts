@@ -187,7 +187,7 @@ interface AccumulatedNameConstraints {
  * certificates and checking each non-self-issued certificate's names
  * against the accumulated constraints.
  *
- * RFC 5280 §6.1.3(b)–(c) for intermediates, §6.1.5(g) for the leaf.
+ * RFC 5280 §6.1.3(b)-(c) for name checks, §6.1.4(g) for constraint accumulation.
  */
 
 export function evaluateNameConstraints(
@@ -215,9 +215,9 @@ export function evaluateNameConstraints(
 			throw new Error(`Certificate chain contains undefined at index ${String(index)}`);
 		}
 
-		// (b) If not self-issued, check names against accumulated constraints.
-		// RFC 5280 §4.2.1.10: self-issued certificates are exempt UNLESS
-		// they are the final certificate (leaf) in the path.
+		// RFC 5280 §6.1.3(b)-(c): check names against accumulated permitted (b)
+		// and excluded (c) constraints. §4.2.1.10 exempts self-issued
+		// certificates unless the certificate is the leaf.
 		if (!isSelfIssued(current) || index === 0) {
 			const nameCheckResult = checkCertificateNames(current, accumulated, index);
 			if (!nameCheckResult.ok) {
@@ -225,7 +225,8 @@ export function evaluateNameConstraints(
 			}
 		}
 
-		// (c) If this cert has nameConstraints, accumulate them.
+		// RFC 5280 §6.1.4(g): accumulate this certificate's nameConstraints,
+		// intersecting permitted subtrees and unioning excluded subtrees.
 		if (current.nameConstraints !== undefined) {
 			accumulated = accumulateConstraints(
 				accumulated,
@@ -418,6 +419,21 @@ function checkCertificateSubjectAltName(
 		);
 	}
 	const checkable = checkableResult.value;
+	if (
+		checkable?.type === 'uri' &&
+		accumulatedHasUriConstraints(accumulated) &&
+		uriAuthorityLacksFqdn(checkable.value)
+	) {
+		return nameConstraintFailure(
+			'name_constraints_violated',
+			`SAN uri:${checkable.value} has no FQDN authority and cannot be evaluated against URI name constraints`,
+			index,
+			nameConstraintDetails({
+				subjectCommonName: certificate.subject.values.commonName,
+				actual: `uri:${checkable.value}`,
+			}),
+		);
+	}
 	if (checkable === undefined || isNamePermitted(checkable, accumulated)) return { ok: true };
 	return nameConstraintFailure(
 		'name_constraints_violated',
@@ -435,10 +451,9 @@ function checkCertificateSubjectEmailFallback(
 	accumulated: AccumulatedNameConstraints,
 	index: number,
 ): NameConstraintValidationResult {
-	// RFC 5280 §4.2.1.10: When constraints are imposed on the rfc822Name
-	// name form, but the certificate does not include a SAN email, the
-	// constraint MUST be applied to the emailAddress attribute in the
-	// subject DN.
+	// RFC 5280 §4.2.1.10 applies rfc822Name constraints to the subject DN
+	// emailAddress when the certificate has no subjectAltName extension. This
+	// implementation applies it whenever the SAN carries no rfc822Name.
 	const hasEmailConstraints = accumulatedHasEmailConstraints(accumulated);
 	if (hasEmailConstraints) {
 		const hasSanEmail = certificate.subjectAltNames?.some((san) => san.type === 'email') ?? false;
@@ -472,6 +487,16 @@ function accumulatedHasEmailConstraints(accumulated: AccumulatedNameConstraints)
 		}
 	}
 	return accumulated.excluded.some((c) => c.type === 'email');
+}
+
+/** True when any level of accumulated constraints addresses the URI name form. */
+function accumulatedHasUriConstraints(accumulated: AccumulatedNameConstraints): boolean {
+	for (const level of accumulated.permittedLevels) {
+		if (level.some((c) => c.type === 'uri')) {
+			return true;
+		}
+	}
+	return accumulated.excluded.some((c) => c.type === 'uri');
 }
 
 /**
@@ -598,9 +623,11 @@ function nameMatchesConstraint(name: NameConstraintForm, constraint: NameConstra
 }
 
 /**
- * RFC 5280 §4.2.1.10: DNS name constraint matching.
- * Constraint "example.com" matches "example.com" and any subdomain.
- * Constraint ".example.com" matches only subdomains, not "example.com" itself.
+ * DNS name constraint matching. RFC 5280 §4.2.1.10 adds zero or more labels on
+ * the left; §7.2 compares label by label case-insensitively. Constraint
+ * "example.com" matches "example.com" and any subdomain. The leading-period
+ * form ".example.com" restricts to subdomains, following the convention shared
+ * by OpenSSL, Go and NSS rather than the RFC.
  */
 function matchesDnsConstraint(name: string, constraint: string): boolean {
 	const lowerName = name.toLowerCase();
@@ -615,22 +642,33 @@ function matchesDnsConstraint(name: string, constraint: string): boolean {
 }
 
 /**
- * RFC 5280 §4.2.1.10: Email constraint matching.
- * - "user@example.com" matches only that exact address.
- * - "example.com" matches any address @example.com.
- * - ".example.com" matches any address @subdomain.example.com.
+ * RFC 5280 §4.2.1.10 email constraint matching, deferring to §7.5 (as
+ * replaced by RFC 9549 §7.5.1): the local part matches exactly, the host part
+ * case-insensitively.
+ * - "user@example.com" constrains the local part exactly and the host case-insensitively.
+ * - "example.com" matches any address whose host is example.com.
+ * - ".example.com" matches any address under a subdomain of example.com.
  */
 function matchesEmailConstraint(name: string, constraint: string): boolean {
-	const lowerName = name.toLowerCase();
-	const lowerConstraint = constraint.toLowerCase();
-	if (lowerConstraint.includes('@')) {
-		return lowerName === lowerConstraint;
+	if (constraint.includes('@')) {
+		const nameAt = name.lastIndexOf('@');
+		const constraintAt = constraint.lastIndexOf('@');
+		if (nameAt < 0 || constraintAt < 0) {
+			return false;
+		}
+		if (name.slice(0, nameAt) !== constraint.slice(0, constraintAt)) {
+			return false;
+		}
+		return (
+			name.slice(nameAt + 1).toLowerCase() === constraint.slice(constraintAt + 1).toLowerCase()
+		);
 	}
-	const atIndex = lowerName.indexOf('@');
+	const atIndex = name.lastIndexOf('@');
 	if (atIndex < 0) {
 		return false;
 	}
-	const host = lowerName.slice(atIndex + 1);
+	const host = name.slice(atIndex + 1).toLowerCase();
+	const lowerConstraint = constraint.toLowerCase();
 	if (lowerConstraint.startsWith('.')) {
 		return host.endsWith(lowerConstraint);
 	}
@@ -668,6 +706,34 @@ function extractUriHost(uri: string): string | undefined {
 		return url.hostname;
 	} catch {
 		return undefined;
+	}
+}
+
+/**
+ * RFC 5280 §4.2.1.10: a URI subject to a uniformResourceIdentifier constraint
+ * MUST be rejected when its authority component has no FQDN host. True for a
+ * missing or empty authority, a bracketed IPv6 literal, an IPv4 literal, or a
+ * single-label host such as `localhost` (an FQDN has at least two labels).
+ */
+function uriAuthorityLacksFqdn(uri: string): boolean {
+	const host = extractUriHost(uri);
+	if (host === undefined || host.length === 0 || host.startsWith('[')) {
+		return true;
+	}
+	if (isIpLiteral(host)) {
+		return true;
+	}
+	const labels = host.split('.').filter((label) => label.length > 0);
+	return labels.length < 2;
+}
+
+/** True when `host` parses as an IPv4 or IPv6 literal. */
+function isIpLiteral(host: string): boolean {
+	try {
+		parseIpAddressToBytes(host);
+		return true;
+	} catch {
+		return false;
 	}
 }
 
