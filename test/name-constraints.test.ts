@@ -270,4 +270,28 @@ describe('name constraint fixtures', () => {
 		});
 		expect(hostCaseFold).toMatchObject({ ok: true });
 	});
+
+	it('cannot be bypassed by an ignorable code point in a directoryName SAN', async () => {
+		const excludedDerHex = buildDirectoryNameDerHex([
+			[{ oid: OIDS.organizationName, value: 'Acme', encoding: 'printable' }],
+		]);
+		// The leaf SAN organization carries a SOFT HYPHEN (U+00AD), which RFC 4518
+		// maps to nothing, so it prepares to "acme" and the excluded subtree still
+		// catches it.
+		const softHyphen = String.fromCodePoint(0x00ad);
+		const result = await verifyNameConstraintFixture({
+			rootNameConstraints: {
+				excludedSubtrees: [{ base: { type: 'directoryName', derHex: excludedDerHex } }],
+			},
+			leafSubjectAltNames: [
+				{
+					type: 'directoryName',
+					derHex: buildDirectoryNameDerHex([
+						[{ oid: OIDS.organizationName, value: `Ac${softHyphen}me`, encoding: 'utf8' }],
+					]),
+				},
+			],
+		});
+		expect(result).toMatchObject({ ok: false, code: 'name_constraints_violated' });
+	});
 });
