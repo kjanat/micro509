@@ -688,12 +688,14 @@ describe('extensions encoding', () => {
 	});
 
 	it('encodeSubjectAltName rejects an unknown GeneralName with an invalid wire tag', () => {
-		// [3], [5], [8] are valid unsupported alternatives; a universal INTEGER (0x02),
-		// context [9] (0x89), or wrong constructedness (0xa2 dNSName) is not a GeneralName.
-		expect(encodeSubjectAltName({ type: 'unknown', tag: 0xa3, value: new Uint8Array() })[0]).toBe(
-			0xa3,
-		);
-		for (const tag of [0x02, 0x89, 0xa2, 0x30]) {
+		// x400Address [3], ediPartyName [5], and registeredID [8] are valid but
+		// unsupported alternatives and round-trip as their own tag.
+		for (const tag of [0xa3, 0xa5, 0x88]) {
+			expect(encodeSubjectAltName({ type: 'unknown', tag, value: new Uint8Array() })[0]).toBe(tag);
+		}
+		// A universal INTEGER (0x02), an application-class tag (0x42), context [9]
+		// (0x89), and wrong constructedness (0xa2 dNSName) are not GeneralNames.
+		for (const tag of [0x02, 0x42, 0x89, 0xa2, 0x30]) {
 			expect(() =>
 				encodeSubjectAltName({ type: 'unknown', tag, value: Uint8Array.of(0x00) }),
 			).toThrow('Invalid GeneralName tag');
