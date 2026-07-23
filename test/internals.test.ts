@@ -17,6 +17,7 @@ import {
 	hexToBytes,
 	parseTime,
 	requireElement,
+	toHex,
 } from '#micro509/internal/asn1/asn1';
 import {
 	assertDerMaxDepth,
@@ -88,6 +89,8 @@ import {
 	encodeAuthorityInfoAccess,
 	encodeCertificatePolicies,
 	encodeCrlDistributionPoints,
+	encodeExtendedKeyUsage,
+	encodeKeyUsage,
 	encodeNameConstraints,
 	encodePolicyMappings,
 	encodeSubjectAltName,
@@ -732,6 +735,110 @@ describe('extensions encoding', () => {
 	it('rejects empty certificate policies and policy mappings', () => {
 		expect(() => encodeCertificatePolicies([])).toThrow('certificatePolicies must not be empty');
 		expect(() => encodePolicyMappings([])).toThrow('policyMappings must not be empty');
+	});
+
+	it('rejects a duplicate certificate policy OID', () => {
+		expect(() =>
+			encodeCertificatePolicies([{ policyIdentifier: '1.2.3.4' }, { policyIdentifier: '1.2.3.4' }]),
+		).toThrow('Duplicate certificate policy OID: 1.2.3.4');
+	});
+
+	it('rejects duplicate policy OIDs that differ only by leading-zero arc aliasing', () => {
+		expect(() =>
+			encodeCertificatePolicies([
+				{ policyIdentifier: '1.2.3.4' },
+				{ policyIdentifier: '1.2.03.4' },
+			]),
+		).toThrow('Duplicate certificate policy OID: 1.2.03.4');
+	});
+
+	it('rejects a policy qualifier reusing a built-in OID in the opaque variant', () => {
+		const qualifierDer = new Uint8Array([0x05, 0x00]);
+		for (const oid of [OIDS.cpsPolicyQualifier, OIDS.userNoticePolicyQualifier]) {
+			expect(() =>
+				encodeCertificatePolicies([
+					{ policyIdentifier: '1.2.3.4', policyQualifiers: [{ type: 'oid', oid, qualifierDer }] },
+				]),
+			).toThrow(
+				'Policy qualifier must use the typed cps or userNotice variant, not a built-in OID',
+			);
+		}
+	});
+
+	it('rejects a built-in qualifier OID smuggled through a leading-zero alias', () => {
+		const alias = OIDS.userNoticePolicyQualifier.replace(/\.(\d+)$/, '.0$1');
+		expect(() =>
+			encodeCertificatePolicies([
+				{
+					policyIdentifier: '1.2.3.4',
+					policyQualifiers: [
+						{ type: 'oid', oid: alias, qualifierDer: new Uint8Array([0x05, 0x00]) },
+					],
+				},
+			]),
+		).toThrow('Policy qualifier must use the typed cps or userNotice variant, not a built-in OID');
+	});
+
+	it('encodes a genuine custom policy qualifier OID as raw DER', () => {
+		const der = encodeCertificatePolicies([
+			{
+				policyIdentifier: '1.2.3.4',
+				policyQualifiers: [
+					{ type: 'oid', oid: '1.3.6.1.4.1.99999.1', qualifierDer: new Uint8Array([0x05, 0x00]) },
+				],
+			},
+		]);
+		expect(toHex(der)).toContain(`${toHex(objectIdentifier('1.3.6.1.4.1.99999.1'))}0500`);
+	});
+
+	it('rejects a DisplayText outside SIZE (1..200)', () => {
+		const overLong = 'a'.repeat(201);
+		expect(() =>
+			encodeCertificatePolicies([
+				{
+					policyIdentifier: '1.2.3.4',
+					policyQualifiers: [{ type: 'userNotice', explicitText: overLong }],
+				},
+			]),
+		).toThrow('DisplayText must be 1 to 200 characters');
+		expect(() =>
+			encodeCertificatePolicies([
+				{
+					policyIdentifier: '1.2.3.4',
+					policyQualifiers: [
+						{ type: 'userNotice', noticeRef: { organization: '', noticeNumbers: [1] } },
+					],
+				},
+			]),
+		).toThrow('DisplayText must be 1 to 200 characters');
+	});
+
+	it('rejects empty SEQUENCE-valued extension encoders', () => {
+		expect(() => encodeKeyUsage([])).toThrow('keyUsage must set at least one bit');
+		expect(() => encodeExtendedKeyUsage([])).toThrow('extendedKeyUsage must not be empty');
+		expect(() => encodeAuthorityInfoAccess([])).toThrow('authorityInfoAccess must not be empty');
+		expect(() => encodeCrlDistributionPoints([])).toThrow(
+			'cRLDistributionPoints must not be empty',
+		);
+		expect(() => encodeNameConstraints({})).toThrow(
+			'nameConstraints must set permittedSubtrees or excludedSubtrees',
+		);
+	});
+
+	it('rejects an IP name constraint whose address and mask do not form 8 or 32 octets', () => {
+		expect(() =>
+			encodeNameConstraints({
+				permittedSubtrees: [
+					{
+						base: {
+							type: 'ip',
+							addressBytes: Uint8Array.of(10, 0, 0, 0),
+							maskBytes: Uint8Array.of(255, 0),
+						},
+					},
+				],
+			}),
+		).toThrow('IP name constraint must be 8 octets (IPv4) or 32 octets (IPv6)');
 	});
 
 	it('rejects invalid distribution point construction', () => {

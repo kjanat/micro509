@@ -4,9 +4,9 @@
 Release checklist — every box, every release:
 - [ ] Move [Unreleased] entries under a new `## [X.Y.Z] - YYYY-MM-DD` header + intro line
 - [ ] Bump version in package.json AND jsr.json
-- [ ] Bump the `micro509` range in examples/vite/package.json — StackBlitz installs it from npm
+- [ ] Bump the `micro509` range in examples/vite/package.json and examples/browser/index.html's `<script type="importmap">`
 - [ ] Link definitions at the BOTTOM of this file: add [X.Y.Z] compare link, repoint [Unreleased]
-- [ ] Signed tag on the release commit: git tag -s vX.Y.Z -m "vX.Y.Z — summary"
+- [ ] Signed tag on the release commit: git tag -s vX.Y.Z -m "vX.Y.Z - summary"
 - [ ] Push master + tag, gh release create with milestone notes
 - [ ] Verify npm dist-tag latest + JSR after the publish workflow
 -->
@@ -36,6 +36,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Extension encoders reject input RFC 5280 forbids rather than emitting
+  non-conformant DER: an empty `keyUsage` (§4.2.1.3), `extendedKeyUsage`
+  (§4.2.1.12), `authorityInfoAccess`/`cRLDistributionPoints` (§4.2.2.1,
+  §4.2.1.13) or `nameConstraints` (§4.2.1.10) SEQUENCE, a duplicate certificate
+  policy OID compared by encoded identity so leading-zero aliases collide
+  (§4.2.1.4), a policy qualifier reusing the built-in `cps` or `userNotice` OID
+  in the opaque `oid` variant (§4.2.1.4), a `DisplayText` outside SIZE (1..200)
+  (§4.2.1.4), and an IP name constraint whose address and mask do not total 8 or
+  32 octets (§4.2.1.10). Each previously encoded a structure the library's own
+  parser, or OpenSSL, rejects.
+  (https://github.com/kjanat/micro509/pull/79)
 - A `directoryName` SubjectAltName or name constraint now encodes the complete
   Name TLV inside `[4]`, per RFC 5280 §4.2.1.6 (Name is an untagged CHOICE, so
   `[4]` is EXPLICIT). The encoder stripped the Name's SEQUENCE header, emitting
@@ -63,7 +74,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is parseable. An end-to-end differential test confirms OpenSSL accepts a
   micro509-produced response.
   (https://github.com/kjanat/micro509/pull/76)
-  > > > > > > > master
 
 ## [0.13.0] - 2026-07-23
 
