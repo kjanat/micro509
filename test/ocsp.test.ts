@@ -20,11 +20,12 @@ import {
 	verifyOcspResponseSignature,
 } from '#micro509';
 import { childrenOf, toHex } from '#micro509/internal/asn1/asn1';
+import type { DerElement } from '#micro509/internal/asn1/der';
 import {
 	bitString,
+	concatBytes,
 	explicitContext,
 	generalizedTime,
-	implicitPrimitiveContext,
 	integerFromNumber,
 	objectIdentifier,
 	octetString,
@@ -2170,7 +2171,7 @@ describe('ocsp', () => {
 		);
 		const response = await createSignedOcspResponseWithSingleResponses({
 			signerPrivateKey: issuer.keyPair.privateKey,
-			responderIdDer: implicitPrimitiveContext(2, responderKeyHash),
+			responderIdDer: explicitContext(2, octetString(responderKeyHash)),
 			singleResponses: [
 				await createOcspSingleResponseWithHashAlgorithm(
 					issuer.certificate.pem,
@@ -2448,7 +2449,7 @@ describe('ocsp', () => {
 		// Build ResponseData WITH explicit version [0]
 		const responseData = sequence([
 			explicitContext(0, integerFromNumber(0)), // version v1 = 0, explicit [0]
-			implicitPrimitiveContext(2, issuerKeyHash), // responderID byKeyHash [2]
+			explicitContext(2, octetString(issuerKeyHash)), // responderID byKeyHash [2]
 			generalizedTime(new Date()), // producedAt
 			sequence([singleResponse]), // responses
 		]);
@@ -2586,7 +2587,7 @@ describe('ocsp', () => {
 			octetString(Uint8Array.of(0x05, 0x00)),
 		]);
 		const responseData = sequence([
-			implicitPrimitiveContext(2, issuerKeyHash), // responderID byKeyHash [2]
+			explicitContext(2, octetString(issuerKeyHash)), // responderID byKeyHash [2]
 			generalizedTime(new Date()),
 			sequence([singleResponse]),
 			explicitContext(1, sequence([fakeExtension])), // responseExtensions [1]
@@ -2633,12 +2634,38 @@ describe('ocsp', () => {
 		});
 		expect(() =>
 			parseOcspResponseDerOrThrow(
-				rewriteOcspResponseResponderId(
-					response,
-					explicitContext(2, octetString(Uint8Array.of(0x01))),
-				),
+				rewriteOcspResponseResponderId(response, explicitContext(3, octetString(responderKeyHash))),
 			),
 		).toThrow('Unsupported OCSP responderID tag');
+		expect(() =>
+			parseOcspResponseDerOrThrow(
+				rewriteOcspResponseResponderId(response, explicitContext(2, integerFromNumber(1))),
+			),
+		).toThrow('ResponderID byKey must wrap an OCTET STRING');
+		expect(() =>
+			parseOcspResponseDerOrThrow(
+				rewriteOcspResponseResponderId(
+					response,
+					explicitContext(
+						2,
+						concatBytes([octetString(responderKeyHash), octetString(responderKeyHash)]),
+					),
+				),
+			),
+		).toThrow('ResponderID byKey must wrap exactly one OCTET STRING');
+		expect(() =>
+			parseOcspResponseDerOrThrow(
+				rewriteOcspResponseResponderId(response, explicitContext(2, octetString(new Uint8Array()))),
+			),
+		).toThrow('ResponderID byKey must be a 20-byte SHA-1 KeyHash');
+		expect(() =>
+			parseOcspResponseDerOrThrow(
+				rewriteOcspResponseResponderId(
+					response,
+					explicitContext(2, octetString(new Uint8Array(19))),
+				),
+			),
+		).toThrow('ResponderID byKey must be a 20-byte SHA-1 KeyHash');
 
 		const responseWithNextUpdate = await createOcspResponse({
 			signerPrivateKey: issuer.keyPair.privateKey,
@@ -2705,7 +2732,7 @@ describe('ocsp', () => {
 			octetString(octetString(Uint8Array.of(0xaa, 0xbb))),
 		]);
 		const responseData = sequence([
-			implicitPrimitiveContext(2, issuerKeyHash),
+			explicitContext(2, octetString(issuerKeyHash)),
 			generalizedTime(new Date()),
 			sequence([singleResponse]),
 			explicitContext(1, sequence([nonceExtension, nonceExtension])),
@@ -2769,7 +2796,7 @@ describe('ocsp', () => {
 		]);
 		const nonceExtension = sequence([objectIdentifier(OIDS.ocspNonce), integerFromNumber(1)]);
 		const responseData = sequence([
-			implicitPrimitiveContext(2, issuerKeyHash),
+			explicitContext(2, octetString(issuerKeyHash)),
 			generalizedTime(new Date()),
 			sequence([singleResponse]),
 			explicitContext(1, sequence([nonceExtension])),
@@ -2837,7 +2864,7 @@ describe('ocsp', () => {
 			octetString(octetString(Uint8Array.of(0xaa, 0xbb))),
 		]);
 		const responseData = sequence([
-			implicitPrimitiveContext(2, issuerKeyHash),
+			explicitContext(2, octetString(issuerKeyHash)),
 			generalizedTime(new Date()),
 			sequence([singleResponse]),
 			explicitContext(1, sequence([nonceExtension])),
@@ -2898,7 +2925,7 @@ describe('ocsp', () => {
 			generalizedTime(new Date()),
 		]);
 		const responseData = sequence([
-			implicitPrimitiveContext(2, issuerKeyHash),
+			explicitContext(2, octetString(issuerKeyHash)),
 			generalizedTime(new Date()),
 			sequence([singleResponse]),
 		]);
@@ -3176,7 +3203,7 @@ async function createSignedOcspResponseWithResponderId(input: {
 	const responderId =
 		input.responderId.type === 'byName'
 			? explicitContext(1, input.responderId.nameDer)
-			: implicitPrimitiveContext(2, input.responderId.keyHash);
+			: explicitContext(2, octetString(input.responderId.keyHash));
 	const responseData = sequence([
 		responderId,
 		generalizedTime(input.producedAt ?? new Date('2024-01-01T00:00:00Z')),
@@ -3600,5 +3627,109 @@ describe('ocsp Result forms', () => {
 		if (parsedResponse.ok) {
 			expect(parsedResponse.value.responseStatus).toBe('successful');
 		}
+	});
+});
+
+describe('RFC 6960 ResponderID byKey and time encoding', () => {
+	const requireEl = (element: DerElement | undefined): DerElement => {
+		if (element === undefined) {
+			throw new Error('expected a DER element');
+		}
+		return element;
+	};
+
+	const drillResponseData = (der: Uint8Array): { source: Uint8Array; children: DerElement[] } => {
+		const rootChildren = childrenOf(der, readElement(der));
+		const responseBytes = requireEl(rootChildren[1]);
+		const responseSequence = requireEl(childrenOf(der, responseBytes)[0]);
+		const basicOctet = requireEl(childrenOf(der, responseSequence)[1]);
+		const basicResponse = basicOctet.value;
+		const responseData = requireEl(childrenOf(basicResponse, readElement(basicResponse))[0]);
+		return { source: basicResponse, children: childrenOf(basicResponse, responseData) };
+	};
+
+	const ocspFixture = async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Interop OCSP CA' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Interop OCSP CA' },
+			subject: { commonName: 'interop-leaf.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+		return { ca, leaf };
+	};
+
+	it('encodes byKeyHash as [2] EXPLICIT wrapping an OCTET STRING', async () => {
+		const { ca, leaf } = await ocspFixture();
+		const material = await createOcspResponse({
+			signerPrivateKey: ca.keyPair.privateKey,
+			signerCertificate: ca.certificate.pem,
+			producedAt: new Date('2025-01-01T00:00:00Z'),
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: ca.certificate.pem,
+					certStatus: 'good',
+					thisUpdate: new Date('2025-01-01T00:00:00Z'),
+					nextUpdate: new Date('2025-01-08T00:00:00Z'),
+				},
+			],
+		});
+		const { source, children } = drillResponseData(material.der);
+		const responderId = requireEl(children[0]);
+		expect(responderId.tag).toBe(0xa2);
+		const responderInner = childrenOf(source, responderId);
+		expect(responderInner).toHaveLength(1);
+		expect(requireEl(responderInner[0]).tag).toBe(0x04);
+
+		const expectedKeyHash = toHex(
+			new Uint8Array(
+				sha1(
+					extractSubjectPublicKeyBytes(
+						unwrap(parseCertificatePem(ca.certificate.pem)).subjectPublicKeyInfoDer,
+					),
+				),
+			),
+		);
+		expect(parseOcspResponseDerOrThrow(material.der).responderId).toMatchObject({
+			type: 'byKeyHash',
+			keyHashHex: expectedKeyHash,
+		});
+	});
+
+	it('encodes producedAt, thisUpdate, nextUpdate and revocationTime as GeneralizedTime', async () => {
+		const { ca, leaf } = await ocspFixture();
+		const material = await createOcspResponse({
+			signerPrivateKey: ca.keyPair.privateKey,
+			signerCertificate: ca.certificate.pem,
+			producedAt: new Date('2025-01-01T00:00:00Z'),
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: ca.certificate.pem,
+					certStatus: 'revoked',
+					revokedAt: new Date('2024-06-15T00:00:00Z'),
+					thisUpdate: new Date('2025-01-01T00:00:00Z'),
+					nextUpdate: new Date('2025-01-08T00:00:00Z'),
+				},
+			],
+		});
+		const { source, children } = drillResponseData(material.der);
+		expect(requireEl(children[1]).tag).toBe(0x18);
+
+		const singleResponses = childrenOf(source, requireEl(children[2]));
+		const single = childrenOf(source, requireEl(singleResponses[0]));
+		const revokedInfo = requireEl(single[1]);
+		expect(revokedInfo.tag).toBe(0xa1);
+		expect(requireEl(childrenOf(source, revokedInfo)[0]).tag).toBe(0x18);
+		expect(requireEl(single[2]).tag).toBe(0x18);
+		const nextUpdate = requireEl(single[3]);
+		expect(nextUpdate.tag).toBe(0xa0);
+		expect(requireEl(childrenOf(source, nextUpdate)[0]).tag).toBe(0x18);
 	});
 });

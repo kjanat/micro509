@@ -32,6 +32,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unrecognised `otherName` shape now degrades to `{ type: 'unknown' }` instead
   of throwing.
   (https://github.com/kjanat/micro509/pull/77)
+- OCSP responses now encode `ResponderID` `byKey` as `[2]` EXPLICIT wrapping an
+  OCTET STRING and every time field as GeneralizedTime, per RFC 6960 Appendix
+  B.1. The `byKey` responder was written as `[2]` IMPLICIT over the raw hash and
+  the times as UTCTime, so OpenSSL and Go's `crypto/ocsp` could not parse a
+  response this library produced. The parser reads the EXPLICIT form and
+  requires the `byKey` hash to be a 20-byte SHA-1 digest. Embedded certificates
+  are wrapped in the `certs [0] EXPLICIT SEQUENCE OF Certificate` the field's
+  syntax requires rather than concatenated, so a response with `includedCertificates`
+  is parseable. An end-to-end differential test confirms OpenSSL accepts a
+  micro509-produced response.
+  (https://github.com/kjanat/micro509/pull/76)
 
 ## [0.13.0] - 2026-07-23
 
