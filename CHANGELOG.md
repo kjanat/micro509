@@ -18,6 +18,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- PEM decoding handles every RFC 7468 §3 newline convention (`CRLF`, `CR`, `LF`).
+  `pemDecode` and `splitPemBlocks` stripped `\r` outright, which joins every line
+  of a CR-only file into one, so such a file failed to decode.
+- `splitPemBlocks` accepts RFC 7468 labels with an internal `-` separator and no
+  longer discards unrelated blocks in the same file when it meets a label it does
+  not recognise.
+- `pemEncode` emits the RFC 7468 strict trailing end-of-line, so concatenating
+  two blocks no longer produces `-----END … ----------BEGIN …-----`, which
+  `openssl storeutl` rejects.
+  (https://github.com/kjanat/micro509/pull/81)
+
 ## [0.13.0] - 2026-07-23
 
 A public `micro509/der` entrypoint, and RFC-conformance fixes across path

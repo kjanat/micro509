@@ -47,8 +47,12 @@ export interface CategorizedPemBlocks {
 export function pemEncode(label: string, der: Uint8Array): string {
 	const body = base64Encode(der);
 	const lines = body.match(/.{1,64}/g) ?? [];
-	return `-----BEGIN ${label}-----\n${lines.join('\n')}\n-----END ${label}-----`;
+	return `-----BEGIN ${label}-----\n${lines.join('\n')}\n-----END ${label}-----\n`;
 }
+
+// RFC 7468 §3 label ABNF: labelchar = %x21-2C / %x2E-7E, joined by an optional
+// single "-" or SP; an empty label is legal.
+const PEM_LABEL_PATTERN = /^(?:[!-,.-~](?:[- ]?[!-,.-~])*)?$/;
 
 /** Machine-readable failure reason for the PEM decoders. */
 export type PemErrorCode = 'malformed';
@@ -83,7 +87,7 @@ export type CategorizePemBlocksResult =
  * @param pem PEM-encoded text (may contain `\r`).
  */
 export function pemDecodeOrThrow(label: string, pem: string): Uint8Array {
-	const normalized = pem.replace(/\r/g, '').trim();
+	const normalized = pem.replace(/\r\n?/g, '\n').trim();
 	const begin = `-----BEGIN ${label}-----`;
 	const end = `-----END ${label}-----`;
 	const lines = normalized.split('\n');
@@ -107,7 +111,7 @@ export function pemDecodeOrThrow(label: string, pem: string): Uint8Array {
  * and ignores non-PEM text between blocks.
  */
 export function splitPemBlocksOrThrow(input: string): readonly PemBlock[] {
-	const normalized = input.replace(/\r/g, '');
+	const normalized = input.replace(/\r\n?/g, '\n');
 	const blocks: PemBlock[] = [];
 	const beginToken = '-----BEGIN ';
 	// Linear `indexOf` scan rather than a global regex with a lazy body: a
@@ -128,15 +132,10 @@ export function splitPemBlocksOrThrow(input: string): readonly PemBlock[] {
 		}
 		const label = normalized.slice(labelStart, dashIdx);
 		const beginLineEnd = dashIdx + 5;
-		// A well-formed begin line is `-----BEGIN <label>-----\n` with a dash-free,
-		// single-line label (RFC 7468). Anything else is not a block start; skip it
-		// so it surfaces in the stray-marker checks instead of being parsed.
-		if (
-			label.length === 0 ||
-			label.includes('-') ||
-			label.includes('\n') ||
-			normalized[beginLineEnd] !== '\n'
-		) {
+		// A well-formed begin line is `-----BEGIN <label>-----\n` with an RFC 7468
+		// label. Anything else is not a block start; skip it so it surfaces in the
+		// stray-marker checks instead of being parsed.
+		if (!PEM_LABEL_PATTERN.test(label) || normalized[beginLineEnd] !== '\n') {
 			scan = labelStart;
 			continue;
 		}
@@ -146,7 +145,8 @@ export function splitPemBlocksOrThrow(input: string): readonly PemBlock[] {
 		if (endIdx === -1) {
 			break;
 		}
-		const blockEnd = endIdx + endToken.length;
+		const markerEnd = endIdx + endToken.length;
+		const blockEnd = normalized[markerEnd] === '\n' ? markerEnd + 1 : markerEnd;
 		const pem = normalized.slice(beginIdx, blockEnd);
 		if (containsPemMarker(normalized.slice(cursor, beginIdx))) {
 			throw new Error('Malformed PEM block');

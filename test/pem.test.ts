@@ -185,3 +185,33 @@ describe('pem Result forms', () => {
 		}
 	});
 });
+
+describe('RFC 7468 conformance', () => {
+	const der = Uint8Array.of(1, 2, 3);
+
+	it('decodes CR-only and CRLF newline conventions', () => {
+		const lf = pemEncode('CERTIFICATE', der);
+		const crOnly = lf.replace(/\n/g, '\r');
+		const crlf = lf.replace(/\n/g, '\r\n');
+		expect(Array.from(pemDecodeOrThrow('CERTIFICATE', crOnly))).toEqual([1, 2, 3]);
+		expect(Array.from(pemDecodeOrThrow('CERTIFICATE', crlf))).toEqual([1, 2, 3]);
+		expect(splitPemBlocksOrThrow(crOnly).map((block) => block.label)).toEqual(['CERTIFICATE']);
+	});
+
+	it('emits a trailing eol so concatenated blocks stay separable', () => {
+		expect(pemEncode('CERTIFICATE', der).endsWith('-----\n')).toBe(true);
+		const bundle = pemEncode('CERTIFICATE', der) + pemEncode('PRIVATE KEY', der);
+		expect(splitPemBlocksOrThrow(bundle).map((block) => block.label)).toEqual([
+			'CERTIFICATE',
+			'PRIVATE KEY',
+		]);
+	});
+
+	it('accepts an RFC 7468 label with an internal hyphen without dropping sibling blocks', () => {
+		const bundle = pemEncode('X-TEST', der) + pemEncode('CERTIFICATE', der);
+		expect(splitPemBlocksOrThrow(bundle).map((block) => block.label)).toEqual([
+			'X-TEST',
+			'CERTIFICATE',
+		]);
+	});
+});
