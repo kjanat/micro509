@@ -56,15 +56,16 @@ import it straight from a CDN.
 ```
 
 Subpaths work the same way — `https://esm.run/micro509/x509` — and pinning a
-version (`https://esm.run/micro509@0.11.0`) is what you want in production, so
-a release cannot change under you.
+version (`https://esm.run/micro509@{{ $frontmatter.packageVersion }}`) is what
+you want in production, so a release cannot change under you.
 
-[`examples/browser`][browser-example] is that, in full: one HTML file that issues
-a certificate and parses it back, with nothing installed and nothing built. For the
-same demo with types and a dev server, see [`examples/vite`][vite-example].
+- [`examples/browser`][browser-example] is that, in full: one HTML file that issues a certificate and parses it back, with nothing installed and nothing built. [open in stackblitz][browser-example:stackblitz]
+- [`examples/vite`][vite-example]: the same demo with types and a dev server. [open in stackblitz][vite-example:stackblitz]
 
-[browser-example]: https://github.com/kjanat/micro509/tree/HEAD/examples/browser/README.md
-[vite-example]: https://github.com/kjanat/micro509/tree/HEAD/examples/vite/README.md
+[browser-example]: https://github.com/kjanat/micro509/tree/master/examples/browser/README.md 'GitHub'
+[browser-example:stackblitz]: https://stackblitz.com/github/kjanat/micro509/tree/master/examples/browser?title=micro509%20in%20the%20browser 'Stackblitz'
+[vite-example]: https://github.com/kjanat/micro509/tree/master/examples/vite/README.md 'GitHub'
+[vite-example:stackblitz]: https://stackblitz.com/github/kjanat/micro509/tree/master/examples/vite?title=micro509%20with%20Vite 'Stackblitz'
 
 ### Deno
 

@@ -208,6 +208,14 @@ function repairExamples(markdown: string): string {
 	);
 }
 
+/** Replace stale pins in immutable release docs with per-tree frontmatter. */
+function versionPackageReferences(markdown: string): string {
+	return markdown.replace(
+		/https:\/\/esm\.run\/micro509@\d+\.\d+\.\d+/g,
+		'https://esm.run/micro509@{{ $frontmatter.packageVersion }}',
+	);
+}
+
 const docs = await versionedDocs({
 	repoRoot,
 	siteRoot,
@@ -217,7 +225,7 @@ const docs = await versionedDocs({
 	...(devLabelUrl === undefined ? {} : { devLabelUrl }),
 	pages: ['site/guide', 'site/reference', 'site/index.md'],
 	sources: ['src', 'package.json', 'jsr.json'],
-	transformPage: repairExamples,
+	transformPage: (markdown) => versionPackageReferences(repairExamples(markdown)),
 	releases: {
 		index: `https://registry.npmjs.org/${repo.name}`,
 		tag: (version) => `v${version}`,
