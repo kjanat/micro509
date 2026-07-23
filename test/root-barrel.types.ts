@@ -1,6 +1,10 @@
 import type {
+	CreateCertificateErrorCode,
 	CreateCertificateInput,
 	CreatePfxInput,
+	CrlEncoderErrorCode,
+	ExtensionEncoderErrorCode,
+	NameEncoderErrorCode,
 	Result,
 	VerifyCertificateChainInput,
 } from '#micro509';
@@ -17,6 +21,15 @@ function assertRootTypes(_input: {
 	readonly result?: Result<string, number>;
 	readonly pkcs12?: RootPkcs12MacData;
 	readonly signature?: RootSignatureProfileInput;
+	readonly certificateError?: CreateCertificateErrorCode;
+	readonly extensionError?: ExtensionEncoderErrorCode;
+	readonly nameError?: NameEncoderErrorCode;
+	readonly crlError?: CrlEncoderErrorCode;
 }): void {}
 
-assertRootTypes({});
+assertRootTypes({
+	certificateError: 'validity_not_after_before_not_before',
+	extensionError: 'key_usage_empty',
+	nameError: 'invalid_country_code',
+	crlError: 'distribution_point_name_conflict',
+});

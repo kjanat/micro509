@@ -31,6 +31,7 @@ export type {
 	CreateCertificateRevocationListInput,
 	CrlApplicabilityFailureReason,
 	CrlCertificateSource,
+	CrlEncoderErrorCode,
 	CrlSource,
 	ParseCertificateRevocationListErrorCode,
 	ParseCertificateRevocationListFailure,

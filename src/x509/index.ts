@@ -11,6 +11,7 @@
 
 export type {
 	CertificateMaterial,
+	CreateCertificateErrorCode,
 	CreateCertificateInput,
 	CreateSelfSignedCertificateInput,
 	SelfSignedCertificateResult,
@@ -37,6 +38,7 @@ export type {
 	DistributionPointName,
 	DistributionPointReason,
 	ExtendedKeyUsage,
+	ExtensionEncoderErrorCode,
 	GeneralName,
 	GeneralSubtree,
 	InhibitAnyPolicy,
@@ -85,6 +87,7 @@ export { certificateFingerprint } from '#micro509/x509/fingerprint';
 
 export type {
 	NameAttribute,
+	NameEncoderErrorCode,
 	NameFieldKey,
 	NameInput,
 	NameObject,
