@@ -972,7 +972,7 @@ export function encodeBasicConstraints(input: BasicConstraints): Uint8Array {
 	}
 	if (input.pathLength !== undefined) {
 		if (!input.ca) {
-			throwExtensionEncoderError('path_length_requires_ca', 'pathLength requires ca=true');
+			throw new Error('pathLength requires ca=true');
 		}
 		fields.push(integerFromNumber(input.pathLength));
 	}

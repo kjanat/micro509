@@ -2574,6 +2574,40 @@ describe('crl', () => {
 		);
 	});
 
+	it('rejects invalid issuing distribution point construction', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Bad IDP CRL Issuer' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const base = {
+			issuer: { commonName: 'Bad IDP CRL Issuer' },
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		} as const;
+		await expectRejectedErrorCode(
+			createCertificateRevocationList({
+				...base,
+				issuingDistributionPoint: {
+					distributionPoint: {
+						fullName: [{ type: 'uri', value: 'http://example.test/crl' }],
+						relativeName: [{ type: 'commonName', value: 'bad' }],
+					},
+				},
+			}),
+			'distribution_point_name_conflict',
+		);
+		await expectRejectedErrorCode(
+			createCertificateRevocationList({
+				...base,
+				issuingDistributionPoint: { distributionPoint: {} },
+			}),
+			'distribution_point_name_empty',
+		);
+	});
+
 	it('rejects empty freshest CRL issuer lists', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'Bad Freshest CRL Issuer' },

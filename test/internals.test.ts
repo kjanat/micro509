@@ -94,6 +94,7 @@ import {
 	encodeKeyUsage,
 	encodeNameConstraints,
 	encodePolicyMappings,
+	encodeRelativeDistinguishedName,
 	encodeSubjectAltName,
 } from '#micro509/x509';
 
@@ -900,6 +901,13 @@ describe('extensions encoding', () => {
 					permittedSubtrees: [{ base: { type: 'directoryName', derHex: '020100' } }],
 				}),
 			'directory_name_not_sequence',
+		);
+	});
+
+	it('rejects an empty relative distinguished name', () => {
+		expectEncoderErrorCode(
+			() => encodeRelativeDistinguishedName([]),
+			'relative_distinguished_name_empty',
 		);
 	});
 

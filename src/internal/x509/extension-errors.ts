@@ -33,7 +33,6 @@ export type ExtensionEncoderErrorCode =
 	| 'invalid_oid'
 	| 'key_usage_empty'
 	| 'name_constraints_empty'
-	| 'path_length_requires_ca'
 	| 'policy_constraints_empty'
 	| 'policy_mappings_any_policy'
 	| 'policy_mappings_empty'

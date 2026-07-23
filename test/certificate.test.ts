@@ -463,6 +463,18 @@ describe('certificate', () => {
 		);
 	});
 
+	it('rejects a malformed custom extension OID', async () => {
+		await expectRejectedErrorCode(
+			createSelfSignedCertificate({
+				subject: { commonName: 'bad-oid.example' },
+				extensions: {
+					customExtensions: [{ oid: 'invalid', value: new Uint8Array([0x05, 0x00]) }],
+				},
+			}),
+			'invalid_oid',
+		);
+	});
+
 	it('creates certificates with RSA SHA-384, SHA-512 and ECDSA P-384', async () => {
 		const rsaSha384 = await createSelfSignedCertificate({
 			subject: { commonName: 'rsa384.example' },

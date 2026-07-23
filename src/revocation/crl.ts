@@ -2042,8 +2042,6 @@ function parseImplicitBoolean(element: DerElement): boolean {
 
 /** Machine-readable reason a CRL encoder rejected its construction input. */
 export type CrlEncoderErrorCode =
-	| 'issuing_distribution_point_conflicting_scope'
-	| 'issuing_distribution_point_required'
 	| 'distribution_point_name_conflict'
 	| 'distribution_point_full_name_empty'
 	| 'distribution_point_name_empty';
@@ -2061,8 +2059,7 @@ function encodeIssuingDistributionPoint(value: IssuingDistributionPoint): Uint8A
 		value.onlyContainsAttributeCerts === true,
 	].filter(Boolean).length;
 	if (certificateScopeFlags > 1) {
-		throwCrlEncoderError(
-			'issuing_distribution_point_conflicting_scope',
+		throw new Error(
 			'IssuingDistributionPoint can assert at most one of user, CA, or attribute cert scope',
 		);
 	}
@@ -2097,10 +2094,7 @@ function encodeDistributionPointName(
 	value: IssuingDistributionPoint['distributionPoint'],
 ): Uint8Array {
 	if (value === undefined) {
-		throwCrlEncoderError(
-			'issuing_distribution_point_required',
-			'IssuingDistributionPoint distributionPoint is required',
-		);
+		throw new Error('IssuingDistributionPoint distributionPoint is required');
 	}
 	if (value.fullName !== undefined && value.relativeName !== undefined) {
 		throwCrlEncoderError(
