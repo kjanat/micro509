@@ -101,9 +101,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   excluded subtree failed to exclude a name carrying a SOFT HYPHEN), folded
   with `toLowerCase` alone (so `Straße` did not equal `STRASSE`), and rejected
   control characters a DN may legitimately carry (so a name did not equal
-  itself). `domainComponent` values now compare case-insensitively per RFC 5280
-  §7.3, so `DC=Example` chains to a CA whose subject is `DC=example`. RFC 4518
-  and RFC 3454 are vendored under `docs/rfc/`.
+  itself). The B.2 fold table is generated from the vendored RFC 3454 Table B.2
+  and covers every fold `toLowerCase` misses, including the Greek polytonic
+  ypogegrammeni set; folding runs after NFKC so a compatibility character such
+  as a modifier-letter capital folds to lowercase. BMPString and
+  UniversalString distinguished-name values are prepared for comparison
+  alongside UTF8String and PrintableString. `domainComponent` values now
+  compare case-insensitively per RFC 5280 §7.3, so `DC=Example` chains to a CA
+  whose subject is `DC=example`. RFC 4518 and RFC 3454 are vendored under
+  `docs/rfc/`.
   (https://github.com/kjanat/micro509/pull/74)
 
 ## [0.12.0] - 2026-07-21

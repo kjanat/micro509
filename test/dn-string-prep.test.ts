@@ -45,6 +45,31 @@ describe('RFC 4518 string preparation', () => {
 			prepareNameCompareString(`${COMBINING_ACUTE}x`),
 		);
 	});
+
+	it('applies B.2 folds that toLowerCase misses', () => {
+		// U+1F80 GREEK SMALL LETTER ALPHA WITH PSILI AND YPOGEGRAMMENI folds to
+		// its base plus iota (RFC 3454 B.2); toLowerCase leaves it unchanged.
+		const polytonic = String.fromCodePoint(0x1f80);
+		const folded = String.fromCodePoint(0x1f00, 0x03b9);
+		expect(prepareNameCompareString(polytonic)).toBe(prepareNameCompareString(folded));
+	});
+
+	it('case-folds compatibility characters to lowercase', () => {
+		// U+1D2C MODIFIER LETTER CAPITAL A: NFKC decomposes it to "A", which must
+		// then lowercase to "a" rather than survive as an uppercase letter.
+		const modifierCapitalA = String.fromCodePoint(0x1d2c);
+		expect(prepareNameCompareString(modifierCapitalA)).toBe(prepareNameCompareString('a'));
+	});
+});
+
+describe('DirectoryString encoding comparison', () => {
+	const attr = (valueTag: number, value: string) => ({ oid: OIDS.commonName, valueTag, value });
+
+	it('compares BMPString, UniversalString, UTF8String, and PrintableString equally', () => {
+		expect(compareNameAttributeValue(attr(0x1e, 'Example'), attr(0x0c, 'Example'))).toBe(true);
+		expect(compareNameAttributeValue(attr(0x1c, 'Example'), attr(0x13, 'Example'))).toBe(true);
+		expect(compareNameAttributeValue(attr(0x1e, 'Example'), attr(0x0c, 'example'))).toBe(true);
+	});
 });
 
 describe('domainComponent comparison', () => {

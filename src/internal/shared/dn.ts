@@ -123,9 +123,14 @@ export function compareNameAttributeValue(
 
 // Helpers
 
-/** True for UTF8String (0x0C) and PrintableString (0x13), the DirectoryString tags prepared for comparison. */
+/**
+ * True for the DirectoryString encodings the parser decodes to a comparable
+ * string: UTF8String (0x0C), PrintableString (0x13), UniversalString (0x1C),
+ * and BMPString (0x1E). TeletexString (0x14) is rejected at parse time, so it
+ * never reaches comparison.
+ */
 export function isDirectoryStringTag(tag: number): boolean {
-	return tag === 0x0c || tag === 0x13;
+	return tag === 0x0c || tag === 0x13 || tag === 0x1c || tag === 0x1e;
 }
 
 /** Inclusive `[first, last]` code-point ranges. */
@@ -177,7 +182,7 @@ function inRanges(codePoint: number, ranges: readonly CodePointRange[]): boolean
  * RFC 4518 §2.4 Prohibit: unassigned (`\p{Cn}`, which also covers
  * non-characters), private use (`\p{Co}`), surrogate (`\p{Cs}`), the
  * replacement character U+FFFD. The deprecated tone marks U+0340/U+0341 that
- * \u00a72.4 also prohibits are decomposed away by the preceding NFKC step.
+ * §2.4 also prohibits are decomposed away by the preceding NFKC step.
  */
 const PROHIBITED = /[\p{Cn}\p{Co}\p{Cs}\ufffd]/u;
 
@@ -188,48 +193,52 @@ const PROHIBITED = /[\p{Cn}\p{Co}\p{Cs}\ufffd]/u;
  */
 const B2_FOLD = new Map<string, string>([
 	['\u00df', 'ss'], // ß -> ss
-	['\u0149', '\u02bcn'], // ŉ -> ʼn
-	['\u01f0', 'j\u030c'], // ǰ -> ǰ
 	['\u0345', '\u03b9'], // ͅ -> ι
-	['\u0390', '\u03b9\u0308\u0301'], // ΐ -> ΐ
-	['\u03b0', '\u03c5\u0308\u0301'], // ΰ -> ΰ
 	['\u03c2', '\u03c3'], // ς -> σ
-	['\u03d0', '\u03b2'], // ϐ -> β
-	['\u03d1', '\u03b8'], // ϑ -> θ
-	['\u03d5', '\u03c6'], // ϕ -> φ
-	['\u03d6', '\u03c0'], // ϖ -> π
-	['\u03f0', '\u03ba'], // ϰ -> κ
-	['\u03f1', '\u03c1'], // ϱ -> ρ
-	['\u0587', '\u0565\u0582'], // և -> եւ
-	['\u1e96', 'h\u0331'], // ẖ -> ẖ
-	['\u1e97', 't\u0308'], // ẗ -> ẗ
-	['\u1e98', 'w\u030a'], // ẘ -> ẘ
-	['\u1e99', 'y\u030a'], // ẙ -> ẙ
-	['\u1e9a', 'a\u02be'], // ẚ -> aʾ
-	['\u1f50', '\u03c5\u0313'], // ὐ -> ὐ
-	['\u1f52', '\u03c5\u0313\u0300'], // ὒ -> ὒ
-	['\u1f54', '\u03c5\u0313\u0301'], // ὔ -> ὔ
-	['\u1f56', '\u03c5\u0313\u0342'], // ὖ -> ὖ
-	['\u1fbe', '\u03b9'], // ι -> ι
-	['\ufb00', 'ff'], // ﬀ -> ff
-	['\ufb01', 'fi'], // ﬁ -> fi
-	['\ufb02', 'fl'], // ﬂ -> fl
-	['\ufb03', 'ffi'], // ﬃ -> ffi
-	['\ufb04', 'ffl'], // ﬄ -> ffl
-	['\ufb05', 'st'], // ﬅ -> st
-	['\ufb06', 'st'], // ﬆ -> st
-	['\ufb13', '\u0574\u0576'], // ﬓ -> մն
-	['\ufb14', '\u0574\u0565'], // ﬔ -> մե
-	['\ufb15', '\u0574\u056b'], // ﬕ -> մի
-	['\ufb16', '\u057e\u0576'], // ﬖ -> վն
-	['\ufb17', '\u0574\u056d'], // ﬗ -> մխ
+	['\u1f80', '\u1f00\u03b9'], // ᾀ -> ἀι
+	['\u1f81', '\u1f01\u03b9'], // ᾁ -> ἁι
+	['\u1f82', '\u1f02\u03b9'], // ᾂ -> ἂι
+	['\u1f83', '\u1f03\u03b9'], // ᾃ -> ἃι
+	['\u1f84', '\u1f04\u03b9'], // ᾄ -> ἄι
+	['\u1f85', '\u1f05\u03b9'], // ᾅ -> ἅι
+	['\u1f86', '\u1f06\u03b9'], // ᾆ -> ἆι
+	['\u1f87', '\u1f07\u03b9'], // ᾇ -> ἇι
+	['\u1f90', '\u1f20\u03b9'], // ᾐ -> ἠι
+	['\u1f91', '\u1f21\u03b9'], // ᾑ -> ἡι
+	['\u1f92', '\u1f22\u03b9'], // ᾒ -> ἢι
+	['\u1f93', '\u1f23\u03b9'], // ᾓ -> ἣι
+	['\u1f94', '\u1f24\u03b9'], // ᾔ -> ἤι
+	['\u1f95', '\u1f25\u03b9'], // ᾕ -> ἥι
+	['\u1f96', '\u1f26\u03b9'], // ᾖ -> ἦι
+	['\u1f97', '\u1f27\u03b9'], // ᾗ -> ἧι
+	['\u1fa0', '\u1f60\u03b9'], // ᾠ -> ὠι
+	['\u1fa1', '\u1f61\u03b9'], // ᾡ -> ὡι
+	['\u1fa2', '\u1f62\u03b9'], // ᾢ -> ὢι
+	['\u1fa3', '\u1f63\u03b9'], // ᾣ -> ὣι
+	['\u1fa4', '\u1f64\u03b9'], // ᾤ -> ὤι
+	['\u1fa5', '\u1f65\u03b9'], // ᾥ -> ὥι
+	['\u1fa6', '\u1f66\u03b9'], // ᾦ -> ὦι
+	['\u1fa7', '\u1f67\u03b9'], // ᾧ -> ὧι
+	['\u1fb2', '\u1f70\u03b9'], // ᾲ -> ὰι
+	['\u1fb3', '\u03b1\u03b9'], // ᾳ -> αι
+	['\u1fb4', '\u03ac\u03b9'], // ᾴ -> άι
+	['\u1fb7', '\u1fb6\u03b9'], // ᾷ -> ᾶι
+	['\u1fc2', '\u1f74\u03b9'], // ῂ -> ὴι
+	['\u1fc3', '\u03b7\u03b9'], // ῃ -> ηι
+	['\u1fc4', '\u03ae\u03b9'], // ῄ -> ήι
+	['\u1fc7', '\u1fc6\u03b9'], // ῇ -> ῆι
+	['\u1ff2', '\u1f7c\u03b9'], // ῲ -> ὼι
+	['\u1ff3', '\u03c9\u03b9'], // ῳ -> ωι
+	['\u1ff4', '\u03ce\u03b9'], // ῴ -> ώι
+	['\u1ff7', '\u1ff6\u03b9'], // ῷ -> ῶι
 ]);
 
 /**
- * RFC 4518 §2.2 Map plus B.2 case fold: delete ignorable code points and fold
- * separators to SPACE, then lowercase, then apply the B.2 table. Lowercasing
- * before the table matters because {@linkcode String.prototype.toLowerCase}
- * emits a final sigma (U+03C2) that B.2 folds to U+03C3.
+ * RFC 4518 §2.2 Map plus B.2 case fold: delete ignorable code points, fold
+ * separators to SPACE, then NFKC, lowercase, and apply the B.2 table. NFKC
+ * before lowercasing folds compatibility characters (a modifier-letter capital
+ * decomposes to its base) that a later NFKC would otherwise reintroduce cased;
+ * {@linkcode prepareNameCompareString} runs the RFC Normalize NFKC afterward.
  */
 function mapAndFold(value: string): string {
 	let mapped = '';
@@ -241,7 +250,7 @@ function mapAndFold(value: string): string {
 		mapped += inRanges(codePoint, MAP_TO_SPACE) ? ' ' : ch;
 	}
 	let out = '';
-	for (const ch of mapped.toLowerCase()) {
+	for (const ch of mapped.normalize('NFKC').toLowerCase()) {
 		out += B2_FOLD.get(ch) ?? ch;
 	}
 	return out;
