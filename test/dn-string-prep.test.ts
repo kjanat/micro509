@@ -123,11 +123,13 @@ describe('domainComponent comparison', () => {
 	});
 
 	it('rejects a non-ASCII domainComponent value', () => {
-		// U+212A KELVIN SIGN lowercases to `k` under a modern engine, but a valid
-		// IA5String DC is ASCII, so a UTF8String Kelvin sign must not match `k`.
+		// U+212A KELVIN SIGN lowercases to `k` under a modern engine. Both values
+		// carry the IA5String tag, so the comparison reaches the ASCII guard: a
+		// non-ASCII value (from a mis-decoded or hand-built attribute) must not
+		// match `k`.
 		const kelvin = {
 			oid: OIDS.domainComponent,
-			valueTag: 0x0c,
+			valueTag: 0x16,
 			value: String.fromCodePoint(0x212a),
 		};
 		const k = { oid: OIDS.domainComponent, valueTag: 0x16, value: 'k' };
