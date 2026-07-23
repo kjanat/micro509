@@ -133,7 +133,7 @@ describe('csr', () => {
 				subjectAltNames: [{ type: 'dns', value: 'csr.example' }],
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['clientAuth', { type: 'oid', value: '1.2.3.4.6' }],
-				authorityInfoAccess: [{ method: 'ocsp', uri: 'http://csr.example/ocsp' }],
+				authorityInfoAccess: [{ method: 'ocsp', location: { type: 'uri', value: 'http://csr.example/ocsp' } }],
 				crlDistributionPoints: [
 					{
 						distributionPoint: {
@@ -171,7 +171,7 @@ describe('csr', () => {
 		expect(parsed.keyUsage).toEqual({ flags: ['digitalSignature'], nonZeroPadding: false });
 		expect(parsed.extendedKeyUsage).toEqual(['clientAuth', { type: 'oid', value: '1.2.3.4.6' }]);
 		expect(parsed.authorityInfoAccess).toEqual([
-			{ method: 'ocsp', uri: 'http://csr.example/ocsp' },
+			{ method: 'ocsp', location: { type: 'uri', value: 'http://csr.example/ocsp' } },
 		]);
 		expect(parsed.crlDistributionPoints).toEqual([
 			{

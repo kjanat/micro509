@@ -690,10 +690,13 @@ describe('revocation boundary', () => {
 			issuerPublicKey: issuer.keyPair.publicKey,
 			extensions: {
 				authorityInfoAccess: [
-					{ method: 'ocsp', uri: 'http://ocsp-1.example.test' },
-					{ method: 'caIssuers', uri: 'http://issuer.example.test/ca.der' },
-					{ method: 'ocsp', uri: 'http://ocsp-1.example.test' },
-					{ method: 'ocsp', uri: 'http://ocsp-2.example.test' },
+					{ method: 'ocsp', location: { type: 'uri', value: 'http://ocsp-1.example.test' } },
+					{
+						method: 'caIssuers',
+						location: { type: 'uri', value: 'http://issuer.example.test/ca.der' },
+					},
+					{ method: 'ocsp', location: { type: 'uri', value: 'http://ocsp-1.example.test' } },
+					{ method: 'ocsp', location: { type: 'uri', value: 'http://ocsp-2.example.test' } },
 				],
 			},
 		});
@@ -724,13 +727,20 @@ describe('revocation boundary', () => {
 			signerPrivateKey: issuer.keyPair.privateKey,
 			issuerPublicKey: issuer.keyPair.publicKey,
 			extensions: {
-				authorityInfoAccess: [{ method: 'ocsp', uri: 'http://real-ocsp.example.test' }],
+				authorityInfoAccess: [
+					{ method: 'ocsp', location: { type: 'uri', value: 'http://real-ocsp.example.test' } },
+				],
 			},
 		});
 		const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
 		const tamperedLeaf = {
 			...parsedLeaf,
-			authorityInfoAccess: [{ method: 'ocsp' as const, uri: 'http://attacker.example.test' }],
+			authorityInfoAccess: [
+				{
+					method: 'ocsp' as const,
+					location: { type: 'uri' as const, value: 'http://attacker.example.test' },
+				},
+			],
 		};
 
 		expect(getCertificateOcspResponderUris(tamperedLeaf)).toEqual([
@@ -767,8 +777,11 @@ describe('revocation boundary', () => {
 			issuerPublicKey: issuer.keyPair.publicKey,
 			extensions: {
 				authorityInfoAccess: [
-					{ method: 'ocsp', uri: 'http://ocsp-aia.example.test' },
-					{ method: 'ocsp', uri: 'http://ocsp-configured.example.test' },
+					{ method: 'ocsp', location: { type: 'uri', value: 'http://ocsp-aia.example.test' } },
+					{
+						method: 'ocsp',
+						location: { type: 'uri', value: 'http://ocsp-configured.example.test' },
+					},
 				],
 			},
 		});

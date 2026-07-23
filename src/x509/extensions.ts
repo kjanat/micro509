@@ -640,8 +640,8 @@ export interface AuthorityInformationAccess {
 				readonly type: 'oid';
 				readonly value: string;
 		  };
-	/** URI where the resource can be fetched. */
-	readonly uri: string;
+	/** accessLocation GeneralName where the resource is available (usually a URI). */
+	readonly location: GeneralName;
 }
 
 /** Well-known Extended Key Usage purpose strings (RFC 5280 §4.2.1.12). */
@@ -1012,7 +1012,7 @@ export function encodeAuthorityInfoAccess(
 		entries.map((entry) =>
 			sequence([
 				objectIdentifier(getAuthorityInfoAccessMethodOid(entry.method)),
-				implicitPrimitiveContext(6, new TextEncoder().encode(entry.uri)),
+				encodeSubjectAltName(entry.location),
 			]),
 		),
 	);

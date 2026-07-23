@@ -18,6 +18,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `AuthorityInformationAccess.uri: string` becomes `location: GeneralName`, the
+  full accessLocation RFC 5280 §4.2.2.1 defines. The parser threw
+  `Unsupported authorityInfoAccess location tag` for any location that was not a
+  URI, so a certificate carrying a directoryName or dNSName accessLocation (both
+  conformant) failed to parse entirely. A URI location is now
+  `{ type: 'uri', value }`; OCSP responder discovery reads only URI locations.
+  (https://github.com/kjanat/micro509/pull/78)
+
 ## [0.13.0] - 2026-07-23
 
 A public `micro509/der` entrypoint, and RFC-conformance fixes across path

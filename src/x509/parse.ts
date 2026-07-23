@@ -1939,12 +1939,9 @@ export function parseAuthorityInfoAccess(bytes: Uint8Array): readonly AuthorityI
 		if (method.tag !== 0x06) {
 			throw new Error('authorityInfoAccess method must use OBJECT IDENTIFIER');
 		}
-		if (location.tag !== 0x86) {
-			throw new Error(`Unsupported authorityInfoAccess location tag: ${location.tag}`);
-		}
 		return {
 			method: parseAuthorityInfoAccessMethodOid(decodeObjectIdentifier(method.value)),
-			uri: textDecoder.decode(location.value),
+			location: parseGeneralName(bytes, location),
 		};
 	});
 }

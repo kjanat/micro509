@@ -118,12 +118,12 @@ describe('extension registry', () => {
 
 		expect(
 			applyDefinition(getExtensionDefinition(OIDS.authorityInfoAccess), [
-				{ method: 'ocsp', uri: 'https://ocsp.example.test' },
-				{ method: 'caIssuers', uri: 'https://example.test/issuer.pem' },
+				{ method: 'ocsp', location: { type: 'uri', value: 'https://ocsp.example.test' } },
+				{ method: 'caIssuers', location: { type: 'uri', value: 'https://example.test/issuer.pem' } },
 			]).authorityInfoAccess,
 		).toEqual([
-			{ method: 'ocsp', uri: 'https://ocsp.example.test' },
-			{ method: 'caIssuers', uri: 'https://example.test/issuer.pem' },
+			{ method: 'ocsp', location: { type: 'uri', value: 'https://ocsp.example.test' } },
+			{ method: 'caIssuers', location: { type: 'uri', value: 'https://example.test/issuer.pem' } },
 		]);
 	});
 
@@ -179,7 +179,7 @@ describe('extension registry', () => {
 				policyMappings: [{ issuerDomainPolicy: '1.2.3.4.1', subjectDomainPolicy: '1.2.3.4.2' }],
 				policyConstraints: { requireExplicitPolicy: 0, inhibitPolicyMapping: 1 },
 				inhibitAnyPolicy: { skipCerts: 2 },
-				authorityInfoAccess: [{ method: 'ocsp', uri: 'https://ocsp.example.test' }],
+				authorityInfoAccess: [{ method: 'ocsp', location: { type: 'uri', value: 'https://ocsp.example.test' } }],
 				crlDistributionPoints: [
 					{
 						distributionPoint: {
@@ -209,7 +209,7 @@ describe('extension registry', () => {
 		expect(parsed.policyConstraints).toEqual({ requireExplicitPolicy: 0, inhibitPolicyMapping: 1 });
 		expect(parsed.inhibitAnyPolicy).toEqual({ skipCerts: 2 });
 		expect(parsed.authorityInfoAccess).toEqual([
-			{ method: 'ocsp', uri: 'https://ocsp.example.test' },
+			{ method: 'ocsp', location: { type: 'uri', value: 'https://ocsp.example.test' } },
 		]);
 		expect(parsed.crlDistributionPoints).toEqual([
 			{
@@ -241,7 +241,7 @@ describe('extension registry', () => {
 				policyMappings: [{ issuerDomainPolicy: '1.2.3.7.1', subjectDomainPolicy: '1.2.3.7.2' }],
 				policyConstraints: { requireExplicitPolicy: 1 },
 				inhibitAnyPolicy: { skipCerts: 3 },
-				authorityInfoAccess: [{ method: 'ocsp', uri: 'https://csr-ocsp.example.test' }],
+				authorityInfoAccess: [{ method: 'ocsp', location: { type: 'uri', value: 'https://csr-ocsp.example.test' } }],
 				crlDistributionPoints: [
 					{
 						distributionPoint: {
@@ -267,7 +267,7 @@ describe('extension registry', () => {
 		expect(parsed.policyConstraints).toEqual({ requireExplicitPolicy: 1 });
 		expect(parsed.inhibitAnyPolicy).toEqual({ skipCerts: 3 });
 		expect(parsed.authorityInfoAccess).toEqual([
-			{ method: 'ocsp', uri: 'https://csr-ocsp.example.test' },
+			{ method: 'ocsp', location: { type: 'uri', value: 'https://csr-ocsp.example.test' } },
 		]);
 		expect(parsed.crlDistributionPoints).toEqual([
 			{
