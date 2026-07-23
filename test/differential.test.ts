@@ -292,9 +292,14 @@ describe.skipIf(!openSslAvailable || !differentialEnabled)('OpenSSL differential
 		const openSsl = await readCertificateSanWithOpenSsl(certificate.pem);
 		expect(openSsl.accepted).toBe(true);
 		// OpenSSL decodes the directoryName [4] SAN (full Name TLV wrapped) and the
-		// SRV-ID otherName [0] (direct type-id/value fields).
-		expect(openSsl.subjectAltName).toContain('DirName:/CN=Diff Dir CA');
-		expect(openSsl.subjectAltName).toContain('SRVName:_xmpp.example.com');
+		// SRV-ID otherName [0] (direct type-id/value fields). Assert the decoded
+		// labels and values, not the separator formatting, which varies by version
+		// (`SRVName:` vs `SRVName::`).
+		const san = openSsl.subjectAltName ?? '';
+		expect(san).toContain('DirName');
+		expect(san).toContain('Diff Dir CA');
+		expect(san).toContain('SRVName');
+		expect(san).toContain('_xmpp.example.com');
 	});
 
 	it('OpenSSL accepts an OCSP response produced by micro509', async () => {
