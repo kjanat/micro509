@@ -95,21 +95,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (https://github.com/kjanat/micro509/pull/75)
 
 - Distinguished name comparison implements the RFC 4518 string-preparation
-  profile that RFC 5280 §7.1 requires: the Map, Normalize, Prohibit, and
-  Insignificant Space steps with RFC 3454 Appendix B.2 case folding. The old
-  NFKC-plus-lowercase shortcut left ignorable code points in place (so an
-  excluded subtree failed to exclude a name carrying a SOFT HYPHEN), folded
-  with `toLowerCase` alone (so `Straße` did not equal `STRASSE`), and rejected
-  control characters a DN may legitimately carry (so a name did not equal
-  itself). The B.2 fold table is generated from the vendored RFC 3454 Table B.2
-  and covers every fold `toLowerCase` misses, including the Greek polytonic
-  ypogegrammeni set; folding runs after NFKC so a compatibility character such
-  as a modifier-letter capital folds to lowercase. BMPString and
-  UniversalString distinguished-name values are prepared for comparison
-  alongside UTF8String and PrintableString. `domainComponent` values now
-  compare case-insensitively per RFC 5280 §7.3, so `DC=Example` chains to a CA
-  whose subject is `DC=example`. RFC 4518 and RFC 3454 are vendored under
-  `docs/rfc/`.
+  profile that RFC 5280 §7.1 requires, against the frozen Unicode 3.2 repertoire
+  RFC 4518 §2.1 fixes: the Map, Normalize, Prohibit, and Insignificant Space
+  steps with the complete RFC 3454 Appendix B.2 case fold and Table A.1
+  unassigned set. The old NFKC-plus-lowercase shortcut left ignorable code
+  points in place (so an excluded subtree failed to exclude a name carrying a
+  SOFT HYPHEN), folded with `toLowerCase` alone (so `Straße` did not equal
+  `STRASSE`), and delegated the repertoire to the running Unicode version. That
+  last part let a code point unassigned in 3.2 slip through: U+1D2C normalized
+  to `a` and matched `CN=a`, U+2F868 used the Unicode 4.0 NFKC correction, and
+  U+10A0 took a post-3.2 fold. The A.1 unassigned set, the B.2 fold, and the
+  five CJK NFKC corrections are generated from the vendored RFC 3454 and guarded
+  by a test that re-derives them from the RFC text. BMPString and UniversalString
+  values are prepared alongside UTF8String and PrintableString. `domainComponent`
+  compares as `caseIgnoreIA5Match` (RFC 4519), requiring the IA5String tag and
+  ASCII, so a UTF8String or non-ASCII value no longer matches an IA5String one;
+  `DC=Example` chains to `DC=example`. Bare-anchor selection confirms the
+  anchor's subject equals the certificate's issuer rather than trusting the
+  canonical-key bucket. RFC 4518 and RFC 3454 are vendored under `docs/rfc/`.
   (https://github.com/kjanat/micro509/pull/74)
 
 ## [0.12.0] - 2026-07-21

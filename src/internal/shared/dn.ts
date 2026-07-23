@@ -13,6 +13,12 @@
  */
 
 import { OIDS } from '#micro509/internal/asn1/oids';
+import {
+	A1_UNASSIGNED_RANGES,
+	B2_CASE_FOLD,
+	type CodePointRange,
+	NFKC_3_2_CORRECTIONS,
+} from '#micro509/internal/shared/rfc3454-tables';
 import type {
 	ParsedName,
 	ParsedNameAttribute,
@@ -108,7 +114,19 @@ export function compareNameAttributeValue(
 		return false;
 	}
 	if (left.oid === OIDS.domainComponent) {
-		return left.value.toLowerCase() === right.value.toLowerCase();
+		// RFC 5280 §7.3 / RFC 4519 caseIgnoreIA5Match: domainComponent is
+		// IA5String, prepared and compared case-insensitively with insignificant
+		// spaces collapsed. A value under any other tag, or a non-ASCII value, is
+		// malformed and does not match.
+		if (left.valueTag !== 0x16 || right.valueTag !== 0x16) {
+			return false;
+		}
+		if (!isAscii(left.value) || !isAscii(right.value)) {
+			return false;
+		}
+		const preparedLeft = prepareNameCompareString(left.value);
+		const preparedRight = prepareNameCompareString(right.value);
+		return preparedLeft !== undefined && preparedLeft === preparedRight;
 	}
 	if (isDirectoryStringTag(left.valueTag) && isDirectoryStringTag(right.valueTag)) {
 		const preparedLeft = prepareNameCompareString(left.value);
@@ -132,9 +150,6 @@ export function compareNameAttributeValue(
 export function isDirectoryStringTag(tag: number): boolean {
 	return tag === 0x0c || tag === 0x13 || tag === 0x1c || tag === 0x1e;
 }
-
-/** Inclusive `[first, last]` code-point ranges. */
-type CodePointRange = readonly [number, number];
 
 /** RFC 4518 §2.2: code points deleted (Cc/Cf controls, joiners, ignorables). */
 const MAP_TO_NOTHING: readonly CodePointRange[] = [
@@ -178,80 +193,67 @@ function inRanges(codePoint: number, ranges: readonly CodePointRange[]): boolean
 	return ranges.some(([first, last]) => codePoint >= first && codePoint <= last);
 }
 
-/**
- * RFC 4518 §2.4 Prohibit: unassigned (`\p{Cn}`, which also covers
- * non-characters), private use (`\p{Co}`), surrogate (`\p{Cs}`), the
- * replacement character U+FFFD. The deprecated tone marks U+0340/U+0341 that
- * §2.4 also prohibits are decomposed away by the preceding NFKC step.
- */
-const PROHIBITED = /[\p{Cn}\p{Co}\p{Cs}\ufffd]/u;
+/** True when every code point in `value` is ASCII. */
+function isAscii(value: string): boolean {
+	for (const ch of value) {
+		const codePoint = ch.codePointAt(0);
+		if (codePoint === undefined || codePoint > 0x7f) {
+			return false;
+		}
+	}
+	return true;
+}
 
 /**
- * RFC 3454 Appendix B.2 case-fold entries whose result differs from a plain
- * lowercase, keyed by the source code point. Every other character folds through
- * {@linkcode String.prototype.toLowerCase}. Trailing comments render `source -> result`.
+ * RFC 4518 §2.4 Prohibit against the frozen Unicode 3.2 repertoire: code points
+ * unassigned in 3.2 (RFC 3454 Table A.1), private use, surrogate, non-character,
+ * and the replacement character. `\p{Cn}` is avoided because it tracks the
+ * running Unicode version rather than 3.2.
  */
-const B2_FOLD = new Map<string, string>([
-	['\u00df', 'ss'], // ß -> ss
-	['\u0345', '\u03b9'], // ͅ -> ι
-	['\u03c2', '\u03c3'], // ς -> σ
-	['\u1f80', '\u1f00\u03b9'], // ᾀ -> ἀι
-	['\u1f81', '\u1f01\u03b9'], // ᾁ -> ἁι
-	['\u1f82', '\u1f02\u03b9'], // ᾂ -> ἂι
-	['\u1f83', '\u1f03\u03b9'], // ᾃ -> ἃι
-	['\u1f84', '\u1f04\u03b9'], // ᾄ -> ἄι
-	['\u1f85', '\u1f05\u03b9'], // ᾅ -> ἅι
-	['\u1f86', '\u1f06\u03b9'], // ᾆ -> ἆι
-	['\u1f87', '\u1f07\u03b9'], // ᾇ -> ἇι
-	['\u1f90', '\u1f20\u03b9'], // ᾐ -> ἠι
-	['\u1f91', '\u1f21\u03b9'], // ᾑ -> ἡι
-	['\u1f92', '\u1f22\u03b9'], // ᾒ -> ἢι
-	['\u1f93', '\u1f23\u03b9'], // ᾓ -> ἣι
-	['\u1f94', '\u1f24\u03b9'], // ᾔ -> ἤι
-	['\u1f95', '\u1f25\u03b9'], // ᾕ -> ἥι
-	['\u1f96', '\u1f26\u03b9'], // ᾖ -> ἦι
-	['\u1f97', '\u1f27\u03b9'], // ᾗ -> ἧι
-	['\u1fa0', '\u1f60\u03b9'], // ᾠ -> ὠι
-	['\u1fa1', '\u1f61\u03b9'], // ᾡ -> ὡι
-	['\u1fa2', '\u1f62\u03b9'], // ᾢ -> ὢι
-	['\u1fa3', '\u1f63\u03b9'], // ᾣ -> ὣι
-	['\u1fa4', '\u1f64\u03b9'], // ᾤ -> ὤι
-	['\u1fa5', '\u1f65\u03b9'], // ᾥ -> ὥι
-	['\u1fa6', '\u1f66\u03b9'], // ᾦ -> ὦι
-	['\u1fa7', '\u1f67\u03b9'], // ᾧ -> ὧι
-	['\u1fb2', '\u1f70\u03b9'], // ᾲ -> ὰι
-	['\u1fb3', '\u03b1\u03b9'], // ᾳ -> αι
-	['\u1fb4', '\u03ac\u03b9'], // ᾴ -> άι
-	['\u1fb7', '\u1fb6\u03b9'], // ᾷ -> ᾶι
-	['\u1fc2', '\u1f74\u03b9'], // ῂ -> ὴι
-	['\u1fc3', '\u03b7\u03b9'], // ῃ -> ηι
-	['\u1fc4', '\u03ae\u03b9'], // ῄ -> ήι
-	['\u1fc7', '\u1fc6\u03b9'], // ῇ -> ῆι
-	['\u1ff2', '\u1f7c\u03b9'], // ῲ -> ὼι
-	['\u1ff3', '\u03c9\u03b9'], // ῳ -> ωι
-	['\u1ff4', '\u03ce\u03b9'], // ῴ -> ώι
-	['\u1ff7', '\u1ff6\u03b9'], // ῷ -> ῶι
-]);
+function isProhibited(codePoint: number): boolean {
+	return (
+		inRanges(codePoint, A1_UNASSIGNED_RANGES) ||
+		(codePoint >= 0xe000 && codePoint <= 0xf8ff) ||
+		(codePoint >= 0xf0000 && codePoint <= 0xffffd) ||
+		(codePoint >= 0x100000 && codePoint <= 0x10fffd) ||
+		(codePoint >= 0xd800 && codePoint <= 0xdfff) ||
+		(codePoint >= 0xfdd0 && codePoint <= 0xfdef) ||
+		(codePoint & 0xffff) >= 0xfffe ||
+		codePoint === 0xfffd
+	);
+}
 
 /**
- * RFC 4518 §2.2 Map plus B.2 case fold: delete ignorable code points, fold
- * separators to SPACE, then NFKC, lowercase, and apply the B.2 table. NFKC
- * before lowercasing folds compatibility characters (a modifier-letter capital
- * decomposes to its base) that a later NFKC would otherwise reintroduce cased;
- * {@linkcode prepareNameCompareString} runs the RFC Normalize NFKC afterward.
+ * RFC 4518 §2.2 Map against the Unicode 3.2 repertoire: delete ignorable code
+ * points, fold separators to SPACE, reject any code point prohibited in 3.2
+ * before the host NFKC can reinterpret it, and freeze the CJK compatibility
+ * ideographs whose NFKC decomposition Unicode 4.0 later corrected. Returns
+ * `undefined` when a prohibited code point is present.
  */
-function mapAndFold(value: string): string {
+function mapAndProhibitSource(value: string): string | undefined {
 	let mapped = '';
 	for (const ch of value) {
 		const codePoint = ch.codePointAt(0);
 		if (codePoint === undefined || inRanges(codePoint, MAP_TO_NOTHING)) {
 			continue;
 		}
-		mapped += inRanges(codePoint, MAP_TO_SPACE) ? ' ' : ch;
+		if (inRanges(codePoint, MAP_TO_SPACE)) {
+			mapped += ' ';
+			continue;
+		}
+		if (isProhibited(codePoint)) {
+			return undefined;
+		}
+		mapped += NFKC_3_2_CORRECTIONS.get(ch) ?? ch;
 	}
+	return mapped;
+}
+
+/** RFC 3454 Appendix B.2 case fold, applied per code point with identity fallback. */
+function caseFold(value: string): string {
 	let out = '';
-	for (const ch of mapped.normalize('NFKC').toLowerCase()) {
-		out += B2_FOLD.get(ch) ?? ch;
+	for (const ch of value) {
+		out += B2_CASE_FOLD.get(ch) ?? ch;
 	}
 	return out;
 }
@@ -269,13 +271,22 @@ function collapseInsignificantSpaces(value: string): string {
 
 /**
  * Prepares a DirectoryString value for RFC 5280 §7.1 comparison through the RFC
- * 4518 Map, Normalize, Prohibit, and Insignificant Space steps. Returns
- * `undefined` when the Prohibit step rejects the value.
+ * 4518 Map, Normalize, Prohibit, and Insignificant Space steps against the
+ * Unicode 3.2 repertoire. B.2 case folds first, the host NFKC runs once, and
+ * the Prohibit set is rechecked on the output. Returns `undefined` when a
+ * prohibited code point is present.
  */
 export function prepareNameCompareString(value: string): string | undefined {
-	const normalized = mapAndFold(value).normalize('NFKC');
-	if (PROHIBITED.test(normalized)) {
+	const mapped = mapAndProhibitSource(value);
+	if (mapped === undefined) {
 		return undefined;
+	}
+	const normalized = caseFold(mapped).normalize('NFKC');
+	for (const ch of normalized) {
+		const codePoint = ch.codePointAt(0);
+		if (codePoint !== undefined && isProhibited(codePoint)) {
+			return undefined;
+		}
 	}
 	return collapseInsignificantSpaces(normalized);
 }
@@ -293,8 +304,8 @@ function canonicalRdnKey(rdn: ParsedRelativeDistinguishedName): string {
 
 /** Tag-independent canonical value for one attribute, matching {@linkcode compareNameAttributeValue}. */
 function canonicalAttributeValue(attr: ParsedNameAttribute): string {
-	if (attr.oid === OIDS.domainComponent) {
-		return `[dc]${attr.value.toLowerCase()}`;
+	if (attr.oid === OIDS.domainComponent && attr.valueTag === 0x16 && isAscii(attr.value)) {
+		return `[dc]${prepareNameCompareString(attr.value) ?? attr.value.toLowerCase()}`;
 	}
 	if (isDirectoryStringTag(attr.valueTag)) {
 		return prepareNameCompareString(attr.value) ?? `[raw:${attr.valueTag}]${attr.value}`;

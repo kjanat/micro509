@@ -10,6 +10,8 @@ const REPLACEMENT = String.fromCodePoint(0xfffd);
 const PRIVATE_USE = String.fromCodePoint(0xe000);
 const COMBINING_ACUTE = String.fromCodePoint(0x0301);
 
+const cn = (valueTag: number, value: string) => ({ oid: OIDS.commonName, valueTag, value });
+
 describe('RFC 4518 string preparation', () => {
 	it('maps ignorable code points to nothing', () => {
 		expect(prepareNameCompareString(`Ac${SOFT_HYPHEN}me`)).toBe(prepareNameCompareString('Acme'));
@@ -54,11 +56,36 @@ describe('RFC 4518 string preparation', () => {
 		expect(prepareNameCompareString(polytonic)).toBe(prepareNameCompareString(folded));
 	});
 
-	it('case-folds compatibility characters to lowercase', () => {
-		// U+1D2C MODIFIER LETTER CAPITAL A: NFKC decomposes it to "A", which must
-		// then lowercase to "a" rather than survive as an uppercase letter.
-		const modifierCapitalA = String.fromCodePoint(0x1d2c);
-		expect(prepareNameCompareString(modifierCapitalA)).toBe(prepareNameCompareString('a'));
+	it('prohibits code points unassigned in Unicode 3.2', () => {
+		// U+1D2C MODIFIER LETTER CAPITAL A is unassigned in Unicode 3.2 (RFC 3454
+		// Table A.1), so preparation fails rather than folding it to `a` via a
+		// post-3.2 NFKC mapping.
+		expect(prepareNameCompareString(String.fromCodePoint(0x1d2c))).toBeUndefined();
+		expect(compareNameAttributeValue(cn(0x0c, String.fromCodePoint(0x1d2c)), cn(0x0c, 'a'))).toBe(
+			false,
+		);
+		// U+1F600 is assigned only after Unicode 3.2.
+		expect(prepareNameCompareString(String.fromCodePoint(0x1f600))).toBeUndefined();
+	});
+
+	it('freezes normalization to Unicode 3.2', () => {
+		// Unicode 4.0 changed NFKC(U+2F868) from U+2136A to U+36FC; RFC 4518 keeps
+		// the 3.2 mapping.
+		expect(prepareNameCompareString(String.fromCodePoint(0x2f868))).toBe(
+			prepareNameCompareString(String.fromCodePoint(0x2136a)),
+		);
+		expect(prepareNameCompareString(String.fromCodePoint(0x2f868))).not.toBe(
+			prepareNameCompareString(String.fromCodePoint(0x36fc)),
+		);
+	});
+
+	it('does not apply post-3.2 case folds that RFC 3454 B.2 omits', () => {
+		// U+10A0 GEORGIAN CAPITAL LETTER AN has no B.2 fold, so it stays itself; a
+		// modern toLowerCase would fold it to U+2D00, which is itself 3.2-unassigned.
+		expect(prepareNameCompareString(String.fromCodePoint(0x10a0))).toBe(
+			String.fromCodePoint(0x10a0),
+		);
+		expect(prepareNameCompareString(String.fromCodePoint(0x2d00))).toBeUndefined();
 	});
 });
 
@@ -82,5 +109,28 @@ describe('domainComponent comparison', () => {
 
 	it('still distinguishes different domain components', () => {
 		expect(compareNameAttributeValue(dc('example'), dc('other'))).toBe(false);
+	});
+
+	it('rejects a domainComponent carried under a non-IA5 tag', () => {
+		const ia5 = { oid: OIDS.domainComponent, valueTag: 0x16, value: 'example' };
+		const utf8 = { oid: OIDS.domainComponent, valueTag: 0x0c, value: 'example' };
+		expect(compareNameAttributeValue(utf8, ia5)).toBe(false);
+	});
+
+	it('collapses insignificant spaces in domainComponent values', () => {
+		expect(compareNameAttributeValue(dc('a  b'), dc('a b'))).toBe(true);
+		expect(compareNameAttributeValue(dc('  Example  '), dc('example'))).toBe(true);
+	});
+
+	it('rejects a non-ASCII domainComponent value', () => {
+		// U+212A KELVIN SIGN lowercases to `k` under a modern engine, but a valid
+		// IA5String DC is ASCII, so a UTF8String Kelvin sign must not match `k`.
+		const kelvin = {
+			oid: OIDS.domainComponent,
+			valueTag: 0x0c,
+			value: String.fromCodePoint(0x212a),
+		};
+		const k = { oid: OIDS.domainComponent, valueTag: 0x16, value: 'k' };
+		expect(compareNameAttributeValue(kelvin, k)).toBe(false);
 	});
 });
