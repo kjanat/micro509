@@ -98,6 +98,7 @@
 		"lint": "bun lint:biome",
 		"lint:biome": "biome lint",
 		"lint:deno": "deno lint src",
+		"lint:fix": "biome check --fix",
 		"playwright:chromium": "npx playwright install --with-deps chromium",
 		"prepare": "run -sq deno:importsmap deno:cache",
 		"prepublishOnly": "[ -n \"${GITHUB_ACTIONS:-}\" ] || { printf '%s\\n' 'manual npm publish blocked; use release workflow for provenance' >&2; exit 1; }",
