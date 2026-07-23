@@ -45,6 +45,7 @@ import type {
 	MutableKnownParsedExtensionAccumulator,
 } from '#micro509/internal/x509/extension-registry';
 import { decodeAndApplyKnownExtension } from '#micro509/internal/x509/extension-registry';
+import { GENERAL_NAME_WIRE_TAGS } from '#micro509/internal/x509/general-name-tags';
 import type { ImportKeyResult, PublicKeyImportInput } from '#micro509/keys/keys';
 import {
 	derivePublicKey,
@@ -368,7 +369,7 @@ export interface ParsedCertificate<TMap extends ExtensionDecoderMap = Record<nev
 	readonly policyConstraints?: PolicyConstraints;
 	/** Decoded Inhibit anyPolicy (RFC 5280 §4.2.1.14). */
 	readonly inhibitAnyPolicy?: InhibitAnyPolicy;
-	/** Decoded Authority Information Access — OCSP and CA Issuer URIs (RFC 5280 §4.2.2.1). */
+	/** Decoded Authority Information Access — GeneralName access locations (RFC 5280 §4.2.2.1). */
 	readonly authorityInfoAccess?: readonly AuthorityInformationAccess[];
 	/** Decoded CRL Distribution Points (RFC 5280 §4.2.1.13). */
 	readonly crlDistributionPoints?: readonly ParsedDistributionPoint[];
@@ -2072,11 +2073,11 @@ function parseGeneralName(source: Uint8Array, element: DerElement): GeneralName 
 			};
 		}
 		case 0x81:
-			return { type: 'email' as const, value: textDecoder.decode(element.value) };
+			return { type: 'email' as const, value: decodeString(0x16, element.value) };
 		case 0x82:
-			return { type: 'dns' as const, value: textDecoder.decode(element.value) };
+			return { type: 'dns' as const, value: decodeString(0x16, element.value) };
 		case 0x86:
-			return { type: 'uri' as const, value: textDecoder.decode(element.value) };
+			return { type: 'uri' as const, value: decodeString(0x16, element.value) };
 		case 0x87:
 			return { type: 'ip' as const, value: decodeIpAddress(element.value) };
 		case 0xa4:
@@ -2085,6 +2086,11 @@ function parseGeneralName(source: Uint8Array, element: DerElement): GeneralName 
 				derHex: toHex(rebuildDirectoryNameFromImplicit(element, source)),
 			};
 		default:
+			// x400Address [3], ediPartyName [5], and registeredID [8] are valid but
+			// unsupported; any other tag/class/constructedness is not a GeneralName.
+			if (!GENERAL_NAME_WIRE_TAGS.has(element.tag)) {
+				throw new Error(`Invalid GeneralName tag: ${element.tag}`);
+			}
 			return {
 				type: 'unknown' as const,
 				tag: element.tag,
@@ -2228,13 +2234,13 @@ function parseNameConstraintGeneralName(
 		case 0xa0:
 			return { type: 'otherName', value: new Uint8Array(element.value) };
 		case 0x81:
-			return { type: 'email', value: textDecoder.decode(element.value) };
+			return { type: 'email', value: decodeString(0x16, element.value) };
 		case 0x82:
-			return { type: 'dns', value: textDecoder.decode(element.value) };
+			return { type: 'dns', value: decodeString(0x16, element.value) };
 		case 0xa3:
 			return { type: 'x400Address', value: new Uint8Array(element.value) };
 		case 0x86:
-			return { type: 'uri', value: textDecoder.decode(element.value) };
+			return { type: 'uri', value: decodeString(0x16, element.value) };
 		case 0x87: {
 			if (element.value.length === 8) {
 				return {

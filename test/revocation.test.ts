@@ -695,7 +695,6 @@ describe('revocation boundary', () => {
 						method: 'caIssuers',
 						location: { type: 'uri', value: 'http://issuer.example.test/ca.der' },
 					},
-					{ method: 'ocsp', location: { type: 'dns', value: 'ocsp-dns.example.test' } },
 					{ method: 'ocsp', location: { type: 'uri', value: 'http://ocsp-1.example.test' } },
 					{ method: 'ocsp', location: { type: 'uri', value: 'http://ocsp-2.example.test' } },
 				],
@@ -706,6 +705,38 @@ describe('revocation boundary', () => {
 			'http://ocsp-1.example.test',
 			'http://ocsp-2.example.test',
 		]);
+	});
+
+	it('drops a non-URI OCSP location parsed from a non-conformant certificate', async () => {
+		const { sequence, objectIdentifier, tlv } = await import('#micro509/internal/asn1/der');
+		const { OIDS } = await import('#micro509/internal/asn1/oids');
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Raw AIA CA' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign'] },
+		});
+		const leafKeys = await generateKeyPair();
+		// An OCSP dNSName location is non-conformant (RFC 6960 §3.1); the typed
+		// builder rejects it, so encode the AIA as raw DER to exercise the discovery
+		// filter against a parsed certificate.
+		const aiaDer = sequence([
+			sequence([
+				objectIdentifier(OIDS.ocspAccessMethod),
+				tlv(0x82, new TextEncoder().encode('ocsp.example.test')),
+			]),
+			sequence([
+				objectIdentifier(OIDS.ocspAccessMethod),
+				tlv(0x86, new TextEncoder().encode('http://ocsp.example.test')),
+			]),
+		]);
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Raw AIA CA' },
+			subject: { commonName: 'raw-aia.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+			extensions: { customExtensions: [{ oid: OIDS.authorityInfoAccess, value: aiaDer }] },
+		});
+		expect(getCertificateOcspResponderUris(leaf.pem)).toEqual(['http://ocsp.example.test']);
 	});
 
 	it('getCertificateOcspResponderUris fails closed for malformed certificate input', () => {

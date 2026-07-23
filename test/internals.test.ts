@@ -89,6 +89,7 @@ import {
 	encodeCrlDistributionPoints,
 	encodeNameConstraints,
 	encodePolicyMappings,
+	encodeAuthorityInfoAccess,
 	encodeSubjectAltName,
 } from '#micro509/x509';
 
@@ -684,6 +685,39 @@ describe('extensions encoding', () => {
 			value: Uint8Array.of(0x01, 0x02),
 		});
 		expect(result[0]).toBe(0x88);
+	});
+
+	it('encodeSubjectAltName rejects an unknown GeneralName with an invalid wire tag', () => {
+		// [3], [5], [8] are valid unsupported alternatives; a universal INTEGER (0x02),
+		// context [9] (0x89), or wrong constructedness (0xa2 dNSName) is not a GeneralName.
+		expect(encodeSubjectAltName({ type: 'unknown', tag: 0xa3, value: new Uint8Array() })[0]).toBe(
+			0xa3,
+		);
+		for (const tag of [0x02, 0x89, 0xa2, 0x30]) {
+			expect(() =>
+				encodeSubjectAltName({ type: 'unknown', tag, value: Uint8Array.of(0x00) }),
+			).toThrow('Invalid GeneralName tag');
+		}
+	});
+
+	it('encodeSubjectAltName rejects a non-ASCII IA5String value', () => {
+		expect(() => encodeSubjectAltName({ type: 'dns', value: 'café.example' })).toThrow(
+			'Invalid IA5String',
+		);
+		expect(() => encodeSubjectAltName({ type: 'uri', value: 'http://café.example' })).toThrow(
+			'Invalid IA5String',
+		);
+	});
+
+	it('encodeAuthorityInfoAccess rejects a non-URI OCSP location wrapped in a custom OID', () => {
+		expect(() =>
+			encodeAuthorityInfoAccess([
+				{
+					method: { type: 'oid', value: OIDS.ocspAccessMethod },
+					location: { type: 'dns', value: 'ocsp.example' },
+				},
+			]),
+		).toThrow('OCSP location must be a URI');
 	});
 
 	it('buildCertificateExtensions throws on SPKI without subject public key bit string', () => {

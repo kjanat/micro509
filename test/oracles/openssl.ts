@@ -377,6 +377,50 @@ export async function readCertificateSanWithOpenSsl(
 	});
 }
 
+/** A normalized view of the Authority Information Access extension as OpenSSL decodes it. */
+export interface OpenSslAiaObservation {
+	/** `true` when OpenSSL parsed the certificate and its AIA extension. */
+	readonly accepted: boolean;
+	/** The whitespace-normalized AIA value (`"OCSP - URI:…, CA Issuers - DirName:…"`), or `undefined`. */
+	readonly authorityInfoAccess?: string;
+}
+
+/**
+ * Reads the Authority Information Access a micro509-produced certificate encodes,
+ * as OpenSSL decodes it, proving the emitted accessLocation GeneralNames (a URI
+ * OCSP responder and a directoryName caIssuers) are interoperable.
+ */
+export async function readCertificateAiaWithOpenSsl(
+	certificatePem: string,
+): Promise<OpenSslAiaObservation> {
+	return await withTempDir(async (directory) => {
+		const certificatePath = join(directory, 'certificate.pem');
+		await Bun.write(certificatePath, certificatePem);
+		// dprint-ignore
+		const result = await runOpenSsl([
+			'x509',
+			'-in', certificatePath,
+			'-noout',
+			'-ext', 'authorityInfoAccess',
+			'-nameopt', 'RFC2253',
+		]);
+		if (result.exitCode !== 0) {
+			return { accepted: false };
+		}
+		const text = mergeCommandOutput(result);
+		const marker = 'Authority Information Access:';
+		const markerIndex = text.indexOf(marker);
+		if (markerIndex === -1) {
+			return { accepted: true };
+		}
+		const authorityInfoAccess = text
+			.slice(markerIndex + marker.length)
+			.replace(/\s+/g, ' ')
+			.trim();
+		return { accepted: true, authorityInfoAccess };
+	});
+}
+
 export async function withTempDir<T>(fn: (directory: string) => Promise<T>): Promise<T> {
 	const directory = await mkdtemp(join(tmpdir(), 'micro509-openssl-'));
 	try {

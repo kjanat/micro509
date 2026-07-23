@@ -13,6 +13,7 @@ import {
 	concatBytes,
 	DEFAULT_MAX_DER_DEPTH,
 	explicitContext,
+	ia5Bytes,
 	ia5String,
 	implicitConstructedContext,
 	implicitPrimitiveContext,
@@ -33,6 +34,7 @@ import {
 	encodeDistributionPointReasonFlagsContent,
 	encodeKeyUsageExtension,
 } from '#micro509/internal/x509/extension-bits';
+import { GENERAL_NAME_WIRE_TAGS } from '#micro509/internal/x509/general-name-tags';
 import type {
 	ExtensionDefinition,
 	ExtensionRegistryContext,
@@ -424,8 +426,8 @@ export interface CertificateExtensionsInput {
 	readonly policyConstraints?: PolicyConstraints;
 	/** Inhibit anyPolicy skip-certs threshold. */
 	readonly inhibitAnyPolicy?: InhibitAnyPolicy;
-	/** Authority Information Access — OCSP responder and CA issuer URIs. */
-	readonly authorityInfoAccess?: readonly AuthorityInformationAccess[];
+	/** Authority Information Access — OCSP responder and CA issuer locations. */
+	readonly authorityInfoAccess?: readonly AuthorityInformationAccessInput[];
 	/** CRL Distribution Points — where to check revocation status. */
 	readonly crlDistributionPoints?: readonly DistributionPoint[];
 	/** Arbitrary extensions not covered by the built-in fields. */
@@ -643,6 +645,27 @@ export interface AuthorityInformationAccess {
 	/** accessLocation GeneralName where the resource is available (usually a URI). */
 	readonly location: GeneralName;
 }
+
+/**
+ * Builder input for one Authority Information Access entry.
+ *
+ * Parsed AIA locations stay broad ({@linkcode AuthorityInformationAccess}), but
+ * an `'ocsp'` entry must supply a URI location, since RFC 6960 §3.1 defines the
+ * `id-ad-ocsp` location as a URI; `directoryName` is defined for `caIssuers`.
+ */
+export type AuthorityInformationAccessInput =
+	| {
+			/** OCSP responder access method. */
+			readonly method: 'ocsp';
+			/** OCSP responder URI (RFC 6960 §3.1). */
+			readonly location: { readonly type: 'uri'; readonly value: string };
+	  }
+	| {
+			/** caIssuers or a custom access method. */
+			readonly method: 'caIssuers' | CustomAuthorityInfoAccessMethod;
+			/** Any accessLocation GeneralName. */
+			readonly location: GeneralName;
+	  };
 
 /** Well-known Extended Key Usage purpose strings (RFC 5280 §4.2.1.12). */
 export type KnownExtendedKeyUsage =
@@ -968,11 +991,11 @@ export function encodeKeyUsage(usages: readonly KeyUsage[]): Uint8Array {
 export function encodeSubjectAltName(value: SubjectAltName): Uint8Array {
 	switch (value.type) {
 		case 'dns':
-			return implicitPrimitiveContext(2, new TextEncoder().encode(value.value));
+			return implicitPrimitiveContext(2, ia5Bytes(value.value));
 		case 'email':
-			return implicitPrimitiveContext(1, new TextEncoder().encode(value.value));
+			return implicitPrimitiveContext(1, ia5Bytes(value.value));
 		case 'uri':
-			return implicitPrimitiveContext(6, new TextEncoder().encode(value.value));
+			return implicitPrimitiveContext(6, ia5Bytes(value.value));
 		case 'srv':
 			return implicitConstructedContext(
 				0,
@@ -986,6 +1009,9 @@ export function encodeSubjectAltName(value: SubjectAltName): Uint8Array {
 		case 'directoryName':
 			return implicitConstructedContext(4, readDirectoryNameTlv(value.derHex));
 		case 'unknown':
+			if (!GENERAL_NAME_WIRE_TAGS.has(value.tag)) {
+				throw new Error(`Invalid GeneralName tag: ${value.tag}`);
+			}
 			return tlv(value.tag, value.value);
 		default: {
 			const _exhaustive: never = value;
@@ -1009,15 +1035,19 @@ export function encodeExtendedKeyUsage(usages: readonly ExtendedKeyUsage[]): Uin
  * @param entries AIA entries (OCSP, caIssuers, or custom) to encode.
  */
 export function encodeAuthorityInfoAccess(
-	entries: readonly AuthorityInformationAccess[],
+	entries: readonly AuthorityInformationAccessInput[],
 ): Uint8Array {
 	return sequence(
-		entries.map((entry) =>
-			sequence([
-				objectIdentifier(getAuthorityInfoAccessMethodOid(entry.method)),
-				encodeSubjectAltName(entry.location),
-			]),
-		),
+		entries.map((entry) => {
+			const methodOid = getAuthorityInfoAccessMethodOid(entry.method);
+			// RFC 6960 §3.1: the id-ad-ocsp location is a URI. Re-check the resolved
+			// OID so a custom-OID wrapper cannot smuggle a non-URI OCSP location past
+			// the input union.
+			if (methodOid === OIDS.ocspAccessMethod && entry.location.type !== 'uri') {
+				throw new Error('authorityInfoAccess OCSP location must be a URI');
+			}
+			return sequence([objectIdentifier(methodOid), encodeSubjectAltName(entry.location)]);
+		}),
 	);
 }
 
@@ -1240,11 +1270,11 @@ function encodeDistributionPointName(name: DistributionPointName): Uint8Array {
 function encodeNameConstraintForm(form: NameConstraintForm): Uint8Array {
 	switch (form.type) {
 		case 'dns':
-			return implicitPrimitiveContext(2, new TextEncoder().encode(form.value));
+			return implicitPrimitiveContext(2, ia5Bytes(form.value));
 		case 'email':
-			return implicitPrimitiveContext(1, new TextEncoder().encode(form.value));
+			return implicitPrimitiveContext(1, ia5Bytes(form.value));
 		case 'uri':
-			return implicitPrimitiveContext(6, new TextEncoder().encode(form.value));
+			return implicitPrimitiveContext(6, ia5Bytes(form.value));
 		case 'ip':
 			return implicitPrimitiveContext(7, concatBytes([form.addressBytes, form.maskBytes]));
 		case 'directoryName':

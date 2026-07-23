@@ -20,6 +20,7 @@ import { OIDS } from '#micro509/internal/asn1/oids';
 import type { ParsedBitFlags } from '#micro509/internal/x509/extension-bits';
 import type {
 	AuthorityInformationAccess,
+	AuthorityInformationAccessInput,
 	BasicConstraints,
 	CertificatePolicies,
 	DistributionPoint,
@@ -267,8 +268,12 @@ export const INHIBIT_ANY_POLICY_EXTENSION_DEFINITION: ExtensionDefinition<Inhibi
 
 /** Registry entry for Authority Information Access (OID 1.3.6.1.5.5.7.1.1). Non-critical. */
 export const AUTHORITY_INFO_ACCESS_EXTENSION_DEFINITION: ExtensionDefinition<
-	readonly AuthorityInformationAccess[]
-> = defineExtensionDefinition<readonly AuthorityInformationAccess[]>({
+	readonly AuthorityInformationAccess[],
+	readonly AuthorityInformationAccessInput[]
+> = defineExtensionDefinition<
+	readonly AuthorityInformationAccess[],
+	readonly AuthorityInformationAccessInput[]
+>({
 	oid: OIDS.authorityInfoAccess,
 	contexts: ['certificate', 'csr'],
 	defaultCritical: false,

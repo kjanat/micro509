@@ -26,7 +26,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   URI, so a certificate carrying a directoryName or dNSName accessLocation (both
   conformant) failed to parse entirely. An OCSP entry requires a URI location
   (its discovery reads only URIs); `directoryName` is defined for `caIssuers`,
-  and other GeneralName forms are syntactically representable.
+  and other GeneralName forms are syntactically representable. GeneralName
+  encoding and parsing now reject any tag, class, or constructedness that is not
+  one of the nine RFC 5280 §4.2.1.6 alternatives (`x400Address [3]`,
+  `ediPartyName [5]`, and `registeredID [8]` are preserved as unknown). The
+  IA5String alternatives (`dNSName`, `rfc822Name`,
+  `uniformResourceIdentifier`) reject non-ASCII input on encode and decode.
   (https://github.com/kjanat/micro509/pull/78)
 
 ### Fixed
