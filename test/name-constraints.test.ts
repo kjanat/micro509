@@ -230,6 +230,14 @@ describe('name constraint fixtures', () => {
 			leafSubjectAltNames: [{ type: 'uri', value: 'urn:example:resource' }],
 		});
 		expect(noAuthority).toMatchObject({ ok: false, code: 'name_constraints_violated' });
+
+		const singleLabel = await verifyNameConstraintFixture({
+			rootNameConstraints: {
+				excludedSubtrees: [{ base: { type: 'uri', value: '.example.com' } }],
+			},
+			leafSubjectAltNames: [{ type: 'uri', value: 'https://localhost/x' }],
+		});
+		expect(singleLabel).toMatchObject({ ok: false, code: 'name_constraints_violated' });
 	});
 
 	it('accepts a non-FQDN URI SAN when no URI constraints apply', async () => {

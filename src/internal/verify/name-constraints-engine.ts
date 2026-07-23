@@ -712,16 +712,23 @@ function extractUriHost(uri: string): string | undefined {
 /**
  * RFC 5280 §4.2.1.10: a URI subject to a uniformResourceIdentifier constraint
  * MUST be rejected when its authority component has no FQDN host. True for a
- * missing or empty authority, a bracketed IPv6 literal, or an IPv4 literal.
+ * missing or empty authority, a bracketed IPv6 literal, an IPv4 literal, or a
+ * single-label host such as `localhost` (an FQDN has at least two labels).
  */
 function uriAuthorityLacksFqdn(uri: string): boolean {
 	const host = extractUriHost(uri);
-	if (host === undefined || host.length === 0) {
+	if (host === undefined || host.length === 0 || host.startsWith('[')) {
 		return true;
 	}
-	if (host.startsWith('[')) {
+	if (isIpLiteral(host)) {
 		return true;
 	}
+	const labels = host.split('.').filter((label) => label.length > 0);
+	return labels.length < 2;
+}
+
+/** True when `host` parses as an IPv4 or IPv6 literal. */
+function isIpLiteral(host: string): boolean {
 	try {
 		parseIpAddressToBytes(host);
 		return true;
