@@ -12,8 +12,8 @@ import {
 } from '#micro509';
 import { readElement } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
-import { encodeName } from '#micro509/x509';
 import { encodeRsaPssParameters, rsaPssParametersForHash } from '#micro509/internal/crypto/rsa-pss';
+import { encodeName } from '#micro509/x509';
 import { childrenOf, decodeObjectIdentifier, hasExtensionOid } from '#test/helpers';
 
 describe('certificate', () => {
