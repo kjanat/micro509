@@ -1759,8 +1759,9 @@ function parseOcspResponderId(source: Uint8Array, element: DerElement): ParsedOc
 			if (keyHash.tag !== 0x04) {
 				throw new Error('ResponderID byKey must wrap an OCTET STRING');
 			}
-			if (keyHash.value.length === 0) {
-				throw new Error('ResponderID byKey must not be empty');
+			// KeyHash is the SHA-1 hash of the responder's public key (RFC 6960 §4.2.1).
+			if (keyHash.value.length !== 20) {
+				throw new Error('ResponderID byKey must be a 20-byte SHA-1 KeyHash');
 			}
 			return { type: 'byKeyHash', keyHashHex: toHex(keyHash.value) };
 		}

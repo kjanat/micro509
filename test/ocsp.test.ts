@@ -2657,7 +2657,15 @@ describe('ocsp', () => {
 			parseOcspResponseDerOrThrow(
 				rewriteOcspResponseResponderId(response, explicitContext(2, octetString(new Uint8Array()))),
 			),
-		).toThrow('ResponderID byKey must not be empty');
+		).toThrow('ResponderID byKey must be a 20-byte SHA-1 KeyHash');
+		expect(() =>
+			parseOcspResponseDerOrThrow(
+				rewriteOcspResponseResponderId(
+					response,
+					explicitContext(2, octetString(new Uint8Array(19))),
+				),
+			),
+		).toThrow('ResponderID byKey must be a 20-byte SHA-1 KeyHash');
 
 		const responseWithNextUpdate = await createOcspResponse({
 			signerPrivateKey: issuer.keyPair.privateKey,
