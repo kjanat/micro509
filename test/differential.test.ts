@@ -15,6 +15,8 @@ import {
 	validateOcspResponse,
 	verifyCertificateChain,
 } from '#micro509';
+import { toHex } from '#micro509/internal/asn1/asn1';
+import { encodeName } from '#micro509/x509';
 import { differentialEnabled, hexToBytes, issueChain, openSslAvailable } from '#test/helpers';
 import {
 	checkIdentityWithOpenSsl,
@@ -24,8 +26,6 @@ import {
 	validateMicro509OcspResponseWithOpenSsl,
 	verifyChainWithOpenSsl,
 } from '#test/oracles/openssl';
-import { toHex } from '#micro509/internal/asn1/asn1';
-import { encodeName } from '#micro509/x509';
 
 describe.skipIf(!openSslAvailable || !differentialEnabled)('OpenSSL differential harness', () => {
 	it('matches OpenSSL path verdicts for valid and path-length-exceeded chains', async () => {
