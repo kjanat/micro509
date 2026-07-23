@@ -85,11 +85,11 @@ import {
 import { createPkcs12MacData, parsePkcs12MacDataOrThrow } from '#micro509/pkcs';
 import {
 	buildCertificateExtensions,
+	encodeAuthorityInfoAccess,
 	encodeCertificatePolicies,
 	encodeCrlDistributionPoints,
 	encodeNameConstraints,
 	encodePolicyMappings,
-	encodeAuthorityInfoAccess,
 	encodeSubjectAltName,
 } from '#micro509/x509';
 
