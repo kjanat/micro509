@@ -12,6 +12,7 @@ import {
 } from '#micro509';
 import { readElement } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
+import { encodeName } from '#micro509/x509';
 import { encodeRsaPssParameters, rsaPssParametersForHash } from '#micro509/internal/crypto/rsa-pss';
 import { childrenOf, decodeObjectIdentifier, hasExtensionOid } from '#test/helpers';
 
@@ -423,8 +424,19 @@ describe('certificate', () => {
 	});
 
 	it('allows empty subject DN when SAN is present and marks SAN critical (RFC 5280 §4.2.1.6)', async () => {
-		const { certificate } = await createSelfSignedCertificate({
+		// The issuer must be non-empty (§4.1.2.4), so an empty subject is only valid
+		// on a CA-issued leaf, not a self-signed certificate.
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Empty Subject CA' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign'] },
+		});
+		const leafKeys = await generateKeyPair();
+		const certificate = await createCertificate({
+			issuer: { commonName: 'Empty Subject CA' },
 			subject: {},
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
 			extensions: {
 				subjectAltNames: [{ type: 'dns', value: 'example.com' }],
 			},
@@ -441,6 +453,32 @@ describe('certificate', () => {
 		expect(createSelfSignedCertificate({ subject: { country: 'USA' } })).rejects.toThrow(
 			'Country must be a 2-character code',
 		);
+	});
+
+	it('rejects an empty name attribute value (RFC 5280 A.1 SIZE (1..ub))', () => {
+		// The NameObject path filters empty values, so exercise the attribute-array path.
+		expect(() => encodeName([{ type: 'commonName', value: '' }])).toThrow(
+			'Name attribute commonName must not be empty',
+		);
+	});
+
+	it('rejects a name attribute over its RFC 5280 A.1 upper bound', async () => {
+		expect(
+			createSelfSignedCertificate({ subject: { commonName: 'a'.repeat(65) } }),
+		).rejects.toThrow('Name attribute commonName must be at most 64 characters');
+	});
+
+	it('rejects an empty issuer distinguished name (RFC 5280 §4.1.2.4)', async () => {
+		const keys = await generateKeyPair();
+		expect(
+			createCertificate({
+				issuer: {},
+				subject: { commonName: 'empty-issuer-leaf' },
+				publicKey: keys.publicKey,
+				signerPrivateKey: keys.privateKey,
+				issuerPublicKey: keys.publicKey,
+			}),
+		).rejects.toThrow('issuer must be a non-empty distinguished name');
 	});
 
 	it('creates certificates with RSA SHA-384, SHA-512 and ECDSA P-384', async () => {

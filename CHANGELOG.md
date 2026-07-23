@@ -18,6 +18,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Distinguished-name encoding enforces the RFC 5280 Appendix A.1 attribute
+  constraints: no attribute value may be empty (`SIZE (1..ub-…)`), and
+  `commonName`/`organization`/`organizationalUnit`/`title`/`serialNumber` cap at
+  64 characters, `locality`/`state` at 128, and `emailAddress` at 255. Only the
+  country exact-length-2 rule was enforced before. `surname`, `givenName`, and
+  `street` stay unbounded (no A.1 bound applies). Bounds count code points.
+- `createCertificate` rejects an empty issuer distinguished name, per RFC 5280
+  §4.1.2.4 ("The issuer field MUST contain a non-empty distinguished name"). An
+  empty subject with a critical subjectAltName stays valid (§4.1.2.6).
+  (https://github.com/kjanat/micro509/pull/84)
+
 ## [0.13.0] - 2026-07-23
 
 A public `micro509/der` entrypoint, and RFC-conformance fixes across path

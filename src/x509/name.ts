@@ -262,8 +262,17 @@ function encodeNameAttribute(attribute: NameAttribute): Uint8Array {
 	if (definition === undefined) {
 		throw new Error(`Unsupported name field: ${attribute.type}`);
 	}
+	const length = [...attribute.value].length;
+	if (length === 0) {
+		throw new Error(`Name attribute ${attribute.type} must not be empty`);
+	}
 	if (attribute.type === 'country' && attribute.value.length !== 2) {
 		throw new Error('Country must be a 2-character code');
+	}
+	if (definition.maxLength !== undefined && length > definition.maxLength) {
+		throw new Error(
+			`Name attribute ${attribute.type} must be at most ${definition.maxLength} characters`,
+		);
 	}
 	return sequence([objectIdentifier(definition.oid), definition.encode(attribute.value)]);
 }

@@ -251,6 +251,9 @@ export async function createCertificate(
 		: undefined;
 	const signatureAlgorithm = getSignatureAlgorithm(input.signerPrivateKey, input.signature);
 	const validity = resolveValidity(input.validity);
+	if (isNameInputEmpty(input.issuer)) {
+		throw new Error('issuer must be a non-empty distinguished name');
+	}
 	const subjectIsEmpty = isNameInputEmpty(input.subject);
 	const extensions = buildCertificateExtensions(
 		subjectPublicKeyInfo,
