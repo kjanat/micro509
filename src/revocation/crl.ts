@@ -48,6 +48,7 @@ import {
 import { base64Encode } from '#micro509/internal/shared/base64';
 import { compareDistinguishedNames, compareNameAttributeValue } from '#micro509/internal/shared/dn';
 import { decodeIpAddress } from '#micro509/internal/shared/ip';
+import { readDirectoryNameTlv } from '#micro509/internal/x509/directory-name';
 import type { ParsedBitFlags } from '#micro509/internal/x509/extension-bits';
 import {
 	encodeDistributionPointReasonFlagsContent,
@@ -1976,7 +1977,7 @@ function parseGeneralName(element: DerElement): GeneralName {
 		case 0xa4:
 			return {
 				type: 'directoryName' as const,
-				derHex: toHex(rebuildDirectoryNameFromImplicit(element)),
+				derHex: toHex(readDirectoryNameTlv(element)),
 			};
 		default:
 			return { type: 'unknown' as const, tag: element.tag, value: new Uint8Array(element.value) };
@@ -2103,14 +2104,6 @@ function encodeDistributionPointName(
 /** DER-encodes and concatenates a list of GeneralName values. */
 function concatGeneralNames(names: readonly GeneralName[]): Uint8Array {
 	return concatBytes(names.map((name) => encodeSubjectAltName(name)));
-}
-
-/** Returns the Name TLV from a directoryName [4]. RFC 5280 makes [4] EXPLICIT, but some certificates encode the RDNSequence content directly. */
-function rebuildDirectoryNameFromImplicit(element: DerElement): Uint8Array {
-	if (element.value.length > 0 && element.value[0] === 0x30) {
-		return new Uint8Array(element.value);
-	}
-	return tlv(0x30, element.value);
 }
 
 /** Parses a Name SEQUENCE element into a full {@linkcode ParsedName}. */

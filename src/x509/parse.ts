@@ -24,7 +24,6 @@ import {
 import type { DerElement } from '#micro509/internal/asn1/der';
 import {
 	DEFAULT_MAX_DER_DEPTH,
-	encodeLength,
 	readElement,
 	readRootElement,
 	readSequenceChildren,
@@ -35,6 +34,7 @@ import {
 	describeSignatureAlgorithm,
 } from '#micro509/internal/crypto/algorithm-names';
 import { decodeIpAddress } from '#micro509/internal/shared/ip';
+import { readDirectoryNameTlv } from '#micro509/internal/x509/directory-name';
 import type { ParsedBitFlags } from '#micro509/internal/x509/extension-bits';
 import {
 	parseDistributionPointReasonFlagsContent,
@@ -1654,13 +1654,16 @@ export function parseKeyUsage(bytes: Uint8Array): ParsedBitFlags<KeyUsage> {
 
 /** @internal Decode the Extended Key Usage SEQUENCE OF OIDs. */
 export function parseExtendedKeyUsage(bytes: Uint8Array): readonly ExtendedKeyUsage[] {
-	const sequenceElement = requireElement(
-		readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH }),
-		'extendedKeyUsage sequence',
-	);
-	return childrenOf(bytes, sequenceElement).map((element) =>
-		parseExtendedKeyUsageOid(decodeObjectIdentifier(element.value)),
-	);
+	const children = readSequenceChildren(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH });
+	if (children.length === 0) {
+		throw new Error('extendedKeyUsage must not be empty');
+	}
+	return children.map((element) => {
+		if (element.tag !== 0x06) {
+			throw new Error('extendedKeyUsage entry must use OBJECT IDENTIFIER');
+		}
+		return parseExtendedKeyUsageOid(decodeObjectIdentifier(element.value));
+	});
 }
 
 /** @internal Decode the Certificate Policies extension value. */
@@ -1899,7 +1902,10 @@ export function parseSubjectAltNames(bytes: Uint8Array): readonly SubjectAltName
 		readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH }),
 		'subjectAltName sequence',
 	);
-	return childrenOf(bytes, sequenceElement).map((element) => parseGeneralName(bytes, element));
+	if (sequenceElement.tag !== 0x30) {
+		throw new Error('subjectAltName must use SEQUENCE');
+	}
+	return parseGeneralNames(bytes, sequenceElement);
 }
 
 /** @internal Decode a bare DER-encoded X.501 Name, as carried in a `directoryName` GeneralName. */
@@ -2083,7 +2089,7 @@ function parseGeneralName(source: Uint8Array, element: DerElement): GeneralName 
 		case 0xa4:
 			return {
 				type: 'directoryName' as const,
-				derHex: toHex(rebuildDirectoryNameFromImplicit(element, source)),
+				derHex: toHex(readDirectoryNameTlv(element)),
 			};
 		default:
 			// x400Address [3], ediPartyName [5], and registeredID [8] are valid but
@@ -2203,7 +2209,7 @@ function parseGeneralSubtree(
 		throw new Error('GeneralSubtree base is required');
 	}
 	validateGeneralSubtreeBounds(children.slice(1));
-	return parseNameConstraintGeneralName(source, baseElement);
+	return parseNameConstraintGeneralName(baseElement);
 }
 
 function validateGeneralSubtreeBounds(children: readonly DerElement[]): void {
@@ -2226,10 +2232,7 @@ function validateGeneralSubtreeBounds(children: readonly DerElement[]): void {
 }
 
 /** Decode a GeneralName for use in name constraints (IP carries address+mask). */
-function parseNameConstraintGeneralName(
-	source: Uint8Array,
-	element: DerElement,
-): ParsedNameConstraintForm | undefined {
+function parseNameConstraintGeneralName(element: DerElement): ParsedNameConstraintForm | undefined {
 	switch (element.tag) {
 		case 0xa0:
 			return { type: 'otherName', value: new Uint8Array(element.value) };
@@ -2263,7 +2266,7 @@ function parseNameConstraintGeneralName(
 		case 0xa4:
 			return {
 				type: 'directoryName',
-				derHex: toHex(rebuildDirectoryNameFromImplicit(element, source)),
+				derHex: toHex(readDirectoryNameTlv(element)),
 			};
 		case 0xa5:
 			return { type: 'ediPartyName', value: new Uint8Array(element.value) };
@@ -2271,19 +2274,6 @@ function parseNameConstraintGeneralName(
 			return { type: 'registeredID', value: decodeObjectIdentifier(element.value) };
 	}
 	throw new Error(`Unsupported name constraint GeneralName tag: ${String(element.tag)}`);
-}
-
-/** Returns the Name TLV from a directoryName [4]. RFC 5280 makes [4] EXPLICIT, but some certificates encode the RDNSequence content directly. */
-function rebuildDirectoryNameFromImplicit(element: DerElement, _source: Uint8Array): Uint8Array {
-	if (element.value.length > 0 && element.value[0] === 0x30) {
-		return new Uint8Array(element.value);
-	}
-	const lengthEncoded = encodeLength(element.value.length);
-	const result = new Uint8Array(1 + lengthEncoded.length + element.value.length);
-	result[0] = 0x30;
-	result.set(lengthEncoded, 1);
-	result.set(element.value, 1 + lengthEncoded.length);
-	return result;
 }
 
 /** Decode a DisplayText (UTF8String, IA5String, VisibleString, or BMPString). */

@@ -36,6 +36,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `subjectAltName` parsing rejects an empty or non-SEQUENCE extension value, per
+  RFC 5280 §4.2.1.6 (`GeneralNames ::= SEQUENCE SIZE (1..MAX)`). An empty SAN
+  previously decoded to `[]`, indistinguishable from an absent extension, so
+  common-name fallback suppression did not engage. `directoryName [4]` now
+  requires exactly one explicit X.501 Name with valid RDN and attribute
+  structure instead of repairing malformed implicit encodings, including in
+  CRL GeneralNames.
+- `extendedKeyUsage` parsing rejects an empty SEQUENCE and any child that is not
+  an OBJECT IDENTIFIER, per RFC 5280 §4.2.1.12. `decodeObjectIdentifier` ran on
+  every child regardless of tag, so `30 03 02 01 01` fabricated the OID `0.1`
+  from an INTEGER. (https://github.com/kjanat/micro509/pull/80)
 - Extension encoders reject input RFC 5280 forbids rather than emitting
   non-conformant DER: an empty `keyUsage` (§4.2.1.3), `extendedKeyUsage`
   (§4.2.1.12), `authorityInfoAccess`/`cRLDistributionPoints` (§4.2.2.1,
