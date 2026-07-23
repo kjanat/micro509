@@ -912,6 +912,57 @@ describe('chain verification', () => {
 		expect(result.value.chain).toHaveLength(2); // leaf + intermediate
 	});
 
+	it('processes the terminal CA policies under a bare trust anchor', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Bare Anchor Root' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 1 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const topKeys = await generateKeyPair();
+		const topCa = await createCertificate({
+			issuer: { commonName: 'Bare Anchor Root' },
+			subject: { commonName: 'Bare Anchor Top CA' },
+			publicKey: topKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Bare Anchor Top CA' },
+			subject: { commonName: 'bare-anchor-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: topKeys.privateKey,
+			issuerPublicKey: topKeys.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				certificatePolicies: [{ policyIdentifier: '1.2.3.4' }],
+			},
+		});
+		const anchor = trustAnchorFromCertificate(unwrap(parseCertificatePem(root.certificate.pem)));
+
+		// The bare anchor verifies topCa, so the path is [leaf, topCa]. topCa carries
+		// no certificatePolicies, which nulls the policy tree, so the requested policy
+		// 1.2.3.4 cannot survive processing of topCa.
+		const result = await verifyCertificateChain({
+			leaf: leaf.pem,
+			intermediates: [topCa.pem],
+			roots: [],
+			trustAnchors: [anchor],
+			initialPolicySet: ['1.2.3.4'],
+		});
+		expect(result.ok).toBe(false);
+		if (result.ok) {
+			throw new Error('expected policy validation to fail');
+		}
+		expect(result.code).toBe('initial_policy_set_not_satisfied');
+	});
+
 	it('rejects chain when trust anchor has wrong key', async () => {
 		const chain = await issueChain();
 		const rootParsed = unwrap(parseCertificatePem(chain.root.certificate.pem));

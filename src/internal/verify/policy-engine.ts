@@ -106,12 +106,13 @@ export function createPolicyValidationState(
 export function evaluatePolicyChain(
 	chain: readonly ParsedCertificate[],
 	state: PolicyValidationState,
+	anchorInChain = true,
 ): PolicyValidationResult {
 	if (chain.length === 0) {
 		throw new RangeError('policy validation requires at least one certificate');
 	}
-	processPolicyState(chain, state);
-	const outcome = derivePolicyValidationOutcome(chain, state);
+	processPolicyState(chain, state, anchorInChain);
+	const outcome = derivePolicyValidationOutcome(state);
 	if (state.explicitPolicy === 0 && outcome.userConstrainedPolicies.length === 0) {
 		return {
 			ok: false,
@@ -173,10 +174,16 @@ function policyNodeKey(depth: number, validPolicy: string): string {
 	return `${String(depth)}:${validPolicy}`;
 }
 
-/** Iterates root-to-leaf (skipping root), applying each certificate's policies to the state. */
+/**
+ * Applies each path certificate's policies to the state, top CA first. When
+ * `anchorInChain` is true the terminal certificate is the trust anchor and is
+ * excluded; a bare anchor leaves the terminal certificate a path certificate
+ * that must be processed.
+ */
 function processPolicyState(
 	chain: readonly ParsedCertificate[],
 	state: PolicyValidationState,
+	anchorInChain: boolean,
 ): void {
 	if (chain.length === 1) {
 		const certificate = chain[0];
@@ -188,8 +195,8 @@ function processPolicyState(
 		processPolicyCertificate(state, certificate, 1, true);
 		return;
 	}
-	const leafDepth = chain.length - 1;
-	for (let index = chain.length - 2; index >= 0; index -= 1) {
+	const leafDepth = anchorInChain ? chain.length - 1 : chain.length;
+	for (let index = leafDepth - 1; index >= 0; index -= 1) {
 		const certificate = chain[index];
 		if (certificate === undefined) {
 			throw new Error(
@@ -201,181 +208,150 @@ function processPolicyState(
 	}
 }
 
-/** Extracts the final authority- and user-constrained policy sets from the completed graph. */
-function derivePolicyValidationOutcome(
-	chain: readonly ParsedCertificate[],
-	state: PolicyValidationState,
-): PolicyValidationOutcome {
-	const authorityConstrainedPolicies = collectAuthorityConstrainedPolicies(
-		chain,
-		state.validPolicyGraph,
-	);
-	const rootDomainPolicies = collectRootDomainPolicies(chain, state.validPolicyGraph);
+/** Extracts the authority- and user-constrained policy sets from the completed graph (RFC 9618 §5.5 step (g)). */
+function derivePolicyValidationOutcome(state: PolicyValidationState): PolicyValidationOutcome {
+	const authority = collectAuthorityConstrainedPolicies(state.validPolicyGraph);
 	return {
-		authorityConstrainedPolicies: [...authorityConstrainedPolicies.values()].sort(comparePolicies),
-		userConstrainedPolicies: deriveUserConstrainedPolicies(
-			authorityConstrainedPolicies,
-			rootDomainPolicies,
-			state.initialPolicySet,
-		),
+		authorityConstrainedPolicies: [...authority.values()].sort(comparePolicies),
+		userConstrainedPolicies: deriveUserConstrainedPolicies(authority, state.initialPolicySet),
 	};
 }
 
-/** Collects leaf-depth policies whose graph paths trace back to the anyPolicy root. */
+/**
+ * RFC 9618 §5.5 (g)(2)-(4) authority_constrained_policy_set. The
+ * valid_policy_node_set is every graph node, at any depth, whose valid_policy is
+ * not anyPolicy and whose single parent is an anyPolicy node, plus a depth-n
+ * anyPolicy node when present. Pruning has already removed nodes with no path to
+ * the leaf, so the whole graph is the final tree.
+ */
 function collectAuthorityConstrainedPolicies(
-	chain: readonly ParsedCertificate[],
 	graph: PolicyGraph | null,
 ): ReadonlyMap<string, ConstrainedPolicy> {
 	if (graph === null) {
 		return new Map<string, ConstrainedPolicy>();
 	}
-	const leafDepth = Math.max(1, chain.length - 1);
-	const finalDepth = graph.nodesByDepth[leafDepth];
-	if (finalDepth === undefined) {
-		return new Map<string, ConstrainedPolicy>();
-	}
-	const authorityPolicies = new Map<string, ConstrainedPolicy>();
-	for (const [key, node] of finalDepth) {
-		if (node.validPolicy === OIDS.anyPolicy) {
-			authorityPolicies.set(
-				OIDS.anyPolicy,
-				buildConstrainedPolicy(OIDS.anyPolicy, node.qualifierSet),
-			);
-			continue;
-		}
-		if (reachesAuthorityRoot(graph, key)) {
-			authorityPolicies.set(
-				node.validPolicy,
-				buildConstrainedPolicy(node.validPolicy, node.qualifierSet),
-			);
-		}
-	}
-	return authorityPolicies;
-}
-
-/** DFS upward through parent links to check if the node ultimately connects to the depth-0 anyPolicy root. */
-function reachesAuthorityRoot(graph: PolicyGraph, nodeKey: string): boolean {
-	const pending = [nodeKey];
-	const visited = new Set<string>();
-	while (pending.length > 0) {
-		const currentKey = pending.pop();
-		if (currentKey === undefined || visited.has(currentKey)) {
-			continue;
-		}
-		visited.add(currentKey);
-		const node = getPolicyGraphNode(graph, currentKey);
-		if (node === undefined) {
-			continue;
-		}
-		for (const parentKey of node.parentKeys) {
-			const parent = getPolicyGraphNode(graph, parentKey);
-			if (parent === undefined) {
+	const qualifiersByOid = new Map<string, PolicyQualifierInfo[]>();
+	const record = (node: PolicyGraphNode): void => {
+		const collected = qualifiersByOid.get(node.validPolicy) ?? [];
+		collected.push(...gatherLineageQualifiers(graph, node));
+		qualifiersByOid.set(node.validPolicy, collected);
+	};
+	for (const depthNodes of graph.nodesByDepth) {
+		for (const node of depthNodes.values()) {
+			if (node.validPolicy === OIDS.anyPolicy || node.parentKeys.size !== 1) {
 				continue;
 			}
-			if (parent.depth === 0 && parent.validPolicy === OIDS.anyPolicy) {
-				return true;
+			if (getSingleParent(graph, node)?.validPolicy === OIDS.anyPolicy) {
+				record(node);
 			}
-			pending.push(parentKey);
 		}
 	}
-	return false;
+	const leafDepth = graph.nodesByDepth.length - 1;
+	const leafAnyPolicy = graph.nodesByDepth[leafDepth]?.get(
+		policyNodeKey(leafDepth, OIDS.anyPolicy),
+	);
+	if (leafAnyPolicy !== undefined) {
+		record(leafAnyPolicy);
+	}
+	const authority = new Map<string, ConstrainedPolicy>();
+	for (const [oid, qualifiers] of qualifiersByOid) {
+		authority.set(oid, buildConstrainedPolicy(oid, dedupeQualifiers(qualifiers)));
+	}
+	return authority;
 }
 
-/** Like authority-constrained, but records the OID at the depth-1 node that connects to root. */
-function collectRootDomainPolicies(
-	chain: readonly ParsedCertificate[],
-	graph: PolicyGraph | null,
-): ReadonlyMap<string, ConstrainedPolicy> {
-	if (graph === null) {
-		return new Map<string, ConstrainedPolicy>();
-	}
-	const leafDepth = Math.max(1, chain.length - 1);
-	const finalDepth = graph.nodesByDepth[leafDepth];
-	if (finalDepth === undefined) {
-		return new Map<string, ConstrainedPolicy>();
-	}
-	const rootPolicies = new Map<string, ConstrainedPolicy>();
-	for (const [key, node] of finalDepth) {
-		if (node.validPolicy === OIDS.anyPolicy) {
-			rootPolicies.set(OIDS.anyPolicy, buildConstrainedPolicy(OIDS.anyPolicy, node.qualifierSet));
-			continue;
-		}
-		collectAuthorityConstrainedPolicyRoots(graph, key, rootPolicies);
-	}
-	return rootPolicies;
+/** Returns the sole parent of a node whose parent list has exactly one entry. */
+function getSingleParent(graph: PolicyGraph, node: PolicyGraphNode): PolicyGraphNode | undefined {
+	const parentKey = [...node.parentKeys][0];
+	return parentKey === undefined ? undefined : getPolicyGraphNode(graph, parentKey);
 }
 
-/** Walks parent links upward, collecting the depth-1 OID that first connects to the root anyPolicy. */
-function collectAuthorityConstrainedPolicyRoots(
+/** RFC 9618 §5.5 (g)(4)(ii): qualifiers from a node, its ancestors, and its descendants. */
+function gatherLineageQualifiers(
 	graph: PolicyGraph,
-	nodeKey: string,
-	authorityPolicies: Map<string, ConstrainedPolicy>,
+	node: PolicyGraphNode,
+): readonly PolicyQualifierInfo[] {
+	const qualifiers: PolicyQualifierInfo[] = [...(node.qualifierSet ?? [])];
+	collectDirectionalQualifiers(graph, node.parentKeys, (visited) => visited.parentKeys, qualifiers);
+	collectDirectionalQualifiers(graph, node.childKeys, (visited) => visited.childKeys, qualifiers);
+	return qualifiers;
+}
+
+/** Follows one edge direction transitively, appending each visited node's qualifiers. */
+function collectDirectionalQualifiers(
+	graph: PolicyGraph,
+	startKeys: ReadonlySet<string>,
+	next: (node: PolicyGraphNode) => ReadonlySet<string>,
+	out: PolicyQualifierInfo[],
 ): void {
-	const pending = [nodeKey];
 	const visited = new Set<string>();
-	while (pending.length > 0) {
-		const currentKey = pending.pop();
-		if (currentKey === undefined || visited.has(currentKey)) {
+	const stack = [...startKeys];
+	while (stack.length > 0) {
+		const key = stack.pop();
+		if (key === undefined || visited.has(key)) {
 			continue;
 		}
-		visited.add(currentKey);
-		const node = getPolicyGraphNode(graph, currentKey);
+		visited.add(key);
+		const node = getPolicyGraphNode(graph, key);
 		if (node === undefined) {
 			continue;
 		}
-		for (const parentKey of node.parentKeys) {
-			const parent = getPolicyGraphNode(graph, parentKey);
-			if (parent === undefined) {
-				continue;
-			}
-			if (parent.depth === 0 && parent.validPolicy === OIDS.anyPolicy) {
-				// Record the depth-1 policy that connects to root
-				// If the depth-1 node is anyPolicy itself, record anyPolicy so it can satisfy
-				// any policy in the initial-policy-set via deriveUserConstrainedPolicies
-				authorityPolicies.set(
-					node.validPolicy,
-					buildConstrainedPolicy(
-						node.validPolicy,
-						currentKey === nodeKey ? node.qualifierSet : undefined,
-					),
-				);
-				continue;
-			}
-			pending.push(parentKey);
+		if (node.qualifierSet !== undefined) {
+			out.push(...node.qualifierSet);
+		}
+		for (const nextKey of next(node)) {
+			stack.push(nextKey);
 		}
 	}
 }
 
-/** Intersects root-domain policies with the caller's initial-policy-set. */
+/** Deduplicates qualifiers by value, returning `undefined` when none remain. */
+function dedupeQualifiers(
+	qualifiers: readonly PolicyQualifierInfo[],
+): readonly PolicyQualifierInfo[] | undefined {
+	const seen = new Set<string>();
+	const unique: PolicyQualifierInfo[] = [];
+	for (const qualifier of qualifiers) {
+		const key = JSON.stringify(qualifier, (_field, value) =>
+			value instanceof Uint8Array ? Array.from(value) : value,
+		);
+		if (!seen.has(key)) {
+			seen.add(key);
+			unique.push(qualifier);
+		}
+	}
+	return unique.length === 0 ? undefined : unique;
+}
+
+/**
+ * RFC 9618 §5.5 (g)(5)-(6) user_constrained_policy_set. It equals the
+ * authority-constrained set when the initial-policy-set is anyPolicy. Otherwise
+ * it keeps the members named in the initial-policy-set, and, when the authority
+ * set holds anyPolicy, adds the remaining requested OIDs with anyPolicy's
+ * qualifiers.
+ */
 function deriveUserConstrainedPolicies(
-	finalAuthorityConstrainedPolicies: ReadonlyMap<string, ConstrainedPolicy>,
-	rootDomainPolicies: ReadonlyMap<string, ConstrainedPolicy>,
+	authority: ReadonlyMap<string, ConstrainedPolicy>,
 	initialPolicySet: readonly string[] | 'any',
 ): readonly ConstrainedPolicy[] {
 	if (initialPolicySet === 'any') {
-		return [...finalAuthorityConstrainedPolicies.values()].sort(comparePolicies);
+		return [...authority.values()].sort(comparePolicies);
 	}
-	const anyPolicy = rootDomainPolicies.get(OIDS.anyPolicy);
-	// If the EE asserts anyPolicy, it satisfies any policy in initial-policy-set
-	const eeHasAnyPolicy = finalAuthorityConstrainedPolicies.has(OIDS.anyPolicy);
 	const constrained = new Map<string, ConstrainedPolicy>();
-	for (const policyIdentifier of initialPolicySet) {
-		const direct = rootDomainPolicies.get(policyIdentifier);
-		if (direct !== undefined) {
-			constrained.set(policyIdentifier, direct);
-			continue;
+	for (const [policyIdentifier, policy] of authority) {
+		if (initialPolicySet.includes(policyIdentifier)) {
+			constrained.set(policyIdentifier, policy);
 		}
-		// anyPolicy can satisfy a requested policy if:
-		// 1. The EE asserts the specific policy (finalAuthorityConstrainedPolicies.has), OR
-		// 2. The EE itself asserts anyPolicy (eeHasAnyPolicy)
-		if (
-			anyPolicy !== undefined &&
-			(finalAuthorityConstrainedPolicies.has(policyIdentifier) || eeHasAnyPolicy)
-		) {
-			constrained.set(
-				policyIdentifier,
-				buildConstrainedPolicy(policyIdentifier, anyPolicy.policyQualifiers),
-			);
+	}
+	const anyPolicy = authority.get(OIDS.anyPolicy);
+	if (anyPolicy !== undefined) {
+		for (const policyIdentifier of initialPolicySet) {
+			if (!constrained.has(policyIdentifier)) {
+				constrained.set(
+					policyIdentifier,
+					buildConstrainedPolicy(policyIdentifier, anyPolicy.policyQualifiers),
+				);
+			}
 		}
 	}
 	return [...constrained.values()].sort(comparePolicies);

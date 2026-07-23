@@ -36,6 +36,12 @@ export interface InternalBuildResult {
 	readonly chain: readonly ParsedCertificate[];
 	/** `true` when the chain terminates at a trusted root or anchor. */
 	readonly foundTrustedRoot: boolean;
+	/**
+	 * `true` when the terminal certificate in `chain` is a trusted root cert (and
+	 * so is excluded from policy/name processing); `false` when a bare trust
+	 * anchor verified the terminal certificate, which then stays a path cert.
+	 */
+	readonly anchorCertificateInChain?: boolean;
 	/** Chain index where no issuer candidate existed, when the search dead-ended. */
 	readonly missingIssuerAt?: number;
 	/** Best failure encountered during the search, for diagnostic reporting. */
@@ -206,7 +212,13 @@ export async function buildChainInternal(
 	const startFingerprint = fingerprint(leaf);
 	const success = await search(leaf, [leaf], new Set([startFingerprint]), 0);
 	if (success !== undefined) {
-		return { chain: success, foundTrustedRoot: true };
+		const terminal = success[success.length - 1];
+		return {
+			chain: success,
+			foundTrustedRoot: true,
+			anchorCertificateInChain:
+				terminal !== undefined && rootFingerprints.has(fingerprint(terminal)),
+		};
 	}
 	if (preferredFailure !== undefined) {
 		return {

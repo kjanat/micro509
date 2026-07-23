@@ -246,6 +246,12 @@ export interface CandidatePath {
 	readonly chain: readonly ParsedCertificate[];
 	/** Trusted root that terminates the path. */
 	readonly root: ParsedCertificate;
+	/**
+	 * `true` when {@linkcode CandidatePath.root} is a trusted root certificate
+	 * included in {@linkcode CandidatePath.chain}; `false` when a bare trust
+	 * anchor verified the terminal certificate, which stays a path certificate.
+	 */
+	readonly anchorCertificateInChain: boolean;
 }
 
 /** Result of {@linkcode buildCandidatePath}. On success, contains the {@linkcode CandidatePath}. */
@@ -268,6 +274,13 @@ export interface ValidateCandidatePathInput
 	readonly nameConstraints?: InitialNameConstraintsInput;
 	/** Pre-built certificate chain in leaf-to-root order. */
 	readonly chain: readonly ParsedCertificate[];
+	/**
+	 * Whether the terminal certificate in `chain` is the trust anchor (and so is
+	 * excluded from policy processing). Defaults to `true`, matching a chain that
+	 * ends at a root certificate. Set `false` when a bare trust anchor verified
+	 * the terminal certificate, which then must be processed as a path certificate.
+	 */
+	readonly anchorCertificateInChain?: boolean;
 	/** Validation time. Defaults to `new Date()`. */
 	readonly at?: Date;
 	/** Leaf purpose constraint to enforce. */
@@ -587,6 +600,7 @@ async function buildCandidatePathRaw(input: BuildCandidatePathInput): Promise<
 			leaf,
 			chain,
 			root,
+			anchorCertificateInChain: buildResult.anchorCertificateInChain ?? true,
 		},
 	};
 }
@@ -651,7 +665,11 @@ async function validateCandidatePathRaw(
 	if (certificateFailure !== undefined) return certificateFailure;
 	const pathLengthFailure = validatePathLengthConstraints(chain);
 	if (pathLengthFailure !== undefined) return pathLengthFailure;
-	const policyResult = validatePolicyAndNameConstraints(chain, validationStateResult.value);
+	const policyResult = validatePolicyAndNameConstraints(
+		chain,
+		validationStateResult.value,
+		input.anchorCertificateInChain ?? true,
+	);
 	if (!policyResult.ok) return policyResult;
 
 	return validateLeaf(leaf, input, policyResult.policyValidation);
@@ -735,8 +753,9 @@ function pathLengthExceededFailure(
 function validatePolicyAndNameConstraints(
 	chain: readonly ParsedCertificate[],
 	validationState: ValidationState,
+	anchorInChain: boolean,
 ): ValidateCandidatePathRawResult {
-	const policyResult = evaluatePolicyChain(chain, validationState.policy);
+	const policyResult = evaluatePolicyChain(chain, validationState.policy, anchorInChain);
 	if (!policyResult.ok) {
 		return failure(
 			policyResult.error.code,
@@ -943,6 +962,7 @@ export async function verifyCertificateChain(
 
 	const validateResult = await validateCandidatePath({
 		chain: buildResult.value.chain,
+		anchorCertificateInChain: buildResult.value.anchorCertificateInChain,
 		...(input.at !== undefined && { at: input.at }),
 		...(input.purpose !== undefined && { purpose: input.purpose }),
 		...copyValidationInputs(input),
