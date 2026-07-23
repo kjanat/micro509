@@ -94,6 +94,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rather than reporting one arbitrary node's set.
   (https://github.com/kjanat/micro509/pull/75)
 
+- Distinguished name comparison implements the RFC 4518 string-preparation
+  profile that RFC 5280 §7.1 requires: the Map, Normalize, Prohibit, and
+  Insignificant Space steps with RFC 3454 Appendix B.2 case folding. The old
+  NFKC-plus-lowercase shortcut left ignorable code points in place (so an
+  excluded subtree failed to exclude a name carrying a SOFT HYPHEN), folded
+  with `toLowerCase` alone (so `Straße` did not equal `STRASSE`), and rejected
+  control characters a DN may legitimately carry (so a name did not equal
+  itself). `domainComponent` values now compare case-insensitively per RFC 5280
+  §7.3, so `DC=Example` chains to a CA whose subject is `DC=example`. RFC 4518
+  and RFC 3454 are vendored under `docs/rfc/`.
+  (https://github.com/kjanat/micro509/pull/74)
+
 ## [0.12.0] - 2026-07-21
 
 Text rendering for subject alternative names and distinguished names, and
