@@ -963,6 +963,38 @@ describe('chain verification', () => {
 		expect(result.code).toBe('initial_policy_set_not_satisfied');
 	});
 
+	it('does not treat a canonical-key bucket as trust-anchor DN equality', async () => {
+		// A private-use code point is prohibited during preparation, so a DN that
+		// carries one does not equal even itself, yet it still yields a stable
+		// canonical-key bucket. A bare anchor sharing that bucket must not anchor a
+		// certificate on the bucket alone; the semantic DN comparison must run.
+		const privateUse = String.fromCodePoint(0xe000);
+		const anchor = await createSelfSignedCertificate({
+			subject: { organization: `Acme${privateUse}`, commonName: 'Collision Anchor' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign'] },
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { organization: `Acme${privateUse}`, commonName: 'Collision Anchor' },
+			subject: { commonName: 'collision-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: anchor.keyPair.privateKey,
+			issuerPublicKey: anchor.keyPair.publicKey,
+			extensions: { keyUsage: ['digitalSignature'] },
+		});
+		const result = await verifyCertificateChain({
+			leaf: leaf.pem,
+			roots: [],
+			trustAnchors: [
+				trustAnchorFromCertificate(unwrap(parseCertificatePem(anchor.certificate.pem))),
+			],
+		});
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.code).toBe('no_trusted_root');
+		}
+	});
+
 	it('rejects chain when trust anchor has wrong key', async () => {
 		const chain = await issueChain();
 		const rootParsed = unwrap(parseCertificatePem(chain.root.certificate.pem));

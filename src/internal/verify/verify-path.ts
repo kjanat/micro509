@@ -583,6 +583,10 @@ async function matchTrustAnchor(
 	let firstFailure: VerifyChainFailure | undefined;
 	for (const anchor of anchors) {
 		if (trustAnchorAkiMismatch(certificate, anchor)) continue;
+		// The canonicalDnKey bucket is not proof of DN equality (prohibited values
+		// are non-reflexive and prepared/tagged namespaces can collide), so confirm
+		// the anchor's subject actually equals the certificate's issuer.
+		if (!compareDistinguishedNames(certificate.issuer, anchor.subject)) continue;
 		const verified = await verifyTrustAnchorSignature(certificate, anchor);
 		if (!verified.ok) {
 			// Capture the first failure but continue trying other anchors
