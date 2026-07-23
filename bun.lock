@@ -31,7 +31,7 @@
     "examples/vite": {
       "name": "micro509-vite-demo",
       "dependencies": {
-        "micro509": "^0.12",
+        "micro509": "^0.13",
       },
       "devDependencies": {
         "typescript": "^7",

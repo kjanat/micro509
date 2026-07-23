@@ -18,6 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-07-23
+
+A public `micro509/der` entrypoint, and RFC-conformance fixes across path
+validation: name constraints, issuer chaining, CRL issuer paths,
+distinguished-name comparison, and policy node sets.
+
 ### Added
 
 - `micro509/der` exposes the DER reader, writer, and value decoders that back
@@ -49,6 +55,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Name constraints reject a URI SAN whose authority has no FQDN host (an IP
+  literal, a single-label host such as `localhost`, or no authority at all)
+  when a uniformResourceIdentifier constraint applies, per RFC 5280 §4.2.1.10.
+  Such a URI previously slipped past the
+  constraint. Email constraint matching now compares the local part
+  case-sensitively and only the host case-insensitively (RFC 5280 §7.5, as
+  replaced by RFC 9549 §7.5.1), so `admin@example.com` no longer matches
+  `ADMIN@example.com` and widens the permitted subtrees.
+  (https://github.com/kjanat/micro509/pull/71)
+- `validateCandidatePath` compares each certificate's issuer DN against the
+  candidate issuer's subject DN, per RFC 5280 §6.1.3(a)(4). It verified only the
+  signature, so a leaf whose issuer DN was unrelated to the signing CA validated
+  as ok on the pre-built-path API. `buildChainInternal` already compared them,
+  so `verifyCertificateChain` was unaffected.
+  (https://github.com/kjanat/micro509/pull/72)
 - CRL evidence validates the CRL issuer's own certification path to the trust
   anchor before trusting its verdict (RFC 5280 §6.3.3(f)). A forged
   indirect-CRL signer whose subject DN collided with a chain certificate was
@@ -61,39 +82,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   issued by a chain CA authorizes. Without these, a genuine revoked CRL became
   `crl_signer_not_authorized` and soft-fail allowed the revoked certificate.
   (https://github.com/kjanat/micro509/pull/73)
-- `validateCandidatePath` compares each certificate's issuer DN against the
-  candidate issuer's subject DN, per RFC 5280 §6.1.3(a)(4). It verified only the
-  signature, so a leaf whose issuer DN was unrelated to the signing CA validated
-  as ok on the pre-built-path API. `buildChainInternal` already compared them,
-  so `verifyCertificateChain` was unaffected.
-  (https://github.com/kjanat/micro509/pull/72)
-- Name constraints reject a URI SAN whose authority has no FQDN host (an IP
-  literal, a single-label host such as `localhost`, or no authority at all)
-  when a uniformResourceIdentifier constraint applies, per RFC 5280 §4.2.1.10.
-  Such a URI previously slipped past the
-  constraint. Email constraint matching now compares the local part
-  case-sensitively and only the host case-insensitively (RFC 5280 §7.5, as
-  replaced by RFC 9549 §7.5.1), so `admin@example.com` no longer matches
-  `ADMIN@example.com` and widens the permitted subtrees.
-  (https://github.com/kjanat/micro509/pull/71)
-
-- Certificate policy validation computes the RFC 9618 §5.5(g)
-  `valid_policy_node_set` correctly: the nodes at any depth whose valid_policy
-  is not anyPolicy and whose single parent is an anyPolicy node, plus a depth-n
-  anyPolicy node. It previously took depth-n nodes tracing back to the depth-0
-  anyPolicy root, which diverges under policy mapping. A CA that mapped
-  `1.2.3.4` to `1.2.3.5` reported `authorityConstrainedPolicies` of `1.2.3.5`
-  where the spec requires `1.2.3.4` (NIST PKITS 4.10.1), so a chain validated
-  against the mapped policy instead of the authority's. `userConstrainedPolicies`
-  now follows §5.5(g)(5)-(6) from the corrected set. Policy validation also
-  processes the terminal certificate when a bare trust anchor is used: a path
-  built to an out-of-band anchor ends at a real CA, and skipping it let a leaf
-  policy satisfy `initialPolicySet` even when that CA omitted or contradicted
-  the policy. `authorityConstrainedPolicies` now aggregates each policy's
-  qualifiers from its node, ancestors, and descendants per §5.5(g)(4)(ii)
-  rather than reporting one arbitrary node's set.
-  (https://github.com/kjanat/micro509/pull/75)
-
 - Distinguished name comparison implements the RFC 4518 string-preparation
   profile that RFC 5280 §7.1 requires, against the frozen Unicode 3.2 repertoire
   RFC 4518 §2.1 fixes: the Map, Normalize, Prohibit, and Insignificant Space
@@ -114,6 +102,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   anchor's subject equals the certificate's issuer rather than trusting the
   canonical-key bucket. RFC 4518 and RFC 3454 are vendored under `docs/rfc/`.
   (https://github.com/kjanat/micro509/pull/74)
+- Certificate policy validation computes the RFC 9618 §5.5(g)
+  `valid_policy_node_set` correctly: the nodes at any depth whose valid_policy
+  is not anyPolicy and whose single parent is an anyPolicy node, plus a depth-n
+  anyPolicy node. It previously took depth-n nodes tracing back to the depth-0
+  anyPolicy root, which diverges under policy mapping. A CA that mapped
+  `1.2.3.4` to `1.2.3.5` reported `authorityConstrainedPolicies` of `1.2.3.5`
+  where the spec requires `1.2.3.4` (NIST PKITS 4.10.1), so a chain validated
+  against the mapped policy instead of the authority's. `userConstrainedPolicies`
+  now follows §5.5(g)(5)-(6) from the corrected set. Policy validation also
+  processes the terminal certificate when a bare trust anchor is used: a path
+  built to an out-of-band anchor ends at a real CA, and skipping it let a leaf
+  policy satisfy `initialPolicySet` even when that CA omitted or contradicted
+  the policy. `authorityConstrainedPolicies` now aggregates each policy's
+  qualifiers from its node, ancestors, and descendants per §5.5(g)(4)(ii)
+  rather than reporting one arbitrary node's set.
+  (https://github.com/kjanat/micro509/pull/75)
 
 ## [0.12.0] - 2026-07-21
 
@@ -714,7 +718,8 @@ Initial prerelease. API may change before 1.0.
 - Zero runtime dependencies, WebCrypto-native, tree-shakeable subpath exports;
   runs on Node, Bun, Deno, browsers, and Cloudflare Workers.
 
-[Unreleased]: https://github.com/kjanat/micro509/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/kjanat/micro509/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/kjanat/micro509/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/kjanat/micro509/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/kjanat/micro509/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/kjanat/micro509/compare/v0.9.0...v0.10.0
