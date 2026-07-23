@@ -695,6 +695,7 @@ describe('revocation boundary', () => {
 						method: 'caIssuers',
 						location: { type: 'uri', value: 'http://issuer.example.test/ca.der' },
 					},
+					{ method: 'ocsp', location: { type: 'dns', value: 'ocsp-dns.example.test' } },
 					{ method: 'ocsp', location: { type: 'uri', value: 'http://ocsp-1.example.test' } },
 					{ method: 'ocsp', location: { type: 'uri', value: 'http://ocsp-2.example.test' } },
 				],

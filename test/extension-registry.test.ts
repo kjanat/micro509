@@ -123,10 +123,12 @@ describe('extension registry', () => {
 					method: 'caIssuers',
 					location: { type: 'uri', value: 'https://example.test/issuer.pem' },
 				},
+				{ method: 'caIssuers', location: { type: 'dns', value: 'issuer.example.test' } },
 			]).authorityInfoAccess,
 		).toEqual([
 			{ method: 'ocsp', location: { type: 'uri', value: 'https://ocsp.example.test' } },
 			{ method: 'caIssuers', location: { type: 'uri', value: 'https://example.test/issuer.pem' } },
+			{ method: 'caIssuers', location: { type: 'dns', value: 'issuer.example.test' } },
 		]);
 	});
 
