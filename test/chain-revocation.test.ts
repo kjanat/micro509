@@ -301,6 +301,170 @@ describe('checkChainRevocation', () => {
 		expect(leafStatus?.status).toBe('indeterminate');
 		expect(leafStatus?.indeterminateReasons).toContain('crl_signer_not_authorized');
 	});
+
+	it('authorizes a delegated CRL signer issued by a chain intermediate', async () => {
+		const at = new Date(Date.now() + 5_000);
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Delegated Root' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 1 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const intermediateKeys = await generateKeyPair();
+		const intermediate = await createCertificate({
+			issuer: { commonName: 'Delegated Root' },
+			subject: { commonName: 'Delegated Intermediate' },
+			publicKey: intermediateKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		// Delegated CRL signer issued by the intermediate, sharing the
+		// intermediate subject DN so its CRL applies to the leaf directly. Its
+		// path to the anchor runs signer -> intermediate -> root, so the
+		// intermediate must come from the validated chain.
+		const signerKeys = await generateKeyPair();
+		const signer = await createCertificate({
+			issuer: { commonName: 'Delegated Intermediate' },
+			subject: { commonName: 'Delegated Intermediate' },
+			publicKey: signerKeys.publicKey,
+			signerPrivateKey: intermediateKeys.privateKey,
+			issuerPublicKey: intermediateKeys.publicKey,
+			extensions: { keyUsage: ['cRLSign'] },
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Delegated Intermediate' },
+			subject: { commonName: 'delegated-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: intermediateKeys.privateKey,
+			issuerPublicKey: intermediateKeys.publicKey,
+			extensions: { keyUsage: ['digitalSignature'] },
+		});
+		const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Delegated Intermediate' },
+			signerPrivateKey: signerKeys.privateKey,
+			issuerPublicKey: signerKeys.publicKey,
+			thisUpdate: new Date(at.getTime() - HOUR_MS),
+			nextUpdate: new Date(at.getTime() + HOUR_MS),
+			revokedCertificates: [
+				{
+					serialNumber: hexToBytes(parsedLeaf.serialNumberHex),
+					revocationDate: new Date(at.getTime() - HOUR_MS),
+					reasonCode: 'keyCompromise',
+				},
+			],
+		});
+
+		const result = await checkChainRevocation({
+			chain: [
+				parsedLeaf,
+				unwrap(parseCertificatePem(intermediate.pem)),
+				unwrap(parseCertificatePem(root.certificate.pem)),
+			],
+			crls: [crl.der],
+			extraCertificates: [signer.pem],
+			at,
+			policy: { mode: 'soft-fail' },
+		});
+		expect(result.ok).toBe(true);
+		expect(result.value.decision).toBe('deny');
+		expect(result.value.certificates[0]?.status).toBe('revoked');
+	});
+
+	it('tries a later authorized signer when an earlier same-key candidate is unusable', async () => {
+		const at = new Date(Date.now() + 5_000);
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Shadow Root' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 1 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const caKeys = await generateKeyPair();
+		const issuerCa = await createCertificate({
+			issuer: { commonName: 'Shadow Root' },
+			subject: { commonName: 'Shadow CA' },
+			publicKey: caKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		// Two CRL signers sharing one key and the CA's subject DN, issued by the
+		// CA. The first is expired; only the second is a usable signer.
+		const signerKeys = await generateKeyPair();
+		const expiredSigner = await createCertificate({
+			issuer: { commonName: 'Shadow CA' },
+			subject: { commonName: 'Shadow CA' },
+			publicKey: signerKeys.publicKey,
+			signerPrivateKey: caKeys.privateKey,
+			issuerPublicKey: caKeys.publicKey,
+			validity: {
+				notBefore: new Date(at.getTime() - 400 * 24 * HOUR_MS),
+				notAfter: new Date(at.getTime() - HOUR_MS),
+			},
+			extensions: { keyUsage: ['cRLSign'] },
+		});
+		const validSigner = await createCertificate({
+			issuer: { commonName: 'Shadow CA' },
+			subject: { commonName: 'Shadow CA' },
+			publicKey: signerKeys.publicKey,
+			signerPrivateKey: caKeys.privateKey,
+			issuerPublicKey: caKeys.publicKey,
+			validity: {
+				notBefore: new Date(at.getTime() - HOUR_MS),
+				notAfter: new Date(at.getTime() + 400 * 24 * HOUR_MS),
+			},
+			extensions: { keyUsage: ['cRLSign'] },
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Shadow CA' },
+			subject: { commonName: 'shadow-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: caKeys.privateKey,
+			issuerPublicKey: caKeys.publicKey,
+			extensions: { keyUsage: ['digitalSignature'] },
+		});
+		const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Shadow CA' },
+			signerPrivateKey: signerKeys.privateKey,
+			issuerPublicKey: signerKeys.publicKey,
+			thisUpdate: new Date(at.getTime() - HOUR_MS),
+			nextUpdate: new Date(at.getTime() + HOUR_MS),
+			revokedCertificates: [
+				{
+					serialNumber: hexToBytes(parsedLeaf.serialNumberHex),
+					revocationDate: new Date(at.getTime() - HOUR_MS),
+					reasonCode: 'keyCompromise',
+				},
+			],
+		});
+
+		const result = await checkChainRevocation({
+			chain: [
+				parsedLeaf,
+				unwrap(parseCertificatePem(issuerCa.pem)),
+				unwrap(parseCertificatePem(root.certificate.pem)),
+			],
+			crls: [crl.der],
+			extraCertificates: [expiredSigner.pem, validSigner.pem],
+			at,
+			policy: { mode: 'soft-fail' },
+		});
+		expect(result.ok).toBe(true);
+		expect(result.value.decision).toBe('deny');
+		expect(result.value.certificates[0]?.status).toBe('revoked');
+	});
 });
 
 const HOUR_MS = 60 * 60 * 1000;

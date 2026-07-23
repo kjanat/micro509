@@ -115,7 +115,7 @@
 		"smoke:deno": "deno run --allow-read scripts/smoke.mjs",
 		"smoke:node": "node scripts/smoke.mjs",
 		"smoke:workerd": "node scripts/smoke-workerd.mjs",
-		"test": "AGENT=1 bun test --coverage --concurrent",
+		"test": "AGENT=1 bun test --concurrent",
 		"test:differential": "bun test test/differential.test.ts test/differential-fuzz.test.ts",
 		"test:pkits": "bun test test/pkits.test.ts",
 		"test:watch": "AGENT=1 bun test --watch --concurrent",

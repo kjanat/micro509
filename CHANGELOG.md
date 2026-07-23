@@ -53,9 +53,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   anchor before trusting its verdict (RFC 5280 §6.3.3(f)). A forged
   indirect-CRL signer whose subject DN collided with a chain certificate was
   accepted on a name match, its signature never checked against a trusted key,
-  so a forged empty CRL reported a revoked certificate as `good`. Every
-  candidate CRL issuer is now tried rather than only the first, so a DN
-  collision cannot shadow the genuine issuer.
+  so a forged empty CRL reported a revoked certificate as `good`. Each
+  candidate CRL issuer runs the full pipeline as one step (signature, then
+  §6.3.3(f) path, then signer revocation), so an unusable candidate no longer
+  shadows a later authorized one, and the signer's path is validated against a
+  pool that includes the validated chain intermediates, so a delegated signer
+  issued by a chain CA authorizes. Without these, a genuine revoked CRL became
+  `crl_signer_not_authorized` and soft-fail allowed the revoked certificate.
   (https://github.com/kjanat/micro509/pull/73)
 - `validateCandidatePath` compares each certificate's issuer DN against the
   candidate issuer's subject DN, per RFC 5280 §6.1.3(a)(4). It verified only the
