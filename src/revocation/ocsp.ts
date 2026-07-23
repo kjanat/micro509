@@ -807,8 +807,9 @@ export async function createOcspResponse(
 		bitString(signature),
 	];
 	if (includedCertificates.length > 0) {
+		// certs [0] EXPLICIT SEQUENCE OF Certificate (RFC 6960 §4.2.1).
 		basicResponseFields.push(
-			explicitContext(0, concatBytes(includedCertificates.map((certificate) => certificate.der))),
+			explicitContext(0, sequence(includedCertificates.map((certificate) => certificate.der))),
 		);
 	}
 	const basicResponse = sequence(basicResponseFields);
@@ -1993,8 +1994,14 @@ function parseEmbeddedCertificates(
 	element: DerElement,
 ): readonly ParsedCertificate[] {
 	const certificates: ParsedCertificate[] = [];
-	let offset = element.start;
-	while (offset < element.end) {
+	// certs [0] EXPLICIT SEQUENCE OF Certificate (RFC 6960 §4.2.1): the single
+	// child of [0] is the SEQUENCE whose elements are the certificates.
+	const sequenceElement = childrenOf(source, element)[0];
+	if (sequenceElement === undefined || sequenceElement.tag !== 0x30) {
+		throw new Error('Malformed BasicOCSPResponse certs');
+	}
+	let offset = sequenceElement.start;
+	while (offset < sequenceElement.end) {
 		const child = readElement(source, offset);
 		certificates.push(parseCertificateDerOrThrow(source.slice(offset, child.end)));
 		offset = child.end;

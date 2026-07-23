@@ -290,6 +290,49 @@ export async function issueAndValidateOcspResponseWithOpenSsl(input: {
 	});
 }
 
+/**
+ * Has OpenSSL parse and validate an OCSP response produced by micro509, proving
+ * the emitted DER (EXPLICIT byKey ResponderID, GeneralizedTime fields) is
+ * interoperable. The response must be signed by the issuer key.
+ */
+export async function validateMicro509OcspResponseWithOpenSsl(input: {
+	readonly issuerCertificatePem: string;
+	readonly certificatePem: string;
+	readonly responseDer: Uint8Array;
+}): Promise<OpenSslOcspStatusResult> {
+	return await withTempDir(async (directory) => {
+		const issuerPath = join(directory, 'issuer.pem');
+		const certificatePath = join(directory, 'certificate.pem');
+		const responsePath = join(directory, 'response.der');
+		await Promise.all([
+			Bun.write(issuerPath, input.issuerCertificatePem),
+			Bun.write(certificatePath, input.certificatePem),
+			Bun.write(responsePath, input.responseDer),
+		]);
+		// dprint-ignore
+		const validation = await runOpenSsl([
+			'ocsp',
+			'-issuer', issuerPath,
+			'-cert', certificatePath,
+			'-respin', responsePath,
+			'-CAfile', issuerPath,
+			'-VAfile', issuerPath,
+			'-no-CApath',
+			'-no-CAstore',
+			'-no_nonce',
+		]);
+		const output = mergeCommandOutput(validation);
+		const status = parseOcspStatus(output);
+		return {
+			accepted: validation.exitCode === 0,
+			...(status === undefined ? {} : { status }),
+			exitCode: validation.exitCode,
+			output,
+			responseDer: input.responseDer,
+		};
+	});
+}
+
 export async function withTempDir<T>(fn: (directory: string) => Promise<T>): Promise<T> {
 	const directory = await mkdtemp(join(tmpdir(), 'micro509-openssl-'));
 	try {
