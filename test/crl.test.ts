@@ -19,6 +19,7 @@ import {
 import {
 	bool,
 	explicitContext,
+	nullValue,
 	objectIdentifier,
 	octetString,
 	readSequenceChildren,
@@ -2936,6 +2937,34 @@ describe('crl', () => {
 				),
 			),
 		).toThrow('IssuingDistributionPoint indirectCrl must not repeat');
+	});
+
+	it('rejects a malformed directoryName in an issuingDistributionPoint', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Malformed DirectoryName IDP CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Malformed DirectoryName IDP CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			issuingDistributionPoint: { indirectCrl: true },
+		});
+		const malformed = rewriteCrlExtensionValuePayload(
+			new Uint8Array(pemDecodeOrThrow('X509 CRL', crl.pem)),
+			OIDS.issuingDistributionPoint,
+			sequence([tlv(0xa0, tlv(0xa0, tlv(0xa4, nullValue())))]),
+		);
+
+		expect(() => parseCertificateRevocationListDerOrThrow(malformed)).toThrow(
+			'directoryName must wrap a Name SEQUENCE',
+		);
+		const result = parseCertificateRevocationListDer(malformed);
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.code).toBe('malformed');
 	});
 
 	it('parseCertificateRevocationListDerOrThrow rejects conflicting issuingDistributionPoint scope booleans', async () => {

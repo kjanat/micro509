@@ -2264,10 +2264,8 @@ describe('parse', () => {
 		]);
 		const rdn = setOf([rdnSeq]);
 		const dnSequence = sequence([rdn]);
-		// Wrap as directoryName [4] IMPLICIT — replace tag 0x30 with 0xa4
-		const dnBytes = new Uint8Array(dnSequence);
-		dnBytes[0] = 0xa4;
-		const subtree = sequence([dnBytes]);
+		// directoryName [4] is explicit because Name is a CHOICE.
+		const subtree = sequence([explicitContext(4, dnSequence)]);
 		const nameConstraints = sequence([tlv(0xa0, subtree)]);
 		const result = parseNameConstraints(nameConstraints);
 		expect(result.permittedSubtrees).toHaveLength(1);
@@ -2585,14 +2583,104 @@ describe('subjectAltName and extendedKeyUsage parse strictness', () => {
 		);
 	});
 
-	it('rejects an empty extendedKeyUsage or a non-OID entry', () => {
+	it('rejects malformed directoryName subjectAltNames', () => {
+		for (const malformed of [
+			// directoryName contains a Name followed by trailing data.
+			sequence([tlv(0xa4, concatBytes([sequence([]), nullValue()]))]),
+			// directoryName wraps a NULL instead of a Name.
+			sequence([explicitContext(4, nullValue())]),
+			// The Name contains a non-RDN child.
+			sequence([explicitContext(4, sequence([nullValue()]))]),
+			// RelativeDistinguishedName has SIZE (1..MAX).
+			sequence([explicitContext(4, sequence([setOf([])]))]),
+			// Attribute type is a malformed OBJECT IDENTIFIER.
+			sequence([
+				explicitContext(
+					4,
+					sequence([setOf([sequence([tlv(0x06, Uint8Array.of(0x80)), nullValue()])])]),
+				),
+			]),
+		]) {
+			expect(() => parseSubjectAltNames(malformed)).toThrow();
+		}
+	});
+
+	it('accepts an explicit empty Name as a directoryName subjectAltName', () => {
+		expect(parseSubjectAltNames(sequence([explicitContext(4, sequence([]))]))).toEqual([
+			{ type: 'directoryName', derHex: '3000' },
+		]);
+	});
+
+	it('accepts an arbitrary AttributeValue in a directoryName subjectAltName', () => {
+		const name = sequence([
+			setOf([sequence([objectIdentifier('1.2.3'), octetString(Uint8Array.of(0x01, 0x02))])]),
+		]);
+		expect(parseSubjectAltNames(sequence([explicitContext(4, name)]))).toEqual([
+			{ type: 'directoryName', derHex: '300c310a300806022a0304020102' },
+		]);
+	});
+
+	it('rejects trailing data and invalid GeneralName tags in subjectAltName', () => {
+		expect(() =>
+			parseSubjectAltNames(
+				concatBytes([sequence([tlv(0x82, new TextEncoder().encode('example.test'))]), nullValue()]),
+			),
+		).toThrow();
+		expect(() => parseSubjectAltNames(sequence([integerFromNumber(1)]))).toThrow(
+			'GeneralNames must contain GeneralName entries',
+		);
+		expect(() => parseSubjectAltNames(sequence([tlv(0xa2, new Uint8Array())]))).toThrow(
+			'Invalid GeneralName tag',
+		);
+	});
+
+	it('rejects malformed extendedKeyUsage structure and OIDs', () => {
 		expect(() => parseExtendedKeyUsage(Uint8Array.of(0x30, 0x00))).toThrow(
 			'extendedKeyUsage must not be empty',
+		);
+		expect(() => parseExtendedKeyUsage(setOf([objectIdentifier(OIDS.serverAuth)]))).toThrow(
+			'Expected SEQUENCE',
 		);
 		// SEQUENCE { INTEGER 1 } — an INTEGER is not a KeyPurposeId OID
 		expect(() => parseExtendedKeyUsage(sequence([integerFromNumber(1)]))).toThrow(
 			'extendedKeyUsage entry must use OBJECT IDENTIFIER',
 		);
+		expect(() =>
+			parseExtendedKeyUsage(
+				concatBytes([sequence([objectIdentifier(OIDS.serverAuth)]), nullValue()]),
+			),
+		).toThrow();
+		// The second arc uses a non-minimal base-128 encoding.
+		expect(() =>
+			parseExtendedKeyUsage(sequence([tlv(0x06, Uint8Array.of(0x2a, 0x80, 0x01))])),
+		).toThrow();
+	});
+
+	it('maps malformed subjectAltName and extendedKeyUsage in certificates and CSRs', async () => {
+		const malformedExtensions = [
+			{ oid: OIDS.subjectAltName, value: sequence([]) },
+			{ oid: OIDS.extendedKeyUsage, value: sequence([]) },
+		];
+		for (const [index, extension] of malformedExtensions.entries()) {
+			const certificate = await createSelfSignedCertificate({
+				subject: { commonName: `malformed-extension-${String(index)}.example` },
+				extensions: { customExtensions: [{ ...extension, critical: true }] },
+			});
+			const certificateResult = parseCertificateDer(certificate.certificate.der);
+			expect(certificateResult.ok).toBe(false);
+			if (!certificateResult.ok) expect(certificateResult.error.code).toBe('malformed');
+
+			const keyPair = await generateKeyPair();
+			const csr = await createCertificateSigningRequest({
+				subject: { commonName: `malformed-extension-${String(index)}.example` },
+				publicKey: keyPair.publicKey,
+				signerPrivateKey: keyPair.privateKey,
+				extensions: { customExtensions: [extension] },
+			});
+			const csrResult = parseCertificateSigningRequestDer(csr.der);
+			expect(csrResult.ok).toBe(false);
+			if (!csrResult.ok) expect(csrResult.error.code).toBe('malformed');
+		}
 	});
 });
 

@@ -24,7 +24,6 @@ import {
 import type { DerElement } from '#micro509/internal/asn1/der';
 import {
 	DEFAULT_MAX_DER_DEPTH,
-	encodeLength,
 	readElement,
 	readRootElement,
 	readSequenceChildren,
@@ -35,6 +34,7 @@ import {
 	describeSignatureAlgorithm,
 } from '#micro509/internal/crypto/algorithm-names';
 import { decodeIpAddress } from '#micro509/internal/shared/ip';
+import { readDirectoryNameTlv } from '#micro509/internal/x509/directory-name';
 import type { ParsedBitFlags } from '#micro509/internal/x509/extension-bits';
 import {
 	parseDistributionPointReasonFlagsContent,
@@ -2089,7 +2089,7 @@ function parseGeneralName(source: Uint8Array, element: DerElement): GeneralName 
 		case 0xa4:
 			return {
 				type: 'directoryName' as const,
-				derHex: toHex(rebuildDirectoryNameFromImplicit(element, source)),
+				derHex: toHex(readDirectoryNameTlv(element)),
 			};
 		default:
 			// x400Address [3], ediPartyName [5], and registeredID [8] are valid but
@@ -2209,7 +2209,7 @@ function parseGeneralSubtree(
 		throw new Error('GeneralSubtree base is required');
 	}
 	validateGeneralSubtreeBounds(children.slice(1));
-	return parseNameConstraintGeneralName(source, baseElement);
+	return parseNameConstraintGeneralName(baseElement);
 }
 
 function validateGeneralSubtreeBounds(children: readonly DerElement[]): void {
@@ -2232,10 +2232,7 @@ function validateGeneralSubtreeBounds(children: readonly DerElement[]): void {
 }
 
 /** Decode a GeneralName for use in name constraints (IP carries address+mask). */
-function parseNameConstraintGeneralName(
-	source: Uint8Array,
-	element: DerElement,
-): ParsedNameConstraintForm | undefined {
+function parseNameConstraintGeneralName(element: DerElement): ParsedNameConstraintForm | undefined {
 	switch (element.tag) {
 		case 0xa0:
 			return { type: 'otherName', value: new Uint8Array(element.value) };
@@ -2269,7 +2266,7 @@ function parseNameConstraintGeneralName(
 		case 0xa4:
 			return {
 				type: 'directoryName',
-				derHex: toHex(rebuildDirectoryNameFromImplicit(element, source)),
+				derHex: toHex(readDirectoryNameTlv(element)),
 			};
 		case 0xa5:
 			return { type: 'ediPartyName', value: new Uint8Array(element.value) };
@@ -2277,19 +2274,6 @@ function parseNameConstraintGeneralName(
 			return { type: 'registeredID', value: decodeObjectIdentifier(element.value) };
 	}
 	throw new Error(`Unsupported name constraint GeneralName tag: ${String(element.tag)}`);
-}
-
-/** Returns the Name TLV from a directoryName [4]. RFC 5280 makes [4] EXPLICIT, but some certificates encode the RDNSequence content directly. */
-function rebuildDirectoryNameFromImplicit(element: DerElement, _source: Uint8Array): Uint8Array {
-	if (element.value.length > 0 && element.value[0] === 0x30) {
-		return new Uint8Array(element.value);
-	}
-	const lengthEncoded = encodeLength(element.value.length);
-	const result = new Uint8Array(1 + lengthEncoded.length + element.value.length);
-	result[0] = 0x30;
-	result.set(lengthEncoded, 1);
-	result.set(element.value, 1 + lengthEncoded.length);
-	return result;
 }
 
 /** Decode a DisplayText (UTF8String, IA5String, VisibleString, or BMPString). */
