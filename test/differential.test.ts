@@ -15,11 +15,14 @@ import {
 	validateOcspResponse,
 	verifyCertificateChain,
 } from '#micro509';
+import { toHex } from '#micro509/internal/asn1/asn1';
+import { encodeName } from '#micro509/x509';
 import { differentialEnabled, hexToBytes, issueChain, openSslAvailable } from '#test/helpers';
 import {
 	checkIdentityWithOpenSsl,
 	checkRevocationWithOpenSsl,
 	issueAndValidateOcspResponseWithOpenSsl,
+	readCertificateSanWithOpenSsl,
 	validateMicro509OcspResponseWithOpenSsl,
 	verifyChainWithOpenSsl,
 } from '#test/oracles/openssl';
@@ -272,6 +275,31 @@ describe.skipIf(!openSslAvailable || !differentialEnabled)('OpenSSL differential
 			expect(micro.ok).toBe(openSsl.accepted);
 			expect(parsed.responses?.[0]?.certStatus).toBe(openSsl.status);
 		}
+	});
+
+	it('OpenSSL parses a micro509 certificate with directoryName and SRV-ID SANs', async () => {
+		const directoryNameDer = toHex(encodeName([{ type: 'commonName', value: 'Diff Dir CA' }]));
+		const { certificate } = await createSelfSignedCertificate({
+			subject: { commonName: 'san-encode.example' },
+			extensions: {
+				subjectAltNames: [
+					{ type: 'dns', value: 'san-encode.example' },
+					{ type: 'srv', value: '_xmpp.example.com' },
+					{ type: 'directoryName', derHex: directoryNameDer },
+				],
+			},
+		});
+		const openSsl = await readCertificateSanWithOpenSsl(certificate.pem);
+		expect(openSsl.accepted).toBe(true);
+		// OpenSSL decodes the directoryName [4] SAN (full Name TLV wrapped) and the
+		// SRV-ID otherName [0] (direct type-id/value fields). Assert the decoded
+		// labels and values, not the separator formatting, which varies by version
+		// (`SRVName:` vs `SRVName::`).
+		const san = openSsl.subjectAltName ?? '';
+		expect(san).toContain('DirName');
+		expect(san).toContain('Diff Dir CA');
+		expect(san).toContain('SRVName');
+		expect(san).toContain('_xmpp.example.com');
 	});
 
 	it('OpenSSL accepts an OCSP response produced by micro509', async () => {
