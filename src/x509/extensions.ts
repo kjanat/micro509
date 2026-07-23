@@ -7,12 +7,13 @@
  * @module
  */
 
-import { hexToBytes } from '#micro509/internal/asn1/asn1';
+import { hexToBytes, toHex } from '#micro509/internal/asn1/asn1';
 import {
 	bool,
 	concatBytes,
 	DEFAULT_MAX_DER_DEPTH,
 	explicitContext,
+	ia5Bytes,
 	ia5String,
 	implicitConstructedContext,
 	implicitPrimitiveContext,
@@ -53,6 +54,7 @@ import {
 	SUBJECT_ALT_NAME_EXTENSION_DEFINITION,
 	SUBJECT_KEY_IDENTIFIER_EXTENSION_DEFINITION,
 } from '#micro509/internal/x509/extension-registry';
+import { GENERAL_NAME_WIRE_TAGS } from '#micro509/internal/x509/general-name-tags';
 import type { RelativeDistinguishedNameInput } from '#micro509/x509/name';
 import { encodeRelativeDistinguishedName } from '#micro509/x509/name';
 
@@ -424,8 +426,8 @@ export interface CertificateExtensionsInput {
 	readonly policyConstraints?: PolicyConstraints;
 	/** Inhibit anyPolicy skip-certs threshold. */
 	readonly inhibitAnyPolicy?: InhibitAnyPolicy;
-	/** Authority Information Access — OCSP responder and CA issuer URIs. */
-	readonly authorityInfoAccess?: readonly AuthorityInformationAccess[];
+	/** Authority Information Access — OCSP responder and CA issuer locations. */
+	readonly authorityInfoAccess?: readonly AuthorityInformationAccessInput[];
 	/** CRL Distribution Points — where to check revocation status. */
 	readonly crlDistributionPoints?: readonly DistributionPoint[];
 	/** Arbitrary extensions not covered by the built-in fields. */
@@ -640,9 +642,30 @@ export interface AuthorityInformationAccess {
 				readonly type: 'oid';
 				readonly value: string;
 		  };
-	/** URI where the resource can be fetched. */
-	readonly uri: string;
+	/** accessLocation GeneralName where the resource is available (usually a URI). */
+	readonly location: GeneralName;
 }
+
+/**
+ * Builder input for one Authority Information Access entry.
+ *
+ * Parsed AIA locations stay broad ({@linkcode AuthorityInformationAccess}), but
+ * an `'ocsp'` entry must supply a URI location, since RFC 6960 §3.1 defines the
+ * `id-ad-ocsp` location as a URI; `directoryName` is defined for `caIssuers`.
+ */
+export type AuthorityInformationAccessInput =
+	| {
+			/** OCSP responder access method. */
+			readonly method: 'ocsp';
+			/** OCSP responder URI (RFC 6960 §3.1). */
+			readonly location: { readonly type: 'uri'; readonly value: string };
+	  }
+	| {
+			/** caIssuers or a custom access method. */
+			readonly method: 'caIssuers' | CustomAuthorityInfoAccessMethod;
+			/** Any accessLocation GeneralName. */
+			readonly location: GeneralName;
+	  };
 
 /** Well-known Extended Key Usage purpose strings (RFC 5280 §4.2.1.12). */
 export type KnownExtendedKeyUsage =
@@ -968,21 +991,27 @@ export function encodeKeyUsage(usages: readonly KeyUsage[]): Uint8Array {
 export function encodeSubjectAltName(value: SubjectAltName): Uint8Array {
 	switch (value.type) {
 		case 'dns':
-			return implicitPrimitiveContext(2, new TextEncoder().encode(value.value));
+			return implicitPrimitiveContext(2, ia5Bytes(value.value));
 		case 'email':
-			return implicitPrimitiveContext(1, new TextEncoder().encode(value.value));
+			return implicitPrimitiveContext(1, ia5Bytes(value.value));
 		case 'uri':
-			return implicitPrimitiveContext(6, new TextEncoder().encode(value.value));
+			return implicitPrimitiveContext(6, ia5Bytes(value.value));
 		case 'srv':
 			return implicitConstructedContext(
 				0,
-				sequence([objectIdentifier(OIDS.idOnDnsSrv), explicitContext(0, ia5String(value.value))]),
+				concatBytes([
+					objectIdentifier(OIDS.idOnDnsSrv),
+					explicitContext(0, ia5String(value.value)),
+				]),
 			);
 		case 'ip':
 			return implicitPrimitiveContext(7, encodeIpAddress(value.value));
 		case 'directoryName':
-			return implicitConstructedContext(4, extractDirectoryNameContent(value.derHex));
+			return implicitConstructedContext(4, readDirectoryNameTlv(value.derHex));
 		case 'unknown':
+			if (!GENERAL_NAME_WIRE_TAGS.has(value.tag)) {
+				throw new Error(`Invalid GeneralName tag: ${value.tag}`);
+			}
 			return tlv(value.tag, value.value);
 		default: {
 			const _exhaustive: never = value;
@@ -1009,18 +1038,22 @@ export function encodeExtendedKeyUsage(usages: readonly ExtendedKeyUsage[]): Uin
  * @param entries AIA entries (OCSP, caIssuers, or custom) to encode.
  */
 export function encodeAuthorityInfoAccess(
-	entries: readonly AuthorityInformationAccess[],
+	entries: readonly AuthorityInformationAccessInput[],
 ): Uint8Array {
 	if (entries.length === 0) {
 		throw new Error('authorityInfoAccess must not be empty');
 	}
 	return sequence(
-		entries.map((entry) =>
-			sequence([
-				objectIdentifier(getAuthorityInfoAccessMethodOid(entry.method)),
-				implicitPrimitiveContext(6, new TextEncoder().encode(entry.uri)),
-			]),
-		),
+		entries.map((entry) => {
+			const methodOid = getAuthorityInfoAccessMethodOid(entry.method);
+			// RFC 6960 §3.1: the id-ad-ocsp location is a URI. Re-check the resolved
+			// OID so a custom-OID wrapper cannot smuggle a non-URI OCSP location past
+			// the input union.
+			if (methodOid === OIDS.ocspAccessMethod && entry.location.type !== 'uri') {
+				throw new Error('authorityInfoAccess OCSP location must be a URI');
+			}
+			return sequence([objectIdentifier(methodOid), encodeSubjectAltName(entry.location)]);
+		}),
 	);
 }
 
@@ -1076,10 +1109,11 @@ export function encodeCertificatePolicies(policies: CertificatePolicies): Uint8A
 	}
 	const seen = new Set<string>();
 	for (const policy of policies) {
-		if (seen.has(policy.policyIdentifier)) {
+		const key = toHex(objectIdentifier(policy.policyIdentifier));
+		if (seen.has(key)) {
 			throw new Error(`Duplicate certificate policy OID: ${policy.policyIdentifier}`);
 		}
-		seen.add(policy.policyIdentifier);
+		seen.add(key);
 	}
 	return sequence(policies.map(encodePolicyInformation));
 }
@@ -1163,9 +1197,20 @@ function encodePolicyQualifierInfo(qualifier: PolicyQualifierInfo): Uint8Array {
 				objectIdentifier(OIDS.userNoticePolicyQualifier),
 				encodeUserNoticePolicyQualifierInfo(qualifier),
 			]);
-		case 'oid':
+		case 'oid': {
 			validateOid(qualifier.oid);
-			return sequence([objectIdentifier(qualifier.oid), new Uint8Array(qualifier.qualifierDer)]);
+			const encodedOid = objectIdentifier(qualifier.oid);
+			const canonicalOid = toHex(encodedOid);
+			if (
+				canonicalOid === toHex(objectIdentifier(OIDS.cpsPolicyQualifier)) ||
+				canonicalOid === toHex(objectIdentifier(OIDS.userNoticePolicyQualifier))
+			) {
+				throw new Error(
+					'Policy qualifier must use the typed cps or userNotice variant, not a built-in OID',
+				);
+			}
+			return sequence([encodedOid, new Uint8Array(qualifier.qualifierDer)]);
+		}
 		default: {
 			const _exhaustive: never = qualifier;
 			throw new Error(`Unhandled PolicyQualifierInfo type: ${String(_exhaustive)}`);
@@ -1265,11 +1310,11 @@ function encodeDistributionPointName(name: DistributionPointName): Uint8Array {
 function encodeNameConstraintForm(form: NameConstraintForm): Uint8Array {
 	switch (form.type) {
 		case 'dns':
-			return implicitPrimitiveContext(2, new TextEncoder().encode(form.value));
+			return implicitPrimitiveContext(2, ia5Bytes(form.value));
 		case 'email':
-			return implicitPrimitiveContext(1, new TextEncoder().encode(form.value));
+			return implicitPrimitiveContext(1, ia5Bytes(form.value));
 		case 'uri':
-			return implicitPrimitiveContext(6, new TextEncoder().encode(form.value));
+			return implicitPrimitiveContext(6, ia5Bytes(form.value));
 		case 'ip': {
 			const total = form.addressBytes.length + form.maskBytes.length;
 			if (form.addressBytes.length !== form.maskBytes.length || (total !== 8 && total !== 32)) {
@@ -1278,7 +1323,7 @@ function encodeNameConstraintForm(form: NameConstraintForm): Uint8Array {
 			return implicitPrimitiveContext(7, concatBytes([form.addressBytes, form.maskBytes]));
 		}
 		case 'directoryName':
-			return implicitConstructedContext(4, extractDirectoryNameContent(form.derHex));
+			return implicitConstructedContext(4, readDirectoryNameTlv(form.derHex));
 		default: {
 			const _exhaustive: never = form;
 			throw new Error(`Unhandled NameConstraintForm type: ${String(_exhaustive)}`);
@@ -1286,13 +1331,14 @@ function encodeNameConstraintForm(form: NameConstraintForm): Uint8Array {
 	}
 }
 
-/** Extract the content bytes from a hex-encoded DER SEQUENCE (strips the outer TLV). */
-function extractDirectoryNameContent(derHex: string): Uint8Array {
-	const element = readRootElement(hexToBytes(derHex), { maxDepth: DEFAULT_MAX_DER_DEPTH });
+/** Returns the complete Name TLV from a hex-encoded DER SEQUENCE, validating the root tag. */
+function readDirectoryNameTlv(derHex: string): Uint8Array {
+	const bytes = hexToBytes(derHex);
+	const element = readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH });
 	if (element.tag !== 0x30) {
 		throw new Error('directoryName derHex must encode a DER SEQUENCE');
 	}
-	return new Uint8Array(element.value);
+	return bytes.slice(element.start - element.headerLength, element.end);
 }
 
 /**

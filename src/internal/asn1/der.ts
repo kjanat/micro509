@@ -205,13 +205,18 @@ export function printableString(value: string): Uint8Array {
  *
  * @throws if the input contains any non-ASCII character (code point > 0x7f).
  */
-export function ia5String(value: string): Uint8Array {
+/** Validates a string is ASCII (IA5) and returns its content bytes, without a tag. */
+export function ia5Bytes(value: string): Uint8Array {
 	for (let i = 0; i < value.length; i++) {
 		if (value.charCodeAt(i) > 0x7f) {
 			throw new Error('Invalid IA5String: contains non-ASCII characters');
 		}
 	}
-	return tlv(0x16, new TextEncoder().encode(value));
+	return new TextEncoder().encode(value);
+}
+
+export function ia5String(value: string): Uint8Array {
+	return tlv(0x16, ia5Bytes(value));
 }
 
 /**

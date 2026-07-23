@@ -64,8 +64,11 @@ describe('certificate', () => {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['serverAuth', { type: 'oid', value: '1.2.3.4.5' }],
 				authorityInfoAccess: [
-					{ method: 'ocsp', uri: 'http://ocsp.example.test' },
-					{ method: 'caIssuers', uri: 'http://issuer.example.test/ca.der' },
+					{ method: 'ocsp', location: { type: 'uri', value: 'http://ocsp.example.test' } },
+					{
+						method: 'caIssuers',
+						location: { type: 'uri', value: 'http://issuer.example.test/ca.der' },
+					},
 				],
 				crlDistributionPoints: [
 					{
@@ -96,8 +99,11 @@ describe('certificate', () => {
 		expect(parsed.subjectAltNames).toEqual([{ type: 'dns', value: 'leaf.example' }]);
 		expect(parsed.extendedKeyUsage).toEqual(['serverAuth', { type: 'oid', value: '1.2.3.4.5' }]);
 		expect(parsed.authorityInfoAccess).toEqual([
-			{ method: 'ocsp', uri: 'http://ocsp.example.test' },
-			{ method: 'caIssuers', uri: 'http://issuer.example.test/ca.der' },
+			{ method: 'ocsp', location: { type: 'uri', value: 'http://ocsp.example.test' } },
+			{
+				method: 'caIssuers',
+				location: { type: 'uri', value: 'http://issuer.example.test/ca.der' },
+			},
 		]);
 		expect(parsed.crlDistributionPoints).toEqual([
 			{
@@ -323,7 +329,7 @@ describe('certificate', () => {
 				authorityInfoAccess: [
 					{
 						method: { type: 'oid', value: '1.3.6.1.5.5.7.48.99' },
-						uri: 'http://custom.example/aia',
+						location: { type: 'uri', value: 'http://custom.example/aia' },
 					},
 				],
 			},
@@ -332,7 +338,7 @@ describe('certificate', () => {
 		expect(parsed.authorityInfoAccess).toEqual([
 			{
 				method: { type: 'oid', value: '1.3.6.1.5.5.7.48.99' },
-				uri: 'http://custom.example/aia',
+				location: { type: 'uri', value: 'http://custom.example/aia' },
 			},
 		]);
 	});

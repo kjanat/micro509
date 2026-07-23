@@ -429,6 +429,7 @@ export {
 
 export type {
 	AuthorityInformationAccess,
+	AuthorityInformationAccessInput,
 	BasicConstraints,
 	CertificateExtensionsInput,
 	CertificateFingerprint,

@@ -18,17 +18,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `AuthorityInformationAccess.uri: string` becomes `location: GeneralName`, the
+  full accessLocation RFC 5280 §4.2.2.1 defines. The parser threw
+  `Unsupported authorityInfoAccess location tag` for any location that was not a
+  URI, so a certificate carrying a directoryName or dNSName accessLocation (both
+  conformant) failed to parse entirely. An OCSP entry requires a URI location
+  (its discovery reads only URIs); `directoryName` is defined for `caIssuers`,
+  and other GeneralName forms are syntactically representable. GeneralName
+  encoding and parsing now reject any tag, class, or constructedness that is not
+  one of the nine RFC 5280 §4.2.1.6 alternatives (`x400Address [3]`,
+  `ediPartyName [5]`, and `registeredID [8]` are preserved as unknown). The
+  IA5String alternatives (`dNSName`, `rfc822Name`,
+  `uniformResourceIdentifier`) reject non-ASCII input on encode and decode.
+  (https://github.com/kjanat/micro509/pull/78)
+
 ### Fixed
 
 - Extension encoders reject input RFC 5280 forbids rather than emitting
   non-conformant DER: an empty `keyUsage` (§4.2.1.3), `extendedKeyUsage`
   (§4.2.1.12), `authorityInfoAccess`/`cRLDistributionPoints` (§4.2.2.1,
   §4.2.1.13) or `nameConstraints` (§4.2.1.10) SEQUENCE, a duplicate certificate
-  policy OID (§4.2.1.4), a `DisplayText` outside SIZE (1..200) (§4.2.1.4), and an
-  IP name constraint whose address and mask do not total 8 or 32 octets
-  (§4.2.1.10). Each previously encoded a structure the library's own parser, or
-  OpenSSL, rejects.
+  policy OID compared by encoded identity so leading-zero aliases collide
+  (§4.2.1.4), a policy qualifier reusing the built-in `cps` or `userNotice` OID
+  in the opaque `oid` variant (§4.2.1.4), a `DisplayText` outside SIZE (1..200)
+  (§4.2.1.4), and an IP name constraint whose address and mask do not total 8 or
+  32 octets (§4.2.1.10). Each previously encoded a structure the library's own
+  parser, or OpenSSL, rejects.
   (https://github.com/kjanat/micro509/pull/79)
+- A `directoryName` SubjectAltName or name constraint now encodes the complete
+  Name TLV inside `[4]`, per RFC 5280 §4.2.1.6 (Name is an untagged CHOICE, so
+  `[4]` is EXPLICIT). The encoder stripped the Name's SEQUENCE header, emitting
+  `a4 12 31 10 ...` where OpenSSL emits `a4 14 30 12 31 10 ...`.
+- An `otherName` SubjectAltName now decodes with the type-id and value as the
+  direct children of `[0]`, per RFC 5280 §4.2.1.6 (`otherName [0]` is IMPLICIT,
+  so `[0]` replaces the SEQUENCE tag). The parser required an inner SEQUENCE, so
+  any real `otherName` (an SRV-ID, a Microsoft UPN) failed the whole certificate
+  parse; the SRV-ID encoder emitted the same non-conformant nesting. A
+  structurally valid `otherName` with an unsupported type is preserved as
+  `{ type: 'unknown' }`, but a malformed `otherName` envelope or a malformed
+  value of a recognised `id-on-dnsSRV` is rejected rather than erased to
+  `unknown`. Path validation rejects a critical `subjectAltName` carrying a
+  GeneralName the verifier cannot interpret (RFC 5280 §4.2), while a
+  non-critical one keeps the unknown entry.
+  (https://github.com/kjanat/micro509/pull/77)
+- OCSP responses now encode `ResponderID` `byKey` as `[2]` EXPLICIT wrapping an
+  OCTET STRING and every time field as GeneralizedTime, per RFC 6960 Appendix
+  B.1. The `byKey` responder was written as `[2]` IMPLICIT over the raw hash and
+  the times as UTCTime, so OpenSSL and Go's `crypto/ocsp` could not parse a
+  response this library produced. The parser reads the EXPLICIT form and
+  requires the `byKey` hash to be a 20-byte SHA-1 digest. Embedded certificates
+  are wrapped in the `certs [0] EXPLICIT SEQUENCE OF Certificate` the field's
+  syntax requires rather than concatenated, so a response with `includedCertificates`
+  is parseable. An end-to-end differential test confirms OpenSSL accepts a
+  micro509-produced response.
+  (https://github.com/kjanat/micro509/pull/76)
 
 ## [0.13.0] - 2026-07-23
 

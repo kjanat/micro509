@@ -3,6 +3,7 @@ import {
 	checkCertificateRevocationAgainstCrl,
 	createCertificate,
 	createCertificateRevocationList,
+	createOcspResponse,
 	createSelfSignedCertificate,
 	exportPkcs8Pem,
 	generateKeyPair,
@@ -14,11 +15,16 @@ import {
 	validateOcspResponse,
 	verifyCertificateChain,
 } from '#micro509';
+import { toHex } from '#micro509/internal/asn1/asn1';
+import { encodeName } from '#micro509/x509';
 import { differentialEnabled, hexToBytes, issueChain, openSslAvailable } from '#test/helpers';
 import {
 	checkIdentityWithOpenSsl,
 	checkRevocationWithOpenSsl,
 	issueAndValidateOcspResponseWithOpenSsl,
+	readCertificateAiaWithOpenSsl,
+	readCertificateSanWithOpenSsl,
+	validateMicro509OcspResponseWithOpenSsl,
 	verifyChainWithOpenSsl,
 } from '#test/oracles/openssl';
 
@@ -270,6 +276,91 @@ describe.skipIf(!openSslAvailable || !differentialEnabled)('OpenSSL differential
 			expect(micro.ok).toBe(openSsl.accepted);
 			expect(parsed.responses?.[0]?.certStatus).toBe(openSsl.status);
 		}
+	});
+
+	it('OpenSSL parses a micro509 certificate with directoryName and SRV-ID SANs', async () => {
+		const directoryNameDer = toHex(encodeName([{ type: 'commonName', value: 'Diff Dir CA' }]));
+		const { certificate } = await createSelfSignedCertificate({
+			subject: { commonName: 'san-encode.example' },
+			extensions: {
+				subjectAltNames: [
+					{ type: 'dns', value: 'san-encode.example' },
+					{ type: 'srv', value: '_xmpp.example.com' },
+					{ type: 'directoryName', derHex: directoryNameDer },
+				],
+			},
+		});
+		const openSsl = await readCertificateSanWithOpenSsl(certificate.pem);
+		expect(openSsl.accepted).toBe(true);
+		// OpenSSL decodes the directoryName [4] SAN (full Name TLV wrapped) and the
+		// SRV-ID otherName [0] (direct type-id/value fields). Assert the decoded
+		// labels and values, not the separator formatting, which varies by version
+		// (`SRVName:` vs `SRVName::`).
+		const san = openSsl.subjectAltName ?? '';
+		expect(san).toContain('DirName');
+		expect(san).toContain('Diff Dir CA');
+		expect(san).toContain('SRVName');
+		expect(san).toContain('_xmpp.example.com');
+	});
+
+	it('OpenSSL parses a micro509 certificate with URI and directoryName AIA locations', async () => {
+		const issuerNameDer = toHex(encodeName([{ type: 'commonName', value: 'AIA Issuer CA' }]));
+		const { certificate } = await createSelfSignedCertificate({
+			subject: { commonName: 'aia-encode.example' },
+			extensions: {
+				authorityInfoAccess: [
+					{ method: 'ocsp', location: { type: 'uri', value: 'http://ocsp.example.test' } },
+					{ method: 'caIssuers', location: { type: 'directoryName', derHex: issuerNameDer } },
+				],
+			},
+		});
+		const openSsl = await readCertificateAiaWithOpenSsl(certificate.pem);
+		expect(openSsl.accepted).toBe(true);
+		// OpenSSL decodes the URI OCSP responder and the directoryName caIssuers.
+		const aia = openSsl.authorityInfoAccess ?? '';
+		expect(aia).toContain('http://ocsp.example.test');
+		expect(aia).toContain('CA Issuers');
+		expect(aia).toContain('DirName');
+		expect(aia).toContain('AIA Issuer CA');
+	});
+
+	it('OpenSSL accepts an OCSP response produced by micro509', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Reverse OCSP CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign', 'digitalSignature'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Reverse OCSP CA' },
+			subject: { commonName: 'reverse-ocsp.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const material = await createOcspResponse({
+			signerPrivateKey: issuer.keyPair.privateKey,
+			signerCertificate: issuer.certificate.pem,
+			includedCertificates: [issuer.certificate.pem],
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: 'good',
+					thisUpdate: new Date(),
+					nextUpdate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+				},
+			],
+		});
+		const openSsl = await validateMicro509OcspResponseWithOpenSsl({
+			issuerCertificatePem: issuer.certificate.pem,
+			certificatePem: leaf.pem,
+			responseDer: material.der,
+		});
+		expect(openSsl.accepted).toBe(true);
+		expect(openSsl.status).toBe('good');
 	});
 
 	it('matches OpenSSL DNS and IP identity verdicts', async () => {

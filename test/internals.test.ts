@@ -665,6 +665,21 @@ describe('extensions encoding', () => {
 		expect(result[0]).toBe(0xa4);
 	});
 
+	it('encodeSubjectAltName wraps the whole directoryName Name TLV, header included', () => {
+		// RFC 5280 §4.2.1.6 makes directoryName [4] EXPLICIT, so its contents are the
+		// complete Name TLV: OpenSSL emits `a4 05 30 03 ...`, not the stripped `a4 03 ...`.
+		const result = encodeSubjectAltName({ type: 'directoryName', derHex: '3003020101' });
+		expect(Array.from(result)).toEqual([0xa4, 0x05, 0x30, 0x03, 0x02, 0x01, 0x01]);
+	});
+
+	it('encodeSubjectAltName encodes an srv otherName with no inner SEQUENCE', () => {
+		// otherName [0] is IMPLICIT, so the [0] content is type-id then value: its
+		// first inner element is the OID (0x06), never a nested SEQUENCE (0x30).
+		const result = encodeSubjectAltName({ type: 'srv', value: '_imaps.example.com' });
+		expect(result[0]).toBe(0xa0);
+		expect(result[2]).toBe(0x06);
+	});
+
 	it('encodeSubjectAltName handles unknown type', () => {
 		const result = encodeSubjectAltName({
 			type: 'unknown',
@@ -672,6 +687,41 @@ describe('extensions encoding', () => {
 			value: Uint8Array.of(0x01, 0x02),
 		});
 		expect(result[0]).toBe(0x88);
+	});
+
+	it('encodeSubjectAltName rejects an unknown GeneralName with an invalid wire tag', () => {
+		// x400Address [3], ediPartyName [5], and registeredID [8] are valid but
+		// unsupported alternatives and round-trip as their own tag.
+		for (const tag of [0xa3, 0xa5, 0x88]) {
+			expect(encodeSubjectAltName({ type: 'unknown', tag, value: new Uint8Array() })[0]).toBe(tag);
+		}
+		// A universal INTEGER (0x02), an application-class tag (0x42), context [9]
+		// (0x89), and wrong constructedness (0xa2 dNSName) are not GeneralNames.
+		for (const tag of [0x02, 0x42, 0x89, 0xa2, 0x30]) {
+			expect(() =>
+				encodeSubjectAltName({ type: 'unknown', tag, value: Uint8Array.of(0x00) }),
+			).toThrow('Invalid GeneralName tag');
+		}
+	});
+
+	it('encodeSubjectAltName rejects a non-ASCII IA5String value', () => {
+		expect(() => encodeSubjectAltName({ type: 'dns', value: 'café.example' })).toThrow(
+			'Invalid IA5String',
+		);
+		expect(() => encodeSubjectAltName({ type: 'uri', value: 'http://café.example' })).toThrow(
+			'Invalid IA5String',
+		);
+	});
+
+	it('encodeAuthorityInfoAccess rejects a non-URI OCSP location wrapped in a custom OID', () => {
+		expect(() =>
+			encodeAuthorityInfoAccess([
+				{
+					method: { type: 'oid', value: OIDS.ocspAccessMethod },
+					location: { type: 'dns', value: 'ocsp.example' },
+				},
+			]),
+		).toThrow('OCSP location must be a URI');
 	});
 
 	it('buildCertificateExtensions throws on SPKI without subject public key bit string', () => {
@@ -690,6 +740,55 @@ describe('extensions encoding', () => {
 		expect(() =>
 			encodeCertificatePolicies([{ policyIdentifier: '1.2.3.4' }, { policyIdentifier: '1.2.3.4' }]),
 		).toThrow('Duplicate certificate policy OID: 1.2.3.4');
+	});
+
+	it('rejects duplicate policy OIDs that differ only by leading-zero arc aliasing', () => {
+		expect(() =>
+			encodeCertificatePolicies([
+				{ policyIdentifier: '1.2.3.4' },
+				{ policyIdentifier: '1.2.03.4' },
+			]),
+		).toThrow('Duplicate certificate policy OID: 1.2.03.4');
+	});
+
+	it('rejects a policy qualifier reusing a built-in OID in the opaque variant', () => {
+		const qualifierDer = new Uint8Array([0x05, 0x00]);
+		for (const oid of [OIDS.cpsPolicyQualifier, OIDS.userNoticePolicyQualifier]) {
+			expect(() =>
+				encodeCertificatePolicies([
+					{ policyIdentifier: '1.2.3.4', policyQualifiers: [{ type: 'oid', oid, qualifierDer }] },
+				]),
+			).toThrow(
+				'Policy qualifier must use the typed cps or userNotice variant, not a built-in OID',
+			);
+		}
+	});
+
+	it('rejects a built-in qualifier OID smuggled through a leading-zero alias', () => {
+		const alias = OIDS.userNoticePolicyQualifier.replace(/\.(\d+)$/, '.0$1');
+		expect(() =>
+			encodeCertificatePolicies([
+				{
+					policyIdentifier: '1.2.3.4',
+					policyQualifiers: [
+						{ type: 'oid', oid: alias, qualifierDer: new Uint8Array([0x05, 0x00]) },
+					],
+				},
+			]),
+		).toThrow('Policy qualifier must use the typed cps or userNotice variant, not a built-in OID');
+	});
+
+	it('encodes a genuine custom policy qualifier OID as raw DER', () => {
+		expect(() =>
+			encodeCertificatePolicies([
+				{
+					policyIdentifier: '1.2.3.4',
+					policyQualifiers: [
+						{ type: 'oid', oid: '1.3.6.1.4.1.99999.1', qualifierDer: new Uint8Array([0x05, 0x00]) },
+					],
+				},
+			]),
+		).not.toThrow();
 	});
 
 	it('rejects a DisplayText outside SIZE (1..200)', () => {
