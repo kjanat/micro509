@@ -46,6 +46,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- PKCS#7/CMS `SignedData` emits SHA-2 digest `AlgorithmIdentifier`s with absent
+  parameters, per RFC 5754 §2 (a MUST). Both `digestAlgorithms` and each
+  `SignerInfo.digestAlgorithm` carried an explicit `05 00` NULL.
+- `createPkcs7CertBag` orders the `certificates` `CertificateSet` canonically
+  (DER SET OF, X.690 §11.6), matching `createPkcs7SignedData`. It concatenated
+  certificates in caller order, so the output was not valid DER and depended on
+  input order.
+  (https://github.com/kjanat/micro509/pull/82)
 - PEM decoding handles every RFC 7468 §3 newline convention (`CRLF`, `CR`, `LF`).
   `pemDecode` and `splitPemBlocks` stripped `\r` outright, which joins every line
   of a CR-only file into one, so such a file failed to decode.
