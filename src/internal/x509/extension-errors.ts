@@ -39,6 +39,7 @@ export type ExtensionEncoderErrorCode =
 	| 'key_usage_empty'
 	| 'malformed_known_extension_value'
 	| 'name_constraints_empty'
+	| 'path_length_requires_ca'
 	| 'path_length_requires_key_cert_sign'
 	| 'policy_constraints_empty'
 	| 'policy_mappings_any_policy'

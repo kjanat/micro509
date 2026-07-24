@@ -11,7 +11,12 @@ import {
 	resolveOcspResponderCandidates,
 	unwrap,
 } from '#micro509';
-import { addRevokedEntryCertificateIssuers, hexToBytes, issueChain } from '#test/helpers';
+import {
+	addRevokedEntryCertificateIssuers,
+	createCertificateWithRawExtensions,
+	hexToBytes,
+	issueChain,
+} from '#test/helpers';
 
 describe('revocation boundary', () => {
 	it('returns unknown when no revocation evidence is provided', async () => {
@@ -759,9 +764,9 @@ describe('revocation boundary', () => {
 			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign'] },
 		});
 		const leafKeys = await generateKeyPair();
-		// An OCSP dNSName location is non-conformant (RFC 6960 §3.1); the typed
-		// builder rejects it, so encode the AIA as raw DER to exercise the discovery
-		// filter against a parsed certificate.
+		// An OCSP dNSName location is non-conformant (RFC 6960 §3.1). The builder
+		// rejects it through both the typed field and customExtensions, so splice the
+		// AIA into the signed certificate to exercise the discovery filter.
 		const aiaDer = sequence([
 			sequence([
 				objectIdentifier(OIDS.ocspAccessMethod),
@@ -772,7 +777,7 @@ describe('revocation boundary', () => {
 				tlv(0x86, new TextEncoder().encode('http://ocsp.example.test')),
 			]),
 		]);
-		const leaf = await createCertificate({
+		const leaf = await createCertificateWithRawExtensions({
 			issuer: { commonName: 'Raw AIA CA' },
 			subject: { commonName: 'raw-aia.example' },
 			publicKey: leafKeys.publicKey,

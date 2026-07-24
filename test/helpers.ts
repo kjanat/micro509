@@ -50,6 +50,8 @@ import { probeOpenSsl } from '#test/oracles/openssl';
 export function encodeUncheckedCrlDistributionPoints(
 	points: readonly {
 		readonly fullNameUri?: string;
+		readonly relativeNameSetDer?: Uint8Array;
+		readonly crlIssuerDer?: Uint8Array;
 		readonly crlIssuer?: readonly GeneralName[];
 	}[],
 ): Uint8Array {
@@ -67,10 +69,22 @@ export function encodeUncheckedCrlDistributionPoints(
 					),
 				);
 			}
-			if (point.crlIssuer !== undefined) {
+			if (point.relativeNameSetDer !== undefined) {
+				const set = readElement(point.relativeNameSetDer);
 				fields.push(
-					implicitConstructedContext(2, concatBytes(point.crlIssuer.map(encodeSubjectAltName))),
+					implicitConstructedContext(
+						0,
+						implicitConstructedContext(1, point.relativeNameSetDer.slice(set.start, set.end)),
+					),
 				);
+			}
+			const crlIssuerDer =
+				point.crlIssuerDer ??
+				(point.crlIssuer === undefined
+					? undefined
+					: concatBytes(point.crlIssuer.map(encodeSubjectAltName)));
+			if (crlIssuerDer !== undefined) {
+				fields.push(implicitConstructedContext(2, crlIssuerDer));
 			}
 			return sequence(fields);
 		}),

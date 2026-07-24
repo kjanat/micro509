@@ -41,8 +41,12 @@ internal/
 - Register new OIDs in `asn1/oids.json` under their registration arc; consume
   them as `OIDS.<name>`. Never inline a dotted-decimal literal in source.
 - New certificate extensions get an `ExtensionDefinition` in
-  `x509/extension-registry.ts` (decode/encode/applyParsed + accumulator field),
-  not ad-hoc decoding at call sites.
+  `x509/extension-registry.ts` (decode/encode/assertProfile/applyParsed +
+  accumulator field), not ad-hoc decoding at call sites.
+- `assertProfile` is required, and delegates to the encoder that owns the rule.
+  It runs only in builders, over a decoded `customExtensions` payload carrying a
+  known OID, so a raw value meets the same bar as the typed input. Parsing stays
+  tolerant and never calls it.
 - `x509/general-name.ts` is the only GeneralName decoder; certificate and CRL
   parsing both consume it so the two layers cannot drift on an alternative.
 - Keep sign/verify dispatch symmetric in `signing.ts` and `sig-verify.ts`.

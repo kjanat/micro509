@@ -56,6 +56,7 @@ import {
 	SUBJECT_KEY_IDENTIFIER_EXTENSION_DEFINITION,
 } from '#micro509/internal/x509/extension-registry';
 import { GENERAL_NAME_WIRE_TAGS } from '#micro509/internal/x509/general-name-tags';
+import { isResultError } from '#micro509/result/result';
 import type { RelativeDistinguishedNameInput } from '#micro509/x509/name';
 import { encodeRelativeDistinguishedName } from '#micro509/x509/name';
 
@@ -867,11 +868,26 @@ function findCustomExtensionValue(
 	return input?.customExtensions?.find((extension) => oidEquals(extension.oid, oid))?.value;
 }
 
-/** The subset of a distribution point the RFC 5280 §4.2.1.13 cRLIssuer rules read. */
-interface CrlIssuerConstrainedPoint {
-	readonly distributionPoint?: { readonly relativeName?: unknown };
+/** The subset of a DistributionPointName the RFC 5280 §4.2.1.13 rules read. */
+interface ProfileDistributionPointName<TRelativeName> {
+	/** Absolute GeneralName(s) identifying the distribution point. */
+	readonly fullName?: readonly GeneralName[];
+	/** Name relative to the CRL issuer, in whichever form the caller holds. */
+	readonly relativeName?: TRelativeName;
+}
+
+/** The subset of a distribution point the RFC 5280 §4.2.1.13 rules read. */
+interface ProfileDistributionPoint<TRelativeName> {
+	/** Where to fetch the CRL. */
+	readonly distributionPoint?: ProfileDistributionPointName<TRelativeName>;
+	/** Entity that signed the CRL, when different from the certificate issuer. */
 	readonly crlIssuer?: readonly GeneralName[];
 }
+
+/** The DistributionPointName alternative in use, once proven to be exactly one. */
+type DistributionPointNameChoice<TRelativeName> =
+	| { readonly kind: 'fullName'; readonly fullName: readonly GeneralName[] }
+	| { readonly kind: 'relativeName'; readonly relativeName: TRelativeName };
 
 /**
  * Rejects a custom extension carrying a known OID whose payload is not the DER
@@ -885,8 +901,7 @@ function assertCustomExtensionsValid(
 	context: ExtensionRegistryContext,
 ): void {
 	for (const extension of input?.customExtensions ?? []) {
-		validateOid(extension.oid);
-		const oid = canonicalizeOid(extension.oid);
+		const oid = validateOid(extension.oid);
 		const definition = getExtensionDefinition(oid);
 		if (definition === undefined) {
 			continue;
@@ -897,37 +912,36 @@ function assertCustomExtensionsValid(
 				`Extension ${extension.oid} is not supported in ${context} context`,
 			);
 		}
-		const value = new Uint8Array(extension.value);
-		assertKnownExtensionDecodes(definition, value, extension.oid);
-		if (oid === OIDS.cRLDistributionPoints) {
-			for (const point of decodeCrlDistributionPoints(value)) {
-				assertCrlIssuerDistinguishedNames(point);
-			}
-		}
+		assertKnownExtensionPayload(definition, new Uint8Array(extension.value), extension.oid);
 	}
 }
 
-/** Reject a custom payload that is not the DER its known OID's schema defines. */
-function assertKnownExtensionDecodes(
-	definition: { readonly oid: string; decode(valueDer: Uint8Array): unknown },
+/**
+ * Decode a custom payload once through its known OID's definition and apply that
+ * extension's profile rules.
+ *
+ * A profile violation already carries its own code and propagates unchanged; a
+ * decode failure means the payload is not the DER the OID's schema defines.
+ */
+function assertKnownExtensionPayload(
+	definition: {
+		readonly oid: string;
+		assertDerProfile(valueDer: Uint8Array): void;
+	},
 	value: Uint8Array,
 	submittedOid: string,
 ): void {
 	try {
-		definition.decode(value);
-	} catch {
+		definition.assertDerProfile(value);
+	} catch (error) {
+		if (isResultError(error)) {
+			throw error;
+		}
 		throwExtensionEncoderError(
 			'malformed_known_extension_value',
 			`Custom extension ${submittedOid} does not decode as ${definition.oid}`,
 		);
 	}
-}
-
-/** Decode a CRLDistributionPoints payload already known to be well-formed. */
-function decodeCrlDistributionPoints(
-	value: Uint8Array,
-): ReturnType<typeof CRL_DISTRIBUTION_POINTS_EXTENSION_DEFINITION.decode> {
-	return CRL_DISTRIBUTION_POINTS_EXTENSION_DEFINITION.decode(value);
 }
 
 /** Effective basicConstraints across the typed field and any custom-known extension. */
@@ -1106,6 +1120,7 @@ function pushKnownExtension<TParsed, TInput>(
  * @param critical Whether to mark the extension as critical. Default `false`.
  */
 export function encodeExtension(oid: string, extnValue: Uint8Array, critical = false): Uint8Array {
+	validateOid(oid);
 	const fields = [objectIdentifier(oid)];
 	if (critical) {
 		fields.push(bool(true));
@@ -1127,7 +1142,10 @@ export function encodeBasicConstraints(input: BasicConstraints): Uint8Array {
 	}
 	if (input.pathLength !== undefined) {
 		if (!input.ca) {
-			throw new Error('pathLength requires ca=true');
+			throwExtensionEncoderError(
+				'path_length_requires_ca',
+				'basicConstraints pathLength requires ca = true',
+			);
 		}
 		fields.push(integerFromNumber(input.pathLength));
 	}
@@ -1222,27 +1240,42 @@ export function encodeExtendedKeyUsage(usages: readonly ExtendedKeyUsage[]): Uin
 export function encodeAuthorityInfoAccess(
 	entries: readonly AuthorityInformationAccessInput[],
 ): Uint8Array {
+	assertAuthorityInfoAccessProfile(entries);
+	return sequence(
+		entries.map((entry) =>
+			sequence([
+				objectIdentifier(getAuthorityInfoAccessMethodOid(entry.method)),
+				encodeSubjectAltName(entry.location),
+			]),
+		),
+	);
+}
+
+/**
+ * @internal RFC 5280 §4.2.2.1 and RFC 6960 §3.1 rules for Authority Information
+ * Access: at least one entry, and an id-ad-ocsp location that is a URI.
+ *
+ * The method OID is resolved before the URI check so a custom-OID wrapper cannot
+ * smuggle a non-URI OCSP location past the input union.
+ */
+export function assertAuthorityInfoAccessProfile(
+	entries: readonly AuthorityInformationAccess[],
+): void {
 	if (entries.length === 0) {
 		throwExtensionEncoderError(
 			'authority_info_access_empty',
 			'authorityInfoAccess must not be empty',
 		);
 	}
-	return sequence(
-		entries.map((entry) => {
-			const methodOid = getAuthorityInfoAccessMethodOid(entry.method);
-			// RFC 6960 §3.1: the id-ad-ocsp location is a URI. Re-check the resolved
-			// OID so a custom-OID wrapper cannot smuggle a non-URI OCSP location past
-			// the input union.
-			if (methodOid === OIDS.ocspAccessMethod && entry.location.type !== 'uri') {
-				throwExtensionEncoderError(
-					'authority_info_access_ocsp_not_uri',
-					'authorityInfoAccess OCSP location must be a URI',
-				);
-			}
-			return sequence([objectIdentifier(methodOid), encodeSubjectAltName(entry.location)]);
-		}),
-	);
+	for (const entry of entries) {
+		const methodOid = getAuthorityInfoAccessMethodOid(entry.method);
+		if (methodOid === OIDS.ocspAccessMethod && entry.location.type !== 'uri') {
+			throwExtensionEncoderError(
+				'authority_info_access_ocsp_not_uri',
+				'authorityInfoAccess OCSP location must be a URI',
+			);
+		}
+	}
 }
 
 /**
@@ -1251,13 +1284,52 @@ export function encodeAuthorityInfoAccess(
  * @param points Distribution points to encode.
  */
 export function encodeCrlDistributionPoints(points: readonly DistributionPoint[]): Uint8Array {
+	assertCrlDistributionPointsProfile(points);
+	return sequence(points.map((point) => sequence(encodeDistributionPoint(point))));
+}
+
+/**
+ * @internal RFC 5280 §4.2.1.13 profile rules for a CRLDistributionPoints value,
+ * stated over the fields a typed {@linkcode DistributionPoint} and a decoded
+ * `ParsedDistributionPoint` share.
+ *
+ * `TRelativeName` differs between the two: builder input carries an unencoded RDN,
+ * a decoded point carries the parsed one. The rules only read its presence.
+ */
+export function assertCrlDistributionPointsProfile<TRelativeName>(
+	points: readonly ProfileDistributionPoint<TRelativeName>[],
+): void {
 	if (points.length === 0) {
 		throwExtensionEncoderError(
 			'crl_distribution_points_empty',
 			'cRLDistributionPoints must not be empty',
 		);
 	}
-	return sequence(points.map((point) => sequence(encodeDistributionPoint(point))));
+	for (const point of points) {
+		assertDistributionPointProfile(point);
+	}
+}
+
+/** RFC 5280 §4.2.1.13 rules for one distribution point. */
+function assertDistributionPointProfile<TRelativeName>(
+	point: ProfileDistributionPoint<TRelativeName>,
+): void {
+	if (point.crlIssuer !== undefined && point.crlIssuer.length === 0) {
+		throwExtensionEncoderError(
+			'distribution_point_crl_issuer_empty',
+			'DistributionPoint crlIssuer must not be empty',
+		);
+	}
+	if (point.distributionPoint === undefined && point.crlIssuer === undefined) {
+		throwExtensionEncoderError(
+			'distribution_point_empty',
+			'DistributionPoint must contain distributionPoint or crlIssuer',
+		);
+	}
+	assertCrlIssuerDistinguishedNames(point);
+	if (point.distributionPoint !== undefined) {
+		resolveDistributionPointNameChoice(point.distributionPoint);
+	}
 }
 
 /**
@@ -1266,6 +1338,7 @@ export function encodeCrlDistributionPoints(points: readonly DistributionPoint[]
  * @param constraints Permitted and/or excluded subtrees.
  */
 export function encodeNameConstraints(constraints: NameConstraints): Uint8Array {
+	assertNameConstraintsProfile(constraints);
 	const parts: Uint8Array[] = [];
 	if (constraints.permittedSubtrees !== undefined && constraints.permittedSubtrees.length > 0) {
 		parts.push(
@@ -1283,13 +1356,25 @@ export function encodeNameConstraints(constraints: NameConstraints): Uint8Array 
 			),
 		);
 	}
-	if (parts.length === 0) {
+	return sequence(parts);
+}
+
+/**
+ * @internal RFC 5280 §4.2.1.10: a nameConstraints extension states at least one
+ * of permittedSubtrees and excludedSubtrees, and neither may be an empty set.
+ */
+export function assertNameConstraintsProfile(constraints: {
+	readonly permittedSubtrees?: readonly unknown[];
+	readonly excludedSubtrees?: readonly unknown[];
+}): void {
+	const permitted = constraints.permittedSubtrees?.length ?? 0;
+	const excluded = constraints.excludedSubtrees?.length ?? 0;
+	if (permitted === 0 && excluded === 0) {
 		throwExtensionEncoderError(
 			'name_constraints_empty',
 			'nameConstraints must set permittedSubtrees or excludedSubtrees',
 		);
 	}
-	return sequence(parts);
 }
 
 /**
@@ -1306,7 +1391,7 @@ export function encodeCertificatePolicies(policies: CertificatePolicies): Uint8A
 	}
 	const seen = new Set<string>();
 	for (const policy of policies) {
-		const key = toHex(objectIdentifier(policy.policyIdentifier));
+		const key = validatePolicyOid(policy.policyIdentifier);
 		if (seen.has(key)) {
 			throwExtensionEncoderError(
 				'duplicate_policy_oid',
@@ -1475,7 +1560,9 @@ function encodeGeneralSubtree(subtree: GeneralSubtree): Uint8Array {
  * {@linkcode ParsedDistributionPoint} alike, so the rule holds whether the value
  * arrives through `crlDistributionPoints` or through `customExtensions`.
  */
-function assertCrlIssuerDistinguishedNames(point: CrlIssuerConstrainedPoint): void {
+function assertCrlIssuerDistinguishedNames<TRelativeName>(
+	point: ProfileDistributionPoint<TRelativeName>,
+): void {
 	if (point.crlIssuer === undefined) {
 		return;
 	}
@@ -1493,21 +1580,8 @@ function assertCrlIssuerDistinguishedNames(point: CrlIssuerConstrainedPoint): vo
 	}
 }
 
-/** DER-encode the fields of a single DistributionPoint. */
+/** DER-encode the fields of a single DistributionPoint, already profile-checked. */
 function encodeDistributionPoint(point: DistributionPoint): Uint8Array[] {
-	if (point.crlIssuer !== undefined && point.crlIssuer.length === 0) {
-		throwExtensionEncoderError(
-			'distribution_point_crl_issuer_empty',
-			'DistributionPoint crlIssuer must not be empty',
-		);
-	}
-	if (point.distributionPoint === undefined && point.crlIssuer === undefined) {
-		throwExtensionEncoderError(
-			'distribution_point_empty',
-			'DistributionPoint must contain distributionPoint or crlIssuer',
-		);
-	}
-	assertCrlIssuerDistinguishedNames(point);
 	const fields: Uint8Array[] = [];
 	if (point.distributionPoint !== undefined) {
 		fields.push(
@@ -1519,7 +1593,7 @@ function encodeDistributionPoint(point: DistributionPoint): Uint8Array[] {
 			implicitPrimitiveContext(1, encodeDistributionPointReasonFlagsContent(point.reasons)),
 		);
 	}
-	if (point.crlIssuer !== undefined && point.crlIssuer.length > 0) {
+	if (point.crlIssuer !== undefined) {
 		fields.push(
 			implicitConstructedContext(2, concatBytes(point.crlIssuer.map(encodeSubjectAltName))),
 		);
@@ -1527,8 +1601,13 @@ function encodeDistributionPoint(point: DistributionPoint): Uint8Array[] {
 	return fields;
 }
 
-/** DER-encode a DistributionPointName (fullName or relativeName). */
-function encodeDistributionPointName(name: DistributionPointName): Uint8Array {
+/**
+ * RFC 5280 §4.2.1.13: a DistributionPointName holds exactly one of fullName and
+ * relativeName, and a fullName holds at least one GeneralName.
+ */
+function resolveDistributionPointNameChoice<TRelativeName>(
+	name: ProfileDistributionPointName<TRelativeName>,
+): DistributionPointNameChoice<TRelativeName> {
 	if (name.fullName !== undefined && name.relativeName !== undefined) {
 		throwExtensionEncoderError(
 			'distribution_point_name_conflict',
@@ -1542,19 +1621,28 @@ function encodeDistributionPointName(name: DistributionPointName): Uint8Array {
 				'DistributionPointName fullName must not be empty',
 			);
 		}
-		return implicitConstructedContext(0, concatBytes(name.fullName.map(encodeSubjectAltName)));
+		return { kind: 'fullName', fullName: name.fullName };
 	}
 	if (name.relativeName !== undefined) {
-		const relativeName = encodeRelativeDistinguishedName(name.relativeName);
-		const relativeNameElement = readElement(relativeName);
-		return implicitConstructedContext(
-			1,
-			relativeName.slice(relativeNameElement.start, relativeNameElement.end),
-		);
+		return { kind: 'relativeName', relativeName: name.relativeName };
 	}
 	throwExtensionEncoderError(
 		'distribution_point_name_empty',
 		'DistributionPointName must contain fullName or relativeName',
+	);
+}
+
+/** DER-encode a DistributionPointName (fullName or relativeName). */
+function encodeDistributionPointName(name: DistributionPointName): Uint8Array {
+	const choice = resolveDistributionPointNameChoice(name);
+	if (choice.kind === 'fullName') {
+		return implicitConstructedContext(0, concatBytes(choice.fullName.map(encodeSubjectAltName)));
+	}
+	const relativeName = encodeRelativeDistinguishedName(choice.relativeName);
+	const relativeNameElement = readElement(relativeName);
+	return implicitConstructedContext(
+		1,
+		relativeName.slice(relativeNameElement.start, relativeNameElement.end),
 	);
 }
 
@@ -1680,26 +1768,27 @@ export function buildSubjectKeyIdentifier(subjectPublicKeyInfo: Uint8Array): Uin
 }
 
 /**
- * Throw if the string is not an encodable dotted-decimal OID.
+ * Throw if the string is not an encodable dotted-decimal OID, and return its
+ * canonical spelling.
  *
- * Syntax alone is not enough: X.660 bounds the first arc to 0, 1, or 2 and the
+ * Syntax alone is not enough. X.660 bounds the first arc to 0, 1, or 2 and the
  * second to under 40 beneath arcs 0 and 1, so `3.1` and `1.40` parse as decimals
  * yet cannot be encoded.
  */
-function validateOid(oid: string): void {
+function validateOid(oid: string): string {
 	if (!/^\d+(?:\.\d+)+$/.test(oid)) {
 		throwExtensionEncoderError('invalid_oid', `Invalid OID: ${oid}`);
 	}
 	try {
-		canonicalizeOid(oid);
+		return canonicalizeOid(oid);
 	} catch {
 		throwExtensionEncoderError('invalid_oid', `Invalid OID: ${oid}`);
 	}
 }
 
-/** Validate that a policy OID is syntactically valid. */
-function validatePolicyOid(oid: string): void {
-	validateOid(oid);
+/** Validate a policy OID and return its canonical spelling. */
+function validatePolicyOid(oid: string): string {
+	return validateOid(oid);
 }
 
 /**
@@ -1716,8 +1805,7 @@ function pushExtension(
 	value: Uint8Array,
 	critical = false,
 ): void {
-	validateOid(oid);
-	const identity = canonicalizeOid(oid);
+	const identity = validateOid(oid);
 	if (seen.has(identity)) {
 		throwExtensionEncoderError('duplicate_extension_oid', `Duplicate extension OID: ${oid}`);
 	}
