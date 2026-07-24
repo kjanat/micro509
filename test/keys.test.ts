@@ -706,6 +706,52 @@ describe('keys: coverage — malformed inputs', () => {
 		expect(key.algorithm.name).toBe('Ed25519');
 	});
 
+	test('rejects malformed OneAsymmetricKey tails per RFC 5958/RFC 8410', async () => {
+		const { integerFromNumber, objectIdentifier, octetString, sequence } = await import(
+			'#micro509/internal/asn1/der'
+		);
+		const seedHex = '9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60';
+		const pubHex = 'd75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a';
+		const version1 = integerFromNumber(1);
+		const version0 = integerFromNumber(0);
+		const algorithm = sequence([objectIdentifier('1.3.101.112')]);
+		const privateKey = octetString(octetString(hexToBytes(seedHex)));
+		const attributes = hexToBytes('a000');
+		const publicKey = hexToBytes(`812100${pubHex}`);
+		const cases: ReadonlyArray<{ name: string; version: Uint8Array; tail: Uint8Array[] }> = [
+			{
+				name: 'attributes [0] as primitive 80',
+				version: version1,
+				tail: [hexToBytes('8000'), publicKey],
+			},
+			{
+				name: 'publicKey [1] as constructed a1',
+				version: version1,
+				tail: [attributes, hexToBytes(`a12100${pubHex}`)],
+			},
+			{ name: 'duplicate publicKey [1]', version: version1, tail: [publicKey, publicKey] },
+			{
+				name: 'publicKey [1] before attributes [0]',
+				version: version1,
+				tail: [publicKey, attributes],
+			},
+			{
+				name: 'publicKey present but version v1',
+				version: version0,
+				tail: [attributes, publicKey],
+			},
+			{ name: 'empty publicKey BIT STRING', version: version1, tail: [hexToBytes('810100')] },
+		];
+		for (const { version, tail } of cases) {
+			const der = sequence([version, algorithm, privateKey, ...tail]);
+			await expectImportFailure(
+				importPkcs8Der(der, { kind: 'ed25519' }),
+				'malformed',
+				'Malformed PKCS#8 private key',
+			);
+		}
+	});
+
 	it('importPkcs8Der and base64 throw on PKCS#8 with wrong privateKey tag', async () => {
 		const { integerFromNumber, nullValue, objectIdentifier, sequence } = await import(
 			'#micro509/internal/asn1/der'

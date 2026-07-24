@@ -1525,10 +1525,12 @@ function parsePkcs8PrivateKey(der: Uint8Array): {
 		algorithm === undefined ||
 		algorithm.tag !== 0x30 ||
 		privateKey === undefined ||
-		privateKey.tag !== 0x04 ||
-		// The only trailing OneAsymmetricKey fields are attributes [0] and publicKey [1].
-		children.slice(3).some((child) => (child.tag & 0xc0) !== 0x80)
+		privateKey.tag !== 0x04
 	) {
+		throw new Error('Malformed PKCS#8 private key');
+	}
+	const hasPublicKey = validateOneAsymmetricKeyTail(children.slice(3));
+	if (readPkcs8Version(version.value) !== (hasPublicKey ? 1 : 0)) {
 		throw new Error('Malformed PKCS#8 private key');
 	}
 	const algorithmChildren = readSequenceChildren(
@@ -1552,6 +1554,56 @@ function parsePkcs8PrivateKey(der: Uint8Array): {
 			: {}),
 		privateKeyDer: privateKey.value,
 	};
+}
+
+/**
+ * Validate the OneAsymmetricKey tail after `privateKey` and report whether a
+ * `publicKey [1]` field is present.
+ *
+ * RFC 5958 §2 encodes `attributes [0]` as an IMPLICIT constructed `SET OF`
+ * (tag `A0`); RFC 8410 §7 adds `publicKey [1]` as an IMPLICIT primitive
+ * `BIT STRING` (tag `81`) after it. Each appears at most once and in that order;
+ * unknown later extension additions are tolerated per the type's X.680
+ * extensibility marker.
+ */
+function validateOneAsymmetricKeyTail(tail: readonly DerElement[]): boolean {
+	let seenAttributes = false;
+	let seenPublicKey = false;
+	let seenUnknown = false;
+	for (const child of tail) {
+		const contextNumber = (child.tag & 0xc0) === 0x80 ? child.tag & 0x1f : -1;
+		if (contextNumber === 0) {
+			if (seenAttributes || seenPublicKey || seenUnknown || child.tag !== 0xa0) {
+				throw new Error('Malformed PKCS#8 private key');
+			}
+			seenAttributes = true;
+		} else if (contextNumber === 1) {
+			if (seenPublicKey || seenUnknown || child.tag !== 0x81) {
+				throw new Error('Malformed PKCS#8 private key');
+			}
+			validatePublicKeyBitString(child.value);
+			seenPublicKey = true;
+		} else {
+			seenUnknown = true;
+		}
+	}
+	return seenPublicKey;
+}
+
+/** Reject a `publicKey [1]` BIT STRING that is not octet-aligned or carries no key octets. */
+function validatePublicKeyBitString(content: Uint8Array): void {
+	if (content.length < 2 || content[0] !== 0x00) {
+		throw new Error('Malformed PKCS#8 private key');
+	}
+}
+
+/** Decode the canonical RFC 5958 version INTEGER content, `v1(0)` or `v2(1)`. */
+function readPkcs8Version(content: Uint8Array): number {
+	const value = content[0];
+	if (content.length !== 1 || (value !== 0x00 && value !== 0x01)) {
+		throw new Error('Malformed PKCS#8 private key');
+	}
+	return value;
 }
 
 /**
