@@ -867,6 +867,12 @@ function findCustomExtensionValue(
 	return input?.customExtensions?.find((extension) => oidEquals(extension.oid, oid))?.value;
 }
 
+/** The subset of a distribution point the RFC 5280 §4.2.1.13 cRLIssuer rules read. */
+interface CrlIssuerConstrainedPoint {
+	readonly distributionPoint?: { readonly relativeName?: unknown };
+	readonly crlIssuer?: readonly GeneralName[];
+}
+
 /**
  * Rejects a custom extension carrying a known OID whose payload is not the DER
  * that OID's schema defines, and a known extension offered in the wrong context.
@@ -880,7 +886,8 @@ function assertCustomExtensionsValid(
 ): void {
 	for (const extension of input?.customExtensions ?? []) {
 		validateOid(extension.oid);
-		const definition = getExtensionDefinition(canonicalizeOid(extension.oid));
+		const oid = canonicalizeOid(extension.oid);
+		const definition = getExtensionDefinition(oid);
 		if (definition === undefined) {
 			continue;
 		}
@@ -890,15 +897,37 @@ function assertCustomExtensionsValid(
 				`Extension ${extension.oid} is not supported in ${context} context`,
 			);
 		}
-		try {
-			definition.decode(new Uint8Array(extension.value));
-		} catch {
-			throwExtensionEncoderError(
-				'malformed_known_extension_value',
-				`Custom extension ${extension.oid} does not decode as ${definition.oid}`,
-			);
+		const value = new Uint8Array(extension.value);
+		assertKnownExtensionDecodes(definition, value, extension.oid);
+		if (oid === OIDS.cRLDistributionPoints) {
+			for (const point of decodeCrlDistributionPoints(value)) {
+				assertCrlIssuerDistinguishedNames(point);
+			}
 		}
 	}
+}
+
+/** Reject a custom payload that is not the DER its known OID's schema defines. */
+function assertKnownExtensionDecodes(
+	definition: { readonly oid: string; decode(valueDer: Uint8Array): unknown },
+	value: Uint8Array,
+	submittedOid: string,
+): void {
+	try {
+		definition.decode(value);
+	} catch {
+		throwExtensionEncoderError(
+			'malformed_known_extension_value',
+			`Custom extension ${submittedOid} does not decode as ${definition.oid}`,
+		);
+	}
+}
+
+/** Decode a CRLDistributionPoints payload already known to be well-formed. */
+function decodeCrlDistributionPoints(
+	value: Uint8Array,
+): ReturnType<typeof CRL_DISTRIBUTION_POINTS_EXTENSION_DEFINITION.decode> {
+	return CRL_DISTRIBUTION_POINTS_EXTENSION_DEFINITION.decode(value);
 }
 
 /** Effective basicConstraints across the typed field and any custom-known extension. */
@@ -1441,8 +1470,12 @@ function encodeGeneralSubtree(subtree: GeneralSubtree): Uint8Array {
 /**
  * RFC 5280 §4.2.1.13: cRLIssuer, when present, only contains the CRL issuer's
  * distinguished name; nameRelativeToCRLIssuer additionally requires exactly one.
+ *
+ * Applies to a typed {@linkcode DistributionPoint} and to a decoded
+ * {@linkcode ParsedDistributionPoint} alike, so the rule holds whether the value
+ * arrives through `crlDistributionPoints` or through `customExtensions`.
  */
-function assertCrlIssuerDistinguishedNames(point: DistributionPoint): void {
+function assertCrlIssuerDistinguishedNames(point: CrlIssuerConstrainedPoint): void {
 	if (point.crlIssuer === undefined) {
 		return;
 	}
@@ -1646,9 +1679,20 @@ export function buildSubjectKeyIdentifier(subjectPublicKeyInfo: Uint8Array): Uin
 	return sha1(publicKeyBytes);
 }
 
-/** Throw if the string is not a valid dotted-decimal OID. */
+/**
+ * Throw if the string is not an encodable dotted-decimal OID.
+ *
+ * Syntax alone is not enough: X.660 bounds the first arc to 0, 1, or 2 and the
+ * second to under 40 beneath arcs 0 and 1, so `3.1` and `1.40` parse as decimals
+ * yet cannot be encoded.
+ */
 function validateOid(oid: string): void {
 	if (!/^\d+(?:\.\d+)+$/.test(oid)) {
+		throwExtensionEncoderError('invalid_oid', `Invalid OID: ${oid}`);
+	}
+	try {
+		canonicalizeOid(oid);
+	} catch {
 		throwExtensionEncoderError('invalid_oid', `Invalid OID: ${oid}`);
 	}
 }

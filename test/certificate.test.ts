@@ -18,6 +18,7 @@ import { encodeRsaPssParameters, rsaPssParametersForHash } from '#micro509/inter
 import { encodeName, encodeSubjectAltName } from '#micro509/x509';
 import {
 	childrenOf,
+	createSelfSignedCertificateWithRawExtensions,
 	decodeObjectIdentifier,
 	encodeUncheckedCrlDistributionPoints,
 	hasExtensionOid,
@@ -301,7 +302,7 @@ describe('certificate', () => {
 	});
 
 	it('parses issuer-only CRL distribution points that name a non-DN CRL issuer', async () => {
-		const { certificate } = await createSelfSignedCertificate({
+		const { certificate } = await createSelfSignedCertificateWithRawExtensions({
 			subject: { commonName: 'issuer-only-dp.example' },
 			extensions: {
 				customExtensions: [

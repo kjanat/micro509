@@ -2675,39 +2675,37 @@ describe('subjectAltName and extendedKeyUsage parse strictness', () => {
 		).toThrow();
 	});
 
-	it('rejects zero-length IA5 GeneralNames in certificates and CSRs (RFC 5280 §4.2.1.6)', async () => {
-		const emptyIa5Tags = [
-			{ tag: 0x81, alternative: 'rfc822Name' },
-			{ tag: 0x82, alternative: 'dNSName' },
-			{ tag: 0x86, alternative: 'uniformResourceIdentifier' },
-		];
-		for (const { tag, alternative } of emptyIa5Tags) {
-			const extension = {
-				oid: OIDS.subjectAltName,
-				value: sequence([tlv(tag, new Uint8Array())]),
-			};
-			const certificate = await createSelfSignedCertificateWithRawExtensions({
-				subject: { commonName: `empty-${alternative}.example` },
-				extensions: { customExtensions: [extension] },
-			});
-			const certificateResult = parseCertificateDer(certificate.certificate.der);
-			expect(certificateResult.ok).toBe(false);
-			if (!certificateResult.ok) {
-				expect(certificateResult.error.code).toBe('malformed');
-				expect(certificateResult.error.message).toContain(`${alternative} must not be empty`);
-			}
-
-			const keyPair = await generateKeyPair();
-			const csr = await createCsrWithRawExtensions({
-				subject: { commonName: `empty-${alternative}.example` },
-				publicKey: keyPair.publicKey,
-				signerPrivateKey: keyPair.privateKey,
-				extensions: { customExtensions: [extension] },
-			});
-			const csrResult = parseCertificateSigningRequestDer(csr.der);
-			expect(csrResult.ok).toBe(false);
-			if (!csrResult.ok) expect(csrResult.error.code).toBe('malformed');
+	// RFC 5280 §4.2.1.6 forbids a zero-length GeneralName value.
+	it.each([
+		[0x81, 'rfc822Name'],
+		[0x82, 'dNSName'],
+		[0x86, 'uniformResourceIdentifier'],
+	])('rejects a zero-length %s GeneralName in certificates and CSRs', async (tag, alternative) => {
+		const extension = {
+			oid: OIDS.subjectAltName,
+			value: sequence([tlv(tag, new Uint8Array())]),
+		};
+		const certificate = await createSelfSignedCertificateWithRawExtensions({
+			subject: { commonName: `empty-${alternative}.example` },
+			extensions: { customExtensions: [extension] },
+		});
+		const certificateResult = parseCertificateDer(certificate.certificate.der);
+		expect(certificateResult.ok).toBe(false);
+		if (!certificateResult.ok) {
+			expect(certificateResult.error.code).toBe('malformed');
+			expect(certificateResult.error.message).toContain(`${alternative} must not be empty`);
 		}
+
+		const keyPair = await generateKeyPair();
+		const csr = await createCsrWithRawExtensions({
+			subject: { commonName: `empty-${alternative}.example` },
+			publicKey: keyPair.publicKey,
+			signerPrivateKey: keyPair.privateKey,
+			extensions: { customExtensions: [extension] },
+		});
+		const csrResult = parseCertificateSigningRequestDer(csr.der);
+		expect(csrResult.ok).toBe(false);
+		if (!csrResult.ok) expect(csrResult.error.code).toBe('malformed');
 	});
 
 	it('maps malformed subjectAltName and extendedKeyUsage in certificates and CSRs', async () => {

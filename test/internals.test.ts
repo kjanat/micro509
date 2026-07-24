@@ -104,7 +104,7 @@ import {
 	encodeRelativeDistinguishedName,
 	encodeSubjectAltName,
 } from '#micro509/x509';
-import { childrenOf } from '#test/helpers';
+import { childrenOf, encodeUncheckedCrlDistributionPoints } from '#test/helpers';
 
 function expectEncoderErrorCode(fn: () => unknown, code: string): void {
 	try {
@@ -1006,8 +1006,9 @@ describe('extensions encoding', () => {
 		);
 	});
 
-	it("rejects a custom extension whose payload is not that known OID's DER", () => {
-		for (const oid of [OIDS.basicConstraints, OIDS.keyUsage, OIDS.subjectAltName]) {
+	it.each([OIDS.basicConstraints, OIDS.keyUsage, OIDS.subjectAltName])(
+		"rejects a custom %s payload that is not that OID's DER",
+		(oid) => {
 			expectEncoderErrorCode(
 				() =>
 					buildCertificateExtensions(subjectPublicKeyInfo, undefined, {
@@ -1022,7 +1023,60 @@ describe('extensions encoding', () => {
 					}),
 				'malformed_known_extension_value',
 			);
+		},
+	);
+
+	it('applies cRLIssuer constraints to a custom CRLDistributionPoints payload', () => {
+		const nonDirectoryName = encodeUncheckedCrlDistributionPoints([
+			{
+				fullNameUri: 'http://crl.example/a.crl',
+				crlIssuer: [{ type: 'uri', value: 'http://crl.example/issuer' }],
+			},
+		]);
+		for (const build of [
+			() =>
+				buildCertificateExtensions(subjectPublicKeyInfo, undefined, {
+					customExtensions: [{ oid: OIDS.cRLDistributionPoints, value: nonDirectoryName }],
+				}),
+			() =>
+				buildRequestedExtensions({
+					customExtensions: [{ oid: OIDS.cRLDistributionPoints, value: nonDirectoryName }],
+				}),
+			() =>
+				buildRequestedExtensions({
+					customExtensions: [{ oid: '2.5.029.31', value: nonDirectoryName }],
+				}),
+		]) {
+			expectEncoderErrorCode(build, 'distribution_point_crl_issuer_not_directory_name');
 		}
+
+		// A conformant custom payload still builds.
+		expect(
+			buildRequestedExtensions({
+				customExtensions: [
+					{
+						oid: OIDS.cRLDistributionPoints,
+						value: encodeCrlDistributionPoints([
+							{
+								distributionPoint: {
+									fullName: [{ type: 'uri', value: 'http://crl.example/a.crl' }],
+								},
+							},
+						]),
+					},
+				],
+			}),
+		).toBeInstanceOf(Array);
+	});
+
+	it.each(['3.1', '1.40'])('rejects OID %s, which violates the X.660 arc bounds', (oid) => {
+		expectEncoderErrorCode(
+			() =>
+				buildRequestedExtensions({
+					customExtensions: [{ oid, value: Uint8Array.of(0x05, 0x00) }],
+				}),
+			'invalid_oid',
+		);
 	});
 
 	it('resolves a known extension supplied under a non-canonical OID spelling', () => {

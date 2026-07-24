@@ -78,7 +78,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   value, so a non-canonical spelling such as `2.5.029.17` is the same extension
   as `2.5.29.17` for registry lookup, certificate-versus-CSR context
   restrictions, and duplicate detection; the diagnostic still quotes the OID as
-  submitted.
+  submitted. A custom `cRLDistributionPoints` payload runs the same §4.2.1.13
+  cRLIssuer checks as the typed field, since decoding proves structure but not
+  the profile the builder promises. `validateOid` also rejects an OID that parses
+  as decimals but breaks the X.660 arc bounds (`3.1`, `1.40`) with `invalid_oid`
+  rather than an uncoded `Error`.
   (https://github.com/kjanat/micro509/pull/88)
 - Parsing rejects a zero-length `dNSName`, `rfc822Name`, or
   `uniformResourceIdentifier` GeneralName, which RFC 5280 §4.2.1.6 forbids. An
