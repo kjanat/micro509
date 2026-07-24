@@ -31,6 +31,7 @@ import {
 	createNameConstraintValidationState,
 	evaluateNameConstraints,
 } from '#micro509/internal/verify/name-constraints-engine';
+import { encodeSubjectAltName } from '#micro509/x509';
 import { parseNameConstraints } from '#micro509/x509/parse';
 import {
 	importRsaPrivateKeyWithScheme,
@@ -983,6 +984,37 @@ describe('chain verification', () => {
 			roots: [ca.certificate.pem],
 		});
 		expect(result.ok).toBe(true);
+	});
+
+	it('allows a chain with a critical issuerAltName (RFC 5280 §4.2.1.7)', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Critical IAN CA' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign'] },
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Critical IAN CA' },
+			subject: { commonName: 'critical-ian.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				subjectAltNames: [{ type: 'dns', value: 'critical-ian.example' }],
+				customExtensions: [
+					{
+						oid: OIDS.issuerAltName,
+						critical: true,
+						value: sequence([encodeSubjectAltName({ type: 'dns', value: 'Critical IAN CA' })]),
+					},
+				],
+			},
+		});
+		const parsed = unwrap(parseCertificatePem(leaf.pem));
+		expect(parsed.issuerAltNames).toEqual([{ type: 'dns', value: 'Critical IAN CA' }]);
+		expect(
+			await verifyCertificateChain({ leaf: leaf.pem, roots: [ca.certificate.pem] }),
+		).toMatchObject({ ok: true });
 	});
 
 	it('checks EKU separately from chain validation', async () => {

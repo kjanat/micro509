@@ -25,7 +25,7 @@ internal/
 | ASN.1 and OID core       | `asn1/`   | DER encoding/parsing + OID resolution             |
 | Crypto dispatch          | `crypto/` | algorithm/profile/sign/verify plumbing            |
 | Cross-domain utilities   | `shared/` | base64 + DN + IP helpers (pure, deterministic)    |
-| Name / extension helpers | `x509/`   | registry + field metadata + bit decoding          |
+| Name / extension helpers | `x509/`   | registry + field metadata + bit and name decoding |
 | Verification engines     | `verify/` | high-complexity policy/name-constraint/path logic |
 
 ## CONVENTIONS
@@ -38,6 +38,13 @@ internal/
   policy logic there.
 - Keep parser limits explicit when traversing nested structures.
 - Use integer and length helpers from `asn1/` instead of local reimplementation.
+- Register new OIDs in `asn1/oids.json` under their registration arc; consume
+  them as `OIDS.<name>`. Never inline a dotted-decimal literal in source.
+- New certificate extensions get an `ExtensionDefinition` in
+  `x509/extension-registry.ts` (decode/encode/applyParsed + accumulator field),
+  not ad-hoc decoding at call sites.
+- `x509/general-name.ts` is the only GeneralName decoder; certificate and CRL
+  parsing both consume it so the two layers cannot drift on an alternative.
 - Keep sign/verify dispatch symmetric in `signing.ts` and `sig-verify.ts`.
 - Preserve wire-level behavior in `shared/` helpers; tiny changes can fan out.
 - If a helper starts encoding protocol policy, move it to the owning domain or engine.

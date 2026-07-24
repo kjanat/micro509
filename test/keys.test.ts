@@ -45,6 +45,10 @@ import {
 	pemEncode,
 	unwrap,
 } from '#micro509';
+import { toArrayBuffer, toHex } from '#micro509/internal/asn1/asn1';
+import { concatBytes, integerFromNumber, sequence } from '#micro509/internal/asn1/der';
+import { md5 } from '#micro509/internal/crypto/hash';
+import { base64Encode } from '#micro509/internal/shared/base64';
 import { hexToBytes } from '#test/helpers';
 
 /** Minimal shape every `import*` Result satisfies, success or failure. */
@@ -65,6 +69,47 @@ async function expectImportFailure(
 	}
 	expect(result.error.code).toBe(code);
 	if (messagePart !== undefined) expect(result.error.message).toContain(messagePart);
+}
+
+/** Encrypt arbitrary DER as a traditional RSA PEM fixture for structural-error tests. */
+async function encryptTraditionalRsaFixture(der: Uint8Array, password: string): Promise<string> {
+	const iv = Uint8Array.from({ length: 16 }, (_, index) => index);
+	const passwordBytes = new TextEncoder().encode(password);
+	const keyBytes = new Uint8Array(32);
+	let previous = new Uint8Array();
+	let offset = 0;
+	while (offset < keyBytes.length) {
+		previous = md5(concatBytes([previous, passwordBytes, iv.slice(0, 8)]));
+		const length = Math.min(previous.length, keyBytes.length - offset);
+		keyBytes.set(previous.slice(0, length), offset);
+		offset += length;
+	}
+	const key = await crypto.subtle.importKey(
+		'raw',
+		toArrayBuffer(keyBytes),
+		{ name: 'AES-CBC', length: 256 },
+		false,
+		['encrypt'],
+	);
+	const encrypted = new Uint8Array(
+		await crypto.subtle.encrypt(
+			{ name: 'AES-CBC', iv: toArrayBuffer(iv) },
+			key,
+			toArrayBuffer(der),
+		),
+	);
+	const body =
+		base64Encode(encrypted)
+			.match(/.{1,64}/g)
+			?.join('\n') ?? '';
+	return [
+		'-----BEGIN RSA PRIVATE KEY-----',
+		'Proc-Type: 4,ENCRYPTED',
+		`DEK-Info: AES-256-CBC,${toHex(iv).toUpperCase()}`,
+		'',
+		body,
+		'-----END RSA PRIVATE KEY-----',
+	].join('\n');
 }
 
 describe('keys', () => {
@@ -149,6 +194,81 @@ describe('keys', () => {
 		expect(result.ok).toBe(false);
 		if (!result.ok) {
 			expect(result.error.code).toBe('invalid_password');
+		}
+	});
+
+	it('reports corrupted traditional PEM ciphertext as invalid_password', async () => {
+		// Altering the first ciphertext block garbles the first two plaintext
+		// blocks and leaves the trailing PKCS#7 padding intact, so AES-CBC
+		// decryption succeeds and only the key structure reveals the damage.
+		const corruptFirstCipherBlock = (pem: string): string => {
+			const lines = pem.split('\n');
+			const bodyIndex = lines.indexOf('') + 1;
+			const line = lines[bodyIndex];
+			if (line === undefined || line.length === 0) {
+				throw new Error('encrypted PEM has no body');
+			}
+			lines[bodyIndex] = `${line[0] === 'A' ? 'B' : 'A'}${line.slice(1)}`;
+			return lines.join('\n');
+		};
+
+		const rsa = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
+		const rsaPem = await exportEncryptedPkcs1Pem(rsa.privateKey, { password: 'secret123' });
+		await expectImportFailure(
+			importEncryptedPkcs1Pem(corruptFirstCipherBlock(rsaPem), 'secret123', { kind: 'rsa' }),
+			'invalid_password',
+			'Invalid password or encrypted PEM content',
+		);
+
+		const ec = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
+		const ecPem = await exportEncryptedSec1Pem(ec.privateKey, { password: 'secret123' });
+		await expectImportFailure(
+			importEncryptedSec1Pem(corruptFirstCipherBlock(ecPem), 'secret123', {
+				kind: 'ecdsa',
+				curve: 'P-256',
+			}),
+			'invalid_password',
+			'Invalid password or encrypted PEM content',
+		);
+
+		// Relabelling decrypts cleanly and yields an ECPrivateKey where an
+		// RSAPrivateKey belongs, so only the structure check rejects it.
+		await expectImportFailure(
+			importEncryptedPkcs1Pem(ecPem.replaceAll('EC PRIVATE KEY', 'RSA PRIVATE KEY'), 'secret123', {
+				kind: 'rsa',
+			}),
+			'invalid_password',
+			'Invalid password or encrypted PEM content',
+		);
+	});
+
+	it('reports malformed PKCS#1 multiprime structures as invalid_password', async () => {
+		const password = 'secret123';
+		const rsaFields = Array.from({ length: 8 }, (_, index) => integerFromNumber(index + 2));
+		const otherPrimeInfo = sequence([
+			integerFromNumber(11),
+			integerFromNumber(13),
+			integerFromNumber(17),
+		]);
+		const malformed = [
+			sequence([integerFromNumber(0), ...rsaFields, sequence([otherPrimeInfo])]),
+			sequence([integerFromNumber(1), ...rsaFields]),
+			sequence([integerFromNumber(1), ...rsaFields, integerFromNumber(19)]),
+			sequence([integerFromNumber(1), ...rsaFields, sequence([])]),
+			sequence([
+				integerFromNumber(1),
+				...rsaFields,
+				sequence([sequence([integerFromNumber(11), integerFromNumber(13)])]),
+			]),
+		];
+		for (const der of malformed) {
+			await expectImportFailure(
+				importEncryptedPkcs1Pem(await encryptTraditionalRsaFixture(der, password), password, {
+					kind: 'rsa',
+				}),
+				'invalid_password',
+				'Invalid password or encrypted PEM content',
+			);
 		}
 	});
 
