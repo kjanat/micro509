@@ -500,7 +500,7 @@ describe('checkChainRevocation', () => {
 		});
 		const scoped = await checkChainRevocation({
 			chain,
-			crls: [leafCrl.der, scopedSignerCrl.der, Uint8Array.of(0x30, 0x00)],
+			crls: [leafCrl.der, scopedSignerCrl.der],
 			extraCertificates,
 			at,
 			policy: { mode: 'soft-fail' },
@@ -508,6 +508,10 @@ describe('checkChainRevocation', () => {
 		expect(scoped.ok).toBe(true);
 		if (!scoped.ok) return;
 		expect(scoped.value.certificates[0]?.status).toBe('indeterminate');
+		expect(scoped.value.certificates[0]?.indeterminateReasons).toContain(
+			'crl_signer_indeterminate',
+		);
+		expect(scoped.value.executionErrors).toBeUndefined();
 
 		const fullSignerCrl = await createCertificateRevocationList({
 			issuer: { commonName: 'Signer Scope CRL CA' },

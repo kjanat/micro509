@@ -1526,20 +1526,52 @@ function assertDecryptedPrivateKey(parse: () => unknown, message: string): void 
 	}
 }
 
-/** Structural check for a PKCS#1 RSAPrivateKey: a version INTEGER and eight more. */
+/** Structural check for a PKCS#1 RSAPrivateKey, including optional multiprime fields. */
 function parsePkcs1PrivateKey(der: Uint8Array): void {
 	const children = readSequenceChildren(der);
 	const version = children[0];
-	const isRsaPrivateKeyShape =
-		(children.length === 9 || children.length === 10) &&
-		version !== undefined &&
-		version.tag === 0x02 &&
-		version.value.length === 1 &&
-		(version.value[0] === 0x00 || version.value[0] === 0x01) &&
-		children.slice(1, 9).every((child) => child.tag === 0x02);
-	if (!isRsaPrivateKeyShape) {
+	if (
+		version === undefined ||
+		version.tag !== 0x02 ||
+		version.value.length !== 1 ||
+		!children.slice(1, 9).every((child) => child.tag === 0x02)
+	) {
 		throw new Error('Malformed PKCS#1 private key');
 	}
+	const versionValue = version.value[0];
+	if (versionValue === 0x00 && children.length === 9) {
+		return;
+	}
+	const otherPrimeInfos = children[9];
+	if (
+		versionValue !== 0x01 ||
+		children.length !== 10 ||
+		otherPrimeInfos === undefined ||
+		!isOtherPrimeInfosShape(der, otherPrimeInfos)
+	) {
+		throw new Error('Malformed PKCS#1 private key');
+	}
+}
+
+/** RFC 8017 Appendix A.1.2: OtherPrimeInfos is a non-empty SEQUENCE OF three-INTEGER entries. */
+function isOtherPrimeInfosShape(source: Uint8Array, element: DerElement): boolean {
+	if (element.tag !== 0x30) {
+		return false;
+	}
+	const otherPrimeInfosDer = source.slice(element.start - element.headerLength, element.end);
+	const infos = readSequenceChildren(otherPrimeInfosDer);
+	if (infos.length === 0) {
+		return false;
+	}
+	return infos.every((info) => {
+		if (info.tag !== 0x30) {
+			return false;
+		}
+		const fields = readSequenceChildren(
+			otherPrimeInfosDer.slice(info.start - info.headerLength, info.end),
+		);
+		return fields.length === 3 && fields.every((field) => field.tag === 0x02);
+	});
 }
 
 /** Extract algorithm OID and inner key bytes from a PKCS#8 PrivateKeyInfo envelope. */
