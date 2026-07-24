@@ -1,8 +1,12 @@
+﻿
+
+
+
 Internet Engineering Task Force (IETF)                        R. Housley
 Request for Comments: 9549                                Vigil Security
 Obsoletes: 8399                                               March 2024
-Updates: 5280
-Category: Standards Track
+Updates: 5280                                                           
+Category: Standards Track                                               
 ISSN: 2070-1721
 
 
@@ -212,13 +216,13 @@ Table of Contents
    |  extension.  Each of these extensions uses the GeneralName type;
    |  one choice in GeneralName is the dNSName field, which is defined
    |  as type IA5String.
-   |
+   |  
    |  IA5String is limited to the set of ASCII characters.  To
    |  accommodate IDNs, U-labels are converted to A-labels.  The A-label
    |  is the encoding of the U-label according to the Punycode algorithm
    |  [RFC3492] with the ACE prefix "xn--" added at the beginning of the
    |  string.
-   |
+   |  
    |  When comparing DNS names for equality, conforming implementations
    |  MUST perform a case-insensitive exact match on the entire DNS
    |  name.  When evaluating name constraints, conforming
@@ -227,11 +231,11 @@ Table of Contents
    |  that may be constructed by adding labels to the left-hand side of
    |  the domain name given as the constraint is considered to fall
    |  within the indicated subtree.
-   |
+   |  
    |  Implementations that have a user interface SHOULD convert IDNs to
    |  Unicode for display.  Specifically, conforming implementations
    |  convert A-labels to U-labels for display purposes.
-   |
+   |  
    |  Implementation consideration: There are increased memory
    |  requirements for IDNs.  An IDN ACE label will begin with the four
    |  additional characters "xn--", and an IDN can require as many as
@@ -286,26 +290,26 @@ Table of Contents
    |  address cannot be represented in ASCII, then the internationalized
    |  email address is placed in the otherName choice of GeneralName
    |  using the conventions in RFC 8398 [RFC8398].
-   |
+   |  
    |  When the host-part contains an IDN, conforming implementations
    |  MUST convert all U-labels to A-labels.
-   |
+   |  
    |  7.5.1.  Local-Part Contains Only ASCII Characters
-   |
+   |  
    |  Two email addresses are considered to match if:
-   |
+   |  
    |  1)  The local-part of each name is an exact match, AND
-   |
+   |  
    |  2)  The host-part of each name matches using a case-insensitive
    |      ASCII comparison.
-   |
+   |  
    |  Implementations that have a user interface SHOULD convert the
    |  host-part of internationalized email addresses specified in these
    |  extensions to Unicode before display.  Specifically, conforming
    |  implementations convert A-labels to U-labels for display purposes.
-   |
+   |  
    |  7.5.2.  Local-Part Contains Non-ASCII Characters
-   |
+   |  
    |  When the local-part contains non-ASCII characters, conforming
    |  implementations MUST place the internationalized email address in
    |  the SmtpUTF8Mailbox within the otherName choice of GeneralName as
@@ -314,14 +318,14 @@ Table of Contents
    |  Byte-Order-Mark (BOM) [RFC3629] to aid comparison.  The email
    |  address local-part within the SmtpUTF8Mailbox MUST conform to the
    |  requirements of [RFC6530] and [RFC6531].
-   |
+   |  
    |  Two email addresses are considered to match if:
-   |
+   |  
    |  1)  The local-part of each name is an exact match, AND
-   |
+   |  
    |  2)  The host-part of each name matches using a case-insensitive
    |      ASCII comparison.
-   |
+   |  
    |  Implementations that have a user interface SHOULD convert the
    |  host-part of internationalized email addresses specified in these
    |  extensions to Unicode before display.  Specifically, conforming

@@ -70,7 +70,7 @@ import type {
 } from '#micro509/x509/parse';
 import { parseCertificateDerOrThrow, parseCertificateFromSource } from '#micro509/x509/parse';
 
-/** Hash algorithm used to compute OCSP CertID fields. SHA-1 is the RFC 6960 default. */
+/** Hash algorithm used to compute OCSP CertID fields. RFC 5019 §2.1.1 requires SHA-1 for the lightweight OCSP profile; RFC 6960 defines no default. */
 export type OcspHashAlgorithm = 'SHA-1' | 'SHA-256';
 /** PEM string, DER bytes, or already-parsed certificate. */
 export type OcspCertificateSource = string | Uint8Array | ParsedCertificate;
@@ -1918,7 +1918,7 @@ function prepareOcspNameCompareString(value: string): string | undefined {
 	return normalized.toLowerCase().trim().replace(/\s+/gu, ' ');
 }
 
-/** Maps an X.500 attribute type OID to its friendly key name for responder name parsing. */
+/** Maps a directory attribute type OID (X.520 `id-at` arc plus the legacy PKCS #9 emailAddress) to its friendly key name for responder name parsing. */
 function responderNameKeyFromOid(oid: string): ParsedNameAttribute['key'] {
 	switch (oid) {
 		case OIDS.commonName:

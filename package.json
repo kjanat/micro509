@@ -104,6 +104,7 @@
 		"prepublishOnly": "[ -n \"${GITHUB_ACTIONS:-}\" ] || { printf '%s\\n' 'manual npm publish blocked; use release workflow for provenance' >&2; exit 1; }",
 		"publish:jsr": "[ -n \"${GITHUB_ACTIONS:-}\" ] || { printf '%s\\n' 'manual JSR publish blocked; use release workflow' >&2; exit 1; }; bunx jsr publish",
 		"publish:pkgprnew": "bunx pkg-pr-new publish --packageManager='npm,pnpm,bun' --bun --template './examples/vite'",
+		"rfc": "test -n \"${RFC}\" && curl -fsSLo \"${PWD}/docs/rfc/rfc${RFC}.txt\" \"https://www.rfc-editor.org/rfc/rfc${RFC}.txt\"",
 		"site:build": "run --dir site/.vitepress build",
 		"site:dev": "run --dir site/.vitepress dev",
 		"site:import-maps": "deno run --allow-read --allow-net --allow-write --allow-run scripts/site-import-maps.deno.ts",

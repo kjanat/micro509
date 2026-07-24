@@ -397,7 +397,7 @@ export interface ParsedCertificate<TMap extends ExtensionDecoderMap = Record<nev
 export interface ParsedCertificateSigningRequest<
 	TMap extends ExtensionDecoderMap = Record<never, never>,
 > {
-	/** PKCS#10 version number (always 1). */
+	/** PKCS#10 version, normalized to the v1 ordinal `1`. The encoded CertificationRequestInfo version INTEGER is `0` (RFC 2986 §4.1). */
 	readonly version: number;
 	/** DER encoding of the CertificationRequestInfo, used for signature verification. */
 	readonly certificationRequestInfoDer: Uint8Array;

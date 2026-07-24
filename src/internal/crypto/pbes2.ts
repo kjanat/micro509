@@ -191,7 +191,10 @@ export function encodePbes2AlgorithmIdentifier(parameters: Pbes2Parameters): Uin
 export function parsePbes2AlgorithmIdentifier(algorithmIdentifierDer: Uint8Array): Pbes2Parameters {
 	const { paramsDer, kdf, scheme } = parsePbes2OuterFields(algorithmIdentifierDer);
 	const { pbkdf2Der, pbkdf2Params } = parsePbes2KdfFields(paramsDer, kdf);
-	// PBKDF2 params: SEQUENCE { salt OCTET STRING, iterationCount INTEGER, [keyLength INTEGER], [prf AlgorithmIdentifier] }
+	// RFC 8018 A.2 PBKDF2-params: SEQUENCE { salt CHOICE { specified OCTET STRING,
+	// otherSource AlgorithmIdentifier }, iterationCount INTEGER, keyLength INTEGER
+	// OPTIONAL, prf AlgorithmIdentifier DEFAULT algid-hmacWithSHA1 }. Only the
+	// `specified` salt alternative is accepted.
 	const salt = pbkdf2Params[0];
 	const iterations = pbkdf2Params[1];
 	if (salt === undefined || iterations === undefined || salt.tag !== 0x04) {

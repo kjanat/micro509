@@ -122,7 +122,7 @@ export type SubjectAltName =
 	| {
 			/** Email address (rfc822Name [1]). */
 			readonly type: 'email';
-			/** RFC 822 mailbox, e.g. `"admin@example.com"`. */
+			/** RFC 2821 §4.1.2 Mailbox (`Local-part@Domain`), e.g. `"admin@example.com"`. */
 			readonly value: string;
 	  }
 	| {
@@ -393,11 +393,12 @@ export interface PolicyConstraints {
 /**
  * RFC 5280 §4.2.1.14 Inhibit anyPolicy.
  *
- * After `skipCerts` additional certificates in the path, the special
- * anyPolicy OID is no longer considered a match.
+ * After `skipCerts` additional non-self-issued certificates in the path, the
+ * special anyPolicy OID is no longer considered a match, except when it
+ * appears in an intermediate self-issued CA certificate.
  */
 export interface InhibitAnyPolicy {
-	/** Number of additional certificates before anyPolicy stops being valid. */
+	/** Number of additional non-self-issued certificates before anyPolicy stops being valid. */
 	readonly skipCerts: number;
 }
 

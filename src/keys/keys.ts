@@ -1609,8 +1609,9 @@ function readPkcs8Version(content: Uint8Array): number {
 /**
  * Extract the optional `parameters [0]` curve identifier from a SEC 1 ECPrivateKey.
  *
- * RFC 5915: `ECPrivateKey ::= SEQUENCE { version INTEGER, privateKey OCTET STRING,
- * parameters [0] ECParameters OPTIONAL, publicKey [1] BIT STRING OPTIONAL }`.
+ * RFC 5915 §3: `ECPrivateKey ::= SEQUENCE { version INTEGER { ecPrivkeyVer1(1) }
+ * (ecPrivkeyVer1), privateKey OCTET STRING, parameters [0] ECParameters
+ * {{ NamedCurve }} OPTIONAL, publicKey [1] BIT STRING OPTIONAL }`.
  */
 function parseSec1PrivateKey(der: Uint8Array): {
 	/** Optional ECParameters tag inside `parameters [0]` (0x06 for a named curve). */
@@ -1948,11 +1949,11 @@ function opensslBytesToKey(password: string, salt: Uint8Array, length: number): 
 	return out;
 }
 
-/** Parse a PEM block into its label, RFC 1421 headers, and base64 body. */
+/** Parse a PEM block into its label, OpenSSL-style headers, and base64 body. */
 function parseTraditionalPem(pem: string): {
 	/** PEM type label between `BEGIN` and `END` markers. */
 	readonly label: string;
-	/** RFC 1421 encapsulated headers (e.g. `Proc-Type`, `DEK-Info`). */
+	/** OpenSSL-style encapsulated headers (e.g. `Proc-Type`, `DEK-Info`). */
 	readonly headers: ReadonlyMap<string, string>;
 	/** Base64-encoded payload after the headers. */
 	readonly base64Body: string;
@@ -1984,7 +1985,7 @@ function parseTraditionalPem(pem: string): {
 			index += 1;
 			break;
 		}
-		const delimiter = line.indexOf(': ');
+		const delimiter = line.indexOf(':');
 		if (delimiter === -1) {
 			break;
 		}
@@ -1992,7 +1993,7 @@ function parseTraditionalPem(pem: string): {
 		if (headers.has(headerName)) {
 			throw new Error(`Duplicate PEM header: ${headerName}`);
 		}
-		headers.set(headerName, line.slice(delimiter + 2));
+		headers.set(headerName, line.slice(delimiter + 1).trimStart());
 		index += 1;
 	}
 	const body = lines.slice(index, lines.length - 1).join('');

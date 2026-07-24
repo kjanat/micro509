@@ -1,8 +1,10 @@
 /**
  * PKCS#7/CMS certificate bags and SignedData.
  *
- * Creates degenerate (signature-less) certificate bags, parses RFC 2315 / RFC 5652
- * SignedData structures, and verifies signer signatures including signed-attribute flows.
+ * Creates degenerate (signature-less) certificate bags, parses RFC 5652
+ * SignedData (and the RFC 2315 form whose contentInfo content is an OCTET
+ * STRING and whose certificates are X.509), and verifies signer signatures
+ * including signed-attribute flows.
  *
  * @module
  */
@@ -885,9 +887,9 @@ function signerHasNamedCurve(algorithm: KeyAlgorithm): algorithm is EcKeyAlgorit
 /**
  * Resolves the content-digest hash and its OID for a signer key.
  *
- * Pairs each key with the digest used by its signature algorithm (RFC 5754):
- * P-256/RSA-SHA256 → SHA-256, P-384 → SHA-384, P-521 → SHA-512. Ed25519 uses
- * SHA-512 for the messageDigest attribute, per RFC 8419.
+ * Curve pairing follows RFC 5753 §8: P-256/RSA-SHA256 → SHA-256, P-384 → SHA-384, P-521 → SHA-512.
+ * Digest OIDs are from RFC 5754 §2.
+ * Ed25519 uses SHA-512 for the messageDigest attribute, per RFC 8419.
  */
 function contentDigestForPrivateKey(
 	privateKey: CryptoKey,

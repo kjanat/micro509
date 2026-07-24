@@ -169,6 +169,14 @@ describe('keys', () => {
 			}),
 		);
 		expect(await exportPkcs8Der(importedCrOnlyRsa)).toEqual(await exportPkcs8Der(rsa.privateKey));
+		// OpenSSL-style encapsulated headers permit no space after the colon.
+		const noSpaceHeaderPem = encryptedRsaPem
+			.replace('Proc-Type: ', 'Proc-Type:')
+			.replace('DEK-Info: ', 'DEK-Info:');
+		const importedNoSpaceRsa = unwrap(
+			await importEncryptedPkcs1Pem(noSpaceHeaderPem, 'secret123', { kind: 'rsa' }),
+		);
+		expect(await exportPkcs8Der(importedNoSpaceRsa)).toEqual(await exportPkcs8Der(rsa.privateKey));
 		await expectImportFailure(
 			importEncryptedPkcs1Pem(encryptedRsaPem, 'wrong', { kind: 'rsa' }),
 			'invalid_password',

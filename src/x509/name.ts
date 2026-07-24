@@ -80,7 +80,7 @@ function throwNameEncoderError(code: NameEncoderErrorCode, message: string): nev
 }
 
 /**
- * Union of recognized X.501 attribute type shorthand names.
+ * Union of recognized distinguished-name attribute type shorthand names.
  *
  * Each key maps to an OID + ASN.1 string encoding in `NAME_FIELD_DEFINITIONS`.
  */
@@ -131,7 +131,7 @@ export interface NameObject {
 	readonly title?: string;
 	/** First / given name (GN). */
 	readonly givenName?: string;
-	/** RFC 822 email address. Encoded as IA5String, not UTF-8. */
+	/** PKCS #9 emailAddress attribute (RFC 2985 §5.2.1). Encoded as IA5String, not UTF-8. RFC 5280 §4.1.2.6 deprecates it in favour of a subjectAltName rfc822Name. */
 	readonly emailAddress?: string;
 }
 
