@@ -258,6 +258,9 @@ export function createPkcs7CertBag(
 	let certificateDers: Uint8Array[];
 	try {
 		certificateDers = certificates.flatMap(normalizeCertificateSource);
+		for (const der of certificateDers) {
+			parseCertificateDerOrThrow(der);
+		}
 	} catch {
 		return createCertBagFailure(
 			'invalid_certificate',
@@ -855,9 +858,13 @@ function createPkcs7Failure(
 /** Converts PEM text to an array of DER certificate blobs, or wraps raw DER. */
 function normalizeCertificateSource(source: Pkcs7CertificateSource): readonly Uint8Array[] {
 	if (typeof source === 'string') {
-		return splitPemBlocksOrThrow(source)
+		const blocks = splitPemBlocksOrThrow(source)
 			.filter((block) => block.label === 'CERTIFICATE')
 			.map((block) => new Uint8Array(block.bytes));
+		if (blocks.length === 0) {
+			throw new Error('Certificate PEM required');
+		}
+		return blocks;
 	}
 	if (source instanceof Uint8Array) {
 		return [new Uint8Array(source)];

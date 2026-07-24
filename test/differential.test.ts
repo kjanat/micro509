@@ -4,6 +4,7 @@ import {
 	createCertificate,
 	createCertificateRevocationList,
 	createOcspResponse,
+	createPkcs7CertBag,
 	createSelfSignedCertificate,
 	exportPkcs8Pem,
 	generateKeyPair,
@@ -24,6 +25,7 @@ import {
 	issueAndValidateOcspResponseWithOpenSsl,
 	readCertificateAiaWithOpenSsl,
 	readCertificateSanWithOpenSsl,
+	readPkcs7CertBagWithOpenSsl,
 	validateMicro509OcspResponseWithOpenSsl,
 	verifyChainWithOpenSsl,
 } from '#test/oracles/openssl';
@@ -412,5 +414,16 @@ describe.skipIf(!openSslAvailable || !differentialEnabled)('OpenSSL differential
 		expect(ipMicro.ok).toBe(true);
 		expect(ipOpenSsl.matches).toBe(true);
 		expect(ipMicro.ok).toBe(ipOpenSsl.matches);
+	});
+
+	it('produces a PKCS#7 cert bag OpenSSL parses with canonical CertificateSet ordering', async () => {
+		const a = await createSelfSignedCertificate({ subject: { commonName: 'Bag Cert A' } });
+		const b = await createSelfSignedCertificate({ subject: { commonName: 'Bag Cert B' } });
+		const bag = unwrap(createPkcs7CertBag([a.certificate.pem, b.certificate.pem]));
+		const reversed = unwrap(createPkcs7CertBag([b.certificate.pem, a.certificate.pem]));
+		expect(toHex(bag.der)).toBe(toHex(reversed.der));
+		const openssl = await readPkcs7CertBagWithOpenSsl(bag.der);
+		expect(openssl.exitCode).toBe(0);
+		expect(openssl.subjectCount).toBe(2);
 	});
 });

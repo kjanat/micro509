@@ -421,6 +421,20 @@ export async function readCertificateAiaWithOpenSsl(
 	});
 }
 
+export async function readPkcs7CertBagWithOpenSsl(
+	certBagDer: Uint8Array,
+): Promise<{ readonly exitCode: number; readonly subjectCount: number; readonly output: string }> {
+	return withTempDir(async (directory) => {
+		const path = join(directory, 'bag.p7b');
+		await Bun.write(path, certBagDer);
+		const result = await runOpenSsl(['pkcs7', '-inform', 'DER', '-in', path, '-print_certs', '-noout']);
+		const subjectCount = result.stdout
+			.split('\n')
+			.filter((line) => line.startsWith('subject=')).length;
+		return { exitCode: result.exitCode, subjectCount, output: `${result.stdout}${result.stderr}` };
+	});
+}
+
 export async function withTempDir<T>(fn: (directory: string) => Promise<T>): Promise<T> {
 	const directory = await mkdtemp(join(tmpdir(), 'micro509-openssl-'));
 	try {
