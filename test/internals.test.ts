@@ -725,23 +725,27 @@ describe('extensions encoding', () => {
 	});
 
 	it('encodeSubjectAltName rejects a non-ASCII IA5String value', () => {
-		expect(() => encodeSubjectAltName({ type: 'dns', value: 'café.example' })).toThrow(
-			'Invalid IA5String',
+		expectEncoderErrorCode(
+			() => encodeSubjectAltName({ type: 'dns', value: 'café.example' }),
+			'invalid_ia5_string',
 		);
-		expect(() => encodeSubjectAltName({ type: 'uri', value: 'http://café.example' })).toThrow(
-			'Invalid IA5String',
+		expectEncoderErrorCode(
+			() => encodeSubjectAltName({ type: 'uri', value: 'http://café.example' }),
+			'invalid_ia5_string',
 		);
 	});
 
 	it('encodeAuthorityInfoAccess rejects a non-URI OCSP location wrapped in a custom OID', () => {
-		expect(() =>
-			encodeAuthorityInfoAccess([
-				{
-					method: { type: 'oid', value: OIDS.ocspAccessMethod },
-					location: { type: 'dns', value: 'ocsp.example' },
-				},
-			]),
-		).toThrow('OCSP location must be a URI');
+		expectEncoderErrorCode(
+			() =>
+				encodeAuthorityInfoAccess([
+					{
+						method: { type: 'oid', value: OIDS.ocspAccessMethod },
+						location: { type: 'dns', value: 'ocsp.example' },
+					},
+				]),
+			'authority_info_access_ocsp_not_uri',
+		);
 	});
 
 	it('buildCertificateExtensions throws on SPKI without subject public key bit string', () => {
@@ -1666,7 +1670,12 @@ describe('pbes2.ts DEFAULT prf', () => {
 		expect(der.length).toBeLessThan(withSha256.length);
 		expect(parsePbes2AlgorithmIdentifier(withSha256).prf).toBe('HMAC-SHA-256');
 
-		expect(pbkdf2ParamsChildren(der)).toHaveLength(3);
-		expect(pbkdf2ParamsChildren(withSha256)).toHaveLength(4);
+		const derChildren = pbkdf2ParamsChildren(der);
+		expect(derChildren).toHaveLength(3);
+		expect(derChildren[2]?.tag).toBe(0x02);
+		const sha256Children = pbkdf2ParamsChildren(withSha256);
+		expect(sha256Children).toHaveLength(4);
+		expect(sha256Children[2]?.tag).toBe(0x02);
+		expect(sha256Children[3]?.tag).toBe(0x30);
 	});
 });

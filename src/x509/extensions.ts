@@ -988,6 +988,17 @@ export function encodeKeyUsage(usages: readonly KeyUsage[]): Uint8Array {
 	return encodeKeyUsageExtension(usages);
 }
 
+function encodeIa5Content(value: string): Uint8Array {
+	try {
+		return ia5Bytes(value);
+	} catch {
+		throwExtensionEncoderError(
+			'invalid_ia5_string',
+			'Invalid IA5String: contains non-ASCII characters',
+		);
+	}
+}
+
 /**
  * DER-encode a single {@linkcode SubjectAltName} GeneralName element.
  *
@@ -996,11 +1007,11 @@ export function encodeKeyUsage(usages: readonly KeyUsage[]): Uint8Array {
 export function encodeSubjectAltName(value: SubjectAltName): Uint8Array {
 	switch (value.type) {
 		case 'dns':
-			return implicitPrimitiveContext(2, ia5Bytes(value.value));
+			return implicitPrimitiveContext(2, encodeIa5Content(value.value));
 		case 'email':
-			return implicitPrimitiveContext(1, ia5Bytes(value.value));
+			return implicitPrimitiveContext(1, encodeIa5Content(value.value));
 		case 'uri':
-			return implicitPrimitiveContext(6, ia5Bytes(value.value));
+			return implicitPrimitiveContext(6, encodeIa5Content(value.value));
 		case 'srv':
 			return implicitConstructedContext(
 				0,
