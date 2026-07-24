@@ -11,6 +11,7 @@
 
 export type {
 	CertificateMaterial,
+	CreateCertificateErrorCode,
 	CreateCertificateInput,
 	CreateSelfSignedCertificateInput,
 	SelfSignedCertificateResult,
@@ -24,6 +25,7 @@ export { createCertificateSigningRequest } from '#micro509/x509/csr';
 export type {
 	AuthorityInfoAccessMethod,
 	AuthorityInformationAccess,
+	AuthorityInformationAccessInput,
 	BasicConstraints,
 	CertificateExtensionsInput,
 	CertificatePolicies,
@@ -36,6 +38,7 @@ export type {
 	DistributionPointName,
 	DistributionPointReason,
 	ExtendedKeyUsage,
+	ExtensionEncoderErrorCode,
 	GeneralName,
 	GeneralSubtree,
 	InhibitAnyPolicy,
@@ -84,6 +87,7 @@ export { certificateFingerprint } from '#micro509/x509/fingerprint';
 
 export type {
 	NameAttribute,
+	NameEncoderErrorCode,
 	NameFieldKey,
 	NameInput,
 	NameObject,
@@ -108,6 +112,7 @@ export type {
 	MatchCertificatePrivateKeyFailureResult,
 	MatchCertificatePrivateKeyResult,
 	MatchCertificatePrivateKeySuccess,
+	ParseCertificateChainResult,
 	ParseCertificateErrorCode,
 	ParseCertificateFailure,
 	ParseCertificateResult,
@@ -137,6 +142,7 @@ export {
 	getSubjectPublicKeyOrThrow,
 	matchCertificatePrivateKey,
 	parseCertificateChainPem,
+	parseCertificateChainPemOrThrow,
 	parseCertificateDer,
 	parseCertificateDerOrThrow,
 	parseCertificatePem,

@@ -16,6 +16,7 @@
  * Verification layers can use this signal to reject non-conformant encodings.
  */
 import { bitString, DEFAULT_MAX_DER_DEPTH, readRootElement } from '#micro509/internal/asn1/der';
+import { throwExtensionEncoderError } from '#micro509/internal/x509/extension-errors';
 import type { DistributionPointReason, KeyUsage, ParsedBitFlags } from '#micro509/x509/extensions';
 
 export type { ParsedBitFlags };
@@ -51,6 +52,9 @@ const DISTRIBUTION_POINT_REASON_ORDER = [
  * @param usages Flags to set. Bit positions follow RFC 5280 §4.2.1.3 order.
  */
 export function encodeKeyUsageExtension(usages: readonly KeyUsage[]): Uint8Array {
+	if (usages.length === 0) {
+		throwExtensionEncoderError('key_usage_empty', 'keyUsage must set at least one bit');
+	}
 	const encoded = encodeBitFlags(usages, (usage) =>
 		indexInOrder(KEY_USAGE_ORDER, usage, 'key usage'),
 	);

@@ -18,7 +18,6 @@ import {
 	bitString,
 	explicitContext,
 	generalizedTime,
-	implicitPrimitiveContext,
 	objectIdentifier,
 	octetString,
 	readElement,
@@ -125,7 +124,7 @@ async function createSignedOcspFixtureResponse(input: {
 	const responderId =
 		input.responderId.type === 'byName'
 			? explicitContext(1, input.responderId.nameDer)
-			: implicitPrimitiveContext(2, input.responderId.keyHash);
+			: explicitContext(2, octetString(input.responderId.keyHash));
 	const responseData = sequence([
 		responderId,
 		generalizedTime(input.producedAt ?? new Date('2024-01-01T00:00:00Z')),

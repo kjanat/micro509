@@ -1499,7 +1499,18 @@ async function verifyChainForExtendedKeyUsageProfile(
 /** Returns the OID of the first critical extension not in {@linkcode PROCESSED_EXTENSION_OIDS}, or `undefined`. */
 function findUnprocessedCriticalExtension(certificate: ParsedCertificate): string | undefined {
 	for (const extension of certificate.extensions) {
-		if (extension.critical && !PROCESSED_EXTENSION_OIDS.has(extension.oid)) {
+		if (!extension.critical) {
+			continue;
+		}
+		if (!PROCESSED_EXTENSION_OIDS.has(extension.oid)) {
+			return extension.oid;
+		}
+		// A critical subjectAltName carrying a GeneralName the verifier cannot
+		// interpret is unprocessed information (RFC 5280 §4.2).
+		if (
+			extension.oid === OIDS.subjectAltName &&
+			certificate.subjectAltNames?.some((name) => name.type === 'unknown') === true
+		) {
 			return extension.oid;
 		}
 	}

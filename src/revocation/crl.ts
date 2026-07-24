@@ -48,6 +48,7 @@ import {
 import { base64Encode } from '#micro509/internal/shared/base64';
 import { compareDistinguishedNames, compareNameAttributeValue } from '#micro509/internal/shared/dn';
 import { decodeIpAddress } from '#micro509/internal/shared/ip';
+import { readDirectoryNameTlv } from '#micro509/internal/x509/directory-name';
 import type { ParsedBitFlags } from '#micro509/internal/x509/extension-bits';
 import {
 	encodeDistributionPointReasonFlagsContent,
@@ -56,7 +57,12 @@ import {
 import { exportSpkiDer } from '#micro509/keys/keys';
 import { pemDecodeOrThrow, pemEncode } from '#micro509/pem/pem';
 import type { ErrorResult, Micro509Error } from '#micro509/result/result';
-import { failureResult, rethrowIfInvariant, successResult } from '#micro509/result/result';
+import {
+	failureResult,
+	rethrowIfInvariant,
+	successResult,
+	throwMicro509Error,
+} from '#micro509/result/result';
 import type {
 	DistributionPoint,
 	DistributionPointReason,
@@ -1976,7 +1982,7 @@ function parseGeneralName(element: DerElement): GeneralName {
 		case 0xa4:
 			return {
 				type: 'directoryName' as const,
-				derHex: toHex(rebuildDirectoryNameFromImplicit(element)),
+				derHex: toHex(readDirectoryNameTlv(element)),
 			};
 		default:
 			return { type: 'unknown' as const, tag: element.tag, value: new Uint8Array(element.value) };
@@ -2035,6 +2041,17 @@ function parseImplicitBoolean(element: DerElement): boolean {
 	return (element.value[0] ?? 0) !== 0;
 }
 
+/** Machine-readable reason a CRL encoder rejected its construction input. */
+export type CrlEncoderErrorCode =
+	| 'distribution_point_name_conflict'
+	| 'distribution_point_full_name_empty'
+	| 'distribution_point_name_empty';
+
+/** Throws a {@link ResultError} for a CRL encoder input-validation failure. */
+function throwCrlEncoderError(code: CrlEncoderErrorCode, message: string): never {
+	throwMicro509Error(code, message);
+}
+
 /** DER-encodes an IssuingDistributionPoint extension value. Throws on mutually-exclusive scope flags. */
 function encodeIssuingDistributionPoint(value: IssuingDistributionPoint): Uint8Array {
 	const certificateScopeFlags = [
@@ -2081,11 +2098,17 @@ function encodeDistributionPointName(
 		throw new Error('IssuingDistributionPoint distributionPoint is required');
 	}
 	if (value.fullName !== undefined && value.relativeName !== undefined) {
-		throw new Error('DistributionPointName cannot contain both fullName and relativeName');
+		throwCrlEncoderError(
+			'distribution_point_name_conflict',
+			'DistributionPointName cannot contain both fullName and relativeName',
+		);
 	}
 	if (value.fullName !== undefined) {
 		if (value.fullName.length === 0) {
-			throw new Error('DistributionPointName fullName must not be empty');
+			throwCrlEncoderError(
+				'distribution_point_full_name_empty',
+				'DistributionPointName fullName must not be empty',
+			);
 		}
 		return implicitConstructedContext(0, concatGeneralNames(value.fullName));
 	}
@@ -2097,29 +2120,15 @@ function encodeDistributionPointName(
 			relativeName.slice(relativeNameElement.start, relativeNameElement.end),
 		);
 	}
-	throw new Error('DistributionPointName must contain fullName or relativeName');
+	throwCrlEncoderError(
+		'distribution_point_name_empty',
+		'DistributionPointName must contain fullName or relativeName',
+	);
 }
 
 /** DER-encodes and concatenates a list of GeneralName values. */
 function concatGeneralNames(names: readonly GeneralName[]): Uint8Array {
 	return concatBytes(names.map((name) => encodeSubjectAltName(name)));
-}
-
-/** Re-wraps an implicitly-tagged directoryName as an explicit SEQUENCE (tag 0x30). */
-/**
- * Extracts the Name SEQUENCE from an implicitly-tagged directoryName [4].
- *
- * Handles two encoding styles found in the wild:
- * - Proper implicit: [4] replaces SEQUENCE tag, content is RDN SETs directly → wrap with 0x30
- * - Explicit-like: [4] wraps entire SEQUENCE, content starts with 0x30 → return content as-is
- */
-function rebuildDirectoryNameFromImplicit(element: DerElement): Uint8Array {
-	// If content already starts with SEQUENCE tag, it's explicit-style encoding
-	if (element.value.length > 0 && element.value[0] === 0x30) {
-		return new Uint8Array(element.value);
-	}
-	// Otherwise, wrap content with SEQUENCE tag (true implicit encoding)
-	return tlv(0x30, element.value);
 }
 
 /** Parses a Name SEQUENCE element into a full {@linkcode ParsedName}. */
