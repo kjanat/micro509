@@ -826,6 +826,30 @@ function assertPathLengthKeyUsage(input: CertificateExtensionsInput | undefined)
 }
 
 /**
+ * RFC 5280 §4.2.1.9: basicConstraints is critical in a CA certificate whose key
+ * validates signatures on certificates. Both conjuncts live in other extensions,
+ * so the rule sits here rather than in the basicConstraints profile hook.
+ *
+ * Only a custom extension can carry the wrong criticality; the typed field is
+ * always emitted with the registry default.
+ */
+function assertCaBasicConstraintsCritical(input: CertificateExtensionsInput | undefined): void {
+	const custom = input?.customExtensions?.find((extension) =>
+		oidEquals(extension.oid, OIDS.basicConstraints),
+	);
+	if (custom === undefined || custom.critical === true) {
+		return;
+	}
+	const basicConstraints = BASIC_CONSTRAINTS_EXTENSION_DEFINITION.decode(
+		new Uint8Array(custom.value),
+	);
+	if (!basicConstraints.ca || resolveEffectiveKeyUsage(input)?.includes('keyCertSign') !== true) {
+		return;
+	}
+	assertExtensionCriticality('basicConstraints', true, false);
+}
+
+/**
  * RFC 5280 §4.2.1.6: an empty subject DN requires a subjectAltName extension
  * present, marked critical, and carrying at least one non-empty GeneralName.
  */
@@ -912,13 +936,18 @@ function assertCustomExtensionsValid(
 				`Extension ${extension.oid} is not supported in ${context} context`,
 			);
 		}
-		assertKnownExtensionPayload(definition, new Uint8Array(extension.value), extension.oid);
+		assertKnownExtensionPayload(
+			definition,
+			new Uint8Array(extension.value),
+			extension.critical ?? false,
+			extension.oid,
+		);
 	}
 }
 
 /**
  * Decode a custom payload once through its known OID's definition and apply that
- * extension's profile rules.
+ * extension's profile rules to the decoded value and its criticality.
  *
  * A profile violation already carries its own code and propagates unchanged; a
  * decode failure means the payload is not the DER the OID's schema defines.
@@ -926,13 +955,14 @@ function assertCustomExtensionsValid(
 function assertKnownExtensionPayload(
 	definition: {
 		readonly oid: string;
-		assertDerProfile(valueDer: Uint8Array): void;
+		assertDerProfile(valueDer: Uint8Array, critical: boolean): void;
 	},
 	value: Uint8Array,
+	critical: boolean,
 	submittedOid: string,
 ): void {
 	try {
-		definition.assertDerProfile(value);
+		definition.assertDerProfile(value, critical);
 	} catch (error) {
 		if (isResultError(error)) {
 			throw error;
@@ -983,6 +1013,7 @@ function appendConstraintExtensions(
 	includeBasicConstraints: boolean,
 ): void {
 	assertPathLengthKeyUsage(input);
+	assertCaBasicConstraintsCritical(input);
 	if (includeBasicConstraints && input.basicConstraints !== undefined) {
 		pushKnownExtension(
 			encoded,
@@ -1360,6 +1391,30 @@ export function encodeNameConstraints(constraints: NameConstraints): Uint8Array 
 }
 
 /**
+ * @internal RFC 5280 fixes the criticality of several extensions: nameConstraints
+ * (§4.2.1.10), policyConstraints (§4.2.1.11), and inhibitAnyPolicy (§4.2.1.14) are
+ * critical; authorityKeyIdentifier (§4.2.1.1), subjectKeyIdentifier (§4.2.1.2),
+ * and authorityInfoAccess (§4.2.2.1) are not.
+ *
+ * @param label Extension name quoted in the diagnostic.
+ * @param required The criticality RFC 5280 mandates.
+ * @param critical The criticality the caller asked for.
+ */
+export function assertExtensionCriticality(
+	label: string,
+	required: boolean,
+	critical: boolean,
+): void {
+	if (critical === required) {
+		return;
+	}
+	throwExtensionEncoderError(
+		required ? 'extension_must_be_critical' : 'extension_must_be_non_critical',
+		`The ${label} extension must be marked ${required ? 'critical' : 'non-critical'}`,
+	);
+}
+
+/**
  * @internal RFC 5280 §4.2.1.10: a nameConstraints extension states at least one
  * of permittedSubtrees and excludedSubtrees, and neither may be an empty set.
  */
@@ -1414,12 +1469,9 @@ export function encodePolicyMappings(mappings: PolicyMappings): Uint8Array {
 	}
 	return sequence(
 		mappings.map((mapping) => {
-			validatePolicyOid(mapping.issuerDomainPolicy);
-			validatePolicyOid(mapping.subjectDomainPolicy);
-			if (
-				mapping.issuerDomainPolicy === OIDS.anyPolicy ||
-				mapping.subjectDomainPolicy === OIDS.anyPolicy
-			) {
+			const issuerDomainPolicy = validatePolicyOid(mapping.issuerDomainPolicy);
+			const subjectDomainPolicy = validatePolicyOid(mapping.subjectDomainPolicy);
+			if (issuerDomainPolicy === OIDS.anyPolicy || subjectDomainPolicy === OIDS.anyPolicy) {
 				throwExtensionEncoderError(
 					'policy_mappings_any_policy',
 					'policyMappings must not use anyPolicy',
@@ -1696,8 +1748,7 @@ export function getExtendedKeyUsageOid(usage: ExtendedKeyUsage): string {
 	if (typeof usage === 'string') {
 		return EXTENDED_KEY_USAGE_OIDS[usage];
 	}
-	validateOid(usage.value);
-	return usage.value;
+	return validateOid(usage.value);
 }
 
 /**
@@ -1732,8 +1783,7 @@ export function getAuthorityInfoAccessMethodOid(method: AuthorityInfoAccessMetho
 	if (typeof method === 'string') {
 		return AUTHORITY_INFO_ACCESS_METHOD_OIDS[method];
 	}
-	validateOid(method.value);
-	return method.value;
+	return validateOid(method.value);
 }
 
 /**

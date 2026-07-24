@@ -31,6 +31,8 @@ export type ExtensionEncoderErrorCode =
 	| 'empty_general_name_value'
 	| 'empty_subject_requires_subject_alt_name'
 	| 'extended_key_usage_empty'
+	| 'extension_must_be_critical'
+	| 'extension_must_be_non_critical'
 	| 'extension_not_supported_in_context'
 	| 'invalid_general_name_tag'
 	| 'invalid_ia5_string'

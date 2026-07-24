@@ -90,6 +90,7 @@ import {
 	parseDistributionPointReasonFlagsContent,
 	parseKeyUsageExtension,
 } from '#micro509/internal/x509/extension-bits';
+import { listExtensionDefinitions } from '#micro509/internal/x509/extension-registry';
 import { createPkcs12MacData, parsePkcs12MacDataOrThrow } from '#micro509/pkcs';
 import {
 	buildCertificateExtensions,
@@ -108,6 +109,8 @@ import {
 	encodePolicyMappings,
 	encodeRelativeDistinguishedName,
 	encodeSubjectAltName,
+	getAuthorityInfoAccessMethodOid,
+	getExtendedKeyUsageOid,
 } from '#micro509/x509';
 import { parseCrlDistributionPoints } from '#micro509/x509/parse';
 import { childrenOf, encodeUncheckedCrlDistributionPoints } from '#test/helpers';
@@ -986,6 +989,7 @@ describe('extensions encoding', () => {
 						{
 							oid: OIDS.basicConstraints,
 							value: encodeBasicConstraints({ ca: true, pathLength: 0 }),
+							critical: true,
 						},
 					],
 				}),
@@ -998,6 +1002,7 @@ describe('extensions encoding', () => {
 					{
 						oid: OIDS.basicConstraints,
 						value: encodeBasicConstraints({ ca: true, pathLength: 0 }),
+						critical: true,
 					},
 				],
 			}),
@@ -1033,13 +1038,17 @@ describe('extensions encoding', () => {
 	);
 
 	/** The same custom extension offered through both builder entry points. */
-	function buildCustomBothWays(oid: string, value: Uint8Array): readonly (() => unknown)[] {
+	function buildCustomBothWays(
+		oid: string,
+		value: Uint8Array,
+		critical = false,
+	): readonly (() => unknown)[] {
 		return [
 			() =>
 				buildCertificateExtensions(subjectPublicKeyInfo, undefined, {
-					customExtensions: [{ oid, value }],
+					customExtensions: [{ oid, value, critical }],
 				}),
-			() => buildRequestedExtensions({ customExtensions: [{ oid, value }] }),
+			() => buildRequestedExtensions({ customExtensions: [{ oid, value, critical }] }),
 		];
 	}
 
@@ -1232,50 +1241,64 @@ describe('extensions encoding', () => {
 		}
 	});
 
-	// Every known extension valid in both contexts, offered as a conformant custom
-	// payload, so each profile hook is exercised on its accepting path too.
-	const CONFORMANT_KNOWN_PAYLOADS = [
-		['keyUsage', OIDS.keyUsage, encodeKeyUsage(['digitalSignature'])],
-		['extendedKeyUsage', OIDS.extendedKeyUsage, encodeExtendedKeyUsage(['serverAuth'])],
+	// One conformant payload per registered extension. Drives both the accepting
+	// path of each profile hook and the proof that every registry default carries
+	// the criticality its own hook demands.
+	const CONFORMANT_KNOWN_PAYLOADS = new Map<string, Uint8Array>([
+		[OIDS.basicConstraints, encodeBasicConstraints({ ca: false })],
+		[OIDS.keyUsage, encodeKeyUsage(['digitalSignature'])],
+		[OIDS.extendedKeyUsage, encodeExtendedKeyUsage(['serverAuth'])],
+		[OIDS.subjectAltName, sequence([encodeSubjectAltName({ type: 'dns', value: 'san.example' })])],
+		[OIDS.issuerAltName, sequence([encodeSubjectAltName({ type: 'dns', value: 'ian.example' })])],
 		[
-			'subjectAltName',
-			OIDS.subjectAltName,
-			sequence([encodeSubjectAltName({ type: 'dns', value: 'san.example' })]),
-		],
-		[
-			'nameConstraints',
 			OIDS.nameConstraints,
 			encodeNameConstraints({ permittedSubtrees: [{ base: { type: 'dns', value: 'example' } }] }),
 		],
+		[OIDS.certificatePolicies, encodeCertificatePolicies([{ policyIdentifier: '1.2.3.4' }])],
 		[
-			'certificatePolicies',
-			OIDS.certificatePolicies,
-			encodeCertificatePolicies([{ policyIdentifier: '1.2.3.4' }]),
-		],
-		[
-			'policyMappings',
 			OIDS.policyMappings,
 			encodePolicyMappings([{ issuerDomainPolicy: '1.2.3.4', subjectDomainPolicy: '1.2.3.5' }]),
 		],
+		[OIDS.policyConstraints, encodePolicyConstraints({ requireExplicitPolicy: 0 })],
+		[OIDS.inhibitAnyPolicy, encodeInhibitAnyPolicy({ skipCerts: 0 })],
 		[
-			'policyConstraints',
-			OIDS.policyConstraints,
-			encodePolicyConstraints({ requireExplicitPolicy: 0 }),
-		],
-		['inhibitAnyPolicy', OIDS.inhibitAnyPolicy, encodeInhibitAnyPolicy({ skipCerts: 0 })],
-		[
-			'authorityInfoAccess',
 			OIDS.authorityInfoAccess,
 			encodeAuthorityInfoAccess([
 				{ method: 'ocsp', location: { type: 'uri', value: 'http://ocsp.example.test' } },
 			]),
 		],
-	] as const;
+		[
+			OIDS.cRLDistributionPoints,
+			encodeCrlDistributionPoints([
+				{ distributionPoint: { fullName: [{ type: 'uri', value: 'http://crl.example/a.crl' }] } },
+			]),
+		],
+		[OIDS.subjectKeyIdentifier, octetString(Uint8Array.of(1, 2, 3))],
+		[OIDS.authorityKeyIdentifier, sequence([implicitPrimitiveContext(0, Uint8Array.of(1, 2, 3))])],
+	]);
 
-	it.each(CONFORMANT_KNOWN_PAYLOADS)(
-		'accepts a conformant custom %s payload',
-		(_label, oid, value) => {
-			for (const build of buildCustomBothWays(oid, value)) {
+	it('emits every registered extension at the criticality its own profile demands', () => {
+		for (const definition of listExtensionDefinitions()) {
+			const payload = CONFORMANT_KNOWN_PAYLOADS.get(definition.oid);
+			expect(payload).toBeInstanceOf(Uint8Array);
+			if (payload !== undefined) {
+				definition.assertDerProfile(payload, definition.defaultCritical);
+			}
+		}
+	});
+
+	// basicConstraints is auto-emitted on the certificate path, so a custom copy
+	// always collides there; every other CSR-context extension takes both paths.
+	const CUSTOM_ACCEPTED_IN_BOTH_CONTEXTS = listExtensionDefinitions('csr')
+		.filter((definition) => definition.oid !== OIDS.basicConstraints)
+		.map((definition) => [definition.oid, definition.defaultCritical] as const);
+
+	it.each(CUSTOM_ACCEPTED_IN_BOTH_CONTEXTS)(
+		'accepts a conformant custom %s payload on both builder paths',
+		(oid, critical) => {
+			const value = CONFORMANT_KNOWN_PAYLOADS.get(oid);
+			expect(value).toBeInstanceOf(Uint8Array);
+			for (const build of buildCustomBothWays(oid, value ?? new Uint8Array(), critical)) {
 				expect(build()).toBeInstanceOf(Array);
 			}
 		},
@@ -1294,13 +1317,10 @@ describe('extensions encoding', () => {
 	});
 
 	it.each([
-		['subjectKeyIdentifier', OIDS.subjectKeyIdentifier, octetString(Uint8Array.of(1, 2, 3))],
-		[
-			'authorityKeyIdentifier',
-			OIDS.authorityKeyIdentifier,
-			sequence([implicitPrimitiveContext(0, Uint8Array.of(1, 2, 3))]),
-		],
-	])('validates a custom %s payload before rejecting it as a duplicate', (_label, oid, value) => {
+		['subjectKeyIdentifier', OIDS.subjectKeyIdentifier],
+		['authorityKeyIdentifier', OIDS.authorityKeyIdentifier],
+	])('validates a custom %s payload before rejecting it as a duplicate', (_label, oid) => {
+		const value = CONFORMANT_KNOWN_PAYLOADS.get(oid) ?? new Uint8Array();
 		expectEncoderErrorCode(
 			() =>
 				buildCertificateExtensions(subjectPublicKeyInfo, subjectPublicKeyInfo, {
@@ -1317,6 +1337,106 @@ describe('extensions encoding', () => {
 					customExtensions: [{ oid: OIDS.subjectKeyIdentifier, value: Uint8Array.of(0x05, 0x00) }],
 				}),
 			'malformed_known_extension_value',
+		);
+	});
+
+	// RFC 5280 fixes the criticality of these extensions, and only a custom
+	// extension can carry the wrong one; typed input has no criticality knob.
+	const CRITICALITY_VIOLATIONS = [
+		['nameConstraints', OIDS.nameConstraints, false, 'extension_must_be_critical'],
+		['policyConstraints', OIDS.policyConstraints, false, 'extension_must_be_critical'],
+		['inhibitAnyPolicy', OIDS.inhibitAnyPolicy, false, 'extension_must_be_critical'],
+		['authorityInfoAccess', OIDS.authorityInfoAccess, true, 'extension_must_be_non_critical'],
+	] as const;
+
+	it.each(CRITICALITY_VIOLATIONS)(
+		'rejects a custom %s marked with the wrong criticality',
+		(_label, oid, critical, code) => {
+			const value = CONFORMANT_KNOWN_PAYLOADS.get(oid) ?? new Uint8Array();
+			for (const build of buildCustomBothWays(oid, value, critical)) {
+				expectEncoderErrorCode(build, code);
+			}
+		},
+	);
+
+	it.each([
+		['subjectKeyIdentifier', OIDS.subjectKeyIdentifier],
+		['authorityKeyIdentifier', OIDS.authorityKeyIdentifier],
+	])('rejects a critical custom %s (RFC 5280 §4.2.1.1, §4.2.1.2)', (_label, oid) => {
+		const value = CONFORMANT_KNOWN_PAYLOADS.get(oid) ?? new Uint8Array();
+		expectEncoderErrorCode(
+			() =>
+				buildCertificateExtensions(subjectPublicKeyInfo, subjectPublicKeyInfo, {
+					customExtensions: [{ oid, value, critical: true }],
+				}),
+			'extension_must_be_non_critical',
+		);
+	});
+
+	it('requires a CA certificate basicConstraints to be critical (RFC 5280 §4.2.1.9)', () => {
+		const value = encodeBasicConstraints({ ca: true });
+		expectEncoderErrorCode(
+			() =>
+				buildRequestedExtensions({
+					keyUsage: ['keyCertSign'],
+					customExtensions: [{ oid: OIDS.basicConstraints, value }],
+				}),
+			'extension_must_be_critical',
+		);
+		expectEncoderErrorCode(
+			() =>
+				buildCertificateExtensions(subjectPublicKeyInfo, undefined, {
+					keyUsage: ['keyCertSign'],
+					customExtensions: [{ oid: '2.5.029.19', value }],
+				}),
+			'extension_must_be_critical',
+		);
+		expect(
+			buildRequestedExtensions({
+				keyUsage: ['keyCertSign'],
+				customExtensions: [{ oid: OIDS.basicConstraints, value, critical: true }],
+			}),
+		).toBeInstanceOf(Array);
+		// Without keyCertSign the certificate is not one §4.2.1.9 constrains.
+		expect(
+			buildRequestedExtensions({
+				keyUsage: ['digitalSignature'],
+				customExtensions: [{ oid: OIDS.basicConstraints, value }],
+			}),
+		).toBeInstanceOf(Array);
+	});
+
+	it('resolves access-method and EKU OIDs canonically', () => {
+		// 1.3.6.1.5.5.7.048.1 and 2.5.29.032.0 encode to id-ad-ocsp and anyPolicy.
+		expect(getAuthorityInfoAccessMethodOid({ type: 'oid', value: '1.3.6.1.5.5.7.048.1' })).toBe(
+			OIDS.ocspAccessMethod,
+		);
+		expect(getExtendedKeyUsageOid({ type: 'oid', value: '1.3.6.1.5.5.7.3.01' })).toBe(
+			OIDS.serverAuth,
+		);
+		expectEncoderErrorCode(
+			() =>
+				encodeAuthorityInfoAccess([
+					{
+						method: { type: 'oid', value: '1.3.6.1.5.5.7.048.1' },
+						location: { type: 'dns', value: 'ocsp.example.test' },
+					},
+				]),
+			'authority_info_access_ocsp_not_uri',
+		);
+		expectEncoderErrorCode(
+			() =>
+				encodePolicyMappings([
+					{ issuerDomainPolicy: '2.5.29.032.0', subjectDomainPolicy: '1.2.3.4' },
+				]),
+			'policy_mappings_any_policy',
+		);
+		expectEncoderErrorCode(
+			() =>
+				encodePolicyMappings([
+					{ issuerDomainPolicy: '1.2.3.4', subjectDomainPolicy: '2.5.29.032.0' },
+				]),
+			'policy_mappings_any_policy',
 		);
 	});
 
@@ -1375,7 +1495,11 @@ describe('extensions encoding', () => {
 			buildRequestedExtensions({
 				keyUsage: ['keyCertSign'],
 				customExtensions: [
-					{ oid: '2.5.029.19', value: encodeBasicConstraints({ ca: true, pathLength: 0 }) },
+					{
+						oid: '2.5.029.19',
+						value: encodeBasicConstraints({ ca: true, pathLength: 0 }),
+						critical: true,
+					},
 				],
 			}),
 		).toBeInstanceOf(Array);
@@ -1384,7 +1508,11 @@ describe('extensions encoding', () => {
 				buildRequestedExtensions({
 					keyUsage: ['digitalSignature'],
 					customExtensions: [
-						{ oid: '2.5.029.19', value: encodeBasicConstraints({ ca: true, pathLength: 0 }) },
+						{
+							oid: '2.5.029.19',
+							value: encodeBasicConstraints({ ca: true, pathLength: 0 }),
+							critical: true,
+						},
 					],
 				}),
 			'path_length_requires_key_cert_sign',

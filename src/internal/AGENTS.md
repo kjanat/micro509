@@ -43,10 +43,17 @@ internal/
 - New certificate extensions get an `ExtensionDefinition` in
   `x509/extension-registry.ts` (decode/encode/assertProfile/applyParsed +
   accumulator field), not ad-hoc decoding at call sites.
-- `assertProfile` is required, and delegates to the encoder that owns the rule.
-  It runs only in builders, over a decoded `customExtensions` payload carrying a
-  known OID, so a raw value meets the same bar as the typed input. Parsing stays
-  tolerant and never calls it.
+- `assertProfile` is required. It receives the decoded value and the extension's
+  criticality, and delegates payload rules to the encoder that owns them. It runs
+  only in builders, over a `customExtensions` entry carrying a known OID, so a raw
+  value meets the same bar as the typed input. Parsing stays tolerant and never
+  calls it.
+- An extension whose criticality RFC 5280 fixes calls `assertExtensionCriticality`
+  from its `assertProfile`, and its `defaultCritical` must agree; a test in
+  `test/internals.test.ts` runs every definition's hook at its own default.
+- Compare OIDs canonically. `validateOid` returns the canonical spelling, and
+  `getExtendedKeyUsageOid` / `getAuthorityInfoAccessMethodOid` resolve to it, so a
+  redundant-leading-zero alias cannot dodge a rule keyed on OID equality.
 - `x509/general-name.ts` is the only GeneralName decoder; certificate and CRL
   parsing both consume it so the two layers cannot drift on an alternative.
 - Keep sign/verify dispatch symmetric in `signing.ts` and `sig-verify.ts`.

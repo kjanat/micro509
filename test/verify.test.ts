@@ -35,6 +35,7 @@ import { encodeSubjectAltName } from '#micro509/x509';
 import { parseNameConstraints } from '#micro509/x509/parse';
 import {
 	createCertificateWithRawExtensions,
+	createSelfSignedCertificateWithRawExtensions,
 	importRsaPrivateKeyWithScheme,
 	issueChain,
 	replaceCertificateSignatureAlgorithm,
@@ -2260,8 +2261,10 @@ describe('chain verification', () => {
 		}
 
 		/** Root CA whose nameConstraints extension is supplied as raw DER. */
+		// RFC 5280 §4.2.1.10 requires a critical nameConstraints, so the non-critical
+		// tolerance fixture splices the extension into the signed certificate.
 		function createConstrainedRoot(constraintDer: Uint8Array, critical: boolean) {
-			return createSelfSignedCertificate({
+			return createSelfSignedCertificateWithRawExtensions({
 				subject: { commonName: 'Unsupported NC Root' },
 				extensions: {
 					basicConstraints: { ca: true },
