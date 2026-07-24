@@ -117,7 +117,7 @@
 		"smoke:node": "node scripts/smoke.mjs",
 		"smoke:workerd": "node scripts/smoke-workerd.mjs",
 		"test": "BIN=\"${BIN:-bun}\"; AGENT=\"${AGENT:-1}\" $BIN test --concurrent",
-		"test:35433": "PR=\"35433\"; (command -v \"bun-${PR}\" || bunx bun-pr \"${PR}\") && BIN=\"bun-${PR}\" bun run test",
+		"test:35433": "PR=\"35433\"; (command -v \"bun-${PR}\" >/dev/null || bunx bun-pr \"${PR}\") && BIN=\"bun-${PR}\" bun --silent run test",
 		"test:coverage": "run -q test --coverage",
 		"test:differential": "BIN=\"${BIN:-bun}\"; $BIN test test/differential.test.ts test/differential-fuzz.test.ts",
 		"test:pkits": "BIN=\"${BIN:-bun}\"; $BIN test test/pkits.test.ts",
