@@ -1,5 +1,5 @@
 @AGENTS.md
 
-Any edits not related to claude (code)/anthropic's performance, should be made in [AGENTS.md](./AGENTS.md)
+For edits unrelated to Claude Code or Anthropic, update the relevant [AGENTS.md](./AGENTS.md) file instead.
 
-Please update all AGENTS.md files after making any changes that it describes, keeping them up-to-date.
+If you change something an AGENTS.md describes, update that AGENTS.md in the same commit.
