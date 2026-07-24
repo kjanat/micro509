@@ -2227,7 +2227,7 @@ describe('chain verification', () => {
 		}
 
 		/** Root CA whose nameConstraints extension is supplied as raw DER. */
-		async function createConstrainedRoot(constraintDer: Uint8Array, critical: boolean) {
+		function createConstrainedRoot(constraintDer: Uint8Array, critical: boolean) {
 			return createSelfSignedCertificate({
 				subject: { commonName: 'Unsupported NC Root' },
 				extensions: {

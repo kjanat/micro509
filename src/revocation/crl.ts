@@ -57,7 +57,12 @@ import {
 import { exportSpkiDer } from '#micro509/keys/keys';
 import { pemDecodeOrThrow, pemEncode } from '#micro509/pem/pem';
 import type { ErrorResult, Micro509Error } from '#micro509/result/result';
-import { failureResult, rethrowIfInvariant, successResult } from '#micro509/result/result';
+import {
+	failureResult,
+	rethrowIfInvariant,
+	successResult,
+	throwMicro509Error,
+} from '#micro509/result/result';
 import type {
 	DistributionPoint,
 	DistributionPointReason,
@@ -2036,6 +2041,17 @@ function parseImplicitBoolean(element: DerElement): boolean {
 	return (element.value[0] ?? 0) !== 0;
 }
 
+/** Machine-readable reason a CRL encoder rejected its construction input. */
+export type CrlEncoderErrorCode =
+	| 'distribution_point_name_conflict'
+	| 'distribution_point_full_name_empty'
+	| 'distribution_point_name_empty';
+
+/** Throws a {@link ResultError} for a CRL encoder input-validation failure. */
+function throwCrlEncoderError(code: CrlEncoderErrorCode, message: string): never {
+	throwMicro509Error(code, message);
+}
+
 /** DER-encodes an IssuingDistributionPoint extension value. Throws on mutually-exclusive scope flags. */
 function encodeIssuingDistributionPoint(value: IssuingDistributionPoint): Uint8Array {
 	const certificateScopeFlags = [
@@ -2082,11 +2098,17 @@ function encodeDistributionPointName(
 		throw new Error('IssuingDistributionPoint distributionPoint is required');
 	}
 	if (value.fullName !== undefined && value.relativeName !== undefined) {
-		throw new Error('DistributionPointName cannot contain both fullName and relativeName');
+		throwCrlEncoderError(
+			'distribution_point_name_conflict',
+			'DistributionPointName cannot contain both fullName and relativeName',
+		);
 	}
 	if (value.fullName !== undefined) {
 		if (value.fullName.length === 0) {
-			throw new Error('DistributionPointName fullName must not be empty');
+			throwCrlEncoderError(
+				'distribution_point_full_name_empty',
+				'DistributionPointName fullName must not be empty',
+			);
 		}
 		return implicitConstructedContext(0, concatGeneralNames(value.fullName));
 	}
@@ -2098,7 +2120,10 @@ function encodeDistributionPointName(
 			relativeName.slice(relativeNameElement.start, relativeNameElement.end),
 		);
 	}
-	throw new Error('DistributionPointName must contain fullName or relativeName');
+	throwCrlEncoderError(
+		'distribution_point_name_empty',
+		'DistributionPointName must contain fullName or relativeName',
+	);
 }
 
 /** DER-encodes and concatenates a list of GeneralName values. */

@@ -27,6 +27,13 @@ and structured `details`.
   material directly and throw on invalid config (empty `keyUsage`, duplicate
   policy OID). Routing these through `Result` would force the whole builder API
   to become `Result`-returning. Keep them as throws.
+- A builder throw is a `ResultError` carrying a stable `code`, thrown via
+  `throwMicro509Error` (`src/result/result.ts`). Detect it with `isResultError`
+  and branch on `error.code`. Codes are per-operation unions co-located with the
+  builder (`ExtensionEncoderErrorCode`, `CrlEncoderErrorCode`,
+  `NameEncoderErrorCode`, `CreateCertificateErrorCode`). Only builder _config_
+  validation carries a code; DER decode guards and `_exhaustive` invariants stay
+  bare `throw new Error`.
 
 ## STRUCTURE
 

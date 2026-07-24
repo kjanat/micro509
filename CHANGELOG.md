@@ -20,6 +20,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Builder input-validation now throws a `ResultError` carrying a stable
+  machine-readable `code` rather than a bare `Error`. `createCertificate`, the
+  `encode*` extension helpers, distinguished-name encoding, and CRL/IDP encoding
+  reject invalid construction input (an empty `keyUsage`, a duplicate policy OID,
+  a `DisplayText` out of range, an invalid country code) with a coded throw that
+  `isResultError` detects and `error.code` discriminates. Codes are per-operation
+  unions (`ExtensionEncoderErrorCode`, `NameEncoderErrorCode`,
+  `CrlEncoderErrorCode`, `CreateCertificateErrorCode`). DER decode guards and
+  exhaustiveness invariants keep throwing a plain `Error`. The thrown message
+  gains a `code: ` prefix.
 - `AuthorityInformationAccess.uri: string` becomes `location: GeneralName`, the
   full accessLocation RFC 5280 §4.2.2.1 defines. The parser threw
   `Unsupported authorityInfoAccess location tag` for any location that was not a
