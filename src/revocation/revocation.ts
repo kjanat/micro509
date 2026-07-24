@@ -339,20 +339,7 @@ export async function checkCertificateRevocation(
 	const crlCoveredReasons = new Set<string>();
 	const indeterminateEvidence: RevocationIndeterminateEvidence[] = [];
 	for (const entry of evidence) {
-		let result: RevocationEvidenceCheck;
-		try {
-			result =
-				entry.kind === 'crl'
-					? await checkCertificateRevocationWithCrl(input, entry, normalizedCertificate)
-					: await checkCertificateRevocationWithOcsp(input, entry, normalizedCertificate);
-		} catch {
-			indeterminateEvidence.push({
-				kind: entry.kind,
-				code: 'signature_invalid',
-				message: `${entry.kind.toUpperCase()} evidence input is malformed`,
-			});
-			continue;
-		}
+		const result = await checkRevocationEvidenceEntry(input, entry, normalizedCertificate);
 		if (result.status === 'revoked') {
 			return revocationSuccess(result.result);
 		}
@@ -393,6 +380,27 @@ export async function checkCertificateRevocation(
 			indeterminateEvidence,
 		},
 	});
+}
+
+async function checkRevocationEvidenceEntry(
+	input: CheckCertificateRevocationInput,
+	evidence: RevocationEvidenceInput,
+	certificate: ParsedCertificate,
+): Promise<RevocationEvidenceCheck> {
+	try {
+		return evidence.kind === 'crl'
+			? await checkCertificateRevocationWithCrl(input, evidence, certificate)
+			: await checkCertificateRevocationWithOcsp(input, evidence, certificate);
+	} catch {
+		return {
+			status: 'indeterminate',
+			detail: {
+				kind: evidence.kind,
+				code: 'signature_invalid',
+				message: `${evidence.kind.toUpperCase()} evidence input is malformed`,
+			},
+		};
+	}
 }
 
 /** Evaluates a single CRL evidence entry via {@linkcode checkCertificateRevocationAgainstCrl}. */
