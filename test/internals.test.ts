@@ -733,6 +733,10 @@ describe('extensions encoding', () => {
 			() => encodeSubjectAltName({ type: 'uri', value: 'http://café.example' }),
 			'invalid_ia5_string',
 		);
+		expectEncoderErrorCode(
+			() => encodeSubjectAltName({ type: 'srv', value: '_xmpp.café.example' }),
+			'invalid_ia5_string',
+		);
 	});
 
 	it('encodeAuthorityInfoAccess rejects a non-URI OCSP location wrapped in a custom OID', () => {

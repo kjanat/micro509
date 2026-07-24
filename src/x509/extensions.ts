@@ -1017,7 +1017,7 @@ export function encodeSubjectAltName(value: SubjectAltName): Uint8Array {
 				0,
 				concatBytes([
 					objectIdentifier(OIDS.idOnDnsSrv),
-					explicitContext(0, ia5String(value.value)),
+					explicitContext(0, tlv(0x16, encodeIa5Content(value.value))),
 				]),
 			);
 		case 'ip':
