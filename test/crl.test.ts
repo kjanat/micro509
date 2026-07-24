@@ -6,6 +6,7 @@ import {
 	createSelfSignedCertificate,
 	generateKeyPair,
 	isCertificateRevoked,
+	isResultError,
 	parseCertificatePem,
 	parseCertificateRevocationListDer,
 	parseCertificateRevocationListDerOrThrow,
@@ -19,6 +20,7 @@ import {
 import {
 	bool,
 	explicitContext,
+	nullValue,
 	objectIdentifier,
 	octetString,
 	readSequenceChildren,
@@ -34,6 +36,17 @@ import {
 	hexToBytes,
 	sliceElement,
 } from '#test/helpers';
+
+async function expectRejectedErrorCode(promise: Promise<unknown>, code: string): Promise<void> {
+	try {
+		await promise;
+	} catch (error) {
+		expect(isResultError(error)).toBe(true);
+		expect(isResultError(error) ? error.code : undefined).toBe(code);
+		return;
+	}
+	throw new Error(`expected a ResultError with code '${code}', but the promise resolved`);
+}
 
 describe('crl', () => {
 	it('creates, parses, and verifies CRLs', async () => {
@@ -266,7 +279,7 @@ describe('crl', () => {
 						fullName: [
 							{ type: 'email', value: 'pki@example.test' },
 							{ type: 'ip', value: '2001:db8::7' },
-							{ type: 'unknown', tag: 0x89, value: Uint8Array.of(0xde, 0xad) },
+							{ type: 'unknown', tag: 0x88, value: Uint8Array.of(0xde, 0xad) },
 						],
 					},
 				},
@@ -280,7 +293,7 @@ describe('crl', () => {
 						fullName: [
 							{ type: 'email', value: 'pki@example.test' },
 							{ type: 'ip', value: '2001:db8:0:0:0:0:0:7' },
-							{ type: 'unknown', tag: 0x89, value: Uint8Array.of(0xde, 0xad) },
+							{ type: 'unknown', tag: 0x88, value: Uint8Array.of(0xde, 0xad) },
 						],
 					},
 				},
@@ -1841,7 +1854,7 @@ describe('crl', () => {
 			{ type: 'ip', value: '2001:db8::7' },
 			{ type: 'uri', value: 'http://example.test/complex-idp.crl' },
 			{ type: 'directoryName', derHex: parsedCa.subject.derHex },
-			{ type: 'unknown', tag: 0x89, value: Uint8Array.of(0xde, 0xad) },
+			{ type: 'unknown', tag: 0x88, value: Uint8Array.of(0xde, 0xad) },
 		] as const;
 		const shuffledNames = [
 			complexNames[3],
@@ -1918,7 +1931,7 @@ describe('crl', () => {
 		const names = [
 			{ type: 'uri', value: 'http://example.test/complex-idp-mismatch.crl' },
 			{ type: 'directoryName', derHex: parsedCa.subject.derHex },
-			{ type: 'unknown', tag: 0x89, value: Uint8Array.of(0xde, 0xad) },
+			{ type: 'unknown', tag: 0x88, value: Uint8Array.of(0xde, 0xad) },
 		] as const;
 		const leafKeys = await generateKeyPair();
 		const leaf = await createCertificate({
@@ -1964,7 +1977,7 @@ describe('crl', () => {
 							fullName: [
 								{ type: 'uri', value: 'http://example.test/complex-idp-mismatch.crl' },
 								{ type: 'directoryName', derHex: parsedCa.subject.derHex },
-								{ type: 'unknown', tag: 0x89, value: Uint8Array.of(0xde, 0xae) },
+								{ type: 'unknown', tag: 0x88, value: Uint8Array.of(0xde, 0xae) },
 							],
 						},
 						onlySomeReasons: ['keyCompromise', 'cessationOfOperation'],
@@ -2547,7 +2560,7 @@ describe('crl', () => {
 			},
 		});
 
-		expect(
+		await expectRejectedErrorCode(
 			createCertificateRevocationList({
 				issuer: { commonName: 'Bad Scope CRL Issuer' },
 				signerPrivateKey: issuer.keyPair.privateKey,
@@ -2558,7 +2571,42 @@ describe('crl', () => {
 					},
 				},
 			}),
-		).rejects.toThrow('DistributionPointName fullName must not be empty');
+			'distribution_point_full_name_empty',
+		);
+	});
+
+	it('rejects invalid issuing distribution point construction', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Bad IDP CRL Issuer' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const base = {
+			issuer: { commonName: 'Bad IDP CRL Issuer' },
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		} as const;
+		await expectRejectedErrorCode(
+			createCertificateRevocationList({
+				...base,
+				issuingDistributionPoint: {
+					distributionPoint: {
+						fullName: [{ type: 'uri', value: 'http://example.test/crl' }],
+						relativeName: [{ type: 'commonName', value: 'bad' }],
+					},
+				},
+			}),
+			'distribution_point_name_conflict',
+		);
+		await expectRejectedErrorCode(
+			createCertificateRevocationList({
+				...base,
+				issuingDistributionPoint: { distributionPoint: {} },
+			}),
+			'distribution_point_name_empty',
+		);
 	});
 
 	it('rejects empty freshest CRL issuer lists', async () => {
@@ -2570,14 +2618,15 @@ describe('crl', () => {
 			},
 		});
 
-		expect(
+		await expectRejectedErrorCode(
 			createCertificateRevocationList({
 				issuer: { commonName: 'Bad Freshest CRL Issuer' },
 				signerPrivateKey: issuer.keyPair.privateKey,
 				issuerPublicKey: issuer.keyPair.publicKey,
 				freshestCrlDistributionPoints: [{ crlIssuer: [] }],
 			}),
-		).rejects.toThrow('DistributionPoint crlIssuer must not be empty');
+			'distribution_point_crl_issuer_empty',
+		);
 	});
 
 	it('verifies CRL with PEM string sources', async () => {
@@ -2936,6 +2985,34 @@ describe('crl', () => {
 				),
 			),
 		).toThrow('IssuingDistributionPoint indirectCrl must not repeat');
+	});
+
+	it('rejects a malformed directoryName in an issuingDistributionPoint', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Malformed DirectoryName IDP CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Malformed DirectoryName IDP CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			issuingDistributionPoint: { indirectCrl: true },
+		});
+		const malformed = rewriteCrlExtensionValuePayload(
+			new Uint8Array(pemDecodeOrThrow('X509 CRL', crl.pem)),
+			OIDS.issuingDistributionPoint,
+			sequence([tlv(0xa0, tlv(0xa0, tlv(0xa4, nullValue())))]),
+		);
+
+		expect(() => parseCertificateRevocationListDerOrThrow(malformed)).toThrow(
+			'directoryName must wrap a Name SEQUENCE',
+		);
+		const result = parseCertificateRevocationListDer(malformed);
+		expect(result.ok).toBe(false);
+		if (!result.ok) expect(result.code).toBe('malformed');
 	});
 
 	it('parseCertificateRevocationListDerOrThrow rejects conflicting issuingDistributionPoint scope booleans', async () => {

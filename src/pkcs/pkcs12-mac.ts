@@ -77,7 +77,8 @@ export async function createPkcs12MacData(
 	const der = sequence([
 		sequence([sequence([objectIdentifier(OIDS.sha256), nullValue()]), octetString(mac)]),
 		octetString(salt),
-		integerFromNumber(iterations),
+		// iterations INTEGER DEFAULT 1 — X.690 §11.5 forbids encoding the default.
+		...(iterations === 1 ? [] : [integerFromNumber(iterations)]),
 	]);
 	return {
 		der,
@@ -120,11 +121,11 @@ export async function parsePkcs12MacDataOrThrow(
 	const salt = top[1];
 	const iterations = top[2];
 	if (
-		top.length !== 3 ||
+		(top.length !== 2 && top.length !== 3) ||
 		digestInfo === undefined ||
 		salt === undefined ||
-		iterations === undefined ||
-		salt.tag !== 0x04
+		salt.tag !== 0x04 ||
+		(iterations !== undefined && iterations.tag !== 0x02)
 	) {
 		throw new Error('Malformed MacData');
 	}
@@ -153,7 +154,10 @@ export async function parsePkcs12MacDataOrThrow(
 	if (digestAlgorithmOid !== OIDS.sha256) {
 		throw new Error('Only SHA-256 PKCS#12 MAC is supported');
 	}
-	const parsedIterations = decodeNonNegativeIntegerNumber(iterations.value, 'MacData iterations');
+	const parsedIterations =
+		iterations === undefined
+			? 1
+			: decodeNonNegativeIntegerNumber(iterations.value, 'MacData iterations');
 	assertPkcs12MacIterations(parsedIterations);
 	if (password === undefined) {
 		return {

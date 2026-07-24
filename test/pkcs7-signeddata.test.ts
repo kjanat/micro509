@@ -5,12 +5,22 @@ import {
 	parsePkcs7SignedDataDer,
 	verifyPkcs7SignedData,
 } from '#micro509';
+import { childrenOf } from '#micro509/internal/asn1/asn1';
+import type { DerElement } from '#micro509/internal/asn1/der';
+import { readElement } from '#micro509/internal/asn1/der';
 import type { KeyAlgorithmInput } from '#micro509/keys';
 
 const encoder = new TextEncoder();
 
+function requireEl(element: DerElement | undefined): DerElement {
+	if (element === undefined) {
+		throw new Error('expected a DER element');
+	}
+	return element;
+}
+
 /** Mints a self-signed signing identity with the digitalSignature key usage. */
-async function signingIdentity(commonName: string, algorithm?: KeyAlgorithmInput) {
+function signingIdentity(commonName: string, algorithm?: KeyAlgorithmInput) {
 	return createSelfSignedCertificate({
 		subject: { commonName },
 		...(algorithm === undefined ? {} : { algorithm }),
@@ -51,6 +61,30 @@ describe('createPkcs7SignedData', () => {
 			expect(result.value.encapsulatedContent).toEqual(content);
 		});
 	}
+
+	it('emits SHA-2 digest AlgorithmIdentifiers with absent parameters (RFC 5754)', async () => {
+		const signer = await signingIdentity('Absent Digest Params Signer');
+		const signed = await createPkcs7SignedData({
+			content: encoder.encode('absent params'),
+			signers: [{ certificate: signer.certificate.pem, privateKey: signer.keyPair.privateKey }],
+		});
+		expect(signed.ok).toBe(true);
+		if (!signed.ok) throw new Error(signed.error.code);
+
+		const der = signed.value.der;
+		const contentInfo = readElement(der);
+		const signedData = requireEl(childrenOf(der, requireEl(childrenOf(der, contentInfo)[1]))[0]);
+		const sdChildren = childrenOf(der, signedData);
+		const digestAlgorithms = requireEl(sdChildren[1]);
+		const firstDigestAlgId = requireEl(childrenOf(der, digestAlgorithms)[0]);
+		// AlgorithmIdentifier { OID } — no NULL parameters element.
+		expect(childrenOf(der, firstDigestAlgId)).toHaveLength(1);
+
+		const signerInfos = requireEl(sdChildren[sdChildren.length - 1]);
+		const signerInfo = requireEl(childrenOf(der, signerInfos)[0]);
+		const signerDigestAlgId = requireEl(childrenOf(der, signerInfo)[2]);
+		expect(childrenOf(der, signerDigestAlgId)).toHaveLength(1);
+	});
 
 	it('round-trips through parse before verify', async () => {
 		const signer = await signingIdentity('Parse Signer');

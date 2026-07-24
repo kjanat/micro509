@@ -94,7 +94,7 @@ describe('certificateFingerprint', () => {
 		expect(a.hex).not.toBe(b.hex);
 	});
 
-	it('throws on malformed input', async () => {
+	it('throws on malformed input', () => {
 		expect(certificateFingerprint('not a pem')).rejects.toThrow();
 		expect(certificateFingerprint(new Uint8Array([0x30, 0x00]))).rejects.toThrow();
 	});

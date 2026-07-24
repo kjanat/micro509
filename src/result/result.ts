@@ -79,10 +79,11 @@ export function successResult<TValue>(value: TValue): {
 }
 
 /**
- * Error thrown by {@link unwrap} when a result is a failure.
+ * Exception form of a {@link Micro509Error}: a branded {@link Error} carrying the structured
+ * {@linkcode code}, `message`, and any `details`.
  *
- * Carries the structured {@link Micro509Error} payload so callers using the
- * throwing escape hatch still get the machine-readable `code` and any details.
+ * Thrown by {@link unwrap} for a failed result and by {@link throwMicro509Error} when a builder
+ * rejects invalid construction input. Detect with {@link isResultError}.
  */
 export interface ResultError<
 	TError extends Micro509Error<string, unknown> = Micro509Error<string, unknown>,
@@ -108,7 +109,7 @@ function makeResultError<TError extends Micro509Error<string, unknown>>(
 	});
 }
 
-/** Type guard: was `value` thrown by {@link unwrap}? Narrows to {@link ResultError}. */
+/** Type guard: was {@linkcode value} thrown by {@link unwrap}? Narrows to {@link ResultError}. */
 export function isResultError(value: unknown): value is ResultError {
 	return value instanceof Error && resultErrorBrand in value;
 }
@@ -119,11 +120,10 @@ export type UnwrappableResult<TValue, TError> =
 	| { readonly ok: false; readonly error: TError };
 
 /**
- * Explicit escape hatch: returns the success value, or throws a
- * {@link ResultError} carrying the structured failure.
+ * Explicit escape hatch: returns the success value, or throws a {@link ResultError} carrying the structured failure.
  *
- * Use when you have already validated the input (or prefer exceptions) and the
- * Result ceremony is noise. Accepts any of the library's `*Result` types.
+ * Use when you have already validated the input (or prefer exceptions) and the Result ceremony is noise.
+ * Accepts any of the library's `*Result` types.
  */
 export function unwrap<TValue, TError extends Micro509Error<string, unknown>>(
 	result: UnwrappableResult<TValue, TError>,
@@ -134,7 +134,7 @@ export function unwrap<TValue, TError extends Micro509Error<string, unknown>>(
 	throw makeResultError(result.error);
 }
 
-/** Returns the success value, or `fallback` when the result is a failure. */
+/** Returns the success value, or {@linkcode fallback} when the result is a failure. */
 export function unwrapOr<TValue>(
 	result: UnwrappableResult<TValue, unknown>,
 	fallback: TValue,
@@ -146,12 +146,11 @@ export function unwrapOr<TValue>(
 const invariantErrorTypes = [TypeError, RangeError, ReferenceError, SyntaxError] as const;
 
 /**
- * Rethrows `error` if it is an invariant/programmer error (`TypeError`,
- * `RangeError`, `ReferenceError`, `SyntaxError`); otherwise returns.
+ * Rethrows {@link error} if it is an invariant/programmer error ({@link TypeError}, {@link RangeError},
+ * {@link ReferenceError}, {@link SyntaxError}); otherwise returns.
  *
- * Boundary wrappers that turn an expected failure into a `Result` should call
- * this first, so a genuine crash is never masked as a clean parse/decode
- * failure (AGENTS.md: throw only for invariants).
+ * Boundary wrappers that turn an expected failure into a `Result` should call this first, so a genuine crash
+ * is never masked as a clean parse/decode failure.
  */
 export function rethrowIfInvariant(error: unknown): void {
 	if (invariantErrorTypes.some((type) => error instanceof type)) {
@@ -170,6 +169,21 @@ export function micro509Error<TCode extends string, TDetails = Record<never, nev
 		message,
 		...(details === undefined ? {} : { details }),
 	};
+}
+
+/**
+ * Throws a {@link ResultError} carrying a typed {@link Micro509Error}.
+ *
+ * The direct-throw counterpart to {@link unwrap}, for builders that reject
+ * invalid construction input. Callers branch on `error.code` via
+ * {@link isResultError} instead of matching message strings.
+ */
+export function throwMicro509Error<TCode extends string, TDetails = Record<never, never>>(
+	code: TCode,
+	message: string,
+	details?: TDetails,
+): never {
+	throw makeResultError(micro509Error(code, message, details));
 }
 
 /** Constructs an {@link IndexedMicro509Error} payload with an optional collection index. */

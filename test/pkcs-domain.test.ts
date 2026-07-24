@@ -113,6 +113,25 @@ describe('pkcs domain', () => {
 		expect(wrongPassword.digestHex).toBe(mac.parsed.digestHex);
 	});
 
+	it('round-trips a PFX whose MacData omits the DEFAULT iteration count', async () => {
+		const key = await generateKeyPair();
+		const cert = await createSelfSignedCertificate({ subject: { commonName: 'PFX Iter One' } });
+		const pfx = unwrap(
+			await createPfx({
+				certificates: [{ certificate: cert.certificate.pem }],
+				privateKeys: [{ privateKey: key.privateKey }],
+				mac: { password: 'pw', iterations: 1 },
+			}),
+		);
+		const parsed = await parsePfxDer(pfx.der, { password: 'pw' });
+		expect(parsed.ok).toBe(true);
+		if (!parsed.ok) {
+			throw new Error(`Expected PFX DER parse to succeed: ${parsed.code}`);
+		}
+		expect(parsed.value.macData?.iterations).toBe(1);
+		expect(parsed.value.macData?.verification).toBe('valid');
+	});
+
 	it('creates and parses PKCS#7 certificate bags via the PKCS domain', async () => {
 		const root = await createSelfSignedCertificate({
 			subject: { commonName: 'PKCS7 Domain Root' },

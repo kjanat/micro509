@@ -23,15 +23,14 @@ import {
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { getCrypto } from '#micro509/internal/crypto/webcrypto';
 
+/** Module-private brand so {@link isWrongPasswordError} cannot be fooled by look-alike errors. */
+const wrongPasswordBrand = Symbol('micro509.WrongPasswordError');
+
 /**
  * Thrown when PBES2 / AES-CBC decryption fails its integrity check, which in
  * practice means the supplied password was wrong (or the ciphertext was
  * corrupted). Lets callers distinguish a bad password from malformed input.
  */
-/** Module-private brand so {@link isWrongPasswordError} cannot be fooled by look-alike errors. */
-const wrongPasswordBrand = Symbol('micro509.WrongPasswordError');
-
-/** Builds the branded `Error` (no class) thrown when decryption fails — a wrong password or corrupt content. */
 export function wrongPasswordError(message: string): Error {
 	return Object.assign(new Error(message), {
 		name: 'WrongPasswordError',
@@ -169,18 +168,20 @@ export async function decryptPbes2(
 export function encodePbes2AlgorithmIdentifier(parameters: Pbes2Parameters): Uint8Array {
 	const encryption = resolveEncryptionProfile(parameters.cipher);
 	const prf = resolvePrfProfile(parameters.prf);
+	const pbkdf2Params = [
+		octetString(parameters.salt),
+		integerFromNumber(parameters.iterations),
+		// keyLength is OPTIONAL (kept); prf AlgorithmIdentifier DEFAULT
+		// algid-hmacWithSHA1, which X.690 §11.5 forbids encoding.
+		integerFromNumber(encryption.keyLengthBytes),
+		...(parameters.prf === 'HMAC-SHA-1'
+			? []
+			: [sequence([objectIdentifier(prf.oid), nullValue()])]),
+	];
 	return sequence([
 		objectIdentifier(OIDS.pbes2),
 		sequence([
-			sequence([
-				objectIdentifier(OIDS.pbkdf2),
-				sequence([
-					octetString(parameters.salt),
-					integerFromNumber(parameters.iterations),
-					integerFromNumber(encryption.keyLengthBytes),
-					sequence([objectIdentifier(prf.oid), nullValue()]),
-				]),
-			]),
+			sequence([objectIdentifier(OIDS.pbkdf2), sequence(pbkdf2Params)]),
 			sequence([objectIdentifier(encryption.oid), octetString(parameters.iv)]),
 		]),
 	]);
