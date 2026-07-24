@@ -780,6 +780,9 @@ export function importSpkiBase64(
  * keys whose type isn't known ahead of time. Pass `algorithm` to additionally
  * assert that the DER matches an expected algorithm.
  *
+ * Bun 1.3.14 and earlier rejects an RFC 5958 v2 `OneAsymmetricKey` carrying `attributes [0]` or `publicKey [1]`
+ * ([oven-sh/bun#35432](https://github.com/oven-sh/bun/issues/35432)).
+ *
  * @param der - DER-encoded PKCS#8 PrivateKeyInfo bytes
  * @param algorithm - Optional expected algorithm; must match key contents when given
  * @returns Extractable CryptoKey with `sign` usage
@@ -908,15 +911,10 @@ export async function importEncryptedPkcs8DerOrThrow(
 		encryptedData.value,
 		password,
 	);
-	try {
-		parsePkcs8PrivateKey(decrypted);
-	} catch {
-		// AES-CBC padding is unauthenticated: a wrong key passes the padding
-		// check ~1/256 of the time and "decrypts" to random bytes. Plaintext
-		// that is not a PrivateKeyInfo means the password was wrong, not that
-		// the input was malformed.
-		throw wrongPasswordError('Invalid password or encrypted content');
-	}
+	assertDecryptedPrivateKey(
+		() => parsePkcs8PrivateKey(decrypted),
+		'Invalid password or encrypted content',
+	);
 	return importPkcs8DerOrThrow(decrypted, algorithm);
 }
 
@@ -1038,6 +1036,10 @@ export async function importEncryptedPkcs1PemOrThrow(
 	algorithm: ImportRsaKeyInput = { kind: 'rsa' },
 ): Promise<CryptoKey> {
 	const decrypted = await decryptTraditionalPem('RSA PRIVATE KEY', pem, password);
+	assertDecryptedPrivateKey(
+		() => parsePkcs1PrivateKey(decrypted),
+		'Invalid password or encrypted PEM content',
+	);
 	return importPkcs1DerOrThrow(decrypted, algorithm);
 }
 
@@ -1177,6 +1179,10 @@ export async function importEncryptedSec1PemOrThrow(
 	algorithm?: ImportEcKeyInput,
 ): Promise<CryptoKey> {
 	const decrypted = await decryptTraditionalPem('EC PRIVATE KEY', pem, password);
+	assertDecryptedPrivateKey(
+		() => parseSec1PrivateKey(decrypted),
+		'Invalid password or encrypted PEM content',
+	);
 	return importSec1DerOrThrow(decrypted, algorithm);
 }
 
@@ -1501,6 +1507,71 @@ function toImportAlgorithm(
 		case 'ed25519':
 			return { name: 'Ed25519' };
 	}
+}
+
+/**
+ * Rejects decrypted plaintext that is not the private-key structure it should be.
+ *
+ * PBES2 and traditional PEM both encrypt with unauthenticated AES-CBC, where a
+ * wrong key clears the padding check roughly once in every 256 attempts and
+ * yields random plaintext. Structure is the only integrity signal left, so
+ * plaintext that fails to parse means the password was wrong or the ciphertext
+ * was corrupted, not that the enclosing input was malformed.
+ */
+function assertDecryptedPrivateKey(parse: () => unknown, message: string): void {
+	try {
+		parse();
+	} catch {
+		throw wrongPasswordError(message);
+	}
+}
+
+/** Structural check for a PKCS#1 RSAPrivateKey, including optional multiprime fields. */
+function parsePkcs1PrivateKey(der: Uint8Array): void {
+	const children = readSequenceChildren(der);
+	const version = children[0];
+	if (
+		version === undefined ||
+		version.tag !== 0x02 ||
+		version.value.length !== 1 ||
+		!children.slice(1, 9).every((child) => child.tag === 0x02)
+	) {
+		throw new Error('Malformed PKCS#1 private key');
+	}
+	const versionValue = version.value[0];
+	if (versionValue === 0x00 && children.length === 9) {
+		return;
+	}
+	const otherPrimeInfos = children[9];
+	if (
+		versionValue !== 0x01 ||
+		children.length !== 10 ||
+		otherPrimeInfos === undefined ||
+		!isOtherPrimeInfosShape(der, otherPrimeInfos)
+	) {
+		throw new Error('Malformed PKCS#1 private key');
+	}
+}
+
+/** RFC 8017 Appendix A.1.2: OtherPrimeInfos is a non-empty SEQUENCE OF three-INTEGER entries. */
+function isOtherPrimeInfosShape(source: Uint8Array, element: DerElement): boolean {
+	if (element.tag !== 0x30) {
+		return false;
+	}
+	const otherPrimeInfosDer = source.slice(element.start - element.headerLength, element.end);
+	const infos = readSequenceChildren(otherPrimeInfosDer);
+	if (infos.length === 0) {
+		return false;
+	}
+	return infos.every((info) => {
+		if (info.tag !== 0x30) {
+			return false;
+		}
+		const fields = readSequenceChildren(
+			otherPrimeInfosDer.slice(info.start - info.headerLength, info.end),
+		);
+		return fields.length === 3 && fields.every((field) => field.tag === 0x02);
+	});
 }
 
 /** Extract algorithm OID and inner key bytes from a PKCS#8 PrivateKeyInfo envelope. */

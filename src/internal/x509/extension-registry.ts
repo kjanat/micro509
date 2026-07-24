@@ -80,6 +80,8 @@ export interface KnownParsedExtensionAccumulator {
 	readonly extendedKeyUsage?: readonly ExtendedKeyUsage[];
 	/** Subject Alternative Names (dns, ip, email, uri, srv, directoryName). */
 	readonly subjectAltNames?: readonly SubjectAltName[];
+	/** Issuer Alternative Names (RFC 5280 §4.2.1.7, same GeneralNames syntax). */
+	readonly issuerAltNames?: readonly SubjectAltName[];
 	/** Name Constraints (permitted/excluded subtrees). */
 	readonly nameConstraints?: NameConstraints<ParsedNameConstraintForm>;
 	/** Certificate Policies extension values. */
@@ -196,6 +198,19 @@ export const SUBJECT_ALT_NAME_EXTENSION_DEFINITION: ExtensionDefinition<readonly
 		encode: (value) => sequence(value.map(encodeSubjectAltName)),
 		applyParsed: (accumulator, value) => {
 			accumulator.subjectAltNames = value;
+		},
+	});
+
+/** Registry entry for Issuer Alternative Name (OID 2.5.29.18). Non-critical by default. */
+export const ISSUER_ALT_NAME_EXTENSION_DEFINITION: ExtensionDefinition<readonly SubjectAltName[]> =
+	defineExtensionDefinition<readonly SubjectAltName[]>({
+		oid: OIDS.issuerAltName,
+		contexts: ['certificate'],
+		defaultCritical: false,
+		decode: (valueDer) => parseSubjectAltNames(valueDer, 'issuerAltName'),
+		encode: (value) => sequence(value.map(encodeSubjectAltName)),
+		applyParsed: (accumulator, value) => {
+			accumulator.issuerAltNames = value;
 		},
 	});
 
@@ -339,6 +354,7 @@ export type KnownExtensionDefinition =
 	| typeof KEY_USAGE_EXTENSION_DEFINITION
 	| typeof EXTENDED_KEY_USAGE_EXTENSION_DEFINITION
 	| typeof SUBJECT_ALT_NAME_EXTENSION_DEFINITION
+	| typeof ISSUER_ALT_NAME_EXTENSION_DEFINITION
 	| typeof NAME_CONSTRAINTS_EXTENSION_DEFINITION
 	| typeof CERTIFICATE_POLICIES_EXTENSION_DEFINITION
 	| typeof POLICY_MAPPINGS_EXTENSION_DEFINITION
@@ -355,6 +371,7 @@ export const CERT_CSR_EXTENSION_DEFINITIONS: readonly KnownExtensionDefinition[]
 	KEY_USAGE_EXTENSION_DEFINITION,
 	EXTENDED_KEY_USAGE_EXTENSION_DEFINITION,
 	SUBJECT_ALT_NAME_EXTENSION_DEFINITION,
+	ISSUER_ALT_NAME_EXTENSION_DEFINITION,
 	NAME_CONSTRAINTS_EXTENSION_DEFINITION,
 	CERTIFICATE_POLICIES_EXTENSION_DEFINITION,
 	POLICY_MAPPINGS_EXTENSION_DEFINITION,
@@ -411,6 +428,10 @@ export function getExtensionDefinition(
 export function getExtensionDefinition(
 	oid: typeof OIDS.subjectAltName,
 ): typeof SUBJECT_ALT_NAME_EXTENSION_DEFINITION;
+/** Exact definition for the Issuer Alternative Name extension. */
+export function getExtensionDefinition(
+	oid: typeof OIDS.issuerAltName,
+): typeof ISSUER_ALT_NAME_EXTENSION_DEFINITION;
 /** Exact definition for the Name Constraints extension. */
 export function getExtensionDefinition(
 	oid: typeof OIDS.nameConstraints,

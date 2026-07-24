@@ -18,6 +18,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `ParsedCertificate.issuerAltNames` decodes the issuerAltName extension
+  (RFC 5280 §4.2.1.7, OID 2.5.29.18) with the subjectAltName GeneralNames
+  decoder.
+- `checkCertificateRevocationAgainstCrl` reports `coveredReasons` on a `good`
+  value: the RFC 5280 §6.3.3 (d) interim_reasons_mask computed from the matched
+  distribution point's `reasons` and the CRL's `onlySomeReasons`.
+
 ### Changed
 
 - Builder input-validation now throws a `ResultError` carrying a stable
@@ -29,7 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unions (`ExtensionEncoderErrorCode`, `NameEncoderErrorCode`,
   `CrlEncoderErrorCode`, `CreateCertificateErrorCode`). DER decode guards and
   exhaustiveness invariants keep throwing a plain `Error`. The thrown message
-  gains a `code: ` prefix.
+  gains a `code: ` prefix. <!-- markdownlint-disable-line MD038 -->
 - `AuthorityInformationAccess.uri: string` becomes `location: GeneralName`, the
   full accessLocation RFC 5280 §4.2.2.1 defines. The parser threw
   `Unsupported authorityInfoAccess location tag` for any location that was not a
@@ -46,6 +55,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- CRL applicability follows the RFC 5280 §6.3.3 relying-party algorithm in
+  three places it diverged. A certificate without a CRLDP extension accepts a
+  CRL whose issuing distribution point names the certificate issuer or one of
+  its issuerAltName entries, per the §6.3.3 assumed-distribution-point rule;
+  such a CRL previously reported `non_applicable`. A distribution point that
+  omits `distributionPoint` matches the CRL IDP name against its `cRLIssuer`
+  names (§6.3.3 (b)(2)(i)); an in-scope indirect CRL was previously rejected.
+  Reason coverage uses the §6.3.3 (d) interim_reasons_mask, unioned across every
+  matching distribution point, instead of the CRL's `onlySomeReasons` alone, so
+  a distribution point scoped to a subset of reasons no longer grants full
+  coverage. Every consumer of a CRL `good` — `checkChainRevocation`,
+  `checkCertificateRevocation`, delegated OCSP-responder validation, and
+  recursive CRL-signer validation — now treats a reason-scoped `good` as
+  definitive only once the applicable CRLs together cover all eight reasons; a
+  revoked verdict from any CRL still wins immediately. GeneralName applicability
+  comparisons apply the RFC 5280 name comparison rules: dNSName is
+  case-insensitive (§7.2), the rfc822Name host-part is case-insensitive (§7.5),
+  an `otherName` SRV-ID is case-insensitive in both halves (RFC 4985 §2), and a
+  uniformResourceIdentifier is prepared per §7.4 — IDN labels to ASCII
+  Compatible Encoding, lowercased scheme and host, percent-encoding and path
+  segment normalization, and scheme-based normalization for `ftp`, `http`,
+  `https`, and `ldap`. Certificate and CRL parsing now share one canonical
+  GeneralName decoder, so an SRV-ID matches across issuerAltName and the IDP.
+  `verifyCertificateChain` recognises a critical
+  issuerAltName rather than rejecting it. A delta-CRL `removeFromCRL` entry for
+  an expired certificate now measures expiry against the delta's `thisUpdate`
+  (§5.2.4), not the evaluation time.
+  (https://github.com/kjanat/micro509/pull/87)
+- `importEncryptedPkcs1Pem` and `importEncryptedSec1Pem` report a wrong password
+  as `invalid_password` rather than occasionally as `malformed`. Traditional PEM
+  encrypts with unauthenticated AES-CBC, so a wrong key clears the PKCS#7 padding
+  check roughly once in every 256 attempts and yields random plaintext; the
+  decrypted bytes are now required to parse as an `RSAPrivateKey` or
+  `ECPrivateKey`, which is the check the PBES2 path already applied.
 - `importPkcs8Der` accepts a `OneAsymmetricKey` (RFC 5958 §2 / RFC 8410 §7) that
   carries both `attributes [0]` and `publicKey [1]`. The parser capped at four
   elements, so a five-element v2 key that OpenSSL and Node WebCrypto both accept
