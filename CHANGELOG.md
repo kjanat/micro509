@@ -58,6 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `relativeName` distribution point rejects more than one `cRLIssuer`
   distinguished name (§4.2.1.13,
   `distribution_point_relative_name_multiple_crl_issuers`).
+  (https://github.com/kjanat/micro509/pull/88)
 - `importPkcs8Der` accepts a `OneAsymmetricKey` (RFC 5958 §2 / RFC 8410 §7) that
   carries both `attributes [0]` and `publicKey [1]`. The parser capped at four
   elements, so a five-element v2 key that OpenSSL and Node WebCrypto both accept
