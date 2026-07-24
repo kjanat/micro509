@@ -91,7 +91,9 @@ import {
 import { createPkcs12MacData, parsePkcs12MacDataOrThrow } from '#micro509/pkcs';
 import {
 	buildCertificateExtensions,
+	buildRequestedExtensions,
 	encodeAuthorityInfoAccess,
+	encodeBasicConstraints,
 	encodeCertificatePolicies,
 	encodeCrlDistributionPoints,
 	encodeExtendedKeyUsage,
@@ -970,6 +972,43 @@ describe('extensions encoding', () => {
 				customExtensions: [{ oid: OIDS.keyUsage, value: encodeKeyUsage(['keyCertSign']) }],
 			}),
 		).toBeInstanceOf(Array);
+		expectEncoderErrorCode(
+			() =>
+				buildRequestedExtensions({
+					keyUsage: ['digitalSignature'],
+					customExtensions: [
+						{
+							oid: OIDS.basicConstraints,
+							value: encodeBasicConstraints({ ca: true, pathLength: 0 }),
+						},
+					],
+				}),
+			'path_length_requires_key_cert_sign',
+		);
+		expect(
+			buildRequestedExtensions({
+				keyUsage: ['keyCertSign'],
+				customExtensions: [
+					{
+						oid: OIDS.basicConstraints,
+						value: encodeBasicConstraints({ ca: true, pathLength: 0 }),
+					},
+				],
+			}),
+		).toBeInstanceOf(Array);
+		expectEncoderErrorCode(
+			() =>
+				buildRequestedExtensions({
+					basicConstraints: { ca: true, pathLength: 0 },
+					customExtensions: [{ oid: OIDS.keyUsage, value: Uint8Array.of(0x05, 0x00) }],
+				}),
+			'path_length_requires_key_cert_sign',
+		);
+		expect(
+			buildRequestedExtensions({
+				customExtensions: [{ oid: OIDS.basicConstraints, value: Uint8Array.of(0x05, 0x00) }],
+			}),
+		).toBeInstanceOf(Array);
 	});
 
 	it('rejects an empty subject without a critical subjectAltName (RFC 5280 §4.2.1.6)', () => {
@@ -1020,6 +1059,58 @@ describe('extensions encoding', () => {
 							oid: OIDS.subjectAltName,
 							critical: true,
 							value: sequence([encodeSubjectAltName({ type: 'dns', value: 'custom-san.example' })]),
+						},
+					],
+				},
+				true,
+			),
+		).toBeInstanceOf(Array);
+	});
+
+	it('accepts empty-subject SANs across non-string GeneralName forms (RFC 5280 §4.2.1.6)', () => {
+		expect(
+			buildCertificateExtensions(
+				subjectPublicKeyInfo,
+				undefined,
+				{ subjectAltNames: [{ type: 'ip', value: '192.0.2.1' }] },
+				true,
+			),
+		).toBeInstanceOf(Array);
+		expect(
+			buildCertificateExtensions(
+				subjectPublicKeyInfo,
+				undefined,
+				{
+					subjectAltNames: [
+						{ type: 'directoryName', derHex: toHex(encodeName({ commonName: 'SAN DN' })) },
+					],
+				},
+				true,
+			),
+		).toBeInstanceOf(Array);
+		expect(
+			buildCertificateExtensions(
+				subjectPublicKeyInfo,
+				undefined,
+				{ subjectAltNames: [{ type: 'unknown', tag: 0x88, value: Uint8Array.of(0x2a) }] },
+				true,
+			),
+		).toBeInstanceOf(Array);
+	});
+
+	it('recognizes a critical custom SAN under a redundant-leading-zero OID (RFC 5280 §4.2.1.6)', () => {
+		expect(
+			buildCertificateExtensions(
+				subjectPublicKeyInfo,
+				undefined,
+				{
+					customExtensions: [
+						{
+							oid: '2.5.029.17',
+							critical: true,
+							value: sequence([
+								encodeSubjectAltName({ type: 'dns', value: 'canonical-oid.example' }),
+							]),
 						},
 					],
 				},

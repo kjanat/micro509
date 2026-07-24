@@ -16,7 +16,12 @@ import { readElement, sequence } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { encodeRsaPssParameters, rsaPssParametersForHash } from '#micro509/internal/crypto/rsa-pss';
 import { encodeName, encodeSubjectAltName } from '#micro509/x509';
-import { childrenOf, decodeObjectIdentifier, hasExtensionOid } from '#test/helpers';
+import {
+	childrenOf,
+	decodeObjectIdentifier,
+	encodeUncheckedCrlDistributionPoints,
+	hasExtensionOid,
+} from '#test/helpers';
 
 async function expectRejectedErrorCode(promise: Promise<unknown>, code: string): Promise<void> {
 	try {
@@ -295,17 +300,21 @@ describe('certificate', () => {
 		});
 	});
 
-	it('roundtrips CRL distribution points that only name an alternate CRL issuer', async () => {
+	it('parses issuer-only CRL distribution points that name a non-DN CRL issuer', async () => {
 		const { certificate } = await createSelfSignedCertificate({
 			subject: { commonName: 'issuer-only-dp.example' },
 			extensions: {
-				crlDistributionPoints: [
+				customExtensions: [
 					{
-						reasons: ['cACompromise'],
-						crlIssuer: [
-							{ type: 'dns', value: 'indirect-issuer.example.test' },
-							{ type: 'uri', value: 'http://issuer.example.test/indirect.crl' },
-						],
+						oid: OIDS.cRLDistributionPoints,
+						value: encodeUncheckedCrlDistributionPoints([
+							{
+								crlIssuer: [
+									{ type: 'dns', value: 'indirect-issuer.example.test' },
+									{ type: 'uri', value: 'http://issuer.example.test/indirect.crl' },
+								],
+							},
+						]),
 					},
 				],
 			},
@@ -314,13 +323,31 @@ describe('certificate', () => {
 		const parsed = unwrap(parseCertificatePem(certificate.pem));
 		expect(parsed.crlDistributionPoints).toEqual([
 			{
-				reasons: { flags: ['cACompromise'], nonZeroPadding: false },
 				crlIssuer: [
 					{ type: 'dns', value: 'indirect-issuer.example.test' },
 					{ type: 'uri', value: 'http://issuer.example.test/indirect.crl' },
 				],
 			},
 		]);
+	});
+
+	it('rejects a non-directoryName cRLIssuer at build (RFC 5280 §4.2.1.13)', async () => {
+		await expectRejectedErrorCode(
+			createSelfSignedCertificate({
+				subject: { commonName: 'nondn-crl-issuer.example' },
+				extensions: {
+					crlDistributionPoints: [
+						{
+							distributionPoint: {
+								fullName: [{ type: 'uri', value: 'http://example.test/nondn.crl' }],
+							},
+							crlIssuer: [{ type: 'uri', value: 'http://example.test/issuer.crl' }],
+						},
+					],
+				},
+			}),
+			'distribution_point_crl_issuer_not_directory_name',
+		);
 	});
 
 	it('roundtrips email, URI, and IPv6 SANs through build and parse', async () => {

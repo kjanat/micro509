@@ -906,22 +906,7 @@ function resolveEffectiveKeyUsage(
 
 /** Whether a typed GeneralName carries a non-empty identity value. */
 function subjectAltNameHasIdentity(name: SubjectAltName): boolean {
-	switch (name.type) {
-		case 'dns':
-		case 'email':
-		case 'uri':
-		case 'srv':
-		case 'ip':
-			return name.value.length > 0;
-		case 'directoryName':
-			return name.derHex.length > 0;
-		case 'unknown':
-			return name.value.length > 0;
-		default: {
-			const _exhaustive: never = name;
-			throw new Error(`Unhandled SubjectAltName type: ${String(_exhaustive)}`);
-		}
-	}
+	return name.type === 'directoryName' ? name.derHex.length > 0 : name.value.length > 0;
 }
 
 /** Whether a custom subjectAltName value decodes to at least one non-empty GeneralName. */
@@ -1448,20 +1433,20 @@ function encodeGeneralSubtree(subtree: GeneralSubtree): Uint8Array {
 }
 
 /**
- * RFC 5280 §4.2.1.13: a nameRelativeToCRLIssuer distribution point requires
- * cRLIssuer to hold exactly one directoryName (the CRL issuer's DN).
+ * RFC 5280 §4.2.1.13: cRLIssuer, when present, only contains the CRL issuer's
+ * distinguished name; nameRelativeToCRLIssuer additionally requires exactly one.
  */
 function assertCrlIssuerDistinguishedNames(point: DistributionPoint): void {
-	if (point.crlIssuer === undefined || point.distributionPoint?.relativeName === undefined) {
+	if (point.crlIssuer === undefined) {
 		return;
 	}
 	if (point.crlIssuer.some((name) => name.type !== 'directoryName')) {
 		throwExtensionEncoderError(
 			'distribution_point_crl_issuer_not_directory_name',
-			'DistributionPointName relativeName requires a directoryName cRLIssuer',
+			'DistributionPoint cRLIssuer must only contain directoryName entries',
 		);
 	}
-	if (point.crlIssuer.length > 1) {
+	if (point.distributionPoint?.relativeName !== undefined && point.crlIssuer.length > 1) {
 		throwExtensionEncoderError(
 			'distribution_point_relative_name_multiple_crl_issuers',
 			'DistributionPointName relativeName requires at most one cRLIssuer distinguished name',

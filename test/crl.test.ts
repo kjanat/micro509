@@ -33,6 +33,7 @@ import {
 	addRevokedEntryCertificateIssuers,
 	childrenOf,
 	decodeObjectIdentifier,
+	encodeUncheckedCrlDistributionPoints,
 	hexToBytes,
 	sliceElement,
 } from '#test/helpers';
@@ -170,6 +171,7 @@ describe('crl', () => {
 				keyUsage: ['keyCertSign', 'cRLSign'],
 			},
 		});
+		const deltaIssuerDnHex = unwrap(parseCertificatePem(issuer.certificate.pem)).subject.derHex;
 		const crl = await createCertificateRevocationList({
 			issuer: { commonName: 'Structured CRL Issuer' },
 			signerPrivateKey: issuer.keyPair.privateKey,
@@ -193,7 +195,7 @@ describe('crl', () => {
 						],
 					},
 					reasons: ['cACompromise'],
-					crlIssuer: [{ type: 'dns', value: 'delta-issuer.example.test' }],
+					crlIssuer: [{ type: 'directoryName', derHex: deltaIssuerDnHex }],
 				},
 				{
 					distributionPoint: {
@@ -225,7 +227,7 @@ describe('crl', () => {
 				],
 			},
 			reasons: { flags: ['cACompromise'], nonZeroPadding: false },
-			crlIssuer: [{ type: 'dns', value: 'delta-issuer.example.test' }],
+			crlIssuer: [{ type: 'directoryName', derHex: deltaIssuerDnHex }],
 		});
 		expect(parsed.freshestCrlDistributionPoints?.[1]).toMatchObject({
 			distributionPoint: {
@@ -620,12 +622,15 @@ describe('crl', () => {
 			signerPrivateKey: certIssuer.keyPair.privateKey,
 			issuerPublicKey: certIssuer.keyPair.publicKey,
 			extensions: {
-				crlDistributionPoints: [
+				customExtensions: [
 					{
-						distributionPoint: {
-							fullName: [{ type: 'uri', value: 'http://example.test/direct.crl' }],
-						},
-						crlIssuer: [{ type: 'dns', value: 'alternate.example.test' }],
+						oid: OIDS.cRLDistributionPoints,
+						value: encodeUncheckedCrlDistributionPoints([
+							{
+								fullNameUri: 'http://example.test/direct.crl',
+								crlIssuer: [{ type: 'dns', value: 'alternate.example.test' }],
+							},
+						]),
 					},
 				],
 			},
@@ -1635,12 +1640,15 @@ describe('crl', () => {
 			signerPrivateKey: certificateIssuer.keyPair.privateKey,
 			issuerPublicKey: certificateIssuer.keyPair.publicKey,
 			extensions: {
-				crlDistributionPoints: [
+				customExtensions: [
 					{
-						distributionPoint: {
-							fullName: [{ type: 'uri', value: 'http://example.test/unsupported-crl-issuer.crl' }],
-						},
-						crlIssuer: [{ type: 'dns', value: 'unsupported.example.test' }],
+						oid: OIDS.cRLDistributionPoints,
+						value: encodeUncheckedCrlDistributionPoints([
+							{
+								fullNameUri: 'http://example.test/unsupported-crl-issuer.crl',
+								crlIssuer: [{ type: 'dns', value: 'unsupported.example.test' }],
+							},
+						]),
 					},
 				],
 			},

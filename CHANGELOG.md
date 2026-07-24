@@ -56,10 +56,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   are all rejected (§4.2.1.6, `empty_subject_requires_subject_alt_name`), so
   `subject: {}` can no longer sign a certificate with no identity. Encoding a
   GeneralName with an empty `dNSName`, `rfc822Name`, URI, or SRV value is
-  rejected (§4.2.1.6, `empty_general_name_value`). A `nameRelativeToCRLIssuer`
-  distribution point requires `cRLIssuer` to hold exactly one `directoryName`,
-  rejecting a non-DN entry or a directoryName smuggled through an `unknown`
-  general name (§4.2.1.13, `distribution_point_crl_issuer_not_directory_name`,
+  rejected (§4.2.1.6, `empty_general_name_value`). A `cRLIssuer`, when present,
+  may only contain `directoryName` entries, rejecting a non-DN entry or a
+  directoryName smuggled through an `unknown` general name; a
+  `nameRelativeToCRLIssuer` distribution point additionally permits only one
+  (§4.2.1.13, `distribution_point_crl_issuer_not_directory_name`,
   `distribution_point_relative_name_multiple_crl_issuers`). Known extensions
   supplied through `customExtensions` participate in these cross-field checks.
   (https://github.com/kjanat/micro509/pull/88)

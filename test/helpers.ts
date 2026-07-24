@@ -6,6 +6,7 @@ import {
 	bool,
 	concatBytes,
 	explicitContext,
+	implicitConstructedContext,
 	integer,
 	integerFromNumber,
 	nullValue,
@@ -32,6 +33,41 @@ import {
 	encodeSubjectAltName,
 } from '#micro509/x509';
 import { probeOpenSsl } from '#test/oracles/openssl';
+
+/**
+ * Encode a CRLDistributionPoints value with an arbitrary cRLIssuer, bypassing the
+ * builder's RFC 5280 §4.2.1.13 directoryName validation. Feeds the parser and
+ * revocation scanner the non-conformant inputs the conformant builder refuses to emit.
+ */
+export function encodeUncheckedCrlDistributionPoints(
+	points: readonly {
+		readonly fullNameUri?: string;
+		readonly crlIssuer?: readonly GeneralName[];
+	}[],
+): Uint8Array {
+	return sequence(
+		points.map((point) => {
+			const fields: Uint8Array[] = [];
+			if (point.fullNameUri !== undefined) {
+				fields.push(
+					implicitConstructedContext(
+						0,
+						implicitConstructedContext(
+							0,
+							encodeSubjectAltName({ type: 'uri', value: point.fullNameUri }),
+						),
+					),
+				);
+			}
+			if (point.crlIssuer !== undefined) {
+				fields.push(
+					implicitConstructedContext(2, concatBytes(point.crlIssuer.map(encodeSubjectAltName))),
+				);
+			}
+			return sequence(fields);
+		}),
+	);
+}
 
 export function childrenOf(
 	source: Uint8Array,
