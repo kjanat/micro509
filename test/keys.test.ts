@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, test } from 'bun:test';
 import { X509Certificate } from 'node:crypto';
 import type { KeyPairMaterial } from '#micro509';
 import {
@@ -45,6 +45,7 @@ import {
 	pemEncode,
 	unwrap,
 } from '#micro509';
+import { hexToBytes } from '#test/helpers';
 
 /** Minimal shape every `import*` Result satisfies, success or failure. */
 type FailableImport =
@@ -691,6 +692,18 @@ describe('keys: coverage — malformed inputs', () => {
 			'malformed',
 			'Malformed PKCS#8 private key',
 		);
+	});
+
+	test.failing('imports RFC 5958 v2 OneAsymmetricKey with attributes and publicKey (oven-sh/bun#35432)', async () => {
+		const oneAsymmetricKey = hexToBytes(
+			'3053020101300506032b657004220420' +
+				'9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60' +
+				'a000812100' +
+				'd75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a',
+		);
+		const key = unwrap(await importPkcs8Der(oneAsymmetricKey, { kind: 'ed25519' }));
+		expect(key.type).toBe('private');
+		expect(key.algorithm.name).toBe('Ed25519');
 	});
 
 	it('importPkcs8Der and base64 throw on PKCS#8 with wrong privateKey tag', async () => {
