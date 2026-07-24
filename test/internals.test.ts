@@ -101,6 +101,7 @@ import {
 	encodeRelativeDistinguishedName,
 	encodeSubjectAltName,
 } from '#micro509/x509';
+import { childrenOf } from '#test/helpers';
 
 function expectEncoderErrorCode(fn: () => unknown, code: string): void {
 	try {
@@ -1647,6 +1648,16 @@ describe('pbes2.ts DEFAULT prf', () => {
 		cipher: 'AES-256-CBC' as const,
 	};
 
+	const pbkdf2ParamsChildren = (pbes2Der: Uint8Array): ReturnType<typeof readElement>[] => {
+		const pbes2Params = childrenOf(pbes2Der, readElement(pbes2Der))[1];
+		if (pbes2Params === undefined) throw new Error('missing PBES2-params');
+		const keyDerivationFunc = childrenOf(pbes2Der, pbes2Params)[0];
+		if (keyDerivationFunc === undefined) throw new Error('missing keyDerivationFunc');
+		const pbkdf2Params = childrenOf(pbes2Der, keyDerivationFunc)[1];
+		if (pbkdf2Params === undefined) throw new Error('missing PBKDF2-params');
+		return childrenOf(pbes2Der, pbkdf2Params);
+	};
+
 	it('omits the PBKDF2 prf DEFAULT HMAC-SHA-1 but keeps keyLength', () => {
 		const der = encodePbes2AlgorithmIdentifier({ ...base, prf: 'HMAC-SHA-1' });
 		expect(parsePbes2AlgorithmIdentifier(der).prf).toBe('HMAC-SHA-1');
@@ -1654,5 +1665,8 @@ describe('pbes2.ts DEFAULT prf', () => {
 		const withSha256 = encodePbes2AlgorithmIdentifier({ ...base, prf: 'HMAC-SHA-256' });
 		expect(der.length).toBeLessThan(withSha256.length);
 		expect(parsePbes2AlgorithmIdentifier(withSha256).prf).toBe('HMAC-SHA-256');
+
+		expect(pbkdf2ParamsChildren(der)).toHaveLength(3);
+		expect(pbkdf2ParamsChildren(withSha256)).toHaveLength(4);
 	});
 });
