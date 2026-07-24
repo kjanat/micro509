@@ -46,6 +46,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `importPkcs8Der` accepts a `OneAsymmetricKey` (RFC 5958 §2 / RFC 8410 §7) that
+  carries both `attributes [0]` and `publicKey [1]`. The parser capped at four
+  elements, so a five-element v2 key that OpenSSL and Node WebCrypto both accept
+  returned `malformed`. The tail is now validated structurally rather than by
+  ASN.1 class alone: `attributes [0]` must be a constructed `SET OF`, an optional
+  `publicKey [1]` must be a primitive BIT STRING after it, the version is coupled
+  to the public key's presence (`v2` iff present), and well-formed unknown
+  extension additions are tolerated per the type's X.680 extensibility marker.
+- SEC1 `ECPrivateKey` parsing rejects a version other than 1, comparing content
+  octets (RFC 5915 §3, "version SHALL be ... one"). Only the tag was checked, so
+  version 0 or 2 was deferred to the WebCrypto backend as a misleading error.
+- PBES2 decryption no longer rejects a PBKDF2 salt shorter than eight bytes. RFC
+  8018 §4.1 makes the eight-octet minimum a "should" for salt _selection_ and
+  says the salt need not be checked on receipt, so `openssl pkcs8 -saltlen 4`
+  could not be decrypted. The encrypt path keeps the minimum.
+  (https://github.com/kjanat/micro509/pull/85)
 - Distinguished-name encoding enforces the RFC 5280 Appendix A.1 attribute
   constraints: no attribute value may be empty (`SIZE (1..ub-…)`), and
   `commonName`/`organization`/`organizationalUnit`/`title`/`serialNumber` cap at

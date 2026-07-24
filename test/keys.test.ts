@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, test } from 'bun:test';
 import { X509Certificate } from 'node:crypto';
 import type { KeyPairMaterial } from '#micro509';
 import {
@@ -45,6 +45,7 @@ import {
 	pemEncode,
 	unwrap,
 } from '#micro509';
+import { hexToBytes } from '#test/helpers';
 
 /** Minimal shape every `import*` Result satisfies, success or failure. */
 type FailableImport =
@@ -493,6 +494,17 @@ describe('keys', () => {
 		expect(reimported.type).toBe('private');
 	});
 
+	it('rejects a SEC1 ECPrivateKey whose version is not 1 (RFC 5915 §3)', async () => {
+		const { sequence, integerFromNumber, octetString } = await import(
+			'#micro509/internal/asn1/der'
+		);
+		const versionTwo = sequence([integerFromNumber(2), octetString(new Uint8Array(32))]);
+		const result = await importSec1Der(versionTwo, { kind: 'ecdsa', curve: 'P-256' });
+		expect(result.ok).toBe(false);
+		if (result.ok) throw new Error('unreachable');
+		expect(result.error.message).toContain('Malformed SEC 1');
+	});
+
 	it('round-trips EC P-521 keys through SEC1', async () => {
 		const keys = await generateKeyPair({
 			kind: 'ecdsa',
@@ -680,6 +692,68 @@ describe('keys: coverage — malformed inputs', () => {
 			'malformed',
 			'Malformed PKCS#8 private key',
 		);
+	});
+
+	test.failing('imports RFC 5958 v2 OneAsymmetricKey with attributes and publicKey (oven-sh/bun#35432)', async () => {
+		const oneAsymmetricKey = hexToBytes(
+			'3053020101300506032b657004220420' +
+				'9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60' +
+				'a000812100' +
+				'd75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a',
+		);
+		const key = unwrap(await importPkcs8Der(oneAsymmetricKey, { kind: 'ed25519' }));
+		expect(key.type).toBe('private');
+		expect(key.algorithm.name).toBe('Ed25519');
+	});
+
+	test('rejects malformed OneAsymmetricKey tails per RFC 5958/RFC 8410', async () => {
+		const { integerFromNumber, objectIdentifier, octetString, sequence } = await import(
+			'#micro509/internal/asn1/der'
+		);
+		const seedHex = '9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60';
+		const pubHex = 'd75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a';
+		const version1 = integerFromNumber(1);
+		const version0 = integerFromNumber(0);
+		const algorithm = sequence([objectIdentifier('1.3.101.112')]);
+		const privateKey = octetString(octetString(hexToBytes(seedHex)));
+		const attributes = hexToBytes('a000');
+		const publicKey = hexToBytes(`812100${pubHex}`);
+		const cases: ReadonlyArray<{ name: string; version: Uint8Array; tail: Uint8Array[] }> = [
+			{
+				name: 'attributes [0] as primitive 80',
+				version: version1,
+				tail: [hexToBytes('8000'), publicKey],
+			},
+			{
+				name: 'publicKey [1] as constructed a1',
+				version: version1,
+				tail: [attributes, hexToBytes(`a12100${pubHex}`)],
+			},
+			{ name: 'duplicate publicKey [1]', version: version1, tail: [publicKey, publicKey] },
+			{
+				name: 'publicKey [1] before attributes [0]',
+				version: version1,
+				tail: [publicKey, attributes],
+			},
+			{
+				name: 'publicKey present but version v1',
+				version: version0,
+				tail: [attributes, publicKey],
+			},
+			{ name: 'empty publicKey BIT STRING', version: version1, tail: [hexToBytes('810100')] },
+		];
+		for (const { name, version, tail } of cases) {
+			const der = sequence([version, algorithm, privateKey, ...tail]);
+			try {
+				await expectImportFailure(
+					importPkcs8Der(der, { kind: 'ed25519' }),
+					'malformed',
+					'Malformed PKCS#8 private key',
+				);
+			} catch (cause) {
+				throw new Error(`case "${name}" failed`, { cause });
+			}
+		}
 	});
 
 	it('importPkcs8Der and base64 throw on PKCS#8 with wrong privateKey tag', async () => {
