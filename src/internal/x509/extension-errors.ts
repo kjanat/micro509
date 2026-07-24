@@ -29,6 +29,7 @@ export type ExtensionEncoderErrorCode =
 	| 'extended_key_usage_empty'
 	| 'extension_not_supported_in_context'
 	| 'invalid_general_name_tag'
+	| 'invalid_ia5_string'
 	| 'invalid_ip_name_constraint'
 	| 'invalid_oid'
 	| 'key_usage_empty'

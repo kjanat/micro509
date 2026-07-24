@@ -50,7 +50,11 @@ import {
 	describeSignatureAlgorithm,
 } from '#micro509/internal/crypto/algorithm-names';
 import { ecdsaSignatureToDer } from '#micro509/internal/crypto/ecdsa';
-import { encryptPbes2, parsePbes2AlgorithmIdentifier } from '#micro509/internal/crypto/pbes2';
+import {
+	encodePbes2AlgorithmIdentifier,
+	encryptPbes2,
+	parsePbes2AlgorithmIdentifier,
+} from '#micro509/internal/crypto/pbes2';
 import {
 	encodeRsaPssParameters,
 	parseRsaPssParameters,
@@ -97,6 +101,7 @@ import {
 	encodeRelativeDistinguishedName,
 	encodeSubjectAltName,
 } from '#micro509/x509';
+import { childrenOf } from '#test/helpers';
 
 function expectEncoderErrorCode(fn: () => unknown, code: string): void {
 	try {
@@ -720,23 +725,31 @@ describe('extensions encoding', () => {
 	});
 
 	it('encodeSubjectAltName rejects a non-ASCII IA5String value', () => {
-		expect(() => encodeSubjectAltName({ type: 'dns', value: 'café.example' })).toThrow(
-			'Invalid IA5String',
+		expectEncoderErrorCode(
+			() => encodeSubjectAltName({ type: 'dns', value: 'café.example' }),
+			'invalid_ia5_string',
 		);
-		expect(() => encodeSubjectAltName({ type: 'uri', value: 'http://café.example' })).toThrow(
-			'Invalid IA5String',
+		expectEncoderErrorCode(
+			() => encodeSubjectAltName({ type: 'uri', value: 'http://café.example' }),
+			'invalid_ia5_string',
+		);
+		expectEncoderErrorCode(
+			() => encodeSubjectAltName({ type: 'srv', value: '_xmpp.café.example' }),
+			'invalid_ia5_string',
 		);
 	});
 
 	it('encodeAuthorityInfoAccess rejects a non-URI OCSP location wrapped in a custom OID', () => {
-		expect(() =>
-			encodeAuthorityInfoAccess([
-				{
-					method: { type: 'oid', value: OIDS.ocspAccessMethod },
-					location: { type: 'dns', value: 'ocsp.example' },
-				},
-			]),
-		).toThrow('OCSP location must be a URI');
+		expectEncoderErrorCode(
+			() =>
+				encodeAuthorityInfoAccess([
+					{
+						method: { type: 'oid', value: OIDS.ocspAccessMethod },
+						location: { type: 'dns', value: 'ocsp.example' },
+					},
+				]),
+			'authority_info_access_ocsp_not_uri',
+		);
 	});
 
 	it('buildCertificateExtensions throws on SPKI without subject public key bit string', () => {
@@ -1433,6 +1446,20 @@ describe('pkcs12-mac.ts edge cases', () => {
 		expect(parsePkcs12MacDataOrThrow(malformed, dummySafe)).rejects.toThrow('Malformed MacData');
 	});
 
+	it('omits the iterations DEFAULT 1 on encode and defaults it back on parse', async () => {
+		const authenticatedSafe = Uint8Array.of(1, 2, 3);
+		const { der } = await createPkcs12MacData(authenticatedSafe, {
+			password: 'pw',
+			iterations: 1,
+			salt: new Uint8Array(16),
+		});
+		// iterations 1 is the DEFAULT, so MacData carries only DigestInfo and salt.
+		expect(readSequenceChildren(der)).toHaveLength(2);
+		const parsed = await parsePkcs12MacDataOrThrow(der, authenticatedSafe, 'pw');
+		expect(parsed.iterations).toBe(1);
+		expect(parsed.verification).toBe('valid');
+	});
+
 	it('parsePkcs12MacDataOrThrow throws on malformed MacData (salt wrong tag)', () => {
 		// salt is INTEGER instead of OCTET STRING
 		const malformed = sequence([
@@ -1618,5 +1645,41 @@ describe('ecdsaSignatureToDer', () => {
 				expect(parts[1]?.tag).toBe(0x02);
 			}
 		}
+	});
+});
+
+describe('pbes2.ts DEFAULT prf', () => {
+	const base = {
+		iterations: 2048,
+		salt: new Uint8Array(8),
+		iv: new Uint8Array(16),
+		cipher: 'AES-256-CBC' as const,
+	};
+
+	const pbkdf2ParamsChildren = (pbes2Der: Uint8Array): ReturnType<typeof readElement>[] => {
+		const pbes2Params = childrenOf(pbes2Der, readElement(pbes2Der))[1];
+		if (pbes2Params === undefined) throw new Error('missing PBES2-params');
+		const keyDerivationFunc = childrenOf(pbes2Der, pbes2Params)[0];
+		if (keyDerivationFunc === undefined) throw new Error('missing keyDerivationFunc');
+		const pbkdf2Params = childrenOf(pbes2Der, keyDerivationFunc)[1];
+		if (pbkdf2Params === undefined) throw new Error('missing PBKDF2-params');
+		return childrenOf(pbes2Der, pbkdf2Params);
+	};
+
+	it('omits the PBKDF2 prf DEFAULT HMAC-SHA-1 but keeps keyLength', () => {
+		const der = encodePbes2AlgorithmIdentifier({ ...base, prf: 'HMAC-SHA-1' });
+		expect(parsePbes2AlgorithmIdentifier(der).prf).toBe('HMAC-SHA-1');
+		// HMAC-SHA-256 is not the default, so its prf AlgorithmIdentifier is encoded.
+		const withSha256 = encodePbes2AlgorithmIdentifier({ ...base, prf: 'HMAC-SHA-256' });
+		expect(der.length).toBeLessThan(withSha256.length);
+		expect(parsePbes2AlgorithmIdentifier(withSha256).prf).toBe('HMAC-SHA-256');
+
+		const derChildren = pbkdf2ParamsChildren(der);
+		expect(derChildren).toHaveLength(3);
+		expect(derChildren[2]?.tag).toBe(0x02);
+		const sha256Children = pbkdf2ParamsChildren(withSha256);
+		expect(sha256Children).toHaveLength(4);
+		expect(sha256Children[2]?.tag).toBe(0x02);
+		expect(sha256Children[3]?.tag).toBe(0x30);
 	});
 });

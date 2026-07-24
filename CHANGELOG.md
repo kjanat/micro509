@@ -46,6 +46,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- PKCS#12 `MacData` omits `iterations` when it equals its `DEFAULT 1`, and the
+  parser accepts a two-element `MacData`, defaulting `iterations` to 1
+  (RFC 7292 §4, X.690 §11.5). A conformant PFX with iteration count 1 previously
+  failed to parse.
+- PBES2 `PBKDF2-params` omits the `prf` when it is the `DEFAULT`
+  `algid-hmacWithSHA1` (RFC 8018 A.2, X.690 §11.5); `keyLength`, being OPTIONAL
+  rather than DEFAULT, is still emitted. `exportEncryptedPkcs8Der(key, { prf: 'HMAC-SHA-1' })`
+  produced a non-DER structure.
+  (https://github.com/kjanat/micro509/pull/83)
 - PKCS#7/CMS `SignedData` emits SHA-2 digest `AlgorithmIdentifier`s with absent
   parameters, per RFC 5754 §2 (a MUST). Both `digestAlgorithms` and each
   `SignerInfo.digestAlgorithm` carried an explicit `05 00` NULL.
