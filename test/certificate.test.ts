@@ -5,6 +5,7 @@ import {
 	createSelfSignedCertificate,
 	findExtension,
 	generateKeyPair,
+	isResultError,
 	parseCertificateDer,
 	parseCertificatePem,
 	unwrap,
@@ -14,6 +15,17 @@ import { readElement } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { encodeRsaPssParameters, rsaPssParametersForHash } from '#micro509/internal/crypto/rsa-pss';
 import { childrenOf, decodeObjectIdentifier, hasExtensionOid } from '#test/helpers';
+
+async function expectRejectedErrorCode(promise: Promise<unknown>, code: string): Promise<void> {
+	try {
+		await promise;
+	} catch (error) {
+		expect(isResultError(error)).toBe(true);
+		expect(isResultError(error) ? error.code : undefined).toBe(code);
+		return;
+	}
+	throw new Error(`expected a ResultError with code '${code}', but the promise resolved`);
+}
 
 describe('certificate', () => {
 	it('creates a self-signed certificate with SANs and exportable keys', async () => {
@@ -64,8 +76,11 @@ describe('certificate', () => {
 				keyUsage: ['digitalSignature'],
 				extendedKeyUsage: ['serverAuth', { type: 'oid', value: '1.2.3.4.5' }],
 				authorityInfoAccess: [
-					{ method: 'ocsp', uri: 'http://ocsp.example.test' },
-					{ method: 'caIssuers', uri: 'http://issuer.example.test/ca.der' },
+					{ method: 'ocsp', location: { type: 'uri', value: 'http://ocsp.example.test' } },
+					{
+						method: 'caIssuers',
+						location: { type: 'uri', value: 'http://issuer.example.test/ca.der' },
+					},
 				],
 				crlDistributionPoints: [
 					{
@@ -96,8 +111,11 @@ describe('certificate', () => {
 		expect(parsed.subjectAltNames).toEqual([{ type: 'dns', value: 'leaf.example' }]);
 		expect(parsed.extendedKeyUsage).toEqual(['serverAuth', { type: 'oid', value: '1.2.3.4.5' }]);
 		expect(parsed.authorityInfoAccess).toEqual([
-			{ method: 'ocsp', uri: 'http://ocsp.example.test' },
-			{ method: 'caIssuers', uri: 'http://issuer.example.test/ca.der' },
+			{ method: 'ocsp', location: { type: 'uri', value: 'http://ocsp.example.test' } },
+			{
+				method: 'caIssuers',
+				location: { type: 'uri', value: 'http://issuer.example.test/ca.der' },
+			},
 		]);
 		expect(parsed.crlDistributionPoints).toEqual([
 			{
@@ -323,7 +341,7 @@ describe('certificate', () => {
 				authorityInfoAccess: [
 					{
 						method: { type: 'oid', value: '1.3.6.1.5.5.7.48.99' },
-						uri: 'http://custom.example/aia',
+						location: { type: 'uri', value: 'http://custom.example/aia' },
 					},
 				],
 			},
@@ -332,7 +350,7 @@ describe('certificate', () => {
 		expect(parsed.authorityInfoAccess).toEqual([
 			{
 				method: { type: 'oid', value: '1.3.6.1.5.5.7.48.99' },
-				uri: 'http://custom.example/aia',
+				location: { type: 'uri', value: 'http://custom.example/aia' },
 			},
 		]);
 	});
@@ -411,7 +429,7 @@ describe('certificate', () => {
 	});
 
 	it('rejects notAfter <= notBefore', async () => {
-		expect(
+		await expectRejectedErrorCode(
 			createSelfSignedCertificate({
 				subject: { commonName: 'bad-validity' },
 				validity: {
@@ -419,7 +437,8 @@ describe('certificate', () => {
 					notAfter: new Date('2025-01-01T00:00:00Z'),
 				},
 			}),
-		).rejects.toThrow('notAfter must be after notBefore');
+			'validity_not_after_before_not_before',
+		);
 	});
 
 	it('allows empty subject DN when SAN is present and marks SAN critical (RFC 5280 §4.2.1.6)', async () => {
@@ -438,8 +457,21 @@ describe('certificate', () => {
 	});
 
 	it('rejects invalid country code length', async () => {
-		expect(createSelfSignedCertificate({ subject: { country: 'USA' } })).rejects.toThrow(
-			'Country must be a 2-character code',
+		await expectRejectedErrorCode(
+			createSelfSignedCertificate({ subject: { country: 'USA' } }),
+			'invalid_country_code',
+		);
+	});
+
+	it('rejects a malformed custom extension OID', async () => {
+		await expectRejectedErrorCode(
+			createSelfSignedCertificate({
+				subject: { commonName: 'bad-oid.example' },
+				extensions: {
+					customExtensions: [{ oid: 'invalid', value: new Uint8Array([0x05, 0x00]) }],
+				},
+			}),
+			'invalid_oid',
 		);
 	});
 
@@ -468,7 +500,7 @@ describe('certificate', () => {
 	});
 
 	it('rejects anyPolicy in policyMappings', async () => {
-		expect(
+		await expectRejectedErrorCode(
 			createSelfSignedCertificate({
 				subject: { commonName: 'bad-policy-mapping.example' },
 				extensions: {
@@ -480,40 +512,44 @@ describe('certificate', () => {
 					],
 				},
 			}),
-		).rejects.toThrow('policyMappings must not use anyPolicy');
+			'policy_mappings_any_policy',
+		);
 	});
 
 	it('rejects empty policyConstraints input', async () => {
-		expect(
+		await expectRejectedErrorCode(
 			createSelfSignedCertificate({
 				subject: { commonName: 'bad-policy-constraints.example' },
 				extensions: {
 					policyConstraints: {},
 				},
 			}),
-		).rejects.toThrow('policyConstraints must set requireExplicitPolicy or inhibitPolicyMapping');
+			'policy_constraints_empty',
+		);
 	});
 
 	it('rejects empty structured distribution point names', async () => {
-		expect(
+		await expectRejectedErrorCode(
 			createSelfSignedCertificate({
 				subject: { commonName: 'bad-dp.example' },
 				extensions: {
 					crlDistributionPoints: [{ distributionPoint: { fullName: [] } }],
 				},
 			}),
-		).rejects.toThrow('DistributionPointName fullName must not be empty');
+			'distribution_point_full_name_empty',
+		);
 	});
 
 	it('rejects empty structured CRL issuer lists', async () => {
-		expect(
+		await expectRejectedErrorCode(
 			createSelfSignedCertificate({
 				subject: { commonName: 'bad-crl-issuer.example' },
 				extensions: {
 					crlDistributionPoints: [{ crlIssuer: [] }],
 				},
 			}),
-		).rejects.toThrow('DistributionPoint crlIssuer must not be empty');
+			'distribution_point_crl_issuer_empty',
+		);
 	});
 });
 

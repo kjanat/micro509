@@ -100,6 +100,8 @@ export type DocsSections = Readonly<Record<string, readonly DocsPage[]>>;
 export interface DocsVersion {
 	/** Release tag, or the dev label for the checked-out tree. */
 	readonly tag: string;
+	/** Version from this documentation tree's package manifest. */
+	readonly packageVersion: string;
 	/** Dropdown text. */
 	readonly label: string;
 	/** Optional external destination for the label when no version switching is available. */
@@ -283,6 +285,7 @@ async function resolveVersions(options: VersionedDocsOptions): Promise<readonly 
 	const releases = options.releases.offline === true ? [] : await fetchReleases(options);
 
 	const treeRoot = path.join(options.repoRoot, options.siteRoot);
+	const treePackageVersion = packageVersionOf(options.repoRoot);
 	options.generateApi({ root: options.repoRoot, outDir: path.join(treeRoot, 'api') });
 	const treeSections = sectionsOf(treeRoot);
 
@@ -292,6 +295,7 @@ async function resolveVersions(options: VersionedDocsOptions): Promise<readonly 
 		return [
 			{
 				tag: options.devLabel,
+				packageVersion: treePackageVersion,
 				label: options.devLabel,
 				...(options.devLabelUrl === undefined ? {} : { labelUrl: options.devLabelUrl }),
 				channel: 'latest',
@@ -306,6 +310,7 @@ async function resolveVersions(options: VersionedDocsOptions): Promise<readonly 
 	const versions: DocsVersion[] = [
 		{
 			tag: options.devLabel,
+			packageVersion: treePackageVersion,
 			label: 'next',
 			channel: 'next',
 			prefix: 'next/',
@@ -329,6 +334,7 @@ async function resolveVersions(options: VersionedDocsOptions): Promise<readonly 
 
 		versions.push({
 			tag: release.tag,
+			packageVersion: packageVersionOf(tree),
 			label: release.tag,
 			channel: isLatest ? 'latest' : 'archive',
 			prefix: isLatest ? '' : `${release.tag}/`,
@@ -353,6 +359,13 @@ function exportsOf(root: string): readonly string[] {
 		fs.readFileSync(path.join(root, 'package.json'), 'utf8'),
 	);
 	return Object.keys(manifest.exports ?? {});
+}
+
+function packageVersionOf(root: string): string {
+	const manifest: { readonly version: string } = JSON.parse(
+		fs.readFileSync(path.join(root, 'package.json'), 'utf8'),
+	);
+	return manifest.version;
 }
 
 /** The version a page belongs to, by its (post-rewrite) route path. */
@@ -630,6 +643,12 @@ export async function versionedDocs(options: VersionedDocsOptions): Promise<Vers
 		},
 
 		transformPageData: (pageData) => {
+			const version = at(pageData.relativePath);
+			pageData.frontmatter = {
+				...pageData.frontmatter,
+				...(version === undefined ? {} : { packageVersion: version.packageVersion }),
+			};
+
 			const hero: { readonly actions?: unknown } | undefined = pageData.frontmatter.hero;
 			const actions: unknown = hero?.actions;
 			if (hero === undefined || !Array.isArray(actions)) return;

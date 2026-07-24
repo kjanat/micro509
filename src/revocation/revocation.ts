@@ -219,11 +219,15 @@ export function getCertificateOcspResponderUris(
 	const uris: string[] = [];
 	const seen = new Set<string>();
 	for (const accessDescription of parsedCertificate.authorityInfoAccess ?? []) {
-		if (accessDescription.method !== 'ocsp' || seen.has(accessDescription.uri)) {
+		if (accessDescription.method !== 'ocsp' || accessDescription.location.type !== 'uri') {
 			continue;
 		}
-		seen.add(accessDescription.uri);
-		uris.push(accessDescription.uri);
+		const uri = accessDescription.location.value;
+		if (seen.has(uri)) {
+			continue;
+		}
+		seen.add(uri);
+		uris.push(uri);
 	}
 	return uris;
 }

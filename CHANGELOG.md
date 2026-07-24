@@ -4,9 +4,9 @@
 Release checklist — every box, every release:
 - [ ] Move [Unreleased] entries under a new `## [X.Y.Z] - YYYY-MM-DD` header + intro line
 - [ ] Bump version in package.json AND jsr.json
-- [ ] Bump the `micro509` range in examples/vite/package.json — StackBlitz installs it from npm
+- [ ] Bump the `micro509` range in examples/vite/package.json and examples/browser/index.html's `<script type="importmap">`
 - [ ] Link definitions at the BOTTOM of this file: add [X.Y.Z] compare link, repoint [Unreleased]
-- [ ] Signed tag on the release commit: git tag -s vX.Y.Z -m "vX.Y.Z — summary"
+- [ ] Signed tag on the release commit: git tag -s vX.Y.Z -m "vX.Y.Z - summary"
 - [ ] Push master + tag, gh release create with milestone notes
 - [ ] Verify npm dist-tag latest + JSR after the publish workflow
 -->
@@ -18,6 +18,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Builder input-validation now throws a `ResultError` carrying a stable
+  machine-readable `code` rather than a bare `Error`. `createCertificate`, the
+  `encode*` extension helpers, distinguished-name encoding, and CRL/IDP encoding
+  reject invalid construction input (an empty `keyUsage`, a duplicate policy OID,
+  a `DisplayText` out of range, an invalid country code) with a coded throw that
+  `isResultError` detects and `error.code` discriminates. Codes are per-operation
+  unions (`ExtensionEncoderErrorCode`, `NameEncoderErrorCode`,
+  `CrlEncoderErrorCode`, `CreateCertificateErrorCode`). DER decode guards and
+  exhaustiveness invariants keep throwing a plain `Error`. The thrown message
+  gains a `code: ` prefix.
+- `AuthorityInformationAccess.uri: string` becomes `location: GeneralName`, the
+  full accessLocation RFC 5280 §4.2.2.1 defines. The parser threw
+  `Unsupported authorityInfoAccess location tag` for any location that was not a
+  URI, so a certificate carrying a directoryName or dNSName accessLocation (both
+  conformant) failed to parse entirely. An OCSP entry requires a URI location
+  (its discovery reads only URIs); `directoryName` is defined for `caIssuers`,
+  and other GeneralName forms are syntactically representable. GeneralName
+  encoding and parsing now reject any tag, class, or constructedness that is not
+  one of the nine RFC 5280 §4.2.1.6 alternatives (`x400Address [3]`,
+  `ediPartyName [5]`, and `registeredID [8]` are preserved as unknown). The
+  IA5String alternatives (`dNSName`, `rfc822Name`,
+  `uniformResourceIdentifier`) reject non-ASCII input on encode and decode.
+  (https://github.com/kjanat/micro509/pull/78)
+
 ### Fixed
 
 - PKCS#7/CMS `SignedData` emits SHA-2 digest `AlgorithmIdentifier`s with absent
@@ -28,6 +54,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   certificates in caller order, so the output was not valid DER and depended on
   input order.
   (https://github.com/kjanat/micro509/pull/82)
+- PEM decoding handles every RFC 7468 §3 newline convention (`CRLF`, `CR`, `LF`).
+  `pemDecode` and `splitPemBlocks` stripped `\r` outright, which joins every line
+  of a CR-only file into one, so such a file failed to decode.
+- `splitPemBlocks` accepts RFC 7468 labels with an internal `-` separator and no
+  longer discards unrelated blocks in the same file when it meets a label it does
+  not recognise.
+- `pemEncode` emits the RFC 7468 strict trailing end-of-line, so concatenating
+  two blocks no longer produces `-----END … ----------BEGIN …-----`, which
+  `openssl storeutl` rejects. (https://github.com/kjanat/micro509/pull/81)
+- `subjectAltName` parsing rejects an empty or non-SEQUENCE extension value, per
+  RFC 5280 §4.2.1.6 (`GeneralNames ::= SEQUENCE SIZE (1..MAX)`). An empty SAN
+  previously decoded to `[]`, indistinguishable from an absent extension, so
+  common-name fallback suppression did not engage. `directoryName [4]` now
+  requires exactly one explicit X.501 Name with valid RDN and attribute
+  structure instead of repairing malformed implicit encodings, including in
+  CRL GeneralNames.
+- `extendedKeyUsage` parsing rejects an empty SEQUENCE and any child that is not
+  an OBJECT IDENTIFIER, per RFC 5280 §4.2.1.12. `decodeObjectIdentifier` ran on
+  every child regardless of tag, so `30 03 02 01 01` fabricated the OID `0.1`
+  from an INTEGER. (https://github.com/kjanat/micro509/pull/80)
+- Extension encoders reject input RFC 5280 forbids rather than emitting
+  non-conformant DER: an empty `keyUsage` (§4.2.1.3), `extendedKeyUsage`
+  (§4.2.1.12), `authorityInfoAccess`/`cRLDistributionPoints` (§4.2.2.1,
+  §4.2.1.13) or `nameConstraints` (§4.2.1.10) SEQUENCE, a duplicate certificate
+  policy OID compared by encoded identity so leading-zero aliases collide
+  (§4.2.1.4), a policy qualifier reusing the built-in `cps` or `userNotice` OID
+  in the opaque `oid` variant (§4.2.1.4), a `DisplayText` outside SIZE (1..200)
+  (§4.2.1.4), and an IP name constraint whose address and mask do not total 8 or
+  32 octets (§4.2.1.10). Each previously encoded a structure the library's own
+  parser, or OpenSSL, rejects.
+  (https://github.com/kjanat/micro509/pull/79)
+- A `directoryName` SubjectAltName or name constraint now encodes the complete
+  Name TLV inside `[4]`, per RFC 5280 §4.2.1.6 (Name is an untagged CHOICE, so
+  `[4]` is EXPLICIT). The encoder stripped the Name's SEQUENCE header, emitting
+  `a4 12 31 10 ...` where OpenSSL emits `a4 14 30 12 31 10 ...`.
+- An `otherName` SubjectAltName now decodes with the type-id and value as the
+  direct children of `[0]`, per RFC 5280 §4.2.1.6 (`otherName [0]` is IMPLICIT,
+  so `[0]` replaces the SEQUENCE tag). The parser required an inner SEQUENCE, so
+  any real `otherName` (an SRV-ID, a Microsoft UPN) failed the whole certificate
+  parse; the SRV-ID encoder emitted the same non-conformant nesting. A
+  structurally valid `otherName` with an unsupported type is preserved as
+  `{ type: 'unknown' }`, but a malformed `otherName` envelope or a malformed
+  value of a recognised `id-on-dnsSRV` is rejected rather than erased to
+  `unknown`. Path validation rejects a critical `subjectAltName` carrying a
+  GeneralName the verifier cannot interpret (RFC 5280 §4.2), while a
+  non-critical one keeps the unknown entry.
+  (https://github.com/kjanat/micro509/pull/77)
+- OCSP responses now encode `ResponderID` `byKey` as `[2]` EXPLICIT wrapping an
+  OCTET STRING and every time field as GeneralizedTime, per RFC 6960 Appendix
+  B.1. The `byKey` responder was written as `[2]` IMPLICIT over the raw hash and
+  the times as UTCTime, so OpenSSL and Go's `crypto/ocsp` could not parse a
+  response this library produced. The parser reads the EXPLICIT form and
+  requires the `byKey` hash to be a 20-byte SHA-1 digest. Embedded certificates
+  are wrapped in the `certs [0] EXPLICIT SEQUENCE OF Certificate` the field's
+  syntax requires rather than concatenated, so a response with `includedCertificates`
+  is parseable. An end-to-end differential test confirms OpenSSL accepts a
+  micro509-produced response.
+  (https://github.com/kjanat/micro509/pull/76)
 
 ## [0.13.0] - 2026-07-23
 

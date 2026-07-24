@@ -3,6 +3,7 @@ import {
 	createCertificateRevocationList,
 	createSelfSignedCertificate,
 	importEncryptedPkcs8Der,
+	isResultError,
 	parseCertificatePem,
 	parseCertificateRevocationListPemOrThrow,
 	unwrap,
@@ -17,6 +18,7 @@ import {
 	hexToBytes,
 	parseTime,
 	requireElement,
+	toHex,
 } from '#micro509/internal/asn1/asn1';
 import {
 	assertDerMaxDepth,
@@ -85,12 +87,27 @@ import {
 import { createPkcs12MacData, parsePkcs12MacDataOrThrow } from '#micro509/pkcs';
 import {
 	buildCertificateExtensions,
+	encodeAuthorityInfoAccess,
 	encodeCertificatePolicies,
 	encodeCrlDistributionPoints,
+	encodeExtendedKeyUsage,
+	encodeKeyUsage,
 	encodeNameConstraints,
 	encodePolicyMappings,
+	encodeRelativeDistinguishedName,
 	encodeSubjectAltName,
 } from '#micro509/x509';
+
+function expectEncoderErrorCode(fn: () => unknown, code: string): void {
+	try {
+		fn();
+	} catch (error) {
+		expect(isResultError(error)).toBe(true);
+		expect(isResultError(error) ? error.code : undefined).toBe(code);
+		return;
+	}
+	throw new Error(`expected a ResultError with code '${code}', but nothing was thrown`);
+}
 
 // DER encoding edge cases
 
@@ -662,6 +679,21 @@ describe('extensions encoding', () => {
 		expect(result[0]).toBe(0xa4);
 	});
 
+	it('encodeSubjectAltName wraps the whole directoryName Name TLV, header included', () => {
+		// RFC 5280 §4.2.1.6 makes directoryName [4] EXPLICIT, so its contents are the
+		// complete Name TLV: OpenSSL emits `a4 05 30 03 ...`, not the stripped `a4 03 ...`.
+		const result = encodeSubjectAltName({ type: 'directoryName', derHex: '3003020101' });
+		expect(Array.from(result)).toEqual([0xa4, 0x05, 0x30, 0x03, 0x02, 0x01, 0x01]);
+	});
+
+	it('encodeSubjectAltName encodes an srv otherName with no inner SEQUENCE', () => {
+		// otherName [0] is IMPLICIT, so the [0] content is type-id then value: its
+		// first inner element is the OID (0x06), never a nested SEQUENCE (0x30).
+		const result = encodeSubjectAltName({ type: 'srv', value: '_imaps.example.com' });
+		expect(result[0]).toBe(0xa0);
+		expect(result[2]).toBe(0x06);
+	});
+
 	it('encodeSubjectAltName handles unknown type', () => {
 		const result = encodeSubjectAltName({
 			type: 'unknown',
@@ -669,6 +701,42 @@ describe('extensions encoding', () => {
 			value: Uint8Array.of(0x01, 0x02),
 		});
 		expect(result[0]).toBe(0x88);
+	});
+
+	it('encodeSubjectAltName rejects an unknown GeneralName with an invalid wire tag', () => {
+		// x400Address [3], ediPartyName [5], and registeredID [8] are valid but
+		// unsupported alternatives and round-trip as their own tag.
+		for (const tag of [0xa3, 0xa5, 0x88]) {
+			expect(encodeSubjectAltName({ type: 'unknown', tag, value: new Uint8Array() })[0]).toBe(tag);
+		}
+		// A universal INTEGER (0x02), an application-class tag (0x42), context [9]
+		// (0x89), and wrong constructedness (0xa2 dNSName) are not GeneralNames.
+		for (const tag of [0x02, 0x42, 0x89, 0xa2, 0x30]) {
+			expectEncoderErrorCode(
+				() => encodeSubjectAltName({ type: 'unknown', tag, value: Uint8Array.of(0x00) }),
+				'invalid_general_name_tag',
+			);
+		}
+	});
+
+	it('encodeSubjectAltName rejects a non-ASCII IA5String value', () => {
+		expect(() => encodeSubjectAltName({ type: 'dns', value: 'café.example' })).toThrow(
+			'Invalid IA5String',
+		);
+		expect(() => encodeSubjectAltName({ type: 'uri', value: 'http://café.example' })).toThrow(
+			'Invalid IA5String',
+		);
+	});
+
+	it('encodeAuthorityInfoAccess rejects a non-URI OCSP location wrapped in a custom OID', () => {
+		expect(() =>
+			encodeAuthorityInfoAccess([
+				{
+					method: { type: 'oid', value: OIDS.ocspAccessMethod },
+					location: { type: 'dns', value: 'ocsp.example' },
+				},
+			]),
+		).toThrow('OCSP location must be a URI');
 	});
 
 	it('buildCertificateExtensions throws on SPKI without subject public key bit string', () => {
@@ -679,38 +747,177 @@ describe('extensions encoding', () => {
 	});
 
 	it('rejects empty certificate policies and policy mappings', () => {
-		expect(() => encodeCertificatePolicies([])).toThrow('certificatePolicies must not be empty');
-		expect(() => encodePolicyMappings([])).toThrow('policyMappings must not be empty');
+		expectEncoderErrorCode(() => encodeCertificatePolicies([]), 'certificate_policies_empty');
+		expectEncoderErrorCode(() => encodePolicyMappings([]), 'policy_mappings_empty');
+	});
+
+	it('rejects a duplicate certificate policy OID', () => {
+		expectEncoderErrorCode(
+			() =>
+				encodeCertificatePolicies([
+					{ policyIdentifier: '1.2.3.4' },
+					{ policyIdentifier: '1.2.3.4' },
+				]),
+			'duplicate_policy_oid',
+		);
+	});
+
+	it('rejects duplicate policy OIDs that differ only by leading-zero arc aliasing', () => {
+		expectEncoderErrorCode(
+			() =>
+				encodeCertificatePolicies([
+					{ policyIdentifier: '1.2.3.4' },
+					{ policyIdentifier: '1.2.03.4' },
+				]),
+			'duplicate_policy_oid',
+		);
+	});
+
+	it('rejects a policy qualifier reusing a built-in OID in the opaque variant', () => {
+		const qualifierDer = new Uint8Array([0x05, 0x00]);
+		for (const oid of [OIDS.cpsPolicyQualifier, OIDS.userNoticePolicyQualifier]) {
+			expectEncoderErrorCode(
+				() =>
+					encodeCertificatePolicies([
+						{ policyIdentifier: '1.2.3.4', policyQualifiers: [{ type: 'oid', oid, qualifierDer }] },
+					]),
+				'reserved_policy_qualifier_oid',
+			);
+		}
+	});
+
+	it('rejects a built-in qualifier OID smuggled through a leading-zero alias', () => {
+		const alias = OIDS.userNoticePolicyQualifier.replace(/\.(\d+)$/, '.0$1');
+		expectEncoderErrorCode(
+			() =>
+				encodeCertificatePolicies([
+					{
+						policyIdentifier: '1.2.3.4',
+						policyQualifiers: [
+							{ type: 'oid', oid: alias, qualifierDer: new Uint8Array([0x05, 0x00]) },
+						],
+					},
+				]),
+			'reserved_policy_qualifier_oid',
+		);
+	});
+
+	it('encodes a genuine custom policy qualifier OID as raw DER', () => {
+		const der = encodeCertificatePolicies([
+			{
+				policyIdentifier: '1.2.3.4',
+				policyQualifiers: [
+					{ type: 'oid', oid: '1.3.6.1.4.1.99999.1', qualifierDer: new Uint8Array([0x05, 0x00]) },
+				],
+			},
+		]);
+		expect(toHex(der)).toContain(`${toHex(objectIdentifier('1.3.6.1.4.1.99999.1'))}0500`);
+	});
+
+	it('rejects a DisplayText outside SIZE (1..200)', () => {
+		const overLong = 'a'.repeat(201);
+		expectEncoderErrorCode(
+			() =>
+				encodeCertificatePolicies([
+					{
+						policyIdentifier: '1.2.3.4',
+						policyQualifiers: [{ type: 'userNotice', explicitText: overLong }],
+					},
+				]),
+			'display_text_out_of_range',
+		);
+		expectEncoderErrorCode(
+			() =>
+				encodeCertificatePolicies([
+					{
+						policyIdentifier: '1.2.3.4',
+						policyQualifiers: [
+							{ type: 'userNotice', noticeRef: { organization: '', noticeNumbers: [1] } },
+						],
+					},
+				]),
+			'display_text_out_of_range',
+		);
+	});
+
+	it('rejects empty SEQUENCE-valued extension encoders', () => {
+		expectEncoderErrorCode(() => encodeKeyUsage([]), 'key_usage_empty');
+		expectEncoderErrorCode(() => encodeExtendedKeyUsage([]), 'extended_key_usage_empty');
+		expectEncoderErrorCode(() => encodeAuthorityInfoAccess([]), 'authority_info_access_empty');
+		expectEncoderErrorCode(() => encodeCrlDistributionPoints([]), 'crl_distribution_points_empty');
+		expectEncoderErrorCode(() => encodeNameConstraints({}), 'name_constraints_empty');
+	});
+
+	it('rejects an IP name constraint whose address and mask do not form 8 or 32 octets', () => {
+		expectEncoderErrorCode(
+			() =>
+				encodeNameConstraints({
+					permittedSubtrees: [
+						{
+							base: {
+								type: 'ip',
+								addressBytes: Uint8Array.of(10, 0, 0, 0),
+								maskBytes: Uint8Array.of(255, 0),
+							},
+						},
+					],
+				}),
+			'invalid_ip_name_constraint',
+		);
 	});
 
 	it('rejects invalid distribution point construction', () => {
-		expect(() =>
-			Reflect.apply(encodeCrlDistributionPoints, undefined, [[{ reasons: ['keyCompromise'] }]]),
-		).toThrow('DistributionPoint must contain distributionPoint or crlIssuer');
-		expect(() =>
-			encodeCrlDistributionPoints([
-				{
-					distributionPoint: {
-						fullName: [{ type: 'uri', value: 'http://example.test/crl' }],
-						relativeName: [{ type: 'commonName', value: 'bad' }],
+		expectEncoderErrorCode(
+			() =>
+				Reflect.apply(encodeCrlDistributionPoints, undefined, [[{ reasons: ['keyCompromise'] }]]),
+			'distribution_point_empty',
+		);
+		expectEncoderErrorCode(
+			() =>
+				encodeCrlDistributionPoints([
+					{
+						distributionPoint: {
+							fullName: [{ type: 'uri', value: 'http://example.test/crl' }],
+							relativeName: [{ type: 'commonName', value: 'bad' }],
+						},
 					},
-				},
-			]),
-		).toThrow('DistributionPointName cannot contain both fullName and relativeName');
-		expect(() => encodeCrlDistributionPoints([{ distributionPoint: {} }])).toThrow(
-			'DistributionPointName must contain fullName or relativeName',
+				]),
+			'distribution_point_name_conflict',
+		);
+		expectEncoderErrorCode(
+			() => encodeCrlDistributionPoints([{ distributionPoint: {} }]),
+			'distribution_point_name_empty',
 		);
 	});
 
 	it('rejects non-SEQUENCE directoryName DER when encoding names', () => {
-		expect(() => encodeSubjectAltName({ type: 'directoryName', derHex: '020100' })).toThrow(
-			'directoryName derHex must encode a DER SEQUENCE',
+		expectEncoderErrorCode(
+			() => encodeSubjectAltName({ type: 'directoryName', derHex: '020100' }),
+			'directory_name_not_sequence',
 		);
-		expect(() =>
-			encodeNameConstraints({
-				permittedSubtrees: [{ base: { type: 'directoryName', derHex: '020100' } }],
-			}),
-		).toThrow('directoryName derHex must encode a DER SEQUENCE');
+		expectEncoderErrorCode(
+			() =>
+				encodeNameConstraints({
+					permittedSubtrees: [{ base: { type: 'directoryName', derHex: '020100' } }],
+				}),
+			'directory_name_not_sequence',
+		);
+	});
+
+	it('rejects an empty relative distinguished name', () => {
+		expectEncoderErrorCode(
+			() => encodeRelativeDistinguishedName([]),
+			'relative_distinguished_name_empty',
+		);
+	});
+
+	it('rejects an unsupported relative distinguished name field', () => {
+		const attribute = { type: 'commonName', value: 'example.test' } as const;
+		Object.defineProperty(attribute, 'type', { value: 'unsupported' });
+		expectEncoderErrorCode(
+			() => encodeRelativeDistinguishedName([attribute]),
+			'unsupported_name_field',
+		);
 	});
 
 	it('rejects invalid IPv4 addresses during certificate creation', async () => {
@@ -1215,7 +1422,7 @@ describe('pbes2.ts edge cases', () => {
 describe('pkcs12-mac.ts edge cases', () => {
 	const dummySafe = new Uint8Array(10);
 
-	it('parsePkcs12MacDataOrThrow throws on malformed MacData (missing salt)', async () => {
+	it('parsePkcs12MacDataOrThrow throws on malformed MacData (missing salt)', () => {
 		// Only digestInfo, no salt or iterations
 		const malformed = sequence([
 			sequence([
@@ -1226,7 +1433,7 @@ describe('pkcs12-mac.ts edge cases', () => {
 		expect(parsePkcs12MacDataOrThrow(malformed, dummySafe)).rejects.toThrow('Malformed MacData');
 	});
 
-	it('parsePkcs12MacDataOrThrow throws on malformed MacData (salt wrong tag)', async () => {
+	it('parsePkcs12MacDataOrThrow throws on malformed MacData (salt wrong tag)', () => {
 		// salt is INTEGER instead of OCTET STRING
 		const malformed = sequence([
 			sequence([
@@ -1239,7 +1446,7 @@ describe('pkcs12-mac.ts edge cases', () => {
 		expect(parsePkcs12MacDataOrThrow(malformed, dummySafe)).rejects.toThrow('Malformed MacData');
 	});
 
-	it('parsePkcs12MacDataOrThrow throws on malformed DigestInfo (missing digest)', async () => {
+	it('parsePkcs12MacDataOrThrow throws on malformed DigestInfo (missing digest)', () => {
 		// DigestInfo with only algorithm, no digest
 		const malformed = sequence([
 			sequence([sequence([objectIdentifier(OIDS.sha256), nullValue()])]),
@@ -1249,7 +1456,7 @@ describe('pkcs12-mac.ts edge cases', () => {
 		expect(parsePkcs12MacDataOrThrow(malformed, dummySafe)).rejects.toThrow('Malformed DigestInfo');
 	});
 
-	it('parsePkcs12MacDataOrThrow throws on malformed DigestInfo (digest wrong tag)', async () => {
+	it('parsePkcs12MacDataOrThrow throws on malformed DigestInfo (digest wrong tag)', () => {
 		// digest is INTEGER instead of OCTET STRING
 		const malformed = sequence([
 			sequence([
@@ -1262,7 +1469,7 @@ describe('pkcs12-mac.ts edge cases', () => {
 		expect(parsePkcs12MacDataOrThrow(malformed, dummySafe)).rejects.toThrow('Malformed DigestInfo');
 	});
 
-	it('parsePkcs12MacDataOrThrow throws when algorithm OID is missing', async () => {
+	it('parsePkcs12MacDataOrThrow throws when algorithm OID is missing', () => {
 		// algorithmSequence is empty
 		const malformed = sequence([
 			sequence([sequence([]), octetString(new Uint8Array(32))]),
@@ -1274,7 +1481,7 @@ describe('pkcs12-mac.ts edge cases', () => {
 		);
 	});
 
-	it('parsePkcs12MacDataOrThrow throws on non-SHA-256 algorithm', async () => {
+	it('parsePkcs12MacDataOrThrow throws on non-SHA-256 algorithm', () => {
 		// Use SHA-1 OID instead of SHA-256
 		const malformed = sequence([
 			sequence([
@@ -1297,7 +1504,7 @@ describe('pkcs12-mac.ts edge cases', () => {
 		expect(parsed.verification).toBe('unchecked');
 	});
 
-	it('parsePkcs12MacDataOrThrow throws on zero iterations', async () => {
+	it('parsePkcs12MacDataOrThrow throws on zero iterations', () => {
 		const malformed = sequence([
 			sequence([
 				sequence([objectIdentifier(OIDS.sha256), nullValue()]),
@@ -1311,7 +1518,7 @@ describe('pkcs12-mac.ts edge cases', () => {
 		);
 	});
 
-	it('parsePkcs12MacDataOrThrow throws on negative iterations', async () => {
+	it('parsePkcs12MacDataOrThrow throws on negative iterations', () => {
 		const malformed = sequence([
 			sequence([
 				sequence([objectIdentifier(OIDS.sha256), nullValue()]),
@@ -1325,7 +1532,7 @@ describe('pkcs12-mac.ts edge cases', () => {
 		);
 	});
 
-	it('createPkcs12MacData rejects zero iterations', async () => {
+	it('createPkcs12MacData rejects zero iterations', () => {
 		expect(createPkcs12MacData(dummySafe, { password: 'test', iterations: 0 })).rejects.toThrow(
 			'MacData iterations must be a positive safe integer',
 		);

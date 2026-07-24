@@ -20,7 +20,7 @@ function requireEl(element: DerElement | undefined): DerElement {
 }
 
 /** Mints a self-signed signing identity with the digitalSignature key usage. */
-async function signingIdentity(commonName: string, algorithm?: KeyAlgorithmInput) {
+function signingIdentity(commonName: string, algorithm?: KeyAlgorithmInput) {
 	return createSelfSignedCertificate({
 		subject: { commonName },
 		...(algorithm === undefined ? {} : { algorithm }),

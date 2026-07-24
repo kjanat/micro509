@@ -64,6 +64,18 @@
 
 import { objectIdentifier, sequence, setOf } from '#micro509/internal/asn1/der';
 import { NAME_FIELD_DEFINITIONS, NAME_OBJECT_ORDER } from '#micro509/internal/x509/name-fields';
+import { throwMicro509Error } from '#micro509/result/result';
+
+/** Machine-readable reason a distinguished-name encoder rejected its construction input. */
+export type NameEncoderErrorCode =
+	| 'relative_distinguished_name_empty'
+	| 'unsupported_name_field'
+	| 'invalid_country_code';
+
+/** Throws a {@link ResultError} for a distinguished-name encoder input-validation failure. */
+function throwNameEncoderError(code: NameEncoderErrorCode, message: string): never {
+	throwMicro509Error(code, message);
+}
 
 /**
  * Union of recognized X.501 attribute type shorthand names.
@@ -231,13 +243,16 @@ export function isNameInputEmpty(input: NameInput): boolean {
  *
  * @param attributes Attribute list to encode inside one RDN.
  * @returns DER-encoded RelativeDistinguishedName bytes.
- * @throws {Error} If the attribute list is empty, contains an unsupported field key, or uses an invalid country code.
+ * @throws {ResultError} If the attribute list is empty, contains an unsupported field key, or uses an invalid country code.
  */
 export function encodeRelativeDistinguishedName(
 	attributes: RelativeDistinguishedNameInput,
 ): Uint8Array {
 	if (attributes.length === 0) {
-		throw new Error('Relative distinguished name must contain at least one attribute');
+		throwNameEncoderError(
+			'relative_distinguished_name_empty',
+			'Relative distinguished name must contain at least one attribute',
+		);
 	}
 	return setOf(attributes.map(encodeNameAttribute));
 }
@@ -260,10 +275,10 @@ function encodeNameAttributeAsSet(attribute: NameAttribute): Uint8Array {
 function encodeNameAttribute(attribute: NameAttribute): Uint8Array {
 	const definition = NAME_FIELD_DEFINITIONS[attribute.type];
 	if (definition === undefined) {
-		throw new Error(`Unsupported name field: ${attribute.type}`);
+		throwNameEncoderError('unsupported_name_field', `Unsupported name field: ${attribute.type}`);
 	}
 	if (attribute.type === 'country' && attribute.value.length !== 2) {
-		throw new Error('Country must be a 2-character code');
+		throwNameEncoderError('invalid_country_code', 'Country must be a 2-character code');
 	}
 	return sequence([objectIdentifier(definition.oid), definition.encode(attribute.value)]);
 }
