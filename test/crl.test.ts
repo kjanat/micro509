@@ -1018,6 +1018,172 @@ describe('crl', () => {
 		).toMatchObject({ ok: true, value: { status: 'good' } });
 	});
 
+	it('matches SRV-ID distribution point names case-insensitively (RFC 4985 §2)', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'SRV DP CA' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'SRV DP CA' },
+			subject: { commonName: 'srv-dp.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				crlDistributionPoints: [
+					{
+						distributionPoint: {
+							fullName: [{ type: 'srv', value: '_ldap.crl.example' }],
+						},
+					},
+				],
+			},
+		});
+		for (const idpName of ['_ldap.crl.example', '_LDAP.CRL.EXAMPLE']) {
+			const crl = await createCertificateRevocationList({
+				issuer: { commonName: 'SRV DP CA' },
+				signerPrivateKey: ca.keyPair.privateKey,
+				issuerPublicKey: ca.keyPair.publicKey,
+				issuingDistributionPoint: {
+					distributionPoint: { fullName: [{ type: 'srv', value: idpName }] },
+				},
+			});
+			expect(
+				await checkCertificateRevocationAgainstCrl({
+					certificate: leaf.pem,
+					issuerCertificate: ca.certificate.pem,
+					crl: crl.pem,
+				}),
+			).toMatchObject({ ok: true, value: { status: 'good' } });
+		}
+
+		const otherCrl = await createCertificateRevocationList({
+			issuer: { commonName: 'SRV DP CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			issuingDistributionPoint: {
+				distributionPoint: { fullName: [{ type: 'srv', value: '_imaps.crl.example' }] },
+			},
+		});
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: leaf.pem,
+				issuerCertificate: ca.certificate.pem,
+				crl: otherCrl.pem,
+			}),
+		).toMatchObject({
+			ok: false,
+			code: 'non_applicable',
+			details: { reason: 'distribution_point_mismatch' },
+		});
+	});
+
+	it('normalizes distribution point URIs before comparing them (RFC 5280 §7.4)', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'URI Norm CA' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
+		});
+		const equivalent = [
+			// Step 3: percent-encoding normalization decodes unreserved octets.
+			['http://crl.example/%7Ecerts/a.crl', 'http://crl.example/~certs/a.crl'],
+			// Step 3: the remaining triplets normalize to uppercase hex.
+			['http://crl.example/a%2fb.crl', 'http://crl.example/a%2Fb.crl'],
+			// Step 3 over the whole unreserved set: ALPHA, DIGIT, "-", ".", "_", "~".
+			['http://crl.example/%41%39%2D%2E%5F%7E.crl', 'http://crl.example/A9-._~.crl'],
+			// Steps 2 and 5 for a scheme the URL parser treats as opaque.
+			['ldap://CRL.EXAMPLE:389/cn=crl', 'ldap://crl.example/cn=crl'],
+			// Step 1: an IDN host carried as percent-encoded UTF-8 reduces to ASCII
+			// Compatible Encoding.
+			['ldap://xn--bcher-kva.example/cn=crl', 'ldap://b%C3%BCcher.example/cn=crl'],
+		] as const;
+		for (const [certificateUri, crlUri] of equivalent) {
+			const leafKeys = await generateKeyPair();
+			const leaf = await createCertificate({
+				issuer: { commonName: 'URI Norm CA' },
+				subject: { commonName: 'uri-norm.example' },
+				publicKey: leafKeys.publicKey,
+				signerPrivateKey: ca.keyPair.privateKey,
+				issuerPublicKey: ca.keyPair.publicKey,
+				extensions: {
+					crlDistributionPoints: [
+						{ distributionPoint: { fullName: [{ type: 'uri', value: certificateUri }] } },
+					],
+				},
+			});
+			const crl = await createCertificateRevocationList({
+				issuer: { commonName: 'URI Norm CA' },
+				signerPrivateKey: ca.keyPair.privateKey,
+				issuerPublicKey: ca.keyPair.publicKey,
+				issuingDistributionPoint: {
+					distributionPoint: { fullName: [{ type: 'uri', value: crlUri }] },
+				},
+			});
+			expect(
+				await checkCertificateRevocationAgainstCrl({
+					certificate: leaf.pem,
+					issuerCertificate: ca.certificate.pem,
+					crl: crl.pem,
+				}),
+			).toMatchObject({ ok: true, value: { status: 'good' } });
+		}
+	});
+
+	it('keeps distinct distribution point URIs distinct under normalization', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'URI Distinct CA' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
+		});
+		const distinct = [
+			// %2F is reserved, so decoding it would collapse two different paths.
+			['http://crl.example/a%2Fb.crl', 'http://crl.example/a/b.crl'],
+			['http://crl.example/a.crl', 'http://crl.example/b.crl'],
+			['ldap://crl.example:390/cn=crl', 'ldap://crl.example/cn=crl'],
+			// A non-conformant relative reference normalizes to nothing comparable.
+			['crl.example/a.crl', 'crl.example/b.crl'],
+			// A host whose percent-decoding would change the authority is left alone.
+			['ldap://a%2Fb.example/cn=crl', 'ldap://a%2Fc.example/cn=crl'],
+			// A host that decodes to an unparseable authority.
+			['ldap://%5B%5D/cn=crl', 'ldap://crl.example/cn=crl'],
+			// A host carrying a percent sequence that is not valid UTF-8.
+			['ldap://a%FF.example/cn=crl', 'ldap://crl.example/cn=crl'],
+		] as const;
+		for (const [certificateUri, crlUri] of distinct) {
+			const leafKeys = await generateKeyPair();
+			const leaf = await createCertificate({
+				issuer: { commonName: 'URI Distinct CA' },
+				subject: { commonName: 'uri-distinct.example' },
+				publicKey: leafKeys.publicKey,
+				signerPrivateKey: ca.keyPair.privateKey,
+				issuerPublicKey: ca.keyPair.publicKey,
+				extensions: {
+					crlDistributionPoints: [
+						{ distributionPoint: { fullName: [{ type: 'uri', value: certificateUri }] } },
+					],
+				},
+			});
+			const crl = await createCertificateRevocationList({
+				issuer: { commonName: 'URI Distinct CA' },
+				signerPrivateKey: ca.keyPair.privateKey,
+				issuerPublicKey: ca.keyPair.publicKey,
+				issuingDistributionPoint: {
+					distributionPoint: { fullName: [{ type: 'uri', value: crlUri }] },
+				},
+			});
+			expect(
+				await checkCertificateRevocationAgainstCrl({
+					certificate: leaf.pem,
+					issuerCertificate: ca.certificate.pem,
+					crl: crl.pem,
+				}),
+			).toMatchObject({
+				ok: false,
+				code: 'non_applicable',
+				details: { reason: 'distribution_point_mismatch' },
+			});
+		}
+	});
+
 	it('freezes the canonical reason list so results cannot corrupt it', () => {
 		expect(Object.isFrozen(ALL_DISTRIBUTION_POINT_REASONS)).toBe(true);
 	});

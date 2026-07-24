@@ -559,39 +559,17 @@ async function checkSignerRevocation(
 
 	// A `good` from one CRL does not end the search: a later CRL may report the
 	// signer revoked, and a revoked verdict from any CRL wins.
-	let sawValidGood = false;
+	const coveredReasons = new Set<string>();
 	for (const crlSource of ctx.crls) {
-		let crl: ParsedCertificateRevocationList;
-		try {
-			crl = parseCrlFromSource(crlSource);
-		} catch {
-			continue;
+		const outcome = await checkSignerAgainstCrl(signer, issuer, crlSource, ctx);
+		if (outcome.kind === 'revoked') {
+			return 'resolved-revoked';
 		}
-
-		// Check if this CRL can provide revocation info for the signer
-		const result = await checkCertificateRevocationAgainstCrl({
-			certificate: signer,
-			issuerCertificate: issuer,
-			crl,
-			at: ctx.at,
-		});
-
-		if (result.ok) {
-			if (result.value.status === 'revoked') {
-				return 'resolved-revoked';
-			}
-			if (result.value.status === 'good') {
-				// Before accepting this result, validate the CRL's signer
-				// The CRL's signer is the issuer we just used
-				const crlSignerStatus = await validateCrlSigner(issuer, ctx);
-				if (crlSignerStatus === 'resolved-valid') {
-					sawValidGood = true;
-				}
-				// If CRL signer is revoked or indeterminate, can't trust this result
-			}
+		for (const reason of outcome.reasons) {
+			coveredReasons.add(reason);
 		}
 	}
-	if (sawValidGood) {
+	if (coversAllDistributionPointReasons(coveredReasons)) {
 		return 'resolved-valid';
 	}
 
@@ -602,6 +580,51 @@ async function checkSignerRevocation(
 	}
 
 	return 'resolved-indeterminate';
+}
+
+/** What one CRL settles about a signer: a revoked verdict, or the reasons it covers. */
+type SignerCrlOutcome =
+	| { readonly kind: 'revoked' }
+	| { readonly kind: 'reasons'; readonly reasons: readonly DistributionPointReason[] };
+
+const SIGNER_CRL_NO_EVIDENCE = {
+	kind: 'reasons',
+	reasons: [],
+} as const satisfies SignerCrlOutcome;
+
+/**
+ * Evaluates one CRL against a signer. A CRL that does not parse, does not
+ * apply, or is itself signed by a signer that is not known good yields no
+ * evidence rather than a verdict.
+ */
+async function checkSignerAgainstCrl(
+	signer: ParsedCertificate,
+	issuer: ParsedCertificate,
+	crlSource: CrlSource,
+	ctx: SignerValidationContext,
+): Promise<SignerCrlOutcome> {
+	let crl: ParsedCertificateRevocationList;
+	try {
+		crl = parseCrlFromSource(crlSource);
+	} catch {
+		return SIGNER_CRL_NO_EVIDENCE;
+	}
+	const result = await checkCertificateRevocationAgainstCrl({
+		certificate: signer,
+		issuerCertificate: issuer,
+		crl,
+		at: ctx.at,
+	});
+	if (!result.ok) {
+		return SIGNER_CRL_NO_EVIDENCE;
+	}
+	if (result.value.status === 'revoked') {
+		return { kind: 'revoked' };
+	}
+	// The CRL's signer is the issuer just used, and it must itself be good.
+	return (await validateCrlSigner(issuer, ctx)) === 'resolved-valid'
+		? { kind: 'reasons', reasons: result.value.coveredReasons }
+		: SIGNER_CRL_NO_EVIDENCE;
 }
 
 /** Builds the `revoked` CertificateRevocationStatus for a CRL hit. */

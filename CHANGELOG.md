@@ -70,10 +70,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   recursive CRL-signer validation — now treats a reason-scoped `good` as
   definitive only once the applicable CRLs together cover all eight reasons; a
   revoked verdict from any CRL still wins immediately. GeneralName applicability
-  comparisons apply the RFC 5280 §7.2/§7.4/§7.5 case rules (dNSName and URI
-  host/scheme, rfc822Name host-part), and CRL GeneralName decoding shares the
-  certificate parser's decoder so an `otherName` SRV-ID matches across
-  issuerAltName and the IDP. `verifyCertificateChain` recognises a critical
+  comparisons apply the RFC 5280 name comparison rules: dNSName is
+  case-insensitive (§7.2), the rfc822Name host-part is case-insensitive (§7.5),
+  an `otherName` SRV-ID is case-insensitive in both halves (RFC 4985 §2), and a
+  uniformResourceIdentifier is prepared per §7.4 — IDN labels to ASCII
+  Compatible Encoding, lowercased scheme and host, percent-encoding and path
+  segment normalization, and scheme-based normalization for `ftp`, `http`,
+  `https`, and `ldap`. Certificate and CRL parsing now share one canonical
+  GeneralName decoder, so an SRV-ID matches across issuerAltName and the IDP.
+  `verifyCertificateChain` recognises a critical
   issuerAltName rather than rejecting it. A delta-CRL `removeFromCRL` entry for
   an expired certificate now measures expiry against the delta's `thisUpdate`
   (§5.2.4), not the evaluation time.

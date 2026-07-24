@@ -52,6 +52,7 @@ import {
 	encodeDistributionPointReasonFlagsContent,
 	parseDistributionPointReasonFlagsContent,
 } from '#micro509/internal/x509/extension-bits';
+import { parseGeneralName, parseGeneralNames } from '#micro509/internal/x509/general-name';
 import { exportSpkiDer } from '#micro509/keys/keys';
 import { pemDecodeOrThrow, pemEncode } from '#micro509/pem/pem';
 import type { ErrorResult, Micro509Error } from '#micro509/result/result';
@@ -88,11 +89,7 @@ import type {
 	ParsedNameAttribute,
 	ParsedRelativeDistinguishedName,
 } from '#micro509/x509/parse';
-import {
-	parseCertificateDerOrThrow,
-	parseCertificateFromSource,
-	parseGeneralName,
-} from '#micro509/x509/parse';
+import { parseCertificateDerOrThrow, parseCertificateFromSource } from '#micro509/x509/parse';
 
 /**
  * Single revoked certificate entry for {@linkcode createCertificateRevocationList}.
@@ -1710,6 +1707,10 @@ function compareGeneralNames(left: GeneralName, right: GeneralName): boolean {
 		// RFC 5280 §7.2: dNSName comparison is case-insensitive.
 		return left.value.toLowerCase() === right.value.toLowerCase();
 	}
+	if (left.type === 'srv' && right.type === 'srv') {
+		// RFC 4985 §2: the SRVName Service and the DNS Name both compare case-insensitively.
+		return left.value.toLowerCase() === right.value.toLowerCase();
+	}
 	if (left.type === 'email' && right.type === 'email') {
 		return compareRfc822Names(left.value, right.value);
 	}
@@ -1746,16 +1747,106 @@ function compareRfc822Names(left: string, right: string): boolean {
 	);
 }
 
-/** RFC 5280 §7.4: URI scheme and host compare case-insensitively; the remainder is exact. */
+/** RFC 5280 §7.4: URIs compare only after syntax-based and scheme-based normalization. */
 function compareUniformResourceIdentifiers(left: string, right: string): boolean {
 	if (left === right) {
 		return true;
 	}
-	try {
-		return new URL(left).href === new URL(right).href;
-	} catch {
+	const normalizedLeft = normalizeUriForComparison(left);
+	if (normalizedLeft === undefined) {
 		return false;
 	}
+	return normalizedLeft === normalizeUriForComparison(right);
+}
+
+/**
+ * The schemes RFC 5280 §7.4 step 5 requires implementations to recognise, with
+ * the default port that scheme-based normalization elides. `ldaps` is included
+ * as the TLS form of the mandatory `ldap` scheme.
+ */
+const URI_DEFAULT_PORT_BY_SCHEME: ReadonlyMap<string, string> = new Map([
+	['ftp', '21'],
+	['http', '80'],
+	['https', '443'],
+	['ldap', '389'],
+	['ldaps', '636'],
+]);
+
+/**
+ * Applies the RFC 5280 §7.4 comparison preparation: IDN labels to ASCII
+ * Compatible Encoding, lowercased scheme and host, percent-encoding and path
+ * segment normalization, and scheme-based normalization. The URL parser covers
+ * path segments for every scheme and the scheme case; the remaining steps are
+ * applied here because it leaves the host of a non-special scheme such as
+ * `ldap` untouched and never normalizes percent-encoding.
+ *
+ * @returns `undefined` when the value does not parse as an absolute URI.
+ */
+function normalizeUriForComparison(value: string): string | undefined {
+	let url: URL;
+	try {
+		url = new URL(value);
+	} catch {
+		return undefined;
+	}
+	if (url.hostname !== '') {
+		const host = normalizeUriHost(url.hostname);
+		if (host === undefined) {
+			return undefined;
+		}
+		url.hostname = host;
+	}
+	if (url.port === URI_DEFAULT_PORT_BY_SCHEME.get(url.protocol.slice(0, -1))) {
+		url.port = '';
+	}
+	return normalizePercentEncoding(url.href);
+}
+
+/**
+ * Reparses a host under a special scheme so the URL parser applies IDNA and
+ * lowercasing to it, which it skips for opaque hosts.
+ *
+ * @returns `undefined` when the host does not survive the round trip intact.
+ */
+function normalizeUriHost(hostname: string): string | undefined {
+	try {
+		const probe = new URL(`https://${decodeHostPercentEncoding(hostname)}`);
+		return probe.href === `https://${probe.hostname}/` ? probe.hostname : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+/** Recovers the Unicode host an opaque-host URI carries as percent-encoded UTF-8. */
+function decodeHostPercentEncoding(hostname: string): string {
+	try {
+		return decodeURIComponent(hostname);
+	} catch {
+		return hostname;
+	}
+}
+
+const PERCENT_TRIPLET = /%[0-9A-Fa-f]{2}/g;
+
+/** RFC 3986 §6.2.2.2: unreserved triplets decode, every other triplet uppercases. */
+function normalizePercentEncoding(value: string): string {
+	return value.replace(PERCENT_TRIPLET, (triplet) => {
+		const code = Number.parseInt(triplet.slice(1), 16);
+		return isUnreservedUriCharacter(code) ? String.fromCharCode(code) : triplet.toUpperCase();
+	});
+}
+
+/** RFC 3986 §2.3 unreserved set: `ALPHA / DIGIT / "-" / "." / "_" / "~"`. */
+function isUnreservedUriCharacter(code: number): boolean {
+	return (
+		(code >= 0x41 && code <= 0x5a) ||
+		(code >= 0x61 && code <= 0x7a) ||
+		(code >= 0x30 && code <= 0x39) ||
+		code === 0x2d ||
+		code === 0x2e ||
+		code === 0x5f ||
+		code === 0x7e
+	);
 }
 
 /** Constant-length byte-array equality check. */
@@ -2142,20 +2233,6 @@ function parseDistributionPointField(
 		default:
 			throw new Error(`Unsupported DistributionPoint field tag: ${String(child.tag)}`);
 	}
-}
-
-/** Decodes a GeneralName from its context-tagged ASN.1 element. */
-function parseGeneralNames(valueDer: Uint8Array, element: DerElement): readonly GeneralName[] {
-	const names = childrenOf(valueDer, element);
-	if (names.length === 0) {
-		throw new Error('GeneralNames must not be empty');
-	}
-	for (const name of names) {
-		if ((name.tag & 0xc0) !== 0x80) {
-			throw new Error('GeneralNames must contain GeneralName entries');
-		}
-	}
-	return names.map((name) => parseGeneralName(valueDer, name));
 }
 
 /** Decodes a RelativeDistinguishedName SET from an implicitly-tagged context element. */
