@@ -50,6 +50,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   an encapsulated header with no space after the colon (`DEK-Info:AES-256-CBC,…`).
   The parser keyed on `': '`, so a conformant no-space header ended the header
   scan early and folded into the base64 body.
+  (https://github.com/kjanat/micro509/pull/89)
 - `importPkcs8Der` accepts a `OneAsymmetricKey` (RFC 5958 §2 / RFC 8410 §7) that
   carries both `attributes [0]` and `publicKey [1]`. The parser capped at four
   elements, so a five-element v2 key that OpenSSL and Node WebCrypto both accept
