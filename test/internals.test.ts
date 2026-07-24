@@ -1000,15 +1000,71 @@ describe('extensions encoding', () => {
 			() =>
 				buildRequestedExtensions({
 					basicConstraints: { ca: true, pathLength: 0 },
-					customExtensions: [{ oid: OIDS.keyUsage, value: Uint8Array.of(0x05, 0x00) }],
+					customExtensions: [{ oid: OIDS.keyUsage, value: encodeKeyUsage(['digitalSignature']) }],
 				}),
 			'path_length_requires_key_cert_sign',
 		);
+	});
+
+	it("rejects a custom extension whose payload is not that known OID's DER", () => {
+		for (const oid of [OIDS.basicConstraints, OIDS.keyUsage, OIDS.subjectAltName]) {
+			expectEncoderErrorCode(
+				() =>
+					buildCertificateExtensions(subjectPublicKeyInfo, undefined, {
+						customExtensions: [{ oid, value: Uint8Array.of(0x05, 0x00) }],
+					}),
+				'malformed_known_extension_value',
+			);
+			expectEncoderErrorCode(
+				() =>
+					buildRequestedExtensions({
+						customExtensions: [{ oid, value: Uint8Array.of(0x05, 0x00) }],
+					}),
+				'malformed_known_extension_value',
+			);
+		}
+	});
+
+	it('resolves a known extension supplied under a non-canonical OID spelling', () => {
+		// 2.5.029.19 and 2.5.29.19 encode to the same OID, so both are basicConstraints.
 		expect(
 			buildRequestedExtensions({
-				customExtensions: [{ oid: OIDS.basicConstraints, value: Uint8Array.of(0x05, 0x00) }],
+				keyUsage: ['keyCertSign'],
+				customExtensions: [
+					{ oid: '2.5.029.19', value: encodeBasicConstraints({ ca: true, pathLength: 0 }) },
+				],
 			}),
 		).toBeInstanceOf(Array);
+		expectEncoderErrorCode(
+			() =>
+				buildRequestedExtensions({
+					keyUsage: ['digitalSignature'],
+					customExtensions: [
+						{ oid: '2.5.029.19', value: encodeBasicConstraints({ ca: true, pathLength: 0 }) },
+					],
+				}),
+			'path_length_requires_key_cert_sign',
+		);
+		expectEncoderErrorCode(
+			() =>
+				buildRequestedExtensions({
+					customExtensions: [{ oid: '2.5.029.19', value: Uint8Array.of(0x05, 0x00) }],
+				}),
+			'malformed_known_extension_value',
+		);
+		// issuerAltName is certificate-only, and the alias must not evade that.
+		expectEncoderErrorCode(
+			() =>
+				buildRequestedExtensions({
+					customExtensions: [
+						{
+							oid: '2.5.029.18',
+							value: sequence([encodeSubjectAltName({ type: 'dns', value: 'alias.example' })]),
+						},
+					],
+				}),
+			'extension_not_supported_in_context',
+		);
 	});
 
 	it('rejects an empty subject without a critical subjectAltName (RFC 5280 §4.2.1.6)', () => {
@@ -1037,6 +1093,25 @@ describe('extensions encoding', () => {
 					subjectPublicKeyInfo,
 					undefined,
 					{ customExtensions: [{ oid: OIDS.subjectAltName, critical: true, value: sequence([]) }] },
+					true,
+				),
+			'malformed_known_extension_value',
+		);
+		// x400Address [3] decodes as an unknown GeneralName, carrying no identity.
+		expectEncoderErrorCode(
+			() =>
+				buildCertificateExtensions(
+					subjectPublicKeyInfo,
+					undefined,
+					{
+						customExtensions: [
+							{
+								oid: OIDS.subjectAltName,
+								critical: true,
+								value: sequence([tlv(0xa3, new Uint8Array())]),
+							},
+						],
+					},
 					true,
 				),
 			'empty_subject_requires_subject_alt_name',

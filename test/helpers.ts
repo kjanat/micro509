@@ -26,9 +26,17 @@ import {
 } from '#micro509/internal/crypto/signing';
 import { exportPkcs8Der, generateKeyPair, importPkcs8Der } from '#micro509/keys';
 import { unwrap } from '#micro509/result';
-import type { BasicConstraints, GeneralName, ParsedCertificate } from '#micro509/x509';
+import type {
+	BasicConstraints,
+	CertificateMaterial,
+	CsrMaterial,
+	GeneralName,
+	ParsedCertificate,
+	SelfSignedCertificateResult,
+} from '#micro509/x509';
 import {
 	createCertificate,
+	createCertificateSigningRequest,
 	createSelfSignedCertificate,
 	encodeSubjectAltName,
 } from '#micro509/x509';
@@ -354,6 +362,207 @@ export async function addRevokedEntryCertificateIssuers(
 		encodeAlgorithmIdentifier(signatureAlgorithm),
 		bitString(signatureValue),
 	]);
+}
+
+/**
+ * Drop-in {@link createSelfSignedCertificate} that splices `customExtensions`
+ * into the signed TBSCertificate instead of routing them through the builder.
+ *
+ * The builder refuses to emit a known OID whose value is not that extension's
+ * DER, so parser-strictness fixtures need a path that bypasses that check while
+ * still producing a properly signed certificate. Takes and returns the same
+ * shapes as the real function.
+ */
+export async function createSelfSignedCertificateWithRawExtensions(
+	input: Parameters<typeof createSelfSignedCertificate>[0],
+): Promise<SelfSignedCertificateResult> {
+	const { customExtensions, ...builderExtensions } = input.extensions ?? {};
+	const issued = await createSelfSignedCertificate({
+		...input,
+		extensions: builderExtensions,
+	});
+	if (customExtensions === undefined || customExtensions.length === 0) {
+		return issued;
+	}
+	const der = await appendCertificateExtensions(
+		issued.certificate.der,
+		issued.keyPair.privateKey,
+		customExtensions.map((extension) =>
+			encodeExtension(extension.oid, new Uint8Array(extension.value), extension.critical ?? false),
+		),
+	);
+	const base64 = Buffer.from(der).toString('base64');
+	return {
+		certificate: { der, base64, pem: toPemBlock('CERTIFICATE', der) },
+		keyPair: issued.keyPair,
+	};
+}
+
+/** Append encoded extensions to a certificate's TBS extensions and re-sign it. */
+export async function appendCertificateExtensions(
+	certificateDer: Uint8Array,
+	signerPrivateKey: CryptoKey,
+	extensionDers: readonly Uint8Array[],
+): Promise<Uint8Array> {
+	const top = readSequenceChildren(certificateDer);
+	const tbsCertificate = top[0];
+	if (tbsCertificate === undefined) {
+		throw new Error('Missing TBSCertificate');
+	}
+	const tbsDer = sliceElement(certificateDer, tbsCertificate);
+	const tbsChildren = readSequenceChildren(tbsDer);
+	const extensionsIndex = tbsChildren.findIndex((child) => child.tag === 0xa3);
+	if (extensionsIndex === -1) {
+		throw new Error('TBSCertificate has no extensions');
+	}
+	const extensionsElement = tbsChildren[extensionsIndex];
+	if (extensionsElement === undefined) {
+		throw new Error('TBSCertificate has no extensions');
+	}
+	const extensionsSequence = childrenOf(tbsDer, extensionsElement)[0];
+	if (extensionsSequence === undefined) {
+		throw new Error('Extensions [3] is empty');
+	}
+	const existing = childrenOf(tbsDer, extensionsSequence).map((extension) =>
+		sliceElement(tbsDer, extension),
+	);
+	const rebuiltTbsDer = sequence(
+		tbsChildren.map((child, childIndex) =>
+			childIndex === extensionsIndex
+				? explicitContext(3, sequence([...existing, ...extensionDers]))
+				: sliceElement(tbsDer, child),
+		),
+	);
+	const signatureAlgorithm = getSignatureAlgorithm(signerPrivateKey);
+	const signatureValue = await signBytes(signerPrivateKey, signatureAlgorithm, rebuiltTbsDer);
+	return sequence([
+		rebuiltTbsDer,
+		encodeAlgorithmIdentifier(signatureAlgorithm),
+		bitString(signatureValue),
+	]);
+}
+
+/**
+ * Drop-in {@link createCertificate} that splices `customExtensions` into the
+ * signed TBSCertificate instead of routing them through the builder.
+ */
+export async function createCertificateWithRawExtensions(
+	input: Parameters<typeof createCertificate>[0],
+): Promise<CertificateMaterial> {
+	const { customExtensions, ...builderExtensions } = input.extensions ?? {};
+	const issued = await createCertificate({ ...input, extensions: builderExtensions });
+	if (customExtensions === undefined || customExtensions.length === 0) {
+		return issued;
+	}
+	const der = await appendCertificateExtensions(
+		issued.der,
+		input.signerPrivateKey,
+		customExtensions.map((extension) =>
+			encodeExtension(extension.oid, new Uint8Array(extension.value), extension.critical ?? false),
+		),
+	);
+	return { der, base64: base64Of(der), pem: toPemBlock('CERTIFICATE', der) };
+}
+
+/**
+ * Drop-in {@link createCertificateSigningRequest} that splices `customExtensions`
+ * into the signed extensionRequest attribute instead of routing them through the
+ * builder. The CSR counterpart of
+ * {@link createSelfSignedCertificateWithRawExtensions}.
+ */
+export async function createCsrWithRawExtensions(
+	input: Parameters<typeof createCertificateSigningRequest>[0],
+): Promise<CsrMaterial> {
+	const { customExtensions, ...builderExtensions } = input.extensions ?? {};
+	const csr = await createCertificateSigningRequest({ ...input, extensions: builderExtensions });
+	if (customExtensions === undefined || customExtensions.length === 0) {
+		return csr;
+	}
+	const encoded = customExtensions.map((extension) =>
+		encodeExtension(extension.oid, new Uint8Array(extension.value), extension.critical ?? false),
+	);
+	const criElement = readSequenceChildren(csr.der)[0];
+	if (criElement === undefined) {
+		throw new Error('Missing CertificationRequestInfo');
+	}
+	const criDer = sliceElement(csr.der, criElement);
+	const criChildren = readSequenceChildren(criDer);
+	const attributesElement = criChildren[3];
+	if (attributesElement === undefined || attributesElement.tag !== 0xa0) {
+		throw new Error('CertificationRequestInfo has no attributes');
+	}
+	const rebuiltCriDer = sequence([
+		...criChildren.slice(0, 3).map((child) => sliceElement(criDer, child)),
+		implicitConstructedContext(
+			0,
+			concatBytes(withExtensionRequest(criDer, attributesElement, encoded)),
+		),
+	]);
+	const signatureAlgorithm = getSignatureAlgorithm(input.signerPrivateKey);
+	const signature = await signBytes(input.signerPrivateKey, signatureAlgorithm, rebuiltCriDer);
+	const der = sequence([
+		rebuiltCriDer,
+		encodeAlgorithmIdentifier(signatureAlgorithm),
+		bitString(signature),
+	]);
+	return { der, pem: toPemBlock('CERTIFICATE REQUEST', der), base64: base64Of(der) };
+}
+
+/** Append extensions to the extensionRequest attribute, creating it when absent. */
+function withExtensionRequest(
+	criDer: Uint8Array,
+	attributesElement: { readonly start: number; readonly end: number },
+	extensionDers: readonly Uint8Array[],
+): Uint8Array[] {
+	const attributes = childrenOf(criDer, attributesElement);
+	const rebuilt: Uint8Array[] = [];
+	let appended = false;
+	for (const attribute of attributes) {
+		const attributeDer = sliceElement(criDer, attribute);
+		const attributeChildren = readSequenceChildren(attributeDer);
+		const typeElement = attributeChildren[0];
+		const valuesElement = attributeChildren[1];
+		if (
+			typeElement === undefined ||
+			valuesElement === undefined ||
+			decodeObjectIdentifier(typeElement.value) !== OIDS.extensionRequest
+		) {
+			rebuilt.push(attributeDer);
+			continue;
+		}
+		const existingSequence = childrenOf(attributeDer, valuesElement)[0];
+		const existing =
+			existingSequence === undefined
+				? []
+				: childrenOf(attributeDer, existingSequence).map((extension) =>
+						sliceElement(attributeDer, extension),
+					);
+		rebuilt.push(
+			sequence([
+				objectIdentifier(OIDS.extensionRequest),
+				setOf([sequence([...existing, ...extensionDers])]),
+			]),
+		);
+		appended = true;
+	}
+	if (!appended) {
+		rebuilt.push(
+			sequence([objectIdentifier(OIDS.extensionRequest), setOf([sequence([...extensionDers])])]),
+		);
+	}
+	return rebuilt;
+}
+
+/** Standard base64 of DER, matching the `base64` field the builders return. */
+function base64Of(der: Uint8Array): string {
+	return Buffer.from(der).toString('base64');
+}
+
+/** Wrap DER in a PEM block with 64-character base64 lines. */
+function toPemBlock(label: string, der: Uint8Array): string {
+	const base64 = Buffer.from(der).toString('base64');
+	const lines = base64.match(/.{1,64}/g) ?? [];
+	return `-----BEGIN ${label}-----\n${lines.join('\n')}\n-----END ${label}-----\n`;
 }
 
 export function createSyntheticPkcs7SignedData(signer: ParsedCertificate): Uint8Array {

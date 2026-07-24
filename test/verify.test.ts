@@ -34,6 +34,7 @@ import {
 import { encodeSubjectAltName } from '#micro509/x509';
 import { parseNameConstraints } from '#micro509/x509/parse';
 import {
+	createCertificateWithRawExtensions,
 	importRsaPrivateKeyWithScheme,
 	issueChain,
 	replaceCertificateSignatureAlgorithm,
@@ -892,7 +893,7 @@ describe('chain verification', () => {
 			},
 		});
 		const leafKeys = await generateKeyPair();
-		const leaf = await createCertificate({
+		const leaf = await createCertificateWithRawExtensions({
 			issuer: { commonName: 'Malformed DirectoryName SAN CA' },
 			subject: { organization: 'Blocked Org', commonName: 'malformed-directory-name.example' },
 			publicKey: leafKeys.publicKey,

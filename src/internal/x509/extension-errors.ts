@@ -37,6 +37,7 @@ export type ExtensionEncoderErrorCode =
 	| 'invalid_ip_name_constraint'
 	| 'invalid_oid'
 	| 'key_usage_empty'
+	| 'malformed_known_extension_value'
 	| 'name_constraints_empty'
 	| 'path_length_requires_key_cert_sign'
 	| 'policy_constraints_empty'

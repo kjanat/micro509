@@ -33,6 +33,19 @@ export function parseGeneralNames(source: Uint8Array, element: DerElement): read
 	return names.map((name) => parseGeneralName(source, name));
 }
 
+/**
+ * Decode an IA5String GeneralName alternative, rejecting a zero-length value.
+ *
+ * RFC 5280 §4.2.1.6 forbids empty GeneralName fields, and a certificate carrying
+ * one presents no usable identity.
+ */
+function requireNonEmptyIa5(element: DerElement, alternative: string): string {
+	if (element.value.length === 0) {
+		throw new Error(`GeneralName ${alternative} must not be empty`);
+	}
+	return decodeString(0x16, element.value);
+}
+
 /** Decode a single GeneralName from its implicit context tag. */
 export function parseGeneralName(source: Uint8Array, element: DerElement): GeneralName {
 	switch (element.tag) {
@@ -48,11 +61,14 @@ export function parseGeneralName(source: Uint8Array, element: DerElement): Gener
 			};
 		}
 		case 0x81:
-			return { type: 'email' as const, value: decodeString(0x16, element.value) };
+			return { type: 'email' as const, value: requireNonEmptyIa5(element, 'rfc822Name') };
 		case 0x82:
-			return { type: 'dns' as const, value: decodeString(0x16, element.value) };
+			return { type: 'dns' as const, value: requireNonEmptyIa5(element, 'dNSName') };
 		case 0x86:
-			return { type: 'uri' as const, value: decodeString(0x16, element.value) };
+			return {
+				type: 'uri' as const,
+				value: requireNonEmptyIa5(element, 'uniformResourceIdentifier'),
+			};
 		case 0x87:
 			return { type: 'ip' as const, value: decodeIpAddress(element.value) };
 		case 0xa4:

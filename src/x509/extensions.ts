@@ -7,7 +7,7 @@
  * @module
  */
 
-import { hexToBytes, toHex } from '#micro509/internal/asn1/asn1';
+import { canonicalizeOid, hexToBytes, toHex } from '#micro509/internal/asn1/asn1';
 import {
 	bool,
 	concatBytes,
@@ -736,6 +736,7 @@ export function buildCertificateExtensions(
 	input: CertificateExtensionsInput | undefined,
 	subjectIsEmpty = false,
 ): Uint8Array[] {
+	assertCustomExtensionsValid(input, 'certificate');
 	if (subjectIsEmpty) {
 		assertEmptySubjectHasCriticalSubjectAltName(input);
 	}
@@ -758,7 +759,7 @@ export function buildCertificateExtensions(
 			buildSubjectKeyIdentifier(issuerPublicKeyInfo),
 		);
 	}
-	appendConfiguredExtensions(extensions, seen, input, 'certificate', {
+	appendConfiguredExtensions(extensions, seen, input, {
 		includeBasicConstraints: false,
 		subjectIsEmpty,
 	});
@@ -776,9 +777,10 @@ export function buildCertificateExtensions(
 export function buildRequestedExtensions(
 	input: CertificateExtensionsInput | undefined,
 ): Uint8Array[] {
+	assertCustomExtensionsValid(input, 'csr');
 	const extensions: Uint8Array[] = [];
 	const seen = new Set<string>();
-	appendConfiguredExtensions(extensions, seen, input, 'csr', { includeBasicConstraints: true });
+	appendConfiguredExtensions(extensions, seen, input, { includeBasicConstraints: true });
 	return extensions;
 }
 
@@ -787,7 +789,6 @@ function appendConfiguredExtensions(
 	encoded: Uint8Array[],
 	seen: Set<string>,
 	input: CertificateExtensionsInput | undefined,
-	context: ExtensionRegistryContext,
 	options: {
 		readonly includeBasicConstraints: boolean;
 		/** When true, SAN is marked critical per RFC 5280 §4.2.1.6. */
@@ -801,7 +802,7 @@ function appendConfiguredExtensions(
 	appendIdentityExtensions(encoded, seen, input, options.subjectIsEmpty === true);
 	appendPolicyExtensions(encoded, seen, input);
 	appendAccessExtensions(encoded, seen, input);
-	appendCustomExtensions(encoded, seen, input, context);
+	appendCustomExtensions(encoded, seen, input);
 }
 
 /**
@@ -848,16 +849,14 @@ function assertEmptySubjectHasCriticalSubjectAltName(
 	);
 }
 
-/** Canonical OID equality: matches even when arcs carry redundant leading zeros. */
+/**
+ * Canonical OID equality: matches even when arcs carry redundant leading zeros.
+ *
+ * Both sides must be encodable. Callers run after `assertCustomExtensionsValid`,
+ * which rejects an OID that cannot be canonicalized.
+ */
 function oidEquals(candidate: string, known: string): boolean {
-	if (candidate === known) {
-		return true;
-	}
-	try {
-		return toHex(objectIdentifier(candidate)) === toHex(objectIdentifier(known));
-	} catch {
-		return false;
-	}
+	return candidate === known || canonicalizeOid(candidate) === canonicalizeOid(known);
 }
 
 /** First customExtensions value whose OID canonically matches `oid`. */
@@ -868,6 +867,40 @@ function findCustomExtensionValue(
 	return input?.customExtensions?.find((extension) => oidEquals(extension.oid, oid))?.value;
 }
 
+/**
+ * Rejects a custom extension carrying a known OID whose payload is not the DER
+ * that OID's schema defines, and a known extension offered in the wrong context.
+ *
+ * Runs before every cross-field guard so the effective-value resolvers below can
+ * decode a custom payload without having to tolerate failure.
+ */
+function assertCustomExtensionsValid(
+	input: CertificateExtensionsInput | undefined,
+	context: ExtensionRegistryContext,
+): void {
+	for (const extension of input?.customExtensions ?? []) {
+		validateOid(extension.oid);
+		const definition = getExtensionDefinition(canonicalizeOid(extension.oid));
+		if (definition === undefined) {
+			continue;
+		}
+		if (!definition.contexts.includes(context)) {
+			throwExtensionEncoderError(
+				'extension_not_supported_in_context',
+				`Extension ${extension.oid} is not supported in ${context} context`,
+			);
+		}
+		try {
+			definition.decode(new Uint8Array(extension.value));
+		} catch {
+			throwExtensionEncoderError(
+				'malformed_known_extension_value',
+				`Custom extension ${extension.oid} does not decode as ${definition.oid}`,
+			);
+		}
+	}
+}
+
 /** Effective basicConstraints across the typed field and any custom-known extension. */
 function resolveEffectiveBasicConstraints(
 	input: CertificateExtensionsInput | undefined,
@@ -876,14 +909,7 @@ function resolveEffectiveBasicConstraints(
 		return input.basicConstraints;
 	}
 	const custom = findCustomExtensionValue(input, OIDS.basicConstraints);
-	if (custom === undefined) {
-		return undefined;
-	}
-	try {
-		return BASIC_CONSTRAINTS_EXTENSION_DEFINITION.decode(custom);
-	} catch {
-		return undefined;
-	}
+	return custom === undefined ? undefined : BASIC_CONSTRAINTS_EXTENSION_DEFINITION.decode(custom);
 }
 
 /** Effective keyUsage flags across the typed field and any custom-known extension. */
@@ -894,14 +920,7 @@ function resolveEffectiveKeyUsage(
 		return input.keyUsage;
 	}
 	const custom = findCustomExtensionValue(input, OIDS.keyUsage);
-	if (custom === undefined) {
-		return undefined;
-	}
-	try {
-		return KEY_USAGE_EXTENSION_DEFINITION.decode(custom).flags;
-	} catch {
-		return undefined;
-	}
+	return custom === undefined ? undefined : KEY_USAGE_EXTENSION_DEFINITION.decode(custom).flags;
 }
 
 /** Whether a typed GeneralName carries a non-empty identity value. */
@@ -911,11 +930,7 @@ function subjectAltNameHasIdentity(name: SubjectAltName): boolean {
 
 /** Whether a custom subjectAltName value decodes to at least one non-empty GeneralName. */
 function customSubjectAltNameHasIdentity(value: Uint8Array): boolean {
-	try {
-		return SUBJECT_ALT_NAME_EXTENSION_DEFINITION.decode(value).some(subjectAltNameHasIdentity);
-	} catch {
-		return false;
-	}
+	return SUBJECT_ALT_NAME_EXTENSION_DEFINITION.decode(value).some(subjectAltNameHasIdentity);
 }
 
 function appendConstraintExtensions(
@@ -1026,29 +1041,20 @@ function appendAccessExtensions(
 	}
 }
 
+/** Push each custom extension. Context and payload were checked by `assertCustomExtensionsValid`. */
 function appendCustomExtensions(
 	encoded: Uint8Array[],
 	seen: Set<string>,
 	input: CertificateExtensionsInput,
-	context: ExtensionRegistryContext,
 ): void {
-	if (input.customExtensions !== undefined) {
-		for (const extension of input.customExtensions) {
-			const knownDefinition = getExtensionDefinition(extension.oid);
-			if (knownDefinition !== undefined && !knownDefinition.contexts.includes(context)) {
-				throwExtensionEncoderError(
-					'extension_not_supported_in_context',
-					`Extension ${extension.oid} is not supported in ${context} context`,
-				);
-			}
-			pushExtension(
-				encoded,
-				seen,
-				extension.oid,
-				new Uint8Array(extension.value),
-				extension.critical ?? false,
-			);
-		}
+	for (const extension of input.customExtensions ?? []) {
+		pushExtension(
+			encoded,
+			seen,
+			extension.oid,
+			new Uint8Array(extension.value),
+			extension.critical ?? false,
+		);
 	}
 }
 
@@ -1652,7 +1658,13 @@ function validatePolicyOid(oid: string): void {
 	validateOid(oid);
 }
 
-/** Encode and push an extension, rejecting duplicate OIDs. */
+/**
+ * Encode and push an extension, rejecting duplicate OIDs.
+ *
+ * Duplicate identity is the canonical OID, because two spellings that differ only
+ * by leading zeros in an arc encode to the same wire bytes. The diagnostic quotes
+ * the OID as submitted, which is the string the caller can find in their input.
+ */
 function pushExtension(
 	encoded: Uint8Array[],
 	seen: Set<string>,
@@ -1661,9 +1673,10 @@ function pushExtension(
 	critical = false,
 ): void {
 	validateOid(oid);
-	if (seen.has(oid)) {
+	const identity = canonicalizeOid(oid);
+	if (seen.has(identity)) {
 		throwExtensionEncoderError('duplicate_extension_oid', `Duplicate extension OID: ${oid}`);
 	}
-	seen.add(oid);
+	seen.add(identity);
 	encoded.push(encodeExtension(oid, value, critical));
 }

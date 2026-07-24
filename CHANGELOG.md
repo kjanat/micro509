@@ -72,6 +72,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (§4.2.1.13, `distribution_point_crl_issuer_not_directory_name`,
   `distribution_point_relative_name_multiple_crl_issuers`). Known extensions
   supplied through `customExtensions` participate in these cross-field checks.
+  A `customExtensions` entry carrying a known OID must decode as that extension,
+  rather than reaching the wire as opaque bytes the parser then rejects
+  (`malformed_known_extension_value`). Extension OIDs resolve by their encoded
+  value, so a non-canonical spelling such as `2.5.029.17` is the same extension
+  as `2.5.29.17` for registry lookup, certificate-versus-CSR context
+  restrictions, and duplicate detection; the diagnostic still quotes the OID as
+  submitted.
+  (https://github.com/kjanat/micro509/pull/88)
+- Parsing rejects a zero-length `dNSName`, `rfc822Name`, or
+  `uniformResourceIdentifier` GeneralName, which RFC 5280 §4.2.1.6 forbids. An
+  external certificate could previously carry an empty subjectAltName value and
+  parse, leaving chain verification to accept a certificate with no usable
+  identity when no identity match was requested. Certificate and CRL parsing
+  share the decoder, so this covers subjectAltName, issuerAltName,
+  authorityInfoAccess locations, CRL distribution points, `cRLIssuer`, the
+  issuing distribution point, and `certificateIssuer`. Name constraints keep
+  their own decoder, where an empty base is meaningful.
   (https://github.com/kjanat/micro509/pull/88)
 - CRL applicability follows the RFC 5280 §6.3.3 relying-party algorithm in
   three places it diverged. A certificate without a CRLDP extension accepts a
