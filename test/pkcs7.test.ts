@@ -53,10 +53,14 @@ describe('pkcs7', () => {
 		const parsed = parsePkcs7CertBagPem(bag.pem);
 		expect(parsed.ok).toBe(true);
 		if (!parsed.ok) throw new Error('unreachable');
-		expect(parsed.value.map((certificate) => certificate.subject.values.commonName)).toEqual([
-			'pkcs7-leaf.example',
-			'PKCS7 Root',
-		]);
+		// CertificateSet is a DER SET OF: canonically ordered, so compare as a set.
+		expect(parsed.value.map((certificate) => certificate.subject.values.commonName).sort()).toEqual(
+			['PKCS7 Root', 'pkcs7-leaf.example'],
+		);
+
+		// The SET OF ordering is canonical, so input order does not affect the bytes.
+		const reversed = unwrap(createPkcs7CertBag([root.certificate.pem, leaf.pem]));
+		expect(reversed.der).toEqual(bag.der);
 	});
 
 	it('verifies PKCS#7 signedData with signed attributes (CMS digest-then-sign)', async () => {
@@ -1096,6 +1100,35 @@ describe('pkcs7', () => {
 		expect(result.ok).toBe(true);
 		if (!result.ok) throw new Error('unreachable');
 		expect(result.value.certificates).toHaveLength(1);
+	});
+
+	it('createPkcs7CertBag rejects a PEM source with no certificate blocks', () => {
+		expect(createPkcs7CertBag([''])).toMatchObject({ ok: false, code: 'invalid_certificate' });
+	});
+
+	it('createPkcs7CertBag rejects DER that is not an X.509 certificate', () => {
+		expect(createPkcs7CertBag([Uint8Array.of(0x30, 0x00)])).toMatchObject({
+			ok: false,
+			code: 'invalid_certificate',
+		});
+	});
+
+	it('createPkcs7CertBag accepts an empty certificate set', () => {
+		const bag = unwrap(createPkcs7CertBag([]));
+		const parsed = parsePkcs7CertBagDer(bag.der);
+		expect(parsed.ok).toBe(true);
+		if (!parsed.ok) throw new Error('unreachable');
+		expect(parsed.value).toHaveLength(0);
+	});
+
+	it('createPkcs7CertBag flattens a grouped multi-certificate PEM source', async () => {
+		const a = await createSelfSignedCertificate({ subject: { commonName: 'Grouped A' } });
+		const b = await createSelfSignedCertificate({ subject: { commonName: 'Grouped B' } });
+		const bag = unwrap(createPkcs7CertBag([a.certificate.pem + b.certificate.pem]));
+		const parsed = parsePkcs7CertBagDer(bag.der);
+		expect(parsed.ok).toBe(true);
+		if (!parsed.ok) throw new Error('unreachable');
+		expect(parsed.value).toHaveLength(2);
 	});
 
 	it('verifyPkcs7SignedData rejects invalid PEM input', async () => {

@@ -162,6 +162,12 @@ describe('keys', () => {
 			}),
 		);
 		expect(await exportPkcs8Der(importedRsa)).toEqual(await exportPkcs8Der(rsa.privateKey));
+		const importedCrOnlyRsa = unwrap(
+			await importEncryptedPkcs1Pem(encryptedRsaPem.replace(/\n/g, '\r'), 'secret123', {
+				kind: 'rsa',
+			}),
+		);
+		expect(await exportPkcs8Der(importedCrOnlyRsa)).toEqual(await exportPkcs8Der(rsa.privateKey));
 		await expectImportFailure(
 			importEncryptedPkcs1Pem(encryptedRsaPem, 'wrong', { kind: 'rsa' }),
 			'invalid_password',

@@ -3,7 +3,11 @@ import {
 	checkCertificateRevocationAgainstCrl,
 	createCertificate,
 	createCertificateRevocationList,
+	createOcspResponse,
+	createPfx,
+	createPkcs7CertBag,
 	createSelfSignedCertificate,
+	exportEncryptedPkcs8Der,
 	exportPkcs8Pem,
 	generateKeyPair,
 	matchServiceIdentity,
@@ -14,11 +18,19 @@ import {
 	validateOcspResponse,
 	verifyCertificateChain,
 } from '#micro509';
+import { toHex } from '#micro509/internal/asn1/asn1';
+import { encodeName } from '#micro509/x509';
 import { differentialEnabled, hexToBytes, issueChain, openSslAvailable } from '#test/helpers';
 import {
 	checkIdentityWithOpenSsl,
 	checkRevocationWithOpenSsl,
+	decryptPkcs8WithOpenSsl,
 	issueAndValidateOcspResponseWithOpenSsl,
+	readCertificateAiaWithOpenSsl,
+	readCertificateSanWithOpenSsl,
+	readPfxWithOpenSsl,
+	readPkcs7CertBagWithOpenSsl,
+	validateMicro509OcspResponseWithOpenSsl,
 	verifyChainWithOpenSsl,
 } from '#test/oracles/openssl';
 
@@ -272,6 +284,91 @@ describe.skipIf(!openSslAvailable || !differentialEnabled)('OpenSSL differential
 		}
 	});
 
+	it('OpenSSL parses a micro509 certificate with directoryName and SRV-ID SANs', async () => {
+		const directoryNameDer = toHex(encodeName([{ type: 'commonName', value: 'Diff Dir CA' }]));
+		const { certificate } = await createSelfSignedCertificate({
+			subject: { commonName: 'san-encode.example' },
+			extensions: {
+				subjectAltNames: [
+					{ type: 'dns', value: 'san-encode.example' },
+					{ type: 'srv', value: '_xmpp.example.com' },
+					{ type: 'directoryName', derHex: directoryNameDer },
+				],
+			},
+		});
+		const openSsl = await readCertificateSanWithOpenSsl(certificate.pem);
+		expect(openSsl.accepted).toBe(true);
+		// OpenSSL decodes the directoryName [4] SAN (full Name TLV wrapped) and the
+		// SRV-ID otherName [0] (direct type-id/value fields). Assert the decoded
+		// labels and values, not the separator formatting, which varies by version
+		// (`SRVName:` vs `SRVName::`).
+		const san = openSsl.subjectAltName ?? '';
+		expect(san).toContain('DirName');
+		expect(san).toContain('Diff Dir CA');
+		expect(san).toContain('SRVName');
+		expect(san).toContain('_xmpp.example.com');
+	});
+
+	it('OpenSSL parses a micro509 certificate with URI and directoryName AIA locations', async () => {
+		const issuerNameDer = toHex(encodeName([{ type: 'commonName', value: 'AIA Issuer CA' }]));
+		const { certificate } = await createSelfSignedCertificate({
+			subject: { commonName: 'aia-encode.example' },
+			extensions: {
+				authorityInfoAccess: [
+					{ method: 'ocsp', location: { type: 'uri', value: 'http://ocsp.example.test' } },
+					{ method: 'caIssuers', location: { type: 'directoryName', derHex: issuerNameDer } },
+				],
+			},
+		});
+		const openSsl = await readCertificateAiaWithOpenSsl(certificate.pem);
+		expect(openSsl.accepted).toBe(true);
+		// OpenSSL decodes the URI OCSP responder and the directoryName caIssuers.
+		const aia = openSsl.authorityInfoAccess ?? '';
+		expect(aia).toContain('http://ocsp.example.test');
+		expect(aia).toContain('CA Issuers');
+		expect(aia).toContain('DirName');
+		expect(aia).toContain('AIA Issuer CA');
+	});
+
+	it('OpenSSL accepts an OCSP response produced by micro509', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Reverse OCSP CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign', 'digitalSignature'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Reverse OCSP CA' },
+			subject: { commonName: 'reverse-ocsp.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		const material = await createOcspResponse({
+			signerPrivateKey: issuer.keyPair.privateKey,
+			signerCertificate: issuer.certificate.pem,
+			includedCertificates: [issuer.certificate.pem],
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: issuer.certificate.pem,
+					certStatus: 'good',
+					thisUpdate: new Date(),
+					nextUpdate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+				},
+			],
+		});
+		const openSsl = await validateMicro509OcspResponseWithOpenSsl({
+			issuerCertificatePem: issuer.certificate.pem,
+			certificatePem: leaf.pem,
+			responseDer: material.der,
+		});
+		expect(openSsl.accepted).toBe(true);
+		expect(openSsl.status).toBe('good');
+	});
+
 	it('matches OpenSSL DNS and IP identity verdicts', async () => {
 		const dnsCertificate = await createSelfSignedCertificate({
 			subject: { commonName: 'ignored.example' },
@@ -321,5 +418,44 @@ describe.skipIf(!openSslAvailable || !differentialEnabled)('OpenSSL differential
 		expect(ipMicro.ok).toBe(true);
 		expect(ipOpenSsl.matches).toBe(true);
 		expect(ipMicro.ok).toBe(ipOpenSsl.matches);
+	});
+
+	it('produces a PKCS#7 cert bag OpenSSL parses with canonical CertificateSet ordering', async () => {
+		const a = await createSelfSignedCertificate({ subject: { commonName: 'Bag Cert A' } });
+		const b = await createSelfSignedCertificate({ subject: { commonName: 'Bag Cert B' } });
+		const bag = unwrap(createPkcs7CertBag([a.certificate.pem, b.certificate.pem]));
+		const reversed = unwrap(createPkcs7CertBag([b.certificate.pem, a.certificate.pem]));
+		expect(toHex(bag.der)).toBe(toHex(reversed.der));
+		const openssl = await readPkcs7CertBagWithOpenSsl(bag.der);
+		expect(openssl.exitCode).toBe(0);
+		expect(openssl.subjectCount).toBe(2);
+	});
+
+	it('OpenSSL decrypts an encrypted PKCS#8 whose PBKDF2 omits the DEFAULT HMAC-SHA-1 prf', async () => {
+		const keyPair = await generateKeyPair();
+		const encrypted = await exportEncryptedPkcs8Der(keyPair.privateKey, {
+			password: 'pw',
+			prf: 'HMAC-SHA-1',
+			iterations: 2048,
+		});
+		const openssl = await decryptPkcs8WithOpenSsl(encrypted, 'pw');
+		expect(openssl.exitCode).toBe(0);
+		expect(openssl.decrypted).toBe(true);
+	});
+
+	it('OpenSSL parses a PFX whose MacData omits the DEFAULT iteration count', async () => {
+		const keyPair = await generateKeyPair();
+		const cert = await createSelfSignedCertificate({
+			subject: { commonName: 'Diff PFX Iter One' },
+		});
+		const pfx = unwrap(
+			await createPfx({
+				certificates: [{ certificate: cert.certificate.pem }],
+				privateKeys: [{ privateKey: keyPair.privateKey }],
+				mac: { password: 'pw', iterations: 1 },
+			}),
+		);
+		const openssl = await readPfxWithOpenSsl(pfx.der, 'pw');
+		expect(openssl.exitCode).toBe(0);
 	});
 });

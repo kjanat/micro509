@@ -690,10 +690,13 @@ describe('revocation boundary', () => {
 			issuerPublicKey: issuer.keyPair.publicKey,
 			extensions: {
 				authorityInfoAccess: [
-					{ method: 'ocsp', uri: 'http://ocsp-1.example.test' },
-					{ method: 'caIssuers', uri: 'http://issuer.example.test/ca.der' },
-					{ method: 'ocsp', uri: 'http://ocsp-1.example.test' },
-					{ method: 'ocsp', uri: 'http://ocsp-2.example.test' },
+					{ method: 'ocsp', location: { type: 'uri', value: 'http://ocsp-1.example.test' } },
+					{
+						method: 'caIssuers',
+						location: { type: 'uri', value: 'http://issuer.example.test/ca.der' },
+					},
+					{ method: 'ocsp', location: { type: 'uri', value: 'http://ocsp-1.example.test' } },
+					{ method: 'ocsp', location: { type: 'uri', value: 'http://ocsp-2.example.test' } },
 				],
 			},
 		});
@@ -702,6 +705,38 @@ describe('revocation boundary', () => {
 			'http://ocsp-1.example.test',
 			'http://ocsp-2.example.test',
 		]);
+	});
+
+	it('drops a non-URI OCSP location parsed from a non-conformant certificate', async () => {
+		const { sequence, objectIdentifier, tlv } = await import('#micro509/internal/asn1/der');
+		const { OIDS } = await import('#micro509/internal/asn1/oids');
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'Raw AIA CA' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign'] },
+		});
+		const leafKeys = await generateKeyPair();
+		// An OCSP dNSName location is non-conformant (RFC 6960 §3.1); the typed
+		// builder rejects it, so encode the AIA as raw DER to exercise the discovery
+		// filter against a parsed certificate.
+		const aiaDer = sequence([
+			sequence([
+				objectIdentifier(OIDS.ocspAccessMethod),
+				tlv(0x82, new TextEncoder().encode('ocsp.example.test')),
+			]),
+			sequence([
+				objectIdentifier(OIDS.ocspAccessMethod),
+				tlv(0x86, new TextEncoder().encode('http://ocsp.example.test')),
+			]),
+		]);
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Raw AIA CA' },
+			subject: { commonName: 'raw-aia.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+			extensions: { customExtensions: [{ oid: OIDS.authorityInfoAccess, value: aiaDer }] },
+		});
+		expect(getCertificateOcspResponderUris(leaf.pem)).toEqual(['http://ocsp.example.test']);
 	});
 
 	it('getCertificateOcspResponderUris fails closed for malformed certificate input', () => {
@@ -724,13 +759,20 @@ describe('revocation boundary', () => {
 			signerPrivateKey: issuer.keyPair.privateKey,
 			issuerPublicKey: issuer.keyPair.publicKey,
 			extensions: {
-				authorityInfoAccess: [{ method: 'ocsp', uri: 'http://real-ocsp.example.test' }],
+				authorityInfoAccess: [
+					{ method: 'ocsp', location: { type: 'uri', value: 'http://real-ocsp.example.test' } },
+				],
 			},
 		});
 		const parsedLeaf = unwrap(parseCertificatePem(leaf.pem));
 		const tamperedLeaf = {
 			...parsedLeaf,
-			authorityInfoAccess: [{ method: 'ocsp' as const, uri: 'http://attacker.example.test' }],
+			authorityInfoAccess: [
+				{
+					method: 'ocsp' as const,
+					location: { type: 'uri' as const, value: 'http://attacker.example.test' },
+				},
+			],
 		};
 
 		expect(getCertificateOcspResponderUris(tamperedLeaf)).toEqual([
@@ -767,8 +809,11 @@ describe('revocation boundary', () => {
 			issuerPublicKey: issuer.keyPair.publicKey,
 			extensions: {
 				authorityInfoAccess: [
-					{ method: 'ocsp', uri: 'http://ocsp-aia.example.test' },
-					{ method: 'ocsp', uri: 'http://ocsp-configured.example.test' },
+					{ method: 'ocsp', location: { type: 'uri', value: 'http://ocsp-aia.example.test' } },
+					{
+						method: 'ocsp',
+						location: { type: 'uri', value: 'http://ocsp-configured.example.test' },
+					},
 				],
 			},
 		});

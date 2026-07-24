@@ -17,6 +17,8 @@ export interface NameFieldDefinition {
 	readonly oid: string;
 	/** Encodes the attribute value to the correct ASN.1 string type (UTF8, PrintableString, IA5). */
 	readonly encode: (value: string) => Uint8Array;
+	/** RFC 5280 Appendix A.1 upper bound in characters, when the X.520 type defines one. */
+	readonly maxLength?: number;
 }
 
 /**
@@ -26,18 +28,18 @@ export interface NameFieldDefinition {
  * all others use UTF8String.
  */
 export const NAME_FIELD_DEFINITIONS: Record<NameFieldKey, NameFieldDefinition> = {
-	commonName: { oid: OIDS.commonName, encode: utf8String },
-	surname: { oid: OIDS.surname, encode: utf8String },
-	serialNumber: { oid: OIDS.serialNumber, encode: printableString },
+	commonName: { oid: OIDS.commonName, encode: utf8String, maxLength: 64 },
+	surname: { oid: OIDS.surname, encode: utf8String, maxLength: 32768 },
+	serialNumber: { oid: OIDS.serialNumber, encode: printableString, maxLength: 64 },
 	country: { oid: OIDS.countryName, encode: printableString },
-	locality: { oid: OIDS.localityName, encode: utf8String },
-	state: { oid: OIDS.stateOrProvinceName, encode: utf8String },
+	locality: { oid: OIDS.localityName, encode: utf8String, maxLength: 128 },
+	state: { oid: OIDS.stateOrProvinceName, encode: utf8String, maxLength: 128 },
 	street: { oid: OIDS.streetAddress, encode: utf8String },
-	organization: { oid: OIDS.organizationName, encode: utf8String },
-	organizationalUnit: { oid: OIDS.organizationalUnitName, encode: utf8String },
-	title: { oid: OIDS.title, encode: utf8String },
-	givenName: { oid: OIDS.givenName, encode: utf8String },
-	emailAddress: { oid: OIDS.emailAddress, encode: ia5String },
+	organization: { oid: OIDS.organizationName, encode: utf8String, maxLength: 64 },
+	organizationalUnit: { oid: OIDS.organizationalUnitName, encode: utf8String, maxLength: 64 },
+	title: { oid: OIDS.title, encode: utf8String, maxLength: 64 },
+	givenName: { oid: OIDS.givenName, encode: utf8String, maxLength: 32768 },
+	emailAddress: { oid: OIDS.emailAddress, encode: ia5String, maxLength: 255 },
 };
 
 /**

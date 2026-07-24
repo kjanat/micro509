@@ -29,6 +29,7 @@ import { base64Encode } from '#micro509/internal/shared/base64';
 import type { KeyAlgorithmInput, KeyPairMaterial } from '#micro509/keys/keys';
 import { exportSpkiDer, generateKeyPair } from '#micro509/keys/keys';
 import { pemEncode } from '#micro509/pem/pem';
+import { throwMicro509Error } from '#micro509/result/result';
 import type { CertificateExtensionsInput } from '#micro509/x509/extensions';
 import { buildCertificateExtensions } from '#micro509/x509/extensions';
 import type { NameInput } from '#micro509/x509/name';
@@ -36,6 +37,11 @@ import { encodeName, isNameInputEmpty } from '#micro509/x509/name';
 
 export type * from '#micro509/x509/extensions';
 export type * from '#micro509/x509/name';
+
+/** Machine-readable reason a certificate builder rejected its construction input. */
+export type CreateCertificateErrorCode =
+	| 'issuer_distinguished_name_empty'
+	| 'validity_not_after_before_not_before';
 
 /**
  * Configures the certificate validity window.
@@ -251,6 +257,12 @@ export async function createCertificate(
 		: undefined;
 	const signatureAlgorithm = getSignatureAlgorithm(input.signerPrivateKey, input.signature);
 	const validity = resolveValidity(input.validity);
+	if (isNameInputEmpty(input.issuer)) {
+		throwMicro509Error<CreateCertificateErrorCode>(
+			'issuer_distinguished_name_empty',
+			'issuer must be a non-empty distinguished name',
+		);
+	}
 	const subjectIsEmpty = isNameInputEmpty(input.subject);
 	const extensions = buildCertificateExtensions(
 		subjectPublicKeyInfo,
@@ -321,7 +333,10 @@ function resolveValidity(input: ValidityInput | undefined): ResolvedValidity {
 	const notBefore = input?.notBefore ?? new Date();
 	const notAfter = input?.notAfter ?? addDays(notBefore, input?.days ?? 30);
 	if (notAfter.getTime() <= notBefore.getTime()) {
-		throw new Error('notAfter must be after notBefore');
+		throwMicro509Error<CreateCertificateErrorCode>(
+			'validity_not_after_before_not_before',
+			'notAfter must be after notBefore',
+		);
 	}
 	return { notBefore, notAfter };
 }
