@@ -205,7 +205,7 @@ export { nameFieldKeyFromOid } from '#micro509/internal/x509/name-fields';
  *
  * @param input Name fields in convenience-object form or caller-ordered attribute form.
  * @returns DER-encoded X.509 `Name` bytes.
- * @throws {ResultError} If the input produces no attributes, contains an unsupported field key, an empty or over-long value, or an invalid country code.
+ * @throws {ResultError} If a value exceeds its RFC 5280 A.1 bound, an ordered attribute value is empty, a field key is unsupported, or a country code is not two characters. An input with no attributes encodes an empty Name (`30 00`) rather than throwing.
  */
 export function encodeName(input: NameInput): Uint8Array {
 	const attributes = isNameAttributes(input) ? input : nameObjectToAttributes(input);

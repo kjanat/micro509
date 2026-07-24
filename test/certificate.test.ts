@@ -513,6 +513,24 @@ describe('certificate', () => {
 		);
 	});
 
+	it('accepts surname and givenName at the RFC 5280 A.1 ub-name bound (32768)', () => {
+		expect(encodeName([{ type: 'surname', value: 'a'.repeat(32768) }])).toBeInstanceOf(Uint8Array);
+		expect(encodeName([{ type: 'givenName', value: 'a'.repeat(32768) }])).toBeInstanceOf(
+			Uint8Array,
+		);
+	});
+
+	it('rejects surname and givenName over the RFC 5280 A.1 ub-name bound (32769)', () => {
+		expectThrownErrorCode(
+			() => encodeName([{ type: 'surname', value: 'a'.repeat(32769) }]),
+			'name_attribute_too_long',
+		);
+		expectThrownErrorCode(
+			() => encodeName([{ type: 'givenName', value: 'a'.repeat(32769) }]),
+			'name_attribute_too_long',
+		);
+	});
+
 	it('rejects an empty issuer distinguished name (RFC 5280 §4.1.2.4)', async () => {
 		const keys = await generateKeyPair();
 		await expectRejectedErrorCode(

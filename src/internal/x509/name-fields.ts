@@ -29,7 +29,7 @@ export interface NameFieldDefinition {
  */
 export const NAME_FIELD_DEFINITIONS: Record<NameFieldKey, NameFieldDefinition> = {
 	commonName: { oid: OIDS.commonName, encode: utf8String, maxLength: 64 },
-	surname: { oid: OIDS.surname, encode: utf8String },
+	surname: { oid: OIDS.surname, encode: utf8String, maxLength: 32768 },
 	serialNumber: { oid: OIDS.serialNumber, encode: printableString, maxLength: 64 },
 	country: { oid: OIDS.countryName, encode: printableString },
 	locality: { oid: OIDS.localityName, encode: utf8String, maxLength: 128 },
@@ -38,7 +38,7 @@ export const NAME_FIELD_DEFINITIONS: Record<NameFieldKey, NameFieldDefinition> =
 	organization: { oid: OIDS.organizationName, encode: utf8String, maxLength: 64 },
 	organizationalUnit: { oid: OIDS.organizationalUnitName, encode: utf8String, maxLength: 64 },
 	title: { oid: OIDS.title, encode: utf8String, maxLength: 64 },
-	givenName: { oid: OIDS.givenName, encode: utf8String },
+	givenName: { oid: OIDS.givenName, encode: utf8String, maxLength: 32768 },
 	emailAddress: { oid: OIDS.emailAddress, encode: ia5String, maxLength: 255 },
 };
 
