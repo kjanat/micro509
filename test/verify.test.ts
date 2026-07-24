@@ -91,7 +91,7 @@ describe('chain verification', () => {
 			signerPrivateKey: root.keyPair.privateKey,
 			issuerPublicKey: root.keyPair.publicKey,
 			extensions: {
-				basicConstraints: { ca: true, pathLength: 0 },
+				basicConstraints: { ca: true },
 				keyUsage: ['digitalSignature'],
 			},
 		});
@@ -259,7 +259,7 @@ describe('chain verification', () => {
 
 		const noKeyCertSignChain = await issueChain({
 			intermediateExtensions: {
-				basicConstraints: { ca: true, pathLength: 0 },
+				basicConstraints: { ca: true },
 				keyUsage: ['digitalSignature'],
 			},
 		});
@@ -3710,7 +3710,7 @@ describe('validateCandidatePath direct', () => {
 	it('detects key_cert_sign_required in candidate path', async () => {
 		const chain = await issueChain({
 			intermediateExtensions: {
-				basicConstraints: { ca: true, pathLength: 0 },
+				basicConstraints: { ca: true },
 				keyUsage: ['digitalSignature'],
 			},
 		});

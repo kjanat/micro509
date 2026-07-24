@@ -46,6 +46,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Certificate and CSR builders reject three RFC 5280 MUST-NOT constructions
+  with coded throws. `pathLenConstraint` requires the keyUsage `keyCertSign`
+  bit when a keyUsage extension is present (§4.2.1.9,
+  `path_length_requires_key_cert_sign`); the verifier already rejected such
+  certificates. An empty subject DN requires a subjectAltName extension,
+  present and critical, counting a `customExtensions` SAN only when
+  `critical: true` and a present-but-empty `subjectAltNames` array as absent
+  (§4.2.1.6, `empty_subject_requires_subject_alt_name`); only criticality was
+  enforced before, so `subject: {}` signed a certificate with no identity. A
+  `relativeName` distribution point rejects more than one `cRLIssuer`
+  distinguished name (§4.2.1.13,
+  `distribution_point_relative_name_multiple_crl_issuers`).
 - `importPkcs8Der` accepts a `OneAsymmetricKey` (RFC 5958 §2 / RFC 8410 §7) that
   carries both `attributes [0]` and `publicKey [1]`. The parser capped at four
   elements, so a five-element v2 key that OpenSSL and Node WebCrypto both accept

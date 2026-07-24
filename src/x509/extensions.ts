@@ -72,7 +72,8 @@ export type {
  * `flags` contains the recognized flag values with any non-zero padding bits
  * masked out. `nonZeroPadding` is `true` when the original BIT STRING encoding
  * had non-zero bits in positions that DER ({@linkcode https://www.itu.int/rec/T-REC-X.690-202102-I/en | X.690 §11.2.1}) requires to be zero.
- * Verification layers can use this signal to reject non-conformant encodings.
+ * Extension flag decoding rejects such encodings, so parsed extension values
+ * always report `false`.
  */
 export interface ParsedBitFlags<T extends string> {
 	/** Decoded flag values, padding bits masked. */
@@ -725,8 +726,8 @@ const AUTHORITY_INFO_ACCESS_METHOD_OIDS: Record<KnownAuthorityInfoAccessMethod, 
  * @param subjectPublicKeyInfo DER-encoded SPKI of the subject.
  * @param issuerPublicKeyInfo DER-encoded SPKI of the issuer, or `undefined` for self-signed.
  * @param input Optional extension configuration.
- * @param subjectIsEmpty Whether the certificate subject DN is empty. When `true`, the
- *   subjectAltName extension is marked critical per RFC 5280 §4.2.1.6.
+ * @param subjectIsEmpty Whether the certificate subject DN is empty. When `true`, a
+ *   subjectAltName extension is required and marked critical per RFC 5280 §4.2.1.6.
  * @returns Array of DER-encoded Extension SEQUENCEs.
  */
 export function buildCertificateExtensions(
@@ -735,6 +736,10 @@ export function buildCertificateExtensions(
 	input: CertificateExtensionsInput | undefined,
 	subjectIsEmpty = false,
 ): Uint8Array[] {
+	if (subjectIsEmpty) {
+		assertEmptySubjectHasCriticalSubjectAltName(input);
+	}
+	assertPathLengthKeyUsage(input?.basicConstraints, input?.keyUsage);
 	const extensions: Uint8Array[] = [];
 	const seen = new Set<string>();
 	const basicConstraints = input?.basicConstraints ?? { ca: false };
@@ -799,12 +804,57 @@ function appendConfiguredExtensions(
 	appendCustomExtensions(encoded, seen, input, context);
 }
 
+/**
+ * RFC 5280 §4.2.1.9: pathLenConstraint requires the keyUsage keyCertSign bit
+ * when a keyUsage extension is present.
+ */
+function assertPathLengthKeyUsage(
+	basicConstraints: BasicConstraints | undefined,
+	keyUsage: readonly KeyUsage[] | undefined,
+): void {
+	if (basicConstraints?.pathLength === undefined) {
+		return;
+	}
+	if (keyUsage === undefined || keyUsage.length === 0) {
+		return;
+	}
+	if (!keyUsage.includes('keyCertSign')) {
+		throwExtensionEncoderError(
+			'path_length_requires_key_cert_sign',
+			'basicConstraints pathLength requires the keyUsage keyCertSign bit',
+		);
+	}
+}
+
+/**
+ * RFC 5280 §4.2.1.6: an empty subject DN requires a subjectAltName extension,
+ * present and marked critical.
+ */
+function assertEmptySubjectHasCriticalSubjectAltName(
+	input: CertificateExtensionsInput | undefined,
+): void {
+	if (input?.subjectAltNames !== undefined && input.subjectAltNames.length > 0) {
+		return;
+	}
+	const criticalCustomSan = input?.customExtensions?.some(
+		(extension) => extension.oid === OIDS.subjectAltName && extension.critical === true,
+	);
+	if (criticalCustomSan === true) {
+		return;
+	}
+	throwExtensionEncoderError(
+		'empty_subject_requires_subject_alt_name',
+		'An empty subject requires a critical subjectAltName extension',
+	);
+}
+
 function appendConstraintExtensions(
 	encoded: Uint8Array[],
 	seen: Set<string>,
 	input: CertificateExtensionsInput,
 	includeBasicConstraints: boolean,
 ): void {
+	assertPathLengthKeyUsage(input.basicConstraints, input.keyUsage);
 	if (includeBasicConstraints && input.basicConstraints !== undefined) {
 		pushKnownExtension(
 			encoded,
@@ -1316,6 +1366,15 @@ function encodeDistributionPoint(point: DistributionPoint): Uint8Array[] {
 		throwExtensionEncoderError(
 			'distribution_point_empty',
 			'DistributionPoint must contain distributionPoint or crlIssuer',
+		);
+	}
+	if (
+		point.distributionPoint?.relativeName !== undefined &&
+		(point.crlIssuer?.filter((name) => name.type === 'directoryName').length ?? 0) > 1
+	) {
+		throwExtensionEncoderError(
+			'distribution_point_relative_name_multiple_crl_issuers',
+			'DistributionPointName relativeName requires at most one cRLIssuer distinguished name',
 		);
 	}
 	const fields: Uint8Array[] = [];

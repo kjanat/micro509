@@ -96,6 +96,7 @@ import {
 	encodeCrlDistributionPoints,
 	encodeExtendedKeyUsage,
 	encodeKeyUsage,
+	encodeName,
 	encodeNameConstraints,
 	encodePolicyMappings,
 	encodeRelativeDistinguishedName,
@@ -859,6 +860,83 @@ describe('extensions encoding', () => {
 		expectEncoderErrorCode(() => encodeAuthorityInfoAccess([]), 'authority_info_access_empty');
 		expectEncoderErrorCode(() => encodeCrlDistributionPoints([]), 'crl_distribution_points_empty');
 		expectEncoderErrorCode(() => encodeNameConstraints({}), 'name_constraints_empty');
+	});
+
+	it('rejects a relativeName distribution point with multiple cRLIssuer DNs (RFC 5280 §4.2.1.13)', () => {
+		const issuerA = toHex(encodeName({ commonName: 'CRL Issuer A' }));
+		const issuerB = toHex(encodeName({ commonName: 'CRL Issuer B' }));
+		const relativeName = [{ type: 'commonName', value: 'CRL42' }] as const;
+		expectEncoderErrorCode(
+			() =>
+				encodeCrlDistributionPoints([
+					{
+						distributionPoint: { relativeName },
+						crlIssuer: [
+							{ type: 'directoryName', derHex: issuerA },
+							{ type: 'directoryName', derHex: issuerB },
+						],
+					},
+				]),
+			'distribution_point_relative_name_multiple_crl_issuers',
+		);
+		expect(
+			encodeCrlDistributionPoints([
+				{
+					distributionPoint: { relativeName },
+					crlIssuer: [
+						{ type: 'directoryName', derHex: issuerA },
+						{ type: 'uri', value: 'http://example.test/backup.crl' },
+					],
+				},
+			]),
+		).toBeInstanceOf(Uint8Array);
+	});
+
+	const subjectPublicKeyInfo = sequence([
+		sequence([objectIdentifier(OIDS.rsaEncryption), nullValue()]),
+		bitString(Uint8Array.of(0x01, 0x02, 0x03)),
+	]);
+
+	it('rejects pathLenConstraint without keyCertSign when keyUsage is present (RFC 5280 §4.2.1.9)', () => {
+		expectEncoderErrorCode(
+			() =>
+				buildCertificateExtensions(subjectPublicKeyInfo, undefined, {
+					basicConstraints: { ca: true, pathLength: 0 },
+					keyUsage: ['digitalSignature'],
+				}),
+			'path_length_requires_key_cert_sign',
+		);
+		expect(
+			buildCertificateExtensions(subjectPublicKeyInfo, undefined, {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign'],
+			}),
+		).toBeInstanceOf(Array);
+		expect(
+			buildCertificateExtensions(subjectPublicKeyInfo, undefined, {
+				basicConstraints: { ca: true, pathLength: 0 },
+			}),
+		).toBeInstanceOf(Array);
+	});
+
+	it('rejects an empty subject without a critical subjectAltName (RFC 5280 §4.2.1.6)', () => {
+		expectEncoderErrorCode(
+			() => buildCertificateExtensions(subjectPublicKeyInfo, undefined, undefined, true),
+			'empty_subject_requires_subject_alt_name',
+		);
+		expectEncoderErrorCode(
+			() =>
+				buildCertificateExtensions(subjectPublicKeyInfo, undefined, { subjectAltNames: [] }, true),
+			'empty_subject_requires_subject_alt_name',
+		);
+		expect(
+			buildCertificateExtensions(
+				subjectPublicKeyInfo,
+				undefined,
+				{ subjectAltNames: [{ type: 'dns', value: 'empty-subject.example' }] },
+				true,
+			),
+		).toBeInstanceOf(Array);
 	});
 
 	it('rejects an IP name constraint whose address and mask do not form 8 or 32 octets', () => {

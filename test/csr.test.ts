@@ -43,6 +43,20 @@ describe('csr', () => {
 		expect(custom?.critical).toBe(true);
 	});
 
+	it('rejects a requested pathLenConstraint without keyCertSign (RFC 5280 §4.2.1.9)', async () => {
+		const keyPair = await generateKeyPair({ kind: 'ed25519' });
+		const pending = createCertificateSigningRequest({
+			subject: { commonName: 'csr-plc.example' },
+			publicKey: keyPair.publicKey,
+			signerPrivateKey: keyPair.privateKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['digitalSignature'],
+			},
+		});
+		await expect(pending).rejects.toThrow('path_length_requires_key_cert_sign');
+	});
+
 	it('verifies certificate request signatures for RSA and Ed25519', async () => {
 		const rsaKeys = await generateKeyPair({
 			kind: 'rsa',

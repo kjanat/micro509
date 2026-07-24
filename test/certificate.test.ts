@@ -11,10 +11,10 @@ import {
 	unwrap,
 	verifyCertificateChain,
 } from '#micro509';
-import { readElement } from '#micro509/internal/asn1/der';
+import { readElement, sequence } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { encodeRsaPssParameters, rsaPssParametersForHash } from '#micro509/internal/crypto/rsa-pss';
-import { encodeName } from '#micro509/x509';
+import { encodeName, encodeSubjectAltName } from '#micro509/x509';
 import { childrenOf, decodeObjectIdentifier, hasExtensionOid } from '#test/helpers';
 
 async function expectRejectedErrorCode(promise: Promise<unknown>, code: string): Promise<void> {
@@ -477,6 +477,75 @@ describe('certificate', () => {
 		// SAN must be critical when subject DN is empty
 		const sanExtension = parsed.extensions.find((ext: { oid: string }) => ext.oid === '2.5.29.17');
 		expect(sanExtension?.critical).toBe(true);
+	});
+
+	it('rejects an empty subject DN without a subjectAltName (RFC 5280 §4.2.1.6)', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Empty Subject CA 2' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign'] },
+		});
+		const leafKeys = await generateKeyPair();
+		await expectRejectedErrorCode(
+			createCertificate({
+				issuer: { commonName: 'Empty Subject CA 2' },
+				subject: {},
+				publicKey: leafKeys.publicKey,
+				signerPrivateKey: ca.keyPair.privateKey,
+				issuerPublicKey: ca.keyPair.publicKey,
+			}),
+			'empty_subject_requires_subject_alt_name',
+		);
+		await expectRejectedErrorCode(
+			createCertificate({
+				issuer: { commonName: 'Empty Subject CA 2' },
+				subject: {},
+				publicKey: leafKeys.publicKey,
+				signerPrivateKey: ca.keyPair.privateKey,
+				issuerPublicKey: ca.keyPair.publicKey,
+				extensions: { subjectAltNames: [] },
+			}),
+			'empty_subject_requires_subject_alt_name',
+		);
+		const withCriticalCustomSan = await createCertificate({
+			issuer: { commonName: 'Empty Subject CA 2' },
+			subject: {},
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				customExtensions: [
+					{
+						oid: '2.5.29.17',
+						critical: true,
+						value: sequence([encodeSubjectAltName({ type: 'dns', value: 'custom-san.example' })]),
+					},
+				],
+			},
+		});
+		expect(unwrap(parseCertificateDer(withCriticalCustomSan.der)).subjectAltNames).toEqual([
+			{ type: 'dns', value: 'custom-san.example' },
+		]);
+	});
+
+	it('rejects pathLenConstraint without keyCertSign (RFC 5280 §4.2.1.9)', async () => {
+		await expectRejectedErrorCode(
+			createSelfSignedCertificate({
+				subject: { commonName: 'PathLen No CertSign' },
+				extensions: {
+					basicConstraints: { ca: true, pathLength: 0 },
+					keyUsage: ['digitalSignature'],
+				},
+			}),
+			'path_length_requires_key_cert_sign',
+		);
+		const qualified = await createSelfSignedCertificate({
+			subject: { commonName: 'PathLen No KeyUsage' },
+			extensions: { basicConstraints: { ca: true, pathLength: 0 } },
+		});
+		expect(unwrap(parseCertificateDer(qualified.certificate.der)).basicConstraints).toEqual({
+			ca: true,
+			pathLength: 0,
+		});
 	});
 
 	it('rejects invalid country code length', async () => {
