@@ -742,13 +742,17 @@ describe('keys: coverage — malformed inputs', () => {
 			},
 			{ name: 'empty publicKey BIT STRING', version: version1, tail: [hexToBytes('810100')] },
 		];
-		for (const { version, tail } of cases) {
+		for (const { name, version, tail } of cases) {
 			const der = sequence([version, algorithm, privateKey, ...tail]);
-			await expectImportFailure(
-				importPkcs8Der(der, { kind: 'ed25519' }),
-				'malformed',
-				'Malformed PKCS#8 private key',
-			);
+			try {
+				await expectImportFailure(
+					importPkcs8Der(der, { kind: 'ed25519' }),
+					'malformed',
+					'Malformed PKCS#8 private key',
+				);
+			} catch (cause) {
+				throw new Error(`case "${name}" failed`, { cause });
+			}
 		}
 	});
 
