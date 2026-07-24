@@ -194,6 +194,50 @@ describe('revocation boundary', () => {
 		});
 	});
 
+	it('does not report good from a single reason-scoped CRL (RFC 5280 §6.3.3 coverage)', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Partial Coverage CA' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Partial Coverage CA' },
+			subject: { commonName: 'partial-coverage.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				crlDistributionPoints: [
+					{
+						distributionPoint: {
+							fullName: [{ type: 'uri', value: 'http://example.test/partial.crl' }],
+						},
+						reasons: ['keyCompromise'],
+					},
+				],
+			},
+		});
+		const cleanCrl = await createCertificateRevocationList({
+			issuer: { commonName: 'Partial Coverage CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+		const result = await checkCertificateRevocation({
+			certificate: unwrap(parseCertificatePem(leaf.pem)),
+			issuerCertificate: ca.certificate.pem,
+			evidence: [{ kind: 'crl', crl: cleanCrl.pem }],
+		});
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.value.status).toBe('indeterminate');
+		if (result.value.status !== 'indeterminate') return;
+		expect(
+			result.value.details.indeterminateEvidence.some(
+				(entry) => entry.code === 'reason_coverage_incomplete',
+			),
+		).toBe(true);
+	});
+
 	it('returns revoked when delta CRL evidence overlays the complete CRL', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Delta Revocation CA' },

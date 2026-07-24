@@ -11,13 +11,17 @@ import type {
 	CrlSource,
 	RevocationReason,
 } from '#micro509/revocation/crl';
-import { checkCertificateRevocationAgainstCrl } from '#micro509/revocation/crl';
+import {
+	checkCertificateRevocationAgainstCrl,
+	coversAllDistributionPointReasons,
+} from '#micro509/revocation/crl';
 import type {
 	OcspCertificateSource,
 	OcspRequestSource,
 	ParsedOcspResponse,
 } from '#micro509/revocation/ocsp';
 import { validateOcspResponse } from '#micro509/revocation/ocsp';
+import type { DistributionPointReason } from '#micro509/x509/extensions';
 import type { ParsedCertificate } from '#micro509/x509/parse';
 import { parseCertificateDerOrThrow, parseCertificateFromSource } from '#micro509/x509/parse';
 
@@ -115,6 +119,7 @@ export const REVOCATION_INDETERMINATE_REASON_CODES = [
 	'non_applicable',
 	'nonce_mismatch',
 	'ocsp_signing_missing',
+	'reason_coverage_incomplete',
 	'request_mismatch',
 	'responder_id_mismatch',
 	'responder_chain_invalid',
@@ -202,7 +207,12 @@ export type CheckCertificateRevocationResult = Result<CheckCertificateRevocation
 
 /** Internal intermediate result from evaluating a single piece of revocation evidence. */
 type RevocationEvidenceCheck =
-	| { readonly status: 'good'; readonly result: RevocationCheckGoodValue }
+	| {
+			readonly status: 'good';
+			readonly result: RevocationCheckGoodValue;
+			/** RFC 5280 §6.3.3(d) reasons this CRL covered; absent for OCSP (which is definitive). */
+			readonly coveredReasons?: readonly DistributionPointReason[];
+	  }
 	| { readonly status: 'revoked'; readonly result: RevocationCheckRevokedValue }
 	| { readonly status: 'indeterminate'; readonly detail: RevocationIndeterminateEvidence };
 
@@ -324,7 +334,9 @@ export async function checkCertificateRevocation(
 			},
 		});
 	}
-	let goodResult: RevocationCheckGoodValue | undefined;
+	let ocspGoodResult: RevocationCheckGoodValue | undefined;
+	let crlGoodResult: RevocationCheckGoodValue | undefined;
+	const crlCoveredReasons = new Set<string>();
 	const indeterminateEvidence: RevocationIndeterminateEvidence[] = [];
 	for (const entry of evidence) {
 		let result: RevocationEvidenceCheck;
@@ -345,13 +357,32 @@ export async function checkCertificateRevocation(
 			return revocationSuccess(result.result);
 		}
 		if (result.status === 'good') {
-			goodResult ??= result.result;
+			if (result.coveredReasons === undefined) {
+				ocspGoodResult ??= result.result;
+			} else {
+				crlGoodResult ??= result.result;
+				for (const reason of result.coveredReasons) {
+					crlCoveredReasons.add(reason);
+				}
+			}
 			continue;
 		}
 		indeterminateEvidence.push(result.detail);
 	}
-	if (goodResult !== undefined) {
-		return revocationSuccess(goodResult);
+	// An OCSP good is per-certificate and definitive. A CRL good is definitive
+	// only once the applicable CRLs together cover every revocation reason.
+	if (ocspGoodResult !== undefined) {
+		return revocationSuccess(ocspGoodResult);
+	}
+	if (crlGoodResult !== undefined && coversAllDistributionPointReasons(crlCoveredReasons)) {
+		return revocationSuccess(crlGoodResult);
+	}
+	if (crlGoodResult !== undefined) {
+		indeterminateEvidence.push({
+			kind: 'crl',
+			code: 'reason_coverage_incomplete',
+			message: 'CRL evidence covers only some revocation reasons',
+		});
 	}
 	return revocationSuccess({
 		status: 'indeterminate',
@@ -400,6 +431,7 @@ async function checkCertificateRevocationWithCrl(
 				kind: 'crl',
 				message: 'Certificate is not revoked according to CRL evidence',
 			},
+			coveredReasons: result.value.coveredReasons,
 		};
 	}
 	return {

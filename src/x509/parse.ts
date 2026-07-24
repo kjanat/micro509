@@ -2101,7 +2101,8 @@ function parseGeneralNames(source: Uint8Array, element: DerElement): readonly Ge
 }
 
 /** Decode a single GeneralName from its implicit context tag. */
-function parseGeneralName(source: Uint8Array, element: DerElement): GeneralName {
+/** @internal Decode one GeneralName element, the canonical decoder shared with CRL parsing. */
+export function parseGeneralName(source: Uint8Array, element: DerElement): GeneralName {
 	switch (element.tag) {
 		case 0xa0: {
 			const otherName = parseOtherName(source, element);

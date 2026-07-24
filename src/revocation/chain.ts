@@ -14,8 +14,8 @@ import type {
 	RevocationReason,
 } from '#micro509/revocation/crl';
 import {
-	ALL_DISTRIBUTION_POINT_REASONS,
 	checkCertificateRevocationAgainstCrl,
+	coversAllDistributionPointReasons,
 	parseCertificateRevocationListDerOrThrow,
 	parseCertificateRevocationListPemOrThrow,
 	revocationReasonFromCode,
@@ -557,7 +557,9 @@ async function checkSignerRevocation(
 	// it's explicitly revoked, not prove "good" status.
 	const issuerInChain = ctx.chain.some((c) => sameCertificate(c, issuer));
 
-	// Try each CRL to check signer's revocation
+	// A `good` from one CRL does not end the search: a later CRL may report the
+	// signer revoked, and a revoked verdict from any CRL wins.
+	let sawValidGood = false;
 	for (const crlSource of ctx.crls) {
 		let crl: ParsedCertificateRevocationList;
 		try {
@@ -583,11 +585,14 @@ async function checkSignerRevocation(
 				// The CRL's signer is the issuer we just used
 				const crlSignerStatus = await validateCrlSigner(issuer, ctx);
 				if (crlSignerStatus === 'resolved-valid') {
-					return 'resolved-valid';
+					sawValidGood = true;
 				}
 				// If CRL signer is revoked or indeterminate, can't trust this result
 			}
 		}
+	}
+	if (sawValidGood) {
+		return 'resolved-valid';
 	}
 
 	// If the signer's issuer is in the chain and we found no revocation,
@@ -934,9 +939,7 @@ async function evaluateCrlEvidence(
 
 	// Return 'good' only if we saw at least one good result AND all reasons are covered
 	if (state.sawGood && state.freshestGood !== undefined) {
-		const allReasonsCovered = ALL_DISTRIBUTION_POINT_REASONS.every((r) =>
-			state.coveredReasons.has(r),
-		);
+		const allReasonsCovered = coversAllDistributionPointReasons(state.coveredReasons);
 		if (allReasonsCovered) {
 			return {
 				status: {

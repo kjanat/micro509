@@ -469,6 +469,7 @@ const PROCESSED_EXTENSION_OIDS: ReadonlySet<string> = new Set([
 	OIDS.keyUsage,
 	OIDS.extendedKeyUsage,
 	OIDS.subjectAltName,
+	OIDS.issuerAltName,
 	OIDS.nameConstraints,
 	OIDS.authorityKeyIdentifier,
 	OIDS.subjectKeyIdentifier,

@@ -62,12 +62,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   such a CRL previously reported `non_applicable`. A distribution point that
   omits `distributionPoint` matches the CRL IDP name against its `cRLIssuer`
   names (§6.3.3 (b)(2)(i)); an in-scope indirect CRL was previously rejected.
-  Reason coverage uses the §6.3.3 (d) interim_reasons_mask instead of the
-  CRL's `onlySomeReasons` alone, so a distribution point scoped to a subset of
-  reasons no longer grants full coverage and `checkChainRevocation` returns
-  `reason_coverage_incomplete` instead of `good` when reasons remain uncovered.
-  A delta-CRL `removeFromCRL` entry for an expired certificate now measures
-  expiry against the delta's `thisUpdate` (§5.2.4), not the evaluation time.
+  Reason coverage uses the §6.3.3 (d) interim_reasons_mask, unioned across every
+  matching distribution point, instead of the CRL's `onlySomeReasons` alone, so
+  a distribution point scoped to a subset of reasons no longer grants full
+  coverage. Every consumer of a CRL `good` — `checkChainRevocation`,
+  `checkCertificateRevocation`, delegated OCSP-responder validation, and
+  recursive CRL-signer validation — now treats a reason-scoped `good` as
+  definitive only once the applicable CRLs together cover all eight reasons; a
+  revoked verdict from any CRL still wins immediately. GeneralName applicability
+  comparisons apply the RFC 5280 §7.2/§7.4/§7.5 case rules (dNSName and URI
+  host/scheme, rfc822Name host-part), and CRL GeneralName decoding shares the
+  certificate parser's decoder so an `otherName` SRV-ID matches across
+  issuerAltName and the IDP. `verifyCertificateChain` recognises a critical
+  issuerAltName rather than rejecting it. A delta-CRL `removeFromCRL` entry for
+  an expired certificate now measures expiry against the delta's `thisUpdate`
+  (§5.2.4), not the evaluation time.
   (https://github.com/kjanat/micro509/pull/87)
 - `importPkcs8Der` accepts a `OneAsymmetricKey` (RFC 5958 §2 / RFC 8410 §7) that
   carries both `attributes [0]` and `publicKey [1]`. The parser capped at four

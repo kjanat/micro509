@@ -47,8 +47,6 @@ import {
 } from '#micro509/internal/crypto/signing';
 import { base64Encode } from '#micro509/internal/shared/base64';
 import { compareDistinguishedNames, compareNameAttributeValue } from '#micro509/internal/shared/dn';
-import { decodeIpAddress } from '#micro509/internal/shared/ip';
-import { readDirectoryNameTlv } from '#micro509/internal/x509/directory-name';
 import type { ParsedBitFlags } from '#micro509/internal/x509/extension-bits';
 import {
 	encodeDistributionPointReasonFlagsContent,
@@ -90,7 +88,11 @@ import type {
 	ParsedNameAttribute,
 	ParsedRelativeDistinguishedName,
 } from '#micro509/x509/parse';
-import { parseCertificateDerOrThrow, parseCertificateFromSource } from '#micro509/x509/parse';
+import {
+	parseCertificateDerOrThrow,
+	parseCertificateFromSource,
+	parseGeneralName,
+} from '#micro509/x509/parse';
 
 /**
  * Single revoked certificate entry for {@linkcode createCertificateRevocationList}.
@@ -439,11 +441,15 @@ type CrlDistributionPointScanResult =
 type CrlDistributionPointScanFailure = Exclude<CrlDistributionPointScanResult, 'matched'>;
 
 type CrlApplicabilityOutcome =
-	| { readonly ok: true; readonly matchedDistributionPoint?: ParsedDistributionPoint }
+	| { readonly ok: true; readonly coveredReasons: readonly DistributionPointReason[] }
 	| { readonly ok: false; readonly failure: CrlApplicabilityFailure };
 
-/** RFC 5280 §4.2.1.13 ReasonFlags, excluding the reserved `unused` bit. */
-export const ALL_DISTRIBUTION_POINT_REASONS: readonly DistributionPointReason[] = [
+/**
+ * RFC 5280 §4.2.1.13 ReasonFlags, excluding the reserved `unused` bit.
+ *
+ * Frozen so a `coveredReasons` result that aliases it cannot corrupt later completeness checks.
+ */
+export const ALL_DISTRIBUTION_POINT_REASONS: readonly DistributionPointReason[] = Object.freeze([
 	'keyCompromise',
 	'cACompromise',
 	'affiliationChanged',
@@ -452,7 +458,13 @@ export const ALL_DISTRIBUTION_POINT_REASONS: readonly DistributionPointReason[] 
 	'certificateHold',
 	'privilegeWithdrawn',
 	'aACompromise',
-];
+] as const);
+
+/** True when `reasons` covers every RFC 5280 §4.2.1.13 reason — a complete-scope CRL verdict. */
+export function coversAllDistributionPointReasons(reasons: Iterable<string>): boolean {
+	const set = reasons instanceof Set ? reasons : new Set(reasons);
+	return ALL_DISTRIBUTION_POINT_REASONS.every((reason) => set.has(reason));
+}
 
 interface MutableIssuingDistributionPointFields {
 	distributionPoint?: ParsedDistributionPointName;
@@ -904,10 +916,7 @@ export async function checkCertificateRevocationAgainstCrl(
 		deltaResult.value,
 	);
 	if (!applicability.ok) return applicability.failure;
-	const coveredReasons = interimReasonsMask(
-		applicability.matchedDistributionPoint,
-		validated.value.issuingDistributionPoint,
-	);
+	const coveredReasons = applicability.coveredReasons;
 	const completeRevoked = findRevokedCertificateEntry(certificate, validated.value);
 	if (!completeRevoked.ok) {
 		return completeRevoked;
@@ -940,7 +949,13 @@ function interimReasonsMask(
 	if (distributionPointReasons !== undefined && crlReasons !== undefined) {
 		return distributionPointReasons.filter((reason) => crlReasons.includes(reason));
 	}
-	return distributionPointReasons ?? crlReasons ?? ALL_DISTRIBUTION_POINT_REASONS;
+	if (distributionPointReasons !== undefined) {
+		return [...distributionPointReasons];
+	}
+	if (crlReasons !== undefined) {
+		return [...crlReasons];
+	}
+	return ALL_DISTRIBUTION_POINT_REASONS;
 }
 
 /** Validates an optional delta CRL and checks compatibility with its complete CRL. */
@@ -1145,7 +1160,7 @@ function checkCrlApplicability(
 				'indirect CRLs for alternate certificate issuers require matching CRLIssuer distribution points',
 			);
 		}
-		return { ok: true };
+		return { ok: true, coveredReasons: interimReasonsMask(undefined, issuingDistributionPoint) };
 	}
 	const scanResult = scanCrlDistributionPoints(
 		distributionPoints,
@@ -1157,7 +1172,7 @@ function checkCrlApplicability(
 	if (typeof scanResult === 'string') {
 		return { ok: false, failure: crlDistributionPointScanFailure(scanResult) };
 	}
-	return { ok: true, matchedDistributionPoint: scanResult.matched };
+	return { ok: true, coveredReasons: scanResult.coveredReasons };
 }
 
 /** Wraps a non-applicability failure into a {@linkcode CrlApplicabilityOutcome}. */
@@ -1184,19 +1199,24 @@ function issuerFallbackDistributionPointName(
 	};
 }
 
-/** Aggregates distribution-point matching outcomes across a certificate. */
+/**
+ * Aggregates distribution-point matching across a certificate.
+ *
+ * RFC 5280 §6.3.3 processes every corresponding DP, so when several match the same CRL their
+ * interim reason masks (d) are unioned rather than stopping at the first.
+ */
 function scanCrlDistributionPoints(
 	distributionPoints: readonly ParsedDistributionPoint[],
 	certificate: ParsedCertificate,
 	crl: ParsedCertificateRevocationList,
 	issuingDistributionPoint: ParsedIssuingDistributionPoint | undefined,
 	isIndirectCrl: boolean,
-): { readonly matched: ParsedDistributionPoint } | CrlDistributionPointScanFailure {
-	let sawIndirectDistributionPoint = false;
-	let sawDistributionMismatch = false;
-	let sawIndirectIssuerMismatch = false;
-	let sawIndirectIssuerUnsupported = false;
-	let sawReasonsMismatch = false;
+):
+	| { readonly coveredReasons: readonly DistributionPointReason[] }
+	| CrlDistributionPointScanFailure {
+	const coveredReasons = new Set<DistributionPointReason>();
+	const failures = new Set<CrlDistributionPointScanFailure>();
+	let sawMatch = false;
 	for (const distributionPoint of distributionPoints) {
 		const result = scanCrlDistributionPoint(
 			distributionPoint,
@@ -1205,26 +1225,30 @@ function scanCrlDistributionPoints(
 			issuingDistributionPoint,
 			isIndirectCrl,
 		);
-		if (result === 'matched') return { matched: distributionPoint };
-		if (result === 'indirect_distribution_point') sawIndirectDistributionPoint = true;
-		if (result === 'distribution_point_mismatch') sawDistributionMismatch = true;
-		if (result === 'indirect_issuer_mismatch') sawIndirectIssuerMismatch = true;
-		if (result === 'unsupported_indirect_crl_issuer') sawIndirectIssuerUnsupported = true;
-		if (result === 'reasons_mismatch') sawReasonsMismatch = true;
+		if (result === 'matched') {
+			sawMatch = true;
+			for (const reason of interimReasonsMask(distributionPoint, issuingDistributionPoint)) {
+				coveredReasons.add(reason);
+			}
+			continue;
+		}
+		failures.add(result);
 	}
-	if (sawReasonsMismatch) {
-		return 'reasons_mismatch';
-	}
-	if (sawIndirectIssuerUnsupported) {
-		return 'unsupported_indirect_crl_issuer';
-	}
-	if (sawIndirectIssuerMismatch) {
-		return 'indirect_issuer_mismatch';
-	}
-	if (sawDistributionMismatch) {
-		return 'distribution_point_mismatch';
-	}
-	return sawIndirectDistributionPoint ? 'indirect_distribution_point' : 'scope_mismatch';
+	return sawMatch ? { coveredReasons: [...coveredReasons] } : resolveScanFailure(failures);
+}
+
+/** Reports the highest-precedence distribution-point scan failure. */
+function resolveScanFailure(
+	failures: ReadonlySet<CrlDistributionPointScanFailure>,
+): CrlDistributionPointScanFailure {
+	const precedence: readonly CrlDistributionPointScanFailure[] = [
+		'reasons_mismatch',
+		'unsupported_indirect_crl_issuer',
+		'indirect_issuer_mismatch',
+		'distribution_point_mismatch',
+		'indirect_distribution_point',
+	];
+	return precedence.find((failure) => failures.has(failure)) ?? 'scope_mismatch';
 }
 
 function scanCrlDistributionPoint(
@@ -1683,16 +1707,17 @@ function hasOverlappingReasons(
 /** Value-equality for two GeneralName entries, using DER comparison for directoryName. */
 function compareGeneralNames(left: GeneralName, right: GeneralName): boolean {
 	if (left.type === 'dns' && right.type === 'dns') {
-		return left.value === right.value;
+		// RFC 5280 §7.2: dNSName comparison is case-insensitive.
+		return left.value.toLowerCase() === right.value.toLowerCase();
 	}
 	if (left.type === 'email' && right.type === 'email') {
-		return left.value === right.value;
+		return compareRfc822Names(left.value, right.value);
 	}
 	if (left.type === 'ip' && right.type === 'ip') {
 		return left.value === right.value;
 	}
 	if (left.type === 'uri' && right.type === 'uri') {
-		return left.value === right.value;
+		return compareUniformResourceIdentifiers(left.value, right.value);
 	}
 	if (left.type === 'directoryName' && right.type === 'directoryName') {
 		const leftName = parseDerHexName(left.derHex);
@@ -1706,6 +1731,31 @@ function compareGeneralNames(left: GeneralName, right: GeneralName): boolean {
 		return left.tag === right.tag && bytesEqual(left.value, right.value);
 	}
 	return false;
+}
+
+/** RFC 5280 §7.5: rfc822Name local-part is case-sensitive, the host-part case-insensitive. */
+function compareRfc822Names(left: string, right: string): boolean {
+	const leftAt = left.lastIndexOf('@');
+	const rightAt = right.lastIndexOf('@');
+	if (leftAt < 0 || rightAt < 0) {
+		return left.toLowerCase() === right.toLowerCase();
+	}
+	return (
+		left.slice(0, leftAt) === right.slice(0, rightAt) &&
+		left.slice(leftAt + 1).toLowerCase() === right.slice(rightAt + 1).toLowerCase()
+	);
+}
+
+/** RFC 5280 §7.4: URI scheme and host compare case-insensitively; the remainder is exact. */
+function compareUniformResourceIdentifiers(left: string, right: string): boolean {
+	if (left === right) {
+		return true;
+	}
+	try {
+		return new URL(left).href === new URL(right).href;
+	} catch {
+		return false;
+	}
 }
 
 /** Constant-length byte-array equality check. */
@@ -2031,7 +2081,7 @@ function parseDistributionPointName(
 			}
 		}
 		return {
-			fullName: fullName.map((name) => parseGeneralName(name)),
+			fullName: fullName.map((name) => parseGeneralName(valueDer, name)),
 		};
 	}
 	if (distributionPointName.tag === 0xa1) {
@@ -2095,26 +2145,6 @@ function parseDistributionPointField(
 }
 
 /** Decodes a GeneralName from its context-tagged ASN.1 element. */
-function parseGeneralName(element: DerElement): GeneralName {
-	switch (element.tag) {
-		case 0x81:
-			return { type: 'email' as const, value: textDecoder.decode(element.value) };
-		case 0x82:
-			return { type: 'dns' as const, value: textDecoder.decode(element.value) };
-		case 0x86:
-			return { type: 'uri' as const, value: textDecoder.decode(element.value) };
-		case 0x87:
-			return { type: 'ip' as const, value: decodeIpAddress(element.value) };
-		case 0xa4:
-			return {
-				type: 'directoryName' as const,
-				derHex: toHex(readDirectoryNameTlv(element)),
-			};
-		default:
-			return { type: 'unknown' as const, tag: element.tag, value: new Uint8Array(element.value) };
-	}
-}
-
 function parseGeneralNames(valueDer: Uint8Array, element: DerElement): readonly GeneralName[] {
 	const names = childrenOf(valueDer, element);
 	if (names.length === 0) {
@@ -2125,7 +2155,7 @@ function parseGeneralNames(valueDer: Uint8Array, element: DerElement): readonly 
 			throw new Error('GeneralNames must contain GeneralName entries');
 		}
 	}
-	return names.map((name) => parseGeneralName(name));
+	return names.map((name) => parseGeneralName(valueDer, name));
 }
 
 /** Decodes a RelativeDistinguishedName SET from an implicitly-tagged context element. */

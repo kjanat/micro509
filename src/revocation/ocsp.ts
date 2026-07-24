@@ -57,6 +57,7 @@ import { failureResult, rethrowIfInvariant, successResult } from '#micro509/resu
 import type { CrlSource, ParsedCertificateRevocationList } from '#micro509/revocation/crl';
 import {
 	checkCertificateRevocationAgainstCrl,
+	coversAllDistributionPointReasons,
 	parseCertificateRevocationListDerOrThrow,
 	parseCertificateRevocationListPemOrThrow,
 } from '#micro509/revocation/crl';
@@ -1287,7 +1288,7 @@ async function checkDelegatedResponderRevocation(
 		return { ok: true };
 	}
 	const at = input.at ?? new Date();
-	let sawGood = false;
+	const coveredReasons = new Set<string>();
 	for (const source of input.responderRevocationCrls ?? []) {
 		let crl: ParsedCertificateRevocationList;
 		try {
@@ -1310,11 +1311,13 @@ async function checkDelegatedResponderRevocation(
 				'Delegated OCSP responder certificate is revoked',
 			);
 		}
-		if (result.value.status === 'good') {
-			sawGood = true;
+		for (const reason of result.value.coveredReasons) {
+			coveredReasons.add(reason);
 		}
 	}
-	if (sawGood || policy === 'honor-nocheck') {
+	// A definitive good requires every revocation reason to be covered; a single
+	// reason-scoped CRL does not prove the responder unrevoked.
+	if (coversAllDistributionPointReasons(coveredReasons) || policy === 'honor-nocheck') {
 		// honor-nocheck tolerates missing evidence (soft) — only a positive
 		// revoked verdict rejects when no usable evidence proves 'good'.
 		return { ok: true };
