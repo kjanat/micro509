@@ -4,8 +4,10 @@ import {
 	createCertificate,
 	createCertificateRevocationList,
 	createOcspResponse,
+	createPfx,
 	createPkcs7CertBag,
 	createSelfSignedCertificate,
+	exportEncryptedPkcs8Der,
 	exportPkcs8Pem,
 	generateKeyPair,
 	matchServiceIdentity,
@@ -22,9 +24,11 @@ import { differentialEnabled, hexToBytes, issueChain, openSslAvailable } from '#
 import {
 	checkIdentityWithOpenSsl,
 	checkRevocationWithOpenSsl,
+	decryptPkcs8WithOpenSsl,
 	issueAndValidateOcspResponseWithOpenSsl,
 	readCertificateAiaWithOpenSsl,
 	readCertificateSanWithOpenSsl,
+	readPfxWithOpenSsl,
 	readPkcs7CertBagWithOpenSsl,
 	validateMicro509OcspResponseWithOpenSsl,
 	verifyChainWithOpenSsl,
@@ -425,5 +429,33 @@ describe.skipIf(!openSslAvailable || !differentialEnabled)('OpenSSL differential
 		const openssl = await readPkcs7CertBagWithOpenSsl(bag.der);
 		expect(openssl.exitCode).toBe(0);
 		expect(openssl.subjectCount).toBe(2);
+	});
+
+	it('OpenSSL decrypts an encrypted PKCS#8 whose PBKDF2 omits the DEFAULT HMAC-SHA-1 prf', async () => {
+		const keyPair = await generateKeyPair();
+		const encrypted = await exportEncryptedPkcs8Der(keyPair.privateKey, {
+			password: 'pw',
+			prf: 'HMAC-SHA-1',
+			iterations: 2048,
+		});
+		const openssl = await decryptPkcs8WithOpenSsl(encrypted, 'pw');
+		expect(openssl.exitCode).toBe(0);
+		expect(openssl.decrypted).toBe(true);
+	});
+
+	it('OpenSSL parses a PFX whose MacData omits the DEFAULT iteration count', async () => {
+		const keyPair = await generateKeyPair();
+		const cert = await createSelfSignedCertificate({
+			subject: { commonName: 'Diff PFX Iter One' },
+		});
+		const pfx = unwrap(
+			await createPfx({
+				certificates: [{ certificate: cert.certificate.pem }],
+				privateKeys: [{ privateKey: keyPair.privateKey }],
+				mac: { password: 'pw', iterations: 1 },
+			}),
+		);
+		const openssl = await readPfxWithOpenSsl(pfx.der, 'pw');
+		expect(openssl.exitCode).toBe(0);
 	});
 });

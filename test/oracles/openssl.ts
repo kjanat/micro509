@@ -435,6 +435,34 @@ export async function readPkcs7CertBagWithOpenSsl(
 	});
 }
 
+export async function decryptPkcs8WithOpenSsl(
+	encryptedPkcs8Der: Uint8Array,
+	password: string,
+): Promise<{ readonly exitCode: number; readonly decrypted: boolean; readonly output: string }> {
+	return withTempDir(async (directory) => {
+		const path = join(directory, 'key.p8');
+		await Bun.write(path, encryptedPkcs8Der);
+		const result = await runOpenSsl(['pkcs8', '-inform', 'DER', '-in', path, '-passin', `pass:${password}`]);
+		return {
+			exitCode: result.exitCode,
+			decrypted: result.stdout.includes('PRIVATE KEY'),
+			output: `${result.stdout}${result.stderr}`,
+		};
+	});
+}
+
+export async function readPfxWithOpenSsl(
+	pfxDer: Uint8Array,
+	password: string,
+): Promise<{ readonly exitCode: number; readonly output: string }> {
+	return withTempDir(async (directory) => {
+		const path = join(directory, 'store.p12');
+		await Bun.write(path, pfxDer);
+		const result = await runOpenSsl(['pkcs12', '-in', path, '-passin', `pass:${password}`, '-info', '-noout', '-nodes']);
+		return { exitCode: result.exitCode, output: `${result.stdout}${result.stderr}` };
+	});
+}
+
 export async function withTempDir<T>(fn: (directory: string) => Promise<T>): Promise<T> {
 	const directory = await mkdtemp(join(tmpdir(), 'micro509-openssl-'));
 	try {
