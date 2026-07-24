@@ -68,6 +68,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `reason_coverage_incomplete` instead of `good` when reasons remain uncovered.
   A delta-CRL `removeFromCRL` entry for an expired certificate now measures
   expiry against the delta's `thisUpdate` (§5.2.4), not the evaluation time.
+  (https://github.com/kjanat/micro509/pull/87)
 - `importPkcs8Der` accepts a `OneAsymmetricKey` (RFC 5958 §2 / RFC 8410 §7) that
   carries both `attributes [0]` and `publicKey [1]`. The parser capped at four
   elements, so a five-element v2 key that OpenSSL and Node WebCrypto both accept
