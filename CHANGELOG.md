@@ -46,6 +46,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Distinguished-name encoding enforces the RFC 5280 Appendix A.1 attribute
+  constraints: no attribute value may be empty (`SIZE (1..ub-…)`), and
+  `commonName`/`organization`/`organizationalUnit`/`title`/`serialNumber` cap at
+  64 characters, `locality`/`state` at 128, `emailAddress` at 255, and
+  `surname`/`givenName` at 32768 (`ub-name`). Only the country exact-length-2
+  rule was enforced before. `street` stays unbounded (no A.1 bound applies).
+  Bounds count code points.
+- `createCertificate` rejects an empty issuer distinguished name, per RFC 5280
+  §4.1.2.4 ("The issuer field MUST contain a non-empty distinguished name"). An
+  empty subject with a critical subjectAltName stays valid (§4.1.2.6).
+  (https://github.com/kjanat/micro509/pull/84)
 - PKCS#12 `MacData` omits `iterations` when it equals its `DEFAULT 1`, and the
   parser accepts a two-element `MacData`, defaulting `iterations` to 1
   (RFC 7292 §4, X.690 §11.5). A conformant PFX with iteration count 1 previously

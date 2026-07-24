@@ -14,6 +14,7 @@ import {
 import { readElement } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { encodeRsaPssParameters, rsaPssParametersForHash } from '#micro509/internal/crypto/rsa-pss';
+import { encodeName } from '#micro509/x509';
 import { childrenOf, decodeObjectIdentifier, hasExtensionOid } from '#test/helpers';
 
 async function expectRejectedErrorCode(promise: Promise<unknown>, code: string): Promise<void> {
@@ -25,6 +26,17 @@ async function expectRejectedErrorCode(promise: Promise<unknown>, code: string):
 		return;
 	}
 	throw new Error(`expected a ResultError with code '${code}', but the promise resolved`);
+}
+
+function expectThrownErrorCode(fn: () => unknown, code: string): void {
+	try {
+		fn();
+	} catch (error) {
+		expect(isResultError(error)).toBe(true);
+		expect(isResultError(error) ? error.code : undefined).toBe(code);
+		return;
+	}
+	throw new Error(`expected a ResultError with code '${code}', but the call returned`);
 }
 
 describe('certificate', () => {
@@ -442,8 +454,19 @@ describe('certificate', () => {
 	});
 
 	it('allows empty subject DN when SAN is present and marks SAN critical (RFC 5280 §4.2.1.6)', async () => {
-		const { certificate } = await createSelfSignedCertificate({
+		// The issuer must be non-empty (§4.1.2.4), so an empty subject is only valid
+		// on a CA-issued leaf, not a self-signed certificate.
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Empty Subject CA' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign'] },
+		});
+		const leafKeys = await generateKeyPair();
+		const certificate = await createCertificate({
+			issuer: { commonName: 'Empty Subject CA' },
 			subject: {},
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
 			extensions: {
 				subjectAltNames: [{ type: 'dns', value: 'example.com' }],
 			},
@@ -472,6 +495,53 @@ describe('certificate', () => {
 				},
 			}),
 			'invalid_oid',
+		);
+	});
+
+	it('rejects an empty name attribute value (RFC 5280 A.1 SIZE (1..ub))', () => {
+		// The NameObject path filters empty values, so exercise the attribute-array path.
+		expectThrownErrorCode(
+			() => encodeName([{ type: 'commonName', value: '' }]),
+			'name_attribute_empty',
+		);
+	});
+
+	it('rejects a name attribute over its RFC 5280 A.1 upper bound', async () => {
+		await expectRejectedErrorCode(
+			createSelfSignedCertificate({ subject: { commonName: 'a'.repeat(65) } }),
+			'name_attribute_too_long',
+		);
+	});
+
+	it('accepts surname and givenName at the RFC 5280 A.1 ub-name bound (32768)', () => {
+		expect(encodeName([{ type: 'surname', value: 'a'.repeat(32768) }])).toBeInstanceOf(Uint8Array);
+		expect(encodeName([{ type: 'givenName', value: 'a'.repeat(32768) }])).toBeInstanceOf(
+			Uint8Array,
+		);
+	});
+
+	it('rejects surname and givenName over the RFC 5280 A.1 ub-name bound (32769)', () => {
+		expectThrownErrorCode(
+			() => encodeName([{ type: 'surname', value: 'a'.repeat(32769) }]),
+			'name_attribute_too_long',
+		);
+		expectThrownErrorCode(
+			() => encodeName([{ type: 'givenName', value: 'a'.repeat(32769) }]),
+			'name_attribute_too_long',
+		);
+	});
+
+	it('rejects an empty issuer distinguished name (RFC 5280 §4.1.2.4)', async () => {
+		const keys = await generateKeyPair();
+		await expectRejectedErrorCode(
+			createCertificate({
+				issuer: {},
+				subject: { commonName: 'empty-issuer-leaf' },
+				publicKey: keys.publicKey,
+				signerPrivateKey: keys.privateKey,
+				issuerPublicKey: keys.publicKey,
+			}),
+			'issuer_distinguished_name_empty',
 		);
 	});
 

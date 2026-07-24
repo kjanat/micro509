@@ -70,6 +70,8 @@ import { throwMicro509Error } from '#micro509/result/result';
 export type NameEncoderErrorCode =
 	| 'relative_distinguished_name_empty'
 	| 'unsupported_name_field'
+	| 'name_attribute_empty'
+	| 'name_attribute_too_long'
 	| 'invalid_country_code';
 
 /** Throws a {@link ResultError} for a distinguished-name encoder input-validation failure. */
@@ -203,7 +205,7 @@ export { nameFieldKeyFromOid } from '#micro509/internal/x509/name-fields';
  *
  * @param input Name fields in convenience-object form or caller-ordered attribute form.
  * @returns DER-encoded X.509 `Name` bytes.
- * @throws {Error} If the input produces no attributes, contains an unsupported field key, or uses an invalid country code.
+ * @throws {ResultError} If a value exceeds its RFC 5280 A.1 bound, an ordered attribute value is empty, a field key is unsupported, or a country code is not two characters. An input with no attributes encodes an empty Name (`30 00`) rather than throwing.
  */
 export function encodeName(input: NameInput): Uint8Array {
 	const attributes = isNameAttributes(input) ? input : nameObjectToAttributes(input);
@@ -243,7 +245,7 @@ export function isNameInputEmpty(input: NameInput): boolean {
  *
  * @param attributes Attribute list to encode inside one RDN.
  * @returns DER-encoded RelativeDistinguishedName bytes.
- * @throws {ResultError} If the attribute list is empty, contains an unsupported field key, or uses an invalid country code.
+ * @throws {ResultError} If the attribute list is empty, contains an unsupported field key, an empty or over-long value, or an invalid country code.
  */
 export function encodeRelativeDistinguishedName(
 	attributes: RelativeDistinguishedNameInput,
@@ -270,15 +272,28 @@ function encodeNameAttributeAsSet(attribute: NameAttribute): Uint8Array {
 /**
  * DER-encodes one name attribute SEQUENCE.
  *
- * Throws for unsupported field keys and invalid country codes.
+ * Throws for unsupported field keys, empty or over-long values, and invalid country codes.
  */
 function encodeNameAttribute(attribute: NameAttribute): Uint8Array {
 	const definition = NAME_FIELD_DEFINITIONS[attribute.type];
 	if (definition === undefined) {
 		throwNameEncoderError('unsupported_name_field', `Unsupported name field: ${attribute.type}`);
 	}
+	const length = [...attribute.value].length;
+	if (length === 0) {
+		throwNameEncoderError(
+			'name_attribute_empty',
+			`Name attribute ${attribute.type} must not be empty`,
+		);
+	}
 	if (attribute.type === 'country' && attribute.value.length !== 2) {
 		throwNameEncoderError('invalid_country_code', 'Country must be a 2-character code');
+	}
+	if (definition.maxLength !== undefined && length > definition.maxLength) {
+		throwNameEncoderError(
+			'name_attribute_too_long',
+			`Name attribute ${attribute.type} must be at most ${definition.maxLength} characters`,
+		);
 	}
 	return sequence([objectIdentifier(definition.oid), definition.encode(attribute.value)]);
 }

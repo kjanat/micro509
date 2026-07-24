@@ -39,7 +39,9 @@ export type * from '#micro509/x509/extensions';
 export type * from '#micro509/x509/name';
 
 /** Machine-readable reason a certificate builder rejected its construction input. */
-export type CreateCertificateErrorCode = 'validity_not_after_before_not_before';
+export type CreateCertificateErrorCode =
+	| 'issuer_distinguished_name_empty'
+	| 'validity_not_after_before_not_before';
 
 /**
  * Configures the certificate validity window.
@@ -255,6 +257,12 @@ export async function createCertificate(
 		: undefined;
 	const signatureAlgorithm = getSignatureAlgorithm(input.signerPrivateKey, input.signature);
 	const validity = resolveValidity(input.validity);
+	if (isNameInputEmpty(input.issuer)) {
+		throwMicro509Error<CreateCertificateErrorCode>(
+			'issuer_distinguished_name_empty',
+			'issuer must be a non-empty distinguished name',
+		);
+	}
 	const subjectIsEmpty = isNameInputEmpty(input.subject);
 	const extensions = buildCertificateExtensions(
 		subjectPublicKeyInfo,
