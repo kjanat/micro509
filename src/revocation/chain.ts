@@ -14,6 +14,7 @@ import type {
 	RevocationReason,
 } from '#micro509/revocation/crl';
 import {
+	ALL_DISTRIBUTION_POINT_REASONS,
 	checkCertificateRevocationAgainstCrl,
 	parseCertificateRevocationListDerOrThrow,
 	parseCertificateRevocationListPemOrThrow,
@@ -32,6 +33,7 @@ import {
 } from '#micro509/revocation/ocsp';
 import type { RevocationCertificateSource } from '#micro509/revocation/revocation';
 import { verifyCertificateChain } from '#micro509/verify/verify';
+import type { DistributionPointReason } from '#micro509/x509/extensions';
 import type { ParsedCertificate } from '#micro509/x509/parse';
 import { parseCertificateFromSource } from '#micro509/x509/parse';
 
@@ -802,17 +804,6 @@ async function evaluateOcspEvidence(
  * Also validates that CRL signers are not revoked (RFC 5280 §6.3.3).
  */
 // RFC 5280 ReasonFlags — all possible revocation reasons that CRLs can cover.
-const ALL_REASON_FLAGS: readonly string[] = [
-	'keyCompromise',
-	'cACompromise',
-	'affiliationChanged',
-	'superseded',
-	'cessationOfOperation',
-	'certificateHold',
-	'privilegeWithdrawn',
-	'aACompromise',
-];
-
 interface CrlEvidenceState {
 	readonly executionErrors: RevocationExecutionError[];
 	readonly coveredReasons: Set<string>;
@@ -887,7 +878,7 @@ async function resolveBaseCrlAgainstSigners(
 				checked.value.reasonCode,
 			);
 		}
-		recordGoodCrlEvidence(state, candidate, crlThisUpdate, baseCrl);
+		recordGoodCrlEvidence(state, candidate, crlThisUpdate, checked.value.coveredReasons);
 		return undefined;
 	}
 	return undefined;
@@ -943,7 +934,9 @@ async function evaluateCrlEvidence(
 
 	// Return 'good' only if we saw at least one good result AND all reasons are covered
 	if (state.sawGood && state.freshestGood !== undefined) {
-		const allReasonsCovered = ALL_REASON_FLAGS.every((r) => state.coveredReasons.has(r));
+		const allReasonsCovered = ALL_DISTRIBUTION_POINT_REASONS.every((r) =>
+			state.coveredReasons.has(r),
+		);
 		if (allReasonsCovered) {
 			return {
 				status: {
@@ -1061,7 +1054,7 @@ function recordGoodCrlEvidence(
 	state: CrlEvidenceState,
 	signer: ParsedCertificate,
 	thisUpdate: Date,
-	baseCrl: ParsedCertificateRevocationList,
+	coveredReasons: readonly DistributionPointReason[],
 ): void {
 	state.sawGood = true;
 	if (
@@ -1070,8 +1063,7 @@ function recordGoodCrlEvidence(
 	) {
 		state.freshestGood = { signer, thisUpdate };
 	}
-	for (const reason of baseCrl.issuingDistributionPoint?.onlySomeReasons?.flags ??
-		ALL_REASON_FLAGS) {
+	for (const reason of coveredReasons) {
 		state.coveredReasons.add(reason);
 	}
 }

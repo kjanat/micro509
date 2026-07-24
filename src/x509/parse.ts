@@ -364,6 +364,8 @@ export interface ParsedCertificate<TMap extends ExtensionDecoderMap = Record<nev
 	readonly extendedKeyUsage?: readonly ExtendedKeyUsage[];
 	/** Decoded Subject Alternative Names (RFC 5280 §4.2.1.6). */
 	readonly subjectAltNames?: readonly SubjectAltName[];
+	/** Decoded Issuer Alternative Names (RFC 5280 §4.2.1.7). */
+	readonly issuerAltNames?: readonly SubjectAltName[];
 	/** Decoded Name Constraints (RFC 5280 §4.2.1.10). */
 	readonly nameConstraints?: NameConstraints<ParsedNameConstraintForm>;
 	/** Decoded Certificate Policies (RFC 5280 §4.2.1.4). */
@@ -562,6 +564,9 @@ export function parseCertificateDerOrThrow<TMap extends ExtensionDecoderMap = Re
 			: {}),
 		...(parsedExtensions.subjectAltNames !== undefined
 			? { subjectAltNames: parsedExtensions.subjectAltNames }
+			: {}),
+		...(parsedExtensions.issuerAltNames !== undefined
+			? { issuerAltNames: parsedExtensions.issuerAltNames }
 			: {}),
 		...(parsedExtensions.nameConstraints !== undefined
 			? { nameConstraints: parsedExtensions.nameConstraints }
@@ -1924,14 +1929,17 @@ export function parseInhibitAnyPolicy(bytes: Uint8Array): InhibitAnyPolicy {
 	};
 }
 
-/** @internal Decode the Subject Alternative Names SEQUENCE OF GeneralName. */
-export function parseSubjectAltNames(bytes: Uint8Array): readonly SubjectAltName[] {
+/** @internal Decode a subjectAltName or issuerAltName SEQUENCE OF GeneralName. */
+export function parseSubjectAltNames(
+	bytes: Uint8Array,
+	label = 'subjectAltName',
+): readonly SubjectAltName[] {
 	const sequenceElement = requireElement(
 		readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH }),
-		'subjectAltName sequence',
+		`${label} sequence`,
 	);
 	if (sequenceElement.tag !== 0x30) {
-		throw new Error('subjectAltName must use SEQUENCE');
+		throw new Error(`${label} must use SEQUENCE`);
 	}
 	return parseGeneralNames(bytes, sequenceElement);
 }

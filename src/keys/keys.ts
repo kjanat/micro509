@@ -780,6 +780,9 @@ export function importSpkiBase64(
  * keys whose type isn't known ahead of time. Pass `algorithm` to additionally
  * assert that the DER matches an expected algorithm.
  *
+ * Bun 1.3.14 and earlier rejects an RFC 5958 v2 `OneAsymmetricKey` carrying `attributes [0]` or `publicKey [1]`
+ * ([oven-sh/bun#35432](https://github.com/oven-sh/bun/issues/35432)).
+ *
  * @param der - DER-encoded PKCS#8 PrivateKeyInfo bytes
  * @param algorithm - Optional expected algorithm; must match key contents when given
  * @returns Extractable CryptoKey with `sign` usage

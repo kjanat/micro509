@@ -89,6 +89,51 @@ describe('checkChainRevocation', () => {
 		expect(result.value.summary.indeterminateCertificates).toHaveLength(1);
 	});
 
+	it('reports incomplete reason coverage when the matched distribution point limits reasons', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Partial Reason CA' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Partial Reason CA' },
+			subject: { commonName: 'partial-reason.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				crlDistributionPoints: [
+					{
+						distributionPoint: {
+							fullName: [{ type: 'uri', value: 'http://example.test/partial.crl' }],
+						},
+						reasons: ['keyCompromise'],
+					},
+				],
+			},
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Partial Reason CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+
+		const result = await checkChainRevocation({
+			chain: [
+				unwrap(parseCertificatePem(leaf.pem)),
+				unwrap(parseCertificatePem(ca.certificate.pem)),
+			],
+			crls: [crl.pem],
+		});
+
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		const leafStatus = result.value.certificates[0];
+		expect(leafStatus?.status).toBe('indeterminate');
+		expect(leafStatus?.indeterminateReasons).toContain('reason_coverage_incomplete');
+		expect(result.value.decision).toBe('deny');
+	});
+
 	it('evaluates good status when CRL covers cert and serial not listed', async () => {
 		const root = await loadPkitsCert('TrustAnchorRootCertificate');
 		const goodCa = await loadPkitsCert('GoodCACert');

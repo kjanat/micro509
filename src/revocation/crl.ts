@@ -378,6 +378,13 @@ export interface CheckCertificateRevocationAgainstCrlGoodValue {
 	readonly status: 'good';
 	/** The validated CRL that was checked. */
 	readonly crl: ParsedCertificateRevocationList;
+	/**
+	 * Revocation reasons this check covered, the RFC 5280 §6.3.3 (d)
+	 * interim_reasons_mask: the matched distribution point's reasons intersected
+	 * with the CRL's `onlySomeReasons`, either alone when the other is absent,
+	 * or every reason when both are.
+	 */
+	readonly coveredReasons: readonly DistributionPointReason[];
 }
 
 /** Success value when the certificate is found as revoked in the CRL. */
@@ -428,6 +435,24 @@ type CrlDistributionPointScanResult =
 	| 'distribution_point_mismatch'
 	| 'indirect_distribution_point'
 	| 'scope_mismatch';
+
+type CrlDistributionPointScanFailure = Exclude<CrlDistributionPointScanResult, 'matched'>;
+
+type CrlApplicabilityOutcome =
+	| { readonly ok: true; readonly matchedDistributionPoint?: ParsedDistributionPoint }
+	| { readonly ok: false; readonly failure: CrlApplicabilityFailure };
+
+/** RFC 5280 §4.2.1.13 ReasonFlags, excluding the reserved `unused` bit. */
+export const ALL_DISTRIBUTION_POINT_REASONS: readonly DistributionPointReason[] = [
+	'keyCompromise',
+	'cACompromise',
+	'affiliationChanged',
+	'superseded',
+	'cessationOfOperation',
+	'certificateHold',
+	'privilegeWithdrawn',
+	'aACompromise',
+];
 
 interface MutableIssuingDistributionPointFields {
 	distributionPoint?: ParsedDistributionPointName;
@@ -873,12 +898,16 @@ export async function checkCertificateRevocationAgainstCrl(
 	}
 	const deltaResult = await validateOptionalDeltaCrl(input, validated.value);
 	if (!deltaResult.ok) return deltaResult;
-	const applicabilityFailure = checkCrlAndDeltaApplicability(
+	const applicability = checkCrlAndDeltaApplicability(
 		certificate,
 		validated.value,
 		deltaResult.value,
 	);
-	if (applicabilityFailure !== undefined) return applicabilityFailure;
+	if (!applicability.ok) return applicability.failure;
+	const coveredReasons = interimReasonsMask(
+		applicability.matchedDistributionPoint,
+		validated.value.issuingDistributionPoint,
+	);
 	const completeRevoked = findRevokedCertificateEntry(certificate, validated.value);
 	if (!completeRevoked.ok) {
 		return completeRevoked;
@@ -893,11 +922,25 @@ export async function checkCertificateRevocationAgainstCrl(
 	}
 	return resolveCertificateRevocationStatus(
 		certificate,
-		input.at ?? new Date(),
+		deltaResult.value?.thisUpdate,
 		validated.value,
 		completeRevoked.entry,
 		deltaRevoked,
+		coveredReasons,
 	);
+}
+
+/** RFC 5280 §6.3.3 (d): interim_reasons_mask from the matched DP and the CRL's IDP. */
+function interimReasonsMask(
+	distributionPoint: ParsedDistributionPoint | undefined,
+	issuingDistributionPoint: ParsedIssuingDistributionPoint | undefined,
+): readonly DistributionPointReason[] {
+	const distributionPointReasons = distributionPoint?.reasons?.flags;
+	const crlReasons = issuingDistributionPoint?.onlySomeReasons?.flags;
+	if (distributionPointReasons !== undefined && crlReasons !== undefined) {
+		return distributionPointReasons.filter((reason) => crlReasons.includes(reason));
+	}
+	return distributionPointReasons ?? crlReasons ?? ALL_DISTRIBUTION_POINT_REASONS;
 }
 
 /** Validates an optional delta CRL and checks compatibility with its complete CRL. */
@@ -928,10 +971,13 @@ function checkCrlAndDeltaApplicability(
 	certificate: ParsedCertificate,
 	crl: ParsedCertificateRevocationList,
 	deltaCrl: ParsedCertificateRevocationList | undefined,
-): CrlApplicabilityFailure | undefined {
-	const applicabilityFailure = checkCrlApplicability(certificate, crl);
-	if (applicabilityFailure !== undefined) return applicabilityFailure;
-	return deltaCrl === undefined ? undefined : checkCrlApplicability(certificate, deltaCrl, true);
+): CrlApplicabilityOutcome {
+	const outcome = checkCrlApplicability(certificate, crl);
+	if (!outcome.ok || deltaCrl === undefined) {
+		return outcome;
+	}
+	const deltaOutcome = checkCrlApplicability(certificate, deltaCrl, true);
+	return deltaOutcome.ok ? outcome : deltaOutcome;
 }
 
 /** Builds a `VerifyCertificateRevocationListSignatureFailureResult`. */
@@ -1043,9 +1089,9 @@ function checkCrlApplicability(
 	certificate: ParsedCertificate,
 	crl: ParsedCertificateRevocationList,
 	allowDeltaCrl = false,
-): CrlApplicabilityFailure | undefined {
+): CrlApplicabilityOutcome {
 	if (!allowDeltaCrl && crl.baseCrlNumber !== undefined) {
-		return nonApplicable(
+		return notApplicableOutcome(
 			'unsupported_delta_crl',
 			'a delta CRL cannot be used as the primary complete CRL input',
 		);
@@ -1053,42 +1099,53 @@ function checkCrlApplicability(
 	const issuingDistributionPoint = crl.issuingDistributionPoint;
 	const isIndirectCrl = issuingDistributionPoint?.indirectCrl === true;
 	if (!isIndirectCrl && !compareDistinguishedNames(certificate.issuer, crl.issuer)) {
-		return nonApplicable(
+		return notApplicableOutcome(
 			'issuer_mismatch',
 			'CRL issuer does not match certificate issuer for direct CRL processing',
 		);
 	}
 	if (issuingDistributionPoint?.onlyContainsAttributeCerts === true) {
-		return nonApplicable(
+		return notApplicableOutcome(
 			'certificate_scope_mismatch',
 			'attribute-certificate-only CRLs are not applicable to public-key certificates',
 		);
 	}
 	const isCaCertificate = certificate.basicConstraints?.ca === true;
 	if (issuingDistributionPoint?.onlyContainsUserCerts === true && isCaCertificate) {
-		return nonApplicable(
+		return notApplicableOutcome(
 			'certificate_scope_mismatch',
 			'CRL only applies to end-entity certificates',
 		);
 	}
 	if (issuingDistributionPoint?.onlyContainsCACerts === true && !isCaCertificate) {
-		return nonApplicable('certificate_scope_mismatch', 'CRL only applies to CA certificates');
+		return notApplicableOutcome(
+			'certificate_scope_mismatch',
+			'CRL only applies to CA certificates',
+		);
 	}
 	const distributionPoints = certificate.crlDistributionPoints ?? [];
 	if (distributionPoints.length === 0) {
-		if (issuingDistributionPoint?.distributionPoint !== undefined) {
-			return nonApplicable(
+		if (
+			issuingDistributionPoint?.distributionPoint !== undefined &&
+			!matchesDistributionPointName(
+				issuerFallbackDistributionPointName(certificate),
+				issuingDistributionPoint.distributionPoint,
+				crl.issuer,
+				undefined,
+			)
+		) {
+			return notApplicableOutcome(
 				'distribution_point_mismatch',
-				'certificates without CRL distribution points only accept full-scope CRLs',
+				'CRL issuing distribution point does not name the certificate issuer',
 			);
 		}
 		if (isIndirectCrl && !compareDistinguishedNames(certificate.issuer, crl.issuer)) {
-			return nonApplicable(
+			return notApplicableOutcome(
 				'issuer_mismatch',
 				'indirect CRLs for alternate certificate issuers require matching CRLIssuer distribution points',
 			);
 		}
-		return undefined;
+		return { ok: true };
 	}
 	const scanResult = scanCrlDistributionPoints(
 		distributionPoints,
@@ -1097,7 +1154,34 @@ function checkCrlApplicability(
 		issuingDistributionPoint,
 		isIndirectCrl,
 	);
-	return crlDistributionPointScanFailure(scanResult);
+	if (typeof scanResult === 'string') {
+		return { ok: false, failure: crlDistributionPointScanFailure(scanResult) };
+	}
+	return { ok: true, matchedDistributionPoint: scanResult.matched };
+}
+
+/** Wraps a non-applicability failure into a {@linkcode CrlApplicabilityOutcome}. */
+function notApplicableOutcome(
+	reason: CrlApplicabilityFailureReason,
+	message: string,
+): CrlApplicabilityOutcome {
+	return { ok: false, failure: nonApplicable(reason, message) };
+}
+
+/**
+ * RFC 5280 §6.3.3 final paragraph: for a certificate without a CRLDP extension,
+ * assume a distribution point named by the certificate issuer and its
+ * issuerAltName entries, with reasons and cRLIssuer omitted.
+ */
+function issuerFallbackDistributionPointName(
+	certificate: ParsedCertificate,
+): ParsedDistributionPointName {
+	return {
+		fullName: [
+			{ type: 'directoryName', derHex: certificate.issuer.derHex },
+			...(certificate.issuerAltNames ?? []),
+		],
+	};
 }
 
 /** Aggregates distribution-point matching outcomes across a certificate. */
@@ -1107,7 +1191,7 @@ function scanCrlDistributionPoints(
 	crl: ParsedCertificateRevocationList,
 	issuingDistributionPoint: ParsedIssuingDistributionPoint | undefined,
 	isIndirectCrl: boolean,
-): CrlDistributionPointScanResult {
+): { readonly matched: ParsedDistributionPoint } | CrlDistributionPointScanFailure {
 	let sawIndirectDistributionPoint = false;
 	let sawDistributionMismatch = false;
 	let sawIndirectIssuerMismatch = false;
@@ -1121,7 +1205,7 @@ function scanCrlDistributionPoints(
 			issuingDistributionPoint,
 			isIndirectCrl,
 		);
-		if (result === 'matched') return result;
+		if (result === 'matched') return { matched: distributionPoint };
 		if (result === 'indirect_distribution_point') sawIndirectDistributionPoint = true;
 		if (result === 'distribution_point_mismatch') sawDistributionMismatch = true;
 		if (result === 'indirect_issuer_mismatch') sawIndirectIssuerMismatch = true;
@@ -1162,6 +1246,7 @@ function scanCrlDistributionPoint(
 			distributionPoint.distributionPoint,
 			issuingDistributionPoint?.distributionPoint,
 			crl.issuer,
+			distributionPoint.crlIssuer,
 		)
 	) {
 		return 'distribution_point_mismatch';
@@ -1192,11 +1277,8 @@ function scanCrlDistributionPointIssuer(
 }
 
 function crlDistributionPointScanFailure(
-	result: CrlDistributionPointScanResult,
-): CrlApplicabilityFailure | undefined {
-	if (result === 'matched') {
-		return undefined;
-	}
+	result: CrlDistributionPointScanFailure,
+): CrlApplicabilityFailure {
 	if (result === 'reasons_mismatch') {
 		return nonApplicable(
 			'reasons_mismatch',
@@ -1355,23 +1437,34 @@ function nonApplicable(
 	return checkCertificateRevocationAgainstCrlFailureResult('non_applicable', message, { reason });
 }
 
-/** Merges complete and delta CRL entries per RFC 5280 §5.2.4 to produce a final `good`/`revoked` status. */
+/**
+ * Merges complete and delta CRL entries into a final `good`/`revoked` status
+ * per the RFC 5280 §6.3.3 (i)-(k) relying-party algorithm.
+ *
+ * Deliberately harder than (i)-(k) on `removeFromCRL`: the entry clears a
+ * revocation only in the two situations §5.2.4(b)/§5.3.1 permit an issuer to
+ * emit it, a complete-CRL `certificateHold` entry or a certificate that
+ * expired before the delta CRL's thisUpdate.
+ */
 function resolveCertificateRevocationStatus(
 	certificate: ParsedCertificate,
-	at: Date,
+	deltaThisUpdate: Date | undefined,
 	completeCrl: ParsedCertificateRevocationList,
 	completeEntry: ParsedRevokedCertificate | undefined,
 	deltaEntry: ParsedRevokedCertificate | undefined,
+	coveredReasons: readonly DistributionPointReason[],
 ): CheckCertificateRevocationAgainstCrlResult {
 	if (deltaEntry !== undefined) {
 		if (deltaEntry.reasonCode === 'removeFromCRL') {
 			if (
 				completeEntry?.reasonCode === 'certificateHold' ||
-				certificate.notAfter.getTime() < at.getTime()
+				(deltaThisUpdate !== undefined &&
+					certificate.notAfter.getTime() < deltaThisUpdate.getTime())
 			) {
 				return checkCertificateRevocationAgainstCrlSuccess({
 					status: 'good',
 					crl: completeCrl,
+					coveredReasons,
 				});
 			}
 		} else {
@@ -1384,7 +1477,11 @@ function resolveCertificateRevocationStatus(
 		}
 	}
 	if (completeEntry === undefined) {
-		return checkCertificateRevocationAgainstCrlSuccess({ status: 'good', crl: completeCrl });
+		return checkCertificateRevocationAgainstCrlSuccess({
+			status: 'good',
+			crl: completeCrl,
+			coveredReasons,
+		});
 	}
 	return checkCertificateRevocationAgainstCrlSuccess({
 		status: 'revoked',
@@ -1405,12 +1502,13 @@ function matchesDistributionPointName(
 	certificatePoint: ParsedDistributionPointName | undefined,
 	crlPoint: ParsedDistributionPointName | undefined,
 	crlIssuer: ParsedName,
+	certificateCrlIssuer: readonly GeneralName[] | undefined,
 ): boolean {
 	if (crlPoint === undefined) {
 		return true;
 	}
 	if (certificatePoint === undefined) {
-		return false;
+		return matchesIdpNameAgainstCrlIssuer(crlPoint, certificateCrlIssuer, crlIssuer);
 	}
 	// Both have fullName — direct comparison
 	if (certificatePoint.fullName !== undefined && crlPoint.fullName !== undefined) {
@@ -1435,6 +1533,34 @@ function matchesDistributionPointName(
 		const resolvedDnHex = resolveRelativeNameToDnHex(crlIssuer, crlPoint.relativeName);
 		return certificatePoint.fullName.some(
 			(name) => name.type === 'directoryName' && name.derHex === resolvedDnHex,
+		);
+	}
+	return false;
+}
+
+/**
+ * RFC 5280 §6.3.3 (b)(2)(i): when the certificate's distribution point omits the
+ * distributionPoint field, match the CRL IDP's distributionPoint names against
+ * the distribution point's `cRLIssuer` names.
+ */
+function matchesIdpNameAgainstCrlIssuer(
+	crlPoint: ParsedDistributionPointName,
+	certificateCrlIssuer: readonly GeneralName[] | undefined,
+	crlIssuer: ParsedName,
+): boolean {
+	if (certificateCrlIssuer === undefined) {
+		return false;
+	}
+	if (crlPoint.fullName !== undefined) {
+		return certificateCrlIssuer.some(
+			(issuerName) =>
+				crlPoint.fullName?.some((name) => compareGeneralNames(issuerName, name)) === true,
+		);
+	}
+	if (crlPoint.relativeName !== undefined) {
+		const resolvedDnHex = resolveRelativeNameToDnHex(crlIssuer, crlPoint.relativeName);
+		return certificateCrlIssuer.some(
+			(issuerName) => issuerName.type === 'directoryName' && issuerName.derHex === resolvedDnHex,
 		);
 	}
 	return false;

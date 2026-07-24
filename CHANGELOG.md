@@ -18,6 +18,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `ParsedCertificate.issuerAltNames` decodes the issuerAltName extension
+  (RFC 5280 §4.2.1.7, OID 2.5.29.18) with the subjectAltName GeneralNames
+  decoder.
+- `checkCertificateRevocationAgainstCrl` reports `coveredReasons` on a `good`
+  value: the RFC 5280 §6.3.3 (d) interim_reasons_mask computed from the matched
+  distribution point's `reasons` and the CRL's `onlySomeReasons`.
+
 ### Changed
 
 - Builder input-validation now throws a `ResultError` carrying a stable
@@ -46,6 +55,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- CRL applicability follows the RFC 5280 §6.3.3 relying-party algorithm in
+  three places it diverged. A certificate without a CRLDP extension accepts a
+  CRL whose issuing distribution point names the certificate issuer or one of
+  its issuerAltName entries, per the §6.3.3 assumed-distribution-point rule;
+  such a CRL previously reported `non_applicable`. A distribution point that
+  omits `distributionPoint` matches the CRL IDP name against its `cRLIssuer`
+  names (§6.3.3 (b)(2)(i)); an in-scope indirect CRL was previously rejected.
+  Reason coverage uses the §6.3.3 (d) interim_reasons_mask instead of the
+  CRL's `onlySomeReasons` alone, so a distribution point scoped to a subset of
+  reasons no longer grants full coverage and `checkChainRevocation` returns
+  `reason_coverage_incomplete` instead of `good` when reasons remain uncovered.
+  A delta-CRL `removeFromCRL` entry for an expired certificate now measures
+  expiry against the delta's `thisUpdate` (§5.2.4), not the evaluation time.
 - `importPkcs8Der` accepts a `OneAsymmetricKey` (RFC 5958 §2 / RFC 8410 §7) that
   carries both `attributes [0]` and `publicKey [1]`. The parser capped at four
   elements, so a five-element v2 key that OpenSSL and Node WebCrypto both accept
