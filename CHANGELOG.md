@@ -38,7 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unions (`ExtensionEncoderErrorCode`, `NameEncoderErrorCode`,
   `CrlEncoderErrorCode`, `CreateCertificateErrorCode`). DER decode guards and
   exhaustiveness invariants keep throwing a plain `Error`. The thrown message
-  gains a `code: ` prefix.
+  gains a `code: ` prefix. <!-- markdownlint-disable-line MD038 -->
 - `AuthorityInformationAccess.uri: string` becomes `location: GeneralName`, the
   full accessLocation RFC 5280 §4.2.2.1 defines. The parser threw
   `Unsupported authorityInfoAccess location tag` for any location that was not a
@@ -83,6 +83,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   an expired certificate now measures expiry against the delta's `thisUpdate`
   (§5.2.4), not the evaluation time.
   (https://github.com/kjanat/micro509/pull/87)
+- `importEncryptedPkcs1Pem` and `importEncryptedSec1Pem` report a wrong password
+  as `invalid_password` rather than occasionally as `malformed`. Traditional PEM
+  encrypts with unauthenticated AES-CBC, so a wrong key clears the PKCS#7 padding
+  check roughly once in every 256 attempts and yields random plaintext; the
+  decrypted bytes are now required to parse as an `RSAPrivateKey` or
+  `ECPrivateKey`, which is the check the PBES2 path already applied.
 - `importPkcs8Der` accepts a `OneAsymmetricKey` (RFC 5958 §2 / RFC 8410 §7) that
   carries both `attributes [0]` and `publicKey [1]`. The parser capped at four
   elements, so a five-element v2 key that OpenSSL and Node WebCrypto both accept

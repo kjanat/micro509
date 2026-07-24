@@ -911,15 +911,10 @@ export async function importEncryptedPkcs8DerOrThrow(
 		encryptedData.value,
 		password,
 	);
-	try {
-		parsePkcs8PrivateKey(decrypted);
-	} catch {
-		// AES-CBC padding is unauthenticated: a wrong key passes the padding
-		// check ~1/256 of the time and "decrypts" to random bytes. Plaintext
-		// that is not a PrivateKeyInfo means the password was wrong, not that
-		// the input was malformed.
-		throw wrongPasswordError('Invalid password or encrypted content');
-	}
+	assertDecryptedPrivateKey(
+		() => parsePkcs8PrivateKey(decrypted),
+		'Invalid password or encrypted content',
+	);
 	return importPkcs8DerOrThrow(decrypted, algorithm);
 }
 
@@ -1041,6 +1036,10 @@ export async function importEncryptedPkcs1PemOrThrow(
 	algorithm: ImportRsaKeyInput = { kind: 'rsa' },
 ): Promise<CryptoKey> {
 	const decrypted = await decryptTraditionalPem('RSA PRIVATE KEY', pem, password);
+	assertDecryptedPrivateKey(
+		() => parsePkcs1PrivateKey(decrypted),
+		'Invalid password or encrypted PEM content',
+	);
 	return importPkcs1DerOrThrow(decrypted, algorithm);
 }
 
@@ -1180,6 +1179,10 @@ export async function importEncryptedSec1PemOrThrow(
 	algorithm?: ImportEcKeyInput,
 ): Promise<CryptoKey> {
 	const decrypted = await decryptTraditionalPem('EC PRIVATE KEY', pem, password);
+	assertDecryptedPrivateKey(
+		() => parseSec1PrivateKey(decrypted),
+		'Invalid password or encrypted PEM content',
+	);
 	return importSec1DerOrThrow(decrypted, algorithm);
 }
 
@@ -1503,6 +1506,39 @@ function toImportAlgorithm(
 			};
 		case 'ed25519':
 			return { name: 'Ed25519' };
+	}
+}
+
+/**
+ * Rejects decrypted plaintext that is not the private-key structure it should be.
+ *
+ * PBES2 and traditional PEM both encrypt with unauthenticated AES-CBC, where a
+ * wrong key clears the padding check roughly once in every 256 attempts and
+ * yields random plaintext. Structure is the only integrity signal left, so
+ * plaintext that fails to parse means the password was wrong or the ciphertext
+ * was corrupted, not that the enclosing input was malformed.
+ */
+function assertDecryptedPrivateKey(parse: () => unknown, message: string): void {
+	try {
+		parse();
+	} catch {
+		throw wrongPasswordError(message);
+	}
+}
+
+/** Structural check for a PKCS#1 RSAPrivateKey: a version INTEGER and eight more. */
+function parsePkcs1PrivateKey(der: Uint8Array): void {
+	const children = readSequenceChildren(der);
+	const version = children[0];
+	const isRsaPrivateKeyShape =
+		(children.length === 9 || children.length === 10) &&
+		version !== undefined &&
+		version.tag === 0x02 &&
+		version.value.length === 1 &&
+		(version.value[0] === 0x00 || version.value[0] === 0x01) &&
+		children.slice(1, 9).every((child) => child.tag === 0x02);
+	if (!isRsaPrivateKeyShape) {
+		throw new Error('Malformed PKCS#1 private key');
 	}
 }
 

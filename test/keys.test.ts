@@ -152,6 +152,51 @@ describe('keys', () => {
 		}
 	});
 
+	it('reports corrupted traditional PEM ciphertext as invalid_password', async () => {
+		// Altering the first ciphertext block garbles the first two plaintext
+		// blocks and leaves the trailing PKCS#7 padding intact, so AES-CBC
+		// decryption succeeds and only the key structure reveals the damage.
+		const corruptFirstCipherBlock = (pem: string): string => {
+			const lines = pem.split('\n');
+			const bodyIndex = lines.indexOf('') + 1;
+			const line = lines[bodyIndex];
+			if (line === undefined || line.length === 0) {
+				throw new Error('encrypted PEM has no body');
+			}
+			lines[bodyIndex] = `${line[0] === 'A' ? 'B' : 'A'}${line.slice(1)}`;
+			return lines.join('\n');
+		};
+
+		const rsa = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
+		const rsaPem = await exportEncryptedPkcs1Pem(rsa.privateKey, { password: 'secret123' });
+		await expectImportFailure(
+			importEncryptedPkcs1Pem(corruptFirstCipherBlock(rsaPem), 'secret123', { kind: 'rsa' }),
+			'invalid_password',
+			'Invalid password or encrypted PEM content',
+		);
+
+		const ec = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
+		const ecPem = await exportEncryptedSec1Pem(ec.privateKey, { password: 'secret123' });
+		await expectImportFailure(
+			importEncryptedSec1Pem(corruptFirstCipherBlock(ecPem), 'secret123', {
+				kind: 'ecdsa',
+				curve: 'P-256',
+			}),
+			'invalid_password',
+			'Invalid password or encrypted PEM content',
+		);
+
+		// Relabelling decrypts cleanly and yields an ECPrivateKey where an
+		// RSAPrivateKey belongs, so only the structure check rejects it.
+		await expectImportFailure(
+			importEncryptedPkcs1Pem(ecPem.replaceAll('EC PRIVATE KEY', 'RSA PRIVATE KEY'), 'secret123', {
+				kind: 'rsa',
+			}),
+			'invalid_password',
+			'Invalid password or encrypted PEM content',
+		);
+	});
+
 	it('roundtrips encrypted traditional RSA and EC PEM helpers', async () => {
 		const rsa = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
 		const encryptedRsaPem = await exportEncryptedPkcs1Pem(rsa.privateKey, {
