@@ -3,6 +3,7 @@ import {
 	createCertificateSigningRequest,
 	findExtension,
 	generateKeyPair,
+	isResultError,
 	parseCertificateSigningRequestPem,
 	unwrap,
 	verifyCertificateSigningRequest,
@@ -18,6 +19,17 @@ import {
 	rewriteCsrSignatureAsRsaPss,
 } from '#test/helpers';
 
+async function expectRejectedErrorCode(promise: Promise<unknown>, code: string): Promise<void> {
+	try {
+		await promise;
+	} catch (error) {
+		expect(isResultError(error)).toBe(true);
+		expect(isResultError(error) ? error.code : undefined).toBe(code);
+		return;
+	}
+	throw new Error(`expected a ResultError with code '${code}', but the promise resolved`);
+}
+
 describe('csr', () => {
 	it('includes basicConstraints and customExtensions in CSR requested extensions', async () => {
 		const keyPair = await generateKeyPair({ kind: 'ed25519' });
@@ -27,6 +39,7 @@ describe('csr', () => {
 			signerPrivateKey: keyPair.privateKey,
 			extensions: {
 				basicConstraints: { ca: true, pathLength: 2 },
+				keyUsage: ['keyCertSign'],
 				customExtensions: [
 					{
 						oid: '1.2.3.4.999',
@@ -45,16 +58,18 @@ describe('csr', () => {
 
 	it('rejects a requested pathLenConstraint without keyCertSign (RFC 5280 §4.2.1.9)', async () => {
 		const keyPair = await generateKeyPair({ kind: 'ed25519' });
-		const pending = createCertificateSigningRequest({
-			subject: { commonName: 'csr-plc.example' },
-			publicKey: keyPair.publicKey,
-			signerPrivateKey: keyPair.privateKey,
-			extensions: {
-				basicConstraints: { ca: true, pathLength: 0 },
-				keyUsage: ['digitalSignature'],
-			},
-		});
-		await expect(pending).rejects.toThrow('path_length_requires_key_cert_sign');
+		await expectRejectedErrorCode(
+			createCertificateSigningRequest({
+				subject: { commonName: 'csr-plc.example' },
+				publicKey: keyPair.publicKey,
+				signerPrivateKey: keyPair.privateKey,
+				extensions: {
+					basicConstraints: { ca: true, pathLength: 0 },
+					keyUsage: ['digitalSignature'],
+				},
+			}),
+			'path_length_requires_key_cert_sign',
+		);
 	});
 
 	it('verifies certificate request signatures for RSA and Ed25519', async () => {

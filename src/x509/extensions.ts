@@ -739,7 +739,7 @@ export function buildCertificateExtensions(
 	if (subjectIsEmpty) {
 		assertEmptySubjectHasCriticalSubjectAltName(input);
 	}
-	assertPathLengthKeyUsage(input?.basicConstraints, input?.keyUsage);
+	assertPathLengthKeyUsage(input);
 	const extensions: Uint8Array[] = [];
 	const seen = new Set<string>();
 	const basicConstraints = input?.basicConstraints ?? { ca: false };
@@ -805,20 +805,17 @@ function appendConfiguredExtensions(
 }
 
 /**
- * RFC 5280 §4.2.1.9: pathLenConstraint requires the keyUsage keyCertSign bit
- * when a keyUsage extension is present.
+ * RFC 5280 §4.2.1.9: pathLenConstraint requires the keyUsage extension to assert keyCertSign.
+ * Absent, empty, or keyCertSign-less keyUsage is rejected. Known extensions supplied through
+ * customExtensions participate in the effective view.
  */
-function assertPathLengthKeyUsage(
-	basicConstraints: BasicConstraints | undefined,
-	keyUsage: readonly KeyUsage[] | undefined,
-): void {
+function assertPathLengthKeyUsage(input: CertificateExtensionsInput | undefined): void {
+	const basicConstraints = resolveEffectiveBasicConstraints(input);
 	if (basicConstraints?.pathLength === undefined) {
 		return;
 	}
-	if (keyUsage === undefined || keyUsage.length === 0) {
-		return;
-	}
-	if (!keyUsage.includes('keyCertSign')) {
+	const keyUsage = resolveEffectiveKeyUsage(input);
+	if (keyUsage === undefined || keyUsage.length === 0 || !keyUsage.includes('keyCertSign')) {
 		throwExtensionEncoderError(
 			'path_length_requires_key_cert_sign',
 			'basicConstraints pathLength requires the keyUsage keyCertSign bit',
@@ -827,17 +824,20 @@ function assertPathLengthKeyUsage(
 }
 
 /**
- * RFC 5280 §4.2.1.6: an empty subject DN requires a subjectAltName extension,
- * present and marked critical.
+ * RFC 5280 §4.2.1.6: an empty subject DN requires a subjectAltName extension
+ * present, marked critical, and carrying at least one non-empty GeneralName.
  */
 function assertEmptySubjectHasCriticalSubjectAltName(
 	input: CertificateExtensionsInput | undefined,
 ): void {
-	if (input?.subjectAltNames !== undefined && input.subjectAltNames.length > 0) {
+	if (input?.subjectAltNames?.some(subjectAltNameHasIdentity) === true) {
 		return;
 	}
 	const criticalCustomSan = input?.customExtensions?.some(
-		(extension) => extension.oid === OIDS.subjectAltName && extension.critical === true,
+		(extension) =>
+			oidEquals(extension.oid, OIDS.subjectAltName) &&
+			extension.critical === true &&
+			customSubjectAltNameHasIdentity(extension.value),
 	);
 	if (criticalCustomSan === true) {
 		return;
@@ -848,13 +848,98 @@ function assertEmptySubjectHasCriticalSubjectAltName(
 	);
 }
 
+/** Canonical OID equality: matches even when arcs carry redundant leading zeros. */
+function oidEquals(candidate: string, known: string): boolean {
+	if (candidate === known) {
+		return true;
+	}
+	try {
+		return toHex(objectIdentifier(candidate)) === toHex(objectIdentifier(known));
+	} catch {
+		return false;
+	}
+}
+
+/** First customExtensions value whose OID canonically matches `oid`. */
+function findCustomExtensionValue(
+	input: CertificateExtensionsInput | undefined,
+	oid: string,
+): Uint8Array | undefined {
+	return input?.customExtensions?.find((extension) => oidEquals(extension.oid, oid))?.value;
+}
+
+/** Effective basicConstraints across the typed field and any custom-known extension. */
+function resolveEffectiveBasicConstraints(
+	input: CertificateExtensionsInput | undefined,
+): BasicConstraints | undefined {
+	if (input?.basicConstraints !== undefined) {
+		return input.basicConstraints;
+	}
+	const custom = findCustomExtensionValue(input, OIDS.basicConstraints);
+	if (custom === undefined) {
+		return undefined;
+	}
+	try {
+		return BASIC_CONSTRAINTS_EXTENSION_DEFINITION.decode(custom);
+	} catch {
+		return undefined;
+	}
+}
+
+/** Effective keyUsage flags across the typed field and any custom-known extension. */
+function resolveEffectiveKeyUsage(
+	input: CertificateExtensionsInput | undefined,
+): readonly KeyUsage[] | undefined {
+	if (input?.keyUsage !== undefined) {
+		return input.keyUsage;
+	}
+	const custom = findCustomExtensionValue(input, OIDS.keyUsage);
+	if (custom === undefined) {
+		return undefined;
+	}
+	try {
+		return KEY_USAGE_EXTENSION_DEFINITION.decode(custom).flags;
+	} catch {
+		return undefined;
+	}
+}
+
+/** Whether a typed GeneralName carries a non-empty identity value. */
+function subjectAltNameHasIdentity(name: SubjectAltName): boolean {
+	switch (name.type) {
+		case 'dns':
+		case 'email':
+		case 'uri':
+		case 'srv':
+		case 'ip':
+			return name.value.length > 0;
+		case 'directoryName':
+			return name.derHex.length > 0;
+		case 'unknown':
+			return name.value.length > 0;
+		default: {
+			const _exhaustive: never = name;
+			throw new Error(`Unhandled SubjectAltName type: ${String(_exhaustive)}`);
+		}
+	}
+}
+
+/** Whether a custom subjectAltName value decodes to at least one non-empty GeneralName. */
+function customSubjectAltNameHasIdentity(value: Uint8Array): boolean {
+	try {
+		return SUBJECT_ALT_NAME_EXTENSION_DEFINITION.decode(value).some(subjectAltNameHasIdentity);
+	} catch {
+		return false;
+	}
+}
+
 function appendConstraintExtensions(
 	encoded: Uint8Array[],
 	seen: Set<string>,
 	input: CertificateExtensionsInput,
 	includeBasicConstraints: boolean,
 ): void {
-	assertPathLengthKeyUsage(input.basicConstraints, input.keyUsage);
+	assertPathLengthKeyUsage(input);
 	if (includeBasicConstraints && input.basicConstraints !== undefined) {
 		pushKnownExtension(
 			encoded,
@@ -1049,6 +1134,14 @@ function encodeIa5Content(value: string): Uint8Array {
 	}
 }
 
+/** RFC 5280 §4.2.1.6: reject an empty GeneralName string value (empty dNSName, rfc822Name, URI, or SRV name). */
+function requireNonEmptyName(value: string): string {
+	if (value.length === 0) {
+		throwExtensionEncoderError('empty_general_name_value', 'GeneralName value must not be empty');
+	}
+	return value;
+}
+
 /**
  * DER-encode a single {@linkcode SubjectAltName} GeneralName element.
  *
@@ -1057,17 +1150,17 @@ function encodeIa5Content(value: string): Uint8Array {
 export function encodeSubjectAltName(value: SubjectAltName): Uint8Array {
 	switch (value.type) {
 		case 'dns':
-			return implicitPrimitiveContext(2, encodeIa5Content(value.value));
+			return implicitPrimitiveContext(2, encodeIa5Content(requireNonEmptyName(value.value)));
 		case 'email':
-			return implicitPrimitiveContext(1, encodeIa5Content(value.value));
+			return implicitPrimitiveContext(1, encodeIa5Content(requireNonEmptyName(value.value)));
 		case 'uri':
-			return implicitPrimitiveContext(6, encodeIa5Content(value.value));
+			return implicitPrimitiveContext(6, encodeIa5Content(requireNonEmptyName(value.value)));
 		case 'srv':
 			return implicitConstructedContext(
 				0,
 				concatBytes([
 					objectIdentifier(OIDS.idOnDnsSrv),
-					explicitContext(0, tlv(0x16, encodeIa5Content(value.value))),
+					explicitContext(0, tlv(0x16, encodeIa5Content(requireNonEmptyName(value.value)))),
 				]),
 			);
 		case 'ip':
@@ -1354,6 +1447,28 @@ function encodeGeneralSubtree(subtree: GeneralSubtree): Uint8Array {
 	return sequence([encodeNameConstraintForm(subtree.base)]);
 }
 
+/**
+ * RFC 5280 §4.2.1.13: a nameRelativeToCRLIssuer distribution point requires
+ * cRLIssuer to hold exactly one directoryName (the CRL issuer's DN).
+ */
+function assertCrlIssuerDistinguishedNames(point: DistributionPoint): void {
+	if (point.crlIssuer === undefined || point.distributionPoint?.relativeName === undefined) {
+		return;
+	}
+	if (point.crlIssuer.some((name) => name.type !== 'directoryName')) {
+		throwExtensionEncoderError(
+			'distribution_point_crl_issuer_not_directory_name',
+			'DistributionPointName relativeName requires a directoryName cRLIssuer',
+		);
+	}
+	if (point.crlIssuer.length > 1) {
+		throwExtensionEncoderError(
+			'distribution_point_relative_name_multiple_crl_issuers',
+			'DistributionPointName relativeName requires at most one cRLIssuer distinguished name',
+		);
+	}
+}
+
 /** DER-encode the fields of a single DistributionPoint. */
 function encodeDistributionPoint(point: DistributionPoint): Uint8Array[] {
 	if (point.crlIssuer !== undefined && point.crlIssuer.length === 0) {
@@ -1368,15 +1483,7 @@ function encodeDistributionPoint(point: DistributionPoint): Uint8Array[] {
 			'DistributionPoint must contain distributionPoint or crlIssuer',
 		);
 	}
-	if (
-		point.distributionPoint?.relativeName !== undefined &&
-		(point.crlIssuer?.filter((name) => name.type === 'directoryName').length ?? 0) > 1
-	) {
-		throwExtensionEncoderError(
-			'distribution_point_relative_name_multiple_crl_issuers',
-			'DistributionPointName relativeName requires at most one cRLIssuer distinguished name',
-		);
-	}
+	assertCrlIssuerDistinguishedNames(point);
 	const fields: Uint8Array[] = [];
 	if (point.distributionPoint !== undefined) {
 		fields.push(

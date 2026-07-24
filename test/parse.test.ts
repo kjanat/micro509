@@ -267,6 +267,7 @@ describe('parse', () => {
 			subject: { commonName: 'bad-basic-constraints.example' },
 			extensions: {
 				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign'],
 			},
 		});
 

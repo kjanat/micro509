@@ -862,6 +862,25 @@ describe('extensions encoding', () => {
 		expectEncoderErrorCode(() => encodeNameConstraints({}), 'name_constraints_empty');
 	});
 
+	it('rejects empty GeneralName string values (RFC 5280 §4.2.1.6)', () => {
+		expectEncoderErrorCode(
+			() => encodeSubjectAltName({ type: 'dns', value: '' }),
+			'empty_general_name_value',
+		);
+		expectEncoderErrorCode(
+			() => encodeSubjectAltName({ type: 'email', value: '' }),
+			'empty_general_name_value',
+		);
+		expectEncoderErrorCode(
+			() => encodeSubjectAltName({ type: 'uri', value: '' }),
+			'empty_general_name_value',
+		);
+		expectEncoderErrorCode(
+			() => encodeSubjectAltName({ type: 'srv', value: '' }),
+			'empty_general_name_value',
+		);
+	});
+
 	it('rejects a relativeName distribution point with multiple cRLIssuer DNs (RFC 5280 §4.2.1.13)', () => {
 		const issuerA = toHex(encodeName({ commonName: 'CRL Issuer A' }));
 		const issuerB = toHex(encodeName({ commonName: 'CRL Issuer B' }));
@@ -879,17 +898,35 @@ describe('extensions encoding', () => {
 				]),
 			'distribution_point_relative_name_multiple_crl_issuers',
 		);
-		expect(
-			encodeCrlDistributionPoints([
-				{
-					distributionPoint: { relativeName },
-					crlIssuer: [
-						{ type: 'directoryName', derHex: issuerA },
-						{ type: 'uri', value: 'http://example.test/backup.crl' },
-					],
-				},
-			]),
-		).toBeInstanceOf(Uint8Array);
+		expectEncoderErrorCode(
+			() =>
+				encodeCrlDistributionPoints([
+					{
+						distributionPoint: { relativeName },
+						crlIssuer: [
+							{ type: 'directoryName', derHex: issuerA },
+							{ type: 'uri', value: 'http://example.test/backup.crl' },
+						],
+					},
+				]),
+			'distribution_point_crl_issuer_not_directory_name',
+		);
+		expectEncoderErrorCode(
+			() =>
+				encodeCrlDistributionPoints([
+					{
+						distributionPoint: { relativeName },
+						crlIssuer: [
+							{
+								type: 'unknown',
+								tag: 0xa4,
+								value: encodeName({ commonName: 'Hidden CRL Issuer' }),
+							},
+						],
+					},
+				]),
+			'distribution_point_crl_issuer_not_directory_name',
+		);
 	});
 
 	const subjectPublicKeyInfo = sequence([
@@ -897,12 +934,27 @@ describe('extensions encoding', () => {
 		bitString(Uint8Array.of(0x01, 0x02, 0x03)),
 	]);
 
-	it('rejects pathLenConstraint without keyCertSign when keyUsage is present (RFC 5280 §4.2.1.9)', () => {
+	it('rejects pathLenConstraint without an effective keyCertSign keyUsage (RFC 5280 §4.2.1.9)', () => {
 		expectEncoderErrorCode(
 			() =>
 				buildCertificateExtensions(subjectPublicKeyInfo, undefined, {
 					basicConstraints: { ca: true, pathLength: 0 },
 					keyUsage: ['digitalSignature'],
+				}),
+			'path_length_requires_key_cert_sign',
+		);
+		expectEncoderErrorCode(
+			() =>
+				buildCertificateExtensions(subjectPublicKeyInfo, undefined, {
+					basicConstraints: { ca: true, pathLength: 0 },
+				}),
+			'path_length_requires_key_cert_sign',
+		);
+		expectEncoderErrorCode(
+			() =>
+				buildCertificateExtensions(subjectPublicKeyInfo, undefined, {
+					basicConstraints: { ca: true, pathLength: 0 },
+					customExtensions: [{ oid: OIDS.keyUsage, value: encodeKeyUsage(['digitalSignature']) }],
 				}),
 			'path_length_requires_key_cert_sign',
 		);
@@ -915,6 +967,7 @@ describe('extensions encoding', () => {
 		expect(
 			buildCertificateExtensions(subjectPublicKeyInfo, undefined, {
 				basicConstraints: { ca: true, pathLength: 0 },
+				customExtensions: [{ oid: OIDS.keyUsage, value: encodeKeyUsage(['keyCertSign']) }],
 			}),
 		).toBeInstanceOf(Array);
 	});
@@ -929,11 +982,47 @@ describe('extensions encoding', () => {
 				buildCertificateExtensions(subjectPublicKeyInfo, undefined, { subjectAltNames: [] }, true),
 			'empty_subject_requires_subject_alt_name',
 		);
+		expectEncoderErrorCode(
+			() =>
+				buildCertificateExtensions(
+					subjectPublicKeyInfo,
+					undefined,
+					{ subjectAltNames: [{ type: 'dns', value: '' }] },
+					true,
+				),
+			'empty_subject_requires_subject_alt_name',
+		);
+		expectEncoderErrorCode(
+			() =>
+				buildCertificateExtensions(
+					subjectPublicKeyInfo,
+					undefined,
+					{ customExtensions: [{ oid: OIDS.subjectAltName, critical: true, value: sequence([]) }] },
+					true,
+				),
+			'empty_subject_requires_subject_alt_name',
+		);
 		expect(
 			buildCertificateExtensions(
 				subjectPublicKeyInfo,
 				undefined,
 				{ subjectAltNames: [{ type: 'dns', value: 'empty-subject.example' }] },
+				true,
+			),
+		).toBeInstanceOf(Array);
+		expect(
+			buildCertificateExtensions(
+				subjectPublicKeyInfo,
+				undefined,
+				{
+					customExtensions: [
+						{
+							oid: OIDS.subjectAltName,
+							critical: true,
+							value: sequence([encodeSubjectAltName({ type: 'dns', value: 'custom-san.example' })]),
+						},
+					],
+				},
 				true,
 			),
 		).toBeInstanceOf(Array);

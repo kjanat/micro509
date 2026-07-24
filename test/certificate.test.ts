@@ -11,6 +11,7 @@ import {
 	unwrap,
 	verifyCertificateChain,
 } from '#micro509';
+import { toHex } from '#micro509/internal/asn1/asn1';
 import { readElement, sequence } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { encodeRsaPssParameters, rsaPssParametersForHash } from '#micro509/internal/crypto/rsa-pss';
@@ -237,6 +238,7 @@ describe('certificate', () => {
 				keyUsage: ['keyCertSign', 'cRLSign'],
 			},
 		});
+		const altIssuerDnHex = toHex(encodeName({ commonName: 'Alt CRL Issuer' }));
 		const leafKeys = await generateKeyPair();
 		const leaf = await createCertificate({
 			issuer: { commonName: 'Structured DP CA' },
@@ -254,10 +256,7 @@ describe('certificate', () => {
 							],
 						},
 						reasons: ['keyCompromise', 'privilegeWithdrawn'],
-						crlIssuer: [
-							{ type: 'dns', value: 'crl-issuer.example.test' },
-							{ type: 'uri', value: 'http://issuer.example.test/alt.crl' },
-						],
+						crlIssuer: [{ type: 'directoryName', derHex: altIssuerDnHex }],
 					},
 					{
 						distributionPoint: {
@@ -284,10 +283,7 @@ describe('certificate', () => {
 				},
 			},
 			reasons: { flags: ['keyCompromise', 'privilegeWithdrawn'], nonZeroPadding: false },
-			crlIssuer: [
-				{ type: 'dns', value: 'crl-issuer.example.test' },
-				{ type: 'uri', value: 'http://issuer.example.test/alt.crl' },
-			],
+			crlIssuer: [{ type: 'directoryName', derHex: altIssuerDnHex }],
 		});
 		expect(parsed.crlDistributionPoints?.[1]).toEqual({
 			distributionPoint: {
@@ -538,9 +534,19 @@ describe('certificate', () => {
 			}),
 			'path_length_requires_key_cert_sign',
 		);
+		await expectRejectedErrorCode(
+			createSelfSignedCertificate({
+				subject: { commonName: 'PathLen No KeyUsage' },
+				extensions: { basicConstraints: { ca: true, pathLength: 0 } },
+			}),
+			'path_length_requires_key_cert_sign',
+		);
 		const qualified = await createSelfSignedCertificate({
-			subject: { commonName: 'PathLen No KeyUsage' },
-			extensions: { basicConstraints: { ca: true, pathLength: 0 } },
+			subject: { commonName: 'PathLen With CertSign' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign'],
+			},
 		});
 		expect(unwrap(parseCertificateDer(qualified.certificate.der)).basicConstraints).toEqual({
 			ca: true,

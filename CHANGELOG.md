@@ -46,18 +46,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Certificate and CSR builders reject three RFC 5280 MUST-NOT constructions
-  with coded throws. `pathLenConstraint` requires the keyUsage `keyCertSign`
-  bit when a keyUsage extension is present (§4.2.1.9,
-  `path_length_requires_key_cert_sign`); the verifier already rejected such
-  certificates. An empty subject DN requires a subjectAltName extension,
-  present and critical, counting a `customExtensions` SAN only when
-  `critical: true` and a present-but-empty `subjectAltNames` array as absent
-  (§4.2.1.6, `empty_subject_requires_subject_alt_name`); only criticality was
-  enforced before, so `subject: {}` signed a certificate with no identity. A
-  `relativeName` distribution point rejects more than one `cRLIssuer`
-  distinguished name (§4.2.1.13,
-  `distribution_point_relative_name_multiple_crl_issuers`).
+- Certificate and CSR builders reject RFC 5280 MUST-NOT constructions with coded
+  throws. `pathLenConstraint` requires the keyUsage extension to assert
+  `keyCertSign`; absent, empty, or `keyCertSign`-less keyUsage is rejected
+  (§4.2.1.9, `path_length_requires_key_cert_sign`). An empty subject DN requires
+  a critical subjectAltName carrying at least one non-empty GeneralName; an empty
+  typed value (`{ type: 'dns', value: '' }`), an empty `subjectAltNames` array,
+  and a critical `customExtensions` SAN whose value holds no usable GeneralName
+  are all rejected (§4.2.1.6, `empty_subject_requires_subject_alt_name`), so
+  `subject: {}` can no longer sign a certificate with no identity. Encoding a
+  GeneralName with an empty `dNSName`, `rfc822Name`, URI, or SRV value is
+  rejected (§4.2.1.6, `empty_general_name_value`). A `nameRelativeToCRLIssuer`
+  distribution point requires `cRLIssuer` to hold exactly one `directoryName`,
+  rejecting a non-DN entry or a directoryName smuggled through an `unknown`
+  general name (§4.2.1.13, `distribution_point_crl_issuer_not_directory_name`,
+  `distribution_point_relative_name_multiple_crl_issuers`). Known extensions
+  supplied through `customExtensions` participate in these cross-field checks.
   (https://github.com/kjanat/micro509/pull/88)
 - `importPkcs8Der` accepts a `OneAsymmetricKey` (RFC 5958 §2 / RFC 8410 §7) that
   carries both `attributes [0]` and `publicKey [1]`. The parser capped at four
