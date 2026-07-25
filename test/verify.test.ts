@@ -31,8 +31,11 @@ import {
 	createNameConstraintValidationState,
 	evaluateNameConstraints,
 } from '#micro509/internal/verify/name-constraints-engine';
+import { encodeSubjectAltName } from '#micro509/x509';
 import { parseNameConstraints } from '#micro509/x509/parse';
 import {
+	createCertificateWithRawExtensions,
+	createSelfSignedCertificateWithRawExtensions,
 	importRsaPrivateKeyWithScheme,
 	issueChain,
 	replaceCertificateSignatureAlgorithm,
@@ -91,7 +94,7 @@ describe('chain verification', () => {
 			signerPrivateKey: root.keyPair.privateKey,
 			issuerPublicKey: root.keyPair.publicKey,
 			extensions: {
-				basicConstraints: { ca: true, pathLength: 0 },
+				basicConstraints: { ca: true },
 				keyUsage: ['digitalSignature'],
 			},
 		});
@@ -259,7 +262,7 @@ describe('chain verification', () => {
 
 		const noKeyCertSignChain = await issueChain({
 			intermediateExtensions: {
-				basicConstraints: { ca: true, pathLength: 0 },
+				basicConstraints: { ca: true },
 				keyUsage: ['digitalSignature'],
 			},
 		});
@@ -891,7 +894,7 @@ describe('chain verification', () => {
 			},
 		});
 		const leafKeys = await generateKeyPair();
-		const leaf = await createCertificate({
+		const leaf = await createCertificateWithRawExtensions({
 			issuer: { commonName: 'Malformed DirectoryName SAN CA' },
 			subject: { organization: 'Blocked Org', commonName: 'malformed-directory-name.example' },
 			publicKey: leafKeys.publicKey,
@@ -983,6 +986,37 @@ describe('chain verification', () => {
 			roots: [ca.certificate.pem],
 		});
 		expect(result.ok).toBe(true);
+	});
+
+	it('allows a chain with a critical issuerAltName (RFC 5280 §4.2.1.7)', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Critical IAN CA' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign'] },
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Critical IAN CA' },
+			subject: { commonName: 'critical-ian.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				subjectAltNames: [{ type: 'dns', value: 'critical-ian.example' }],
+				customExtensions: [
+					{
+						oid: OIDS.issuerAltName,
+						critical: true,
+						value: sequence([encodeSubjectAltName({ type: 'dns', value: 'Critical IAN CA' })]),
+					},
+				],
+			},
+		});
+		const parsed = unwrap(parseCertificatePem(leaf.pem));
+		expect(parsed.issuerAltNames).toEqual([{ type: 'dns', value: 'Critical IAN CA' }]);
+		expect(
+			await verifyCertificateChain({ leaf: leaf.pem, roots: [ca.certificate.pem] }),
+		).toMatchObject({ ok: true });
 	});
 
 	it('checks EKU separately from chain validation', async () => {
@@ -2227,8 +2261,10 @@ describe('chain verification', () => {
 		}
 
 		/** Root CA whose nameConstraints extension is supplied as raw DER. */
+		// RFC 5280 §4.2.1.10 requires a critical nameConstraints, so the non-critical
+		// tolerance fixture splices the extension into the signed certificate.
 		function createConstrainedRoot(constraintDer: Uint8Array, critical: boolean) {
-			return createSelfSignedCertificate({
+			return createSelfSignedCertificateWithRawExtensions({
 				subject: { commonName: 'Unsupported NC Root' },
 				extensions: {
 					basicConstraints: { ca: true },
@@ -3710,7 +3746,7 @@ describe('validateCandidatePath direct', () => {
 	it('detects key_cert_sign_required in candidate path', async () => {
 		const chain = await issueChain({
 			intermediateExtensions: {
-				basicConstraints: { ca: true, pathLength: 0 },
+				basicConstraints: { ca: true },
 				keyUsage: ['digitalSignature'],
 			},
 		});

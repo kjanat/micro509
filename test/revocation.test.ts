@@ -11,7 +11,12 @@ import {
 	resolveOcspResponderCandidates,
 	unwrap,
 } from '#micro509';
-import { addRevokedEntryCertificateIssuers, hexToBytes, issueChain } from '#test/helpers';
+import {
+	addRevokedEntryCertificateIssuers,
+	createCertificateWithRawExtensions,
+	hexToBytes,
+	issueChain,
+} from '#test/helpers';
 
 describe('revocation boundary', () => {
 	it('returns unknown when no revocation evidence is provided', async () => {
@@ -192,6 +197,50 @@ describe('revocation boundary', () => {
 				revocationReason: 'keyCompromise',
 			},
 		});
+	});
+
+	it('does not report good from a single reason-scoped CRL (RFC 5280 §6.3.3 coverage)', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Partial Coverage CA' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Partial Coverage CA' },
+			subject: { commonName: 'partial-coverage.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				crlDistributionPoints: [
+					{
+						distributionPoint: {
+							fullName: [{ type: 'uri', value: 'http://example.test/partial.crl' }],
+						},
+						reasons: ['keyCompromise'],
+					},
+				],
+			},
+		});
+		const cleanCrl = await createCertificateRevocationList({
+			issuer: { commonName: 'Partial Coverage CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+		const result = await checkCertificateRevocation({
+			certificate: unwrap(parseCertificatePem(leaf.pem)),
+			issuerCertificate: ca.certificate.pem,
+			evidence: [{ kind: 'crl', crl: cleanCrl.pem }],
+		});
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.value.status).toBe('indeterminate');
+		if (result.value.status !== 'indeterminate') return;
+		expect(
+			result.value.details.indeterminateEvidence.some(
+				(entry) => entry.code === 'reason_coverage_incomplete',
+			),
+		).toBe(true);
 	});
 
 	it('returns revoked when delta CRL evidence overlays the complete CRL', async () => {
@@ -715,9 +764,9 @@ describe('revocation boundary', () => {
 			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign'] },
 		});
 		const leafKeys = await generateKeyPair();
-		// An OCSP dNSName location is non-conformant (RFC 6960 §3.1); the typed
-		// builder rejects it, so encode the AIA as raw DER to exercise the discovery
-		// filter against a parsed certificate.
+		// An OCSP dNSName location is non-conformant (RFC 6960 §3.1). The builder
+		// rejects it through both the typed field and customExtensions, so splice the
+		// AIA into the signed certificate to exercise the discovery filter.
 		const aiaDer = sequence([
 			sequence([
 				objectIdentifier(OIDS.ocspAccessMethod),
@@ -728,7 +777,7 @@ describe('revocation boundary', () => {
 				tlv(0x86, new TextEncoder().encode('http://ocsp.example.test')),
 			]),
 		]);
-		const leaf = await createCertificate({
+		const leaf = await createCertificateWithRawExtensions({
 			issuer: { commonName: 'Raw AIA CA' },
 			subject: { commonName: 'raw-aia.example' },
 			publicKey: leafKeys.publicKey,

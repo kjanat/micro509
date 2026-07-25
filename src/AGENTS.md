@@ -25,6 +25,9 @@ barrels under `x509`, `verify`, `revocation`, `keys`, `pem`, `pkcs`, and
 
 - Keep APIs by domain barrel; add files inside existing domain unless the domain
   model clearly needs a new public ownership file.
+- New OIDs go in `src/internal/asn1/oids.json` under their registration arc and
+  are consumed as `OIDS.<name>`; never inline a dotted-decimal literal in
+  source.
 - Public API additions need both module export and barrel review.
 - Internal helpers are not re-exported from public barrels unless they define API
   state.

@@ -37,6 +37,7 @@ describe('extension registry', () => {
 			OIDS.keyUsage,
 			OIDS.extendedKeyUsage,
 			OIDS.subjectAltName,
+			OIDS.issuerAltName,
 			OIDS.nameConstraints,
 			OIDS.certificatePolicies,
 			OIDS.policyMappings,

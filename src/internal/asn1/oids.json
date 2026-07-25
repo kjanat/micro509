@@ -305,6 +305,7 @@
 							"subjectKeyIdentifier": "14",
 							"keyUsage": "15",
 							"subjectAltName": "17",
+							"issuerAltName": "18",
 							"basicConstraints": "19",
 							"cRLNumber": "20",
 							"cRLReason": "21",

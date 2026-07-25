@@ -36,7 +36,7 @@ import {
 } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { encodeRsaPssParameters, rsaPssParametersForHash } from '#micro509/internal/crypto/rsa-pss';
-import { encodeName } from '#micro509/x509';
+import { encodeKeyUsage, encodeName, encodeSubjectAltName } from '#micro509/x509';
 import {
 	parseAuthorityKeyIdentifier,
 	parseExtendedKeyUsage,
@@ -45,6 +45,9 @@ import {
 } from '#micro509/x509/parse';
 import {
 	childrenOf,
+	createCsrWithRawExtensions,
+	createSelfSignedCertificateWithRawExtensions,
+	expectRejectedErrorCode,
 	importRsaPrivateKeyWithScheme,
 	replaceCertificateSignatureAlgorithm,
 	rewriteCertificateSignatureAsRsaPss,
@@ -60,7 +63,7 @@ interface MalformedCustomExtensionCase {
 }
 
 async function expectMalformedCustomExtension(input: MalformedCustomExtensionCase): Promise<void> {
-	const certificate = await createSelfSignedCertificate({
+	const certificate = await createSelfSignedCertificateWithRawExtensions({
 		subject: { commonName: input.commonName },
 		extensions: {
 			customExtensions: [{ oid: input.oid, critical: true, value: input.value }],
@@ -75,7 +78,7 @@ async function expectMalformedCustomExtension(input: MalformedCustomExtensionCas
 
 describe('parse', () => {
 	it('supports custom extension encode and decode hooks', async () => {
-		const certificate = await createSelfSignedCertificate({
+		const certificate = await createSelfSignedCertificateWithRawExtensions({
 			subject: { commonName: 'custom-ext.example' },
 			extensions: {
 				customExtensions: [
@@ -124,15 +127,33 @@ describe('parse', () => {
 			{ oid: '1.2.3.4.201', critical: false, value: 'non-critical' },
 		]);
 
-		expect(
+		await expectRejectedErrorCode(
 			createSelfSignedCertificate({
 				subject: { commonName: 'dup-ext.example' },
 				extensions: {
 					keyUsage: ['digitalSignature'],
-					customExtensions: [{ oid: OIDS.keyUsage, value: Uint8Array.of(0x05, 0x00) }],
+					customExtensions: [{ oid: OIDS.keyUsage, value: encodeKeyUsage(['digitalSignature']) }],
 				},
 			}),
-		).rejects.toThrow('Duplicate extension OID');
+			'duplicate_extension_oid',
+		);
+
+		// 2.5.029.17 encodes to the same OID as 2.5.29.17, so it is the same extension.
+		await expectRejectedErrorCode(
+			createSelfSignedCertificate({
+				subject: { commonName: 'dup-alias-ext.example' },
+				extensions: {
+					subjectAltNames: [{ type: 'dns', value: 'alias.example' }],
+					customExtensions: [
+						{
+							oid: '2.5.029.17',
+							value: sequence([encodeSubjectAltName({ type: 'dns', value: 'alias.example' })]),
+						},
+					],
+				},
+			}),
+			'duplicate_extension_oid',
+		);
 	});
 
 	it('rejects duplicate extension OIDs during certificate parse', async () => {
@@ -267,6 +288,7 @@ describe('parse', () => {
 			subject: { commonName: 'bad-basic-constraints.example' },
 			extensions: {
 				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign'],
 			},
 		});
 
@@ -356,7 +378,7 @@ describe('parse', () => {
 	});
 
 	it('rejects repeated distribution point fields during parse', async () => {
-		const certificate = await createSelfSignedCertificate({
+		const certificate = await createSelfSignedCertificateWithRawExtensions({
 			subject: { commonName: 'bad-dp-repeat.example' },
 			extensions: {
 				customExtensions: [
@@ -390,7 +412,7 @@ describe('parse', () => {
 	});
 
 	it('rejects distributionPointName wrappers with multiple choices during parse', async () => {
-		const certificate = await createSelfSignedCertificate({
+		const certificate = await createSelfSignedCertificateWithRawExtensions({
 			subject: { commonName: 'bad-dp-choice.example' },
 			extensions: {
 				customExtensions: [
@@ -426,7 +448,7 @@ describe('parse', () => {
 	});
 
 	it('rejects CRL distribution points that contain only reasons', async () => {
-		const certificate = await createSelfSignedCertificate({
+		const certificate = await createSelfSignedCertificateWithRawExtensions({
 			subject: { commonName: 'bad-dp-reasons.example' },
 			extensions: {
 				customExtensions: [
@@ -796,7 +818,7 @@ describe('parse', () => {
 	});
 
 	it('runs decoder registries directly during parse', async () => {
-		const certificate = await createSelfSignedCertificate({
+		const certificate = await createSelfSignedCertificateWithRawExtensions({
 			subject: { commonName: 'parse-registry.example' },
 			extensions: {
 				customExtensions: [{ oid: '1.2.3.4.210', value: Uint8Array.of(0x04, 0x02, 0xaa, 0xbb) }],
@@ -1283,7 +1305,7 @@ describe('parse', () => {
 	});
 
 	it('rejects malformed certificatePolicies during parsing', async () => {
-		const certificate = await createSelfSignedCertificate({
+		const certificate = await createSelfSignedCertificateWithRawExtensions({
 			subject: { commonName: 'bad-policy-parse.example' },
 			extensions: {
 				customExtensions: [{ oid: OIDS.certificatePolicies, critical: true, value: sequence([]) }],
@@ -1299,7 +1321,7 @@ describe('parse', () => {
 	});
 
 	it('rejects anyPolicy in policyMappings during parsing', async () => {
-		const certificate = await createSelfSignedCertificate({
+		const certificate = await createSelfSignedCertificateWithRawExtensions({
 			subject: { commonName: 'bad-policy-mappings-parse.example' },
 			extensions: {
 				customExtensions: [
@@ -1323,7 +1345,7 @@ describe('parse', () => {
 	});
 
 	it('rejects malformed policy qualifiers during parsing', async () => {
-		const certificate = await createSelfSignedCertificate({
+		const certificate = await createSelfSignedCertificateWithRawExtensions({
 			subject: { commonName: 'bad-policy-qualifier-parse.example' },
 			extensions: {
 				customExtensions: [
@@ -1352,7 +1374,7 @@ describe('parse', () => {
 	});
 
 	it('rejects policyInformation with trailing fields and empty qualifier sequences', async () => {
-		const trailing = await createSelfSignedCertificate({
+		const trailing = await createSelfSignedCertificateWithRawExtensions({
 			subject: { commonName: 'bad-policy-trailing.example' },
 			extensions: {
 				customExtensions: [
@@ -1383,7 +1405,7 @@ describe('parse', () => {
 			}
 		}
 
-		const emptyQualifiers = await createSelfSignedCertificate({
+		const emptyQualifiers = await createSelfSignedCertificateWithRawExtensions({
 			subject: { commonName: 'bad-policy-empty-qualifiers.example' },
 			extensions: {
 				customExtensions: [
@@ -1405,7 +1427,7 @@ describe('parse', () => {
 	});
 
 	it('rejects malformed policy qualifier and userNotice structures during parsing', async () => {
-		const qualifierTrailing = await createSelfSignedCertificate({
+		const qualifierTrailing = await createSelfSignedCertificateWithRawExtensions({
 			subject: { commonName: 'bad-policy-qualifier-trailing.example' },
 			extensions: {
 				customExtensions: [
@@ -1438,7 +1460,7 @@ describe('parse', () => {
 			}
 		}
 
-		const duplicateNoticeRef = await createSelfSignedCertificate({
+		const duplicateNoticeRef = await createSelfSignedCertificateWithRawExtensions({
 			subject: { commonName: 'bad-user-notice-ref.example' },
 			extensions: {
 				customExtensions: [
@@ -1479,7 +1501,7 @@ describe('parse', () => {
 			}
 		}
 
-		const duplicateExplicitText = await createSelfSignedCertificate({
+		const duplicateExplicitText = await createSelfSignedCertificateWithRawExtensions({
 			subject: { commonName: 'bad-user-notice-text.example' },
 			extensions: {
 				customExtensions: [
@@ -1670,7 +1692,7 @@ describe('parse', () => {
 	});
 
 	it('rejects malformed distributionPointName and unsupported DisplayText tags', async () => {
-		const badDistributionPointName = await createSelfSignedCertificate({
+		const badDistributionPointName = await createSelfSignedCertificateWithRawExtensions({
 			subject: { commonName: 'bad-dp-name.example' },
 			extensions: {
 				customExtensions: [
@@ -1690,7 +1712,7 @@ describe('parse', () => {
 			}
 		}
 
-		const badDisplayText = await createSelfSignedCertificate({
+		const badDisplayText = await createSelfSignedCertificateWithRawExtensions({
 			subject: { commonName: 'bad-display-text.example' },
 			extensions: {
 				customExtensions: [
@@ -1722,7 +1744,7 @@ describe('parse', () => {
 	});
 
 	it('rejects empty CRLDistributionPoints and empty fullName GeneralNames during parse', async () => {
-		const emptyDistributionPoints = await createSelfSignedCertificate({
+		const emptyDistributionPoints = await createSelfSignedCertificateWithRawExtensions({
 			subject: { commonName: 'bad-empty-dp.example' },
 			extensions: {
 				customExtensions: [
@@ -1738,7 +1760,7 @@ describe('parse', () => {
 			}
 		}
 
-		const emptyFullName = await createSelfSignedCertificate({
+		const emptyFullName = await createSelfSignedCertificateWithRawExtensions({
 			subject: { commonName: 'bad-empty-fullname.example' },
 			extensions: {
 				customExtensions: [
@@ -1760,7 +1782,7 @@ describe('parse', () => {
 			}
 		}
 
-		const setWrappedDistributionPoint = await createSelfSignedCertificate({
+		const setWrappedDistributionPoint = await createSelfSignedCertificateWithRawExtensions({
 			subject: { commonName: 'bad-set-dp.example' },
 			extensions: {
 				customExtensions: [
@@ -1806,7 +1828,7 @@ describe('parse', () => {
 	});
 
 	it('rejects empty policy noticeNumbers during parsing', async () => {
-		const certificate = await createSelfSignedCertificate({
+		const certificate = await createSelfSignedCertificateWithRawExtensions({
 			subject: { commonName: 'bad-policy-notice-parse.example' },
 			extensions: {
 				customExtensions: [
@@ -1840,7 +1862,7 @@ describe('parse', () => {
 	});
 
 	it('parses BMPString DisplayText in certificate policies', async () => {
-		const certificate = await createSelfSignedCertificate({
+		const certificate = await createSelfSignedCertificateWithRawExtensions({
 			subject: { commonName: 'bmp-policy-parse.example' },
 			extensions: {
 				customExtensions: [
@@ -1872,7 +1894,7 @@ describe('parse', () => {
 	});
 
 	it('rejects malformed BMPString DisplayText in certificate policies', async () => {
-		const certificate = await createSelfSignedCertificate({
+		const certificate = await createSelfSignedCertificateWithRawExtensions({
 			subject: { commonName: 'bad-bmp-policy-parse.example' },
 			extensions: {
 				customExtensions: [
@@ -1905,7 +1927,7 @@ describe('parse', () => {
 	});
 
 	it('rejects non-integer inhibitAnyPolicy during parsing', async () => {
-		const certificate = await createSelfSignedCertificate({
+		const certificate = await createSelfSignedCertificateWithRawExtensions({
 			subject: { commonName: 'bad-inhibit-any-policy-parse.example' },
 			extensions: {
 				customExtensions: [
@@ -1927,7 +1949,7 @@ describe('parse', () => {
 	});
 
 	it('rejects empty policyConstraints during parsing', async () => {
-		const certificate = await createSelfSignedCertificate({
+		const certificate = await createSelfSignedCertificateWithRawExtensions({
 			subject: { commonName: 'bad-policy-constraints-parse.example' },
 			extensions: {
 				customExtensions: [
@@ -2283,7 +2305,7 @@ describe('parse: coverage — error paths', () => {
 				tlv(0x82, new TextEncoder().encode('ocsp.example.com')), // dNSName, not URI
 			]),
 		]);
-		const cert = await createSelfSignedCertificate({
+		const cert = await createSelfSignedCertificateWithRawExtensions({
 			subject: { commonName: 'aia-test.example' },
 			extensions: {
 				customExtensions: [{ oid: '1.3.6.1.5.5.7.1.1', value: aiaValue }],
@@ -2303,7 +2325,7 @@ describe('parse: coverage — error paths', () => {
 			tlv(0xa2, tlv(0x82, new TextEncoder().encode('x'))), // dNSName with wrong constructedness
 		]) {
 			const aiaValue = sequence([sequence([objectIdentifier(caIssuers), badLocation])]);
-			const cert = await createSelfSignedCertificate({
+			const cert = await createSelfSignedCertificateWithRawExtensions({
 				subject: { commonName: 'bad-aia.example' },
 				extensions: { customExtensions: [{ oid: OIDS.authorityInfoAccess, value: aiaValue }] },
 			});
@@ -2317,7 +2339,7 @@ describe('parse: coverage — error paths', () => {
 			// x400Address [3] is a valid but unsupported GeneralName alternative.
 			sequence([objectIdentifier('1.3.6.1.5.5.7.48.2'), tlv(0xa3, new Uint8Array())]),
 		]);
-		const cert = await createSelfSignedCertificate({
+		const cert = await createSelfSignedCertificateWithRawExtensions({
 			subject: { commonName: 'unsupported-aia.example' },
 			extensions: { customExtensions: [{ oid: OIDS.authorityInfoAccess, value: aiaValue }] },
 		});
@@ -2358,7 +2380,7 @@ describe('parse: coverage — error paths', () => {
 		const sanValue = sequence([
 			tlv(0x87, Uint8Array.of(0x0a, 0x00, 0x00, 0x01, 0xff, 0xee)), // 6 bytes — invalid
 		]);
-		const cert = await createSelfSignedCertificate({
+		const cert = await createSelfSignedCertificateWithRawExtensions({
 			subject: { commonName: 'bad-ip.example' },
 			extensions: {
 				customExtensions: [
@@ -2382,7 +2404,7 @@ describe('parse: coverage — error paths', () => {
 		// Build keyUsage extension with unusedBits = 8 (invalid)
 		// KeyUsage is a BIT STRING: first byte is unused bits count
 		const keyUsageValue = tlv(0x03, Uint8Array.of(8, 0x80)); // unusedBits=8, data=0x80
-		const cert = await createSelfSignedCertificate({
+		const cert = await createSelfSignedCertificateWithRawExtensions({
 			subject: { commonName: 'bad-ku.example' },
 			extensions: {
 				customExtensions: [
@@ -2656,13 +2678,46 @@ describe('subjectAltName and extendedKeyUsage parse strictness', () => {
 		).toThrow();
 	});
 
+	// RFC 5280 §4.2.1.6 forbids a zero-length GeneralName value.
+	it.each([
+		[0x81, 'rfc822Name'],
+		[0x82, 'dNSName'],
+		[0x86, 'uniformResourceIdentifier'],
+	])('rejects a zero-length %s GeneralName in certificates and CSRs', async (tag, alternative) => {
+		const extension = {
+			oid: OIDS.subjectAltName,
+			value: sequence([tlv(tag, new Uint8Array())]),
+		};
+		const certificate = await createSelfSignedCertificateWithRawExtensions({
+			subject: { commonName: `empty-${alternative}.example` },
+			extensions: { customExtensions: [extension] },
+		});
+		const certificateResult = parseCertificateDer(certificate.certificate.der);
+		expect(certificateResult.ok).toBe(false);
+		if (!certificateResult.ok) {
+			expect(certificateResult.error.code).toBe('malformed');
+			expect(certificateResult.error.message).toContain(`${alternative} must not be empty`);
+		}
+
+		const keyPair = await generateKeyPair();
+		const csr = await createCsrWithRawExtensions({
+			subject: { commonName: `empty-${alternative}.example` },
+			publicKey: keyPair.publicKey,
+			signerPrivateKey: keyPair.privateKey,
+			extensions: { customExtensions: [extension] },
+		});
+		const csrResult = parseCertificateSigningRequestDer(csr.der);
+		expect(csrResult.ok).toBe(false);
+		if (!csrResult.ok) expect(csrResult.error.code).toBe('malformed');
+	});
+
 	it('maps malformed subjectAltName and extendedKeyUsage in certificates and CSRs', async () => {
 		const malformedExtensions = [
 			{ oid: OIDS.subjectAltName, value: sequence([]) },
 			{ oid: OIDS.extendedKeyUsage, value: sequence([]) },
 		];
 		for (const [index, extension] of malformedExtensions.entries()) {
-			const certificate = await createSelfSignedCertificate({
+			const certificate = await createSelfSignedCertificateWithRawExtensions({
 				subject: { commonName: `malformed-extension-${String(index)}.example` },
 				extensions: { customExtensions: [{ ...extension, critical: true }] },
 			});
@@ -2671,7 +2726,7 @@ describe('subjectAltName and extendedKeyUsage parse strictness', () => {
 			if (!certificateResult.ok) expect(certificateResult.error.code).toBe('malformed');
 
 			const keyPair = await generateKeyPair();
-			const csr = await createCertificateSigningRequest({
+			const csr = await createCsrWithRawExtensions({
 				subject: { commonName: `malformed-extension-${String(index)}.example` },
 				publicKey: keyPair.publicKey,
 				signerPrivateKey: keyPair.privateKey,

@@ -421,7 +421,7 @@ export async function readCertificateAiaWithOpenSsl(
 	});
 }
 
-export async function readPkcs7CertBagWithOpenSsl(
+export function readPkcs7CertBagWithOpenSsl(
 	certBagDer: Uint8Array,
 ): Promise<{ readonly exitCode: number; readonly subjectCount: number; readonly output: string }> {
 	return withTempDir(async (directory) => {
@@ -435,7 +435,7 @@ export async function readPkcs7CertBagWithOpenSsl(
 	});
 }
 
-export async function decryptPkcs8WithOpenSsl(
+export function decryptPkcs8WithOpenSsl(
 	encryptedPkcs8Der: Uint8Array,
 	password: string,
 ): Promise<{ readonly exitCode: number; readonly decrypted: boolean; readonly output: string }> {
@@ -451,7 +451,7 @@ export async function decryptPkcs8WithOpenSsl(
 	});
 }
 
-export async function readPfxWithOpenSsl(
+export function readPfxWithOpenSsl(
 	pfxDer: Uint8Array,
 	password: string,
 ): Promise<{ readonly exitCode: number; readonly output: string }> {

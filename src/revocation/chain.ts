@@ -15,6 +15,7 @@ import type {
 } from '#micro509/revocation/crl';
 import {
 	checkCertificateRevocationAgainstCrl,
+	coversAllDistributionPointReasons,
 	parseCertificateRevocationListDerOrThrow,
 	parseCertificateRevocationListPemOrThrow,
 	revocationReasonFromCode,
@@ -32,6 +33,7 @@ import {
 } from '#micro509/revocation/ocsp';
 import type { RevocationCertificateSource } from '#micro509/revocation/revocation';
 import { verifyCertificateChain } from '#micro509/verify/verify';
+import type { DistributionPointReason } from '#micro509/x509/extensions';
 import type { ParsedCertificate } from '#micro509/x509/parse';
 import { parseCertificateFromSource } from '#micro509/x509/parse';
 
@@ -555,37 +557,20 @@ async function checkSignerRevocation(
 	// it's explicitly revoked, not prove "good" status.
 	const issuerInChain = ctx.chain.some((c) => sameCertificate(c, issuer));
 
-	// Try each CRL to check signer's revocation
+	// A `good` from one CRL does not end the search: a later CRL may report the
+	// signer revoked, and a revoked verdict from any CRL wins.
+	const coveredReasons = new Set<string>();
 	for (const crlSource of ctx.crls) {
-		let crl: ParsedCertificateRevocationList;
-		try {
-			crl = parseCrlFromSource(crlSource);
-		} catch {
-			continue;
+		const outcome = await checkSignerAgainstCrl(signer, issuer, crlSource, ctx);
+		if (outcome.kind === 'revoked') {
+			return 'resolved-revoked';
 		}
-
-		// Check if this CRL can provide revocation info for the signer
-		const result = await checkCertificateRevocationAgainstCrl({
-			certificate: signer,
-			issuerCertificate: issuer,
-			crl,
-			at: ctx.at,
-		});
-
-		if (result.ok) {
-			if (result.value.status === 'revoked') {
-				return 'resolved-revoked';
-			}
-			if (result.value.status === 'good') {
-				// Before accepting this result, validate the CRL's signer
-				// The CRL's signer is the issuer we just used
-				const crlSignerStatus = await validateCrlSigner(issuer, ctx);
-				if (crlSignerStatus === 'resolved-valid') {
-					return 'resolved-valid';
-				}
-				// If CRL signer is revoked or indeterminate, can't trust this result
-			}
+		for (const reason of outcome.reasons) {
+			coveredReasons.add(reason);
 		}
+	}
+	if (coversAllDistributionPointReasons(coveredReasons)) {
+		return 'resolved-valid';
 	}
 
 	// If the signer's issuer is in the chain and we found no revocation,
@@ -595,6 +580,51 @@ async function checkSignerRevocation(
 	}
 
 	return 'resolved-indeterminate';
+}
+
+/** What one CRL settles about a signer: a revoked verdict, or the reasons it covers. */
+type SignerCrlOutcome =
+	| { readonly kind: 'revoked' }
+	| { readonly kind: 'reasons'; readonly reasons: readonly DistributionPointReason[] };
+
+const SIGNER_CRL_NO_EVIDENCE = {
+	kind: 'reasons',
+	reasons: [],
+} as const satisfies SignerCrlOutcome;
+
+/**
+ * Evaluates one CRL against a signer. A CRL that does not parse, does not
+ * apply, or is itself signed by a signer that is not known good yields no
+ * evidence rather than a verdict.
+ */
+async function checkSignerAgainstCrl(
+	signer: ParsedCertificate,
+	issuer: ParsedCertificate,
+	crlSource: CrlSource,
+	ctx: SignerValidationContext,
+): Promise<SignerCrlOutcome> {
+	let crl: ParsedCertificateRevocationList;
+	try {
+		crl = parseCrlFromSource(crlSource);
+	} catch {
+		return SIGNER_CRL_NO_EVIDENCE;
+	}
+	const result = await checkCertificateRevocationAgainstCrl({
+		certificate: signer,
+		issuerCertificate: issuer,
+		crl,
+		at: ctx.at,
+	});
+	if (!result.ok) {
+		return SIGNER_CRL_NO_EVIDENCE;
+	}
+	if (result.value.status === 'revoked') {
+		return { kind: 'revoked' };
+	}
+	// The CRL's signer is the issuer just used, and it must itself be good.
+	return (await validateCrlSigner(issuer, ctx)) === 'resolved-valid'
+		? { kind: 'reasons', reasons: result.value.coveredReasons }
+		: SIGNER_CRL_NO_EVIDENCE;
 }
 
 /** Builds the `revoked` CertificateRevocationStatus for a CRL hit. */
@@ -802,17 +832,6 @@ async function evaluateOcspEvidence(
  * Also validates that CRL signers are not revoked (RFC 5280 §6.3.3).
  */
 // RFC 5280 ReasonFlags — all possible revocation reasons that CRLs can cover.
-const ALL_REASON_FLAGS: readonly string[] = [
-	'keyCompromise',
-	'cACompromise',
-	'affiliationChanged',
-	'superseded',
-	'cessationOfOperation',
-	'certificateHold',
-	'privilegeWithdrawn',
-	'aACompromise',
-];
-
 interface CrlEvidenceState {
 	readonly executionErrors: RevocationExecutionError[];
 	readonly coveredReasons: Set<string>;
@@ -887,7 +906,7 @@ async function resolveBaseCrlAgainstSigners(
 				checked.value.reasonCode,
 			);
 		}
-		recordGoodCrlEvidence(state, candidate, crlThisUpdate, baseCrl);
+		recordGoodCrlEvidence(state, candidate, crlThisUpdate, checked.value.coveredReasons);
 		return undefined;
 	}
 	return undefined;
@@ -943,7 +962,7 @@ async function evaluateCrlEvidence(
 
 	// Return 'good' only if we saw at least one good result AND all reasons are covered
 	if (state.sawGood && state.freshestGood !== undefined) {
-		const allReasonsCovered = ALL_REASON_FLAGS.every((r) => state.coveredReasons.has(r));
+		const allReasonsCovered = coversAllDistributionPointReasons(state.coveredReasons);
 		if (allReasonsCovered) {
 			return {
 				status: {
@@ -1061,7 +1080,7 @@ function recordGoodCrlEvidence(
 	state: CrlEvidenceState,
 	signer: ParsedCertificate,
 	thisUpdate: Date,
-	baseCrl: ParsedCertificateRevocationList,
+	coveredReasons: readonly DistributionPointReason[],
 ): void {
 	state.sawGood = true;
 	if (
@@ -1070,8 +1089,7 @@ function recordGoodCrlEvidence(
 	) {
 		state.freshestGood = { signer, thisUpdate };
 	}
-	for (const reason of baseCrl.issuingDistributionPoint?.onlySomeReasons?.flags ??
-		ALL_REASON_FLAGS) {
+	for (const reason of coveredReasons) {
 		state.coveredReasons.add(reason);
 	}
 }

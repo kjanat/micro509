@@ -8,25 +8,25 @@ import {
 	isResultError,
 	parseCertificateDer,
 	parseCertificatePem,
+	parseCertificateSigningRequestPem,
 	unwrap,
 	verifyCertificateChain,
 } from '#micro509';
-import { readElement } from '#micro509/internal/asn1/der';
+import { toHex } from '#micro509/internal/asn1/asn1';
+import { readElement, sequence } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { encodeRsaPssParameters, rsaPssParametersForHash } from '#micro509/internal/crypto/rsa-pss';
-import { encodeName } from '#micro509/x509';
-import { childrenOf, decodeObjectIdentifier, hasExtensionOid } from '#test/helpers';
-
-async function expectRejectedErrorCode(promise: Promise<unknown>, code: string): Promise<void> {
-	try {
-		await promise;
-	} catch (error) {
-		expect(isResultError(error)).toBe(true);
-		expect(isResultError(error) ? error.code : undefined).toBe(code);
-		return;
-	}
-	throw new Error(`expected a ResultError with code '${code}', but the promise resolved`);
-}
+import { encodeName, encodeSubjectAltName } from '#micro509/x509';
+import {
+	childrenOf,
+	createCertificateWithRawExtensions,
+	createCsrWithRawExtensions,
+	createSelfSignedCertificateWithRawExtensions,
+	decodeObjectIdentifier,
+	encodeUncheckedCrlDistributionPoints,
+	expectRejectedErrorCode,
+	hasExtensionOid,
+} from '#test/helpers';
 
 function expectThrownErrorCode(fn: () => unknown, code: string): void {
 	try {
@@ -183,6 +183,46 @@ describe('certificate', () => {
 				serviceIdentity: { type: 'dns', value: 'rsa-pss-leaf.example' },
 			}),
 		).toMatchObject({ ok: true });
+
+		// The raw-extension helpers re-sign what the builder produced, so they carry
+		// the same signature profile rather than falling back to the key's default.
+		const splicedLeaf = await createCertificateWithRawExtensions({
+			issuer: { commonName: 'RSA-PSS Root CA' },
+			subject: { commonName: 'rsa-pss-spliced.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			signature: { kind: 'rsa-pss', saltLength: 48 },
+			extensions: {
+				customExtensions: [
+					{
+						oid: OIDS.subjectAltName,
+						value: sequence([encodeSubjectAltName({ type: 'dns', value: 'spliced.example' })]),
+					},
+				],
+			},
+		});
+		expect(unwrap(parseCertificatePem(splicedLeaf.pem))).toMatchObject({
+			signatureAlgorithmOid: OIDS.rsassaPss,
+			signatureAlgorithmParametersDer: expectedParameters,
+		});
+		const splicedCsr = await createCsrWithRawExtensions({
+			subject: { commonName: 'rsa-pss-spliced-csr.example' },
+			publicKey: root.keyPair.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			signature: { kind: 'rsa-pss', saltLength: 48 },
+			extensions: {
+				customExtensions: [
+					{
+						oid: OIDS.subjectAltName,
+						value: sequence([encodeSubjectAltName({ type: 'dns', value: 'spliced-csr.example' })]),
+					},
+				],
+			},
+		});
+		expect(unwrap(parseCertificateSigningRequestPem(splicedCsr.pem))).toMatchObject({
+			signatureAlgorithmOid: OIDS.rsassaPss,
+		});
 	});
 
 	it('creates P-521-signed certificates with ECDSA SHA-512', async () => {
@@ -237,6 +277,7 @@ describe('certificate', () => {
 				keyUsage: ['keyCertSign', 'cRLSign'],
 			},
 		});
+		const altIssuerDnHex = toHex(encodeName({ commonName: 'Alt CRL Issuer' }));
 		const leafKeys = await generateKeyPair();
 		const leaf = await createCertificate({
 			issuer: { commonName: 'Structured DP CA' },
@@ -254,10 +295,7 @@ describe('certificate', () => {
 							],
 						},
 						reasons: ['keyCompromise', 'privilegeWithdrawn'],
-						crlIssuer: [
-							{ type: 'dns', value: 'crl-issuer.example.test' },
-							{ type: 'uri', value: 'http://issuer.example.test/alt.crl' },
-						],
+						crlIssuer: [{ type: 'directoryName', derHex: altIssuerDnHex }],
 					},
 					{
 						distributionPoint: {
@@ -284,10 +322,7 @@ describe('certificate', () => {
 				},
 			},
 			reasons: { flags: ['keyCompromise', 'privilegeWithdrawn'], nonZeroPadding: false },
-			crlIssuer: [
-				{ type: 'dns', value: 'crl-issuer.example.test' },
-				{ type: 'uri', value: 'http://issuer.example.test/alt.crl' },
-			],
+			crlIssuer: [{ type: 'directoryName', derHex: altIssuerDnHex }],
 		});
 		expect(parsed.crlDistributionPoints?.[1]).toEqual({
 			distributionPoint: {
@@ -299,17 +334,21 @@ describe('certificate', () => {
 		});
 	});
 
-	it('roundtrips CRL distribution points that only name an alternate CRL issuer', async () => {
-		const { certificate } = await createSelfSignedCertificate({
+	it('parses issuer-only CRL distribution points that name a non-DN CRL issuer', async () => {
+		const { certificate } = await createSelfSignedCertificateWithRawExtensions({
 			subject: { commonName: 'issuer-only-dp.example' },
 			extensions: {
-				crlDistributionPoints: [
+				customExtensions: [
 					{
-						reasons: ['cACompromise'],
-						crlIssuer: [
-							{ type: 'dns', value: 'indirect-issuer.example.test' },
-							{ type: 'uri', value: 'http://issuer.example.test/indirect.crl' },
-						],
+						oid: OIDS.cRLDistributionPoints,
+						value: encodeUncheckedCrlDistributionPoints([
+							{
+								crlIssuer: [
+									{ type: 'dns', value: 'indirect-issuer.example.test' },
+									{ type: 'uri', value: 'http://issuer.example.test/indirect.crl' },
+								],
+							},
+						]),
 					},
 				],
 			},
@@ -318,13 +357,31 @@ describe('certificate', () => {
 		const parsed = unwrap(parseCertificatePem(certificate.pem));
 		expect(parsed.crlDistributionPoints).toEqual([
 			{
-				reasons: { flags: ['cACompromise'], nonZeroPadding: false },
 				crlIssuer: [
 					{ type: 'dns', value: 'indirect-issuer.example.test' },
 					{ type: 'uri', value: 'http://issuer.example.test/indirect.crl' },
 				],
 			},
 		]);
+	});
+
+	it('rejects a non-directoryName cRLIssuer at build (RFC 5280 §4.2.1.13)', async () => {
+		await expectRejectedErrorCode(
+			createSelfSignedCertificate({
+				subject: { commonName: 'nondn-crl-issuer.example' },
+				extensions: {
+					crlDistributionPoints: [
+						{
+							distributionPoint: {
+								fullName: [{ type: 'uri', value: 'http://example.test/nondn.crl' }],
+							},
+							crlIssuer: [{ type: 'uri', value: 'http://example.test/issuer.crl' }],
+						},
+					],
+				},
+			}),
+			'distribution_point_crl_issuer_not_directory_name',
+		);
 	});
 
 	it('roundtrips email, URI, and IPv6 SANs through build and parse', async () => {
@@ -477,6 +534,85 @@ describe('certificate', () => {
 		// SAN must be critical when subject DN is empty
 		const sanExtension = parsed.extensions.find((ext: { oid: string }) => ext.oid === '2.5.29.17');
 		expect(sanExtension?.critical).toBe(true);
+	});
+
+	it('rejects an empty subject DN without a subjectAltName (RFC 5280 §4.2.1.6)', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Empty Subject CA 2' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign'] },
+		});
+		const leafKeys = await generateKeyPair();
+		await expectRejectedErrorCode(
+			createCertificate({
+				issuer: { commonName: 'Empty Subject CA 2' },
+				subject: {},
+				publicKey: leafKeys.publicKey,
+				signerPrivateKey: ca.keyPair.privateKey,
+				issuerPublicKey: ca.keyPair.publicKey,
+			}),
+			'empty_subject_requires_subject_alt_name',
+		);
+		await expectRejectedErrorCode(
+			createCertificate({
+				issuer: { commonName: 'Empty Subject CA 2' },
+				subject: {},
+				publicKey: leafKeys.publicKey,
+				signerPrivateKey: ca.keyPair.privateKey,
+				issuerPublicKey: ca.keyPair.publicKey,
+				extensions: { subjectAltNames: [] },
+			}),
+			'empty_subject_requires_subject_alt_name',
+		);
+		const withCriticalCustomSan = await createCertificate({
+			issuer: { commonName: 'Empty Subject CA 2' },
+			subject: {},
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				customExtensions: [
+					{
+						oid: '2.5.29.17',
+						critical: true,
+						value: sequence([encodeSubjectAltName({ type: 'dns', value: 'custom-san.example' })]),
+					},
+				],
+			},
+		});
+		expect(unwrap(parseCertificateDer(withCriticalCustomSan.der)).subjectAltNames).toEqual([
+			{ type: 'dns', value: 'custom-san.example' },
+		]);
+	});
+
+	it('rejects pathLenConstraint without keyCertSign (RFC 5280 §4.2.1.9)', async () => {
+		await expectRejectedErrorCode(
+			createSelfSignedCertificate({
+				subject: { commonName: 'PathLen No CertSign' },
+				extensions: {
+					basicConstraints: { ca: true, pathLength: 0 },
+					keyUsage: ['digitalSignature'],
+				},
+			}),
+			'path_length_requires_key_cert_sign',
+		);
+		await expectRejectedErrorCode(
+			createSelfSignedCertificate({
+				subject: { commonName: 'PathLen No KeyUsage' },
+				extensions: { basicConstraints: { ca: true, pathLength: 0 } },
+			}),
+			'path_length_requires_key_cert_sign',
+		);
+		const qualified = await createSelfSignedCertificate({
+			subject: { commonName: 'PathLen With CertSign' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign'],
+			},
+		});
+		expect(unwrap(parseCertificateDer(qualified.certificate.der)).basicConstraints).toEqual({
+			ca: true,
+			pathLength: 0,
+		});
 	});
 
 	it('rejects invalid country code length', async () => {

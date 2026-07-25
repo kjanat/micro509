@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { readFile } from 'node:fs/promises';
+import { URL } from 'node:url';
 import {
 	checkChainRevocation,
 	createCertificate,
@@ -87,6 +88,51 @@ describe('checkChainRevocation', () => {
 		expect(result.ok).toBe(true);
 		expect(result.value.decision).toBe('allow');
 		expect(result.value.summary.indeterminateCertificates).toHaveLength(1);
+	});
+
+	it('reports incomplete reason coverage when the matched distribution point limits reasons', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Partial Reason CA' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Partial Reason CA' },
+			subject: { commonName: 'partial-reason.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				crlDistributionPoints: [
+					{
+						distributionPoint: {
+							fullName: [{ type: 'uri', value: 'http://example.test/partial.crl' }],
+						},
+						reasons: ['keyCompromise'],
+					},
+				],
+			},
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Partial Reason CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+
+		const result = await checkChainRevocation({
+			chain: [
+				unwrap(parseCertificatePem(leaf.pem)),
+				unwrap(parseCertificatePem(ca.certificate.pem)),
+			],
+			crls: [crl.pem],
+		});
+
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		const leafStatus = result.value.certificates[0];
+		expect(leafStatus?.status).toBe('indeterminate');
+		expect(leafStatus?.indeterminateReasons).toContain('reason_coverage_incomplete');
+		expect(result.value.decision).toBe('deny');
 	});
 
 	it('evaluates good status when CRL covers cert and serial not listed', async () => {
@@ -375,6 +421,116 @@ describe('checkChainRevocation', () => {
 		expect(result.ok).toBe(true);
 		expect(result.value.decision).toBe('deny');
 		expect(result.value.certificates[0]?.status).toBe('revoked');
+	});
+
+	it('holds a delegated CRL signer indeterminate until its own CRLs cover every reason', async () => {
+		const at = new Date(Date.now() + 5_000);
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'Signer Scope Root' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 2 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const intermediateKeys = await generateKeyPair();
+		const intermediate = await createCertificate({
+			issuer: { commonName: 'Signer Scope Root' },
+			subject: { commonName: 'Signer Scope Intermediate' },
+			publicKey: intermediateKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		// The delegated signer's own issuer stays out of the validated chain, so
+		// its revocation status has to come from a CRL rather than from chain
+		// membership.
+		const signerCaKeys = await generateKeyPair();
+		const signerCa = await createCertificate({
+			issuer: { commonName: 'Signer Scope Root' },
+			subject: { commonName: 'Signer Scope CRL CA' },
+			publicKey: signerCaKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const signerKeys = await generateKeyPair();
+		const signer = await createCertificate({
+			issuer: { commonName: 'Signer Scope CRL CA' },
+			subject: { commonName: 'Signer Scope Intermediate' },
+			publicKey: signerKeys.publicKey,
+			signerPrivateKey: signerCaKeys.privateKey,
+			issuerPublicKey: signerCaKeys.publicKey,
+			extensions: { keyUsage: ['cRLSign'] },
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Signer Scope Intermediate' },
+			subject: { commonName: 'signer-scope-leaf' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: intermediateKeys.privateKey,
+			issuerPublicKey: intermediateKeys.publicKey,
+			extensions: { keyUsage: ['digitalSignature'] },
+		});
+		const leafCrl = await createCertificateRevocationList({
+			issuer: { commonName: 'Signer Scope Intermediate' },
+			signerPrivateKey: signerKeys.privateKey,
+			issuerPublicKey: signerKeys.publicKey,
+			thisUpdate: new Date(at.getTime() - HOUR_MS),
+			nextUpdate: new Date(at.getTime() + HOUR_MS),
+		});
+		const chain = [
+			unwrap(parseCertificatePem(leaf.pem)),
+			unwrap(parseCertificatePem(intermediate.pem)),
+			unwrap(parseCertificatePem(root.certificate.pem)),
+		];
+		const extraCertificates = [signer.pem, signerCa.pem];
+
+		const scopedSignerCrl = await createCertificateRevocationList({
+			issuer: { commonName: 'Signer Scope CRL CA' },
+			signerPrivateKey: signerCaKeys.privateKey,
+			issuerPublicKey: signerCaKeys.publicKey,
+			thisUpdate: new Date(at.getTime() - HOUR_MS),
+			nextUpdate: new Date(at.getTime() + HOUR_MS),
+			issuingDistributionPoint: { onlySomeReasons: ['keyCompromise'] },
+		});
+		const scoped = await checkChainRevocation({
+			chain,
+			crls: [leafCrl.der, scopedSignerCrl.der],
+			extraCertificates,
+			at,
+			policy: { mode: 'soft-fail' },
+		});
+		expect(scoped.ok).toBe(true);
+		if (!scoped.ok) return;
+		expect(scoped.value.certificates[0]?.status).toBe('indeterminate');
+		expect(scoped.value.certificates[0]?.indeterminateReasons).toContain(
+			'crl_signer_indeterminate',
+		);
+		expect(scoped.value.executionErrors).toBeUndefined();
+
+		const fullSignerCrl = await createCertificateRevocationList({
+			issuer: { commonName: 'Signer Scope CRL CA' },
+			signerPrivateKey: signerCaKeys.privateKey,
+			issuerPublicKey: signerCaKeys.publicKey,
+			thisUpdate: new Date(at.getTime() - HOUR_MS),
+			nextUpdate: new Date(at.getTime() + HOUR_MS),
+		});
+		const full = await checkChainRevocation({
+			chain,
+			crls: [leafCrl.der, fullSignerCrl.der],
+			extraCertificates,
+			at,
+			policy: { mode: 'soft-fail' },
+		});
+		expect(full.ok).toBe(true);
+		if (!full.ok) return;
+		expect(full.value.certificates[0]?.status).toBe('good');
 	});
 
 	it('tries a later authorized signer when an earlier same-key candidate is unusable', async () => {

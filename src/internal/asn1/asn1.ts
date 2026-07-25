@@ -8,7 +8,7 @@
  */
 
 import type { DerElement } from '#micro509/internal/asn1/der';
-import { readElement } from '#micro509/internal/asn1/der';
+import { objectIdentifier, readElement } from '#micro509/internal/asn1/der';
 
 /** Shared UTF-8 text decoder for ASN.1 string types. */
 const textDecoder = new TextDecoder('utf-8', { fatal: true });
@@ -39,6 +39,18 @@ export function decodeObjectIdentifier(bytes: Uint8Array): string {
 		offset = subidentifier.nextOffset;
 	}
 	return values.join('.');
+}
+
+/**
+ * Reduces an OID to the dotted-decimal form its DER encoding decodes back to, so
+ * that spellings differing only by redundant leading zeros in an arc resolve to
+ * one identity.
+ *
+ * @example `canonicalizeOid('2.5.029.17')` returns `'2.5.29.17'`
+ * @throws if the OID has a non-numeric segment or violates the X.660 arc constraints.
+ */
+export function canonicalizeOid(oid: string): string {
+	return decodeObjectIdentifier(readElement(objectIdentifier(oid), 0).value);
 }
 
 /** Converts raw bytes to a lowercase hex string with no separator. */
@@ -285,7 +297,7 @@ export function hexToBytes(value: string): Uint8Array {
 	return out;
 }
 
-/** Decodes a DER BOOLEAN value: any non-zero first byte is `true`. */
+/** Decodes a DER BOOLEAN value. X.690 clause 11.1 restricts TRUE to an all-ones octet, so only `0xff` and `0x00` are accepted. */
 export function decodeBoolean(bytes: Uint8Array): boolean {
 	if (bytes.length !== 1) {
 		throw new Error('BOOLEAN must contain exactly one octet');
