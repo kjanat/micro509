@@ -78,21 +78,37 @@ function assertRootTypes(_input: {
 			CreateOcspCertStatusInput
 		>
 	>;
-	readonly ocspRejectsRevocationFieldsForGood?: Assert<
+	readonly ocspRejectsRevokedAtForGood?: Assert<
 		IsNotAssignable<
 			{
 				readonly certStatus: 'good';
 				readonly revokedAt: Date;
+			},
+			CreateOcspCertStatusInput
+		>
+	>;
+	readonly ocspRejectsRevocationReasonForGood?: Assert<
+		IsNotAssignable<
+			{
+				readonly certStatus: 'good';
 				readonly revocationReasonCode: number;
 			},
 			CreateOcspCertStatusInput
 		>
 	>;
-	readonly ocspRejectsRevocationFieldsForUnknown?: Assert<
+	readonly ocspRejectsRevokedAtForUnknown?: Assert<
 		IsNotAssignable<
 			{
 				readonly certStatus: 'unknown';
 				readonly revokedAt: Date;
+			},
+			CreateOcspCertStatusInput
+		>
+	>;
+	readonly ocspRejectsRevocationReasonForUnknown?: Assert<
+		IsNotAssignable<
+			{
+				readonly certStatus: 'unknown';
 				readonly revocationReasonCode: number;
 			},
 			CreateOcspCertStatusInput
@@ -111,6 +127,8 @@ assertRootTypes({
 	issuingDistributionPointAcceptsOneScope: true,
 	issuingDistributionPointRejectsConflictingScopes: true,
 	ocspAcceptsRevocationFieldsForRevoked: true,
-	ocspRejectsRevocationFieldsForGood: true,
-	ocspRejectsRevocationFieldsForUnknown: true,
+	ocspRejectsRevokedAtForGood: true,
+	ocspRejectsRevocationReasonForGood: true,
+	ocspRejectsRevokedAtForUnknown: true,
+	ocspRejectsRevocationReasonForUnknown: true,
 });
