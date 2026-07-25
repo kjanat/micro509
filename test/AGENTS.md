@@ -72,7 +72,7 @@ Define tests with a Jest-like API imported from the built-in `bun:test` module. 
 
 To define a test:
 
-```ts title="math.test.ts"
+```ts
 import { expect, test } from 'bun:test';
 
 test('2 + 2', () => {
@@ -84,7 +84,7 @@ test('2 + 2', () => {
 
 Group tests into suites with `describe`.
 
-```ts title="math.test.ts"
+```ts
 import { expect, test, describe } from 'bun:test';
 
 describe('arithmetic', () => {
@@ -102,7 +102,7 @@ describe('arithmetic', () => {
 
 Tests can be async.
 
-```ts title="math.test.ts"
+```ts
 import { expect, test } from 'bun:test';
 
 test('2 * 2', async () => {
@@ -113,7 +113,7 @@ test('2 * 2', async () => {
 
 Alternatively, use the `done` callback to signal completion. If your test function takes a `done` parameter, you must call it or the test hangs.
 
-```ts title="math.test.ts"
+```ts
 import { expect, test } from 'bun:test';
 
 test('2 * 2', (done) => {
@@ -128,7 +128,7 @@ test('2 * 2', (done) => {
 
 Optionally specify a per-test timeout in milliseconds by passing a number as the third argument to `test`.
 
-```ts title="math.test.ts"
+```ts
 import { test } from 'bun:test';
 
 test('wat', async () => {
@@ -147,7 +147,7 @@ The default timeout for each test is 5000ms (5 seconds) if not overridden by thi
 
 Use the `retry` option to automatically retry a flaky test when it fails. The test passes if it succeeds within the specified number of attempts.
 
-```ts title="example.test.ts"
+```ts
 import { test } from 'bun:test';
 
 test(
@@ -164,7 +164,7 @@ test(
 
 Use the `repeats` option to run a test multiple times regardless of pass/fail status; the test fails if any iteration fails. Use it to detect flaky tests or for stress testing. `repeats: N` runs the test N+1 times total (1 initial run + N repeats).
 
-```ts title="example.test.ts"
+```ts
 import { test } from 'bun:test';
 
 test(
@@ -188,7 +188,7 @@ When a test times out, Bun kills any processes spawned in it with `Bun.spawn`, `
 
 Skip individual tests with `test.skip`. These tests are not run.
 
-```ts title="math.test.ts"
+```ts
 import { expect, test } from 'bun:test';
 
 test.skip('wat', () => {
@@ -201,7 +201,7 @@ test.skip('wat', () => {
 
 Mark a test as a todo with `test.todo`. These tests are not run.
 
-```ts title="math.test.ts"
+```ts
 import { expect, test } from 'bun:test';
 
 test.todo('fix this', () => {
@@ -231,7 +231,7 @@ With this flag, failing todo tests do not cause an error, but todo tests that pa
 
 To run a particular test or suite of tests, use `test.only()` or `describe.only()`.
 
-```ts title="example.test.ts"
+```ts
 import { test, describe } from 'bun:test';
 
 test('test #1', () => {
@@ -259,7 +259,7 @@ bun test --only
 
 To run a test conditionally, use `test.if()`. The test runs if the condition is truthy. Use it for tests that should only run on a specific architecture or operating system.
 
-```ts title="example.test.ts"
+```ts
 test.if(Math.random() > 0.5)('runs half the time', () => {
   // ...
 });
@@ -274,7 +274,7 @@ test.if(macOS)('runs on macOS', () => {
 
 To instead skip a test based on some condition, use `test.skipIf()` or `describe.skipIf()`.
 
-```ts title="example.test.ts"
+```ts
 const macOS = process.platform === 'darwin';
 
 test.skipIf(macOS)('runs on non-macOS', () => {
@@ -286,7 +286,7 @@ test.skipIf(macOS)('runs on non-macOS', () => {
 
 To mark the test as TODO instead, use `test.todoIf()` or `describe.todoIf()`. The choice between `skipIf` and `todoIf` signals intent: "invalid for this target" versus "planned but not implemented yet."
 
-```ts title="example.test.ts"
+```ts
 const macOS = process.platform === 'darwin';
 
 // TODO: we've only implemented this for Linux so far.
@@ -302,7 +302,7 @@ Use `test.failing()` when you know a test is failing but you want to track it an
 - A failing test marked with `.failing()` passes
 - A passing test marked with `.failing()` fails, with a message that it now passes and should be fixed
 
-```ts math.test.ts
+```ts
 // This will pass because the test is failing as expected
 test.failing('math is broken', () => {
   expect(0.1 + 0.2).toBe(0.3); // fails due to floating point precision
@@ -320,7 +320,7 @@ Use it to track known bugs you plan to fix later, or for test-driven development
 
 The conditional modifiers `.if()`, `.skipIf()`, and `.todoIf()` also work on `describe` blocks, affecting all tests in the suite:
 
-```ts title="example.test.ts"
+```ts
 const isMacOS = process.platform === 'darwin';
 
 // Only runs the entire suite on macOS
@@ -355,7 +355,7 @@ describe.todoIf(process.platform === 'linux')('Upcoming Linux support', () => {
 
 To run the same test with multiple sets of data, use `test.each`. This creates a parametrized test that runs once for each test case provided.
 
-```ts title="math.test.ts"
+```ts
 const cases = [
   [1, 2, 3],
   [3, 4, 7],
@@ -368,7 +368,7 @@ test.each(cases)('%p + %p should be %p', (a, b, expected) => {
 
 `describe.each` creates a parametrized suite that runs once for each test case:
 
-```ts title="sum.test.ts"
+```ts
 describe.each([
   [1, 2, 3],
   [3, 4, 7],
@@ -391,7 +391,7 @@ How arguments are passed to your test function depends on the structure of your 
 - If a table row is an array (like `[1, 2, 3]`), each element is passed as an individual argument
 - If a row is not an array (like an object), it's passed as a single argument
 
-```ts title="example.test.ts"
+```ts
 // Array items passed as individual arguments
 test.each([
   [1, 2, 3],
@@ -427,7 +427,7 @@ Use these specifiers to format the test title:
 
 #### Examples
 
-```ts title="example.test.ts"
+```ts
 // Basic specifiers
 test.each([
   ['hello', 123],
@@ -461,7 +461,7 @@ Bun supports verifying that a specific number of assertions were called during a
 
 Use `expect.hasAssertions()` to verify that at least one assertion is called during a test:
 
-```ts title="example.test.ts"
+```ts
 test('async work calls assertions', async () => {
   expect.hasAssertions(); // Will fail if no assertions are called
 
@@ -476,7 +476,7 @@ This is especially useful in async tests, to make sure your assertions run.
 
 Use `expect.assertions(count)` to verify that a specific number of assertions are called during a test:
 
-```ts title="example.test.ts"
+```ts
 test('exactly two assertions', () => {
   expect.assertions(2); // Will fail if not exactly 2 assertions are called
 
@@ -500,7 +500,7 @@ The `expectTypeOf` function provides type-level assertions that are checked by T
 1. Write your type assertions using `expectTypeOf`
 2. Run `bunx tsc --noEmit` to check that your types are correct
 
-```ts title="example.test.ts"
+```ts
 import { expectTypeOf } from 'bun:test';
 
 // Basic type assertions
@@ -642,7 +642,7 @@ Bun implements the following matchers. Full Jest compatibility is planned; see t
 
 ### Use Descriptive Test Names
 
-```ts title="example.test.ts"
+```ts
 // Good
 test('should calculate total price including tax for multiple items', () => {
   // test implementation
@@ -656,7 +656,7 @@ test('price calculation', () => {
 
 ### Group Related Tests
 
-```ts title="auth.test.ts"
+```ts
 describe('User authentication', () => {
   describe('with valid credentials', () => {
     test('should return user data', () => {
@@ -678,7 +678,7 @@ describe('User authentication', () => {
 
 ### Use Appropriate Matchers
 
-```ts title="auth.test.ts"
+```ts
 // Good: Use specific matchers
 expect(users).toHaveLength(3);
 expect(user.email).toContain('@');
@@ -692,7 +692,7 @@ expect(response.status >= 200).toBe(true);
 
 ### Test Error Conditions
 
-```ts title="example.test.ts"
+```ts
 test('should throw error for invalid input', () => {
   expect(() => {
     validateEmail('not-an-email');
@@ -708,7 +708,7 @@ test('should handle async errors', async () => {
 
 ### Use Setup and Teardown
 
-```ts title="example.test.ts"
+```ts
 import { beforeEach, afterEach, test } from 'bun:test';
 
 let testUser;
