@@ -189,15 +189,23 @@ export interface ParsedRelativeDistinguishedName {
 }
 
 /**
- * The name component of a CRL Distribution Point (RFC 5280 §4.2.1.13).
- * Exactly one of `fullName` or `relativeName` will be present.
+ * The name component of a CRL Distribution Point, mirroring RFC 5280 §4.2.1.13
+ * `DistributionPointName ::= CHOICE { fullName [0] GeneralNames,
+ * nameRelativeToCRLIssuer [1] RelativeDistinguishedName }`.
  */
-export interface ParsedDistributionPointName {
-	/** Absolute GeneralName(s) identifying the distribution point. */
-	readonly fullName?: readonly GeneralName[];
-	/** Name relative to the CRL issuer's distinguished name. */
-	readonly relativeName?: ParsedRelativeDistinguishedName;
-}
+export type ParsedDistributionPointName =
+	| {
+			/** The `fullName [0]` alternative. */
+			readonly type: 'fullName';
+			/** Absolute GeneralName(s) identifying the distribution point. */
+			readonly fullName: readonly GeneralName[];
+	  }
+	| {
+			/** The `nameRelativeToCRLIssuer [1]` alternative. */
+			readonly type: 'relativeName';
+			/** Name relative to the CRL issuer's distinguished name. */
+			readonly relativeName: ParsedRelativeDistinguishedName;
+	  };
 
 /** A decoded DistributionPoint from the CRL Distribution Points extension. */
 export interface ParsedDistributionPoint {
@@ -2076,11 +2084,15 @@ function parseDistributionPointName(
 			}
 		}
 		return {
+			type: 'fullName',
 			fullName: fullName.map((name) => parseGeneralName(source, name)),
 		};
 	}
 	if (distributionPointName.tag === 0xa1) {
-		return { relativeName: parseRelativeDistinguishedName(source, distributionPointName) };
+		return {
+			type: 'relativeName',
+			relativeName: parseRelativeDistinguishedName(source, distributionPointName),
+		};
 	}
 	throw new Error(`Unsupported distributionPointName tag: ${distributionPointName.tag}`);
 }

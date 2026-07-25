@@ -59,6 +59,7 @@ export {
 } from '#micro509/revocation/crl';
 
 export type {
+	CreateOcspCertStatusInput,
 	CreateOcspRequestInput,
 	CreateOcspRequestItemInput,
 	CreateOcspResponseInput,
@@ -72,6 +73,7 @@ export type {
 	OcspResponseMaterial,
 	OcspResponseStatus,
 	ParsedOcspCertId,
+	ParsedOcspCertStatus,
 	ParsedOcspRequest,
 	ParsedOcspResponderId,
 	ParsedOcspResponse,

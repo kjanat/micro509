@@ -97,6 +97,7 @@ describe('certificate', () => {
 				crlDistributionPoints: [
 					{
 						distributionPoint: {
+							type: 'fullName',
 							fullName: [{ type: 'uri', value: 'http://issuer.example.test/ca.crl' }],
 						},
 					},
@@ -132,6 +133,7 @@ describe('certificate', () => {
 		expect(parsed.crlDistributionPoints).toEqual([
 			{
 				distributionPoint: {
+					type: 'fullName',
 					fullName: [{ type: 'uri', value: 'http://issuer.example.test/ca.crl' }],
 				},
 			},
@@ -289,6 +291,7 @@ describe('certificate', () => {
 				crlDistributionPoints: [
 					{
 						distributionPoint: {
+							type: 'relativeName',
 							relativeName: [
 								{ type: 'organization', value: 'Example PKI' },
 								{ type: 'commonName', value: 'leaf-partition' },
@@ -299,6 +302,7 @@ describe('certificate', () => {
 					},
 					{
 						distributionPoint: {
+							type: 'fullName',
 							fullName: [
 								{ type: 'uri', value: 'http://issuer.example.test/full.crl' },
 								{ type: 'dns', value: 'full-crl.example.test' },
@@ -314,6 +318,7 @@ describe('certificate', () => {
 		expect(parsed.crlDistributionPoints).toHaveLength(2);
 		expect(parsed.crlDistributionPoints?.[0]).toMatchObject({
 			distributionPoint: {
+				type: 'relativeName',
 				relativeName: {
 					values: {
 						organization: 'Example PKI',
@@ -326,6 +331,7 @@ describe('certificate', () => {
 		});
 		expect(parsed.crlDistributionPoints?.[1]).toEqual({
 			distributionPoint: {
+				type: 'fullName',
 				fullName: [
 					{ type: 'uri', value: 'http://issuer.example.test/full.crl' },
 					{ type: 'dns', value: 'full-crl.example.test' },
@@ -373,6 +379,7 @@ describe('certificate', () => {
 					crlDistributionPoints: [
 						{
 							distributionPoint: {
+								type: 'fullName',
 								fullName: [{ type: 'uri', value: 'http://example.test/nondn.crl' }],
 							},
 							crlIssuer: [{ type: 'uri', value: 'http://example.test/issuer.crl' }],
@@ -739,7 +746,7 @@ describe('certificate', () => {
 			createSelfSignedCertificate({
 				subject: { commonName: 'bad-dp.example' },
 				extensions: {
-					crlDistributionPoints: [{ distributionPoint: { fullName: [] } }],
+					crlDistributionPoints: [{ distributionPoint: { type: 'fullName', fullName: [] } }],
 				},
 			}),
 			'distribution_point_full_name_empty',

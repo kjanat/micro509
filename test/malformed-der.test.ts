@@ -762,7 +762,12 @@ describe('malformed DER corpus', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 			freshestCrlDistributionPoints: [
-				{ distributionPoint: { fullName: [{ type: 'uri', value: 'http://example.test/ok.crl' }] } },
+				{
+					distributionPoint: {
+						type: 'fullName',
+						fullName: [{ type: 'uri', value: 'http://example.test/ok.crl' }],
+					},
+				},
 			],
 		});
 		const ocspResponse = await createOcspResponse({

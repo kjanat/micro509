@@ -159,6 +159,7 @@ describe('revocation boundary', () => {
 				crlDistributionPoints: [
 					{
 						distributionPoint: {
+							type: 'fullName',
 							fullName: [{ type: 'uri', value: 'http://example.test/revocation-scoped.crl' }],
 						},
 					},
@@ -172,6 +173,7 @@ describe('revocation boundary', () => {
 			issuerPublicKey: ca.keyPair.publicKey,
 			issuingDistributionPoint: {
 				distributionPoint: {
+					type: 'fullName',
 					fullName: [{ type: 'uri', value: 'http://example.test/revocation-scoped.crl' }],
 				},
 			},
@@ -215,6 +217,7 @@ describe('revocation boundary', () => {
 				crlDistributionPoints: [
 					{
 						distributionPoint: {
+							type: 'fullName',
 							fullName: [{ type: 'uri', value: 'http://example.test/partial.crl' }],
 						},
 						reasons: ['keyCompromise'],
@@ -262,6 +265,7 @@ describe('revocation boundary', () => {
 				crlDistributionPoints: [
 					{
 						distributionPoint: {
+							type: 'fullName',
 							fullName: [{ type: 'uri', value: 'http://example.test/delta-revocation.crl' }],
 						},
 					},
@@ -276,6 +280,7 @@ describe('revocation boundary', () => {
 			crlNumber: 4,
 			issuingDistributionPoint: {
 				distributionPoint: {
+					type: 'fullName',
 					fullName: [{ type: 'uri', value: 'http://example.test/delta-revocation.crl' }],
 				},
 			},
@@ -288,6 +293,7 @@ describe('revocation boundary', () => {
 			baseCrlNumber: 4,
 			issuingDistributionPoint: {
 				distributionPoint: {
+					type: 'fullName',
 					fullName: [{ type: 'uri', value: 'http://example.test/delta-revocation.crl' }],
 				},
 			},
@@ -345,6 +351,7 @@ describe('revocation boundary', () => {
 				crlDistributionPoints: [
 					{
 						distributionPoint: {
+							type: 'fullName',
 							fullName: [{ type: 'uri', value: 'http://example.test/indirect-revocation.crl' }],
 						},
 						crlIssuer: [{ type: 'directoryName', derHex: parsedCrlIssuer.subject.derHex }],
@@ -358,6 +365,7 @@ describe('revocation boundary', () => {
 			issuerPublicKey: crlIssuer.keyPair.publicKey,
 			issuingDistributionPoint: {
 				distributionPoint: {
+					type: 'fullName',
 					fullName: [{ type: 'uri', value: 'http://example.test/indirect-revocation.crl' }],
 				},
 				indirectCrl: true,
@@ -410,6 +418,7 @@ describe('revocation boundary', () => {
 				crlDistributionPoints: [
 					{
 						distributionPoint: {
+							type: 'fullName',
 							fullName: [{ type: 'uri', value: 'http://example.test/scope-a.crl' }],
 						},
 					},
@@ -423,6 +432,7 @@ describe('revocation boundary', () => {
 			issuerPublicKey: ca.keyPair.publicKey,
 			issuingDistributionPoint: {
 				distributionPoint: {
+					type: 'fullName',
 					fullName: [{ type: 'uri', value: 'http://example.test/scope-b.crl' }],
 				},
 			},

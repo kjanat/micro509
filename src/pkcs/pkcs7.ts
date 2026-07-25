@@ -76,16 +76,32 @@ export interface Pkcs7CertBagMaterial {
 	readonly base64: string;
 }
 
+/**
+ * RFC 5652 §5.3 `SignerIdentifier ::= CHOICE { issuerAndSerialNumber,
+ * subjectKeyIdentifier [0] }`, which locates the signer's certificate.
+ */
+export type ParsedSignerIdentifier =
+	| {
+			/** Issuer name plus serial number. */
+			readonly type: 'issuerAndSerialNumber';
+			/** Parsed issuer distinguished name. */
+			readonly issuer: ParsedName;
+			/** Hex-encoded certificate serial number. */
+			readonly serialNumberHex: string;
+	  }
+	| {
+			/** SubjectKeyIdentifier (`[0]`). */
+			readonly type: 'subjectKeyIdentifier';
+			/** Hex-encoded SubjectKeyIdentifier of the signer certificate. */
+			readonly subjectKeyIdentifier: string;
+	  };
+
 /** Fields shared by every decoded SignerInfo, regardless of signed-attribute presence. */
 export interface ParsedPkcs7SignerInfoBase {
 	/** CMS SignerInfo version (typically 1 for issuerAndSerialNumber). */
 	readonly version: number;
-	/** Parsed issuer distinguished name, if present (issuerAndSerialNumber signer identifier). */
-	readonly issuer?: ParsedName;
-	/** Hex-encoded serial number used to locate the signer certificate, if present. */
-	readonly serialNumberHex?: string;
-	/** Hex-encoded SubjectKeyIdentifier used to locate the signer certificate, if present. */
-	readonly subjectKeyIdentifier?: string;
+	/** Which of the two RFC 5652 §5.3 SignerIdentifier alternatives this SignerInfo uses. */
+	readonly signerIdentifier: ParsedSignerIdentifier;
 	/** OID of the digest algorithm used to hash the content. */
 	readonly digestAlgorithmOid: string;
 	/** Human-readable digest algorithm name (e.g. `"SHA-256"`). */
@@ -1134,16 +1150,9 @@ function parseSignerInfo(source: Uint8Array, signerInfo: DerElement): ParsedPkcs
 		requireElement(signatureAlgorithmChildren[0], 'signature algorithm OID').value,
 	);
 	const signatureAlgorithmParams = signatureAlgorithmChildren[1];
-	const parsedSid = parseSignerIdentifier(signerDer.slice(sid.start - sid.headerLength, sid.end));
 	return {
 		version: decodeIntegerNumber(version.value),
-		...(parsedSid.issuer === undefined ? {} : { issuer: parsedSid.issuer }),
-		...(parsedSid.serialNumberHex === undefined
-			? {}
-			: { serialNumberHex: parsedSid.serialNumberHex }),
-		...(parsedSid.subjectKeyIdentifier === undefined
-			? {}
-			: { subjectKeyIdentifier: parsedSid.subjectKeyIdentifier }),
+		signerIdentifier: parseSignerIdentifier(signerDer.slice(sid.start - sid.headerLength, sid.end)),
 		digestAlgorithmOid,
 		digestAlgorithmName: describeHashAlgorithm(digestAlgorithmOid),
 		signatureAlgorithmOid,
@@ -1205,11 +1214,7 @@ function extractEncapsulatedContent(
 }
 
 /** Extracts issuer Name and serial number from an issuerAndSerialNumber SEQUENCE, or subjectKeyIdentifier from [0] IMPLICIT. */
-function parseSignerIdentifier(der: Uint8Array): {
-	readonly issuer?: ParsedName;
-	readonly serialNumberHex?: string;
-	readonly subjectKeyIdentifier?: string;
-} {
+function parseSignerIdentifier(der: Uint8Array): ParsedSignerIdentifier {
 	const element = readRootElement(der, { maxDepth: DEFAULT_MAX_DER_DEPTH });
 	// [0] IMPLICIT SubjectKeyIdentifier
 	if (element.tag === 0x80) {
@@ -1217,6 +1222,7 @@ function parseSignerIdentifier(der: Uint8Array): {
 			throw new Error('SignerIdentifier subjectKeyIdentifier must not be empty');
 		}
 		return {
+			type: 'subjectKeyIdentifier',
 			subjectKeyIdentifier: toHex(element.value),
 		};
 	}
@@ -1236,6 +1242,7 @@ function parseSignerIdentifier(der: Uint8Array): {
 		}
 		assertImplicitSerialNumberEncoding(serial.value, 'SignerIdentifier serialNumber');
 		return {
+			type: 'issuerAndSerialNumber',
 			issuer: parseSignerIssuerName(der, issuerElement),
 			serialNumberHex: toHex(serial.value),
 		};
@@ -1500,18 +1507,14 @@ function signerIdentifierMatches(
 	certificate: ParsedCertificate,
 	signerInfo: ParsedPkcs7SignerInfo,
 ): boolean {
-	if (signerInfo.issuer !== undefined || signerInfo.serialNumberHex !== undefined) {
+	const identifier = signerInfo.signerIdentifier;
+	if (identifier.type === 'issuerAndSerialNumber') {
 		return (
-			signerInfo.issuer !== undefined &&
-			signerInfo.serialNumberHex !== undefined &&
-			certificate.serialNumberHex === signerInfo.serialNumberHex &&
-			compareDistinguishedNames(certificate.issuer, signerInfo.issuer)
+			certificate.serialNumberHex === identifier.serialNumberHex &&
+			compareDistinguishedNames(certificate.issuer, identifier.issuer)
 		);
 	}
-	return (
-		signerInfo.subjectKeyIdentifier !== undefined &&
-		certificate.subjectKeyIdentifier === signerInfo.subjectKeyIdentifier
-	);
+	return certificate.subjectKeyIdentifier === identifier.subjectKeyIdentifier;
 }
 
 function assertImplicitSignedAttrsDer(signedAttrsDer: Uint8Array): void {

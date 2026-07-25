@@ -31,5 +31,5 @@ assertRootTypes({
 	certificateError: 'validity_not_after_before_not_before',
 	extensionError: 'key_usage_empty',
 	nameError: 'invalid_country_code',
-	crlError: 'distribution_point_name_conflict',
+	crlError: 'distribution_point_full_name_empty',
 });

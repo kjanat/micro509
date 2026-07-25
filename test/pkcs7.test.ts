@@ -132,7 +132,10 @@ describe('pkcs7', () => {
 			digestAlgorithmName: 'SHA-256',
 			signatureAlgorithmOid: OIDS.sha256WithRSAEncryption,
 			signatureAlgorithmName: 'RSA PKCS#1 v1.5 with SHA-256',
-			serialNumberHex: parsedSigner.serialNumberHex,
+			signerIdentifier: {
+				type: 'issuerAndSerialNumber',
+				serialNumberHex: parsedSigner.serialNumberHex,
+			},
 		});
 	});
 
@@ -344,52 +347,12 @@ describe('pkcs7', () => {
 		if (signerInfo === undefined) {
 			throw new Error('expected signer info');
 		}
-		const {
-			issuer: _ignoredIssuer,
-			serialNumberHex: _ignoredSerialNumberHex,
-			...signerInfoWithoutIssuerAndSerial
-		} = signerInfo;
-		const result = await verifyPkcs7SignedData({
-			...parsed.value,
-			signerInfos: [
-				{
-					...signerInfoWithoutIssuerAndSerial,
-					subjectKeyIdentifier,
-				},
-			],
-		});
-		expect(result.ok).toBe(true);
-	});
-
-	it('verifyPkcs7SignedData ignores tampered dual signer identifiers on pre-parsed input', async () => {
-		const signer = await createSelfSignedCertificate({
-			subject: { commonName: 'Dual Identifier Signer' },
-		});
-		const parsedSigner = unwrap(parseCertificatePem(signer.certificate.pem));
-		const subjectKeyIdentifier = parsedSigner.subjectKeyIdentifier;
-		if (subjectKeyIdentifier === undefined) {
-			throw new Error('expected subjectKeyIdentifier');
-		}
-		const content = new TextEncoder().encode('Dual identifier test');
-		const der = await createCmsSignedDataWithSignedAttrs(
-			parsedSigner,
-			signer.keyPair.privateKey,
-			content,
-		);
-		const parsed = parsePkcs7SignedDataDer(der);
-		expect(parsed.ok).toBe(true);
-		if (!parsed.ok) throw new Error('unreachable');
-		const signerInfo = parsed.value.signerInfos[0];
-		if (signerInfo === undefined) {
-			throw new Error('expected signer info');
-		}
 		const result = await verifyPkcs7SignedData({
 			...parsed.value,
 			signerInfos: [
 				{
 					...signerInfo,
-					serialNumberHex: 'deadbeef',
-					subjectKeyIdentifier,
+					signerIdentifier: { type: 'subjectKeyIdentifier', subjectKeyIdentifier },
 				},
 			],
 		});

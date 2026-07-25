@@ -172,16 +172,23 @@ export type DistributionPointReason =
 	| 'aACompromise';
 
 /**
- * Name component of a CRL Distribution Point (RFC 5280 §4.2.1.13).
- *
- * Supply exactly one of `fullName` or `relativeName`.
+ * Name component of a CRL Distribution Point, mirroring RFC 5280 §4.2.1.13
+ * `DistributionPointName ::= CHOICE { fullName [0] GeneralNames,
+ * nameRelativeToCRLIssuer [1] RelativeDistinguishedName }`.
  */
-export interface DistributionPointName {
-	/** Absolute {@linkcode GeneralName}(s) identifying the distribution point (usually a URI). */
-	readonly fullName?: readonly GeneralName[];
-	/** Name relative to the issuer's DN; mutually exclusive with `fullName`. */
-	readonly relativeName?: RelativeDistinguishedNameInput;
-}
+export type DistributionPointName =
+	| {
+			/** The `fullName [0]` alternative. */
+			readonly type: 'fullName';
+			/** Absolute {@linkcode GeneralName}(s) identifying the distribution point (usually a URI). */
+			readonly fullName: readonly GeneralName[];
+	  }
+	| {
+			/** The `nameRelativeToCRLIssuer [1]` alternative. */
+			readonly type: 'relativeName';
+			/** Name relative to the issuer's DN. */
+			readonly relativeName: RelativeDistinguishedNameInput;
+	  };
 
 /**
  * Input for a single CRL Distribution Point (RFC 5280 §4.2.1.13).
@@ -904,12 +911,9 @@ function findCustomExtensionValue(
 }
 
 /** The subset of a DistributionPointName the RFC 5280 §4.2.1.13 rules read. */
-interface ProfileDistributionPointName<TRelativeName> {
-	/** Absolute GeneralName(s) identifying the distribution point. */
-	readonly fullName?: readonly GeneralName[];
-	/** Name relative to the CRL issuer, in whichever form the caller holds. */
-	readonly relativeName?: TRelativeName;
-}
+type ProfileDistributionPointName<TRelativeName> =
+	| { readonly type: 'fullName'; readonly fullName: readonly GeneralName[] }
+	| { readonly type: 'relativeName'; readonly relativeName: TRelativeName };
 
 /** The subset of a distribution point the RFC 5280 §4.2.1.13 rules read. */
 interface ProfileDistributionPoint<TRelativeName> {
@@ -918,11 +922,6 @@ interface ProfileDistributionPoint<TRelativeName> {
 	/** Entity that signed the CRL, when different from the certificate issuer. */
 	readonly crlIssuer?: readonly GeneralName[];
 }
-
-/** The DistributionPointName alternative in use, once proven to be exactly one. */
-type DistributionPointNameChoice<TRelativeName> =
-	| { readonly kind: 'fullName'; readonly fullName: readonly GeneralName[] }
-	| { readonly kind: 'relativeName'; readonly relativeName: TRelativeName };
 
 /**
  * Rejects a custom extension carrying a known OID whose payload is not the DER
@@ -1369,8 +1368,14 @@ function assertDistributionPointProfile<TRelativeName>(
 		);
 	}
 	assertCrlIssuerDistinguishedNames(point);
-	if (point.distributionPoint !== undefined) {
-		resolveDistributionPointNameChoice(point.distributionPoint);
+	if (
+		point.distributionPoint?.type === 'fullName' &&
+		point.distributionPoint.fullName.length === 0
+	) {
+		throwExtensionEncoderError(
+			'distribution_point_full_name_empty',
+			'DistributionPointName fullName must not be empty',
+		);
 	}
 }
 
@@ -1635,7 +1640,7 @@ function assertCrlIssuerDistinguishedNames<TRelativeName>(
 			'DistributionPoint cRLIssuer must only contain directoryName entries',
 		);
 	}
-	if (point.distributionPoint?.relativeName !== undefined && point.crlIssuer.length > 1) {
+	if (point.distributionPoint?.type === 'relativeName' && point.crlIssuer.length > 1) {
 		throwExtensionEncoderError(
 			'distribution_point_relative_name_multiple_crl_issuers',
 			'DistributionPointName relativeName requires at most one cRLIssuer distinguished name',
@@ -1664,44 +1669,18 @@ function encodeDistributionPoint(point: DistributionPoint): Uint8Array[] {
 	return fields;
 }
 
-/**
- * RFC 5280 §4.2.1.13: a DistributionPointName holds exactly one of fullName and
- * relativeName, and a fullName holds at least one GeneralName.
- */
-function resolveDistributionPointNameChoice<TRelativeName>(
-	name: ProfileDistributionPointName<TRelativeName>,
-): DistributionPointNameChoice<TRelativeName> {
-	if (name.fullName !== undefined && name.relativeName !== undefined) {
-		throwExtensionEncoderError(
-			'distribution_point_name_conflict',
-			'DistributionPointName cannot contain both fullName and relativeName',
-		);
-	}
-	if (name.fullName !== undefined) {
+/** DER-encode a DistributionPointName (fullName or relativeName). */
+function encodeDistributionPointName(name: DistributionPointName): Uint8Array {
+	if (name.type === 'fullName') {
 		if (name.fullName.length === 0) {
 			throwExtensionEncoderError(
 				'distribution_point_full_name_empty',
 				'DistributionPointName fullName must not be empty',
 			);
 		}
-		return { kind: 'fullName', fullName: name.fullName };
+		return implicitConstructedContext(0, concatBytes(name.fullName.map(encodeSubjectAltName)));
 	}
-	if (name.relativeName !== undefined) {
-		return { kind: 'relativeName', relativeName: name.relativeName };
-	}
-	throwExtensionEncoderError(
-		'distribution_point_name_empty',
-		'DistributionPointName must contain fullName or relativeName',
-	);
-}
-
-/** DER-encode a DistributionPointName (fullName or relativeName). */
-function encodeDistributionPointName(name: DistributionPointName): Uint8Array {
-	const choice = resolveDistributionPointNameChoice(name);
-	if (choice.kind === 'fullName') {
-		return implicitConstructedContext(0, concatBytes(choice.fullName.map(encodeSubjectAltName)));
-	}
-	const relativeName = encodeRelativeDistinguishedName(choice.relativeName);
+	const relativeName = encodeRelativeDistinguishedName(name.relativeName);
 	const relativeNameElement = readElement(relativeName);
 	return implicitConstructedContext(
 		1,

@@ -43,6 +43,7 @@ export type {
 	ParsedPkcs7SignedData,
 	ParsedPkcs7SignerInfo,
 	ParsedPkcs7SignerInfoBase,
+	ParsedSignerIdentifier,
 	ParsePkcs7CertBagResult,
 	ParsePkcs7ErrorCode,
 	ParsePkcs7Failure,
