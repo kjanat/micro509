@@ -21,6 +21,7 @@ jobs:
       - name: Deno lint + type-check + doc-lint (full source tree)
         run: run -p check:deno lint:deno docs:lint
       - run: run test:coverage
+        env: { DIFFERENTIAL_OPENSSL: "1" }
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v7
         with: { flags: bun, fail_ci_if_error: true, use_oidc: true, report_type: coverage }
