@@ -4,9 +4,8 @@
  * Creates degenerate (signature-less) certificate bags, parses RFC 5652
  * SignedData (and the RFC 2315 form whose contentInfo content is an OCTET
  * STRING), and verifies signer signatures including signed-attribute flows.
- * A CertificateSet may carry the RFC 5652 §10.2.2 attribute-certificate and
- * other-format alternatives; those are skipped and only X.509 certificates are
- * returned.
+ * A CertificateSet is decoded as RFC 5652 §10.2.2 CertificateChoices, so an
+ * attribute certificate or other-format entry is preserved rather than dropped.
  *
  * @module
  */
@@ -133,6 +132,48 @@ interface ParsedSignedAttributeFields {
 	contentTypeOid?: string;
 }
 
+/**
+ * One RFC 5652 §10.2.2 CertificateChoices alternative.
+ *
+ * X.509 is the only alternative this library decodes. The rest keep their DER,
+ * including the context tag, so a CertificateSet round-trips and a caller can
+ * tell an X.509-only bag from one carrying attribute certificates. RFC 5652
+ * marks `extendedCertificate` and `attributeCertificateV1` obsolete.
+ */
+export type ParsedCertificateChoice =
+	| {
+			/** X.509 certificate (untagged `Certificate`). */
+			readonly type: 'certificate';
+			/** The decoded certificate. */
+			readonly certificate: ParsedCertificate;
+	  }
+	| {
+			/** PKCS #6 extended certificate (`[0]`), obsolete. */
+			readonly type: 'extendedCertificate';
+			/** Raw DER of the element, including its context tag. */
+			readonly der: Uint8Array;
+	  }
+	| {
+			/** Version 1 X.509 attribute certificate (`[1]`), obsolete. */
+			readonly type: 'attributeCertificateV1';
+			/** Raw DER of the element, including its context tag. */
+			readonly der: Uint8Array;
+	  }
+	| {
+			/** Version 2 X.509 attribute certificate (`[2]`). */
+			readonly type: 'attributeCertificateV2';
+			/** Raw DER of the element, including its context tag. */
+			readonly der: Uint8Array;
+	  }
+	| {
+			/** Any other certificate format (`[3] OtherCertificateFormat`). */
+			readonly type: 'other';
+			/** `otherCertFormat` OID identifying the format. */
+			readonly formatOid: string;
+			/** Raw DER of the element, including its context tag. */
+			readonly der: Uint8Array;
+	  };
+
 /** Decoded PKCS#7 SignedData content, including certificates and signer info. */
 export interface ParsedPkcs7SignedData {
 	/** Original DER bytes when this object came from {@linkcode parsePkcs7SignedDataDer} or PEM parsing. */
@@ -149,8 +190,8 @@ export interface ParsedPkcs7SignedData {
 	readonly encapsulatedContentTypeOid: string;
 	/** Raw encapsulated content bytes. Absent in degenerate (certs-only) bags. */
 	readonly encapsulatedContent?: Uint8Array;
-	/** Certificates included in the SignedData certificate set. */
-	readonly certificates: readonly ParsedCertificate[];
+	/** RFC 5652 §10.2.2 CertificateChoices entries from the SignedData certificate set. */
+	readonly certificateChoices: readonly ParsedCertificateChoice[];
 	/** Decoded signer info entries. Empty for degenerate cert bags. */
 	readonly signerInfos: readonly ParsedPkcs7SignerInfo[];
 }
@@ -572,7 +613,7 @@ export function parsePkcs7CertBagDer(der: Uint8Array): ParsePkcs7CertBagResult {
 	if (!result.ok) {
 		return result;
 	}
-	return { ok: true, value: result.value.certificates };
+	return { ok: true, value: x509CertificatesOf(result.value.certificateChoices) };
 }
 
 /** Parses a PEM-armored PKCS#7 cert bag. Expects exactly one `PKCS7` PEM block. */
@@ -659,7 +700,7 @@ export function parsePkcs7SignedDataDer(der: Uint8Array): ParsePkcs7SignedDataRe
 					: {
 							encapsulatedContent: extractEncapsulatedContent(encapDer, encapContent),
 						}),
-				certificates: parseCertificateSet(der, optionalFields.value.certificates),
+				certificateChoices: parseCertificateSet(der, optionalFields.value.certificates),
 				signerInfos: parseSignerInfos(der, signerInfos),
 			},
 		};
@@ -783,7 +824,7 @@ async function verifyPkcs7SignerInfo(
 	signerInfo: ParsedPkcs7SignerInfo,
 	content: Uint8Array,
 ): Promise<{ readonly ok: true } | Extract<VerifyPkcs7SignedDataResult, { readonly ok: false }>> {
-	const signer = parsed.certificates.find((certificate) =>
+	const signer = x509CertificatesOf(parsed.certificateChoices).find((certificate) =>
 		signerIdentifierMatches(certificate, signerInfo),
 	);
 	if (signer === undefined) {
@@ -955,36 +996,69 @@ function buildSignedAttributes(
 	return { setForSigning, implicitForEmit };
 }
 
-/**
- * RFC 5652 §10.2.2 CertificateChoices: `extendedCertificate [0]`, `v1AttrCert [1]`,
- * `v2AttrCert [2]`, and `other [3]`, each IMPLICIT over a SEQUENCE.
- */
-const NON_X509_CERTIFICATE_CHOICE_TAGS: ReadonlySet<number> = new Set([0xa0, 0xa1, 0xa2, 0xa3]);
+/** The X.509 subset of a decoded CertificateSet. */
+function x509CertificatesOf(
+	choices: readonly ParsedCertificateChoice[],
+): readonly ParsedCertificate[] {
+	return choices.flatMap((choice) => (choice.type === 'certificate' ? [choice.certificate] : []));
+}
 
 /**
- * Parses the IMPLICIT [0] certificate set from a SignedData structure.
+ * `otherCertFormat` from an `other [3] IMPLICIT OtherCertificateFormat` entry.
  *
- * RFC 5652 §10.2.2 encodes an X.509 certificate as a bare SEQUENCE and every other
- * CertificateChoices alternative behind a context tag; the tagged
- * attribute-certificate and other-format entries are skipped. Any other tag is not
- * a CertificateChoices alternative at all.
+ * The IMPLICIT tag replaces the SEQUENCE tag, so the OID and the `ANY DEFINED BY`
+ * value are direct children of the `[3]` element.
+ */
+function parseOtherCertificateFormatOid(source: Uint8Array, element: DerElement): string {
+	const formatOid = requireElement(childrenOf(source, element)[0], 'otherCertFormat');
+	if (formatOid.tag !== 0x06) {
+		throw new Error('otherCertFormat must be an OBJECT IDENTIFIER');
+	}
+	return decodeObjectIdentifier(formatOid.value);
+}
+
+/** Decodes one RFC 5652 §10.2.2 CertificateChoices alternative. */
+function parseCertificateChoice(
+	source: Uint8Array,
+	element: DerElement,
+	der: Uint8Array,
+): ParsedCertificateChoice {
+	switch (element.tag) {
+		case 0x30:
+			return { type: 'certificate', certificate: parseCertificateDerOrThrow(der) };
+		case 0xa0:
+			return { type: 'extendedCertificate', der };
+		case 0xa1:
+			return { type: 'attributeCertificateV1', der };
+		case 0xa2:
+			return { type: 'attributeCertificateV2', der };
+		case 0xa3:
+			return {
+				type: 'other',
+				formatOid: parseOtherCertificateFormatOid(source, element),
+				der,
+			};
+		default:
+			throw new Error(`Unsupported CertificateChoices tag: ${element.tag}`);
+	}
+}
+
+/**
+ * Parses the IMPLICIT [0] certificate set from a SignedData structure as
+ * RFC 5652 §10.2.3 `CertificateSet ::= SET OF CertificateChoices`.
  */
 function parseCertificateSet(
 	source: Uint8Array,
 	certificates: ReturnType<typeof readElement> | undefined,
-): readonly ParsedCertificate[] {
+): readonly ParsedCertificateChoice[] {
 	if (certificates === undefined || certificates.tag !== 0xa0) {
 		return [];
 	}
-	const parsed: ParsedCertificate[] = [];
+	const parsed: ParsedCertificateChoice[] = [];
 	let offset = certificates.start;
 	while (offset < certificates.end) {
 		const element = readElement(source, offset);
-		if (element.tag === 0x30) {
-			parsed.push(parseCertificateDerOrThrow(source.slice(offset, element.end)));
-		} else if (!NON_X509_CERTIFICATE_CHOICE_TAGS.has(element.tag)) {
-			throw new Error(`Unsupported CertificateChoices tag: ${element.tag}`);
-		}
+		parsed.push(parseCertificateChoice(source, element, source.slice(offset, element.end)));
 		offset = element.end;
 	}
 	return parsed;

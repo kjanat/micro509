@@ -124,7 +124,7 @@ describe('pkcs7', () => {
 		expect(parsed.ok).toBe(true);
 		if (!parsed.ok) throw new Error('unreachable');
 		expect(parsed.value.contentTypeOid).toBe(OIDS.pkcs7SignedData);
-		expect(parsed.value.certificates).toHaveLength(1);
+		expect(parsed.value.certificateChoices).toHaveLength(1);
 		expect(parsed.value.digestAlgorithmNames).toEqual(['SHA-256']);
 		expect(parsed.value.signerInfos[0]).toMatchObject({
 			version: 1,
@@ -136,21 +136,55 @@ describe('pkcs7', () => {
 		});
 	});
 
-	it('skips non-X.509 CertificateChoices alternatives (RFC 5652 §10.2.2)', async () => {
+	it.each([
+		['extendedCertificate', 0xa0],
+		['attributeCertificateV1', 0xa1],
+		['attributeCertificateV2', 0xa2],
+	] as const)('preserves a %s CertificateChoices entry (RFC 5652 §10.2.2)', async (type, tag) => {
 		const signer = await createSelfSignedCertificate({
 			subject: { commonName: 'CMS Signer' },
 		});
 		const parsedSigner = unwrap(parseCertificatePem(signer.certificate.pem));
-		// v2AttrCert [2]: an attribute certificate is not an X.509 certificate, so it
-		// is skipped rather than failing the whole SignedData parse.
-		const attributeCertificate = tlv(0xa2, sequence([integerFromNumber(1)]));
-		const parsed = parsePkcs7SignedDataDer(
-			createSyntheticPkcs7SignedData(parsedSigner, [attributeCertificate]),
-		);
+		const other = tlv(tag, sequence([integerFromNumber(1)]));
+		const parsed = parsePkcs7SignedDataDer(createSyntheticPkcs7SignedData(parsedSigner, [other]));
 		expect(parsed.ok).toBe(true);
 		if (!parsed.ok) throw new Error('unreachable');
-		expect(parsed.value.certificates).toHaveLength(1);
-		expect(parsed.value.certificates[0]?.subject.values.commonName).toBe('CMS Signer');
+		expect(parsed.value.certificateChoices.map((choice) => choice.type)).toEqual([
+			'certificate',
+			type,
+		]);
+		const [first, second] = parsed.value.certificateChoices;
+		if (first?.type !== 'certificate') throw new Error('unreachable');
+		expect(first.certificate.subject.values.commonName).toBe('CMS Signer');
+		if (second === undefined || second.type === 'certificate') throw new Error('unreachable');
+		expect(second.der).toEqual(other);
+	});
+
+	it('decodes the otherCertFormat OID of an other [3] entry (RFC 5652 §10.2.2)', async () => {
+		const signer = await createSelfSignedCertificate({
+			subject: { commonName: 'CMS Signer' },
+		});
+		const parsedSigner = unwrap(parseCertificatePem(signer.certificate.pem));
+		// [3] IMPLICIT OtherCertificateFormat, so the OID and the ANY value are
+		// direct children of the tag rather than nested in a SEQUENCE.
+		const other = tlv(0xa3, concatBytes([objectIdentifier('1.2.3.4'), integerFromNumber(1)]));
+		const parsed = parsePkcs7SignedDataDer(createSyntheticPkcs7SignedData(parsedSigner, [other]));
+		expect(parsed.ok).toBe(true);
+		if (!parsed.ok) throw new Error('unreachable');
+		const [, second] = parsed.value.certificateChoices;
+		expect(second).toMatchObject({ type: 'other', formatOid: '1.2.3.4' });
+	});
+
+	it('rejects an other [3] entry whose first element is not an OID', async () => {
+		const signer = await createSelfSignedCertificate({
+			subject: { commonName: 'CMS Signer' },
+		});
+		const parsedSigner = unwrap(parseCertificatePem(signer.certificate.pem));
+		const other = tlv(0xa3, concatBytes([integerFromNumber(1), integerFromNumber(2)]));
+		const parsed = parsePkcs7SignedDataDer(createSyntheticPkcs7SignedData(parsedSigner, [other]));
+		expect(parsed.ok).toBe(false);
+		if (parsed.ok) throw new Error('unreachable');
+		expect(parsed.error.code).toBe('malformed');
 	});
 
 	it.each([
@@ -1010,7 +1044,7 @@ describe('pkcs7', () => {
 		const result = parsePkcs7SignedDataDer(der);
 		expect(result.ok).toBe(true);
 		if (!result.ok) throw new Error('unreachable');
-		expect(result.value.certificates).toHaveLength(0);
+		expect(result.value.certificateChoices).toHaveLength(0);
 	});
 
 	it('parsePkcs7SignedDataDer rejects duplicate certificates fields', async () => {
@@ -1130,7 +1164,7 @@ describe('pkcs7', () => {
 		const result = parsePkcs7SignedDataDer(der);
 		expect(result.ok).toBe(true);
 		if (!result.ok) throw new Error('unreachable');
-		expect(result.value.certificates).toHaveLength(1);
+		expect(result.value.certificateChoices).toHaveLength(1);
 	});
 
 	it('createPkcs7CertBag rejects a PEM source with no certificate blocks', () => {

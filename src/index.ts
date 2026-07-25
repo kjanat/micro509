@@ -184,6 +184,7 @@ export type {
 	CreatePkcs7SignedDataFailure,
 	CreatePkcs7SignedDataInput,
 	CreatePkcs7SignedDataResult,
+	ParsedCertificateChoice,
 	ParsedPfx,
 	ParsedPfxAttribute,
 	ParsedPfxBag,

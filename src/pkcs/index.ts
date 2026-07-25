@@ -39,6 +39,7 @@ export type {
 	CreatePkcs7SignedDataFailure,
 	CreatePkcs7SignedDataInput,
 	CreatePkcs7SignedDataResult,
+	ParsedCertificateChoice,
 	ParsedPkcs7SignedData,
 	ParsedPkcs7SignerInfo,
 	ParsedPkcs7SignerInfoBase,

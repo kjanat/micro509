@@ -29,6 +29,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `ParsedPkcs7SignedData.certificates: readonly ParsedCertificate[]` becomes
+  `certificateChoices: readonly ParsedCertificateChoice[]`, modelling RFC 5652
+  §10.2.2 CertificateChoices as a discriminated union rather than discarding
+  four of its five alternatives. `certificate` carries the decoded X.509;
+  `extendedCertificate` (`[0]`, obsolete), `attributeCertificateV1` (`[1]`,
+  obsolete), `attributeCertificateV2` (`[2]`), and `other` (`[3]`, with its
+  `otherCertFormat` OID decoded) keep their DER including the context tag, so a
+  CertificateSet round-trips and a caller can tell an X.509-only bag from a
+  mixed one. A certificate set entry whose tag is none of these is rejected as
+  `malformed`; previously any non-SEQUENCE element was silently dropped.
+  `parsePkcs7CertBagDer` and `parsePkcs7CertBagPem` still return
+  `readonly ParsedCertificate[]`, now the X.509 projection of the set.
 - Builder input-validation now throws a `ResultError` carrying a stable
   machine-readable `code` rather than a bare `Error`. `createCertificate`, the
   `encode*` extension helpers, distinguished-name encoding, and CRL/IDP encoding
