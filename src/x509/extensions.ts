@@ -830,6 +830,11 @@ function assertPathLengthKeyUsage(input: CertificateExtensionsInput | undefined)
  * validates signatures on certificates. Both conjuncts live in other extensions,
  * so the rule sits here rather than in the basicConstraints profile hook.
  *
+ * §4.2.1.3 restricts a key only through a keyUsage extension that reaches the
+ * wire, so an absent keyUsage, and an empty one the builder therefore omits,
+ * leave the key free to validate certificate signatures. Only an emitted keyUsage
+ * without keyCertSign takes the certificate out of the clause's scope.
+ *
  * Only a custom extension can carry the wrong criticality; the typed field is
  * always emitted with the registry default.
  */
@@ -843,10 +848,15 @@ function assertCaBasicConstraintsCritical(input: CertificateExtensionsInput | un
 	const basicConstraints = BASIC_CONSTRAINTS_EXTENSION_DEFINITION.decode(
 		new Uint8Array(custom.value),
 	);
-	if (!basicConstraints.ca || resolveEffectiveKeyUsage(input)?.includes('keyCertSign') !== true) {
+	if (!basicConstraints.ca) {
 		return;
 	}
-	assertExtensionCriticality('basicConstraints', true, false);
+	const keyUsage = resolveEffectiveKeyUsage(input);
+	const mayValidateCertificates =
+		keyUsage === undefined || keyUsage.length === 0 || keyUsage.includes('keyCertSign');
+	if (mayValidateCertificates) {
+		assertExtensionCriticality('basicConstraints', true, false);
+	}
 }
 
 /**

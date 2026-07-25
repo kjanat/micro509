@@ -1373,35 +1373,55 @@ describe('extensions encoding', () => {
 		);
 	});
 
-	it('requires a CA certificate basicConstraints to be critical (RFC 5280 §4.2.1.9)', () => {
-		const value = encodeBasicConstraints({ ca: true });
-		expectEncoderErrorCode(
-			() =>
-				buildRequestedExtensions({
-					keyUsage: ['keyCertSign'],
-					customExtensions: [{ oid: OIDS.basicConstraints, value }],
-				}),
-			'extension_must_be_critical',
-		);
-		expectEncoderErrorCode(
-			() =>
-				buildCertificateExtensions(subjectPublicKeyInfo, undefined, {
-					keyUsage: ['keyCertSign'],
-					customExtensions: [{ oid: '2.5.029.19', value }],
-				}),
-			'extension_must_be_critical',
-		);
+	// RFC 5280 §4.2.1.9 covers any CA certificate whose key may validate signatures
+	// on certificates. §4.2.1.3 restricts the key only through a keyUsage that
+	// reaches the wire, so absent and empty leave the key unrestricted, and the
+	// builder omits an empty keyUsage.
+	const CA_KEY_USAGE_CASES = [
+		['an absent keyUsage', undefined, true],
+		['an empty keyUsage', [], true],
+		['a keyCertSign keyUsage', ['keyCertSign'], true],
+		['a keyUsage without keyCertSign', ['digitalSignature'], false],
+	] as const;
+
+	it.each(CA_KEY_USAGE_CASES)(
+		'applies the §4.2.1.9 basicConstraints criticality rule under %s',
+		(_label, keyUsage, constrained) => {
+			const caBasicConstraints = encodeBasicConstraints({ ca: true });
+			const input = (critical: boolean, oid: string) => ({
+				...(keyUsage === undefined ? {} : { keyUsage }),
+				customExtensions: [{ oid, value: caBasicConstraints, critical }],
+			});
+			for (const oid of [OIDS.basicConstraints, '2.5.029.19']) {
+				if (constrained) {
+					expectEncoderErrorCode(
+						() => buildRequestedExtensions(input(false, oid)),
+						'extension_must_be_critical',
+					);
+					expectEncoderErrorCode(
+						() => buildCertificateExtensions(subjectPublicKeyInfo, undefined, input(false, oid)),
+						'extension_must_be_critical',
+					);
+				} else {
+					expect(buildRequestedExtensions(input(false, oid))).toBeInstanceOf(Array);
+					// The certificate path always emits its own basicConstraints, so a
+					// silent criticality rule surfaces as the duplicate instead.
+					expectEncoderErrorCode(
+						() => buildCertificateExtensions(subjectPublicKeyInfo, undefined, input(false, oid)),
+						'duplicate_extension_oid',
+					);
+				}
+				expect(buildRequestedExtensions(input(true, oid))).toBeInstanceOf(Array);
+			}
+		},
+	);
+
+	it('leaves a non-CA custom basicConstraints non-critical (RFC 5280 §4.2.1.9)', () => {
 		expect(
 			buildRequestedExtensions({
-				keyUsage: ['keyCertSign'],
-				customExtensions: [{ oid: OIDS.basicConstraints, value, critical: true }],
-			}),
-		).toBeInstanceOf(Array);
-		// Without keyCertSign the certificate is not one §4.2.1.9 constrains.
-		expect(
-			buildRequestedExtensions({
-				keyUsage: ['digitalSignature'],
-				customExtensions: [{ oid: OIDS.basicConstraints, value }],
+				customExtensions: [
+					{ oid: OIDS.basicConstraints, value: encodeBasicConstraints({ ca: false }) },
+				],
 			}),
 		).toBeInstanceOf(Array);
 	});
