@@ -1,24 +1,29 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
-import type { UserConfig } from 'tsdown';
 import { defineConfig } from 'tsdown';
 import jsr from '#jsr' with { type: 'json' };
 import pkg from '#pkg' with { type: 'json' };
 
-export const entries = {
-	index: 'src/index.ts',
-	der: 'src/der/index.ts',
-	keys: 'src/keys/index.ts',
-	pem: 'src/pem/index.ts',
-	pkcs: 'src/pkcs/index.ts',
-	result: 'src/result/index.ts',
-	revocation: 'src/revocation/index.ts',
-	verify: 'src/verify/index.ts',
-	x509: 'src/x509/index.ts',
-} satisfies UserConfig['entry'];
+/**
+ * Root source files are the package's public entrypoints; everything else lives
+ * in a domain directory or under `src/internal/`. Adding `src/foo.ts` publishes
+ * `micro509/foo`, which `test/conventions.test.ts` guards against doing by
+ * accident.
+ */
+const ROOT_ENTRY_GLOB = 'src/*.ts';
+
+/** The root entry files, `index` first and the rest alphabetical. */
+function rootEntryStems(): readonly string[] {
+	return readdirSync('src', { withFileTypes: true })
+		.filter((entry) => entry.isFile() && entry.name.endsWith('.ts'))
+		.map((entry) => entry.name.slice(0, -'.ts'.length))
+		.sort((left, right) =>
+			left === 'index' ? -1 : right === 'index' ? 1 : left.localeCompare(right),
+		);
+}
 
 export default defineConfig((options) => ({
-	entry: entries,
+	entry: [ROOT_ENTRY_GLOB],
 	name: pkg.name,
 	format: 'esm',
 	dts: true,
@@ -62,9 +67,9 @@ export default defineConfig((options) => ({
 					'build:done': async () => {
 						const jsrNext = { ...jsr, exports: {} };
 						jsrNext.exports = Object.fromEntries(
-							Object.entries(entries).map(([name, sourcePath]) => [
-								name === 'index' ? '.' : `./${name}`,
-								`./${sourcePath}`,
+							rootEntryStems().map((stem) => [
+								stem === 'index' ? '.' : `./${stem}`,
+								`./src/${stem}.ts`,
 							]),
 						);
 						jsrNext.version = pkg.version;

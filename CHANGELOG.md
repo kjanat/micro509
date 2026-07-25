@@ -29,6 +29,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Public source entrypoints are flat `src/*.ts` files: `src/x509/index.ts`
+  becomes `src/x509.ts`, and the eight nested barrels are gone. `tsdown.config.ts`
+  globs `entry: ['src/*.ts']`, so `package.json#exports` and `jsr.json#exports`
+  derive from the filesystem rather than a hand-maintained entry map, and
+  `package.json#imports` collapses onto the `#micro509/*` wildcard. Package
+  specifiers (`micro509`, `micro509/x509`, …) and every exported symbol are
+  unchanged; JSR consumers reading source paths see the new flat layout.
 - Builder input-validation now throws a `ResultError` carrying a stable
   machine-readable `code` rather than a bare `Error`. `createCertificate`, the
   `encode*` extension helpers, distinguished-name encoding, and CRL/IDP encoding

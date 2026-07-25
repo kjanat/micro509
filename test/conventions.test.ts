@@ -3,6 +3,13 @@ import { Glob } from 'bun';
 import { VERIFY_ERROR_CODES } from '#micro509/verify';
 import { projectRoot, srcRoot } from '#test/helpers';
 
+/** Stems of the root `src/*.ts` files, which tsdown publishes as package subpaths. */
+function rootEntryStems(): readonly string[] {
+	return [...new Glob('*.ts').scanSync({ cwd: srcRoot })]
+		.map((name) => name.slice(0, -'.ts'.length))
+		.sort();
+}
+
 function sourceFiles(): readonly string[] {
 	return [...new Glob('**/*.ts').scanSync({ cwd: srcRoot, absolute: true })];
 }
@@ -94,12 +101,29 @@ describe('repo conventions (AGENTS.md / CONTRIBUTING.md)', () => {
 		const allOrThrow = new Set<string>();
 		for (const [domain, names] of orThrowByDomain) {
 			if (names.size === 0) continue;
-			offenders.push(...(await missingOrThrowExports(`${domain}/index.ts`, names)));
+			offenders.push(...(await missingOrThrowExports(`${domain}.ts`, names)));
 			for (const name of names) allOrThrow.add(name);
 		}
 		offenders.push(...(await missingOrThrowExports('index.ts', allOrThrow)));
 
 		expect(offenders).toEqual([]);
+	});
+
+	it('publishes exactly the intended root entrypoints', () => {
+		// tsdown globs src/*.ts, so a stray root file silently becomes a published
+		// subpath. Domain implementation belongs in src/<domain>/, internals in
+		// src/internal/.
+		expect(rootEntryStems()).toEqual([
+			'der',
+			'index',
+			'keys',
+			'pem',
+			'pkcs',
+			'result',
+			'revocation',
+			'verify',
+			'x509',
+		]);
 	});
 
 	it('site error-code table matches VERIFY_ERROR_CODES exactly', async () => {
