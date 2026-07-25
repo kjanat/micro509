@@ -2020,6 +2020,9 @@ function opensslBytesToKey(password: string, salt: Uint8Array, length: number): 
 	return out;
 }
 
+/** RFC 822 §3.2: `field-name = 1*<any CHAR, excluding CTLs, SPACE, and ":">`. */
+const RFC822_FIELD_NAME = /^[\x21-\x39\x3b-\x7e]+$/;
+
 /** Parse a PEM block into its label, OpenSSL-style headers, and base64 body. */
 function parseTraditionalPem(pem: string): {
 	/** PEM type label between `BEGIN` and `END` markers. */
@@ -2061,6 +2064,9 @@ function parseTraditionalPem(pem: string): {
 			break;
 		}
 		const headerName = line.slice(0, delimiter);
+		if (!RFC822_FIELD_NAME.test(headerName)) {
+			throw new Error(`Invalid PEM header name: ${headerName}`);
+		}
 		if (headers.has(headerName)) {
 			throw new Error(`Duplicate PEM header: ${headerName}`);
 		}

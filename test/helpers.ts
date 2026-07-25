@@ -604,7 +604,10 @@ function toPemBlock(label: string, der: Uint8Array): string {
 	return `-----BEGIN ${label}-----\n${lines.join('\n')}\n-----END ${label}-----\n`;
 }
 
-export function createSyntheticPkcs7SignedData(signer: ParsedCertificate): Uint8Array {
+export function createSyntheticPkcs7SignedData(
+	signer: ParsedCertificate,
+	extraCertificateChoices: readonly Uint8Array[] = [],
+): Uint8Array {
 	const signerInfo = sequence([
 		integerFromNumber(1),
 		sequence([hexToBytes(signer.issuer.derHex), integer(hexToBytes(signer.serialNumberHex))]),
@@ -616,7 +619,7 @@ export function createSyntheticPkcs7SignedData(signer: ParsedCertificate): Uint8
 		integerFromNumber(1),
 		setOf([sequence([objectIdentifier(OIDS.sha256), nullValue()])]),
 		sequence([objectIdentifier(OIDS.pkcs7Data)]),
-		explicitContext(0, signer.der),
+		explicitContext(0, concatBytes([signer.der, ...extraCertificateChoices])),
 		setOf([signerInfo]),
 	]);
 	return sequence([objectIdentifier(OIDS.pkcs7SignedData), explicitContext(0, signedData)]);

@@ -136,6 +136,37 @@ describe('pkcs7', () => {
 		});
 	});
 
+	it('skips non-X.509 CertificateChoices alternatives (RFC 5652 §10.2.2)', async () => {
+		const signer = await createSelfSignedCertificate({
+			subject: { commonName: 'CMS Signer' },
+		});
+		const parsedSigner = unwrap(parseCertificatePem(signer.certificate.pem));
+		// v2AttrCert [2]: an attribute certificate is not an X.509 certificate, so it
+		// is skipped rather than failing the whole SignedData parse.
+		const attributeCertificate = tlv(0xa2, sequence([integerFromNumber(1)]));
+		const parsed = parsePkcs7SignedDataDer(
+			createSyntheticPkcs7SignedData(parsedSigner, [attributeCertificate]),
+		);
+		expect(parsed.ok).toBe(true);
+		if (!parsed.ok) throw new Error('unreachable');
+		expect(parsed.value.certificates).toHaveLength(1);
+		expect(parsed.value.certificates[0]?.subject.values.commonName).toBe('CMS Signer');
+	});
+
+	it.each([
+		['an INTEGER', integerFromNumber(1)],
+		['an unknown context tag [4]', tlv(0xa4, sequence([integerFromNumber(1)]))],
+	])('rejects %s in the CertificateSet (RFC 5652 §10.2.2)', async (_label, element) => {
+		const signer = await createSelfSignedCertificate({
+			subject: { commonName: 'CMS Signer' },
+		});
+		const parsedSigner = unwrap(parseCertificatePem(signer.certificate.pem));
+		const parsed = parsePkcs7SignedDataDer(createSyntheticPkcs7SignedData(parsedSigner, [element]));
+		expect(parsed.ok).toBe(false);
+		if (parsed.ok) throw new Error('unreachable');
+		expect(parsed.error.code).toBe('malformed');
+	});
+
 	// -----------------------------------------------------------------------
 	// Parse error paths
 	// -----------------------------------------------------------------------

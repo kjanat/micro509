@@ -3,8 +3,10 @@
  *
  * Creates degenerate (signature-less) certificate bags, parses RFC 5652
  * SignedData (and the RFC 2315 form whose contentInfo content is an OCTET
- * STRING and whose certificates are X.509), and verifies signer signatures
- * including signed-attribute flows.
+ * STRING), and verifies signer signatures including signed-attribute flows.
+ * A CertificateSet may carry the RFC 5652 §10.2.2 attribute-certificate and
+ * other-format alternatives; those are skipped and only X.509 certificates are
+ * returned.
  *
  * @module
  */
@@ -887,7 +889,8 @@ function signerHasNamedCurve(algorithm: KeyAlgorithm): algorithm is EcKeyAlgorit
 /**
  * Resolves the content-digest hash and its OID for a signer key.
  *
- * Curve pairing follows RFC 5753 §8: P-256/RSA-SHA256 → SHA-256, P-384 → SHA-384, P-521 → SHA-512.
+ * ECDSA curve pairing follows RFC 5753 §8: P-256 → SHA-256, P-384 → SHA-384,
+ * P-521 → SHA-512. RSA uses the hash bound to the key.
  * Digest OIDs are from RFC 5754 §2.
  * Ed25519 uses SHA-512 for the messageDigest attribute, per RFC 8419.
  */
@@ -952,7 +955,20 @@ function buildSignedAttributes(
 	return { setForSigning, implicitForEmit };
 }
 
-/** Parses the IMPLICIT [0] certificate set from a SignedData structure. */
+/**
+ * RFC 5652 §10.2.2 CertificateChoices: `extendedCertificate [0]`, `v1AttrCert [1]`,
+ * `v2AttrCert [2]`, and `other [3]`, each IMPLICIT over a SEQUENCE.
+ */
+const NON_X509_CERTIFICATE_CHOICE_TAGS: ReadonlySet<number> = new Set([0xa0, 0xa1, 0xa2, 0xa3]);
+
+/**
+ * Parses the IMPLICIT [0] certificate set from a SignedData structure.
+ *
+ * RFC 5652 §10.2.2 encodes an X.509 certificate as a bare SEQUENCE and every other
+ * CertificateChoices alternative behind a context tag; the tagged
+ * attribute-certificate and other-format entries are skipped. Any other tag is not
+ * a CertificateChoices alternative at all.
+ */
 function parseCertificateSet(
 	source: Uint8Array,
 	certificates: ReturnType<typeof readElement> | undefined,
@@ -964,7 +980,11 @@ function parseCertificateSet(
 	let offset = certificates.start;
 	while (offset < certificates.end) {
 		const element = readElement(source, offset);
-		parsed.push(parseCertificateDerOrThrow(source.slice(offset, element.end)));
+		if (element.tag === 0x30) {
+			parsed.push(parseCertificateDerOrThrow(source.slice(offset, element.end)));
+		} else if (!NON_X509_CERTIFICATE_CHOICE_TAGS.has(element.tag)) {
+			throw new Error(`Unsupported CertificateChoices tag: ${element.tag}`);
+		}
 		offset = element.end;
 	}
 	return parsed;
