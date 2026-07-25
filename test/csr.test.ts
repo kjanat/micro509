@@ -13,6 +13,7 @@ import { encodeRsaPssParameters, rsaPssParametersForHash } from '#micro509/inter
 import {
 	childrenOf,
 	decodeObjectIdentifier,
+	expectRejectedErrorCode,
 	importRsaPrivateKeyWithScheme,
 	replaceCsrSignatureAlgorithm,
 	rewriteCsrSignatureAsRsaPss,
@@ -27,6 +28,7 @@ describe('csr', () => {
 			signerPrivateKey: keyPair.privateKey,
 			extensions: {
 				basicConstraints: { ca: true, pathLength: 2 },
+				keyUsage: ['keyCertSign'],
 				customExtensions: [
 					{
 						oid: '1.2.3.4.999',
@@ -41,6 +43,22 @@ describe('csr', () => {
 		const custom = findExtension(parsed.requestedExtensions, '1.2.3.4.999');
 		expect(custom).toBeDefined();
 		expect(custom?.critical).toBe(true);
+	});
+
+	it('rejects a requested pathLenConstraint without keyCertSign (RFC 5280 §4.2.1.9)', async () => {
+		const keyPair = await generateKeyPair({ kind: 'ed25519' });
+		await expectRejectedErrorCode(
+			createCertificateSigningRequest({
+				subject: { commonName: 'csr-plc.example' },
+				publicKey: keyPair.publicKey,
+				signerPrivateKey: keyPair.privateKey,
+				extensions: {
+					basicConstraints: { ca: true, pathLength: 0 },
+					keyUsage: ['digitalSignature'],
+				},
+			}),
+			'path_length_requires_key_cert_sign',
+		);
 	});
 
 	it('verifies certificate request signatures for RSA and Ed25519', async () => {

@@ -34,6 +34,8 @@ import {
 import { encodeSubjectAltName } from '#micro509/x509';
 import { parseNameConstraints } from '#micro509/x509/parse';
 import {
+	createCertificateWithRawExtensions,
+	createSelfSignedCertificateWithRawExtensions,
 	importRsaPrivateKeyWithScheme,
 	issueChain,
 	replaceCertificateSignatureAlgorithm,
@@ -92,7 +94,7 @@ describe('chain verification', () => {
 			signerPrivateKey: root.keyPair.privateKey,
 			issuerPublicKey: root.keyPair.publicKey,
 			extensions: {
-				basicConstraints: { ca: true, pathLength: 0 },
+				basicConstraints: { ca: true },
 				keyUsage: ['digitalSignature'],
 			},
 		});
@@ -260,7 +262,7 @@ describe('chain verification', () => {
 
 		const noKeyCertSignChain = await issueChain({
 			intermediateExtensions: {
-				basicConstraints: { ca: true, pathLength: 0 },
+				basicConstraints: { ca: true },
 				keyUsage: ['digitalSignature'],
 			},
 		});
@@ -892,7 +894,7 @@ describe('chain verification', () => {
 			},
 		});
 		const leafKeys = await generateKeyPair();
-		const leaf = await createCertificate({
+		const leaf = await createCertificateWithRawExtensions({
 			issuer: { commonName: 'Malformed DirectoryName SAN CA' },
 			subject: { organization: 'Blocked Org', commonName: 'malformed-directory-name.example' },
 			publicKey: leafKeys.publicKey,
@@ -2259,8 +2261,10 @@ describe('chain verification', () => {
 		}
 
 		/** Root CA whose nameConstraints extension is supplied as raw DER. */
+		// RFC 5280 §4.2.1.10 requires a critical nameConstraints, so the non-critical
+		// tolerance fixture splices the extension into the signed certificate.
 		function createConstrainedRoot(constraintDer: Uint8Array, critical: boolean) {
-			return createSelfSignedCertificate({
+			return createSelfSignedCertificateWithRawExtensions({
 				subject: { commonName: 'Unsupported NC Root' },
 				extensions: {
 					basicConstraints: { ca: true },
@@ -3742,7 +3746,7 @@ describe('validateCandidatePath direct', () => {
 	it('detects key_cert_sign_required in candidate path', async () => {
 		const chain = await issueChain({
 			intermediateExtensions: {
-				basicConstraints: { ca: true, pathLength: 0 },
+				basicConstraints: { ca: true },
 				keyUsage: ['digitalSignature'],
 			},
 		});

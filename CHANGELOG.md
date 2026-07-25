@@ -55,6 +55,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Certificate and CSR builders reject RFC 5280 MUST-NOT constructions with coded
+  throws. `pathLenConstraint` requires the keyUsage extension to assert
+  `keyCertSign`; absent, empty, or `keyCertSign`-less keyUsage is rejected
+  (§4.2.1.9, `path_length_requires_key_cert_sign`). An empty subject DN requires
+  a critical subjectAltName carrying at least one non-empty GeneralName; an empty
+  typed value (`{ type: 'dns', value: '' }`), an empty `subjectAltNames` array,
+  and a critical `customExtensions` SAN whose value holds no usable GeneralName
+  are all rejected (§4.2.1.6, `empty_subject_requires_subject_alt_name`), so
+  `subject: {}` can no longer sign a certificate with no identity. Encoding a
+  GeneralName with an empty `dNSName`, `rfc822Name`, URI, or SRV value is
+  rejected (§4.2.1.6, `empty_general_name_value`). A `cRLIssuer`, when present,
+  may only contain `directoryName` entries, rejecting a non-DN entry or a
+  directoryName smuggled through an `unknown` general name; a
+  `nameRelativeToCRLIssuer` distribution point additionally permits only one
+  (§4.2.1.13, `distribution_point_crl_issuer_not_directory_name`,
+  `distribution_point_relative_name_multiple_crl_issuers`). Known extensions
+  supplied through `customExtensions` participate in these cross-field checks.
+  A `customExtensions` entry carrying a known OID must decode as that extension,
+  rather than reaching the wire as opaque bytes the parser then rejects
+  (`malformed_known_extension_value`). Extension OIDs resolve by their encoded
+  value, so a non-canonical spelling such as `2.5.029.17` is the same extension
+  as `2.5.29.17` for registry lookup, certificate-versus-CSR context
+  restrictions, and duplicate detection; the diagnostic still quotes the OID as
+  submitted. A custom `cRLDistributionPoints` payload runs the same §4.2.1.13
+  cRLIssuer checks as the typed field, since decoding proves structure but not
+  the profile the builder promises. `validateOid` also rejects an OID that parses
+  as decimals but breaks the X.660 arc bounds (`3.1`, `1.40`) with `invalid_oid`
+  rather than an uncoded `Error`.
+  (https://github.com/kjanat/micro509/pull/88)
+- Parsing rejects a zero-length `dNSName`, `rfc822Name`, or
+  `uniformResourceIdentifier` GeneralName, which RFC 5280 §4.2.1.6 forbids. An
+  external certificate could previously carry an empty subjectAltName value and
+  parse, leaving chain verification to accept a certificate with no usable
+  identity when no identity match was requested. Certificate and CRL parsing
+  share the decoder, so this covers subjectAltName, issuerAltName,
+  authorityInfoAccess locations, CRL distribution points, `cRLIssuer`, the
+  issuing distribution point, and `certificateIssuer`. Name constraints keep
+  their own decoder, where an empty base is meaningful.
+  (https://github.com/kjanat/micro509/pull/88)
 - CRL applicability follows the RFC 5280 §6.3.3 relying-party algorithm in
   three places it diverged. A certificate without a CRLDP extension accepts a
   CRL whose issuing distribution point names the certificate issuer or one of

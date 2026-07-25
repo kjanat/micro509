@@ -7,7 +7,7 @@
  * @module
  */
 
-import { hexToBytes, toHex } from '#micro509/internal/asn1/asn1';
+import { canonicalizeOid, hexToBytes, toHex } from '#micro509/internal/asn1/asn1';
 import {
 	bool,
 	concatBytes,
@@ -56,6 +56,7 @@ import {
 	SUBJECT_KEY_IDENTIFIER_EXTENSION_DEFINITION,
 } from '#micro509/internal/x509/extension-registry';
 import { GENERAL_NAME_WIRE_TAGS } from '#micro509/internal/x509/general-name-tags';
+import { isResultError } from '#micro509/result/result';
 import type { RelativeDistinguishedNameInput } from '#micro509/x509/name';
 import { encodeRelativeDistinguishedName } from '#micro509/x509/name';
 
@@ -72,7 +73,8 @@ export type {
  * `flags` contains the recognized flag values with any non-zero padding bits
  * masked out. `nonZeroPadding` is `true` when the original BIT STRING encoding
  * had non-zero bits in positions that DER ({@linkcode https://www.itu.int/rec/T-REC-X.690-202102-I/en | X.690 §11.2.1}) requires to be zero.
- * Verification layers can use this signal to reject non-conformant encodings.
+ * Extension flag decoding rejects such encodings, so parsed extension values
+ * always report `false`.
  */
 export interface ParsedBitFlags<T extends string> {
 	/** Decoded flag values, padding bits masked. */
@@ -725,8 +727,8 @@ const AUTHORITY_INFO_ACCESS_METHOD_OIDS: Record<KnownAuthorityInfoAccessMethod, 
  * @param subjectPublicKeyInfo DER-encoded SPKI of the subject.
  * @param issuerPublicKeyInfo DER-encoded SPKI of the issuer, or `undefined` for self-signed.
  * @param input Optional extension configuration.
- * @param subjectIsEmpty Whether the certificate subject DN is empty. When `true`, the
- *   subjectAltName extension is marked critical per RFC 5280 §4.2.1.6.
+ * @param subjectIsEmpty Whether the certificate subject DN is empty. When `true`, a
+ *   subjectAltName extension is required and marked critical per RFC 5280 §4.2.1.6.
  * @returns Array of DER-encoded Extension SEQUENCEs.
  */
 export function buildCertificateExtensions(
@@ -735,6 +737,11 @@ export function buildCertificateExtensions(
 	input: CertificateExtensionsInput | undefined,
 	subjectIsEmpty = false,
 ): Uint8Array[] {
+	assertCustomExtensionsValid(input, 'certificate');
+	if (subjectIsEmpty) {
+		assertEmptySubjectHasCriticalSubjectAltName(input);
+	}
+	assertPathLengthKeyUsage(input);
 	const extensions: Uint8Array[] = [];
 	const seen = new Set<string>();
 	const basicConstraints = input?.basicConstraints ?? { ca: false };
@@ -753,7 +760,7 @@ export function buildCertificateExtensions(
 			buildSubjectKeyIdentifier(issuerPublicKeyInfo),
 		);
 	}
-	appendConfiguredExtensions(extensions, seen, input, 'certificate', {
+	appendConfiguredExtensions(extensions, seen, input, {
 		includeBasicConstraints: false,
 		subjectIsEmpty,
 	});
@@ -771,9 +778,10 @@ export function buildCertificateExtensions(
 export function buildRequestedExtensions(
 	input: CertificateExtensionsInput | undefined,
 ): Uint8Array[] {
+	assertCustomExtensionsValid(input, 'csr');
 	const extensions: Uint8Array[] = [];
 	const seen = new Set<string>();
-	appendConfiguredExtensions(extensions, seen, input, 'csr', { includeBasicConstraints: true });
+	appendConfiguredExtensions(extensions, seen, input, { includeBasicConstraints: true });
 	return extensions;
 }
 
@@ -782,7 +790,6 @@ function appendConfiguredExtensions(
 	encoded: Uint8Array[],
 	seen: Set<string>,
 	input: CertificateExtensionsInput | undefined,
-	context: ExtensionRegistryContext,
 	options: {
 		readonly includeBasicConstraints: boolean;
 		/** When true, SAN is marked critical per RFC 5280 §4.2.1.6. */
@@ -796,7 +803,217 @@ function appendConfiguredExtensions(
 	appendIdentityExtensions(encoded, seen, input, options.subjectIsEmpty === true);
 	appendPolicyExtensions(encoded, seen, input);
 	appendAccessExtensions(encoded, seen, input);
-	appendCustomExtensions(encoded, seen, input, context);
+	appendCustomExtensions(encoded, seen, input);
+}
+
+/**
+ * RFC 5280 §4.2.1.9: pathLenConstraint requires the keyUsage extension to assert keyCertSign.
+ * Absent, empty, or keyCertSign-less keyUsage is rejected. Known extensions supplied through
+ * customExtensions participate in the effective view.
+ */
+function assertPathLengthKeyUsage(input: CertificateExtensionsInput | undefined): void {
+	const basicConstraints = resolveEffectiveBasicConstraints(input);
+	if (basicConstraints?.pathLength === undefined) {
+		return;
+	}
+	const keyUsage = resolveEffectiveKeyUsage(input);
+	if (keyUsage === undefined || keyUsage.length === 0 || !keyUsage.includes('keyCertSign')) {
+		throwExtensionEncoderError(
+			'path_length_requires_key_cert_sign',
+			'basicConstraints pathLength requires the keyUsage keyCertSign bit',
+		);
+	}
+}
+
+/**
+ * RFC 5280 §4.2.1.9: basicConstraints is critical in a CA certificate whose key
+ * validates signatures on certificates. Both conjuncts live in other extensions,
+ * so the rule sits here rather than in the basicConstraints profile hook.
+ *
+ * §4.2.1.3 restricts a key only through a keyUsage extension that reaches the
+ * wire, so an absent keyUsage, and an empty one the builder therefore omits,
+ * leave the key free to validate certificate signatures. Only an emitted keyUsage
+ * without keyCertSign takes the certificate out of the clause's scope.
+ *
+ * Only a custom extension can carry the wrong criticality; the typed field is
+ * always emitted with the registry default.
+ */
+function assertCaBasicConstraintsCritical(input: CertificateExtensionsInput | undefined): void {
+	const custom = input?.customExtensions?.find((extension) =>
+		oidEquals(extension.oid, OIDS.basicConstraints),
+	);
+	if (custom === undefined || custom.critical === true) {
+		return;
+	}
+	const basicConstraints = BASIC_CONSTRAINTS_EXTENSION_DEFINITION.decode(
+		new Uint8Array(custom.value),
+	);
+	if (!basicConstraints.ca) {
+		return;
+	}
+	const keyUsage = resolveEffectiveKeyUsage(input);
+	const mayValidateCertificates =
+		keyUsage === undefined || keyUsage.length === 0 || keyUsage.includes('keyCertSign');
+	if (mayValidateCertificates) {
+		assertExtensionCriticality('basicConstraints', true, false);
+	}
+}
+
+/**
+ * RFC 5280 §4.2.1.6: an empty subject DN requires a subjectAltName extension
+ * present, marked critical, and carrying at least one non-empty GeneralName.
+ */
+function assertEmptySubjectHasCriticalSubjectAltName(
+	input: CertificateExtensionsInput | undefined,
+): void {
+	if (input?.subjectAltNames?.some(subjectAltNameHasIdentity) === true) {
+		return;
+	}
+	const criticalCustomSan = input?.customExtensions?.some(
+		(extension) =>
+			oidEquals(extension.oid, OIDS.subjectAltName) &&
+			extension.critical === true &&
+			customSubjectAltNameHasIdentity(extension.value),
+	);
+	if (criticalCustomSan === true) {
+		return;
+	}
+	throwExtensionEncoderError(
+		'empty_subject_requires_subject_alt_name',
+		'An empty subject requires a critical subjectAltName extension',
+	);
+}
+
+/**
+ * Canonical OID equality: matches even when arcs carry redundant leading zeros.
+ *
+ * Both sides must be encodable. Callers run after `assertCustomExtensionsValid`,
+ * which rejects an OID that cannot be canonicalized.
+ */
+function oidEquals(candidate: string, known: string): boolean {
+	return candidate === known || canonicalizeOid(candidate) === canonicalizeOid(known);
+}
+
+/** First customExtensions value whose OID canonically matches `oid`. */
+function findCustomExtensionValue(
+	input: CertificateExtensionsInput | undefined,
+	oid: string,
+): Uint8Array | undefined {
+	return input?.customExtensions?.find((extension) => oidEquals(extension.oid, oid))?.value;
+}
+
+/** The subset of a DistributionPointName the RFC 5280 §4.2.1.13 rules read. */
+interface ProfileDistributionPointName<TRelativeName> {
+	/** Absolute GeneralName(s) identifying the distribution point. */
+	readonly fullName?: readonly GeneralName[];
+	/** Name relative to the CRL issuer, in whichever form the caller holds. */
+	readonly relativeName?: TRelativeName;
+}
+
+/** The subset of a distribution point the RFC 5280 §4.2.1.13 rules read. */
+interface ProfileDistributionPoint<TRelativeName> {
+	/** Where to fetch the CRL. */
+	readonly distributionPoint?: ProfileDistributionPointName<TRelativeName>;
+	/** Entity that signed the CRL, when different from the certificate issuer. */
+	readonly crlIssuer?: readonly GeneralName[];
+}
+
+/** The DistributionPointName alternative in use, once proven to be exactly one. */
+type DistributionPointNameChoice<TRelativeName> =
+	| { readonly kind: 'fullName'; readonly fullName: readonly GeneralName[] }
+	| { readonly kind: 'relativeName'; readonly relativeName: TRelativeName };
+
+/**
+ * Rejects a custom extension carrying a known OID whose payload is not the DER
+ * that OID's schema defines, and a known extension offered in the wrong context.
+ *
+ * Runs before every cross-field guard so the effective-value resolvers below can
+ * decode a custom payload without having to tolerate failure.
+ */
+function assertCustomExtensionsValid(
+	input: CertificateExtensionsInput | undefined,
+	context: ExtensionRegistryContext,
+): void {
+	for (const extension of input?.customExtensions ?? []) {
+		const oid = validateOid(extension.oid);
+		const definition = getExtensionDefinition(oid);
+		if (definition === undefined) {
+			continue;
+		}
+		if (!definition.contexts.includes(context)) {
+			throwExtensionEncoderError(
+				'extension_not_supported_in_context',
+				`Extension ${extension.oid} is not supported in ${context} context`,
+			);
+		}
+		assertKnownExtensionPayload(
+			definition,
+			new Uint8Array(extension.value),
+			extension.critical ?? false,
+			extension.oid,
+		);
+	}
+}
+
+/**
+ * Decode a custom payload once through its known OID's definition and apply that
+ * extension's profile rules to the decoded value and its criticality.
+ *
+ * A profile violation already carries its own code and propagates unchanged; a
+ * decode failure means the payload is not the DER the OID's schema defines.
+ */
+function assertKnownExtensionPayload(
+	definition: {
+		readonly oid: string;
+		assertDerProfile(valueDer: Uint8Array, critical: boolean): void;
+	},
+	value: Uint8Array,
+	critical: boolean,
+	submittedOid: string,
+): void {
+	try {
+		definition.assertDerProfile(value, critical);
+	} catch (error) {
+		if (isResultError(error)) {
+			throw error;
+		}
+		throwExtensionEncoderError(
+			'malformed_known_extension_value',
+			`Custom extension ${submittedOid} does not decode as ${definition.oid}`,
+		);
+	}
+}
+
+/** Effective basicConstraints across the typed field and any custom-known extension. */
+function resolveEffectiveBasicConstraints(
+	input: CertificateExtensionsInput | undefined,
+): BasicConstraints | undefined {
+	if (input?.basicConstraints !== undefined) {
+		return input.basicConstraints;
+	}
+	const custom = findCustomExtensionValue(input, OIDS.basicConstraints);
+	return custom === undefined ? undefined : BASIC_CONSTRAINTS_EXTENSION_DEFINITION.decode(custom);
+}
+
+/** Effective keyUsage flags across the typed field and any custom-known extension. */
+function resolveEffectiveKeyUsage(
+	input: CertificateExtensionsInput | undefined,
+): readonly KeyUsage[] | undefined {
+	if (input?.keyUsage !== undefined) {
+		return input.keyUsage;
+	}
+	const custom = findCustomExtensionValue(input, OIDS.keyUsage);
+	return custom === undefined ? undefined : KEY_USAGE_EXTENSION_DEFINITION.decode(custom).flags;
+}
+
+/** Whether a typed GeneralName carries a non-empty identity value. */
+function subjectAltNameHasIdentity(name: SubjectAltName): boolean {
+	return name.type === 'directoryName' ? name.derHex.length > 0 : name.value.length > 0;
+}
+
+/** Whether a custom subjectAltName value decodes to at least one non-empty GeneralName. */
+function customSubjectAltNameHasIdentity(value: Uint8Array): boolean {
+	return SUBJECT_ALT_NAME_EXTENSION_DEFINITION.decode(value).some(subjectAltNameHasIdentity);
 }
 
 function appendConstraintExtensions(
@@ -805,6 +1022,8 @@ function appendConstraintExtensions(
 	input: CertificateExtensionsInput,
 	includeBasicConstraints: boolean,
 ): void {
+	assertPathLengthKeyUsage(input);
+	assertCaBasicConstraintsCritical(input);
 	if (includeBasicConstraints && input.basicConstraints !== undefined) {
 		pushKnownExtension(
 			encoded,
@@ -906,29 +1125,20 @@ function appendAccessExtensions(
 	}
 }
 
+/** Push each custom extension. Context and payload were checked by `assertCustomExtensionsValid`. */
 function appendCustomExtensions(
 	encoded: Uint8Array[],
 	seen: Set<string>,
 	input: CertificateExtensionsInput,
-	context: ExtensionRegistryContext,
 ): void {
-	if (input.customExtensions !== undefined) {
-		for (const extension of input.customExtensions) {
-			const knownDefinition = getExtensionDefinition(extension.oid);
-			if (knownDefinition !== undefined && !knownDefinition.contexts.includes(context)) {
-				throwExtensionEncoderError(
-					'extension_not_supported_in_context',
-					`Extension ${extension.oid} is not supported in ${context} context`,
-				);
-			}
-			pushExtension(
-				encoded,
-				seen,
-				extension.oid,
-				new Uint8Array(extension.value),
-				extension.critical ?? false,
-			);
-		}
+	for (const extension of input.customExtensions ?? []) {
+		pushExtension(
+			encoded,
+			seen,
+			extension.oid,
+			new Uint8Array(extension.value),
+			extension.critical ?? false,
+		);
 	}
 }
 
@@ -951,6 +1161,7 @@ function pushKnownExtension<TParsed, TInput>(
  * @param critical Whether to mark the extension as critical. Default `false`.
  */
 export function encodeExtension(oid: string, extnValue: Uint8Array, critical = false): Uint8Array {
+	validateOid(oid);
 	const fields = [objectIdentifier(oid)];
 	if (critical) {
 		fields.push(bool(true));
@@ -972,7 +1183,10 @@ export function encodeBasicConstraints(input: BasicConstraints): Uint8Array {
 	}
 	if (input.pathLength !== undefined) {
 		if (!input.ca) {
-			throw new Error('pathLength requires ca=true');
+			throwExtensionEncoderError(
+				'path_length_requires_ca',
+				'basicConstraints pathLength requires ca = true',
+			);
 		}
 		fields.push(integerFromNumber(input.pathLength));
 	}
@@ -999,6 +1213,14 @@ function encodeIa5Content(value: string): Uint8Array {
 	}
 }
 
+/** RFC 5280 §4.2.1.6: reject an empty GeneralName string value (empty dNSName, rfc822Name, URI, or SRV name). */
+function requireNonEmptyName(value: string): string {
+	if (value.length === 0) {
+		throwExtensionEncoderError('empty_general_name_value', 'GeneralName value must not be empty');
+	}
+	return value;
+}
+
 /**
  * DER-encode a single {@linkcode SubjectAltName} GeneralName element.
  *
@@ -1007,17 +1229,17 @@ function encodeIa5Content(value: string): Uint8Array {
 export function encodeSubjectAltName(value: SubjectAltName): Uint8Array {
 	switch (value.type) {
 		case 'dns':
-			return implicitPrimitiveContext(2, encodeIa5Content(value.value));
+			return implicitPrimitiveContext(2, encodeIa5Content(requireNonEmptyName(value.value)));
 		case 'email':
-			return implicitPrimitiveContext(1, encodeIa5Content(value.value));
+			return implicitPrimitiveContext(1, encodeIa5Content(requireNonEmptyName(value.value)));
 		case 'uri':
-			return implicitPrimitiveContext(6, encodeIa5Content(value.value));
+			return implicitPrimitiveContext(6, encodeIa5Content(requireNonEmptyName(value.value)));
 		case 'srv':
 			return implicitConstructedContext(
 				0,
 				concatBytes([
 					objectIdentifier(OIDS.idOnDnsSrv),
-					explicitContext(0, tlv(0x16, encodeIa5Content(value.value))),
+					explicitContext(0, tlv(0x16, encodeIa5Content(requireNonEmptyName(value.value)))),
 				]),
 			);
 		case 'ip':
@@ -1059,27 +1281,42 @@ export function encodeExtendedKeyUsage(usages: readonly ExtendedKeyUsage[]): Uin
 export function encodeAuthorityInfoAccess(
 	entries: readonly AuthorityInformationAccessInput[],
 ): Uint8Array {
+	assertAuthorityInfoAccessProfile(entries);
+	return sequence(
+		entries.map((entry) =>
+			sequence([
+				objectIdentifier(getAuthorityInfoAccessMethodOid(entry.method)),
+				encodeSubjectAltName(entry.location),
+			]),
+		),
+	);
+}
+
+/**
+ * @internal RFC 5280 §4.2.2.1 and RFC 6960 §3.1 rules for Authority Information
+ * Access: at least one entry, and an id-ad-ocsp location that is a URI.
+ *
+ * The method OID is resolved before the URI check so a custom-OID wrapper cannot
+ * smuggle a non-URI OCSP location past the input union.
+ */
+export function assertAuthorityInfoAccessProfile(
+	entries: readonly AuthorityInformationAccess[],
+): void {
 	if (entries.length === 0) {
 		throwExtensionEncoderError(
 			'authority_info_access_empty',
 			'authorityInfoAccess must not be empty',
 		);
 	}
-	return sequence(
-		entries.map((entry) => {
-			const methodOid = getAuthorityInfoAccessMethodOid(entry.method);
-			// RFC 6960 §3.1: the id-ad-ocsp location is a URI. Re-check the resolved
-			// OID so a custom-OID wrapper cannot smuggle a non-URI OCSP location past
-			// the input union.
-			if (methodOid === OIDS.ocspAccessMethod && entry.location.type !== 'uri') {
-				throwExtensionEncoderError(
-					'authority_info_access_ocsp_not_uri',
-					'authorityInfoAccess OCSP location must be a URI',
-				);
-			}
-			return sequence([objectIdentifier(methodOid), encodeSubjectAltName(entry.location)]);
-		}),
-	);
+	for (const entry of entries) {
+		const methodOid = getAuthorityInfoAccessMethodOid(entry.method);
+		if (methodOid === OIDS.ocspAccessMethod && entry.location.type !== 'uri') {
+			throwExtensionEncoderError(
+				'authority_info_access_ocsp_not_uri',
+				'authorityInfoAccess OCSP location must be a URI',
+			);
+		}
+	}
 }
 
 /**
@@ -1088,13 +1325,52 @@ export function encodeAuthorityInfoAccess(
  * @param points Distribution points to encode.
  */
 export function encodeCrlDistributionPoints(points: readonly DistributionPoint[]): Uint8Array {
+	assertCrlDistributionPointsProfile(points);
+	return sequence(points.map((point) => sequence(encodeDistributionPoint(point))));
+}
+
+/**
+ * @internal RFC 5280 §4.2.1.13 profile rules for a CRLDistributionPoints value,
+ * stated over the fields a typed {@linkcode DistributionPoint} and a decoded
+ * `ParsedDistributionPoint` share.
+ *
+ * `TRelativeName` differs between the two: builder input carries an unencoded RDN,
+ * a decoded point carries the parsed one. The rules only read its presence.
+ */
+export function assertCrlDistributionPointsProfile<TRelativeName>(
+	points: readonly ProfileDistributionPoint<TRelativeName>[],
+): void {
 	if (points.length === 0) {
 		throwExtensionEncoderError(
 			'crl_distribution_points_empty',
 			'cRLDistributionPoints must not be empty',
 		);
 	}
-	return sequence(points.map((point) => sequence(encodeDistributionPoint(point))));
+	for (const point of points) {
+		assertDistributionPointProfile(point);
+	}
+}
+
+/** RFC 5280 §4.2.1.13 rules for one distribution point. */
+function assertDistributionPointProfile<TRelativeName>(
+	point: ProfileDistributionPoint<TRelativeName>,
+): void {
+	if (point.crlIssuer !== undefined && point.crlIssuer.length === 0) {
+		throwExtensionEncoderError(
+			'distribution_point_crl_issuer_empty',
+			'DistributionPoint crlIssuer must not be empty',
+		);
+	}
+	if (point.distributionPoint === undefined && point.crlIssuer === undefined) {
+		throwExtensionEncoderError(
+			'distribution_point_empty',
+			'DistributionPoint must contain distributionPoint or crlIssuer',
+		);
+	}
+	assertCrlIssuerDistinguishedNames(point);
+	if (point.distributionPoint !== undefined) {
+		resolveDistributionPointNameChoice(point.distributionPoint);
+	}
 }
 
 /**
@@ -1103,6 +1379,7 @@ export function encodeCrlDistributionPoints(points: readonly DistributionPoint[]
  * @param constraints Permitted and/or excluded subtrees.
  */
 export function encodeNameConstraints(constraints: NameConstraints): Uint8Array {
+	assertNameConstraintsProfile(constraints);
 	const parts: Uint8Array[] = [];
 	if (constraints.permittedSubtrees !== undefined && constraints.permittedSubtrees.length > 0) {
 		parts.push(
@@ -1120,13 +1397,49 @@ export function encodeNameConstraints(constraints: NameConstraints): Uint8Array 
 			),
 		);
 	}
-	if (parts.length === 0) {
+	return sequence(parts);
+}
+
+/**
+ * @internal RFC 5280 fixes the criticality of several extensions: nameConstraints
+ * (§4.2.1.10), policyConstraints (§4.2.1.11), and inhibitAnyPolicy (§4.2.1.14) are
+ * critical; authorityKeyIdentifier (§4.2.1.1), subjectKeyIdentifier (§4.2.1.2),
+ * and authorityInfoAccess (§4.2.2.1) are not.
+ *
+ * @param label Extension name quoted in the diagnostic.
+ * @param required The criticality RFC 5280 mandates.
+ * @param critical The criticality the caller asked for.
+ */
+export function assertExtensionCriticality(
+	label: string,
+	required: boolean,
+	critical: boolean,
+): void {
+	if (critical === required) {
+		return;
+	}
+	throwExtensionEncoderError(
+		required ? 'extension_must_be_critical' : 'extension_must_be_non_critical',
+		`The ${label} extension must be marked ${required ? 'critical' : 'non-critical'}`,
+	);
+}
+
+/**
+ * @internal RFC 5280 §4.2.1.10: a nameConstraints extension states at least one
+ * of permittedSubtrees and excludedSubtrees, and neither may be an empty set.
+ */
+export function assertNameConstraintsProfile(constraints: {
+	readonly permittedSubtrees?: readonly unknown[];
+	readonly excludedSubtrees?: readonly unknown[];
+}): void {
+	const permitted = constraints.permittedSubtrees?.length ?? 0;
+	const excluded = constraints.excludedSubtrees?.length ?? 0;
+	if (permitted === 0 && excluded === 0) {
 		throwExtensionEncoderError(
 			'name_constraints_empty',
 			'nameConstraints must set permittedSubtrees or excludedSubtrees',
 		);
 	}
-	return sequence(parts);
 }
 
 /**
@@ -1143,7 +1456,7 @@ export function encodeCertificatePolicies(policies: CertificatePolicies): Uint8A
 	}
 	const seen = new Set<string>();
 	for (const policy of policies) {
-		const key = toHex(objectIdentifier(policy.policyIdentifier));
+		const key = validatePolicyOid(policy.policyIdentifier);
 		if (seen.has(key)) {
 			throwExtensionEncoderError(
 				'duplicate_policy_oid',
@@ -1166,12 +1479,9 @@ export function encodePolicyMappings(mappings: PolicyMappings): Uint8Array {
 	}
 	return sequence(
 		mappings.map((mapping) => {
-			validatePolicyOid(mapping.issuerDomainPolicy);
-			validatePolicyOid(mapping.subjectDomainPolicy);
-			if (
-				mapping.issuerDomainPolicy === OIDS.anyPolicy ||
-				mapping.subjectDomainPolicy === OIDS.anyPolicy
-			) {
+			const issuerDomainPolicy = validatePolicyOid(mapping.issuerDomainPolicy);
+			const subjectDomainPolicy = validatePolicyOid(mapping.subjectDomainPolicy);
+			if (issuerDomainPolicy === OIDS.anyPolicy || subjectDomainPolicy === OIDS.anyPolicy) {
 				throwExtensionEncoderError(
 					'policy_mappings_any_policy',
 					'policyMappings must not use anyPolicy',
@@ -1304,20 +1614,36 @@ function encodeGeneralSubtree(subtree: GeneralSubtree): Uint8Array {
 	return sequence([encodeNameConstraintForm(subtree.base)]);
 }
 
-/** DER-encode the fields of a single DistributionPoint. */
+/**
+ * RFC 5280 §4.2.1.13: cRLIssuer, when present, only contains the CRL issuer's
+ * distinguished name; nameRelativeToCRLIssuer additionally requires exactly one.
+ *
+ * Applies to a typed {@linkcode DistributionPoint} and to a decoded
+ * {@linkcode ParsedDistributionPoint} alike, so the rule holds whether the value
+ * arrives through `crlDistributionPoints` or through `customExtensions`.
+ */
+function assertCrlIssuerDistinguishedNames<TRelativeName>(
+	point: ProfileDistributionPoint<TRelativeName>,
+): void {
+	if (point.crlIssuer === undefined) {
+		return;
+	}
+	if (point.crlIssuer.some((name) => name.type !== 'directoryName')) {
+		throwExtensionEncoderError(
+			'distribution_point_crl_issuer_not_directory_name',
+			'DistributionPoint cRLIssuer must only contain directoryName entries',
+		);
+	}
+	if (point.distributionPoint?.relativeName !== undefined && point.crlIssuer.length > 1) {
+		throwExtensionEncoderError(
+			'distribution_point_relative_name_multiple_crl_issuers',
+			'DistributionPointName relativeName requires at most one cRLIssuer distinguished name',
+		);
+	}
+}
+
+/** DER-encode the fields of a single DistributionPoint, already profile-checked. */
 function encodeDistributionPoint(point: DistributionPoint): Uint8Array[] {
-	if (point.crlIssuer !== undefined && point.crlIssuer.length === 0) {
-		throwExtensionEncoderError(
-			'distribution_point_crl_issuer_empty',
-			'DistributionPoint crlIssuer must not be empty',
-		);
-	}
-	if (point.distributionPoint === undefined && point.crlIssuer === undefined) {
-		throwExtensionEncoderError(
-			'distribution_point_empty',
-			'DistributionPoint must contain distributionPoint or crlIssuer',
-		);
-	}
 	const fields: Uint8Array[] = [];
 	if (point.distributionPoint !== undefined) {
 		fields.push(
@@ -1329,7 +1655,7 @@ function encodeDistributionPoint(point: DistributionPoint): Uint8Array[] {
 			implicitPrimitiveContext(1, encodeDistributionPointReasonFlagsContent(point.reasons)),
 		);
 	}
-	if (point.crlIssuer !== undefined && point.crlIssuer.length > 0) {
+	if (point.crlIssuer !== undefined) {
 		fields.push(
 			implicitConstructedContext(2, concatBytes(point.crlIssuer.map(encodeSubjectAltName))),
 		);
@@ -1337,8 +1663,13 @@ function encodeDistributionPoint(point: DistributionPoint): Uint8Array[] {
 	return fields;
 }
 
-/** DER-encode a DistributionPointName (fullName or relativeName). */
-function encodeDistributionPointName(name: DistributionPointName): Uint8Array {
+/**
+ * RFC 5280 §4.2.1.13: a DistributionPointName holds exactly one of fullName and
+ * relativeName, and a fullName holds at least one GeneralName.
+ */
+function resolveDistributionPointNameChoice<TRelativeName>(
+	name: ProfileDistributionPointName<TRelativeName>,
+): DistributionPointNameChoice<TRelativeName> {
 	if (name.fullName !== undefined && name.relativeName !== undefined) {
 		throwExtensionEncoderError(
 			'distribution_point_name_conflict',
@@ -1352,19 +1683,28 @@ function encodeDistributionPointName(name: DistributionPointName): Uint8Array {
 				'DistributionPointName fullName must not be empty',
 			);
 		}
-		return implicitConstructedContext(0, concatBytes(name.fullName.map(encodeSubjectAltName)));
+		return { kind: 'fullName', fullName: name.fullName };
 	}
 	if (name.relativeName !== undefined) {
-		const relativeName = encodeRelativeDistinguishedName(name.relativeName);
-		const relativeNameElement = readElement(relativeName);
-		return implicitConstructedContext(
-			1,
-			relativeName.slice(relativeNameElement.start, relativeNameElement.end),
-		);
+		return { kind: 'relativeName', relativeName: name.relativeName };
 	}
 	throwExtensionEncoderError(
 		'distribution_point_name_empty',
 		'DistributionPointName must contain fullName or relativeName',
+	);
+}
+
+/** DER-encode a DistributionPointName (fullName or relativeName). */
+function encodeDistributionPointName(name: DistributionPointName): Uint8Array {
+	const choice = resolveDistributionPointNameChoice(name);
+	if (choice.kind === 'fullName') {
+		return implicitConstructedContext(0, concatBytes(choice.fullName.map(encodeSubjectAltName)));
+	}
+	const relativeName = encodeRelativeDistinguishedName(choice.relativeName);
+	const relativeNameElement = readElement(relativeName);
+	return implicitConstructedContext(
+		1,
+		relativeName.slice(relativeNameElement.start, relativeNameElement.end),
 	);
 }
 
@@ -1418,8 +1758,7 @@ export function getExtendedKeyUsageOid(usage: ExtendedKeyUsage): string {
 	if (typeof usage === 'string') {
 		return EXTENDED_KEY_USAGE_OIDS[usage];
 	}
-	validateOid(usage.value);
-	return usage.value;
+	return validateOid(usage.value);
 }
 
 /**
@@ -1454,8 +1793,7 @@ export function getAuthorityInfoAccessMethodOid(method: AuthorityInfoAccessMetho
 	if (typeof method === 'string') {
 		return AUTHORITY_INFO_ACCESS_METHOD_OIDS[method];
 	}
-	validateOid(method.value);
-	return method.value;
+	return validateOid(method.value);
 }
 
 /**
@@ -1489,19 +1827,37 @@ export function buildSubjectKeyIdentifier(subjectPublicKeyInfo: Uint8Array): Uin
 	return sha1(publicKeyBytes);
 }
 
-/** Throw if the string is not a valid dotted-decimal OID. */
-function validateOid(oid: string): void {
+/**
+ * Throw if the string is not an encodable dotted-decimal OID, and return its
+ * canonical spelling.
+ *
+ * Syntax alone is not enough. X.660 bounds the first arc to 0, 1, or 2 and the
+ * second to under 40 beneath arcs 0 and 1, so `3.1` and `1.40` parse as decimals
+ * yet cannot be encoded.
+ */
+function validateOid(oid: string): string {
 	if (!/^\d+(?:\.\d+)+$/.test(oid)) {
+		throwExtensionEncoderError('invalid_oid', `Invalid OID: ${oid}`);
+	}
+	try {
+		return canonicalizeOid(oid);
+	} catch {
 		throwExtensionEncoderError('invalid_oid', `Invalid OID: ${oid}`);
 	}
 }
 
-/** Validate that a policy OID is syntactically valid. */
-function validatePolicyOid(oid: string): void {
-	validateOid(oid);
+/** Validate a policy OID and return its canonical spelling. */
+function validatePolicyOid(oid: string): string {
+	return validateOid(oid);
 }
 
-/** Encode and push an extension, rejecting duplicate OIDs. */
+/**
+ * Encode and push an extension, rejecting duplicate OIDs.
+ *
+ * Duplicate identity is the canonical OID, because two spellings that differ only
+ * by leading zeros in an arc encode to the same wire bytes. The diagnostic quotes
+ * the OID as submitted, which is the string the caller can find in their input.
+ */
 function pushExtension(
 	encoded: Uint8Array[],
 	seen: Set<string>,
@@ -1509,10 +1865,10 @@ function pushExtension(
 	value: Uint8Array,
 	critical = false,
 ): void {
-	validateOid(oid);
-	if (seen.has(oid)) {
+	const identity = validateOid(oid);
+	if (seen.has(identity)) {
 		throwExtensionEncoderError('duplicate_extension_oid', `Duplicate extension OID: ${oid}`);
 	}
-	seen.add(oid);
+	seen.add(identity);
 	encoded.push(encodeExtension(oid, value, critical));
 }

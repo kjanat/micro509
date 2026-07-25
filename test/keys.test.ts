@@ -694,6 +694,9 @@ describe('keys', () => {
 	});
 });
 
+/** Is a bun canary build */
+const isCanary = (await Bun.$`${process.argv0} --revision`.text()).includes('canary');
+
 describe('keys: coverage — malformed inputs', () => {
 	it('importEncryptedPkcs8Der throws on malformed EncryptedPrivateKeyInfo (missing OCTET STRING)', async () => {
 		// SEQUENCE with only one child (algorithmIdentifier) and no encryptedData
@@ -814,17 +817,20 @@ describe('keys: coverage — malformed inputs', () => {
 		);
 	});
 
-	test.failing('imports RFC 5958 v2 OneAsymmetricKey with attributes and publicKey (oven-sh/bun#35432)', async () => {
-		const oneAsymmetricKey = hexToBytes(
-			'3053020101300506032b657004220420' +
-				'9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60' +
-				'a000812100' +
-				'd75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a',
-		);
-		const key = unwrap(await importPkcs8Der(oneAsymmetricKey, { kind: 'ed25519' }));
-		expect(key.type).toBe('private');
-		expect(key.algorithm.name).toBe('Ed25519');
-	});
+	test.failingIf(!isCanary)(
+		'imports RFC 5958 v2 OneAsymmetricKey with attributes and publicKey (oven-sh/bun#35432, oven-sh/bun#35433)',
+		async () => {
+			const oneAsymmetricKey = hexToBytes(
+				'3053020101300506032b657004220420' +
+					'9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60' +
+					'a000812100' +
+					'd75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a',
+			);
+			const key = unwrap(await importPkcs8Der(oneAsymmetricKey, { kind: 'ed25519' }));
+			expect(key.type).toBe('private');
+			expect(key.algorithm.name).toBe('Ed25519');
+		},
+	);
 
 	test('rejects malformed OneAsymmetricKey tails per RFC 5958/RFC 8410', async () => {
 		const { integerFromNumber, objectIdentifier, octetString, sequence } = await import(
