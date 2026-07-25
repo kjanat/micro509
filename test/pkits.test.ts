@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { readdir, readFile } from 'node:fs/promises';
+import { URL } from 'node:url';
 import type { ParsedCertificate, ParsedCertificateRevocationList } from '#micro509';
 import {
 	checkChainRevocation,

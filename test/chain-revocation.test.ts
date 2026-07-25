@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { readFile } from 'node:fs/promises';
+import { URL } from 'node:url';
 import {
 	checkChainRevocation,
 	createCertificate,

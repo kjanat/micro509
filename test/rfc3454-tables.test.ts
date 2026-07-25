@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { readFileSync } from 'node:fs';
+import { URL } from 'node:url';
 import {
 	A1_UNASSIGNED_RANGES,
 	B2_CASE_FOLD,
