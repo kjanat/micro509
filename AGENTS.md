@@ -40,12 +40,20 @@ and structured `details`.
 ```tree
 micro509/
 ├── src/               # public entrypoints (src/*.ts) + domain implementation
-│   ├── x509.ts        # micro509/x509 entrypoint (one per domain, plus index.ts)
+│   ├── index.ts       # micro509
+│   ├── der.ts         # micro509/der
+│   ├── keys.ts        # micro509/keys
+│   ├── pem.ts         # micro509/pem
+│   ├── pkcs.ts        # micro509/pkcs
+│   ├── result.ts      # micro509/result
+│   ├── revocation.ts  # micro509/revocation
+│   ├── verify.ts      # micro509/verify
+│   ├── x509.ts        # micro509/x509
 │   ├── x509/          # cert + CSR + extension + parse APIs
 │   ├── verify/        # chain validation + policy + identity checks
 │   ├── revocation/    # CRL/OCSP lifecycles
 │   ├── keys/          # key import/export and generation
-│   ├── der/           # public DER encode/decode surface (micro509/der)
+│   ├── der/           # public DER encode/decode surface
 │   ├── pem/           # PEM encode/decode boundary
 │   ├── pkcs/          # PKCS-7 and PKCS#12 workflows
 │   ├── result/        # shared result/error algebra
@@ -118,10 +126,14 @@ Avoid the following in this project:
 | Symbol                 | Type          | Location            | Refs                                      |
 | ---------------------- | ------------- | ------------------- | ----------------------------------------- |
 | `src/index.ts`         | barrel export | root surface        | Re-exports all stable API slices          |
-| `src/x509.ts`          | domain barrel | X.509 feature slice | Certificate, CSR, parse, extension APIs   |
-| `src/verify.ts`        | domain barrel | verification slice  | Path, policy, identity, name constraints  |
-| `src/revocation.ts`    | domain barrel | revocation slice    | CRL/OCSP orchestration                    |
 | `src/der.ts`           | domain barrel | DER slice           | public DER encode/decode surface          |
+| `src/keys.ts`          | domain barrel | key slice           | import/export, generation, encryption     |
+| `src/pem.ts`           | domain barrel | PEM slice           | encode/decode and block classification    |
+| `src/pkcs.ts`          | domain barrel | PKCS slice          | PKCS-7 and PKCS#12 workflows              |
+| `src/result.ts`        | domain barrel | result slice        | `Result` and error constructors           |
+| `src/revocation.ts`    | domain barrel | revocation slice    | CRL/OCSP orchestration                    |
+| `src/verify.ts`        | domain barrel | verification slice  | Path, policy, identity, name constraints  |
+| `src/x509.ts`          | domain barrel | X.509 feature slice | Certificate, CSR, parse, extension APIs   |
 | `src/result/result.ts` | result ADT    | shared model        | central `Result`/`Micro509Error` contract |
 
 ## COMMANDS

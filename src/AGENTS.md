@@ -1,7 +1,7 @@
 # `src/` - Module Map
 
-Public domain entrypoints are one-level buckets, implementation details stay in
-`src/internal/`.
+Public entrypoints are the root `src/*.ts` files; domain implementation stays in
+`src/<domain>/` and internals in `src/internal/`.
 
 ## OVERVIEW
 
@@ -11,15 +11,15 @@ entrypoint that re-exports its domain; implementation lives in the matching
 
 ## WHERE TO LOOK
 
-| Area               | File/dir                                | Notes                                               |
-| ------------------ | --------------------------------------- | --------------------------------------------------- |
-| Package root       | `index.ts`                              | all stable package exports                          |
-| Domain entrypoints | `x509.ts`, `verify.ts`, `revocation.ts` | re-export-only                                      |
-| Key APIs           | `keys/`                                 | import/export, generation, encryption options       |
-| PEM boundary       | `pem/`                                  | encode/decode and block classification              |
-| PKCS workflows     | `pkcs/`                                 | PFX and PKCS#7 data lifecycles                      |
-| Result model       | `result/`                               | shared typed `Result` and error constructors        |
-| Internal spine     | `internal/`                             | ASN.1, crypto, shared helpers, verification engines |
+| Area               | File/dir                                                                                       | Notes                                               |
+| ------------------ | ---------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| Package root       | `index.ts`                                                                                     | all stable package exports                          |
+| Domain entrypoints | `der.ts`, `keys.ts`, `pem.ts`, `pkcs.ts`, `result.ts`, `revocation.ts`, `verify.ts`, `x509.ts` | re-export-only                                      |
+| Key APIs           | `keys/`                                                                                        | import/export, generation, encryption options       |
+| PEM boundary       | `pem/`                                                                                         | encode/decode and block classification              |
+| PKCS workflows     | `pkcs/`                                                                                        | PFX and PKCS#7 data lifecycles                      |
+| Result model       | `result/`                                                                                      | shared typed `Result` and error constructors        |
+| Internal spine     | `internal/`                                                                                    | ASN.1, crypto, shared helpers, verification engines |
 
 ## LOCAL CONVENTIONS
 

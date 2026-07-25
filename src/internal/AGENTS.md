@@ -5,7 +5,7 @@ Non-public internals for codecs, cryptography, and verification engines.
 ## OVERVIEW
 
 `src/internal/` hosts reusable low-level spines consumed by all domains.
-Public barrels should stay in domain folders.
+Public barrels are the root `src/*.ts` files and never live here.
 
 ## STRUCTURE
 
