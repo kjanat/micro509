@@ -221,20 +221,60 @@ export interface ParsedDistributionPoint {
  * Decoded Issuing Distribution Point CRL extension (RFC 5280 §5.2.5).
  * Constrains which certificates a CRL covers (scope, reasons, indirection).
  */
-export interface ParsedIssuingDistributionPoint {
+export type ParsedIssuingDistributionPoint = ParsedIssuingDistributionPointBase &
+	ParsedIssuingDistributionPointScope;
+
+/** Scope-independent fields of a decoded Issuing Distribution Point. */
+export interface ParsedIssuingDistributionPointBase {
 	/** Where to fetch this CRL, if specified. */
 	readonly distributionPoint?: ParsedDistributionPointName;
-	/** When true, this CRL only covers end-entity certificates. Default false. */
-	readonly onlyContainsUserCerts?: boolean;
-	/** When true, this CRL only covers CA certificates. Default false. */
-	readonly onlyContainsCACerts?: boolean;
 	/** Limits the CRL to these revocation reasons. Absent means all reasons. */
 	readonly onlySomeReasons?: ParsedBitFlags<DistributionPointReason>;
 	/** When true, this CRL may contain entries from CAs other than the issuer. Default false. */
 	readonly indirectCrl?: boolean;
-	/** When true, this CRL only covers attribute certificates. Default false. */
-	readonly onlyContainsAttributeCerts?: boolean;
 }
+
+/**
+ * Which certificate kind a CRL is scoped to. RFC 5280 §5.2.5 allows at most one
+ * of `onlyContainsUserCerts`, `onlyContainsCACerts`, and
+ * `onlyContainsAttributeCerts` to be TRUE, so the union admits one at a time.
+ *
+ * A flag is absent when the encoding omitted it and `false` when the encoding
+ * carried an explicit FALSE.
+ */
+export type ParsedIssuingDistributionPointScope =
+	| {
+			/** No scope restriction; this CRL covers every certificate kind. */
+			readonly onlyContainsUserCerts?: false;
+			/** No scope restriction. */
+			readonly onlyContainsCACerts?: false;
+			/** No scope restriction. */
+			readonly onlyContainsAttributeCerts?: false;
+	  }
+	| {
+			/** This CRL only covers end-entity certificates. */
+			readonly onlyContainsUserCerts: true;
+			/** Excluded by the user-cert scope. */
+			readonly onlyContainsCACerts?: false;
+			/** Excluded by the user-cert scope. */
+			readonly onlyContainsAttributeCerts?: false;
+	  }
+	| {
+			/** Excluded by the CA-cert scope. */
+			readonly onlyContainsUserCerts?: false;
+			/** This CRL only covers CA certificates. */
+			readonly onlyContainsCACerts: true;
+			/** Excluded by the CA-cert scope. */
+			readonly onlyContainsAttributeCerts?: false;
+	  }
+	| {
+			/** Excluded by the attribute-cert scope. */
+			readonly onlyContainsUserCerts?: false;
+			/** Excluded by the attribute-cert scope. */
+			readonly onlyContainsCACerts?: false;
+			/** This CRL only covers attribute certificates. */
+			readonly onlyContainsAttributeCerts: true;
+	  };
 
 /** A raw X.509v3 extension before type-specific decoding. */
 export interface ParsedExtension {
@@ -1296,6 +1336,10 @@ export async function matchCertificatePrivateKey<
 				'key_type_mismatch',
 				"Private key algorithm does not match the certificate's subject public key algorithm",
 			);
+		default: {
+			const _exhaustive: never = comparison;
+			throw new Error(`Unhandled key comparison result: ${String(_exhaustive)}`);
+		}
 	}
 }
 

@@ -3483,6 +3483,54 @@ describe('crl', () => {
 		).toThrow('IssuingDistributionPoint scope booleans are mutually exclusive');
 	});
 
+	it('preserves explicitly encoded false issuingDistributionPoint scope booleans', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Explicit False IDP Scope CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Explicit False IDP Scope CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			issuingDistributionPoint: { onlyContainsUserCerts: true },
+		});
+		const crlDer = new Uint8Array(pemDecodeOrThrow('X509 CRL', crl.pem));
+		const allFalse = rewriteCrlExtensionValuePayload(
+			crlDer,
+			OIDS.issuingDistributionPoint,
+			sequence([
+				tlv(0x81, Uint8Array.of(0x00)),
+				tlv(0x82, Uint8Array.of(0x00)),
+				tlv(0x85, Uint8Array.of(0x00)),
+			]),
+		);
+		const userCertsOnly = rewriteCrlExtensionValuePayload(
+			crlDer,
+			OIDS.issuingDistributionPoint,
+			sequence([
+				tlv(0x81, Uint8Array.of(0xff)),
+				tlv(0x82, Uint8Array.of(0x00)),
+				tlv(0x85, Uint8Array.of(0x00)),
+			]),
+		);
+
+		expect(parseCertificateRevocationListDerOrThrow(allFalse).issuingDistributionPoint).toEqual({
+			onlyContainsUserCerts: false,
+			onlyContainsCACerts: false,
+			onlyContainsAttributeCerts: false,
+		});
+		expect(
+			parseCertificateRevocationListDerOrThrow(userCertsOnly).issuingDistributionPoint,
+		).toEqual({
+			onlyContainsUserCerts: true,
+			onlyContainsCACerts: false,
+			onlyContainsAttributeCerts: false,
+		});
+	});
+
 	it('parseCertificateRevocationListDerOrThrow rejects unsupported issuingDistributionPoint distributionPointName tags', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Bad IDP Name Tag CA' },

@@ -145,4 +145,8 @@ export type {
 	IssuingDistributionPointForUserCerts,
 } from '#micro509/x509/extensions';
 
-export type { ParsedIssuingDistributionPoint } from '#micro509/x509/parse';
+export type {
+	ParsedIssuingDistributionPoint,
+	ParsedIssuingDistributionPointBase,
+	ParsedIssuingDistributionPointScope,
+} from '#micro509/x509/parse';

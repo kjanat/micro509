@@ -1671,21 +1671,29 @@ function encodeDistributionPoint(point: DistributionPoint): Uint8Array[] {
 
 /** DER-encode a DistributionPointName (fullName or relativeName). */
 function encodeDistributionPointName(name: DistributionPointName): Uint8Array {
-	if (name.type === 'fullName') {
-		if (name.fullName.length === 0) {
-			throwExtensionEncoderError(
-				'distribution_point_full_name_empty',
-				'DistributionPointName fullName must not be empty',
+	switch (name.type) {
+		case 'fullName': {
+			if (name.fullName.length === 0) {
+				throwExtensionEncoderError(
+					'distribution_point_full_name_empty',
+					'DistributionPointName fullName must not be empty',
+				);
+			}
+			return implicitConstructedContext(0, concatBytes(name.fullName.map(encodeSubjectAltName)));
+		}
+		case 'relativeName': {
+			const relativeName = encodeRelativeDistinguishedName(name.relativeName);
+			const relativeNameElement = readElement(relativeName);
+			return implicitConstructedContext(
+				1,
+				relativeName.slice(relativeNameElement.start, relativeNameElement.end),
 			);
 		}
-		return implicitConstructedContext(0, concatBytes(name.fullName.map(encodeSubjectAltName)));
+		default: {
+			const _exhaustive: never = name;
+			throw new Error(`Unhandled DistributionPointName type: ${String(_exhaustive)}`);
+		}
 	}
-	const relativeName = encodeRelativeDistinguishedName(name.relativeName);
-	const relativeNameElement = readElement(relativeName);
-	return implicitConstructedContext(
-		1,
-		relativeName.slice(relativeNameElement.start, relativeNameElement.end),
-	);
 }
 
 /** DER-encode a NameConstraintForm as an implicit-tagged {@linkcode GeneralName}. */

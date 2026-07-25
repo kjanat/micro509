@@ -85,6 +85,7 @@ import type {
 	ParsedDistributionPoint,
 	ParsedDistributionPointName,
 	ParsedIssuingDistributionPoint,
+	ParsedIssuingDistributionPointScope,
 	ParsedName,
 	ParsedNameAttribute,
 	ParsedRelativeDistinguishedName,
@@ -2035,31 +2036,61 @@ function parseIssuingDistributionPoint(valueDer: Uint8Array): ParsedIssuingDistr
 	for (const child of childrenOf(valueDer, sequenceElement)) {
 		parseIssuingDistributionPointField(valueDer, child, fields);
 	}
-	const scopeFlags = [
-		fields.onlyContainsUserCerts,
-		fields.onlyContainsCACerts,
-		fields.onlyContainsAttributeCerts,
-	].filter((value) => value === true).length;
-	if (scopeFlags > 1) {
-		throw new Error('IssuingDistributionPoint scope booleans are mutually exclusive');
-	}
 	return {
 		...(fields.distributionPoint === undefined
 			? {}
 			: { distributionPoint: fields.distributionPoint }),
-		...(fields.onlyContainsUserCerts === undefined
-			? {}
-			: { onlyContainsUserCerts: fields.onlyContainsUserCerts }),
-		...(fields.onlyContainsCACerts === undefined
-			? {}
-			: { onlyContainsCACerts: fields.onlyContainsCACerts }),
 		...(fields.onlySomeReasons === undefined ? {} : { onlySomeReasons: fields.onlySomeReasons }),
 		...(fields.indirectCrl === undefined ? {} : { indirectCrl: fields.indirectCrl }),
-		...(fields.onlyContainsAttributeCerts === undefined
-			? {}
-			: { onlyContainsAttributeCerts: fields.onlyContainsAttributeCerts }),
+		...parseIssuingDistributionPointScope(fields),
 	};
 }
+
+/** RFC 5280 §5.2.5: at most one `onlyContains*` flag may be TRUE. */
+function parseIssuingDistributionPointScope(
+	fields: MutableIssuingDistributionPointFields,
+): ParsedIssuingDistributionPointScope {
+	const userCerts = fields.onlyContainsUserCerts;
+	const caCerts = fields.onlyContainsCACerts;
+	const attributeCerts = fields.onlyContainsAttributeCerts;
+	if (userCerts === true) {
+		if (caCerts === true || attributeCerts === true) {
+			throw new Error(IDP_SCOPE_CONFLICT);
+		}
+		return { onlyContainsUserCerts: true, ...unselectedScopeFlags({ caCerts, attributeCerts }) };
+	}
+	if (caCerts === true) {
+		if (attributeCerts === true) {
+			throw new Error(IDP_SCOPE_CONFLICT);
+		}
+		return { onlyContainsCACerts: true, ...unselectedScopeFlags({ userCerts, attributeCerts }) };
+	}
+	if (attributeCerts === true) {
+		return { onlyContainsAttributeCerts: true, ...unselectedScopeFlags({ userCerts, caCerts }) };
+	}
+	return unselectedScopeFlags({ userCerts, caCerts, attributeCerts });
+}
+
+/** Keeps the explicit-FALSE flags the encoding carried, omitting the ones it left out. */
+function unselectedScopeFlags(flags: {
+	readonly userCerts?: false;
+	readonly caCerts?: false;
+	readonly attributeCerts?: false;
+}): {
+	readonly onlyContainsUserCerts?: false;
+	readonly onlyContainsCACerts?: false;
+	readonly onlyContainsAttributeCerts?: false;
+} {
+	return {
+		...(flags.userCerts === undefined ? {} : { onlyContainsUserCerts: flags.userCerts }),
+		...(flags.caCerts === undefined ? {} : { onlyContainsCACerts: flags.caCerts }),
+		...(flags.attributeCerts === undefined
+			? {}
+			: { onlyContainsAttributeCerts: flags.attributeCerts }),
+	};
+}
+
+const IDP_SCOPE_CONFLICT = 'IssuingDistributionPoint scope booleans are mutually exclusive';
 
 function parseIssuingDistributionPointField(
 	valueDer: Uint8Array,
@@ -2319,21 +2350,29 @@ function encodeDistributionPointName(
 	if (value === undefined) {
 		throw new Error('IssuingDistributionPoint distributionPoint is required');
 	}
-	if (value.type === 'fullName') {
-		if (value.fullName.length === 0) {
-			throwCrlEncoderError(
-				'distribution_point_full_name_empty',
-				'DistributionPointName fullName must not be empty',
+	switch (value.type) {
+		case 'fullName': {
+			if (value.fullName.length === 0) {
+				throwCrlEncoderError(
+					'distribution_point_full_name_empty',
+					'DistributionPointName fullName must not be empty',
+				);
+			}
+			return implicitConstructedContext(0, concatGeneralNames(value.fullName));
+		}
+		case 'relativeName': {
+			const relativeName = encodeRelativeDistinguishedName(value.relativeName);
+			const relativeNameElement = readElement(relativeName);
+			return implicitConstructedContext(
+				1,
+				relativeName.slice(relativeNameElement.start, relativeNameElement.end),
 			);
 		}
-		return implicitConstructedContext(0, concatGeneralNames(value.fullName));
+		default: {
+			const _exhaustive: never = value;
+			throw new Error(`Unhandled DistributionPointName type: ${String(_exhaustive)}`);
+		}
 	}
-	const relativeName = encodeRelativeDistinguishedName(value.relativeName);
-	const relativeNameElement = readElement(relativeName);
-	return implicitConstructedContext(
-		1,
-		relativeName.slice(relativeNameElement.start, relativeNameElement.end),
-	);
 }
 
 /** DER-encodes and concatenates a list of GeneralName values. */

@@ -1486,6 +1486,10 @@ function toGenerateKeyAlgorithm(
 			};
 		case 'ed25519':
 			return { name: 'Ed25519' };
+		default: {
+			const _exhaustive: never = algorithm;
+			throw new Error(`Unhandled KeyAlgorithmInput kind: ${String(_exhaustive)}`);
+		}
 	}
 }
 
@@ -1506,6 +1510,10 @@ function toImportAlgorithm(
 			};
 		case 'ed25519':
 			return { name: 'Ed25519' };
+		default: {
+			const _exhaustive: never = algorithm;
+			throw new Error(`Unhandled PublicKeyImportInput kind: ${String(_exhaustive)}`);
+		}
 	}
 }
 
@@ -1989,6 +1997,10 @@ function traditionalPemCipherKeyLength(
 			return 192;
 		case 'AES-256-CBC':
 			return 256;
+		default: {
+			const _exhaustive: never = cipher;
+			throw new Error(`Unhandled traditional PEM cipher: ${String(_exhaustive)}`);
+		}
 	}
 }
 
@@ -2269,6 +2281,10 @@ function assertSpkiMatchesRequestedAlgorithm(
 				throw new Error('SubjectPublicKeyInfo algorithm does not match requested import algorithm');
 			}
 			return;
+		default: {
+			const _exhaustive: never = algorithm;
+			throw new Error(`Unhandled PublicKeyImportInput kind: ${String(_exhaustive)}`);
+		}
 	}
 }
 
@@ -2306,6 +2322,10 @@ function assertPkcs8MatchesRequestedAlgorithm(
 				throw new Error('PKCS#8 private key algorithm does not match requested import algorithm');
 			}
 			return;
+		default: {
+			const _exhaustive: never = algorithm;
+			throw new Error(`Unhandled PrivateKeyImportInput kind: ${String(_exhaustive)}`);
+		}
 	}
 }
 
@@ -2365,6 +2385,10 @@ function assertPublicJwkMatchesRequestedAlgorithm(
 				throw new Error('Public JWK algorithm does not match requested import algorithm');
 			}
 			return;
+		default: {
+			const _exhaustive: never = algorithm;
+			throw new Error(`Unhandled PublicKeyImportInput kind: ${String(_exhaustive)}`);
+		}
 	}
 }
 
@@ -2408,5 +2432,9 @@ function assertPrivateJwkMatchesRequestedAlgorithm(
 				throw new Error('Private JWK algorithm does not match requested import algorithm');
 			}
 			return;
+		default: {
+			const _exhaustive: never = algorithm;
+			throw new Error(`Unhandled PrivateKeyImportInput kind: ${String(_exhaustive)}`);
+		}
 	}
 }

@@ -68,6 +68,10 @@ export function subjectAltNameLabel(name: SubjectAltName): string {
 			return 'DirName';
 		case 'unknown':
 			return `[tag ${String(name.tag)}]`;
+		default: {
+			const _exhaustive: never = name;
+			throw new Error(`Unhandled SubjectAltName type: ${String(_exhaustive)}`);
+		}
 	}
 }
 
@@ -135,6 +139,10 @@ function subjectAltNameText(name: SubjectAltName): string {
 			return directoryNameText(name.derHex);
 		case 'unknown':
 			return toHex(name.value);
+		default: {
+			const _exhaustive: never = name;
+			throw new Error(`Unhandled SubjectAltName type: ${String(_exhaustive)}`);
+		}
 	}
 }
 

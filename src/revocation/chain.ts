@@ -683,6 +683,10 @@ function ocspIndeterminateReasonFromFailure(
 		case 'nonce_mismatch':
 		case 'request_mismatch':
 			return 'no_applicable_ocsp';
+		default: {
+			const _exhaustive: never = code;
+			throw new Error(`Unhandled ValidateOcspResponse failure code: ${String(_exhaustive)}`);
+		}
 	}
 }
 

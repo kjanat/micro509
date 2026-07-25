@@ -410,5 +410,9 @@ function resolvePrfProfile(name: Pbes2Prf): {
 			return { oid: OIDS.hmacWithSHA1, hash: 'SHA-1' };
 		case 'HMAC-SHA-256':
 			return { oid: OIDS.hmacWithSHA256, hash: 'SHA-256' };
+		default: {
+			const _exhaustive: never = name;
+			throw new Error(`Unhandled Pbes2Prf: ${String(_exhaustive)}`);
+		}
 	}
 }

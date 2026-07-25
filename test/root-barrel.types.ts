@@ -2,14 +2,23 @@ import type {
 	CreateCertificateErrorCode,
 	CreateCertificateInput,
 	CreatePfxInput,
+	CreateSelfSignedCertificateBase,
+	CreateSelfSignedCertificateInput,
 	CrlEncoderErrorCode,
 	ExtensionEncoderErrorCode,
+	KeyAlgorithmInput,
+	KeyPairMaterial,
 	NameEncoderErrorCode,
+	ParsedIssuingDistributionPointScope,
 	Result,
 	VerifyCertificateChainInput,
 } from '#micro509';
 import type { SignatureProfileInput } from '#micro509/internal/crypto/signing';
 import type { ParsedPkcs12MacData } from '#micro509/pkcs';
+
+type Assert<Condition extends true> = Condition;
+type IsAssignable<Source, Target> = [Source] extends [Target] ? true : false;
+type IsNotAssignable<Source, Target> = [Source] extends [Target] ? false : true;
 
 type RootPkcs12MacData = ParsedPkcs12MacData;
 type RootSignatureProfileInput = SignatureProfileInput;
@@ -25,6 +34,39 @@ function assertRootTypes(_input: {
 	readonly extensionError?: ExtensionEncoderErrorCode;
 	readonly nameError?: NameEncoderErrorCode;
 	readonly crlError?: CrlEncoderErrorCode;
+	readonly selfSignedExistingKeyPair?: Assert<
+		IsAssignable<
+			CreateSelfSignedCertificateBase & { readonly keyPair: KeyPairMaterial },
+			CreateSelfSignedCertificateInput
+		>
+	>;
+	readonly selfSignedGeneratedKeyPair?: Assert<
+		IsAssignable<
+			CreateSelfSignedCertificateBase & { readonly algorithm: KeyAlgorithmInput },
+			CreateSelfSignedCertificateInput
+		>
+	>;
+	readonly selfSignedRejectsBothKeySources?: Assert<
+		IsNotAssignable<
+			CreateSelfSignedCertificateBase & {
+				readonly keyPair: KeyPairMaterial;
+				readonly algorithm: KeyAlgorithmInput;
+			},
+			CreateSelfSignedCertificateInput
+		>
+	>;
+	readonly issuingDistributionPointAcceptsOneScope?: Assert<
+		IsAssignable<{ readonly onlyContainsUserCerts: true }, ParsedIssuingDistributionPointScope>
+	>;
+	readonly issuingDistributionPointRejectsConflictingScopes?: Assert<
+		IsNotAssignable<
+			{
+				readonly onlyContainsUserCerts: true;
+				readonly onlyContainsCACerts: true;
+			},
+			ParsedIssuingDistributionPointScope
+		>
+	>;
 }): void {}
 
 assertRootTypes({
@@ -32,4 +74,9 @@ assertRootTypes({
 	extensionError: 'key_usage_empty',
 	nameError: 'invalid_country_code',
 	crlError: 'distribution_point_full_name_empty',
+	selfSignedExistingKeyPair: true,
+	selfSignedGeneratedKeyPair: true,
+	selfSignedRejectsBothKeySources: true,
+	issuingDistributionPointAcceptsOneScope: true,
+	issuingDistributionPointRejectsConflictingScopes: true,
 });

@@ -1627,6 +1627,10 @@ function encodeOcspCertStatus(input: CreateOcspSingleResponseInput): Uint8Array 
 			}
 			return tlv(0xa1, concatBytes(revokedFields));
 		}
+		default: {
+			const _exhaustive: never = input;
+			throw new Error(`Unhandled CertStatus type: ${String(_exhaustive)}`);
+		}
 	}
 }
 
