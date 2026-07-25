@@ -593,10 +593,10 @@ Bun implements the following matchers. Full Jest compatibility is planned; see t
 
 ### Promise Matchers
 
-| Status | Matcher       |
-| ------ | ------------- |
-| ✅     | `.resolves()` |
-| ✅     | `.rejects()`  |
+| Status | Matcher     |
+| ------ | ----------- |
+| ✅     | `.resolves` |
+| ✅     | `.rejects`  |
 
 ### Mock Function Matchers
 

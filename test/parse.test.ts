@@ -47,6 +47,7 @@ import {
 	childrenOf,
 	createCsrWithRawExtensions,
 	createSelfSignedCertificateWithRawExtensions,
+	expectRejectedErrorCode,
 	importRsaPrivateKeyWithScheme,
 	replaceCertificateSignatureAlgorithm,
 	rewriteCertificateSignatureAsRsaPss,
@@ -126,7 +127,7 @@ describe('parse', () => {
 			{ oid: '1.2.3.4.201', critical: false, value: 'non-critical' },
 		]);
 
-		expect(
+		await expectRejectedErrorCode(
 			createSelfSignedCertificate({
 				subject: { commonName: 'dup-ext.example' },
 				extensions: {
@@ -134,10 +135,11 @@ describe('parse', () => {
 					customExtensions: [{ oid: OIDS.keyUsage, value: encodeKeyUsage(['digitalSignature']) }],
 				},
 			}),
-		).rejects.toThrow('Duplicate extension OID');
+			'duplicate_extension_oid',
+		);
 
 		// 2.5.029.17 encodes to the same OID as 2.5.29.17, so it is the same extension.
-		expect(
+		await expectRejectedErrorCode(
 			createSelfSignedCertificate({
 				subject: { commonName: 'dup-alias-ext.example' },
 				extensions: {
@@ -150,7 +152,8 @@ describe('parse', () => {
 					],
 				},
 			}),
-		).rejects.toThrow('Duplicate extension OID: 2.5.029.17');
+			'duplicate_extension_oid',
+		);
 	});
 
 	it('rejects duplicate extension OIDs during certificate parse', async () => {

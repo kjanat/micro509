@@ -1,3 +1,4 @@
+import { expect } from 'bun:test';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { toArrayBuffer } from '#micro509/internal/asn1/asn1';
@@ -19,13 +20,14 @@ import {
 	tlv,
 } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
+import type { SignatureProfileInput } from '#micro509/internal/crypto/signing';
 import {
 	encodeAlgorithmIdentifier,
 	getSignatureAlgorithm,
 	signBytes,
 } from '#micro509/internal/crypto/signing';
 import { exportPkcs8Der, generateKeyPair, importPkcs8Der } from '#micro509/keys';
-import { unwrap } from '#micro509/result';
+import { isResultError, unwrap } from '#micro509/result';
 import type {
 	BasicConstraints,
 	CertificateMaterial,
@@ -41,6 +43,26 @@ import {
 	encodeSubjectAltName,
 } from '#micro509/x509';
 import { probeOpenSsl } from '#test/oracles/openssl';
+
+/**
+ * Await a builder promise and assert it rejected with a specific `ResultError` code.
+ *
+ * Builder input validation throws rather than returning a `Result`, so the code is
+ * the stable contract; the message is not.
+ */
+export async function expectRejectedErrorCode(
+	promise: Promise<unknown>,
+	code: string,
+): Promise<void> {
+	try {
+		await promise;
+	} catch (error) {
+		expect(isResultError(error)).toBe(true);
+		expect(isResultError(error) ? error.code : undefined).toBe(code);
+		return;
+	}
+	throw new Error(`expected a ResultError with code '${code}', but the promise resolved`);
+}
 
 /**
  * Encode a CRLDistributionPoints value with an arbitrary cRLIssuer, bypassing the
@@ -404,6 +426,7 @@ export async function createSelfSignedCertificateWithRawExtensions(
 		customExtensions.map((extension) =>
 			encodeExtension(extension.oid, new Uint8Array(extension.value), extension.critical ?? false),
 		),
+		input.signature,
 	);
 	const base64 = Buffer.from(der).toString('base64');
 	return {
@@ -417,6 +440,7 @@ export async function appendCertificateExtensions(
 	certificateDer: Uint8Array,
 	signerPrivateKey: CryptoKey,
 	extensionDers: readonly Uint8Array[],
+	signature?: SignatureProfileInput,
 ): Promise<Uint8Array> {
 	const top = readSequenceChildren(certificateDer);
 	const tbsCertificate = top[0];
@@ -447,7 +471,7 @@ export async function appendCertificateExtensions(
 				: sliceElement(tbsDer, child),
 		),
 	);
-	const signatureAlgorithm = getSignatureAlgorithm(signerPrivateKey);
+	const signatureAlgorithm = getSignatureAlgorithm(signerPrivateKey, signature);
 	const signatureValue = await signBytes(signerPrivateKey, signatureAlgorithm, rebuiltTbsDer);
 	return sequence([
 		rebuiltTbsDer,
@@ -474,6 +498,7 @@ export async function createCertificateWithRawExtensions(
 		customExtensions.map((extension) =>
 			encodeExtension(extension.oid, new Uint8Array(extension.value), extension.critical ?? false),
 		),
+		input.signature,
 	);
 	return { der, base64: base64Of(der), pem: toPemBlock('CERTIFICATE', der) };
 }
@@ -512,7 +537,7 @@ export async function createCsrWithRawExtensions(
 			concatBytes(withExtensionRequest(criDer, attributesElement, encoded)),
 		),
 	]);
-	const signatureAlgorithm = getSignatureAlgorithm(input.signerPrivateKey);
+	const signatureAlgorithm = getSignatureAlgorithm(input.signerPrivateKey, input.signature);
 	const signature = await signBytes(input.signerPrivateKey, signatureAlgorithm, rebuiltCriDer);
 	const der = sequence([
 		rebuiltCriDer,

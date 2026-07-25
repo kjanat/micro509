@@ -3,7 +3,6 @@ import {
 	createCertificateSigningRequest,
 	findExtension,
 	generateKeyPair,
-	isResultError,
 	parseCertificateSigningRequestPem,
 	unwrap,
 	verifyCertificateSigningRequest,
@@ -14,21 +13,11 @@ import { encodeRsaPssParameters, rsaPssParametersForHash } from '#micro509/inter
 import {
 	childrenOf,
 	decodeObjectIdentifier,
+	expectRejectedErrorCode,
 	importRsaPrivateKeyWithScheme,
 	replaceCsrSignatureAlgorithm,
 	rewriteCsrSignatureAsRsaPss,
 } from '#test/helpers';
-
-async function expectRejectedErrorCode(promise: Promise<unknown>, code: string): Promise<void> {
-	try {
-		await promise;
-	} catch (error) {
-		expect(isResultError(error)).toBe(true);
-		expect(isResultError(error) ? error.code : undefined).toBe(code);
-		return;
-	}
-	throw new Error(`expected a ResultError with code '${code}', but the promise resolved`);
-}
 
 describe('csr', () => {
 	it('includes basicConstraints and customExtensions in CSR requested extensions', async () => {

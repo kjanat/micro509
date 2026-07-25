@@ -6,7 +6,6 @@ import {
 	createSelfSignedCertificate,
 	generateKeyPair,
 	isCertificateRevoked,
-	isResultError,
 	parseCertificatePem,
 	parseCertificateRevocationListDer,
 	parseCertificateRevocationListDerOrThrow,
@@ -37,20 +36,10 @@ import {
 	createCertificateWithRawExtensions,
 	decodeObjectIdentifier,
 	encodeUncheckedCrlDistributionPoints,
+	expectRejectedErrorCode,
 	hexToBytes,
 	sliceElement,
 } from '#test/helpers';
-
-async function expectRejectedErrorCode(promise: Promise<unknown>, code: string): Promise<void> {
-	try {
-		await promise;
-	} catch (error) {
-		expect(isResultError(error)).toBe(true);
-		expect(isResultError(error) ? error.code : undefined).toBe(code);
-		return;
-	}
-	throw new Error(`expected a ResultError with code '${code}', but the promise resolved`);
-}
 
 describe('crl', () => {
 	it('creates, parses, and verifies CRLs', async () => {

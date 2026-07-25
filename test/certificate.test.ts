@@ -8,6 +8,7 @@ import {
 	isResultError,
 	parseCertificateDer,
 	parseCertificatePem,
+	parseCertificateSigningRequestPem,
 	unwrap,
 	verifyCertificateChain,
 } from '#micro509';
@@ -18,22 +19,14 @@ import { encodeRsaPssParameters, rsaPssParametersForHash } from '#micro509/inter
 import { encodeName, encodeSubjectAltName } from '#micro509/x509';
 import {
 	childrenOf,
+	createCertificateWithRawExtensions,
+	createCsrWithRawExtensions,
 	createSelfSignedCertificateWithRawExtensions,
 	decodeObjectIdentifier,
 	encodeUncheckedCrlDistributionPoints,
+	expectRejectedErrorCode,
 	hasExtensionOid,
 } from '#test/helpers';
-
-async function expectRejectedErrorCode(promise: Promise<unknown>, code: string): Promise<void> {
-	try {
-		await promise;
-	} catch (error) {
-		expect(isResultError(error)).toBe(true);
-		expect(isResultError(error) ? error.code : undefined).toBe(code);
-		return;
-	}
-	throw new Error(`expected a ResultError with code '${code}', but the promise resolved`);
-}
 
 function expectThrownErrorCode(fn: () => unknown, code: string): void {
 	try {
@@ -190,6 +183,46 @@ describe('certificate', () => {
 				serviceIdentity: { type: 'dns', value: 'rsa-pss-leaf.example' },
 			}),
 		).toMatchObject({ ok: true });
+
+		// The raw-extension helpers re-sign what the builder produced, so they carry
+		// the same signature profile rather than falling back to the key's default.
+		const splicedLeaf = await createCertificateWithRawExtensions({
+			issuer: { commonName: 'RSA-PSS Root CA' },
+			subject: { commonName: 'rsa-pss-spliced.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			signature: { kind: 'rsa-pss', saltLength: 48 },
+			extensions: {
+				customExtensions: [
+					{
+						oid: OIDS.subjectAltName,
+						value: sequence([encodeSubjectAltName({ type: 'dns', value: 'spliced.example' })]),
+					},
+				],
+			},
+		});
+		expect(unwrap(parseCertificatePem(splicedLeaf.pem))).toMatchObject({
+			signatureAlgorithmOid: OIDS.rsassaPss,
+			signatureAlgorithmParametersDer: expectedParameters,
+		});
+		const splicedCsr = await createCsrWithRawExtensions({
+			subject: { commonName: 'rsa-pss-spliced-csr.example' },
+			publicKey: root.keyPair.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			signature: { kind: 'rsa-pss', saltLength: 48 },
+			extensions: {
+				customExtensions: [
+					{
+						oid: OIDS.subjectAltName,
+						value: sequence([encodeSubjectAltName({ type: 'dns', value: 'spliced-csr.example' })]),
+					},
+				],
+			},
+		});
+		expect(unwrap(parseCertificateSigningRequestPem(splicedCsr.pem))).toMatchObject({
+			signatureAlgorithmOid: OIDS.rsassaPss,
+		});
 	});
 
 	it('creates P-521-signed certificates with ECDSA SHA-512', async () => {
