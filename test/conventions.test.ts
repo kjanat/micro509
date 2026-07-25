@@ -1,12 +1,20 @@
 import { describe, expect, it } from 'bun:test';
 import { Glob } from 'bun';
+import jsr from '#jsr' with { type: 'json' };
 import { VERIFY_ERROR_CODES } from '#micro509/verify';
+import pkg from '#pkg' with { type: 'json' };
 import { projectRoot, srcRoot } from '#test/helpers';
 
-/** Stems of the root `src/*.ts` files, which tsdown publishes as package subpaths. */
 function rootEntryStems(): readonly string[] {
 	return [...new Glob('*.ts').scanSync({ cwd: srcRoot })]
 		.map((name) => name.slice(0, -'.ts'.length))
+		.sort();
+}
+
+function exportedStems(exports: Readonly<Record<string, unknown>>): readonly string[] {
+	return Object.keys(exports)
+		.filter((key) => key !== './package.json')
+		.map((key) => (key === '.' ? 'index' : key.slice('./'.length)))
 		.sort();
 }
 
@@ -37,16 +45,6 @@ function exportedNames(source: string): ReadonlySet<string> {
 		}
 	}
 	return names;
-}
-
-async function offendersMatching(pattern: RegExp): Promise<readonly string[]> {
-	const offenders: string[] = [];
-	for (const file of sourceFiles()) {
-		if (pattern.test(await Bun.file(file).text())) {
-			offenders.push(file.slice(srcRoot.length));
-		}
-	}
-	return offenders;
 }
 
 async function orThrowExportsByDomain(): Promise<ReadonlyMap<string, ReadonlySet<string>>> {
@@ -81,17 +79,6 @@ async function missingOrThrowExports(
 }
 
 describe('repo conventions (AGENTS.md / CONTRIBUTING.md)', () => {
-	it('src/ declares no classes', async () => {
-		// Line must begin (after indentation, optional `export`/`abstract`) with `class`.
-		expect(
-			await offendersMatching(/^[ \t]*(?:export[ \t]+)?(?:abstract[ \t]+)?class[ \t]/m),
-		).toEqual([]);
-	});
-
-	it('src/ has no default exports', async () => {
-		expect(await offendersMatching(/^[ \t]*export[ \t]+default\b/m)).toEqual([]);
-	});
-
 	it('barrels re-export the OrThrow sibling of every function they expose', async () => {
 		// If a module defines `fooOrThrow` and a barrel re-exports `foo`, the barrel
 		// must re-export `fooOrThrow` too — otherwise the throwing variant is
@@ -109,21 +96,9 @@ describe('repo conventions (AGENTS.md / CONTRIBUTING.md)', () => {
 		expect(offenders).toEqual([]);
 	});
 
-	it('publishes exactly the intended root entrypoints', () => {
-		// tsdown globs src/*.ts, so a stray root file silently becomes a published
-		// subpath. Domain implementation belongs in src/<domain>/, internals in
-		// src/internal/.
-		expect(rootEntryStems()).toEqual([
-			'der',
-			'index',
-			'keys',
-			'pem',
-			'pkcs',
-			'result',
-			'revocation',
-			'verify',
-			'x509',
-		]);
+	it('both export maps list exactly the root src files', () => {
+		expect(exportedStems(pkg.exports)).toEqual(rootEntryStems());
+		expect(exportedStems(jsr.exports)).toEqual(rootEntryStems());
 	});
 
 	it('site error-code table matches VERIFY_ERROR_CODES exactly', async () => {

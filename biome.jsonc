@@ -18,29 +18,50 @@
 		"enabled": true,
 		"domains": {
 			"project": "recommended",
-			// "types": "recommended", await [biomejs/biome#10885](https://github.com/biomejs/biome/issues/10885) resolution
+			"types": "recommended",
 			"test": "recommended"
 		},
 		"rules": {
-			"a11y": { "recommended": true },
+			"preset": "recommended",
+			"a11y": {},
 			"complexity": {
-				"recommended": true,
 				"useLiteralKeys": "off",
 				"noExcessiveCognitiveComplexity": {
 					"options": { "maxAllowedComplexity": 20 },
 					"level": "info"
 				}
 			},
-			"correctness": { "recommended": true },
-			"performance": { "recommended": true },
-			"nursery": { "recommended": true },
-			"security": { "recommended": true },
-			"style": { "recommended": true },
-			"suspicious": { "recommended": true }
+			"correctness": {
+				"useQwikClasslist": "off",
+				"noQwikUseVisibleTask": "off",
+				"useQwikMethodUsage": "off",
+				"useQwikValidLexicalScope": "off",
+				"noUndeclaredDependencies": "off",
+				"noUnresolvedImports": "off"
+			},
+			"performance": {},
+			"nursery": {},
+			"security": {},
+			"style": {
+				"noProcessEnv": "off",
+				"noNestedTernary": "off",
+				"noTernary": "off",
+				"useBlockStatements": "off"
+			},
+			"suspicious": {
+				"noConsole": "off"
+			}
 		}
 	},
+	"plugins": [
+		{
+			"path": "./plugins/grit/no-classes.grit",
+			"includes": ["**/src/**/*.ts", "!**/packages/**", "!**/examples/**", "!**/site/**"]
+		}
+	],
 	"javascript": {
-		"formatter": { "quoteStyle": "single" }
+		"formatter": { "quoteStyle": "single" },
+		"globals": ["Bun", "Deno"]
 	},
 	"json": { "formatter": { "enabled": false } },
 	"assist": {
@@ -50,6 +71,24 @@
 		}
 	},
 	"overrides": [
+		{
+			"includes": ["**", "**/src/**"],
+			"linter": {
+				"rules": {
+					"correctness": {
+						"noNodejsModules": "off",
+						"noUnusedImports": "off"
+					},
+					"performance": {
+						"useTopLevelRegex": "off"
+					}
+				}
+			}
+		},
+		{
+			"includes": ["src/**/*.ts"],
+			"linter": { "rules": { "style": { "noDefaultExport": "error" } } }
+		},
 		{
 			"includes": ["**/*.jsonc", "!biome.jsonc"],
 			"json": { "formatter": { "trailingCommas": "all" } }

@@ -1,0 +1,6 @@
+or { JsClassDeclaration(), JsClassExpression() } as $class where {
+	register_diagnostic(
+		span = $class,
+		message = "src/ declares no classes (AGENTS.md ANTI-PATTERNS)"
+	)
+}
