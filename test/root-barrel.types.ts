@@ -1,6 +1,7 @@
 import type {
 	CreateCertificateErrorCode,
 	CreateCertificateInput,
+	CreateOcspCertStatusInput,
 	CreatePfxInput,
 	CreateSelfSignedCertificateBase,
 	CreateSelfSignedCertificateInput,
@@ -67,6 +68,36 @@ function assertRootTypes(_input: {
 			ParsedIssuingDistributionPointScope
 		>
 	>;
+	readonly ocspAcceptsRevocationFieldsForRevoked?: Assert<
+		IsAssignable<
+			{
+				readonly certStatus: 'revoked';
+				readonly revokedAt: Date;
+				readonly revocationReasonCode: number;
+			},
+			CreateOcspCertStatusInput
+		>
+	>;
+	readonly ocspRejectsRevocationFieldsForGood?: Assert<
+		IsNotAssignable<
+			{
+				readonly certStatus: 'good';
+				readonly revokedAt: Date;
+				readonly revocationReasonCode: number;
+			},
+			CreateOcspCertStatusInput
+		>
+	>;
+	readonly ocspRejectsRevocationFieldsForUnknown?: Assert<
+		IsNotAssignable<
+			{
+				readonly certStatus: 'unknown';
+				readonly revokedAt: Date;
+				readonly revocationReasonCode: number;
+			},
+			CreateOcspCertStatusInput
+		>
+	>;
 }): void {}
 
 assertRootTypes({
@@ -79,4 +110,7 @@ assertRootTypes({
 	selfSignedRejectsBothKeySources: true,
 	issuingDistributionPointAcceptsOneScope: true,
 	issuingDistributionPointRejectsConflictingScopes: true,
+	ocspAcceptsRevocationFieldsForRevoked: true,
+	ocspRejectsRevocationFieldsForGood: true,
+	ocspRejectsRevocationFieldsForUnknown: true,
 });

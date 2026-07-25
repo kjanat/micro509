@@ -261,6 +261,10 @@ export type CreateOcspCertStatusInput =
 	| {
 			/** Assert the certificate is not revoked. */
 			readonly certStatus: 'good';
+			/** Unavailable unless `certStatus` is `'revoked'`. */
+			readonly revokedAt?: never;
+			/** Unavailable unless `certStatus` is `'revoked'`. */
+			readonly revocationReasonCode?: never;
 	  }
 	| {
 			/** Assert the certificate is revoked. */
@@ -273,6 +277,10 @@ export type CreateOcspCertStatusInput =
 	| {
 			/** Assert no record of the certificate exists. */
 			readonly certStatus: 'unknown';
+			/** Unavailable unless `certStatus` is `'revoked'`. */
+			readonly revokedAt?: never;
+			/** Unavailable unless `certStatus` is `'revoked'`. */
+			readonly revocationReasonCode?: never;
 	  };
 
 /**

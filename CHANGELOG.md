@@ -29,6 +29,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Tighten four exported TypeScript contracts to make invalid states
+  unrepresentable. These changes can require source updates:
+  - `CrlEncoderErrorCode` now contains only
+    `'distribution_point_full_name_empty'`.
+    `'distribution_point_name_conflict'` and
+    `'distribution_point_name_empty'` are removed because
+    `DistributionPointName` is now a discriminated union that cannot express
+    either invalid shape.
+  - `ParsedOcspSingleResponse` is now discriminated by `certStatus`.
+    `revokedAt` and `revocationReasonCode` are available only after narrowing to
+    `certStatus === 'revoked'`; `revokedAt` is then required.
+  - `CreateOcspCertStatusInput` rejects `revokedAt` and
+    `revocationReasonCode` unless `certStatus` is `'revoked'`, including when a
+    previously declared object is passed instead of an object literal.
+  - `CreateSelfSignedCertificateInput` no longer accepts both `keyPair` and
+    `algorithm`. Supply `keyPair` to reuse existing keys, or `algorithm` to
+    generate a new pair.
+
+  ```ts
+  if (singleResponse.certStatus === 'revoked') {
+    singleResponse.revokedAt; // Date
+    singleResponse.revocationReasonCode; // number | undefined
+  }
+
+  await createSelfSignedCertificate({ subject, keyPair });
+  await createSelfSignedCertificate({
+    subject,
+    algorithm: { kind: 'ecdsa', curve: 'P-256' },
+  });
+  ```
+
 - `ParsedPkcs7SignedData.certificates: readonly ParsedCertificate[]` becomes
   `certificateChoices: readonly ParsedCertificateChoice[]`, modelling RFC 5652
   §10.2.2 CertificateChoices as a discriminated union rather than discarding
