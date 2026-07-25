@@ -1070,14 +1070,13 @@ function parseCertificateSet(
 	if (certificates === undefined || certificates.tag !== 0xa0) {
 		return [];
 	}
-	const parsed: ParsedCertificateChoice[] = [];
-	let offset = certificates.start;
-	while (offset < certificates.end) {
-		const element = readElement(source, offset);
-		parsed.push(parseCertificateChoice(source, element, source.slice(offset, element.end)));
-		offset = element.end;
-	}
-	return parsed;
+	return childrenOf(source, certificates).map((element) =>
+		parseCertificateChoice(
+			source,
+			element,
+			source.slice(element.start - element.headerLength, element.end),
+		),
+	);
 }
 
 /** Extracts the list of digest algorithm OIDs from the digestAlgorithms SET. */

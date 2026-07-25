@@ -5,6 +5,7 @@ import {
 	createPkcs7CertBag,
 	createSelfSignedCertificate,
 	generateKeyPair,
+	type ParsedPkcs7SignedData,
 	parseCertificatePem,
 	parsePkcs7CertBagDer,
 	parsePkcs7CertBagPem,
@@ -204,6 +205,21 @@ describe('pkcs7', () => {
 		expect(parsed.error.code).toBe('malformed');
 	});
 
+	it('rejects a CertificateChoices entry that overruns the CertificateSet boundary', () => {
+		const signedData = sequence([
+			integerFromNumber(1),
+			setOf([sequence([objectIdentifier(OIDS.sha256)])]),
+			sequence([objectIdentifier(OIDS.pkcs7Data)]),
+			// The [1] child claims two content bytes, which overlap the following
+			// empty signerInfos SET beyond the two-byte CertificateSet contents.
+			Uint8Array.of(0xa0, 0x02, 0xa1, 0x02),
+			setOf([]),
+		]);
+		const der = sequence([objectIdentifier(OIDS.pkcs7SignedData), explicitContext(0, signedData)]);
+		const parsed = parsePkcs7SignedDataDer(der);
+		expect(parsed).toMatchObject({ ok: false, code: 'malformed' });
+	});
+
 	// -----------------------------------------------------------------------
 	// Parse error paths
 	// -----------------------------------------------------------------------
@@ -396,9 +412,9 @@ describe('pkcs7', () => {
 		const otherParsed = unwrap(parseCertificatePem(other.certificate.pem));
 		const tampered = {
 			...parsed.value,
-			certificates: [otherParsed],
+			certificateChoices: [{ type: 'certificate', certificate: otherParsed }],
 			encapsulatedContent: new TextEncoder().encode('test'),
-		};
+		} satisfies ParsedPkcs7SignedData;
 		const result = await verifyPkcs7SignedData(tampered);
 		expect(result.ok).toBe(true);
 	});
