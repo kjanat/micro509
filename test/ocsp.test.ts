@@ -258,8 +258,11 @@ describe('ocsp', () => {
 			],
 		});
 		const parsedRevoked = parseOcspResponsePemOrThrow(revokedResponse.pem);
-		expect(parsedRevoked.responses?.[0]?.certStatus).toBe('revoked');
-		expect(parsedRevoked.responses?.[0]?.revokedAt?.toISOString()).toBe('2024-06-15T00:00:00.000Z');
+		const revokedEntry = parsedRevoked.responses?.[0];
+		if (revokedEntry?.certStatus !== 'revoked') {
+			throw new Error('expected revoked certStatus');
+		}
+		expect(revokedEntry.revokedAt.toISOString()).toBe('2024-06-15T00:00:00.000Z');
 
 		const unknownResponse = await createOcspResponse({
 			signerPrivateKey: issuer.keyPair.privateKey,
@@ -308,8 +311,11 @@ describe('ocsp', () => {
 			],
 		});
 		const parsed = parseOcspResponsePemOrThrow(response.pem);
-		expect(parsed.responses?.[0]?.certStatus).toBe('revoked');
-		expect(parsed.responses?.[0]?.revocationReasonCode).toBe(1);
+		const entry = parsed.responses?.[0];
+		if (entry?.certStatus !== 'revoked') {
+			throw new Error('expected revoked certStatus');
+		}
+		expect(entry.revocationReasonCode).toBe(1);
 	});
 
 	it('verifyOcspResponseSignature with DER input', async () => {
@@ -1014,6 +1020,7 @@ describe('ocsp', () => {
 						responses: parsed.responses.map((entry) => ({
 							...entry,
 							certStatus: 'revoked' as const,
+							revokedAt: future,
 							thisUpdate: future,
 						})),
 					}),
@@ -2392,9 +2399,11 @@ describe('ocsp', () => {
 		expect(parsed.responseStatus).toBe('successful');
 		expect(parsed.responses).toBeDefined();
 		const certResponse = parsed.responses?.[0];
-		expect(certResponse?.certStatus).toBe('revoked');
-		expect(certResponse?.revokedAt?.getTime()).toBe(revokedAt.getTime());
-		expect(certResponse?.revocationReasonCode).toBe(1);
+		if (certResponse?.certStatus !== 'revoked') {
+			throw new Error('expected revoked certStatus');
+		}
+		expect(certResponse.revokedAt.getTime()).toBe(revokedAt.getTime());
+		expect(certResponse.revocationReasonCode).toBe(1);
 	});
 
 	it('parseOcspResponseDerOrThrow skips version tag [0] if present (line 254)', async () => {

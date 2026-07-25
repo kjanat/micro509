@@ -41,6 +41,11 @@ export interface ConstrainedPolicy {
 export interface PolicyValidationOutcome {
 	/** Policies valid under the authority's (CA chain) constraints alone. */
 	readonly authorityConstrainedPolicies: readonly ConstrainedPolicy[];
-	/** Policies that also satisfy the caller's {@linkcode PolicyValidationInput.initialPolicySet}. */
+	/**
+	 * Policies from {@linkcode PolicyValidationInput.initialPolicySet} the chain
+	 * establishes, per RFC 9618 §5.5 step (g)(5)-(6). Includes OIDs covered only
+	 * by an authority-constrained anyPolicy, so this is not necessarily a subset
+	 * of {@linkcode authorityConstrainedPolicies}.
+	 */
 	readonly userConstrainedPolicies: readonly ConstrainedPolicy[];
 }

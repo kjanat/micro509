@@ -71,7 +71,7 @@ import type {
 } from '#micro509/x509/parse';
 import { parseCertificateDerOrThrow, parseCertificateFromSource } from '#micro509/x509/parse';
 
-/** Hash algorithm used to compute OCSP CertID fields. SHA-1 is the RFC 6960 default. */
+/** Hash algorithm used to compute OCSP CertID fields. RFC 5019 §2.1.1 requires SHA-1 for the lightweight OCSP profile; RFC 6960 defines no default. */
 export type OcspHashAlgorithm = 'SHA-1' | 'SHA-256';
 /** PEM string, DER bytes, or already-parsed certificate. */
 export type OcspCertificateSource = string | Uint8Array | ParsedCertificate;
@@ -156,20 +156,40 @@ export type OcspResponseStatus =
 /**
  * Status of one certificate inside an OCSP BasicResponse.
  */
-export interface ParsedOcspSingleResponse {
+export type ParsedOcspSingleResponse = {
 	/** Which certificate this status applies to. */
 	readonly certId: ParsedOcspCertId;
-	/** Responder's verdict: `good`, `revoked`, or `unknown`. */
-	readonly certStatus: OcspCertStatus;
 	/** Start of the validity window for this status assertion. */
 	readonly thisUpdate: Date;
 	/** End of the validity window. Absent if the responder does not commit to a schedule. */
 	readonly nextUpdate?: Date;
-	/** When the certificate was revoked (only for `certStatus === 'revoked'`). */
-	readonly revokedAt?: Date;
-	/** CRLReason integer (only for `certStatus === 'revoked'`). */
-	readonly revocationReasonCode?: number;
-}
+} & ParsedOcspCertStatus;
+
+/**
+ * RFC 6960 §4.2.1 `CertStatus ::= CHOICE { good [0] NULL, revoked [1] RevokedInfo,
+ * unknown [2] UnknownInfo }`.
+ *
+ * Only `revoked` carries data, so `RevokedInfo`'s fields exist only on that
+ * alternative. `revocationReasonCode` stays optional because `revocationReason`
+ * is OPTIONAL within `RevokedInfo`.
+ */
+export type ParsedOcspCertStatus =
+	| {
+			/** Responder asserts the certificate is not revoked. */
+			readonly certStatus: 'good';
+	  }
+	| {
+			/** Responder asserts the certificate is revoked. */
+			readonly certStatus: 'revoked';
+			/** `RevokedInfo.revocationTime`. */
+			readonly revokedAt: Date;
+			/** `RevokedInfo.revocationReason` CRLReason integer, when present. */
+			readonly revocationReasonCode?: number;
+	  }
+	| {
+			/** Responder has no record of the certificate. */
+			readonly certStatus: 'unknown';
+	  };
 
 /**
  * How the OCSP responder identifies itself — either by distinguished name or
@@ -225,18 +245,43 @@ export interface ParsedOcspResponse {
  * One certificate's status entry for {@linkcode CreateOcspResponseInput.responses}.
  * Extends {@linkcode CreateOcspRequestItemInput} with status and timing fields.
  */
-export interface CreateOcspSingleResponseInput extends CreateOcspRequestItemInput {
-	/** Status to assert for this certificate. */
-	readonly certStatus: OcspCertStatus;
+export type CreateOcspSingleResponseInput = CreateOcspRequestItemInput & {
 	/** Start of the validity window for this status assertion. Defaults to `new Date()`. */
 	readonly thisUpdate?: Date;
 	/** End of the validity window. Omit for open-ended assertions. */
 	readonly nextUpdate?: Date;
-	/** Revocation time (required when `certStatus` is `'revoked'`). Defaults to `thisUpdate`. */
-	readonly revokedAt?: Date;
-	/** CRLReason integer code (only meaningful when `certStatus` is `'revoked'`). */
-	readonly revocationReasonCode?: number;
-}
+} & CreateOcspCertStatusInput;
+
+/**
+ * Status to assert for one certificate, mirroring RFC 6960 §4.2.1 `CertStatus`.
+ *
+ * `RevokedInfo`'s fields are reachable only under `'revoked'`.
+ */
+export type CreateOcspCertStatusInput =
+	| {
+			/** Assert the certificate is not revoked. */
+			readonly certStatus: 'good';
+			/** Unavailable unless `certStatus` is `'revoked'`. */
+			readonly revokedAt?: never;
+			/** Unavailable unless `certStatus` is `'revoked'`. */
+			readonly revocationReasonCode?: never;
+	  }
+	| {
+			/** Assert the certificate is revoked. */
+			readonly certStatus: 'revoked';
+			/** `RevokedInfo.revocationTime`. Defaults to `thisUpdate`. */
+			readonly revokedAt?: Date;
+			/** `RevokedInfo.revocationReason` CRLReason integer code. */
+			readonly revocationReasonCode?: number;
+	  }
+	| {
+			/** Assert no record of the certificate exists. */
+			readonly certStatus: 'unknown';
+			/** Unavailable unless `certStatus` is `'revoked'`. */
+			readonly revokedAt?: never;
+			/** Unavailable unless `certStatus` is `'revoked'`. */
+			readonly revocationReasonCode?: never;
+	  };
 
 /**
  * Input for {@linkcode createOcspResponse}.
@@ -391,12 +436,6 @@ interface NormalizedOcspValidationInput {
 	readonly issuer: ParsedCertificate;
 	readonly trustedResponders: readonly ParsedCertificate[];
 	readonly signer: ParsedCertificate;
-}
-
-interface ParsedOcspCertStatusFields {
-	readonly certStatus: ParsedOcspSingleResponse['certStatus'];
-	readonly revokedAt?: Date;
-	readonly revocationReasonCode?: number;
 }
 
 /**
@@ -1596,6 +1635,10 @@ function encodeOcspCertStatus(input: CreateOcspSingleResponseInput): Uint8Array 
 			}
 			return tlv(0xa1, concatBytes(revokedFields));
 		}
+		default: {
+			const _exhaustive: never = input;
+			throw new Error(`Unhandled CertStatus type: ${String(_exhaustive)}`);
+		}
 	}
 }
 
@@ -1675,16 +1718,11 @@ function parseSingleResponse(source: Uint8Array, element: DerElement): ParsedOcs
 	if (children.length !== cursor + (singleExtensions === undefined ? 0 : 1)) {
 		throw new Error('Malformed OCSP SingleResponse');
 	}
-	const statusFields = parseOcspCertStatusFields(source, certStatus);
 	return {
 		certId: parseOcspCertId(source.slice(certId.start - certId.headerLength, certId.end)),
-		certStatus: statusFields.certStatus,
 		thisUpdate: parseTime(thisUpdate),
 		...parseOcspSingleResponseNextUpdate(source, nextUpdateElement),
-		...(statusFields.revokedAt === undefined ? {} : { revokedAt: statusFields.revokedAt }),
-		...(statusFields.revocationReasonCode === undefined
-			? {}
-			: { revocationReasonCode: statusFields.revocationReasonCode }),
+		...parseOcspCertStatusFields(source, certStatus),
 	};
 }
 
@@ -1704,7 +1742,7 @@ function parseOcspSingleResponseNextUpdate(
 function parseOcspCertStatusFields(
 	source: Uint8Array,
 	certStatus: DerElement,
-): ParsedOcspCertStatusFields {
+): ParsedOcspCertStatus {
 	if (certStatus.tag === 0x80) {
 		if (certStatus.value.length !== 0) {
 			throw new Error('OCSP good certStatus must be empty');
@@ -1921,7 +1959,7 @@ function prepareOcspNameCompareString(value: string): string | undefined {
 	return normalized.toLowerCase().trim().replace(/\s+/gu, ' ');
 }
 
-/** Maps an X.500 attribute type OID to its friendly key name for responder name parsing. */
+/** Maps a directory attribute type OID (X.520 `id-at` arc plus the legacy PKCS #9 emailAddress) to its friendly key name for responder name parsing. */
 function responderNameKeyFromOid(oid: string): ParsedNameAttribute['key'] {
 	switch (oid) {
 		case OIDS.commonName:

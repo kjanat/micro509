@@ -191,7 +191,7 @@ export function utf8String(value: string): Uint8Array {
 /**
  * Encodes a DER PrintableString (tag `0x13`).
  *
- * @throws if the input contains characters outside the X.520 PrintableString set.
+ * @throws if the input contains characters outside the ITU-T X.680 §41.4 Table 10 PrintableString set.
  */
 export function printableString(value: string): Uint8Array {
 	if (!/^[A-Za-z0-9 '()+,\-./:=?]*$/.test(value)) {
@@ -275,7 +275,9 @@ function encodeBase128(value: bigint): number[] {
 /**
  * Encodes a dotted-decimal OID string as a DER OBJECT IDENTIFIER (tag `0x06`).
  *
- * Validates arc constraints per X.660: first arc must be 0–2, second < 40 for arcs 0 and 1.\
+ * Validates arc constraints per X.660 §7.6: the root arc must be 0–2, and under
+ * roots 0 and 1 the second arc must be 0–39. X.690 §8.19.4 defines the `(X*40)+Y`
+ * packing of the first two arcs into one subidentifier.\
  * Sub-identifiers are encoded with base-128 continuation.
  */
 export function objectIdentifier(oid: string): Uint8Array {

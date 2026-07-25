@@ -100,7 +100,7 @@ describe('createPkcs7SignedData', () => {
 		expect(parsed.ok).toBe(true);
 		if (!parsed.ok) throw new Error(parsed.error.code);
 		expect(parsed.value.version).toBe(1);
-		expect(parsed.value.certificates).toHaveLength(1);
+		expect(parsed.value.certificateChoices).toHaveLength(1);
 
 		const verified = await verifyPkcs7SignedData(parsed.value);
 		expect(verified.ok).toBe(true);
@@ -143,7 +143,7 @@ describe('createPkcs7SignedData', () => {
 		expect(result.ok).toBe(true);
 		if (!result.ok) throw new Error(result.error.code);
 		expect(result.value.signerInfos).toHaveLength(2);
-		expect(result.value.certificates).toHaveLength(2);
+		expect(result.value.certificateChoices).toHaveLength(2);
 	});
 
 	it('embeds additional certificates without duplicating the signer', async () => {
@@ -164,7 +164,7 @@ describe('createPkcs7SignedData', () => {
 		expect(result.ok).toBe(true);
 		if (!result.ok) throw new Error(result.error.code);
 		// signer + CA, deduplicated (signer also passed via additionalCertificates).
-		expect(result.value.certificates).toHaveLength(2);
+		expect(result.value.certificateChoices).toHaveLength(2);
 	});
 
 	it('returns no_signers when no signers are provided', async () => {

@@ -25,9 +25,11 @@ import {
 	exportSpkiPem,
 	generateKeyPair,
 	importEncryptedPkcs1Pem,
+	importEncryptedPkcs1PemOrThrow,
 	importEncryptedPkcs8Der,
 	importEncryptedPkcs8Pem,
 	importEncryptedSec1Pem,
+	importEncryptedSec1PemOrThrow,
 	importPkcs1Der,
 	importPkcs1Pem,
 	importPkcs8Base64,
@@ -70,6 +72,28 @@ async function expectImportFailure(
 	expect(result.error.code).toBe(code);
 	if (messagePart !== undefined) expect(result.error.message).toContain(messagePart);
 }
+
+/** Assert a throwing-variant promise rejected with a message containing `messagePart`. */
+async function expectRejection(pending: Promise<unknown>, messagePart: string): Promise<void> {
+	try {
+		await pending;
+	} catch (error) {
+		expect(error instanceof Error ? error.message : String(error)).toContain(messagePart);
+		return;
+	}
+	throw new Error(`expected a rejection containing '${messagePart}', but it resolved`);
+}
+
+/**
+ * Header lines RFC 822 §3.2 excludes from `field-name`: empty, embedded SPACE,
+ * an embedded CTL, and non-ASCII.
+ */
+const MALFORMED_PEM_HEADER_NAMES = [
+	':junk',
+	'Bad Name:thing',
+	'Bad\u0001Name:thing',
+	'Ünicode:thing',
+] as const;
 
 /** Encrypt arbitrary DER as a traditional RSA PEM fixture for structural-error tests. */
 async function encryptTraditionalRsaFixture(der: Uint8Array, password: string): Promise<string> {
@@ -289,6 +313,25 @@ describe('keys', () => {
 			}),
 		);
 		expect(await exportPkcs8Der(importedCrOnlyRsa)).toEqual(await exportPkcs8Der(rsa.privateKey));
+		// OpenSSL-style encapsulated headers permit no space after the colon.
+		const noSpaceHeaderPem = encryptedRsaPem
+			.replace('Proc-Type: ', 'Proc-Type:')
+			.replace('DEK-Info: ', 'DEK-Info:');
+		const importedNoSpaceRsa = unwrap(
+			await importEncryptedPkcs1Pem(noSpaceHeaderPem, 'secret123', { kind: 'rsa' }),
+		);
+		expect(await exportPkcs8Der(importedNoSpaceRsa)).toEqual(await exportPkcs8Der(rsa.privateKey));
+		for (const badName of MALFORMED_PEM_HEADER_NAMES) {
+			const badHeaderPem = encryptedRsaPem.replace('Proc-Type: ', `${badName}\nProc-Type: `);
+			await expectImportFailure(
+				importEncryptedPkcs1Pem(badHeaderPem, 'secret123', { kind: 'rsa' }),
+				'malformed',
+			);
+			await expectRejection(
+				importEncryptedPkcs1PemOrThrow(badHeaderPem, 'secret123', { kind: 'rsa' }),
+				'Invalid PEM header name',
+			);
+		}
 		await expectImportFailure(
 			importEncryptedPkcs1Pem(encryptedRsaPem, 'wrong', { kind: 'rsa' }),
 			'invalid_password',
@@ -306,6 +349,20 @@ describe('keys', () => {
 			}),
 		);
 		expect(await exportPkcs8Der(importedEc)).toEqual(await exportPkcs8Der(ec.privateKey));
+		for (const badName of MALFORMED_PEM_HEADER_NAMES) {
+			const badHeaderPem = encryptedEcPem.replace('Proc-Type: ', `${badName}\nProc-Type: `);
+			await expectImportFailure(
+				importEncryptedSec1Pem(badHeaderPem, 'secret123', { kind: 'ecdsa', curve: 'P-256' }),
+				'malformed',
+			);
+			await expectRejection(
+				importEncryptedSec1PemOrThrow(badHeaderPem, 'secret123', {
+					kind: 'ecdsa',
+					curve: 'P-256',
+				}),
+				'Invalid PEM header name',
+			);
+		}
 	});
 
 	it('roundtrips keys through PEM, base64, and JWK imports', async () => {

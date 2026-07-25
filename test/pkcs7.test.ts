@@ -5,6 +5,7 @@ import {
 	createPkcs7CertBag,
 	createSelfSignedCertificate,
 	generateKeyPair,
+	type ParsedPkcs7SignedData,
 	parseCertificatePem,
 	parsePkcs7CertBagDer,
 	parsePkcs7CertBagPem,
@@ -124,7 +125,7 @@ describe('pkcs7', () => {
 		expect(parsed.ok).toBe(true);
 		if (!parsed.ok) throw new Error('unreachable');
 		expect(parsed.value.contentTypeOid).toBe(OIDS.pkcs7SignedData);
-		expect(parsed.value.certificates).toHaveLength(1);
+		expect(parsed.value.certificateChoices).toHaveLength(1);
 		expect(parsed.value.digestAlgorithmNames).toEqual(['SHA-256']);
 		expect(parsed.value.signerInfos[0]).toMatchObject({
 			version: 1,
@@ -132,8 +133,91 @@ describe('pkcs7', () => {
 			digestAlgorithmName: 'SHA-256',
 			signatureAlgorithmOid: OIDS.sha256WithRSAEncryption,
 			signatureAlgorithmName: 'RSA PKCS#1 v1.5 with SHA-256',
-			serialNumberHex: parsedSigner.serialNumberHex,
+			signerIdentifier: {
+				type: 'issuerAndSerialNumber',
+				serialNumberHex: parsedSigner.serialNumberHex,
+			},
 		});
+	});
+
+	it.each([
+		['extendedCertificate', 0xa0],
+		['attributeCertificateV1', 0xa1],
+		['attributeCertificateV2', 0xa2],
+	] as const)('preserves a %s CertificateChoices entry (RFC 5652 §10.2.2)', async (type, tag) => {
+		const signer = await createSelfSignedCertificate({
+			subject: { commonName: 'CMS Signer' },
+		});
+		const parsedSigner = unwrap(parseCertificatePem(signer.certificate.pem));
+		const other = tlv(tag, sequence([integerFromNumber(1)]));
+		const parsed = parsePkcs7SignedDataDer(createSyntheticPkcs7SignedData(parsedSigner, [other]));
+		expect(parsed.ok).toBe(true);
+		if (!parsed.ok) throw new Error('unreachable');
+		expect(parsed.value.certificateChoices.map((choice) => choice.type)).toEqual([
+			'certificate',
+			type,
+		]);
+		const [first, second] = parsed.value.certificateChoices;
+		if (first?.type !== 'certificate') throw new Error('unreachable');
+		expect(first.certificate.subject.values.commonName).toBe('CMS Signer');
+		if (second === undefined || second.type === 'certificate') throw new Error('unreachable');
+		expect(second.der).toEqual(other);
+	});
+
+	it('decodes the otherCertFormat OID of an other [3] entry (RFC 5652 §10.2.2)', async () => {
+		const signer = await createSelfSignedCertificate({
+			subject: { commonName: 'CMS Signer' },
+		});
+		const parsedSigner = unwrap(parseCertificatePem(signer.certificate.pem));
+		// [3] IMPLICIT OtherCertificateFormat, so the OID and the ANY value are
+		// direct children of the tag rather than nested in a SEQUENCE.
+		const other = tlv(0xa3, concatBytes([objectIdentifier('1.2.3.4'), integerFromNumber(1)]));
+		const parsed = parsePkcs7SignedDataDer(createSyntheticPkcs7SignedData(parsedSigner, [other]));
+		expect(parsed.ok).toBe(true);
+		if (!parsed.ok) throw new Error('unreachable');
+		const [, second] = parsed.value.certificateChoices;
+		expect(second).toMatchObject({ type: 'other', formatOid: '1.2.3.4' });
+	});
+
+	it('rejects an other [3] entry whose first element is not an OID', async () => {
+		const signer = await createSelfSignedCertificate({
+			subject: { commonName: 'CMS Signer' },
+		});
+		const parsedSigner = unwrap(parseCertificatePem(signer.certificate.pem));
+		const other = tlv(0xa3, concatBytes([integerFromNumber(1), integerFromNumber(2)]));
+		const parsed = parsePkcs7SignedDataDer(createSyntheticPkcs7SignedData(parsedSigner, [other]));
+		expect(parsed.ok).toBe(false);
+		if (parsed.ok) throw new Error('unreachable');
+		expect(parsed.error.code).toBe('malformed');
+	});
+
+	it.each([
+		['an INTEGER', integerFromNumber(1)],
+		['an unknown context tag [4]', tlv(0xa4, sequence([integerFromNumber(1)]))],
+	])('rejects %s in the CertificateSet (RFC 5652 §10.2.2)', async (_label, element) => {
+		const signer = await createSelfSignedCertificate({
+			subject: { commonName: 'CMS Signer' },
+		});
+		const parsedSigner = unwrap(parseCertificatePem(signer.certificate.pem));
+		const parsed = parsePkcs7SignedDataDer(createSyntheticPkcs7SignedData(parsedSigner, [element]));
+		expect(parsed.ok).toBe(false);
+		if (parsed.ok) throw new Error('unreachable');
+		expect(parsed.error.code).toBe('malformed');
+	});
+
+	it('rejects a CertificateChoices entry that overruns the CertificateSet boundary', () => {
+		const signedData = sequence([
+			integerFromNumber(1),
+			setOf([sequence([objectIdentifier(OIDS.sha256)])]),
+			sequence([objectIdentifier(OIDS.pkcs7Data)]),
+			// The [1] child claims two content bytes, which overlap the following
+			// empty signerInfos SET beyond the two-byte CertificateSet contents.
+			Uint8Array.of(0xa0, 0x02, 0xa1, 0x02),
+			setOf([]),
+		]);
+		const der = sequence([objectIdentifier(OIDS.pkcs7SignedData), explicitContext(0, signedData)]);
+		const parsed = parsePkcs7SignedDataDer(der);
+		expect(parsed).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
 	// -----------------------------------------------------------------------
@@ -279,52 +363,12 @@ describe('pkcs7', () => {
 		if (signerInfo === undefined) {
 			throw new Error('expected signer info');
 		}
-		const {
-			issuer: _ignoredIssuer,
-			serialNumberHex: _ignoredSerialNumberHex,
-			...signerInfoWithoutIssuerAndSerial
-		} = signerInfo;
-		const result = await verifyPkcs7SignedData({
-			...parsed.value,
-			signerInfos: [
-				{
-					...signerInfoWithoutIssuerAndSerial,
-					subjectKeyIdentifier,
-				},
-			],
-		});
-		expect(result.ok).toBe(true);
-	});
-
-	it('verifyPkcs7SignedData ignores tampered dual signer identifiers on pre-parsed input', async () => {
-		const signer = await createSelfSignedCertificate({
-			subject: { commonName: 'Dual Identifier Signer' },
-		});
-		const parsedSigner = unwrap(parseCertificatePem(signer.certificate.pem));
-		const subjectKeyIdentifier = parsedSigner.subjectKeyIdentifier;
-		if (subjectKeyIdentifier === undefined) {
-			throw new Error('expected subjectKeyIdentifier');
-		}
-		const content = new TextEncoder().encode('Dual identifier test');
-		const der = await createCmsSignedDataWithSignedAttrs(
-			parsedSigner,
-			signer.keyPair.privateKey,
-			content,
-		);
-		const parsed = parsePkcs7SignedDataDer(der);
-		expect(parsed.ok).toBe(true);
-		if (!parsed.ok) throw new Error('unreachable');
-		const signerInfo = parsed.value.signerInfos[0];
-		if (signerInfo === undefined) {
-			throw new Error('expected signer info');
-		}
 		const result = await verifyPkcs7SignedData({
 			...parsed.value,
 			signerInfos: [
 				{
 					...signerInfo,
-					serialNumberHex: 'deadbeef',
-					subjectKeyIdentifier,
+					signerIdentifier: { type: 'subjectKeyIdentifier', subjectKeyIdentifier },
 				},
 			],
 		});
@@ -368,9 +412,9 @@ describe('pkcs7', () => {
 		const otherParsed = unwrap(parseCertificatePem(other.certificate.pem));
 		const tampered = {
 			...parsed.value,
-			certificates: [otherParsed],
+			certificateChoices: [{ type: 'certificate', certificate: otherParsed }],
 			encapsulatedContent: new TextEncoder().encode('test'),
-		};
+		} satisfies ParsedPkcs7SignedData;
 		const result = await verifyPkcs7SignedData(tampered);
 		expect(result.ok).toBe(true);
 	});
@@ -979,7 +1023,7 @@ describe('pkcs7', () => {
 		const result = parsePkcs7SignedDataDer(der);
 		expect(result.ok).toBe(true);
 		if (!result.ok) throw new Error('unreachable');
-		expect(result.value.certificates).toHaveLength(0);
+		expect(result.value.certificateChoices).toHaveLength(0);
 	});
 
 	it('parsePkcs7SignedDataDer rejects duplicate certificates fields', async () => {
@@ -1099,7 +1143,7 @@ describe('pkcs7', () => {
 		const result = parsePkcs7SignedDataDer(der);
 		expect(result.ok).toBe(true);
 		if (!result.ok) throw new Error('unreachable');
-		expect(result.value.certificates).toHaveLength(1);
+		expect(result.value.certificateChoices).toHaveLength(1);
 	});
 
 	it('createPkcs7CertBag rejects a PEM source with no certificate blocks', () => {

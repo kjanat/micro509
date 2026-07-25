@@ -1486,6 +1486,10 @@ function toGenerateKeyAlgorithm(
 			};
 		case 'ed25519':
 			return { name: 'Ed25519' };
+		default: {
+			const _exhaustive: never = algorithm;
+			throw new Error(`Unhandled KeyAlgorithmInput kind: ${String(_exhaustive)}`);
+		}
 	}
 }
 
@@ -1506,6 +1510,10 @@ function toImportAlgorithm(
 			};
 		case 'ed25519':
 			return { name: 'Ed25519' };
+		default: {
+			const _exhaustive: never = algorithm;
+			throw new Error(`Unhandled PublicKeyImportInput kind: ${String(_exhaustive)}`);
+		}
 	}
 }
 
@@ -1680,8 +1688,9 @@ function readPkcs8Version(content: Uint8Array): number {
 /**
  * Extract the optional `parameters [0]` curve identifier from a SEC 1 ECPrivateKey.
  *
- * RFC 5915: `ECPrivateKey ::= SEQUENCE { version INTEGER, privateKey OCTET STRING,
- * parameters [0] ECParameters OPTIONAL, publicKey [1] BIT STRING OPTIONAL }`.
+ * RFC 5915 §3: `ECPrivateKey ::= SEQUENCE { version INTEGER { ecPrivkeyVer1(1) }
+ * (ecPrivkeyVer1), privateKey OCTET STRING, parameters [0] ECParameters
+ * {{ NamedCurve }} OPTIONAL, publicKey [1] BIT STRING OPTIONAL }`.
  */
 function parseSec1PrivateKey(der: Uint8Array): {
 	/** Optional ECParameters tag inside `parameters [0]` (0x06 for a named curve). */
@@ -1988,6 +1997,10 @@ function traditionalPemCipherKeyLength(
 			return 192;
 		case 'AES-256-CBC':
 			return 256;
+		default: {
+			const _exhaustive: never = cipher;
+			throw new Error(`Unhandled traditional PEM cipher: ${String(_exhaustive)}`);
+		}
 	}
 }
 
@@ -2019,11 +2032,14 @@ function opensslBytesToKey(password: string, salt: Uint8Array, length: number): 
 	return out;
 }
 
-/** Parse a PEM block into its label, RFC 1421 headers, and base64 body. */
+/** RFC 822 §3.2: `field-name = 1*<any CHAR, excluding CTLs, SPACE, and ":">`. */
+const RFC822_FIELD_NAME = /^[\x21-\x39\x3b-\x7e]+$/;
+
+/** Parse a PEM block into its label, OpenSSL-style headers, and base64 body. */
 function parseTraditionalPem(pem: string): {
 	/** PEM type label between `BEGIN` and `END` markers. */
 	readonly label: string;
-	/** RFC 1421 encapsulated headers (e.g. `Proc-Type`, `DEK-Info`). */
+	/** OpenSSL-style encapsulated headers (e.g. `Proc-Type`, `DEK-Info`). */
 	readonly headers: ReadonlyMap<string, string>;
 	/** Base64-encoded payload after the headers. */
 	readonly base64Body: string;
@@ -2055,15 +2071,18 @@ function parseTraditionalPem(pem: string): {
 			index += 1;
 			break;
 		}
-		const delimiter = line.indexOf(': ');
+		const delimiter = line.indexOf(':');
 		if (delimiter === -1) {
 			break;
 		}
 		const headerName = line.slice(0, delimiter);
+		if (!RFC822_FIELD_NAME.test(headerName)) {
+			throw new Error(`Invalid PEM header name: ${headerName}`);
+		}
 		if (headers.has(headerName)) {
 			throw new Error(`Duplicate PEM header: ${headerName}`);
 		}
-		headers.set(headerName, line.slice(delimiter + 2));
+		headers.set(headerName, line.slice(delimiter + 1).trimStart());
 		index += 1;
 	}
 	const body = lines.slice(index, lines.length - 1).join('');
@@ -2262,6 +2281,10 @@ function assertSpkiMatchesRequestedAlgorithm(
 				throw new Error('SubjectPublicKeyInfo algorithm does not match requested import algorithm');
 			}
 			return;
+		default: {
+			const _exhaustive: never = algorithm;
+			throw new Error(`Unhandled PublicKeyImportInput kind: ${String(_exhaustive)}`);
+		}
 	}
 }
 
@@ -2299,6 +2322,10 @@ function assertPkcs8MatchesRequestedAlgorithm(
 				throw new Error('PKCS#8 private key algorithm does not match requested import algorithm');
 			}
 			return;
+		default: {
+			const _exhaustive: never = algorithm;
+			throw new Error(`Unhandled PrivateKeyImportInput kind: ${String(_exhaustive)}`);
+		}
 	}
 }
 
@@ -2358,6 +2385,10 @@ function assertPublicJwkMatchesRequestedAlgorithm(
 				throw new Error('Public JWK algorithm does not match requested import algorithm');
 			}
 			return;
+		default: {
+			const _exhaustive: never = algorithm;
+			throw new Error(`Unhandled PublicKeyImportInput kind: ${String(_exhaustive)}`);
+		}
 	}
 }
 
@@ -2401,5 +2432,9 @@ function assertPrivateJwkMatchesRequestedAlgorithm(
 				throw new Error('Private JWK algorithm does not match requested import algorithm');
 			}
 			return;
+		default: {
+			const _exhaustive: never = algorithm;
+			throw new Error(`Unhandled PrivateKeyImportInput kind: ${String(_exhaustive)}`);
+		}
 	}
 }

@@ -191,6 +191,7 @@ describe('extension registry', () => {
 				crlDistributionPoints: [
 					{
 						distributionPoint: {
+							type: 'fullName',
 							fullName: [{ type: 'uri', value: 'https://example.test/root.crl' }],
 						},
 					},
@@ -222,6 +223,7 @@ describe('extension registry', () => {
 		expect(parsed.crlDistributionPoints).toEqual([
 			{
 				distributionPoint: {
+					type: 'fullName',
 					fullName: [{ type: 'uri', value: 'https://example.test/root.crl' }],
 				},
 			},
@@ -255,6 +257,7 @@ describe('extension registry', () => {
 				crlDistributionPoints: [
 					{
 						distributionPoint: {
+							type: 'fullName',
 							fullName: [{ type: 'uri', value: 'https://example.test/csr.crl' }],
 						},
 					},
@@ -282,6 +285,7 @@ describe('extension registry', () => {
 		expect(parsed.crlDistributionPoints).toEqual([
 			{
 				distributionPoint: {
+					type: 'fullName',
 					fullName: [{ type: 'uri', value: 'https://example.test/csr.crl' }],
 				},
 			},

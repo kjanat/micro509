@@ -157,6 +157,7 @@ describe('csr', () => {
 				crlDistributionPoints: [
 					{
 						distributionPoint: {
+							type: 'fullName',
 							fullName: [{ type: 'uri', value: 'http://csr.example/crl' }],
 						},
 					},
@@ -196,6 +197,7 @@ describe('csr', () => {
 		expect(parsed.crlDistributionPoints).toEqual([
 			{
 				distributionPoint: {
+					type: 'fullName',
 					fullName: [{ type: 'uri', value: 'http://csr.example/crl' }],
 				},
 			},

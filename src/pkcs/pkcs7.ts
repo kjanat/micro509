@@ -1,8 +1,11 @@
 /**
  * PKCS#7/CMS certificate bags and SignedData.
  *
- * Creates degenerate (signature-less) certificate bags, parses RFC 2315 / RFC 5652
- * SignedData structures, and verifies signer signatures including signed-attribute flows.
+ * Creates degenerate (signature-less) certificate bags, parses RFC 5652
+ * SignedData (and the RFC 2315 form whose contentInfo content is an OCTET
+ * STRING), and verifies signer signatures including signed-attribute flows.
+ * A CertificateSet is decoded as RFC 5652 §10.2.2 CertificateChoices, so an
+ * attribute certificate or other-format entry is preserved rather than dropped.
  *
  * @module
  */
@@ -73,16 +76,32 @@ export interface Pkcs7CertBagMaterial {
 	readonly base64: string;
 }
 
+/**
+ * RFC 5652 §5.3 `SignerIdentifier ::= CHOICE { issuerAndSerialNumber,
+ * subjectKeyIdentifier [0] }`, which locates the signer's certificate.
+ */
+export type ParsedSignerIdentifier =
+	| {
+			/** Issuer name plus serial number. */
+			readonly type: 'issuerAndSerialNumber';
+			/** Parsed issuer distinguished name. */
+			readonly issuer: ParsedName;
+			/** Hex-encoded certificate serial number. */
+			readonly serialNumberHex: string;
+	  }
+	| {
+			/** SubjectKeyIdentifier (`[0]`). */
+			readonly type: 'subjectKeyIdentifier';
+			/** Hex-encoded SubjectKeyIdentifier of the signer certificate. */
+			readonly subjectKeyIdentifier: string;
+	  };
+
 /** Fields shared by every decoded SignerInfo, regardless of signed-attribute presence. */
 export interface ParsedPkcs7SignerInfoBase {
 	/** CMS SignerInfo version (typically 1 for issuerAndSerialNumber). */
 	readonly version: number;
-	/** Parsed issuer distinguished name, if present (issuerAndSerialNumber signer identifier). */
-	readonly issuer?: ParsedName;
-	/** Hex-encoded serial number used to locate the signer certificate, if present. */
-	readonly serialNumberHex?: string;
-	/** Hex-encoded SubjectKeyIdentifier used to locate the signer certificate, if present. */
-	readonly subjectKeyIdentifier?: string;
+	/** Which of the two RFC 5652 §5.3 SignerIdentifier alternatives this SignerInfo uses. */
+	readonly signerIdentifier: ParsedSignerIdentifier;
 	/** OID of the digest algorithm used to hash the content. */
 	readonly digestAlgorithmOid: string;
 	/** Human-readable digest algorithm name (e.g. `"SHA-256"`). */
@@ -129,6 +148,48 @@ interface ParsedSignedAttributeFields {
 	contentTypeOid?: string;
 }
 
+/**
+ * One RFC 5652 §10.2.2 CertificateChoices alternative.
+ *
+ * X.509 is the only alternative this library decodes. The rest keep their DER,
+ * including the context tag, so a CertificateSet round-trips and a caller can
+ * tell an X.509-only bag from one carrying attribute certificates. RFC 5652
+ * marks `extendedCertificate` and `attributeCertificateV1` obsolete.
+ */
+export type ParsedCertificateChoice =
+	| {
+			/** X.509 certificate (untagged `Certificate`). */
+			readonly type: 'certificate';
+			/** The decoded certificate. */
+			readonly certificate: ParsedCertificate;
+	  }
+	| {
+			/** PKCS #6 extended certificate (`[0]`), obsolete. */
+			readonly type: 'extendedCertificate';
+			/** Raw DER of the element, including its context tag. */
+			readonly der: Uint8Array;
+	  }
+	| {
+			/** Version 1 X.509 attribute certificate (`[1]`), obsolete. */
+			readonly type: 'attributeCertificateV1';
+			/** Raw DER of the element, including its context tag. */
+			readonly der: Uint8Array;
+	  }
+	| {
+			/** Version 2 X.509 attribute certificate (`[2]`). */
+			readonly type: 'attributeCertificateV2';
+			/** Raw DER of the element, including its context tag. */
+			readonly der: Uint8Array;
+	  }
+	| {
+			/** Any other certificate format (`[3] OtherCertificateFormat`). */
+			readonly type: 'other';
+			/** `otherCertFormat` OID identifying the format. */
+			readonly formatOid: string;
+			/** Raw DER of the element, including its context tag. */
+			readonly der: Uint8Array;
+	  };
+
 /** Decoded PKCS#7 SignedData content, including certificates and signer info. */
 export interface ParsedPkcs7SignedData {
 	/** Original DER bytes when this object came from {@linkcode parsePkcs7SignedDataDer} or PEM parsing. */
@@ -145,8 +206,8 @@ export interface ParsedPkcs7SignedData {
 	readonly encapsulatedContentTypeOid: string;
 	/** Raw encapsulated content bytes. Absent in degenerate (certs-only) bags. */
 	readonly encapsulatedContent?: Uint8Array;
-	/** Certificates included in the SignedData certificate set. */
-	readonly certificates: readonly ParsedCertificate[];
+	/** RFC 5652 §10.2.2 CertificateChoices entries from the SignedData certificate set. */
+	readonly certificateChoices: readonly ParsedCertificateChoice[];
 	/** Decoded signer info entries. Empty for degenerate cert bags. */
 	readonly signerInfos: readonly ParsedPkcs7SignerInfo[];
 }
@@ -568,7 +629,7 @@ export function parsePkcs7CertBagDer(der: Uint8Array): ParsePkcs7CertBagResult {
 	if (!result.ok) {
 		return result;
 	}
-	return { ok: true, value: result.value.certificates };
+	return { ok: true, value: x509CertificatesOf(result.value.certificateChoices) };
 }
 
 /** Parses a PEM-armored PKCS#7 cert bag. Expects exactly one `PKCS7` PEM block. */
@@ -655,7 +716,7 @@ export function parsePkcs7SignedDataDer(der: Uint8Array): ParsePkcs7SignedDataRe
 					: {
 							encapsulatedContent: extractEncapsulatedContent(encapDer, encapContent),
 						}),
-				certificates: parseCertificateSet(der, optionalFields.value.certificates),
+				certificateChoices: parseCertificateSet(der, optionalFields.value.certificates),
 				signerInfos: parseSignerInfos(der, signerInfos),
 			},
 		};
@@ -779,7 +840,7 @@ async function verifyPkcs7SignerInfo(
 	signerInfo: ParsedPkcs7SignerInfo,
 	content: Uint8Array,
 ): Promise<{ readonly ok: true } | Extract<VerifyPkcs7SignedDataResult, { readonly ok: false }>> {
-	const signer = parsed.certificates.find((certificate) =>
+	const signer = x509CertificatesOf(parsed.certificateChoices).find((certificate) =>
 		signerIdentifierMatches(certificate, signerInfo),
 	);
 	if (signer === undefined) {
@@ -885,9 +946,10 @@ function signerHasNamedCurve(algorithm: KeyAlgorithm): algorithm is EcKeyAlgorit
 /**
  * Resolves the content-digest hash and its OID for a signer key.
  *
- * Pairs each key with the digest used by its signature algorithm (RFC 5754):
- * P-256/RSA-SHA256 → SHA-256, P-384 → SHA-384, P-521 → SHA-512. Ed25519 uses
- * SHA-512 for the messageDigest attribute, per RFC 8419.
+ * ECDSA curve pairing follows RFC 5753 §8: P-256 → SHA-256, P-384 → SHA-384,
+ * P-521 → SHA-512. RSA uses the hash bound to the key.
+ * Digest OIDs are from RFC 5754 §2.
+ * Ed25519 uses SHA-512 for the messageDigest attribute, per RFC 8419.
  */
 function contentDigestForPrivateKey(
 	privateKey: CryptoKey,
@@ -950,22 +1012,71 @@ function buildSignedAttributes(
 	return { setForSigning, implicitForEmit };
 }
 
-/** Parses the IMPLICIT [0] certificate set from a SignedData structure. */
+/** The X.509 subset of a decoded CertificateSet. */
+function x509CertificatesOf(
+	choices: readonly ParsedCertificateChoice[],
+): readonly ParsedCertificate[] {
+	return choices.flatMap((choice) => (choice.type === 'certificate' ? [choice.certificate] : []));
+}
+
+/**
+ * `otherCertFormat` from an `other [3] IMPLICIT OtherCertificateFormat` entry.
+ *
+ * The IMPLICIT tag replaces the SEQUENCE tag, so the OID and the `ANY DEFINED BY`
+ * value are direct children of the `[3]` element.
+ */
+function parseOtherCertificateFormatOid(source: Uint8Array, element: DerElement): string {
+	const formatOid = requireElement(childrenOf(source, element)[0], 'otherCertFormat');
+	if (formatOid.tag !== 0x06) {
+		throw new Error('otherCertFormat must be an OBJECT IDENTIFIER');
+	}
+	return decodeObjectIdentifier(formatOid.value);
+}
+
+/** Decodes one RFC 5652 §10.2.2 CertificateChoices alternative. */
+function parseCertificateChoice(
+	source: Uint8Array,
+	element: DerElement,
+	der: Uint8Array,
+): ParsedCertificateChoice {
+	switch (element.tag) {
+		case 0x30:
+			return { type: 'certificate', certificate: parseCertificateDerOrThrow(der) };
+		case 0xa0:
+			return { type: 'extendedCertificate', der };
+		case 0xa1:
+			return { type: 'attributeCertificateV1', der };
+		case 0xa2:
+			return { type: 'attributeCertificateV2', der };
+		case 0xa3:
+			return {
+				type: 'other',
+				formatOid: parseOtherCertificateFormatOid(source, element),
+				der,
+			};
+		default:
+			throw new Error(`Unsupported CertificateChoices tag: ${element.tag}`);
+	}
+}
+
+/**
+ * Parses the IMPLICIT [0] certificate set from a SignedData structure as
+ * RFC 5652 §10.2.3 `CertificateSet ::= SET OF CertificateChoices`.
+ */
 function parseCertificateSet(
 	source: Uint8Array,
 	certificates: ReturnType<typeof readElement> | undefined,
-): readonly ParsedCertificate[] {
+): readonly ParsedCertificateChoice[] {
 	if (certificates === undefined || certificates.tag !== 0xa0) {
 		return [];
 	}
-	const parsed: ParsedCertificate[] = [];
-	let offset = certificates.start;
-	while (offset < certificates.end) {
-		const element = readElement(source, offset);
-		parsed.push(parseCertificateDerOrThrow(source.slice(offset, element.end)));
-		offset = element.end;
-	}
-	return parsed;
+	return childrenOf(source, certificates).map((element) =>
+		parseCertificateChoice(
+			source,
+			element,
+			source.slice(element.start - element.headerLength, element.end),
+		),
+	);
 }
 
 /** Extracts the list of digest algorithm OIDs from the digestAlgorithms SET. */
@@ -1038,16 +1149,9 @@ function parseSignerInfo(source: Uint8Array, signerInfo: DerElement): ParsedPkcs
 		requireElement(signatureAlgorithmChildren[0], 'signature algorithm OID').value,
 	);
 	const signatureAlgorithmParams = signatureAlgorithmChildren[1];
-	const parsedSid = parseSignerIdentifier(signerDer.slice(sid.start - sid.headerLength, sid.end));
 	return {
 		version: decodeIntegerNumber(version.value),
-		...(parsedSid.issuer === undefined ? {} : { issuer: parsedSid.issuer }),
-		...(parsedSid.serialNumberHex === undefined
-			? {}
-			: { serialNumberHex: parsedSid.serialNumberHex }),
-		...(parsedSid.subjectKeyIdentifier === undefined
-			? {}
-			: { subjectKeyIdentifier: parsedSid.subjectKeyIdentifier }),
+		signerIdentifier: parseSignerIdentifier(signerDer.slice(sid.start - sid.headerLength, sid.end)),
 		digestAlgorithmOid,
 		digestAlgorithmName: describeHashAlgorithm(digestAlgorithmOid),
 		signatureAlgorithmOid,
@@ -1109,11 +1213,7 @@ function extractEncapsulatedContent(
 }
 
 /** Extracts issuer Name and serial number from an issuerAndSerialNumber SEQUENCE, or subjectKeyIdentifier from [0] IMPLICIT. */
-function parseSignerIdentifier(der: Uint8Array): {
-	readonly issuer?: ParsedName;
-	readonly serialNumberHex?: string;
-	readonly subjectKeyIdentifier?: string;
-} {
+function parseSignerIdentifier(der: Uint8Array): ParsedSignerIdentifier {
 	const element = readRootElement(der, { maxDepth: DEFAULT_MAX_DER_DEPTH });
 	// [0] IMPLICIT SubjectKeyIdentifier
 	if (element.tag === 0x80) {
@@ -1121,6 +1221,7 @@ function parseSignerIdentifier(der: Uint8Array): {
 			throw new Error('SignerIdentifier subjectKeyIdentifier must not be empty');
 		}
 		return {
+			type: 'subjectKeyIdentifier',
 			subjectKeyIdentifier: toHex(element.value),
 		};
 	}
@@ -1140,6 +1241,7 @@ function parseSignerIdentifier(der: Uint8Array): {
 		}
 		assertImplicitSerialNumberEncoding(serial.value, 'SignerIdentifier serialNumber');
 		return {
+			type: 'issuerAndSerialNumber',
 			issuer: parseSignerIssuerName(der, issuerElement),
 			serialNumberHex: toHex(serial.value),
 		};
@@ -1404,18 +1506,14 @@ function signerIdentifierMatches(
 	certificate: ParsedCertificate,
 	signerInfo: ParsedPkcs7SignerInfo,
 ): boolean {
-	if (signerInfo.issuer !== undefined || signerInfo.serialNumberHex !== undefined) {
+	const identifier = signerInfo.signerIdentifier;
+	if (identifier.type === 'issuerAndSerialNumber') {
 		return (
-			signerInfo.issuer !== undefined &&
-			signerInfo.serialNumberHex !== undefined &&
-			certificate.serialNumberHex === signerInfo.serialNumberHex &&
-			compareDistinguishedNames(certificate.issuer, signerInfo.issuer)
+			certificate.serialNumberHex === identifier.serialNumberHex &&
+			compareDistinguishedNames(certificate.issuer, identifier.issuer)
 		);
 	}
-	return (
-		signerInfo.subjectKeyIdentifier !== undefined &&
-		certificate.subjectKeyIdentifier === signerInfo.subjectKeyIdentifier
-	);
+	return certificate.subjectKeyIdentifier === identifier.subjectKeyIdentifier;
 }
 
 function assertImplicitSignedAttrsDer(signedAttrsDer: Uint8Array): void {

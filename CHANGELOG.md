@@ -29,6 +29,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Tighten four exported TypeScript contracts to make invalid states
+  unrepresentable. These changes can require source updates:
+  - `CrlEncoderErrorCode` now contains only
+    `'distribution_point_full_name_empty'`.
+    `'distribution_point_name_conflict'` and
+    `'distribution_point_name_empty'` are removed because
+    `DistributionPointName` is now a discriminated union that cannot express
+    either invalid shape.
+  - `ParsedOcspSingleResponse` is now discriminated by `certStatus`.
+    `revokedAt` and `revocationReasonCode` are available only after narrowing to
+    `certStatus === 'revoked'`; `revokedAt` is then required.
+  - `CreateOcspCertStatusInput` rejects `revokedAt` and
+    `revocationReasonCode` unless `certStatus` is `'revoked'`, including when a
+    previously declared object is passed instead of an object literal.
+  - `CreateSelfSignedCertificateInput` no longer accepts both `keyPair` and
+    `algorithm`. Supply `keyPair` to reuse existing keys, or `algorithm` to
+    generate a new pair.
+
+  ```ts
+  if (singleResponse.certStatus === 'revoked') {
+    singleResponse.revokedAt; // Date
+    singleResponse.revocationReasonCode; // number | undefined
+  }
+
+  await createSelfSignedCertificate({ subject, keyPair });
+  await createSelfSignedCertificate({
+    subject,
+    algorithm: { kind: 'ecdsa', curve: 'P-256' },
+  });
+  ```
+
+- `ParsedPkcs7SignedData.certificates: readonly ParsedCertificate[]` becomes
+  `certificateChoices: readonly ParsedCertificateChoice[]`, modelling RFC 5652
+  §10.2.2 CertificateChoices as a discriminated union rather than discarding
+  four of its five alternatives. `certificate` carries the decoded X.509;
+  `extendedCertificate` (`[0]`, obsolete), `attributeCertificateV1` (`[1]`,
+  obsolete), `attributeCertificateV2` (`[2]`), and `other` (`[3]`, with its
+  `otherCertFormat` OID decoded) keep their DER including the context tag, so a
+  CertificateSet round-trips and a caller can tell an X.509-only bag from a
+  mixed one. A certificate set entry whose tag is none of these is rejected as
+  `malformed`; previously any non-SEQUENCE element was silently dropped.
+  `parsePkcs7CertBagDer` and `parsePkcs7CertBagPem` still return
+  `readonly ParsedCertificate[]`, now the X.509 projection of the set.
 - Builder input-validation now throws a `ResultError` carrying a stable
   machine-readable `code` rather than a bare `Error`. `createCertificate`, the
   `encode*` extension helpers, distinguished-name encoding, and CRL/IDP encoding
@@ -55,6 +98,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Legacy OpenSSL-style encrypted PEM (`Proc-Type: 4,ENCRYPTED`) parsing accepts
+  an encapsulated header with no space after the colon (`DEK-Info:AES-256-CBC,…`).
+  The parser keyed on `': '`, so a conformant no-space header ended the header
+  scan early and folded into the base64 body.
+  (https://github.com/kjanat/micro509/pull/89)
 - Certificate and CSR builders reject RFC 5280 MUST-NOT constructions with coded
   throws. `pathLenConstraint` requires the keyUsage extension to assert
   `keyCertSign`; absent, empty, or `keyCertSign`-less keyUsage is rejected

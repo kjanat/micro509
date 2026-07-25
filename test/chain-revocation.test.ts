@@ -106,6 +106,7 @@ describe('checkChainRevocation', () => {
 				crlDistributionPoints: [
 					{
 						distributionPoint: {
+							type: 'fullName',
 							fullName: [{ type: 'uri', value: 'http://example.test/partial.crl' }],
 						},
 						reasons: ['keyCompromise'],

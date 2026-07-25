@@ -1,5 +1,6 @@
 /**
- * Service-identity matching (RFC 6125 / RFC 9525).
+ * Service-identity matching (RFC 9525), with opt-in CN fallback from the
+ * obsoleted RFC 6125 §6.4.4.
  *
  * Compares a reference identifier (hostname, IP, URI, SRV name) against the
  * presented identifiers in a certificate's SAN extension, with optional
@@ -24,6 +25,7 @@ export interface DnsServiceIdentityInput {
 	/**
 	 * When `true`, falls back to the subject CN if the SAN extension has no
 	 * dns/uri/srv entries. Suppressed when any supported SAN type is present.
+	 * RFC 9525 §4.1 forbids identifying a service by the Common Name RDN.
 	 * @default false
 	 */
 	readonly allowCommonNameFallback?: boolean;

@@ -121,23 +121,42 @@ export interface CreateCertificateInput {
 /**
  * Input for {@linkcode createSelfSignedCertificate}.
  */
-export interface CreateSelfSignedCertificateInput {
+export type CreateSelfSignedCertificateInput = CreateSelfSignedCertificateBase &
+	SelfSignedKeySource;
+
+/**
+ * Where {@linkcode createSelfSignedCertificate} gets its key pair.
+ *
+ * Supplying `keyPair` makes `algorithm` unreachable, since generation is skipped.
+ */
+export type SelfSignedKeySource =
+	| {
+			/**
+			 * Existing key pair to reuse for both subject and issuer.
+			 */
+			readonly keyPair: KeyPairMaterial;
+			/**
+			 * Unavailable in this variant; the supplied `keyPair` is used as-is.
+			 */
+			readonly algorithm?: never;
+	  }
+	| {
+			/**
+			 * Generate a new key pair for both subject and issuer.
+			 */
+			readonly keyPair?: never;
+			/**
+			 * Key generation parameters. Defaults to the {@linkcode generateKeyPair} default.
+			 */
+			readonly algorithm?: KeyAlgorithmInput;
+	  };
+
+/** Fields common to both {@linkcode SelfSignedKeySource} variants. */
+export interface CreateSelfSignedCertificateBase {
 	/**
 	 * Subject distinguished name used as both subject and issuer.
 	 */
 	readonly subject: NameInput;
-	/**
-	 * Key generation parameters.
-	 *
-	 * Ignored when `keyPair` is provided.
-	 */
-	readonly algorithm?: KeyAlgorithmInput;
-	/**
-	 * Existing key pair to reuse for both subject and issuer.
-	 *
-	 * When omitted, a new key pair is generated.
-	 */
-	readonly keyPair?: KeyPairMaterial;
 	/**
 	 * Validity window configuration.
 	 */

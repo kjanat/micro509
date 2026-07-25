@@ -85,6 +85,7 @@ import type {
 	ParsedDistributionPoint,
 	ParsedDistributionPointName,
 	ParsedIssuingDistributionPoint,
+	ParsedIssuingDistributionPointScope,
 	ParsedName,
 	ParsedNameAttribute,
 	ParsedRelativeDistinguishedName,
@@ -1189,6 +1190,7 @@ function issuerFallbackDistributionPointName(
 	certificate: ParsedCertificate,
 ): ParsedDistributionPointName {
 	return {
+		type: 'fullName',
 		fullName: [
 			{ type: 'directoryName', derHex: certificate.issuer.derHex },
 			...(certificate.issuerAltNames ?? []),
@@ -1531,26 +1533,21 @@ function matchesDistributionPointName(
 	if (certificatePoint === undefined) {
 		return matchesIdpNameAgainstCrlIssuer(crlPoint, certificateCrlIssuer, crlIssuer);
 	}
-	// Both have fullName — direct comparison
-	if (certificatePoint.fullName !== undefined && crlPoint.fullName !== undefined) {
-		return certificatePoint.fullName.some(
-			(leftName) =>
-				crlPoint.fullName?.some((rightName) => compareGeneralNames(leftName, rightName)) === true,
+	if (certificatePoint.type === 'fullName' && crlPoint.type === 'fullName') {
+		return certificatePoint.fullName.some((leftName) =>
+			crlPoint.fullName.some((rightName) => compareGeneralNames(leftName, rightName)),
 		);
 	}
-	// Cert has relativeName, CRL has fullName — resolve relativeName to full DN
-	if (certificatePoint.relativeName !== undefined && crlPoint.fullName !== undefined) {
+	if (certificatePoint.type === 'relativeName' && crlPoint.type === 'fullName') {
 		const resolvedDnHex = resolveRelativeNameToDnHex(crlIssuer, certificatePoint.relativeName);
 		return crlPoint.fullName.some(
 			(name) => name.type === 'directoryName' && name.derHex === resolvedDnHex,
 		);
 	}
-	// Both have relativeName — direct RDN comparison
-	if (certificatePoint.relativeName !== undefined && crlPoint.relativeName !== undefined) {
+	if (certificatePoint.type === 'relativeName' && crlPoint.type === 'relativeName') {
 		return compareRelativeDistinguishedNames(certificatePoint.relativeName, crlPoint.relativeName);
 	}
-	// Cert has fullName, CRL has relativeName — resolve CRL relativeName to full DN
-	if (certificatePoint.fullName !== undefined && crlPoint.relativeName !== undefined) {
+	if (certificatePoint.type === 'fullName' && crlPoint.type === 'relativeName') {
 		const resolvedDnHex = resolveRelativeNameToDnHex(crlIssuer, crlPoint.relativeName);
 		return certificatePoint.fullName.some(
 			(name) => name.type === 'directoryName' && name.derHex === resolvedDnHex,
@@ -1572,19 +1569,15 @@ function matchesIdpNameAgainstCrlIssuer(
 	if (certificateCrlIssuer === undefined) {
 		return false;
 	}
-	if (crlPoint.fullName !== undefined) {
-		return certificateCrlIssuer.some(
-			(issuerName) =>
-				crlPoint.fullName?.some((name) => compareGeneralNames(issuerName, name)) === true,
+	if (crlPoint.type === 'fullName') {
+		return certificateCrlIssuer.some((issuerName) =>
+			crlPoint.fullName.some((name) => compareGeneralNames(issuerName, name)),
 		);
 	}
-	if (crlPoint.relativeName !== undefined) {
-		const resolvedDnHex = resolveRelativeNameToDnHex(crlIssuer, crlPoint.relativeName);
-		return certificateCrlIssuer.some(
-			(issuerName) => issuerName.type === 'directoryName' && issuerName.derHex === resolvedDnHex,
-		);
-	}
-	return false;
+	const resolvedDnHex = resolveRelativeNameToDnHex(crlIssuer, crlPoint.relativeName);
+	return certificateCrlIssuer.some(
+		(issuerName) => issuerName.type === 'directoryName' && issuerName.derHex === resolvedDnHex,
+	);
 }
 
 /** Constructs a full DN by appending an RDN to an existing Name, returning hex-encoded DER. */
@@ -1637,16 +1630,13 @@ function sameDistributionPointName(
 	if (left === undefined || right === undefined) {
 		return left === right;
 	}
-	if (left.fullName !== undefined || right.fullName !== undefined) {
-		if (left.fullName === undefined || right.fullName === undefined) {
-			return false;
-		}
+	if (left.type === 'fullName' && right.type === 'fullName') {
 		return sameGeneralNameSet(left.fullName, right.fullName);
 	}
-	if (left.relativeName === undefined || right.relativeName === undefined) {
-		return false;
+	if (left.type === 'relativeName' && right.type === 'relativeName') {
+		return compareRelativeDistinguishedNames(left.relativeName, right.relativeName);
 	}
-	return compareRelativeDistinguishedNames(left.relativeName, right.relativeName);
+	return false;
 }
 
 /** Set-equality comparison for GeneralName arrays (order-independent). */
@@ -2046,31 +2036,61 @@ function parseIssuingDistributionPoint(valueDer: Uint8Array): ParsedIssuingDistr
 	for (const child of childrenOf(valueDer, sequenceElement)) {
 		parseIssuingDistributionPointField(valueDer, child, fields);
 	}
-	const scopeFlags = [
-		fields.onlyContainsUserCerts,
-		fields.onlyContainsCACerts,
-		fields.onlyContainsAttributeCerts,
-	].filter((value) => value === true).length;
-	if (scopeFlags > 1) {
-		throw new Error('IssuingDistributionPoint scope booleans are mutually exclusive');
-	}
 	return {
 		...(fields.distributionPoint === undefined
 			? {}
 			: { distributionPoint: fields.distributionPoint }),
-		...(fields.onlyContainsUserCerts === undefined
-			? {}
-			: { onlyContainsUserCerts: fields.onlyContainsUserCerts }),
-		...(fields.onlyContainsCACerts === undefined
-			? {}
-			: { onlyContainsCACerts: fields.onlyContainsCACerts }),
 		...(fields.onlySomeReasons === undefined ? {} : { onlySomeReasons: fields.onlySomeReasons }),
 		...(fields.indirectCrl === undefined ? {} : { indirectCrl: fields.indirectCrl }),
-		...(fields.onlyContainsAttributeCerts === undefined
-			? {}
-			: { onlyContainsAttributeCerts: fields.onlyContainsAttributeCerts }),
+		...parseIssuingDistributionPointScope(fields),
 	};
 }
+
+/** RFC 5280 §5.2.5: at most one `onlyContains*` flag may be TRUE. */
+function parseIssuingDistributionPointScope(
+	fields: MutableIssuingDistributionPointFields,
+): ParsedIssuingDistributionPointScope {
+	const userCerts = fields.onlyContainsUserCerts;
+	const caCerts = fields.onlyContainsCACerts;
+	const attributeCerts = fields.onlyContainsAttributeCerts;
+	if (userCerts === true) {
+		if (caCerts === true || attributeCerts === true) {
+			throw new Error(IDP_SCOPE_CONFLICT);
+		}
+		return { onlyContainsUserCerts: true, ...unselectedScopeFlags({ caCerts, attributeCerts }) };
+	}
+	if (caCerts === true) {
+		if (attributeCerts === true) {
+			throw new Error(IDP_SCOPE_CONFLICT);
+		}
+		return { onlyContainsCACerts: true, ...unselectedScopeFlags({ userCerts, attributeCerts }) };
+	}
+	if (attributeCerts === true) {
+		return { onlyContainsAttributeCerts: true, ...unselectedScopeFlags({ userCerts, caCerts }) };
+	}
+	return unselectedScopeFlags({ userCerts, caCerts, attributeCerts });
+}
+
+/** Keeps the explicit-FALSE flags the encoding carried, omitting the ones it left out. */
+function unselectedScopeFlags(flags: {
+	readonly userCerts?: false;
+	readonly caCerts?: false;
+	readonly attributeCerts?: false;
+}): {
+	readonly onlyContainsUserCerts?: false;
+	readonly onlyContainsCACerts?: false;
+	readonly onlyContainsAttributeCerts?: false;
+} {
+	return {
+		...(flags.userCerts === undefined ? {} : { onlyContainsUserCerts: flags.userCerts }),
+		...(flags.caCerts === undefined ? {} : { onlyContainsCACerts: flags.caCerts }),
+		...(flags.attributeCerts === undefined
+			? {}
+			: { onlyContainsAttributeCerts: flags.attributeCerts }),
+	};
+}
+
+const IDP_SCOPE_CONFLICT = 'IssuingDistributionPoint scope booleans are mutually exclusive';
 
 function parseIssuingDistributionPointField(
 	valueDer: Uint8Array,
@@ -2172,12 +2192,15 @@ function parseDistributionPointName(
 			}
 		}
 		return {
+			type: 'fullName',
 			fullName: fullName.map((name) => parseGeneralName(valueDer, name)),
 		};
 	}
 	if (distributionPointName.tag === 0xa1) {
-		const relativeName = parseRelativeName(valueDer, distributionPointName);
-		return { relativeName };
+		return {
+			type: 'relativeName',
+			relativeName: parseRelativeName(valueDer, distributionPointName),
+		};
 	}
 	throw new Error(`Unsupported distributionPointName tag: ${String(distributionPointName.tag)}`);
 }
@@ -2275,10 +2298,7 @@ function parseImplicitBoolean(element: DerElement): boolean {
 }
 
 /** Machine-readable reason a CRL encoder rejected its construction input. */
-export type CrlEncoderErrorCode =
-	| 'distribution_point_name_conflict'
-	| 'distribution_point_full_name_empty'
-	| 'distribution_point_name_empty';
+export type CrlEncoderErrorCode = 'distribution_point_full_name_empty';
 
 /** Throws a {@link ResultError} for a CRL encoder input-validation failure. */
 function throwCrlEncoderError(code: CrlEncoderErrorCode, message: string): never {
@@ -2330,33 +2350,29 @@ function encodeDistributionPointName(
 	if (value === undefined) {
 		throw new Error('IssuingDistributionPoint distributionPoint is required');
 	}
-	if (value.fullName !== undefined && value.relativeName !== undefined) {
-		throwCrlEncoderError(
-			'distribution_point_name_conflict',
-			'DistributionPointName cannot contain both fullName and relativeName',
-		);
-	}
-	if (value.fullName !== undefined) {
-		if (value.fullName.length === 0) {
-			throwCrlEncoderError(
-				'distribution_point_full_name_empty',
-				'DistributionPointName fullName must not be empty',
+	switch (value.type) {
+		case 'fullName': {
+			if (value.fullName.length === 0) {
+				throwCrlEncoderError(
+					'distribution_point_full_name_empty',
+					'DistributionPointName fullName must not be empty',
+				);
+			}
+			return implicitConstructedContext(0, concatGeneralNames(value.fullName));
+		}
+		case 'relativeName': {
+			const relativeName = encodeRelativeDistinguishedName(value.relativeName);
+			const relativeNameElement = readElement(relativeName);
+			return implicitConstructedContext(
+				1,
+				relativeName.slice(relativeNameElement.start, relativeNameElement.end),
 			);
 		}
-		return implicitConstructedContext(0, concatGeneralNames(value.fullName));
+		default: {
+			const _exhaustive: never = value;
+			throw new Error(`Unhandled DistributionPointName type: ${String(_exhaustive)}`);
+		}
 	}
-	if (value.relativeName !== undefined) {
-		const relativeName = encodeRelativeDistinguishedName(value.relativeName);
-		const relativeNameElement = readElement(relativeName);
-		return implicitConstructedContext(
-			1,
-			relativeName.slice(relativeNameElement.start, relativeNameElement.end),
-		);
-	}
-	throwCrlEncoderError(
-		'distribution_point_name_empty',
-		'DistributionPointName must contain fullName or relativeName',
-	);
 }
 
 /** DER-encodes and concatenates a list of GeneralName values. */

@@ -6,6 +6,7 @@ import {
 	createSelfSignedCertificate,
 	generateKeyPair,
 	isCertificateRevoked,
+	type ParsedCertificateRevocationList,
 	parseCertificatePem,
 	parseCertificateRevocationListDer,
 	parseCertificateRevocationListDerOrThrow,
@@ -108,6 +109,7 @@ describe('crl', () => {
 			baseCrlNumber: 8,
 			issuingDistributionPoint: {
 				distributionPoint: {
+					type: 'fullName',
 					fullName: [{ type: 'uri', value: 'http://example.test/idp.crl' }],
 				},
 				onlyContainsUserCerts: true,
@@ -117,6 +119,7 @@ describe('crl', () => {
 			freshestCrlDistributionPoints: [
 				{
 					distributionPoint: {
+						type: 'fullName',
 						fullName: [{ type: 'uri', value: 'http://example.test/freshest.crl' }],
 					},
 				},
@@ -133,6 +136,7 @@ describe('crl', () => {
 		expect(parsed.baseCrlNumber).toBe(8);
 		expect(parsed.issuingDistributionPoint).toEqual({
 			distributionPoint: {
+				type: 'fullName',
 				fullName: [{ type: 'uri', value: 'http://example.test/idp.crl' }],
 			},
 			onlyContainsUserCerts: true,
@@ -142,6 +146,7 @@ describe('crl', () => {
 		expect(parsed.freshestCrlDistributionPoints).toEqual([
 			{
 				distributionPoint: {
+					type: 'fullName',
 					fullName: [{ type: 'uri', value: 'http://example.test/freshest.crl' }],
 				},
 			},
@@ -170,6 +175,7 @@ describe('crl', () => {
 			issuerPublicKey: issuer.keyPair.publicKey,
 			issuingDistributionPoint: {
 				distributionPoint: {
+					type: 'relativeName',
 					relativeName: [
 						{ type: 'organizationalUnit', value: 'CRLs' },
 						{ type: 'commonName', value: 'ca-scope' },
@@ -181,6 +187,7 @@ describe('crl', () => {
 			freshestCrlDistributionPoints: [
 				{
 					distributionPoint: {
+						type: 'fullName',
 						fullName: [
 							{ type: 'uri', value: 'http://example.test/delta.crl' },
 							{ type: 'dns', value: 'delta.example.test' },
@@ -191,6 +198,7 @@ describe('crl', () => {
 				},
 				{
 					distributionPoint: {
+						type: 'relativeName',
 						relativeName: [{ type: 'commonName', value: 'delta-relative' }],
 					},
 				},
@@ -200,6 +208,7 @@ describe('crl', () => {
 		const parsed = parseCertificateRevocationListPemOrThrow(crl.pem);
 		expect(parsed.issuingDistributionPoint).toMatchObject({
 			distributionPoint: {
+				type: 'relativeName',
 				relativeName: {
 					values: {
 						organizationalUnit: 'CRLs',
@@ -213,6 +222,7 @@ describe('crl', () => {
 		expect(parsed.freshestCrlDistributionPoints).toHaveLength(2);
 		expect(parsed.freshestCrlDistributionPoints?.[0]).toEqual({
 			distributionPoint: {
+				type: 'fullName',
 				fullName: [
 					{ type: 'uri', value: 'http://example.test/delta.crl' },
 					{ type: 'dns', value: 'delta.example.test' },
@@ -223,6 +233,7 @@ describe('crl', () => {
 		});
 		expect(parsed.freshestCrlDistributionPoints?.[1]).toMatchObject({
 			distributionPoint: {
+				type: 'relativeName',
 				relativeName: {
 					values: { commonName: 'delta-relative' },
 				},
@@ -270,6 +281,7 @@ describe('crl', () => {
 			freshestCrlDistributionPoints: [
 				{
 					distributionPoint: {
+						type: 'fullName',
 						fullName: [
 							{ type: 'email', value: 'pki@example.test' },
 							{ type: 'ip', value: '2001:db8::7' },
@@ -284,6 +296,7 @@ describe('crl', () => {
 			[
 				{
 					distributionPoint: {
+						type: 'fullName',
 						fullName: [
 							{ type: 'email', value: 'pki@example.test' },
 							{ type: 'ip', value: '2001:db8:0:0:0:0:0:7' },
@@ -402,6 +415,7 @@ describe('crl', () => {
 				crlDistributionPoints: [
 					{
 						distributionPoint: {
+							type: 'fullName',
 							fullName: [{ type: 'uri', value: 'http://example.test/leaf.crl' }],
 						},
 					},
@@ -415,6 +429,7 @@ describe('crl', () => {
 			issuerPublicKey: ca.keyPair.publicKey,
 			issuingDistributionPoint: {
 				distributionPoint: {
+					type: 'fullName',
 					fullName: [{ type: 'uri', value: 'http://example.test/leaf.crl' }],
 				},
 			},
@@ -433,6 +448,7 @@ describe('crl', () => {
 			issuerPublicKey: ca.keyPair.publicKey,
 			issuingDistributionPoint: {
 				distributionPoint: {
+					type: 'fullName',
 					fullName: [{ type: 'uri', value: 'http://example.test/other.crl' }],
 				},
 			},
@@ -471,6 +487,7 @@ describe('crl', () => {
 				crlDistributionPoints: [
 					{
 						distributionPoint: {
+							type: 'fullName',
 							fullName: [{ type: 'uri', value: 'http://example.test/reasons.crl' }],
 						},
 						reasons: ['keyCompromise'],
@@ -485,6 +502,7 @@ describe('crl', () => {
 			issuerPublicKey: ca.keyPair.publicKey,
 			issuingDistributionPoint: {
 				distributionPoint: {
+					type: 'fullName',
 					fullName: [{ type: 'uri', value: 'http://example.test/reasons.crl' }],
 				},
 				onlySomeReasons: ['cessationOfOperation'],
@@ -517,6 +535,7 @@ describe('crl', () => {
 				crlDistributionPoints: [
 					{
 						distributionPoint: {
+							type: 'fullName',
 							fullName: [{ type: 'uri', value: 'http://example.test/ca-only.crl' }],
 						},
 					},
@@ -529,6 +548,7 @@ describe('crl', () => {
 			issuerPublicKey: ca.keyPair.publicKey,
 			issuingDistributionPoint: {
 				distributionPoint: {
+					type: 'fullName',
 					fullName: [{ type: 'uri', value: 'http://example.test/ca-only.crl' }],
 				},
 				onlyContainsCACerts: true,
@@ -581,6 +601,7 @@ describe('crl', () => {
 				crlDistributionPoints: [
 					{
 						distributionPoint: {
+							type: 'fullName',
 							fullName: [{ type: 'uri', value: 'http://example.test/direct.crl' }],
 						},
 					},
@@ -633,6 +654,7 @@ describe('crl', () => {
 			issuerPublicKey: certIssuer.keyPair.publicKey,
 			issuingDistributionPoint: {
 				distributionPoint: {
+					type: 'fullName',
 					fullName: [{ type: 'uri', value: 'http://example.test/direct.crl' }],
 				},
 			},
@@ -672,6 +694,7 @@ describe('crl', () => {
 				crlDistributionPoints: [
 					{
 						distributionPoint: {
+							type: 'fullName',
 							fullName: [{ type: 'uri', value: 'http://example.test/no-idp-delta.crl' }],
 						},
 					},
@@ -792,7 +815,10 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 			issuingDistributionPoint: {
-				distributionPoint: { fullName: [{ type: 'directoryName', derHex: caDnHex }] },
+				distributionPoint: {
+					type: 'fullName',
+					fullName: [{ type: 'directoryName', derHex: caDnHex }],
+				},
 			},
 		});
 		expect(
@@ -833,7 +859,10 @@ describe('crl', () => {
 			signerPrivateKey: crlCa.keyPair.privateKey,
 			issuerPublicKey: crlCa.keyPair.publicKey,
 			issuingDistributionPoint: {
-				distributionPoint: { fullName: [{ type: 'directoryName', derHex: crlCaDnHex }] },
+				distributionPoint: {
+					type: 'fullName',
+					fullName: [{ type: 'directoryName', derHex: crlCaDnHex }],
+				},
 				indirectCrl: true,
 			},
 		});
@@ -851,6 +880,7 @@ describe('crl', () => {
 			issuerPublicKey: crlCa.keyPair.publicKey,
 			issuingDistributionPoint: {
 				distributionPoint: {
+					type: 'fullName',
 					fullName: [{ type: 'uri', value: 'http://example.test/other.crl' }],
 				},
 				indirectCrl: true,
@@ -885,6 +915,7 @@ describe('crl', () => {
 				crlDistributionPoints: [
 					{
 						distributionPoint: {
+							type: 'fullName',
 							fullName: [{ type: 'uri', value: 'http://example.test/partial.crl' }],
 						},
 						reasons: ['keyCompromise', 'cACompromise'],
@@ -914,6 +945,7 @@ describe('crl', () => {
 			issuerPublicKey: ca.keyPair.publicKey,
 			issuingDistributionPoint: {
 				distributionPoint: {
+					type: 'fullName',
 					fullName: [{ type: 'uri', value: 'http://example.test/partial.crl' }],
 				},
 				onlySomeReasons: ['cACompromise', 'superseded'],
@@ -947,12 +979,14 @@ describe('crl', () => {
 				crlDistributionPoints: [
 					{
 						distributionPoint: {
+							type: 'fullName',
 							fullName: [{ type: 'uri', value: 'http://example.test/a.crl' }],
 						},
 						reasons: ['keyCompromise'],
 					},
 					{
 						distributionPoint: {
+							type: 'fullName',
 							fullName: [{ type: 'uri', value: 'http://example.test/a.crl' }],
 						},
 						reasons: ['cACompromise'],
@@ -1001,7 +1035,7 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 			issuingDistributionPoint: {
-				distributionPoint: { fullName: [{ type: 'dns', value: 'crl.example' }] },
+				distributionPoint: { type: 'fullName', fullName: [{ type: 'dns', value: 'crl.example' }] },
 			},
 		});
 		expect(
@@ -1029,6 +1063,7 @@ describe('crl', () => {
 				crlDistributionPoints: [
 					{
 						distributionPoint: {
+							type: 'fullName',
 							fullName: [{ type: 'srv', value: '_ldap.crl.example' }],
 						},
 					},
@@ -1041,7 +1076,7 @@ describe('crl', () => {
 				signerPrivateKey: ca.keyPair.privateKey,
 				issuerPublicKey: ca.keyPair.publicKey,
 				issuingDistributionPoint: {
-					distributionPoint: { fullName: [{ type: 'srv', value: idpName }] },
+					distributionPoint: { type: 'fullName', fullName: [{ type: 'srv', value: idpName }] },
 				},
 			});
 			expect(
@@ -1058,7 +1093,10 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 			issuingDistributionPoint: {
-				distributionPoint: { fullName: [{ type: 'srv', value: '_imaps.crl.example' }] },
+				distributionPoint: {
+					type: 'fullName',
+					fullName: [{ type: 'srv', value: '_imaps.crl.example' }],
+				},
 			},
 		});
 		expect(
@@ -1098,7 +1136,12 @@ describe('crl', () => {
 			issuerPublicKey: ca.keyPair.publicKey,
 			extensions: {
 				crlDistributionPoints: [
-					{ distributionPoint: { fullName: [{ type: 'uri', value: certificateUri }] } },
+					{
+						distributionPoint: {
+							type: 'fullName',
+							fullName: [{ type: 'uri', value: certificateUri }],
+						},
+					},
 				],
 			},
 		});
@@ -1107,7 +1150,7 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 			issuingDistributionPoint: {
-				distributionPoint: { fullName: [{ type: 'uri', value: crlUri }] },
+				distributionPoint: { type: 'fullName', fullName: [{ type: 'uri', value: crlUri }] },
 			},
 		});
 		expect(
@@ -1145,7 +1188,12 @@ describe('crl', () => {
 			issuerPublicKey: ca.keyPair.publicKey,
 			extensions: {
 				crlDistributionPoints: [
-					{ distributionPoint: { fullName: [{ type: 'uri', value: certificateUri }] } },
+					{
+						distributionPoint: {
+							type: 'fullName',
+							fullName: [{ type: 'uri', value: certificateUri }],
+						},
+					},
 				],
 			},
 		});
@@ -1154,7 +1202,7 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 			issuingDistributionPoint: {
-				distributionPoint: { fullName: [{ type: 'uri', value: crlUri }] },
+				distributionPoint: { type: 'fullName', fullName: [{ type: 'uri', value: crlUri }] },
 			},
 		});
 		expect(
@@ -1231,6 +1279,7 @@ describe('crl', () => {
 			issuerPublicKey: ca.keyPair.publicKey,
 			issuingDistributionPoint: {
 				distributionPoint: {
+					type: 'fullName',
 					fullName: [{ type: 'uri', value: 'http://example.test/scoped.crl' }],
 				},
 			},
@@ -1302,6 +1351,7 @@ describe('crl', () => {
 				crlDistributionPoints: [
 					{
 						distributionPoint: {
+							type: 'fullName',
 							fullName: [{ type: 'uri', value: 'http://example.test/unsupported.crl' }],
 						},
 					},
@@ -1314,6 +1364,7 @@ describe('crl', () => {
 			issuerPublicKey: ca.keyPair.publicKey,
 			issuingDistributionPoint: {
 				distributionPoint: {
+					type: 'fullName',
 					fullName: [{ type: 'uri', value: 'http://example.test/unsupported.crl' }],
 				},
 				indirectCrl: true,
@@ -1622,6 +1673,7 @@ describe('crl', () => {
 				crlDistributionPoints: [
 					{
 						distributionPoint: {
+							type: 'fullName',
 							fullName: [{ type: 'uri', value: 'http://example.test/delta-scope-a.crl' }],
 						},
 					},
@@ -1635,6 +1687,7 @@ describe('crl', () => {
 			crlNumber: 7,
 			issuingDistributionPoint: {
 				distributionPoint: {
+					type: 'fullName',
 					fullName: [{ type: 'uri', value: 'http://example.test/delta-scope-a.crl' }],
 				},
 			},
@@ -1647,6 +1700,7 @@ describe('crl', () => {
 			baseCrlNumber: 7,
 			issuingDistributionPoint: {
 				distributionPoint: {
+					type: 'fullName',
 					fullName: [{ type: 'uri', value: 'http://example.test/delta-scope-b.crl' }],
 				},
 			},
@@ -1849,6 +1903,7 @@ describe('crl', () => {
 		const distributionPoints = [
 			{
 				distributionPoint: {
+					type: 'fullName',
 					fullName: [{ type: 'uri', value: 'http://example.test/indirect.crl' }],
 				},
 				crlIssuer: [{ type: 'directoryName', derHex: parsedCrlIssuer.subject.derHex }],
@@ -1878,6 +1933,7 @@ describe('crl', () => {
 			issuerPublicKey: crlIssuer.keyPair.publicKey,
 			issuingDistributionPoint: {
 				distributionPoint: {
+					type: 'fullName',
 					fullName: [{ type: 'uri', value: 'http://example.test/indirect.crl' }],
 				},
 				indirectCrl: true,
@@ -1939,6 +1995,7 @@ describe('crl', () => {
 				crlDistributionPoints: [
 					{
 						distributionPoint: {
+							type: 'fullName',
 							fullName: [{ type: 'uri', value: 'http://example.test/indirect-applicability.crl' }],
 						},
 					},
@@ -1951,6 +2008,7 @@ describe('crl', () => {
 			issuerPublicKey: crlIssuer.keyPair.publicKey,
 			issuingDistributionPoint: {
 				distributionPoint: {
+					type: 'fullName',
 					fullName: [{ type: 'uri', value: 'http://example.test/indirect-applicability.crl' }],
 				},
 				indirectCrl: true,
@@ -2057,6 +2115,7 @@ describe('crl', () => {
 			issuerPublicKey: crlIssuer.keyPair.publicKey,
 			issuingDistributionPoint: {
 				distributionPoint: {
+					type: 'fullName',
 					fullName: [{ type: 'uri', value: 'http://example.test/unsupported-crl-issuer.crl' }],
 				},
 				indirectCrl: true,
@@ -2105,6 +2164,7 @@ describe('crl', () => {
 				crlDistributionPoints: [
 					{
 						distributionPoint: {
+							type: 'fullName',
 							fullName: [{ type: 'uri', value: 'http://example.test/delta-unsupported-entry.crl' }],
 						},
 						crlIssuer: [{ type: 'directoryName', derHex: parsedCrlIssuer.subject.derHex }],
@@ -2119,6 +2179,7 @@ describe('crl', () => {
 			crlNumber: 10,
 			issuingDistributionPoint: {
 				distributionPoint: {
+					type: 'fullName',
 					fullName: [{ type: 'uri', value: 'http://example.test/delta-unsupported-entry.crl' }],
 				},
 				indirectCrl: true,
@@ -2132,6 +2193,7 @@ describe('crl', () => {
 			baseCrlNumber: 10,
 			issuingDistributionPoint: {
 				distributionPoint: {
+					type: 'fullName',
 					fullName: [{ type: 'uri', value: 'http://example.test/delta-unsupported-entry.crl' }],
 				},
 				indirectCrl: true,
@@ -2186,6 +2248,7 @@ describe('crl', () => {
 				crlDistributionPoints: [
 					{
 						distributionPoint: {
+							type: 'fullName',
 							fullName: [{ type: 'uri', value: 'http://example.test/parsed-delta-compat.crl' }],
 						},
 					},
@@ -2201,6 +2264,7 @@ describe('crl', () => {
 					crlNumber: 4,
 					issuingDistributionPoint: {
 						distributionPoint: {
+							type: 'fullName',
 							fullName: [{ type: 'uri', value: 'http://example.test/parsed-delta-compat.crl' }],
 						},
 					},
@@ -2217,6 +2281,7 @@ describe('crl', () => {
 					baseCrlNumber: 4,
 					issuingDistributionPoint: {
 						distributionPoint: {
+							type: 'fullName',
 							fullName: [{ type: 'uri', value: 'http://example.test/parsed-delta-compat.crl' }],
 						},
 					},
@@ -2281,6 +2346,7 @@ describe('crl', () => {
 				crlDistributionPoints: [
 					{
 						distributionPoint: {
+							type: 'fullName',
 							fullName: [{ type: 'uri', value: 'http://example.test/complex-idp.crl' }],
 						},
 					},
@@ -2295,7 +2361,7 @@ describe('crl', () => {
 					issuerPublicKey: ca.keyPair.publicKey,
 					crlNumber: 12,
 					issuingDistributionPoint: {
-						distributionPoint: { fullName: complexNames },
+						distributionPoint: { type: 'fullName', fullName: complexNames },
 					},
 				})
 			).pem,
@@ -2309,7 +2375,7 @@ describe('crl', () => {
 					crlNumber: 13,
 					baseCrlNumber: 12,
 					issuingDistributionPoint: {
-						distributionPoint: { fullName: shuffledNames },
+						distributionPoint: { type: 'fullName', fullName: shuffledNames },
 					},
 				})
 			).pem,
@@ -2350,6 +2416,7 @@ describe('crl', () => {
 				crlDistributionPoints: [
 					{
 						distributionPoint: {
+							type: 'fullName',
 							fullName: [{ type: 'uri', value: 'http://example.test/complex-idp-mismatch.crl' }],
 						},
 					},
@@ -2364,7 +2431,7 @@ describe('crl', () => {
 					issuerPublicKey: ca.keyPair.publicKey,
 					crlNumber: 20,
 					issuingDistributionPoint: {
-						distributionPoint: { fullName: names },
+						distributionPoint: { type: 'fullName', fullName: names },
 						onlySomeReasons: ['keyCompromise'],
 					},
 				})
@@ -2380,6 +2447,7 @@ describe('crl', () => {
 					baseCrlNumber: 20,
 					issuingDistributionPoint: {
 						distributionPoint: {
+							type: 'fullName',
 							fullName: [
 								{ type: 'uri', value: 'http://example.test/complex-idp-mismatch.crl' },
 								{ type: 'directoryName', derHex: parsedCa.subject.derHex },
@@ -2426,6 +2494,7 @@ describe('crl', () => {
 				crlDistributionPoints: [
 					{
 						distributionPoint: {
+							type: 'relativeName',
 							relativeName: [{ type: 'commonName', value: 'team alpha' }],
 						},
 					},
@@ -2441,6 +2510,7 @@ describe('crl', () => {
 					crlNumber: 30,
 					issuingDistributionPoint: {
 						distributionPoint: {
+							type: 'relativeName',
 							relativeName: [{ type: 'commonName', value: ' Team   Alpha ' }],
 						},
 					},
@@ -2457,6 +2527,7 @@ describe('crl', () => {
 					baseCrlNumber: 30,
 					issuingDistributionPoint: {
 						distributionPoint: {
+							type: 'relativeName',
 							relativeName: [{ type: 'commonName', value: 'TEAM ALPHA' }],
 						},
 					},
@@ -2475,15 +2546,11 @@ describe('crl', () => {
 
 		const issuingDistributionPoint = delta.issuingDistributionPoint;
 		const distributionPoint = issuingDistributionPoint?.distributionPoint;
-		const relativeName = distributionPoint?.relativeName;
-		if (
-			issuingDistributionPoint === undefined ||
-			distributionPoint === undefined ||
-			relativeName === undefined
-		) {
+		if (issuingDistributionPoint === undefined || distributionPoint?.type !== 'relativeName') {
 			throw new Error('Expected relativeName issuing distribution point');
 		}
-		const poisonedDelta = {
+		const relativeName = distributionPoint.relativeName;
+		const poisonedDelta: ParsedCertificateRevocationList = {
 			...delta,
 			issuingDistributionPoint: {
 				...issuingDistributionPoint,
@@ -2539,6 +2606,7 @@ describe('crl', () => {
 				crlDistributionPoints: [
 					{
 						distributionPoint: {
+							type: 'fullName',
 							fullName: [{ type: 'uri', value: 'http://example.test/entry-mismatch.crl' }],
 						},
 						crlIssuer: [{ type: 'directoryName', derHex: parsedCrlIssuer.subject.derHex }],
@@ -2552,6 +2620,7 @@ describe('crl', () => {
 			issuerPublicKey: crlIssuer.keyPair.publicKey,
 			issuingDistributionPoint: {
 				distributionPoint: {
+					type: 'fullName',
 					fullName: [{ type: 'uri', value: 'http://example.test/entry-mismatch.crl' }],
 				},
 				indirectCrl: true,
@@ -2973,45 +3042,12 @@ describe('crl', () => {
 				issuerPublicKey: issuer.keyPair.publicKey,
 				issuingDistributionPoint: {
 					distributionPoint: {
+						type: 'fullName',
 						fullName: [],
 					},
 				},
 			}),
 			'distribution_point_full_name_empty',
-		);
-	});
-
-	it('rejects invalid issuing distribution point construction', async () => {
-		const issuer = await createSelfSignedCertificate({
-			subject: { commonName: 'Bad IDP CRL Issuer' },
-			extensions: {
-				basicConstraints: { ca: true, pathLength: 0 },
-				keyUsage: ['keyCertSign', 'cRLSign'],
-			},
-		});
-		const base = {
-			issuer: { commonName: 'Bad IDP CRL Issuer' },
-			signerPrivateKey: issuer.keyPair.privateKey,
-			issuerPublicKey: issuer.keyPair.publicKey,
-		} as const;
-		await expectRejectedErrorCode(
-			createCertificateRevocationList({
-				...base,
-				issuingDistributionPoint: {
-					distributionPoint: {
-						fullName: [{ type: 'uri', value: 'http://example.test/crl' }],
-						relativeName: [{ type: 'commonName', value: 'bad' }],
-					},
-				},
-			}),
-			'distribution_point_name_conflict',
-		);
-		await expectRejectedErrorCode(
-			createCertificateRevocationList({
-				...base,
-				issuingDistributionPoint: { distributionPoint: {} },
-			}),
-			'distribution_point_name_empty',
 		);
 	});
 
@@ -3067,6 +3103,7 @@ describe('crl', () => {
 			issuerPublicKey: ca.keyPair.publicKey,
 			issuingDistributionPoint: {
 				distributionPoint: {
+					type: 'fullName',
 					fullName: [{ type: 'uri', value: 'http://crl.example.com/crl.pem' }],
 				},
 			},
@@ -3446,6 +3483,54 @@ describe('crl', () => {
 		).toThrow('IssuingDistributionPoint scope booleans are mutually exclusive');
 	});
 
+	it('preserves explicitly encoded false issuingDistributionPoint scope booleans', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Explicit False IDP Scope CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Explicit False IDP Scope CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			issuingDistributionPoint: { onlyContainsUserCerts: true },
+		});
+		const crlDer = new Uint8Array(pemDecodeOrThrow('X509 CRL', crl.pem));
+		const allFalse = rewriteCrlExtensionValuePayload(
+			crlDer,
+			OIDS.issuingDistributionPoint,
+			sequence([
+				tlv(0x81, Uint8Array.of(0x00)),
+				tlv(0x82, Uint8Array.of(0x00)),
+				tlv(0x85, Uint8Array.of(0x00)),
+			]),
+		);
+		const userCertsOnly = rewriteCrlExtensionValuePayload(
+			crlDer,
+			OIDS.issuingDistributionPoint,
+			sequence([
+				tlv(0x81, Uint8Array.of(0xff)),
+				tlv(0x82, Uint8Array.of(0x00)),
+				tlv(0x85, Uint8Array.of(0x00)),
+			]),
+		);
+
+		expect(parseCertificateRevocationListDerOrThrow(allFalse).issuingDistributionPoint).toEqual({
+			onlyContainsUserCerts: false,
+			onlyContainsCACerts: false,
+			onlyContainsAttributeCerts: false,
+		});
+		expect(
+			parseCertificateRevocationListDerOrThrow(userCertsOnly).issuingDistributionPoint,
+		).toEqual({
+			onlyContainsUserCerts: true,
+			onlyContainsCACerts: false,
+			onlyContainsAttributeCerts: false,
+		});
+	});
+
 	it('parseCertificateRevocationListDerOrThrow rejects unsupported issuingDistributionPoint distributionPointName tags', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Bad IDP Name Tag CA' },
@@ -3484,7 +3569,12 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 			freshestCrlDistributionPoints: [
-				{ distributionPoint: { fullName: [{ type: 'uri', value: 'http://example.test/ok.crl' }] } },
+				{
+					distributionPoint: {
+						type: 'fullName',
+						fullName: [{ type: 'uri', value: 'http://example.test/ok.crl' }],
+					},
+				},
 			],
 		});
 		expect(() =>
@@ -3511,7 +3601,12 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 			freshestCrlDistributionPoints: [
-				{ distributionPoint: { fullName: [{ type: 'uri', value: 'http://example.test/ok.crl' }] } },
+				{
+					distributionPoint: {
+						type: 'fullName',
+						fullName: [{ type: 'uri', value: 'http://example.test/ok.crl' }],
+					},
+				},
 			],
 		});
 		expect(() =>

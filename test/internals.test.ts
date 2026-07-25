@@ -900,7 +900,7 @@ describe('extensions encoding', () => {
 			() =>
 				encodeCrlDistributionPoints([
 					{
-						distributionPoint: { relativeName },
+						distributionPoint: { type: 'relativeName', relativeName },
 						crlIssuer: [
 							{ type: 'directoryName', derHex: issuerA },
 							{ type: 'directoryName', derHex: issuerB },
@@ -913,7 +913,7 @@ describe('extensions encoding', () => {
 			() =>
 				encodeCrlDistributionPoints([
 					{
-						distributionPoint: { relativeName },
+						distributionPoint: { type: 'relativeName', relativeName },
 						crlIssuer: [
 							{ type: 'directoryName', derHex: issuerA },
 							{ type: 'uri', value: 'http://example.test/backup.crl' },
@@ -926,7 +926,7 @@ describe('extensions encoding', () => {
 			() =>
 				encodeCrlDistributionPoints([
 					{
-						distributionPoint: { relativeName },
+						distributionPoint: { type: 'relativeName', relativeName },
 						crlIssuer: [
 							{
 								type: 'unknown',
@@ -1098,7 +1098,12 @@ describe('extensions encoding', () => {
 		[
 			'a fullName URI',
 			encodeCrlDistributionPoints([
-				{ distributionPoint: { fullName: [{ type: 'uri', value: 'http://crl.example/a.crl' }] } },
+				{
+					distributionPoint: {
+						type: 'fullName',
+						fullName: [{ type: 'uri', value: 'http://crl.example/a.crl' }],
+					},
+				},
 			]),
 		],
 		[
@@ -1270,7 +1275,12 @@ describe('extensions encoding', () => {
 		[
 			OIDS.cRLDistributionPoints,
 			encodeCrlDistributionPoints([
-				{ distributionPoint: { fullName: [{ type: 'uri', value: 'http://crl.example/a.crl' }] } },
+				{
+					distributionPoint: {
+						type: 'fullName',
+						fullName: [{ type: 'uri', value: 'http://crl.example/a.crl' }],
+					},
+				},
 			]),
 		],
 		[OIDS.subjectKeyIdentifier, octetString(Uint8Array.of(1, 2, 3))],
@@ -1709,22 +1719,6 @@ describe('extensions encoding', () => {
 			() =>
 				Reflect.apply(encodeCrlDistributionPoints, undefined, [[{ reasons: ['keyCompromise'] }]]),
 			'distribution_point_empty',
-		);
-		expectEncoderErrorCode(
-			() =>
-				encodeCrlDistributionPoints([
-					{
-						distributionPoint: {
-							fullName: [{ type: 'uri', value: 'http://example.test/crl' }],
-							relativeName: [{ type: 'commonName', value: 'bad' }],
-						},
-					},
-				]),
-			'distribution_point_name_conflict',
-		);
-		expectEncoderErrorCode(
-			() => encodeCrlDistributionPoints([{ distributionPoint: {} }]),
-			'distribution_point_name_empty',
 		);
 	});
 

@@ -13,8 +13,10 @@ export type {
 	CertificateMaterial,
 	CreateCertificateErrorCode,
 	CreateCertificateInput,
+	CreateSelfSignedCertificateBase,
 	CreateSelfSignedCertificateInput,
 	SelfSignedCertificateResult,
+	SelfSignedKeySource,
 	SignatureProfileInput,
 	ValidityInput,
 } from '#micro509/x509/certificate';

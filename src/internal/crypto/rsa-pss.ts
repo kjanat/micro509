@@ -154,6 +154,10 @@ export function rsaPssParametersForHash(hash: RsaPssHash): RsaPssParameters {
 				saltLength: 64,
 				trailerField: 1,
 			};
+		default: {
+			const _exhaustive: never = hash;
+			throw new Error(`Unhandled RsaPssHash: ${String(_exhaustive)}`);
+		}
 	}
 }
 
@@ -395,6 +399,10 @@ function hashOidForName(hash: RsaPssHash): string {
 			return OIDS.sha384;
 		case 'SHA-512':
 			return OIDS.sha512;
+		default: {
+			const _exhaustive: never = hash;
+			throw new Error(`Unhandled RsaPssHash: ${String(_exhaustive)}`);
+		}
 	}
 }
 

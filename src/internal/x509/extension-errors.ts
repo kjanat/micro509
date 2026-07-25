@@ -23,8 +23,6 @@ export type ExtensionEncoderErrorCode =
 	| 'distribution_point_crl_issuer_not_directory_name'
 	| 'distribution_point_empty'
 	| 'distribution_point_full_name_empty'
-	| 'distribution_point_name_conflict'
-	| 'distribution_point_name_empty'
 	| 'distribution_point_relative_name_multiple_crl_issuers'
 	| 'duplicate_extension_oid'
 	| 'duplicate_policy_oid'
