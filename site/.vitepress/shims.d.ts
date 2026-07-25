@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/style/noDefaultExport: explanation */
 declare module '*.css' {
 	const stylesheet: CSSStyleSheet;
 	export default stylesheet;

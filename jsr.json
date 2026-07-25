@@ -4,14 +4,14 @@
 	"license": "MIT",
 	"exports": {
 		".": "./src/index.ts",
-		"./der": "./src/der/index.ts",
-		"./keys": "./src/keys/index.ts",
-		"./pem": "./src/pem/index.ts",
-		"./pkcs": "./src/pkcs/index.ts",
-		"./result": "./src/result/index.ts",
-		"./revocation": "./src/revocation/index.ts",
-		"./verify": "./src/verify/index.ts",
-		"./x509": "./src/x509/index.ts"
+		"./der": "./src/der.ts",
+		"./keys": "./src/keys.ts",
+		"./pem": "./src/pem.ts",
+		"./pkcs": "./src/pkcs.ts",
+		"./result": "./src/result.ts",
+		"./revocation": "./src/revocation.ts",
+		"./verify": "./src/verify.ts",
+		"./x509": "./src/x509.ts"
 	},
 	"publish": {
 		"include": ["src/**/*.ts", "src/**/*.json", "package.json", "LICENSE", "README.md"],

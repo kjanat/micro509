@@ -1,30 +1,32 @@
 # `src/` - Module Map
 
-Public domain entrypoints are one-level buckets, implementation details stay in
-`src/internal/`.
+Public entrypoints are the root `src/*.ts` files; domain implementation stays in
+`src/<domain>/` and internals in `src/internal/`.
 
 ## OVERVIEW
 
-`src/` is the library boundary. High-level workflow ownership is in domain
-barrels under `x509`, `verify`, `revocation`, `keys`, `pem`, `pkcs`, and
-`result`.
+`src/` is the library boundary. Each root `src/<domain>.ts` file is a package
+entrypoint that re-exports its domain; implementation lives in the matching
+`src/<domain>/` directory.
 
 ## WHERE TO LOOK
 
-| Area               | File/dir                          | Notes                                               |
-| ------------------ | --------------------------------- | --------------------------------------------------- |
-| Package root       | `index.ts`                        | all stable package exports                          |
-| Domain entrypoints | `x509/`, `verify/`, `revocation/` | re-export-only in most cases                        |
-| Key APIs           | `keys/`                           | import/export, generation, encryption options       |
-| PEM boundary       | `pem/`                            | encode/decode and block classification              |
-| PKCS workflows     | `pkcs/`                           | PFX and PKCS#7 data lifecycles                      |
-| Result model       | `result/`                         | shared typed `Result` and error constructors        |
-| Internal spine     | `internal/`                       | ASN.1, crypto, shared helpers, verification engines |
+| Area               | File/dir                                                                                       | Notes                                               |
+| ------------------ | ---------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| Package root       | `index.ts`                                                                                     | all stable package exports                          |
+| Domain entrypoints | `der.ts`, `keys.ts`, `pem.ts`, `pkcs.ts`, `result.ts`, `revocation.ts`, `verify.ts`, `x509.ts` | re-export-only                                      |
+| Key APIs           | `keys/`                                                                                        | import/export, generation, encryption options       |
+| PEM boundary       | `pem/`                                                                                         | encode/decode and block classification              |
+| PKCS workflows     | `pkcs/`                                                                                        | PFX and PKCS#7 data lifecycles                      |
+| Result model       | `result/`                                                                                      | shared typed `Result` and error constructors        |
+| Internal spine     | `internal/`                                                                                    | ASN.1, crypto, shared helpers, verification engines |
 
 ## LOCAL CONVENTIONS
 
 - Keep APIs by domain barrel; add files inside existing domain unless the domain
   model clearly needs a new public ownership file.
+- Root `src/*.ts` is reserved for package entrypoints. tsdown globs it, so a new
+  root file publishes `micro509/<name>`; `test/conventions.test.ts` pins the set.
 - New OIDs go in `src/internal/asn1/oids.json` under their registration arc and
   are consumed as `OIDS.<name>`; never inline a dotted-decimal literal in
   source.

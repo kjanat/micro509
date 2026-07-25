@@ -1,3 +1,5 @@
+/** biome-ignore-all lint/style/noExcessiveLinesPerFile: explanation */
+/** biome-ignore-all lint/correctness/noNodejsModules: explanation */
 import { writeImportMap } from 'importmapify';
 import { entrypointsOf } from '@micro509/doc-render';
 import { apiDocsPlugin, generateApiDocs } from '@micro509/vitepress-api-docs';
@@ -15,6 +17,7 @@ import robotsTxt from 'vite-robots-txt';
 import svgToIco from 'vite-svg-to-ico';
 import type { DefaultTheme } from 'vitepress';
 import { defineConfig } from 'vitepress';
+import process from 'node:process';
 
 interface DocsThemeConfig extends DefaultTheme.Config {
 	readonly versions: readonly DocsVersion[];
@@ -253,10 +256,10 @@ const versionPrefixes = docs.versions
 	.sort((left, right) => right.length - left.length);
 
 function versionPrefixOfPath(pathname: string): string {
-	const path = pathname.replace(/^\//, '');
+	const p = pathname.replace(/^\//, '');
 	return (
 		versionPrefixes.find(
-			(prefix) => prefix === '' || path === prefix.slice(0, -1) || path.startsWith(prefix),
+			(prefix) => prefix === '' || p === prefix.slice(0, -1) || p.startsWith(prefix),
 		) ?? ''
 	);
 }

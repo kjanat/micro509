@@ -277,8 +277,7 @@ function parsePbes2KdfFields(
 } {
 	const kdfDer = paramsDer.slice(kdf.start - kdf.headerLength, kdf.end);
 	const kdfChildren = readSequenceChildren(kdfDer);
-	const kdfOid = kdfChildren[0];
-	const kdfParams = kdfChildren[1];
+	const [kdfOid, kdfParams] = kdfChildren;
 	if (kdfOid === undefined || kdfParams === undefined) {
 		throw new Error('Malformed KDF params');
 	}
@@ -335,7 +334,7 @@ function parsePbkdf2Prf(
 	const prfDer = readSequenceChildren(
 		pbkdf2Der.slice(element.start - element.headerLength, element.end),
 	);
-	const oid = prfDer[0];
+	const [oid] = prfDer;
 	if (oid === undefined) {
 		throw new Error('Malformed PBKDF2 PRF');
 	}

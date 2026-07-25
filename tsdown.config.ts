@@ -1,24 +1,11 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
-import type { UserConfig } from 'tsdown';
 import { defineConfig } from 'tsdown';
 import jsr from '#jsr' with { type: 'json' };
 import pkg from '#pkg' with { type: 'json' };
 
-export const entries = {
-	index: 'src/index.ts',
-	der: 'src/der/index.ts',
-	keys: 'src/keys/index.ts',
-	pem: 'src/pem/index.ts',
-	pkcs: 'src/pkcs/index.ts',
-	result: 'src/result/index.ts',
-	revocation: 'src/revocation/index.ts',
-	verify: 'src/verify/index.ts',
-	x509: 'src/x509/index.ts',
-} satisfies UserConfig['entry'];
-
 export default defineConfig((options) => ({
-	entry: entries,
+	entry: ['src/*.ts'],
 	name: pkg.name,
 	format: 'esm',
 	dts: true,
@@ -60,14 +47,16 @@ export default defineConfig((options) => ({
 				onSuccess: 'dprint fmt {jsr,package}.json',
 				hooks: {
 					'build:done': async () => {
-						const jsrNext = { ...jsr, exports: {} };
-						jsrNext.exports = Object.fromEntries(
-							Object.entries(entries).map(([name, sourcePath]) => [
-								name === 'index' ? '.' : `./${name}`,
-								`./${sourcePath}`,
-							]),
+						const exports = Object.fromEntries(
+							readdirSync('src')
+								.filter((file) => file.endsWith('.ts'))
+								.map((file) => {
+									const name = file.slice(0, -'.ts'.length);
+									return [name === 'index' ? '.' : `./${name}`, `./src/${file}`];
+								})
+								.sort(),
 						);
-						jsrNext.version = pkg.version;
+						const jsrNext = { ...jsr, exports, version: pkg.version };
 						await writeFile('jsr.json', `${JSON.stringify(jsrNext, null, '\t')}\n`);
 					},
 				},

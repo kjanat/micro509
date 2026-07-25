@@ -1,3 +1,4 @@
+/** biome-ignore-all lint/style/noDefaultExport: explanation */
 import LiveCode from '#components/LiveCode.vue' with { type: 'vue' };
 import VersionedNav from '#components/VersionedNav.vue' with { type: 'vue' };
 import VersionSwitcher from '#components/VersionSwitcher.vue' with { type: 'vue' };

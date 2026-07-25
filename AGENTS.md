@@ -39,12 +39,21 @@ and structured `details`.
 
 ```tree
 micro509/
-├── src/               # domain barrels + public modules
+├── src/               # public entrypoints (src/*.ts) + domain implementation
+│   ├── index.ts       # micro509
+│   ├── der.ts         # micro509/der
+│   ├── keys.ts        # micro509/keys
+│   ├── pem.ts         # micro509/pem
+│   ├── pkcs.ts        # micro509/pkcs
+│   ├── result.ts      # micro509/result
+│   ├── revocation.ts  # micro509/revocation
+│   ├── verify.ts      # micro509/verify
+│   ├── x509.ts        # micro509/x509
 │   ├── x509/          # cert + CSR + extension + parse APIs
 │   ├── verify/        # chain validation + policy + identity checks
 │   ├── revocation/    # CRL/OCSP lifecycles
 │   ├── keys/          # key import/export and generation
-│   ├── der/           # public DER encode/decode surface (micro509/der)
+│   ├── der/           # public DER encode/decode surface
 │   ├── pem/           # PEM encode/decode boundary
 │   ├── pkcs/          # PKCS-7 and PKCS#12 workflows
 │   ├── result/        # shared result/error algebra
@@ -68,26 +77,28 @@ micro509/
 
 ## WHERE TO LOOK
 
-| Task                              | Location                                                   | Notes                                                |
-| --------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------- |
-| Public API surface                | `src/index.ts`                                             | root barrel for `micro509`                           |
-| Domain entrypoints                | `src/x509/`, `src/verify/`, `src/revocation/`, `src/keys/` | domain-specific high-level entry surfaces            |
-| Package entry routing             | `package.json`                                             | `exports`, `imports`, scripts                        |
-| Chain validation                  | `src/verify/verify.ts`                                     | candidate path building, policy composition          |
-| Certificate/CSR parsing           | `src/x509/parse.ts`                                        | DER/PEM parse boundary + extension decoding          |
-| Revocation                        | `src/revocation/crl.ts`, `src/revocation/ocsp.ts`          | CRL + OCSP creation, parse, validate, verify         |
-| Key import/export                 | `src/keys/keys.ts`                                         | PKCS#1/8, SEC1, SPKI, JWK flows                      |
-| DER codec surface                 | `src/der/der.ts`                                           | public DER encode/decode (`micro509/der`)            |
-| Extension model/builders          | `src/x509/extensions.ts`                                   | typed extension schema and encoder helpers           |
-| Test helpers and internals probes | `test/helpers.ts`, `test/internals.test.ts`                | shared DER helpers, internal probing through imports |
-| Standards scope                   | `docs/PKIX-SCOPE.md`                                       | claim boundaries                                     |
-| Docs site                         | `site/.vitepress/config.ts`, `site/guide/`, `site/api/`    | VitePress config, authored guides, generated API     |
-| Reusable CI actions               | `.github/actions/`                                         | shared setup + release version validation            |
+| Task                              | Location                                                           | Notes                                                |
+| --------------------------------- | ------------------------------------------------------------------ | ---------------------------------------------------- |
+| Public API surface                | `src/index.ts`                                                     | root barrel for `micro509`                           |
+| Domain entrypoints                | `src/x509.ts`, `src/verify.ts`, `src/revocation.ts`, `src/keys.ts` | domain-specific high-level entry surfaces            |
+| Package entry routing             | `package.json`, `tsdown.config.ts`                                 | `exports` and `jsr.json` are derived from `src/*.ts` |
+| Chain validation                  | `src/verify/verify.ts`                                             | candidate path building, policy composition          |
+| Certificate/CSR parsing           | `src/x509/parse.ts`                                                | DER/PEM parse boundary + extension decoding          |
+| Revocation                        | `src/revocation/crl.ts`, `src/revocation/ocsp.ts`                  | CRL + OCSP creation, parse, validate, verify         |
+| Key import/export                 | `src/keys/keys.ts`                                                 | PKCS#1/8, SEC1, SPKI, JWK flows                      |
+| DER codec surface                 | `src/der/der.ts`                                                   | public DER encode/decode (`micro509/der`)            |
+| Extension model/builders          | `src/x509/extensions.ts`                                           | typed extension schema and encoder helpers           |
+| Test helpers and internals probes | `test/helpers.ts`, `test/internals.test.ts`                        | shared DER helpers, internal probing through imports |
+| Standards scope                   | `docs/PKIX-SCOPE.md`                                               | claim boundaries                                     |
+| Docs site                         | `site/.vitepress/config.ts`, `site/guide/`, `site/api/`            | VitePress config, authored guides, generated API     |
+| Reusable CI actions               | `.github/actions/`                                                 | shared setup + release version validation            |
 
 ## CONVENTIONS
 
 - Domain entrypoints own feature ownership; concrete lifecycle modules do implementation.
-- `src/*/` barrels are re-export-only unless local file owners expand naturally.
+- Root `src/*.ts` files are the package entrypoints and are re-export-only; tsdown
+  globs them, so a new root file publishes a new `micro509/<name>` subpath. Domain
+  implementation goes in `src/<domain>/`, internals in `src/internal/`.
 - Relative imports use `.ts` extensions; `#micro509/*` subpath imports are extensionless (the `imports` map supplies `.ts`).
 - Import boundaries: public leaf modules may use `#micro509/internal/*`, not sibling barrels.
 - Return typed result unions for expected failures; throw only for invariants.
@@ -112,14 +123,18 @@ Avoid the following in this project:
 
 ## CODE MAP
 
-| Symbol                    | Type          | Location            | Refs                                      |
-| ------------------------- | ------------- | ------------------- | ----------------------------------------- |
-| `src/index.ts`            | barrel export | root surface        | Re-exports all stable API slices          |
-| `src/x509/index.ts`       | domain barrel | X.509 feature slice | Certificate, CSR, parse, extension APIs   |
-| `src/verify/index.ts`     | domain barrel | verification slice  | Path, policy, identity, name constraints  |
-| `src/revocation/index.ts` | domain barrel | revocation slice    | CRL/OCSP orchestration                    |
-| `src/der/index.ts`        | domain barrel | DER slice           | public DER encode/decode surface          |
-| `src/result/result.ts`    | result ADT    | shared model        | central `Result`/`Micro509Error` contract |
+| Symbol                 | Type          | Location            | Refs                                      |
+| ---------------------- | ------------- | ------------------- | ----------------------------------------- |
+| `src/index.ts`         | barrel export | root surface        | Re-exports all stable API slices          |
+| `src/der.ts`           | domain barrel | DER slice           | public DER encode/decode surface          |
+| `src/keys.ts`          | domain barrel | key slice           | import/export, generation, encryption     |
+| `src/pem.ts`           | domain barrel | PEM slice           | encode/decode and block classification    |
+| `src/pkcs.ts`          | domain barrel | PKCS slice          | PKCS-7 and PKCS#12 workflows              |
+| `src/result.ts`        | domain barrel | result slice        | `Result` and error constructors           |
+| `src/revocation.ts`    | domain barrel | revocation slice    | CRL/OCSP orchestration                    |
+| `src/verify.ts`        | domain barrel | verification slice  | Path, policy, identity, name constraints  |
+| `src/x509.ts`          | domain barrel | X.509 feature slice | Certificate, CSR, parse, extension APIs   |
+| `src/result/result.ts` | result ADT    | shared model        | central `Result`/`Micro509Error` contract |
 
 ## COMMANDS
 
