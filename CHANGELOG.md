@@ -604,22 +604,6 @@ runnable docs examples that survive client-side navigation.
   the same URL serves the archived copy. Temporary on purpose: browsers cache a
   301 past the release that makes it wrong.
 
-### Fixed
-
-- Runnable examples now execute the version of the page they run on after
-  client-side navigation. Each page shipped its own `<script type="importmap">`,
-  which the browser reads once per document, so navigating from the landing page
-  to an archived version and pressing Run resolved `micro509` against the entry
-  page's map and imported the wrong release; only a hard refresh picked up the
-  right one. Every page now ships one identical map: top-level imports for the
-  root version and a scope per version prefix. Scopes match the URL of the
-  importing module, and the injected example module inherits the document URL,
-  so resolution follows the page at run time with no map swapping. `run
-site:import-maps` now verifies the map is identical on every page and each
-  scope binds its own version, and `run site:live-examples` replays the failing
-  flow: enter at the root, navigate client-side to an archive, run its example,
-  and require every import to carry that archive's version.
-
 ### Changed
 
 - The X.509 reference now identifies every asynchronous operation in one place
@@ -650,6 +634,22 @@ site:import-maps` now verifies the map is identical on every page and each
   the position the TypeScript parser expects. Nine `guide/getting-started` examples
   across v0.3.0 through v0.9.0 were affected. The archived page then differs from the
   code that release published. (https://github.com/kjanat/micro509/issues/53)
+
+### Fixed
+
+- Runnable examples now execute the version of the page they run on after
+  client-side navigation. Each page shipped its own `<script type="importmap">`,
+  which the browser reads once per document, so navigating from the landing page
+  to an archived version and pressing Run resolved `micro509` against the entry
+  page's map and imported the wrong release; only a hard refresh picked up the
+  right one. Every page now ships one identical map: top-level imports for the
+  root version and a scope per version prefix. Scopes match the URL of the
+  importing module, and the injected example module inherits the document URL,
+  so resolution follows the page at run time with no map swapping. `run
+site:import-maps` now verifies the map is identical on every page and each
+  scope binds its own version, and `run site:live-examples` replays the failing
+  flow: enter at the root, navigate client-side to an archive, run its example,
+  and require every import to carry that archive's version.
 
 ## [0.11.0] - 2026-07-13
 
@@ -715,14 +715,6 @@ rely on — and algorithm inference across every private-key import family.
     `alg` (`RS*`/`PS*`/`RSA-OAEP-256/384/512` select the RSA scheme and hash).
     (https://github.com/kjanat/micro509/issues/41)
 
-### Fixed
-
-- `createPkcs7SignedData` returns the typed `'invalid_signer_certificate'` /
-  `'invalid_certificate'` (new code) failures for malformed signer and
-  additional-certificate inputs instead of rejecting the promise. Each
-  `additionalCertificates` value is structurally validated as a real X.509
-  certificate, so malformed DER also returns `'invalid_certificate'`.
-
 ### Changed
 
 - **BREAKING** — `verifyPkcs7SignedData` reports a SignedData that carries no
@@ -739,6 +731,14 @@ rely on — and algorithm inference across every private-key import family.
 - Preserve public API behavior while decomposing DER, parsing, verification,
   revocation, PKCS#7, and API-documentation flows into focused helpers that
   satisfy the stricter cognitive-complexity limit. (https://github.com/kjanat/micro509/pull/39)
+
+### Fixed
+
+- `createPkcs7SignedData` returns the typed `'invalid_signer_certificate'` /
+  `'invalid_certificate'` (new code) failures for malformed signer and
+  additional-certificate inputs instead of rejecting the promise. Each
+  `additionalCertificates` value is structurally validated as a real X.509
+  certificate, so malformed DER also returns `'invalid_certificate'`.
 
 ## [0.9.0] - 2026-07-06
 
@@ -857,7 +857,29 @@ error-handling doctrine, type shapes, and export surface, so 1.0 can freeze
 a surface with no known regrets. Every rename is in the migration table
 below.
 
-### Changed (BREAKING)
+### Added
+
+- Runtime code arrays `REVOCATION_INDETERMINATE_REASON_CODES` and
+  `REVOCATION_INDETERMINATE_REASONS` (the `VERIFY_ERROR_CODES` pattern);
+  their unions now derive from the arrays.
+- The root entry point exports every type reachable from public signatures
+  that were previously subpath-only (MacData, policy-validation outcome,
+  identity failure details, revocation error codes/failure payloads, and
+  the new `Parse*Result` / `Pem*Result` types).
+- `Pkcs7CertificateSource` and `PfxCertificateSource` accept an
+  already-parsed `ParsedCertificate` (parity with the revocation source
+  unions).
+- Documented error-code stability policy: unions may gain members in
+  minor releases — treat them as non-exhaustive.
+- CI now smoke-tests the two previously untested runtime claims: Cloudflare
+  Workers (real workerd via wrangler's test harness) and browsers (headless
+  Chromium via Playwright, loading the built `dist/` output). All five
+  supported runtimes are now exercised in CI.
+
+### Changed
+
+Every entry in this section is **BREAKING**; the migration table at the end
+maps each old name to its replacement.
 
 - **Revocation defaults to hard-fail once enabled.** Revocation checking
   remains opt-in (no evidence supplied ⇒ no check), but once `revocation`
@@ -950,25 +972,6 @@ below.
 | `VerifyOcspResponse{Result,Failure}`                           | `VerifyOcspResponseSignature{Result,Failure}`              |
 | `VerifyCertificateRevocationList{Result,Failure}`              | `VerifyCertificateRevocationListSignature{Result,Failure}` |
 
-### Added
-
-- Runtime code arrays `REVOCATION_INDETERMINATE_REASON_CODES` and
-  `REVOCATION_INDETERMINATE_REASONS` (the `VERIFY_ERROR_CODES` pattern);
-  their unions now derive from the arrays.
-- The root entry point exports every type reachable from public signatures
-  that were previously subpath-only (MacData, policy-validation outcome,
-  identity failure details, revocation error codes/failure payloads, and
-  the new `Parse*Result` / `Pem*Result` types).
-- `Pkcs7CertificateSource` and `PfxCertificateSource` accept an
-  already-parsed `ParsedCertificate` (parity with the revocation source
-  unions).
-- Documented error-code stability policy: unions may gain members in
-  minor releases — treat them as non-exhaustive.
-- CI now smoke-tests the two previously untested runtime claims: Cloudflare
-  Workers (real workerd via wrangler's test harness) and browsers (headless
-  Chromium via Playwright, loading the built `dist/` output). All five
-  supported runtimes are now exercised in CI.
-
 ### Fixed
 
 - Manual `npm publish` outside the release workflow now fails via a
@@ -982,15 +985,12 @@ Full standards surface claimed complete: all four RFC status rows — 5280,
 6960, 6125, 9618 — now read `complete`, backed by the full NIST PKITS
 suite and RFC-exact name-constraint handling.
 
-### Conformance
-
-- PKITS sweep completed: the harness runs the full NIST PKITS suite — all
-  224 test procedures across sections 4.1–4.16, expanded to 249 runs
-  including every documented subtest variation — and every manifest
-  expectation was verified against the official PKITS document, now
-  vendored as `docs/rfc/pkits.txt`. 4.1.4/4.1.5 (DSA chains) are
-  expected-fail per the WebCrypto algorithm boundary. RFC 5280 path
-  validation and RFC 9618 policy validation are now claimed `complete`.
+The PKITS sweep behind that claim runs the full NIST suite — all 224 test
+procedures across sections 4.1–4.16, expanded to 249 runs including every
+documented subtest variation — with every manifest expectation verified
+against the official PKITS document, now vendored as `docs/rfc/pkits.txt`.
+4.1.4/4.1.5 (DSA chains) are expected-fail per the WebCrypto algorithm
+boundary.
 
 ### Changed
 
@@ -1010,23 +1010,6 @@ suite and RFC-exact name-constraint handling.
 OCSP responder authorization, URI/SRV service identities, and a
 `best-available` revocation preference that actually compares evidence
 freshness.
-
-### Changed
-
-- `policy.prefer: 'best-available'` (the default) now genuinely picks the
-  freshest evidence: when CRL and OCSP both yield a validated `good`
-  verdict, the source with the later `thisUpdate` is reported (an applied
-  delta CRL counts as its own `thisUpdate`; ties favor OCSP). Previously
-  `'best-available'` behaved identically to `'ocsp'`. Fail-closed
-  combination is unchanged — a validated `revoked` verdict from either
-  source still always wins.
-
-- `RevocationSource` gained `thisUpdate` — the timestamp of the evidence
-  backing the verdict (OCSP single-response entry or freshest contributing
-  CRL), i.e. the value `'best-available'` compares. `signerCertificate` for
-  a multi-CRL `good` verdict is now the freshest contributing CRL's signer
-  rather than the last one processed, so it always matches the reported
-  freshness.
 
 ### Added
 
@@ -1053,6 +1036,23 @@ freshness.
   - Delegated responder chains now validate at the caller-supplied `at`
     (historical-time validation) instead of always at the current time.
 
+### Changed
+
+- `policy.prefer: 'best-available'` (the default) now genuinely picks the
+  freshest evidence: when CRL and OCSP both yield a validated `good`
+  verdict, the source with the later `thisUpdate` is reported (an applied
+  delta CRL counts as its own `thisUpdate`; ties favor OCSP). Previously
+  `'best-available'` behaved identically to `'ocsp'`. Fail-closed
+  combination is unchanged — a validated `revoked` verdict from either
+  source still always wins.
+
+- `RevocationSource` gained `thisUpdate` — the timestamp of the evidence
+  backing the verdict (OCSP single-response entry or freshest contributing
+  CRL), i.e. the value `'best-available'` compares. `signerCertificate` for
+  a multi-CRL `good` verdict is now the freshest contributing CRL's signer
+  rather than the last one processed, so it always matches the reported
+  freshness.
+
 ## [0.4.0] - 2026-07-03
 
 OCSP joins chain-level revocation, and the npm package no longer ships
@@ -1073,9 +1073,10 @@ broken Bun export conditions.
 - CI now builds, validates the npm tarball against the published exports
   map, and smoke-tests the dist output under Node and Deno.
 
-### Changed (BREAKING)
+### Changed
 
-- `VerifyErrorCode`: renamed `initial_name_constraints_not_implemented` →
+- **BREAKING** — `VerifyErrorCode`: renamed
+  `initial_name_constraints_not_implemented` →
   `unsupported_initial_name_constraints` (it reports unsupported/malformed
   initial-name-constraint forms, not a missing feature). Removed
   `policy_processing_not_implemented`, which no code path emitted.
@@ -1098,38 +1099,48 @@ throwing (a bad config is a programmer error, not a runtime condition).
 
 ### Added
 
-- `unwrap(result)` / `unwrapOr(result, fallback)` and the `ResultError`
-  class (root + `micro509/result`): the explicit escape hatch for callers
-  who have already validated input or prefer exceptions. `unwrap` throws a
-  `ResultError` carrying the structured `code`.
+- `unwrap(result)` / `unwrapOr(result, fallback)` (root + `micro509/result`):
+  the explicit escape hatch for callers who have already validated input or
+  prefer exceptions. `unwrap` throws a branded plain error carrying the
+  structured `code`; `ResultError` is exported as its type and
+  `isResultError(error)` is the guard. There is no class to `instanceof` —
+  the library ships no classes.
 - `failureResult(code, message, details?)` factory in `micro509/result`:
   one source of truth for the `{ ok, error, code, message }` shape.
+- `rethrowIfInvariant(error)` in `micro509/result`: the guard the parse
+  wrappers use to keep programmer errors out of `Result` failures (removed
+  from the public barrel in 0.7.0).
 
-### Changed (BREAKING)
+### Changed
 
-- `parseCertificateDer`, `parseCertificatePem`,
+- **BREAKING** — `parseCertificateDer`, `parseCertificatePem`,
   `parseCertificateSigningRequestDer`, `parseCertificateSigningRequestPem`
   now return a `Result` (`{ ok, value }` / `{ ok, error: { code:
 'malformed' } }`) instead of throwing. Wrap with `unwrap(...)` for the
   previous throw-on-error behavior.
-- All 16 key `import*` functions now return a `Result` instead of
-  throwing. Non-encrypted failures use code `'malformed'`; encrypted
+- **BREAKING** — All 16 key `import*` functions now return a `Result` instead
+  of throwing. Non-encrypted failures use code `'malformed'`; encrypted
   imports distinguish a typed `'invalid_password'` from `'malformed'`.
   `export*` and `generateKeyPair` are unchanged (no untrusted input).
-- `createPfx`, `createPkcs7CertBagDer`, and `createPkcs7CertBagPem` now
-  return a `Result` (code `'invalid_certificate'`) instead of throwing
-  on a malformed certificate source — matching `createPkcs7SignedData`.
-  Pure typed-config constructors (`createCertificate`,
-  `createSelfSignedCertificate`, `createCertificateRevocationList`, …)
-  still throw: a bad config is a programmer error, not a runtime result.
-
-### Changed
-
+- **BREAKING** — `createPfx`, `createPkcs7CertBagDer`, and
+  `createPkcs7CertBagPem` now return a `Result` (code
+  `'invalid_certificate'`) instead of throwing on a malformed certificate
+  source — matching `createPkcs7SignedData`. Pure typed-config constructors
+  (`createCertificate`, `createSelfSignedCertificate`,
+  `createCertificateRevocationList`, …) still throw: a bad config is a
+  programmer error, not a runtime result.
 - Canonical docs site is now `micro509.kjanat.dev` (was `micro509.kjanat.com`,
   which stays live as a mirror). `homepage` and all documentation links point at
   the `.dev` domain.
 - GitHub repository renamed `kjanat/ts-x509` → `kjanat/micro509` to match the
   published package name. `repository.url` updated; old URLs redirect.
+
+### Fixed
+
+- The new parse `Result` wrappers rethrow a `TypeError`, `RangeError`,
+  `ReferenceError`, or `SyntaxError` raised inside a parser instead of
+  reporting it as a `'malformed'` failure, so a genuine crash surfaces as a
+  crash rather than masquerading as bad input.
 
 ## [0.2.0] - 2026-06-29
 
