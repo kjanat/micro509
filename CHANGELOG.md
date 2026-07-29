@@ -19,6 +19,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- npm and JSR packages include `CHANGELOG.md` in the published tarball
+  (`package.json` `files`, `jsr.json` `publish.include`).
+
+### Fixed
+
+- Two `site/guide/keys.md` LiveCode examples used TypeScript parameter types
+  (`key: CryptoKey`, `bytes: Uint8Array`). LiveCode injects examples as browser
+  JS modules, so Run failed with `missing ) after argument list` and
+  `Unexpected token ':'`. The annotations are removed.
+
 ## [0.14.0] - 2026-07-29
 
 Everything that already worked but had no export: a `micro509/crypto`

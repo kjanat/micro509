@@ -27,7 +27,7 @@ const rsa = await generateKeyPair({
   modulusLength: 2048,
 });
 
-const spki = async (key: CryptoKey) =>
+const spki = async (key) =>
   `…${(await exportBinaryBase64(key)).slice(-32)}`;
 
 console.log(`\
@@ -395,7 +395,7 @@ const der = await exportEncryptedPkcs8Der(keys.privateKey, {
 
 const params = inspectEncryptedPkcs8Der(der);
 
-const hex = (bytes: Uint8Array) =>
+const hex = (bytes) =>
   Array.from(bytes, (byte) =>
     byte.toString(16).padStart(2, '0'),
   ).join('');
