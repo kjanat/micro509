@@ -321,6 +321,44 @@ describe('keys', () => {
 			await importEncryptedPkcs1Pem(noSpaceHeaderPem, 'secret123', { kind: 'rsa' }),
 		);
 		expect(await exportPkcs8Der(importedNoSpaceRsa)).toEqual(await exportPkcs8Der(rsa.privateKey));
+		// RFC 1421 4.6 folds encapsulated headers per RFC 822 3.1.1.
+		const foldedHeaderPems = [
+			encryptedRsaPem.replace('Proc-Type: 4,ENCRYPTED', 'Proc-Type: 4,\n ENCRYPTED'),
+			encryptedRsaPem.replace(/DEK-Info: ([^,]+),/, 'DEK-Info: $1,\n           '),
+			encryptedRsaPem.replace('Proc-Type: 4,ENCRYPTED', 'Proc-Type:\n\t4,ENCRYPTED'),
+		];
+		for (const foldedPem of foldedHeaderPems) {
+			const importedFolded = unwrap(
+				await importEncryptedPkcs1Pem(foldedPem, 'secret123', { kind: 'rsa' }),
+			);
+			expect(await exportPkcs8Der(importedFolded)).toEqual(await exportPkcs8Der(rsa.privateKey));
+		}
+		// RFC 822 3.3 admits SPACE and HTAB only, so no other whitespace is consumed.
+		for (const nonLwsp of ['\u000b', '\u00a0', '\u3000']) {
+			const procTypePems = [
+				encryptedRsaPem.replace('4,ENCRYPTED', `4,${nonLwsp}ENCRYPTED`),
+				encryptedRsaPem.replace('Proc-Type: ', `Proc-Type:${nonLwsp}`),
+			];
+			for (const procTypePem of procTypePems) {
+				await expectImportFailure(
+					importEncryptedPkcs1Pem(procTypePem, 'secret123', { kind: 'rsa' }),
+					'malformed',
+				);
+				await expectRejection(
+					importEncryptedPkcs1PemOrThrow(procTypePem, 'secret123', { kind: 'rsa' }),
+					'Traditional PEM encryption headers missing',
+				);
+			}
+			const dekInfoPem = encryptedRsaPem.replace(/,(?=[0-9A-F]{32})/, `,${nonLwsp}`);
+			await expectImportFailure(
+				importEncryptedPkcs1Pem(dekInfoPem, 'secret123', { kind: 'rsa' }),
+				'malformed',
+			);
+			await expectRejection(
+				importEncryptedPkcs1PemOrThrow(dekInfoPem, 'secret123', { kind: 'rsa' }),
+				'Traditional PEM encryption requires a 16-byte IV',
+			);
+		}
 		for (const badName of MALFORMED_PEM_HEADER_NAMES) {
 			const badHeaderPem = encryptedRsaPem.replace('Proc-Type: ', `${badName}\nProc-Type: `);
 			await expectImportFailure(

@@ -47,7 +47,12 @@ import {
 } from '#micro509/internal/crypto/pbes2';
 import { getCrypto } from '#micro509/internal/crypto/webcrypto';
 import { base64Decode, base64Encode } from '#micro509/internal/shared/base64';
-import { pemDecodeOrThrow, pemEncode } from '#micro509/pem/pem';
+import {
+	parseTraditionalPemOrThrow,
+	pemDecodeOrThrow,
+	pemEncode,
+	trimLwsp,
+} from '#micro509/pem/pem';
 import {
 	type ErrorResult,
 	failureResult,
@@ -1917,21 +1922,22 @@ async function encryptTraditionalPem(
 	].join('\n');
 }
 
-/** Decrypt an OpenSSL-style `Proc-Type: 4,ENCRYPTED` PEM block back to plaintext DER. */
+/** Decrypt a `Proc-Type: 4,ENCRYPTED` PEM block, RFC 1421 §4.6 headers, to plaintext DER. */
 async function decryptTraditionalPem(
 	expectedLabel: 'RSA PRIVATE KEY' | 'EC PRIVATE KEY',
 	pem: string,
 	password: string,
 ): Promise<Uint8Array> {
-	const parsed = parseTraditionalPem(pem);
+	const parsed = parseTraditionalPemOrThrow(pem);
 	if (parsed.label !== expectedLabel) {
 		throw new Error(`Expected ${expectedLabel} PEM block`);
 	}
 	const dekInfo = parsed.headers.get('DEK-Info');
-	if (parsed.headers.get('Proc-Type') !== '4,ENCRYPTED' || dekInfo === undefined) {
+	const procType = parsed.headers.get('Proc-Type');
+	if (procType === undefined || !isEncryptedProcType(procType) || dekInfo === undefined) {
 		throw new Error('Traditional PEM encryption headers missing');
 	}
-	const [cipher, ivHex] = dekInfo.split(',');
+	const [cipher, ivHex] = dekInfo.split(',').map(trimLwsp);
 	if (!isTraditionalPemCipher(cipher) || ivHex === undefined) {
 		throw new Error(
 			'Only AES-128-CBC, AES-192-CBC, and AES-256-CBC traditional PEM encryption is supported',
@@ -1972,6 +1978,21 @@ function importTraditionalPemAesKey(
 		{ name: 'AES-CBC', length: keyLength },
 		false,
 		usages,
+	);
+}
+
+/**
+ * RFC 1421 §4.6.1.1 `Proc-Type: 4,ENCRYPTED`.
+ *
+ * Fields are trimmed because RFC 822 §3.1.1 unfolding leaves an LWSP-char
+ * wherever the header was folded.
+ */
+function isEncryptedProcType(value: string): boolean {
+	const fields = value.split(',');
+	return (
+		fields.length === 2 &&
+		trimLwsp(fields[0] ?? '') === '4' &&
+		trimLwsp(fields[1] ?? '') === 'ENCRYPTED'
 	);
 }
 
@@ -2030,63 +2051,6 @@ function opensslBytesToKey(password: string, salt: Uint8Array, length: number): 
 		}
 	}
 	return out;
-}
-
-/** RFC 822 §3.2: `field-name = 1*<any CHAR, excluding CTLs, SPACE, and ":">`. */
-const RFC822_FIELD_NAME = /^[\x21-\x39\x3b-\x7e]+$/;
-
-/** Parse a PEM block into its label, OpenSSL-style headers, and base64 body. */
-function parseTraditionalPem(pem: string): {
-	/** PEM type label between `BEGIN` and `END` markers. */
-	readonly label: string;
-	/** OpenSSL-style encapsulated headers (e.g. `Proc-Type`, `DEK-Info`). */
-	readonly headers: ReadonlyMap<string, string>;
-	/** Base64-encoded payload after the headers. */
-	readonly base64Body: string;
-} {
-	const normalized = pem.replace(/\r\n?/g, '\n').trim();
-	const lines = normalized.split('\n');
-	const begin = lines[0];
-	const end = lines[lines.length - 1];
-	if (
-		begin === undefined ||
-		end === undefined ||
-		!begin.startsWith('-----BEGIN ') ||
-		!end.startsWith('-----END ')
-	) {
-		throw new Error('Invalid PEM block');
-	}
-	const label = begin.slice(11, -5);
-	if (end !== `-----END ${label}-----`) {
-		throw new Error('PEM boundaries do not match');
-	}
-	const headers = new Map<string, string>();
-	let index = 1;
-	while (index < lines.length - 1) {
-		const line = lines[index];
-		if (line === undefined) {
-			break;
-		}
-		if (line.length === 0) {
-			index += 1;
-			break;
-		}
-		const delimiter = line.indexOf(':');
-		if (delimiter === -1) {
-			break;
-		}
-		const headerName = line.slice(0, delimiter);
-		if (!RFC822_FIELD_NAME.test(headerName)) {
-			throw new Error(`Invalid PEM header name: ${headerName}`);
-		}
-		if (headers.has(headerName)) {
-			throw new Error(`Duplicate PEM header: ${headerName}`);
-		}
-		headers.set(headerName, line.slice(delimiter + 1).trimStart());
-		index += 1;
-	}
-	const body = lines.slice(index, lines.length - 1).join('');
-	return { label, headers, base64Body: body };
 }
 
 function parseSpkiDer(der: Uint8Array): {

@@ -103,6 +103,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The parser keyed on `': '`, so a conformant no-space header ended the header
   scan early and folded into the base64 body.
   (https://github.com/kjanat/micro509/pull/89)
+- Legacy encrypted PEM parsing unfolds folded encapsulated headers. RFC 1421
+  §4.6 defines encapsulated header folding by reference to RFC 822, and its
+  Figure 2 folds a `Key-Info:` field across two lines. Every line was treated as
+  a complete header, so a folded field was misparsed and its continuation fell
+  into the base64 body. A line opening with an RFC 822 §3.3 `LWSP-char` (SPACE
+  or HTAB) now continues the preceding field; per §3.1.1 unfolding drops the
+  CRLF and keeps the whitespace, so the field-body and the `Proc-Type` and
+  `DEK-Info` field comparisons strip the SPACE and HTAB unfolding leaves behind.
+  Only those two characters are stripped: `String.prototype.trim` also removes
+  VT, FF, NBSP, and every Unicode `Zs`, none of which RFC 822 admits, so a
+  header such as `Proc-Type: 4,<NBSP>ENCRYPTED` is rejected rather than read as
+  `4,ENCRYPTED`. (https://github.com/kjanat/micro509/issues/92)
 - Certificate and CSR builders reject RFC 5280 MUST-NOT constructions with coded
   throws. `pathLenConstraint` requires the keyUsage extension to assert
   `keyCertSign`; absent, empty, or `keyCertSign`-less keyUsage is rejected

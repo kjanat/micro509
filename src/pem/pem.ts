@@ -231,6 +231,85 @@ function looksLikePemBoundary(line: string): boolean {
 	return /^[ \t]*-{5,}(?:BEGIN|END)/.test(line);
 }
 
+/** RFC 822 §3.2: `field-name = 1*<any CHAR, excluding CTLs, SPACE, and ":">`. */
+const RFC822_FIELD_NAME = /^[\x21-\x39\x3b-\x7e]+$/;
+
+/** RFC 822 §3.3: `LWSP-char = SPACE / HTAB`. */
+function isLwspChar(character: string): boolean {
+	return character === ' ' || character === '\t';
+}
+
+/**
+ * @internal Strips surrounding RFC 822 §3.3 `LWSP-char`s.
+ *
+ * `String.prototype.trim` would also strip VT, FF, NBSP, and every Unicode `Zs`,
+ * none of which the grammar admits.
+ */
+export function trimLwsp(value: string): string {
+	return value.replace(/^[ \t]+|[ \t]+$/g, '');
+}
+
+/** A PEM block carrying RFC 1421 §4.6 encapsulated headers ahead of its body. */
+export interface TraditionalPemBlock {
+	/** PEM type label between the `BEGIN` / `END` markers. */
+	readonly label: string;
+	/** Encapsulated headers (e.g. `Proc-Type`, `DEK-Info`), unfolded. */
+	readonly headers: ReadonlyMap<string, string>;
+	/** Base64-encoded payload after the headers. */
+	readonly base64Body: string;
+}
+
+/**
+ * @internal Parses a PEM block with RFC 1421 §4.6 encapsulated headers.
+ *
+ * RFC 7468 §2 forbids headers, so this path exists only for the legacy
+ * OpenSSL-style encrypted PKCS#1 and SEC1 blocks that predate it.
+ */
+export function parseTraditionalPemOrThrow(pem: string): TraditionalPemBlock {
+	const normalized = pem.replace(/\r\n?/g, '\n').trim();
+	const lines = normalized.split('\n');
+	const label = parsePemBoundaryLine(lines[0] ?? '', 'BEGIN');
+	if (label === undefined || lines.length < 2) {
+		throw new Error('Invalid PEM block');
+	}
+	if (parsePemBoundaryLine(lines[lines.length - 1] ?? '', 'END') !== label) {
+		throw new Error('PEM boundaries do not match');
+	}
+	const headers = new Map<string, string>();
+	let index = 1;
+	let foldedName: string | undefined;
+	while (index < lines.length - 1) {
+		const line = lines[index];
+		if (line === undefined) {
+			break;
+		}
+		if (line.length === 0) {
+			index += 1;
+			break;
+		}
+		if (foldedName !== undefined && isLwspChar(line.charAt(0))) {
+			headers.set(foldedName, `${headers.get(foldedName) ?? ''}${line}`);
+			index += 1;
+			continue;
+		}
+		const delimiter = line.indexOf(':');
+		if (delimiter === -1) {
+			break;
+		}
+		const headerName = line.slice(0, delimiter);
+		if (!RFC822_FIELD_NAME.test(headerName)) {
+			throw new Error(`Invalid PEM header name: ${headerName}`);
+		}
+		if (headers.has(headerName)) {
+			throw new Error(`Duplicate PEM header: ${headerName}`);
+		}
+		headers.set(headerName, line.slice(delimiter + 1).replace(/^[ \t]+/, ''));
+		foldedName = headerName;
+		index += 1;
+	}
+	return { label, headers, base64Body: lines.slice(index, lines.length - 1).join('') };
+}
+
 function isPemLabel(label: string): boolean {
 	return PEM_LABEL_PATTERN.exec(label)?.[0] === label;
 }
