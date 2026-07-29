@@ -43,7 +43,8 @@ describe('site guide LiveCode examples execute', () => {
 				});
 				const exitCode = await child.exited;
 				if (exitCode !== 0) {
-					throw new Error(`example exited ${exitCode}:\n${await child.stderr.text()}`);
+					const stderr = await new Response(child.stderr).text();
+					throw new Error(`example exited ${exitCode}:\n${stderr}`);
 				}
 				expect(exitCode).toBe(0);
 			}, 30_000);

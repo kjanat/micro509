@@ -26,11 +26,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `checkCertificateRevocationAgainstCrl` reports `coveredReasons` on a `good`
   value: the RFC 5280 §6.3.3 (d) interim_reasons_mask computed from the matched
   distribution point's `reasons` and the CRL's `onlySomeReasons`.
-- `ec_domain_parameters_missing` joins `VERIFY_ERROR_CODES`. Chain validation
-  now rejects any certificate on the path whose `id-ecPublicKey` public key
-  carries no namedCurve OID, which RFC 5480 §2.1.1 requires clients to do.
-  Absent parameters, an `implicitCurve` NULL, and a `specifiedCurve` SEQUENCE
-  all fail it.
+- `verifyPkcs7SignedData` success values carry `signers`, pairing each
+  SignerInfo with the certificate that verified its signature
+  (`VerifiedPkcs7Signer`), so callers can check trust, EKU, or identity of the
+  actual signer without reimplementing the issuerAndSerial DN match.
+  (https://github.com/kjanat/micro509/issues/67)
+- `micro509/crypto`, a new entrypoint for detached signatures: `verifySignature`
+  checks raw bytes against a signer's SubjectPublicKeyInfo across RSA PKCS#1
+  v1.5, RSA-PSS, ECDSA P-256/P-384/P-521, and Ed25519, retrying the alternate
+  DER/raw ECDSA encoding; `signData` signs with a WebCrypto key and returns the
+  signature beside its `AlgorithmIdentifier` material; `ecdsaSignatureDerToRaw`
+  and `ecdsaSignatureRawToDer` convert between the DER `ECDSA-Sig-Value` X.509
+  and CMS embed and the raw `r || s` form WebCrypto and JOSE use.
+  (https://github.com/kjanat/micro509/issues/65)
+- `micro509/x509` exports its extension-value decoders as the `decode*`
+  inverses of the existing encoders (`decodeKeyUsage`, `decodeBasicConstraints`,
+  `decodeSubjectAltNames`, …, `decodeAuthorityKeyIdentifier`), the RFC 5280
+  §7.1 semantic DN comparison (`compareDistinguishedNames`, `canonicalDnKey`,
+  `isWithinDirectoryNameSubtree`), `parseDistinguishedNameDer` for a bare
+  `Name`, the `parseCertificateFromSource` / `parseCertificatesFromSource`
+  input normalizers, `subjectKeyIdentifier` (RFC 5280 §4.2.1.2 method (1)),
+  and the IP helpers name-constraint inputs demand (`parseIpAddressToBytes`,
+  `decodeIpAddress`, `allOnesMaskForIpAddress`, `normalizeIpAddress`).
+  (https://github.com/kjanat/micro509/issues/64)
+- `isSelfIssuedCertificate` from `micro509/verify`: the RFC 5280 §7.1
+  subject-equals-issuer predicate path validation already used internally.
+  (https://github.com/kjanat/micro509/issues/65)
+- `inspectEncryptedPkcs8Der` reads the PBES2 parameters of an encrypted PKCS#8
+  key without the password (iterations, salt, PRF, AES-CBC variant, IV), and
+  `micro509/keys` exports `parsePbes2AlgorithmIdentifier` with the
+  `Pbes2Parameters` types behind it.
+  (https://github.com/kjanat/micro509/issues/66)
+- `revocationReasonFromCode` maps a raw CRLReason integer to the
+  `RevocationReason` name the CRL path already returns, giving OCSP's
+  `revocationReasonCode` the same vocabulary.
+  (https://github.com/kjanat/micro509/issues/68)
+- `micro509/result` exports `rethrowIfInvariant`, the boundary guard the
+  library's own catch blocks use to keep programmer errors from being
+  flattened into malformed-input failures.
+  (https://github.com/kjanat/micro509/issues/69)
 
 ### Changed
 
@@ -167,16 +201,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the profile the builder promises. `validateOid` also rejects an OID that parses
   as decimals but breaks the X.660 arc bounds (`3.1`, `1.40`) with `invalid_oid`
   rather than an uncoded `Error`.
-  (https://github.com/kjanat/micro509/pull/88)
-- Parsing rejects a zero-length `dNSName`, `rfc822Name`, or
-  `uniformResourceIdentifier` GeneralName, which RFC 5280 §4.2.1.6 forbids. An
-  external certificate could previously carry an empty subjectAltName value and
-  parse, leaving chain verification to accept a certificate with no usable
-  identity when no identity match was requested. Certificate and CRL parsing
-  share the decoder, so this covers subjectAltName, issuerAltName,
-  authorityInfoAccess locations, CRL distribution points, `cRLIssuer`, the
-  issuing distribution point, and `certificateIssuer`. Name constraints keep
-  their own decoder, where an empty base is meaningful.
   (https://github.com/kjanat/micro509/pull/88)
 - CRL applicability follows the RFC 5280 §6.3.3 relying-party algorithm in
   three places it diverged. A certificate without a CRLDP extension accepts a
@@ -334,12 +358,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   STRING, per RFC 8410 §7. The field's content was passed to WebCrypto
   unexamined, so a BER long-form length (`04 81 20 …`) around an otherwise
   valid Ed25519 key imported.
-- CRL parsing rejects a `CertificateList` whose `signatureAlgorithm` differs
-  from the `signature` field of the signed `tbsCertList`, per RFC 5280 §5.1.1.2.
-  The outer field is outside the signature, and it was the one reported as the
-  CRL's signature algorithm, so a CRL could name one algorithm to the caller and
-  another to the signer. Certificate parsing already enforced the same rule from
-  RFC 5280 §4.1.1.2.
 - `publicKeyAlgorithmName` reports `X25519`, `X448`, and `Ed448` alongside the
   existing `Ed25519`, and `signatureAlgorithmName` reports `Ed448`, the
   human-readable names RFC 8410 §8 establishes. Every one of those OIDs was
@@ -428,6 +446,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and an unpadded `AQ` decoded as `AQ==` does. `pemDecode`, `splitPemBlocks`,
   every PEM parser above them, `importSpkiBase64`, `importPkcs8Base64`, and
   legacy encrypted PEM now reject both.
+
+### Security
+
+- `verifyCertificateChain` reported `ok: true` for a chain containing a
+  certificate whose `id-ecPublicKey` public key carries no namedCurve OID,
+  which RFC 5480 §2.1.1 requires clients to reject. The caller received a
+  "verified" certificate binding a key `certificatePublicKey` cannot import.
+  Chain validation now fails such a path with `ec_domain_parameters_missing`
+  (joining `VERIFY_ERROR_CODES`); absent parameters, an `implicitCurve` NULL,
+  and a `specifiedCurve` SEQUENCE all fail it.
+- Parsing rejects a zero-length `dNSName`, `rfc822Name`, or
+  `uniformResourceIdentifier` GeneralName, which RFC 5280 §4.2.1.6 forbids. An
+  external certificate could previously carry an empty subjectAltName value and
+  parse, leaving chain verification to accept a certificate with no usable
+  identity when no identity match was requested. Certificate and CRL parsing
+  share the decoder, so this covers subjectAltName, issuerAltName,
+  authorityInfoAccess locations, CRL distribution points, `cRLIssuer`, the
+  issuing distribution point, and `certificateIssuer`. Name constraints keep
+  their own decoder, where an empty base is meaningful.
+  (https://github.com/kjanat/micro509/pull/88)
+- CRL parsing rejects a `CertificateList` whose `signatureAlgorithm` differs
+  from the `signature` field of the signed `tbsCertList`, per RFC 5280 §5.1.1.2.
+  The outer field is outside the signature, and it was the one reported as the
+  CRL's signature algorithm, so a CRL could name one algorithm to the caller and
+  another to the signer. Certificate parsing already enforced the same rule from
+  RFC 5280 §4.1.1.2.
 
 ## [0.13.0] - 2026-07-23
 
