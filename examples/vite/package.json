@@ -10,7 +10,7 @@
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
-		"micro509": "^0.13"
+		"micro509": "^0.14"
 	},
 	"devDependencies": {
 		"typescript": "^7",

@@ -253,14 +253,14 @@ for (const cert of chain) {
       ? 'self-signed'
       : `issued by ${issuer?.subject.values.commonName}`;
   console.log(
-    `${role} ${cert.subject.values.commonName.padEnd(16)} ${signer}, serial ${cert.serialNumberHex}`,
+    `${role} ${(cert.subject.values.commonName ?? '?').padEnd(16)} ${signer}, serial ${cert.serialNumberHex}`,
   );
 }
 
 // PEM, DER, or already-parsed: one normalizer
 const fromDer = parseCertificateFromSource(leaf.der);
 console.log(
-  `DER  ${fromDer.subject.values.commonName.padEnd(16)} same certificate: ${
+  `DER  ${(fromDer.subject.values.commonName ?? '?').padEnd(16)} same certificate: ${
     fromDer.serialNumberHex === chain[0]?.serialNumberHex
   }`,
 );

@@ -5,6 +5,7 @@ Release checklist — every box, every release:
 - [ ] Move [Unreleased] entries under a new `## [X.Y.Z] - YYYY-MM-DD` header + intro line
 - [ ] Bump version in package.json AND jsr.json
 - [ ] Bump the `micro509` range in examples/vite/package.json and examples/browser/index.html's `<script type="importmap">`
+- [ ] Run `bun install` after the example bump so bun.lock matches; CI installs with a frozen lockfile
 - [ ] Link definitions at the BOTTOM of this file: add [X.Y.Z] compare link, repoint [Unreleased]
 - [ ] Signed tag on the release commit: git tag -s vX.Y.Z -m "vX.Y.Z - summary"
 - [ ] Push master + tag, gh release create with milestone notes
@@ -17,6 +18,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [0.14.0] - 2026-07-29
+
+Everything that already worked but had no export: a `micro509/crypto`
+entrypoint for detached signatures, extension decoders, RFC 5280 §7.1
+distinguished-name comparison, PKCS#7 signer resolution, and PBES2
+inspection. Plus three wrongful-acceptance fixes under Security and a
+stricter typed-contract pass.
 
 ### Added
 
@@ -1184,7 +1193,8 @@ Initial prerelease. API may change before 1.0.
 - Zero runtime dependencies, WebCrypto-native, tree-shakeable subpath exports;
   runs on Node, Bun, Deno, browsers, and Cloudflare Workers.
 
-[Unreleased]: https://github.com/kjanat/micro509/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/kjanat/micro509/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/kjanat/micro509/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/kjanat/micro509/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/kjanat/micro509/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/kjanat/micro509/compare/v0.10.0...v0.11.0

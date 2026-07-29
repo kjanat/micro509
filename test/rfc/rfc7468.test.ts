@@ -1059,7 +1059,7 @@ describe('RFC 7468: PKIX Textual Encodings', () => {
 				const assigned = new Set(moduleOids.map((entry) => entry.name));
 				expect(
 					guide.flatMap((row) =>
-						row.modules.filter((cell) => !assigned.has(cell.replace('*', ''))),
+						row.modules.filter((cell) => !assigned.has(cell.replaceAll('*', ''))),
 					),
 				).toEqual([]);
 			});
@@ -1097,7 +1097,7 @@ describe('RFC 7468: PKIX Textual Encodings', () => {
 					for (const [index, cell] of row.modules.entries()) {
 						const number = /^\[RFC(\d+)\]$/.exec(row.references[index] ?? '')?.[1];
 						expect(number).toBeDefined();
-						const name = cell.replace('*', '');
+						const name = cell.replaceAll('*', '');
 						const oid = moduleOids.find((entry) => entry.name === name)?.oid;
 						expect(oid).toBeDefined();
 						const spelled = await objectIdentifiersIn(number ?? '');
