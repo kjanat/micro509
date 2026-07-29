@@ -40,7 +40,7 @@ export type RsaPssParameters =
 			readonly mgfHash: 'SHA-256';
 			/** Salt length in bytes — equals the hash digest size. */
 			readonly saltLength: 32;
-			/** Trailer field (always 0xBC per RFC 3447). */
+			/** Trailer field (always 0xBC per RFC 8017 Appendix A.2.3). */
 			readonly trailerField: 1;
 	  }
 	| {
@@ -50,7 +50,7 @@ export type RsaPssParameters =
 			readonly mgfHash: 'SHA-384';
 			/** Salt length in bytes — equals the hash digest size. */
 			readonly saltLength: 48;
-			/** Trailer field (always 0xBC per RFC 3447). */
+			/** Trailer field (always 0xBC per RFC 8017 Appendix A.2.3). */
 			readonly trailerField: 1;
 	  }
 	| {
@@ -60,7 +60,7 @@ export type RsaPssParameters =
 			readonly mgfHash: 'SHA-512';
 			/** Salt length in bytes — equals the hash digest size. */
 			readonly saltLength: 64;
-			/** Trailer field (always 0xBC per RFC 3447). */
+			/** Trailer field (always 0xBC per RFC 8017 Appendix A.2.3). */
 			readonly trailerField: 1;
 	  };
 
@@ -127,7 +127,7 @@ interface MutableRsaPssParameterState {
 	sawTrailerField: boolean;
 }
 
-/** RFC 3447 default salt length when hash is SHA-1 (used to detect the unsupported default). */
+/** RFC 8017 Appendix A.2.3 default salt length when hash is SHA-1. */
 const SHA1_SALT_LENGTH = 20;
 
 /** Return the canonical {@linkcode RsaPssParameters} profile for a given hash algorithm. */

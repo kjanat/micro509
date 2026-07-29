@@ -1,20 +1,17 @@
+/**
+ * Re-derives the frozen Unicode 3.2 tables directly from the vendored RFC 3454
+ * text and asserts the committed `rfc3454-tables.ts` matches.
+ */
+
 import { describe, expect, it } from 'bun:test';
-import { readFileSync } from 'node:fs';
-import { URL } from 'node:url';
 import {
 	A1_UNASSIGNED_RANGES,
 	B2_CASE_FOLD,
 	NFKC_3_2_CORRECTIONS,
 } from '#micro509/internal/shared/rfc3454-tables';
+import { rfcDir } from '#test/helpers';
 
-/**
- * Re-derives the frozen Unicode 3.2 tables directly from the vendored RFC 3454
- * text and asserts the committed `rfc3454-tables.ts` matches. This is the
- * generation step turned into a guard: the tables cannot silently drift from the
- * RFC, and completeness is proven rather than reviewed by hand.
- */
-
-const rfc = readFileSync(new URL('../docs/rfc/rfc3454.txt', import.meta.url), 'utf8');
+const rfc = await Bun.file(`${rfcDir}/rfc3454.txt`).text();
 
 function tableLines(name: string): string[] {
 	const out: string[] = [];

@@ -136,3 +136,55 @@ describe('domainComponent comparison', () => {
 		expect(compareNameAttributeValue(kelvin, k)).toBe(false);
 	});
 });
+
+describe('emailAddress comparison', () => {
+	const email = (value: string, valueTag = 0x16) => ({
+		oid: OIDS.emailAddress,
+		valueTag,
+		value,
+	});
+
+	it('compares case-insensitively across the whole address', () => {
+		// RFC 5280 §4.1.2.6: "emailAddress attribute values are not case-sensitive
+		// (e.g., "subscriber@example.com" is the same as "SUBSCRIBER@EXAMPLE.COM")",
+		// over the RFC 2985 §6.1 pkcs9CaseIgnoreMatch rule.
+		expect(
+			compareNameAttributeValue(email('SUBSCRIBER@EXAMPLE.COM'), email('subscriber@example.com')),
+		).toBe(true);
+		expect(
+			compareNameAttributeValue(email('Local.Part@Example.com'), email('local.part@example.com')),
+		).toBe(true);
+	});
+
+	it('still distinguishes different addresses', () => {
+		expect(compareNameAttributeValue(email('a@example.com'), email('b@example.com'))).toBe(false);
+	});
+
+	it('keeps the spaces pkcs9CaseIgnoreMatch does not collapse', () => {
+		// RFC 2985 §6.1 compares character by character ignoring case, so it has
+		// none of the RFC 4518 §2.6 space folding a DirectoryString attribute gets.
+		expect(compareNameAttributeValue(email('a  b@example.com'), email('a b@example.com'))).toBe(
+			false,
+		);
+	});
+
+	it('matches an address a certificate carries under a DirectoryString tag', () => {
+		// RFC 5280 §4.1.2.6 gives emailAddress the IA5String type, but a value one
+		// certificate encodes as UTF8String still has to match the same value in
+		// another, or neither can be an issuer of the other.
+		expect(
+			compareNameAttributeValue(email('a@example.com', 0x0c), email('a@example.com', 0x0c)),
+		).toBe(true);
+		expect(
+			compareNameAttributeValue(email('A@example.com', 0x0c), email('a@example.com', 0x0c)),
+		).toBe(true);
+		expect(compareNameAttributeValue(email('a@example.com', 0x0c), email('a@example.com'))).toBe(
+			false,
+		);
+	});
+
+	it('rejects a non-ASCII address under the IA5String tag', () => {
+		const kelvin = email(`${String.fromCodePoint(0x212a)}@example.com`);
+		expect(compareNameAttributeValue(kelvin, email('k@example.com'))).toBe(false);
+	});
+});

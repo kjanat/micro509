@@ -83,23 +83,25 @@ export type CategorizePemBlocksResult =
 
 /**
  * Throwing core for {@linkcode pemDecode}: extracts and base64-decodes the
- * DER content from a PEM string. Throws if the `BEGIN`/`END` markers don't
- * match `label`.
+ * DER content from a PEM string. Text ahead of the `BEGIN` line is ignored.
+ * Throws if the `BEGIN`/`END` markers don't match `label`.
  *
  * @param label Expected PEM type label.
  * @param pem PEM-encoded text (may contain `\r`).
  */
 export function pemDecodeOrThrow(label: string, pem: string): Uint8Array {
-	const normalized = pem.replace(/\r\n?/g, '\n').trim();
+	const normalized = trimPemDocument(pem.replace(/\r\n?/g, '\n'));
 	const lines = normalized.split('\n');
+	const begin = findPreEncapsulationBoundary(lines);
 	if (
-		parsePemBoundaryLine(lines[0] ?? '', 'BEGIN') !== label ||
+		begin === undefined ||
+		parsePemBoundaryLine(lines[begin] ?? '', 'BEGIN') !== label ||
 		parsePemBoundaryLine(lines[lines.length - 1] ?? '', 'END') !== label ||
-		lines.length < 3
+		lines.length - begin < 3
 	) {
 		throw new Error(`Invalid PEM for ${label}`);
 	}
-	const bodyLines = normalizePemBodyLines(lines.slice(1, -1));
+	const bodyLines = normalizePemBodyLines(lines.slice(begin + 1, -1));
 	if (bodyLines === undefined) {
 		throw new Error(`Invalid PEM for ${label}`);
 	}
@@ -126,7 +128,7 @@ export function splitPemBlocksOrThrow(input: string): readonly PemBlock[] {
 		const nextLineStart = newline === -1 ? normalized.length : newline + 1;
 		const line = normalized.slice(lineStart, lineEnd);
 		const beginLine = line.replace(/^[ \t]+/, '');
-		const beginLabel = parsePemBoundaryLine(beginLine, 'BEGIN');
+		const beginLabel = parsePemBoundaryLine(line, 'BEGIN');
 		const endLabel = parsePemBoundaryLine(line, 'END');
 
 		if (beginLabel !== undefined) {
@@ -219,12 +221,25 @@ function normalizePemBodyLines(lines: readonly string[]): readonly string[] | un
 
 function parsePemBoundaryLine(line: string, kind: 'BEGIN' | 'END'): string | undefined {
 	const prefix = `-----${kind} `;
-	const withoutTrailingWsp = line.replace(/[ \t]+$/, '');
-	if (!withoutTrailingWsp.startsWith(prefix) || !withoutTrailingWsp.endsWith('-----')) {
+	const withoutSurroundingWsp = trimLwsp(line);
+	if (!withoutSurroundingWsp.startsWith(prefix) || !withoutSurroundingWsp.endsWith('-----')) {
 		return undefined;
 	}
-	const label = withoutTrailingWsp.slice(prefix.length, -5);
+	const label = withoutSurroundingWsp.slice(prefix.length, -5);
 	return isPemLabel(label) ? label : undefined;
+}
+
+/** RFC 7468 §2: data before the encapsulation boundaries is permitted. */
+function findPreEncapsulationBoundary(lines: readonly string[]): number | undefined {
+	for (const [index, line] of lines.entries()) {
+		if (parsePemBoundaryLine(line, 'BEGIN') !== undefined) {
+			return index;
+		}
+		if (looksLikePemBoundary(line)) {
+			return undefined;
+		}
+	}
+	return undefined;
 }
 
 function looksLikePemBoundary(line: string): boolean {
@@ -237,6 +252,18 @@ const RFC822_FIELD_NAME = /^[\x21-\x39\x3b-\x7e]+$/;
 /** RFC 822 §3.3: `LWSP-char = SPACE / HTAB`. */
 function isLwspChar(character: string): boolean {
 	return character === ' ' || character === '\t';
+}
+
+/**
+ * Strips the whitespace surrounding a PEM document: `LWSP-char`s and the line
+ * terminators that separate the boundary lines from the body.
+ *
+ * `String.prototype.trim` would also strip VT, FF, NBSP, and every Unicode
+ * `Zs`, making those characters acceptable at a document edge while
+ * {@linkcode parsePemBoundaryLine} rejects them everywhere else.
+ */
+function trimPemDocument(value: string): string {
+	return value.replace(/^[ \t\n]+|[ \t\n]+$/g, '');
 }
 
 /**
@@ -266,7 +293,7 @@ export interface TraditionalPemBlock {
  * OpenSSL-style encrypted PKCS#1 and SEC1 blocks that predate it.
  */
 export function parseTraditionalPemOrThrow(pem: string): TraditionalPemBlock {
-	const normalized = pem.replace(/\r\n?/g, '\n').trim();
+	const normalized = trimPemDocument(pem.replace(/\r\n?/g, '\n'));
 	const lines = normalized.split('\n');
 	const label = parsePemBoundaryLine(lines[0] ?? '', 'BEGIN');
 	if (label === undefined || lines.length < 2) {
@@ -316,6 +343,7 @@ function isPemLabel(label: string): boolean {
 
 /**
  * Extracts and base64-decodes the DER content from a PEM string.
+ * Text ahead of the `BEGIN` line is ignored.
  *
  * Returns a typed failure (`code: 'malformed'`) when the `BEGIN`/`END`
  * markers don't match `label` or the body is not valid base64. For the

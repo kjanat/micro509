@@ -66,8 +66,15 @@ describe('ocsp', () => {
 		});
 		const parsedRequest = parseOcspRequestPemOrThrow(request.pem);
 		expect(parsedRequest.requests).toHaveLength(1);
-		expect(parsedRequest.requests[0]?.hashAlgorithmName).toBe('SHA-1');
+		expect(parsedRequest.requests[0]?.hashAlgorithmName).toBe('SHA-256');
 		expect(parsedRequest.nonce).toBe('aabb');
+		const legacyRequest = await createOcspRequest({
+			requests: [{ certificate: leaf.pem, issuerCertificate: issuer.certificate.pem }],
+			hashAlgorithm: 'SHA-1',
+		});
+		expect(parseOcspRequestDerOrThrow(legacyRequest.der).requests[0]?.hashAlgorithmName).toBe(
+			'SHA-1',
+		);
 		const ocspResponse = await createOcspResponse({
 			signerPrivateKey: issuer.keyPair.privateKey,
 			signerCertificate: issuer.certificate.pem,
@@ -85,6 +92,7 @@ describe('ocsp', () => {
 		expect(parsedResponse.responseStatus).toBe('successful');
 		expect(parsedResponse.signatureAlgorithmName).toBe('ECDSA with SHA-256');
 		expect(parsedResponse.responses?.[0]).toMatchObject({ certStatus: 'good' });
+		expect(parsedResponse.responses?.[0]?.certId.hashAlgorithmName).toBe('SHA-256');
 		expect(parsedResponse.nonce).toBe('aabb');
 		expect(parsedResponse.responderId).toMatchObject({
 			type: 'byKeyHash',

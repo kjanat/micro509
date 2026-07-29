@@ -66,6 +66,7 @@ export type {
 	CreateOcspSingleResponseInput,
 	OcspCertificateSource,
 	OcspCertStatus,
+	OcspEncoderErrorCode,
 	OcspHashAlgorithm,
 	OcspRequestMaterial,
 	OcspRequestSource,

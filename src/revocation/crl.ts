@@ -78,6 +78,7 @@ import type { NameFieldKey, NameInput } from '#micro509/x509/name';
 import {
 	encodeName,
 	encodeRelativeDistinguishedName,
+	isNameInputEmpty,
 	nameFieldKeyFromOid,
 } from '#micro509/x509/name';
 import type {
@@ -540,6 +541,12 @@ interface MutableAuthorityKeyIdentifierState {
 export async function createCertificateRevocationList(
 	input: CreateCertificateRevocationListInput,
 ): Promise<CertificateRevocationListMaterial> {
+	if (isNameInputEmpty(input.issuer)) {
+		throwCrlEncoderError(
+			'issuer_distinguished_name_empty',
+			'issuer must be a non-empty distinguished name',
+		);
+	}
 	const signatureAlgorithm = getSignatureAlgorithm(input.signerPrivateKey);
 	const thisUpdate = input.thisUpdate ?? new Date();
 	const nextUpdate = input.nextUpdate;
@@ -616,6 +623,7 @@ export function parseCertificateRevocationListDerOrThrow(
 		der.slice(tbsCertList.start - tbsCertList.headerLength, tbsCertList.end),
 	);
 	const parsedSignatureAlgorithm = parseAlgorithmIdentifier(der, signatureAlgorithm);
+	assertMatchingCrlSignatureAlgorithms(signedFields.signature, parsedSignatureAlgorithm);
 	return {
 		der: new Uint8Array(der),
 		version: signedFields.version,
@@ -2298,7 +2306,9 @@ function parseImplicitBoolean(element: DerElement): boolean {
 }
 
 /** Machine-readable reason a CRL encoder rejected its construction input. */
-export type CrlEncoderErrorCode = 'distribution_point_full_name_empty';
+export type CrlEncoderErrorCode =
+	| 'distribution_point_full_name_empty'
+	| 'issuer_distinguished_name_empty';
 
 /** Throws a {@link ResultError} for a CRL encoder input-validation failure. */
 function throwCrlEncoderError(code: CrlEncoderErrorCode, message: string): never {
@@ -2559,14 +2569,40 @@ function validateImplicitSerialNumberEncoding(bytes: Uint8Array, label: string):
 	}
 }
 
+/** An AlgorithmIdentifier decoded to its OID and the DER of its parameters. */
+interface ParsedCrlAlgorithmIdentifier {
+	readonly oid: string;
+	readonly parametersDer?: Uint8Array;
+}
+
+/** RFC 5280 §5.1.1.2: signatureAlgorithm MUST equal the tbsCertList signature field. */
+function assertMatchingCrlSignatureAlgorithms(
+	signature: ParsedCrlAlgorithmIdentifier,
+	signatureAlgorithm: ParsedCrlAlgorithmIdentifier,
+): void {
+	if (
+		signature.oid !== signatureAlgorithm.oid ||
+		!optionalBytesEqual(signature.parametersDer, signatureAlgorithm.parametersDer)
+	) {
+		throw new Error('CRL signatureAlgorithm must match TBSCertList signature');
+	}
+}
+
+function optionalBytesEqual(left: Uint8Array | undefined, right: Uint8Array | undefined): boolean {
+	if (left === undefined || right === undefined) {
+		return left === right;
+	}
+	if (left.length !== right.length) {
+		return false;
+	}
+	return left.every((byte, index) => byte === right[index]);
+}
+
 /** Extracts the algorithm OID from an AlgorithmIdentifier SEQUENCE. */
 function parseAlgorithmIdentifier(
 	source: Uint8Array,
 	element: DerElement,
-): {
-	readonly oid: string;
-	readonly parametersDer?: Uint8Array;
-} {
+): ParsedCrlAlgorithmIdentifier {
 	const children = childrenOf(source, element);
 	const oid = requireElement(children[0], 'algorithm OID');
 	const parameters = children[1];
@@ -2636,6 +2672,7 @@ function normalizeCrl(source: CrlSource): ParsedCertificateRevocationList {
 
 function parseSignedCrlFields(tbsCertListDer: Uint8Array): {
 	readonly version: number;
+	readonly signature: ParsedCrlAlgorithmIdentifier;
 	readonly issuer: ParsedName;
 	readonly thisUpdate: Date;
 	readonly nextUpdate?: Date;
@@ -2650,8 +2687,8 @@ function parseSignedCrlFields(tbsCertListDer: Uint8Array): {
 	const tbsChildren = childrenOf(tbsCertListDer, tbsCertList);
 	const versionField = parseCrlVersionField(tbsChildren);
 	const version = versionField.version;
-	let index = versionField.nextIndex;
-	index += 1;
+	const signatureElement = requireElement(tbsChildren[versionField.nextIndex], 'signature');
+	const index = versionField.nextIndex + 1;
 	const issuerElement = requireElement(tbsChildren[index], 'issuer');
 	const thisUpdateElement = requireElement(tbsChildren[index + 1], 'thisUpdate');
 	let cursor = index + 2;
@@ -2675,6 +2712,7 @@ function parseSignedCrlFields(tbsCertListDer: Uint8Array): {
 	const parsedExtensions = parseCrlExtensionFields(tbsCertListDer, maybeExtensions, version);
 	return {
 		version,
+		signature: parseAlgorithmIdentifier(tbsCertListDer, signatureElement),
 		issuer: parseIssuer(tbsCertListDer, issuerElement),
 		thisUpdate: parseTime(thisUpdateElement),
 		...(nextUpdate === undefined ? {} : { nextUpdate }),

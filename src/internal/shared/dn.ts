@@ -116,17 +116,25 @@ export function compareNameAttributeValue(
 	if (left.oid === OIDS.domainComponent) {
 		// RFC 5280 §7.3 / RFC 4519 caseIgnoreIA5Match: domainComponent is
 		// IA5String, prepared and compared case-insensitively with insignificant
-		// spaces collapsed. A value under any other tag, or a non-ASCII value, is
-		// malformed and does not match.
-		if (left.valueTag !== 0x16 || right.valueTag !== 0x16) {
-			return false;
-		}
-		if (!isAscii(left.value) || !isAscii(right.value)) {
-			return false;
-		}
-		const preparedLeft = prepareNameCompareString(left.value);
-		const preparedRight = prepareNameCompareString(right.value);
-		return preparedLeft !== undefined && preparedLeft === preparedRight;
+		// spaces collapsed.
+		return compareIa5AttributeValue(left, right, (leftValue, rightValue) => {
+			const prepared = prepareNameCompareString(leftValue);
+			return prepared !== undefined && prepared === prepareNameCompareString(rightValue);
+		});
+	}
+	// RFC 5280 §4.1.2.6 and RFC 2985 §6.1 pkcs9CaseIgnoreMatch: emailAddress is
+	// IA5String, matched character by character without regard to case and
+	// without the RFC 4518 space collapsing a DirectoryString attribute gets.
+	// Under any other tag the value falls through to the general comparison.
+	if (
+		left.oid === OIDS.emailAddress &&
+		compareIa5AttributeValue(
+			left,
+			right,
+			(leftValue, rightValue) => leftValue.toLowerCase() === rightValue.toLowerCase(),
+		)
+	) {
+		return true;
 	}
 	if (isDirectoryStringTag(left.valueTag) && isDirectoryStringTag(right.valueTag)) {
 		const preparedLeft = prepareNameCompareString(left.value);
@@ -140,6 +148,24 @@ export function compareNameAttributeValue(
 }
 
 // Helpers
+
+/**
+ * Applies `matches` to two IA5String attribute values. A value under any other
+ * tag, or a non-ASCII value, is malformed and does not match.
+ */
+function compareIa5AttributeValue(
+	left: ParsedNameAttribute,
+	right: ParsedNameAttribute,
+	matches: (left: string, right: string) => boolean,
+): boolean {
+	if (left.valueTag !== 0x16 || right.valueTag !== 0x16) {
+		return false;
+	}
+	if (!isAscii(left.value) || !isAscii(right.value)) {
+		return false;
+	}
+	return matches(left.value, right.value);
+}
 
 /**
  * True for the DirectoryString encodings the parser decodes to a comparable
@@ -306,6 +332,9 @@ function canonicalRdnKey(rdn: ParsedRelativeDistinguishedName): string {
 function canonicalAttributeValue(attr: ParsedNameAttribute): string {
 	if (attr.oid === OIDS.domainComponent && attr.valueTag === 0x16 && isAscii(attr.value)) {
 		return `[dc]${prepareNameCompareString(attr.value) ?? attr.value.toLowerCase()}`;
+	}
+	if (attr.oid === OIDS.emailAddress && attr.valueTag === 0x16 && isAscii(attr.value)) {
+		return `[email]${attr.value.toLowerCase()}`;
 	}
 	if (isDirectoryStringTag(attr.valueTag)) {
 		return prepareNameCompareString(attr.value) ?? `[raw:${attr.valueTag}]${attr.value}`;

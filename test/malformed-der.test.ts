@@ -19,6 +19,7 @@ import {
 	explicitContext,
 	implicitPrimitiveContext,
 	integerFromNumber,
+	objectIdentifier,
 	octetString,
 	readSequenceChildren,
 	sequence,
@@ -460,12 +461,24 @@ describe('malformed DER corpus', () => {
 				messagePattern: /revocationDate/i,
 			},
 			{
-				name: 'CRL skeletal structure missing issuer',
+				name: 'CRL skeletal structure missing signature',
 				parse: () =>
 					parseCertificateRevocationListDerOrThrow(
 						sequence([
 							sequence([integerFromNumber(1)]),
 							sequence([]),
+							bitString(Uint8Array.of(0x00)),
+						]),
+					),
+				messagePattern: /signature/i,
+			},
+			{
+				name: 'CRL skeletal structure missing issuer',
+				parse: () =>
+					parseCertificateRevocationListDerOrThrow(
+						sequence([
+							sequence([integerFromNumber(1), sequence([objectIdentifier(OIDS.ecdsaWithSHA256)])]),
+							sequence([objectIdentifier(OIDS.ecdsaWithSHA256)]),
 							bitString(Uint8Array.of(0x00)),
 						]),
 					),

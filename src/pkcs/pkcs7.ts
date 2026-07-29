@@ -39,7 +39,10 @@ import {
 	describeHashAlgorithm,
 	describeSignatureAlgorithm,
 } from '#micro509/internal/crypto/algorithm-names';
-import { verifySignedDataDetailed } from '#micro509/internal/crypto/sig-verify';
+import {
+	getVerifySignatureConfigResult,
+	verifySignedDataDetailed,
+} from '#micro509/internal/crypto/sig-verify';
 import type { SignatureAlgorithmIdentifier } from '#micro509/internal/crypto/signing';
 import {
 	encodeAlgorithmIdentifier,
@@ -65,6 +68,9 @@ import { parseCertificateDerOrThrow } from '#micro509/x509/parse';
 
 /** PEM text (may contain multiple CERTIFICATE blocks), raw DER bytes, or an already-parsed certificate. */
 export type Pkcs7CertificateSource = string | Uint8Array | ParsedCertificate;
+
+/** RFC 7468 Section 8 armors an RFC 2315 ContentInfo; Section 9 armors an RFC 5652 one. */
+const CONTENT_INFO_PEM_LABELS = ['PKCS7', 'CMS'] as const;
 
 /** DER, PEM, and base64 encodings of a PKCS#7 certificate bag. */
 export interface Pkcs7CertBagMaterial {
@@ -392,11 +398,15 @@ export interface CreatePkcs7SignedDataInput {
 	readonly detached?: boolean;
 }
 
-/** DER, PEM, and base64 encodings of a PKCS#7 SignedData structure. */
+/** DER, PEM, and base64 encodings of a PKCS#7/CMS SignedData structure. */
 export interface Pkcs7SignedDataMaterial {
-	/** Raw DER-encoded PKCS#7 SignedData. */
+	/** Raw DER-encoded SignedData ContentInfo. */
 	readonly der: Uint8Array;
-	/** PEM-armored PKCS#7 (`-----BEGIN PKCS7-----`). */
+	/**
+	 * PEM-armored ContentInfo. A version 1 SignedData carries the `PKCS7`
+	 * label; a version 3 one is outside RFC 2315, whose SignedData version
+	 * "shall be 1", so it carries the RFC 7468 Section 9 `CMS` label.
+	 */
 	readonly pem: string;
 	/** Base64-encoded DER (no PEM armor). */
 	readonly base64: string;
@@ -407,6 +417,7 @@ export type CreatePkcs7SignedDataErrorCode =
 	| 'no_signers'
 	| 'invalid_signer_certificate'
 	| 'invalid_certificate'
+	| 'signer_certificate_key_mismatch'
 	| 'unsupported_signer_key';
 
 /** Error payload for a failed PKCS#7 SignedData creation. */
@@ -442,7 +453,8 @@ export type CreatePkcs7SignedDataResult =
  *
  * Returns a {@linkcode CreatePkcs7SignedDataResult}: DER, PEM, and base64
  * forms on success, or a typed failure for caller-correctable input (no
- * signers, a signer source that is not exactly one certificate, or an
+ * signers, a signer source that is not exactly one certificate, a signer
+ * certificate whose public key cannot verify the signer key's algorithm, or an
  * unsupported signer key).
  */
 export async function createPkcs7SignedData(
@@ -513,9 +525,13 @@ export async function createPkcs7SignedData(
 		setOf(signerInfos),
 	]);
 	const der = sequence([objectIdentifier(OIDS.pkcs7SignedData), explicitContext(0, signedData)]);
+	// RFC 7468 Section 8 requires PKCS7-labelled data to be an RFC 2315
+	// ContentInfo, whose SignedData version "shall be 1"; version 3 is described
+	// only by RFC 5652, which Section 9 armors as CMS.
+	const label = signedDataVersion === 1 ? 'PKCS7' : 'CMS';
 	return {
 		ok: true,
-		value: { der, pem: pemEncode('PKCS7', der), base64: base64Encode(der) },
+		value: { der, pem: pemEncode(label, der), base64: base64Encode(der) },
 	};
 }
 
@@ -580,6 +596,23 @@ async function buildPkcs7SignerInfo(
 			'Unsupported signer key or signature profile',
 		);
 	}
+	// RFC 8410 §12: "the same public key cannot be used for both ECDH and EdDSA",
+	// so a SignerInfo must not name a certificate whose subject public key cannot
+	// verify the algorithm the signer key produces.
+	if (
+		!getVerifySignatureConfigResult(
+			signatureAlgorithm.algorithmOid,
+			signatureAlgorithm.parameters,
+			certificate.publicKeyAlgorithmOid,
+			certificate.publicKeyParametersOid,
+			'signer',
+		).ok
+	) {
+		return createPkcs7Failure(
+			'signer_certificate_key_mismatch',
+			'Each PKCS#7 signer certificate must carry a public key that verifies the signer key algorithm',
+		);
+	}
 	const digest = contentDigestForPrivateKey(signer.privateKey);
 	if (digest === undefined) {
 		return createPkcs7Failure(
@@ -632,21 +665,31 @@ export function parsePkcs7CertBagDer(der: Uint8Array): ParsePkcs7CertBagResult {
 	return { ok: true, value: x509CertificatesOf(result.value.certificateChoices) };
 }
 
-/** Parses a PEM-armored PKCS#7 cert bag. Expects exactly one `PKCS7` PEM block. */
-export function parsePkcs7CertBagPem(pem: string): ParsePkcs7CertBagResult {
+/** The DER of the single `PKCS7` or `CMS` block in `pem`, or a typed failure. */
+function contentInfoPemBytes(
+	pem: string,
+):
+	| { readonly ok: true; readonly bytes: Uint8Array }
+	| ErrorResult<ParsePkcs7ErrorCode, Record<never, never>, ParsePkcs7Failure> {
 	try {
-		const blocks = splitPemBlocksOrThrow(pem).filter((block) => block.label === 'PKCS7');
-		if (blocks.length !== 1) {
-			return pkcs7Failure('malformed', 'Expected exactly one PKCS7 PEM block');
-		}
+		const blocks = splitPemBlocksOrThrow(pem).filter((block) =>
+			CONTENT_INFO_PEM_LABELS.some((label) => label === block.label),
+		);
 		const block = blocks[0];
-		if (block === undefined) {
-			return pkcs7Failure('malformed', 'Missing PKCS7 block');
+		if (block === undefined || blocks.length !== 1) {
+			return pkcs7Failure('malformed', 'Expected exactly one PKCS7 or CMS PEM block');
 		}
-		return parsePkcs7CertBagDer(block.bytes);
+		return { ok: true, bytes: block.bytes };
 	} catch {
-		return pkcs7Failure('malformed', 'Expected exactly one PKCS7 PEM block');
+		return pkcs7Failure('malformed', 'Expected exactly one PKCS7 or CMS PEM block');
 	}
+}
+
+/** Parses a PEM-armored PKCS#7/CMS cert bag. Expects exactly one `PKCS7` or `CMS` PEM block. */
+export function parsePkcs7CertBagPem(pem: string): ParsePkcs7CertBagResult {
+	const block = contentInfoPemBytes(pem);
+	if (!block.ok) return block;
+	return parsePkcs7CertBagDer(block.bytes);
 }
 
 // parsePkcs7SignedData — Result-returning
@@ -657,21 +700,18 @@ export function parsePkcs7SignedDataDer(der: Uint8Array): ParsePkcs7SignedDataRe
 		const contentInfo = readSequenceChildren(der, { maxDepth: DEFAULT_MAX_DER_DEPTH });
 		const contentType = contentInfo[0];
 		const content = contentInfo[1];
-		if (
-			contentType === undefined ||
-			content === undefined ||
-			contentInfo.length !== 2 ||
-			contentType.tag !== 0x06 ||
-			content.tag !== 0xa0
-		) {
+		if (contentType === undefined || contentInfo.length > 2 || contentType.tag !== 0x06) {
 			return pkcs7Failure('malformed', 'Malformed PKCS#7 content info');
 		}
-		if (childrenOf(der, content).length !== 1) {
+		if (content !== undefined && (content.tag !== 0xa0 || childrenOf(der, content).length !== 1)) {
 			return pkcs7Failure('malformed', 'Malformed PKCS#7 content info');
 		}
 		const contentTypeOid = decodeObjectIdentifier(contentType.value);
 		if (contentTypeOid !== OIDS.pkcs7SignedData) {
 			return pkcs7Failure('not_signed_data', 'PKCS#7 content is not signedData');
+		}
+		if (content === undefined) {
+			return pkcs7Failure('malformed', 'PKCS#7 signedData content info carries no content');
 		}
 		const signedData = childAt(der, content, 0, 'signedData');
 		const signedDataChildren = childrenOf(der, signedData);
@@ -699,7 +739,7 @@ export function parsePkcs7SignedDataDer(der: Uint8Array): ParsePkcs7SignedDataRe
 		const encapType = encapChildren[0];
 		const encapContent = encapChildren[1];
 		const digestAlgorithmOids = parseDigestAlgorithms(der, digestAlgorithms);
-		if (encapType === undefined) {
+		if (encapType === undefined || encapChildren.length > 2 || encapType.tag !== 0x06) {
 			return pkcs7Failure('malformed', 'Malformed EncapsulatedContentInfo');
 		}
 		return {
@@ -758,18 +798,11 @@ function parseSignedDataOptionalFields(
 	};
 }
 
-/** Decodes a PEM-armored PKCS#7 SignedData. Expects exactly one `PKCS7` PEM block. */
+/** Decodes a PEM-armored PKCS#7/CMS SignedData. Expects exactly one `PKCS7` or `CMS` PEM block. */
 export function parsePkcs7SignedDataPem(pem: string): ParsePkcs7SignedDataResult {
-	try {
-		const blocks = splitPemBlocksOrThrow(pem).filter((block) => block.label === 'PKCS7');
-		const block = blocks[0];
-		if (block === undefined || blocks.length !== 1) {
-			return pkcs7Failure('malformed', 'Expected exactly one PKCS7 PEM block');
-		}
-		return parsePkcs7SignedDataDer(block.bytes);
-	} catch {
-		return pkcs7Failure('malformed', 'Expected exactly one PKCS7 PEM block');
-	}
+	const block = contentInfoPemBytes(pem);
+	if (!block.ok) return block;
+	return parsePkcs7SignedDataDer(block.bytes);
 }
 
 // verifyPkcs7SignedData
@@ -1208,6 +1241,9 @@ function extractEncapsulatedContent(
 	const inner = readElement(encapDer, element.start);
 	if (inner.tag !== 0x04) {
 		throw new Error('Expected encapsulated OCTET STRING');
+	}
+	if (inner.end !== element.end) {
+		throw new Error('Encapsulated content must hold exactly one element');
 	}
 	return inner.value;
 }

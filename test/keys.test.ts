@@ -321,44 +321,6 @@ describe('keys', () => {
 			await importEncryptedPkcs1Pem(noSpaceHeaderPem, 'secret123', { kind: 'rsa' }),
 		);
 		expect(await exportPkcs8Der(importedNoSpaceRsa)).toEqual(await exportPkcs8Der(rsa.privateKey));
-		// RFC 1421 4.6 folds encapsulated headers per RFC 822 3.1.1.
-		const foldedHeaderPems = [
-			encryptedRsaPem.replace('Proc-Type: 4,ENCRYPTED', 'Proc-Type: 4,\n ENCRYPTED'),
-			encryptedRsaPem.replace(/DEK-Info: ([^,]+),/, 'DEK-Info: $1,\n           '),
-			encryptedRsaPem.replace('Proc-Type: 4,ENCRYPTED', 'Proc-Type:\n\t4,ENCRYPTED'),
-		];
-		for (const foldedPem of foldedHeaderPems) {
-			const importedFolded = unwrap(
-				await importEncryptedPkcs1Pem(foldedPem, 'secret123', { kind: 'rsa' }),
-			);
-			expect(await exportPkcs8Der(importedFolded)).toEqual(await exportPkcs8Der(rsa.privateKey));
-		}
-		// RFC 822 3.3 admits SPACE and HTAB only, so no other whitespace is consumed.
-		for (const nonLwsp of ['\u000b', '\u00a0', '\u3000']) {
-			const procTypePems = [
-				encryptedRsaPem.replace('4,ENCRYPTED', `4,${nonLwsp}ENCRYPTED`),
-				encryptedRsaPem.replace('Proc-Type: ', `Proc-Type:${nonLwsp}`),
-			];
-			for (const procTypePem of procTypePems) {
-				await expectImportFailure(
-					importEncryptedPkcs1Pem(procTypePem, 'secret123', { kind: 'rsa' }),
-					'malformed',
-				);
-				await expectRejection(
-					importEncryptedPkcs1PemOrThrow(procTypePem, 'secret123', { kind: 'rsa' }),
-					'Traditional PEM encryption headers missing',
-				);
-			}
-			const dekInfoPem = encryptedRsaPem.replace(/,(?=[0-9A-F]{32})/, `,${nonLwsp}`);
-			await expectImportFailure(
-				importEncryptedPkcs1Pem(dekInfoPem, 'secret123', { kind: 'rsa' }),
-				'malformed',
-			);
-			await expectRejection(
-				importEncryptedPkcs1PemOrThrow(dekInfoPem, 'secret123', { kind: 'rsa' }),
-				'Traditional PEM encryption requires a 16-byte IV',
-			);
-		}
 		for (const badName of MALFORMED_PEM_HEADER_NAMES) {
 			const badHeaderPem = encryptedRsaPem.replace('Proc-Type: ', `${badName}\nProc-Type: `);
 			await expectImportFailure(
@@ -402,6 +364,66 @@ describe('keys', () => {
 			);
 		}
 	});
+
+	// Header grammar is shared by the PKCS#1 and SEC1 paths through
+	// decryptTraditionalPem, so these cover it on the cheaper EC keygen.
+	async function encryptedEcPemFixture(): Promise<{
+		readonly pem: string;
+		readonly pkcs8: Uint8Array;
+	}> {
+		const ec = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
+		return {
+			pem: await exportEncryptedSec1Pem(ec.privateKey, { password: 'secret123' }),
+			pkcs8: await exportPkcs8Der(ec.privateKey),
+		};
+	}
+
+	const ecImportOptions = { kind: 'ecdsa', curve: 'P-256' } as const;
+
+	it('unfolds RFC 1421 4.6 encapsulated headers folded per RFC 822 3.1.1', async () => {
+		const { pem, pkcs8 } = await encryptedEcPemFixture();
+		const folded = [
+			pem.replace('Proc-Type: 4,ENCRYPTED', 'Proc-Type: 4,\n ENCRYPTED'),
+			pem.replace(/DEK-Info: ([^,]+),/, 'DEK-Info: $1,\n           '),
+			// RFC 1421 Figure 3 folds a field whose first line carries no body.
+			pem.replace('Proc-Type: 4,ENCRYPTED', 'Proc-Type:\n\t4,ENCRYPTED'),
+		];
+		for (const foldedPem of folded) {
+			const imported = unwrap(
+				await importEncryptedSec1Pem(foldedPem, 'secret123', ecImportOptions),
+			);
+			expect(await exportPkcs8Der(imported)).toEqual(pkcs8);
+		}
+	});
+
+	it.each(['\u000b', '\u00a0', '\u3000'])(
+		'rejects %j in a consumed header field, which RFC 822 3.3 excludes from LWSP-char',
+		async (nonLwsp) => {
+			const { pem } = await encryptedEcPemFixture();
+			for (const candidate of [
+				pem.replace('4,ENCRYPTED', `4,${nonLwsp}ENCRYPTED`),
+				pem.replace('Proc-Type: ', `Proc-Type:${nonLwsp}`),
+			]) {
+				await expectImportFailure(
+					importEncryptedSec1Pem(candidate, 'secret123', ecImportOptions),
+					'malformed',
+				);
+				await expectRejection(
+					importEncryptedSec1PemOrThrow(candidate, 'secret123', ecImportOptions),
+					'Traditional PEM encryption headers missing',
+				);
+			}
+			const dekInfoPem = pem.replace(/,(?=[0-9A-F]{32})/, `,${nonLwsp}`);
+			await expectImportFailure(
+				importEncryptedSec1Pem(dekInfoPem, 'secret123', ecImportOptions),
+				'malformed',
+			);
+			await expectRejection(
+				importEncryptedSec1PemOrThrow(dekInfoPem, 'secret123', ecImportOptions),
+				'Traditional PEM encryption requires a 16-byte IV',
+			);
+		},
+	);
 
 	it('roundtrips keys through PEM, base64, and JWK imports', async () => {
 		const original = await generateKeyPair({
@@ -888,6 +910,30 @@ describe('keys: coverage — malformed inputs', () => {
 		);
 	});
 
+	it('importSpkiBase64 rejects the respellings of one key', async () => {
+		const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+		const keyPair = await generateKeyPair({ kind: 'ed25519' });
+		const base64 = await exportBinaryBase64(keyPair.publicKey);
+		expect(base64.endsWith('=')).toBe(true);
+		const canonical = alphabet.indexOf(base64.slice(-2, -1));
+		expect(canonical % 4).toBe(0);
+		for (const offset of [1, 2, 3]) {
+			await expectImportFailure(
+				importSpkiBase64(`${base64.slice(0, -2)}${alphabet.charAt(canonical + offset)}=`, {
+					kind: 'ed25519',
+				}),
+				'malformed',
+				'Invalid base64 SubjectPublicKeyInfo',
+			);
+		}
+		await expectImportFailure(
+			importSpkiBase64(base64.slice(0, -1), { kind: 'ed25519' }),
+			'malformed',
+			'Invalid base64 SubjectPublicKeyInfo',
+		);
+		expect(unwrap(await importSpkiBase64(base64, { kind: 'ed25519' })).type).toBe('public');
+	});
+
 	it('importSpki base64 and PEM preserve algorithm mismatch errors', async () => {
 		const rsa = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
 		const base64 = await exportBinaryBase64(rsa.publicKey);
@@ -912,18 +958,37 @@ describe('keys: coverage — malformed inputs', () => {
 		);
 	});
 
+	/** RFC 5958 §2 v2 `OneAsymmetricKey`: `attributes [0]` empty, `publicKey [1]` present. */
+	const ONE_ASYMMETRIC_KEY_V2 =
+		'3053020101300506032b657004220420' +
+		'9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60' +
+		'a000812100' +
+		'd75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a';
+
+	test('imports RFC 5958 v2 OneAsymmetricKey with attributes and publicKey (oven-sh/bun#35432, oven-sh/bun#35433)', async () => {
+		const key = unwrap(
+			await importPkcs8Der(hexToBytes(ONE_ASYMMETRIC_KEY_V2), { kind: 'ed25519' }),
+		);
+		expect(key.type).toBe('private');
+		expect(key.algorithm.name).toBe('Ed25519');
+	});
+
+	// The import above reduces a v2 key to its v1 fields before the platform call,
+	// so it passes on every build and says nothing about the platform. This one
+	// hands WebCrypto the v2 structure RFC 5958 §2 defines, which is what
+	// oven-sh/bun#35432 rejects: it fails on a stock build and passes once the fix
+	// in oven-sh/bun#35433 lands, which `bun run test:35433` exercises.
 	test.failingIf(!isCanary)(
-		'imports RFC 5958 v2 OneAsymmetricKey with attributes and publicKey (oven-sh/bun#35432, oven-sh/bun#35433)',
+		'WebCrypto imports an RFC 5958 v2 OneAsymmetricKey (oven-sh/bun#35432)',
 		async () => {
-			const oneAsymmetricKey = hexToBytes(
-				'3053020101300506032b657004220420' +
-					'9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60' +
-					'a000812100' +
-					'd75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a',
+			const key = await crypto.subtle.importKey(
+				'pkcs8',
+				toArrayBuffer(hexToBytes(ONE_ASYMMETRIC_KEY_V2)),
+				'Ed25519',
+				true,
+				['sign'],
 			);
-			const key = unwrap(await importPkcs8Der(oneAsymmetricKey, { kind: 'ed25519' }));
 			expect(key.type).toBe('private');
-			expect(key.algorithm.name).toBe('Ed25519');
 		},
 	);
 
@@ -961,13 +1026,16 @@ describe('keys: coverage — malformed inputs', () => {
 				version: version0,
 				tail: [attributes, publicKey],
 			},
+			{ name: 'version v2 but no publicKey', version: version1, tail: [attributes] },
 			{ name: 'empty publicKey BIT STRING', version: version1, tail: [hexToBytes('810100')] },
 		];
+		// Requesting ECDSA over an Ed25519 body: the algorithm check runs after the
+		// structure is read, so an accepted tail would surface as a mismatch instead.
 		for (const { name, version, tail } of cases) {
 			const der = sequence([version, algorithm, privateKey, ...tail]);
 			try {
 				await expectImportFailure(
-					importPkcs8Der(der, { kind: 'ed25519' }),
+					importPkcs8Der(der, { kind: 'ecdsa', curve: 'P-256' }),
 					'malformed',
 					'Malformed PKCS#8 private key',
 				);

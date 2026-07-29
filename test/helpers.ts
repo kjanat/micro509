@@ -743,8 +743,9 @@ const projectRoot = path.resolve(import.meta.dir, '..');
 const srcRoot = path.join(projectRoot, 'src');
 const testRoot = import.meta.dir;
 const fixturesDir = path.join(testRoot, 'fixtures');
+const rfcDir = path.join(projectRoot, 'docs', 'rfc');
 
-export { fixturesDir, projectRoot, srcRoot, testRoot };
+export { fixturesDir, projectRoot, rfcDir, srcRoot, testRoot };
 
 export const isCi = Bun.env.CI !== undefined;
 

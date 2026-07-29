@@ -270,6 +270,7 @@ as `VERIFY_ERROR_CODES`; this table is checked against it by a repo test):
 | `unsupported_name_constraints`               | Unsupported name constraint form               |
 | `name_constraints_violated`                  | Name constraints check failed                  |
 | `unsupported_signature_algorithm_parameters` | Unknown signature algorithm                    |
+| `ec_domain_parameters_missing`               | EC public key without a named curve            |
 | `certificate_revoked`                        | Revocation evidence confirms revocation        |
 | `revocation_indeterminate`                   | Revocation unknown under hard-fail policy      |
 

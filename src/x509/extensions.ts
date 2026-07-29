@@ -7,7 +7,12 @@
  * @module
  */
 
-import { canonicalizeOid, hexToBytes, toHex } from '#micro509/internal/asn1/asn1';
+import {
+	canonicalizeOid,
+	decodeObjectIdentifier,
+	hexToBytes,
+	toHex,
+} from '#micro509/internal/asn1/asn1';
 import {
 	bool,
 	concatBytes,
@@ -750,6 +755,7 @@ export function buildCertificateExtensions(
 		assertEmptySubjectHasCriticalSubjectAltName(input);
 	}
 	assertPathLengthKeyUsage(input);
+	assertSafeCurveKeyUsage(subjectPublicKeyInfo, input);
 	const extensions: Uint8Array[] = [];
 	const seen = new Set<string>();
 	const basicConstraints = input?.basicConstraints ?? { ca: false };
@@ -831,6 +837,121 @@ function assertPathLengthKeyUsage(input: CertificateExtensionsInput | undefined)
 			'basicConstraints pathLength requires the keyUsage keyCertSign bit',
 		);
 	}
+}
+
+/** RFC 9295 §3: an end-entity id-Ed25519 or id-Ed448 certificate needs one of these. */
+const EDWARDS_END_ENTITY_KEY_USAGE = ['nonRepudiation', 'digitalSignature', 'cRLSign'] as const;
+
+/** RFC 9295 §3: bits an id-Ed25519 or id-Ed448 certificate must never assert. */
+const EDWARDS_FORBIDDEN_KEY_USAGE = [
+	'keyEncipherment',
+	'dataEncipherment',
+	'keyAgreement',
+	'encipherOnly',
+	'decipherOnly',
+] as const;
+
+/** RFC 9295 §3: bits an id-X25519 or id-X448 certificate must never assert. */
+const MONTGOMERY_FORBIDDEN_KEY_USAGE = [
+	'digitalSignature',
+	'nonRepudiation',
+	'keyEncipherment',
+	'dataEncipherment',
+	'keyCertSign',
+	'cRLSign',
+] as const;
+
+/**
+ * RFC 9295 §3, which replaces RFC 8410 §5, constrains a keyUsage extension on a
+ * certificate whose subject key names one of the four 1.3.101 curves.
+ *
+ * id-X25519 and id-X448 require `keyAgreement`, admit one of `encipherOnly` and
+ * `decipherOnly`, and forbid the rest.
+ *
+ * id-Ed25519 and id-Ed448 split on whether the certificate is a certification
+ * authority. A CA MUST assert `keyCertSign` and MAY add `nonRepudiation`,
+ * `digitalSignature`, or `cRLSign`. Any other certificate MUST assert at least
+ * one of those three and MUST NOT assert `keyCertSign`. Both forbid the key
+ * agreement and encipherment bits. A CRL issuer is the case where `cRLSign` is
+ * the bit chosen, and a CRL issuer that is also a CA is the CA case, so the two
+ * branches cover the section's four paragraphs.
+ *
+ * The rule binds only a keyUsage that reaches the wire, so an absent one, and an
+ * empty one the builder therefore omits, leave the key unconstrained.
+ */
+function assertSafeCurveKeyUsage(
+	subjectPublicKeyInfo: Uint8Array,
+	input: CertificateExtensionsInput | undefined,
+): void {
+	const keyUsage = resolveEffectiveKeyUsage(input);
+	if (keyUsage === undefined || keyUsage.length === 0) {
+		return;
+	}
+	const algorithm = readSubjectKeyAlgorithmOid(subjectPublicKeyInfo);
+	if (algorithm === undefined) {
+		return;
+	}
+	if (oidEquals(algorithm, OIDS.x25519) || oidEquals(algorithm, OIDS.x448)) {
+		if (!keyUsage.includes('keyAgreement')) {
+			throwExtensionEncoderError(
+				'montgomery_key_usage_requires_key_agreement',
+				'keyUsage on an X25519 or X448 certificate must set keyAgreement',
+			);
+		}
+		const asserted = MONTGOMERY_FORBIDDEN_KEY_USAGE.filter((flag: KeyUsage) =>
+			keyUsage.includes(flag),
+		);
+		if (asserted.length > 0) {
+			throwExtensionEncoderError(
+				'montgomery_key_usage_forbids_signature_bit',
+				`keyUsage on an X25519 or X448 certificate must not set ${asserted.join(', ')}`,
+			);
+		}
+		if (keyUsage.includes('encipherOnly') && keyUsage.includes('decipherOnly')) {
+			throwExtensionEncoderError(
+				'montgomery_key_usage_forbids_both_cipher_bits',
+				'keyUsage on an X25519 or X448 certificate must not set both encipherOnly and decipherOnly',
+			);
+		}
+		return;
+	}
+	if (!oidEquals(algorithm, OIDS.ed25519) && !oidEquals(algorithm, OIDS.ed448)) {
+		return;
+	}
+	const isCertificationAuthority = resolveEffectiveBasicConstraints(input)?.ca === true;
+	if (isCertificationAuthority) {
+		if (!keyUsage.includes('keyCertSign')) {
+			throwExtensionEncoderError(
+				'edwards_key_usage_requires_key_cert_sign',
+				'keyUsage on an Ed25519 or Ed448 certification authority certificate must set keyCertSign',
+			);
+		}
+	} else if (!EDWARDS_END_ENTITY_KEY_USAGE.some((flag: KeyUsage) => keyUsage.includes(flag))) {
+		throwExtensionEncoderError(
+			'edwards_key_usage_requires_signing_bit',
+			`keyUsage on an Ed25519 or Ed448 certificate must set one of ${EDWARDS_END_ENTITY_KEY_USAGE.join(', ')}`,
+		);
+	}
+	const forbidden = isCertificationAuthority
+		? EDWARDS_FORBIDDEN_KEY_USAGE
+		: ([...EDWARDS_FORBIDDEN_KEY_USAGE, 'keyCertSign'] as const);
+	const asserted = forbidden.filter((flag: KeyUsage) => keyUsage.includes(flag));
+	if (asserted.length > 0) {
+		throwExtensionEncoderError(
+			'edwards_key_usage_forbids_agreement_bit',
+			`keyUsage on an Ed25519 or Ed448 certificate must not set ${asserted.join(', ')}`,
+		);
+	}
+}
+
+/** The algorithm OID of a SubjectPublicKeyInfo, or `undefined` when the field is not an OID. */
+function readSubjectKeyAlgorithmOid(subjectPublicKeyInfo: Uint8Array): string | undefined {
+	const algorithm = readSequenceChildren(subjectPublicKeyInfo)[0];
+	if (algorithm === undefined || algorithm.tag !== 0x30 || algorithm.start === algorithm.end) {
+		return undefined;
+	}
+	const oid = readElement(subjectPublicKeyInfo, algorithm.start);
+	return oid.tag === 0x06 ? decodeObjectIdentifier(oid.value) : undefined;
 }
 
 /**

@@ -283,6 +283,7 @@ export type {
 	IssuingDistributionPointForUserCerts,
 	OcspCertificateSource,
 	OcspCertStatus,
+	OcspEncoderErrorCode,
 	OcspHashAlgorithm,
 	OcspRequestMaterial,
 	OcspRequestSource,
