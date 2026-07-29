@@ -114,7 +114,7 @@ export function getVerifySignatureConfigResult(
 ): VerifySignatureConfigResult {
 	switch (signatureAlgorithmOid) {
 		case OIDS.sha256WithRSAEncryption: {
-			const parameters = requireDerNullSignatureAlgorithmParameters(
+			const parameters = requireDerNullOrAbsentSignatureAlgorithmParameters(
 				signatureAlgorithmParametersDer,
 				'SHA-256 with RSA',
 			);
@@ -124,7 +124,7 @@ export function getVerifySignatureConfigResult(
 			return requireRsaPublicKey(publicKeyAlgorithmOid, 'SHA-256', 'pkcs1-v1_5', context);
 		}
 		case OIDS.sha384WithRSAEncryption: {
-			const parameters = requireDerNullSignatureAlgorithmParameters(
+			const parameters = requireDerNullOrAbsentSignatureAlgorithmParameters(
 				signatureAlgorithmParametersDer,
 				'SHA-384 with RSA',
 			);
@@ -134,7 +134,7 @@ export function getVerifySignatureConfigResult(
 			return requireRsaPublicKey(publicKeyAlgorithmOid, 'SHA-384', 'pkcs1-v1_5', context);
 		}
 		case OIDS.sha512WithRSAEncryption: {
-			const parameters = requireDerNullSignatureAlgorithmParameters(
+			const parameters = requireDerNullOrAbsentSignatureAlgorithmParameters(
 				signatureAlgorithmParametersDer,
 				'SHA-512 with RSA',
 			);
@@ -373,21 +373,23 @@ function requireRsaPssVerifyConfig(
 	);
 }
 
-function requireDerNullSignatureAlgorithmParameters(
+/** RFC 4055 §5 requires generators to encode NULL and implementations to accept absent parameters too. */
+function requireDerNullOrAbsentSignatureAlgorithmParameters(
 	parametersDer: Uint8Array | undefined,
 	algorithm: string,
 ): VerifySignatureConfigFailure | undefined {
 	if (parametersDer === undefined) {
-		return unsupported(algorithm, 'signature AlgorithmIdentifier parameters must be DER NULL');
+		return undefined;
 	}
+	const reason = 'signature AlgorithmIdentifier parameters must be DER NULL or absent';
 	try {
 		const element = readElement(parametersDer);
 		if (element.tag !== 0x05 || element.length !== 0 || element.end !== parametersDer.length) {
-			return unsupported(algorithm, 'signature AlgorithmIdentifier parameters must be DER NULL');
+			return unsupported(algorithm, reason);
 		}
 		return undefined;
 	} catch {
-		return unsupported(algorithm, 'signature AlgorithmIdentifier parameters must be DER NULL');
+		return unsupported(algorithm, reason);
 	}
 }
 

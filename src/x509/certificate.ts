@@ -41,6 +41,8 @@ export type * from '#micro509/x509/name';
 /** Machine-readable reason a certificate builder rejected its construction input. */
 export type CreateCertificateErrorCode =
 	| 'issuer_distinguished_name_empty'
+	| 'serial_number_not_positive'
+	| 'serial_number_too_long'
 	| 'validity_not_after_before_not_before';
 
 /**
@@ -102,6 +104,7 @@ export interface CreateCertificateInput {
 	/**
 	 * DER integer bytes for the certificate serial number.
 	 *
+	 * RFC 5280 §4.1.2.2 requires a positive value of at most 20 octets.
 	 * When omitted, a random positive 16-byte serial number is generated.
 	 */
 	readonly serialNumber?: Uint8Array;
@@ -163,6 +166,9 @@ export interface CreateSelfSignedCertificateBase {
 	readonly validity?: ValidityInput;
 	/**
 	 * DER integer bytes for the certificate serial number.
+	 *
+	 * RFC 5280 §4.1.2.2 requires a positive value of at most 20 octets.
+	 * When omitted, a random positive 16-byte serial number is generated.
 	 */
 	readonly serialNumber?: Uint8Array;
 	/**
@@ -291,7 +297,7 @@ export async function createCertificate(
 	);
 	const tbsCertificate = sequence([
 		explicitContext(0, integerFromNumber(2)),
-		integer(input.serialNumber ?? randomSerialNumber()),
+		encodeSerialNumber(input.serialNumber),
 		encodeAlgorithmIdentifier(signatureAlgorithm),
 		encodeName(input.issuer),
 		sequence([time(validity.notBefore), time(validity.notAfter)]),
@@ -371,6 +377,42 @@ function addDays(date: Date, days: number): Date {
 	const out = new Date(date.getTime());
 	out.setUTCDate(out.getUTCDate() + days);
 	return out;
+}
+
+/** RFC 5280 §4.1.2.2: conforming CAs must not use serial numbers longer than this. */
+const SERIAL_NUMBER_MAX_OCTETS = 20;
+
+/**
+ * Encode a certificate serial number as a DER INTEGER.
+ *
+ * @param serialNumber Serial number bytes, big-endian; a random one is generated when omitted.
+ * @returns The DER INTEGER element.
+ * @throws a `ResultError` with code `serial_number_not_positive` or
+ * `serial_number_too_long` when RFC 5280 §4.1.2.2 forbids the value.
+ */
+function encodeSerialNumber(serialNumber: Uint8Array | undefined): Uint8Array {
+	if (serialNumber === undefined) {
+		return integer(randomSerialNumber());
+	}
+	let start = 0;
+	while (start < serialNumber.length && serialNumber[start] === 0) {
+		start += 1;
+	}
+	const magnitude = serialNumber.subarray(start);
+	const first = magnitude[0];
+	if (first === undefined) {
+		throwMicro509Error<CreateCertificateErrorCode>(
+			'serial_number_not_positive',
+			'serialNumber must be a positive integer',
+		);
+	}
+	if (magnitude.length + (first >= 0x80 ? 1 : 0) > SERIAL_NUMBER_MAX_OCTETS) {
+		throwMicro509Error<CreateCertificateErrorCode>(
+			'serial_number_too_long',
+			`serialNumber must not exceed ${String(SERIAL_NUMBER_MAX_OCTETS)} octets`,
+		);
+	}
+	return integer(magnitude);
 }
 
 /**

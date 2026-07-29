@@ -197,7 +197,7 @@ It intentionally excludes niche, blockchain-specific, or key-agreement-only prim
 | -------------------------- | -------- |
 | RFC 5280 path validation   | complete |
 | RFC 6960 OCSP              | complete |
-| RFC 6125 service identity  | complete |
+| RFC 9525 service identity  | complete |
 | RFC 9618 policy validation | complete |
 
 See [`docs/PKIX-SCOPE.md`](./docs/PKIX-SCOPE.md) for the detailed scope boundary

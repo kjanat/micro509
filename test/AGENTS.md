@@ -13,6 +13,7 @@ checks against OpenSSL.
 ```tree
 test/
 ├── *.test.ts              # feature suites
+├── rfc/*.test.ts          # per-RFC conformance suites, fixtures read from docs/rfc/
 ├── helpers.ts             # shared DER/cert builders and fixture utilities
 ├── oracles/openssl.ts     # normalized OpenSSL wrapper
 └── fixtures/pkits/certs/  # vendored PKITS certificates
@@ -26,11 +27,12 @@ test/
 | Chain validation coverage | `verify.test.ts`                                | largest spec-like suite                   |
 | CRL coverage              | `crl.test.ts`, `revocation.test.ts`             | direct CRL semantics and orchestration    |
 | OCSP coverage             | `ocsp.test.ts`, `ocsp-fixtures.test.ts`         | parser/validator plus focused fixtures    |
-| Identity coverage         | `identity.test.ts`, `identity-fixtures.test.ts` | RFC 6125 semantics and fixture corpus     |
+| Identity coverage         | `identity.test.ts`, `identity-fixtures.test.ts` | RFC 9525 semantics and fixture corpus     |
 | Parse hardening           | `parse.test.ts`, `malformed-der.test.ts`        | malformed input and parser boundaries     |
 | Differential interop      | `differential.test.ts`                          | compares normalized results to OpenSSL    |
 | PKITS subset              | `pkits.test.ts`                                 | fixed-time conformance subset             |
 | Internal-only checks      | `internals.test.ts`                             | safe place for `#micro509/*` internals    |
+| Per-RFC conformance       | `rfc/*.test.ts`                                 | describes mirror RFC sections             |
 
 ## LOCAL CONVENTIONS
 
@@ -40,6 +42,10 @@ test/
 - Internal imports through `#micro509/internal/*` are acceptable when validating low-level
   invariants.
 - Shared helpers belong in `helpers.ts`; OpenSSL process wrappers belong in `oracles/`.
+- A suite under `rfc/` reads its fixtures out of `docs/rfc/` via `rfcDir` rather than
+  inlining them, nests `describe` blocks by RFC section, and quotes the sentence each
+  assertion encodes. Check an example is a real block before relying on it: RFC 5915
+  and RFC 5958 print empty `BEGIN`/`END` pairs as prose illustration.
 - Gate OpenSSL differential suites with the shared `openSslAvailable` and
   `differentialEnabled` values from `helpers.ts`.
 - Differential tests compare normalized semantics only, never exact CLI stderr/stdout.

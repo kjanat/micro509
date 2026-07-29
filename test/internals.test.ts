@@ -465,20 +465,22 @@ describe('sig-verify', () => {
 		).toThrow('Ed25519');
 	});
 
-	it('getVerifySignatureConfigResult rejects PKCS#1 v1.5 signatures without DER NULL parameters', () => {
-		const missingNull = getVerifySignatureConfigResult(
-			OIDS.sha256WithRSAEncryption,
-			undefined,
-			OIDS.rsaEncryption,
-			undefined,
-		);
-		expect(missingNull).toMatchObject({
-			ok: false,
-			code: 'unsupported_signature_algorithm_parameters',
+	// RFC 4055 §5, over sha224/256/384/512WithRSAEncryption: "When any of these four
+	// object identifiers appears within an AlgorithmIdentifier, the parameters MUST be
+	// NULL. Implementations MUST accept the parameters being absent as well as
+	// present." Anything that is neither is still rejected.
+	it('getVerifySignatureConfigResult accepts PKCS#1 v1.5 parameters absent or DER NULL', () => {
+		expect(
+			getVerifySignatureConfigResult(
+				OIDS.sha256WithRSAEncryption,
+				undefined,
+				OIDS.rsaEncryption,
+				undefined,
+			),
+		).toMatchObject({
+			ok: true,
+			value: { importAlgorithm: { kind: 'rsa', hash: 'SHA-256', scheme: 'pkcs1-v1_5' } },
 		});
-		if (!missingNull.ok) {
-			expect(missingNull.reason).toContain('DER NULL');
-		}
 
 		const malformedNull = getVerifySignatureConfigResult(
 			OIDS.sha256WithRSAEncryption,
@@ -522,14 +524,20 @@ describe('sig-verify', () => {
 			expect(trailingBytes.reason).toContain('DER NULL');
 		}
 
-		expect(
-			getVerifySignatureConfigResult(
-				OIDS.sha256WithRSAEncryption,
-				nullValue(),
-				OIDS.rsaEncryption,
-				undefined,
-			),
-		).toMatchObject({ ok: true });
+		for (const [oid, hash] of [
+			[OIDS.sha256WithRSAEncryption, 'SHA-256'],
+			[OIDS.sha384WithRSAEncryption, 'SHA-384'],
+			[OIDS.sha512WithRSAEncryption, 'SHA-512'],
+		] as const) {
+			for (const parameters of [undefined, nullValue()]) {
+				expect(
+					getVerifySignatureConfigResult(oid, parameters, OIDS.rsaEncryption, undefined),
+				).toMatchObject({
+					ok: true,
+					value: { importAlgorithm: { kind: 'rsa', hash, scheme: 'pkcs1-v1_5' } },
+				});
+			}
+		}
 	});
 
 	it('getVerifySignatureConfigResult rejects unexpected parameters for ECDSA and Ed25519', () => {

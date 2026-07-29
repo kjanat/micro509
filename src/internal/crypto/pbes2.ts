@@ -231,10 +231,10 @@ export function parsePbes2AlgorithmIdentifier(algorithmIdentifierDer: Uint8Array
 	const ivValue = new Uint8Array(iv.value);
 
 	if (iterationsValue < 1) {
-		throw new RangeError(`Invalid PBES2 iterations: must be >= 1, got ${iterationsValue}`);
+		throw new Error(`Invalid PBES2 iterations: must be >= 1, got ${iterationsValue}`);
 	}
 	if (ivValue.length !== 16) {
-		throw new RangeError(`Invalid PBES2 IV: must be exactly 16 bytes, got ${ivValue.length}`);
+		throw new Error(`Invalid PBES2 IV: must be exactly 16 bytes, got ${ivValue.length}`);
 	}
 
 	return {

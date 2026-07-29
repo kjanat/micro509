@@ -24,6 +24,7 @@ import {
 import type { DerElement } from '#micro509/internal/asn1/der';
 import {
 	DEFAULT_MAX_DER_DEPTH,
+	optionalBytesEqual,
 	readElement,
 	readRootElement,
 	readSequenceChildren,
@@ -525,7 +526,7 @@ interface ParsedCertificationRequestInfoFields {
 	readonly version: number;
 	readonly subject: DerElement;
 	readonly subjectPublicKeyInfo: DerElement;
-	readonly attributes?: DerElement;
+	readonly attributes: DerElement;
 }
 
 interface MutableDistributionPointFields {
@@ -992,7 +993,7 @@ function parseCertificationRequestInfoFields(
 	certificationRequestInfo: DerElement,
 ): ParsedCertificationRequestInfoFields {
 	const criChildren = childrenOf(der, certificationRequestInfo);
-	if (criChildren.length < 3 || criChildren.length > 4) {
+	if (criChildren.length !== 4) {
 		throw new Error('Malformed CertificationRequestInfo');
 	}
 	const versionElement = requireElement(criChildren[0], 'version');
@@ -1003,15 +1004,15 @@ function parseCertificationRequestInfoFields(
 	if (version !== 1) {
 		throw new Error(`Unsupported CertificationRequestInfo version: ${String(version)}`);
 	}
-	const attributes = criChildren[3];
-	if (attributes !== undefined && attributes.tag !== 0xa0) {
+	const attributes = requireElement(criChildren[3], 'attributes');
+	if (attributes.tag !== 0xa0) {
 		throw new Error('CertificationRequestInfo attributes must use [0]');
 	}
 	return {
 		version,
 		subject: requireElement(criChildren[1], 'subject'),
 		subjectPublicKeyInfo: requireElement(criChildren[2], 'subjectPublicKeyInfo'),
-		...(attributes === undefined ? {} : { attributes }),
+		attributes,
 	};
 }
 
@@ -1451,34 +1452,34 @@ function parseExtensionContainer(
 }
 
 /** Extract extensions from the CSR extensionRequest attribute. */
-function parseRequestedExtensions(
-	source: Uint8Array,
-	attributes: DerElement | undefined,
-): ParsedExtensions {
-	if (attributes === undefined) {
-		return { all: [] };
-	}
-	if (attributes.tag !== 0xa0) {
-		throw new Error('CertificationRequestInfo attributes must use [0]');
-	}
+function parseRequestedExtensions(source: Uint8Array, attributes: DerElement): ParsedExtensions {
 	let requestedExtensions: ParsedExtensions | undefined;
 	for (const attribute of childrenOf(source, attributes)) {
+		if (attribute.tag !== 0x30) {
+			throw new Error('CSR attribute must use SEQUENCE');
+		}
 		const attributeChildren = childrenOf(source, attribute);
 		if (attributeChildren.length !== 2) {
 			throw new Error('Malformed CSR attribute');
 		}
 		const oid = requireElement(attributeChildren[0], 'attribute OID');
+		if (oid.tag !== 0x06) {
+			throw new Error('CSR attribute type must use OBJECT IDENTIFIER');
+		}
+		const valuesSet = requireElement(attributeChildren[1], 'attribute values');
+		if (valuesSet.tag !== 0x31) {
+			throw new Error('CSR attribute values must use SET');
+		}
+		const values = childrenOf(source, valuesSet);
+		if (values.length === 0) {
+			throw new Error('CSR attribute values must not be empty');
+		}
 		if (decodeObjectIdentifier(oid.value) !== OIDS.extensionRequest) {
 			continue;
 		}
 		if (requestedExtensions !== undefined) {
 			throw new Error('extensionRequest attribute must not repeat');
 		}
-		const valuesSet = requireElement(attributeChildren[1], 'attribute values');
-		if (valuesSet.tag !== 0x31) {
-			throw new Error('extensionRequest attribute values must use SET');
-		}
-		const values = childrenOf(source, valuesSet);
 		if (values.length !== 1) {
 			throw new Error('extensionRequest attribute must contain exactly one value');
 		}
@@ -1537,10 +1538,16 @@ function parseExtensionSequence(
 
 /** Decode an X.501 Name (issuer / subject) into a {@linkcode ParsedName}. */
 function parseName(source: Uint8Array, element: DerElement): ParsedName {
+	if (element.tag !== 0x30) {
+		throw new Error('Name must use SEQUENCE');
+	}
 	const rdns: ParsedRelativeDistinguishedName[] = [];
 	const attributes: ParsedNameAttribute[] = [];
 	const values: Partial<Record<NameFieldKey, string>> = {};
 	for (const setElement of childrenOf(source, element)) {
+		if (setElement.tag !== 0x31) {
+			throw new Error('RelativeDistinguishedName must use SET');
+		}
 		const rdn = parseNameAttributeSet(source, setElement);
 		rdns.push(rdn);
 		for (const attribute of rdn.attributes) {
@@ -1574,8 +1581,18 @@ function parseNameAttributeSet(
 	const attributes: ParsedNameAttribute[] = [];
 	const values: Partial<Record<NameFieldKey, string>> = {};
 	for (const attributeSequence of childrenOf(source, setElement)) {
+		if (attributeSequence.tag !== 0x30) {
+			throw new Error('AttributeTypeAndValue must use SEQUENCE');
+		}
 		const parts = childrenOf(source, attributeSequence);
-		const oid = decodeObjectIdentifier(requireElement(parts[0], 'name OID').value);
+		if (parts.length !== 2) {
+			throw new Error('AttributeTypeAndValue must contain type and value');
+		}
+		const typeElement = requireElement(parts[0], 'name OID');
+		if (typeElement.tag !== 0x06) {
+			throw new Error('AttributeTypeAndValue type must use OBJECT IDENTIFIER');
+		}
+		const oid = decodeObjectIdentifier(typeElement.value);
 		const valueElement = requireElement(parts[1], 'name value');
 		const fieldKey = nameFieldKeyFromOid(oid);
 		const fieldValue = decodeString(valueElement.tag, valueElement.value);
@@ -1646,11 +1663,18 @@ function parseAlgorithmIdentifier(
 	source: Uint8Array,
 	element: DerElement,
 ): ParsedAlgorithmIdentifier {
+	if (element.tag !== 0x30) {
+		throw new Error('AlgorithmIdentifier must use SEQUENCE');
+	}
 	const children = childrenOf(source, element);
 	if (children.length === 0 || children.length > 2) {
 		throw new Error('Malformed AlgorithmIdentifier');
 	}
-	const oid = decodeObjectIdentifier(requireElement(children[0], 'algorithm OID').value);
+	const algorithmElement = requireElement(children[0], 'algorithm OID');
+	if (algorithmElement.tag !== 0x06) {
+		throw new Error('AlgorithmIdentifier algorithm must use OBJECT IDENTIFIER');
+	}
+	const oid = decodeObjectIdentifier(algorithmElement.value);
 	const parameters = children[1];
 	if (parameters === undefined) {
 		return { oid };
@@ -1672,21 +1696,6 @@ function assertMatchingCertificateSignatureAlgorithms(
 	) {
 		throw new Error('Certificate signatureAlgorithm must match TBSCertificate signature');
 	}
-}
-
-function optionalBytesEqual(left: Uint8Array | undefined, right: Uint8Array | undefined): boolean {
-	if (left === undefined || right === undefined) {
-		return left === right;
-	}
-	if (left.length !== right.length) {
-		return false;
-	}
-	for (let index = 0; index < left.length; index += 1) {
-		if (left[index] !== right[index]) {
-			return false;
-		}
-	}
-	return true;
 }
 
 /** @internal Decode the Basic Constraints extension value DER. */

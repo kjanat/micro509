@@ -30,12 +30,14 @@ import {
 import type { DerElement } from '#micro509/internal/asn1/der';
 import {
 	explicitContext,
+	integer,
 	nullValue,
 	objectIdentifier,
 	octetString,
 	readRootElement,
 	readSequenceChildren,
 	sequence,
+	tlv,
 } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { md5 } from '#micro509/internal/crypto/hash';
@@ -47,7 +49,12 @@ import {
 } from '#micro509/internal/crypto/pbes2';
 import { getCrypto } from '#micro509/internal/crypto/webcrypto';
 import { base64Decode, base64Encode } from '#micro509/internal/shared/base64';
-import { pemDecodeOrThrow, pemEncode } from '#micro509/pem/pem';
+import {
+	parseTraditionalPemOrThrow,
+	pemDecodeOrThrow,
+	pemEncode,
+	trimLwsp,
+} from '#micro509/pem/pem';
 import {
 	type ErrorResult,
 	failureResult,
@@ -780,14 +787,17 @@ export function importSpkiBase64(
  * keys whose type isn't known ahead of time. Pass `algorithm` to additionally
  * assert that the DER matches an expected algorithm.
  *
- * Bun 1.3.14 and earlier rejects an RFC 5958 v2 `OneAsymmetricKey` carrying `attributes [0]` or `publicKey [1]`
- * ([oven-sh/bun#35432](https://github.com/oven-sh/bun/issues/35432)).
+ * An RFC 5958 v2 `OneAsymmetricKey` carrying `attributes [0]` or `publicKey [1]`
+ * is reduced to its v1 fields for the platform import, which Bun 1.3.14 and
+ * earlier rejects outright
+ * ([oven-sh/bun#35432](https://github.com/oven-sh/bun/issues/35432)). A
+ * `publicKey [1]` field is checked against the private key it accompanies.
  *
  * @param der - DER-encoded PKCS#8 PrivateKeyInfo bytes
  * @param algorithm - Optional expected algorithm; must match key contents when given
  * @returns Extractable CryptoKey with `sign` usage
  *
- * @throws {Error} If DER is malformed, encodes an unsupported algorithm, or doesn't match `algorithm`
+ * @throws {Error} If DER is malformed, encodes an unsupported algorithm, doesn't match `algorithm`, or carries a `publicKey [1]` that is not the private key's own
  *
  * @see {@linkcode exportPkcs8Der} for the inverse operation
  * @see {@linkcode importPkcs8Pem} for PEM input
@@ -810,16 +820,48 @@ export async function importPkcs8DerOrThrow(
 		assertPkcs8MatchesRequestedAlgorithm(parsedPrivateKey, algorithm);
 		importInput = algorithm;
 	}
+	let privateKey: CryptoKey;
 	try {
-		return await getCrypto().subtle.importKey(
+		privateKey = await getCrypto().subtle.importKey(
 			'pkcs8',
-			new Uint8Array(der),
+			new Uint8Array(parsedPrivateKey.v1Der),
 			toImportAlgorithm(importInput),
 			true,
 			privateKeyUsages(importInput),
 		);
 	} catch {
 		throw new Error('Malformed PKCS#8 private key');
+	}
+	const declaredPublicKey = parsedPrivateKey.declaredPublicKey;
+	if (declaredPublicKey !== undefined) {
+		await assertDeclaredPublicKeyMatches(privateKey, declaredPublicKey);
+	}
+	return privateKey;
+}
+
+/**
+ * Reject a OneAsymmetricKey whose `publicKey [1]` field is not the public key of
+ * its own `privateKey`.
+ *
+ * RFC 8410 Appendix A: "Key mismatch errors: If a public key is provided, it may
+ * not agree with the private key because either it is wrong or the wrong
+ * algorithm was used."
+ */
+async function assertDeclaredPublicKeyMatches(
+	privateKey: CryptoKey,
+	declared: Uint8Array,
+): Promise<void> {
+	const spki = await exportSpkiDer(await derivePublicKey(privateKey));
+	const subjectPublicKey = readSequenceChildren(spki)[1];
+	if (subjectPublicKey === undefined || subjectPublicKey.tag !== 0x03) {
+		throw new Error('Malformed PKCS#8 private key');
+	}
+	const derived = subjectPublicKey.value.slice(1);
+	if (
+		derived.length !== declared.length ||
+		derived.some((byte, index) => byte !== declared[index])
+	) {
+		throw new Error('PKCS#8 publicKey does not match the private key');
 	}
 }
 
@@ -1592,6 +1634,10 @@ function parsePkcs8PrivateKey(der: Uint8Array): {
 	readonly parametersTag?: number;
 	/** Raw DER of the inner private key (PKCS#1 for RSA, SEC 1 for EC). */
 	readonly privateKeyDer: Uint8Array;
+	/** The same key reduced to `version`, `privateKeyAlgorithm`, and `privateKey`. */
+	readonly v1Der: Uint8Array;
+	/** `publicKey [1]` octets without the BIT STRING unused-bits octet, when the field is present. */
+	readonly declaredPublicKey?: Uint8Array;
 } {
 	const children = readSequenceChildren(der);
 	const version = children[0];
@@ -1608,13 +1654,12 @@ function parsePkcs8PrivateKey(der: Uint8Array): {
 	) {
 		throw new Error('Malformed PKCS#8 private key');
 	}
-	const hasPublicKey = validateOneAsymmetricKeyTail(children.slice(3));
-	if (readPkcs8Version(version.value) !== (hasPublicKey ? 1 : 0)) {
+	const declaredPublicKey = validateOneAsymmetricKeyTail(children.slice(3));
+	if (readPkcs8Version(version.value) !== (declaredPublicKey === undefined ? 0 : 1)) {
 		throw new Error('Malformed PKCS#8 private key');
 	}
-	const algorithmChildren = readSequenceChildren(
-		der.slice(algorithm.start - algorithm.headerLength, algorithm.end),
-	);
+	const algorithmDer = der.slice(algorithm.start - algorithm.headerLength, algorithm.end);
+	const algorithmChildren = readSequenceChildren(algorithmDer);
 	const algorithmOid = algorithmChildren[0];
 	if (
 		algorithmOid === undefined ||
@@ -1625,55 +1670,121 @@ function parsePkcs8PrivateKey(der: Uint8Array): {
 		throw new Error('Malformed PKCS#8 private key');
 	}
 	const parameters = algorithmChildren[1];
+	const oid = decodeObjectIdentifier(algorithmOid.value);
+	if (CURVE_PRIVATE_KEY_ALGORITHM_OIDS.includes(oid)) {
+		assertCurvePrivateKey(privateKey.value);
+	}
 	return {
-		algorithmOid: decodeObjectIdentifier(algorithmOid.value),
+		algorithmOid: oid,
 		...(parameters === undefined ? {} : { parametersTag: parameters.tag }),
 		...(parameters?.tag === 0x06
 			? { parametersOid: decodeObjectIdentifier(parameters.value) }
 			: {}),
 		privateKeyDer: privateKey.value,
+		v1Der:
+			children.length === 3
+				? der
+				: sequence([integer(Uint8Array.of(0)), algorithmDer, octetString(privateKey.value)]),
+		...(declaredPublicKey === undefined ? {} : { declaredPublicKey }),
 	};
 }
 
+/** Algorithms whose `privateKey` field holds an RFC 8410 §7 `CurvePrivateKey`. */
+const CURVE_PRIVATE_KEY_ALGORITHM_OIDS: readonly string[] = [
+	OIDS.x25519,
+	OIDS.x448,
+	OIDS.ed25519,
+	OIDS.ed448,
+];
+
 /**
- * Validate the OneAsymmetricKey tail after `privateKey` and report whether a
- * `publicKey [1]` field is present.
+ * Reject a `privateKey` field that does not hold exactly one DER `CurvePrivateKey`.
+ *
+ * RFC 8410 §7: "when encoding a OneAsymmetricKey object, the private key is
+ * wrapped in a CurvePrivateKey object and wrapped by the OCTET STRING of the
+ * 'privateKey' field", and `CurvePrivateKey ::= OCTET STRING`.
+ */
+function assertCurvePrivateKey(content: Uint8Array): void {
+	const curvePrivateKey = readRootElement(content);
+	if (curvePrivateKey.tag !== 0x04) {
+		throw new Error('Malformed PKCS#8 private key');
+	}
+}
+
+/**
+ * Validate the OneAsymmetricKey tail after `privateKey` and return the
+ * `publicKey [1]` octets when the field is present.
  *
  * RFC 5958 §2 encodes `attributes [0]` as an IMPLICIT constructed `SET OF`
  * (tag `A0`); RFC 8410 §7 adds `publicKey [1]` as an IMPLICIT primitive
- * `BIT STRING` (tag `81`) after it. Each appears at most once and in that order;
- * unknown later extension additions are tolerated per the type's X.680
- * extensibility marker.
+ * `BIT STRING` (tag `81`) after it. Each appears at most once and in that order.
+ * The type's two X.680 extensibility markers admit later additions, which take
+ * the next context-specific numbers, so `[2]` and above are tolerated and every
+ * other class is malformed.
  */
-function validateOneAsymmetricKeyTail(tail: readonly DerElement[]): boolean {
+function validateOneAsymmetricKeyTail(tail: readonly DerElement[]): Uint8Array | undefined {
 	let seenAttributes = false;
-	let seenPublicKey = false;
+	let publicKey: Uint8Array | undefined;
 	let seenUnknown = false;
 	for (const child of tail) {
 		const contextNumber = (child.tag & 0xc0) === 0x80 ? child.tag & 0x1f : -1;
 		if (contextNumber === 0) {
-			if (seenAttributes || seenPublicKey || seenUnknown || child.tag !== 0xa0) {
+			if (seenAttributes || publicKey !== undefined || seenUnknown || child.tag !== 0xa0) {
 				throw new Error('Malformed PKCS#8 private key');
 			}
+			assertOneAsymmetricKeyAttributes(child.value);
 			seenAttributes = true;
 		} else if (contextNumber === 1) {
-			if (seenPublicKey || seenUnknown || child.tag !== 0x81) {
+			if (publicKey !== undefined || seenUnknown || child.tag !== 0x81) {
 				throw new Error('Malformed PKCS#8 private key');
 			}
-			validatePublicKeyBitString(child.value);
-			seenPublicKey = true;
-		} else {
+			publicKey = readPublicKeyBitString(child.value);
+		} else if (contextNumber >= 2 && contextNumber <= 30) {
 			seenUnknown = true;
+		} else {
+			throw new Error('Malformed PKCS#8 private key');
 		}
 	}
-	return seenPublicKey;
+	return publicKey;
+}
+
+/**
+ * Reject an `attributes [0]` field that does not hold a `SET OF Attribute`.
+ *
+ * RFC 5958 §2 types the field `Attributes ::= SET OF Attribute`, over the
+ * `Attribute ::= SEQUENCE { attrType OBJECT IDENTIFIER, attrValues SET OF
+ * AttributeValue }` of RFC 5652 §5.3. The implicit tag has replaced the SET OF
+ * tag, so the members are read back under a universal constructed one.
+ */
+function assertOneAsymmetricKeyAttributes(content: Uint8Array): void {
+	const attributes = tlv(0x30, content);
+	for (const attribute of readSequenceChildren(attributes)) {
+		if (attribute.tag !== 0x30) {
+			throw new Error('Malformed PKCS#8 private key');
+		}
+		const fields = readSequenceChildren(
+			attributes.slice(attribute.start - attribute.headerLength, attribute.end),
+		);
+		const type = fields[0];
+		const values = fields[1];
+		if (
+			fields.length !== 2 ||
+			type === undefined ||
+			type.tag !== 0x06 ||
+			values === undefined ||
+			values.tag !== 0x31
+		) {
+			throw new Error('Malformed PKCS#8 private key');
+		}
+	}
 }
 
 /** Reject a `publicKey [1]` BIT STRING that is not octet-aligned or carries no key octets. */
-function validatePublicKeyBitString(content: Uint8Array): void {
+function readPublicKeyBitString(content: Uint8Array): Uint8Array {
 	if (content.length < 2 || content[0] !== 0x00) {
 		throw new Error('Malformed PKCS#8 private key');
 	}
+	return content.slice(1);
 }
 
 /** Decode the canonical RFC 5958 version INTEGER content, `v1(0)` or `v2(1)`. */
@@ -1917,21 +2028,22 @@ async function encryptTraditionalPem(
 	].join('\n');
 }
 
-/** Decrypt an OpenSSL-style `Proc-Type: 4,ENCRYPTED` PEM block back to plaintext DER. */
+/** Decrypt a `Proc-Type: 4,ENCRYPTED` PEM block, RFC 1421 §4.6 headers, to plaintext DER. */
 async function decryptTraditionalPem(
 	expectedLabel: 'RSA PRIVATE KEY' | 'EC PRIVATE KEY',
 	pem: string,
 	password: string,
 ): Promise<Uint8Array> {
-	const parsed = parseTraditionalPem(pem);
+	const parsed = parseTraditionalPemOrThrow(pem);
 	if (parsed.label !== expectedLabel) {
 		throw new Error(`Expected ${expectedLabel} PEM block`);
 	}
 	const dekInfo = parsed.headers.get('DEK-Info');
-	if (parsed.headers.get('Proc-Type') !== '4,ENCRYPTED' || dekInfo === undefined) {
+	const procType = parsed.headers.get('Proc-Type');
+	if (procType === undefined || !isEncryptedProcType(procType) || dekInfo === undefined) {
 		throw new Error('Traditional PEM encryption headers missing');
 	}
-	const [cipher, ivHex] = dekInfo.split(',');
+	const [cipher, ivHex] = dekInfo.split(',').map(trimLwsp);
 	if (!isTraditionalPemCipher(cipher) || ivHex === undefined) {
 		throw new Error(
 			'Only AES-128-CBC, AES-192-CBC, and AES-256-CBC traditional PEM encryption is supported',
@@ -1972,6 +2084,21 @@ function importTraditionalPemAesKey(
 		{ name: 'AES-CBC', length: keyLength },
 		false,
 		usages,
+	);
+}
+
+/**
+ * RFC 1421 §4.6.1.1 `Proc-Type: 4,ENCRYPTED`.
+ *
+ * Fields are trimmed because RFC 822 §3.1.1 unfolding leaves an LWSP-char
+ * wherever the header was folded.
+ */
+function isEncryptedProcType(value: string): boolean {
+	const fields = value.split(',');
+	return (
+		fields.length === 2 &&
+		trimLwsp(fields[0] ?? '') === '4' &&
+		trimLwsp(fields[1] ?? '') === 'ENCRYPTED'
 	);
 }
 
@@ -2030,63 +2157,6 @@ function opensslBytesToKey(password: string, salt: Uint8Array, length: number): 
 		}
 	}
 	return out;
-}
-
-/** RFC 822 §3.2: `field-name = 1*<any CHAR, excluding CTLs, SPACE, and ":">`. */
-const RFC822_FIELD_NAME = /^[\x21-\x39\x3b-\x7e]+$/;
-
-/** Parse a PEM block into its label, OpenSSL-style headers, and base64 body. */
-function parseTraditionalPem(pem: string): {
-	/** PEM type label between `BEGIN` and `END` markers. */
-	readonly label: string;
-	/** OpenSSL-style encapsulated headers (e.g. `Proc-Type`, `DEK-Info`). */
-	readonly headers: ReadonlyMap<string, string>;
-	/** Base64-encoded payload after the headers. */
-	readonly base64Body: string;
-} {
-	const normalized = pem.replace(/\r\n?/g, '\n').trim();
-	const lines = normalized.split('\n');
-	const begin = lines[0];
-	const end = lines[lines.length - 1];
-	if (
-		begin === undefined ||
-		end === undefined ||
-		!begin.startsWith('-----BEGIN ') ||
-		!end.startsWith('-----END ')
-	) {
-		throw new Error('Invalid PEM block');
-	}
-	const label = begin.slice(11, -5);
-	if (end !== `-----END ${label}-----`) {
-		throw new Error('PEM boundaries do not match');
-	}
-	const headers = new Map<string, string>();
-	let index = 1;
-	while (index < lines.length - 1) {
-		const line = lines[index];
-		if (line === undefined) {
-			break;
-		}
-		if (line.length === 0) {
-			index += 1;
-			break;
-		}
-		const delimiter = line.indexOf(':');
-		if (delimiter === -1) {
-			break;
-		}
-		const headerName = line.slice(0, delimiter);
-		if (!RFC822_FIELD_NAME.test(headerName)) {
-			throw new Error(`Invalid PEM header name: ${headerName}`);
-		}
-		if (headers.has(headerName)) {
-			throw new Error(`Duplicate PEM header: ${headerName}`);
-		}
-		headers.set(headerName, line.slice(delimiter + 1).trimStart());
-		index += 1;
-	}
-	const body = lines.slice(index, lines.length - 1).join('');
-	return { label, headers, base64Body: body };
 }
 
 function parseSpkiDer(der: Uint8Array): {

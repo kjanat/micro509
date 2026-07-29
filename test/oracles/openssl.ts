@@ -313,6 +313,7 @@ export async function validateMicro509OcspResponseWithOpenSsl(input: {
 		const validation = await runOpenSsl([
 			'ocsp',
 			'-issuer', issuerPath,
+			'-sha256',
 			'-cert', certificatePath,
 			'-respin', responsePath,
 			'-CAfile', issuerPath,

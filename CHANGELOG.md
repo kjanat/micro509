@@ -26,6 +26,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `checkCertificateRevocationAgainstCrl` reports `coveredReasons` on a `good`
   value: the RFC 5280 §6.3.3 (d) interim_reasons_mask computed from the matched
   distribution point's `reasons` and the CRL's `onlySomeReasons`.
+- `ec_domain_parameters_missing` joins `VERIFY_ERROR_CODES`. Chain validation
+  now rejects any certificate on the path whose `id-ecPublicKey` public key
+  carries no namedCurve OID, which RFC 5480 §2.1.1 requires clients to do.
+  Absent parameters, an `implicitCurve` NULL, and a `specifiedCurve` SEQUENCE
+  all fail it.
 
 ### Changed
 
@@ -98,11 +103,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Signature verification accepts an absent parameters field on the
+  sha256WithRSAEncryption, sha384WithRSAEncryption, and sha512WithRSAEncryption
+  AlgorithmIdentifiers. RFC 4055 §5 requires the parameters to be NULL and
+  requires implementations to accept them absent as well as present; every
+  surface that resolves a signature algorithm reported
+  `unsupported_signature_algorithm_parameters` for the absent encoding, so a
+  conformant certificate, CRL, OCSP response, CSR, or PKCS#7 signature that
+  omits the NULL could not be verified. Parameters that are neither absent nor
+  a DER NULL are still rejected, and signatures this library produces still
+  carry the NULL.
+- `verifyCertificateChain` and `validateCandidatePath` no longer reject a
+  self-issued leaf that another key signed. RFC 5280 §3.2 calls a self-issued
+  certificate self-signed only when the public key it binds verifies its
+  signature, but the guard behind `allowSelfSignedLeaf` fired on matching issuer
+  and subject DNs alone. The RFC 8410 §10.2 example certificate is exactly that
+  case, a self-issued X25519 certificate signed by a separate Ed25519 key, and
+  failed with `self_signed_leaf_not_allowed` when anchored on the §10.1 key. The
+  guard now verifies the leaf against its own public key first and only reports
+  `self_signed_leaf_not_allowed` when that verification succeeds.
 - Legacy OpenSSL-style encrypted PEM (`Proc-Type: 4,ENCRYPTED`) parsing accepts
   an encapsulated header with no space after the colon (`DEK-Info:AES-256-CBC,…`).
   The parser keyed on `': '`, so a conformant no-space header ended the header
   scan early and folded into the base64 body.
   (https://github.com/kjanat/micro509/pull/89)
+- Legacy encrypted PEM parsing unfolds folded encapsulated headers. RFC 1421
+  §4.6 defines encapsulated header folding by reference to RFC 822, and its
+  Figure 2 folds a `Key-Info:` field across two lines. Every line was treated as
+  a complete header, so a folded field was misparsed and its continuation fell
+  into the base64 body. A line opening with an RFC 822 §3.3 `LWSP-char` (SPACE
+  or HTAB) now continues the preceding field; per §3.1.1 unfolding drops the
+  CRLF and keeps the whitespace, so the field-body and the `Proc-Type` and
+  `DEK-Info` field comparisons strip the SPACE and HTAB unfolding leaves behind.
+  Only those two characters are stripped: `String.prototype.trim` also removes
+  VT, FF, NBSP, and every Unicode `Zs`, none of which RFC 822 admits, so a
+  header such as `Proc-Type: 4,<NBSP>ENCRYPTED` is rejected rather than read as
+  `4,ENCRYPTED`. (https://github.com/kjanat/micro509/issues/92)
 - Certificate and CSR builders reject RFC 5280 MUST-NOT constructions with coded
   throws. `pathLenConstraint` requires the keyUsage extension to assert
   `keyCertSign`; absent, empty, or `keyCertSign`-less keyUsage is rejected
@@ -278,6 +314,120 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is parseable. An end-to-end differential test confirms OpenSSL accepts a
   micro509-produced response.
   (https://github.com/kjanat/micro509/pull/76)
+- The certificate builder enforces the RFC 8410 §5 keyUsage rules for the four
+  1.3.101 curves. A keyUsage extension on a certificate whose subject key names
+  id-X25519 or id-X448 must set `keyAgreement`
+  (`montgomery_key_usage_requires_key_agreement`); one whose subject key names
+  id-Ed25519 or id-Ed448 must set `nonRepudiation` or `digitalSignature`, widened
+  in a certification authority certificate to also accept `keyCertSign` or
+  `cRLSign` (`edwards_key_usage_requires_signing_bit`). The X25519 and X448
+  clause admits "one of the following MAY also be present: encipherOnly; or
+  decipherOnly", so a keyUsage setting both is rejected
+  (`montgomery_key_usage_forbids_both_cipher_bits`); the two Ed clauses say "one
+  or both" and "one or more", and keep combining. All three codes join
+  `ExtensionEncoderErrorCode`. The rules bind only a keyUsage that reaches the
+  wire, and read the effective value across the typed field and a
+  `customExtensions` entry carrying the keyUsage OID. `OIDS` gains `x25519`,
+  `x448`, and `ed448` alongside the existing `ed25519`.
+- PKCS#8 import requires the `privateKey` field of an id-X25519, id-X448,
+  id-Ed25519, or id-Ed448 key to hold exactly one DER `CurvePrivateKey` OCTET
+  STRING, per RFC 8410 §7. The field's content was passed to WebCrypto
+  unexamined, so a BER long-form length (`04 81 20 …`) around an otherwise
+  valid Ed25519 key imported.
+- CRL parsing rejects a `CertificateList` whose `signatureAlgorithm` differs
+  from the `signature` field of the signed `tbsCertList`, per RFC 5280 §5.1.1.2.
+  The outer field is outside the signature, and it was the one reported as the
+  CRL's signature algorithm, so a CRL could name one algorithm to the caller and
+  another to the signer. Certificate parsing already enforced the same rule from
+  RFC 5280 §4.1.1.2.
+- `publicKeyAlgorithmName` reports `X25519`, `X448`, and `Ed448` alongside the
+  existing `Ed25519`, and `signatureAlgorithmName` reports `Ed448`, the
+  human-readable names RFC 8410 §8 establishes. Every one of those OIDs was
+  reported as `Unknown (1.3.101.…)`, including the subject key of the X25519
+  certificate the RFC prints in §10.2. The names reach certificate, CSR, CRL,
+  OCSP, and PKCS#7 parse output.
+- CSR parsing rejects a `CertificationRequestInfo` that omits `attributes [0]`,
+  per RFC 2986 §4.1, which lists it as a component without `OPTIONAL`. A
+  three-field request parsed and came back with an empty `requestedExtensions`,
+  so a truncated structure was indistinguishable from one requesting no
+  extensions. RFC 7468 §7 requires the octets under the `CERTIFICATE REQUEST`
+  label to be a `CertificationRequest` as described in RFC 2986.
+- PKCS#7/CMS PEM parsing accepts the RFC 7468 §9 `CMS` label alongside `PKCS7`.
+  `parsePkcs7SignedDataPem`, `parsePkcs7CertBagPem`, and `verifyPkcs7SignedData`
+  read only `PKCS7` blocks, so the RFC 5652 ContentInfo that §9 armors was
+  unreadable, including the RFC's own Figure 11.
+- `createPkcs7SignedData` armors a version 3 SignedData under the `CMS` label.
+  Version 3 (an `encapContentInfo` `eContentType` other than `id-data`, RFC 5652
+  §5.1) is outside RFC 2315, whose SignedData version "shall be 1" (§9.1), and
+  RFC 7468 §8 requires the octets under `PKCS7` to be an RFC 2315 ContentInfo. A
+  version 1 SignedData and the degenerate certificate bag keep the `PKCS7` label.
+- The certificate builder rejects a keyUsage that gives one 1.3.101 subject key
+  both applications RFC 8410 §12 separates: "the same public key cannot be used
+  for both ECDH and EdDSA". A certificate whose subject key names id-X25519 or
+  id-X448 must not set `digitalSignature`, `nonRepudiation`, `keyCertSign`, or
+  `cRLSign` (`montgomery_key_usage_forbids_signature_bit`); one whose subject key
+  names id-Ed25519 or id-Ed448 must not set `keyAgreement`, `encipherOnly`, or
+  `decipherOnly` (`edwards_key_usage_forbids_agreement_bit`). RFC 5280 §4.2.1.3
+  defines the first four bits over a key used to verify signatures and
+  `keyAgreement` over a key used for key agreement, and leaves `encipherOnly` and
+  `decipherOnly` undefined without it. Both codes join
+  `ExtensionEncoderErrorCode`.
+- The certificate builder rejects a `serialNumber` RFC 5280 §4.1.2.2 forbids a CA
+  to issue: a zero value ("the serial number MUST be a positive integer",
+  `serial_number_not_positive`) and one whose DER INTEGER runs past 20 octets
+  ("Conforming CAs MUST NOT use serialNumber values longer than 20 octets",
+  `serial_number_too_long`, counting the leading zero octet a high bit forces).
+  The bytes were encoded unexamined, so `new Uint8Array(21)` or an empty array
+  produced a certificate no conforming CA may issue. Both codes join
+  `CreateCertificateErrorCode`.
+- The CRL builder rejects an empty issuer distinguished name
+  (`issuer_distinguished_name_empty`, joining `CrlEncoderErrorCode`). RFC 5280
+  §5.1.2.3 requires the issuer field to contain a non-empty X.500 distinguished
+  name, and RFC 7468 §6 requires the octets under the `X509 CRL` label to be a
+  `CertificateList` as described in RFC 5280 §5. `createCertificateRevocationList`
+  encoded an empty `SEQUENCE` for `issuer: {}`, naming an entity no certificate
+  can identify. The certificate builder already enforced the same rule from
+  RFC 5280 §4.1.2.4.
+- Parsing checks the ASN.1 tag of an `AlgorithmIdentifier`, of a `Name` and its
+  `RelativeDistinguishedName` and `AttributeTypeAndValue` components, and of a
+  PKCS#10 attribute and its `type` and `values` fields. RFC 7468 §7 requires the
+  octets under the `CERTIFICATE REQUEST` label to be a `CertificationRequest` as
+  described in RFC 2986, whose §4.1 and §4.2 give each of those fields a type.
+  A CSR could carry its subject as a `SET`, its signature algorithm as a `SET`,
+  or an attribute whose `type` was an OCTET STRING holding the extensionRequest
+  OID's content octets, and parse; the last one had its extensions decoded as if
+  the type had been an OBJECT IDENTIFIER. An attribute `values` field is now also
+  required to be a non-empty `SET`, per the `SET SIZE(1..MAX)` in RFC 2986 §4.1.
+  The `AlgorithmIdentifier` and `Name` checks apply to certificate, CRL, and OCSP
+  parsing as well.
+- PKCS#7/CMS parsing rejects a SignedData whose `EXPLICIT [0]` content tag holds
+  more than one value, and one whose signed `contentInfo` is not the two-field
+  `SEQUENCE` of RFC 2315 §7 with an OBJECT IDENTIFIER `contentType`. RFC 7468 §8
+  requires the octets under `PKCS7` to be an RFC 2315 ContentInfo, whose `content`
+  is `[0] EXPLICIT ANY DEFINED BY contentType OPTIONAL`. A value appended inside
+  the `eContent` tag was ignored and `verifyPkcs7SignedData` still returned `ok`,
+  because RFC 2315 §9.3 digests only the contents octets of the first value, so
+  two encodings verified under one signature; a `contentType` carrying another
+  tag was decoded as if it were an OBJECT IDENTIFIER, yielding a fabricated OID.
+- `createPkcs7SignedData` and `createOcspResponse` reject a signer certificate
+  whose subject public key cannot verify the algorithm the signer private key
+  produces. RFC 8410 §12: "the same public key cannot be used for both ECDH and
+  EdDSA", and both builders accepted an id-X25519 certificate beside an Ed25519
+  key, emitting a SignerInfo or a BasicOCSPResponse that named id-Ed25519 over a
+  certificate that can never verify it. `CreatePkcs7SignedDataErrorCode` gains
+  `signer_certificate_key_mismatch`; `createOcspResponse` throws a `ResultError`
+  carrying the same code, from the new `OcspEncoderErrorCode`.
+- Base64 decoding rejects a final quantum that is not the RFC 4648 §4 encoding
+  of its own octets. RFC 7468 §2 takes the encapsulated data as base64 "according
+  to Section 4 of [RFC4648]", which completes a short final quantum with pad
+  characters and "bits with value zero", and §14 names data encoding ambiguity as
+  an opportunity for side channels. `atob` ignores the pad bits and the padding
+  alike, so four texts decoded to a one-pad structure and sixteen to a two-pad
+  one: Figure 6 of RFC 7468 parsed to the same certificate from a body ending
+  `Ipo=`, `Ipp=`, `Ipq=`, or `Ipr=`,
+  and an unpadded `AQ` decoded as `AQ==` does. `pemDecode`, `splitPemBlocks`,
+  every PEM parser above them, `importSpkiBase64`, `importPkcs8Base64`, and
+  legacy encrypted PEM now reject both.
 
 ## [0.13.0] - 2026-07-23
 

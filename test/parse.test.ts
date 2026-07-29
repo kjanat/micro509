@@ -24,6 +24,7 @@ import {
 	bitString,
 	concatBytes,
 	explicitContext,
+	implicitConstructedContext,
 	integerFromNumber,
 	nullValue,
 	objectIdentifier,
@@ -812,7 +813,7 @@ describe('parse', () => {
 			);
 			expect(result.ok).toBe(false);
 			if (!result.ok) {
-				expect(result.error.message).toContain('extensionRequest attribute values must use SET');
+				expect(result.error.message).toContain('CSR attribute values must use SET');
 			}
 		}
 	});
@@ -2154,7 +2155,9 @@ describe('parse', () => {
 		expect(parsedEc.publicKeyAlgorithmName).toBe('EC P-384');
 	});
 
-	it('parses CSR without attributes field', async () => {
+	it('rejects CSR without attributes field', async () => {
+		// RFC 2986 §4.1 lists `attributes [0] Attributes{{ CRIAttributes }}` as a
+		// component of CertificationRequestInfo, without OPTIONAL.
 		const keys = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
 		const signatureAlgorithm = sequence([
 			objectIdentifier(OIDS.sha256WithRSAEncryption),
@@ -2171,9 +2174,24 @@ describe('parse', () => {
 			signatureAlgorithm,
 			bitString(Uint8Array.of(0x00)),
 		]);
-		const parsed = unwrap(parseCertificateSigningRequestDer(der));
-		expect(parsed.subject.values.commonName).toBe('bare-csr.example');
-		expect(parsed.requestedExtensions).toHaveLength(0);
+		const parsed = parseCertificateSigningRequestDer(der);
+		expect(parsed.ok).toBe(false);
+		if (!parsed.ok) {
+			expect(parsed.code).toBe('malformed');
+		}
+		const withEmptyAttributes = sequence([
+			sequence([
+				integerFromNumber(0),
+				encodeName({ commonName: 'bare-csr.example' }),
+				spki,
+				implicitConstructedContext(0, Uint8Array.of()),
+			]),
+			signatureAlgorithm,
+			bitString(Uint8Array.of(0x00)),
+		]);
+		const accepted = unwrap(parseCertificateSigningRequestDer(withEmptyAttributes));
+		expect(accepted.subject.values.commonName).toBe('bare-csr.example');
+		expect(accepted.requestedExtensions).toHaveLength(0);
 	});
 
 	it('preserves raw algorithm parameters in parsed CSRs', async () => {

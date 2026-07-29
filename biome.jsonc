@@ -7,7 +7,7 @@
 		"defaultBranch": "master"
 	},
 	"files": {
-		"includes": ["**", "!!**/dist", "!!**/*.svg"]
+		"includes": ["**", "!!**/dist", "!!**/*.svg", "!.claude/workflows"]
 	},
 	"formatter": {
 		"enabled": false,
@@ -18,7 +18,7 @@
 		"enabled": true,
 		"domains": {
 			"project": "recommended",
-			// "types": "recommended", await [biomejs/biome#10885](https://github.com/biomejs/biome/issues/10885) resolution
+			"types": "recommended",
 			"test": "recommended"
 		},
 		"rules": {

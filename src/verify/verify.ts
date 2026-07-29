@@ -162,6 +162,7 @@ export interface TrustAnchor {
  * - `unsupported_name_constraints` — a certificate's nameConstraints use an unsupported form.
  * - `name_constraints_violated` — a subject name violates a permitted/excluded subtree.
  * - `unsupported_signature_algorithm_parameters` — the signature algorithm uses unrecognized parameters.
+ * - `ec_domain_parameters_missing` — an elliptic curve public key carries no namedCurve domain parameters.
  * - `certificate_revoked` — revocation evidence confirms a chain certificate is revoked.
  * - `revocation_indeterminate` — revocation status could not be determined under a hard-fail policy.
  */
@@ -186,6 +187,7 @@ export const VERIFY_ERROR_CODES = [
 	'unsupported_name_constraints',
 	'name_constraints_violated',
 	'unsupported_signature_algorithm_parameters',
+	'ec_domain_parameters_missing',
 	'certificate_revoked',
 	'revocation_indeterminate',
 ] as const;
@@ -660,7 +662,7 @@ async function validateCandidatePathRaw(
 		return failure('issuer_not_found', 'chain is empty', 0);
 	}
 
-	const selfSignedLeafFailure = validateSelfSignedLeafAllowed(leaf, chain.length, input);
+	const selfSignedLeafFailure = await validateSelfSignedLeafAllowed(leaf, chain.length, input);
 	if (selfSignedLeafFailure !== undefined) return selfSignedLeafFailure;
 	const certificateFailure = await validatePathCertificates(chain, at);
 	if (certificateFailure !== undefined) return certificateFailure;
@@ -676,13 +678,16 @@ async function validateCandidatePathRaw(
 	return validateLeaf(leaf, input, policyResult.policyValidation);
 }
 
-function validateSelfSignedLeafAllowed(
+/** RFC 5280 §3.2 makes a self-issued certificate self-signed only when the public key it binds verifies its signature. */
+async function validateSelfSignedLeafAllowed(
 	leaf: ParsedCertificate,
 	chainLength: number,
 	input: ValidateCandidatePathInput,
-): ValidateCandidatePathFailure | undefined {
+): Promise<ValidateCandidatePathFailure | undefined> {
 	if (chainLength !== 1 || !isSelfIssued(leaf) || input.allowSelfSignedLeaf === true)
 		return undefined;
+	const selfSignature = await verifyCertificateSignature(leaf, leaf);
+	if (!selfSignature.ok || !selfSignature.valid) return undefined;
 	return failure(
 		'self_signed_leaf_not_allowed',
 		'self-signed leaf not allowed',
@@ -792,16 +797,46 @@ function validateCertificateAtPathIndex(
 		);
 	}
 	const unprocessedCritical = findUnprocessedCriticalExtension(current);
-	if (unprocessedCritical === undefined) {
+	if (unprocessedCritical !== undefined) {
+		return failure(
+			'unrecognized_critical_extension',
+			`certificate contains unrecognized critical extension ${unprocessedCritical}`,
+			index,
+			detail({
+				subjectCommonName: current.subject.values.commonName,
+				actual: unprocessedCritical,
+			}),
+		);
+	}
+	return validateEcDomainParametersAtPathIndex(current, index);
+}
+
+/**
+ * RFC 5480 §2.1.1 admits only the namedCurve alternative of ECParameters, and
+ * requires clients to reject a certificate whose elliptic curve domain
+ * parameters are not present.
+ */
+function validateEcDomainParametersAtPathIndex(
+	current: ParsedCertificate,
+	index: number,
+): ValidateCandidatePathFailure | undefined {
+	if (
+		current.publicKeyAlgorithmOid !== OIDS.ecPublicKey ||
+		current.publicKeyParametersOid !== undefined
+	) {
 		return undefined;
 	}
 	return failure(
-		'unrecognized_critical_extension',
-		`certificate contains unrecognized critical extension ${unprocessedCritical}`,
+		'ec_domain_parameters_missing',
+		'elliptic curve public key carries no namedCurve domain parameters',
 		index,
 		detail({
 			subjectCommonName: current.subject.values.commonName,
-			actual: unprocessedCritical,
+			expected: 'namedCurve OBJECT IDENTIFIER',
+			actual:
+				current.publicKeyAlgorithmParametersDer === undefined
+					? 'absent'
+					: `tag 0x${(current.publicKeyAlgorithmParametersDer[0] ?? 0).toString(16).padStart(2, '0')}`,
 		}),
 	);
 }

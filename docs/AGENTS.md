@@ -1,54 +1,63 @@
-# `docs/` - Docs Map
+# `docs/` - Standards And Scope
 
-Status docs and harness docs live here.\
-This directory defines what the project claims, not just how it works.
+Authored support claims plus the vendored standards corpus used to verify them.
 
-## OVERVIEW
+## STRUCTURE
 
-[`docs/`][docs] is small but high-leverage:
-[`PKIX-SCOPE.md`] sets support boundaries, and harness docs tie prose claims to
-concrete tests.
+```tree
+docs/
+├── PKIX-SCOPE.md  # canonical support boundary and evidence links
+├── rfc/           # unmodified RFC Editor text plus NIST PKITS text
+├── itu/           # local, gitignored ITU-T references; redistribution restricted
+└── CLAUDE.md      # delegates agent guidance to this file
+```
+
+Generated Deno API documentation may appear under `docs/deno/`; edit source
+JSDoc and regenerate it rather than editing generated pages.
 
 ## WHERE TO LOOK
 
-| Area             | File              | Notes                                                 |
-| ---------------- | ----------------- | ----------------------------------------------------- |
-| Support boundary | [`PKIX-SCOPE.md`] | canonical claim language and partial/full scope lines |
+| Need                    | Location                      | Notes                                       |
+| ----------------------- | ----------------------------- | ------------------------------------------- |
+| Support claims and gaps | `PKIX-SCOPE.md`               | source of truth mirrored by README and site |
+| RFC text                | `rfc/rfc<number>.txt`         | fetched verbatim from RFC Editor            |
+| PKITS specification     | `rfc/pkits.txt`               | upstream NIST fixture documentation         |
+| RFC fetcher             | `scripts/fetch-rfc.bun.ts`    | run with `bun rfc <number>`                 |
+| RFC status guard        | `test/rfc/rfc-status.test.ts` | live RFC Editor index, daily cache          |
+| Per-RFC conformance     | `test/rfc/*.test.ts`          | section-quoted behavioral evidence          |
+| PKITS execution         | `test/pkits.test.ts`          | fixed-time path-validation harness          |
 
-## STANDARDS MAPPING
+## CURRENT BASELINES
 
-| Need                          | Standard | Notes                                              |
-| ----------------------------- | -------- | -------------------------------------------------- |
-| PKIX path validation baseline | RFC 5280 | certificate/profile rules and validation language  |
-| Service identity matching     | RFC 6125 | DNS/IP identity reference                          |
-| OCSP baseline                 | RFC 6960 | request/response and responder rules               |
-| Policy processing updates     | RFC 9618 | RFC 5280 policy updates referenced by current work |
-| RSA PKIX algorithm rules      | RFC 4055 | RSA PKCS#1 v1.5, RSA-PSS, and OAEP identifiers     |
-| RSA parameter update          | RFC 5756 | updates RFC 4055 SPKI and OAEP/PSS parameter rules |
-| DSA/ECDSA SHA-2 identifiers   | RFC 5758 | SHA-224/256/384/512 signature OIDs and ASN.1       |
-| PKIX clarification update     | RFC 6818 | RFC 5280 clarifications for policy and validation  |
-| I18N update to RFC 5280       | RFC 9549 | current IDN and internationalized email updates    |
-| Intl email certificates       | RFC 9598 | current SmtpUTF8Mailbox and matching rules         |
-| Revocation not published      | RFC 9608 | `noRevAvail` extension and path validation update  |
+| Domain              | Current RFCs               | Legacy or supporting text                  |
+| ------------------- | -------------------------- | ------------------------------------------ |
+| PKIX validation     | RFC 5280, 6818, 9549, 9618 | NIST PKITS                                 |
+| Service identity    | RFC 9525                   | RFC 6125 only for opt-in CN compatibility  |
+| OCSP                | RFC 6960, 9919             | RFC 5019 legacy lightweight profile        |
+| RSA                 | RFC 4055, 5756, 8017       | RFC 3447 superseded PKCS #1 text           |
+| Safe curves         | RFC 8410, 9295             | RFC 5912 ASN.1 object classes              |
+| PEM                 | RFC 7468                   | RFC 1421 and RFC 822 frozen legacy headers |
+| PKCS containers     | RFC 5652, 7292, 8018       | RFC 2315 and 5208 legacy formats           |
+| International email | RFC 9598                   | RFC 6531 and RFC 5321 terminology          |
 
-## LOCAL CONVENTIONS
+## CONVENTIONS
 
-- Keep docs aligned with shipped behavior and current tests.
-- Harness docs should point at owning test files.
-- Prefer exact scope language over marketing language.
-- [`docs/rfc/`][rfc] is reference material; project-authored edits belong in the
-  Markdown docs, not vendored RFC text.
+- Fetch or refresh RFC text with `bun rfc <number>`; never hand-edit it.
+- Keep an obsolete RFC when a legacy format is defined against that exact text.
+- Vendor the current successor beside every retained obsolete RFC.
+- Cite current RFCs in source unless behavior is deliberately pinned to frozen
+  legacy text listed in `PINNED_TO_SUPERSEDED`.
+- Add pinned exceptions only in `test/rfc/rfc-status.test.ts`, with the owning
+  specification and section explaining why the old text remains normative.
+- Quote the exact RFC sentence in conformance tests and group tests by section.
+- Keep `PKIX-SCOPE.md`, README standards status, and site standards claims aligned.
+- Treat RFC "updates" and "obsoletes" differently; inspect replacement text
+  before changing behavior or citations.
 
 ## ANTI-PATTERNS
 
-- Do not claim full RFC 5280, RFC 6960, or revocation coverage\
-  _unless_ tests and implementation truly support it.
-- Do not let docs drift from [`test/pkits.test.ts`][pkits.test.ts] or
-  [`test/differential.test.ts`][differential.test.ts].
-- Do not rewrite vendored [RFC files][rfc] for local commentary.
-
-[docs]: ../docs/
-[`PKIX-SCOPE.md`]: ./PKIX-SCOPE.md
-[rfc]: ../docs/rfc/
-[pkits.test.ts]: ../test/pkits.test.ts
-[differential.test.ts]: ../test/differential.test.ts
+- Editing `rfc/*.txt` or `rfc/pkits.txt` as project prose.
+- Removing frozen legacy RFCs solely because the RFC Editor marks them obsolete.
+- Silencing `rfc-status.test.ts` without a real normative pin.
+- Claiming complete RFC support without test-backed behavior.
+- Committing or unignoring `itu/**`; its source is redistribution-restricted.

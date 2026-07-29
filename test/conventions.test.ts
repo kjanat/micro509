@@ -85,6 +85,26 @@ describe('repo conventions (AGENTS.md / CONTRIBUTING.md)', () => {
 		expect(await offendersMatching(/^[ \t]*export[ \t]+default\b/m)).toEqual([]);
 	});
 
+	it('src/ emits no PEM label RFC 7468 forbids generators from producing', async () => {
+		// Sections 5-8: "MUST NOT generate" X509 CERTIFICATE, X.509 CERTIFICATE,
+		// CRL, NEW CERTIFICATE REQUEST, or CERTIFICATE CHAIN.
+		const forbidden = new Set([
+			'X509 CERTIFICATE',
+			'X.509 CERTIFICATE',
+			'CRL',
+			'NEW CERTIFICATE REQUEST',
+			'CERTIFICATE CHAIN',
+		]);
+		const emitted = new Map<string, string>();
+		for (const file of sourceFiles()) {
+			for (const match of (await Bun.file(file).text()).matchAll(/pemEncode\('([^']+)'/g)) {
+				if (match[1] !== undefined) emitted.set(match[1], file);
+			}
+		}
+		expect(emitted.size).toBeGreaterThan(0);
+		expect([...emitted.keys()].filter((label) => forbidden.has(label))).toEqual([]);
+	});
+
 	it('barrels re-export the OrThrow sibling of every function they expose', async () => {
 		// If a module defines `fooOrThrow` and a barrel re-exports `foo`, the barrel
 		// must re-export `fooOrThrow` too — otherwise the throwing variant is

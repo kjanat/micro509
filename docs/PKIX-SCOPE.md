@@ -9,7 +9,7 @@ forward-work backlog for the PKIX-facing surface.
 | -------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | RFC 5280 path validation   | `complete` | core path validation, name constraints across all GeneralName forms (enforce or fail-closed), initial subtree inputs, RFC 9618 policy processing, and malformed-DER coverage ship; validated against the full NIST PKITS suite (224 test procedures, 249 runs incl. documented subtest variations; 4.1.4/4.1.5 DSA chains expected-fail per the WebCrypto algorithm boundary). Revocation is a separate API by design           |
 | RFC 6960 OCSP              | `complete` | the full validation surface ships: request/response parsing, signature checks, responder binding/authorization (incl. local trusted responders, `id-pkix-ocsp-nocheck`, and responder revocation policy), nonce/request matching, freshness checks, full request coverage, and chain-level revocation orchestration with freshest-evidence combination; HTTP transport is caller-provided by design (scope boundary, not a gap) |
-| RFC 6125 service identity  | `complete` | `matchServiceIdentity()` and the verification helpers (`verifyCertificateChain`, `validateForTlsServer`, …) ship every RFC 6125/9525 identity type: DNS-ID, IP-ID, URI-ID, SRV-ID, wildcard, IDNA, and opt-in CN-compat checks                                                                                                                                                                                                  |
+| RFC 9525 service identity  | `complete` | `matchServiceIdentity()` and the verification helpers (`verifyCertificateChain`, `validateForTlsServer`, …) ship every RFC 9525 identity type: DNS-ID, IP-ID, URI-ID, SRV-ID, wildcard, IDNA, and opt-in RFC 6125 CN-compat checks                                                                                                                                                                                              |
 | RFC 9618 policy validation | `complete` | RFC 9618-style policy state, enforcement, and outputs ship; the full PKITS policy sections (4.8–4.12, every documented subtest variation) pass                                                                                                                                                                                                                                                                                  |
 
 Current conformance evidence:
@@ -59,6 +59,8 @@ Current conformance evidence:
 - [x] Enforce `pathLenConstraint` where applicable.
 - [x] Enforce `keyUsage`, especially `keyCertSign` for CAs used to sign subordinate certs.
 - [x] Process self-issued vs non-self-issued certs correctly for path length and name constraints.
+- [x] Reject a certificate whose `id-ecPublicKey` key locates no namedCurve domain
+      parameters. (IETF Datatracker[^rfc5480])
 - [x] Reject the path if any required path-processing step fails. (IETF Datatracker[^rfc5280])
 
 ## 4. Extension handling
@@ -127,10 +129,10 @@ Current GeneralName matrix for `nameConstraints`:
 - [x] For each supported identity type (`dNSName`, `iPAddress`, URI-ID, SRV-ID), match `subjectAltName` entries of the corresponding type first.
 - [x] `matchServiceIdentity()` supports `dNSName`, `iPAddress`, URI-ID, and SRV-ID matching with wildcard and IDNA coverage.
 - [x] Verification helpers (`verifyCertificateChain`, `validateForTlsServer`, …) accept the same identity union as `matchServiceIdentity()`.
-- [x] Only support CN fallback as an explicit compatibility mode, because RFC 6125 treats CN-ID usage as existing practice and prefers `subjectAltName`; CN comparison is deprecated. (IETF Datatracker[^rfc6125])
+- [x] Only support CN fallback as an explicit RFC 6125 compatibility mode; RFC 9525 forbids using the Common Name RDN to identify a service. (IETF Datatracker[^rfc6125], [^rfc9525])
 - [x] Make wildcard behavior explicit and test it hard.
 
-Focused RFC 6125 identity fixtures live in [`test/identity-fixtures.test.ts`](../test/identity-fixtures.test.ts).
+Focused RFC 9525 identity fixtures live in [`test/identity-fixtures.test.ts`](../test/identity-fixtures.test.ts).
 
 ## 9. EKU / purpose checks
 
@@ -217,9 +219,13 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
 
 [^rfc5280]: https://datatracker.ietf.org/doc/html/rfc5280 "RFC 5280 - Internet X.509 Public Key Infrastructure Certificate and Certificate Revocation List (CRL) Profile"
 
+[^rfc5480]: https://datatracker.ietf.org/doc/html/rfc5480 "RFC 5480 - Elliptic Curve Cryptography Subject Public Key Information"
+
 [^rfc9618]: https://datatracker.ietf.org/doc/html/rfc9618 "RFC 9618 - Updates to X.509 Policy Validation"
 
 [^rfc6125]: https://datatracker.ietf.org/doc/html/rfc6125 "RFC 6125 - Representation and Verification of Domain-Based Application Service Identity within Internet Public Key Infrastructure Using X.509 (PKIX) Certificates in the Context of Transport Layer Security (TLS)"
+
+[^rfc9525]: https://datatracker.ietf.org/doc/html/rfc9525 "RFC 9525 - Service Identity in TLS"
 
 [^rfc6960]: https://datatracker.ietf.org/doc/html/rfc6960 "RFC 6960 - X.509 Internet Public Key Infrastructure Online Certificate Status Protocol - OCSP"
 

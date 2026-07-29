@@ -6,7 +6,7 @@
 | -------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | RFC 5280 path validation   | complete | Full NIST PKITS suite passes (224 procedures, 249 runs; DSA chains expected-fail per the WebCrypto algorithm boundary); revocation is a separate API by design            |
 | RFC 6960 OCSP              | complete | Full validation surface: parsing, signatures, responder authorization, revocation policy, nonce, freshness, chain orchestration; HTTP transport caller-provided by design |
-| RFC 6125 service identity  | complete | Every identity type: DNS-ID, IP-ID, URI-ID, SRV-ID, wildcard, IDNA, opt-in CN-compat                                                                                      |
+| RFC 9525 service identity  | complete | Every identity type: DNS-ID, IP-ID, URI-ID, SRV-ID, wildcard, IDNA, opt-in RFC 6125 CN-compat                                                                             |
 | RFC 9618 policy validation | complete | Full PKITS policy sections (4.8–4.12, every documented subtest variation) pass                                                                                            |
 
 ## What ships
@@ -58,7 +58,7 @@ then defaults to `mode: 'hard-fail'` — indeterminate status denies. Set
 [revocation guide](/guide/revocation).
 :::
 
-### RFC 6125 service identity
+### RFC 9525 service identity
 
 - DNS-ID with single-level wildcard matching
 - IP-ID with IPv6 normalization

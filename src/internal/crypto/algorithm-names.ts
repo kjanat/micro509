@@ -56,6 +56,8 @@ export function describeSignatureAlgorithm(
 			return 'ECDSA with SHA-512';
 		case OIDS.ed25519:
 			return 'Ed25519';
+		case OIDS.ed448:
+			return 'Ed448';
 		default:
 			return `Unknown (${oid})`;
 	}
@@ -79,8 +81,14 @@ export function describePublicKeyAlgorithm(oid: string, parametersOid: string | 
 				default:
 					return 'EC';
 			}
+		case OIDS.x25519:
+			return 'X25519';
+		case OIDS.x448:
+			return 'X448';
 		case OIDS.ed25519:
 			return 'Ed25519';
+		case OIDS.ed448:
+			return 'Ed448';
 		default:
 			return `Unknown (${oid})`;
 	}

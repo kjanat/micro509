@@ -42,7 +42,10 @@ import {
 	describeHashAlgorithm,
 	describeSignatureAlgorithm,
 } from '#micro509/internal/crypto/algorithm-names';
-import { verifySignedDataDetailed } from '#micro509/internal/crypto/sig-verify';
+import {
+	getVerifySignatureConfigResult,
+	verifySignedDataDetailed,
+} from '#micro509/internal/crypto/sig-verify';
 import {
 	encodeAlgorithmIdentifier,
 	getSignatureAlgorithm,
@@ -53,7 +56,12 @@ import { base64Encode } from '#micro509/internal/shared/base64';
 import { compareDistinguishedNames } from '#micro509/internal/shared/dn';
 import { pemDecodeOrThrow, pemEncode } from '#micro509/pem/pem';
 import type { ErrorResult, Micro509Error } from '#micro509/result/result';
-import { failureResult, rethrowIfInvariant, successResult } from '#micro509/result/result';
+import {
+	failureResult,
+	rethrowIfInvariant,
+	successResult,
+	throwMicro509Error,
+} from '#micro509/result/result';
 import type { CrlSource, ParsedCertificateRevocationList } from '#micro509/revocation/crl';
 import {
 	checkCertificateRevocationAgainstCrl,
@@ -71,7 +79,7 @@ import type {
 } from '#micro509/x509/parse';
 import { parseCertificateDerOrThrow, parseCertificateFromSource } from '#micro509/x509/parse';
 
-/** Hash algorithm used to compute OCSP CertID fields. RFC 5019 §2.1.1 requires SHA-1 for the lightweight OCSP profile; RFC 6960 defines no default. */
+/** Hash algorithm used to compute OCSP CertID fields. RFC 9919 §3.1.1 requires SHA-256 for conforming clients; RFC 6960 defines no default. */
 export type OcspHashAlgorithm = 'SHA-1' | 'SHA-256';
 /** PEM string, DER bytes, or already-parsed certificate. */
 export type OcspCertificateSource = string | Uint8Array | ParsedCertificate;
@@ -95,7 +103,7 @@ export interface CreateOcspRequestItemInput {
 export interface CreateOcspRequestInput {
 	/** One or more certificates to query (batched into a single OCSP request). */
 	readonly requests: readonly CreateOcspRequestItemInput[];
-	/** Hash algorithm for CertID computation. Defaults to `'SHA-1'`. */
+	/** Hash algorithm for CertID computation. Defaults to `'SHA-256'`. */
 	readonly hashAlgorithm?: OcspHashAlgorithm;
 	/** Random nonce for replay protection. Omit to skip the nonce extension. */
 	readonly nonce?: Uint8Array;
@@ -227,6 +235,8 @@ export interface ParsedOcspResponse {
 	readonly responderId?: ParsedOcspResponderId;
 	/** OID of the algorithm used to sign this response. */
 	readonly signatureAlgorithmOid?: string;
+	/** DER-encoded `parameters` field of the signature AlgorithmIdentifier. */
+	readonly signatureAlgorithmParametersDer?: Uint8Array;
 	/** Human-readable signature algorithm name. */
 	readonly signatureAlgorithmName?: string;
 	/** Raw signature bytes. */
@@ -283,6 +293,14 @@ export type CreateOcspCertStatusInput =
 			readonly revocationReasonCode?: never;
 	  };
 
+/** Machine-readable reason an OCSP encoder rejected its construction input. */
+export type OcspEncoderErrorCode = 'signer_certificate_key_mismatch';
+
+/** Throws a {@link ResultError} for an OCSP encoder input-validation failure. */
+function throwOcspEncoderError(code: OcspEncoderErrorCode, message: string): never {
+	throwMicro509Error(code, message);
+}
+
 /**
  * Input for {@linkcode createOcspResponse}.
  */
@@ -297,7 +315,7 @@ export interface CreateOcspResponseInput {
 	readonly producedAt?: Date;
 	/** Nonce to echo back for replay protection. */
 	readonly nonce?: Uint8Array;
-	/** Hash algorithm for CertID computation. Defaults to `'SHA-1'`. */
+	/** Hash algorithm for CertID computation. Defaults to `'SHA-256'`. */
 	readonly hashAlgorithm?: OcspHashAlgorithm;
 	/** Extra certificates to embed in the response (e.g. the responder's issuer chain). */
 	readonly includedCertificates?: readonly OcspCertificateSource[];
@@ -457,7 +475,7 @@ interface NormalizedOcspValidationInput {
 export async function createOcspRequest(
 	input: CreateOcspRequestInput,
 ): Promise<OcspRequestMaterial> {
-	const hashAlgorithm = input.hashAlgorithm ?? 'SHA-1';
+	const hashAlgorithm = input.hashAlgorithm ?? 'SHA-256';
 	const requestEntries: Uint8Array[] = [];
 	for (const request of input.requests) {
 		const certificate = normalizeCertificate(request.certificate);
@@ -688,6 +706,13 @@ export function parseOcspResponseDerOrThrow(der: Uint8Array): ParsedOcspResponse
 		requireElement(signatureAlgorithmChildren[0], 'signatureAlgorithm OID').value,
 	);
 	const signatureAlgorithmParameters = signatureAlgorithmChildren[1];
+	const signatureAlgorithmParametersDer =
+		signatureAlgorithmParameters === undefined
+			? undefined
+			: basicResponse.slice(
+					signatureAlgorithmParameters.start - signatureAlgorithmParameters.headerLength,
+					signatureAlgorithmParameters.end,
+				);
 	const responseDataDer = basicResponse.slice(
 		responseData.start - responseData.headerLength,
 		responseData.end,
@@ -700,14 +725,10 @@ export function parseOcspResponseDerOrThrow(der: Uint8Array): ParsedOcspResponse
 		responseDataDer,
 		responderId: signedResponseData.responderId,
 		signatureAlgorithmOid,
+		...(signatureAlgorithmParametersDer === undefined ? {} : { signatureAlgorithmParametersDer }),
 		signatureAlgorithmName: describeSignatureAlgorithm(
 			signatureAlgorithmOid,
-			signatureAlgorithmParameters === undefined
-				? undefined
-				: basicResponse.slice(
-						signatureAlgorithmParameters.start - signatureAlgorithmParameters.headerLength,
-						signatureAlgorithmParameters.end,
-					),
+			signatureAlgorithmParametersDer,
 		),
 		signatureValue: extractBitStringValue(signatureValue),
 		producedAt: signedResponseData.producedAt,
@@ -808,8 +829,25 @@ export async function createOcspResponse(
 ): Promise<OcspResponseMaterial> {
 	const signerCertificate = normalizeCertificate(input.signerCertificate);
 	const signatureAlgorithm = getSignatureAlgorithm(input.signerPrivateKey);
+	// RFC 8410 §12: "the same public key cannot be used for both ECDH and EdDSA",
+	// so a responder must not name a certificate whose subject public key cannot
+	// verify the algorithm the signer key produces.
+	if (
+		!getVerifySignatureConfigResult(
+			signatureAlgorithm.algorithmOid,
+			signatureAlgorithm.parameters,
+			signerCertificate.publicKeyAlgorithmOid,
+			signerCertificate.publicKeyParametersOid,
+			'signer',
+		).ok
+	) {
+		throwOcspEncoderError(
+			'signer_certificate_key_mismatch',
+			'signerCertificate must carry a public key that verifies the signer key algorithm',
+		);
+	}
 	const producedAt = input.producedAt ?? new Date();
-	const hashAlgorithm = input.hashAlgorithm ?? 'SHA-1';
+	const hashAlgorithm = input.hashAlgorithm ?? 'SHA-256';
 	const responses: Uint8Array[] = [];
 	for (const response of input.responses) {
 		const certificate = normalizeCertificate(response.certificate);
@@ -906,7 +944,7 @@ export async function verifyOcspResponseSignature(
 	try {
 		verifiedResult = await verifySignedDataDetailed(
 			parsed.signatureAlgorithmOid,
-			undefined,
+			parsed.signatureAlgorithmParametersDer,
 			signer.publicKeyAlgorithmOid,
 			signer.publicKeyParametersOid,
 			signer.subjectPublicKeyInfoDer,

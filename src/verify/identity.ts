@@ -39,7 +39,7 @@ export interface IpServiceIdentityInput {
 	readonly value: string;
 }
 
-/** URI-ID reference identifier (RFC 6125 §6.5). Scheme and host are matched. */
+/** URI-ID reference identifier (RFC 9525 §§6.2-6.5). Scheme and host are matched. */
 export interface UriServiceIdentityInput {
 	/** Discriminant for URI-ID matching. */
 	readonly type: 'uri';

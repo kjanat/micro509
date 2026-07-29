@@ -233,6 +233,34 @@ describe('RFC 7468 conformance', () => {
 		expect(blocks[0]?.pem.startsWith('-----BEGIN X-TEST-----')).toBe(true);
 	});
 
+	it('accepts horizontal whitespace before an end boundary', () => {
+		const indented = pemEncode('X-TEST', der).replace('-----END', ' \t-----END');
+		expect(Array.from(pemDecodeOrThrow('X-TEST', indented))).toEqual([1, 2, 3]);
+		expect(splitPemBlocksOrThrow(indented).map((block) => block.label)).toEqual(['X-TEST']);
+	});
+
+	// Whitespace acceptance must not depend on position. String.prototype.trim
+	// takes VT, FF, NBSP and every Unicode Zs, none of which RFC 7468 4 admits,
+	// so trimming a whole document with it accepted at the edges what the
+	// boundary-line parser rejects everywhere else.
+	it.each(['\u000b', '\u000c', '\u00a0', '\u2009', '\u3000'])(
+		'rejects %j around every part of an encapsulated block',
+		(space) => {
+			const pem = pemEncode('X-TEST', der);
+			const positions = [
+				`${space}${pem}`,
+				`${pem}${space}`,
+				pem.replace('-----BEGIN', `-----BEGIN${space}`),
+				pem.replace('-----BEGIN X-TEST-----', `-----BEGIN X-TEST-----${space}`),
+				pem.replace('-----END', `-----END${space}`),
+				pem.replace('-----END X-TEST-----', `-----END X-TEST-----${space}`),
+			];
+			for (const candidate of positions) {
+				expect(pemDecode('X-TEST', candidate)).toMatchObject({ ok: false, code: 'malformed' });
+			}
+		},
+	);
+
 	it('accepts a UTF-8 BOM before the first boundary', () => {
 		expect(
 			splitPemBlocksOrThrow(`\uFEFF${pemEncode('X-TEST', der)}`).map((block) => block.label),
