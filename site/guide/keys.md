@@ -1,3 +1,7 @@
+---
+outline: [2, 3]
+---
+
 # Keys
 
 ## Generate a key pair

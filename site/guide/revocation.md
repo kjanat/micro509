@@ -1,3 +1,7 @@
+---
+outline: [2, 3]
+---
+
 # Revocation
 
 The examples below build their own `ca`, `leaf`, CRL, and OCSP material

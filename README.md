@@ -10,10 +10,6 @@
 [![JSR](https://img.shields.io/jsr/v/@kjanat/micro509?logoColor=083344&logo=jsr&logoSize=auto&label=&labelColor=f7df1e&color=black)][jsr]
 [![Socket](https://badge.socket.dev/npm/package/micro509)][socket]
 
-[npm]: https://npm.im/micro509
-[jsr]: https://jsr.io/@kjanat/micro509
-[socket]: https://socket.dev/npm/package/micro509
-
 A zero-dependency TypeScript PKI toolkit for certificates, verification, revocation, and PKCS workflows.
 
 Zero dependencies. Tree-shakeable subpath entrypoints. Pure WebCrypto. Runs everywhere: Node, Bun, Deno, browsers, Cloudflare Workers.
@@ -34,11 +30,13 @@ In a browser, no build step — it is WebCrypto and nothing else:
 </script>
 ```
 
-Two runnable examples: [`examples/browser`] is one HTML file you can open, and
-[`examples/vite`] is the same demo with types and a dev server. Both open in StackBlitz.
+Two runnable examples:
 
-[`examples/browser`]: ./examples/browser/README.md
-[`examples/vite`]: ./examples/vite/README.md
+- [`examples/browser`][browser-example] is that, in full: one HTML file that
+  issues a certificate and parses it back, with nothing installed and nothing
+  built. [open in stackblitz][browser-example:stackblitz]
+- [`examples/vite`][vite-example]: the same demo with types and a dev server.
+  [open in stackblitz][vite-example:stackblitz]
 
 ## Why micro509
 
@@ -59,13 +57,36 @@ And when verification fails, you get typed results your code
 can act on: [a typed error code for every failure mode], the failing
 certificate index, and structured failure details instead of `false`.
 
-[a typed error code for every failure mode]: https://micro509.kjanat.dev/guide/verification#error-codes
-
 ```ts
+import { createSelfSignedCertificate, unwrap, verifyCertificateChain } from 'micro509';
+
+const { certificate } = await createSelfSignedCertificate({
+  subject: { commonName: 'app.example.com' },
+  extensions: {
+    subjectAltNames: [{ type: 'dns', value: 'app.example.com' }],
+  },
+});
+
+const result = await verifyCertificateChain({
+  leaf: certificate.pem,
+  roots: [certificate.pem],
+  allowSelfSignedLeaf: true,
+  serviceIdentity: { type: 'dns', value: 'evil.example.com' },
+});
+
 if (!result.ok) {
-  // result.error.code: 'signature_invalid' | 'certificate_expired' | 'name_constraints_violated' | ...
-  // result.error.index: which certificate in the chain failed
-  // result.error.details: { expected, actual } for identity mismatches
+  switch (result.error.code) {
+    case 'certificate_expired':
+      console.log('renew the certificate at index', result.error.index);
+      break;
+    case 'subject_alt_name_mismatch': {
+      const { expected, actual } = result.error.details ?? {};
+      console.log(`identity mismatch: wanted ${expected}, presented ${actual}`);
+      break;
+    }
+    default:
+      unwrap(result); // rethrows the typed error
+  }
 }
 ```
 
@@ -134,13 +155,17 @@ console.log(csr.pem);
 Parse a certificate:
 
 ```ts
-import { parseCertificatePem, unwrap } from 'micro509';
+import { createSelfSignedCertificate, parseCertificatePem, unwrap } from 'micro509';
 
-// Using certificate from previous example
+const { certificate } = await createSelfSignedCertificate({
+  subject: { commonName: 'example.com' },
+  extensions: { extendedKeyUsage: ['serverAuth'] },
+});
+
 const parsed = unwrap(parseCertificatePem(certificate.pem));
 console.log(parsed.subject.values.commonName);
+console.log(parsed.serialNumberHex);
 console.log(parsed.extendedKeyUsage);
-console.log(parsed.authorityInfoAccess);
 ```
 
 `parseCertificatePem` returns a typed `Result` — check `result.ok`, or
@@ -149,19 +174,27 @@ console.log(parsed.authorityInfoAccess);
 Verify a chain:
 
 ```ts
-import { verifyCertificateChain } from 'micro509';
+import { createSelfSignedCertificate, verifyCertificateChain } from 'micro509';
 
-// Assuming you have a self-signed certificate used as both leaf and root; no intermediates
+const { certificate } = await createSelfSignedCertificate({
+  subject: { commonName: 'example.com' },
+  extensions: {
+    extendedKeyUsage: ['serverAuth'],
+    subjectAltNames: [{ type: 'dns', value: 'example.com' }],
+  },
+});
+
+// Self-signed leaf as its own root: development shape, explicit opt-in
 const result = await verifyCertificateChain({
   leaf: certificate.pem,
-  intermediates: [],
-  roots: [certificate.pem], // Using self-signed cert as root for demo
+  roots: [certificate.pem],
   purpose: 'serverAuth',
   serviceIdentity: { type: 'dns', value: 'example.com' },
+  allowSelfSignedLeaf: true,
 });
 
 if (result.ok) {
-  console.log(result.value.chain.length);
+  console.log(result.value.chain.length, result.value.leaf.serialNumberHex);
 } else {
   console.log(result.error.code);
 }
@@ -243,3 +276,12 @@ The full stable subpath list lives in the [API reference](https://micro509.kjana
 ## License
 
 [MIT](./LICENSE)
+
+[npm]: https://npm.im/micro509
+[jsr]: https://jsr.io/@kjanat/micro509
+[socket]: https://socket.dev/npm/package/micro509
+[browser-example]: ./examples/browser/README.md 'GitHub'
+[browser-example:stackblitz]: https://stackblitz.com/github/kjanat/micro509/tree/master/examples/browser?title=micro509%20in%20the%20browser 'Stackblitz'
+[vite-example]: ./examples/vite/README.md 'GitHub'
+[vite-example:stackblitz]: https://stackblitz.com/github/kjanat/micro509/tree/master/examples/vite?title=micro509%20with%20Vite 'Stackblitz'
+[a typed error code for every failure mode]: https://micro509.kjanat.dev/guide/verification#error-codes

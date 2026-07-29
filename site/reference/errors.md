@@ -1,3 +1,7 @@
+---
+outline: [2, 3]
+---
+
 # Error Codes
 
 Every expected failure in micro509 carries a machine-readable code. `Result`-returning
