@@ -172,11 +172,11 @@ if (!result.ok) {
   console.log(`\
 subject:   ${parsed.subject.values.commonName}
 org:       ${parsed.subject.values.organization}
+serial:    ${parsed.serialNumberHex}
 sig algo:  ${parsed.signatureAlgorithmName}
 pubkey:    ${parsed.publicKeyAlgorithmName}
 key usage: ${parsed.keyUsage?.flags.join(', ') ?? 'none'}
-SANs:      ${sans}
-`);
+SANs:      ${sans}`);
 }
 ```
 
@@ -234,8 +234,7 @@ if (result.ok) {
 verified ${parsed.subject.values.commonName}
   issuer:       ${parsed.issuer.values.commonName}
   serial:       ${parsed.serialNumberHex}
-  chain length: ${result.value.chain.length}
-`);
+  chain length: ${result.value.chain.length}`);
 }
 ```
 
@@ -272,7 +271,7 @@ const selfSigned = await verifyCertificateChain({
 console.log(`\
 trusted: ${trusted.ok} (${!trusted.ok && trusted.error.code})
 opt-in:  ${selfSigned.ok}
-`);
+serial:  ${selfSigned.ok ? selfSigned.value.leaf.serialNumberHex : ''}`);
 ```
 
 </LiveCode>
@@ -303,8 +302,7 @@ const { certificate } = await createSelfSignedCertificate({
 const parsed = parseCertificatePem(certificate.pem);
 if (parsed.ok) {
   console.log(
-    'subject:',
-    parsed.value.subject.values.commonName,
+    `subject:     ${parsed.value.subject.values.commonName}, serial ${parsed.value.serialNumberHex}`,
   );
 }
 
@@ -317,8 +315,7 @@ const fallback = unwrapOr(
   known,
 );
 console.log(
-  'fallback:',
-  fallback.subject.values.commonName,
+  `fallback:    ${fallback.subject.values.commonName}`,
 );
 
 // An unwrap() throw still carries the typed code.
@@ -326,7 +323,7 @@ try {
   unwrap(parseCertificatePem('not a pem'));
 } catch (error) {
   if (isResultError(error)) {
-    console.log('caught code:', error.code);
+    console.log(`caught code: ${error.code}`);
   }
 }
 ```

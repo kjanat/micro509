@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, it } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
@@ -36,18 +36,26 @@ describe('site guide LiveCode examples execute', () => {
 				const target = path.join(scratchDir, `${guide.replace(/\.md$/, '')}-${index + 1}.ts`);
 				await fsp.mkdir(scratchDir, { recursive: true });
 				await fsp.writeFile(target, rewriteBareImports(code));
-				const child = Bun.spawn([process.execPath, 'run', target], {
-					cwd: projectRoot,
-					stdout: 'pipe',
-					stderr: 'pipe',
-				});
-				const exitCode = await child.exited;
-				if (exitCode !== 0) {
-					const stderr = await new Response(child.stderr).text();
-					throw new Error(`example exited ${exitCode}:\n${stderr}`);
+				const outputs: string[] = [];
+				for (let run = 0; run < 2; run += 1) {
+					const child = Bun.spawn([process.execPath, 'run', target], {
+						cwd: projectRoot,
+						stdout: 'pipe',
+						stderr: 'pipe',
+					});
+					const exitCode = await child.exited;
+					if (exitCode !== 0) {
+						const stderr = await new Response(child.stderr).text();
+						throw new Error(`example exited ${exitCode}:\n${stderr}`);
+					}
+					outputs.push(await new Response(child.stdout).text());
 				}
-				expect(exitCode).toBe(0);
-			}, 30_000);
+				if (outputs[0] === outputs[1]) {
+					throw new Error(
+						're-running this example prints byte-identical output; show something run-varying',
+					);
+				}
+			}, 60_000);
 		}
 	}
 });

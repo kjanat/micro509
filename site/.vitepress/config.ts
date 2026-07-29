@@ -15,6 +15,7 @@ import robotsTxt from 'vite-robots-txt';
 import svgToIco from 'vite-svg-to-ico';
 import type { DefaultTheme } from 'vitepress';
 import { defineConfig } from 'vitepress';
+import { devServerCertificate } from './dev-cert.ts';
 
 interface DocsThemeConfig extends DefaultTheme.Config {
 	readonly versions: readonly DocsVersion[];
@@ -22,6 +23,12 @@ interface DocsThemeConfig extends DefaultTheme.Config {
 
 const repoRoot = path.resolve(import.meta.dirname, '../..');
 const siteRoot = 'site';
+const isDev = process.argv.includes('dev');
+
+/** HTTPS so non-localhost origins keep a secure context; WebCrypto needs one. */
+const devHttps = isDev
+	? await devServerCertificate(path.join(import.meta.dirname, 'cache/dev-cert'))
+	: undefined;
 
 interface Manifests {
 	readonly name: string;
@@ -234,14 +241,22 @@ const docs = await versionedDocs({
 		/** A preview serves only its pull request. */
 		offline: process.env.DOCS_OFFLINE === '1' || pull !== undefined,
 	},
-	/** jsDelivr serves releases. esm.sh builds the current GitHub tree by commit. */
+	/**
+	 * jsDelivr serves releases. esm.sh builds the current GitHub tree by commit,
+	 * which only exists for pushed refs, so the dev server serves the local
+	 * `dist/` through vite's `/@fs` instead. `bun dev` keeps it fresh via
+	 * `build:watch`; a bare `site:dev` needs a prior `bun bd`.
+	 */
 	library: {
 		name: repo.name,
 		moduleUrl: (version, subpath) => {
 			const tail = subpath === '.' ? '' : `/${subpath.slice('./'.length)}`;
-			return version.tag === devLabel
-				? `https://esm.sh/gh${repoUrl.pathname}@${nextRef}${tail}?standalone`
-				: `https://cdn.jsdelivr.net/npm/${repo.name}@${version.tag.replace(/^v/, '')}${tail}/+esm`;
+			if (version.tag !== devLabel) {
+				return `https://cdn.jsdelivr.net/npm/${repo.name}@${version.tag.replace(/^v/, '')}${tail}/+esm`;
+			}
+			return isDev
+				? `/@fs${repoRoot}/dist${subpath === '.' ? '/index' : tail}.js`
+				: `https://esm.sh/gh${repoUrl.pathname}@${nextRef}${tail}?standalone`;
 		},
 	},
 	generateApi,
@@ -273,7 +288,7 @@ const ORDER: SidebarOrder = {
 	reference: [
 		{
 			text: 'Reference',
-			slugs: ['index', 'standards', 'algorithms', 'runtimes', 'execution-model'],
+			slugs: ['index', 'standards', 'algorithms', 'errors', 'runtimes', 'execution-model'],
 		},
 	],
 	api: [{ text: 'API Reference', slugs: ['index', 'root'] }],
@@ -282,6 +297,7 @@ const ORDER: SidebarOrder = {
 export default defineConfig<DocsThemeConfig>({
 	vite: {
 		build: { chunkSizeWarningLimit: 1500 },
+		...(devHttps === undefined ? {} : { server: { https: devHttps } }),
 		plugins: [
 			apiDocsPlugin({
 				watchDir: path.join(repoRoot, 'src'),

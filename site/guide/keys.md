@@ -6,6 +6,7 @@
 
 ```ts
 import { generateKeyPair } from 'micro509';
+import { exportBinaryBase64 } from 'micro509/keys';
 
 // Ed25519
 const ed = await generateKeyPair({ kind: 'ed25519' });
@@ -22,12 +23,13 @@ const rsa = await generateKeyPair({
   modulusLength: 2048,
 });
 
-console.log(
-  'generated:',
-  ed.publicKey.algorithm.name,
-  ec.publicKey.algorithm.name,
-  rsa.publicKey.algorithm.name,
-);
+const spki = async (key: CryptoKey) =>
+  `…${(await exportBinaryBase64(key)).slice(-32)}`;
+
+console.log(`\
+ed25519: ${ed.publicKey.algorithm.name} (${ed.privateKey.usages.join('/')}), spki ${await spki(ed.publicKey)}
+ecdsa:   ${JSON.stringify(ec.publicKey.algorithm)}, spki ${await spki(ec.publicKey)}
+rsa:     ${rsa.publicKey.algorithm.name} (${rsa.privateKey.usages.join('/')}), spki ${await spki(rsa.publicKey)}`);
 ```
 
 </LiveCode>
@@ -59,10 +61,15 @@ const privateKey = unwrap(
 );
 const exported = await exportPkcs8Pem(privateKey);
 
+const body = pem
+  .trimEnd()
+  .split('\n')
+  .slice(1, -1)
+  .join('');
 console.log(`\
 algorithm:  ${JSON.stringify(privateKey.algorithm)}
 usages:     ${privateKey.usages.join(', ')}
-PEM base64: ${pem.split('\n')[1]?.slice(0, 44)}…
+PEM tail:   …${body.slice(-44)}
 round-trip: ${exported === pem}`);
 ```
 
@@ -111,10 +118,15 @@ const publicKey = unwrap(
 );
 const exported = await exportSpkiPem(publicKey);
 
+const body = pem
+  .trimEnd()
+  .split('\n')
+  .slice(1, -1)
+  .join('');
 console.log(`\
 algorithm:  ${JSON.stringify(publicKey.algorithm)}
 usages:     ${publicKey.usages.join(', ')}
-PEM base64: ${pem.split('\n')[1]?.slice(0, 44)}…
+PEM tail:   …${body.slice(-44)}
 round-trip: ${exported === pem}`);
 ```
 
@@ -147,6 +159,7 @@ distribute the public key). It supports RSA, ECDSA, and Ed25519.
 import { generateKeyPair, unwrap } from 'micro509';
 import {
   derivePublicKey,
+  exportBinaryBase64,
   exportSpkiPem,
   importPkcs8Pem,
 } from 'micro509/keys';
@@ -167,10 +180,10 @@ const privateKey = unwrap(
 const publicKey = await derivePublicKey(privateKey);
 const spki = await exportSpkiPem(publicKey);
 
-console.log(
-  'derived spki matches:',
-  spki === (await keys.exportSpkiPem()),
-);
+console.log(`\
+derived: ${JSON.stringify(publicKey.algorithm)} (${publicKey.usages.join(', ')})
+spki:    …${(await exportBinaryBase64(publicKey)).slice(-44)}
+matches: ${spki === (await keys.exportSpkiPem())}`);
 ```
 
 </LiveCode>
@@ -210,8 +223,8 @@ const privateKey = unwrap(
 
 console.log(`\
 kty/crv: ${pubJwk.kty}/${pubJwk.crv}
-x:       ${pubJwk.x?.slice(0, 22)}…
-y:       ${pubJwk.y?.slice(0, 22)}…
+x:       ${pubJwk.x}
+y:       ${pubJwk.y}
 usages:  ${publicKey.usages.join(', ')} | ${privateKey.usages.join(', ')}`);
 ```
 
@@ -338,9 +351,14 @@ if (!result.ok) {
 // A wrong password is a typed failure, not an exception
 const wrong = await importEncryptedPkcs8Pem(pem, 'nope');
 
+const body = pem
+  .trimEnd()
+  .split('\n')
+  .slice(1, -1)
+  .join('');
 console.log(`\
 algorithm:  ${JSON.stringify(result.value.algorithm)}
-ciphertext: ${pem.split('\n')[1]?.slice(0, 44)}…
+ciphertext: …${body.slice(-44)}
 wrong pw:   ok=${wrong.ok} (${wrong.ok ? '' : wrong.error.code})`);
 ```
 
@@ -373,11 +391,16 @@ const der = await exportEncryptedPkcs8Der(keys.privateKey, {
 
 const params = inspectEncryptedPkcs8Der(der);
 
+const hex = (bytes: Uint8Array) =>
+  Array.from(bytes, (byte) =>
+    byte.toString(16).padStart(2, '0'),
+  ).join('');
 console.log(`\
 cipher:     ${params.cipher}
 prf:        ${params.prf}
 iterations: ${params.iterations}
-salt bytes: ${params.salt.length}`);
+salt:       ${hex(params.salt)}
+iv:         ${hex(params.iv)}`);
 ```
 
 </LiveCode>

@@ -23,6 +23,7 @@ micro509 returns a discriminated union with typed error codes, the failing certi
 
 ```ts
 import {
+  certificateFingerprint,
   createSelfSignedCertificate,
   createCertificate,
   generateKeyPair,
@@ -65,10 +66,12 @@ const result = await verifyCertificateChain({
 if (!result.ok) {
   const e = result.error;
   const det = JSON.stringify(e.details, null, '  ');
+  const { hex } = await certificateFingerprint(leaf.pem);
   console.log(`\
 code:    ${e.code}
 message: ${e.message}
-details: ${det}`);
+details: ${det}
+leaf:    ${hex.slice(0, 40)}…`);
 }
 // result.error.code is a typed union, e.g.:
 //   'signature_invalid'

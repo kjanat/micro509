@@ -371,8 +371,8 @@ onMounted(() => {
   padding: 12px 16px;
   font-size: 13px;
   line-height: 1.6;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  white-space: pre;
+  overflow-x: auto;
   overflow-y: auto;
   max-height: 400px;
   background: var(--vp-code-block-bg);

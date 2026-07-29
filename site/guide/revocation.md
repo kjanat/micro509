@@ -98,12 +98,20 @@ const verifyResult =
     ca.certificate.pem,
   );
 
+const entry = parsed.revokedCertificates[0];
+const body = crl.pem
+  .trimEnd()
+  .split('\n')
+  .slice(1, -1)
+  .join('');
 console.log(`\
 verified:   ${verifyResult.ok}
 sig algo:   ${parsed.signatureAlgorithmName}
+signature:  …${body.slice(-44)}
 thisUpdate: ${parsed.thisUpdate.toISOString()}
-entries:    ${parsed.revokedCertificates.length}
-revoked 01: ${isCertificateRevoked('01', parsed)}`);
+entry 01:   revoked ${entry?.revocationDate.toISOString().slice(0, 10)}, reason ${entry?.reasonCode}
+revoked 01: ${isCertificateRevoked('01', parsed)}
+revoked 02: ${isCertificateRevoked('02', parsed)}`);
 ```
 
 </LiveCode>
@@ -120,7 +128,10 @@ import {
   createSelfSignedCertificate,
   generateKeyPair,
 } from 'micro509';
-import { createOcspRequest } from 'micro509/revocation';
+import {
+  createOcspRequest,
+  parseOcspRequestDerOrThrow,
+} from 'micro509/revocation';
 
 const ca = await createSelfSignedCertificate({
   subject: { commonName: 'Demo CA' },
@@ -148,6 +159,13 @@ const request = await createOcspRequest({
   ],
 });
 
+// Parse it back to see the CertID the responder will look up
+const certId = parseOcspRequestDerOrThrow(request.der)
+  .requests[0];
+console.log(`\
+serial:   ${certId?.serialNumberHex}
+hashed:   with ${certId?.hashAlgorithmName} (RFC 9919 default)
+key hash: ${certId?.issuerKeyHashHex}`);
 console.log(request.pem);
 ```
 
@@ -187,7 +205,12 @@ const leaf = await createCertificate({
   issuerPublicKey: ca.keyPair.publicKey,
 });
 
+const nonce = crypto.getRandomValues(new Uint8Array(16));
+const nonceHex = Array.from(nonce, (byte) =>
+  byte.toString(16).padStart(2, '0'),
+).join('');
 const request = await createOcspRequest({
+  nonce,
   requests: [
     {
       certificate: leaf.pem,
@@ -200,6 +223,7 @@ const request = await createOcspRequest({
 const ocsp = await createOcspResponse({
   signerPrivateKey: ca.keyPair.privateKey,
   signerCertificate: ca.certificate.pem,
+  nonce,
   responses: [
     {
       certificate: leaf.pem,
@@ -211,6 +235,9 @@ const ocsp = await createOcspResponse({
 
 const response = parseOcspResponseDerOrThrow(ocsp.der);
 
+// Verifies the signature, binds and authorizes the
+// responder against the issuer, matches the nonce and
+// every requested CertID, and checks freshness
 const result = await validateOcspResponse({
   response,
   request: request.der,
@@ -219,10 +246,15 @@ const result = await validateOcspResponse({
 
 if (result.ok) {
   const entry = result.value.responses?.[0];
+  const responder = response.responderId;
   console.log(`\
-valid:      true
-status:     ${entry?.certStatus}
-sig algo:   ${response.signatureAlgorithmName}
+status:     ${response.responseStatus}, ${entry?.certStatus}
+serial:     ${entry?.certId.serialNumberHex}
+certId:     hashed with ${entry?.certId.hashAlgorithmName} (RFC 9919 default)
+responder:  ${responder?.type === 'byKeyHash' ? `key hash ${responder.keyHashHex}` : 'by name'}
+signature:  ${response.signatureAlgorithmName}, verified
+nonce:      ${response.nonce === nonceHex ? 'echoed' : response.nonce}
+window:     ${entry?.thisUpdate.toISOString()} → ${entry?.nextUpdate?.toISOString() ?? 'no commitment'}
 producedAt: ${response.producedAt?.toISOString()}`);
 } else {
   console.log(`invalid: ${result.error.code}`);

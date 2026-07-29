@@ -173,10 +173,10 @@ const r4 = await verifyCertificateChain({
 });
 
 console.log(`\
-serverAuth:  ${r1.ok ? 'ok' : `${r1.error.code}@${r1.error.index}`}
-clientAuth:  ${r2.ok ? 'ok' : `${r2.error.code}@${r2.error.index}`}
-codeSigning: ${r3.ok ? 'ok' : `${r3.error.code}@${r3.error.index}`}
-ca:          ${r4.ok ? 'ok' : `${r4.error.code}@${r4.error.index}`}`);
+serverAuth:  ${r1.ok ? `ok, serial ${r1.value.leaf.serialNumberHex}` : `${r1.error.code}@${r1.error.index}`}
+clientAuth:  ${r2.ok ? `ok, serial ${r2.value.leaf.serialNumberHex}` : `${r2.error.code}@${r2.error.index}`}
+codeSigning: ${r3.ok ? `ok, serial ${r3.value.leaf.serialNumberHex}` : `${r3.error.code}@${r3.error.index}`}
+ca:          ${r4.ok ? `ok, serial ${r4.value.leaf.serialNumberHex}` : `${r4.error.code}@${r4.error.index}`}`);
 ```
 
 </LiveCode>
@@ -248,7 +248,9 @@ breaking change and only happens in a major release.
 :::
 
 Every failure mode in the `VerifyErrorCode` type (the runtime list is exported
-as `VERIFY_ERROR_CODES`; this table is checked against it by a repo test):
+as `VERIFY_ERROR_CODES`; this table is checked against it by a repo test).
+Every other error-code union in the library is tabled in the
+[error-code reference](../reference/errors.md), under the same enforcement:
 
 | Code                                         | Meaning                                        |
 | -------------------------------------------- | ---------------------------------------------- |
@@ -309,11 +311,16 @@ if (result.ok) {
   const sans = (result.value.subjectAltNames ?? [])
     .map((name) => subjectAltNameToString(name))
     .join(', ');
+  const body = csr.pem
+    .trimEnd()
+    .split('\n')
+    .slice(1, -1)
+    .join('');
   console.log(`\
-subject:  ${result.value.subject.values.commonName}
-sig algo: ${result.value.signatureAlgorithmName}
-SANs:     ${sans}
-PEM line: ${csr.pem.split('\n')[1]?.slice(0, 44)}…`);
+subject:   ${result.value.subject.values.commonName}
+sig algo:  ${result.value.signatureAlgorithmName}
+SANs:      ${sans}
+signature: …${body.slice(-44)}`);
 } else {
   console.log('CSR invalid:', result.error.code);
 }
@@ -387,11 +394,14 @@ const raw = ecdsaSignatureDerToRaw(
 );
 const der = ecdsaSignatureRawToDer(raw, 'P-256');
 
+const rawHex = Array.from(raw, (byte) =>
+  byte.toString(16).padStart(2, '0'),
+).join('');
 console.log(`\
 algorithm: ${signed.algorithmOid}
 valid:     ${result.ok && result.valid}
 tampered:  ${tampered.ok && tampered.valid}
-raw r||s:  ${raw.length} bytes
+raw r||s:  ${raw.length} bytes, ${rawHex.slice(0, 48)}…
 DER again: ${der.length} bytes`);
 ```
 

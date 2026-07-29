@@ -1,4 +1,4 @@
-# Custom Extensions & DER
+# Extensions
 
 The built-in extensions (`basicConstraints`, `keyUsage`, SANs, …) encode and
 decode automatically. This page covers the OIDs micro509 does not know:
@@ -31,9 +31,11 @@ import {
 
 // A private extension: SEQUENCE { tier UTF8String, seats INTEGER }
 const LICENSE_OID = '1.3.6.1.4.1.55555.1';
+const seats =
+  crypto.getRandomValues(new Uint8Array(1))[0] ?? 25;
 const payload = derSequence([
   derUtf8String('enterprise'),
-  derIntegerFromNumber(25),
+  derIntegerFromNumber(seats),
 ]);
 
 const { certificate } = await createSelfSignedCertificate({
@@ -102,6 +104,8 @@ const license = defineExtensionDecoder({
 });
 
 // Same certificate shape as the previous example
+const seats =
+  crypto.getRandomValues(new Uint8Array(1))[0] ?? 25;
 const { certificate } = await createSelfSignedCertificate({
   subject: { commonName: 'licensed.example' },
   extensions: {
@@ -110,7 +114,7 @@ const { certificate } = await createSelfSignedCertificate({
         oid: LICENSE_OID,
         value: derSequence([
           derUtf8String('enterprise'),
-          derIntegerFromNumber(25),
+          derIntegerFromNumber(seats),
         ]),
       },
     ],
@@ -183,7 +187,7 @@ if (algorithm === undefined) {
 console.log(`\
 tbs:       tag 0x${tbs.tag.toString(16)}, ${tbs.value.length} bytes
 sig algo:  ${decodeDerOidOrThrow(algorithm)}
-signature: ${toHex(sig.value).slice(0, 24)}…`);
+signature: ${toHex(sig.value).slice(0, 48)}…`);
 ```
 
 </LiveCode>

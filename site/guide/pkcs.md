@@ -72,14 +72,14 @@ const result = await parsePfxDer(pfx.der, {
 });
 
 if (result.ok) {
-  const { certificates, privateKeys, bags } = result.value;
+  const { certificates, privateKeys, bags, macData } =
+    result.value;
   const leafCert = certificates[0];
   console.log(`\
-certs:        ${certificates.length}
-private keys: ${privateKeys.length}
-bags:         ${bags.length}
-subject:      ${leafCert?.subject.values.commonName}
-`);
+bags:    ${bags.map((bag) => bag.kind).join(', ')}
+subject: ${leafCert?.subject.values.commonName}, serial ${leafCert?.serialNumberHex}
+key:     ${privateKeys[0]?.length} bytes of PKCS#8 DER
+MAC:     ${macData?.verification} (${macData?.digestAlgorithmName})`);
 } else {
   console.log(`parse failed: ${result.error.code}`);
 }
@@ -156,7 +156,9 @@ if (result.ok) {
   const certificates = result.value;
   console.log(`certs: ${certificates.length}`);
   for (const cert of certificates) {
-    console.log(cert.subject.values.commonName);
+    console.log(
+      `${cert.subject.values.commonName}, serial ${cert.serialNumberHex}, ${cert.publicKeyAlgorithmName}`,
+    );
   }
 } else {
   console.log(`parse failed: ${result.error.code}`);
@@ -208,9 +210,9 @@ if (!signed.ok) {
     console.log(`\
 verified:  true
 signers:   ${result.signers.length}
-signed by: ${entry?.certificate.subject.values.commonName}
+signed by: ${entry?.certificate.subject.values.commonName}, serial ${entry?.certificate.serialNumberHex}
 digest:    ${entry?.signerInfo.digestAlgorithmName}
-signature: ${entry?.signerInfo.signatureAlgorithmName}
+signature: ${entry?.signerInfo.signatureAlgorithmName}, ${entry?.signerInfo.signatureHex.slice(0, 48)}…
 der size:  ${signed.value.der.length} bytes`);
   } else {
     console.log(`verify: ${result.error.code}`);
@@ -282,7 +284,7 @@ blob size:   ${signed.value.der.length} bytes (no eContent)
 no content:  ok=${missing.ok} (${missing.ok ? '' : missing.error.code})
 forged:      ok=${forged.ok} (${forged.ok ? '' : forged.error.code})
 original:    ok=${result.ok}
-signature:   ${info?.signatureAlgorithmName}
+signature:   ${info?.signatureAlgorithmName}, ${info?.signatureHex.slice(0, 48)}…
 digest:      ${info?.digestAlgorithmName}`);
 }
 ```
@@ -330,7 +332,7 @@ const { certificates, certificateRequests, privateKeys } =
 
 console.log(`\
 der bytes:    ${der.length}
-der head:     ${[...der.slice(0, 8)]
+der tail:     ${[...der.slice(-8)]
   .map((byte) => byte.toString(16).padStart(2, '0'))
   .join(' ')}
 round-trip:   ${pemEncoded === pem}

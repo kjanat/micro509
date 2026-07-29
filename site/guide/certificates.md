@@ -125,6 +125,7 @@ console.log(csr.pem);
 ```ts
 import {
   createSelfSignedCertificate,
+  distinguishedNameToString,
   parseCertificatePem,
   subjectAltNameToString,
   unwrap,
@@ -149,20 +150,30 @@ const { certificate } = await createSelfSignedCertificate({
 
 const parsed = unwrap(parseCertificatePem(certificate.pem));
 
-// Typed metadata
+// Typed metadata: RFC 4514 DN rendering, the random
+// serial, the embedded subject key identifier, and the
+// raw extension list with criticality
 const sans = (parsed.subjectAltNames ?? []).map((name) =>
-  subjectAltNameToString(name),
+  subjectAltNameToString(name, { prefix: true }),
+);
+const days = Math.round(
+  (parsed.notAfter.getTime() - parsed.notBefore.getTime()) /
+    86_400_000,
 );
 console.log(`\
-subject:   ${parsed.subject.values.commonName}
-org:       ${parsed.subject.values.organization}
-issuer:    ${parsed.issuer.values.commonName}
-notBefore: ${parsed.notBefore.toISOString()}
-notAfter:  ${parsed.notAfter.toISOString()}
-sig algo:  ${parsed.signatureAlgorithmName}
-ca:        ${parsed.basicConstraints?.ca ?? false}
-key usage: ${parsed.keyUsage?.flags.join(', ')}
-SANs:      ${sans.join(', ')}`);
+subject:    ${distinguishedNameToString(parsed.subject)}
+serial:     ${parsed.serialNumberHex}
+public key: ${parsed.publicKeyAlgorithmName}, SKI ${parsed.subjectKeyIdentifier}
+signature:  ${parsed.signatureAlgorithmName}
+validity:   ${days} days from ${parsed.notBefore.toISOString().slice(0, 10)}
+key usage:  ${parsed.keyUsage?.flags.join(', ')}
+SANs:       ${sans.join(', ')}
+extensions: ${parsed.extensions
+  .map(
+    (ext) =>
+      `${ext.oid}${ext.critical ? ' (critical)' : ''}`,
+  )
+  .join(', ')}`);
 ```
 
 </LiveCode>
@@ -171,44 +182,88 @@ SANs:      ${sans.join(', ')}`);
 
 `parseCertificateChainPem` decodes a PEM bundle (a leaf plus its
 intermediates, a trust store dump) into parsed certificates, skipping
-non-CERTIFICATE blocks such as private keys. When input arrives as "whatever
-the caller had", `parseCertificateFromSource` accepts PEM text, DER bytes, or
-an already-parsed certificate and returns the parsed form, throwing on
+non-CERTIFICATE blocks such as private keys. Combined with
+`compareDistinguishedNames`, that is enough to reconstruct who issued whom
+from a bundle in any order. When input arrives as "whatever the caller had",
+`parseCertificateFromSource` accepts PEM text, DER bytes, or an
+already-parsed certificate and returns the parsed form, throwing on
 malformed input.
 
 <LiveCode>
 
 ```ts
 import {
+  compareDistinguishedNames,
+  createCertificate,
   createSelfSignedCertificate,
+  generateKeyPair,
   parseCertificateChainPem,
   parseCertificateFromSource,
   unwrap,
 } from 'micro509';
 
 const ca = await createSelfSignedCertificate({
-  subject: { commonName: 'Bundle CA' },
+  subject: {
+    commonName: 'Bundle Root CA',
+    organization: 'Acme',
+  },
   extensions: {
     basicConstraints: { ca: true },
     keyUsage: ['keyCertSign'],
   },
 });
-const leaf = await createSelfSignedCertificate({
+const leafKeys = await generateKeyPair();
+const leaf = await createCertificate({
+  issuer: {
+    commonName: 'Bundle Root CA',
+    organization: 'Acme',
+  },
   subject: { commonName: 'bundle.example' },
+  publicKey: leafKeys.publicKey,
+  signerPrivateKey: ca.keyPair.privateKey,
+  issuerPublicKey: ca.keyPair.publicKey,
 });
 
-// Private keys in the bundle are skipped
-const bundle = `${leaf.certificate.pem}\n${await leaf.keyPair.exportPkcs8Pem()}\n${ca.certificate.pem}`;
-const chain = unwrap(parseCertificateChainPem(bundle));
+// A typical fullchain dump: certificates in whatever
+// order, with a stray private key between them
+const bundle = [
+  leaf.pem,
+  await ca.keyPair.exportPkcs8Pem(),
+  ca.certificate.pem,
+].join('\n');
 
-// PEM, DER, or parsed input give the same answer
-const fromDer = parseCertificateFromSource(
-  leaf.certificate.der,
+const chain = unwrap(parseCertificateChainPem(bundle));
+console.log(
+  `${chain.length} certificates parsed, key block skipped`,
 );
 
-console.log(`\
-bundle:  ${chain.map((c) => c.subject.values.commonName).join(', ')}
-fromDer: ${fromDer.subject.values.commonName}`);
+// Sort out who is who: CA flags, then issuer -> subject
+// links by RFC 5280 semantic DN comparison
+for (const cert of chain) {
+  const role =
+    cert.basicConstraints?.ca === true ? 'CA  ' : 'leaf';
+  const issuer = chain.find((candidate) =>
+    compareDistinguishedNames(
+      cert.issuer,
+      candidate.subject,
+    ),
+  );
+  const signer =
+    issuer === cert
+      ? 'self-signed'
+      : `issued by ${issuer?.subject.values.commonName}`;
+  console.log(
+    `${role} ${cert.subject.values.commonName.padEnd(16)} ${signer}, serial ${cert.serialNumberHex}`,
+  );
+}
+
+// PEM, DER, or already-parsed: one normalizer
+const fromDer = parseCertificateFromSource(leaf.der);
+console.log(
+  `DER  ${fromDer.subject.values.commonName.padEnd(16)} same certificate: ${
+    fromDer.serialNumberHex === chain[0]?.serialNumberHex
+  }`,
+);
 ```
 
 </LiveCode>
@@ -227,6 +282,7 @@ key is extractable with `verify` usage, ready for `exportSpkiPem`/
 ```ts
 import {
   createSelfSignedCertificate,
+  distinguishedNameToString,
   exportSpkiPem,
   getSubjectPublicKey,
   parseCertificatePem,
@@ -234,7 +290,10 @@ import {
 } from 'micro509';
 
 const { certificate } = await createSelfSignedCertificate({
-  subject: { commonName: 'spki.example' },
+  subject: {
+    commonName: 'spki.example',
+    organization: 'Acme',
+  },
 });
 
 const parsed = unwrap(parseCertificatePem(certificate.pem));
@@ -242,9 +301,11 @@ const parsed = unwrap(parseCertificatePem(certificate.pem));
 // Algorithm and curve are inferred from the certificate's own SPKI
 const publicKey = unwrap(await getSubjectPublicKey(parsed));
 
-console.log(
-  `${parsed.publicKeyAlgorithmName} -> ${publicKey.algorithm.name}`,
-);
+console.log(`\
+subject:  ${distinguishedNameToString(parsed.subject)}
+serial:   ${parsed.serialNumberHex}
+inferred: ${parsed.publicKeyAlgorithmName} -> ${JSON.stringify(publicKey.algorithm)}
+usages:   ${publicKey.usages.join(', ')}, extractable ${publicKey.extractable}`);
 console.log(await exportSpkiPem(publicKey));
 ```
 
@@ -303,6 +364,7 @@ already-parsed certificate.
 
 ```ts
 import {
+  certificateFingerprint,
   certificateMatchesPrivateKey,
   createSelfSignedCertificate,
   generateKeyPair,
@@ -314,13 +376,17 @@ const { certificate, keyPair } =
     algorithm: { kind: 'ecdsa', curve: 'P-256' },
   });
 
+const { colonHex } = await certificateFingerprint(
+  certificate.pem,
+);
+console.log(`certificate:  ${colonHex.slice(0, 47)}…`);
+
 // The key that issued the certificate matches...
 console.log(
-  'own key matches:',
-  await certificateMatchesPrivateKey(
+  `own key:      ${await certificateMatchesPrivateKey(
     certificate.pem,
     keyPair.privateKey,
-  ),
+  )}`,
 );
 
 // ...an unrelated key of the same type does not.
@@ -329,11 +395,10 @@ const impostor = await generateKeyPair({
   curve: 'P-256',
 });
 console.log(
-  'impostor key matches:',
-  await certificateMatchesPrivateKey(
+  `impostor key: ${await certificateMatchesPrivateKey(
     certificate.pem,
     impostor.privateKey,
-  ),
+  )}`,
 );
 ```
 
@@ -350,6 +415,7 @@ wrong key), `key_type_mismatch` (wrong algorithm), `malformed_certificate`, or
 
 ```ts
 import {
+  certificateFingerprint,
   generateKeyPair,
   matchCertificatePrivateKey,
   createSelfSignedCertificate,
@@ -369,7 +435,13 @@ const result = await matchCertificatePrivateKey(
   certificate.pem,
   rsa.privateKey,
 );
-console.log(result.ok ? 'match' : result.code);
+const { hex } = await certificateFingerprint(
+  certificate.pem,
+);
+console.log(
+  result.ok ? 'match' : result.code,
+  `(certificate ${hex.slice(0, 40)}…)`,
+);
 ```
 
 </LiveCode>
@@ -406,13 +478,19 @@ const parsed = unwrap(
 const sans = (parsed.subjectAltNames ?? []).map((name) =>
   subjectAltNameToString(name),
 );
+const body = csr.pem
+  .trimEnd()
+  .split('\n')
+  .slice(1, -1)
+  .join('');
 console.log(`\
-subject:  ${parsed.subject.values.commonName}
-sig algo: ${parsed.signatureAlgorithmName}
-SANs:     ${sans.join(', ')}`);
+subject:   ${parsed.subject.values.commonName}
+sig algo:  ${parsed.signatureAlgorithmName}
+SANs:      ${sans.join(', ')}
+signature: …${body.slice(-44)}`);
 ```
 
 </LiveCode>
 
 For extensions micro509 has no typed field for, see
-[Custom Extensions & DER](./extensions.md).
+[Extensions](./extensions.md).
