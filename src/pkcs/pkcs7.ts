@@ -273,11 +273,18 @@ export interface VerifyPkcs7SignedDataFailure
 /** Options for {@linkcode verifyPkcs7SignedData}. */
 export interface VerifyPkcs7SignedDataOptions {
 	/**
-	 * External content for a detached SignedData (RFC 5652 Section 5.2, absent
-	 * `eContent`). Required to verify a detached signature; ignored when the
-	 * SignedData embeds its own content.
+	 * External content for a detached SignedData (RFC 5652 Section 5.2, absent `eContent`).
+	 * Required to verify a detached signature; ignored when the SignedData embeds its own content.
 	 */
 	readonly content?: Uint8Array;
+}
+
+/** A SignerInfo paired with the certificate that verified its signature. */
+export interface VerifiedPkcs7Signer {
+	/** The SignerInfo whose signature verified. */
+	readonly signerInfo: ParsedPkcs7SignerInfo;
+	/** The certificate from the SignedData certificate set that verified it. */
+	readonly certificate: ParsedCertificate;
 }
 
 /** Success-or-failure result from {@linkcode verifyPkcs7SignedData}. */
@@ -287,6 +294,8 @@ export type VerifyPkcs7SignedDataResult =
 			readonly ok: true;
 			/** The verified SignedData structure. */
 			readonly value: ParsedPkcs7SignedData;
+			/** One entry per SignerInfo, in SignedData order. */
+			readonly signers: readonly VerifiedPkcs7Signer[];
 	  }
 	| ErrorResult<VerifyPkcs7SignedDataErrorCode, Record<never, never>, VerifyPkcs7SignedDataFailure>;
 
@@ -825,7 +834,9 @@ export function parsePkcs7SignedDataPem(pem: string): ParsePkcs7SignedDataResult
  *
  * const result = await verifyPkcs7SignedData(pkcs7Pem);
  * if (result.ok) {
- *   console.log('all signers verified');
+ *   for (const { signerInfo, certificate } of result.signers) {
+ *     console.log(signerInfo.digestAlgorithmOid, certificate.subject);
+ *   }
  * }
  *
  * // Detached signature: supply the content externally
@@ -848,11 +859,13 @@ export async function verifyPkcs7SignedData(
 			'SignedData has no encapsulated content; supply the detached content via options.content',
 		);
 	}
+	const signers: VerifiedPkcs7Signer[] = [];
 	for (const signerInfo of parsed.signerInfos) {
 		const result = await verifyPkcs7SignerInfo(parsed, signerInfo, content);
 		if (!result.ok) return result;
+		signers.push({ signerInfo, certificate: result.certificate });
 	}
-	return { ok: true, value: parsed };
+	return { ok: true, value: parsed, signers };
 }
 
 /** Normalizes encoded or parsed SignedData into a freshly parsed verification input. */
@@ -872,7 +885,10 @@ async function verifyPkcs7SignerInfo(
 	parsed: ParsedPkcs7SignedData,
 	signerInfo: ParsedPkcs7SignerInfo,
 	content: Uint8Array,
-): Promise<{ readonly ok: true } | Extract<VerifyPkcs7SignedDataResult, { readonly ok: false }>> {
+): Promise<
+	| { readonly ok: true; readonly certificate: ParsedCertificate }
+	| Extract<VerifyPkcs7SignedDataResult, { readonly ok: false }>
+> {
 	const signer = x509CertificatesOf(parsed.certificateChoices).find((certificate) =>
 		signerIdentifierMatches(certificate, signerInfo),
 	);
@@ -882,9 +898,10 @@ async function verifyPkcs7SignerInfo(
 			'Signer certificate not found in SignedData certificates',
 		);
 	}
-	return signerInfo.hasSignedAttrs
+	const result = signerInfo.hasSignedAttrs
 		? await verifySignedAttrs(signerInfo, signer, content, parsed.encapsulatedContentTypeOid)
 		: await verifyPkcs7BareSignerInfo(signerInfo, signer, content);
+	return result.ok ? { ok: true, certificate: signer } : result;
 }
 
 async function verifyPkcs7BareSignerInfo(

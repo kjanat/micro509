@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import type { ParsedPkcs7SignerInfo, VerifyPkcs7SignedDataResult } from '#micro509';
 import {
 	createPkcs7SignedData,
 	createSelfSignedCertificate,
@@ -26,6 +27,36 @@ function signingIdentity(commonName: string, algorithm?: KeyAlgorithmInput) {
 		...(algorithm === undefined ? {} : { algorithm }),
 		extensions: { keyUsage: ['digitalSignature'] },
 	});
+}
+
+/**
+ * Asserts `signers` walks `signerInfos` in order and pairs each entry with the
+ * certificate its identifier names. SET OF SignerInfos is DER-sorted by
+ * encoding, so expected common names are compared order-independently.
+ */
+function requireSignerInfo(value: ParsedPkcs7SignerInfo | undefined): ParsedPkcs7SignerInfo {
+	if (value === undefined) {
+		throw new Error('expected a SignerInfo at the paired index');
+	}
+	return value;
+}
+
+function expectSignerPairing(
+	result: Extract<VerifyPkcs7SignedDataResult, { readonly ok: true }>,
+	commonNames: readonly string[],
+): void {
+	expect(result.signers).toHaveLength(commonNames.length);
+	result.signers.forEach((entry, index) => {
+		expect(entry.signerInfo).toBe(requireSignerInfo(result.value.signerInfos[index]));
+		const identifier = entry.signerInfo.signerIdentifier;
+		if (identifier.type !== 'issuerAndSerialNumber') {
+			throw new Error('expected issuerAndSerialNumber');
+		}
+		expect(entry.certificate.serialNumberHex).toBe(identifier.serialNumberHex);
+	});
+	expect(result.signers.map((entry) => entry.certificate.subject.values.commonName).sort()).toEqual(
+		[...commonNames].sort(),
+	);
 }
 
 describe('createPkcs7SignedData', () => {
@@ -59,6 +90,7 @@ describe('createPkcs7SignedData', () => {
 			expect(result.value.signerInfos[0]?.hasSignedAttrs).toBe(true);
 			expect(result.value.signerInfos[0]?.digestAlgorithmName).toBe(testCase.digest);
 			expect(result.value.encapsulatedContent).toEqual(content);
+			expectSignerPairing(result, [`Signer ${testCase.name}`]);
 		});
 	}
 
@@ -144,6 +176,7 @@ describe('createPkcs7SignedData', () => {
 		if (!result.ok) throw new Error(result.error.code);
 		expect(result.value.signerInfos).toHaveLength(2);
 		expect(result.value.certificateChoices).toHaveLength(2);
+		expectSignerPairing(result, ['Signer A', 'Signer B']);
 	});
 
 	it('embeds additional certificates without duplicating the signer', async () => {
@@ -297,6 +330,7 @@ describe('createPkcs7SignedData: detached (RFC 5652 §5.2)', () => {
 		expect(verified.ok).toBe(true);
 		if (!verified.ok) throw new Error(verified.error.code);
 		expect(verified.value.signerInfos).toHaveLength(2);
+		expectSignerPairing(verified, ['Detached A', 'Detached B']);
 	});
 
 	it('fails with detached_content_required when no content is supplied', async () => {

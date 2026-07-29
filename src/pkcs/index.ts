@@ -52,6 +52,7 @@ export type {
 	Pkcs7CertificateSource,
 	Pkcs7SignedDataMaterial,
 	Pkcs7Signer,
+	VerifiedPkcs7Signer,
 	VerifyPkcs7SignedDataErrorCode,
 	VerifyPkcs7SignedDataFailure,
 	VerifyPkcs7SignedDataOptions,

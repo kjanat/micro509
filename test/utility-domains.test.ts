@@ -127,5 +127,12 @@ describe('utility domains', () => {
 			expect(err.message).toBe('bad cert');
 			expect(err.index).toBe(3);
 		});
+
+		it('rethrows invariant error types and swallows domain failures', () => {
+			expect(() => result.rethrowIfInvariant(new TypeError('bug'))).toThrow(TypeError);
+			expect(() => result.rethrowIfInvariant(new RangeError('bug'))).toThrow(RangeError);
+			expect(() => result.rethrowIfInvariant(new Error('malformed input'))).not.toThrow();
+			expect(() => result.rethrowIfInvariant('string throw')).not.toThrow();
+		});
 	});
 });

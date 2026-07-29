@@ -202,14 +202,15 @@ if (!signed.ok) {
     signed.value.pem,
   );
   if (result.ok) {
-    const sd = result.value;
-    const info = sd.signerInfos[0];
+    // result.signers pairs each SignerInfo with the
+    // certificate that verified its signature
+    const entry = result.signers[0];
     console.log(`\
 verified:  true
-signers:   ${sd.signerInfos.length}
-digest:    ${info?.digestAlgorithmName}
-signature: ${info?.signatureAlgorithmName}
-sig hex:   ${info?.signatureHex.slice(0, 24)}…
+signers:   ${result.signers.length}
+signed by: ${entry?.certificate.subject.values.commonName}
+digest:    ${entry?.signerInfo.digestAlgorithmName}
+signature: ${entry?.signerInfo.signatureAlgorithmName}
 der size:  ${signed.value.der.length} bytes`);
   } else {
     console.log(`verify: ${result.error.code}`);

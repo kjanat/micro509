@@ -114,4 +114,15 @@ describe('revocation domain', () => {
 		expect(result.value.code).toBe('revocation_evidence_missing');
 		expect(result.value.details.indeterminateEvidence).toHaveLength(0);
 	});
+
+	it('maps CRLReason codes to RevocationReason names, skipping unused 7', () => {
+		expect(revocation.revocationReasonFromCode(0)).toBe('unspecified');
+		expect(revocation.revocationReasonFromCode(1)).toBe('keyCompromise');
+		expect(revocation.revocationReasonFromCode(6)).toBe('certificateHold');
+		expect(revocation.revocationReasonFromCode(7)).toBeUndefined();
+		expect(revocation.revocationReasonFromCode(8)).toBe('removeFromCRL');
+		expect(revocation.revocationReasonFromCode(10)).toBe('aACompromise');
+		expect(revocation.revocationReasonFromCode(11)).toBeUndefined();
+		expect(revocation.revocationReasonFromCode(undefined)).toBeUndefined();
+	});
 });

@@ -54,6 +54,7 @@ export {
 	parseCertificateRevocationListDerOrThrow,
 	parseCertificateRevocationListPem,
 	parseCertificateRevocationListPemOrThrow,
+	revocationReasonFromCode,
 	validateCertificateRevocationList,
 	verifyCertificateRevocationListSignature,
 } from '#micro509/revocation/crl';

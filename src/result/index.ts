@@ -21,6 +21,7 @@ export {
 	indexedMicro509Error,
 	isResultError,
 	micro509Error,
+	rethrowIfInvariant,
 	successResult,
 	unwrap,
 	unwrapOr,

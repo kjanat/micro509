@@ -247,6 +247,7 @@ import {
   checkCertificateRevocation,
   createCertificateRevocationList,
   createOcspResponse,
+  revocationReasonFromCode,
 } from 'micro509/revocation';
 
 const ca = await createSelfSignedCertificate({
@@ -298,6 +299,7 @@ const ocsp = await createOcspResponse({
       issuerCertificate: ca.certificate.pem,
       certStatus: 'revoked',
       revokedAt: new Date(),
+      revocationReasonCode: 1,
     },
   ],
 });
@@ -316,10 +318,20 @@ if (!result.ok) {
   throw new Error('unreachable: evidence was supplied');
 }
 if (result.value.status === 'revoked') {
+  // CRL evidence reports a RevocationReason name,
+  // OCSP a raw CRLReason integer;
+  // revocationReasonFromCode() maps the integer to
+  // the same name so either path yields one answer
+  const reason =
+    result.value.revocationReason ??
+    revocationReasonFromCode(
+      result.value.revocationReasonCode,
+    );
   console.log(`\
 status:     revoked
 serial:     ${serialHex}
-revoked at: ${result.value.revokedAt?.toISOString()}`);
+revoked at: ${result.value.revokedAt?.toISOString()}
+reason:     ${reason}`);
 } else {
   console.log('status:', result.value.status);
 }
