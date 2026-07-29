@@ -1940,7 +1940,12 @@ function encodeIpAddress(input: string): Uint8Array {
 	return parseIpAddressToBytes(input);
 }
 
-/** @internal Compute the SKI as SHA-1 of the subjectPublicKey BIT STRING content. */
+/**
+ * Computes a key identifier from a DER `SubjectPublicKeyInfo` using method (1)
+ * of RFC 5280 §4.2.1.2: "the 160-bit SHA-1 hash of the value of the BIT STRING
+ * subjectPublicKey (excluding the tag, length, and number of unused bits)".
+ * A parsed certificate carries the input as `subjectPublicKeyInfoDer`.
+ */
 export function buildSubjectKeyIdentifier(subjectPublicKeyInfo: Uint8Array): Uint8Array {
 	const topLevel = readSequenceChildren(subjectPublicKeyInfo);
 	const subjectPublicKey = topLevel[1];
@@ -1996,3 +2001,10 @@ function pushExtension(
 	seen.add(identity);
 	encoded.push(encodeExtension(oid, value, critical));
 }
+
+export {
+	allOnesMaskForIpAddress,
+	decodeIpAddress,
+	normalizeIpAddress,
+	parseIpAddressToBytes,
+} from '#micro509/internal/shared/ip';

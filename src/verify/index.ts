@@ -61,6 +61,7 @@ export type {
 export {
 	buildCandidatePath,
 	checkExtendedKeyUsage,
+	isSelfIssuedCertificate,
 	trustAnchorFromCertificate,
 	VERIFY_ERROR_CODES,
 	validateCandidatePath,

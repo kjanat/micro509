@@ -45,6 +45,8 @@ import {
 	decryptPbes2,
 	encryptPbes2,
 	isWrongPasswordError,
+	type Pbes2Parameters,
+	parsePbes2AlgorithmIdentifier,
 	wrongPasswordError,
 } from '#micro509/internal/crypto/pbes2';
 import { getCrypto } from '#micro509/internal/crypto/webcrypto';
@@ -66,8 +68,10 @@ import {
 export type {
 	Pbes2EncryptionOptions,
 	Pbes2EncryptionScheme,
+	Pbes2Parameters,
 	Pbes2Prf,
 } from '#micro509/internal/crypto/pbes2';
+export { parsePbes2AlgorithmIdentifier } from '#micro509/internal/crypto/pbes2';
 
 /** Hash algorithm paired with an RSA key. */
 export type RsaHash = 'SHA-256' | 'SHA-384' | 'SHA-512';
@@ -929,6 +933,24 @@ export async function importEncryptedPkcs8DerOrThrow(
 	password: string,
 	algorithm?: PrivateKeyImportInput,
 ): Promise<CryptoKey> {
+	const envelope = readEncryptedPkcs8Envelope(der);
+	const decrypted = await decryptPbes2(
+		envelope.algorithmIdentifierDer,
+		envelope.encryptedData,
+		password,
+	);
+	assertDecryptedPrivateKey(
+		() => parsePkcs8PrivateKey(decrypted),
+		'Invalid password or encrypted content',
+	);
+	return importPkcs8DerOrThrow(decrypted, algorithm);
+}
+
+/** Splits a DER `EncryptedPrivateKeyInfo` into its AlgorithmIdentifier DER and encryptedData bytes. */
+function readEncryptedPkcs8Envelope(der: Uint8Array): {
+	readonly algorithmIdentifierDer: Uint8Array;
+	readonly encryptedData: Uint8Array;
+} {
 	let children: readonly ReturnType<typeof readSequenceChildren>[number][];
 	try {
 		children = readSequenceChildren(der);
@@ -945,19 +967,23 @@ export async function importEncryptedPkcs8DerOrThrow(
 	) {
 		throw new Error('Malformed EncryptedPrivateKeyInfo');
 	}
-	const decrypted = await decryptPbes2(
-		der.slice(
+	return {
+		algorithmIdentifierDer: der.slice(
 			algorithmIdentifier.start - algorithmIdentifier.headerLength,
 			algorithmIdentifier.end,
 		),
-		encryptedData.value,
-		password,
-	);
-	assertDecryptedPrivateKey(
-		() => parsePkcs8PrivateKey(decrypted),
-		'Invalid password or encrypted content',
-	);
-	return importPkcs8DerOrThrow(decrypted, algorithm);
+		encryptedData: encryptedData.value,
+	};
+}
+
+/**
+ * Reads the PBES2 encryption parameters of a DER PKCS#8
+ * `EncryptedPrivateKeyInfo` (RFC 5958 §3) without the password: PBKDF2
+ * iteration count, salt, and PRF, plus the AES-CBC variant and IV.
+ * Throws on malformed DER or a non-PBES2 encryption algorithm.
+ */
+export function inspectEncryptedPkcs8Der(der: Uint8Array): Pbes2Parameters {
+	return parsePbes2AlgorithmIdentifier(readEncryptedPkcs8Envelope(der).algorithmIdentifierDer);
 }
 
 /**

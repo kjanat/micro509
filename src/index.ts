@@ -89,6 +89,7 @@ export type {
 	KeyAlgorithmInput,
 	KeyPairMaterial,
 	LegacyPemEncryptionOptions,
+	Pbes2Parameters,
 	PrivateKeyImportInput,
 	PublicKeyImportInput,
 	RsaHash,
@@ -151,6 +152,7 @@ export {
 	importSpkiDerOrThrow,
 	importSpkiPem,
 	importSpkiPemOrThrow,
+	inspectEncryptedPkcs8Der,
 } from '#micro509/keys';
 
 export type {
@@ -424,6 +426,7 @@ export type {
 export {
 	buildCandidatePath,
 	checkExtendedKeyUsage,
+	isSelfIssuedCertificate,
 	matchCertificateServiceIdentity,
 	matchServiceIdentity,
 	trustAnchorFromCertificate,
@@ -510,6 +513,7 @@ export type {
 export {
 	certificateFingerprint,
 	certificateMatchesPrivateKey,
+	compareDistinguishedNames,
 	createCertificate,
 	createCertificateSigningRequest,
 	createSelfSignedCertificate,
@@ -527,12 +531,15 @@ export {
 	parseCertificateChainPemOrThrow,
 	parseCertificateDer,
 	parseCertificateDerOrThrow,
+	parseCertificateFromSource,
 	parseCertificatePem,
 	parseCertificatePemOrThrow,
 	parseCertificateSigningRequestDer,
 	parseCertificateSigningRequestDerOrThrow,
 	parseCertificateSigningRequestPem,
 	parseCertificateSigningRequestPemOrThrow,
+	parseCertificatesFromSource,
+	parseDistinguishedNameDer,
 	relativeDistinguishedNameToString,
 	subjectAltNameLabel,
 	subjectAltNameToString,

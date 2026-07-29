@@ -309,3 +309,9 @@ function nameObjectToAttributes(input: NameObject): readonly NameAttribute[] {
 	}
 	return attributes;
 }
+
+export {
+	canonicalDnKey,
+	compareDistinguishedNames,
+	isWithinDirectoryNameSubtree,
+} from '#micro509/internal/shared/dn';

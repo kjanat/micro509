@@ -44,6 +44,7 @@ micro509/
 │   ├── verify/        # chain validation + policy + identity checks
 │   ├── revocation/    # CRL/OCSP lifecycles
 │   ├── keys/          # key import/export and generation
+│   ├── crypto/        # detached sign/verify + ECDSA signature encoding
 │   ├── der/           # public DER encode/decode surface (micro509/der)
 │   ├── pem/           # PEM encode/decode boundary
 │   ├── pkcs/          # PKCS-7 and PKCS#12 workflows
@@ -68,21 +69,21 @@ micro509/
 
 ## WHERE TO LOOK
 
-| Task                              | Location                                                   | Notes                                                |
-| --------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------- |
-| Public API surface                | `src/index.ts`                                             | root barrel for `micro509`                           |
-| Domain entrypoints                | `src/x509/`, `src/verify/`, `src/revocation/`, `src/keys/` | domain-specific high-level entry surfaces            |
-| Package entry routing             | `package.json`                                             | `exports`, `imports`, scripts                        |
-| Chain validation                  | `src/verify/verify.ts`                                     | candidate path building, policy composition          |
-| Certificate/CSR parsing           | `src/x509/parse.ts`                                        | DER/PEM parse boundary + extension decoding          |
-| Revocation                        | `src/revocation/crl.ts`, `src/revocation/ocsp.ts`          | CRL + OCSP creation, parse, validate, verify         |
-| Key import/export                 | `src/keys/keys.ts`                                         | PKCS#1/8, SEC1, SPKI, JWK flows                      |
-| DER codec surface                 | `src/der/der.ts`                                           | public DER encode/decode (`micro509/der`)            |
-| Extension model/builders          | `src/x509/extensions.ts`                                   | typed extension schema and encoder helpers           |
-| Test helpers and internals probes | `test/helpers.ts`, `test/internals.test.ts`                | shared DER helpers, internal probing through imports |
-| Standards scope                   | `docs/PKIX-SCOPE.md`                                       | claim boundaries                                     |
-| Docs site                         | `site/.vitepress/config.ts`, `site/guide/`, `site/api/`    | VitePress config, authored guides, generated API     |
-| Reusable CI actions               | `.github/actions/`                                         | shared setup + release version validation            |
+| Task                              | Location                                                                  | Notes                                                |
+| --------------------------------- | ------------------------------------------------------------------------- | ---------------------------------------------------- |
+| Public API surface                | `src/index.ts`                                                            | root barrel for `micro509`                           |
+| Domain entrypoints                | `src/x509/`, `src/verify/`, `src/revocation/`, `src/keys/`, `src/crypto/` | domain-specific high-level entry surfaces            |
+| Package entry routing             | `package.json`                                                            | `exports`, `imports`, scripts                        |
+| Chain validation                  | `src/verify/verify.ts`                                                    | candidate path building, policy composition          |
+| Certificate/CSR parsing           | `src/x509/parse.ts`                                                       | DER/PEM parse boundary + extension decoding          |
+| Revocation                        | `src/revocation/crl.ts`, `src/revocation/ocsp.ts`                         | CRL + OCSP creation, parse, validate, verify         |
+| Key import/export                 | `src/keys/keys.ts`                                                        | PKCS#1/8, SEC1, SPKI, JWK flows                      |
+| DER codec surface                 | `src/der/der.ts`                                                          | public DER encode/decode (`micro509/der`)            |
+| Extension model/builders          | `src/x509/extensions.ts`                                                  | typed extension schema and encoder helpers           |
+| Test helpers and internals probes | `test/helpers.ts`, `test/internals.test.ts`                               | shared DER helpers, internal probing through imports |
+| Standards scope                   | `docs/PKIX-SCOPE.md`                                                      | claim boundaries                                     |
+| Docs site                         | `site/.vitepress/config.ts`, `site/guide/`, `site/api/`                   | VitePress config, authored guides, generated API     |
+| Reusable CI actions               | `.github/actions/`                                                        | shared setup + release version validation            |
 
 ## CONVENTIONS
 

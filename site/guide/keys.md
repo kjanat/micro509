@@ -346,6 +346,42 @@ wrong pw:   ok=${wrong.ok} (${wrong.ok ? '' : wrong.error.code})`);
 
 </LiveCode>
 
+### Inspect encryption parameters
+
+`inspectEncryptedPkcs8Der()` reads the PBES2 parameters of an encrypted key
+without the password, so you can audit how strongly a key is protected
+before deciding to import it.
+
+<LiveCode>
+
+```ts
+import { generateKeyPair } from 'micro509';
+import {
+  exportEncryptedPkcs8Der,
+  inspectEncryptedPkcs8Der,
+} from 'micro509/keys';
+
+const keys = await generateKeyPair({
+  kind: 'ecdsa',
+  curve: 'P-256',
+});
+
+const der = await exportEncryptedPkcs8Der(keys.privateKey, {
+  password: 'password',
+  iterations: 600_000,
+});
+
+const params = inspectEncryptedPkcs8Der(der);
+
+console.log(`\
+cipher:     ${params.cipher}
+prf:        ${params.prf}
+iterations: ${params.iterations}
+salt bytes: ${params.salt.length}`);
+```
+
+</LiveCode>
+
 ### Legacy encrypted PEM (OpenSSL format)
 
 <LiveCode>

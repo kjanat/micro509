@@ -1698,7 +1698,7 @@ function assertMatchingCertificateSignatureAlgorithms(
 	}
 }
 
-/** @internal Decode the Basic Constraints extension value DER. */
+/** Decodes the Basic Constraints extension value DER. */
 export function parseBasicConstraints(bytes: Uint8Array): BasicConstraints {
 	const element = readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH });
 	if (element.tag !== 0x30) {
@@ -1740,12 +1740,12 @@ export function parseBasicConstraints(bytes: Uint8Array): BasicConstraints {
 	return { ca: false };
 }
 
-/** @internal Decode the Key Usage BIT STRING extension value. */
+/** Decodes the Key Usage BIT STRING extension value. */
 export function parseKeyUsage(bytes: Uint8Array): ParsedBitFlags<KeyUsage> {
 	return parseKeyUsageExtension(bytes);
 }
 
-/** @internal Decode the Extended Key Usage SEQUENCE OF OIDs. */
+/** Decodes the Extended Key Usage SEQUENCE OF OIDs. */
 export function parseExtendedKeyUsage(bytes: Uint8Array): readonly ExtendedKeyUsage[] {
 	const children = readSequenceChildren(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH });
 	if (children.length === 0) {
@@ -1759,7 +1759,7 @@ export function parseExtendedKeyUsage(bytes: Uint8Array): readonly ExtendedKeyUs
 	});
 }
 
-/** @internal Decode the Certificate Policies extension value. */
+/** Decodes the Certificate Policies extension value. */
 export function parseCertificatePolicies(bytes: Uint8Array): CertificatePolicies {
 	const sequenceElement = requireElement(
 		readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH }),
@@ -1907,7 +1907,7 @@ function parsePolicyNoticeNumbers(source: Uint8Array, element: DerElement): read
 	});
 }
 
-/** @internal Decode the Policy Mappings extension value. */
+/** Decodes the Policy Mappings extension value. */
 export function parsePolicyMappings(bytes: Uint8Array): PolicyMappings {
 	const sequenceElement = requireElement(
 		readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH }),
@@ -1935,7 +1935,7 @@ export function parsePolicyMappings(bytes: Uint8Array): PolicyMappings {
 	});
 }
 
-/** @internal Decode the Policy Constraints extension value. */
+/** Decodes the Policy Constraints extension value. */
 export function parsePolicyConstraints(bytes: Uint8Array): PolicyConstraints {
 	const sequenceElement = requireElement(
 		readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH }),
@@ -1975,7 +1975,7 @@ export function parsePolicyConstraints(bytes: Uint8Array): PolicyConstraints {
 	};
 }
 
-/** @internal Decode the Inhibit anyPolicy extension (single INTEGER). */
+/** Decodes the Inhibit anyPolicy extension (single INTEGER). */
 export function parseInhibitAnyPolicy(bytes: Uint8Array): InhibitAnyPolicy {
 	const integerElement = requireElement(
 		readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH }),
@@ -1989,7 +1989,7 @@ export function parseInhibitAnyPolicy(bytes: Uint8Array): InhibitAnyPolicy {
 	};
 }
 
-/** @internal Decode a subjectAltName or issuerAltName SEQUENCE OF GeneralName. */
+/** Decodes a subjectAltName or issuerAltName SEQUENCE OF GeneralName. */
 export function parseSubjectAltNames(
 	bytes: Uint8Array,
 	label = 'subjectAltName',
@@ -2004,7 +2004,7 @@ export function parseSubjectAltNames(
 	return parseGeneralNames(bytes, sequenceElement);
 }
 
-/** @internal Decode a bare DER-encoded X.501 Name, as carried in a `directoryName` GeneralName. */
+/** Decodes a bare DER-encoded X.501 Name, as carried in a `directoryName` GeneralName. */
 export function parseDistinguishedNameDer(bytes: Uint8Array): ParsedName {
 	const nameElement = requireElement(
 		readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH }),
@@ -2016,7 +2016,7 @@ export function parseDistinguishedNameDer(bytes: Uint8Array): ParsedName {
 	return parseName(bytes, nameElement);
 }
 
-/** @internal Decode the Authority Information Access extension value. */
+/** Decodes the Authority Information Access extension value. */
 export function parseAuthorityInfoAccess(bytes: Uint8Array): readonly AuthorityInformationAccess[] {
 	const sequenceElement = requireElement(
 		readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH }),
@@ -2049,7 +2049,7 @@ export function parseAuthorityInfoAccess(bytes: Uint8Array): readonly AuthorityI
 	});
 }
 
-/** @internal Decode the CRL Distribution Points extension value. */
+/** Decodes the CRL Distribution Points extension value. */
 export function parseCrlDistributionPoints(bytes: Uint8Array): readonly ParsedDistributionPoint[] {
 	const sequenceElement = requireElement(
 		readRootElement(bytes, { maxDepth: DEFAULT_MAX_DER_DEPTH }),
@@ -2150,7 +2150,7 @@ function parseDistributionPointName(
 	throw new Error(`Unsupported distributionPointName tag: ${distributionPointName.tag}`);
 }
 
-/** @internal Decode the Name Constraints extension value. */
+/** Decodes the Name Constraints extension value. */
 export function parseNameConstraints(bytes: Uint8Array): NameConstraints<ParsedNameConstraintForm> {
 	const sequenceElement = requireElement(
 		readRootElement(bytes, {
@@ -2315,7 +2315,6 @@ function decodeBmpString(bytes: Uint8Array): string {
 	return value;
 }
 
-/** @internal Decode the Authority Key Identifier extension, returning the keyIdentifier hex or undefined. */
 interface MutableAuthorityKeyIdentifierState {
 	keyIdentifier?: string;
 	sawAuthorityCertIssuer: boolean;
@@ -2323,6 +2322,7 @@ interface MutableAuthorityKeyIdentifierState {
 	lastFieldOrder: number;
 }
 
+/** Decodes the Authority Key Identifier extension, returning the keyIdentifier hex or undefined. */
 export function parseAuthorityKeyIdentifier(bytes: Uint8Array): string | undefined {
 	const sequenceElement = requireElement(readElement(bytes, 0), 'authorityKeyIdentifier sequence');
 	if (sequenceElement.end !== bytes.length) {

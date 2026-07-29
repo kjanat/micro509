@@ -40,6 +40,28 @@ describe('verify domain', () => {
 		});
 	});
 
+	describe('isSelfIssuedCertificate', () => {
+		it('is true for a self-signed leaf and false for an issued one', async () => {
+			const ca = await createSelfSignedCertificate({
+				subject: { commonName: 'Self CA' },
+				extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign'] },
+			});
+			const leafKeys = await generateKeyPair();
+			const leaf = await createCertificate({
+				issuer: { commonName: 'Self CA' },
+				subject: { commonName: 'issued.example' },
+				publicKey: leafKeys.publicKey,
+				signerPrivateKey: ca.keyPair.privateKey,
+				issuerPublicKey: ca.keyPair.publicKey,
+			});
+
+			expect(verify.isSelfIssuedCertificate(unwrap(parseCertificatePem(ca.certificate.pem)))).toBe(
+				true,
+			);
+			expect(verify.isSelfIssuedCertificate(unwrap(parseCertificatePem(leaf.pem)))).toBe(false);
+		});
+	});
+
 	describe('matchServiceIdentity', () => {
 		it('matches a dns SAN against the same hostname', async () => {
 			const { certificate } = await createSelfSignedCertificate({

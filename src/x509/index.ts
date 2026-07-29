@@ -61,8 +61,11 @@ export type {
 	UserNoticePolicyQualifierInfo,
 } from '#micro509/x509/extensions';
 export {
+	allOnesMaskForIpAddress,
 	buildCertificateExtensions,
 	buildRequestedExtensions,
+	buildSubjectKeyIdentifier as subjectKeyIdentifier,
+	decodeIpAddress,
 	encodeAuthorityInfoAccess,
 	encodeBasicConstraints,
 	encodeCertificatePolicies,
@@ -77,8 +80,10 @@ export {
 	encodeSubjectAltName,
 	getAuthorityInfoAccessMethodOid,
 	getExtendedKeyUsageOid,
+	normalizeIpAddress,
 	parseAuthorityInfoAccessMethodOid,
 	parseExtendedKeyUsageOid,
+	parseIpAddressToBytes,
 } from '#micro509/x509/extensions';
 export type {
 	CertificateFingerprint,
@@ -95,7 +100,13 @@ export type {
 	NameObject,
 	RelativeDistinguishedNameInput,
 } from '#micro509/x509/name';
-export { encodeName, encodeRelativeDistinguishedName } from '#micro509/x509/name';
+export {
+	canonicalDnKey,
+	compareDistinguishedNames,
+	encodeName,
+	encodeRelativeDistinguishedName,
+	isWithinDirectoryNameSubtree,
+} from '#micro509/x509/name';
 export type { SubjectAltNameTextOptions } from '#micro509/x509/name-text';
 export {
 	distinguishedNameToString,
@@ -143,14 +154,29 @@ export {
 	getSubjectPublicKey,
 	getSubjectPublicKeyOrThrow,
 	matchCertificatePrivateKey,
+	parseAuthorityInfoAccess as decodeAuthorityInfoAccess,
+	parseAuthorityKeyIdentifier as decodeAuthorityKeyIdentifier,
+	parseBasicConstraints as decodeBasicConstraints,
 	parseCertificateChainPem,
 	parseCertificateChainPemOrThrow,
 	parseCertificateDer,
 	parseCertificateDerOrThrow,
+	parseCertificateFromSource,
 	parseCertificatePem,
 	parseCertificatePemOrThrow,
+	parseCertificatePolicies as decodeCertificatePolicies,
 	parseCertificateSigningRequestDer,
 	parseCertificateSigningRequestDerOrThrow,
 	parseCertificateSigningRequestPem,
 	parseCertificateSigningRequestPemOrThrow,
+	parseCertificatesFromSource,
+	parseCrlDistributionPoints as decodeCrlDistributionPoints,
+	parseDistinguishedNameDer,
+	parseExtendedKeyUsage as decodeExtendedKeyUsage,
+	parseInhibitAnyPolicy as decodeInhibitAnyPolicy,
+	parseKeyUsage as decodeKeyUsage,
+	parseNameConstraints as decodeNameConstraints,
+	parsePolicyConstraints as decodePolicyConstraints,
+	parsePolicyMappings as decodePolicyMappings,
+	parseSubjectAltNames as decodeSubjectAltNames,
 } from '#micro509/x509/parse';

@@ -44,6 +44,7 @@ import {
 	importSpkiBase64,
 	importSpkiDer,
 	importSpkiPem,
+	inspectEncryptedPkcs8Der,
 	pemEncode,
 	unwrap,
 } from '#micro509';
@@ -205,6 +206,26 @@ describe('keys', () => {
 			importEncryptedPkcs8Pem(pem, 'wrong', { kind: 'rsa' }),
 			'invalid_password',
 			'Invalid password or encrypted content',
+		);
+	});
+
+	it('inspectEncryptedPkcs8Der reads PBES2 parameters without the password', async () => {
+		const keyPair = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
+		const der = await exportEncryptedPkcs8Der(keyPair.privateKey, {
+			password: 'secret123',
+			iterations: 2_048,
+			cipher: 'AES-128-CBC',
+			prf: 'HMAC-SHA-1',
+		});
+		const parameters = inspectEncryptedPkcs8Der(der);
+
+		expect(parameters.iterations).toBe(2_048);
+		expect(parameters.cipher).toBe('AES-128-CBC');
+		expect(parameters.prf).toBe('HMAC-SHA-1');
+		expect(parameters.salt.length).toBeGreaterThanOrEqual(8);
+		expect(parameters.iv).toHaveLength(16);
+		expect(() => inspectEncryptedPkcs8Der(Uint8Array.of(0x30, 0x00))).toThrow(
+			'Malformed EncryptedPrivateKeyInfo',
 		);
 	});
 

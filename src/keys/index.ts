@@ -28,6 +28,10 @@ export type {
 	KeyAlgorithmInput,
 	KeyPairMaterial,
 	LegacyPemEncryptionOptions,
+	Pbes2EncryptionOptions,
+	Pbes2EncryptionScheme,
+	Pbes2Parameters,
+	Pbes2Prf,
 	PrivateKeyImportInput,
 	PublicKeyImportInput,
 	RsaHash,
@@ -90,4 +94,6 @@ export {
 	importSpkiDerOrThrow,
 	importSpkiPem,
 	importSpkiPemOrThrow,
+	inspectEncryptedPkcs8Der,
+	parsePbes2AlgorithmIdentifier,
 } from '#micro509/keys/keys';

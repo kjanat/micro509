@@ -6,8 +6,8 @@ Public domain entrypoints are one-level buckets, implementation details stay in
 ## OVERVIEW
 
 `src/` is the library boundary. High-level workflow ownership is in domain
-barrels under `x509`, `verify`, `revocation`, `keys`, `pem`, `pkcs`, and
-`result`.
+barrels under `x509`, `verify`, `revocation`, `keys`, `crypto`, `pem`, `pkcs`,
+and `result`.
 
 ## WHERE TO LOOK
 
@@ -16,6 +16,7 @@ barrels under `x509`, `verify`, `revocation`, `keys`, `pem`, `pkcs`, and
 | Package root       | `index.ts`                        | all stable package exports                            |
 | Domain entrypoints | `x509/`, `verify/`, `revocation/` | re-export-only in most cases                          |
 | Key APIs           | `keys/`                           | import/export, generation, encryption options         |
+| Crypto primitives  | `crypto/`                         | detached sign/verify, ECDSA signature encoding        |
 | PEM boundary       | `pem/`                            | encode/decode, block classification, RFC 1421 headers |
 | PKCS workflows     | `pkcs/`                           | PFX and PKCS#7 data lifecycles                        |
 | Result model       | `result/`                         | shared typed `Result` and error constructors          |

@@ -7,6 +7,7 @@ import pkg from '#pkg' with { type: 'json' };
 
 export const entries = {
 	index: 'src/index.ts',
+	crypto: 'src/crypto/index.ts',
 	der: 'src/der/index.ts',
 	keys: 'src/keys/index.ts',
 	pem: 'src/pem/index.ts',

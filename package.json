@@ -19,6 +19,7 @@
 	"imports": {
 		"#micro509": "./src/index.ts",
 		"#micro509/*": "./src/*.ts",
+		"#micro509/crypto": "./src/crypto/index.ts",
 		"#micro509/der": "./src/der/index.ts",
 		"#micro509/keys": "./src/keys/index.ts",
 		"#micro509/pem": "./src/pem/index.ts",
@@ -40,6 +41,10 @@
 		".": {
 			"types": "./dist/index.d.ts",
 			"default": "./dist/index.js"
+		},
+		"./crypto": {
+			"types": "./dist/crypto.d.ts",
+			"default": "./dist/crypto.js"
 		},
 		"./der": {
 			"types": "./dist/der.d.ts",

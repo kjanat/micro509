@@ -76,8 +76,9 @@ in a single zero-dependency JS package:
 - **PFX / PKCS#12** — create and parse password-protected key+cert bundles
 - **PKCS#7 / CMS** — sign content, parse and verify SignedData with each signer's certificate resolved, extract cert bags
 - **CRLs** — create, parse, verify, and check revocation status
-- **Encrypted keys** — PBES2 PKCS#8, legacy OpenSSL encrypted PEM, PKCS#1, SEC1
+- **Encrypted keys** — PBES2 PKCS#8, legacy OpenSSL encrypted PEM, PKCS#1, SEC1, parameter inspection without the password
 - **Key import/export** — PKCS#8, SPKI, JWK, PKCS#1, SEC1 with generation for RSA, ECDSA, Ed25519
+- **Detached signatures** — sign and verify raw bytes, ECDSA DER/raw signature conversion
 - **Service identity** — wildcard DNS, IPv6 normalization, URI-ID, SRV-ID, explicit CN opt-in
 
 Narrow defaults, explicit escape hatches — dangerous operations like CN
@@ -219,6 +220,7 @@ import { parseCertificatePem } from 'micro509/x509';
 import { verifyCertificateChain, matchServiceIdentity } from 'micro509/verify';
 import { createOcspRequest, checkCertificateRevocation } from 'micro509/revocation';
 import { createPfx } from 'micro509/pkcs';
+import { signData, verifySignature } from 'micro509/crypto';
 import { generateKeyPair } from 'micro509/keys';
 import { pemDecode, pemEncode } from 'micro509/pem';
 import type { Micro509Error } from 'micro509/result';

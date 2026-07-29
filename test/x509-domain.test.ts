@@ -208,4 +208,91 @@ describe('x509 domain', () => {
 		expect(der.byteLength).toBeGreaterThan(0);
 		expect(der[0]).toBe(0x30); // SEQUENCE tag
 	});
+
+	it('decode* extension decoders invert the raw extension values of a real certificate', async () => {
+		const { certificate } = await x509.createSelfSignedCertificate({
+			subject: { commonName: 'decoder.example' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 1 },
+				keyUsage: ['digitalSignature', 'keyCertSign'],
+				extendedKeyUsage: ['serverAuth'],
+				subjectAltNames: [{ type: 'dns', value: 'decoder.example' }],
+			},
+		});
+		const parsed = unwrap(x509.parseCertificatePem(certificate.pem));
+		const extensionValue = (oid: string): Uint8Array => {
+			const extension = x509.findExtension(parsed.extensions, oid);
+			if (extension === undefined) throw new Error(`missing extension ${oid}`);
+			return extension.valueDer;
+		};
+
+		expect(x509.decodeBasicConstraints(extensionValue('2.5.29.19'))).toEqual({
+			ca: true,
+			pathLength: 1,
+		});
+		expect(x509.decodeKeyUsage(extensionValue('2.5.29.15')).flags).toEqual(
+			parsed.keyUsage === undefined ? [] : parsed.keyUsage.flags,
+		);
+		expect(x509.decodeExtendedKeyUsage(extensionValue('2.5.29.37'))).toEqual(['serverAuth']);
+		expect(x509.decodeSubjectAltNames(extensionValue('2.5.29.17'))).toEqual([
+			{ type: 'dns', value: 'decoder.example' },
+		]);
+	});
+
+	it('compareDistinguishedNames and canonicalDnKey treat a self-issued pair as equal', async () => {
+		const { certificate } = await x509.createSelfSignedCertificate({
+			subject: { commonName: 'dn.example', organization: 'Org' },
+		});
+		const parsed = unwrap(x509.parseCertificatePem(certificate.pem));
+
+		expect(x509.compareDistinguishedNames(parsed.subject, parsed.issuer)).toBe(true);
+		expect(x509.canonicalDnKey(parsed.subject)).toBe(x509.canonicalDnKey(parsed.issuer));
+		expect(x509.isWithinDirectoryNameSubtree(parsed.subject, parsed.issuer)).toBe(true);
+	});
+
+	it('parseDistinguishedNameDer inverts encodeName', () => {
+		const der = x509.encodeName({ commonName: 'name.example', country: 'NL' });
+		const parsed = x509.parseDistinguishedNameDer(der);
+
+		expect(parsed.values.commonName).toBe('name.example');
+		expect(parsed.values.country).toBe('NL');
+	});
+
+	it('parseCertificateFromSource accepts PEM, DER, and already-parsed input', async () => {
+		const { certificate } = await x509.createSelfSignedCertificate({
+			subject: { commonName: 'source.example' },
+		});
+		const fromPem = x509.parseCertificateFromSource(certificate.pem);
+		const fromDer = x509.parseCertificateFromSource(certificate.der);
+		const fromParsed = x509.parseCertificateFromSource(fromPem);
+
+		expect(fromDer.serialNumberHex).toBe(fromPem.serialNumberHex);
+		expect(fromParsed).toBe(fromPem);
+		expect(x509.parseCertificatesFromSource(`${certificate.pem}\n${certificate.pem}`)).toHaveLength(
+			2,
+		);
+	});
+
+	it('subjectKeyIdentifier computes the RFC 5280 method-1 value the builder embedded', async () => {
+		const { certificate } = await x509.createSelfSignedCertificate({
+			subject: { commonName: 'ski.example' },
+		});
+		const parsed = unwrap(x509.parseCertificatePem(certificate.pem));
+		const embedded = parsed.subjectKeyIdentifier;
+		if (embedded === undefined) throw new Error('expected an embedded SKI');
+		const computed = x509.subjectKeyIdentifier(parsed.subjectPublicKeyInfoDer);
+		const hex = Array.from(computed, (byte) => byte.toString(16).padStart(2, '0')).join('');
+
+		expect(computed).toHaveLength(20);
+		expect(hex).toBe(embedded);
+	});
+
+	it('IP helpers parse, mask, decode, and normalize both address families', () => {
+		expect(Array.from(x509.parseIpAddressToBytes('127.0.0.1'))).toEqual([127, 0, 0, 1]);
+		expect(x509.parseIpAddressToBytes('2001:db8::1')).toHaveLength(16);
+		expect(Array.from(x509.allOnesMaskForIpAddress('127.0.0.1'))).toEqual([255, 255, 255, 255]);
+		expect(x509.decodeIpAddress(Uint8Array.of(127, 0, 0, 1))).toBe('127.0.0.1');
+		expect(x509.normalizeIpAddress('::1')).toBe('0000:0000:0000:0000:0000:0000:0000:0001');
+		expect(x509.normalizeIpAddress('::1')).toBe(x509.normalizeIpAddress('0:0:0:0:0:0:0:1'));
+	});
 });

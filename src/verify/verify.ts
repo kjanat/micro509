@@ -1874,3 +1874,5 @@ function invalidInitialNameConstraintsFailure(actual: string): VerifyChainFailur
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null;
 }
+
+export { isSelfIssued as isSelfIssuedCertificate } from '#micro509/internal/verify/verify-path';
