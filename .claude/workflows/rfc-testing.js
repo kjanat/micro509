@@ -25,6 +25,19 @@ const REPORT = {
   },
 }
 
+const HEADINGS = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['headings'],
+  properties: {
+    headings: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'Every heading of the document in order, each as "<number>. <title>"',
+    },
+  },
+}
+
 // Workflow scripts run sandboxed: no import(), no Bun, no process, and
 // `import.meta` is a syntax error. Anything from the host comes in through args,
 // which the harness hands over as a JSON string rather than the object passed.
@@ -119,6 +132,33 @@ Return the structured report.
 `
 }
 
+function headingsPrompt(rfcNumber) {
+	return `\
+Read docs/rfc/rfc${rfcNumber}.txt end to end and return every heading it prints, in document order.
+
+Headings look like "2.  General Considerations", "5.1.  Encoding", "Appendix A.  Title". A long title wraps onto the following line; join it into one. Include subsection headings, appendices, and unnumbered back matter such as "Acknowledgments" and "Authors' Addresses".
+Do not include the running page header that repeats the document title on every page, and do not include table-of-contents lines: take the headings from the body.
+
+Return each as "<number>. <title>" (a single space after the number's trailing dot), or the unnumbered title as printed. Nothing else.
+`
+}
+
+/** The heading list, or `undefined` when the reader failed. */
+async function readHeadings(rfcNumber, phase) {
+  const result = await agent(headingsPrompt(rfcNumber), {
+    label: `${rfcNumber}: read headings`,
+    phase,
+    schema: HEADINGS,
+  })
+  const headings = result?.headings?.filter((heading) => typeof heading === 'string' && heading !== '')
+  return headings !== undefined && headings.length > 0 ? headings : undefined
+}
+
+// The controller drives the order rather than the baton. A leg reporting an
+// early `nextHeading: null` used to finish a lane and silently drop every
+// heading after it, which is how RFC 8410 13.1 and 13.2 went unworked. The
+// baton is now a cross-check: a disagreement is logged, and the plan wins.
+//
 // Seeding beats resumeFromRunId here. Each leg's prompt embeds the accumulated
 // `done` list, so a cached replay that rebuilds that list in a different order
 // changes the key and every later leg misses. Pass `start` and `alreadyDone` to
@@ -127,14 +167,36 @@ async function relay({ number: rfcNumber, testFile, start, done: alreadyDone }, 
   const phase = `RFC ${rfcNumber}`
   const done = [...alreadyDone]
   const reports = []
-  let assignment =
-    start ?? `the FIRST heading in the document. Find it yourself in docs/rfc/rfc${rfcNumber}.txt.`
-  // A lane ends by dropping the baton. Everything else is a stop mid-document,
-  // and the caller is told which, since partial coverage otherwise reads as a
-  // finished RFC.
-  let unfinished = `lane never ran`
+  const headings = await readHeadings(rfcNumber, phase)
 
-  for (let guard = 0; guard < MAX_LEGS; guard++) {
+  // Without the list the lane still runs, on the agent's baton alone, and says
+  // so: that is the mode this whole plan exists to stop trusting silently.
+  const startIndex = headings === undefined || start === undefined ? 0 : headings.indexOf(start)
+  if (headings !== undefined && start !== undefined && startIndex < 0) {
+    log(`${rfcNumber}: seeded start "${start}" is not a heading of the document`)
+    return { rfcNumber, reports, unfinished: `seeded start "${start}" is not in the document` }
+  }
+  const plan =
+    headings === undefined
+      ? undefined
+      : headings.slice(startIndex).filter((heading) => !done.includes(heading))
+  if (plan === undefined) {
+    log(`${rfcNumber}: heading list unavailable, falling back to the agent's baton`)
+  } else {
+    log(`${rfcNumber}: ${plan.length} headings to work of ${headings.length} in the document`)
+  }
+
+  let assignment =
+    plan?.[0] ??
+    start ??
+    `the FIRST heading in the document. Find it yourself in docs/rfc/rfc${rfcNumber}.txt.`
+  // A lane ends by running out of headings. Everything else is a stop
+  // mid-document, and the caller is told which, since partial coverage
+  // otherwise reads as a finished RFC.
+  let unfinished = plan?.length === 0 ? undefined : `lane never ran`
+  let planned = 0
+
+  for (let guard = 0; guard < MAX_LEGS && unfinished !== undefined; guard++) {
     const report = await agent(prompt(rfcNumber, testFile, assignment, done, laneCount), {
       label: `${rfcNumber}: ${String(assignment).slice(0, 40)}`,
       phase,
@@ -149,6 +211,24 @@ async function relay({ number: rfcNumber, testFile, start, done: alreadyDone }, 
     reports.push(report)
     done.push(report.heading)
     log(`${rfcNumber} ${report.heading} -> ${report.status}${report.srcChanges.length > 0 ? ` (${report.srcChanges.length} src fix)` : ''}`)
+
+    if (plan !== undefined) {
+      if (report.heading !== assignment) {
+        log(`${rfcNumber}: leg was given "${assignment}" and reported "${report.heading}"`)
+      }
+      planned += 1
+      const next = plan[planned]
+      if (next === undefined) {
+        unfinished = undefined
+        log(`${rfcNumber}: every planned heading worked, ${planned} legs run`)
+        break
+      }
+      if (report.nextHeading !== next) {
+        log(`${rfcNumber}: baton said "${report.nextHeading}", the document says "${next}"`)
+      }
+      assignment = next
+      continue
+    }
 
     if (report.nextHeading === null) {
       unfinished = undefined
