@@ -70,11 +70,11 @@ code:    ${e.code}
 message: ${e.message}
 details: ${det}`);
 }
-// result.error.code is a union of 21 codes, e.g.:
+// result.error.code is a typed union, e.g.:
 //   'signature_invalid'
 //   'certificate_expired'
 //   'name_constraints_violated'
-//   ... (18 more)
+//   ... (the verification guide tables every code)
 // result.error.index: which cert in the chain
 //   failed
 // result.error.details: { expected, actual }
@@ -87,15 +87,16 @@ details: ${det}`);
 
 micro509 covers PKI surface that's hard to find in a single zero-dependency JS package:
 
-| Area              | Capabilities                                                                 |
-| ----------------- | ---------------------------------------------------------------------------- |
-| OCSP              | Build requests, parse and validate responses, verify responder authorization |
-| PFX / PKCS#12     | Create and parse password-protected key+cert bundles                         |
-| PKCS#7 / CMS      | Sign content, parse and verify SignedData, extract cert bags                 |
-| CRLs              | Create, parse, verify, and check revocation status                           |
-| Encrypted keys    | PBES2 PKCS#8, legacy OpenSSL encrypted PEM, PKCS#1, SEC1                     |
-| Key import/export | PKCS#8, SPKI, JWK, PKCS#1, SEC1 with generation for RSA, ECDSA, Ed25519      |
-| Service identity  | Wildcard DNS, IPv6 normalization, URI-ID, SRV-ID, explicit CN opt-in         |
+| Area                | Capabilities                                                                                         |
+| ------------------- | ---------------------------------------------------------------------------------------------------- |
+| OCSP                | Build requests, parse and validate responses, verify responder authorization                         |
+| PFX / PKCS#12       | Create and parse password-protected key+cert bundles                                                 |
+| PKCS#7 / CMS        | Sign content, parse and verify SignedData with each signer's certificate resolved, extract cert bags |
+| CRLs                | Create, parse, verify, and check revocation status                                                   |
+| Encrypted keys      | PBES2 PKCS#8, legacy OpenSSL encrypted PEM, PKCS#1, SEC1, parameter inspection without the password  |
+| Key import/export   | PKCS#8, SPKI, JWK, PKCS#1, SEC1 with generation for RSA, ECDSA, Ed25519                              |
+| Detached signatures | Sign and verify raw bytes, ECDSA DER/raw signature conversion                                        |
+| Service identity    | Wildcard DNS, IPv6 normalization, URI-ID, SRV-ID, explicit CN opt-in                                 |
 
 ## Design principles
 

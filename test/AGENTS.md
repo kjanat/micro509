@@ -21,19 +21,20 @@ test/
 
 ## WHERE TO LOOK
 
-| Task                      | File                                                       | Notes                                             |
-| ------------------------- | ---------------------------------------------------------- | ------------------------------------------------- |
-| Shared helpers            | `helpers.ts`                                               | common DER helpers and synthetic builders         |
-| Chain validation coverage | `verify.test.ts`                                           | largest spec-like suite                           |
-| CRL coverage              | `crl.test.ts`, `revocation.test.ts`                        | direct CRL semantics and orchestration            |
-| OCSP coverage             | `ocsp.test.ts`, `ocsp-fixtures.test.ts`                    | parser/validator plus focused fixtures            |
-| PKCS coverage             | `pkcs7.test.ts`, `pkcs7-signeddata.test.ts`, `pfx.test.ts` | SignedData lifecycle, signer pairing, PFX bundles |
-| Identity coverage         | `identity.test.ts`, `identity-fixtures.test.ts`            | RFC 9525 semantics and fixture corpus             |
-| Parse hardening           | `parse.test.ts`, `malformed-der.test.ts`                   | malformed input and parser boundaries             |
-| Differential interop      | `differential.test.ts`                                     | compares normalized results to OpenSSL            |
-| PKITS subset              | `pkits.test.ts`                                            | fixed-time conformance subset                     |
-| Internal-only checks      | `internals.test.ts`                                        | safe place for `#micro509/*` internals            |
-| Per-RFC conformance       | `rfc/*.test.ts`                                            | describes mirror RFC sections                     |
+| Task                      | File                                                       | Notes                                                |
+| ------------------------- | ---------------------------------------------------------- | ---------------------------------------------------- |
+| Shared helpers            | `helpers.ts`                                               | common DER helpers and synthetic builders            |
+| Chain validation coverage | `verify.test.ts`                                           | largest spec-like suite                              |
+| CRL coverage              | `crl.test.ts`, `revocation.test.ts`                        | direct CRL semantics and orchestration               |
+| OCSP coverage             | `ocsp.test.ts`, `ocsp-fixtures.test.ts`                    | parser/validator plus focused fixtures               |
+| PKCS coverage             | `pkcs7.test.ts`, `pkcs7-signeddata.test.ts`, `pfx.test.ts` | SignedData lifecycle, signer pairing, PFX bundles    |
+| Docs example execution    | `guide-examples.test.ts`                                   | every site guide LiveCode block runs as a subprocess |
+| Identity coverage         | `identity.test.ts`, `identity-fixtures.test.ts`            | RFC 9525 semantics and fixture corpus                |
+| Parse hardening           | `parse.test.ts`, `malformed-der.test.ts`                   | malformed input and parser boundaries                |
+| Differential interop      | `differential.test.ts`                                     | compares normalized results to OpenSSL               |
+| PKITS subset              | `pkits.test.ts`                                            | fixed-time conformance subset                        |
+| Internal-only checks      | `internals.test.ts`                                        | safe place for `#micro509/*` internals               |
+| Per-RFC conformance       | `rfc/*.test.ts`                                            | describes mirror RFC sections                        |
 
 ## LOCAL CONVENTIONS
 

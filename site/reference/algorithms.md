@@ -2,14 +2,18 @@
 
 ## Signature algorithms
 
-| Algorithm       | Certificate / CSR signing | Chain verification |
-| --------------- | :-----------------------: | :----------------: |
-| RSA PKCS#1 v1.5 |            yes            |        yes         |
-| RSA‑PSS         |            yes            |        yes         |
-| ECDSA P‑256     |            yes            |        yes         |
-| ECDSA P‑384     |            yes            |        yes         |
-| ECDSA P‑521     |            yes            |        yes         |
-| Ed25519         |            yes            |        yes         |
+The same set signs and verifies everywhere a signature appears: certificates,
+CSRs, CRLs, OCSP requests and responses, PKCS#7 SignedData, and detached
+signatures through `micro509/crypto` (`signData` / `verifySignature`).
+
+| Algorithm       | Signing | Verification |
+| --------------- | :-----: | :----------: |
+| RSA PKCS#1 v1.5 |   yes   |     yes      |
+| RSA‑PSS         |   yes   |     yes      |
+| ECDSA P‑256     |   yes   |     yes      |
+| ECDSA P‑384     |   yes   |     yes      |
+| ECDSA P‑521     |   yes   |     yes      |
+| Ed25519         |   yes   |     yes      |
 
 ## Key formats
 
@@ -23,20 +27,21 @@
 
 ## Encryption
 
-| Context              | Schemes                                              |
-| -------------------- | ---------------------------------------------------- |
-| Encrypted PKCS#8     | PBES2 with AES‑CBC + PBKDF2 HMAC‑SHA1 or HMAC‑SHA256 |
-| Encrypted PFX        | PBES2 with AES‑CBC + PBKDF2 HMAC‑SHA1 or HMAC‑SHA256 |
-| Legacy encrypted PEM | AES‑128‑CBC, AES‑192‑CBC, AES‑256‑CBC                |
-| PKCS#12 MAC          | PKCS#12 KDF + HMAC‑SHA‑256                           |
+| Context              | Schemes                                                        |
+| -------------------- | -------------------------------------------------------------- |
+| Encrypted PKCS#8     | PBES2 with AES‑CBC + PBKDF2 HMAC‑SHA1 or HMAC‑SHA256           |
+| Encrypted PFX        | PBES2 with AES‑CBC + PBKDF2 HMAC‑SHA1 or HMAC‑SHA256           |
+| Legacy encrypted PEM | AES‑128‑CBC, AES‑192‑CBC, AES‑256‑CBC                          |
+| PKCS#12 MAC          | PKCS#12 KDF + HMAC‑SHA‑256                                     |
+| RSA‑OAEP             | key encapsulation with SHA‑256/384/512 keys and optional label |
 
 ## Not supported
 
 micro509 does not try to mirror every primitive some WebCrypto runtimes expose:
 
 - DSA
-- Ed448
-- RSA-OAEP
-- ECDH / X25519 / X448
+- Ed448, X25519, X448 key operations. Certificates carrying them still parse,
+  and RFC 9295 key-usage rules are enforced for all four safe-curve OIDs
+- ECDH and other key agreement
 - Generic symmetric-crypto APIs
 - Brainpool curves

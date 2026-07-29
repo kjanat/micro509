@@ -82,7 +82,9 @@ At index: ${result.error.index}`);
 
 Four built-in validation profiles. `serverAuth`,
 `clientAuth`, and `ca` are passed as `purpose` to
-`verifyCertificateChain`; code signing has its own
+`verifyCertificateChain`, or through the equivalent
+`validateForTlsServer`, `validateForTlsClient`, and
+`validateForCa` wrappers; code signing has its own
 `validateForCodeSigning` profile:
 
 <LiveCode>
@@ -315,6 +317,82 @@ PEM line: ${csr.pem.split('\n')[1]?.slice(0, 44)}…`);
 } else {
   console.log('CSR invalid:', result.error.code);
 }
+```
+
+</LiveCode>
+
+## Detached signatures
+
+`micro509/crypto` signs and verifies raw bytes when there is no X.509 or
+CMS structure around the signature: a timestamp token, a code-signing
+blob, a hand-built TBS. `signData` infers the algorithm from the key and
+returns the signature beside its `AlgorithmIdentifier` material;
+`verifySignature` checks it against the signer's SubjectPublicKeyInfo,
+retrying the alternate DER/raw ECDSA encoding when needed.
+
+<LiveCode>
+
+```ts
+import {
+  ecdsaSignatureDerToRaw,
+  ecdsaSignatureRawToDer,
+  signData,
+  verifySignature,
+} from 'micro509/crypto';
+import {
+  createSelfSignedCertificate,
+  parseCertificatePem,
+  unwrap,
+} from 'micro509';
+
+const { certificate, keyPair } =
+  await createSelfSignedCertificate({
+    subject: { commonName: 'signer.example' },
+    algorithm: { kind: 'ecdsa', curve: 'P-256' },
+  });
+const parsed = unwrap(parseCertificatePem(certificate.pem));
+
+const data = new TextEncoder().encode('release-v1.tar.gz');
+const signed = await signData(keyPair.privateKey, data);
+
+const result = await verifySignature({
+  signerSpkiDer: parsed.subjectPublicKeyInfoDer,
+  signatureAlgorithm: { oid: signed.algorithmOid },
+  publicKeyAlgorithm: {
+    oid: parsed.publicKeyAlgorithmOid,
+    parametersOid: parsed.publicKeyParametersOid,
+  },
+  signature: signed.signature,
+  data,
+});
+
+const tampered = await verifySignature({
+  signerSpkiDer: parsed.subjectPublicKeyInfoDer,
+  signatureAlgorithm: { oid: signed.algorithmOid },
+  publicKeyAlgorithm: {
+    oid: parsed.publicKeyAlgorithmOid,
+    parametersOid: parsed.publicKeyParametersOid,
+  },
+  signature: signed.signature,
+  data: new TextEncoder().encode('release-v2.tar.gz'),
+});
+
+// ECDSA signatures convert between the DER encoding
+// X.509/CMS embed and the raw r||s form WebCrypto and
+// JOSE use, bridging an HSM or JWS signature into a
+// PKIX structure, or the other way around.
+const raw = ecdsaSignatureDerToRaw(
+  signed.signature,
+  'P-256',
+);
+const der = ecdsaSignatureRawToDer(raw, 'P-256');
+
+console.log(`\
+algorithm: ${signed.algorithmOid}
+valid:     ${result.ok && result.valid}
+tampered:  ${tampered.ok && tampered.valid}
+raw r||s:  ${raw.length} bytes
+DER again: ${der.length} bytes`);
 ```
 
 </LiveCode>

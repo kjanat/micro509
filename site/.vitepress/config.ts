@@ -265,7 +265,10 @@ function versionPrefixOfPath(pathname: string): string {
 const ORDER: SidebarOrder = {
 	guide: [
 		{ text: 'Introduction', slugs: ['getting-started', 'why'] },
-		{ text: 'Workflows', slugs: ['certificates', 'verification', 'keys', 'revocation', 'pkcs'] },
+		{
+			text: 'Workflows',
+			slugs: ['certificates', 'verification', 'keys', 'revocation', 'pkcs', 'extensions'],
+		},
 	],
 	reference: [
 		{

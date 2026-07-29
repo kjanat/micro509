@@ -30,6 +30,11 @@ console.log(await keyPair.exportPkcs8Pem());
 
 </LiveCode>
 
+With no key input, a fresh ECDSA P-256 pair is generated. Pass
+`algorithm: { kind: 'ed25519' }` (or `'rsa'`, or another curve) to pick the
+key type, or `keyPair` to reuse keys you already hold. The two are mutually
+exclusive by type.
+
 ## Create a CA-signed certificate
 
 <LiveCode>
@@ -158,6 +163,52 @@ sig algo:  ${parsed.signatureAlgorithmName}
 ca:        ${parsed.basicConstraints?.ca ?? false}
 key usage: ${parsed.keyUsage?.flags.join(', ')}
 SANs:      ${sans.join(', ')}`);
+```
+
+</LiveCode>
+
+## Parse a certificate bundle
+
+`parseCertificateChainPem` decodes a PEM bundle (a leaf plus its
+intermediates, a trust store dump) into parsed certificates, skipping
+non-CERTIFICATE blocks such as private keys. When input arrives as "whatever
+the caller had", `parseCertificateFromSource` accepts PEM text, DER bytes, or
+an already-parsed certificate and returns the parsed form, throwing on
+malformed input.
+
+<LiveCode>
+
+```ts
+import {
+  createSelfSignedCertificate,
+  parseCertificateChainPem,
+  parseCertificateFromSource,
+  unwrap,
+} from 'micro509';
+
+const ca = await createSelfSignedCertificate({
+  subject: { commonName: 'Bundle CA' },
+  extensions: {
+    basicConstraints: { ca: true },
+    keyUsage: ['keyCertSign'],
+  },
+});
+const leaf = await createSelfSignedCertificate({
+  subject: { commonName: 'bundle.example' },
+});
+
+// Private keys in the bundle are skipped
+const bundle = `${leaf.certificate.pem}\n${await leaf.keyPair.exportPkcs8Pem()}\n${ca.certificate.pem}`;
+const chain = unwrap(parseCertificateChainPem(bundle));
+
+// PEM, DER, or parsed input give the same answer
+const fromDer = parseCertificateFromSource(
+  leaf.certificate.der,
+);
+
+console.log(`\
+bundle:  ${chain.map((c) => c.subject.values.commonName).join(', ')}
+fromDer: ${fromDer.subject.values.commonName}`);
 ```
 
 </LiveCode>
@@ -362,3 +413,6 @@ SANs:     ${sans.join(', ')}`);
 ```
 
 </LiveCode>
+
+For extensions micro509 has no typed field for, see
+[Custom Extensions & DER](./extensions.md).

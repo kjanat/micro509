@@ -277,6 +277,67 @@ opt-in:  ${selfSigned.ok}
 
 </LiveCode>
 
+## Working with results
+
+Anything that parses untrusted input returns a `Result`: `{ ok: true, value }`
+or `{ ok: false, error }` with a stable machine-readable `error.code`. Builders
+taking developer-supplied config throw instead, and the thrown error carries
+the same kind of code.
+
+<LiveCode>
+
+```ts
+import {
+  createSelfSignedCertificate,
+  parseCertificatePem,
+  unwrap,
+  unwrapOr,
+} from 'micro509';
+import { isResultError } from 'micro509/result';
+
+const { certificate } = await createSelfSignedCertificate({
+  subject: { commonName: 'results.example' },
+});
+
+// Branch on ok for full control...
+const parsed = parseCertificatePem(certificate.pem);
+if (parsed.ok) {
+  console.log(
+    'subject:',
+    parsed.value.subject.values.commonName,
+  );
+}
+
+// ...unwrap() to throw on failure...
+const known = unwrap(parseCertificatePem(certificate.pem));
+
+// ...or unwrapOr() for a fallback value.
+const fallback = unwrapOr(
+  parseCertificatePem('not a pem'),
+  known,
+);
+console.log(
+  'fallback:',
+  fallback.subject.values.commonName,
+);
+
+// An unwrap() throw still carries the typed code.
+try {
+  unwrap(parseCertificatePem('not a pem'));
+} catch (error) {
+  if (isResultError(error)) {
+    console.log('caught code:', error.code);
+  }
+}
+```
+
+</LiveCode>
+
+When wrapping a throwing operation into your own `Result`-returning code,
+`rethrowIfInvariant(error)` keeps the library's discipline: it rethrows
+programmer bugs (`TypeError`, `RangeError`, …) so they are never flattened
+into a "malformed input" failure, and returns for everything else.
+
 ## Imports
 
 Use the root package for most applications:
@@ -302,7 +363,9 @@ import {
   checkCertificateRevocation,
 } from 'micro509/revocation';
 import { createPfx } from 'micro509/pkcs';
+import { signData, verifySignature } from 'micro509/crypto';
 import { generateKeyPair } from 'micro509/keys';
 import { pemDecode, pemEncode } from 'micro509/pem';
+import { readDerRoot, decodeDerOid } from 'micro509/der';
 import type { Micro509Error } from 'micro509/result';
 ```

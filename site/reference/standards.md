@@ -2,12 +2,15 @@
 
 ## Status
 
-| Area                       | Status   | Notes                                                                                                                                                                     |
-| -------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| RFC 5280 path validation   | complete | Full NIST PKITS suite passes (224 procedures, 249 runs; DSA chains expected-fail per the WebCrypto algorithm boundary); revocation is a separate API by design            |
-| RFC 6960 OCSP              | complete | Full validation surface: parsing, signatures, responder authorization, revocation policy, nonce, freshness, chain orchestration; HTTP transport caller-provided by design |
-| RFC 9525 service identity  | complete | Every identity type: DNS-ID, IP-ID, URI-ID, SRV-ID, wildcard, IDNA, opt-in RFC 6125 CN-compat                                                                             |
-| RFC 9618 policy validation | complete | Full PKITS policy sections (4.8–4.12, every documented subtest variation) pass                                                                                            |
+| Area                                  | Status   | Notes                                                                                                                                                                                                                                                         |
+| ------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| RFC 5280 path validation              | complete | Full NIST PKITS suite passes (224 procedures, 249 runs; DSA chains expected-fail per the WebCrypto algorithm boundary); revocation is a separate API by design                                                                                                |
+| RFC 6960 + 9919 OCSP                  | complete | Full validation surface: parsing, signatures, responder authorization, revocation policy, nonce, freshness, chain orchestration; CertID hashing defaults to SHA-256 per RFC 9919 §3.1.1 with explicit SHA-1 interop; HTTP transport caller-provided by design |
+| RFC 9525 service identity             | complete | Every identity type: DNS-ID, IP-ID, URI-ID, SRV-ID, wildcard, IDNA, opt-in RFC 6125 CN-compat                                                                                                                                                                 |
+| RFC 9618 policy validation            | complete | Full PKITS policy sections (4.8–4.12, every documented subtest variation) pass                                                                                                                                                                                |
+| RFC 7468 PEM textual encodings        | complete | Strict generator/parser conformance backed by a section-complete executable suite; non-canonical base64 final quanta rejected per RFC 4648 §3.5; RFC 1421 folded encapsulated headers unfold for legacy traditional PEM                                       |
+| RFC 8410 + 9295 safe-curve profiles   | complete | Ed25519 end-to-end (keys, CSRs, certificates, signatures); Ed448/X25519/X448 parse with RFC 9295 §3 key-usage enforcement, their key operations outside the WebCrypto boundary; section-complete executable suite                                             |
+| PKCS containers: RFC 5652, 7292, 8018 | partial  | SignedData sign/parse/verify with signer resolution and cert bags (RFC 5652 subset); PFX create/parse with PKCS#12 MAC (RFC 7292 subset); PBES2 with PBKDF2 HMAC-SHA-1/256 and AES-CBC (RFC 8018 subset); no enveloped/encrypted CMS content types            |
 
 ## What ships
 

@@ -5,12 +5,15 @@ forward-work backlog for the PKIX-facing surface.
 
 ## Standards status
 
-| Area                       | Status     | Notes                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| -------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| RFC 5280 path validation   | `complete` | core path validation, name constraints across all GeneralName forms (enforce or fail-closed), initial subtree inputs, RFC 9618 policy processing, and malformed-DER coverage ship; validated against the full NIST PKITS suite (224 test procedures, 249 runs incl. documented subtest variations; 4.1.4/4.1.5 DSA chains expected-fail per the WebCrypto algorithm boundary). Revocation is a separate API by design           |
-| RFC 6960 OCSP              | `complete` | the full validation surface ships: request/response parsing, signature checks, responder binding/authorization (incl. local trusted responders, `id-pkix-ocsp-nocheck`, and responder revocation policy), nonce/request matching, freshness checks, full request coverage, and chain-level revocation orchestration with freshest-evidence combination; HTTP transport is caller-provided by design (scope boundary, not a gap) |
-| RFC 9525 service identity  | `complete` | `matchServiceIdentity()` and the verification helpers (`verifyCertificateChain`, `validateForTlsServer`, …) ship every RFC 9525 identity type: DNS-ID, IP-ID, URI-ID, SRV-ID, wildcard, IDNA, and opt-in RFC 6125 CN-compat checks                                                                                                                                                                                              |
-| RFC 9618 policy validation | `complete` | RFC 9618-style policy state, enforcement, and outputs ship; the full PKITS policy sections (4.8–4.12, every documented subtest variation) pass                                                                                                                                                                                                                                                                                  |
+| Area                                  | Status     | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| RFC 5280 path validation              | `complete` | core path validation, name constraints across all GeneralName forms (enforce or fail-closed), initial subtree inputs, RFC 9618 policy processing, and malformed-DER coverage ship; validated against the full NIST PKITS suite (224 test procedures, 249 runs incl. documented subtest variations; 4.1.4/4.1.5 DSA chains expected-fail per the WebCrypto algorithm boundary). Revocation is a separate API by design                                                                                               |
+| RFC 6960 + 9919 OCSP                  | `complete` | the full validation surface ships: request/response parsing, signature checks, responder binding/authorization (incl. local trusted responders, `id-pkix-ocsp-nocheck`, and responder revocation policy), nonce/request matching, freshness checks, full request coverage, and chain-level revocation orchestration with freshest-evidence combination; CertID hashing defaults to SHA-256 per RFC 9919 §3.1.1 with explicit SHA-1 interop; HTTP transport is caller-provided by design (scope boundary, not a gap) |
+| RFC 9525 service identity             | `complete` | `matchServiceIdentity()` and the verification helpers (`verifyCertificateChain`, `validateForTlsServer`, …) ship every RFC 9525 identity type: DNS-ID, IP-ID, URI-ID, SRV-ID, wildcard, IDNA, and opt-in RFC 6125 CN-compat checks                                                                                                                                                                                                                                                                                  |
+| RFC 9618 policy validation            | `complete` | RFC 9618-style policy state, enforcement, and outputs ship; the full PKITS policy sections (4.8–4.12, every documented subtest variation) pass                                                                                                                                                                                                                                                                                                                                                                      |
+| RFC 7468 PEM textual encodings        | `complete` | strict generator/parser conformance: strict-mode encapsulation, label handling, and base64 rules ship, with non-canonical final quanta rejected per RFC 4648 §3.5; RFC 1421 folded encapsulated headers unfold for legacy traditional PEM; section-complete executable suite                                                                                                                                                                                                                                        |
+| RFC 8410 + 9295 safe-curve profiles   | `complete` | Ed25519 end-to-end (key import/export/generation, CSRs, certificates, signature verification); Ed448/X25519/X448 algorithm identifiers and subject keys parse, with RFC 9295 §3 key-usage enforcement for all four OIDs; Ed448/X25519/X448 key operations sit outside the WebCrypto algorithm boundary; section-complete executable suite                                                                                                                                                                           |
+| PKCS containers: RFC 5652, 7292, 8018 | `partial`  | SignedData sign/parse/verify with per-signer certificate resolution and cert bags (RFC 5652 subset; no enveloped/encrypted content types); PFX create/parse with PKCS#12 MAC (RFC 7292 subset); PBES2 with PBKDF2 HMAC-SHA-1/256 and AES-CBC (RFC 8018 subset)                                                                                                                                                                                                                                                      |
 
 Current conformance evidence:
 
@@ -21,16 +24,22 @@ Current conformance evidence:
 - [`test/identity-fixtures.test.ts`](../test/identity-fixtures.test.ts),
 - [`test/revocation.test.ts`](../test/revocation.test.ts),
 - [`test/chain-revocation.test.ts`](../test/chain-revocation.test.ts),
-- [`test/malformed-der.test.ts`](../test/malformed-der.test.ts), and
+- [`test/malformed-der.test.ts`](../test/malformed-der.test.ts),
+- [`test/rfc/rfc7468.test.ts`](../test/rfc/rfc7468.test.ts),
+- [`test/rfc/rfc8410.test.ts`](../test/rfc/rfc8410.test.ts),
+- [`test/pkcs7-signeddata.test.ts`](../test/pkcs7-signeddata.test.ts),
+- [`test/pfx.test.ts`](../test/pfx.test.ts), and
 - [`test/differential.test.ts`](../test/differential.test.ts).
 
 ## 1. Define the boundary up front
 
 - [x] Treat **certification path validation** as a function over a
       **prospective certification path** plus validation inputs, not as
-      “build whatever chain you can find and hope for the best.”\
-       RFC 5280 Section 6.1.1 defines the algorithm in terms of a candidate path
+      “build whatever chain you can find and hope for the best.”
+
+      RFC 5280 Section 6.1.1 defines the algorithm in terms of a candidate path
       and nine inputs. (IETF Datatracker[^rfc5280])
+
 - [x] Keep **path building/discovery** separate from **path validation**.
 - [x] Keep **service identity matching** separate from **path validation**.
 - [x] Keep **revocation** separate from **path validation**.
