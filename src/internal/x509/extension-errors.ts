@@ -27,6 +27,7 @@ export type ExtensionEncoderErrorCode =
 	| 'duplicate_extension_oid'
 	| 'duplicate_policy_oid'
 	| 'edwards_key_usage_forbids_agreement_bit'
+	| 'edwards_key_usage_forbids_key_cert_sign'
 	| 'edwards_key_usage_requires_key_cert_sign'
 	| 'edwards_key_usage_requires_signing_bit'
 	| 'empty_general_name_value'

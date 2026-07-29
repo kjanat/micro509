@@ -24,6 +24,7 @@ import {
 import type { DerElement } from '#micro509/internal/asn1/der';
 import {
 	DEFAULT_MAX_DER_DEPTH,
+	optionalBytesEqual,
 	readElement,
 	readRootElement,
 	readSequenceChildren,
@@ -1695,21 +1696,6 @@ function assertMatchingCertificateSignatureAlgorithms(
 	) {
 		throw new Error('Certificate signatureAlgorithm must match TBSCertificate signature');
 	}
-}
-
-function optionalBytesEqual(left: Uint8Array | undefined, right: Uint8Array | undefined): boolean {
-	if (left === undefined || right === undefined) {
-		return left === right;
-	}
-	if (left.length !== right.length) {
-		return false;
-	}
-	for (let index = 0; index < left.length; index += 1) {
-		if (left[index] !== right[index]) {
-			return false;
-		}
-	}
-	return true;
 }
 
 /** @internal Decode the Basic Constraints extension value DER. */

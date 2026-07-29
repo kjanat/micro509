@@ -687,7 +687,7 @@ async function validateSelfSignedLeafAllowed(
 	if (chainLength !== 1 || !isSelfIssued(leaf) || input.allowSelfSignedLeaf === true)
 		return undefined;
 	const selfSignature = await verifyCertificateSignature(leaf, leaf);
-	if (!selfSignature.ok) return undefined;
+	if (!selfSignature.ok || !selfSignature.valid) return undefined;
 	return failure(
 		'self_signed_leaf_not_allowed',
 		'self-signed leaf not allowed',

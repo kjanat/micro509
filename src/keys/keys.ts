@@ -1717,9 +1717,10 @@ function assertCurvePrivateKey(content: Uint8Array): void {
  *
  * RFC 5958 §2 encodes `attributes [0]` as an IMPLICIT constructed `SET OF`
  * (tag `A0`); RFC 8410 §7 adds `publicKey [1]` as an IMPLICIT primitive
- * `BIT STRING` (tag `81`) after it. Each appears at most once and in that order;
- * unknown later extension additions are tolerated per the type's X.680
- * extensibility marker.
+ * `BIT STRING` (tag `81`) after it. Each appears at most once and in that order.
+ * The type's two X.680 extensibility markers admit later additions, which take
+ * the next context-specific numbers, so `[2]` and above are tolerated and every
+ * other class is malformed.
  */
 function validateOneAsymmetricKeyTail(tail: readonly DerElement[]): Uint8Array | undefined {
 	let seenAttributes = false;
@@ -1738,8 +1739,10 @@ function validateOneAsymmetricKeyTail(tail: readonly DerElement[]): Uint8Array |
 				throw new Error('Malformed PKCS#8 private key');
 			}
 			publicKey = readPublicKeyBitString(child.value);
-		} else {
+		} else if (contextNumber >= 2 && contextNumber <= 30) {
 			seenUnknown = true;
+		} else {
+			throw new Error('Malformed PKCS#8 private key');
 		}
 	}
 	return publicKey;

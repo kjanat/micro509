@@ -61,14 +61,21 @@ import {
 	describePublicKeyAlgorithm,
 	describeSignatureAlgorithm,
 } from '#micro509/internal/crypto/algorithm-names';
-import { isResultError } from '#micro509/result';
 import { buildCertificateExtensions, encodeKeyUsage } from '#micro509/x509';
 import {
+	buildErrorCode,
+	childAt,
+	constructedChildren,
+	expectBuildErrorCode,
 	expectRejectedErrorCode,
+	fieldAt,
 	hexToBytes,
+	littleEndianInteger,
 	replaceCsrSignatureAlgorithm,
 	rfcDir,
 	sliceElement,
+	withAlgorithmOid,
+	withSignatureValue,
 } from '#test/helpers';
 
 const lines = (await Bun.file(`${rfcDir}/rfc8410.txt`).text()).split('\n');
@@ -565,13 +572,6 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 		}
 
 		/** The child at `index` of a SEQUENCE, as its own DER element. */
-		function childAt(der: Uint8Array, index: number): Uint8Array {
-			const child = readSequenceChildren(der)[index];
-			if (child === undefined) {
-				throw new Error(`no child at index ${index}`);
-			}
-			return sliceElement(der, child);
-		}
 
 		/** The 32 octets the Section 7 private key wraps in its `CurvePrivateKey`. */
 		function section7Scalar(): Uint8Array {
@@ -878,16 +878,6 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 		const X448_SPKI = spkiNaming(ID_X448, 56);
 		const ED448_SPKI = spkiNaming(ID_ED448, 57);
 
-		function expectBuildErrorCode(build: () => unknown, code: string): void {
-			try {
-				build();
-			} catch (error) {
-				expect(isResultError(error) ? error.code : undefined).toBe(code);
-				return;
-			}
-			throw new Error(`expected a ResultError with code '${code}', but nothing was thrown`);
-		}
-
 		/** The extnValue octets of the keyUsage extension in a built extension list. */
 		function keyUsageValueOf(extensions: readonly Uint8Array[]): Uint8Array | undefined {
 			for (const extension of extensions) {
@@ -1107,7 +1097,7 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 		it('does not issue an Ed25519 end-entity certificate asserting keyCertSign', async () => {
 			await expectRejectedErrorCode(
 				issue(await ed25519PublicKey(), { keyUsage: ['digitalSignature', 'keyCertSign'] }),
-				'edwards_key_usage_forbids_agreement_bit',
+				'edwards_key_usage_forbids_key_cert_sign',
 			);
 		});
 
@@ -1294,22 +1284,8 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 		const GROUP_ORDER = 2n ** 252n + 27742317777372353535851937790883648493n;
 
 		/** The child at `index` of a SEQUENCE, as its own DER element. */
-		function childAt(der: Uint8Array, index: number): Uint8Array {
-			const child = readSequenceChildren(der)[index];
-			if (child === undefined) {
-				throw new Error(`no child at index ${index}`);
-			}
-			return sliceElement(der, child);
-		}
 
 		/** An octet string read as the little-endian integer RFC 8032 5.1.2 encodes. */
-		function littleEndianInteger(bytes: Uint8Array): bigint {
-			let value = 0n;
-			for (let index = bytes.length - 1; index >= 0; index -= 1) {
-				value = (value << 8n) | BigInt(bytes[index] ?? 0);
-			}
-			return value;
-		}
 
 		/** `value` as `length` octets in little-endian order. */
 		function littleEndianOctets(value: bigint, length: number): Uint8Array {
@@ -1321,13 +1297,6 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 		}
 
 		/** The same Certificate, with its signatureValue field replaced. */
-		function withSignatureValue(der: Uint8Array, signatureValue: Uint8Array): Uint8Array {
-			return sequence(
-				readSequenceChildren(der).map((child, index) =>
-					index === 2 ? signatureValue : sliceElement(der, child),
-				),
-			);
-		}
 
 		/** A path over `certificateDer` anchored on the Section 10.1 Ed25519 key. */
 		function verifyWithSection101Key(
@@ -1361,11 +1330,6 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 		}
 
 		/** The children of a constructed element, whatever its tag, as their own DER elements. */
-		function constructedChildren(der: Uint8Array): Uint8Array[] {
-			const asSequence = new Uint8Array(der);
-			asSequence[0] = 0x30;
-			return readSequenceChildren(asSequence).map((child) => sliceElement(asSequence, child));
-		}
 
 		/**
 		 * The signedAttrs of a SignerInfo under the tag its signature covers.
@@ -1798,13 +1762,6 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 		);
 
 		/** The child at `index` of a SEQUENCE. */
-		function fieldAt(der: Uint8Array, index: number): DerElement {
-			const child = readSequenceChildren(der)[index];
-			if (child === undefined) {
-				throw new Error(`no child at index ${index}`);
-			}
-			return child;
-		}
 
 		/** The `privateKeyAlgorithm` AlgorithmIdentifier as its own DER element. */
 		function algorithmDer(der: Uint8Array): Uint8Array {
@@ -2025,8 +1982,18 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 			// exactly five on both ends, "no more, no less", so this printing of an
 			// otherwise valid key is not a conforming textual encoding.
 			expect(blockAt(410).endsWith('-----END PRIVATE KEY------')).toBe(true);
-			const result = await importPkcs8Pem(blockAt(410), ED25519);
-			expect(result.ok).toBe(false);
+			expect(await importPkcs8Pem(blockAt(410), ED25519)).toMatchObject({
+				ok: false,
+				code: 'malformed',
+			});
+			// The same key with the boundary repaired imports, so the sixth hyphen is
+			// the whole of what the failure reports.
+			expect(
+				await importPkcs8Pem(
+					blockAt(410).replace('-----END PRIVATE KEY------', '-----END PRIVATE KEY-----'),
+					ED25519,
+				),
+			).toMatchObject({ ok: true });
 		});
 	});
 
@@ -2302,11 +2269,6 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 		}
 
 		/** The children of a constructed element, whatever its tag. */
-		function constructedChildren(der: Uint8Array): Uint8Array[] {
-			const asSequence = new Uint8Array(der);
-			asSequence[0] = 0x30;
-			return readSequenceChildren(asSequence).map((child) => sliceElement(asSequence, child));
-		}
 
 		/** The same ContentInfo, with the SignerInfo signature AlgorithmIdentifier replaced. */
 		function withSignerInfoAlgorithm(der: Uint8Array, algorithmIdentifier: Uint8Array): Uint8Array {
@@ -2731,13 +2693,6 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 		}
 
 		/** The child at `index` of a SEQUENCE. */
-		function fieldAt(der: Uint8Array, index: number): DerElement {
-			const child = readSequenceChildren(der)[index];
-			if (child === undefined) {
-				throw new Error(`no child at index ${index}`);
-			}
-			return child;
-		}
 
 		/** The offset and content length a two-column ASN.1 dump line prints. */
 		function dumpSpan(lineNumber: number): { offset: number; length: number } {
@@ -3355,13 +3310,6 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 		] as const;
 
 		/** The same SEQUENCE, with the AlgorithmIdentifier at `index` naming `oid` and no parameters. */
-		function withAlgorithmOid(der: Uint8Array, index: number, oid: string): Uint8Array {
-			return sequence(
-				readSequenceChildren(der).map((child, at) =>
-					at === index ? sequence([objectIdentifier(oid)]) : sliceElement(der, child),
-				),
-			);
-		}
 
 		/** An Ed25519 certificate request, and the same request relabelled with `oid`. */
 		async function requestRelabelledAs(oid: string): Promise<{
@@ -3583,31 +3531,10 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 		}
 
 		/** The child at `index` of a SEQUENCE, as its own DER element. */
-		function childAt(der: Uint8Array, index: number): Uint8Array {
-			const child = readSequenceChildren(der)[index];
-			if (child === undefined) {
-				throw new Error(`no child at index ${index}`);
-			}
-			return sliceElement(der, child);
-		}
 
 		/** The same SEQUENCE, with the AlgorithmIdentifier child at `index` naming `oid`. */
-		function withAlgorithmOid(der: Uint8Array, index: number, oid: string): Uint8Array {
-			return sequence(
-				readSequenceChildren(der).map((child, at) =>
-					at === index ? sequence([objectIdentifier(oid)]) : sliceElement(der, child),
-				),
-			);
-		}
 
 		/** An octet string read as the little-endian integer RFC 8032 5.1.2 encodes. */
-		function littleEndianInteger(bytes: Uint8Array): bigint {
-			let value = 0n;
-			for (let index = bytes.length - 1; index >= 0; index -= 1) {
-				value = (value << 8n) | BigInt(bytes[index] ?? 0);
-			}
-			return value;
-		}
 
 		/** The same signature, with S raised by the group order it is reduced modulo. */
 		function withRaisedS(signature: Uint8Array): Uint8Array {
@@ -3621,13 +3548,6 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 		}
 
 		/** The same SEQUENCE, with the BIT STRING at index 2 holding `signature`. */
-		function withSignatureValue(der: Uint8Array, signature: Uint8Array): Uint8Array {
-			return sequence(
-				readSequenceChildren(der).map((child, index) =>
-					index === 2 ? bitString(signature) : sliceElement(der, child),
-				),
-			);
-		}
 
 		/** The same OCSPResponse, with the signature of its BasicOCSPResponse replaced. */
 		function withBasicResponseSignature(der: Uint8Array, signature: Uint8Array): Uint8Array {
@@ -3637,30 +3557,17 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 				childAt(der, 0),
 				explicitContext(
 					0,
-					sequence([childAt(responseBytes, 0), octetString(withSignatureValue(basic, signature))]),
+					sequence([
+						childAt(responseBytes, 0),
+						octetString(withSignatureValue(basic, bitString(signature))),
+					]),
 				),
 			]);
 		}
 
 		/** The code a builder threw, or `undefined` when it returned. */
-		function buildErrorCode(build: () => unknown): string | undefined {
-			try {
-				build();
-				return undefined;
-			} catch (error) {
-				if (!isResultError(error)) {
-					throw error;
-				}
-				return error.code;
-			}
-		}
 
 		/** The children of a constructed element, whatever its tag, as their own DER elements. */
-		function constructedChildren(der: Uint8Array): Uint8Array[] {
-			const asSequence = new Uint8Array(der);
-			asSequence[0] = 0x30;
-			return readSequenceChildren(asSequence).map((child) => sliceElement(asSequence, child));
-		}
 
 		/** The same ContentInfo, with the OCTET STRING signature of its SignerInfo replaced. */
 		function withSignerInfoSignature(der: Uint8Array, signature: Uint8Array): Uint8Array {
@@ -3984,24 +3891,26 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 			const crlSignature = parseCertificateRevocationListDerOrThrow(crl.der).signatureValue;
 			expect(
 				await verifyCertificateRevocationListSignature(
-					withSignatureValue(crl.der, crlSignature),
+					withSignatureValue(crl.der, bitString(crlSignature)),
 					issuer.certificate.pem,
 				),
 			).toMatchObject({ ok: true });
 			expect(
 				await verifyCertificateRevocationListSignature(
-					withSignatureValue(crl.der, withRaisedS(crlSignature)),
+					withSignatureValue(crl.der, bitString(withRaisedS(crlSignature))),
 					issuer.certificate.pem,
 				),
 			).toMatchObject({ ok: false, code: 'signature_invalid' });
 
 			const requestSignature = parseCertificateSigningRequestDerOrThrow(request.der).signatureValue;
 			expect(
-				await verifyCertificateSigningRequest(withSignatureValue(request.der, requestSignature)),
+				await verifyCertificateSigningRequest(
+					withSignatureValue(request.der, bitString(requestSignature)),
+				),
 			).toMatchObject({ ok: true });
 			expect(
 				await verifyCertificateSigningRequest(
-					withSignatureValue(request.der, withRaisedS(requestSignature)),
+					withSignatureValue(request.der, bitString(withRaisedS(requestSignature))),
 				),
 			).toMatchObject({ ok: false, code: 'signature_invalid' });
 
@@ -4728,13 +4637,6 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 		);
 
 		/** The child at `index` of a SEQUENCE. */
-		function fieldAt(der: Uint8Array, index: number): DerElement {
-			const child = readSequenceChildren(der)[index];
-			if (child === undefined) {
-				throw new Error(`no child at index ${index}`);
-			}
-			return child;
-		}
 
 		/** The `attributes [0]` element of the 7 second example. */
 		const ATTRIBUTES = sliceElement(V2_PRIVATE_KEY, fieldAt(V2_PRIVATE_KEY, 3));
@@ -5086,17 +4988,10 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 		].flatMap(([, name]) => (name === undefined ? [] : [name]));
 
 		/** The `index`-th child of a SEQUENCE. */
-		function childAt(der: Uint8Array, index: number): DerElement {
-			const child = readSequenceChildren(der)[index];
-			if (child === undefined) {
-				throw new Error(`no child at index ${index}`);
-			}
-			return child;
-		}
 
 		/** The subjectPublicKey BIT STRING of a SubjectPublicKeyInfo, as its own DER element. */
 		function subjectPublicKeyOf(spki: Uint8Array): Uint8Array {
-			return sliceElement(spki, childAt(spki, 1));
+			return childAt(spki, 1);
 		}
 
 		/** The same key bits under an AlgorithmIdentifier naming `oid` with `parameters`. */
@@ -5151,7 +5046,7 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 				signerPrivateKey: keyPair.privateKey,
 			});
 			const algorithm = sequence([objectIdentifier(OIDS.sha256WithRSAEncryption), ...parameters]);
-			const tbs = sliceElement(leaf.der, childAt(leaf.der, 0));
+			const tbs = childAt(leaf.der, 0);
 			const tbsChildren = readSequenceChildren(tbs);
 			const signatureIndex = tbsChildren[0]?.tag === 0xa0 ? 2 : 1;
 			const rebuilt = sequence(

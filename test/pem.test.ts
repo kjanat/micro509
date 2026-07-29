@@ -251,10 +251,12 @@ describe('RFC 7468 conformance', () => {
 				`${space}${pem}`,
 				`${pem}${space}`,
 				pem.replace('-----BEGIN', `-----BEGIN${space}`),
-				pem.replace('X-TEST-----\n', `X-TEST-----${space}\n`),
+				pem.replace('-----BEGIN X-TEST-----', `-----BEGIN X-TEST-----${space}`),
+				pem.replace('-----END', `-----END${space}`),
+				pem.replace('-----END X-TEST-----', `-----END X-TEST-----${space}`),
 			];
 			for (const candidate of positions) {
-				expect(() => pemDecodeOrThrow('X-TEST', candidate)).toThrow();
+				expect(pemDecode('X-TEST', candidate)).toMatchObject({ ok: false, code: 'malformed' });
 			}
 		},
 	);

@@ -223,17 +223,30 @@ describe.skipIf(index === undefined)('RFC status against the RFC Editor index', 
 		expect(unnecessary).toEqual([]);
 	});
 
-	it('vendors the current form of every document updating one it carries', () => {
+	it('vendors every document that updates one it carries and that src cites', () => {
+		// The update graph reaches far outside PKI, and RFC 1123 alone pulls in DNS
+		// transport and DiffServ, so vendoring all of it is not the bar. An updater
+		// this library cites is a different matter: the clause it changed is one a
+		// reader has to be able to check against the text.
 		const have = new Set(vendored);
+		const cited = new Set(
+			sourceFiles(srcRoot).flatMap((file) =>
+				[...readFileSync(file, 'utf8').matchAll(/\bRFC[\s-]?(\d{3,5})\b/gi)].flatMap(
+					(match) => match[1] ?? [],
+				),
+			),
+		);
 		const missing = new Set<string>();
 		for (const number of vendored) {
 			for (const updater of rfcIndex.get(number)?.updatedBy ?? []) {
 				const current = currentOf(updater, rfcIndex);
-				if (!have.has(current)) missing.add(`rfc${current} updates rfc${number}`);
+				if (!have.has(current) && cited.has(current)) {
+					missing.add(
+						`rfc${current} (${rfcIndex.get(current)?.title ?? '?'}) updates rfc${number} and is cited from src — vendor it with: run rfc ${current}`,
+					);
+				}
 			}
 		}
-		// Reported rather than asserted empty: the update graph reaches far outside
-		// PKI, and RFC 1123 alone pulls in DNS transport and DiffServ.
-		expect(missing.size).toBeGreaterThanOrEqual(0);
+		expect([...missing]).toEqual([]);
 	});
 });

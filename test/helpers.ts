@@ -2,6 +2,7 @@ import { expect } from 'bun:test';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { toArrayBuffer } from '#micro509/internal/asn1/asn1';
+import type { DerElement } from '#micro509/internal/asn1/der';
 import {
 	bitString,
 	bool,
@@ -191,6 +192,75 @@ export function sliceElement(
 	element: { readonly start: number; readonly end: number; readonly headerLength: number },
 ): Uint8Array {
 	return source.slice(element.start - element.headerLength, element.end);
+}
+
+/** The `index`-th child of a SEQUENCE, as its own DER element. */
+export function fieldAt(der: Uint8Array, index: number): DerElement {
+	const child = readSequenceChildren(der)[index];
+	if (child === undefined) {
+		throw new Error(`no child at index ${index}`);
+	}
+	return child;
+}
+
+/** The `index`-th child of a SEQUENCE, as its own encoding. */
+export function childAt(der: Uint8Array, index: number): Uint8Array {
+	return sliceElement(der, fieldAt(der, index));
+}
+
+/** The children of a constructed element, whatever its tag, as their own encodings. */
+export function constructedChildren(der: Uint8Array): Uint8Array[] {
+	const asSequence = new Uint8Array(der);
+	asSequence[0] = 0x30;
+	return readSequenceChildren(asSequence).map((child) => sliceElement(asSequence, child));
+}
+
+/** The same SEQUENCE, with the third child replaced by `signatureValue`. */
+export function withSignatureValue(der: Uint8Array, signatureValue: Uint8Array): Uint8Array {
+	return sequence(
+		readSequenceChildren(der).map((child, index) =>
+			index === 2 ? signatureValue : sliceElement(der, child),
+		),
+	);
+}
+
+/** The same SEQUENCE, with the AlgorithmIdentifier child at `index` naming `oid`. */
+export function withAlgorithmOid(der: Uint8Array, index: number, oid: string): Uint8Array {
+	return sequence(
+		readSequenceChildren(der).map((child, at) =>
+			at === index ? sequence([objectIdentifier(oid)]) : sliceElement(der, child),
+		),
+	);
+}
+
+/** An octet string read as the little-endian integer RFC 8032 §5.1.2 encodes. */
+export function littleEndianInteger(bytes: Uint8Array): bigint {
+	let value = 0n;
+	for (let index = bytes.length - 1; index >= 0; index -= 1) {
+		value = (value << 8n) | BigInt(bytes[index] ?? 0);
+	}
+	return value;
+}
+
+/** The code a builder threw, or `undefined` when it returned. */
+export function buildErrorCode(build: () => unknown): string | undefined {
+	try {
+		build();
+		return undefined;
+	} catch (error) {
+		if (!isResultError(error)) {
+			throw error;
+		}
+		return error.code;
+	}
+}
+
+export function expectBuildErrorCode(build: () => unknown, code: string): void {
+	const thrown = buildErrorCode(build);
+	if (thrown === undefined) {
+		throw new Error(`expected a ResultError with code '${code}', but nothing was thrown`);
+	}
+	expect(thrown).toBe(code);
 }
 
 export async function importRsaPrivateKeyWithScheme(

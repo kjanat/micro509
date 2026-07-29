@@ -9,6 +9,7 @@
 
 import {
 	canonicalizeOid,
+	childrenOf,
 	decodeObjectIdentifier,
 	hexToBytes,
 	toHex,
@@ -892,33 +893,44 @@ function assertSafeCurveKeyUsage(
 		return;
 	}
 	if (oidEquals(algorithm, OIDS.x25519) || oidEquals(algorithm, OIDS.x448)) {
-		if (!keyUsage.includes('keyAgreement')) {
-			throwExtensionEncoderError(
-				'montgomery_key_usage_requires_key_agreement',
-				'keyUsage on an X25519 or X448 certificate must set keyAgreement',
-			);
-		}
-		const asserted = MONTGOMERY_FORBIDDEN_KEY_USAGE.filter((flag: KeyUsage) =>
-			keyUsage.includes(flag),
+		assertMontgomeryKeyUsage(keyUsage);
+		return;
+	}
+	if (oidEquals(algorithm, OIDS.ed25519) || oidEquals(algorithm, OIDS.ed448)) {
+		assertEdwardsKeyUsage(keyUsage, resolveEffectiveBasicConstraints(input)?.ca === true);
+	}
+}
+
+/** The X25519 and X448 half of RFC 9295 §3. */
+function assertMontgomeryKeyUsage(keyUsage: readonly KeyUsage[]): void {
+	if (!keyUsage.includes('keyAgreement')) {
+		throwExtensionEncoderError(
+			'montgomery_key_usage_requires_key_agreement',
+			'keyUsage on an X25519 or X448 certificate must set keyAgreement',
 		);
-		if (asserted.length > 0) {
-			throwExtensionEncoderError(
-				'montgomery_key_usage_forbids_signature_bit',
-				`keyUsage on an X25519 or X448 certificate must not set ${asserted.join(', ')}`,
-			);
-		}
-		if (keyUsage.includes('encipherOnly') && keyUsage.includes('decipherOnly')) {
-			throwExtensionEncoderError(
-				'montgomery_key_usage_forbids_both_cipher_bits',
-				'keyUsage on an X25519 or X448 certificate must not set both encipherOnly and decipherOnly',
-			);
-		}
-		return;
 	}
-	if (!oidEquals(algorithm, OIDS.ed25519) && !oidEquals(algorithm, OIDS.ed448)) {
-		return;
+	const asserted = MONTGOMERY_FORBIDDEN_KEY_USAGE.filter((flag: KeyUsage) =>
+		keyUsage.includes(flag),
+	);
+	if (asserted.length > 0) {
+		throwExtensionEncoderError(
+			'montgomery_key_usage_forbids_signature_bit',
+			`keyUsage on an X25519 or X448 certificate must not set ${asserted.join(', ')}`,
+		);
 	}
-	const isCertificationAuthority = resolveEffectiveBasicConstraints(input)?.ca === true;
+	if (keyUsage.includes('encipherOnly') && keyUsage.includes('decipherOnly')) {
+		throwExtensionEncoderError(
+			'montgomery_key_usage_forbids_both_cipher_bits',
+			'keyUsage on an X25519 or X448 certificate must not set both encipherOnly and decipherOnly',
+		);
+	}
+}
+
+/** The Ed25519 and Ed448 half of RFC 9295 §3. */
+function assertEdwardsKeyUsage(
+	keyUsage: readonly KeyUsage[],
+	isCertificationAuthority: boolean,
+): void {
 	if (isCertificationAuthority) {
 		if (!keyUsage.includes('keyCertSign')) {
 			throwExtensionEncoderError(
@@ -932,14 +944,17 @@ function assertSafeCurveKeyUsage(
 			`keyUsage on an Ed25519 or Ed448 certificate must set one of ${EDWARDS_END_ENTITY_KEY_USAGE.join(', ')}`,
 		);
 	}
-	const forbidden = isCertificationAuthority
-		? EDWARDS_FORBIDDEN_KEY_USAGE
-		: ([...EDWARDS_FORBIDDEN_KEY_USAGE, 'keyCertSign'] as const);
-	const asserted = forbidden.filter((flag: KeyUsage) => keyUsage.includes(flag));
+	const asserted = EDWARDS_FORBIDDEN_KEY_USAGE.filter((flag: KeyUsage) => keyUsage.includes(flag));
 	if (asserted.length > 0) {
 		throwExtensionEncoderError(
 			'edwards_key_usage_forbids_agreement_bit',
 			`keyUsage on an Ed25519 or Ed448 certificate must not set ${asserted.join(', ')}`,
+		);
+	}
+	if (!isCertificationAuthority && keyUsage.includes('keyCertSign')) {
+		throwExtensionEncoderError(
+			'edwards_key_usage_forbids_key_cert_sign',
+			'keyUsage on an Ed25519 or Ed448 end-entity certificate must not set keyCertSign',
 		);
 	}
 }
@@ -947,11 +962,11 @@ function assertSafeCurveKeyUsage(
 /** The algorithm OID of a SubjectPublicKeyInfo, or `undefined` when the field is not an OID. */
 function readSubjectKeyAlgorithmOid(subjectPublicKeyInfo: Uint8Array): string | undefined {
 	const algorithm = readSequenceChildren(subjectPublicKeyInfo)[0];
-	if (algorithm === undefined || algorithm.tag !== 0x30 || algorithm.start === algorithm.end) {
+	if (algorithm === undefined || algorithm.tag !== 0x30) {
 		return undefined;
 	}
-	const oid = readElement(subjectPublicKeyInfo, algorithm.start);
-	return oid.tag === 0x06 ? decodeObjectIdentifier(oid.value) : undefined;
+	const oid = childrenOf(subjectPublicKeyInfo, algorithm)[0];
+	return oid?.tag === 0x06 ? decodeObjectIdentifier(oid.value) : undefined;
 }
 
 /**

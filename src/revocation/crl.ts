@@ -30,6 +30,7 @@ import {
 	implicitPrimitiveContext,
 	integer,
 	integerFromNumber,
+	optionalBytesEqual,
 	readElement,
 	readRootElement,
 	readSequenceChildren,
@@ -2586,16 +2587,6 @@ function assertMatchingCrlSignatureAlgorithms(
 	) {
 		throw new Error('CRL signatureAlgorithm must match TBSCertList signature');
 	}
-}
-
-function optionalBytesEqual(left: Uint8Array | undefined, right: Uint8Array | undefined): boolean {
-	if (left === undefined || right === undefined) {
-		return left === right;
-	}
-	if (left.length !== right.length) {
-		return false;
-	}
-	return left.every((byte, index) => byte === right[index]);
 }
 
 /** Extracts the algorithm OID from an AlgorithmIdentifier SEQUENCE. */

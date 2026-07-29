@@ -4,6 +4,9 @@ export const meta = {
   whenToUse: 'Bringing test/rfc/rfc<n>.test.ts up to the clauses of docs/rfc/rfc<n>.txt, one heading at a time. Takes any number of RFCs, one lane each, run in parallel.',
 }
 
+/** Loop protection: no RFC in docs/rfc/ carries this many headings. */
+const MAX_LEGS = 60
+
 const REPORT = {
   type: 'object',
   additionalProperties: false,
@@ -26,7 +29,11 @@ const REPORT = {
 // `import.meta` is a syntax error. Anything from the host comes in through args,
 // which the harness hands over as a JSON string rather than the object passed.
 const input = typeof args === 'string' && args !== '' ? JSON.parse(args) : (args ?? {})
-const repoRoot = (Array.isArray(input) ? undefined : input.repoRoot) ?? '/home/kjanat/projects/ts-x509'
+
+// Agents already run in the checkout, and the sandbox exposes no cwd to name it
+// with, so the prompt describes the repository rather than pointing at a path.
+// An explicit repoRoot overrides that for a run driven from somewhere else.
+const repoRoot = Array.isArray(input) ? undefined : input.repoRoot
 
 // One lane per RFC: { number, testFile?, start?, done? }, where `number` is all
 // that is needed and the rest resume a lane partway through. A lane may also be
@@ -52,7 +59,7 @@ function prompt(rfcNumber, testFile, assignment, done, laneCount) {
 	return `\
 You are one leg of a relay over RFC ${rfcNumber}. You work ONE heading to completeness, then hand the baton on.
 
-Repo: ${repoRoot} (micro509, zero-dependency TypeScript X.509 library).
+Repo: ${repoRoot ?? 'the checkout you are already running in'} (micro509, zero-dependency TypeScript X.509 library). Every path below is relative to its root.
 Spec text: docs/rfc/rfc${rfcNumber}.txt (vendored, read-only).
 Test file: ${testFile}
 
@@ -122,24 +129,29 @@ async function relay({ number: rfcNumber, testFile, start, done: alreadyDone }, 
   const reports = []
   let assignment =
     start ?? `the FIRST heading in the document. Find it yourself in docs/rfc/rfc${rfcNumber}.txt.`
-  let guard = 0
+  // A lane ends by dropping the baton. Everything else is a stop mid-document,
+  // and the caller is told which, since partial coverage otherwise reads as a
+  // finished RFC.
+  let unfinished = `lane never ran`
 
-  while (guard < 60) {
-    guard++
+  for (let guard = 0; guard < MAX_LEGS; guard++) {
     const report = await agent(prompt(rfcNumber, testFile, assignment, done, laneCount), {
       label: `${rfcNumber}: ${String(assignment).slice(0, 40)}`,
       phase,
       schema: REPORT,
     })
     if (report === null) {
+      unfinished = `leg died on "${assignment}"`
       log(`${rfcNumber}: leg died on "${assignment}", relay stops`)
       break
     }
+    unfinished = `stopped after ${MAX_LEGS} legs, still holding "${report.nextHeading}"`
     reports.push(report)
     done.push(report.heading)
     log(`${rfcNumber} ${report.heading} -> ${report.status}${report.srcChanges.length > 0 ? ` (${report.srcChanges.length} src fix)` : ''}`)
 
     if (report.nextHeading === null) {
+      unfinished = undefined
       log(`${rfcNumber}: baton dropped at the finish, ${done.length} legs run`)
       break
     }
@@ -147,20 +159,25 @@ async function relay({ number: rfcNumber, testFile, start, done: alreadyDone }, 
     // already worked means the leg mis-walked the document, not that the lane
     // is finished.
     if (done.includes(report.nextHeading)) {
+      unfinished = `"${report.nextHeading}" came back already worked`
       log(`${rfcNumber}: "${report.nextHeading}" was already worked, relay stops rather than loop`)
       break
     }
     assignment = report.nextHeading
   }
-  return reports
+  if (unfinished !== undefined) log(`${rfcNumber}: INCOMPLETE, ${unfinished}`)
+  return { rfcNumber, reports, unfinished }
 }
 
 log(`lanes: ${lanes.map((lane) => `${lane.number}${lane.start === undefined ? '' : ` from "${lane.start}"`}`).join(', ')}`)
 
-const perLane = await parallel(lanes.map((lane) => () => relay(lane, lanes.length)))
+const perLane = (await parallel(lanes.map((lane) => () => relay(lane, lanes.length)))).filter(Boolean)
 
-const all = perLane.filter(Boolean).flat()
+const all = perLane.flatMap((lane) => lane.reports)
 return {
+  incompleteLanes: perLane
+    .filter((lane) => lane.unfinished !== undefined)
+    .map((lane) => `rfc${lane.rfcNumber}: ${lane.unfinished}`),
   legsRun: all.length,
   changed: all.filter((r) => r.status === 'changed').length,
   alreadyComplete: all.filter((r) => r.status === 'already-complete').length,
