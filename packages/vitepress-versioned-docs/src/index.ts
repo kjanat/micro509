@@ -40,6 +40,8 @@ export interface VersionedDocsOptions {
 	readonly devLabel: string;
 	/** External destination for the checked-out tree label, e.g. its pull request. */
 	readonly devLabelUrl?: string;
+	/** Serve no `/next/` channel: the checked-out tree is exactly the latest release. */
+	readonly omitNext?: boolean;
 
 	/** Page paths taken verbatim from a tag, relative to the repository root. */
 	readonly pages: readonly string[];
@@ -307,18 +309,21 @@ async function resolveVersions(options: VersionedDocsOptions): Promise<readonly 
 		];
 	}
 
-	const versions: DocsVersion[] = [
-		{
-			tag: options.devLabel,
-			packageVersion: treePackageVersion,
-			label: 'next',
-			channel: 'next',
-			prefix: 'next/',
-			srcRoot: options.siteRoot,
-			exports: exportsOf(options.repoRoot),
-			sections: treeSections,
-		},
-	];
+	const versions: DocsVersion[] =
+		options.omitNext === true
+			? []
+			: [
+					{
+						tag: options.devLabel,
+						packageVersion: treePackageVersion,
+						label: 'next',
+						channel: 'next',
+						prefix: 'next/',
+						srcRoot: options.siteRoot,
+						exports: exportsOf(options.repoRoot),
+						sections: treeSections,
+					},
+				];
 
 	await fsp.rm(options.versionsDir, { recursive: true, force: true });
 	const versionsRoot = path.relative(options.repoRoot, options.versionsDir);
@@ -345,9 +350,11 @@ async function resolveVersions(options: VersionedDocsOptions): Promise<readonly 
 		});
 	}
 
+	const root = versions.find((version) => version.channel === 'latest');
+	const hasNext = versions.some((version) => version.channel === 'next');
 	console.log(
-		`[versions] root=${versions[1]?.label}, next, archives=[${versions
-			.slice(2)
+		`[versions] root=${root?.label}${hasNext ? ', next' : ' (tree is the release, no next)'}, archives=[${versions
+			.filter((version) => version.channel === 'archive')
 			.map((version) => version.label)
 			.join(', ')}]`,
 	);
@@ -579,6 +586,8 @@ export interface VersionedDocs {
 	readonly plugin: Plugin;
 	/** Source path -> route path. */
 	readonly rewrites: (id: string) => string;
+	/** Tree pages the build must skip when no version serves the tree. */
+	readonly srcExclude: readonly string[];
 	/** Keeps a page's links inside the version it belongs to. */
 	readonly markdown: (md: MarkdownRenderer) => void;
 	/** Versions the hero actions, which are frontmatter rather than links. */
@@ -612,6 +621,14 @@ export async function versionedDocs(options: VersionedDocsOptions): Promise<Vers
 	return {
 		versions,
 		plugin: importMapPlugin(versions, options),
+
+		srcExclude:
+			tree === undefined
+				? [
+						...options.pages.map((page) => (page.endsWith('.md') ? page : `${page}/**`)),
+						`${options.siteRoot}/api/**`,
+					]
+				: [],
 
 		rewrites: (id) => {
 			for (const version of versions) {

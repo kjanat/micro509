@@ -105,6 +105,20 @@ function commitSha(): string | undefined {
 
 const treeSha = commitSha();
 
+/** The commit the latest release tag points at; peeled remotely when the clone is shallow. */
+function releasedSha(): string | undefined {
+	const peeled = `refs/tags/v${repo.version}^{}`;
+	return (
+		git('rev-parse', '--quiet', '--verify', peeled) ??
+		git('ls-remote', repoUrl.href, peeled)?.split('\t')[0]
+	);
+}
+
+const released = releasedSha();
+const omitNext = treeSha !== undefined && treeSha === released;
+
+console.log(`[versions] tree ${treeSha}, release v${repo.version} ${released ?? 'unresolved'}`);
+
 const GITHUB_TIMEOUT_MS = 10_000;
 
 async function pullRequestOf(sha: string): Promise<string | undefined> {
@@ -245,6 +259,7 @@ const docs = await versionedDocs({
 	cacheDir: path.join(import.meta.dirname, 'cache/versions'),
 	devLabel,
 	...(devLabelUrl === undefined ? {} : { devLabelUrl }),
+	omitNext,
 	pages: ['site/guide', 'site/reference', 'site/index.md'],
 	sources: ['src', 'package.json', 'jsr.json'],
 	transformPage: (markdown) => versionPackageReferences(repairExamples(markdown)),
@@ -348,6 +363,7 @@ export default defineConfig<DocsThemeConfig>({
 		'packages/**',
 		'src/**',
 		'test/**',
+		...docs.srcExclude,
 	],
 	ignoreDeadLinks: [/test\/fixtures\//],
 
