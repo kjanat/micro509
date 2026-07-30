@@ -16,8 +16,8 @@
 				{ "language_server": { "name": "dprint" } }
 			],
 			"language_servers": [
-				"typescript",
-				"typescript-ls",
+				"typescript", // https://github.com/kjanat/zed-typescript (just better...)
+				// "typescript-ls",
 				"deno",
 				"biome",
 				"oxlint",
