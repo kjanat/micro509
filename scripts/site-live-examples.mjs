@@ -134,6 +134,106 @@ function findVersions(routes) {
 }
 
 /**
+ * Every page that may carry LiveCode blocks, for one version prefix
+ * ('' is the latest release at the site root, '/next' the dev tree).
+ *
+ * @param {Map<string, string>} routes
+ * @param {string} prefix
+ * @returns {string[]}
+ */
+function findRunnablePages(routes, prefix) {
+	const pattern = new RegExp(`^${prefix}/(guide|reference)/[^/.]+$`);
+	return [...routes.keys()].filter((route) => pattern.test(route)).sort();
+}
+
+/**
+ * Run every LiveCode block on one page; a block that errors, prints nothing,
+ * or never settles fails.
+ *
+ * @param {import('playwright').Browser} browser
+ * @param {string} baseUrl
+ * @param {string} route
+ * @returns {Promise<Result[]>}
+ */
+async function runAllBlocks(browser, baseUrl, route) {
+	const context = await browser.newContext({
+		baseURL: baseUrl,
+		serviceWorkers: 'block',
+	});
+	const page = await context.newPage();
+
+	page.setDefaultTimeout(EXAMPLE_TIMEOUT_MS);
+	page.setDefaultNavigationTimeout(EXAMPLE_TIMEOUT_MS);
+
+	/** @type {Result[]} */
+	const results = [];
+
+	try {
+		await page.goto(route, { waitUntil: 'domcontentloaded' });
+
+		const blocks = page.locator('.live-code');
+		const count = await blocks.count();
+
+		for (let index = 0; index < count; index += 1) {
+			const label = `${route}#${index}`;
+			const block = blocks.nth(index);
+			const button = block.locator('.live-code-btn').first();
+			const outputBlock = block.locator('.live-code-pre').first();
+
+			let source = '';
+			let output = '';
+			let started;
+
+			try {
+				await block.scrollIntoViewIfNeeded();
+				source = (await block.locator('pre code').first().innerText()).trim();
+
+				started = performance.now();
+				await button.click();
+				await outputBlock.waitFor({ state: 'visible' });
+				await page.waitForFunction(
+					({ index: nth }) =>
+						!document
+							.querySelectorAll('.live-code')
+							[nth]?.querySelector('.live-code-btn')
+							?.textContent?.includes('Running'),
+					{ index },
+				);
+
+				const ms = Math.round(performance.now() - started);
+				output = (await outputBlock.innerText()).trim();
+
+				let why = '';
+
+				if ((await block.locator('.live-code-err').count()) > 0) {
+					why = 'the example errored';
+				} else if (output === '') {
+					why = 'the example printed nothing';
+				}
+
+				results.push({ version: label, source, output, failed: why !== '', why, ms, imported: [] });
+			} catch (error) {
+				results.push({
+					version: label,
+					source,
+					output,
+					failed: true,
+					why: String(error).split('\n')[0] || 'threw',
+					ms: started === undefined ? 0 : Math.round(performance.now() - started),
+					imported: [],
+				});
+			}
+		}
+
+		return results;
+	} finally {
+		await context.close().catch((error) => {
+			console.warn(`[live-examples] ${route}: failed to close context: ${error}`);
+		});
+	}
+}
+
+/**
  * @param {string} text
  * @param {number} [head]
  * @param {number} [tail]
@@ -557,6 +657,14 @@ async function main() {
 			report(await runVersion(browser, baseUrl, version));
 		}
 
+		for (const prefix of ['', '/next']) {
+			for (const route of findRunnablePages(routes, prefix)) {
+				for (const result of await runAllBlocks(browser, baseUrl, route)) {
+					report(result);
+				}
+			}
+		}
+
 		const navigable = versions.find(({ version }) => /^v\d/.test(version));
 		if (navigable !== undefined) {
 			report(await runAfterClientNavigation(browser, baseUrl, navigable));
@@ -573,7 +681,10 @@ async function main() {
 		await teardown();
 	}
 
-	printSuccessfulOutputs(results, baseUrl);
+	printSuccessfulOutputs(
+		results.filter(({ version }) => !version.startsWith('/')),
+		baseUrl,
+	);
 
 	const failures = results.filter(({ failed }) => failed);
 

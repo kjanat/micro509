@@ -97,7 +97,11 @@ async function run() {
     const raw = extractCode();
     if (!raw) throw new Error('No code found');
 
-    const { head, body } = splitCode(raw);
+    const runnable =
+      el.value
+        ?.querySelector('[data-js]')
+        ?.getAttribute('data-js') ?? raw;
+    const { head, body } = splitCode(runnable);
     const eid = `__lc${Date.now()}${Math.random().toString(36).slice(2)}`;
 
     const src = `${head}

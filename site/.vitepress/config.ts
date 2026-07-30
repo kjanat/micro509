@@ -181,6 +181,21 @@ const examples: DocExamplesOptions = {
 
 const LIVE_CODE_BLOCK = /(<LiveCode[^>]*>\s*\n\n```ts\n)([\s\S]*?)(```)/g;
 
+const RUNNABLE_PAGE = /(^|\/)(guide|reference)\/[^/]+\.md$|(^|\/)index\.md$/;
+
+/** A LiveCode fence executes in the browser, which parses JavaScript, not TypeScript. */
+function stripTypes(source: string): string {
+	return ts.transpileModule(source, {
+		compilerOptions: { target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.ESNext },
+	}).outputText;
+}
+
+function pageOf(env: unknown): string {
+	if (typeof env !== 'object' || env === null) return '';
+	const value = Object.fromEntries(Object.entries(env))['relativePath'];
+	return typeof value === 'string' ? value : '';
+}
+
 /** The example's syntax errors. A bare transpile does no type checking. */
 function syntaxErrors(source: string): readonly ts.Diagnostic[] {
 	return (
@@ -347,6 +362,16 @@ export default defineConfig<DocsThemeConfig>({
 			md.use(markdownItTaskLists);
 			docs.markdown(md);
 			githubLinks({ repoUrl: repoUrl.href, ref: gitRef })(md);
+			const fence = md.renderer.rules.fence;
+			if (fence === undefined) throw new Error('vitepress registered no fence renderer');
+			md.renderer.rules.fence = (tokens, idx, options, env, self) => {
+				const html = fence(tokens, idx, options, env, self);
+				const token = tokens[idx];
+				if (token === undefined) return html;
+				if (token.info.trim().split(/\s+/)[0] !== 'ts') return html;
+				if (!RUNNABLE_PAGE.test(pageOf(env))) return html;
+				return `<div data-js="${md.utils.escapeHtml(stripTypes(token.content))}">${html}</div>`;
+			};
 		},
 	},
 
