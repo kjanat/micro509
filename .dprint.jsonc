@@ -92,6 +92,8 @@
 		"**/bun.lock",
 		"**/dist",
 		"**/docs/deno",
+		"**/docs/{itu,rfc}",
+		"**/docs/w3c/**/*.txt",
 		"examples/vite/src/favicon.svg"
 	],
 	"plugins": [
