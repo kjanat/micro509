@@ -505,7 +505,8 @@ function tryParseUriServiceIdentity(value: string): ServiceScopedIdentity | unde
 	}
 	const serviceType = value.slice(0, schemeEnd).toLowerCase();
 	const domainName = extractUriRegName(value);
-	const normalizedDomainName = domainName === undefined ? undefined : tryNormalizeDnsName(domainName);
+	const normalizedDomainName =
+		domainName === undefined ? undefined : tryNormalizeDnsName(domainName);
 	if (normalizedDomainName === undefined) {
 		return undefined;
 	}
