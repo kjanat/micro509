@@ -9,6 +9,8 @@ const CONTROL_SOH = String.fromCodePoint(0x0001);
 const REPLACEMENT = String.fromCodePoint(0xfffd);
 const PRIVATE_USE = String.fromCodePoint(0xe000);
 const COMBINING_ACUTE = String.fromCodePoint(0x0301);
+const MONGOLIAN_LETTER_ALI_GALI_BALUDA = String.fromCodePoint(0x1885);
+const ARABIC_START_OF_RUB_EL_HIZB = String.fromCodePoint(0x06de);
 
 const cn = (valueTag: number, value: string) => ({ oid: OIDS.commonName, valueTag, value });
 
@@ -45,6 +47,14 @@ describe('RFC 4518 string preparation', () => {
 		expect(prepareNameCompareString('  x  ')).toBe(prepareNameCompareString('x'));
 		expect(prepareNameCompareString(` ${COMBINING_ACUTE}x`)).not.toBe(
 			prepareNameCompareString(`${COMBINING_ACUTE}x`),
+		);
+		// RFC 4518 freezes combining-mark classification to Unicode 3.2. U+1885
+		// became a mark later, while U+06DE ceased to be one.
+		expect(prepareNameCompareString(` ${MONGOLIAN_LETTER_ALI_GALI_BALUDA}`)).toBe(
+			prepareNameCompareString(MONGOLIAN_LETTER_ALI_GALI_BALUDA),
+		);
+		expect(prepareNameCompareString(` ${ARABIC_START_OF_RUB_EL_HIZB}`)).not.toBe(
+			prepareNameCompareString(ARABIC_START_OF_RUB_EL_HIZB),
 		);
 	});
 

@@ -19,6 +19,7 @@ import {
 	type CodePointRange,
 	NFKC_3_2_CORRECTIONS,
 } from '#micro509/internal/shared/rfc3454-tables';
+import { COMBINING_MARK_RANGES } from '#micro509/internal/shared/rfc4518-tables';
 import type {
 	ParsedName,
 	ParsedNameAttribute,
@@ -289,10 +290,31 @@ function caseFold(value: string): string {
  * combining mark is significant (the base of a combining sequence) and stays.
  */
 function collapseInsignificantSpaces(value: string): string {
-	return value
-		.replace(/ +(?!\p{M})/gu, ' ')
-		.replace(/^ (?!\p{M})/u, '')
-		.replace(/ $/u, '');
+	let collapsed = '';
+	for (let index = 0; index < value.length; ) {
+		const codePoint = value.codePointAt(index);
+		if (codePoint === undefined) {
+			break;
+		}
+		if (codePoint !== 0x20) {
+			collapsed += String.fromCodePoint(codePoint);
+			index += codePoint > 0xffff ? 2 : 1;
+			continue;
+		}
+
+		let nextIndex = index + 1;
+		while (value.codePointAt(nextIndex) === 0x20) {
+			nextIndex += 1;
+		}
+		const nextCodePoint = value.codePointAt(nextIndex);
+		const followedByCombiningMark =
+			nextCodePoint !== undefined && inRanges(nextCodePoint, COMBINING_MARK_RANGES);
+		if (followedByCombiningMark || (collapsed.length > 0 && nextCodePoint !== undefined)) {
+			collapsed += ' ';
+		}
+		index = nextIndex;
+	}
+	return collapsed;
 }
 
 /**
