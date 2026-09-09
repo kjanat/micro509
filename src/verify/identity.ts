@@ -500,15 +500,16 @@ function presentedDnsIdentifierTypes(
 /** Attempts to split a URI into scheme + reg-name. @returns `undefined` on failure. */
 function tryParseUriServiceIdentity(value: string): ServiceScopedIdentity | undefined {
 	const schemeEnd = value.indexOf(':');
-	if (schemeEnd <= 0) {
+	if (schemeEnd <= 0 || !/^[A-Za-z][A-Za-z0-9+.-]*$/.test(value.slice(0, schemeEnd))) {
 		return undefined;
 	}
 	const serviceType = value.slice(0, schemeEnd).toLowerCase();
 	const domainName = extractUriRegName(value);
-	if (domainName === undefined) {
+	const normalizedDomainName = domainName === undefined ? undefined : tryNormalizeDnsName(domainName);
+	if (normalizedDomainName === undefined) {
 		return undefined;
 	}
-	return { serviceType, domainName: normalizeDnsName(domainName) };
+	return { serviceType, domainName: normalizedDomainName };
 }
 
 /** Extracts the reg-name host from a URI, stripping scheme, userinfo, port, and path components. */
@@ -518,10 +519,10 @@ function extractUriRegName(value: string): string | undefined {
 		return undefined;
 	}
 	const schemeSpecific = value.slice(schemeEnd + 1);
-	let authority = cutAtFirstDelimiter(
-		schemeSpecific.startsWith('//') ? schemeSpecific.slice(2) : schemeSpecific,
-		['/', '?', '#'],
-	);
+	if (!schemeSpecific.startsWith('//')) {
+		return undefined;
+	}
+	let authority = cutAtFirstDelimiter(schemeSpecific.slice(2), ['/', '?', '#']);
 	const userInfoSeparator = authority.lastIndexOf('@');
 	if (userInfoSeparator >= 0) {
 		authority = authority.slice(userInfoSeparator + 1);

@@ -2585,6 +2585,32 @@ describe('validation profiles', () => {
 		expect(wrongScheme).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
 	});
 
+	it('rejects hostless URI SANs through chain and TLS verification helpers', async () => {
+		const chain = await issueChain({
+			leafSubjectAltNames: [{ type: 'uri', value: 'https:verify.example' }],
+		});
+		const base = {
+			leaf: chain.leaf.pem,
+			intermediates: [chain.intermediate.pem],
+			roots: [chain.root.certificate.pem],
+			serviceIdentity: { type: 'uri', value: 'https://verify.example' } as const,
+		};
+
+		const chainResult = await verifyCertificateChain(base);
+		expect(chainResult).toMatchObject({
+			ok: false,
+			code: 'subject_alt_name_mismatch',
+			index: 0,
+		});
+
+		const tlsResult = await validateForTlsServer(base);
+		expect(tlsResult).toMatchObject({
+			ok: false,
+			code: 'subject_alt_name_mismatch',
+			index: 0,
+		});
+	});
+
 	it('verifyCertificateChain fails closed on malformed uri/srv identity values', async () => {
 		const chain = await issueChain({
 			leafSubjectAltNames: [{ type: 'uri', value: 'https://verify.example' }],
