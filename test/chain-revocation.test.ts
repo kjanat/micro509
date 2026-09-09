@@ -819,8 +819,10 @@ describe('checkChainRevocation with OCSP evidence', () => {
 
 			expect(result.ok).toBe(true);
 			expect(result.value.decision).toBe('allow');
-			expect(result.value.certificates[0]?.status).toBe('good');
-			expect(result.value.certificates[0]?.source?.thisUpdate.getTime()).toBe(
+			const leafStatus = result.value.certificates[0];
+			expect(leafStatus?.status).toBe('good');
+			if (leafStatus?.status !== 'good') return;
+			expect(leafStatus.source.thisUpdate?.getTime()).toBe(
 				Math.floor(goodThisUpdate.getTime() / 1000) * 1000,
 			);
 		}

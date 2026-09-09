@@ -23,6 +23,7 @@ import {
 import type {
 	OcspResponderRevocationPolicy,
 	ParsedOcspResponse,
+	ParsedOcspSingleResponse,
 	ValidateOcspResponseFailure,
 	ValidateOcspResponseResult,
 } from '#micro509/revocation/ocsp';
@@ -659,12 +660,47 @@ interface OcspHoldEvidence {
 	readonly thisUpdate: Date;
 }
 
+type ClassifiedOcspEvidence =
+	| { readonly kind: 'good'; readonly thisUpdate: Date }
+	| { readonly kind: 'hold'; readonly evidence: OcspHoldEvidence }
+	| { readonly kind: 'revoked'; readonly status: CertificateRevocationStatus }
+	| { readonly kind: 'unknown' };
+
+type ApplicableOcspResponse =
+	| {
+			readonly kind: 'applicable';
+			readonly parsed: ParsedOcspResponse;
+			readonly entry: ParsedOcspSingleResponse;
+	  }
+	| { readonly kind: 'parse_error'; readonly message: string }
+	| { readonly kind: 'not_applicable' };
+
 /** Parses an OCSP response from PEM string or DER bytes. */
 function parseOcspResponseFromSource(source: OcspResponseSource): ParsedOcspResponse {
 	if (typeof source === 'string') {
 		return parseOcspResponsePemOrThrow(source);
 	}
 	return parseOcspResponseDerOrThrow(source);
+}
+
+/** Parses one OCSP source and locates the entry for the certificate under evaluation. */
+function findApplicableOcspResponse(
+	source: OcspResponseSource,
+	cert: ParsedCertificate,
+): ApplicableOcspResponse {
+	let parsed: ParsedOcspResponse;
+	try {
+		parsed = parseOcspResponseFromSource(source);
+	} catch (e) {
+		return {
+			kind: 'parse_error',
+			message: e instanceof Error ? e.message : 'OCSP response parse failed',
+		};
+	}
+	const entry = (parsed.responses ?? []).find(
+		(single) => normalizeHex(single.certId.serialNumberHex) === normalizeHex(cert.serialNumberHex),
+	);
+	return entry === undefined ? { kind: 'not_applicable' } : { kind: 'applicable', parsed, entry };
 }
 
 /** Returns the later of two evidence timestamps, tolerating an empty accumulator. */
@@ -688,6 +724,24 @@ function buildOcspRevokedStatus(
 			...(reason !== undefined ? { reason } : {}),
 		},
 	};
+}
+
+/** Classifies one fully validated OCSP entry for aggregation. */
+function classifyValidatedOcspEntry(
+	cert: ParsedCertificate,
+	entry: ParsedOcspSingleResponse,
+): ClassifiedOcspEvidence {
+	if (entry.certStatus === 'good') {
+		return { kind: 'good', thisUpdate: entry.thisUpdate };
+	}
+	if (entry.certStatus === 'unknown') {
+		return { kind: 'unknown' };
+	}
+	const reason = revocationReasonFromCode(entry.revocationReasonCode);
+	const status = buildOcspRevokedStatus(cert, entry.thisUpdate, entry.revokedAt, reason);
+	return reason === 'certificateHold'
+		? { kind: 'hold', evidence: { status, thisUpdate: entry.thisUpdate } }
+		: { kind: 'revoked', status };
 }
 
 /** Builds the definitive OCSP-good result or the accumulated indeterminate result. */
@@ -820,55 +874,47 @@ async function evaluateOcspEvidence(
 	let freshestHold: OcspHoldEvidence | undefined;
 
 	for (const source of ocspResponses) {
-		let parsed: ParsedOcspResponse;
-		try {
-			parsed = parseOcspResponseFromSource(source);
-		} catch (e) {
+		const applicable = findApplicableOcspResponse(source, cert);
+		if (applicable.kind === 'parse_error') {
 			executionErrors.push({
 				kind: 'parse_error',
-				message: e instanceof Error ? e.message : 'OCSP response parse failed',
+				message: applicable.message,
 			});
 			continue;
 		}
-
-		const entry = (parsed.responses ?? []).find(
-			(single) =>
-				normalizeHex(single.certId.serialNumberHex) === normalizeHex(cert.serialNumberHex),
-		);
-		if (entry === undefined) {
+		if (applicable.kind === 'not_applicable') {
 			continue; // Response does not cover this certificate
 		}
 
-		const validation = await validateOcspResponseWithResponderFallback(parsed, issuer, input, at);
+		const validation = await validateOcspResponseWithResponderFallback(
+			applicable.parsed,
+			issuer,
+			input,
+			at,
+		);
 		if (!validation.ok) {
 			reasons.add(ocspIndeterminateReasonFromFailure(validation.code));
 			continue;
 		}
 
-		if (entry.certStatus === 'revoked') {
-			const reason = revocationReasonFromCode(entry.revocationReasonCode);
-			const revokedStatus = buildOcspRevokedStatus(
-				cert,
-				entry.thisUpdate,
-				entry.revokedAt ?? entry.thisUpdate,
-				reason,
-			);
-			if (reason === 'certificateHold') {
-				if (
-					freshestHold === undefined ||
-					entry.thisUpdate.getTime() > freshestHold.thisUpdate.getTime()
-				) {
-					freshestHold = { status: revokedStatus, thisUpdate: entry.thisUpdate };
-				}
-				continue;
-			}
+		const evidence = classifyValidatedOcspEntry(cert, applicable.entry);
+		if (evidence.kind === 'revoked') {
 			return {
-				status: revokedStatus,
+				status: evidence.status,
 				executionErrors,
 			};
 		}
-		if (entry.certStatus === 'good') {
-			freshestGoodThisUpdate = laterEvidenceDate(freshestGoodThisUpdate, entry.thisUpdate);
+		if (evidence.kind === 'good') {
+			freshestGoodThisUpdate = laterEvidenceDate(freshestGoodThisUpdate, evidence.thisUpdate);
+			continue;
+		}
+		if (evidence.kind === 'hold') {
+			if (
+				freshestHold === undefined ||
+				evidence.evidence.thisUpdate.getTime() > freshestHold.thisUpdate.getTime()
+			) {
+				freshestHold = evidence.evidence;
+			}
 			continue;
 		}
 		reasons.add('ocsp_status_unknown');
