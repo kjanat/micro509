@@ -733,6 +733,46 @@ describe('checkChainRevocation with OCSP evidence', () => {
 		);
 	});
 
+	it('denies when revoked OCSP evidence follows a validated good response', async () => {
+		const { ca, leaf, chain, at, fresh } = await createOcspChainFixture();
+		const good = await createOcspResponse({
+			signerPrivateKey: ca.keyPair.privateKey,
+			signerCertificate: ca.certificate.pem,
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: ca.certificate.pem,
+					certStatus: 'good',
+					...fresh,
+				},
+			],
+		});
+		const revoked = await createOcspResponse({
+			signerPrivateKey: ca.keyPair.privateKey,
+			signerCertificate: ca.certificate.pem,
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: ca.certificate.pem,
+					certStatus: 'revoked',
+					revokedAt: fresh.thisUpdate,
+					...fresh,
+				},
+			],
+		});
+
+		const result = await checkChainRevocation({
+			chain: [...chain],
+			ocspResponses: [good.der, revoked.der],
+			at,
+		});
+
+		expect(result.ok).toBe(true);
+		expect(result.value.decision).toBe('deny');
+		expect(result.value.certificates[0]?.status).toBe('revoked');
+		expect(result.value.certificates[0]?.source?.kind).toBe('ocsp');
+	});
+
 	it('treats OCSP unknown status as indeterminate', async () => {
 		const { ca, leaf, chain, at, fresh } = await createOcspChainFixture();
 		const response = await createOcspResponse({

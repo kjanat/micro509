@@ -662,6 +662,41 @@ function parseOcspResponseFromSource(source: OcspResponseSource): ParsedOcspResp
 	return parseOcspResponseDerOrThrow(source);
 }
 
+/** Returns the later of two evidence timestamps, tolerating an empty accumulator. */
+function laterEvidenceDate(current: Date | undefined, candidate: Date): Date {
+	return current === undefined || candidate.getTime() > current.getTime() ? candidate : current;
+}
+
+/** Builds the definitive OCSP-good result or the accumulated indeterminate result. */
+function finalizeOcspEvidence(
+	cert: ParsedCertificate,
+	freshestGoodThisUpdate: Date | undefined,
+	reasons: Set<RevocationIndeterminateReason>,
+	executionErrors: readonly RevocationExecutionError[],
+): EvidenceEvaluation {
+	if (freshestGoodThisUpdate !== undefined) {
+		return {
+			status: {
+				certificate: cert,
+				status: 'good',
+				source: { kind: 'ocsp', thisUpdate: freshestGoodThisUpdate },
+			},
+			executionErrors,
+		};
+	}
+	if (reasons.size === 0) {
+		reasons.add('no_applicable_ocsp');
+	}
+	return {
+		status: {
+			certificate: cert,
+			status: 'indeterminate',
+			indeterminateReasons: [...reasons],
+		},
+		executionErrors,
+	};
+}
+
 /** Maps a {@linkcode validateOcspResponse} failure code to an indeterminate reason. */
 function ocspIndeterminateReasonFromFailure(
 	code: ValidateOcspResponseFailure['code'],
@@ -758,6 +793,7 @@ async function evaluateOcspEvidence(
 	const { ocspResponses = [], at = new Date() } = input;
 	const executionErrors: RevocationExecutionError[] = [];
 	const reasons = new Set<RevocationIndeterminateReason>();
+	let freshestGoodThisUpdate: Date | undefined;
 
 	for (const source of ocspResponses) {
 		let parsed: ParsedOcspResponse;
@@ -801,29 +837,13 @@ async function evaluateOcspEvidence(
 			};
 		}
 		if (entry.certStatus === 'good') {
-			return {
-				status: {
-					certificate: cert,
-					status: 'good',
-					source: { kind: 'ocsp', thisUpdate: entry.thisUpdate },
-				},
-				executionErrors,
-			};
+			freshestGoodThisUpdate = laterEvidenceDate(freshestGoodThisUpdate, entry.thisUpdate);
+			continue;
 		}
 		reasons.add('ocsp_status_unknown');
 	}
 
-	if (reasons.size === 0) {
-		reasons.add('no_applicable_ocsp');
-	}
-	return {
-		status: {
-			certificate: cert,
-			status: 'indeterminate',
-			indeterminateReasons: [...reasons],
-		},
-		executionErrors,
-	};
+	return finalizeOcspEvidence(cert, freshestGoodThisUpdate, reasons, executionErrors);
 }
 
 /**
