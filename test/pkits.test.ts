@@ -128,7 +128,11 @@ describe('PKITS harness', () => {
 	for (const [section, sectionCases] of casesBySection) {
 		describe(section, () => {
 			for (const pkitsCase of sectionCases) {
-				const register = UNSUPPORTED_ALGORITHM_TESTS.has(pkitsCase.testNumber) ? it.failing : it;
+				// Revocation cases search the full corpus. Run serially so concurrent
+				// coverage work does not consume each case's timeout on CI runners.
+				const register = UNSUPPORTED_ALGORITHM_TESTS.has(pkitsCase.testNumber)
+					? it.serial.failing
+					: it.serial;
 				register(`${pkitsCase.testNumber} ${pkitsCase.title}`, () => runPkitsCase(pkitsCase));
 			}
 		});
