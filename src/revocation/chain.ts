@@ -654,6 +654,11 @@ interface EvidenceEvaluation {
 	readonly executionErrors: readonly RevocationExecutionError[];
 }
 
+interface OcspHoldEvidence {
+	readonly status: CertificateRevocationStatus;
+	readonly thisUpdate: Date;
+}
+
 /** Parses an OCSP response from PEM string or DER bytes. */
 function parseOcspResponseFromSource(source: OcspResponseSource): ParsedOcspResponse {
 	if (typeof source === 'string') {
@@ -665,6 +670,24 @@ function parseOcspResponseFromSource(source: OcspResponseSource): ParsedOcspResp
 /** Returns the later of two evidence timestamps, tolerating an empty accumulator. */
 function laterEvidenceDate(current: Date | undefined, candidate: Date): Date {
 	return current === undefined || candidate.getTime() > current.getTime() ? candidate : current;
+}
+
+/** Builds a definitive OCSP-revoked status from a validated response entry. */
+function buildOcspRevokedStatus(
+	cert: ParsedCertificate,
+	thisUpdate: Date,
+	revocationDate: Date,
+	reason: RevocationReason | undefined,
+): CertificateRevocationStatus {
+	return {
+		certificate: cert,
+		status: 'revoked',
+		source: { kind: 'ocsp', thisUpdate },
+		revocationInfo: {
+			revocationDate,
+			...(reason !== undefined ? { reason } : {}),
+		},
+	};
 }
 
 /** Builds the definitive OCSP-good result or the accumulated indeterminate result. */
@@ -794,6 +817,7 @@ async function evaluateOcspEvidence(
 	const executionErrors: RevocationExecutionError[] = [];
 	const reasons = new Set<RevocationIndeterminateReason>();
 	let freshestGoodThisUpdate: Date | undefined;
+	let freshestHold: OcspHoldEvidence | undefined;
 
 	for (const source of ocspResponses) {
 		let parsed: ParsedOcspResponse;
@@ -823,16 +847,23 @@ async function evaluateOcspEvidence(
 
 		if (entry.certStatus === 'revoked') {
 			const reason = revocationReasonFromCode(entry.revocationReasonCode);
+			const revokedStatus = buildOcspRevokedStatus(
+				cert,
+				entry.thisUpdate,
+				entry.revokedAt ?? entry.thisUpdate,
+				reason,
+			);
+			if (reason === 'certificateHold') {
+				if (
+					freshestHold === undefined ||
+					entry.thisUpdate.getTime() > freshestHold.thisUpdate.getTime()
+				) {
+					freshestHold = { status: revokedStatus, thisUpdate: entry.thisUpdate };
+				}
+				continue;
+			}
 			return {
-				status: {
-					certificate: cert,
-					status: 'revoked',
-					source: { kind: 'ocsp', thisUpdate: entry.thisUpdate },
-					revocationInfo: {
-						revocationDate: entry.revokedAt ?? entry.thisUpdate,
-						...(reason !== undefined ? { reason } : {}),
-					},
-				},
+				status: revokedStatus,
 				executionErrors,
 			};
 		}
@@ -841,6 +872,14 @@ async function evaluateOcspEvidence(
 			continue;
 		}
 		reasons.add('ocsp_status_unknown');
+	}
+
+	if (
+		freshestHold !== undefined &&
+		(freshestGoodThisUpdate === undefined ||
+			freshestGoodThisUpdate.getTime() <= freshestHold.thisUpdate.getTime())
+	) {
+		return { status: freshestHold.status, executionErrors };
 	}
 
 	return finalizeOcspEvidence(cert, freshestGoodThisUpdate, reasons, executionErrors);
