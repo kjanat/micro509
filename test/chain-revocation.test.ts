@@ -733,6 +733,50 @@ describe('checkChainRevocation with OCSP evidence', () => {
 		);
 	});
 
+	it('denies on revoked OCSP evidence regardless of response ordering', async () => {
+		const { ca, leaf, chain, at } = await createOcspChainFixture();
+		const oldGood = await createOcspResponse({
+			signerPrivateKey: ca.keyPair.privateKey,
+			signerCertificate: ca.certificate.pem,
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: ca.certificate.pem,
+					certStatus: 'good',
+					thisUpdate: new Date(at.getTime() - 2 * HOUR_MS),
+				},
+			],
+		});
+		const newerRevoked = await createOcspResponse({
+			signerPrivateKey: ca.keyPair.privateKey,
+			signerCertificate: ca.certificate.pem,
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: ca.certificate.pem,
+					certStatus: 'revoked',
+					thisUpdate: new Date(at.getTime() - HOUR_MS),
+					revokedAt: new Date(at.getTime() - HOUR_MS),
+				},
+			],
+		});
+
+		for (const ocspResponses of [
+			[oldGood.der, newerRevoked.der],
+			[newerRevoked.der, oldGood.der],
+		]) {
+			const result = await checkChainRevocation({
+				chain: [...chain],
+				ocspResponses,
+				at,
+				policy: { mode: 'hard-fail', prefer: 'best-available' },
+			});
+
+			expect(result.value.decision).toBe('deny');
+			expect(result.value.certificates[0]?.status).toBe('revoked');
+		}
+	});
+
 	it('treats OCSP unknown status as indeterminate', async () => {
 		const { ca, leaf, chain, at, fresh } = await createOcspChainFixture();
 		const response = await createOcspResponse({

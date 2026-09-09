@@ -757,7 +757,8 @@ async function evaluateOcspEvidence(
 ): Promise<EvidenceEvaluation> {
 	const { ocspResponses = [], at = new Date() } = input;
 	const executionErrors: RevocationExecutionError[] = [];
-	const reasons = new Set<RevocationIndeterminateReason>();
+	const reasons = new Set<RevocationIndeterminateReason>(['no_applicable_ocsp']);
+	const goodThisUpdates: Date[] = [];
 
 	for (const source of ocspResponses) {
 		let parsed: ParsedOcspResponse;
@@ -778,6 +779,7 @@ async function evaluateOcspEvidence(
 		if (entry === undefined) {
 			continue; // Response does not cover this certificate
 		}
+		reasons.delete('no_applicable_ocsp');
 
 		const validation = await validateOcspResponseWithResponderFallback(parsed, issuer, input, at);
 		if (!validation.ok) {
@@ -801,21 +803,26 @@ async function evaluateOcspEvidence(
 			};
 		}
 		if (entry.certStatus === 'good') {
-			return {
-				status: {
-					certificate: cert,
-					status: 'good',
-					source: { kind: 'ocsp', thisUpdate: entry.thisUpdate },
-				},
-				executionErrors,
-			};
+			goodThisUpdates.push(entry.thisUpdate);
+			continue;
 		}
 		reasons.add('ocsp_status_unknown');
 	}
 
-	if (reasons.size === 0) {
-		reasons.add('no_applicable_ocsp');
+	const freshestGoodThisUpdate = goodThisUpdates.sort(
+		(left, right) => right.getTime() - left.getTime(),
+	)[0];
+	if (freshestGoodThisUpdate !== undefined) {
+		return {
+			status: {
+				certificate: cert,
+				status: 'good',
+				source: { kind: 'ocsp', thisUpdate: freshestGoodThisUpdate },
+			},
+			executionErrors,
+		};
 	}
+
 	return {
 		status: {
 			certificate: cert,
