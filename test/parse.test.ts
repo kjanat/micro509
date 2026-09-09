@@ -859,6 +859,39 @@ describe('parse', () => {
 		});
 	});
 
+	it('returns malformed when custom decoders reject untrusted extension bytes', async () => {
+		const oid = '1.2.3.4.250';
+		const decoder = {
+			oid,
+			decode(extension: { readonly valueDer: Uint8Array }) {
+				return new TextDecoder('utf-8', { fatal: true }).decode(extension.valueDer);
+			},
+		};
+		const certificate = await createSelfSignedCertificateWithRawExtensions({
+			subject: { commonName: 'invalid-custom-extension.example' },
+			extensions: { customExtensions: [{ oid, value: Uint8Array.of(0xff) }] },
+		});
+		const keyPair = await generateKeyPair();
+		const csr = await createCsrWithRawExtensions({
+			subject: { commonName: 'invalid-custom-extension.example' },
+			publicKey: keyPair.publicKey,
+			signerPrivateKey: keyPair.privateKey,
+			extensions: { customExtensions: [{ oid, value: Uint8Array.of(0xff) }] },
+		});
+
+		for (const result of [
+			parseCertificateDer(certificate.certificate.der, { decoders: [decoder] }),
+			parseCertificatePem(certificate.certificate.pem, { decoders: [decoder] }),
+			parseCertificateSigningRequestDer(csr.der, { decoders: [decoder] }),
+			parseCertificateSigningRequestPem(csr.pem, { decoders: [decoder] }),
+		]) {
+			expect(result.ok).toBe(false);
+			if (!result.ok) {
+				expect(result.error.code).toBe('malformed');
+			}
+		}
+	});
+
 	it('parses all known EKU types', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'EKU CA' },
