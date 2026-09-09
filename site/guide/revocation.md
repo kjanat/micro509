@@ -91,13 +91,16 @@ const crl = await createCertificateRevocationList({
   ],
 });
 
-const validationResult = await validateCertificateRevocationList({
-  crl: crl.pem,
-  issuerCertificate: ca.certificate.pem,
-});
+const validationResult =
+  await validateCertificateRevocationList({
+    crl: crl.pem,
+    issuerCertificate: ca.certificate.pem,
+  });
 
 if (!validationResult.ok) {
-  console.log(`validation failed: ${validationResult.code}`);
+  console.log(
+    `validation failed: ${validationResult.code}`,
+  );
 } else {
   const parsed = validationResult.value;
   const entry = parsed.revokedCertificates[0];
