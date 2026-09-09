@@ -31,7 +31,7 @@ jobs:
       is_stable: ${{ steps.version.outputs.is_stable }}
       mode: ${{ steps.version.outputs.mode }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with: { persist-credentials: false }
       - uses: ./.github/actions/release-validate
         id: version
@@ -47,7 +47,7 @@ jobs:
       name: ${{ needs.validate.outputs.is_tag == 'true' && 'jsr' || '' }}
       url: ${{ needs.validate.outputs.is_tag == 'true' && needs.validate.outputs.jsr_url || '' }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with: { persist-credentials: false }
       - uses: ./.github/actions/setup-ts
         with: { install-bun: "true" }
@@ -75,7 +75,7 @@ jobs:
       name: ${{ needs.validate.outputs.is_tag == 'true' && 'npm' || '' }}
       url: ${{ needs.validate.outputs.is_tag == 'true' && needs.validate.outputs.npm_url || '' }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with: { persist-credentials: false }
       - uses: ./.github/actions/setup-ts
         with: { install-bun: true, install-node: true, update-npm: true, node-registry-url: https://registry.npmjs.org }
@@ -104,7 +104,7 @@ jobs:
     timeout-minutes: 15
     permissions: { contents: write }
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with: { persist-credentials: false }
       - uses: ./.github/actions/setup-ts
         with: { install-node: true, update-npm: true }
