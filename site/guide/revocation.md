@@ -59,7 +59,7 @@ console.log(crl.pem);
 
 </LiveCode>
 
-### Parse and verify a CRL
+### Parse and validate a CRL
 
 <LiveCode>
 
@@ -68,8 +68,7 @@ import { createSelfSignedCertificate } from 'micro509';
 import {
   createCertificateRevocationList,
   isCertificateRevoked,
-  parseCertificateRevocationListPemOrThrow,
-  verifyCertificateRevocationListSignature,
+  validateCertificateRevocationList,
 } from 'micro509/revocation';
 
 const ca = await createSelfSignedCertificate({
@@ -92,30 +91,33 @@ const crl = await createCertificateRevocationList({
   ],
 });
 
-const parsed = parseCertificateRevocationListPemOrThrow(
-  crl.pem,
-);
+const validationResult =
+  await validateCertificateRevocationList({
+    crl: crl.pem,
+    issuerCertificate: ca.certificate.pem,
+  });
 
-const verifyResult =
-  await verifyCertificateRevocationListSignature(
-    crl.pem,
-    ca.certificate.pem,
+if (!validationResult.ok) {
+  console.log(
+    `validation failed: ${validationResult.code}`,
   );
-
-const entry = parsed.revokedCertificates[0];
-const body = crl.pem
-  .trimEnd()
-  .split('\n')
-  .slice(1, -1)
-  .join('');
-console.log(`\
-verified:   ${verifyResult.ok}
+} else {
+  const parsed = validationResult.value;
+  const entry = parsed.revokedCertificates[0];
+  const body = crl.pem
+    .trimEnd()
+    .split('\n')
+    .slice(1, -1)
+    .join('');
+  console.log(`\
+validated:  true
 sig algo:   ${parsed.signatureAlgorithmName}
 signature:  …${body.slice(-44)}
 thisUpdate: ${parsed.thisUpdate.toISOString()}
 entry 01:   revoked ${entry?.revocationDate.toISOString().slice(0, 10)}, reason ${entry?.reasonCode}
 revoked 01: ${isCertificateRevoked('01', parsed)}
 revoked 02: ${isCertificateRevoked('02', parsed)}`);
+}
 ```
 
 </LiveCode>
