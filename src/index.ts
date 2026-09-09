@@ -334,6 +334,7 @@ export type {
 	RevocationSource,
 	RevocationStatus,
 	RevokedCertificateInput,
+	TrustedOcspResponder,
 	ValidateCertificateRevocationListFailure,
 	ValidateCertificateRevocationListInput,
 	ValidateCertificateRevocationListResult,

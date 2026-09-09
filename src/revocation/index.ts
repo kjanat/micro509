@@ -15,6 +15,7 @@ export type {
 	RevocationIndeterminateReason,
 	RevocationPolicy,
 	RevocationSource,
+	TrustedOcspResponder,
 } from '#micro509/revocation/chain';
 export { checkChainRevocation, REVOCATION_INDETERMINATE_REASONS } from '#micro509/revocation/chain';
 
