@@ -136,6 +136,22 @@ bun lint               # biome lint
 bun fmt                # dprint fmt
 ```
 
+### Dependency bootstrap
+
+- Do not stop at a missing executable or an empty `node_modules/` directory.
+  Install the dependencies before running project checks.
+- Use the latest stable Bun release; an older system-provided Bun may not
+  understand the workspace catalog or the test APIs used by this repository.
+- Install the lockfile-resolved dependency versions with
+  `bun install --frozen-lockfile`. Do not substitute globally installed
+  formatter, linter, or task-runner binaries for the project dependencies.
+
+```bash
+curl -fsSL https://bun.sh/install | bash # install or upgrade to latest stable Bun
+export PATH="$HOME/.bun/bin:$PATH"
+bun install --frozen-lockfile
+```
+
 ## NOTES
 
 - Repo and package name are both `micro509` (local checkout dir may still be `ts-x509`).
