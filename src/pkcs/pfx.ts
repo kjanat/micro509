@@ -28,10 +28,12 @@ import {
 } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
 import {
+	createKdfBudget,
 	decryptPbes2,
 	encryptPbes2,
 	isKdfIterationLimitError,
 	isWrongPasswordError,
+	type KdfBudget,
 	type KdfLimitOptions,
 } from '#micro509/internal/crypto/pbes2';
 import { base64Encode } from '#micro509/internal/shared/base64';
@@ -372,12 +374,15 @@ export async function parsePfxDer(
 		}
 		const authenticatedSafe = readSequenceChildren(authenticatedSafeOctets);
 		const bags: ParsedPfxBag[] = [];
+		// One budget for the whole file: entries that each sit under the ceiling
+		// must not be able to sum past it.
+		const budget = createKdfBudget(options);
 		for (const contentInfo of authenticatedSafe) {
 			const contentInfoDer = authenticatedSafeOctets.slice(
 				contentInfo.start - contentInfo.headerLength,
 				contentInfo.end,
 			);
-			const safeContentsResult = await extractSafeContents(contentInfoDer, options);
+			const safeContentsResult = await extractSafeContents(contentInfoDer, options, budget);
 			if (safeContentsResult.error !== undefined) {
 				return safeContentsResult.error;
 			}
@@ -465,6 +470,7 @@ function extractContentInfoData(contentInfoDer: Uint8Array): Uint8Array {
 async function extractSafeContents(
 	contentInfoDer: Uint8Array,
 	options: ParsePfxOptions | undefined,
+	budget: KdfBudget,
 ): Promise<
 	| {
 			readonly data: Uint8Array;
@@ -506,7 +512,7 @@ async function extractSafeContents(
 		decrypted = await decryptEncryptedData(
 			contentInfoDer.slice(encryptedData.start - encryptedData.headerLength, encryptedData.end),
 			options.password,
-			options,
+			budget,
 		);
 	} catch (error) {
 		rethrowIfInvariant(error);
@@ -775,7 +781,7 @@ async function verifyPfxMacData(
 function decryptEncryptedData(
 	encryptedDataDer: Uint8Array,
 	password: string,
-	options: KdfLimitOptions,
+	budget: KdfBudget,
 ): Promise<Uint8Array> {
 	const topLevel = readSequenceChildren(encryptedDataDer);
 	const encryptedContentInfo = topLevel[1];
@@ -808,7 +814,7 @@ function decryptEncryptedData(
 		contentInfoDer.slice(algorithm.start - algorithm.headerLength, algorithm.end),
 		encryptedContent.value,
 		password,
-		options,
+		budget,
 	);
 }
 

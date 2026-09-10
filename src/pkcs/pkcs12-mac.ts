@@ -25,7 +25,8 @@ import {
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { describeHashAlgorithm } from '#micro509/internal/crypto/algorithm-names';
 import {
-	assertKdfIterationsWithinLimit,
+	chargeKdfBudget,
+	createKdfBudget,
 	DEFAULT_MAX_PKCS12_MAC_ITERATIONS,
 	isKdfIterationLimitError,
 	type KdfLimitOptions,
@@ -181,7 +182,7 @@ export async function parsePkcs12MacDataOrThrow(
 			verification: 'unchecked',
 		};
 	}
-	assertKdfIterationsWithinLimit(parsedIterations, options, DEFAULT_MAX_PKCS12_MAC_ITERATIONS);
+	chargeKdfBudget(createKdfBudget(options, DEFAULT_MAX_PKCS12_MAC_ITERATIONS), parsedIterations);
 	const expected = await computePkcs12Mac(
 		authenticatedSafe,
 		password,

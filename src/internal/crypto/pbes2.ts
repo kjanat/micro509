@@ -57,9 +57,9 @@ export const DEFAULT_MAX_PKCS12_MAC_ITERATIONS = 100_000;
 const kdfIterationLimitBrand = Symbol('micro509.KdfIterationLimitError');
 
 /** Thrown before key derivation when an encoded iteration count exceeds the caller's limit. */
-export function kdfIterationLimitError(iterations: number, limit: number): Error {
+export function kdfIterationLimitError(iterations: number, remaining: number): Error {
 	return Object.assign(
-		new Error(`KDF iteration count ${iterations} exceeds the limit of ${limit}`),
+		new Error(`KDF iteration count ${iterations} exceeds the remaining budget of ${remaining}`),
 		{ name: 'KdfIterationLimitError', [kdfIterationLimitBrand]: true },
 	);
 }
@@ -79,19 +79,34 @@ export interface KdfLimitOptions {
 	readonly maxKdfIterations?: number;
 }
 
-/** Rejects an iteration count above the caller's limit before any derivation runs. */
-export function assertKdfIterationsWithinLimit(
-	iterations: number,
+/**
+ * KDF iterations one operation may still spend. A container decrypting many
+ * entries shares a single budget, so entries that each sit under the ceiling
+ * cannot sum past it.
+ */
+export interface KdfBudget {
+	/** Iterations still available. */
+	remaining: number;
+}
+
+/** Opens a budget from the caller's limit. Throws when that limit is not a positive integer. */
+export function createKdfBudget(
 	options: KdfLimitOptions | undefined,
 	defaultLimit: number = DEFAULT_MAX_KDF_ITERATIONS,
-): void {
+): KdfBudget {
 	const limit = options?.maxKdfIterations ?? defaultLimit;
 	if (!Number.isSafeInteger(limit) || limit < 1) {
 		throw new RangeError(`Invalid maxKdfIterations: must be an integer >= 1, got ${limit}`);
 	}
-	if (iterations > limit) {
-		throw kdfIterationLimitError(iterations, limit);
+	return { remaining: limit };
+}
+
+/** Charges iterations against the budget, throwing before any derivation runs. */
+export function chargeKdfBudget(budget: KdfBudget, iterations: number): void {
+	if (iterations > budget.remaining) {
+		throw kdfIterationLimitError(iterations, budget.remaining);
 	}
+	budget.remaining -= iterations;
 }
 
 /** AES-CBC key sizes supported by this PBES2 implementation. */
@@ -190,16 +205,16 @@ export async function encryptPbes2(
 /**
  * Decrypts PBES2 ciphertext given the DER AlgorithmIdentifier and password.
  * Throws on wrong password, and before derivation when the encoded iteration
- * count exceeds `options.maxKdfIterations`.
+ * count exceeds what `budget` still allows.
  */
 export async function decryptPbes2(
 	algorithmIdentifierDer: Uint8Array,
 	encryptedData: Uint8Array,
 	password: string,
-	options?: KdfLimitOptions,
+	budget: KdfBudget = createKdfBudget(undefined),
 ): Promise<Uint8Array> {
 	const parameters = parsePbes2AlgorithmIdentifier(algorithmIdentifierDer);
-	assertKdfIterationsWithinLimit(parameters.iterations, options);
+	chargeKdfBudget(budget, parameters.iterations);
 	const key = await deriveAesKey(
 		password,
 		parameters.salt,
