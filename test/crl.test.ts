@@ -4673,6 +4673,19 @@ describe('CRL maximum age', () => {
 		expect(withinAge.ok).toBe(true);
 	});
 
+	it('rejects a negative maxAgeMs', async () => {
+		const { ca, crl } = await issueOpenEndedCrl();
+
+		expect(
+			validateCertificateRevocationList({
+				crl: crl.pem,
+				issuerCertificate: ca.certificate.pem,
+				at: new Date('2020-06-01T00:00:00Z'),
+				maxAgeMs: -1,
+			}),
+		).rejects.toThrow(RangeError);
+	});
+
 	it('applies maxAgeMs through checkCertificateRevocationAgainstCrl', async () => {
 		const { ca, crl } = await issueOpenEndedCrl();
 		const leafKeys = await generateKeyPair();
