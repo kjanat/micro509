@@ -248,7 +248,13 @@ export async function buildChainInternal(
 		if (rootFingerprints.has(fingerprint(current))) {
 			return path;
 		}
-		const matchedAnchor = await matchTrustAnchor(current, anchorIndex, callbacks, path.length - 1);
+		const matchedAnchor = await matchTrustAnchor(
+			current,
+			anchorIndex,
+			callbacks,
+			path.length - 1,
+			verifyAnchorOnce,
+		);
 		if (matchedAnchor.failure !== undefined) {
 			recordFailure(matchedAnchor.failure, path);
 		}
@@ -340,10 +346,32 @@ export async function buildChainInternal(
 		certificate: ParsedCertificate,
 		issuer: ParsedCertificate,
 	): Promise<VerifyCertificateSignatureResult> {
-		const key = `${fingerprint(certificate)}:${toHex(issuer.subjectPublicKeyInfoDer)}`;
+		return verifyOnce(
+			`c:${fingerprint(certificate)}:${toHex(issuer.subjectPublicKeyInfoDer)}`,
+			() => verifyCertificateSignature(certificate, issuer),
+		);
+	}
+
+	function verifyAnchorOnce(
+		certificate: ParsedCertificate,
+		anchor: TrustAnchor,
+	): Promise<VerifyCertificateSignatureResult> {
+		const anchorKey = `${anchor.publicKeyAlgorithmOid}:${anchor.publicKeyParametersOid ?? ''}:${toHex(
+			anchor.subjectPublicKeyInfoDer,
+		)}`;
+		return verifyOnce(`a:${fingerprint(certificate)}:${anchorKey}`, () =>
+			verifyTrustAnchorSignature(certificate, anchor),
+		);
+	}
+
+	/** One signature check per distinct certificate-and-key pair for the whole search. */
+	function verifyOnce(
+		key: string,
+		run: () => Promise<VerifyCertificateSignatureResult>,
+	): Promise<VerifyCertificateSignatureResult> {
 		let pending = signatureResults.get(key);
 		if (pending === undefined) {
-			pending = verifyCertificateSignature(certificate, issuer);
+			pending = run();
 			signatureResults.set(key, pending);
 		}
 		return pending;
@@ -590,6 +618,7 @@ async function matchTrustAnchor(
 	anchorIndex: ReadonlyMap<string, readonly TrustAnchor[]>,
 	callbacks: VerifyPathCallbacks,
 	index: number,
+	verifyAnchor: typeof verifyTrustAnchorSignature,
 ): Promise<TrustAnchorMatchResult> {
 	const anchors = anchorIndex.get(canonicalDnKey(certificate.issuer));
 	if (anchors === undefined) {
@@ -602,7 +631,7 @@ async function matchTrustAnchor(
 		// are non-reflexive and prepared/tagged namespaces can collide), so confirm
 		// the anchor's subject actually equals the certificate's issuer.
 		if (!compareDistinguishedNames(certificate.issuer, anchor.subject)) continue;
-		const verified = await verifyTrustAnchorSignature(certificate, anchor);
+		const verified = await verifyAnchor(certificate, anchor);
 		if (!verified.ok) {
 			// Capture the first failure but continue trying other anchors
 			if (firstFailure === undefined) {

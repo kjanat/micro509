@@ -25,7 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fourth argument), `parsePfxDer` / `parsePfxPem` options, and
   `parsePkcs12MacData` bounds the PBKDF2 and PKCS#12 KDF iteration counts a
   file may demand. Above the bound the import fails with
-  `kdf_iterations_exceeded` before any derivation runs. See Security.
+  `kdf_iterations_exceeded` before any derivation runs. The default is
+  2,000,000 for PBKDF2 and 100,000 for the PKCS#12 KDF, which RFC 7292
+  Appendix B derives one digest at a time. See Security.
 - `maxAgeMs` on `validateCertificateRevocationList` and
   `checkCertificateRevocationAgainstCrl`, `crlMaxAgeMs` on
   `checkCertificateRevocation` and the chain-level `RevocationPolicy`, bound
@@ -109,8 +111,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   verification ran the PKCS#12 KDF, for whatever iteration count the file
   encoded before the password or ciphertext could be rejected. A 122-byte
   EncryptedPrivateKeyInfo or a 177-byte PFX carrying `0x7fffffff` iterations
-  held the CPU for minutes. Counts above 2,000,000 are now refused before
-  derivation; `maxKdfIterations` adjusts the bound.
+  held the CPU for minutes. Counts above the ceiling are now refused before
+  derivation; `maxKdfIterations` adjusts it.
+- Bare trust anchors were re-verified on every visit to a certificate, because
+  the anchor match ran before the dead-end lookup. A bundle of same-subject CAs
+  plus a few subject-matching anchors made anchor signature checks grow with
+  the search graph rather than the input: 40 candidates and 20 anchors cost
+  3.7s. Each certificate-and-anchor pair is now checked once per search.
 - Path building memoized dead ends per visited set, so a bundle of `n`
   same-subject CA certificates sharing one key cost on the order of `n³`
   signature verifications before `no_trusted_root` (30 candidates: 9,426 key

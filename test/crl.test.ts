@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import {
+	checkCertificateRevocation,
 	checkCertificateRevocationAgainstCrl,
 	createCertificate,
 	createCertificateRevocationList,
@@ -4682,6 +4683,27 @@ describe('CRL maximum age', () => {
 				issuerCertificate: ca.certificate.pem,
 				at: new Date('2020-06-01T00:00:00Z'),
 				maxAgeMs: -1,
+			}),
+		).rejects.toThrow(RangeError);
+	});
+
+	it('reports an invalid crlMaxAgeMs as an invariant, not indeterminate evidence', async () => {
+		const { ca, crl } = await issueOpenEndedCrl();
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Max Age CRL CA' },
+			subject: { commonName: 'invariant-leaf.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+
+		expect(
+			checkCertificateRevocation({
+				certificate: leaf.pem,
+				issuerCertificate: ca.certificate.pem,
+				evidence: [{ kind: 'crl', crl: crl.pem }],
+				crlMaxAgeMs: -1,
 			}),
 		).rejects.toThrow(RangeError);
 	});

@@ -41,7 +41,7 @@ import { pemEncode, splitPemBlocksOrThrow } from '#micro509/pem/pem';
 import type { ParsedPkcs12MacData, Pkcs12MacOptions } from '#micro509/pkcs/pkcs12-mac';
 import { createPkcs12MacData, parsePkcs12MacData } from '#micro509/pkcs/pkcs12-mac';
 import type { ErrorResult, Micro509Error } from '#micro509/result/result';
-import { failureResult } from '#micro509/result/result';
+import { failureResult, rethrowIfInvariant } from '#micro509/result/result';
 import type { ParsedCertificate } from '#micro509/x509/parse';
 import { parseCertificateDerOrThrow } from '#micro509/x509/parse';
 
@@ -396,7 +396,8 @@ export async function parsePfxDer(
 				...(macData === undefined ? {} : { macData }),
 			},
 		};
-	} catch {
+	} catch (error) {
+		rethrowIfInvariant(error);
 		return pfxFailure('malformed', 'Malformed PFX structure');
 	}
 }
@@ -508,6 +509,7 @@ async function extractSafeContents(
 			options,
 		);
 	} catch (error) {
+		rethrowIfInvariant(error);
 		if (isWrongPasswordError(error)) {
 			return {
 				error: pfxFailure('invalid_password', 'Invalid PFX password or encrypted content'),

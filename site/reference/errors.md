@@ -269,12 +269,12 @@ both tables are enforced against `VERIFY_ERROR_CODES` by tests.
 
 ### ParsePfxErrorCode
 
-| Code                      | Meaning                                                                     |
-| ------------------------- | --------------------------------------------------------------------------- |
-| `invalid_password`        | MAC or decryption rejects the supplied password                             |
-| `kdf_iterations_exceeded` | MAC or PBES2 iteration count exceeds `maxKdfIterations` (2,000,000 default) |
-| `malformed`               | PFX structure fails to parse                                                |
-| `password_required`       | Encrypted content present but no password given                             |
+| Code                      | Meaning                                                                   |
+| ------------------------- | ------------------------------------------------------------------------- |
+| `invalid_password`        | MAC or decryption rejects the supplied password                           |
+| `kdf_iterations_exceeded` | Iteration count exceeds `maxKdfIterations` (2,000,000 PBES2, 100,000 MAC) |
+| `malformed`               | PFX structure fails to parse                                              |
+| `password_required`       | Encrypted content present but no password given                           |
 
 ### CreatePfxErrorCode
 
@@ -284,10 +284,10 @@ both tables are enforced against `VERIFY_ERROR_CODES` by tests.
 
 ### ParsePkcs12MacDataErrorCode
 
-| Code                      | Meaning                                                            |
-| ------------------------- | ------------------------------------------------------------------ |
-| `kdf_iterations_exceeded` | KDF iteration count exceeds `maxKdfIterations` (2,000,000 default) |
-| `malformed`               | MacData structure fails to parse                                   |
+| Code                      | Meaning                                                                  |
+| ------------------------- | ------------------------------------------------------------------------ |
+| `kdf_iterations_exceeded` | PKCS#12 KDF iteration count exceeds `maxKdfIterations` (100,000 default) |
+| `malformed`               | MacData structure fails to parse                                         |
 
 ### ParsePkcs7ErrorCode
 
