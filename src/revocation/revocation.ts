@@ -103,6 +103,8 @@ export interface CheckCertificateRevocationInput {
 	readonly at?: Date;
 	/** Clock-skew tolerance in milliseconds. */
 	readonly clockSkewMs?: number;
+	/** Maximum age of each CRL's `thisUpdate` in milliseconds. See {@linkcode ValidateCertificateRevocationListInput.maxAgeMs}. */
+	readonly crlMaxAgeMs?: number;
 }
 
 /** Error codes that {@linkcode checkCertificateRevocation} may surface inside an `indeterminate` result. */
@@ -416,6 +418,7 @@ async function checkCertificateRevocationWithCrl(
 		...(evidence.deltaCrl === undefined ? {} : { deltaCrl: evidence.deltaCrl }),
 		...(input.at === undefined ? {} : { at: input.at }),
 		...(input.clockSkewMs === undefined ? {} : { clockSkewMs: input.clockSkewMs }),
+		...(input.crlMaxAgeMs === undefined ? {} : { maxAgeMs: input.crlMaxAgeMs }),
 	});
 	if (result.ok) {
 		if (result.value.status === 'revoked') {

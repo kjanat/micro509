@@ -196,6 +196,7 @@ export async function buildChainInternal(
 	let deepestMissingIssuerAt: number | undefined;
 	let preferredFailure: VerifyChainFailure | undefined;
 	const deadEnds = new Set<string>();
+	const signatureResults = new Map<string, Promise<VerifyCertificateSignatureResult>>();
 
 	candidates.forEach((candidate, index) => {
 		const key = canonicalDnKey(candidate.subject);
@@ -257,8 +258,7 @@ export async function buildChainInternal(
 		if (path.length > maxDepth) {
 			return undefined;
 		}
-		const visitedKey = [...visited].sort().join(',');
-		const memoKey = `${fingerprint(current)}:${caBelowCount}:${visitedKey}`;
+		const memoKey = `${fingerprint(current)}:${caBelowCount}`;
 		if (deadEnds.has(memoKey)) {
 			return undefined;
 		}
@@ -325,6 +325,7 @@ export async function buildChainInternal(
 			caBelowCount,
 			at,
 			callbacks,
+			verifySignatureOnce,
 		);
 		if (!candidate.ok) {
 			recordFailure(candidate.failure, path);
@@ -333,6 +334,19 @@ export async function buildChainInternal(
 		const nextVisited = new Set(visited);
 		nextVisited.add(issuerFingerprint);
 		return await search(issuer, [...path, issuer], nextVisited, candidate.nextCaBelowCount);
+	}
+
+	function verifySignatureOnce(
+		certificate: ParsedCertificate,
+		issuer: ParsedCertificate,
+	): Promise<VerifyCertificateSignatureResult> {
+		const key = `${fingerprint(certificate)}:${toHex(issuer.subjectPublicKeyInfoDer)}`;
+		let pending = signatureResults.get(key);
+		if (pending === undefined) {
+			pending = verifyCertificateSignature(certificate, issuer);
+			signatureResults.set(key, pending);
+		}
+		return pending;
 	}
 
 	function updateDeepest(path: readonly ParsedCertificate[]): boolean {
@@ -362,6 +376,7 @@ async function evaluateIssuerCandidate(
 	caBelowCount: number,
 	at: Date,
 	callbacks: VerifyPathCallbacks,
+	verifySignature: typeof verifyCertificateSignature,
 ): Promise<IssuerCandidateEvaluation> {
 	const issuerConstraints = evaluateIssuerConstraints(
 		current,
@@ -374,7 +389,7 @@ async function evaluateIssuerCandidate(
 	if (!issuerConstraints.ok) {
 		return issuerConstraints;
 	}
-	const signatureResult = await verifyCertificateSignature(current, issuer);
+	const signatureResult = await verifySignature(current, issuer);
 	if (!signatureResult.ok) {
 		return {
 			ok: false,
