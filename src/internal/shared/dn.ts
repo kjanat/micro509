@@ -309,7 +309,14 @@ function collapseInsignificantSpaces(value: string): string {
 		const nextCodePoint = value.codePointAt(nextIndex);
 		const followedByCombiningMark =
 			nextCodePoint !== undefined && inRanges(nextCodePoint, COMBINING_MARK_RANGES);
-		if (followedByCombiningMark || (collapsed.length > 0 && nextCodePoint !== undefined)) {
+		if (followedByCombiningMark) {
+			// Only the final SPACE in the run is the combining sequence's base.
+			// Collapse any preceding, inner insignificant run separately.
+			if (nextIndex - index > 1 && collapsed.length > 0) {
+				collapsed += ' ';
+			}
+			collapsed += ' ';
+		} else if (collapsed.length > 0 && nextCodePoint !== undefined) {
 			collapsed += ' ';
 		}
 		index = nextIndex;

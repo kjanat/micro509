@@ -48,6 +48,12 @@ describe('RFC 4518 string preparation', () => {
 		expect(prepareNameCompareString(` ${COMBINING_ACUTE}x`)).not.toBe(
 			prepareNameCompareString(`${COMBINING_ACUTE}x`),
 		);
+		expect(prepareNameCompareString(`a  ${COMBINING_ACUTE}x`)).not.toBe(
+			prepareNameCompareString(`a ${COMBINING_ACUTE}x`),
+		);
+		expect(prepareNameCompareString(`a   ${COMBINING_ACUTE}x`)).toBe(
+			prepareNameCompareString(`a  ${COMBINING_ACUTE}x`),
+		);
 		// RFC 4518 freezes combining-mark classification to Unicode 3.2. U+1885
 		// became a mark later, while U+06DE ceased to be one.
 		expect(prepareNameCompareString(` ${MONGOLIAN_LETTER_ALI_GALI_BALUDA}`)).toBe(
