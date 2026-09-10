@@ -164,7 +164,7 @@
 		"vue": "catalog:",
 		"wrangler": "catalog:cloudflare"
 	},
-	"packageManager": "bun@1.3.14",
+	"packageManager": "bun@1.4.2",
 	"devEngines": {
 		"packageManager": [
 			{
