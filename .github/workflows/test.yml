@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with: { persist-credentials: false }
-      - uses: ./.github/actions/setup-ts
+      - uses: $/.github/actions/setup-ts
         with: { install-bun: true, install-node: true, install-deno: true }
       - name: Build (runs attw + publint + unused-export checks)
         run: runner install -f build
@@ -41,7 +41,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with: { persist-credentials: false }
-      - uses: ./.github/actions/setup-ts
+      - uses: $/.github/actions/setup-ts
         with: { install-bun: true, install-node: true, install-deno: true }
       - run: runner install -f site:build
         env: { GITHUB_TOKEN: "${{ github.token }}" }
@@ -59,7 +59,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with: { persist-credentials: false }
-      - uses: ./.github/actions/setup-ts
+      - uses: $/.github/actions/setup-ts
         with: { install-bun: true, install-node: true, install-deno: true }
       - run: runner install -sf bd playwright:chromium smoke
 
@@ -71,7 +71,7 @@ jobs:
     env: { DIFFERENTIAL_OPENSSL: "1", EXPECTED_OPENSSL_VERSION: "3.5.5" }
     steps:
       - { uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1, with: { persist-credentials: false } } # v7
-      - { uses: ./.github/actions/setup-ts, with: { install-bun: "true" } }
+      - { uses: $/.github/actions/setup-ts, with: { install-bun: "true" } }
       - name: Assert OpenSSL oracle version
         run: |
           version="$(openssl version)"
