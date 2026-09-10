@@ -91,6 +91,10 @@ MAC:     ${macData?.verification} (${macData?.digestAlgorithmName})`);
 
 </LiveCode>
 
+Both the MAC and the PBES2 key bags carry their own KDF iteration counts.
+Parsing refuses counts above 2,000,000 with `kdf_iterations_exceeded`;
+`maxKdfIterations` in the options raises or lowers that bound.
+
 ## PKCS#7 / CMS
 
 ### Create a certificate bag

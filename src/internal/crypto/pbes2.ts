@@ -43,6 +43,47 @@ export function isWrongPasswordError(value: unknown): value is Error {
 	return value instanceof Error && wrongPasswordBrand in value;
 }
 
+/** Upper bound on password-based KDF iteration counts accepted from untrusted input. */
+export const DEFAULT_MAX_KDF_ITERATIONS = 2_000_000;
+
+const kdfIterationLimitBrand = Symbol('micro509.KdfIterationLimitError');
+
+/** Thrown before key derivation when an encoded iteration count exceeds the caller's limit. */
+export function kdfIterationLimitError(iterations: number, limit: number): Error {
+	return Object.assign(
+		new Error(`KDF iteration count ${iterations} exceeds the limit of ${limit}`),
+		{ name: 'KdfIterationLimitError', [kdfIterationLimitBrand]: true },
+	);
+}
+
+/** Type guard: was derivation refused because the iteration count exceeds the limit? */
+export function isKdfIterationLimitError(value: unknown): value is Error {
+	return value instanceof Error && kdfIterationLimitBrand in value;
+}
+
+/** Caller-supplied bound on password-based KDF work. */
+export interface KdfLimitOptions {
+	/**
+	 * Maximum PBKDF2 or PKCS#12 KDF iteration count accepted from the input.
+	 * Higher counts fail before any derivation runs. Default: `2_000_000`.
+	 */
+	readonly maxKdfIterations?: number;
+}
+
+/** Rejects an iteration count above the caller's limit before any derivation runs. */
+export function assertKdfIterationsWithinLimit(
+	iterations: number,
+	options: KdfLimitOptions | undefined,
+): void {
+	const limit = options?.maxKdfIterations ?? DEFAULT_MAX_KDF_ITERATIONS;
+	if (!Number.isSafeInteger(limit) || limit < 1) {
+		throw new RangeError(`Invalid maxKdfIterations: must be an integer >= 1, got ${limit}`);
+	}
+	if (iterations > limit) {
+		throw kdfIterationLimitError(iterations, limit);
+	}
+}
+
 /** AES-CBC key sizes supported by this PBES2 implementation. */
 export type Pbes2EncryptionScheme = 'AES-128-CBC' | 'AES-192-CBC' | 'AES-256-CBC';
 
@@ -136,13 +177,19 @@ export async function encryptPbes2(
 	};
 }
 
-/** Decrypts PBES2 ciphertext given the DER AlgorithmIdentifier and password. Throws on wrong password. */
+/**
+ * Decrypts PBES2 ciphertext given the DER AlgorithmIdentifier and password.
+ * Throws on wrong password, and before derivation when the encoded iteration
+ * count exceeds `options.maxKdfIterations`.
+ */
 export async function decryptPbes2(
 	algorithmIdentifierDer: Uint8Array,
 	encryptedData: Uint8Array,
 	password: string,
+	options?: KdfLimitOptions,
 ): Promise<Uint8Array> {
 	const parameters = parsePbes2AlgorithmIdentifier(algorithmIdentifierDer);
+	assertKdfIterationsWithinLimit(parameters.iterations, options);
 	const key = await deriveAesKey(
 		password,
 		parameters.salt,

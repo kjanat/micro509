@@ -17,5 +17,8 @@ jobs:
       - id: pkg-pr
         timeout-minutes: 1
         continue-on-error: true # pkg.pr.new intermittently returns unrelated Cloudflare 500/1101 errors and hangs; previews are non-critical.
-        run: run -q publish:pkgprnew --json pkgpr.json; echo "meta=$(jq -c . pkgpr.json)" | tee -a "${GITHUB_OUTPUT}"
+        run: |
+          run -q publish:pkgprnew --json pkgpr.json
+          meta="$(jq -c . pkgpr.json)"
+          echo "meta=${meta}" | tee -a "${GITHUB_OUTPUT}"
       - { run: echo boo, if: always() }

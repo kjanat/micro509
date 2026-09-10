@@ -13,6 +13,7 @@ import {
 import {
 	explicitContext,
 	integerFromNumber,
+	nullValue,
 	objectIdentifier,
 	octetString,
 	sequence,
@@ -20,6 +21,7 @@ import {
 	tlv,
 } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
+import { parsePkcs12MacData } from '#micro509/pkcs';
 
 /** Success-path helper: builds a PFX and unwraps the typed result. */
 async function buildPfx(input: CreatePfxInput) {
@@ -971,3 +973,50 @@ function bmpString(value: string): Uint8Array {
 	}
 	return new Uint8Array([0x1e, bytes.length, ...bytes]);
 }
+
+describe('PFX KDF work-factor limit', () => {
+	async function issuePfx(iterations: { readonly encryption: number; readonly mac: number }) {
+		const keys = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
+		return buildPfx({
+			privateKeys: [{ privateKey: keys.privateKey }],
+			encryption: { password: 'pw', iterations: iterations.encryption },
+			mac: { password: 'pw', iterations: iterations.mac },
+		});
+	}
+
+	it('rejects MacData iteration counts above maxKdfIterations', async () => {
+		const pfx = await issuePfx({ encryption: 1024, mac: 4096 });
+		const result = await parsePfxDer(pfx.der, { password: 'pw', maxKdfIterations: 2048 });
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.code).toBe('kdf_iterations_exceeded');
+		}
+	});
+
+	it('rejects PBES2 iteration counts above maxKdfIterations', async () => {
+		const pfx = await issuePfx({ encryption: 4096, mac: 1024 });
+		const result = await parsePfxDer(pfx.der, { password: 'pw', maxKdfIterations: 2048 });
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.code).toBe('kdf_iterations_exceeded');
+		}
+		const accepted = await parsePfxDer(pfx.der, { password: 'pw', maxKdfIterations: 4096 });
+		expect(accepted.ok).toBe(true);
+	});
+
+	it('caps PKCS#12 MAC iterations at 2,000,000 by default', async () => {
+		const macData = sequence([
+			sequence([
+				sequence([objectIdentifier(OIDS.sha256), nullValue()]),
+				octetString(new Uint8Array(32)),
+			]),
+			octetString(new Uint8Array(8)),
+			integerFromNumber(2_000_001),
+		]);
+		const result = await parsePkcs12MacData(macData, new Uint8Array(4), 'pw');
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.code).toBe('kdf_iterations_exceeded');
+		}
+	});
+});
