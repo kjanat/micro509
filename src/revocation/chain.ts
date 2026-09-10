@@ -50,6 +50,14 @@ export type { CrlSource };
  */
 export type OcspResponseSource = string | Uint8Array;
 
+/** A locally trusted OCSP responder bound to the CA scope it may serve. */
+export interface TrustedOcspResponder {
+	/** Certificate of the CA for whose certificates the responder is trusted. */
+	readonly issuerCertificate: RevocationCertificateSource;
+	/** Responder certificate trusted within that issuer's scope. */
+	readonly responderCertificate: RevocationCertificateSource;
+}
+
 /**
  * Revocation checking policy for {@linkcode checkChainRevocation}.
  *
@@ -103,10 +111,11 @@ export interface CheckChainRevocationInput {
 	readonly extraCertificates?: readonly RevocationCertificateSource[];
 	/**
 	 * Explicitly trusted OCSP responder certificates (RFC 6960 §4.2.2.2
-	 * criterion 1). A response signed by one of these is accepted without
-	 * delegated-responder issuance, EKU, and revocation checks.
+	 * criterion 1), each bound to the issuing CA for which it is authorized.
+	 * A response signed by a matching responder is accepted without delegated-
+	 * responder issuance, EKU, and revocation checks only in that issuer scope.
 	 */
-	readonly trustedOcspResponders?: readonly RevocationCertificateSource[];
+	readonly trustedOcspResponders?: readonly TrustedOcspResponder[];
 	/** Evaluation time. Defaults to `new Date()`. */
 	readonly at?: Date;
 	/** Revocation policy. */
@@ -820,12 +829,16 @@ async function validateOcspResponseWithResponderFallback(
 	input: CheckChainRevocationInput,
 	at: Date,
 ): Promise<ValidateOcspResponseResult> {
+	const trustedOcspResponders = input.trustedOcspResponders
+		?.filter((trusted) => {
+			const trustedIssuer = parseCertificateSafe(trusted.issuerCertificate);
+			return trustedIssuer !== undefined && sameCertificate(trustedIssuer, issuer);
+		})
+		.map((trusted) => trusted.responderCertificate);
 	const shared = {
 		issuerCertificate: issuer,
 		at,
-		...(input.trustedOcspResponders !== undefined
-			? { trustedOcspResponders: input.trustedOcspResponders }
-			: {}),
+		...(trustedOcspResponders !== undefined ? { trustedOcspResponders } : {}),
 		...(input.policy?.ocspResponderRevocation !== undefined
 			? { responderRevocationPolicy: input.policy.ocspResponderRevocation }
 			: {}),
