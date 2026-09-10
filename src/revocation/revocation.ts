@@ -6,6 +6,7 @@
  */
 
 import type { Result } from '#micro509/result/result';
+import { rethrowIfInvariant } from '#micro509/result/result';
 import type {
 	CrlApplicabilityFailureReason,
 	CrlSource,
@@ -393,7 +394,8 @@ async function checkRevocationEvidenceEntry(
 		return evidence.kind === 'crl'
 			? await checkCertificateRevocationWithCrl(input, evidence, certificate)
 			: await checkCertificateRevocationWithOcsp(input, evidence, certificate);
-	} catch {
+	} catch (error) {
+		rethrowIfInvariant(error);
 		return {
 			status: 'indeterminate',
 			detail: {

@@ -43,8 +43,16 @@ export function isWrongPasswordError(value: unknown): value is Error {
 	return value instanceof Error && wrongPasswordBrand in value;
 }
 
-/** Upper bound on password-based KDF iteration counts accepted from untrusted input. */
+/** Upper bound on PBKDF2 iteration counts accepted from untrusted input. */
 export const DEFAULT_MAX_KDF_ITERATIONS = 2_000_000;
+
+/**
+ * Upper bound on PKCS#12 KDF iteration counts accepted from untrusted input.
+ * RFC 7292 Appendix B defines the KDF as a chain of single-block digests, so a
+ * round costs a separate WebCrypto call and runs orders of magnitude slower
+ * than a PBKDF2 round.
+ */
+export const DEFAULT_MAX_PKCS12_MAC_ITERATIONS = 100_000;
 
 const kdfIterationLimitBrand = Symbol('micro509.KdfIterationLimitError');
 
@@ -64,8 +72,9 @@ export function isKdfIterationLimitError(value: unknown): value is Error {
 /** Caller-supplied bound on password-based KDF work. */
 export interface KdfLimitOptions {
 	/**
-	 * Maximum PBKDF2 or PKCS#12 KDF iteration count accepted from the input.
-	 * Higher counts fail before any derivation runs. Default: `2_000_000`.
+	 * Maximum KDF iteration count accepted from the input. Higher counts fail
+	 * before any derivation runs. Defaults to `2_000_000` for PBKDF2 and
+	 * `100_000` for the PKCS#12 KDF, which costs far more per round.
 	 */
 	readonly maxKdfIterations?: number;
 }
@@ -74,8 +83,9 @@ export interface KdfLimitOptions {
 export function assertKdfIterationsWithinLimit(
 	iterations: number,
 	options: KdfLimitOptions | undefined,
+	defaultLimit: number = DEFAULT_MAX_KDF_ITERATIONS,
 ): void {
-	const limit = options?.maxKdfIterations ?? DEFAULT_MAX_KDF_ITERATIONS;
+	const limit = options?.maxKdfIterations ?? defaultLimit;
 	if (!Number.isSafeInteger(limit) || limit < 1) {
 		throw new RangeError(`Invalid maxKdfIterations: must be an integer >= 1, got ${limit}`);
 	}

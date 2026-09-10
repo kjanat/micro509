@@ -1004,19 +1004,34 @@ describe('PFX KDF work-factor limit', () => {
 		expect(accepted.ok).toBe(true);
 	});
 
-	it('caps PKCS#12 MAC iterations at 2,000,000 by default', async () => {
-		const macData = sequence([
+	it('caps PKCS#12 MAC iterations at 100,000 by default', async () => {
+		// The PKCS#12 KDF runs one awaited digest per round from JS, so it costs
+		// far more per iteration than native PBKDF2 and needs a lower ceiling.
+		const macData = (iterations: number) =>
 			sequence([
-				sequence([objectIdentifier(OIDS.sha256), nullValue()]),
-				octetString(new Uint8Array(32)),
-			]),
-			octetString(new Uint8Array(8)),
-			integerFromNumber(2_000_001),
-		]);
-		const result = await parsePkcs12MacData(macData, new Uint8Array(4), 'pw');
-		expect(result.ok).toBe(false);
-		if (!result.ok) {
-			expect(result.code).toBe('kdf_iterations_exceeded');
+				sequence([
+					sequence([objectIdentifier(OIDS.sha256), nullValue()]),
+					octetString(new Uint8Array(32)),
+				]),
+				octetString(new Uint8Array(8)),
+				integerFromNumber(iterations),
+			]);
+
+		const rejected = await parsePkcs12MacData(macData(100_001), new Uint8Array(4), 'pw');
+		expect(rejected.ok).toBe(false);
+		if (!rejected.ok) {
+			expect(rejected.code).toBe('kdf_iterations_exceeded');
 		}
+
+		const accepted = await parsePkcs12MacData(macData(2_048), new Uint8Array(4), 'pw');
+		expect(accepted.ok).toBe(true);
+	});
+
+	it('reports an invalid maxKdfIterations as an invariant, not malformed input', async () => {
+		const pfx = await issuePfx({ encryption: 1024, mac: 1024 });
+
+		expect(parsePfxDer(pfx.der, { password: 'pw', maxKdfIterations: 0 })).rejects.toThrow(
+			RangeError,
+		);
 	});
 });
