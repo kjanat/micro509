@@ -486,7 +486,7 @@ async function emitVersionIndex(
 		(version) => version.channel === 'latest' && version.release !== undefined,
 	);
 	if (latest !== undefined) {
-		await fsp.writeFile(
+		await fsp.appendFile(
 			path.join(outDir, '_redirects'),
 			`/${latest.tag} / 302\n/${latest.tag}/* /:splat 302\n`,
 		);
