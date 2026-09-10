@@ -733,7 +733,7 @@ describe('checkChainRevocation with OCSP evidence', () => {
 		);
 	});
 
-	it('denies when revoked OCSP evidence follows a validated good response', async () => {
+	it('denies on revoked OCSP evidence regardless of response ordering', async () => {
 		const { ca, leaf, chain, at, fresh } = await createOcspChainFixture();
 		const good = await createOcspResponse({
 			signerPrivateKey: ca.keyPair.privateKey,
@@ -761,16 +761,21 @@ describe('checkChainRevocation with OCSP evidence', () => {
 			],
 		});
 
-		const result = await checkChainRevocation({
-			chain: [...chain],
-			ocspResponses: [good.der, revoked.der],
-			at,
-		});
+		for (const ocspResponses of [
+			[good.der, revoked.der],
+			[revoked.der, good.der],
+		]) {
+			const result = await checkChainRevocation({
+				chain: [...chain],
+				ocspResponses,
+				at,
+			});
 
-		expect(result.ok).toBe(true);
-		expect(result.value.decision).toBe('deny');
-		expect(result.value.certificates[0]?.status).toBe('revoked');
-		expect(result.value.certificates[0]?.source?.kind).toBe('ocsp');
+			expect(result.ok).toBe(true);
+			expect(result.value.decision).toBe('deny');
+			expect(result.value.certificates[0]?.status).toBe('revoked');
+			expect(result.value.certificates[0]?.source?.kind).toBe('ocsp');
+		}
 	});
 
 	it('allows newer good OCSP evidence to clear an older certificate hold', async () => {
