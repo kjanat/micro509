@@ -44,6 +44,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A CRL rejected by `crlMaxAgeMs` reported `no_applicable_crl` on the chain
+  result, hiding the configured freshness policy's actual outcome. It now
+  reports `crl_expired`.
 - Two `site/guide/keys.md` LiveCode examples used TypeScript parameter types
   (`key: CryptoKey`, `bytes: Uint8Array`). LiveCode injects examples as browser
   JS modules, so Run failed with `missing ) after argument list` and
@@ -113,6 +116,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   EncryptedPrivateKeyInfo or a 177-byte PFX carrying `0x7fffffff` iterations
   held the CPU for minutes. Counts above the ceiling are now refused before
   derivation; `maxKdfIterations` adjusts it.
+- A PFX gave every encrypted entry the full `maxKdfIterations` allowance, so a
+  file with many small entries could demand unbounded work without any encoded
+  count standing out: 100 entries at the default ceiling ask for 200 million
+  PBKDF2 rounds. One budget now covers the whole file.
 - Bare trust anchors were re-verified on every visit to a certificate, because
   the anchor match ran before the dead-end lookup. A bundle of same-subject CAs
   plus a few subject-matching anchors made anchor signature checks grow with

@@ -968,6 +968,7 @@ interface CrlEvidenceState {
 	sawCrlSignerRevoked: boolean;
 	sawCrlSignerIndeterminate: boolean;
 	sawCrlSignerNotAuthorized: boolean;
+	sawStaleCrl: boolean;
 	sawGood: boolean;
 	freshestGood?: { readonly signer: ParsedCertificate; readonly thisUpdate: Date };
 }
@@ -1021,6 +1022,9 @@ async function resolveBaseCrlAgainstSigners(
 			crlMaxAgeMs,
 		);
 		if (!checked.ok) {
+			if (checked.code === 'stale_crl') {
+				state.sawStaleCrl = true;
+			}
 			continue;
 		}
 		if (!(await crlSignerChainsToAnchor(candidate, chain, extraCertificates, at))) {
@@ -1064,6 +1068,7 @@ async function evaluateCrlEvidence(
 		sawCrlSignerRevoked: false,
 		sawCrlSignerIndeterminate: false,
 		sawCrlSignerNotAuthorized: false,
+		sawStaleCrl: false,
 		sawGood: false,
 	};
 
@@ -1148,6 +1153,9 @@ function crlUnavailableReason(state: CrlEvidenceState): RevocationIndeterminateR
 	}
 	if (state.sawCrlSignerIndeterminate) {
 		return 'crl_signer_indeterminate';
+	}
+	if (state.sawStaleCrl) {
+		return 'crl_expired';
 	}
 	return 'no_applicable_crl';
 }

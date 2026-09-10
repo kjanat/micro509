@@ -42,6 +42,7 @@ import {
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { md5 } from '#micro509/internal/crypto/hash';
 import {
+	createKdfBudget,
 	decryptPbes2,
 	encryptPbes2,
 	isKdfIterationLimitError,
@@ -955,7 +956,7 @@ export async function importEncryptedPkcs8DerOrThrow(
 		envelope.algorithmIdentifierDer,
 		envelope.encryptedData,
 		password,
-		options,
+		createKdfBudget(options),
 	);
 	assertDecryptedPrivateKey(
 		() => parsePkcs8PrivateKey(decrypted),

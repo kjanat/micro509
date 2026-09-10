@@ -1536,5 +1536,6 @@ describe('checkChainRevocation CRL maximum age policy', () => {
 		});
 		expect(bounded.value.decision).toBe('deny');
 		expect(bounded.value.certificates[0]?.status).toBe('indeterminate');
+		expect(bounded.value.certificates[0]?.indeterminateReasons).toContain('crl_expired');
 	});
 });
