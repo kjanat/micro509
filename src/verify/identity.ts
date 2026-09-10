@@ -504,7 +504,7 @@ function tryParseUriServiceIdentity(value: string): ServiceScopedIdentity | unde
 		return undefined;
 	}
 	const serviceType = value.slice(0, schemeEnd).toLowerCase();
-	const domainName = extractUriRegName(value);
+	const domainName = extractUriRegName(value, serviceType);
 	const normalizedDomainName =
 		domainName === undefined ? undefined : tryNormalizeDnsName(domainName);
 	if (normalizedDomainName === undefined) {
@@ -514,16 +514,21 @@ function tryParseUriServiceIdentity(value: string): ServiceScopedIdentity | unde
 }
 
 /** Extracts the reg-name host from a URI, stripping scheme, userinfo, port, and path components. */
-function extractUriRegName(value: string): string | undefined {
+function extractUriRegName(value: string, serviceType: string): string | undefined {
 	const schemeEnd = value.indexOf(':');
 	if (schemeEnd <= 0) {
 		return undefined;
 	}
 	const schemeSpecific = value.slice(schemeEnd + 1);
-	if (!schemeSpecific.startsWith('//')) {
+	const hasAuthority = schemeSpecific.startsWith('//');
+	if (!hasAuthority && serviceType !== 'sip' && serviceType !== 'sips') {
 		return undefined;
 	}
-	let authority = cutAtFirstDelimiter(schemeSpecific.slice(2), ['/', '?', '#']);
+	let authority = cutAtFirstDelimiter(hasAuthority ? schemeSpecific.slice(2) : schemeSpecific, [
+		'/',
+		'?',
+		'#',
+	]);
 	const userInfoSeparator = authority.lastIndexOf('@');
 	if (userInfoSeparator >= 0) {
 		authority = authority.slice(userInfoSeparator + 1);

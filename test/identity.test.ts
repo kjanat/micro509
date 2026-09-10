@@ -559,6 +559,43 @@ describe('identity boundary', () => {
 		).toMatchObject({ ok: false, code: 'service_identity_mismatch' });
 	});
 
+	it('matches SIP URI SANs whose scheme-defined host has no authority delimiter', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Identity CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Identity CA' },
+			subject: { commonName: 'sip.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				extendedKeyUsage: ['serverAuth'],
+				subjectAltNames: [{ type: 'uri', value: 'sip:user@voice.college.example:5060' }],
+			},
+		});
+		const certificate = unwrap(parseCertificatePem(leaf.pem));
+
+		expect(
+			matchServiceIdentity({
+				certificate,
+				serviceIdentity: { type: 'uri', value: 'sip:voice.college.example' },
+			}),
+		).toEqual({ ok: true, value: undefined });
+		expect(
+			matchServiceIdentity({
+				certificate,
+				serviceIdentity: { type: 'uri', value: 'https:voice.college.example' },
+			}),
+		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
+	});
+
 	it('rejects URI SANs with matching scheme but different host', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Identity CA' },

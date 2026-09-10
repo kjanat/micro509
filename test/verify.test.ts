@@ -2585,6 +2585,21 @@ describe('validation profiles', () => {
 		expect(wrongScheme).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
 	});
 
+	it('verifyCertificateChain matches SIP URI-IDs without an authority delimiter', async () => {
+		const chain = await issueChain({
+			leafSubjectAltNames: [{ type: 'uri', value: 'sip:voice.college.example' }],
+		});
+
+		const result = await verifyCertificateChain({
+			leaf: chain.leaf.pem,
+			intermediates: [chain.intermediate.pem],
+			roots: [chain.root.certificate.pem],
+			serviceIdentity: { type: 'uri', value: 'sip:voice.college.example' },
+		});
+
+		expect(result.ok).toBe(true);
+	});
+
 	it('rejects hostless URI SANs through chain and TLS verification helpers', async () => {
 		const chain = await issueChain({
 			leafSubjectAltNames: [{ type: 'uri', value: 'https:verify.example' }],
