@@ -291,9 +291,6 @@ export async function buildChainInternal(
 		}
 		const memoKey = `${fingerprint(current)}:${caBelowCount}`;
 		if (deadEnds.has(memoKey)) {
-			// The subtree below this state is known to fail, but this path reached
-			// it through a longer prefix, which the reported chain should show.
-			updateDeepest(path);
 			return undefined;
 		}
 		const issuers = rankIssuerCandidates(
