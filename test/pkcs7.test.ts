@@ -924,6 +924,14 @@ describe('pkcs7', () => {
 		if (!result.ok) expect(result.code).toBe('detached_content_required');
 	});
 
+	it('verifyPkcs7SignedData rejects detached content with no signers', async () => {
+		const bag = unwrap(createPkcs7CertBag([]));
+		const result = await verifyPkcs7SignedData(bag.der, {
+			content: new TextEncoder().encode('unsigned content'),
+		});
+		expect(result).toMatchObject({ ok: false, code: 'malformed' });
+	});
+
 	it('verifyPkcs7SignedData ignores tampered encapsulated content on pre-parsed input', async () => {
 		const rsaKeys = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
 		const signer = await createSelfSignedCertificate({

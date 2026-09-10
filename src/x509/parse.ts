@@ -656,14 +656,22 @@ function parseCustomExtensions<TMap extends ExtensionDecoderMap>(
 	extensions: readonly ParsedExtension[],
 	options: ParseOptions<TMap> | undefined,
 ): ParsedCustomExtensions<TMap> {
-	return {
-		...(options?.decoders === undefined
-			? {}
-			: { decodedExtensions: decodeExtensions(extensions, options.decoders) }),
-		...(options?.decoderMap === undefined
-			? {}
-			: { decodedExtensionMap: decodeExtensionMap(extensions, options.decoderMap) }),
-	};
+	try {
+		return {
+			...(options?.decoders === undefined
+				? {}
+				: { decodedExtensions: decodeExtensions(extensions, options.decoders) }),
+			...(options?.decoderMap === undefined
+				? {}
+				: { decodedExtensionMap: decodeExtensionMap(extensions, options.decoderMap) }),
+		};
+	} catch (error) {
+		// Decoder input comes from the certificate or CSR. Normalize native errors
+		// before the Result boundary decides whether an exception is an invariant.
+		throw new Error(error instanceof Error ? error.message : 'Custom extension decoder failed', {
+			cause: error,
+		});
+	}
 }
 
 /** Extracts and validates the structural fields of a TBSCertificate sequence. */

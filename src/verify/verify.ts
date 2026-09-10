@@ -52,7 +52,7 @@ import {
 	indexedMicro509Error,
 	micro509Error,
 } from '#micro509/result/result';
-import type { CrlSource, RevocationPolicy } from '#micro509/revocation/chain';
+import type { CrlSource, RevocationPolicy, TrustedOcspResponder } from '#micro509/revocation/chain';
 import { checkChainRevocation } from '#micro509/revocation/chain';
 import type { RevocationCertificateSource } from '#micro509/revocation/revocation';
 import type { ServiceIdentityInput } from '#micro509/verify/identity';
@@ -325,8 +325,8 @@ export interface ChainRevocationInput {
 	readonly ocspResponses?: readonly (string | Uint8Array)[];
 	/** Extra certs for indirect CRL issuers / delegated OCSP responders. */
 	readonly extraCertificates?: readonly RevocationCertificateSource[];
-	/** Explicitly trusted OCSP responder certificates (RFC 6960 §4.2.2.2 criterion 1). */
-	readonly trustedOcspResponders?: readonly RevocationCertificateSource[];
+	/** Issuer-scoped trusted OCSP responders (RFC 6960 §4.2.2.2 criterion 1). */
+	readonly trustedOcspResponders?: readonly TrustedOcspResponder[];
 	/** Revocation policy. */
 	readonly policy?: RevocationPolicy;
 }

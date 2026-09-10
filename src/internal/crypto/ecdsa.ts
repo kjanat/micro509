@@ -18,7 +18,7 @@ export function derEcdsaSignatureToRaw(signature: Uint8Array, partLength: number
 	if (r.tag !== 0x02 || s.tag !== 0x02) {
 		throw new Error('ECDSA DER signature must contain two INTEGERs');
 	}
-	return concatFixedWidth(trimLeadingZero(r.value), trimLeadingZero(s.value), partLength);
+	return concatFixedWidth(derIntegerMagnitude(r.value), derIntegerMagnitude(s.value), partLength);
 }
 
 /** Convert a fixed-width raw `r || s` ECDSA signature to DER-encoded SEQUENCE of two INTEGERs. */
@@ -87,11 +87,21 @@ export function concatFixedWidth(
 	return out;
 }
 
-/** Strip leading zero bytes from a DER INTEGER value, keeping at least one byte. */
-function trimLeadingZero(bytes: Uint8Array): Uint8Array {
-	let index = 0;
-	while (index < bytes.length - 1 && bytes[index] === 0) {
-		index += 1;
+/** Validate a non-negative DER INTEGER and return its unsigned magnitude. */
+function derIntegerMagnitude(bytes: Uint8Array): Uint8Array {
+	const first = bytes[0];
+	if (first === undefined) {
+		throw new Error('ECDSA DER signature INTEGER must not be empty');
 	}
-	return bytes.slice(index);
+	if ((first & 0x80) !== 0) {
+		throw new Error('ECDSA DER signature INTEGER must be non-negative');
+	}
+	if (first === 0 && bytes.length > 1) {
+		const second = bytes[1];
+		if (second === undefined || (second & 0x80) === 0) {
+			throw new Error('ECDSA DER signature INTEGER must use minimal encoding');
+		}
+		return bytes.slice(1);
+	}
+	return bytes;
 }

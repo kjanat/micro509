@@ -734,8 +734,8 @@ describe('checkChainRevocation with OCSP evidence', () => {
 	});
 
 	it('denies on revoked OCSP evidence regardless of response ordering', async () => {
-		const { ca, leaf, chain, at } = await createOcspChainFixture();
-		const oldGood = await createOcspResponse({
+		const { ca, leaf, chain, at, fresh } = await createOcspChainFixture();
+		const good = await createOcspResponse({
 			signerPrivateKey: ca.keyPair.privateKey,
 			signerCertificate: ca.certificate.pem,
 			responses: [
@@ -743,11 +743,11 @@ describe('checkChainRevocation with OCSP evidence', () => {
 					certificate: leaf.pem,
 					issuerCertificate: ca.certificate.pem,
 					certStatus: 'good',
-					thisUpdate: new Date(at.getTime() - 2 * HOUR_MS),
+					...fresh,
 				},
 			],
 		});
-		const newerRevoked = await createOcspResponse({
+		const revoked = await createOcspResponse({
 			signerPrivateKey: ca.keyPair.privateKey,
 			signerCertificate: ca.certificate.pem,
 			responses: [
@@ -755,25 +755,81 @@ describe('checkChainRevocation with OCSP evidence', () => {
 					certificate: leaf.pem,
 					issuerCertificate: ca.certificate.pem,
 					certStatus: 'revoked',
-					thisUpdate: new Date(at.getTime() - HOUR_MS),
-					revokedAt: new Date(at.getTime() - HOUR_MS),
+					revokedAt: fresh.thisUpdate,
+					...fresh,
 				},
 			],
 		});
 
 		for (const ocspResponses of [
-			[oldGood.der, newerRevoked.der],
-			[newerRevoked.der, oldGood.der],
+			[good.der, revoked.der],
+			[revoked.der, good.der],
 		]) {
 			const result = await checkChainRevocation({
 				chain: [...chain],
 				ocspResponses,
 				at,
-				policy: { mode: 'hard-fail', prefer: 'best-available' },
 			});
 
+			expect(result.ok).toBe(true);
 			expect(result.value.decision).toBe('deny');
 			expect(result.value.certificates[0]?.status).toBe('revoked');
+			expect(result.value.certificates[0]?.source?.kind).toBe('ocsp');
+		}
+	});
+
+	it('allows newer good OCSP evidence to clear an older certificate hold', async () => {
+		const { ca, leaf, chain, at } = await createOcspChainFixture();
+		const holdThisUpdate = new Date(at.getTime() - 2 * HOUR_MS);
+		const goodThisUpdate = new Date(at.getTime() - HOUR_MS);
+		const nextUpdate = new Date(at.getTime() + HOUR_MS);
+		const hold = await createOcspResponse({
+			signerPrivateKey: ca.keyPair.privateKey,
+			signerCertificate: ca.certificate.pem,
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: ca.certificate.pem,
+					certStatus: 'revoked',
+					revokedAt: holdThisUpdate,
+					revocationReasonCode: 6,
+					thisUpdate: holdThisUpdate,
+					nextUpdate,
+				},
+			],
+		});
+		const good = await createOcspResponse({
+			signerPrivateKey: ca.keyPair.privateKey,
+			signerCertificate: ca.certificate.pem,
+			responses: [
+				{
+					certificate: leaf.pem,
+					issuerCertificate: ca.certificate.pem,
+					certStatus: 'good',
+					thisUpdate: goodThisUpdate,
+					nextUpdate,
+				},
+			],
+		});
+
+		for (const ocspResponses of [
+			[good.der, hold.der],
+			[hold.der, good.der],
+		]) {
+			const result = await checkChainRevocation({
+				chain: [...chain],
+				ocspResponses,
+				at,
+			});
+
+			expect(result.ok).toBe(true);
+			expect(result.value.decision).toBe('allow');
+			const leafStatus = result.value.certificates[0];
+			expect(leafStatus?.status).toBe('good');
+			if (leafStatus?.status !== 'good') return;
+			expect(leafStatus.source.thisUpdate?.getTime()).toBe(
+				Math.floor(goodThisUpdate.getTime() / 1000) * 1000,
+			);
 		}
 	});
 
@@ -1189,11 +1245,85 @@ describe('checkChainRevocation with OCSP evidence', () => {
 		const trusted = await checkChainRevocation({
 			chain: [...chain],
 			ocspResponses: [response.der],
-			trustedOcspResponders: [responder.pem],
+			trustedOcspResponders: [
+				{
+					issuerCertificate: ca.certificate.pem,
+					responderCertificate: responder.pem,
+				},
+			],
 			at,
 		});
 		expect(trusted.value.certificates[0]?.status).toBe('good');
 		expect(trusted.value.certificates[0]?.source?.kind).toBe('ocsp');
+	});
+
+	it('does not trust an issuer-scoped responder for another issuer in the chain', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'OCSP Scope Root' },
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 1 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const intermediateKeys = await generateKeyPair();
+		const intermediate = await createCertificate({
+			issuer: { commonName: 'OCSP Scope Root' },
+			subject: { commonName: 'OCSP Scope Intermediate' },
+			publicKey: intermediateKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				basicConstraints: { ca: true, pathLength: 0 },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'OCSP Scope Intermediate' },
+			subject: { commonName: 'ocsp-scope-leaf.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: intermediateKeys.privateKey,
+			issuerPublicKey: intermediateKeys.publicKey,
+		});
+		const responder = await createSelfSignedCertificate({
+			subject: { commonName: 'Intermediate Scoped Responder' },
+		});
+		const at = new Date(Date.now() + 5_000);
+		const response = await createOcspResponse({
+			signerPrivateKey: responder.keyPair.privateKey,
+			signerCertificate: responder.certificate.pem,
+			includedCertificates: [responder.certificate.pem],
+			responses: [
+				{
+					certificate: intermediate.pem,
+					issuerCertificate: root.certificate.pem,
+					certStatus: 'good',
+					thisUpdate: new Date(at.getTime() - HOUR_MS),
+					nextUpdate: new Date(at.getTime() + HOUR_MS),
+				},
+			],
+		});
+
+		const result = await checkChainRevocation({
+			chain: [
+				unwrap(parseCertificatePem(leaf.pem)),
+				unwrap(parseCertificatePem(intermediate.pem)),
+				unwrap(parseCertificatePem(root.certificate.pem)),
+			],
+			ocspResponses: [response.der],
+			trustedOcspResponders: [
+				{
+					issuerCertificate: intermediate.pem,
+					responderCertificate: responder.certificate.pem,
+				},
+			],
+			at,
+		});
+
+		expect(result.value.certificates[1]?.status).toBe('indeterminate');
+		expect(result.value.certificates[1]?.indeterminateReasons).toContain(
+			'ocsp_responder_not_authorized',
+		);
 	});
 
 	it('validates a delegated responder provided via extraCertificates', async () => {
