@@ -60,6 +60,24 @@ type IssuerCandidateEvaluation =
 	| { readonly ok: true; readonly nextCaBelowCount: number }
 	| { readonly ok: false; readonly failure: VerifyChainFailure };
 
+/**
+ * The signature checks {@linkcode buildChainInternal} performs, injected per
+ * call. A caller can wrap them to observe how much cryptographic work path
+ * building costs; replacing a global would leak across concurrent searches.
+ */
+export interface VerifyPathSignatureChecks {
+	/** Verifies a certificate against a candidate issuer certificate. */
+	readonly certificate: (
+		certificate: ParsedCertificate,
+		issuer: ParsedCertificate,
+	) => Promise<VerifyCertificateSignatureResult>;
+	/** Verifies a certificate against a bare trust anchor. */
+	readonly trustAnchor: (
+		certificate: ParsedCertificate,
+		anchor: TrustAnchor,
+	) => Promise<VerifyCertificateSignatureResult>;
+}
+
 /** Loose input for constructing failure detail objects during path building. */
 export interface VerifyPathFailureDetailsInput {
 	/** Common name of the certificate under evaluation, if known. */
@@ -163,6 +181,12 @@ export async function verifyCertificateSignature(
 	return result;
 }
 
+/** The real signature checks, used unless a caller injects its own. */
+const DEFAULT_SIGNATURE_CHECKS: VerifyPathSignatureChecks = {
+	certificate: verifyCertificateSignature,
+	trustAnchor: verifyTrustAnchorSignature,
+};
+
 /**
  * Depth-first chain search from leaf to root. Tries all issuer candidates,
  * checking validity, CA constraints, AKI, pathLength, and signatures at each
@@ -176,6 +200,7 @@ export async function buildChainInternal(
 	trustAnchors: readonly TrustAnchor[],
 	at: Date,
 	callbacks: VerifyPathCallbacks,
+	signatureChecks: VerifyPathSignatureChecks = DEFAULT_SIGNATURE_CHECKS,
 ): Promise<InternalBuildResult> {
 	const candidates = [...intermediates, ...roots];
 	const subjectIndex = new Map<string, ParsedCertificate[]>();
@@ -348,7 +373,7 @@ export async function buildChainInternal(
 	): Promise<VerifyCertificateSignatureResult> {
 		return verifyOnce(
 			`c:${fingerprint(certificate)}:${toHex(issuer.subjectPublicKeyInfoDer)}`,
-			() => verifyCertificateSignature(certificate, issuer),
+			() => signatureChecks.certificate(certificate, issuer),
 		);
 	}
 
@@ -360,7 +385,7 @@ export async function buildChainInternal(
 			anchor.subjectPublicKeyInfoDer,
 		)}`;
 		return verifyOnce(`a:${fingerprint(certificate)}:${anchorKey}`, () =>
-			verifyTrustAnchorSignature(certificate, anchor),
+			signatureChecks.trustAnchor(certificate, anchor),
 		);
 	}
 
@@ -676,7 +701,8 @@ function trustAnchorAkiMismatch(certificate: ParsedCertificate, anchor: TrustAnc
 	);
 }
 
-async function verifyTrustAnchorSignature(
+/** Verifies that `certificate` was signed by a bare trust anchor's key. */
+export async function verifyTrustAnchorSignature(
 	certificate: ParsedCertificate,
 	anchor: TrustAnchor,
 ): Promise<VerifyCertificateSignatureResult> {
