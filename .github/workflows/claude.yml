@@ -8,17 +8,24 @@ permissions: { contents: read }
 jobs:
   claude:
     if: |
-      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
-      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
+      github.actor == github.repository_owner && (
+        (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+        (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+        (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
+        (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
+      )
     runs-on: ubuntu-latest
-    permissions: { contents: write, pull-requests: write, issues: write, id-token: write, actions: read }
+    permissions: { contents: write, pull-requests: write, issues: write, actions: read }
     steps:
-      - { uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1, with: { fetch-depth: 0 } } # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.event.repository.default_branch }}
       - uses: kjanat/install-dprint@43ace6752278feeb7c40262e29286b6342e33865 # v2
       - { uses: ./.github/actions/setup-ts, id: setup-ts, with: { install-bun: "true", install-node: "true" } }
-      - run: runner install -f build
+      - name: Install dependencies and build
+        run: bun install --frozen-lockfile --ignore-scripts && bun run build
 
       - name: Run Claude Code
         id: claude
