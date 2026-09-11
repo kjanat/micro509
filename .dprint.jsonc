@@ -76,10 +76,10 @@
 		"cwd": "${configDir}",
 		"commands": [
 			{
-				"command": "tombi format - --stdin-filename {{file_path}}",
+				"command": "node_modules/.bin/tombi format - --stdin-filename {{file_path}}",
 				"exts": ["toml"],
 				"cacheKeyFiles": ["tombi.toml"],
-				"setupCommand": "npm i -g tombi"
+				"setupCommand": "bun install"
 			}
 		]
 	},
@@ -100,10 +100,10 @@
 		"https://plugins.dprint.dev/kjanat/shfmt-1.1.0.wasm",
 		"https://plugins.dprint.dev/kjanat/sortpackagejson-0.2.1.wasm",
 		"https://plugins.dprint.dev/kjanat/svg-v0.4.1.wasm",
-		"npm:@dprint/biome@0.13.10",
+		"npm:@dprint/biome@0.13.11",
 		"npm:dprint-plugin-malva@0.16.0",
 		"npm:@dprint/json@0.23.0",
-		"npm:@dprint/markdown@0.23.3",
+		"npm:@dprint/markdown@0.24.0",
 		"npm:@dprint/typescript@0.96.1",
 		"npm:dprint-plugin-markup@0.27.3",
 		"npm:dprint-plugin-yaml@0.6.0",
