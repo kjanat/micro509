@@ -859,6 +859,9 @@ export async function verifyPkcs7SignedData(
 			'SignedData has no encapsulated content; supply the detached content via options.content',
 		);
 	}
+	if (parsed.signerInfos.length === 0) {
+		return verifyPkcs7Failure('malformed', 'SignedData has no signers to verify');
+	}
 	const signers: VerifiedPkcs7Signer[] = [];
 	for (const signerInfo of parsed.signerInfos) {
 		const result = await verifyPkcs7SignerInfo(parsed, signerInfo, content);
