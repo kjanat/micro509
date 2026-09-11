@@ -89,6 +89,9 @@ export interface Pbes2EncryptionResult {
 	readonly parameters: Pbes2Parameters;
 }
 
+/** Default upper bound for attacker-controlled PBKDF2 work during decryption. */
+export const DEFAULT_MAX_PBKDF2_ITERATIONS = 1_000_000;
+
 /** Encrypts `data` using PBES2 (PBKDF2 + AES-CBC) and returns ciphertext with algorithm params. */
 export async function encryptPbes2(
 	data: Uint8Array,
@@ -141,8 +144,17 @@ export async function decryptPbes2(
 	algorithmIdentifierDer: Uint8Array,
 	encryptedData: Uint8Array,
 	password: string,
+	maxIterations: number = DEFAULT_MAX_PBKDF2_ITERATIONS,
 ): Promise<Uint8Array> {
+	if (!Number.isSafeInteger(maxIterations) || maxIterations < 1) {
+		throw new RangeError('Maximum PBKDF2 iterations must be a positive safe integer');
+	}
 	const parameters = parsePbes2AlgorithmIdentifier(algorithmIdentifierDer);
+	if (parameters.iterations > maxIterations) {
+		throw new RangeError(
+			`PBKDF2 iterations exceed configured maximum: ${parameters.iterations} > ${maxIterations}`,
+		);
+	}
 	const key = await deriveAesKey(
 		password,
 		parameters.salt,
@@ -197,7 +209,12 @@ export function parsePbes2AlgorithmIdentifier(algorithmIdentifierDer: Uint8Array
 	// `specified` salt alternative is accepted.
 	const salt = pbkdf2Params[0];
 	const iterations = pbkdf2Params[1];
-	if (salt === undefined || iterations === undefined || salt.tag !== 0x04) {
+	if (
+		salt === undefined ||
+		iterations === undefined ||
+		salt.tag !== 0x04 ||
+		iterations.tag !== 0x02
+	) {
 		throw new Error('Malformed PBKDF2 params');
 	}
 	const keyLengthElement = pbkdf2Params[2];

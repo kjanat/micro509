@@ -91,6 +91,8 @@ export interface ParsePfxOptions {
 	readonly password?: string;
 	/** Separate password for MAC verification. Falls back to `password` when omitted. */
 	readonly macPassword?: string;
+	/** Maximum accepted PBKDF2 iteration count. Default: `1_000_000`. */
+	readonly maxKdfIterations?: number;
 }
 
 /** DER, PEM, and base64 encodings of a PFX container produced by {@linkcode createPfx}. */
@@ -496,6 +498,7 @@ async function extractSafeContents(
 		decrypted = await decryptEncryptedData(
 			contentInfoDer.slice(encryptedData.start - encryptedData.headerLength, encryptedData.end),
 			options.password,
+			options.maxKdfIterations,
 		);
 	} catch (error) {
 		if (isWrongPasswordError(error)) {
@@ -723,7 +726,11 @@ function normalizeCertificate(source: PfxCertificateSource): Uint8Array {
 }
 
 /** Decrypts a PKCS#7 EncryptedData structure using PBES2 with the given password. */
-function decryptEncryptedData(encryptedDataDer: Uint8Array, password: string): Promise<Uint8Array> {
+function decryptEncryptedData(
+	encryptedDataDer: Uint8Array,
+	password: string,
+	maxKdfIterations: number | undefined,
+): Promise<Uint8Array> {
 	const topLevel = readSequenceChildren(encryptedDataDer);
 	const encryptedContentInfo = topLevel[1];
 	if (topLevel.length !== 2 || encryptedContentInfo === undefined) {
@@ -755,6 +762,7 @@ function decryptEncryptedData(encryptedDataDer: Uint8Array, password: string): P
 		contentInfoDer.slice(algorithm.start - algorithm.headerLength, algorithm.end),
 		encryptedContent.value,
 		password,
+		maxKdfIterations,
 	);
 }
 
