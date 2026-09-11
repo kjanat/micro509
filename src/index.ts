@@ -74,6 +74,7 @@ export type {
 	EcNamedCurve,
 	Ed25519KeyAlgorithmInput,
 	EncryptedPkcs8Options,
+	EncryptedPkcs8ImportOptions,
 	EncryptRsaOaepErrorCode,
 	EncryptRsaOaepFailure,
 	EncryptRsaOaepResult,
