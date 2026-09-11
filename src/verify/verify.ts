@@ -149,6 +149,7 @@ export interface TrustAnchor {
  * - `ca_required` — an issuer lacks `basicConstraints.ca = true`.
  * - `key_cert_sign_required` — an issuer has keyUsage but omits `keyCertSign`.
  * - `path_length_exceeded` — the number of CA certificates below an issuer exceeds its pathLength.
+ * - `path_building_limit_exceeded` — candidate-path construction exceeded its bounded work limits.
  * - `authority_key_identifier_mismatch` — a certificate's AKI does not match the issuer's SKI.
  * - `extended_key_usage_invalid` — the leaf certificate lacks the required EKU for the requested purpose.
  * - `subject_alt_name_mismatch` — no SAN entry matches the requested service identity.
@@ -174,6 +175,7 @@ export const VERIFY_ERROR_CODES = [
 	'ca_required',
 	'key_cert_sign_required',
 	'path_length_exceeded',
+	'path_building_limit_exceeded',
 	'authority_key_identifier_mismatch',
 	'extended_key_usage_invalid',
 	'subject_alt_name_mismatch',

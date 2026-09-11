@@ -3922,6 +3922,16 @@ it('accepts purpose=ca when leaf IS a CA', async () => {
 // buildCandidatePath edge cases
 
 describe('buildCandidatePath edge cases', () => {
+	it('bounds the number of path-building candidates', async () => {
+		const chain = await issueChain();
+		const result = await buildCandidatePath({
+			leaf: chain.leaf.pem,
+			intermediates: Array.from({ length: 64 }, () => chain.intermediate.pem),
+			roots: [chain.root.certificate.pem],
+		});
+		expect(result).toMatchObject({ ok: false, code: 'path_building_limit_exceeded' });
+	});
+
 	it('reports expired intermediate during path build', async () => {
 		const root = await createSelfSignedCertificate({
 			subject: { commonName: 'Build Root' },
