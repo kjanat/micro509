@@ -216,6 +216,8 @@ function isMoreSignificant(candidate: PathDiagnostic, incumbent: PathDiagnostic)
 		: candidateTier > incumbentTier;
 }
 
+type DeadEndKind = 'missing-issuer' | 'untrusted-anchor' | 'none';
+
 /**
  * Depth-first chain search from leaf to root. Tries all issuer candidates,
  * checking validity, CA constraints, AKI, pathLength, and signatures at each
@@ -246,7 +248,7 @@ export async function buildChainInternal(
 		}
 	}
 	const best: { current: PathDiagnostic } = { current: { kind: 'none', path: [leaf] } };
-	const deadEnds = new Set<string>();
+	const deadEnds = new Map<string, DeadEndKind>();
 	const signatureResults = new Map<string, Promise<VerifyCertificateSignatureResult>>();
 
 	candidates.forEach((candidate, index) => {
@@ -317,7 +319,9 @@ export async function buildChainInternal(
 			return undefined;
 		}
 		const memoKey = `${fingerprint(current)}:${caBelowCount}`;
-		if (deadEnds.has(memoKey)) {
+		const memoized = deadEnds.get(memoKey);
+		if (memoized !== undefined) {
+			recoverDeadEnd(memoized, path);
 			return undefined;
 		}
 		const issuers = rankIssuerCandidates(
@@ -327,15 +331,14 @@ export async function buildChainInternal(
 			rootFingerprints,
 		);
 		if (issuers.length === 0) {
-			recordMissingIssuers(current, path);
-			deadEnds.add(memoKey);
+			deadEnds.set(memoKey, recordMissingIssuers(current, path));
 			return undefined;
 		}
 
 		const issuerPath = await searchIssuerCandidates(current, issuers, path, visited, caBelowCount);
 		if (issuerPath !== undefined) return issuerPath;
 
-		deadEnds.add(memoKey);
+		deadEnds.set(memoKey, 'none');
 		consider({ kind: 'none', path });
 		return undefined;
 	}
@@ -343,11 +346,32 @@ export async function buildChainInternal(
 	function recordMissingIssuers(
 		current: ParsedCertificate,
 		path: readonly ParsedCertificate[],
-	): void {
+	): DeadEndKind {
 		if (isSelfIssued(current)) {
 			consider({ kind: 'untrusted-anchor', path });
-		} else if (path.length > 1) {
+			return 'untrusted-anchor';
+		}
+		if (path.length > 1) {
 			consider({ kind: 'missing-issuer', path, missingIssuerAt: path.length - 1 });
+		}
+		return 'missing-issuer';
+	}
+
+	function recoverDeadEnd(kind: DeadEndKind, path: readonly ParsedCertificate[]): void {
+		switch (kind) {
+			case 'missing-issuer':
+				consider({ kind: 'missing-issuer', path, missingIssuerAt: path.length - 1 });
+				return;
+			case 'untrusted-anchor':
+				consider({ kind: 'untrusted-anchor', path });
+				return;
+			case 'none':
+				consider({ kind: 'none', path });
+				return;
+			default: {
+				const _exhaustive: never = kind;
+				throw new Error(`unreachable dead-end kind ${String(_exhaustive)}`);
+			}
 		}
 	}
 

@@ -97,4 +97,40 @@ describe('path search diagnostics', () => {
 		expect(index).toBe(chainCommonNames.length - 1);
 		expect(result.details?.subjectCommonName).toBe(chainCommonNames[index]);
 	});
+
+	it('recovers the deeper arriving prefix when a missing-issuer node is re-reached through a self-issued bridge', async () => {
+		const keyL = await party();
+		const keyQ = await party();
+		const keyS = await party();
+		const keyNowhere = await party();
+
+		const leaf = await leafPem('Leaf', 'Q', keyL, keyQ);
+		const certQ = await caPem('Q', 'S', keyQ, keyS);
+		const sCross = await caPem('S', 'Nowhere', keyS, keyNowhere);
+		const sSelf = await caPem('S', 'S', keyS, keyS);
+
+		const result = await verifyCertificateChain({
+			leaf,
+			intermediates: [certQ, sCross, sSelf],
+			roots: [],
+			at: AT,
+		});
+
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.code).toBe('issuer_not_found');
+
+		const chainCommonNames = result.details?.chainCommonNames;
+		expect(chainCommonNames).toBeDefined();
+		if (chainCommonNames === undefined) return;
+
+		const index = result.index;
+		expect(index).toBeDefined();
+		if (index === undefined) return;
+
+		expect(chainCommonNames).toEqual(['Leaf', 'Q', 'S', 'S']);
+		expect(index).toBe(3);
+		expect(index).toBe(chainCommonNames.length - 1);
+		expect(result.details?.subjectCommonName).toBe(chainCommonNames[index]);
+	});
 });
