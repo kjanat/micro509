@@ -187,6 +187,35 @@ const DEFAULT_SIGNATURE_CHECKS: VerifyPathSignatureChecks = {
 	trustAnchor: verifyTrustAnchorSignature,
 };
 
+type PathDiagnostic =
+	| { readonly kind: 'none'; readonly path: readonly ParsedCertificate[] }
+	| { readonly kind: 'untrusted-anchor'; readonly path: readonly ParsedCertificate[] }
+	| {
+			readonly kind: 'missing-issuer';
+			readonly path: readonly ParsedCertificate[];
+			readonly missingIssuerAt: number;
+	  }
+	| {
+			readonly kind: 'specific-failure';
+			readonly path: readonly ParsedCertificate[];
+			readonly failure: VerifyChainFailure;
+	  };
+
+const DIAGNOSTIC_TIER = {
+	'specific-failure': 3,
+	'untrusted-anchor': 2,
+	'missing-issuer': 1,
+	none: 0,
+} as const satisfies Record<PathDiagnostic['kind'], number>;
+
+function isMoreSignificant(candidate: PathDiagnostic, incumbent: PathDiagnostic): boolean {
+	const candidateTier = DIAGNOSTIC_TIER[candidate.kind];
+	const incumbentTier = DIAGNOSTIC_TIER[incumbent.kind];
+	return candidateTier === incumbentTier
+		? candidate.path.length > incumbent.path.length
+		: candidateTier > incumbentTier;
+}
+
 /**
  * Depth-first chain search from leaf to root. Tries all issuer candidates,
  * checking validity, CA constraints, AKI, pathLength, and signatures at each
@@ -216,10 +245,7 @@ export async function buildChainInternal(
 			existing.push(anchor);
 		}
 	}
-	let sawUntrustedAnchor = false;
-	let deepestPath: readonly ParsedCertificate[] = [leaf];
-	let deepestMissingIssuerAt: number | undefined;
-	let preferredFailure: VerifyChainFailure | undefined;
+	const best: { current: PathDiagnostic } = { current: { kind: 'none', path: [leaf] } };
 	const deadEnds = new Set<string>();
 	const signatureResults = new Map<string, Promise<VerifyCertificateSignatureResult>>();
 
@@ -246,23 +272,24 @@ export async function buildChainInternal(
 				terminal !== undefined && rootFingerprints.has(fingerprint(terminal)),
 		};
 	}
-	if (preferredFailure !== undefined) {
-		return {
-			chain: deepestPath,
-			foundTrustedRoot: false,
-			failure: preferredFailure,
-		};
-	}
-	if (sawUntrustedAnchor) {
-		return { chain: deepestPath, foundTrustedRoot: false };
-	}
-	return deepestMissingIssuerAt === undefined
-		? { chain: deepestPath, foundTrustedRoot: false }
-		: {
-				chain: deepestPath,
+	const owner = best.current;
+	switch (owner.kind) {
+		case 'specific-failure':
+			return { chain: owner.path, foundTrustedRoot: false, failure: owner.failure };
+		case 'missing-issuer':
+			return {
+				chain: owner.path,
 				foundTrustedRoot: false,
-				missingIssuerAt: deepestMissingIssuerAt,
+				missingIssuerAt: owner.missingIssuerAt,
 			};
+		case 'untrusted-anchor':
+		case 'none':
+			return { chain: owner.path, foundTrustedRoot: false };
+		default: {
+			const _exhaustive: never = owner;
+			throw new Error(`unreachable diagnostic ${String(_exhaustive)}`);
+		}
+	}
 
 	async function search(
 		current: ParsedCertificate,
@@ -309,7 +336,7 @@ export async function buildChainInternal(
 		if (issuerPath !== undefined) return issuerPath;
 
 		deadEnds.add(memoKey);
-		updateDeepest(path);
+		consider({ kind: 'none', path });
 		return undefined;
 	}
 
@@ -318,10 +345,9 @@ export async function buildChainInternal(
 		path: readonly ParsedCertificate[],
 	): void {
 		if (isSelfIssued(current)) {
-			updateDeepest(path);
-			sawUntrustedAnchor = true;
-		} else if (updateDeepest(path)) {
-			deepestMissingIssuerAt = path.length - 1;
+			consider({ kind: 'untrusted-anchor', path });
+		} else if (path.length > 1) {
+			consider({ kind: 'missing-issuer', path, missingIssuerAt: path.length - 1 });
 		}
 	}
 
@@ -402,22 +428,17 @@ export async function buildChainInternal(
 		return pending;
 	}
 
-	function updateDeepest(path: readonly ParsedCertificate[]): boolean {
-		if (path.length > deepestPath.length) {
-			deepestPath = path;
-			return true;
+	function consider(candidate: PathDiagnostic): void {
+		if (isMoreSignificant(candidate, best.current)) {
+			best.current = candidate;
 		}
-		return false;
 	}
 
 	function recordFailure(
 		candidateFailure: VerifyChainFailure,
 		path: readonly ParsedCertificate[],
 	): void {
-		if (preferredFailure === undefined || path.length > deepestPath.length) {
-			preferredFailure = candidateFailure;
-			deepestPath = path;
-		}
+		consider({ kind: 'specific-failure', path, failure: candidateFailure });
 	}
 }
 
