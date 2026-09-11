@@ -924,6 +924,24 @@ describe('pkcs7', () => {
 		if (!result.ok) expect(result.code).toBe('detached_content_required');
 	});
 
+	it('verifyPkcs7SignedData rejects embedded content without signers', async () => {
+		const content = new TextEncoder().encode('attacker-controlled');
+		const signedData = sequence([
+			integerFromNumber(1),
+			setOf([]),
+			sequence([objectIdentifier(OIDS.pkcs7Data), explicitContext(0, octetString(content))]),
+			setOf([]),
+		]);
+		const der = sequence([objectIdentifier(OIDS.pkcs7SignedData), explicitContext(0, signedData)]);
+		const parsed = parsePkcs7SignedDataDer(der);
+		expect(parsed.ok).toBe(true);
+		if (!parsed.ok) throw new Error('unreachable');
+		expect(parsed.value.signerInfos).toHaveLength(0);
+
+		const result = await verifyPkcs7SignedData(der);
+		expect(result).toMatchObject({ ok: false, code: 'no_signers' });
+	});
+
 	it('verifyPkcs7SignedData ignores tampered encapsulated content on pre-parsed input', async () => {
 		const rsaKeys = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
 		const signer = await createSelfSignedCertificate({
