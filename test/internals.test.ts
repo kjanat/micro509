@@ -2091,6 +2091,24 @@ describe('pbes2.ts edge cases', () => {
 		expect(parsePbes2AlgorithmIdentifier(der).salt.length).toBe(4);
 	});
 
+	it('enforces a configurable PBKDF2 iteration ceiling before decryption', () => {
+		const der = encodePbes2AlgorithmIdentifier({
+			iterations: 2_147_483_647,
+			salt: new Uint8Array(16),
+			iv: new Uint8Array(16),
+			cipher: 'AES-256-CBC',
+			prf: 'HMAC-SHA-256',
+		});
+
+		expect(() => parsePbes2AlgorithmIdentifier(der)).toThrow('exceed configured maximum');
+		expect(parsePbes2AlgorithmIdentifier(der, { maxIterations: 2_147_483_647 }).iterations).toBe(
+			2_147_483_647,
+		);
+		expect(() => parsePbes2AlgorithmIdentifier(der, { maxIterations: 0 })).toThrow(
+			'positive safe integer',
+		);
+	});
+
 	it('parsePbes2AlgorithmIdentifier throws on non-PBES2 OID', () => {
 		const wrong = sequence([objectIdentifier('1.2.3.4'), sequence([])]);
 		expect(() => parsePbes2AlgorithmIdentifier(wrong)).toThrow(/Unsupported encryption/);

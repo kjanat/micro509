@@ -229,6 +229,25 @@ describe('keys', () => {
 		);
 	});
 
+	it('rejects encrypted PKCS#8 work above the configured PBKDF2 limit', async () => {
+		const keyPair = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
+		const options = { password: 'secret123', iterations: 2 };
+		const der = await exportEncryptedPkcs8Der(keyPair.privateKey, options);
+		const pem = await exportEncryptedPkcs8Pem(keyPair.privateKey, options);
+		const algorithm = { kind: 'ecdsa', curve: 'P-256' } as const;
+
+		await expectImportFailure(
+			importEncryptedPkcs8Der(der, options.password, algorithm, { maxIterations: 1 }),
+			'malformed',
+			'exceed configured maximum',
+		);
+		await expectImportFailure(
+			importEncryptedPkcs8Pem(pem, options.password, algorithm, { maxIterations: 1 }),
+			'malformed',
+			'exceed configured maximum',
+		);
+	});
+
 	it('returns invalid_password when decrypting PKCS#8 DER with the wrong password', async () => {
 		const keyPair = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
 		const der = await exportEncryptedPkcs8Der(keyPair.privateKey, { password: 'right' });

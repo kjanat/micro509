@@ -45,6 +45,7 @@ import {
 	decryptPbes2,
 	encryptPbes2,
 	isWrongPasswordError,
+	type Pbes2DecryptionOptions,
 	type Pbes2Parameters,
 	parsePbes2AlgorithmIdentifier,
 	wrongPasswordError,
@@ -66,6 +67,7 @@ import {
 } from '#micro509/result/result';
 
 export type {
+	Pbes2DecryptionOptions,
 	Pbes2EncryptionOptions,
 	Pbes2EncryptionScheme,
 	Pbes2Parameters,
@@ -191,6 +193,9 @@ export interface EncryptedPkcs8Options {
 	/** PBKDF2 pseudo-random function. Default: `'HMAC-SHA-256'`. */
 	readonly prf?: 'HMAC-SHA-1' | 'HMAC-SHA-256';
 }
+
+/** Resource policy for importing an encrypted PKCS#8 private key. */
+export type EncryptedPkcs8ImportOptions = Pbes2DecryptionOptions;
 
 /** Options for OpenSSL-style `Proc-Type: 4,ENCRYPTED` PEM encryption (PKCS#1/SEC1). */
 export interface LegacyPemEncryptionOptions {
@@ -932,12 +937,14 @@ export async function importEncryptedPkcs8DerOrThrow(
 	der: Uint8Array,
 	password: string,
 	algorithm?: PrivateKeyImportInput,
+	options: EncryptedPkcs8ImportOptions = {},
 ): Promise<CryptoKey> {
 	const envelope = readEncryptedPkcs8Envelope(der);
 	const decrypted = await decryptPbes2(
 		envelope.algorithmIdentifierDer,
 		envelope.encryptedData,
 		password,
+		options,
 	);
 	assertDecryptedPrivateKey(
 		() => parsePkcs8PrivateKey(decrypted),
@@ -995,8 +1002,11 @@ export function importEncryptedPkcs8Der(
 	der: Uint8Array,
 	password: string,
 	algorithm?: PrivateKeyImportInput,
+	options: EncryptedPkcs8ImportOptions = {},
 ): Promise<ImportEncryptedKeyResult<CryptoKey>> {
-	return encryptedImportResult(() => importEncryptedPkcs8DerOrThrow(der, password, algorithm));
+	return encryptedImportResult(() =>
+		importEncryptedPkcs8DerOrThrow(der, password, algorithm, options),
+	);
 }
 
 /**
@@ -1015,11 +1025,13 @@ export function importEncryptedPkcs8PemOrThrow(
 	pem: string,
 	password: string,
 	algorithm?: PrivateKeyImportInput,
+	options: EncryptedPkcs8ImportOptions = {},
 ): Promise<CryptoKey> {
 	return importEncryptedPkcs8DerOrThrow(
 		pemDecodeOrThrow('ENCRYPTED PRIVATE KEY', pem),
 		password,
 		algorithm,
+		options,
 	);
 }
 
@@ -1032,8 +1044,11 @@ export function importEncryptedPkcs8Pem(
 	pem: string,
 	password: string,
 	algorithm?: PrivateKeyImportInput,
+	options: EncryptedPkcs8ImportOptions = {},
 ): Promise<ImportEncryptedKeyResult<CryptoKey>> {
-	return encryptedImportResult(() => importEncryptedPkcs8PemOrThrow(pem, password, algorithm));
+	return encryptedImportResult(() =>
+		importEncryptedPkcs8PemOrThrow(pem, password, algorithm, options),
+	);
 }
 
 /**

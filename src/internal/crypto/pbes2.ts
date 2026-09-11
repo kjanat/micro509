@@ -65,6 +65,15 @@ export interface Pbes2EncryptionOptions {
 	readonly prf?: Pbes2Prf;
 }
 
+/** Limits attacker-controlled PBKDF2 work while decrypting PBES2 content. */
+export interface Pbes2DecryptionOptions {
+	/** Maximum accepted PBKDF2 iteration count. Default: `1_000_000`. */
+	readonly maxIterations?: number;
+}
+
+/** Default upper bound for PBKDF2 work requested by an untrusted PBES2 envelope. */
+export const DEFAULT_PBES2_MAX_ITERATIONS = 1_000_000;
+
 /** Resolved PBES2 algorithm parameters, either parsed from DER or built by `encryptPbes2`. */
 export interface Pbes2Parameters {
 	/** PBKDF2 iteration count. */
@@ -141,8 +150,9 @@ export async function decryptPbes2(
 	algorithmIdentifierDer: Uint8Array,
 	encryptedData: Uint8Array,
 	password: string,
+	options: Pbes2DecryptionOptions = {},
 ): Promise<Uint8Array> {
-	const parameters = parsePbes2AlgorithmIdentifier(algorithmIdentifierDer);
+	const parameters = parsePbes2AlgorithmIdentifier(algorithmIdentifierDer, options);
 	const key = await deriveAesKey(
 		password,
 		parameters.salt,
@@ -188,7 +198,14 @@ export function encodePbes2AlgorithmIdentifier(parameters: Pbes2Parameters): Uin
 }
 
 /** Decodes a DER-encoded PBES2 AlgorithmIdentifier into structured {@linkcode Pbes2Parameters}. */
-export function parsePbes2AlgorithmIdentifier(algorithmIdentifierDer: Uint8Array): Pbes2Parameters {
+export function parsePbes2AlgorithmIdentifier(
+	algorithmIdentifierDer: Uint8Array,
+	options: Pbes2DecryptionOptions = {},
+): Pbes2Parameters {
+	const maxIterations = options.maxIterations ?? DEFAULT_PBES2_MAX_ITERATIONS;
+	if (!Number.isSafeInteger(maxIterations) || maxIterations < 1) {
+		throw new RangeError('PBES2 maxIterations must be a positive safe integer');
+	}
 	const { paramsDer, kdf, scheme } = parsePbes2OuterFields(algorithmIdentifierDer);
 	const { pbkdf2Der, pbkdf2Params } = parsePbes2KdfFields(paramsDer, kdf);
 	// RFC 8018 A.2 PBKDF2-params: SEQUENCE { salt CHOICE { specified OCTET STRING,
@@ -232,6 +249,11 @@ export function parsePbes2AlgorithmIdentifier(algorithmIdentifierDer: Uint8Array
 
 	if (iterationsValue < 1) {
 		throw new Error(`Invalid PBES2 iterations: must be >= 1, got ${iterationsValue}`);
+	}
+	if (iterationsValue > maxIterations) {
+		throw new Error(
+			`PBES2 iterations ${iterationsValue} exceed configured maximum ${maxIterations}`,
+		);
 	}
 	if (ivValue.length !== 16) {
 		throw new Error(`Invalid PBES2 IV: must be exactly 16 bytes, got ${ivValue.length}`);
