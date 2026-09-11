@@ -118,6 +118,26 @@ describe('pfx', () => {
 		}
 	});
 
+	it('rejects PBKDF2 work above the configured parsing limit', async () => {
+		const keyPair = await generateKeyPair();
+		const pfx = await buildPfx({
+			privateKeys: [{ privateKey: keyPair.privateKey }],
+			encryption: { password: 'secret', iterations: 2 },
+		});
+		const rejected = await parsePfxDer(pfx.der, {
+			password: 'secret',
+			maxKdfIterations: 1,
+		});
+		expect(rejected.ok).toBe(false);
+		if (!rejected.ok) expect(rejected.code).toBe('malformed');
+
+		const accepted = await parsePfxDer(pfx.der, {
+			password: 'secret',
+			maxKdfIterations: 2,
+		});
+		expect(accepted.ok).toBe(true);
+	});
+
 	it('verifies PFX MAC integrity', async () => {
 		const keyPair = await generateKeyPair();
 		const certificate = await createSelfSignedCertificate({

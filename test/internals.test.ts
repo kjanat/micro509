@@ -2128,6 +2128,20 @@ describe('pbes2.ts edge cases', () => {
 		expect(() => parsePbes2AlgorithmIdentifier(badPbkdf2)).toThrow(/Malformed PBKDF2/);
 	});
 
+	it('parsePbes2AlgorithmIdentifier requires an INTEGER iteration count', () => {
+		const badPbkdf2 = sequence([
+			objectIdentifier(OIDS.pbes2),
+			sequence([
+				sequence([
+					objectIdentifier(OIDS.pbkdf2),
+					sequence([octetString(new Uint8Array(16)), octetString(Uint8Array.of(1))]),
+				]),
+				sequence([objectIdentifier(OIDS.aes256Cbc), octetString(new Uint8Array(16))]),
+			]),
+		]);
+		expect(() => parsePbes2AlgorithmIdentifier(badPbkdf2)).toThrow(/Malformed PBKDF2/);
+	});
+
 	it('parsePbes2AlgorithmIdentifier accepts shipped AES-CBC and PBKDF2 PRF variants', () => {
 		const cases = [
 			{
