@@ -196,7 +196,10 @@ export interface ParsedCertificateRevocationList {
 	readonly issuer: ParsedName;
 	/** Start of the CRL validity window. */
 	readonly thisUpdate: Date;
-	/** End of the CRL validity window. Absent if the CA does not commit to a schedule. */
+	/**
+	 * End of the CRL validity window. Absent if the CA does not commit to a schedule;
+	 * full validation then applies its configured maximum age.
+	 */
 	readonly nextUpdate?: Date;
 	/** OID of the algorithm used to sign this CRL. */
 	readonly signatureAlgorithmOid: string;
@@ -277,6 +280,11 @@ export interface ValidateCertificateRevocationListInput {
 	readonly at?: Date;
 	/** Tolerance in milliseconds for clock skew when checking `thisUpdate`/`nextUpdate`. */
 	readonly clockSkewMs?: number;
+	/**
+	 * Maximum age in milliseconds for a CRL without `nextUpdate`.
+	 * Defaults to seven days.
+	 */
+	readonly maxAgeMs?: number;
 }
 
 /**
@@ -778,7 +786,8 @@ export async function verifyCertificateRevocationListSignature(
 /**
  * Full CRL validation: issuer name match, authority key identifier match,
  * cRLSign key-usage check, signature verification, and `thisUpdate`/`nextUpdate`
- * freshness check (with optional clock-skew tolerance).
+ * freshness check (with optional clock-skew tolerance). CRLs without `nextUpdate`
+ * use a caller-configurable maximum age, which defaults to seven days.
  */
 export async function validateCertificateRevocationList(
 	input: ValidateCertificateRevocationListInput,
@@ -860,9 +869,12 @@ export async function validateCertificateRevocationList(
 	}
 	const at = input.at ?? new Date();
 	const skew = input.clockSkewMs ?? 0;
+	const maximumAge = input.maxAgeMs ?? 7 * 24 * 60 * 60 * 1_000;
 	if (
 		parsedCrl.thisUpdate.getTime() - skew > at.getTime() ||
-		(parsedCrl.nextUpdate !== undefined && parsedCrl.nextUpdate.getTime() + skew < at.getTime())
+		(parsedCrl.nextUpdate === undefined
+			? parsedCrl.thisUpdate.getTime() + maximumAge + skew < at.getTime()
+			: parsedCrl.nextUpdate.getTime() + skew < at.getTime())
 	) {
 		return validateCertificateRevocationListFailureResult(
 			'stale_crl',

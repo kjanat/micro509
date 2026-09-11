@@ -369,6 +369,42 @@ describe('crl', () => {
 		expect(staleWithSkew.ok).toBe(true);
 	});
 
+	it('bounds the freshness of a CRL without nextUpdate', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Unbounded CRL CA' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+			},
+		});
+		const thisUpdate = new Date('2020-01-01T00:00:00Z');
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Unbounded CRL CA' },
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			thisUpdate,
+		});
+
+		const result = await validateCertificateRevocationList({
+			crl: crl.pem,
+			issuerCertificate: ca.certificate.pem,
+			at: new Date('2100-01-01T00:00:00Z'),
+		});
+
+		expect(result.ok).toBe(false);
+		if (!result.ok) {
+			expect(result.code).toBe('stale_crl');
+		}
+
+		const withinConfiguredAge = await validateCertificateRevocationList({
+			crl: crl.pem,
+			issuerCertificate: ca.certificate.pem,
+			at: new Date('2020-01-08T00:00:00Z'),
+			maxAgeMs: 8 * 24 * 60 * 60 * 1_000,
+		});
+		expect(withinConfiguredAge.ok).toBe(true);
+	});
+
 	it('validates CRL with AKI mismatch', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'AKI CRL CA' },
