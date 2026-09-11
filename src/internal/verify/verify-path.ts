@@ -60,6 +60,9 @@ type IssuerCandidateEvaluation =
 	| { readonly ok: true; readonly nextCaBelowCount: number }
 	| { readonly ok: false; readonly failure: VerifyChainFailure };
 
+const MAX_PATH_BUILDING_CANDIDATES = 64;
+const MAX_PATH_BUILDING_ISSUER_CHECKS = 4_096;
+
 /** Loose input for constructing failure detail objects during path building. */
 export interface VerifyPathFailureDetailsInput {
 	/** Common name of the certificate under evaluation, if known. */
@@ -178,6 +181,22 @@ export async function buildChainInternal(
 	callbacks: VerifyPathCallbacks,
 ): Promise<InternalBuildResult> {
 	const candidates = [...intermediates, ...roots];
+	const candidateCount = candidates.length + trustAnchors.length;
+	if (candidateCount > MAX_PATH_BUILDING_CANDIDATES) {
+		return {
+			chain: [leaf],
+			foundTrustedRoot: false,
+			failure: callbacks.failure(
+				'path_building_limit_exceeded',
+				'certificate path candidate limit exceeded',
+				undefined,
+				callbacks.detail({
+					expected: `at most ${MAX_PATH_BUILDING_CANDIDATES} issuer candidates`,
+					actual: String(candidateCount),
+				}),
+			),
+		};
+	}
 	const subjectIndex = new Map<string, ParsedCertificate[]>();
 	const order = new Map<string, number>();
 	const rootFingerprints = new Set(roots.map((candidate) => fingerprint(candidate)));
@@ -195,6 +214,8 @@ export async function buildChainInternal(
 	let deepestPath: readonly ParsedCertificate[] = [leaf];
 	let deepestMissingIssuerAt: number | undefined;
 	let preferredFailure: VerifyChainFailure | undefined;
+	let issuerChecks = 0;
+	let pathBuildingLimitExceeded = false;
 	const deadEnds = new Set<string>();
 
 	candidates.forEach((candidate, index) => {
@@ -218,6 +239,21 @@ export async function buildChainInternal(
 			foundTrustedRoot: true,
 			anchorCertificateInChain:
 				terminal !== undefined && rootFingerprints.has(fingerprint(terminal)),
+		};
+	}
+	if (pathBuildingLimitExceeded) {
+		return {
+			chain: deepestPath,
+			foundTrustedRoot: false,
+			failure: callbacks.failure(
+				'path_building_limit_exceeded',
+				'certificate path issuer-check limit exceeded',
+				undefined,
+				callbacks.detail({
+					expected: `at most ${MAX_PATH_BUILDING_ISSUER_CHECKS} issuer checks`,
+					actual: String(issuerChecks),
+				}),
+			),
 		};
 	}
 	if (preferredFailure !== undefined) {
@@ -244,6 +280,7 @@ export async function buildChainInternal(
 		visited: ReadonlySet<string>,
 		caBelowCount: number,
 	): Promise<readonly ParsedCertificate[] | undefined> {
+		if (pathBuildingLimitExceeded) return undefined;
 		if (rootFingerprints.has(fingerprint(current))) {
 			return path;
 		}
@@ -303,6 +340,7 @@ export async function buildChainInternal(
 		caBelowCount: number,
 	): Promise<readonly ParsedCertificate[] | undefined> {
 		for (const issuer of issuers) {
+			if (pathBuildingLimitExceeded) return undefined;
 			const result = await searchIssuerCandidate(current, issuer, path, visited, caBelowCount);
 			if (result !== undefined) return result;
 		}
@@ -318,6 +356,11 @@ export async function buildChainInternal(
 	): Promise<readonly ParsedCertificate[] | undefined> {
 		const issuerFingerprint = fingerprint(issuer);
 		if (visited.has(issuerFingerprint)) return undefined;
+		if (issuerChecks >= MAX_PATH_BUILDING_ISSUER_CHECKS) {
+			pathBuildingLimitExceeded = true;
+			return undefined;
+		}
+		issuerChecks += 1;
 		const candidate = await evaluateIssuerCandidate(
 			current,
 			issuer,

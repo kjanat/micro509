@@ -261,6 +261,7 @@ Every other error-code union in the library is tabled in the
 | `ca_required`                                | Non-CA certificate used as issuer              |
 | `key_cert_sign_required`                     | Issuer missing `keyCertSign` key usage         |
 | `path_length_exceeded`                       | Chain exceeds `pathLenConstraint`              |
+| `path_building_limit_exceeded`               | Path building exceeded bounded work limits     |
 | `authority_key_identifier_mismatch`          | AKI/SKI cross-check failed                     |
 | `extended_key_usage_invalid`                 | EKU doesn't match requested purpose            |
 | `subject_alt_name_mismatch`                  | SAN doesn't match service identity             |
