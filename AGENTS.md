@@ -131,6 +131,7 @@ bun typecheck          # tsc across src, other, regular, and site configs
 bun test               # bun test --concurrent (test:coverage for coverage)
 bun test:pkits         # NIST PKITS conformance suite
 bun test:differential  # OpenSSL differential (set DIFFERENTIAL_OPENSSL=1)
+bun spec list          # section-level reader for the vendored standards corpus
 bun docs:lint          # deno doc lint on public exports (CI gate)
 bun lint               # biome lint
 bun fmt                # dprint fmt
