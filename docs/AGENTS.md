@@ -46,6 +46,7 @@ JSDoc and regenerate it rather than editing generated pages.
 
 - Fetch or refresh RFC text with `bun rfc <number>`; never hand-edit it.
 - Keep an obsolete RFC when a legacy format is defined against that exact text.
+- A fetched RFC joins the corpus and stays in `rfc/`.
 - Vendor the current successor beside every retained obsolete RFC.
 - Cite current RFCs in source unless behavior is deliberately pinned to frozen
   legacy text listed in `PINNED_TO_SUPERSEDED`.
