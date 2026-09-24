@@ -136,7 +136,7 @@ function componentPattern(component: string): RegExp | undefined {
 
 function componentMatches(pattern: string, actual: string): boolean {
 	if (!GLOB_META.test(pattern)) return pattern === actual;
-	return componentPattern(pattern)?.test(actual) ?? true;
+	return componentPattern(pattern)?.test(actual) ?? pattern === actual;
 }
 
 function relationTo(target: readonly string[], corpus: readonly string[]): Relation {
@@ -154,6 +154,7 @@ export function corpusDirs(project: string): readonly string[] {
 }
 
 export function relation(word: string, cwd: string, dirs: readonly string[]): Relation {
+	if (word.includes('\n')) return 'none';
 	const absolute = path.resolve(cwd, word);
 	const target = components(GLOB_META.test(word) ? absolute : canonical(absolute));
 	let strongest: Relation = 'none';

@@ -71,7 +71,3 @@ export interface SpecDocument extends ParsedDocument {
 	readonly kind: DocKind;
 	readonly relativePath: string;
 }
-
-export function unreachable(value: never): never {
-	throw new Error(`unreachable variant: ${String(value)}`);
-}

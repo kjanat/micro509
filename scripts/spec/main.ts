@@ -11,7 +11,6 @@ import {
 } from './corpus.ts';
 import { blocksOf, minimumIndent, renderBody } from './text.ts';
 import type { DocKind, SourceLine, SpecDocument } from './types.ts';
-import { unreachable } from './types.ts';
 
 type ListedDocument =
 	| {
@@ -123,8 +122,10 @@ function describe(
 			};
 		case 'w3c':
 			return { ...common, kind: 'w3c', status: meta.status, date: meta.date };
-		default:
-			return unreachable(meta);
+		default: {
+			const _exhaustive: never = meta;
+			throw new Error(`Unhandled document kind: ${String(_exhaustive)}`);
+		}
 	}
 }
 
@@ -149,8 +150,10 @@ function noteOf(entry: ListedDocument): string {
 		case 'w3c':
 			if (entry.status !== undefined) notes.push(entry.status);
 			break;
-		default:
-			return unreachable(entry);
+		default: {
+			const _exhaustive: never = entry;
+			throw new Error(`Unhandled document kind: ${String(_exhaustive)}`);
+		}
 	}
 	return notes.join('; ');
 }
@@ -163,8 +166,10 @@ function dateOf(entry: ListedDocument): string {
 			return entry.date ?? '';
 		case 'itu':
 			return entry.edition ?? '';
-		default:
-			return unreachable(entry);
+		default: {
+			const _exhaustive: never = entry;
+			throw new Error(`Unhandled document kind: ${String(_exhaustive)}`);
+		}
 	}
 }
 

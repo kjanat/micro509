@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { runCommand } from 'dreamcli/testkit';
 import { projectRoot, rfcDir } from '#test/helpers';
+import { ituIdentifier, ituMeta, parseItu } from '../scripts/spec/itu.ts';
 import { headingsCommand, listCommand, readCommand, searchCommand } from '../scripts/spec/main.ts';
 
 type Entry = Readonly<Record<string, unknown>>;
@@ -485,5 +486,79 @@ describe('spec errors', () => {
 		const result = await runCommand(searchCommand, ['nextUpdate(', '--doc', 'rfc5280']);
 		expect(result.exitCode).not.toBe(0);
 		expect(result.error?.code).toBe('SPEC_PATTERN_INVALID');
+	});
+});
+
+describe('ITU-T parsing', () => {
+	const source = [
+		'Contents',
+		'1  Scope ........ 1',
+		'',
+		'1  Scope',
+		'Body of the first clause.',
+		'',
+		'1.1  Subject',
+		'Body of a subclause.',
+		'',
+		'2.3  Orphan without a parent clause',
+		'',
+		'01  Malformed number',
+		'',
+		'2  Definitions',
+		'2.1  Imported terms',
+	].join('\n');
+
+	test('lists well-formed clauses whose parent precedes them', () => {
+		const parsed = parseItu(source, 'T-REC-X.509-201910-I!!PDF-E', 'x509');
+		expect(
+			parsed.headings.map((heading) => [heading.number, heading.title, heading.depth]),
+		).toEqual([
+			['1', 'Scope', 1],
+			['1.1', 'Subject', 2],
+			['2', 'Definitions', 1],
+			['2.1', 'Imported terms', 2],
+		]);
+	});
+
+	test.each([
+		['T-REC-X.509-201910-I!!PDF-E', 'Recommendation ITU-T X.509 (10/2019)', 'base', undefined],
+		[
+			'T-REC-X.509-202310-I!Cor2!PDF-E',
+			'Recommendation ITU-T X.509 (10/2023) Corrigendum 2',
+			'corrigendum',
+			2,
+		],
+		[
+			'T-REC-X.520-202410-I!Amd1!PDF-E',
+			'Recommendation ITU-T X.520 (10/2024) Amendment 1',
+			'amendment',
+			1,
+		],
+		[
+			'T-REC-X.690-202109-I!Err1!PDF-E',
+			'Recommendation ITU-T X.690 (09/2021) Erratum 1',
+			'erratum',
+			1,
+		],
+		['T-REC-X.690-202109-I!Sup9!PDF-E', 'Recommendation ITU-T X.690 (09/2021)', 'other', undefined],
+	] as const)('describes %s', (stem, title, variant, variantNumber) => {
+		expect(ituMeta(stem, 'x')).toMatchObject({ kind: 'itu', title, variant, variantNumber });
+	});
+
+	test('falls back to the directory for a file outside the T-REC naming scheme', () => {
+		expect(ituMeta('X6801', 'x680')).toEqual({
+			kind: 'itu',
+			title: 'ITU-T x680 (X6801)',
+			recommendation: 'x680',
+			edition: undefined,
+			variant: 'other',
+			variantNumber: undefined,
+		});
+		expect(ituIdentifier('X6801', 'x680')).toBe('itu-x680-x6801');
+	});
+
+	test('derives stable identifiers from T-REC names', () => {
+		expect(ituIdentifier('T-REC-X.509-201910-I!!PDF-E', 'x509')).toBe('itu-x509-2019');
+		expect(ituIdentifier('T-REC-X.509-202310-I!Cor2!PDF-E', 'x509')).toBe('itu-x509-2023-cor2');
 	});
 });
