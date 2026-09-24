@@ -187,7 +187,7 @@ const DEFAULT_SIGNATURE_CHECKS: VerifyPathSignatureChecks = {
 	trustAnchor: verifyTrustAnchorSignature,
 };
 
-type PathDiagnostic =
+export type PathDiagnostic =
 	| { readonly kind: 'none'; readonly path: readonly ParsedCertificate[] }
 	| { readonly kind: 'untrusted-anchor'; readonly path: readonly ParsedCertificate[] }
 	| {
@@ -216,7 +216,49 @@ function isMoreSignificant(candidate: PathDiagnostic, incumbent: PathDiagnostic)
 		: candidateTier > incumbentTier;
 }
 
-type DeadEndKind = 'missing-issuer' | 'untrusted-anchor' | 'none';
+interface DeadEnd {
+	readonly diagnostic: PathDiagnostic;
+	readonly nodeIndex: number;
+}
+
+/**
+ * Moves a diagnostic recorded below the certificate at `nodeIndex` onto a new
+ * prefix ending at that same certificate. A suffix that repeats a certificate
+ * of the new prefix cannot form a path, so only the prefix is reported.
+ */
+export function rebaseDiagnostic(
+	diagnostic: PathDiagnostic,
+	nodeIndex: number,
+	prefix: readonly ParsedCertificate[],
+): PathDiagnostic {
+	const suffix = diagnostic.path.slice(nodeIndex + 1);
+	const spent = new Set(prefix.map((certificate) => fingerprint(certificate)));
+	if (suffix.some((certificate) => spent.has(fingerprint(certificate)))) {
+		return { kind: 'none', path: prefix };
+	}
+	const path = [...prefix, ...suffix];
+	const shift = prefix.length - 1 - nodeIndex;
+	switch (diagnostic.kind) {
+		case 'none':
+		case 'untrusted-anchor':
+			return { kind: diagnostic.kind, path };
+		case 'missing-issuer':
+			return { kind: 'missing-issuer', path, missingIssuerAt: diagnostic.missingIssuerAt + shift };
+		case 'specific-failure':
+			return {
+				kind: 'specific-failure',
+				path,
+				failure:
+					diagnostic.failure.index === undefined
+						? diagnostic.failure
+						: { ...diagnostic.failure, index: diagnostic.failure.index + shift },
+			};
+		default: {
+			const _exhaustive: never = diagnostic;
+			throw new Error(`unreachable diagnostic ${String(_exhaustive)}`);
+		}
+	}
+}
 
 /**
  * Depth-first chain search from leaf to root. Tries all issuer candidates,
@@ -248,7 +290,8 @@ export async function buildChainInternal(
 		}
 	}
 	const best: { current: PathDiagnostic } = { current: { kind: 'none', path: [leaf] } };
-	const deadEnds = new Map<string, DeadEndKind>();
+	const deadEnds = new Map<string, DeadEnd>();
+	const subtrees: { best: PathDiagnostic }[] = [];
 	const signatureResults = new Map<string, Promise<VerifyCertificateSignatureResult>>();
 
 	candidates.forEach((candidate, index) => {
@@ -321,9 +364,27 @@ export async function buildChainInternal(
 		const memoKey = `${fingerprint(current)}:${caBelowCount}`;
 		const memoized = deadEnds.get(memoKey);
 		if (memoized !== undefined) {
-			recoverDeadEnd(memoized, path);
+			consider(rebaseDiagnostic(memoized.diagnostic, memoized.nodeIndex, path));
 			return undefined;
 		}
+		const subtree: { best: PathDiagnostic } = { best: { kind: 'none', path } };
+		subtrees.push(subtree);
+		try {
+			const issuerPath = await searchBelow(current, path, visited, caBelowCount);
+			if (issuerPath !== undefined) return issuerPath;
+		} finally {
+			subtrees.pop();
+		}
+		deadEnds.set(memoKey, { diagnostic: subtree.best, nodeIndex: path.length - 1 });
+		return undefined;
+	}
+
+	async function searchBelow(
+		current: ParsedCertificate,
+		path: readonly ParsedCertificate[],
+		visited: ReadonlySet<string>,
+		caBelowCount: number,
+	): Promise<readonly ParsedCertificate[] | undefined> {
 		const issuers = rankIssuerCandidates(
 			current,
 			subjectIndex.get(canonicalDnKey(current.issuer)) ?? [],
@@ -331,14 +392,11 @@ export async function buildChainInternal(
 			rootFingerprints,
 		);
 		if (issuers.length === 0) {
-			deadEnds.set(memoKey, recordMissingIssuers(current, path));
+			recordMissingIssuers(current, path);
 			return undefined;
 		}
-
 		const issuerPath = await searchIssuerCandidates(current, issuers, path, visited, caBelowCount);
 		if (issuerPath !== undefined) return issuerPath;
-
-		deadEnds.set(memoKey, 'none');
 		consider({ kind: 'none', path });
 		return undefined;
 	}
@@ -346,32 +404,13 @@ export async function buildChainInternal(
 	function recordMissingIssuers(
 		current: ParsedCertificate,
 		path: readonly ParsedCertificate[],
-	): DeadEndKind {
+	): void {
 		if (isSelfIssued(current)) {
 			consider({ kind: 'untrusted-anchor', path });
-			return 'untrusted-anchor';
+			return;
 		}
 		if (path.length > 1) {
 			consider({ kind: 'missing-issuer', path, missingIssuerAt: path.length - 1 });
-		}
-		return 'missing-issuer';
-	}
-
-	function recoverDeadEnd(kind: DeadEndKind, path: readonly ParsedCertificate[]): void {
-		switch (kind) {
-			case 'missing-issuer':
-				consider({ kind: 'missing-issuer', path, missingIssuerAt: path.length - 1 });
-				return;
-			case 'untrusted-anchor':
-				consider({ kind: 'untrusted-anchor', path });
-				return;
-			case 'none':
-				consider({ kind: 'none', path });
-				return;
-			default: {
-				const _exhaustive: never = kind;
-				throw new Error(`unreachable dead-end kind ${String(_exhaustive)}`);
-			}
 		}
 	}
 
@@ -455,6 +494,11 @@ export async function buildChainInternal(
 	function consider(candidate: PathDiagnostic): void {
 		if (isMoreSignificant(candidate, best.current)) {
 			best.current = candidate;
+		}
+		for (const subtree of subtrees) {
+			if (isMoreSignificant(candidate, subtree.best)) {
+				subtree.best = candidate;
+			}
 		}
 	}
 

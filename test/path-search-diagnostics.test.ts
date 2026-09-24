@@ -133,4 +133,72 @@ describe('path search diagnostics', () => {
 		expect(index).toBe(chainCommonNames.length - 1);
 		expect(result.details?.subjectCommonName).toBe(chainCommonNames[index]);
 	});
+
+	it('rebases a missing issuer found below a re-reached node onto the deeper prefix', async () => {
+		const keyL = await party();
+		const keyQ = await party();
+		const keyS = await party();
+		const keyT = await party();
+		const keyNowhere = await party();
+
+		const leaf = await leafPem('Leaf', 'Q', keyL, keyQ);
+		const certQ = await caPem('Q', 'S', keyQ, keyS);
+		const sCross = await caPem('S', 'T', keyS, keyT);
+		const sSelf = await caPem('S', 'S', keyS, keyS);
+		const certT = await caPem('T', 'Nowhere', keyT, keyNowhere);
+
+		const result = await verifyCertificateChain({
+			leaf,
+			intermediates: [certQ, sCross, sSelf, certT],
+			roots: [],
+			at: AT,
+		});
+
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.code).toBe('issuer_not_found');
+		expect(result.details?.chainCommonNames).toEqual(['Leaf', 'Q', 'S', 'S', 'T']);
+		expect(result.index).toBe(4);
+		expect(result.details?.subjectCommonName).toBe('T');
+	});
+
+	it('rebases a specific failure found below a re-reached node onto the deeper prefix', async () => {
+		const keyL = await party();
+		const keyQ = await party();
+		const keyS = await party();
+		const keyT = await party();
+		const keyU = await party();
+
+		const leaf = await leafPem('Leaf', 'Q', keyL, keyQ);
+		const certQ = await caPem('Q', 'S', keyQ, keyS);
+		const sCross = await caPem('S', 'T', keyS, keyT);
+		const sSelf = await caPem('S', 'S', keyS, keyS);
+		const certT = await caPem('T', 'U', keyT, keyU);
+		const expiredU = await createCertificate({
+			issuer: { commonName: 'U' },
+			subject: { commonName: 'U' },
+			publicKey: keyU.publicKey,
+			signerPrivateKey: keyU.privateKey,
+			issuerPublicKey: keyU.publicKey,
+			serialNumber: nextSerial(),
+			validity: {
+				notBefore: new Date('2010-01-01T00:00:00Z'),
+				notAfter: new Date('2011-01-01T00:00:00Z'),
+			},
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
+		});
+
+		const result = await verifyCertificateChain({
+			leaf,
+			intermediates: [certQ, sCross, sSelf, certT],
+			roots: [expiredU.pem],
+			at: AT,
+		});
+
+		expect(result.ok).toBe(false);
+		if (result.ok) return;
+		expect(result.code).toBe('certificate_expired');
+		expect(result.index).toBe(5);
+		expect(result.details?.subjectCommonName).toBe('U');
+	});
 });
