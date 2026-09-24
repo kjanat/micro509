@@ -13,7 +13,36 @@ function parentOf(value: string): string | undefined {
 	return parts.length === 1 ? undefined : parts.slice(0, -1).join('.');
 }
 
+const MARKED_HEADING = /^(#{1,6}) (\S.*)$/;
+const MARK = /^(~~|__)(.*)\1$/;
+const HEADING_NUMBER = /^(?:(\d+(?:\.\d+)*)|(\d+)\)|Annex ([A-Z]))\s+(.*)$/;
+
+function markedHeadingsOf(lines: readonly SourceLine[]): readonly Heading[] {
+	const headings: Heading[] = [];
+	lines.forEach((entry, index) => {
+		const match = MARKED_HEADING.exec(entry.text.trimEnd());
+		const level = match?.[1];
+		const raw = match?.[2];
+		if (level === undefined || raw === undefined) return;
+		const marked = MARK.exec(raw);
+		const mark = marked?.[1] ?? '';
+		const text = marked?.[2] ?? raw;
+		const numbered = HEADING_NUMBER.exec(text);
+		const number = numbered?.[1] ?? numbered?.[2] ?? numbered?.[3];
+		const rest = cleanTitle(numbered?.[4] ?? text);
+		headings.push({
+			number: number ?? rest,
+			title: `${mark}${rest}${mark}`,
+			depth: level.length,
+			line: entry.line,
+			index,
+		});
+	});
+	return headings;
+}
+
 function headingsOf(lines: readonly SourceLine[]): readonly Heading[] {
+	if (lines.some((entry) => MARKED_HEADING.test(entry.text))) return markedHeadingsOf(lines);
 	const headings: Heading[] = [];
 	const seen = new Set<string>();
 	lines.forEach((entry, index) => {

@@ -520,6 +520,34 @@ describe('ITU-T parsing', () => {
 		]);
 	});
 
+	test('reads marked headings from a Word conversion', () => {
+		const converted = [
+			'# 1) Correction of the defects reported in defect report 436',
+			'',
+			'##### ~~17.5.2.1.1\tBasic attribute constraints extension definition~~',
+			'',
+			'Body with __inserted__ and ~~deleted~~ text.',
+			'',
+			'# Annex A Module',
+			'',
+			'# Summary',
+		].join('\n');
+		const parsed = parseItu(converted, 'T-REC-X.509-202607-P!Cor3!MSW-E', 'x509');
+		expect(
+			parsed.headings.map((heading) => [
+				heading.number,
+				heading.title,
+				heading.depth,
+				heading.line,
+			]),
+		).toEqual([
+			['1', 'Correction of the defects reported in defect report 436', 1, 1],
+			['17.5.2.1.1', '~~Basic attribute constraints extension definition~~', 5, 3],
+			['A', 'Module', 1, 7],
+			['Summary', 'Summary', 1, 9],
+		]);
+	});
+
 	test.each([
 		['T-REC-X.509-201910-I!!PDF-E', 'Recommendation ITU-T X.509 (10/2019)', 'base', undefined],
 		[

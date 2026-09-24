@@ -15,7 +15,7 @@ expect is rarely the only one that speaks, and it is often not the newest.
 | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `docs/rfc/rfc<n>.txt`        | Verbatim RFC Editor text. Refresh with `bun rfc <n>`.                                                                                                             |
 | `docs/rfc/pkits.txt`         | NIST PKITS specification. Its section prose states relying-party practice and the configurable local-policy escape hatches explicitly.                             |
-| `docs/itu/**/*.txt`          | ITU-T X.501, X.509 (plus corrigenda and amendments), X.520, X.660, X.680, X.690. Fetch with `bun itu <item id>`. Redistribution-restricted: read locally, paraphrase in tracked files and public text, never paste verbatim. |
+| `docs/itu/**/*.txt`          | ITU-T X.501, X.509 (plus corrigenda and amendments), X.520, X.660, X.680, X.690. Fetch with `bun itu <item id>`. Text converted from the Word item (`!MSW-E` in the file name) marks struck text `~~…~~`, underlined text `__…__` and headings `#`. Redistribution-restricted: read locally, paraphrase in tracked files and public text, never paste verbatim. |
 | `docs/w3c/<spec>/`           | W3C WebCrypto and WHATWG Web IDL. Refresh with `bun w3c <spec>`.                                                                                                  |
 | `docs/PKIX-SCOPE.md`         | The project's own support claims and design decisions. Check it so a spec-driven change does not silently contradict a documented decision.                       |
 
