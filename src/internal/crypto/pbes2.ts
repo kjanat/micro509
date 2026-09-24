@@ -269,7 +269,12 @@ export function parsePbes2AlgorithmIdentifier(algorithmIdentifierDer: Uint8Array
 	// `specified` salt alternative is accepted.
 	const salt = pbkdf2Params[0];
 	const iterations = pbkdf2Params[1];
-	if (salt === undefined || iterations === undefined || salt.tag !== 0x04) {
+	if (
+		salt === undefined ||
+		iterations === undefined ||
+		salt.tag !== 0x04 ||
+		iterations.tag !== 0x02
+	) {
 		throw new Error('Malformed PBKDF2 params');
 	}
 	const keyLengthElement = pbkdf2Params[2];
