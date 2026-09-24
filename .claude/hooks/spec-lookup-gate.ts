@@ -56,8 +56,11 @@ const PREFIXES: ReadonlySet<string> = new Set([
 	'env',
 	'sudo',
 ]);
+const FANOUT: ReadonlySet<string> = new Set(['xargs', 'parallel']);
+const GLOB_FLAGS: ReadonlySet<string> = new Set(['-g', '--glob', '--iglob']);
 const SEARCHERS: ReadonlySet<string> = new Set(['rg', 'ag', 'ack', 'ugrep']);
 const GREPS: ReadonlySet<string> = new Set(['grep', 'egrep', 'fgrep']);
+const PATTERN_FLAGS = /^(?:--regexp|--file)(?:=|$)|^-[A-Za-z]*[ef]/;
 const READER_COMMANDS: ReadonlySet<string> = new Set(['read', 'search', 'headings']);
 
 export const EXCLUDE_GLOB = '!**/docs/{rfc,itu,w3c}/**';
@@ -459,19 +462,114 @@ function findOperands(args: readonly string[]): readonly string[] {
 }
 
 function isRoot(word: string, cwd: string): boolean {
-	if (!GLOB_META.test(word)) return existsSync(path.resolve(cwd, word));
+	if (!GLOB_META.test(word)) return word.includes('/') || existsSync(path.resolve(cwd, word));
 	const prefix = word.slice(0, word.search(GLOB_META));
 	return prefix.includes('/');
 }
 
-function searchRoots(segment: Segment, cwd: string): readonly string[] {
-	const args = segment.words.slice(commandIndex(segment.words) + 1);
+function patternIndex(segment: Segment): number | undefined {
+	const words = segment.words;
+	const start = commandIndex(words);
+	const name = path.basename(words[start] ?? '');
+	const gitGrep = name === 'git' ? words.indexOf('grep', start + 1) : -1;
+	if (!SEARCHERS.has(name) && !GREPS.has(name) && gitGrep === -1) return undefined;
+	const first = gitGrep === -1 ? start + 1 : gitGrep + 1;
+	if (words.slice(first).some((word) => PATTERN_FLAGS.test(word))) return undefined;
+	const index = words.findIndex((word, position) => position >= first && !word.startsWith('-'));
+	return index === -1 ? undefined : index;
+}
+
+interface Exclusion {
+	readonly index: number;
+	readonly pattern: string;
+}
+
+function isSearcher(segment: Segment): boolean {
+	const start = commandIndex(segment.words);
+	const name = path.basename(segment.words[start] ?? '');
+	return SEARCHERS.has(name) || GREPS.has(name) || name === 'git';
+}
+
+function exclusionsOf(segment: Segment): readonly Exclusion[] {
+	if (!isSearcher(segment)) return [];
+	const words = segment.words;
+	const found: Exclusion[] = [];
+	words.forEach((word, index) => {
+		const previous = words[index - 1] ?? '';
+		const joined =
+			/^(?:--i?glob=|-g)!(.+)$/.exec(word) ??
+			/^--exclude-dir=(.+)$/.exec(word) ??
+			/^:(?:!|\^|\(exclude\))(.+)$/.exec(word);
+		if (joined?.[1] !== undefined) found.push({ index, pattern: joined[1] });
+		else if (GLOB_FLAGS.has(previous) && word.startsWith('!')) {
+			found.push({ index, pattern: word.slice(1) });
+		} else if (previous === '--exclude-dir') found.push({ index, pattern: word });
+	});
+	return found;
+}
+
+function expandBraces(pattern: string): readonly string[] {
+	const match = /\{([^{}]*)\}/.exec(pattern);
+	if (match?.[1] === undefined) return [pattern];
+	const head = pattern.slice(0, match.index);
+	const tail = pattern.slice(match.index + match[0].length);
+	return match[1].split(',').flatMap((option) => expandBraces(`${head}${option}${tail}`));
+}
+
+function covers(pattern: string, relative: string): boolean {
+	return expandBraces(pattern).some((option) => {
+		const core = option
+			.replace(/^\.\//, '')
+			.replace(/^\*\*\//, '')
+			.replace(/\/\*{1,2}$/, '')
+			.replace(/\/$/, '');
+		if (core.includes('/')) return relative === core || relative.endsWith(`/${core}`);
+		return path.basename(relative) === core;
+	});
+}
+
+function exposes(
+	root: string,
+	cwd: string,
+	dirs: readonly string[],
+	exclusions: readonly Exclusion[],
+): boolean {
+	const found = relation(root, cwd, dirs);
+	if (found !== 'ancestor') return found === 'inside';
+	const base = canonical(path.resolve(cwd, root));
+	const here = canonical(cwd);
+	return dirs.some(
+		(dir) =>
+			!exclusions.some(
+				({ pattern }) =>
+					covers(pattern, path.relative(base, dir)) || covers(pattern, path.relative(here, dir)),
+			),
+	);
+}
+
+function readsStdin(segment: Segment, previous: Segment | undefined): boolean {
+	if (previous?.piped !== true) return false;
+	const start = commandIndex(segment.words);
+	if (segment.words.slice(0, start).some((word) => FANOUT.has(path.basename(word)))) return false;
+	const name = path.basename(segment.words[start] ?? '');
+	return SEARCHERS.has(name) || GREPS.has(name);
+}
+
+function searchRoots(
+	segment: Segment,
+	previous: Segment | undefined,
+	cwd: string,
+	skipped: ReadonlySet<number>,
+): readonly string[] {
+	const start = commandIndex(segment.words);
+	const args = segment.words.filter((_, index) => index > start && !skipped.has(index));
 	const candidates =
 		commandName(segment) === 'find'
 			? findOperands(args)
 			: args.filter((word) => !word.startsWith('-'));
 	const roots = candidates.filter((word) => isRoot(word, cwd));
-	return roots.length > 0 ? roots : [cwd];
+	if (roots.length > 0) return roots;
+	return readsStdin(segment, previous) ? [] : [cwd];
 }
 
 function isReader(segment: Segment): boolean {
@@ -508,14 +606,24 @@ function nextDirectory(segment: Segment, cwd: string): string {
 
 function segmentReads(
 	segment: Segment,
+	previous: Segment | undefined,
 	next: Segment | undefined,
 	cwd: string,
 	dirs: readonly string[],
 ): boolean {
 	if (isReader(segment)) return true;
-	if (segment.words.some((word) => relation(word, cwd, dirs) === 'inside')) return true;
+	const exclusions = exclusionsOf(segment);
+	const pattern = patternIndex(segment);
+	const skipped = new Set(exclusions.map(({ index }) => index));
+	if (pattern !== undefined) skipped.add(pattern);
+	const operands = segment.words.filter((_, index) => !skipped.has(index));
+	if (operands.some((word) => SPEC_RE.test(word) || relation(word, cwd, dirs) === 'inside')) {
+		return true;
+	}
 	if (!isSearch(segment, next)) return false;
-	return searchRoots(segment, cwd).some((root) => relation(root, cwd, dirs) !== 'none');
+	return searchRoots(segment, previous, cwd, skipped).some((root) =>
+		exposes(root, cwd, dirs, exclusions),
+	);
 }
 
 function decideBash(command: string, cwd: string, dirs: readonly string[]): Decision {
@@ -523,11 +631,13 @@ function decideBash(command: string, cwd: string, dirs: readonly string[]): Deci
 	const split = splitHeredocs(command);
 	const script = tokenize(split.text);
 	if (isMetadataOnly(command, script)) return { kind: 'pass' };
-	if ([split.text, ...split.bodies].some((text) => SPEC_RE.test(text))) return { kind: 'deny' };
+	if (split.bodies.some((text) => SPEC_RE.test(text))) return { kind: 'deny' };
 	const segments = [...script.segments, ...split.bodies.flatMap((body) => tokenize(body).segments)];
 	let directory = cwd;
 	for (const [index, segment] of segments.entries()) {
-		if (segmentReads(segment, segments[index + 1], directory, dirs)) return { kind: 'deny' };
+		if (segmentReads(segment, segments[index - 1], segments[index + 1], directory, dirs)) {
+			return { kind: 'deny' };
+		}
 		directory = nextDirectory(segment, directory);
 	}
 	return { kind: 'pass' };

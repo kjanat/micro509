@@ -3,7 +3,9 @@ import type { Heading, ParsedDocument, SourceLine, W3cMeta } from './types.ts';
 
 const TOC_ENTRY = /^\s*(?:[•□☆*+-]|\d+\.)\s+((?:\d+|[A-Z])(?:\.\d+)*)\.?(?:\s+(.*))?$/;
 const BODY_HEADING = /^((?:\d+|[A-Z])(?:\.\d+)*)\.?(?:\s+(.*))?$/;
-const STATUS = /^W3C\s+(.*?)\s+(\d{1,2}\s+[A-Z][a-z]+\s+\d{4})\s*$/;
+const STATUS =
+	/^(?:W3C\s+(.*?)|(Living Standard)\s+—\s+Last Updated)\s+(\d{1,2}\s+[A-Z][a-z]+\s+\d{4})\s*$/;
+const PUBLISHERS: ReadonlySet<string> = new Set(['', 'W3C', 'WHATWG']);
 
 function tocTitles(lines: readonly SourceLine[]): ReadonlyMap<string, string> {
 	const titles = new Map<string, string>();
@@ -56,11 +58,11 @@ function metaOf(lines: readonly SourceLine[]): W3cMeta {
 	let date: string | undefined;
 	for (const entry of head) {
 		const text = cleanTitle(entry.text);
-		if (text === '' || text === 'W3C') continue;
+		if (PUBLISHERS.has(text)) continue;
 		const match = STATUS.exec(text);
-		if (match?.[1] !== undefined) {
-			status ??= match[1];
-			date ??= match[2];
+		if (match !== null) {
+			status ??= match[1] ?? match[2];
+			date ??= match[3];
 			continue;
 		}
 		if (title === '') title = text;

@@ -9,6 +9,7 @@ docs/
 ├── PKIX-SCOPE.md  # canonical support boundary and evidence links
 ├── rfc/           # unmodified RFC Editor text plus NIST PKITS text
 ├── itu/           # local, gitignored ITU-T references; redistribution restricted
+├── w3c/           # W3C WebCrypto and WHATWG Web IDL rendered to text
 └── CLAUDE.md      # delegates agent guidance to this file
 ```
 
@@ -24,7 +25,7 @@ JSDoc and regenerate it rather than editing generated pages.
 | PKITS specification     | `rfc/pkits.txt`                       | upstream NIST fixture documentation                                                                 |
 | Spec reader             | `scripts/spec/`                       | section-level access, run with `bun spec`                                                           |
 | Spec lookup procedure   | `.claude/skills/spec-lookup/SKILL.md` | hand spec questions to the `spec-lookup` agent; raw reads of `rfc/`, `itu/`, `w3c/` are gated to it |
-| RFC fetcher             | `scripts/fetch-rfc.bun.ts`            | run with `bun rfc <number>`                                                                         |
+| Spec fetcher            | `scripts/fetch-spec.bun.ts`           | `bun rfc <number>`, `bun itu <item id>` (`pdftotext -layout`), `bun w3c <spec>` (`w3m -dump`)       |
 | RFC status guard        | `test/rfc/rfc-status.test.ts`         | live RFC Editor index, daily cache                                                                  |
 | Per-RFC conformance     | `test/rfc/*.test.ts`                  | section-quoted behavioral evidence                                                                  |
 | PKITS execution         | `test/pkits.test.ts`                  | fixed-time path-validation harness                                                                  |
@@ -44,7 +45,9 @@ JSDoc and regenerate it rather than editing generated pages.
 
 ## CONVENTIONS
 
-- Fetch or refresh RFC text with `bun rfc <number>`; never hand-edit it.
+- Fetch or refresh RFC text with `bun rfc <number>`, ITU-T text with
+  `bun itu <item id>`, and W3C or WHATWG text with `bun w3c <spec>`; never
+  hand-edit it.
 - Keep an obsolete RFC when a legacy format is defined against that exact text.
 - A fetched RFC joins the corpus and stays in `rfc/`.
 - Vendor the current successor beside every retained obsolete RFC.
