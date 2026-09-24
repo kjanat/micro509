@@ -6,6 +6,7 @@ import {
 	parseCertificatePem,
 	unwrap,
 } from '#micro509';
+import { readSequenceChildren } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { pemEncode } from '#micro509/pem';
 import {
@@ -123,6 +124,13 @@ describe('pkcs domain', () => {
 				mac: { password: 'pw', iterations: 1 },
 			}),
 		);
+		const macData = readSequenceChildren(pfx.der)[2];
+		expect(macData).toBeDefined();
+		const macDataDer = pfx.der.slice(
+			(macData?.start ?? 0) - (macData?.headerLength ?? 0),
+			macData?.end ?? 0,
+		);
+		expect(readSequenceChildren(macDataDer)).toHaveLength(2);
 		const parsed = await parsePfxDer(pfx.der, { password: 'pw' });
 		expect(parsed.ok).toBe(true);
 		if (!parsed.ok) {

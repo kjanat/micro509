@@ -154,29 +154,34 @@ both tables are enforced against `VERIFY_ERROR_CODES` by tests.
 
 ### CheckCertificateRevocationAgainstCrlErrorCode
 
-| Code                     | Meaning                                                      |
-| ------------------------ | ------------------------------------------------------------ |
-| `crl_sign_not_permitted` | CRL signer's keyUsage lacks `cRLSign`                        |
-| `issuer_mismatch`        | CRL issuer does not match the certificate's issuer           |
-| `non_applicable`         | No supplied CRL applies to the certificate (RFC 5280 §6.3.3) |
-| `signature_invalid`      | CRL signature fails against the issuer key                   |
-| `stale_crl`              | CRL outside its `thisUpdate`/`nextUpdate` window             |
+| Code                     | Meaning                                                                   |
+| ------------------------ | ------------------------------------------------------------------------- |
+| `crl_sign_not_permitted` | CRL signer's keyUsage lacks `cRLSign`                                     |
+| `issuer_mismatch`        | CRL issuer does not match the certificate's issuer                        |
+| `non_applicable`         | No supplied CRL applies to the certificate (RFC 5280 §6.3.3)              |
+| `signature_invalid`      | CRL signature fails against the issuer key                                |
+| `stale_crl`              | CRL outside its `thisUpdate`/`nextUpdate` window or older than `maxAgeMs` |
+
+A `non_applicable` failure carries a `reason`. `delta_crl_incompatible` covers a
+delta CRL that does not pair with the complete CRL, including one whose
+`thisUpdate` precedes the complete CRL's `thisUpdate`.
 
 ### ValidateOcspResponseErrorCode
 
-| Code                           | Meaning                                            |
-| ------------------------------ | -------------------------------------------------- |
-| `issuer_mismatch`              | CertID does not hash to the supplied issuer        |
-| `nonce_mismatch`               | Response nonce differs from the request's          |
-| `ocsp_signing_missing`         | Delegated responder lacks the `ocspSigning` EKU    |
-| `request_mismatch`             | Response does not answer every requested CertID    |
-| `responder_chain_invalid`      | Responder certificate path fails validation        |
-| `responder_id_mismatch`        | ResponderID matches no candidate signer            |
-| `responder_revocation_unknown` | Delegated responder revocation status undetermined |
-| `responder_revoked`            | Delegated responder certificate is revoked         |
-| `response_status_invalid`      | OCSPResponse status is not `successful`            |
-| `signature_invalid`            | Response signature fails                           |
-| `stale_response`               | Response outside its freshness window              |
+| Code                           | Meaning                                                                |
+| ------------------------------ | ---------------------------------------------------------------------- |
+| `issuer_mismatch`              | CertID does not hash to the supplied issuer                            |
+| `next_update_missing`          | A response omits `nextUpdate` under `profile: 'rfc9919'` (RFC 9919 §5) |
+| `nonce_mismatch`               | Response nonce differs from the request's                              |
+| `ocsp_signing_missing`         | Delegated responder lacks the `ocspSigning` EKU                        |
+| `request_mismatch`             | Response does not answer every requested CertID                        |
+| `responder_chain_invalid`      | Responder certificate path fails validation                            |
+| `responder_id_mismatch`        | ResponderID matches no candidate signer                                |
+| `responder_revocation_unknown` | Delegated responder revocation status undetermined                     |
+| `responder_revoked`            | Delegated responder certificate is revoked                             |
+| `response_status_invalid`      | OCSPResponse status is not `successful`                                |
+| `signature_invalid`            | Response signature fails                                               |
+| `stale_response`               | Response outside its freshness window                                  |
 
 ### CheckCertificateRevocationErrorCode
 
@@ -187,32 +192,40 @@ both tables are enforced against `VERIFY_ERROR_CODES` by tests.
 
 ### RevocationIndeterminateReasonCode
 
-| Code                           | Meaning                                                 |
-| ------------------------------ | ------------------------------------------------------- |
-| `certificate_status_missing`   | Response carries no entry for the certificate           |
-| `certificate_status_unknown`   | Responder answered `unknown`                            |
-| `crl_sign_not_permitted`       | CRL signer's keyUsage lacks `cRLSign`                   |
-| `issuer_mismatch`              | Evidence issuer does not match the certificate's issuer |
-| `non_applicable`               | No supplied CRL applies to the certificate              |
-| `nonce_mismatch`               | Response nonce differs from the request's               |
-| `ocsp_signing_missing`         | Delegated responder lacks the `ocspSigning` EKU         |
-| `reason_coverage_incomplete`   | Applicable CRLs cover only some CRLReasons              |
-| `request_mismatch`             | Response does not answer the supplied request           |
-| `responder_chain_invalid`      | Responder certificate path fails validation             |
-| `responder_id_mismatch`        | ResponderID matches no candidate signer                 |
-| `responder_revocation_unknown` | Delegated responder revocation status undetermined      |
-| `responder_revoked`            | Delegated responder certificate is revoked              |
-| `response_status_invalid`      | OCSPResponse status is not `successful`                 |
-| `signature_invalid`            | Evidence signature fails                                |
-| `stale_crl`                    | CRL outside its `thisUpdate`/`nextUpdate` window        |
-| `stale_response`               | Response outside its freshness window                   |
+| Code                           | Meaning                                                                      |
+| ------------------------------ | ---------------------------------------------------------------------------- |
+| `certificate_status_missing`   | Response carries no entry for the certificate                                |
+| `certificate_status_unknown`   | Responder answered `unknown`                                                 |
+| `crl_sign_not_permitted`       | CRL signer's keyUsage lacks `cRLSign`                                        |
+| `issuer_mismatch`              | Evidence issuer does not match the certificate's issuer                      |
+| `next_update_missing`          | OCSP response omits `nextUpdate` under `ocspProfile: 'rfc9919'`              |
+| `non_applicable`               | No supplied CRL applies to the certificate                                   |
+| `nonce_mismatch`               | Response nonce differs from the request's                                    |
+| `ocsp_signing_missing`         | Delegated responder lacks the `ocspSigning` EKU                              |
+| `reason_coverage_incomplete`   | Applicable CRLs cover only some CRLReasons                                   |
+| `request_mismatch`             | Response does not answer the supplied request                                |
+| `responder_chain_invalid`      | Responder certificate path fails validation                                  |
+| `responder_id_mismatch`        | ResponderID matches no candidate signer                                      |
+| `responder_revocation_unknown` | Delegated responder revocation status undetermined                           |
+| `responder_revoked`            | Delegated responder certificate is revoked                                   |
+| `response_status_invalid`      | OCSPResponse status is not `successful`                                      |
+| `signature_invalid`            | Evidence signature fails                                                     |
+| `stale_crl`                    | CRL outside its `thisUpdate`/`nextUpdate` window or older than `crlMaxAgeMs` |
+| `stale_response`               | Response outside its freshness window                                        |
+
+The chain-level `RevocationIndeterminateReason` from `checkChainRevocation` and
+`verifyCertificateChain({ revocation })` uses its own names. A CRL that is
+outside its window or older than `crlMaxAgeMs` is reported as `crl_expired`,
+and an OCSP response without `nextUpdate` under `ocspProfile: 'rfc9919'` as
+`ocsp_next_update_missing`.
 
 ### CrlEncoderErrorCode
 
-| Code                                 | Meaning                                          |
-| ------------------------------------ | ------------------------------------------------ |
-| `distribution_point_full_name_empty` | IDP `fullName` present but holds no GeneralName  |
-| `issuer_distinguished_name_empty`    | RFC 5280 §5.1.2.3 requires a non-empty issuer DN |
+| Code                                 | Meaning                                                       |
+| ------------------------------------ | ------------------------------------------------------------- |
+| `distribution_point_full_name_empty` | IDP `fullName` present but holds no GeneralName               |
+| `issuer_distinguished_name_empty`    | RFC 5280 §5.1.2.3 requires a non-empty issuer DN              |
+| `next_update_not_after_this_update`  | `nextUpdate` does not encode a later second than `thisUpdate` |
 
 ### OcspEncoderErrorCode
 
@@ -230,11 +243,11 @@ both tables are enforced against `VERIFY_ERROR_CODES` by tests.
 
 ### ImportEncryptedKeyErrorCode
 
-| Code                      | Meaning                                                               |
-| ------------------------- | --------------------------------------------------------------------- |
-| `invalid_password`        | Decryption failed, or plaintext is not a private key                  |
-| `kdf_iterations_exceeded` | PBKDF2 iteration count exceeds `maxKdfIterations` (2,000,000 default) |
-| `malformed`               | Envelope fails to parse before any decryption                         |
+| Code                      | Meaning                                                                                                                                       |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `invalid_password`        | Decryption failed, or plaintext is not a private key                                                                                          |
+| `kdf_iterations_exceeded` | PBKDF2 iteration count exceeds `maxKdfIterations` (2,000,000 default)                                                                         |
+| `malformed`               | Envelope fails to parse before any decryption, including a PBKDF2 `iterationCount` outside 1 to 4294967295 whatever `maxKdfIterations` allows |
 
 ### EncryptRsaOaepErrorCode
 
@@ -270,12 +283,16 @@ both tables are enforced against `VERIFY_ERROR_CODES` by tests.
 
 ### ParsePfxErrorCode
 
-| Code                      | Meaning                                                                   |
-| ------------------------- | ------------------------------------------------------------------------- |
-| `invalid_password`        | MAC or decryption rejects the supplied password                           |
-| `kdf_iterations_exceeded` | Iteration count exceeds `maxKdfIterations` (2,000,000 PBES2, 100,000 MAC) |
-| `malformed`               | PFX structure fails to parse                                              |
-| `password_required`       | Encrypted content present but no password given                           |
+| Code                        | Meaning                                                                                                                                                                                                           |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `invalid_password`          | MAC or decryption rejects the supplied password                                                                                                                                                                   |
+| `kdf_iterations_exceeded`   | The PBES2 bags' combined PBKDF2 iteration counts exceed `maxKdfIterations` (2,000,000 default), or the MAC's count exceeds its own `maxKdfIterations` (100,000 default for the PKCS#12 KDF, 2,000,000 for PBMAC1) |
+| `malformed`                 | PFX structure fails to parse, including a PBKDF2 `iterationCount` outside 1 to 4294967295 in a PBES2 bag or a PBMAC1 MAC                                                                                          |
+| `password_not_bmp_string`   | The RFC 7292 MAC password (`macPassword`, or `password` as fallback) contains a UTF-16 surrogate                                                                                                                  |
+| `password_not_utf8`         | The PBMAC1 password contains an unpaired UTF-16 surrogate                                                                                                                                                         |
+| `password_required`         | Encrypted content present but no password given                                                                                                                                                                   |
+| `unsupported_mac_algorithm` | The MAC is neither the SHA-256 RFC 7292 MAC nor a supported PBMAC1 variant                                                                                                                                        |
+| `weak_mac_key_length`       | PBMAC1 PBKDF2 `keyLength` is below 20 octets                                                                                                                                                                      |
 
 ### CreatePfxErrorCode
 
@@ -283,12 +300,31 @@ both tables are enforced against `VERIFY_ERROR_CODES` by tests.
 | --------------------- | ----------------------------------- |
 | `invalid_certificate` | A certificate source fails to parse |
 
+### CreatePkcs12MacDataErrorCode
+
+`createPkcs12MacData`, and `createPfx` through its `mac` option, throw these as a
+`ResultError`.
+
+| Code                      | Meaning                                                                                                    |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `invalid_iterations`      | `iterations` is not a positive safe integer (RFC 7292 MAC) or not an integer from 1 to 4294967295 (PBMAC1) |
+| `password_not_bmp_string` | RFC 7292 MAC password contains a UTF-16 surrogate                                                          |
+| `password_not_utf8`       | PBMAC1 password contains an unpaired UTF-16 surrogate                                                      |
+
 ### ParsePkcs12MacDataErrorCode
 
-| Code                      | Meaning                                                                  |
-| ------------------------- | ------------------------------------------------------------------------ |
-| `kdf_iterations_exceeded` | PKCS#12 KDF iteration count exceeds `maxKdfIterations` (100,000 default) |
-| `malformed`               | MacData structure fails to parse                                         |
+| Code                        | Meaning                                                                                                                                                                                                                |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kdf_iterations_exceeded`   | With a password, the iteration count exceeds `maxKdfIterations` (100,000 default for the PKCS#12 KDF, 2,000,000 for PBMAC1), or an RFC 7292 MAC count exceeds `Number.MAX_SAFE_INTEGER`                                |
+| `malformed`                 | MacData structure fails to parse, an iteration count is below 1, a PBMAC1 count exceeds 4294967295 whatever `maxKdfIterations` allows, or, without a password, an RFC 7292 MAC count exceeds `Number.MAX_SAFE_INTEGER` |
+| `password_not_bmp_string`   | RFC 7292 MAC password contains a UTF-16 surrogate                                                                                                                                                                      |
+| `password_not_utf8`         | PBMAC1 password contains an unpaired UTF-16 surrogate                                                                                                                                                                  |
+| `unsupported_mac_algorithm` | The MAC is neither the SHA-256 RFC 7292 MAC nor a supported PBMAC1 variant                                                                                                                                             |
+| `weak_mac_key_length`       | PBMAC1 PBKDF2 `keyLength` is below 20 octets                                                                                                                                                                           |
+
+Without a password no key is derived. `maxKdfIterations` is not applied, and
+`verification` is `'unchecked'` for any RFC 7292 MAC count from 1 to
+`Number.MAX_SAFE_INTEGER` and any PBMAC1 count from 1 to 4294967295.
 
 ### ParsePkcs7ErrorCode
 

@@ -18,6 +18,7 @@ import {
 import { encodePbes2AlgorithmIdentifier } from '#micro509/internal/crypto/pbes2';
 import { encodeRsaPssParameters, rsaPssParametersForHash } from '#micro509/internal/crypto/rsa-pss';
 import { encodeCrlDistributionPoints } from '#micro509/x509/extensions';
+import { FAR_FUTURE_NEXT_UPDATE } from '#test/helpers';
 
 interface RuntimeGuardCase {
 	readonly name: string;
@@ -226,6 +227,7 @@ describe('runtime exhaustiveness guards', () => {
 						issuer: { commonName: 'Runtime Guard Signer' },
 						signerPrivateKey: signer.keyPair.privateKey,
 						issuerPublicKey: signer.keyPair.publicKey,
+						nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 						issuingDistributionPoint: {
 							distributionPoint: { type: 'unsupported' },
 						},

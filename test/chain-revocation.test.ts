@@ -14,7 +14,7 @@ import {
 	unwrap,
 	verifyCertificateChain,
 } from '#micro509';
-import { hexToBytes } from '#test/helpers';
+import { FAR_FUTURE_NEXT_UPDATE, hexToBytes } from '#test/helpers';
 
 async function loadPkitsCert(name: string) {
 	const der = await readFile(new URL(`./fixtures/pkits/certs/${name}.crt`, import.meta.url));
@@ -118,6 +118,7 @@ describe('checkChainRevocation', () => {
 			issuer: { commonName: 'Partial Reason CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 
 		const result = await checkChainRevocation({
@@ -1517,6 +1518,7 @@ describe('checkChainRevocation CRL maximum age policy', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 			thisUpdate: new Date('2020-01-01T00:00:00Z'),
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const chain = [
 			unwrap(parseCertificatePem(leaf.pem)),

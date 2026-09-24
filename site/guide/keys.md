@@ -372,6 +372,8 @@ The PBKDF2 iteration count comes from the file, so a hostile envelope can ask
 for billions of rounds before the password is even checked. Import refuses
 counts above 2,000,000 with `kdf_iterations_exceeded`; pass
 `{ maxKdfIterations }` as the fourth argument to raise or lower that bound.
+Counts above 4294967295, the most WebCrypto's PBKDF2 accepts, fail as
+`malformed` whatever the bound.
 
 ### Inspect encryption parameters
 
@@ -413,6 +415,9 @@ iv:         ${hex(params.iv)}`);
 ```
 
 </LiveCode>
+
+`exportEncryptedPkcs8Der` and `exportEncryptedPkcs8Pem` throw a `RangeError`
+when `iterations` is not an integer from 1 to 4294967295.
 
 ### Legacy encrypted PEM (OpenSSL format)
 

@@ -14,6 +14,7 @@ import {
 import {
 	addRevokedEntryCertificateIssuers,
 	createCertificateWithRawExtensions,
+	FAR_FUTURE_NEXT_UPDATE,
 	hexToBytes,
 	issueChain,
 } from '#test/helpers';
@@ -90,6 +91,7 @@ describe('revocation boundary', () => {
 					reasonCode: 'keyCompromise',
 				},
 			],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 
 		expect(
@@ -122,6 +124,7 @@ describe('revocation boundary', () => {
 			signerPrivateKey: intermediateKeys.privateKey,
 			issuerPublicKey: intermediateKeys.publicKey,
 			revokedCertificates: [{ serialNumber: Uint8Array.of(0x7f) }],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 
 		expect(
@@ -183,6 +186,7 @@ describe('revocation boundary', () => {
 					reasonCode: 'keyCompromise',
 				},
 			],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 
 		expect(
@@ -229,6 +233,7 @@ describe('revocation boundary', () => {
 			issuer: { commonName: 'Partial Coverage CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const result = await checkCertificateRevocation({
 			certificate: unwrap(parseCertificatePem(leaf.pem)),
@@ -284,6 +289,7 @@ describe('revocation boundary', () => {
 					fullName: [{ type: 'uri', value: 'http://example.test/delta-revocation.crl' }],
 				},
 			},
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const deltaCrl = await createCertificateRevocationList({
 			issuer: { commonName: 'Delta Revocation CA' },
@@ -303,6 +309,7 @@ describe('revocation boundary', () => {
 					reasonCode: 'cessationOfOperation',
 				},
 			],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 
 		expect(
@@ -371,6 +378,7 @@ describe('revocation boundary', () => {
 				indirectCrl: true,
 			},
 			revokedCertificates: [{ serialNumber, reasonCode: 'keyCompromise' }],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const indirectCrl = await addRevokedEntryCertificateIssuers(
 			baseCrl.der,
@@ -437,6 +445,7 @@ describe('revocation boundary', () => {
 				},
 			},
 			revokedCertificates: [{ serialNumber: hexToBytes(certificate.serialNumberHex) }],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 
 		expect(
@@ -478,6 +487,7 @@ describe('revocation boundary', () => {
 			issuingDistributionPoint: {
 				onlyContainsCACerts: true,
 			},
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const ocspResponse = await createOcspResponse({
 			signerPrivateKey: intermediateKeys.privateKey,
@@ -678,6 +688,7 @@ describe('revocation boundary', () => {
 			issuingDistributionPoint: {
 				onlyContainsCACerts: true,
 			},
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const unknownOcspResponse = await createOcspResponse({
 			signerPrivateKey: intermediateKeys.privateKey,

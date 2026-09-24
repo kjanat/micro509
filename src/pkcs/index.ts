@@ -70,6 +70,7 @@ export {
 } from '#micro509/pkcs/pkcs7';
 
 export type {
+	CreatePkcs12MacDataErrorCode,
 	ParsedPkcs12MacData,
 	ParsePkcs12MacDataErrorCode,
 	ParsePkcs12MacDataFailure,

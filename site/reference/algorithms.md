@@ -27,13 +27,14 @@ signatures through `micro509/crypto` (`signData` / `verifySignature`).
 
 ## Encryption
 
-| Context              | Schemes                                                        |
-| -------------------- | -------------------------------------------------------------- |
-| Encrypted PKCS#8     | PBES2 with AES‑CBC + PBKDF2 HMAC‑SHA1 or HMAC‑SHA256           |
-| Encrypted PFX        | PBES2 with AES‑CBC + PBKDF2 HMAC‑SHA1 or HMAC‑SHA256           |
-| Legacy encrypted PEM | AES‑128‑CBC, AES‑192‑CBC, AES‑256‑CBC                          |
-| PKCS#12 MAC          | PKCS#12 KDF + HMAC‑SHA‑256                                     |
-| RSA‑OAEP             | key encapsulation with SHA‑256/384/512 keys and optional label |
+| Context              | Schemes                                                                   |
+| -------------------- | ------------------------------------------------------------------------- |
+| Encrypted PKCS#8     | PBES2 with AES‑CBC + PBKDF2 HMAC‑SHA1 or HMAC‑SHA256                      |
+| Encrypted PFX        | PBES2 with AES‑CBC + PBKDF2 HMAC‑SHA1 or HMAC‑SHA256                      |
+| Legacy encrypted PEM | AES‑128‑CBC, AES‑192‑CBC, AES‑256‑CBC                                     |
+| PKCS#12 MAC          | PKCS#12 KDF + HMAC‑SHA‑256                                                |
+| PBMAC1 (RFC 9879)    | PBKDF2 HMAC‑SHA‑256/384/512 + HMAC‑SHA‑256/384/512; creation uses SHA‑256 |
+| RSA‑OAEP             | key encapsulation with SHA‑256/384/512 keys and optional label            |
 
 ## Not supported
 

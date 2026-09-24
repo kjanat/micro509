@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'bun:test';
-import type { CreatePfxInput } from '#micro509';
+import type { CreatePfxInput, CreatePkcs12MacDataErrorCode } from '#micro509';
 import {
 	createCertificate,
 	createPfx,
 	createSelfSignedCertificate,
 	exportPkcs8Der,
 	generateKeyPair,
+	isResultError,
 	parsePfxDer,
 	parsePfxPem,
 	unwrap,
@@ -1078,5 +1079,30 @@ describe('PFX KDF work-factor limit', () => {
 		expect(parsePfxDer(pfx.der, { password: 'pw', maxKdfIterations: 0 })).rejects.toThrow(
 			RangeError,
 		);
+	});
+});
+
+describe('PFX MacData builder and password checks (RFC 7292)', () => {
+	it('micro509 policy: createPfx throws invalid_iterations for a MAC iteration count of 0', async () => {
+		const keys = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
+		const error = await createPfx({
+			privateKeys: [{ privateKey: keys.privateKey }],
+			mac: { password: 'pw', iterations: 0 },
+		}).then(
+			() => undefined,
+			(thrown: unknown) => thrown,
+		);
+		const expected: CreatePkcs12MacDataErrorCode = 'invalid_iterations';
+		expect(isResultError(error) ? error.code : error).toBe(expected);
+	});
+
+	it('Appendix B.1 (L1081-1086) "all passwords are created from BMPStrings": parsePfxDer returns password_not_bmp_string for a MAC password with a surrogate pair', async () => {
+		const keys = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
+		const pfx = await buildPfx({
+			privateKeys: [{ privateKey: keys.privateKey }],
+			mac: { password: 'pw', iterations: 1 },
+		});
+		const result = await parsePfxDer(pfx.der, { macPassword: 'pw\u{1F600}' });
+		expect(result.ok ? 'ok' : result.code).toBe('password_not_bmp_string');
 	});
 });

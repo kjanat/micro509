@@ -48,9 +48,8 @@ export const DEFAULT_MAX_KDF_ITERATIONS = 2_000_000;
 
 /**
  * Upper bound on PKCS#12 KDF iteration counts accepted from untrusted input.
- * RFC 7292 Appendix B defines the KDF as a chain of single-block digests, so a
- * round costs a separate WebCrypto call and runs orders of magnitude slower
- * than a PBKDF2 round.
+ * RFC 7292 Appendix B hashes once per round, and each round is a separate
+ * WebCrypto digest call, so a round costs more than a PBKDF2 round.
  */
 export const DEFAULT_MAX_PKCS12_MAC_ITERATIONS = 100_000;
 
@@ -74,7 +73,9 @@ export interface KdfLimitOptions {
 	/**
 	 * Maximum KDF iteration count accepted from the input. Higher counts fail
 	 * before any derivation runs. Defaults to `2_000_000` for PBKDF2 and
-	 * `100_000` for the PKCS#12 KDF, which costs far more per round.
+	 * `100_000` for the PKCS#12 KDF, which costs more per round. In a PFX the
+	 * PBES2-encrypted entries share one budget of this size and the MAC has a
+	 * separate budget of this size.
 	 */
 	readonly maxKdfIterations?: number;
 }
@@ -109,6 +110,34 @@ export function chargeKdfBudget(budget: KdfBudget, iterations: number): void {
 	budget.remaining -= iterations;
 }
 
+export const WEBCRYPTO_MAX_PBKDF2_ITERATIONS = 0xffff_ffff;
+
+export type Pbkdf2Hash = 'SHA-1' | 'SHA-256' | 'SHA-384' | 'SHA-512';
+
+export async function derivePbkdf2Bytes(
+	password: Uint8Array,
+	salt: Uint8Array,
+	iterations: number,
+	hash: Pbkdf2Hash,
+	length: number,
+): Promise<Uint8Array> {
+	assertPbkdf2IterationCount(iterations);
+	const passwordKey = await getCrypto().subtle.importKey(
+		'raw',
+		toArrayBuffer(password),
+		'PBKDF2',
+		false,
+		['deriveBits'],
+	);
+	return new Uint8Array(
+		await getCrypto().subtle.deriveBits(
+			{ name: 'PBKDF2', salt: toArrayBuffer(salt), iterations, hash },
+			passwordKey,
+			length * 8,
+		),
+	);
+}
+
 /** AES-CBC key sizes supported by this PBES2 implementation. */
 export type Pbes2EncryptionScheme = 'AES-128-CBC' | 'AES-192-CBC' | 'AES-256-CBC';
 
@@ -119,7 +148,7 @@ export type Pbes2Prf = 'HMAC-SHA-1' | 'HMAC-SHA-256';
 export interface Pbes2EncryptionOptions {
 	/** Password fed to PBKDF2 for key derivation. */
 	readonly password: string;
-	/** PBKDF2 iteration count. Default: `100_000`. */
+	/** PBKDF2 iteration count, an integer from 1 to 4294967295. Default: `100_000`. */
 	readonly iterations?: number;
 	/** PBKDF2 salt. Default: 16 cryptographically random bytes. */
 	readonly salt?: Uint8Array;
@@ -133,7 +162,7 @@ export interface Pbes2EncryptionOptions {
 
 /** Resolved PBES2 algorithm parameters, either parsed from DER or built by `encryptPbes2`. */
 export interface Pbes2Parameters {
-	/** PBKDF2 iteration count. */
+	/** PBKDF2 iteration count, an integer from 1 to 4294967295. */
 	readonly iterations: number;
 	/** PBKDF2 salt bytes. */
 	readonly salt: Uint8Array;
@@ -167,9 +196,7 @@ export async function encryptPbes2(
 	const prf = options.prf ?? 'HMAC-SHA-256';
 
 	// Validate inputs before any WebCrypto calls
-	if (!Number.isInteger(iterations) || iterations < 1) {
-		throw new RangeError(`Invalid iterations: must be an integer >= 1, got ${iterations}`);
-	}
+	assertPbkdf2IterationCount(iterations);
 	if (!(salt instanceof Uint8Array) || salt.length < 8) {
 		throw new TypeError(
 			`Invalid salt: must be Uint8Array with length >= 8, got length ${salt.length}`,
@@ -236,15 +263,20 @@ export async function decryptPbes2(
 	}
 }
 
-/** DER-encodes a PBES2 AlgorithmIdentifier SEQUENCE from resolved parameters. */
+/**
+ * DER-encodes a PBES2 AlgorithmIdentifier SEQUENCE from resolved parameters.
+ *
+ * @throws {RangeError} if `parameters.iterations` is not an integer from 1 to 4294967295.
+ */
 export function encodePbes2AlgorithmIdentifier(parameters: Pbes2Parameters): Uint8Array {
+	assertPbkdf2IterationCount(parameters.iterations);
 	const encryption = resolveEncryptionProfile(parameters.cipher);
 	const prf = resolvePrfProfile(parameters.prf);
 	const pbkdf2Params = [
 		octetString(parameters.salt),
 		integerFromNumber(parameters.iterations),
 		// keyLength is OPTIONAL (kept); prf AlgorithmIdentifier DEFAULT
-		// algid-hmacWithSHA1, which X.690 §11.5 forbids encoding.
+		// algid-hmacWithSHA1, which X.690 §11.5 forbids encoding under DER.
 		integerFromNumber(encryption.keyLengthBytes),
 		...(parameters.prf === 'HMAC-SHA-1'
 			? []
@@ -259,14 +291,19 @@ export function encodePbes2AlgorithmIdentifier(parameters: Pbes2Parameters): Uin
 	]);
 }
 
-/** Decodes a DER-encoded PBES2 AlgorithmIdentifier into structured {@linkcode Pbes2Parameters}. */
+/**
+ * Decodes a DER-encoded PBES2 AlgorithmIdentifier into structured {@linkcode Pbes2Parameters}.
+ *
+ * @throws if the encoding is malformed, names an unsupported KDF, PRF or cipher, or carries an
+ * iteration count outside 1 to 4294967295.
+ */
 export function parsePbes2AlgorithmIdentifier(algorithmIdentifierDer: Uint8Array): Pbes2Parameters {
 	const { paramsDer, kdf, scheme } = parsePbes2OuterFields(algorithmIdentifierDer);
 	const { pbkdf2Der, pbkdf2Params } = parsePbes2KdfFields(paramsDer, kdf);
 	// RFC 8018 A.2 PBKDF2-params: SEQUENCE { salt CHOICE { specified OCTET STRING,
-	// otherSource AlgorithmIdentifier }, iterationCount INTEGER, keyLength INTEGER
-	// OPTIONAL, prf AlgorithmIdentifier DEFAULT algid-hmacWithSHA1 }. Only the
-	// `specified` salt alternative is accepted.
+	// otherSource AlgorithmIdentifier }, iterationCount INTEGER (1..MAX), keyLength
+	// INTEGER (1..MAX) OPTIONAL, prf AlgorithmIdentifier DEFAULT algid-hmacWithSHA1 }.
+	// Only the `specified` salt alternative is accepted.
 	const salt = pbkdf2Params[0];
 	const iterations = pbkdf2Params[1];
 	if (
@@ -310,6 +347,11 @@ export function parsePbes2AlgorithmIdentifier(algorithmIdentifierDer: Uint8Array
 	if (iterationsValue < 1) {
 		throw new Error(`Invalid PBES2 iterations: must be >= 1, got ${iterationsValue}`);
 	}
+	if (iterationsValue > WEBCRYPTO_MAX_PBKDF2_ITERATIONS) {
+		throw new Error(
+			`Invalid PBES2 iterations: must be <= ${WEBCRYPTO_MAX_PBKDF2_ITERATIONS}, got ${iterationsValue}`,
+		);
+	}
 	if (ivValue.length !== 16) {
 		throw new Error(`Invalid PBES2 IV: must be exactly 16 bytes, got ${ivValue.length}`);
 	}
@@ -321,6 +363,18 @@ export function parsePbes2AlgorithmIdentifier(algorithmIdentifierDer: Uint8Array
 		cipher: encryption.name,
 		prf,
 	};
+}
+
+function assertPbkdf2IterationCount(iterations: number): void {
+	if (
+		!Number.isInteger(iterations) ||
+		iterations < 1 ||
+		iterations > WEBCRYPTO_MAX_PBKDF2_ITERATIONS
+	) {
+		throw new RangeError(
+			`Invalid iterations: must be an integer from 1 to ${WEBCRYPTO_MAX_PBKDF2_ITERATIONS}, got ${iterations}`,
+		);
+	}
 }
 
 /** Extracts the KDF and encryption-scheme fields from a PBES2 AlgorithmIdentifier. */

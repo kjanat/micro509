@@ -137,8 +137,8 @@ export interface CreateCertificateRevocationListInput {
 	readonly issuerPublicKey?: CryptoKey;
 	/** Issuance timestamp. Defaults to `new Date()`. */
 	readonly thisUpdate?: Date;
-	/** Planned next issuance. Omit for an open-ended CRL. */
-	readonly nextUpdate?: Date;
+	/** Date by which the next CRL will be issued. Must be at least one second later than `thisUpdate`. */
+	readonly nextUpdate: Date;
 	/** Certificates to list as revoked in this CRL. */
 	readonly revokedCertificates?: readonly RevokedCertificateInput[];
 	/** Monotonically-increasing CRL sequence number (CRLNumber extension). */
@@ -194,9 +194,9 @@ export interface ParsedCertificateRevocationList {
 	readonly signatureValue: Uint8Array;
 	/** CRL issuer distinguished name. */
 	readonly issuer: ParsedName;
-	/** Start of the CRL validity window. */
+	/** Issue date of this CRL. */
 	readonly thisUpdate: Date;
-	/** End of the CRL validity window. Absent if the CA does not commit to a schedule. */
+	/** Date by which the next CRL will be issued. Absent when the encoded CRL omits it. */
 	readonly nextUpdate?: Date;
 	/** OID of the algorithm used to sign this CRL. */
 	readonly signatureAlgorithmOid: string;
@@ -275,12 +275,16 @@ export interface ValidateCertificateRevocationListInput {
 	readonly issuerCertificate: CrlCertificateSource;
 	/** Evaluation time for freshness checks. Defaults to `new Date()`. */
 	readonly at?: Date;
-	/** Tolerance in milliseconds for clock skew when checking `thisUpdate`/`nextUpdate`. */
+	/**
+	 * Tolerance in milliseconds for clock skew when checking `thisUpdate` and
+	 * `nextUpdate`. It also widens `maxAgeMs` by the same amount.
+	 */
 	readonly clockSkewMs?: number;
 	/**
 	 * Maximum age of `thisUpdate` at `at`, in milliseconds. A CRL older than
 	 * this fails with `stale_crl` even when `nextUpdate` is absent or later.
-	 * Unbounded by default.
+	 * Unbounded by default. RFC 5280 §3.3 leaves the required recency of
+	 * revocation data to local policy.
 	 */
 	readonly maxAgeMs?: number;
 }
@@ -325,11 +329,17 @@ export interface CheckCertificateRevocationAgainstCrlInput {
 	readonly issuerCertificate: CrlCertificateSource;
 	/** Complete (base) CRL to check against. */
 	readonly crl: CrlSource;
-	/** Optional delta CRL for more recent revocation information. */
+	/**
+	 * Optional delta CRL for more recent revocation information. With a delta
+	 * CRL, the freshness checks and `maxAgeMs` apply to the delta CRL alone,
+	 * whose `thisUpdate` and `nextUpdate` the constructed CRL takes
+	 * (RFC 5280 §5.2.4, §6.3.3(a)(1)(i)). A delta CRL without `nextUpdate` is
+	 * never current and fails with `stale_crl`.
+	 */
 	readonly deltaCrl?: CrlSource;
 	/** Evaluation time. Defaults to `new Date()`. */
 	readonly at?: Date;
-	/** Clock-skew tolerance in milliseconds for freshness checks. */
+	/** Clock-skew tolerance in milliseconds for freshness checks. It also widens `maxAgeMs`. */
 	readonly clockSkewMs?: number;
 	/** Maximum age of each CRL's `thisUpdate` in milliseconds. See {@linkcode ValidateCertificateRevocationListInput.maxAgeMs}. */
 	readonly maxAgeMs?: number;
@@ -559,6 +569,12 @@ export async function createCertificateRevocationList(
 	const signatureAlgorithm = getSignatureAlgorithm(input.signerPrivateKey);
 	const thisUpdate = input.thisUpdate ?? new Date();
 	const nextUpdate = input.nextUpdate;
+	if (Math.floor(nextUpdate.getTime() / 1000) <= Math.floor(thisUpdate.getTime() / 1000)) {
+		throwCrlEncoderError(
+			'next_update_not_after_this_update',
+			'nextUpdate must be at least one second later than thisUpdate',
+		);
+	}
 	const extensions = await buildCrlExtensions(
 		input.issuerPublicKey,
 		input.crlNumber,
@@ -576,7 +592,7 @@ export async function createCertificateRevocationList(
 		encodeAlgorithmIdentifier(signatureAlgorithm),
 		encodeName(input.issuer),
 		time(thisUpdate),
-		...(nextUpdate === undefined ? [] : [time(nextUpdate)]),
+		time(nextUpdate),
 		...revokedSequence,
 		...(extensions.length === 0 ? [] : [explicitContext(0, sequence(extensions))]),
 	]);
@@ -785,16 +801,37 @@ export async function verifyCertificateRevocationListSignature(
 
 /**
  * Full CRL validation: issuer name match, authority key identifier match,
- * cRLSign key-usage check, signature verification, and `thisUpdate`/`nextUpdate`
- * freshness check (with optional clock-skew tolerance).
+ * cRLSign key-usage check, signature verification, `thisUpdate`/`nextUpdate`
+ * freshness check (with optional clock-skew tolerance), and the optional
+ * `maxAgeMs` bound on `thisUpdate`. Without `maxAgeMs`, a CRL that omits
+ * `nextUpdate` stays usable for any `at` after its `thisUpdate`.
  */
 export async function validateCertificateRevocationList(
 	input: ValidateCertificateRevocationListInput,
 ): Promise<ValidateCertificateRevocationListResult> {
 	assertCrlMaxAge(input.maxAgeMs);
+	const authenticated = await authenticateCrl(input.crl, input.issuerCertificate);
+	if (!authenticated.ok) {
+		return authenticated;
+	}
+	const freshnessFailure = crlFreshnessFailure(
+		authenticated.value,
+		input.at ?? new Date(),
+		input.clockSkewMs ?? 0,
+		input.maxAgeMs,
+	);
+	return freshnessFailure === undefined
+		? authenticated
+		: validateCertificateRevocationListFailureResult('stale_crl', freshnessFailure);
+}
+
+async function authenticateCrl(
+	crl: CrlSource,
+	issuerCertificate: CrlCertificateSource,
+): Promise<ValidateCertificateRevocationListResult> {
 	let parsedCrl: ParsedCertificateRevocationList;
 	try {
-		parsedCrl = normalizeCrl(input.crl);
+		parsedCrl = normalizeCrl(crl);
 	} catch {
 		return validateCertificateRevocationListFailureResult(
 			'signature_invalid',
@@ -803,7 +840,7 @@ export async function validateCertificateRevocationList(
 	}
 	let issuer: ParsedCertificate;
 	try {
-		issuer = normalizeCrlCertificate(input.issuerCertificate);
+		issuer = normalizeCrlCertificate(issuerCertificate);
 	} catch {
 		return validateCertificateRevocationListFailureResult(
 			'signature_invalid',
@@ -867,23 +904,6 @@ export async function validateCertificateRevocationList(
 			'certificate revocation list signature does not verify',
 		);
 	}
-	const at = input.at ?? new Date();
-	const skew = input.clockSkewMs ?? 0;
-	if (
-		parsedCrl.thisUpdate.getTime() - skew > at.getTime() ||
-		(parsedCrl.nextUpdate !== undefined && parsedCrl.nextUpdate.getTime() + skew < at.getTime())
-	) {
-		return validateCertificateRevocationListFailureResult(
-			'stale_crl',
-			'CRL is not valid at requested time',
-		);
-	}
-	if (exceedsCrlMaxAge(parsedCrl, at, skew, input.maxAgeMs)) {
-		return validateCertificateRevocationListFailureResult(
-			'stale_crl',
-			'CRL thisUpdate is older than the maximum age',
-		);
-	}
 	return { ok: true, value: parsedCrl };
 }
 
@@ -893,13 +913,34 @@ export function assertCrlMaxAge(maxAgeMs: number | undefined): void {
 	}
 }
 
-function exceedsCrlMaxAge(
+function crlFreshnessFailure(
 	crl: ParsedCertificateRevocationList,
 	at: Date,
 	skew: number,
 	maxAgeMs: number | undefined,
+): string | undefined {
+	if (
+		crl.thisUpdate.getTime() - skew > at.getTime() ||
+		(crl.nextUpdate !== undefined && crl.nextUpdate.getTime() + skew < at.getTime())
+	) {
+		return 'CRL is not valid at requested time';
+	}
+	if (maxAgeMs !== undefined && at.getTime() - crl.thisUpdate.getTime() > maxAgeMs + skew) {
+		return 'CRL thisUpdate is older than the maximum age';
+	}
+	return undefined;
+}
+
+export function isCurrentDeltaCrl(
+	deltaCrl: ParsedCertificateRevocationList,
+	at: Date,
+	skew: number,
+	maxAgeMs: number | undefined,
 ): boolean {
-	return maxAgeMs !== undefined && at.getTime() - crl.thisUpdate.getTime() > maxAgeMs + skew;
+	return (
+		deltaCrl.nextUpdate !== undefined &&
+		crlFreshnessFailure(deltaCrl, at, skew, maxAgeMs) === undefined
+	);
 }
 
 /**
@@ -937,13 +978,16 @@ export async function checkCertificateRevocationAgainstCrl(
 			'certificate input is malformed',
 		);
 	}
-	const validated = await validateCertificateRevocationList({
-		crl: input.crl,
-		issuerCertificate: input.issuerCertificate,
-		...(input.at === undefined ? {} : { at: input.at }),
-		...(input.clockSkewMs === undefined ? {} : { clockSkewMs: input.clockSkewMs }),
-		...(input.maxAgeMs === undefined ? {} : { maxAgeMs: input.maxAgeMs }),
-	});
+	const validated =
+		input.deltaCrl === undefined
+			? await validateCertificateRevocationList({
+					crl: input.crl,
+					issuerCertificate: input.issuerCertificate,
+					...(input.at === undefined ? {} : { at: input.at }),
+					...(input.clockSkewMs === undefined ? {} : { clockSkewMs: input.clockSkewMs }),
+					...(input.maxAgeMs === undefined ? {} : { maxAgeMs: input.maxAgeMs }),
+				})
+			: await authenticateCrl(input.crl, input.issuerCertificate);
 	if (!validated.ok) {
 		return checkCertificateRevocationAgainstCrlFailureResult(validated.code, validated.message);
 	}
@@ -1016,6 +1060,12 @@ async function validateOptionalDeltaCrl(
 		return checkCertificateRevocationAgainstCrlFailureResult(
 			deltaValidation.code,
 			deltaValidation.message,
+		);
+	}
+	if (deltaValidation.value.nextUpdate === undefined) {
+		return checkCertificateRevocationAgainstCrlFailureResult(
+			'stale_crl',
+			'delta CRL has no nextUpdate',
 		);
 	}
 	const compatibilityFailure = checkDeltaCrlCompatibility(completeCrl, deltaValidation.value);
@@ -1442,6 +1492,12 @@ function checkDeltaCrlCompatibility(
 		return nonApplicable(
 			'delta_crl_incompatible',
 			'delta CRL number must be newer than the complete CRL number',
+		);
+	}
+	if (completeCrl.thisUpdate.getTime() > deltaCrl.thisUpdate.getTime()) {
+		return nonApplicable(
+			'delta_crl_incompatible',
+			'delta CRL thisUpdate must not precede the complete CRL thisUpdate',
 		);
 	}
 	return undefined;
@@ -2197,7 +2253,7 @@ function parseUniqueIssuingDistributionPointBoolean(
 	if (existing !== undefined) {
 		throw new Error(`IssuingDistributionPoint ${fieldName} must not repeat`);
 	}
-	return parseImplicitBoolean(child);
+	return decodeBoolean(child.value);
 }
 
 /** Decodes a SEQUENCE OF DistributionPoint from DER. */
@@ -2334,15 +2390,11 @@ function decodeNameValue(element: DerElement): string {
 	return decodeString(element.tag, element.value);
 }
 
-/** Reads an implicitly-tagged BOOLEAN from a context element. Absent content → `false`. */
-function parseImplicitBoolean(element: DerElement): boolean {
-	return (element.value[0] ?? 0) !== 0;
-}
-
 /** Machine-readable reason a CRL encoder rejected its construction input. */
 export type CrlEncoderErrorCode =
 	| 'distribution_point_full_name_empty'
-	| 'issuer_distinguished_name_empty';
+	| 'issuer_distinguished_name_empty'
+	| 'next_update_not_after_this_update';
 
 /** Throws a {@link ResultError} for a CRL encoder input-validation failure. */
 function throwCrlEncoderError(code: CrlEncoderErrorCode, message: string): never {

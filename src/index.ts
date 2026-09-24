@@ -188,6 +188,7 @@ export type {
 	CreatePkcs7SignedDataFailure,
 	CreatePkcs7SignedDataInput,
 	CreatePkcs7SignedDataResult,
+	CreatePkcs12MacDataErrorCode,
 	ParsedCertificateChoice,
 	ParsedPfx,
 	ParsedPfxAttribute,

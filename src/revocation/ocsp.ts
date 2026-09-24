@@ -64,6 +64,7 @@ import {
 } from '#micro509/result/result';
 import type { CrlSource, ParsedCertificateRevocationList } from '#micro509/revocation/crl';
 import {
+	assertCrlMaxAge,
 	checkCertificateRevocationAgainstCrl,
 	coversAllDistributionPointReasons,
 	parseCertificateRevocationListDerOrThrow,
@@ -169,7 +170,11 @@ export type ParsedOcspSingleResponse = {
 	readonly certId: ParsedOcspCertId;
 	/** Start of the validity window for this status assertion. */
 	readonly thisUpdate: Date;
-	/** End of the validity window. Absent if the responder does not commit to a schedule. */
+	/**
+	 * Time at or before which newer status information will be available.
+	 * Absent when the responder indicates that newer revocation information is
+	 * available all the time (RFC 6960 §4.2.2.1).
+	 */
 	readonly nextUpdate?: Date;
 } & ParsedOcspCertStatus;
 
@@ -258,7 +263,11 @@ export interface ParsedOcspResponse {
 export type CreateOcspSingleResponseInput = CreateOcspRequestItemInput & {
 	/** Start of the validity window for this status assertion. Defaults to `new Date()`. */
 	readonly thisUpdate?: Date;
-	/** End of the validity window. Omit for open-ended assertions. */
+	/**
+	 * Time at or before which newer status information will be available.
+	 * When omitted, the response indicates that newer information is available
+	 * all the time (RFC 6960 §4.2.2.1), and RFC 9919 clients reject it.
+	 */
 	readonly nextUpdate?: Date;
 } & CreateOcspCertStatusInput;
 
@@ -395,14 +404,32 @@ export interface ValidateOcspResponseInput {
 	readonly responderRevocationPolicy?: OcspResponderRevocationPolicy;
 	/** CRLs used as revocation evidence for delegated responder certificates. */
 	readonly responderRevocationCrls?: readonly CrlSource[];
+	/**
+	 * Maximum age of each `responderRevocationCrls` entry's `thisUpdate` at
+	 * `at`, in milliseconds. An older CRL yields no evidence. Unbounded by
+	 * default. Throws `RangeError` when negative or not finite.
+	 */
+	readonly responderRevocationCrlMaxAgeMs?: number;
 	/** Evaluation time for freshness checks and delegated responder chain validation. Defaults to `new Date()`. */
 	readonly at?: Date;
-	/** Clock-skew tolerance in milliseconds for `thisUpdate`/`nextUpdate`/`producedAt`. */
+	/**
+	 * Clock-skew tolerance in milliseconds for `thisUpdate`/`nextUpdate`/`producedAt`,
+	 * including those of `responderRevocationCrls`. It also widens
+	 * `responderRevocationCrlMaxAgeMs`.
+	 */
 	readonly clockSkewMs?: number;
+	/**
+	 * OCSP client profile to enforce. Defaults to `'rfc6960'`, which accepts a
+	 * response without `nextUpdate` (RFC 6960 §4.2.2.1). `'rfc9919'` applies the
+	 * RFC 9919 §5 client rule and fails with `next_update_missing` when any
+	 * single response omits `nextUpdate`.
+	 */
+	readonly profile?: 'rfc6960' | 'rfc9919';
 }
 
 /** Failure codes produced by {@linkcode validateOcspResponse}. */
 export type ValidateOcspResponseErrorCode =
+	| 'next_update_missing'
 	| 'response_status_invalid'
 	| 'signature_invalid'
 	| 'responder_id_mismatch'
@@ -418,7 +445,7 @@ export type ValidateOcspResponseErrorCode =
 /**
  * Failure detail for {@linkcode validateOcspResponse}.
  *
- * Possible codes: `response_status_invalid`, `signature_invalid`,
+ * Possible codes: `next_update_missing`, `response_status_invalid`, `signature_invalid`,
  * `responder_id_mismatch`, `nonce_mismatch`, `request_mismatch`,
  * `issuer_mismatch`, `responder_chain_invalid`, `ocsp_signing_missing`,
  * `responder_revoked`, `responder_revocation_unknown`, `stale_response`.
@@ -1001,6 +1028,7 @@ export async function verifyOcspResponseSignature(
 export async function validateOcspResponse(
 	input: ValidateOcspResponseInput,
 ): Promise<ValidateOcspResponseResult> {
+	assertCrlMaxAge(input.responderRevocationCrlMaxAgeMs);
 	let parsedResponse: ParsedOcspResponse;
 	try {
 		parsedResponse = normalizeOcspResponse(input.response);
@@ -1035,7 +1063,11 @@ export async function validateOcspResponse(
 	if (responderAuthorization !== undefined) return responderAuthorization;
 	const at = input.at ?? new Date();
 	const skew = input.clockSkewMs ?? 0;
-	const freshness = await validateOcspResponseFreshness(parsedResponse, issuer, at, skew);
+	const freshness = await validateOcspResponseFreshness(parsedResponse, issuer, {
+		at,
+		skew,
+		profile: input.profile ?? 'rfc6960',
+	});
 	if (freshness !== undefined) return freshness;
 	if (hasDuplicateOcspResponseCertificateSerial(parsedResponse.responses ?? [])) {
 		return validateOcspResponseFailureResult(
@@ -1175,16 +1207,21 @@ async function validateDelegatedOcspResponder(
 	return responderRevocation.ok ? undefined : responderRevocation;
 }
 
+interface OcspFreshnessContext {
+	readonly at: Date;
+	readonly skew: number;
+	readonly profile: NonNullable<ValidateOcspResponseInput['profile']>;
+}
+
 /** Checks response-level and per-certificate OCSP timestamps against the validation time. */
 async function validateOcspResponseFreshness(
 	parsedResponse: ParsedOcspResponse,
 	issuer: ParsedCertificate,
-	at: Date,
-	skew: number,
+	context: OcspFreshnessContext,
 ): Promise<ValidateOcspResponseFailureBranch | undefined> {
 	if (
 		parsedResponse.producedAt !== undefined &&
-		parsedResponse.producedAt.getTime() - skew > at.getTime()
+		parsedResponse.producedAt.getTime() - context.skew > context.at.getTime()
 	) {
 		return validateOcspResponseFailureResult(
 			'stale_response',
@@ -1196,8 +1233,7 @@ async function validateOcspResponseFreshness(
 			response,
 			parsedResponse.producedAt,
 			issuer,
-			at,
-			skew,
+			context,
 		);
 		if (responseFreshness !== undefined) return responseFreshness;
 	}
@@ -1208,8 +1244,7 @@ async function validateOcspSingleResponseFreshness(
 	response: ParsedOcspSingleResponse,
 	producedAt: Date | undefined,
 	issuer: ParsedCertificate,
-	at: Date,
-	skew: number,
+	context: OcspFreshnessContext,
 ): Promise<ValidateOcspResponseFailureBranch | undefined> {
 	let expected: ParsedOcspCertId;
 	try {
@@ -1233,15 +1268,20 @@ async function validateOcspSingleResponseFreshness(
 			'OCSP response certId does not match issuer certificate',
 		);
 	}
-	return validateOcspSingleResponseTimes(response, producedAt, at, skew);
+	return validateOcspSingleResponseTimes(response, producedAt, context);
 }
 
 function validateOcspSingleResponseTimes(
 	response: ParsedOcspSingleResponse,
 	producedAt: Date | undefined,
-	at: Date,
-	skew: number,
+	{ at, skew, profile }: OcspFreshnessContext,
 ): ValidateOcspResponseFailureBranch | undefined {
+	if (profile === 'rfc9919' && response.nextUpdate === undefined) {
+		return validateOcspResponseFailureResult(
+			'next_update_missing',
+			'OCSP response omits nextUpdate, which the RFC 9919 profile requires',
+		);
+	}
 	if (
 		response.thisUpdate.getTime() - skew > at.getTime() ||
 		(response.nextUpdate !== undefined && response.nextUpdate.getTime() + skew < at.getTime())
@@ -1364,7 +1404,15 @@ async function checkDelegatedResponderRevocation(
 	if (policy === 'honor-nocheck' && hasOcspNoCheckExtension(signer)) {
 		return { ok: true };
 	}
-	const at = input.at ?? new Date();
+	const crlCheck = {
+		certificate: signer,
+		issuerCertificate: issuer,
+		at: input.at ?? new Date(),
+		...(input.responderRevocationCrlMaxAgeMs === undefined
+			? {}
+			: { maxAgeMs: input.responderRevocationCrlMaxAgeMs }),
+		...(input.clockSkewMs === undefined ? {} : { clockSkewMs: input.clockSkewMs }),
+	};
 	const coveredReasons = new Set<string>();
 	for (const source of input.responderRevocationCrls ?? []) {
 		let crl: ParsedCertificateRevocationList;
@@ -1373,12 +1421,7 @@ async function checkDelegatedResponderRevocation(
 		} catch {
 			continue; // Unusable evidence — try remaining CRLs
 		}
-		const result = await checkCertificateRevocationAgainstCrl({
-			certificate: signer,
-			issuerCertificate: issuer,
-			crl,
-			at,
-		});
+		const result = await checkCertificateRevocationAgainstCrl({ ...crlCheck, crl });
 		if (!result.ok) {
 			continue; // CRL does not apply to the responder certificate
 		}

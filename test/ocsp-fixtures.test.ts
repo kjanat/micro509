@@ -31,7 +31,7 @@ import {
 	getSignatureAlgorithm,
 	signBytes,
 } from '#micro509/internal/crypto/signing';
-import { hexToBytes } from '#test/helpers';
+import { FAR_FUTURE_NEXT_UPDATE, hexToBytes } from '#test/helpers';
 
 interface FixtureResponderInput {
 	readonly commonName: string;
@@ -533,6 +533,7 @@ describe('ocsp responder authorization (RFC 6960 §4.2.2.2)', () => {
 			signerPrivateKey: authority.ca.keyPair.privateKey,
 			issuerPublicKey: authority.ca.keyPair.publicKey,
 			revokedCertificates: [{ serialNumber: hexToBytes(responderSerial) }],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const response = await goodResponse(
 			authority,
@@ -560,6 +561,7 @@ describe('ocsp responder authorization (RFC 6960 §4.2.2.2)', () => {
 			signerPrivateKey: authority.ca.keyPair.privateKey,
 			issuerPublicKey: authority.ca.keyPair.publicKey,
 			revokedCertificates: [{ serialNumber: hexToBytes(responderSerial) }],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const response = await goodResponse(
 			authority,
@@ -600,6 +602,7 @@ describe('ocsp responder authorization (RFC 6960 §4.2.2.2)', () => {
 			issuer: { commonName: authority.commonName },
 			signerPrivateKey: authority.ca.keyPair.privateKey,
 			issuerPublicKey: authority.ca.keyPair.publicKey,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		expect(
 			await validateOcspResponse({

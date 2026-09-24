@@ -26,7 +26,12 @@ import {
 	tlv,
 } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
-import { childrenOf, decodeObjectIdentifier, hexToBytes } from '#test/helpers';
+import {
+	childrenOf,
+	decodeObjectIdentifier,
+	FAR_FUTURE_NEXT_UPDATE,
+	hexToBytes,
+} from '#test/helpers';
 
 interface CorpusCase {
 	readonly name: string;
@@ -440,6 +445,7 @@ describe('malformed DER corpus', () => {
 			issuerPublicKey: issuer.keyPair.publicKey,
 			signerPrivateKey: issuer.keyPair.privateKey,
 			revokedCertificates: [{ serialNumber: hexToBytes(parsedLeaf.serialNumberHex) }],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 
 		const corpus: readonly CorpusCase[] = [
@@ -717,6 +723,7 @@ describe('malformed DER corpus', () => {
 			signerPrivateKey: certificate.keyPair.privateKey,
 			issuerPublicKey: certificate.keyPair.publicKey,
 			crlNumber: 1,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const ocspResponse = await createOcspResponse({
 			signerPrivateKey: certificate.keyPair.privateKey,
@@ -782,6 +789,7 @@ describe('malformed DER corpus', () => {
 					},
 				},
 			],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const ocspResponse = await createOcspResponse({
 			signerPrivateKey: ca.keyPair.privateKey,

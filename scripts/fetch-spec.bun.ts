@@ -97,20 +97,23 @@ const itu = command('itu')
 			'ITU_CONVERTER_MISSING',
 			'Install poppler, which provides pdftotext',
 		);
-		const url = `https://www.itu.int/rec/dologin_pub.asp?lang=e&id=${args.id}&type=items`;
+		const url = `https://www.itu.int/rec/dologin.asp?lang=e&id=${args.id}&type=items`;
 		out.status(`fetching ${url}`);
 		const response = await fetch(url);
-		const type = response.headers.get('content-type') ?? '';
-		if (!response.ok || !type.startsWith('application/pdf')) {
-			throw new CLIError(`${args.id}: ${response.status} ${type}`, {
-				code: 'ITU_FETCH_FAILED',
-				suggest: `Find the item id on https://www.itu.int/rec/T-REC-${recommendation}`,
-			});
+		const bytes = await response.bytes();
+		if (!response.ok || new TextDecoder().decode(bytes.subarray(0, 5)) !== '%PDF-') {
+			throw new CLIError(
+				`${args.id}: ${response.status} ${response.headers.get('content-type') ?? ''}`,
+				{
+					code: 'ITU_FETCH_FAILED',
+					suggest: `Find the item id on https://www.itu.int/rec/T-REC-${recommendation}`,
+				},
+			);
 		}
 		const scratch = mkdtempSync(path.join(tmpdir(), 'itu-'));
 		try {
 			const pdf = path.join(scratch, 'item.pdf');
-			await Bun.write(pdf, await response.bytes());
+			await Bun.write(pdf, bytes);
 			const directory = path.join('docs', 'itu', recommendation);
 			mkdirSync(directory, { recursive: true });
 			const destination = path.join(directory, `${args.id}.txt`);

@@ -36,11 +36,11 @@ JSDoc and regenerate it rather than editing generated pages.
 | ------------------- | -------------------------- | ------------------------------------------ |
 | PKIX validation     | RFC 5280, 6818, 9549, 9618 | NIST PKITS                                 |
 | Service identity    | RFC 9525                   | RFC 6125 only for opt-in CN compatibility  |
-| OCSP                | RFC 6960, 9919             | RFC 5019 legacy lightweight profile        |
+| OCSP                | RFC 6960, 9654, 9919       | RFC 5019 legacy lightweight profile        |
 | RSA                 | RFC 4055, 5756, 8017       | RFC 3447 superseded PKCS #1 text           |
 | Safe curves         | RFC 8410, 9295             | RFC 5912 ASN.1 object classes              |
 | PEM                 | RFC 7468                   | RFC 1421 and RFC 822 frozen legacy headers |
-| PKCS containers     | RFC 5652, 7292, 8018       | RFC 2315 and 5208 legacy formats           |
+| PKCS containers     | RFC 5652, 7292, 8018, 9879 | RFC 2315 and 5208 legacy formats           |
 | International email | RFC 9598                   | RFC 6531 and RFC 5321 terminology          |
 
 ## CONVENTIONS

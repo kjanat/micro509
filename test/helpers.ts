@@ -414,6 +414,33 @@ function encodeExtension(oid: string, value: Uint8Array, critical = false): Uint
 	return sequence([objectIdentifier(oid), ...(critical ? [bool(true)] : []), octetString(value)]);
 }
 
+export const FAR_FUTURE_NEXT_UPDATE = new Date('2999-01-01T00:00:00Z');
+
+export async function withoutCrlNextUpdate(
+	crlDer: Uint8Array,
+	signerPrivateKey: CryptoKey,
+): Promise<Uint8Array> {
+	const tbsDer = childAt(crlDer, 0);
+	const tbsChildren = readSequenceChildren(tbsDer);
+	const nextUpdateIndex = tbsChildren[0]?.tag === 0x02 ? 4 : 3;
+	const nextUpdate = tbsChildren[nextUpdateIndex];
+	if (nextUpdate === undefined || (nextUpdate.tag !== 0x17 && nextUpdate.tag !== 0x18)) {
+		throw new Error('CRL has no nextUpdate');
+	}
+	const trimmedTbsDer = sequence(
+		tbsChildren
+			.filter((_, index) => index !== nextUpdateIndex)
+			.map((child) => sliceElement(tbsDer, child)),
+	);
+	const signatureAlgorithm = getSignatureAlgorithm(signerPrivateKey);
+	const signatureValue = await signBytes(signerPrivateKey, signatureAlgorithm, trimmedTbsDer);
+	return sequence([
+		trimmedTbsDer,
+		encodeAlgorithmIdentifier(signatureAlgorithm),
+		bitString(signatureValue),
+	]);
+}
+
 export async function addRevokedEntryCertificateIssuers(
 	crlDer: Uint8Array,
 	signerPrivateKey: CryptoKey,

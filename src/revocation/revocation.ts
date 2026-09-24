@@ -21,6 +21,7 @@ import type {
 	OcspCertificateSource,
 	OcspRequestSource,
 	ParsedOcspResponse,
+	ValidateOcspResponseInput,
 } from '#micro509/revocation/ocsp';
 import { validateOcspResponse } from '#micro509/revocation/ocsp';
 import type { DistributionPointReason } from '#micro509/x509/extensions';
@@ -103,10 +104,15 @@ export interface CheckCertificateRevocationInput {
 	readonly evidence?: readonly RevocationEvidenceInput[];
 	/** Evaluation time. Defaults to `new Date()`. */
 	readonly at?: Date;
-	/** Clock-skew tolerance in milliseconds. */
+	/** Clock-skew tolerance in milliseconds. It also widens `crlMaxAgeMs`. */
 	readonly clockSkewMs?: number;
-	/** Maximum age of each CRL's `thisUpdate` in milliseconds. See {@linkcode ValidateCertificateRevocationListInput.maxAgeMs}. */
+	/** Maximum age of each CRL's `thisUpdate` in milliseconds. Unbounded by default. See {@linkcode ValidateCertificateRevocationListInput.maxAgeMs}. */
 	readonly crlMaxAgeMs?: number;
+	/**
+	 * OCSP client profile for every OCSP evidence entry. See
+	 * {@linkcode ValidateOcspResponseInput.profile}. Defaults to `'rfc6960'`.
+	 */
+	readonly ocspProfile?: ValidateOcspResponseInput['profile'];
 }
 
 /** Error codes that {@linkcode checkCertificateRevocation} may surface inside an `indeterminate` result. */
@@ -120,6 +126,7 @@ export const REVOCATION_INDETERMINATE_REASON_CODES = [
 	'certificate_status_unknown',
 	'crl_sign_not_permitted',
 	'issuer_mismatch',
+	'next_update_missing',
 	'non_applicable',
 	'nonce_mismatch',
 	'ocsp_signing_missing',
@@ -475,6 +482,7 @@ async function checkCertificateRevocationWithOcsp(
 			: { responderCertificate: evidence.responderCertificate }),
 		...(input.at === undefined ? {} : { at: input.at }),
 		...(input.clockSkewMs === undefined ? {} : { clockSkewMs: input.clockSkewMs }),
+		...(input.ocspProfile === undefined ? {} : { profile: input.ocspProfile }),
 	});
 	if (!response.ok) {
 		return {
