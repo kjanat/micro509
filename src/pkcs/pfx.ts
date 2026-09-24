@@ -344,7 +344,7 @@ export async function parsePfxDer(
 	der: Uint8Array,
 	options?: ParsePfxOptions,
 ): Promise<ParsePfxResult> {
-	return parsePfxDerWithBudget(der, options, createKdfBudget(options));
+	return await parsePfxDerWithBudget(der, options, createKdfBudget(options));
 }
 
 async function parsePfxDerWithBudget(
@@ -440,7 +440,7 @@ export async function parsePfxPem(pem: string, options?: ParsePfxOptions): Promi
 	} catch {
 		return pfxFailure('malformed', 'Expected exactly one PKCS12 PEM block');
 	}
-	return parsePfxDerWithBudget(bytes, options, budget);
+	return await parsePfxDerWithBudget(bytes, options, budget);
 }
 
 // Private: PFX helpers

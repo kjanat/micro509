@@ -952,7 +952,7 @@ export async function importEncryptedPkcs8DerOrThrow(
 	algorithm?: PrivateKeyImportInput,
 	options?: ImportEncryptedKeyOptions,
 ): Promise<CryptoKey> {
-	return importEncryptedPkcs8WithBudget(der, password, algorithm, createKdfBudget(options));
+	return await importEncryptedPkcs8WithBudget(der, password, algorithm, createKdfBudget(options));
 }
 
 async function importEncryptedPkcs8WithBudget(
@@ -1050,7 +1050,7 @@ export async function importEncryptedPkcs8PemOrThrow(
 	options?: ImportEncryptedKeyOptions,
 ): Promise<CryptoKey> {
 	const budget = createKdfBudget(options);
-	return importEncryptedPkcs8WithBudget(
+	return await importEncryptedPkcs8WithBudget(
 		pemDecodeOrThrow('ENCRYPTED PRIVATE KEY', pem),
 		password,
 		algorithm,
