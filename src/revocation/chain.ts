@@ -14,6 +14,7 @@ import type {
 	RevocationReason,
 } from '#micro509/revocation/crl';
 import {
+	assertCrlMaxAge,
 	checkCertificateRevocationAgainstCrl,
 	coversAllDistributionPointReasons,
 	parseCertificateRevocationListDerOrThrow,
@@ -1328,6 +1329,7 @@ export async function checkChainRevocation(
 	input: CheckChainRevocationInput,
 ): Promise<CheckChainRevocationResult> {
 	const { chain, policy, crls = [], extraCertificates = [], at = new Date() } = input;
+	assertCrlMaxAge(policy?.crlMaxAgeMs);
 	const mode = policy?.mode ?? 'hard-fail';
 
 	// Empty chain → allow

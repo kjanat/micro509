@@ -344,6 +344,14 @@ export async function parsePfxDer(
 	der: Uint8Array,
 	options?: ParsePfxOptions,
 ): Promise<ParsePfxResult> {
+	return parsePfxDerWithBudget(der, options, createKdfBudget(options));
+}
+
+async function parsePfxDerWithBudget(
+	der: Uint8Array,
+	options: ParsePfxOptions | undefined,
+	budget: KdfBudget,
+): Promise<ParsePfxResult> {
 	try {
 		const topLevel = readSequenceChildren(der, { maxDepth: DEFAULT_MAX_DER_DEPTH });
 		if (topLevel.length < 2 || topLevel.length > 3) {
@@ -374,9 +382,6 @@ export async function parsePfxDer(
 		}
 		const authenticatedSafe = readSequenceChildren(authenticatedSafeOctets);
 		const bags: ParsedPfxBag[] = [];
-		// One budget for the whole file: entries that each sit under the ceiling
-		// must not be able to sum past it.
-		const budget = createKdfBudget(options);
 		for (const contentInfo of authenticatedSafe) {
 			const contentInfoDer = authenticatedSafeOctets.slice(
 				contentInfo.start - contentInfo.headerLength,
@@ -422,19 +427,20 @@ export async function parsePfxDer(
  * }
  * ```
  */
-export function parsePfxPem(pem: string, options?: ParsePfxOptions): Promise<ParsePfxResult> {
+export async function parsePfxPem(pem: string, options?: ParsePfxOptions): Promise<ParsePfxResult> {
+	const budget = createKdfBudget(options);
 	let bytes: Uint8Array;
 	try {
 		const blocks = splitPemBlocksOrThrow(pem).filter((block) => block.label === 'PKCS12');
 		const block = blocks[0];
 		if (block === undefined || blocks.length !== 1) {
-			return Promise.resolve(pfxFailure('malformed', 'Expected exactly one PKCS12 PEM block'));
+			return pfxFailure('malformed', 'Expected exactly one PKCS12 PEM block');
 		}
 		bytes = block.bytes;
 	} catch {
-		return Promise.resolve(pfxFailure('malformed', 'Expected exactly one PKCS12 PEM block'));
+		return pfxFailure('malformed', 'Expected exactly one PKCS12 PEM block');
 	}
-	return parsePfxDer(bytes, options);
+	return parsePfxDerWithBudget(bytes, options, budget);
 }
 
 // Private: PFX helpers

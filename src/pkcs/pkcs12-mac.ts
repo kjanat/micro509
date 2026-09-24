@@ -129,6 +129,7 @@ export async function parsePkcs12MacDataOrThrow(
 	password?: string,
 	options?: ParsePkcs12MacDataOptions,
 ): Promise<ParsedPkcs12MacData> {
+	const budget = createKdfBudget(options, DEFAULT_MAX_PKCS12_MAC_ITERATIONS);
 	const top = readSequenceChildren(der);
 	const digestInfo = top[0];
 	const salt = top[1];
@@ -182,7 +183,7 @@ export async function parsePkcs12MacDataOrThrow(
 			verification: 'unchecked',
 		};
 	}
-	chargeKdfBudget(createKdfBudget(options, DEFAULT_MAX_PKCS12_MAC_ITERATIONS), parsedIterations);
+	chargeKdfBudget(budget, parsedIterations);
 	const expected = await computePkcs12Mac(
 		authenticatedSafe,
 		password,

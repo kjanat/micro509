@@ -791,6 +791,7 @@ export async function verifyCertificateRevocationListSignature(
 export async function validateCertificateRevocationList(
 	input: ValidateCertificateRevocationListInput,
 ): Promise<ValidateCertificateRevocationListResult> {
+	assertCrlMaxAge(input.maxAgeMs);
 	let parsedCrl: ParsedCertificateRevocationList;
 	try {
 		parsedCrl = normalizeCrl(input.crl);
@@ -886,19 +887,19 @@ export async function validateCertificateRevocationList(
 	return { ok: true, value: parsedCrl };
 }
 
+export function assertCrlMaxAge(maxAgeMs: number | undefined): void {
+	if (maxAgeMs !== undefined && (!Number.isFinite(maxAgeMs) || maxAgeMs < 0)) {
+		throw new RangeError(`Invalid maxAgeMs: must be a non-negative number, got ${maxAgeMs}`);
+	}
+}
+
 function exceedsCrlMaxAge(
 	crl: ParsedCertificateRevocationList,
 	at: Date,
 	skew: number,
 	maxAgeMs: number | undefined,
 ): boolean {
-	if (maxAgeMs === undefined) {
-		return false;
-	}
-	if (!Number.isFinite(maxAgeMs) || maxAgeMs < 0) {
-		throw new RangeError(`Invalid maxAgeMs: must be a non-negative number, got ${maxAgeMs}`);
-	}
-	return at.getTime() - crl.thisUpdate.getTime() > maxAgeMs + skew;
+	return maxAgeMs !== undefined && at.getTime() - crl.thisUpdate.getTime() > maxAgeMs + skew;
 }
 
 /**
@@ -926,6 +927,7 @@ function exceedsCrlMaxAge(
 export async function checkCertificateRevocationAgainstCrl(
 	input: CheckCertificateRevocationAgainstCrlInput,
 ): Promise<CheckCertificateRevocationAgainstCrlResult> {
+	assertCrlMaxAge(input.maxAgeMs);
 	let certificate: ParsedCertificate;
 	try {
 		certificate = normalizeCrlCertificate(input.certificate);

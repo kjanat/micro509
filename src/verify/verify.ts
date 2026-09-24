@@ -54,6 +54,7 @@ import {
 } from '#micro509/result/result';
 import type { CrlSource, RevocationPolicy, TrustedOcspResponder } from '#micro509/revocation/chain';
 import { checkChainRevocation } from '#micro509/revocation/chain';
+import { assertCrlMaxAge } from '#micro509/revocation/crl';
 import type { RevocationCertificateSource } from '#micro509/revocation/revocation';
 import type { ServiceIdentityInput } from '#micro509/verify/identity';
 import { matchServiceIdentity } from '#micro509/verify/identity';
@@ -981,6 +982,7 @@ export async function validateCandidatePath(
 export async function verifyCertificateChain(
 	input: VerifyCertificateChainInput,
 ): Promise<VerifyChainResult> {
+	assertCrlMaxAge(input.revocation?.policy?.crlMaxAgeMs);
 	const buildResult = await buildCandidatePath({
 		leaf: input.leaf,
 		roots: input.roots,

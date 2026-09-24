@@ -47,6 +47,7 @@ import {
 	encryptPbes2,
 	isKdfIterationLimitError,
 	isWrongPasswordError,
+	type KdfBudget,
 	type KdfLimitOptions,
 	type Pbes2Parameters,
 	parsePbes2AlgorithmIdentifier,
@@ -951,12 +952,21 @@ export async function importEncryptedPkcs8DerOrThrow(
 	algorithm?: PrivateKeyImportInput,
 	options?: ImportEncryptedKeyOptions,
 ): Promise<CryptoKey> {
+	return importEncryptedPkcs8WithBudget(der, password, algorithm, createKdfBudget(options));
+}
+
+async function importEncryptedPkcs8WithBudget(
+	der: Uint8Array,
+	password: string,
+	algorithm: PrivateKeyImportInput | undefined,
+	budget: KdfBudget,
+): Promise<CryptoKey> {
 	const envelope = readEncryptedPkcs8Envelope(der);
 	const decrypted = await decryptPbes2(
 		envelope.algorithmIdentifierDer,
 		envelope.encryptedData,
 		password,
-		createKdfBudget(options),
+		budget,
 	);
 	assertDecryptedPrivateKey(
 		() => parsePkcs8PrivateKey(decrypted),
@@ -1033,17 +1043,18 @@ export function importEncryptedPkcs8Der(
  * const inferred = await importEncryptedPkcs8PemOrThrow(pem, 'secret');
  * ```
  */
-export function importEncryptedPkcs8PemOrThrow(
+export async function importEncryptedPkcs8PemOrThrow(
 	pem: string,
 	password: string,
 	algorithm?: PrivateKeyImportInput,
 	options?: ImportEncryptedKeyOptions,
 ): Promise<CryptoKey> {
-	return importEncryptedPkcs8DerOrThrow(
+	const budget = createKdfBudget(options);
+	return importEncryptedPkcs8WithBudget(
 		pemDecodeOrThrow('ENCRYPTED PRIVATE KEY', pem),
 		password,
 		algorithm,
-		options,
+		budget,
 	);
 }
 

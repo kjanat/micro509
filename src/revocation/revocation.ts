@@ -13,6 +13,7 @@ import type {
 	RevocationReason,
 } from '#micro509/revocation/crl';
 import {
+	assertCrlMaxAge,
 	checkCertificateRevocationAgainstCrl,
 	coversAllDistributionPointReasons,
 } from '#micro509/revocation/crl';
@@ -310,6 +311,7 @@ export function resolveOcspResponderCandidates(
 export async function checkCertificateRevocation(
 	input: CheckCertificateRevocationInput,
 ): Promise<CheckCertificateRevocationResult> {
+	assertCrlMaxAge(input.crlMaxAgeMs);
 	const evidence = input.evidence ?? [];
 	const checkedSources = evidence.map((entry) => entry.kind);
 	if (evidence.length === 0) {
