@@ -1,6 +1,6 @@
 import type { Out } from 'dreamcli';
 import { arg, CLIError, cli, command, flag, isMainModule } from 'dreamcli';
-import { synchronousAdapter } from '../cli-adapter.ts';
+import { deferredExitAdapter, runUntilDrained } from '../cli-adapter.ts';
 import {
 	discover,
 	enclosingHeading,
@@ -480,4 +480,5 @@ export const specCli = cli('spec')
 	.command(readCommand)
 	.command(searchCommand);
 
-if (isMainModule(import.meta)) await specCli.run({ adapter: synchronousAdapter() });
+if (isMainModule(import.meta))
+	await runUntilDrained(specCli.run({ adapter: deferredExitAdapter() }));

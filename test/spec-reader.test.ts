@@ -520,6 +520,53 @@ describe('ITU-T parsing', () => {
 		]);
 	});
 
+	test('reads tab-separated clauses and annexes and skips contents rows and stray numbers', () => {
+		const converted = [
+			'1\tScope\t\t1',
+			'2\tDefinitions\t\t3',
+			'1\tScope',
+			'Body.',
+			'2\tDefinitions',
+			'2.1\tImported terms',
+			"5\tTO '0001'B,",
+			'2.2\tLocal terms',
+			'1\tBitmap bit = 1 indicates "children" is present',
+			'3\tAbbreviations',
+			'                    Annex A',
+			'A.1       Introduction',
+			'Annex B  Examples',
+		].join('\n');
+		const parsed = parseItu(converted, 'X6801', 'x680');
+		expect(parsed.headings.map((heading) => [heading.number, heading.title, heading.line])).toEqual(
+			[
+				['1', 'Scope', 3],
+				['2', 'Definitions', 5],
+				['2.1', 'Imported terms', 6],
+				['2.2', 'Local terms', 8],
+				['3', 'Abbreviations', 10],
+				['A', 'Annex A', 11],
+				['A.1', 'Introduction', 12],
+				['B', 'Examples', 13],
+			],
+		);
+	});
+
+	test('lists the numbered changes of an amendment', () => {
+		const amendment = [
+			'1)        Clause 5 ........................ 1',
+			'1)        Clause 5',
+			'Replace the text.',
+			'2)        Annex A',
+		].join('\n');
+		const parsed = parseItu(amendment, 'T-REC-X.501-202410-I!Amd2!PDF-E', 'x501');
+		expect(parsed.headings.map((heading) => [heading.number, heading.title, heading.line])).toEqual(
+			[
+				['1', 'Clause 5', 2],
+				['2', 'Annex A', 4],
+			],
+		);
+	});
+
 	test('reads marked headings from a Word conversion', () => {
 		const converted = [
 			'# 1) Correction of the defects reported in defect report 436',

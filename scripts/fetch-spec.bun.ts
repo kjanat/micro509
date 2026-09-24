@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { Out } from 'dreamcli';
 import { arg, CLIError, cli, command } from 'dreamcli';
-import { synchronousAdapter } from './cli-adapter.ts';
+import { deferredExitAdapter, runUntilDrained } from './cli-adapter.ts';
 
 const W3C_SPECS = {
 	'webcrypto-editors-draft': {
@@ -298,9 +298,11 @@ const w3c = command('w3c')
 		out.log(destination);
 	});
 
-cli('fetch-spec')
-	.description('Vendor standards text into docs/')
-	.command(rfc)
-	.command(itu)
-	.command(w3c)
-	.run({ adapter: synchronousAdapter() });
+await runUntilDrained(
+	cli('fetch-spec')
+		.description('Vendor standards text into docs/')
+		.command(rfc)
+		.command(itu)
+		.command(w3c)
+		.run({ adapter: deferredExitAdapter() }),
+);
