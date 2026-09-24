@@ -17,15 +17,17 @@ JSDoc and regenerate it rather than editing generated pages.
 
 ## WHERE TO LOOK
 
-| Need                    | Location                      | Notes                                       |
-| ----------------------- | ----------------------------- | ------------------------------------------- |
-| Support claims and gaps | `PKIX-SCOPE.md`               | source of truth mirrored by README and site |
-| RFC text                | `rfc/rfc<number>.txt`         | fetched verbatim from RFC Editor            |
-| PKITS specification     | `rfc/pkits.txt`               | upstream NIST fixture documentation         |
-| RFC fetcher             | `scripts/fetch-rfc.bun.ts`    | run with `bun rfc <number>`                 |
-| RFC status guard        | `test/rfc/rfc-status.test.ts` | live RFC Editor index, daily cache          |
-| Per-RFC conformance     | `test/rfc/*.test.ts`          | section-quoted behavioral evidence          |
-| PKITS execution         | `test/pkits.test.ts`          | fixed-time path-validation harness          |
+| Need                    | Location                              | Notes                                                                                               |
+| ----------------------- | ------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Support claims and gaps | `PKIX-SCOPE.md`                       | source of truth mirrored by README and site                                                         |
+| RFC text                | `rfc/rfc<number>.txt`                 | fetched verbatim from RFC Editor                                                                    |
+| PKITS specification     | `rfc/pkits.txt`                       | upstream NIST fixture documentation                                                                 |
+| Spec reader             | `scripts/spec/`                       | section-level access, run with `bun spec`                                                           |
+| Spec lookup procedure   | `.claude/skills/spec-lookup/SKILL.md` | hand spec questions to the `spec-lookup` agent; raw reads of `rfc/`, `itu/`, `w3c/` are gated to it |
+| RFC fetcher             | `scripts/fetch-rfc.bun.ts`            | run with `bun rfc <number>`                                                                         |
+| RFC status guard        | `test/rfc/rfc-status.test.ts`         | live RFC Editor index, daily cache                                                                  |
+| Per-RFC conformance     | `test/rfc/*.test.ts`                  | section-quoted behavioral evidence                                                                  |
+| PKITS execution         | `test/pkits.test.ts`                  | fixed-time path-validation harness                                                                  |
 
 ## CURRENT BASELINES
 
