@@ -65,6 +65,20 @@ export async function expectRejectedErrorCode(
 	throw new Error(`expected a ResultError with code '${code}', but the promise resolved`);
 }
 
+/** Await a promise and assert it rejected with an instance of `type`. */
+export async function expectRejectedWith(
+	promise: Promise<unknown>,
+	type: new (...args: never[]) => Error,
+): Promise<void> {
+	try {
+		await promise;
+	} catch (error) {
+		expect(error).toBeInstanceOf(type);
+		return;
+	}
+	throw new Error(`expected a ${type.name} rejection, but the promise resolved`);
+}
+
 /**
  * Encode a CRLDistributionPoints value with an arbitrary cRLIssuer, bypassing the
  * builder's RFC 5280 §4.2.1.13 directoryName validation. Feeds the parser and

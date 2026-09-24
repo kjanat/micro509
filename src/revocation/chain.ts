@@ -14,6 +14,7 @@ import type {
 	RevocationReason,
 } from '#micro509/revocation/crl';
 import {
+	assertCrlMaxAge,
 	checkCertificateRevocationAgainstCrl,
 	coversAllDistributionPointReasons,
 	parseCertificateRevocationListDerOrThrow,
@@ -97,6 +98,12 @@ export interface RevocationPolicy {
 	 * evidence. Defaults to `'honor-nocheck'`.
 	 */
 	readonly ocspResponderRevocation?: OcspResponderRevocationPolicy;
+	/**
+	 * Maximum age of a CRL's `thisUpdate` at the evaluation time, in
+	 * milliseconds. An older CRL yields no evidence even when it carries no
+	 * `nextUpdate`. Unbounded by default.
+	 */
+	readonly crlMaxAgeMs?: number;
 }
 
 /** Input for {@linkcode checkChainRevocation}. */
@@ -451,6 +458,7 @@ interface SignerValidationContext {
 	readonly crls: readonly CrlSource[];
 	readonly extraCertificates: readonly RevocationCertificateSource[];
 	readonly at: Date;
+	readonly crlMaxAgeMs: number | undefined;
 }
 
 /**
@@ -624,6 +632,7 @@ async function checkSignerAgainstCrl(
 		issuerCertificate: issuer,
 		crl,
 		at: ctx.at,
+		...(ctx.crlMaxAgeMs === undefined ? {} : { maxAgeMs: ctx.crlMaxAgeMs }),
 	});
 	if (!result.ok) {
 		return SIGNER_CRL_NO_EVIDENCE;
@@ -960,6 +969,7 @@ interface CrlEvidenceState {
 	sawCrlSignerRevoked: boolean;
 	sawCrlSignerIndeterminate: boolean;
 	sawCrlSignerNotAuthorized: boolean;
+	sawStaleCrl: boolean;
 	sawGood: boolean;
 	freshestGood?: { readonly signer: ParsedCertificate; readonly thisUpdate: Date };
 }
@@ -974,6 +984,7 @@ interface BaseCrlResolution {
 	readonly extraCertificates: readonly RevocationCertificateSource[];
 	readonly chain: readonly ParsedCertificate[];
 	readonly at: Date;
+	readonly crlMaxAgeMs: number | undefined;
 	readonly signerCtx: SignerValidationContext;
 	readonly state: CrlEvidenceState;
 }
@@ -998,12 +1009,23 @@ async function resolveBaseCrlAgainstSigners(
 		extraCertificates,
 		chain,
 		at,
+		crlMaxAgeMs,
 		signerCtx,
 		state,
 	} = params;
 	for (const candidate of collectCrlSignerCandidates(baseCrl, issuer, extraCertificates, chain)) {
-		const checked = await checkCrlWithIssuer(cert, baseCrl, applicableDelta, candidate, at);
+		const checked = await checkCrlWithIssuer(
+			cert,
+			baseCrl,
+			applicableDelta,
+			candidate,
+			at,
+			crlMaxAgeMs,
+		);
 		if (!checked.ok) {
+			if (checked.code === 'stale_crl') {
+				state.sawStaleCrl = true;
+			}
 			continue;
 		}
 		if (!(await crlSignerChainsToAnchor(candidate, chain, extraCertificates, at))) {
@@ -1047,6 +1069,7 @@ async function evaluateCrlEvidence(
 		sawCrlSignerRevoked: false,
 		sawCrlSignerIndeterminate: false,
 		sawCrlSignerNotAuthorized: false,
+		sawStaleCrl: false,
 		sawGood: false,
 	};
 
@@ -1074,6 +1097,7 @@ async function evaluateCrlEvidence(
 			extraCertificates,
 			chain,
 			at,
+			crlMaxAgeMs: input.policy?.crlMaxAgeMs,
 			signerCtx,
 			state,
 		});
@@ -1130,6 +1154,9 @@ function crlUnavailableReason(state: CrlEvidenceState): RevocationIndeterminateR
 	}
 	if (state.sawCrlSignerIndeterminate) {
 		return 'crl_signer_indeterminate';
+	}
+	if (state.sawStaleCrl) {
+		return 'crl_expired';
 	}
 	return 'no_applicable_crl';
 }
@@ -1188,6 +1215,7 @@ function checkCrlWithIssuer(
 	deltaCrl: ParsedCertificateRevocationList | undefined,
 	crlIssuer: ParsedCertificate,
 	at: Date,
+	maxAgeMs: number | undefined,
 ): ReturnType<typeof checkCertificateRevocationAgainstCrl> {
 	return checkCertificateRevocationAgainstCrl({
 		certificate: cert,
@@ -1195,6 +1223,7 @@ function checkCrlWithIssuer(
 		crl,
 		...(deltaCrl !== undefined ? { deltaCrl } : {}),
 		at,
+		...(maxAgeMs === undefined ? {} : { maxAgeMs }),
 	});
 }
 
@@ -1300,6 +1329,7 @@ export async function checkChainRevocation(
 	input: CheckChainRevocationInput,
 ): Promise<CheckChainRevocationResult> {
 	const { chain, policy, crls = [], extraCertificates = [], at = new Date() } = input;
+	assertCrlMaxAge(policy?.crlMaxAgeMs);
 	const mode = policy?.mode ?? 'hard-fail';
 
 	// Empty chain → allow
@@ -1322,6 +1352,7 @@ export async function checkChainRevocation(
 		crls,
 		extraCertificates,
 		at,
+		crlMaxAgeMs: policy?.crlMaxAgeMs,
 	};
 
 	// Skip trust anchor (last cert) — it's the trust base

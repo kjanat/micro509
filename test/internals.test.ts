@@ -86,6 +86,7 @@ import {
 	normalizeIpAddress,
 	parseIpAddressToBytes,
 } from '#micro509/internal/shared/ip';
+import { rebaseDiagnostic } from '#micro509/internal/verify/verify-path';
 import {
 	parseDistributionPointReasonFlagsContent,
 	parseKeyUsageExtension,
@@ -2521,5 +2522,62 @@ describe('pbes2.ts DEFAULT prf', () => {
 		expect(sha256Children).toHaveLength(4);
 		expect(sha256Children[2]?.tag).toBe(0x02);
 		expect(sha256Children[3]?.tag).toBe(0x30);
+	});
+});
+
+describe('rebaseDiagnostic', () => {
+	async function parsedCertificates(count: number) {
+		const certificates = [];
+		for (let index = 0; index < count; index += 1) {
+			const material = await createSelfSignedCertificate({
+				subject: { commonName: `Rebase ${index}` },
+			});
+			certificates.push(unwrap(parseCertificatePem(material.certificate.pem)));
+		}
+		return certificates;
+	}
+
+	it('moves the suffix onto the new prefix and shifts every index', async () => {
+		const [a, b, node, below, bottom, other] = await parsedCertificates(6);
+		if (!(a && b && node && below && bottom && other)) throw new Error('fixture');
+		const failure = {
+			ok: false,
+			code: 'certificate_expired',
+			message: 'expired',
+			index: 4,
+		} as const;
+
+		expect(
+			rebaseDiagnostic({ kind: 'specific-failure', path: [a, node, below, bottom], failure }, 1, [
+				a,
+				b,
+				other,
+				node,
+			]),
+		).toEqual({
+			kind: 'specific-failure',
+			path: [a, b, other, node, below, bottom],
+			failure: { ...failure, index: 6 },
+		});
+		expect(
+			rebaseDiagnostic({ kind: 'missing-issuer', path: [a, node, below], missingIssuerAt: 2 }, 1, [
+				b,
+				other,
+				node,
+			]),
+		).toEqual({ kind: 'missing-issuer', path: [b, other, node, below], missingIssuerAt: 3 });
+	});
+
+	it('reports only the prefix when the suffix repeats one of its certificates', async () => {
+		const [a, node, below, bottom] = await parsedCertificates(4);
+		if (!(a && node && below && bottom)) throw new Error('fixture');
+
+		expect(
+			rebaseDiagnostic(
+				{ kind: 'missing-issuer', path: [a, node, below, bottom], missingIssuerAt: 3 },
+				1,
+				[below, node],
+			),
+		).toEqual({ kind: 'none', path: [below, node] });
 	});
 });
