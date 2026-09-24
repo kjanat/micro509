@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import {
+	buildCandidatePath,
 	createCertificate,
 	createSelfSignedCertificate,
 	generateKeyPair,
@@ -165,4 +166,100 @@ describe('path search cost', () => {
 		if (result.ok) return;
 		expect(result.code).toBe('no_trusted_root');
 	}, 5_000);
+});
+
+async function issueThreeCertificateChain() {
+	const root = await createSelfSignedCertificate({
+		subject: { commonName: 'Budget Root' },
+		algorithm: { kind: 'ecdsa', curve: 'P-256' },
+		validity: VALIDITY,
+		extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign'] },
+	});
+	const intermediateKeys = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
+	const intermediate = await createCertificate({
+		issuer: { commonName: 'Budget Root' },
+		subject: { commonName: 'Budget Intermediate' },
+		publicKey: intermediateKeys.publicKey,
+		signerPrivateKey: root.keyPair.privateKey,
+		issuerPublicKey: root.keyPair.publicKey,
+		validity: VALIDITY,
+		extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign'] },
+	});
+	const leafKeys = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
+	const leaf = await createCertificate({
+		issuer: { commonName: 'Budget Intermediate' },
+		subject: { commonName: 'budget-leaf.example' },
+		publicKey: leafKeys.publicKey,
+		signerPrivateKey: intermediateKeys.privateKey,
+		issuerPublicKey: intermediateKeys.publicKey,
+		validity: VALIDITY,
+	});
+	return { leaf: leaf.pem, intermediate: intermediate.pem, root: root.certificate.pem };
+}
+
+describe('path search work limit', () => {
+	it('reports the limit only when it stops the search', async () => {
+		const { leaf, intermediate, root } = await issueThreeCertificateChain();
+		const input = { leaf, intermediates: [intermediate], roots: [root], at: VALIDITY.notBefore };
+
+		expect((await buildCandidatePath({ ...input, maxPathBuildingChecks: 2 })).ok).toBe(true);
+
+		const stopped = await buildCandidatePath({ ...input, maxPathBuildingChecks: 1 });
+		expect(stopped.ok).toBe(false);
+		if (stopped.ok) return;
+		expect(stopped.code).toBe('path_building_limit_exceeded');
+	});
+
+	it('stops a search over many same-subject candidates', async () => {
+		const { leaf, intermediates, root } = await issueSameSubjectCandidates(12);
+		const input = { leaf, intermediates, roots: [root], at: VALIDITY.notBefore };
+
+		const stopped = await verifyCertificateChain({ ...input, maxPathBuildingChecks: 10 });
+		expect(stopped.ok).toBe(false);
+		if (stopped.ok) return;
+		expect(stopped.code).toBe('path_building_limit_exceeded');
+
+		const finished = await verifyCertificateChain(input);
+		expect(finished.ok).toBe(false);
+		if (finished.ok) return;
+		expect(finished.code).toBe('no_trusted_root');
+	});
+
+	it('charges trust-anchor attempts to the same budget', async () => {
+		const { leaf, root } = await issueSameSubjectCandidates(0);
+		const trustAnchors = await Promise.all(Array.from({ length: 8 }, () => issueDecoyAnchor()));
+		const input = { leaf, roots: [root], trustAnchors, at: VALIDITY.notBefore };
+
+		const stopped = await buildCandidatePath({ ...input, maxPathBuildingChecks: 3 });
+		expect(stopped.ok).toBe(false);
+		if (stopped.ok) return;
+		expect(stopped.code).toBe('path_building_limit_exceeded');
+
+		const finished = await buildCandidatePath({ ...input, maxPathBuildingChecks: 8 });
+		expect(finished.ok).toBe(false);
+		if (finished.ok) return;
+		expect(finished.code).toBe('signature_invalid');
+	});
+
+	it('does not count unrelated trust-store roots against the default limit', async () => {
+		const { leaf, intermediate, root } = await issueThreeCertificateChain();
+		const unrelated = await Promise.all(
+			Array.from({ length: 150 }, (_, index) =>
+				createSelfSignedCertificate({
+					subject: { commonName: `Store Root ${index}` },
+					algorithm: { kind: 'ecdsa', curve: 'P-256' },
+					validity: VALIDITY,
+					extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign'] },
+				}),
+			),
+		);
+
+		const result = await verifyCertificateChain({
+			leaf,
+			intermediates: [intermediate],
+			roots: [...unrelated.map((material) => material.certificate.pem), root],
+			at: VALIDITY.notBefore,
+		});
+		expect(result.ok).toBe(true);
+	});
 });

@@ -1,5 +1,6 @@
 import { describe, it } from 'bun:test';
 import {
+	buildCandidatePath,
 	checkCertificateRevocation,
 	checkCertificateRevocationAgainstCrl,
 	checkChainRevocation,
@@ -113,6 +114,22 @@ describe('an invalid CRL maximum age throws before any evidence is read', () => 
 				roots: [root.certificate.pem],
 				revocation: { policy: { crlMaxAgeMs: Number.POSITIVE_INFINITY } },
 			}),
+			RangeError,
+		);
+	});
+});
+
+describe('an invalid maxPathBuildingChecks throws before the input is parsed', () => {
+	it('buildCandidatePath', async () => {
+		await expectRejectedWith(
+			buildCandidatePath({ leaf: garbage, roots: [], maxPathBuildingChecks: 0 }),
+			RangeError,
+		);
+	});
+
+	it('verifyCertificateChain', async () => {
+		await expectRejectedWith(
+			verifyCertificateChain({ leaf: garbage, roots: [], maxPathBuildingChecks: 1.5 }),
 			RangeError,
 		);
 	});

@@ -32,6 +32,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `checkCertificateRevocationAgainstCrl`, `crlMaxAgeMs` on
   `checkCertificateRevocation` and the chain-level `RevocationPolicy`, bound
   how old a CRL's `thisUpdate` may be. See Security.
+- `maxPathBuildingChecks` on `verifyCertificateChain` and `buildCandidatePath`
+  bounds how many issuer candidates and bare trust anchors one path search may
+  try. When the bound stops the search, the result is
+  `path_building_limit_exceeded`, which joins `VERIFY_ERROR_CODES`. The default
+  is 100,000.
 
 ### Changed
 

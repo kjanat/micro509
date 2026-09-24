@@ -78,6 +78,16 @@ export interface VerifyPathSignatureChecks {
 	) => Promise<VerifyCertificateSignatureResult>;
 }
 
+/** Default upper bound on issuer candidates and trust anchors one path search may try. */
+export const DEFAULT_MAX_PATH_BUILDING_CHECKS = 100_000;
+
+/** Throws when a caller-supplied path-building limit is not a positive safe integer. */
+export function assertPathBuildingChecks(limit: number | undefined): void {
+	if (limit !== undefined && (!Number.isSafeInteger(limit) || limit < 1)) {
+		throw new RangeError(`Invalid maxPathBuildingChecks: must be an integer >= 1, got ${limit}`);
+	}
+}
+
 /** Loose input for constructing failure detail objects during path building. */
 export interface VerifyPathFailureDetailsInput {
 	/** Common name of the certificate under evaluation, if known. */
@@ -274,6 +284,7 @@ export async function buildChainInternal(
 	at: Date,
 	callbacks: VerifyPathCallbacks,
 	signatureChecks: VerifyPathSignatureChecks = DEFAULT_SIGNATURE_CHECKS,
+	maxIssuerChecks: number = DEFAULT_MAX_PATH_BUILDING_CHECKS,
 ): Promise<InternalBuildResult> {
 	const candidates = [...intermediates, ...roots];
 	const subjectIndex = new Map<string, ParsedCertificate[]>();
@@ -293,6 +304,7 @@ export async function buildChainInternal(
 	const deadEnds = new Map<string, DeadEnd>();
 	const subtrees: { best: PathDiagnostic }[] = [];
 	const signatureResults = new Map<string, Promise<VerifyCertificateSignatureResult>>();
+	const budget = { remaining: maxIssuerChecks, exhausted: false };
 
 	candidates.forEach((candidate, index) => {
 		const key = canonicalDnKey(candidate.subject);
@@ -318,6 +330,21 @@ export async function buildChainInternal(
 		};
 	}
 	const owner = best.current;
+	if (budget.exhausted) {
+		return {
+			chain: owner.path,
+			foundTrustedRoot: false,
+			failure: callbacks.failure(
+				'path_building_limit_exceeded',
+				'path building stopped at its work limit',
+				undefined,
+				callbacks.detail({
+					expected: `at most ${maxIssuerChecks} issuer and trust-anchor checks`,
+					actual: 'limit reached before a trusted path was found',
+				}),
+			),
+		};
+	}
 	switch (owner.kind) {
 		case 'specific-failure':
 			return { chain: owner.path, foundTrustedRoot: false, failure: owner.failure };
@@ -342,6 +369,7 @@ export async function buildChainInternal(
 		visited: ReadonlySet<string>,
 		caBelowCount: number,
 	): Promise<readonly ParsedCertificate[] | undefined> {
+		if (budget.exhausted) return undefined;
 		if (rootFingerprints.has(fingerprint(current))) {
 			return path;
 		}
@@ -351,7 +379,9 @@ export async function buildChainInternal(
 			callbacks,
 			path.length - 1,
 			verifyAnchorOnce,
+			chargeBudget,
 		);
+		if (budget.exhausted) return undefined;
 		if (matchedAnchor.failure !== undefined) {
 			recordFailure(matchedAnchor.failure, path);
 		}
@@ -423,6 +453,7 @@ export async function buildChainInternal(
 		caBelowCount: number,
 	): Promise<readonly ParsedCertificate[] | undefined> {
 		for (const issuer of issuers) {
+			if (budget.exhausted) return undefined;
 			const result = await searchIssuerCandidate(current, issuer, path, visited, caBelowCount);
 			if (result !== undefined) return result;
 		}
@@ -438,6 +469,7 @@ export async function buildChainInternal(
 	): Promise<readonly ParsedCertificate[] | undefined> {
 		const issuerFingerprint = fingerprint(issuer);
 		if (visited.has(issuerFingerprint)) return undefined;
+		if (!chargeBudget()) return undefined;
 		const candidate = await evaluateIssuerCandidate(
 			current,
 			issuer,
@@ -454,6 +486,15 @@ export async function buildChainInternal(
 		const nextVisited = new Set(visited);
 		nextVisited.add(issuerFingerprint);
 		return await search(issuer, [...path, issuer], nextVisited, candidate.nextCaBelowCount);
+	}
+
+	function chargeBudget(): boolean {
+		if (budget.remaining === 0) {
+			budget.exhausted = true;
+			return false;
+		}
+		budget.remaining -= 1;
+		return true;
 	}
 
 	function verifySignatureOnce(
@@ -733,6 +774,7 @@ async function matchTrustAnchor(
 	callbacks: VerifyPathCallbacks,
 	index: number,
 	verifyAnchor: typeof verifyTrustAnchorSignature,
+	charge: () => boolean,
 ): Promise<TrustAnchorMatchResult> {
 	const anchors = anchorIndex.get(canonicalDnKey(certificate.issuer));
 	if (anchors === undefined) {
@@ -745,6 +787,7 @@ async function matchTrustAnchor(
 		// are non-reflexive and prepared/tagged namespaces can collide), so confirm
 		// the anchor's subject actually equals the certificate's issuer.
 		if (!compareDistinguishedNames(certificate.issuer, anchor.subject)) continue;
+		if (!charge()) return { matched: false };
 		const verified = await verifyAnchor(certificate, anchor);
 		if (!verified.ok) {
 			// Capture the first failure but continue trying other anchors

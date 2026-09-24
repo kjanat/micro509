@@ -78,6 +78,13 @@ At index: ${result.error.index}`);
 
 </LiveCode>
 
+Path building tries every issuer candidate and bare trust anchor whose subject
+matches, so an input with many same-subject certificates costs more work than
+its size suggests. `maxPathBuildingChecks` on `verifyCertificateChain` and
+`buildCandidatePath` bounds how many candidates and anchors one search may try.
+The default is 100,000. When the bound stops the search before a trusted path
+is found, the result is `path_building_limit_exceeded`.
+
 ## Verification purposes
 
 Four built-in validation profiles. `serverAuth`,
@@ -261,6 +268,7 @@ Every other error-code union in the library is tabled in the
 | `ca_required`                                | Non-CA certificate used as issuer              |
 | `key_cert_sign_required`                     | Issuer missing `keyCertSign` key usage         |
 | `path_length_exceeded`                       | Chain exceeds `pathLenConstraint`              |
+| `path_building_limit_exceeded`               | Path building exceeded bounded work limits     |
 | `authority_key_identifier_mismatch`          | AKI/SKI cross-check failed                     |
 | `extended_key_usage_invalid`                 | EKU doesn't match requested purpose            |
 | `subject_alt_name_mismatch`                  | SAN doesn't match service identity             |
