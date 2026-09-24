@@ -1,7 +1,7 @@
 import { cleanTitle, sourceLines, stripPageArtifacts } from './text.ts';
 import type { Heading, ParsedDocument, PkitsMeta, SourceLine } from './types.ts';
 
-const CLAUSE = /^\s{0,10}(\d+(?:\.\d+)*)\s+([A-Z]\S*.*)$/;
+const CLAUSE = /^\s{0,10}(\d+(?:\.\d+)*)\s+([A-Za-z]\S*.*)$/;
 const VERSION = /^\s*Version\s+(\S+)/;
 const DATE = /^\s*([A-Z][a-z]+\s+\d{1,2},\s+\d{4})/;
 
@@ -24,8 +24,9 @@ function headingsOf(lines: readonly SourceLine[]): readonly Heading[] {
 		const number = match?.[1];
 		const title = match?.[2];
 		if (number === undefined || title === undefined) return;
-		if (!wellFormed(number)) return;
+		if (!wellFormed(number) || seen.has(number)) return;
 		const parent = parentOf(number);
+		if (parent === undefined && /^[a-z]/.test(title)) return;
 		if (parent !== undefined && !seen.has(parent)) return;
 		seen.add(number);
 		headings.push({

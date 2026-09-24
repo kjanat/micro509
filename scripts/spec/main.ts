@@ -299,16 +299,22 @@ function compile(pattern: string, ignoreCase: boolean): RegExp {
 	}
 }
 
+type DocumentSearch = {
+	readonly hits: readonly SearchHit[];
+	readonly more: boolean;
+};
+
 function searchDocument(
 	document: SpecDocument,
 	pattern: RegExp,
 	span: number,
 	remaining: number,
-): readonly SearchHit[] {
+): DocumentSearch {
 	const hits: SearchHit[] = [];
-	for (let index = 0; index < document.lines.length && hits.length < remaining; index += 1) {
+	for (let index = 0; index < document.lines.length; index += 1) {
 		const entry = document.lines[index];
 		if (entry === undefined || !pattern.test(entry.text)) continue;
+		if (hits.length >= remaining) return { hits, more: true };
 		const section = enclosingHeading(document, index);
 		hits.push({
 			doc: document.id,
@@ -320,7 +326,7 @@ function searchDocument(
 			after: contextAround(document.lines, index, span, 1),
 		});
 	}
-	return hits;
+	return { hits, more: false };
 }
 
 type RenderLine = {
@@ -344,12 +350,17 @@ function record(
 function runsOf(lines: readonly RenderLine[]): readonly (readonly RenderLine[])[] {
 	const runs: RenderLine[][] = [];
 	let current: RenderLine[] = [];
+	let label: string | undefined;
 	for (const entry of lines) {
 		const previous = current[current.length - 1];
-		if (previous !== undefined && entry.line - previous.line > 1) {
+		const gap = previous !== undefined && entry.line - previous.line > 1;
+		const relabel = entry.match && label !== undefined && entry.label !== label;
+		if (gap || relabel) {
 			runs.push(current);
 			current = [];
+			label = undefined;
 		}
+		if (entry.match) label = entry.label;
 		current.push(entry);
 	}
 	if (current.length > 0) runs.push(current);
@@ -436,13 +447,17 @@ export const searchCommand = command('search')
 		const hits: SearchHit[] = [];
 		let truncated = false;
 		for (const ref of scope) {
-			if (hits.length >= flags.limit) {
+			const found = searchDocument(
+				loadDocument(ref),
+				pattern,
+				flags.context,
+				flags.limit - hits.length,
+			);
+			hits.push(...found.hits);
+			if (found.more) {
 				truncated = true;
 				break;
 			}
-			hits.push(
-				...searchDocument(loadDocument(ref), pattern, flags.context, flags.limit - hits.length),
-			);
 		}
 		if (out.jsonMode) {
 			out.json({ pattern: source, matches: hits, truncated });

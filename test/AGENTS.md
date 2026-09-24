@@ -36,6 +36,7 @@ test/
 | PKITS subset              | `pkits.test.ts`                                            | fixed-time conformance subset                                             |
 | Internal-only checks      | `internals.test.ts`                                        | safe place for `#micro509/*` internals                                    |
 | Per-RFC conformance       | `rfc/*.test.ts`                                            | describes mirror RFC sections                                             |
+| Spec tooling              | `spec-reader.test.ts`, `spec-lookup-gate.test.ts`          | `bun spec` parsing and search; the spec-lookup PreToolUse gate            |
 
 ## LOCAL CONVENTIONS
 

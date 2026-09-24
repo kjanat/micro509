@@ -31,6 +31,7 @@
 		"src",
 		"src/**/*.json",
 		"test/**/*.ts",
+		".claude/hooks/**/*.ts",
 		"scripts",
 		"packages/**/*.ts",
 		"*.config.ts",

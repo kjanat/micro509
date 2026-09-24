@@ -6,7 +6,7 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/spec-lookup-gate.sh\"",
+						"command": "bun \"$CLAUDE_PROJECT_DIR/.claude/hooks/spec-lookup-gate.ts\"",
 						"timeout": 5,
 						"statusMessage": "spec-lookup gate"
 					}

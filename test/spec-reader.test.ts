@@ -166,10 +166,159 @@ describe('spec headings', () => {
 		);
 	});
 
+	test('lists PKITS sections whose titles start in lowercase', async () => {
+		const headings = await headingsOf(['pkits', '--depth', '4']);
+		const numbers = headings.map((heading) => text(heading.number));
+		expect(numbers).toContain('6.1.5.205');
+		expect(new Set(numbers).size).toBe(numbers.length);
+	});
+
 	test('lists W3C sections', async () => {
 		const headings = await headingsOf(['w3c-webcrypto-rec-2017']);
 		expect(headings).toContainEqual(
 			expect.objectContaining({ number: '14', title: 'SubtleCrypto interface' }),
+		);
+	});
+
+	test('keeps numbered sections that follow the appendices', async () => {
+		expect(await headingsOf(['rfc5322', '--depth', '2'])).toContainEqual(
+			expect.objectContaining({ number: '7.1', title: 'Normative References' }),
+		);
+	});
+
+	test('does not let a lettered table row swallow the rest of the outline', async () => {
+		const numbers = (await headingsOf(['rfc2156', '--depth', '4'])).map((heading) =>
+			text(heading.number),
+		);
+		expect(numbers).toContain('5.3.9');
+		expect(numbers).toContain('L');
+		expect(numbers).not.toContain('X.4.4');
+		expect(numbers).not.toContain('X.4.5');
+	});
+
+	test('lists unnumbered margin titles in a document with no numbered margin headings', async () => {
+		const titles = (await headingsOf(['rfc934'])).map((heading) => text(heading.title));
+		expect(titles).toContain('Introduction, Scope, and Motivation');
+		expect(titles).toContain('Blind Carbon Copies');
+		expect(titles.filter((title) => title === 'Message Encapsulation')).toHaveLength(1);
+	});
+
+	test('lists indented appendix-local sections', async () => {
+		const titles = (await headingsOf(['rfc2156', '--depth', '3'])).map((heading) =>
+			text(heading.title),
+		);
+		expect(titles).toContain('Probes');
+		expect(await headingsOf(['rfc2156', '--depth', '2'])).toContainEqual(
+			expect.objectContaining({ number: '1', title: 'Probes', depth: 2 }),
+		);
+		expect(titles).toContain('SMTP Extension mapping to X.400');
+	});
+
+	test('keeps list items and references out of appendix-local numbering', async () => {
+		const titles = (await headingsOf(['rfc2156', '--depth', '2'])).map((heading) =>
+			text(heading.title),
+		);
+		expect(titles).toContain('Syntax Definitions');
+		expect(titles).toContain('Table Lookups');
+		expect(titles.some((title) => title.startsWith('CCITT'))).toBe(false);
+		expect(titles.some((title) => title.startsWith('OR Address Space'))).toBe(false);
+	});
+
+	test('nests numbered sections under an unnumbered title', async () => {
+		expect(await headingsOf(['rfc934', '--depth', '3'])).toContainEqual(
+			expect.objectContaining({ number: '1', title: 'The Header Portion', depth: 2 }),
+		);
+	});
+
+	test('lists a colon-terminated notes heading', async () => {
+		expect((await headingsOf(['rfc1421'])).map((heading) => text(heading.title))).toContain(
+			'NOTES',
+		);
+	});
+
+	test('cuts a heading fused with its first paragraph back to its contents entry', async () => {
+		expect(await headingsOf(['rfc2985'])).toContainEqual(
+			expect.objectContaining({ number: 'B', title: 'BNF schema summary' }),
+		);
+	});
+
+	test('lists chapter headings', async () => {
+		expect(await headingsOf(['rfc2156'])).toContainEqual(
+			expect.objectContaining({ number: '1', title: 'Overview' }),
+		);
+	});
+
+	test('does not append body text to a list-style heading', async () => {
+		expect(await headingsOf(['rfc2119'])).toContainEqual(
+			expect.objectContaining({ number: '1', title: expect.stringMatching(/^MUST\s/) }),
+		);
+		const rfc2119Lines = readFileSync(path.join(rfcDir, 'rfc2119.txt'), 'utf8').split('\n');
+		for (const heading of await headingsOf(['rfc2119'])) {
+			const source = rfc2119Lines[count(heading.line) - 1] ?? '';
+			expect(source.replace(/\s+/g, ' ')).toContain(text(heading.title));
+		}
+	});
+
+	test('accepts weak headings whose titles start with punctuation', async () => {
+		expect((await headingsOf(['rfc822', '--depth', '2'])).map((h) => text(h.number))).toContain(
+			'2.7',
+		);
+		expect((await headingsOf(['rfc2821', '--depth', '2'])).map((h) => text(h.number))).toContain(
+			'F.6',
+		);
+	});
+
+	test('lists periodless numbered headings', async () => {
+		const headings = await headingsOf(['rfc3279', '--depth', '3']);
+		expect(headings).toContainEqual(
+			expect.objectContaining({ number: '2.1', title: 'One-way Hash Functions' }),
+		);
+		expect(headings).toContainEqual(
+			expect.objectContaining({ number: '2.2.3', title: 'ECDSA Signature Algorithm' }),
+		);
+	});
+
+	test('lists indented headings when the document has none at the margin', async () => {
+		const headings = await headingsOf(['rfc822', '--depth', '3']);
+		expect(headings).toContainEqual(
+			expect.objectContaining({ number: '1', title: 'INTRODUCTION' }),
+		);
+		expect(headings).toContainEqual(expect.objectContaining({ number: '1.1', title: 'SCOPE' }));
+		expect(headings).toContainEqual(expect.objectContaining({ number: 'A.1', title: 'ADDRESSES' }));
+	});
+
+	test('lists indented subsections below margin-level sections', async () => {
+		const headings = await headingsOf(['rfc1123', '--depth', '2']);
+		expect(headings).toContainEqual(
+			expect.objectContaining({ number: '1.1', title: 'The Internet Architecture' }),
+		);
+	});
+
+	test('lists nested and colon-delimited appendix headings', async () => {
+		expect(await headingsOf(['rfc5322', '--depth', '2'])).toContainEqual(
+			expect.objectContaining({ number: 'A.1', title: 'Addressing Examples' }),
+		);
+		expect(await headingsOf(['rfc3274'])).toContainEqual(
+			expect.objectContaining({ number: 'A', title: 'ASN.1 Module' }),
+		);
+	});
+
+	test('skips numbered list items that break the outline', async () => {
+		const headings = await headingsOf(['rfc1123', '--depth', '1']);
+		const numbers = headings
+			.map((heading) => text(heading.number))
+			.filter((number) => /^\d+$/.test(number));
+		expect(numbers).toEqual([...numbers].sort((left, right) => Number(left) - Number(right)));
+		expect(new Set(numbers).size).toBe(numbers.length);
+	});
+
+	test('joins a heading title that wraps onto the next line', async () => {
+		const headings = await headingsOf(['rfc5322', '--depth', '3']);
+		expect(headings).toContainEqual(
+			expect.objectContaining({
+				number: 'A.1.1',
+				title: 'A Message from One Person to Another with Simple Addressing',
+			}),
 		);
 	});
 
@@ -261,6 +410,56 @@ describe('spec search', () => {
 	test('is case sensitive unless -i is given', async () => {
 		expect((await hitsOf(['NEXTUPDATE', '--doc', 'rfc5280'])).length).toBe(0);
 		expect((await hitsOf(['NEXTUPDATE', '--doc', 'rfc5280', '-i'])).length).toBeGreaterThan(0);
+	});
+
+	test('reports truncation when one document holds more matches than the limit', async () => {
+		const result = await runCommand(searchCommand, [
+			'nextUpdate',
+			'--doc',
+			'rfc5280',
+			'--limit',
+			'1',
+			'--json',
+		]);
+		const payload = payloadOf(result.stdout);
+		expect(entries(payload.matches).length).toBe(1);
+		expect(payload.truncated).toBe(true);
+	});
+
+	test('does not report truncation when the limit equals the match count', async () => {
+		const all = await hitsOf(['nextUpdate']);
+		const result = await runCommand(searchCommand, [
+			'nextUpdate',
+			'--limit',
+			String(all.length),
+			'--json',
+		]);
+		const payload = payloadOf(result.stdout);
+		expect(entries(payload.matches).length).toBe(all.length);
+		expect(payload.truncated).toBe(false);
+	});
+
+	test('labels every rendered match with its own enclosing section', async () => {
+		const argv = ['thisUpdate|nextUpdate', '--doc', 'rfc5280', '--context', '25'];
+		const sections = new Map(
+			(await hitsOf(argv)).map((hit) => [
+				count(hit.line),
+				hit.section === null ? '' : text(entry(hit.section).number),
+			]),
+		);
+		const result = await runCommand(searchCommand, argv);
+		let label = '';
+		let checked = 0;
+		for (const line of result.stdout.join('').split('\n')) {
+			const match = /^\s*(\d+):/.exec(line);
+			if (match?.[1] !== undefined) {
+				expect(label).toStartWith(`rfc5280 §${sections.get(Number(match[1])) ?? ''}  `);
+				checked += 1;
+			} else if (/^rfc5280/.test(line)) {
+				label = line;
+			}
+		}
+		expect(checked).toBe(sections.size);
 	});
 
 	test('never returns a page header or footer line', async () => {

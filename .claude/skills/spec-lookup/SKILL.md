@@ -81,14 +81,14 @@ Only once the needed documents are present and confirmed current do you search.
 
 When the question spans several documents, hand a subagent this prompt
 verbatim and fill the two placeholders. Give it `subagent_type:
-general-purpose`. It may fetch RFCs (`bun rfc <n>`) and search the web to
+spec-lookup`. It may fetch RFCs (`bun rfc <n>`) and search the web to
 confirm document status, but must not edit source, tests, or config, and
 must not commit. Name the documents or topics you expect it to cover; it
 ensures each is present and current before searching. Do not run a source
 writer in the same worktree at the same time.
 
 ```text
-Spec research in the micro509 repo at /home/kjanat/projects/ts-x509. Ground every claim in the vendored text under docs/. You MAY run `bun rfc <n>` to fetch a missing or superseded RFC and MAY use web search to confirm a document's status; do NOT edit source, tests, or config, and do NOT commit.
+Spec research in the micro509 repo at the current project root. Ground every claim in the vendored text under docs/. You MAY run `bun rfc <n>` to fetch a missing or superseded RFC and MAY use web search to confirm a document's status; do NOT edit source, tests, or config, and do NOT commit.
 
 QUESTION: <the exact question>
 TERMS: <the search terms, including synonyms and field names>
