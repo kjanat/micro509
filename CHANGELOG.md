@@ -26,8 +26,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `parsePkcs12MacData` bounds the PBKDF2 and PKCS#12 KDF iteration counts a
   file may demand. Above the bound the import fails with
   `kdf_iterations_exceeded` before any derivation runs. The default is
-  2,000,000 for PBKDF2 and 100,000 for the PKCS#12 KDF, which RFC 7292
-  Appendix B derives one digest at a time. See Security.
+  2,000,000 for PBKDF2 and 100,000 for the PKCS#12 KDF. RFC 7292 Appendix B
+  makes one hash call per round, and each call is a separate WebCrypto digest,
+  while PBKDF2 runs natively inside WebCrypto. See Security.
 - `maxAgeMs` on `validateCertificateRevocationList` and
   `checkCertificateRevocationAgainstCrl`, `crlMaxAgeMs` on
   `checkCertificateRevocation` and the chain-level `RevocationPolicy`, bound
@@ -137,10 +138,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and CA count, and each certificate-to-key signature check runs once per
   search.
 - A CRL without `nextUpdate` validated at any later time, so a replayed CRL
-  from before a revocation stayed usable indefinitely. RFC 5280 §5.1.2.5 makes
-  `nextUpdate` optional, so the check remains opt-in: `maxAgeMs` /
-  `crlMaxAgeMs` reject a CRL whose `thisUpdate` is older than the bound with
-  `stale_crl`.
+  from before a revocation stayed usable indefinitely. RFC 5280 §5.1.2.5
+  requires conforming issuers to include `nextUpdate` and leaves client
+  handling of a CRL without it unspecified. `maxAgeMs` / `crlMaxAgeMs` reject a
+  CRL whose `thisUpdate` is older than the bound with `stale_crl`; neither is
+  set by default.
 - The dprint TOML formatter installed `tombi` unversioned and globally from
   npm on every fresh setup, so the registry chose the code that ran. `tombi`
   is now a catalog-pinned devDependency; the exec plugin runs
@@ -405,10 +407,10 @@ stricter typed-contract pass.
   (https://github.com/kjanat/micro509/pull/84)
 - PKCS#12 `MacData` omits `iterations` when it equals its `DEFAULT 1`, and the
   parser accepts a two-element `MacData`, defaulting `iterations` to 1
-  (RFC 7292 §4, X.690 §11.5). A conformant PFX with iteration count 1 previously
+  (RFC 7292 §4, X.690 §11.5 under DER). A conformant PFX with iteration count 1 previously
   failed to parse.
 - PBES2 `PBKDF2-params` omits the `prf` when it is the `DEFAULT`
-  `algid-hmacWithSHA1` (RFC 8018 A.2, X.690 §11.5); `keyLength`, being OPTIONAL
+  `algid-hmacWithSHA1` (RFC 8018 A.2, X.690 §11.5 under DER); `keyLength`, being OPTIONAL
   rather than DEFAULT, is still emitted. `exportEncryptedPkcs8Der(key, { prf: 'HMAC-SHA-1' })`
   produced a non-DER structure.
   (https://github.com/kjanat/micro509/pull/83)

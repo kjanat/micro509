@@ -93,10 +93,10 @@ MAC:     ${macData?.verification} (${macData?.digestAlgorithmName})`);
 
 Both the MAC and the PBES2 key bags carry their own KDF iteration counts, and
 parsing refuses a count above its ceiling with `kdf_iterations_exceeded`. The
-PBES2 bags allow 2,000,000, matching encrypted PKCS#8. The MAC allows 100,000,
-because RFC 7292 Appendix B derives its key one digest at a time rather than
-through native PBKDF2, so a round costs far more. `maxKdfIterations` in the
-options overrides both.
+PBES2 bags allow 2,000,000, matching encrypted PKCS#8. The MAC allows 100,000.
+RFC 7292 Appendix B derives its key with one hash call per round, and each call
+is a separate WebCrypto digest, while PBKDF2 runs natively inside WebCrypto.
+`maxKdfIterations` in the options overrides both.
 
 ## PKCS#7 / CMS
 
