@@ -157,7 +157,7 @@ both tables are enforced against `VERIFY_ERROR_CODES` by tests.
 
 | Code                     | Meaning                                                                   |
 | ------------------------ | ------------------------------------------------------------------------- |
-| `crl_sign_not_permitted` | CRL signer's keyUsage lacks `cRLSign`                                     |
+| `crl_sign_not_permitted` | CRL signer's keyUsage lacks `cRLSign`, or a v3 signer has no keyUsage     |
 | `issuer_mismatch`        | CRL issuer does not match the certificate's issuer                        |
 | `non_applicable`         | No supplied CRL applies to the certificate (RFC 5280 §6.3.3)              |
 | `signature_invalid`      | CRL signature fails against the issuer key                                |
@@ -197,7 +197,7 @@ delta CRL that does not pair with the complete CRL, including one whose
 | ------------------------------ | ---------------------------------------------------------------------------- |
 | `certificate_status_missing`   | Response carries no entry for the certificate                                |
 | `certificate_status_unknown`   | Responder answered `unknown`                                                 |
-| `crl_sign_not_permitted`       | CRL signer's keyUsage lacks `cRLSign`                                        |
+| `crl_sign_not_permitted`       | CRL signer's keyUsage lacks `cRLSign`, or a v3 signer has no keyUsage        |
 | `issuer_mismatch`              | Evidence issuer does not match the certificate's issuer                      |
 | `next_update_missing`          | OCSP response omits `nextUpdate` under `ocspProfile: 'rfc9919'`              |
 | `non_applicable`               | No supplied CRL applies to the certificate                                   |

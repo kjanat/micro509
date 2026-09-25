@@ -214,6 +214,9 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
 - [x] Treat CRL validation as a separate revocation subsystem.
 - [x] Parse CRLs and CRL extensions.
 - [x] Verify CRL signatures and issuer linkage.
+- [x] Require keyUsage with `cRLSign` on a v3 CRL issuer certificate, and skip
+      the check for v1 and v2 issuers (RFC 10007 §4, updating RFC 5280 §6.3.3
+      step (f)).
 - [x] Enforce CRL time/freshness semantics. CRL age is unbounded by default,
       so a received CRL without `nextUpdate` stays usable unless the caller
       sets `maxAgeMs` (`validateCertificateRevocationList`,

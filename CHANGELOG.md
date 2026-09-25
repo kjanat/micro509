@@ -147,6 +147,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- CRL validation accepted a v3 issuer certificate with no keyUsage extension,
+  so a CRL signed with a key certified for another purpose under the CRL
+  issuer's name validated. A v3 CRL issuer certificate now needs keyUsage with
+  `cRLSign`, and fails with `crl_sign_not_permitted` without it; v1 and v2
+  issuer certificates have no extensions and skip the check (RFC 10007 §4).
 - Decoding a DER INTEGER above `Number.MAX_SAFE_INTEGER`, such as a PKCS#12
   MacData or PBMAC1 iteration count, folded every octet into a `bigint`, so a
   file with a very long INTEGER cost CPU and memory before the KDF budget could
