@@ -40,7 +40,7 @@ import type { RevocationCertificateSource } from '#micro509/revocation/revocatio
 import { verifyCertificateChain } from '#micro509/verify/verify';
 import type { DistributionPointReason } from '#micro509/x509/extensions';
 import type { ParsedCertificate } from '#micro509/x509/parse';
-import { parseCertificateFromSource } from '#micro509/x509/parse';
+import { parseCertificateDer, parseCertificateFromSource } from '#micro509/x509/parse';
 
 export type { CrlSource };
 
@@ -1392,13 +1392,16 @@ async function evaluateCertificateRevocation(
 
 /**
  * RFC 9608 §4: path validation skips RFC 5280 §6.1.3 step (a)(3) for a
- * certificate carrying noRevAvail or id-pkix-ocsp-nocheck.
+ * certificate carrying noRevAvail or id-pkix-ocsp-nocheck, read from its
+ * signed DER.
  */
 function revocationSkipReason(
 	certificate: ParsedCertificate,
 ): 'no_rev_avail' | 'ocsp_nocheck' | undefined {
-	if (certificate.noRevAvail === true) return 'no_rev_avail';
-	return carriesOcspNoCheck(certificate) ? 'ocsp_nocheck' : undefined;
+	const signed = parseCertificateDer(certificate.der);
+	if (!signed.ok) return undefined;
+	if (signed.value.noRevAvail === true) return 'no_rev_avail';
+	return carriesOcspNoCheck(signed.value) ? 'ocsp_nocheck' : undefined;
 }
 
 // Function

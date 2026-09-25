@@ -283,6 +283,34 @@ describe('RFC 9608 §4: revocation checking is skipped for noRevAvail and ocsp-n
 		expect(result.value.certificates[0]?.status).toBe('indeterminate');
 	});
 
+	it('reads the exemption from the signed DER, not from altered parsed fields', async () => {
+		const ca = await issuingCa();
+		const leaf = parseCertificateDerOrThrow(await issueLeaf(ca, undefined));
+		const forged = [
+			{ ...leaf, noRevAvail: true },
+			{
+				...leaf,
+				extensions: [
+					...leaf.extensions,
+					{
+						oid: OIDS.ocspNoCheck,
+						critical: false,
+						valueHex: '0500',
+						valueDer: Uint8Array.of(0x05, 0x00),
+					},
+				],
+			},
+		] as const;
+		for (const certificate of forged) {
+			const result = await checkChainRevocation({
+				chain: [certificate, parseCertificateDerOrThrow(ca.certificate.der)],
+				policy: { mode: 'hard-fail' },
+			});
+			expect(result.value.decision).toBe('deny');
+			expect(result.value.certificates[0]?.status).toBe('indeterminate');
+		}
+	});
+
 	it('still denies a leaf without either extension when no evidence is supplied', async () => {
 		const ca = await issuingCa();
 		const leaf = parseCertificateDerOrThrow(await issueLeaf(ca, undefined));
