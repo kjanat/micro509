@@ -444,12 +444,14 @@ function matchesDnsName(pattern: string, actual: string): boolean {
 	return prefix.length > 0 && !prefix.includes('.');
 }
 
-/** Lowercases a DNS pattern, preserving the `*.` wildcard prefix if present. */
+/**
+ * Lowercases the ASCII letters of a presented DNS identifier and nothing else:
+ * RFC 9549 §2.3 compares DNS names by a case-insensitive exact match, so no
+ * percent-decoding, IPv4 parsing or IDNA mapping applies to what the
+ * certificate presents.
+ */
 function normalizeDnsPattern(value: string): string {
-	if (!value.startsWith('*.')) {
-		return normalizeDnsName(value);
-	}
-	return `*.${normalizeDnsName(value.slice(2))}`;
+	return value.replace(/[A-Z]/g, (letter) => letter.toLowerCase());
 }
 
 /** Lowercases and IDNA-normalizes a DNS name via the URL parser. */

@@ -1905,7 +1905,9 @@ function describeInvalidInitialNameConstraintForm(subtree: unknown): string | un
 		case 'dns':
 		case 'email':
 		case 'uri':
-			return typeof base.value === 'string' ? undefined : base.type;
+			return typeof base.value === 'string' && /^[\x20-\x7e]*$/.test(base.value)
+				? undefined
+				: base.type;
 		case 'directoryName':
 			return typeof base.derHex === 'string' ? undefined : base.type;
 		case 'ip':

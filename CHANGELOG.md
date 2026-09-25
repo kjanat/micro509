@@ -171,6 +171,15 @@ revocation })` report a certificate carrying `noRevAvail` or
 
 ### Security
 
+- DNS service-identity matching ran the certificate's dNSName through the URL
+  parser, which percent-decodes and parses IPv4 forms, so a SAN such as
+  `a%62c.example` matched the reference `abc.example` and `0x7f.0.0.1` matched
+  `127.0.0.1`. A presented dNSName, and the Common Name fallback, now compare
+  by a case-insensitive exact match (RFC 9549 §2.3).
+- Caller-supplied initial name constraints accepted a dNSName, rfc822Name or
+  URI base written with U-labels. Certificates carry A-labels (RFC 9549 §1),
+  so such a base never matched, and an excluded subtree excluded nothing. A
+  non-ASCII base now fails with `unsupported_initial_name_constraints`.
 - A SmtpUTF8Mailbox subjectAltName (RFC 9598) parsed as an unrecognized
   otherName, so rfc822Name name constraints never reached it and an
   internationalized mailbox outside a permitted domain, or inside an excluded
