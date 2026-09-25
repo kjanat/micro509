@@ -44,11 +44,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `clockSkewMs` on the chain-level `RevocationPolicy` sets the tolerance for
   CRL and OCSP `thisUpdate` and `nextUpdate` checks in `checkChainRevocation`
   and `verifyCertificateChain({ revocation })`.
-- `maxPathBuildingChecks` on `verifyCertificateChain` and `buildCandidatePath`
-  bounds how many issuer candidates and bare trust anchors one path search may
-  try. When the bound stops the search, the result is
-  `path_building_limit_exceeded`, which joins `VERIFY_ERROR_CODES`. The default
-  is 100,000.
+- `maxPathBuildingChecks` on `verifyCertificateChain`, `buildCandidatePath`
+  and the `validateFor*` profiles bounds how many issuer candidates and bare
+  trust anchors one path search may examine, counting candidates it skips as
+  already on the path or as a name mismatch. When the bound stops the search,
+  the result is `path_building_limit_exceeded`, which joins
+  `VERIFY_ERROR_CODES`. The default is 100,000.
 - RFC 9879 PBMAC1 for the PKCS#12 MacData. `parsePfxDer`, `parsePfxPem` and
   `parsePkcs12MacData` verify a PBMAC1 MAC keyed by PBKDF2 with an
   HMAC-SHA-256, HMAC-SHA-384 or HMAC-SHA-512 PRF and MAC. The PBKDF2 params

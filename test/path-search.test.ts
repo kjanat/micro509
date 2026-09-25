@@ -7,6 +7,10 @@ import {
 	parseCertificatePem,
 	type TrustAnchor,
 	unwrap,
+	validateForCa,
+	validateForCodeSigning,
+	validateForTlsClient,
+	validateForTlsServer,
 	verifyCertificateChain,
 } from '#micro509';
 import type {
@@ -223,6 +227,40 @@ describe('path search work limit', () => {
 		expect(finished.ok).toBe(false);
 		if (finished.ok) return;
 		expect(finished.code).toBe('no_trusted_root');
+	});
+
+	it('charges every candidate a node examines, including those already on the path', async () => {
+		const { leaf, intermediates, root } = await issueSameSubjectCandidates(2);
+		const input = { leaf, intermediates, roots: [root], at: VALIDITY.notBefore };
+
+		const stopped = await buildCandidatePath({ ...input, maxPathBuildingChecks: 5 });
+		expect(stopped.ok).toBe(false);
+		if (stopped.ok) return;
+		expect(stopped.code).toBe('path_building_limit_exceeded');
+
+		const finished = await buildCandidatePath({ ...input, maxPathBuildingChecks: 6 });
+		expect(finished.ok).toBe(false);
+		if (finished.ok) return;
+		expect(finished.code).toBe('no_trusted_root');
+	});
+
+	it.each([
+		['validateForTlsServer', validateForTlsServer],
+		['validateForTlsClient', validateForTlsClient],
+		['validateForCodeSigning', validateForCodeSigning],
+		['validateForCa', validateForCa],
+	] as const)('%s passes the limit to the path search', async (_name, validate) => {
+		const { leaf, intermediate, root } = await issueThreeCertificateChain();
+		const stopped = await validate({
+			leaf,
+			intermediates: [intermediate],
+			roots: [root],
+			at: VALIDITY.notBefore,
+			maxPathBuildingChecks: 1,
+		});
+		expect(stopped.ok).toBe(false);
+		if (stopped.ok) return;
+		expect(stopped.code).toBe('path_building_limit_exceeded');
 	});
 
 	it('charges trust-anchor attempts to the same budget', async () => {

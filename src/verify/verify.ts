@@ -1294,6 +1294,9 @@ function baseChainInput(
 			trustAnchors: input.trustAnchors,
 		}),
 		...(input.at !== undefined && { at: input.at }),
+		...(input.maxPathBuildingChecks !== undefined && {
+			maxPathBuildingChecks: input.maxPathBuildingChecks,
+		}),
 		...copyValidationInputs(input),
 	};
 }

@@ -80,9 +80,10 @@ At index: ${result.error.index}`);
 
 Path building tries every issuer candidate and bare trust anchor whose subject
 matches, so an input with many same-subject certificates costs more work than
-its size suggests. `maxPathBuildingChecks` on `verifyCertificateChain` and
-`buildCandidatePath` bounds how many candidates and anchors one search may try.
-The default is 100,000. When the bound stops the search before a trusted path
+its size suggests. `maxPathBuildingChecks` on `verifyCertificateChain`,
+`buildCandidatePath` and the `validateFor*` profiles bounds how many candidates
+and anchors one search may examine, including those it skips because they are
+already on the path or their names do not match. The default is 100,000. When the bound stops the search before a trusted path
 is found, the result is `path_building_limit_exceeded`.
 
 ## Verification purposes

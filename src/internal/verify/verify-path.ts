@@ -305,6 +305,7 @@ export async function buildChainInternal(
 	const subtrees: { best: PathDiagnostic }[] = [];
 	const signatureResults = new Map<string, Promise<VerifyCertificateSignatureResult>>();
 	const budget = { remaining: maxIssuerChecks, exhausted: false };
+	const rankedBuckets = new Map<string, RankedBucket>();
 
 	candidates.forEach((candidate, index) => {
 		const key = canonicalDnKey(candidate.subject);
@@ -415,20 +416,49 @@ export async function buildChainInternal(
 		visited: ReadonlySet<string>,
 		caBelowCount: number,
 	): Promise<readonly ParsedCertificate[] | undefined> {
-		const issuers = rankIssuerCandidates(
-			current,
-			subjectIndex.get(canonicalDnKey(current.issuer)) ?? [],
-			order,
-			rootFingerprints,
-		);
-		if (issuers.length === 0) {
+		let sawIssuer = false;
+		for (const issuer of issuerCandidates(current)) {
+			if (!chargeBudget()) return undefined;
+			if (!isIssuerOf(issuer, current)) continue;
+			sawIssuer = true;
+			const issuerFingerprint = fingerprint(issuer);
+			if (visited.has(issuerFingerprint)) continue;
+			const result = await searchIssuerCandidate(
+				current,
+				issuer,
+				issuerFingerprint,
+				path,
+				visited,
+				caBelowCount,
+			);
+			if (result !== undefined) return result;
+			if (budget.exhausted) return undefined;
+		}
+		if (!sawIssuer) {
 			recordMissingIssuers(current, path);
 			return undefined;
 		}
-		const issuerPath = await searchIssuerCandidates(current, issuers, path, visited, caBelowCount);
-		if (issuerPath !== undefined) return issuerPath;
 		consider({ kind: 'none', path });
 		return undefined;
+	}
+
+	/** Yields the issuer bucket for `current`: AKI matches first, then roots, then input order. */
+	function* issuerCandidates(current: ParsedCertificate): Generator<ParsedCertificate> {
+		const key = canonicalDnKey(current.issuer);
+		let bucket = rankedBuckets.get(key);
+		if (bucket === undefined) {
+			bucket = rankBucket(subjectIndex.get(key) ?? [], order, rootFingerprints);
+			rankedBuckets.set(key, bucket);
+		}
+		const aki = current.authorityKeyIdentifier;
+		if (aki === undefined) {
+			yield* bucket.ordered;
+			return;
+		}
+		yield* bucket.bySubjectKeyIdentifier.get(aki) ?? [];
+		for (const candidate of bucket.ordered) {
+			if (candidate.subjectKeyIdentifier !== aki) yield candidate;
+		}
 	}
 
 	function recordMissingIssuers(
@@ -444,32 +474,14 @@ export async function buildChainInternal(
 		}
 	}
 
-	/** Searches ranked issuer candidates until one produces a trusted path. */
-	async function searchIssuerCandidates(
-		current: ParsedCertificate,
-		issuers: readonly ParsedCertificate[],
-		path: readonly ParsedCertificate[],
-		visited: ReadonlySet<string>,
-		caBelowCount: number,
-	): Promise<readonly ParsedCertificate[] | undefined> {
-		for (const issuer of issuers) {
-			if (budget.exhausted) return undefined;
-			const result = await searchIssuerCandidate(current, issuer, path, visited, caBelowCount);
-			if (result !== undefined) return result;
-		}
-		return undefined;
-	}
-
 	async function searchIssuerCandidate(
 		current: ParsedCertificate,
 		issuer: ParsedCertificate,
+		issuerFingerprint: string,
 		path: readonly ParsedCertificate[],
 		visited: ReadonlySet<string>,
 		caBelowCount: number,
 	): Promise<readonly ParsedCertificate[] | undefined> {
-		const issuerFingerprint = fingerprint(issuer);
-		if (visited.has(issuerFingerprint)) return undefined;
-		if (!chargeBudget()) return undefined;
 		const candidate = await evaluateIssuerCandidate(
 			current,
 			issuer,
@@ -714,26 +726,20 @@ function expandSource(source: CertificateSource): readonly ParsedCertificate[] {
 	return parseCertificatesFromSource(source);
 }
 
-/** Filters and sorts issuer candidates: AKI match first, then roots, then input order. */
-function rankIssuerCandidates(
-	current: ParsedCertificate,
-	candidates: readonly ParsedCertificate[],
+interface RankedBucket {
+	readonly ordered: readonly ParsedCertificate[];
+	readonly bySubjectKeyIdentifier: ReadonlyMap<string, readonly ParsedCertificate[]>;
+}
+
+/** Orders one subject bucket once, roots first and then input order, and indexes it by SKI. */
+function rankBucket(
+	members: readonly ParsedCertificate[],
 	order: ReadonlyMap<string, number>,
 	rootFingerprints: ReadonlySet<string>,
-): readonly ParsedCertificate[] {
-	const aki = current.authorityKeyIdentifier;
-	const filtered = [...candidates].filter((candidate) => isIssuerOf(candidate, current));
-	const fps = new Map<ParsedCertificate, string>();
-	for (const candidate of filtered) {
-		fps.set(candidate, fingerprint(candidate));
-	}
-	return filtered.sort((left, right) => {
-		const akiScore = compareBooleans(matchesAki(left, aki), matchesAki(right, aki));
-		if (akiScore !== 0) {
-			return akiScore;
-		}
-		const leftFp = fps.get(left) ?? '';
-		const rightFp = fps.get(right) ?? '';
+): RankedBucket {
+	const ordered = [...members].sort((left, right) => {
+		const leftFp = fingerprint(left);
+		const rightFp = fingerprint(right);
 		const rootScore = compareBooleans(rootFingerprints.has(leftFp), rootFingerprints.has(rightFp));
 		if (rootScore !== 0) {
 			return rootScore;
@@ -743,15 +749,18 @@ function rankIssuerCandidates(
 			(order.get(rightFp) ?? Number.MAX_SAFE_INTEGER)
 		);
 	});
-}
-
-/** Returns `true` if the candidate's SKI matches the given authority key identifier. */
-function matchesAki(candidate: ParsedCertificate, aki: string | undefined): boolean {
-	return (
-		aki !== undefined &&
-		candidate.subjectKeyIdentifier !== undefined &&
-		candidate.subjectKeyIdentifier === aki
-	);
+	const bySubjectKeyIdentifier = new Map<string, ParsedCertificate[]>();
+	for (const candidate of ordered) {
+		const ski = candidate.subjectKeyIdentifier;
+		if (ski === undefined) continue;
+		const existing = bySubjectKeyIdentifier.get(ski);
+		if (existing === undefined) {
+			bySubjectKeyIdentifier.set(ski, [candidate]);
+		} else {
+			existing.push(candidate);
+		}
+	}
+	return { ordered, bySubjectKeyIdentifier };
 }
 
 /** Sort comparator: `true` sorts before `false`. Returns -1, 0, or 1. */
@@ -782,12 +791,12 @@ async function matchTrustAnchor(
 	}
 	let firstFailure: VerifyChainFailure | undefined;
 	for (const anchor of anchors) {
+		if (!charge()) return { matched: false };
 		if (trustAnchorAkiMismatch(certificate, anchor)) continue;
 		// The canonicalDnKey bucket is not proof of DN equality (prohibited values
 		// are non-reflexive and prepared/tagged namespaces can collide), so confirm
 		// the anchor's subject actually equals the certificate's issuer.
 		if (!compareDistinguishedNames(certificate.issuer, anchor.subject)) continue;
-		if (!charge()) return { matched: false };
 		const verified = await verifyAnchor(certificate, anchor);
 		if (!verified.ok) {
 			// Capture the first failure but continue trying other anchors
