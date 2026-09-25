@@ -172,6 +172,25 @@ describe('domainToAscii', () => {
 		});
 	});
 
+	it('checks the ASCII labels beside an IDN label', () => {
+		const cases = [
+			['bad label.bücher.example', 'registration', 'invalid_ascii_label'],
+			['-a.bücher.example', 'registration', 'invalid_ascii_label'],
+			['ab--c.bücher.example', 'registration', 'invalid_ascii_label'],
+			['_srv.bücher.example', 'registration', 'invalid_ascii_label'],
+			['a..bücher.example', 'registration', 'empty_label'],
+			[`${'a'.repeat(64)}.bücher.example`, 'lookup', 'label_too_long'],
+			['bad label.bücher.example', 'lookup', 'invalid_ascii_label'],
+		] as const;
+		for (const [domain, mode, reason] of cases) {
+			expect(domainToAscii(domain, mode)).toEqual({ ok: false, reason });
+		}
+		expect(domainToAscii('_srv.-a.bücher.example', 'lookup')).toEqual({
+			ok: true,
+			value: '_srv.-a.xn--bcher-kva.example',
+		});
+	});
+
 	it('rejects a U-label too long to encode without throwing', () => {
 		expect(domainToAscii(`${'a'.repeat(20000)}\u{20000}.example`, 'lookup')).toEqual({
 			ok: false,

@@ -47,6 +47,7 @@ export type IdnaFailure =
 	| 'label_too_long'
 	| 'domain_too_long'
 	| 'invalid_a_label'
+	| 'invalid_ascii_label'
 	| 'not_nfc'
 	| 'hyphen'
 	| 'leading_combining_mark'
@@ -304,8 +305,9 @@ function uLabelToALabel(label: string, mode: IdnaMode): IdnaResult {
 /**
  * Converts each U-label of `domain` to its A-label and checks each `xn--`
  * label, under the RFC 5891 §4 (registration) or §5 (lookup) tests, then
- * applies the RFC 5893 Bidi rule across the name. Other ASCII labels and a
- * trailing root dot are returned as given.
+ * applies the RFC 5893 Bidi rule across the name. Other ASCII labels are
+ * checked by {@linkcode checkAsciiLabel} and returned as given, as is a
+ * trailing root dot. A name with no IDN label is returned unchecked.
  */
 export function domainToAscii(domain: string, mode: IdnaMode): IdnaResult {
 	const root = rootDotOf(domain);
@@ -325,6 +327,8 @@ export function domainToAscii(domain: string, mode: IdnaMode): IdnaResult {
 			ascii.push(asciiLowercase(label));
 			uLabels.push(checked.uLabel);
 		} else {
+			const failure = checkAsciiLabel(label, mode);
+			if (failure !== undefined) return { ok: false, reason: failure };
 			ascii.push(label);
 			uLabels.push(label);
 		}
@@ -335,6 +339,20 @@ export function domainToAscii(domain: string, mode: IdnaMode): IdnaResult {
 	return value.length > MAX_DOMAIN_OCTETS
 		? { ok: false, reason: 'domain_too_long' }
 		: { ok: true, value: `${value}${root}` };
+}
+
+/**
+ * An ASCII label beside an IDN label: NR-LDH for registration (RFC 5890
+ * §2.3.1), and letters, digits, hyphens or underscores for lookup.
+ */
+function checkAsciiLabel(label: string, mode: IdnaMode): IdnaFailure | undefined {
+	if (label.length === 0) return 'empty_label';
+	if (label.length > MAX_LABEL_OCTETS) return 'label_too_long';
+	const valid =
+		mode === 'registration'
+			? isLdhLabel(label) && label.slice(2, 4) !== '--'
+			: /^[A-Za-z0-9_-]+$/.test(label);
+	return valid ? undefined : 'invalid_ascii_label';
 }
 
 /** RFC 1034 §3.1: the `"."` of an absolute name, which ends in the empty root label. */

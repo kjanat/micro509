@@ -186,6 +186,13 @@ describe('RFC 9598 §3 and §4: the mailbox domain is IDNA2008 in A-labels', () 
 		for (const value of ['用户@\u265a.example', '用户@xn--45h.example', '用户@xn--abc.example']) {
 			expect(await builderErrorCode(() => leafWith(root, [mailbox(value)]))).toBe('invalid_idn');
 		}
+		for (const san of [
+			mailbox('用户@bad label.bücher.example'),
+			{ type: 'email', value: 'user@bad label.bücher.example' },
+			{ type: 'dns', value: 'bad label.bücher.example' },
+		] as const) {
+			expect(await builderErrorCode(() => leafWith(root, [san]))).toBe('invalid_idn');
+		}
 	});
 });
 
