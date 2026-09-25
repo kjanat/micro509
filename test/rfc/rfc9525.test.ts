@@ -74,6 +74,13 @@ describe('RFC 9525 §6.3: reference U-labels are converted to A-labels under IDN
 		expect(await matchesDns('example.com', `${'a'.repeat(20000)}\u{20000}.example`)).toBe(false);
 	});
 
+	it('stores a SRVName U-label domain as its A-labels (RFC 4985 §3)', async () => {
+		const certificate = await presenting({ type: 'srv', value: '_imap.bücher.example' });
+		expect(certificate.subjectAltNames).toEqual([
+			{ type: 'srv', value: '_imap.xn--bcher-kva.example' },
+		]);
+	});
+
 	it('matches a URI-ID and an SRV-ID host after the same conversion', async () => {
 		expect(
 			matchServiceIdentity({

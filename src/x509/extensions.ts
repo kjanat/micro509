@@ -1507,6 +1507,12 @@ function toAsciiDnsName(value: string): string {
 	return `${prefix}${toAsciiDomain(value.slice(prefix.length))}`;
 }
 
+/** RFC 4985 §3: a SRVName with its `_Service` label kept and its Name in A-labels. */
+function toAsciiSrvName(value: string): string {
+	const dot = value.indexOf('.');
+	return dot < 0 ? value : `${value.slice(0, dot + 1)}${toAsciiDomain(value.slice(dot + 1))}`;
+}
+
 /** RFC 9549 §2.5: an rfc822Name or rfc822Name constraint with its host in A-labels. */
 function toAsciiMailbox(value: string): string {
 	const at = value.lastIndexOf('@');
@@ -1539,7 +1545,10 @@ export function encodeSubjectAltName(value: SubjectAltName): Uint8Array {
 				0,
 				concatBytes([
 					objectIdentifier(OIDS.idOnDnsSrv),
-					explicitContext(0, tlv(0x16, encodeIa5Content(requireNonEmptyName(value.value)))),
+					explicitContext(
+						0,
+						tlv(0x16, encodeIa5Content(toAsciiSrvName(requireNonEmptyName(value.value)))),
+					),
 				]),
 			);
 		case 'smtpUtf8Mailbox':

@@ -783,7 +783,7 @@ describe('extensions encoding', () => {
 			'invalid_ia5_string',
 		);
 		expectEncoderErrorCode(
-			() => encodeSubjectAltName({ type: 'srv', value: '_xmpp.café.example' }),
+			() => encodeSubjectAltName({ type: 'srv', value: '_xmpé.example' }),
 			'invalid_ia5_string',
 		);
 		expectEncoderErrorCode(
