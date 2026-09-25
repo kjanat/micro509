@@ -39,6 +39,7 @@ import {
 	assertCrlDistributionPointsProfile,
 	assertExtensionCriticality,
 	assertNameConstraintsProfile,
+	assertStoredSubjectAltName,
 	buildSubjectKeyIdentifier,
 	encodeAuthorityInfoAccess,
 	encodeBasicConstraints,
@@ -240,7 +241,7 @@ export const SUBJECT_ALT_NAME_EXTENSION_DEFINITION: RegisteredExtensionDefinitio
 	encode: (value) => sequence(value.map(encodeSubjectAltName)),
 	assertProfile: (value) => {
 		for (const name of value) {
-			encodeSubjectAltName(name);
+			assertStoredSubjectAltName(name);
 		}
 	},
 	applyParsed: (accumulator, value) => {
@@ -259,7 +260,7 @@ export const ISSUER_ALT_NAME_EXTENSION_DEFINITION: RegisteredExtensionDefinition
 	encode: (value) => sequence(value.map(encodeSubjectAltName)),
 	assertProfile: (value) => {
 		for (const name of value) {
-			encodeSubjectAltName(name);
+			assertStoredSubjectAltName(name);
 		}
 	},
 	applyParsed: (accumulator, value) => {

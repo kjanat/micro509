@@ -1474,6 +1474,21 @@ function assertSmtpUtf8Mailbox(value: string): string {
 	return `${localPart}@${domain}`;
 }
 
+/**
+ * @internal A decoded SAN or IAN entry of a custom extension, which is emitted
+ * as given: the typed builder's rules, with a SmtpUTF8Mailbox domain already
+ * stored in A-labels.
+ */
+export function assertStoredSubjectAltName(name: SubjectAltName): void {
+	encodeSubjectAltName(name);
+	if (name.type === 'smtpUtf8Mailbox' && assertSmtpUtf8Mailbox(name.value) !== name.value) {
+		throwExtensionEncoderError(
+			'invalid_smtp_utf8_mailbox',
+			'SmtpUTF8Mailbox domain must be stored as lowercase A-labels and NR-LDH labels',
+		);
+	}
+}
+
 /** RFC 5891 §4: the domain with each U-label converted to its A-label and each A-label checked. */
 function toAsciiDomain(domain: string): string {
 	const converted = domainToAscii(domain, 'registration');

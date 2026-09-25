@@ -221,7 +221,9 @@ revocation })` report a certificate carrying `noRevAvail` or
   a Byte Order Mark, a Local-part outside the RFC 6531 Dot-string or
   Quoted-string grammar, or a domain that is not lowercase NR-LDH labels and
   A-labels, and `smtp_utf8_mailbox_ascii_local_part` for a Local-part that
-  fits an rfc822Name. A U-label domain is stored as A-labels.
+  fits an rfc822Name. A U-label domain is stored as A-labels, and a
+  `customExtensions` SAN or IAN whose mailbox domain is not already stored
+  that way fails with `invalid_smtp_utf8_mailbox`.
 - CRL validation accepted a v3 issuer certificate with no keyUsage extension,
   so a CRL signed with a key certified for another purpose under the CRL
   issuer's name validated. A v3 CRL issuer certificate now needs keyUsage with

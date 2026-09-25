@@ -195,6 +195,35 @@ describe('RFC 9598 §3 and §4: the mailbox domain is IDNA2008 in A-labels', () 
 			expect(await builderErrorCode(() => leafWith(root, [san]))).toBe('invalid_idn');
 		}
 	});
+
+	it('refuses a customExtensions mailbox whose domain is not stored in A-labels', async () => {
+		const root = await constrainedRoot({
+			excludedSubtrees: [{ base: { type: 'dns', value: 'x' } }],
+		});
+		const withCustomMailbox = (value: string) =>
+			builderErrorCode(async () => {
+				const keys = await generateKeyPair();
+				const otherName = implicitConstructedContext(
+					0,
+					concatBytes([
+						objectIdentifier(OIDS.idOnSmtpUtf8Mailbox),
+						explicitContext(0, utf8String(value)),
+					]),
+				);
+				return createCertificate({
+					issuer: { commonName: ROOT_NAME },
+					subject: { commonName: 'rfc9598-leaf' },
+					publicKey: keys.publicKey,
+					signerPrivateKey: root.keyPair.privateKey,
+					issuerPublicKey: root.keyPair.publicKey,
+					extensions: {
+						customExtensions: [{ oid: OIDS.subjectAltName, value: sequence([otherName]) }],
+					},
+				});
+			});
+		expect(await withCustomMailbox('用户@bücher.example')).toBe('invalid_smtp_utf8_mailbox');
+		expect(await withCustomMailbox('用户@xn--bcher-kva.example')).toBeUndefined();
+	});
 });
 
 describe('RFC 9598 §6: rfc822Name name constraints apply to SmtpUTF8Mailbox by domain', () => {
