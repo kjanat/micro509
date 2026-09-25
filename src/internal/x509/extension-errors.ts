@@ -43,6 +43,7 @@ export type ExtensionEncoderErrorCode =
 	| 'invalid_bmp_string'
 	| 'invalid_general_name_tag'
 	| 'invalid_ia5_string'
+	| 'invalid_idn'
 	| 'invalid_ip_name_constraint'
 	| 'invalid_oid'
 	| 'invalid_smtp_utf8_mailbox'

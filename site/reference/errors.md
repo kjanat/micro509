@@ -95,6 +95,7 @@ Unions may gain members in minor releases; treat them as non-exhaustive and keep
 | `invalid_bmp_string`                                    | BMPString explicitText outside the Basic Multilingual Plane       |
 | `invalid_general_name_tag`                              | GeneralName tag outside the nine RFC 5280 §4.2.1.6 alternatives   |
 | `invalid_ia5_string`                                    | Non-ASCII input for an IA5String value                            |
+| `invalid_idn`                                           | Domain name is not valid IDNA2008 (RFC 5891 §4)                   |
 | `invalid_ip_name_constraint`                            | IP constraint bytes are not address+mask of one family            |
 | `invalid_oid`                                           | String is not an encodable OID within X.660 arc bounds            |
 | `invalid_smtp_utf8_mailbox`                             | SmtpUTF8Mailbox malformed or domain not A-labels (RFC 9598 §3)    |

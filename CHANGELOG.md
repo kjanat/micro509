@@ -21,6 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- IDNA2008 (RFC 5890-5893, RFC 8753) over frozen Unicode 12.0.0 tables
+  derived from the IANA registry. The builder converts U-labels to A-labels
+  in dNSName and rfc822Name SANs, SmtpUTF8Mailbox domains, and dNSName and
+  rfc822Name constraints, and fails with `invalid_idn` on a label that is not
+  valid IDNA2008 or an `xn--` label that is not an A-label.
 - RFC 9608 `noRevAvail` (id-ce 56). Parsing exposes it as
   `ParsedCertificate.noRevAvail`, and `extensions.noRevAvail: true` emits it.
   The builder refuses it beside cA TRUE, `crlDistributionPoints`, freshestCRL
@@ -197,8 +202,9 @@ revocation })` report a certificate carrying `noRevAvail` or
   `{ type: 'smtpUtf8Mailbox', value }` and rfc822Name constraints bind it by
   domain (RFC 9598 §6). The builder emits it and enforces RFC 9598 §3:
   `invalid_smtp_utf8_mailbox` for a missing `@`, a Byte Order Mark or a domain
-  that is not lowercase A-labels, and `smtp_utf8_mailbox_ascii_local_part` for
-  a Local-part that fits an rfc822Name.
+  that is not lowercase NR-LDH labels and A-labels, and
+  `smtp_utf8_mailbox_ascii_local_part` for a Local-part that fits an
+  rfc822Name. A U-label domain is stored as A-labels.
 - CRL validation accepted a v3 issuer certificate with no keyUsage extension,
   so a CRL signed with a key certified for another purpose under the CRL
   issuer's name validated. A v3 CRL issuer certificate now needs keyUsage with

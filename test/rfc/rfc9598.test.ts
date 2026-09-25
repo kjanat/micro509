@@ -105,7 +105,6 @@ describe('RFC 9598 §3: the SmtpUTF8Mailbox otherName', () => {
 		}
 		for (const value of [
 			'用户@EXAMPLE.com',
-			'用户@bücher.example',
 			`${String.fromCharCode(0xfeff)}用户@example.com`,
 			'用户',
 			'用户@',
@@ -119,6 +118,34 @@ describe('RFC 9598 §3: the SmtpUTF8Mailbox otherName', () => {
 			expect(await builderErrorCode(() => leafWith(root, [mailbox(value)]))).toBe(
 				'invalid_smtp_utf8_mailbox',
 			);
+		}
+	});
+});
+
+describe('RFC 9598 §3 and §4: the mailbox domain is IDNA2008 in A-labels', () => {
+	it('prints the sentences this suite relies on', () => {
+		expect(rfc9598).toContain(
+			'labels that include non-ASCII characters MUST be stored in A-label (rather than U-label) form',
+		);
+		expect(rfc9598).toContain(
+			'all email address domains in X.509 certificates MUST conform to IDNA2008',
+		);
+	});
+
+	it('stores a U-label domain as its A-labels', async () => {
+		const root = await constrainedRoot({
+			excludedSubtrees: [{ base: { type: 'dns', value: 'x' } }],
+		});
+		const leaf = parseCertificateDerOrThrow(await leafWith(root, [mailbox('用户@bücher.example')]));
+		expect(leaf.subjectAltNames).toEqual([mailbox('用户@xn--bcher-kva.example')]);
+	});
+
+	it('refuses a domain that is not valid IDNA2008', async () => {
+		const root = await constrainedRoot({
+			excludedSubtrees: [{ base: { type: 'dns', value: 'x' } }],
+		});
+		for (const value of ['用户@\u265a.example', '用户@xn--45h.example', '用户@xn--abc.example']) {
+			expect(await builderErrorCode(() => leafWith(root, [mailbox(value)]))).toBe('invalid_idn');
 		}
 	});
 });

@@ -37,6 +37,7 @@ import {
 } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { sha1 } from '#micro509/internal/crypto/hash';
+import { domainToAscii } from '#micro509/internal/shared/idna';
 import { parseIpAddressToBytes } from '#micro509/internal/shared/ip';
 import {
 	encodeDistributionPointReasonFlagsContent,
@@ -1446,7 +1447,7 @@ function requireNonEmptyName(value: string): string {
 function assertSmtpUtf8Mailbox(value: string): string {
 	const at = requireNonEmptyName(value).lastIndexOf('@');
 	const localPart = at > 0 ? value.slice(0, at) : '';
-	const domain = value.slice(at + 1);
+	const domain = toAsciiDomain(value.slice(at + 1));
 	if (localPart.length === 0 || value.includes('\ufeff') || !isMailboxDomain(domain)) {
 		throwExtensionEncoderError(
 			'invalid_smtp_utf8_mailbox',
@@ -1459,7 +1460,33 @@ function assertSmtpUtf8Mailbox(value: string): string {
 			'A mailbox with an ASCII Local-part must use rfc822Name (type email)',
 		);
 	}
-	return value;
+	return `${localPart}@${domain}`;
+}
+
+/** RFC 5891 §4: the domain with each U-label converted to its A-label and each A-label checked. */
+function toAsciiDomain(domain: string): string {
+	const converted = domainToAscii(domain, 'registration');
+	if (!converted.ok) {
+		return throwExtensionEncoderError(
+			'invalid_idn',
+			`Domain name is not valid IDNA2008 (${converted.reason})`,
+		);
+	}
+	return converted.value;
+}
+
+/** A dNSName or dNSName constraint with its leading `*.` or `.` kept and its domain in A-labels. */
+function toAsciiDnsName(value: string): string {
+	const prefix = value.startsWith('*.') ? '*.' : value.startsWith('.') ? '.' : '';
+	return `${prefix}${toAsciiDomain(value.slice(prefix.length))}`;
+}
+
+/** RFC 9549 §2.5: an rfc822Name or rfc822Name constraint with its host in A-labels. */
+function toAsciiMailbox(value: string): string {
+	const at = value.lastIndexOf('@');
+	return at < 0
+		? toAsciiDnsName(value)
+		: `${value.slice(0, at + 1)}${toAsciiDomain(value.slice(at + 1))}`;
 }
 
 /** A dot-separated domain of 1 to 63 octet lowercase LDH labels, with no reserved `??--` label other than an `xn--` A-label. */
@@ -1485,9 +1512,15 @@ function isMailboxDomain(domain: string): boolean {
 export function encodeSubjectAltName(value: SubjectAltName): Uint8Array {
 	switch (value.type) {
 		case 'dns':
-			return implicitPrimitiveContext(2, encodeIa5Content(requireNonEmptyName(value.value)));
+			return implicitPrimitiveContext(
+				2,
+				encodeIa5Content(toAsciiDnsName(requireNonEmptyName(value.value))),
+			);
 		case 'email':
-			return implicitPrimitiveContext(1, encodeIa5Content(requireNonEmptyName(value.value)));
+			return implicitPrimitiveContext(
+				1,
+				encodeIa5Content(toAsciiMailbox(requireNonEmptyName(value.value))),
+			);
 		case 'uri':
 			return implicitPrimitiveContext(6, encodeIa5Content(requireNonEmptyName(value.value)));
 		case 'srv':
@@ -2034,7 +2067,7 @@ function encodeDistributionPointName(name: DistributionPointName): Uint8Array {
 function encodeNameConstraintForm(form: NameConstraintForm): Uint8Array {
 	switch (form.type) {
 		case 'dns':
-			return implicitPrimitiveContext(2, encodeIa5Content(form.value));
+			return implicitPrimitiveContext(2, encodeIa5Content(toAsciiDnsName(form.value)));
 		case 'email':
 			if (form.value.includes('@')) {
 				throwExtensionEncoderError(
@@ -2042,7 +2075,7 @@ function encodeNameConstraintForm(form: NameConstraintForm): Uint8Array {
 					'An rfc822Name constraint names a host or a domain, not a particular mailbox (RFC 9549 §2.2)',
 				);
 			}
-			return implicitPrimitiveContext(1, encodeIa5Content(form.value));
+			return implicitPrimitiveContext(1, encodeIa5Content(toAsciiMailbox(form.value)));
 		case 'uri':
 			return implicitPrimitiveContext(6, encodeIa5Content(form.value));
 		case 'ip': {

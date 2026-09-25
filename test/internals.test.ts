@@ -777,11 +777,7 @@ describe('extensions encoding', () => {
 		}
 	});
 
-	it('encodeSubjectAltName rejects a non-ASCII IA5String value', () => {
-		expectEncoderErrorCode(
-			() => encodeSubjectAltName({ type: 'dns', value: 'café.example' }),
-			'invalid_ia5_string',
-		);
+	it('encodeSubjectAltName rejects a non-ASCII URI or SRV name', () => {
 		expectEncoderErrorCode(
 			() => encodeSubjectAltName({ type: 'uri', value: 'http://café.example' }),
 			'invalid_ia5_string',
@@ -790,16 +786,58 @@ describe('extensions encoding', () => {
 			() => encodeSubjectAltName({ type: 'srv', value: '_xmpp.café.example' }),
 			'invalid_ia5_string',
 		);
+		expectEncoderErrorCode(
+			() => encodeSubjectAltName({ type: 'email', value: 'josé@example.com' }),
+			'invalid_ia5_string',
+		);
 	});
 
-	it('encodeNameConstraints rejects a non-ASCII dNSName, rfc822Name or URI base with a code', () => {
-		for (const type of ['dns', 'email', 'uri'] as const) {
+	it('encodeSubjectAltName writes dNSName and rfc822Name hosts as A-labels', () => {
+		expect(encodeSubjectAltName({ type: 'dns', value: '*.café.example' })).toEqual(
+			encodeSubjectAltName({ type: 'dns', value: '*.xn--caf-dma.example' }),
+		);
+		expect(encodeSubjectAltName({ type: 'email', value: 'user@café.example' })).toEqual(
+			encodeSubjectAltName({ type: 'email', value: 'user@xn--caf-dma.example' }),
+		);
+	});
+
+	it('encodeSubjectAltName rejects a dNSName or rfc822Name host that is not valid IDNA2008', () => {
+		for (const value of ['\u265a.example', 'xn--45h.example', 'XN--CAF-DMA.example']) {
+			expectEncoderErrorCode(() => encodeSubjectAltName({ type: 'dns', value }), 'invalid_idn');
 			expectEncoderErrorCode(
-				() =>
-					encodeNameConstraints({ permittedSubtrees: [{ base: { type, value: 'café.example' } }] }),
-				'invalid_ia5_string',
+				() => encodeSubjectAltName({ type: 'email', value: `user@${value}` }),
+				'invalid_idn',
 			);
 		}
+	});
+
+	it('encodeNameConstraints writes dNSName and rfc822Name bases as A-labels', () => {
+		for (const type of ['dns', 'email'] as const) {
+			expect(
+				encodeNameConstraints({ permittedSubtrees: [{ base: { type, value: '.café.example' } }] }),
+			).toEqual(
+				encodeNameConstraints({
+					permittedSubtrees: [{ base: { type, value: '.xn--caf-dma.example' } }],
+				}),
+			);
+			expectEncoderErrorCode(
+				() =>
+					encodeNameConstraints({
+						permittedSubtrees: [{ base: { type, value: 'xn--45h.example' } }],
+					}),
+				'invalid_idn',
+			);
+		}
+	});
+
+	it('encodeNameConstraints rejects a non-ASCII URI base with a code', () => {
+		expectEncoderErrorCode(
+			() =>
+				encodeNameConstraints({
+					permittedSubtrees: [{ base: { type: 'uri', value: 'café.example' } }],
+				}),
+			'invalid_ia5_string',
+		);
 	});
 
 	it('encodeAuthorityInfoAccess rejects a non-URI OCSP location wrapped in a custom OID', () => {
