@@ -124,14 +124,20 @@ Current GeneralName matrix for `nameConstraints`:
 | `ediPartyName`              | preserved as raw payload         | fail closed when critical and form appears | `complete` |
 | `registeredID`              | decoded OID, preserved           | fail closed when critical and form appears | `complete` |
 
-- Domain names follow IDNA2008 (RFC 5890-5893, RFC 8753) over the IANA
-  derived property values for Unicode 12.0.0. The builder converts U-labels
-  to A-labels in dNSName and rfc822Name SANs, SmtpUTF8Mailbox domains, and
-  dNSName and rfc822Name constraints, and checks every `xn--` label round
-  trips, under the RFC 5891 §4 registration tests. Caller-supplied initial
-  DNS and mail constraints convert under the §5 lookup tests. A reference
-  identifier converts after RFC 5895 mapping (RFC 9525 §6.3). URI and SRV
-  names stay ASCII.
+- Domain names follow IDNA2008 (RFC 5890-5893, RFC 8753). The derived
+  property values, the Unicode properties the contextual and Bidi rules read,
+  and the RFC 5895 width decompositions are frozen to Unicode 12.0.0; NFC and
+  case mapping come from the runtime. The builder converts U-labels to
+  A-labels in dNSName and rfc822Name SANs, SmtpUTF8Mailbox domains, the Name
+  of a SRVName, and dNSName and rfc822Name constraints, and checks every
+  `xn--` label round trips, under the RFC 5891 §4 registration tests.
+  Caller-supplied initial DNS and mail constraints convert under the §5
+  lookup tests. A reference identifier converts after RFC 5895 mapping (RFC
+  9525 §6.3). A URI host is not converted. RFC 5280 §7.4 maps an IRI to a URI
+  by percent-encoding and forbids converting its ireg-name.
+- A name with no IDN label passes the builder unchecked, so a successful
+  conversion does not establish that the whole name is a valid DNS name.
+  ASCII labels beside an IDN label must be NR-LDH.
 - rfc822Name constraints that name a particular mailbox were removed by RFC
   9549 §2.2. The builder and caller-supplied initial constraints refuse them.
   One in an already-issued certificate keeps its exact local-part match
