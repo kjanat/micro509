@@ -20,6 +20,7 @@ import { canonicalizeOid } from '#micro509/internal/asn1/asn1';
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { verifySignedDataDetailed } from '#micro509/internal/crypto/sig-verify';
 import { compareDistinguishedNames } from '#micro509/internal/shared/dn';
+import { domainToAscii } from '#micro509/internal/shared/idna';
 import { parseIpAddressToBytes } from '#micro509/internal/shared/ip';
 import type { NameConstraintValidationState } from '#micro509/internal/verify/name-constraints-engine';
 import {
@@ -62,7 +63,7 @@ import type { ServiceIdentityInput } from '#micro509/verify/identity';
 import { matchServiceIdentity } from '#micro509/verify/identity';
 import type { InitialNameConstraintsInput } from '#micro509/verify/name-constraints';
 import type { PolicyValidationInput, PolicyValidationOutcome } from '#micro509/verify/policy';
-import type { ExtendedKeyUsage } from '#micro509/x509/extensions';
+import type { ExtendedKeyUsage, GeneralSubtree } from '#micro509/x509/extensions';
 import type {
 	ParsedCertificate,
 	ParsedCertificateSigningRequest,
@@ -1879,7 +1880,17 @@ function validateInitialNameConstraintsInput(input: InitialNameConstraintsInput)
 	if (!excludedValidation.ok) {
 		return excludedValidation;
 	}
-	return { ok: true, value: input };
+	return {
+		ok: true,
+		value: {
+			...(permittedValidation.value === undefined
+				? {}
+				: { permittedSubtrees: permittedValidation.value }),
+			...(excludedValidation.value === undefined
+				? {}
+				: { excludedSubtrees: excludedValidation.value }),
+		},
+	};
 }
 
 function validateInitialNameConstraintSubtrees(
@@ -1887,20 +1898,40 @@ function validateInitialNameConstraintSubtrees(
 		| InitialNameConstraintsInput['permittedSubtrees']
 		| InitialNameConstraintsInput['excludedSubtrees'],
 	label: 'permittedSubtrees' | 'excludedSubtrees',
-): { readonly ok: true } | VerifyChainFailure {
+): { readonly ok: true; readonly value?: readonly GeneralSubtree[] } | VerifyChainFailure {
 	if (subtrees === undefined) {
 		return { ok: true };
 	}
 	if (!Array.isArray(subtrees)) {
 		return invalidInitialNameConstraintsFailure(label);
 	}
+	const converted: GeneralSubtree[] = [];
 	for (const subtree of subtrees) {
 		const invalidForm = describeInvalidInitialNameConstraintForm(subtree);
 		if (invalidForm !== undefined) {
 			return invalidInitialNameConstraintsFailure(invalidForm);
 		}
+		const ascii = toAsciiInitialNameConstraint(subtree);
+		if (ascii === undefined) {
+			return invalidInitialNameConstraintsFailure(subtree.base.type);
+		}
+		converted.push(ascii);
 	}
-	return { ok: true };
+	return { ok: true, value: converted };
+}
+
+/** RFC 9549 §1 and RFC 9598 §6: a DNS or mail domain constraint in A-labels. */
+function toAsciiInitialNameConstraint(subtree: GeneralSubtree): GeneralSubtree | undefined {
+	const { base } = subtree;
+	if (base.type !== 'dns' && base.type !== 'email') {
+		return subtree;
+	}
+	const prefix = base.value.startsWith('.') ? '.' : '';
+	const converted = domainToAscii(base.value.slice(prefix.length), 'lookup');
+	if (!converted.ok || !/^[\x20-\x7e]*$/.test(converted.value)) {
+		return undefined;
+	}
+	return { ...subtree, base: { ...base, value: `${prefix}${converted.value}` } };
 }
 
 function describeInvalidInitialNameConstraintForm(subtree: unknown): string | undefined {
@@ -1913,16 +1944,13 @@ function describeInvalidInitialNameConstraintForm(subtree: unknown): string | un
 	}
 	switch (base.type) {
 		case 'dns':
+			return typeof base.value === 'string' ? undefined : base.type;
 		case 'uri':
 			return typeof base.value === 'string' && /^[\x20-\x7e]*$/.test(base.value)
 				? undefined
 				: base.type;
 		case 'email':
-			return typeof base.value === 'string' &&
-				/^[\x20-\x7e]*$/.test(base.value) &&
-				!base.value.includes('@')
-				? undefined
-				: base.type;
+			return typeof base.value === 'string' && !base.value.includes('@') ? undefined : base.type;
 		case 'directoryName':
 			return typeof base.derHex === 'string' ? undefined : base.type;
 		case 'ip':

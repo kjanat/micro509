@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'bun:test';
 import {
+	createCertificate,
 	createSelfSignedCertificate,
+	generateKeyPair,
 	isResultError,
 	matchServiceIdentity,
 	parseCertificateDerOrThrow,
+	type SubjectAltName,
 	verifyCertificateChain,
 } from '#micro509';
 import { flattenedText, rfcDir } from '#test/helpers';
@@ -54,17 +57,52 @@ describe('RFC 9549 §1: all IDNs are carried and processed as A-labels', () => {
 		expect(rfc9549).toContain('Now, all IDNs are carried and processed as A-labels.');
 	});
 
-	it('refuses caller-supplied initial name constraints written with U-labels', async () => {
+	it('applies caller-supplied initial DNS and mail constraints written with U-labels as A-labels', async () => {
 		const root = await createSelfSignedCertificate({
 			subject: { commonName: 'RFC 9549 Root' },
 			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
 		});
-		for (const type of ['dns', 'email', 'uri'] as const) {
+		const leafFor = async (subjectAltNames: readonly SubjectAltName[]) => {
+			const keys = await generateKeyPair();
+			return (
+				await createCertificate({
+					issuer: { commonName: 'RFC 9549 Root' },
+					subject: { commonName: 'rfc9549-leaf' },
+					publicKey: keys.publicKey,
+					signerPrivateKey: root.keyPair.privateKey,
+					issuerPublicKey: root.keyPair.publicKey,
+					extensions: { subjectAltNames },
+				})
+			).der;
+		};
+		for (const [type, san] of [
+			['dns', { type: 'dns', value: 'www.xn--bcher-kva.example' }],
+			['email', { type: 'email', value: 'user@mail.xn--bcher-kva.example' }],
+		] as const) {
+			const result = await verifyCertificateChain({
+				leaf: await leafFor([san]),
+				roots: [root.certificate.der],
+				nameConstraints: { excludedSubtrees: [{ base: { type, value: '.bücher.example' } }] },
+			});
+			expect(result).toMatchObject({ ok: false, code: 'name_constraints_violated' });
+		}
+	});
+
+	it('refuses caller-supplied initial constraints that are not valid IDNA2008, and U-label URI constraints', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'RFC 9549 Root' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
+		});
+		for (const base of [
+			{ type: 'dns', value: '\u265a.example' },
+			{ type: 'email', value: 'xn--45h.example' },
+			{ type: 'uri', value: 'bücher.example' },
+		] as const) {
 			const result = await verifyCertificateChain({
 				leaf: root.certificate.der,
 				roots: [root.certificate.der],
 				allowSelfSignedLeaf: true,
-				nameConstraints: { excludedSubtrees: [{ base: { type, value: 'bücher.example' } }] },
+				nameConstraints: { excludedSubtrees: [{ base }] },
 			});
 			expect(result).toMatchObject({ ok: false, code: 'unsupported_initial_name_constraints' });
 		}

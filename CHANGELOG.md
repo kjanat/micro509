@@ -194,7 +194,9 @@ revocation })` report a certificate carrying `noRevAvail` or
 - Caller-supplied initial name constraints accepted a dNSName, rfc822Name or
   URI base written with U-labels. Certificates carry A-labels (RFC 9549 §1),
   so such a base never matched, and an excluded subtree excluded nothing. A
-  non-ASCII base now fails with `unsupported_initial_name_constraints`.
+  dNSName or rfc822Name base now converts to A-labels, and a URI base or a
+  domain that is not valid IDNA2008 fails with
+  `unsupported_initial_name_constraints`.
 - A SmtpUTF8Mailbox subjectAltName (RFC 9598) parsed as an unrecognized
   otherName, so rfc822Name name constraints never reached it and an
   internationalized mailbox outside a permitted domain, or inside an excluded
