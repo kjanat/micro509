@@ -17,11 +17,13 @@ import {
 	validateOcspResponse,
 	verifyCertificateChain,
 } from '#micro509';
+import { integer, sequence, tlv } from '#micro509/internal/asn1/der';
 import {
 	expectRejectedErrorCode,
 	expectRejectedWith,
 	hexToBytes,
 	rfcDir,
+	withCrlExtension,
 	withoutCrlNextUpdate,
 } from '#test/helpers';
 
@@ -151,6 +153,7 @@ interface CrlFields {
 	readonly crlNumber: number;
 	readonly baseCrlNumber?: number;
 	readonly revokesLeaf?: boolean;
+	readonly revocationDate?: Date;
 	readonly withoutNextUpdate?: boolean;
 }
 
@@ -183,7 +186,7 @@ async function crlPki() {
 						revokedCertificates: [
 							{
 								serialNumber: hexToBytes(parsedLeaf.serialNumberHex),
-								revocationDate: fields.thisUpdate,
+								revocationDate: fields.revocationDate ?? fields.thisUpdate,
 							},
 						],
 					}
@@ -838,5 +841,107 @@ describe('RFC 5280 §6.3.3(a)(1)(i) L5128-5132 "a delta CRL with a next update v
 		const status = await leafRevocation(chain, [base, delta], at, { crlMaxAgeMs: DAY_MS });
 		expect(status?.status).toBe('good');
 		expect(status?.source?.thisUpdate).toEqual(shift(at, -HOUR_MS));
+	});
+});
+
+describe('RFC 5280 §6.3.3(j) L5278-5282: a listed serial is revoked, and steps (i)-(k) compare no revocationDate with the validation time', () => {
+	it('prints the sentences this suite relies on', () => {
+		expect(printed(5278, 5282)).toContain(
+			'If (cert_status is UNREVOKED), then search for the certificate on the complete CRL. If an entry is found that matches the certificate issuer and serial number as described in Section 5.3.3, then set the cert_status variable to the indicated reason as described in step (i).',
+		);
+		expect(printed(3294, 3295)).toContain(
+			'The date on which the revocation occurred is specified.',
+		);
+	});
+
+	it('reports revoked for an entry whose revocationDate is later than the validation time', async () => {
+		const { ca, leaf, chain, issueCrl } = await crlPki();
+		const at = evaluationTime();
+		const revocationDate = shift(at, 7 * DAY_MS);
+		const crl = await issueCrl({
+			thisUpdate: shift(at, -HOUR_MS),
+			nextUpdate: shift(at, DAY_MS),
+			crlNumber: 1,
+			revokesLeaf: true,
+			revocationDate,
+		});
+		const direct = await checkCertificateRevocationAgainstCrl({
+			certificate: leaf.pem,
+			issuerCertificate: ca.certificate.pem,
+			crl,
+			at,
+		});
+		expect(direct).toMatchObject({ ok: true, value: { status: 'revoked', revocationDate } });
+		const status = await leafRevocation(chain, [crl], at);
+		expect(status?.status).toBe('revoked');
+	});
+});
+
+const TO_BE_REVOKED = '2.5.29.58';
+
+function generalizedTime(date: Date): Uint8Array {
+	const digits = date.toISOString().replace(/[-:T]/g, '').slice(0, 14);
+	return tlv(0x18, new TextEncoder().encode(`${digits}Z`));
+}
+
+function toBeRevokedValue(revocationTime: Date, serialNumberHex: string): Uint8Array {
+	return sequence([
+		sequence([generalizedTime(revocationTime), tlv(0xa0, integer(hexToBytes(serialNumberHex)))]),
+	]);
+}
+
+describe('RFC 5280 §5.2 L3324-3327: a CRL extension the application cannot process, here X.509 toBeRevoked (2.5.29.58), which no RFC profiles', () => {
+	it('prints the sentences this suite relies on', () => {
+		expect(printed(3324, 3327)).toContain(
+			'If a CRL contains a critical extension that the application cannot process, then the application MUST NOT use that CRL to determine the status of certificates.',
+		);
+		expect(printed(3326, 3327)).toContain(
+			'However, applications may ignore unrecognized non-critical extensions.',
+		);
+	});
+
+	async function crlWithToBeRevoked(critical: boolean) {
+		const { ca, leaf, chain, issueCrl } = await crlPki();
+		const at = evaluationTime();
+		const [parsedLeaf] = chain;
+		if (parsedLeaf === undefined) throw new Error('missing leaf');
+		const crl = await withCrlExtension(
+			await issueCrl({
+				thisUpdate: shift(at, -HOUR_MS),
+				nextUpdate: shift(at, DAY_MS),
+				crlNumber: 1,
+			}),
+			ca.keyPair.privateKey,
+			TO_BE_REVOKED,
+			toBeRevokedValue(shift(at, -30 * SECOND_MS), parsedLeaf.serialNumberHex),
+			critical,
+		);
+		return { ca, leaf, chain, at, crl };
+	}
+
+	it('does not use a CRL that carries toBeRevoked marked critical', async () => {
+		const { ca, leaf, chain, at, crl } = await crlWithToBeRevoked(true);
+		const direct = await checkCertificateRevocationAgainstCrl({
+			certificate: leaf.pem,
+			issuerCertificate: ca.certificate.pem,
+			crl,
+			at,
+		});
+		expect(direct.ok).toBe(false);
+		const status = await leafRevocation(chain, [crl], at);
+		expect(status?.status).toBe('indeterminate');
+	});
+
+	it('ignores toBeRevoked marked non-critical and uses the rest of the CRL', async () => {
+		const { ca, leaf, chain, at, crl } = await crlWithToBeRevoked(false);
+		const direct = await checkCertificateRevocationAgainstCrl({
+			certificate: leaf.pem,
+			issuerCertificate: ca.certificate.pem,
+			crl,
+			at,
+		});
+		expect(direct).toMatchObject({ ok: true, value: { status: 'good' } });
+		const status = await leafRevocation(chain, [crl], at);
+		expect(status?.status).toBe('good');
 	});
 });
