@@ -125,6 +125,13 @@ describe('RFC 5893 §2 Bidi rule across a Bidi domain name', () => {
 			reason: 'bidi_rule',
 		});
 	});
+
+	it('keeps the root dot of an absolute name out of the labels it tests', () => {
+		expect(domainToAscii('אב.example.', 'registration')).toEqual({
+			ok: true,
+			value: 'xn--4dbc.example.',
+		});
+	});
 });
 
 describe('RFC 5891 §4.2.1 and §5.3 A-labels', () => {
@@ -185,6 +192,11 @@ describe('referenceDomainToAscii', () => {
 		expect(referenceDomainToAscii('Bücher.Example')).toBe('xn--bcher-kva.example');
 		expect(referenceDomainToAscii('ＢÜＣＨＥＲ．example')).toBe('xn--bcher-kva.example');
 		expect(referenceDomainToAscii('ü。example')).toBe('xn--tda.example');
+	});
+
+	it('keeps a trailing root dot', () => {
+		expect(referenceDomainToAscii('Example.COM.')).toBe('example.com.');
+		expect(referenceDomainToAscii('אב.example.')).toBe('xn--4dbc.example.');
 	});
 
 	it('lowercases ASCII labels and keeps SRV underscores', () => {

@@ -25,7 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   derived from the IANA registry. The builder converts U-labels to A-labels
   in dNSName and rfc822Name SANs, SmtpUTF8Mailbox domains, and dNSName and
   rfc822Name constraints, and fails with `invalid_idn` on a label that is not
-  valid IDNA2008 or an `xn--` label that is not an A-label.
+  valid IDNA2008 or an `xn--` label that is not an A-label. A trailing root
+  dot is kept and is not tested as a label.
 - RFC 9608 `noRevAvail` (id-ce 56). Parsing exposes it as
   `ParsedCertificate.noRevAvail`, and `extensions.noRevAvail: true` emits it.
   The builder refuses it beside cA TRUE, `crlDistributionPoints`, freshestCRL
@@ -97,7 +98,7 @@ revocation })` report a certificate carrying `noRevAvail` or
   after RFC 5895 mapping (RFC 9525 §6.3), replacing the URL parser's UTS #46
   processing. A reference that IDNA2008 disallows, such as `♚.example`, or
   with an ASCII label outside letters, digits, hyphens and underscores,
-  matches nothing.
+  matches nothing. A trailing root dot is kept.
 - An rfc822Name name constraint that names a particular mailbox
   (`user@example.com`) is refused: the builder throws
   `email_name_constraint_names_mailbox`, and a caller-supplied initial

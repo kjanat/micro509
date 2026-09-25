@@ -304,11 +304,12 @@ function uLabelToALabel(label: string, mode: IdnaMode): IdnaResult {
 /**
  * Converts each U-label of `domain` to its A-label and checks each `xn--`
  * label, under the RFC 5891 §4 (registration) or §5 (lookup) tests, then
- * applies the RFC 5893 Bidi rule across the name. Other ASCII labels are
- * returned as given.
+ * applies the RFC 5893 Bidi rule across the name. Other ASCII labels and a
+ * trailing root dot are returned as given.
  */
 export function domainToAscii(domain: string, mode: IdnaMode): IdnaResult {
-	const labels = domain.split('.');
+	const root = rootDotOf(domain);
+	const labels = domain.slice(0, domain.length - root.length).split('.');
 	if (!labels.some(isIdnLabel)) return { ok: true, value: domain };
 	const ascii: string[] = [];
 	const uLabels: string[] = [];
@@ -333,7 +334,12 @@ export function domainToAscii(domain: string, mode: IdnaMode): IdnaResult {
 	const value = ascii.join('.');
 	return value.length > MAX_DOMAIN_OCTETS
 		? { ok: false, reason: 'domain_too_long' }
-		: { ok: true, value };
+		: { ok: true, value: `${value}${root}` };
+}
+
+/** RFC 1034 §3.1: the `"."` of an absolute name, which ends in the empty root label. */
+function rootDotOf(domain: string): '' | '.' {
+	return domain.length > 1 && domain.endsWith('.') ? '.' : '';
 }
 
 /**
@@ -354,12 +360,13 @@ function mapForLookup(domain: string): string {
 /**
  * RFC 9525 §6.3 A-label form of a reference identifier's domain name, after
  * RFC 5895 mapping and the RFC 5891 §5 lookup tests. Every ASCII label must be
- * 1 to 63 letters, digits, hyphens or underscores. Returns `undefined` when the
- * name fails either test.
+ * 1 to 63 letters, digits, hyphens or underscores, and a trailing root dot is
+ * kept. Returns `undefined` when the name fails either test.
  */
 export function referenceDomainToAscii(domain: string): string | undefined {
 	const mapped = mapForLookup(domain);
 	const asciiLabelsValid = mapped
+		.slice(0, mapped.length - rootDotOf(mapped).length)
 		.split('.')
 		.every((label) => !isAscii(label) || /^[a-z0-9_-]{1,63}$/.test(label));
 	if (!asciiLabelsValid) return undefined;
