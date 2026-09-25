@@ -37,8 +37,9 @@ import {
 } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { sha1 } from '#micro509/internal/crypto/hash';
-import { domainToAscii, isMailboxDomain } from '#micro509/internal/shared/idna';
+import { domainToAscii } from '#micro509/internal/shared/idna';
 import { parseIpAddressToBytes } from '#micro509/internal/shared/ip';
+import { isMailboxDomain, isSmtpUtf8LocalPart } from '#micro509/internal/shared/mailbox';
 import {
 	encodeDistributionPointReasonFlagsContent,
 	encodeKeyUsageExtension,
@@ -1439,13 +1440,6 @@ function requireNonEmptyName(value: string): string {
 	return value;
 }
 
-/** RFC 5321 §4.1.2 Dot-string with RFC 6531 §3.3 `atext =/ UTF8-non-ascii`, C1 controls excluded (RFC 6530 §10.1). */
-const SMTP_UTF8_DOT_STRING =
-	/^[\w!#$%&'*+\-/=?^`{|}~\u{a0}-\u{d7ff}\u{e000}-\u{10ffff}]+(?:\.[\w!#$%&'*+\-/=?^`{|}~\u{a0}-\u{d7ff}\u{e000}-\u{10ffff}]+)*$/u;
-
-/** RFC 5321 §4.1.2 Quoted-string with RFC 6531 §3.3 `qtextSMTP =/ UTF8-non-ascii`, C1 controls excluded (RFC 6530 §10.1). */
-const SMTP_UTF8_QUOTED_STRING = /^"(?:[ !#-[\]-~\u{a0}-\u{d7ff}\u{e000}-\u{10ffff}]|\\[ -~])*"$/u;
-
 /**
  * RFC 9598 §3: a SmtpUTF8Mailbox carries no Byte Order Mark, is used only when
  * the Local-part holds a non-ASCII character, and stores its domain as
@@ -1471,7 +1465,7 @@ function assertSmtpUtf8Mailbox(value: string): string {
 			'A mailbox with an ASCII Local-part must use rfc822Name (type email)',
 		);
 	}
-	if (!SMTP_UTF8_DOT_STRING.test(localPart) && !SMTP_UTF8_QUOTED_STRING.test(localPart)) {
+	if (!isSmtpUtf8LocalPart(localPart)) {
 		throwExtensionEncoderError(
 			'invalid_smtp_utf8_mailbox',
 			'SmtpUTF8Mailbox Local-part must be an RFC 6531 Dot-string or Quoted-string',

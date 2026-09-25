@@ -207,8 +207,9 @@ revocation })` report a certificate carrying `noRevAvail` or
   internationalized mailbox outside a permitted domain, or inside an excluded
   one, passed path validation. It now parses as
   `{ type: 'smtpUtf8Mailbox', value }` and rfc822Name constraints bind it by
-  domain (RFC 9598 §6). A received mailbox whose domain is not NR-LDH labels
-  and A-labels fails whenever rfc822Name constraints apply. The builder emits
+  domain (RFC 9598 §6). A received mailbox fails whenever rfc822Name
+  constraints apply unless its Local-part is a non-ASCII RFC 6531 Local-part
+  and its domain is NR-LDH labels and A-labels. The builder emits
   it and enforces RFC 9598 §3: `invalid_smtp_utf8_mailbox` for a missing `@`,
   a Byte Order Mark, a Local-part outside the RFC 6531 Dot-string or
   Quoted-string grammar, or a domain that is not lowercase NR-LDH labels and

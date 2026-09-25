@@ -292,6 +292,27 @@ describe('RFC 9598 §6: rfc822Name name constraints apply to SmtpUTF8Mailbox by 
 		}
 	});
 
+	it('rejects a received mailbox whose Local-part breaks the RFC 6531 grammar', async () => {
+		for (const value of ['example.com', '@example.com', 'user@example.com', '用 户@example.com']) {
+			const root = await constrainedRoot({
+				permittedSubtrees: [{ base: { type: 'email', value: 'example.com' } }],
+			});
+			const otherName = implicitConstructedContext(
+				0,
+				concatBytes([
+					objectIdentifier(OIDS.idOnSmtpUtf8Mailbox),
+					explicitContext(0, utf8String(value)),
+				]),
+			);
+			const leaf = await appendCertificateExtensions(
+				await leafWith(root),
+				root.keyPair.privateKey,
+				[encodeExtension(OIDS.subjectAltName, sequence([otherName]), false)],
+			);
+			expect(await verdict(root, leaf)).toBe('name_constraints_violated');
+		}
+	});
+
 	it('compares a received uppercase domain after lowercasing it', async () => {
 		const root = await constrainedRoot({
 			permittedSubtrees: [{ base: { type: 'email', value: '.example.com' } }],

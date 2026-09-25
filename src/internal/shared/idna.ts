@@ -324,25 +324,6 @@ export function domainToAscii(domain: string, mode: IdnaMode): IdnaResult {
 }
 
 /**
- * RFC 9598 §3: a mailbox domain of lowercase NR-LDH labels and A-labels, each
- * `xn--` label passing {@linkcode checkALabel} in `mode`.
- */
-export function isMailboxDomain(domain: string, mode: IdnaMode): boolean {
-	return (
-		domain.length > 0 &&
-		domain.length <= MAX_DOMAIN_OCTETS &&
-		domain
-			.split('.')
-			.every(
-				(label) =>
-					/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label) &&
-					(label.slice(2, 4) !== '--' ||
-						(label.startsWith(ACE_PREFIX) && checkALabel(label, mode).ok)),
-			)
-	);
-}
-
-/**
  * RFC 5895 §2 mapping of a user-supplied name: lowercase, fullwidth and
  * halfwidth forms to their standard characters, the ideographic full stops to
  * ".", and NFC.

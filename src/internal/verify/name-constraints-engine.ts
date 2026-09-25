@@ -26,12 +26,12 @@ import {
 	compareDistinguishedNames,
 	isWithinDirectoryNameSubtree,
 } from '#micro509/internal/shared/dn';
-import { isMailboxDomain } from '#micro509/internal/shared/idna';
 import {
 	allOnesMaskForIpAddress,
 	decodeIpAddress,
 	parseIpAddressToBytes,
 } from '#micro509/internal/shared/ip';
+import { isMailboxDomain, isSmtpUtf8LocalPart } from '#micro509/internal/shared/mailbox';
 import type { Micro509Error } from '#micro509/result/result';
 import type { InitialNameConstraintsInput } from '#micro509/verify/name-constraints';
 import type {
@@ -454,9 +454,9 @@ function checkCertificateSubjectAltName(
  * RFC 9598 §6 applies rfc822Name constraints to a SmtpUTF8Mailbox by its domain
  * alone: the Local-part and "@" are stripped from the name and the constraint,
  * and the remaining domains compare octet for octet after lowercasing, as a
- * suffix when the constraint starts with ".". §3 requires that domain in
- * NR-LDH labels and A-labels, and one that is not cannot be compared, so it
- * fails whenever rfc822Name constraints are in force.
+ * suffix when the constraint starts with ".". A mailbox that breaks the §3
+ * syntax cannot be compared, so it fails whenever rfc822Name constraints are
+ * in force.
  */
 function checkSmtpUtf8Mailbox(
 	certificate: ParsedCertificate,
@@ -464,10 +464,8 @@ function checkSmtpUtf8Mailbox(
 	mailbox: string,
 	index: number,
 ): NameConstraintValidationResult {
-	const domain = mailbox.slice(mailbox.lastIndexOf('@') + 1);
 	const permitted = accumulatedHasEmailConstraints(accumulated)
-		? isMailboxDomain(asciiLowercase(domain), 'lookup') &&
-			isMailboxDomainPermitted(asciiLowercase(domain), accumulated)
+		? isSmtpUtf8MailboxDomainPermitted(mailbox, accumulated)
 		: true;
 	if (permitted) return { ok: true };
 	return nameConstraintFailure(
@@ -478,6 +476,26 @@ function checkSmtpUtf8Mailbox(
 			subjectCommonName: certificate.subject.values.commonName,
 			actual: `smtpUtf8Mailbox:${mailbox}`,
 		}),
+	);
+}
+
+/**
+ * RFC 9598 §5: the Local-part is a non-ASCII RFC 6531 Local-part and the
+ * lowercased domain is NR-LDH labels and A-labels before the domain is compared.
+ */
+function isSmtpUtf8MailboxDomainPermitted(
+	mailbox: string,
+	accumulated: AccumulatedNameConstraints,
+): boolean {
+	const at = mailbox.lastIndexOf('@');
+	const localPart = mailbox.slice(0, Math.max(at, 0));
+	const domain = asciiLowercase(mailbox.slice(at + 1));
+	return (
+		at > 0 &&
+		isSmtpUtf8LocalPart(localPart) &&
+		[...localPart].some((character) => (character.codePointAt(0) ?? 0) > 0x7f) &&
+		isMailboxDomain(domain, 'lookup') &&
+		isMailboxDomainPermitted(domain, accumulated)
 	);
 }
 
