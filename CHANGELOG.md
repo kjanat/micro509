@@ -34,7 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   verify code. `checkChainRevocation` and `verifyCertificateChain({
 revocation })` report a certificate carrying `noRevAvail` or
   `id-pkix-ocsp-nocheck` as the new `status: 'skipped'` with a `skipReason`,
-  without consulting evidence (RFC 9608 §4).
+  without consulting evidence (RFC 9608 §4). The exemption is read from the
+  certificate's signed DER.
 - `maxKdfIterations` on the encrypted PKCS#8 imports (`ImportEncryptedKeyOptions`,
   fourth argument), `parsePfxDer` / `parsePfxPem` options, and
   `parsePkcs12MacData` bounds the PBKDF2 and PKCS#12 KDF iteration counts a
@@ -206,11 +207,12 @@ revocation })` report a certificate carrying `noRevAvail` or
   internationalized mailbox outside a permitted domain, or inside an excluded
   one, passed path validation. It now parses as
   `{ type: 'smtpUtf8Mailbox', value }` and rfc822Name constraints bind it by
-  domain (RFC 9598 §6). The builder emits it and enforces RFC 9598 §3:
-  `invalid_smtp_utf8_mailbox` for a missing `@`, a Byte Order Mark or a domain
-  that is not lowercase NR-LDH labels and A-labels, and
-  `smtp_utf8_mailbox_ascii_local_part` for a Local-part that fits an
-  rfc822Name. A U-label domain is stored as A-labels.
+  domain (RFC 9598 §6). A received mailbox whose domain is not NR-LDH labels
+  and A-labels fails whenever rfc822Name constraints apply. The builder emits
+  it and enforces RFC 9598 §3: `invalid_smtp_utf8_mailbox` for a missing `@`,
+  a Byte Order Mark or a domain that is not lowercase NR-LDH labels and
+  A-labels, and `smtp_utf8_mailbox_ascii_local_part` for a Local-part that
+  fits an rfc822Name. A U-label domain is stored as A-labels.
 - CRL validation accepted a v3 issuer certificate with no keyUsage extension,
   so a CRL signed with a key certified for another purpose under the CRL
   issuer's name validated. A v3 CRL issuer certificate now needs keyUsage with
