@@ -233,13 +233,13 @@ export function decodeIntegerNumber(bytes: Uint8Array): number {
 	return magnitude.value;
 }
 
-/** A non-negative INTEGER value as a `number`, or as a `bigint` when it exceeds {@linkcode Number.MAX_SAFE_INTEGER}. */
+/** A non-negative INTEGER value as a `number`, or `unsafe` once it exceeds {@linkcode Number.MAX_SAFE_INTEGER}. */
 export type IntegerMagnitude =
 	| { readonly type: 'safe'; readonly value: number }
-	| { readonly type: 'unsafe'; readonly value: bigint };
+	| { readonly type: 'unsafe' };
 
 /**
- * Decodes DER INTEGER content octets holding a non-negative value of any size.
+ * Decodes DER INTEGER content octets holding a non-negative value, stopping at the first octet past {@linkcode Number.MAX_SAFE_INTEGER}.
  *
  * @param bytes DER INTEGER content octets to decode.
  * @param label Field name for error messages (defaults to `"INTEGER"`).
@@ -259,10 +259,7 @@ export function decodeIntegerMagnitude(bytes: Uint8Array, label = 'INTEGER'): In
 	let value = 0;
 	for (const byte of bytes) {
 		if (value > Math.floor((Number.MAX_SAFE_INTEGER - byte) / 256)) {
-			return {
-				type: 'unsafe',
-				value: bytes.reduce((sum, next) => sum * 256n + BigInt(next), 0n),
-			};
+			return { type: 'unsafe' };
 		}
 		value = value * 256 + byte;
 	}

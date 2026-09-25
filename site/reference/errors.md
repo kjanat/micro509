@@ -48,6 +48,7 @@ Unions may gain members in minor releases; treat them as non-exhaustive and keep
 | `issuer_distinguished_name_empty`      | RFC 5280 §4.1.2.4 requires a non-empty issuer DN         |
 | `serial_number_not_positive`           | Serial must be a positive integer (RFC 5280 §4.1.2.2)    |
 | `serial_number_too_long`               | Serial DER INTEGER exceeds 20 octets (RFC 5280 §4.1.2.2) |
+| `validity_date_invalid`                | `notBefore`, `notAfter` or `days` gives an invalid date  |
 | `validity_not_after_before_not_before` | Validity window ends before it starts                    |
 
 ### NameEncoderErrorCode
@@ -225,12 +226,14 @@ and an OCSP response without `nextUpdate` under `ocspProfile: 'rfc9919'` as
 | ------------------------------------ | ------------------------------------------------------------- |
 | `distribution_point_full_name_empty` | IDP `fullName` present but holds no GeneralName               |
 | `issuer_distinguished_name_empty`    | RFC 5280 §5.1.2.3 requires a non-empty issuer DN              |
+| `invalid_date`                       | A CRL or revoked-entry date is an invalid `Date`              |
 | `next_update_not_after_this_update`  | `nextUpdate` does not encode a later second than `thisUpdate` |
 
 ### OcspEncoderErrorCode
 
 | Code                              | Meaning                                                  |
 | --------------------------------- | -------------------------------------------------------- |
+| `invalid_date`                    | A response date is an invalid `Date`                     |
 | `signer_certificate_key_mismatch` | Signer certificate's SPKI does not match the signing key |
 
 ## micro509/keys

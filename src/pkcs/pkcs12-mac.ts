@@ -452,7 +452,7 @@ function decodeMacIterations(
 		return magnitude.value;
 	}
 	if (password !== undefined) {
-		chargeKdfBudget(budget, Number(magnitude.value));
+		chargeKdfBudget(budget, Number.POSITIVE_INFINITY);
 	}
 	throw new Error(`${label} too large for safe number (${content.length} bytes)`);
 }
@@ -572,9 +572,7 @@ function parsePbkdf2Parameters(
 	);
 	const iterations = decodeIntegerMagnitude(iterationCount.value, 'PBKDF2 iterationCount');
 	if (iterations.type === 'unsafe' || iterations.value > WEBCRYPTO_MAX_PBKDF2_ITERATIONS) {
-		throw new Error(
-			`PBKDF2 iterationCount must be at most ${WEBCRYPTO_MAX_PBKDF2_ITERATIONS}, got ${iterations.value}`,
-		);
+		throw new Error(`PBKDF2 iterationCount must be at most ${WEBCRYPTO_MAX_PBKDF2_ITERATIONS}`);
 	}
 	if (iterations.value === 0) {
 		throw new Error('PBKDF2 iterationCount must be at least 1');

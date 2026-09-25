@@ -3,7 +3,6 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { Out } from 'dreamcli';
 import { arg, CLIError, cli, command } from 'dreamcli';
-import { deferredExitAdapter, runUntilDrained } from './cli-adapter.ts';
 import { licenseLinks, provenance } from './spec/w3c.ts';
 
 const W3C_SPECS = {
@@ -307,11 +306,9 @@ const w3c = command('w3c')
 		out.log(destination);
 	});
 
-await runUntilDrained(
-	cli('fetch-spec')
-		.description('Vendor standards text into docs/')
-		.command(rfc)
-		.command(itu)
-		.command(w3c)
-		.run({ adapter: deferredExitAdapter() }),
-);
+cli('fetch-spec')
+	.description('Vendor standards text into docs/')
+	.command(rfc)
+	.command(itu)
+	.command(w3c)
+	.run();

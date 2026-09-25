@@ -569,6 +569,12 @@ export async function createCertificateRevocationList(
 	const signatureAlgorithm = getSignatureAlgorithm(input.signerPrivateKey);
 	const thisUpdate = input.thisUpdate ?? new Date();
 	const nextUpdate = input.nextUpdate;
+	assertCrlDate(thisUpdate, 'thisUpdate');
+	assertCrlDate(nextUpdate, 'nextUpdate');
+	for (const entry of input.revokedCertificates ?? []) {
+		assertCrlDate(entry.revocationDate, 'revocationDate');
+		assertCrlDate(entry.invalidityDate, 'invalidityDate');
+	}
 	if (Math.floor(nextUpdate.getTime() / 1000) <= Math.floor(thisUpdate.getTime() / 1000)) {
 		throwCrlEncoderError(
 			'next_update_not_after_this_update',
@@ -2394,11 +2400,18 @@ function decodeNameValue(element: DerElement): string {
 export type CrlEncoderErrorCode =
 	| 'distribution_point_full_name_empty'
 	| 'issuer_distinguished_name_empty'
+	| 'invalid_date'
 	| 'next_update_not_after_this_update';
 
 /** Throws a {@link ResultError} for a CRL encoder input-validation failure. */
 function throwCrlEncoderError(code: CrlEncoderErrorCode, message: string): never {
 	throwMicro509Error(code, message);
+}
+
+function assertCrlDate(date: Date | undefined, field: string): void {
+	if (date !== undefined && Number.isNaN(date.getTime())) {
+		throwCrlEncoderError('invalid_date', `${field} must be a valid date`);
+	}
 }
 
 /** DER-encodes an IssuingDistributionPoint extension value. Throws on mutually-exclusive scope flags. */

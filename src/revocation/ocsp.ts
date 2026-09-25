@@ -303,11 +303,17 @@ export type CreateOcspCertStatusInput =
 	  };
 
 /** Machine-readable reason an OCSP encoder rejected its construction input. */
-export type OcspEncoderErrorCode = 'signer_certificate_key_mismatch';
+export type OcspEncoderErrorCode = 'invalid_date' | 'signer_certificate_key_mismatch';
 
 /** Throws a {@link ResultError} for an OCSP encoder input-validation failure. */
 function throwOcspEncoderError(code: OcspEncoderErrorCode, message: string): never {
 	throwMicro509Error(code, message);
+}
+
+function assertOcspDate(date: Date | undefined, field: string): void {
+	if (date !== undefined && Number.isNaN(date.getTime())) {
+		throwOcspEncoderError('invalid_date', `${field} must be a valid date`);
+	}
 }
 
 /**
@@ -874,9 +880,13 @@ export async function createOcspResponse(
 		);
 	}
 	const producedAt = input.producedAt ?? new Date();
+	assertOcspDate(producedAt, 'producedAt');
 	const hashAlgorithm = input.hashAlgorithm ?? 'SHA-256';
 	const responses: Uint8Array[] = [];
 	for (const response of input.responses) {
+		assertOcspDate(response.thisUpdate, 'thisUpdate');
+		assertOcspDate(response.nextUpdate, 'nextUpdate');
+		assertOcspDate(response.revokedAt, 'revokedAt');
 		const certificate = normalizeCertificate(response.certificate);
 		const issuer = normalizeCertificate(response.issuerCertificate);
 		responses.push(await encodeSingleResponse(certificate, issuer, response, hashAlgorithm));

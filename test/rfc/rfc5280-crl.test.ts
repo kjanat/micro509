@@ -121,6 +121,40 @@ describe('RFC 5280', () => {
 			);
 		});
 
+		it.each([
+			['thisUpdate', { thisUpdate: new Date(Number.NaN) }],
+			['nextUpdate', { nextUpdate: new Date(Number.NaN) }],
+			[
+				'revocationDate',
+				{
+					revokedCertificates: [
+						{ serialNumber: Uint8Array.of(1), revocationDate: new Date(Number.NaN) },
+					],
+				},
+			],
+			[
+				'invalidityDate',
+				{
+					revokedCertificates: [
+						{ serialNumber: Uint8Array.of(1), invalidityDate: new Date(Number.NaN) },
+					],
+				},
+			],
+		] as const)('rejects an invalid %s as invalid_date', async (_field, fields) => {
+			const ca = await crlIssuer();
+			await expectRejectedErrorCode(
+				createCertificateRevocationList({
+					issuer: { commonName: 'RFC 5280 CRL CA' },
+					signerPrivateKey: ca.keyPair.privateKey,
+					issuerPublicKey: ca.keyPair.publicKey,
+					thisUpdate: THIS_UPDATE,
+					nextUpdate: new Date('2025-01-08T00:00:00Z'),
+					...fields,
+				}),
+				'invalid_date',
+			);
+		});
+
 		it('accepts nextUpdate one second after thisUpdate', async () => {
 			const ca = await crlIssuer();
 			const nextUpdate = new Date(THIS_UPDATE.getTime() + 1_000);
@@ -686,6 +720,36 @@ describe('RFC 5280 §5.2.4 L3572-3582: only a current delta CRL applies, and the
 			const status = await leafRevocation(chain, crls, at);
 			expect(status?.status).toBe('revoked');
 			expect(status?.source?.thisUpdate).toEqual(shift(at, -HOUR_MS));
+		}
+	});
+
+	it('§5.2.3 (CRL numbers increase monotonically): of two current delta CRLs issued in the same second, applies the higher-numbered one', async () => {
+		const { chain, issueCrl } = await crlPki();
+		const at = evaluationTime();
+		const base = await issueCrl({
+			thisUpdate: shift(at, -3 * HOUR_MS),
+			nextUpdate: shift(at, DAY_MS),
+			crlNumber: 10,
+		});
+		const olderDelta = await issueCrl({
+			thisUpdate: shift(at, -HOUR_MS),
+			nextUpdate: shift(at, DAY_MS),
+			crlNumber: 11,
+			baseCrlNumber: 10,
+		});
+		const newerDelta = await issueCrl({
+			thisUpdate: shift(at, -HOUR_MS),
+			nextUpdate: shift(at, DAY_MS),
+			crlNumber: 12,
+			baseCrlNumber: 10,
+			revokesLeaf: true,
+		});
+		for (const crls of [
+			[base, olderDelta, newerDelta],
+			[base, newerDelta, olderDelta],
+		]) {
+			const status = await leafRevocation(chain, crls, at);
+			expect(status?.status).toBe('revoked');
 		}
 	});
 

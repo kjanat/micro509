@@ -360,7 +360,7 @@ describe('asn1 decoding', () => {
 		expect(() => decodeIntegerNumber(Uint8Array.of(1, 2, 3, 4, 5, 6, 7, 8))).toThrow('too large');
 	});
 
-	it('decodeIntegerMagnitude returns an exact bigint above MAX_SAFE_INTEGER', () => {
+	it('decodeIntegerMagnitude reports unsafe above MAX_SAFE_INTEGER', () => {
 		expect(decodeIntegerMagnitude(Uint8Array.of(0x1f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff))).toEqual(
 			{
 				type: 'safe',
@@ -369,9 +369,13 @@ describe('asn1 decoding', () => {
 		);
 		expect(decodeIntegerMagnitude(Uint8Array.of(0x20, 0, 0, 0, 0, 0, 1))).toEqual({
 			type: 'unsafe',
-			value: 2n ** 53n + 1n,
 		});
 	});
+
+	it('decodeIntegerMagnitude stops at the first octet past MAX_SAFE_INTEGER', () => {
+		const huge = new Uint8Array(10_000_000).fill(0x7f);
+		expect(decodeIntegerMagnitude(huge)).toEqual({ type: 'unsafe' });
+	}, 1_000);
 
 	it('decodeIntegerMagnitude labels empty, negative, and non-minimal encodings', () => {
 		expect(() => decodeIntegerMagnitude(new Uint8Array(), 'field')).toThrow('field is empty');

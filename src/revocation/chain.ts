@@ -1241,12 +1241,22 @@ function findApplicableDeltaCrl(
 			deltaCrl.crlNumber > baseCrlNumber &&
 			deltaCrl.thisUpdate.getTime() >= baseCrl.thisUpdate.getTime() &&
 			isCurrentDeltaCrl(deltaCrl, at, clockSkewMs, crlMaxAgeMs) &&
-			(latest === undefined || deltaCrl.thisUpdate.getTime() > latest.thisUpdate.getTime())
+			(latest === undefined || isNewerDeltaCrl(deltaCrl, latest))
 		) {
 			latest = deltaCrl;
 		}
 	}
 	return latest;
+}
+
+function isNewerDeltaCrl(
+	candidate: ParsedCertificateRevocationList,
+	current: ParsedCertificateRevocationList,
+): boolean {
+	const candidateTime = candidate.thisUpdate.getTime();
+	const currentTime = current.thisUpdate.getTime();
+	if (candidateTime !== currentTime) return candidateTime > currentTime;
+	return (candidate.crlNumber ?? 0) > (current.crlNumber ?? 0);
 }
 
 /** The direct issuer first, then deduplicated indirect CRL-issuer candidates. */

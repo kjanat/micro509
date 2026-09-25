@@ -129,7 +129,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   even an expired one. It now uses only a current delta (the evaluation time
   lies between its `thisUpdate` and `nextUpdate`) whose CRL number exceeds the
   base CRL's number, and it prefers the one with the latest `thisUpdate` (RFC
-  5280 §5.2.4). The delta's `thisUpdate` must also be no earlier than the base
+  5280 §5.2.4), then the higher CRL number when two share a `thisUpdate` second
+  (§5.2.3). The delta's `thisUpdate` must also be no earlier than the base
   CRL's (X.509 Annex E.5.2), and an equal `thisUpdate` is accepted.
   `checkCertificateRevocationAgainstCrl` returns `non_applicable` with reason
   `delta_crl_incompatible` for a delta whose `thisUpdate` precedes the complete
@@ -137,9 +138,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The CRL issuingDistributionPoint decoder read any non-zero BOOLEAN octet as
   TRUE and empty content as FALSE. A BOOLEAN whose content is not a single
   `0x00` or `0xFF` octet is now `malformed` (X.690 §11.1).
+- An invalid `Date` passed to `createCertificate`, `createSelfSignedCertificate`,
+  `createCertificateRevocationList` or `createOcspResponse` compared as `NaN`,
+  skipped the ordering checks and surfaced as an uncoded `RangeError` from the
+  DER encoder. `CreateCertificateErrorCode` gains `validity_date_invalid`, and
+  `CrlEncoderErrorCode` and `OcspEncoderErrorCode` gain `invalid_date`, thrown
+  as a `ResultError` before encoding.
 
 ### Security
 
+- Decoding a DER INTEGER above `Number.MAX_SAFE_INTEGER`, such as a PKCS#12
+  MacData or PBMAC1 iteration count, folded every octet into a `bigint`, so a
+  file with a very long INTEGER cost CPU and memory before the KDF budget could
+  reject it. Decoding now stops at the first octet past the safe range.
 - Chain-level OCSP evaluation returned on the first validated `good` response,
   so a `revoked` response later in `ocspResponses` was never read and a
   revoked certificate passed with `decision: 'allow'`. Every applicable

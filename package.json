@@ -154,7 +154,7 @@
 		"biome": "catalog:",
 		"deno": "catalog:deno",
 		"dprint": "catalog:",
-		"dreamcli": "npm:@kjanat/dreamcli@4.0.0",
+		"dreamcli": "npm:@kjanat/dreamcli@4.1.0",
 		"importmapify": "catalog:deno",
 		"playwright": "^1.61.1",
 		"publint": "catalog:build",

@@ -61,6 +61,7 @@ const GLOB_FLAGS: ReadonlySet<string> = new Set(['-g', '--glob', '--iglob']);
 const SEARCHERS: ReadonlySet<string> = new Set(['rg', 'ag', 'ack', 'ugrep']);
 const GREPS: ReadonlySet<string> = new Set(['grep', 'egrep', 'fgrep']);
 const PATTERN_FLAGS = /^(?:--regexp|--file)(?:=|$)|^-[A-Za-z]*[ef]/;
+const PATTERN_VALUE_FOLLOWS = /^(?:--regexp|--file|-[A-Za-z]*[ef])$/;
 const READER_COMMANDS: ReadonlySet<string> = new Set(['read', 'search', 'headings']);
 
 export const EXCLUDE_GLOB = '!**/docs/{rfc,itu,w3c}/**';
@@ -467,16 +468,22 @@ function isRoot(word: string, cwd: string): boolean {
 	return prefix.includes('/');
 }
 
-function patternIndex(segment: Segment): number | undefined {
+function patternIndices(segment: Segment): readonly number[] {
 	const words = segment.words;
 	const start = commandIndex(words);
 	const name = path.basename(words[start] ?? '');
 	const gitGrep = name === 'git' ? words.indexOf('grep', start + 1) : -1;
-	if (!SEARCHERS.has(name) && !GREPS.has(name) && gitGrep === -1) return undefined;
+	if (!SEARCHERS.has(name) && !GREPS.has(name) && gitGrep === -1) return [];
 	const first = gitGrep === -1 ? start + 1 : gitGrep + 1;
-	if (words.slice(first).some((word) => PATTERN_FLAGS.test(word))) return undefined;
+	if (words.slice(first).some((word) => PATTERN_FLAGS.test(word))) {
+		return words.flatMap((word, index) =>
+			index >= first && PATTERN_VALUE_FOLLOWS.test(word) && index + 1 < words.length
+				? [index + 1]
+				: [],
+		);
+	}
 	const index = words.findIndex((word, position) => position >= first && !word.startsWith('-'));
-	return index === -1 ? undefined : index;
+	return index === -1 ? [] : [index];
 }
 
 interface Exclusion {
@@ -613,9 +620,7 @@ function segmentReads(
 ): boolean {
 	if (isReader(segment)) return true;
 	const exclusions = exclusionsOf(segment);
-	const pattern = patternIndex(segment);
-	const skipped = new Set(exclusions.map(({ index }) => index));
-	if (pattern !== undefined) skipped.add(pattern);
+	const skipped = new Set([...exclusions.map(({ index }) => index), ...patternIndices(segment)]);
 	const operands = segment.words.filter((_, index) => !skipped.has(index));
 	if (operands.some((word) => SPEC_RE.test(word) || relation(word, cwd, dirs) === 'inside')) {
 		return true;
