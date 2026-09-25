@@ -210,7 +210,8 @@ revocation })` report a certificate carrying `noRevAvail` or
   domain (RFC 9598 §6). A received mailbox whose domain is not NR-LDH labels
   and A-labels fails whenever rfc822Name constraints apply. The builder emits
   it and enforces RFC 9598 §3: `invalid_smtp_utf8_mailbox` for a missing `@`,
-  a Byte Order Mark or a domain that is not lowercase NR-LDH labels and
+  a Byte Order Mark, a Local-part outside the RFC 6531 Dot-string or
+  Quoted-string grammar, or a domain that is not lowercase NR-LDH labels and
   A-labels, and `smtp_utf8_mailbox_ascii_local_part` for a Local-part that
   fits an rfc822Name. A U-label domain is stored as A-labels.
 - CRL validation accepted a v3 issuer certificate with no keyUsage extension,

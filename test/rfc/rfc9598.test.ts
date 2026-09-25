@@ -121,6 +121,46 @@ describe('RFC 9598 §3: the SmtpUTF8Mailbox otherName', () => {
 	});
 });
 
+describe('RFC 9598 §3: the Local-part follows the RFC 6531 Mailbox grammar', () => {
+	it('prints the sentences this suite relies on', () => {
+		expect(rfc9598).toContain(
+			'In particular, Local-part was updated to also support UTF8-non-ascii.',
+		);
+	});
+
+	it('accepts a Dot-string and a Quoted-string Local-part', async () => {
+		const root = await constrainedRoot({
+			excludedSubtrees: [{ base: { type: 'dns', value: 'x' } }],
+		});
+		for (const value of ['a.用户+tag@example.com', '"用 户"@example.com', '"用\\"x"@example.com']) {
+			const leaf = parseCertificateDerOrThrow(await leafWith(root, [mailbox(value)]));
+			expect(leaf.subjectAltNames).toEqual([mailbox(value)]);
+		}
+	});
+
+	it('refuses a Local-part outside the grammar', async () => {
+		const root = await constrainedRoot({
+			excludedSubtrees: [{ base: { type: 'dns', value: 'x' } }],
+		});
+		for (const value of [
+			`用${String.fromCharCode(0x01)}@example.com`,
+			`用${String.fromCharCode(0x85)}@example.com`,
+			`用${String.fromCharCode(0xd800)}@example.com`,
+			'用 er@example.com',
+			'a@用@example.com',
+			'用..x@example.com',
+			'.用@example.com',
+			'用.@example.com',
+			'"用"x"@example.com',
+			'"用\\用"@example.com',
+		]) {
+			expect(await builderErrorCode(() => leafWith(root, [mailbox(value)]))).toBe(
+				'invalid_smtp_utf8_mailbox',
+			);
+		}
+	});
+});
+
 describe('RFC 9598 §3 and §4: the mailbox domain is IDNA2008 in A-labels', () => {
 	it('prints the sentences this suite relies on', () => {
 		expect(rfc9598).toContain(
