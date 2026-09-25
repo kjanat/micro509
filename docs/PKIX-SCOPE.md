@@ -118,16 +118,20 @@ Current GeneralName matrix for `nameConstraints`:
 | `uniformResourceIdentifier` | decode to typed URI values       | enforce host-based matching                | `complete` |
 | `iPAddress`                 | decode to address+mask bytes     | enforce                                    | `complete` |
 | `directoryName`             | preserve structured DN payload   | enforce with RFC 5280 semantic compare     | `complete` |
-| SmtpUTF8Mailbox `otherName` | decode to typed mailbox values   | enforce rfc822Name constraints by domain   | `partial`  |
+| SmtpUTF8Mailbox `otherName` | decode to typed mailbox values   | enforce rfc822Name constraints by domain   | `complete` |
 | other `otherName`           | preserved as raw payload         | fail closed when critical and form appears | `complete` |
 | `x400Address`               | preserved as raw payload         | fail closed when critical and form appears | `complete` |
 | `ediPartyName`              | preserved as raw payload         | fail closed when critical and form appears | `complete` |
 | `registeredID`              | decoded OID, preserved           | fail closed when critical and form appears | `complete` |
 
-- SmtpUTF8Mailbox is `partial`: domains are checked for lowercase LDH label
-  syntax, but an `xn--` label is not checked for IDNA2008 validity (RFC 9598
-  §4), and a Unicode reference identifier converts through the URL parser's
-  UTS #46 processing rather than IDNA2008.
+- Domain names follow IDNA2008 (RFC 5890-5893, RFC 8753) over the IANA
+  derived property values for Unicode 12.0.0. The builder converts U-labels
+  to A-labels in dNSName and rfc822Name SANs, SmtpUTF8Mailbox domains, and
+  dNSName and rfc822Name constraints, and checks every `xn--` label round
+  trips, under the RFC 5891 §4 registration tests. Caller-supplied initial
+  DNS and mail constraints convert under the §5 lookup tests. A reference
+  identifier converts after RFC 5895 mapping (RFC 9525 §6.3). URI and SRV
+  names stay ASCII.
 - rfc822Name constraints that name a particular mailbox were removed by RFC
   9549 §2.2. The builder and caller-supplied initial constraints refuse them.
   One in an already-issued certificate keeps its exact local-part match

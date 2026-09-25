@@ -102,7 +102,7 @@ then defaults to `mode: 'hard-fail'` — indeterminate status denies. Set
 - IP-ID with IPv6 normalization
 - URI-ID scheme + host matching
 - SRV-ID via otherName SAN
-- IDNA-aware comparison
+- IDNA2008 reference conversion (RFC 5891 lookup, RFC 5895 mapping)
 - Opt-in CN compatibility (disabled by default)
 
 ### RFC 9618 policy validation

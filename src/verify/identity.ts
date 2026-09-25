@@ -9,6 +9,7 @@
  * @module
  */
 
+import { referenceDomainToAscii } from '#micro509/internal/shared/idna';
 import { decodeIpAddress, parseIpAddressToBytes } from '#micro509/internal/shared/ip';
 import type { ErrorResult, Micro509Error } from '#micro509/result/result';
 import { errorResult, micro509Error, successResult } from '#micro509/result/result';
@@ -429,7 +430,10 @@ function serviceTypeFromSanValue(
 /** Compares a presented DNS identifier (possibly wildcarded) against a reference name. */
 function matchesDnsName(pattern: string, actual: string): boolean {
 	const lowerPattern = normalizeDnsPattern(pattern);
-	const lowerActual = normalizeDnsName(actual);
+	const lowerActual = tryNormalizeDnsName(actual);
+	if (lowerActual === undefined) {
+		return false;
+	}
 	if (!lowerPattern.includes('*')) {
 		return lowerPattern === lowerActual;
 	}
@@ -454,27 +458,15 @@ function normalizeDnsPattern(value: string): string {
 	return value.replace(/[A-Z]/g, (letter) => letter.toLowerCase());
 }
 
-/** Lowercases and IDNA-normalizes a DNS name via the URL parser. */
-function normalizeDnsName(value: string): string {
-	const normalized = tryNormalizeDnsName(value);
-	return normalized ?? value.toLowerCase();
-}
-
-/** Attempts IDNA normalization via URL constructor. Returns `undefined` for invalid names. */
+/**
+ * RFC 9525 §6.3: a reference domain name in A-labels, lowercased. Returns
+ * `undefined` for a name with URI delimiters or one that is not valid IDNA2008.
+ */
 function tryNormalizeDnsName(value: string): string | undefined {
-	if (value.length === 0) {
+	if (value.length === 0 || /[/:?#@[\]]/.test(value)) {
 		return undefined;
 	}
-	for (const forbidden of ['/', ':', '?', '#', '@', '[', ']']) {
-		if (value.includes(forbidden)) {
-			return undefined;
-		}
-	}
-	try {
-		return new URL(`https://${value}`).hostname.toLowerCase();
-	} catch {
-		return undefined;
-	}
+	return referenceDomainToAscii(value);
 }
 
 /** Decomposed URI-ID or SRV-ID: a service type discriminant plus a domain. */
@@ -566,10 +558,10 @@ function tryParseSrvServiceIdentity(value: string): ServiceScopedIdentity | unde
 	if (dotIndex <= 1 || dotIndex === value.length - 1) {
 		return undefined;
 	}
-	return {
-		serviceType: value.slice(1, dotIndex).toLowerCase(),
-		domainName: normalizeDnsName(value.slice(dotIndex + 1)),
-	};
+	const domainName = tryNormalizeDnsName(value.slice(dotIndex + 1));
+	return domainName === undefined
+		? undefined
+		: { serviceType: value.slice(1, dotIndex).toLowerCase(), domainName };
 }
 
 /** Constructs a failure result with the given error code and diagnostic details. */

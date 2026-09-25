@@ -92,6 +92,10 @@ revocation })` report a certificate carrying `noRevAvail` or
 
 ### Changed
 
+- A reference identifier's domain converts to A-labels by IDNA2008 lookup
+  after RFC 5895 mapping (RFC 9525 §6.3), replacing the URL parser's UTS #46
+  processing. A reference that IDNA2008 disallows, such as `♚.example`,
+  matches nothing.
 - An rfc822Name name constraint that names a particular mailbox
   (`user@example.com`) is refused: the builder throws
   `email_name_constraint_names_mailbox`, and a caller-supplied initial
