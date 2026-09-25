@@ -10,6 +10,7 @@ docs/
 ├── rfc/           # unmodified RFC Editor text plus NIST PKITS text
 ├── itu/           # local, gitignored ITU-T references; redistribution restricted
 ├── w3c/           # W3C WebCrypto and WHATWG Web IDL rendered to text
+├── idna/          # IANA IDNA2008 table and Unicode 12.0.0 UCD files, frozen by scripts/idna-tables.bun.ts
 └── CLAUDE.md      # delegates agent guidance to this file
 ```
 
@@ -42,6 +43,7 @@ JSDoc and regenerate it rather than editing generated pages.
 | PEM                 | RFC 7468                   | RFC 1421 and RFC 822 frozen legacy headers |
 | PKCS containers     | RFC 5652, 7292, 8018, 9879 | RFC 2315 and 5208 legacy formats           |
 | International email | RFC 9598                   | RFC 6531 and RFC 5321 terminology          |
+| IDNA                | RFC 5890-5893, 8753        | RFC 3492 Punycode, RFC 5895 mapping        |
 
 ## CONVENTIONS
 
