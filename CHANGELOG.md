@@ -87,6 +87,13 @@ revocation })` report a certificate carrying `noRevAvail` or
 
 ### Changed
 
+- An rfc822Name name constraint that names a particular mailbox
+  (`user@example.com`) is refused: the builder throws
+  `email_name_constraint_names_mailbox`, and a caller-supplied initial
+  constraint fails with `unsupported_initial_name_constraints`. RFC 9549 §2.2
+  removed that form. A certificate issued with one still validates as before.
+- `initialPolicySet` canonicalizes every OID. A list holding the anyPolicy OID
+  means `'any'`, and a list with a malformed OID matches no policy.
 - npm and JSR packages include `CHANGELOG.md` in the published tarball
   (`package.json` `files`, `jsr.json` `publish.include`).
 - `trustedOcspResponders` on `checkChainRevocation()` and
@@ -171,6 +178,9 @@ revocation })` report a certificate carrying `noRevAvail` or
 
 ### Security
 
+- Chain-level revocation skipped a certificate carrying `id-pkix-ocsp-nocheck`
+  whatever the extension held, and `hasOcspNoCheckExtension` counted it the
+  same way. Only the NULL value RFC 6960 §4.2.2.2.1 defines now counts.
 - DNS service-identity matching ran the certificate's dNSName through the URL
   parser, which percent-decodes and parses IPv4 forms, so a SAN such as
   `a%62c.example` matched the reference `abc.example` and `0x7f.0.0.1` matched

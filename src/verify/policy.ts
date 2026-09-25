@@ -18,7 +18,12 @@ import type { PolicyQualifierInfo } from '#micro509/x509/extensions';
 export interface PolicyValidationInput {
 	/**
 	 * OIDs the relying party considers acceptable, or `'any'` to accept
-	 * whatever the chain asserts. Default: `'any'`.
+	 * whatever the chain asserts. A list holding the anyPolicy OID
+	 * (`2.5.29.32.0`) means `'any'`. A list with a malformed OID matches
+	 * nothing. Unlike RFC 9618 §5.5, which accepts a path whose
+	 * user-constrained policy set is empty while explicit policy is not
+	 * required, validation fails when a supplied list is not satisfied, as the
+	 * application restriction §5.1 allows. Default: `'any'`.
 	 */
 	readonly initialPolicySet?: readonly string[] | 'any';
 	/** When `true`, the chain must assert at least one acceptable policy. Default: `false`. */

@@ -139,11 +139,11 @@ describe('extension registry', () => {
 		expect(
 			applyDefinition(getExtensionDefinition(OIDS.nameConstraints), {
 				permittedSubtrees: [{ base: { type: 'dns', value: '.example.test' } }],
-				excludedSubtrees: [{ base: { type: 'email', value: 'blocked@example.test' } }],
+				excludedSubtrees: [{ base: { type: 'email', value: 'blocked.example.test' } }],
 			}).nameConstraints,
 		).toEqual({
 			permittedSubtrees: [{ base: { type: 'dns', value: '.example.test' } }],
-			excludedSubtrees: [{ base: { type: 'email', value: 'blocked@example.test' } }],
+			excludedSubtrees: [{ base: { type: 'email', value: 'blocked.example.test' } }],
 		});
 
 		expect(
@@ -181,7 +181,7 @@ describe('extension registry', () => {
 				],
 				nameConstraints: {
 					permittedSubtrees: [{ base: { type: 'dns', value: '.example.test' } }],
-					excludedSubtrees: [{ base: { type: 'email', value: 'blocked@example.test' } }],
+					excludedSubtrees: [{ base: { type: 'email', value: 'blocked.example.test' } }],
 				},
 				certificatePolicies: [{ policyIdentifier: '1.2.3.4.5' }],
 				policyMappings: [{ issuerDomainPolicy: '1.2.3.4.1', subjectDomainPolicy: '1.2.3.4.2' }],
@@ -211,7 +211,7 @@ describe('extension registry', () => {
 		]);
 		expect(parsed.nameConstraints).toEqual({
 			permittedSubtrees: [{ base: { type: 'dns', value: '.example.test' } }],
-			excludedSubtrees: [{ base: { type: 'email', value: 'blocked@example.test' } }],
+			excludedSubtrees: [{ base: { type: 'email', value: 'blocked.example.test' } }],
 		});
 		expect(parsed.certificatePolicies).toEqual([{ policyIdentifier: '1.2.3.4.5' }]);
 		expect(parsed.policyMappings).toEqual([
@@ -247,7 +247,7 @@ describe('extension registry', () => {
 				subjectAltNames: [{ type: 'dns', value: 'registry-csr.example' }],
 				nameConstraints: {
 					permittedSubtrees: [{ base: { type: 'dns', value: '.example.test' } }],
-					excludedSubtrees: [{ base: { type: 'email', value: 'blocked@example.test' } }],
+					excludedSubtrees: [{ base: { type: 'email', value: 'blocked.example.test' } }],
 				},
 				certificatePolicies: [{ policyIdentifier: '1.2.3.7.8' }],
 				policyMappings: [{ issuerDomainPolicy: '1.2.3.7.1', subjectDomainPolicy: '1.2.3.7.2' }],
@@ -273,7 +273,7 @@ describe('extension registry', () => {
 		expect(parsed.subjectAltNames).toEqual([{ type: 'dns', value: 'registry-csr.example' }]);
 		expect(parsed.nameConstraints).toEqual({
 			permittedSubtrees: [{ base: { type: 'dns', value: '.example.test' } }],
-			excludedSubtrees: [{ base: { type: 'email', value: 'blocked@example.test' } }],
+			excludedSubtrees: [{ base: { type: 'email', value: 'blocked.example.test' } }],
 		});
 		expect(parsed.certificatePolicies).toEqual([{ policyIdentifier: '1.2.3.7.8' }]);
 		expect(parsed.policyMappings).toEqual([

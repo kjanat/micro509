@@ -38,6 +38,7 @@ import {
 	createSelfSignedCertificateWithRawExtensions,
 	importRsaPrivateKeyWithScheme,
 	issueChain,
+	legacyMailboxNameConstraints,
 	replaceCertificateSignatureAlgorithm,
 	rewriteCertificateSignatureAsRsaPss,
 } from '#test/helpers';
@@ -1869,15 +1870,19 @@ describe('chain verification', () => {
 	});
 
 	it('rejects email SAN with exact-address constraint mismatch', async () => {
-		// RFC 5280: "user@example.com" as constraint matches only that exact address
-		const root = await createSelfSignedCertificate({
+		// A pre-RFC 9549 "user@example.com" constraint matches only that exact address
+		const root = await createSelfSignedCertificateWithRawExtensions({
 			subject: { commonName: 'NC Email Exact Root' },
 			extensions: {
 				basicConstraints: { ca: true },
 				keyUsage: ['keyCertSign', 'cRLSign'],
-				nameConstraints: {
-					permittedSubtrees: [{ base: { type: 'email', value: 'user@example.com' } }],
-				},
+				customExtensions: [
+					{
+						oid: OIDS.nameConstraints,
+						value: legacyMailboxNameConstraints('permitted', 'user@example.com'),
+						critical: true,
+					},
+				],
 			},
 		});
 		// Exact match passes

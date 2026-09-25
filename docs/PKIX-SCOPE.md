@@ -57,7 +57,11 @@ Current conformance evidence:
 - [x] Trust anchor information: trusted issuer name,
       trusted public key algorithm,
       trusted public key, and optional trusted key parameters.
-- [x] User-initial-policy-set.
+- [x] User-initial-policy-set. A list holding the anyPolicy OID means
+      any-policy. A supplied list must be satisfied even when explicit policy
+      is not required: RFC 9618 §5.5 would accept an empty user-constrained
+      policy set there, and micro509 applies the stricter rule as the
+      application restriction RFC 9618 §5.1 allows.
 - [x] Initial policy-mapping inhibit flag.
 - [x] Initial explicit-policy flag.
 - [x] Initial anyPolicy-inhibit flag.
@@ -114,12 +118,21 @@ Current GeneralName matrix for `nameConstraints`:
 | `uniformResourceIdentifier` | decode to typed URI values       | enforce host-based matching                | `complete` |
 | `iPAddress`                 | decode to address+mask bytes     | enforce                                    | `complete` |
 | `directoryName`             | preserve structured DN payload   | enforce with RFC 5280 semantic compare     | `complete` |
-| SmtpUTF8Mailbox `otherName` | decode to typed mailbox values   | enforce rfc822Name constraints by domain   | `complete` |
+| SmtpUTF8Mailbox `otherName` | decode to typed mailbox values   | enforce rfc822Name constraints by domain   | `partial`  |
 | other `otherName`           | preserved as raw payload         | fail closed when critical and form appears | `complete` |
 | `x400Address`               | preserved as raw payload         | fail closed when critical and form appears | `complete` |
 | `ediPartyName`              | preserved as raw payload         | fail closed when critical and form appears | `complete` |
 | `registeredID`              | decoded OID, preserved           | fail closed when critical and form appears | `complete` |
 
+- SmtpUTF8Mailbox is `partial`: domains are checked for lowercase LDH label
+  syntax, but an `xn--` label is not checked for IDNA2008 validity (RFC 9598
+  §4), and a Unicode reference identifier converts through the URL parser's
+  UTS #46 processing rather than IDNA2008.
+- rfc822Name constraints that name a particular mailbox were removed by RFC
+  9549 §2.2. The builder and caller-supplied initial constraints refuse them.
+  One in an already-issued certificate keeps its exact local-part match
+  against an rfc822Name, and matches a SmtpUTF8Mailbox by domain alone as RFC
+  9598 §6 describes.
 - Parser responsibility: preserve enough tag/type information that validation can make a deterministic supported-vs-unsupported decision.
 - Validator responsibility: enforce supported forms and reject critical under-enforced cases instead of silently widening trust.
 

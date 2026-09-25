@@ -33,6 +33,7 @@ export type ExtensionEncoderErrorCode =
 	| 'edwards_key_usage_forbids_key_cert_sign'
 	| 'edwards_key_usage_requires_key_cert_sign'
 	| 'edwards_key_usage_requires_signing_bit'
+	| 'email_name_constraint_names_mailbox'
 	| 'empty_general_name_value'
 	| 'empty_subject_requires_subject_alt_name'
 	| 'extended_key_usage_empty'

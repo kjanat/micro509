@@ -26,7 +26,6 @@ import {
 const rfc9608 = await flattenedText(`${rfcDir}/rfc9608.txt`);
 
 const CA_NAME = 'RFC 9608 CA';
-const AT = new Date();
 
 async function issuingCa() {
 	return createSelfSignedCertificate({
@@ -141,6 +140,27 @@ describe('RFC 9608 §3: a noRevAvail certificate carries no CA flag and no revoc
 				basicConstraints: { ca: true },
 				customExtensions: [{ oid: OIDS.noRevAvail, value: nullValue() }],
 			},
+			{
+				noRevAvail: true,
+				authorityInfoAccess: [
+					{
+						method: { type: 'oid', value: OIDS.ocspAccessMethod },
+						location: { type: 'uri', value: 'http://ocsp.example.test' },
+					},
+				],
+			},
+			{
+				noRevAvail: true,
+				authorityInfoAccess: [],
+				customExtensions: [
+					{
+						oid: OIDS.authorityInfoAccess,
+						value: encodeAuthorityInfoAccess([
+							{ method: 'ocsp', location: { type: 'uri', value: 'http://ocsp.example.test' } },
+						]),
+					},
+				],
+			},
 		];
 		for (const extensions of conflicts) {
 			expect(await builderErrorCode(() => issueLeaf(ca, extensions))).toBe('no_rev_avail_conflict');
@@ -183,7 +203,6 @@ describe('RFC 9608 §3: a noRevAvail certificate carries no CA flag and no revoc
 			const result = await verifyCertificateChain({
 				leaf: der,
 				roots: [ca.certificate.der],
-				at: AT,
 			});
 			expect(result).toMatchObject({ ok: false, code: 'no_rev_avail_conflict', index: 0 });
 		}
@@ -201,7 +220,6 @@ describe('RFC 9608 §3: a noRevAvail certificate carries no CA flag and no revoc
 		const result = await verifyCertificateChain({
 			leaf: await issueLeaf(ca, undefined),
 			roots: [ca.certificate.der],
-			at: AT,
 		});
 		expect(result).toMatchObject({ ok: false, code: 'no_rev_avail_conflict', index: 1 });
 	});
@@ -215,7 +233,7 @@ describe('RFC 9608 §3: a noRevAvail certificate carries no CA flag and no revoc
 			[encodeExtension(OIDS.noRevAvail, nullValue(), true)],
 		);
 		for (const leaf of [plain, critical]) {
-			const result = await verifyCertificateChain({ leaf, roots: [ca.certificate.der], at: AT });
+			const result = await verifyCertificateChain({ leaf, roots: [ca.certificate.der] });
 			expect(result.ok).toBe(true);
 		}
 	});
@@ -242,7 +260,6 @@ describe('RFC 9608 §4: revocation checking is skipped for noRevAvail and ocsp-n
 			const result = await checkChainRevocation({
 				chain: [leaf, parseCertificateDerOrThrow(ca.certificate.der)],
 				policy: { mode: 'hard-fail' },
-				at: AT,
 			});
 			expect(result.value.decision).toBe('allow');
 			expect(result.value.certificates).toEqual([
@@ -251,13 +268,27 @@ describe('RFC 9608 §4: revocation checking is skipped for noRevAvail and ocsp-n
 		}
 	});
 
+	it('does not exempt a certificate whose ocsp-nocheck value is not NULL', async () => {
+		const ca = await issuingCa();
+		const leaf = parseCertificateDerOrThrow(
+			await issueLeaf(ca, {
+				customExtensions: [{ oid: OIDS.ocspNoCheck, value: octetString(Uint8Array.of(1)) }],
+			}),
+		);
+		const result = await checkChainRevocation({
+			chain: [leaf, parseCertificateDerOrThrow(ca.certificate.der)],
+			policy: { mode: 'hard-fail' },
+		});
+		expect(result.value.decision).toBe('deny');
+		expect(result.value.certificates[0]?.status).toBe('indeterminate');
+	});
+
 	it('still denies a leaf without either extension when no evidence is supplied', async () => {
 		const ca = await issuingCa();
 		const leaf = parseCertificateDerOrThrow(await issueLeaf(ca, undefined));
 		const result = await checkChainRevocation({
 			chain: [leaf, parseCertificateDerOrThrow(ca.certificate.der)],
 			policy: { mode: 'hard-fail' },
-			at: AT,
 		});
 		expect(result.value.decision).toBe('deny');
 		expect(result.value.certificates[0]?.status).toBe('indeterminate');
@@ -268,7 +299,6 @@ describe('RFC 9608 §4: revocation checking is skipped for noRevAvail and ocsp-n
 		const result = await verifyCertificateChain({
 			leaf: await issueLeaf(ca, { noRevAvail: true }),
 			roots: [ca.certificate.der],
-			at: AT,
 			revocation: { policy: { mode: 'hard-fail' } },
 		});
 		expect(result.ok).toBe(true);

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import {
 	createSelfSignedCertificate,
+	isResultError,
 	matchServiceIdentity,
 	parseCertificateDerOrThrow,
 	verifyCertificateChain,
@@ -67,5 +68,46 @@ describe('RFC 9549 §1: all IDNs are carried and processed as A-labels', () => {
 			});
 			expect(result).toMatchObject({ ok: false, code: 'unsupported_initial_name_constraints' });
 		}
+	});
+});
+
+describe('RFC 9549 §2.2 (replacing part of RFC 5280 §4.2.1.10): mail constraints name a host or a domain', () => {
+	it('prints the sentences this suite relies on', () => {
+		expect(rfc9549).toContain(
+			'A name constraint for Internet mail addresses MAY specify all addresses at a particular host or all mailboxes in a domain.',
+		);
+	});
+
+	it('refuses to build an rfc822Name constraint that names a mailbox', async () => {
+		const error = await createSelfSignedCertificate({
+			subject: { commonName: 'RFC 9549 Mailbox Constraint' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'cRLSign'],
+				nameConstraints: {
+					permittedSubtrees: [{ base: { type: 'email', value: 'root@example.com' } }],
+				},
+			},
+		}).then(
+			() => undefined,
+			(caught: unknown) => (isResultError(caught) ? caught.code : undefined),
+		);
+		expect(error).toBe('email_name_constraint_names_mailbox');
+	});
+
+	it('refuses a caller-supplied initial rfc822Name constraint that names a mailbox', async () => {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'RFC 9549 Root' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
+		});
+		const result = await verifyCertificateChain({
+			leaf: root.certificate.der,
+			roots: [root.certificate.der],
+			allowSelfSignedLeaf: true,
+			nameConstraints: {
+				permittedSubtrees: [{ base: { type: 'email', value: 'root@example.com' } }],
+			},
+		});
+		expect(result).toMatchObject({ ok: false, code: 'unsupported_initial_name_constraints' });
 	});
 });

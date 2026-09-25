@@ -16,6 +16,7 @@
  * @module
  */
 
+import { canonicalizeOid } from '#micro509/internal/asn1/asn1';
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { verifySignedDataDetailed } from '#micro509/internal/crypto/sig-verify';
 import { compareDistinguishedNames } from '#micro509/internal/shared/dn';
@@ -1844,9 +1845,18 @@ function normalizeInitialPolicySet(
 	if (!Array.isArray(initialPolicySet)) {
 		return [];
 	}
-	return initialPolicySet.every((policyIdentifier) => typeof policyIdentifier === 'string')
-		? initialPolicySet
-		: [];
+	const canonical: string[] = [];
+	for (const policyIdentifier of initialPolicySet) {
+		if (typeof policyIdentifier !== 'string') {
+			return [];
+		}
+		try {
+			canonical.push(canonicalizeOid(policyIdentifier));
+		} catch {
+			return [];
+		}
+	}
+	return canonical.includes(OIDS.anyPolicy) ? 'any' : canonical;
 }
 
 function validateInitialNameConstraintsInput(input: InitialNameConstraintsInput):
@@ -1903,9 +1913,14 @@ function describeInvalidInitialNameConstraintForm(subtree: unknown): string | un
 	}
 	switch (base.type) {
 		case 'dns':
-		case 'email':
 		case 'uri':
 			return typeof base.value === 'string' && /^[\x20-\x7e]*$/.test(base.value)
+				? undefined
+				: base.type;
+		case 'email':
+			return typeof base.value === 'string' &&
+				/^[\x20-\x7e]*$/.test(base.value) &&
+				!base.value.includes('@')
 				? undefined
 				: base.type;
 		case 'directoryName':

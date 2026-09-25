@@ -8,7 +8,6 @@
  * @module
  */
 
-import { OIDS } from '#micro509/internal/asn1/oids';
 import type {
 	CrlSource,
 	ParsedCertificateRevocationList,
@@ -32,6 +31,7 @@ import type {
 	ValidateOcspResponseResult,
 } from '#micro509/revocation/ocsp';
 import {
+	carriesOcspNoCheck,
 	parseOcspResponseDerOrThrow,
 	parseOcspResponsePemOrThrow,
 	validateOcspResponse,
@@ -1398,9 +1398,7 @@ function revocationSkipReason(
 	certificate: ParsedCertificate,
 ): 'no_rev_avail' | 'ocsp_nocheck' | undefined {
 	if (certificate.noRevAvail === true) return 'no_rev_avail';
-	return certificate.extensions.some((extension) => extension.oid === OIDS.ocspNoCheck)
-		? 'ocsp_nocheck'
-		: undefined;
+	return carriesOcspNoCheck(certificate) ? 'ocsp_nocheck' : undefined;
 }
 
 // Function

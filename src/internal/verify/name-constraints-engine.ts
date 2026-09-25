@@ -463,9 +463,9 @@ function checkSmtpUtf8Mailbox(
 	mailbox: string,
 	index: number,
 ): NameConstraintValidationResult {
-	const domain = mailbox.slice(mailbox.lastIndexOf('@') + 1).toLowerCase();
+	const domain = mailbox.slice(mailbox.lastIndexOf('@') + 1);
 	const permitted = accumulatedHasEmailConstraints(accumulated)
-		? /^[\x21-\x7e]+$/.test(domain) && isMailboxDomainPermitted(domain, accumulated)
+		? /^[\x21-\x7e]+$/.test(domain) && isMailboxDomainPermitted(asciiLowercase(domain), accumulated)
 		: true;
 	if (permitted) return { ok: true };
 	return nameConstraintFailure(
@@ -492,10 +492,14 @@ function isMailboxDomainPermitted(
 }
 
 function matchesMailboxDomainConstraint(domain: string, constraint: string): boolean {
-	const constraintDomain = constraint.slice(constraint.lastIndexOf('@') + 1).toLowerCase();
+	const constraintDomain = asciiLowercase(constraint.slice(constraint.lastIndexOf('@') + 1));
 	return constraintDomain.startsWith('.')
 		? domain.endsWith(constraintDomain)
 		: domain === constraintDomain;
+}
+
+function asciiLowercase(value: string): string {
+	return value.replace(/[A-Z]/g, (letter) => letter.toLowerCase());
 }
 
 function checkCertificateSubjectEmailFallback(

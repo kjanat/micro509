@@ -1054,15 +1054,24 @@ function assertNoRevAvailProfile(input: CertificateExtensionsInput | undefined):
 	if (findCustomExtensionValue(input, OIDS.freshestCRL) !== undefined) {
 		throwNoRevAvailConflict('freshestCRL');
 	}
-	const customAccess = findCustomExtensionValue(input, OIDS.authorityInfoAccess);
-	const access =
-		input?.authorityInfoAccess ??
-		(customAccess === undefined
-			? []
-			: AUTHORITY_INFO_ACCESS_EXTENSION_DEFINITION.decode(customAccess));
-	if (access.some((entry) => entry.method === 'ocsp')) {
+	if (
+		resolveEffectiveAuthorityInfoAccess(input).some(
+			(entry) => getAuthorityInfoAccessMethodOid(entry.method) === OIDS.ocspAccessMethod,
+		)
+	) {
 		throwNoRevAvailConflict('an id-ad-ocsp authorityInfoAccess entry');
 	}
+}
+
+/** The authorityInfoAccess entries the builder will emit: the typed list when non-empty, otherwise a custom-known extension. */
+function resolveEffectiveAuthorityInfoAccess(
+	input: CertificateExtensionsInput | undefined,
+): readonly (AuthorityInformationAccess | AuthorityInformationAccessInput)[] {
+	if (input?.authorityInfoAccess !== undefined && input.authorityInfoAccess.length > 0) {
+		return input.authorityInfoAccess;
+	}
+	const custom = findCustomExtensionValue(input, OIDS.authorityInfoAccess);
+	return custom === undefined ? [] : AUTHORITY_INFO_ACCESS_EXTENSION_DEFINITION.decode(custom);
 }
 
 function throwNoRevAvailConflict(conflict: string): never {
@@ -1436,27 +1445,36 @@ function requireNonEmptyName(value: string): string {
  */
 function assertSmtpUtf8Mailbox(value: string): string {
 	const at = requireNonEmptyName(value).lastIndexOf('@');
-	const localPart = value.slice(0, Math.max(at, 0));
+	const localPart = at > 0 ? value.slice(0, at) : '';
 	const domain = value.slice(at + 1);
-	if (at <= 0 || domain.length === 0 || value.includes('﻿')) {
+	if (localPart.length === 0 || value.includes('\ufeff') || !isMailboxDomain(domain)) {
 		throwExtensionEncoderError(
 			'invalid_smtp_utf8_mailbox',
-			'SmtpUTF8Mailbox must be Local-part@Domain with no Byte Order Mark',
+			'SmtpUTF8Mailbox must be Local-part@Domain with no Byte Order Mark and a domain of lowercase A-labels and NR-LDH labels',
 		);
 	}
-	if (/^[\x20-\x7e]*$/.test(localPart)) {
+	if (![...localPart].some((character) => (character.codePointAt(0) ?? 0) > 0x7f)) {
 		throwExtensionEncoderError(
 			'smtp_utf8_mailbox_ascii_local_part',
 			'A mailbox with an ASCII Local-part must use rfc822Name (type email)',
 		);
 	}
-	if (!/^[a-z0-9.-]+$/.test(domain)) {
-		throwExtensionEncoderError(
-			'invalid_smtp_utf8_mailbox',
-			'SmtpUTF8Mailbox domain must be lowercase A-labels and NR-LDH labels',
-		);
-	}
 	return value;
+}
+
+/** A dot-separated domain of 1 to 63 octet lowercase LDH labels, with no reserved `??--` label other than an `xn--` A-label. */
+function isMailboxDomain(domain: string): boolean {
+	return (
+		domain.length > 0 &&
+		domain.length <= 253 &&
+		domain
+			.split('.')
+			.every(
+				(label) =>
+					/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label) &&
+					(label.slice(2, 4) !== '--' || label.startsWith('xn--')),
+			)
+	);
 }
 
 /**
@@ -2018,6 +2036,12 @@ function encodeNameConstraintForm(form: NameConstraintForm): Uint8Array {
 		case 'dns':
 			return implicitPrimitiveContext(2, encodeIa5Content(form.value));
 		case 'email':
+			if (form.value.includes('@')) {
+				throwExtensionEncoderError(
+					'email_name_constraint_names_mailbox',
+					'An rfc822Name constraint names a host or a domain, not a particular mailbox (RFC 9549 §2.2)',
+				);
+			}
 			return implicitPrimitiveContext(1, encodeIa5Content(form.value));
 		case 'uri':
 			return implicitPrimitiveContext(6, encodeIa5Content(form.value));

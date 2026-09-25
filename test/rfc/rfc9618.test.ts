@@ -14,6 +14,7 @@ const rfc9618 = await flattenedText(`${rfcDir}/rfc9618.txt`);
 
 const P1 = '1.2.3.4';
 const P2 = '1.2.3.5';
+const ANY_POLICY = '2.5.29.32.0';
 
 describe('RFC 5280 §6.1.3 as kept by RFC 9618 §5.3: policy mapping (§6.1.4(b)) never runs on certificate n', () => {
 	it('prints the sentences this suite relies on', () => {
@@ -71,5 +72,57 @@ describe('RFC 5280 §6.1.3 as kept by RFC 9618 §5.3: policy mapping (§6.1.4(b)
 			ok: true,
 			value: { policyValidation: { userConstrainedPolicies: [{ policyIdentifier: P1 }] } },
 		});
+	});
+});
+
+describe('RFC 5280 §6.1.1(c): the special value any-policy in user-initial-policy-set', () => {
+	it('prints the sentences this suite relies on', () => {
+		expect(rfc5280).toContain(
+			'The user-initial-policy-set contains the special value any-policy if the user is not concerned about certificate policy.',
+		);
+	});
+
+	async function policyChain() {
+		const root = await createSelfSignedCertificate({
+			subject: { commonName: 'RFC 5280 Policy Root' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'RFC 5280 Policy Root' },
+			subject: { commonName: 'rfc5280-policy-leaf.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: root.keyPair.privateKey,
+			issuerPublicKey: root.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				certificatePolicies: [{ policyIdentifier: P1 }],
+			},
+		});
+		return [
+			unwrap(parseCertificatePem(leaf.pem)),
+			unwrap(parseCertificatePem(root.certificate.pem)),
+		];
+	}
+
+	it('reads the anyPolicy OID in initialPolicySet as any-policy', async () => {
+		const chain = await policyChain();
+		expect(await validateCandidatePath({ chain, initialPolicySet: [ANY_POLICY] })).toMatchObject({
+			ok: true,
+			value: { policyValidation: { userConstrainedPolicies: [{ policyIdentifier: P1 }] } },
+		});
+		expect(
+			await validateCandidatePath({ chain, initialPolicySet: [P2, ANY_POLICY] }),
+		).toMatchObject({ ok: true });
+	});
+
+	it('fails an initialPolicySet holding a malformed OID, even beside anyPolicy', async () => {
+		const chain = await policyChain();
+		for (const initialPolicySet of [['not-an-oid'], [ANY_POLICY, 'not-an-oid']]) {
+			expect(await validateCandidatePath({ chain, initialPolicySet })).toMatchObject({
+				ok: false,
+				code: 'initial_policy_set_not_satisfied',
+			});
+		}
 	});
 });

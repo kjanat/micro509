@@ -9,6 +9,7 @@ import {
 	concatBytes,
 	explicitContext,
 	implicitConstructedContext,
+	implicitPrimitiveContext,
 	integer,
 	integerFromNumber,
 	nullValue,
@@ -901,3 +902,20 @@ const openSslAvailable = await probeOpenSsl();
 const differentialEnabled = isCi ? Bun.env.DIFFERENTIAL_OPENSSL === '1' : true;
 
 export { differentialEnabled, openSslAvailable };
+
+/**
+ * DER of a nameConstraints value holding one rfc822Name subtree that names a
+ * particular mailbox, a form RFC 9549 §2.2 removed and the builder refuses, as
+ * certificates issued before then may still carry it.
+ */
+export function legacyMailboxNameConstraints(
+	kind: 'permitted' | 'excluded',
+	mailbox: string,
+): Uint8Array {
+	const subtrees = sequence([
+		sequence([implicitPrimitiveContext(1, new TextEncoder().encode(mailbox))]),
+	]);
+	return sequence([
+		implicitConstructedContext(kind === 'permitted' ? 0 : 1, readElement(subtrees).value),
+	]);
+}

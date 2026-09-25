@@ -85,6 +85,7 @@ Unions may gain members in minor releases; treat them as non-exhaustive and keep
 | `edwards_key_usage_forbids_key_cert_sign`               | End-entity Edwards certificate asserts `keyCertSign`/`cRLSign`    |
 | `edwards_key_usage_requires_key_cert_sign`              | Edwards CA keyUsage missing `keyCertSign`                         |
 | `edwards_key_usage_requires_signing_bit`                | Edwards keyUsage missing a signing bit (RFC 9295 §3)              |
+| `email_name_constraint_names_mailbox`                   | rfc822Name constraint names a mailbox (RFC 9549 §2.2)             |
 | `empty_general_name_value`                              | dNSName/rfc822Name/URI/SRV value is empty                         |
 | `empty_subject_requires_subject_alt_name`               | Empty subject DN without a critical, non-empty SAN                |
 | `extended_key_usage_empty`                              | EKU list is empty                                                 |
