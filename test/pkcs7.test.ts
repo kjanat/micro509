@@ -929,7 +929,24 @@ describe('pkcs7', () => {
 		const result = await verifyPkcs7SignedData(bag.der, {
 			content: new TextEncoder().encode('unsigned content'),
 		});
-		expect(result).toMatchObject({ ok: false, code: 'malformed' });
+		expect(result).toMatchObject({ ok: false, code: 'no_signers' });
+	});
+
+	it('verifyPkcs7SignedData rejects embedded content with no signers', async () => {
+		const signedData = sequence([
+			integerFromNumber(1),
+			setOf([]),
+			sequence([
+				objectIdentifier(OIDS.pkcs7Data),
+				explicitContext(0, octetString(new TextEncoder().encode('unsigned content'))),
+			]),
+			setOf([]),
+		]);
+		const der = sequence([objectIdentifier(OIDS.pkcs7SignedData), explicitContext(0, signedData)]);
+		expect(unwrap(parsePkcs7SignedDataDer(der)).signerInfos).toEqual([]);
+
+		const result = await verifyPkcs7SignedData(der);
+		expect(result).toMatchObject({ ok: false, code: 'no_signers' });
 	});
 
 	it('verifyPkcs7SignedData ignores tampered encapsulated content on pre-parsed input', async () => {

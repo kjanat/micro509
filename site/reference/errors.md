@@ -359,6 +359,7 @@ Without a password no key is derived. `maxKdfIterations` is not applied, and
 | `detached_content_required` | SignedData has no `eContent` and no `content` option supplied |
 | `malformed`                 | Structure, attributes, or algorithms fail to process          |
 | `message_digest_mismatch`   | Content digest differs from the `messageDigest` attribute     |
+| `no_signers`                | `signerInfos` is empty                                        |
 | `not_signed_data`           | ContentInfo carries a content type other than SignedData      |
 | `signature_invalid`         | A signer's signature does not verify                          |
 | `signer_not_found`          | No embedded certificate matches a SignerInfo                  |

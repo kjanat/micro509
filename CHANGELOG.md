@@ -181,9 +181,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   normalized into a raw signature WebCrypto could verify, giving a second
   accepted encoding of one signature. Such INTEGERs are now rejected.
   (https://github.com/kjanat/micro509/pull/100)
-- `verifyPkcs7SignedData` reported `ok: true` for a detached `SignedData`
-  whose `signerInfos` set was empty when the caller supplied `content`,
-  verifying nothing. A `SignedData` with no signer now fails with `malformed`.
+- `verifyPkcs7SignedData` reported `ok: true` for a `SignedData` whose
+  `signerInfos` set was empty, with embedded `eContent` or with detached
+  `content` from the caller, verifying nothing. A `SignedData` with no signer
+  now fails with `no_signers`, a new `VerifyPkcs7SignedDataErrorCode`.
   (https://github.com/kjanat/micro509/pull/106)
 - Distinguished-name comparison classified combining marks with the runtime's
   `\p{M}`, which tracks the host Unicode version. RFC 4518 §2.6.1 keys
