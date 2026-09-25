@@ -1,11 +1,10 @@
 import { describe, expect, it } from 'bun:test';
+import type { NameConstraints, SubjectAltName } from '#micro509';
 import {
 	createCertificate,
 	generateKeyPair,
 	isResultError,
-	type NameConstraints,
 	parseCertificateDerOrThrow,
-	type SubjectAltName,
 	verifyCertificateChain,
 } from '#micro509';
 import {

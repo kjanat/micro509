@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import type { SubjectAltName } from '#micro509';
 import {
 	createCertificate,
 	createSelfSignedCertificate,
@@ -6,7 +7,6 @@ import {
 	isResultError,
 	matchServiceIdentity,
 	parseCertificateDerOrThrow,
-	type SubjectAltName,
 	verifyCertificateChain,
 } from '#micro509';
 import { flattenedText, rfcDir } from '#test/helpers';
