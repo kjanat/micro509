@@ -83,6 +83,9 @@ const crl = await createCertificateRevocationList({
   issuer: { commonName: 'My CA' },
   signerPrivateKey: ca.keyPair.privateKey,
   issuerPublicKey: ca.keyPair.publicKey,
+  nextUpdate: new Date(
+    Date.now() + 7 * 24 * 60 * 60 * 1000,
+  ),
   revokedCertificates: [
     {
       serialNumber: Uint8Array.of(0x01),
@@ -122,10 +125,29 @@ revoked 02: ${isCertificateRevoked('02', parsed)}`);
 
 </LiveCode>
 
-`nextUpdate` is optional in RFC 5280, and a CRL without one never goes stale
-on its own, so a replayed pre-revocation CRL would validate forever. Set
-`maxAgeMs` to bound how old `thisUpdate` may be; the same knob is
-`crlMaxAgeMs` on the chain-level revocation policy.
+RFC 5280 §5.1.2.5 requires conforming CRL issuers to include `nextUpdate`, so
+`createCertificateRevocationList` requires it. The builder also throws
+`next_update_not_after_this_update` unless `nextUpdate` is at least one second
+after `thisUpdate`. That ordering is a micro509 invariant, and RFC 5280 and
+X.509 do not specify it. RFC 5280 §5.1.2.5 does not specify how a client
+handles a received CRL without `nextUpdate`, and §3.3 leaves the required
+recency of revocation data to local policy. By default micro509 applies no age limit, so a replayed
+pre-revocation CRL without `nextUpdate` still validates.
+
+Bound the age of `thisUpdate` with these options. A CRL older than the bound
+fails with `stale_crl`, and the chain reports it as `crl_expired`.
+
+| Option                           | Where                                                                             |
+| -------------------------------- | --------------------------------------------------------------------------------- |
+| `maxAgeMs`                       | `validateCertificateRevocationList`, `checkCertificateRevocationAgainstCrl`       |
+| `crlMaxAgeMs`                    | `checkCertificateRevocation`                                                      |
+| `crlMaxAgeMs`                    | `policy` of `checkChainRevocation` and `verifyCertificateChain({ revocation })`   |
+| `responderRevocationCrlMaxAgeMs` | `validateOcspResponse`, for the `responderRevocationCrls` of delegated responders |
+
+The chain-level `crlMaxAgeMs` also applies to CRLs for CRL signers and
+delegated OCSP responders. `clockSkewMs`, on the same input or on the chain
+`policy`, widens the bound by the same amount and also applies to the
+`thisUpdate` and `nextUpdate` checks.
 
 ## OCSP
 
@@ -265,7 +287,7 @@ certId:     hashed with ${entry?.certId.hashAlgorithmName} (RFC 9919 default)
 responder:  ${responder?.type === 'byKeyHash' ? `key hash ${responder.keyHashHex}` : 'by name'}
 signature:  ${response.signatureAlgorithmName}, verified
 nonce:      ${response.nonce === nonceHex ? 'echoed' : response.nonce}
-window:     ${entry?.thisUpdate.toISOString()} → ${entry?.nextUpdate?.toISOString() ?? 'no commitment'}
+window:     ${entry?.thisUpdate.toISOString()} → ${entry?.nextUpdate?.toISOString() ?? 'no nextUpdate'}
 producedAt: ${response.producedAt?.toISOString()}`);
 } else {
   console.log(`invalid: ${result.error.code}`);
@@ -273,6 +295,27 @@ producedAt: ${response.producedAt?.toISOString()}`);
 ```
 
 </LiveCode>
+
+### Require nextUpdate (RFC 9919)
+
+RFC 6960 §4.2.2.1 lets a response omit `nextUpdate`, meaning newer information
+is always available, and `validateOcspResponse` accepts such a response by
+default. RFC 9919 is a profile for lightweight, high-volume environments, and
+its §5 requires a client that follows it to reject a response without
+`nextUpdate`. Opt in with `profile: 'rfc9919'` on `validateOcspResponse`, or
+`ocspProfile: 'rfc9919'` on `checkCertificateRevocation` and the chain-level
+revocation `policy`. `validateOcspResponse` then fails with
+`next_update_missing`, `checkCertificateRevocation` reports
+`next_update_missing` as the indeterminate reason, and the chain reports
+`ocsp_next_update_missing`.
+
+```ts
+const result = await validateOcspResponse({
+  response,
+  issuerCertificate: ca.certificate.pem,
+  profile: 'rfc9919',
+});
+```
 
 ## Orchestrated revocation check
 
@@ -323,6 +366,9 @@ const crl = await createCertificateRevocationList({
   issuer: { commonName: 'Demo CA' },
   signerPrivateKey: ca.keyPair.privateKey,
   issuerPublicKey: ca.keyPair.publicKey,
+  nextUpdate: new Date(
+    Date.now() + 7 * 24 * 60 * 60 * 1000,
+  ),
   revokedCertificates: [
     {
       serialNumber: leafSerial,

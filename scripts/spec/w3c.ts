@@ -3,7 +3,9 @@ import type { Heading, ParsedDocument, SourceLine, W3cMeta } from './types.ts';
 
 const TOC_ENTRY = /^\s*(?:[•□☆*+-]|\d+\.)\s+((?:\d+|[A-Z])(?:\.\d+)*)\.?(?:\s+(.*))?$/;
 const BODY_HEADING = /^((?:\d+|[A-Z])(?:\.\d+)*)\.?(?:\s+(.*))?$/;
-const STATUS = /^W3C\s+(.*?)\s+(\d{1,2}\s+[A-Z][a-z]+\s+\d{4})\s*$/;
+const STATUS =
+	/^(?:W3C\s+(.*?)|(Living Standard)\s+—\s+Last Updated)\s+(\d{1,2}\s+[A-Z][a-z]+\s+\d{4})\s*$/;
+const PUBLISHERS: ReadonlySet<string> = new Set(['', 'W3C', 'WHATWG']);
 
 function tocTitles(lines: readonly SourceLine[]): ReadonlyMap<string, string> {
 	const titles = new Map<string, string>();
@@ -56,11 +58,11 @@ function metaOf(lines: readonly SourceLine[]): W3cMeta {
 	let date: string | undefined;
 	for (const entry of head) {
 		const text = cleanTitle(entry.text);
-		if (text === '' || text === 'W3C') continue;
+		if (PUBLISHERS.has(text)) continue;
 		const match = STATUS.exec(text);
-		if (match?.[1] !== undefined) {
-			status ??= match[1];
-			date ??= match[2];
+		if (match !== null) {
+			status ??= match[1] ?? match[2];
+			date ??= match[3];
 			continue;
 		}
 		if (title === '') title = text;
@@ -85,4 +87,30 @@ export function w3cIdentifier(stem: string): string {
 export function parseW3c(source: string): ParsedDocument {
 	const { lines, seams } = stripPageArtifacts(sourceLines(source));
 	return { meta: metaOf(lines), lines, seams, headings: headingsOf(lines) };
+}
+
+const LICENSE_LINK = /<a\b[^>]*\bhref="([^"]+)"[^>]*>/g;
+
+const LEGAL_PAGE =
+	/\/Consortium\/Legal\/(?:\d{4}\/)?copyright-(?:documents|software-and-document)|\/copyright\/(?:document|software)-license/;
+
+export function licenseLinks(html: string, base: string): readonly string[] {
+	const links = new Set<string>();
+	for (const match of html.matchAll(LICENSE_LINK)) {
+		const [tag, href] = match;
+		if (href === undefined) continue;
+		if (/\brel="license"/.test(tag) || LEGAL_PAGE.test(href)) links.add(new URL(href, base).href);
+	}
+	return [...links];
+}
+
+export function provenance(source: string, licenses: readonly string[]): string {
+	const retrieved = new Date().toISOString().slice(0, 10);
+	return [
+		'',
+		`Source: ${source}`,
+		`Retrieved: ${retrieved}`,
+		...licenses.map((license) => `License: ${license}`),
+		'',
+	].join('\n');
 }

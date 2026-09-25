@@ -41,9 +41,77 @@ import {
 	getSignatureAlgorithm,
 	signBytes,
 } from '#micro509/internal/crypto/signing';
-import { hexToBytes } from '#test/helpers';
+import { expectRejectedErrorCode, hexToBytes } from '#test/helpers';
 
 describe('ocsp', () => {
+	it.each([
+		['producedAt', { producedAt: new Date(Number.NaN) }, {}],
+		['thisUpdate', {}, { thisUpdate: new Date(Number.NaN) }],
+		['nextUpdate', {}, { nextUpdate: new Date(Number.NaN) }],
+	] as const)(
+		'createOcspResponse rejects an invalid %s as invalid_date',
+		async (_field, top, single) => {
+			const issuer = await createSelfSignedCertificate({
+				subject: { commonName: 'OCSP Date CA' },
+				extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
+			});
+			const leafKeys = await generateKeyPair();
+			const leaf = await createCertificate({
+				issuer: { commonName: 'OCSP Date CA' },
+				subject: { commonName: 'ocsp-date.example' },
+				publicKey: leafKeys.publicKey,
+				signerPrivateKey: issuer.keyPair.privateKey,
+				issuerPublicKey: issuer.keyPair.publicKey,
+			});
+			await expectRejectedErrorCode(
+				createOcspResponse({
+					signerPrivateKey: issuer.keyPair.privateKey,
+					signerCertificate: issuer.certificate.pem,
+					...top,
+					responses: [
+						{
+							certificate: leaf.pem,
+							issuerCertificate: issuer.certificate.pem,
+							certStatus: 'good',
+							...single,
+						},
+					],
+				}),
+				'invalid_date',
+			);
+		},
+	);
+
+	it('createOcspResponse rejects an invalid revokedAt as invalid_date', async () => {
+		const issuer = await createSelfSignedCertificate({
+			subject: { commonName: 'OCSP Date CA' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'OCSP Date CA' },
+			subject: { commonName: 'ocsp-date.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: issuer.keyPair.privateKey,
+			issuerPublicKey: issuer.keyPair.publicKey,
+		});
+		await expectRejectedErrorCode(
+			createOcspResponse({
+				signerPrivateKey: issuer.keyPair.privateKey,
+				signerCertificate: issuer.certificate.pem,
+				responses: [
+					{
+						certificate: leaf.pem,
+						issuerCertificate: issuer.certificate.pem,
+						certStatus: 'revoked',
+						revokedAt: new Date(Number.NaN),
+					},
+				],
+			}),
+			'invalid_date',
+		);
+	});
+
 	it('builds, parses, and verifies OCSP responses', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'OCSP CA' },

@@ -14,6 +14,7 @@ import {
 	parseCertificateRevocationListPem,
 	parseCertificateRevocationListPemOrThrow,
 	pemDecodeOrThrow,
+	pemEncode,
 	unwrap,
 	validateCertificateRevocationList,
 	verifyCertificateRevocationListSignature,
@@ -39,8 +40,11 @@ import {
 	decodeObjectIdentifier,
 	encodeUncheckedCrlDistributionPoints,
 	expectRejectedErrorCode,
+	expectRejectedWith,
+	FAR_FUTURE_NEXT_UPDATE,
 	hexToBytes,
 	sliceElement,
+	withoutCrlNextUpdate,
 } from '#test/helpers';
 
 describe('crl', () => {
@@ -67,6 +71,7 @@ describe('crl', () => {
 			issuerPublicKey: issuer.keyPair.publicKey,
 			crlNumber: 7,
 			revokedCertificates: [{ serialNumber: hexToBytes(parsedLeaf.serialNumberHex) }],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const parsedCrl = parseCertificateRevocationListPemOrThrow(crl.pem);
 		expect(parsedCrl.issuer.values.commonName).toBe('CRL Issuer');
@@ -85,6 +90,7 @@ describe('crl', () => {
 			issuer: { commonName: 'CRL Issuer' },
 			signerPrivateKey: wrongSigner.privateKey,
 			revokedCertificates: [{ serialNumber: hexToBytes(parsedLeaf.serialNumberHex) }],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		expect(
 			await verifyCertificateRevocationListSignature(badCrl.der, issuer.certificate.der),
@@ -132,6 +138,7 @@ describe('crl', () => {
 					invalidityDate: new Date('2024-01-01T00:00:00Z'),
 				},
 			],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const parsed = parseCertificateRevocationListPemOrThrow(crl.pem);
 		expect(parsed.baseCrlNumber).toBe(8);
@@ -204,6 +211,7 @@ describe('crl', () => {
 					},
 				},
 			],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 
 		const parsed = parseCertificateRevocationListPemOrThrow(crl.pem);
@@ -258,6 +266,7 @@ describe('crl', () => {
 				onlyContainsAttributeCerts: true,
 				indirectCrl: true,
 			},
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 
 		const parsed = parseCertificateRevocationListPemOrThrow(crl.pem);
@@ -291,6 +300,7 @@ describe('crl', () => {
 					},
 				},
 			],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 
 		expect(parseCertificateRevocationListPemOrThrow(crl.pem).freshestCrlDistributionPoints).toEqual(
@@ -389,6 +399,7 @@ describe('crl', () => {
 			issuer: { commonName: 'AKI CRL CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const result = await validateCertificateRevocationList({
 			crl: crl.pem,
@@ -434,6 +445,7 @@ describe('crl', () => {
 					fullName: [{ type: 'uri', value: 'http://example.test/leaf.crl' }],
 				},
 			},
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		expect(
 			await checkCertificateRevocationAgainstCrl({
@@ -454,6 +466,7 @@ describe('crl', () => {
 				},
 			},
 			revokedCertificates: [{ serialNumber: hexToBytes(parsedLeaf.serialNumberHex) }],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		expect(
 			await checkCertificateRevocationAgainstCrl({
@@ -509,6 +522,7 @@ describe('crl', () => {
 				onlySomeReasons: ['cessationOfOperation'],
 			},
 			revokedCertificates: [{ serialNumber: hexToBytes(parsedLeaf.serialNumberHex) }],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		expect(
 			await checkCertificateRevocationAgainstCrl({
@@ -554,6 +568,7 @@ describe('crl', () => {
 				},
 				onlyContainsCACerts: true,
 			},
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		expect(
 			await checkCertificateRevocationAgainstCrl({
@@ -613,6 +628,7 @@ describe('crl', () => {
 			issuer: { commonName: 'Different CRL Issuer CA' },
 			signerPrivateKey: crlIssuer.keyPair.privateKey,
 			issuerPublicKey: crlIssuer.keyPair.publicKey,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 
 		expect(
@@ -659,6 +675,7 @@ describe('crl', () => {
 					fullName: [{ type: 'uri', value: 'http://example.test/direct.crl' }],
 				},
 			},
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 
 		expect(
@@ -707,6 +724,7 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 			crlNumber: 2,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const delta = await createCertificateRevocationList({
 			issuer: { commonName: 'No IDP Delta CA' },
@@ -714,6 +732,7 @@ describe('crl', () => {
 			issuerPublicKey: ca.keyPair.publicKey,
 			crlNumber: 3,
 			baseCrlNumber: 2,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 
 		expect(
@@ -761,6 +780,7 @@ describe('crl', () => {
 			issuingDistributionPoint: {
 				onlyContainsAttributeCerts: true,
 			},
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const userOnlyCrl = await createCertificateRevocationList({
 			issuer: { commonName: 'Scope Mismatch CA' },
@@ -769,6 +789,7 @@ describe('crl', () => {
 			issuingDistributionPoint: {
 				onlyContainsUserCerts: true,
 			},
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 
 		expect(
@@ -821,6 +842,7 @@ describe('crl', () => {
 					fullName: [{ type: 'directoryName', derHex: caDnHex }],
 				},
 			},
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		expect(
 			await checkCertificateRevocationAgainstCrl({
@@ -866,6 +888,7 @@ describe('crl', () => {
 				},
 				indirectCrl: true,
 			},
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		expect(
 			await checkCertificateRevocationAgainstCrl({
@@ -886,6 +909,7 @@ describe('crl', () => {
 				},
 				indirectCrl: true,
 			},
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		expect(
 			await checkCertificateRevocationAgainstCrl({
@@ -928,6 +952,7 @@ describe('crl', () => {
 			issuer: { commonName: 'Reason Mask CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		expect(
 			await checkCertificateRevocationAgainstCrl({
@@ -951,6 +976,7 @@ describe('crl', () => {
 				},
 				onlySomeReasons: ['cACompromise', 'superseded'],
 			},
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		expect(
 			await checkCertificateRevocationAgainstCrl({
@@ -999,6 +1025,7 @@ describe('crl', () => {
 			issuer: { commonName: 'Multi DP CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const result = await checkCertificateRevocationAgainstCrl({
 			certificate: leaf.pem,
@@ -1038,6 +1065,7 @@ describe('crl', () => {
 			issuingDistributionPoint: {
 				distributionPoint: { type: 'fullName', fullName: [{ type: 'dns', value: 'crl.example' }] },
 			},
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		expect(
 			await checkCertificateRevocationAgainstCrl({
@@ -1079,6 +1107,7 @@ describe('crl', () => {
 				issuingDistributionPoint: {
 					distributionPoint: { type: 'fullName', fullName: [{ type: 'srv', value: idpName }] },
 				},
+				nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 			});
 			expect(
 				await checkCertificateRevocationAgainstCrl({
@@ -1099,6 +1128,7 @@ describe('crl', () => {
 					fullName: [{ type: 'srv', value: '_imaps.crl.example' }],
 				},
 			},
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		expect(
 			await checkCertificateRevocationAgainstCrl({
@@ -1153,6 +1183,7 @@ describe('crl', () => {
 			issuingDistributionPoint: {
 				distributionPoint: { type: 'fullName', fullName: [{ type: 'uri', value: crlUri }] },
 			},
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		expect(
 			await checkCertificateRevocationAgainstCrl({
@@ -1205,6 +1236,7 @@ describe('crl', () => {
 			issuingDistributionPoint: {
 				distributionPoint: { type: 'fullName', fullName: [{ type: 'uri', value: crlUri }] },
 			},
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		expect(
 			await checkCertificateRevocationAgainstCrl({
@@ -1243,6 +1275,7 @@ describe('crl', () => {
 			issuer: { commonName: 'Full Scope CRL CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		expect(
 			await checkCertificateRevocationAgainstCrl({
@@ -1262,6 +1295,7 @@ describe('crl', () => {
 			issuingDistributionPoint: {
 				onlySomeReasons: ['keyCompromise'],
 			},
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		expect(
 			await checkCertificateRevocationAgainstCrl({
@@ -1284,6 +1318,7 @@ describe('crl', () => {
 					fullName: [{ type: 'uri', value: 'http://example.test/scoped.crl' }],
 				},
 			},
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		expect(
 			await checkCertificateRevocationAgainstCrl({
@@ -1308,6 +1343,7 @@ describe('crl', () => {
 			issuer: { commonName: 'No CRL Sign CA' },
 			signerPrivateKey: signerWithoutCrlSign.keyPair.privateKey,
 			issuerPublicKey: signerWithoutCrlSign.keyPair.publicKey,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		expect(
 			await checkCertificateRevocationAgainstCrl({
@@ -1373,6 +1409,7 @@ describe('crl', () => {
 			revokedCertificates: [
 				{ serialNumber: hexToBytes(unwrap(parseCertificatePem(leaf.pem)).serialNumberHex) },
 			],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		expect(
 			await checkCertificateRevocationAgainstCrl({
@@ -1413,6 +1450,7 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 			baseCrlNumber: 1,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		expect(
 			await checkCertificateRevocationAgainstCrl({
@@ -1450,6 +1488,7 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 			crlNumber: 5,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const deltaCrl = await createCertificateRevocationList({
 			issuer: { commonName: 'Delta Merge CA' },
@@ -1463,6 +1502,7 @@ describe('crl', () => {
 					reasonCode: 'keyCompromise',
 				},
 			],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 
 		expect(
@@ -1692,6 +1732,7 @@ describe('crl', () => {
 					fullName: [{ type: 'uri', value: 'http://example.test/delta-scope-a.crl' }],
 				},
 			},
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const deltaCrl = await createCertificateRevocationList({
 			issuer: { commonName: 'Delta Scope CA' },
@@ -1705,6 +1746,7 @@ describe('crl', () => {
 					fullName: [{ type: 'uri', value: 'http://example.test/delta-scope-b.crl' }],
 				},
 			},
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 
 		expect(
@@ -1745,6 +1787,7 @@ describe('crl', () => {
 			issuerPublicKey: ca.keyPair.publicKey,
 			crlNumber: 8,
 			baseCrlNumber: 7,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const normalDelta = await createCertificateRevocationList({
 			issuer: { commonName: 'Delta Compatibility CA' },
@@ -1752,6 +1795,7 @@ describe('crl', () => {
 			issuerPublicKey: ca.keyPair.publicKey,
 			crlNumber: 9,
 			baseCrlNumber: 8,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		expect(
 			await checkCertificateRevocationAgainstCrl({
@@ -1772,12 +1816,14 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 			crlNumber: 8,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const missingIndicatorDelta = await createCertificateRevocationList({
 			issuer: { commonName: 'Delta Compatibility CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 			crlNumber: 9,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		expect(
 			await checkCertificateRevocationAgainstCrl({
@@ -1799,6 +1845,7 @@ describe('crl', () => {
 			issuerPublicKey: ca.keyPair.publicKey,
 			crlNumber: 10,
 			baseCrlNumber: 9,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		expect(
 			await checkCertificateRevocationAgainstCrl({
@@ -1820,6 +1867,7 @@ describe('crl', () => {
 			issuerPublicKey: ca.keyPair.publicKey,
 			crlNumber: 8,
 			baseCrlNumber: 8,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		expect(
 			await checkCertificateRevocationAgainstCrl({
@@ -1857,6 +1905,7 @@ describe('crl', () => {
 			signerPrivateKey: crlIssuer.keyPair.privateKey,
 			issuerPublicKey: crlIssuer.keyPair.publicKey,
 			revokedCertificates: [{ serialNumber: Uint8Array.of(0x01) }],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const modifiedDer = await addRevokedEntryCertificateIssuers(
 			crl.der,
@@ -1943,6 +1992,7 @@ describe('crl', () => {
 				{ serialNumber: Uint8Array.of(0x01) },
 				{ serialNumber: sharedSerial, reasonCode: 'keyCompromise' },
 			],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const indirectCrlDer = await addRevokedEntryCertificateIssuers(
 			baseCrl.der,
@@ -2014,6 +2064,7 @@ describe('crl', () => {
 				},
 				indirectCrl: true,
 			},
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		expect(
 			await checkCertificateRevocationAgainstCrl({
@@ -2059,6 +2110,7 @@ describe('crl', () => {
 			issuingDistributionPoint: {
 				indirectCrl: true,
 			},
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 
 		expect(
@@ -2121,6 +2173,7 @@ describe('crl', () => {
 				},
 				indirectCrl: true,
 			},
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 
 		expect(
@@ -2185,6 +2238,7 @@ describe('crl', () => {
 				},
 				indirectCrl: true,
 			},
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const deltaBase = await createCertificateRevocationList({
 			issuer: { commonName: 'Delta Unsupported Entry CRL Issuer' },
@@ -2200,6 +2254,7 @@ describe('crl', () => {
 				indirectCrl: true,
 			},
 			revokedCertificates: [{ serialNumber: Uint8Array.of(0x55), reasonCode: 'keyCompromise' }],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const deltaCrl = await addRevokedEntryCertificateIssuers(
 			deltaBase.der,
@@ -2269,6 +2324,7 @@ describe('crl', () => {
 							fullName: [{ type: 'uri', value: 'http://example.test/parsed-delta-compat.crl' }],
 						},
 					},
+					nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 				})
 			).pem,
 		);
@@ -2286,6 +2342,7 @@ describe('crl', () => {
 							fullName: [{ type: 'uri', value: 'http://example.test/parsed-delta-compat.crl' }],
 						},
 					},
+					nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 				})
 			).pem,
 		);
@@ -2364,6 +2421,7 @@ describe('crl', () => {
 					issuingDistributionPoint: {
 						distributionPoint: { type: 'fullName', fullName: complexNames },
 					},
+					nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 				})
 			).pem,
 		);
@@ -2378,6 +2436,7 @@ describe('crl', () => {
 					issuingDistributionPoint: {
 						distributionPoint: { type: 'fullName', fullName: shuffledNames },
 					},
+					nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 				})
 			).pem,
 		);
@@ -2435,6 +2494,7 @@ describe('crl', () => {
 						distributionPoint: { type: 'fullName', fullName: names },
 						onlySomeReasons: ['keyCompromise'],
 					},
+					nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 				})
 			).pem,
 		);
@@ -2457,6 +2517,7 @@ describe('crl', () => {
 						},
 						onlySomeReasons: ['keyCompromise', 'cessationOfOperation'],
 					},
+					nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 				})
 			).pem,
 		);
@@ -2515,6 +2576,7 @@ describe('crl', () => {
 							relativeName: [{ type: 'commonName', value: ' Team   Alpha ' }],
 						},
 					},
+					nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 				})
 			).pem,
 		);
@@ -2532,6 +2594,7 @@ describe('crl', () => {
 							relativeName: [{ type: 'commonName', value: 'TEAM ALPHA' }],
 						},
 					},
+					nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 				})
 			).pem,
 		);
@@ -2627,6 +2690,7 @@ describe('crl', () => {
 				indirectCrl: true,
 			},
 			revokedCertificates: [{ serialNumber: sharedSerial, reasonCode: 'keyCompromise' }],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 
 		expect(
@@ -2667,6 +2731,7 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 			revokedCertificates: revokedCerts,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const parsed = parseCertificateRevocationListPemOrThrow(crl.pem);
 		expect(parsed.revokedCertificates).toHaveLength(reasons.length);
@@ -2739,6 +2804,7 @@ describe('crl', () => {
 			issuer: { commonName: 'Malformed Parsed CRL Validate CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const parsedCrl = parseCertificateRevocationListPemOrThrow(crl.pem);
 		const parsedCa = unwrap(parseCertificatePem(ca.certificate.pem));
@@ -2763,6 +2829,7 @@ describe('crl', () => {
 			issuer: { commonName: 'DER-less Parsed CRL Validate CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const parsedCrl = parseCertificateRevocationListPemOrThrow(crl.pem);
 		const { der: _ignoredDer, ...parsedCrlWithoutDer } = parsedCrl;
@@ -2786,6 +2853,7 @@ describe('crl', () => {
 			issuer: { commonName: 'Malformed Validate Issuer CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const result = await validateCertificateRevocationList({
 			crl: crl.pem,
@@ -2806,6 +2874,7 @@ describe('crl', () => {
 			issuer: { commonName: 'Tampered Parsed Validate Issuer CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const parsedCa = unwrap(parseCertificatePem(ca.certificate.pem));
 		const tamperedCa = {
@@ -2842,6 +2911,7 @@ describe('crl', () => {
 			issuer: { commonName: 'Tampered Parsed CRL CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const parsedCrl = parseCertificateRevocationListPemOrThrow(crl.pem);
 		const future = new Date('2999-01-01T00:00:00Z');
@@ -2885,6 +2955,7 @@ describe('crl', () => {
 			issuer: { commonName: 'Malformed Parsed CRL Check CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const parsedCrl = parseCertificateRevocationListPemOrThrow(crl.pem);
 		const tamperedCrl = { ...parsedCrl, tbsCertListDer: Uint8Array.of(0x30, 0x80) };
@@ -2909,6 +2980,7 @@ describe('crl', () => {
 			issuer: { commonName: 'Malformed Target Cert CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const result = await checkCertificateRevocationAgainstCrl({
 			certificate: Uint8Array.of(0xff, 0xff),
@@ -2943,6 +3015,7 @@ describe('crl', () => {
 				{ serialNumber: hexToBytes(parsedLeaf.serialNumberHex) },
 				{ serialNumber: hexToBytes(parsedLeaf.serialNumberHex) },
 			],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const result = await checkCertificateRevocationAgainstCrl({
 			certificate: leaf.pem,
@@ -2972,6 +3045,7 @@ describe('crl', () => {
 			issuer: { commonName: 'CRL CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const result = await verifyCertificateRevocationListSignature(crl.pem, otherCa.certificate.pem);
 		expect(result.ok).toBe(false);
@@ -2990,6 +3064,7 @@ describe('crl', () => {
 			issuer: { commonName: 'Malformed Verify Issuer CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const result = await verifyCertificateRevocationListSignature(
 			crl.pem,
@@ -3018,6 +3093,7 @@ describe('crl', () => {
 			issuer: { commonName: 'CRL Validate CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			// omit issuerPublicKey → no AKI extension
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const result = await validateCertificateRevocationList({
 			crl: crl.pem,
@@ -3047,6 +3123,7 @@ describe('crl', () => {
 						fullName: [],
 					},
 				},
+				nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 			}),
 			'distribution_point_full_name_empty',
 		);
@@ -3067,6 +3144,7 @@ describe('crl', () => {
 				signerPrivateKey: issuer.keyPair.privateKey,
 				issuerPublicKey: issuer.keyPair.publicKey,
 				freshestCrlDistributionPoints: [{ crlIssuer: [] }],
+				nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 			}),
 			'distribution_point_crl_issuer_empty',
 		);
@@ -3084,6 +3162,7 @@ describe('crl', () => {
 			issuer: { commonName: 'PEM CRL CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const result = await verifyCertificateRevocationListSignature(crl.pem, ca.certificate.pem);
 		expect(result.ok).toBe(true);
@@ -3108,6 +3187,7 @@ describe('crl', () => {
 					fullName: [{ type: 'uri', value: 'http://crl.example.com/crl.pem' }],
 				},
 			},
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const derBytes = new Uint8Array(pemDecodeOrThrow('X509 CRL', crl.pem));
 		// Find the IDP OID bytes (2.5.29.28 = 55 1D 1C) in the CRL DER
@@ -3162,6 +3242,7 @@ describe('crl', () => {
 			issuer: { commonName: 'AKI CRL CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const derBytes = new Uint8Array(pemDecodeOrThrow('X509 CRL', crl.pem));
 		// Find AKI OID bytes (2.5.29.35 = 55 1D 23)
@@ -3204,6 +3285,7 @@ describe('crl', () => {
 			issuer: { commonName: 'Bad CRL AKI CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		expect(() =>
 			parseCertificateRevocationListDerOrThrow(
@@ -3228,6 +3310,7 @@ describe('crl', () => {
 			issuer: { commonName: 'Bad CRL AKI Wrapper CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		expect(() =>
 			parseCertificateRevocationListDerOrThrow(
@@ -3253,6 +3336,7 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 			crlNumber: 7,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 
 		expect(() =>
@@ -3278,6 +3362,7 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 			crlNumber: 7,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 
 		expect(() =>
@@ -3304,6 +3389,7 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 			crlNumber: 1,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		expect(() =>
 			parseCertificateRevocationListDerOrThrow(
@@ -3325,6 +3411,7 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 			crlNumber: 1,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		expect(() =>
 			parseCertificateRevocationListDerOrThrow(
@@ -3348,6 +3435,7 @@ describe('crl', () => {
 			issuer: { commonName: 'Trailing CRL Field CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		expect(() =>
 			parseCertificateRevocationListDerOrThrow(
@@ -3372,6 +3460,7 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 			crlNumber: 9,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		expect(() =>
 			parseCertificateRevocationListDerOrThrow(
@@ -3398,6 +3487,7 @@ describe('crl', () => {
 					reasonCode: 'keyCompromise',
 				},
 			],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		expect(() =>
 			parseCertificateRevocationListDerOrThrow(
@@ -3419,6 +3509,7 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 			issuingDistributionPoint: { indirectCrl: true },
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		expect(() =>
 			parseCertificateRevocationListDerOrThrow(
@@ -3444,6 +3535,7 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 			issuingDistributionPoint: { indirectCrl: true },
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const malformed = rewriteCrlExtensionValuePayload(
 			new Uint8Array(pemDecodeOrThrow('X509 CRL', crl.pem)),
@@ -3472,6 +3564,7 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 			issuingDistributionPoint: { onlyContainsUserCerts: true },
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		expect(() =>
 			parseCertificateRevocationListDerOrThrow(
@@ -3497,6 +3590,7 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 			issuingDistributionPoint: { onlyContainsUserCerts: true },
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const crlDer = new Uint8Array(pemDecodeOrThrow('X509 CRL', crl.pem));
 		const allFalse = rewriteCrlExtensionValuePayload(
@@ -3545,6 +3639,7 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 			issuingDistributionPoint: { indirectCrl: true },
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		expect(() =>
 			parseCertificateRevocationListDerOrThrow(
@@ -3577,6 +3672,7 @@ describe('crl', () => {
 					},
 				},
 			],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		expect(() =>
 			parseCertificateRevocationListDerOrThrow(
@@ -3609,6 +3705,7 @@ describe('crl', () => {
 					},
 				},
 			],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		expect(() =>
 			parseCertificateRevocationListDerOrThrow(
@@ -3634,6 +3731,7 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 			crlNumber: 7,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 
 		expect(() =>
@@ -3660,6 +3758,7 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 			crlNumber: 7,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 
 		expect(() =>
@@ -3701,6 +3800,7 @@ describe('crl', () => {
 					reasonCode: 'keyCompromise',
 				},
 			],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 
 		expect(() =>
@@ -3741,6 +3841,7 @@ describe('crl', () => {
 					reasonCode: 'keyCompromise',
 				},
 			],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 
 		expect(() =>
@@ -3776,6 +3877,7 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 			revokedCertificates: [{ serialNumber: hexToBytes(parsedLeaf.serialNumberHex) }],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const withCertificateIssuer = await addRevokedEntryCertificateIssuers(
 			crl.der,
@@ -3815,6 +3917,7 @@ describe('crl', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 			revokedCertificates: [{ serialNumber: hexToBytes(parsedLeaf.serialNumberHex) }],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const withCertificateIssuer = await addRevokedEntryCertificateIssuers(
 			crl.der,
@@ -3860,6 +3963,7 @@ describe('crl', () => {
 					reasonCode: 'keyCompromise',
 				},
 			],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 
 		expect(() =>
@@ -3900,6 +4004,7 @@ describe('crl', () => {
 					reasonCode: 'keyCompromise',
 				},
 			],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 
 		expect(() =>
@@ -4606,6 +4711,7 @@ describe('crl Result forms', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 			revokedCertificates: [],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 		const der = parseCertificateRevocationListDer(crl.der);
 		expect(der.ok).toBe(true);
@@ -4634,13 +4740,16 @@ describe('CRL maximum age', () => {
 				keyUsage: ['keyCertSign', 'cRLSign'],
 			},
 		});
-		const crl = await createCertificateRevocationList({
+		const issued = await createCertificateRevocationList({
 			issuer: { commonName: 'Max Age CRL CA' },
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 			thisUpdate: new Date('2020-01-01T00:00:00Z'),
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
-		return { ca, crl };
+		const der = await withoutCrlNextUpdate(issued.der, ca.keyPair.privateKey);
+		expect(parseCertificateRevocationListDerOrThrow(der).nextUpdate).toBeUndefined();
+		return { ca, crl: { pem: pemEncode('X509 CRL', der) } };
 	}
 
 	it('rejects a CRL older than maxAgeMs even when nextUpdate is absent', async () => {
@@ -4677,14 +4786,15 @@ describe('CRL maximum age', () => {
 	it('rejects a negative maxAgeMs', async () => {
 		const { ca, crl } = await issueOpenEndedCrl();
 
-		expect(
+		await expectRejectedWith(
 			validateCertificateRevocationList({
 				crl: crl.pem,
 				issuerCertificate: ca.certificate.pem,
 				at: new Date('2020-06-01T00:00:00Z'),
 				maxAgeMs: -1,
 			}),
-		).rejects.toThrow(RangeError);
+			RangeError,
+		);
 	});
 
 	it('reports an invalid crlMaxAgeMs as an invariant, not indeterminate evidence', async () => {
@@ -4698,14 +4808,15 @@ describe('CRL maximum age', () => {
 			issuerPublicKey: ca.keyPair.publicKey,
 		});
 
-		expect(
+		await expectRejectedWith(
 			checkCertificateRevocation({
 				certificate: leaf.pem,
 				issuerCertificate: ca.certificate.pem,
 				evidence: [{ kind: 'crl', crl: crl.pem }],
 				crlMaxAgeMs: -1,
 			}),
-		).rejects.toThrow(RangeError);
+			RangeError,
+		);
 	});
 
 	it('applies maxAgeMs through checkCertificateRevocationAgainstCrl', async () => {

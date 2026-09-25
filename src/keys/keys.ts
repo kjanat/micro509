@@ -185,7 +185,7 @@ export type PrivateKeyImportInput = PublicKeyImportInput;
 export interface EncryptedPkcs8Options {
 	/** Password fed to PBKDF2 for key derivation. */
 	readonly password: string;
-	/** PBKDF2 iteration count. Default: `100_000`. */
+	/** PBKDF2 iteration count, an integer from 1 to 4294967295. Default: `100_000`. */
 	readonly iterations?: number;
 	/** PBKDF2 salt. Default: 16 cryptographically random bytes. */
 	readonly salt?: Uint8Array;
@@ -436,6 +436,8 @@ export async function exportPkcs8Pem(privateKey: CryptoKey): Promise<string> {
  *
  * @param privateKey - The private key to export
  * @param options - Encryption options including password and optional algorithm settings
+ *
+ * @throws {RangeError} If `options.iterations` is not an integer from 1 to 4294967295
  *
  * @see {@linkcode importEncryptedPkcs8Der} for the inverse operation
  * @see {@linkcode exportEncryptedPkcs8Pem} for PEM output
@@ -1009,7 +1011,8 @@ function readEncryptedPkcs8Envelope(der: Uint8Array): {
  * Reads the PBES2 encryption parameters of a DER PKCS#8
  * `EncryptedPrivateKeyInfo` (RFC 5958 §3) without the password: PBKDF2
  * iteration count, salt, and PRF, plus the AES-CBC variant and IV.
- * Throws on malformed DER or a non-PBES2 encryption algorithm.
+ * Throws on malformed DER, a non-PBES2 encryption algorithm, or a PBKDF2
+ * iteration count outside 1 to 4294967295.
  */
 export function inspectEncryptedPkcs8Der(der: Uint8Array): Pbes2Parameters {
 	return parsePbes2AlgorithmIdentifier(readEncryptedPkcs8Envelope(der).algorithmIdentifierDer);

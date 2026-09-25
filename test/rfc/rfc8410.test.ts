@@ -68,6 +68,7 @@ import {
 	constructedChildren,
 	expectBuildErrorCode,
 	expectRejectedErrorCode,
+	FAR_FUTURE_NEXT_UPDATE,
 	fieldAt,
 	hexToBytes,
 	littleEndianInteger,
@@ -514,6 +515,7 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 				issuerPublicKey: issuer.keyPair.publicKey,
 				crlNumber: 1,
 				revokedCertificates: [],
+				nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 			});
 			expect(
 				await verifyCertificateRevocationListSignature(crl.der, issuer.certificate.pem),
@@ -1247,6 +1249,7 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 					issuerPublicKey: publicKey,
 					crlNumber: 1,
 					revokedCertificates: [],
+					nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 				});
 				expect(
 					await verifyCertificateRevocationListSignature(crl.der, certificate.pem),
@@ -1390,6 +1393,7 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 				issuerPublicKey: issuer.keyPair.publicKey,
 				crlNumber: 1,
 				revokedCertificates: [],
+				nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 			});
 			const requestKeyPair = await generateKeyPair(ED25519);
 			const request = await createCertificateSigningRequest({
@@ -2180,6 +2184,7 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 				issuerPublicKey: issuer.keyPair.publicKey,
 				crlNumber: 1,
 				revokedCertificates: [],
+				nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 			});
 			const requestKeyPair = await generateKeyPair(ED25519);
 			const request = await createCertificateSigningRequest({
@@ -2363,6 +2368,7 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 				issuerPublicKey: issuer.keyPair.publicKey,
 				crlNumber: 1,
 				revokedCertificates: [],
+				nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 			});
 			const tbsCertListDer = parseCertificateRevocationListDerOrThrow(crl.der).tbsCertListDer;
 			const reissueCrl = async (algorithmIdentifier: Uint8Array): Promise<Uint8Array> => {
@@ -3755,6 +3761,7 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 				issuerPublicKey: issuer.keyPair.publicKey,
 				crlNumber: 1,
 				revokedCertificates: [],
+				nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 			});
 			expect(
 				await verifyCertificateRevocationListSignature(crl.der, issuer.certificate.pem),
@@ -3869,6 +3876,7 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 				issuerPublicKey: issuer.keyPair.publicKey,
 				crlNumber: 1,
 				revokedCertificates: [],
+				nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 			});
 			const requestKeyPair = await generateKeyPair(ED25519);
 			const request = await createCertificateSigningRequest({

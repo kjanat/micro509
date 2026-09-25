@@ -63,7 +63,8 @@
 												"arc": "5",
 												"oids": {
 													"pbkdf2": "12",
-													"pbes2": "13"
+													"pbes2": "13",
+													"pbmac1": "14"
 												}
 											},
 											"pkcs7": {
@@ -116,7 +117,9 @@
 										"arc": "2",
 										"oids": {
 											"hmacWithSHA1": "7",
-											"hmacWithSHA256": "9"
+											"hmacWithSHA256": "9",
+											"hmacWithSHA384": "10",
+											"hmacWithSHA512": "11"
 										}
 									}
 								}

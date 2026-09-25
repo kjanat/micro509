@@ -31,6 +31,7 @@ import {
 	evaluatePolicyChain,
 } from '#micro509/internal/verify/policy-engine';
 import {
+	assertPathBuildingChecks,
 	authorityKeyIdentifierMismatch,
 	buildChainInternal,
 	countCaCertificatesBelowParsed,
@@ -150,6 +151,7 @@ export interface TrustAnchor {
  * - `ca_required` — an issuer lacks `basicConstraints.ca = true`.
  * - `key_cert_sign_required` — an issuer has keyUsage but omits `keyCertSign`.
  * - `path_length_exceeded` — the number of CA certificates below an issuer exceeds its pathLength.
+ * - `path_building_limit_exceeded` — candidate-path construction exceeded its bounded work limits.
  * - `authority_key_identifier_mismatch` — a certificate's AKI does not match the issuer's SKI.
  * - `extended_key_usage_invalid` — the leaf certificate lacks the required EKU for the requested purpose.
  * - `subject_alt_name_mismatch` — no SAN entry matches the requested service identity.
@@ -175,6 +177,7 @@ export const VERIFY_ERROR_CODES = [
 	'ca_required',
 	'key_cert_sign_required',
 	'path_length_exceeded',
+	'path_building_limit_exceeded',
 	'authority_key_identifier_mismatch',
 	'extended_key_usage_invalid',
 	'subject_alt_name_mismatch',
@@ -239,6 +242,11 @@ export interface BuildCandidatePathInput {
 	readonly trustAnchors?: readonly TrustAnchor[];
 	/** Validation time. Defaults to `new Date()`. */
 	readonly at?: Date;
+	/**
+	 * Maximum issuer candidates and trust anchors the path search may try before
+	 * it stops with `path_building_limit_exceeded`. Defaults to `100_000`.
+	 */
+	readonly maxPathBuildingChecks?: number;
 }
 
 /** A signature-verified certification path from leaf to root, before constraint validation. */
@@ -350,6 +358,11 @@ export interface VerifyCertificateChainInput
 	readonly trustAnchors?: readonly TrustAnchor[];
 	/** Validation time. Defaults to `new Date()`. */
 	readonly at?: Date;
+	/**
+	 * Maximum issuer candidates and trust anchors the path search may try before
+	 * it stops with `path_building_limit_exceeded`. Defaults to `100_000`.
+	 */
+	readonly maxPathBuildingChecks?: number;
 	/** Leaf purpose constraint to enforce during validation. */
 	readonly purpose?: VerifyPurpose;
 	/** DNS/IP/URI/SRV identity to match against the leaf's SAN. */
@@ -544,6 +557,7 @@ async function buildCandidatePathRaw(input: BuildCandidatePathInput): Promise<
 	  }
 	| VerifyChainFailure
 > {
+	assertPathBuildingChecks(input.maxPathBuildingChecks);
 	let leaf: ParsedCertificate;
 	let intermediates: readonly ParsedCertificate[];
 	let roots: readonly ParsedCertificate[];
@@ -563,10 +577,16 @@ async function buildCandidatePathRaw(input: BuildCandidatePathInput): Promise<
 	}
 	const anchors = input.trustAnchors ?? [];
 	const at = input.at ?? new Date();
-	const buildResult = await buildChainInternal(leaf, intermediates, roots, anchors, at, {
-		failure,
-		detail,
-	});
+	const buildResult = await buildChainInternal(
+		leaf,
+		intermediates,
+		roots,
+		anchors,
+		at,
+		{ failure, detail },
+		undefined,
+		input.maxPathBuildingChecks,
+	);
 	const chain = buildResult.chain;
 
 	if (!buildResult.foundTrustedRoot) {
@@ -993,6 +1013,9 @@ export async function verifyCertificateChain(
 			trustAnchors: input.trustAnchors,
 		}),
 		...(input.at !== undefined && { at: input.at }),
+		...(input.maxPathBuildingChecks !== undefined && {
+			maxPathBuildingChecks: input.maxPathBuildingChecks,
+		}),
 	});
 	if (!buildResult.ok) {
 		return buildResult;
@@ -1271,6 +1294,9 @@ function baseChainInput(
 			trustAnchors: input.trustAnchors,
 		}),
 		...(input.at !== undefined && { at: input.at }),
+		...(input.maxPathBuildingChecks !== undefined && {
+			maxPathBuildingChecks: input.maxPathBuildingChecks,
+		}),
 		...copyValidationInputs(input),
 	};
 }

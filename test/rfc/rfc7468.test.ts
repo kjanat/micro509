@@ -75,7 +75,12 @@ import {
 } from '#micro509/der';
 import { parseGeneralNames } from '#micro509/internal/x509/general-name';
 import { parseDistinguishedNameDer } from '#micro509/x509/parse';
-import { createSyntheticPkcs7SignedData, expectRejectedErrorCode, rfcDir } from '#test/helpers';
+import {
+	createSyntheticPkcs7SignedData,
+	expectRejectedErrorCode,
+	FAR_FUTURE_NEXT_UPDATE,
+	rfcDir,
+} from '#test/helpers';
 
 const rfc = await Bun.file(`${rfcDir}/rfc7468.txt`).text();
 
@@ -2135,6 +2140,7 @@ describe('RFC 7468: PKIX Textual Encodings', () => {
 				issuer: { commonName: 'label-conformance CA' },
 				signerPrivateKey: ca.keyPair.privateKey,
 				issuerPublicKey: ca.keyPair.publicKey,
+				nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 			});
 			expect(splitPemBlocksOrThrow(crl.pem).map((b) => b.label)).toEqual(['X509 CRL']);
 			expect(crl.pem.startsWith('-----BEGIN X509 CRL-----\n')).toBe(true);
@@ -2157,6 +2163,7 @@ describe('RFC 7468: PKIX Textual Encodings', () => {
 				issuerPublicKey: ca.keyPair.publicKey,
 				crlNumber: 1,
 				revokedCertificates: [{ serialNumber: Uint8Array.of(0x2a) }],
+				nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 			});
 			expectCertificateListStructure(crl.der);
 			expect(Array.from(pemDecodeOrThrow('X509 CRL', crl.pem))).toEqual(Array.from(crl.der));
@@ -2209,7 +2216,7 @@ describe('RFC 7468: PKIX Textual Encodings', () => {
 				extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
 			});
 			const windows = [
-				{ thisUpdate: '2049-12-31T23:59:59Z', nextUpdate: '2049-12-31T23:59:59Z', tag: UTC_TIME },
+				{ thisUpdate: '2049-12-31T23:59:58Z', nextUpdate: '2049-12-31T23:59:59Z', tag: UTC_TIME },
 				{
 					thisUpdate: '2050-01-01T00:00:00Z',
 					nextUpdate: '2051-01-01T00:00:00Z',
@@ -2258,6 +2265,7 @@ describe('RFC 7468: PKIX Textual Encodings', () => {
 					signerPrivateKey: ca.keyPair.privateKey,
 					issuerPublicKey: ca.keyPair.publicKey,
 					crlNumber: 1,
+					nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 				}),
 				'issuer_distinguished_name_empty',
 			);
@@ -2267,6 +2275,7 @@ describe('RFC 7468: PKIX Textual Encodings', () => {
 					signerPrivateKey: ca.keyPair.privateKey,
 					issuerPublicKey: ca.keyPair.publicKey,
 					crlNumber: 1,
+					nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 				}),
 				'issuer_distinguished_name_empty',
 			);
@@ -4228,9 +4237,10 @@ describe('RFC 7468: PKIX Textual Encodings', () => {
 			// "Data in this format often originates from untrusted sources, thus parsers
 			// must be prepared to handle unexpected data without causing security
 			// vulnerabilities" (Section 14). Figure 13's parameters carry an 8-octet IV
-			// and would carry any iteration count an encoder wrote; under a scheme this
-			// library does implement, both reach the AES-CBC parameter checks, and an
-			// exception out of a Result-returning import is a crash, not a verdict.
+			// and would carry any iteration count an encoder wrote. Under a scheme this
+			// library does implement, the IV fails the AES-CBC IV length check and a zero
+			// count fails the PBKDF2 iterationCount check, and an exception out of a
+			// Result-returning import is a crash, not a verdict.
 			for (const [title, envelope] of [
 				['an IV shorter than the AES-CBC block', pbes2Envelope(AES_256_CBC, figure13Iv, 2048)],
 				['an iteration count below one', pbes2Envelope(AES_256_CBC, new Uint8Array(16), 0)],
