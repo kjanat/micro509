@@ -353,10 +353,16 @@ function mapForLookup(domain: string): string {
 
 /**
  * RFC 9525 §6.3 A-label form of a reference identifier's domain name, after
- * RFC 5895 mapping and the RFC 5891 §5 lookup tests. Returns `undefined` when
- * the name is not valid IDNA2008.
+ * RFC 5895 mapping and the RFC 5891 §5 lookup tests. Every ASCII label must be
+ * 1 to 63 letters, digits, hyphens or underscores. Returns `undefined` when the
+ * name fails either test.
  */
 export function referenceDomainToAscii(domain: string): string | undefined {
-	const converted = domainToAscii(mapForLookup(domain), 'lookup');
+	const mapped = mapForLookup(domain);
+	const asciiLabelsValid = mapped
+		.split('.')
+		.every((label) => !isAscii(label) || /^[a-z0-9_-]{1,63}$/.test(label));
+	if (!asciiLabelsValid) return undefined;
+	const converted = domainToAscii(mapped, 'lookup');
 	return converted.ok ? converted.value : undefined;
 }

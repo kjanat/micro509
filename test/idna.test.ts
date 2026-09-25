@@ -192,6 +192,17 @@ describe('referenceDomainToAscii', () => {
 		expect(referenceDomainToAscii('_imap.example.com')).toBe('_imap.example.com');
 	});
 
+	it('returns undefined for an ASCII label outside letters, digits, hyphens and underscores', () => {
+		for (const value of [
+			'foo bar.example',
+			'a\u0001b.example',
+			'a..example',
+			`${'a'.repeat(64)}.example`,
+		]) {
+			expect(referenceDomainToAscii(value)).toBeUndefined();
+		}
+	});
+
 	it('returns undefined for a name that is not IDNA2008 valid', () => {
 		expect(referenceDomainToAscii('♚.example')).toBeUndefined();
 		expect(referenceDomainToAscii('xn--45h.example')).toBeUndefined();
