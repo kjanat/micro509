@@ -16,6 +16,7 @@ import {
 	utf8String,
 } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
+import { toALabel } from '#micro509/internal/shared/idna';
 import { encodeExtension } from '#micro509/x509';
 import {
 	appendCertificateExtensions,
@@ -278,6 +279,7 @@ describe('RFC 9598 §6: rfc822Name name constraints apply to SmtpUTF8Mailbox by 
 			{ constraint: 'permittedSubtrees', value: '用户@host..example.com' },
 			{ constraint: 'permittedSubtrees', value: '用户@_host.example.com' },
 			{ constraint: 'permittedSubtrees', value: '用户@xn--45h.example.com' },
+			{ constraint: 'permittedSubtrees', value: `用户@${toALabel('אa')}.example.com` },
 		] as const;
 		for (const { constraint, value } of cases) {
 			const root = await constrainedRoot({

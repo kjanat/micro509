@@ -5,7 +5,7 @@
  * @module
  */
 
-import { checkALabel, type IdnaMode } from '#micro509/internal/shared/idna';
+import { domainToAscii, type IdnaMode } from '#micro509/internal/shared/idna';
 
 const MAX_DOMAIN_OCTETS = 253;
 
@@ -22,8 +22,8 @@ export function isSmtpUtf8LocalPart(localPart: string): boolean {
 }
 
 /**
- * RFC 9598 §3: a mailbox domain of lowercase NR-LDH labels and A-labels, each
- * `xn--` label passing {@linkcode checkALabel} in `mode`.
+ * RFC 9598 §3: a mailbox domain of lowercase NR-LDH labels and A-labels that
+ * passes {@linkcode domainToAscii} in `mode`, the RFC 5893 Bidi rule included.
  */
 export function isMailboxDomain(domain: string, mode: IdnaMode): boolean {
 	return (
@@ -34,7 +34,8 @@ export function isMailboxDomain(domain: string, mode: IdnaMode): boolean {
 			.every(
 				(label) =>
 					/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label) &&
-					(label.slice(2, 4) !== '--' || (label.startsWith('xn--') && checkALabel(label, mode).ok)),
-			)
+					(label.slice(2, 4) !== '--' || label.startsWith('xn--')),
+			) &&
+		domainToAscii(domain, mode).ok
 	);
 }
