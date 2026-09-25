@@ -2016,11 +2016,11 @@ function encodeDistributionPointName(name: DistributionPointName): Uint8Array {
 function encodeNameConstraintForm(form: NameConstraintForm): Uint8Array {
 	switch (form.type) {
 		case 'dns':
-			return implicitPrimitiveContext(2, ia5Bytes(form.value));
+			return implicitPrimitiveContext(2, encodeIa5Content(form.value));
 		case 'email':
-			return implicitPrimitiveContext(1, ia5Bytes(form.value));
+			return implicitPrimitiveContext(1, encodeIa5Content(form.value));
 		case 'uri':
-			return implicitPrimitiveContext(6, ia5Bytes(form.value));
+			return implicitPrimitiveContext(6, encodeIa5Content(form.value));
 		case 'ip': {
 			const total = form.addressBytes.length + form.maskBytes.length;
 			if (form.addressBytes.length !== form.maskBytes.length || (total !== 8 && total !== 32)) {

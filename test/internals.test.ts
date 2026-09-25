@@ -792,6 +792,16 @@ describe('extensions encoding', () => {
 		);
 	});
 
+	it('encodeNameConstraints rejects a non-ASCII dNSName, rfc822Name or URI base with a code', () => {
+		for (const type of ['dns', 'email', 'uri'] as const) {
+			expectEncoderErrorCode(
+				() =>
+					encodeNameConstraints({ permittedSubtrees: [{ base: { type, value: 'café.example' } }] }),
+				'invalid_ia5_string',
+			);
+		}
+	});
+
 	it('encodeAuthorityInfoAccess rejects a non-URI OCSP location wrapped in a custom OID', () => {
 		expectEncoderErrorCode(
 			() =>
