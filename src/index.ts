@@ -463,6 +463,7 @@ export type {
 	CsrMaterial,
 	DecodedExtensionMap,
 	DecodedExtensionValue,
+	DisplayTextType,
 	DistributionPoint,
 	DistributionPointName,
 	ExtendedKeyUsage,

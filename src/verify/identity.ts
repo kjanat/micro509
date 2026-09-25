@@ -9,6 +9,7 @@
  * @module
  */
 
+import { referenceDomainToAscii } from '#micro509/internal/shared/idna';
 import { decodeIpAddress, parseIpAddressToBytes } from '#micro509/internal/shared/ip';
 import type { ErrorResult, Micro509Error } from '#micro509/result/result';
 import { errorResult, micro509Error, successResult } from '#micro509/result/result';
@@ -429,7 +430,10 @@ function serviceTypeFromSanValue(
 /** Compares a presented DNS identifier (possibly wildcarded) against a reference name. */
 function matchesDnsName(pattern: string, actual: string): boolean {
 	const lowerPattern = normalizeDnsPattern(pattern);
-	const lowerActual = normalizeDnsName(actual);
+	const lowerActual = tryNormalizeDnsName(actual);
+	if (lowerActual === undefined) {
+		return false;
+	}
 	if (!lowerPattern.includes('*')) {
 		return lowerPattern === lowerActual;
 	}
@@ -444,35 +448,25 @@ function matchesDnsName(pattern: string, actual: string): boolean {
 	return prefix.length > 0 && !prefix.includes('.');
 }
 
-/** Lowercases a DNS pattern, preserving the `*.` wildcard prefix if present. */
+/**
+ * Lowercases the ASCII letters of a presented DNS identifier and nothing else:
+ * RFC 9549 §2.3 compares DNS names by a case-insensitive exact match, so no
+ * percent-decoding, IPv4 parsing or IDNA mapping applies to what the
+ * certificate presents.
+ */
 function normalizeDnsPattern(value: string): string {
-	if (!value.startsWith('*.')) {
-		return normalizeDnsName(value);
-	}
-	return `*.${normalizeDnsName(value.slice(2))}`;
+	return value.replace(/[A-Z]/g, (letter) => letter.toLowerCase());
 }
 
-/** Lowercases and IDNA-normalizes a DNS name via the URL parser. */
-function normalizeDnsName(value: string): string {
-	const normalized = tryNormalizeDnsName(value);
-	return normalized ?? value.toLowerCase();
-}
-
-/** Attempts IDNA normalization via URL constructor. Returns `undefined` for invalid names. */
+/**
+ * RFC 9525 §6.3: a reference domain name in A-labels, lowercased. Returns
+ * `undefined` for a name with URI delimiters or one that is not valid IDNA2008.
+ */
 function tryNormalizeDnsName(value: string): string | undefined {
-	if (value.length === 0) {
+	if (value.length === 0 || /[/:?#@[\]]/.test(value)) {
 		return undefined;
 	}
-	for (const forbidden of ['/', ':', '?', '#', '@', '[', ']']) {
-		if (value.includes(forbidden)) {
-			return undefined;
-		}
-	}
-	try {
-		return new URL(`https://${value}`).hostname.toLowerCase();
-	} catch {
-		return undefined;
-	}
+	return referenceDomainToAscii(value);
 }
 
 /** Decomposed URI-ID or SRV-ID: a service type discriminant plus a domain. */
@@ -540,7 +534,19 @@ function extractUriRegName(value: string, serviceType: string): string | undefin
 	if (host.length === 0 || host.includes('[') || host.includes(']')) {
 		return undefined;
 	}
-	return host;
+	return decodeRegName(host);
+}
+
+/** RFC 3986 §3.2.2: a reg-name with its percent-encoded UTF-8 octets decoded once. */
+function decodeRegName(host: string): string | undefined {
+	if (/%(?![0-9A-Fa-f]{2})/.test(host)) {
+		return undefined;
+	}
+	try {
+		return decodeURIComponent(host);
+	} catch {
+		return undefined;
+	}
 }
 
 /** Returns the substring before the first occurrence of any delimiter character. */
@@ -564,10 +570,10 @@ function tryParseSrvServiceIdentity(value: string): ServiceScopedIdentity | unde
 	if (dotIndex <= 1 || dotIndex === value.length - 1) {
 		return undefined;
 	}
-	return {
-		serviceType: value.slice(1, dotIndex).toLowerCase(),
-		domainName: normalizeDnsName(value.slice(dotIndex + 1)),
-	};
+	const domainName = tryNormalizeDnsName(value.slice(dotIndex + 1));
+	return domainName === undefined
+		? undefined
+		: { serviceType: value.slice(1, dotIndex).toLowerCase(), domainName };
 }
 
 /** Constructs a failure result with the given error code and diagnostic details. */

@@ -233,7 +233,8 @@
 															"otherNameForms": {
 																"arc": "8",
 																"oids": {
-																	"idOnDnsSrv": "7"
+																	"idOnDnsSrv": "7",
+																	"idOnSmtpUtf8Mailbox": "9"
 																}
 															},
 															"accessMethods": {
@@ -327,7 +328,8 @@
 							"policyConstraints": "36",
 							"extendedKeyUsage": "37",
 							"freshestCRL": "46",
-							"inhibitAnyPolicy": "54"
+							"inhibitAnyPolicy": "54",
+							"noRevAvail": "56"
 						},
 						"children": {
 							"certificatePolicies": {

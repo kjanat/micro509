@@ -19,6 +19,9 @@ import { readDirectoryNameTlv } from '#micro509/internal/x509/directory-name';
 import { GENERAL_NAME_WIRE_TAGS } from '#micro509/internal/x509/general-name-tags';
 import type { GeneralName, SubjectAltName } from '#micro509/x509/extensions';
 
+/** Keeps a leading U+FEFF, which RFC 9598 §3 forbids and the builder must be able to see. */
+const SMTP_UTF8_MAILBOX_DECODER = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
+
 /** Decode a SEQUENCE OF GeneralName. */
 export function parseGeneralNames(source: Uint8Array, element: DerElement): readonly GeneralName[] {
 	const names = childrenOf(source, element);
@@ -91,7 +94,8 @@ export function parseGeneralName(source: Uint8Array, element: DerElement): Gener
 }
 
 /**
- * Decode an otherName [0] as a known type (currently only SRV-ID).
+ * Decode an otherName [0] as a known type: SRV-ID (RFC 4985) or SmtpUTF8Mailbox
+ * (RFC 9598).
  *
  * `otherName [0] OtherName` is in the IMPLICIT-TAGS module, so the [0] tag
  * replaces OtherName's SEQUENCE tag: the type-id and `value [0] EXPLICIT` are
@@ -118,11 +122,18 @@ function parseOtherName(source: Uint8Array, element: DerElement): SubjectAltName
 	if (valueChildren.length !== 1 || value === undefined) {
 		throw new Error('otherName value [0] must wrap exactly one element');
 	}
-	if (decodeObjectIdentifier(typeId.value) !== OIDS.idOnDnsSrv) {
-		return undefined;
+	switch (decodeObjectIdentifier(typeId.value)) {
+		case OIDS.idOnDnsSrv:
+			if (value.tag !== 0x16 || value.value.length === 0) {
+				throw new Error('SRV-ID otherName must wrap a non-empty IA5String');
+			}
+			return { type: 'srv', value: decodeString(value.tag, value.value) };
+		case OIDS.idOnSmtpUtf8Mailbox:
+			if (value.tag !== 0x0c || value.value.length === 0) {
+				throw new Error('SmtpUTF8Mailbox otherName must wrap a non-empty UTF8String');
+			}
+			return { type: 'smtpUtf8Mailbox', value: SMTP_UTF8_MAILBOX_DECODER.decode(value.value) };
+		default:
+			return undefined;
 	}
-	if (value.tag !== 0x16 || value.value.length === 0) {
-		throw new Error('SRV-ID otherName must wrap a non-empty IA5String');
-	}
-	return { type: 'srv', value: decodeString(value.tag, value.value) };
 }

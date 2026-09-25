@@ -16,9 +16,11 @@
  * @module
  */
 
+import { canonicalizeOid } from '#micro509/internal/asn1/asn1';
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { verifySignedDataDetailed } from '#micro509/internal/crypto/sig-verify';
 import { compareDistinguishedNames } from '#micro509/internal/shared/dn';
+import { domainToAscii } from '#micro509/internal/shared/idna';
 import { parseIpAddressToBytes } from '#micro509/internal/shared/ip';
 import type { NameConstraintValidationState } from '#micro509/internal/verify/name-constraints-engine';
 import {
@@ -61,7 +63,7 @@ import type { ServiceIdentityInput } from '#micro509/verify/identity';
 import { matchServiceIdentity } from '#micro509/verify/identity';
 import type { InitialNameConstraintsInput } from '#micro509/verify/name-constraints';
 import type { PolicyValidationInput, PolicyValidationOutcome } from '#micro509/verify/policy';
-import type { ExtendedKeyUsage } from '#micro509/x509/extensions';
+import type { ExtendedKeyUsage, GeneralSubtree } from '#micro509/x509/extensions';
 import type {
 	ParsedCertificate,
 	ParsedCertificateSigningRequest,
@@ -158,6 +160,7 @@ export interface TrustAnchor {
  * - `common_name_fallback_suppressed` — CN fallback was attempted but suppressed (SAN present or disabled).
  * - `self_signed_leaf_not_allowed` — the leaf is self-signed and `allowSelfSignedLeaf` was not set.
  * - `unrecognized_critical_extension` — a certificate contains a critical extension the verifier cannot process.
+ * - `no_rev_avail_conflict` — a certificate carries noRevAvail alongside a CA basicConstraints, cRLDistributionPoints, freshestCRL, or an id-ad-ocsp authorityInfoAccess entry (RFC 9608 §3).
  * - `intermediate_eku_constraint` — an intermediate CA's EKU set does not include the required purpose.
  * - `explicit_policy_required` — `requireExplicitPolicy` was set but no acceptable policy was found.
  * - `initial_policy_set_not_satisfied` — the chain's policies do not intersect `initialPolicySet`.
@@ -184,6 +187,7 @@ export const VERIFY_ERROR_CODES = [
 	'common_name_fallback_suppressed',
 	'self_signed_leaf_not_allowed',
 	'unrecognized_critical_extension',
+	'no_rev_avail_conflict',
 	'intermediate_eku_constraint',
 	'explicit_policy_required',
 	'initial_policy_set_not_satisfied',
@@ -495,6 +499,7 @@ const PROCESSED_EXTENSION_OIDS: ReadonlySet<string> = new Set([
 	OIDS.policyMappings,
 	OIDS.policyConstraints,
 	OIDS.inhibitAnyPolicy,
+	OIDS.noRevAvail,
 ]);
 
 // Internal types
@@ -829,7 +834,36 @@ function validateCertificateAtPathIndex(
 			}),
 		);
 	}
+	const noRevAvailConflict = findNoRevAvailConflict(current);
+	if (noRevAvailConflict !== undefined) {
+		return failure(
+			'no_rev_avail_conflict',
+			`certificate carries noRevAvail with ${noRevAvailConflict}`,
+			index,
+			detail({
+				subjectCommonName: current.subject.values.commonName,
+				actual: noRevAvailConflict,
+			}),
+		);
+	}
 	return validateEcDomainParametersAtPathIndex(current, index);
+}
+
+/**
+ * RFC 9608 §3: a relying party MUST consider a certificate carrying noRevAvail
+ * invalid when it also asserts cA, points at a CRL, or names an OCSP responder.
+ */
+function findNoRevAvailConflict(certificate: ParsedCertificate): string | undefined {
+	if (certificate.noRevAvail !== true) return undefined;
+	if (certificate.basicConstraints?.ca === true) return 'basicConstraints cA TRUE';
+	if (certificate.crlDistributionPoints !== undefined) return 'cRLDistributionPoints';
+	if (certificate.extensions.some((extension) => extension.oid === OIDS.freshestCRL)) {
+		return 'freshestCRL';
+	}
+	if (certificate.authorityInfoAccess?.some((entry) => entry.method === 'ocsp') === true) {
+		return 'an id-ad-ocsp authorityInfoAccess entry';
+	}
+	return undefined;
 }
 
 /**
@@ -1812,9 +1846,18 @@ function normalizeInitialPolicySet(
 	if (!Array.isArray(initialPolicySet)) {
 		return [];
 	}
-	return initialPolicySet.every((policyIdentifier) => typeof policyIdentifier === 'string')
-		? initialPolicySet
-		: [];
+	const canonical: string[] = [];
+	for (const policyIdentifier of initialPolicySet) {
+		if (typeof policyIdentifier !== 'string') {
+			return [];
+		}
+		try {
+			canonical.push(canonicalizeOid(policyIdentifier));
+		} catch {
+			return [];
+		}
+	}
+	return canonical.includes(OIDS.anyPolicy) ? 'any' : canonical;
 }
 
 function validateInitialNameConstraintsInput(input: InitialNameConstraintsInput):
@@ -1837,7 +1880,17 @@ function validateInitialNameConstraintsInput(input: InitialNameConstraintsInput)
 	if (!excludedValidation.ok) {
 		return excludedValidation;
 	}
-	return { ok: true, value: input };
+	return {
+		ok: true,
+		value: {
+			...(permittedValidation.value === undefined
+				? {}
+				: { permittedSubtrees: permittedValidation.value }),
+			...(excludedValidation.value === undefined
+				? {}
+				: { excludedSubtrees: excludedValidation.value }),
+		},
+	};
 }
 
 function validateInitialNameConstraintSubtrees(
@@ -1845,20 +1898,40 @@ function validateInitialNameConstraintSubtrees(
 		| InitialNameConstraintsInput['permittedSubtrees']
 		| InitialNameConstraintsInput['excludedSubtrees'],
 	label: 'permittedSubtrees' | 'excludedSubtrees',
-): { readonly ok: true } | VerifyChainFailure {
+): { readonly ok: true; readonly value?: readonly GeneralSubtree[] } | VerifyChainFailure {
 	if (subtrees === undefined) {
 		return { ok: true };
 	}
 	if (!Array.isArray(subtrees)) {
 		return invalidInitialNameConstraintsFailure(label);
 	}
+	const converted: GeneralSubtree[] = [];
 	for (const subtree of subtrees) {
 		const invalidForm = describeInvalidInitialNameConstraintForm(subtree);
 		if (invalidForm !== undefined) {
 			return invalidInitialNameConstraintsFailure(invalidForm);
 		}
+		const ascii = toAsciiInitialNameConstraint(subtree);
+		if (ascii === undefined) {
+			return invalidInitialNameConstraintsFailure(subtree.base.type);
+		}
+		converted.push(ascii);
 	}
-	return { ok: true };
+	return { ok: true, value: converted };
+}
+
+/** RFC 9549 §1 and RFC 9598 §6: a DNS or mail domain constraint in A-labels. */
+function toAsciiInitialNameConstraint(subtree: GeneralSubtree): GeneralSubtree | undefined {
+	const { base } = subtree;
+	if (base.type !== 'dns' && base.type !== 'email') {
+		return subtree;
+	}
+	const prefix = base.value.startsWith('.') ? '.' : '';
+	const converted = domainToAscii(base.value.slice(prefix.length), 'lookup');
+	if (!converted.ok || !/^[\x20-\x7e]*$/.test(converted.value)) {
+		return undefined;
+	}
+	return { ...subtree, base: { ...base, value: `${prefix}${converted.value}` } };
 }
 
 function describeInvalidInitialNameConstraintForm(subtree: unknown): string | undefined {
@@ -1871,9 +1944,13 @@ function describeInvalidInitialNameConstraintForm(subtree: unknown): string | un
 	}
 	switch (base.type) {
 		case 'dns':
-		case 'email':
-		case 'uri':
 			return typeof base.value === 'string' ? undefined : base.type;
+		case 'uri':
+			return typeof base.value === 'string' && /^[\x20-\x7e]*$/.test(base.value)
+				? undefined
+				: base.type;
+		case 'email':
+			return typeof base.value === 'string' && !base.value.includes('@') ? undefined : base.type;
 		case 'directoryName':
 			return typeof base.derHex === 'string' ? undefined : base.type;
 		case 'ip':

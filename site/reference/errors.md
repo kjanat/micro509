@@ -70,6 +70,9 @@ Unions may gain members in minor releases; treat them as non-exhaustive and keep
 | `certificate_policies_empty`                            | certificatePolicies lists no policies                             |
 | `crl_distribution_points_empty`                         | cRLDistributionPoints lists no points                             |
 | `directory_name_not_sequence`                           | directoryName payload is not a DER SEQUENCE                       |
+| `display_text_control_character`                        | explicitText contains a C0 or C1 control character (RFC 6818 §3)  |
+| `display_text_ia5_string`                               | explicitText requested as IA5String (RFC 6818 §3)                 |
+| `display_text_not_nfc`                                  | UTF8String or BMPString explicitText is not NFC (RFC 6818 §3)     |
 | `display_text_out_of_range`                             | User-notice DisplayText length outside RFC 5280 bounds            |
 | `distribution_point_crl_issuer_empty`                   | `cRLIssuer` present but holds no name                             |
 | `distribution_point_crl_issuer_not_directory_name`      | `cRLIssuer` entries must be directoryNames (RFC 5280 §4.2.1.13)   |
@@ -82,28 +85,35 @@ Unions may gain members in minor releases; treat them as non-exhaustive and keep
 | `edwards_key_usage_forbids_key_cert_sign`               | End-entity Edwards certificate asserts `keyCertSign`/`cRLSign`    |
 | `edwards_key_usage_requires_key_cert_sign`              | Edwards CA keyUsage missing `keyCertSign`                         |
 | `edwards_key_usage_requires_signing_bit`                | Edwards keyUsage missing a signing bit (RFC 9295 §3)              |
+| `email_name_constraint_names_mailbox`                   | rfc822Name constraint names a mailbox (RFC 9549 §2.2)             |
 | `empty_general_name_value`                              | dNSName/rfc822Name/URI/SRV value is empty                         |
 | `empty_subject_requires_subject_alt_name`               | Empty subject DN without a critical, non-empty SAN                |
 | `extended_key_usage_empty`                              | EKU list is empty                                                 |
 | `extension_must_be_critical`                            | RFC 5280 fixes this extension as critical                         |
 | `extension_must_be_non_critical`                        | RFC 5280 fixes this extension as non-critical                     |
 | `extension_not_supported_in_context`                    | Extension not allowed in this certificate/CSR context             |
+| `invalid_bmp_string`                                    | BMPString explicitText outside the Basic Multilingual Plane       |
 | `invalid_general_name_tag`                              | GeneralName tag outside the nine RFC 5280 §4.2.1.6 alternatives   |
 | `invalid_ia5_string`                                    | Non-ASCII input for an IA5String value                            |
+| `invalid_idn`                                           | Domain name is not valid IDNA2008 (RFC 5891 §4)                   |
 | `invalid_ip_name_constraint`                            | IP constraint bytes are not address+mask of one family            |
 | `invalid_oid`                                           | String is not an encodable OID within X.660 arc bounds            |
+| `invalid_smtp_utf8_mailbox`                             | SmtpUTF8Mailbox malformed or domain not A-labels (RFC 9598 §3)    |
+| `invalid_visible_string`                                | VisibleString explicitText outside printable ASCII                |
 | `key_usage_empty`                                       | keyUsage asserts no bits                                          |
 | `malformed_known_extension_value`                       | `customExtensions` payload with a known OID fails to decode as it |
 | `montgomery_key_usage_forbids_both_cipher_bits`         | X25519/X448 asserts both `encipherOnly` and `decipherOnly`        |
 | `montgomery_key_usage_forbids_signature_bit`            | X25519/X448 asserts a signature bit (RFC 8410 §12)                |
 | `montgomery_key_usage_requires_key_agreement`           | X25519/X448 keyUsage missing `keyAgreement` (RFC 9295 §3)         |
 | `name_constraints_empty`                                | nameConstraints has neither permitted nor excluded subtrees       |
+| `no_rev_avail_conflict`                                 | noRevAvail with cA or a revocation pointer (RFC 9608 §3)          |
 | `path_length_requires_ca`                               | `pathLength` on a non-CA basicConstraints                         |
 | `path_length_requires_key_cert_sign`                    | `pathLength` requires keyUsage asserting `keyCertSign`            |
 | `policy_constraints_empty`                              | policyConstraints carries neither field                           |
 | `policy_mappings_any_policy`                            | anyPolicy may not appear in a policy mapping                      |
 | `policy_mappings_empty`                                 | Mappings list is empty                                            |
 | `reserved_policy_qualifier_oid`                         | Custom qualifier uses a reserved qualifier OID                    |
+| `smtp_utf8_mailbox_ascii_local_part`                    | ASCII Local-part must use rfc822Name (RFC 9598 §3)                |
 
 ## micro509/verify
 
@@ -117,7 +127,8 @@ both tables are enforced against `VERIFY_ERROR_CODES` by tests.
 `ec_domain_parameters_missing`, `explicit_policy_required`,
 `extended_key_usage_invalid`, `initial_policy_set_not_satisfied`,
 `intermediate_eku_constraint`, `issuer_not_found`, `key_cert_sign_required`,
-`name_constraints_violated`, `no_trusted_root`, `path_length_exceeded`,
+`name_constraints_violated`, `no_rev_avail_conflict`, `no_trusted_root`,
+`path_length_exceeded`,
 `path_building_limit_exceeded`,
 `revocation_indeterminate`, `self_signed_leaf_not_allowed`, `signature_invalid`,
 `subject_alt_name_mismatch`, `unrecognized_critical_extension`,
@@ -157,7 +168,7 @@ both tables are enforced against `VERIFY_ERROR_CODES` by tests.
 
 | Code                     | Meaning                                                                   |
 | ------------------------ | ------------------------------------------------------------------------- |
-| `crl_sign_not_permitted` | CRL signer's keyUsage lacks `cRLSign`                                     |
+| `crl_sign_not_permitted` | CRL signer's keyUsage lacks `cRLSign`, or a v3 signer has no keyUsage     |
 | `issuer_mismatch`        | CRL issuer does not match the certificate's issuer                        |
 | `non_applicable`         | No supplied CRL applies to the certificate (RFC 5280 §6.3.3)              |
 | `signature_invalid`      | CRL signature fails against the issuer key                                |
@@ -197,7 +208,7 @@ delta CRL that does not pair with the complete CRL, including one whose
 | ------------------------------ | ---------------------------------------------------------------------------- |
 | `certificate_status_missing`   | Response carries no entry for the certificate                                |
 | `certificate_status_unknown`   | Responder answered `unknown`                                                 |
-| `crl_sign_not_permitted`       | CRL signer's keyUsage lacks `cRLSign`                                        |
+| `crl_sign_not_permitted`       | CRL signer's keyUsage lacks `cRLSign`, or a v3 signer has no keyUsage        |
 | `issuer_mismatch`              | Evidence issuer does not match the certificate's issuer                      |
 | `next_update_missing`          | OCSP response omits `nextUpdate` under `ocspProfile: 'rfc9919'`              |
 | `non_applicable`               | No supplied CRL applies to the certificate                                   |

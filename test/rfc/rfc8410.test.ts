@@ -66,11 +66,13 @@ import {
 	buildErrorCode,
 	childAt,
 	constructedChildren,
+	createSelfSignedCertificateWithRawExtensions,
 	expectBuildErrorCode,
 	expectRejectedErrorCode,
 	FAR_FUTURE_NEXT_UPDATE,
 	fieldAt,
 	hexToBytes,
+	legacyMailboxNameConstraints,
 	littleEndianInteger,
 	replaceCsrSignatureAlgorithm,
 	rfcDir,
@@ -5274,15 +5276,23 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 		/** An Ed25519 CA whose own subject is one author, and the key that signs under it. */
 		async function certificateAuthority(
 			author: Author,
-			nameConstraints?: CertificateExtensionsInput['nameConstraints'],
+			nameConstraints?: CertificateExtensionsInput['nameConstraints'] | Uint8Array,
 		): Promise<{ readonly keyPair: CryptoKeyPair; readonly pem: string }> {
-			const created = await createSelfSignedCertificate({
+			const created = await createSelfSignedCertificateWithRawExtensions({
 				subject: { commonName: author.organization, emailAddress: author.email },
 				algorithm: ED25519,
 				extensions: {
 					basicConstraints: { ca: true },
 					keyUsage: ['keyCertSign', 'cRLSign'],
-					...(nameConstraints === undefined ? {} : { nameConstraints }),
+					...(nameConstraints === undefined
+						? {}
+						: nameConstraints instanceof Uint8Array
+							? {
+									customExtensions: [
+										{ oid: OIDS.nameConstraints, value: nameConstraints, critical: true },
+									],
+								}
+							: { nameConstraints }),
 				},
 			});
 			return { keyPair: created.keyPair, pem: created.certificate.pem };
@@ -5377,9 +5387,9 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 		// RFC 5280 7.5, replaced without change to this rule by RFC 9549 7.5.1: "Two email
 		// addresses are considered to match if: 1) the local-part of each name is an exact
 		// match, AND 2) the host-part of each name matches using a case-insensitive ASCII
-		// comparison." RFC 5280 4.2.1.10 spends that on a subtree: "a name constraint for
-		// Internet mail addresses MAY specify a particular mailbox, all addresses at a
-		// particular host, or all mailboxes in a domain."
+		// comparison." RFC 5280 4.2.1.10 spent that on a subtree that "MAY specify a
+		// particular mailbox"; RFC 9549 2.2 removed that form, so byMailbox stands for a CA
+		// certificate issued before it, and the builder no longer emits one.
 		it('separates the two authors by an rfc822Name constraint', async () => {
 			const permitted = authorAt(0);
 			const excluded = authorAt(1);
@@ -5388,9 +5398,10 @@ describe('RFC 8410: Safe Curves for X.509', () => {
 			const byHost = await certificateAuthority(excluded, {
 				permittedSubtrees: [{ base: { type: 'email', value: hostPartOf(permitted.email) } }],
 			});
-			const byMailbox = await certificateAuthority(excluded, {
-				permittedSubtrees: [{ base: { type: 'email', value: permitted.email } }],
-			});
+			const byMailbox = await certificateAuthority(
+				excluded,
+				legacyMailboxNameConstraints('permitted', permitted.email),
+			);
 
 			async function verdict(
 				ca: { readonly keyPair: CryptoKeyPair; readonly pem: string },

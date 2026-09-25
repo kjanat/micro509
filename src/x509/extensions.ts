@@ -15,6 +15,7 @@ import {
 	toHex,
 } from '#micro509/internal/asn1/asn1';
 import {
+	bmpString,
 	bool,
 	concatBytes,
 	DEFAULT_MAX_DER_DEPTH,
@@ -32,10 +33,13 @@ import {
 	sequence,
 	tlv,
 	utf8String,
+	visibleString,
 } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { sha1 } from '#micro509/internal/crypto/hash';
+import { domainToAscii } from '#micro509/internal/shared/idna';
 import { parseIpAddressToBytes } from '#micro509/internal/shared/ip';
+import { isMailboxDomain, isSmtpUtf8LocalPart } from '#micro509/internal/shared/mailbox';
 import {
 	encodeDistributionPointReasonFlagsContent,
 	encodeKeyUsageExtension,
@@ -56,6 +60,7 @@ import {
 	INHIBIT_ANY_POLICY_EXTENSION_DEFINITION,
 	KEY_USAGE_EXTENSION_DEFINITION,
 	NAME_CONSTRAINTS_EXTENSION_DEFINITION,
+	NO_REV_AVAIL_EXTENSION_DEFINITION,
 	POLICY_CONSTRAINTS_EXTENSION_DEFINITION,
 	POLICY_MAPPINGS_EXTENSION_DEFINITION,
 	SUBJECT_ALT_NAME_EXTENSION_DEFINITION,
@@ -143,6 +148,12 @@ export type SubjectAltName =
 			/** SRV-ID otherName (id-on-dnsSRV). */
 			readonly type: 'srv';
 			/** SRV service name, e.g. `"_imaps.example.com"`. */
+			readonly value: string;
+	  }
+	| {
+			/** SmtpUTF8Mailbox otherName (id-on-SmtpUTF8Mailbox, RFC 9598 §3). */
+			readonly type: 'smtpUtf8Mailbox';
+			/** Internationalized mailbox whose domain is in A-labels, e.g. `"用户@example.com"`. */
 			readonly value: string;
 	  }
 	| {
@@ -325,6 +336,7 @@ export type CertificatePolicies = readonly {
 					readonly noticeNumbers: readonly number[];
 				};
 				readonly explicitText?: string;
+				readonly explicitTextType?: DisplayTextType;
 		  }
 		| {
 				readonly type: 'oid';
@@ -358,7 +370,16 @@ export interface UserNoticePolicyQualifierInfo {
 	readonly noticeRef?: PolicyNoticeReference;
 	/** Free-form text to display to relying parties. */
 	readonly explicitText?: string;
+	/**
+	 * ASN.1 string type carrying `explicitText`. Parsing reports the received
+	 * type. The builder defaults to `'utf8String'`, accepts `'visibleString'`
+	 * and `'bmpString'`, and rejects `'ia5String'` (RFC 6818 §3).
+	 */
+	readonly explicitTextType?: DisplayTextType;
 }
+
+/** The ASN.1 string types RFC 5280 §4.2.1.4 allows for a DisplayText. */
+export type DisplayTextType = 'utf8String' | 'ia5String' | 'visibleString' | 'bmpString';
 
 /** Opaque policy qualifier identified by a custom OID, carried as raw DER. */
 export interface CustomPolicyQualifierInfo {
@@ -448,6 +469,12 @@ export interface CertificateExtensionsInput {
 	readonly authorityInfoAccess?: readonly AuthorityInformationAccessInput[];
 	/** CRL Distribution Points — where to check revocation status. */
 	readonly crlDistributionPoints?: readonly DistributionPoint[];
+	/**
+	 * Emit No Revocation Available (RFC 9608 §2): the CA publishes no revocation
+	 * information for this certificate. A certificate carrying it cannot be a CA
+	 * and cannot point at a CRL or an OCSP responder (RFC 9608 §3).
+	 */
+	readonly noRevAvail?: boolean;
 	/** Arbitrary extensions not covered by the built-in fields. */
 	readonly customExtensions?: readonly CustomExtension[];
 }
@@ -757,6 +784,7 @@ export function buildCertificateExtensions(
 	}
 	assertPathLengthKeyUsage(input);
 	assertSafeCurveKeyUsage(subjectPublicKeyInfo, input);
+	assertNoRevAvailProfile(input);
 	const extensions: Uint8Array[] = [];
 	const seen = new Set<string>();
 	const basicConstraints = input?.basicConstraints ?? { ca: false };
@@ -1001,6 +1029,58 @@ function assertCaBasicConstraintsCritical(input: CertificateExtensionsInput | un
 	if (mayValidateCertificates) {
 		assertExtensionCriticality('basicConstraints', true, false);
 	}
+}
+
+/**
+ * RFC 9608 §2 and §3: a certificate carrying noRevAvail is not a CA certificate
+ * and carries no cRLDistributionPoints, no freshestCRL, and no id-ad-ocsp
+ * authorityInfoAccess entry. Known extensions supplied through customExtensions
+ * participate in the effective view.
+ */
+function assertNoRevAvailProfile(input: CertificateExtensionsInput | undefined): void {
+	if (
+		input?.noRevAvail !== true &&
+		findCustomExtensionValue(input, OIDS.noRevAvail) === undefined
+	) {
+		return;
+	}
+	if (resolveEffectiveBasicConstraints(input)?.ca === true) {
+		throwNoRevAvailConflict('basicConstraints with cA TRUE');
+	}
+	if (
+		(input?.crlDistributionPoints?.length ?? 0) > 0 ||
+		findCustomExtensionValue(input, OIDS.cRLDistributionPoints) !== undefined
+	) {
+		throwNoRevAvailConflict('cRLDistributionPoints');
+	}
+	if (findCustomExtensionValue(input, OIDS.freshestCRL) !== undefined) {
+		throwNoRevAvailConflict('freshestCRL');
+	}
+	if (
+		resolveEffectiveAuthorityInfoAccess(input).some(
+			(entry) => getAuthorityInfoAccessMethodOid(entry.method) === OIDS.ocspAccessMethod,
+		)
+	) {
+		throwNoRevAvailConflict('an id-ad-ocsp authorityInfoAccess entry');
+	}
+}
+
+/** The authorityInfoAccess entries the builder will emit: the typed list when non-empty, otherwise a custom-known extension. */
+function resolveEffectiveAuthorityInfoAccess(
+	input: CertificateExtensionsInput | undefined,
+): readonly (AuthorityInformationAccess | AuthorityInformationAccessInput)[] {
+	if (input?.authorityInfoAccess !== undefined && input.authorityInfoAccess.length > 0) {
+		return input.authorityInfoAccess;
+	}
+	const custom = findCustomExtensionValue(input, OIDS.authorityInfoAccess);
+	return custom === undefined ? [] : AUTHORITY_INFO_ACCESS_EXTENSION_DEFINITION.decode(custom);
+}
+
+function throwNoRevAvailConflict(conflict: string): never {
+	throwExtensionEncoderError(
+		'no_rev_avail_conflict',
+		`A certificate carrying noRevAvail must not also carry ${conflict}`,
+	);
 }
 
 /**
@@ -1259,6 +1339,9 @@ function appendAccessExtensions(
 			input.crlDistributionPoints,
 		);
 	}
+	if (input.noRevAvail === true) {
+		pushKnownExtension(encoded, seen, NO_REV_AVAIL_EXTENSION_DEFINITION, true);
+	}
 }
 
 /** Push each custom extension. Context and payload were checked by `assertCustomExtensionsValid`. */
@@ -1358,6 +1441,87 @@ function requireNonEmptyName(value: string): string {
 }
 
 /**
+ * RFC 9598 §3: a SmtpUTF8Mailbox carries no Byte Order Mark, is used only when
+ * the Local-part holds a non-ASCII character, and stores its domain as
+ * lowercase A-labels and NR-LDH labels.
+ */
+function assertSmtpUtf8Mailbox(value: string): string {
+	const at = requireNonEmptyName(value).lastIndexOf('@');
+	const localPart = at > 0 ? value.slice(0, at) : '';
+	const domain = toAsciiDomain(value.slice(at + 1));
+	if (
+		localPart.length === 0 ||
+		value.includes('\ufeff') ||
+		!isMailboxDomain(domain, 'registration')
+	) {
+		throwExtensionEncoderError(
+			'invalid_smtp_utf8_mailbox',
+			'SmtpUTF8Mailbox must be Local-part@Domain with no Byte Order Mark and a domain of lowercase A-labels and NR-LDH labels',
+		);
+	}
+	if (![...localPart].some((character) => (character.codePointAt(0) ?? 0) > 0x7f)) {
+		throwExtensionEncoderError(
+			'smtp_utf8_mailbox_ascii_local_part',
+			'A mailbox with an ASCII Local-part must use rfc822Name (type email)',
+		);
+	}
+	if (!isSmtpUtf8LocalPart(localPart)) {
+		throwExtensionEncoderError(
+			'invalid_smtp_utf8_mailbox',
+			'SmtpUTF8Mailbox Local-part must be an RFC 6531 Dot-string or Quoted-string',
+		);
+	}
+	return `${localPart}@${domain}`;
+}
+
+/**
+ * @internal A decoded SAN or IAN entry of a custom extension, which is emitted
+ * as given: the typed builder's rules, with a SmtpUTF8Mailbox domain already
+ * stored in A-labels.
+ */
+export function assertStoredSubjectAltName(name: SubjectAltName): void {
+	encodeSubjectAltName(name);
+	if (name.type === 'smtpUtf8Mailbox' && assertSmtpUtf8Mailbox(name.value) !== name.value) {
+		throwExtensionEncoderError(
+			'invalid_smtp_utf8_mailbox',
+			'SmtpUTF8Mailbox domain must be stored as lowercase A-labels and NR-LDH labels',
+		);
+	}
+}
+
+/** RFC 5891 §4: the domain with each U-label converted to its A-label and each A-label checked. */
+function toAsciiDomain(domain: string): string {
+	const converted = domainToAscii(domain, 'registration');
+	if (!converted.ok) {
+		return throwExtensionEncoderError(
+			'invalid_idn',
+			`Domain name is not valid IDNA2008 (${converted.reason})`,
+		);
+	}
+	return converted.value;
+}
+
+/** A dNSName or dNSName constraint with its leading `*.` or `.` kept and its domain in A-labels. */
+function toAsciiDnsName(value: string): string {
+	const prefix = value.startsWith('*.') ? '*.' : value.startsWith('.') ? '.' : '';
+	return `${prefix}${toAsciiDomain(value.slice(prefix.length))}`;
+}
+
+/** RFC 4985 §3: a SRVName with its `_Service` label kept and its Name in A-labels. */
+function toAsciiSrvName(value: string): string {
+	const dot = value.indexOf('.');
+	return dot < 0 ? value : `${value.slice(0, dot + 1)}${toAsciiDomain(value.slice(dot + 1))}`;
+}
+
+/** RFC 9549 §2.5: an rfc822Name or rfc822Name constraint with its host in A-labels. */
+function toAsciiMailbox(value: string): string {
+	const at = value.lastIndexOf('@');
+	return at < 0
+		? toAsciiDnsName(value)
+		: `${value.slice(0, at + 1)}${toAsciiDomain(value.slice(at + 1))}`;
+}
+
+/**
  * DER-encode a single {@linkcode SubjectAltName} GeneralName element.
  *
  * @param value The SAN entry to encode.
@@ -1365,9 +1529,15 @@ function requireNonEmptyName(value: string): string {
 export function encodeSubjectAltName(value: SubjectAltName): Uint8Array {
 	switch (value.type) {
 		case 'dns':
-			return implicitPrimitiveContext(2, encodeIa5Content(requireNonEmptyName(value.value)));
+			return implicitPrimitiveContext(
+				2,
+				encodeIa5Content(toAsciiDnsName(requireNonEmptyName(value.value))),
+			);
 		case 'email':
-			return implicitPrimitiveContext(1, encodeIa5Content(requireNonEmptyName(value.value)));
+			return implicitPrimitiveContext(
+				1,
+				encodeIa5Content(toAsciiMailbox(requireNonEmptyName(value.value))),
+			);
 		case 'uri':
 			return implicitPrimitiveContext(6, encodeIa5Content(requireNonEmptyName(value.value)));
 		case 'srv':
@@ -1375,7 +1545,18 @@ export function encodeSubjectAltName(value: SubjectAltName): Uint8Array {
 				0,
 				concatBytes([
 					objectIdentifier(OIDS.idOnDnsSrv),
-					explicitContext(0, tlv(0x16, encodeIa5Content(requireNonEmptyName(value.value)))),
+					explicitContext(
+						0,
+						tlv(0x16, encodeIa5Content(toAsciiSrvName(requireNonEmptyName(value.value)))),
+					),
+				]),
+			);
+		case 'smtpUtf8Mailbox':
+			return implicitConstructedContext(
+				0,
+				concatBytes([
+					objectIdentifier(OIDS.idOnSmtpUtf8Mailbox),
+					explicitContext(0, utf8String(assertSmtpUtf8Mailbox(value.value))),
 				]),
 			);
 		case 'ip':
@@ -1732,9 +1913,79 @@ function encodeUserNoticePolicyQualifierInfo(qualifier: UserNoticePolicyQualifie
 	}
 	if (qualifier.explicitText !== undefined) {
 		assertDisplayText(qualifier.explicitText);
-		fields.push(utf8String(qualifier.explicitText));
+		fields.push(encodeExplicitText(qualifier.explicitText, qualifier.explicitTextType));
 	}
 	return sequence(fields);
+}
+
+/**
+ * RFC 6818 §3, replacing the explicitText paragraph of RFC 5280 §4.2.1.4:
+ * UTF8String is preferred, VisibleString and BMPString are acceptable,
+ * IA5String is forbidden, control characters should not appear, and UTF8String
+ * and BMPString text should be in Unicode normalization form C.
+ */
+function encodeExplicitText(text: string, type: DisplayTextType = 'utf8String'): Uint8Array {
+	if ([...text].some(isControlCharacter)) {
+		throwExtensionEncoderError(
+			'display_text_control_character',
+			'explicitText must not contain control characters',
+		);
+	}
+	switch (type) {
+		case 'utf8String':
+			assertNormalizationFormC(text);
+			return utf8String(text);
+		case 'bmpString':
+			assertNormalizationFormC(text);
+			return encodeBmpDisplayText(text);
+		case 'visibleString':
+			return encodeVisibleDisplayText(text);
+		case 'ia5String':
+			return throwExtensionEncoderError(
+				'display_text_ia5_string',
+				'explicitText must not be encoded as IA5String',
+			);
+		default: {
+			const _exhaustive: never = type;
+			throw new Error(`Unhandled DisplayText type: ${String(_exhaustive)}`);
+		}
+	}
+}
+
+function isControlCharacter(character: string): boolean {
+	const codePoint = character.codePointAt(0) ?? 0;
+	return codePoint <= 0x1f || (codePoint >= 0x7f && codePoint <= 0x9f);
+}
+
+function assertNormalizationFormC(text: string): void {
+	if (text.normalize('NFC') !== text) {
+		throwExtensionEncoderError(
+			'display_text_not_nfc',
+			'explicitText must be in Unicode normalization form C',
+		);
+	}
+}
+
+function encodeVisibleDisplayText(text: string): Uint8Array {
+	try {
+		return visibleString(text);
+	} catch {
+		return throwExtensionEncoderError(
+			'invalid_visible_string',
+			'VisibleString explicitText must be printable ASCII',
+		);
+	}
+}
+
+function encodeBmpDisplayText(text: string): Uint8Array {
+	try {
+		return bmpString(text);
+	} catch {
+		return throwExtensionEncoderError(
+			'invalid_bmp_string',
+			'BMPString explicitText must stay within the Basic Multilingual Plane',
+		);
+	}
 }
 
 /** DER-encode a NoticeReference SEQUENCE. */
@@ -1836,11 +2087,17 @@ function encodeDistributionPointName(name: DistributionPointName): Uint8Array {
 function encodeNameConstraintForm(form: NameConstraintForm): Uint8Array {
 	switch (form.type) {
 		case 'dns':
-			return implicitPrimitiveContext(2, ia5Bytes(form.value));
+			return implicitPrimitiveContext(2, encodeIa5Content(toAsciiDnsName(form.value)));
 		case 'email':
-			return implicitPrimitiveContext(1, ia5Bytes(form.value));
+			if (form.value.includes('@')) {
+				throwExtensionEncoderError(
+					'email_name_constraint_names_mailbox',
+					'An rfc822Name constraint names a host or a domain, not a particular mailbox (RFC 9549 §2.2)',
+				);
+			}
+			return implicitPrimitiveContext(1, encodeIa5Content(toAsciiMailbox(form.value)));
 		case 'uri':
-			return implicitPrimitiveContext(6, ia5Bytes(form.value));
+			return implicitPrimitiveContext(6, encodeIa5Content(form.value));
 		case 'ip': {
 			const total = form.addressBytes.length + form.maskBytes.length;
 			if (form.addressBytes.length !== form.maskBytes.length || (total !== 8 && total !== 32)) {

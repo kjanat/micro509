@@ -60,6 +60,7 @@ import type {
 	AuthorityInformationAccess,
 	BasicConstraints,
 	CertificatePolicies,
+	DisplayTextType,
 	DistributionPointReason,
 	ExtendedKeyUsage,
 	GeneralName,
@@ -428,6 +429,8 @@ export interface ParsedCertificate<TMap extends ExtensionDecoderMap = Record<nev
 	readonly authorityInfoAccess?: readonly AuthorityInformationAccess[];
 	/** Decoded CRL Distribution Points (RFC 5280 §4.2.1.13). */
 	readonly crlDistributionPoints?: readonly ParsedDistributionPoint[];
+	/** `true` when the certificate carries No Revocation Available (RFC 9608 §2). */
+	readonly noRevAvail?: true;
 	/** Custom-decoded extensions from {@linkcode ParseOptions.decoders}. */
 	readonly decodedExtensions?: readonly DecodedExtensionValue<unknown>[];
 	/** Custom-decoded extensions from {@linkcode ParseOptions.decoderMap}, keyed by map key. */
@@ -495,6 +498,8 @@ export interface ParsedCertificateSigningRequest<
 	readonly authorityInfoAccess?: readonly AuthorityInformationAccess[];
 	/** Decoded CRL Distribution Points from the extensionRequest attribute. */
 	readonly crlDistributionPoints?: readonly ParsedDistributionPoint[];
+	/** `true` when the extensionRequest attribute carries No Revocation Available (RFC 9608 §2). */
+	readonly noRevAvail?: true;
 	/** Custom-decoded extensions from {@linkcode ParseOptions.decoders}. */
 	readonly decodedExtensions?: readonly DecodedExtensionValue<unknown>[];
 	/** Custom-decoded extensions from {@linkcode ParseOptions.decoderMap}. */
@@ -631,12 +636,7 @@ export function parseCertificateDerOrThrow<TMap extends ExtensionDecoderMap = Re
 		...(parsedExtensions.inhibitAnyPolicy !== undefined
 			? { inhibitAnyPolicy: parsedExtensions.inhibitAnyPolicy }
 			: {}),
-		...(parsedExtensions.authorityInfoAccess !== undefined
-			? { authorityInfoAccess: parsedExtensions.authorityInfoAccess }
-			: {}),
-		...(parsedExtensions.crlDistributionPoints !== undefined
-			? { crlDistributionPoints: parsedExtensions.crlDistributionPoints }
-			: {}),
+		...accessExtensionFields(parsedExtensions),
 		...(customExtensions.decodedExtensions === undefined
 			? {}
 			: { decodedExtensions: customExtensions.decodedExtensions }),
@@ -981,12 +981,7 @@ export function parseCertificateSigningRequestDerOrThrow<
 		...(parsedExtensions.inhibitAnyPolicy !== undefined
 			? { inhibitAnyPolicy: parsedExtensions.inhibitAnyPolicy }
 			: {}),
-		...(parsedExtensions.authorityInfoAccess !== undefined
-			? { authorityInfoAccess: parsedExtensions.authorityInfoAccess }
-			: {}),
-		...(parsedExtensions.crlDistributionPoints !== undefined
-			? { crlDistributionPoints: parsedExtensions.crlDistributionPoints }
-			: {}),
+		...accessExtensionFields(parsedExtensions),
 		...(customExtensions.decodedExtensions === undefined
 			? {}
 			: { decodedExtensions: customExtensions.decodedExtensions }),
@@ -1447,6 +1442,23 @@ interface ParsedExtensions extends KnownParsedExtensionAccumulator {
 	readonly all: readonly ParsedExtension[];
 }
 
+/** The decoded authorityInfoAccess, cRLDistributionPoints and noRevAvail fields, each only when present. */
+function accessExtensionFields(extensions: ParsedExtensions): {
+	readonly authorityInfoAccess?: readonly AuthorityInformationAccess[];
+	readonly crlDistributionPoints?: readonly ParsedDistributionPoint[];
+	readonly noRevAvail?: true;
+} {
+	return {
+		...(extensions.authorityInfoAccess === undefined
+			? {}
+			: { authorityInfoAccess: extensions.authorityInfoAccess }),
+		...(extensions.crlDistributionPoints === undefined
+			? {}
+			: { crlDistributionPoints: extensions.crlDistributionPoints }),
+		...(extensions.noRevAvail === true ? { noRevAvail: true } : {}),
+	};
+}
+
 /** Decode the explicit [3] extensions wrapper from a TBSCertificate. */
 function parseExtensionContainer(
 	source: Uint8Array,
@@ -1847,6 +1859,7 @@ function parseUserNoticePolicyQualifierInfo(
 		readonly noticeNumbers: readonly number[];
 	};
 	readonly explicitText?: string;
+	readonly explicitTextType?: DisplayTextType;
 } {
 	const children = childrenOf(source, element);
 	let noticeRef:
@@ -1855,7 +1868,7 @@ function parseUserNoticePolicyQualifierInfo(
 				readonly noticeNumbers: readonly number[];
 		  }
 		| undefined;
-	let explicitText: string | undefined;
+	let explicitText: { readonly text: string; readonly type: DisplayTextType } | undefined;
 	for (const child of children) {
 		if (child.tag === 0x30) {
 			if (noticeRef !== undefined) {
@@ -1867,11 +1880,13 @@ function parseUserNoticePolicyQualifierInfo(
 		if (explicitText !== undefined) {
 			throw new Error('userNotice must not contain multiple explicitText values');
 		}
-		explicitText = parseDisplayText(child);
+		explicitText = { text: parseDisplayText(child), type: displayTextType(child.tag) };
 	}
 	return {
 		...(noticeRef === undefined ? {} : { noticeRef }),
-		...(explicitText === undefined ? {} : { explicitText }),
+		...(explicitText === undefined
+			? {}
+			: { explicitText: explicitText.text, explicitTextType: explicitText.type }),
 	};
 }
 
@@ -2290,6 +2305,20 @@ function parseNameConstraintGeneralName(element: DerElement): ParsedNameConstrai
 			return { type: 'registeredID', value: decodeObjectIdentifier(element.value) };
 	}
 	throw new Error(`Unsupported name constraint GeneralName tag: ${String(element.tag)}`);
+}
+
+/** The DisplayText alternative a tag names. Call only after `parseDisplayText` accepted the tag. */
+function displayTextType(tag: number): DisplayTextType {
+	switch (tag) {
+		case 0x16:
+			return 'ia5String';
+		case 0x1a:
+			return 'visibleString';
+		case 0x1e:
+			return 'bmpString';
+		default:
+			return 'utf8String';
+	}
 }
 
 /** Decode a DisplayText (UTF8String, IA5String, VisibleString, or BMPString). */

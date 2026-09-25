@@ -13,20 +13,20 @@ Public barrels should stay in domain folders.
 internal/
 ├── asn1/    # DER/ASN.1 primitives, OID catalog
 ├── crypto/  # signature, hashing, encryption helpers
-├── shared/  # base64 + DN + IP helpers with cross-domain use
+├── shared/  # base64 + DN + IP + IDNA helpers with cross-domain use
 ├── verify/  # policy/path/constraint engines
 └── x509/    # extension/name metadata helpers
 ```
 
 ## WHERE TO LOOK
 
-| Need                     | Location  | Notes                                             |
-| ------------------------ | --------- | ------------------------------------------------- |
-| ASN.1 and OID core       | `asn1/`   | DER encoding/parsing + OID resolution             |
-| Crypto dispatch          | `crypto/` | algorithm/profile/sign/verify plumbing            |
-| Cross-domain utilities   | `shared/` | base64 + DN + IP helpers (pure, deterministic)    |
-| Name / extension helpers | `x509/`   | registry + field metadata + bit and name decoding |
-| Verification engines     | `verify/` | high-complexity policy/name-constraint/path logic |
+| Need                     | Location  | Notes                                                 |
+| ------------------------ | --------- | ----------------------------------------------------- |
+| ASN.1 and OID core       | `asn1/`   | DER encoding/parsing + OID resolution                 |
+| Crypto dispatch          | `crypto/` | algorithm/profile/sign/verify plumbing                |
+| Cross-domain utilities   | `shared/` | base64 + DN + IP + IDNA helpers (pure, deterministic) |
+| Name / extension helpers | `x509/`   | registry + field metadata + bit and name decoding     |
+| Verification engines     | `verify/` | high-complexity policy/name-constraint/path logic     |
 
 ## CONVENTIONS
 
@@ -36,6 +36,8 @@ internal/
 - Avoid public barrel dependence inside internal modules.
 - `shared/` helpers must stay pure and deterministic; do not add domain-specific
   policy logic there.
+- `shared/idna-tables.ts` is generated; regenerate it with
+  `bun scripts/idna-tables.bun.ts` and never edit it by hand.
 - Keep parser limits explicit when traversing nested structures.
 - Use integer and length helpers from `asn1/` instead of local reimplementation.
 - Register new OIDs in `asn1/oids.json` under their registration arc; consume

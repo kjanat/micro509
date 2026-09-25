@@ -26,11 +26,13 @@ import {
 	compareDistinguishedNames,
 	isWithinDirectoryNameSubtree,
 } from '#micro509/internal/shared/dn';
+import { domainToAscii } from '#micro509/internal/shared/idna';
 import {
 	allOnesMaskForIpAddress,
 	decodeIpAddress,
 	parseIpAddressToBytes,
 } from '#micro509/internal/shared/ip';
+import { isMailboxDomain, isSmtpUtf8LocalPart } from '#micro509/internal/shared/mailbox';
 import type { Micro509Error } from '#micro509/result/result';
 import type { InitialNameConstraintsInput } from '#micro509/verify/name-constraints';
 import type {
@@ -406,6 +408,9 @@ function checkCertificateSubjectAltName(
 			}),
 		);
 	}
+	if (san.type === 'smtpUtf8Mailbox') {
+		return checkSmtpUtf8Mailbox(certificate, accumulated, san.value, index);
+	}
 	const checkableResult = sanToConstraintCheckable(san);
 	if (!checkableResult.ok) {
 		return nameConstraintFailure(
@@ -444,6 +449,129 @@ function checkCertificateSubjectAltName(
 			actual: formatConstraintForm(checkable),
 		}),
 	);
+}
+
+/**
+ * RFC 9598 §6 applies rfc822Name constraints to a SmtpUTF8Mailbox by its domain
+ * alone: the Local-part and "@" are stripped from the name and the constraint,
+ * and the remaining domains compare octet for octet after lowercasing, as a
+ * suffix when the constraint starts with ".". A mailbox that breaks the §3
+ * syntax cannot be compared, so it fails whenever rfc822Name constraints are
+ * in force.
+ */
+function checkSmtpUtf8Mailbox(
+	certificate: ParsedCertificate,
+	accumulated: AccumulatedNameConstraints,
+	mailbox: string,
+	index: number,
+): NameConstraintValidationResult {
+	const permitted = accumulatedHasEmailConstraints(accumulated)
+		? isSmtpUtf8MailboxDomainPermitted(mailbox, accumulated)
+		: true;
+	if (permitted) return { ok: true };
+	return nameConstraintFailure(
+		'name_constraints_violated',
+		`SAN smtpUtf8Mailbox:${mailbox} violates name constraints`,
+		index,
+		nameConstraintDetails({
+			subjectCommonName: certificate.subject.values.commonName,
+			actual: `smtpUtf8Mailbox:${mailbox}`,
+		}),
+	);
+}
+
+/**
+ * RFC 9598 §5: the Local-part is a non-ASCII RFC 6531 Local-part and the
+ * lowercased domain is NR-LDH labels and A-labels before the domain is compared.
+ */
+function isSmtpUtf8MailboxDomainPermitted(
+	mailbox: string,
+	accumulated: AccumulatedNameConstraints,
+): boolean {
+	const at = mailbox.lastIndexOf('@');
+	const localPart = mailbox.slice(0, Math.max(at, 0));
+	const domain = asciiLowercase(mailbox.slice(at + 1));
+	return (
+		at > 0 &&
+		isSmtpUtf8LocalPart(localPart) &&
+		[...localPart].some((character) => (character.codePointAt(0) ?? 0) > 0x7f) &&
+		isMailboxDomain(domain, 'lookup') &&
+		isMailboxDomainPermitted(domain, accumulated)
+	);
+}
+
+function isMailboxDomainPermitted(
+	domain: string,
+	accumulated: AccumulatedNameConstraints,
+): boolean {
+	if (hasMalformedConstraint('email', accumulated)) return false;
+	const matches = (constraint: NameConstraintForm): boolean =>
+		constraint.type === 'email' && matchesMailboxDomainConstraint(domain, constraint.value);
+	if (accumulated.excluded.some(matches)) return false;
+	return accumulated.permittedLevels.every(
+		(level) => !level.some((constraint) => constraint.type === 'email') || level.some(matches),
+	);
+}
+
+/**
+ * A dNSName or rfc822Name constraint whose domain is not a well-formed name
+ * cannot be compared, so no name of its type is permitted while one is in force.
+ */
+function hasMalformedConstraint(
+	type: NameConstraintForm['type'],
+	accumulated: AccumulatedNameConstraints,
+): boolean {
+	return [...accumulated.excluded, ...accumulated.permittedLevels.flat()].some(
+		(constraint) => constraint.type === type && !isWellFormedConstraint(constraint),
+	);
+}
+
+function isWellFormedConstraint(constraint: NameConstraintForm): boolean {
+	switch (constraint.type) {
+		case 'dns': {
+			const value = asciiLowercase(constraint.value);
+			return (
+				value.length === 0 || isComparableDomain(value.startsWith('.') ? value.slice(1) : value)
+			);
+		}
+		case 'email':
+			return constraintMailboxDomain(constraint.value) !== undefined;
+		case 'uri':
+		case 'ip':
+		case 'directoryName':
+			return true;
+		default: {
+			const _exhaustive: never = constraint;
+			throw new Error(`Unhandled NameConstraintForm type: ${String(_exhaustive)}`);
+		}
+	}
+}
+
+/** Labels of 1 to 63 letters, digits, hyphens or underscores, with each `xn--` label an A-label. */
+function isComparableDomain(domain: string): boolean {
+	return (
+		domain.length <= 253 &&
+		domain.split('.').every((label) => /^[a-z0-9_-]{1,63}$/.test(label)) &&
+		domainToAscii(domain, 'lookup').ok
+	);
+}
+
+/** RFC 9598 §6: the lowercased domain of an rfc822Name constraint, keeping a leading ".". */
+function constraintMailboxDomain(constraint: string): string | undefined {
+	const domain = asciiLowercase(constraint.slice(constraint.lastIndexOf('@') + 1));
+	const host = domain.startsWith('.') ? domain.slice(1) : domain;
+	return isMailboxDomain(host, 'lookup') ? domain : undefined;
+}
+
+function matchesMailboxDomainConstraint(domain: string, constraint: string): boolean {
+	const constraintDomain = constraintMailboxDomain(constraint);
+	return constraintDomain?.startsWith('.') === true
+		? domain.endsWith(constraintDomain)
+		: domain === constraintDomain;
+}
+
+function asciiLowercase(value: string): string {
+	return value.replace(/[A-Z]/g, (letter) => letter.toLowerCase());
 }
 
 function checkCertificateSubjectEmailFallback(
@@ -509,7 +637,7 @@ function accumulatedHasUriConstraints(accumulated: AccumulatedNameConstraints): 
 function sanUnsupportedFormType(
 	san: SubjectAltName,
 ): UnsupportedNameConstraintForm['type'] | undefined {
-	if (san.type === 'srv') {
+	if (san.type === 'srv' || san.type === 'smtpUtf8Mailbox') {
 		return 'otherName';
 	}
 	if (san.type !== 'unknown') {
@@ -543,6 +671,7 @@ function sanToConstraintCheckable(san: SubjectAltName): SubjectAltNameCheckableR
 		case 'uri':
 			return { ok: true, value: { type: 'uri', value: san.value } };
 		case 'srv':
+		case 'smtpUtf8Mailbox':
 			return { ok: true, value: undefined };
 		case 'ip':
 			try {
@@ -582,6 +711,9 @@ function isNamePermitted(
 	name: NameConstraintForm,
 	accumulated: AccumulatedNameConstraints,
 ): boolean {
+	if (hasMalformedConstraint(name.type, accumulated)) {
+		return false;
+	}
 	// Check excluded — if any match, reject.
 	for (const constraint of accumulated.excluded) {
 		if (nameMatchesConstraint(name, constraint)) {

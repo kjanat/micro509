@@ -12,6 +12,7 @@ import { hexToBytes, toHex } from '#micro509/internal/asn1/asn1';
 import {
 	DEFAULT_MAX_DER_DEPTH,
 	implicitPrimitiveContext,
+	nullValue,
 	octetString,
 	readRootElement,
 	sequence,
@@ -38,6 +39,7 @@ import {
 	assertCrlDistributionPointsProfile,
 	assertExtensionCriticality,
 	assertNameConstraintsProfile,
+	assertStoredSubjectAltName,
 	buildSubjectKeyIdentifier,
 	encodeAuthorityInfoAccess,
 	encodeBasicConstraints,
@@ -100,6 +102,8 @@ export interface KnownParsedExtensionAccumulator {
 	readonly authorityInfoAccess?: readonly AuthorityInformationAccess[];
 	/** CRL Distribution Points. */
 	readonly crlDistributionPoints?: readonly ParsedDistributionPoint[];
+	/** No Revocation Available (RFC 9608 §2). */
+	readonly noRevAvail?: true;
 	/** Hex-encoded Subject Key Identifier. */
 	readonly subjectKeyIdentifier?: string;
 	/** Hex-encoded Authority Key Identifier. */
@@ -237,7 +241,7 @@ export const SUBJECT_ALT_NAME_EXTENSION_DEFINITION: RegisteredExtensionDefinitio
 	encode: (value) => sequence(value.map(encodeSubjectAltName)),
 	assertProfile: (value) => {
 		for (const name of value) {
-			encodeSubjectAltName(name);
+			assertStoredSubjectAltName(name);
 		}
 	},
 	applyParsed: (accumulator, value) => {
@@ -256,7 +260,7 @@ export const ISSUER_ALT_NAME_EXTENSION_DEFINITION: RegisteredExtensionDefinition
 	encode: (value) => sequence(value.map(encodeSubjectAltName)),
 	assertProfile: (value) => {
 		for (const name of value) {
-			encodeSubjectAltName(name);
+			assertStoredSubjectAltName(name);
 		}
 	},
 	applyParsed: (accumulator, value) => {
@@ -389,6 +393,22 @@ export const CRL_DISTRIBUTION_POINTS_EXTENSION_DEFINITION: RegisteredExtensionDe
 	},
 });
 
+/** Registry entry for No Revocation Available (OID 2.5.29.56, RFC 9608 §2). Non-critical. */
+export const NO_REV_AVAIL_EXTENSION_DEFINITION: RegisteredExtensionDefinition<true> =
+	defineExtensionDefinition<true>({
+		oid: OIDS.noRevAvail,
+		contexts: ['certificate', 'csr'],
+		defaultCritical: false,
+		decode: (valueDer) => decodeNoRevAvail(valueDer),
+		encode: () => nullValue(),
+		assertProfile: (_value, critical) => {
+			assertExtensionCriticality('noRevAvail', false, critical);
+		},
+		applyParsed: (accumulator, value) => {
+			accumulator.noRevAvail = value;
+		},
+	});
+
 /** Registry entry for Subject Key Identifier (OID 2.5.29.14). Auto-generated; non-critical. */
 export const SUBJECT_KEY_IDENTIFIER_EXTENSION_DEFINITION: RegisteredExtensionDefinition<
 	string,
@@ -447,6 +467,7 @@ export type KnownExtensionDefinition =
 	| typeof INHIBIT_ANY_POLICY_EXTENSION_DEFINITION
 	| typeof AUTHORITY_INFO_ACCESS_EXTENSION_DEFINITION
 	| typeof CRL_DISTRIBUTION_POINTS_EXTENSION_DEFINITION
+	| typeof NO_REV_AVAIL_EXTENSION_DEFINITION
 	| typeof SUBJECT_KEY_IDENTIFIER_EXTENSION_DEFINITION
 	| typeof AUTHORITY_KEY_IDENTIFIER_EXTENSION_DEFINITION;
 
@@ -464,6 +485,7 @@ export const CERT_CSR_EXTENSION_DEFINITIONS: readonly KnownExtensionDefinition[]
 	INHIBIT_ANY_POLICY_EXTENSION_DEFINITION,
 	AUTHORITY_INFO_ACCESS_EXTENSION_DEFINITION,
 	CRL_DISTRIBUTION_POINTS_EXTENSION_DEFINITION,
+	NO_REV_AVAIL_EXTENSION_DEFINITION,
 	SUBJECT_KEY_IDENTIFIER_EXTENSION_DEFINITION,
 	AUTHORITY_KEY_IDENTIFIER_EXTENSION_DEFINITION,
 ];
@@ -545,6 +567,10 @@ export function getExtensionDefinition(
 export function getExtensionDefinition(
 	oid: typeof OIDS.cRLDistributionPoints,
 ): typeof CRL_DISTRIBUTION_POINTS_EXTENSION_DEFINITION;
+/** Exact definition for the No Revocation Available extension. */
+export function getExtensionDefinition(
+	oid: typeof OIDS.noRevAvail,
+): typeof NO_REV_AVAIL_EXTENSION_DEFINITION;
 /** Exact definition for the Subject Key Identifier extension. */
 export function getExtensionDefinition(
 	oid: typeof OIDS.subjectKeyIdentifier,
@@ -619,6 +645,15 @@ function defineExtensionDefinition<TParsed, TInput = TParsed>(
 /** Accept hex string or Uint8Array and return raw bytes. */
 function normalizeKeyIdentifier(value: string | Uint8Array): Uint8Array {
 	return typeof value === 'string' ? hexToBytes(value) : value;
+}
+
+/** Decode a noRevAvail extension value, which RFC 9608 §2 defines as NULL. */
+function decodeNoRevAvail(valueDer: Uint8Array): true {
+	const element = readRootElement(valueDer, { maxDepth: DEFAULT_MAX_DER_DEPTH });
+	if (element.tag !== 0x05 || element.value.length !== 0) {
+		throw new Error('noRevAvail must be NULL');
+	}
+	return true;
 }
 
 /** Decode an SKI extension value DER to a hex string. */

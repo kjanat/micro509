@@ -36,6 +36,7 @@ export type {
 	CustomExtendedKeyUsage,
 	CustomExtension,
 	CustomPolicyQualifierInfo,
+	DisplayTextType,
 	DistributionPoint,
 	DistributionPointName,
 	DistributionPointReason,

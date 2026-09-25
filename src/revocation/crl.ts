@@ -807,7 +807,8 @@ export async function verifyCertificateRevocationListSignature(
 
 /**
  * Full CRL validation: issuer name match, authority key identifier match,
- * cRLSign key-usage check, signature verification, `thisUpdate`/`nextUpdate`
+ * a v3 issuer certificate's key usage must be present and assert cRLSign
+ * (RFC 10007 §4), signature verification, `thisUpdate`/`nextUpdate`
  * freshness check (with optional clock-skew tolerance), and the optional
  * `maxAgeMs` bound on `thisUpdate`. Without `maxAgeMs`, a CRL that omits
  * `nextUpdate` stays usable for any `at` after its `thisUpdate`.
@@ -867,6 +868,12 @@ async function authenticateCrl(
 		return validateCertificateRevocationListFailureResult(
 			'issuer_mismatch',
 			'CRL authority key identifier does not match issuer subject key identifier',
+		);
+	}
+	if (issuer.keyUsage === undefined && issuer.version === 3) {
+		return validateCertificateRevocationListFailureResult(
+			'crl_sign_not_permitted',
+			'v3 issuer certificate has no key usage extension',
 		);
 	}
 	if (issuer.keyUsage !== undefined && !issuer.keyUsage.flags.includes('cRLSign')) {
@@ -1807,6 +1814,10 @@ function compareGeneralNames(left: GeneralName, right: GeneralName): boolean {
 	}
 	if (left.type === 'email' && right.type === 'email') {
 		return compareRfc822Names(left.value, right.value);
+	}
+	if (left.type === 'smtpUtf8Mailbox' && right.type === 'smtpUtf8Mailbox') {
+		// RFC 9598 §5: two SmtpUTF8Mailboxes are equivalent on an exact octet-for-octet match.
+		return left.value === right.value;
 	}
 	if (left.type === 'ip' && right.type === 'ip') {
 		return left.value === right.value;

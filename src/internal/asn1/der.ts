@@ -219,6 +219,18 @@ export function printableString(value: string): Uint8Array {
 	return tlv(0x13, new TextEncoder().encode(value));
 }
 
+/**
+ * Encodes a DER VisibleString (tag `0x1a`).
+ *
+ * @throws if the input contains a character outside the printable ASCII range 0x20 to 0x7e.
+ */
+export function visibleString(value: string): Uint8Array {
+	if (!/^[\x20-\x7e]*$/.test(value)) {
+		throw new Error('Invalid VisibleString: contains characters outside 0x20 to 0x7e');
+	}
+	return tlv(0x1a, new TextEncoder().encode(value));
+}
+
 /** Validates a string is ASCII (IA5) and returns its content bytes, without a tag. */
 export function ia5Bytes(value: string): Uint8Array {
 	for (let i = 0; i < value.length; i++) {

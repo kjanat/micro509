@@ -31,6 +31,7 @@ import type {
 	ValidateOcspResponseResult,
 } from '#micro509/revocation/ocsp';
 import {
+	carriesOcspNoCheck,
 	parseOcspResponseDerOrThrow,
 	parseOcspResponsePemOrThrow,
 	validateOcspResponse,
@@ -39,7 +40,7 @@ import type { RevocationCertificateSource } from '#micro509/revocation/revocatio
 import { verifyCertificateChain } from '#micro509/verify/verify';
 import type { DistributionPointReason } from '#micro509/x509/extensions';
 import type { ParsedCertificate } from '#micro509/x509/parse';
-import { parseCertificateFromSource } from '#micro509/x509/parse';
+import { parseCertificateDer, parseCertificateFromSource } from '#micro509/x509/parse';
 
 export type { CrlSource };
 
@@ -259,6 +260,23 @@ export type CertificateRevocationStatus =
 			/** Never present on an `indeterminate` verdict. */
 			readonly source?: undefined;
 			/** Never present on an `indeterminate` verdict. */
+			readonly revocationInfo?: undefined;
+	  }
+	| {
+			/** The certificate that was evaluated. */
+			readonly certificate: ParsedCertificate;
+			/** Revocation checking does not apply to the certificate (RFC 9608 §4). */
+			readonly status: 'skipped';
+			/**
+			 * The extension that exempts the certificate: `'no_rev_avail'` for
+			 * noRevAvail (RFC 9608 §2) or `'ocsp_nocheck'` for id-pkix-ocsp-nocheck.
+			 */
+			readonly skipReason: 'no_rev_avail' | 'ocsp_nocheck';
+			/** Never present on a `skipped` verdict. */
+			readonly source?: undefined;
+			/** Never present on a `skipped` verdict. */
+			readonly indeterminateReasons?: undefined;
+			/** Never present on a `skipped` verdict. */
 			readonly revocationInfo?: undefined;
 	  };
 
@@ -1372,13 +1390,29 @@ async function evaluateCertificateRevocation(
 	};
 }
 
+/**
+ * RFC 9608 §4: path validation skips RFC 5280 §6.1.3 step (a)(3) for a
+ * certificate carrying noRevAvail or id-pkix-ocsp-nocheck, read from its
+ * signed DER.
+ */
+function revocationSkipReason(
+	certificate: ParsedCertificate,
+): 'no_rev_avail' | 'ocsp_nocheck' | undefined {
+	const signed = parseCertificateDer(certificate.der);
+	if (!signed.ok) return undefined;
+	if (signed.value.noRevAvail === true) return 'no_rev_avail';
+	return carriesOcspNoCheck(signed.value) ? 'ocsp_nocheck' : undefined;
+}
+
 // Function
 
 /**
  * Checks revocation status for all certificates in a validated chain.
  *
  * Evaluates CRL and OCSP evidence against each certificate (except the trust
- * anchor), applies the revocation policy, and returns a unified decision.
+ * anchor), applies the revocation policy, and returns a unified decision. A
+ * certificate carrying noRevAvail or id-pkix-ocsp-nocheck is reported as
+ * `skipped` without consulting evidence (RFC 9608 §4).
  *
  * @example
  * ```ts
@@ -1436,6 +1470,12 @@ export async function checkChainRevocation(
 		const issuer = chain[i + 1]; // Next cert in chain is the issuer
 		if (cert === undefined || issuer === undefined) {
 			continue; // Should never happen given loop bounds
+		}
+
+		const skipReason = revocationSkipReason(cert);
+		if (skipReason !== undefined) {
+			certificates.push({ certificate: cert, status: 'skipped', skipReason });
+			continue;
 		}
 
 		const { status, executionErrors } = await evaluateCertificateRevocation(

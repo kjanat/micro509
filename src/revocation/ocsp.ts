@@ -1381,10 +1381,17 @@ function validateOcspResponseFailureResult(
  * Reports whether a certificate carries the `id-pkix-ocsp-nocheck` extension
  * (RFC 6960 §4.2.2.2.1) — the CA's assertion that relying parties may trust
  * this OCSP responder certificate for its lifetime without revocation checks.
+ * An extension whose value is not the NULL that §4.2.2.2.1 requires does not count.
  */
 export function hasOcspNoCheckExtension(certificate: OcspCertificateSource): boolean {
-	const parsed = normalizeCertificate(certificate);
-	return parsed.extensions.some((extension) => extension.oid === OIDS.ocspNoCheck);
+	return carriesOcspNoCheck(normalizeCertificate(certificate));
+}
+
+/** Whether a parsed certificate carries `id-pkix-ocsp-nocheck` with its NULL value. */
+export function carriesOcspNoCheck(certificate: ParsedCertificate): boolean {
+	return certificate.extensions.some(
+		(extension) => extension.oid === OIDS.ocspNoCheck && extension.valueHex === '0500',
+	);
 }
 
 /** Parses a CRL from PEM string, DER bytes, or an already-parsed CRL. */

@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import {
-	createCertificate,
-	createSelfSignedCertificate,
-	generateKeyPair,
-	verifyCertificateChain,
-} from '#micro509';
+import type { createSelfSignedCertificate } from '#micro509';
+import { createCertificate, generateKeyPair, verifyCertificateChain } from '#micro509';
 import {
 	objectIdentifier,
 	printableString,
@@ -13,6 +9,10 @@ import {
 	utf8String,
 } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
+import {
+	createSelfSignedCertificateWithRawExtensions,
+	legacyMailboxNameConstraints,
+} from '#test/helpers';
 
 type TestDnStringEncoding = 'printable' | 'utf8';
 type DirectoryNameAttribute = {
@@ -51,17 +51,22 @@ function buildDirectoryNameDerHex(rdns: readonly (readonly DirectoryNameAttribut
 }
 
 async function verifyNameConstraintFixture(options: {
-	readonly rootNameConstraints: NameConstraintsInput;
+	readonly rootNameConstraints: NameConstraintsInput | Uint8Array;
 	readonly leafSubject?: LeafSubject;
 	readonly leafSubjectAltNames?: LeafSubjectAltNames;
 }) {
 	const rootCommonName = 'Name Constraint Fixture Root';
-	const root = await createSelfSignedCertificate({
+	const constraints = options.rootNameConstraints;
+	const root = await createSelfSignedCertificateWithRawExtensions({
 		subject: { commonName: rootCommonName },
 		extensions: {
 			basicConstraints: { ca: true },
 			keyUsage: ['keyCertSign', 'cRLSign'],
-			nameConstraints: options.rootNameConstraints,
+			...(constraints instanceof Uint8Array
+				? {
+						customExtensions: [{ oid: OIDS.nameConstraints, value: constraints, critical: true }],
+					}
+				: { nameConstraints: constraints }),
 		},
 	});
 	const leafKeys = await generateKeyPair();
@@ -107,19 +112,48 @@ describe('name constraint fixtures', () => {
 		expect(excluded).toMatchObject({ ok: false, code: 'name_constraints_violated' });
 	});
 
-	it('covers exact rfc822Name mailbox matching', async () => {
-		const permitted = await verifyNameConstraintFixture({
-			rootNameConstraints: {
-				permittedSubtrees: [{ base: { type: 'email', value: 'user@example.com' } }],
+	it('fails every name of a type while a dNSName or rfc822Name constraint of that type is malformed', async () => {
+		const cases = [
+			{
+				constraint: { type: 'dns', value: '.example.com.' },
+				san: { type: 'dns', value: 'host.example.com' },
 			},
+			{
+				constraint: { type: 'email', value: '.example.com.' },
+				san: { type: 'email', value: 'user@host.example.com' },
+			},
+			{
+				constraint: { type: 'email', value: '.example.com.' },
+				san: { type: 'smtpUtf8Mailbox', value: '用户@host.example.com' },
+			},
+			{
+				constraint: { type: 'dns', value: 'bad label.example' },
+				san: { type: 'dns', value: 'host.example.com' },
+			},
+		] as const;
+		for (const { constraint, san } of cases) {
+			const unrelated = await verifyNameConstraintFixture({
+				rootNameConstraints: { excludedSubtrees: [{ base: { type: 'dns', value: 'other.test' } }] },
+				leafSubjectAltNames: [san],
+			});
+			expect(unrelated).toMatchObject({ ok: true });
+			const result = await verifyNameConstraintFixture({
+				rootNameConstraints: { excludedSubtrees: [{ base: constraint }] },
+				leafSubjectAltNames: [san],
+			});
+			expect(result).toMatchObject({ ok: false, code: 'name_constraints_violated' });
+		}
+	});
+
+	it('covers exact rfc822Name mailbox matching for a constraint issued before RFC 9549', async () => {
+		const permitted = await verifyNameConstraintFixture({
+			rootNameConstraints: legacyMailboxNameConstraints('permitted', 'user@example.com'),
 			leafSubjectAltNames: [{ type: 'email', value: 'user@example.com' }],
 		});
 		expect(permitted).toMatchObject({ ok: true });
 
 		const rejected = await verifyNameConstraintFixture({
-			rootNameConstraints: {
-				permittedSubtrees: [{ base: { type: 'email', value: 'user@example.com' } }],
-			},
+			rootNameConstraints: legacyMailboxNameConstraints('permitted', 'user@example.com'),
 			leafSubjectAltNames: [{ type: 'email', value: 'admin@example.com' }],
 		});
 		expect(rejected).toMatchObject({ ok: false, code: 'name_constraints_violated' });
@@ -255,17 +289,13 @@ describe('name constraint fixtures', () => {
 
 	it('matches rfc822Name local-part case-sensitively and host case-insensitively', async () => {
 		const localMismatch = await verifyNameConstraintFixture({
-			rootNameConstraints: {
-				permittedSubtrees: [{ base: { type: 'email', value: 'admin@example.com' } }],
-			},
+			rootNameConstraints: legacyMailboxNameConstraints('permitted', 'admin@example.com'),
 			leafSubjectAltNames: [{ type: 'email', value: 'ADMIN@example.com' }],
 		});
 		expect(localMismatch).toMatchObject({ ok: false, code: 'name_constraints_violated' });
 
 		const hostCaseFold = await verifyNameConstraintFixture({
-			rootNameConstraints: {
-				permittedSubtrees: [{ base: { type: 'email', value: 'admin@example.com' } }],
-			},
+			rootNameConstraints: legacyMailboxNameConstraints('permitted', 'admin@example.com'),
 			leafSubjectAltNames: [{ type: 'email', value: 'admin@EXAMPLE.com' }],
 		});
 		expect(hostCaseFold).toMatchObject({ ok: true });

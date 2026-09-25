@@ -21,6 +21,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- IDNA2008 (RFC 5890-5893, RFC 8753) over frozen Unicode 12.0.0 tables
+  derived from the IANA registry. The builder converts U-labels to A-labels
+  in dNSName and rfc822Name SANs, SmtpUTF8Mailbox domains, the Name of a
+  SRVName, and dNSName and rfc822Name constraints, and fails with
+  `invalid_idn` on a label that is not valid IDNA2008, an `xn--` label that is
+  not an A-label, or an ASCII label beside an IDN label that is not NR-LDH. A
+  trailing root dot is kept and is not tested as a label.
+- RFC 9608 `noRevAvail` (id-ce 56). Parsing exposes it as
+  `ParsedCertificate.noRevAvail`, and `extensions.noRevAvail: true` emits it.
+  The builder refuses it beside cA TRUE, `crlDistributionPoints`, freshestCRL
+  or an `ocsp` authorityInfoAccess entry (`no_rev_avail_conflict`), and path
+  validation rejects such a certificate with the new `no_rev_avail_conflict`
+  verify code. `checkChainRevocation` and `verifyCertificateChain({
+revocation })` report a certificate carrying `noRevAvail` or
+  `id-pkix-ocsp-nocheck` as the new `status: 'skipped'` with a `skipReason`,
+  without consulting evidence (RFC 9608 §4). The exemption is read from the
+  certificate's signed DER.
 - `maxKdfIterations` on the encrypted PKCS#8 imports (`ImportEncryptedKeyOptions`,
   fourth argument), `parsePfxDer` / `parsePfxPem` options, and
   `parsePkcs12MacData` bounds the PBKDF2 and PKCS#12 KDF iteration counts a
@@ -78,6 +95,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- A reference identifier's domain converts to A-labels by IDNA2008 lookup
+  after RFC 5895 mapping (RFC 9525 §6.3), replacing the URL parser's UTS #46
+  processing. The mapping follows RFC 5895 §2 in order: each character to its
+  Lowercase_Mapping, `<wide>` and `<narrow>` characters to their
+  decompositions from the Unicode 12.0.0 UCD, NFC, and U+3002 to ".". A
+  reference that IDNA2008 disallows, such as `♚.example`, or with an ASCII
+  label outside letters, digits, hyphens and underscores, matches nothing. A
+  trailing root dot is kept. The host of a URI-ID and of a presented URI
+  decodes its percent-encoded UTF-8 once before conversion (RFC 3986 §3.2.2),
+  and a malformed encoding matches nothing.
+- An rfc822Name name constraint that names a particular mailbox
+  (`user@example.com`) is refused: the builder throws
+  `email_name_constraint_names_mailbox`, and a caller-supplied initial
+  constraint fails with `unsupported_initial_name_constraints`. RFC 9549 §2.2
+  removed that form. A certificate issued with one still validates as before.
+- `initialPolicySet` canonicalizes every OID. A list holding the anyPolicy OID
+  means `'any'`, and a list with a malformed OID matches no policy.
 - npm and JSR packages include `CHANGELOG.md` in the published tarball
   (`package.json` `files`, `jsr.json` `publish.include`).
 - `trustedOcspResponders` on `checkChainRevocation()` and
@@ -109,6 +143,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Policy validation applied a policyMappings extension found in the
+  end-entity certificate. RFC 5280 §6.1.3 runs the policy-mapping step of
+  §6.1.4 only for certificates before the last, and RFC 9618 keeps that, so a
+  leaf's mappings no longer rewrite or, under inhibitPolicyMapping, delete the
+  policies that certificate asserts.
+- The certificate builder accepted a `customExtensions` certificatePolicies
+  payload whose user notice `explicitText` was an IA5String, which RFC 6818 §3
+  forbids for conforming CAs. `explicitText` now follows RFC 6818 §3 on both
+  builder paths: IA5String fails with `display_text_ia5_string`, control
+  characters with `display_text_control_character`, and UTF8String or
+  BMPString text outside Unicode NFC with `display_text_not_nfc`. A user notice
+  gains `explicitTextType`, which parsing sets to the received string type and
+  which the builder accepts as `'visibleString'` or `'bmpString'` (default
+  `'utf8String'`), failing with `invalid_visible_string` or
+  `invalid_bmp_string` when the text does not fit.
 - Two `site/guide/keys.md` LiveCode examples used TypeScript parameter types
   (`key: CryptoKey`, `bytes: Uint8Array`). LiveCode injects examples as browser
   JS modules, so Run failed with `missing ) after argument list` and
@@ -147,6 +196,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Chain-level revocation skipped a certificate carrying `id-pkix-ocsp-nocheck`
+  whatever the extension held, and `hasOcspNoCheckExtension` counted it the
+  same way. Only the NULL value RFC 6960 §4.2.2.2.1 defines now counts.
+- DNS service-identity matching ran the certificate's dNSName through the URL
+  parser, which percent-decodes and parses IPv4 forms, so a SAN such as
+  `a%62c.example` matched the reference `abc.example` and `0x7f.0.0.1` matched
+  `127.0.0.1`. A presented dNSName, and the Common Name fallback, now compare
+  by a case-insensitive exact match (RFC 9549 §2.3).
+- A dNSName or rfc822Name name constraint whose domain is malformed, such as
+  `.example.com.`, matched no name, so an excluded subtree excluded nothing.
+  While one is in force, every dNSName, rfc822Name or SmtpUTF8Mailbox of its
+  type now fails with `name_constraints_violated`.
+- Caller-supplied initial name constraints accepted a dNSName, rfc822Name or
+  URI base written with U-labels. Certificates carry A-labels (RFC 9549 §1),
+  so such a base never matched, and an excluded subtree excluded nothing. A
+  dNSName or rfc822Name base now converts to A-labels, and a URI base or a
+  domain that is not valid IDNA2008 fails with
+  `unsupported_initial_name_constraints`.
+- A SmtpUTF8Mailbox subjectAltName (RFC 9598) parsed as an unrecognized
+  otherName, so rfc822Name name constraints never reached it and an
+  internationalized mailbox outside a permitted domain, or inside an excluded
+  one, passed path validation. It now parses as
+  `{ type: 'smtpUtf8Mailbox', value }` and rfc822Name constraints bind it by
+  domain (RFC 9598 §6). A received mailbox fails whenever rfc822Name
+  constraints apply unless its Local-part is a non-ASCII RFC 6531 Local-part
+  and its domain is NR-LDH labels and A-labels that pass the RFC 5893 Bidi
+  rule. The builder emits
+  it and enforces RFC 9598 §3: `invalid_smtp_utf8_mailbox` for a missing `@`,
+  a Byte Order Mark, a Local-part outside the RFC 6531 Dot-string or
+  Quoted-string grammar, or a domain that is not lowercase NR-LDH labels and
+  A-labels, and `smtp_utf8_mailbox_ascii_local_part` for a Local-part that
+  fits an rfc822Name. A U-label domain is stored as A-labels, and a
+  `customExtensions` SAN or IAN whose mailbox domain is not already stored
+  that way fails with `invalid_smtp_utf8_mailbox`.
+- CRL validation accepted a v3 issuer certificate with no keyUsage extension,
+  so a CRL signed with a key certified for another purpose under the CRL
+  issuer's name validated. A v3 CRL issuer certificate now needs keyUsage with
+  `cRLSign`, and fails with `crl_sign_not_permitted` without it; v1 and v2
+  issuer certificates have no extensions and skip the check (RFC 10007 §4).
 - Decoding a DER INTEGER above `Number.MAX_SAFE_INTEGER`, such as a PKCS#12
   MacData or PBMAC1 iteration count, folded every octet into a `bigint`, so a
   file with a very long INTEGER cost CPU and memory before the KDF budget could

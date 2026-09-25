@@ -478,6 +478,7 @@ describe('certificate', () => {
 							noticeNumbers: [7],
 						},
 						explicitText: 'policy notice',
+						explicitTextType: 'utf8String',
 					},
 				],
 			},

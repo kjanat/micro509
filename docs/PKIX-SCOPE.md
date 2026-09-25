@@ -57,7 +57,11 @@ Current conformance evidence:
 - [x] Trust anchor information: trusted issuer name,
       trusted public key algorithm,
       trusted public key, and optional trusted key parameters.
-- [x] User-initial-policy-set.
+- [x] User-initial-policy-set. A list holding the anyPolicy OID means
+      any-policy. A supplied list must be satisfied even when explicit policy
+      is not required: RFC 9618 §5.5 would accept an empty user-constrained
+      policy set there, and micro509 applies the stricter rule as the
+      application restriction RFC 9618 §5.1 allows.
 - [x] Initial policy-mapping inhibit flag.
 - [x] Initial explicit-policy flag.
 - [x] Initial anyPolicy-inhibit flag.
@@ -114,11 +118,31 @@ Current GeneralName matrix for `nameConstraints`:
 | `uniformResourceIdentifier` | decode to typed URI values       | enforce host-based matching                | `complete` |
 | `iPAddress`                 | decode to address+mask bytes     | enforce                                    | `complete` |
 | `directoryName`             | preserve structured DN payload   | enforce with RFC 5280 semantic compare     | `complete` |
-| `otherName`                 | preserved as raw payload         | fail closed when critical and form appears | `complete` |
+| SmtpUTF8Mailbox `otherName` | decode to typed mailbox values   | enforce rfc822Name constraints by domain   | `complete` |
+| other `otherName`           | preserved as raw payload         | fail closed when critical and form appears | `complete` |
 | `x400Address`               | preserved as raw payload         | fail closed when critical and form appears | `complete` |
 | `ediPartyName`              | preserved as raw payload         | fail closed when critical and form appears | `complete` |
 | `registeredID`              | decoded OID, preserved           | fail closed when critical and form appears | `complete` |
 
+- Domain names follow IDNA2008 (RFC 5890-5893, RFC 8753). The derived
+  property values, the Unicode properties the contextual and Bidi rules read,
+  and the RFC 5895 width decompositions are frozen to Unicode 12.0.0; NFC and
+  case mapping come from the runtime. The builder converts U-labels to
+  A-labels in dNSName and rfc822Name SANs, SmtpUTF8Mailbox domains, the Name
+  of a SRVName, and dNSName and rfc822Name constraints, and checks every
+  `xn--` label round trips, under the RFC 5891 §4 registration tests.
+  Caller-supplied initial DNS and mail constraints convert under the §5
+  lookup tests. A reference identifier converts after RFC 5895 mapping (RFC
+  9525 §6.3). A URI host is not converted. RFC 5280 §7.4 maps an IRI to a URI
+  by percent-encoding and forbids converting its ireg-name.
+- A name with no IDN label passes the builder unchecked, so a successful
+  conversion does not establish that the whole name is a valid DNS name.
+  ASCII labels beside an IDN label must be NR-LDH.
+- rfc822Name constraints that name a particular mailbox were removed by RFC
+  9549 §2.2. The builder and caller-supplied initial constraints refuse them.
+  One in an already-issued certificate keeps its exact local-part match
+  against an rfc822Name, and matches a SmtpUTF8Mailbox by domain alone as RFC
+  9598 §6 describes.
 - Parser responsibility: preserve enough tag/type information that validation can make a deterministic supported-vs-unsupported decision.
 - Validator responsibility: enforce supported forms and reject critical under-enforced cases instead of silently widening trust.
 
@@ -214,6 +238,13 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
 - [x] Treat CRL validation as a separate revocation subsystem.
 - [x] Parse CRLs and CRL extensions.
 - [x] Verify CRL signatures and issuer linkage.
+- [x] Skip chain-level revocation checking for a certificate carrying
+      `noRevAvail` or `id-pkix-ocsp-nocheck`, and reject a certificate pairing
+      `noRevAvail` with cA TRUE, cRLDistributionPoints, freshestCRL or an
+      `id-ad-ocsp` authorityInfoAccess entry (RFC 9608 §3, §4).
+- [x] Require keyUsage with `cRLSign` on a v3 CRL issuer certificate, and skip
+      the check for v1 and v2 issuers (RFC 10007 §4, updating RFC 5280 §6.3.3
+      step (f)).
 - [x] Enforce CRL time/freshness semantics. CRL age is unbounded by default,
       so a received CRL without `nextUpdate` stays usable unless the caller
       sets `maxAgeMs` (`validateCertificateRevocationList`,
