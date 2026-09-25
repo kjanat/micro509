@@ -5,6 +5,7 @@ import {
 	checkULabel,
 	domainToAscii,
 	referenceDomainToAscii,
+	toALabel,
 } from '#micro509/internal/shared/idna';
 import { punycodeDecode, punycodeEncode } from '#micro509/internal/shared/punycode';
 
@@ -211,6 +212,11 @@ describe('referenceDomainToAscii', () => {
 		expect(referenceDomainToAscii('Bücher.Example')).toBe('xn--bcher-kva.example');
 		expect(referenceDomainToAscii('ＢÜＣＨＥＲ．example')).toBe('xn--bcher-kva.example');
 		expect(referenceDomainToAscii('ü。example')).toBe('xn--tda.example');
+		expect(referenceDomainToAscii('ü｡example')).toBe('xn--tda.example');
+	});
+
+	it('lowercases each character by its Lowercase_Mapping, without the final-sigma context', () => {
+		expect(referenceDomainToAscii('ΑΣ-1.example')).toBe(`${toALabel('ασ-1')}.example`);
 	});
 
 	it('keeps a trailing root dot', () => {

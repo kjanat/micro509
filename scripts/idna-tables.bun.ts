@@ -34,9 +34,10 @@ const unicodeLicense = (await Bun.file(`${root}docs/idna/UNICODE-LICENSE.txt`).t
 const source = [
 	`/**
  * Frozen IDNA2008 tables for Unicode ${IDNA_UNICODE_VERSION}: the IANA derived
- * property values (RFC 5892) and the Unicode properties the contextual rules
- * (RFC 5892 Appendix A) and the Bidi rule (RFC 5893) read. Each table is a flat
- * list of inclusive \`[first, last]\` code point pairs in ascending order.
+ * property values (RFC 5892), the Unicode properties the contextual rules
+ * (RFC 5892 Appendix A) and the Bidi rule (RFC 5893) read, and the width
+ * decompositions the RFC 5895 mapping reads. Each range table is a flat list of
+ * inclusive \`[first, last]\` code point pairs in ascending order.
  *
  * Do not edit by hand; regenerate with \`bun scripts/idna-tables.bun.ts\`.
  *
@@ -75,6 +76,11 @@ ${unicodeLicense}
 		),
 	),
 	ranges('MARK_RANGES', 'Code points whose General_Category is Mn, Mc or Me.', tables.marks),
+	ranges(
+		'WIDTH_DECOMPOSITIONS',
+		'`[code point, mapping, …]` for each code point whose Decomposition_Type is <wide> or <narrow>.',
+		tables.widthDecompositions,
+	),
 ].join('\n');
 
 await Bun.write(`${root}src/internal/shared/idna-tables.ts`, source);

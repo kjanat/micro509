@@ -12,11 +12,14 @@ latest Unicode version IANA publishes derived property values for.
 | `ucd-12.0.0/DerivedCombiningClass.txt`  | <https://www.unicode.org/Public/12.0.0/ucd/extracted/DerivedCombiningClass.txt>  |
 | `ucd-12.0.0/DerivedGeneralCategory.txt` | <https://www.unicode.org/Public/12.0.0/ucd/extracted/DerivedGeneralCategory.txt> |
 | `ucd-12.0.0/Scripts.txt`                | <https://www.unicode.org/Public/12.0.0/ucd/Scripts.txt>                          |
+| `ucd-12.0.0/UnicodeData.txt`            | <https://www.unicode.org/Public/12.0.0/ucd/UnicodeData.txt>                      |
 
 The IANA table is the RFC 5892 derived property value of every code point:
 PVALID, CONTEXTJ, CONTEXTO, DISALLOWED or UNASSIGNED. The Unicode Character
 Database files supply the properties the RFC 5892 Appendix A contextual rules
-and the RFC 5893 Bidi rule read. The CSV's CRLF line endings are stored as LF.
+and the RFC 5893 Bidi rule read, and the `<wide>` and `<narrow>`
+decompositions the RFC 5895 mapping reads. The CSV's CRLF line endings are
+stored as LF.
 
 ## License
 
@@ -32,7 +35,8 @@ content are at <https://www.iana.org/help/licensing-terms>.
 curl -fsSL https://www.iana.org/assignments/idna-tables-12.0.0/idna-tables-properties.csv |
   tr -d '\r' > docs/idna/idna-tables-properties-12.0.0.csv
 for file in extracted/DerivedBidiClass.txt extracted/DerivedJoiningType.txt \
-  extracted/DerivedCombiningClass.txt extracted/DerivedGeneralCategory.txt Scripts.txt; do
+  extracted/DerivedCombiningClass.txt extracted/DerivedGeneralCategory.txt Scripts.txt \
+  UnicodeData.txt; do
   curl -fsSL "https://www.unicode.org/Public/12.0.0/ucd/$file" \
     -o "docs/idna/ucd-12.0.0/$(basename "$file")"
 done

@@ -43,4 +43,9 @@ describe('IDNA2008 tables', () => {
 		expect(frozen.SCRIPT_HAN_RANGES).toEqual(derived.scripts.get('Han') ?? []);
 		expect(frozen.MARK_RANGES).toEqual(derived.marks);
 	});
+
+	test('match the width decompositions the RFC 5895 mapping reads', () => {
+		expect(frozen.WIDTH_DECOMPOSITIONS).toEqual(derived.widthDecompositions);
+		expect(derived.widthDecompositions.length).toBe(452);
+	});
 });

@@ -35,6 +35,7 @@ import {
 	SCRIPT_HIRAGANA_RANGES,
 	SCRIPT_KATAKANA_RANGES,
 	VIRAMA_RANGES,
+	WIDTH_DECOMPOSITIONS,
 } from '#micro509/internal/shared/idna-tables';
 import { punycodeDecode, punycodeEncode } from '#micro509/internal/shared/punycode';
 
@@ -360,19 +361,25 @@ function rootDotOf(domain: string): '' | '.' {
 	return domain.length > 1 && domain.endsWith('.') ? '.' : '';
 }
 
+const WIDTH_MAPPING: ReadonlyMap<number, number> = new Map(
+	Array.from({ length: WIDTH_DECOMPOSITIONS.length / 2 }, (_, index) => [
+		WIDTH_DECOMPOSITIONS[index * 2] ?? 0,
+		WIDTH_DECOMPOSITIONS[index * 2 + 1] ?? 0,
+	]),
+);
+
 /**
- * RFC 5895 §2 mapping of a user-supplied name: lowercase, fullwidth and
- * halfwidth forms to their standard characters, the ideographic full stops to
- * ".", and NFC.
+ * RFC 5895 §2 mapping of a user-supplied name, in its order: each character to
+ * its Lowercase_Mapping, each `<wide>` or `<narrow>` character to its
+ * decomposition, NFC, and U+3002 to ".".
  */
 function mapForLookup(domain: string): string {
-	return Array.from(domain.toLowerCase(), (character) => {
-		const codePoint = character.codePointAt(0) ?? 0;
-		if (codePoint === 0x3002 || codePoint === 0xff0e || codePoint === 0xff61) return '.';
-		return codePoint >= 0xff01 && codePoint <= 0xffef ? character.normalize('NFKC') : character;
-	})
-		.join('')
-		.normalize('NFC');
+	const lower = Array.from(domain, (character) => character.toLowerCase()).join('');
+	const narrowed = Array.from(lower, (character) => {
+		const mapped = WIDTH_MAPPING.get(character.codePointAt(0) ?? 0);
+		return mapped === undefined ? character : String.fromCodePoint(mapped);
+	}).join('');
+	return narrowed.normalize('NFC').replaceAll('。', '.');
 }
 
 /**

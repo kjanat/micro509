@@ -33,6 +33,7 @@ export interface IdnaTables {
 	readonly virama: readonly number[];
 	readonly scripts: ReadonlyMap<(typeof SCRIPTS)[number], readonly number[]>;
 	readonly marks: readonly number[];
+	readonly widthDecompositions: readonly number[];
 }
 
 type Range = readonly [number, number];
@@ -69,6 +70,19 @@ function ucdRanges(text: string, accept: (value: string) => boolean): Range[] {
 	return ranges;
 }
 
+/** `[code point, mapping, …]` for each `<wide>` or `<narrow>` decomposition in UnicodeData.txt. */
+function widthDecompositions(text: string): number[] {
+	const pairs: number[] = [];
+	for (const line of text.split('\n')) {
+		const fields = line.split(';');
+		const [type, ...mapping] = (fields[5] ?? '').split(' ');
+		if (type !== '<wide>' && type !== '<narrow>') continue;
+		if (mapping.length !== 1) throw new Error(`multi-code-point ${type} mapping: ${line}`);
+		pairs.push(Number.parseInt(fields[0] ?? '', 16), Number.parseInt(mapping[0] ?? '', 16));
+	}
+	return pairs;
+}
+
 export async function deriveIdnaTables(dir: string): Promise<IdnaTables> {
 	const read = (name: string) => Bun.file(`${dir}/${name}`).text();
 	const csv = await read(`idna-tables-properties-${IDNA_UNICODE_VERSION}.csv`);
@@ -84,6 +98,7 @@ export async function deriveIdnaTables(dir: string): Promise<IdnaTables> {
 	const combiningText = await read(`${ucd}/DerivedCombiningClass.txt`);
 	const scriptText = await read(`${ucd}/Scripts.txt`);
 	const categoryText = await read(`${ucd}/DerivedGeneralCategory.txt`);
+	const unicodeDataText = await read(`${ucd}/UnicodeData.txt`);
 	const byValue = <T extends string>(text: string, values: readonly T[]): Map<T, number[]> =>
 		new Map(
 			values.map((value) => [value, flattenRanges(ucdRanges(text, (found) => found === value))]),
@@ -99,5 +114,6 @@ export async function deriveIdnaTables(dir: string): Promise<IdnaTables> {
 		marks: flattenRanges(
 			ucdRanges(categoryText, (value) => value === 'Mn' || value === 'Mc' || value === 'Me'),
 		),
+		widthDecompositions: widthDecompositions(unicodeDataText),
 	};
 }
