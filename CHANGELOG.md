@@ -118,6 +118,11 @@ revocation })` report a certificate carrying `noRevAvail` or
 
 ### Fixed
 
+- Policy validation applied a policyMappings extension found in the
+  end-entity certificate. RFC 5280 §6.1.3 runs the policy-mapping step of
+  §6.1.4 only for certificates before the last, and RFC 9618 keeps that, so a
+  leaf's mappings no longer rewrite or, under inhibitPolicyMapping, delete the
+  policies that certificate asserts.
 - The certificate builder accepted a `customExtensions` certificatePolicies
   payload whose user notice `explicitText` was an IA5String, which RFC 6818 §3
   forbids for conforming CAs. `explicitText` now follows RFC 6818 §3 on both

@@ -397,7 +397,7 @@ function processPolicyCertificate(
 			depth,
 			state.inhibitAnyPolicy > 0 || (!isLeaf && isSelfIssued(certificate)),
 		);
-		if (certificate.policyMappings !== undefined) {
+		if (!isLeaf && certificate.policyMappings !== undefined) {
 			applyPolicyMappingsStep(
 				state.validPolicyGraph,
 				depth,
