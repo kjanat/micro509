@@ -49,6 +49,12 @@ describe('RFC 5891 §4.2 registration tests on a U-label', () => {
 		expect(checkULabel('ü-', 'registration')).toBe('hyphen');
 	});
 
+	it('counts the third and fourth positions in code points', () => {
+		expect(checkULabel('\u{20000}a--b', 'registration')).toBe('hyphen');
+		expect(checkULabel('\u{20000}a--b', 'lookup')).toBe('hyphen');
+		expect(checkULabel('a\u{20000}-b', 'registration')).toBeUndefined();
+	});
+
 	it('rejects a leading combining mark', () => {
 		expect(checkULabel('́a', 'registration')).toBe('leading_combining_mark');
 	});

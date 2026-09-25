@@ -191,9 +191,11 @@ function zeroWidthNonJoinerJoins(codePoints: readonly number[], index: number): 
 export function checkULabel(label: string, mode: IdnaMode): IdnaFailure | undefined {
 	if (label.length === 0) return 'empty_label';
 	if (label.normalize('NFC') !== label) return 'not_nfc';
-	if (label.slice(2, 4) === '--') return 'hyphen';
-	if (mode === 'registration' && (label.startsWith('-') || label.endsWith('-'))) return 'hyphen';
 	const codePoints = codePointsOf(label);
+	if (codePoints[2] === 0x2d && codePoints[3] === 0x2d) return 'hyphen';
+	if (mode === 'registration' && (codePoints[0] === 0x2d || codePoints.at(-1) === 0x2d)) {
+		return 'hyphen';
+	}
 	if (inRanges(MARK_RANGES, codePoints[0] ?? 0)) return 'leading_combining_mark';
 	for (let index = 0; index < codePoints.length; index += 1) {
 		const codePoint = codePoints[index] ?? 0;
