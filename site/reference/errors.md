@@ -70,6 +70,9 @@ Unions may gain members in minor releases; treat them as non-exhaustive and keep
 | `certificate_policies_empty`                            | certificatePolicies lists no policies                             |
 | `crl_distribution_points_empty`                         | cRLDistributionPoints lists no points                             |
 | `directory_name_not_sequence`                           | directoryName payload is not a DER SEQUENCE                       |
+| `display_text_control_character`                        | explicitText contains a C0 or C1 control character (RFC 6818 §3)  |
+| `display_text_ia5_string`                               | explicitText requested as IA5String (RFC 6818 §3)                 |
+| `display_text_not_nfc`                                  | UTF8String or BMPString explicitText is not NFC (RFC 6818 §3)     |
 | `display_text_out_of_range`                             | User-notice DisplayText length outside RFC 5280 bounds            |
 | `distribution_point_crl_issuer_empty`                   | `cRLIssuer` present but holds no name                             |
 | `distribution_point_crl_issuer_not_directory_name`      | `cRLIssuer` entries must be directoryNames (RFC 5280 §4.2.1.13)   |
@@ -88,10 +91,12 @@ Unions may gain members in minor releases; treat them as non-exhaustive and keep
 | `extension_must_be_critical`                            | RFC 5280 fixes this extension as critical                         |
 | `extension_must_be_non_critical`                        | RFC 5280 fixes this extension as non-critical                     |
 | `extension_not_supported_in_context`                    | Extension not allowed in this certificate/CSR context             |
+| `invalid_bmp_string`                                    | BMPString explicitText outside the Basic Multilingual Plane       |
 | `invalid_general_name_tag`                              | GeneralName tag outside the nine RFC 5280 §4.2.1.6 alternatives   |
 | `invalid_ia5_string`                                    | Non-ASCII input for an IA5String value                            |
 | `invalid_ip_name_constraint`                            | IP constraint bytes are not address+mask of one family            |
 | `invalid_oid`                                           | String is not an encodable OID within X.660 arc bounds            |
+| `invalid_visible_string`                                | VisibleString explicitText outside printable ASCII                |
 | `key_usage_empty`                                       | keyUsage asserts no bits                                          |
 | `malformed_known_extension_value`                       | `customExtensions` payload with a known OID fails to decode as it |
 | `montgomery_key_usage_forbids_both_cipher_bits`         | X25519/X448 asserts both `encipherOnly` and `decipherOnly`        |

@@ -1026,6 +1026,7 @@ describe('parse', () => {
 						type: 'userNotice',
 						noticeRef: { organization: 'Example Org', noticeNumbers: [7, 9] },
 						explicitText: 'policy notice',
+						explicitTextType: 'utf8String',
 					},
 					{
 						type: 'oid',
@@ -1922,7 +1923,9 @@ describe('parse', () => {
 		expect(unwrap(parseCertificatePem(certificate.certificate.pem)).certificatePolicies).toEqual([
 			{
 				policyIdentifier: '1.2.3.4.1',
-				policyQualifiers: [{ type: 'userNotice', explicitText: 'OK' }],
+				policyQualifiers: [
+					{ type: 'userNotice', explicitText: 'OK', explicitTextType: 'bmpString' },
+				],
 			},
 		]);
 	});

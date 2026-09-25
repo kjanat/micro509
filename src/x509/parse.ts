@@ -60,6 +60,7 @@ import type {
 	AuthorityInformationAccess,
 	BasicConstraints,
 	CertificatePolicies,
+	DisplayTextType,
 	DistributionPointReason,
 	ExtendedKeyUsage,
 	GeneralName,
@@ -1858,6 +1859,7 @@ function parseUserNoticePolicyQualifierInfo(
 		readonly noticeNumbers: readonly number[];
 	};
 	readonly explicitText?: string;
+	readonly explicitTextType?: DisplayTextType;
 } {
 	const children = childrenOf(source, element);
 	let noticeRef:
@@ -1866,7 +1868,7 @@ function parseUserNoticePolicyQualifierInfo(
 				readonly noticeNumbers: readonly number[];
 		  }
 		| undefined;
-	let explicitText: string | undefined;
+	let explicitText: { readonly text: string; readonly type: DisplayTextType } | undefined;
 	for (const child of children) {
 		if (child.tag === 0x30) {
 			if (noticeRef !== undefined) {
@@ -1878,11 +1880,13 @@ function parseUserNoticePolicyQualifierInfo(
 		if (explicitText !== undefined) {
 			throw new Error('userNotice must not contain multiple explicitText values');
 		}
-		explicitText = parseDisplayText(child);
+		explicitText = { text: parseDisplayText(child), type: displayTextType(child.tag) };
 	}
 	return {
 		...(noticeRef === undefined ? {} : { noticeRef }),
-		...(explicitText === undefined ? {} : { explicitText }),
+		...(explicitText === undefined
+			? {}
+			: { explicitText: explicitText.text, explicitTextType: explicitText.type }),
 	};
 }
 
@@ -2301,6 +2305,20 @@ function parseNameConstraintGeneralName(element: DerElement): ParsedNameConstrai
 			return { type: 'registeredID', value: decodeObjectIdentifier(element.value) };
 	}
 	throw new Error(`Unsupported name constraint GeneralName tag: ${String(element.tag)}`);
+}
+
+/** The DisplayText alternative a tag names. Call only after `parseDisplayText` accepted the tag. */
+function displayTextType(tag: number): DisplayTextType {
+	switch (tag) {
+		case 0x16:
+			return 'ia5String';
+		case 0x1a:
+			return 'visibleString';
+		case 0x1e:
+			return 'bmpString';
+		default:
+			return 'utf8String';
+	}
 }
 
 /** Decode a DisplayText (UTF8String, IA5String, VisibleString, or BMPString). */

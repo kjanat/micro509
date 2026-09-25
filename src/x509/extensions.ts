@@ -15,6 +15,7 @@ import {
 	toHex,
 } from '#micro509/internal/asn1/asn1';
 import {
+	bmpString,
 	bool,
 	concatBytes,
 	DEFAULT_MAX_DER_DEPTH,
@@ -32,6 +33,7 @@ import {
 	sequence,
 	tlv,
 	utf8String,
+	visibleString,
 } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { sha1 } from '#micro509/internal/crypto/hash';
@@ -326,6 +328,7 @@ export type CertificatePolicies = readonly {
 					readonly noticeNumbers: readonly number[];
 				};
 				readonly explicitText?: string;
+				readonly explicitTextType?: DisplayTextType;
 		  }
 		| {
 				readonly type: 'oid';
@@ -359,7 +362,16 @@ export interface UserNoticePolicyQualifierInfo {
 	readonly noticeRef?: PolicyNoticeReference;
 	/** Free-form text to display to relying parties. */
 	readonly explicitText?: string;
+	/**
+	 * ASN.1 string type carrying `explicitText`. Parsing reports the received
+	 * type. The builder defaults to `'utf8String'`, accepts `'visibleString'`
+	 * and `'bmpString'`, and rejects `'ia5String'` (RFC 6818 §3).
+	 */
+	readonly explicitTextType?: DisplayTextType;
 }
+
+/** The ASN.1 string types RFC 5280 §4.2.1.4 allows for a DisplayText. */
+export type DisplayTextType = 'utf8String' | 'ia5String' | 'visibleString' | 'bmpString';
 
 /** Opaque policy qualifier identified by a custom OID, carried as raw DER. */
 export interface CustomPolicyQualifierInfo {
@@ -1786,9 +1798,79 @@ function encodeUserNoticePolicyQualifierInfo(qualifier: UserNoticePolicyQualifie
 	}
 	if (qualifier.explicitText !== undefined) {
 		assertDisplayText(qualifier.explicitText);
-		fields.push(utf8String(qualifier.explicitText));
+		fields.push(encodeExplicitText(qualifier.explicitText, qualifier.explicitTextType));
 	}
 	return sequence(fields);
+}
+
+/**
+ * RFC 6818 §3, replacing the explicitText paragraph of RFC 5280 §4.2.1.4:
+ * UTF8String is preferred, VisibleString and BMPString are acceptable,
+ * IA5String is forbidden, control characters should not appear, and UTF8String
+ * and BMPString text should be in Unicode normalization form C.
+ */
+function encodeExplicitText(text: string, type: DisplayTextType = 'utf8String'): Uint8Array {
+	if ([...text].some(isControlCharacter)) {
+		throwExtensionEncoderError(
+			'display_text_control_character',
+			'explicitText must not contain control characters',
+		);
+	}
+	switch (type) {
+		case 'utf8String':
+			assertNormalizationFormC(text);
+			return utf8String(text);
+		case 'bmpString':
+			assertNormalizationFormC(text);
+			return encodeBmpDisplayText(text);
+		case 'visibleString':
+			return encodeVisibleDisplayText(text);
+		case 'ia5String':
+			return throwExtensionEncoderError(
+				'display_text_ia5_string',
+				'explicitText must not be encoded as IA5String',
+			);
+		default: {
+			const _exhaustive: never = type;
+			throw new Error(`Unhandled DisplayText type: ${String(_exhaustive)}`);
+		}
+	}
+}
+
+function isControlCharacter(character: string): boolean {
+	const codePoint = character.codePointAt(0) ?? 0;
+	return codePoint <= 0x1f || (codePoint >= 0x7f && codePoint <= 0x9f);
+}
+
+function assertNormalizationFormC(text: string): void {
+	if (text.normalize('NFC') !== text) {
+		throwExtensionEncoderError(
+			'display_text_not_nfc',
+			'explicitText must be in Unicode normalization form C',
+		);
+	}
+}
+
+function encodeVisibleDisplayText(text: string): Uint8Array {
+	try {
+		return visibleString(text);
+	} catch {
+		return throwExtensionEncoderError(
+			'invalid_visible_string',
+			'VisibleString explicitText must be printable ASCII',
+		);
+	}
+}
+
+function encodeBmpDisplayText(text: string): Uint8Array {
+	try {
+		return bmpString(text);
+	} catch {
+		return throwExtensionEncoderError(
+			'invalid_bmp_string',
+			'BMPString explicitText must stay within the Basic Multilingual Plane',
+		);
+	}
 }
 
 /** DER-encode a NoticeReference SEQUENCE. */

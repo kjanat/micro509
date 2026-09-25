@@ -118,6 +118,16 @@ revocation })` report a certificate carrying `noRevAvail` or
 
 ### Fixed
 
+- The certificate builder accepted a `customExtensions` certificatePolicies
+  payload whose user notice `explicitText` was an IA5String, which RFC 6818 §3
+  forbids for conforming CAs. `explicitText` now follows RFC 6818 §3 on both
+  builder paths: IA5String fails with `display_text_ia5_string`, control
+  characters with `display_text_control_character`, and UTF8String or
+  BMPString text outside Unicode NFC with `display_text_not_nfc`. A user notice
+  gains `explicitTextType`, which parsing sets to the received string type and
+  which the builder accepts as `'visibleString'` or `'bmpString'` (default
+  `'utf8String'`), failing with `invalid_visible_string` or
+  `invalid_bmp_string` when the text does not fit.
 - Two `site/guide/keys.md` LiveCode examples used TypeScript parameter types
   (`key: CryptoKey`, `bytes: Uint8Array`). LiveCode injects examples as browser
   JS modules, so Run failed with `missing ) after argument list` and
