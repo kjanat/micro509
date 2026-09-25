@@ -534,7 +534,19 @@ function extractUriRegName(value: string, serviceType: string): string | undefin
 	if (host.length === 0 || host.includes('[') || host.includes(']')) {
 		return undefined;
 	}
-	return host;
+	return decodeRegName(host);
+}
+
+/** RFC 3986 §3.2.2: a reg-name with its percent-encoded UTF-8 octets decoded once. */
+function decodeRegName(host: string): string | undefined {
+	if (/%(?![0-9A-Fa-f]{2})/.test(host)) {
+		return undefined;
+	}
+	try {
+		return decodeURIComponent(host);
+	} catch {
+		return undefined;
+	}
 }
 
 /** Returns the substring before the first occurrence of any delimiter character. */

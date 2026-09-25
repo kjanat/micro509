@@ -81,6 +81,22 @@ describe('RFC 9525 §6.3: reference U-labels are converted to A-labels under IDN
 		]);
 	});
 
+	it('decodes a percent-encoded UTF-8 URI host once before converting it', async () => {
+		const uriMatches = async (presented: string, reference: string) =>
+			matchServiceIdentity({
+				certificate: await presenting({ type: 'uri', value: presented }),
+				serviceIdentity: { type: 'uri', value: reference },
+			}).ok;
+		expect(await uriMatches('https://b%C3%BCcher.example/', 'https://xn--bcher-kva.example/')).toBe(
+			true,
+		);
+		expect(await uriMatches('https://xn--bcher-kva.example/', 'https://b%C3%BCcher.example/')).toBe(
+			true,
+		);
+		expect(await uriMatches('https://b%C3cher.example/', 'https://b%C3cher.example/')).toBe(false);
+		expect(await uriMatches('https://b%zzcher.example/', 'https://b%zzcher.example/')).toBe(false);
+	});
+
 	it('matches a URI-ID and an SRV-ID host after the same conversion', async () => {
 		expect(
 			matchServiceIdentity({

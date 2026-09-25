@@ -102,7 +102,9 @@ revocation })` report a certificate carrying `noRevAvail` or
   decompositions from the Unicode 12.0.0 UCD, NFC, and U+3002 to ".". A
   reference that IDNA2008 disallows, such as `♚.example`, or with an ASCII
   label outside letters, digits, hyphens and underscores, matches nothing. A
-  trailing root dot is kept.
+  trailing root dot is kept. The host of a URI-ID and of a presented URI
+  decodes its percent-encoded UTF-8 once before conversion (RFC 3986 §3.2.2),
+  and a malformed encoding matches nothing.
 - An rfc822Name name constraint that names a particular mailbox
   (`user@example.com`) is refused: the builder throws
   `email_name_constraint_names_mailbox`, and a caller-supplied initial
