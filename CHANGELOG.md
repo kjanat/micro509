@@ -202,6 +202,10 @@ revocation })` report a certificate carrying `noRevAvail` or
   `a%62c.example` matched the reference `abc.example` and `0x7f.0.0.1` matched
   `127.0.0.1`. A presented dNSName, and the Common Name fallback, now compare
   by a case-insensitive exact match (RFC 9549 §2.3).
+- A dNSName or rfc822Name name constraint whose domain is malformed, such as
+  `.example.com.`, matched no name, so an excluded subtree excluded nothing.
+  While one is in force, every dNSName, rfc822Name or SmtpUTF8Mailbox of its
+  type now fails with `name_constraints_violated`.
 - Caller-supplied initial name constraints accepted a dNSName, rfc822Name or
   URI base written with U-labels. Certificates carry A-labels (RFC 9549 §1),
   so such a base never matched, and an excluded subtree excluded nothing. A

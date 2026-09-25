@@ -26,6 +26,7 @@ import {
 	compareDistinguishedNames,
 	isWithinDirectoryNameSubtree,
 } from '#micro509/internal/shared/dn';
+import { domainToAscii } from '#micro509/internal/shared/idna';
 import {
 	allOnesMaskForIpAddress,
 	decodeIpAddress,
@@ -503,6 +504,7 @@ function isMailboxDomainPermitted(
 	domain: string,
 	accumulated: AccumulatedNameConstraints,
 ): boolean {
+	if (hasMalformedConstraint('email', accumulated)) return false;
 	const matches = (constraint: NameConstraintForm): boolean =>
 		constraint.type === 'email' && matchesMailboxDomainConstraint(domain, constraint.value);
 	if (accumulated.excluded.some(matches)) return false;
@@ -511,9 +513,59 @@ function isMailboxDomainPermitted(
 	);
 }
 
+/**
+ * A dNSName or rfc822Name constraint whose domain is not a well-formed name
+ * cannot be compared, so no name of its type is permitted while one is in force.
+ */
+function hasMalformedConstraint(
+	type: NameConstraintForm['type'],
+	accumulated: AccumulatedNameConstraints,
+): boolean {
+	return [...accumulated.excluded, ...accumulated.permittedLevels.flat()].some(
+		(constraint) => constraint.type === type && !isWellFormedConstraint(constraint),
+	);
+}
+
+function isWellFormedConstraint(constraint: NameConstraintForm): boolean {
+	switch (constraint.type) {
+		case 'dns': {
+			const value = asciiLowercase(constraint.value);
+			return (
+				value.length === 0 || isComparableDomain(value.startsWith('.') ? value.slice(1) : value)
+			);
+		}
+		case 'email':
+			return constraintMailboxDomain(constraint.value) !== undefined;
+		case 'uri':
+		case 'ip':
+		case 'directoryName':
+			return true;
+		default: {
+			const _exhaustive: never = constraint;
+			throw new Error(`Unhandled NameConstraintForm type: ${String(_exhaustive)}`);
+		}
+	}
+}
+
+/** Labels of 1 to 63 letters, digits, hyphens or underscores, with each `xn--` label an A-label. */
+function isComparableDomain(domain: string): boolean {
+	return (
+		domain.length <= 253 &&
+		domain.split('.').every((label) => /^[a-z0-9_-]{1,63}$/.test(label)) &&
+		domainToAscii(domain, 'lookup').ok
+	);
+}
+
+/** RFC 9598 §6: the lowercased domain of an rfc822Name constraint, keeping a leading ".". */
+function constraintMailboxDomain(constraint: string): string | undefined {
+	const domain = asciiLowercase(constraint.slice(constraint.lastIndexOf('@') + 1));
+	const host = domain.startsWith('.') ? domain.slice(1) : domain;
+	return isMailboxDomain(host, 'lookup') ? domain : undefined;
+}
+
 function matchesMailboxDomainConstraint(domain: string, constraint: string): boolean {
-	const constraintDomain = asciiLowercase(constraint.slice(constraint.lastIndexOf('@') + 1));
-	return constraintDomain.startsWith('.')
+	const constraintDomain = constraintMailboxDomain(constraint);
+	return constraintDomain?.startsWith('.') === true
 		? domain.endsWith(constraintDomain)
 		: domain === constraintDomain;
 }
@@ -659,6 +711,9 @@ function isNamePermitted(
 	name: NameConstraintForm,
 	accumulated: AccumulatedNameConstraints,
 ): boolean {
+	if (hasMalformedConstraint(name.type, accumulated)) {
+		return false;
+	}
 	// Check excluded — if any match, reject.
 	for (const constraint of accumulated.excluded) {
 		if (nameMatchesConstraint(name, constraint)) {

@@ -112,6 +112,39 @@ describe('name constraint fixtures', () => {
 		expect(excluded).toMatchObject({ ok: false, code: 'name_constraints_violated' });
 	});
 
+	it('fails every name of a type while a dNSName or rfc822Name constraint of that type is malformed', async () => {
+		const cases = [
+			{
+				constraint: { type: 'dns', value: '.example.com.' },
+				san: { type: 'dns', value: 'host.example.com' },
+			},
+			{
+				constraint: { type: 'email', value: '.example.com.' },
+				san: { type: 'email', value: 'user@host.example.com' },
+			},
+			{
+				constraint: { type: 'email', value: '.example.com.' },
+				san: { type: 'smtpUtf8Mailbox', value: '用户@host.example.com' },
+			},
+			{
+				constraint: { type: 'dns', value: 'bad label.example' },
+				san: { type: 'dns', value: 'host.example.com' },
+			},
+		] as const;
+		for (const { constraint, san } of cases) {
+			const unrelated = await verifyNameConstraintFixture({
+				rootNameConstraints: { excludedSubtrees: [{ base: { type: 'dns', value: 'other.test' } }] },
+				leafSubjectAltNames: [san],
+			});
+			expect(unrelated).toMatchObject({ ok: true });
+			const result = await verifyNameConstraintFixture({
+				rootNameConstraints: { excludedSubtrees: [{ base: constraint }] },
+				leafSubjectAltNames: [san],
+			});
+			expect(result).toMatchObject({ ok: false, code: 'name_constraints_violated' });
+		}
+	});
+
 	it('covers exact rfc822Name mailbox matching for a constraint issued before RFC 9549', async () => {
 		const permitted = await verifyNameConstraintFixture({
 			rootNameConstraints: legacyMailboxNameConstraints('permitted', 'user@example.com'),
