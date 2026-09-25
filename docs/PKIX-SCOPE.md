@@ -261,8 +261,9 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
       CRL applicability; CRL discovery/fetch hooks are not shipped.
 - [x] Add delta CRL handling only if you actually want to live in that swamp. RFC 5280 defines CRL validation separately from path validation. (IETF Datatracker[^rfc5280])
       Chain evaluation uses only a current delta CRL whose CRL number exceeds
-      the base CRL's (RFC 5280 §5.2.4), and it prefers the one with the
-      latest `thisUpdate` (RFC 5280 §5.2.4). It also requires the delta's
+      the base CRL's (RFC 5280 §5.2.4), and it tries candidates from the
+      latest `thisUpdate` down (RFC 5280 §5.2.4), using the first that
+      validates and otherwise the base CRL alone. It also requires the delta's
       `thisUpdate` to be no earlier than the base CRL's, because X.509 Annex
       E.5.2 requires a delta CRL to be issued after the base CRL it updates.
       X.509 does not say whether an equal `thisUpdate` meets that rule, and

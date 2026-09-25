@@ -235,6 +235,14 @@ revocation })` report a certificate carrying `noRevAvail` or
   issuer's name validated. A v3 CRL issuer certificate now needs keyUsage with
   `cRLSign`, and fails with `crl_sign_not_permitted` without it; v1 and v2
   issuer certificates have no extensions and skip the check (RFC 10007 §4).
+- Chain-level CRL evaluation picked one delta CRL per base CRL from its
+  unauthenticated `thisUpdate` and CRL number, and when that delta failed
+  validation it tried neither another delta nor the base CRL alone. A forged
+  delta with a later `thisUpdate` therefore hid an authentic revoking delta,
+  or a revocation listed in the base CRL itself, and a validated OCSP `good`
+  then allowed the revoked certificate under hard-fail. Applicable deltas are
+  now tried newest first, the first that validates is used, and the base CRL
+  is evaluated alone when none does.
 - Decoding a DER INTEGER above `Number.MAX_SAFE_INTEGER`, such as a PKCS#12
   MacData or PBMAC1 iteration count, folded every octet into a `bigint`, so a
   file with a very long INTEGER cost CPU and memory before the KDF budget could

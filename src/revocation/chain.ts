@@ -1024,8 +1024,7 @@ interface CrlEvidenceState {
 interface BaseCrlResolution {
 	readonly cert: ParsedCertificate;
 	readonly baseCrl: ParsedCertificateRevocationList;
-	readonly applicableDelta: ParsedCertificateRevocationList | undefined;
-	readonly crlThisUpdate: Date;
+	readonly deltaCandidates: readonly ParsedCertificateRevocationList[];
 	readonly issuer: ParsedCertificate;
 	readonly extraCertificates: readonly RevocationCertificateSource[];
 	readonly chain: readonly ParsedCertificate[];
@@ -1050,8 +1049,7 @@ async function resolveBaseCrlAgainstSigners(
 	const {
 		cert,
 		baseCrl,
-		applicableDelta,
-		crlThisUpdate,
+		deltaCandidates,
 		issuer,
 		extraCertificates,
 		chain,
@@ -1062,21 +1060,20 @@ async function resolveBaseCrlAgainstSigners(
 		state,
 	} = params;
 	for (const candidate of collectCrlSignerCandidates(baseCrl, issuer, extraCertificates, chain)) {
-		const checked = await checkCrlWithIssuer(
+		const resolved = await checkCrlAgainstDeltaCandidates({
 			cert,
 			baseCrl,
-			applicableDelta,
+			deltaCandidates,
 			candidate,
 			at,
 			crlMaxAgeMs,
 			clockSkewMs,
-		);
-		if (!checked.ok) {
-			if (checked.code === 'stale_crl') {
-				state.sawStaleCrl = true;
-			}
+			state,
+		});
+		if (resolved === undefined) {
 			continue;
 		}
+		const { checked, crlThisUpdate } = resolved;
 		if (!(await crlSignerChainsToAnchor(candidate, chain, extraCertificates, at))) {
 			state.sawCrlSignerNotAuthorized = true;
 			continue;
@@ -1132,24 +1129,16 @@ async function evaluateCrlEvidence(
 	const crlMaxAgeMs = input.policy?.crlMaxAgeMs;
 	const clockSkewMs = input.policy?.clockSkewMs;
 	for (const baseCrl of baseCrls) {
-		const applicableDelta = findApplicableDeltaCrl(
-			baseCrl,
-			deltaCrls,
-			at,
-			clockSkewMs ?? 0,
-			crlMaxAgeMs,
-		);
-		// Evidence freshness: an applied delta CRL supersedes its base
-		const crlThisUpdate =
-			applicableDelta !== undefined &&
-			applicableDelta.thisUpdate.getTime() > baseCrl.thisUpdate.getTime()
-				? applicableDelta.thisUpdate
-				: baseCrl.thisUpdate;
 		const revoked = await resolveBaseCrlAgainstSigners({
 			cert,
 			baseCrl,
-			applicableDelta,
-			crlThisUpdate,
+			deltaCandidates: rankApplicableDeltaCrls(
+				baseCrl,
+				deltaCrls,
+				at,
+				clockSkewMs ?? 0,
+				crlMaxAgeMs,
+			),
 			issuer,
 			extraCertificates,
 			chain,
@@ -1238,33 +1227,81 @@ function parseCrlEvidenceSources(
 	return parsedCrls;
 }
 
-function findApplicableDeltaCrl(
+/** Every delta CRL that can update `baseCrl`, newest first, in the order to try authenticating them. */
+function rankApplicableDeltaCrls(
 	baseCrl: ParsedCertificateRevocationList,
 	deltaCrls: readonly ParsedCertificateRevocationList[],
 	at: Date,
 	clockSkewMs: number,
 	crlMaxAgeMs: number | undefined,
-): ParsedCertificateRevocationList | undefined {
+): readonly ParsedCertificateRevocationList[] {
 	const baseCrlNumber = baseCrl.crlNumber;
 	if (baseCrlNumber === undefined) {
-		return undefined;
+		return [];
 	}
-	let latest: ParsedCertificateRevocationList | undefined;
-	for (const deltaCrl of deltaCrls) {
-		if (
-			deltaCrl.issuer.derHex === baseCrl.issuer.derHex &&
-			deltaCrl.baseCrlNumber !== undefined &&
-			deltaCrl.baseCrlNumber <= baseCrlNumber &&
-			deltaCrl.crlNumber !== undefined &&
-			deltaCrl.crlNumber > baseCrlNumber &&
-			deltaCrl.thisUpdate.getTime() >= baseCrl.thisUpdate.getTime() &&
-			isCurrentDeltaCrl(deltaCrl, at, clockSkewMs, crlMaxAgeMs) &&
-			(latest === undefined || isNewerDeltaCrl(deltaCrl, latest))
-		) {
-			latest = deltaCrl;
+	return deltaCrls
+		.filter(
+			(deltaCrl) =>
+				deltaCrl.issuer.derHex === baseCrl.issuer.derHex &&
+				deltaCrl.baseCrlNumber !== undefined &&
+				deltaCrl.baseCrlNumber <= baseCrlNumber &&
+				deltaCrl.crlNumber !== undefined &&
+				deltaCrl.crlNumber > baseCrlNumber &&
+				deltaCrl.thisUpdate.getTime() >= baseCrl.thisUpdate.getTime() &&
+				isCurrentDeltaCrl(deltaCrl, at, clockSkewMs, crlMaxAgeMs),
+		)
+		.sort((left, right) =>
+			isNewerDeltaCrl(left, right) ? -1 : isNewerDeltaCrl(right, left) ? 1 : 0,
+		);
+}
+
+interface DeltaCandidateCheck {
+	readonly cert: ParsedCertificate;
+	readonly baseCrl: ParsedCertificateRevocationList;
+	readonly deltaCandidates: readonly ParsedCertificateRevocationList[];
+	readonly candidate: ParsedCertificate;
+	readonly at: Date;
+	readonly crlMaxAgeMs: number | undefined;
+	readonly clockSkewMs: number | undefined;
+	readonly state: CrlEvidenceState;
+}
+
+/** Checks `baseCrl` with each ranked delta CRL and then alone, returning the first combination that validates against `candidate`. */
+async function checkCrlAgainstDeltaCandidates(params: DeltaCandidateCheck): Promise<
+	| {
+			readonly checked: Extract<
+				Awaited<ReturnType<typeof checkCertificateRevocationAgainstCrl>>,
+				{ readonly ok: true }
+			>;
+			readonly crlThisUpdate: Date;
+	  }
+	| undefined
+> {
+	const { cert, baseCrl, deltaCandidates, candidate, at, crlMaxAgeMs, clockSkewMs, state } = params;
+	for (const deltaCrl of [...deltaCandidates, undefined]) {
+		const checked = await checkCrlWithIssuer(
+			cert,
+			baseCrl,
+			deltaCrl,
+			candidate,
+			at,
+			crlMaxAgeMs,
+			clockSkewMs,
+		);
+		if (checked.ok) {
+			return {
+				checked,
+				crlThisUpdate:
+					deltaCrl !== undefined && deltaCrl.thisUpdate.getTime() > baseCrl.thisUpdate.getTime()
+						? deltaCrl.thisUpdate
+						: baseCrl.thisUpdate,
+			};
+		}
+		if (checked.code === 'stale_crl') {
+			state.sawStaleCrl = true;
 		}
 	}
-	return latest;
+	return undefined;
 }
 
 function isNewerDeltaCrl(
