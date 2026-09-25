@@ -37,7 +37,7 @@ import {
 } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { sha1 } from '#micro509/internal/crypto/hash';
-import { domainToAscii } from '#micro509/internal/shared/idna';
+import { domainToAscii, isMailboxDomain } from '#micro509/internal/shared/idna';
 import { parseIpAddressToBytes } from '#micro509/internal/shared/ip';
 import {
 	encodeDistributionPointReasonFlagsContent,
@@ -1448,7 +1448,11 @@ function assertSmtpUtf8Mailbox(value: string): string {
 	const at = requireNonEmptyName(value).lastIndexOf('@');
 	const localPart = at > 0 ? value.slice(0, at) : '';
 	const domain = toAsciiDomain(value.slice(at + 1));
-	if (localPart.length === 0 || value.includes('\ufeff') || !isMailboxDomain(domain)) {
+	if (
+		localPart.length === 0 ||
+		value.includes('\ufeff') ||
+		!isMailboxDomain(domain, 'registration')
+	) {
 		throwExtensionEncoderError(
 			'invalid_smtp_utf8_mailbox',
 			'SmtpUTF8Mailbox must be Local-part@Domain with no Byte Order Mark and a domain of lowercase A-labels and NR-LDH labels',
@@ -1487,21 +1491,6 @@ function toAsciiMailbox(value: string): string {
 	return at < 0
 		? toAsciiDnsName(value)
 		: `${value.slice(0, at + 1)}${toAsciiDomain(value.slice(at + 1))}`;
-}
-
-/** A dot-separated domain of 1 to 63 octet lowercase LDH labels, with no reserved `??--` label other than an `xn--` A-label. */
-function isMailboxDomain(domain: string): boolean {
-	return (
-		domain.length > 0 &&
-		domain.length <= 253 &&
-		domain
-			.split('.')
-			.every(
-				(label) =>
-					/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label) &&
-					(label.slice(2, 4) !== '--' || label.startsWith('xn--')),
-			)
-	);
 }
 
 /**

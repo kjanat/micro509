@@ -26,6 +26,7 @@ import {
 	compareDistinguishedNames,
 	isWithinDirectoryNameSubtree,
 } from '#micro509/internal/shared/dn';
+import { isMailboxDomain } from '#micro509/internal/shared/idna';
 import {
 	allOnesMaskForIpAddress,
 	decodeIpAddress,
@@ -454,8 +455,8 @@ function checkCertificateSubjectAltName(
  * alone: the Local-part and "@" are stripped from the name and the constraint,
  * and the remaining domains compare octet for octet after lowercasing, as a
  * suffix when the constraint starts with ".". §3 requires that domain in
- * A-labels, and one that is not cannot be compared, so it fails whenever
- * rfc822Name constraints are in force.
+ * NR-LDH labels and A-labels, and one that is not cannot be compared, so it
+ * fails whenever rfc822Name constraints are in force.
  */
 function checkSmtpUtf8Mailbox(
 	certificate: ParsedCertificate,
@@ -465,7 +466,8 @@ function checkSmtpUtf8Mailbox(
 ): NameConstraintValidationResult {
 	const domain = mailbox.slice(mailbox.lastIndexOf('@') + 1);
 	const permitted = accumulatedHasEmailConstraints(accumulated)
-		? /^[\x21-\x7e]+$/.test(domain) && isMailboxDomainPermitted(asciiLowercase(domain), accumulated)
+		? isMailboxDomain(asciiLowercase(domain), 'lookup') &&
+			isMailboxDomainPermitted(asciiLowercase(domain), accumulated)
 		: true;
 	if (permitted) return { ok: true };
 	return nameConstraintFailure(

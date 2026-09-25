@@ -225,6 +225,50 @@ describe('RFC 9598 §6: rfc822Name name constraints apply to SmtpUTF8Mailbox by 
 		expect(await verdict(root, leaf)).toBe('name_constraints_violated');
 	});
 
+	it('rejects a received domain that is not NR-LDH labels and A-labels', async () => {
+		const cases = [
+			{ constraint: 'excludedSubtrees', value: '用户@host.example.com.' },
+			{ constraint: 'permittedSubtrees', value: '用户@host..example.com' },
+			{ constraint: 'permittedSubtrees', value: '用户@_host.example.com' },
+			{ constraint: 'permittedSubtrees', value: '用户@xn--45h.example.com' },
+		] as const;
+		for (const { constraint, value } of cases) {
+			const root = await constrainedRoot({
+				[constraint]: [{ base: { type: 'email', value: '.example.com' } }],
+			});
+			const otherName = implicitConstructedContext(
+				0,
+				concatBytes([
+					objectIdentifier(OIDS.idOnSmtpUtf8Mailbox),
+					explicitContext(0, utf8String(value)),
+				]),
+			);
+			const leaf = await appendCertificateExtensions(
+				await leafWith(root),
+				root.keyPair.privateKey,
+				[encodeExtension(OIDS.subjectAltName, sequence([otherName]), false)],
+			);
+			expect(await verdict(root, leaf)).toBe('name_constraints_violated');
+		}
+	});
+
+	it('compares a received uppercase domain after lowercasing it', async () => {
+		const root = await constrainedRoot({
+			permittedSubtrees: [{ base: { type: 'email', value: '.example.com' } }],
+		});
+		const otherName = implicitConstructedContext(
+			0,
+			concatBytes([
+				objectIdentifier(OIDS.idOnSmtpUtf8Mailbox),
+				explicitContext(0, utf8String('用户@HOST.XN--BCHER-KVA.example.com')),
+			]),
+		);
+		const leaf = await appendCertificateExtensions(await leafWith(root), root.keyPair.privateKey, [
+			encodeExtension(OIDS.subjectAltName, sequence([otherName]), false),
+		]);
+		expect(await verdict(root, leaf)).toBe('ok');
+	});
+
 	it('keeps a leading Byte Order Mark visible to the customExtensions profile check', async () => {
 		const root = await constrainedRoot({
 			excludedSubtrees: [{ base: { type: 'dns', value: 'x' } }],
