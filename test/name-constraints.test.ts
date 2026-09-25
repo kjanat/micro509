@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import {
-	createCertificate,
-	type createSelfSignedCertificate,
-	generateKeyPair,
-	verifyCertificateChain,
-} from '#micro509';
+import type { createSelfSignedCertificate } from '#micro509';
+import { createCertificate, generateKeyPair, verifyCertificateChain } from '#micro509';
 import {
 	objectIdentifier,
 	printableString,
