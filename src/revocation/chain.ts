@@ -8,6 +8,7 @@
  * @module
  */
 
+import { OIDS } from '#micro509/internal/asn1/oids';
 import type {
 	CrlSource,
 	ParsedCertificateRevocationList,
@@ -259,6 +260,23 @@ export type CertificateRevocationStatus =
 			/** Never present on an `indeterminate` verdict. */
 			readonly source?: undefined;
 			/** Never present on an `indeterminate` verdict. */
+			readonly revocationInfo?: undefined;
+	  }
+	| {
+			/** The certificate that was evaluated. */
+			readonly certificate: ParsedCertificate;
+			/** Revocation checking does not apply to the certificate (RFC 9608 §4). */
+			readonly status: 'skipped';
+			/**
+			 * The extension that exempts the certificate: `'no_rev_avail'` for
+			 * noRevAvail (RFC 9608 §2) or `'ocsp_nocheck'` for id-pkix-ocsp-nocheck.
+			 */
+			readonly skipReason: 'no_rev_avail' | 'ocsp_nocheck';
+			/** Never present on a `skipped` verdict. */
+			readonly source?: undefined;
+			/** Never present on a `skipped` verdict. */
+			readonly indeterminateReasons?: undefined;
+			/** Never present on a `skipped` verdict. */
 			readonly revocationInfo?: undefined;
 	  };
 
@@ -1372,13 +1390,28 @@ async function evaluateCertificateRevocation(
 	};
 }
 
+/**
+ * RFC 9608 §4: path validation skips RFC 5280 §6.1.3 step (a)(3) for a
+ * certificate carrying noRevAvail or id-pkix-ocsp-nocheck.
+ */
+function revocationSkipReason(
+	certificate: ParsedCertificate,
+): 'no_rev_avail' | 'ocsp_nocheck' | undefined {
+	if (certificate.noRevAvail === true) return 'no_rev_avail';
+	return certificate.extensions.some((extension) => extension.oid === OIDS.ocspNoCheck)
+		? 'ocsp_nocheck'
+		: undefined;
+}
+
 // Function
 
 /**
  * Checks revocation status for all certificates in a validated chain.
  *
  * Evaluates CRL and OCSP evidence against each certificate (except the trust
- * anchor), applies the revocation policy, and returns a unified decision.
+ * anchor), applies the revocation policy, and returns a unified decision. A
+ * certificate carrying noRevAvail or id-pkix-ocsp-nocheck is reported as
+ * `skipped` without consulting evidence (RFC 9608 §4).
  *
  * @example
  * ```ts
@@ -1436,6 +1469,12 @@ export async function checkChainRevocation(
 		const issuer = chain[i + 1]; // Next cert in chain is the issuer
 		if (cert === undefined || issuer === undefined) {
 			continue; // Should never happen given loop bounds
+		}
+
+		const skipReason = revocationSkipReason(cert);
+		if (skipReason !== undefined) {
+			certificates.push({ certificate: cert, status: 'skipped', skipReason });
+			continue;
 		}
 
 		const { status, executionErrors } = await evaluateCertificateRevocation(

@@ -1324,6 +1324,7 @@ describe('extensions encoding', () => {
 				},
 			]),
 		],
+		[OIDS.noRevAvail, nullValue()],
 		[OIDS.subjectKeyIdentifier, octetString(Uint8Array.of(1, 2, 3))],
 		[OIDS.authorityKeyIdentifier, sequence([implicitPrimitiveContext(0, Uint8Array.of(1, 2, 3))])],
 	]);

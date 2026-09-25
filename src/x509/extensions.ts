@@ -56,6 +56,7 @@ import {
 	INHIBIT_ANY_POLICY_EXTENSION_DEFINITION,
 	KEY_USAGE_EXTENSION_DEFINITION,
 	NAME_CONSTRAINTS_EXTENSION_DEFINITION,
+	NO_REV_AVAIL_EXTENSION_DEFINITION,
 	POLICY_CONSTRAINTS_EXTENSION_DEFINITION,
 	POLICY_MAPPINGS_EXTENSION_DEFINITION,
 	SUBJECT_ALT_NAME_EXTENSION_DEFINITION,
@@ -448,6 +449,12 @@ export interface CertificateExtensionsInput {
 	readonly authorityInfoAccess?: readonly AuthorityInformationAccessInput[];
 	/** CRL Distribution Points — where to check revocation status. */
 	readonly crlDistributionPoints?: readonly DistributionPoint[];
+	/**
+	 * Emit No Revocation Available (RFC 9608 §2): the CA publishes no revocation
+	 * information for this certificate. A certificate carrying it cannot be a CA
+	 * and cannot point at a CRL or an OCSP responder (RFC 9608 §3).
+	 */
+	readonly noRevAvail?: boolean;
 	/** Arbitrary extensions not covered by the built-in fields. */
 	readonly customExtensions?: readonly CustomExtension[];
 }
@@ -757,6 +764,7 @@ export function buildCertificateExtensions(
 	}
 	assertPathLengthKeyUsage(input);
 	assertSafeCurveKeyUsage(subjectPublicKeyInfo, input);
+	assertNoRevAvailProfile(input);
 	const extensions: Uint8Array[] = [];
 	const seen = new Set<string>();
 	const basicConstraints = input?.basicConstraints ?? { ca: false };
@@ -1001,6 +1009,49 @@ function assertCaBasicConstraintsCritical(input: CertificateExtensionsInput | un
 	if (mayValidateCertificates) {
 		assertExtensionCriticality('basicConstraints', true, false);
 	}
+}
+
+/**
+ * RFC 9608 §2 and §3: a certificate carrying noRevAvail is not a CA certificate
+ * and carries no cRLDistributionPoints, no freshestCRL, and no id-ad-ocsp
+ * authorityInfoAccess entry. Known extensions supplied through customExtensions
+ * participate in the effective view.
+ */
+function assertNoRevAvailProfile(input: CertificateExtensionsInput | undefined): void {
+	if (
+		input?.noRevAvail !== true &&
+		findCustomExtensionValue(input, OIDS.noRevAvail) === undefined
+	) {
+		return;
+	}
+	if (resolveEffectiveBasicConstraints(input)?.ca === true) {
+		throwNoRevAvailConflict('basicConstraints with cA TRUE');
+	}
+	if (
+		(input?.crlDistributionPoints?.length ?? 0) > 0 ||
+		findCustomExtensionValue(input, OIDS.cRLDistributionPoints) !== undefined
+	) {
+		throwNoRevAvailConflict('cRLDistributionPoints');
+	}
+	if (findCustomExtensionValue(input, OIDS.freshestCRL) !== undefined) {
+		throwNoRevAvailConflict('freshestCRL');
+	}
+	const customAccess = findCustomExtensionValue(input, OIDS.authorityInfoAccess);
+	const access =
+		input?.authorityInfoAccess ??
+		(customAccess === undefined
+			? []
+			: AUTHORITY_INFO_ACCESS_EXTENSION_DEFINITION.decode(customAccess));
+	if (access.some((entry) => entry.method === 'ocsp')) {
+		throwNoRevAvailConflict('an id-ad-ocsp authorityInfoAccess entry');
+	}
+}
+
+function throwNoRevAvailConflict(conflict: string): never {
+	throwExtensionEncoderError(
+		'no_rev_avail_conflict',
+		`A certificate carrying noRevAvail must not also carry ${conflict}`,
+	);
 }
 
 /**
@@ -1258,6 +1309,9 @@ function appendAccessExtensions(
 			CRL_DISTRIBUTION_POINTS_EXTENSION_DEFINITION,
 			input.crlDistributionPoints,
 		);
+	}
+	if (input.noRevAvail === true) {
+		pushKnownExtension(encoded, seen, NO_REV_AVAIL_EXTENSION_DEFINITION, true);
 	}
 }
 

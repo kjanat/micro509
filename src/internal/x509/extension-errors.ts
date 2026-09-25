@@ -46,6 +46,7 @@ export type ExtensionEncoderErrorCode =
 	| 'montgomery_key_usage_forbids_signature_bit'
 	| 'montgomery_key_usage_requires_key_agreement'
 	| 'name_constraints_empty'
+	| 'no_rev_avail_conflict'
 	| 'path_length_requires_ca'
 	| 'path_length_requires_key_cert_sign'
 	| 'policy_constraints_empty'

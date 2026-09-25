@@ -158,6 +158,7 @@ export interface TrustAnchor {
  * - `common_name_fallback_suppressed` — CN fallback was attempted but suppressed (SAN present or disabled).
  * - `self_signed_leaf_not_allowed` — the leaf is self-signed and `allowSelfSignedLeaf` was not set.
  * - `unrecognized_critical_extension` — a certificate contains a critical extension the verifier cannot process.
+ * - `no_rev_avail_conflict` — a certificate carries noRevAvail alongside a CA basicConstraints, cRLDistributionPoints, freshestCRL, or an id-ad-ocsp authorityInfoAccess entry (RFC 9608 §3).
  * - `intermediate_eku_constraint` — an intermediate CA's EKU set does not include the required purpose.
  * - `explicit_policy_required` — `requireExplicitPolicy` was set but no acceptable policy was found.
  * - `initial_policy_set_not_satisfied` — the chain's policies do not intersect `initialPolicySet`.
@@ -184,6 +185,7 @@ export const VERIFY_ERROR_CODES = [
 	'common_name_fallback_suppressed',
 	'self_signed_leaf_not_allowed',
 	'unrecognized_critical_extension',
+	'no_rev_avail_conflict',
 	'intermediate_eku_constraint',
 	'explicit_policy_required',
 	'initial_policy_set_not_satisfied',
@@ -495,6 +497,7 @@ const PROCESSED_EXTENSION_OIDS: ReadonlySet<string> = new Set([
 	OIDS.policyMappings,
 	OIDS.policyConstraints,
 	OIDS.inhibitAnyPolicy,
+	OIDS.noRevAvail,
 ]);
 
 // Internal types
@@ -829,7 +832,36 @@ function validateCertificateAtPathIndex(
 			}),
 		);
 	}
+	const noRevAvailConflict = findNoRevAvailConflict(current);
+	if (noRevAvailConflict !== undefined) {
+		return failure(
+			'no_rev_avail_conflict',
+			`certificate carries noRevAvail with ${noRevAvailConflict}`,
+			index,
+			detail({
+				subjectCommonName: current.subject.values.commonName,
+				actual: noRevAvailConflict,
+			}),
+		);
+	}
 	return validateEcDomainParametersAtPathIndex(current, index);
+}
+
+/**
+ * RFC 9608 §3: a relying party MUST consider a certificate carrying noRevAvail
+ * invalid when it also asserts cA, points at a CRL, or names an OCSP responder.
+ */
+function findNoRevAvailConflict(certificate: ParsedCertificate): string | undefined {
+	if (certificate.noRevAvail !== true) return undefined;
+	if (certificate.basicConstraints?.ca === true) return 'basicConstraints cA TRUE';
+	if (certificate.crlDistributionPoints !== undefined) return 'cRLDistributionPoints';
+	if (certificate.extensions.some((extension) => extension.oid === OIDS.freshestCRL)) {
+		return 'freshestCRL';
+	}
+	if (certificate.authorityInfoAccess?.some((entry) => entry.method === 'ocsp') === true) {
+		return 'an id-ad-ocsp authorityInfoAccess entry';
+	}
+	return undefined;
 }
 
 /**

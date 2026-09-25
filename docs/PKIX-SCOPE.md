@@ -214,6 +214,10 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
 - [x] Treat CRL validation as a separate revocation subsystem.
 - [x] Parse CRLs and CRL extensions.
 - [x] Verify CRL signatures and issuer linkage.
+- [x] Skip chain-level revocation checking for a certificate carrying
+      `noRevAvail` or `id-pkix-ocsp-nocheck`, and reject a certificate pairing
+      `noRevAvail` with cA TRUE, cRLDistributionPoints, freshestCRL or an
+      `id-ad-ocsp` authorityInfoAccess entry (RFC 9608 §3, §4).
 - [x] Require keyUsage with `cRLSign` on a v3 CRL issuer certificate, and skip
       the check for v1 and v2 issuers (RFC 10007 §4, updating RFC 5280 §6.3.3
       step (f)).

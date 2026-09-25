@@ -35,6 +35,9 @@ outline: [2, 3]
   fail-closed for otherName / x400Address / ediPartyName / registeredID when
   a critical constraint meets a SAN of that form (RFC 5280 §4.2.1.10)
 - Critical extension rejection for unrecognized OIDs
+- `noRevAvail` (RFC 9608): parsed, emitted by the builder, and a certificate
+  pairing it with cA TRUE, cRLDistributionPoints, freshestCRL or an
+  `id-ad-ocsp` location is rejected
 
 ### RFC 6960 OCSP
 
@@ -58,6 +61,9 @@ outline: [2, 3]
 - Chain-level orchestration: `checkChainRevocation()` /
   `verifyCertificateChain({ revocation })` consume caller-supplied OCSP
   responses alongside CRLs
+- Chain-level revocation reports a certificate carrying `noRevAvail` or
+  `id-pkix-ocsp-nocheck` as `skipped` without consulting evidence (RFC 9608
+  §4)
 
 ### CRL processing
 

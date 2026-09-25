@@ -327,7 +327,8 @@
 							"policyConstraints": "36",
 							"extendedKeyUsage": "37",
 							"freshestCRL": "46",
-							"inhibitAnyPolicy": "54"
+							"inhibitAnyPolicy": "54",
+							"noRevAvail": "56"
 						},
 						"children": {
 							"certificatePolicies": {

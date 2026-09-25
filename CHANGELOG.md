@@ -21,6 +21,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- RFC 9608 `noRevAvail` (id-ce 56). Parsing exposes it as
+  `ParsedCertificate.noRevAvail`, and `extensions.noRevAvail: true` emits it.
+  The builder refuses it beside cA TRUE, `crlDistributionPoints`, freshestCRL
+  or an `ocsp` authorityInfoAccess entry (`no_rev_avail_conflict`), and path
+  validation rejects such a certificate with the new `no_rev_avail_conflict`
+  verify code. `checkChainRevocation` and `verifyCertificateChain({
+revocation })` report a certificate carrying `noRevAvail` or
+  `id-pkix-ocsp-nocheck` as the new `status: 'skipped'` with a `skipReason`,
+  without consulting evidence (RFC 9608 §4).
 - `maxKdfIterations` on the encrypted PKCS#8 imports (`ImportEncryptedKeyOptions`,
   fourth argument), `parsePfxDer` / `parsePfxPem` options, and
   `parsePkcs12MacData` bounds the PBKDF2 and PKCS#12 KDF iteration counts a

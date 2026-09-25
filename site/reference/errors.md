@@ -98,6 +98,7 @@ Unions may gain members in minor releases; treat them as non-exhaustive and keep
 | `montgomery_key_usage_forbids_signature_bit`            | X25519/X448 asserts a signature bit (RFC 8410 §12)                |
 | `montgomery_key_usage_requires_key_agreement`           | X25519/X448 keyUsage missing `keyAgreement` (RFC 9295 §3)         |
 | `name_constraints_empty`                                | nameConstraints has neither permitted nor excluded subtrees       |
+| `no_rev_avail_conflict`                                 | noRevAvail with cA or a revocation pointer (RFC 9608 §3)          |
 | `path_length_requires_ca`                               | `pathLength` on a non-CA basicConstraints                         |
 | `path_length_requires_key_cert_sign`                    | `pathLength` requires keyUsage asserting `keyCertSign`            |
 | `policy_constraints_empty`                              | policyConstraints carries neither field                           |
@@ -117,7 +118,8 @@ both tables are enforced against `VERIFY_ERROR_CODES` by tests.
 `ec_domain_parameters_missing`, `explicit_policy_required`,
 `extended_key_usage_invalid`, `initial_policy_set_not_satisfied`,
 `intermediate_eku_constraint`, `issuer_not_found`, `key_cert_sign_required`,
-`name_constraints_violated`, `no_trusted_root`, `path_length_exceeded`,
+`name_constraints_violated`, `no_rev_avail_conflict`, `no_trusted_root`,
+`path_length_exceeded`,
 `path_building_limit_exceeded`,
 `revocation_indeterminate`, `self_signed_leaf_not_allowed`, `signature_invalid`,
 `subject_alt_name_mismatch`, `unrecognized_critical_extension`,

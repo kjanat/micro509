@@ -45,6 +45,7 @@ describe('extension registry', () => {
 			OIDS.inhibitAnyPolicy,
 			OIDS.authorityInfoAccess,
 			OIDS.cRLDistributionPoints,
+			OIDS.noRevAvail,
 			OIDS.subjectKeyIdentifier,
 			OIDS.authorityKeyIdentifier,
 		]);
@@ -60,6 +61,7 @@ describe('extension registry', () => {
 			OIDS.inhibitAnyPolicy,
 			OIDS.authorityInfoAccess,
 			OIDS.cRLDistributionPoints,
+			OIDS.noRevAvail,
 		]);
 	});
 

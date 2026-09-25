@@ -276,6 +276,7 @@ Every other error-code union in the library is tabled in the
 | `common_name_fallback_suppressed`            | CN match suppressed by presented identifiers   |
 | `self_signed_leaf_not_allowed`               | Self-signed leaf without explicit opt-in       |
 | `unrecognized_critical_extension`            | Unknown critical extension                     |
+| `no_rev_avail_conflict`                      | noRevAvail with cA or a revocation pointer     |
 | `intermediate_eku_constraint`                | Intermediate has restrictive EKU               |
 | `explicit_policy_required`                   | Policy required but not satisfied              |
 | `initial_policy_set_not_satisfied`           | Initial policy set not met                     |
