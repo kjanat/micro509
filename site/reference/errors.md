@@ -96,6 +96,7 @@ Unions may gain members in minor releases; treat them as non-exhaustive and keep
 | `invalid_ia5_string`                                    | Non-ASCII input for an IA5String value                            |
 | `invalid_ip_name_constraint`                            | IP constraint bytes are not address+mask of one family            |
 | `invalid_oid`                                           | String is not an encodable OID within X.660 arc bounds            |
+| `invalid_smtp_utf8_mailbox`                             | SmtpUTF8Mailbox malformed or domain not A-labels (RFC 9598 §3)    |
 | `invalid_visible_string`                                | VisibleString explicitText outside printable ASCII                |
 | `key_usage_empty`                                       | keyUsage asserts no bits                                          |
 | `malformed_known_extension_value`                       | `customExtensions` payload with a known OID fails to decode as it |
@@ -110,6 +111,7 @@ Unions may gain members in minor releases; treat them as non-exhaustive and keep
 | `policy_mappings_any_policy`                            | anyPolicy may not appear in a policy mapping                      |
 | `policy_mappings_empty`                                 | Mappings list is empty                                            |
 | `reserved_policy_qualifier_oid`                         | Custom qualifier uses a reserved qualifier OID                    |
+| `smtp_utf8_mailbox_ascii_local_part`                    | ASCII Local-part must use rfc822Name (RFC 9598 §3)                |
 
 ## micro509/verify
 

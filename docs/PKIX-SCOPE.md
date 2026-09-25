@@ -114,7 +114,8 @@ Current GeneralName matrix for `nameConstraints`:
 | `uniformResourceIdentifier` | decode to typed URI values       | enforce host-based matching                | `complete` |
 | `iPAddress`                 | decode to address+mask bytes     | enforce                                    | `complete` |
 | `directoryName`             | preserve structured DN payload   | enforce with RFC 5280 semantic compare     | `complete` |
-| `otherName`                 | preserved as raw payload         | fail closed when critical and form appears | `complete` |
+| SmtpUTF8Mailbox `otherName` | decode to typed mailbox values   | enforce rfc822Name constraints by domain   | `complete` |
+| other `otherName`           | preserved as raw payload         | fail closed when critical and form appears | `complete` |
 | `x400Address`               | preserved as raw payload         | fail closed when critical and form appears | `complete` |
 | `ediPartyName`              | preserved as raw payload         | fail closed when critical and form appears | `complete` |
 | `registeredID`              | decoded OID, preserved           | fail closed when critical and form appears | `complete` |

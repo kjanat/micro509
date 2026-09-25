@@ -44,6 +44,7 @@ export type ExtensionEncoderErrorCode =
 	| 'invalid_ia5_string'
 	| 'invalid_ip_name_constraint'
 	| 'invalid_oid'
+	| 'invalid_smtp_utf8_mailbox'
 	| 'invalid_visible_string'
 	| 'key_usage_empty'
 	| 'malformed_known_extension_value'
@@ -57,7 +58,8 @@ export type ExtensionEncoderErrorCode =
 	| 'policy_constraints_empty'
 	| 'policy_mappings_any_policy'
 	| 'policy_mappings_empty'
-	| 'reserved_policy_qualifier_oid';
+	| 'reserved_policy_qualifier_oid'
+	| 'smtp_utf8_mailbox_ascii_local_part';
 
 /** Throws a {@link ResultError} for an extension encoder input-validation failure. */
 export function throwExtensionEncoderError(

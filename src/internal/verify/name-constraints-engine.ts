@@ -406,6 +406,9 @@ function checkCertificateSubjectAltName(
 			}),
 		);
 	}
+	if (san.type === 'smtpUtf8Mailbox') {
+		return checkSmtpUtf8Mailbox(certificate, accumulated, san.value, index);
+	}
 	const checkableResult = sanToConstraintCheckable(san);
 	if (!checkableResult.ok) {
 		return nameConstraintFailure(
@@ -444,6 +447,55 @@ function checkCertificateSubjectAltName(
 			actual: formatConstraintForm(checkable),
 		}),
 	);
+}
+
+/**
+ * RFC 9598 §6 applies rfc822Name constraints to a SmtpUTF8Mailbox by its domain
+ * alone: the Local-part and "@" are stripped from the name and the constraint,
+ * and the remaining domains compare octet for octet after lowercasing, as a
+ * suffix when the constraint starts with ".". §3 requires that domain in
+ * A-labels, and one that is not cannot be compared, so it fails whenever
+ * rfc822Name constraints are in force.
+ */
+function checkSmtpUtf8Mailbox(
+	certificate: ParsedCertificate,
+	accumulated: AccumulatedNameConstraints,
+	mailbox: string,
+	index: number,
+): NameConstraintValidationResult {
+	const domain = mailbox.slice(mailbox.lastIndexOf('@') + 1).toLowerCase();
+	const permitted = accumulatedHasEmailConstraints(accumulated)
+		? /^[\x21-\x7e]+$/.test(domain) && isMailboxDomainPermitted(domain, accumulated)
+		: true;
+	if (permitted) return { ok: true };
+	return nameConstraintFailure(
+		'name_constraints_violated',
+		`SAN smtpUtf8Mailbox:${mailbox} violates name constraints`,
+		index,
+		nameConstraintDetails({
+			subjectCommonName: certificate.subject.values.commonName,
+			actual: `smtpUtf8Mailbox:${mailbox}`,
+		}),
+	);
+}
+
+function isMailboxDomainPermitted(
+	domain: string,
+	accumulated: AccumulatedNameConstraints,
+): boolean {
+	const matches = (constraint: NameConstraintForm): boolean =>
+		constraint.type === 'email' && matchesMailboxDomainConstraint(domain, constraint.value);
+	if (accumulated.excluded.some(matches)) return false;
+	return accumulated.permittedLevels.every(
+		(level) => !level.some((constraint) => constraint.type === 'email') || level.some(matches),
+	);
+}
+
+function matchesMailboxDomainConstraint(domain: string, constraint: string): boolean {
+	const constraintDomain = constraint.slice(constraint.lastIndexOf('@') + 1).toLowerCase();
+	return constraintDomain.startsWith('.')
+		? domain.endsWith(constraintDomain)
+		: domain === constraintDomain;
 }
 
 function checkCertificateSubjectEmailFallback(
@@ -509,7 +561,7 @@ function accumulatedHasUriConstraints(accumulated: AccumulatedNameConstraints): 
 function sanUnsupportedFormType(
 	san: SubjectAltName,
 ): UnsupportedNameConstraintForm['type'] | undefined {
-	if (san.type === 'srv') {
+	if (san.type === 'srv' || san.type === 'smtpUtf8Mailbox') {
 		return 'otherName';
 	}
 	if (san.type !== 'unknown') {
@@ -543,6 +595,7 @@ function sanToConstraintCheckable(san: SubjectAltName): SubjectAltNameCheckableR
 		case 'uri':
 			return { ok: true, value: { type: 'uri', value: san.value } };
 		case 'srv':
+		case 'smtpUtf8Mailbox':
 			return { ok: true, value: undefined };
 		case 'ip':
 			try {

@@ -171,6 +171,15 @@ revocation })` report a certificate carrying `noRevAvail` or
 
 ### Security
 
+- A SmtpUTF8Mailbox subjectAltName (RFC 9598) parsed as an unrecognized
+  otherName, so rfc822Name name constraints never reached it and an
+  internationalized mailbox outside a permitted domain, or inside an excluded
+  one, passed path validation. It now parses as
+  `{ type: 'smtpUtf8Mailbox', value }` and rfc822Name constraints bind it by
+  domain (RFC 9598 §6). The builder emits it and enforces RFC 9598 §3:
+  `invalid_smtp_utf8_mailbox` for a missing `@`, a Byte Order Mark or a domain
+  that is not lowercase A-labels, and `smtp_utf8_mailbox_ascii_local_part` for
+  a Local-part that fits an rfc822Name.
 - CRL validation accepted a v3 issuer certificate with no keyUsage extension,
   so a CRL signed with a key certified for another purpose under the CRL
   issuer's name validated. A v3 CRL issuer certificate now needs keyUsage with

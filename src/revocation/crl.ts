@@ -1815,6 +1815,10 @@ function compareGeneralNames(left: GeneralName, right: GeneralName): boolean {
 	if (left.type === 'email' && right.type === 'email') {
 		return compareRfc822Names(left.value, right.value);
 	}
+	if (left.type === 'smtpUtf8Mailbox' && right.type === 'smtpUtf8Mailbox') {
+		// RFC 9598 §5: two SmtpUTF8Mailboxes are equivalent on an exact octet-for-octet match.
+		return left.value === right.value;
+	}
 	if (left.type === 'ip' && right.type === 'ip') {
 		return left.value === right.value;
 	}

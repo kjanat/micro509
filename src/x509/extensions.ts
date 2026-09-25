@@ -149,6 +149,12 @@ export type SubjectAltName =
 			readonly value: string;
 	  }
 	| {
+			/** SmtpUTF8Mailbox otherName (id-on-SmtpUTF8Mailbox, RFC 9598 §3). */
+			readonly type: 'smtpUtf8Mailbox';
+			/** Internationalized mailbox whose domain is in A-labels, e.g. `"用户@example.com"`. */
+			readonly value: string;
+	  }
+	| {
 			/** X.500 directory name (directoryName [4]). */
 			readonly type: 'directoryName';
 			/** Hex-encoded DER of the Name SEQUENCE. */
@@ -1424,6 +1430,36 @@ function requireNonEmptyName(value: string): string {
 }
 
 /**
+ * RFC 9598 §3: a SmtpUTF8Mailbox carries no Byte Order Mark, is used only when
+ * the Local-part holds a non-ASCII character, and stores its domain as
+ * lowercase A-labels and NR-LDH labels.
+ */
+function assertSmtpUtf8Mailbox(value: string): string {
+	const at = requireNonEmptyName(value).lastIndexOf('@');
+	const localPart = value.slice(0, Math.max(at, 0));
+	const domain = value.slice(at + 1);
+	if (at <= 0 || domain.length === 0 || value.includes('﻿')) {
+		throwExtensionEncoderError(
+			'invalid_smtp_utf8_mailbox',
+			'SmtpUTF8Mailbox must be Local-part@Domain with no Byte Order Mark',
+		);
+	}
+	if (/^[\x20-\x7e]*$/.test(localPart)) {
+		throwExtensionEncoderError(
+			'smtp_utf8_mailbox_ascii_local_part',
+			'A mailbox with an ASCII Local-part must use rfc822Name (type email)',
+		);
+	}
+	if (!/^[a-z0-9.-]+$/.test(domain)) {
+		throwExtensionEncoderError(
+			'invalid_smtp_utf8_mailbox',
+			'SmtpUTF8Mailbox domain must be lowercase A-labels and NR-LDH labels',
+		);
+	}
+	return value;
+}
+
+/**
  * DER-encode a single {@linkcode SubjectAltName} GeneralName element.
  *
  * @param value The SAN entry to encode.
@@ -1442,6 +1478,14 @@ export function encodeSubjectAltName(value: SubjectAltName): Uint8Array {
 				concatBytes([
 					objectIdentifier(OIDS.idOnDnsSrv),
 					explicitContext(0, tlv(0x16, encodeIa5Content(requireNonEmptyName(value.value)))),
+				]),
+			);
+		case 'smtpUtf8Mailbox':
+			return implicitConstructedContext(
+				0,
+				concatBytes([
+					objectIdentifier(OIDS.idOnSmtpUtf8Mailbox),
+					explicitContext(0, utf8String(assertSmtpUtf8Mailbox(value.value))),
 				]),
 			);
 		case 'ip':

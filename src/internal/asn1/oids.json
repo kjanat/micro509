@@ -233,7 +233,8 @@
 															"otherNameForms": {
 																"arc": "8",
 																"oids": {
-																	"idOnDnsSrv": "7"
+																	"idOnDnsSrv": "7",
+																	"idOnSmtpUtf8Mailbox": "9"
 																}
 															},
 															"accessMethods": {

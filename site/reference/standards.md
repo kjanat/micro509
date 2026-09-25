@@ -32,8 +32,9 @@ outline: [2, 3]
 - `keyUsage` enforcement (`keyCertSign` for CAs)
 - Self-issued vs non-self-issued processing
 - Name constraints: enforced for DNS, URI, email, IP, and directoryName;
-  fail-closed for otherName / x400Address / ediPartyName / registeredID when
-  a critical constraint meets a SAN of that form (RFC 5280 §4.2.1.10)
+  rfc822Name constraints also bind SmtpUTF8Mailbox SANs by domain (RFC 9598
+  §6); fail-closed for otherName / x400Address / ediPartyName / registeredID
+  when a critical constraint meets a SAN of that form (RFC 5280 §4.2.1.10)
 - Critical extension rejection for unrecognized OIDs
 - `noRevAvail` (RFC 9608): parsed, emitted by the builder, and a certificate
   pairing it with cA TRUE, cRLDistributionPoints, freshestCRL or an
