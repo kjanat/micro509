@@ -1745,6 +1745,27 @@ describe('encrypted PKCS#8 KDF work-factor limit', () => {
 		expect(accepted.ok).toBe(true);
 	});
 
+	it('rejects PEM PBKDF2 iteration counts above maxKdfIterations before deriving', async () => {
+		const keyPair = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
+		const pem = await exportEncryptedPkcs8Pem(keyPair.privateKey, {
+			password: 'secret',
+			iterations: 4096,
+		});
+
+		const rejected = await importEncryptedPkcs8Pem(pem, 'secret', undefined, {
+			maxKdfIterations: 2048,
+		});
+		expect(rejected.ok).toBe(false);
+		if (!rejected.ok) {
+			expect(rejected.error.code).toBe('kdf_iterations_exceeded');
+		}
+
+		const accepted = await importEncryptedPkcs8Pem(pem, 'secret', undefined, {
+			maxKdfIterations: 4096,
+		});
+		expect(accepted.ok).toBe(true);
+	});
+
 	it('rejects a maxKdfIterations that is not a positive integer', async () => {
 		const keyPair = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
 		const der = await exportEncryptedPkcs8Der(keyPair.privateKey, { password: 'secret' });
