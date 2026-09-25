@@ -6,12 +6,14 @@
  */
 
 import type { Result } from '#micro509/result/result';
+import { rethrowIfInvariant } from '#micro509/result/result';
 import type {
 	CrlApplicabilityFailureReason,
 	CrlSource,
 	RevocationReason,
 } from '#micro509/revocation/crl';
 import {
+	assertCrlMaxAge,
 	checkCertificateRevocationAgainstCrl,
 	coversAllDistributionPointReasons,
 } from '#micro509/revocation/crl';
@@ -19,6 +21,7 @@ import type {
 	OcspCertificateSource,
 	OcspRequestSource,
 	ParsedOcspResponse,
+	ValidateOcspResponseInput,
 } from '#micro509/revocation/ocsp';
 import { validateOcspResponse } from '#micro509/revocation/ocsp';
 import type { DistributionPointReason } from '#micro509/x509/extensions';
@@ -101,8 +104,15 @@ export interface CheckCertificateRevocationInput {
 	readonly evidence?: readonly RevocationEvidenceInput[];
 	/** Evaluation time. Defaults to `new Date()`. */
 	readonly at?: Date;
-	/** Clock-skew tolerance in milliseconds. */
+	/** Clock-skew tolerance in milliseconds. It also widens `crlMaxAgeMs`. */
 	readonly clockSkewMs?: number;
+	/** Maximum age of each CRL's `thisUpdate` in milliseconds. Unbounded by default. See {@linkcode ValidateCertificateRevocationListInput.maxAgeMs}. */
+	readonly crlMaxAgeMs?: number;
+	/**
+	 * OCSP client profile for every OCSP evidence entry. See
+	 * {@linkcode ValidateOcspResponseInput.profile}. Defaults to `'rfc6960'`.
+	 */
+	readonly ocspProfile?: ValidateOcspResponseInput['profile'];
 }
 
 /** Error codes that {@linkcode checkCertificateRevocation} may surface inside an `indeterminate` result. */
@@ -116,6 +126,7 @@ export const REVOCATION_INDETERMINATE_REASON_CODES = [
 	'certificate_status_unknown',
 	'crl_sign_not_permitted',
 	'issuer_mismatch',
+	'next_update_missing',
 	'non_applicable',
 	'nonce_mismatch',
 	'ocsp_signing_missing',
@@ -307,6 +318,7 @@ export function resolveOcspResponderCandidates(
 export async function checkCertificateRevocation(
 	input: CheckCertificateRevocationInput,
 ): Promise<CheckCertificateRevocationResult> {
+	assertCrlMaxAge(input.crlMaxAgeMs);
 	const evidence = input.evidence ?? [];
 	const checkedSources = evidence.map((entry) => entry.kind);
 	if (evidence.length === 0) {
@@ -391,7 +403,8 @@ async function checkRevocationEvidenceEntry(
 		return evidence.kind === 'crl'
 			? await checkCertificateRevocationWithCrl(input, evidence, certificate)
 			: await checkCertificateRevocationWithOcsp(input, evidence, certificate);
-	} catch {
+	} catch (error) {
+		rethrowIfInvariant(error);
 		return {
 			status: 'indeterminate',
 			detail: {
@@ -416,6 +429,7 @@ async function checkCertificateRevocationWithCrl(
 		...(evidence.deltaCrl === undefined ? {} : { deltaCrl: evidence.deltaCrl }),
 		...(input.at === undefined ? {} : { at: input.at }),
 		...(input.clockSkewMs === undefined ? {} : { clockSkewMs: input.clockSkewMs }),
+		...(input.crlMaxAgeMs === undefined ? {} : { maxAgeMs: input.crlMaxAgeMs }),
 	});
 	if (result.ok) {
 		if (result.value.status === 'revoked') {
@@ -468,6 +482,7 @@ async function checkCertificateRevocationWithOcsp(
 			: { responderCertificate: evidence.responderCertificate }),
 		...(input.at === undefined ? {} : { at: input.at }),
 		...(input.clockSkewMs === undefined ? {} : { clockSkewMs: input.clockSkewMs }),
+		...(input.ocspProfile === undefined ? {} : { profile: input.ocspProfile }),
 	});
 	if (!response.ok) {
 		return {

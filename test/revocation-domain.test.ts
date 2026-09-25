@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { createCertificate, createSelfSignedCertificate, generateKeyPair } from '#micro509';
 import * as revocation from '#micro509/revocation';
+import { FAR_FUTURE_NEXT_UPDATE } from '#test/helpers';
 
 describe('revocation domain', () => {
 	it('creates a CRL with an empty revoked list', async () => {
@@ -18,6 +19,7 @@ describe('revocation domain', () => {
 			issuerPublicKey: ca.keyPair.publicKey,
 			crlNumber: 1,
 			revokedCertificates: [],
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 
 		expect(crl.pem).toContain('BEGIN X509 CRL');
@@ -39,6 +41,7 @@ describe('revocation domain', () => {
 			signerPrivateKey: ca.keyPair.privateKey,
 			issuerPublicKey: ca.keyPair.publicKey,
 			crlNumber: 2,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
 
 		const parsed = revocation.parseCertificateRevocationListPemOrThrow(crl.pem);

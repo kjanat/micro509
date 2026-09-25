@@ -100,6 +100,7 @@
 		"docs:lint": "run -q deno:doc --lint $(jq -r '.exports | .[]? // .' jsr.json)",
 		"fmt": "dprint fmt",
 		"format": "run -q fmt",
+		"itu": "bun scripts/fetch-spec.bun.ts itu",
 		"lint": "run -qq lint:biome",
 		"lint:biome": "biome lint",
 		"lint:deno": "deno lint src",
@@ -109,7 +110,7 @@
 		"prepublishOnly": "[ -n \"${GITHUB_ACTIONS:-}\" ] || { printf '%s\\n' 'manual npm publish blocked; use release workflow for provenance' >&2; exit 1; }",
 		"publish:jsr": "[ -n \"${GITHUB_ACTIONS:-}\" ] || { printf '%s\\n' 'manual JSR publish blocked; use release workflow' >&2; exit 1; }; BIN=\"${BIN:-bun}\"; $BIN x jsr publish",
 		"publish:pkgprnew": "BIN=\"${BIN:-bun}\"; $BIN x pkg-pr-new publish --packageManager='npm,pnpm,bun' --bun --template './examples/vite'",
-		"rfc": "bun scripts/fetch-rfc.bun.ts",
+		"rfc": "bun scripts/fetch-spec.bun.ts rfc",
 		"site:build": "run build && run --dir site/.vitepress build",
 		"site:dev": "run --dir site/.vitepress dev",
 		"site:import-maps": "deno run --allow-read --allow-net --allow-write --allow-run scripts/site-import-maps.deno.ts",
@@ -122,6 +123,7 @@
 		"smoke:deno": "deno run --allow-read scripts/smoke.mjs",
 		"smoke:node": "node scripts/smoke.mjs",
 		"smoke:workerd": "node scripts/smoke-workerd.mjs",
+		"spec": "bun scripts/spec/main.ts",
 		"test": "BIN=\"${BIN:-bun}\"; AGENT=\"${AGENT:-1}\" $BIN test --concurrent",
 		"test:35433": "PR=\"35433\"; (command -v \"bun-${PR}\" >/dev/null || bunx bun-pr \"${PR}\") && BIN=\"bun-${PR}\" bun --silent run test",
 		"test:coverage": "run -q test --coverage",
@@ -132,6 +134,7 @@
 		"typecheck:other": "run typescript-7 --noEmit -p tsconfig.other.json",
 		"typecheck:regular": "run typescript-7 --noEmit -p tsconfig.json",
 		"typecheck:src": "run typescript-7 --noEmit -p tsconfig.src.json",
+		"w3c": "bun scripts/fetch-spec.bun.ts w3c",
 		"wrangler:build": "wrangler build",
 		"wrangler:deploy": "wrangler deploy",
 		"wrangler:deploy:versions": "wrangler versions upload",
@@ -151,11 +154,12 @@
 		"biome": "catalog:",
 		"deno": "catalog:deno",
 		"dprint": "catalog:",
-		"dreamcli": "npm:@kjanat/dreamcli@3.0.1",
+		"dreamcli": "npm:@kjanat/dreamcli@4.1.0",
 		"importmapify": "catalog:deno",
 		"playwright": "^1.61.1",
 		"publint": "catalog:build",
 		"runner-run": "catalog:",
+		"tombi": "catalog:",
 		"tsdown": "catalog:build",
 		"typescript": "catalog:ts",
 		"typescript-7": "catalog:ts",
@@ -163,7 +167,7 @@
 		"vue": "catalog:",
 		"wrangler": "catalog:cloudflare"
 	},
-	"packageManager": "bun@1.3.14",
+	"packageManager": "bun@1.4.2",
 	"devEngines": {
 		"packageManager": [
 			{
@@ -199,6 +203,7 @@
 		"biome": "npm:@biomejs/biome@^2.5.5",
 		"dprint": "^0.55.2",
 		"runner-run": "^0.23.0",
+		"tombi": "^1.5.4",
 		"vue": "^3.5.40"
 	},
 	"catalogs": {

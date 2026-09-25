@@ -91,6 +91,41 @@ MAC:     ${macData?.verification} (${macData?.digestAlgorithmName})`);
 
 </LiveCode>
 
+`parsePfxDer` accepts BER for the PFX, the AuthenticatedSafe and each
+SafeContents, as RFC 7292 §4 allows, and verifies the MAC over the
+AuthenticatedSafe octets as received. Certificates and private keys inside the
+bags must be DER.
+
+Both the MAC and the PBES2 key bags carry their own KDF iteration counts, and
+parsing refuses a count above its ceiling with `kdf_iterations_exceeded`. The
+PBES2 bags share one budget of 2,000,000 PBKDF2 rounds per file, matching
+encrypted PKCS#8. The RFC 7292 MAC allows 100,000. RFC 7292 Appendix B derives
+its key with one hash call per round, and each call is a separate WebCrypto
+digest, while PBKDF2 runs natively inside WebCrypto. A PBMAC1 MAC allows
+2,000,000 PBKDF2 rounds. `maxKdfIterations` in the options overrides each
+ceiling.
+
+`parsePkcs12MacData` without a password derives no key. It does not apply
+`maxKdfIterations`, and it returns `verification: 'unchecked'` for any RFC 7292
+MAC count from 1 to `Number.MAX_SAFE_INTEGER` and any PBMAC1 count from 1
+to 4294967295. A PBKDF2 count above 4294967295, the most WebCrypto's PBKDF2
+accepts, fails as `malformed` in a PBES2 bag or a PBMAC1 MAC, with or without a
+password.
+
+### MAC algorithms
+
+The default MAC is the RFC 7292 MAC with SHA-256, keyed by the PKCS#12 KDF. Its
+password must be a BMPString, so a password with a UTF-16 surrogate (an emoji,
+for example) fails with `password_not_bmp_string`. Pass
+`mac: { type: 'pbmac1', password }` to `createPfx` for an RFC 9879 PBMAC1 MAC
+instead. It uses PBKDF2-HMAC-SHA-256 with a 32-octet key and HMAC-SHA-256, and
+encodes the password as UTF-8, so any well-formed string works. Parsing detects
+the MAC type and reports it as `macData.type` (`'pkcs12-kdf'` or
+`'pbmac1'`). PBMAC1 verification accepts HMAC-SHA-256, HMAC-SHA-384 and
+HMAC-SHA-512 for both the PBKDF2 PRF and the MAC, requires `keyLength`, and
+fails with `weak_mac_key_length` below 20 octets. Any other MAC returns
+`unsupported_mac_algorithm`.
+
 ## PKCS#7 / CMS
 
 ### Create a certificate bag

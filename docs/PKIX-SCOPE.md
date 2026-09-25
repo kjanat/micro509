@@ -5,15 +5,15 @@ forward-work backlog for the PKIX-facing surface.
 
 ## Standards status
 
-| Area                                  | Status     | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| ------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| RFC 5280 path validation              | `complete` | core path validation, name constraints across all GeneralName forms (enforce or fail-closed), initial subtree inputs, RFC 9618 policy processing, and malformed-DER coverage ship; validated against the full NIST PKITS suite (224 test procedures, 249 runs incl. documented subtest variations; 4.1.4/4.1.5 DSA chains expected-fail per the WebCrypto algorithm boundary). Revocation is a separate API by design                                                                                               |
-| RFC 6960 + 9919 OCSP                  | `complete` | the full validation surface ships: request/response parsing, signature checks, responder binding/authorization (incl. local trusted responders, `id-pkix-ocsp-nocheck`, and responder revocation policy), nonce/request matching, freshness checks, full request coverage, and chain-level revocation orchestration with freshest-evidence combination; CertID hashing defaults to SHA-256 per RFC 9919 §3.1.1 with explicit SHA-1 interop; HTTP transport is caller-provided by design (scope boundary, not a gap) |
-| RFC 9525 service identity             | `complete` | `matchServiceIdentity()` and the verification helpers (`verifyCertificateChain`, `validateForTlsServer`, …) ship every RFC 9525 identity type: DNS-ID, IP-ID, URI-ID, SRV-ID, wildcard, IDNA, and opt-in RFC 6125 CN-compat checks                                                                                                                                                                                                                                                                                  |
-| RFC 9618 policy validation            | `complete` | RFC 9618-style policy state, enforcement, and outputs ship; the full PKITS policy sections (4.8–4.12, every documented subtest variation) pass                                                                                                                                                                                                                                                                                                                                                                      |
-| RFC 7468 PEM textual encodings        | `complete` | strict generator/parser conformance: strict-mode encapsulation, label handling, and base64 rules ship, with non-canonical final quanta rejected per RFC 4648 §3.5; RFC 1421 folded encapsulated headers unfold for legacy traditional PEM; section-complete executable suite                                                                                                                                                                                                                                        |
-| RFC 8410 + 9295 safe-curve profiles   | `complete` | Ed25519 end-to-end (key import/export/generation, CSRs, certificates, signature verification); Ed448/X25519/X448 algorithm identifiers and subject keys parse, with RFC 9295 §3 key-usage enforcement for all four OIDs; Ed448/X25519/X448 key operations sit outside the WebCrypto algorithm boundary; section-complete executable suite                                                                                                                                                                           |
-| PKCS containers: RFC 5652, 7292, 8018 | `partial`  | SignedData sign/parse/verify with per-signer certificate resolution and cert bags (RFC 5652 subset; no enveloped/encrypted content types); PFX create/parse with PKCS#12 MAC (RFC 7292 subset); PBES2 with PBKDF2 HMAC-SHA-1/256 and AES-CBC (RFC 8018 subset)                                                                                                                                                                                                                                                      |
+| Area                                        | Status     | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ------------------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| RFC 5280 path validation                    | `complete` | core path validation, name constraints across all GeneralName forms (enforce or fail-closed), initial subtree inputs, RFC 9618 policy processing, and malformed-DER coverage ship; validated against the full NIST PKITS suite (224 test procedures, 249 runs incl. documented subtest variations; 4.1.4/4.1.5 DSA chains expected-fail per the WebCrypto algorithm boundary). Revocation is a separate API by design                                                                                                                                                                                                                                                                                                                                                                                 |
+| RFC 6960 + 9919 OCSP                        | `complete` | the full validation surface ships: request/response parsing, signature checks, responder binding/authorization (incl. local trusted responders, `id-pkix-ocsp-nocheck`, and responder revocation policy), nonce/request matching, freshness checks, full request coverage, and chain-level revocation orchestration with freshest-evidence combination; CertID hashing defaults to SHA-256 per RFC 9919 §3.1.1 with explicit SHA-1 interop; the RFC 9919 client rule is opt-in, and `profile: 'rfc9919'` on `validateOcspResponse` (`ocspProfile: 'rfc9919'` on `checkCertificateRevocation` and the chain `RevocationPolicy`) rejects a response without `nextUpdate` (RFC 9919 §5), and the default `'rfc6960'` profile accepts it (RFC 6960 §4.2.2.1); HTTP transport is caller-provided by design |
+| RFC 9525 service identity                   | `complete` | `matchServiceIdentity()` and the verification helpers (`verifyCertificateChain`, `validateForTlsServer`, …) ship every RFC 9525 identity type: DNS-ID, IP-ID, URI-ID, SRV-ID, wildcard, IDNA, and opt-in RFC 6125 CN-compat checks                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| RFC 9618 policy validation                  | `complete` | RFC 9618-style policy state, enforcement, and outputs ship; the full PKITS policy sections (4.8–4.12, every documented subtest variation) pass                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| RFC 7468 PEM textual encodings              | `complete` | strict generator/parser conformance: strict-mode encapsulation, label handling, and base64 rules ship, with non-canonical final quanta rejected per RFC 4648 §3.5; RFC 1421 folded encapsulated headers unfold for legacy traditional PEM; section-complete executable suite                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| RFC 8410 + 9295 safe-curve profiles         | `complete` | Ed25519 end-to-end (key import/export/generation, CSRs, certificates, signature verification); Ed448/X25519/X448 algorithm identifiers and subject keys parse, with RFC 9295 §3 key-usage enforcement for all four OIDs; Ed448/X25519/X448 key operations sit outside the WebCrypto algorithm boundary; section-complete executable suite                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| PKCS containers: RFC 5652, 7292, 8018, 9879 | `partial`  | SignedData sign/parse/verify with per-signer certificate resolution and cert bags (RFC 5652 subset; no enveloped/encrypted content types); PFX create/parse with BER input, a SHA-256-only RFC 7292 MAC, and RFC 9879 PBMAC1 verification plus opt-in creation (RFC 7292 subset, see §15); PBES2 with PBKDF2 HMAC-SHA-1/256 and AES-CBC (RFC 8018 subset)                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 
 Current conformance evidence:
 
@@ -28,7 +28,13 @@ Current conformance evidence:
 - [`test/rfc/rfc7468.test.ts`](../test/rfc/rfc7468.test.ts),
 - [`test/rfc/rfc8410.test.ts`](../test/rfc/rfc8410.test.ts),
 - [`test/pkcs7-signeddata.test.ts`](../test/pkcs7-signeddata.test.ts),
-- [`test/pfx.test.ts`](../test/pfx.test.ts), and
+- [`test/pfx.test.ts`](../test/pfx.test.ts),
+- [`test/rfc/rfc5280-crl.test.ts`](../test/rfc/rfc5280-crl.test.ts),
+- [`test/rfc/rfc5280-der.test.ts`](../test/rfc/rfc5280-der.test.ts),
+- [`test/rfc/rfc7292.test.ts`](../test/rfc/rfc7292.test.ts),
+- [`test/rfc/rfc8018.test.ts`](../test/rfc/rfc8018.test.ts),
+- [`test/rfc/rfc9879.test.ts`](../test/rfc/rfc9879.test.ts),
+- [`test/rfc/rfc9919.test.ts`](../test/rfc/rfc9919.test.ts), and
 - [`test/differential.test.ts`](../test/differential.test.ts).
 
 ## 1. Define the boundary up front
@@ -60,7 +66,13 @@ Current conformance evidence:
 
 ## 3. Core certificate/path checks
 
-- [x] Parse DER strictly enough to reject malformed certificates.
+- [x] Emit DER from every encoder, and reject malformed certificates on parse.
+      As local policy (X.509 §7.2.1 NOTE 2), parsers tolerate an explicitly
+      encoded DEFAULT value: certificate version v1, extension `critical`
+      FALSE, basicConstraints `cA` FALSE, and OCSP request and response
+      version v1. A BOOLEAN whose content is not a single `0x00` or `0xFF`
+      octet is rejected as malformed (X.690 §11.1). PKCS#12 input may be BER;
+      see §15.
 - [x] Verify issuer/subject chaining across the candidate path.
 - [x] Verify each certificate signature using the evolving working public key.
 - [x] Check validity time (`notBefore` / `notAfter`) against the chosen validation time.
@@ -162,6 +174,12 @@ Focused RFC 9525 identity fixtures live in [`test/identity-fixtures.test.ts`](..
   - [x] Decide and enforce responder-certificate revocation policy — see §11 for the canonical breakdown.
   - [x] Add fixture coverage for configured-responder accept/reject and historical-time validation.
 - [x] Enforce response freshness using `thisUpdate` / `nextUpdate` and configurable clock skew.
+      By default a response without `nextUpdate` is accepted, as RFC 6960
+      §4.2.2.1 allows. The opt-in RFC 9919 client profile
+      (`profile: 'rfc9919'` on `validateOcspResponse`,
+      `ocspProfile: 'rfc9919'` on `checkCertificateRevocation` and the chain
+      `RevocationPolicy`) rejects it with `next_update_missing`, or
+      `ocsp_next_update_missing` on the chain (RFC 9919 §5).
 - [x] Return `good`, `revoked`, and `unknown` distinctly.
 - [x] Support optional nonce handling if you want replay binding between request and response. RFC 9654 defines the updated nonce extension details. (IETF Datatracker[^rfc6960])
 - [x] Consume caller-supplied OCSP responses in chain-level revocation
@@ -196,10 +214,30 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
 - [x] Treat CRL validation as a separate revocation subsystem.
 - [x] Parse CRLs and CRL extensions.
 - [x] Verify CRL signatures and issuer linkage.
-- [x] Enforce CRL time/freshness semantics.
+- [x] Enforce CRL time/freshness semantics. CRL age is unbounded by default,
+      so a received CRL without `nextUpdate` stays usable unless the caller
+      sets `maxAgeMs` (`validateCertificateRevocationList`,
+      `checkCertificateRevocationAgainstCrl`), `crlMaxAgeMs`
+      (`checkCertificateRevocation`, the chain `RevocationPolicy`) or
+      `responderRevocationCrlMaxAgeMs` (`validateOcspResponse`). RFC 5280
+      §5.1.2.5 does not specify client behaviour for such a CRL, and §3.3
+      leaves the required recency of revocation data to local policy.
+- [x] Always encode `nextUpdate` in generated CRLs (RFC 5280 §5.1.2.5).
+      `createCertificateRevocationList` also requires it at least one second
+      after `thisUpdate`. This is a micro509 builder invariant. RFC 5280 and
+      X.509 do not specify an order between the two fields.
 - [x] Parse CRL distribution points and enforce distribution-point scope during
       CRL applicability; CRL discovery/fetch hooks are not shipped.
 - [x] Add delta CRL handling only if you actually want to live in that swamp. RFC 5280 defines CRL validation separately from path validation. (IETF Datatracker[^rfc5280])
+      Chain evaluation uses only a current delta CRL whose CRL number exceeds
+      the base CRL's (RFC 5280 §5.2.4), and it prefers the one with the
+      latest `thisUpdate` (RFC 5280 §5.2.4). It also requires the delta's
+      `thisUpdate` to be no earlier than the base CRL's, because X.509 Annex
+      E.5.2 requires a delta CRL to be issued after the base CRL it updates.
+      X.509 does not say whether an equal `thisUpdate` meets that rule, and
+      micro509 accepts it. `checkCertificateRevocationAgainstCrl` reports
+      `delta_crl_incompatible` for a delta whose `thisUpdate` precedes the
+      complete CRL's (X.509 Annex E.5.2).
 
 ## 13. API design checklist
 
@@ -225,6 +263,37 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
 - [x] Add malformed DER / fuzz tests.
 - [x] Differential-test against at least one mature implementation. See [`test/differential.test.ts`](../test/differential.test.ts).
 - [x] Run the validator against **NIST PKITS** as a gap-report harness, which NIST describes as a comprehensive X.509 path validation test suite for relying parties. (NIST Computer Security Resource Center[^x-509-path-validation])
+
+## 15. PKCS#12 and PBES2 boundary
+
+- [x] Accept BER for the PFX, the authSafe ContentInfo, the AuthenticatedSafe
+      and each SafeContents in `parsePfxDer` / `parsePfxPem`: indefinite
+      lengths, non-minimal lengths and constructed OCTET STRINGs (RFC 7292 §4;
+      X.690 §7.3). BER nesting is limited to 64 levels. Certificate and PKCS#8
+      bag payloads must be DER. The MAC is verified over the AuthenticatedSafe
+      octets as received (RFC 7292 Appendix A).
+- [x] Verify and create the RFC 7292 MAC with SHA-256 only. Any other digest
+      returns `unsupported_mac_algorithm`.
+- [x] Require the RFC 7292 MAC password to be a BMPString (RFC 7292
+      Appendix B.1). A password containing a UTF-16 surrogate, from a non-BMP
+      character or a lone surrogate, is rejected with
+      `password_not_bmp_string`. RFC 7292 does not specify this case, so the
+      rejection is micro509 policy.
+- [x] Reject MacData iterations of 0 or below as `malformed`. RFC 7292 §4
+      gives the field no range, so this is micro509 policy.
+- [x] Verify RFC 9879 PBMAC1 with PBKDF2 and an HMAC-SHA-256, HMAC-SHA-384 or
+      HMAC-SHA-512 PRF and MAC. PBKDF2 params must carry `keyLength`, and a
+      `keyLength` below 20 octets returns `weak_mac_key_length`. The password
+      is encoded as UTF-8 with no NULL terminator or BOM. MacData `iterations`
+      and `macSalt` are ignored.
+- [x] Create PBMAC1 only on request with `mac: { type: 'pbmac1' }`
+      (PBKDF2-HMAC-SHA-256, a 32-octet key, HMAC-SHA-256). The default MAC is
+      the RFC 7292 SHA-256 MAC.
+- [x] Cap the PBKDF2 `iterationCount` at 4294967295, the largest value
+      WebCrypto's `[EnforceRange] unsigned long` accepts. RFC 8018 §A.2
+      leaves the maximum iteration count to the implementation. A larger
+      PBES2 or PBMAC1 count is `malformed`. The PBES2 encoders throw `RangeError`,
+      and PBMAC1 creation throws `invalid_iterations`.
 
 [^rfc5280]: https://datatracker.ietf.org/doc/html/rfc5280 "RFC 5280 - Internet X.509 Public Key Infrastructure Certificate and Certificate Revocation List (CRL) Profile"
 

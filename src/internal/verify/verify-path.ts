@@ -60,6 +60,34 @@ type IssuerCandidateEvaluation =
 	| { readonly ok: true; readonly nextCaBelowCount: number }
 	| { readonly ok: false; readonly failure: VerifyChainFailure };
 
+/**
+ * The signature checks {@linkcode buildChainInternal} performs, injected per
+ * call. A caller can wrap them to observe how much cryptographic work path
+ * building costs; replacing a global would leak across concurrent searches.
+ */
+export interface VerifyPathSignatureChecks {
+	/** Verifies a certificate against a candidate issuer certificate. */
+	readonly certificate: (
+		certificate: ParsedCertificate,
+		issuer: ParsedCertificate,
+	) => Promise<VerifyCertificateSignatureResult>;
+	/** Verifies a certificate against a bare trust anchor. */
+	readonly trustAnchor: (
+		certificate: ParsedCertificate,
+		anchor: TrustAnchor,
+	) => Promise<VerifyCertificateSignatureResult>;
+}
+
+/** Default upper bound on issuer candidates and trust anchors one path search may try. */
+export const DEFAULT_MAX_PATH_BUILDING_CHECKS = 100_000;
+
+/** Throws when a caller-supplied path-building limit is not a positive safe integer. */
+export function assertPathBuildingChecks(limit: number | undefined): void {
+	if (limit !== undefined && (!Number.isSafeInteger(limit) || limit < 1)) {
+		throw new RangeError(`Invalid maxPathBuildingChecks: must be an integer >= 1, got ${limit}`);
+	}
+}
+
 /** Loose input for constructing failure detail objects during path building. */
 export interface VerifyPathFailureDetailsInput {
 	/** Common name of the certificate under evaluation, if known. */
@@ -163,6 +191,85 @@ export async function verifyCertificateSignature(
 	return result;
 }
 
+/** The real signature checks, used unless a caller injects its own. */
+const DEFAULT_SIGNATURE_CHECKS: VerifyPathSignatureChecks = {
+	certificate: verifyCertificateSignature,
+	trustAnchor: verifyTrustAnchorSignature,
+};
+
+export type PathDiagnostic =
+	| { readonly kind: 'none'; readonly path: readonly ParsedCertificate[] }
+	| { readonly kind: 'untrusted-anchor'; readonly path: readonly ParsedCertificate[] }
+	| {
+			readonly kind: 'missing-issuer';
+			readonly path: readonly ParsedCertificate[];
+			readonly missingIssuerAt: number;
+	  }
+	| {
+			readonly kind: 'specific-failure';
+			readonly path: readonly ParsedCertificate[];
+			readonly failure: VerifyChainFailure;
+	  };
+
+const DIAGNOSTIC_TIER = {
+	'specific-failure': 3,
+	'untrusted-anchor': 2,
+	'missing-issuer': 1,
+	none: 0,
+} as const satisfies Record<PathDiagnostic['kind'], number>;
+
+function isMoreSignificant(candidate: PathDiagnostic, incumbent: PathDiagnostic): boolean {
+	const candidateTier = DIAGNOSTIC_TIER[candidate.kind];
+	const incumbentTier = DIAGNOSTIC_TIER[incumbent.kind];
+	return candidateTier === incumbentTier
+		? candidate.path.length > incumbent.path.length
+		: candidateTier > incumbentTier;
+}
+
+interface DeadEnd {
+	readonly diagnostic: PathDiagnostic;
+	readonly nodeIndex: number;
+}
+
+/**
+ * Moves a diagnostic recorded below the certificate at `nodeIndex` onto a new
+ * prefix ending at that same certificate. A suffix that repeats a certificate
+ * of the new prefix cannot form a path, so only the prefix is reported.
+ */
+export function rebaseDiagnostic(
+	diagnostic: PathDiagnostic,
+	nodeIndex: number,
+	prefix: readonly ParsedCertificate[],
+): PathDiagnostic {
+	const suffix = diagnostic.path.slice(nodeIndex + 1);
+	const spent = new Set(prefix.map((certificate) => fingerprint(certificate)));
+	if (suffix.some((certificate) => spent.has(fingerprint(certificate)))) {
+		return { kind: 'none', path: prefix };
+	}
+	const path = [...prefix, ...suffix];
+	const shift = prefix.length - 1 - nodeIndex;
+	switch (diagnostic.kind) {
+		case 'none':
+		case 'untrusted-anchor':
+			return { kind: diagnostic.kind, path };
+		case 'missing-issuer':
+			return { kind: 'missing-issuer', path, missingIssuerAt: diagnostic.missingIssuerAt + shift };
+		case 'specific-failure':
+			return {
+				kind: 'specific-failure',
+				path,
+				failure:
+					diagnostic.failure.index === undefined
+						? diagnostic.failure
+						: { ...diagnostic.failure, index: diagnostic.failure.index + shift },
+			};
+		default: {
+			const _exhaustive: never = diagnostic;
+			throw new Error(`unreachable diagnostic ${String(_exhaustive)}`);
+		}
+	}
+}
+
 /**
  * Depth-first chain search from leaf to root. Tries all issuer candidates,
  * checking validity, CA constraints, AKI, pathLength, and signatures at each
@@ -176,6 +283,8 @@ export async function buildChainInternal(
 	trustAnchors: readonly TrustAnchor[],
 	at: Date,
 	callbacks: VerifyPathCallbacks,
+	signatureChecks: VerifyPathSignatureChecks = DEFAULT_SIGNATURE_CHECKS,
+	maxIssuerChecks: number = DEFAULT_MAX_PATH_BUILDING_CHECKS,
 ): Promise<InternalBuildResult> {
 	const candidates = [...intermediates, ...roots];
 	const subjectIndex = new Map<string, ParsedCertificate[]>();
@@ -191,11 +300,12 @@ export async function buildChainInternal(
 			existing.push(anchor);
 		}
 	}
-	let sawUntrustedAnchor = false;
-	let deepestPath: readonly ParsedCertificate[] = [leaf];
-	let deepestMissingIssuerAt: number | undefined;
-	let preferredFailure: VerifyChainFailure | undefined;
-	const deadEnds = new Set<string>();
+	const best: { current: PathDiagnostic } = { current: { kind: 'none', path: [leaf] } };
+	const deadEnds = new Map<string, DeadEnd>();
+	const subtrees: { best: PathDiagnostic }[] = [];
+	const signatureResults = new Map<string, Promise<VerifyCertificateSignatureResult>>();
+	const budget = { remaining: maxIssuerChecks, exhausted: false };
+	const rankedBuckets = new Map<string, RankedBucket>();
 
 	candidates.forEach((candidate, index) => {
 		const key = canonicalDnKey(candidate.subject);
@@ -220,23 +330,39 @@ export async function buildChainInternal(
 				terminal !== undefined && rootFingerprints.has(fingerprint(terminal)),
 		};
 	}
-	if (preferredFailure !== undefined) {
+	const owner = best.current;
+	if (budget.exhausted) {
 		return {
-			chain: deepestPath,
+			chain: owner.path,
 			foundTrustedRoot: false,
-			failure: preferredFailure,
+			failure: callbacks.failure(
+				'path_building_limit_exceeded',
+				'path building stopped at its work limit',
+				undefined,
+				callbacks.detail({
+					expected: `at most ${maxIssuerChecks} issuer and trust-anchor checks`,
+					actual: 'limit reached before a trusted path was found',
+				}),
+			),
 		};
 	}
-	if (sawUntrustedAnchor) {
-		return { chain: deepestPath, foundTrustedRoot: false };
-	}
-	return deepestMissingIssuerAt === undefined
-		? { chain: deepestPath, foundTrustedRoot: false }
-		: {
-				chain: deepestPath,
+	switch (owner.kind) {
+		case 'specific-failure':
+			return { chain: owner.path, foundTrustedRoot: false, failure: owner.failure };
+		case 'missing-issuer':
+			return {
+				chain: owner.path,
 				foundTrustedRoot: false,
-				missingIssuerAt: deepestMissingIssuerAt,
+				missingIssuerAt: owner.missingIssuerAt,
 			};
+		case 'untrusted-anchor':
+		case 'none':
+			return { chain: owner.path, foundTrustedRoot: false };
+		default: {
+			const _exhaustive: never = owner;
+			throw new Error(`unreachable diagnostic ${String(_exhaustive)}`);
+		}
+	}
 
 	async function search(
 		current: ParsedCertificate,
@@ -244,10 +370,19 @@ export async function buildChainInternal(
 		visited: ReadonlySet<string>,
 		caBelowCount: number,
 	): Promise<readonly ParsedCertificate[] | undefined> {
+		if (budget.exhausted) return undefined;
 		if (rootFingerprints.has(fingerprint(current))) {
 			return path;
 		}
-		const matchedAnchor = await matchTrustAnchor(current, anchorIndex, callbacks, path.length - 1);
+		const matchedAnchor = await matchTrustAnchor(
+			current,
+			anchorIndex,
+			callbacks,
+			path.length - 1,
+			verifyAnchorOnce,
+			chargeBudget,
+		);
+		if (budget.exhausted) return undefined;
 		if (matchedAnchor.failure !== undefined) {
 			recordFailure(matchedAnchor.failure, path);
 		}
@@ -257,29 +392,73 @@ export async function buildChainInternal(
 		if (path.length > maxDepth) {
 			return undefined;
 		}
-		const visitedKey = [...visited].sort().join(',');
-		const memoKey = `${fingerprint(current)}:${caBelowCount}:${visitedKey}`;
-		if (deadEnds.has(memoKey)) {
+		const memoKey = `${fingerprint(current)}:${caBelowCount}`;
+		const memoized = deadEnds.get(memoKey);
+		if (memoized !== undefined) {
+			consider(rebaseDiagnostic(memoized.diagnostic, memoized.nodeIndex, path));
 			return undefined;
 		}
-		const issuers = rankIssuerCandidates(
-			current,
-			subjectIndex.get(canonicalDnKey(current.issuer)) ?? [],
-			order,
-			rootFingerprints,
-		);
-		if (issuers.length === 0) {
-			recordMissingIssuers(current, path);
-			deadEnds.add(memoKey);
-			return undefined;
+		const subtree: { best: PathDiagnostic } = { best: { kind: 'none', path } };
+		subtrees.push(subtree);
+		try {
+			const issuerPath = await searchBelow(current, path, visited, caBelowCount);
+			if (issuerPath !== undefined) return issuerPath;
+		} finally {
+			subtrees.pop();
 		}
-
-		const issuerPath = await searchIssuerCandidates(current, issuers, path, visited, caBelowCount);
-		if (issuerPath !== undefined) return issuerPath;
-
-		deadEnds.add(memoKey);
-		updateDeepest(path);
+		deadEnds.set(memoKey, { diagnostic: subtree.best, nodeIndex: path.length - 1 });
 		return undefined;
+	}
+
+	async function searchBelow(
+		current: ParsedCertificate,
+		path: readonly ParsedCertificate[],
+		visited: ReadonlySet<string>,
+		caBelowCount: number,
+	): Promise<readonly ParsedCertificate[] | undefined> {
+		let sawIssuer = false;
+		for (const issuer of issuerCandidates(current)) {
+			if (!chargeBudget()) return undefined;
+			if (!isIssuerOf(issuer, current)) continue;
+			sawIssuer = true;
+			const issuerFingerprint = fingerprint(issuer);
+			if (visited.has(issuerFingerprint)) continue;
+			const result = await searchIssuerCandidate(
+				current,
+				issuer,
+				issuerFingerprint,
+				path,
+				visited,
+				caBelowCount,
+			);
+			if (result !== undefined) return result;
+			if (budget.exhausted) return undefined;
+		}
+		if (!sawIssuer) {
+			recordMissingIssuers(current, path);
+			return undefined;
+		}
+		consider({ kind: 'none', path });
+		return undefined;
+	}
+
+	/** Yields the issuer bucket for `current`: AKI matches first, then roots, then input order. */
+	function* issuerCandidates(current: ParsedCertificate): Generator<ParsedCertificate> {
+		const key = canonicalDnKey(current.issuer);
+		let bucket = rankedBuckets.get(key);
+		if (bucket === undefined) {
+			bucket = rankBucket(subjectIndex.get(key) ?? [], order, rootFingerprints);
+			rankedBuckets.set(key, bucket);
+		}
+		const aki = current.authorityKeyIdentifier;
+		if (aki === undefined) {
+			yield* bucket.ordered;
+			return;
+		}
+		yield* bucket.bySubjectKeyIdentifier.get(aki) ?? [];
+		for (const candidate of bucket.ordered) {
+			if (candidate.subjectKeyIdentifier !== aki) yield candidate;
+		}
 	}
 
 	function recordMissingIssuers(
@@ -287,37 +466,22 @@ export async function buildChainInternal(
 		path: readonly ParsedCertificate[],
 	): void {
 		if (isSelfIssued(current)) {
-			updateDeepest(path);
-			sawUntrustedAnchor = true;
-		} else if (updateDeepest(path)) {
-			deepestMissingIssuerAt = path.length - 1;
+			consider({ kind: 'untrusted-anchor', path });
+			return;
 		}
-	}
-
-	/** Searches ranked issuer candidates until one produces a trusted path. */
-	async function searchIssuerCandidates(
-		current: ParsedCertificate,
-		issuers: readonly ParsedCertificate[],
-		path: readonly ParsedCertificate[],
-		visited: ReadonlySet<string>,
-		caBelowCount: number,
-	): Promise<readonly ParsedCertificate[] | undefined> {
-		for (const issuer of issuers) {
-			const result = await searchIssuerCandidate(current, issuer, path, visited, caBelowCount);
-			if (result !== undefined) return result;
+		if (path.length > 1) {
+			consider({ kind: 'missing-issuer', path, missingIssuerAt: path.length - 1 });
 		}
-		return undefined;
 	}
 
 	async function searchIssuerCandidate(
 		current: ParsedCertificate,
 		issuer: ParsedCertificate,
+		issuerFingerprint: string,
 		path: readonly ParsedCertificate[],
 		visited: ReadonlySet<string>,
 		caBelowCount: number,
 	): Promise<readonly ParsedCertificate[] | undefined> {
-		const issuerFingerprint = fingerprint(issuer);
-		if (visited.has(issuerFingerprint)) return undefined;
 		const candidate = await evaluateIssuerCandidate(
 			current,
 			issuer,
@@ -325,6 +489,7 @@ export async function buildChainInternal(
 			caBelowCount,
 			at,
 			callbacks,
+			verifySignatureOnce,
 		);
 		if (!candidate.ok) {
 			recordFailure(candidate.failure, path);
@@ -335,22 +500,66 @@ export async function buildChainInternal(
 		return await search(issuer, [...path, issuer], nextVisited, candidate.nextCaBelowCount);
 	}
 
-	function updateDeepest(path: readonly ParsedCertificate[]): boolean {
-		if (path.length > deepestPath.length) {
-			deepestPath = path;
-			return true;
+	function chargeBudget(): boolean {
+		if (budget.remaining === 0) {
+			budget.exhausted = true;
+			return false;
 		}
-		return false;
+		budget.remaining -= 1;
+		return true;
+	}
+
+	function verifySignatureOnce(
+		certificate: ParsedCertificate,
+		issuer: ParsedCertificate,
+	): Promise<VerifyCertificateSignatureResult> {
+		return verifyOnce(
+			`c:${fingerprint(certificate)}:${toHex(issuer.subjectPublicKeyInfoDer)}`,
+			() => signatureChecks.certificate(certificate, issuer),
+		);
+	}
+
+	function verifyAnchorOnce(
+		certificate: ParsedCertificate,
+		anchor: TrustAnchor,
+	): Promise<VerifyCertificateSignatureResult> {
+		const anchorKey = `${anchor.publicKeyAlgorithmOid}:${anchor.publicKeyParametersOid ?? ''}:${toHex(
+			anchor.subjectPublicKeyInfoDer,
+		)}`;
+		return verifyOnce(`a:${fingerprint(certificate)}:${anchorKey}`, () =>
+			signatureChecks.trustAnchor(certificate, anchor),
+		);
+	}
+
+	/** One signature check per distinct certificate-and-key pair for the whole search. */
+	function verifyOnce(
+		key: string,
+		run: () => Promise<VerifyCertificateSignatureResult>,
+	): Promise<VerifyCertificateSignatureResult> {
+		let pending = signatureResults.get(key);
+		if (pending === undefined) {
+			pending = run();
+			signatureResults.set(key, pending);
+		}
+		return pending;
+	}
+
+	function consider(candidate: PathDiagnostic): void {
+		if (isMoreSignificant(candidate, best.current)) {
+			best.current = candidate;
+		}
+		for (const subtree of subtrees) {
+			if (isMoreSignificant(candidate, subtree.best)) {
+				subtree.best = candidate;
+			}
+		}
 	}
 
 	function recordFailure(
 		candidateFailure: VerifyChainFailure,
 		path: readonly ParsedCertificate[],
 	): void {
-		if (preferredFailure === undefined || path.length > deepestPath.length) {
-			preferredFailure = candidateFailure;
-			deepestPath = path;
-		}
+		consider({ kind: 'specific-failure', path, failure: candidateFailure });
 	}
 }
 
@@ -362,6 +571,7 @@ async function evaluateIssuerCandidate(
 	caBelowCount: number,
 	at: Date,
 	callbacks: VerifyPathCallbacks,
+	verifySignature: typeof verifyCertificateSignature,
 ): Promise<IssuerCandidateEvaluation> {
 	const issuerConstraints = evaluateIssuerConstraints(
 		current,
@@ -374,7 +584,7 @@ async function evaluateIssuerCandidate(
 	if (!issuerConstraints.ok) {
 		return issuerConstraints;
 	}
-	const signatureResult = await verifyCertificateSignature(current, issuer);
+	const signatureResult = await verifySignature(current, issuer);
 	if (!signatureResult.ok) {
 		return {
 			ok: false,
@@ -516,26 +726,20 @@ function expandSource(source: CertificateSource): readonly ParsedCertificate[] {
 	return parseCertificatesFromSource(source);
 }
 
-/** Filters and sorts issuer candidates: AKI match first, then roots, then input order. */
-function rankIssuerCandidates(
-	current: ParsedCertificate,
-	candidates: readonly ParsedCertificate[],
+interface RankedBucket {
+	readonly ordered: readonly ParsedCertificate[];
+	readonly bySubjectKeyIdentifier: ReadonlyMap<string, readonly ParsedCertificate[]>;
+}
+
+/** Orders one subject bucket once, roots first and then input order, and indexes it by SKI. */
+function rankBucket(
+	members: readonly ParsedCertificate[],
 	order: ReadonlyMap<string, number>,
 	rootFingerprints: ReadonlySet<string>,
-): readonly ParsedCertificate[] {
-	const aki = current.authorityKeyIdentifier;
-	const filtered = [...candidates].filter((candidate) => isIssuerOf(candidate, current));
-	const fps = new Map<ParsedCertificate, string>();
-	for (const candidate of filtered) {
-		fps.set(candidate, fingerprint(candidate));
-	}
-	return filtered.sort((left, right) => {
-		const akiScore = compareBooleans(matchesAki(left, aki), matchesAki(right, aki));
-		if (akiScore !== 0) {
-			return akiScore;
-		}
-		const leftFp = fps.get(left) ?? '';
-		const rightFp = fps.get(right) ?? '';
+): RankedBucket {
+	const ordered = [...members].sort((left, right) => {
+		const leftFp = fingerprint(left);
+		const rightFp = fingerprint(right);
 		const rootScore = compareBooleans(rootFingerprints.has(leftFp), rootFingerprints.has(rightFp));
 		if (rootScore !== 0) {
 			return rootScore;
@@ -545,15 +749,18 @@ function rankIssuerCandidates(
 			(order.get(rightFp) ?? Number.MAX_SAFE_INTEGER)
 		);
 	});
-}
-
-/** Returns `true` if the candidate's SKI matches the given authority key identifier. */
-function matchesAki(candidate: ParsedCertificate, aki: string | undefined): boolean {
-	return (
-		aki !== undefined &&
-		candidate.subjectKeyIdentifier !== undefined &&
-		candidate.subjectKeyIdentifier === aki
-	);
+	const bySubjectKeyIdentifier = new Map<string, ParsedCertificate[]>();
+	for (const candidate of ordered) {
+		const ski = candidate.subjectKeyIdentifier;
+		if (ski === undefined) continue;
+		const existing = bySubjectKeyIdentifier.get(ski);
+		if (existing === undefined) {
+			bySubjectKeyIdentifier.set(ski, [candidate]);
+		} else {
+			existing.push(candidate);
+		}
+	}
+	return { ordered, bySubjectKeyIdentifier };
 }
 
 /** Sort comparator: `true` sorts before `false`. Returns -1, 0, or 1. */
@@ -575,6 +782,8 @@ async function matchTrustAnchor(
 	anchorIndex: ReadonlyMap<string, readonly TrustAnchor[]>,
 	callbacks: VerifyPathCallbacks,
 	index: number,
+	verifyAnchor: typeof verifyTrustAnchorSignature,
+	charge: () => boolean,
 ): Promise<TrustAnchorMatchResult> {
 	const anchors = anchorIndex.get(canonicalDnKey(certificate.issuer));
 	if (anchors === undefined) {
@@ -582,12 +791,13 @@ async function matchTrustAnchor(
 	}
 	let firstFailure: VerifyChainFailure | undefined;
 	for (const anchor of anchors) {
+		if (!charge()) return { matched: false };
 		if (trustAnchorAkiMismatch(certificate, anchor)) continue;
 		// The canonicalDnKey bucket is not proof of DN equality (prohibited values
 		// are non-reflexive and prepared/tagged namespaces can collide), so confirm
 		// the anchor's subject actually equals the certificate's issuer.
 		if (!compareDistinguishedNames(certificate.issuer, anchor.subject)) continue;
-		const verified = await verifyTrustAnchorSignature(certificate, anchor);
+		const verified = await verifyAnchor(certificate, anchor);
 		if (!verified.ok) {
 			// Capture the first failure but continue trying other anchors
 			if (firstFailure === undefined) {
@@ -632,7 +842,8 @@ function trustAnchorAkiMismatch(certificate: ParsedCertificate, anchor: TrustAnc
 	);
 }
 
-async function verifyTrustAnchorSignature(
+/** Verifies that `certificate` was signed by a bare trust anchor's key. */
+export async function verifyTrustAnchorSignature(
 	certificate: ParsedCertificate,
 	anchor: TrustAnchor,
 ): Promise<VerifyCertificateSignatureResult> {

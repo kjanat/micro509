@@ -15,6 +15,16 @@ The deployed editor's draft still represented the 29 April 2026 build when
 these files were refreshed. The vendored snapshot was therefore built from the
 newer pinned source commit instead of copied from GitHub Pages.
 
+## License
+
+| File                                | Copyright                                             | License                                                                                  |
+| ----------------------------------- | ----------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `W3C-REC-WebCryptoAPI-20170126.txt` | Copyright © 2012-2017 W3C (MIT, ERCIM, Keio, Beihang) | [W3C Document License](https://www.w3.org/Consortium/Legal/copyright-documents)          |
+| `W3C-TR-webcrypto-current.txt`      | Copyright © 2025 World Wide Web Consortium            | [W3C Software and Document License](https://www.w3.org/copyright/software-license-2023/) |
+| `w3c-webcrypto-editors-draft.txt`   | Copyright © 2026 World Wide Web Consortium            | [W3C Software and Document License](https://www.w3.org/copyright/software-license-2023/) |
+
+The renderings convert the HTML to text and make no other change.
+
 ## Regenerate
 
 The text rendering uses `w3m 0.5.6` with a fixed 110-column width. The editor's

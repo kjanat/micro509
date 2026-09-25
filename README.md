@@ -214,28 +214,29 @@ The core stays ESM-only and side-effect-free.
 
 ## Algorithm support
 
-| Area                           | Shipped support                                                      |
-| ------------------------------ | -------------------------------------------------------------------- |
-| Certificate and CSR signatures | RSA PKCS#1 v1.5, RSA-PSS, ECDSA `P-256` / `P-384` / `P-521`, Ed25519 |
-| RSA key APIs                   | `scheme: 'pkcs1-v1_5'`, `'pss'`, `'oaep'` (encryption)               |
-| ECDSA key APIs                 | `P-256`, `P-384`, `P-521`                                            |
-| Encrypted PKCS#8 and PFX       | PBES2 with AES-CBC plus PBKDF2 HMAC-SHA1/HMAC-SHA256                 |
-| Encrypted traditional PEM      | AES-128-CBC, AES-192-CBC, AES-256-CBC for RSA and EC private keys    |
+| Area                           | Shipped support                                                            |
+| ------------------------------ | -------------------------------------------------------------------------- |
+| Certificate and CSR signatures | RSA PKCS#1 v1.5, RSA-PSS, ECDSA `P-256` / `P-384` / `P-521`, Ed25519       |
+| RSA key APIs                   | `scheme: 'pkcs1-v1_5'`, `'pss'`, `'oaep'` (encryption)                     |
+| ECDSA key APIs                 | `P-256`, `P-384`, `P-521`                                                  |
+| Encrypted PKCS#8 and PFX       | PBES2 with AES-CBC plus PBKDF2 HMAC-SHA1/HMAC-SHA256                       |
+| PFX MAC                        | SHA-256-only PKCS#12 MAC; RFC 9879 PBMAC1 with PBKDF2 HMAC-SHA-256/384/512 |
+| Encrypted traditional PEM      | AES-128-CBC, AES-192-CBC, AES-256-CBC for RSA and EC private keys          |
 
 `micro509` focuses on algorithms that are broadly interoperable in modern X.509 and WebCrypto-backed runtimes.\
 It intentionally excludes niche, blockchain-specific, or key-agreement-only primitives from the core API unless they are needed for a PKI workflow the library explicitly supports.
 
 ## Standards status
 
-| Area                                  | Status   |
-| ------------------------------------- | -------- |
-| RFC 5280 path validation              | complete |
-| RFC 6960 + 9919 OCSP                  | complete |
-| RFC 9525 service identity             | complete |
-| RFC 9618 policy validation            | complete |
-| RFC 7468 PEM textual encodings        | complete |
-| RFC 8410 + 9295 safe-curve profiles   | complete |
-| PKCS containers: RFC 5652, 7292, 8018 | partial  |
+| Area                                        | Status   |
+| ------------------------------------------- | -------- |
+| RFC 5280 path validation                    | complete |
+| RFC 6960 + 9919 OCSP                        | complete |
+| RFC 9525 service identity                   | complete |
+| RFC 9618 policy validation                  | complete |
+| RFC 7468 PEM textual encodings              | complete |
+| RFC 8410 + 9295 safe-curve profiles         | complete |
+| PKCS containers: RFC 5652, 7292, 8018, 9879 | partial  |
 
 See [`docs/PKIX-SCOPE.md`](./docs/PKIX-SCOPE.md) for the detailed scope boundary
 and the [API reference](https://micro509.kjanat.dev/api/) for the public module surface.

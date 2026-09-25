@@ -19,10 +19,93 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `maxKdfIterations` on the encrypted PKCS#8 imports (`ImportEncryptedKeyOptions`,
+  fourth argument), `parsePfxDer` / `parsePfxPem` options, and
+  `parsePkcs12MacData` bounds the PBKDF2 and PKCS#12 KDF iteration counts a
+  file may demand. Above the bound the import fails with
+  `kdf_iterations_exceeded` before any derivation runs. The default is
+  2,000,000 for PBKDF2, including the PBKDF2 behind PBMAC1, and 100,000 for the
+  PKCS#12 KDF. RFC 7292 Appendix B makes one hash call per round, and each call
+  is a separate WebCrypto digest, while PBKDF2 runs natively inside WebCrypto.
+  Without a password `parsePkcs12MacData` derives no key and does not apply the
+  bound. See Security.
+- `maxAgeMs` on `validateCertificateRevocationList` and
+  `checkCertificateRevocationAgainstCrl`, `crlMaxAgeMs` on
+  `checkCertificateRevocation` and the chain-level `RevocationPolicy`, and
+  `responderRevocationCrlMaxAgeMs` on `validateOcspResponse` bound how old a
+  CRL's `thisUpdate` may be. The chain-level `crlMaxAgeMs` also covers the CRLs
+  for CRL signers and delegated OCSP responders. A CRL older than the bound
+  fails with `stale_crl`, and the chain reports `crl_expired` for it.
+  `clockSkewMs` widens each bound. No bound is set by default. RFC 5280 §3.3
+  leaves the required recency of revocation data to local policy. See
+  Security.
+- `clockSkewMs` on the chain-level `RevocationPolicy` sets the tolerance for
+  CRL and OCSP `thisUpdate` and `nextUpdate` checks in `checkChainRevocation`
+  and `verifyCertificateChain({ revocation })`.
+- `maxPathBuildingChecks` on `verifyCertificateChain`, `buildCandidatePath`
+  and the `validateFor*` profiles bounds how many issuer candidates and bare
+  trust anchors one path search may examine, counting candidates it skips as
+  already on the path or as a name mismatch. When the bound stops the search,
+  the result is `path_building_limit_exceeded`, which joins
+  `VERIFY_ERROR_CODES`. The default is 100,000.
+- RFC 9879 PBMAC1 for the PKCS#12 MacData. `parsePfxDer`, `parsePfxPem` and
+  `parsePkcs12MacData` verify a PBMAC1 MAC keyed by PBKDF2 with an
+  HMAC-SHA-256, HMAC-SHA-384 or HMAC-SHA-512 PRF and MAC. The PBKDF2 params
+  must carry `keyLength`, and the password is encoded as UTF-8 with no NULL
+  terminator. `createPfx` and `createPkcs12MacData` create one with
+  `mac: { type: 'pbmac1', password }`, using PBKDF2-HMAC-SHA-256, a 32-octet
+  key and HMAC-SHA-256. The default MAC is unchanged. `parsePkcs12MacData`
+  returns a `ParsedPkcs12MacData` discriminated by `type` (`'pkcs12-kdf'` or
+  `'pbmac1'`). New codes on `ParsePfxErrorCode` and
+  `ParsePkcs12MacDataErrorCode`: `unsupported_mac_algorithm` for a MAC or
+  PBMAC1 variant micro509 does not handle, `weak_mac_key_length` for a PBKDF2
+  `keyLength` below 20 octets, and `password_not_utf8` for a password with an
+  unpaired UTF-16 surrogate. A PBMAC1 PBKDF2 count above 4294967295 returns
+  `malformed`, as it does for PBES2.
+- An opt-in RFC 9919 OCSP client profile. `profile: 'rfc9919'` on
+  `validateOcspResponse`, and `ocspProfile: 'rfc9919'` on
+  `checkCertificateRevocation` and the chain-level `RevocationPolicy`, reject a
+  response without `nextUpdate` (RFC 9919 §5). `validateOcspResponse` and
+  `checkCertificateRevocation` report `next_update_missing`, and the chain
+  reports `ocsp_next_update_missing`. The default `'rfc6960'` profile accepts
+  such a response, as RFC 6960 §4.2.2.1 allows.
+- `CreatePkcs12MacDataErrorCode` (`invalid_iterations`,
+  `password_not_bmp_string`, `password_not_utf8`) is exported from `micro509`
+  and `micro509/pkcs`. `createPkcs12MacData`, and `createPfx` through `mac`,
+  throw these codes as a `ResultError`.
+
 ### Changed
 
 - npm and JSR packages include `CHANGELOG.md` in the published tarball
   (`package.json` `files`, `jsr.json` `publish.include`).
+- `trustedOcspResponders` on `checkChainRevocation()` and
+  `verifyCertificateChain({ revocation })` takes `TrustedOcspResponder`
+  entries (`{ issuerCertificate, responderCertificate }`) instead of bare
+  certificates. See Security.
+- **BREAKING** `createCertificateRevocationList` requires `nextUpdate` and
+  always encodes it (RFC 5280 §5.1.2.5). It throws `ResultError` code
+  `next_update_not_after_this_update` when `nextUpdate` does not encode a later
+  second than `thisUpdate`, which defaults to now. This ordering is a micro509
+  builder invariant. `CrlEncoderErrorCode` gains
+  `next_update_not_after_this_update`. Parsed CRLs keep `nextUpdate` optional.
+- An RFC 7292 MAC password containing a UTF-16 surrogate (a non-BMP character
+  or a lone surrogate) is not a BMPString (RFC 7292 Appendix B.1).
+  `createPkcs12MacData` and `createPfx` throw `ResultError` code
+  `password_not_bmp_string` for it, and `parsePkcs12MacData`, `parsePfxDer`
+  and `parsePfxPem` return that code. `parsePfxDer` and `parsePfxPem` reported
+  it as `malformed` before.
+- A PFX MAC with a digest other than SHA-256 returns
+  `unsupported_mac_algorithm` instead of `malformed`.
+- `parsePfxDer` and `parsePfxPem` accept BER for the PFX, the authSafe
+  ContentInfo, the AuthenticatedSafe and each SafeContents: indefinite lengths,
+  non-minimal lengths and constructed OCTET STRINGs (RFC 7292 §4). The MAC is
+  verified over the AuthenticatedSafe octets as received. Certificates and
+  PKCS#8 keys inside bags must still be DER. BER nesting is limited to 64
+  levels. `ParsedPfxAttribute.valuesHex` and the unknown bag's `valueDer` hold
+  the received value with definite lengths and universal constructed strings
+  joined, so they are not guaranteed to be DER.
 
 ### Fixed
 
@@ -30,6 +113,138 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`key: CryptoKey`, `bytes: Uint8Array`). LiveCode injects examples as browser
   JS modules, so Run failed with `missing ) after argument list` and
   `Unexpected token ':'`. The annotations are removed.
+- PBES2 parsing (encrypted PKCS#8 import and inspection, PFX key bags) rejects
+  a PBKDF2 `iterationCount` that is not an INTEGER.
+  (https://github.com/kjanat/micro509/pull/113)
+- A PBKDF2 `iterationCount` above 4294967295 returns `malformed`. Before, with
+  `maxKdfIterations` set above 2^32, it reached WebCrypto and threw an uncaught
+  `TypeError` from a Result-returning import.
+- `exportEncryptedPkcs8Der` / `exportEncryptedPkcs8Pem` and PFX creation throw
+  `RangeError` for `iterations` above 4294967295, which previously passed
+  validation.
+- An RFC 7292 MacData iteration count of 2^53 or more returns
+  `kdf_iterations_exceeded` when a password is given. Without a password it
+  returns `malformed`.
+- Chain evaluation applied the first delta CRL whose base CRL number matched,
+  even an expired one. It now uses only a current delta (the evaluation time
+  lies between its `thisUpdate` and `nextUpdate`) whose CRL number exceeds the
+  base CRL's number, and it prefers the one with the latest `thisUpdate` (RFC
+  5280 §5.2.4), then the higher CRL number when two share a `thisUpdate` second
+  (§5.2.3). The delta's `thisUpdate` must also be no earlier than the base
+  CRL's (X.509 Annex E.5.2), and an equal `thisUpdate` is accepted.
+  `checkCertificateRevocationAgainstCrl` returns `non_applicable` with reason
+  `delta_crl_incompatible` for a delta whose `thisUpdate` precedes the complete
+  CRL's (X.509 Annex E.5.2).
+- The CRL issuingDistributionPoint decoder read any non-zero BOOLEAN octet as
+  TRUE and empty content as FALSE. A BOOLEAN whose content is not a single
+  `0x00` or `0xFF` octet is now `malformed` (X.690 §11.1).
+- An invalid `Date` passed to `createCertificate`, `createSelfSignedCertificate`,
+  `createCertificateRevocationList` or `createOcspResponse` compared as `NaN`,
+  skipped the ordering checks and surfaced as an uncoded `RangeError` from the
+  DER encoder. `CreateCertificateErrorCode` gains `validity_date_invalid`, and
+  `CrlEncoderErrorCode` and `OcspEncoderErrorCode` gain `invalid_date`, thrown
+  as a `ResultError` before encoding.
+
+### Security
+
+- Decoding a DER INTEGER above `Number.MAX_SAFE_INTEGER`, such as a PKCS#12
+  MacData or PBMAC1 iteration count, folded every octet into a `bigint`, so a
+  file with a very long INTEGER cost CPU and memory before the KDF budget could
+  reject it. Decoding now stops at the first octet past the safe range.
+- Chain-level OCSP evaluation returned on the first validated `good` response,
+  so a `revoked` response later in `ocspResponses` was never read and a
+  revoked certificate passed with `decision: 'allow'`. Every applicable
+  response is now validated; any validated `revoked` verdict wins regardless
+  of position, and otherwise the freshest validated `good` response by
+  `thisUpdate` is reported. A `certificateHold` (RFC 5280 §5.3.1 reason 6)
+  still denies unless a validated `good` response carries a later
+  `thisUpdate`, which clears the hold.
+  (https://github.com/kjanat/micro509/pull/108,
+  https://github.com/kjanat/micro509/pull/110)
+- `trustedOcspResponders` on chain-level revocation was a flat list applied to
+  every issuer in the chain, so a responder trusted for one CA could assert
+  status for certificates issued by any other CA in the same path (RFC 6960
+  §4.2.2.2 criterion 1 binds local trust to the issuing CA). Each entry now
+  names the issuer it is trusted for, and only responders bound to the issuer
+  under evaluation reach `validateOcspResponse`.
+  (https://github.com/kjanat/micro509/pull/111)
+- URI-ID matching accepted a scheme-specific path as an authority, so a
+  hostless SAN such as `https:verify.example` matched the reference identifier
+  `https://verify.example` in `verifyCertificateChain` and
+  `validateForTlsServer`. A URI now needs a syntactically valid scheme and an
+  explicit `//` authority (RFC 3986 §3.2), and its reg-name must normalize as a
+  DNS name; `sip:` and `sips:` keep their authority-less form (RFC 3261 §19.1).
+  (https://github.com/kjanat/micro509/pull/109)
+- `ecdsaSignatureDerToRaw` and the ECDSA verify path trimmed leading zero
+  bytes from each `ECDSA-Sig-Value` INTEGER without checking the encoding, so
+  an empty, negative, or non-minimally encoded `r` or `s` (X.690 §8.3)
+  normalized into a raw signature WebCrypto could verify, giving a second
+  accepted encoding of one signature. Such INTEGERs are now rejected.
+  (https://github.com/kjanat/micro509/pull/100)
+- `verifyPkcs7SignedData` reported `ok: true` for a `SignedData` whose
+  `signerInfos` set was empty, with embedded `eContent` or with detached
+  `content` from the caller, verifying nothing. A `SignedData` with no signer
+  now fails with `no_signers`, a new `VerifyPkcs7SignedDataErrorCode`.
+  (https://github.com/kjanat/micro509/pull/106)
+- Distinguished-name comparison classified combining marks with the runtime's
+  `\p{M}`, which tracks the host Unicode version. RFC 4518 §2.6.1 keys
+  insignificant-space handling on combining marks, and Appendix A lists them
+  definitively against the Unicode 3.2 repertoire §2.1 fixes. A code point
+  reclassified since 3.2 (U+1885, U+06DE) changed which spaces survived, so a
+  directoryName excluded subtree could fail to match. The Appendix A set is
+  now generated from the vendored RFC text and guarded by a test that
+  re-derives it. (https://github.com/kjanat/micro509/pull/102)
+- A caller-supplied extension decoder that threw a native error (for example
+  `TextDecoder` with `fatal: true` on invalid UTF-8) escaped the
+  Result-returning certificate and CSR parse functions as an exception. The
+  decoder boundary now maps such errors to `code: 'malformed'`, so attacker
+  bytes in an extension cannot crash a parser call.
+  (https://github.com/kjanat/micro509/pull/107)
+- The `site/guide/revocation.md` CRL example looked up revoked entries after a
+  failed signature check. It now calls `validateCertificateRevocationList` and
+  reads entries only from the validated value.
+  (https://github.com/kjanat/micro509/pull/104)
+- Third-party GitHub Actions in the release, test, and site workflows are
+  pinned to commit SHAs again; mutable tags had let upstream ref movement run
+  unreviewed code with `id-token: write` and `contents: write`.
+  (https://github.com/kjanat/micro509/pull/103)
+- Encrypted PKCS#8 import and PFX parsing ran PBKDF2, and PFX MAC
+  verification ran the PKCS#12 KDF, for whatever iteration count the file
+  encoded before the password or ciphertext could be rejected. A 122-byte
+  EncryptedPrivateKeyInfo or a 177-byte PFX carrying `0x7fffffff` iterations
+  held the CPU for minutes. Counts above the ceiling are now refused before
+  derivation; `maxKdfIterations` adjusts it.
+- A PFX gave every encrypted entry the full `maxKdfIterations` allowance, so a
+  file with many small entries could demand unbounded work without any encoded
+  count standing out: 100 entries at the default ceiling ask for 200 million
+  PBKDF2 rounds. One budget now covers the whole file.
+- Bare trust anchors were re-verified on every visit to a certificate, because
+  the anchor match ran before the dead-end lookup. A bundle of same-subject CAs
+  plus a few subject-matching anchors made anchor signature checks grow with
+  the search graph rather than the input: 40 candidates and 20 anchors cost
+  3.7s. Each certificate-and-anchor pair is now checked once per search.
+- Path building memoized dead ends per visited set, so a bundle of `n`
+  same-subject CA certificates sharing one key cost on the order of `n³`
+  signature verifications before `no_trusted_root` (30 candidates: 9,426 key
+  imports and 18,852 verify calls). Dead ends are now memoized per certificate
+  and CA count, and each certificate-to-key signature check runs once per
+  search.
+- A CRL without `nextUpdate` validates at any later time by default, so a
+  replayed CRL from before a revocation stays usable. RFC 5280 §5.1.2.5
+  requires conforming issuers to include `nextUpdate` and does not specify how
+  a client handles a CRL without it, and §3.3 leaves the required recency of
+  revocation data to local policy. The new `maxAgeMs`, `crlMaxAgeMs` and
+  `responderRevocationCrlMaxAgeMs` options reject a CRL whose `thisUpdate` is
+  older than the bound. The CRL APIs report `stale_crl`, and the chain reports
+  `crl_expired`. No bound is set by default.
+- The dprint TOML formatter installed `tombi` unversioned and globally from
+  npm on every fresh setup, so the registry chose the code that ran. `tombi`
+  is now a catalog-pinned devDependency; the exec plugin runs
+  `node_modules/.bin/tombi` and its setup command is `bun install`.
+- The OpenSSL differential job ran against whatever OpenSSL the runner image
+  shipped. It now pins `ubuntu-26.04` and fails unless `openssl version`
+  reports 3.5.5, so an oracle change surfaces as a version assertion instead
+  of as verdict or formatting drift.
 
 ## [0.14.0] - 2026-07-29
 
@@ -286,10 +501,10 @@ stricter typed-contract pass.
   (https://github.com/kjanat/micro509/pull/84)
 - PKCS#12 `MacData` omits `iterations` when it equals its `DEFAULT 1`, and the
   parser accepts a two-element `MacData`, defaulting `iterations` to 1
-  (RFC 7292 §4, X.690 §11.5). A conformant PFX with iteration count 1 previously
+  (RFC 7292 §4, X.690 §11.5 under DER). A conformant PFX with iteration count 1 previously
   failed to parse.
 - PBES2 `PBKDF2-params` omits the `prf` when it is the `DEFAULT`
-  `algid-hmacWithSHA1` (RFC 8018 A.2, X.690 §11.5); `keyLength`, being OPTIONAL
+  `algid-hmacWithSHA1` (RFC 8018 A.2, X.690 §11.5 under DER); `keyLength`, being OPTIONAL
   rather than DEFAULT, is still emitted. `exportEncryptedPkcs8Der(key, { prf: 'HMAC-SHA-1' })`
   produced a non-DER structure.
   (https://github.com/kjanat/micro509/pull/83)

@@ -13,6 +13,7 @@ export type {
 	CreatePfxFailure,
 	CreatePfxInput,
 	CreatePfxResult,
+	KdfLimitOptions,
 	ParsedPfx,
 	ParsedPfxAttribute,
 	ParsedPfxBag,
@@ -69,9 +70,11 @@ export {
 } from '#micro509/pkcs/pkcs7';
 
 export type {
+	CreatePkcs12MacDataErrorCode,
 	ParsedPkcs12MacData,
 	ParsePkcs12MacDataErrorCode,
 	ParsePkcs12MacDataFailure,
+	ParsePkcs12MacDataOptions,
 	ParsePkcs12MacDataResult,
 	Pkcs12MacOptions,
 } from '#micro509/pkcs/pkcs12-mac';

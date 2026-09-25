@@ -65,6 +65,20 @@ export async function expectRejectedErrorCode(
 	throw new Error(`expected a ResultError with code '${code}', but the promise resolved`);
 }
 
+/** Await a promise and assert it rejected with an instance of `type`. */
+export async function expectRejectedWith(
+	promise: Promise<unknown>,
+	type: new (...args: never[]) => Error,
+): Promise<void> {
+	try {
+		await promise;
+	} catch (error) {
+		expect(error).toBeInstanceOf(type);
+		return;
+	}
+	throw new Error(`expected a ${type.name} rejection, but the promise resolved`);
+}
+
 /**
  * Encode a CRLDistributionPoints value with an arbitrary cRLIssuer, bypassing the
  * builder's RFC 5280 §4.2.1.13 directoryName validation. Feeds the parser and
@@ -398,6 +412,70 @@ function hashNameToOid(hash: TestRsaPssParameters['hash']): string {
 
 function encodeExtension(oid: string, value: Uint8Array, critical = false): Uint8Array {
 	return sequence([objectIdentifier(oid), ...(critical ? [bool(true)] : []), octetString(value)]);
+}
+
+export async function flattenedText(file: string): Promise<string> {
+	return (await Bun.file(file).text()).replace(/\s+/g, ' ');
+}
+
+export const FAR_FUTURE_NEXT_UPDATE = new Date('2999-01-01T00:00:00Z');
+
+export async function withoutCrlNextUpdate(
+	crlDer: Uint8Array,
+	signerPrivateKey: CryptoKey,
+): Promise<Uint8Array> {
+	const tbsDer = childAt(crlDer, 0);
+	const tbsChildren = readSequenceChildren(tbsDer);
+	const nextUpdateIndex = tbsChildren[0]?.tag === 0x02 ? 4 : 3;
+	const nextUpdate = tbsChildren[nextUpdateIndex];
+	if (nextUpdate === undefined || (nextUpdate.tag !== 0x17 && nextUpdate.tag !== 0x18)) {
+		throw new Error('CRL has no nextUpdate');
+	}
+	const trimmedTbsDer = sequence(
+		tbsChildren
+			.filter((_, index) => index !== nextUpdateIndex)
+			.map((child) => sliceElement(tbsDer, child)),
+	);
+	const signatureAlgorithm = getSignatureAlgorithm(signerPrivateKey);
+	const signatureValue = await signBytes(signerPrivateKey, signatureAlgorithm, trimmedTbsDer);
+	return sequence([
+		trimmedTbsDer,
+		encodeAlgorithmIdentifier(signatureAlgorithm),
+		bitString(signatureValue),
+	]);
+}
+
+export async function withCrlExtension(
+	crlDer: Uint8Array,
+	signerPrivateKey: CryptoKey,
+	oid: string,
+	valueDer: Uint8Array,
+	critical: boolean,
+): Promise<Uint8Array> {
+	const tbsDer = childAt(crlDer, 0);
+	const tbsChildren = readSequenceChildren(tbsDer);
+	const added = encodeExtension(oid, valueDer, critical);
+	const wrapper = tbsChildren.find((child) => child.tag === 0xa0);
+	const existing =
+		wrapper === undefined
+			? []
+			: childrenOf(tbsDer, wrapper).flatMap((list) =>
+					childrenOf(tbsDer, list).map((entry) => sliceElement(tbsDer, entry)),
+				);
+	const extensions = explicitContext(0, sequence([...existing, added]));
+	const rebuiltTbsDer = sequence([
+		...tbsChildren
+			.filter((child) => child.tag !== 0xa0)
+			.map((child) => sliceElement(tbsDer, child)),
+		extensions,
+	]);
+	const signatureAlgorithm = getSignatureAlgorithm(signerPrivateKey);
+	const signatureValue = await signBytes(signerPrivateKey, signatureAlgorithm, rebuiltTbsDer);
+	return sequence([
+		rebuiltTbsDer,
+		encodeAlgorithmIdentifier(signatureAlgorithm),
+		bitString(signatureValue),
+	]);
 }
 
 export async function addRevokedEntryCertificateIssuers(

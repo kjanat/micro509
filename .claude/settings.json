@@ -1,0 +1,17 @@
+{
+	"hooks": {
+		"PreToolUse": [
+			{
+				"matcher": "",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "bun \"$CLAUDE_PROJECT_DIR/.claude/hooks/spec-lookup-gate.ts\"",
+						"timeout": 5,
+						"statusMessage": "spec-lookup gate"
+					}
+				]
+			}
+		]
+	}
+}

@@ -221,29 +221,49 @@ export function parseTime(element: DerElement): Date {
 }
 
 /**
- * Decodes a big-endian unsigned byte sequence into a JavaScript `number`.
+ * Decodes DER INTEGER content octets holding a non-negative value into a JavaScript `number`.
  *
- * @throws if the value exceeds {@linkcode Number.MAX_SAFE_INTEGER}, the boundary for lossless arithmetic.
+ * @throws if the value is empty, negative, non-minimally encoded, or exceeds {@linkcode Number.MAX_SAFE_INTEGER}.
  */
 export function decodeIntegerNumber(bytes: Uint8Array): number {
+	const magnitude = decodeIntegerMagnitude(bytes);
+	if (magnitude.type === 'unsafe') {
+		throw new Error(`Integer too large for safe number (${bytes.length} bytes)`);
+	}
+	return magnitude.value;
+}
+
+/** A non-negative INTEGER value as a `number`, or `unsafe` once it exceeds {@linkcode Number.MAX_SAFE_INTEGER}. */
+export type IntegerMagnitude =
+	| { readonly type: 'safe'; readonly value: number }
+	| { readonly type: 'unsafe' };
+
+/**
+ * Decodes DER INTEGER content octets holding a non-negative value, stopping at the first octet past {@linkcode Number.MAX_SAFE_INTEGER}.
+ *
+ * @param bytes DER INTEGER content octets to decode.
+ * @param label Field name for error messages (defaults to `"INTEGER"`).
+ * @throws if the value is empty, negative, or non-minimally encoded.
+ */
+export function decodeIntegerMagnitude(bytes: Uint8Array, label = 'INTEGER'): IntegerMagnitude {
 	const first = bytes[0];
 	if (first === undefined) {
-		throw new Error('INTEGER is empty');
+		throw new Error(`${label} is empty`);
 	}
 	if ((first & 0x80) !== 0) {
-		throw new Error('INTEGER must be non-negative');
+		throw new Error(`${label} must be non-negative`);
 	}
 	if (bytes.length > 1 && first === 0 && ((bytes[1] ?? 0) & 0x80) === 0) {
-		throw new Error('INTEGER must use minimal encoding');
+		throw new Error(`${label} must use minimal encoding`);
 	}
 	let value = 0;
 	for (const byte of bytes) {
 		if (value > Math.floor((Number.MAX_SAFE_INTEGER - byte) / 256)) {
-			throw new Error(`Integer too large for safe number (${bytes.length} bytes)`);
+			return { type: 'unsafe' };
 		}
 		value = value * 256 + byte;
 	}
-	return value;
+	return { type: 'safe', value };
 }
 
 /**

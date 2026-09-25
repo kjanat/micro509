@@ -43,6 +43,7 @@ export type CreateCertificateErrorCode =
 	| 'issuer_distinguished_name_empty'
 	| 'serial_number_not_positive'
 	| 'serial_number_too_long'
+	| 'validity_date_invalid'
 	| 'validity_not_after_before_not_before';
 
 /**
@@ -357,6 +358,12 @@ interface ResolvedValidity {
 function resolveValidity(input: ValidityInput | undefined): ResolvedValidity {
 	const notBefore = input?.notBefore ?? new Date();
 	const notAfter = input?.notAfter ?? addDays(notBefore, input?.days ?? 30);
+	if (Number.isNaN(notBefore.getTime()) || Number.isNaN(notAfter.getTime())) {
+		throwMicro509Error<CreateCertificateErrorCode>(
+			'validity_date_invalid',
+			'notBefore and notAfter must be valid dates',
+		);
+	}
 	if (notAfter.getTime() <= notBefore.getTime()) {
 		throwMicro509Error<CreateCertificateErrorCode>(
 			'validity_not_after_before_not_before',

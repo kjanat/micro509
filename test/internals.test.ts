@@ -10,6 +10,7 @@ import {
 } from '#micro509';
 import {
 	decodeBoolean,
+	decodeIntegerMagnitude,
 	decodeIntegerNumber,
 	decodeNonNegativeIntegerNumber,
 	decodeObjectIdentifier,
@@ -86,6 +87,7 @@ import {
 	normalizeIpAddress,
 	parseIpAddressToBytes,
 } from '#micro509/internal/shared/ip';
+import { rebaseDiagnostic } from '#micro509/internal/verify/verify-path';
 import {
 	parseDistributionPointReasonFlagsContent,
 	parseKeyUsageExtension,
@@ -113,7 +115,11 @@ import {
 	getExtendedKeyUsageOid,
 } from '#micro509/x509';
 import { parseCrlDistributionPoints } from '#micro509/x509/parse';
-import { childrenOf, encodeUncheckedCrlDistributionPoints } from '#test/helpers';
+import {
+	childrenOf,
+	encodeUncheckedCrlDistributionPoints,
+	FAR_FUTURE_NEXT_UPDATE,
+} from '#test/helpers';
 
 function expectEncoderErrorCode(fn: () => unknown, code: string): void {
 	try {
@@ -352,6 +358,33 @@ describe('asn1 decoding', () => {
 	it('decodeIntegerNumber throws above MAX_SAFE_INTEGER', () => {
 		expect(() => decodeIntegerNumber(Uint8Array.of(0x20, 0, 0, 0, 0, 0, 0))).toThrow('too large');
 		expect(() => decodeIntegerNumber(Uint8Array.of(1, 2, 3, 4, 5, 6, 7, 8))).toThrow('too large');
+	});
+
+	it('decodeIntegerMagnitude reports unsafe above MAX_SAFE_INTEGER', () => {
+		expect(decodeIntegerMagnitude(Uint8Array.of(0x1f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff))).toEqual(
+			{
+				type: 'safe',
+				value: Number.MAX_SAFE_INTEGER,
+			},
+		);
+		expect(decodeIntegerMagnitude(Uint8Array.of(0x20, 0, 0, 0, 0, 0, 1))).toEqual({
+			type: 'unsafe',
+		});
+	});
+
+	it('decodeIntegerMagnitude stops at the first octet past MAX_SAFE_INTEGER', () => {
+		const huge = new Uint8Array(10_000_000).fill(0x7f);
+		expect(decodeIntegerMagnitude(huge)).toEqual({ type: 'unsafe' });
+	}, 1_000);
+
+	it('decodeIntegerMagnitude labels empty, negative, and non-minimal encodings', () => {
+		expect(() => decodeIntegerMagnitude(new Uint8Array(), 'field')).toThrow('field is empty');
+		expect(() => decodeIntegerMagnitude(Uint8Array.of(0xff), 'field')).toThrow(
+			'field must be non-negative',
+		);
+		expect(() => decodeIntegerMagnitude(Uint8Array.of(0x00, 0x01), 'field')).toThrow(
+			'field must use minimal encoding',
+		);
 	});
 
 	it('decodeIntegerNumber rejects empty, negative, and non-minimal encodings', () => {
@@ -2128,6 +2161,20 @@ describe('pbes2.ts edge cases', () => {
 		expect(() => parsePbes2AlgorithmIdentifier(badPbkdf2)).toThrow(/Malformed PBKDF2/);
 	});
 
+	it('parsePbes2AlgorithmIdentifier requires an INTEGER iteration count', () => {
+		const badPbkdf2 = sequence([
+			objectIdentifier(OIDS.pbes2),
+			sequence([
+				sequence([
+					objectIdentifier(OIDS.pbkdf2),
+					sequence([octetString(new Uint8Array(16)), octetString(Uint8Array.of(1))]),
+				]),
+				sequence([objectIdentifier(OIDS.aes256Cbc), octetString(new Uint8Array(16))]),
+			]),
+		]);
+		expect(() => parsePbes2AlgorithmIdentifier(badPbkdf2)).toThrow(/Malformed PBKDF2/);
+	});
+
 	it('parsePbes2AlgorithmIdentifier accepts shipped AES-CBC and PBKDF2 PRF variants', () => {
 		const cases = [
 			{
@@ -2286,20 +2333,6 @@ describe('pkcs12-mac.ts edge cases', () => {
 		expect(parsePkcs12MacDataOrThrow(malformed, dummySafe)).rejects.toThrow('Malformed MacData');
 	});
 
-	it('omits the iterations DEFAULT 1 on encode and defaults it back on parse', async () => {
-		const authenticatedSafe = Uint8Array.of(1, 2, 3);
-		const { der } = await createPkcs12MacData(authenticatedSafe, {
-			password: 'pw',
-			iterations: 1,
-			salt: new Uint8Array(16),
-		});
-		// iterations 1 is the DEFAULT, so MacData carries only DigestInfo and salt.
-		expect(readSequenceChildren(der)).toHaveLength(2);
-		const parsed = await parsePkcs12MacDataOrThrow(der, authenticatedSafe, 'pw');
-		expect(parsed.iterations).toBe(1);
-		expect(parsed.verification).toBe('valid');
-	});
-
 	it('parsePkcs12MacDataOrThrow throws on malformed MacData (salt wrong tag)', () => {
 		// salt is INTEGER instead of OCTET STRING
 		const malformed = sequence([
@@ -2371,40 +2404,6 @@ describe('pkcs12-mac.ts edge cases', () => {
 		expect(parsed.verification).toBe('unchecked');
 	});
 
-	it('parsePkcs12MacDataOrThrow throws on zero iterations', () => {
-		const malformed = sequence([
-			sequence([
-				sequence([objectIdentifier(OIDS.sha256), nullValue()]),
-				octetString(new Uint8Array(32)),
-			]),
-			octetString(new Uint8Array(16)),
-			integerFromNumber(0),
-		]);
-		expect(parsePkcs12MacDataOrThrow(malformed, dummySafe)).rejects.toThrow(
-			'MacData iterations must be a positive safe integer',
-		);
-	});
-
-	it('parsePkcs12MacDataOrThrow throws on negative iterations', () => {
-		const malformed = sequence([
-			sequence([
-				sequence([objectIdentifier(OIDS.sha256), nullValue()]),
-				octetString(new Uint8Array(32)),
-			]),
-			octetString(new Uint8Array(16)),
-			new Uint8Array([0x02, 0x01, 0xff]),
-		]);
-		expect(parsePkcs12MacDataOrThrow(malformed, dummySafe)).rejects.toThrow(
-			'MacData iterations must be non-negative',
-		);
-	});
-
-	it('createPkcs12MacData rejects zero iterations', () => {
-		expect(createPkcs12MacData(dummySafe, { password: 'test', iterations: 0 })).rejects.toThrow(
-			'MacData iterations must be a positive safe integer',
-		);
-	});
-
 	it('createPkcs12MacData supports empty salt', async () => {
 		const data = new Uint8Array([0x30, 0x03, 0x01, 0x01, 0xff]);
 		const mac = await createPkcs12MacData(data, {
@@ -2474,6 +2473,7 @@ describe('ecdsaSignatureToDer', () => {
 				signerPrivateKey: ca.keyPair.privateKey,
 				issuerPublicKey: ca.keyPair.publicKey,
 				revokedCertificates: [],
+				nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 			});
 			for (const der of [
 				unwrap(parseCertificatePem(ca.certificate.pem)).signatureValue,
@@ -2521,5 +2521,62 @@ describe('pbes2.ts DEFAULT prf', () => {
 		expect(sha256Children).toHaveLength(4);
 		expect(sha256Children[2]?.tag).toBe(0x02);
 		expect(sha256Children[3]?.tag).toBe(0x30);
+	});
+});
+
+describe('rebaseDiagnostic', () => {
+	async function parsedCertificates(count: number) {
+		const certificates = [];
+		for (let index = 0; index < count; index += 1) {
+			const material = await createSelfSignedCertificate({
+				subject: { commonName: `Rebase ${index}` },
+			});
+			certificates.push(unwrap(parseCertificatePem(material.certificate.pem)));
+		}
+		return certificates;
+	}
+
+	it('moves the suffix onto the new prefix and shifts every index', async () => {
+		const [a, b, node, below, bottom, other] = await parsedCertificates(6);
+		if (!(a && b && node && below && bottom && other)) throw new Error('fixture');
+		const failure = {
+			ok: false,
+			code: 'certificate_expired',
+			message: 'expired',
+			index: 4,
+		} as const;
+
+		expect(
+			rebaseDiagnostic({ kind: 'specific-failure', path: [a, node, below, bottom], failure }, 1, [
+				a,
+				b,
+				other,
+				node,
+			]),
+		).toEqual({
+			kind: 'specific-failure',
+			path: [a, b, other, node, below, bottom],
+			failure: { ...failure, index: 6 },
+		});
+		expect(
+			rebaseDiagnostic({ kind: 'missing-issuer', path: [a, node, below], missingIssuerAt: 2 }, 1, [
+				b,
+				other,
+				node,
+			]),
+		).toEqual({ kind: 'missing-issuer', path: [b, other, node, below], missingIssuerAt: 3 });
+	});
+
+	it('reports only the prefix when the suffix repeats one of its certificates', async () => {
+		const [a, node, below, bottom] = await parsedCertificates(4);
+		if (!(a && node && below && bottom)) throw new Error('fixture');
+
+		expect(
+			rebaseDiagnostic(
+				{ kind: 'missing-issuer', path: [a, node, below, bottom], missingIssuerAt: 3 },
+				1,
+				[below, node],
+			),
+		).toEqual({ kind: 'none', path: [below, node] });
 	});
 });

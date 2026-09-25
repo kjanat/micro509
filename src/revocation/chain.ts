@@ -14,8 +14,10 @@ import type {
 	RevocationReason,
 } from '#micro509/revocation/crl';
 import {
+	assertCrlMaxAge,
 	checkCertificateRevocationAgainstCrl,
 	coversAllDistributionPointReasons,
+	isCurrentDeltaCrl,
 	parseCertificateRevocationListDerOrThrow,
 	parseCertificateRevocationListPemOrThrow,
 	revocationReasonFromCode,
@@ -25,6 +27,7 @@ import type {
 	ParsedOcspResponse,
 	ParsedOcspSingleResponse,
 	ValidateOcspResponseFailure,
+	ValidateOcspResponseInput,
 	ValidateOcspResponseResult,
 } from '#micro509/revocation/ocsp';
 import {
@@ -97,6 +100,27 @@ export interface RevocationPolicy {
 	 * evidence. Defaults to `'honor-nocheck'`.
 	 */
 	readonly ocspResponderRevocation?: OcspResponderRevocationPolicy;
+	/**
+	 * Maximum age of a CRL's `thisUpdate` at the evaluation time, in
+	 * milliseconds. An older CRL yields no evidence even when it carries no
+	 * `nextUpdate`. Applies to CRLs for chain certificates, CRL signers and
+	 * delegated OCSP responders. Unbounded by default. RFC 5280 §3.3 leaves
+	 * the required recency of revocation data to local policy.
+	 */
+	readonly crlMaxAgeMs?: number;
+	/**
+	 * Clock-skew tolerance in milliseconds for CRL and OCSP `thisUpdate`/
+	 * `nextUpdate` checks. It also widens `crlMaxAgeMs` by the same amount.
+	 * Defaults to `0`.
+	 */
+	readonly clockSkewMs?: number;
+	/**
+	 * OCSP client profile for every OCSP response. See
+	 * {@linkcode ValidateOcspResponseInput.profile}. `'rfc9919'` turns a
+	 * response without `nextUpdate` into `ocsp_next_update_missing`. Defaults
+	 * to `'rfc6960'`.
+	 */
+	readonly ocspProfile?: ValidateOcspResponseInput['profile'];
 }
 
 /** Input for {@linkcode checkChainRevocation}. */
@@ -135,7 +159,8 @@ export interface CheckChainRevocationInput {
  *   `reason_scope_mismatch`, `indirect_crl_scope_mismatch`, `reason_coverage_incomplete`
  * - **Signer trust**: `crl_signer_not_found`, `crl_signer_not_authorized`,
  *   `crl_signer_revoked`, `crl_signer_indeterminate`, and OCSP equivalents
- * - **Freshness**: `crl_expired`, `ocsp_response_expired`
+ * - **Freshness**: `crl_expired`, `ocsp_response_expired`,
+ *   `ocsp_next_update_missing`
  */
 export const REVOCATION_INDETERMINATE_REASONS = [
 	// Evidence not found
@@ -159,6 +184,7 @@ export const REVOCATION_INDETERMINATE_REASONS = [
 	// Freshness
 	'crl_expired',
 	'ocsp_response_expired',
+	'ocsp_next_update_missing',
 	// OCSP specific
 	'ocsp_status_unknown',
 ] as const;
@@ -451,6 +477,8 @@ interface SignerValidationContext {
 	readonly crls: readonly CrlSource[];
 	readonly extraCertificates: readonly RevocationCertificateSource[];
 	readonly at: Date;
+	readonly crlMaxAgeMs: number | undefined;
+	readonly clockSkewMs: number | undefined;
 }
 
 /**
@@ -624,6 +652,8 @@ async function checkSignerAgainstCrl(
 		issuerCertificate: issuer,
 		crl,
 		at: ctx.at,
+		...(ctx.crlMaxAgeMs === undefined ? {} : { maxAgeMs: ctx.crlMaxAgeMs }),
+		...(ctx.clockSkewMs === undefined ? {} : { clockSkewMs: ctx.clockSkewMs }),
 	});
 	if (!result.ok) {
 		return SIGNER_CRL_NO_EVIDENCE;
@@ -790,6 +820,8 @@ function ocspIndeterminateReasonFromFailure(
 	switch (code) {
 		case 'stale_response':
 			return 'ocsp_response_expired';
+		case 'next_update_missing':
+			return 'ocsp_next_update_missing';
 		case 'responder_id_mismatch':
 		case 'responder_chain_invalid':
 		case 'ocsp_signing_missing':
@@ -844,6 +876,11 @@ async function validateOcspResponseWithResponderFallback(
 			: {}),
 		// Chain-level CRLs double as responder revocation evidence
 		...(input.crls !== undefined ? { responderRevocationCrls: input.crls } : {}),
+		...(input.policy?.crlMaxAgeMs !== undefined
+			? { responderRevocationCrlMaxAgeMs: input.policy.crlMaxAgeMs }
+			: {}),
+		...(input.policy?.clockSkewMs !== undefined ? { clockSkewMs: input.policy.clockSkewMs } : {}),
+		...(input.policy?.ocspProfile !== undefined ? { profile: input.policy.ocspProfile } : {}),
 	};
 	const primary = await validateOcspResponse({ response, ...shared });
 	if (primary.ok || !OCSP_RESPONDER_FAILURE_CODES.has(primary.code)) {
@@ -960,6 +997,7 @@ interface CrlEvidenceState {
 	sawCrlSignerRevoked: boolean;
 	sawCrlSignerIndeterminate: boolean;
 	sawCrlSignerNotAuthorized: boolean;
+	sawStaleCrl: boolean;
 	sawGood: boolean;
 	freshestGood?: { readonly signer: ParsedCertificate; readonly thisUpdate: Date };
 }
@@ -974,6 +1012,8 @@ interface BaseCrlResolution {
 	readonly extraCertificates: readonly RevocationCertificateSource[];
 	readonly chain: readonly ParsedCertificate[];
 	readonly at: Date;
+	readonly crlMaxAgeMs: number | undefined;
+	readonly clockSkewMs: number | undefined;
 	readonly signerCtx: SignerValidationContext;
 	readonly state: CrlEvidenceState;
 }
@@ -998,12 +1038,25 @@ async function resolveBaseCrlAgainstSigners(
 		extraCertificates,
 		chain,
 		at,
+		crlMaxAgeMs,
+		clockSkewMs,
 		signerCtx,
 		state,
 	} = params;
 	for (const candidate of collectCrlSignerCandidates(baseCrl, issuer, extraCertificates, chain)) {
-		const checked = await checkCrlWithIssuer(cert, baseCrl, applicableDelta, candidate, at);
+		const checked = await checkCrlWithIssuer(
+			cert,
+			baseCrl,
+			applicableDelta,
+			candidate,
+			at,
+			crlMaxAgeMs,
+			clockSkewMs,
+		);
 		if (!checked.ok) {
+			if (checked.code === 'stale_crl') {
+				state.sawStaleCrl = true;
+			}
 			continue;
 		}
 		if (!(await crlSignerChainsToAnchor(candidate, chain, extraCertificates, at))) {
@@ -1047,6 +1100,7 @@ async function evaluateCrlEvidence(
 		sawCrlSignerRevoked: false,
 		sawCrlSignerIndeterminate: false,
 		sawCrlSignerNotAuthorized: false,
+		sawStaleCrl: false,
 		sawGood: false,
 	};
 
@@ -1057,8 +1111,16 @@ async function evaluateCrlEvidence(
 	const deltaCrls = parsedCrls.filter((crl) => crl.baseCrlNumber !== undefined);
 
 	// Process base CRLs (optionally paired with delta CRLs)
+	const crlMaxAgeMs = input.policy?.crlMaxAgeMs;
+	const clockSkewMs = input.policy?.clockSkewMs;
 	for (const baseCrl of baseCrls) {
-		const applicableDelta = findApplicableDeltaCrl(baseCrl, deltaCrls);
+		const applicableDelta = findApplicableDeltaCrl(
+			baseCrl,
+			deltaCrls,
+			at,
+			clockSkewMs ?? 0,
+			crlMaxAgeMs,
+		);
 		// Evidence freshness: an applied delta CRL supersedes its base
 		const crlThisUpdate =
 			applicableDelta !== undefined &&
@@ -1074,6 +1136,8 @@ async function evaluateCrlEvidence(
 			extraCertificates,
 			chain,
 			at,
+			crlMaxAgeMs,
+			clockSkewMs,
 			signerCtx,
 			state,
 		});
@@ -1131,6 +1195,9 @@ function crlUnavailableReason(state: CrlEvidenceState): RevocationIndeterminateR
 	if (state.sawCrlSignerIndeterminate) {
 		return 'crl_signer_indeterminate';
 	}
+	if (state.sawStaleCrl) {
+		return 'crl_expired';
+	}
 	return 'no_applicable_crl';
 }
 
@@ -1156,14 +1223,40 @@ function parseCrlEvidenceSources(
 function findApplicableDeltaCrl(
 	baseCrl: ParsedCertificateRevocationList,
 	deltaCrls: readonly ParsedCertificateRevocationList[],
+	at: Date,
+	clockSkewMs: number,
+	crlMaxAgeMs: number | undefined,
 ): ParsedCertificateRevocationList | undefined {
-	return deltaCrls.find(
-		(deltaCrl) =>
+	const baseCrlNumber = baseCrl.crlNumber;
+	if (baseCrlNumber === undefined) {
+		return undefined;
+	}
+	let latest: ParsedCertificateRevocationList | undefined;
+	for (const deltaCrl of deltaCrls) {
+		if (
 			deltaCrl.issuer.derHex === baseCrl.issuer.derHex &&
 			deltaCrl.baseCrlNumber !== undefined &&
-			baseCrl.crlNumber !== undefined &&
-			BigInt(deltaCrl.baseCrlNumber) <= BigInt(baseCrl.crlNumber),
-	);
+			deltaCrl.baseCrlNumber <= baseCrlNumber &&
+			deltaCrl.crlNumber !== undefined &&
+			deltaCrl.crlNumber > baseCrlNumber &&
+			deltaCrl.thisUpdate.getTime() >= baseCrl.thisUpdate.getTime() &&
+			isCurrentDeltaCrl(deltaCrl, at, clockSkewMs, crlMaxAgeMs) &&
+			(latest === undefined || isNewerDeltaCrl(deltaCrl, latest))
+		) {
+			latest = deltaCrl;
+		}
+	}
+	return latest;
+}
+
+function isNewerDeltaCrl(
+	candidate: ParsedCertificateRevocationList,
+	current: ParsedCertificateRevocationList,
+): boolean {
+	const candidateTime = candidate.thisUpdate.getTime();
+	const currentTime = current.thisUpdate.getTime();
+	if (candidateTime !== currentTime) return candidateTime > currentTime;
+	return (candidate.crlNumber ?? 0) > (current.crlNumber ?? 0);
 }
 
 /** The direct issuer first, then deduplicated indirect CRL-issuer candidates. */
@@ -1188,6 +1281,8 @@ function checkCrlWithIssuer(
 	deltaCrl: ParsedCertificateRevocationList | undefined,
 	crlIssuer: ParsedCertificate,
 	at: Date,
+	maxAgeMs: number | undefined,
+	clockSkewMs: number | undefined,
 ): ReturnType<typeof checkCertificateRevocationAgainstCrl> {
 	return checkCertificateRevocationAgainstCrl({
 		certificate: cert,
@@ -1195,6 +1290,8 @@ function checkCrlWithIssuer(
 		crl,
 		...(deltaCrl !== undefined ? { deltaCrl } : {}),
 		at,
+		...(maxAgeMs === undefined ? {} : { maxAgeMs }),
+		...(clockSkewMs === undefined ? {} : { clockSkewMs }),
 	});
 }
 
@@ -1300,6 +1397,7 @@ export async function checkChainRevocation(
 	input: CheckChainRevocationInput,
 ): Promise<CheckChainRevocationResult> {
 	const { chain, policy, crls = [], extraCertificates = [], at = new Date() } = input;
+	assertCrlMaxAge(policy?.crlMaxAgeMs);
 	const mode = policy?.mode ?? 'hard-fail';
 
 	// Empty chain → allow
@@ -1322,6 +1420,8 @@ export async function checkChainRevocation(
 		crls,
 		extraCertificates,
 		at,
+		crlMaxAgeMs: policy?.crlMaxAgeMs,
+		clockSkewMs: policy?.clockSkewMs,
 	};
 
 	// Skip trust anchor (last cert) — it's the trust base

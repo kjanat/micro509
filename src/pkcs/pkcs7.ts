@@ -255,8 +255,10 @@ export type ParsePkcs7CertBagResult =
  * `detached_content_required` means the SignedData carries no `eContent`
  * (detached signature or degenerate cert bag) and no external content was
  * supplied via {@linkcode VerifyPkcs7SignedDataOptions}.
+ * `no_signers` means the SignedData carries no SignerInfo to verify.
  */
 export type VerifyPkcs7SignedDataErrorCode =
+	| 'no_signers'
 	| 'signer_not_found'
 	| 'signature_invalid'
 	| 'message_digest_mismatch'
@@ -860,7 +862,7 @@ export async function verifyPkcs7SignedData(
 		);
 	}
 	if (parsed.signerInfos.length === 0) {
-		return verifyPkcs7Failure('malformed', 'SignedData contains no signer information');
+		return verifyPkcs7Failure('no_signers', 'SignedData contains no signer information');
 	}
 	const signers: VerifiedPkcs7Signer[] = [];
 	for (const signerInfo of parsed.signerInfos) {

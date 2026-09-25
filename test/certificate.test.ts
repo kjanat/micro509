@@ -517,6 +517,17 @@ describe('certificate', () => {
 		);
 	});
 
+	it.each([
+		['notBefore', { notBefore: new Date(Number.NaN) }],
+		['notAfter', { notAfter: new Date(Number.NaN) }],
+		['days', { days: Number.NaN }],
+	] as const)('rejects an invalid %s as validity_date_invalid', async (_field, validity) => {
+		await expectRejectedErrorCode(
+			createSelfSignedCertificate({ subject: { commonName: 'bad-date' }, validity }),
+			'validity_date_invalid',
+		);
+	});
+
 	it('allows empty subject DN when SAN is present and marks SAN critical (RFC 5280 §4.2.1.6)', async () => {
 		// The issuer must be non-empty (§4.1.2.4), so an empty subject is only valid
 		// on a CA-issued leaf, not a self-signed certificate.

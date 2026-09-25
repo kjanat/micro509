@@ -80,7 +80,7 @@ YOUR LEG: ${assignment}
 ${done.length === 0 ? 'No heading has been worked yet; yours is the first leg.' : `Already worked by earlier legs, do not redo them unless faulty or incomplete:\n${done.map((h) => `  - ${h}`).join('\n')}`}
 
 TASK
-1. Read your heading's full text in docs/rfc/rfc${rfcNumber}.txt. Read the WHOLE section, not just grep hits. If it refers to another section of this RFC, or to another RFC, read that too: docs/rfc/ holds many of them (if missing, add it using bash \`run rfc <number>\`, which invokes \`scripts/fetch-rfc.bun.ts\`), and the referenced clause is often where the real requirement is.
+1. Read your heading's full text in docs/rfc/rfc${rfcNumber}.txt. Read the WHOLE section, not just grep hits. If it refers to another section of this RFC, or to another RFC, read that too: docs/rfc/ holds many of them (if missing, add it using bash \`run rfc <number>\`, which invokes \`scripts/fetch-spec.bun.ts rfc\`), and the referenced clause is often where the real requirement is.
 2. Read the matching describe(...) block in ${testFile}. Match it by its leading section number. If no describe exists for your heading, create one in correct document order.
 3. Identify, concretely:
    - normative clauses (MUST / MUST NOT / SHOULD / SHOULD NOT / MAY / REQUIRED) in your section, and in what it references, that no assertion covers;
