@@ -288,6 +288,19 @@ function isIdnLabel(label: string): boolean {
 	return !isAscii(label) || asciiLowercase(label).startsWith(ACE_PREFIX);
 }
 
+/** The A-label of a U-label that passes {@linkcode checkULabel} and fits 63 octets. */
+function uLabelToALabel(label: string, mode: IdnaMode): IdnaResult {
+	if (codePointsOf(label).length > MAX_LABEL_OCTETS - ACE_PREFIX.length) {
+		return { ok: false, reason: 'label_too_long' };
+	}
+	const failure = checkULabel(label, mode);
+	if (failure !== undefined) return { ok: false, reason: failure };
+	const aLabel = toALabel(label);
+	return aLabel.length > MAX_LABEL_OCTETS
+		? { ok: false, reason: 'label_too_long' }
+		: { ok: true, value: aLabel };
+}
+
 /**
  * Converts each U-label of `domain` to its A-label and checks each `xn--`
  * label, under the RFC 5891 §4 (registration) or §5 (lookup) tests, then
@@ -301,11 +314,9 @@ export function domainToAscii(domain: string, mode: IdnaMode): IdnaResult {
 	const uLabels: string[] = [];
 	for (const label of labels) {
 		if (!isAscii(label)) {
-			const failure = checkULabel(label, mode);
-			if (failure !== undefined) return { ok: false, reason: failure };
-			const aLabel = toALabel(label);
-			if (aLabel.length > MAX_LABEL_OCTETS) return { ok: false, reason: 'label_too_long' };
-			ascii.push(aLabel);
+			const converted = uLabelToALabel(label, mode);
+			if (!converted.ok) return converted;
+			ascii.push(converted.value);
 			uLabels.push(label);
 		} else if (isIdnLabel(label)) {
 			const checked = checkALabel(label, mode);

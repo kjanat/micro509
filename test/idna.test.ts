@@ -165,6 +165,13 @@ describe('domainToAscii', () => {
 		});
 	});
 
+	it('rejects a U-label too long to encode without throwing', () => {
+		expect(domainToAscii(`${'a'.repeat(20000)}\u{20000}.example`, 'lookup')).toEqual({
+			ok: false,
+			reason: 'label_too_long',
+		});
+	});
+
 	it('rejects a U-label whose A-label exceeds 63 octets', () => {
 		expect(domainToAscii(`${'ü'.repeat(60)}.example`, 'registration')).toEqual({
 			ok: false,

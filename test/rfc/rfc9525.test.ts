@@ -66,6 +66,10 @@ describe('RFC 9525 §6.3: reference U-labels are converted to A-labels under IDN
 		expect(await matchesDns('xn--45h.example', 'xn--45h.example')).toBe(false);
 	});
 
+	it('returns a mismatch, without throwing, for a reference label too long to encode', async () => {
+		expect(await matchesDns('example.com', `${'a'.repeat(20000)}\u{20000}.example`)).toBe(false);
+	});
+
 	it('matches a URI-ID and an SRV-ID host after the same conversion', async () => {
 		expect(
 			matchServiceIdentity({
