@@ -88,3 +88,29 @@ export function parseW3c(source: string): ParsedDocument {
 	const { lines, seams } = stripPageArtifacts(sourceLines(source));
 	return { meta: metaOf(lines), lines, seams, headings: headingsOf(lines) };
 }
+
+const LICENSE_LINK = /<a\b[^>]*\bhref="([^"]+)"[^>]*>/g;
+
+const LEGAL_PAGE =
+	/\/Consortium\/Legal\/(?:\d{4}\/)?copyright-(?:documents|software-and-document)|\/copyright\/(?:document|software)-license/;
+
+export function licenseLinks(html: string, base: string): readonly string[] {
+	const links = new Set<string>();
+	for (const match of html.matchAll(LICENSE_LINK)) {
+		const [tag, href] = match;
+		if (href === undefined) continue;
+		if (/\brel="license"/.test(tag) || LEGAL_PAGE.test(href)) links.add(new URL(href, base).href);
+	}
+	return [...links];
+}
+
+export function provenance(source: string, licenses: readonly string[]): string {
+	const retrieved = new Date().toISOString().slice(0, 10);
+	return [
+		'',
+		`Source: ${source}`,
+		`Retrieved: ${retrieved}`,
+		...licenses.map((license) => `License: ${license}`),
+		'',
+	].join('\n');
+}

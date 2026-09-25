@@ -414,6 +414,10 @@ function encodeExtension(oid: string, value: Uint8Array, critical = false): Uint
 	return sequence([objectIdentifier(oid), ...(critical ? [bool(true)] : []), octetString(value)]);
 }
 
+export async function flattenedText(file: string): Promise<string> {
+	return (await Bun.file(file).text()).replace(/\s+/g, ' ');
+}
+
 export const FAR_FUTURE_NEXT_UPDATE = new Date('2999-01-01T00:00:00Z');
 
 export async function withoutCrlNextUpdate(

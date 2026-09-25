@@ -5,6 +5,7 @@ import { runCommand } from 'dreamcli/testkit';
 import { projectRoot, rfcDir } from '#test/helpers';
 import { ituIdentifier, ituMeta, parseItu } from '../scripts/spec/itu.ts';
 import { headingsCommand, listCommand, readCommand, searchCommand } from '../scripts/spec/main.ts';
+import { licenseLinks, provenance } from '../scripts/spec/w3c.ts';
 
 type Entry = Readonly<Record<string, unknown>>;
 
@@ -635,5 +636,51 @@ describe('ITU-T parsing', () => {
 	test('derives stable identifiers from T-REC names', () => {
 		expect(ituIdentifier('T-REC-X.509-201910-I!!PDF-E', 'x509')).toBe('itu-x509-2019');
 		expect(ituIdentifier('T-REC-X.509-202310-I!Cor2!PDF-E', 'x509')).toBe('itu-x509-2023-cor2');
+	});
+});
+
+describe('W3C and WHATWG attribution', () => {
+	test('collects license links and leaves other legal links out', () => {
+		const whatwg = [
+			'<a href="https://creativecommons.org/licenses/by/4.0/" rel="license">Creative Commons Attribution 4.0</a>',
+			'<a href="https://opensource.org/licenses/BSD-3-Clause" rel="license">BSD 3-Clause License</a>',
+			'<a href="https://www.w3.org/Consortium/Legal/2015/copyright-software-and-document">W3C Software and Document License</a>',
+		].join('');
+		expect(licenseLinks(whatwg, 'https://webidl.spec.whatwg.org/')).toEqual([
+			'https://creativecommons.org/licenses/by/4.0/',
+			'https://opensource.org/licenses/BSD-3-Clause',
+			'https://www.w3.org/Consortium/Legal/2015/copyright-software-and-document',
+		]);
+		const recommendation = [
+			'<a href="https://www.w3.org/Consortium/Legal/ipr-notice#Copyright">Copyright</a>',
+			'<a href="https://www.w3.org/Consortium/Legal/copyright-documents">document use</a>',
+		].join('');
+		expect(
+			licenseLinks(recommendation, 'https://www.w3.org/TR/2017/REC-WebCryptoAPI-20170126/'),
+		).toEqual(['https://www.w3.org/Consortium/Legal/copyright-documents']);
+		const published = [
+			'<a href="https://www.w3.org/policies/patent-policy/">Patent Policy</a>',
+			'<a rel="license" href="/copyright/software-license-2023/" title="W3C Software and Document Notice and License">permissive document license</a>',
+		].join('');
+		expect(licenseLinks(published, 'https://www.w3.org/TR/webcrypto-2/')).toEqual([
+			'https://www.w3.org/copyright/software-license-2023/',
+		]);
+	});
+
+	test('writes the source, retrieval date and each license URI', () => {
+		const today = new Date().toISOString().slice(0, 10);
+		expect(
+			provenance('https://webidl.spec.whatwg.org/', [
+				'https://creativecommons.org/licenses/by/4.0/',
+			]),
+		).toBe(
+			[
+				'',
+				'Source: https://webidl.spec.whatwg.org/',
+				`Retrieved: ${today}`,
+				'License: https://creativecommons.org/licenses/by/4.0/',
+				'',
+			].join('\n'),
+		);
 	});
 });

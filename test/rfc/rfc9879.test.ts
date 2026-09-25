@@ -18,17 +18,19 @@ import {
 	parsePkcs12MacData,
 } from '#micro509/pkcs/pkcs12-mac';
 import { isResultError } from '#micro509/result';
-import { projectRoot, rfcDir } from '#test/helpers';
+import { flattenedText, projectRoot, rfcDir } from '#test/helpers';
 
 const readLines = async (file: string): Promise<readonly string[]> =>
 	(await Bun.file(file).text()).split('\n');
 
 const rfc9879Lines = await readLines(`${rfcDir}/rfc9879.txt`);
 const rfc8018Lines = await readLines(`${rfcDir}/rfc8018.txt`);
-const webCryptoLines = await readLines(
+const webCryptoText = await flattenedText(
 	path.join(projectRoot, 'docs', 'w3c', 'WebCryptoAPI', 'w3c-webcrypto-editors-draft.txt'),
 );
-const webIdlLines = await readLines(path.join(projectRoot, 'docs', 'w3c', 'WebIDL', 'webidl.txt'));
+const webIdlText = await flattenedText(
+	path.join(projectRoot, 'docs', 'w3c', 'WebIDL', 'webidl.txt'),
+);
 
 const printedIn = (lines: readonly string[], from: number, to: number): string =>
 	lines
@@ -536,13 +538,11 @@ describe('RFC 9879', () => {
 			);
 		});
 
-		describe('WebCrypto "required [EnforceRange] unsigned long iterations;" (ED §34.3 L6763) and Web IDL unsigned long "[0, 4294967295]" (§3.2.4.6 L5970) cap PBMAC1 iterations', () => {
+		describe('WebCrypto "required [EnforceRange] unsigned long iterations;" (editor draft) and Web IDL unsigned long "[0, 4294967295]" cap PBMAC1 iterations', () => {
 			it('prints the WebCrypto and Web IDL bounds', () => {
-				expect(printedIn(webCryptoLines, 6763, 6763)).toContain(
-					'required [EnforceRange] unsigned long iterations;',
-				);
-				expect(printedIn(webIdlLines, 5970, 5970)).toContain('[0, 4294967295]');
-				expect(printedIn(webIdlLines, 6051, 6051)).toContain(
+				expect(webCryptoText).toContain('required [EnforceRange] unsigned long iterations;');
+				expect(webIdlText).toContain('[0, 4294967295]');
+				expect(webIdlText).toContain(
 					'If x < lowerBound or x > upperBound, then throw a TypeError.',
 				);
 			});

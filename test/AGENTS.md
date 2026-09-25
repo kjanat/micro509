@@ -50,6 +50,10 @@ test/
   inlining them, nests `describe` blocks by RFC section, and quotes the sentence each
   assertion encodes. Check an example is a real block before relying on it: RFC 5915
   and RFC 5958 print empty `BEGIN`/`END` pairs as prose illustration.
+- Pin a quoted sentence to its line numbers only in immutable text (RFCs, dated
+  Recommendations). For living W3C or WHATWG documents, match the sentence
+  anywhere in `flattenedText(file)`, so refreshing the vendored copy does not
+  break the test.
 - Gate OpenSSL differential suites with the shared `openSslAvailable` and
   `differentialEnabled` values from `helpers.ts`.
 - Differential tests compare normalized semantics only, never exact CLI stderr/stdout.

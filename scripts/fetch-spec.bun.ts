@@ -4,6 +4,7 @@ import path from 'node:path';
 import type { Out } from 'dreamcli';
 import { arg, CLIError, cli, command } from 'dreamcli';
 import { deferredExitAdapter, runUntilDrained } from './cli-adapter.ts';
+import { licenseLinks, provenance } from './spec/w3c.ts';
 
 const W3C_SPECS = {
 	'webcrypto-editors-draft': {
@@ -288,13 +289,21 @@ const w3c = command('w3c')
 				suggest: `Check ${spec.url}`,
 			});
 		}
+		const html = await response.bytes();
+		const licenses = licenseLinks(new TextDecoder().decode(html), response.url);
+		if (licenses.length === 0) {
+			throw new CLIError(`${args.spec}: no license link found in ${spec.url}`, {
+				code: 'W3C_LICENSE_MISSING',
+				suggest: 'Vendor only text whose license the page links',
+			});
+		}
 		const text = await run(
 			[w3m, '-T', 'text/html', '-I', 'UTF-8', '-O', 'UTF-8', '-cols', '80', '-dump'],
-			await response.bytes(),
+			html,
 			'W3C_CONVERT_FAILED',
 		);
 		const destination = `docs/w3c/${spec.file}`;
-		await Bun.write(destination, text);
+		await Bun.write(destination, `${text.trimEnd()}\n${provenance(spec.url, licenses)}`);
 		out.log(destination);
 	});
 
