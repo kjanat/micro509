@@ -14,7 +14,8 @@ const SMTP_UTF8_DOT_STRING =
 	/^[\w!#$%&'*+\-/=?^`{|}~\u{a0}-\u{d7ff}\u{e000}-\u{10ffff}]+(?:\.[\w!#$%&'*+\-/=?^`{|}~\u{a0}-\u{d7ff}\u{e000}-\u{10ffff}]+)*$/u;
 
 /** RFC 5321 §4.1.2 Quoted-string with RFC 6531 §3.3 `qtextSMTP =/ UTF8-non-ascii`, C1 controls excluded (RFC 6530 §10.1). */
-const SMTP_UTF8_QUOTED_STRING = /^"(?:[ !#-[\]-~\u{a0}-\u{d7ff}\u{e000}-\u{10ffff}]|\\[ -~])*"$/u;
+// biome-ignore lint/suspicious/noControlCharactersInRegex: the class excludes the C0 and C1 controls prohibited by RFC 6530 §10.1.
+const SMTP_UTF8_QUOTED_STRING = /^"(?:[^"\\\0-\x1f\x7f-\x9f\u{d800}-\u{dfff}]|\\[ -~])*"$/u;
 
 /** An RFC 6531 §3.3 Local-part: a Dot-string or a Quoted-string. */
 export function isSmtpUtf8LocalPart(localPart: string): boolean {
