@@ -2821,8 +2821,13 @@ function parseIssuerCertificatePem(pem: string): ParsedCertificate {
 	return parseCertificateFromSource(pem);
 }
 
-/** Accepts PEM, DER, or already-parsed CRL and returns a parsed CRL. */
-function normalizeCrl(source: CrlSource): ParsedCertificateRevocationList {
+/**
+ * Parses PEM, DER, or an already-parsed CRL's `der`, so every decoded field
+ * comes from the signed bytes.
+ *
+ * @internal
+ */
+export function normalizeCrl(source: CrlSource): ParsedCertificateRevocationList {
 	if (typeof source === 'string') {
 		return parseCertificateRevocationListPemOrThrow(source);
 	}

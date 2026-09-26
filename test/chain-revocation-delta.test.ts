@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import type { CrlSource } from '#micro509';
 import {
 	checkCertificateRevocationAgainstCrl,
 	checkChainRevocation,
@@ -8,6 +9,7 @@ import {
 	createSelfSignedCertificate,
 	generateKeyPair,
 	parseCertificatePem,
+	parseCertificateRevocationListDer,
 	unwrap,
 	validateCertificateRevocationList,
 } from '#micro509';
@@ -78,7 +80,7 @@ async function scenario() {
 		],
 	});
 
-	const forgedDeltas = (count: number, baseCrlNumber = 5) =>
+	const forgedDeltas = (count: number, baseCrlNumber = 5, firstCrlNumber = 100) =>
 		Promise.all(
 			Array.from(
 				{ length: count },
@@ -86,7 +88,7 @@ async function scenario() {
 					(
 						await crl({
 							signerPrivateKey: attackerKeys.privateKey,
-							crlNumber: 100 + index,
+							crlNumber: firstCrlNumber + index,
 							baseCrlNumber,
 							thisUpdate: new Date(at.getTime() - HOUR_MS),
 						})
@@ -172,11 +174,11 @@ async function scenario() {
 				baseCrlNumber: 5,
 				thisUpdate: new Date(at.getTime() - 2 * HOUR_MS),
 			}),
-		revokingDelta: () =>
+		revokingDelta: (baseCrlNumber = 5, crlNumber = 6) =>
 			crl({
 				signerPrivateKey: ca.keyPair.privateKey,
-				crlNumber: 6,
-				baseCrlNumber: 5,
+				crlNumber,
+				baseCrlNumber,
 				thisUpdate: new Date(at.getTime() - 2 * HOUR_MS),
 				revokedCertificates: revocation,
 			}),
@@ -197,7 +199,7 @@ async function verdict(
 
 async function leafStatus(
 	s: Scenario,
-	crls: readonly Uint8Array[],
+	crls: readonly CrlSource[],
 	ocspResponses: readonly Uint8Array[],
 	mode: 'hard-fail' | 'soft-fail' = 'hard-fail',
 	limits: { readonly clockSkewMs?: number; readonly crlMaxAgeMs?: number } = {},
@@ -578,6 +580,70 @@ describe('checkChainRevocation delta CRL attempt limits and evidence that cannot
 			(await s.base(false)).der,
 			...Array.from({ length: 4 }, () => s.forgedNewerDelta),
 			(await s.revokingDelta()).der,
+		];
+		expect(await leafStatus(s, crls, [s.ocspGood], 'soft-fail')).toEqual({
+			decision: 'deny',
+			status: 'revoked',
+			indeterminateReasons: undefined,
+		});
+	});
+});
+
+describe('checkChainRevocation with pre-parsed or repeated CRL evidence', () => {
+	it("judges a parsed base CRL's applicability from its DER", async () => {
+		const s = await scenario();
+		const base = unwrap(parseCertificateRevocationListDer((await s.base(true)).der));
+		const leafSubject = unwrap(parseCertificatePem(s.leafPem)).subject;
+		expect(await leafStatus(s, [{ ...base, issuer: leafSubject }], [s.ocspGood])).toEqual({
+			decision: 'deny',
+			status: 'revoked',
+			indeterminateReasons: undefined,
+		});
+	});
+
+	it('keeps a parsed delta CRL whose decoded fields copy another delta', async () => {
+		const s = await scenario();
+		const forged = unwrap(parseCertificateRevocationListDer(s.forgedNewerDelta));
+		const authentic = unwrap(parseCertificateRevocationListDer((await s.revokingDelta()).der));
+		const disguised = {
+			...authentic,
+			signatureAlgorithmOid: forged.signatureAlgorithmOid,
+			signatureValue: forged.signatureValue,
+			tbsCertListDer: forged.tbsCertListDer,
+		};
+		expect(
+			await leafStatus(
+				s,
+				[(await s.base(false)).der, s.forgedNewerDelta, disguised],
+				[],
+				'soft-fail',
+			),
+		).toEqual({ decision: 'deny', status: 'revoked', indeterminateReasons: undefined });
+	});
+
+	it('counts parsed copies of one delta CRL once, whatever their decoded fields', async () => {
+		const s = await scenario();
+		const forged = unwrap(parseCertificateRevocationListDer(s.forgedNewerDelta));
+		const copies = Array.from({ length: 4 }, (_, index) => ({
+			...forged,
+			signatureValue: Uint8Array.of(index),
+		}));
+		const crls = [(await s.base(false)).der, ...copies, (await s.revokingDelta()).der];
+		expect(await leafStatus(s, crls, [s.ocspGood], 'soft-fail')).toEqual({
+			decision: 'deny',
+			status: 'revoked',
+			indeterminateReasons: undefined,
+		});
+	});
+
+	it('gives repeated copies of one base CRL a single per-base budget', async () => {
+		const s = await scenario();
+		const base = (await s.base(false)).der;
+		const crls = [
+			...Array.from({ length: 8 }, () => base),
+			...(await s.forgedDeltas(4, 5, 6)),
+			(await s.baseNumbered(10)).der,
+			(await s.revokingDelta(10, 11)).der,
 		];
 		expect(await leafStatus(s, crls, [s.ocspGood], 'soft-fail')).toEqual({
 			decision: 'deny',

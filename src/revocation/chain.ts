@@ -23,8 +23,7 @@ import {
 	coversAllDistributionPointReasons,
 	isCrlApplicableTo,
 	isCurrentDeltaCrl,
-	parseCertificateRevocationListDerOrThrow,
-	parseCertificateRevocationListPemOrThrow,
+	normalizeCrl,
 	revocationReasonFromCode,
 } from '#micro509/revocation/crl';
 import type {
@@ -347,19 +346,6 @@ export type CheckChainRevocationResult = {
 // Helpers
 
 /**
- * Parses a CRL from various source formats.
- */
-function parseCrlFromSource(source: CrlSource): ParsedCertificateRevocationList {
-	if (typeof source === 'object' && 'issuer' in source) {
-		return source;
-	}
-	if (typeof source === 'string') {
-		return parseCertificateRevocationListPemOrThrow(source);
-	}
-	return parseCertificateRevocationListDerOrThrow(source);
-}
-
-/**
  * Parses a certificate from various source formats, returning undefined on failure.
  */
 function parseCertificateSafe(source: RevocationCertificateSource): ParsedCertificate | undefined {
@@ -673,7 +659,7 @@ async function checkSignerAgainstCrl(
 ): Promise<SignerCrlOutcome> {
 	let crl: ParsedCertificateRevocationList;
 	try {
-		crl = parseCrlFromSource(crlSource);
+		crl = normalizeCrl(crlSource);
 	} catch {
 		return SIGNER_CRL_NO_EVIDENCE;
 	}
@@ -1151,8 +1137,8 @@ async function evaluateCrlEvidence(
 	// Parse all CRLs and separate base CRLs from delta CRLs
 	const parsedCrls = parseCrlEvidenceSources(crls, state.executionErrors);
 
-	const baseCrls = parsedCrls.filter(
-		(crl) => crl.baseCrlNumber === undefined && isCrlApplicableTo(cert, crl),
+	const baseCrls = distinctSignedCrls(
+		parsedCrls.filter((crl) => crl.baseCrlNumber === undefined && isCrlApplicableTo(cert, crl)),
 	);
 	const deltaCrls = distinctSignedCrls(parsedCrls.filter((crl) => crl.baseCrlNumber !== undefined));
 
@@ -1266,7 +1252,7 @@ function parseCrlEvidenceSources(
 	const parsedCrls: ParsedCertificateRevocationList[] = [];
 	for (const crlSource of crls) {
 		try {
-			parsedCrls.push(parseCrlFromSource(crlSource));
+			parsedCrls.push(normalizeCrl(crlSource));
 		} catch (e) {
 			executionErrors.push({
 				kind: 'parse_error',
