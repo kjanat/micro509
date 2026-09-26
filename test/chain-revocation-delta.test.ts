@@ -127,8 +127,15 @@ async function scenario() {
 				thisUpdate: baseThisUpdate,
 				...(revokes ? { revokedCertificates: revocation } : {}),
 			}),
-		baseNumbered: (crlNumber: number) =>
-			crl({ signerPrivateKey: ca.keyPair.privateKey, crlNumber, thisUpdate: baseThisUpdate }),
+		baseNumbered: (crlNumber: number, reasonCode?: 'keyCompromise' | 'certificateHold') =>
+			crl({
+				signerPrivateKey: ca.keyPair.privateKey,
+				crlNumber,
+				thisUpdate: baseThisUpdate,
+				...(reasonCode === undefined
+					? {}
+					: { revokedCertificates: revocation.map((entry) => ({ ...entry, reasonCode })) }),
+			}),
 		unresolvableDelta: () =>
 			crl({
 				signerPrivateKey: ca.keyPair.privateKey,
@@ -304,6 +311,16 @@ describe('checkChainRevocation with an authenticated delta CRL that cannot settl
 		}
 	});
 
+	it("keeps the base CRL's keyCompromise revocation in force", async () => {
+		const s = await scenario();
+		const crls = [(await s.base(true)).der, (await s.unresolvableDelta()).der];
+		expect(await leafStatus(s, crls, [s.ocspGood], 'soft-fail')).toEqual({
+			decision: 'deny',
+			status: 'revoked',
+			indeterminateReasons: undefined,
+		});
+	});
+
 	it('yields to an OCSP revocation', async () => {
 		const s = await scenario();
 		const crls = [(await s.base(false)).der, (await s.unresolvableDelta()).der];
@@ -455,5 +472,38 @@ describe('checkChainRevocation delta CRL attempt limits', () => {
 			'no_applicable_ocsp',
 			'delta_crl_retry_limit_exceeded',
 		]);
+	});
+});
+
+describe('checkChainRevocation delta CRL attempt limits with a base CRL that lists the certificate', () => {
+	it('keeps a keyCompromise revocation in force, which no delta CRL can remove', async () => {
+		const s = await scenario();
+		const crls = [(await s.baseNumbered(5, 'keyCompromise')).der, ...(await s.forgedDeltas(5))];
+		expect(await leafStatus(s, crls, [s.ocspGood], 'soft-fail')).toEqual({
+			decision: 'deny',
+			status: 'revoked',
+			indeterminateReasons: undefined,
+		});
+	});
+
+	it('keeps a keyCompromise revocation in force after the per-call limit runs out', async () => {
+		const s = await scenario();
+		const bases = await Promise.all(
+			Array.from({ length: 8 }, async (_, index) => (await s.baseNumbered(index + 1)).der),
+		);
+		const revoking = (await s.baseNumbered(9, 'keyCompromise')).der;
+		expect(
+			await leafStatus(s, [...bases, revoking, ...(await s.forgedDeltas(4, 1))], [], 'soft-fail'),
+		).toEqual({ decision: 'deny', status: 'revoked', indeterminateReasons: undefined });
+	});
+
+	it('stays indeterminate for a certificateHold, which a delta CRL can remove', async () => {
+		const s = await scenario();
+		const crls = [(await s.baseNumbered(5, 'certificateHold')).der, ...(await s.forgedDeltas(5))];
+		expect(await leafStatus(s, crls, [s.ocspGood])).toEqual({
+			decision: 'deny',
+			status: 'indeterminate',
+			indeterminateReasons: ['delta_crl_retry_limit_exceeded'],
+		});
 	});
 });

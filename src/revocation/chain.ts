@@ -10,6 +10,7 @@
 
 import type {
 	AuthenticatedCrlCheckOutcome,
+	CheckCertificateRevocationAgainstCrlInput,
 	CrlSource,
 	ParsedCertificateRevocationList,
 	RevocationReason,
@@ -1367,20 +1368,23 @@ async function checkCrlAgainstDeltaCandidates(
 		...(clockSkewMs === undefined ? {} : { clockSkewMs }),
 	};
 	for (const deltaCrl of deltaCandidates) {
-		if (!takeDeltaCrlAttempt(budgets)) {
-			return { kind: 'retry_limit' };
+		const settled = takeDeltaCrlAttempt(budgets)
+			? settleAuthenticatedCrlOutcome(
+					await checkRevocationAgainstAuthenticatedCrl(cert, authenticated.value, {
+						...input,
+						deltaCrl,
+					}),
+					laterEvidenceDate(baseCrl.thisUpdate, deltaCrl.thisUpdate),
+					state,
+				)
+			: ({ kind: 'retry_limit' } as const);
+		if (settled === undefined) {
+			continue;
 		}
-		const settled = settleAuthenticatedCrlOutcome(
-			await checkRevocationAgainstAuthenticatedCrl(cert, authenticated.value, {
-				...input,
-				deltaCrl,
-			}),
-			laterEvidenceDate(baseCrl.thisUpdate, deltaCrl.thisUpdate),
-			state,
-		);
-		if (settled !== undefined) {
-			return settled;
+		if (settled.kind === 'retry_limit' || settled.kind === 'delta_unusable') {
+			return (await irremovableBaseRevocation(cert, authenticated.value, input)) ?? settled;
 		}
+		return settled;
 	}
 	return (
 		settleAuthenticatedCrlOutcome(
@@ -1389,6 +1393,31 @@ async function checkCrlAgainstDeltaCandidates(
 			state,
 		) ?? { kind: 'unusable_base' }
 	);
+}
+
+/**
+ * The base CRL's own revocation of `cert` when no current delta CRL could
+ * remove it. RFC 5280 §5.3.1 lets removeFromCRL clear only a certificateHold
+ * entry or a certificate that expired before the delta CRL's thisUpdate.
+ */
+async function irremovableBaseRevocation(
+	cert: ParsedCertificate,
+	baseCrl: ParsedCertificateRevocationList,
+	input: CheckCertificateRevocationAgainstCrlInput & { readonly at: Date },
+): Promise<DeltaCandidateOutcome | undefined> {
+	if (cert.notAfter.getTime() < input.at.getTime() + (input.clockSkewMs ?? 0)) {
+		return undefined;
+	}
+	const outcome = await checkRevocationAgainstAuthenticatedCrl(cert, baseCrl, input);
+	if (
+		outcome.kind !== 'checked' ||
+		!outcome.result.ok ||
+		outcome.result.value.status !== 'revoked' ||
+		outcome.result.value.reasonCode === 'certificateHold'
+	) {
+		return undefined;
+	}
+	return { kind: 'checked', checked: outcome.result, crlThisUpdate: baseCrl.thisUpdate };
 }
 
 /** Spends one delta CRL check from every budget, or none when any is empty. */

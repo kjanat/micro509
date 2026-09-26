@@ -270,8 +270,10 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
       `delta_crl_unusable`. At most four candidates are checked per base CRL
       and 32 per `checkChainRevocation` call, and a candidate left unchecked
       makes the result indeterminate with `delta_crl_retry_limit_exceeded`.
-      Both reasons outrank a `good` verdict from other evidence. These are
-      micro509 policy choices. It also requires the delta's
+      Both reasons outrank a `good` verdict from other evidence. Neither
+      replaces a base CRL revocation that no delta can remove: one with a
+      reason other than `certificateHold`, for a certificate that has not
+      expired (RFC 5280 §5.3.1). These are micro509 policy choices. It also requires the delta's
       `thisUpdate` to be no earlier than the base CRL's, because X.509 Annex
       E.5.2 requires a delta CRL to be issued after the base CRL it updates.
       X.509 does not say whether an equal `thisUpdate` meets that rule, and
