@@ -1017,14 +1017,19 @@ export async function checkCertificateRevocationAgainstCrl(
  * stage that settled it. `delta_rejected` means the delta CRL failed
  * authentication, freshness, compatibility or applicability;
  * `delta_unresolved` means it passed them and its revoked entries could not
- * settle the certificate's status.
+ * settle the certificate's status; `complete` is then the complete CRL's own
+ * result, without its freshness check.
  *
  * @internal
  */
 export type AuthenticatedCrlCheckOutcome =
 	| { readonly kind: 'checked'; readonly result: CheckCertificateRevocationAgainstCrlResult }
 	| { readonly kind: 'delta_rejected'; readonly failure: CrlApplicabilityFailure }
-	| { readonly kind: 'delta_unresolved'; readonly failure: CrlApplicabilityFailure };
+	| {
+			readonly kind: 'delta_unresolved';
+			readonly failure: CrlApplicabilityFailure;
+			readonly complete: CheckCertificateRevocationAgainstCrlResult;
+	  };
 
 /**
  * Checks `certificate` against a complete CRL that {@linkcode authenticateCrl}
@@ -1067,7 +1072,20 @@ export async function checkRevocationAgainstAuthenticatedCrl(
 	let deltaRevoked: ParsedRevokedCertificate | undefined;
 	if (deltaCrl !== undefined) {
 		const deltaLookup = findRevokedCertificateEntry(certificate, deltaCrl);
-		if (!deltaLookup.ok) return { kind: 'delta_unresolved', failure: deltaLookup };
+		if (!deltaLookup.ok) {
+			return {
+				kind: 'delta_unresolved',
+				failure: deltaLookup,
+				complete: resolveCertificateRevocationStatus(
+					certificate,
+					undefined,
+					completeCrl,
+					completeRevoked.entry,
+					undefined,
+					applicability.coveredReasons,
+				),
+			};
+		}
 		deltaRevoked = deltaLookup.entry;
 	}
 	return {

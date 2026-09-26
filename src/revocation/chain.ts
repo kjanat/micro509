@@ -10,7 +10,6 @@
 
 import type {
 	AuthenticatedCrlCheckOutcome,
-	CheckCertificateRevocationAgainstCrlInput,
 	CrlSource,
 	ParsedCertificateRevocationList,
 	RevocationReason,
@@ -1332,7 +1331,10 @@ type DeltaCandidateOutcome =
 			readonly crlThisUpdate: Date;
 	  }
 	| { readonly kind: 'unusable_base' }
-	| { readonly kind: 'delta_unusable' }
+	| {
+			readonly kind: 'delta_unusable';
+			readonly complete: Awaited<ReturnType<typeof checkCertificateRevocationAgainstCrl>>;
+	  }
 	| { readonly kind: 'retry_limit' };
 
 /**
@@ -1381,8 +1383,16 @@ async function checkCrlAgainstDeltaCandidates(
 		if (settled === undefined) {
 			continue;
 		}
-		if (settled.kind === 'retry_limit' || settled.kind === 'delta_unusable') {
-			return (await irremovableBaseRevocation(cert, authenticated.value, input)) ?? settled;
+		if (settled.kind === 'delta_unusable') {
+			return irremovableRevocation(cert, settled.complete, at, baseCrl.thisUpdate) ?? settled;
+		}
+		if (settled.kind === 'retry_limit') {
+			const alone = await checkRevocationAgainstAuthenticatedCrl(cert, authenticated.value, input);
+			return (
+				(alone.kind === 'checked'
+					? irremovableRevocation(cert, alone.result, at, baseCrl.thisUpdate)
+					: undefined) ?? settled
+			);
 		}
 		return settled;
 	}
@@ -1396,28 +1406,25 @@ async function checkCrlAgainstDeltaCandidates(
 }
 
 /**
- * The base CRL's own revocation of `cert` when no current delta CRL could
- * remove it. RFC 5280 §5.3.1 lets removeFromCRL clear only a certificateHold
- * entry or a certificate that expired before the delta CRL's thisUpdate.
+ * The base CRL's revocation of `cert` in `complete` when no delta CRL could
+ * remove it at `at`. RFC 5280 §5.3.1 lets removeFromCRL clear only a
+ * certificateHold entry or a certificate that has expired.
  */
-async function irremovableBaseRevocation(
+function irremovableRevocation(
 	cert: ParsedCertificate,
-	baseCrl: ParsedCertificateRevocationList,
-	input: CheckCertificateRevocationAgainstCrlInput & { readonly at: Date },
-): Promise<DeltaCandidateOutcome | undefined> {
-	if (cert.notAfter.getTime() < input.at.getTime() + (input.clockSkewMs ?? 0)) {
-		return undefined;
-	}
-	const outcome = await checkRevocationAgainstAuthenticatedCrl(cert, baseCrl, input);
+	complete: Awaited<ReturnType<typeof checkCertificateRevocationAgainstCrl>>,
+	at: Date,
+	crlThisUpdate: Date,
+): DeltaCandidateOutcome | undefined {
 	if (
-		outcome.kind !== 'checked' ||
-		!outcome.result.ok ||
-		outcome.result.value.status !== 'revoked' ||
-		outcome.result.value.reasonCode === 'certificateHold'
+		cert.notAfter.getTime() < at.getTime() ||
+		!complete.ok ||
+		complete.value.status !== 'revoked' ||
+		complete.value.reasonCode === 'certificateHold'
 	) {
 		return undefined;
 	}
-	return { kind: 'checked', checked: outcome.result, crlThisUpdate: baseCrl.thisUpdate };
+	return { kind: 'checked', checked: complete, crlThisUpdate };
 }
 
 /** Spends one delta CRL check from every budget, or none when any is empty. */
@@ -1438,7 +1445,7 @@ function settleAuthenticatedCrlOutcome(
 	state: CrlEvidenceState,
 ): DeltaCandidateOutcome | undefined {
 	if (outcome.kind === 'delta_unresolved') {
-		return { kind: 'delta_unusable' };
+		return { kind: 'delta_unusable', complete: outcome.complete };
 	}
 	const result = outcome.kind === 'checked' ? outcome.result : outcome.failure;
 	if (!result.ok && result.code === 'stale_crl') {

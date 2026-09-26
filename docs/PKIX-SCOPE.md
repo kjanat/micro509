@@ -273,7 +273,10 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
       Both reasons outrank a `good` verdict from other evidence. Neither
       replaces a base CRL revocation that no delta can remove: one with a
       reason other than `certificateHold`, for a certificate that has not
-      expired (RFC 5280 §5.3.1). These are micro509 policy choices. It also requires the delta's
+      expired at the evaluation time (RFC 5280 §5.3.1). Beside an unusable
+      delta, the base CRL needs no freshness of its own, as with any delta;
+      beside unexamined candidates, it must be fresh. These are micro509
+      policy choices. It also requires the delta's
       `thisUpdate` to be no earlier than the base CRL's, because X.509 Annex
       E.5.2 requires a delta CRL to be issued after the base CRL it updates.
       X.509 does not say whether an equal `thisUpdate` meets that rule, and

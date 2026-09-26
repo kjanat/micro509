@@ -193,13 +193,14 @@ async function leafStatus(
 	crls: readonly Uint8Array[],
 	ocspResponses: readonly Uint8Array[],
 	mode: 'hard-fail' | 'soft-fail' = 'hard-fail',
+	limits: { readonly clockSkewMs?: number; readonly crlMaxAgeMs?: number } = {},
 ) {
 	const result = await checkChainRevocation({
 		chain: s.chain,
 		crls,
 		ocspResponses,
 		at: s.at,
-		policy: { mode },
+		policy: { mode, ...limits },
 	});
 	const status = result.value.certificates[0];
 	return {
@@ -502,6 +503,43 @@ describe('checkChainRevocation delta CRL attempt limits with a base CRL that lis
 		const crls = [(await s.baseNumbered(5, 'certificateHold')).der, ...(await s.forgedDeltas(5))];
 		expect(await leafStatus(s, crls, [s.ocspGood])).toEqual({
 			decision: 'deny',
+			status: 'indeterminate',
+			indeterminateReasons: ['delta_crl_retry_limit_exceeded'],
+		});
+	});
+});
+
+describe('checkChainRevocation keeping a base CRL revocation beside delta CRLs it cannot use', () => {
+	it('judges certificate expiry at the evaluation time, whatever the clock skew', async () => {
+		const s = await scenario();
+		const leaf = s.chain[0];
+		if (leaf === undefined) throw new Error('chain has no leaf');
+		const clockSkewMs = leaf.notAfter.getTime() - s.at.getTime() + HOUR_MS;
+		for (const deltas of [await s.forgedDeltas(5), [(await s.unresolvableDelta()).der]]) {
+			const crls = [(await s.baseNumbered(5, 'keyCompromise')).der, ...deltas];
+			expect(await leafStatus(s, crls, [s.ocspGood], 'soft-fail', { clockSkewMs })).toEqual({
+				decision: 'deny',
+				status: 'revoked',
+				indeterminateReasons: undefined,
+			});
+		}
+	});
+
+	it('lets an unusable but current delta CRL stand in for an over-age base CRL', async () => {
+		const s = await scenario();
+		const crls = [(await s.base(true)).der, (await s.unresolvableDelta()).der];
+		expect(
+			await leafStatus(s, crls, [s.ocspGood], 'soft-fail', { crlMaxAgeMs: 2 * HOUR_MS }),
+		).toEqual({ decision: 'deny', status: 'revoked', indeterminateReasons: undefined });
+	});
+
+	it('does not let unexamined delta CRLs stand in for an over-age base CRL', async () => {
+		const s = await scenario();
+		const crls = [(await s.base(true)).der, ...(await s.forgedDeltas(5))];
+		expect(
+			await leafStatus(s, crls, [s.ocspGood], 'soft-fail', { crlMaxAgeMs: 2 * HOUR_MS }),
+		).toEqual({
+			decision: 'allow',
 			status: 'indeterminate',
 			indeterminateReasons: ['delta_crl_retry_limit_exceeded'],
 		});
