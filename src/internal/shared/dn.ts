@@ -169,10 +169,9 @@ function compareIa5AttributeValue(
 }
 
 /**
- * True for the DirectoryString encodings the parser decodes to a comparable
- * string: UTF8String (0x0C), PrintableString (0x13), UniversalString (0x1C),
- * and BMPString (0x1E). TeletexString (0x14) is rejected at parse time, so it
- * never reaches comparison.
+ * True for the DirectoryString encodings compared after RFC 4518 preparation:
+ * UTF8String (0x0C), PrintableString (0x13), UniversalString (0x1C), and
+ * BMPString (0x1E).
  */
 export function isDirectoryStringTag(tag: number): boolean {
 	return tag === 0x0c || tag === 0x13 || tag === 0x1c || tag === 0x1e;

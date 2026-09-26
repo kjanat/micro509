@@ -120,6 +120,14 @@ revocation })` report a certificate carrying `noRevAvail` or
   extended-network-address extension attributes, and extension-attribute
   types RFC 5280 does not define are refused as unsupported. `unknown`
   remains as raw builder input.
+- TeletexString Name attribute values decode in certificate, CRL, OCSP and
+  PKCS #7 names and in `decodeDerString`, which refused them before. Decoding
+  follows the initial state X.690 §8.23.5.2 fixes: the T.61 primary set
+  (register entry 102) with SPACE and DELETE, reading 2/3 as # and 2/4 as ¤
+  (T.61 Figure 2 Note 4). A C0 control function, an escape or shift sequence,
+  a position T.61 Table 1 leaves empty, or an octet from 0x80 up is
+  unsupported and returns `malformed`. A TeletexString value matches only an
+  identical TeletexString value.
 
 ### Changed
 
@@ -240,8 +248,7 @@ revocation })` report a certificate carrying `noRevAvail` or
   or GeneralizedTime whose contents began with the octets EF BB BF parsed as
   the time that followed, in certificates, CRLs, OCSP responses and
   `decodeDerTime`; it is now malformed. A UTF8String keeps the character in
-  `decodeDerString`, parsed names and DisplayText, as does an issuer attribute
-  that CRL or PKCS #7 parsing decodes leniently.
+  `decodeDerString`, parsed names and DisplayText.
 - BMPString decoding and `derBmpString` accepted U+FFFE and U+FFFF, which
   X.680 §41.15 leaves out of BMPString. `decodeDerString` and name parsing now
   reject them as they reject surrogates, `derBmpString` throws, and a BMPString
@@ -262,6 +269,10 @@ revocation })` report a certificate carrying `noRevAvail` or
   decodes the tagged type strictly with SIZE (1..200) and returns `malformed`
   for anything else, so a certificate whose explicitText exceeds 200
   characters, such as PKITS 4.8.19's, no longer parses.
+- CRL issuer and PKCS #7 signer issuer parsing decoded an attribute value that
+  failed its string type's decoding as UTF-8 and replaced invalid sequences
+  with U+FFFD. Such a value now returns `malformed`, as it does in a
+  certificate.
 
 ### Security
 

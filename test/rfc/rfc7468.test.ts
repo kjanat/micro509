@@ -434,7 +434,9 @@ describe('RFC 7468: PKIX Textual Encodings', () => {
 			// "A conforming parser MAY interpret the contents as another label type
 			// but ought to be aware of the security implications discussed in the
 			// Security Considerations section." Relabelling a figure decodes to the
-			// same octets, and the certificate parser still rejects the structure.
+			// same octets, and the certificate parser rejects the structure unless the
+			// figure is one of the certificates Appendix A shows under a historical label.
+			const appendixCertificates = new Set(['X509 CERTIFICATE', 'X.509 CERTIFICATE']);
 			for (const label of examples.keys()) {
 				if (label === 'CERTIFICATE') {
 					continue;
@@ -444,7 +446,7 @@ describe('RFC 7468: PKIX Textual Encodings', () => {
 					Array.from(pemDecodeOrThrow(label, example(label))),
 				);
 				const parsed = parseCertificatePem(relabelled);
-				expect({ label, ok: parsed.ok }).toEqual({ label, ok: false });
+				expect({ label, ok: parsed.ok }).toEqual({ label, ok: appendixCertificates.has(label) });
 			}
 		});
 	});

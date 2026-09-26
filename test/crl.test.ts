@@ -101,41 +101,52 @@ describe('crl', () => {
 		});
 	});
 
-	it('keeps a leading U+FEFF in an issuer value it cannot decode strictly', async () => {
+	it('keeps a leading U+FEFF in a UTF8String issuer value', async () => {
 		const keys = await generateKeyPair();
 		const crl = await createCertificateRevocationList({
 			issuer: { commonName: 'CRL Issuer' },
 			signerPrivateKey: keys.privateKey,
 			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
 		});
-		const [tbs, algorithm, signature] = readSequenceChildren(crl.der).map((child) =>
-			sliceElement(crl.der, child),
+		const rewritten = rewriteCrlIssuerCommonName(
+			crl.der,
+			tlv(0x0c, Uint8Array.of(0xef, 0xbb, 0xbf, 0x41)),
 		);
-		if (tbs === undefined || algorithm === undefined || signature === undefined) {
-			throw new Error('unreachable');
-		}
-		const tbsChildren = readSequenceChildren(tbs);
-		const issuerIndex = tbsChildren[0]?.tag === 0x02 ? 2 : 1;
-		const teletexIssuer = sequence([
-			setOf([
-				sequence([
-					objectIdentifier(OIDS.commonName),
-					tlv(0x14, Uint8Array.of(0xef, 0xbb, 0xbf, 0x41)),
-				]),
-			]),
-		]);
-		const rewritten = sequence([
-			sequence(
-				tbsChildren.map((child, index) =>
-					index === issuerIndex ? teletexIssuer : sliceElement(tbs, child),
-				),
-			),
-			algorithm,
-			signature,
-		]);
 		expect(parseCertificateRevocationListDerOrThrow(rewritten).issuer.values.commonName).toBe(
 			'\u{FEFF}A',
 		);
+	});
+
+	it('decodes a TeletexString issuer value in its X.690 §8.23.5.2 initial state', async () => {
+		const keys = await generateKeyPair();
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'CRL Issuer' },
+			signerPrivateKey: keys.privateKey,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
+		});
+		const rewritten = rewriteCrlIssuerCommonName(
+			crl.der,
+			tlv(0x14, Uint8Array.of(0x55, 0x53, 0x24)),
+		);
+		expect(parseCertificateRevocationListDerOrThrow(rewritten).issuer.values.commonName).toBe(
+			'US\u{a4}',
+		);
+	});
+
+	it.each([
+		['invalid UTF-8 in a UTF8String', tlv(0x0c, Uint8Array.of(0x41, 0xff))],
+		['a surrogate in a BMPString', tlv(0x1e, Uint8Array.of(0xd8, 0x00))],
+		['a TeletexString octet from the right half', tlv(0x14, Uint8Array.of(0xef, 0xbb, 0xbf, 0x41))],
+	] as const)('rejects an issuer value holding %s', async (_label, value) => {
+		const keys = await generateKeyPair();
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'CRL Issuer' },
+			signerPrivateKey: keys.privateKey,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
+		});
+		expect(
+			parseCertificateRevocationListDer(rewriteCrlIssuerCommonName(crl.der, value)),
+		).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
 	it('parses CRL entry extensions and delta CRL indicator', async () => {
@@ -4341,6 +4352,34 @@ function removeCrlVersion(crlDer: Uint8Array): Uint8Array {
 		tbsChildren
 			.filter((child, index) => !(index === 0 && child.tag === 0x02))
 			.map((child) => sliceElement(tbsDer, child)),
+	);
+	return sequence([
+		rebuiltTbs,
+		sliceElement(crlDer, signatureAlgorithm),
+		sliceElement(crlDer, signatureValue),
+	]);
+}
+
+function rewriteCrlIssuerCommonName(crlDer: Uint8Array, value: Uint8Array): Uint8Array {
+	const topLevel = readSequenceChildren(crlDer);
+	const tbsCertList = topLevel[0];
+	const signatureAlgorithm = topLevel[1];
+	const signatureValue = topLevel[2];
+	if (
+		tbsCertList === undefined ||
+		signatureAlgorithm === undefined ||
+		signatureValue === undefined
+	) {
+		throw new Error('Malformed CRL');
+	}
+	const tbsDer = sliceElement(crlDer, tbsCertList);
+	const tbsChildren = readSequenceChildren(tbsDer);
+	const issuerIndex = tbsChildren[0]?.tag === 0x02 ? 2 : 1;
+	const issuer = sequence([setOf([sequence([objectIdentifier(OIDS.commonName), value])])]);
+	const rebuiltTbs = sequence(
+		tbsChildren.map((child, index) =>
+			index === issuerIndex ? issuer : sliceElement(tbsDer, child),
+		),
 	);
 	return sequence([
 		rebuiltTbs,

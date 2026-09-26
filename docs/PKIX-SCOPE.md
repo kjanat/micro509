@@ -82,6 +82,18 @@ Current conformance evidence:
       Appendix B states "There is no maximum size for OIDs"; its 2^28 arc,
       100-byte and 20-element figures are the minimum an implementation must
       support. micro509 sets no arc-size limit of its own.
+- [x] Decode a TeletexString Name attribute value in the initial state X.690
+      §8.23.5.2 fixes: register entry 102, the T.61 primary set, read by T.61
+      Table 1 with 2/3 as # and 2/4 as ¤ (T.61 Figure 2 Note 4), plus the SPACE
+      and DELETE of X.680 Table 8. No standard maps TeletexString to Unicode
+      (RFC 4518 §2.1); micro509 maps each character to the ISO/IEC 10646
+      character of the same name, as the RFC 1345 `T.61-7bit` table does.
+      Octets below 0x20 (the C0 control functions, ESC and the shifts among
+      them), the six positions T.61 Table 1 leaves empty, and octets from 0x80
+      up (C1 and the right half, where X.690 designates nothing) are
+      unsupported, and the parse returns `malformed`. RFC 5280 §7.1 makes
+      TeletexString comparison optional; micro509 matches a TeletexString value
+      only against an identical TeletexString value.
 - [x] Verify issuer/subject chaining across the candidate path.
 - [x] Verify each certificate signature using the evolving working public key.
 - [x] Check validity time (`notBefore` / `notAfter`) against the chosen validation time.
@@ -169,8 +181,7 @@ Current GeneralName matrix for `nameConstraints`:
   repertoires and upper bounds, with DER SET ordering. TeletexString, the
   Teletex extension attributes (types 2 to 6), extended-network-address
   (type 22) and extension-attribute types RFC 5280 does not define are
-  refused as unsupported; RFC 5280 gives TeletexString no repertoire to
-  validate. Parsing keeps both forms as opaque bytes.
+  refused as unsupported. Parsing keeps both forms as opaque bytes.
 
 - Domain names follow IDNA2008 (RFC 5890-5893, RFC 8753). The derived
   property values, the Unicode properties the contextual and Bidi rules read,

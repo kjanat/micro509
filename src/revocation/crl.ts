@@ -2596,12 +2596,7 @@ function parseIssuer(source: Uint8Array, element: DerElement): ParsedName {
 			const oidElement = requireElement(parts[0], 'issuer attribute OID');
 			const valueElement = requireElement(parts[1], 'issuer attribute value');
 			const oid = decodeObjectIdentifier(oidElement.value);
-			let fieldValue: string;
-			try {
-				fieldValue = decodeString(valueElement.tag, valueElement.value);
-			} catch {
-				fieldValue = textDecoder.decode(valueElement.value);
-			}
+			const fieldValue = decodeNameValue(valueElement);
 			const fieldKey = nameFieldKeyFromOid(oid);
 			const attribute: ParsedNameAttribute =
 				fieldKey !== undefined
@@ -3082,6 +3077,3 @@ function hasReparseableCrlShape(
 ): crl is ParsedCertificateRevocationList & { readonly der: Uint8Array } {
 	return 'der' in crl && crl.der instanceof Uint8Array;
 }
-
-/** Shared UTF-8 decoder instance. */
-const textDecoder = new TextDecoder('utf-8', { ignoreBOM: true });

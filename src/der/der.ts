@@ -214,9 +214,10 @@ export function decodeDerBitString(element: DerElement): DecodeDerResult<DerBitS
 /**
  * Decodes a string element into text, dispatching on its tag.
  *
- * Supports UTF8String, PrintableString, IA5String, UniversalString, and BMPString.
+ * Supports UTF8String, PrintableString, TeletexString, IA5String, UniversalString, and BMPString.
+ * A TeletexString decodes only in its X.690 §8.23.5.2 initial state.
  *
- * @throws on TeletexString, and on every other string tag.
+ * @throws on every other string tag, and on a TeletexString octet outside that state.
  */
 export function decodeDerStringOrThrow(element: DerElement): string {
 	return decodeString(element.tag, element.value);
@@ -225,7 +226,8 @@ export function decodeDerStringOrThrow(element: DerElement): string {
 /**
  * Decodes a string element into text, dispatching on its tag.
  *
- * Supports UTF8String, PrintableString, IA5String, UniversalString, and BMPString.
+ * Supports UTF8String, PrintableString, TeletexString, IA5String, UniversalString, and BMPString.
+ * A TeletexString decodes only in its X.690 §8.23.5.2 initial state.
  */
 export function decodeDerString(element: DerElement): DecodeDerResult<string> {
 	return attempt(() => decodeDerStringOrThrow(element), 'Malformed string');

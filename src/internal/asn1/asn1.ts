@@ -398,6 +398,7 @@ function decodeOidSubidentifier(
  * Supports:
  * - UTF8String (`0x0c`),
  * - PrintableString (`0x13`),
+ * - TeletexString (`0x14`) in its X.690 §8.23.5.2 initial state,
  * - IA5String (`0x16`),
  * - UniversalString (`0x1c`), and
  * - BMPString (`0x1e`).
@@ -413,7 +414,7 @@ export function decodeString(tag: number, bytes: Uint8Array): string {
 		case 0x16:
 			return decodeIa5String(bytes);
 		case 0x14:
-			throw new Error('Unsupported string tag: 20 (TeletexString)');
+			return decodeTeletexString(bytes);
 		case 0x1c:
 			return decodeUniversalString(bytes);
 		case 0x1e:
@@ -472,6 +473,27 @@ export function decodeVisibleString(bytes: Uint8Array): string {
 			throw new Error('Invalid VisibleString: contains octets outside 0x20 to 0x7e');
 		}
 		value += String.fromCharCode(byte);
+	}
+	return value;
+}
+
+/** T.61 Table 1 leaves these positions of register entry 102 empty. */
+const TELETEX_EMPTY_POSITIONS: ReadonlySet<number> = new Set([0x5c, 0x5e, 0x60, 0x7b, 0x7d, 0x7e]);
+
+/**
+ * Decodes TeletexString contents in the X.690 §8.23.5.2 initial state, reading
+ * register entry 102 by T.61 Table 1 and Figure 2 Note 4, with the SPACE and
+ * DELETE that X.680 Table 8 adds.
+ *
+ * @throws on any other octet.
+ */
+function decodeTeletexString(bytes: Uint8Array): string {
+	let value = '';
+	for (const byte of bytes) {
+		if (byte < 0x20 || byte > 0x7f || TELETEX_EMPTY_POSITIONS.has(byte)) {
+			throw new Error(`Unsupported TeletexString octet: 0x${byte.toString(16).padStart(2, '0')}`);
+		}
+		value += byte === 0x24 ? '\u{a4}' : String.fromCharCode(byte);
 	}
 	return value;
 }

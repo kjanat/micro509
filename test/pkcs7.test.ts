@@ -141,30 +141,36 @@ describe('pkcs7', () => {
 		});
 	});
 
-	it('keeps a leading U+FEFF in a signer issuer value it cannot decode strictly', async () => {
-		const signer = await createSelfSignedCertificate({
-			subject: { commonName: 'CMS Signer' },
-		});
-		const parsedSigner = unwrap(parseCertificatePem(signer.certificate.pem));
-		const teletexIssuer = sequence([
-			setOf([
-				sequence([
-					objectIdentifier(OIDS.commonName),
-					tlv(0x14, Uint8Array.of(0xef, 0xbb, 0xbf, 0x41)),
-				]),
-			]),
-		]);
+	it('keeps a leading U+FEFF in a UTF8String signer issuer value', async () => {
 		const parsed = parsePkcs7SignedDataDer(
-			createSyntheticPkcs7SignedData({
-				...parsedSigner,
-				issuer: { ...parsedSigner.issuer, derHex: toHex(teletexIssuer) },
-			}),
+			await signedDataWithSignerIssuerCommonName(tlv(0x0c, Uint8Array.of(0xef, 0xbb, 0xbf, 0x41))),
 		);
 		expect(parsed.ok).toBe(true);
 		if (!parsed.ok) throw new Error('unreachable');
 		const identifier = parsed.value.signerInfos[0]?.signerIdentifier;
 		if (identifier?.type !== 'issuerAndSerialNumber') throw new Error('unreachable');
 		expect(identifier.issuer.values.commonName).toBe('\u{FEFF}A');
+	});
+
+	it('decodes a TeletexString signer issuer value in its X.690 §8.23.5.2 initial state', async () => {
+		const parsed = parsePkcs7SignedDataDer(
+			await signedDataWithSignerIssuerCommonName(tlv(0x14, Uint8Array.of(0x55, 0x53, 0x24))),
+		);
+		expect(parsed.ok).toBe(true);
+		if (!parsed.ok) throw new Error('unreachable');
+		const identifier = parsed.value.signerInfos[0]?.signerIdentifier;
+		if (identifier?.type !== 'issuerAndSerialNumber') throw new Error('unreachable');
+		expect(identifier.issuer.values.commonName).toBe('US\u{a4}');
+	});
+
+	it.each([
+		['invalid UTF-8 in a UTF8String', tlv(0x0c, Uint8Array.of(0x41, 0xff))],
+		['a surrogate in a BMPString', tlv(0x1e, Uint8Array.of(0xd8, 0x00))],
+		['a TeletexString octet from the right half', tlv(0x14, Uint8Array.of(0xef, 0xbb, 0xbf, 0x41))],
+	] as const)('rejects a signer issuer value holding %s', async (_label, value) => {
+		expect(
+			parsePkcs7SignedDataDer(await signedDataWithSignerIssuerCommonName(value)),
+		).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
 	it.each([
@@ -1642,3 +1648,15 @@ describe('pkcs7: coverage — error paths', () => {
 		if (!result.ok) expect(result.code).toBe('malformed');
 	});
 });
+
+async function signedDataWithSignerIssuerCommonName(value: Uint8Array): Promise<Uint8Array> {
+	const signer = await createSelfSignedCertificate({
+		subject: { commonName: 'CMS Signer' },
+	});
+	const parsedSigner = unwrap(parseCertificatePem(signer.certificate.pem));
+	const issuer = sequence([setOf([sequence([objectIdentifier(OIDS.commonName), value])])]);
+	return createSyntheticPkcs7SignedData({
+		...parsedSigner,
+		issuer: { ...parsedSigner.issuer, derHex: toHex(issuer) },
+	});
+}

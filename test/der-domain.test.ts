@@ -101,6 +101,52 @@ describe('der domain', () => {
 			);
 		});
 
+		describe('TeletexString in its X.690 §8.23.5.2 initial state', () => {
+			const teletex = (...octets: number[]) =>
+				readDerElementOrThrow(Uint8Array.of(0x14, octets.length, ...octets));
+
+			it('reads the T.61 Table 1 characters, SPACE and DELETE by name', () => {
+				const text = ` !"#%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[]_abcdefghijklmnopqrstuvwxyz|\u{7f}`;
+				const octets = Array.from(text, (character) => character.charCodeAt(0));
+				expect(decodeDerStringOrThrow(teletex(...octets))).toBe(text);
+			});
+
+			it('reads 2/4 as the currency sign (T.61 Figure 2 Note 4)', () => {
+				expect(decodeDerStringOrThrow(teletex(0x55, 0x53, 0x24))).toBe('US\u{a4}');
+			});
+
+			it.each([
+				['5/12, empty', 0x5c],
+				['5/14, empty', 0x5e],
+				['6/0, empty', 0x60],
+				['7/11, empty', 0x7b],
+				['7/13, empty', 0x7d],
+				['7/14, empty', 0x7e],
+				['0/0 in C0', 0x00],
+				['0/8, BS', 0x08],
+				['0/10, LF', 0x0a],
+				['0/13, CR', 0x0d],
+				['0/14, LS1', 0x0e],
+				['0/15, LS0', 0x0f],
+				['1/9, SS2', 0x19],
+				['1/10, SUB', 0x1a],
+				['1/11, ESC', 0x1b],
+				['8/0 in C1', 0x80],
+				['9/11, CSI', 0x9b],
+				['10/0 in the right half', 0xa0],
+				['12/1 in the right half', 0xc1],
+				['15/15 in the right half', 0xff],
+			] as const)('refuses the octet at %s as unsupported', (_position, octet) => {
+				expect(() => decodeDerStringOrThrow(teletex(0x41, octet))).toThrow(
+					'Unsupported TeletexString octet',
+				);
+				expect(decodeDerString(teletex(0x41, octet))).toMatchObject({
+					ok: false,
+					code: 'malformed',
+				});
+			});
+		});
+
 		it('UTCTime and GeneralizedTime', () => {
 			const near = new Date('2026-07-22T10:11:12Z');
 			const far = new Date('2200-01-02T03:04:05Z');
@@ -208,8 +254,8 @@ describe('der domain', () => {
 		});
 
 		it('propagates an unsupported string tag as a failure', () => {
-			const teletex = readDerElementOrThrow(Uint8Array.of(0x14, 0x01, 0x41));
-			const result = decodeDerString(teletex);
+			const videotex = readDerElementOrThrow(Uint8Array.of(0x15, 0x01, 0x41));
+			const result = decodeDerString(videotex);
 			expect(result.ok).toBe(false);
 			if (result.ok) throw new Error('expected failure');
 			expect(result.code).toBe('malformed');
@@ -241,9 +287,11 @@ describe('der domain', () => {
 			);
 		});
 
-		it('rejects an unsupported string tag by name', () => {
-			const teletex = Uint8Array.of(0x14, 0x01, 0x41);
-			expect(() => decodeDerStringOrThrow(readDerElementOrThrow(teletex))).toThrow('TeletexString');
+		it('rejects an unsupported string tag by number', () => {
+			const videotex = Uint8Array.of(0x15, 0x01, 0x41);
+			expect(() => decodeDerStringOrThrow(readDerElementOrThrow(videotex))).toThrow(
+				'Unsupported string tag: 21',
+			);
 		});
 
 		it('rejects a BIT STRING claiming more than seven unused bits', () => {

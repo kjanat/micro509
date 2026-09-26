@@ -98,11 +98,7 @@ const TELETEX_STRING = 0x14;
 /** DirectoryString alternatives other than TeletexString: PrintableString, UniversalString, UTF8String, BMPString. */
 const DECODABLE_DIRECTORY_STRING_TAGS: ReadonlySet<number> = new Set([0x13, 0x1c, 0x0c, 0x1e]);
 
-/**
- * RFC 5280 DirectoryString, each alternative `SIZE (1..MAX)`. TeletexString has
- * no repertoire micro509 validates, so it is unsupported rather than accepted
- * unchecked.
- */
+/** RFC 5280 DirectoryString, each alternative `SIZE (1..MAX)`, with TeletexString unsupported. */
 export function checkDirectoryString(element: DerElement): GeneralNameContentCheck {
 	if (element.tag === TELETEX_STRING) {
 		return UNSUPPORTED;

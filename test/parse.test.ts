@@ -2009,6 +2009,29 @@ describe('parse', () => {
 		});
 	});
 
+	describe('TeletexString names (X.690 §8.23.5.2 initial state)', () => {
+		const commonNameSubject = (value: Uint8Array): Uint8Array =>
+			sequence([setOf([sequence([objectIdentifier(OIDS.commonName), value])])]);
+
+		it('decodes a TeletexString subject value, reading 2/4 as the currency sign', async () => {
+			const { certificate } = await createSelfSignedCertificate({ subject: { commonName: 'x' } });
+			const rewritten = rewriteCertificateSubject(
+				certificate.der,
+				commonNameSubject(tlv(0x14, Uint8Array.of(0x55, 0x53, 0x24))),
+			);
+			expect(unwrap(parseCertificateDer(rewritten)).subject.values.commonName).toBe('US\u{a4}');
+		});
+
+		it('fails on a TeletexString octet outside its initial state', async () => {
+			const { certificate } = await createSelfSignedCertificate({ subject: { commonName: 'x' } });
+			const rewritten = rewriteCertificateSubject(
+				certificate.der,
+				commonNameSubject(tlv(0x14, Uint8Array.of(0xc1, 0x41))),
+			);
+			expect(parseCertificateDer(rewritten)).toMatchObject({ ok: false, code: 'malformed' });
+		});
+	});
+
 	it('keeps a leading U+FEFF in UTF8String names and DisplayText', async () => {
 		const certificate = await createSelfSignedCertificate({
 			subject: { commonName: '\u{FEFF}bom.example' },
@@ -3196,6 +3219,34 @@ function rewriteCertificateSubjectPublicKeyInfo(
 	const rebuiltTbs = sequence(
 		tbsChildren.map((child, index) =>
 			index === subjectPublicKeyInfoIndex ? subjectPublicKeyInfoDer : sliceElement(tbsDer, child),
+		),
+	);
+	return sequence([
+		rebuiltTbs,
+		sliceElement(certificateDer, signatureAlgorithm),
+		sliceElement(certificateDer, signatureValue),
+	]);
+}
+
+function rewriteCertificateSubject(certificateDer: Uint8Array, subjectDer: Uint8Array): Uint8Array {
+	const topLevel = readSequenceChildren(certificateDer);
+	const tbsCertificate = topLevel[0];
+	const signatureAlgorithm = topLevel[1];
+	const signatureValue = topLevel[2];
+	if (
+		tbsCertificate === undefined ||
+		signatureAlgorithm === undefined ||
+		signatureValue === undefined
+	) {
+		throw new Error('Malformed Certificate');
+	}
+	const tbsDer = sliceElement(certificateDer, tbsCertificate);
+	const tbsChildren = readSequenceChildren(tbsDer);
+	const serialNumberIndex = tbsChildren[0]?.tag === 0xa0 ? 1 : 0;
+	const subjectIndex = serialNumberIndex + 4;
+	const rebuiltTbs = sequence(
+		tbsChildren.map((child, index) =>
+			index === subjectIndex ? subjectDer : sliceElement(tbsDer, child),
 		),
 	);
 	return sequence([

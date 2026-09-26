@@ -1307,8 +1307,6 @@ function parseSignerIdentifier(der: Uint8Array): ParsedSignerIdentifier {
 	throw new Error(`Unsupported SignerIdentifier tag: ${String(element.tag)}`);
 }
 
-const textDecoder = new TextDecoder('utf-8', { ignoreBOM: true });
-
 /** Parses a Name SEQUENCE element from a PKCS#7 signer identifier into a {@linkcode ParsedName}. */
 function parseSignerIssuerName(source: Uint8Array, element: DerElement): ParsedName {
 	const derHex = toHex(source.slice(element.start - element.headerLength, element.end));
@@ -1323,12 +1321,7 @@ function parseSignerIssuerName(source: Uint8Array, element: DerElement): ParsedN
 			const oidElement = requireElement(parts[0], 'signer issuer attribute OID');
 			const valueElement = requireElement(parts[1], 'signer issuer attribute value');
 			const oid = decodeObjectIdentifier(oidElement.value);
-			let fieldValue: string;
-			try {
-				fieldValue = decodeString(valueElement.tag, valueElement.value);
-			} catch {
-				fieldValue = textDecoder.decode(valueElement.value);
-			}
+			const fieldValue = decodeString(valueElement.tag, valueElement.value);
 			const fieldKey = nameFieldKeyFromOid(oid);
 			const attribute: ParsedNameAttribute =
 				fieldKey !== undefined

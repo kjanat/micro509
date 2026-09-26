@@ -465,7 +465,11 @@ describe('asn1 decoding', () => {
 		expect(() => decodeString(0x1c, Uint8Array.of(0x00, 0x11, 0x00, 0x00))).toThrow(
 			'Invalid UniversalString code point',
 		);
-		expect(() => decodeString(0x14, Uint8Array.of(0x41))).toThrow('TeletexString');
+		expect(decodeString(0x14, Uint8Array.of(0x41))).toBe('A');
+		expect(() => decodeString(0x14, Uint8Array.of(0xc1, 0x41))).toThrow(
+			'Unsupported TeletexString octet: 0xc1',
+		);
+		expect(() => decodeString(0x15, Uint8Array.of(0x41))).toThrow('Unsupported string tag: 21');
 	});
 
 	it('decodeBoolean rejects malformed DER encodings', () => {
