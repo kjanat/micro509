@@ -130,14 +130,14 @@ export interface SrvNameRestriction {
 
 /**
  * RFC 4985 §4: split `_Service.Name`, `_Service`, or `Name`, the leading
- * underscore marking the service (§2). The Name is at most 253 octets of labels
- * of 1 to 63 letters, digits, hyphens or underscores.
+ * underscore marking the service (§2). The `_Service` label and each Name label
+ * are DNS labels of at most 63 octets, and the Name is at most 253 octets.
  */
 export function splitSrvNameRestriction(value: string): SrvNameRestriction | undefined {
 	const dot = value.indexOf('.');
 	const service = value.startsWith('_') ? value.slice(0, dot < 0 ? value.length : dot) : '';
 	const name = service.length === 0 ? value : value.slice(service.length + 1);
-	if (service.length > 0 && !/^_[A-Za-z0-9-]+$/.test(service)) return undefined;
+	if (service.length > 0 && !/^_[A-Za-z0-9-]{1,62}$/.test(service)) return undefined;
 	if (service.length > 0 && dot < 0) return { service, name: '' };
 	return name.length <= 253 && name.split('.').every((label) => /^[A-Za-z0-9_-]{1,63}$/.test(label))
 		? { service, name }

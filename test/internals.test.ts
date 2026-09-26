@@ -793,6 +793,39 @@ describe('extensions encoding', () => {
 		expect(parseGeneralNames(encoded, readRootElement(encoded))).toEqual([...names]);
 	});
 
+	it('encodeSubjectAltName requires non-empty EDIPartyName DirectoryStrings of every alternative', () => {
+		// RFC 5280 gives TeletexString, PrintableString, UniversalString, UTF8String and BMPString each SIZE (1..MAX).
+		const alternatives = [
+			[0x14, Uint8Array.of(0x70)],
+			[0x13, Uint8Array.of(0x70)],
+			[0x1c, Uint8Array.of(0x00, 0x00, 0x00, 0x70)],
+			[0x0c, Uint8Array.of(0x70)],
+			[0x1e, Uint8Array.of(0x00, 0x70)],
+		] as const;
+		for (const [tag, content] of alternatives) {
+			const empty = tlv(tag, new Uint8Array());
+			const filled = tlv(tag, content);
+			expectEncoderErrorCode(
+				() => encodeSubjectAltName({ type: 'ediPartyName', value: explicitContext(1, empty) }),
+				'invalid_general_name_content',
+			);
+			expectEncoderErrorCode(
+				() =>
+					encodeSubjectAltName({
+						type: 'ediPartyName',
+						value: concatBytes([explicitContext(0, empty), explicitContext(1, filled)]),
+					}),
+				'invalid_general_name_content',
+			);
+			expect(
+				encodeSubjectAltName({
+					type: 'ediPartyName',
+					value: concatBytes([explicitContext(0, filled), explicitContext(1, filled)]),
+				})[0],
+			).toBe(0xa5);
+		}
+	});
+
 	it('encodeSubjectAltName refuses an otherName it cannot encode faithfully', () => {
 		for (const typeId of [OIDS.idOnDnsSrv, OIDS.idOnSmtpUtf8Mailbox]) {
 			expectEncoderErrorCode(
@@ -814,6 +847,15 @@ describe('extensions encoding', () => {
 			'invalid_other_name_value',
 		);
 		expectEncoderErrorCode(
+			() =>
+				encodeSubjectAltName({
+					type: 'otherName',
+					typeId: '1.2.3.4',
+					value: Uint8Array.of(0x00, 0x00),
+				}),
+			'invalid_other_name_value',
+		);
+		expectEncoderErrorCode(
 			() => encodeSubjectAltName({ type: 'registeredID', value: '1' }),
 			'invalid_oid',
 		);
@@ -827,11 +869,6 @@ describe('extensions encoding', () => {
 			['ediPartyName', new Uint8Array()],
 			['ediPartyName', explicitContext(0, utf8String('assigner'))],
 			['ediPartyName', explicitContext(1, integerFromNumber(1))],
-			['ediPartyName', explicitContext(1, utf8String(''))],
-			[
-				'ediPartyName',
-				concatBytes([explicitContext(0, printableString('')), explicitContext(1, utf8String('p'))]),
-			],
 			[
 				'ediPartyName',
 				concatBytes([explicitContext(1, utf8String('a')), explicitContext(0, utf8String('b'))]),
@@ -869,6 +906,15 @@ describe('extensions encoding', () => {
 		]);
 	});
 
+	it('encodeNameConstraints accepts a _Service label of exactly 63 octets', () => {
+		const service = `_${'m'.repeat(62)}`;
+		expect(
+			parseNameConstraints(
+				encodeNameConstraints({ permittedSubtrees: [{ base: { type: 'srv', value: service } }] }),
+			).permittedSubtrees,
+		).toEqual([{ base: { type: 'srv', value: service } }]);
+	});
+
 	it('encodeNameConstraints rejects a SRVName restriction outside the RFC 4985 §4 forms', () => {
 		const values = [
 			'',
@@ -880,6 +926,8 @@ describe('extensions encoding', () => {
 			'example.com.',
 			'ex*ample.com',
 			`${'a'.repeat(64)}.example`,
+			`_${'m'.repeat(63)}`,
+			`_${'m'.repeat(63)}.example.com`,
 		];
 		for (const value of values) {
 			for (const field of ['permittedSubtrees', 'excludedSubtrees'] as const) {

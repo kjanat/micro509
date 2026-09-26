@@ -122,9 +122,7 @@ revocation })` report a certificate carrying `noRevAvail` or
   (`otherName 1.3.6.1.4.1.311.20.2.3`). An `otherName` constraint base is
   decoded into `typeId` and `value`, and a malformed one fails the parse.
 - A `registeredID` GeneralName whose OID is malformed fails the parse, in a
-  certificate and in a CRL. A critical subjectAltName carrying a
-  `registeredID` is no longer an `unrecognized_critical_extension`, since the
-  OID is fully decoded.
+  certificate and in a CRL.
 - A reference identifier's domain converts to A-labels by IDNA2008 lookup
   after RFC 5895 mapping (RFC 9525 §6.3), replacing the URL parser's UTS #46
   processing. The mapping follows RFC 5895 §2 in order: each character to its

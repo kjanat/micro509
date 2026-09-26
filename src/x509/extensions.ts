@@ -1658,10 +1658,15 @@ function requireGeneralNameStructure(
 	return element;
 }
 
+/** X.690 §8.1.5: tag 0 is the end-of-contents marker, which DER never emits. */
 function requireSingleDerElement(value: Uint8Array): Uint8Array {
+	let tag: number | undefined;
 	try {
-		readRootElement(value, { maxDepth: DEFAULT_MAX_DER_DEPTH });
+		tag = readRootElement(value, { maxDepth: DEFAULT_MAX_DER_DEPTH }).tag;
 	} catch {
+		tag = undefined;
+	}
+	if (tag === undefined || tag === 0x00) {
 		throwExtensionEncoderError(
 			'invalid_other_name_value',
 			'otherName value must be exactly one DER element',
