@@ -181,8 +181,14 @@ describe('PKITS 4.8.19 oversized explicitText', () => {
 		).toMatchObject({
 			ok: false,
 			code: 'explicit_text_oversized',
+			message:
+				'certificate policy 2.16.840.1.101.3.2.1.48.1 carries a user notice explicitText of 310 characters',
 			index: 0,
-			details: { expected: '200', actual: '310' },
+			details: {
+				subjectCommonName: 'User Notice Qualifier EE Certificate Test19',
+				expected: '200',
+				actual: '310',
+			},
 		});
 	});
 
