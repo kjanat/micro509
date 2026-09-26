@@ -111,11 +111,12 @@ export function checkDirectoryString(element: DerElement): GeneralNameContentChe
 	if (element.tag === TELETEX_STRING) {
 		return UNSUPPORTED;
 	}
-	if (!DECODABLE_DIRECTORY_STRING_TAGS.has(element.tag)) {
+	if (!DECODABLE_DIRECTORY_STRING_TAGS.has(element.tag) || element.value.length === 0) {
 		return MALFORMED;
 	}
 	try {
-		return decodeString(element.tag, element.value).length > 0 ? VALID : MALFORMED;
+		decodeString(element.tag, element.value);
+		return VALID;
 	} catch {
 		return MALFORMED;
 	}

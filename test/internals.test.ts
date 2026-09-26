@@ -857,6 +857,18 @@ describe('extensions encoding', () => {
 				})[0],
 			).toBe(0xa5);
 		}
+		for (const zeroWidthNoBreakSpace of [
+			tlv(0x0c, Uint8Array.of(0xef, 0xbb, 0xbf)),
+			tlv(0x1e, Uint8Array.of(0xfe, 0xff)),
+			tlv(0x1c, Uint8Array.of(0x00, 0x00, 0xfe, 0xff)),
+		]) {
+			expect(
+				encodeSubjectAltName({
+					type: 'ediPartyName',
+					value: explicitContext(1, zeroWidthNoBreakSpace),
+				})[0],
+			).toBe(0xa5);
+		}
 	});
 
 	it('encodeSubjectAltName validates x400Address contents against the RFC 5280 ORAddress schema', () => {
