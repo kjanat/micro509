@@ -8,18 +8,22 @@
  * @module
  */
 
+import { toHex } from '#micro509/internal/asn1/asn1';
 import type {
+	AuthenticatedCrlCheckOutcome,
 	CrlSource,
 	ParsedCertificateRevocationList,
 	RevocationReason,
 } from '#micro509/revocation/crl';
 import {
 	assertCrlMaxAge,
+	authenticateCrl,
 	checkCertificateRevocationAgainstCrl,
+	checkRevocationAgainstAuthenticatedCrl,
 	coversAllDistributionPointReasons,
+	isCrlApplicableTo,
 	isCurrentDeltaCrl,
-	parseCertificateRevocationListDerOrThrow,
-	parseCertificateRevocationListPemOrThrow,
+	normalizeCrl,
 	revocationReasonFromCode,
 } from '#micro509/revocation/crl';
 import type {
@@ -162,6 +166,10 @@ export interface CheckChainRevocationInput {
  *   `crl_signer_revoked`, `crl_signer_indeterminate`, and OCSP equivalents
  * - **Freshness**: `crl_expired`, `ocsp_response_expired`,
  *   `ocsp_next_update_missing`
+ * - **Delta CRL**: `delta_crl_unusable` when an authenticated, current delta
+ *   CRL cannot settle the status, `delta_crl_retry_limit_exceeded` when delta
+ *   CRL candidates remain after the attempt limit. Either one outranks a
+ *   `good` verdict from other evidence.
  */
 export const REVOCATION_INDETERMINATE_REASONS = [
 	// Evidence not found
@@ -188,6 +196,9 @@ export const REVOCATION_INDETERMINATE_REASONS = [
 	'ocsp_next_update_missing',
 	// OCSP specific
 	'ocsp_status_unknown',
+	// Delta CRL
+	'delta_crl_unusable',
+	'delta_crl_retry_limit_exceeded',
 ] as const;
 
 /** See the doc comment above {@linkcode REVOCATION_INDETERMINATE_REASONS}. */
@@ -333,19 +344,6 @@ export type CheckChainRevocationResult = {
 };
 
 // Helpers
-
-/**
- * Parses a CRL from various source formats.
- */
-function parseCrlFromSource(source: CrlSource): ParsedCertificateRevocationList {
-	if (typeof source === 'object' && 'issuer' in source) {
-		return source;
-	}
-	if (typeof source === 'string') {
-		return parseCertificateRevocationListPemOrThrow(source);
-	}
-	return parseCertificateRevocationListDerOrThrow(source);
-}
 
 /**
  * Parses a certificate from various source formats, returning undefined on failure.
@@ -661,7 +659,7 @@ async function checkSignerAgainstCrl(
 ): Promise<SignerCrlOutcome> {
 	let crl: ParsedCertificateRevocationList;
 	try {
-		crl = parseCrlFromSource(crlSource);
+		crl = normalizeCrl(crlSource);
 	} catch {
 		return SIGNER_CRL_NO_EVIDENCE;
 	}
@@ -1016,6 +1014,8 @@ interface CrlEvidenceState {
 	sawCrlSignerIndeterminate: boolean;
 	sawCrlSignerNotAuthorized: boolean;
 	sawStaleCrl: boolean;
+	sawDeltaCrlUnusable: boolean;
+	sawDeltaCrlRetryLimit: boolean;
 	sawGood: boolean;
 	freshestGood?: { readonly signer: ParsedCertificate; readonly thisUpdate: Date };
 }
@@ -1024,8 +1024,7 @@ interface CrlEvidenceState {
 interface BaseCrlResolution {
 	readonly cert: ParsedCertificate;
 	readonly baseCrl: ParsedCertificateRevocationList;
-	readonly applicableDelta: ParsedCertificateRevocationList | undefined;
-	readonly crlThisUpdate: Date;
+	readonly deltaCandidates: readonly ParsedCertificateRevocationList[];
 	readonly issuer: ParsedCertificate;
 	readonly extraCertificates: readonly RevocationCertificateSource[];
 	readonly chain: readonly ParsedCertificate[];
@@ -1033,6 +1032,7 @@ interface BaseCrlResolution {
 	readonly crlMaxAgeMs: number | undefined;
 	readonly clockSkewMs: number | undefined;
 	readonly signerCtx: SignerValidationContext;
+	readonly deltaBudget: DeltaCrlBudget;
 	readonly state: CrlEvidenceState;
 }
 
@@ -1050,8 +1050,7 @@ async function resolveBaseCrlAgainstSigners(
 	const {
 		cert,
 		baseCrl,
-		applicableDelta,
-		crlThisUpdate,
+		deltaCandidates,
 		issuer,
 		extraCertificates,
 		chain,
@@ -1059,22 +1058,23 @@ async function resolveBaseCrlAgainstSigners(
 		crlMaxAgeMs,
 		clockSkewMs,
 		signerCtx,
+		deltaBudget,
 		state,
 	} = params;
+	const baseBudget = { remaining: DELTA_CRL_ATTEMPTS_PER_BASE };
 	for (const candidate of collectCrlSignerCandidates(baseCrl, issuer, extraCertificates, chain)) {
-		const checked = await checkCrlWithIssuer(
+		const resolved = await checkCrlAgainstDeltaCandidates({
 			cert,
 			baseCrl,
-			applicableDelta,
+			deltaCandidates,
 			candidate,
 			at,
 			crlMaxAgeMs,
 			clockSkewMs,
-		);
-		if (!checked.ok) {
-			if (checked.code === 'stale_crl') {
-				state.sawStaleCrl = true;
-			}
+			budgets: [baseBudget, deltaBudget],
+			state,
+		});
+		if (resolved.kind === 'unusable_base') {
 			continue;
 		}
 		if (!(await crlSignerChainsToAnchor(candidate, chain, extraCertificates, at))) {
@@ -1090,6 +1090,15 @@ async function resolveBaseCrlAgainstSigners(
 			state.sawCrlSignerIndeterminate = true;
 			continue;
 		}
+		if (resolved.kind === 'delta_unusable') {
+			state.sawDeltaCrlUnusable = true;
+			return undefined;
+		}
+		if (resolved.kind === 'retry_limit') {
+			state.sawDeltaCrlRetryLimit = true;
+			return undefined;
+		}
+		const { checked, crlThisUpdate } = resolved;
 		if (checked.value.status === 'revoked') {
 			return buildCrlRevokedStatus(
 				cert,
@@ -1110,6 +1119,7 @@ async function evaluateCrlEvidence(
 	issuer: ParsedCertificate,
 	input: CheckChainRevocationInput,
 	signerCtx: SignerValidationContext,
+	deltaBudget: DeltaCrlBudget,
 ): Promise<EvidenceEvaluation> {
 	const { crls = [], extraCertificates = [], chain = [], at = new Date() } = input;
 	const state: CrlEvidenceState = {
@@ -1119,37 +1129,33 @@ async function evaluateCrlEvidence(
 		sawCrlSignerIndeterminate: false,
 		sawCrlSignerNotAuthorized: false,
 		sawStaleCrl: false,
+		sawDeltaCrlUnusable: false,
+		sawDeltaCrlRetryLimit: false,
 		sawGood: false,
 	};
 
 	// Parse all CRLs and separate base CRLs from delta CRLs
 	const parsedCrls = parseCrlEvidenceSources(crls, state.executionErrors);
 
-	const baseCrls = parsedCrls.filter((crl) => crl.baseCrlNumber === undefined);
-	const deltaCrls = parsedCrls.filter((crl) => crl.baseCrlNumber !== undefined);
+	const baseCrls = distinctSignedCrls(
+		parsedCrls.filter((crl) => crl.baseCrlNumber === undefined && isCrlApplicableTo(cert, crl)),
+	);
+	const deltaCrls = distinctSignedCrls(parsedCrls.filter((crl) => crl.baseCrlNumber !== undefined));
 
 	// Process base CRLs (optionally paired with delta CRLs)
 	const crlMaxAgeMs = input.policy?.crlMaxAgeMs;
 	const clockSkewMs = input.policy?.clockSkewMs;
 	for (const baseCrl of baseCrls) {
-		const applicableDelta = findApplicableDeltaCrl(
-			baseCrl,
-			deltaCrls,
-			at,
-			clockSkewMs ?? 0,
-			crlMaxAgeMs,
-		);
-		// Evidence freshness: an applied delta CRL supersedes its base
-		const crlThisUpdate =
-			applicableDelta !== undefined &&
-			applicableDelta.thisUpdate.getTime() > baseCrl.thisUpdate.getTime()
-				? applicableDelta.thisUpdate
-				: baseCrl.thisUpdate;
 		const revoked = await resolveBaseCrlAgainstSigners({
 			cert,
 			baseCrl,
-			applicableDelta,
-			crlThisUpdate,
+			deltaCandidates: rankApplicableDeltaCrls(
+				baseCrl,
+				deltaCrls,
+				at,
+				clockSkewMs ?? 0,
+				crlMaxAgeMs,
+			),
 			issuer,
 			extraCertificates,
 			chain,
@@ -1157,11 +1163,20 @@ async function evaluateCrlEvidence(
 			crlMaxAgeMs,
 			clockSkewMs,
 			signerCtx,
+			deltaBudget,
 			state,
 		});
 		if (revoked !== undefined) {
 			return { status: revoked, executionErrors: state.executionErrors };
 		}
+	}
+
+	const deltaReasons = deltaCrlIndeterminateReasons(state);
+	if (deltaReasons.length > 0) {
+		return {
+			status: { certificate: cert, status: 'indeterminate', indeterminateReasons: deltaReasons },
+			executionErrors: state.executionErrors,
+		};
 	}
 
 	// Return 'good' only if we saw at least one good result AND all reasons are covered
@@ -1202,6 +1217,16 @@ async function evaluateCrlEvidence(
 	};
 }
 
+/** Delta CRL conditions that keep the status indeterminate despite `good` evidence. */
+function deltaCrlIndeterminateReasons(
+	state: CrlEvidenceState,
+): readonly RevocationIndeterminateReason[] {
+	return [
+		...(state.sawDeltaCrlUnusable ? (['delta_crl_unusable'] as const) : []),
+		...(state.sawDeltaCrlRetryLimit ? (['delta_crl_retry_limit_exceeded'] as const) : []),
+	];
+}
+
 /** Most specific indeterminate reason when no CRL yielded a usable verdict. */
 function crlUnavailableReason(state: CrlEvidenceState): RevocationIndeterminateReason {
 	if (state.sawCrlSignerRevoked) {
@@ -1227,7 +1252,7 @@ function parseCrlEvidenceSources(
 	const parsedCrls: ParsedCertificateRevocationList[] = [];
 	for (const crlSource of crls) {
 		try {
-			parsedCrls.push(parseCrlFromSource(crlSource));
+			parsedCrls.push(normalizeCrl(crlSource));
 		} catch (e) {
 			executionErrors.push({
 				kind: 'parse_error',
@@ -1238,33 +1263,210 @@ function parseCrlEvidenceSources(
 	return parsedCrls;
 }
 
-function findApplicableDeltaCrl(
+/** `crls` without repeats of the same signed content and signature. */
+function distinctSignedCrls(
+	crls: readonly ParsedCertificateRevocationList[],
+): readonly ParsedCertificateRevocationList[] {
+	const seen = new Set<string>();
+	return crls.filter((crl) => {
+		const key = [
+			crl.signatureAlgorithmOid,
+			toHex(crl.signatureAlgorithmParametersDer ?? new Uint8Array()),
+			toHex(crl.signatureValue),
+			toHex(crl.tbsCertListDer),
+		].join(':');
+		if (seen.has(key)) {
+			return false;
+		}
+		seen.add(key);
+		return true;
+	});
+}
+
+/** Every delta CRL that can update `baseCrl`, newest first, in the order to try authenticating them. */
+function rankApplicableDeltaCrls(
 	baseCrl: ParsedCertificateRevocationList,
 	deltaCrls: readonly ParsedCertificateRevocationList[],
 	at: Date,
 	clockSkewMs: number,
 	crlMaxAgeMs: number | undefined,
-): ParsedCertificateRevocationList | undefined {
+): readonly ParsedCertificateRevocationList[] {
 	const baseCrlNumber = baseCrl.crlNumber;
 	if (baseCrlNumber === undefined) {
+		return [];
+	}
+	return deltaCrls
+		.filter(
+			(deltaCrl) =>
+				deltaCrl.issuer.derHex === baseCrl.issuer.derHex &&
+				deltaCrl.baseCrlNumber !== undefined &&
+				deltaCrl.baseCrlNumber <= baseCrlNumber &&
+				deltaCrl.crlNumber !== undefined &&
+				deltaCrl.crlNumber > baseCrlNumber &&
+				deltaCrl.thisUpdate.getTime() >= baseCrl.thisUpdate.getTime() &&
+				isCurrentDeltaCrl(deltaCrl, at, clockSkewMs, crlMaxAgeMs),
+		)
+		.sort((left, right) =>
+			isNewerDeltaCrl(left, right) ? -1 : isNewerDeltaCrl(right, left) ? 1 : 0,
+		);
+}
+
+/** Delta CRL checks left to spend. */
+interface DeltaCrlBudget {
+	remaining: number;
+}
+
+const DELTA_CRL_ATTEMPTS_PER_BASE = 4;
+const DELTA_CRL_ATTEMPTS_PER_CHAIN = 32;
+
+interface DeltaCandidateCheck {
+	readonly cert: ParsedCertificate;
+	readonly baseCrl: ParsedCertificateRevocationList;
+	readonly deltaCandidates: readonly ParsedCertificateRevocationList[];
+	readonly candidate: ParsedCertificate;
+	readonly at: Date;
+	readonly crlMaxAgeMs: number | undefined;
+	readonly clockSkewMs: number | undefined;
+	readonly budgets: readonly DeltaCrlBudget[];
+	readonly state: CrlEvidenceState;
+}
+
+type DeltaCandidateOutcome =
+	| {
+			readonly kind: 'checked';
+			readonly checked: Extract<
+				Awaited<ReturnType<typeof checkCertificateRevocationAgainstCrl>>,
+				{ readonly ok: true }
+			>;
+			readonly crlThisUpdate: Date;
+	  }
+	| { readonly kind: 'unusable_base' }
+	| {
+			readonly kind: 'delta_unusable';
+			readonly complete: Awaited<ReturnType<typeof checkCertificateRevocationAgainstCrl>>;
+	  }
+	| { readonly kind: 'retry_limit' };
+
+/**
+ * Authenticates `baseCrl` with `candidate` once, then checks it with each
+ * ranked delta CRL while the budgets last, and alone once every delta CRL is
+ * rejected. A delta CRL that passes authentication, freshness, compatibility
+ * and applicability ends the search.
+ */
+async function checkCrlAgainstDeltaCandidates(
+	params: DeltaCandidateCheck,
+): Promise<DeltaCandidateOutcome> {
+	const {
+		cert,
+		baseCrl,
+		deltaCandidates,
+		candidate,
+		at,
+		crlMaxAgeMs,
+		clockSkewMs,
+		budgets,
+		state,
+	} = params;
+	const authenticated = await authenticateCrl(baseCrl, candidate);
+	if (!authenticated.ok) {
+		return { kind: 'unusable_base' };
+	}
+	const input = {
+		certificate: cert,
+		issuerCertificate: candidate,
+		crl: authenticated.value,
+		at,
+		...(crlMaxAgeMs === undefined ? {} : { maxAgeMs: crlMaxAgeMs }),
+		...(clockSkewMs === undefined ? {} : { clockSkewMs }),
+	};
+	for (const deltaCrl of deltaCandidates) {
+		const settled = takeDeltaCrlAttempt(budgets)
+			? settleAuthenticatedCrlOutcome(
+					await checkRevocationAgainstAuthenticatedCrl(cert, authenticated.value, {
+						...input,
+						deltaCrl,
+					}),
+					laterEvidenceDate(baseCrl.thisUpdate, deltaCrl.thisUpdate),
+					state,
+				)
+			: ({ kind: 'retry_limit' } as const);
+		if (settled === undefined) {
+			continue;
+		}
+		if (settled.kind === 'delta_unusable') {
+			return irremovableRevocation(cert, settled.complete, at, baseCrl.thisUpdate) ?? settled;
+		}
+		if (settled.kind === 'retry_limit') {
+			const alone = await checkRevocationAgainstAuthenticatedCrl(cert, authenticated.value, input);
+			return (
+				(alone.kind === 'checked'
+					? irremovableRevocation(cert, alone.result, at, baseCrl.thisUpdate)
+					: undefined) ?? settled
+			);
+		}
+		return settled;
+	}
+	return (
+		settleAuthenticatedCrlOutcome(
+			await checkRevocationAgainstAuthenticatedCrl(cert, authenticated.value, input),
+			baseCrl.thisUpdate,
+			state,
+		) ?? { kind: 'unusable_base' }
+	);
+}
+
+/**
+ * The base CRL's revocation of `cert` in `complete` when no delta CRL could
+ * remove it at `at`. RFC 5280 §5.3.1 lets removeFromCRL clear only a
+ * certificateHold entry or a certificate that has expired.
+ */
+function irremovableRevocation(
+	cert: ParsedCertificate,
+	complete: Awaited<ReturnType<typeof checkCertificateRevocationAgainstCrl>>,
+	at: Date,
+	crlThisUpdate: Date,
+): DeltaCandidateOutcome | undefined {
+	if (
+		cert.notAfter.getTime() < at.getTime() ||
+		!complete.ok ||
+		complete.value.status !== 'revoked' ||
+		complete.value.reasonCode === 'certificateHold'
+	) {
 		return undefined;
 	}
-	let latest: ParsedCertificateRevocationList | undefined;
-	for (const deltaCrl of deltaCrls) {
-		if (
-			deltaCrl.issuer.derHex === baseCrl.issuer.derHex &&
-			deltaCrl.baseCrlNumber !== undefined &&
-			deltaCrl.baseCrlNumber <= baseCrlNumber &&
-			deltaCrl.crlNumber !== undefined &&
-			deltaCrl.crlNumber > baseCrlNumber &&
-			deltaCrl.thisUpdate.getTime() >= baseCrl.thisUpdate.getTime() &&
-			isCurrentDeltaCrl(deltaCrl, at, clockSkewMs, crlMaxAgeMs) &&
-			(latest === undefined || isNewerDeltaCrl(deltaCrl, latest))
-		) {
-			latest = deltaCrl;
-		}
+	return { kind: 'checked', checked: complete, crlThisUpdate };
+}
+
+/** Spends one delta CRL check from every budget, or none when any is empty. */
+function takeDeltaCrlAttempt(budgets: readonly DeltaCrlBudget[]): boolean {
+	if (budgets.some((budget) => budget.remaining <= 0)) {
+		return false;
 	}
-	return latest;
+	for (const budget of budgets) {
+		budget.remaining -= 1;
+	}
+	return true;
+}
+
+/** Maps one staged CRL check to the search outcome, or `undefined` to try the next delta CRL. */
+function settleAuthenticatedCrlOutcome(
+	outcome: AuthenticatedCrlCheckOutcome,
+	crlThisUpdate: Date,
+	state: CrlEvidenceState,
+): DeltaCandidateOutcome | undefined {
+	if (outcome.kind === 'delta_unresolved') {
+		return { kind: 'delta_unusable', complete: outcome.complete };
+	}
+	const result = outcome.kind === 'checked' ? outcome.result : outcome.failure;
+	if (!result.ok && result.code === 'stale_crl') {
+		state.sawStaleCrl = true;
+	}
+	if (outcome.kind === 'delta_rejected') {
+		return undefined;
+	}
+	return result.ok
+		? { kind: 'checked', checked: result, crlThisUpdate }
+		: { kind: 'unusable_base' };
 }
 
 function isNewerDeltaCrl(
@@ -1293,26 +1495,6 @@ function collectCrlSignerCandidates(
 	return candidates;
 }
 
-function checkCrlWithIssuer(
-	cert: ParsedCertificate,
-	crl: ParsedCertificateRevocationList,
-	deltaCrl: ParsedCertificateRevocationList | undefined,
-	crlIssuer: ParsedCertificate,
-	at: Date,
-	maxAgeMs: number | undefined,
-	clockSkewMs: number | undefined,
-): ReturnType<typeof checkCertificateRevocationAgainstCrl> {
-	return checkCertificateRevocationAgainstCrl({
-		certificate: cert,
-		issuerCertificate: crlIssuer,
-		crl,
-		...(deltaCrl !== undefined ? { deltaCrl } : {}),
-		at,
-		...(maxAgeMs === undefined ? {} : { maxAgeMs }),
-		...(clockSkewMs === undefined ? {} : { clockSkewMs }),
-	});
-}
-
 function recordGoodCrlEvidence(
 	state: CrlEvidenceState,
 	signer: ParsedCertificate,
@@ -1339,18 +1521,20 @@ function recordGoodCrlEvidence(
  * either source wins regardless of {@linkcode RevocationPolicy.prefer}
  * (fail-closed). Otherwise the preferred source's `good` verdict is reported —
  * for `'best-available'` the source with the later evidence `thisUpdate` wins,
- * ties favoring OCSP. If neither source is definitive, indeterminate reasons
- * from both are merged.
+ * ties favoring OCSP. A CRL result of `delta_crl_unusable` or
+ * `delta_crl_retry_limit_exceeded` outranks a `good` verdict. If neither
+ * source is definitive, indeterminate reasons from both are merged.
  */
 async function evaluateCertificateRevocation(
 	cert: ParsedCertificate,
 	issuer: ParsedCertificate,
 	input: CheckChainRevocationInput,
 	signerCtx: SignerValidationContext,
+	deltaBudget: DeltaCrlBudget,
 ): Promise<EvidenceEvaluation> {
 	const prefer = input.policy?.prefer ?? 'best-available';
 	const ocsp = await evaluateOcspEvidence(cert, issuer, input);
-	const crl = await evaluateCrlEvidence(cert, issuer, input, signerCtx);
+	const crl = await evaluateCrlEvidence(cert, issuer, input, signerCtx, deltaBudget);
 	const executionErrors = [...ocsp.executionErrors, ...crl.executionErrors];
 
 	// 'best-available' ranks by evidence freshness; the sort is stable, so
@@ -1370,7 +1554,10 @@ async function evaluateCertificateRevocation(
 		return { status: revoked.status, executionErrors };
 	}
 	const good = ordered.find((evaluation) => evaluation.status.status === 'good');
-	if (good !== undefined) {
+	const deltaBlocked = crl.status.indeterminateReasons?.some(
+		(reason) => reason === 'delta_crl_unusable' || reason === 'delta_crl_retry_limit_exceeded',
+	);
+	if (good !== undefined && deltaBlocked !== true) {
 		return { status: good.status, executionErrors };
 	}
 
@@ -1457,6 +1644,7 @@ export async function checkChainRevocation(
 		crlMaxAgeMs: policy?.crlMaxAgeMs,
 		clockSkewMs: policy?.clockSkewMs,
 	};
+	const deltaBudget: DeltaCrlBudget = { remaining: DELTA_CRL_ATTEMPTS_PER_CHAIN };
 
 	// Skip trust anchor (last cert) — it's the trust base
 	const certsToCheck = chain.slice(0, -1);
@@ -1483,6 +1671,7 @@ export async function checkChainRevocation(
 			issuer,
 			input,
 			signerCtx,
+			deltaBudget,
 		);
 		certificates.push(status);
 		allExecutionErrors.push(...executionErrors);
