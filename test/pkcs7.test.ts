@@ -14,6 +14,7 @@ import {
 	unwrap,
 	verifyPkcs7SignedData,
 } from '#micro509';
+import { toHex } from '#micro509/internal/asn1/asn1';
 import {
 	concatBytes,
 	explicitContext,
@@ -138,6 +139,32 @@ describe('pkcs7', () => {
 				serialNumberHex: parsedSigner.serialNumberHex,
 			},
 		});
+	});
+
+	it('keeps a leading U+FEFF in a signer issuer value it cannot decode strictly', async () => {
+		const signer = await createSelfSignedCertificate({
+			subject: { commonName: 'CMS Signer' },
+		});
+		const parsedSigner = unwrap(parseCertificatePem(signer.certificate.pem));
+		const teletexIssuer = sequence([
+			setOf([
+				sequence([
+					objectIdentifier(OIDS.commonName),
+					tlv(0x14, Uint8Array.of(0xef, 0xbb, 0xbf, 0x41)),
+				]),
+			]),
+		]);
+		const parsed = parsePkcs7SignedDataDer(
+			createSyntheticPkcs7SignedData({
+				...parsedSigner,
+				issuer: { ...parsedSigner.issuer, derHex: toHex(teletexIssuer) },
+			}),
+		);
+		expect(parsed.ok).toBe(true);
+		if (!parsed.ok) throw new Error('unreachable');
+		const identifier = parsed.value.signerInfos[0]?.signerIdentifier;
+		if (identifier?.type !== 'issuerAndSerialNumber') throw new Error('unreachable');
+		expect(identifier.issuer.values.commonName).toBe('﻿A');
 	});
 
 	it.each([

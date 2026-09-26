@@ -1899,6 +1899,30 @@ describe('parse', () => {
 		}
 	});
 
+	it('keeps a leading U+FEFF in UTF8String names and DisplayText', async () => {
+		const certificate = await createSelfSignedCertificate({
+			subject: { commonName: '﻿bom.example' },
+			extensions: {
+				certificatePolicies: [
+					{
+						policyIdentifier: '1.2.3.4.1',
+						policyQualifiers: [{ type: 'userNotice', explicitText: '﻿notice' }],
+					},
+				],
+			},
+		});
+		const parsed = unwrap(parseCertificatePem(certificate.certificate.pem));
+		expect(parsed.subject.values.commonName).toBe('﻿bom.example');
+		expect(parsed.certificatePolicies).toEqual([
+			{
+				policyIdentifier: '1.2.3.4.1',
+				policyQualifiers: [
+					{ type: 'userNotice', explicitText: '﻿notice', explicitTextType: 'utf8String' },
+				],
+			},
+		]);
+	});
+
 	it('parses BMPString DisplayText in certificate policies', async () => {
 		const certificate = await createSelfSignedCertificateWithRawExtensions({
 			subject: { commonName: 'bmp-policy-parse.example' },

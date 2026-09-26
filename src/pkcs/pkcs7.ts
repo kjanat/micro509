@@ -1307,7 +1307,7 @@ function parseSignerIdentifier(der: Uint8Array): ParsedSignerIdentifier {
 	throw new Error(`Unsupported SignerIdentifier tag: ${String(element.tag)}`);
 }
 
-const textDecoder = new TextDecoder();
+const textDecoder = new TextDecoder('utf-8', { ignoreBOM: true });
 
 /** Parses a Name SEQUENCE element from a PKCS#7 signer identifier into a {@linkcode ParsedName}. */
 function parseSignerIssuerName(source: Uint8Array, element: DerElement): ParsedName {

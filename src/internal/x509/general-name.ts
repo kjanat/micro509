@@ -18,9 +18,6 @@ import { decodeIpAddress } from '#micro509/internal/shared/ip';
 import { readDirectoryNameTlv } from '#micro509/internal/x509/directory-name';
 import type { GeneralName, SubjectAltName } from '#micro509/x509/extensions';
 
-/** Keeps a leading U+FEFF, which RFC 9598 §3 forbids and the builder must be able to see. */
-const SMTP_UTF8_MAILBOX_DECODER = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
-
 /** Decode a SEQUENCE OF GeneralName. */
 export function parseGeneralNames(source: Uint8Array, element: DerElement): readonly GeneralName[] {
 	const names = childrenOf(source, element);
@@ -141,7 +138,7 @@ function parseOtherName(source: Uint8Array, element: DerElement): SubjectAltName
 			if (value.tag !== 0x0c || value.value.length === 0) {
 				throw new Error('SmtpUTF8Mailbox otherName must wrap a non-empty UTF8String');
 			}
-			return { type: 'smtpUtf8Mailbox', value: SMTP_UTF8_MAILBOX_DECODER.decode(value.value) };
+			return { type: 'smtpUtf8Mailbox', value: decodeString(value.tag, value.value) };
 		default:
 			return { type: 'otherName', typeId, value: otherNameValueDer(source, value) };
 	}

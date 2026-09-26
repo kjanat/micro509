@@ -3084,4 +3084,4 @@ function hasReparseableCrlShape(
 }
 
 /** Shared UTF-8 decoder instance. */
-const textDecoder = new TextDecoder();
+const textDecoder = new TextDecoder('utf-8', { ignoreBOM: true });

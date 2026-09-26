@@ -234,6 +234,12 @@ revocation })` report a certificate carrying `noRevAvail` or
   DER encoder. `CreateCertificateErrorCode` gains `validity_date_invalid`, and
   `CrlEncoderErrorCode` and `OcspEncoderErrorCode` gain `invalid_date`, thrown
   as a `ResultError` before encoding.
+- Decoding ASN.1 text dropped a leading U+FEFF as a byte order mark. A UTCTime
+  or GeneralizedTime whose contents began with the octets EF BB BF parsed as
+  the time that followed, in certificates, CRLs, OCSP responses and
+  `decodeDerTime`; it is now malformed. A UTF8String keeps the character in
+  `decodeDerString`, parsed names and DisplayText, as does an issuer attribute
+  that CRL or PKCS #7 parsing decodes leniently.
 
 ### Security
 

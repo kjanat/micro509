@@ -367,6 +367,22 @@ describe('asn1 decoding', () => {
 		);
 	});
 
+	it('parseTime rejects a time value that opens with the octets EF BB BF', () => {
+		const bom = Uint8Array.of(0xef, 0xbb, 0xbf);
+		const encoder = new TextEncoder();
+		expect(() =>
+			parseTime(readElement(tlv(0x17, concatBytes([bom, encoder.encode('260101000000Z')])))),
+		).toThrow('Invalid UTCTime');
+		expect(() =>
+			parseTime(readElement(tlv(0x18, concatBytes([bom, encoder.encode('20260101000000Z')])))),
+		).toThrow('Invalid GeneralizedTime');
+	});
+
+	it('decodeString keeps a leading U+FEFF in a UTF8String', () => {
+		expect(decodeString(0x0c, Uint8Array.of(0xef, 0xbb, 0xbf))).toBe('﻿');
+		expect(decodeString(0x0c, Uint8Array.of(0xef, 0xbb, 0xbf, 0x41))).toBe('﻿A');
+	});
+
 	it('decodeIntegerNumber accepts any value up to MAX_SAFE_INTEGER', () => {
 		expect(decodeIntegerNumber(Uint8Array.of(1, 2, 3, 4, 5, 6, 7))).toBe(283686952306183);
 		expect(decodeIntegerNumber(Uint8Array.of(0x1f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff))).toBe(

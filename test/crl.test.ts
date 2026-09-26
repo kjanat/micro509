@@ -101,6 +101,41 @@ describe('crl', () => {
 		});
 	});
 
+	it('keeps a leading U+FEFF in an issuer value it cannot decode strictly', async () => {
+		const keys = await generateKeyPair();
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'CRL Issuer' },
+			signerPrivateKey: keys.privateKey,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
+		});
+		const [tbs, algorithm, signature] = readSequenceChildren(crl.der).map((child) =>
+			sliceElement(crl.der, child),
+		);
+		if (tbs === undefined || algorithm === undefined || signature === undefined) {
+			throw new Error('unreachable');
+		}
+		const tbsChildren = readSequenceChildren(tbs);
+		const issuerIndex = tbsChildren[0]?.tag === 0x02 ? 2 : 1;
+		const teletexIssuer = sequence([
+			setOf([
+				sequence([
+					objectIdentifier(OIDS.commonName),
+					tlv(0x14, Uint8Array.of(0xef, 0xbb, 0xbf, 0x41)),
+				]),
+			]),
+		]);
+		const rewritten = sequence([
+			sequence(
+				tbsChildren.map((child, index) =>
+					index === issuerIndex ? teletexIssuer : sliceElement(tbs, child),
+				),
+			),
+			algorithm,
+			signature,
+		]);
+		expect(parseCertificateRevocationListDerOrThrow(rewritten).issuer.values.commonName).toBe('﻿A');
+	});
+
 	it('parses CRL entry extensions and delta CRL indicator', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'Delta CRL Issuer' },

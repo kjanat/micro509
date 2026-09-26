@@ -149,7 +149,7 @@ export type ParseCertificateSigningRequestResult<
 	  >;
 
 /** Shared UTF-8 decoder for IA5String / UTF8String values. */
-const textDecoder = new TextDecoder();
+const textDecoder = new TextDecoder('utf-8', { ignoreBOM: true });
 
 /**
  * A single decoded name attribute from an X.501 RelativeDistinguishedName.
