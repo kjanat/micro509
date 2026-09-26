@@ -109,8 +109,8 @@ revocation })` report a certificate carrying `noRevAvail` or
   builder encodes them; an `otherName` with the SRVName or SmtpUTF8Mailbox
   type-id is refused (`other_name_type_id_has_variant`), as is a value that is
   not one DER element (`invalid_other_name_value`) and `x400Address` or
-  `ediPartyName` contents that are not well-formed DER
-  (`invalid_general_name_content`). `unknown` remains as raw builder input.
+  `ediPartyName` contents without the top-level ORAddress or EDIPartyName
+  structure (`invalid_general_name_content`). `unknown` remains as raw builder input.
 
 ### Changed
 

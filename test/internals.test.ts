@@ -785,7 +785,7 @@ describe('extensions encoding', () => {
 				typeId: '1.3.6.1.4.1.311.20.2.3',
 				value: utf8String('user@example.com'),
 			},
-			{ type: 'x400Address', value: sequence([printableString('x')]) },
+			{ type: 'x400Address', value: concatBytes([sequence([]), setOf([sequence([])])]) },
 			{ type: 'ediPartyName', value: explicitContext(1, utf8String('party')) },
 			{ type: 'registeredID', value: '1.2.840.113549' },
 		] as const;
@@ -817,14 +817,36 @@ describe('extensions encoding', () => {
 			() => encodeSubjectAltName({ type: 'registeredID', value: '1' }),
 			'invalid_oid',
 		);
-		for (const type of ['x400Address', 'ediPartyName'] as const) {
-			for (const value of [Uint8Array.of(0xff), Uint8Array.of(0x30, 0x05)]) {
-				expectEncoderErrorCode(
-					() => encodeSubjectAltName({ type, value }),
-					'invalid_general_name_content',
-				);
-			}
+		const malformed = [
+			['x400Address', Uint8Array.of(0xff)],
+			['x400Address', Uint8Array.of(0x30, 0x05)],
+			['x400Address', new Uint8Array()],
+			['x400Address', printableString('x')],
+			['x400Address', concatBytes([sequence([]), setOf([]), sequence([])])],
+			['ediPartyName', Uint8Array.of(0xff)],
+			['ediPartyName', new Uint8Array()],
+			['ediPartyName', explicitContext(0, utf8String('assigner'))],
+			['ediPartyName', explicitContext(1, integerFromNumber(1))],
+			[
+				'ediPartyName',
+				concatBytes([explicitContext(1, utf8String('a')), explicitContext(0, utf8String('b'))]),
+			],
+		] as const;
+		for (const [type, value] of malformed) {
+			expectEncoderErrorCode(
+				() => encodeSubjectAltName({ type, value }),
+				'invalid_general_name_content',
+			);
 		}
+		expect(
+			encodeSubjectAltName({
+				type: 'ediPartyName',
+				value: concatBytes([
+					explicitContext(0, printableString('assigner')),
+					explicitContext(1, utf8String('party')),
+				]),
+			})[0],
+		).toBe(0xa5);
 	});
 
 	it('encodeNameConstraints writes the three RFC 4985 §4 SRVName restriction forms', () => {
@@ -1776,7 +1798,7 @@ describe('extensions encoding', () => {
 				),
 			'malformed_known_extension_value',
 		);
-		// x400Address [3] decodes as an unknown GeneralName, carrying no identity.
+		// An empty x400Address [3] is not an ORAddress.
 		expectEncoderErrorCode(
 			() =>
 				buildCertificateExtensions(
@@ -1793,7 +1815,7 @@ describe('extensions encoding', () => {
 					},
 					true,
 				),
-			'empty_subject_requires_subject_alt_name',
+			'invalid_general_name_content',
 		);
 		expect(
 			buildCertificateExtensions(

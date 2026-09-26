@@ -14,6 +14,7 @@ import {
 	hexToBytes,
 	toHex,
 } from '#micro509/internal/asn1/asn1';
+import type { DerElement } from '#micro509/internal/asn1/der';
 import {
 	bmpString,
 	bool,
@@ -1596,13 +1597,56 @@ function validateOtherNameTypeId(typeId: string): string {
 	return oid;
 }
 
-function requireWellFormedDer(element: Uint8Array): Uint8Array {
+/** DirectoryString alternatives: TeletexString, PrintableString, UniversalString, UTF8String, BMPString. */
+const DIRECTORY_STRING_TAGS: ReadonlySet<number> = new Set([0x14, 0x13, 0x1c, 0x0c, 0x1e]);
+
+/**
+ * RFC 5280 Appendix A.1: `ORAddress ::= SEQUENCE { built-in-standard-attributes
+ * SEQUENCE, built-in-domain-defined-attributes SEQUENCE OPTIONAL,
+ * extension-attributes SET OPTIONAL }`.
+ */
+function isOrAddress(children: readonly DerElement[]): boolean {
+	const [standard, ...optional] = children.map((child) => child.tag);
+	const afterDomainDefined = optional[0] === 0x30 ? optional.slice(1) : optional;
+	return (
+		standard === 0x30 &&
+		(afterDomainDefined.length === 0 ||
+			(afterDomainDefined.length === 1 && afterDomainDefined[0] === 0x31))
+	);
+}
+
+/**
+ * RFC 5280 §4.2.1.6: `EDIPartyName ::= SEQUENCE { nameAssigner [0]
+ * DirectoryString OPTIONAL, partyName [1] DirectoryString }`, each tag
+ * explicit around its CHOICE.
+ */
+function isEdiPartyName(children: readonly DerElement[], source: Uint8Array): boolean {
+	const partyName = children.at(-1);
+	return (
+		partyName?.tag === 0xa1 &&
+		(children.length === 1 || (children.length === 2 && children[0]?.tag === 0xa0)) &&
+		children.every((child) => {
+			const inner = childrenOf(source, child);
+			return inner.length === 1 && DIRECTORY_STRING_TAGS.has(inner[0]?.tag ?? -1);
+		})
+	);
+}
+
+function requireGeneralNameStructure(
+	element: Uint8Array,
+	isValid: (children: readonly DerElement[], source: Uint8Array) => boolean,
+): Uint8Array {
+	let valid: boolean;
 	try {
-		readRootElement(element, { maxDepth: DEFAULT_MAX_DER_DEPTH });
+		const root = readRootElement(element, { maxDepth: DEFAULT_MAX_DER_DEPTH });
+		valid = isValid(childrenOf(element, root), element);
 	} catch {
+		valid = false;
+	}
+	if (!valid) {
 		throwExtensionEncoderError(
 			'invalid_general_name_content',
-			'x400Address or ediPartyName contents must be well-formed DER',
+			'x400Address contents must be an ORAddress and ediPartyName contents an EDIPartyName',
 		);
 	}
 	return element;
@@ -1679,9 +1723,12 @@ export function encodeSubjectAltName(value: SubjectAltName): Uint8Array {
 				]),
 			);
 		case 'x400Address':
-			return requireWellFormedDer(implicitConstructedContext(3, value.value));
+			return requireGeneralNameStructure(implicitConstructedContext(3, value.value), isOrAddress);
 		case 'ediPartyName':
-			return requireWellFormedDer(implicitConstructedContext(5, value.value));
+			return requireGeneralNameStructure(
+				implicitConstructedContext(5, value.value),
+				isEdiPartyName,
+			);
 		case 'registeredID':
 			return implicitPrimitiveContext(
 				8,

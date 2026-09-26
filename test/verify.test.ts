@@ -19,6 +19,7 @@ import {
 } from '#micro509';
 import {
 	concatBytes,
+	explicitContext,
 	nullValue,
 	objectIdentifier,
 	printableString,
@@ -2433,14 +2434,14 @@ describe('chain verification', () => {
 		});
 
 		it.each([
-			['x400Address', 0xa3],
-			['ediPartyName', 0xa5],
+			['x400Address', 0xa3, sequence([])],
+			['ediPartyName', 0xa5, explicitContext(1, utf8String('party'))],
 		] as const)(
 			'fails closed when a critical %s constraint meets a SAN of that form',
-			async (form, tag) => {
-				const constraintDer = buildRawConstraintDer(tlv(tag, sequence([])));
+			async (form, tag, value) => {
+				const constraintDer = buildRawConstraintDer(tlv(tag, value));
 				const root = await createConstrainedRoot(constraintDer, true);
-				const leaf = await issueLeaf(root, [{ type: form, value: sequence([]) }]);
+				const leaf = await issueLeaf(root, [{ type: form, value }]);
 				const result = await verifyCertificateChain({
 					leaf: leaf.pem,
 					roots: [root.certificate.pem],
