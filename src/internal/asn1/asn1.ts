@@ -8,7 +8,12 @@
  */
 
 import type { DerElement } from '#micro509/internal/asn1/der';
-import { objectIdentifier, readElement } from '#micro509/internal/asn1/der';
+import {
+	DEFAULT_MAX_DER_DEPTH,
+	objectIdentifier,
+	readElement,
+	walkDerTree,
+} from '#micro509/internal/asn1/der';
 
 /** Shared UTF-8 text decoder for ASN.1 string types. */
 const textDecoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
@@ -507,4 +512,283 @@ function decodeUniversalString(bytes: Uint8Array): string {
 		value += String.fromCodePoint(codePoint);
 	}
 	return value;
+}
+
+/** The verdict of {@linkcode checkStrictDer} on an encoding. */
+export type StrictDerVerdict = 'valid' | 'malformed' | 'unsupported';
+
+/**
+ * Walks {@linkcode bytes} as one DER element and checks each universal-class
+ * element against the X.690 rules its tag fixes: the identifier form, the
+ * contents, and the DER restrictions of clauses 10 and 11.
+ *
+ * Where those rules rest on ISO/IEC 2022, ISO 8601 or an implicitly tagged
+ * schema, the element is `unsupported`: TeletexString, VideotexString, TIME,
+ * EXTERNAL, EMBEDDED PDV, CHARACTER STRING, a REAL with a long-form exponent, a
+ * GeneralizedTime at second 60, and text holding an escape sequence or a
+ * code-extension control. Context-specific, application and private elements
+ * get framing checks only, as do the rules that depend on a schema: SET
+ * component order, DEFAULT omission and NamedBitList trailing bits.
+ */
+export function checkStrictDer(
+	bytes: Uint8Array,
+	maxDepth: number = DEFAULT_MAX_DER_DEPTH,
+): StrictDerVerdict {
+	let unsupported = false;
+	try {
+		walkDerTree(bytes, maxDepth, undefined, (element) => {
+			const verdict = checkUniversalElement(element);
+			if (verdict === 'malformed') {
+				throw new Error('DER element breaks the rules of its universal type');
+			}
+			unsupported ||= verdict === 'unsupported';
+		});
+	} catch {
+		return 'malformed';
+	}
+	return unsupported ? 'unsupported' : 'valid';
+}
+
+type UniversalElementCheck = (element: DerElement) => StrictDerVerdict;
+
+function verdictOf(valid: boolean): StrictDerVerdict {
+	return valid ? 'valid' : 'malformed';
+}
+
+function decodes(decode: () => unknown): StrictDerVerdict {
+	try {
+		decode();
+		return 'valid';
+	} catch {
+		return 'malformed';
+	}
+}
+
+function asciiText(contents: Uint8Array): string | undefined {
+	try {
+		return decodeIa5String(contents);
+	} catch {
+		return undefined;
+	}
+}
+
+const ESCAPE = 0x1b;
+
+/** X.690 §8.23.10 and Table 3: UTF8String and IA5String carry no escape sequence. */
+const ESCAPE_CONTROLS: ReadonlySet<number> = new Set([ESCAPE]);
+
+/** X.690 §8.23.9: SHIFT OUT, SHIFT IN, ESCAPE, SINGLE-SHIFT TWO and THREE, and CONTROL SEQUENCE INTRODUCER. */
+const CODE_EXTENSION_CONTROLS: ReadonlySet<number> = new Set([
+	0x0e,
+	0x0f,
+	ESCAPE,
+	0x8e,
+	0x8f,
+	0x9b,
+]);
+
+/** The verdict on text {@linkcode decode} validates, `unsupported` when it holds one of {@linkcode controls}. */
+function checkText(decode: () => string, controls: ReadonlySet<number>): StrictDerVerdict {
+	let text: string;
+	try {
+		text = decode();
+	} catch {
+		return 'malformed';
+	}
+	for (const character of text) {
+		if (controls.has(character.codePointAt(0) ?? 0)) {
+			return 'unsupported';
+		}
+	}
+	return 'valid';
+}
+
+/** X.690 Table 3: GraphicString and ObjectDescriptor open with register entry 6 as G0 and no C0 or C1 set. */
+function checkGraphicString(element: DerElement): StrictDerVerdict {
+	if (element.value.includes(ESCAPE)) {
+		return 'unsupported';
+	}
+	return verdictOf(element.value.every((octet) => octet >= 0x20 && octet <= 0x7e));
+}
+
+/** X.690 Table 3: GeneralString opens with register entry 6 as G0 and entry 1 as C0, beside SPACE and DELETE. */
+function checkGeneralString(element: DerElement): StrictDerVerdict {
+	if (element.value.some((octet) => octet === ESCAPE || octet === 0x0e || octet === 0x0f)) {
+		return 'unsupported';
+	}
+	return verdictOf(element.value.every((octet) => octet <= 0x7f));
+}
+
+/** X.690 §8.3.2: the first nine bits of a multi-octet INTEGER are neither all ones nor all zeros. */
+function isMinimalInteger(contents: Uint8Array): boolean {
+	const [first, second] = contents;
+	if (first === undefined) {
+		return false;
+	}
+	return (
+		second === undefined ||
+		((first !== 0x00 || second >= 0x80) && (first !== 0xff || second < 0x80))
+	);
+}
+
+/** X.690 §8.19.2: every subidentifier ends on an octet with bit 8 clear and never opens with 0x80. */
+function isSubidentifierList(contents: Uint8Array): boolean {
+	let opensSubidentifier = true;
+	for (const octet of contents) {
+		if (opensSubidentifier && octet === 0x80) {
+			return false;
+		}
+		opensSubidentifier = (octet & 0x80) === 0;
+	}
+	return opensSubidentifier;
+}
+
+function checkBitString(element: DerElement): StrictDerVerdict {
+	try {
+		return verdictOf(!decodeBitString(element).nonZeroPadding);
+	} catch {
+		return 'malformed';
+	}
+}
+
+/** X.680 Table 9: NumericString holds the digits and SPACE. */
+export function isNumericStringContents(contents: Uint8Array): boolean {
+	return contents.every((octet) => octet === 0x20 || (octet >= 0x30 && octet <= 0x39));
+}
+
+function isLeapYear(year: number): boolean {
+	return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+}
+
+const DAYS_IN_MONTH: readonly number[] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+interface TimeSyntax {
+	readonly pattern: RegExp;
+	readonly century: number;
+	readonly leapSecond: StrictDerVerdict;
+}
+
+/** X.690 §11.8 and X.680 §47.3: `YYMMDDhhmmssZ`, the year as its two low-order digits and seconds 00 to 59. */
+const UTC_TIME: TimeSyntax = {
+	pattern: /^(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})Z$/,
+	century: 2000,
+	leapSecond: 'malformed',
+};
+
+/** X.690 §11.7: seconds present, `.` before a fraction with no trailing zero, and `Z`; ISO 8601 governs second 60. */
+const GENERALIZED_TIME: TimeSyntax = {
+	pattern: /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(?:\.\d*[1-9])?Z$/,
+	century: 0,
+	leapSecond: 'unsupported',
+};
+
+function checkTime(element: DerElement, syntax: TimeSyntax): StrictDerVerdict {
+	const fields = syntax.pattern
+		.exec(asciiText(element.value) ?? '')
+		?.slice(1)
+		.map(Number);
+	if (fields === undefined) {
+		return 'malformed';
+	}
+	const [year = 0, month = 0, day = 0, hour = 0, minute = 0, second = 0] = fields;
+	const monthDays =
+		(DAYS_IN_MONTH[month - 1] ?? 0) + (month === 2 && isLeapYear(syntax.century + year) ? 1 : 0);
+	if (day < 1 || day > monthDays || hour > 23 || minute > 59 || second > 60) {
+		return 'malformed';
+	}
+	return second === 60 ? syntax.leapSecond : 'valid';
+}
+
+/**
+ * X.690 §11.3.2: NR3 without SPACE, a MINUS SIGN only on a negative value, a
+ * mantissa that neither opens nor closes with 0 followed by `.E`, and an
+ * exponent written `+0` or with no leading 0 and no PLUS SIGN.
+ */
+const DER_NR3 = /^-?[1-9](?:\d*[1-9])?\.E(?:\+0|-?[1-9]\d*)$/;
+
+/**
+ * X.690 §8.5 and §11.3: an empty plus zero, a one-octet special value, a
+ * base-2 binary form with F = 0, the fewest exponent octets and an odd
+ * mantissa with no leading zero octet, or a decimal NR3 form. X.690 §8.5.7.4
+ * d) leaves the length of a long-form exponent ambiguous.
+ */
+function checkReal(element: DerElement): StrictDerVerdict {
+	const [first] = element.value;
+	const rest = element.value.subarray(1);
+	if (first === undefined) {
+		return 'valid';
+	}
+	if ((first & 0x80) === 0) {
+		return (first & 0x40) === 0
+			? verdictOf(first === 0x03 && DER_NR3.test(asciiText(rest) ?? ''))
+			: verdictOf(rest.length === 0 && first <= 0x43);
+	}
+	const format = first & 0x03;
+	if ((first & 0x3c) !== 0) {
+		return 'malformed';
+	}
+	if (format === 0x03) {
+		return 'unsupported';
+	}
+	const exponent = rest.subarray(0, format + 1);
+	const mantissa = rest.subarray(format + 1);
+	return verdictOf(
+		exponent.length === format + 1 &&
+			isMinimalInteger(exponent) &&
+			(mantissa[0] ?? 0) !== 0 &&
+			((mantissa.at(-1) ?? 0) & 0x01) === 1,
+	);
+}
+
+/**
+ * The identifier octet DER uses for each universal type, mapped to the check
+ * of its contents. A universal identifier missing here is a reserved tag
+ * number or a form DER forbids.
+ */
+const UNIVERSAL_ELEMENTS: ReadonlyMap<number, UniversalElementCheck> = new Map<
+	number,
+	UniversalElementCheck
+>([
+	[0x01, (element) => decodes(() => decodeBoolean(element.value))],
+	[0x02, (element) => verdictOf(isMinimalInteger(element.value))],
+	[0x03, checkBitString],
+	[0x04, () => 'valid'],
+	[0x05, (element) => verdictOf(element.value.length === 0)],
+	[0x06, (element) => verdictOf(element.value.length > 0 && isSubidentifierList(element.value))],
+	[0x07, checkGraphicString],
+	[0x09, checkReal],
+	[0x0a, (element) => verdictOf(isMinimalInteger(element.value))],
+	[
+		0x0c,
+		(element) => checkText(() => decodeUtf8Text(element.value, 'UTF8String'), ESCAPE_CONTROLS),
+	],
+	[0x0d, (element) => verdictOf(element.value.length > 0 && isSubidentifierList(element.value))],
+	[0x0e, () => 'unsupported'],
+	[0x12, (element) => verdictOf(isNumericStringContents(element.value))],
+	[0x13, (element) => decodes(() => decodePrintableString(element.value))],
+	[0x14, () => 'unsupported'],
+	[0x15, () => 'unsupported'],
+	[0x16, (element) => checkText(() => decodeIa5String(element.value), ESCAPE_CONTROLS)],
+	[0x17, (element) => checkTime(element, UTC_TIME)],
+	[0x18, (element) => checkTime(element, GENERALIZED_TIME)],
+	[0x19, checkGraphicString],
+	[0x1a, (element) => verdictOf(element.value.every((octet) => octet >= 0x20 && octet <= 0x7e))],
+	[0x1b, checkGeneralString],
+	[
+		0x1c,
+		(element) => checkText(() => decodeUniversalString(element.value), CODE_EXTENSION_CONTROLS),
+	],
+	[0x1e, (element) => checkText(() => decodeBmpString(element.value), CODE_EXTENSION_CONTROLS)],
+	[0x28, () => 'unsupported'],
+	[0x2b, () => 'unsupported'],
+	[0x30, () => 'valid'],
+	[0x31, () => 'valid'],
+	[0x3d, () => 'unsupported'],
+]);
+
+function checkUniversalElement(element: DerElement): StrictDerVerdict {
+	if ((element.tag & 0xc0) !== 0) {
+		return 'valid';
+	}
+	return UNIVERSAL_ELEMENTS.get(element.tag)?.(element) ?? 'malformed';
 }

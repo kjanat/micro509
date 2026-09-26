@@ -6,7 +6,12 @@
  * @module
  */
 
-import { childrenOf, decodeIntegerNumber, decodeString } from '#micro509/internal/asn1/asn1';
+import {
+	childrenOf,
+	decodeIntegerNumber,
+	decodeString,
+	isNumericStringContents,
+} from '#micro509/internal/asn1/asn1';
 import type { DerElement } from '#micro509/internal/asn1/der';
 import type { GeneralNameContentCheck } from '#micro509/internal/x509/general-name-profile';
 
@@ -37,13 +42,8 @@ function firstFailure(checks: readonly GeneralNameContentCheck[]): GeneralNameCo
 	return checks.find((result) => !result.ok) ?? VALID;
 }
 
-/** X.680 Table 9: NumericString holds digits and space. */
 function isNumericString(value: Uint8Array, size: Bounds): boolean {
-	return (
-		value.length >= size.min &&
-		value.length <= size.max &&
-		value.every((octet) => octet === 0x20 || (octet >= 0x30 && octet <= 0x39))
-	);
+	return value.length >= size.min && value.length <= size.max && isNumericStringContents(value);
 }
 
 function isPrintableString(value: Uint8Array, size: Bounds): boolean {

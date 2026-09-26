@@ -111,7 +111,8 @@ revocation })` report a certificate carrying `noRevAvail` or
   (dotted OID). Parsing produces them where it produced `unknown`, and the
   builder encodes them; an `otherName` with the SRVName or SmtpUTF8Mailbox
   type-id is refused (`other_name_type_id_has_variant`), as is a value that is
-  not one strict DER element or holds end-of-contents octets at any depth
+  not one DER element or holds, at any depth, a universal-class element whose
+  form or contents break X.690 or whose rules micro509 cannot check
   (`invalid_other_name_value`). `x400Address` contents must follow the RFC
   5280 Appendix A.1 ORAddress schema and `ediPartyName` contents the
   EDIPartyName, with each DirectoryString validated by its encoding

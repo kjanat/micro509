@@ -98,7 +98,7 @@ Unions may gain members in minor releases; treat them as non-exhaustive and keep
 | `invalid_ia5_string`                                    | Non-ASCII input for an IA5String value                              |
 | `invalid_idn`                                           | Domain name is not valid IDNA2008 (RFC 5891 §4)                     |
 | `invalid_ip_name_constraint`                            | IP constraint bytes are not address+mask of one family              |
-| `invalid_other_name_value`                              | otherName value is not exactly one DER element                      |
+| `invalid_other_name_value`                              | otherName value is not one DER element micro509 can validate        |
 | `invalid_oid`                                           | String is not an encodable OID within X.660 arc bounds              |
 | `invalid_smtp_utf8_mailbox`                             | SmtpUTF8Mailbox malformed or domain not A-labels (RFC 9598 §3)      |
 | `invalid_srv_name`                                      | SRVName not \_Service.Name with RFC 6335 service and LDH Name       |

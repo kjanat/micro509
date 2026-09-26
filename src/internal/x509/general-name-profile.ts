@@ -6,13 +6,9 @@
  * @module
  */
 
-import { childrenOf, decodeString } from '#micro509/internal/asn1/asn1';
+import { checkStrictDer, childrenOf, decodeString } from '#micro509/internal/asn1/asn1';
 import type { DerElement } from '#micro509/internal/asn1/der';
-import {
-	assertStrictDer,
-	DEFAULT_MAX_DER_DEPTH,
-	readRootElement,
-} from '#micro509/internal/asn1/der';
+import { readRootElement } from '#micro509/internal/asn1/der';
 import { domainToAscii } from '#micro509/internal/shared/idna';
 import { checkOrAddressFields } from '#micro509/internal/x509/or-address';
 
@@ -157,10 +153,13 @@ function checkStructuredGeneralName(
 	element: Uint8Array,
 	check: (children: readonly DerElement[], source: Uint8Array) => GeneralNameContentCheck,
 ): GeneralNameContentCheck {
+	const encoding = checkStrictDer(element);
+	if (encoding === 'malformed') {
+		return MALFORMED;
+	}
 	try {
-		assertStrictDer(element, DEFAULT_MAX_DER_DEPTH);
-		const root = readRootElement(element, { maxDepth: DEFAULT_MAX_DER_DEPTH });
-		return check(childrenOf(element, root), element);
+		const profile = check(childrenOf(element, readRootElement(element)), element);
+		return profile.ok && encoding === 'unsupported' ? UNSUPPORTED : profile;
 	} catch {
 		return MALFORMED;
 	}

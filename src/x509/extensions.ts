@@ -9,13 +9,13 @@
 
 import {
 	canonicalizeOid,
+	checkStrictDer,
 	childrenOf,
 	decodeObjectIdentifier,
 	hexToBytes,
 	toHex,
 } from '#micro509/internal/asn1/asn1';
 import {
-	assertStrictDer,
 	bmpString,
 	bool,
 	concatBytes,
@@ -1636,12 +1636,13 @@ function requireGeneralNameContent(
 }
 
 function requireSingleDerElement(value: Uint8Array): Uint8Array {
-	try {
-		assertStrictDer(value, DEFAULT_MAX_DER_DEPTH);
-	} catch {
+	const verdict = checkStrictDer(value);
+	if (verdict !== 'valid') {
 		throwExtensionEncoderError(
 			'invalid_other_name_value',
-			'otherName value must be exactly one DER element',
+			verdict === 'unsupported'
+				? 'otherName value uses an encoding micro509 cannot validate'
+				: 'otherName value must be exactly one DER element',
 		);
 	}
 	return value;

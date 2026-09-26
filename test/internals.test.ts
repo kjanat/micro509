@@ -9,6 +9,7 @@ import {
 	unwrap,
 } from '#micro509';
 import {
+	checkStrictDer,
 	decodeBoolean,
 	decodeIntegerMagnitude,
 	decodeIntegerNumber,
@@ -469,6 +470,214 @@ describe('asn1 decoding', () => {
 	it('hexToBytes rejects malformed hex input', () => {
 		expect(() => hexToBytes('zz')).toThrow('Invalid hex byte: zz');
 		expect(() => hexToBytes('1g')).toThrow('Invalid hex byte: 1g');
+	});
+});
+
+describe('checkStrictDer', () => {
+	const octets = (...values: number[]) => Uint8Array.from(values);
+	const text = (value: string) => new TextEncoder().encode(value);
+
+	it.each([
+		['BOOLEAN FALSE', tlv(0x01, octets(0x00))],
+		['BOOLEAN TRUE', tlv(0x01, octets(0xff))],
+		['INTEGER zero', tlv(0x02, octets(0x00))],
+		['INTEGER -1', tlv(0x02, octets(0xff))],
+		['INTEGER 128', tlv(0x02, octets(0x00, 0x80))],
+		['INTEGER -129', tlv(0x02, octets(0xff, 0x7f))],
+		['INTEGER past 2^53', tlv(0x02, new Uint8Array(40).fill(0x7f))],
+		['empty BIT STRING', tlv(0x03, octets(0x00))],
+		['BIT STRING with zero padding', tlv(0x03, octets(0x03, 0xf8))],
+		['empty OCTET STRING', tlv(0x04, new Uint8Array())],
+		['NULL', tlv(0x05, new Uint8Array())],
+		[
+			'OBJECT IDENTIFIER with a 128-bit arc',
+			objectIdentifier('2.25.329800735698586629295641978511506172918'),
+		],
+		['ENUMERATED', tlv(0x0a, octets(0x01))],
+		['UTF8String', tlv(0x0c, text('ünïcode'))],
+		['NumericString', tlv(0x12, text('0123 456'))],
+		['PrintableString', tlv(0x13, text("Az 09 '()+,-./:=?"))],
+		['IA5String', tlv(0x16, octets(0x00, 0x7f))],
+		['UTCTime', tlv(0x17, text('260926120000Z'))],
+		['UTCTime on 29 February of year 00', tlv(0x17, text('000229000000Z'))],
+		['GeneralizedTime', tlv(0x18, text('20260926120000Z'))],
+		['GeneralizedTime with a fraction', tlv(0x18, text('20260926120000.05Z'))],
+		['GeneralizedTime in year 4', tlv(0x18, text('00040229000000Z'))],
+		['VisibleString', tlv(0x1a, text(' ~'))],
+		['UniversalString', tlv(0x1c, octets(0x00, 0x01, 0xf6, 0x00))],
+		['BMPString', tlv(0x1e, octets(0x00, 0x41))],
+		['empty SEQUENCE', sequence([])],
+		['empty SET', setOf([])],
+		[
+			'universal elements under context tags',
+			sequence([nullValue(), explicitContext(0, sequence([tlv(0x02, octets(0x01))]))]),
+		],
+		['opaque primitive context contents', tlv(0x80, octets(0x00, 0x00))],
+		['opaque primitive application contents', tlv(0x41, octets(0x05, 0x01, 0x00))],
+		['opaque primitive private contents', tlv(0xc1, octets(0x01, 0x01, 0x01))],
+		['REAL plus zero', tlv(0x09, new Uint8Array())],
+		['REAL PLUS-INFINITY', tlv(0x09, octets(0x40))],
+		['REAL minus zero', tlv(0x09, octets(0x43))],
+		['binary REAL 1', tlv(0x09, octets(0x80, 0x00, 0x01))],
+		['binary REAL -3 × 2^-2', tlv(0x09, octets(0xc0, 0xfe, 0x03))],
+		['binary REAL with a two-octet exponent', tlv(0x09, octets(0x81, 0x01, 0x00, 0x01))],
+		['decimal REAL 1.5', tlv(0x09, concatBytes([octets(0x03), text('15.E-1')]))],
+		['decimal REAL -5', tlv(0x09, concatBytes([octets(0x03), text('-5.E+0')]))],
+		['RELATIVE-OID', tlv(0x0d, octets(0x81, 0x00, 0x01))],
+		['ASCII GraphicString', tlv(0x19, text('EXAMPLE.COM'))],
+		['ASCII ObjectDescriptor', tlv(0x07, text('descriptor'))],
+		['GeneralString with C0 controls and DELETE', tlv(0x1b, octets(0x00, 0x0a, 0x41, 0x7f))],
+		['UTF8String holding SHIFT OUT', tlv(0x0c, octets(0x0e))],
+	] as const)('accepts %s', (_label, der) => {
+		expect(checkStrictDer(der)).toBe('valid');
+	});
+
+	it.each([
+		['TeletexString', tlv(0x14, text('x'))],
+		['VideotexString', tlv(0x15, text('x'))],
+		['TIME', tlv(0x0e, text('2026-09-26'))],
+		[
+			'EXTERNAL',
+			tlv(0x28, concatBytes([objectIdentifier('1.2.3'), explicitContext(0, nullValue())])),
+		],
+		[
+			'EMBEDDED PDV',
+			tlv(
+				0x2b,
+				concatBytes([explicitContext(0, tlv(0x85, new Uint8Array())), tlv(0x82, octets(0x01))]),
+			),
+		],
+		[
+			'CHARACTER STRING',
+			tlv(
+				0x3d,
+				concatBytes([explicitContext(0, tlv(0x85, new Uint8Array())), tlv(0x82, octets(0x41))]),
+			),
+		],
+		['binary REAL with a long-form exponent', tlv(0x09, octets(0x83, 0x01, 0x05, 0x01))],
+		['GeneralizedTime at second 60', tlv(0x18, text('20161231235960Z'))],
+		['UTF8String with an escape sequence', tlv(0x0c, octets(0x1b, 0x28, 0x42))],
+		['IA5String with ESCAPE', tlv(0x16, octets(0x41, 0x1b))],
+		['BMPString with SHIFT OUT', tlv(0x1e, octets(0x00, 0x0e))],
+		['UniversalString with CONTROL SEQUENCE INTRODUCER', tlv(0x1c, octets(0x00, 0x00, 0x00, 0x9b))],
+		['GraphicString with an escape sequence', tlv(0x19, octets(0x1b, 0x28, 0x42, 0x41))],
+		['GeneralString with SHIFT IN', tlv(0x1b, octets(0x41, 0x0f))],
+		['TeletexString inside a SEQUENCE', sequence([tlv(0x14, text('x'))])],
+	] as const)('reports %s as unsupported', (_label, der) => {
+		expect(checkStrictDer(der)).toBe('unsupported');
+	});
+
+	it('reports a malformed element over an unsupported one', () => {
+		expect(checkStrictDer(sequence([tlv(0x14, text('x')), tlv(0x05, octets(0x00))]))).toBe(
+			'malformed',
+		);
+		expect(checkStrictDer(sequence([tlv(0x05, octets(0x00)), tlv(0x14, text('x'))]))).toBe(
+			'malformed',
+		);
+	});
+
+	it.each([
+		['end-of-contents (X.690 §8.1.5, §10.1)', tlv(0x00, new Uint8Array())],
+		['empty BOOLEAN (X.690 §8.2.1)', tlv(0x01, new Uint8Array())],
+		['two-octet BOOLEAN (X.690 §8.2.1)', tlv(0x01, octets(0xff, 0xff))],
+		['BOOLEAN TRUE as 0x01 (X.690 §11.1)', tlv(0x01, octets(0x01))],
+		['empty INTEGER (X.690 §8.3.1)', tlv(0x02, new Uint8Array())],
+		['INTEGER with a redundant 0x00 (X.690 §8.3.2)', tlv(0x02, octets(0x00, 0x7f))],
+		['INTEGER with a redundant 0xFF (X.690 §8.3.2)', tlv(0x02, octets(0xff, 0x80))],
+		['ENUMERATED with a redundant 0x00 (X.690 §8.4)', tlv(0x0a, octets(0x00, 0x01))],
+		['BIT STRING with no initial octet (X.690 §8.6.2)', tlv(0x03, new Uint8Array())],
+		['BIT STRING with eight unused bits (X.690 §8.6.2.2)', tlv(0x03, octets(0x08, 0x00))],
+		['empty BIT STRING with unused bits (X.690 §8.6.2.3)', tlv(0x03, octets(0x01))],
+		['BIT STRING with a set padding bit (X.690 §11.2.1)', tlv(0x03, octets(0x01, 0x01))],
+		['NULL with contents (X.690 §8.8.2)', tlv(0x05, octets(0x00))],
+		['empty OBJECT IDENTIFIER (X.690 §8.19)', tlv(0x06, new Uint8Array())],
+		[
+			'OBJECT IDENTIFIER arc opening with 0x80 (X.690 §8.19.2)',
+			tlv(0x06, octets(0x2a, 0x80, 0x01)),
+		],
+		['unterminated OBJECT IDENTIFIER arc (X.690 §8.19.2)', tlv(0x06, octets(0x2a, 0x86))],
+		['UTF8String that is not UTF-8', tlv(0x0c, octets(0xc3, 0x28))],
+		['NumericString with a letter', tlv(0x12, text('12a'))],
+		['PrintableString with @', tlv(0x13, text('a@b'))],
+		['IA5String above 0x7F', tlv(0x16, octets(0x80))],
+		['VisibleString with DEL', tlv(0x1a, octets(0x7f))],
+		['UniversalString surrogate', tlv(0x1c, octets(0x00, 0x00, 0xd8, 0x00))],
+		['odd-length BMPString', tlv(0x1e, octets(0x00))],
+		['UTCTime without seconds (X.690 §11.8)', tlv(0x17, text('2609261200Z'))],
+		['UTCTime with an offset (X.690 §11.8)', tlv(0x17, text('260926120000+0100'))],
+		['UTCTime in month 13', tlv(0x17, text('261326120000Z'))],
+		['UTCTime at hour 24 (X.690 §11.8)', tlv(0x17, text('260926240000Z'))],
+		[
+			'GeneralizedTime with a trailing fraction zero (X.690 §11.7)',
+			tlv(0x18, text('20260926120000.50Z')),
+		],
+		['GeneralizedTime with a zero fraction (X.690 §11.7)', tlv(0x18, text('20260926120000.0Z'))],
+		['GeneralizedTime with a decimal comma (X.690 §11.7)', tlv(0x18, text('20260926120000,5Z'))],
+		['GeneralizedTime in local time (X.690 §11.7)', tlv(0x18, text('20260926120000'))],
+		['GeneralizedTime on 29 February 2025', tlv(0x18, text('20250229000000Z'))],
+		['GeneralizedTime on 29 February 1900', tlv(0x18, text('19000229000000Z'))],
+		[
+			'GeneralizedTime with a BOM',
+			tlv(0x18, concatBytes([octets(0xef, 0xbb, 0xbf), text('20260926120000Z')])),
+		],
+		['constructed OCTET STRING (X.690 §10.2)', tlv(0x24, octetString(octets(0x01)))],
+		['constructed BIT STRING (X.690 §10.2)', tlv(0x23, bitString(octets(0x01)))],
+		['constructed UTF8String (X.690 §10.2)', tlv(0x2c, utf8String('x'))],
+		['constructed BOOLEAN (X.690 §8.2.1)', tlv(0x21, tlv(0x01, octets(0xff)))],
+		['primitive SEQUENCE (X.690 §8.9.1)', tlv(0x10, new Uint8Array())],
+		['primitive SET (X.690 §8.11.1)', tlv(0x11, new Uint8Array())],
+		['reserved universal tag 15', tlv(0x0f, new Uint8Array())],
+		['NULL with contents inside a SEQUENCE', sequence([tlv(0x05, octets(0x00))])],
+		[
+			'BOOLEAN TRUE as 0x01 under a context tag',
+			explicitContext(3, sequence([tlv(0x01, octets(0x01))])),
+		],
+		['BOOLEAN TRUE as 0x01 under an application tag', tlv(0x61, tlv(0x01, octets(0x01)))],
+		['trailing data after the element', concatBytes([nullValue(), nullValue()])],
+		['REAL in base 8 (X.690 §11.3.1)', tlv(0x09, octets(0x90, 0x00, 0x01))],
+		['REAL with scaling factor 1 (X.690 §11.3.1)', tlv(0x09, octets(0x84, 0x00, 0x01))],
+		['REAL with an even mantissa (X.690 §11.3.1)', tlv(0x09, octets(0x80, 0x00, 0x02))],
+		[
+			'REAL mantissa with a leading zero octet (X.690 §11.3.1)',
+			tlv(0x09, octets(0x80, 0x00, 0x00, 0x01)),
+		],
+		['REAL with no mantissa (X.690 §8.5.7)', tlv(0x09, octets(0x80, 0x00))],
+		[
+			'REAL with a padded two-octet exponent (X.690 §11.3.1)',
+			tlv(0x09, octets(0x81, 0x00, 0x01, 0x01)),
+		],
+		['REAL special value with a second octet (X.690 §8.5.9)', tlv(0x09, octets(0x40, 0x00))],
+		['reserved REAL special value (X.690 §8.5.9)', tlv(0x09, octets(0x44))],
+		['REAL in NR1 form (X.690 §11.3.2.1)', tlv(0x09, concatBytes([octets(0x01), text('1')]))],
+		...[
+			['with a zero mantissa', '0.E+0'],
+			['whose mantissa ends in 0', '10.E+0'],
+			['with a PLUS SIGN', '+5.E+0'],
+			['with an exponent of 0 not written +0', '5.E0'],
+			['with a PLUS SIGN on its exponent', '5.E+1'],
+			['with a leading 0 in its exponent', '5.E01'],
+			['with a lower-case exponent mark', '5.e+0'],
+			['with a SPACE', '5 .E+0'],
+			['with a point inside the mantissa', '1.5E+0'],
+		].map(
+			([label = '', nr3 = '']) =>
+				[
+					`decimal REAL ${label} (X.690 §11.3.2)`,
+					tlv(0x09, concatBytes([octets(0x03), text(nr3)])),
+				] as const,
+		),
+		['empty RELATIVE-OID (X.680 §33.3)', tlv(0x0d, new Uint8Array())],
+		['RELATIVE-OID arc opening with 0x80 (X.690 §8.20.2)', tlv(0x0d, octets(0x80, 0x01))],
+		['GraphicString with a C0 control', tlv(0x19, octets(0x0a))],
+		['GraphicString with DELETE', tlv(0x19, octets(0x7f))],
+		['GraphicString with an octet above 0x7F', tlv(0x19, octets(0xa0))],
+		['GeneralString with an octet above 0x7F', tlv(0x1b, octets(0x80))],
+		['UTCTime at second 60 (X.680 §47.3)', tlv(0x17, text('161231235960Z'))],
+		['primitive EXTERNAL (X.690 §8.18.1)', tlv(0x08, new Uint8Array())],
+		['primitive CHARACTER STRING (X.690 §8.24.1)', tlv(0x1d, new Uint8Array())],
+		['constructed TIME (X.690 §8.26.1.1)', tlv(0x2e, new Uint8Array())],
+	] as const)('rejects %s', (_label, der) => {
+		expect(checkStrictDer(der)).toBe('malformed');
 	});
 });
 
@@ -973,6 +1182,38 @@ describe('extensions encoding', () => {
 		);
 	});
 
+	it('encodeSubjectAltName refuses an otherName value holding a type it cannot validate', () => {
+		const value = sequence([utf8String('a'), tlv(0x14, Uint8Array.of(0x41))]);
+		expect(() => encodeSubjectAltName({ type: 'otherName', typeId: '1.2.3.4', value })).toThrow(
+			/cannot validate/,
+		);
+		expectEncoderErrorCode(
+			() => encodeSubjectAltName({ type: 'otherName', typeId: '1.2.3.4', value }),
+			'invalid_other_name_value',
+		);
+	});
+
+	it('encodeSubjectAltName encodes an RFC 4556 KRB5PrincipalName otherName', () => {
+		const kerberosString = (value: string) => tlv(0x1b, new TextEncoder().encode(value));
+		const krb5PrincipalName = sequence([
+			explicitContext(0, kerberosString('EXAMPLE.COM')),
+			explicitContext(
+				1,
+				sequence([
+					explicitContext(0, integerFromNumber(1)),
+					explicitContext(1, sequence([kerberosString('alice')])),
+				]),
+			),
+		]);
+		expect(
+			encodeSubjectAltName({
+				type: 'otherName',
+				typeId: '1.3.6.1.5.2.2',
+				value: krb5PrincipalName,
+			})[0],
+		).toBe(0xa0);
+	});
+
 	it('encodeSubjectAltName refuses an otherName it cannot encode faithfully', () => {
 		for (const typeId of [OIDS.idOnDnsSrv, OIDS.idOnSmtpUtf8Mailbox]) {
 			expectEncoderErrorCode(
@@ -997,6 +1238,10 @@ describe('extensions encoding', () => {
 			Uint8Array.of(0x00, 0x00),
 			sequence([utf8String('a'), Uint8Array.of(0x00, 0x00)]),
 			explicitContext(2, sequence([Uint8Array.of(0x00, 0x00)])),
+			tlv(0x05, Uint8Array.of(0x00)),
+			tlv(0x01, Uint8Array.of(0x01)),
+			tlv(0x02, Uint8Array.of(0x00, 0x01)),
+			sequence([utf8String('a'), tlv(0x02, Uint8Array.of(0xff, 0xff))]),
 		]) {
 			expectEncoderErrorCode(
 				() => encodeSubjectAltName({ type: 'otherName', typeId: '1.2.3.4', value }),

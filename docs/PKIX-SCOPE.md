@@ -147,9 +147,18 @@ Current GeneralName matrix for `nameConstraints`:
   `registeredID` is processed, since its whole value is an OID; its name
   constraints still fail closed, and it satisfies no DNS, URI or SRV identity.
 - The builder validates the representation it emits. An `otherName` value is
-  one strict DER element with no end-of-contents octets at any depth
-  (X.690 §8.1.5, §10.1); micro509 does not know the schema behind an
-  arbitrary type-id. An `ediPartyName` holds an optional `[0]` and a
+  one DER element. Every universal-class element inside it, at any depth, has
+  the form and contents X.690 fixes for its tag, DER's clauses 10 and 11
+  included, and none is end-of-contents (X.690 §8.1.5, §10.1). TeletexString
+  and VideotexString (ISO-IR repertoires), escape sequences and
+  code-extension controls (ISO/IEC 2022), TIME and a GeneralizedTime at second
+  60 (ISO 8601), a REAL with a long-form exponent (ambiguous in X.690
+  §8.5.7.4 d)), and EXTERNAL, EMBEDDED PDV and CHARACTER STRING (implicitly
+  tagged contents) are refused as unsupported. micro509 does not know the
+  schema behind an arbitrary type-id, so contents under context-specific,
+  application and private tags stay unchecked, as do SET component order,
+  DEFAULT omission and NamedBitList trailing bits. An `ediPartyName` holds an
+  optional `[0]` and a
   required `[1]` DirectoryString, and an `x400Address` follows the RFC 5280
   Appendix A.1 ORAddress schema: fields, tags, order, multiplicity, string
   repertoires and upper bounds, with DER SET ordering. TeletexString, the
