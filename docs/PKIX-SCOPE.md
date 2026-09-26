@@ -262,8 +262,16 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
 - [x] Add delta CRL handling only if you actually want to live in that swamp. RFC 5280 defines CRL validation separately from path validation. (IETF Datatracker[^rfc5280])
       Chain evaluation uses only a current delta CRL whose CRL number exceeds
       the base CRL's (RFC 5280 §5.2.4), and it tries candidates from the
-      latest `thisUpdate` down (RFC 5280 §5.2.4), using the first that
-      validates and otherwise the base CRL alone. It also requires the delta's
+      latest `thisUpdate` down (RFC 5280 §5.2.4). A candidate that fails
+      authentication, freshness, compatibility or applicability is skipped,
+      and the base CRL is evaluated alone once every candidate is skipped. A
+      candidate that passes those checks is used, and when its revoked entries
+      cannot settle the certificate's status the result is indeterminate with
+      `delta_crl_unusable`. At most four candidates are checked per base CRL
+      and 32 per `checkChainRevocation` call, and a candidate left unchecked
+      makes the result indeterminate with `delta_crl_retry_limit_exceeded`.
+      Both reasons outrank a `good` verdict from other evidence. These are
+      micro509 policy choices. It also requires the delta's
       `thisUpdate` to be no earlier than the base CRL's, because X.509 Annex
       E.5.2 requires a delta CRL to be issued after the base CRL it updates.
       X.509 does not say whether an equal `thisUpdate` meets that rule, and

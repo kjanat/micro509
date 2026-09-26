@@ -832,7 +832,13 @@ export async function validateCertificateRevocationList(
 		: validateCertificateRevocationListFailureResult('stale_crl', freshnessFailure);
 }
 
-async function authenticateCrl(
+/**
+ * Verifies the issuer binding, cRLSign permission and signature of `crl`
+ * against `issuerCertificate`, without freshness checks.
+ *
+ * @internal
+ */
+export async function authenticateCrl(
 	crl: CrlSource,
 	issuerCertificate: CrlCertificateSource,
 ): Promise<ValidateCertificateRevocationListResult> {
@@ -991,48 +997,90 @@ export async function checkCertificateRevocationAgainstCrl(
 			'certificate input is malformed',
 		);
 	}
-	const validated =
-		input.deltaCrl === undefined
-			? await validateCertificateRevocationList({
-					crl: input.crl,
-					issuerCertificate: input.issuerCertificate,
-					...(input.at === undefined ? {} : { at: input.at }),
-					...(input.clockSkewMs === undefined ? {} : { clockSkewMs: input.clockSkewMs }),
-					...(input.maxAgeMs === undefined ? {} : { maxAgeMs: input.maxAgeMs }),
-				})
-			: await authenticateCrl(input.crl, input.issuerCertificate);
-	if (!validated.ok) {
-		return checkCertificateRevocationAgainstCrlFailureResult(validated.code, validated.message);
+	const authenticated = await authenticateCrl(input.crl, input.issuerCertificate);
+	if (!authenticated.ok) {
+		return checkCertificateRevocationAgainstCrlFailureResult(
+			authenticated.code,
+			authenticated.message,
+		);
 	}
-	const deltaResult = await validateOptionalDeltaCrl(input, validated.value);
-	if (!deltaResult.ok) return deltaResult;
-	const applicability = checkCrlAndDeltaApplicability(
+	const outcome = await checkRevocationAgainstAuthenticatedCrl(
 		certificate,
-		validated.value,
-		deltaResult.value,
+		authenticated.value,
+		input,
 	);
-	if (!applicability.ok) return applicability.failure;
-	const coveredReasons = applicability.coveredReasons;
-	const completeRevoked = findRevokedCertificateEntry(certificate, validated.value);
-	if (!completeRevoked.ok) {
-		return completeRevoked;
-	}
-	let deltaRevoked: ParsedRevokedCertificate | undefined;
-	if (deltaResult.value !== undefined) {
-		const deltaLookup = findRevokedCertificateEntry(certificate, deltaResult.value);
-		if (!deltaLookup.ok) {
-			return deltaLookup;
+	return outcome.kind === 'checked' ? outcome.result : outcome.failure;
+}
+
+/**
+ * Result of {@linkcode checkRevocationAgainstAuthenticatedCrl}, keyed by the
+ * stage that settled it. `delta_rejected` means the delta CRL failed
+ * authentication, freshness, compatibility or applicability;
+ * `delta_unresolved` means it passed them and its revoked entries could not
+ * settle the certificate's status.
+ *
+ * @internal
+ */
+export type AuthenticatedCrlCheckOutcome =
+	| { readonly kind: 'checked'; readonly result: CheckCertificateRevocationAgainstCrlResult }
+	| { readonly kind: 'delta_rejected'; readonly failure: CrlApplicabilityFailure }
+	| { readonly kind: 'delta_unresolved'; readonly failure: CrlApplicabilityFailure };
+
+/**
+ * Checks `certificate` against a complete CRL that {@linkcode authenticateCrl}
+ * accepted for `input.issuerCertificate`, updated by `input.deltaCrl` when given.
+ *
+ * @internal
+ */
+export async function checkRevocationAgainstAuthenticatedCrl(
+	certificate: ParsedCertificate,
+	completeCrl: ParsedCertificateRevocationList,
+	input: CheckCertificateRevocationAgainstCrlInput,
+): Promise<AuthenticatedCrlCheckOutcome> {
+	if (input.deltaCrl === undefined) {
+		const freshnessFailure = crlFreshnessFailure(
+			completeCrl,
+			input.at ?? new Date(),
+			input.clockSkewMs ?? 0,
+			input.maxAgeMs,
+		);
+		if (freshnessFailure !== undefined) {
+			return {
+				kind: 'checked',
+				result: checkCertificateRevocationAgainstCrlFailureResult('stale_crl', freshnessFailure),
+			};
 		}
+	}
+	const deltaResult = await validateOptionalDeltaCrl(input, completeCrl);
+	if (!deltaResult.ok) return { kind: 'delta_rejected', failure: deltaResult };
+	const deltaCrl = deltaResult.value;
+	const applicability = checkCrlApplicability(certificate, completeCrl);
+	if (!applicability.ok) return { kind: 'checked', result: applicability.failure };
+	if (deltaCrl !== undefined) {
+		const deltaApplicability = checkCrlApplicability(certificate, deltaCrl, true);
+		if (!deltaApplicability.ok) {
+			return { kind: 'delta_rejected', failure: deltaApplicability.failure };
+		}
+	}
+	const completeRevoked = findRevokedCertificateEntry(certificate, completeCrl);
+	if (!completeRevoked.ok) return { kind: 'checked', result: completeRevoked };
+	let deltaRevoked: ParsedRevokedCertificate | undefined;
+	if (deltaCrl !== undefined) {
+		const deltaLookup = findRevokedCertificateEntry(certificate, deltaCrl);
+		if (!deltaLookup.ok) return { kind: 'delta_unresolved', failure: deltaLookup };
 		deltaRevoked = deltaLookup.entry;
 	}
-	return resolveCertificateRevocationStatus(
-		certificate,
-		deltaResult.value?.thisUpdate,
-		validated.value,
-		completeRevoked.entry,
-		deltaRevoked,
-		coveredReasons,
-	);
+	return {
+		kind: 'checked',
+		result: resolveCertificateRevocationStatus(
+			certificate,
+			deltaCrl?.thisUpdate,
+			completeCrl,
+			completeRevoked.entry,
+			deltaRevoked,
+			applicability.coveredReasons,
+		),
+	};
 }
 
 /** RFC 5280 §6.3.3 (d): interim_reasons_mask from the matched DP and the CRL's IDP. */
@@ -1083,19 +1131,6 @@ async function validateOptionalDeltaCrl(
 	}
 	const compatibilityFailure = checkDeltaCrlCompatibility(completeCrl, deltaValidation.value);
 	return compatibilityFailure ?? { ok: true, value: deltaValidation.value };
-}
-
-function checkCrlAndDeltaApplicability(
-	certificate: ParsedCertificate,
-	crl: ParsedCertificateRevocationList,
-	deltaCrl: ParsedCertificateRevocationList | undefined,
-): CrlApplicabilityOutcome {
-	const outcome = checkCrlApplicability(certificate, crl);
-	if (!outcome.ok || deltaCrl === undefined) {
-		return outcome;
-	}
-	const deltaOutcome = checkCrlApplicability(certificate, deltaCrl, true);
-	return deltaOutcome.ok ? outcome : deltaOutcome;
 }
 
 /** Builds a `VerifyCertificateRevocationListSignatureFailureResult`. */
