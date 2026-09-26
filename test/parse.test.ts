@@ -1254,6 +1254,27 @@ describe('parse', () => {
 		]);
 	});
 
+	it('round-trips an otherName value carrying high-tag-number identifiers', async () => {
+		const values = [
+			Uint8Array.of(0x9f, 0x20, 0x01, 0x00),
+			Uint8Array.of(0xbf, 0x81, 0x00, 0x03, 0x02, 0x01, 0x05),
+			Uint8Array.of(0x30, 0x04, 0xdf, 0x82, 0x00, 0x00),
+		];
+		const { certificate } = await createSelfSignedCertificate({
+			subject: { commonName: 'high-tag-othername.example' },
+			extensions: {
+				subjectAltNames: values.map((value) => ({
+					type: 'otherName' as const,
+					typeId: '1.2.3.4',
+					value,
+				})),
+			},
+		});
+		expect(unwrap(parseCertificatePem(certificate.pem)).subjectAltNames).toEqual(
+			values.map((value) => ({ type: 'otherName', typeId: '1.2.3.4', value })),
+		);
+	});
+
 	it('parses a conformant SRV-ID otherName carrying no inner SEQUENCE', async () => {
 		// RFC 5280 §4.2.1.6: otherName [0] is IMPLICIT, so the [0] tag replaces
 		// OtherName's SEQUENCE tag and type-id/value are its direct children.
@@ -1918,6 +1939,24 @@ describe('parse', () => {
 			{ policyIdentifier: uuid },
 			{ policyIdentifier: wide },
 			{ policyIdentifier: `1.2.${1n << 130n}` },
+		]);
+	});
+
+	it('round-trips registeredID SANs with arcs wider than 53 bits exactly', async () => {
+		const uuid = '2.25.329800735698586629295641978511506172918';
+		const wide = `2.25.${(1n << 200n) + 7n}`;
+		const certificate = await createSelfSignedCertificate({
+			subject: { commonName: 'wide-arc-registered-id.example' },
+			extensions: {
+				subjectAltNames: [
+					{ type: 'registeredID', value: uuid },
+					{ type: 'registeredID', value: wide },
+				],
+			},
+		});
+		expect(unwrap(parseCertificatePem(certificate.certificate.pem)).subjectAltNames).toEqual([
+			{ type: 'registeredID', value: uuid },
+			{ type: 'registeredID', value: wide },
 		]);
 	});
 
@@ -2654,7 +2693,7 @@ describe('parse: coverage — error paths', () => {
 			parseAuthorityKeyIdentifier(
 				sequence([tlv(0xa1, Uint8Array.of(0xff)), tlv(0x82, Uint8Array.of(0x01))]),
 			),
-		).toThrow('High-tag-number DER form is not supported');
+		).toThrow('DER element exceeds input length');
 		expect(() =>
 			parseAuthorityKeyIdentifier(
 				sequence([tlv(0x82, Uint8Array.of(0x01)), explicitContext(1, sequence([]))]),

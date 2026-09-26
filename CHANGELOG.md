@@ -21,6 +21,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The DER and BER readers accept high-tag-number identifiers (X.690 §8.1.2.4)
+  for tag numbers from 31 up, and `DerElement.tagNumber` carries the tag number
+  within its class. An otherName value, a SafeBag value and a OneAsymmetricKey
+  extension field may use them. A tag number below 31 in that form, or one whose
+  first subsequent octet is `0x80`, is `malformed`. `checkStrictDer` reports
+  UNIVERSAL 31 to 36 as `unsupported` and the reserved numbers from 37 up as
+  `malformed`.
 - IDNA2008 (RFC 5890-5893, RFC 8753) over frozen Unicode 12.0.0 tables
   derived from the IANA registry. The builder converts U-labels to A-labels
   in dNSName and rfc822Name SANs, SmtpUTF8Mailbox domains, the Name of a
@@ -135,14 +142,15 @@ revocation })` report a certificate carrying `noRevAvail` or
 - `unsupported` and `limit_exceeded` on the parse error codes. `unsupported`,
   on `ParseCertificateErrorCode`, `ParseCertificateSigningRequestErrorCode`,
   `ParseCertificateRevocationListErrorCode`, `ParseOcspRequestErrorCode`,
-  `ParseOcspResponseErrorCode`, `ParsePkcs7ErrorCode` and
+  `ParseOcspResponseErrorCode`, `ParsePkcs7ErrorCode`, `ParsePfxErrorCode` and
   `DecodeDerErrorCode`, is input the profile may allow but micro509 does not
   decode, today a TeletexString octet outside the X.690 §8.23.5.2 initial
   state. `limit_exceeded`, on those and on `ImportKeyErrorCode`,
   `ImportEncryptedKeyErrorCode`, `ParsePfxErrorCode` and
   `ParsePkcs12MacDataErrorCode`, is an implementation limit of micro509's own:
-  an OBJECT IDENTIFIER sub-identifier encoded in more than 64 octets, or DER or
-  BER nested deeper than 64 levels, which returned `malformed` before. The
+  an OBJECT IDENTIFIER sub-identifier encoded in more than 64 octets, a tag
+  number of 2^53 or more, or DER or BER nested deeper than 64 levels, which
+  returned `malformed` before. The
   throwing parsers throw a `ResultError` carrying the code.
 - `rejectOversizedExplicitText` on `verifyCertificateChain` and
   `validateCandidatePath` rejects a certificate whose user notice

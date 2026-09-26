@@ -22,19 +22,19 @@ Unions may gain members in minor releases; treat them as non-exhaustive and keep
 
 ### ParseCertificateErrorCode
 
-| Code             | Meaning                                                                                                                   |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `limit_exceeded` | A micro509 limit: an OBJECT IDENTIFIER sub-identifier encoded in more than 64 octets, or DER nested deeper than 64 levels |
-| `malformed`      | Input is not a valid DER or PEM X.509 certificate                                                                         |
-| `unsupported`    | A TeletexString name value holds an octet outside the X.690 §8.23.5.2 initial state, which micro509 does not decode       |
+| Code             | Meaning                                                                                                                                                 |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `limit_exceeded` | A micro509 limit: an OBJECT IDENTIFIER sub-identifier encoded in more than 64 octets, a tag number of 2^53 or more, or DER nested deeper than 64 levels |
+| `malformed`      | Input is not a valid DER or PEM X.509 certificate                                                                                                       |
+| `unsupported`    | A TeletexString name value holds an octet outside the X.690 §8.23.5.2 initial state, which micro509 does not decode                                     |
 
 ### ParseCertificateSigningRequestErrorCode
 
-| Code             | Meaning                                                                                                                   |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `limit_exceeded` | A micro509 limit: an OBJECT IDENTIFIER sub-identifier encoded in more than 64 octets, or DER nested deeper than 64 levels |
-| `malformed`      | Input is not a valid DER or PEM PKCS#10 request                                                                           |
-| `unsupported`    | A TeletexString name value holds an octet outside the X.690 §8.23.5.2 initial state, which micro509 does not decode       |
+| Code             | Meaning                                                                                                                                                 |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `limit_exceeded` | A micro509 limit: an OBJECT IDENTIFIER sub-identifier encoded in more than 64 octets, a tag number of 2^53 or more, or DER nested deeper than 64 levels |
+| `malformed`      | Input is not a valid DER or PEM PKCS#10 request                                                                                                         |
+| `unsupported`    | A TeletexString name value holds an octet outside the X.690 §8.23.5.2 initial state, which micro509 does not decode                                     |
 
 ### MatchCertificatePrivateKeyErrorCode
 
@@ -158,27 +158,27 @@ both tables are enforced against `VERIFY_ERROR_CODES` by tests.
 
 ### ParseCertificateRevocationListErrorCode
 
-| Code             | Meaning                                                                                                                   |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `limit_exceeded` | A micro509 limit: an OBJECT IDENTIFIER sub-identifier encoded in more than 64 octets, or DER nested deeper than 64 levels |
-| `malformed`      | Input is not a valid DER or PEM CRL                                                                                       |
-| `unsupported`    | A TeletexString name value holds an octet outside the X.690 §8.23.5.2 initial state, which micro509 does not decode       |
+| Code             | Meaning                                                                                                                                                 |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `limit_exceeded` | A micro509 limit: an OBJECT IDENTIFIER sub-identifier encoded in more than 64 octets, a tag number of 2^53 or more, or DER nested deeper than 64 levels |
+| `malformed`      | Input is not a valid DER or PEM CRL                                                                                                                     |
+| `unsupported`    | A TeletexString name value holds an octet outside the X.690 §8.23.5.2 initial state, which micro509 does not decode                                     |
 
 ### ParseOcspRequestErrorCode
 
-| Code             | Meaning                                                                                                                   |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `limit_exceeded` | A micro509 limit: an OBJECT IDENTIFIER sub-identifier encoded in more than 64 octets, or DER nested deeper than 64 levels |
-| `malformed`      | Input is not a valid DER or PEM OCSP request                                                                              |
-| `unsupported`    | A TeletexString name value holds an octet outside the X.690 §8.23.5.2 initial state, which micro509 does not decode       |
+| Code             | Meaning                                                                                                                                                 |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `limit_exceeded` | A micro509 limit: an OBJECT IDENTIFIER sub-identifier encoded in more than 64 octets, a tag number of 2^53 or more, or DER nested deeper than 64 levels |
+| `malformed`      | Input is not a valid DER or PEM OCSP request                                                                                                            |
+| `unsupported`    | A TeletexString name value holds an octet outside the X.690 §8.23.5.2 initial state, which micro509 does not decode                                     |
 
 ### ParseOcspResponseErrorCode
 
-| Code             | Meaning                                                                                                                   |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `limit_exceeded` | A micro509 limit: an OBJECT IDENTIFIER sub-identifier encoded in more than 64 octets, or DER nested deeper than 64 levels |
-| `malformed`      | Input is not a valid DER or PEM OCSP response                                                                             |
-| `unsupported`    | A TeletexString name value holds an octet outside the X.690 §8.23.5.2 initial state, which micro509 does not decode       |
+| Code             | Meaning                                                                                                                                                 |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `limit_exceeded` | A micro509 limit: an OBJECT IDENTIFIER sub-identifier encoded in more than 64 octets, a tag number of 2^53 or more, or DER nested deeper than 64 levels |
+| `malformed`      | Input is not a valid DER or PEM OCSP response                                                                                                           |
+| `unsupported`    | A TeletexString name value holds an octet outside the X.690 §8.23.5.2 initial state, which micro509 does not decode                                     |
 
 ### CheckCertificateRevocationAgainstCrlErrorCode
 
@@ -267,19 +267,19 @@ and an OCSP response without `nextUpdate` under `ocspProfile: 'rfc9919'` as
 
 ### ImportKeyErrorCode
 
-| Code             | Meaning                                                                                                                   |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `limit_exceeded` | A micro509 limit: an OBJECT IDENTIFIER sub-identifier encoded in more than 64 octets, or DER nested deeper than 64 levels |
-| `malformed`      | Key material fails to parse or match the request                                                                          |
+| Code             | Meaning                                                                                                                                                 |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `limit_exceeded` | A micro509 limit: an OBJECT IDENTIFIER sub-identifier encoded in more than 64 octets, a tag number of 2^53 or more, or DER nested deeper than 64 levels |
+| `malformed`      | Key material fails to parse or match the request                                                                                                        |
 
 ### ImportEncryptedKeyErrorCode
 
-| Code                      | Meaning                                                                                                                                       |
-| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `invalid_password`        | Decryption failed, or plaintext is not a private key                                                                                          |
-| `kdf_iterations_exceeded` | PBKDF2 iteration count exceeds `maxKdfIterations` (2,000,000 default)                                                                         |
-| `limit_exceeded`          | A micro509 limit: an OBJECT IDENTIFIER sub-identifier encoded in more than 64 octets, or DER nested deeper than 64 levels                     |
-| `malformed`               | Envelope fails to parse before any decryption, including a PBKDF2 `iterationCount` outside 1 to 4294967295 whatever `maxKdfIterations` allows |
+| Code                      | Meaning                                                                                                                                                 |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `invalid_password`        | Decryption failed, or plaintext is not a private key                                                                                                    |
+| `kdf_iterations_exceeded` | PBKDF2 iteration count exceeds `maxKdfIterations` (2,000,000 default)                                                                                   |
+| `limit_exceeded`          | A micro509 limit: an OBJECT IDENTIFIER sub-identifier encoded in more than 64 octets, a tag number of 2^53 or more, or DER nested deeper than 64 levels |
+| `malformed`               | Envelope fails to parse before any decryption, including a PBKDF2 `iterationCount` outside 1 to 4294967295 whatever `maxKdfIterations` allows           |
 
 ### EncryptRsaOaepErrorCode
 
@@ -307,11 +307,11 @@ and an OCSP response without `nextUpdate` under `ocspProfile: 'rfc9919'` as
 
 ### DecodeDerErrorCode
 
-| Code             | Meaning                                                                                                                   |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `limit_exceeded` | A micro509 limit: an OBJECT IDENTIFIER sub-identifier encoded in more than 64 octets, or DER nested deeper than 64 levels |
-| `malformed`      | Bytes are not the expected DER structure                                                                                  |
-| `unsupported`    | A TeletexString holds an octet outside the X.690 §8.23.5.2 initial state, which micro509 does not decode                  |
+| Code             | Meaning                                                                                                                                                 |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `limit_exceeded` | A micro509 limit: an OBJECT IDENTIFIER sub-identifier encoded in more than 64 octets, a tag number of 2^53 or more, or DER nested deeper than 64 levels |
+| `malformed`      | Bytes are not the expected DER structure                                                                                                                |
+| `unsupported`    | A TeletexString holds an octet outside the X.690 §8.23.5.2 initial state, which micro509 does not decode                                                |
 
 ## micro509/pkcs
 
@@ -321,11 +321,12 @@ and an OCSP response without `nextUpdate` under `ocspProfile: 'rfc9919'` as
 | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `invalid_password`          | MAC or decryption rejects the supplied password                                                                                                                                                                   |
 | `kdf_iterations_exceeded`   | The PBES2 bags' combined PBKDF2 iteration counts exceed `maxKdfIterations` (2,000,000 default), or the MAC's count exceeds its own `maxKdfIterations` (100,000 default for the PKCS#12 KDF, 2,000,000 for PBMAC1) |
-| `limit_exceeded`            | A micro509 limit: an OBJECT IDENTIFIER sub-identifier encoded in more than 64 octets, or DER or BER nested deeper than 64 levels                                                                                  |
+| `limit_exceeded`            | A micro509 limit: an OBJECT IDENTIFIER sub-identifier encoded in more than 64 octets, a tag number of 2^53 or more, or DER or BER nested deeper than 64 levels                                                    |
 | `malformed`                 | PFX structure fails to parse, including a PBKDF2 `iterationCount` outside 1 to 4294967295 in a PBES2 bag or a PBMAC1 MAC                                                                                          |
 | `password_not_bmp_string`   | The RFC 7292 MAC password (`macPassword`, or `password` as fallback) contains a UTF-16 surrogate, U+FFFE or U+FFFF                                                                                                |
 | `password_not_utf8`         | The PBMAC1 password contains an unpaired UTF-16 surrogate                                                                                                                                                         |
 | `password_required`         | Encrypted content present but no password given                                                                                                                                                                   |
+| `unsupported`               | A certBag certificate's TeletexString name value holds an octet outside the X.690 §8.23.5.2 initial state, which micro509 does not decode                                                                         |
 | `unsupported_mac_algorithm` | The MAC is neither the SHA-256 RFC 7292 MAC nor a supported PBMAC1 variant                                                                                                                                        |
 | `weak_mac_key_length`       | PBMAC1 PBKDF2 `keyLength` is below 20 octets                                                                                                                                                                      |
 
@@ -359,7 +360,7 @@ and an OCSP response without `nextUpdate` under `ocspProfile: 'rfc9919'` as
 | Code                        | Meaning                                                                                                                                                                                                                |
 | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `kdf_iterations_exceeded`   | With a password, the iteration count exceeds `maxKdfIterations` (100,000 default for the PKCS#12 KDF, 2,000,000 for PBMAC1), or an RFC 7292 MAC count exceeds `Number.MAX_SAFE_INTEGER`                                |
-| `limit_exceeded`            | A micro509 limit: an OBJECT IDENTIFIER sub-identifier encoded in more than 64 octets, or DER nested deeper than 64 levels                                                                                              |
+| `limit_exceeded`            | A micro509 limit: an OBJECT IDENTIFIER sub-identifier encoded in more than 64 octets, a tag number of 2^53 or more, or DER nested deeper than 64 levels                                                                |
 | `malformed`                 | MacData structure fails to parse, an iteration count is below 1, a PBMAC1 count exceeds 4294967295 whatever `maxKdfIterations` allows, or, without a password, an RFC 7292 MAC count exceeds `Number.MAX_SAFE_INTEGER` |
 | `password_not_bmp_string`   | RFC 7292 MAC password contains a UTF-16 surrogate, U+FFFE or U+FFFF                                                                                                                                                    |
 | `password_not_utf8`         | PBMAC1 password contains an unpaired UTF-16 surrogate                                                                                                                                                                  |
@@ -372,12 +373,12 @@ Without a password no key is derived. `maxKdfIterations` is not applied, and
 
 ### ParsePkcs7ErrorCode
 
-| Code              | Meaning                                                                                                                      |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `limit_exceeded`  | A micro509 limit: an OBJECT IDENTIFIER sub-identifier encoded in more than 64 octets, or DER nested deeper than 64 levels    |
-| `malformed`       | ContentInfo or SignedData fails to parse                                                                                     |
-| `not_signed_data` | ContentInfo carries a content type other than data                                                                           |
-| `unsupported`     | A signer issuer TeletexString value holds an octet outside the X.690 §8.23.5.2 initial state, which micro509 does not decode |
+| Code              | Meaning                                                                                                                                                 |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `limit_exceeded`  | A micro509 limit: an OBJECT IDENTIFIER sub-identifier encoded in more than 64 octets, a tag number of 2^53 or more, or DER nested deeper than 64 levels |
+| `malformed`       | ContentInfo or SignedData fails to parse                                                                                                                |
+| `not_signed_data` | ContentInfo carries a content type other than data                                                                                                      |
+| `unsupported`     | A signer issuer TeletexString value holds an octet outside the X.690 §8.23.5.2 initial state, which micro509 does not decode                            |
 
 ### CreatePkcs7CertBagErrorCode
 

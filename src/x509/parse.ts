@@ -115,8 +115,8 @@ export type { NameFieldKey } from '#micro509/x509/name';
  * `unsupported` is input the profile may allow but micro509 does not decode: a
  * TeletexString octet outside the X.690 §8.23.5.2 initial state.
  * `limit_exceeded` is an implementation limit: an OBJECT IDENTIFIER
- * sub-identifier encoded in more than 64 octets, or DER nested deeper than 64
- * levels.
+ * sub-identifier encoded in more than 64 octets, a tag number of 2^53 or more,
+ * or DER nested deeper than 64 levels.
  */
 export type ParseCertificateErrorCode = 'malformed' | 'unsupported' | 'limit_exceeded';
 

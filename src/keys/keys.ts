@@ -205,8 +205,8 @@ export interface LegacyPemEncryptionOptions {
  * Machine-readable failure reason for the `import*` key functions.
  *
  * `limit_exceeded` is an implementation limit: an OBJECT IDENTIFIER
- * sub-identifier encoded in more than 64 octets, or DER nested deeper than 64
- * levels.
+ * sub-identifier encoded in more than 64 octets, a tag number of 2^53 or more,
+ * or DER nested deeper than 64 levels.
  */
 export type ImportKeyErrorCode = 'malformed' | 'limit_exceeded';
 
@@ -1794,7 +1794,7 @@ function validateOneAsymmetricKeyTail(tail: readonly DerElement[]): Uint8Array |
 	let publicKey: Uint8Array | undefined;
 	let seenUnknown = false;
 	for (const child of tail) {
-		const contextNumber = (child.tag & 0xc0) === 0x80 ? child.tag & 0x1f : -1;
+		const contextNumber = (child.tag & 0xc0) === 0x80 ? child.tagNumber : -1;
 		if (contextNumber === 0) {
 			if (seenAttributes || publicKey !== undefined || seenUnknown || child.tag !== 0xa0) {
 				throw new Error('Malformed PKCS#8 private key');
@@ -1806,7 +1806,7 @@ function validateOneAsymmetricKeyTail(tail: readonly DerElement[]): Uint8Array |
 				throw new Error('Malformed PKCS#8 private key');
 			}
 			publicKey = readPublicKeyBitString(child.value);
-		} else if (contextNumber >= 2 && contextNumber <= 30) {
+		} else if (contextNumber >= 2) {
 			seenUnknown = true;
 		} else {
 			throw new Error('Malformed PKCS#8 private key');

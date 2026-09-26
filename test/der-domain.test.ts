@@ -280,7 +280,7 @@ describe('der domain', () => {
 				'Indefinite lengths are not supported',
 			);
 			expect(() => readDerElementOrThrow(Uint8Array.of(0x1f, 0x01, 0x41))).toThrow(
-				'High-tag-number DER form is not supported',
+				'Tag numbers below 31 must use the low-tag-number form',
 			);
 			expect(() => readDerElementOrThrow(Uint8Array.of(0x04, 0x81, 0x01, 0x41))).toThrow(
 				'Non-minimal DER length encoding',

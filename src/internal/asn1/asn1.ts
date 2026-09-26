@@ -571,9 +571,9 @@ export type StrictDerVerdict = 'valid' | 'malformed' | 'unsupported';
  *
  * Where those rules rest on ISO/IEC 2022, ISO 8601 or an implicitly tagged
  * schema, the element is `unsupported`: TeletexString, VideotexString, TIME,
- * EXTERNAL, EMBEDDED PDV, CHARACTER STRING, a REAL with a long-form exponent, a
- * GeneralizedTime at second 60, and text holding an escape sequence or a
- * code-extension control. Context-specific, application and private elements
+ * EXTERNAL, EMBEDDED PDV, CHARACTER STRING, the types of UNIVERSAL 31 to 36, a
+ * REAL with a long-form exponent, a GeneralizedTime at second 60, and text
+ * holding an escape sequence or a code-extension control. Context-specific, application and private elements
  * get framing checks only, as do the rules that depend on a schema: SET
  * component order, DEFAULT omission and NamedBitList trailing bits.
  */
@@ -833,9 +833,15 @@ const UNIVERSAL_ELEMENTS: ReadonlyMap<number, UniversalElementCheck> = new Map<
 	[0x3d, () => 'unsupported'],
 ]);
 
+/** X.680 Table 1: UNIVERSAL 31 to 36 are DATE, TIME-OF-DAY, DATE-TIME, DURATION, OID-IRI and RELATIVE-OID-IRI. */
+const LAST_ASSIGNED_UNIVERSAL_TAG_NUMBER = 36;
+
 function checkUniversalElement(element: DerElement): StrictDerVerdict {
 	if ((element.tag & 0xc0) !== 0) {
 		return 'valid';
+	}
+	if ((element.tag & 0x1f) === 0x1f) {
+		return element.tagNumber <= LAST_ASSIGNED_UNIVERSAL_TAG_NUMBER ? 'unsupported' : 'malformed';
 	}
 	return UNIVERSAL_ELEMENTS.get(element.tag)?.(element) ?? 'malformed';
 }

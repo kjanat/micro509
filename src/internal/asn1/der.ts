@@ -423,9 +423,11 @@ function encodeBase256(value: number): readonly number[] {
 
 /** A single parsed ASN.1 TLV element with byte-range metadata. */
 export interface DerElement {
-	/** ASN.1 tag byte (e.g. `0x30` for SEQUENCE, `0x02` for INTEGER). */
+	/** Leading identifier octet (e.g. `0x30` for SEQUENCE, `0x02` for INTEGER, `0x9f` for any context-specific primitive tag from 31 up). */
 	readonly tag: number;
-	/** Number of bytes occupied by the tag + length octets. */
+	/** Tag number within the class, from the leading octet below 31 and from the subsequent identifier octets from 31 up. */
+	readonly tagNumber: number;
+	/** Number of bytes occupied by the identifier and length octets. */
 	readonly headerLength: number;
 	/** Byte length of the value portion (excluding tag and length octets). */
 	readonly length: number;
@@ -453,29 +455,79 @@ export interface ReadRootElementOptions {
 	readonly allowOpaqueConstructedTags?: readonly number[];
 }
 
+/** The identifier octets of a BER or DER element. */
+export interface Identifier {
+	/** Leading identifier octet. */
+	readonly tag: number;
+	/** Tag number within the class. */
+	readonly tagNumber: number;
+	/** Number of identifier octets. */
+	readonly length: number;
+}
+
+/**
+ * Reads the identifier octets at {@linkcode offset} by X.690 §8.1.2, which BER
+ * and DER share.
+ *
+ * @throws on truncated identifier octets, a high-tag-number form with a leading
+ * zero group or a tag number below 31, and `limit_exceeded` on a tag number
+ * above {@linkcode Number.MAX_SAFE_INTEGER}.
+ */
+export function readIdentifier(bytes: Uint8Array, offset: number): Identifier {
+	const tag = bytes[offset];
+	if (tag === undefined) {
+		throw new Error('Unexpected end of identifier octets');
+	}
+	if ((tag & 0x1f) !== 0x1f) {
+		return { tag, tagNumber: tag & 0x1f, length: 1 };
+	}
+	if (bytes[offset + 1] === 0x80) {
+		throw new Error('High-tag-number form must not open with a zero group');
+	}
+	let tagNumber = 0;
+	let index = offset + 1;
+	while (true) {
+		const octet = bytes[index];
+		if (octet === undefined) {
+			throw new Error('Unexpected end of identifier octets');
+		}
+		if (tagNumber > (Number.MAX_SAFE_INTEGER - (octet & 0x7f)) / 128) {
+			throwDecodeRefusal('limit_exceeded', 'Tag number exceeds Number.MAX_SAFE_INTEGER');
+		}
+		tagNumber = tagNumber * 128 + (octet & 0x7f);
+		if ((octet & 0x80) === 0) {
+			break;
+		}
+		index += 1;
+	}
+	if (tagNumber < 31) {
+		throw new Error('Tag numbers below 31 must use the low-tag-number form');
+	}
+	return { tag, tagNumber, length: index - offset + 1 };
+}
+
 /**
  * Reads one TLV element from {@linkcode bytes} starting at {@linkcode offset}.
  *
- * Parses the tag byte, decodes the DER length octets, and slices out the value bytes.
+ * Parses the identifier octets, decodes the DER length octets, and slices out the value bytes.
  *
- * @throws on truncated input, indefinite lengths, and non-minimal length encodings.
- * @param offset Byte position of the tag octet. Defaults to 0.
+ * @throws on truncated input, malformed identifier octets, indefinite lengths, and non-minimal length encodings.
+ * @param offset Byte position of the leading identifier octet. Defaults to 0.
  */
 export function readElement(bytes: Uint8Array, offset = 0): DerElement {
-	const tag = bytes[offset];
-	if (tag === undefined) {
+	if (bytes[offset] === undefined) {
 		throw new Error('Unexpected end of DER input');
 	}
-	if ((tag & 0x1f) === 0x1f) {
-		throw new Error('High-tag-number DER form is not supported');
-	}
-	const lengthByte = bytes[offset + 1];
+	const identifier = readIdentifier(bytes, offset);
+	const lengthOffset = offset + identifier.length;
+	const lengthByte = bytes[lengthOffset];
 	if (lengthByte === undefined) {
 		throw new Error('Unexpected end of DER input');
 	}
 
-	const { headerLength, length } = readDerLength(bytes, offset, lengthByte);
+	const { lengthOctets, length } = readDerLength(bytes, lengthOffset, lengthByte);
 
+	const headerLength = identifier.length + lengthOctets;
 	const start = offset + headerLength;
 	const end = start + length;
 	if (end > bytes.length) {
@@ -483,7 +535,8 @@ export function readElement(bytes: Uint8Array, offset = 0): DerElement {
 	}
 
 	return {
-		tag,
+		tag: identifier.tag,
+		tagNumber: identifier.tagNumber,
 		headerLength,
 		length,
 		start,
@@ -495,34 +548,34 @@ export function readElement(bytes: Uint8Array, offset = 0): DerElement {
 /** Decodes and validates the definite-length field of a DER element. */
 function readDerLength(
 	bytes: Uint8Array,
-	offset: number,
+	lengthOffset: number,
 	lengthByte: number,
-): { readonly headerLength: number; readonly length: number } {
+): { readonly lengthOctets: number; readonly length: number } {
 	if ((lengthByte & 0x80) === 0) {
-		return { headerLength: 2, length: lengthByte };
+		return { lengthOctets: 1, length: lengthByte };
 	}
 	const octets = lengthByte & 0x7f;
 	if (octets === 0) {
 		throw new Error('Indefinite lengths are not supported');
 	}
-	const firstLengthOctet = bytes[offset + 2];
+	const firstLengthOctet = bytes[lengthOffset + 1];
 	if (firstLengthOctet === undefined) {
 		throw new Error('Unexpected end of DER input');
 	}
 	if (firstLengthOctet === 0) {
 		throw new Error('Non-minimal DER length encoding');
 	}
-	const length = readLongFormDerLength(bytes, offset, octets);
+	const length = readLongFormDerLength(bytes, lengthOffset, octets);
 	if (length < 128) {
 		throw new Error('Non-minimal DER length encoding');
 	}
-	return { headerLength: 2 + octets, length };
+	return { lengthOctets: 1 + octets, length };
 }
 
-function readLongFormDerLength(bytes: Uint8Array, offset: number, octets: number): number {
+function readLongFormDerLength(bytes: Uint8Array, lengthOffset: number, octets: number): number {
 	let length = 0;
 	for (let index = 0; index < octets; index += 1) {
-		const next = bytes[offset + 2 + index];
+		const next = bytes[lengthOffset + 1 + index];
 		if (next === undefined) {
 			throw new Error('Unexpected end of DER input');
 		}

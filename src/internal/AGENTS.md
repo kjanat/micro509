@@ -72,9 +72,13 @@ internal/
 - `asn1/asn1.ts` `checkStrictDer` walks one DER element and holds every
   universal-class element to the X.690 rules its tag fixes, DER's clauses 10
   and 11 included. It answers `unsupported` where those rules rest on ISO/IEC
-  2022, ISO 8601 or implicitly tagged contents. Use it where caller bytes must
-  be DER throughout. The ordinary reader and `assertDerMaxDepth` keep their
-  behaviour.
+  2022, ISO 8601 or implicitly tagged contents, and for UNIVERSAL 31 to 36. Use
+  it where caller bytes must be DER throughout. The ordinary reader and
+  `assertDerMaxDepth` keep their behaviour.
+- `asn1/der.ts` `readIdentifier` reads X.690 §8.1.2 identifier octets for both
+  the DER and the BER reader. A high-tag-number element keeps its leading
+  octet in `tag` and its number in `tagNumber`, so compare `tagNumber` when the
+  class allows numbers from 31 up.
 - Keep sign/verify dispatch symmetric in `signing.ts` and `sig-verify.ts`.
 - Preserve wire-level behavior in `shared/` helpers; tiny changes can fan out.
 - If a helper starts encoding protocol policy, move it to the owning domain or engine.

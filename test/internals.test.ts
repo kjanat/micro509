@@ -265,7 +265,55 @@ describe('der encoding', () => {
 		expect(() => implicitPrimitiveContext(31, Uint8Array.of(0x00))).toThrow(
 			'Context-specific tag number',
 		);
-		expect(() => readElement(Uint8Array.of(0x1f, 0x01, 0x00))).toThrow('High-tag-number');
+	});
+
+	it('readElement reads high-tag-number identifiers by X.690 §8.1.2.4', () => {
+		expect(readElement(Uint8Array.of(0x9f, 0x20, 0x01, 0x00))).toEqual({
+			tag: 0x9f,
+			tagNumber: 32,
+			headerLength: 3,
+			length: 1,
+			start: 3,
+			end: 4,
+			value: Uint8Array.of(0x00),
+		});
+		expect(readElement(Uint8Array.of(0xbf, 0x81, 0x00, 0x00))).toMatchObject({
+			tag: 0xbf,
+			tagNumber: 128,
+			headerLength: 4,
+		});
+		expect(readElement(Uint8Array.of(0x02, 0x01, 0x05)).tagNumber).toBe(2);
+		expect(() => readElement(Uint8Array.of(0x1f, 0x01, 0x00))).toThrow(
+			'Tag numbers below 31 must use the low-tag-number form',
+		);
+		expect(() => readElement(Uint8Array.of(0x9f, 0x1e, 0x00))).toThrow(
+			'Tag numbers below 31 must use the low-tag-number form',
+		);
+		expect(() => readElement(Uint8Array.of(0x9f, 0x80, 0x20, 0x00))).toThrow(
+			'High-tag-number form must not open with a zero group',
+		);
+		expect(() => readElement(Uint8Array.of(0x9f, 0x81))).toThrow(
+			'Unexpected end of identifier octets',
+		);
+		expect(() => readElement(Uint8Array.of(0x9f, 0x20))).toThrow('Unexpected end of DER input');
+	});
+
+	it('readElement refuses a tag number above Number.MAX_SAFE_INTEGER as limit_exceeded', () => {
+		const identifier = (groups: readonly number[]): Uint8Array =>
+			Uint8Array.of(
+				0x9f,
+				...groups.map((group, index) => (index === groups.length - 1 ? group : group | 0x80)),
+				0x00,
+			);
+		const maxSafeGroups = [0x0f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f, 0x7f];
+		expect(readElement(identifier(maxSafeGroups)).tagNumber).toBe(Number.MAX_SAFE_INTEGER);
+		let caught: unknown;
+		try {
+			readElement(identifier([0x10, 0, 0, 0, 0, 0, 0, 0]));
+		} catch (error) {
+			caught = error;
+		}
+		expect(isResultError(caught) && caught.code).toBe('limit_exceeded');
 	});
 
 	it('encodeLength emits long-form lengths', () => {
@@ -558,6 +606,12 @@ describe('checkStrictDer', () => {
 		['ASCII ObjectDescriptor', tlv(0x07, text('descriptor'))],
 		['GeneralString with C0 controls and DELETE', tlv(0x1b, octets(0x00, 0x0a, 0x41, 0x7f))],
 		['UTF8String holding SHIFT OUT', tlv(0x0c, octets(0x0e))],
+		['context-specific [32] primitive', octets(0x9f, 0x20, 0x01, 0x00)],
+		['private [256] inside a SEQUENCE', sequence([octets(0xdf, 0x82, 0x00, 0x00)])],
+		[
+			'context-specific [128] constructed around an INTEGER',
+			octets(0xbf, 0x81, 0x00, 0x03, 0x02, 0x01, 0x05),
+		],
 	] as const)('accepts %s', (_label, der) => {
 		expect(checkStrictDer(der)).toBe('valid');
 	});
@@ -593,6 +647,8 @@ describe('checkStrictDer', () => {
 		['GraphicString with an escape sequence', tlv(0x19, octets(0x1b, 0x28, 0x42, 0x41))],
 		['GeneralString with SHIFT IN', tlv(0x1b, octets(0x41, 0x0f))],
 		['TeletexString inside a SEQUENCE', sequence([tlv(0x14, text('x'))])],
+		['DATE (UNIVERSAL 31)', concatBytes([octets(0x1f, 0x1f, 0x0a), text('2026-09-27')])],
+		['RELATIVE-OID-IRI (UNIVERSAL 36)', concatBytes([octets(0x1f, 0x24, 0x01), text('a')])],
 	] as const)('reports %s as unsupported', (_label, der) => {
 		expect(checkStrictDer(der)).toBe('unsupported');
 	});
@@ -707,6 +763,9 @@ describe('checkStrictDer', () => {
 		['primitive EXTERNAL (X.690 §8.18.1)', tlv(0x08, new Uint8Array())],
 		['primitive CHARACTER STRING (X.690 §8.24.1)', tlv(0x1d, new Uint8Array())],
 		['constructed TIME (X.690 §8.26.1.1)', tlv(0x2e, new Uint8Array())],
+		['reserved UNIVERSAL 37 (X.680 Table 1)', octets(0x1f, 0x25, 0x00)],
+		['tag number 30 in the high-tag-number form (X.690 §8.1.2.2)', octets(0x9f, 0x1e, 0x00)],
+		['a zero leading tag group (X.690 §8.1.2.4.2 c)', octets(0x9f, 0x80, 0x20, 0x00)],
 	] as const)('rejects %s', (_label, der) => {
 		expect(checkStrictDer(der)).toBe('malformed');
 	});
@@ -1282,6 +1341,7 @@ describe('extensions encoding', () => {
 		for (const value of [
 			octetString(Uint8Array.of(0x00, 0x00)),
 			sequence([explicitContext(0, octetString(Uint8Array.of(0x00, 0x00, 0x00)))]),
+			Uint8Array.of(0x9f, 0x20, 0x01, 0x00),
 		]) {
 			expect(encodeSubjectAltName({ type: 'otherName', typeId: '1.2.3.4', value })[0]).toBe(0xa0);
 		}

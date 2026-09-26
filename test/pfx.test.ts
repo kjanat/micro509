@@ -24,7 +24,7 @@ import {
 } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { parsePkcs12MacData } from '#micro509/pkcs';
-import { childrenOf } from '#test/helpers';
+import { childrenOf, reissueSelfSignedCertificateWithName } from '#test/helpers';
 
 /** Success-path helper: builds a PFX and unwraps the typed result. */
 async function buildPfx(input: CreatePfxInput) {
@@ -440,6 +440,18 @@ describe('pfx', () => {
 		expect(result.value.bags[0]?.kind).toBe('unknown');
 	});
 
+	it('parses an unknown bag value carrying high-tag-number identifiers into definite-length DER', async () => {
+		const indefinite = Uint8Array.of(0xbf, 0x20, 0x80, 0x9f, 0x81, 0x00, 0x01, 0xaa, 0x00, 0x00);
+		const safeBag = sequence([objectIdentifier('1.2.3.4.5.6.7'), explicitContext(0, indefinite)]);
+		const result = await parsePfxDer(wrapSafeBags([safeBag]));
+		expect(result.ok).toBe(true);
+		if (!result.ok) throw new Error('unreachable');
+		expect(result.value.bags[0]).toMatchObject({
+			kind: 'unknown',
+			valueDer: Uint8Array.of(0xbf, 0x20, 0x05, 0x9f, 0x81, 0x00, 0x01, 0xaa),
+		});
+	});
+
 	it('parses PFX with key bag (PKCS#8 private key)', async () => {
 		const keyPair = await generateKeyPair();
 		const pkcs8 = await exportPkcs8Der(keyPair.privateKey);
@@ -557,6 +569,30 @@ describe('pfx', () => {
 
 		const result = await parsePfxDer(pfxDer);
 		expect(result).toMatchObject({ ok: false, code: 'malformed' });
+	});
+
+	it('parsePfxDer returns unsupported for a certBag certificate with a TeletexString name it does not decode', async () => {
+		const { certificate, keyPair } = await createSelfSignedCertificate({
+			subject: { commonName: 'teletex-pfx' },
+		});
+		const teletexName = sequence([
+			setOf([sequence([objectIdentifier(OIDS.commonName), tlv(0x14, Uint8Array.of(0xc1, 0x41))])]),
+		]);
+		const certificateDer = await reissueSelfSignedCertificateWithName(
+			certificate.der,
+			keyPair.privateKey,
+			teletexName,
+		);
+		const certBag = sequence([
+			objectIdentifier(OIDS.x509CertificateBagType),
+			explicitContext(0, octetString(certificateDer)),
+		]);
+		const safeBag = sequence([objectIdentifier(OIDS.pkcs12CertBag), explicitContext(0, certBag)]);
+
+		expect(await parsePfxDer(wrapSafeBags([safeBag]))).toMatchObject({
+			ok: false,
+			code: 'unsupported',
+		});
 	});
 
 	it('parsePfxDer returns malformed when extractContextChild gets non-context tag', async () => {

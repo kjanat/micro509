@@ -22,7 +22,11 @@ import {
 	berToDefiniteLength,
 	readBerRoot,
 } from '#micro509/internal/asn1/ber';
-import { DECODE_LIMIT_CODES, decodeRefusalOf } from '#micro509/internal/asn1/decode-refusal';
+import {
+	DECODE_LIMIT_CODES,
+	DECODE_REFUSAL_CODES,
+	decodeRefusalOf,
+} from '#micro509/internal/asn1/decode-refusal';
 import {
 	bmpString,
 	explicitContext,
@@ -210,6 +214,7 @@ export type ParsePfxErrorCode =
 	| 'limit_exceeded'
 	| 'password_not_bmp_string'
 	| 'password_not_utf8'
+	| 'unsupported'
 	| 'unsupported_mac_algorithm'
 	| 'weak_mac_key_length';
 
@@ -446,7 +451,7 @@ async function parsePfxDerWithBudget(
 		};
 	} catch (error) {
 		rethrowIfInvariant(error);
-		const refusal = decodeRefusalOf(error, DECODE_LIMIT_CODES);
+		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
 		return refusal === undefined
 			? pfxFailure('malformed', 'Malformed PFX structure')
 			: pfxFailure(refusal.code, refusal.message);

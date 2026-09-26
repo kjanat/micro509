@@ -1067,6 +1067,24 @@ describe('keys: coverage — malformed inputs', () => {
 		}
 	});
 
+	test('tolerates OneAsymmetricKey extension fields from [2] up, high-tag-number ones included', async () => {
+		const { integerFromNumber, objectIdentifier, octetString, sequence } = await import(
+			'#micro509/internal/asn1/der'
+		);
+		const seedHex = '9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60';
+		const pubHex = 'd75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a';
+		const der = sequence([
+			integerFromNumber(1),
+			sequence([objectIdentifier('1.3.101.112')]),
+			octetString(octetString(hexToBytes(seedHex))),
+			hexToBytes(`812100${pubHex}`),
+			hexToBytes('8200'),
+			hexToBytes('9f1f00'),
+			hexToBytes('bf814800'),
+		]);
+		expect(await importPkcs8Der(der)).toMatchObject({ ok: true });
+	});
+
 	it('importPkcs8Der and base64 throw on PKCS#8 with wrong privateKey tag', async () => {
 		const { integerFromNumber, nullValue, objectIdentifier, sequence } = await import(
 			'#micro509/internal/asn1/der'
