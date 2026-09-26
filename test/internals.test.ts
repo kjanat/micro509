@@ -318,12 +318,16 @@ describe('asn1 decoding', () => {
 		);
 	});
 
-	it('decodeObjectIdentifier rejects too-large subidentifiers before number overflow', () => {
-		expect(() =>
-			decodeObjectIdentifier(
-				Uint8Array.of(0x2a, 0x82, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x00),
-			),
-		).toThrow('too-large subidentifier');
+	it('decodeObjectIdentifier decodes arcs of any size exactly', () => {
+		for (const oid of [
+			'1.2.9007199254740993',
+			'2.25.329800735698586629295641978511506172918',
+			`2.25.${1n << 128n}`,
+			`2.25.${(1n << 1000n) + 1n}.7`,
+			`2.${(1n << 200n) - 1n}`,
+		]) {
+			expect(decodeObjectIdentifier(readElement(objectIdentifier(oid)).value)).toBe(oid);
+		}
 	});
 
 	it('requireElement throws on undefined value', () => {
@@ -380,8 +384,8 @@ describe('asn1 decoding', () => {
 	});
 
 	it('decodeString keeps a leading U+FEFF in a UTF8String', () => {
-		expect(decodeString(0x0c, Uint8Array.of(0xef, 0xbb, 0xbf))).toBe('﻿');
-		expect(decodeString(0x0c, Uint8Array.of(0xef, 0xbb, 0xbf, 0x41))).toBe('﻿A');
+		expect(decodeString(0x0c, Uint8Array.of(0xef, 0xbb, 0xbf))).toBe('\u{FEFF}');
+		expect(decodeString(0x0c, Uint8Array.of(0xef, 0xbb, 0xbf, 0x41))).toBe('\u{FEFF}A');
 	});
 
 	it('decodeIntegerNumber accepts any value up to MAX_SAFE_INTEGER', () => {
@@ -456,7 +460,7 @@ describe('asn1 decoding', () => {
 		for (const noncharacter of [Uint8Array.of(0xff, 0xfe), Uint8Array.of(0xff, 0xff)]) {
 			expect(() => decodeString(0x1e, noncharacter)).toThrow('Invalid BMPString code point');
 		}
-		expect(decodeString(0x1e, Uint8Array.of(0xff, 0xfd))).toBe('�');
+		expect(decodeString(0x1e, Uint8Array.of(0xff, 0xfd))).toBe('\u{FFFD}');
 		expect(decodeString(0x1c, Uint8Array.of(0x00, 0x00, 0x00, 0x41))).toBe('A');
 		expect(() => decodeString(0x1c, Uint8Array.of(0x00, 0x11, 0x00, 0x00))).toThrow(
 			'Invalid UniversalString code point',
@@ -1886,22 +1890,6 @@ describe('extensions encoding', () => {
 			'duplicate_policy_oid',
 		],
 		[
-			'certificatePolicies with an explicitText over 200 characters',
-			OIDS.certificatePolicies,
-			sequence([
-				sequence([
-					objectIdentifier('1.2.3.4'),
-					sequence([
-						sequence([
-							objectIdentifier(OIDS.userNoticePolicyQualifier),
-							sequence([utf8String('a'.repeat(201))]),
-						]),
-					]),
-				]),
-			]),
-			'display_text_out_of_range',
-		],
-		[
 			'authorityInfoAccess with a dNSName OCSP location',
 			OIDS.authorityInfoAccess,
 			sequence([
@@ -1950,6 +1938,21 @@ describe('extensions encoding', () => {
 			sequence([integerFromNumber(0)]),
 		],
 		['policyConstraints with neither field', OIDS.policyConstraints, sequence([])],
+		[
+			'certificatePolicies with an explicitText over 200 characters',
+			OIDS.certificatePolicies,
+			sequence([
+				sequence([
+					objectIdentifier('1.2.3.4'),
+					sequence([
+						sequence([
+							objectIdentifier(OIDS.userNoticePolicyQualifier),
+							sequence([utf8String('a'.repeat(201))]),
+						]),
+					]),
+				]),
+			]),
+		],
 	] as const;
 
 	it.each(DECODER_REJECTED_KNOWN_PAYLOADS)('rejects a custom %s payload', (_label, oid, value) => {

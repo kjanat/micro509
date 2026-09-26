@@ -126,8 +126,8 @@ const NON_BMP_PASSWORDS = [
 	{ label: 'a surrogate pair (U+1F600)', password: 'pw\u{1F600}' },
 	{ label: 'a lone high surrogate', password: 'pw\ud800' },
 	{ label: 'a lone low surrogate', password: '\udfffpw' },
-	{ label: 'U+FFFE', password: 'pw￾' },
-	{ label: 'U+FFFF', password: '￿pw' },
+	{ label: 'U+FFFE', password: 'pw\u{FFFE}' },
+	{ label: 'U+FFFF', password: '\u{FFFF}pw' },
 ] as const;
 
 function rejection(promise: Promise<unknown>): Promise<unknown> {

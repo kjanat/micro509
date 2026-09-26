@@ -77,6 +77,11 @@ Current conformance evidence:
       version v1. A BOOLEAN whose content is not a single `0x00` or `0xFF`
       octet is rejected as malformed (X.690 §11.1). PKCS#12 input may be BER;
       see §15.
+- [x] Encode, decode and canonicalize OBJECT IDENTIFIER arcs with arbitrary
+      precision. X.660 §7.6 leaves arc values unbounded, and RFC 5280
+      Appendix B states "There is no maximum size for OIDs"; its 2^28 arc,
+      100-byte and 20-element figures are the minimum an implementation must
+      support. micro509 sets no arc-size limit of its own.
 - [x] Verify issuer/subject chaining across the candidate path.
 - [x] Verify each certificate signature using the evolving working public key.
 - [x] Check validity time (`notBefore` / `notAfter`) against the chosen validation time.
@@ -197,6 +202,14 @@ Current GeneralName matrix for `nameConstraints`:
 ## 6. Certificate policy processing
 
 - [x] Support `certificatePolicies`.
+- [x] Parse each user-notice DisplayText (`explicitText` and the `noticeRef`
+      organization) as the ASN.1 type its tag names: a valid UTF8String,
+      IA5String, VisibleString or BMPString of SIZE (1..200) characters (RFC
+      5280 §4.2.1.4). Anything else fails the parse as `malformed`, and valid
+      text is returned unchanged. RFC 5280 §4.2.1.4 asks certificate users to
+      handle explicitText over 200 characters gracefully; micro509 rejects it,
+      which PKITS §4.8.19 permits. The RFC 6818 §3 rules for conforming CAs
+      (no IA5String, no control characters, NFC) bind the builder only.
 - [x] Support `policyConstraints`.
 - [x] Support `policyMappings`.
 - [x] Support `inhibitAnyPolicy`.
@@ -206,7 +219,9 @@ Current GeneralName matrix for `nameConstraints`:
       (IETF Datatracker[^rfc9618])
 - [x] Conformance evidence landed: the full PKITS policy sections (4.8–4.12)
       pass, with every manifest expectation verified against the official
-      PKITS document ([`docs/rfc/pkits.txt`](./rfc/pkits.txt)).
+      PKITS document ([`docs/rfc/pkits.txt`](./rfc/pkits.txt)). For 4.8.19,
+      whose explicitText exceeds 200 characters, the harness expects the
+      rejection PKITS allows instead of the generated manifest's acceptance.
 
 ## 7. Trust-anchor model
 
@@ -375,6 +390,12 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
       `password_not_bmp_string`. RFC 7292 does not specify this case, so the
       rejection is micro509 policy. X.680 §41.15 leaves U+FFFE and U+FFFF out
       of BMPString, and a password holding either gets the same code.
+- [x] Hold a bag's friendlyName to RFC 2985 §5.5.1, which RFC 7292 imports:
+      one value, a BMPString of 1 to 255 characters from the BMPString
+      repertoire (X.680 §41.15), so no surrogate code unit, U+FFFE or U+FFFF.
+      `createPfx` throws `invalid_friendly_name` for any other name, and
+      parsing returns `malformed` for any other value. Rejecting a second
+      friendlyName attribute in one bag is micro509 policy.
 - [x] Reject MacData iterations of 0 or below as `malformed`. RFC 7292 §4
       gives the field no range, so this is micro509 policy.
 - [x] Verify RFC 9879 PBMAC1 with PBKDF2 and an HMAC-SHA-256, HMAC-SHA-384 or

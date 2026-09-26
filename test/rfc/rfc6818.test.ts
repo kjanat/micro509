@@ -138,7 +138,7 @@ describe('RFC 6818 §3: explicitText encodings (replacing the RFC 5280 §4.2.1.4
 				issue({ certificatePolicies: notice(`caf${COMPOSED_E_ACUTE}`, 'visibleString') }),
 			),
 		).toBe('invalid_visible_string');
-		for (const text of ['\u{1F600}', '￾', '￿']) {
+		for (const text of ['\u{1F600}', '\u{FFFE}', '\u{FFFF}']) {
 			expect(
 				await builderErrorCode(() => issue({ certificatePolicies: notice(text, 'bmpString') })),
 			).toBe('invalid_bmp_string');

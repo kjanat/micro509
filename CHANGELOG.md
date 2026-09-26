@@ -246,6 +246,22 @@ revocation })` report a certificate carrying `noRevAvail` or
   X.680 §41.15 leaves out of BMPString. `decodeDerString` and name parsing now
   reject them as they reject surrogates, `derBmpString` throws, and a BMPString
   explicitText holding one fails with `invalid_bmp_string`.
+- OBJECT IDENTIFIER decoding refused any arc above 2^53 − 1, so a certificate
+  or CRL carrying a 2.25 UUID OID failed to parse, and the builder refused such
+  an OID with `invalid_oid`. Arcs now decode, encode and canonicalize exactly
+  at any size; X.660 §7.6 leaves them unbounded.
+- `createPfx` wrote any `friendlyName` into its BMPString, including surrogate
+  pairs, U+FFFE, U+FFFF, an empty name and names over 255 characters, and PFX
+  parsing accepted them. RFC 2985 §5.5.1 makes friendlyName one BMPString of 1
+  to 255 characters. `createPfx` now throws `ResultError` code
+  `invalid_friendly_name` from the new `PfxEncoderErrorCode`, and parsing
+  returns `malformed`.
+- DisplayText parsing (user-notice `explicitText` and the `noticeRef`
+  organization) replaced invalid UTF-8 with U+FFFD, accepted octets outside
+  the IA5String and VisibleString repertoires, and accepted any length. It now
+  decodes the tagged type strictly with SIZE (1..200) and returns `malformed`
+  for anything else, so a certificate whose explicitText exceeds 200
+  characters, such as PKITS 4.8.19's, no longer parses.
 
 ### Security
 

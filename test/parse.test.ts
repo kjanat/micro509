@@ -1899,25 +1899,135 @@ describe('parse', () => {
 		}
 	});
 
+	it('round-trips certificate policy OIDs with arcs wider than 128 bits exactly', async () => {
+		const uuid = '2.25.329800735698586629295641978511506172918';
+		const wide = `2.25.${(1n << 200n) + 7n}`;
+		const certificate = await createSelfSignedCertificate({
+			subject: { commonName: 'wide-arc-policy.example' },
+			extensions: {
+				certificatePolicies: [
+					{ policyIdentifier: uuid },
+					{ policyIdentifier: wide },
+					{ policyIdentifier: `1.2.00${1n << 130n}` },
+				],
+			},
+		});
+		expect(unwrap(parseCertificatePem(certificate.certificate.pem)).certificatePolicies).toEqual([
+			{ policyIdentifier: uuid },
+			{ policyIdentifier: wide },
+			{ policyIdentifier: `1.2.${1n << 130n}` },
+		]);
+	});
+
+	describe('DisplayText (RFC 5280 §4.2.1.4)', () => {
+		const text = (value: string) => new TextEncoder().encode(value);
+		const bmp = (value: string) =>
+			Uint8Array.from(
+				[...value].flatMap((character) => {
+					const unit = character.charCodeAt(0);
+					return [unit >> 8, unit & 0xff];
+				}),
+			);
+
+		async function parseUserNotice(userNotice: Uint8Array) {
+			const certificate = await createSelfSignedCertificateWithRawExtensions({
+				subject: { commonName: 'display-text.example' },
+				extensions: {
+					customExtensions: [
+						{
+							oid: OIDS.certificatePolicies,
+							critical: true,
+							value: sequence([
+								sequence([
+									objectIdentifier('1.2.3.4.1'),
+									sequence([
+										sequence([objectIdentifier(OIDS.userNoticePolicyQualifier), userNotice]),
+									]),
+								]),
+							]),
+						},
+					],
+				},
+			});
+			return parseCertificatePem(certificate.certificate.pem);
+		}
+
+		it.each([
+			['a one-character UTF8String', tlv(0x0c, text('x')), 'x', 'utf8String'],
+			[
+				'a 200-character UTF8String of two-octet characters',
+				tlv(0x0c, text('é'.repeat(200))),
+				'é'.repeat(200),
+				'utf8String',
+			],
+			[
+				'a UTF8String with a control character and a decomposed accent',
+				tlv(0x0c, text('line\ne\u{0301}')),
+				'line\ne\u{0301}',
+				'utf8String',
+			],
+			['an IA5String', tlv(0x16, text('notice')), 'notice', 'ia5String'],
+			[
+				'a 200-character VisibleString',
+				tlv(0x1a, text('~'.repeat(200))),
+				'~'.repeat(200),
+				'visibleString',
+			],
+			['a BMPString', tlv(0x1e, bmp('Ωk')), 'Ωk', 'bmpString'],
+		] as const)(
+			'keeps %s unchanged',
+			async (_label, displayText, explicitText, explicitTextType) => {
+				const parsed = unwrap(await parseUserNotice(sequence([displayText])));
+				expect(parsed.certificatePolicies).toEqual([
+					{
+						policyIdentifier: '1.2.3.4.1',
+						policyQualifiers: [{ type: 'userNotice', explicitText, explicitTextType }],
+					},
+				]);
+			},
+		);
+
+		it.each([
+			['a UTF8String that is not UTF-8', tlv(0x0c, Uint8Array.of(0x6f, 0xc3, 0x28))],
+			['an empty UTF8String', tlv(0x0c, new Uint8Array())],
+			['a 201-character UTF8String', tlv(0x0c, text('é'.repeat(201)))],
+			['an IA5String above 0x7F', tlv(0x16, Uint8Array.of(0x6f, 0x80))],
+			['a VisibleString with DELETE', tlv(0x1a, Uint8Array.of(0x6f, 0x7f))],
+			['a VisibleString with a line feed', tlv(0x1a, Uint8Array.of(0x6f, 0x0a))],
+			['a BMPString with an unpaired surrogate', tlv(0x1e, Uint8Array.of(0x00, 0x4f, 0xd8, 0x00))],
+			['a BMPString with a surrogate pair', tlv(0x1e, Uint8Array.of(0xd8, 0x3d, 0xde, 0x00))],
+			['a BMPString holding U+FFFF', tlv(0x1e, Uint8Array.of(0x00, 0x4f, 0xff, 0xff))],
+			['a 201-character BMPString', tlv(0x1e, bmp('k'.repeat(201)))],
+		] as const)('fails on %s as explicitText or organization', async (_label, displayText) => {
+			for (const userNotice of [
+				sequence([displayText]),
+				sequence([sequence([displayText, sequence([integerFromNumber(1)])])]),
+			]) {
+				const result = await parseUserNotice(userNotice);
+				expect(result.ok ? 'ok' : result.code).toBe('malformed');
+			}
+		});
+	});
+
 	it('keeps a leading U+FEFF in UTF8String names and DisplayText', async () => {
 		const certificate = await createSelfSignedCertificate({
-			subject: { commonName: '﻿bom.example' },
+			subject: { commonName: '\u{FEFF}bom.example' },
 			extensions: {
 				certificatePolicies: [
 					{
 						policyIdentifier: '1.2.3.4.1',
-						policyQualifiers: [{ type: 'userNotice', explicitText: '﻿notice' }],
+						policyQualifiers: [{ type: 'userNotice', explicitText: '\u{FEFF}notice' }],
 					},
 				],
 			},
 		});
 		const parsed = unwrap(parseCertificatePem(certificate.certificate.pem));
-		expect(parsed.subject.values.commonName).toBe('﻿bom.example');
+		expect(parsed.subject.values.commonName).toBe('\u{FEFF}bom.example');
 		expect(parsed.certificatePolicies).toEqual([
 			{
 				policyIdentifier: '1.2.3.4.1',
 				policyQualifiers: [
-					{ type: 'userNotice', explicitText: '﻿notice', explicitTextType: 'utf8String' },
+					{ type: 'userNotice', explicitText: '\u{FEFF}notice', explicitTextType: 'utf8String' },
 				],
 			},
 		]);

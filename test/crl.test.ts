@@ -133,7 +133,9 @@ describe('crl', () => {
 			algorithm,
 			signature,
 		]);
-		expect(parseCertificateRevocationListDerOrThrow(rewritten).issuer.values.commonName).toBe('﻿A');
+		expect(parseCertificateRevocationListDerOrThrow(rewritten).issuer.values.commonName).toBe(
+			'\u{FEFF}A',
+		);
 	});
 
 	it('parses CRL entry extensions and delta CRL indicator', async () => {

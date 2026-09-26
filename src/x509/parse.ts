@@ -16,6 +16,7 @@ import {
 	decodeNonNegativeIntegerNumber,
 	decodeObjectIdentifier,
 	decodeString,
+	decodeVisibleString,
 	extractBitStringValue,
 	parseTime,
 	requireElement,
@@ -147,9 +148,6 @@ export type ParseCertificateSigningRequestResult<
 			Record<never, never>,
 			ParseCertificateSigningRequestFailure
 	  >;
-
-/** Shared UTF-8 decoder for IA5String / UTF8String values. */
-const textDecoder = new TextDecoder('utf-8', { ignoreBOM: true });
 
 /**
  * A single decoded name attribute from an X.501 RelativeDistinguishedName.
@@ -2334,35 +2332,27 @@ function displayTextType(tag: number): DisplayTextType {
 	}
 }
 
-/** Decode a DisplayText (UTF8String, IA5String, VisibleString, or BMPString). */
+/** RFC 5280 §4.2.1.4: `DisplayText` is an IA5String, VisibleString, BMPString or UTF8String of SIZE (1..200). */
 function parseDisplayText(element: DerElement): string {
+	const text = decodeDisplayText(element);
+	const characters = [...text].length;
+	if (characters < 1 || characters > 200) {
+		throw new Error(`DisplayText must hold 1 to 200 characters, not ${characters}`);
+	}
+	return text;
+}
+
+function decodeDisplayText(element: DerElement): string {
 	switch (element.tag) {
 		case 0x0c:
 		case 0x16:
-		case 0x1a:
-			return textDecoder.decode(element.value);
 		case 0x1e:
-			return decodeBmpString(element.value);
+			return decodeString(element.tag, element.value);
+		case 0x1a:
+			return decodeVisibleString(element.value);
 		default:
 			throw new Error(`Unsupported DisplayText tag: ${element.tag}`);
 	}
-}
-
-/** Decode a BMPString (UCS-2 big-endian) to a JS string. */
-function decodeBmpString(bytes: Uint8Array): string {
-	if (bytes.length % 2 !== 0) {
-		throw new Error('Invalid BMPString length');
-	}
-	let value = '';
-	for (let index = 0; index < bytes.length; index += 2) {
-		const left = bytes[index];
-		const right = bytes[index + 1];
-		if (left === undefined || right === undefined) {
-			throw new Error('Invalid BMPString content');
-		}
-		value += String.fromCharCode((left << 8) | right);
-	}
-	return value;
 }
 
 interface MutableAuthorityKeyIdentifierState {

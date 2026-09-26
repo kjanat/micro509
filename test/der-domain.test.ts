@@ -74,6 +74,12 @@ describe('der domain', () => {
 			expect(decodeDerOidOrThrow(readDerElementOrThrow(derOid(oid)))).toBe(oid);
 		});
 
+		it('OBJECT IDENTIFIER with arcs wider than 128 bits', () => {
+			for (const oid of [`2.25.${(1n << 129n) + 3n}`, `1.3.${(1n << 300n) - 1n}.${1n << 256n}`]) {
+				expect(decodeDerOidOrThrow(readDerElementOrThrow(derOid(oid)))).toBe(oid);
+			}
+		});
+
 		it('OCTET STRING', () => {
 			const bytes = Uint8Array.of(0xde, 0xad, 0xbe, 0xef);
 			expect(toHex(decodeDerOctetStringOrThrow(readDerElementOrThrow(derOctetString(bytes))))).toBe(
@@ -299,7 +305,7 @@ describe('der domain', () => {
 			expect(() => derBmpString('a\u{1F600}')).toThrow(
 				'code point above the Basic Multilingual Plane',
 			);
-			for (const noncharacter of ['￾', '￿']) {
+			for (const noncharacter of ['\u{FFFE}', '\u{FFFF}']) {
 				expect(() => derBmpString(`a${noncharacter}`)).toThrow('not BMPString characters');
 			}
 			expect(() => derPrintableString('a_b')).toThrow('Invalid PrintableString');

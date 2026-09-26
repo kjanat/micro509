@@ -25,6 +25,7 @@ export type {
 	PfxBagAttributesInput,
 	PfxCertificateBagInput,
 	PfxCertificateSource,
+	PfxEncoderErrorCode,
 	PfxEncryptionOptions,
 	PfxMaterial,
 	PfxPrivateKeyBagInput,

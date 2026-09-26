@@ -164,7 +164,7 @@ describe('pkcs7', () => {
 		if (!parsed.ok) throw new Error('unreachable');
 		const identifier = parsed.value.signerInfos[0]?.signerIdentifier;
 		if (identifier?.type !== 'issuerAndSerialNumber') throw new Error('unreachable');
-		expect(identifier.issuer.values.commonName).toBe('﻿A');
+		expect(identifier.issuer.values.commonName).toBe('\u{FEFF}A');
 	});
 
 	it.each([

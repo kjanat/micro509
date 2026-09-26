@@ -7,7 +7,12 @@
  * @module
  */
 
-import { decodeIntegerNumber, decodeObjectIdentifier, toHex } from '#micro509/internal/asn1/asn1';
+import {
+	decodeIntegerNumber,
+	decodeObjectIdentifier,
+	decodeString,
+	toHex,
+} from '#micro509/internal/asn1/asn1';
 import type { BerElement } from '#micro509/internal/asn1/ber';
 import {
 	berEncoding,
@@ -18,6 +23,7 @@ import {
 	readBerRoot,
 } from '#micro509/internal/asn1/ber';
 import {
+	bmpString,
 	explicitContext,
 	integerFromNumber,
 	objectIdentifier,
@@ -44,7 +50,7 @@ import { pemEncode, splitPemBlocksOrThrow } from '#micro509/pem/pem';
 import type { ParsedPkcs12MacData, Pkcs12MacOptions } from '#micro509/pkcs/pkcs12-mac';
 import { createPkcs12MacData, parsePkcs12MacData } from '#micro509/pkcs/pkcs12-mac';
 import type { ErrorResult, Micro509Error } from '#micro509/result/result';
-import { failureResult, rethrowIfInvariant } from '#micro509/result/result';
+import { failureResult, rethrowIfInvariant, throwMicro509Error } from '#micro509/result/result';
 import type { ParsedCertificate } from '#micro509/x509/parse';
 import { parseCertificateDerOrThrow } from '#micro509/x509/parse';
 
@@ -57,7 +63,10 @@ export type PfxPrivateKeySource = CryptoKey | Uint8Array;
 
 /** Optional metadata attached to a certificate or key bag inside a PFX. */
 export interface PfxBagAttributesInput {
-	/** Human-readable label stored as a BMPString attribute. */
+	/**
+	 * Human-readable label stored as a BMPString attribute of 1 to 255 characters
+	 * (RFC 2985 §5.5.1), none of them a surrogate, U+FFFE or U+FFFF.
+	 */
 	readonly friendlyName?: string;
 	/** Opaque identifier linking a certificate bag to its corresponding key bag. */
 	readonly localKeyId?: Uint8Array;
@@ -230,6 +239,9 @@ export type ParsePfxResult =
  */
 export type CreatePfxErrorCode = 'invalid_certificate';
 
+/** Bag attribute input that {@linkcode createPfx} refuses by throwing a `ResultError`. */
+export type PfxEncoderErrorCode = 'invalid_friendly_name';
+
 /** Error payload for a failed PFX creation. */
 export interface CreatePfxFailure extends Micro509Error<CreatePfxErrorCode> {
 	/** Always `false` for failures. */
@@ -262,7 +274,9 @@ export type CreatePfxResult =
  * RFC 9879 PBMAC1.
  *
  * @throws {ResultError} with a {@linkcode CreatePkcs12MacDataErrorCode} when `mac.iterations`
- * is out of range or `mac.password` cannot be encoded for the selected MAC.
+ * is out of range or `mac.password` cannot be encoded for the selected MAC, and with
+ * {@linkcode PfxEncoderErrorCode} `invalid_friendly_name` when a bag `friendlyName` is not a
+ * BMPString of 1 to 255 characters.
  *
  * @example
  * ```ts
@@ -630,7 +644,10 @@ function encodeBagAttributes(attributes: PfxBagAttributesInput | undefined): rea
 	const out: Uint8Array[] = [];
 	if (attributes.friendlyName !== undefined) {
 		out.push(
-			sequence([objectIdentifier(OIDS.friendlyName), setOf([bmpString(attributes.friendlyName)])]),
+			sequence([
+				objectIdentifier(OIDS.friendlyName),
+				setOf([encodeFriendlyName(attributes.friendlyName)]),
+			]),
 		);
 	}
 	if (attributes.localKeyId !== undefined) {
@@ -639,6 +656,25 @@ function encodeBagAttributes(attributes: PfxBagAttributesInput | undefined): rea
 		);
 	}
 	return out.length === 0 ? [] : [setOf(out)];
+}
+
+/** RFC 2985 §5.5.1: `pkcs-9-ub-friendlyName`. */
+const MAX_FRIENDLY_NAME_LENGTH = 255;
+
+function encodeFriendlyName(friendlyName: string): Uint8Array {
+	const refuse = (): never =>
+		throwMicro509Error<PfxEncoderErrorCode>(
+			'invalid_friendly_name',
+			'friendlyName must be a BMPString of 1 to 255 characters, none of them a surrogate, U+FFFE or U+FFFF',
+		);
+	if (friendlyName.length === 0 || friendlyName.length > MAX_FRIENDLY_NAME_LENGTH) {
+		return refuse();
+	}
+	try {
+		return bmpString(friendlyName);
+	} catch {
+		return refuse();
+	}
 }
 
 /** Decodes a single SafeBag into a {@linkcode ParsedPfxBag} discriminated union. */
@@ -723,7 +759,7 @@ function parseBagAttributes(
 			if (friendlyName !== undefined || rawValues.length !== 1 || firstValue === undefined) {
 				throw new Error('Malformed friendlyName attribute');
 			}
-			friendlyName = decodeBmpString(firstValue);
+			friendlyName = decodeFriendlyName(firstValue);
 			continue;
 		}
 		if (attrOid === OIDS.localKeyId) {
@@ -861,31 +897,15 @@ function extractContextChild(element: BerElement): BerElement {
 	return child;
 }
 
-/** Encodes a JS string as an ASN.1 BMPString (UCS-2 big-endian, tag 0x1e). */
-function bmpString(value: string): Uint8Array {
-	const bytes = new Uint8Array(value.length * 2);
-	for (let index = 0; index < value.length; index += 1) {
-		const codePoint = value.charCodeAt(index);
-		bytes[index * 2] = codePoint >> 8;
-		bytes[index * 2 + 1] = codePoint & 0xff;
-	}
-	return tlv(0x1e, bytes);
-}
-
-/** Decodes a DER-encoded BMPString (tag 0x1e) back to a JS string. */
-function decodeBmpString(der: Uint8Array): string {
+/** RFC 2985 §5.5.1: a friendlyName value is a BMPString of SIZE (1..255). */
+function decodeFriendlyName(der: Uint8Array): string {
 	const element = readElement(der);
 	if (element.tag !== 0x1e) {
-		throw new Error('Expected BMPString');
+		throw new Error('friendlyName must be a BMPString');
 	}
-	if (element.value.length % 2 !== 0) {
-		throw new Error('BMPString must use an even number of bytes');
+	const friendlyName = decodeString(0x1e, element.value);
+	if (friendlyName.length < 1 || friendlyName.length > MAX_FRIENDLY_NAME_LENGTH) {
+		throw new Error('friendlyName must hold 1 to 255 characters');
 	}
-	let value = '';
-	for (let index = 0; index < element.value.length; index += 2) {
-		const left = element.value[index] ?? 0;
-		const right = element.value[index + 1] ?? 0;
-		value += String.fromCharCode((left << 8) | right);
-	}
-	return value;
+	return friendlyName;
 }

@@ -32,12 +32,9 @@ export function decodeObjectIdentifier(bytes: Uint8Array): string {
 	}
 	const firstSubidentifier = decodeOidSubidentifier(bytes, 0);
 	let offset = firstSubidentifier.nextOffset;
-	const values =
-		firstSubidentifier.value < 40
-			? [0, firstSubidentifier.value]
-			: firstSubidentifier.value < 80
-				? [1, firstSubidentifier.value - 40]
-				: [2, firstSubidentifier.value - 80];
+	const first = firstSubidentifier.value;
+	const values: bigint[] =
+		first < 40n ? [0n, first] : first < 80n ? [1n, first - 40n] : [2n, first - 80n];
 	while (offset < bytes.length) {
 		const subidentifier = decodeOidSubidentifier(bytes, offset);
 		values.push(subidentifier.value);
@@ -367,7 +364,7 @@ function decodeOidSubidentifier(
 	bytes: Uint8Array,
 	start: number,
 ): {
-	readonly value: number;
+	readonly value: bigint;
 	readonly nextOffset: number;
 } {
 	const first = bytes[start];
@@ -377,18 +374,14 @@ function decodeOidSubidentifier(
 	if (first === 0x80) {
 		throw new Error('Malformed OID: non-minimal base-128 encoding');
 	}
-	let value = 0;
+	let value = 0n;
 	let offset = start;
 	for (; offset < bytes.length; offset += 1) {
 		const next = bytes[offset];
 		if (next === undefined) {
 			throw new Error('Malformed OID');
 		}
-		const digit = next & 0x7f;
-		if (value > Math.floor((Number.MAX_SAFE_INTEGER - digit) / 128)) {
-			throw new Error('Malformed OID: overflow/non-minimal or too-large subidentifier');
-		}
-		value = value * 128 + digit;
+		value = (value << 7n) | BigInt(next & 0x7f);
 		if ((next & 0x80) === 0) {
 			return {
 				value,
@@ -463,6 +456,22 @@ function decodePrintableString(bytes: Uint8Array): string {
 	const value = decodeAsciiString(bytes, 'PrintableString');
 	if (!PRINTABLE_STRING_PATTERN.test(value)) {
 		throw new Error('Invalid PrintableString: contains characters outside the allowed set');
+	}
+	return value;
+}
+
+/**
+ * Decodes VisibleString contents, which X.680 §43.7 limits to 0x20 through 0x7E.
+ *
+ * @throws on an octet outside that range.
+ */
+export function decodeVisibleString(bytes: Uint8Array): string {
+	let value = '';
+	for (const byte of bytes) {
+		if (byte < 0x20 || byte > 0x7e) {
+			throw new Error('Invalid VisibleString: contains octets outside 0x20 to 0x7e');
+		}
+		value += String.fromCharCode(byte);
 	}
 	return value;
 }
@@ -773,7 +782,7 @@ const UNIVERSAL_ELEMENTS: ReadonlyMap<number, UniversalElementCheck> = new Map<
 	[0x17, (element) => checkTime(element, UTC_TIME)],
 	[0x18, (element) => checkTime(element, GENERALIZED_TIME)],
 	[0x19, checkGraphicString],
-	[0x1a, (element) => verdictOf(element.value.every((octet) => octet >= 0x20 && octet <= 0x7e))],
+	[0x1a, (element) => decodes(() => decodeVisibleString(element.value))],
 	[0x1b, checkGeneralString],
 	[
 		0x1c,

@@ -319,6 +319,14 @@ and an OCSP response without `nextUpdate` under `ocspProfile: 'rfc9919'` as
 | --------------------- | ----------------------------------- |
 | `invalid_certificate` | A certificate source fails to parse |
 
+### PfxEncoderErrorCode
+
+`createPfx` throws this as a `ResultError`.
+
+| Code                    | Meaning                                                                          |
+| ----------------------- | -------------------------------------------------------------------------------- |
+| `invalid_friendly_name` | A bag `friendlyName` is not a BMPString of 1 to 255 characters (RFC 2985 §5.5.1) |
+
 ### CreatePkcs12MacDataErrorCode
 
 `createPkcs12MacData`, and `createPfx` through its `mac` option, throw these as a
