@@ -1255,6 +1255,18 @@ function findRevokedCertificateEntry(
 	return { ok: true };
 }
 
+/**
+ * Whether `crl` covers `certificate` under {@linkcode checkCrlApplicability}.
+ *
+ * @internal
+ */
+export function isCrlApplicableTo(
+	certificate: ParsedCertificate,
+	crl: ParsedCertificateRevocationList,
+): boolean {
+	return checkCrlApplicability(certificate, crl).ok;
+}
+
 /** RFC 5280 §6.3 CRL applicability: scope, distribution-point, reason, and indirect-CRL checks. */
 function checkCrlApplicability(
 	certificate: ParsedCertificate,

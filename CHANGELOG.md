@@ -245,8 +245,9 @@ revocation })` report a certificate carrying `noRevAvail` or
   fails authentication, freshness, compatibility or applicability. A delta
   that passes those checks but whose revoked entries cannot settle the status
   makes the result indeterminate with the new reason `delta_crl_unusable`. At
-  most four deltas are checked per base CRL and 32 per call, and a delta left
-  unchecked makes the result indeterminate with the new reason
+  most four deltas are checked per base CRL and 32 per call, skipping base
+  CRLs that do not cover the certificate and repeated copies of a delta, and
+  a delta left unchecked makes the result indeterminate with the new reason
   `delta_crl_retry_limit_exceeded`. Either reason outranks a `good` verdict
   from OCSP or another CRL. Neither replaces a revocation that the base CRL
   lists for a reason other than `certificateHold`, since no delta can remove

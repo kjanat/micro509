@@ -8,6 +8,7 @@
  * @module
  */
 
+import { toHex } from '#micro509/internal/asn1/asn1';
 import type {
 	AuthenticatedCrlCheckOutcome,
 	CrlSource,
@@ -20,6 +21,7 @@ import {
 	checkCertificateRevocationAgainstCrl,
 	checkRevocationAgainstAuthenticatedCrl,
 	coversAllDistributionPointReasons,
+	isCrlApplicableTo,
 	isCurrentDeltaCrl,
 	parseCertificateRevocationListDerOrThrow,
 	parseCertificateRevocationListPemOrThrow,
@@ -1149,8 +1151,10 @@ async function evaluateCrlEvidence(
 	// Parse all CRLs and separate base CRLs from delta CRLs
 	const parsedCrls = parseCrlEvidenceSources(crls, state.executionErrors);
 
-	const baseCrls = parsedCrls.filter((crl) => crl.baseCrlNumber === undefined);
-	const deltaCrls = parsedCrls.filter((crl) => crl.baseCrlNumber !== undefined);
+	const baseCrls = parsedCrls.filter(
+		(crl) => crl.baseCrlNumber === undefined && isCrlApplicableTo(cert, crl),
+	);
+	const deltaCrls = distinctSignedCrls(parsedCrls.filter((crl) => crl.baseCrlNumber !== undefined));
 
 	// Process base CRLs (optionally paired with delta CRLs)
 	const crlMaxAgeMs = input.policy?.crlMaxAgeMs;
@@ -1271,6 +1275,26 @@ function parseCrlEvidenceSources(
 		}
 	}
 	return parsedCrls;
+}
+
+/** `crls` without repeats of the same signed content and signature. */
+function distinctSignedCrls(
+	crls: readonly ParsedCertificateRevocationList[],
+): readonly ParsedCertificateRevocationList[] {
+	const seen = new Set<string>();
+	return crls.filter((crl) => {
+		const key = [
+			crl.signatureAlgorithmOid,
+			toHex(crl.signatureAlgorithmParametersDer ?? new Uint8Array()),
+			toHex(crl.signatureValue),
+			toHex(crl.tbsCertListDer),
+		].join(':');
+		if (seen.has(key)) {
+			return false;
+		}
+		seen.add(key);
+		return true;
+	});
 }
 
 /** Every delta CRL that can update `baseCrl`, newest first, in the order to try authenticating them. */

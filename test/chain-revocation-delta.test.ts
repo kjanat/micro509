@@ -136,6 +136,13 @@ async function scenario() {
 					? {}
 					: { revokedCertificates: revocation.map((entry) => ({ ...entry, reasonCode })) }),
 			}),
+		caOnlyBase: (crlNumber: number) =>
+			crl({
+				signerPrivateKey: ca.keyPair.privateKey,
+				crlNumber,
+				thisUpdate: baseThisUpdate,
+				issuingDistributionPoint: { onlyContainsCACerts: true },
+			}),
 		unresolvableDelta: () =>
 			crl({
 				signerPrivateKey: ca.keyPair.privateKey,
@@ -542,6 +549,40 @@ describe('checkChainRevocation keeping a base CRL revocation beside delta CRLs i
 			decision: 'allow',
 			status: 'indeterminate',
 			indeterminateReasons: ['delta_crl_retry_limit_exceeded'],
+		});
+	});
+});
+
+describe('checkChainRevocation delta CRL attempt limits and evidence that cannot matter', () => {
+	it('spends no attempts on delta CRLs for base CRLs that do not cover the certificate', async () => {
+		const s = await scenario();
+		const outOfScope = await Promise.all(
+			Array.from({ length: 8 }, async (_, index) => (await s.caOnlyBase(10 + index)).der),
+		);
+		const crls = [
+			...outOfScope,
+			...(await s.forgedDeltas(4, 10)),
+			(await s.base(false)).der,
+			(await s.revokingDelta()).der,
+		];
+		expect(await leafStatus(s, crls, [s.ocspGood], 'soft-fail')).toEqual({
+			decision: 'deny',
+			status: 'revoked',
+			indeterminateReasons: undefined,
+		});
+	});
+
+	it('spends one attempt on repeated copies of the same delta CRL', async () => {
+		const s = await scenario();
+		const crls = [
+			(await s.base(false)).der,
+			...Array.from({ length: 4 }, () => s.forgedNewerDelta),
+			(await s.revokingDelta()).der,
+		];
+		expect(await leafStatus(s, crls, [s.ocspGood], 'soft-fail')).toEqual({
+			decision: 'deny',
+			status: 'revoked',
+			indeterminateReasons: undefined,
 		});
 	});
 });
