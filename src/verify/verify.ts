@@ -1620,7 +1620,6 @@ const UNINTERPRETED_GENERAL_NAME_TYPES: ReadonlySet<SubjectAltName['type']> = ne
 	'otherName',
 	'x400Address',
 	'ediPartyName',
-	'registeredID',
 	'unknown',
 ]);
 

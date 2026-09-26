@@ -888,6 +888,31 @@ describe('chain verification', () => {
 		}
 	});
 
+	it('processes a registeredID in the critical SAN of an empty-subject leaf', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Critical RegisteredID CA' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign'] },
+		});
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Critical RegisteredID CA' },
+			subject: {},
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+			extensions: {
+				keyUsage: ['digitalSignature'],
+				subjectAltNames: [{ type: 'registeredID', value: '1.2.3.4' }],
+			},
+		});
+		expect(unwrap(parseCertificatePem(leaf.pem)).extensions).toContainEqual(
+			expect.objectContaining({ oid: OIDS.subjectAltName, critical: true }),
+		);
+		expect(
+			await verifyCertificateChain({ leaf: leaf.pem, roots: [ca.certificate.pem] }),
+		).toMatchObject({ ok: true });
+	});
+
 	it('rejects a malformed critical directoryName SAN before applying name constraints', async () => {
 		const excludedName = buildDirectoryNameDerHex([
 			[{ oid: OIDS.organizationName, value: 'Blocked Org', encoding: 'utf8' }],

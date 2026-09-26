@@ -1618,7 +1618,7 @@ function isOrAddress(children: readonly DerElement[]): boolean {
 /**
  * RFC 5280 §4.2.1.6: `EDIPartyName ::= SEQUENCE { nameAssigner [0]
  * DirectoryString OPTIONAL, partyName [1] DirectoryString }`, each tag
- * explicit around its CHOICE.
+ * explicit around its CHOICE, whose alternatives are all `SIZE (1..MAX)`.
  */
 function isEdiPartyName(children: readonly DerElement[], source: Uint8Array): boolean {
 	const partyName = children.at(-1);
@@ -1627,7 +1627,13 @@ function isEdiPartyName(children: readonly DerElement[], source: Uint8Array): bo
 		(children.length === 1 || (children.length === 2 && children[0]?.tag === 0xa0)) &&
 		children.every((child) => {
 			const inner = childrenOf(source, child);
-			return inner.length === 1 && DIRECTORY_STRING_TAGS.has(inner[0]?.tag ?? -1);
+			const directoryString = inner[0];
+			return (
+				inner.length === 1 &&
+				directoryString !== undefined &&
+				DIRECTORY_STRING_TAGS.has(directoryString.tag) &&
+				directoryString.value.length > 0
+			);
 		})
 	);
 }

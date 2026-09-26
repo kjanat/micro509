@@ -827,6 +827,11 @@ describe('extensions encoding', () => {
 			['ediPartyName', new Uint8Array()],
 			['ediPartyName', explicitContext(0, utf8String('assigner'))],
 			['ediPartyName', explicitContext(1, integerFromNumber(1))],
+			['ediPartyName', explicitContext(1, utf8String(''))],
+			[
+				'ediPartyName',
+				concatBytes([explicitContext(0, printableString('')), explicitContext(1, utf8String('p'))]),
+			],
 			[
 				'ediPartyName',
 				concatBytes([explicitContext(1, utf8String('a')), explicitContext(0, utf8String('b'))]),
