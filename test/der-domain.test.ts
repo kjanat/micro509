@@ -299,6 +299,9 @@ describe('der domain', () => {
 			expect(() => derBmpString('a\u{1F600}')).toThrow(
 				'code point above the Basic Multilingual Plane',
 			);
+			for (const noncharacter of ['￾', '￿']) {
+				expect(() => derBmpString(`a${noncharacter}`)).toThrow('not BMPString characters');
+			}
 			expect(() => derPrintableString('a_b')).toThrow('Invalid PrintableString');
 			expect(() => derIa5String('héllo')).toThrow('Invalid IA5String');
 		});

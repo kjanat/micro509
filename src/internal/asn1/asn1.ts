@@ -467,6 +467,7 @@ function decodePrintableString(bytes: Uint8Array): string {
 	return value;
 }
 
+/** X.680 §41.15: BMPString holds code units 0000 to D7FF and E000 to FFFD. */
 function decodeBmpString(bytes: Uint8Array): string {
 	if (bytes.length % 2 !== 0) {
 		throw new Error('Invalid BMPString length');
@@ -479,7 +480,7 @@ function decodeBmpString(bytes: Uint8Array): string {
 			throw new Error('Invalid BMPString content');
 		}
 		const codeUnit = (left << 8) | right;
-		if (codeUnit >= 0xd800 && codeUnit <= 0xdfff) {
+		if ((codeUnit >= 0xd800 && codeUnit <= 0xdfff) || codeUnit >= 0xfffe) {
 			throw new Error('Invalid BMPString code point');
 		}
 		value += String.fromCharCode(codeUnit);

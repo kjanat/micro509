@@ -92,7 +92,7 @@ Unions may gain members in minor releases; treat them as non-exhaustive and keep
 | `extension_must_be_critical`                            | RFC 5280 fixes this extension as critical                           |
 | `extension_must_be_non_critical`                        | RFC 5280 fixes this extension as non-critical                       |
 | `extension_not_supported_in_context`                    | Extension not allowed in this certificate/CSR context               |
-| `invalid_bmp_string`                                    | BMPString explicitText outside the Basic Multilingual Plane         |
+| `invalid_bmp_string`                                    | BMPString explicitText outside the X.680 BMPString repertoire       |
 | `invalid_general_name_content`                          | x400Address or ediPartyName contents fail their schema or encoding  |
 | `invalid_general_name_tag`                              | GeneralName tag outside the nine RFC 5280 §4.2.1.6 alternatives     |
 | `invalid_ia5_string`                                    | Non-ASCII input for an IA5String value                              |
@@ -307,7 +307,7 @@ and an OCSP response without `nextUpdate` under `ocspProfile: 'rfc9919'` as
 | `invalid_password`          | MAC or decryption rejects the supplied password                                                                                                                                                                   |
 | `kdf_iterations_exceeded`   | The PBES2 bags' combined PBKDF2 iteration counts exceed `maxKdfIterations` (2,000,000 default), or the MAC's count exceeds its own `maxKdfIterations` (100,000 default for the PKCS#12 KDF, 2,000,000 for PBMAC1) |
 | `malformed`                 | PFX structure fails to parse, including a PBKDF2 `iterationCount` outside 1 to 4294967295 in a PBES2 bag or a PBMAC1 MAC                                                                                          |
-| `password_not_bmp_string`   | The RFC 7292 MAC password (`macPassword`, or `password` as fallback) contains a UTF-16 surrogate                                                                                                                  |
+| `password_not_bmp_string`   | The RFC 7292 MAC password (`macPassword`, or `password` as fallback) contains a UTF-16 surrogate, U+FFFE or U+FFFF                                                                                                |
 | `password_not_utf8`         | The PBMAC1 password contains an unpaired UTF-16 surrogate                                                                                                                                                         |
 | `password_required`         | Encrypted content present but no password given                                                                                                                                                                   |
 | `unsupported_mac_algorithm` | The MAC is neither the SHA-256 RFC 7292 MAC nor a supported PBMAC1 variant                                                                                                                                        |
@@ -327,7 +327,7 @@ and an OCSP response without `nextUpdate` under `ocspProfile: 'rfc9919'` as
 | Code                      | Meaning                                                                                                    |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | `invalid_iterations`      | `iterations` is not a positive safe integer (RFC 7292 MAC) or not an integer from 1 to 4294967295 (PBMAC1) |
-| `password_not_bmp_string` | RFC 7292 MAC password contains a UTF-16 surrogate                                                          |
+| `password_not_bmp_string` | RFC 7292 MAC password contains a UTF-16 surrogate, U+FFFE or U+FFFF                                        |
 | `password_not_utf8`       | PBMAC1 password contains an unpaired UTF-16 surrogate                                                      |
 
 ### ParsePkcs12MacDataErrorCode
@@ -336,7 +336,7 @@ and an OCSP response without `nextUpdate` under `ocspProfile: 'rfc9919'` as
 | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `kdf_iterations_exceeded`   | With a password, the iteration count exceeds `maxKdfIterations` (100,000 default for the PKCS#12 KDF, 2,000,000 for PBMAC1), or an RFC 7292 MAC count exceeds `Number.MAX_SAFE_INTEGER`                                |
 | `malformed`                 | MacData structure fails to parse, an iteration count is below 1, a PBMAC1 count exceeds 4294967295 whatever `maxKdfIterations` allows, or, without a password, an RFC 7292 MAC count exceeds `Number.MAX_SAFE_INTEGER` |
-| `password_not_bmp_string`   | RFC 7292 MAC password contains a UTF-16 surrogate                                                                                                                                                                      |
+| `password_not_bmp_string`   | RFC 7292 MAC password contains a UTF-16 surrogate, U+FFFE or U+FFFF                                                                                                                                                    |
 | `password_not_utf8`         | PBMAC1 password contains an unpaired UTF-16 surrogate                                                                                                                                                                  |
 | `unsupported_mac_algorithm` | The MAC is neither the SHA-256 RFC 7292 MAC nor a supported PBMAC1 variant                                                                                                                                             |
 | `weak_mac_key_length`       | PBMAC1 PBKDF2 `keyLength` is below 20 octets                                                                                                                                                                           |

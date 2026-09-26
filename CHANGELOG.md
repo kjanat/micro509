@@ -167,7 +167,8 @@ revocation })` report a certificate carrying `noRevAvail` or
   builder invariant. `CrlEncoderErrorCode` gains
   `next_update_not_after_this_update`. Parsed CRLs keep `nextUpdate` optional.
 - An RFC 7292 MAC password containing a UTF-16 surrogate (a non-BMP character
-  or a lone surrogate) is not a BMPString (RFC 7292 Appendix B.1).
+  or a lone surrogate), U+FFFE or U+FFFF is not a BMPString (RFC 7292 Appendix
+  B.1, X.680 §41.15).
   `createPkcs12MacData` and `createPfx` throw `ResultError` code
   `password_not_bmp_string` for it, and `parsePkcs12MacData`, `parsePfxDer`
   and `parsePfxPem` return that code. `parsePfxDer` and `parsePfxPem` reported
@@ -241,6 +242,10 @@ revocation })` report a certificate carrying `noRevAvail` or
   `decodeDerTime`; it is now malformed. A UTF8String keeps the character in
   `decodeDerString`, parsed names and DisplayText, as does an issuer attribute
   that CRL or PKCS #7 parsing decodes leniently.
+- BMPString decoding and `derBmpString` accepted U+FFFE and U+FFFF, which
+  X.680 §41.15 leaves out of BMPString. `decodeDerString` and name parsing now
+  reject them as they reject surrogates, `derBmpString` throws, and a BMPString
+  explicitText holding one fails with `invalid_bmp_string`.
 
 ### Security
 

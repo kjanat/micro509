@@ -373,7 +373,8 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
       Appendix B.1). A password containing a UTF-16 surrogate, from a non-BMP
       character or a lone surrogate, is rejected with
       `password_not_bmp_string`. RFC 7292 does not specify this case, so the
-      rejection is micro509 policy.
+      rejection is micro509 policy. X.680 §41.15 leaves U+FFFE and U+FFFF out
+      of BMPString, and a password holding either gets the same code.
 - [x] Reject MacData iterations of 0 or below as `malformed`. RFC 7292 §4
       gives the field no range, so this is micro509 policy.
 - [x] Verify RFC 9879 PBMAC1 with PBKDF2 and an HMAC-SHA-256, HMAC-SHA-384 or

@@ -2143,7 +2143,7 @@ function encodeBmpDisplayText(text: string): Uint8Array {
 	} catch {
 		return throwExtensionEncoderError(
 			'invalid_bmp_string',
-			'BMPString explicitText must stay within the Basic Multilingual Plane',
+			'BMPString explicitText must hold Basic Multilingual Plane characters other than surrogates, U+FFFE and U+FFFF',
 		);
 	}
 }

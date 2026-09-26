@@ -453,6 +453,10 @@ describe('asn1 decoding', () => {
 		expect(() => decodeString(0x1e, Uint8Array.of(0xd8, 0x00))).toThrow(
 			'Invalid BMPString code point',
 		);
+		for (const noncharacter of [Uint8Array.of(0xff, 0xfe), Uint8Array.of(0xff, 0xff)]) {
+			expect(() => decodeString(0x1e, noncharacter)).toThrow('Invalid BMPString code point');
+		}
+		expect(decodeString(0x1e, Uint8Array.of(0xff, 0xfd))).toBe('�');
 		expect(decodeString(0x1c, Uint8Array.of(0x00, 0x00, 0x00, 0x41))).toBe('A');
 		expect(() => decodeString(0x1c, Uint8Array.of(0x00, 0x11, 0x00, 0x00))).toThrow(
 			'Invalid UniversalString code point',
@@ -603,6 +607,7 @@ describe('checkStrictDer', () => {
 		['VisibleString with DEL', tlv(0x1a, octets(0x7f))],
 		['UniversalString surrogate', tlv(0x1c, octets(0x00, 0x00, 0xd8, 0x00))],
 		['odd-length BMPString', tlv(0x1e, octets(0x00))],
+		['BMPString holding U+FFFF (X.680 §41.15)', tlv(0x1e, octets(0xff, 0xff))],
 		['UTCTime without seconds (X.690 §11.8)', tlv(0x17, text('2609261200Z'))],
 		['UTCTime with an offset (X.690 §11.8)', tlv(0x17, text('260926120000+0100'))],
 		['UTCTime in month 13', tlv(0x17, text('261326120000Z'))],
