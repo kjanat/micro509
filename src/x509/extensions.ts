@@ -373,6 +373,8 @@ export type CertificatePolicies = readonly {
 				};
 				readonly explicitText?: string;
 				readonly explicitTextType?: DisplayTextType;
+				/** Present when `explicitText` exceeds 200 characters; the builder emits no such notice. */
+				readonly oversizedExplicitText?: OversizedExplicitText;
 		  }
 		| {
 				readonly type: 'oid';
@@ -416,6 +418,18 @@ export interface UserNoticePolicyQualifierInfo {
 
 /** The ASN.1 string types RFC 5280 §4.2.1.4 allows for a DisplayText. */
 export type DisplayTextType = 'utf8String' | 'ia5String' | 'visibleString' | 'bmpString';
+
+/**
+ * A user notice `explicitText` longer than the 200 characters RFC 5280
+ * §4.2.1.4 allows. Parsing keeps the text whole, as §4.2.1.4 asks certificate
+ * users to handle such a notice gracefully, and reports its size here.
+ */
+export interface OversizedExplicitText {
+	/** Characters the certificate carries. */
+	readonly characters: number;
+	/** The RFC 5280 §4.2.1.4 upper bound, 200. */
+	readonly limit: number;
+}
 
 /** Opaque policy qualifier identified by a custom OID, carried as raw DER. */
 export interface CustomPolicyQualifierInfo {

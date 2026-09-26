@@ -39,6 +39,12 @@ internal/
 - `shared/idna-tables.ts` is generated; regenerate it with
   `bun scripts/idna-tables.bun.ts` and never edit it by hand.
 - Keep parser limits explicit when traversing nested structures.
+- A decoder that refuses input without calling it malformed throws through
+  `asn1/decode-refusal.ts`: `unsupported` for a construct micro509 does not
+  decode, `limit_exceeded` for an implementation limit such as
+  `MAX_OID_SUBIDENTIFIER_OCTETS` or `DEFAULT_MAX_DER_DEPTH`. Every Result
+  boundary maps those codes with `decodeFailureResult` or `decodeRefusalOf`; a
+  bare `throw new Error` stays `malformed`.
 - Use integer and length helpers from `asn1/` instead of local reimplementation.
 - Register new OIDs in `asn1/oids.json` under their registration arc; consume
   them as `OIDS.<name>`. Never inline a dotted-decimal literal in source.

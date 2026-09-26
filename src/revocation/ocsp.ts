@@ -20,6 +20,7 @@ import {
 	toArrayBuffer,
 	toHex,
 } from '#micro509/internal/asn1/asn1';
+import { DECODE_REFUSAL_CODES, decodeFailureResult } from '#micro509/internal/asn1/decode-refusal';
 import type { DerElement } from '#micro509/internal/asn1/der';
 import {
 	bitString,
@@ -535,7 +536,7 @@ export async function createOcspRequest(
 }
 
 /** Machine-readable failure reason for the OCSP request parsers. */
-export type ParseOcspRequestErrorCode = 'malformed';
+export type ParseOcspRequestErrorCode = 'malformed' | 'unsupported' | 'limit_exceeded';
 
 /** Structured failure payload for OCSP request parsing. */
 export interface ParseOcspRequestFailure extends Micro509Error<ParseOcspRequestErrorCode> {
@@ -645,10 +646,7 @@ export function parseOcspRequestDer(der: Uint8Array): ParseOcspRequestResult {
 		return successResult(parseOcspRequestDerOrThrow(der));
 	} catch (error) {
 		rethrowIfInvariant(error);
-		return failureResult(
-			'malformed',
-			error instanceof Error ? error.message : 'Malformed OCSP request',
-		);
+		return decodeFailureResult(error, DECODE_REFUSAL_CODES, 'Malformed OCSP request');
 	}
 }
 
@@ -663,15 +661,12 @@ export function parseOcspRequestPem(pem: string): ParseOcspRequestResult {
 		return successResult(parseOcspRequestPemOrThrow(pem));
 	} catch (error) {
 		rethrowIfInvariant(error);
-		return failureResult(
-			'malformed',
-			error instanceof Error ? error.message : 'Malformed OCSP request',
-		);
+		return decodeFailureResult(error, DECODE_REFUSAL_CODES, 'Malformed OCSP request');
 	}
 }
 
 /** Machine-readable failure reason for the OCSP response parsers. */
-export type ParseOcspResponseErrorCode = 'malformed';
+export type ParseOcspResponseErrorCode = 'malformed' | 'unsupported' | 'limit_exceeded';
 
 /** Structured failure payload for OCSP response parsing. */
 export interface ParseOcspResponseFailure extends Micro509Error<ParseOcspResponseErrorCode> {
@@ -805,10 +800,7 @@ export function parseOcspResponseDer(der: Uint8Array): ParseOcspResponseResult {
 		return successResult(parseOcspResponseDerOrThrow(der));
 	} catch (error) {
 		rethrowIfInvariant(error);
-		return failureResult(
-			'malformed',
-			error instanceof Error ? error.message : 'Malformed OCSP response',
-		);
+		return decodeFailureResult(error, DECODE_REFUSAL_CODES, 'Malformed OCSP response');
 	}
 }
 
@@ -823,10 +815,7 @@ export function parseOcspResponsePem(pem: string): ParseOcspResponseResult {
 		return successResult(parseOcspResponsePemOrThrow(pem));
 	} catch (error) {
 		rethrowIfInvariant(error);
-		return failureResult(
-			'malformed',
-			error instanceof Error ? error.message : 'Malformed OCSP response',
-		);
+		return decodeFailureResult(error, DECODE_REFUSAL_CODES, 'Malformed OCSP response');
 	}
 }
 

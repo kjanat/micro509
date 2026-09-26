@@ -20,6 +20,7 @@ import {
 	toArrayBuffer,
 	toHex,
 } from '#micro509/internal/asn1/asn1';
+import { DECODE_REFUSAL_CODES, decodeRefusalOf } from '#micro509/internal/asn1/decode-refusal';
 import type { DerElement } from '#micro509/internal/asn1/der';
 import {
 	DEFAULT_MAX_DER_DEPTH,
@@ -54,7 +55,7 @@ import { base64Encode } from '#micro509/internal/shared/base64';
 import { compareDistinguishedNames } from '#micro509/internal/shared/dn';
 import { pemEncode, splitPemBlocksOrThrow } from '#micro509/pem/pem';
 import type { ErrorResult, Micro509Error } from '#micro509/result/result';
-import { failureResult } from '#micro509/result/result';
+import { failureResult, rethrowIfInvariant } from '#micro509/result/result';
 import type { SignatureProfileInput } from '#micro509/x509/certificate';
 import type { NameFieldKey } from '#micro509/x509/name';
 import { nameFieldKeyFromOid } from '#micro509/x509/name';
@@ -220,8 +221,20 @@ export interface ParsedPkcs7SignedData {
 
 // Result types for PKCS#7 parsing
 
-/** Error codes for PKCS#7 parse failures. */
-export type ParsePkcs7ErrorCode = 'malformed' | 'not_signed_data';
+/**
+ * Error codes for PKCS#7 parse failures.
+ *
+ * `unsupported` is a signer issuer name value micro509 does not decode, a
+ * TeletexString octet outside the X.690 §8.23.5.2 initial state.
+ * `limit_exceeded` is an implementation limit: an OBJECT IDENTIFIER
+ * sub-identifier encoded in more than 64 octets, or DER nested deeper than 64
+ * levels.
+ */
+export type ParsePkcs7ErrorCode =
+	| 'malformed'
+	| 'not_signed_data'
+	| 'unsupported'
+	| 'limit_exceeded';
 
 /** Error payload for a failed PKCS#7 parse. */
 export interface ParsePkcs7Failure extends Micro509Error<ParsePkcs7ErrorCode> {
@@ -771,8 +784,12 @@ export function parsePkcs7SignedDataDer(der: Uint8Array): ParsePkcs7SignedDataRe
 				signerInfos: parseSignerInfos(der, signerInfos),
 			},
 		};
-	} catch {
-		return pkcs7Failure('malformed', 'Malformed PKCS#7 structure');
+	} catch (error) {
+		rethrowIfInvariant(error);
+		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+		return refusal === undefined
+			? pkcs7Failure('malformed', 'Malformed PKCS#7 structure')
+			: pkcs7Failure(refusal.code, refusal.message);
 	}
 }
 

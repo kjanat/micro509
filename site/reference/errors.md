@@ -22,15 +22,19 @@ Unions may gain members in minor releases; treat them as non-exhaustive and keep
 
 ### ParseCertificateErrorCode
 
-| Code        | Meaning                                           |
-| ----------- | ------------------------------------------------- |
-| `malformed` | Input is not a valid DER or PEM X.509 certificate |
+| Code             | Meaning                                                                                                                   |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `limit_exceeded` | A micro509 limit: an OBJECT IDENTIFIER sub-identifier encoded in more than 64 octets, or DER nested deeper than 64 levels |
+| `malformed`      | Input is not a valid DER or PEM X.509 certificate                                                                         |
+| `unsupported`    | A TeletexString name value holds an octet outside the X.690 §8.23.5.2 initial state, which micro509 does not decode       |
 
 ### ParseCertificateSigningRequestErrorCode
 
-| Code        | Meaning                                         |
-| ----------- | ----------------------------------------------- |
-| `malformed` | Input is not a valid DER or PEM PKCS#10 request |
+| Code             | Meaning                                                                                                                   |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `limit_exceeded` | A micro509 limit: an OBJECT IDENTIFIER sub-identifier encoded in more than 64 octets, or DER nested deeper than 64 levels |
+| `malformed`      | Input is not a valid DER or PEM PKCS#10 request                                                                           |
+| `unsupported`    | A TeletexString name value holds an octet outside the X.690 §8.23.5.2 initial state, which micro509 does not decode       |
 
 ### MatchCertificatePrivateKeyErrorCode
 
@@ -63,62 +67,62 @@ Unions may gain members in minor releases; treat them as non-exhaustive and keep
 
 ### ExtensionEncoderErrorCode
 
-| Code                                                    | Meaning                                                             |
-| ------------------------------------------------------- | ------------------------------------------------------------------- |
-| `authority_info_access_empty`                           | AIA input has no access descriptions                                |
-| `authority_info_access_ocsp_not_uri`                    | An OCSP access method requires a URI location                       |
-| `certificate_policies_empty`                            | certificatePolicies lists no policies                               |
-| `crl_distribution_points_empty`                         | cRLDistributionPoints lists no points                               |
-| `directory_name_not_sequence`                           | directoryName payload is not a DER SEQUENCE                         |
-| `display_text_control_character`                        | explicitText contains a C0 or C1 control character (RFC 6818 §3)    |
-| `display_text_ia5_string`                               | explicitText requested as IA5String (RFC 6818 §3)                   |
-| `display_text_not_nfc`                                  | UTF8String or BMPString explicitText is not NFC (RFC 6818 §3)       |
-| `display_text_out_of_range`                             | User-notice DisplayText length outside RFC 5280 bounds              |
-| `distribution_point_crl_issuer_empty`                   | `cRLIssuer` present but holds no name                               |
-| `distribution_point_crl_issuer_not_directory_name`      | `cRLIssuer` entries must be directoryNames (RFC 5280 §4.2.1.13)     |
-| `distribution_point_empty`                              | Distribution point carries no field at all                          |
-| `distribution_point_full_name_empty`                    | `fullName` present but holds no GeneralName                         |
-| `distribution_point_relative_name_multiple_crl_issuers` | `nameRelativeToCRLIssuer` permits at most one `cRLIssuer`           |
-| `duplicate_extension_oid`                               | Same extension OID supplied twice                                   |
-| `duplicate_policy_oid`                                  | Same policy OID listed twice                                        |
-| `edwards_key_usage_forbids_agreement_bit`               | Ed25519/Ed448 keyUsage asserts an agreement or cipher bit           |
-| `edwards_key_usage_forbids_key_cert_sign`               | End-entity Edwards certificate asserts `keyCertSign`/`cRLSign`      |
-| `edwards_key_usage_requires_key_cert_sign`              | Edwards CA keyUsage missing `keyCertSign`                           |
-| `edwards_key_usage_requires_signing_bit`                | Edwards keyUsage missing a signing bit (RFC 9295 §3)                |
-| `email_name_constraint_names_mailbox`                   | rfc822Name constraint names a mailbox (RFC 9549 §2.2)               |
-| `empty_general_name_value`                              | dNSName/rfc822Name/URI/SRV value is empty                           |
-| `empty_subject_requires_subject_alt_name`               | Empty subject DN without a critical, non-empty SAN                  |
-| `extended_key_usage_empty`                              | EKU list is empty                                                   |
-| `extension_must_be_critical`                            | RFC 5280 fixes this extension as critical                           |
-| `extension_must_be_non_critical`                        | RFC 5280 fixes this extension as non-critical                       |
-| `extension_not_supported_in_context`                    | Extension not allowed in this certificate/CSR context               |
-| `invalid_bmp_string`                                    | BMPString explicitText outside the X.680 BMPString repertoire       |
-| `invalid_general_name_content`                          | x400Address or ediPartyName contents fail their schema or encoding  |
-| `invalid_general_name_tag`                              | GeneralName tag outside the nine RFC 5280 §4.2.1.6 alternatives     |
-| `invalid_ia5_string`                                    | Non-ASCII input for an IA5String value                              |
-| `invalid_idn`                                           | Domain name is not valid IDNA2008 (RFC 5891 §4)                     |
-| `invalid_ip_name_constraint`                            | IP constraint bytes are not address+mask of one family              |
-| `invalid_other_name_value`                              | otherName value is not one DER element micro509 can validate        |
-| `invalid_oid`                                           | String is not an encodable OID within X.660 arc bounds              |
-| `invalid_smtp_utf8_mailbox`                             | SmtpUTF8Mailbox malformed or domain not A-labels (RFC 9598 §3)      |
-| `invalid_srv_name`                                      | SRVName not \_Service.Name with RFC 6335 service and LDH Name       |
-| `invalid_srv_name_constraint`                           | SRVName constraint not \_Service.Name, \_Service or Name (RFC 4985) |
-| `invalid_visible_string`                                | VisibleString explicitText outside printable ASCII                  |
-| `key_usage_empty`                                       | keyUsage asserts no bits                                            |
-| `malformed_known_extension_value`                       | `customExtensions` payload with a known OID fails to decode as it   |
-| `montgomery_key_usage_forbids_both_cipher_bits`         | X25519/X448 asserts both `encipherOnly` and `decipherOnly`          |
-| `montgomery_key_usage_forbids_signature_bit`            | X25519/X448 asserts a signature bit (RFC 8410 §12)                  |
-| `montgomery_key_usage_requires_key_agreement`           | X25519/X448 keyUsage missing `keyAgreement` (RFC 9295 §3)           |
-| `name_constraints_empty`                                | nameConstraints has neither permitted nor excluded subtrees         |
-| `no_rev_avail_conflict`                                 | noRevAvail with cA or a revocation pointer (RFC 9608 §3)            |
-| `other_name_type_id_has_variant`                        | otherName type-id belongs to the `srv` or `smtpUtf8Mailbox` variant |
-| `path_length_requires_ca`                               | `pathLength` on a non-CA basicConstraints                           |
-| `path_length_requires_key_cert_sign`                    | `pathLength` requires keyUsage asserting `keyCertSign`              |
-| `policy_constraints_empty`                              | policyConstraints carries neither field                             |
-| `policy_mappings_any_policy`                            | anyPolicy may not appear in a policy mapping                        |
-| `policy_mappings_empty`                                 | Mappings list is empty                                              |
-| `reserved_policy_qualifier_oid`                         | Custom qualifier uses a reserved qualifier OID                      |
-| `smtp_utf8_mailbox_ascii_local_part`                    | ASCII Local-part must use rfc822Name (RFC 9598 §3)                  |
+| Code                                                    | Meaning                                                                    |
+| ------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `authority_info_access_empty`                           | AIA input has no access descriptions                                       |
+| `authority_info_access_ocsp_not_uri`                    | An OCSP access method requires a URI location                              |
+| `certificate_policies_empty`                            | certificatePolicies lists no policies                                      |
+| `crl_distribution_points_empty`                         | cRLDistributionPoints lists no points                                      |
+| `directory_name_not_sequence`                           | directoryName payload is not a DER SEQUENCE                                |
+| `display_text_control_character`                        | explicitText contains a C0 or C1 control character (RFC 6818 §3)           |
+| `display_text_ia5_string`                               | explicitText requested as IA5String (RFC 6818 §3)                          |
+| `display_text_not_nfc`                                  | UTF8String or BMPString explicitText is not NFC (RFC 6818 §3)              |
+| `display_text_out_of_range`                             | User-notice DisplayText length outside RFC 5280 bounds                     |
+| `distribution_point_crl_issuer_empty`                   | `cRLIssuer` present but holds no name                                      |
+| `distribution_point_crl_issuer_not_directory_name`      | `cRLIssuer` entries must be directoryNames (RFC 5280 §4.2.1.13)            |
+| `distribution_point_empty`                              | Distribution point carries no field at all                                 |
+| `distribution_point_full_name_empty`                    | `fullName` present but holds no GeneralName                                |
+| `distribution_point_relative_name_multiple_crl_issuers` | `nameRelativeToCRLIssuer` permits at most one `cRLIssuer`                  |
+| `duplicate_extension_oid`                               | Same extension OID supplied twice                                          |
+| `duplicate_policy_oid`                                  | Same policy OID listed twice                                               |
+| `edwards_key_usage_forbids_agreement_bit`               | Ed25519/Ed448 keyUsage asserts an agreement or cipher bit                  |
+| `edwards_key_usage_forbids_key_cert_sign`               | End-entity Edwards certificate asserts `keyCertSign`/`cRLSign`             |
+| `edwards_key_usage_requires_key_cert_sign`              | Edwards CA keyUsage missing `keyCertSign`                                  |
+| `edwards_key_usage_requires_signing_bit`                | Edwards keyUsage missing a signing bit (RFC 9295 §3)                       |
+| `email_name_constraint_names_mailbox`                   | rfc822Name constraint names a mailbox (RFC 9549 §2.2)                      |
+| `empty_general_name_value`                              | dNSName/rfc822Name/URI/SRV value is empty                                  |
+| `empty_subject_requires_subject_alt_name`               | Empty subject DN without a critical, non-empty SAN                         |
+| `extended_key_usage_empty`                              | EKU list is empty                                                          |
+| `extension_must_be_critical`                            | RFC 5280 fixes this extension as critical                                  |
+| `extension_must_be_non_critical`                        | RFC 5280 fixes this extension as non-critical                              |
+| `extension_not_supported_in_context`                    | Extension not allowed in this certificate/CSR context                      |
+| `invalid_bmp_string`                                    | BMPString explicitText outside the X.680 BMPString repertoire              |
+| `invalid_general_name_content`                          | x400Address or ediPartyName contents fail their schema or encoding         |
+| `invalid_general_name_tag`                              | GeneralName tag outside the nine RFC 5280 §4.2.1.6 alternatives            |
+| `invalid_ia5_string`                                    | Non-ASCII input for an IA5String value                                     |
+| `invalid_idn`                                           | Domain name is not valid IDNA2008 (RFC 5891 §4)                            |
+| `invalid_ip_name_constraint`                            | IP constraint bytes are not address+mask of one family                     |
+| `invalid_other_name_value`                              | otherName value is not one DER element micro509 can validate               |
+| `invalid_oid`                                           | String is not an OID within X.660 arc bounds, or has an arc over 64 octets |
+| `invalid_smtp_utf8_mailbox`                             | SmtpUTF8Mailbox malformed or domain not A-labels (RFC 9598 §3)             |
+| `invalid_srv_name`                                      | SRVName not \_Service.Name with RFC 6335 service and LDH Name              |
+| `invalid_srv_name_constraint`                           | SRVName constraint not \_Service.Name, \_Service or Name (RFC 4985)        |
+| `invalid_visible_string`                                | VisibleString explicitText outside printable ASCII                         |
+| `key_usage_empty`                                       | keyUsage asserts no bits                                                   |
+| `malformed_known_extension_value`                       | `customExtensions` payload with a known OID fails to decode as it          |
+| `montgomery_key_usage_forbids_both_cipher_bits`         | X25519/X448 asserts both `encipherOnly` and `decipherOnly`                 |
+| `montgomery_key_usage_forbids_signature_bit`            | X25519/X448 asserts a signature bit (RFC 8410 §12)                         |
+| `montgomery_key_usage_requires_key_agreement`           | X25519/X448 keyUsage missing `keyAgreement` (RFC 9295 §3)                  |
+| `name_constraints_empty`                                | nameConstraints has neither permitted nor excluded subtrees                |
+| `no_rev_avail_conflict`                                 | noRevAvail with cA or a revocation pointer (RFC 9608 §3)                   |
+| `other_name_type_id_has_variant`                        | otherName type-id belongs to the `srv` or `smtpUtf8Mailbox` variant        |
+| `path_length_requires_ca`                               | `pathLength` on a non-CA basicConstraints                                  |
+| `path_length_requires_key_cert_sign`                    | `pathLength` requires keyUsage asserting `keyCertSign`                     |
+| `policy_constraints_empty`                              | policyConstraints carries neither field                                    |
+| `policy_mappings_any_policy`                            | anyPolicy may not appear in a policy mapping                               |
+| `policy_mappings_empty`                                 | Mappings list is empty                                                     |
+| `reserved_policy_qualifier_oid`                         | Custom qualifier uses a reserved qualifier OID                             |
+| `smtp_utf8_mailbox_ascii_local_part`                    | ASCII Local-part must use rfc822Name (RFC 9598 §3)                         |
 
 ## micro509/verify
 
@@ -130,6 +134,7 @@ both tables are enforced against `VERIFY_ERROR_CODES` by tests.
 `authority_key_identifier_mismatch`, `ca_required`, `certificate_expired`,
 `certificate_revoked`, `common_name_fallback_suppressed`,
 `ec_domain_parameters_missing`, `explicit_policy_required`,
+`explicit_text_oversized`,
 `extended_key_usage_invalid`, `initial_policy_set_not_satisfied`,
 `intermediate_eku_constraint`, `issuer_not_found`, `key_cert_sign_required`,
 `name_constraints_violated`, `no_rev_avail_conflict`, `no_trusted_root`,
@@ -153,21 +158,27 @@ both tables are enforced against `VERIFY_ERROR_CODES` by tests.
 
 ### ParseCertificateRevocationListErrorCode
 
-| Code        | Meaning                             |
-| ----------- | ----------------------------------- |
-| `malformed` | Input is not a valid DER or PEM CRL |
+| Code             | Meaning                                                                                                                   |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `limit_exceeded` | A micro509 limit: an OBJECT IDENTIFIER sub-identifier encoded in more than 64 octets, or DER nested deeper than 64 levels |
+| `malformed`      | Input is not a valid DER or PEM CRL                                                                                       |
+| `unsupported`    | A TeletexString name value holds an octet outside the X.690 §8.23.5.2 initial state, which micro509 does not decode       |
 
 ### ParseOcspRequestErrorCode
 
-| Code        | Meaning                                      |
-| ----------- | -------------------------------------------- |
-| `malformed` | Input is not a valid DER or PEM OCSP request |
+| Code             | Meaning                                                                                                                   |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `limit_exceeded` | A micro509 limit: an OBJECT IDENTIFIER sub-identifier encoded in more than 64 octets, or DER nested deeper than 64 levels |
+| `malformed`      | Input is not a valid DER or PEM OCSP request                                                                              |
+| `unsupported`    | A TeletexString name value holds an octet outside the X.690 §8.23.5.2 initial state, which micro509 does not decode       |
 
 ### ParseOcspResponseErrorCode
 
-| Code        | Meaning                                       |
-| ----------- | --------------------------------------------- |
-| `malformed` | Input is not a valid DER or PEM OCSP response |
+| Code             | Meaning                                                                                                                   |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `limit_exceeded` | A micro509 limit: an OBJECT IDENTIFIER sub-identifier encoded in more than 64 octets, or DER nested deeper than 64 levels |
+| `malformed`      | Input is not a valid DER or PEM OCSP response                                                                             |
+| `unsupported`    | A TeletexString name value holds an octet outside the X.690 §8.23.5.2 initial state, which micro509 does not decode       |
 
 ### CheckCertificateRevocationAgainstCrlErrorCode
 
@@ -256,9 +267,10 @@ and an OCSP response without `nextUpdate` under `ocspProfile: 'rfc9919'` as
 
 ### ImportKeyErrorCode
 
-| Code        | Meaning                                          |
-| ----------- | ------------------------------------------------ |
-| `malformed` | Key material fails to parse or match the request |
+| Code             | Meaning                                                                                                                   |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `limit_exceeded` | A micro509 limit: an OBJECT IDENTIFIER sub-identifier encoded in more than 64 octets, or DER nested deeper than 64 levels |
+| `malformed`      | Key material fails to parse or match the request                                                                          |
 
 ### ImportEncryptedKeyErrorCode
 
@@ -266,6 +278,7 @@ and an OCSP response without `nextUpdate` under `ocspProfile: 'rfc9919'` as
 | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | `invalid_password`        | Decryption failed, or plaintext is not a private key                                                                                          |
 | `kdf_iterations_exceeded` | PBKDF2 iteration count exceeds `maxKdfIterations` (2,000,000 default)                                                                         |
+| `limit_exceeded`          | A micro509 limit: an OBJECT IDENTIFIER sub-identifier encoded in more than 64 octets, or DER nested deeper than 64 levels                     |
 | `malformed`               | Envelope fails to parse before any decryption, including a PBKDF2 `iterationCount` outside 1 to 4294967295 whatever `maxKdfIterations` allows |
 
 ### EncryptRsaOaepErrorCode
@@ -294,9 +307,11 @@ and an OCSP response without `nextUpdate` under `ocspProfile: 'rfc9919'` as
 
 ### DecodeDerErrorCode
 
-| Code        | Meaning                                  |
-| ----------- | ---------------------------------------- |
-| `malformed` | Bytes are not the expected DER structure |
+| Code             | Meaning                                                                                                                   |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `limit_exceeded` | A micro509 limit: an OBJECT IDENTIFIER sub-identifier encoded in more than 64 octets, or DER nested deeper than 64 levels |
+| `malformed`      | Bytes are not the expected DER structure                                                                                  |
+| `unsupported`    | A TeletexString holds an octet outside the X.690 §8.23.5.2 initial state, which micro509 does not decode                  |
 
 ## micro509/pkcs
 
@@ -306,6 +321,7 @@ and an OCSP response without `nextUpdate` under `ocspProfile: 'rfc9919'` as
 | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `invalid_password`          | MAC or decryption rejects the supplied password                                                                                                                                                                   |
 | `kdf_iterations_exceeded`   | The PBES2 bags' combined PBKDF2 iteration counts exceed `maxKdfIterations` (2,000,000 default), or the MAC's count exceeds its own `maxKdfIterations` (100,000 default for the PKCS#12 KDF, 2,000,000 for PBMAC1) |
+| `limit_exceeded`            | A micro509 limit: an OBJECT IDENTIFIER sub-identifier encoded in more than 64 octets, or DER or BER nested deeper than 64 levels                                                                                  |
 | `malformed`                 | PFX structure fails to parse, including a PBKDF2 `iterationCount` outside 1 to 4294967295 in a PBES2 bag or a PBMAC1 MAC                                                                                          |
 | `password_not_bmp_string`   | The RFC 7292 MAC password (`macPassword`, or `password` as fallback) contains a UTF-16 surrogate, U+FFFE or U+FFFF                                                                                                |
 | `password_not_utf8`         | The PBMAC1 password contains an unpaired UTF-16 surrogate                                                                                                                                                         |
@@ -343,6 +359,7 @@ and an OCSP response without `nextUpdate` under `ocspProfile: 'rfc9919'` as
 | Code                        | Meaning                                                                                                                                                                                                                |
 | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `kdf_iterations_exceeded`   | With a password, the iteration count exceeds `maxKdfIterations` (100,000 default for the PKCS#12 KDF, 2,000,000 for PBMAC1), or an RFC 7292 MAC count exceeds `Number.MAX_SAFE_INTEGER`                                |
+| `limit_exceeded`            | A micro509 limit: an OBJECT IDENTIFIER sub-identifier encoded in more than 64 octets, or DER nested deeper than 64 levels                                                                                              |
 | `malformed`                 | MacData structure fails to parse, an iteration count is below 1, a PBMAC1 count exceeds 4294967295 whatever `maxKdfIterations` allows, or, without a password, an RFC 7292 MAC count exceeds `Number.MAX_SAFE_INTEGER` |
 | `password_not_bmp_string`   | RFC 7292 MAC password contains a UTF-16 surrogate, U+FFFE or U+FFFF                                                                                                                                                    |
 | `password_not_utf8`         | PBMAC1 password contains an unpaired UTF-16 surrogate                                                                                                                                                                  |
@@ -355,10 +372,12 @@ Without a password no key is derived. `maxKdfIterations` is not applied, and
 
 ### ParsePkcs7ErrorCode
 
-| Code              | Meaning                                            |
-| ----------------- | -------------------------------------------------- |
-| `malformed`       | ContentInfo or SignedData fails to parse           |
-| `not_signed_data` | ContentInfo carries a content type other than data |
+| Code              | Meaning                                                                                                                      |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `limit_exceeded`  | A micro509 limit: an OBJECT IDENTIFIER sub-identifier encoded in more than 64 octets, or DER nested deeper than 64 levels    |
+| `malformed`       | ContentInfo or SignedData fails to parse                                                                                     |
+| `not_signed_data` | ContentInfo carries a content type other than data                                                                           |
+| `unsupported`     | A signer issuer TeletexString value holds an octet outside the X.690 §8.23.5.2 initial state, which micro509 does not decode |
 
 ### CreatePkcs7CertBagErrorCode
 
@@ -378,12 +397,14 @@ Without a password no key is derived. `maxKdfIterations` is not applied, and
 
 ### VerifyPkcs7SignedDataErrorCode
 
-| Code                        | Meaning                                                       |
-| --------------------------- | ------------------------------------------------------------- |
-| `detached_content_required` | SignedData has no `eContent` and no `content` option supplied |
-| `malformed`                 | Structure, attributes, or algorithms fail to process          |
-| `message_digest_mismatch`   | Content digest differs from the `messageDigest` attribute     |
-| `no_signers`                | `signerInfos` is empty                                        |
-| `not_signed_data`           | ContentInfo carries a content type other than SignedData      |
-| `signature_invalid`         | A signer's signature does not verify                          |
-| `signer_not_found`          | No embedded certificate matches a SignerInfo                  |
+| Code                        | Meaning                                                                   |
+| --------------------------- | ------------------------------------------------------------------------- |
+| `detached_content_required` | SignedData has no `eContent` and no `content` option supplied             |
+| `limit_exceeded`            | A micro509 limit while parsing, see `ParsePkcs7ErrorCode`                 |
+| `malformed`                 | Structure, attributes, or algorithms fail to process                      |
+| `message_digest_mismatch`   | Content digest differs from the `messageDigest` attribute                 |
+| `no_signers`                | `signerInfos` is empty                                                    |
+| `not_signed_data`           | ContentInfo carries a content type other than SignedData                  |
+| `signature_invalid`         | A signer's signature does not verify                                      |
+| `signer_not_found`          | No embedded certificate matches a SignerInfo                              |
+| `unsupported`               | A signer issuer value micro509 does not decode, see `ParsePkcs7ErrorCode` |

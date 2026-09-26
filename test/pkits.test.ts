@@ -20,8 +20,9 @@ const REVOCATION_TEST_NUMBERS = new Set(['4.7.4', '4.7.5']);
 // `unsupported_signature_algorithm_parameters`. Tracked with `it.failing` so the
 // suite flags us if DSA support ever lands (the test would start passing).
 const UNSUPPORTED_ALGORITHM_TESTS = new Set(['4.1.4', '4.1.5']);
-// PKITS 4.8.19 lets the application reject explicitText longer than 200 characters.
-const OVERSIZE_DISPLAY_TEXT_TEST = '4.8.19';
+// PKITS 4.8.19's explicitText is 310 characters; the application may reject it.
+const OVERSIZED_EXPLICIT_TEXT_TEST = '4.8.19';
+const USER_NOTICE_QUALIFIER_TITLE = 'User Notice Qualifier';
 
 const certificateDerCache = new Map<string, Promise<Uint8Array>>();
 const parsedCertificateCache = new Map<string, Promise<ParsedCertificate>>();
@@ -142,20 +143,83 @@ describe('PKITS harness', () => {
 	}
 });
 
-async function runPkitsCase(pkitsCase: PkitsCase): Promise<void> {
-	const leafName = pkitsCase.certs[pkitsCase.certs.length - 1];
-	const rootName = pkitsCase.certs[0];
-	if (leafName === undefined || rootName === undefined) {
-		throw new Error(`PKITS case ${pkitsCase.testNumber} is missing leaf or root`);
+// PKITS 4.8.19: "Since the explicitText exceeds the maximum size of 200
+// characters, the application may choose to reject the certificate."
+describe('PKITS 4.8.19 oversized explicitText', () => {
+	const oversizedCase = PKITS_CASES.find(
+		(pkitsCase) => pkitsCase.testNumber === OVERSIZED_EXPLICIT_TEXT_TEST,
+	);
+	if (oversizedCase === undefined) {
+		throw new Error(`PKITS manifest lacks ${OVERSIZED_EXPLICIT_TEXT_TEST}`);
+	}
+	const otherUserNoticeCases = PKITS_CASES.filter(
+		(pkitsCase) =>
+			pkitsCase.title.startsWith(USER_NOTICE_QUALIFIER_TITLE) &&
+			pkitsCase.testNumber !== OVERSIZED_EXPLICIT_TEXT_TEST,
+	);
+
+	async function userNotices(pkitsCase: PkitsCase) {
+		const leaf = await readPkitsParsedCertificate(pkitsLeafName(pkitsCase));
+		return (leaf.certificatePolicies ?? []).flatMap((policy) =>
+			(policy.policyQualifiers ?? []).flatMap((qualifier) =>
+				qualifier.type === 'userNotice' ? [qualifier] : [],
+			),
+		);
 	}
 
+	it('keeps the 310-character explicitText whole and reports its size', async () => {
+		const notices = await userNotices(oversizedCase);
+		expect(notices).toHaveLength(1);
+		expect([...(notices[0]?.explicitText ?? '')]).toHaveLength(310);
+		expect(notices[0]?.oversizedExplicitText).toEqual({ characters: 310, limit: 200 });
+	});
+
+	it('rejects the path under rejectOversizedExplicitText for that reason alone', async () => {
+		expect(await verifyPkitsPath(oversizedCase)).toMatchObject({ ok: true });
+		expect(
+			await verifyPkitsPath(oversizedCase, { rejectOversizedExplicitText: true }),
+		).toMatchObject({
+			ok: false,
+			code: 'explicit_text_oversized',
+			index: 0,
+			details: { expected: '200', actual: '310' },
+		});
+	});
+
+	it.each(otherUserNoticeCases.map((pkitsCase) => [pkitsCase.testNumber, pkitsCase] as const))(
+		'%s validates under rejectOversizedExplicitText as the manifest expects (run %#)',
+		async (_testNumber, pkitsCase) => {
+			const notices = await userNotices(pkitsCase);
+			expect(notices.length).toBeGreaterThan(0);
+			expect(notices.every((notice) => notice.oversizedExplicitText === undefined)).toBe(true);
+			const result = await verifyPkitsPath(pkitsCase, { rejectOversizedExplicitText: true });
+			expect(result.ok).toBe(pkitsCase.shouldValidate);
+		},
+	);
+});
+
+function pkitsLeafName(pkitsCase: PkitsCase): string {
+	const leafName = pkitsCase.certs[pkitsCase.certs.length - 1];
+	if (leafName === undefined) {
+		throw new Error(`PKITS case ${pkitsCase.testNumber} is missing its leaf`);
+	}
+	return leafName;
+}
+
+async function verifyPkitsPath(
+	pkitsCase: PkitsCase,
+	options: { readonly rejectOversizedExplicitText?: boolean } = {},
+): Promise<Awaited<ReturnType<typeof verifyCertificateChain>>> {
+	const rootName = pkitsCase.certs[0];
+	if (rootName === undefined) {
+		throw new Error(`PKITS case ${pkitsCase.testNumber} is missing its root`);
+	}
 	const [leaf, root, intermediates] = await Promise.all([
-		readPkitsCertificateDer(leafName),
+		readPkitsCertificateDer(pkitsLeafName(pkitsCase)),
 		readPkitsCertificateDer(rootName),
 		Promise.all(pkitsCase.certs.slice(1, -1).map(readPkitsCertificateDer)),
 	]);
-
-	const verifyResult = await verifyCertificateChain({
+	return await verifyCertificateChain({
 		leaf,
 		intermediates,
 		roots: [root],
@@ -172,12 +236,12 @@ async function runPkitsCase(pkitsCase: PkitsCase): Promise<void> {
 		...(pkitsCase.inhibitAnyPolicy === undefined
 			? {}
 			: { inhibitAnyPolicy: pkitsCase.inhibitAnyPolicy }),
+		...options,
 	});
-	if (pkitsCase.testNumber === OVERSIZE_DISPLAY_TEXT_TEST) {
-		expect(parseCertificateDer(leaf)).toMatchObject({ ok: false, code: 'malformed' });
-		expect(verifyResult.ok).toBe(false);
-		return;
-	}
+}
+
+async function runPkitsCase(pkitsCase: PkitsCase): Promise<void> {
+	const verifyResult = await verifyPkitsPath(pkitsCase);
 	if (!shouldEvaluateRevocation(pkitsCase) || !verifyResult.ok) {
 		expect(verifyResult.ok).toBe(pkitsCase.shouldValidate);
 		return;

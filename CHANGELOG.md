@@ -126,8 +126,32 @@ revocation })` report a certificate carrying `noRevAvail` or
   (register entry 102) with SPACE and DELETE, reading 2/3 as # and 2/4 as ¤
   (T.61 Figure 2 Note 4). A C0 control function, an escape or shift sequence,
   a position T.61 Table 1 leaves empty, or an octet from 0x80 up is
-  unsupported and returns `malformed`. A TeletexString value matches only an
-  identical TeletexString value.
+  unsupported and returns `unsupported`. A decoded TeletexString value compares
+  like the other DirectoryString alternatives, after RFC 4518 preparation (RFC
+  5280 §7.1), so it matches a UTF8String or PrintableString value with the same
+  characters in issuer/subject chaining, CRL and OCSP issuer matching and
+  directoryName name constraints, with case and insignificant spaces
+  disregarded.
+- `unsupported` and `limit_exceeded` on the parse error codes. `unsupported`,
+  on `ParseCertificateErrorCode`, `ParseCertificateSigningRequestErrorCode`,
+  `ParseCertificateRevocationListErrorCode`, `ParseOcspRequestErrorCode`,
+  `ParseOcspResponseErrorCode`, `ParsePkcs7ErrorCode` and
+  `DecodeDerErrorCode`, is input the profile may allow but micro509 does not
+  decode, today a TeletexString octet outside the X.690 §8.23.5.2 initial
+  state. `limit_exceeded`, on those and on `ImportKeyErrorCode`,
+  `ImportEncryptedKeyErrorCode`, `ParsePfxErrorCode` and
+  `ParsePkcs12MacDataErrorCode`, is an implementation limit of micro509's own:
+  an OBJECT IDENTIFIER sub-identifier encoded in more than 64 octets, or DER or
+  BER nested deeper than 64 levels, which returned `malformed` before. The
+  throwing parsers throw a `ResultError` carrying the code.
+- `rejectOversizedExplicitText` on `verifyCertificateChain` and
+  `validateCandidatePath` rejects a certificate whose user notice
+  `explicitText` exceeds 200 characters with the new `explicit_text_oversized`
+  verify code, which joins `VERIFY_ERROR_CODES` with the character count in
+  `details.actual`. By default such a certificate validates, and its parsed
+  user notice carries `oversizedExplicitText` (the new `OversizedExplicitText`
+  type) with the count. RFC 5280 §4.2.1.4 asks certificate users to handle the
+  notice gracefully, and PKITS 4.8.19 leaves rejection to the application.
 
 ### Changed
 
@@ -256,7 +280,11 @@ revocation })` report a certificate carrying `noRevAvail` or
 - OBJECT IDENTIFIER decoding refused any arc above 2^53 − 1, so a certificate
   or CRL carrying a 2.25 UUID OID failed to parse, and the builder refused such
   an OID with `invalid_oid`. Arcs now decode, encode and canonicalize exactly
-  at any size; X.660 §7.6 leaves them unbounded.
+  up to 64 octets per sub-identifier (values below 2^448). X.660 §7.6 leaves
+  arcs unbounded; the bound is an implementation limit, checked before the arc
+  is accumulated, since decoding grew quadratically with an arc's length. A
+  longer arc returns `limit_exceeded` from every parser, and the builder
+  refuses it with `invalid_oid`.
 - `createPfx` wrote any `friendlyName` into its BMPString, including surrogate
   pairs, U+FFFE, U+FFFF, an empty name and names over 255 characters, and PFX
   parsing accepted them. RFC 2985 §5.5.1 makes friendlyName one BMPString of 1
@@ -266,9 +294,10 @@ revocation })` report a certificate carrying `noRevAvail` or
 - DisplayText parsing (user-notice `explicitText` and the `noticeRef`
   organization) replaced invalid UTF-8 with U+FFFD, accepted octets outside
   the IA5String and VisibleString repertoires, and accepted any length. It now
-  decodes the tagged type strictly with SIZE (1..200) and returns `malformed`
-  for anything else, so a certificate whose explicitText exceeds 200
-  characters, such as PKITS 4.8.19's, no longer parses.
+  decodes the tagged type strictly. A `noticeRef` organization outside SIZE
+  (1..200), an empty `explicitText` and any other encoding return `malformed`;
+  an `explicitText` over 200 characters, such as PKITS 4.8.19's, is kept whole
+  and reported as `oversizedExplicitText`. See Added.
 - CRL issuer and PKCS #7 signer issuer parsing decoded an attribute value that
   failed its string type's decoding as UTF-8 and replaced invalid sequences
   with U+FFFD. Such a value now returns `malformed`, as it does in a
@@ -284,6 +313,9 @@ revocation })` report a certificate carrying `noRevAvail` or
   `a%62c.example` matched the reference `abc.example` and `0x7f.0.0.1` matched
   `127.0.0.1`. A presented dNSName, and the Common Name fallback, now compare
   by a case-insensitive exact match (RFC 9549 §2.3).
+- A directoryName name constraint whose DN could not be decoded matched no
+  name, so an excluded subtree excluded nothing. While one is in force, every
+  subject DN and directoryName SAN fails with `name_constraints_violated`.
 - A dNSName or rfc822Name name constraint whose domain is malformed, such as
   `.example.com.`, matched no name, so an excluded subtree excluded nothing.
   While one is in force, every dNSName, rfc822Name or SmtpUTF8Mailbox of its

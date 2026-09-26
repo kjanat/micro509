@@ -27,6 +27,7 @@ import {
 	toArrayBuffer,
 	toHex,
 } from '#micro509/internal/asn1/asn1';
+import { DECODE_LIMIT_CODES, decodeFailureResult } from '#micro509/internal/asn1/decode-refusal';
 import type { DerElement } from '#micro509/internal/asn1/der';
 import {
 	explicitContext,
@@ -200,8 +201,14 @@ export interface LegacyPemEncryptionOptions {
 	readonly cipher?: 'AES-128-CBC' | 'AES-192-CBC' | 'AES-256-CBC';
 }
 
-/** Machine-readable failure reason for the `import*` key functions. */
-export type ImportKeyErrorCode = 'malformed';
+/**
+ * Machine-readable failure reason for the `import*` key functions.
+ *
+ * `limit_exceeded` is an implementation limit: an OBJECT IDENTIFIER
+ * sub-identifier encoded in more than 64 octets, or DER nested deeper than 64
+ * levels.
+ */
+export type ImportKeyErrorCode = 'malformed' | 'limit_exceeded';
 
 /** Structured failure payload for key import. */
 export interface ImportKeyFailure extends Micro509Error<ImportKeyErrorCode> {
@@ -212,9 +219,10 @@ export interface ImportKeyFailure extends Micro509Error<ImportKeyErrorCode> {
 /**
  * Success-or-failure result returned by the public `import*` key functions.
  *
- * On failure, `code` is always `'malformed'`: structurally invalid input,
- * algorithm mismatches, and wrong-password decryption failures all surface
- * the same way (see the throwing `*OrThrow` variants for raw error messages).
+ * On failure, `code` is `'malformed'` for structurally invalid input,
+ * algorithm mismatches, and wrong-password decryption failures alike (see the
+ * throwing `*OrThrow` variants for raw error messages), and `'limit_exceeded'`
+ * for an implementation limit.
  */
 export type ImportKeyResult<T> =
 	| { readonly ok: true; readonly value: T }
@@ -224,14 +232,16 @@ export type ImportKeyResult<T> =
  * Machine-readable failure reason for the `importEncrypted*` key functions.
  *
  * Distinguishes a wrong decryption password (`'invalid_password'`) from
- * structurally invalid input or algorithm mismatches (`'malformed'`), and
- * from an encoded KDF iteration count above the caller's limit
- * (`'kdf_iterations_exceeded'`).
+ * structurally invalid input or algorithm mismatches (`'malformed'`), from an
+ * encoded KDF iteration count above the caller's limit
+ * (`'kdf_iterations_exceeded'`), and from a decoding limit of micro509's own
+ * (`'limit_exceeded'`, see {@linkcode ImportKeyErrorCode}).
  */
 export type ImportEncryptedKeyErrorCode =
 	| 'malformed'
 	| 'invalid_password'
-	| 'kdf_iterations_exceeded';
+	| 'kdf_iterations_exceeded'
+	| 'limit_exceeded';
 
 /** Options for the encrypted PKCS#8 import functions. */
 export type ImportEncryptedKeyOptions = KdfLimitOptions;
@@ -688,13 +698,13 @@ export async function importSpkiDerOrThrow(
 	}
 }
 
-/** Runs a throwing key import and maps an EXPECTED failure to a `'malformed'` result; invariants rethrow. */
+/** Runs a throwing key import and maps an EXPECTED failure to a `'malformed'` or `'limit_exceeded'` result; invariants rethrow. */
 async function importResult(run: () => Promise<CryptoKey>): Promise<ImportKeyResult<CryptoKey>> {
 	try {
 		return successResult(await run());
 	} catch (error) {
 		rethrowIfInvariant(error);
-		return failureResult('malformed', error instanceof Error ? error.message : 'Malformed key');
+		return decodeFailureResult(error, DECODE_LIMIT_CODES, 'Malformed key');
 	}
 }
 
@@ -712,10 +722,7 @@ async function encryptedImportResult(
 		if (isKdfIterationLimitError(error)) {
 			return failureResult('kdf_iterations_exceeded', error.message);
 		}
-		return failureResult(
-			'malformed',
-			error instanceof Error ? error.message : 'Malformed encrypted key',
-		);
+		return decodeFailureResult(error, DECODE_LIMIT_CODES, 'Malformed encrypted key');
 	}
 }
 

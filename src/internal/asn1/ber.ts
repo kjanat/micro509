@@ -1,3 +1,4 @@
+import { throwDecodeRefusal } from '#micro509/internal/asn1/decode-refusal';
 import { concatBytes, DEFAULT_MAX_DER_DEPTH, tlv } from '#micro509/internal/asn1/der';
 
 export interface BerElement {
@@ -126,7 +127,7 @@ function readBerElement(
 	maxDepth: number,
 ): BerElement {
 	if (depth > maxDepth) {
-		throw new Error(`BER exceeds max depth of ${maxDepth}`);
+		throwDecodeRefusal('limit_exceeded', `BER exceeds max depth of ${maxDepth}`);
 	}
 	const tag = byteAt(bytes, offset);
 	if (tag === 0x00) {

@@ -6,6 +6,8 @@
  * @module
  */
 
+import { throwDecodeRefusal } from '#micro509/internal/asn1/decode-refusal';
+
 /**
  * Maximum nesting depth allowed when recursively walking a DER structure.
  *
@@ -579,7 +581,7 @@ export function walkDerTree(
 			continue;
 		}
 		if (current.depth > maxDepth) {
-			throw new Error(`DER exceeds max depth of ${maxDepth}`);
+			throwDecodeRefusal('limit_exceeded', `DER exceeds max depth of ${maxDepth}`);
 		}
 		visit(current.element);
 		if ((current.element.tag & 0x20) === 0) {

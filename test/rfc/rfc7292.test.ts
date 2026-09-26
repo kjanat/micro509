@@ -423,13 +423,13 @@ describe('RFC 7292', () => {
 			expect(await pfxCode(await berPfxAround(unknownBag(segments(1))))).toBe('malformed');
 		});
 
-		it('micro509 policy: bounds BER nesting depth inside SafeContents', async () => {
+		it('micro509 policy: bounds BER nesting depth inside SafeContents as limit_exceeded', async () => {
 			let nested = nullValue();
 			for (let depth = 0; depth < 100; depth += 1) {
 				nested = indefinite(0x30, [nested]);
 			}
 			const bag = indefinite(0x30, [objectIdentifier(OIDS.pkcs7Data), indefinite(0xa0, [nested])]);
-			expect(await pfxCode(await berPfxAround(indefinite(0x30, [bag])))).toBe('malformed');
+			expect(await pfxCode(await berPfxAround(indefinite(0x30, [bag])))).toBe('limit_exceeded');
 		});
 
 		it('keeps the keyBag PrivateKeyInfo DER: an indefinite-length PrivateKeyInfo is malformed', async () => {

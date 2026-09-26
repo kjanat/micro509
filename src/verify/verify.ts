@@ -165,6 +165,7 @@ export interface TrustAnchor {
  * - `self_signed_leaf_not_allowed` — the leaf is self-signed and `allowSelfSignedLeaf` was not set.
  * - `unrecognized_critical_extension` — a certificate contains a critical extension the verifier cannot process.
  * - `no_rev_avail_conflict` — a certificate carries noRevAvail alongside a CA basicConstraints, cRLDistributionPoints, freshestCRL, or an id-ad-ocsp authorityInfoAccess entry (RFC 9608 §3).
+ * - `explicit_text_oversized` — under `rejectOversizedExplicitText`, a certificate's user notice `explicitText` exceeds the 200 characters of RFC 5280 §4.2.1.4.
  * - `intermediate_eku_constraint` — an intermediate CA's EKU set does not include the required purpose.
  * - `explicit_policy_required` — `requireExplicitPolicy` was set but no acceptable policy was found.
  * - `initial_policy_set_not_satisfied` — the chain's policies do not intersect `initialPolicySet`.
@@ -192,6 +193,7 @@ export const VERIFY_ERROR_CODES = [
 	'self_signed_leaf_not_allowed',
 	'unrecognized_critical_extension',
 	'no_rev_avail_conflict',
+	'explicit_text_oversized',
 	'intermediate_eku_constraint',
 	'explicit_policy_required',
 	'initial_policy_set_not_satisfied',
@@ -306,6 +308,14 @@ export interface ValidateCandidatePathInput
 	readonly purpose?: VerifyPurpose;
 	/** When `true`, allows a self-signed leaf that is also the root. Defaults to `false`. */
 	readonly allowSelfSignedLeaf?: boolean;
+	/**
+	 * When `true`, rejects a certificate whose user notice `explicitText`
+	 * exceeds 200 characters with `explicit_text_oversized`. Defaults to
+	 * `false`: RFC 5280 §4.2.1.4 asks certificate users to handle such a notice
+	 * gracefully, and the parsed certificate reports it as
+	 * `oversizedExplicitText`.
+	 */
+	readonly rejectOversizedExplicitText?: boolean;
 }
 
 /** Success payload from {@linkcode validateCandidatePath}. */
@@ -377,6 +387,14 @@ export interface VerifyCertificateChainInput
 	readonly serviceIdentity?: ServiceIdentityInput;
 	/** When `true`, allows a self-signed leaf. Defaults to `false`. */
 	readonly allowSelfSignedLeaf?: boolean;
+	/**
+	 * When `true`, rejects a certificate whose user notice `explicitText`
+	 * exceeds 200 characters with `explicit_text_oversized`. Defaults to
+	 * `false`: RFC 5280 §4.2.1.4 asks certificate users to handle such a notice
+	 * gracefully, and the parsed certificate reports it as
+	 * `oversizedExplicitText`.
+	 */
+	readonly rejectOversizedExplicitText?: boolean;
 	/** Optional revocation checking. */
 	readonly revocation?: ChainRevocationInput;
 }
@@ -694,7 +712,11 @@ async function validateCandidatePathRaw(
 
 	const selfSignedLeafFailure = await validateSelfSignedLeafAllowed(leaf, chain.length, input);
 	if (selfSignedLeafFailure !== undefined) return selfSignedLeafFailure;
-	const certificateFailure = await validatePathCertificates(chain, at);
+	const certificateFailure = await validatePathCertificates(
+		chain,
+		at,
+		input.rejectOversizedExplicitText === true,
+	);
 	if (certificateFailure !== undefined) return certificateFailure;
 	const pathLengthFailure = validatePathLengthConstraints(chain);
 	if (pathLengthFailure !== undefined) return pathLengthFailure;
@@ -730,14 +752,44 @@ async function validateSelfSignedLeafAllowed(
 async function validatePathCertificates(
 	chain: readonly ParsedCertificate[],
 	at: Date,
+	rejectOversizedExplicitText: boolean,
 ): Promise<ValidateCandidatePathFailure | undefined> {
 	for (let index = 0; index < chain.length; index += 1) {
 		const current = chain[index];
 		if (current === undefined) return failure('issuer_not_found', 'chain element missing', index);
 		const certificateValidation = validateCertificateAtPathIndex(current, index, at);
 		if (certificateValidation !== undefined) return certificateValidation;
+		if (rejectOversizedExplicitText) {
+			const explicitTextValidation = validateExplicitTextAtPathIndex(current, index);
+			if (explicitTextValidation !== undefined) return explicitTextValidation;
+		}
 		const issuerValidation = await validatePathIssuerAtIndex(chain, current, index);
 		if (issuerValidation !== undefined) return issuerValidation;
+	}
+	return undefined;
+}
+
+/** RFC 5280 §4.2.1.4 bounds a user notice explicitText at 200 characters; PKITS 4.8.19 lets the application reject a longer one. */
+function validateExplicitTextAtPathIndex(
+	current: ParsedCertificate,
+	index: number,
+): ValidateCandidatePathFailure | undefined {
+	for (const policy of current.certificatePolicies ?? []) {
+		for (const qualifier of policy.policyQualifiers ?? []) {
+			if (qualifier.type !== 'userNotice' || qualifier.oversizedExplicitText === undefined) {
+				continue;
+			}
+			return failure(
+				'explicit_text_oversized',
+				`certificate policy ${policy.policyIdentifier} carries a user notice explicitText of ${String(qualifier.oversizedExplicitText.characters)} characters`,
+				index,
+				detail({
+					subjectCommonName: current.subject.values.commonName,
+					expected: String(qualifier.oversizedExplicitText.limit),
+					actual: String(qualifier.oversizedExplicitText.characters),
+				}),
+			);
+		}
 	}
 	return undefined;
 }
@@ -1067,6 +1119,9 @@ export async function verifyCertificateChain(
 		...copyValidationInputs(input),
 		...(input.allowSelfSignedLeaf !== undefined && {
 			allowSelfSignedLeaf: input.allowSelfSignedLeaf,
+		}),
+		...(input.rejectOversizedExplicitText !== undefined && {
+			rejectOversizedExplicitText: input.rejectOversizedExplicitText,
 		}),
 	});
 	if (!validateResult.ok) {

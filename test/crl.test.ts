@@ -44,7 +44,9 @@ import {
 	expectRejectedWith,
 	FAR_FUTURE_NEXT_UPDATE,
 	hexToBytes,
+	reissueSelfSignedCertificateWithName,
 	sliceElement,
+	withCrlIssuer,
 	withoutCrlNextUpdate,
 } from '#test/helpers';
 
@@ -133,11 +135,62 @@ describe('crl', () => {
 		);
 	});
 
+	// RFC 5280 §7.1: names match after RFC 4518 preparation, whatever
+	// DirectoryString alternative each side uses.
+	it('matches a TeletexString CRL issuer to a UTF8String certificate issuer', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Teletex CA' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
+		});
+		const teletexName = sequence([
+			setOf([
+				sequence([
+					objectIdentifier(OIDS.commonName),
+					tlv(0x14, new TextEncoder().encode('TELETEX  CA')),
+				]),
+			]),
+		]);
+		const caDer = await reissueSelfSignedCertificateWithName(
+			ca.certificate.der,
+			ca.keyPair.privateKey,
+			teletexName,
+		);
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Teletex CA' },
+			subject: { commonName: 'teletex-crl.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Teletex CA' },
+			issuerPublicKey: ca.keyPair.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
+		});
+		const crlDer = await withCrlIssuer(crl.der, ca.keyPair.privateKey, teletexName);
+		expect(unwrap(parseCertificateRevocationListDer(crlDer)).issuer.values.commonName).toBe(
+			'TELETEX  CA',
+		);
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: leaf.der,
+				issuerCertificate: caDer,
+				crl: crlDer,
+			}),
+		).toMatchObject({ ok: true, value: { status: 'good' } });
+	});
+
 	it.each([
-		['invalid UTF-8 in a UTF8String', tlv(0x0c, Uint8Array.of(0x41, 0xff))],
-		['a surrogate in a BMPString', tlv(0x1e, Uint8Array.of(0xd8, 0x00))],
-		['a TeletexString octet from the right half', tlv(0x14, Uint8Array.of(0xef, 0xbb, 0xbf, 0x41))],
-	] as const)('rejects an issuer value holding %s', async (_label, value) => {
+		['invalid UTF-8 in a UTF8String', tlv(0x0c, Uint8Array.of(0x41, 0xff)), 'malformed'],
+		['a surrogate in a BMPString', tlv(0x1e, Uint8Array.of(0xd8, 0x00)), 'malformed'],
+		[
+			'a TeletexString octet from the right half',
+			tlv(0x14, Uint8Array.of(0xef, 0xbb, 0xbf, 0x41)),
+			'unsupported',
+		],
+	] as const)('rejects an issuer value holding %s as %s', async (_label, value, code) => {
 		const keys = await generateKeyPair();
 		const crl = await createCertificateRevocationList({
 			issuer: { commonName: 'CRL Issuer' },
@@ -146,7 +199,7 @@ describe('crl', () => {
 		});
 		expect(
 			parseCertificateRevocationListDer(rewriteCrlIssuerCommonName(crl.der, value)),
-		).toMatchObject({ ok: false, code: 'malformed' });
+		).toMatchObject({ ok: false, code });
 	});
 
 	it('parses CRL entry extensions and delta CRL indicator', async () => {

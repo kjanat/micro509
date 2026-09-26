@@ -17,7 +17,7 @@ import {
 	legacyMailboxNameConstraints,
 } from '#test/helpers';
 
-type TestDnStringEncoding = 'printable' | 'utf8';
+type TestDnStringEncoding = 'printable' | 'utf8' | 'teletex';
 type DirectoryNameAttribute = {
 	readonly oid: string;
 	readonly value: string;
@@ -34,7 +34,17 @@ type LeafSubjectAltNames = NonNullable<
 >;
 
 function encodeDirectoryNameString(value: string, encoding: TestDnStringEncoding): Uint8Array {
-	return encoding === 'printable' ? printableString(value) : utf8String(value);
+	switch (encoding) {
+		case 'printable':
+			return printableString(value);
+		case 'utf8':
+			return utf8String(value);
+		case 'teletex':
+			return tlv(
+				0x14,
+				Uint8Array.from(value, (character) => character.charCodeAt(0)),
+			);
+	}
 }
 
 function buildDirectoryNameDerHex(rdns: readonly (readonly DirectoryNameAttribute[])[]): string {
@@ -302,6 +312,126 @@ describe('name constraint fixtures', () => {
 			leafSubjectAltNames: [{ type: 'email', value: 'admin@EXAMPLE.com' }],
 		});
 		expect(hostCaseFold).toMatchObject({ ok: true });
+	});
+
+	// RFC 5280 §7.1 matches attributes after RFC 4518 preparation, which
+	// transcodes a TeletexString (§2.1) before the remaining steps, so a
+	// constraint and a name need not share a DirectoryString encoding.
+	it('matches directoryName constraints across TeletexString and UTF8String encodings', async () => {
+		const excludedUtf8 = await verifyNameConstraintFixture({
+			rootNameConstraints: {
+				excludedSubtrees: [
+					{
+						base: {
+							type: 'directoryName',
+							derHex: buildDirectoryNameDerHex([
+								[{ oid: OIDS.organizationName, value: 'Blocked Org', encoding: 'utf8' }],
+							]),
+						},
+					},
+				],
+			},
+			leafSubjectAltNames: [
+				{
+					type: 'directoryName',
+					derHex: buildDirectoryNameDerHex([
+						[{ oid: OIDS.organizationName, value: 'Blocked Org', encoding: 'teletex' }],
+					]),
+				},
+			],
+		});
+		expect(excludedUtf8).toMatchObject({ ok: false, code: 'name_constraints_violated' });
+
+		const excludedTeletex = await verifyNameConstraintFixture({
+			rootNameConstraints: {
+				excludedSubtrees: [
+					{
+						base: {
+							type: 'directoryName',
+							derHex: buildDirectoryNameDerHex([
+								[{ oid: OIDS.organizationName, value: 'Blocked Org', encoding: 'teletex' }],
+							]),
+						},
+					},
+				],
+			},
+			leafSubject: { organization: 'Blocked Org', commonName: 'fixture-leaf' },
+		});
+		expect(excludedTeletex).toMatchObject({ ok: false, code: 'name_constraints_violated' });
+
+		const caseAndSpaces = await verifyNameConstraintFixture({
+			rootNameConstraints: {
+				excludedSubtrees: [
+					{
+						base: {
+							type: 'directoryName',
+							derHex: buildDirectoryNameDerHex([
+								[{ oid: OIDS.organizationName, value: 'Blocked Org', encoding: 'teletex' }],
+							]),
+						},
+					},
+				],
+			},
+			leafSubjectAltNames: [
+				{
+					type: 'directoryName',
+					derHex: buildDirectoryNameDerHex([
+						[{ oid: OIDS.organizationName, value: '  BLOCKED   ORG  ', encoding: 'teletex' }],
+					]),
+				},
+			],
+		});
+		expect(caseAndSpaces).toMatchObject({ ok: false, code: 'name_constraints_violated' });
+
+		const permittedTeletex = await verifyNameConstraintFixture({
+			rootNameConstraints: {
+				permittedSubtrees: [
+					{
+						base: {
+							type: 'directoryName',
+							derHex: buildDirectoryNameDerHex([
+								[{ oid: OIDS.organizationName, value: 'Allowed Org', encoding: 'teletex' }],
+							]),
+						},
+					},
+				],
+			},
+			leafSubject: { organization: '  allowed   ORG  ', commonName: 'fixture-leaf' },
+		});
+		expect(permittedTeletex).toMatchObject({ ok: true });
+	});
+
+	it('fails every subject DN while a directoryName constraint cannot be decoded', async () => {
+		const undecodable = Buffer.from(
+			sequence([
+				setOf([
+					sequence([objectIdentifier(OIDS.organizationName), tlv(0x02, Uint8Array.of(0x01))]),
+				]),
+			]),
+		).toString('hex');
+		const unrelated = await verifyNameConstraintFixture({
+			rootNameConstraints: {
+				excludedSubtrees: [
+					{
+						base: {
+							type: 'directoryName',
+							derHex: buildDirectoryNameDerHex([
+								[{ oid: OIDS.organizationName, value: 'Other Org', encoding: 'utf8' }],
+							]),
+						},
+					},
+				],
+			},
+			leafSubject: { organization: 'Some Org', commonName: 'fixture-leaf' },
+		});
+		expect(unrelated).toMatchObject({ ok: true });
+		const subject = await verifyNameConstraintFixture({
+			rootNameConstraints: {
+				excludedSubtrees: [{ base: { type: 'directoryName', derHex: undecodable } }],
+			},
+			leafSubject: { organization: 'Some Org', commonName: 'fixture-leaf' },
+		});
+		expect(subject).toMatchObject({ ok: false, code: 'name_constraints_violated' });
 	});
 
 	it('cannot be bypassed by an ignorable code point in a directoryName SAN', async () => {

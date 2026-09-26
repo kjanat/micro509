@@ -559,9 +559,10 @@ function isWellFormedConstraint(constraint: NameConstraintForm): boolean {
 			return constraintMailboxDomain(constraint.value) !== undefined;
 		case 'srv':
 			return parseSrvNameRestriction(asciiLowercase(constraint.value)) !== undefined;
+		case 'directoryName':
+			return parseDirectoryNameDerHex(constraint.derHex) !== undefined;
 		case 'uri':
 		case 'ip':
-		case 'directoryName':
 			return true;
 		default: {
 			const _exhaustive: never = constraint;

@@ -22,6 +22,7 @@ import {
 	berToDefiniteLength,
 	readBerRoot,
 } from '#micro509/internal/asn1/ber';
+import { DECODE_LIMIT_CODES, decodeRefusalOf } from '#micro509/internal/asn1/decode-refusal';
 import {
 	bmpString,
 	explicitContext,
@@ -206,6 +207,7 @@ export type ParsePfxErrorCode =
 	| 'invalid_password'
 	| 'password_required'
 	| 'kdf_iterations_exceeded'
+	| 'limit_exceeded'
 	| 'password_not_bmp_string'
 	| 'password_not_utf8'
 	| 'unsupported_mac_algorithm'
@@ -444,7 +446,10 @@ async function parsePfxDerWithBudget(
 		};
 	} catch (error) {
 		rethrowIfInvariant(error);
-		return pfxFailure('malformed', 'Malformed PFX structure');
+		const refusal = decodeRefusalOf(error, DECODE_LIMIT_CODES);
+		return refusal === undefined
+			? pfxFailure('malformed', 'Malformed PFX structure')
+			: pfxFailure(refusal.code, refusal.message);
 	}
 }
 
@@ -538,7 +543,13 @@ async function extractSafeContents(
 		({ oid, content } = readContentInfo(source, contentInfo));
 	} catch (error) {
 		rethrowIfInvariant(error);
-		return { error: pfxFailure('malformed', 'Malformed ContentInfo') };
+		const refusal = decodeRefusalOf(error, DECODE_LIMIT_CODES);
+		return {
+			error:
+				refusal === undefined
+					? pfxFailure('malformed', 'Malformed ContentInfo')
+					: pfxFailure(refusal.code, refusal.message),
+		};
 	}
 	if (oid === OIDS.pkcs7Data) {
 		const data = extractContextOctetString(source, content);
@@ -568,8 +579,12 @@ async function extractSafeContents(
 		if (isKdfIterationLimitError(error)) {
 			return { error: pfxFailure('kdf_iterations_exceeded', error.message) };
 		}
+		const refusal = decodeRefusalOf(error, DECODE_LIMIT_CODES);
 		return {
-			error: pfxFailure('malformed', 'Malformed PFX encrypted content'),
+			error:
+				refusal === undefined
+					? pfxFailure('malformed', 'Malformed PFX encrypted content')
+					: pfxFailure(refusal.code, refusal.message),
 		};
 	}
 	try {

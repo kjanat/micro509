@@ -50,6 +50,7 @@ export type {
 	KnownExtendedKeyUsage,
 	NameConstraintForm,
 	NameConstraints,
+	OversizedExplicitText,
 	ParsedNameConstraintForm,
 	PolicyConstraints,
 	PolicyInformation,

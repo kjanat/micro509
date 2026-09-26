@@ -7,6 +7,7 @@
  * @module
  */
 
+import { throwDecodeRefusal } from '#micro509/internal/asn1/decode-refusal';
 import type { DerElement } from '#micro509/internal/asn1/der';
 import {
 	DEFAULT_MAX_DER_DEPTH,
@@ -20,11 +21,16 @@ const textDecoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
 
 const PRINTABLE_STRING_PATTERN = /^[A-Za-z0-9 '()+,\-./:=?]*$/u;
 
+/** micro509's bound on one OBJECT IDENTIFIER sub-identifier's base-128 encoding; X.660 §7.6 leaves arc values unbounded. */
+export const MAX_OID_SUBIDENTIFIER_OCTETS = 64;
+
 /**
  * Decodes a DER-encoded OBJECT IDENTIFIER value into its dotted-decimal string form.
  *
  * @example "1.2.840.113549.1.1.1"
- * @throws on empty input, truncated multi-byte sub-identifiers, or incomplete continuation octets.
+ * @throws on empty input, truncated multi-byte sub-identifiers, or incomplete continuation octets,
+ * and `limit_exceeded` for a sub-identifier encoded in more than
+ * {@linkcode MAX_OID_SUBIDENTIFIER_OCTETS} octets.
  */
 export function decodeObjectIdentifier(bytes: Uint8Array): string {
 	if (bytes.length === 0) {
@@ -374,19 +380,25 @@ function decodeOidSubidentifier(
 	if (first === 0x80) {
 		throw new Error('Malformed OID: non-minimal base-128 encoding');
 	}
+	const end = findOidSubidentifierEnd(bytes, start);
 	let value = 0n;
-	let offset = start;
-	for (; offset < bytes.length; offset += 1) {
-		const next = bytes[offset];
-		if (next === undefined) {
-			throw new Error('Malformed OID');
+	for (let offset = start; offset <= end; offset += 1) {
+		value = (value << 7n) | BigInt((bytes[offset] ?? 0) & 0x7f);
+	}
+	return { value, nextOffset: end + 1 };
+}
+
+/** The offset of the sub-identifier's last octet, checked before any of it is accumulated. */
+function findOidSubidentifierEnd(bytes: Uint8Array, start: number): number {
+	for (let offset = start; offset < bytes.length; offset += 1) {
+		if (((bytes[offset] ?? 0) & 0x80) === 0) {
+			return offset;
 		}
-		value = (value << 7n) | BigInt(next & 0x7f);
-		if ((next & 0x80) === 0) {
-			return {
-				value,
-				nextOffset: offset + 1,
-			};
+		if (offset - start + 1 >= MAX_OID_SUBIDENTIFIER_OCTETS) {
+			throwDecodeRefusal(
+				'limit_exceeded',
+				`OID sub-identifier exceeds ${MAX_OID_SUBIDENTIFIER_OCTETS} octets`,
+			);
 		}
 	}
 	throw new Error('Malformed OID: incomplete continuation');
@@ -485,13 +497,16 @@ const TELETEX_EMPTY_POSITIONS: ReadonlySet<number> = new Set([0x5c, 0x5e, 0x60, 
  * register entry 102 by T.61 Table 1 and Figure 2 Note 4, with the SPACE and
  * DELETE that X.680 Table 8 adds.
  *
- * @throws on any other octet.
+ * @throws `unsupported` on any other octet.
  */
 function decodeTeletexString(bytes: Uint8Array): string {
 	let value = '';
 	for (const byte of bytes) {
 		if (byte < 0x20 || byte > 0x7f || TELETEX_EMPTY_POSITIONS.has(byte)) {
-			throw new Error(`Unsupported TeletexString octet: 0x${byte.toString(16).padStart(2, '0')}`);
+			throwDecodeRefusal(
+				'unsupported',
+				`Unsupported TeletexString octet: 0x${byte.toString(16).padStart(2, '0')}`,
+			);
 		}
 		value += byte === 0x24 ? '\u{a4}' : String.fromCharCode(byte);
 	}

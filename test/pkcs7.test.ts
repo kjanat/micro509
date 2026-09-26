@@ -164,13 +164,17 @@ describe('pkcs7', () => {
 	});
 
 	it.each([
-		['invalid UTF-8 in a UTF8String', tlv(0x0c, Uint8Array.of(0x41, 0xff))],
-		['a surrogate in a BMPString', tlv(0x1e, Uint8Array.of(0xd8, 0x00))],
-		['a TeletexString octet from the right half', tlv(0x14, Uint8Array.of(0xef, 0xbb, 0xbf, 0x41))],
-	] as const)('rejects a signer issuer value holding %s', async (_label, value) => {
+		['invalid UTF-8 in a UTF8String', tlv(0x0c, Uint8Array.of(0x41, 0xff)), 'malformed'],
+		['a surrogate in a BMPString', tlv(0x1e, Uint8Array.of(0xd8, 0x00)), 'malformed'],
+		[
+			'a TeletexString octet from the right half',
+			tlv(0x14, Uint8Array.of(0xef, 0xbb, 0xbf, 0x41)),
+			'unsupported',
+		],
+	] as const)('rejects a signer issuer value holding %s as %s', async (_label, value, code) => {
 		expect(
 			parsePkcs7SignedDataDer(await signedDataWithSignerIssuerCommonName(value)),
-		).toMatchObject({ ok: false, code: 'malformed' });
+		).toMatchObject({ ok: false, code });
 	});
 
 	it.each([

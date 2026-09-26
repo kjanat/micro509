@@ -43,6 +43,7 @@ import {
 	importRsaPrivateKeyWithScheme,
 	issueChain,
 	legacyMailboxNameConstraints,
+	reissueSelfSignedCertificateWithName,
 	replaceCertificateSignatureAlgorithm,
 	rewriteCertificateSignatureAsRsaPss,
 } from '#test/helpers';
@@ -382,6 +383,109 @@ describe('chain verification', () => {
 				allowSelfSignedLeaf: true,
 			}),
 		).toMatchObject({ ok: true });
+	});
+
+	// RFC 5280 §7.1: names match after RFC 4518 preparation, whatever
+	// DirectoryString alternative each side uses.
+	it('chains a UTF8String issuer name to a TeletexString CA subject', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Teletex CA' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
+		});
+		const teletexName = sequence([
+			setOf([
+				sequence([
+					objectIdentifier(OIDS.commonName),
+					tlv(0x14, new TextEncoder().encode('TELETEX  CA')),
+				]),
+			]),
+		]);
+		const caDer = await reissueSelfSignedCertificateWithName(
+			ca.certificate.der,
+			ca.keyPair.privateKey,
+			teletexName,
+		);
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Teletex CA' },
+			subject: { commonName: 'teletex-chain.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: ca.keyPair.privateKey,
+			issuerPublicKey: ca.keyPair.publicKey,
+		});
+		expect(await verifyCertificateChain({ leaf: leaf.pem, roots: [caDer] })).toMatchObject({
+			ok: true,
+			value: { root: { subject: { values: { commonName: 'TELETEX  CA' } } } },
+		});
+	});
+
+	it('accepts an oversized user notice explicitText by default and rejects it on request', async () => {
+		const explicitText = 'x'.repeat(201);
+		const selfSigned = await createSelfSignedCertificateWithRawExtensions({
+			subject: { commonName: 'oversized-notice.example' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'digitalSignature'],
+				customExtensions: [
+					{
+						oid: OIDS.certificatePolicies,
+						value: sequence([
+							sequence([
+								objectIdentifier('1.2.3.4.1'),
+								sequence([
+									sequence([
+										objectIdentifier(OIDS.userNoticePolicyQualifier),
+										sequence([utf8String(explicitText)]),
+									]),
+								]),
+							]),
+						]),
+					},
+				],
+			},
+		});
+		const pem = selfSigned.certificate.pem;
+		expect(unwrap(parseCertificatePem(pem)).certificatePolicies).toEqual([
+			{
+				policyIdentifier: '1.2.3.4.1',
+				policyQualifiers: [
+					{
+						type: 'userNotice',
+						explicitText,
+						explicitTextType: 'utf8String',
+						oversizedExplicitText: { characters: 201, limit: 200 },
+					},
+				],
+			},
+		]);
+		expect(
+			await verifyCertificateChain({ leaf: pem, roots: [pem], allowSelfSignedLeaf: true }),
+		).toMatchObject({ ok: true });
+		expect(
+			await verifyCertificateChain({
+				leaf: pem,
+				roots: [pem],
+				allowSelfSignedLeaf: true,
+				rejectOversizedExplicitText: true,
+			}),
+		).toMatchObject({
+			ok: false,
+			code: 'explicit_text_oversized',
+			index: 0,
+			details: {
+				subjectCommonName: 'oversized-notice.example',
+				expected: '200',
+				actual: '201',
+			},
+		});
+		const candidate = unwrap(await buildCandidatePath({ leaf: pem, roots: [pem] }));
+		expect(
+			await validateCandidatePath({
+				chain: candidate.chain,
+				allowSelfSignedLeaf: true,
+				rejectOversizedExplicitText: true,
+			}),
+		).toMatchObject({ ok: false, code: 'explicit_text_oversized', index: 0 });
 	});
 
 	it('rejects purpose=ca when leaf is not a CA', async () => {

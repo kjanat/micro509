@@ -18,6 +18,7 @@ import {
 	decodeString,
 	extractBitStringValue,
 	hexToBytes,
+	MAX_OID_SUBIDENTIFIER_OCTETS,
 	parseTime,
 	requireElement,
 	toHex,
@@ -318,16 +319,33 @@ describe('asn1 decoding', () => {
 		);
 	});
 
-	it('decodeObjectIdentifier decodes arcs of any size exactly', () => {
+	it('decodeObjectIdentifier decodes arcs exactly up to the 64-octet sub-identifier bound', () => {
 		for (const oid of [
 			'1.2.9007199254740993',
 			'2.25.329800735698586629295641978511506172918',
 			`2.25.${1n << 128n}`,
-			`2.25.${(1n << 1000n) + 1n}.7`,
+			`2.25.${(1n << 441n) + 1n}.7`,
 			`2.${(1n << 200n) - 1n}`,
 		]) {
 			expect(decodeObjectIdentifier(readElement(objectIdentifier(oid)).value)).toBe(oid);
 		}
+	});
+
+	it('decodeObjectIdentifier refuses a sub-identifier over 64 octets before accumulating it', () => {
+		const arcOf = (octets: number): Uint8Array =>
+			Uint8Array.of(0x2a, ...new Array<number>(octets - 1).fill(0xff), 0x7f);
+		expect(decodeObjectIdentifier(arcOf(MAX_OID_SUBIDENTIFIER_OCTETS))).toBe(
+			`1.2.${(1n << 448n) - 1n}`,
+		);
+		expect(() => decodeObjectIdentifier(arcOf(MAX_OID_SUBIDENTIFIER_OCTETS + 1))).toThrow(
+			'limit_exceeded: OID sub-identifier exceeds 64 octets',
+		);
+		expect(() =>
+			decodeObjectIdentifier(Uint8Array.of(0x2a, ...new Array<number>(64).fill(0xff))),
+		).toThrow('limit_exceeded: OID sub-identifier exceeds 64 octets');
+		expect(() =>
+			decodeObjectIdentifier(Uint8Array.of(0x2a, ...new Array<number>(63).fill(0xff))),
+		).toThrow('incomplete continuation');
 	});
 
 	it('requireElement throws on undefined value', () => {
@@ -1911,6 +1929,22 @@ describe('extensions encoding', () => {
 			'name_constraints_empty',
 		],
 		['keyUsage with no bit set', OIDS.keyUsage, bitString(new Uint8Array(), 0), 'key_usage_empty'],
+		[
+			'certificatePolicies with an explicitText over 200 characters',
+			OIDS.certificatePolicies,
+			sequence([
+				sequence([
+					objectIdentifier('1.2.3.4'),
+					sequence([
+						sequence([
+							objectIdentifier(OIDS.userNoticePolicyQualifier),
+							sequence([utf8String('a'.repeat(201))]),
+						]),
+					]),
+				]),
+			]),
+			'display_text_out_of_range',
+		],
 	] as const;
 
 	it.each(KNOWN_EXTENSION_PROFILE_VIOLATIONS)(
@@ -1942,21 +1976,6 @@ describe('extensions encoding', () => {
 			sequence([integerFromNumber(0)]),
 		],
 		['policyConstraints with neither field', OIDS.policyConstraints, sequence([])],
-		[
-			'certificatePolicies with an explicitText over 200 characters',
-			OIDS.certificatePolicies,
-			sequence([
-				sequence([
-					objectIdentifier('1.2.3.4'),
-					sequence([
-						sequence([
-							objectIdentifier(OIDS.userNoticePolicyQualifier),
-							sequence([utf8String('a'.repeat(201))]),
-						]),
-					]),
-				]),
-			]),
-		],
 	] as const;
 
 	it.each(DECODER_REJECTED_KNOWN_PAYLOADS)('rejects a custom %s payload', (_label, oid, value) => {

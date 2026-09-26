@@ -14,6 +14,7 @@ import {
 	toArrayBuffer,
 	toHex,
 } from '#micro509/internal/asn1/asn1';
+import { DECODE_LIMIT_CODES, decodeFailureResult } from '#micro509/internal/asn1/decode-refusal';
 import type { DerElement } from '#micro509/internal/asn1/der';
 import {
 	concatBytes,
@@ -255,6 +256,7 @@ async function createPbmac1MacData(
 export type ParsePkcs12MacDataErrorCode =
 	| 'malformed'
 	| 'kdf_iterations_exceeded'
+	| 'limit_exceeded'
 	| 'password_not_bmp_string'
 	| 'password_not_utf8'
 	| 'unsupported_mac_algorithm'
@@ -262,7 +264,7 @@ export type ParsePkcs12MacDataErrorCode =
 
 type ThrownMacDataErrorCode = Exclude<
 	ParsePkcs12MacDataErrorCode,
-	'malformed' | 'kdf_iterations_exceeded'
+	'malformed' | 'kdf_iterations_exceeded' | 'limit_exceeded'
 >;
 
 const THROWN_MAC_DATA_ERROR_CODES = [
@@ -436,7 +438,7 @@ export async function parsePkcs12MacData(
 				return failureResult(code, error.error.message);
 			}
 		}
-		return failureResult('malformed', error instanceof Error ? error.message : 'Malformed MacData');
+		return decodeFailureResult(error, DECODE_LIMIT_CODES, 'Malformed MacData');
 	}
 }
 

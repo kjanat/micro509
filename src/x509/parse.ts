@@ -22,6 +22,7 @@ import {
 	requireElement,
 	toHex,
 } from '#micro509/internal/asn1/asn1';
+import { DECODE_REFUSAL_CODES, decodeFailureResult } from '#micro509/internal/asn1/decode-refusal';
 import type { DerElement } from '#micro509/internal/asn1/der';
 import {
 	DEFAULT_MAX_DER_DEPTH,
@@ -75,6 +76,7 @@ import type {
 	InhibitAnyPolicy,
 	KeyUsage,
 	NameConstraints,
+	OversizedExplicitText,
 	ParsedNameConstraintForm,
 	PolicyConstraints,
 	PolicyMappings,
@@ -106,8 +108,17 @@ export type {
 } from '#micro509/x509/extensions';
 export type { NameFieldKey } from '#micro509/x509/name';
 
-/** Machine-readable failure reason for {@linkcode parseCertificateDer} / {@linkcode parseCertificatePem}. */
-export type ParseCertificateErrorCode = 'malformed';
+/**
+ * Machine-readable failure reason for {@linkcode parseCertificateDer} / {@linkcode parseCertificatePem}.
+ *
+ * `malformed` is input that breaks DER, ASN.1 or the RFC 5280 profile.
+ * `unsupported` is input the profile may allow but micro509 does not decode: a
+ * TeletexString octet outside the X.690 §8.23.5.2 initial state.
+ * `limit_exceeded` is an implementation limit: an OBJECT IDENTIFIER
+ * sub-identifier encoded in more than 64 octets, or DER nested deeper than 64
+ * levels.
+ */
+export type ParseCertificateErrorCode = 'malformed' | 'unsupported' | 'limit_exceeded';
 
 /** Structured failure payload for certificate parsing. */
 export interface ParseCertificateFailure extends Micro509Error<ParseCertificateErrorCode> {
@@ -125,8 +136,11 @@ export type ParseCertificateChainResult<TMap extends ExtensionDecoderMap = Recor
 	| { readonly ok: true; readonly value: readonly ParsedCertificate<TMap>[] }
 	| ErrorResult<ParseCertificateErrorCode, Record<never, never>, ParseCertificateFailure>;
 
-/** Machine-readable failure reason for the CSR parsers. */
-export type ParseCertificateSigningRequestErrorCode = 'malformed';
+/** Machine-readable failure reason for the CSR parsers, with the codes of {@linkcode ParseCertificateErrorCode}. */
+export type ParseCertificateSigningRequestErrorCode =
+	| 'malformed'
+	| 'unsupported'
+	| 'limit_exceeded';
 
 /** Structured failure payload for CSR parsing. */
 export interface ParseCertificateSigningRequestFailure
@@ -788,10 +802,7 @@ export function parseCertificateDer<TMap extends ExtensionDecoderMap = Record<ne
 		return successResult(parseCertificateDerOrThrow(der, options));
 	} catch (error) {
 		rethrowIfInvariant(error);
-		return failureResult(
-			'malformed',
-			error instanceof Error ? error.message : 'Malformed certificate',
-		);
+		return decodeFailureResult(error, DECODE_REFUSAL_CODES, 'Malformed certificate');
 	}
 }
 
@@ -840,10 +851,7 @@ export function parseCertificatePem<TMap extends ExtensionDecoderMap = Record<ne
 		return successResult(parseCertificatePemOrThrow(pem, options));
 	} catch (error) {
 		rethrowIfInvariant(error);
-		return failureResult(
-			'malformed',
-			error instanceof Error ? error.message : 'Malformed certificate',
-		);
+		return decodeFailureResult(error, DECODE_REFUSAL_CODES, 'Malformed certificate');
 	}
 }
 
@@ -902,10 +910,7 @@ export function parseCertificateChainPem<TMap extends ExtensionDecoderMap = Reco
 		return successResult(parseCertificateChainPemOrThrow(pemBundle, options));
 	} catch (error) {
 		rethrowIfInvariant(error);
-		return failureResult(
-			'malformed',
-			error instanceof Error ? error.message : 'Malformed certificate chain',
-		);
+		return decodeFailureResult(error, DECODE_REFUSAL_CODES, 'Malformed certificate chain');
 	}
 }
 
@@ -1036,9 +1041,10 @@ export function parseCertificateSigningRequestDer<
 		return successResult(parseCertificateSigningRequestDerOrThrow(der, options));
 	} catch (error) {
 		rethrowIfInvariant(error);
-		return failureResult(
-			'malformed',
-			error instanceof Error ? error.message : 'Malformed certificate signing request',
+		return decodeFailureResult(
+			error,
+			DECODE_REFUSAL_CODES,
+			'Malformed certificate signing request',
 		);
 	}
 }
@@ -1086,9 +1092,10 @@ export function parseCertificateSigningRequestPem<
 		return successResult(parseCertificateSigningRequestPemOrThrow(pem, options));
 	} catch (error) {
 		rethrowIfInvariant(error);
-		return failureResult(
-			'malformed',
-			error instanceof Error ? error.message : 'Malformed certificate signing request',
+		return decodeFailureResult(
+			error,
+			DECODE_REFUSAL_CODES,
+			'Malformed certificate signing request',
 		);
 	}
 }
@@ -1864,6 +1871,7 @@ function parseUserNoticePolicyQualifierInfo(
 	};
 	readonly explicitText?: string;
 	readonly explicitTextType?: DisplayTextType;
+	readonly oversizedExplicitText?: OversizedExplicitText;
 } {
 	const children = childrenOf(source, element);
 	let noticeRef:
@@ -1872,7 +1880,7 @@ function parseUserNoticePolicyQualifierInfo(
 				readonly noticeNumbers: readonly number[];
 		  }
 		| undefined;
-	let explicitText: { readonly text: string; readonly type: DisplayTextType } | undefined;
+	let explicitText: ParsedExplicitText | undefined;
 	for (const child of children) {
 		if (child.tag === 0x30) {
 			if (noticeRef !== undefined) {
@@ -1884,13 +1892,31 @@ function parseUserNoticePolicyQualifierInfo(
 		if (explicitText !== undefined) {
 			throw new Error('userNotice must not contain multiple explicitText values');
 		}
-		explicitText = { text: parseDisplayText(child), type: displayTextType(child.tag) };
+		explicitText = parseExplicitText(child);
 	}
 	return {
 		...(noticeRef === undefined ? {} : { noticeRef }),
-		...(explicitText === undefined
-			? {}
-			: { explicitText: explicitText.text, explicitTextType: explicitText.type }),
+		...explicitText,
+	};
+}
+
+interface ParsedExplicitText {
+	readonly explicitText: string;
+	readonly explicitTextType: DisplayTextType;
+	readonly oversizedExplicitText?: OversizedExplicitText;
+}
+
+/** RFC 5280 §4.2.1.4 asks certificate users to handle explicitText over 200 characters gracefully, so it is kept whole and its size reported. */
+function parseExplicitText(element: DerElement): ParsedExplicitText {
+	const text = decodeDisplayText(element);
+	const characters = [...text].length;
+	if (characters < 1) {
+		throw new Error('DisplayText must hold at least one character');
+	}
+	return {
+		explicitText: text,
+		explicitTextType: displayTextType(element.tag),
+		...(characters > 200 ? { oversizedExplicitText: { characters, limit: 200 } } : {}),
 	};
 }
 
@@ -2318,7 +2344,7 @@ function parseNameConstraintGeneralName(
 	throw new Error(`Unsupported name constraint GeneralName tag: ${String(element.tag)}`);
 }
 
-/** The DisplayText alternative a tag names. Call only after `parseDisplayText` accepted the tag. */
+/** The DisplayText alternative a tag names. Call only after `decodeDisplayText` accepted the tag. */
 function displayTextType(tag: number): DisplayTextType {
 	switch (tag) {
 		case 0x16:
@@ -2332,7 +2358,7 @@ function displayTextType(tag: number): DisplayTextType {
 	}
 }
 
-/** RFC 5280 §4.2.1.4: `DisplayText` is an IA5String, VisibleString, BMPString or UTF8String of SIZE (1..200). */
+/** RFC 5280 §4.2.1.4: `DisplayText` is an IA5String, VisibleString, BMPString or UTF8String of SIZE (1..200); a noticeRef organization is held to it. */
 function parseDisplayText(element: DerElement): string {
 	const text = decodeDisplayText(element);
 	const characters = [...text].length;

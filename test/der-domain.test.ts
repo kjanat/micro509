@@ -142,7 +142,7 @@ describe('der domain', () => {
 				);
 				expect(decodeDerString(teletex(0x41, octet))).toMatchObject({
 					ok: false,
-					code: 'malformed',
+					code: 'unsupported',
 				});
 			});
 		});

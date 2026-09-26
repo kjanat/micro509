@@ -19,6 +19,7 @@ import {
 	requireElement,
 	toHex,
 } from '#micro509/internal/asn1/asn1';
+import { DECODE_REFUSAL_CODES, decodeFailureResult } from '#micro509/internal/asn1/decode-refusal';
 import type { DerElement } from '#micro509/internal/asn1/der';
 import {
 	bitString,
@@ -616,7 +617,10 @@ export async function createCertificateRevocationList(
 }
 
 /** Machine-readable failure reason for the CRL parsers. */
-export type ParseCertificateRevocationListErrorCode = 'malformed';
+export type ParseCertificateRevocationListErrorCode =
+	| 'malformed'
+	| 'unsupported'
+	| 'limit_exceeded';
 
 /** Structured failure payload for CRL parsing. */
 export interface ParseCertificateRevocationListFailure
@@ -720,7 +724,7 @@ export function parseCertificateRevocationListDer(
 		return successResult(parseCertificateRevocationListDerOrThrow(der));
 	} catch (error) {
 		rethrowIfInvariant(error);
-		return failureResult('malformed', error instanceof Error ? error.message : 'Malformed CRL');
+		return decodeFailureResult(error, DECODE_REFUSAL_CODES, 'Malformed CRL');
 	}
 }
 
@@ -737,7 +741,7 @@ export function parseCertificateRevocationListPem(
 		return successResult(parseCertificateRevocationListPemOrThrow(pem));
 	} catch (error) {
 		rethrowIfInvariant(error);
-		return failureResult('malformed', error instanceof Error ? error.message : 'Malformed CRL');
+		return decodeFailureResult(error, DECODE_REFUSAL_CODES, 'Malformed CRL');
 	}
 }
 

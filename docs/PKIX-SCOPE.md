@@ -81,7 +81,13 @@ Current conformance evidence:
       precision. X.660 §7.6 leaves arc values unbounded, and RFC 5280
       Appendix B states "There is no maximum size for OIDs"; its 2^28 arc,
       100-byte and 20-element figures are the minimum an implementation must
-      support. micro509 sets no arc-size limit of its own.
+      support. micro509 bounds one sub-identifier's base-128 encoding at 64
+      octets (values below 2^448) as an implementation limit, checked before
+      any of the arc is accumulated. Decoding an arc grows quadratically with
+      its octets (`bench/oid-bench.ts`: 1,000 octets in 1 ms, 10,000 in 22 ms,
+      100,000 in 1.1 s on the reference machine), and the bound keeps a parse
+      linear in its input. A longer arc returns `limit_exceeded` from every
+      parser, and the builder refuses it with `invalid_oid`.
 - [x] Decode a TeletexString Name attribute value in the initial state X.690
       §8.23.5.2 fixes: register entry 102, the T.61 primary set, read by T.61
       Table 1 with 2/3 as # and 2/4 as ¤ (T.61 Figure 2 Note 4), plus the SPACE
@@ -91,9 +97,20 @@ Current conformance evidence:
       Octets below 0x20 (the C0 control functions, ESC and the shifts among
       them), the six positions T.61 Table 1 leaves empty, and octets from 0x80
       up (C1 and the right half, where X.690 designates nothing) are
-      unsupported, and the parse returns `malformed`. RFC 5280 §7.1 makes
-      TeletexString comparison optional; micro509 matches a TeletexString value
-      only against an identical TeletexString value.
+      unsupported, and the parse returns `unsupported` rather than `malformed`,
+      since micro509 does not decode them and X.690 and T.61 disagree on the
+      right half. RFC 5280 §7.1 makes TeletexString support optional and
+      defines a match as the same attribute type with values equal after RFC
+      4518 preparation, which transcodes a TeletexString by a local mapping
+      (RFC 4518 §2.1) before the remaining steps; micro509 prepares the decoded
+      value like the other DirectoryString alternatives, so it matches a
+      UTF8String or PrintableString value with the same characters, in
+      issuer/subject chaining, CRL and OCSP issuer matching and directoryName
+      name constraints. A TeletexString value micro509 cannot decode fails the
+      parse of a certificate, CRL, OCSP message or PKCS#7 signer; inside a
+      directoryName name constraint it fails every subject DN and directoryName
+      SAN while the constraint is in force (RFC 4518 §2 makes a failed
+      preparation Undefined, and RFC 5280 leaves the consequence unspecified).
 - [x] Verify issuer/subject chaining across the candidate path.
 - [x] Verify each certificate signature using the evolving working public key.
 - [x] Check validity time (`notBefore` / `notAfter`) against the chosen validation time.
@@ -215,12 +232,18 @@ Current GeneralName matrix for `nameConstraints`:
 - [x] Support `certificatePolicies`.
 - [x] Parse each user-notice DisplayText (`explicitText` and the `noticeRef`
       organization) as the ASN.1 type its tag names: a valid UTF8String,
-      IA5String, VisibleString or BMPString of SIZE (1..200) characters (RFC
-      5280 §4.2.1.4). Anything else fails the parse as `malformed`, and valid
-      text is returned unchanged. RFC 5280 §4.2.1.4 asks certificate users to
-      handle explicitText over 200 characters gracefully; micro509 rejects it,
-      which PKITS §4.8.19 permits. The RFC 6818 §3 rules for conforming CAs
-      (no IA5String, no control characters, NFC) bind the builder only.
+      IA5String, VisibleString or BMPString (RFC 5280 §4.2.1.4), returned
+      unchanged. A `noticeRef` organization outside SIZE (1..200), an empty
+      `explicitText`, and any other encoding fail the parse as `malformed`. An
+      `explicitText` over 200 characters is kept whole and reported on the
+      qualifier as `oversizedExplicitText` with its character count, since
+      §4.2.1.4 asks certificate users to handle it gracefully; its length is
+      bounded by the input alone, and decoding it is linear. Path validation
+      accepts it by default and rejects it with `explicit_text_oversized` under
+      `rejectOversizedExplicitText`, the choice PKITS §4.8.19 leaves to the
+      application. The 200-character bound and the RFC 6818 §3 rules for
+      conforming CAs (no IA5String, no control characters, NFC) bind the
+      builder.
 - [x] Support `policyConstraints`.
 - [x] Support `policyMappings`.
 - [x] Support `inhibitAnyPolicy`.
@@ -230,9 +253,12 @@ Current GeneralName matrix for `nameConstraints`:
       (IETF Datatracker[^rfc9618])
 - [x] Conformance evidence landed: the full PKITS policy sections (4.8–4.12)
       pass, with every manifest expectation verified against the official
-      PKITS document ([`docs/rfc/pkits.txt`](./rfc/pkits.txt)). For 4.8.19,
-      whose explicitText exceeds 200 characters, the harness expects the
-      rejection PKITS allows instead of the generated manifest's acceptance.
+      PKITS document ([`docs/rfc/pkits.txt`](./rfc/pkits.txt)). 4.8.19, whose
+      explicitText is 310 characters, validates under the default settings as
+      the manifest expects; the harness also checks that the notice is kept
+      whole and reported, that `rejectOversizedExplicitText` rejects the path
+      for that reason alone, and that the other user-notice tests validate
+      under it.
 
 ## 7. Trust-anchor model
 
@@ -390,8 +416,8 @@ Focused OCSP auth/completeness/freshness fixtures live in [`test/ocsp-fixtures.t
 - [x] Accept BER for the PFX, the authSafe ContentInfo, the AuthenticatedSafe
       and each SafeContents in `parsePfxDer` / `parsePfxPem`: indefinite
       lengths, non-minimal lengths and constructed OCTET STRINGs (RFC 7292 §4;
-      X.690 §7.3). BER nesting is limited to 64 levels. Certificate and PKCS#8
-      bag payloads must be DER. The MAC is verified over the AuthenticatedSafe
+      X.690 §7.3). BER nesting is limited to 64 levels (`limit_exceeded`).
+      Certificate and PKCS#8 bag payloads must be DER. The MAC is verified over the AuthenticatedSafe
       octets as received (RFC 7292 Appendix A).
 - [x] Verify and create the RFC 7292 MAC with SHA-256 only. Any other digest
       returns `unsupported_mac_algorithm`.

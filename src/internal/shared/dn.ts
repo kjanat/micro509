@@ -169,12 +169,13 @@ function compareIa5AttributeValue(
 }
 
 /**
- * True for the DirectoryString encodings compared after RFC 4518 preparation:
- * UTF8String (0x0C), PrintableString (0x13), UniversalString (0x1C), and
- * BMPString (0x1E).
+ * True for the DirectoryString alternatives compared after RFC 4518
+ * preparation: UTF8String (0x0C), PrintableString (0x13), TeletexString (0x14,
+ * transcoded by RFC 4518 §2.1's local mapping at decode time), UniversalString
+ * (0x1C), and BMPString (0x1E).
  */
 export function isDirectoryStringTag(tag: number): boolean {
-	return tag === 0x0c || tag === 0x13 || tag === 0x1c || tag === 0x1e;
+	return tag === 0x0c || tag === 0x13 || tag === 0x14 || tag === 0x1c || tag === 0x1e;
 }
 
 /** RFC 4518 §2.2: code points deleted (Cc/Cf controls, joiners, ignorables). */

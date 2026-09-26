@@ -31,9 +31,13 @@ and structured `details`.
   `throwMicro509Error` (`src/result/result.ts`). Detect it with `isResultError`
   and branch on `error.code`. Codes are per-operation unions co-located with the
   builder (`ExtensionEncoderErrorCode`, `CrlEncoderErrorCode`,
-  `NameEncoderErrorCode`, `CreateCertificateErrorCode`). Only builder _config_
-  validation carries a code; DER decode guards and `_exhaustive` invariants stay
-  bare `throw new Error`.
+  `NameEncoderErrorCode`, `CreateCertificateErrorCode`). Builder _config_
+  validation carries a code, and so do the two decode refusals of
+  `src/internal/asn1/decode-refusal.ts`: `unsupported` for a construct micro509
+  does not decode and `limit_exceeded` for an implementation limit, which every
+  parse boundary maps onto its result codes. Other DER decode guards and
+  `_exhaustive` invariants stay bare `throw new Error`, and a boundary reports
+  them as `malformed`.
 
 ## STRUCTURE
 

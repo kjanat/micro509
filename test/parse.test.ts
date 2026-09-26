@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import type { ParseCertificateErrorCode } from '#micro509';
 import {
 	certificateMatchesPrivateKey,
+	compareDistinguishedNames,
 	createCertificate,
 	createCertificateSigningRequest,
 	createSelfSignedCertificate,
@@ -45,6 +46,7 @@ import {
 	parseSubjectAltNames,
 } from '#micro509/x509/parse';
 import {
+	appendCertificateExtensions,
 	childrenOf,
 	createCsrWithRawExtensions,
 	createSelfSignedCertificateWithRawExtensions,
@@ -1919,6 +1921,33 @@ describe('parse', () => {
 		]);
 	});
 
+	it('bounds an OID sub-identifier at 64 octets, refusing a longer one as limit_exceeded', async () => {
+		const arcOf = (octets: number): Uint8Array =>
+			Uint8Array.of(0x2a, ...new Array<number>(octets - 1).fill(0xff), 0x7f);
+		const extensionWithOid = (contents: Uint8Array): Uint8Array =>
+			sequence([tlv(0x06, contents), octetString(nullValue())]);
+		const { certificate, keyPair } = await createSelfSignedCertificate({
+			subject: { commonName: 'arc-bound.example' },
+		});
+		const accepted = await appendCertificateExtensions(certificate.der, keyPair.privateKey, [
+			extensionWithOid(arcOf(64)),
+		]);
+		expect(unwrap(parseCertificateDer(accepted)).extensions.at(-1)?.oid).toBe(
+			`1.2.${(1n << 448n) - 1n}`,
+		);
+		const refused = await appendCertificateExtensions(certificate.der, keyPair.privateKey, [
+			extensionWithOid(arcOf(65)),
+		]);
+		expect(parseCertificateDer(refused)).toMatchObject({ ok: false, code: 'limit_exceeded' });
+		await expectRejectedErrorCode(
+			createSelfSignedCertificate({
+				subject: { commonName: 'arc-bound.example' },
+				extensions: { certificatePolicies: [{ policyIdentifier: `1.2.${1n << 448n}` }] },
+			}),
+			'invalid_oid',
+		);
+	});
+
 	describe('DisplayText (RFC 5280 §4.2.1.4)', () => {
 		const text = (value: string) => new TextEncoder().encode(value);
 		const bmp = (value: string) =>
@@ -1990,14 +2019,12 @@ describe('parse', () => {
 		it.each([
 			['a UTF8String that is not UTF-8', tlv(0x0c, Uint8Array.of(0x6f, 0xc3, 0x28))],
 			['an empty UTF8String', tlv(0x0c, new Uint8Array())],
-			['a 201-character UTF8String', tlv(0x0c, text('é'.repeat(201)))],
 			['an IA5String above 0x7F', tlv(0x16, Uint8Array.of(0x6f, 0x80))],
 			['a VisibleString with DELETE', tlv(0x1a, Uint8Array.of(0x6f, 0x7f))],
 			['a VisibleString with a line feed', tlv(0x1a, Uint8Array.of(0x6f, 0x0a))],
 			['a BMPString with an unpaired surrogate', tlv(0x1e, Uint8Array.of(0x00, 0x4f, 0xd8, 0x00))],
 			['a BMPString with a surrogate pair', tlv(0x1e, Uint8Array.of(0xd8, 0x3d, 0xde, 0x00))],
 			['a BMPString holding U+FFFF', tlv(0x1e, Uint8Array.of(0x00, 0x4f, 0xff, 0xff))],
-			['a 201-character BMPString', tlv(0x1e, bmp('k'.repeat(201)))],
 		] as const)('fails on %s as explicitText or organization', async (_label, displayText) => {
 			for (const userNotice of [
 				sequence([displayText]),
@@ -2007,6 +2034,40 @@ describe('parse', () => {
 				expect(result.ok ? 'ok' : result.code).toBe('malformed');
 			}
 		});
+
+		// RFC 5280 §4.2.1.4: "certificate users SHOULD gracefully handle explicitText
+		// with more than 200 characters."
+		it.each([
+			[
+				'a 201-character UTF8String',
+				tlv(0x0c, text('é'.repeat(201))),
+				'é'.repeat(201),
+				'utf8String',
+			],
+			['a 201-character BMPString', tlv(0x1e, bmp('k'.repeat(201))), 'k'.repeat(201), 'bmpString'],
+		] as const)(
+			'keeps %s whole as explicitText and reports its size, and fails on it as organization',
+			async (_label, displayText, explicitText, explicitTextType) => {
+				const parsed = unwrap(await parseUserNotice(sequence([displayText])));
+				expect(parsed.certificatePolicies).toEqual([
+					{
+						policyIdentifier: '1.2.3.4.1',
+						policyQualifiers: [
+							{
+								type: 'userNotice',
+								explicitText,
+								explicitTextType,
+								oversizedExplicitText: { characters: 201, limit: 200 },
+							},
+						],
+					},
+				]);
+				const organization = await parseUserNotice(
+					sequence([sequence([displayText, sequence([integerFromNumber(1)])])]),
+				);
+				expect(organization.ok ? 'ok' : organization.code).toBe('malformed');
+			},
+		);
 	});
 
 	describe('TeletexString names (X.690 §8.23.5.2 initial state)', () => {
@@ -2022,13 +2083,27 @@ describe('parse', () => {
 			expect(unwrap(parseCertificateDer(rewritten)).subject.values.commonName).toBe('US\u{a4}');
 		});
 
-		it('fails on a TeletexString octet outside its initial state', async () => {
+		it('compares a TeletexString name with a UTF8String name after RFC 4518 preparation', async () => {
+			const { certificate } = await createSelfSignedCertificate({ subject: { commonName: 'x' } });
+			const subjectOf = (value: Uint8Array) =>
+				unwrap(
+					parseCertificateDer(rewriteCertificateSubject(certificate.der, commonNameSubject(value))),
+				).subject;
+			const teletex = subjectOf(tlv(0x14, new TextEncoder().encode('Blocked Org')));
+			const utf8 = subjectOf(tlv(0x0c, new TextEncoder().encode('  blocked   ORG  ')));
+			const other = subjectOf(tlv(0x0c, new TextEncoder().encode('Other Org')));
+			expect(compareDistinguishedNames(teletex, utf8)).toBe(true);
+			expect(compareDistinguishedNames(utf8, teletex)).toBe(true);
+			expect(compareDistinguishedNames(teletex, other)).toBe(false);
+		});
+
+		it('refuses a TeletexString octet outside its initial state as unsupported', async () => {
 			const { certificate } = await createSelfSignedCertificate({ subject: { commonName: 'x' } });
 			const rewritten = rewriteCertificateSubject(
 				certificate.der,
 				commonNameSubject(tlv(0x14, Uint8Array.of(0xc1, 0x41))),
 			);
-			expect(parseCertificateDer(rewritten)).toMatchObject({ ok: false, code: 'malformed' });
+			expect(parseCertificateDer(rewritten)).toMatchObject({ ok: false, code: 'unsupported' });
 		});
 	});
 

@@ -20,6 +20,7 @@ import {
 	decodeString,
 	parseTime,
 } from '#micro509/internal/asn1/asn1';
+import { DECODE_REFUSAL_CODES, decodeFailureResult } from '#micro509/internal/asn1/decode-refusal';
 import type {
 	DerElement,
 	ReadRootElementOptions,
@@ -27,10 +28,19 @@ import type {
 } from '#micro509/internal/asn1/der';
 import { readElement, readRootElement, readSequenceChildren } from '#micro509/internal/asn1/der';
 import type { ErrorResult, Micro509Error } from '#micro509/result/result';
-import { failureResult, rethrowIfInvariant, successResult } from '#micro509/result/result';
+import { rethrowIfInvariant, successResult } from '#micro509/result/result';
 
-/** Machine-readable failure reason for the DER readers and decoders. */
-export type DecodeDerErrorCode = 'malformed';
+/**
+ * Machine-readable failure reason for the DER readers and decoders.
+ *
+ * `malformed` is input that breaks DER or the decoder's ASN.1 type.
+ * `unsupported` is input the type may allow but micro509 does not decode: a
+ * TeletexString octet outside the X.690 §8.23.5.2 initial state.
+ * `limit_exceeded` is an implementation limit: an OBJECT IDENTIFIER
+ * sub-identifier encoded in more than 64 octets, or DER nested deeper than 64
+ * levels.
+ */
+export type DecodeDerErrorCode = 'malformed' | 'unsupported' | 'limit_exceeded';
 
 /** Structured failure payload for DER reading and decoding. */
 export interface DecodeDerFailure extends Micro509Error<DecodeDerErrorCode> {
@@ -48,7 +58,7 @@ function attempt<TValue>(decode: () => TValue, fallback: string): DecodeDerResul
 		return successResult(decode());
 	} catch (error) {
 		rethrowIfInvariant(error);
-		return failureResult('malformed', error instanceof Error ? error.message : fallback);
+		return decodeFailureResult(error, DECODE_REFUSAL_CODES, fallback);
 	}
 }
 
