@@ -396,10 +396,50 @@ describe('RFC 4985 §4 SRVName constraints', () => {
 		},
 	);
 
+	it('treats a received SRVName outside STD3 or RFC 6335 syntax as not _Service.Name', async () => {
+		for (const presented of ['_mail.example_com', '_123.example.com', '_mail.-example.com']) {
+			const result = await verifyNameConstraintFixture({
+				rootNameConstraints: {
+					permittedSubtrees: [{ base: { type: 'srv', value: 'example.com' } }],
+				},
+				leafSubjectAltNames: [
+					{
+						type: 'unknown',
+						tag: 0xa0,
+						value: concatBytes([
+							objectIdentifier(OIDS.idOnDnsSrv),
+							tlv(0xa0, ia5String(presented)),
+						]),
+					},
+				],
+			});
+			expect(result).toMatchObject({ ok: false, code: 'name_constraints_violated' });
+		}
+	});
+
+	it('fails every SRVName while a received restriction breaks STD3 or RFC 6335 syntax', async () => {
+		for (const restriction of ['example_com', '_123', '_mail.example-.com']) {
+			const result = await verifyNameConstraintFixture({
+				rootNameConstraints: rawSrvNameConstraints(0xa1, restriction),
+				leafSubjectAltNames: [{ type: 'srv', value: '_mail.example.com' }],
+			});
+			expect(result).toMatchObject({ ok: false, code: 'name_constraints_violated' });
+		}
+	});
+
 	it('fails an SRVName that is not _Service.Name while SRVName constraints apply', async () => {
 		const result = await verifyNameConstraintFixture({
 			rootNameConstraints: { excludedSubtrees: [{ base: { type: 'srv', value: '_ntp' } }] },
-			leafSubjectAltNames: [{ type: 'srv', value: 'mail.example.com' }],
+			leafSubjectAltNames: [
+				{
+					type: 'unknown',
+					tag: 0xa0,
+					value: concatBytes([
+						objectIdentifier(OIDS.idOnDnsSrv),
+						tlv(0xa0, ia5String('mail.example.com')),
+					]),
+				},
+			],
 		});
 		expect(result).toMatchObject({ ok: false, code: 'name_constraints_violated' });
 	});

@@ -30,8 +30,10 @@ import {
 	parseIpAddressToBytes,
 } from '#micro509/internal/shared/ip';
 import { isMailboxDomain, isSmtpUtf8LocalPart } from '#micro509/internal/shared/mailbox';
-import type { SrvNameRestriction } from '#micro509/internal/x509/general-name';
-import { splitSrvNameRestriction } from '#micro509/internal/x509/general-name';
+import {
+	parsePresentedSrvName,
+	parseSrvNameRestriction,
+} from '#micro509/internal/x509/general-name-profile';
 import type { Micro509Error } from '#micro509/result/result';
 import type { InitialNameConstraintsInput } from '#micro509/verify/name-constraints';
 import type {
@@ -431,7 +433,7 @@ function checkCertificateSubjectAltName(
 	if (
 		checkable?.type === 'srv' &&
 		accumulatedHasConstraintsOfType('srv', accumulated) &&
-		!isPresentedSrvName(parseSrvName(checkable.value))
+		parsePresentedSrvName(asciiLowercase(checkable.value)) === undefined
 	) {
 		return nameConstraintFailure(
 			'name_constraints_violated',
@@ -556,7 +558,7 @@ function isWellFormedConstraint(constraint: NameConstraintForm): boolean {
 		case 'email':
 			return constraintMailboxDomain(constraint.value) !== undefined;
 		case 'srv':
-			return parseSrvName(constraint.value) !== undefined;
+			return parseSrvNameRestriction(asciiLowercase(constraint.value)) !== undefined;
 		case 'uri':
 		case 'ip':
 		case 'directoryName':
@@ -799,30 +801,15 @@ function nameMatchesConstraint(name: NameConstraintForm, constraint: NameConstra
 }
 
 /**
- * A lowercased SRVName split per RFC 4985 §4. A Name must also be a comparable
- * domain, since §3 matches it label by label.
- */
-function parseSrvName(value: string): SrvNameRestriction | undefined {
-	const parts = splitSrvNameRestriction(asciiLowercase(value));
-	return parts !== undefined && (parts.name.length === 0 || isComparableDomain(parts.name))
-		? parts
-		: undefined;
-}
-
-function isPresentedSrvName(parts: SrvNameRestriction | undefined): parts is SrvNameRestriction {
-	return parts !== undefined && parts.service.length > 0 && parts.name.length > 0;
-}
-
-/**
  * RFC 4985 §4: a restriction's service, when present, must equal the SRVName's
  * service case-insensitively (§2), and its Name, when present, is satisfied by
  * that domain or any subdomain added to the left.
  */
 function matchesSrvConstraint(name: string, constraint: string): boolean {
-	const presented = parseSrvName(name);
-	const restriction = parseSrvName(constraint);
+	const presented = parsePresentedSrvName(asciiLowercase(name));
+	const restriction = parseSrvNameRestriction(asciiLowercase(constraint));
 	return (
-		isPresentedSrvName(presented) &&
+		presented !== undefined &&
 		restriction !== undefined &&
 		(restriction.service.length === 0 || presented.service === restriction.service) &&
 		(restriction.name.length === 0 ||

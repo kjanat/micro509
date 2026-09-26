@@ -49,6 +49,7 @@ export type ExtensionEncoderErrorCode =
 	| 'invalid_other_name_value'
 	| 'invalid_oid'
 	| 'invalid_smtp_utf8_mailbox'
+	| 'invalid_srv_name'
 	| 'invalid_srv_name_constraint'
 	| 'invalid_visible_string'
 	| 'key_usage_empty'

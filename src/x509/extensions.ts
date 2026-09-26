@@ -14,8 +14,8 @@ import {
 	hexToBytes,
 	toHex,
 } from '#micro509/internal/asn1/asn1';
-import type { DerElement } from '#micro509/internal/asn1/der';
 import {
+	assertStrictDer,
 	bmpString,
 	bool,
 	concatBytes,
@@ -67,7 +67,14 @@ import {
 	SUBJECT_ALT_NAME_EXTENSION_DEFINITION,
 	SUBJECT_KEY_IDENTIFIER_EXTENSION_DEFINITION,
 } from '#micro509/internal/x509/extension-registry';
-import { splitSrvNameRestriction } from '#micro509/internal/x509/general-name';
+import type { GeneralNameContentCheck } from '#micro509/internal/x509/general-name-profile';
+import {
+	checkEdiPartyName,
+	checkOrAddress,
+	normalizeLabelSeparators,
+	parsePresentedSrvName,
+	parseSrvNameRestriction,
+} from '#micro509/internal/x509/general-name-profile';
 import { GENERAL_NAME_WIRE_TAGS } from '#micro509/internal/x509/general-name-tags';
 import { isResultError } from '#micro509/result/result';
 import type { RelativeDistinguishedNameInput } from '#micro509/x509/name';
@@ -1558,25 +1565,39 @@ function toAsciiDnsName(value: string): string {
 	return `${prefix}${toAsciiDomain(value.slice(prefix.length))}`;
 }
 
-/** RFC 4985 §3: a SRVName with its `_Service` label kept and its Name in A-labels. */
-function toAsciiSrvName(value: string): string {
-	const dot = value.indexOf('.');
-	return dot < 0 ? value : `${value.slice(0, dot + 1)}${toAsciiDomain(value.slice(dot + 1))}`;
+/**
+ * RFC 4985 §3: a SRVName or SRVName restriction with its label separators
+ * normalized, its `_Service` label kept, and its Name in A-labels.
+ */
+function toAsciiSrvComponents(value: string): string {
+	const normalized = normalizeLabelSeparators(value);
+	const dot = normalized.indexOf('.');
+	if (!normalized.startsWith('_')) {
+		return toAsciiDomain(normalized);
+	}
+	if (dot < 0) {
+		return normalized;
+	}
+	const name = normalized.slice(dot + 1);
+	return `${normalized.slice(0, dot + 1)}${name.length === 0 ? '' : toAsciiDomain(name)}`;
 }
 
-/**
- * RFC 4985 §4: a SRVName constraint is `_Service.Name`, `_Service`, or `Name`,
- * kept with its Name in A-labels.
- */
+/** RFC 4985 §2 and RFC 6335 §5.1: a presented SRVName is `_Service.Name`. */
+function toAsciiSrvName(value: string): string {
+	const ascii = toAsciiSrvComponents(value);
+	if (parsePresentedSrvName(ascii) === undefined) {
+		throwExtensionEncoderError(
+			'invalid_srv_name',
+			'A SRVName is _Service.Name with an RFC 6335 service and an LDH Name (RFC 4985 §2)',
+		);
+	}
+	return ascii;
+}
+
+/** RFC 4985 §4: a SRVName constraint is `_Service.Name`, `_Service`, or `Name`. */
 function toAsciiSrvNameConstraint(value: string): string {
-	const dot = value.indexOf('.');
-	const service = value.startsWith('_') ? value.slice(0, dot < 0 ? value.length : dot) : '';
-	const name = service.length === 0 ? value : value.slice(service.length + 1);
-	const ascii =
-		service.length > 0 && dot < 0
-			? service
-			: `${service}${service.length === 0 ? '' : '.'}${name.length === 0 ? '' : toAsciiDomain(name)}`;
-	if (splitSrvNameRestriction(ascii) === undefined) {
+	const ascii = toAsciiSrvComponents(value);
+	if (parseSrvNameRestriction(ascii) === undefined) {
 		throwExtensionEncoderError(
 			'invalid_srv_name_constraint',
 			'A SRVName constraint is _Service.Name, _Service, or Name (RFC 4985 §4)',
@@ -1597,76 +1618,27 @@ function validateOtherNameTypeId(typeId: string): string {
 	return oid;
 }
 
-/** DirectoryString alternatives: TeletexString, PrintableString, UniversalString, UTF8String, BMPString. */
-const DIRECTORY_STRING_TAGS: ReadonlySet<number> = new Set([0x14, 0x13, 0x1c, 0x0c, 0x1e]);
-
-/**
- * RFC 5280 Appendix A.1: `ORAddress ::= SEQUENCE { built-in-standard-attributes
- * SEQUENCE, built-in-domain-defined-attributes SEQUENCE OPTIONAL,
- * extension-attributes SET OPTIONAL }`.
- */
-function isOrAddress(children: readonly DerElement[]): boolean {
-	const [standard, ...optional] = children.map((child) => child.tag);
-	const afterDomainDefined = optional[0] === 0x30 ? optional.slice(1) : optional;
-	return (
-		standard === 0x30 &&
-		(afterDomainDefined.length === 0 ||
-			(afterDomainDefined.length === 1 && afterDomainDefined[0] === 0x31))
-	);
-}
-
-/**
- * RFC 5280 §4.2.1.6: `EDIPartyName ::= SEQUENCE { nameAssigner [0]
- * DirectoryString OPTIONAL, partyName [1] DirectoryString }`, each tag
- * explicit around its CHOICE, whose alternatives are all `SIZE (1..MAX)`.
- */
-function isEdiPartyName(children: readonly DerElement[], source: Uint8Array): boolean {
-	const partyName = children.at(-1);
-	return (
-		partyName?.tag === 0xa1 &&
-		(children.length === 1 || (children.length === 2 && children[0]?.tag === 0xa0)) &&
-		children.every((child) => {
-			const inner = childrenOf(source, child);
-			const directoryString = inner[0];
-			return (
-				inner.length === 1 &&
-				directoryString !== undefined &&
-				DIRECTORY_STRING_TAGS.has(directoryString.tag) &&
-				directoryString.value.length > 0
-			);
-		})
-	);
-}
-
-function requireGeneralNameStructure(
+function requireGeneralNameContent(
 	element: Uint8Array,
-	isValid: (children: readonly DerElement[], source: Uint8Array) => boolean,
+	form: 'x400Address' | 'ediPartyName',
+	check: (element: Uint8Array) => GeneralNameContentCheck,
 ): Uint8Array {
-	let valid: boolean;
-	try {
-		const root = readRootElement(element, { maxDepth: DEFAULT_MAX_DER_DEPTH });
-		valid = isValid(childrenOf(element, root), element);
-	} catch {
-		valid = false;
-	}
-	if (!valid) {
+	const result = check(element);
+	if (!result.ok) {
 		throwExtensionEncoderError(
 			'invalid_general_name_content',
-			'x400Address contents must be an ORAddress and ediPartyName contents an EDIPartyName',
+			result.reason === 'unsupported'
+				? `${form} contents use an encoding micro509 cannot validate`
+				: `${form} contents do not match the ${form === 'x400Address' ? 'ORAddress' : 'EDIPartyName'} ASN.1 (RFC 5280)`,
 		);
 	}
 	return element;
 }
 
-/** X.690 §8.1.5: tag 0 is the end-of-contents marker, which DER never emits. */
 function requireSingleDerElement(value: Uint8Array): Uint8Array {
-	let tag: number | undefined;
 	try {
-		tag = readRootElement(value, { maxDepth: DEFAULT_MAX_DER_DEPTH }).tag;
+		assertStrictDer(value, DEFAULT_MAX_DER_DEPTH);
 	} catch {
-		tag = undefined;
-	}
-	if (tag === undefined || tag === 0x00) {
 		throwExtensionEncoderError(
 			'invalid_other_name_value',
 			'otherName value must be exactly one DER element',
@@ -1734,11 +1706,16 @@ export function encodeSubjectAltName(value: SubjectAltName): Uint8Array {
 				]),
 			);
 		case 'x400Address':
-			return requireGeneralNameStructure(implicitConstructedContext(3, value.value), isOrAddress);
+			return requireGeneralNameContent(
+				implicitConstructedContext(3, value.value),
+				'x400Address',
+				checkOrAddress,
+			);
 		case 'ediPartyName':
-			return requireGeneralNameStructure(
+			return requireGeneralNameContent(
 				implicitConstructedContext(5, value.value),
-				isEdiPartyName,
+				'ediPartyName',
+				checkEdiPartyName,
 			);
 		case 'registeredID':
 			return implicitPrimitiveContext(

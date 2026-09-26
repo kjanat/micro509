@@ -123,6 +123,23 @@ import {
 	FAR_FUTURE_NEXT_UPDATE,
 } from '#test/helpers';
 
+/** An RFC 5280 ORAddress with every top-level component present. */
+function validOrAddress(): Uint8Array {
+	const text = (value: string) => new TextEncoder().encode(value);
+	return concatBytes([
+		sequence([
+			tlv(0x61, printableString('NL')),
+			tlv(0x83, text('Acme')),
+			tlv(0xa5, concatBytes([tlv(0x80, text('Doe')), tlv(0x81, text('Jane'))])),
+			tlv(0xa6, printableString('Sales')),
+		]),
+		sequence([sequence([printableString('dept'), printableString('42')])]),
+		setOf([
+			sequence([tlv(0x80, Uint8Array.of(1)), explicitContext(1, printableString('Jane Doe'))]),
+		]),
+	]);
+}
+
 function expectEncoderErrorCode(fn: () => unknown, code: string): void {
 	try {
 		fn();
@@ -785,7 +802,7 @@ describe('extensions encoding', () => {
 				typeId: '1.3.6.1.4.1.311.20.2.3',
 				value: utf8String('user@example.com'),
 			},
-			{ type: 'x400Address', value: concatBytes([sequence([]), setOf([sequence([])])]) },
+			{ type: 'x400Address', value: validOrAddress() },
 			{ type: 'ediPartyName', value: explicitContext(1, utf8String('party')) },
 			{ type: 'registeredID', value: '1.2.840.113549' },
 		] as const;
@@ -793,30 +810,30 @@ describe('extensions encoding', () => {
 		expect(parseGeneralNames(encoded, readRootElement(encoded))).toEqual([...names]);
 	});
 
-	it('encodeSubjectAltName requires non-empty EDIPartyName DirectoryStrings of every alternative', () => {
-		// RFC 5280 gives TeletexString, PrintableString, UniversalString, UTF8String and BMPString each SIZE (1..MAX).
+	it('encodeSubjectAltName validates each EDIPartyName DirectoryString encoding', () => {
+		// RFC 5280 gives PrintableString, UniversalString, UTF8String and BMPString each SIZE (1..MAX).
 		const alternatives = [
-			[0x14, Uint8Array.of(0x70)],
-			[0x13, Uint8Array.of(0x70)],
-			[0x1c, Uint8Array.of(0x00, 0x00, 0x00, 0x70)],
-			[0x0c, Uint8Array.of(0x70)],
-			[0x1e, Uint8Array.of(0x00, 0x70)],
+			[0x13, Uint8Array.of(0x70), Uint8Array.of(0x2a)],
+			[0x1c, Uint8Array.of(0x00, 0x00, 0x00, 0x70), Uint8Array.of(0x00, 0x11, 0x00, 0x00)],
+			[0x0c, Uint8Array.of(0x70), Uint8Array.of(0xff)],
+			[0x1e, Uint8Array.of(0x00, 0x70), Uint8Array.of(0x41)],
 		] as const;
-		for (const [tag, content] of alternatives) {
-			const empty = tlv(tag, new Uint8Array());
+		for (const [tag, content, invalid] of alternatives) {
 			const filled = tlv(tag, content);
-			expectEncoderErrorCode(
-				() => encodeSubjectAltName({ type: 'ediPartyName', value: explicitContext(1, empty) }),
-				'invalid_general_name_content',
-			);
-			expectEncoderErrorCode(
-				() =>
-					encodeSubjectAltName({
-						type: 'ediPartyName',
-						value: concatBytes([explicitContext(0, empty), explicitContext(1, filled)]),
-					}),
-				'invalid_general_name_content',
-			);
+			for (const bad of [tlv(tag, new Uint8Array()), tlv(tag, invalid)]) {
+				expectEncoderErrorCode(
+					() => encodeSubjectAltName({ type: 'ediPartyName', value: explicitContext(1, bad) }),
+					'invalid_general_name_content',
+				);
+				expectEncoderErrorCode(
+					() =>
+						encodeSubjectAltName({
+							type: 'ediPartyName',
+							value: concatBytes([explicitContext(0, bad), explicitContext(1, filled)]),
+						}),
+					'invalid_general_name_content',
+				);
+			}
 			expect(
 				encodeSubjectAltName({
 					type: 'ediPartyName',
@@ -824,6 +841,108 @@ describe('extensions encoding', () => {
 				})[0],
 			).toBe(0xa5);
 		}
+	});
+
+	it('encodeSubjectAltName validates x400Address contents against the RFC 5280 ORAddress schema', () => {
+		const text = (value: string) => new TextEncoder().encode(value);
+		const standard = (...fields: Uint8Array[]) => sequence(fields);
+		const extension = (type: number, value: Uint8Array) =>
+			sequence([tlv(0x80, Uint8Array.of(type)), explicitContext(1, value)]);
+		const accepted = [
+			validOrAddress(),
+			standard(),
+			concatBytes([standard(tlv(0x80, text('0123 456')))]),
+			concatBytes([standard(), setOf([extension(23, integerFromNumber(256))])]),
+			concatBytes([standard(), setOf([extension(10, setOf([printableString('Office 1')]))])]),
+			concatBytes([
+				standard(),
+				setOf([extension(16, setOf([sequence([printableString('Line')])]))]),
+			]),
+			standard(tlv(0x62, tlv(0x12, new Uint8Array())), tlv(0xa2, printableString('private'))),
+			concatBytes([
+				standard(),
+				tlv(
+					0x31,
+					concatBytes([extension(7, printableString('pds')), extension(7, printableString('pds'))]),
+				),
+			]),
+		];
+		for (const value of accepted) {
+			expect(encodeSubjectAltName({ type: 'x400Address', value })[0]).toBe(0xa3);
+		}
+		const malformed = [
+			sequence([integerFromNumber(1)]),
+			standard(tlv(0x83, text('Acme')), tlv(0x61, printableString('NL'))),
+			standard(tlv(0x61, printableString('NLD'))),
+			standard(tlv(0x61, tlv(0x12, text('12')))),
+			standard(tlv(0x83, text(''))),
+			standard(tlv(0x83, text('a'.repeat(65)))),
+			standard(tlv(0x80, text('12a'))),
+			standard(tlv(0x83, text('under_score'))),
+			standard(tlv(0xa5, tlv(0x81, text('Jane')))),
+			standard(tlv(0xa5, concatBytes([tlv(0x81, text('Jane')), tlv(0x80, text('Doe'))]))),
+			standard(tlv(0xa6, concatBytes(Array.from({ length: 5 }, () => printableString('ou'))))),
+			concatBytes([
+				standard(),
+				sequence(
+					Array.from({ length: 5 }, () => sequence([printableString('t'), printableString('v')])),
+				),
+			]),
+			concatBytes([
+				standard(),
+				sequence([sequence([printableString('toolongtype'), printableString('v')])]),
+			]),
+			concatBytes([standard(), setOf([])]),
+			concatBytes([
+				standard(),
+				tlv(
+					0x31,
+					concatBytes([extension(7, printableString('b')), extension(1, printableString('a'))]),
+				),
+			]),
+			concatBytes([standard(), setOf([extension(1, printableString(''))])]),
+			concatBytes([standard(), setOf([extension(23, integerFromNumber(257))])]),
+			concatBytes([standard(), setOf([extension(23, tlv(0x02, new Uint8Array()))])]),
+			concatBytes([
+				standard(),
+				setOf([sequence([tlv(0x80, new Uint8Array()), explicitContext(1, printableString('x'))])]),
+			]),
+			standard(tlv(0x62, printableString('a'.repeat(17)))),
+			standard(tlv(0xa2, printableString(''))),
+			concatBytes([standard(), setOf([extension(7, printableString('a'.repeat(17)))])]),
+		];
+		for (const value of malformed) {
+			expectEncoderErrorCode(
+				() => encodeSubjectAltName({ type: 'x400Address', value }),
+				'invalid_general_name_content',
+			);
+		}
+		const unsupported = [
+			concatBytes([standard(), setOf([extension(2, tlv(0x14, text('x')))])]),
+			concatBytes([standard(), setOf([extension(22, sequence([tlv(0x80, text('1'))]))])]),
+			concatBytes([standard(), setOf([extension(30, printableString('x'))])]),
+			concatBytes([standard(), setOf([extension(10, setOf([tlv(0x14, text('x'))]))])]),
+		];
+		for (const value of unsupported) {
+			expect(() => encodeSubjectAltName({ type: 'x400Address', value })).toThrow(/cannot validate/);
+		}
+	});
+
+	it('encodeSubjectAltName refuses a TeletexString EDIPartyName it cannot validate', () => {
+		expect(() =>
+			encodeSubjectAltName({
+				type: 'ediPartyName',
+				value: explicitContext(1, tlv(0x14, Uint8Array.of(0x70))),
+			}),
+		).toThrow(/cannot validate/);
+		expectEncoderErrorCode(
+			() =>
+				encodeSubjectAltName({
+					type: 'ediPartyName',
+					value: explicitContext(1, tlv(0x14, Uint8Array.of(0x70))),
+				}),
+			'invalid_general_name_content',
+		);
 	});
 
 	it('encodeSubjectAltName refuses an otherName it cannot encode faithfully', () => {
@@ -846,15 +965,22 @@ describe('extensions encoding', () => {
 				}),
 			'invalid_other_name_value',
 		);
-		expectEncoderErrorCode(
-			() =>
-				encodeSubjectAltName({
-					type: 'otherName',
-					typeId: '1.2.3.4',
-					value: Uint8Array.of(0x00, 0x00),
-				}),
-			'invalid_other_name_value',
-		);
+		for (const value of [
+			Uint8Array.of(0x00, 0x00),
+			sequence([utf8String('a'), Uint8Array.of(0x00, 0x00)]),
+			explicitContext(2, sequence([Uint8Array.of(0x00, 0x00)])),
+		]) {
+			expectEncoderErrorCode(
+				() => encodeSubjectAltName({ type: 'otherName', typeId: '1.2.3.4', value }),
+				'invalid_other_name_value',
+			);
+		}
+		for (const value of [
+			octetString(Uint8Array.of(0x00, 0x00)),
+			sequence([explicitContext(0, octetString(Uint8Array.of(0x00, 0x00, 0x00)))]),
+		]) {
+			expect(encodeSubjectAltName({ type: 'otherName', typeId: '1.2.3.4', value })[0]).toBe(0xa0);
+		}
 		expectEncoderErrorCode(
 			() => encodeSubjectAltName({ type: 'registeredID', value: '1' }),
 			'invalid_oid',
@@ -906,13 +1032,70 @@ describe('extensions encoding', () => {
 		]);
 	});
 
-	it('encodeNameConstraints accepts a _Service label of exactly 63 octets', () => {
-		const service = `_${'m'.repeat(62)}`;
-		expect(
-			parseNameConstraints(
-				encodeNameConstraints({ permittedSubtrees: [{ base: { type: 'srv', value: service } }] }),
-			).permittedSubtrees,
-		).toEqual([{ base: { type: 'srv', value: service } }]);
+	it('encodeNameConstraints and encodeSubjectAltName hold the service to RFC 6335 §5.1', () => {
+		for (const service of ['_m', `_${'m'.repeat(15)}`, '_x-400', '_3com']) {
+			expect(
+				parseNameConstraints(
+					encodeNameConstraints({ permittedSubtrees: [{ base: { type: 'srv', value: service } }] }),
+				).permittedSubtrees,
+			).toEqual([{ base: { type: 'srv', value: service } }]);
+			expect(encodeSubjectAltName({ type: 'srv', value: `${service}.example.com` })[0]).toBe(0xa0);
+		}
+		for (const service of [`_${'m'.repeat(16)}`, '_123', '_-mail', '_mail-', '_ma--il', '_ma_il']) {
+			expectEncoderErrorCode(
+				() =>
+					encodeNameConstraints({ permittedSubtrees: [{ base: { type: 'srv', value: service } }] }),
+				'invalid_srv_name_constraint',
+			);
+			expectEncoderErrorCode(
+				() => encodeSubjectAltName({ type: 'srv', value: `${service}.example.com` }),
+				'invalid_srv_name',
+			);
+		}
+	});
+
+	it('encodeNameConstraints and encodeSubjectAltName hold the SRVName Name to STD3 LDH labels', () => {
+		for (const name of ['example_com', '-example.com', 'example-.com', 'exa mple.com']) {
+			for (const value of [name, `_mail.${name}`]) {
+				expectEncoderErrorCode(
+					() => encodeNameConstraints({ permittedSubtrees: [{ base: { type: 'srv', value } }] }),
+					'invalid_srv_name_constraint',
+				);
+			}
+			expectEncoderErrorCode(
+				() => encodeSubjectAltName({ type: 'srv', value: `_mail.${name}` }),
+				'invalid_srv_name',
+			);
+		}
+		expectEncoderErrorCode(
+			() => encodeSubjectAltName({ type: 'srv', value: '_mail.xn--a.example' }),
+			'invalid_idn',
+		);
+		expectEncoderErrorCode(
+			() => encodeSubjectAltName({ type: 'srv', value: '_mail' }),
+			'invalid_srv_name',
+		);
+	});
+
+	it('encodeNameConstraints and encodeSubjectAltName store RFC 4985 §3 label separators as U+002E', () => {
+		for (const separator of ['\u3002', '\uff0e', '\uff61']) {
+			const value = `_mail.例子${separator}com`;
+			expect(
+				parseNameConstraints(
+					encodeNameConstraints({ permittedSubtrees: [{ base: { type: 'srv', value } }] }),
+				).permittedSubtrees,
+			).toEqual([{ base: { type: 'srv', value: '_mail.xn--fsqu00a.com' } }]);
+			expect(encodeSubjectAltName({ type: 'srv', value })).toEqual(
+				encodeSubjectAltName({ type: 'srv', value: '_mail.xn--fsqu00a.com' }),
+			);
+		}
+		expectEncoderErrorCode(
+			() =>
+				encodeNameConstraints({
+					permittedSubtrees: [{ base: { type: 'srv', value: '_mail.example\u3002\u3002com' } }],
+				}),
+			'invalid_srv_name_constraint',
+		);
 	});
 
 	it('encodeNameConstraints rejects a SRVName restriction outside the RFC 4985 §4 forms', () => {
@@ -946,7 +1129,7 @@ describe('extensions encoding', () => {
 		);
 		expectEncoderErrorCode(
 			() => encodeSubjectAltName({ type: 'srv', value: '_xmpé.example' }),
-			'invalid_ia5_string',
+			'invalid_srv_name',
 		);
 		expectEncoderErrorCode(
 			() => encodeSubjectAltName({ type: 'email', value: 'josé@example.com' }),

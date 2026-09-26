@@ -543,6 +543,32 @@ export function assertDerMaxDepth(
 		readonly allowOpaqueConstructedTags?: readonly number[];
 	},
 ): void {
+	walkDerTree(bytes, maxDepth, options, () => undefined);
+}
+
+/**
+ * Walks the full DER tree rooted in {@linkcode bytes} with no opaque containers,
+ * rejecting the end-of-contents marker at every element boundary.
+ *
+ * X.690 §8.1.5 reserves universal tag 0 for indefinite lengths, which DER
+ * forbids (§10.1). Primitive contents are not searched.
+ *
+ * @throws if the tree is malformed, nests beyond {@linkcode maxDepth}, or holds an end-of-contents element.
+ */
+export function assertStrictDer(bytes: Uint8Array, maxDepth: number = DEFAULT_MAX_DER_DEPTH): void {
+	walkDerTree(bytes, maxDepth, undefined, (element) => {
+		if (element.tag === 0x00) {
+			throw new Error('End-of-contents element in DER');
+		}
+	});
+}
+
+function walkDerTree(
+	bytes: Uint8Array,
+	maxDepth: number,
+	options: { readonly allowOpaqueConstructedTags?: readonly number[] } | undefined,
+	visit: (element: DerElement) => void,
+): void {
 	if (!Number.isSafeInteger(maxDepth) || maxDepth < 1) {
 		throw new Error('DER max depth must be a positive safe integer');
 	}
@@ -562,6 +588,7 @@ export function assertDerMaxDepth(
 		if (current.depth > maxDepth) {
 			throw new Error(`DER exceeds max depth of ${maxDepth}`);
 		}
+		visit(current.element);
 		if ((current.element.tag & 0x20) === 0) {
 			continue;
 		}

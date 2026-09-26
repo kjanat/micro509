@@ -888,6 +888,42 @@ describe('chain verification', () => {
 		}
 	});
 
+	it('processes a registeredID in the critical SAN of an empty-subject leaf', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Critical RegisteredID CA' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign'] },
+		});
+		const leafKeys = await generateKeyPair();
+		const issueLeaf = (
+			subjectAltNames: NonNullable<
+				NonNullable<Parameters<typeof createCertificate>[0]['extensions']>['subjectAltNames']
+			>,
+		) =>
+			createCertificate({
+				issuer: { commonName: 'Critical RegisteredID CA' },
+				subject: {},
+				publicKey: leafKeys.publicKey,
+				signerPrivateKey: ca.keyPair.privateKey,
+				issuerPublicKey: ca.keyPair.publicKey,
+				extensions: { keyUsage: ['digitalSignature'], subjectAltNames },
+			});
+		const processed = await issueLeaf([{ type: 'registeredID', value: '1.2.3.4' }]);
+		expect(unwrap(parseCertificatePem(processed.pem)).extensions).toContainEqual(
+			expect.objectContaining({ oid: OIDS.subjectAltName, critical: true }),
+		);
+		expect(
+			await verifyCertificateChain({ leaf: processed.pem, roots: [ca.certificate.pem] }),
+		).toMatchObject({ ok: true });
+
+		const withUpn = await issueLeaf([
+			{ type: 'registeredID', value: '1.2.3.4' },
+			{ type: 'otherName', typeId: UPN_TYPE_ID, value: utf8String('u@example.com') },
+		]);
+		expect(
+			await verifyCertificateChain({ leaf: withUpn.pem, roots: [ca.certificate.pem] }),
+		).toMatchObject({ ok: false, code: 'unrecognized_critical_extension' });
+	});
+
 	it('rejects a malformed critical directoryName SAN before applying name constraints', async () => {
 		const excludedName = buildDirectoryNameDerHex([
 			[{ oid: OIDS.organizationName, value: 'Blocked Org', encoding: 'utf8' }],
@@ -3855,6 +3891,14 @@ describe('validateCandidatePath direct', () => {
 				permittedSubtrees: [{ base: { type: 'srv', value: 'café.example' } }],
 			}),
 		).toMatchObject({ ok: true });
+		for (const separator of ['\u3002', '\uff0e', '\uff61']) {
+			expect(
+				await validateCandidatePath({
+					chain: parsedChain,
+					permittedSubtrees: [{ base: { type: 'srv', value: `_ntp.café${separator}example` } }],
+				}),
+			).toMatchObject({ ok: true });
+		}
 		expect(
 			await validateCandidatePath({
 				chain: parsedChain,
@@ -3871,6 +3915,12 @@ describe('validateCandidatePath direct', () => {
 		'_mail..example.com',
 		'example.com.',
 		`_${'m'.repeat(63)}`,
+		`_${'m'.repeat(16)}`,
+		'_123',
+		'_ma--il',
+		'example_com',
+		'-example.com',
+		'_mail.example-.com',
 	])('rejects the malformed initial SRVName constraint %s', async (value) => {
 		const chain = await issueChain();
 		const result = await validateCandidatePath({

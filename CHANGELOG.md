@@ -102,18 +102,28 @@ revocation })` report a certificate carrying `noRevAvail` or
   case-insensitively and its Name as that domain or a subdomain, both parts
   when the restriction has both. While a SRVName constraint is in force, a
   SRVName SAN that is not `_Service.Name` fails, and a malformed restriction
-  fails every SRVName.
+  fails every SRVName. Every SRVName, typed or received, is held to one
+  profile: an RFC 6335 §5.1 service name and a Name of STD3 LDH labels with
+  IDNA2008 A-labels. The builder stores U+3002, U+FF0E and U+FF61 as "."
+  (RFC 4985 §3), in SANs, restrictions and initial constraints.
 - `SubjectAltName` gains `otherName` (`typeId` and the DER of its value),
   `x400Address`, `ediPartyName` (content octets), and `registeredID`
   (dotted OID). Parsing produces them where it produced `unknown`, and the
   builder encodes them; an `otherName` with the SRVName or SmtpUTF8Mailbox
   type-id is refused (`other_name_type_id_has_variant`), as is a value that is
-  not one DER element (`invalid_other_name_value`) and `x400Address` or
-  `ediPartyName` contents without the top-level ORAddress or EDIPartyName
-  structure (`invalid_general_name_content`). `unknown` remains as raw builder input.
+  not one strict DER element or holds end-of-contents octets at any depth
+  (`invalid_other_name_value`). `x400Address` contents must follow the RFC
+  5280 Appendix A.1 ORAddress schema and `ediPartyName` contents the
+  EDIPartyName, with each DirectoryString validated by its encoding
+  (`invalid_general_name_content`); TeletexString, the Teletex and
+  extended-network-address extension attributes, and extension-attribute
+  types RFC 5280 does not define are refused as unsupported. `unknown`
+  remains as raw builder input.
 
 ### Changed
 
+- A typed SRVName SAN outside the RFC 6335 service grammar or STD3 LDH Name
+  syntax is refused with the new `invalid_srv_name`.
 - A critical `otherName` name constraint fails closed only for SANs of the
   same type-id, following X.509 §9.4.2.2, where each type-id is its own name
   form. A UPN constraint no longer rejects a SRVName or SmtpUTF8Mailbox SAN,
@@ -122,7 +132,10 @@ revocation })` report a certificate carrying `noRevAvail` or
   (`otherName 1.3.6.1.4.1.311.20.2.3`). An `otherName` constraint base is
   decoded into `typeId` and `value`, and a malformed one fails the parse.
 - A `registeredID` GeneralName whose OID is malformed fails the parse, in a
-  certificate and in a CRL.
+  certificate and in a CRL. A critical subjectAltName carrying a
+  `registeredID` is processed rather than reported as an
+  `unrecognized_critical_extension`; a critical `registeredID` name
+  constraint still fails closed.
 - A reference identifier's domain converts to A-labels by IDNA2008 lookup
   after RFC 5895 mapping (RFC 9525 §6.3), replacing the URL parser's UTS #46
   processing. The mapping follows RFC 5895 §2 in order: each character to its

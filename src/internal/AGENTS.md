@@ -58,6 +58,14 @@ internal/
   redundant-leading-zero alias cannot dodge a rule keyed on OID equality.
 - `x509/general-name.ts` is the only GeneralName decoder; certificate and CRL
   parsing both consume it so the two layers cannot drift on an alternative.
+- `x509/general-name-profile.ts` owns GeneralName content profiles: the
+  SRVName grammar, DirectoryString, EDIPartyName, and ORAddress (schema in
+  `x509/or-address.ts`). The builder, initial constraints, and the
+  name-constraint engine all call it, so issuance and evaluation accept the
+  same language.
+- `asn1/der.ts` `assertStrictDer` rejects end-of-contents at every depth; use
+  it where caller bytes must be DER throughout. The ordinary reader and
+  `assertDerMaxDepth` keep their behaviour.
 - Keep sign/verify dispatch symmetric in `signing.ts` and `sig-verify.ts`.
 - Preserve wire-level behavior in `shared/` helpers; tiny changes can fan out.
 - If a helper starts encoding protocol policy, move it to the owning domain or engine.

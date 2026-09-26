@@ -105,6 +105,15 @@ Current conformance evidence:
 - [x] Enforce SRVName restrictions per RFC 4985 §4: `_Service.Name`,
       `_Service`, or `Name`, the service matched case-insensitively and the
       Name matching that domain and its subdomains label by label.
+- [x] Hold every SRVName, in typed SANs, typed and initial restrictions, and
+      received names and restrictions under evaluation, to one profile: the
+      service is an RFC 6335 §5.1 service name (1 to 15 letters, digits and
+      hyphens, at least one letter, no leading, trailing or adjacent hyphen),
+      and the Name is STD3 LDH labels with each `xn--` label an IDNA2008
+      A-label. U+3002, U+FF0E and U+FF61 are stored as U+002E (RFC 4985 §3).
+      Applying RFC 6335 to received restrictions is micro509's acceptance
+      policy; a restriction outside it counts as malformed and rejects every
+      SRVName while in force.
 - [x] Fail closed per RFC 5280 §4.2.1.10 when a **critical** nameConstraints
       extension imposes a form whose constraint-matching semantics micro509
       does not implement
@@ -132,17 +141,39 @@ Current GeneralName matrix for `nameConstraints`:
 | `ediPartyName`              | preserved as raw payload         | fail closed when critical and form appears | `complete` |
 | `registeredID`              | decoded OID, preserved           | fail closed when critical and form appears | `complete` |
 
+- Typing a GeneralName alternative is separate from supporting it. A critical
+  subjectAltName carrying an `otherName` of an unrecognised type-id, an
+  `x400Address` or an `ediPartyName` is an unprocessed critical extension. A
+  `registeredID` is processed, since its whole value is an OID; its name
+  constraints still fail closed, and it satisfies no DNS, URI or SRV identity.
+- The builder validates the representation it emits. An `otherName` value is
+  one strict DER element with no end-of-contents octets at any depth
+  (X.690 §8.1.5, §10.1); micro509 does not know the schema behind an
+  arbitrary type-id. An `ediPartyName` holds an optional `[0]` and a
+  required `[1]` DirectoryString, and an `x400Address` follows the RFC 5280
+  Appendix A.1 ORAddress schema: fields, tags, order, multiplicity, string
+  repertoires and upper bounds, with DER SET ordering. TeletexString, the
+  Teletex extension attributes (types 2 to 6), extended-network-address
+  (type 22) and extension-attribute types RFC 5280 does not define are
+  refused as unsupported; RFC 5280 gives TeletexString no repertoire to
+  validate. Parsing keeps both forms as opaque bytes.
+
 - Domain names follow IDNA2008 (RFC 5890-5893, RFC 8753). The derived
   property values, the Unicode properties the contextual and Bidi rules read,
   and the RFC 5895 width decompositions are frozen to Unicode 12.0.0; NFC and
   case mapping come from the runtime. The builder converts U-labels to
   A-labels in dNSName and rfc822Name SANs, SmtpUTF8Mailbox domains, the Name
-  of a SRVName, and dNSName and rfc822Name constraints, and checks every
+  of a SRVName and SRVName restriction, and dNSName and rfc822Name
+  constraints, and checks every
   `xn--` label round trips, under the RFC 5891 §4 registration tests.
   Caller-supplied initial DNS and mail constraints convert under the §5
   lookup tests. A reference identifier converts after RFC 5895 mapping (RFC
   9525 §6.3). A URI host is not converted. RFC 5280 §7.4 maps an IRI to a URI
   by percent-encoding and forbids converting its ireg-name.
+- RFC 4985 §3 names the IDNA2003 conversion of RFC 3490 for the SRVName
+  Name. micro509 applies IDNA2008 instead, as it does for dNSName under RFC
+  9549; that is an implementation profile rather than the historical
+  algorithm.
 - A name with no IDN label passes the builder unchecked, so a successful
   conversion does not establish that the whole name is a valid DNS name.
   ASCII labels beside an IDN label must be NR-LDH.

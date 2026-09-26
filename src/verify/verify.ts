@@ -43,7 +43,10 @@ import {
 	loadSingleCertificate,
 	verifyCertificateSignature,
 } from '#micro509/internal/verify/verify-path';
-import { splitSrvNameRestriction } from '#micro509/internal/x509/general-name';
+import {
+	normalizeLabelSeparators,
+	parseSrvNameRestriction,
+} from '#micro509/internal/x509/general-name-profile';
 import type {
 	ErrorResult,
 	IndexedErrorResult,
@@ -1620,7 +1623,6 @@ const UNINTERPRETED_GENERAL_NAME_TYPES: ReadonlySet<SubjectAltName['type']> = ne
 	'otherName',
 	'x400Address',
 	'ediPartyName',
-	'registeredID',
 	'unknown',
 ]);
 
@@ -1942,8 +1944,9 @@ function toAsciiInitialNameConstraint(subtree: GeneralSubtree): GeneralSubtree |
 	if (base.type !== 'dns' && base.type !== 'email' && base.type !== 'srv') {
 		return subtree;
 	}
-	const prefix = unconvertedConstraintPrefix(base.type, base.value);
-	const domain = base.value.slice(prefix.length);
+	const source = base.type === 'srv' ? normalizeLabelSeparators(base.value) : base.value;
+	const prefix = unconvertedConstraintPrefix(base.type, source);
+	const domain = source.slice(prefix.length);
 	const converted =
 		base.type === 'srv' && domain.length === 0 ? undefined : domainToAscii(domain, 'lookup');
 	if (converted !== undefined && !converted.ok) {
@@ -1952,7 +1955,7 @@ function toAsciiInitialNameConstraint(subtree: GeneralSubtree): GeneralSubtree |
 	const value = `${prefix}${converted?.value ?? ''}`;
 	if (
 		!/^[\x20-\x7e]*$/.test(value) ||
-		(base.type === 'srv' && splitSrvNameRestriction(value) === undefined)
+		(base.type === 'srv' && parseSrvNameRestriction(value) === undefined)
 	) {
 		return undefined;
 	}
