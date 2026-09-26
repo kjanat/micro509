@@ -43,6 +43,7 @@ import {
 	loadSingleCertificate,
 	verifyCertificateSignature,
 } from '#micro509/internal/verify/verify-path';
+import { splitSrvNameRestriction } from '#micro509/internal/x509/general-name';
 import type {
 	ErrorResult,
 	IndexedErrorResult,
@@ -1615,27 +1616,16 @@ function findUnprocessedCriticalExtension(certificate: ParsedCertificate): strin
 	return undefined;
 }
 
+const UNINTERPRETED_GENERAL_NAME_TYPES: ReadonlySet<SubjectAltName['type']> = new Set([
+	'otherName',
+	'x400Address',
+	'ediPartyName',
+	'registeredID',
+	'unknown',
+]);
+
 function isUninterpretedGeneralName(name: SubjectAltName): boolean {
-	switch (name.type) {
-		case 'otherName':
-		case 'x400Address':
-		case 'ediPartyName':
-		case 'registeredID':
-		case 'unknown':
-			return true;
-		case 'dns':
-		case 'ip':
-		case 'email':
-		case 'uri':
-		case 'srv':
-		case 'smtpUtf8Mailbox':
-		case 'directoryName':
-			return false;
-		default: {
-			const _exhaustive: never = name;
-			throw new Error(`Unhandled SubjectAltName type: ${String(_exhaustive)}`);
-		}
-	}
+	return UNINTERPRETED_GENERAL_NAME_TYPES.has(name.type);
 }
 
 /** Constructs a {@linkcode VerifyChainFailure} with the given code, message, optional chain index, and details. */
@@ -1953,14 +1943,20 @@ function toAsciiInitialNameConstraint(subtree: GeneralSubtree): GeneralSubtree |
 		return subtree;
 	}
 	const prefix = unconvertedConstraintPrefix(base.type, base.value);
-	if (base.type === 'srv' && prefix === base.value) {
-		return subtree;
-	}
-	const converted = domainToAscii(base.value.slice(prefix.length), 'lookup');
-	if (!converted.ok || !/^[\x20-\x7e]*$/.test(converted.value)) {
+	const domain = base.value.slice(prefix.length);
+	const converted =
+		base.type === 'srv' && domain.length === 0 ? undefined : domainToAscii(domain, 'lookup');
+	if (converted !== undefined && !converted.ok) {
 		return undefined;
 	}
-	return { ...subtree, base: { ...base, value: `${prefix}${converted.value}` } };
+	const value = `${prefix}${converted?.value ?? ''}`;
+	if (
+		!/^[\x20-\x7e]*$/.test(value) ||
+		(base.type === 'srv' && splitSrvNameRestriction(value) === undefined)
+	) {
+		return undefined;
+	}
+	return { ...subtree, base: { ...base, value } };
 }
 
 /** The leading `.` of a domain constraint, or the `_Service` label of a SRVName constraint with its dot. */

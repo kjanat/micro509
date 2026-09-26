@@ -3839,6 +3839,49 @@ describe('validateCandidatePath direct', () => {
 		});
 	});
 
+	it('enforces a domain-only initial SRVName constraint in A-labels', async () => {
+		const chain = await issueChain({
+			leafSubjectAltNames: [{ type: 'srv', value: '_ntp.xn--caf-dma.example' }],
+		});
+		const parsedChain = unwrap(
+			parseCertificateChainPem(
+				`${chain.leaf.pem}${chain.intermediate.pem}${chain.root.certificate.pem}`,
+			),
+		);
+		expect(
+			await validateCandidatePath({
+				chain: parsedChain,
+				permittedSubtrees: [{ base: { type: 'srv', value: 'café.example' } }],
+			}),
+		).toMatchObject({ ok: true });
+		expect(
+			await validateCandidatePath({
+				chain: parsedChain,
+				permittedSubtrees: [{ base: { type: 'srv', value: 'other.example' } }],
+			}),
+		).toMatchObject({ ok: false, code: 'name_constraints_violated' });
+	});
+
+	it.each(['_mail!', '_é', '_mail.', '.example.com', '_mail..example.com', 'example.com.'])(
+		'rejects the malformed initial SRVName constraint %s',
+		async (value) => {
+			const chain = await issueChain();
+			const result = await validateCandidatePath({
+				chain: unwrap(
+					parseCertificateChainPem(
+						`${chain.leaf.pem}${chain.intermediate.pem}${chain.root.certificate.pem}`,
+					),
+				),
+				permittedSubtrees: [{ base: { type: 'srv', value } }],
+			});
+			expect(result).toMatchObject({
+				ok: false,
+				code: 'unsupported_initial_name_constraints',
+				details: { actual: 'srv' },
+			});
+		},
+	);
+
 	it('rejects malformed nested initial name constraint subtree containers', async () => {
 		const chain = await issueChain();
 		const input = {

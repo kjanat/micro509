@@ -41,6 +41,7 @@ export type ExtensionEncoderErrorCode =
 	| 'extension_must_be_non_critical'
 	| 'extension_not_supported_in_context'
 	| 'invalid_bmp_string'
+	| 'invalid_general_name_content'
 	| 'invalid_general_name_tag'
 	| 'invalid_ia5_string'
 	| 'invalid_idn'

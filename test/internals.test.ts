@@ -817,6 +817,14 @@ describe('extensions encoding', () => {
 			() => encodeSubjectAltName({ type: 'registeredID', value: '1' }),
 			'invalid_oid',
 		);
+		for (const type of ['x400Address', 'ediPartyName'] as const) {
+			for (const value of [Uint8Array.of(0xff), Uint8Array.of(0x30, 0x05)]) {
+				expectEncoderErrorCode(
+					() => encodeSubjectAltName({ type, value }),
+					'invalid_general_name_content',
+				);
+			}
+		}
 	});
 
 	it('encodeNameConstraints writes the three RFC 4985 §4 SRVName restriction forms', () => {
@@ -835,11 +843,24 @@ describe('extensions encoding', () => {
 	});
 
 	it('encodeNameConstraints rejects a SRVName restriction outside the RFC 4985 §4 forms', () => {
-		for (const value of ['', '_', '_mail.', '_m@il.example.com']) {
-			expectEncoderErrorCode(
-				() => encodeNameConstraints({ permittedSubtrees: [{ base: { type: 'srv', value } }] }),
-				'invalid_srv_name_constraint',
-			);
+		const values = [
+			'',
+			'_',
+			'_mail.',
+			'_m@il.example.com',
+			'.example.com',
+			'_mail..example.com',
+			'example.com.',
+			'ex*ample.com',
+			`${'a'.repeat(64)}.example`,
+		];
+		for (const value of values) {
+			for (const field of ['permittedSubtrees', 'excludedSubtrees'] as const) {
+				expectEncoderErrorCode(
+					() => encodeNameConstraints({ [field]: [{ base: { type: 'srv', value } }] }),
+					'invalid_srv_name_constraint',
+				);
+			}
 		}
 	});
 

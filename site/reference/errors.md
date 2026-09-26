@@ -93,6 +93,7 @@ Unions may gain members in minor releases; treat them as non-exhaustive and keep
 | `extension_must_be_non_critical`                        | RFC 5280 fixes this extension as non-critical                       |
 | `extension_not_supported_in_context`                    | Extension not allowed in this certificate/CSR context               |
 | `invalid_bmp_string`                                    | BMPString explicitText outside the Basic Multilingual Plane         |
+| `invalid_general_name_content`                          | x400Address or ediPartyName contents are not well-formed DER        |
 | `invalid_general_name_tag`                              | GeneralName tag outside the nine RFC 5280 §4.2.1.6 alternatives     |
 | `invalid_ia5_string`                                    | Non-ASCII input for an IA5String value                              |
 | `invalid_idn`                                           | Domain name is not valid IDNA2008 (RFC 5891 §4)                     |

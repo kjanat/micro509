@@ -66,6 +66,7 @@ import {
 	SUBJECT_ALT_NAME_EXTENSION_DEFINITION,
 	SUBJECT_KEY_IDENTIFIER_EXTENSION_DEFINITION,
 } from '#micro509/internal/x509/extension-registry';
+import { splitSrvNameRestriction } from '#micro509/internal/x509/general-name';
 import { GENERAL_NAME_WIRE_TAGS } from '#micro509/internal/x509/general-name-tags';
 import { isResultError } from '#micro509/result/result';
 import type { RelativeDistinguishedNameInput } from '#micro509/x509/name';
@@ -1568,24 +1569,19 @@ function toAsciiSrvName(value: string): string {
  */
 function toAsciiSrvNameConstraint(value: string): string {
 	const dot = value.indexOf('.');
-	const service = value.startsWith('_') ? (dot < 0 ? value : value.slice(0, dot)) : '';
-	const name = value.startsWith('_') ? (dot < 0 ? '' : value.slice(dot + 1)) : value;
-	if (
-		(service.length === 0 && name.length === 0) ||
-		(service.length > 0 && !/^_[A-Za-z0-9-]+$/.test(service)) ||
-		(value.startsWith('_') && dot >= 0 && name.length === 0)
-	) {
+	const service = value.startsWith('_') ? value.slice(0, dot < 0 ? value.length : dot) : '';
+	const name = service.length === 0 ? value : value.slice(service.length + 1);
+	const ascii =
+		service.length > 0 && dot < 0
+			? service
+			: `${service}${service.length === 0 ? '' : '.'}${name.length === 0 ? '' : toAsciiDomain(name)}`;
+	if (splitSrvNameRestriction(ascii) === undefined) {
 		throwExtensionEncoderError(
 			'invalid_srv_name_constraint',
 			'A SRVName constraint is _Service.Name, _Service, or Name (RFC 4985 §4)',
 		);
 	}
-	const asciiName = name.length === 0 ? '' : toAsciiDomain(name);
-	return service.length === 0
-		? asciiName
-		: asciiName.length === 0
-			? service
-			: `${service}.${asciiName}`;
+	return ascii;
 }
 
 /** An otherName type-id that has no dedicated {@linkcode SubjectAltName} variant. */
@@ -1598,6 +1594,18 @@ function validateOtherNameTypeId(typeId: string): string {
 		);
 	}
 	return oid;
+}
+
+function requireWellFormedDer(element: Uint8Array): Uint8Array {
+	try {
+		readRootElement(element, { maxDepth: DEFAULT_MAX_DER_DEPTH });
+	} catch {
+		throwExtensionEncoderError(
+			'invalid_general_name_content',
+			'x400Address or ediPartyName contents must be well-formed DER',
+		);
+	}
+	return element;
 }
 
 function requireSingleDerElement(value: Uint8Array): Uint8Array {
@@ -1671,9 +1679,9 @@ export function encodeSubjectAltName(value: SubjectAltName): Uint8Array {
 				]),
 			);
 		case 'x400Address':
-			return implicitConstructedContext(3, value.value);
+			return requireWellFormedDer(implicitConstructedContext(3, value.value));
 		case 'ediPartyName':
-			return implicitConstructedContext(5, value.value);
+			return requireWellFormedDer(implicitConstructedContext(5, value.value));
 		case 'registeredID':
 			return implicitPrimitiveContext(
 				8,

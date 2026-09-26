@@ -33,6 +33,10 @@ import {
 	parseIpAddressToBytes,
 } from '#micro509/internal/shared/ip';
 import { isMailboxDomain, isSmtpUtf8LocalPart } from '#micro509/internal/shared/mailbox';
+import {
+	type SrvNameRestriction,
+	splitSrvNameRestriction,
+} from '#micro509/internal/x509/general-name';
 import type { Micro509Error } from '#micro509/result/result';
 import type { InitialNameConstraintsInput } from '#micro509/verify/name-constraints';
 import type {
@@ -799,28 +803,18 @@ function nameMatchesConstraint(name: NameConstraintForm, constraint: NameConstra
 	return false;
 }
 
-/** A SRVName split into its `_Service` label and its Name, each lowercased and either possibly empty. */
-interface SrvNameParts {
-	readonly service: string;
-	readonly name: string;
-}
-
 /**
- * RFC 4985 §4 splits a SRVName restriction into `_Service.Name`, `_Service`, or
- * `Name`, the leading underscore marking the service (§2). A Name must be a
- * comparable domain, since §3 matches it label by label.
+ * A lowercased SRVName split per RFC 4985 §4. A Name must also be a comparable
+ * domain, since §3 matches it label by label.
  */
-function parseSrvName(value: string): SrvNameParts | undefined {
-	const lower = asciiLowercase(value);
-	const dot = lower.indexOf('.');
-	const service = lower.startsWith('_') ? lower.slice(0, dot < 0 ? lower.length : dot) : '';
-	const name = service.length === 0 ? lower : lower.slice(service.length + 1);
-	if (service.length > 0 && !/^_[a-z0-9-]+$/.test(service)) return undefined;
-	if (service.length > 0 && dot < 0) return { service, name: '' };
-	return isComparableDomain(name) ? { service, name } : undefined;
+function parseSrvName(value: string): SrvNameRestriction | undefined {
+	const parts = splitSrvNameRestriction(asciiLowercase(value));
+	return parts !== undefined && (parts.name.length === 0 || isComparableDomain(parts.name))
+		? parts
+		: undefined;
 }
 
-function isPresentedSrvName(parts: SrvNameParts | undefined): parts is SrvNameParts {
+function isPresentedSrvName(parts: SrvNameRestriction | undefined): parts is SrvNameRestriction {
 	return parts !== undefined && parts.service.length > 0 && parts.name.length > 0;
 }
 
@@ -832,10 +826,9 @@ function isPresentedSrvName(parts: SrvNameParts | undefined): parts is SrvNamePa
 function matchesSrvConstraint(name: string, constraint: string): boolean {
 	const presented = parseSrvName(name);
 	const restriction = parseSrvName(constraint);
-	if (!isPresentedSrvName(presented) || restriction === undefined) {
-		return false;
-	}
 	return (
+		isPresentedSrvName(presented) &&
+		restriction !== undefined &&
 		(restriction.service.length === 0 || presented.service === restriction.service) &&
 		(restriction.name.length === 0 ||
 			presented.name === restriction.name ||

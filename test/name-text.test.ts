@@ -136,6 +136,12 @@ describe('subjectAltNameLabel', () => {
 		expect(subjectAltNameToString({ type: 'registeredID', value: '1.2.3' }, { prefix: true })).toBe(
 			'Registered ID:1.2.3',
 		);
+		expect(
+			subjectAltNameToString(
+				{ type: 'x400Address', value: Uint8Array.of(0x30, 0x00) },
+				{ prefix: true },
+			),
+		).toBe('X400Name:3000');
 	});
 });
 

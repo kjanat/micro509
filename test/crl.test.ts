@@ -29,6 +29,7 @@ import {
 	sequence,
 	setOf,
 	tlv,
+	utf8String,
 } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { ALL_DISTRIBUTION_POINT_REASONS } from '#micro509/revocation/crl';
@@ -2384,13 +2385,19 @@ describe('crl', () => {
 			{ type: 'uri', value: 'http://example.test/complex-idp.crl' },
 			{ type: 'directoryName', derHex: parsedCa.subject.derHex },
 			{ type: 'registeredID', value: '1.2.3.4' },
+			{ type: 'otherName', typeId: '1.3.6.1.4.1.311.20.2.3', value: utf8String('u@example.test') },
+			{ type: 'x400Address', value: sequence([]) },
+			{ type: 'ediPartyName', value: explicitContext(1, utf8String('party')) },
 		] as const;
 		const shuffledNames = [
 			complexNames[3],
+			complexNames[7],
 			complexNames[1],
 			complexNames[0],
+			complexNames[8],
 			complexNames[5],
 			complexNames[4],
+			complexNames[6],
 			complexNames[2],
 		].flatMap((value) => (value === undefined ? [] : [value]));
 		const leafKeys = await generateKeyPair();

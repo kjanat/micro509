@@ -106,7 +106,8 @@ Current conformance evidence:
       `_Service`, or `Name`, the service matched case-insensitively and the
       Name matching that domain and its subdomains label by label.
 - [x] Fail closed per RFC 5280 §4.2.1.10 when a **critical** nameConstraints
-      extension imposes a form no specification gives matching semantics
+      extension imposes a form whose constraint-matching semantics micro509
+      does not implement
       (`x400Address`, `ediPartyName`, `registeredID`, and every `otherName`
       type-id other than SRVName) **and** an instance of that form appears in
       a subsequent certificate's SANs. Each `otherName` type-id is its own
