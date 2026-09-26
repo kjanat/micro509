@@ -28,6 +28,10 @@ runs:
       if: ${{ inputs.install-runner == 'true' }}
       uses: kjanat/runner@b6ffeff9bf51c5d7aba975433fabdf375eb1515c # v0.19.1
 
+    - name: Setup dprint
+      uses: kjanat/dprint-check@2a71b9c51a4bd9935243a16de38fa830dbaa30be # v3
+      with: { install-only: true }
+
     - name: Setup Deno
       id: setup-deno
       if: ${{ inputs.install-deno == 'true' }}
