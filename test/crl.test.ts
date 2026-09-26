@@ -276,7 +276,7 @@ describe('crl', () => {
 		});
 	});
 
-	it('parses CRL general names for email, IP, and unknown tags', async () => {
+	it('parses CRL general names for email, IP, and registeredID', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'General Name CRL Issuer' },
 			extensions: {
@@ -295,7 +295,7 @@ describe('crl', () => {
 						fullName: [
 							{ type: 'email', value: 'pki@example.test' },
 							{ type: 'ip', value: '2001:db8::7' },
-							{ type: 'unknown', tag: 0x88, value: Uint8Array.of(0xde, 0xad) },
+							{ type: 'registeredID', value: '1.2.3.4' },
 						],
 					},
 				},
@@ -311,7 +311,7 @@ describe('crl', () => {
 						fullName: [
 							{ type: 'email', value: 'pki@example.test' },
 							{ type: 'ip', value: '2001:db8:0:0:0:0:0:7' },
-							{ type: 'unknown', tag: 0x88, value: Uint8Array.of(0xde, 0xad) },
+							{ type: 'registeredID', value: '1.2.3.4' },
 						],
 					},
 				},
@@ -2383,7 +2383,7 @@ describe('crl', () => {
 			{ type: 'ip', value: '2001:db8::7' },
 			{ type: 'uri', value: 'http://example.test/complex-idp.crl' },
 			{ type: 'directoryName', derHex: parsedCa.subject.derHex },
-			{ type: 'unknown', tag: 0x88, value: Uint8Array.of(0xde, 0xad) },
+			{ type: 'registeredID', value: '1.2.3.4' },
 		] as const;
 		const shuffledNames = [
 			complexNames[3],
@@ -2451,7 +2451,7 @@ describe('crl', () => {
 		).toMatchObject({ ok: true, value: { status: 'good' } });
 	});
 
-	it('rejects delta CRLs when fullName unknown bytes or reason sets differ', async () => {
+	it('rejects delta CRLs when a fullName registeredID or reason sets differ', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Complex IDP Mismatch CA' },
 			extensions: {
@@ -2463,7 +2463,7 @@ describe('crl', () => {
 		const names = [
 			{ type: 'uri', value: 'http://example.test/complex-idp-mismatch.crl' },
 			{ type: 'directoryName', derHex: parsedCa.subject.derHex },
-			{ type: 'unknown', tag: 0x88, value: Uint8Array.of(0xde, 0xad) },
+			{ type: 'registeredID', value: '1.2.3.4' },
 		] as const;
 		const leafKeys = await generateKeyPair();
 		const leaf = await createCertificate({
@@ -2512,7 +2512,7 @@ describe('crl', () => {
 							fullName: [
 								{ type: 'uri', value: 'http://example.test/complex-idp-mismatch.crl' },
 								{ type: 'directoryName', derHex: parsedCa.subject.derHex },
-								{ type: 'unknown', tag: 0x88, value: Uint8Array.of(0xde, 0xae) },
+								{ type: 'registeredID', value: '1.2.3.5' },
 							],
 						},
 						onlySomeReasons: ['keyCompromise', 'cessationOfOperation'],

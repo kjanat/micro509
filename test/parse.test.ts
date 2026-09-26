@@ -1170,7 +1170,7 @@ describe('parse', () => {
 		}
 	});
 
-	it('parses certificate with unknown SAN type', async () => {
+	it('decodes raw registeredID builder input as a registeredID SAN', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Unknown SAN CA' },
 			extensions: {
@@ -1194,7 +1194,7 @@ describe('parse', () => {
 			},
 		});
 		const parsed = unwrap(parseCertificatePem(leaf.pem));
-		expect(parsed.subjectAltNames?.some((san) => san.type === 'unknown')).toBe(true);
+		expect(parsed.subjectAltNames).toContainEqual({ type: 'registeredID', value: '0.1.2' });
 	});
 
 	it('parses SRV-ID subjectAltName otherName values from certificates', async () => {
@@ -1224,10 +1224,8 @@ describe('parse', () => {
 		expect(parsed.subjectAltNames).toEqual([{ type: 'srv', value: '_imap.example.com' }]);
 	});
 
-	it('preserves a conformant unsupported otherName OID as an unknown entry', async () => {
-		// A structurally valid OtherName (type-id + [0] EXPLICIT value) carrying an
-		// OID the parser does not recognise is preserved, not rejected — a Microsoft
-		// UPN here.
+	it('decodes an otherName of an unrecognised type-id with its value element', async () => {
+		// A Microsoft UPN: type-id and a [0] EXPLICIT UTF8String value.
 		const { certificate } = await createSelfSignedCertificate({
 			subject: { commonName: 'unknown-othername.example' },
 			extensions: {
@@ -1245,8 +1243,13 @@ describe('parse', () => {
 		});
 
 		const parsed = unwrap(parseCertificatePem(certificate.pem));
-		expect(parsed.subjectAltNames).toHaveLength(1);
-		expect(parsed.subjectAltNames?.[0]).toMatchObject({ type: 'unknown', tag: 0xa0 });
+		expect(parsed.subjectAltNames).toEqual([
+			{
+				type: 'otherName',
+				typeId: '1.3.6.1.4.1.311.20.2.3',
+				value: tlv(0x0c, new TextEncoder().encode('user@example.com')),
+			},
+		]);
 	});
 
 	it('parses a conformant SRV-ID otherName carrying no inner SEQUENCE', async () => {
@@ -2388,9 +2391,8 @@ describe('parse: coverage — error paths', () => {
 		}
 	});
 
-	it('preserves a valid unsupported authorityInfoAccess GeneralName as unknown', async () => {
+	it('decodes an x400Address authorityInfoAccess location', async () => {
 		const aiaValue = sequence([
-			// x400Address [3] is a valid but unsupported GeneralName alternative.
 			sequence([objectIdentifier('1.3.6.1.5.5.7.48.2'), tlv(0xa3, new Uint8Array())]),
 		]);
 		const cert = await createSelfSignedCertificateWithRawExtensions({
@@ -2398,7 +2400,10 @@ describe('parse: coverage — error paths', () => {
 			extensions: { customExtensions: [{ oid: OIDS.authorityInfoAccess, value: aiaValue }] },
 		});
 		const parsed = unwrap(parseCertificatePem(cert.certificate.pem));
-		expect(parsed.authorityInfoAccess?.[0]?.location).toMatchObject({ type: 'unknown', tag: 0xa3 });
+		expect(parsed.authorityInfoAccess?.[0]?.location).toEqual({
+			type: 'x400Address',
+			value: new Uint8Array(),
+		});
 	});
 
 	it('parseAuthorityKeyIdentifier rejects malformed authorityCertIssuer shapes', () => {

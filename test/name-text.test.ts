@@ -101,11 +101,41 @@ describe('subjectAltNameLabel', () => {
 				{ type: 'email', value: 'a' },
 				{ type: 'uri', value: 'a' },
 				{ type: 'srv', value: 'a' },
+				{ type: 'smtpUtf8Mailbox', value: 'a' },
 				{ type: 'directoryName', derHex: '3000' },
+				{ type: 'otherName', typeId: '1.2.3', value: new Uint8Array() },
+				{ type: 'x400Address', value: new Uint8Array() },
+				{ type: 'ediPartyName', value: new Uint8Array() },
+				{ type: 'registeredID', value: '1.2.3' },
 				{ type: 'unknown', tag: 8, value: new Uint8Array() },
 			] satisfies readonly SubjectAltName[]
 		).map((name) => subjectAltNameLabel(name));
-		expect(labels).toEqual(['DNS', 'IP Address', 'email', 'URI', 'SRV', 'DirName', '[tag 8]']);
+		expect(labels).toEqual([
+			'DNS',
+			'IP Address',
+			'email',
+			'URI',
+			'SRV',
+			'SmtpUTF8Mailbox',
+			'DirName',
+			'othername',
+			'X400Name',
+			'EdiPartyName',
+			'Registered ID',
+			'[tag 8]',
+		]);
+	});
+
+	it('renders an otherName as its type-id and value hex, and a registeredID as its OID', () => {
+		expect(
+			subjectAltNameToString(
+				{ type: 'otherName', typeId: '1.2.3', value: Uint8Array.of(0x05, 0x00) },
+				{ prefix: true },
+			),
+		).toBe('othername:1.2.3:0500');
+		expect(subjectAltNameToString({ type: 'registeredID', value: '1.2.3' }, { prefix: true })).toBe(
+			'Registered ID:1.2.3',
+		);
 	});
 });
 

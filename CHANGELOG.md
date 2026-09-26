@@ -93,8 +93,35 @@ revocation })` report a certificate carrying `noRevAvail` or
   and `micro509/pkcs`. `createPkcs12MacData`, and `createPfx` through `mac`,
   throw these codes as a `ResultError`.
 
+- RFC 4985 §4 SRVName name constraints. `NameConstraintForm` gains
+  `{ type: 'srv', value }`, whose value is `_Service.Name`, `_Service`, or
+  `Name`. The builder writes it as an id-on-dnsSRV otherName with the Name in
+  A-labels and refuses any other shape (`invalid_srv_name_constraint`);
+  parsing decodes an id-on-dnsSRV otherName base to it, and it is accepted as
+  an initial constraint. Path validation matches a SRVName SAN's service
+  case-insensitively and its Name as that domain or a subdomain, both parts
+  when the restriction has both. While a SRVName constraint is in force, a
+  SRVName SAN that is not `_Service.Name` fails, and a malformed restriction
+  fails every SRVName.
+- `SubjectAltName` gains `otherName` (`typeId` and the DER of its value),
+  `x400Address`, `ediPartyName` (content octets), and `registeredID`
+  (dotted OID). Parsing produces them where it produced `unknown`, and the
+  builder encodes them; an `otherName` with the SRVName or SmtpUTF8Mailbox
+  type-id is refused (`other_name_type_id_has_variant`), as is a value that is
+  not one DER element (`invalid_other_name_value`). `unknown` remains as raw
+  builder input.
+
 ### Changed
 
+- A critical `otherName` name constraint fails closed only for SANs of the
+  same type-id, following X.509 §9.4.2.2, where each type-id is its own name
+  form. A UPN constraint no longer rejects a SRVName or SmtpUTF8Mailbox SAN,
+  and a certificate carrying a UPN still fails under it. The
+  `unsupported_name_constraints` detail names the type-id
+  (`otherName 1.3.6.1.4.1.311.20.2.3`). An `otherName` constraint base is
+  decoded into `typeId` and `value`, and a malformed one fails the parse.
+- A `registeredID` GeneralName whose OID is malformed fails the parse, in a
+  certificate and in a CRL.
 - A reference identifier's domain converts to A-labels by IDNA2008 lookup
   after RFC 5895 mapping (RFC 9525 §6.3), replacing the URL parser's UTS #46
   processing. The mapping follows RFC 5895 §2 in order: each character to its

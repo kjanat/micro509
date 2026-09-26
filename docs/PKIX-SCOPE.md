@@ -102,12 +102,18 @@ Current conformance evidence:
 - [x] Support initial permitted/excluded subtrees as validator inputs.
 - [x] Apply constraints across supported name forms, not just DNS SANs.
 - [x] Handle self-issued certificates correctly when evaluating constraints.
+- [x] Enforce SRVName restrictions per RFC 4985 §4: `_Service.Name`,
+      `_Service`, or `Name`, the service matched case-insensitively and the
+      Name matching that domain and its subdomains label by label.
 - [x] Fail closed per RFC 5280 §4.2.1.10 when a **critical** nameConstraints
-      extension imposes a form the validator cannot process (`otherName`,
-      `x400Address`, `ediPartyName`, `registeredID`) **and** an instance of
-      that form appears in a subsequent certificate's SANs; chains where the
-      form never appears stay acceptable, and unsupported forms in
-      non-critical extensions are ignored.
+      extension imposes a form no specification gives matching semantics
+      (`x400Address`, `ediPartyName`, `registeredID`, and every `otherName`
+      type-id other than SRVName) **and** an instance of that form appears in
+      a subsequent certificate's SANs. Each `otherName` type-id is its own
+      form (X.509 §9.4.2.2), so a UPN constraint does not reject an SRVName or
+      SmtpUTF8Mailbox. Chains where the form never appears stay acceptable,
+      unsupported forms in non-critical extensions are ignored, and initial
+      constraints of these forms are refused.
       (IETF Datatracker[^rfc5280])
 
 Current GeneralName matrix for `nameConstraints`:
@@ -119,7 +125,8 @@ Current GeneralName matrix for `nameConstraints`:
 | `iPAddress`                 | decode to address+mask bytes     | enforce                                    | `complete` |
 | `directoryName`             | preserve structured DN payload   | enforce with RFC 5280 semantic compare     | `complete` |
 | SmtpUTF8Mailbox `otherName` | decode to typed mailbox values   | enforce rfc822Name constraints by domain   | `complete` |
-| other `otherName`           | preserved as raw payload         | fail closed when critical and form appears | `complete` |
+| SRVName `otherName`         | decode to typed SRVName values   | enforce RFC 4985 §4 restrictions           | `complete` |
+| other `otherName`           | decode type-id and value DER     | fail closed per type-id when critical      | `complete` |
 | `x400Address`               | preserved as raw payload         | fail closed when critical and form appears | `complete` |
 | `ediPartyName`              | preserved as raw payload         | fail closed when critical and form appears | `complete` |
 | `registeredID`              | decoded OID, preserved           | fail closed when critical and form appears | `complete` |

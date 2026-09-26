@@ -45,7 +45,13 @@ import type {
 	MutableKnownParsedExtensionAccumulator,
 } from '#micro509/internal/x509/extension-registry';
 import { decodeAndApplyKnownExtension } from '#micro509/internal/x509/extension-registry';
-import { parseGeneralName, parseGeneralNames } from '#micro509/internal/x509/general-name';
+import {
+	decodeSrvName,
+	otherNameValueDer,
+	parseGeneralName,
+	parseGeneralNames,
+	readOtherName,
+} from '#micro509/internal/x509/general-name';
 import type { ImportKeyResult, PublicKeyImportInput } from '#micro509/keys/keys';
 import {
 	derivePublicKey,
@@ -2240,7 +2246,7 @@ function parseGeneralSubtree(
 		throw new Error('GeneralSubtree base is required');
 	}
 	validateGeneralSubtreeBounds(children.slice(1));
-	return parseNameConstraintGeneralName(baseElement);
+	return parseNameConstraintGeneralName(source, baseElement);
 }
 
 function validateGeneralSubtreeBounds(children: readonly DerElement[]): void {
@@ -2263,10 +2269,17 @@ function validateGeneralSubtreeBounds(children: readonly DerElement[]): void {
 }
 
 /** Decode a GeneralName for use in name constraints (IP carries address+mask). */
-function parseNameConstraintGeneralName(element: DerElement): ParsedNameConstraintForm | undefined {
+function parseNameConstraintGeneralName(
+	source: Uint8Array,
+	element: DerElement,
+): ParsedNameConstraintForm | undefined {
 	switch (element.tag) {
-		case 0xa0:
-			return { type: 'otherName', value: new Uint8Array(element.value) };
+		case 0xa0: {
+			const { typeId, value } = readOtherName(source, element);
+			return typeId === OIDS.idOnDnsSrv
+				? { type: 'srv', value: decodeSrvName(value) }
+				: { type: 'otherName', typeId, value: otherNameValueDer(source, value) };
+		}
 		case 0x81:
 			return { type: 'email', value: decodeString(0x16, element.value) };
 		case 0x82:

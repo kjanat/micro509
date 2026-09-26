@@ -1898,6 +1898,23 @@ function compareGeneralNames(left: GeneralName, right: GeneralName): boolean {
 		}
 		return compareDistinguishedNames(leftName, rightName);
 	}
+	return compareOpaqueGeneralNames(left, right);
+}
+
+/** Encoding equality for the GeneralName alternatives carried as DER or an OID. */
+function compareOpaqueGeneralNames(left: GeneralName, right: GeneralName): boolean {
+	if (left.type === 'otherName' && right.type === 'otherName') {
+		return left.typeId === right.typeId && bytesEqual(left.value, right.value);
+	}
+	if (
+		(left.type === 'x400Address' && right.type === 'x400Address') ||
+		(left.type === 'ediPartyName' && right.type === 'ediPartyName')
+	) {
+		return bytesEqual(left.value, right.value);
+	}
+	if (left.type === 'registeredID' && right.type === 'registeredID') {
+		return left.value === right.value;
+	}
 	if (left.type === 'unknown' && right.type === 'unknown') {
 		return left.tag === right.tag && bytesEqual(left.value, right.value);
 	}

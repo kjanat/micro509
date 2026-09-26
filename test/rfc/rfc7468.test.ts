@@ -4645,10 +4645,10 @@ describe('RFC 7468: PKIX Textual Encodings', () => {
 				derTlv(REGISTERED_ID, readDerRootOrThrow(derOid('2.5.4.3')).value),
 			]);
 			expect(
-				parseGeneralNames(unused, readDerRootOrThrow(unused)).map((alternative) =>
-					alternative.type === 'unknown' ? alternative.tag : alternative.type,
+				parseGeneralNames(unused, readDerRootOrThrow(unused)).map(
+					(alternative) => alternative.type,
 				),
-			).toEqual([X400_ADDRESS, EDI_PARTY_NAME, REGISTERED_ID]);
+			).toEqual(['x400Address', 'ediPartyName', 'registeredID']);
 		});
 
 		it('reads one PKIXALGS signing algorithm from both AlgorithmIdentifier fields', () => {

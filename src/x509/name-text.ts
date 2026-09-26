@@ -50,7 +50,8 @@ export function subjectAltNameToString(
 
 /**
  * The `openssl x509 -text` label for a {@linkcode SubjectAltName} variant —
- * `DNS`, `IP Address`, `email`, `URI`, `SRV`, `SmtpUTF8Mailbox`, `DirName`, or `[tag <n>]` for an unrecognized tag.
+ * `DNS`, `IP Address`, `email`, `URI`, `SRV`, `SmtpUTF8Mailbox`, `DirName`, `othername`, `X400Name`,
+ * `EdiPartyName`, `Registered ID`, or `[tag <n>]` for raw `unknown` input.
  */
 export function subjectAltNameLabel(name: SubjectAltName): string {
 	switch (name.type) {
@@ -68,6 +69,14 @@ export function subjectAltNameLabel(name: SubjectAltName): string {
 			return 'SmtpUTF8Mailbox';
 		case 'directoryName':
 			return 'DirName';
+		case 'otherName':
+			return 'othername';
+		case 'x400Address':
+			return 'X400Name';
+		case 'ediPartyName':
+			return 'EdiPartyName';
+		case 'registeredID':
+			return 'Registered ID';
 		case 'unknown':
 			return `[tag ${String(name.tag)}]`;
 		default: {
@@ -137,9 +146,15 @@ function subjectAltNameText(name: SubjectAltName): string {
 		case 'uri':
 		case 'srv':
 		case 'smtpUtf8Mailbox':
+		case 'registeredID':
 			return name.value;
 		case 'directoryName':
 			return directoryNameText(name.derHex);
+		case 'otherName':
+			return `${name.typeId}:${toHex(name.value)}`;
+		case 'x400Address':
+		case 'ediPartyName':
+			return toHex(name.value);
 		case 'unknown':
 			return toHex(name.value);
 		default: {

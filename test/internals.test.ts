@@ -39,6 +39,7 @@ import {
 	octetString,
 	printableString,
 	readElement,
+	readRootElement,
 	readSequenceChildren,
 	sequence,
 	setOf,
@@ -93,6 +94,7 @@ import {
 	parseKeyUsageExtension,
 } from '#micro509/internal/x509/extension-bits';
 import { listExtensionDefinitions } from '#micro509/internal/x509/extension-registry';
+import { parseGeneralNames } from '#micro509/internal/x509/general-name';
 import { createPkcs12MacData, parsePkcs12MacDataOrThrow } from '#micro509/pkcs';
 import {
 	buildCertificateExtensions,
@@ -114,7 +116,7 @@ import {
 	getAuthorityInfoAccessMethodOid,
 	getExtendedKeyUsageOid,
 } from '#micro509/x509';
-import { parseCrlDistributionPoints } from '#micro509/x509/parse';
+import { parseCrlDistributionPoints, parseNameConstraints } from '#micro509/x509/parse';
 import {
 	childrenOf,
 	encodeUncheckedCrlDistributionPoints,
@@ -762,8 +764,7 @@ describe('extensions encoding', () => {
 	});
 
 	it('encodeSubjectAltName rejects an unknown GeneralName with an invalid wire tag', () => {
-		// x400Address [3], ediPartyName [5], and registeredID [8] are valid but
-		// unsupported alternatives and round-trip as their own tag.
+		// Raw x400Address [3], ediPartyName [5], and registeredID [8] input keeps its tag.
 		for (const tag of [0xa3, 0xa5, 0x88]) {
 			expect(encodeSubjectAltName({ type: 'unknown', tag, value: new Uint8Array() })[0]).toBe(tag);
 		}
@@ -773,6 +774,71 @@ describe('extensions encoding', () => {
 			expectEncoderErrorCode(
 				() => encodeSubjectAltName({ type: 'unknown', tag, value: Uint8Array.of(0x00) }),
 				'invalid_general_name_tag',
+			);
+		}
+	});
+
+	it('encodeSubjectAltName round-trips every typed GeneralName alternative through the decoder', () => {
+		const names = [
+			{
+				type: 'otherName',
+				typeId: '1.3.6.1.4.1.311.20.2.3',
+				value: utf8String('user@example.com'),
+			},
+			{ type: 'x400Address', value: sequence([printableString('x')]) },
+			{ type: 'ediPartyName', value: explicitContext(1, utf8String('party')) },
+			{ type: 'registeredID', value: '1.2.840.113549' },
+		] as const;
+		const encoded = sequence(names.map((name) => encodeSubjectAltName(name)));
+		expect(parseGeneralNames(encoded, readRootElement(encoded))).toEqual([...names]);
+	});
+
+	it('encodeSubjectAltName refuses an otherName it cannot encode faithfully', () => {
+		for (const typeId of [OIDS.idOnDnsSrv, OIDS.idOnSmtpUtf8Mailbox]) {
+			expectEncoderErrorCode(
+				() => encodeSubjectAltName({ type: 'otherName', typeId, value: utf8String('x') }),
+				'other_name_type_id_has_variant',
+			);
+		}
+		expectEncoderErrorCode(
+			() => encodeSubjectAltName({ type: 'otherName', typeId: '3.1', value: utf8String('x') }),
+			'invalid_oid',
+		);
+		expectEncoderErrorCode(
+			() =>
+				encodeSubjectAltName({
+					type: 'otherName',
+					typeId: '1.2.3.4',
+					value: concatBytes([utf8String('a'), utf8String('b')]),
+				}),
+			'invalid_other_name_value',
+		);
+		expectEncoderErrorCode(
+			() => encodeSubjectAltName({ type: 'registeredID', value: '1' }),
+			'invalid_oid',
+		);
+	});
+
+	it('encodeNameConstraints writes the three RFC 4985 §4 SRVName restriction forms', () => {
+		const encoded = encodeNameConstraints({
+			permittedSubtrees: [
+				{ base: { type: 'srv', value: '_mail' } },
+				{ base: { type: 'srv', value: 'café.example' } },
+				{ base: { type: 'srv', value: '_mail.café.example' } },
+			],
+		});
+		expect(parseNameConstraints(encoded).permittedSubtrees).toEqual([
+			{ base: { type: 'srv', value: '_mail' } },
+			{ base: { type: 'srv', value: 'xn--caf-dma.example' } },
+			{ base: { type: 'srv', value: '_mail.xn--caf-dma.example' } },
+		]);
+	});
+
+	it('encodeNameConstraints rejects a SRVName restriction outside the RFC 4985 §4 forms', () => {
+		for (const value of ['', '_', '_mail.', '_m@il.example.com']) {
+			expectEncoderErrorCode(
+				() => encodeNameConstraints({ permittedSubtrees: [{ base: { type: 'srv', value } }] }),
+				'invalid_srv_name_constraint',
 			);
 		}
 	});
