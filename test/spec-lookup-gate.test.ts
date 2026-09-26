@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import path from 'node:path';
 import { projectRoot } from '#test/helpers';
+import type { Decision } from '../.claude/hooks/spec-lookup-gate.ts';
 import {
-	type Decision,
 	decide,
 	EXCLUDE_GLOB,
 	parsePayload,

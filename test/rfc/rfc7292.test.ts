@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'bun:test';
+import type { ParsePfxResult } from '#micro509';
 import {
 	createSelfSignedCertificate,
 	exportPkcs8Der,
 	generateKeyPair,
-	type ParsePfxResult,
 	parsePfxDer,
 } from '#micro509';
 import {
@@ -126,6 +126,8 @@ const NON_BMP_PASSWORDS = [
 	{ label: 'a surrogate pair (U+1F600)', password: 'pw\u{1F600}' },
 	{ label: 'a lone high surrogate', password: 'pw\ud800' },
 	{ label: 'a lone low surrogate', password: '\udfffpw' },
+	{ label: 'U+FFFE', password: 'pw\u{FFFE}' },
+	{ label: 'U+FFFF', password: '\u{FFFF}pw' },
 ] as const;
 
 function rejection(promise: Promise<unknown>): Promise<unknown> {
@@ -294,7 +296,7 @@ describe('RFC 7292', () => {
 			);
 		});
 
-		describe('X.680 41.15 excludes the surrogate cells from BMPString; micro509 rejects such passwords', () => {
+		describe('X.680 41.15 excludes the surrogate cells, U+FFFE and U+FFFF from BMPString; micro509 rejects such passwords', () => {
 			for (const { label, password } of NON_BMP_PASSWORDS) {
 				it(`derivePkcs12Key throws password_not_bmp_string for ${label}`, async () => {
 					expectPasswordNotBmpString(

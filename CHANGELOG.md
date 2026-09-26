@@ -93,8 +93,58 @@ revocation })` report a certificate carrying `noRevAvail` or
   and `micro509/pkcs`. `createPkcs12MacData`, and `createPfx` through `mac`,
   throw these codes as a `ResultError`.
 
+- RFC 4985 §4 SRVName name constraints. `NameConstraintForm` gains
+  `{ type: 'srv', value }`, whose value is `_Service.Name`, `_Service`, or
+  `Name`. The builder writes it as an id-on-dnsSRV otherName with the Name in
+  A-labels and refuses any other shape (`invalid_srv_name_constraint`);
+  parsing decodes an id-on-dnsSRV otherName base to it, and it is accepted as
+  an initial constraint. Path validation matches a SRVName SAN's service
+  case-insensitively and its Name as that domain or a subdomain, both parts
+  when the restriction has both. While a SRVName constraint is in force, a
+  SRVName SAN that is not `_Service.Name` fails, and a malformed restriction
+  fails every SRVName. Every SRVName, typed or received, is held to one
+  profile: an RFC 6335 §5.1 service name and a Name of STD3 LDH labels with
+  IDNA2008 A-labels. The builder stores U+3002, U+FF0E and U+FF61 as "."
+  (RFC 4985 §3), in SANs, restrictions and initial constraints.
+- `SubjectAltName` gains `otherName` (`typeId` and the DER of its value),
+  `x400Address`, `ediPartyName` (content octets), and `registeredID`
+  (dotted OID). Parsing produces them where it produced `unknown`, and the
+  builder encodes them; an `otherName` with the SRVName or SmtpUTF8Mailbox
+  type-id is refused (`other_name_type_id_has_variant`), as is a value that is
+  not one DER element or holds, at any depth, a universal-class element whose
+  form or contents break X.690 or whose rules micro509 cannot check
+  (`invalid_other_name_value`). `x400Address` contents must follow the RFC
+  5280 Appendix A.1 ORAddress schema and `ediPartyName` contents the
+  EDIPartyName, with each DirectoryString validated by its encoding
+  (`invalid_general_name_content`); TeletexString, the Teletex and
+  extended-network-address extension attributes, and extension-attribute
+  types RFC 5280 does not define are refused as unsupported. `unknown`
+  remains as raw builder input.
+- TeletexString Name attribute values decode in certificate, CRL, OCSP and
+  PKCS #7 names and in `decodeDerString`, which refused them before. Decoding
+  follows the initial state X.690 §8.23.5.2 fixes: the T.61 primary set
+  (register entry 102) with SPACE and DELETE, reading 2/3 as # and 2/4 as ¤
+  (T.61 Figure 2 Note 4). A C0 control function, an escape or shift sequence,
+  a position T.61 Table 1 leaves empty, or an octet from 0x80 up is
+  unsupported and returns `malformed`. A TeletexString value matches only an
+  identical TeletexString value.
+
 ### Changed
 
+- A typed SRVName SAN outside the RFC 6335 service grammar or STD3 LDH Name
+  syntax is refused with the new `invalid_srv_name`.
+- A critical `otherName` name constraint fails closed only for SANs of the
+  same type-id, following X.509 §9.4.2.2, where each type-id is its own name
+  form. A UPN constraint no longer rejects a SRVName or SmtpUTF8Mailbox SAN,
+  and a certificate carrying a UPN still fails under it. The
+  `unsupported_name_constraints` detail names the type-id
+  (`otherName 1.3.6.1.4.1.311.20.2.3`). An `otherName` constraint base is
+  decoded into `typeId` and `value`, and a malformed one fails the parse.
+- A `registeredID` GeneralName whose OID is malformed fails the parse, in a
+  certificate and in a CRL. A critical subjectAltName carrying a
+  `registeredID` is processed rather than reported as an
+  `unrecognized_critical_extension`; a critical `registeredID` name
+  constraint still fails closed.
 - A reference identifier's domain converts to A-labels by IDNA2008 lookup
   after RFC 5895 mapping (RFC 9525 §6.3), replacing the URL parser's UTS #46
   processing. The mapping follows RFC 5895 §2 in order: each character to its
@@ -125,7 +175,8 @@ revocation })` report a certificate carrying `noRevAvail` or
   builder invariant. `CrlEncoderErrorCode` gains
   `next_update_not_after_this_update`. Parsed CRLs keep `nextUpdate` optional.
 - An RFC 7292 MAC password containing a UTF-16 surrogate (a non-BMP character
-  or a lone surrogate) is not a BMPString (RFC 7292 Appendix B.1).
+  or a lone surrogate), U+FFFE or U+FFFF is not a BMPString (RFC 7292 Appendix
+  B.1, X.680 §41.15).
   `createPkcs12MacData` and `createPfx` throw `ResultError` code
   `password_not_bmp_string` for it, and `parsePkcs12MacData`, `parsePfxDer`
   and `parsePfxPem` return that code. `parsePfxDer` and `parsePfxPem` reported
@@ -193,6 +244,35 @@ revocation })` report a certificate carrying `noRevAvail` or
   DER encoder. `CreateCertificateErrorCode` gains `validity_date_invalid`, and
   `CrlEncoderErrorCode` and `OcspEncoderErrorCode` gain `invalid_date`, thrown
   as a `ResultError` before encoding.
+- Decoding ASN.1 text dropped a leading U+FEFF as a byte order mark. A UTCTime
+  or GeneralizedTime whose contents began with the octets EF BB BF parsed as
+  the time that followed, in certificates, CRLs, OCSP responses and
+  `decodeDerTime`; it is now malformed. A UTF8String keeps the character in
+  `decodeDerString`, parsed names and DisplayText.
+- BMPString decoding and `derBmpString` accepted U+FFFE and U+FFFF, which
+  X.680 §41.15 leaves out of BMPString. `decodeDerString` and name parsing now
+  reject them as they reject surrogates, `derBmpString` throws, and a BMPString
+  explicitText holding one fails with `invalid_bmp_string`.
+- OBJECT IDENTIFIER decoding refused any arc above 2^53 − 1, so a certificate
+  or CRL carrying a 2.25 UUID OID failed to parse, and the builder refused such
+  an OID with `invalid_oid`. Arcs now decode, encode and canonicalize exactly
+  at any size; X.660 §7.6 leaves them unbounded.
+- `createPfx` wrote any `friendlyName` into its BMPString, including surrogate
+  pairs, U+FFFE, U+FFFF, an empty name and names over 255 characters, and PFX
+  parsing accepted them. RFC 2985 §5.5.1 makes friendlyName one BMPString of 1
+  to 255 characters. `createPfx` now throws `ResultError` code
+  `invalid_friendly_name` from the new `PfxEncoderErrorCode`, and parsing
+  returns `malformed`.
+- DisplayText parsing (user-notice `explicitText` and the `noticeRef`
+  organization) replaced invalid UTF-8 with U+FFFD, accepted octets outside
+  the IA5String and VisibleString repertoires, and accepted any length. It now
+  decodes the tagged type strictly with SIZE (1..200) and returns `malformed`
+  for anything else, so a certificate whose explicitText exceeds 200
+  characters, such as PKITS 4.8.19's, no longer parses.
+- CRL issuer and PKCS #7 signer issuer parsing decoded an attribute value that
+  failed its string type's decoding as UTF-8 and replaced invalid sequences
+  with U+FFFD. Such a value now returns `malformed`, as it does in a
+  certificate.
 
 ### Security
 

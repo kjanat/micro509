@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import type { ParsedCertificateRevocationList } from '#micro509';
 import {
 	checkCertificateRevocation,
 	checkCertificateRevocationAgainstCrl,
@@ -7,7 +8,6 @@ import {
 	createSelfSignedCertificate,
 	generateKeyPair,
 	isCertificateRevoked,
-	type ParsedCertificateRevocationList,
 	parseCertificatePem,
 	parseCertificateRevocationListDer,
 	parseCertificateRevocationListDerOrThrow,
@@ -29,6 +29,7 @@ import {
 	sequence,
 	setOf,
 	tlv,
+	utf8String,
 } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { ALL_DISTRIBUTION_POINT_REASONS } from '#micro509/revocation/crl';
@@ -98,6 +99,54 @@ describe('crl', () => {
 			ok: false,
 			code: 'signature_invalid',
 		});
+	});
+
+	it('keeps a leading U+FEFF in a UTF8String issuer value', async () => {
+		const keys = await generateKeyPair();
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'CRL Issuer' },
+			signerPrivateKey: keys.privateKey,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
+		});
+		const rewritten = rewriteCrlIssuerCommonName(
+			crl.der,
+			tlv(0x0c, Uint8Array.of(0xef, 0xbb, 0xbf, 0x41)),
+		);
+		expect(parseCertificateRevocationListDerOrThrow(rewritten).issuer.values.commonName).toBe(
+			'\u{FEFF}A',
+		);
+	});
+
+	it('decodes a TeletexString issuer value in its X.690 §8.23.5.2 initial state', async () => {
+		const keys = await generateKeyPair();
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'CRL Issuer' },
+			signerPrivateKey: keys.privateKey,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
+		});
+		const rewritten = rewriteCrlIssuerCommonName(
+			crl.der,
+			tlv(0x14, Uint8Array.of(0x55, 0x53, 0x24)),
+		);
+		expect(parseCertificateRevocationListDerOrThrow(rewritten).issuer.values.commonName).toBe(
+			'US\u{a4}',
+		);
+	});
+
+	it.each([
+		['invalid UTF-8 in a UTF8String', tlv(0x0c, Uint8Array.of(0x41, 0xff))],
+		['a surrogate in a BMPString', tlv(0x1e, Uint8Array.of(0xd8, 0x00))],
+		['a TeletexString octet from the right half', tlv(0x14, Uint8Array.of(0xef, 0xbb, 0xbf, 0x41))],
+	] as const)('rejects an issuer value holding %s', async (_label, value) => {
+		const keys = await generateKeyPair();
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'CRL Issuer' },
+			signerPrivateKey: keys.privateKey,
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
+		});
+		expect(
+			parseCertificateRevocationListDer(rewriteCrlIssuerCommonName(crl.der, value)),
+		).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
 	it('parses CRL entry extensions and delta CRL indicator', async () => {
@@ -276,7 +325,7 @@ describe('crl', () => {
 		});
 	});
 
-	it('parses CRL general names for email, IP, and unknown tags', async () => {
+	it('parses CRL general names for email, IP, and registeredID', async () => {
 		const issuer = await createSelfSignedCertificate({
 			subject: { commonName: 'General Name CRL Issuer' },
 			extensions: {
@@ -295,7 +344,7 @@ describe('crl', () => {
 						fullName: [
 							{ type: 'email', value: 'pki@example.test' },
 							{ type: 'ip', value: '2001:db8::7' },
-							{ type: 'unknown', tag: 0x88, value: Uint8Array.of(0xde, 0xad) },
+							{ type: 'registeredID', value: '1.2.3.4' },
 						],
 					},
 				},
@@ -311,7 +360,7 @@ describe('crl', () => {
 						fullName: [
 							{ type: 'email', value: 'pki@example.test' },
 							{ type: 'ip', value: '2001:db8:0:0:0:0:0:7' },
-							{ type: 'unknown', tag: 0x88, value: Uint8Array.of(0xde, 0xad) },
+							{ type: 'registeredID', value: '1.2.3.4' },
 						],
 					},
 				},
@@ -2383,14 +2432,20 @@ describe('crl', () => {
 			{ type: 'ip', value: '2001:db8::7' },
 			{ type: 'uri', value: 'http://example.test/complex-idp.crl' },
 			{ type: 'directoryName', derHex: parsedCa.subject.derHex },
-			{ type: 'unknown', tag: 0x88, value: Uint8Array.of(0xde, 0xad) },
+			{ type: 'registeredID', value: '1.2.3.4' },
+			{ type: 'otherName', typeId: '1.3.6.1.4.1.311.20.2.3', value: utf8String('u@example.test') },
+			{ type: 'x400Address', value: sequence([]) },
+			{ type: 'ediPartyName', value: explicitContext(1, utf8String('party')) },
 		] as const;
 		const shuffledNames = [
 			complexNames[3],
+			complexNames[7],
 			complexNames[1],
 			complexNames[0],
+			complexNames[8],
 			complexNames[5],
 			complexNames[4],
+			complexNames[6],
 			complexNames[2],
 		].flatMap((value) => (value === undefined ? [] : [value]));
 		const leafKeys = await generateKeyPair();
@@ -2451,7 +2506,7 @@ describe('crl', () => {
 		).toMatchObject({ ok: true, value: { status: 'good' } });
 	});
 
-	it('rejects delta CRLs when fullName unknown bytes or reason sets differ', async () => {
+	it('rejects delta CRLs when a fullName registeredID or reason sets differ', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Complex IDP Mismatch CA' },
 			extensions: {
@@ -2463,7 +2518,7 @@ describe('crl', () => {
 		const names = [
 			{ type: 'uri', value: 'http://example.test/complex-idp-mismatch.crl' },
 			{ type: 'directoryName', derHex: parsedCa.subject.derHex },
-			{ type: 'unknown', tag: 0x88, value: Uint8Array.of(0xde, 0xad) },
+			{ type: 'registeredID', value: '1.2.3.4' },
 		] as const;
 		const leafKeys = await generateKeyPair();
 		const leaf = await createCertificate({
@@ -2512,7 +2567,7 @@ describe('crl', () => {
 							fullName: [
 								{ type: 'uri', value: 'http://example.test/complex-idp-mismatch.crl' },
 								{ type: 'directoryName', derHex: parsedCa.subject.derHex },
-								{ type: 'unknown', tag: 0x88, value: Uint8Array.of(0xde, 0xae) },
+								{ type: 'registeredID', value: '1.2.3.5' },
 							],
 						},
 						onlySomeReasons: ['keyCompromise', 'cessationOfOperation'],
@@ -4297,6 +4352,34 @@ function removeCrlVersion(crlDer: Uint8Array): Uint8Array {
 		tbsChildren
 			.filter((child, index) => !(index === 0 && child.tag === 0x02))
 			.map((child) => sliceElement(tbsDer, child)),
+	);
+	return sequence([
+		rebuiltTbs,
+		sliceElement(crlDer, signatureAlgorithm),
+		sliceElement(crlDer, signatureValue),
+	]);
+}
+
+function rewriteCrlIssuerCommonName(crlDer: Uint8Array, value: Uint8Array): Uint8Array {
+	const topLevel = readSequenceChildren(crlDer);
+	const tbsCertList = topLevel[0];
+	const signatureAlgorithm = topLevel[1];
+	const signatureValue = topLevel[2];
+	if (
+		tbsCertList === undefined ||
+		signatureAlgorithm === undefined ||
+		signatureValue === undefined
+	) {
+		throw new Error('Malformed CRL');
+	}
+	const tbsDer = sliceElement(crlDer, tbsCertList);
+	const tbsChildren = readSequenceChildren(tbsDer);
+	const issuerIndex = tbsChildren[0]?.tag === 0x02 ? 2 : 1;
+	const issuer = sequence([setOf([sequence([objectIdentifier(OIDS.commonName), value])])]);
+	const rebuiltTbs = sequence(
+		tbsChildren.map((child, index) =>
+			index === issuerIndex ? issuer : sliceElement(tbsDer, child),
+		),
 	);
 	return sequence([
 		rebuiltTbs,

@@ -13,10 +13,10 @@
  */
 
 import { OIDS } from '#micro509/internal/asn1/oids';
+import type { CodePointRange } from '#micro509/internal/shared/rfc3454-tables';
 import {
 	A1_UNASSIGNED_RANGES,
 	B2_CASE_FOLD,
-	type CodePointRange,
 	NFKC_3_2_CORRECTIONS,
 } from '#micro509/internal/shared/rfc3454-tables';
 import { COMBINING_MARK_RANGES } from '#micro509/internal/shared/rfc4518-tables';
@@ -169,10 +169,9 @@ function compareIa5AttributeValue(
 }
 
 /**
- * True for the DirectoryString encodings the parser decodes to a comparable
- * string: UTF8String (0x0C), PrintableString (0x13), UniversalString (0x1C),
- * and BMPString (0x1E). TeletexString (0x14) is rejected at parse time, so it
- * never reaches comparison.
+ * True for the DirectoryString encodings compared after RFC 4518 preparation:
+ * UTF8String (0x0C), PrintableString (0x13), UniversalString (0x1C), and
+ * BMPString (0x1E).
  */
 export function isDirectoryStringTag(tag: number): boolean {
 	return tag === 0x0c || tag === 0x13 || tag === 0x1c || tag === 0x1e;

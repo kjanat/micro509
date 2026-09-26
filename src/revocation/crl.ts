@@ -1898,6 +1898,23 @@ function compareGeneralNames(left: GeneralName, right: GeneralName): boolean {
 		}
 		return compareDistinguishedNames(leftName, rightName);
 	}
+	return compareOpaqueGeneralNames(left, right);
+}
+
+/** Encoding equality for the GeneralName alternatives carried as DER or an OID. */
+function compareOpaqueGeneralNames(left: GeneralName, right: GeneralName): boolean {
+	if (left.type === 'otherName' && right.type === 'otherName') {
+		return left.typeId === right.typeId && bytesEqual(left.value, right.value);
+	}
+	if (
+		(left.type === 'x400Address' && right.type === 'x400Address') ||
+		(left.type === 'ediPartyName' && right.type === 'ediPartyName')
+	) {
+		return bytesEqual(left.value, right.value);
+	}
+	if (left.type === 'registeredID' && right.type === 'registeredID') {
+		return left.value === right.value;
+	}
 	if (left.type === 'unknown' && right.type === 'unknown') {
 		return left.tag === right.tag && bytesEqual(left.value, right.value);
 	}
@@ -2579,12 +2596,7 @@ function parseIssuer(source: Uint8Array, element: DerElement): ParsedName {
 			const oidElement = requireElement(parts[0], 'issuer attribute OID');
 			const valueElement = requireElement(parts[1], 'issuer attribute value');
 			const oid = decodeObjectIdentifier(oidElement.value);
-			let fieldValue: string;
-			try {
-				fieldValue = decodeString(valueElement.tag, valueElement.value);
-			} catch {
-				fieldValue = textDecoder.decode(valueElement.value);
-			}
+			const fieldValue = decodeNameValue(valueElement);
 			const fieldKey = nameFieldKeyFromOid(oid);
 			const attribute: ParsedNameAttribute =
 				fieldKey !== undefined
@@ -3065,6 +3077,3 @@ function hasReparseableCrlShape(
 ): crl is ParsedCertificateRevocationList & { readonly der: Uint8Array } {
 	return 'der' in crl && crl.der instanceof Uint8Array;
 }
-
-/** Shared UTF-8 decoder instance. */
-const textDecoder = new TextDecoder();

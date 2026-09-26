@@ -43,6 +43,10 @@ import {
 	loadSingleCertificate,
 	verifyCertificateSignature,
 } from '#micro509/internal/verify/verify-path';
+import {
+	normalizeLabelSeparators,
+	parseSrvNameRestriction,
+} from '#micro509/internal/x509/general-name-profile';
 import type {
 	ErrorResult,
 	IndexedErrorResult,
@@ -63,7 +67,7 @@ import type { ServiceIdentityInput } from '#micro509/verify/identity';
 import { matchServiceIdentity } from '#micro509/verify/identity';
 import type { InitialNameConstraintsInput } from '#micro509/verify/name-constraints';
 import type { PolicyValidationInput, PolicyValidationOutcome } from '#micro509/verify/policy';
-import type { ExtendedKeyUsage, GeneralSubtree } from '#micro509/x509/extensions';
+import type { ExtendedKeyUsage, GeneralSubtree, SubjectAltName } from '#micro509/x509/extensions';
 import type {
 	ParsedCertificate,
 	ParsedCertificateSigningRequest,
@@ -1607,12 +1611,23 @@ function findUnprocessedCriticalExtension(certificate: ParsedCertificate): strin
 		// interpret is unprocessed information (RFC 5280 §4.2).
 		if (
 			extension.oid === OIDS.subjectAltName &&
-			certificate.subjectAltNames?.some((name) => name.type === 'unknown') === true
+			certificate.subjectAltNames?.some(isUninterpretedGeneralName) === true
 		) {
 			return extension.oid;
 		}
 	}
 	return undefined;
+}
+
+const UNINTERPRETED_GENERAL_NAME_TYPES: ReadonlySet<SubjectAltName['type']> = new Set([
+	'otherName',
+	'x400Address',
+	'ediPartyName',
+	'unknown',
+]);
+
+function isUninterpretedGeneralName(name: SubjectAltName): boolean {
+	return UNINTERPRETED_GENERAL_NAME_TYPES.has(name.type);
 }
 
 /** Constructs a {@linkcode VerifyChainFailure} with the given code, message, optional chain index, and details. */
@@ -1920,18 +1935,43 @@ function validateInitialNameConstraintSubtrees(
 	return { ok: true, value: converted };
 }
 
-/** RFC 9549 §1 and RFC 9598 §6: a DNS or mail domain constraint in A-labels. */
+/**
+ * RFC 9549 §1, RFC 9598 §6 and RFC 4985 §3: a DNS or mail domain constraint, or
+ * the Name of a SRVName constraint, in A-labels.
+ */
 function toAsciiInitialNameConstraint(subtree: GeneralSubtree): GeneralSubtree | undefined {
 	const { base } = subtree;
-	if (base.type !== 'dns' && base.type !== 'email') {
+	if (base.type !== 'dns' && base.type !== 'email' && base.type !== 'srv') {
 		return subtree;
 	}
-	const prefix = base.value.startsWith('.') ? '.' : '';
-	const converted = domainToAscii(base.value.slice(prefix.length), 'lookup');
-	if (!converted.ok || !/^[\x20-\x7e]*$/.test(converted.value)) {
+	const source = base.type === 'srv' ? normalizeLabelSeparators(base.value) : base.value;
+	const prefix = unconvertedConstraintPrefix(base.type, source);
+	const domain = source.slice(prefix.length);
+	const converted =
+		base.type === 'srv' && domain.length === 0 ? undefined : domainToAscii(domain, 'lookup');
+	if (converted !== undefined && !converted.ok) {
 		return undefined;
 	}
-	return { ...subtree, base: { ...base, value: `${prefix}${converted.value}` } };
+	const value = `${prefix}${converted?.value ?? ''}`;
+	if (
+		!/^[\x20-\x7e]*$/.test(value) ||
+		(base.type === 'srv' && parseSrvNameRestriction(value) === undefined)
+	) {
+		return undefined;
+	}
+	return { ...subtree, base: { ...base, value } };
+}
+
+/** The leading `.` of a domain constraint, or the `_Service` label of a SRVName constraint with its dot. */
+function unconvertedConstraintPrefix(type: 'dns' | 'email' | 'srv', value: string): string {
+	if (type !== 'srv') {
+		return value.startsWith('.') ? '.' : '';
+	}
+	if (!value.startsWith('_')) {
+		return '';
+	}
+	const dot = value.indexOf('.');
+	return dot < 0 ? value : value.slice(0, dot + 1);
 }
 
 function describeInvalidInitialNameConstraintForm(subtree: unknown): string | undefined {
@@ -1951,6 +1991,8 @@ function describeInvalidInitialNameConstraintForm(subtree: unknown): string | un
 				: base.type;
 		case 'email':
 			return typeof base.value === 'string' && !base.value.includes('@') ? undefined : base.type;
+		case 'srv':
+			return typeof base.value === 'string' && base.value.length > 0 ? undefined : base.type;
 		case 'directoryName':
 			return typeof base.derHex === 'string' ? undefined : base.type;
 		case 'ip':

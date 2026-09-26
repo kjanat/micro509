@@ -63,57 +63,62 @@ Unions may gain members in minor releases; treat them as non-exhaustive and keep
 
 ### ExtensionEncoderErrorCode
 
-| Code                                                    | Meaning                                                           |
-| ------------------------------------------------------- | ----------------------------------------------------------------- |
-| `authority_info_access_empty`                           | AIA input has no access descriptions                              |
-| `authority_info_access_ocsp_not_uri`                    | An OCSP access method requires a URI location                     |
-| `certificate_policies_empty`                            | certificatePolicies lists no policies                             |
-| `crl_distribution_points_empty`                         | cRLDistributionPoints lists no points                             |
-| `directory_name_not_sequence`                           | directoryName payload is not a DER SEQUENCE                       |
-| `display_text_control_character`                        | explicitText contains a C0 or C1 control character (RFC 6818 §3)  |
-| `display_text_ia5_string`                               | explicitText requested as IA5String (RFC 6818 §3)                 |
-| `display_text_not_nfc`                                  | UTF8String or BMPString explicitText is not NFC (RFC 6818 §3)     |
-| `display_text_out_of_range`                             | User-notice DisplayText length outside RFC 5280 bounds            |
-| `distribution_point_crl_issuer_empty`                   | `cRLIssuer` present but holds no name                             |
-| `distribution_point_crl_issuer_not_directory_name`      | `cRLIssuer` entries must be directoryNames (RFC 5280 §4.2.1.13)   |
-| `distribution_point_empty`                              | Distribution point carries no field at all                        |
-| `distribution_point_full_name_empty`                    | `fullName` present but holds no GeneralName                       |
-| `distribution_point_relative_name_multiple_crl_issuers` | `nameRelativeToCRLIssuer` permits at most one `cRLIssuer`         |
-| `duplicate_extension_oid`                               | Same extension OID supplied twice                                 |
-| `duplicate_policy_oid`                                  | Same policy OID listed twice                                      |
-| `edwards_key_usage_forbids_agreement_bit`               | Ed25519/Ed448 keyUsage asserts an agreement or cipher bit         |
-| `edwards_key_usage_forbids_key_cert_sign`               | End-entity Edwards certificate asserts `keyCertSign`/`cRLSign`    |
-| `edwards_key_usage_requires_key_cert_sign`              | Edwards CA keyUsage missing `keyCertSign`                         |
-| `edwards_key_usage_requires_signing_bit`                | Edwards keyUsage missing a signing bit (RFC 9295 §3)              |
-| `email_name_constraint_names_mailbox`                   | rfc822Name constraint names a mailbox (RFC 9549 §2.2)             |
-| `empty_general_name_value`                              | dNSName/rfc822Name/URI/SRV value is empty                         |
-| `empty_subject_requires_subject_alt_name`               | Empty subject DN without a critical, non-empty SAN                |
-| `extended_key_usage_empty`                              | EKU list is empty                                                 |
-| `extension_must_be_critical`                            | RFC 5280 fixes this extension as critical                         |
-| `extension_must_be_non_critical`                        | RFC 5280 fixes this extension as non-critical                     |
-| `extension_not_supported_in_context`                    | Extension not allowed in this certificate/CSR context             |
-| `invalid_bmp_string`                                    | BMPString explicitText outside the Basic Multilingual Plane       |
-| `invalid_general_name_tag`                              | GeneralName tag outside the nine RFC 5280 §4.2.1.6 alternatives   |
-| `invalid_ia5_string`                                    | Non-ASCII input for an IA5String value                            |
-| `invalid_idn`                                           | Domain name is not valid IDNA2008 (RFC 5891 §4)                   |
-| `invalid_ip_name_constraint`                            | IP constraint bytes are not address+mask of one family            |
-| `invalid_oid`                                           | String is not an encodable OID within X.660 arc bounds            |
-| `invalid_smtp_utf8_mailbox`                             | SmtpUTF8Mailbox malformed or domain not A-labels (RFC 9598 §3)    |
-| `invalid_visible_string`                                | VisibleString explicitText outside printable ASCII                |
-| `key_usage_empty`                                       | keyUsage asserts no bits                                          |
-| `malformed_known_extension_value`                       | `customExtensions` payload with a known OID fails to decode as it |
-| `montgomery_key_usage_forbids_both_cipher_bits`         | X25519/X448 asserts both `encipherOnly` and `decipherOnly`        |
-| `montgomery_key_usage_forbids_signature_bit`            | X25519/X448 asserts a signature bit (RFC 8410 §12)                |
-| `montgomery_key_usage_requires_key_agreement`           | X25519/X448 keyUsage missing `keyAgreement` (RFC 9295 §3)         |
-| `name_constraints_empty`                                | nameConstraints has neither permitted nor excluded subtrees       |
-| `no_rev_avail_conflict`                                 | noRevAvail with cA or a revocation pointer (RFC 9608 §3)          |
-| `path_length_requires_ca`                               | `pathLength` on a non-CA basicConstraints                         |
-| `path_length_requires_key_cert_sign`                    | `pathLength` requires keyUsage asserting `keyCertSign`            |
-| `policy_constraints_empty`                              | policyConstraints carries neither field                           |
-| `policy_mappings_any_policy`                            | anyPolicy may not appear in a policy mapping                      |
-| `policy_mappings_empty`                                 | Mappings list is empty                                            |
-| `reserved_policy_qualifier_oid`                         | Custom qualifier uses a reserved qualifier OID                    |
-| `smtp_utf8_mailbox_ascii_local_part`                    | ASCII Local-part must use rfc822Name (RFC 9598 §3)                |
+| Code                                                    | Meaning                                                             |
+| ------------------------------------------------------- | ------------------------------------------------------------------- |
+| `authority_info_access_empty`                           | AIA input has no access descriptions                                |
+| `authority_info_access_ocsp_not_uri`                    | An OCSP access method requires a URI location                       |
+| `certificate_policies_empty`                            | certificatePolicies lists no policies                               |
+| `crl_distribution_points_empty`                         | cRLDistributionPoints lists no points                               |
+| `directory_name_not_sequence`                           | directoryName payload is not a DER SEQUENCE                         |
+| `display_text_control_character`                        | explicitText contains a C0 or C1 control character (RFC 6818 §3)    |
+| `display_text_ia5_string`                               | explicitText requested as IA5String (RFC 6818 §3)                   |
+| `display_text_not_nfc`                                  | UTF8String or BMPString explicitText is not NFC (RFC 6818 §3)       |
+| `display_text_out_of_range`                             | User-notice DisplayText length outside RFC 5280 bounds              |
+| `distribution_point_crl_issuer_empty`                   | `cRLIssuer` present but holds no name                               |
+| `distribution_point_crl_issuer_not_directory_name`      | `cRLIssuer` entries must be directoryNames (RFC 5280 §4.2.1.13)     |
+| `distribution_point_empty`                              | Distribution point carries no field at all                          |
+| `distribution_point_full_name_empty`                    | `fullName` present but holds no GeneralName                         |
+| `distribution_point_relative_name_multiple_crl_issuers` | `nameRelativeToCRLIssuer` permits at most one `cRLIssuer`           |
+| `duplicate_extension_oid`                               | Same extension OID supplied twice                                   |
+| `duplicate_policy_oid`                                  | Same policy OID listed twice                                        |
+| `edwards_key_usage_forbids_agreement_bit`               | Ed25519/Ed448 keyUsage asserts an agreement or cipher bit           |
+| `edwards_key_usage_forbids_key_cert_sign`               | End-entity Edwards certificate asserts `keyCertSign`/`cRLSign`      |
+| `edwards_key_usage_requires_key_cert_sign`              | Edwards CA keyUsage missing `keyCertSign`                           |
+| `edwards_key_usage_requires_signing_bit`                | Edwards keyUsage missing a signing bit (RFC 9295 §3)                |
+| `email_name_constraint_names_mailbox`                   | rfc822Name constraint names a mailbox (RFC 9549 §2.2)               |
+| `empty_general_name_value`                              | dNSName/rfc822Name/URI/SRV value is empty                           |
+| `empty_subject_requires_subject_alt_name`               | Empty subject DN without a critical, non-empty SAN                  |
+| `extended_key_usage_empty`                              | EKU list is empty                                                   |
+| `extension_must_be_critical`                            | RFC 5280 fixes this extension as critical                           |
+| `extension_must_be_non_critical`                        | RFC 5280 fixes this extension as non-critical                       |
+| `extension_not_supported_in_context`                    | Extension not allowed in this certificate/CSR context               |
+| `invalid_bmp_string`                                    | BMPString explicitText outside the X.680 BMPString repertoire       |
+| `invalid_general_name_content`                          | x400Address or ediPartyName contents fail their schema or encoding  |
+| `invalid_general_name_tag`                              | GeneralName tag outside the nine RFC 5280 §4.2.1.6 alternatives     |
+| `invalid_ia5_string`                                    | Non-ASCII input for an IA5String value                              |
+| `invalid_idn`                                           | Domain name is not valid IDNA2008 (RFC 5891 §4)                     |
+| `invalid_ip_name_constraint`                            | IP constraint bytes are not address+mask of one family              |
+| `invalid_other_name_value`                              | otherName value is not one DER element micro509 can validate        |
+| `invalid_oid`                                           | String is not an encodable OID within X.660 arc bounds              |
+| `invalid_smtp_utf8_mailbox`                             | SmtpUTF8Mailbox malformed or domain not A-labels (RFC 9598 §3)      |
+| `invalid_srv_name`                                      | SRVName not \_Service.Name with RFC 6335 service and LDH Name       |
+| `invalid_srv_name_constraint`                           | SRVName constraint not \_Service.Name, \_Service or Name (RFC 4985) |
+| `invalid_visible_string`                                | VisibleString explicitText outside printable ASCII                  |
+| `key_usage_empty`                                       | keyUsage asserts no bits                                            |
+| `malformed_known_extension_value`                       | `customExtensions` payload with a known OID fails to decode as it   |
+| `montgomery_key_usage_forbids_both_cipher_bits`         | X25519/X448 asserts both `encipherOnly` and `decipherOnly`          |
+| `montgomery_key_usage_forbids_signature_bit`            | X25519/X448 asserts a signature bit (RFC 8410 §12)                  |
+| `montgomery_key_usage_requires_key_agreement`           | X25519/X448 keyUsage missing `keyAgreement` (RFC 9295 §3)           |
+| `name_constraints_empty`                                | nameConstraints has neither permitted nor excluded subtrees         |
+| `no_rev_avail_conflict`                                 | noRevAvail with cA or a revocation pointer (RFC 9608 §3)            |
+| `other_name_type_id_has_variant`                        | otherName type-id belongs to the `srv` or `smtpUtf8Mailbox` variant |
+| `path_length_requires_ca`                               | `pathLength` on a non-CA basicConstraints                           |
+| `path_length_requires_key_cert_sign`                    | `pathLength` requires keyUsage asserting `keyCertSign`              |
+| `policy_constraints_empty`                              | policyConstraints carries neither field                             |
+| `policy_mappings_any_policy`                            | anyPolicy may not appear in a policy mapping                        |
+| `policy_mappings_empty`                                 | Mappings list is empty                                              |
+| `reserved_policy_qualifier_oid`                         | Custom qualifier uses a reserved qualifier OID                      |
+| `smtp_utf8_mailbox_ascii_local_part`                    | ASCII Local-part must use rfc822Name (RFC 9598 §3)                  |
 
 ## micro509/verify
 
@@ -302,7 +307,7 @@ and an OCSP response without `nextUpdate` under `ocspProfile: 'rfc9919'` as
 | `invalid_password`          | MAC or decryption rejects the supplied password                                                                                                                                                                   |
 | `kdf_iterations_exceeded`   | The PBES2 bags' combined PBKDF2 iteration counts exceed `maxKdfIterations` (2,000,000 default), or the MAC's count exceeds its own `maxKdfIterations` (100,000 default for the PKCS#12 KDF, 2,000,000 for PBMAC1) |
 | `malformed`                 | PFX structure fails to parse, including a PBKDF2 `iterationCount` outside 1 to 4294967295 in a PBES2 bag or a PBMAC1 MAC                                                                                          |
-| `password_not_bmp_string`   | The RFC 7292 MAC password (`macPassword`, or `password` as fallback) contains a UTF-16 surrogate                                                                                                                  |
+| `password_not_bmp_string`   | The RFC 7292 MAC password (`macPassword`, or `password` as fallback) contains a UTF-16 surrogate, U+FFFE or U+FFFF                                                                                                |
 | `password_not_utf8`         | The PBMAC1 password contains an unpaired UTF-16 surrogate                                                                                                                                                         |
 | `password_required`         | Encrypted content present but no password given                                                                                                                                                                   |
 | `unsupported_mac_algorithm` | The MAC is neither the SHA-256 RFC 7292 MAC nor a supported PBMAC1 variant                                                                                                                                        |
@@ -314,6 +319,14 @@ and an OCSP response without `nextUpdate` under `ocspProfile: 'rfc9919'` as
 | --------------------- | ----------------------------------- |
 | `invalid_certificate` | A certificate source fails to parse |
 
+### PfxEncoderErrorCode
+
+`createPfx` throws this as a `ResultError`.
+
+| Code                    | Meaning                                                                          |
+| ----------------------- | -------------------------------------------------------------------------------- |
+| `invalid_friendly_name` | A bag `friendlyName` is not a BMPString of 1 to 255 characters (RFC 2985 §5.5.1) |
+
 ### CreatePkcs12MacDataErrorCode
 
 `createPkcs12MacData`, and `createPfx` through its `mac` option, throw these as a
@@ -322,7 +335,7 @@ and an OCSP response without `nextUpdate` under `ocspProfile: 'rfc9919'` as
 | Code                      | Meaning                                                                                                    |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | `invalid_iterations`      | `iterations` is not a positive safe integer (RFC 7292 MAC) or not an integer from 1 to 4294967295 (PBMAC1) |
-| `password_not_bmp_string` | RFC 7292 MAC password contains a UTF-16 surrogate                                                          |
+| `password_not_bmp_string` | RFC 7292 MAC password contains a UTF-16 surrogate, U+FFFE or U+FFFF                                        |
 | `password_not_utf8`       | PBMAC1 password contains an unpaired UTF-16 surrogate                                                      |
 
 ### ParsePkcs12MacDataErrorCode
@@ -331,7 +344,7 @@ and an OCSP response without `nextUpdate` under `ocspProfile: 'rfc9919'` as
 | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `kdf_iterations_exceeded`   | With a password, the iteration count exceeds `maxKdfIterations` (100,000 default for the PKCS#12 KDF, 2,000,000 for PBMAC1), or an RFC 7292 MAC count exceeds `Number.MAX_SAFE_INTEGER`                                |
 | `malformed`                 | MacData structure fails to parse, an iteration count is below 1, a PBMAC1 count exceeds 4294967295 whatever `maxKdfIterations` allows, or, without a password, an RFC 7292 MAC count exceeds `Number.MAX_SAFE_INTEGER` |
-| `password_not_bmp_string`   | RFC 7292 MAC password contains a UTF-16 surrogate                                                                                                                                                                      |
+| `password_not_bmp_string`   | RFC 7292 MAC password contains a UTF-16 surrogate, U+FFFE or U+FFFF                                                                                                                                                    |
 | `password_not_utf8`         | PBMAC1 password contains an unpaired UTF-16 surrogate                                                                                                                                                                  |
 | `unsupported_mac_algorithm` | The MAC is neither the SHA-256 RFC 7292 MAC nor a supported PBMAC1 variant                                                                                                                                             |
 | `weak_mac_key_length`       | PBMAC1 PBKDF2 `keyLength` is below 20 octets                                                                                                                                                                           |

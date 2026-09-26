@@ -9,7 +9,8 @@ import {
 	unwrap,
 	verifyCertificateChain,
 } from '#micro509';
-import { PKITS_CASES, type PkitsCase } from '#test/pkits/manifest';
+import type { PkitsCase } from '#test/pkits/manifest';
+import { PKITS_CASES } from '#test/pkits/manifest';
 
 const PKITS_VALIDATION_TIME = new Date('2011-04-15T00:00:00Z');
 const REVOCATION_SECTIONS = new Set(['4.4', '4.5', '4.14', '4.15']);
@@ -19,6 +20,8 @@ const REVOCATION_TEST_NUMBERS = new Set(['4.7.4', '4.7.5']);
 // `unsupported_signature_algorithm_parameters`. Tracked with `it.failing` so the
 // suite flags us if DSA support ever lands (the test would start passing).
 const UNSUPPORTED_ALGORITHM_TESTS = new Set(['4.1.4', '4.1.5']);
+// PKITS 4.8.19 lets the application reject explicitText longer than 200 characters.
+const OVERSIZE_DISPLAY_TEXT_TEST = '4.8.19';
 
 const certificateDerCache = new Map<string, Promise<Uint8Array>>();
 const parsedCertificateCache = new Map<string, Promise<ParsedCertificate>>();
@@ -170,6 +173,11 @@ async function runPkitsCase(pkitsCase: PkitsCase): Promise<void> {
 			? {}
 			: { inhibitAnyPolicy: pkitsCase.inhibitAnyPolicy }),
 	});
+	if (pkitsCase.testNumber === OVERSIZE_DISPLAY_TEXT_TEST) {
+		expect(parseCertificateDer(leaf)).toMatchObject({ ok: false, code: 'malformed' });
+		expect(verifyResult.ok).toBe(false);
+		return;
+	}
 	if (!shouldEvaluateRevocation(pkitsCase) || !verifyResult.ok) {
 		expect(verifyResult.ok).toBe(pkitsCase.shouldValidate);
 		return;

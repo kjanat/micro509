@@ -12,11 +12,8 @@ import {
 } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { createPfx, parsePfxDer } from '#micro509/pkcs/pfx';
-import {
-	createPkcs12MacData,
-	type ParsedPkcs12MacData,
-	parsePkcs12MacData,
-} from '#micro509/pkcs/pkcs12-mac';
+import type { ParsedPkcs12MacData } from '#micro509/pkcs/pkcs12-mac';
+import { createPkcs12MacData, parsePkcs12MacData } from '#micro509/pkcs/pkcs12-mac';
 import { isResultError } from '#micro509/result';
 import { flattenedText, projectRoot, rfcDir } from '#test/helpers';
 

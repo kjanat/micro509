@@ -434,7 +434,9 @@ describe('RFC 7468: PKIX Textual Encodings', () => {
 			// "A conforming parser MAY interpret the contents as another label type
 			// but ought to be aware of the security implications discussed in the
 			// Security Considerations section." Relabelling a figure decodes to the
-			// same octets, and the certificate parser still rejects the structure.
+			// same octets, and the certificate parser rejects the structure unless the
+			// figure is one of the certificates Appendix A shows under a historical label.
+			const appendixCertificates = new Set(['X509 CERTIFICATE', 'X.509 CERTIFICATE']);
 			for (const label of examples.keys()) {
 				if (label === 'CERTIFICATE') {
 					continue;
@@ -444,7 +446,7 @@ describe('RFC 7468: PKIX Textual Encodings', () => {
 					Array.from(pemDecodeOrThrow(label, example(label))),
 				);
 				const parsed = parseCertificatePem(relabelled);
-				expect({ label, ok: parsed.ok }).toEqual({ label, ok: false });
+				expect({ label, ok: parsed.ok }).toEqual({ label, ok: appendixCertificates.has(label) });
 			}
 		});
 	});
@@ -4645,10 +4647,10 @@ describe('RFC 7468: PKIX Textual Encodings', () => {
 				derTlv(REGISTERED_ID, readDerRootOrThrow(derOid('2.5.4.3')).value),
 			]);
 			expect(
-				parseGeneralNames(unused, readDerRootOrThrow(unused)).map((alternative) =>
-					alternative.type === 'unknown' ? alternative.tag : alternative.type,
+				parseGeneralNames(unused, readDerRootOrThrow(unused)).map(
+					(alternative) => alternative.type,
 				),
-			).toEqual([X400_ADDRESS, EDI_PARTY_NAME, REGISTERED_ID]);
+			).toEqual(['x400Address', 'ediPartyName', 'registeredID']);
 		});
 
 		it('reads one PKIXALGS signing algorithm from both AlgorithmIdentifier fields', () => {

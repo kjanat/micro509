@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import type { CreatePfxInput, CreatePkcs12MacDataErrorCode } from '#micro509';
+import type { CreatePfxInput, CreatePkcs12MacDataErrorCode, PfxEncoderErrorCode } from '#micro509';
 import {
 	createCertificate,
 	createPfx,
@@ -1104,5 +1104,86 @@ describe('PFX MacData builder and password checks (RFC 7292)', () => {
 		});
 		const result = await parsePfxDer(pfx.der, { macPassword: 'pw\u{1F600}' });
 		expect(result.ok ? 'ok' : result.code).toBe('password_not_bmp_string');
+	});
+});
+
+describe('PFX friendlyName (RFC 2985 §5.5.1)', () => {
+	const bmp = (value: string) =>
+		Uint8Array.from(
+			[...value].flatMap((character) => {
+				const unit = character.charCodeAt(0);
+				return [unit >> 8, unit & 0xff];
+			}),
+		);
+
+	async function friendlyNameError(friendlyName: string): Promise<unknown> {
+		const keys = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
+		const error = await createPfx({
+			privateKeys: [{ privateKey: keys.privateKey, attributes: { friendlyName } }],
+		}).then(
+			() => undefined,
+			(thrown: unknown) => thrown,
+		);
+		return isResultError(error) ? error.code : error;
+	}
+
+	function parsedFriendlyName(values: readonly Uint8Array[]) {
+		return parsePfxDer(
+			wrapSafeBags([
+				sequence([
+					objectIdentifier('1.2.3.4.5.6'),
+					explicitContext(0, octetString(Uint8Array.of(0x01))),
+					setOf([sequence([objectIdentifier(OIDS.friendlyName), setOf([...values])])]),
+				]),
+			]),
+		).then((result) => (result.ok ? result.value.bags[0]?.attributes.friendlyName : result.code));
+	}
+
+	it('createPfx refuses a friendlyName that is not a BMPString of 1 to 255 characters', async () => {
+		const expected: PfxEncoderErrorCode = 'invalid_friendly_name';
+		for (const friendlyName of [
+			'',
+			'x'.repeat(256),
+			'key\u{1F600}',
+			'key\u{D800}',
+			'\u{DC00}key',
+			'key\u{FFFE}',
+			'key\u{FFFF}',
+		]) {
+			expect(await friendlyNameError(friendlyName)).toBe(expected);
+		}
+	});
+
+	it('createPfx writes 1- and 255-character friendlyNames that parse back unchanged', async () => {
+		const keys = await generateKeyPair({ kind: 'ecdsa', curve: 'P-256' });
+		for (const friendlyName of ['k', `clé-${'x'.repeat(251)}`]) {
+			const pfx = await buildPfx({
+				privateKeys: [{ privateKey: keys.privateKey, attributes: { friendlyName } }],
+			});
+			expect(unwrap(await parsePfxDer(pfx.der)).bags[0]?.attributes.friendlyName).toBe(
+				friendlyName,
+			);
+		}
+	});
+
+	it('parsePfxDer keeps a valid BMPString friendlyName unchanged', async () => {
+		expect(await parsedFriendlyName([tlv(0x1e, bmp('Ωk'))])).toBe('Ωk');
+		expect(await parsedFriendlyName([tlv(0x1e, bmp('x'.repeat(255)))])).toBe('x'.repeat(255));
+	});
+
+	it.each([
+		['a surrogate pair', [tlv(0x1e, Uint8Array.of(0xd8, 0x3d, 0xde, 0x00))]],
+		['an unpaired high surrogate', [tlv(0x1e, Uint8Array.of(0x00, 0x6b, 0xd8, 0x00))]],
+		['an unpaired low surrogate', [tlv(0x1e, Uint8Array.of(0xdc, 0x00, 0x00, 0x6b))]],
+		['U+FFFE', [tlv(0x1e, Uint8Array.of(0xff, 0xfe))]],
+		['U+FFFF', [tlv(0x1e, Uint8Array.of(0x00, 0x6b, 0xff, 0xff))]],
+		['an odd number of octets', [tlv(0x1e, Uint8Array.of(0x00, 0x6b, 0x00))]],
+		['no characters', [tlv(0x1e, new Uint8Array())]],
+		['256 characters', [tlv(0x1e, bmp('x'.repeat(256)))]],
+		['a UTF8String value', [tlv(0x0c, Uint8Array.of(0x6b))]],
+		['no value', []],
+		['two values', [tlv(0x1e, bmp('a')), tlv(0x1e, bmp('b'))]],
+	] as const)('parsePfxDer rejects a friendlyName with %s', async (_label, values) => {
+		expect(await parsedFriendlyName(values)).toBe('malformed');
 	});
 });

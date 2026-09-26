@@ -253,7 +253,8 @@ export function ia5String(value: string): Uint8Array {
 /**
  * Encodes a DER BMPString (tag `0x1e`) as big-endian UTF-16.
  *
- * @throws on lone surrogates and on code points above the Basic Multilingual Plane.
+ * @throws on lone surrogates, on U+FFFE and U+FFFF, which X.680 §41.15 leaves
+ * out of BMPString, and on code points above the Basic Multilingual Plane.
  */
 export function bmpString(value: string): Uint8Array {
 	const units: number[] = [];
@@ -264,6 +265,9 @@ export function bmpString(value: string): Uint8Array {
 		}
 		if (codePoint >= 0xd800 && codePoint <= 0xdfff) {
 			throw new Error('Invalid BMPString: lone surrogate');
+		}
+		if (codePoint >= 0xfffe) {
+			throw new Error('Invalid BMPString: U+FFFE and U+FFFF are not BMPString characters');
 		}
 		units.push((codePoint >> 8) & 0xff, codePoint & 0xff);
 	}
@@ -543,6 +547,21 @@ export function assertDerMaxDepth(
 		readonly allowOpaqueConstructedTags?: readonly number[];
 	},
 ): void {
+	walkDerTree(bytes, maxDepth, options, () => undefined);
+}
+
+/**
+ * Walks the full DER tree rooted in {@linkcode bytes}, calling {@linkcode visit}
+ * on each element before reading its children.
+ *
+ * @throws if the tree is malformed or nests beyond {@linkcode maxDepth}.
+ */
+export function walkDerTree(
+	bytes: Uint8Array,
+	maxDepth: number,
+	options: { readonly allowOpaqueConstructedTags?: readonly number[] } | undefined,
+	visit: (element: DerElement) => void,
+): void {
 	if (!Number.isSafeInteger(maxDepth) || maxDepth < 1) {
 		throw new Error('DER max depth must be a positive safe integer');
 	}
@@ -562,6 +581,7 @@ export function assertDerMaxDepth(
 		if (current.depth > maxDepth) {
 			throw new Error(`DER exceeds max depth of ${maxDepth}`);
 		}
+		visit(current.element);
 		if ((current.element.tag & 0x20) === 0) {
 			continue;
 		}

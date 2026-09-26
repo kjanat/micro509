@@ -9,6 +9,7 @@ import {
 	unwrap,
 } from '#micro509';
 import {
+	checkStrictDer,
 	decodeBoolean,
 	decodeIntegerMagnitude,
 	decodeIntegerNumber,
@@ -39,6 +40,7 @@ import {
 	octetString,
 	printableString,
 	readElement,
+	readRootElement,
 	readSequenceChildren,
 	sequence,
 	setOf,
@@ -93,6 +95,7 @@ import {
 	parseKeyUsageExtension,
 } from '#micro509/internal/x509/extension-bits';
 import { listExtensionDefinitions } from '#micro509/internal/x509/extension-registry';
+import { parseGeneralNames } from '#micro509/internal/x509/general-name';
 import { createPkcs12MacData, parsePkcs12MacDataOrThrow } from '#micro509/pkcs';
 import {
 	buildCertificateExtensions,
@@ -114,12 +117,29 @@ import {
 	getAuthorityInfoAccessMethodOid,
 	getExtendedKeyUsageOid,
 } from '#micro509/x509';
-import { parseCrlDistributionPoints } from '#micro509/x509/parse';
+import { parseCrlDistributionPoints, parseNameConstraints } from '#micro509/x509/parse';
 import {
 	childrenOf,
 	encodeUncheckedCrlDistributionPoints,
 	FAR_FUTURE_NEXT_UPDATE,
 } from '#test/helpers';
+
+/** An RFC 5280 ORAddress with every top-level component present. */
+function validOrAddress(): Uint8Array {
+	const text = (value: string) => new TextEncoder().encode(value);
+	return concatBytes([
+		sequence([
+			tlv(0x61, printableString('NL')),
+			tlv(0x83, text('Acme')),
+			tlv(0xa5, concatBytes([tlv(0x80, text('Doe')), tlv(0x81, text('Jane'))])),
+			tlv(0xa6, printableString('Sales')),
+		]),
+		sequence([sequence([printableString('dept'), printableString('42')])]),
+		setOf([
+			sequence([tlv(0x80, Uint8Array.of(1)), explicitContext(1, printableString('Jane Doe'))]),
+		]),
+	]);
+}
 
 function expectEncoderErrorCode(fn: () => unknown, code: string): void {
 	try {
@@ -298,12 +318,16 @@ describe('asn1 decoding', () => {
 		);
 	});
 
-	it('decodeObjectIdentifier rejects too-large subidentifiers before number overflow', () => {
-		expect(() =>
-			decodeObjectIdentifier(
-				Uint8Array.of(0x2a, 0x82, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x00),
-			),
-		).toThrow('too-large subidentifier');
+	it('decodeObjectIdentifier decodes arcs of any size exactly', () => {
+		for (const oid of [
+			'1.2.9007199254740993',
+			'2.25.329800735698586629295641978511506172918',
+			`2.25.${1n << 128n}`,
+			`2.25.${(1n << 1000n) + 1n}.7`,
+			`2.${(1n << 200n) - 1n}`,
+		]) {
+			expect(decodeObjectIdentifier(readElement(objectIdentifier(oid)).value)).toBe(oid);
+		}
 	});
 
 	it('requireElement throws on undefined value', () => {
@@ -346,6 +370,22 @@ describe('asn1 decoding', () => {
 		expect(() => parseTime(readElement(Uint8Array.of(0x18, 0x02, 0xc3, 0x28)))).toThrow(
 			'Invalid GeneralizedTime: invalid UTF-8',
 		);
+	});
+
+	it('parseTime rejects a time value that opens with the octets EF BB BF', () => {
+		const bom = Uint8Array.of(0xef, 0xbb, 0xbf);
+		const encoder = new TextEncoder();
+		expect(() =>
+			parseTime(readElement(tlv(0x17, concatBytes([bom, encoder.encode('260101000000Z')])))),
+		).toThrow('Invalid UTCTime');
+		expect(() =>
+			parseTime(readElement(tlv(0x18, concatBytes([bom, encoder.encode('20260101000000Z')])))),
+		).toThrow('Invalid GeneralizedTime');
+	});
+
+	it('decodeString keeps a leading U+FEFF in a UTF8String', () => {
+		expect(decodeString(0x0c, Uint8Array.of(0xef, 0xbb, 0xbf))).toBe('\u{FEFF}');
+		expect(decodeString(0x0c, Uint8Array.of(0xef, 0xbb, 0xbf, 0x41))).toBe('\u{FEFF}A');
 	});
 
 	it('decodeIntegerNumber accepts any value up to MAX_SAFE_INTEGER', () => {
@@ -417,11 +457,19 @@ describe('asn1 decoding', () => {
 		expect(() => decodeString(0x1e, Uint8Array.of(0xd8, 0x00))).toThrow(
 			'Invalid BMPString code point',
 		);
+		for (const noncharacter of [Uint8Array.of(0xff, 0xfe), Uint8Array.of(0xff, 0xff)]) {
+			expect(() => decodeString(0x1e, noncharacter)).toThrow('Invalid BMPString code point');
+		}
+		expect(decodeString(0x1e, Uint8Array.of(0xff, 0xfd))).toBe('\u{FFFD}');
 		expect(decodeString(0x1c, Uint8Array.of(0x00, 0x00, 0x00, 0x41))).toBe('A');
 		expect(() => decodeString(0x1c, Uint8Array.of(0x00, 0x11, 0x00, 0x00))).toThrow(
 			'Invalid UniversalString code point',
 		);
-		expect(() => decodeString(0x14, Uint8Array.of(0x41))).toThrow('TeletexString');
+		expect(decodeString(0x14, Uint8Array.of(0x41))).toBe('A');
+		expect(() => decodeString(0x14, Uint8Array.of(0xc1, 0x41))).toThrow(
+			'Unsupported TeletexString octet: 0xc1',
+		);
+		expect(() => decodeString(0x15, Uint8Array.of(0x41))).toThrow('Unsupported string tag: 21');
 	});
 
 	it('decodeBoolean rejects malformed DER encodings', () => {
@@ -434,6 +482,215 @@ describe('asn1 decoding', () => {
 	it('hexToBytes rejects malformed hex input', () => {
 		expect(() => hexToBytes('zz')).toThrow('Invalid hex byte: zz');
 		expect(() => hexToBytes('1g')).toThrow('Invalid hex byte: 1g');
+	});
+});
+
+describe('checkStrictDer', () => {
+	const octets = (...values: number[]) => Uint8Array.from(values);
+	const text = (value: string) => new TextEncoder().encode(value);
+
+	it.each([
+		['BOOLEAN FALSE', tlv(0x01, octets(0x00))],
+		['BOOLEAN TRUE', tlv(0x01, octets(0xff))],
+		['INTEGER zero', tlv(0x02, octets(0x00))],
+		['INTEGER -1', tlv(0x02, octets(0xff))],
+		['INTEGER 128', tlv(0x02, octets(0x00, 0x80))],
+		['INTEGER -129', tlv(0x02, octets(0xff, 0x7f))],
+		['INTEGER past 2^53', tlv(0x02, new Uint8Array(40).fill(0x7f))],
+		['empty BIT STRING', tlv(0x03, octets(0x00))],
+		['BIT STRING with zero padding', tlv(0x03, octets(0x03, 0xf8))],
+		['empty OCTET STRING', tlv(0x04, new Uint8Array())],
+		['NULL', tlv(0x05, new Uint8Array())],
+		[
+			'OBJECT IDENTIFIER with a 128-bit arc',
+			objectIdentifier('2.25.329800735698586629295641978511506172918'),
+		],
+		['ENUMERATED', tlv(0x0a, octets(0x01))],
+		['UTF8String', tlv(0x0c, text('ünïcode'))],
+		['NumericString', tlv(0x12, text('0123 456'))],
+		['PrintableString', tlv(0x13, text("Az 09 '()+,-./:=?"))],
+		['IA5String', tlv(0x16, octets(0x00, 0x7f))],
+		['UTCTime', tlv(0x17, text('260926120000Z'))],
+		['UTCTime on 29 February of year 00', tlv(0x17, text('000229000000Z'))],
+		['GeneralizedTime', tlv(0x18, text('20260926120000Z'))],
+		['GeneralizedTime with a fraction', tlv(0x18, text('20260926120000.05Z'))],
+		['GeneralizedTime in year 4', tlv(0x18, text('00040229000000Z'))],
+		['VisibleString', tlv(0x1a, text(' ~'))],
+		['UniversalString', tlv(0x1c, octets(0x00, 0x01, 0xf6, 0x00))],
+		['BMPString', tlv(0x1e, octets(0x00, 0x41))],
+		['empty SEQUENCE', sequence([])],
+		['empty SET', setOf([])],
+		[
+			'universal elements under context tags',
+			sequence([nullValue(), explicitContext(0, sequence([tlv(0x02, octets(0x01))]))]),
+		],
+		['opaque primitive context contents', tlv(0x80, octets(0x00, 0x00))],
+		['opaque primitive application contents', tlv(0x41, octets(0x05, 0x01, 0x00))],
+		['opaque primitive private contents', tlv(0xc1, octets(0x01, 0x01, 0x01))],
+		['REAL plus zero', tlv(0x09, new Uint8Array())],
+		['REAL PLUS-INFINITY', tlv(0x09, octets(0x40))],
+		['REAL minus zero', tlv(0x09, octets(0x43))],
+		['binary REAL 1', tlv(0x09, octets(0x80, 0x00, 0x01))],
+		['binary REAL -3 × 2^-2', tlv(0x09, octets(0xc0, 0xfe, 0x03))],
+		['binary REAL with a two-octet exponent', tlv(0x09, octets(0x81, 0x01, 0x00, 0x01))],
+		['decimal REAL 1.5', tlv(0x09, concatBytes([octets(0x03), text('15.E-1')]))],
+		['decimal REAL -5', tlv(0x09, concatBytes([octets(0x03), text('-5.E+0')]))],
+		['RELATIVE-OID', tlv(0x0d, octets(0x81, 0x00, 0x01))],
+		['ASCII GraphicString', tlv(0x19, text('EXAMPLE.COM'))],
+		['ASCII ObjectDescriptor', tlv(0x07, text('descriptor'))],
+		['GeneralString with C0 controls and DELETE', tlv(0x1b, octets(0x00, 0x0a, 0x41, 0x7f))],
+		['UTF8String holding SHIFT OUT', tlv(0x0c, octets(0x0e))],
+	] as const)('accepts %s', (_label, der) => {
+		expect(checkStrictDer(der)).toBe('valid');
+	});
+
+	it.each([
+		['TeletexString', tlv(0x14, text('x'))],
+		['VideotexString', tlv(0x15, text('x'))],
+		['TIME', tlv(0x0e, text('2026-09-26'))],
+		[
+			'EXTERNAL',
+			tlv(0x28, concatBytes([objectIdentifier('1.2.3'), explicitContext(0, nullValue())])),
+		],
+		[
+			'EMBEDDED PDV',
+			tlv(
+				0x2b,
+				concatBytes([explicitContext(0, tlv(0x85, new Uint8Array())), tlv(0x82, octets(0x01))]),
+			),
+		],
+		[
+			'CHARACTER STRING',
+			tlv(
+				0x3d,
+				concatBytes([explicitContext(0, tlv(0x85, new Uint8Array())), tlv(0x82, octets(0x41))]),
+			),
+		],
+		['binary REAL with a long-form exponent', tlv(0x09, octets(0x83, 0x01, 0x05, 0x01))],
+		['GeneralizedTime at second 60', tlv(0x18, text('20161231235960Z'))],
+		['UTF8String with an escape sequence', tlv(0x0c, octets(0x1b, 0x28, 0x42))],
+		['IA5String with ESCAPE', tlv(0x16, octets(0x41, 0x1b))],
+		['BMPString with SHIFT OUT', tlv(0x1e, octets(0x00, 0x0e))],
+		['UniversalString with CONTROL SEQUENCE INTRODUCER', tlv(0x1c, octets(0x00, 0x00, 0x00, 0x9b))],
+		['GraphicString with an escape sequence', tlv(0x19, octets(0x1b, 0x28, 0x42, 0x41))],
+		['GeneralString with SHIFT IN', tlv(0x1b, octets(0x41, 0x0f))],
+		['TeletexString inside a SEQUENCE', sequence([tlv(0x14, text('x'))])],
+	] as const)('reports %s as unsupported', (_label, der) => {
+		expect(checkStrictDer(der)).toBe('unsupported');
+	});
+
+	it('reports a malformed element over an unsupported one', () => {
+		expect(checkStrictDer(sequence([tlv(0x14, text('x')), tlv(0x05, octets(0x00))]))).toBe(
+			'malformed',
+		);
+		expect(checkStrictDer(sequence([tlv(0x05, octets(0x00)), tlv(0x14, text('x'))]))).toBe(
+			'malformed',
+		);
+	});
+
+	it.each([
+		['end-of-contents (X.690 §8.1.5, §10.1)', tlv(0x00, new Uint8Array())],
+		['empty BOOLEAN (X.690 §8.2.1)', tlv(0x01, new Uint8Array())],
+		['two-octet BOOLEAN (X.690 §8.2.1)', tlv(0x01, octets(0xff, 0xff))],
+		['BOOLEAN TRUE as 0x01 (X.690 §11.1)', tlv(0x01, octets(0x01))],
+		['empty INTEGER (X.690 §8.3.1)', tlv(0x02, new Uint8Array())],
+		['INTEGER with a redundant 0x00 (X.690 §8.3.2)', tlv(0x02, octets(0x00, 0x7f))],
+		['INTEGER with a redundant 0xFF (X.690 §8.3.2)', tlv(0x02, octets(0xff, 0x80))],
+		['ENUMERATED with a redundant 0x00 (X.690 §8.4)', tlv(0x0a, octets(0x00, 0x01))],
+		['BIT STRING with no initial octet (X.690 §8.6.2)', tlv(0x03, new Uint8Array())],
+		['BIT STRING with eight unused bits (X.690 §8.6.2.2)', tlv(0x03, octets(0x08, 0x00))],
+		['empty BIT STRING with unused bits (X.690 §8.6.2.3)', tlv(0x03, octets(0x01))],
+		['BIT STRING with a set padding bit (X.690 §11.2.1)', tlv(0x03, octets(0x01, 0x01))],
+		['NULL with contents (X.690 §8.8.2)', tlv(0x05, octets(0x00))],
+		['empty OBJECT IDENTIFIER (X.690 §8.19)', tlv(0x06, new Uint8Array())],
+		[
+			'OBJECT IDENTIFIER arc opening with 0x80 (X.690 §8.19.2)',
+			tlv(0x06, octets(0x2a, 0x80, 0x01)),
+		],
+		['unterminated OBJECT IDENTIFIER arc (X.690 §8.19.2)', tlv(0x06, octets(0x2a, 0x86))],
+		['UTF8String that is not UTF-8', tlv(0x0c, octets(0xc3, 0x28))],
+		['NumericString with a letter', tlv(0x12, text('12a'))],
+		['PrintableString with @', tlv(0x13, text('a@b'))],
+		['IA5String above 0x7F', tlv(0x16, octets(0x80))],
+		['VisibleString with DEL', tlv(0x1a, octets(0x7f))],
+		['UniversalString surrogate', tlv(0x1c, octets(0x00, 0x00, 0xd8, 0x00))],
+		['odd-length BMPString', tlv(0x1e, octets(0x00))],
+		['BMPString holding U+FFFF (X.680 §41.15)', tlv(0x1e, octets(0xff, 0xff))],
+		['UTCTime without seconds (X.690 §11.8)', tlv(0x17, text('2609261200Z'))],
+		['UTCTime with an offset (X.690 §11.8)', tlv(0x17, text('260926120000+0100'))],
+		['UTCTime in month 13', tlv(0x17, text('261326120000Z'))],
+		['UTCTime at hour 24 (X.690 §11.8)', tlv(0x17, text('260926240000Z'))],
+		[
+			'GeneralizedTime with a trailing fraction zero (X.690 §11.7)',
+			tlv(0x18, text('20260926120000.50Z')),
+		],
+		['GeneralizedTime with a zero fraction (X.690 §11.7)', tlv(0x18, text('20260926120000.0Z'))],
+		['GeneralizedTime with a decimal comma (X.690 §11.7)', tlv(0x18, text('20260926120000,5Z'))],
+		['GeneralizedTime in local time (X.690 §11.7)', tlv(0x18, text('20260926120000'))],
+		['GeneralizedTime on 29 February 2025', tlv(0x18, text('20250229000000Z'))],
+		['GeneralizedTime on 29 February 1900', tlv(0x18, text('19000229000000Z'))],
+		[
+			'GeneralizedTime with a BOM',
+			tlv(0x18, concatBytes([octets(0xef, 0xbb, 0xbf), text('20260926120000Z')])),
+		],
+		['constructed OCTET STRING (X.690 §10.2)', tlv(0x24, octetString(octets(0x01)))],
+		['constructed BIT STRING (X.690 §10.2)', tlv(0x23, bitString(octets(0x01)))],
+		['constructed UTF8String (X.690 §10.2)', tlv(0x2c, utf8String('x'))],
+		['constructed BOOLEAN (X.690 §8.2.1)', tlv(0x21, tlv(0x01, octets(0xff)))],
+		['primitive SEQUENCE (X.690 §8.9.1)', tlv(0x10, new Uint8Array())],
+		['primitive SET (X.690 §8.11.1)', tlv(0x11, new Uint8Array())],
+		['reserved universal tag 15', tlv(0x0f, new Uint8Array())],
+		['NULL with contents inside a SEQUENCE', sequence([tlv(0x05, octets(0x00))])],
+		[
+			'BOOLEAN TRUE as 0x01 under a context tag',
+			explicitContext(3, sequence([tlv(0x01, octets(0x01))])),
+		],
+		['BOOLEAN TRUE as 0x01 under an application tag', tlv(0x61, tlv(0x01, octets(0x01)))],
+		['trailing data after the element', concatBytes([nullValue(), nullValue()])],
+		['REAL in base 8 (X.690 §11.3.1)', tlv(0x09, octets(0x90, 0x00, 0x01))],
+		['REAL with scaling factor 1 (X.690 §11.3.1)', tlv(0x09, octets(0x84, 0x00, 0x01))],
+		['REAL with an even mantissa (X.690 §11.3.1)', tlv(0x09, octets(0x80, 0x00, 0x02))],
+		[
+			'REAL mantissa with a leading zero octet (X.690 §11.3.1)',
+			tlv(0x09, octets(0x80, 0x00, 0x00, 0x01)),
+		],
+		['REAL with no mantissa (X.690 §8.5.7)', tlv(0x09, octets(0x80, 0x00))],
+		[
+			'REAL with a padded two-octet exponent (X.690 §11.3.1)',
+			tlv(0x09, octets(0x81, 0x00, 0x01, 0x01)),
+		],
+		['REAL special value with a second octet (X.690 §8.5.9)', tlv(0x09, octets(0x40, 0x00))],
+		['reserved REAL special value (X.690 §8.5.9)', tlv(0x09, octets(0x44))],
+		['REAL in NR1 form (X.690 §11.3.2.1)', tlv(0x09, concatBytes([octets(0x01), text('1')]))],
+		...[
+			['with a zero mantissa', '0.E+0'],
+			['whose mantissa ends in 0', '10.E+0'],
+			['with a PLUS SIGN', '+5.E+0'],
+			['with an exponent of 0 not written +0', '5.E0'],
+			['with a PLUS SIGN on its exponent', '5.E+1'],
+			['with a leading 0 in its exponent', '5.E01'],
+			['with a lower-case exponent mark', '5.e+0'],
+			['with a SPACE', '5 .E+0'],
+			['with a point inside the mantissa', '1.5E+0'],
+		].map(
+			([label = '', nr3 = '']) =>
+				[
+					`decimal REAL ${label} (X.690 §11.3.2)`,
+					tlv(0x09, concatBytes([octets(0x03), text(nr3)])),
+				] as const,
+		),
+		['empty RELATIVE-OID (X.680 §33.3)', tlv(0x0d, new Uint8Array())],
+		['RELATIVE-OID arc opening with 0x80 (X.690 §8.20.2)', tlv(0x0d, octets(0x80, 0x01))],
+		['GraphicString with a C0 control', tlv(0x19, octets(0x0a))],
+		['GraphicString with DELETE', tlv(0x19, octets(0x7f))],
+		['GraphicString with an octet above 0x7F', tlv(0x19, octets(0xa0))],
+		['GeneralString with an octet above 0x7F', tlv(0x1b, octets(0x80))],
+		['UTCTime at second 60 (X.680 §47.3)', tlv(0x17, text('161231235960Z'))],
+		['primitive EXTERNAL (X.690 §8.18.1)', tlv(0x08, new Uint8Array())],
+		['primitive CHARACTER STRING (X.690 §8.24.1)', tlv(0x1d, new Uint8Array())],
+		['constructed TIME (X.690 §8.26.1.1)', tlv(0x2e, new Uint8Array())],
+	] as const)('rejects %s', (_label, der) => {
+		expect(checkStrictDer(der)).toBe('malformed');
 	});
 });
 
@@ -762,8 +1019,7 @@ describe('extensions encoding', () => {
 	});
 
 	it('encodeSubjectAltName rejects an unknown GeneralName with an invalid wire tag', () => {
-		// x400Address [3], ediPartyName [5], and registeredID [8] are valid but
-		// unsupported alternatives and round-trip as their own tag.
+		// Raw x400Address [3], ediPartyName [5], and registeredID [8] input keeps its tag.
 		for (const tag of [0xa3, 0xa5, 0x88]) {
 			expect(encodeSubjectAltName({ type: 'unknown', tag, value: new Uint8Array() })[0]).toBe(tag);
 		}
@@ -777,6 +1033,381 @@ describe('extensions encoding', () => {
 		}
 	});
 
+	it('encodeSubjectAltName round-trips every typed GeneralName alternative through the decoder', () => {
+		const names = [
+			{
+				type: 'otherName',
+				typeId: '1.3.6.1.4.1.311.20.2.3',
+				value: utf8String('user@example.com'),
+			},
+			{ type: 'x400Address', value: validOrAddress() },
+			{ type: 'ediPartyName', value: explicitContext(1, utf8String('party')) },
+			{ type: 'registeredID', value: '1.2.840.113549' },
+		] as const;
+		const encoded = sequence(names.map((name) => encodeSubjectAltName(name)));
+		expect(parseGeneralNames(encoded, readRootElement(encoded))).toEqual([...names]);
+	});
+
+	it('encodeSubjectAltName validates each EDIPartyName DirectoryString encoding', () => {
+		// RFC 5280 gives PrintableString, UniversalString, UTF8String and BMPString each SIZE (1..MAX).
+		const alternatives = [
+			[0x13, Uint8Array.of(0x70), Uint8Array.of(0x2a)],
+			[0x1c, Uint8Array.of(0x00, 0x00, 0x00, 0x70), Uint8Array.of(0x00, 0x11, 0x00, 0x00)],
+			[0x0c, Uint8Array.of(0x70), Uint8Array.of(0xff)],
+			[0x1e, Uint8Array.of(0x00, 0x70), Uint8Array.of(0x41)],
+		] as const;
+		for (const [tag, content, invalid] of alternatives) {
+			const filled = tlv(tag, content);
+			for (const bad of [tlv(tag, new Uint8Array()), tlv(tag, invalid)]) {
+				expectEncoderErrorCode(
+					() => encodeSubjectAltName({ type: 'ediPartyName', value: explicitContext(1, bad) }),
+					'invalid_general_name_content',
+				);
+				expectEncoderErrorCode(
+					() =>
+						encodeSubjectAltName({
+							type: 'ediPartyName',
+							value: concatBytes([explicitContext(0, bad), explicitContext(1, filled)]),
+						}),
+					'invalid_general_name_content',
+				);
+			}
+			expect(
+				encodeSubjectAltName({
+					type: 'ediPartyName',
+					value: concatBytes([explicitContext(0, filled), explicitContext(1, filled)]),
+				})[0],
+			).toBe(0xa5);
+		}
+		for (const zeroWidthNoBreakSpace of [
+			tlv(0x0c, Uint8Array.of(0xef, 0xbb, 0xbf)),
+			tlv(0x1e, Uint8Array.of(0xfe, 0xff)),
+			tlv(0x1c, Uint8Array.of(0x00, 0x00, 0xfe, 0xff)),
+		]) {
+			expect(
+				encodeSubjectAltName({
+					type: 'ediPartyName',
+					value: explicitContext(1, zeroWidthNoBreakSpace),
+				})[0],
+			).toBe(0xa5);
+		}
+	});
+
+	it('encodeSubjectAltName validates x400Address contents against the RFC 5280 ORAddress schema', () => {
+		const text = (value: string) => new TextEncoder().encode(value);
+		const standard = (...fields: Uint8Array[]) => sequence(fields);
+		const extension = (type: number, value: Uint8Array) =>
+			sequence([tlv(0x80, Uint8Array.of(type)), explicitContext(1, value)]);
+		const accepted = [
+			validOrAddress(),
+			standard(),
+			concatBytes([standard(tlv(0x80, text('0123 456')))]),
+			concatBytes([standard(), setOf([extension(23, integerFromNumber(256))])]),
+			concatBytes([standard(), setOf([extension(10, setOf([printableString('Office 1')]))])]),
+			concatBytes([
+				standard(),
+				setOf([extension(16, setOf([sequence([printableString('Line')])]))]),
+			]),
+			standard(tlv(0x62, tlv(0x12, new Uint8Array())), tlv(0xa2, printableString('private'))),
+			concatBytes([
+				standard(),
+				tlv(
+					0x31,
+					concatBytes([extension(7, printableString('pds')), extension(7, printableString('pds'))]),
+				),
+			]),
+		];
+		for (const value of accepted) {
+			expect(encodeSubjectAltName({ type: 'x400Address', value })[0]).toBe(0xa3);
+		}
+		const malformed = [
+			sequence([integerFromNumber(1)]),
+			standard(tlv(0x83, text('Acme')), tlv(0x61, printableString('NL'))),
+			standard(tlv(0x61, printableString('NLD'))),
+			standard(tlv(0x61, tlv(0x12, text('12')))),
+			standard(tlv(0x83, text(''))),
+			standard(tlv(0x83, text('a'.repeat(65)))),
+			standard(tlv(0x80, text('12a'))),
+			standard(tlv(0x83, text('under_score'))),
+			standard(tlv(0xa5, tlv(0x81, text('Jane')))),
+			standard(tlv(0xa5, concatBytes([tlv(0x81, text('Jane')), tlv(0x80, text('Doe'))]))),
+			standard(tlv(0xa6, concatBytes(Array.from({ length: 5 }, () => printableString('ou'))))),
+			concatBytes([
+				standard(),
+				sequence(
+					Array.from({ length: 5 }, () => sequence([printableString('t'), printableString('v')])),
+				),
+			]),
+			concatBytes([
+				standard(),
+				sequence([sequence([printableString('toolongtype'), printableString('v')])]),
+			]),
+			concatBytes([standard(), setOf([])]),
+			concatBytes([
+				standard(),
+				tlv(
+					0x31,
+					concatBytes([extension(7, printableString('b')), extension(1, printableString('a'))]),
+				),
+			]),
+			concatBytes([standard(), setOf([extension(1, printableString(''))])]),
+			concatBytes([standard(), setOf([extension(23, integerFromNumber(257))])]),
+			concatBytes([standard(), setOf([extension(23, tlv(0x02, new Uint8Array()))])]),
+			concatBytes([
+				standard(),
+				setOf([sequence([tlv(0x80, new Uint8Array()), explicitContext(1, printableString('x'))])]),
+			]),
+			standard(tlv(0x62, printableString('a'.repeat(17)))),
+			standard(tlv(0xa2, printableString(''))),
+			concatBytes([standard(), setOf([extension(7, printableString('a'.repeat(17)))])]),
+		];
+		for (const value of malformed) {
+			expectEncoderErrorCode(
+				() => encodeSubjectAltName({ type: 'x400Address', value }),
+				'invalid_general_name_content',
+			);
+		}
+		const unsupported = [
+			concatBytes([standard(), setOf([extension(2, tlv(0x14, text('x')))])]),
+			concatBytes([standard(), setOf([extension(22, sequence([tlv(0x80, text('1'))]))])]),
+			concatBytes([standard(), setOf([extension(30, printableString('x'))])]),
+			concatBytes([standard(), setOf([extension(10, setOf([tlv(0x14, text('x'))]))])]),
+		];
+		for (const value of unsupported) {
+			expect(() => encodeSubjectAltName({ type: 'x400Address', value })).toThrow(/cannot validate/);
+		}
+	});
+
+	it('encodeSubjectAltName refuses a TeletexString EDIPartyName it cannot validate', () => {
+		expect(() =>
+			encodeSubjectAltName({
+				type: 'ediPartyName',
+				value: explicitContext(1, tlv(0x14, Uint8Array.of(0x70))),
+			}),
+		).toThrow(/cannot validate/);
+		expectEncoderErrorCode(
+			() =>
+				encodeSubjectAltName({
+					type: 'ediPartyName',
+					value: explicitContext(1, tlv(0x14, Uint8Array.of(0x70))),
+				}),
+			'invalid_general_name_content',
+		);
+	});
+
+	it('encodeSubjectAltName refuses an otherName value holding a type it cannot validate', () => {
+		const value = sequence([utf8String('a'), tlv(0x14, Uint8Array.of(0x41))]);
+		expect(() => encodeSubjectAltName({ type: 'otherName', typeId: '1.2.3.4', value })).toThrow(
+			/cannot validate/,
+		);
+		expectEncoderErrorCode(
+			() => encodeSubjectAltName({ type: 'otherName', typeId: '1.2.3.4', value }),
+			'invalid_other_name_value',
+		);
+	});
+
+	it('encodeSubjectAltName encodes an RFC 4556 KRB5PrincipalName otherName', () => {
+		const kerberosString = (value: string) => tlv(0x1b, new TextEncoder().encode(value));
+		const krb5PrincipalName = sequence([
+			explicitContext(0, kerberosString('EXAMPLE.COM')),
+			explicitContext(
+				1,
+				sequence([
+					explicitContext(0, integerFromNumber(1)),
+					explicitContext(1, sequence([kerberosString('alice')])),
+				]),
+			),
+		]);
+		expect(
+			encodeSubjectAltName({
+				type: 'otherName',
+				typeId: '1.3.6.1.5.2.2',
+				value: krb5PrincipalName,
+			})[0],
+		).toBe(0xa0);
+	});
+
+	it('encodeSubjectAltName refuses an otherName it cannot encode faithfully', () => {
+		for (const typeId of [OIDS.idOnDnsSrv, OIDS.idOnSmtpUtf8Mailbox]) {
+			expectEncoderErrorCode(
+				() => encodeSubjectAltName({ type: 'otherName', typeId, value: utf8String('x') }),
+				'other_name_type_id_has_variant',
+			);
+		}
+		expectEncoderErrorCode(
+			() => encodeSubjectAltName({ type: 'otherName', typeId: '3.1', value: utf8String('x') }),
+			'invalid_oid',
+		);
+		expectEncoderErrorCode(
+			() =>
+				encodeSubjectAltName({
+					type: 'otherName',
+					typeId: '1.2.3.4',
+					value: concatBytes([utf8String('a'), utf8String('b')]),
+				}),
+			'invalid_other_name_value',
+		);
+		for (const value of [
+			Uint8Array.of(0x00, 0x00),
+			sequence([utf8String('a'), Uint8Array.of(0x00, 0x00)]),
+			explicitContext(2, sequence([Uint8Array.of(0x00, 0x00)])),
+			tlv(0x05, Uint8Array.of(0x00)),
+			tlv(0x01, Uint8Array.of(0x01)),
+			tlv(0x02, Uint8Array.of(0x00, 0x01)),
+			sequence([utf8String('a'), tlv(0x02, Uint8Array.of(0xff, 0xff))]),
+		]) {
+			expectEncoderErrorCode(
+				() => encodeSubjectAltName({ type: 'otherName', typeId: '1.2.3.4', value }),
+				'invalid_other_name_value',
+			);
+		}
+		for (const value of [
+			octetString(Uint8Array.of(0x00, 0x00)),
+			sequence([explicitContext(0, octetString(Uint8Array.of(0x00, 0x00, 0x00)))]),
+		]) {
+			expect(encodeSubjectAltName({ type: 'otherName', typeId: '1.2.3.4', value })[0]).toBe(0xa0);
+		}
+		expectEncoderErrorCode(
+			() => encodeSubjectAltName({ type: 'registeredID', value: '1' }),
+			'invalid_oid',
+		);
+		const malformed = [
+			['x400Address', Uint8Array.of(0xff)],
+			['x400Address', Uint8Array.of(0x30, 0x05)],
+			['x400Address', new Uint8Array()],
+			['x400Address', printableString('x')],
+			['x400Address', concatBytes([sequence([]), setOf([]), sequence([])])],
+			['ediPartyName', Uint8Array.of(0xff)],
+			['ediPartyName', new Uint8Array()],
+			['ediPartyName', explicitContext(0, utf8String('assigner'))],
+			['ediPartyName', explicitContext(1, integerFromNumber(1))],
+			[
+				'ediPartyName',
+				concatBytes([explicitContext(1, utf8String('a')), explicitContext(0, utf8String('b'))]),
+			],
+		] as const;
+		for (const [type, value] of malformed) {
+			expectEncoderErrorCode(
+				() => encodeSubjectAltName({ type, value }),
+				'invalid_general_name_content',
+			);
+		}
+		expect(
+			encodeSubjectAltName({
+				type: 'ediPartyName',
+				value: concatBytes([
+					explicitContext(0, printableString('assigner')),
+					explicitContext(1, utf8String('party')),
+				]),
+			})[0],
+		).toBe(0xa5);
+	});
+
+	it('encodeNameConstraints writes the three RFC 4985 §4 SRVName restriction forms', () => {
+		const encoded = encodeNameConstraints({
+			permittedSubtrees: [
+				{ base: { type: 'srv', value: '_mail' } },
+				{ base: { type: 'srv', value: 'café.example' } },
+				{ base: { type: 'srv', value: '_mail.café.example' } },
+			],
+		});
+		expect(parseNameConstraints(encoded).permittedSubtrees).toEqual([
+			{ base: { type: 'srv', value: '_mail' } },
+			{ base: { type: 'srv', value: 'xn--caf-dma.example' } },
+			{ base: { type: 'srv', value: '_mail.xn--caf-dma.example' } },
+		]);
+	});
+
+	it('encodeNameConstraints and encodeSubjectAltName hold the service to RFC 6335 §5.1', () => {
+		for (const service of ['_m', `_${'m'.repeat(15)}`, '_x-400', '_3com']) {
+			expect(
+				parseNameConstraints(
+					encodeNameConstraints({ permittedSubtrees: [{ base: { type: 'srv', value: service } }] }),
+				).permittedSubtrees,
+			).toEqual([{ base: { type: 'srv', value: service } }]);
+			expect(encodeSubjectAltName({ type: 'srv', value: `${service}.example.com` })[0]).toBe(0xa0);
+		}
+		for (const service of [`_${'m'.repeat(16)}`, '_123', '_-mail', '_mail-', '_ma--il', '_ma_il']) {
+			expectEncoderErrorCode(
+				() =>
+					encodeNameConstraints({ permittedSubtrees: [{ base: { type: 'srv', value: service } }] }),
+				'invalid_srv_name_constraint',
+			);
+			expectEncoderErrorCode(
+				() => encodeSubjectAltName({ type: 'srv', value: `${service}.example.com` }),
+				'invalid_srv_name',
+			);
+		}
+	});
+
+	it('encodeNameConstraints and encodeSubjectAltName hold the SRVName Name to STD3 LDH labels', () => {
+		for (const name of ['example_com', '-example.com', 'example-.com', 'exa mple.com']) {
+			for (const value of [name, `_mail.${name}`]) {
+				expectEncoderErrorCode(
+					() => encodeNameConstraints({ permittedSubtrees: [{ base: { type: 'srv', value } }] }),
+					'invalid_srv_name_constraint',
+				);
+			}
+			expectEncoderErrorCode(
+				() => encodeSubjectAltName({ type: 'srv', value: `_mail.${name}` }),
+				'invalid_srv_name',
+			);
+		}
+		expectEncoderErrorCode(
+			() => encodeSubjectAltName({ type: 'srv', value: '_mail.xn--a.example' }),
+			'invalid_idn',
+		);
+		expectEncoderErrorCode(
+			() => encodeSubjectAltName({ type: 'srv', value: '_mail' }),
+			'invalid_srv_name',
+		);
+	});
+
+	it('encodeNameConstraints and encodeSubjectAltName store RFC 4985 §3 label separators as U+002E', () => {
+		for (const separator of ['\u3002', '\uff0e', '\uff61']) {
+			const value = `_mail.例子${separator}com`;
+			expect(
+				parseNameConstraints(
+					encodeNameConstraints({ permittedSubtrees: [{ base: { type: 'srv', value } }] }),
+				).permittedSubtrees,
+			).toEqual([{ base: { type: 'srv', value: '_mail.xn--fsqu00a.com' } }]);
+			expect(encodeSubjectAltName({ type: 'srv', value })).toEqual(
+				encodeSubjectAltName({ type: 'srv', value: '_mail.xn--fsqu00a.com' }),
+			);
+		}
+		expectEncoderErrorCode(
+			() =>
+				encodeNameConstraints({
+					permittedSubtrees: [{ base: { type: 'srv', value: '_mail.example\u3002\u3002com' } }],
+				}),
+			'invalid_srv_name_constraint',
+		);
+	});
+
+	it('encodeNameConstraints rejects a SRVName restriction outside the RFC 4985 §4 forms', () => {
+		const values = [
+			'',
+			'_',
+			'_mail.',
+			'_m@il.example.com',
+			'.example.com',
+			'_mail..example.com',
+			'example.com.',
+			'ex*ample.com',
+			`${'a'.repeat(64)}.example`,
+			`_${'m'.repeat(63)}`,
+			`_${'m'.repeat(63)}.example.com`,
+		];
+		for (const value of values) {
+			for (const field of ['permittedSubtrees', 'excludedSubtrees'] as const) {
+				expectEncoderErrorCode(
+					() => encodeNameConstraints({ [field]: [{ base: { type: 'srv', value } }] }),
+					'invalid_srv_name_constraint',
+				);
+			}
+		}
+	});
+
 	it('encodeSubjectAltName rejects a non-ASCII URI or SRV name', () => {
 		expectEncoderErrorCode(
 			() => encodeSubjectAltName({ type: 'uri', value: 'http://café.example' }),
@@ -784,7 +1415,7 @@ describe('extensions encoding', () => {
 		);
 		expectEncoderErrorCode(
 			() => encodeSubjectAltName({ type: 'srv', value: '_xmpé.example' }),
-			'invalid_ia5_string',
+			'invalid_srv_name',
 		);
 		expectEncoderErrorCode(
 			() => encodeSubjectAltName({ type: 'email', value: 'josé@example.com' }),
@@ -1263,22 +1894,6 @@ describe('extensions encoding', () => {
 			'duplicate_policy_oid',
 		],
 		[
-			'certificatePolicies with an explicitText over 200 characters',
-			OIDS.certificatePolicies,
-			sequence([
-				sequence([
-					objectIdentifier('1.2.3.4'),
-					sequence([
-						sequence([
-							objectIdentifier(OIDS.userNoticePolicyQualifier),
-							sequence([utf8String('a'.repeat(201))]),
-						]),
-					]),
-				]),
-			]),
-			'display_text_out_of_range',
-		],
-		[
 			'authorityInfoAccess with a dNSName OCSP location',
 			OIDS.authorityInfoAccess,
 			sequence([
@@ -1327,6 +1942,21 @@ describe('extensions encoding', () => {
 			sequence([integerFromNumber(0)]),
 		],
 		['policyConstraints with neither field', OIDS.policyConstraints, sequence([])],
+		[
+			'certificatePolicies with an explicitText over 200 characters',
+			OIDS.certificatePolicies,
+			sequence([
+				sequence([
+					objectIdentifier('1.2.3.4'),
+					sequence([
+						sequence([
+							objectIdentifier(OIDS.userNoticePolicyQualifier),
+							sequence([utf8String('a'.repeat(201))]),
+						]),
+					]),
+				]),
+			]),
+		],
 	] as const;
 
 	it.each(DECODER_REJECTED_KNOWN_PAYLOADS)('rejects a custom %s payload', (_label, oid, value) => {
@@ -1689,7 +2319,7 @@ describe('extensions encoding', () => {
 				),
 			'malformed_known_extension_value',
 		);
-		// x400Address [3] decodes as an unknown GeneralName, carrying no identity.
+		// An empty x400Address [3] is not an ORAddress.
 		expectEncoderErrorCode(
 			() =>
 				buildCertificateExtensions(
@@ -1706,7 +2336,7 @@ describe('extensions encoding', () => {
 					},
 					true,
 				),
-			'empty_subject_requires_subject_alt_name',
+			'invalid_general_name_content',
 		);
 		expect(
 			buildCertificateExtensions(

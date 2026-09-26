@@ -2,10 +2,13 @@ import { describe, expect, it } from 'bun:test';
 import type { createSelfSignedCertificate } from '#micro509';
 import { createCertificate, generateKeyPair, verifyCertificateChain } from '#micro509';
 import {
+	concatBytes,
+	ia5String,
 	objectIdentifier,
 	printableString,
 	sequence,
 	setOf,
+	tlv,
 	utf8String,
 } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
@@ -318,6 +321,122 @@ describe('name constraint fixtures', () => {
 					type: 'directoryName',
 					derHex: buildDirectoryNameDerHex([
 						[{ oid: OIDS.organizationName, value: `Ac${softHyphen}me`, encoding: 'utf8' }],
+					]),
+				},
+			],
+		});
+		expect(result).toMatchObject({ ok: false, code: 'name_constraints_violated' });
+	});
+});
+
+function rawSrvNameConstraints(field: 0xa0 | 0xa1, restriction: string): Uint8Array {
+	const srvName = tlv(
+		0xa0,
+		concatBytes([objectIdentifier(OIDS.idOnDnsSrv), tlv(0xa0, ia5String(restriction))]),
+	);
+	return sequence([tlv(field, sequence([srvName]))]);
+}
+
+describe('RFC 4985 §4 SRVName constraints', () => {
+	it.each([
+		['example.com', '_mail.example.com', true],
+		['example.com', '_ntp.example.com', true],
+		['example.com', '_mail.1.example.com', true],
+		['example.com', '_mail.1example.com', false],
+		['_mail', '_mail.example.com', true],
+		['_mail', '_mail.1example.com', true],
+		['_mail', '_ntp.example.com', false],
+		['_mail.example.com', '_mail.example.com', true],
+		['_mail.example.com', '_mail.1.example.com', true],
+		['_mail.example.com', '_mail.1example.com', false],
+		['_mail.example.com', '_ntp.example.com', false],
+	] as const)('restriction %s against %s permits: %p', async (restriction, san, permits) => {
+		const result = await verifyNameConstraintFixture({
+			rootNameConstraints: { permittedSubtrees: [{ base: { type: 'srv', value: restriction } }] },
+			leafSubjectAltNames: [{ type: 'srv', value: san }],
+		});
+		expect(result).toMatchObject(
+			permits ? { ok: true } : { ok: false, code: 'name_constraints_violated' },
+		);
+	});
+
+	it('rejects an SRVName inside an excluded restriction', async () => {
+		const result = await verifyNameConstraintFixture({
+			rootNameConstraints: { excludedSubtrees: [{ base: { type: 'srv', value: '_mail' } }] },
+			leafSubjectAltNames: [{ type: 'srv', value: '_mail.example.com' }],
+		});
+		expect(result).toMatchObject({ ok: false, code: 'name_constraints_violated' });
+	});
+
+	it('matches the service and the Name case-insensitively', async () => {
+		const result = await verifyNameConstraintFixture({
+			rootNameConstraints: rawSrvNameConstraints(0xa0, '_MAIL.Example.COM'),
+			leafSubjectAltNames: [{ type: 'srv', value: '_mail.mx.example.com' }],
+		});
+		expect(result).toMatchObject({ ok: true });
+	});
+
+	it('leaves SRVNames unconstrained by a dNSName constraint', async () => {
+		// RFC 9525 §7.6: constraints apply only to the name forms they enumerate.
+		const result = await verifyNameConstraintFixture({
+			rootNameConstraints: { permittedSubtrees: [{ base: { type: 'dns', value: 'example.com' } }] },
+			leafSubjectAltNames: [{ type: 'srv', value: '_mail.example.net' }],
+		});
+		expect(result).toMatchObject({ ok: true });
+	});
+
+	it.each(['.example.com', '_mail.', '_.example.com', '_mail..example.com'])(
+		'fails every SRVName while the restriction %s is malformed',
+		async (restriction) => {
+			const result = await verifyNameConstraintFixture({
+				rootNameConstraints: rawSrvNameConstraints(0xa1, restriction),
+				leafSubjectAltNames: [{ type: 'srv', value: '_mail.example.com' }],
+			});
+			expect(result).toMatchObject({ ok: false, code: 'name_constraints_violated' });
+		},
+	);
+
+	it('treats a received SRVName outside STD3 or RFC 6335 syntax as not _Service.Name', async () => {
+		for (const presented of ['_mail.example_com', '_123.example.com', '_mail.-example.com']) {
+			const result = await verifyNameConstraintFixture({
+				rootNameConstraints: {
+					permittedSubtrees: [{ base: { type: 'srv', value: 'example.com' } }],
+				},
+				leafSubjectAltNames: [
+					{
+						type: 'unknown',
+						tag: 0xa0,
+						value: concatBytes([
+							objectIdentifier(OIDS.idOnDnsSrv),
+							tlv(0xa0, ia5String(presented)),
+						]),
+					},
+				],
+			});
+			expect(result).toMatchObject({ ok: false, code: 'name_constraints_violated' });
+		}
+	});
+
+	it('fails every SRVName while a received restriction breaks STD3 or RFC 6335 syntax', async () => {
+		for (const restriction of ['example_com', '_123', '_mail.example-.com']) {
+			const result = await verifyNameConstraintFixture({
+				rootNameConstraints: rawSrvNameConstraints(0xa1, restriction),
+				leafSubjectAltNames: [{ type: 'srv', value: '_mail.example.com' }],
+			});
+			expect(result).toMatchObject({ ok: false, code: 'name_constraints_violated' });
+		}
+	});
+
+	it('fails an SRVName that is not _Service.Name while SRVName constraints apply', async () => {
+		const result = await verifyNameConstraintFixture({
+			rootNameConstraints: { excludedSubtrees: [{ base: { type: 'srv', value: '_ntp' } }] },
+			leafSubjectAltNames: [
+				{
+					type: 'unknown',
+					tag: 0xa0,
+					value: concatBytes([
+						objectIdentifier(OIDS.idOnDnsSrv),
+						tlv(0xa0, ia5String('mail.example.com')),
 					]),
 				},
 			],

@@ -16,11 +16,7 @@ import type { DerElement } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { decodeIpAddress } from '#micro509/internal/shared/ip';
 import { readDirectoryNameTlv } from '#micro509/internal/x509/directory-name';
-import { GENERAL_NAME_WIRE_TAGS } from '#micro509/internal/x509/general-name-tags';
 import type { GeneralName, SubjectAltName } from '#micro509/x509/extensions';
-
-/** Keeps a leading U+FEFF, which RFC 9598 §3 forbids and the builder must be able to see. */
-const SMTP_UTF8_MAILBOX_DECODER = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
 
 /** Decode a SEQUENCE OF GeneralName. */
 export function parseGeneralNames(source: Uint8Array, element: DerElement): readonly GeneralName[] {
@@ -52,17 +48,8 @@ function requireNonEmptyIa5(element: DerElement, alternative: string): string {
 /** Decode a single GeneralName from its implicit context tag. */
 export function parseGeneralName(source: Uint8Array, element: DerElement): GeneralName {
 	switch (element.tag) {
-		case 0xa0: {
-			const otherName = parseOtherName(source, element);
-			if (otherName !== undefined) {
-				return otherName;
-			}
-			return {
-				type: 'unknown' as const,
-				tag: element.tag,
-				value: source.slice(element.start, element.end),
-			};
-		}
+		case 0xa0:
+			return parseOtherName(source, element);
 		case 0x81:
 			return { type: 'email' as const, value: requireNonEmptyIa5(element, 'rfc822Name') };
 		case 0x82:
@@ -74,37 +61,36 @@ export function parseGeneralName(source: Uint8Array, element: DerElement): Gener
 			};
 		case 0x87:
 			return { type: 'ip' as const, value: decodeIpAddress(element.value) };
+		case 0xa3:
+			return { type: 'x400Address' as const, value: source.slice(element.start, element.end) };
 		case 0xa4:
 			return {
 				type: 'directoryName' as const,
 				derHex: toHex(readDirectoryNameTlv(element)),
 			};
+		case 0xa5:
+			return { type: 'ediPartyName' as const, value: source.slice(element.start, element.end) };
+		case 0x88:
+			return { type: 'registeredID' as const, value: decodeObjectIdentifier(element.value) };
 		default:
-			// x400Address [3], ediPartyName [5], and registeredID [8] are valid but
-			// unsupported; any other tag/class/constructedness is not a GeneralName.
-			if (!GENERAL_NAME_WIRE_TAGS.has(element.tag)) {
-				throw new Error(`Invalid GeneralName tag: ${element.tag}`);
-			}
-			return {
-				type: 'unknown' as const,
-				tag: element.tag,
-				value: source.slice(element.start, element.end),
-			};
+			throw new Error(`Invalid GeneralName tag: ${element.tag}`);
 	}
 }
 
+/** The type-id and single value element of an otherName [0]. */
+export interface OtherNameParts {
+	readonly typeId: string;
+	readonly value: DerElement;
+}
+
 /**
- * Decode an otherName [0] as a known type: SRV-ID (RFC 4985) or SmtpUTF8Mailbox
- * (RFC 9598).
+ * Read the envelope of an otherName [0], throwing when it is malformed.
  *
  * `otherName [0] OtherName` is in the IMPLICIT-TAGS module, so the [0] tag
  * replaces OtherName's SEQUENCE tag: the type-id and `value [0] EXPLICIT` are
- * the direct children, with no inner SEQUENCE. A malformed envelope, or a
- * malformed payload of a recognised OID, throws. A structurally valid OtherName
- * with an unsupported OID returns `undefined`, so the caller preserves it as
- * `{ type: 'unknown' }`.
+ * the direct children, with no inner SEQUENCE.
  */
-function parseOtherName(source: Uint8Array, element: DerElement): SubjectAltName | undefined {
+export function readOtherName(source: Uint8Array, element: DerElement): OtherNameParts {
 	const children = childrenOf(source, element);
 	const typeId = children[0];
 	const valueElement = children[1];
@@ -122,18 +108,38 @@ function parseOtherName(source: Uint8Array, element: DerElement): SubjectAltName
 	if (valueChildren.length !== 1 || value === undefined) {
 		throw new Error('otherName value [0] must wrap exactly one element');
 	}
-	switch (decodeObjectIdentifier(typeId.value)) {
+	return { typeId: decodeObjectIdentifier(typeId.value), value };
+}
+
+/** RFC 4985 §2: `SRVName ::= IA5String (SIZE (1..MAX))`. */
+export function decodeSrvName(value: DerElement): string {
+	if (value.tag !== 0x16 || value.value.length === 0) {
+		throw new Error('SRV-ID otherName must wrap a non-empty IA5String');
+	}
+	return decodeString(value.tag, value.value);
+}
+
+/** The DER of an otherName value element. */
+export function otherNameValueDer(source: Uint8Array, value: DerElement): Uint8Array {
+	return source.slice(value.start - value.headerLength, value.end);
+}
+
+/**
+ * Decode an otherName [0], typing SRV-ID (RFC 4985) and SmtpUTF8Mailbox
+ * (RFC 9598) and keeping any other type-id with its value element. A malformed
+ * payload of a recognised type-id throws.
+ */
+function parseOtherName(source: Uint8Array, element: DerElement): SubjectAltName {
+	const { typeId, value } = readOtherName(source, element);
+	switch (typeId) {
 		case OIDS.idOnDnsSrv:
-			if (value.tag !== 0x16 || value.value.length === 0) {
-				throw new Error('SRV-ID otherName must wrap a non-empty IA5String');
-			}
-			return { type: 'srv', value: decodeString(value.tag, value.value) };
+			return { type: 'srv', value: decodeSrvName(value) };
 		case OIDS.idOnSmtpUtf8Mailbox:
 			if (value.tag !== 0x0c || value.value.length === 0) {
 				throw new Error('SmtpUTF8Mailbox otherName must wrap a non-empty UTF8String');
 			}
-			return { type: 'smtpUtf8Mailbox', value: SMTP_UTF8_MAILBOX_DECODER.decode(value.value) };
+			return { type: 'smtpUtf8Mailbox', value: decodeString(value.tag, value.value) };
 		default:
-			return undefined;
+			return { type: 'otherName', typeId, value: otherNameValueDer(source, value) };
 	}
 }

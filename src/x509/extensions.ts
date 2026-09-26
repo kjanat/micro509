@@ -9,6 +9,7 @@
 
 import {
 	canonicalizeOid,
+	checkStrictDer,
 	childrenOf,
 	decodeObjectIdentifier,
 	hexToBytes,
@@ -66,6 +67,14 @@ import {
 	SUBJECT_ALT_NAME_EXTENSION_DEFINITION,
 	SUBJECT_KEY_IDENTIFIER_EXTENSION_DEFINITION,
 } from '#micro509/internal/x509/extension-registry';
+import type { GeneralNameContentCheck } from '#micro509/internal/x509/general-name-profile';
+import {
+	checkEdiPartyName,
+	checkOrAddress,
+	normalizeLabelSeparators,
+	parsePresentedSrvName,
+	parseSrvNameRestriction,
+} from '#micro509/internal/x509/general-name-profile';
 import { GENERAL_NAME_WIRE_TAGS } from '#micro509/internal/x509/general-name-tags';
 import { isResultError } from '#micro509/result/result';
 import type { RelativeDistinguishedNameInput } from '#micro509/x509/name';
@@ -117,7 +126,8 @@ export type KeyUsage =
  *
  * Discriminated union keyed on `type`.
  *
- * The `'unknown'` variant preserves unrecognized {@linkcode GeneralName} tags for round-trip fidelity.
+ * Every GeneralName alternative has a typed variant. Parsing never produces
+ * `'unknown'`, which remains as raw builder input.
  */
 export type SubjectAltName =
 	| {
@@ -163,7 +173,33 @@ export type SubjectAltName =
 			readonly derHex: string;
 	  }
 	| {
-			/** Unrecognized {@linkcode GeneralName} tag, preserved as raw bytes. */
+			/** otherName [0] of a type-id without a dedicated variant, e.g. a Microsoft UPN. */
+			readonly type: 'otherName';
+			/** Dotted-decimal type-id OID. */
+			readonly typeId: string;
+			/** DER of the single element inside `value [0] EXPLICIT`. */
+			readonly value: Uint8Array;
+	  }
+	| {
+			/** X.400 O/R address (x400Address [3]). */
+			readonly type: 'x400Address';
+			/** Content octets of the ORAddress SEQUENCE. */
+			readonly value: Uint8Array;
+	  }
+	| {
+			/** EDI party name (ediPartyName [5]). */
+			readonly type: 'ediPartyName';
+			/** Content octets of the EDIPartyName SEQUENCE. */
+			readonly value: Uint8Array;
+	  }
+	| {
+			/** Registered identifier (registeredID [8]). */
+			readonly type: 'registeredID';
+			/** Dotted-decimal OID. */
+			readonly value: string;
+	  }
+	| {
+			/** Raw {@linkcode GeneralName} builder input, encoded under its wire tag. */
 			readonly type: 'unknown';
 			/** ASN.1 context tag number. */
 			readonly tag: number;
@@ -528,6 +564,12 @@ export type NameConstraintForm =
 			readonly type: 'directoryName';
 			/** Hex-encoded DER of the Name SEQUENCE. */
 			readonly derHex: string;
+	  }
+	| {
+			/** SRVName constraint (otherName id-on-dnsSRV, RFC 4985 §4). */
+			readonly type: 'srv';
+			/** `_Service.Name`, `_Service`, or `Name`, e.g. `"_mail.example.com"`. */
+			readonly value: string;
 	  };
 
 /**
@@ -536,8 +578,11 @@ export type NameConstraintForm =
  */
 export type UnsupportedNameConstraintForm =
 	| {
-			/** otherName [0] — raw bytes. */
+			/** otherName [0] of a type-id without defined constraint semantics. */
 			readonly type: 'otherName';
+			/** Dotted-decimal type-id OID. */
+			readonly typeId: string;
+			/** DER of the single element inside `value [0] EXPLICIT`. */
 			readonly value: Uint8Array;
 	  }
 	| {
@@ -580,7 +625,12 @@ export type ParsedNameConstraintForm =
 			readonly derHex: string;
 	  }
 	| {
+			readonly type: 'srv';
+			readonly value: string;
+	  }
+	| {
 			readonly type: 'otherName';
+			readonly typeId: string;
 			readonly value: Uint8Array;
 	  }
 	| {
@@ -619,6 +669,10 @@ export interface GeneralSubtree<
 		| {
 				readonly type: 'directoryName';
 				readonly derHex: string;
+		  }
+		| {
+				readonly type: 'srv';
+				readonly value: string;
 		  },
 > {
 	/** The name form that defines this constraint boundary. */
@@ -653,6 +707,10 @@ export interface NameConstraints<
 		| {
 				readonly type: 'directoryName';
 				readonly derHex: string;
+		  }
+		| {
+				readonly type: 'srv';
+				readonly value: string;
 		  },
 > {
 	/** Names that MUST fall within these subtrees to be valid. */
@@ -1507,10 +1565,87 @@ function toAsciiDnsName(value: string): string {
 	return `${prefix}${toAsciiDomain(value.slice(prefix.length))}`;
 }
 
-/** RFC 4985 §3: a SRVName with its `_Service` label kept and its Name in A-labels. */
+/**
+ * RFC 4985 §3: a SRVName or SRVName restriction with its label separators
+ * normalized, its `_Service` label kept, and its Name in A-labels.
+ */
+function toAsciiSrvComponents(value: string): string {
+	const normalized = normalizeLabelSeparators(value);
+	const dot = normalized.indexOf('.');
+	if (!normalized.startsWith('_')) {
+		return toAsciiDomain(normalized);
+	}
+	if (dot < 0) {
+		return normalized;
+	}
+	const name = normalized.slice(dot + 1);
+	return `${normalized.slice(0, dot + 1)}${name.length === 0 ? '' : toAsciiDomain(name)}`;
+}
+
+/** RFC 4985 §2 and RFC 6335 §5.1: a presented SRVName is `_Service.Name`. */
 function toAsciiSrvName(value: string): string {
-	const dot = value.indexOf('.');
-	return dot < 0 ? value : `${value.slice(0, dot + 1)}${toAsciiDomain(value.slice(dot + 1))}`;
+	const ascii = toAsciiSrvComponents(value);
+	if (parsePresentedSrvName(ascii) === undefined) {
+		throwExtensionEncoderError(
+			'invalid_srv_name',
+			'A SRVName is _Service.Name with an RFC 6335 service and an LDH Name (RFC 4985 §2)',
+		);
+	}
+	return ascii;
+}
+
+/** RFC 4985 §4: a SRVName constraint is `_Service.Name`, `_Service`, or `Name`. */
+function toAsciiSrvNameConstraint(value: string): string {
+	const ascii = toAsciiSrvComponents(value);
+	if (parseSrvNameRestriction(ascii) === undefined) {
+		throwExtensionEncoderError(
+			'invalid_srv_name_constraint',
+			'A SRVName constraint is _Service.Name, _Service, or Name (RFC 4985 §4)',
+		);
+	}
+	return ascii;
+}
+
+/** An otherName type-id that has no dedicated {@linkcode SubjectAltName} variant. */
+function validateOtherNameTypeId(typeId: string): string {
+	const oid = validateOid(typeId);
+	if (oid === OIDS.idOnDnsSrv || oid === OIDS.idOnSmtpUtf8Mailbox) {
+		throwExtensionEncoderError(
+			'other_name_type_id_has_variant',
+			`otherName type-id ${oid} is encoded through its dedicated SubjectAltName variant`,
+		);
+	}
+	return oid;
+}
+
+function requireGeneralNameContent(
+	element: Uint8Array,
+	form: 'x400Address' | 'ediPartyName',
+	check: (element: Uint8Array) => GeneralNameContentCheck,
+): Uint8Array {
+	const result = check(element);
+	if (!result.ok) {
+		throwExtensionEncoderError(
+			'invalid_general_name_content',
+			result.reason === 'unsupported'
+				? `${form} contents use an encoding micro509 cannot validate`
+				: `${form} contents do not match the ${form === 'x400Address' ? 'ORAddress' : 'EDIPartyName'} ASN.1 (RFC 5280)`,
+		);
+	}
+	return element;
+}
+
+function requireSingleDerElement(value: Uint8Array): Uint8Array {
+	const verdict = checkStrictDer(value);
+	if (verdict !== 'valid') {
+		throwExtensionEncoderError(
+			'invalid_other_name_value',
+			verdict === 'unsupported'
+				? 'otherName value uses an encoding micro509 cannot validate'
+				: 'otherName value must be exactly one DER element',
+		);
+	}
+	return value;
 }
 
 /** RFC 9549 §2.5: an rfc822Name or rfc822Name constraint with its host in A-labels. */
@@ -1563,6 +1698,31 @@ export function encodeSubjectAltName(value: SubjectAltName): Uint8Array {
 			return implicitPrimitiveContext(7, encodeIpAddress(value.value));
 		case 'directoryName':
 			return implicitConstructedContext(4, readDirectoryNameTlv(value.derHex));
+		case 'otherName':
+			return implicitConstructedContext(
+				0,
+				concatBytes([
+					objectIdentifier(validateOtherNameTypeId(value.typeId)),
+					explicitContext(0, requireSingleDerElement(value.value)),
+				]),
+			);
+		case 'x400Address':
+			return requireGeneralNameContent(
+				implicitConstructedContext(3, value.value),
+				'x400Address',
+				checkOrAddress,
+			);
+		case 'ediPartyName':
+			return requireGeneralNameContent(
+				implicitConstructedContext(5, value.value),
+				'ediPartyName',
+				checkEdiPartyName,
+			);
+		case 'registeredID':
+			return implicitPrimitiveContext(
+				8,
+				readRootElement(objectIdentifier(validateOid(value.value))).value,
+			);
 		case 'unknown':
 			if (!GENERAL_NAME_WIRE_TAGS.has(value.tag)) {
 				throwExtensionEncoderError(
@@ -1983,7 +2143,7 @@ function encodeBmpDisplayText(text: string): Uint8Array {
 	} catch {
 		return throwExtensionEncoderError(
 			'invalid_bmp_string',
-			'BMPString explicitText must stay within the Basic Multilingual Plane',
+			'BMPString explicitText must hold Basic Multilingual Plane characters other than surrogates, U+FFFE and U+FFFF',
 		);
 	}
 }
@@ -2110,6 +2270,14 @@ function encodeNameConstraintForm(form: NameConstraintForm): Uint8Array {
 		}
 		case 'directoryName':
 			return implicitConstructedContext(4, readDirectoryNameTlv(form.derHex));
+		case 'srv':
+			return implicitConstructedContext(
+				0,
+				concatBytes([
+					objectIdentifier(OIDS.idOnDnsSrv),
+					explicitContext(0, tlv(0x16, encodeIa5Content(toAsciiSrvNameConstraint(form.value)))),
+				]),
+			);
 		default: {
 			const _exhaustive: never = form;
 			throw new Error(`Unhandled NameConstraintForm type: ${String(_exhaustive)}`);
