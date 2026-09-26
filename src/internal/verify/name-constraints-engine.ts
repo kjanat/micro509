@@ -33,10 +33,8 @@ import {
 	parseIpAddressToBytes,
 } from '#micro509/internal/shared/ip';
 import { isMailboxDomain, isSmtpUtf8LocalPart } from '#micro509/internal/shared/mailbox';
-import {
-	type SrvNameRestriction,
-	splitSrvNameRestriction,
-} from '#micro509/internal/x509/general-name';
+import type { SrvNameRestriction } from '#micro509/internal/x509/general-name';
+import { splitSrvNameRestriction } from '#micro509/internal/x509/general-name';
 import type { Micro509Error } from '#micro509/result/result';
 import type { InitialNameConstraintsInput } from '#micro509/verify/name-constraints';
 import type {
