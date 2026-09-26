@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'bun:test';
+import type { TrustAnchor } from '#micro509';
 import {
 	buildCandidatePath,
 	createCertificate,
 	createSelfSignedCertificate,
 	generateKeyPair,
 	parseCertificatePem,
-	type TrustAnchor,
 	unwrap,
 	validateForCa,
 	validateForCodeSigning,

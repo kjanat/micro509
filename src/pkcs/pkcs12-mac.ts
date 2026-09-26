@@ -26,6 +26,7 @@ import {
 } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { describeHashAlgorithm } from '#micro509/internal/crypto/algorithm-names';
+import type { KdfBudget, KdfLimitOptions, Pbkdf2Hash } from '#micro509/internal/crypto/pbes2';
 import {
 	chargeKdfBudget,
 	createKdfBudget,
@@ -33,9 +34,6 @@ import {
 	DEFAULT_MAX_PKCS12_MAC_ITERATIONS,
 	derivePbkdf2Bytes,
 	isKdfIterationLimitError,
-	type KdfBudget,
-	type KdfLimitOptions,
-	type Pbkdf2Hash,
 	WEBCRYPTO_MAX_PBKDF2_ITERATIONS,
 } from '#micro509/internal/crypto/pbes2';
 import { getCrypto } from '#micro509/internal/crypto/webcrypto';

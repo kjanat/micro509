@@ -5,7 +5,8 @@
  * @module
  */
 
-import { domainToAscii, type IdnaMode } from '#micro509/internal/shared/idna';
+import type { IdnaMode } from '#micro509/internal/shared/idna';
+import { domainToAscii } from '#micro509/internal/shared/idna';
 
 const MAX_DOMAIN_OCTETS = 253;
 

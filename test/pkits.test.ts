@@ -9,7 +9,8 @@ import {
 	unwrap,
 	verifyCertificateChain,
 } from '#micro509';
-import { PKITS_CASES, type PkitsCase } from '#test/pkits/manifest';
+import type { PkitsCase } from '#test/pkits/manifest';
+import { PKITS_CASES } from '#test/pkits/manifest';
 
 const PKITS_VALIDATION_TIME = new Date('2011-04-15T00:00:00Z');
 const REVOCATION_SECTIONS = new Set(['4.4', '4.5', '4.14', '4.15']);

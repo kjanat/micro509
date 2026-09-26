@@ -16,11 +16,8 @@ import {
 	requireElement,
 	toHex,
 } from '#micro509/internal/asn1/asn1';
-import {
-	DEFAULT_MAX_DER_DEPTH,
-	type DerElement,
-	readRootElement,
-} from '#micro509/internal/asn1/der';
+import type { DerElement } from '#micro509/internal/asn1/der';
+import { DEFAULT_MAX_DER_DEPTH, readRootElement } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
 import {
 	compareDistinguishedNames,

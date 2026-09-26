@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import type { ParsedCertificate, RevocationPolicy } from '#micro509';
 import {
 	checkCertificateRevocation,
 	checkCertificateRevocationAgainstCrl,
@@ -8,10 +9,8 @@ import {
 	createOcspResponse,
 	createSelfSignedCertificate,
 	generateKeyPair,
-	type ParsedCertificate,
 	parseCertificatePem,
 	parseCertificateRevocationListDerOrThrow,
-	type RevocationPolicy,
 	unwrap,
 	validateCertificateRevocationList,
 	validateOcspResponse,

@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import {
-	type CertificatePolicies,
-	createSelfSignedCertificate,
-	isResultError,
-	parseCertificateDerOrThrow,
-} from '#micro509';
+import type { CertificatePolicies } from '#micro509';
+import { createSelfSignedCertificate, isResultError, parseCertificateDerOrThrow } from '#micro509';
 import { ia5String, objectIdentifier, sequence, utf8String } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { flattenedText, rfcDir } from '#test/helpers';

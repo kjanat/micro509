@@ -13,10 +13,10 @@
  */
 
 import { OIDS } from '#micro509/internal/asn1/oids';
+import type { CodePointRange } from '#micro509/internal/shared/rfc3454-tables';
 import {
 	A1_UNASSIGNED_RANGES,
 	B2_CASE_FOLD,
-	type CodePointRange,
 	NFKC_3_2_CORRECTIONS,
 } from '#micro509/internal/shared/rfc3454-tables';
 import { COMBINING_MARK_RANGES } from '#micro509/internal/shared/rfc4518-tables';

@@ -29,14 +29,13 @@ import {
 	tlv,
 } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
+import type { KdfBudget, KdfLimitOptions } from '#micro509/internal/crypto/pbes2';
 import {
 	createKdfBudget,
 	decryptPbes2,
 	encryptPbes2,
 	isKdfIterationLimitError,
 	isWrongPasswordError,
-	type KdfBudget,
-	type KdfLimitOptions,
 } from '#micro509/internal/crypto/pbes2';
 import { base64Encode } from '#micro509/internal/shared/base64';
 import type { EncryptedPkcs8Options } from '#micro509/keys/keys';

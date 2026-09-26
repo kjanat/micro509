@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
+import type { ParsedPkcs7SignedData } from '#micro509';
 import {
 	createCertificate,
 	createPkcs7CertBag,
 	createSelfSignedCertificate,
 	generateKeyPair,
-	type ParsedPkcs7SignedData,
 	parseCertificatePem,
 	parsePkcs7CertBagDer,
 	parsePkcs7CertBagPem,

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'bun:test';
+import type { SubjectAltName } from '#micro509';
 import {
 	createSelfSignedCertificate,
 	matchServiceIdentity,
 	parseCertificateDerOrThrow,
-	type SubjectAltName,
 } from '#micro509';
 import { ia5Bytes, implicitPrimitiveContext, sequence } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';

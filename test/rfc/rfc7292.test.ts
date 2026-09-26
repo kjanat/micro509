@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'bun:test';
+import type { ParsePfxResult } from '#micro509';
 import {
 	createSelfSignedCertificate,
 	exportPkcs8Der,
 	generateKeyPair,
-	type ParsePfxResult,
 	parsePfxDer,
 } from '#micro509';
 import {
