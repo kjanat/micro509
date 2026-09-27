@@ -45,7 +45,7 @@ function isServiceLabel(label: string): boolean {
 }
 
 /** RFC 1034 §3.1: an absolute domain name with the dot of its terminal root label removed. */
-export function withoutRootLabel(name: string): string {
+function withoutRootLabel(name: string): string {
 	return name.endsWith('.') ? name.slice(0, -1) : name;
 }
 

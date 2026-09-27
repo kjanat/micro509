@@ -331,11 +331,17 @@ Current GeneralName matrix for `nameConstraints`:
 - [x] Verification helpers (`verifyCertificateChain`, `validateForTlsServer`, …) accept the same identity union as `matchServiceIdentity()`.
 - [x] Only support CN fallback as an explicit RFC 6125 compatibility mode; RFC 9525 forbids using the Common Name RDN to identify a service. (IETF Datatracker[^rfc6125], [^rfc9525])
 - [x] Make wildcard behavior explicit and test it hard.
+- [x] Match a presented wildcard in a URI-ID or SRV-ID as RFC 9525 §6.3 does
+      in the DNS domain name portion: one `*` forming the whole left-most
+      label, matching exactly one label. A wildcard placed anywhere else makes
+      the identifier invalid and it is ignored. A `sip` or `sips` URI-ID takes
+      no wildcard (RFC 5922 §7.2), and a reference identifier holds none.
 - [x] Take a URI-ID's host as §7 reads a URI SAN's host. A `sip` or `sips`
       URI without `//` has no RFC 3986 authority, so its host comes from the
       RFC 3261 §25.1 hostport, past any userinfo and before any parameter, as
       RFC 9525 §6.2 splits `sip:voice.college.example`. An IP host matches by
       its octets (RFC 9525 §6.4).
+- [x] Hold an SRV-ID, presented or reference, to the SRVName syntax of §7.
 
 Focused RFC 9525 identity fixtures live in [`test/identity-fixtures.test.ts`](../test/identity-fixtures.test.ts).
 

@@ -10,11 +10,11 @@
  */
 
 import { DECODE_REFUSAL_CODES, decodeRefusalOf } from '#micro509/internal/asn1/decode-refusal';
-import { referenceDomainToAscii } from '#micro509/internal/shared/idna';
+import { presentedDomainToAscii, referenceDomainToAscii } from '#micro509/internal/shared/idna';
 import { decodeIpAddress, parseIpAddressToBytes } from '#micro509/internal/shared/ip';
 import type { UriHost, UriHostSource } from '#micro509/internal/shared/uri-host';
 import { hostportHost, uriAuthorityHost } from '#micro509/internal/shared/uri-host';
-import { withoutRootLabel } from '#micro509/internal/x509/general-name-profile';
+import { parsePresentedSrvName } from '#micro509/internal/x509/general-name-profile';
 import type { DecodeRefusalCode, ErrorResult, Micro509Error } from '#micro509/result/result';
 import { errorResult, micro509Error, successResult } from '#micro509/result/result';
 import type { SubjectAltName } from '#micro509/x509/extensions';
@@ -481,7 +481,7 @@ function tryNormalizeDnsName(value: string): string | undefined {
 interface ServiceScopedIdentity {
 	/** URI scheme (e.g. `"https"`) or SRV service label (e.g. `"imap"`). */
 	readonly serviceType: string;
-	/** Domain name in A-labels or an IP address. */
+	/** Domain name in A-labels, which a presented identifier may wildcard, or an IP address. */
 	readonly host: ServiceHost;
 }
 
@@ -529,7 +529,7 @@ function tryParseUriServiceIdentity(
 		sip && !value.startsWith('//', schemeEnd + 1)
 			? sipUriHost(value.slice(schemeEnd + 1), source)
 			: uriAuthorityHost(value, source);
-	const serviceHost = uriServiceHost(host);
+	const serviceHost = uriServiceHost(host, source === 'presented' && !sip);
 	return serviceHost === undefined ? undefined : { serviceType, host: serviceHost };
 }
 
@@ -543,12 +543,22 @@ function sipUriHost(schemeSpecific: string, source: UriHostSource): UriHost {
 	return hostport.includes('%') ? { type: 'invalid' } : hostportHost(hostport, source);
 }
 
-function uriServiceHost(host: UriHost): ServiceHost | undefined {
+/**
+ * RFC 9525 §6.3: a presented wildcard is the whole left-most label of the
+ * domain name. RFC 5922 §7.2 prohibits wildcards for SIP domains.
+ */
+function uriServiceHost(host: UriHost, wildcardAllowed: boolean): ServiceHost | undefined {
 	switch (host.type) {
 		case 'dns':
 		case 'ip':
 			return host;
-		case 'regName':
+		case 'regName': {
+			const parent =
+				wildcardAllowed && host.value.startsWith('*.')
+					? presentedDomainToAscii(host.value.slice(2))
+					: undefined;
+			return parent === undefined ? undefined : { type: 'dns', name: `*.${parent}` };
+		}
 		case 'absent':
 		case 'invalid':
 			return undefined;
@@ -559,8 +569,14 @@ function uriServiceHost(host: UriHost): ServiceHost | undefined {
 	}
 }
 
-/** Attempts to split `_service.domain` into parts. @returns `undefined` on failure. */
-function tryParseSrvServiceIdentity(value: string): ServiceScopedIdentity | undefined {
+/**
+ * RFC 4985 §2 `_Service.Name`. RFC 9525 §6.3 lets a presented Name open with
+ * a `*` label.
+ */
+function tryParseSrvServiceIdentity(
+	value: string,
+	source: UriHostSource,
+): ServiceScopedIdentity | undefined {
 	if (!value.startsWith('_')) {
 		return undefined;
 	}
@@ -568,12 +584,18 @@ function tryParseSrvServiceIdentity(value: string): ServiceScopedIdentity | unde
 	if (dotIndex <= 1 || dotIndex === value.length - 1) {
 		return undefined;
 	}
-	const domainName = tryNormalizeDnsName(value.slice(dotIndex + 1));
-	return domainName === undefined
+	const domain = value.slice(dotIndex + 1);
+	const wildcard = source === 'presented' && domain.startsWith('*.');
+	const domainName = tryNormalizeDnsName(wildcard ? domain.slice(2) : domain);
+	const parts =
+		domainName === undefined
+			? undefined
+			: parsePresentedSrvName(`${value.slice(0, dotIndex).toLowerCase()}.${domainName}`);
+	return parts === undefined
 		? undefined
 		: {
-				serviceType: value.slice(1, dotIndex).toLowerCase(),
-				host: { type: 'dns', name: withoutRootLabel(domainName) },
+				serviceType: parts.service.slice(1),
+				host: { type: 'dns', name: wildcard ? `*.${parts.name}` : parts.name },
 			};
 }
 

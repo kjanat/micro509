@@ -189,6 +189,10 @@ revocation })` report a certificate carrying `noRevAvail` or
   certificate users to handle an oversized explicitText gracefully, and PKITS
   4.8.19 leaves rejection to the application. The RFC says nothing about an
   oversized organization, and keeping it is micro509's receiving policy.
+- URI-ID and SRV-ID matching accept a presented wildcard where RFC 9525 §6.3
+  allows one in the DNS domain name portion, such as `https://*.example.com/`
+  or `_imap.*.example.com`. It is the whole left-most label and matches one
+  label. A `sip` or `sips` URI-ID takes none (RFC 5922 §7.2).
 - A URI-ID whose host is an IPv4 address or a bracketed IPv6 address matches
   by its octets (RFC 9525 §6.4).
 
@@ -200,6 +204,11 @@ revocation })` report a certificate carrying `noRevAvail` or
   presented SRVName without the root label, so `_imaps.example.com.` and
   `_imaps.example.com` match (RFC 3490 §2, §3.1). A Name with an empty label,
   a repeated terminal dot or no labels still matches nothing.
+- SRV-ID matching holds the reference identifier and each presented SRVName
+  to the RFC 6335 §5.1 service name and STD3 LDH labels that the builder and
+  name constraints already enforce. A reference such as
+  `_123.example.com` or `_mail.example_com` is malformed input, and a presented
+  SRVName outside the grammar matches nothing.
 - A critical `otherName` name constraint fails closed only for SANs of the
   same type-id, following X.509 §9.4.2.2, where each type-id is its own name
   form. A UPN constraint no longer rejects a SRVName or SmtpUTF8Mailbox SAN,

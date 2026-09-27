@@ -8,6 +8,8 @@ import {
 	unwrap,
 	verifyCertificateChain,
 } from '#micro509';
+import { concatBytes, ia5String, objectIdentifier, tlv } from '#micro509/internal/asn1/der';
+import { OIDS } from '#micro509/internal/asn1/oids';
 import { issueChain } from '#test/helpers';
 
 describe('identity boundary', () => {
@@ -839,6 +841,29 @@ describe('identity boundary', () => {
 		},
 	);
 
+	it.each(['_123.example.com', '_mail.example_com', '_-mail.example.com'])(
+		'holds the SRV-ID %s to the SRVName grammar on both sides',
+		async (value) => {
+			const { certificate } = await createSelfSignedCertificate({
+				subject: { commonName: 'srv-grammar.example' },
+				extensions: {
+					subjectAltNames: [
+						{
+							type: 'unknown',
+							tag: 0xa0,
+							value: concatBytes([objectIdentifier(OIDS.idOnDnsSrv), tlv(0xa0, ia5String(value))]),
+						},
+					],
+				},
+			});
+			const parsed = unwrap(parseCertificatePem(certificate.pem));
+			expect(parsed.subjectAltNames).toEqual([{ type: 'srv', value }]);
+			expect(
+				matchServiceIdentity({ certificate: parsed, serviceIdentity: { type: 'srv', value } }),
+			).toMatchObject({ ok: false, message: 'service identity input is malformed' });
+		},
+	);
+
 	it('fails closed for unsupported direct identity types at runtime', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Identity CA' },
@@ -970,6 +995,14 @@ async function verifyServiceIdentity(
 	return result.ok;
 }
 
+function rawSrvName(value: string): LeafSubjectAltNames[number] {
+	return {
+		type: 'unknown',
+		tag: 0xa0,
+		value: concatBytes([objectIdentifier(OIDS.idOnDnsSrv), tlv(0xa0, ia5String(value))]),
+	};
+}
+
 describe('URI-ID and SRV-ID hosts in a verified chain', () => {
 	it.each([
 		['ldap://%62locked.example/', 'ldap://blocked.example/', true],
@@ -1005,6 +1038,43 @@ describe('URI-ID and SRV-ID hosts in a verified chain', () => {
 					type: 'uri',
 					value: reference,
 				}),
+			).toBe(ok);
+		},
+	);
+
+	it.each([
+		['https://*.example.com/', 'https://api.example.com/', true],
+		['https://*.example.com/', 'https://example.com/', false],
+		['https://*.example.com/', 'https://a.b.example.com/', false],
+		['https://*.*.example.com/', 'https://a.b.example.com/', false],
+		['https://f*o.example.com/', 'https://foo.example.com/', false],
+		['https://*.example.com/', 'https://*.example.com/', false],
+		['sip:*.example.com', 'sip:voice.example.com', false],
+		['sips:*.example.com', 'sips:voice.example.com', false],
+	] as const)(
+		'matches the URI-ID wildcard %s against %s (RFC 9525 §6.3, RFC 5922 §7.2)',
+		async (presented, reference, ok) => {
+			expect(
+				await verifyServiceIdentity([{ type: 'uri', value: presented }], {
+					type: 'uri',
+					value: reference,
+				}),
+			).toBe(ok);
+		},
+	);
+
+	it.each([
+		['_imap.*.example.com', '_imap.mail.example.com', true],
+		['_imap.*.example.com', '_imap.example.com', false],
+		['_imap.*.example.com', '_imap.a.b.example.com', false],
+		['_imap.*.example.com', '_pop3.mail.example.com', false],
+		['_imap.m*.example.com', '_imap.mail.example.com', false],
+		['_imap.*.example.com', '_imap.*.example.com', false],
+	] as const)(
+		'matches the SRV-ID wildcard %s against %s (RFC 9525 §6.3)',
+		async (presented, reference, ok) => {
+			expect(
+				await verifyServiceIdentity([rawSrvName(presented)], { type: 'srv', value: reference }),
 			).toBe(ok);
 		},
 	);

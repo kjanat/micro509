@@ -253,8 +253,9 @@ Supported identity types:
 
 - **DNS-ID** — with wildcard matching and case-insensitive comparison
 - **IP-ID** — with IPv6 normalization
-- **URI-ID** — scheme + host matching
-- **SRV-ID** — service name matching via otherName SAN
+- **URI-ID** — scheme + host matching, with wildcard matching except for SIP
+  and IP hosts compared by octets
+- **SRV-ID** — service name matching via otherName SAN, with wildcard matching
 
 ## Error codes
 
