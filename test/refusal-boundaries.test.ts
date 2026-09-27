@@ -2,15 +2,19 @@ import { describe, expect, it } from 'bun:test';
 import {
 	checkCertificateRevocation,
 	checkCertificateRevocationAgainstCrl,
+	createCertificate,
 	createCertificateRevocationList,
 	createOcspResponse,
 	createSelfSignedCertificate,
+	generateKeyPair,
 	matchCertificatePrivateKey,
+	parseCertificatePem,
 	validateCertificateRevocationList,
 	validateOcspResponse,
 	verifyCertificateRevocationListSignature,
 	verifyOcspResponseSignature,
 } from '#micro509';
+import { toHex } from '#micro509/internal/asn1/asn1';
 import {
 	nullValue,
 	objectIdentifier,
@@ -92,6 +96,48 @@ describe('decode refusals at the CRL boundaries', () => {
 			await checkCertificateRevocationAgainstCrl({
 				certificate: leaf.pem,
 				issuerCertificate: unsupportedIssuer,
+				crl: crl.pem,
+			}),
+		).toMatchObject(unsupported);
+	});
+
+	it('checkCertificateRevocationAgainstCrl reports a distribution point name it cannot decode as unsupported', async () => {
+		const { intermediate, intermediateKeys } = await fixture();
+		const leafKeys = await generateKeyPair();
+		const leaf = await createCertificate({
+			issuer: { commonName: 'Verify Intermediate CA' },
+			subject: { commonName: 'teletex-distribution-point.example' },
+			publicKey: leafKeys.publicKey,
+			signerPrivateKey: intermediateKeys.privateKey,
+			issuerPublicKey: intermediateKeys.publicKey,
+			extensions: {
+				crlDistributionPoints: [
+					{
+						distributionPoint: {
+							type: 'fullName',
+							fullName: [{ type: 'directoryName', derHex: toHex(teletexSubject) }],
+						},
+					},
+				],
+			},
+		});
+		expect(parseCertificatePem(leaf.pem).ok).toBe(true);
+		const crl = await createCertificateRevocationList({
+			issuer: { commonName: 'Verify Intermediate CA' },
+			signerPrivateKey: intermediateKeys.privateKey,
+			issuerPublicKey: intermediateKeys.publicKey,
+			issuingDistributionPoint: {
+				distributionPoint: {
+					type: 'fullName',
+					fullName: [{ type: 'directoryName', derHex: toHex(sequence([])) }],
+				},
+			},
+			nextUpdate: FAR_FUTURE_NEXT_UPDATE,
+		});
+		expect(
+			await checkCertificateRevocationAgainstCrl({
+				certificate: leaf.pem,
+				issuerCertificate: intermediate.pem,
 				crl: crl.pem,
 			}),
 		).toMatchObject(unsupported);

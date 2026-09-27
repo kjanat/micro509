@@ -23,6 +23,7 @@ import {
 	DECODE_REFUSAL_CODES,
 	decodeFailureResult,
 	decodeRefusalOf,
+	rethrowDecodeRefusal,
 } from '#micro509/internal/asn1/decode-refusal';
 import type { DerElement } from '#micro509/internal/asn1/der';
 import {
@@ -1190,7 +1191,12 @@ async function validateOptionalDeltaCrl(
 			'delta CRL has no nextUpdate',
 		);
 	}
-	const compatibilityFailure = checkDeltaCrlCompatibility(completeCrl, deltaValidation.value);
+	let compatibilityFailure: CrlApplicabilityFailure | undefined;
+	try {
+		compatibilityFailure = checkDeltaCrlCompatibility(completeCrl, deltaValidation.value);
+	} catch (error) {
+		return crlNameRefusalFailure(error);
+	}
 	return compatibilityFailure ?? { ok: true, value: deltaValidation.value };
 }
 
@@ -1269,6 +1275,17 @@ function findRevokedCertificateEntry(
 	certificate: ParsedCertificate,
 	crl: ParsedCertificateRevocationList,
 ): RevokedCertificateLookupResult {
+	try {
+		return lookupRevokedCertificateEntry(certificate, crl);
+	} catch (error) {
+		return crlNameRefusalFailure(error);
+	}
+}
+
+function lookupRevokedCertificateEntry(
+	certificate: ParsedCertificate,
+	crl: ParsedCertificateRevocationList,
+): RevokedCertificateLookupResult {
 	const serialNumberHex = normalizeHex(certificate.serialNumberHex);
 	let effectiveIssuer: readonly GeneralName[] | undefined;
 	let sawUnsupportedIssuer = false;
@@ -1324,6 +1341,18 @@ function checkCrlApplicability(
 	certificate: ParsedCertificate,
 	crl: ParsedCertificateRevocationList,
 	allowDeltaCrl = false,
+): CrlApplicabilityOutcome {
+	try {
+		return evaluateCrlApplicability(certificate, crl, allowDeltaCrl);
+	} catch (error) {
+		return { ok: false, failure: crlNameRefusalFailure(error) };
+	}
+}
+
+function evaluateCrlApplicability(
+	certificate: ParsedCertificate,
+	crl: ParsedCertificateRevocationList,
+	allowDeltaCrl: boolean,
 ): CrlApplicabilityOutcome {
 	if (!allowDeltaCrl && crl.baseCrlNumber !== undefined) {
 		return notApplicableOutcome(
@@ -2683,7 +2712,10 @@ function parseIssuer(source: Uint8Array, element: DerElement): ParsedName {
 	return { derHex, rdns, attributes: allAttributes, values };
 }
 
-/** Re-parses a hex-encoded DER Name into a {@linkcode ParsedName}. Returns `undefined` on malformed input. */
+/**
+ * Re-parses a hex-encoded DER Name into a {@linkcode ParsedName}. Returns
+ * `undefined` on malformed input and throws a decode refusal.
+ */
 function parseDerHexName(hex: string): ParsedName | undefined {
 	try {
 		const bytes = hexToBytes(hex);
@@ -2693,9 +2725,19 @@ function parseDerHexName(hex: string): ParsedName | undefined {
 			return undefined;
 		}
 		return parseIssuer(bytes, element);
-	} catch {
+	} catch (error) {
+		rethrowDecodeRefusal(error, DECODE_REFUSAL_CODES);
 		return undefined;
 	}
+}
+
+/** The failure for a decode refusal a directoryName comparison threw. */
+function crlNameRefusalFailure(error: unknown): CrlApplicabilityFailure {
+	const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+	if (refusal === undefined) {
+		throw error;
+	}
+	return checkCertificateRevocationAgainstCrlFailureResult(refusal.code, refusal.message);
 }
 
 function unwrapNameElement(source: Uint8Array, element: DerElement): DerElement {

@@ -180,8 +180,11 @@ revocation })` report a certificate carrying `noRevAvail` or
   `validateCertificateRevocationList` and `verifyOcspResponseSignature`
   failures, where a CRL, OCSP response or request, or certificate that
   micro509 cannot decode was reported as `signature_invalid`,
-  `non_applicable`, `request_mismatch` or `malformed_certificate`. The chain
-  level treats an OCSP refusal like the `signature_invalid` it replaces.
+  `non_applicable`, `request_mismatch` or `malformed_certificate`. A
+  distribution point, issuing distribution point or CRL issuer directoryName
+  that micro509 cannot decode fails `checkCertificateRevocationAgainstCrl`
+  with its refusal. The chain level treats an OCSP refusal like the
+  `signature_invalid` it replaces.
 - `rejectOversizedDisplayText` on `verifyCertificateChain` and
   `validateCandidatePath` rejects a certificate whose user notice
   `explicitText` or `noticeRef` organization exceeds 200 characters with the
