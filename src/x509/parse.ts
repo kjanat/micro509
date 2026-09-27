@@ -22,7 +22,11 @@ import {
 	requireElement,
 	toHex,
 } from '#micro509/internal/asn1/asn1';
-import { DECODE_REFUSAL_CODES, decodeFailureResult } from '#micro509/internal/asn1/decode-refusal';
+import {
+	DECODE_REFUSAL_CODES,
+	decodeFailureResult,
+	decodeRefusalOf,
+} from '#micro509/internal/asn1/decode-refusal';
 import type { DerElement } from '#micro509/internal/asn1/der';
 import {
 	DEFAULT_MAX_DER_DEPTH,
@@ -62,7 +66,12 @@ import {
 	importSpkiDerOrThrow,
 } from '#micro509/keys/keys';
 import { pemDecodeOrThrow, splitPemBlocksOrThrow } from '#micro509/pem/pem';
-import type { DecodeFailureCode, ErrorResult, Micro509Error } from '#micro509/result/result';
+import type {
+	DecodeFailureCode,
+	DecodeRefusalCode,
+	ErrorResult,
+	Micro509Error,
+} from '#micro509/result/result';
 import { failureResult, rethrowIfInvariant, successResult } from '#micro509/result/result';
 import type {
 	AuthorityInformationAccess,
@@ -1241,7 +1250,8 @@ export type MatchCertificatePrivateKeyErrorCode =
 	| 'malformed_certificate'
 	| 'unsupported_private_key'
 	| 'key_type_mismatch'
-	| 'key_mismatch';
+	| 'key_mismatch'
+	| DecodeRefusalCode;
 
 /** Structured failure payload for {@linkcode matchCertificatePrivateKey}. */
 export interface MatchCertificatePrivateKeyFailure
@@ -1283,6 +1293,9 @@ export type MatchCertificatePrivateKeyResult =
  * one of:
  *
  * - `malformed_certificate` — `certificate` could not be parsed.
+ * - `unsupported` or `limit_exceeded` — `certificate` holds a construct
+ *   micro509 does not decode or exceeds a decoding limit (see
+ *   {@linkcode ParseCertificateErrorCode}).
  * - `unsupported_private_key` — `privateKey` is not an extractable private key
  *   of a supported type (from {@linkcode derivePublicKey}).
  * - `key_type_mismatch` — the key is a different algorithm than the
@@ -1303,6 +1316,7 @@ export type MatchCertificatePrivateKeyResult =
  * if (!result.ok) {
  *   // result.code is 'malformed_certificate' | 'unsupported_private_key'
  *   //              | 'key_type_mismatch' | 'key_mismatch'
+ *   //              | 'unsupported' | 'limit_exceeded'
  *   throw new Error(`key does not match certificate: ${result.code}`);
  * }
  * ```
@@ -1320,10 +1334,13 @@ export async function matchCertificatePrivateKey<
 		parsed = parseCertificateFromSource(certificate);
 	} catch (error) {
 		rethrowIfInvariant(error);
-		return failureResult(
-			'malformed_certificate',
-			error instanceof Error ? error.message : 'Malformed certificate',
-		);
+		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+		return refusal === undefined
+			? failureResult<MatchCertificatePrivateKeyErrorCode>(
+					'malformed_certificate',
+					error instanceof Error ? error.message : 'Malformed certificate',
+				)
+			: failureResult<MatchCertificatePrivateKeyErrorCode>(refusal.code, refusal.message);
 	}
 	let comparison: CertificatePrivateKeyComparison;
 	try {

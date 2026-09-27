@@ -166,7 +166,17 @@ revocation })` report a certificate carrying `noRevAvail` or
   both codes too, so a certificate or CSR source that `buildCandidatePath`,
   `validateCandidatePath`, `verifyCertificateChain`, the `validateFor*`
   profiles or `matchServiceIdentity` cannot decode reports its refusal, and
-  `trustAnchorFromCertificate` throws it.
+  `trustAnchorFromCertificate` throws it. The same holds for
+  `MatchCertificatePrivateKeyErrorCode`,
+  `CheckCertificateRevocationAgainstCrlErrorCode`,
+  `ValidateOcspResponseErrorCode`, `CheckCertificateRevocationErrorCode`,
+  `RevocationIndeterminateReasonCode` and the
+  `verifyCertificateRevocationListSignature`,
+  `validateCertificateRevocationList` and `verifyOcspResponseSignature`
+  failures, where a CRL, OCSP response or request, or certificate that
+  micro509 cannot decode was reported as `signature_invalid`,
+  `non_applicable`, `request_mismatch` or `malformed_certificate`. The chain
+  level treats an OCSP refusal like the `signature_invalid` it replaces.
 - `rejectOversizedDisplayText` on `verifyCertificateChain` and
   `validateCandidatePath` rejects a certificate whose user notice
   `explicitText` or `noticeRef` organization exceeds 200 characters with the

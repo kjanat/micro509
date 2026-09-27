@@ -19,7 +19,11 @@ import {
 	requireElement,
 	toHex,
 } from '#micro509/internal/asn1/asn1';
-import { DECODE_REFUSAL_CODES, decodeFailureResult } from '#micro509/internal/asn1/decode-refusal';
+import {
+	DECODE_REFUSAL_CODES,
+	decodeFailureResult,
+	decodeRefusalOf,
+} from '#micro509/internal/asn1/decode-refusal';
 import type { DerElement } from '#micro509/internal/asn1/der';
 import {
 	bitString,
@@ -58,7 +62,12 @@ import { parseGeneralName, parseGeneralNames } from '#micro509/internal/x509/gen
 import { parsePresentedSrvName } from '#micro509/internal/x509/general-name-profile';
 import { exportSpkiDer } from '#micro509/keys/keys';
 import { pemDecodeOrThrow, pemEncode } from '#micro509/pem/pem';
-import type { DecodeFailureCode, ErrorResult, Micro509Error } from '#micro509/result/result';
+import type {
+	DecodeFailureCode,
+	DecodeRefusalCode,
+	ErrorResult,
+	Micro509Error,
+} from '#micro509/result/result';
 import {
 	failureResult,
 	rethrowIfInvariant,
@@ -243,9 +252,13 @@ export type CrlSource = string | Uint8Array | ParsedCertificateRevocationList;
 /** PEM string, DER bytes, or already-parsed certificate. */
 export type CrlCertificateSource = string | Uint8Array | ParsedCertificate;
 
-/** Failure detail when CRL signature verification fails. */
+/**
+ * Failure detail when CRL signature verification fails. `unsupported` and
+ * `limit_exceeded` report a CRL or issuer certificate micro509 cannot decode
+ * (see {@linkcode ParseCertificateRevocationListErrorCode}).
+ */
 export interface VerifyCertificateRevocationListSignatureFailure
-	extends Micro509Error<'signature_invalid'> {
+	extends Micro509Error<'signature_invalid' | DecodeRefusalCode> {
 	/** Always `false` for failures. */
 	readonly ok: false;
 }
@@ -262,7 +275,7 @@ export type VerifyCertificateRevocationListSignatureResult =
 			readonly value: ParsedCertificateRevocationList;
 	  }
 	| ErrorResult<
-			'signature_invalid',
+			'signature_invalid' | DecodeRefusalCode,
 			Record<never, never>,
 			VerifyCertificateRevocationListSignatureFailure
 	  >;
@@ -294,11 +307,16 @@ export interface ValidateCertificateRevocationListInput {
 /**
  * Failure detail for {@linkcode validateCertificateRevocationList}.
  *
- * Possible codes: `signature_invalid`, `issuer_mismatch`, `stale_crl`, `crl_sign_not_permitted`.
+ * Possible codes: `signature_invalid`, `issuer_mismatch`, `stale_crl`, `crl_sign_not_permitted`,
+ * and `unsupported` or `limit_exceeded` for a CRL or issuer certificate micro509 cannot decode.
  */
 export interface ValidateCertificateRevocationListFailure
 	extends Micro509Error<
-		'signature_invalid' | 'issuer_mismatch' | 'stale_crl' | 'crl_sign_not_permitted'
+		| 'signature_invalid'
+		| 'issuer_mismatch'
+		| 'stale_crl'
+		| 'crl_sign_not_permitted'
+		| DecodeRefusalCode
 	> {
 	/** Always `false` for failures. */
 	readonly ok: false;
@@ -316,7 +334,11 @@ export type ValidateCertificateRevocationListResult =
 			readonly value: ParsedCertificateRevocationList;
 	  }
 	| ErrorResult<
-			'signature_invalid' | 'issuer_mismatch' | 'stale_crl' | 'crl_sign_not_permitted',
+			| 'signature_invalid'
+			| 'issuer_mismatch'
+			| 'stale_crl'
+			| 'crl_sign_not_permitted'
+			| DecodeRefusalCode,
 			Record<never, never>,
 			ValidateCertificateRevocationListFailure
 	  >;
@@ -353,7 +375,8 @@ export type CheckCertificateRevocationAgainstCrlErrorCode =
 	| 'issuer_mismatch'
 	| 'stale_crl'
 	| 'crl_sign_not_permitted'
-	| 'non_applicable';
+	| 'non_applicable'
+	| DecodeRefusalCode;
 
 /** Structured reason why a CRL was deemed non-applicable to a given certificate. */
 export type CrlApplicabilityFailureReason =
@@ -764,11 +787,14 @@ export async function verifyCertificateRevocationListSignature(
 			typeof issuerCertificate === 'string'
 				? parseIssuerCertificatePem(issuerCertificate)
 				: parseIssuerCertificateDer(new Uint8Array(issuerCertificate));
-	} catch {
-		return verifyCertificateRevocationListFailureResult(
-			'signature_invalid',
-			'certificate revocation list or issuer certificate input is malformed',
-		);
+	} catch (error) {
+		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+		return refusal === undefined
+			? verifyCertificateRevocationListFailureResult(
+					'signature_invalid',
+					'certificate revocation list or issuer certificate input is malformed',
+				)
+			: verifyCertificateRevocationListFailureResult(refusal.code, refusal.message);
 	}
 	let verifiedResult: Awaited<ReturnType<typeof verifySignedDataDetailed>>;
 	try {
@@ -781,11 +807,14 @@ export async function verifyCertificateRevocationListSignature(
 			parsedCrl.signatureValue,
 			parsedCrl.tbsCertListDer,
 		);
-	} catch {
-		return verifyCertificateRevocationListFailureResult(
-			'signature_invalid',
-			'certificate revocation list signature verification failed',
-		);
+	} catch (error) {
+		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+		return refusal === undefined
+			? verifyCertificateRevocationListFailureResult(
+					'signature_invalid',
+					'certificate revocation list signature verification failed',
+				)
+			: verifyCertificateRevocationListFailureResult(refusal.code, refusal.message);
 	}
 	if (!verifiedResult.ok) {
 		if (verifiedResult.code === 'verification_error') {
@@ -847,20 +876,26 @@ export async function authenticateCrl(
 	let parsedCrl: ParsedCertificateRevocationList;
 	try {
 		parsedCrl = normalizeCrl(crl);
-	} catch {
-		return validateCertificateRevocationListFailureResult(
-			'signature_invalid',
-			'certificate revocation list signed content is malformed',
-		);
+	} catch (error) {
+		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+		return refusal === undefined
+			? validateCertificateRevocationListFailureResult(
+					'signature_invalid',
+					'certificate revocation list signed content is malformed',
+				)
+			: validateCertificateRevocationListFailureResult(refusal.code, refusal.message);
 	}
 	let issuer: ParsedCertificate;
 	try {
 		issuer = normalizeCrlCertificate(issuerCertificate);
-	} catch {
-		return validateCertificateRevocationListFailureResult(
-			'signature_invalid',
-			'issuer certificate input is malformed',
-		);
+	} catch (error) {
+		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+		return refusal === undefined
+			? validateCertificateRevocationListFailureResult(
+					'signature_invalid',
+					'issuer certificate input is malformed',
+				)
+			: validateCertificateRevocationListFailureResult(refusal.code, refusal.message);
 	}
 	if (!compareDistinguishedNames(parsedCrl.issuer, issuer.subject)) {
 		return validateCertificateRevocationListFailureResult(
@@ -901,11 +936,14 @@ export async function authenticateCrl(
 			parsedCrl.signatureValue,
 			parsedCrl.tbsCertListDer,
 		);
-	} catch {
-		return validateCertificateRevocationListFailureResult(
-			'signature_invalid',
-			'certificate revocation list signature verification failed',
-		);
+	} catch (error) {
+		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+		return refusal === undefined
+			? validateCertificateRevocationListFailureResult(
+					'signature_invalid',
+					'certificate revocation list signature verification failed',
+				)
+			: validateCertificateRevocationListFailureResult(refusal.code, refusal.message);
 	}
 	if (!verifiedResult.ok) {
 		if (verifiedResult.code === 'verification_error') {
@@ -993,11 +1031,14 @@ export async function checkCertificateRevocationAgainstCrl(
 	let certificate: ParsedCertificate;
 	try {
 		certificate = normalizeCrlCertificate(input.certificate);
-	} catch {
-		return checkCertificateRevocationAgainstCrlFailureResult(
-			'non_applicable',
-			'certificate input is malformed',
-		);
+	} catch (error) {
+		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+		return refusal === undefined
+			? checkCertificateRevocationAgainstCrlFailureResult(
+					'non_applicable',
+					'certificate input is malformed',
+				)
+			: checkCertificateRevocationAgainstCrlFailureResult(refusal.code, refusal.message);
 	}
 	const authenticated = await authenticateCrl(input.crl, input.issuerCertificate);
 	if (!authenticated.ok) {
@@ -1155,10 +1196,10 @@ async function validateOptionalDeltaCrl(
 
 /** Builds a `VerifyCertificateRevocationListSignatureFailureResult`. */
 function verifyCertificateRevocationListFailureResult(
-	code: 'signature_invalid',
+	code: 'signature_invalid' | DecodeRefusalCode,
 	message: string,
 ): ErrorResult<
-	'signature_invalid',
+	'signature_invalid' | DecodeRefusalCode,
 	Record<never, never>,
 	VerifyCertificateRevocationListSignatureFailure
 > {
@@ -1167,10 +1208,19 @@ function verifyCertificateRevocationListFailureResult(
 
 /** Builds a `ValidateCertificateRevocationListFailureResult`. */
 function validateCertificateRevocationListFailureResult(
-	code: 'signature_invalid' | 'issuer_mismatch' | 'stale_crl' | 'crl_sign_not_permitted',
+	code:
+		| 'signature_invalid'
+		| 'issuer_mismatch'
+		| 'stale_crl'
+		| 'crl_sign_not_permitted'
+		| DecodeRefusalCode,
 	message: string,
 ): ErrorResult<
-	'signature_invalid' | 'issuer_mismatch' | 'stale_crl' | 'crl_sign_not_permitted',
+	| 'signature_invalid'
+	| 'issuer_mismatch'
+	| 'stale_crl'
+	| 'crl_sign_not_permitted'
+	| DecodeRefusalCode,
 	Record<never, never>,
 	ValidateCertificateRevocationListFailure
 > {

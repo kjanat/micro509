@@ -846,6 +846,8 @@ function ocspIndeterminateReasonFromFailure(
 			return 'ocsp_responder_revoked';
 		case 'signature_invalid':
 		case 'responder_revocation_unknown':
+		case 'unsupported':
+		case 'limit_exceeded':
 			return 'ocsp_responder_indeterminate';
 		case 'response_status_invalid':
 		case 'issuer_mismatch':
@@ -865,6 +867,8 @@ const OCSP_RESPONDER_FAILURE_CODES: ReadonlySet<ValidateOcspResponseFailure['cod
 	'responder_id_mismatch',
 	'responder_chain_invalid',
 	'ocsp_signing_missing',
+	'unsupported',
+	'limit_exceeded',
 ]);
 
 /**

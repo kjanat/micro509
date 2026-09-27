@@ -38,12 +38,14 @@ Unions may gain members in minor releases; treat them as non-exhaustive and keep
 
 ### MatchCertificatePrivateKeyErrorCode
 
-| Code                      | Meaning                                       |
-| ------------------------- | --------------------------------------------- |
-| `key_mismatch`            | Right algorithm, different key                |
-| `key_type_mismatch`       | Private key algorithm differs from the SPKI's |
-| `malformed_certificate`   | Certificate source failed to parse            |
-| `unsupported_private_key` | Key type has no supported SPKI derivation     |
+| Code                      | Meaning                                                                             |
+| ------------------------- | ----------------------------------------------------------------------------------- |
+| `key_mismatch`            | Right algorithm, different key                                                      |
+| `key_type_mismatch`       | Private key algorithm differs from the SPKI's                                       |
+| `limit_exceeded`          | Certificate exceeds a micro509 decoding limit, see `ParseCertificateErrorCode`      |
+| `malformed_certificate`   | Certificate source failed to parse                                                  |
+| `unsupported`             | Certificate holds a value micro509 does not decode, see `ParseCertificateErrorCode` |
+| `unsupported_private_key` | Key type has no supported SPKI derivation                                           |
 
 ### CreateCertificateErrorCode
 
@@ -185,13 +187,15 @@ both tables are enforced against `VERIFY_ERROR_CODES` by tests.
 
 ### CheckCertificateRevocationAgainstCrlErrorCode
 
-| Code                     | Meaning                                                                   |
-| ------------------------ | ------------------------------------------------------------------------- |
-| `crl_sign_not_permitted` | CRL signer's keyUsage lacks `cRLSign`, or a v3 signer has no keyUsage     |
-| `issuer_mismatch`        | CRL issuer does not match the certificate's issuer                        |
-| `non_applicable`         | No supplied CRL applies to the certificate (RFC 5280 §6.3.3)              |
-| `signature_invalid`      | CRL signature fails against the issuer key                                |
-| `stale_crl`              | CRL outside its `thisUpdate`/`nextUpdate` window or older than `maxAgeMs` |
+| Code                     | Meaning                                                                                                    |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| `crl_sign_not_permitted` | CRL signer's keyUsage lacks `cRLSign`, or a v3 signer has no keyUsage                                      |
+| `issuer_mismatch`        | CRL issuer does not match the certificate's issuer                                                         |
+| `limit_exceeded`         | A CRL or certificate exceeds a micro509 decoding limit, see `ParseCertificateRevocationListErrorCode`      |
+| `non_applicable`         | No supplied CRL applies to the certificate (RFC 5280 §6.3.3)                                               |
+| `signature_invalid`      | CRL signature fails against the issuer key                                                                 |
+| `stale_crl`              | CRL outside its `thisUpdate`/`nextUpdate` window or older than `maxAgeMs`                                  |
+| `unsupported`            | A CRL or certificate holds a value micro509 does not decode, see `ParseCertificateRevocationListErrorCode` |
 
 A `non_applicable` failure carries a `reason`. `delta_crl_incompatible` covers a
 delta CRL that does not pair with the complete CRL, including one whose
@@ -199,27 +203,31 @@ delta CRL that does not pair with the complete CRL, including one whose
 
 ### ValidateOcspResponseErrorCode
 
-| Code                           | Meaning                                                                |
-| ------------------------------ | ---------------------------------------------------------------------- |
-| `issuer_mismatch`              | CertID does not hash to the supplied issuer                            |
-| `next_update_missing`          | A response omits `nextUpdate` under `profile: 'rfc9919'` (RFC 9919 §5) |
-| `nonce_mismatch`               | Response nonce differs from the request's                              |
-| `ocsp_signing_missing`         | Delegated responder lacks the `ocspSigning` EKU                        |
-| `request_mismatch`             | Response does not answer every requested CertID                        |
-| `responder_chain_invalid`      | Responder certificate path fails validation                            |
-| `responder_id_mismatch`        | ResponderID matches no candidate signer                                |
-| `responder_revocation_unknown` | Delegated responder revocation status undetermined                     |
-| `responder_revoked`            | Delegated responder certificate is revoked                             |
-| `response_status_invalid`      | OCSPResponse status is not `successful`                                |
-| `signature_invalid`            | Response signature fails                                               |
-| `stale_response`               | Response outside its freshness window                                  |
+| Code                           | Meaning                                                                                                     |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| `issuer_mismatch`              | CertID does not hash to the supplied issuer                                                                 |
+| `limit_exceeded`               | A response, request or certificate exceeds a micro509 decoding limit, see `ParseOcspResponseErrorCode`      |
+| `next_update_missing`          | A response omits `nextUpdate` under `profile: 'rfc9919'` (RFC 9919 §5)                                      |
+| `nonce_mismatch`               | Response nonce differs from the request's                                                                   |
+| `ocsp_signing_missing`         | Delegated responder lacks the `ocspSigning` EKU                                                             |
+| `request_mismatch`             | Response does not answer every requested CertID                                                             |
+| `responder_chain_invalid`      | Responder certificate path fails validation                                                                 |
+| `responder_id_mismatch`        | ResponderID matches no candidate signer                                                                     |
+| `responder_revocation_unknown` | Delegated responder revocation status undetermined                                                          |
+| `responder_revoked`            | Delegated responder certificate is revoked                                                                  |
+| `response_status_invalid`      | OCSPResponse status is not `successful`                                                                     |
+| `signature_invalid`            | Response signature fails                                                                                    |
+| `stale_response`               | Response outside its freshness window                                                                       |
+| `unsupported`                  | A response, request or certificate holds a value micro509 does not decode, see `ParseOcspResponseErrorCode` |
 
 ### CheckCertificateRevocationErrorCode
 
-| Code                              | Meaning                                                |
-| --------------------------------- | ------------------------------------------------------ |
-| `revocation_evidence_missing`     | No CRL or OCSP evidence was supplied                   |
-| `revocation_status_indeterminate` | Evidence yielded no verdict under the hard-fail policy |
+| Code                              | Meaning                                                                                 |
+| --------------------------------- | --------------------------------------------------------------------------------------- |
+| `limit_exceeded`                  | The certificate exceeds a micro509 decoding limit, see `ParseCertificateErrorCode`      |
+| `revocation_evidence_missing`     | No CRL or OCSP evidence was supplied                                                    |
+| `revocation_status_indeterminate` | Evidence yielded no verdict under the hard-fail policy                                  |
+| `unsupported`                     | The certificate holds a value micro509 does not decode, see `ParseCertificateErrorCode` |
 
 ### RevocationIndeterminateReasonCode
 
@@ -229,6 +237,7 @@ delta CRL that does not pair with the complete CRL, including one whose
 | `certificate_status_unknown`   | Responder answered `unknown`                                                 |
 | `crl_sign_not_permitted`       | CRL signer's keyUsage lacks `cRLSign`, or a v3 signer has no keyUsage        |
 | `issuer_mismatch`              | Evidence issuer does not match the certificate's issuer                      |
+| `limit_exceeded`               | Evidence or a certificate it names exceeds a micro509 decoding limit         |
 | `next_update_missing`          | OCSP response omits `nextUpdate` under `ocspProfile: 'rfc9919'`              |
 | `non_applicable`               | No supplied CRL applies to the certificate                                   |
 | `nonce_mismatch`               | Response nonce differs from the request's                                    |
@@ -243,6 +252,7 @@ delta CRL that does not pair with the complete CRL, including one whose
 | `signature_invalid`            | Evidence signature fails                                                     |
 | `stale_crl`                    | CRL outside its `thisUpdate`/`nextUpdate` window or older than `crlMaxAgeMs` |
 | `stale_response`               | Response outside its freshness window                                        |
+| `unsupported`                  | Evidence or a certificate it names holds a value micro509 does not decode    |
 
 The chain-level `RevocationIndeterminateReason` from `checkChainRevocation` and
 `verifyCertificateChain({ revocation })` uses its own names. A CRL that is

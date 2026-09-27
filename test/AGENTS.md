@@ -32,6 +32,7 @@ test/
 | README example execution  | `readme-examples.test.ts`                                  | every README ts fence executes and compiles with zero diagnostics         |
 | Identity coverage         | `identity.test.ts`, `identity-fixtures.test.ts`            | RFC 9525 semantics and fixture corpus                                     |
 | Parse hardening           | `parse.test.ts`, `malformed-der.test.ts`                   | malformed input and parser boundaries                                     |
+| Decode refusal boundaries | `refusal-boundaries.test.ts`                               | `unsupported` and `limit_exceeded` through revocation and key matching    |
 | Differential interop      | `differential.test.ts`                                     | compares normalized results to OpenSSL                                    |
 | PKITS subset              | `pkits.test.ts`                                            | fixed-time conformance subset                                             |
 | Internal-only checks      | `internals.test.ts`                                        | safe place for `#micro509/*` internals                                    |
