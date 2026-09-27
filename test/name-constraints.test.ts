@@ -469,6 +469,23 @@ describe('name constraint fixtures', () => {
 		}
 	});
 
+	it('returns unsupported for a directoryName constraint holding an unsupported TeletexString octet', async () => {
+		const derHex = Buffer.from(
+			sequence([
+				setOf([
+					sequence([objectIdentifier(OIDS.organizationName), tlv(0x14, Uint8Array.of(0x41, 0x80))]),
+				]),
+			]),
+		).toString('hex');
+		for (const kind of ['permittedSubtrees', 'excludedSubtrees'] as const) {
+			const result = await verifyNameConstraintFixture({
+				rootNameConstraints: { [kind]: [{ base: { type: 'directoryName', derHex } }] },
+				leafSubject: { commonName: 'fixture-leaf', organization: 'A' },
+			});
+			expect(result).toMatchObject({ ok: false, code: 'unsupported', index: 0 });
+		}
+	});
+
 	it('refuses an initial URI constraint that is not a domain name', async () => {
 		const root = await createSelfSignedCertificateWithRawExtensions({
 			subject: { commonName: 'Initial URI Constraint Root' },

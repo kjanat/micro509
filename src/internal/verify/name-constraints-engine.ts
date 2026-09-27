@@ -16,6 +16,11 @@ import {
 	requireElement,
 	toHex,
 } from '#micro509/internal/asn1/asn1';
+import {
+	DECODE_REFUSAL_CODES,
+	decodeRefusalOf,
+	rethrowDecodeRefusal,
+} from '#micro509/internal/asn1/decode-refusal';
 import type { DerElement } from '#micro509/internal/asn1/der';
 import { DEFAULT_MAX_DER_DEPTH, readRootElement } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
@@ -34,7 +39,7 @@ import {
 	parseSrvNameRestriction,
 	parseUriNameConstraint,
 } from '#micro509/internal/x509/general-name-profile';
-import type { Micro509Error } from '#micro509/result/result';
+import type { DecodeRefusalCode, Micro509Error } from '#micro509/result/result';
 import type { InitialNameConstraintsInput } from '#micro509/verify/name-constraints';
 import type {
 	NameConstraintForm,
@@ -66,7 +71,8 @@ export interface NameConstraintValidationState {
 /** Discriminant codes for name-constraint validation failures. */
 export type NameConstraintValidationFailureCode =
 	| 'name_constraints_violated'
-	| 'unsupported_name_constraints';
+	| 'unsupported_name_constraints'
+	| DecodeRefusalCode;
 
 /** Diagnostic context attached to a name-constraint validation failure. */
 export interface NameConstraintValidationFailureDetails {
@@ -354,13 +360,25 @@ function checkCertificateNames(
 	accumulated: AccumulatedNameConstraints,
 	index: number,
 ): NameConstraintValidationResult {
-	const subjectResult = checkCertificateSubjectName(certificate, accumulated, index);
-	if (!subjectResult.ok) return subjectResult;
-	const sanResult = checkCertificateSubjectAltNames(certificate, accumulated, index);
-	if (!sanResult.ok) return sanResult;
-	const subjectEmailResult = checkCertificateSubjectEmailFallback(certificate, accumulated, index);
-	if (!subjectEmailResult.ok) return subjectEmailResult;
-	return { ok: true };
+	try {
+		const subjectResult = checkCertificateSubjectName(certificate, accumulated, index);
+		if (!subjectResult.ok) return subjectResult;
+		const sanResult = checkCertificateSubjectAltNames(certificate, accumulated, index);
+		if (!sanResult.ok) return sanResult;
+		return checkCertificateSubjectEmailFallback(certificate, accumulated, index);
+	} catch (error) {
+		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+		if (refusal === undefined) throw error;
+		return nameConstraintFailure(
+			refusal.code,
+			refusal.message,
+			index,
+			nameConstraintDetails({
+				subjectCommonName: certificate.subject.values.commonName,
+				actual: refusal.message,
+			}),
+		);
+	}
 }
 
 /** Checks a certificate subject DN against the accumulated directory-name constraints. */
@@ -999,7 +1017,8 @@ function parseDirectoryNameDerHex(derHex: string): ParsedName | undefined {
 			attributes,
 			values,
 		};
-	} catch {
+	} catch (error) {
+		rethrowDecodeRefusal(error, DECODE_REFUSAL_CODES);
 		return undefined;
 	}
 }
@@ -1056,7 +1075,8 @@ function parseDirectoryNameRdn(
 				valueElement.tag,
 				requireElement(valueElement, 'directoryName value').value,
 			);
-		} catch {
+		} catch (error) {
+			rethrowDecodeRefusal(error, DECODE_REFUSAL_CODES);
 			return undefined;
 		}
 		const fieldKey = nameFieldKeyFromOid(oid);
