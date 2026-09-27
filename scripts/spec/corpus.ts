@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CLIError } from 'dreamcli';
 import { ituIdentifier, parseItu } from './itu.ts';
+import { msIdentifier, parseMs } from './ms.ts';
 import { parsePkits } from './pkits.ts';
 import { parseRfc } from './rfc.ts';
 import type { DocumentRef, Heading, SourceLine, SpecDocument } from './types.ts';
@@ -94,6 +95,7 @@ export function discover(root: string = repositoryRoot): readonly DocumentRef[] 
 		...rfcReferences(root),
 		...nestedReferences(root, 'itu', 'itu', ituIdentifier),
 		...nestedReferences(root, 'w3c', 'w3c', (stem) => w3cIdentifier(stem)),
+		...nestedReferences(root, 'ms', 'ms', msIdentifier),
 	]);
 }
 
@@ -110,7 +112,9 @@ export function loadDocument(ref: DocumentRef): SpecDocument {
 				? parsePkits(source)
 				: ref.kind === 'itu'
 					? parseItu(source, path.basename(ref.path, '.txt'), path.basename(path.dirname(ref.path)))
-					: parseW3c(source);
+					: ref.kind === 'ms'
+						? parseMs(source)
+						: parseW3c(source);
 	const document: SpecDocument = {
 		...parsed,
 		id: ref.id,

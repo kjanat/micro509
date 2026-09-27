@@ -53,6 +53,15 @@ type ListedDocument =
 			readonly path: string;
 			readonly status: string | undefined;
 			readonly date: string | undefined;
+	  }
+	| {
+			readonly id: string;
+			readonly kind: 'ms';
+			readonly title: string;
+			readonly path: string;
+			readonly document: string;
+			readonly version: string | undefined;
+			readonly date: string | undefined;
 	  };
 
 type ListRow = {
@@ -122,6 +131,14 @@ function describe(
 			};
 		case 'w3c':
 			return { ...common, kind: 'w3c', status: meta.status, date: meta.date };
+		case 'ms':
+			return {
+				...common,
+				kind: 'ms',
+				document: meta.document,
+				version: meta.version,
+				date: meta.date,
+			};
 		default: {
 			const _exhaustive: never = meta;
 			throw new Error(`Unhandled document kind: ${String(_exhaustive)}`);
@@ -150,6 +167,9 @@ function noteOf(entry: ListedDocument): string {
 		case 'w3c':
 			if (entry.status !== undefined) notes.push(entry.status);
 			break;
+		case 'ms':
+			if (entry.version !== undefined) notes.push(entry.version);
+			break;
 		default: {
 			const _exhaustive: never = entry;
 			throw new Error(`Unhandled document kind: ${String(_exhaustive)}`);
@@ -163,6 +183,7 @@ function dateOf(entry: ListedDocument): string {
 		case 'rfc':
 		case 'pkits':
 		case 'w3c':
+		case 'ms':
 			return entry.date ?? '';
 		case 'itu':
 			return entry.edition ?? '';

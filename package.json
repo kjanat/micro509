@@ -105,6 +105,7 @@
 		"lint:biome": "biome lint",
 		"lint:deno": "deno lint src",
 		"lint:fix": "biome check --fix",
+		"ms": "bun scripts/fetch-spec.bun.ts ms",
 		"playwright:chromium": "npx playwright install --with-deps chromium",
 		"prepare": "run -sq deno:importsmap deno:cache",
 		"prepublishOnly": "[ -n \"${GITHUB_ACTIONS:-}\" ] || { printf '%s\\n' 'manual npm publish blocked; use release workflow for provenance' >&2; exit 1; }",

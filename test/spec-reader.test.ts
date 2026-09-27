@@ -5,6 +5,7 @@ import { runCommand } from 'dreamcli/testkit';
 import { projectRoot, rfcDir } from '#test/helpers';
 import { ituIdentifier, ituMeta, parseItu } from '../scripts/spec/itu.ts';
 import { headingsCommand, listCommand, readCommand, searchCommand } from '../scripts/spec/main.ts';
+import { msIdentifier, parseMs } from '../scripts/spec/ms.ts';
 import { licenseLinks, provenance } from '../scripts/spec/w3c.ts';
 
 type Entry = Readonly<Record<string, unknown>>;
@@ -77,6 +78,9 @@ function sectionNumbers(hits: readonly Entry[], doc: string): readonly string[] 
 }
 
 const ituPresent = existsSync(path.join(projectRoot, 'docs', 'itu'));
+const msWccePresent = existsSync(
+	path.join(projectRoot, 'docs', 'ms', 'MS-WCCE', 'MS-WCCE-v20260824.txt'),
+);
 const rfc5280Lines = readFileSync(path.join(rfcDir, 'rfc5280.txt'), 'utf8').split('\n');
 
 describe('spec list', () => {
@@ -636,6 +640,69 @@ describe('ITU-T parsing', () => {
 	test('derives stable identifiers from T-REC names', () => {
 		expect(ituIdentifier('T-REC-X.509-201910-I!!PDF-E', 'x509')).toBe('itu-x509-2019');
 		expect(ituIdentifier('T-REC-X.509-202310-I!Cor2!PDF-E', 'x509')).toBe('itu-x509-2023-cor2');
+	});
+});
+
+describe('Microsoft Open Specifications', () => {
+	const footer = (page: number, indent: string): readonly string[] => [
+		`${indent}                                        ${page} / 2`,
+		`${indent}[MS-TEST] - v20260101`,
+		`${indent}Test Protocol`,
+		`${indent}Copyright © 2026 Microsoft Corporation`,
+		`${indent}Release: January 1, 2026`,
+	];
+	const sample = [
+		'[MS-TEST]:',
+		'Test Protocol',
+		'',
+		'Cover text.',
+		...footer(1, ''),
+		'\f1     Introduction',
+		'',
+		'Body text.',
+		'1.1    Scope',
+		'Scope text.',
+		...footer(2, '  '),
+	].join('\n');
+
+	test('reads the cover, version and release date', () => {
+		expect(parseMs(sample).meta).toEqual({
+			kind: 'ms',
+			title: '[MS-TEST]: Test Protocol',
+			document: 'MS-TEST',
+			version: 'v20260101',
+			date: 'January 1, 2026',
+		});
+	});
+
+	test('drops the running page footers and numbers the sections', () => {
+		const parsed = parseMs(sample);
+		expect(parsed.lines.map((line) => line.text.trim()).filter((text) => text !== '')).toEqual([
+			'[MS-TEST]:',
+			'Test Protocol',
+			'Cover text.',
+			'1     Introduction',
+			'Body text.',
+			'1.1    Scope',
+			'Scope text.',
+		]);
+		expect(parsed.headings.map((heading) => [heading.number, heading.title])).toEqual([
+			['1', 'Introduction'],
+			['1.1', 'Scope'],
+		]);
+	});
+
+	test('derives identifiers from the versioned file name', () => {
+		expect(msIdentifier('MS-WCCE-v20260824', 'MS-WCCE')).toBe('ms-wcce-20260824');
+		expect(msIdentifier('notes', 'MS-WCCE')).toBe('ms-ms-wcce-notes');
+	});
+
+	test.skipIf(!msWccePresent)('reads MS-WCCE §2.2.2.7.5 szOID_NT_PRINCIPAL_NAME', async () => {
+		const result = await runCommand(readCommand, ['ms-wcce-20260824', '2.2.2.7.5']);
+		expect(result.exitCode).toBe(0);
+		const body = result.stdout.join('');
+		expect(body).toContain('OID = 1.3.6.1.4.1.311.20.2.3.');
+		expect(body).toContain('Format: UTF8String.');
 	});
 });
 

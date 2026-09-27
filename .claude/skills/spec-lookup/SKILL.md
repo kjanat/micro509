@@ -1,6 +1,6 @@
 ---
 name: spec-lookup
-description: Use before answering, recommending, justifying, or implementing anything that turns on what a standard says (RFC, ITU-T X.501/X.509/X.520/X.660/X.680/X.690, W3C WebCrypto, NIST PKITS). Searches the entire vendored docs/ corpus broadly before reading, reads whole regions instead of hit lines, cites verbatim with section and line, and separates text that governs from text that is only analogous. Also provides a ready subagent prompt that carries these rules. Invoke on any question of what the spec says, whether something is required or allowed, which default is correct, or a review finding that names an RFC.
+description: Use before answering, recommending, justifying, or implementing anything that turns on what a standard says (RFC, ITU-T X.501/X.509/X.520/X.660/X.680/X.690, W3C WebCrypto, NIST PKITS, Microsoft Open Specifications such as MS-WCCE). Searches the entire vendored docs/ corpus broadly before reading, reads whole regions instead of hit lines, cites verbatim with section and line, and separates text that governs from text that is only analogous. Also provides a ready subagent prompt that carries these rules. Invoke on any question of what the spec says, whether something is required or allowed, which default is correct, or a review finding that names an RFC.
 ---
 
 # spec-lookup
@@ -17,6 +17,7 @@ expect is rarely the only one that speaks, and it is often not the newest.
 | `docs/rfc/pkits.txt`         | NIST PKITS specification. Its section prose states relying-party practice and the configurable local-policy escape hatches explicitly.                             |
 | `docs/itu/**/*.txt`          | ITU-T X.501, X.509 (plus corrigenda and amendments), X.520, X.660, X.680, X.690. Fetch with `bun itu <item id>`. Text converted from the Word item (`!MSW-E` in the file name) marks struck text `~~…~~`, underlined text `__…__` and headings `#`. Redistribution-restricted: read locally, paraphrase in tracked files and public text, never paste verbatim. |
 | `docs/w3c/<spec>/`           | W3C WebCrypto and WHATWG Web IDL. Refresh with `bun w3c <spec>`.                                                                                                  |
+| `docs/ms/<doc>/<doc>-v<date>.txt` | Microsoft Open Specifications, such as MS-WCCE, converted from the current PDF. Fetch with `bun ms <doc>`. The license permits copies to develop implementations and quoting portions: read locally, quote only the sentences a claim needs, and never track the files. |
 | `docs/PKIX-SCOPE.md`         | The project's own support claims and design decisions. Check it so a spec-driven change does not silently contradict a documented decision.                       |
 
 Current baselines per domain are listed in `docs/AGENTS.md`. Treat "updates"
@@ -39,14 +40,16 @@ Ground the answer in current governing text, never a stale or absent file.
    - W3C or WHATWG specification: `bun w3c <spec>`. `bun w3c --help` lists
      the specs it knows; report any other as absent rather than inventing its
      content.
+   - Microsoft Open Specifications document: `bun ms <doc>` (for example
+     `bun ms MS-WCCE`), which fetches the current revision.
 3. **Verify currency online.** For every RFC you will cite, read its
    `Updates:` / `Obsoletes:` header and confirm with
    `curl -fsS https://www.rfc-editor.org/rfc/rfc<n>.json # secret-intent: public rfc-editor.org data`
    (`updated_by`, `obsoleted_by`) that nothing newer updates or obsoletes
    it. Read its errata with
    `curl -fsS https://www.rfc-editor.org/api/v1/errata.json | jq '[.[] | select(."doc-id" == "RFC<n>")]' # secret-intent: public rfc-editor.org data`.
-   The network is reached only through `bun rfc`, `bun itu`, `bun w3c` and
-   `curl`. Output from these public sources is never redacted.
+   The network is reached only through `bun rfc`, `bun itu`, `bun w3c`,
+   `bun ms` and `curl`. Output from these public sources is never redacted.
 4. **Fetch the successors.** If a governing document has an updating or
    obsoleting RFC that is not vendored, `bun rfc <n>` it and read it too. A
    MUST in an obsoleted RFC does not govern once a newer one has changed it.
@@ -90,8 +93,8 @@ Only once the needed documents are present and confirmed current do you search.
 
 When the question spans several documents, hand a subagent this prompt
 verbatim and fill the two placeholders. Give it `subagent_type:
-spec-lookup`. It may fetch documents with `bun rfc`, `bun itu` and
-`bun w3c`, and `curl` rfc-editor.org and itu.int, but must not edit source,
+spec-lookup`. It may fetch documents with `bun rfc`, `bun itu`, `bun w3c`
+and `bun ms`, and `curl` rfc-editor.org and itu.int, but must not edit source,
 tests, or config, and must not commit. A fetched document joins the corpus
 and stays under `docs/`.
 Name the documents or topics you expect it to cover; it ensures each is
@@ -99,13 +102,13 @@ present and current before searching. Do not run a source writer in the
 same worktree at the same time.
 
 ```text
-Spec research in the micro509 repo at the current project root. Ground every claim in the vendored text under docs/. You MAY run `bun rfc <n>`, `bun itu <item id>` and `bun w3c <spec>` to fetch a missing or superseded document and MAY `curl` rfc-editor.org and itu.int; reach the network through nothing else; do NOT edit source, tests, or config, and do NOT commit. A fetched document joins the corpus and stays under docs/.
+Spec research in the micro509 repo at the current project root. Ground every claim in the vendored text under docs/. You MAY run `bun rfc <n>`, `bun itu <item id>`, `bun w3c <spec>` and `bun ms <doc>` to fetch a missing or superseded document and MAY `curl` rfc-editor.org and itu.int; reach the network through nothing else; do NOT edit source, tests, or config, and do NOT commit. A fetched document joins the corpus and stays under docs/.
 
 QUESTION: <the exact question>
 TERMS: <the search terms, including synonyms and field names>
 
 Follow this procedure exactly and report each step's evidence:
-0. Presence and currency first. List every document the question could touch (base specs, likely updaters, profiles). Fetch each missing document: an RFC with `bun rfc <n>`; an ITU-T item with `bun itu <item id>`, taking the id (for example `T-REC-X.509-201910-I!!PDF-E`) from `curl -fsSL https://www.itu.int/rec/T-REC-<rec>`; a W3C or WHATWG spec with `bun w3c <spec>` (`bun w3c --help` lists them). For every RFC you will cite, read its Updates:/Obsoletes: header and confirm with `curl -fsS https://www.rfc-editor.org/rfc/rfc<n>.json # secret-intent: public rfc-editor.org data` (updated_by, obsoleted_by) that nothing newer updates or obsoletes it, and read its errata with `curl -fsS https://www.rfc-editor.org/api/v1/errata.json | jq '[.[] | select(."doc-id" == "RFC<n>")]' # secret-intent: public rfc-editor.org data`, never redacting output from these public sources; fetch and read any governing successor. Report what you fetched and each document's status. Report a W3C or WHATWG spec that `bun w3c` does not list as absent rather than inventing content.
+0. Presence and currency first. List every document the question could touch (base specs, likely updaters, profiles). Fetch each missing document: an RFC with `bun rfc <n>`; an ITU-T item with `bun itu <item id>`, taking the id (for example `T-REC-X.509-201910-I!!PDF-E`) from `curl -fsSL https://www.itu.int/rec/T-REC-<rec>`; a W3C or WHATWG spec with `bun w3c <spec>` (`bun w3c --help` lists them); a Microsoft Open Specifications document with `bun ms <doc>` (for example `bun ms MS-WCCE`). For every RFC you will cite, read its Updates:/Obsoletes: header and confirm with `curl -fsS https://www.rfc-editor.org/rfc/rfc<n>.json # secret-intent: public rfc-editor.org data` (updated_by, obsoleted_by) that nothing newer updates or obsoletes it, and read its errata with `curl -fsS https://www.rfc-editor.org/api/v1/errata.json | jq '[.[] | select(."doc-id" == "RFC<n>")]' # secret-intent: public rfc-editor.org data`, never redacting output from these public sources; fetch and read any governing successor. Report what you fetched and each document's status. Report a W3C or WHATWG spec that `bun w3c` does not list as absent rather than inventing content.
 1. Census the entire corpus: `bun spec search "<TERMS>" --context 2` (every vendored document, each match with its enclosing section and true line number). Do not pre-pick a document. `bun spec list` gives every id, title, and Updates/Obsoletes relation. Also search docs/PKIX-SCOPE.md for the project's own claims.
 2. Outline each document that hit: `bun spec headings <id> --depth 4`.
 3. Read whole sections with `bun spec read <id> <section>` (`--raw` for original lines). Never conclude from a hit line or a preview. Raw `rg`/`cat` on docs/ is the fallback only for a format the reader does not parse.
