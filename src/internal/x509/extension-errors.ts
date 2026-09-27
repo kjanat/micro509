@@ -53,6 +53,7 @@ export type ExtensionEncoderErrorCode =
 	| 'invalid_smtp_utf8_mailbox'
 	| 'invalid_srv_name'
 	| 'invalid_srv_name_constraint'
+	| 'invalid_uri_name_constraint'
 	| 'invalid_visible_string'
 	| 'key_usage_empty'
 	| 'limit_exceeded'

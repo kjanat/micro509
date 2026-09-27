@@ -32,6 +32,7 @@ type LeafSubject = CreateCertificateInput['subject'];
 type LeafSubjectAltNames = NonNullable<
 	NonNullable<CreateCertificateInput['extensions']>['subjectAltNames']
 >;
+type ServiceIdentity = NonNullable<Parameters<typeof verifyCertificateChain>[0]['serviceIdentity']>;
 
 function encodeDirectoryNameString(value: string, encoding: TestDnStringEncoding): Uint8Array {
 	switch (encoding) {
@@ -67,6 +68,7 @@ async function verifyNameConstraintFixture(options: {
 	readonly rootNameConstraints: NameConstraintsInput | Uint8Array;
 	readonly leafSubject?: LeafSubject;
 	readonly leafSubjectAltNames?: LeafSubjectAltNames;
+	readonly serviceIdentity?: ServiceIdentity;
 }) {
 	const rootCommonName = 'Name Constraint Fixture Root';
 	const constraints = options.rootNameConstraints;
@@ -103,7 +105,14 @@ async function verifyNameConstraintFixture(options: {
 	return await verifyCertificateChain({
 		leaf: leaf.pem,
 		roots: [root.certificate.pem],
+		...(options.serviceIdentity === undefined ? {} : { serviceIdentity: options.serviceIdentity }),
 	});
+}
+
+function rawUriNameConstraints(kind: 'permitted' | 'excluded', value: string): Uint8Array {
+	return sequence([
+		tlv(kind === 'permitted' ? 0xa0 : 0xa1, sequence([tlv(0x86, new TextEncoder().encode(value))])),
+	]);
 }
 
 describe('name constraint fixtures', () => {
@@ -351,6 +360,134 @@ describe('name constraint fixtures', () => {
 			],
 		});
 		expect(result).toMatchObject({ ok: true });
+	});
+
+	it('reads a URI SAN host by RFC 3986 §3.2.2 under an excluded host constraint', async () => {
+		const rootNameConstraints: NameConstraintsInput = {
+			excludedSubtrees: [{ base: { type: 'uri', value: 'blocked.example' } }],
+		};
+		for (const value of [
+			'ldap://%62locked.example/',
+			'https://blocked%2Eexample/',
+			'https://blocked.example./',
+			'https://BLOCKED.Example/',
+			'https://user@blocked.example:8443/x',
+		]) {
+			const result = await verifyNameConstraintFixture({
+				rootNameConstraints,
+				leafSubjectAltNames: [{ type: 'uri', value }],
+			});
+			expect(result).toMatchObject({ ok: false, code: 'name_constraints_violated' });
+		}
+		for (const value of ['https://allowed.example/', 'https://www.blocked.example/']) {
+			const result = await verifyNameConstraintFixture({
+				rootNameConstraints,
+				leafSubjectAltNames: [{ type: 'uri', value }],
+			});
+			expect(result).toMatchObject({ ok: true });
+		}
+	});
+
+	it('keeps a leading-period URI constraint to subdomains', async () => {
+		const rootNameConstraints: NameConstraintsInput = {
+			excludedSubtrees: [{ base: { type: 'uri', value: '.blocked.example' } }],
+		};
+		const subdomain = await verifyNameConstraintFixture({
+			rootNameConstraints,
+			leafSubjectAltNames: [{ type: 'uri', value: 'https://www.blocked.example./' }],
+		});
+		expect(subdomain).toMatchObject({ ok: false, code: 'name_constraints_violated' });
+		const domain = await verifyNameConstraintFixture({
+			rootNameConstraints,
+			leafSubjectAltNames: [{ type: 'uri', value: 'https://blocked.example/' }],
+		});
+		expect(domain).toMatchObject({ ok: true });
+	});
+
+	it('rejects a URI SAN whose reg-name is not a domain name under URI constraints', async () => {
+		for (const [rootNameConstraints, value] of [
+			[
+				{ excludedSubtrees: [{ base: { type: 'uri', value: 'blocked.example' } }] },
+				'https://blocked.example;extra/',
+			],
+			[
+				{ excludedSubtrees: [{ base: { type: 'uri', value: '.blocked.example' } }] },
+				'https://*.blocked.example/',
+			],
+			[
+				{ permittedSubtrees: [{ base: { type: 'uri', value: '.example.com' } }] },
+				'https://www.example.com%3Bx/',
+			],
+			[
+				{ permittedSubtrees: [{ base: { type: 'uri', value: '.example.com' } }] },
+				'https://www.example..com/',
+			],
+		] as const) {
+			const result = await verifyNameConstraintFixture({
+				rootNameConstraints,
+				leafSubjectAltNames: [{ type: 'uri', value }],
+			});
+			expect(result).toMatchObject({ ok: false, code: 'name_constraints_violated' });
+		}
+	});
+
+	it('rejects the chain before matching a URI-ID whose host an excluded URI constraint covers', async () => {
+		const leafSubjectAltNames: LeafSubjectAltNames = [
+			{ type: 'uri', value: 'ldap://%62locked.example/' },
+		];
+		const serviceIdentity: ServiceIdentity = { type: 'uri', value: 'ldap://blocked.example/' };
+		const unconstrained = await verifyNameConstraintFixture({
+			rootNameConstraints: {
+				excludedSubtrees: [{ base: { type: 'uri', value: 'other.example' } }],
+			},
+			leafSubjectAltNames,
+			serviceIdentity,
+		});
+		expect(unconstrained).toMatchObject({ ok: true });
+		const constrained = await verifyNameConstraintFixture({
+			rootNameConstraints: {
+				excludedSubtrees: [{ base: { type: 'uri', value: 'blocked.example' } }],
+			},
+			leafSubjectAltNames,
+			serviceIdentity,
+		});
+		expect(constrained).toMatchObject({ ok: false, code: 'name_constraints_violated' });
+	});
+
+	it('rejects every URI SAN while a received URI constraint is not a domain name', async () => {
+		for (const kind of ['permitted', 'excluded'] as const) {
+			const uri = await verifyNameConstraintFixture({
+				rootNameConstraints: rawUriNameConstraints(kind, 'https://blocked.example'),
+				leafSubjectAltNames: [{ type: 'uri', value: 'https://blocked.example/' }],
+			});
+			expect(uri).toMatchObject({ ok: false, code: 'name_constraints_violated' });
+			const dns = await verifyNameConstraintFixture({
+				rootNameConstraints: rawUriNameConstraints(kind, 'https://blocked.example'),
+				leafSubjectAltNames: [{ type: 'dns', value: 'blocked.example' }],
+			});
+			expect(dns).toMatchObject({ ok: true });
+		}
+	});
+
+	it('refuses an initial URI constraint that is not a domain name', async () => {
+		const root = await createSelfSignedCertificateWithRawExtensions({
+			subject: { commonName: 'Initial URI Constraint Root' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
+		});
+		for (const value of [
+			'https://blocked.example',
+			'blocked.example/',
+			'*.example.com',
+			'192.0.2.1',
+		]) {
+			const result = await verifyCertificateChain({
+				leaf: root.certificate.pem,
+				roots: [root.certificate.pem],
+				allowSelfSignedLeaf: true,
+				nameConstraints: { excludedSubtrees: [{ base: { type: 'uri', value } }] },
+			});
+			expect(result).toMatchObject({ ok: false, code: 'unsupported_initial_name_constraints' });
+		}
 	});
 
 	it('matches rfc822Name local-part case-sensitively and host case-insensitively', async () => {

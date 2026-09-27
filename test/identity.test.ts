@@ -6,6 +6,7 @@ import {
 	matchServiceIdentity,
 	parseCertificatePem,
 	unwrap,
+	verifyCertificateChain,
 } from '#micro509';
 import { issueChain } from '#test/helpers';
 
@@ -937,4 +938,74 @@ describe('identity boundary', () => {
 			}),
 		).toEqual({ ok: true, value: undefined });
 	});
+});
+
+type LeafSubjectAltNames = NonNullable<
+	NonNullable<Parameters<typeof createCertificate>[0]['extensions']>['subjectAltNames']
+>;
+type ServiceIdentity = NonNullable<Parameters<typeof verifyCertificateChain>[0]['serviceIdentity']>;
+
+async function verifyServiceIdentity(
+	subjectAltNames: LeafSubjectAltNames,
+	serviceIdentity: ServiceIdentity,
+): Promise<boolean> {
+	const root = await createSelfSignedCertificate({
+		subject: { commonName: 'Service Host Root' },
+		extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
+	});
+	const leafKeys = await generateKeyPair();
+	const leaf = await createCertificate({
+		issuer: { commonName: 'Service Host Root' },
+		subject: { commonName: 'service-host-leaf' },
+		publicKey: leafKeys.publicKey,
+		signerPrivateKey: root.keyPair.privateKey,
+		issuerPublicKey: root.keyPair.publicKey,
+		extensions: { keyUsage: ['digitalSignature'], subjectAltNames },
+	});
+	const result = await verifyCertificateChain({
+		leaf: leaf.pem,
+		roots: [root.certificate.pem],
+		serviceIdentity,
+	});
+	return result.ok;
+}
+
+describe('URI-ID and SRV-ID hosts in a verified chain', () => {
+	it.each([
+		['ldap://%62locked.example/', 'ldap://blocked.example/', true],
+		['https://blocked.example./', 'https://blocked.example/', true],
+		['https://blocked.example/', 'https://blocked.example./', true],
+		['https://user@Blocked.Example:8443/x', 'https://blocked.example/', true],
+		['sip:voice.college.example;transport=tcp', 'sip:voice.college.example', true],
+		['https://blocked.example;extra/', 'https://blocked.example/', false],
+		['https://blocked.example%3Bextra/', 'https://blocked.example/', false],
+		['https://blocked.example;extra/', 'https://blocked.example;extra/', false],
+	] as const)(
+		'reads presented %s against %s by RFC 3986 §3.2.2',
+		async (presented, reference, ok) => {
+			expect(
+				await verifyServiceIdentity([{ type: 'uri', value: presented }], {
+					type: 'uri',
+					value: reference,
+				}),
+			).toBe(ok);
+		},
+	);
+
+	it.each([
+		['https://[2001:db8::1]/', 'https://[2001:DB8:0::1]:443/', true],
+		['https://192.0.2.1/', 'https://192.0.2.1:443/', true],
+		['https://192.0.2.1/', 'https://192.0.2.2/', false],
+		['https://[2001:db8::1]/', 'https://[2001:db8::2]/', false],
+	] as const)(
+		'compares the IP host of %s and %s by its octets (RFC 9525 §6.4)',
+		async (presented, reference, ok) => {
+			expect(
+				await verifyServiceIdentity([{ type: 'uri', value: presented }], {
+					type: 'uri',
+					value: reference,
+				}),
+			).toBe(ok);
+		},
+	);
 });

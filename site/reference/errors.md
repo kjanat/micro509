@@ -112,6 +112,7 @@ Unions may gain members in minor releases; treat them as non-exhaustive and keep
 | `invalid_smtp_utf8_mailbox`                             | SmtpUTF8Mailbox malformed or domain not A-labels (RFC 9598 §3)                                                           |
 | `invalid_srv_name`                                      | SRVName not \_Service.Name with RFC 6335 service and LDH Name                                                            |
 | `invalid_srv_name_constraint`                           | SRVName constraint not \_Service.Name, \_Service or Name (RFC 4985)                                                      |
+| `invalid_uri_name_constraint`                           | URI constraint not an FQDN or a leading-period domain (RFC 5280 §4.2.1.10)                                               |
 | `invalid_visible_string`                                | VisibleString explicitText outside printable ASCII                                                                       |
 | `key_usage_empty`                                       | keyUsage asserts no bits                                                                                                 |
 | `limit_exceeded`                                        | An OID arc encodes in more than 64 octets, a micro509 limit                                                              |

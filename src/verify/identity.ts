@@ -12,6 +12,8 @@
 import { DECODE_REFUSAL_CODES, decodeRefusalOf } from '#micro509/internal/asn1/decode-refusal';
 import { referenceDomainToAscii } from '#micro509/internal/shared/idna';
 import { decodeIpAddress, parseIpAddressToBytes } from '#micro509/internal/shared/ip';
+import type { UriHost, UriHostSource } from '#micro509/internal/shared/uri-host';
+import { hostportHost, uriAuthorityHost } from '#micro509/internal/shared/uri-host';
 import { withoutRootLabel } from '#micro509/internal/x509/general-name-profile';
 import type { DecodeRefusalCode, ErrorResult, Micro509Error } from '#micro509/result/result';
 import { errorResult, micro509Error, successResult } from '#micro509/result/result';
@@ -337,7 +339,7 @@ function matchParsedIpServiceIdentity(
 }
 
 interface ScopedServiceIdentityOptions {
-	readonly parse: (value: string) => ServiceScopedIdentity | undefined;
+	readonly parse: (value: string, source: UriHostSource) => ServiceScopedIdentity | undefined;
 	readonly sanType: 'uri' | 'srv';
 	readonly missingMessage: string;
 	readonly serviceMismatchMessage: string;
@@ -360,7 +362,7 @@ function matchScopedServiceIdentity(
 			serviceIdentity.value,
 		);
 	}
-	const expected = options.parse(serviceIdentity.value);
+	const expected = options.parse(serviceIdentity.value, 'reference');
 	if (expected === undefined) {
 		return malformedServiceIdentityFailure(
 			certificate,
@@ -373,10 +375,10 @@ function matchScopedServiceIdentity(
 			isScopedSubjectAltName(entry, options.sanType),
 		) ?? [];
 	const matchingService = sans.flatMap((entry) => {
-		const parsed = options.parse(entry.value);
+		const parsed = options.parse(entry.value, 'presented');
 		return parsed === undefined || parsed.serviceType !== expected.serviceType ? [] : [parsed];
 	});
-	if (matchingService.some((entry) => matchesDnsName(entry.domainName, expected.domainName))) {
+	if (matchingService.some((entry) => matchesServiceHost(entry.host, expected.host))) {
 		return success();
 	}
 	return scopedServiceIdentityFailure(certificate, expected, sans, matchingService, options);
@@ -402,8 +404,8 @@ function scopedServiceIdentityFailure(
 			options.domainMismatchMessage,
 			details(
 				certificate.subject.values.commonName,
-				expected.domainName,
-				matchingService.map((entry) => entry.domainName).join(','),
+				serviceHostText(expected.host),
+				matchingService.map((entry) => serviceHostText(entry.host)).join(','),
 			),
 		);
 	}
@@ -421,15 +423,15 @@ function scopedServiceIdentityFailure(
 	return failure(
 		'subject_alt_name_mismatch',
 		options.missingMessage,
-		details(certificate.subject.values.commonName, expected.domainName, ''),
+		details(certificate.subject.values.commonName, serviceHostText(expected.host), ''),
 	);
 }
 
 function serviceTypeFromSanValue(
 	value: string,
-	parse: (value: string) => ServiceScopedIdentity | undefined,
+	parse: ScopedServiceIdentityOptions['parse'],
 ): readonly string[] {
-	const parsed = parse(value);
+	const parsed = parse(value, 'presented');
 	return parsed === undefined ? [] : [parsed.serviceType];
 }
 
@@ -475,12 +477,27 @@ function tryNormalizeDnsName(value: string): string | undefined {
 	return referenceDomainToAscii(value);
 }
 
-/** Decomposed URI-ID or SRV-ID: a service type discriminant plus a domain. */
+/** Decomposed URI-ID or SRV-ID: a service type discriminant plus a host. */
 interface ServiceScopedIdentity {
 	/** URI scheme (e.g. `"https"`) or SRV service label (e.g. `"imap"`). */
 	readonly serviceType: string;
-	/** Normalized domain name portion for DNS comparison. */
-	readonly domainName: string;
+	/** Domain name in A-labels or an IP address. */
+	readonly host: ServiceHost;
+}
+
+type ServiceHost =
+	| { readonly type: 'dns'; readonly name: string }
+	| { readonly type: 'ip'; readonly bytes: Uint8Array };
+
+/** RFC 9525 §6.3 compares domain names and §6.4 compares IP addresses by their octets. */
+function matchesServiceHost(presented: ServiceHost, reference: ServiceHost): boolean {
+	return presented.type === 'ip'
+		? reference.type === 'ip' && sameIpAddressBytes(presented.bytes, reference.bytes)
+		: reference.type === 'dns' && matchesDnsName(presented.name, reference.name);
+}
+
+function serviceHostText(host: ServiceHost): string {
+	return host.type === 'ip' ? decodeIpAddress(host.bytes) : host.name;
 }
 
 /** Returns which SAN types (dns, uri, srv) the certificate presents, used for CN-fallback suppression. */
@@ -497,74 +514,49 @@ function presentedDnsIdentifierTypes(
 	return types;
 }
 
-/** Attempts to split a URI into scheme + reg-name. @returns `undefined` on failure. */
-function tryParseUriServiceIdentity(value: string): ServiceScopedIdentity | undefined {
+/** RFC 9525 §6.2: a URI-ID's scheme and the host of its authority, or of a SIP URI. */
+function tryParseUriServiceIdentity(
+	value: string,
+	source: UriHostSource,
+): ServiceScopedIdentity | undefined {
 	const schemeEnd = value.indexOf(':');
 	if (schemeEnd <= 0 || !/^[A-Za-z][A-Za-z0-9+.-]*$/.test(value.slice(0, schemeEnd))) {
 		return undefined;
 	}
 	const serviceType = value.slice(0, schemeEnd).toLowerCase();
-	const domainName = extractUriRegName(value, serviceType);
-	const normalizedDomainName =
-		domainName === undefined ? undefined : tryNormalizeDnsName(domainName);
-	if (normalizedDomainName === undefined) {
-		return undefined;
-	}
-	return { serviceType, domainName: normalizedDomainName };
+	const sip = serviceType === 'sip' || serviceType === 'sips';
+	const host =
+		sip && !value.startsWith('//', schemeEnd + 1)
+			? sipUriHost(value.slice(schemeEnd + 1), source)
+			: uriAuthorityHost(value, source);
+	const serviceHost = uriServiceHost(host);
+	return serviceHost === undefined ? undefined : { serviceType, host: serviceHost };
 }
 
-/** Extracts the reg-name host from a URI, stripping scheme, userinfo, port, and path components. */
-function extractUriRegName(value: string, serviceType: string): string | undefined {
-	const schemeEnd = value.indexOf(':');
-	if (schemeEnd <= 0) {
-		return undefined;
-	}
-	const schemeSpecific = value.slice(schemeEnd + 1);
-	const hasAuthority = schemeSpecific.startsWith('//');
-	if (!hasAuthority && serviceType !== 'sip' && serviceType !== 'sips') {
-		return undefined;
-	}
-	let authority = cutAtFirstDelimiter(hasAuthority ? schemeSpecific.slice(2) : schemeSpecific, [
-		'/',
-		'?',
-		'#',
-	]);
-	const userInfoSeparator = authority.lastIndexOf('@');
-	if (userInfoSeparator >= 0) {
-		authority = authority.slice(userInfoSeparator + 1);
-	}
-	if (authority.startsWith('[')) {
-		return undefined;
-	}
-	const host = cutAtFirstDelimiter(authority, [':', ';']);
-	if (host.length === 0 || host.includes('[') || host.includes(']')) {
-		return undefined;
-	}
-	return decodeRegName(host);
+/**
+ * RFC 3261 §25.1: the host of a SIP URI follows any userinfo and precedes its
+ * parameters and headers, and its hostname holds no escaped octets.
+ */
+function sipUriHost(schemeSpecific: string, source: UriHostSource): UriHost {
+	const beforeHeaders = schemeSpecific.split(/[/?#]/, 1)[0] ?? '';
+	const hostport = beforeHeaders.slice(beforeHeaders.lastIndexOf('@') + 1).split(';', 1)[0] ?? '';
+	return hostport.includes('%') ? { type: 'invalid' } : hostportHost(hostport, source);
 }
 
-/** RFC 3986 §3.2.2: a reg-name with its percent-encoded UTF-8 octets decoded once. */
-function decodeRegName(host: string): string | undefined {
-	if (/%(?![0-9A-Fa-f]{2})/.test(host)) {
-		return undefined;
-	}
-	try {
-		return decodeURIComponent(host);
-	} catch {
-		return undefined;
-	}
-}
-
-/** Returns the substring before the first occurrence of any delimiter character. */
-function cutAtFirstDelimiter(value: string, delimiters: readonly string[]): string {
-	let end = value.length;
-	for (const delimiter of delimiters) {
-		const index = value.indexOf(delimiter);
-		if (index >= 0 && index < end) {
-			end = index;
+function uriServiceHost(host: UriHost): ServiceHost | undefined {
+	switch (host.type) {
+		case 'dns':
+		case 'ip':
+			return host;
+		case 'regName':
+		case 'absent':
+		case 'invalid':
+			return undefined;
+		default: {
+			const _exhaustive: never = host;
+			throw new Error(`Unhandled UriHost type: ${String(_exhaustive)}`);
 		}
 	}
-	return value.slice(0, end);
 }
 
 /** Attempts to split `_service.domain` into parts. @returns `undefined` on failure. */
@@ -581,7 +573,7 @@ function tryParseSrvServiceIdentity(value: string): ServiceScopedIdentity | unde
 		? undefined
 		: {
 				serviceType: value.slice(1, dotIndex).toLowerCase(),
-				domainName: withoutRootLabel(domainName),
+				host: { type: 'dns', name: withoutRootLabel(domainName) },
 			};
 }
 

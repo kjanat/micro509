@@ -173,6 +173,27 @@ Current conformance evidence:
       only, and erratum 5997 (Held for Document Update) records the readings
       for dNSName. OpenSSL, BoringSSL, Go, NSS, mozilla::pkix and
       rustls-webpki all match subdomains only.
+- [x] Hold every URI constraint, typed, initial or received, to RFC 5280
+      §4.2.1.10 and Appendix B: a DNS name in A-labels, which names one host,
+      or the same with a leading period, which names its subdomains only. The
+      builder and the initial-constraint input refuse a full URI such as
+      `https://blocked.example`, a port or path, an IP address, a root dot and
+      a U-label. A received constraint of that kind is malformed, and every URI
+      SAN is rejected while it is in force (RFC 5280 §4.2). RFC 5280 does not
+      define an empty URI constraint; micro509 matches it against every host,
+      as for dNSName.
+- [x] Read a URI SAN's host once, by RFC 3986, for URI constraints and URI-ID
+      matching alike: the authority after `//`, past any userinfo and before
+      any port. Percent-encoded octets decode as UTF-8 (RFC 3986 §3.2.2), so
+      `ldap://%62locked.example/` has the host `blocked.example` (RFC 3986
+      §2.3 and §6.2.2.2, RFC 5280 §7.4 step 3). The single dot RFC 3986
+      §3.2.2 allows after the rightmost label is dropped. No normalization rule
+      makes `blocked.example.` equal `blocked.example`; reading both as one
+      FQDN is micro509's choice. Under any URI constraint the certificate is
+      rejected when a URI SAN has no authority, an IP host, a single-label host
+      such as `localhost`, or a reg-name that is not a domain name after
+      decoding, such as `blocked.example;extra` (";" is a sub-delim) or
+      `*.example.com` (RFC 5280 §4.2.1.10).
 - [x] Fail closed per RFC 5280 §4.2.1.10 when a **critical** nameConstraints
       extension imposes a form whose constraint-matching semantics micro509
       does not implement
@@ -237,8 +258,9 @@ Current GeneralName matrix for `nameConstraints`:
   `xn--` label round trips, under the RFC 5891 §4 registration tests.
   Caller-supplied initial DNS and mail constraints convert under the §5
   lookup tests. A reference identifier converts after RFC 5895 mapping (RFC
-  9525 §6.3). A URI host is not converted. RFC 5280 §7.4 maps an IRI to a URI
-  by percent-encoding and forbids converting its ireg-name.
+  9525 §6.3). A URI host, in a SAN or a URI-ID, is percent-decoded and its
+  U-labels converted under the §5 lookup tests, after RFC 5895 mapping only in
+  a reference identifier.
 - RFC 4985 §3 requires the IDNA2003 ToASCII conversion of RFC 3490 §4
   before a SRVName Name is stored. RFC 5890 and RFC 5891 obsolete RFC 3490,
   and no RFC moves SRVName to IDNA2008. micro509 converts the Name with
@@ -309,6 +331,11 @@ Current GeneralName matrix for `nameConstraints`:
 - [x] Verification helpers (`verifyCertificateChain`, `validateForTlsServer`, …) accept the same identity union as `matchServiceIdentity()`.
 - [x] Only support CN fallback as an explicit RFC 6125 compatibility mode; RFC 9525 forbids using the Common Name RDN to identify a service. (IETF Datatracker[^rfc6125], [^rfc9525])
 - [x] Make wildcard behavior explicit and test it hard.
+- [x] Take a URI-ID's host as §7 reads a URI SAN's host. A `sip` or `sips`
+      URI without `//` has no RFC 3986 authority, so its host comes from the
+      RFC 3261 §25.1 hostport, past any userinfo and before any parameter, as
+      RFC 9525 §6.2 splits `sip:voice.college.example`. An IP host matches by
+      its octets (RFC 9525 §6.4).
 
 Focused RFC 9525 identity fixtures live in [`test/identity-fixtures.test.ts`](../test/identity-fixtures.test.ts).
 

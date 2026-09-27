@@ -51,6 +51,7 @@ import {
 import {
 	normalizeLabelSeparators,
 	parseSrvNameRestriction,
+	parseUriNameConstraint,
 } from '#micro509/internal/x509/general-name-profile';
 import type {
 	DecodeRefusalCode,
@@ -2102,7 +2103,7 @@ function describeInvalidInitialNameConstraintForm(subtree: unknown): string | un
 		case 'dns':
 			return typeof base.value === 'string' ? undefined : base.type;
 		case 'uri':
-			return typeof base.value === 'string' && /^[\x20-\x7e]*$/.test(base.value)
+			return typeof base.value === 'string' && parseUriNameConstraint(base.value) !== undefined
 				? undefined
 				: base.type;
 		case 'email':

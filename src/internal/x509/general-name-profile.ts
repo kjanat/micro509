@@ -1,7 +1,7 @@
 /**
  * Profile validation for GeneralName alternatives whose content micro509
- * checks beyond DER framing: SRVName (RFC 4985, RFC 6335), DirectoryString,
- * EDIPartyName, and ORAddress (RFC 5280).
+ * checks beyond DER framing: SRVName (RFC 4985, RFC 6335), the URI name
+ * constraint, DirectoryString, EDIPartyName, and ORAddress (RFC 5280).
  *
  * @module
  */
@@ -9,7 +9,8 @@
 import { checkStrictDer, childrenOf, decodeString } from '#micro509/internal/asn1/asn1';
 import type { DerElement } from '#micro509/internal/asn1/der';
 import { readRootElement } from '#micro509/internal/asn1/der';
-import { domainToAscii } from '#micro509/internal/shared/idna';
+import { domainToAscii, presentedDomainToAscii } from '#micro509/internal/shared/idna';
+import { isIpv4Address } from '#micro509/internal/shared/uri-host';
 import { checkOrAddressFields } from '#micro509/internal/x509/or-address';
 
 /** A SRVName's `_Service` label and Name without its root label, either possibly empty in a restriction. */
@@ -85,6 +86,23 @@ export function parseSrvNameRestriction(value: string): SrvNameParts | undefined
 export function parsePresentedSrvName(value: string): SrvNameParts | undefined {
 	const parts = splitSrvName(value);
 	return isServiceLabel(parts.service) && isSrvDomainName(parts.name) ? parts : undefined;
+}
+
+/** RFC 5280 §4.2.1.10 URI constraint: every host, one host, or the subdomains of a domain. */
+export type UriNameConstraint =
+	| { readonly type: 'any' }
+	| { readonly type: 'host'; readonly name: string }
+	| { readonly type: 'subdomains'; readonly name: string };
+
+/** RFC 5280 §4.2.1.10 and Appendix B: a URI constraint holds a DNS name, not a URI. */
+export function parseUriNameConstraint(value: string): UriNameConstraint | undefined {
+	if (value.length === 0) return { type: 'any' };
+	const subdomains = value.startsWith('.');
+	const name = /^[\x21-\x7e]+$/.test(value)
+		? presentedDomainToAscii(subdomains ? value.slice(1) : value)
+		: undefined;
+	if (name === undefined || isIpv4Address(name)) return undefined;
+	return subdomains ? { type: 'subdomains', name } : { type: 'host', name };
 }
 
 /** Why a structured GeneralName value failed its profile. */

@@ -13,20 +13,20 @@ Public barrels should stay in domain folders.
 internal/
 ├── asn1/    # DER/ASN.1 primitives, OID catalog
 ├── crypto/  # signature, hashing, encryption helpers
-├── shared/  # base64 + DN + IP + IDNA helpers with cross-domain use
+├── shared/  # base64 + DN + IP + IDNA + URI host helpers with cross-domain use
 ├── verify/  # policy/path/constraint engines
 └── x509/    # extension/name metadata helpers
 ```
 
 ## WHERE TO LOOK
 
-| Need                     | Location  | Notes                                                 |
-| ------------------------ | --------- | ----------------------------------------------------- |
-| ASN.1 and OID core       | `asn1/`   | DER encoding/parsing + OID resolution                 |
-| Crypto dispatch          | `crypto/` | algorithm/profile/sign/verify plumbing                |
-| Cross-domain utilities   | `shared/` | base64 + DN + IP + IDNA helpers (pure, deterministic) |
-| Name / extension helpers | `x509/`   | registry + field metadata + bit and name decoding     |
-| Verification engines     | `verify/` | high-complexity policy/name-constraint/path logic     |
+| Need                     | Location  | Notes                                                    |
+| ------------------------ | --------- | -------------------------------------------------------- |
+| ASN.1 and OID core       | `asn1/`   | DER encoding/parsing + OID resolution                    |
+| Crypto dispatch          | `crypto/` | algorithm/profile/sign/verify plumbing                   |
+| Cross-domain utilities   | `shared/` | base64 + DN + IP + IDNA + URI host (pure, deterministic) |
+| Name / extension helpers | `x509/`   | registry + field metadata + bit and name decoding        |
+| Verification engines     | `verify/` | high-complexity policy/name-constraint/path logic        |
 
 ## CONVENTIONS
 
@@ -66,10 +66,12 @@ internal/
 - `x509/general-name.ts` is the only GeneralName decoder; certificate and CRL
   parsing both consume it so the two layers cannot drift on an alternative.
 - `x509/general-name-profile.ts` owns GeneralName content profiles: the
-  SRVName grammar, DirectoryString, EDIPartyName, and ORAddress (schema in
-  `x509/or-address.ts`). The builder, initial constraints, and the
-  name-constraint engine all call it, so issuance and evaluation accept the
-  same language.
+  SRVName grammar, the URI name constraint, DirectoryString, EDIPartyName,
+  and ORAddress (schema in `x509/or-address.ts`). The builder, initial
+  constraints, and the name-constraint engine all call it, so issuance and
+  evaluation accept the same language.
+- URI name constraints and URI-ID matching read a URI's host through
+  `shared/uri-host.ts`, so the two decisions see the same host.
 - `asn1/asn1.ts` `checkStrictDer` walks one DER element and holds every
   universal-class element to the X.690 rules its tag fixes, DER's clauses 10
   and 11 included. It answers `unsupported` where those rules rest on ISO/IEC

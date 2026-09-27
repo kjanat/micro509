@@ -398,3 +398,18 @@ export function referenceDomainToAscii(domain: string): string | undefined {
 	const converted = domainToAscii(mapped, 'lookup');
 	return converted.ok ? converted.value : undefined;
 }
+
+/**
+ * A-label form of a domain name taken from a certificate, with its ASCII
+ * letters lowercased and no RFC 5895 mapping. Every ASCII label must be 1 to
+ * 63 letters, digits, hyphens or underscores, so a root dot is refused.
+ */
+export function presentedDomainToAscii(domain: string): string | undefined {
+	const lower = asciiLowercase(domain);
+	const asciiLabelsValid = lower
+		.split('.')
+		.every((label) => !isAscii(label) || /^[a-z0-9_-]{1,63}$/.test(label));
+	if (!asciiLabelsValid || lower.length > MAX_DOMAIN_OCTETS) return undefined;
+	const converted = domainToAscii(lower, 'lookup');
+	return converted.ok ? converted.value : undefined;
+}

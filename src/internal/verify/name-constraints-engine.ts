@@ -28,9 +28,11 @@ import {
 	parseIpAddressToBytes,
 } from '#micro509/internal/shared/ip';
 import { isMailboxDomain, isSmtpUtf8LocalPart } from '#micro509/internal/shared/mailbox';
+import { uriAuthorityHost } from '#micro509/internal/shared/uri-host';
 import {
 	parsePresentedSrvName,
 	parseSrvNameRestriction,
+	parseUriNameConstraint,
 } from '#micro509/internal/x509/general-name-profile';
 import type { Micro509Error } from '#micro509/result/result';
 import type { InitialNameConstraintsInput } from '#micro509/verify/name-constraints';
@@ -446,11 +448,11 @@ function checkCertificateSubjectAltName(
 	if (
 		checkable?.type === 'uri' &&
 		accumulatedHasConstraintsOfType('uri', accumulated) &&
-		uriAuthorityLacksFqdn(checkable.value)
+		uriConstraintHost(checkable.value) === undefined
 	) {
 		return nameConstraintFailure(
 			'name_constraints_violated',
-			`SAN uri:${checkable.value} has no FQDN authority and cannot be evaluated against URI name constraints`,
+			`SAN uri:${checkable.value} has no FQDN authority host and cannot be evaluated against URI name constraints`,
 			index,
 			nameConstraintDetails({
 				subjectCommonName: certificate.subject.values.commonName,
@@ -560,6 +562,7 @@ function isWellFormedConstraint(constraint: NameConstraintForm): boolean {
 		case 'directoryName':
 			return parseDirectoryNameDerHex(constraint.derHex) !== undefined;
 		case 'uri':
+			return parseUriNameConstraint(constraint.value) !== undefined;
 		case 'ip':
 			return true;
 		default: {
@@ -891,65 +894,38 @@ function matchesEmailConstraint(name: string, constraint: string): boolean {
 }
 
 /**
- * RFC 5280 §4.2.1.10: URI constraint matching.
- * Applied to the host part of the URI.
- * - Constraint ".example.com" matches subdomains only.
- * - Constraint "example.com" matches ONLY that exact host (no subdomain
- *   expansion, unlike DNS constraints).
+ * RFC 5280 §4.2.1.10: a URI constraint applies to the host part, a constraint
+ * without a leading period names one host, and ".example.com" is satisfied by
+ * its subdomains only.
  */
 function matchesUriConstraint(uri: string, constraint: string): boolean {
-	const host = extractUriHost(uri);
-	if (host === undefined) {
+	const host = uriConstraintHost(uri);
+	const parsed = parseUriNameConstraint(constraint);
+	if (host === undefined || parsed === undefined) {
 		return false;
 	}
-	const lowerHost = host.toLowerCase();
-	const lowerConstraint = constraint.toLowerCase();
-	if (lowerConstraint.length === 0) {
-		return true;
-	}
-	if (lowerConstraint.startsWith('.')) {
-		return lowerHost.endsWith(lowerConstraint);
-	}
-	// Non-period constraint: exact host match only (RFC 5280 §4.2.1.10).
-	return lowerHost === lowerConstraint;
-}
-
-/** Extracts the host (reg-name) portion of a URI, stripping scheme, userinfo, port, and path. */
-function extractUriHost(uri: string): string | undefined {
-	try {
-		const url = new URL(uri);
-		return url.hostname;
-	} catch {
-		return undefined;
+	switch (parsed.type) {
+		case 'any':
+			return true;
+		case 'host':
+			return host === parsed.name;
+		case 'subdomains':
+			return host.endsWith(`.${parsed.name}`);
+		default: {
+			const _exhaustive: never = parsed;
+			throw new Error(`Unhandled UriNameConstraint type: ${String(_exhaustive)}`);
+		}
 	}
 }
 
 /**
- * RFC 5280 §4.2.1.10: a URI subject to a uniformResourceIdentifier constraint
- * MUST be rejected when its authority component has no FQDN host. True for a
- * missing or empty authority, a bracketed IPv6 literal, an IPv4 literal, or a
- * single-label host such as `localhost` (an FQDN has at least two labels).
+ * RFC 5280 §4.2.1.10: the domain name of a URI's authority host, which a URI
+ * constraint in force requires. `undefined` for no authority, an IP address, a
+ * reg-name that is not a domain name, or a single-label host.
  */
-function uriAuthorityLacksFqdn(uri: string): boolean {
-	const host = extractUriHost(uri);
-	if (host === undefined || host.length === 0 || host.startsWith('[')) {
-		return true;
-	}
-	if (isIpLiteral(host)) {
-		return true;
-	}
-	const labels = host.split('.').filter((label) => label.length > 0);
-	return labels.length < 2;
-}
-
-/** True when `host` parses as an IPv4 or IPv6 literal. */
-function isIpLiteral(host: string): boolean {
-	try {
-		parseIpAddressToBytes(host);
-		return true;
-	} catch {
-		return false;
-	}
+function uriConstraintHost(uri: string): string | undefined {
+	const host = uriAuthorityHost(uri, 'presented');
+	return host.type === 'dns' && host.name.includes('.') ? host.name : undefined;
 }
 
 /**

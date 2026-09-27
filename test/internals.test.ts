@@ -1622,14 +1622,38 @@ describe('extensions encoding', () => {
 		}
 	});
 
-	it('encodeNameConstraints rejects a non-ASCII URI base with a code', () => {
-		expectEncoderErrorCode(
-			() =>
-				encodeNameConstraints({
-					permittedSubtrees: [{ base: { type: 'uri', value: 'café.example' } }],
-				}),
-			'invalid_ia5_string',
-		);
+	it('encodeNameConstraints takes a URI base that is a host or a leading-period domain', () => {
+		for (const value of [
+			'',
+			'blocked.example',
+			'.example.com',
+			'Host.Example.COM',
+			'.xn--caf-dma.example',
+		]) {
+			expect(() =>
+				encodeNameConstraints({ permittedSubtrees: [{ base: { type: 'uri', value } }] }),
+			).not.toThrow();
+		}
+		for (const value of [
+			'café.example',
+			'https://blocked.example',
+			'blocked.example/',
+			'blocked.example:443',
+			'blocked.example.',
+			'..example',
+			'.',
+			'*.example.com',
+			'blocked.example;extra',
+			'%62locked.example',
+			'xn--45h.example',
+			'192.0.2.1',
+			'[2001:db8::1]',
+		]) {
+			expectEncoderErrorCode(
+				() => encodeNameConstraints({ permittedSubtrees: [{ base: { type: 'uri', value } }] }),
+				'invalid_uri_name_constraint',
+			);
+		}
 	});
 
 	it('encodeAuthorityInfoAccess rejects a non-URI OCSP location wrapped in a custom OID', () => {

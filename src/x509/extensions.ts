@@ -76,6 +76,7 @@ import {
 	normalizeLabelSeparators,
 	parsePresentedSrvName,
 	parseSrvNameRestriction,
+	parseUriNameConstraint,
 } from '#micro509/internal/x509/general-name-profile';
 import { GENERAL_NAME_WIRE_TAGS } from '#micro509/internal/x509/general-name-tags';
 import { isResultError } from '#micro509/result/result';
@@ -2292,6 +2293,12 @@ function encodeNameConstraintForm(form: NameConstraintForm): Uint8Array {
 			}
 			return implicitPrimitiveContext(1, encodeIa5Content(toAsciiMailbox(form.value)));
 		case 'uri':
+			if (parseUriNameConstraint(form.value) === undefined) {
+				throwExtensionEncoderError(
+					'invalid_uri_name_constraint',
+					'A uniformResourceIdentifier constraint is a fully qualified domain name, with a leading period for its subdomains (RFC 5280 §4.2.1.10)',
+				);
+			}
 			return implicitPrimitiveContext(6, encodeIa5Content(form.value));
 		case 'ip': {
 			const total = form.addressBytes.length + form.maskBytes.length;

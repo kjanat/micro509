@@ -189,6 +189,8 @@ revocation })` report a certificate carrying `noRevAvail` or
   certificate users to handle an oversized explicitText gracefully, and PKITS
   4.8.19 leaves rejection to the application. The RFC says nothing about an
   oversized organization, and keeping it is micro509's receiving policy.
+- A URI-ID whose host is an IPv4 address or a bracketed IPv6 address matches
+  by its octets (RFC 9525 §6.4).
 
 ### Changed
 
@@ -256,6 +258,8 @@ revocation })` report a certificate carrying `noRevAvail` or
   levels. `ParsedPfxAttribute.valuesHex` and the unknown bag's `valueDer` hold
   the received value with definite lengths and universal constructed strings
   joined, so they are not guaranteed to be DER.
+- The U-labels of a presented URI host convert to A-labels without the RFC
+  5895 mapping, which applies to reference identifiers only.
 
 ### Fixed
 
@@ -385,6 +389,23 @@ revocation })` report a certificate carrying `noRevAvail` or
   mismatch, so an excluded subtree did not exclude the name. Such a comparison
   is now Undefined. It fails an excluded subtree and does not satisfy a
   permitted one.
+- URI name constraints and URI-ID matching read a URI SAN's host differently.
+  The constraint took the WHATWG URL hostname, which left
+  `ldap://%62locked.example/` percent-encoded and kept the trailing dot of
+  `https://blocked.example./`, so both escaped a `blocked.example` exclusion,
+  and the first still matched the URI-ID `ldap://blocked.example/`. URI-ID
+  matching cut every host at ";", so `https://blocked.example;extra/` matched
+  `https://blocked.example/`, and kept the trailing dot, so
+  `https://blocked.example./` did not. Both now read the host by RFC 3986:
+  percent-encoded octets decode as UTF-8, the dot after the rightmost label
+  is dropped, and a reg-name that is not a domain name after decoding fails
+  every URI constraint and matches no URI-ID.
+- A URI name constraint that was not a DNS name, such as
+  `https://blocked.example`, matched no host, so an excluded subtree excluded
+  nothing. The builder refuses it with the new `invalid_uri_name_constraint`,
+  initial constraints return `unsupported_initial_name_constraints`, and while
+  a received one is in force every URI SAN fails with
+  `name_constraints_violated`.
 - A dNSName or rfc822Name name constraint whose domain is malformed, such as
   `.example.com.`, matched no name, so an excluded subtree excluded nothing.
   While one is in force, every dNSName, rfc822Name or SmtpUTF8Mailbox of its
