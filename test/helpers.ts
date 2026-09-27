@@ -209,6 +209,38 @@ export function sliceElement(
 	return source.slice(element.start - element.headerLength, element.end);
 }
 
+/** A certificate with its TBSCertificate subject replaced and its signature left as it was. */
+export function rewriteCertificateSubject(
+	certificateDer: Uint8Array,
+	subjectDer: Uint8Array,
+): Uint8Array {
+	const topLevel = readSequenceChildren(certificateDer);
+	const tbsCertificate = topLevel[0];
+	const signatureAlgorithm = topLevel[1];
+	const signatureValue = topLevel[2];
+	if (
+		tbsCertificate === undefined ||
+		signatureAlgorithm === undefined ||
+		signatureValue === undefined
+	) {
+		throw new Error('Malformed Certificate');
+	}
+	const tbsDer = sliceElement(certificateDer, tbsCertificate);
+	const tbsChildren = readSequenceChildren(tbsDer);
+	const serialNumberIndex = tbsChildren[0]?.tag === 0xa0 ? 1 : 0;
+	const subjectIndex = serialNumberIndex + 4;
+	const rebuiltTbs = sequence(
+		tbsChildren.map((child, index) =>
+			index === subjectIndex ? subjectDer : sliceElement(tbsDer, child),
+		),
+	);
+	return sequence([
+		rebuiltTbs,
+		sliceElement(certificateDer, signatureAlgorithm),
+		sliceElement(certificateDer, signatureValue),
+	]);
+}
+
 /** The `index`-th child of a SEQUENCE, as its own DER element. */
 export function fieldAt(der: Uint8Array, index: number): DerElement {
 	const child = readSequenceChildren(der)[index];

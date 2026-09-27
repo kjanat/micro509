@@ -3,19 +3,25 @@ import {
 	buildCandidatePath,
 	checkExtendedKeyUsage,
 	createCertificate,
+	createCertificateSigningRequest,
 	createSelfSignedCertificate,
+	DECODE_REFUSAL_CODES,
 	generateKeyPair,
+	isResultError,
+	matchServiceIdentity,
 	parseCertificateChainPem,
 	parseCertificatePem,
 	pemDecodeOrThrow,
 	trustAnchorFromCertificate,
 	unwrap,
+	VERIFY_ERROR_CODES,
 	validateCandidatePath,
 	validateForCa,
 	validateForCodeSigning,
 	validateForTlsClient,
 	validateForTlsServer,
 	verifyCertificateChain,
+	verifyCertificateSigningRequest,
 } from '#micro509';
 import {
 	concatBytes,
@@ -23,8 +29,10 @@ import {
 	integerFromNumber,
 	nullValue,
 	objectIdentifier,
+	octetString,
 	printableString,
 	readRootElement,
+	readSequenceChildren,
 	sequence,
 	setOf,
 	tlv,
@@ -39,6 +47,7 @@ import { encodeSubjectAltName } from '#micro509/x509';
 import type { ParsedNameConstraintForm } from '#micro509/x509/extensions';
 import { parseNameConstraints } from '#micro509/x509/parse';
 import {
+	appendCertificateExtensions,
 	createCertificateWithRawExtensions,
 	createSelfSignedCertificateWithRawExtensions,
 	importRsaPrivateKeyWithScheme,
@@ -47,6 +56,8 @@ import {
 	reissueSelfSignedCertificateWithName,
 	replaceCertificateSignatureAlgorithm,
 	rewriteCertificateSignatureAsRsaPss,
+	rewriteCertificateSubject,
+	sliceElement,
 } from '#test/helpers';
 
 const UPN_TYPE_ID = '1.3.6.1.4.1.311.20.2.3';
@@ -5597,5 +5608,87 @@ describe('coverage: verify.ts internal edge cases', () => {
 			roots: [root.certificate.pem],
 		});
 		expect(result.ok).toBe(true);
+	});
+});
+
+function rewriteCsrSubject(csrDer: Uint8Array, subjectDer: Uint8Array): Uint8Array {
+	const [info, algorithm, signature] = readSequenceChildren(csrDer);
+	if (info === undefined || algorithm === undefined || signature === undefined) {
+		throw new Error('Malformed CertificationRequest');
+	}
+	const infoDer = sliceElement(csrDer, info);
+	const rebuiltInfo = sequence(
+		readSequenceChildren(infoDer).map((child, index) =>
+			index === 1 ? subjectDer : sliceElement(infoDer, child),
+		),
+	);
+	return sequence([rebuiltInfo, sliceElement(csrDer, algorithm), sliceElement(csrDer, signature)]);
+}
+
+describe('decode refusals at the verification entry points', () => {
+	const teletexSubject = sequence([
+		setOf([sequence([objectIdentifier(OIDS.commonName), tlv(0x14, Uint8Array.of(0xc1, 0x41))])]),
+	]);
+
+	it('lists every decode refusal code among the verify codes', () => {
+		for (const code of DECODE_REFUSAL_CODES) {
+			expect(VERIFY_ERROR_CODES).toContain(code);
+		}
+	});
+
+	it('reports a certificate micro509 does not decode as unsupported', async () => {
+		const chain = await issueChain();
+		const unsupportedDer = rewriteCertificateSubject(chain.leaf.der, teletexSubject);
+		const sources = {
+			leaf: unsupportedDer,
+			intermediates: [chain.intermediate.pem],
+			roots: [chain.root.certificate.pem],
+		};
+		const unsupported = { ok: false, code: 'unsupported', index: 0 };
+		expect(await buildCandidatePath(sources)).toMatchObject(unsupported);
+		expect(await verifyCertificateChain(sources)).toMatchObject(unsupported);
+		expect(await validateForTlsServer(sources)).toMatchObject(unsupported);
+		const forged = { ...unwrap(parseCertificatePem(chain.leaf.pem)), der: unsupportedDer };
+		expect(await validateCandidatePath({ chain: [forged] })).toMatchObject(unsupported);
+		expect(checkExtendedKeyUsage([forged], 'serverAuth')).toMatchObject(unsupported);
+		expect(
+			matchServiceIdentity({
+				certificate: forged,
+				serviceIdentity: { type: 'dns', value: 'verify.example' },
+			}),
+		).toMatchObject({ ok: false, code: 'unsupported' });
+		let thrown: unknown;
+		try {
+			trustAnchorFromCertificate(forged);
+		} catch (error) {
+			thrown = error;
+		}
+		expect(isResultError(thrown) ? thrown.code : undefined).toBe('unsupported');
+	});
+
+	it('reports a CSR micro509 does not decode as unsupported', async () => {
+		const keyPair = await generateKeyPair({ kind: 'ed25519' });
+		const csr = await createCertificateSigningRequest({
+			subject: { commonName: 'teletex-csr.example' },
+			publicKey: keyPair.publicKey,
+			signerPrivateKey: keyPair.privateKey,
+		});
+		expect(
+			await verifyCertificateSigningRequest(rewriteCsrSubject(csr.der, teletexSubject)),
+		).toMatchObject({ ok: false, code: 'unsupported' });
+	});
+
+	it('reports a certificate over a decoding limit as limit_exceeded', async () => {
+		const { certificate, keyPair } = await createSelfSignedCertificate({
+			subject: { commonName: 'arc-bound.example' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign'] },
+		});
+		const overlongArc = Uint8Array.of(0x2a, ...new Array<number>(64).fill(0xff), 0x7f);
+		const leaf = await appendCertificateExtensions(certificate.der, keyPair.privateKey, [
+			sequence([tlv(0x06, overlongArc), octetString(nullValue())]),
+		]);
+		expect(
+			await verifyCertificateChain({ leaf, roots: [certificate.pem], allowSelfSignedLeaf: true }),
+		).toMatchObject({ ok: false, code: 'limit_exceeded', index: 0 });
 	});
 });

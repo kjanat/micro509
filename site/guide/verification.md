@@ -299,6 +299,8 @@ Every other error-code union in the library is tabled in the
 | `ec_domain_parameters_missing`               | EC public key without a named curve            |
 | `certificate_revoked`                        | Revocation evidence confirms revocation        |
 | `revocation_indeterminate`                   | Revocation unknown under hard-fail policy      |
+| `unsupported`                                | Certificate input micro509 does not decode     |
+| `limit_exceeded`                             | Certificate input exceeds a decoding limit     |
 
 ## CSR verification
 

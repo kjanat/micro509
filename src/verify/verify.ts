@@ -17,6 +17,11 @@
  */
 
 import { canonicalizeOid } from '#micro509/internal/asn1/asn1';
+import {
+	DECODE_REFUSAL_CODES,
+	decodeRefusalOf,
+	rethrowDecodeRefusal,
+} from '#micro509/internal/asn1/decode-refusal';
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { verifySignedDataDetailed } from '#micro509/internal/crypto/sig-verify';
 import { compareDistinguishedNames } from '#micro509/internal/shared/dn';
@@ -48,6 +53,7 @@ import {
 	parseSrvNameRestriction,
 } from '#micro509/internal/x509/general-name-profile';
 import type {
+	DecodeRefusalCode,
 	ErrorResult,
 	IndexedErrorResult,
 	IndexedMicro509Error,
@@ -111,14 +117,14 @@ export type EkuCheckResult =
 			readonly value: undefined;
 	  }
 	| IndexedErrorResult<
-			'leaf_eku_missing' | 'intermediate_eku_constraint',
+			'leaf_eku_missing' | 'intermediate_eku_constraint' | DecodeRefusalCode,
 			Record<never, never>,
 			EkuCheckFailure
 	  >;
 
 /** Failure from {@linkcode checkExtendedKeyUsage} with the chain index of the certificate that failed. */
 export interface EkuCheckFailure
-	extends Micro509Error<'leaf_eku_missing' | 'intermediate_eku_constraint'> {
+	extends Micro509Error<'leaf_eku_missing' | 'intermediate_eku_constraint' | DecodeRefusalCode> {
 	/** Always `false` for failures. */
 	readonly ok: false;
 	/** Zero-based index into the chain of the certificate that lacks the required EKU. */
@@ -176,6 +182,8 @@ export interface TrustAnchor {
  * - `ec_domain_parameters_missing` — an elliptic curve public key carries no namedCurve domain parameters.
  * - `certificate_revoked` — revocation evidence confirms a chain certificate is revoked.
  * - `revocation_indeterminate` — revocation status could not be determined under a hard-fail policy.
+ * - `unsupported` — a certificate source holds a construct micro509 does not decode (see `ParseCertificateErrorCode`).
+ * - `limit_exceeded` — a certificate source exceeds a micro509 decoding limit (see `ParseCertificateErrorCode`).
  */
 export const VERIFY_ERROR_CODES = [
 	'no_trusted_root',
@@ -204,6 +212,8 @@ export const VERIFY_ERROR_CODES = [
 	'ec_domain_parameters_missing',
 	'certificate_revoked',
 	'revocation_indeterminate',
+	'unsupported',
+	'limit_exceeded',
 ] as const;
 
 /** See the doc comment above {@linkcode VERIFY_ERROR_CODES} for the meaning of each code. */
@@ -424,7 +434,7 @@ export type VerifyChainResult =
 /** Failure from {@linkcode verifyCertificateSigningRequest}. */
 export interface VerifyRequestFailure
 	extends Micro509Error<
-		'signature_invalid' | 'unsupported_signature_algorithm_parameters',
+		'signature_invalid' | 'unsupported_signature_algorithm_parameters' | DecodeRefusalCode,
 		VerifyFailureDetails
 	> {
 	/** Always `false` for failures. */
@@ -438,7 +448,7 @@ export type VerifyRequestResult =
 			readonly value: ParsedCertificateSigningRequest;
 	  }
 	| ErrorResult<
-			'signature_invalid' | 'unsupported_signature_algorithm_parameters',
+			'signature_invalid' | 'unsupported_signature_algorithm_parameters' | DecodeRefusalCode,
 			VerifyFailureDetails,
 			VerifyRequestFailure
 	  >;
@@ -594,6 +604,10 @@ async function buildCandidatePathRaw(input: BuildCandidatePathInput): Promise<
 		intermediates = loadCertificates(input.intermediates ?? []);
 		roots = loadCertificates(input.roots);
 	} catch (error) {
+		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+		if (refusal !== undefined) {
+			return failure(refusal.code, refusal.message, 0, detail({ actual: refusal.message }));
+		}
 		return failure(
 			'issuer_not_found',
 			'certificate source is malformed or leaf source does not contain exactly one certificate',
@@ -1062,6 +1076,12 @@ export async function validateCandidatePath(
 	try {
 		normalizedChain = normalizeValidationChain(input.chain);
 	} catch (error) {
+		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+		if (refusal !== undefined) {
+			return verifyFailureResult(
+				failure(refusal.code, refusal.message, 0, detail({ actual: refusal.message })),
+			);
+		}
 		return verifyFailureResult(
 			failure(
 				'signature_invalid',
@@ -1252,6 +1272,14 @@ export async function verifyCertificateSigningRequest(
 				? parseCertificateSigningRequestPemOrThrow(input)
 				: parseCertificateSigningRequestDerOrThrow(new Uint8Array(input));
 	} catch (error) {
+		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+		if (refusal !== undefined) {
+			return verifyRequestFailureResult(
+				refusal.code,
+				refusal.message,
+				detail({ actual: refusal.message }),
+			);
+		}
 		return verifyRequestFailureResult(
 			'signature_invalid',
 			'certificate request input is malformed',
@@ -1272,6 +1300,14 @@ export async function verifyCertificateSigningRequest(
 			parsed.certificationRequestInfoDer,
 		);
 	} catch (error) {
+		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+		if (refusal !== undefined) {
+			return verifyRequestFailureResult(
+				refusal.code,
+				refusal.message,
+				detail({ subjectCommonName: parsed.subject.values.commonName, actual: refusal.message }),
+			);
+		}
 		return verifyRequestFailureResult(
 			'signature_invalid',
 			'certificate request input is malformed',
@@ -1327,8 +1363,11 @@ export function checkExtendedKeyUsage(
 	let normalizedChain: readonly ParsedCertificate[];
 	try {
 		normalizedChain = normalizeValidationChain(chain);
-	} catch {
-		return ekuCheckFailureResult('leaf_eku_missing', 'certificate input is malformed', 0);
+	} catch (error) {
+		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+		return refusal === undefined
+			? ekuCheckFailureResult('leaf_eku_missing', 'certificate input is malformed', 0)
+			: ekuCheckFailureResult(refusal.code, refusal.message, 0);
 	}
 	const leaf = normalizedChain[0];
 	if (leaf === undefined) {
@@ -1367,7 +1406,8 @@ export function trustAnchorFromCertificate(certificate: ParsedCertificate): Trus
 	let normalizedCertificate: ParsedCertificate;
 	try {
 		normalizedCertificate = reparseCertificateForTrust(certificate);
-	} catch {
+	} catch (error) {
+		rethrowDecodeRefusal(error, DECODE_REFUSAL_CODES);
 		throw new Error('certificate input is malformed');
 	}
 	return {
@@ -1571,7 +1611,9 @@ function validateServiceIdentity(
 	}
 	if (
 		error.code !== 'subject_alt_name_mismatch' &&
-		error.code !== 'common_name_fallback_suppressed'
+		error.code !== 'common_name_fallback_suppressed' &&
+		error.code !== 'unsupported' &&
+		error.code !== 'limit_exceeded'
 	) {
 		return failure(
 			'subject_alt_name_mismatch',
@@ -1756,7 +1798,7 @@ function verifyRequestFailureResult(
 	message: string,
 	details?: VerifyFailureDetails,
 ): ErrorResult<
-	'signature_invalid' | 'unsupported_signature_algorithm_parameters',
+	'signature_invalid' | 'unsupported_signature_algorithm_parameters' | DecodeRefusalCode,
 	VerifyFailureDetails,
 	VerifyRequestFailure
 > {
@@ -1773,7 +1815,7 @@ function ekuCheckFailureResult(
 	message: string,
 	index: number,
 ): IndexedErrorResult<
-	'leaf_eku_missing' | 'intermediate_eku_constraint',
+	'leaf_eku_missing' | 'intermediate_eku_constraint' | DecodeRefusalCode,
 	Record<never, never>,
 	EkuCheckFailure
 > {

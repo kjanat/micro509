@@ -9,10 +9,11 @@
  * @module
  */
 
+import { DECODE_REFUSAL_CODES, decodeRefusalOf } from '#micro509/internal/asn1/decode-refusal';
 import { referenceDomainToAscii } from '#micro509/internal/shared/idna';
 import { decodeIpAddress, parseIpAddressToBytes } from '#micro509/internal/shared/ip';
 import { withoutRootLabel } from '#micro509/internal/x509/general-name-profile';
-import type { ErrorResult, Micro509Error } from '#micro509/result/result';
+import type { DecodeRefusalCode, ErrorResult, Micro509Error } from '#micro509/result/result';
 import { errorResult, micro509Error, successResult } from '#micro509/result/result';
 import type { SubjectAltName } from '#micro509/x509/extensions';
 import type { ParsedCertificate } from '#micro509/x509/parse';
@@ -71,7 +72,8 @@ export type MatchServiceIdentityErrorCode =
 	| 'subject_alt_name_mismatch'
 	| 'common_name_fallback_suppressed'
 	| 'service_identity_mismatch'
-	| 'unsupported_service_identity_type';
+	| 'unsupported_service_identity_type'
+	| DecodeRefusalCode;
 
 /** Diagnostic context attached to an identity-matching failure. */
 export interface MatchServiceIdentityFailureDetails {
@@ -175,8 +177,11 @@ export function matchCertificateServiceIdentity(
 	let certificate: ParsedCertificate;
 	try {
 		certificate = parseCertificateDerOrThrow(new Uint8Array(rawCertificate.der));
-	} catch {
-		return failure('subject_alt_name_mismatch', 'certificate input is malformed');
+	} catch (error) {
+		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+		return refusal === undefined
+			? failure('subject_alt_name_mismatch', 'certificate input is malformed')
+			: failure(refusal.code, refusal.message);
 	}
 	switch (serviceIdentity.type) {
 		case 'dns':

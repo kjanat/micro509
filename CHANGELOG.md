@@ -161,6 +161,12 @@ revocation })` report a certificate carrying `noRevAvail` or
   `DECODE_REFUSAL_CODES`, its `DecodeRefusalCode` type and `DecodeFailureCode`
   (`malformed` plus both) are exported from `micro509` and `micro509/result`,
   and each of those error code types is built from them.
+  `VERIFY_ERROR_CODES`, `MatchServiceIdentityErrorCode` and the
+  `verifyCertificateSigningRequest` and `checkExtendedKeyUsage` failures carry
+  both codes too, so a certificate or CSR source that `buildCandidatePath`,
+  `validateCandidatePath`, `verifyCertificateChain`, the `validateFor*`
+  profiles or `matchServiceIdentity` cannot decode reports its refusal, and
+  `trustAnchorFromCertificate` throws it.
 - `rejectOversizedDisplayText` on `verifyCertificateChain` and
   `validateCandidatePath` rejects a certificate whose user notice
   `explicitText` or `noticeRef` organization exceeds 200 characters with the

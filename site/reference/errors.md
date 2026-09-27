@@ -144,16 +144,18 @@ both tables are enforced against `VERIFY_ERROR_CODES` by tests.
 `revocation_indeterminate`, `self_signed_leaf_not_allowed`, `signature_invalid`,
 `subject_alt_name_mismatch`, `unrecognized_critical_extension`,
 `unsupported_initial_name_constraints`, `unsupported_name_constraints`,
-`unsupported_signature_algorithm_parameters`
+`unsupported_signature_algorithm_parameters`, `unsupported`, `limit_exceeded`
 
 ### MatchServiceIdentityErrorCode
 
-| Code                                | Meaning                                      |
-| ----------------------------------- | -------------------------------------------- |
-| `common_name_fallback_suppressed`   | CN match suppressed by presented identifiers |
-| `service_identity_mismatch`         | SRV-ID or URI-ID service part does not match |
-| `subject_alt_name_mismatch`         | No SAN matches the requested identity        |
-| `unsupported_service_identity_type` | Identity type has no matcher                 |
+| Code                                | Meaning                                                                                 |
+| ----------------------------------- | --------------------------------------------------------------------------------------- |
+| `common_name_fallback_suppressed`   | CN match suppressed by presented identifiers                                            |
+| `limit_exceeded`                    | The certificate exceeds a micro509 decoding limit, see `ParseCertificateErrorCode`      |
+| `service_identity_mismatch`         | SRV-ID or URI-ID service part does not match                                            |
+| `subject_alt_name_mismatch`         | No SAN matches the requested identity                                                   |
+| `unsupported`                       | The certificate holds a value micro509 does not decode, see `ParseCertificateErrorCode` |
+| `unsupported_service_identity_type` | Identity type has no matcher                                                            |
 
 ## micro509/revocation
 
