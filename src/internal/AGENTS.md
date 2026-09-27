@@ -44,7 +44,8 @@ internal/
   decode, `limit_exceeded` for an implementation limit such as
   `MAX_OID_SUBIDENTIFIER_OCTETS` or `DEFAULT_MAX_DER_DEPTH`. Every Result
   boundary maps those codes with `decodeFailureResult` or `decodeRefusalOf`; a
-  bare `throw new Error` stays `malformed`.
+  bare `throw new Error` stays `malformed`. A catch that replaces a decode
+  error with its own message calls `rethrowDecodeRefusal` first.
 - Use integer and length helpers from `asn1/` instead of local reimplementation.
 - Register new OIDs in `asn1/oids.json` under their registration arc; consume
   them as `OIDS.<name>`. Never inline a dotted-decimal literal in source.

@@ -228,6 +228,11 @@ revocation })` report a certificate carrying `noRevAvail` or
 
 ### Fixed
 
+- Key import returned `malformed` for a decode limit inside a
+  SubjectPublicKeyInfo, PKCS#8, SEC 1 or EncryptedPrivateKeyInfo, and
+  `invalid_password` for one inside decrypted PKCS#8, PKCS#1 or SEC 1 content.
+  `verifyPkcs7SignedData` returned `malformed` for one inside signedAttrs.
+  They now return `limit_exceeded`.
 - PFX parsing accepted any context-specific constructed tag where ContentInfo
   content, SafeBag bagValue and CertBag certValue are `[0] EXPLICIT`. Any
   other tag is now `malformed`.

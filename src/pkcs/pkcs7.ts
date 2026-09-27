@@ -1512,8 +1512,12 @@ async function verifySignedAttrs(
 	try {
 		assertImplicitSignedAttrsDer(signerInfo.signedAttrsDer);
 		signedAttributes = parseSignedAttributeRequirements(signerInfo.signedAttrsDer);
-	} catch {
-		return verifyPkcs7Failure('malformed', 'Malformed signedAttrs in SignedData');
+	} catch (error) {
+		rethrowIfInvariant(error);
+		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+		return refusal === undefined
+			? verifyPkcs7Failure('malformed', 'Malformed signedAttrs in SignedData')
+			: verifyPkcs7Failure(refusal.code, refusal.message);
 	}
 	if (signedAttributes.contentTypeOid !== encapsulatedContentTypeOid) {
 		return verifyPkcs7Failure('malformed', 'SignedData contentType attribute does not match');

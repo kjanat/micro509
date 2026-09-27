@@ -1598,6 +1598,49 @@ describe('pkcs7: coverage — error paths', () => {
 		expect(result).toMatchObject({ ok: false, code: 'malformed' });
 	});
 
+	it('returns limit_exceeded for a signedAttrs attribute type with an OID arc over 64 octets', async () => {
+		const rsaKeys = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'PKCS7 Long Attr OID CA' },
+			keyPair: rsaKeys,
+		});
+		const parsedSigner = unwrap(parseCertificatePem(ca.certificate.pem));
+		const content = new Uint8Array([0x01]);
+		const sigAlgorithm = getSignatureAlgorithm(rsaKeys.privateKey);
+		const overLongOid = tlv(0x06, Uint8Array.of(0x2a, ...new Array<number>(64).fill(0xff), 0x7f));
+		const signedAttrsContent = concatBytes([
+			sequence([objectIdentifier(OIDS.cmsContentType), setOf([objectIdentifier(OIDS.pkcs7Data)])]),
+			sequence([objectIdentifier(OIDS.cmsMessageDigest), setOf([octetString(new Uint8Array(32))])]),
+			sequence([overLongOid, setOf([nullValue()])]),
+		]);
+		const signedAttrsForSigning = tlv(0x31, signedAttrsContent);
+		const signedAttrsImplicit = tlv(0xa0, signedAttrsContent);
+		const sig = await signBytes(rsaKeys.privateKey, sigAlgorithm, signedAttrsForSigning);
+		const signerInfo = sequence([
+			integerFromNumber(1),
+			sequence([
+				hexToBytes(parsedSigner.issuer.derHex),
+				tlv(0x02, hexToBytes(parsedSigner.serialNumberHex)),
+			]),
+			sequence([objectIdentifier(OIDS.sha256), nullValue()]),
+			signedAttrsImplicit,
+			sequence([
+				objectIdentifier(sigAlgorithm.algorithmOid),
+				...(sigAlgorithm.parameters !== undefined ? [sigAlgorithm.parameters] : []),
+			]),
+			octetString(sig),
+		]);
+		const signedData = sequence([
+			integerFromNumber(1),
+			setOf([sequence([objectIdentifier(OIDS.sha256), nullValue()])]),
+			sequence([objectIdentifier(OIDS.pkcs7Data), explicitContext(0, octetString(content))]),
+			explicitContext(0, parsedSigner.der),
+			setOf([signerInfo]),
+		]);
+		const der = sequence([objectIdentifier(OIDS.pkcs7SignedData), explicitContext(0, signedData)]);
+		expect(await verifyPkcs7SignedData(der)).toMatchObject({ ok: false, code: 'limit_exceeded' });
+	});
+
 	it('rejects contentType signedAttrs values that are not OIDs', async () => {
 		const rsaKeys = await generateKeyPair({ kind: 'rsa', modulusLength: 2048 });
 		const ca = await createSelfSignedCertificate({

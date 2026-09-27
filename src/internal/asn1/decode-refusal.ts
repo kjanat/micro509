@@ -37,6 +37,13 @@ export function decodeRefusalOf<TCode extends DecodeRefusalCode>(
 	return code === undefined ? undefined : { code, message: error.error.message };
 }
 
+/** Rethrows `error` when it carries one of the refusal `codes`. */
+export function rethrowDecodeRefusal(error: unknown, codes: readonly DecodeRefusalCode[]): void {
+	if (decodeRefusalOf(error, codes) !== undefined) {
+		throw error;
+	}
+}
+
 /** A boundary's failure for a thrown decode error: its refusal, else `malformed` with its message. */
 export function decodeFailureResult<TCode extends DecodeRefusalCode>(
 	error: unknown,

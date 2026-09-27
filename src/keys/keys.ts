@@ -27,7 +27,11 @@ import {
 	toArrayBuffer,
 	toHex,
 } from '#micro509/internal/asn1/asn1';
-import { DECODE_LIMIT_CODES, decodeFailureResult } from '#micro509/internal/asn1/decode-refusal';
+import {
+	DECODE_LIMIT_CODES,
+	decodeFailureResult,
+	rethrowDecodeRefusal,
+} from '#micro509/internal/asn1/decode-refusal';
 import type { DerElement } from '#micro509/internal/asn1/der';
 import {
 	explicitContext,
@@ -832,7 +836,8 @@ export async function importPkcs8DerOrThrow(
 	let parsedPrivateKey: ReturnType<typeof parsePkcs8PrivateKey>;
 	try {
 		parsedPrivateKey = parsePkcs8PrivateKey(der);
-	} catch {
+	} catch (error) {
+		rethrowDecodeRefusal(error, DECODE_LIMIT_CODES);
 		throw new Error('Malformed PKCS#8 private key');
 	}
 	let importInput: PrivateKeyImportInput;
@@ -985,7 +990,8 @@ function readEncryptedPkcs8Envelope(der: Uint8Array): {
 	let children: readonly ReturnType<typeof readSequenceChildren>[number][];
 	try {
 		children = readSequenceChildren(der);
-	} catch {
+	} catch (error) {
+		rethrowDecodeRefusal(error, DECODE_LIMIT_CODES);
 		throw new Error('Malformed EncryptedPrivateKeyInfo');
 	}
 	const algorithmIdentifier = children[0];
@@ -1220,7 +1226,8 @@ export async function importSec1DerOrThrow(
 	let parsedSec1: ReturnType<typeof parseSec1PrivateKey>;
 	try {
 		parsedSec1 = parseSec1PrivateKey(der);
-	} catch {
+	} catch (error) {
+		rethrowDecodeRefusal(error, DECODE_LIMIT_CODES);
 		throw new Error('Malformed SEC 1 private key');
 	}
 	let importInput: ImportEcKeyInput;
@@ -1638,7 +1645,8 @@ function toImportAlgorithm(
 function assertDecryptedPrivateKey(parse: () => unknown, message: string): void {
 	try {
 		parse();
-	} catch {
+	} catch (error) {
+		rethrowDecodeRefusal(error, DECODE_LIMIT_CODES);
 		throw wrongPasswordError(message);
 	}
 }
@@ -2267,7 +2275,8 @@ function parseSpkiDer(der: Uint8Array): {
 				? { parametersOid: decodeObjectIdentifier(parameters.value) }
 				: {}),
 		};
-	} catch {
+	} catch (error) {
+		rethrowDecodeRefusal(error, DECODE_LIMIT_CODES);
 		throw new Error('Malformed SubjectPublicKeyInfo');
 	}
 }
