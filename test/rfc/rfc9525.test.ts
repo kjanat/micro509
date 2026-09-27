@@ -42,6 +42,32 @@ async function matchesDns(presented: string, reference: string): Promise<boolean
 	}).ok;
 }
 
+async function uriMatches(presented: string, reference: string): Promise<boolean> {
+	return matchServiceIdentity({
+		certificate: await presenting({ type: 'uri', value: presented }),
+		serviceIdentity: { type: 'uri', value: reference },
+	}).ok;
+}
+
+describe('RFC 9525 §2: the DNS domain name portion of a presented URI-ID holds A-labels', () => {
+	it('prints the sentence this suite relies on', () => {
+		expect(rfc9525).toContain(
+			'internationalized domain labels are represented as A-labels [IDNA-DEFS].',
+		);
+	});
+
+	it('matches no presented URI-ID whose host is a percent-encoded U-label', async () => {
+		expect(await uriMatches('https://b%C3%BCcher.example/', 'https://xn--bcher-kva.example/')).toBe(
+			false,
+		);
+		expect(await uriMatches('https://b%C3%BCcher.example/', 'https://bücher.example/')).toBe(false);
+	});
+
+	it('decodes a presented percent-encoded unreserved character (RFC 3986 §6.2.2.2)', async () => {
+		expect(await uriMatches('https://%62ucher.example/', 'https://bucher.example/')).toBe(true);
+	});
+});
+
 describe('RFC 9525 §6.3: reference U-labels are converted to A-labels under IDNA2008', () => {
 	it('prints the sentences this suite relies on', () => {
 		expect(rfc9525).toContain(
@@ -81,15 +107,7 @@ describe('RFC 9525 §6.3: reference U-labels are converted to A-labels under IDN
 		]);
 	});
 
-	it('decodes a percent-encoded UTF-8 URI host once before converting it', async () => {
-		const uriMatches = async (presented: string, reference: string) =>
-			matchServiceIdentity({
-				certificate: await presenting({ type: 'uri', value: presented }),
-				serviceIdentity: { type: 'uri', value: reference },
-			}).ok;
-		expect(await uriMatches('https://b%C3%BCcher.example/', 'https://xn--bcher-kva.example/')).toBe(
-			true,
-		);
+	it('decodes a percent-encoded UTF-8 reference host once before converting it', async () => {
 		expect(await uriMatches('https://xn--bcher-kva.example/', 'https://b%C3%BCcher.example/')).toBe(
 			true,
 		);

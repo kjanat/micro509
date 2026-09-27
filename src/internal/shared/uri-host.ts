@@ -73,17 +73,13 @@ function ipLiteralHost(literal: string): UriHost {
 }
 
 /**
- * RFC 3986 §3.2.2 IPv4address or reg-name, with percent-encoded octets decoded
- * as UTF-8 and the single "." that may follow the rightmost label dropped.
+ * RFC 3986 §3.2.2 IPv4address or reg-name, with the single "." that may follow
+ * the rightmost label dropped.
  */
 function regNameHost(host: string, source: UriHostSource): UriHost {
 	if (!(source === 'reference' ? IREG_NAME : REG_NAME).test(host)) return INVALID;
-	let decoded: string;
-	try {
-		decoded = decodeURIComponent(host);
-	} catch {
-		return INVALID;
-	}
+	const decoded = source === 'reference' ? decodeUtf8(host) : decodeUnreserved(host);
+	if (decoded === undefined) return INVALID;
 	if (isIpv4Address(decoded)) return { type: 'ip', bytes: parseIpAddressToBytes(decoded) };
 	const value = decoded.endsWith('.') ? decoded.slice(0, -1) : decoded;
 	const name = !DOMAIN_CHARACTERS.test(value)
@@ -94,4 +90,21 @@ function regNameHost(host: string, source: UriHostSource): UriHost {
 	return name === undefined || name.endsWith('.')
 		? { type: 'regName', value }
 		: { type: 'dns', name };
+}
+
+/** RFC 3986 §6.2.2.2: only a percent-encoded unreserved character decodes. */
+function decodeUnreserved(host: string): string {
+	return host.replace(/%([0-9A-Fa-f]{2})/g, (encoded, hex: string) => {
+		const character = String.fromCharCode(Number.parseInt(hex, 16));
+		return /^[A-Za-z0-9._~-]$/.test(character) ? character : encoded;
+	});
+}
+
+/** RFC 3986 §3.2.2: a reference host's percent-encoded octets decode as UTF-8. */
+function decodeUtf8(host: string): string | undefined {
+	try {
+		return decodeURIComponent(host);
+	} catch {
+		return undefined;
+	}
 }

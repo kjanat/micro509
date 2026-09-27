@@ -188,9 +188,12 @@ Current conformance evidence:
       as for dNSName.
 - [x] Read a URI SAN's host once, by RFC 3986, for URI constraints and URI-ID
       matching alike: the authority after `//`, past any userinfo and before
-      any port. Percent-encoded octets decode as UTF-8 (RFC 3986 §3.2.2), so
+      any port. A percent-encoded unreserved character decodes, so
       `ldap://%62locked.example/` has the host `blocked.example` (RFC 3986
-      §2.3 and §6.2.2.2, RFC 5280 §7.4 step 3). The single dot RFC 3986
+      §2.3 and §6.2.2.2, RFC 5280 §7.4 step 3). Other percent-encoded octets
+      stay encoded: RFC 3986 §6 does not make a percent-encoded U-label equal
+      its A-label, and RFC 9525 §2 requires A-labels in a presented URI-ID, so
+      `https://b%C3%BCcher.example/` is not a domain name. The single dot RFC 3986
       §3.2.2 allows after the rightmost label is dropped. No normalization rule
       makes `blocked.example.` equal `blocked.example`; reading both as one
       FQDN is micro509's choice. Under any URI constraint the certificate is
@@ -262,9 +265,9 @@ Current GeneralName matrix for `nameConstraints`:
   `xn--` label round trips, under the RFC 5891 §4 registration tests.
   Caller-supplied initial DNS and mail constraints convert under the §5
   lookup tests. A reference identifier converts after RFC 5895 mapping (RFC
-  9525 §6.3). A URI host, in a SAN or a URI-ID, is percent-decoded and its
-  U-labels converted under the §5 lookup tests, after RFC 5895 mapping only in
-  a reference identifier.
+  9525 §6.3). A reference URI-ID's host decodes its percent-encoded octets as
+  UTF-8 (RFC 3986 §3.2.2) before that conversion. A presented URI host is not
+  converted.
 - RFC 4985 §3 requires the IDNA2003 ToASCII conversion of RFC 3490 §4
   before a SRVName Name is stored. RFC 5890 and RFC 5891 obsolete RFC 3490,
   and no RFC moves SRVName to IDNA2008. micro509 converts the Name with

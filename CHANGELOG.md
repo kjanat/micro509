@@ -280,8 +280,12 @@ revocation })` report a certificate carrying `noRevAvail` or
   levels. `ParsedPfxAttribute.valuesHex` and the unknown bag's `valueDer` hold
   the received value with definite lengths and universal constructed strings
   joined, so they are not guaranteed to be DER.
-- The U-labels of a presented URI host convert to A-labels without the RFC
-  5895 mapping, which applies to reference identifiers only.
+- A presented URI-ID whose host is a percent-encoded U-label, such as
+  `https://b%C3%BCcher.example/`, no longer matches the reference
+  `https://xn--bcher-kva.example/`. RFC 9525 §2 requires A-labels in the DNS
+  domain name portion of a URI-ID, and RFC 3986 §6 decodes only percent-encoded
+  unreserved characters. A reference URI-ID's host still decodes as UTF-8
+  and converts to A-labels (RFC 9525 §6.3).
 
 ### Fixed
 
@@ -419,9 +423,10 @@ revocation })` report a certificate carrying `noRevAvail` or
   matching cut every host at ";", so `https://blocked.example;extra/` matched
   `https://blocked.example/`, and kept the trailing dot, so
   `https://blocked.example./` did not. Both now read the host by RFC 3986:
-  percent-encoded octets decode as UTF-8, the dot after the rightmost label
-  is dropped, and a reg-name that is not a domain name after decoding fails
-  every URI constraint and matches no URI-ID.
+  a percent-encoded unreserved character decodes, the dot after the rightmost
+  label is dropped, and a reg-name that is not a domain name after decoding,
+  a percent-encoded U-label included, fails every URI constraint and matches
+  no URI-ID.
 - A URI name constraint that was not a DNS name, such as
   `https://blocked.example`, matched no host, so an excluded subtree excluded
   nothing. The builder refuses it with the new `invalid_uri_name_constraint`,

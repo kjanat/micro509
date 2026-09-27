@@ -422,6 +422,10 @@ describe('name constraint fixtures', () => {
 				{ permittedSubtrees: [{ base: { type: 'uri', value: '.example.com' } }] },
 				'https://www.example..com/',
 			],
+			[
+				{ permittedSubtrees: [{ base: { type: 'uri', value: '.example' } }] },
+				'https://b%C3%BCcher.example/',
+			],
 		] as const) {
 			const result = await verifyNameConstraintFixture({
 				rootNameConstraints,
