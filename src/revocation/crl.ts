@@ -55,6 +55,7 @@ import {
 	parseDistributionPointReasonFlagsContent,
 } from '#micro509/internal/x509/extension-bits';
 import { parseGeneralName, parseGeneralNames } from '#micro509/internal/x509/general-name';
+import { parsePresentedSrvName } from '#micro509/internal/x509/general-name-profile';
 import { exportSpkiDer } from '#micro509/keys/keys';
 import { pemDecodeOrThrow, pemEncode } from '#micro509/pem/pem';
 import type { DecodeFailureCode, ErrorResult, Micro509Error } from '#micro509/result/result';
@@ -1876,7 +1877,7 @@ function compareGeneralNames(left: GeneralName, right: GeneralName): boolean {
 	}
 	if (left.type === 'srv' && right.type === 'srv') {
 		// RFC 4985 §2: the SRVName Service and the DNS Name both compare case-insensitively.
-		return left.value.toLowerCase() === right.value.toLowerCase();
+		return compareSrvNames(left.value.toLowerCase(), right.value.toLowerCase());
 	}
 	if (left.type === 'email' && right.type === 'email') {
 		return compareRfc822Names(left.value, right.value);
@@ -1900,6 +1901,15 @@ function compareGeneralNames(left: GeneralName, right: GeneralName): boolean {
 		return compareDistinguishedNames(leftName, rightName);
 	}
 	return compareOpaqueGeneralNames(left, right);
+}
+
+function compareSrvNames(left: string, right: string): boolean {
+	const leftParts = parsePresentedSrvName(left);
+	const rightParts = parsePresentedSrvName(right);
+	if (leftParts === undefined || rightParts === undefined) {
+		return left === right;
+	}
+	return leftParts.service === rightParts.service && leftParts.name === rightParts.name;
 }
 
 /** Encoding equality for the GeneralName alternatives carried as DER or an OID. */

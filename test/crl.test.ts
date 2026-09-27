@@ -1245,6 +1245,58 @@ describe('crl', () => {
 		});
 	});
 
+	it.each([
+		['_ldap.crl.example.', '_ldap.crl.example', 'good'],
+		['_ldap.crl.example', '_LDAP.CRL.EXAMPLE.', 'good'],
+		['_ldap.crl.example.', '_ldap.crl.example.', 'good'],
+		['_ldap.crl.example.', '_ldap.other.example', 'non_applicable'],
+		['_ldap.crl.example.', '_imaps.crl.example', 'non_applicable'],
+	] as const)(
+		'matches the SRVName distribution point %s against the issuing point %s across the root dot: %s',
+		async (dpName, idpName, outcome) => {
+			const ca = await createSelfSignedCertificate({
+				subject: { commonName: 'SRV Root DP CA' },
+				extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign', 'cRLSign'] },
+			});
+			const leafKeys = await generateKeyPair();
+			const leaf = await createCertificate({
+				issuer: { commonName: 'SRV Root DP CA' },
+				subject: { commonName: 'srv-root-dp.example' },
+				publicKey: leafKeys.publicKey,
+				signerPrivateKey: ca.keyPair.privateKey,
+				issuerPublicKey: ca.keyPair.publicKey,
+				extensions: {
+					crlDistributionPoints: [
+						{ distributionPoint: { type: 'fullName', fullName: [{ type: 'srv', value: dpName }] } },
+					],
+				},
+			});
+			const crl = await createCertificateRevocationList({
+				issuer: { commonName: 'SRV Root DP CA' },
+				signerPrivateKey: ca.keyPair.privateKey,
+				issuerPublicKey: ca.keyPair.publicKey,
+				issuingDistributionPoint: {
+					distributionPoint: { type: 'fullName', fullName: [{ type: 'srv', value: idpName }] },
+				},
+				nextUpdate: FAR_FUTURE_NEXT_UPDATE,
+			});
+			const result = await checkCertificateRevocationAgainstCrl({
+				certificate: leaf.pem,
+				issuerCertificate: ca.certificate.pem,
+				crl: crl.pem,
+			});
+			expect(result).toMatchObject(
+				outcome === 'good'
+					? { ok: true, value: { status: 'good' } }
+					: {
+							ok: false,
+							code: 'non_applicable',
+							details: { reason: 'distribution_point_mismatch' },
+						},
+			);
+		},
+	);
+
 	// RFC 5280 §7.4 step 3 decodes unreserved octets, uppercases the remaining
 	// triplets, and covers the whole unreserved set; steps 2 and 5 lowercase the
 	// host and drop the default port even for a scheme the URL parser treats as
