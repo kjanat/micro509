@@ -11,18 +11,18 @@ import { throwDecodeRefusal } from '#micro509/internal/asn1/decode-refusal';
 import type { DerElement } from '#micro509/internal/asn1/der';
 import {
 	DEFAULT_MAX_DER_DEPTH,
+	MAX_OID_SUBIDENTIFIER_OCTETS,
 	objectIdentifier,
 	readElement,
 	walkDerTree,
 } from '#micro509/internal/asn1/der';
 
+export { MAX_OID_SUBIDENTIFIER_OCTETS } from '#micro509/internal/asn1/der';
+
 /** Shared UTF-8 text decoder for ASN.1 string types. */
 const textDecoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
 
 const PRINTABLE_STRING_PATTERN = /^[A-Za-z0-9 '()+,\-./:=?]*$/u;
-
-/** micro509's bound on one OBJECT IDENTIFIER sub-identifier's base-128 encoding; X.660 §7.6 leaves arc values unbounded. */
-export const MAX_OID_SUBIDENTIFIER_OCTETS = 64;
 
 /**
  * Decodes a DER-encoded OBJECT IDENTIFIER value into its dotted-decimal string form.

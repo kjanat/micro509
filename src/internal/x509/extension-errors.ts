@@ -55,6 +55,7 @@ export type ExtensionEncoderErrorCode =
 	| 'invalid_srv_name_constraint'
 	| 'invalid_visible_string'
 	| 'key_usage_empty'
+	| 'limit_exceeded'
 	| 'malformed_known_extension_value'
 	| 'montgomery_key_usage_forbids_both_cipher_bits'
 	| 'montgomery_key_usage_forbids_signature_bit'

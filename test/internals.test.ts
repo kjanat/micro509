@@ -379,6 +379,27 @@ describe('asn1 decoding', () => {
 		}
 	});
 
+	it('objectIdentifier encodes an arc up to the 64-octet bound and refuses a larger one before encoding', () => {
+		const largest = (1n << 448n) - 1n;
+		const encoded = readElement(objectIdentifier(`1.2.${largest}`)).value;
+		expect(encoded.length).toBe(1 + MAX_OID_SUBIDENTIFIER_OCTETS);
+		expect(decodeObjectIdentifier(encoded)).toBe(`1.2.${largest}`);
+		expect(decodeObjectIdentifier(readElement(objectIdentifier(`1.2.000${largest}`)).value)).toBe(
+			`1.2.${largest}`,
+		);
+		for (const oid of [
+			`1.2.${1n << 448n}`,
+			`2.${largest}`,
+			`1.2.${'9'.repeat(100_000)}`,
+			`1.2.1${'0'.repeat(135)}`,
+		]) {
+			expect(() => objectIdentifier(oid)).toThrow(
+				'limit_exceeded: OID sub-identifier exceeds 64 octets',
+			);
+		}
+		expect(() => objectIdentifier('1.2.x')).toThrow('Invalid OID segment');
+	});
+
 	it('decodeObjectIdentifier refuses a sub-identifier over 64 octets before accumulating it', () => {
 		const arcOf = (octets: number): Uint8Array =>
 			Uint8Array.of(0x2a, ...new Array<number>(octets - 1).fill(0xff), 0x7f);

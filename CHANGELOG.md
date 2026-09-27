@@ -334,8 +334,9 @@ revocation })` report a certificate carrying `noRevAvail` or
   up to 64 octets per sub-identifier (values below 2^448). X.660 §7.6 leaves
   arcs unbounded; the bound is an implementation limit, checked before the arc
   is accumulated, since decoding grew quadratically with an arc's length. A
-  longer arc returns `limit_exceeded` from every parser, and the builder
-  refuses it with `invalid_oid`.
+  longer arc returns `limit_exceeded` from every parser and from the builder,
+  which checks each arc's decimal length before it builds the arc and adds the
+  code to `ExtensionEncoderErrorCode`.
 - `createPfx` wrote any `friendlyName` into its BMPString, including surrogate
   pairs, U+FFFE, U+FFFF, an empty name and names over 255 characters, and PFX
   parsing accepted them. RFC 2985 §5.5.1 makes friendlyName one BMPString of 1

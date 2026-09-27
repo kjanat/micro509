@@ -15,6 +15,7 @@ import {
 	hexToBytes,
 	toHex,
 } from '#micro509/internal/asn1/asn1';
+import { DECODE_REFUSAL_CODES, rethrowDecodeRefusal } from '#micro509/internal/asn1/decode-refusal';
 import {
 	bmpString,
 	bool,
@@ -2429,7 +2430,8 @@ function validateOid(oid: string): string {
 	}
 	try {
 		return canonicalizeOid(oid);
-	} catch {
+	} catch (error) {
+		rethrowDecodeRefusal(error, DECODE_REFUSAL_CODES);
 		throwExtensionEncoderError('invalid_oid', `Invalid OID: ${oid}`);
 	}
 }

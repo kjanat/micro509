@@ -108,12 +108,13 @@ Unions may gain members in minor releases; treat them as non-exhaustive and keep
 | `invalid_idn`                                           | Domain name is not valid IDNA2008 (RFC 5891 §4)                                                                          |
 | `invalid_ip_name_constraint`                            | IP constraint bytes are not address+mask of one family                                                                   |
 | `invalid_other_name_value`                              | otherName value is not one DER element micro509 can validate                                                             |
-| `invalid_oid`                                           | String is not an OID within X.660 arc bounds, or has an arc over 64 octets                                               |
+| `invalid_oid`                                           | String is not an OID within X.660 arc bounds                                                                             |
 | `invalid_smtp_utf8_mailbox`                             | SmtpUTF8Mailbox malformed or domain not A-labels (RFC 9598 §3)                                                           |
 | `invalid_srv_name`                                      | SRVName not \_Service.Name with RFC 6335 service and LDH Name                                                            |
 | `invalid_srv_name_constraint`                           | SRVName constraint not \_Service.Name, \_Service or Name (RFC 4985)                                                      |
 | `invalid_visible_string`                                | VisibleString explicitText outside printable ASCII                                                                       |
 | `key_usage_empty`                                       | keyUsage asserts no bits                                                                                                 |
+| `limit_exceeded`                                        | An OID arc encodes in more than 64 octets, a micro509 limit                                                              |
 | `malformed_known_extension_value`                       | `customExtensions` payload with a known OID fails to decode as it                                                        |
 | `montgomery_key_usage_forbids_both_cipher_bits`         | X25519/X448 asserts both `encipherOnly` and `decipherOnly`                                                               |
 | `montgomery_key_usage_forbids_signature_bit`            | X25519/X448 asserts a signature bit (RFC 8410 §12)                                                                       |

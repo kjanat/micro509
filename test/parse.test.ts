@@ -1990,7 +1990,7 @@ describe('parse', () => {
 				subject: { commonName: 'arc-bound.example' },
 				extensions: { certificatePolicies: [{ policyIdentifier: `1.2.${1n << 448n}` }] },
 			}),
-			'invalid_oid',
+			'limit_exceeded',
 		);
 	});
 

@@ -323,15 +323,41 @@ export function universalString(value: string): Uint8Array {
 	return tlv(0x1c, Uint8Array.from(bytes));
 }
 
+/** micro509's bound on one OBJECT IDENTIFIER sub-identifier's base-128 encoding; X.660 §7.6 leaves arc values unbounded. */
+export const MAX_OID_SUBIDENTIFIER_OCTETS = 64;
+
+const OID_SUBIDENTIFIER_LIMIT = 1n << BigInt(7 * MAX_OID_SUBIDENTIFIER_OCTETS);
+
+const OID_SUBIDENTIFIER_MAX_DIGITS = OID_SUBIDENTIFIER_LIMIT.toString().length;
+
+function parseOidArc(segment: string): bigint {
+	if (!/^\d+$/.test(segment)) {
+		throw new Error(`Invalid OID segment: ${segment}`);
+	}
+	const significant = segment.replace(/^0+/, '');
+	if (significant.length > OID_SUBIDENTIFIER_MAX_DIGITS) {
+		throwOidLimit();
+	}
+	return BigInt(significant.length === 0 ? '0' : significant);
+}
+
+function throwOidLimit(): never {
+	return throwDecodeRefusal(
+		'limit_exceeded',
+		`OID sub-identifier exceeds ${MAX_OID_SUBIDENTIFIER_OCTETS} octets`,
+	);
+}
+
 /** Encode a non-negative integer as a base-128 sub-identifier ({@linkcode https://www.itu.int/rec/T-REC-X.690-202102-I/en | X.690 §8.19.2}). */
 function encodeBase128(value: bigint): number[] {
-	const encoded: number[] = [Number(value & 0x7fn)];
-	let current = value >> 7n;
-	while (current > 0n) {
-		encoded.unshift(0x80 | Number(current & 0x7fn));
-		current >>= 7n;
+	if (value >= OID_SUBIDENTIFIER_LIMIT) {
+		throwOidLimit();
 	}
-	return encoded;
+	const reversed: number[] = [Number(value & 0x7fn)];
+	for (let current = value >> 7n; current > 0n; current >>= 7n) {
+		reversed.push(0x80 | Number(current & 0x7fn));
+	}
+	return reversed.reverse();
 }
 
 /**
@@ -343,13 +369,7 @@ function encodeBase128(value: bigint): number[] {
  * Sub-identifiers are encoded with base-128 continuation.
  */
 export function objectIdentifier(oid: string): Uint8Array {
-	const digitPattern = /^\d+$/;
-	const segments = oid.split('.').map((segment) => {
-		if (!digitPattern.test(segment)) {
-			throw new Error(`Invalid OID segment: ${segment}`);
-		}
-		return BigInt(segment);
-	});
+	const segments = oid.split('.').map(parseOidArc);
 	if (segments.length < 2) {
 		throw new Error(`Invalid OID: ${oid}`);
 	}
