@@ -175,12 +175,14 @@ revocation })` report a certificate carrying `noRevAvail` or
   `MatchCertificatePrivateKeyErrorCode`,
   `CheckCertificateRevocationAgainstCrlErrorCode`,
   `ValidateOcspResponseErrorCode`, `CheckCertificateRevocationErrorCode`,
-  `RevocationIndeterminateReasonCode` and the
+  `RevocationIndeterminateReasonCode`, `CreatePkcs7CertBagErrorCode`,
+  `CreatePkcs7SignedDataErrorCode` and the
   `verifyCertificateRevocationListSignature`,
   `validateCertificateRevocationList` and `verifyOcspResponseSignature`
   failures, where a CRL, OCSP response or request, or certificate that
   micro509 cannot decode was reported as `signature_invalid`,
-  `non_applicable`, `request_mismatch` or `malformed_certificate`. A
+  `non_applicable`, `request_mismatch`, `malformed_certificate`,
+  `invalid_certificate` or `invalid_signer_certificate`. A
   distribution point, issuing distribution point or CRL issuer directoryName
   that micro509 cannot decode fails `checkCertificateRevocationAgainstCrl`
   with its refusal. The chain level treats an OCSP refusal like the

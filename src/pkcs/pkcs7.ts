@@ -54,7 +54,12 @@ import { getCrypto } from '#micro509/internal/crypto/webcrypto';
 import { base64Encode } from '#micro509/internal/shared/base64';
 import { compareDistinguishedNames } from '#micro509/internal/shared/dn';
 import { pemEncode, splitPemBlocksOrThrow } from '#micro509/pem/pem';
-import type { DecodeFailureCode, ErrorResult, Micro509Error } from '#micro509/result/result';
+import type {
+	DecodeFailureCode,
+	DecodeRefusalCode,
+	ErrorResult,
+	Micro509Error,
+} from '#micro509/result/result';
 import { failureResult, rethrowIfInvariant } from '#micro509/result/result';
 import type { SignatureProfileInput } from '#micro509/x509/certificate';
 import type { NameFieldKey } from '#micro509/x509/name';
@@ -313,7 +318,7 @@ export type VerifyPkcs7SignedDataResult =
 // createPkcs7CertBag
 
 /** Caller-correctable failure code from {@linkcode createPkcs7CertBag}. */
-export type CreatePkcs7CertBagErrorCode = 'invalid_certificate';
+export type CreatePkcs7CertBagErrorCode = 'invalid_certificate' | DecodeRefusalCode;
 
 /** Error payload for a failed PKCS#7 certificate bag creation. */
 export interface CreatePkcs7CertBagFailure extends Micro509Error<CreatePkcs7CertBagErrorCode> {
@@ -348,11 +353,14 @@ export function createPkcs7CertBag(
 		for (const der of certificateDers) {
 			parseCertificateDerOrThrow(der);
 		}
-	} catch {
-		return createCertBagFailure(
-			'invalid_certificate',
-			'Each PKCS#7 certificate source must be valid PEM or DER',
-		);
+	} catch (error) {
+		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+		return refusal === undefined
+			? createCertBagFailure(
+					'invalid_certificate',
+					'Each PKCS#7 certificate source must be valid PEM or DER',
+				)
+			: createCertBagFailure(refusal.code, refusal.message);
 	}
 	// certificates [0] IMPLICIT CertificateSet — a DER SET OF must be canonically
 	// ordered, so sort via setOf, then retag 0x31 -> 0xa0 for the IMPLICIT [0].
@@ -438,7 +446,8 @@ export type CreatePkcs7SignedDataErrorCode =
 	| 'invalid_signer_certificate'
 	| 'invalid_certificate'
 	| 'signer_certificate_key_mismatch'
-	| 'unsupported_signer_key';
+	| 'unsupported_signer_key'
+	| DecodeRefusalCode;
 
 /** Error payload for a failed PKCS#7 SignedData creation. */
 export interface CreatePkcs7SignedDataFailure
@@ -518,11 +527,14 @@ export async function createPkcs7SignedData(
 				parseCertificateDerOrThrow(der);
 				addCertificate(der);
 			}
-		} catch {
-			return createPkcs7Failure(
-				'invalid_certificate',
-				'Each additional PKCS#7 certificate source must be valid PEM or DER',
-			);
+		} catch (error) {
+			const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+			return refusal === undefined
+				? createPkcs7Failure(
+						'invalid_certificate',
+						'Each additional PKCS#7 certificate source must be valid PEM or DER',
+					)
+				: createPkcs7Failure(refusal.code, refusal.message);
 		}
 	}
 
@@ -600,11 +612,14 @@ async function buildPkcs7SignerInfo(
 	let certificate: ParsedCertificate;
 	try {
 		certificate = parseCertificateDerOrThrow(signerCertDer);
-	} catch {
-		return createPkcs7Failure(
-			'invalid_signer_certificate',
-			'Each PKCS#7 signer certificate must be a parseable X.509 certificate',
-		);
+	} catch (error) {
+		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+		return refusal === undefined
+			? createPkcs7Failure(
+					'invalid_signer_certificate',
+					'Each PKCS#7 signer certificate must be a parseable X.509 certificate',
+				)
+			: createPkcs7Failure(refusal.code, refusal.message);
 	}
 	// getSignatureAlgorithm throws only for unsupported/misconfigured keys.
 	let signatureAlgorithm: SignatureAlgorithmIdentifier;

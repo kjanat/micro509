@@ -399,19 +399,23 @@ Without a password no key is derived. `maxKdfIterations` is not applied, and
 
 ### CreatePkcs7CertBagErrorCode
 
-| Code                  | Meaning                             |
-| --------------------- | ----------------------------------- |
-| `invalid_certificate` | A certificate source fails to parse |
+| Code                  | Meaning                                                                               |
+| --------------------- | ------------------------------------------------------------------------------------- |
+| `invalid_certificate` | A certificate source fails to parse                                                   |
+| `limit_exceeded`      | A certificate exceeds a micro509 decoding limit, see `ParseCertificateErrorCode`      |
+| `unsupported`         | A certificate holds a value micro509 does not decode, see `ParseCertificateErrorCode` |
 
 ### CreatePkcs7SignedDataErrorCode
 
-| Code                              | Meaning                                                  |
-| --------------------------------- | -------------------------------------------------------- |
-| `invalid_certificate`             | An `additionalCertificates` entry fails to parse         |
-| `invalid_signer_certificate`      | A signer's certificate source fails to parse             |
-| `no_signers`                      | `signers` is empty                                       |
-| `signer_certificate_key_mismatch` | Signer certificate's SPKI does not match the signing key |
-| `unsupported_signer_key`          | Signing key algorithm has no CMS digest mapping          |
+| Code                              | Meaning                                                                                                    |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `invalid_certificate`             | An `additionalCertificates` entry fails to parse                                                           |
+| `invalid_signer_certificate`      | A signer's certificate source fails to parse                                                               |
+| `limit_exceeded`                  | A signer or additional certificate exceeds a micro509 decoding limit, see `ParseCertificateErrorCode`      |
+| `no_signers`                      | `signers` is empty                                                                                         |
+| `signer_certificate_key_mismatch` | Signer certificate's SPKI does not match the signing key                                                   |
+| `unsupported_signer_key`          | Signing key algorithm has no CMS digest mapping                                                            |
+| `unsupported`                     | A signer or additional certificate holds a value micro509 does not decode, see `ParseCertificateErrorCode` |
 
 ### VerifyPkcs7SignedDataErrorCode
 

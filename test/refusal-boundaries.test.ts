@@ -5,6 +5,8 @@ import {
 	createCertificate,
 	createCertificateRevocationList,
 	createOcspResponse,
+	createPkcs7CertBag,
+	createPkcs7SignedData,
 	createSelfSignedCertificate,
 	generateKeyPair,
 	matchCertificatePrivateKey,
@@ -194,6 +196,31 @@ describe('decode refusals in checkCertificateRevocation', () => {
 				},
 			},
 		});
+	});
+});
+
+describe('decode refusals in the PKCS#7 builders', () => {
+	it('createPkcs7CertBag reports an undecodable certificate as unsupported', async () => {
+		const { leaf, unsupportedLeaf } = await fixture();
+		expect(createPkcs7CertBag([leaf.pem, unsupportedLeaf])).toMatchObject(unsupported);
+	});
+
+	it('createPkcs7SignedData reports an undecodable signer or additional certificate as unsupported', async () => {
+		const { leaf, leafKeys, unsupportedIssuer, unsupportedLeaf } = await fixture();
+		const content = new TextEncoder().encode('hello');
+		expect(
+			await createPkcs7SignedData({
+				content,
+				signers: [{ certificate: unsupportedLeaf, privateKey: leafKeys.privateKey }],
+			}),
+		).toMatchObject(unsupported);
+		expect(
+			await createPkcs7SignedData({
+				content,
+				signers: [{ certificate: leaf.pem, privateKey: leafKeys.privateKey }],
+				additionalCertificates: [unsupportedIssuer],
+			}),
+		).toMatchObject(unsupported);
 	});
 });
 
