@@ -147,14 +147,27 @@ Current conformance evidence:
       An empty label elsewhere, a repeated terminal dot and an empty Name are
       malformed.
 - [x] Hold every SRVName, in typed SANs, typed and initial restrictions, and
-      received names and restrictions under evaluation, to one profile: the
+      received names and restrictions under evaluation, to one syntax. The
       service is an RFC 6335 §5.1 service name (1 to 15 letters, digits and
-      hyphens, at least one letter, no leading, trailing or adjacent hyphen),
-      and the Name is STD3 LDH labels with each `xn--` label an IDNA2008
-      A-label. U+3002, U+FF0E and U+FF61 are stored as U+002E (RFC 4985 §3).
-      Applying RFC 6335 to received restrictions is micro509's acceptance
-      policy; a restriction outside it counts as malformed and rejects every
-      SRVName while in force.
+      hyphens, at least one letter, no leading, trailing or adjacent hyphen).
+      RFC 4985 §2 requires the components to be consistent with an RFC 2782
+      SRV RR, and RFC 6335 §5.2, which updates RFC 2782, requires the Service
+      Label to be such a name. The Name is STD3 LDH labels (RFC 4985 §3).
+      U+3002, U+FF0E and U+FF61 are stored as U+002E (RFC 4985 §3). Holding a
+      received Name's `xn--` labels to IDNA2008 A-labels is micro509's
+      choice; RFC 4985 requires conversion only when a Name is stored.
+      RFC 4985 gives a relying party no rule for a received restriction
+      outside this syntax. micro509 cannot evaluate one, counts it as
+      malformed and rejects every SRVName while it is in force, as RFC 5280
+      §4.2 requires for a critical extension holding information that cannot
+      be processed.
+- [x] Match a dNSName constraint that starts with a period, such as
+      `.example.com`, against subdomains only. `www.example.com` and
+      `a.b.example.com` fall inside it, and `example.com` does not. RFC 5280
+      §4.2.1.10 defines the leading period for URI and rfc822Name constraints
+      only, and erratum 5997 (Held for Document Update) records the readings
+      for dNSName. OpenSSL, BoringSSL, Go, NSS, mozilla::pkix and
+      rustls-webpki all match subdomains only.
 - [x] Fail closed per RFC 5280 §4.2.1.10 when a **critical** nameConstraints
       extension imposes a form whose constraint-matching semantics micro509
       does not implement
@@ -221,10 +234,13 @@ Current GeneralName matrix for `nameConstraints`:
   lookup tests. A reference identifier converts after RFC 5895 mapping (RFC
   9525 §6.3). A URI host is not converted. RFC 5280 §7.4 maps an IRI to a URI
   by percent-encoding and forbids converting its ireg-name.
-- RFC 4985 §3 names the IDNA2003 conversion of RFC 3490 for the SRVName
-  Name. micro509 applies IDNA2008 instead, as it does for dNSName under RFC
-  9549; that is an implementation profile rather than the historical
-  algorithm.
+- RFC 4985 §3 requires the IDNA2003 ToASCII conversion of RFC 3490 §4
+  before a SRVName Name is stored. RFC 5890 and RFC 5891 obsolete RFC 3490,
+  and no RFC moves SRVName to IDNA2008. micro509 converts the Name with
+  IDNA2008, as RFC 9549 requires for dNSName, so a label on which the two
+  disagree, such as one holding U+00DF, converts differently. The frozen
+  Unicode 12.0.0 tables and the refusal of a label IDNA2008 disallows are
+  micro509's choices.
 - A name with no IDN label passes the builder unchecked, so a successful
   conversion does not establish that the whole name is a valid DNS name.
   ASCII labels beside an IDN label must be NR-LDH.

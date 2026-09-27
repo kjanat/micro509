@@ -836,9 +836,10 @@ function matchesSrvConstraint(name: string, constraint: string): boolean {
 /**
  * DNS name constraint matching. RFC 5280 §4.2.1.10 adds zero or more labels on
  * the left; §7.2 compares label by label case-insensitively. Constraint
- * "example.com" matches "example.com" and any subdomain. The leading-period
- * form ".example.com" restricts to subdomains, following the convention shared
- * by OpenSSL, Go and NSS rather than the RFC.
+ * "example.com" matches "example.com" and any subdomain. RFC 5280 defines no
+ * leading-period dNSName form; ".example.com" matches subdomains only, as in
+ * OpenSSL, BoringSSL, Go, NSS, mozilla::pkix and rustls-webpki (RFC 5280
+ * erratum 5997).
  */
 function matchesDnsConstraint(name: string, constraint: string): boolean {
 	const lowerName = name.toLowerCase();

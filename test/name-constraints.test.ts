@@ -126,6 +126,30 @@ describe('name constraint fixtures', () => {
 	});
 
 	it.each([
+		['.example.com', 'example.com', false],
+		['.example.com', 'www.example.com', true],
+		['.example.com', 'a.b.example.com', true],
+		['.example.com', 'notexample.com', false],
+		['.example.com', 'example.com.evil', false],
+		['example.com', 'example.com', true],
+		['example.com', 'www.example.com', true],
+		['example.com', 'a.b.example.com', true],
+		['example.com', 'notexample.com', false],
+	] as const)('the dNSName constraint %s covers %s: %p', async (constraint, name, covered) => {
+		const permitted = await verifyNameConstraintFixture({
+			rootNameConstraints: { permittedSubtrees: [{ base: { type: 'dns', value: constraint } }] },
+			leafSubjectAltNames: [{ type: 'dns', value: name }],
+		});
+		const excluded = await verifyNameConstraintFixture({
+			rootNameConstraints: { excludedSubtrees: [{ base: { type: 'dns', value: constraint } }] },
+			leafSubjectAltNames: [{ type: 'dns', value: name }],
+		});
+		const violated = { ok: false, code: 'name_constraints_violated' };
+		expect(permitted).toMatchObject(covered ? { ok: true } : violated);
+		expect(excluded).toMatchObject(covered ? violated : { ok: true });
+	});
+
+	it.each([
 		['evil.example.com.', 0x82, 'dns', 'email'],
 		['user@evil.example.com.', 0x81, 'email', 'dns'],
 	] as const)(
