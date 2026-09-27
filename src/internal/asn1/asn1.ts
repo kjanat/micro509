@@ -573,9 +573,11 @@ export type StrictDerVerdict = 'valid' | 'malformed' | 'unsupported';
  * schema, the element is `unsupported`: TeletexString, VideotexString, TIME,
  * EXTERNAL, EMBEDDED PDV, CHARACTER STRING, the types of UNIVERSAL 31 to 36, a
  * REAL with a long-form exponent, a GeneralizedTime at second 60, and text
- * holding an escape sequence or a code-extension control. Context-specific, application and private elements
- * get framing checks only, as do the rules that depend on a schema: SET
- * component order, DEFAULT omission and NamedBitList trailing bits.
+ * holding an escape sequence or a code-extension control. A SET or SET OF
+ * whose children follow neither the DER SET order nor the DER SET OF order is
+ * `malformed`. Context-specific, application and private elements get framing
+ * checks only, as do the rules that depend on a schema: DEFAULT omission and
+ * NamedBitList trailing bits.
  */
 export function checkStrictDer(
 	bytes: Uint8Array,
@@ -787,6 +789,52 @@ function checkReal(element: DerElement): StrictDerVerdict {
 	);
 }
 
+/** X.690 §11.6: set-of encodings compare as octet strings, the shorter padded at its end with zero octets. */
+function compareSetOfEncodings(left: Uint8Array, right: Uint8Array): number {
+	for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
+		const difference = (left[index] ?? 0) - (right[index] ?? 0);
+		if (difference !== 0) {
+			return difference;
+		}
+	}
+	return 0;
+}
+
+/**
+ * X.690 §10.3 orders SET components by the canonical tag order of X.680 §8.6,
+ * which compares class and number and never the constructed bit, and X.690
+ * §11.6 orders SET OF components by encoding.
+ */
+function checkSet(element: DerElement): StrictDerVerdict {
+	const children: DerElement[] = [];
+	for (let offset = 0; offset < element.value.length; ) {
+		const child = readElement(element.value, offset);
+		children.push(child);
+		offset = child.end;
+	}
+	const encodingOf = (child: DerElement): Uint8Array =>
+		element.value.subarray(child.start - child.headerLength, child.end);
+	const setOrder = children.every((child, index) => {
+		const previous = children[index - 1];
+		if (previous === undefined) {
+			return true;
+		}
+		const previousClass = previous.tag & 0xc0;
+		const childClass = child.tag & 0xc0;
+		return (
+			previousClass < childClass ||
+			(previousClass === childClass && previous.tagNumber < child.tagNumber)
+		);
+	});
+	const setOfOrder = children.every((child, index) => {
+		const previous = children[index - 1];
+		return (
+			previous === undefined || compareSetOfEncodings(encodingOf(previous), encodingOf(child)) <= 0
+		);
+	});
+	return verdictOf(setOrder || setOfOrder);
+}
+
 /**
  * The identifier octet DER uses for each universal type, mapped to the check
  * of its contents. A universal identifier missing here is a reserved tag
@@ -829,7 +877,7 @@ const UNIVERSAL_ELEMENTS: ReadonlyMap<number, UniversalElementCheck> = new Map<
 	[0x28, () => 'unsupported'],
 	[0x2b, () => 'unsupported'],
 	[0x30, () => 'valid'],
-	[0x31, () => 'valid'],
+	[0x31, checkSet],
 	[0x3d, () => 'unsupported'],
 ]);
 

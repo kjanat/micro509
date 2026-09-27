@@ -187,11 +187,13 @@ Current GeneralName matrix for `nameConstraints`:
   and VideotexString (ISO-IR repertoires), escape sequences and
   code-extension controls (ISO/IEC 2022), TIME and a GeneralizedTime at second
   60 (ISO 8601), a REAL with a long-form exponent (ambiguous in X.690
-  §8.5.7.4 d)), and EXTERNAL, EMBEDDED PDV and CHARACTER STRING (implicitly
-  tagged contents) are refused as unsupported. micro509 does not know the
+  §8.5.7.4 d)), EXTERNAL, EMBEDDED PDV and CHARACTER STRING (implicitly
+  tagged contents), and the types of UNIVERSAL 31 to 36 are refused as
+  unsupported. A SET or SET OF must list its children in the DER SET order
+  (X.690 §10.3) or the DER SET OF order (§11.6). micro509 does not know the
   schema behind an arbitrary type-id, so contents under context-specific,
-  application and private tags stay unchecked, as do SET component order,
-  DEFAULT omission and NamedBitList trailing bits. An `ediPartyName` holds an
+  application and private tags stay unchecked, as do DEFAULT omission and
+  NamedBitList trailing bits. An `ediPartyName` holds an
   optional `[0]` and a
   required `[1]` DirectoryString, and an `x400Address` follows the RFC 5280
   Appendix A.1 ORAddress schema: fields, tags, order, multiplicity, string

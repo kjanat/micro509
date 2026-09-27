@@ -611,6 +611,11 @@ describe('checkStrictDer', () => {
 		['GeneralString with C0 controls and DELETE', tlv(0x1b, octets(0x00, 0x0a, 0x41, 0x7f))],
 		['UTF8String holding SHIFT OUT', tlv(0x0c, octets(0x0e))],
 		['context-specific [32] primitive', octets(0x9f, 0x20, 0x01, 0x00)],
+		['empty SET', octets(0x31, 0x00)],
+		['SET OF in encoding order', octets(0x31, 0x06, 0x02, 0x01, 0x01, 0x02, 0x01, 0x02)],
+		['SET OF with equal members', octets(0x31, 0x06, 0x02, 0x01, 0x01, 0x02, 0x01, 0x01)],
+		['SET OF compared with zero padding', octets(0x31, 0x05, 0x04, 0x00, 0x04, 0x01, 0x00)],
+		['SET of [0] constructed then [1] primitive', octets(0x31, 0x04, 0xa0, 0x00, 0x81, 0x00)],
 		['private [256] inside a SEQUENCE', sequence([octets(0xdf, 0x82, 0x00, 0x00)])],
 		[
 			'context-specific [128] constructed around an INTEGER',
@@ -768,6 +773,11 @@ describe('checkStrictDer', () => {
 		['primitive CHARACTER STRING (X.690 §8.24.1)', tlv(0x1d, new Uint8Array())],
 		['constructed TIME (X.690 §8.26.1.1)', tlv(0x2e, new Uint8Array())],
 		['reserved UNIVERSAL 37 (X.680 Table 1)', octets(0x1f, 0x25, 0x00)],
+		[
+			'SET of INTEGERs out of encoding order (X.690 §11.6)',
+			octets(0x31, 0x06, 0x02, 0x01, 0x02, 0x02, 0x01, 0x01),
+		],
+		['SET of [1] then [0] (X.690 §10.3, §11.6)', octets(0x31, 0x04, 0x81, 0x00, 0x80, 0x00)],
 		['tag number 30 in the high-tag-number form (X.690 §8.1.2.2)', octets(0x9f, 0x1e, 0x00)],
 		['a zero leading tag group (X.690 §8.1.2.4.2 c)', octets(0x9f, 0x80, 0x20, 0x00)],
 	] as const)('rejects %s', (_label, der) => {
