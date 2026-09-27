@@ -175,7 +175,11 @@ Current conformance evidence:
       rustls-webpki all match subdomains only.
 - [x] Hold every URI constraint, typed, initial or received, to RFC 5280
       §4.2.1.10 and Appendix B: a DNS name in A-labels, which names one host,
-      or the same with a leading period, which names its subdomains only. The
+      or the same with a leading period, which names its subdomains only.
+      RFC 5280 sets no label syntax for a URI constraint or a URI SAN host,
+      and RFC 3986 lets a reg-name hold "\_". micro509 takes ASCII labels of 1
+      to 63 letters, digits, hyphens and underscores for both, so a
+      constraint and the hosts it is matched against share one alphabet. The
       builder and the initial-constraint input refuse a full URI such as
       `https://blocked.example`, a port or path, an IP address, a root dot and
       a U-label. A received constraint of that kind is malformed, and every URI
