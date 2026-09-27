@@ -114,7 +114,10 @@ revocation })` report a certificate carrying `noRevAvail` or
   fails every SRVName. Every SRVName, typed or received, is held to one
   profile: an RFC 6335 §5.1 service name and a Name of STD3 LDH labels with
   IDNA2008 A-labels. The builder stores U+3002, U+FF0E and U+FF61 as "."
-  (RFC 4985 §3), in SANs, restrictions and initial constraints.
+  (RFC 4985 §3), in SANs, restrictions and initial constraints. A Name may
+  end in the root dot of an absolute name. It is kept as written, and
+  restriction matching compares its labels without the root label (RFC 3490
+  §2, §3.1).
 - `SubjectAltName` gains `otherName` (`typeId` and the DER of its value),
   `x400Address`, `ediPartyName` (content octets), and `registeredID`
   (dotted OID). Parsing produces them where it produced `unknown`, and the
@@ -171,6 +174,10 @@ revocation })` report a certificate carrying `noRevAvail` or
 
 - A typed SRVName SAN outside the RFC 6335 service grammar or STD3 LDH Name
   syntax is refused with the new `invalid_srv_name`.
+- SRV-ID matching compares the Name of the reference identifier and of each
+  presented SRVName without the root label, so `_imaps.example.com.` and
+  `_imaps.example.com` match (RFC 3490 §2, §3.1). A Name with an empty label,
+  a repeated terminal dot or no labels still matches nothing.
 - A critical `otherName` name constraint fails closed only for SANs of the
   same type-id, following X.509 §9.4.2.2, where each type-id is its own name
   form. A UPN constraint no longer rejects a SRVName or SmtpUTF8Mailbox SAN,

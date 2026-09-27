@@ -11,6 +11,7 @@
 
 import { referenceDomainToAscii } from '#micro509/internal/shared/idna';
 import { decodeIpAddress, parseIpAddressToBytes } from '#micro509/internal/shared/ip';
+import { withoutRootLabel } from '#micro509/internal/x509/general-name-profile';
 import type { ErrorResult, Micro509Error } from '#micro509/result/result';
 import { errorResult, micro509Error, successResult } from '#micro509/result/result';
 import type { SubjectAltName } from '#micro509/x509/extensions';
@@ -573,7 +574,10 @@ function tryParseSrvServiceIdentity(value: string): ServiceScopedIdentity | unde
 	const domainName = tryNormalizeDnsName(value.slice(dotIndex + 1));
 	return domainName === undefined
 		? undefined
-		: { serviceType: value.slice(1, dotIndex).toLowerCase(), domainName };
+		: {
+				serviceType: value.slice(1, dotIndex).toLowerCase(),
+				domainName: withoutRootLabel(domainName),
+			};
 }
 
 /** Constructs a failure result with the given error code and diagnostic details. */

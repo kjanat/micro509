@@ -800,6 +800,44 @@ describe('identity boundary', () => {
 		).toMatchObject({ ok: false, code: 'subject_alt_name_mismatch' });
 	});
 
+	it.each([
+		['_imaps.verify.example', '_imaps.verify.example.'],
+		['_imaps.verify.example.', '_imaps.verify.example'],
+		['_imaps.verify.example.', '_IMAPS.Verify.Example.'],
+	])(
+		'matches the SRV SAN %s against the reference %s across the root dot',
+		async (san, reference) => {
+			const { leaf } = await issueChain({ leafSubjectAltNames: [{ type: 'srv', value: san }] });
+			const certificate = unwrap(parseCertificatePem(leaf.pem));
+			expect(certificate.subjectAltNames).toEqual([{ type: 'srv', value: san }]);
+			expect(
+				matchServiceIdentity({ certificate, serviceIdentity: { type: 'srv', value: reference } }),
+			).toEqual({ ok: true, value: undefined });
+		},
+	);
+
+	it.each([
+		['_imaps.other.example.', 'SRV domain not present in SAN'],
+		['_imaps.sub.verify.example.', 'SRV domain not present in SAN'],
+		['_pop3.verify.example.', 'SRV service not present in SAN'],
+		['_imaps.verify.example..', 'service identity input is malformed'],
+		['_imaps..', 'service identity input is malformed'],
+		['_imaps.verify..example.', 'service identity input is malformed'],
+	])(
+		'does not match the dotted SRV SAN against the reference %s: %s',
+		async (reference, message) => {
+			const { leaf } = await issueChain({
+				leafSubjectAltNames: [{ type: 'srv', value: '_imaps.verify.example.' }],
+			});
+			const certificate = unwrap(parseCertificatePem(leaf.pem));
+			const result = matchServiceIdentity({
+				certificate,
+				serviceIdentity: { type: 'srv', value: reference },
+			});
+			expect(result).toMatchObject({ ok: false, message });
+		},
+	);
+
 	it('fails closed for unsupported direct identity types at runtime', async () => {
 		const ca = await createSelfSignedCertificate({
 			subject: { commonName: 'Identity CA' },

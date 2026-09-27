@@ -12,7 +12,7 @@ import { readRootElement } from '#micro509/internal/asn1/der';
 import { domainToAscii } from '#micro509/internal/shared/idna';
 import { checkOrAddressFields } from '#micro509/internal/x509/or-address';
 
-/** A SRVName's `_Service` label and Name, either possibly empty in a restriction. */
+/** A SRVName's `_Service` label and Name without its root label, either possibly empty in a restriction. */
 export interface SrvNameParts {
 	readonly service: string;
 	readonly name: string;
@@ -43,6 +43,11 @@ function isServiceLabel(label: string): boolean {
 	);
 }
 
+/** RFC 1034 §3.1: an absolute domain name with the dot of its terminal root label removed. */
+export function withoutRootLabel(name: string): string {
+	return name.endsWith('.') ? name.slice(0, -1) : name;
+}
+
 /**
  * RFC 4985 §3 Name under `UseSTD3ASCIIRules`: at most 253 octets of LDH labels
  * of 1 to 63 octets that start and end with a letter or digit, with every
@@ -60,12 +65,12 @@ function isSrvDomainName(name: string): boolean {
 
 function splitSrvName(value: string): SrvNameParts {
 	if (!value.startsWith('_')) {
-		return { service: '', name: value };
+		return { service: '', name: withoutRootLabel(value) };
 	}
 	const dot = value.indexOf('.');
 	return dot < 0
 		? { service: value, name: '' }
-		: { service: value.slice(0, dot), name: value.slice(dot + 1) };
+		: { service: value.slice(0, dot), name: withoutRootLabel(value.slice(dot + 1)) };
 }
 
 /** RFC 4985 §4: a restriction is `_Service.Name`, `_Service`, or `Name`. */

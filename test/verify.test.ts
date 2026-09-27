@@ -4012,12 +4012,42 @@ describe('validateCandidatePath direct', () => {
 	});
 
 	it.each([
+		['_ntp.example.com', 'example.com.'],
+		['_ntp.example.com.', 'example.com'],
+		['_ntp.example.com.', '_ntp.example.com.'],
+	])(
+		'compares the SRVName SAN %s and initial constraint %s without the root dot',
+		async (san, value) => {
+			const chain = await issueChain({ leafSubjectAltNames: [{ type: 'srv', value: san }] });
+			const parsedChain = unwrap(
+				parseCertificateChainPem(
+					`${chain.leaf.pem}${chain.intermediate.pem}${chain.root.certificate.pem}`,
+				),
+			);
+			expect(
+				await validateCandidatePath({
+					chain: parsedChain,
+					permittedSubtrees: [{ base: { type: 'srv', value } }],
+				}),
+			).toMatchObject({ ok: true });
+			expect(
+				await validateCandidatePath({
+					chain: parsedChain,
+					excludedSubtrees: [{ base: { type: 'srv', value } }],
+				}),
+			).toMatchObject({ ok: false, code: 'name_constraints_violated' });
+		},
+	);
+
+	it.each([
 		'_mail!',
 		'_é',
 		'_mail.',
 		'.example.com',
 		'_mail..example.com',
-		'example.com.',
+		'example.com..',
+		'_mail.example.com..',
+		'.',
 		`_${'m'.repeat(63)}`,
 		`_${'m'.repeat(16)}`,
 		'_123',

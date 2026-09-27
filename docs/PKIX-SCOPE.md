@@ -139,6 +139,13 @@ Current conformance evidence:
 - [x] Enforce SRVName restrictions per RFC 4985 §4: `_Service.Name`,
       `_Service`, or `Name`, the service matched case-insensitively and the
       Name matching that domain and its subdomains label by label.
+- [x] Accept a SRVName Name, in a SAN or a restriction, that ends in the
+      dot of an absolute name, and keep it as written. Restriction matching
+      and SRV-ID matching compare the Name's labels without the root label,
+      which RFC 3490 §2 does not count as a label, so `_mail.example.com.`
+      and `_mail.example.com` match each other (RFC 3490 §3.1 requirement 4).
+      An empty label elsewhere, a repeated terminal dot and an empty Name are
+      malformed.
 - [x] Hold every SRVName, in typed SANs, typed and initial restrictions, and
       received names and restrictions under evaluation, to one profile: the
       service is an RFC 6335 §5.1 service name (1 to 15 letters, digits and

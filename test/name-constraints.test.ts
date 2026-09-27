@@ -539,6 +539,42 @@ describe('RFC 4985 §4 SRVName constraints', () => {
 		expect(result).toMatchObject({ ok: true });
 	});
 
+	it.each([
+		['example.com.', '_mail.example.com', true],
+		['example.com', '_mail.example.com.', true],
+		['example.com.', '_mail.1.example.com.', true],
+		['_mail.example.com.', '_mail.example.com', true],
+		['_mail.example.com', '_mail.example.com.', true],
+		['example.com.', '_mail.1example.com.', false],
+		['_mail.example.com.', '_ntp.example.com.', false],
+	] as const)(
+		'compares the absolute or relative restriction %s and SRVName %s by their labels, permits: %p',
+		async (restriction, san, permits) => {
+			const result = await verifyNameConstraintFixture({
+				rootNameConstraints: { permittedSubtrees: [{ base: { type: 'srv', value: restriction } }] },
+				leafSubjectAltNames: [{ type: 'srv', value: san }],
+			});
+			expect(result).toMatchObject(
+				permits ? { ok: true } : { ok: false, code: 'name_constraints_violated' },
+			);
+		},
+	);
+
+	it.each([
+		['example.com', '_mail.example.com.'],
+		['example.com.', '_mail.example.com'],
+		['_mail.example.com', '_mail.www.example.com.'],
+	])(
+		'the excluded restriction %s catches the SRVName %s across the root dot',
+		async (restriction, san) => {
+			const result = await verifyNameConstraintFixture({
+				rootNameConstraints: { excludedSubtrees: [{ base: { type: 'srv', value: restriction } }] },
+				leafSubjectAltNames: [{ type: 'srv', value: san }],
+			});
+			expect(result).toMatchObject({ ok: false, code: 'name_constraints_violated' });
+		},
+	);
+
 	it('leaves SRVNames unconstrained by a dNSName constraint', async () => {
 		// RFC 9525 §7.6: constraints apply only to the name forms they enumerate.
 		const result = await verifyNameConstraintFixture({

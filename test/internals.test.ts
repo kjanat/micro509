@@ -1476,6 +1476,31 @@ describe('extensions encoding', () => {
 		);
 	});
 
+	it.each([
+		['_mail.example.com.', '_mail.example.com.'],
+		['example.com.', 'example.com.'],
+		['_mail.例子。com。', '_mail.xn--fsqu00a.com.'],
+	])('encodeNameConstraints keeps the absolute SRVName restriction %s as %s', (value, stored) => {
+		expect(
+			parseNameConstraints(
+				encodeNameConstraints({ excludedSubtrees: [{ base: { type: 'srv', value } }] }),
+			).excludedSubtrees,
+		).toEqual([{ base: { type: 'srv', value: stored } }]);
+	});
+
+	it('encodeSubjectAltName keeps an absolute SRVName as given', () => {
+		expect(encodeSubjectAltName({ type: 'srv', value: '_mail.例子.com.' })).toEqual(
+			encodeSubjectAltName({ type: 'srv', value: '_mail.xn--fsqu00a.com.' }),
+		);
+		expect(encodeSubjectAltName({ type: 'srv', value: '_mail.example.com.' })).not.toEqual(
+			encodeSubjectAltName({ type: 'srv', value: '_mail.example.com' }),
+		);
+		expectEncoderErrorCode(
+			() => encodeSubjectAltName({ type: 'srv', value: '_mail.example.com..' }),
+			'invalid_srv_name',
+		);
+	});
+
 	it('encodeNameConstraints rejects a SRVName restriction outside the RFC 4985 §4 forms', () => {
 		const values = [
 			'',
@@ -1484,7 +1509,9 @@ describe('extensions encoding', () => {
 			'_m@il.example.com',
 			'.example.com',
 			'_mail..example.com',
-			'example.com.',
+			'example.com..',
+			'_mail.example.com..',
+			'.',
 			'ex*ample.com',
 			`${'a'.repeat(64)}.example`,
 			`_${'m'.repeat(63)}`,
