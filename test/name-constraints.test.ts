@@ -487,6 +487,31 @@ describe('name constraint fixtures', () => {
 		expect(subject).toMatchObject({ ok: false, code: 'name_constraints_violated' });
 	});
 
+	it.each([
+		['excluded', 'Blocked', 'Blocked', false],
+		['excluded', 'Blocked', 'Other', false],
+		['excluded', 'Blocked', 'Other', false],
+		['excluded', 'Blocked', 'Other', true],
+		['permitted', 'Blocked', 'Blocked', false],
+		['permitted', 'Blocked', 'Blocked', true],
+	] as const)(
+		'treats an RFC 4518 Undefined comparison as no permission: %s O=%s against subject O=%s validates %p',
+		async (field, constraintValue, subjectValue, validates) => {
+			const derHex = buildDirectoryNameDerHex([
+				[{ oid: OIDS.organizationName, value: constraintValue, encoding: 'utf8' }],
+			]);
+			const subtrees = [{ base: { type: 'directoryName' as const, derHex } }];
+			const result = await verifyNameConstraintFixture({
+				rootNameConstraints:
+					field === 'excluded' ? { excludedSubtrees: subtrees } : { permittedSubtrees: subtrees },
+				leafSubject: { organization: subjectValue, commonName: 'fixture-leaf' },
+			});
+			expect(result).toMatchObject(
+				validates ? { ok: true } : { ok: false, code: 'name_constraints_violated' },
+			);
+		},
+	);
+
 	it('cannot be bypassed by an ignorable code point in a directoryName SAN', async () => {
 		const excludedDerHex = buildDirectoryNameDerHex([
 			[{ oid: OIDS.organizationName, value: 'Acme', encoding: 'printable' }],

@@ -380,6 +380,11 @@ revocation })` report a certificate carrying `noRevAvail` or
 - A directoryName name constraint whose DN could not be decoded matched no
   name, so an excluded subtree excluded nothing. While one is in force, every
   subject DN and directoryName SAN fails with `name_constraints_violated`.
+- A directoryName comparison that RFC 4518 string preparation cannot perform,
+  such as one over a value holding a private-use character, counted as a
+  mismatch, so an excluded subtree did not exclude the name. Such a comparison
+  is now Undefined. It fails an excluded subtree and does not satisfy a
+  permitted one.
 - A dNSName or rfc822Name name constraint whose domain is malformed, such as
   `.example.com.`, matched no name, so an excluded subtree excluded nothing.
   While one is in force, every dNSName, rfc822Name or SmtpUTF8Mailbox of its

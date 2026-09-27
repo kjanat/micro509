@@ -111,6 +111,11 @@ Current conformance evidence:
       directoryName name constraint it fails every subject DN and directoryName
       SAN while the constraint is in force (RFC 4518 §2 makes a failed
       preparation Undefined, and RFC 5280 leaves the consequence unspecified).
+      A decoded value that preparation refuses, such as one holding a
+      private-use character, makes its comparison Undefined as well. In a
+      directoryName name constraint an Undefined comparison fails an excluded
+      subtree and does not satisfy a permitted one. Issuer/subject chaining and
+      CRL and OCSP issuer matching treat it as no match.
 - [x] Verify issuer/subject chaining across the candidate path.
 - [x] Verify each certificate signature using the evolving working public key.
 - [x] Check validity time (`notBefore` / `notAfter`) against the chosen validation time.

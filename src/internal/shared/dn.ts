@@ -58,20 +58,34 @@ export function canonicalDnKey(name: ParsedName): string {
 
 /** True when `subject` equals or is subordinate to `constraint` (RDN prefix match). */
 export function isWithinDirectoryNameSubtree(subject: ParsedName, constraint: ParsedName): boolean {
+	return directoryNameSubtreeMatch(subject, constraint) === 'match';
+}
+
+/**
+ * Outcome of an RFC 5280 §7.1 name comparison. `undetermined` is the RFC 4518
+ * Undefined result: a DirectoryString value that string preparation refuses.
+ */
+export type NameMatch = 'match' | 'mismatch' | 'undetermined';
+
+/** {@linkcode isWithinDirectoryNameSubtree}, keeping an undetermined comparison apart from a mismatch. */
+export function directoryNameSubtreeMatch(subject: ParsedName, constraint: ParsedName): NameMatch {
 	if (constraint.rdns.length > subject.rdns.length) {
-		return false;
+		return 'mismatch';
 	}
+	let undetermined = false;
 	for (let index = 0; index < constraint.rdns.length; index += 1) {
 		const subjectRdn = subject.rdns[index];
 		const constraintRdn = constraint.rdns[index];
 		if (subjectRdn === undefined || constraintRdn === undefined) {
-			return false;
+			return 'mismatch';
 		}
-		if (!compareRelativeDistinguishedNames(subjectRdn, constraintRdn)) {
-			return false;
+		const match = relativeDistinguishedNameMatch(subjectRdn, constraintRdn);
+		if (match === 'mismatch') {
+			return 'mismatch';
 		}
+		undetermined ||= match === 'undetermined';
 	}
-	return true;
+	return undetermined ? 'undetermined' : 'match';
 }
 
 // RDN / attribute comparison
@@ -81,29 +95,49 @@ export function compareRelativeDistinguishedNames(
 	left: ParsedRelativeDistinguishedName,
 	right: ParsedRelativeDistinguishedName,
 ): boolean {
+	return relativeDistinguishedNameMatch(left, right) === 'match';
+}
+
+function relativeDistinguishedNameMatch(
+	left: ParsedRelativeDistinguishedName,
+	right: ParsedRelativeDistinguishedName,
+): NameMatch {
 	if (left.attributes.length !== right.attributes.length) {
-		return false;
+		return 'mismatch';
 	}
-	const matched = Array.from({ length: right.attributes.length }, () => false);
+	const used = Array.from({ length: right.attributes.length }, () => false);
+	let undetermined = false;
 	for (const leftAttribute of left.attributes) {
-		let found = false;
-		for (let index = 0; index < right.attributes.length; index += 1) {
-			const rightAttribute = right.attributes[index];
-			if (rightAttribute === undefined || matched[index]) {
-				continue;
-			}
-			if (!compareNameAttributeValue(leftAttribute, rightAttribute)) {
-				continue;
-			}
-			matched[index] = true;
-			found = true;
-			break;
+		const pick = pickAttributePartner(leftAttribute, right.attributes, used);
+		if (pick === undefined) {
+			return 'mismatch';
 		}
-		if (!found) {
-			return false;
+		used[pick.index] = true;
+		undetermined ||= pick.match === 'undetermined';
+	}
+	return undetermined ? 'undetermined' : 'match';
+}
+
+function pickAttributePartner(
+	attribute: ParsedNameAttribute,
+	candidates: readonly ParsedNameAttribute[],
+	used: readonly boolean[],
+): { readonly index: number; readonly match: NameMatch } | undefined {
+	let open: number | undefined;
+	for (let index = 0; index < candidates.length; index += 1) {
+		const candidate = candidates[index];
+		if (candidate === undefined || used[index] === true) {
+			continue;
+		}
+		const match = nameAttributeValueMatch(attribute, candidate);
+		if (match === 'match') {
+			return { index, match };
+		}
+		if (match === 'undetermined' && open === undefined) {
+			open = index;
 		}
 	}
-	return true;
+	return open === undefined ? undefined : { index: open, match: 'undetermined' };
 }
 
 /** Compares two AttributeTypeAndValue pairs using RFC 5280 [§7.1](https://datatracker.ietf.org/doc/html/rfc5280#section-7.1) string-prep for DirectoryString tags. */
@@ -111,17 +145,31 @@ export function compareNameAttributeValue(
 	left: ParsedNameAttribute,
 	right: ParsedNameAttribute,
 ): boolean {
+	return nameAttributeValueMatch(left, right) === 'match';
+}
+
+function nameAttributeValueMatch(left: ParsedNameAttribute, right: ParsedNameAttribute): NameMatch {
 	if (left.oid !== right.oid) {
-		return false;
+		return 'mismatch';
 	}
 	if (left.oid === OIDS.domainComponent) {
 		// RFC 5280 §7.3 / RFC 4519 caseIgnoreIA5Match: domainComponent is
 		// IA5String, prepared and compared case-insensitively with insignificant
 		// spaces collapsed.
-		return compareIa5AttributeValue(left, right, (leftValue, rightValue) => {
-			const prepared = prepareNameCompareString(leftValue);
-			return prepared !== undefined && prepared === prepareNameCompareString(rightValue);
+		let undetermined = false;
+		const equal = compareIa5AttributeValue(left, right, (leftValue, rightValue) => {
+			const preparedLeft = prepareNameCompareString(leftValue);
+			const preparedRight = prepareNameCompareString(rightValue);
+			if (preparedLeft === undefined || preparedRight === undefined) {
+				undetermined = true;
+				return false;
+			}
+			return preparedLeft === preparedRight;
 		});
+		if (equal) {
+			return 'match';
+		}
+		return undetermined ? 'undetermined' : 'mismatch';
 	}
 	// RFC 5280 §4.1.2.6 and RFC 2985 §6.1 pkcs9CaseIgnoreMatch: emailAddress is
 	// IA5String, matched character by character without regard to case and
@@ -135,17 +183,17 @@ export function compareNameAttributeValue(
 			(leftValue, rightValue) => leftValue.toLowerCase() === rightValue.toLowerCase(),
 		)
 	) {
-		return true;
+		return 'match';
 	}
 	if (isDirectoryStringTag(left.valueTag) && isDirectoryStringTag(right.valueTag)) {
 		const preparedLeft = prepareNameCompareString(left.value);
 		const preparedRight = prepareNameCompareString(right.value);
 		if (preparedLeft === undefined || preparedRight === undefined) {
-			return false;
+			return 'undetermined';
 		}
-		return preparedLeft === preparedRight;
+		return preparedLeft === preparedRight ? 'match' : 'mismatch';
 	}
-	return left.valueTag === right.valueTag && left.value === right.value;
+	return left.valueTag === right.valueTag && left.value === right.value ? 'match' : 'mismatch';
 }
 
 // Helpers

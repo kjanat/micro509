@@ -19,10 +19,8 @@ import {
 import type { DerElement } from '#micro509/internal/asn1/der';
 import { DEFAULT_MAX_DER_DEPTH, readRootElement } from '#micro509/internal/asn1/der';
 import { OIDS } from '#micro509/internal/asn1/oids';
-import {
-	compareDistinguishedNames,
-	isWithinDirectoryNameSubtree,
-} from '#micro509/internal/shared/dn';
+import type { NameMatch } from '#micro509/internal/shared/dn';
+import { compareDistinguishedNames, directoryNameSubtreeMatch } from '#micro509/internal/shared/dn';
 import { domainToAscii } from '#micro509/internal/shared/idna';
 import {
 	allOnesMaskForIpAddress,
@@ -769,7 +767,7 @@ function isNamePermitted(
 	}
 	// Check excluded — if any match, reject.
 	for (const constraint of accumulated.excluded) {
-		if (nameMatchesConstraint(name, constraint)) {
+		if (nameConstraintMatch(name, constraint) !== 'mismatch') {
 			return false;
 		}
 	}
@@ -780,7 +778,7 @@ function isNamePermitted(
 		if (relevant.length === 0) {
 			continue;
 		}
-		if (!relevant.some((constraint) => nameMatchesConstraint(name, constraint))) {
+		if (!relevant.some((constraint) => nameConstraintMatch(name, constraint) === 'match')) {
 			return false;
 		}
 	}
@@ -790,6 +788,14 @@ function isNamePermitted(
 /** RFC 5280 §4.2.1.6: a dNSName or rfc822Name host in RFC 1034 §3.5 preferred name syntax has no trailing root dot. */
 function endsInRootDot(name: NameConstraintForm): boolean {
 	return (name.type === 'dns' || name.type === 'email') && name.value.endsWith('.');
+}
+
+/** RFC 4518 §2: a comparison that string preparation cannot perform is Undefined. */
+function nameConstraintMatch(name: NameConstraintForm, constraint: NameConstraintForm): NameMatch {
+	if (name.type === 'directoryName' && constraint.type === 'directoryName') {
+		return matchesDnConstraint(name.derHex, constraint.derHex);
+	}
+	return nameMatchesConstraint(name, constraint) ? 'match' : 'mismatch';
 }
 
 /** Dispatches to the type-specific matching function for the name form. */
@@ -805,9 +811,6 @@ function nameMatchesConstraint(name: NameConstraintForm, constraint: NameConstra
 	}
 	if (name.type === 'ip' && constraint.type === 'ip') {
 		return matchesIpConstraint(name.addressBytes, constraint.addressBytes, constraint.maskBytes);
-	}
-	if (name.type === 'directoryName' && constraint.type === 'directoryName') {
-		return matchesDnConstraint(name.derHex, constraint.derHex);
 	}
 	if (name.type === 'srv' && constraint.type === 'srv') {
 		return matchesSrvConstraint(name.value, constraint.value);
@@ -977,13 +980,13 @@ function matchesIpConstraint(
  * The subject DN must equal or be subordinate to the constraint DN,
  * using RFC 5280 section 7.1 name comparison semantics.
  */
-function matchesDnConstraint(subjectDerHex: string, constraintDerHex: string): boolean {
+function matchesDnConstraint(subjectDerHex: string, constraintDerHex: string): NameMatch {
 	const subjectName = parseDirectoryNameDerHex(subjectDerHex);
 	const constraintName = parseDirectoryNameDerHex(constraintDerHex);
 	if (subjectName === undefined || constraintName === undefined) {
-		return false;
+		return 'mismatch';
 	}
-	return isWithinDirectoryNameSubtree(subjectName, constraintName);
+	return directoryNameSubtreeMatch(subjectName, constraintName);
 }
 
 /** Re-parses a hex-encoded DER Name for RDN-by-RDN comparison. Returns `undefined` on malformed input. */
