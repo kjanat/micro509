@@ -1073,28 +1073,27 @@ function validateIssuerConstraintsAtPathIndex(
 export async function validateCandidatePath(
 	input: ValidateCandidatePathInput,
 ): Promise<ValidateCandidatePathResult> {
-	let normalizedChain: readonly ParsedCertificate[];
-	try {
-		normalizedChain = normalizeValidationChain(input.chain);
-	} catch (error) {
+	const normalized = normalizeValidationChain(input.chain);
+	if (!normalized.ok) {
+		const { error, index } = normalized;
 		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
 		if (refusal !== undefined) {
 			return verifyFailureResult(
-				failure(refusal.code, refusal.message, 0, detail({ actual: refusal.message })),
+				failure(refusal.code, refusal.message, index, detail({ actual: refusal.message })),
 			);
 		}
 		return verifyFailureResult(
 			failure(
 				'signature_invalid',
 				'certificate input is malformed',
-				0,
+				index,
 				detail({
 					actual: error instanceof Error ? error.message : 'certificate input is malformed',
 				}),
 			),
 		);
 	}
-	const result = await validateCandidatePathRaw({ ...input, chain: normalizedChain });
+	const result = await validateCandidatePathRaw({ ...input, chain: normalized.chain });
 	return result.ok
 		? validateCandidatePathSuccessResult(result.policyValidation)
 		: verifyFailureResult(result);
@@ -1361,15 +1360,18 @@ export function checkExtendedKeyUsage(
 	chain: readonly ParsedCertificate[],
 	purpose: EkuCheckPurpose,
 ): EkuCheckResult {
-	let normalizedChain: readonly ParsedCertificate[];
-	try {
-		normalizedChain = normalizeValidationChain(chain);
-	} catch (error) {
-		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+	const normalized = normalizeValidationChain(chain);
+	if (!normalized.ok) {
+		const refusal = decodeRefusalOf(normalized.error, DECODE_REFUSAL_CODES);
 		return refusal === undefined
-			? ekuCheckFailureResult('leaf_eku_missing', 'certificate input is malformed', 0)
-			: ekuCheckFailureResult(refusal.code, refusal.message, 0);
+			? ekuCheckFailureResult(
+					'leaf_eku_missing',
+					'certificate input is malformed',
+					normalized.index,
+				)
+			: ekuCheckFailureResult(refusal.code, refusal.message, normalized.index);
 	}
+	const normalizedChain = normalized.chain;
 	const leaf = normalizedChain[0];
 	if (leaf === undefined) {
 		return ekuCheckFailureResult('leaf_eku_missing', 'chain is empty', 0);
@@ -1778,10 +1780,20 @@ function describeDateTime(value: Date): string {
 	return Number.isNaN(value.getTime()) ? '<invalid date>' : value.toISOString();
 }
 
-function normalizeValidationChain(
-	chain: readonly ParsedCertificate[],
-): readonly ParsedCertificate[] {
-	return chain.map(reparseCertificateForTrust);
+type NormalizedValidationChain =
+	| { readonly ok: true; readonly chain: readonly ParsedCertificate[] }
+	| { readonly ok: false; readonly index: number; readonly error: unknown };
+
+function normalizeValidationChain(chain: readonly ParsedCertificate[]): NormalizedValidationChain {
+	const normalized: ParsedCertificate[] = [];
+	for (const [index, certificate] of chain.entries()) {
+		try {
+			normalized.push(reparseCertificateForTrust(certificate));
+		} catch (error) {
+			return { ok: false, index, error };
+		}
+	}
+	return { ok: true, chain: normalized };
 }
 
 function reparseCertificateForTrust(certificate: ParsedCertificate): ParsedCertificate {

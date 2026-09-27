@@ -167,7 +167,9 @@ revocation })` report a certificate carrying `noRevAvail` or
   both codes too, so a certificate or CSR source that `buildCandidatePath`,
   `validateCandidatePath`, `verifyCertificateChain`, the `validateFor*`
   profiles or `matchServiceIdentity` cannot decode reports its refusal, and
-  `trustAnchorFromCertificate` throws it. A directoryName name constraint that
+  `trustAnchorFromCertificate` throws it. `validateCandidatePath` and
+  `checkExtendedKeyUsage` report it at the index of the chain element they
+  cannot decode. A directoryName name constraint that
   micro509 cannot decode fails the chain with its refusal at the index of the
   certificate checked against it. The same holds for
   `MatchCertificatePrivateKeyErrorCode`,

@@ -5666,6 +5666,23 @@ describe('decode refusals at the verification entry points', () => {
 		expect(isResultError(thrown) ? thrown.code : undefined).toBe('unsupported');
 	});
 
+	it('reports the index of the chain element micro509 does not decode', async () => {
+		const chain = await issueChain();
+		const parsed = [chain.leaf.pem, chain.intermediate.pem, chain.root.certificate.pem].map((pem) =>
+			unwrap(parseCertificatePem(pem)),
+		);
+		for (const index of [1, 2]) {
+			const forgedChain = parsed.map((certificate, position) =>
+				position === index
+					? { ...certificate, der: rewriteCertificateSubject(certificate.der, teletexSubject) }
+					: certificate,
+			);
+			const unsupported = { ok: false, code: 'unsupported', index };
+			expect(await validateCandidatePath({ chain: forgedChain })).toMatchObject(unsupported);
+			expect(checkExtendedKeyUsage(forgedChain, 'serverAuth')).toMatchObject(unsupported);
+		}
+	});
+
 	it('reports a CSR micro509 does not decode as unsupported', async () => {
 		const keyPair = await generateKeyPair({ kind: 'ed25519' });
 		const csr = await createCertificateSigningRequest({
