@@ -27,6 +27,7 @@ export type ExtensionEncoderErrorCode =
 	| 'distribution_point_empty'
 	| 'distribution_point_full_name_empty'
 	| 'distribution_point_relative_name_multiple_crl_issuers'
+	| 'domain_trailing_dot'
 	| 'duplicate_extension_oid'
 	| 'duplicate_policy_oid'
 	| 'edwards_key_usage_forbids_agreement_bit'

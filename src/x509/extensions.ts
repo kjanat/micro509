@@ -1573,10 +1573,21 @@ function toAsciiDomain(domain: string): string {
 	return converted.value;
 }
 
+/** RFC 5280 §4.2.1.6 dNSName and rfc822Name domains take the RFC 1034 §3.5 preferred name syntax, which has no trailing root dot. */
+function requireRelativeDomain(domain: string): string {
+	if (domain.endsWith('.')) {
+		throwExtensionEncoderError(
+			'domain_trailing_dot',
+			'A dNSName or rfc822Name domain must not end in "." (RFC 5280 §4.2.1.6)',
+		);
+	}
+	return domain;
+}
+
 /** A dNSName or dNSName constraint with its leading `*.` or `.` kept and its domain in A-labels. */
 function toAsciiDnsName(value: string): string {
 	const prefix = value.startsWith('*.') ? '*.' : value.startsWith('.') ? '.' : '';
-	return `${prefix}${toAsciiDomain(value.slice(prefix.length))}`;
+	return `${prefix}${toAsciiDomain(requireRelativeDomain(value.slice(prefix.length)))}`;
 }
 
 /**
@@ -1667,7 +1678,7 @@ function toAsciiMailbox(value: string): string {
 	const at = value.lastIndexOf('@');
 	return at < 0
 		? toAsciiDnsName(value)
-		: `${value.slice(0, at + 1)}${toAsciiDomain(value.slice(at + 1))}`;
+		: `${value.slice(0, at + 1)}${toAsciiDomain(requireRelativeDomain(value.slice(at + 1)))}`;
 }
 
 /**

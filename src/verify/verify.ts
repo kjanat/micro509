@@ -2002,6 +2002,9 @@ function toAsciiInitialNameConstraint(subtree: GeneralSubtree): GeneralSubtree |
 	const source = base.type === 'srv' ? normalizeLabelSeparators(base.value) : base.value;
 	const prefix = unconvertedConstraintPrefix(base.type, source);
 	const domain = source.slice(prefix.length);
+	if (base.type !== 'srv' && domain.endsWith('.')) {
+		return undefined;
+	}
 	const converted =
 		base.type === 'srv' && domain.length === 0 ? undefined : domainToAscii(domain, 'lookup');
 	if (converted !== undefined && !converted.ok) {

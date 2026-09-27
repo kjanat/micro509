@@ -755,7 +755,10 @@ function isNamePermitted(
 	name: NameConstraintForm,
 	accumulated: AccumulatedNameConstraints,
 ): boolean {
-	if (hasMalformedConstraint(name.type, accumulated)) {
+	if (
+		hasMalformedConstraint(name.type, accumulated) ||
+		(endsInRootDot(name) && accumulatedHasConstraintsOfType(name.type, accumulated))
+	) {
 		return false;
 	}
 	// Check excluded — if any match, reject.
@@ -776,6 +779,11 @@ function isNamePermitted(
 		}
 	}
 	return true;
+}
+
+/** RFC 5280 §4.2.1.6: a dNSName or rfc822Name host in RFC 1034 §3.5 preferred name syntax has no trailing root dot. */
+function endsInRootDot(name: NameConstraintForm): boolean {
+	return (name.type === 'dns' || name.type === 'email') && name.value.endsWith('.');
 }
 
 /** Dispatches to the type-specific matching function for the name form. */

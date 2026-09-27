@@ -1520,6 +1520,27 @@ describe('extensions encoding', () => {
 		}
 	});
 
+	it('encodeSubjectAltName and encodeNameConstraints refuse a dNSName or rfc822Name domain ending in the root dot', () => {
+		for (const value of ['example.com.', '*.example.com.', 'café.example.']) {
+			expectEncoderErrorCode(
+				() => encodeSubjectAltName({ type: 'dns', value }),
+				'domain_trailing_dot',
+			);
+		}
+		expectEncoderErrorCode(
+			() => encodeSubjectAltName({ type: 'email', value: 'user@example.com.' }),
+			'domain_trailing_dot',
+		);
+		for (const type of ['dns', 'email'] as const) {
+			for (const value of ['example.com.', '.example.com.']) {
+				expectEncoderErrorCode(
+					() => encodeNameConstraints({ excludedSubtrees: [{ base: { type, value } }] }),
+					'domain_trailing_dot',
+				);
+			}
+		}
+	});
+
 	it('encodeNameConstraints writes dNSName and rfc822Name bases as A-labels', () => {
 		for (const type of ['dns', 'email'] as const) {
 			expect(

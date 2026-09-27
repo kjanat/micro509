@@ -4042,6 +4042,30 @@ describe('validateCandidatePath direct', () => {
 		});
 	});
 
+	it.each([
+		['dns', 'example.com.'],
+		['dns', '.example.com.'],
+		['email', 'example.com.'],
+		['email', '.example.com.'],
+	] as const)(
+		'rejects the initial %s constraint %s ending in the root dot',
+		async (type, value) => {
+			const chain = await issueChain();
+			const result = await validateCandidatePath({
+				chain: unwrap(
+					parseCertificateChainPem(
+						`${chain.leaf.pem}${chain.intermediate.pem}${chain.root.certificate.pem}`,
+					),
+				),
+				permittedSubtrees: [{ base: { type, value } }],
+			});
+			expect(result).toMatchObject({
+				ok: false,
+				code: 'unsupported_initial_name_constraints',
+			});
+		},
+	);
+
 	it('rejects malformed nested initial name constraint subtree containers', async () => {
 		const chain = await issueChain();
 		const input = {

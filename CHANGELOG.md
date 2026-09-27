@@ -34,7 +34,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   SRVName, and dNSName and rfc822Name constraints, and fails with
   `invalid_idn` on a label that is not valid IDNA2008, an `xn--` label that is
   not an A-label, or an ASCII label beside an IDN label that is not NR-LDH. A
-  trailing root dot is kept and is not tested as a label.
+  dNSName or rfc822Name domain, SAN or constraint, that ends in the root dot
+  fails with `domain_trailing_dot`. RFC 5280 §4.2.1.6 requires the RFC 1034
+  §3.5 preferred name syntax, which has no trailing dot.
 - RFC 9608 `noRevAvail` (id-ce 56). Parsing exposes it as
   `ParsedCertificate.noRevAvail`, and `extensions.noRevAvail: true` emits it.
   The builder refuses it beside cA TRUE, `crlDistributionPoints`, freshestCRL
@@ -318,6 +320,12 @@ revocation })` report a certificate carrying `noRevAvail` or
 
 ### Security
 
+- A received dNSName or rfc822Name ending in the root dot, such as
+  `evil.example.com.`, matched no dNSName or rfc822Name constraint, so an
+  excluded `example.com` did not exclude it. While constraints of its type are
+  in force, such a name now fails with `name_constraints_violated`, and an
+  initial dNSName or rfc822Name constraint ending in the root dot returns
+  `unsupported_initial_name_constraints`.
 - Chain-level revocation skipped a certificate carrying `id-pkix-ocsp-nocheck`
   whatever the extension held, and `hasOcspNoCheckExtension` counted it the
   same way. Only the NULL value RFC 6960 §4.2.2.2.1 defines now counts.

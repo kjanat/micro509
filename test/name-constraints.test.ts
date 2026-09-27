@@ -125,22 +125,51 @@ describe('name constraint fixtures', () => {
 		expect(excluded).toMatchObject({ ok: false, code: 'name_constraints_violated' });
 	});
 
+	it.each([
+		['evil.example.com.', 0x82, 'dns', 'email'],
+		['user@evil.example.com.', 0x81, 'email', 'dns'],
+	] as const)(
+		'fails a received name %s ending in the root dot while constraints of its type apply',
+		async (value, tag, type, otherType) => {
+			const leafSubjectAltNames = [
+				{ type: 'unknown', tag, value: new TextEncoder().encode(value) },
+			] as const;
+			const excluded = await verifyNameConstraintFixture({
+				rootNameConstraints: { excludedSubtrees: [{ base: { type, value: 'example.com' } }] },
+				leafSubjectAltNames,
+			});
+			expect(excluded).toMatchObject({ ok: false, code: 'name_constraints_violated' });
+			const permitted = await verifyNameConstraintFixture({
+				rootNameConstraints: { permittedSubtrees: [{ base: { type, value: 'example.com' } }] },
+				leafSubjectAltNames,
+			});
+			expect(permitted).toMatchObject({ ok: false, code: 'name_constraints_violated' });
+			const unrelated = await verifyNameConstraintFixture({
+				rootNameConstraints: {
+					excludedSubtrees: [{ base: { type: otherType, value: 'example.com' } }],
+				},
+				leafSubjectAltNames,
+			});
+			expect(unrelated).toMatchObject({ ok: true });
+		},
+	);
+
 	it('fails every name of a type while a dNSName or rfc822Name constraint of that type is malformed', async () => {
 		const cases = [
 			{
-				constraint: { type: 'dns', value: '.example.com.' },
+				constraint: rawExcludedDomainConstraint(0x82, '.example.com.'),
 				san: { type: 'dns', value: 'host.example.com' },
 			},
 			{
-				constraint: { type: 'email', value: '.example.com.' },
+				constraint: rawExcludedDomainConstraint(0x81, '.example.com.'),
 				san: { type: 'email', value: 'user@host.example.com' },
 			},
 			{
-				constraint: { type: 'email', value: '.example.com.' },
+				constraint: rawExcludedDomainConstraint(0x81, '.example.com.'),
 				san: { type: 'smtpUtf8Mailbox', value: '用户@host.example.com' },
 			},
 			{
-				constraint: { type: 'dns', value: 'bad label.example' },
+				constraint: { excludedSubtrees: [{ base: { type: 'dns', value: 'bad label.example' } }] },
 				san: { type: 'dns', value: 'host.example.com' },
 			},
 		] as const;
@@ -151,7 +180,7 @@ describe('name constraint fixtures', () => {
 			});
 			expect(unrelated).toMatchObject({ ok: true });
 			const result = await verifyNameConstraintFixture({
-				rootNameConstraints: { excludedSubtrees: [{ base: constraint }] },
+				rootNameConstraints: constraint,
 				leafSubjectAltNames: [san],
 			});
 			expect(result).toMatchObject({ ok: false, code: 'name_constraints_violated' });
@@ -458,6 +487,10 @@ describe('name constraint fixtures', () => {
 		expect(result).toMatchObject({ ok: false, code: 'name_constraints_violated' });
 	});
 });
+
+function rawExcludedDomainConstraint(tag: 0x81 | 0x82, value: string): Uint8Array {
+	return sequence([tlv(0xa1, sequence([tlv(tag, new TextEncoder().encode(value))]))]);
+}
 
 function rawSrvNameConstraints(field: 0xa0 | 0xa1, restriction: string): Uint8Array {
 	const srvName = tlv(
