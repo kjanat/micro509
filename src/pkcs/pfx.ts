@@ -596,7 +596,12 @@ async function extractSafeContents(
 		const root = readBerRoot(decrypted);
 		berSequenceChildren(root);
 		return { data: decrypted, root };
-	} catch {
+	} catch (error) {
+		rethrowIfInvariant(error);
+		const refusal = decodeRefusalOf(error, DECODE_LIMIT_CODES);
+		if (refusal !== undefined) {
+			return { error: pfxFailure(refusal.code, refusal.message) };
+		}
 		// AES-CBC padding is unauthenticated: a wrong key passes the padding
 		// check ~1/256 of the time and "decrypts" to random bytes that are not
 		// a SafeContents SEQUENCE — a wrong password, not malformed input.
@@ -900,15 +905,15 @@ function decryptEncryptedData(
 	);
 }
 
-/** Reads the OCTET STRING inside a context-specific constructed wrapper. */
+/** Reads the OCTET STRING inside a `[0] EXPLICIT` wrapper. */
 function extractContextOctetString(source: Uint8Array, element: BerElement): Uint8Array {
 	return berStringContent(source, extractContextChild(element), 0x04);
 }
 
-/** Reads the single child element inside a context-specific constructed wrapper. */
+/** Reads the single child element inside a `[0] EXPLICIT` wrapper. */
 function extractContextChild(element: BerElement): BerElement {
-	if ((element.tag & 0xe0) !== 0xa0) {
-		throw new Error('Expected context-specific constructed value');
+	if (element.tag !== 0xa0) {
+		throw new Error('Expected [0] EXPLICIT value');
 	}
 	const child = element.children[0];
 	if (element.children.length !== 1 || child === undefined) {

@@ -1,4 +1,5 @@
 import { throwDecodeRefusal } from '#micro509/internal/asn1/decode-refusal';
+import type { Identifier } from '#micro509/internal/asn1/der';
 import {
 	concatBytes,
 	DEFAULT_MAX_DER_DEPTH,
@@ -9,6 +10,7 @@ import {
 
 export interface BerElement {
 	readonly tag: number;
+	readonly tagNumber: number;
 	readonly headerStart: number;
 	readonly identifierLength: number;
 	readonly start: number;
@@ -157,7 +159,7 @@ function readBerElement(
 		if (!constructed) {
 			throw new Error('Indefinite length requires a constructed encoding');
 		}
-		return readIndefiniteElement(bytes, offset, identifier.length, tag, limit, depth, maxDepth);
+		return readIndefiniteElement(bytes, offset, identifier, limit, depth, maxDepth);
 	}
 	const { lengthOctets, length } = readDefiniteLength(bytes, lengthOffset, lengthByte);
 	const start = lengthOffset + lengthOctets;
@@ -167,6 +169,7 @@ function readBerElement(
 	}
 	return {
 		tag,
+		tagNumber: identifier.tagNumber,
 		headerStart: offset,
 		identifierLength: identifier.length,
 		start,
@@ -179,13 +182,12 @@ function readBerElement(
 function readIndefiniteElement(
 	bytes: Uint8Array,
 	offset: number,
-	identifierLength: number,
-	tag: number,
+	identifier: Identifier,
 	limit: number,
 	depth: number,
 	maxDepth: number,
 ): BerElement {
-	const start = offset + identifierLength + 1;
+	const start = offset + identifier.length + 1;
 	const children: BerElement[] = [];
 	let position = start;
 	while (position < limit && bytes[position] !== 0x00) {
@@ -197,9 +199,10 @@ function readIndefiniteElement(
 		throw new Error('Missing end-of-contents octets');
 	}
 	return {
-		tag,
+		tag: identifier.tag,
+		tagNumber: identifier.tagNumber,
 		headerStart: offset,
-		identifierLength,
+		identifierLength: identifier.length,
 		start,
 		contentEnd: position,
 		end: position + 2,

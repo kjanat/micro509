@@ -226,6 +226,11 @@ revocation })` report a certificate carrying `noRevAvail` or
 
 ### Fixed
 
+- PFX parsing accepted any context-specific constructed tag where ContentInfo
+  content, SafeBag bagValue and CertBag certValue are `[0] EXPLICIT`. Any
+  other tag is now `malformed`.
+- A BER implementation limit inside decrypted PFX SafeContents returned
+  `invalid_password`. It now returns `limit_exceeded`.
 - Policy validation applied a policyMappings extension found in the
   end-entity certificate. RFC 5280 §6.1.3 runs the policy-mapping step of
   §6.1.4 only for certificates before the last, and RFC 9618 keeps that, so a

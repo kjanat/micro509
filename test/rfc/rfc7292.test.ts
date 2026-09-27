@@ -432,6 +432,45 @@ describe('RFC 7292', () => {
 			expect(await pfxCode(await berPfxAround(indefinite(0x30, [bag])))).toBe('limit_exceeded');
 		});
 
+		it('micro509 policy: bounds BER nesting depth inside decrypted SafeContents as limit_exceeded', async () => {
+			let nested = nullValue();
+			for (let depth = 0; depth < 100; depth += 1) {
+				nested = indefinite(0x30, [nested]);
+			}
+			const bag = indefinite(0x30, [objectIdentifier(OIDS.pkcs7Data), indefinite(0xa0, [nested])]);
+			expect(await pfxCode(await encryptedBerPfxAround(indefinite(0x30, [bag])))).toBe(
+				'limit_exceeded',
+			);
+		});
+
+		it('reads ContentInfo content and SafeBag bagValue only under [0] EXPLICIT', async () => {
+			const explicit0 = (value: Uint8Array): Uint8Array => indefinite(0xa0, [value]);
+			const wrongWrappers = [
+				(value: Uint8Array): Uint8Array => indefinite(0xa1, [value]),
+				(value: Uint8Array): Uint8Array =>
+					concatBytes([Uint8Array.of(0xbf, 0x1f, 0x80), value, Uint8Array.of(0, 0)]),
+			];
+			const safeContents = (wrap: (value: Uint8Array) => Uint8Array): Uint8Array =>
+				indefinite(0x30, [indefinite(0x30, [objectIdentifier(OIDS.pkcs7Data), wrap(nullValue())])]);
+			const pfx = async (
+				wrapContent: (value: Uint8Array) => Uint8Array,
+				wrapBagValue: (value: Uint8Array) => Uint8Array,
+			): Promise<Uint8Array> =>
+				await assemblePfx(
+					indefinite(0x30, [
+						indefinite(0x30, [
+							objectIdentifier(OIDS.pkcs7Data),
+							wrapContent(segmented(0x24, safeContents(wrapBagValue), 2)),
+						]),
+					]),
+				);
+			expect(await pfxCode(await pfx(explicit0, explicit0))).toBe('ok');
+			for (const wrap of wrongWrappers) {
+				expect(await pfxCode(await pfx(wrap, explicit0))).toBe('malformed');
+				expect(await pfxCode(await pfx(explicit0, wrap))).toBe('malformed');
+			}
+		});
+
 		it('keeps the keyBag PrivateKeyInfo DER: an indefinite-length PrivateKeyInfo is malformed', async () => {
 			const keyPair = await generateKeyPair();
 			const pkcs8 = readElement(await exportPkcs8Der(keyPair.privateKey));
@@ -504,6 +543,26 @@ async function berPfxAround(safeContents: Uint8Array): Promise<Uint8Array> {
 			indefinite(0x30, [
 				objectIdentifier(OIDS.pkcs7Data),
 				indefinite(0xa0, [segmented(0x24, safeContents, 2)]),
+			]),
+		]),
+	);
+}
+
+async function encryptedBerPfxAround(safeContents: Uint8Array): Promise<Uint8Array> {
+	const encryption = await encryptPbes2(safeContents, { password: 'pw', iterations: 1 });
+	const encryptedData = indefinite(0x30, [
+		integerFromNumber(0),
+		indefinite(0x30, [
+			objectIdentifier(OIDS.pkcs7Data),
+			nonMinimal(0x30, readElement(encryption.algorithmIdentifierDer).value),
+			segmented(0xa0, encryption.encryptedData, 2),
+		]),
+	]);
+	return await assemblePfx(
+		indefinite(0x30, [
+			indefinite(0x30, [
+				objectIdentifier(OIDS.pkcs7EncryptedData),
+				indefinite(0xa0, [encryptedData]),
 			]),
 		]),
 	);
