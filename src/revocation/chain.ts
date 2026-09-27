@@ -9,6 +9,8 @@
  */
 
 import { toHex } from '#micro509/internal/asn1/asn1';
+import { DECODE_REFUSAL_CODES, decodeRefusalOf } from '#micro509/internal/asn1/decode-refusal';
+import type { DecodeFailureCode } from '#micro509/result/result';
 import type {
 	AuthenticatedCrlCheckOutcome,
 	CrlSource,
@@ -300,9 +302,24 @@ export type CertificateRevocationStatus =
  *
  * Collected in {@linkcode CheckChainRevocationValue.executionErrors}.
  */
-export interface RevocationExecutionError {
+export type RevocationExecutionError = RevocationParseError | RevocationProcessingError;
+
+/** Revocation evidence that did not parse. */
+export interface RevocationParseError {
 	/** Error category. */
-	readonly kind: 'parse_error' | 'unsupported_extension' | 'internal_error';
+	readonly kind: 'parse_error';
+	/** `malformed`, or the refusal for evidence micro509 does not decode. */
+	readonly code: DecodeFailureCode;
+	/** Human-readable error description. */
+	readonly message: string;
+	/** Which evidence caused the error (e.g., CRL issuer DN). */
+	readonly evidenceIdentifier?: string;
+}
+
+/** Revocation evidence that parsed but could not be processed. */
+export interface RevocationProcessingError {
+	/** Error category. */
+	readonly kind: 'unsupported_extension' | 'internal_error';
 	/** Human-readable error description. */
 	readonly message: string;
 	/** Which evidence caused the error (e.g., CRL issuer DN). */
@@ -727,7 +744,7 @@ type ApplicableOcspResponse =
 			readonly parsed: ParsedOcspResponse;
 			readonly entry: ParsedOcspSingleResponse;
 	  }
-	| { readonly kind: 'parse_error'; readonly message: string }
+	| { readonly kind: 'parse_error'; readonly error: RevocationParseError }
 	| { readonly kind: 'not_applicable' };
 
 /** Parses an OCSP response from PEM string or DER bytes. */
@@ -738,6 +755,14 @@ function parseOcspResponseFromSource(source: OcspResponseSource): ParsedOcspResp
 	return parseOcspResponseDerOrThrow(source);
 }
 
+function evidenceParseError(error: unknown, fallbackMessage: string): RevocationParseError {
+	return {
+		kind: 'parse_error',
+		code: decodeRefusalOf(error, DECODE_REFUSAL_CODES)?.code ?? 'malformed',
+		message: error instanceof Error ? error.message : fallbackMessage,
+	};
+}
+
 /** Parses one OCSP source and locates the entry for the certificate under evaluation. */
 function findApplicableOcspResponse(
 	source: OcspResponseSource,
@@ -746,11 +771,8 @@ function findApplicableOcspResponse(
 	let parsed: ParsedOcspResponse;
 	try {
 		parsed = parseOcspResponseFromSource(source);
-	} catch (e) {
-		return {
-			kind: 'parse_error',
-			message: e instanceof Error ? e.message : 'OCSP response parse failed',
-		};
+	} catch (error) {
+		return { kind: 'parse_error', error: evidenceParseError(error, 'OCSP response parse failed') };
 	}
 	const entry = (parsed.responses ?? []).find(
 		(single) => normalizeHex(single.certId.serialNumberHex) === normalizeHex(cert.serialNumberHex),
@@ -946,10 +968,7 @@ async function evaluateOcspEvidence(
 	for (const source of ocspResponses) {
 		const applicable = findApplicableOcspResponse(source, cert);
 		if (applicable.kind === 'parse_error') {
-			executionErrors.push({
-				kind: 'parse_error',
-				message: applicable.message,
-			});
+			executionErrors.push(applicable.error);
 			continue;
 		}
 		if (applicable.kind === 'not_applicable') {
@@ -1257,11 +1276,8 @@ function parseCrlEvidenceSources(
 	for (const crlSource of crls) {
 		try {
 			parsedCrls.push(normalizeCrl(crlSource));
-		} catch (e) {
-			executionErrors.push({
-				kind: 'parse_error',
-				message: e instanceof Error ? e.message : 'CRL parse failed',
-			});
+		} catch (error) {
+			executionErrors.push(evidenceParseError(error, 'CRL parse failed'));
 		}
 	}
 	return parsedCrls;

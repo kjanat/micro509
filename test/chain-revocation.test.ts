@@ -14,6 +14,7 @@ import {
 	unwrap,
 	verifyCertificateChain,
 } from '#micro509';
+import { explicitContext, octetString, sequence, tlv, utcTime } from '#micro509/internal/asn1/der';
 import { FAR_FUTURE_NEXT_UPDATE, hexToBytes } from '#test/helpers';
 
 async function loadPkitsCert(name: string) {
@@ -1378,7 +1379,35 @@ describe('checkChainRevocation with OCSP evidence', () => {
 		});
 
 		expect(result.value.certificates[0]?.status).toBe('indeterminate');
-		expect(result.value.executionErrors?.some((e) => e.kind === 'parse_error')).toBe(true);
+		expect(result.value.executionErrors).toMatchObject([
+			{ kind: 'parse_error', code: 'malformed' },
+		]);
+	});
+
+	it('records the decode refusal for CRL and OCSP evidence over a micro509 limit', async () => {
+		const { chain, at } = await createOcspChainFixture();
+		const overlongArc = tlv(0x06, Uint8Array.of(0x2a, ...new Array<number>(64).fill(0xff), 0x7f));
+		const crl = sequence([
+			sequence([tlv(0x02, Uint8Array.of(1)), sequence([overlongArc]), sequence([]), utcTime(at)]),
+			sequence([overlongArc]),
+			tlv(0x03, Uint8Array.of(0)),
+		]);
+		const ocspResponse = sequence([
+			tlv(0x0a, Uint8Array.of(0)),
+			explicitContext(0, sequence([overlongArc, octetString(Uint8Array.of())])),
+		]);
+		const result = await checkChainRevocation({
+			chain: [...chain],
+			crls: [crl],
+			ocspResponses: [ocspResponse],
+			at,
+		});
+
+		expect(result.value.certificates[0]?.status).toBe('indeterminate');
+		expect(result.value.executionErrors).toMatchObject([
+			{ kind: 'parse_error', code: 'limit_exceeded' },
+			{ kind: 'parse_error', code: 'limit_exceeded' },
+		]);
 	});
 
 	it('verifyCertificateChain denies via OCSP revocation evidence', async () => {
