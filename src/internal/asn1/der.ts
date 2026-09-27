@@ -204,8 +204,33 @@ export function bitString(value: Uint8Array, unusedBits = 0): Uint8Array {
 	return tlv(0x03, concatBytes([Uint8Array.of(unusedBits), value]));
 }
 
-/** Encodes a DER UTF8String (tag `0x0c`). */
+export function hasLoneSurrogate(value: string): boolean {
+	for (let index = 0; index < value.length; index += 1) {
+		const unit = value.charCodeAt(index);
+		if (unit >= 0xd800 && unit <= 0xdbff) {
+			const next = value.charCodeAt(index + 1);
+			if (next >= 0xdc00 && next <= 0xdfff) {
+				index += 1;
+				continue;
+			}
+			return true;
+		}
+		if (unit >= 0xdc00 && unit <= 0xdfff) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
+ * Encodes a DER UTF8String (tag `0x0c`).
+ *
+ * @throws on a lone surrogate, which has no UTF-8 encoding.
+ */
 export function utf8String(value: string): Uint8Array {
+	if (hasLoneSurrogate(value)) {
+		throw new Error('Invalid UTF8String: lone surrogate');
+	}
 	return tlv(0x0c, new TextEncoder().encode(value));
 }
 

@@ -62,7 +62,7 @@
  * @module
  */
 
-import { objectIdentifier, sequence, setOf } from '#micro509/internal/asn1/der';
+import { hasLoneSurrogate, objectIdentifier, sequence, setOf } from '#micro509/internal/asn1/der';
 import { NAME_FIELD_DEFINITIONS, NAME_OBJECT_ORDER } from '#micro509/internal/x509/name-fields';
 import { throwMicro509Error } from '#micro509/result/result';
 
@@ -72,6 +72,7 @@ export type NameEncoderErrorCode =
 	| 'unsupported_name_field'
 	| 'name_attribute_empty'
 	| 'name_attribute_too_long'
+	| 'name_attribute_lone_surrogate'
 	| 'invalid_country_code';
 
 /** Throws a {@link ResultError} for a distinguished-name encoder input-validation failure. */
@@ -284,6 +285,12 @@ function encodeNameAttribute(attribute: NameAttribute): Uint8Array {
 		throwNameEncoderError(
 			'name_attribute_empty',
 			`Name attribute ${attribute.type} must not be empty`,
+		);
+	}
+	if (hasLoneSurrogate(attribute.value)) {
+		throwNameEncoderError(
+			'name_attribute_lone_surrogate',
+			`Name attribute ${attribute.type} holds a lone UTF-16 surrogate`,
 		);
 	}
 	if (attribute.type === 'country' && attribute.value.length !== 2) {

@@ -20,6 +20,7 @@ export type ExtensionEncoderErrorCode =
 	| 'directory_name_not_sequence'
 	| 'display_text_control_character'
 	| 'display_text_ia5_string'
+	| 'display_text_lone_surrogate'
 	| 'display_text_not_nfc'
 	| 'display_text_out_of_range'
 	| 'distribution_point_crl_issuer_empty'

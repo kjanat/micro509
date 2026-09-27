@@ -21,6 +21,7 @@ import {
 	concatBytes,
 	DEFAULT_MAX_DER_DEPTH,
 	explicitContext,
+	hasLoneSurrogate,
 	ia5Bytes,
 	ia5String,
 	implicitConstructedContext,
@@ -2084,6 +2085,12 @@ function encodePolicyQualifierInfo(qualifier: PolicyQualifierInfo): Uint8Array {
 
 /** DER-encode a UserNotice qualifier SEQUENCE. */
 function assertDisplayText(value: string): void {
+	if (hasLoneSurrogate(value)) {
+		throwExtensionEncoderError(
+			'display_text_lone_surrogate',
+			'DisplayText must not hold a lone UTF-16 surrogate',
+		);
+	}
 	const length = [...value].length;
 	if (length === 0 || length > 200) {
 		throwExtensionEncoderError(

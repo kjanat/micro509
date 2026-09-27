@@ -353,6 +353,12 @@ revocation })` report a certificate carrying `noRevAvail` or
   failed its string type's decoding as UTF-8 and replaced invalid sequences
   with U+FFFD. Such a value now returns `malformed`, as it does in a
   certificate.
+- A UTF8String the builder wrote from a string holding a lone UTF-16
+  surrogate carried U+FFFD in its place, so the certificate held different
+  text from the input. A lone surrogate in a name attribute now fails with the
+  new `name_attribute_lone_surrogate`, and in an explicitText or `noticeRef`
+  organization with the new `display_text_lone_surrogate`. A surrogate pair
+  and U+FFFD itself encode as before.
 
 ### Security
 

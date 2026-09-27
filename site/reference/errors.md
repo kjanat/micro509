@@ -59,13 +59,14 @@ Unions may gain members in minor releases; treat them as non-exhaustive and keep
 
 ### NameEncoderErrorCode
 
-| Code                                | Meaning                                              |
-| ----------------------------------- | ---------------------------------------------------- |
-| `invalid_country_code`              | Country attribute is not exactly two letters         |
-| `name_attribute_empty`              | Attribute value is empty (RFC 5280 A.1 `SIZE (1..)`) |
-| `name_attribute_too_long`           | Attribute value exceeds its RFC 5280 A.1 upper bound |
-| `relative_distinguished_name_empty` | RDN carries no attributes                            |
-| `unsupported_name_field`            | Attribute key is not an encodable name field         |
+| Code                                | Meaning                                                                    |
+| ----------------------------------- | -------------------------------------------------------------------------- |
+| `invalid_country_code`              | Country attribute is not exactly two letters                               |
+| `name_attribute_empty`              | Attribute value is empty (RFC 5280 A.1 `SIZE (1..)`)                       |
+| `name_attribute_lone_surrogate`     | Attribute value holds a lone UTF-16 surrogate, which has no UTF-8 encoding |
+| `name_attribute_too_long`           | Attribute value exceeds its RFC 5280 A.1 upper bound                       |
+| `relative_distinguished_name_empty` | RDN carries no attributes                                                  |
+| `unsupported_name_field`            | Attribute key is not an encodable name field                               |
 
 ### ExtensionEncoderErrorCode
 
@@ -78,6 +79,7 @@ Unions may gain members in minor releases; treat them as non-exhaustive and keep
 | `directory_name_not_sequence`                           | directoryName payload is not a DER SEQUENCE                                                                              |
 | `display_text_control_character`                        | explicitText contains a C0 or C1 control character (RFC 6818 §3)                                                         |
 | `display_text_ia5_string`                               | explicitText requested as IA5String (RFC 6818 §3)                                                                        |
+| `display_text_lone_surrogate`                           | explicitText or noticeRef organization holds a lone UTF-16 surrogate                                                     |
 | `display_text_not_nfc`                                  | UTF8String or BMPString explicitText is not NFC (RFC 6818 §3)                                                            |
 | `display_text_out_of_range`                             | User-notice DisplayText length outside RFC 5280 bounds                                                                   |
 | `distribution_point_crl_issuer_empty`                   | `cRLIssuer` present but holds no name                                                                                    |
