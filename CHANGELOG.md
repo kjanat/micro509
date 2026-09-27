@@ -161,14 +161,18 @@ revocation })` report a certificate carrying `noRevAvail` or
   `DECODE_REFUSAL_CODES`, its `DecodeRefusalCode` type and `DecodeFailureCode`
   (`malformed` plus both) are exported from `micro509` and `micro509/result`,
   and each of those error code types is built from them.
-- `rejectOversizedExplicitText` on `verifyCertificateChain` and
+- `rejectOversizedDisplayText` on `verifyCertificateChain` and
   `validateCandidatePath` rejects a certificate whose user notice
-  `explicitText` exceeds 200 characters with the new `explicit_text_oversized`
-  verify code, which joins `VERIFY_ERROR_CODES` with the character count in
-  `details.actual`. By default such a certificate validates, and its parsed
-  user notice carries `oversizedExplicitText` (the new `OversizedExplicitText`
-  type) with the count. RFC 5280 §4.2.1.4 asks certificate users to handle the
-  notice gracefully, and PKITS 4.8.19 leaves rejection to the application.
+  `explicitText` or `noticeRef` organization exceeds 200 characters with the
+  new `display_text_oversized` verify code, which joins `VERIFY_ERROR_CODES`
+  with the character count in `details.actual` and the field in the new
+  `details.userNoticeField` (`'explicitText'` or `'noticeRefOrganization'`).
+  By default such a certificate validates, and its parsed user notice carries
+  `oversizedExplicitText`, or its `noticeRef` carries `oversizedOrganization`,
+  with the count (the new `OversizedDisplayText` type). RFC 5280 §4.2.1.4 asks
+  certificate users to handle an oversized explicitText gracefully, and PKITS
+  4.8.19 leaves rejection to the application. The RFC says nothing about an
+  oversized organization, and keeping it is micro509's receiving policy.
 
 ### Changed
 
@@ -325,10 +329,10 @@ revocation })` report a certificate carrying `noRevAvail` or
 - DisplayText parsing (user-notice `explicitText` and the `noticeRef`
   organization) replaced invalid UTF-8 with U+FFFD, accepted octets outside
   the IA5String and VisibleString repertoires, and accepted any length. It now
-  decodes the tagged type strictly. A `noticeRef` organization outside SIZE
-  (1..200), an empty `explicitText` and any other encoding return `malformed`;
-  an `explicitText` over 200 characters, such as PKITS 4.8.19's, is kept whole
-  and reported as `oversizedExplicitText`. See Added.
+  decodes the tagged type strictly. An empty DisplayText and any other
+  encoding return `malformed`. An `explicitText` over 200 characters, such as
+  PKITS 4.8.19's, is kept whole and reported as `oversizedExplicitText`, and
+  an organization over 200 characters as `oversizedOrganization`. See Added.
 - CRL issuer and PKCS #7 signer issuer parsing decoded an attribute value that
   failed its string type's decoding as UTF-8 and replaced invalid sequences
   with U+FFFD. Such a value now returns `malformed`, as it does in a

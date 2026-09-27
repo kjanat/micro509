@@ -134,8 +134,8 @@ both tables are enforced against `VERIFY_ERROR_CODES` by tests.
 
 `authority_key_identifier_mismatch`, `ca_required`, `certificate_expired`,
 `certificate_revoked`, `common_name_fallback_suppressed`,
+`display_text_oversized`,
 `ec_domain_parameters_missing`, `explicit_policy_required`,
-`explicit_text_oversized`,
 `extended_key_usage_invalid`, `initial_policy_set_not_satisfied`,
 `intermediate_eku_constraint`, `issuer_not_found`, `key_cert_sign_required`,
 `name_constraints_violated`, `no_rev_avail_conflict`, `no_trusted_root`,

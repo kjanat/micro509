@@ -2067,6 +2067,22 @@ describe('extensions encoding', () => {
 			]),
 			'display_text_out_of_range',
 		],
+		[
+			'certificatePolicies with a noticeRef organization over 200 characters',
+			OIDS.certificatePolicies,
+			sequence([
+				sequence([
+					objectIdentifier('1.2.3.4'),
+					sequence([
+						sequence([
+							objectIdentifier(OIDS.userNoticePolicyQualifier),
+							sequence([sequence([utf8String('a'.repeat(201)), sequence([integerFromNumber(1)])])]),
+						]),
+					]),
+				]),
+			]),
+			'display_text_out_of_range',
+		],
 	] as const;
 
 	it.each(KNOWN_EXTENSION_PROFILE_VIOLATIONS)(

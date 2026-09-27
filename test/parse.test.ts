@@ -2080,8 +2080,6 @@ describe('parse', () => {
 			}
 		});
 
-		// RFC 5280 §4.2.1.4: "certificate users SHOULD gracefully handle explicitText
-		// with more than 200 characters."
 		it.each([
 			[
 				'a 201-character UTF8String',
@@ -2091,28 +2089,61 @@ describe('parse', () => {
 			],
 			['a 201-character BMPString', tlv(0x1e, bmp('k'.repeat(201))), 'k'.repeat(201), 'bmpString'],
 		] as const)(
-			'keeps %s whole as explicitText and reports its size, and fails on it as organization',
-			async (_label, displayText, explicitText, explicitTextType) => {
-				const parsed = unwrap(await parseUserNotice(sequence([displayText])));
-				expect(parsed.certificatePolicies).toEqual([
+			'keeps %s whole as explicitText or organization and reports its size',
+			async (_label, displayText, value, explicitTextType) => {
+				const explicitText = unwrap(await parseUserNotice(sequence([displayText])));
+				expect(explicitText.certificatePolicies).toEqual([
 					{
 						policyIdentifier: '1.2.3.4.1',
 						policyQualifiers: [
 							{
 								type: 'userNotice',
-								explicitText,
+								explicitText: value,
 								explicitTextType,
 								oversizedExplicitText: { characters: 201, limit: 200 },
 							},
 						],
 					},
 				]);
-				const organization = await parseUserNotice(
-					sequence([sequence([displayText, sequence([integerFromNumber(1)])])]),
+				const organization = unwrap(
+					await parseUserNotice(
+						sequence([sequence([displayText, sequence([integerFromNumber(1)])])]),
+					),
 				);
-				expect(organization.ok ? 'ok' : organization.code).toBe('malformed');
+				expect(organization.certificatePolicies).toEqual([
+					{
+						policyIdentifier: '1.2.3.4.1',
+						policyQualifiers: [
+							{
+								type: 'userNotice',
+								noticeRef: {
+									organization: value,
+									noticeNumbers: [1],
+									oversizedOrganization: { characters: 201, limit: 200 },
+								},
+							},
+						],
+					},
+				]);
 			},
 		);
+
+		it('reports no size for a 200-character organization', async () => {
+			const organization = 'o'.repeat(200);
+			const parsed = unwrap(
+				await parseUserNotice(
+					sequence([sequence([tlv(0x0c, text(organization)), sequence([integerFromNumber(1)])])]),
+				),
+			);
+			expect(parsed.certificatePolicies).toEqual([
+				{
+					policyIdentifier: '1.2.3.4.1',
+					policyQualifiers: [
+						{ type: 'userNotice', noticeRef: { organization, noticeNumbers: [1] } },
+					],
+				},
+			]);
+		});
 	});
 
 	describe('TeletexString names (X.690 §8.23.5.2 initial state)', () => {

@@ -76,7 +76,7 @@ import type {
 	InhibitAnyPolicy,
 	KeyUsage,
 	NameConstraints,
-	OversizedExplicitText,
+	OversizedDisplayText,
 	ParsedNameConstraintForm,
 	PolicyConstraints,
 	PolicyMappings,
@@ -1862,21 +1862,13 @@ function parseUserNoticePolicyQualifierInfo(
 	source: Uint8Array,
 	element: DerElement,
 ): {
-	readonly noticeRef?: {
-		readonly organization: string;
-		readonly noticeNumbers: readonly number[];
-	};
+	readonly noticeRef?: ParsedNoticeReference;
 	readonly explicitText?: string;
 	readonly explicitTextType?: DisplayTextType;
-	readonly oversizedExplicitText?: OversizedExplicitText;
+	readonly oversizedExplicitText?: OversizedDisplayText;
 } {
 	const children = childrenOf(source, element);
-	let noticeRef:
-		| {
-				readonly organization: string;
-				readonly noticeNumbers: readonly number[];
-		  }
-		| undefined;
+	let noticeRef: ParsedNoticeReference | undefined;
 	let explicitText: ParsedExplicitText | undefined;
 	for (const child of children) {
 		if (child.tag === 0x30) {
@@ -1900,31 +1892,29 @@ function parseUserNoticePolicyQualifierInfo(
 interface ParsedExplicitText {
 	readonly explicitText: string;
 	readonly explicitTextType: DisplayTextType;
-	readonly oversizedExplicitText?: OversizedExplicitText;
+	readonly oversizedExplicitText?: OversizedDisplayText;
 }
 
-/** RFC 5280 §4.2.1.4 asks certificate users to handle explicitText over 200 characters gracefully, so it is kept whole and its size reported. */
 function parseExplicitText(element: DerElement): ParsedExplicitText {
-	const text = decodeDisplayText(element);
-	const characters = [...text].length;
-	if (characters < 1) {
-		throw new Error('DisplayText must hold at least one character');
-	}
+	const { text, oversized } = parseDisplayText(element);
 	return {
 		explicitText: text,
 		explicitTextType: displayTextType(element.tag),
-		...(characters > 200 ? { oversizedExplicitText: { characters, limit: 200 } } : {}),
+		...(oversized === undefined ? {} : { oversizedExplicitText: oversized }),
 	};
+}
+
+interface ParsedNoticeReference {
+	readonly organization: string;
+	readonly noticeNumbers: readonly number[];
+	readonly oversizedOrganization?: OversizedDisplayText;
 }
 
 /** Decode a NoticeReference (organization name + notice number list). */
 function parsePolicyNoticeReference(
 	source: Uint8Array,
 	element: DerElement,
-): {
-	readonly organization: string;
-	readonly noticeNumbers: readonly number[];
-} {
+): ParsedNoticeReference {
 	if (element.tag !== 0x30) {
 		throw new Error('noticeRef must use SEQUENCE');
 	}
@@ -1935,8 +1925,11 @@ function parsePolicyNoticeReference(
 		throw new Error('noticeRef has unexpected trailing fields');
 	}
 	return {
-		organization,
+		organization: organization.text,
 		noticeNumbers: parsePolicyNoticeNumbers(source, noticeNumbersElement),
+		...(organization.oversized === undefined
+			? {}
+			: { oversizedOrganization: organization.oversized }),
 	};
 }
 
@@ -2355,14 +2348,19 @@ function displayTextType(tag: number): DisplayTextType {
 	}
 }
 
-/** RFC 5280 §4.2.1.4: `DisplayText` is an IA5String, VisibleString, BMPString or UTF8String of SIZE (1..200); a noticeRef organization is held to it. */
-function parseDisplayText(element: DerElement): string {
+interface ParsedDisplayText {
+	readonly text: string;
+	readonly oversized?: OversizedDisplayText;
+}
+
+/** RFC 5280 §4.2.1.4: `DisplayText` is an IA5String, VisibleString, BMPString or UTF8String of SIZE (1..200). */
+function parseDisplayText(element: DerElement): ParsedDisplayText {
 	const text = decodeDisplayText(element);
 	const characters = [...text].length;
-	if (characters < 1 || characters > 200) {
-		throw new Error(`DisplayText must hold 1 to 200 characters, not ${characters}`);
+	if (characters < 1) {
+		throw new Error('DisplayText must hold at least one character');
 	}
-	return text;
+	return { text, ...(characters > 200 ? { oversized: { characters, limit: 200 } } : {}) };
 }
 
 function decodeDisplayText(element: DerElement): string {

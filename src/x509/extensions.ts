@@ -370,11 +370,13 @@ export type CertificatePolicies = readonly {
 				readonly noticeRef?: {
 					readonly organization: string;
 					readonly noticeNumbers: readonly number[];
+					/** Present when `organization` exceeds 200 characters; the builder emits no such notice. */
+					readonly oversizedOrganization?: OversizedDisplayText;
 				};
 				readonly explicitText?: string;
 				readonly explicitTextType?: DisplayTextType;
 				/** Present when `explicitText` exceeds 200 characters; the builder emits no such notice. */
-				readonly oversizedExplicitText?: OversizedExplicitText;
+				readonly oversizedExplicitText?: OversizedDisplayText;
 		  }
 		| {
 				readonly type: 'oid';
@@ -420,11 +422,11 @@ export interface UserNoticePolicyQualifierInfo {
 export type DisplayTextType = 'utf8String' | 'ia5String' | 'visibleString' | 'bmpString';
 
 /**
- * A user notice `explicitText` longer than the 200 characters RFC 5280
- * §4.2.1.4 allows. Parsing keeps the text whole, as §4.2.1.4 asks certificate
- * users to handle such a notice gracefully, and reports its size here.
+ * A user notice `explicitText` or `noticeRef` organization longer than the 200
+ * characters RFC 5280 §4.2.1.4 allows a DisplayText. Parsing keeps the text
+ * whole and reports its size here.
  */
-export interface OversizedExplicitText {
+export interface OversizedDisplayText {
 	/** Characters the certificate carries. */
 	readonly characters: number;
 	/** The RFC 5280 §4.2.1.4 upper bound, 200. */

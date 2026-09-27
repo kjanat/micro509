@@ -174,13 +174,13 @@ describe('PKITS 4.8.19 oversized explicitText', () => {
 		expect(notices[0]?.oversizedExplicitText).toEqual({ characters: 310, limit: 200 });
 	});
 
-	it('rejects the path under rejectOversizedExplicitText for that reason alone', async () => {
+	it('rejects the path under rejectOversizedDisplayText for that reason alone', async () => {
 		expect(await verifyPkitsPath(oversizedCase)).toMatchObject({ ok: true });
 		expect(
-			await verifyPkitsPath(oversizedCase, { rejectOversizedExplicitText: true }),
+			await verifyPkitsPath(oversizedCase, { rejectOversizedDisplayText: true }),
 		).toMatchObject({
 			ok: false,
-			code: 'explicit_text_oversized',
+			code: 'display_text_oversized',
 			message:
 				'certificate policy 2.16.840.1.101.3.2.1.48.1 carries a user notice explicitText of 310 characters',
 			index: 0,
@@ -188,17 +188,24 @@ describe('PKITS 4.8.19 oversized explicitText', () => {
 				subjectCommonName: 'User Notice Qualifier EE Certificate Test19',
 				expected: '200',
 				actual: '310',
+				userNoticeField: 'explicitText',
 			},
 		});
 	});
 
 	it.each(otherUserNoticeCases.map((pkitsCase) => [pkitsCase.testNumber, pkitsCase] as const))(
-		'%s validates under rejectOversizedExplicitText as the manifest expects (run %#)',
+		'%s validates under rejectOversizedDisplayText as the manifest expects (run %#)',
 		async (_testNumber, pkitsCase) => {
 			const notices = await userNotices(pkitsCase);
 			expect(notices.length).toBeGreaterThan(0);
-			expect(notices.every((notice) => notice.oversizedExplicitText === undefined)).toBe(true);
-			const result = await verifyPkitsPath(pkitsCase, { rejectOversizedExplicitText: true });
+			expect(
+				notices.every(
+					(notice) =>
+						notice.oversizedExplicitText === undefined &&
+						notice.noticeRef?.oversizedOrganization === undefined,
+				),
+			).toBe(true);
+			const result = await verifyPkitsPath(pkitsCase, { rejectOversizedDisplayText: true });
 			expect(result.ok).toBe(pkitsCase.shouldValidate);
 		},
 	);
@@ -214,7 +221,7 @@ function pkitsLeafName(pkitsCase: PkitsCase): string {
 
 async function verifyPkitsPath(
 	pkitsCase: PkitsCase,
-	options: { readonly rejectOversizedExplicitText?: boolean } = {},
+	options: { readonly rejectOversizedDisplayText?: boolean } = {},
 ): Promise<Awaited<ReturnType<typeof verifyCertificateChain>>> {
 	const rootName = pkitsCase.certs[0];
 	if (rootName === undefined) {

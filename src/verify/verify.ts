@@ -165,7 +165,7 @@ export interface TrustAnchor {
  * - `self_signed_leaf_not_allowed` — the leaf is self-signed and `allowSelfSignedLeaf` was not set.
  * - `unrecognized_critical_extension` — a certificate contains a critical extension the verifier cannot process.
  * - `no_rev_avail_conflict` — a certificate carries noRevAvail alongside a CA basicConstraints, cRLDistributionPoints, freshestCRL, or an id-ad-ocsp authorityInfoAccess entry (RFC 9608 §3).
- * - `explicit_text_oversized` — under `rejectOversizedExplicitText`, a certificate's user notice `explicitText` exceeds the 200 characters of RFC 5280 §4.2.1.4.
+ * - `display_text_oversized` — under `rejectOversizedDisplayText`, a certificate's user notice `explicitText` or `noticeRef` organization exceeds the 200 characters of RFC 5280 §4.2.1.4.
  * - `intermediate_eku_constraint` — an intermediate CA's EKU set does not include the required purpose.
  * - `explicit_policy_required` — `requireExplicitPolicy` was set but no acceptable policy was found.
  * - `initial_policy_set_not_satisfied` — the chain's policies do not intersect `initialPolicySet`.
@@ -193,7 +193,7 @@ export const VERIFY_ERROR_CODES = [
 	'self_signed_leaf_not_allowed',
 	'unrecognized_critical_extension',
 	'no_rev_avail_conflict',
-	'explicit_text_oversized',
+	'display_text_oversized',
 	'intermediate_eku_constraint',
 	'explicit_policy_required',
 	'initial_policy_set_not_satisfied',
@@ -229,6 +229,8 @@ export interface VerifyFailureDetails {
 		| 'suppressed_by_presented_identifier'
 		| 'common_name_missing'
 		| 'common_name_mismatch';
+	/** The user notice DisplayText that exceeds 200 characters. Set on `display_text_oversized`. */
+	readonly userNoticeField?: 'explicitText' | 'noticeRefOrganization';
 }
 
 /** A chain verification failure with its error code, human message, chain index, and diagnostic details. */
@@ -309,13 +311,12 @@ export interface ValidateCandidatePathInput
 	/** When `true`, allows a self-signed leaf that is also the root. Defaults to `false`. */
 	readonly allowSelfSignedLeaf?: boolean;
 	/**
-	 * When `true`, rejects a certificate whose user notice `explicitText`
-	 * exceeds 200 characters with `explicit_text_oversized`. Defaults to
-	 * `false`: RFC 5280 §4.2.1.4 asks certificate users to handle such a notice
-	 * gracefully, and the parsed certificate reports it as
-	 * `oversizedExplicitText`.
+	 * When `true`, rejects a certificate whose user notice `explicitText` or
+	 * `noticeRef` organization exceeds 200 characters with
+	 * `display_text_oversized`. Defaults to `false`, and the parsed certificate
+	 * reports such a value as `oversizedExplicitText` or `oversizedOrganization`.
 	 */
-	readonly rejectOversizedExplicitText?: boolean;
+	readonly rejectOversizedDisplayText?: boolean;
 }
 
 /** Success payload from {@linkcode validateCandidatePath}. */
@@ -388,13 +389,12 @@ export interface VerifyCertificateChainInput
 	/** When `true`, allows a self-signed leaf. Defaults to `false`. */
 	readonly allowSelfSignedLeaf?: boolean;
 	/**
-	 * When `true`, rejects a certificate whose user notice `explicitText`
-	 * exceeds 200 characters with `explicit_text_oversized`. Defaults to
-	 * `false`: RFC 5280 §4.2.1.4 asks certificate users to handle such a notice
-	 * gracefully, and the parsed certificate reports it as
-	 * `oversizedExplicitText`.
+	 * When `true`, rejects a certificate whose user notice `explicitText` or
+	 * `noticeRef` organization exceeds 200 characters with
+	 * `display_text_oversized`. Defaults to `false`, and the parsed certificate
+	 * reports such a value as `oversizedExplicitText` or `oversizedOrganization`.
 	 */
-	readonly rejectOversizedExplicitText?: boolean;
+	readonly rejectOversizedDisplayText?: boolean;
 	/** Optional revocation checking. */
 	readonly revocation?: ChainRevocationInput;
 }
@@ -540,6 +540,7 @@ interface VerifyFailureDetailsInput {
 		| 'common_name_missing'
 		| 'common_name_mismatch'
 		| undefined;
+	readonly userNoticeField?: 'explicitText' | 'noticeRefOrganization' | undefined;
 }
 
 /** Mutable validation state accumulated during path walks. */
@@ -715,7 +716,7 @@ async function validateCandidatePathRaw(
 	const certificateFailure = await validatePathCertificates(
 		chain,
 		at,
-		input.rejectOversizedExplicitText === true,
+		input.rejectOversizedDisplayText === true,
 	);
 	if (certificateFailure !== undefined) return certificateFailure;
 	const pathLengthFailure = validatePathLengthConstraints(chain);
@@ -752,16 +753,16 @@ async function validateSelfSignedLeafAllowed(
 async function validatePathCertificates(
 	chain: readonly ParsedCertificate[],
 	at: Date,
-	rejectOversizedExplicitText: boolean,
+	rejectOversizedDisplayText: boolean,
 ): Promise<ValidateCandidatePathFailure | undefined> {
 	for (let index = 0; index < chain.length; index += 1) {
 		const current = chain[index];
 		if (current === undefined) return failure('issuer_not_found', 'chain element missing', index);
 		const certificateValidation = validateCertificateAtPathIndex(current, index, at);
 		if (certificateValidation !== undefined) return certificateValidation;
-		if (rejectOversizedExplicitText) {
-			const explicitTextValidation = validateExplicitTextAtPathIndex(current, index);
-			if (explicitTextValidation !== undefined) return explicitTextValidation;
+		if (rejectOversizedDisplayText) {
+			const displayTextValidation = validateDisplayTextAtPathIndex(current, index);
+			if (displayTextValidation !== undefined) return displayTextValidation;
 		}
 		const issuerValidation = await validatePathIssuerAtIndex(chain, current, index);
 		if (issuerValidation !== undefined) return issuerValidation;
@@ -769,26 +770,40 @@ async function validatePathCertificates(
 	return undefined;
 }
 
-/** RFC 5280 §4.2.1.4 bounds a user notice explicitText at 200 characters; PKITS 4.8.19 lets the application reject a longer one. */
-function validateExplicitTextAtPathIndex(
+/** RFC 5280 §4.2.1.4 bounds a DisplayText at 200 characters; PKITS 4.8.19 lets the application reject a longer explicitText. */
+function validateDisplayTextAtPathIndex(
 	current: ParsedCertificate,
 	index: number,
 ): ValidateCandidatePathFailure | undefined {
 	for (const policy of current.certificatePolicies ?? []) {
 		for (const qualifier of policy.policyQualifiers ?? []) {
-			if (qualifier.type !== 'userNotice' || qualifier.oversizedExplicitText === undefined) {
+			if (qualifier.type !== 'userNotice') {
 				continue;
 			}
-			return failure(
-				'explicit_text_oversized',
-				`certificate policy ${policy.policyIdentifier} carries a user notice explicitText of ${String(qualifier.oversizedExplicitText.characters)} characters`,
-				index,
-				detail({
-					subjectCommonName: current.subject.values.commonName,
-					expected: String(qualifier.oversizedExplicitText.limit),
-					actual: String(qualifier.oversizedExplicitText.characters),
-				}),
-			);
+			const oversized = [
+				['explicitText', 'explicitText', qualifier.oversizedExplicitText],
+				[
+					'noticeRefOrganization',
+					'noticeRef organization',
+					qualifier.noticeRef?.oversizedOrganization,
+				],
+			] as const;
+			for (const [field, label, size] of oversized) {
+				if (size === undefined) {
+					continue;
+				}
+				return failure(
+					'display_text_oversized',
+					`certificate policy ${policy.policyIdentifier} carries a user notice ${label} of ${String(size.characters)} characters`,
+					index,
+					detail({
+						subjectCommonName: current.subject.values.commonName,
+						expected: String(size.limit),
+						actual: String(size.characters),
+						userNoticeField: field,
+					}),
+				);
+			}
 		}
 	}
 	return undefined;
@@ -1120,8 +1135,8 @@ export async function verifyCertificateChain(
 		...(input.allowSelfSignedLeaf !== undefined && {
 			allowSelfSignedLeaf: input.allowSelfSignedLeaf,
 		}),
-		...(input.rejectOversizedExplicitText !== undefined && {
-			rejectOversizedExplicitText: input.rejectOversizedExplicitText,
+		...(input.rejectOversizedDisplayText !== undefined && {
+			rejectOversizedDisplayText: input.rejectOversizedDisplayText,
 		}),
 	});
 	if (!validateResult.ok) {
@@ -1877,6 +1892,7 @@ function detail(input: VerifyFailureDetailsInput): VerifyFailureDetails {
 		...(input.commonNameFallbackReason === undefined
 			? {}
 			: { commonNameFallbackReason: input.commonNameFallbackReason }),
+		...(input.userNoticeField === undefined ? {} : { userNoticeField: input.userNoticeField }),
 	};
 }
 

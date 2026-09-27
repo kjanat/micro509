@@ -489,7 +489,7 @@ export type {
 	NameFieldKey,
 	NameInput,
 	NameObject,
-	OversizedExplicitText,
+	OversizedDisplayText,
 	ParseCertificateChainResult,
 	ParseCertificateErrorCode,
 	ParseCertificateFailure,

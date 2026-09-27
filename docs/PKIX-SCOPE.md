@@ -242,14 +242,17 @@ Current GeneralName matrix for `nameConstraints`:
 - [x] Parse each user-notice DisplayText (`explicitText` and the `noticeRef`
       organization) as the ASN.1 type its tag names: a valid UTF8String,
       IA5String, VisibleString or BMPString (RFC 5280 §4.2.1.4), returned
-      unchanged. A `noticeRef` organization outside SIZE (1..200), an empty
-      `explicitText`, and any other encoding fail the parse as `malformed`. An
-      `explicitText` over 200 characters is kept whole and reported on the
-      qualifier as `oversizedExplicitText` with its character count, since
-      §4.2.1.4 asks certificate users to handle it gracefully; its length is
-      bounded by the input alone, and decoding it is linear. Path validation
-      accepts it by default and rejects it with `explicit_text_oversized` under
-      `rejectOversizedExplicitText`, the choice PKITS §4.8.19 leaves to the
+      unchanged. An empty DisplayText and any other encoding fail the parse
+      as `malformed`. A DisplayText over 200 characters is kept whole and
+      reported with its character count, as `oversizedExplicitText` on the
+      qualifier or `oversizedOrganization` on the `noticeRef`; its length is
+      bounded by the input alone, and decoding it is linear. §4.2.1.4 asks
+      certificate users to handle an oversized `explicitText` gracefully. It
+      says nothing about an oversized organization, and keeping one is
+      micro509's receiving policy. Path validation accepts both by default and
+      rejects either with `display_text_oversized` under
+      `rejectOversizedDisplayText`, with `details.userNoticeField` naming the
+      field; PKITS §4.8.19 leaves that choice for `explicitText` to the
       application. The 200-character bound and the RFC 6818 §3 rules for
       conforming CAs (no IA5String, no control characters, NFC) bind the
       builder.
@@ -265,7 +268,7 @@ Current GeneralName matrix for `nameConstraints`:
       PKITS document ([`docs/rfc/pkits.txt`](./rfc/pkits.txt)). 4.8.19, whose
       explicitText is 310 characters, validates under the default settings as
       the manifest expects; the harness also checks that the notice is kept
-      whole and reported, that `rejectOversizedExplicitText` rejects the path
+      whole and reported, that `rejectOversizedDisplayText` rejects the path
       for that reason alone, and that the other user-notice tests validate
       under it.
 

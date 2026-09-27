@@ -20,6 +20,7 @@ import {
 import {
 	concatBytes,
 	explicitContext,
+	integerFromNumber,
 	nullValue,
 	objectIdentifier,
 	printableString,
@@ -419,6 +420,75 @@ describe('chain verification', () => {
 		});
 	});
 
+	it('accepts an oversized noticeRef organization by default and rejects it on request', async () => {
+		const organization = 'o'.repeat(201);
+		const selfSigned = await createSelfSignedCertificateWithRawExtensions({
+			subject: { commonName: 'oversized-organization.example' },
+			extensions: {
+				basicConstraints: { ca: true },
+				keyUsage: ['keyCertSign', 'digitalSignature'],
+				customExtensions: [
+					{
+						oid: OIDS.certificatePolicies,
+						value: sequence([
+							sequence([
+								objectIdentifier('1.2.3.4.1'),
+								sequence([
+									sequence([
+										objectIdentifier(OIDS.userNoticePolicyQualifier),
+										sequence([
+											sequence([utf8String(organization), sequence([integerFromNumber(7)])]),
+											utf8String('short notice'),
+										]),
+									]),
+								]),
+							]),
+						]),
+					},
+				],
+			},
+		});
+		const pem = selfSigned.certificate.pem;
+		expect(unwrap(parseCertificatePem(pem)).certificatePolicies).toEqual([
+			{
+				policyIdentifier: '1.2.3.4.1',
+				policyQualifiers: [
+					{
+						type: 'userNotice',
+						noticeRef: {
+							organization,
+							noticeNumbers: [7],
+							oversizedOrganization: { characters: 201, limit: 200 },
+						},
+						explicitText: 'short notice',
+						explicitTextType: 'utf8String',
+					},
+				],
+			},
+		]);
+		expect(
+			await verifyCertificateChain({ leaf: pem, roots: [pem], allowSelfSignedLeaf: true }),
+		).toMatchObject({ ok: true });
+		expect(
+			await verifyCertificateChain({
+				leaf: pem,
+				roots: [pem],
+				allowSelfSignedLeaf: true,
+				rejectOversizedDisplayText: true,
+			}),
+		).toMatchObject({
+			ok: false,
+			code: 'display_text_oversized',
+			index: 0,
+			details: {
+				subjectCommonName: 'oversized-organization.example',
+				expected: '200',
+				actual: '201',
+				userNoticeField: 'noticeRefOrganization',
+			},
+		});
+	});
+
 	it('accepts an oversized user notice explicitText by default and rejects it on request', async () => {
 		const explicitText = 'x'.repeat(201);
 		const selfSigned = await createSelfSignedCertificateWithRawExtensions({
@@ -466,16 +536,17 @@ describe('chain verification', () => {
 				leaf: pem,
 				roots: [pem],
 				allowSelfSignedLeaf: true,
-				rejectOversizedExplicitText: true,
+				rejectOversizedDisplayText: true,
 			}),
 		).toMatchObject({
 			ok: false,
-			code: 'explicit_text_oversized',
+			code: 'display_text_oversized',
 			index: 0,
 			details: {
 				subjectCommonName: 'oversized-notice.example',
 				expected: '200',
 				actual: '201',
+				userNoticeField: 'explicitText',
 			},
 		});
 		const candidate = unwrap(await buildCandidatePath({ leaf: pem, roots: [pem] }));
@@ -483,9 +554,9 @@ describe('chain verification', () => {
 			await validateCandidatePath({
 				chain: candidate.chain,
 				allowSelfSignedLeaf: true,
-				rejectOversizedExplicitText: true,
+				rejectOversizedDisplayText: true,
 			}),
-		).toMatchObject({ ok: false, code: 'explicit_text_oversized', index: 0 });
+		).toMatchObject({ ok: false, code: 'display_text_oversized', index: 0 });
 	});
 
 	it('rejects purpose=ca when leaf is not a CA', async () => {
