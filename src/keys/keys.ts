@@ -64,7 +64,7 @@ import {
 	pemEncode,
 	trimLwsp,
 } from '#micro509/pem/pem';
-import type { ErrorResult, Micro509Error } from '#micro509/result/result';
+import type { DecodeFailureCode, ErrorResult, Micro509Error } from '#micro509/result/result';
 import { failureResult, rethrowIfInvariant, successResult } from '#micro509/result/result';
 
 export type {
@@ -212,7 +212,7 @@ export interface LegacyPemEncryptionOptions {
  * sub-identifier encoded in more than 64 octets, a tag number of 2^53 or more,
  * or DER nested deeper than 64 levels.
  */
-export type ImportKeyErrorCode = 'malformed' | 'limit_exceeded';
+export type ImportKeyErrorCode = Exclude<DecodeFailureCode, 'unsupported'>;
 
 /** Structured failure payload for key import. */
 export interface ImportKeyFailure extends Micro509Error<ImportKeyErrorCode> {
@@ -242,10 +242,9 @@ export type ImportKeyResult<T> =
  * (`'limit_exceeded'`, see {@linkcode ImportKeyErrorCode}).
  */
 export type ImportEncryptedKeyErrorCode =
-	| 'malformed'
+	| ImportKeyErrorCode
 	| 'invalid_password'
-	| 'kdf_iterations_exceeded'
-	| 'limit_exceeded';
+	| 'kdf_iterations_exceeded';
 
 /** Options for the encrypted PKCS#8 import functions. */
 export type ImportEncryptedKeyOptions = KdfLimitOptions;

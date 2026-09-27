@@ -5,20 +5,14 @@
  * @module
  */
 
-import type { ErrorResult, Micro509Error } from '#micro509/result/result';
+import type { DecodeRefusalCode, ErrorResult, Micro509Error } from '#micro509/result/result';
 import { failureResult, isResultError, throwMicro509Error } from '#micro509/result/result';
 
-/** Codes a decoder throws besides `malformed`. */
-export type DecodeRefusalCode = 'unsupported' | 'limit_exceeded';
-
-/** Every refusal code, for boundaries whose input carries both. */
-export const DECODE_REFUSAL_CODES: readonly ['unsupported', 'limit_exceeded'] = [
-	'unsupported',
-	'limit_exceeded',
-];
+export type { DecodeRefusalCode } from '#micro509/result/result';
+export { DECODE_REFUSAL_CODES } from '#micro509/result/result';
 
 /** The limit code alone, for boundaries whose input carries no text. */
-export const DECODE_LIMIT_CODES: readonly ['limit_exceeded'] = ['limit_exceeded'];
+export const DECODE_LIMIT_CODES = ['limit_exceeded'] as const;
 
 /** Throws a {@link ResultError} carrying a decode refusal. */
 export function throwDecodeRefusal(code: DecodeRefusalCode, message: string): never {

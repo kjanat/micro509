@@ -154,6 +154,9 @@ revocation })` report a certificate carrying `noRevAvail` or
   number of 2^53 or more, or DER or BER nested deeper than 64 levels, which
   returned `malformed` before. The
   throwing parsers throw a `ResultError` carrying the code.
+  `DECODE_REFUSAL_CODES`, its `DecodeRefusalCode` type and `DecodeFailureCode`
+  (`malformed` plus both) are exported from `micro509` and `micro509/result`,
+  and each of those error code types is built from them.
 - `rejectOversizedExplicitText` on `verifyCertificateChain` and
   `validateCandidatePath` rejects a certificate whose user notice
   `explicitText` exceeds 200 characters with the new `explicit_text_oversized`

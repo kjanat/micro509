@@ -54,7 +54,7 @@ import { getCrypto } from '#micro509/internal/crypto/webcrypto';
 import { base64Encode } from '#micro509/internal/shared/base64';
 import { compareDistinguishedNames } from '#micro509/internal/shared/dn';
 import { pemEncode, splitPemBlocksOrThrow } from '#micro509/pem/pem';
-import type { ErrorResult, Micro509Error } from '#micro509/result/result';
+import type { DecodeFailureCode, ErrorResult, Micro509Error } from '#micro509/result/result';
 import { failureResult, rethrowIfInvariant } from '#micro509/result/result';
 import type { SignatureProfileInput } from '#micro509/x509/certificate';
 import type { NameFieldKey } from '#micro509/x509/name';
@@ -230,11 +230,7 @@ export interface ParsedPkcs7SignedData {
  * sub-identifier encoded in more than 64 octets, a tag number of 2^53 or more,
  * or DER nested deeper than 64 levels.
  */
-export type ParsePkcs7ErrorCode =
-	| 'malformed'
-	| 'not_signed_data'
-	| 'unsupported'
-	| 'limit_exceeded';
+export type ParsePkcs7ErrorCode = DecodeFailureCode | 'not_signed_data';
 
 /** Error payload for a failed PKCS#7 parse. */
 export interface ParsePkcs7Failure extends Micro509Error<ParsePkcs7ErrorCode> {

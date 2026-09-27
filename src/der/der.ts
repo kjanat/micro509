@@ -27,7 +27,7 @@ import type {
 	ReadSequenceChildrenOptions,
 } from '#micro509/internal/asn1/der';
 import { readElement, readRootElement, readSequenceChildren } from '#micro509/internal/asn1/der';
-import type { ErrorResult, Micro509Error } from '#micro509/result/result';
+import type { DecodeFailureCode, ErrorResult, Micro509Error } from '#micro509/result/result';
 import { rethrowIfInvariant, successResult } from '#micro509/result/result';
 
 /**
@@ -40,7 +40,7 @@ import { rethrowIfInvariant, successResult } from '#micro509/result/result';
  * sub-identifier encoded in more than 64 octets, a tag number of 2^53 or more,
  * or DER nested deeper than 64 levels.
  */
-export type DecodeDerErrorCode = 'malformed' | 'unsupported' | 'limit_exceeded';
+export type DecodeDerErrorCode = DecodeFailureCode;
 
 /** Structured failure payload for DER reading and decoding. */
 export interface DecodeDerFailure extends Micro509Error<DecodeDerErrorCode> {

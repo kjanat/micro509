@@ -394,7 +394,7 @@ function findOidSubidentifierEnd(bytes: Uint8Array, start: number): number {
 		if (((bytes[offset] ?? 0) & 0x80) === 0) {
 			return offset;
 		}
-		if (offset - start + 1 >= MAX_OID_SUBIDENTIFIER_OCTETS) {
+		if (offset - start + 1 >= MAX_OID_SUBIDENTIFIER_OCTETS && offset + 1 < bytes.length) {
 			throwDecodeRefusal(
 				'limit_exceeded',
 				`OID sub-identifier exceeds ${MAX_OID_SUBIDENTIFIER_OCTETS} octets`,

@@ -1978,6 +1978,12 @@ describe('parse', () => {
 			extensionWithOid(arcOf(65)),
 		]);
 		expect(parseCertificateDer(refused)).toMatchObject({ ok: false, code: 'limit_exceeded' });
+		const truncatedAtBound = await appendCertificateExtensions(
+			certificate.der,
+			keyPair.privateKey,
+			[extensionWithOid(Uint8Array.of(0x2a, ...new Array<number>(64).fill(0x81)))],
+		);
+		expect(parseCertificateDer(truncatedAtBound)).toMatchObject({ ok: false, code: 'malformed' });
 		await expectRejectedErrorCode(
 			createSelfSignedCertificate({
 				subject: { commonName: 'arc-bound.example' },

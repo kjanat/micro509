@@ -56,7 +56,7 @@ import { getCrypto } from '#micro509/internal/crypto/webcrypto';
 import { base64Encode } from '#micro509/internal/shared/base64';
 import { compareDistinguishedNames } from '#micro509/internal/shared/dn';
 import { pemDecodeOrThrow, pemEncode } from '#micro509/pem/pem';
-import type { ErrorResult, Micro509Error } from '#micro509/result/result';
+import type { DecodeFailureCode, ErrorResult, Micro509Error } from '#micro509/result/result';
 import {
 	failureResult,
 	rethrowIfInvariant,
@@ -536,7 +536,7 @@ export async function createOcspRequest(
 }
 
 /** Machine-readable failure reason for the OCSP request parsers. */
-export type ParseOcspRequestErrorCode = 'malformed' | 'unsupported' | 'limit_exceeded';
+export type ParseOcspRequestErrorCode = DecodeFailureCode;
 
 /** Structured failure payload for OCSP request parsing. */
 export interface ParseOcspRequestFailure extends Micro509Error<ParseOcspRequestErrorCode> {
@@ -665,8 +665,8 @@ export function parseOcspRequestPem(pem: string): ParseOcspRequestResult {
 	}
 }
 
-/** Machine-readable failure reason for the OCSP response parsers. */
-export type ParseOcspResponseErrorCode = 'malformed' | 'unsupported' | 'limit_exceeded';
+/** Machine-readable failure reason for the OCSP response parsers, with the codes of {@linkcode ParseOcspRequestErrorCode}. */
+export type ParseOcspResponseErrorCode = ParseOcspRequestErrorCode;
 
 /** Structured failure payload for OCSP response parsing. */
 export interface ParseOcspResponseFailure extends Micro509Error<ParseOcspResponseErrorCode> {

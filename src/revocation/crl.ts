@@ -57,7 +57,7 @@ import {
 import { parseGeneralName, parseGeneralNames } from '#micro509/internal/x509/general-name';
 import { exportSpkiDer } from '#micro509/keys/keys';
 import { pemDecodeOrThrow, pemEncode } from '#micro509/pem/pem';
-import type { ErrorResult, Micro509Error } from '#micro509/result/result';
+import type { DecodeFailureCode, ErrorResult, Micro509Error } from '#micro509/result/result';
 import {
 	failureResult,
 	rethrowIfInvariant,
@@ -617,10 +617,7 @@ export async function createCertificateRevocationList(
 }
 
 /** Machine-readable failure reason for the CRL parsers. */
-export type ParseCertificateRevocationListErrorCode =
-	| 'malformed'
-	| 'unsupported'
-	| 'limit_exceeded';
+export type ParseCertificateRevocationListErrorCode = DecodeFailureCode;
 
 /** Structured failure payload for CRL parsing. */
 export interface ParseCertificateRevocationListFailure

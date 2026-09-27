@@ -62,7 +62,7 @@ import {
 	importSpkiDerOrThrow,
 } from '#micro509/keys/keys';
 import { pemDecodeOrThrow, splitPemBlocksOrThrow } from '#micro509/pem/pem';
-import type { ErrorResult, Micro509Error } from '#micro509/result/result';
+import type { DecodeFailureCode, ErrorResult, Micro509Error } from '#micro509/result/result';
 import { failureResult, rethrowIfInvariant, successResult } from '#micro509/result/result';
 import type {
 	AuthorityInformationAccess,
@@ -118,7 +118,7 @@ export type { NameFieldKey } from '#micro509/x509/name';
  * sub-identifier encoded in more than 64 octets, a tag number of 2^53 or more,
  * or DER nested deeper than 64 levels.
  */
-export type ParseCertificateErrorCode = 'malformed' | 'unsupported' | 'limit_exceeded';
+export type ParseCertificateErrorCode = DecodeFailureCode;
 
 /** Structured failure payload for certificate parsing. */
 export interface ParseCertificateFailure extends Micro509Error<ParseCertificateErrorCode> {
@@ -137,10 +137,7 @@ export type ParseCertificateChainResult<TMap extends ExtensionDecoderMap = Recor
 	| ErrorResult<ParseCertificateErrorCode, Record<never, never>, ParseCertificateFailure>;
 
 /** Machine-readable failure reason for the CSR parsers, with the codes of {@linkcode ParseCertificateErrorCode}. */
-export type ParseCertificateSigningRequestErrorCode =
-	| 'malformed'
-	| 'unsupported'
-	| 'limit_exceeded';
+export type ParseCertificateSigningRequestErrorCode = ParseCertificateErrorCode;
 
 /** Structured failure payload for CSR parsing. */
 export interface ParseCertificateSigningRequestFailure

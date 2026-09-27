@@ -244,6 +244,8 @@ export {
 } from '#micro509/pkcs';
 
 export type {
+	DecodeFailureCode,
+	DecodeRefusalCode,
 	ErrorResult,
 	IndexedErrorResult,
 	IndexedMicro509Error,
@@ -251,7 +253,7 @@ export type {
 	Result,
 	ResultError,
 } from '#micro509/result';
-export { isResultError, unwrap, unwrapOr } from '#micro509/result';
+export { DECODE_REFUSAL_CODES, isResultError, unwrap, unwrapOr } from '#micro509/result';
 
 export type {
 	CertificateRevocationListMaterial,

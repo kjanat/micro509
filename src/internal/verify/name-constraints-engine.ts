@@ -680,20 +680,26 @@ function unprocessableConstraintFormOf(
 	}
 }
 
-const UNKNOWN_TAG_FORMS: ReadonlyMap<number, UnsupportedDirectForm> = new Map([
-	[0xa3, 'x400Address'],
-	[0xa5, 'ediPartyName'],
-	[0x88, 'registeredID'],
-]);
-
 function unknownTagForm(tag: number, accumulated: AccumulatedNameConstraints): string | undefined {
-	const form = UNKNOWN_TAG_FORMS.get(tag);
-	if (form !== undefined) {
-		return accumulated.unsupportedCriticalForms.has(form) ? form : undefined;
+	let form: UnsupportedDirectForm;
+
+	switch (tag) {
+		case 0xa3:
+			form = 'x400Address';
+			break;
+		case 0xa5:
+			form = 'ediPartyName';
+			break;
+		case 0x88:
+			form = 'registeredID';
+			break;
+		case 0xa0:
+			return accumulated.unsupportedCriticalOtherNames.size > 0 ? 'otherName' : undefined;
+		default:
+			return undefined;
 	}
-	return tag === 0xa0 && accumulated.unsupportedCriticalOtherNames.size > 0
-		? 'otherName'
-		: undefined;
+
+	return accumulated.unsupportedCriticalForms.has(form) ? form : undefined;
 }
 
 /**

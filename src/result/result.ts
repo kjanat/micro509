@@ -248,3 +248,16 @@ export function indexedErrorResult<
 		...(error.index === undefined ? {} : { index: error.index }),
 	};
 }
+
+/**
+ * Codes a parse boundary returns for input it refuses without calling it
+ * malformed: `unsupported` for a construct micro509 does not decode, and
+ * `limit_exceeded` for an implementation limit of micro509's own.
+ */
+export const DECODE_REFUSAL_CODES = ['unsupported', 'limit_exceeded'] as const;
+
+/** One of {@linkcode DECODE_REFUSAL_CODES}. */
+export type DecodeRefusalCode = (typeof DECODE_REFUSAL_CODES)[number];
+
+/** The codes a parse boundary returns for input it cannot decode: `malformed` and every {@linkcode DecodeRefusalCode}. */
+export type DecodeFailureCode = 'malformed' | DecodeRefusalCode;

@@ -38,7 +38,7 @@ import {
 	WEBCRYPTO_MAX_PBKDF2_ITERATIONS,
 } from '#micro509/internal/crypto/pbes2';
 import { getCrypto } from '#micro509/internal/crypto/webcrypto';
-import type { ErrorResult, Micro509Error } from '#micro509/result/result';
+import type { DecodeFailureCode, ErrorResult, Micro509Error } from '#micro509/result/result';
 import {
 	failureResult,
 	isResultError,
@@ -254,9 +254,8 @@ async function createPbmac1MacData(
 
 /** Machine-readable failure reason for {@linkcode parsePkcs12MacData}. */
 export type ParsePkcs12MacDataErrorCode =
-	| 'malformed'
+	| Exclude<DecodeFailureCode, 'unsupported'>
 	| 'kdf_iterations_exceeded'
-	| 'limit_exceeded'
 	| 'password_not_bmp_string'
 	| 'password_not_utf8'
 	| 'unsupported_mac_algorithm'
@@ -264,7 +263,7 @@ export type ParsePkcs12MacDataErrorCode =
 
 type ThrownMacDataErrorCode = Exclude<
 	ParsePkcs12MacDataErrorCode,
-	'malformed' | 'kdf_iterations_exceeded' | 'limit_exceeded'
+	DecodeFailureCode | 'kdf_iterations_exceeded'
 >;
 
 const THROWN_MAC_DATA_ERROR_CODES = [

@@ -389,11 +389,15 @@ describe('asn1 decoding', () => {
 			'limit_exceeded: OID sub-identifier exceeds 64 octets',
 		);
 		expect(() =>
-			decodeObjectIdentifier(Uint8Array.of(0x2a, ...new Array<number>(64).fill(0xff))),
+			decodeObjectIdentifier(Uint8Array.of(0x2a, ...new Array<number>(65).fill(0xff))),
 		).toThrow('limit_exceeded: OID sub-identifier exceeds 64 octets');
-		expect(() =>
-			decodeObjectIdentifier(Uint8Array.of(0x2a, ...new Array<number>(63).fill(0xff))),
-		).toThrow('incomplete continuation');
+		for (const continuationOctets of [63, 64]) {
+			expect(() =>
+				decodeObjectIdentifier(
+					Uint8Array.of(0x2a, ...new Array<number>(continuationOctets).fill(0xff)),
+				),
+			).toThrow('incomplete continuation');
+		}
 	});
 
 	it('requireElement throws on undefined value', () => {
