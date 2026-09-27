@@ -529,26 +529,25 @@ export function readIdentifier(bytes: Uint8Array, offset: number): Identifier {
 	if (bytes[offset + 1] === 0x80) {
 		throw new Error('High-tag-number form must not open with a zero group');
 	}
+	let end = offset + 1;
+	while (((bytes[end] ?? 0) & 0x80) !== 0) {
+		end += 1;
+	}
+	if (bytes[end] === undefined) {
+		throw new Error('Unexpected end of identifier octets');
+	}
 	let tagNumber = 0;
-	let index = offset + 1;
-	while (true) {
-		const octet = bytes[index];
-		if (octet === undefined) {
-			throw new Error('Unexpected end of identifier octets');
-		}
-		if (tagNumber > (Number.MAX_SAFE_INTEGER - (octet & 0x7f)) / 128) {
+	for (let index = offset + 1; index <= end; index += 1) {
+		const group = (bytes[index] ?? 0) & 0x7f;
+		if (tagNumber > (Number.MAX_SAFE_INTEGER - group) / 128) {
 			throwDecodeRefusal('limit_exceeded', 'Tag number exceeds Number.MAX_SAFE_INTEGER');
 		}
-		tagNumber = tagNumber * 128 + (octet & 0x7f);
-		if ((octet & 0x80) === 0) {
-			break;
-		}
-		index += 1;
+		tagNumber = tagNumber * 128 + group;
 	}
 	if (tagNumber < 31) {
 		throw new Error('Tag numbers below 31 must use the low-tag-number form');
 	}
-	return { tag, tagNumber, length: index - offset + 1 };
+	return { tag, tagNumber, length: end - offset + 1 };
 }
 
 /**

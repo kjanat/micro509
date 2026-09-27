@@ -24,8 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The DER and BER readers accept high-tag-number identifiers (X.690 §8.1.2.4)
   for tag numbers from 31 up, and `DerElement.tagNumber` carries the tag number
   within its class. An otherName value, a SafeBag value and a OneAsymmetricKey
-  extension field may use them. A tag number below 31 in that form, or one whose
-  first subsequent octet is `0x80`, is `malformed`. `checkStrictDer` reports
+  extension field may use them. A tag number below 31 in that form, one whose
+  first subsequent octet is `0x80`, and one that ends before its final octet,
+  however long, are `malformed`. `checkStrictDer` reports
   UNIVERSAL 31 to 36 as `unsupported` and the reserved numbers from 37 up as
   `malformed`.
 - IDNA2008 (RFC 5890-5893, RFC 8753) over frozen Unicode 12.0.0 tables

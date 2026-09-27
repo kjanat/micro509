@@ -316,6 +316,19 @@ describe('der encoding', () => {
 		expect(isResultError(caught) && caught.code).toBe('limit_exceeded');
 	});
 
+	it('readElement reports an unterminated high tag number as truncated before its size', () => {
+		for (const continuations of [8, 64]) {
+			let caught: unknown;
+			try {
+				readElement(Uint8Array.of(0x9f, ...Array.from({ length: continuations }, () => 0xff)));
+			} catch (error) {
+				caught = error;
+			}
+			expect(isResultError(caught)).toBe(false);
+			expect(caught instanceof Error && caught.message).toBe('Unexpected end of identifier octets');
+		}
+	});
+
 	it('encodeLength emits long-form lengths', () => {
 		expect(encodeLength(256)).toEqual(Uint8Array.of(0x82, 0x01, 0x00));
 	});

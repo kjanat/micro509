@@ -229,6 +229,11 @@ describe('der domain', () => {
 
 			const trailing = readDerSequence(Uint8Array.of(0x05, 0x00, 0x00));
 			expect(trailing.ok).toBe(false);
+
+			const unterminatedTag = readDerRoot(
+				Uint8Array.of(0x9f, ...Array.from({ length: 8 }, () => 0xff)),
+			);
+			expect(unterminatedTag).toMatchObject({ ok: false, code: 'malformed' });
 		});
 
 		it('every decoder has a working result variant', () => {
