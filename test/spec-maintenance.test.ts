@@ -144,6 +144,30 @@ describe('ITU series and bundled identities', () => {
 		});
 	});
 	test.each(['', '# '])(
+		'keeps short numbered body clauses without turning short headings into body text (%s)',
+		(marker) => {
+			const sentence = 'The value is present.';
+			const source = `1  Scope\n\n1.1  Definitions\n\n${marker}1.1.1  ${sentence}\n\n${marker}1.1.2  Value syntax\n`;
+			const normalized =
+				marker === ''
+					? source
+					: source.replace(/^1 {2}/m, '# 1  ').replace(/^1\.1 {2}/m, '# 1.1  ');
+			const parsed = parseItu(normalized, 'T-REC-X.680-202102-I!!MSW-E', 'X.680');
+			const document = {
+				...parsed,
+				id: 'itu-x680-2021',
+				kind: 'itu' as const,
+				relativePath: 'fixture.txt',
+			};
+			const body = findHeading(document, '1.1.1');
+			expect(body).toMatchObject({ title: '', depth: 3, inlineBody: true });
+			expect(sectionLines(document, body)[0]?.text).toContain(sentence);
+			const heading = findHeading(document, '1.1.2');
+			expect(heading).toMatchObject({ title: 'Value syntax', depth: 3 });
+			expect(heading.inlineBody).toBeUndefined();
+		},
+	);
+	test.each(['', '# '])(
 		'keeps numbered body clauses addressable without giant outline titles (%s)',
 		(marker) => {
 			const paragraph =
