@@ -1,154 +1,121 @@
 ---
 name: spec-lookup
-description: Use before answering, recommending, justifying, or implementing anything that turns on what a standard says (RFC, ITU-T X.501/X.509/X.520/X.660/X.680/X.690, W3C WebCrypto, NIST PKITS). Searches the entire vendored docs/ corpus broadly before reading, reads whole regions instead of hit lines, cites verbatim with section and line, and separates text that governs from text that is only analogous. Also provides a ready subagent prompt that carries these rules. Invoke on any question of what the spec says, whether something is required or allowed, which default is correct, or a review finding that names an RFC.
+description: Use before answering, reviewing, or implementing a claim about RFC, ITU-T, W3C, WHATWG, or NIST PKITS requirements. Delegate to the spec-lookup agent for complete corpus discovery, dated status checks, whole-section reading, and cited governing/analogous/unspecified conclusions.
 ---
 
 # spec-lookup
 
-Every spec claim in this repo is grounded in the vendored text under `docs/`.
-Never predetermine which document answers the question. The document you
-expect is rarely the only one that speaks, and it is often not the newest.
+This file is the canonical research procedure. The agent definition delegates
+here rather than maintaining another copy. CLI behavior and output contracts
+are documented in `docs/SPEC-TOOLING.md`.
 
-## Corpus
+A plausible standards claim is not evidence. Research what governs the exact
+artifact, operation, profile, and edition before changing code or advising a
+caller. Do not pick a document merely because it supports an expected answer.
 
-| Path                         | What it is                                                                                                                                                       |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `docs/rfc/rfc<n>.txt`        | Verbatim RFC Editor text. Refresh with `bun rfc <n>`.                                                                                                             |
-| `docs/rfc/pkits.txt`         | NIST PKITS specification. Its section prose states relying-party practice and the configurable local-policy escape hatches explicitly.                             |
-| `docs/itu/**/*.txt`          | ITU-T X.501, X.509 (plus corrigenda and amendments), X.520, X.660, X.680, X.690. Fetch with `bun itu <item id>`. Text converted from the Word item (`!MSW-E` in the file name) marks struck text `~~…~~`, underlined text `__…__` and headings `#`. Redistribution-restricted: read locally, paraphrase in tracked files and public text, never paste verbatim. |
-| `docs/w3c/<spec>/`           | W3C WebCrypto and WHATWG Web IDL. Refresh with `bun w3c <spec>`.                                                                                                  |
-| `docs/PKIX-SCOPE.md`         | The project's own support claims and design decisions. Check it so a spec-driven change does not silently contradict a documented decision.                       |
+## Delegation and boundaries
 
-Current baselines per domain are listed in `docs/AGENTS.md`. Treat "updates"
-and "obsoletes" differently: an updating RFC changes the base text and wins.
+Delegate standards questions with a short request:
 
-## Ensure the corpus is present and current (before any search)
+```text
+Agent(subagent_type: "spec-lookup", prompt: "QUESTION: <exact question, artifact and operation>. CONTEXT: <review claim, suspected documents, project scope or compatibility constraints>.")
+```
 
-The vendored copy can be missing a document or lag behind the RFC Editor.
-Ground the answer in current governing text, never a stale or absent file.
+The lookup agent reads this file in full, expands the research scope itself,
+and returns the evidence contract below. Callers must not reproduce this
+procedure in their prompts. The lookup may fetch standards and cache status
+metadata; it must not edit source, tests, configuration, or authored project
+policy, and must not commit. Do not run a source writer concurrently in the
+same worktree when a lookup is fetching documents.
 
-1. **List every document the question could touch** — base specs, likely
-   updaters, and profiles. The caller names the topics or documents; the
-   lookup expands the set.
-2. **Confirm each is vendored.** Fetch whatever is missing:
-   - RFC: `bun rfc <n>`.
-   - ITU-T Recommendation, corrigendum, amendment or erratum:
-     `bun itu <item id>`, with the id from
-     `curl -fsSL https://www.itu.int/rec/T-REC-<rec>` (for example
-     `T-REC-X.509-201910-I!!PDF-E`).
-   - W3C or WHATWG specification: `bun w3c <spec>`. `bun w3c --help` lists
-     the specs it knows; report any other as absent rather than inventing its
-     content.
-3. **Verify currency online.** For every RFC you will cite, read its
-   `Updates:` / `Obsoletes:` header and confirm with
-   `curl -fsS https://www.rfc-editor.org/rfc/rfc<n>.json # secret-intent: public rfc-editor.org data`
-   (`updated_by`, `obsoleted_by`) that nothing newer updates or obsoletes
-   it. Read its errata with
-   `curl -fsS https://www.rfc-editor.org/api/v1/errata.json | jq '[.[] | select(."doc-id" == "RFC<n>")]' # secret-intent: public rfc-editor.org data`.
-   The network is reached only through `bun rfc`, `bun itu`, `bun w3c` and
-   `curl`. Output from these public sources is never redacted.
-4. **Fetch the successors.** If a governing document has an updating or
-   obsoleting RFC that is not vendored, `bun rfc <n>` it and read it too. A
-   MUST in an obsoleted RFC does not govern once a newer one has changed it.
+The hook routes supported corpus reads to `spec-lookup` to protect the coding
+agent's context. It is a workflow guard, not an OS sandbox or a guarantee
+against arbitrary shell code. Comments such as `# spec-intent: ...` do not
+exempt a command. Metadata operations (`list`, `status`, `fetch`, help) remain
+available to callers; the research procedure remains mandatory for conclusions.
 
-Only once the needed documents are present and confirmed current do you search.
+## Corpus and scope
+
+- `docs/rfc/rfc<n>.txt`: immutable RFC Editor text.
+- `docs/rfc/pkits.txt`: NIST PKITS documentation and relying-party test policy.
+- `docs/itu/**/*.txt`: local ITU-T Recommendations, amendments and corrigenda.
+  Never commit this corpus or quote it verbatim in tracked/public output;
+  paraphrase and cite the edition, clause, and source range instead.
+- `docs/w3c/<spec>/*.txt`: rendered WebCrypto and Web IDL specifications.
+- `docs/PKIX-SCOPE.md`: authored project scope; read separately, not as a standard.
+
+`bun spec list` inventories the indexed text formats. It does not recursively
+search arbitrary files under `docs/`. Check authored scope and any relevant
+unindexed material separately. Report missing or unreadable evidence explicitly.
 
 ## Procedure
 
-1. **Census the whole corpus first.** `bun spec search "<terms>" --context 2`
-   searches every vendored document and reports each match with its
-   enclosing section and its true line number in the file. Do not name a
-   file; the search already covers all of `docs/`. This is the step that
-   surfaces the document you did not know about. `bun spec list` shows every
-   document with its id, title, date, and Updates/Obsoletes relations.
-2. **Outline the documents that hit.** `bun spec headings <id> --depth 4`
-   shows the section structure so you read the right section rather than a
-   window around a line.
-3. **Read whole sections, not lines.** `bun spec read <id> <section>` prints
-   one entire section, de-wrapped and free of page headers and footers
-   (`--raw` keeps the original lines). A hit line is not an answer. The
-   sentence that changes the meaning is usually above the hit: a heading, an
-   "obsolete" marker, a conditional. Raw `rg`/`cat` on `docs/` is gated to
-   the spec-lookup agent and is the fallback only for a format the reader
-   does not parse.
-4. **Follow the update graph.** Read each RFC's `Updates:` / `Obsoletes:`
-   header, then search the corpus for documents that update *it*. The newest
-   governing text wins. Note when a document is a profile (for example
-   RFC 5019 and RFC 9919 profile OCSP) rather than the base specification.
-5. **Cross-check ITU-T X.509 and its corrigenda** for the same concept. Note
-   where it agrees with, extends, or is silent relative to the RFC.
-6. **Check PKITS section prose** for relying-party practice. It frequently
-   states the local-policy override the RFC leaves implicit.
-7. **Separate governing from analogous.** A MUST in an OCSP profile does not
-   govern CRLs. Say "analogous" when that is what it is, then find the base
-   text that actually applies, and say "unspecified" when the governing text
-   is silent.
-8. **Cite verbatim.** Document, section, line number, exact sentence.
-   Explain it in plain language in one or two sentences. Then implement.
+1. **Frame the question and vocabulary.** Identify the artifact, operation,
+   profile, and compatibility constraints. Derive 3–6 independent concepts,
+   synonyms, field names, or grammar productions; do not collapse them into
+   one guessed phrase. Record suspected base specifications and profiles
+   without treating that list as exhaustive.
+2. **Discover broadly.** Run `bun spec list`, then
+   `bun spec census <concept> <concept> ... --samples 1 --json` across every
+   indexed document. Each quoted argument is a separate regex; matching is
+   case-insensitive by default. Inspect zero-hit queries and expand vocabulary
+   where necessary. Sample limits never limit the documents scanned.
+   `search` supplies bounded excerpts, not a complete census. Read
+   `docs/PKIX-SCOPE.md` separately before proposing a support change.
+3. **Establish presence and currency.** For RFC candidates, run
+   `bun spec status <rfc> ... --refresh --json`. Inspect both relationship
+   directions, missing vendored texts, dated metadata and errata provenance,
+   and every relevant erratum's published status. A cache within its age limit
+   is a recent observation, not proof that no later update exists. `--offline`
+   is explicitly cached evidence; say that currency was not rechecked online.
+   An unavailable status check is not evidence of no updates or no errata.
+4. **Fetch missing evidence and repeat discovery.** Use
+   `bun spec fetch rfc <number>`, `bun spec fetch itu <item-id>`, or
+   `bun spec fetch w3c <name>`. Obtain ITU item IDs from the official
+   Recommendation catalogue, not a guessed edition; inspect amendments and
+   corrigenda. Use `bun spec fetch w3c --help` for supported sources and check
+   their publication status. Fetching a draft does not make it normative.
+   Repeat the census after adding relevant documents. For every successor
+   that might govern the question, check its own status and text too: `status`
+   reports direct edges, not a transitive closure.
+5. **Read whole regions.** Outline with `bun spec headings <id> --depth 4`,
+   then `bun spec read <id> <section> --lines`. Read parent scope/conditions,
+   referenced definitions, exceptions, and relevant successor sections, not
+   merely the matching sentence. Use `--json` for source mappings and
+   `--raw --lines` to verify exact wording. Raw file reads are a fallback for
+   formats the section reader cannot handle, not a substitute for context.
+6. **Resolve applicability.** Distinguish base text, profile restrictions,
+   amendments, informative examples, and intentionally pinned legacy text.
+   An updater changes the clauses it addresses; it does not replace the
+   entire base document. An obsoleting document does not automatically undo a
+   deliberate legacy compatibility contract. Inspect the actual text rather
+   than using publication date as a universal precedence rule. Cross-check
+   ITU-T X.509 and its corrigenda, and PKITS section prose, when they address
+   the same concept; record not-applicable cases rather than forcing analogies.
+7. **Classify and report.** Apply the evidence contract below. Do not promote
+   a profile's MUST to a different artifact, a Reported erratum to a verified
+   correction, a test-suite policy to a universal requirement, or project
+   policy to a standards obligation. Preserve a supported conclusion under
+   pushback, but revise it when the governing evidence changes.
 
-## Delegating the search
+## Evidence contract
 
-When the question spans several documents, hand a subagent this prompt
-verbatim and fill the two placeholders. Give it `subagent_type:
-spec-lookup`. It may fetch documents with `bun rfc`, `bun itu` and
-`bun w3c`, and `curl` rfc-editor.org and itu.int, but must not edit source,
-tests, or config, and must not commit. A fetched document joins the corpus
-and stays under `docs/`.
-Name the documents or topics you expect it to cover; it ensures each is
-present and current before searching. Do not run a source writer in the
-same worktree at the same time.
+Return a compact answer, not the whole corpus:
 
-```text
-Spec research in the micro509 repo at the current project root. Ground every claim in the vendored text under docs/. You MAY run `bun rfc <n>`, `bun itu <item id>` and `bun w3c <spec>` to fetch a missing or superseded document and MAY `curl` rfc-editor.org and itu.int; reach the network through nothing else; do NOT edit source, tests, or config, and do NOT commit. A fetched document joins the corpus and stays under docs/.
+- **Conclusion and applicability:** the exact artifact, operation, profile,
+  edition and project constraints to which it applies.
+- **Evidence:** classify each material finding as GOVERNING, ANALOGOUS, or
+  UNSPECIFIED, with a reason. Cite document ID, edition/status where relevant,
+  section, local path and original line range. Quote only the necessary RFC
+  or other redistributable sentence; paraphrase ITU-T text. De-wrapped output
+  is for reading; verify verbatim quotations against original source lines.
+- **Coverage and currency:** independent search expressions, documents read,
+  fetched additions, update edges followed, relevant errata and their statuses,
+  and observation timestamps/cache state. Identify unindexed or absent sources.
+- **Limits:** distinguish silence in governing text from missing evidence,
+  failed network access, parser limitations, or an incomplete search. Do not
+  label an unavailable document UNSPECIFIED. Separate implementation advice
+  and local policy from what the evidence actually requires.
 
-QUESTION: <the exact question>
-TERMS: <the search terms, including synonyms and field names>
-
-Follow this procedure exactly and report each step's evidence:
-0. Presence and currency first. List every document the question could touch (base specs, likely updaters, profiles). Fetch each missing document: an RFC with `bun rfc <n>`; an ITU-T item with `bun itu <item id>`, taking the id (for example `T-REC-X.509-201910-I!!PDF-E`) from `curl -fsSL https://www.itu.int/rec/T-REC-<rec>`; a W3C or WHATWG spec with `bun w3c <spec>` (`bun w3c --help` lists them). For every RFC you will cite, read its Updates:/Obsoletes: header and confirm with `curl -fsS https://www.rfc-editor.org/rfc/rfc<n>.json # secret-intent: public rfc-editor.org data` (updated_by, obsoleted_by) that nothing newer updates or obsoletes it, and read its errata with `curl -fsS https://www.rfc-editor.org/api/v1/errata.json | jq '[.[] | select(."doc-id" == "RFC<n>")]' # secret-intent: public rfc-editor.org data`, never redacting output from these public sources; fetch and read any governing successor. Report what you fetched and each document's status. Report a W3C or WHATWG spec that `bun w3c` does not list as absent rather than inventing content.
-1. Census the entire corpus: `bun spec search "<TERMS>" --context 2` (every vendored document, each match with its enclosing section and true line number). Do not pre-pick a document. `bun spec list` gives every id, title, and Updates/Obsoletes relation. Also search docs/PKIX-SCOPE.md for the project's own claims.
-2. Outline each document that hit: `bun spec headings <id> --depth 4`.
-3. Read whole sections with `bun spec read <id> <section>` (`--raw` for original lines). Never conclude from a hit line or a preview. Raw `rg`/`cat` on docs/ is the fallback only for a format the reader does not parse.
-4. For every RFC you cite, read its Updates:/Obsoletes: header and search docs/ for documents that update it. Report which text is newest and governing.
-5. Cross-check ITU-T X.509 and its corrigenda under docs/itu/. Paraphrase ITU text; do not quote it verbatim.
-6. Check docs/rfc/pkits.txt section prose for relying-party practice on the same point.
-7. Classify each finding as GOVERNING, ANALOGOUS, or UNSPECIFIED, and say why. A MUST in a profile for one artifact (for example OCSP) is ANALOGOUS for another (for example CRLs) unless the base text ties them.
-8. Deliver: the verbatim governing sentences with document, section, and line; a plain-language explanation; and the list of documents you searched. Do not add your own policy reasoning on top of the text. If the text is silent, say so.
-```
-
-## Do not
-
-- Grep a single RFC because it is the one you expect. The census comes first.
-- Treat a 6-line window as "the spec". Read the section.
-- Pipe a context-rich search into a second `grep`, `head`, or `tail`.
-- Cite a profile's MUST as governing a different artifact. RFC 5019 and 9919 govern OCSP responses, not CRLs.
-- Justify a recommendation from your own reasoning when spec text decides it. Cite the text. If the text is silent, say "unspecified" and name the nearest governing and analogous text honestly.
-- Soften a spec-backed position under pushback unless the spec itself is softer.
-
-## Worked example (2026-09-12)
-
-Question: is revocation checking a required step of path validation, and how
-must a CRL without `nextUpdate` be treated.
-
-A 5280-only grep would have found §5.1.2.5 ("client behavior ... is not
-specified") and stopped. The census over `docs/` surfaced RFC 9608 ("No
-Revocation Available", updates 5280), ITU-T X.509 2023 Corrigendum 2, PKITS
-§4.4, and RFC 6960 §4.2.2.1. Those decided it:
-
-- RFC 5280 §6.1.3(a): the certificate "MUST satisfy ... (3) At the current
-  time, the certificate is not revoked."
-- RFC 9608 §4: "If the noRevAvail ... or the ocsp-nocheck certificate
-  extension is present, then Step (a)(3) is skipped. Otherwise, revocation
-  status determination of the certificate is performed."
-- RFC 6960 §4.2.2.1: the interval "corresponds to the {thisUpdate,
-  nextUpdate} interval in CRLs", and "If nextUpdate is not set, the
-  responder is indicating that newer revocation information is available
-  all the time."
-- PKITS §4.4: a max age from `thisUpdate` is the configurable local-policy
-  override for staleness.
-- RFC 9919 §4 ("MUST reject" when `nextUpdate` is absent) is an OCSP
-  profile: analogous for CRLs, not governing.
-
-Conclusion the text supports: revocation determination is the default with
-`noRevAvail`/`ocsp-nocheck`/explicit local policy as the only exemptions, and
-an absent `nextUpdate` means "no validity window", not "valid forever".
+The coding agent implements and tests after receiving this answer. The lookup
+agent does not silently turn a research conclusion into a code or policy change.
