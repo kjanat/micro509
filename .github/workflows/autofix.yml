@@ -3,7 +3,7 @@ on: { push: { branches: ["master"] }, pull_request: null, workflow_call: null }
 permissions: { contents: read }
 jobs:
   autofix:
-    if: ${{ github.actor != 'autofix-ci[bot]' && !contains(github.event.head_commit.message, '[autofix.ci]') && github.event.pull_request.stack == null }}
+    if: ${{ github.repository == 'kjanat/micro509' && github.actor != 'autofix-ci[bot]' && !contains(github.event.head_commit.message, '[autofix.ci]') && github.event.pull_request.stack == null }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

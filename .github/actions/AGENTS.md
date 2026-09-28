@@ -11,6 +11,7 @@ This directory owns reusable CI building blocks, not full workflow policy. Keep 
 ```tree
 actions/
 ├── release-validate/  # manifest/tag consistency gate for publish flow
+├── setup-openssl/     # pinned OpenSSL differential oracle from ghcr.io/kjanat/openssl-prebuilt
 └── setup-ts/          # shared Bun/Node/Deno runtime bootstrap
 ```
 
@@ -20,6 +21,7 @@ actions/
 | ---------------- | ------------------------------------------------------------- | ----------------------------------------------------- |
 | Release gating   | `release-validate/action.yml`, `release-validate/validate.sh` | checks `package.json`, `jsr.json`, and tag alignment  |
 | Runtime setup    | `setup-ts/action.yml`                                         | installs Bun by default; Node/Deno optional           |
+| OpenSSL oracle   | `setup-openssl/action.yml`                                    | installs a build published by `workflows/openssl.yml` |
 | Action consumers | `.github/workflows/`                                          | publish, docs deploy, and preview flows wire these in |
 
 ## CONVENTIONS

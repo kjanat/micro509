@@ -1,9 +1,11 @@
 name: Deploy Site
 
 on: { push: { branches: [master, vitepress] }, workflow_dispatch: null }
+permissions: {}
 
 jobs:
   build:
+    if: github.repository == 'kjanat/micro509'
     runs-on: ubuntu-latest
     permissions: { contents: read }
     timeout-minutes: 5

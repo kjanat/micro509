@@ -1,6 +1,6 @@
 # PROJECT KNOWLEDGE BASE
 
-**Last updated:** 2026-07-23
+**Last updated:** 2026-09-28
 
 ## OVERVIEW
 
@@ -66,6 +66,7 @@ micro509/
 ├── examples/          # runnable consumers (browser, vite)
 ├── scripts/           # build, smoke, and doc-render helper scripts
 ├── .github/actions/   # reusable CI setup/release validation actions
+├── .github/openssl/   # static OpenSSL image for ghcr.io/kjanat/openssl
 ├── comparisons/       # competitor notes
 ├── dist/              # generated build output
 └── .opencode/         # local agent workflow state

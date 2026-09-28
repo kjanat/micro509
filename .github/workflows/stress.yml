@@ -13,9 +13,12 @@ on:
         default: 100
         required: false
 
+permissions: {}
+
 jobs:
   stress:
     name: Randomized rerun suite
+    if: github.repository == 'kjanat/micro509'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions: { contents: read }
