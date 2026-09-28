@@ -87,9 +87,9 @@ already on the path or their names do not match. The default is 100,000. When th
 is found, the result is `path_building_limit_exceeded`.
 
 A user notice `explicitText` or `noticeRef` organization longer than the 200
-characters RFC 5280 §4.2.1.4 allows a DisplayText is kept whole by the parser
+characters [RFC 5280 §4.2.1.4][rfc5280-section-4.2.1.4] allows a DisplayText is kept whole by the parser
 and reported as `oversizedExplicitText` on the qualifier or
-`oversizedOrganization` on the `noticeRef`, and the chain validates. §4.2.1.4
+`oversizedOrganization` on the `noticeRef`, and the chain validates. [§4.2.1.4][rfc5280-section-4.2.1.4]
 asks certificate users to handle an oversized `explicitText` gracefully, and
 micro509 applies the same policy to the organization.
 `rejectOversizedDisplayText: true` on `verifyCertificateChain` or
@@ -431,3 +431,5 @@ DER again: ${der.length} bytes`);
 ```
 
 </LiveCode>
+
+[rfc5280-section-4.2.1.4]: https://www.rfc-editor.org/rfc/rfc5280.html#section-4.2.1.4

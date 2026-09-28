@@ -78,7 +78,7 @@ internal invariants.
 
 This repo deliberately ships partial standards support.
 
-- do not claim full RFC 5280, RFC 6960, or revocation coverage unless code and tests actually prove it
+- do not claim full [RFC 5280][rfc5280], [RFC 6960][rfc6960], or revocation coverage unless code and tests actually prove it
 - keep `docs/PKIX-SCOPE.md` aligned with shipped behavior
 - do not widen README claims without matching tests
 - treat harness docs as contract docs, not marketing copy
@@ -120,3 +120,6 @@ Make sure:
 - tests and docs match the new behavior
 - scope claims are still accurate
 - the PR description explains the user-visible impact and any standards-boundary change
+
+[rfc5280]: https://www.rfc-editor.org/rfc/rfc5280.html
+[rfc6960]: https://www.rfc-editor.org/rfc/rfc6960.html

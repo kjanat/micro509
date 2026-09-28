@@ -125,12 +125,12 @@ revoked 02: ${isCertificateRevoked('02', parsed)}`);
 
 </LiveCode>
 
-RFC 5280 §5.1.2.5 requires conforming CRL issuers to include `nextUpdate`, so
+[RFC 5280 §5.1.2.5][rfc5280-section-5.1.2.5] requires conforming CRL issuers to include `nextUpdate`, so
 `createCertificateRevocationList` requires it. The builder also throws
 `next_update_not_after_this_update` unless `nextUpdate` is at least one second
-after `thisUpdate`. That ordering is a micro509 invariant, and RFC 5280 and
-X.509 do not specify it. RFC 5280 §5.1.2.5 does not specify how a client
-handles a received CRL without `nextUpdate`, and §3.3 leaves the required
+after `thisUpdate`. That ordering is a micro509 invariant, and [RFC 5280][rfc5280] and
+X.509 do not specify it. [RFC 5280 §5.1.2.5][rfc5280-section-5.1.2.5] does not specify how a client
+handles a received CRL without `nextUpdate`, and [§3.3][rfc5280-section-3.3] leaves the required
 recency of revocation data to local policy. By default micro509 applies no age limit, so a replayed
 pre-revocation CRL without `nextUpdate` still validates.
 
@@ -298,10 +298,10 @@ producedAt: ${response.producedAt?.toISOString()}`);
 
 ### Require nextUpdate (RFC 9919)
 
-RFC 6960 §4.2.2.1 lets a response omit `nextUpdate`, meaning newer information
+[RFC 6960 §4.2.2.1][rfc6960-section-4.2.2.1] lets a response omit `nextUpdate`, meaning newer information
 is always available, and `validateOcspResponse` accepts such a response by
-default. RFC 9919 is a profile for lightweight, high-volume environments, and
-its §5 requires a client that follows it to reject a response without
+default. [RFC 9919][rfc9919] is a profile for lightweight, high-volume environments, and
+its [§5][rfc9919-section-5] requires a client that follows it to reject a response without
 `nextUpdate`. Opt in with `profile: 'rfc9919'` on `validateOcspResponse`, or
 `ocspProfile: 'rfc9919'` on `checkCertificateRevocation` and the chain-level
 revocation `policy`. `validateOcspResponse` then fails with
@@ -511,3 +511,10 @@ chain:    ${result.value.chain.length} certificates`);
 ```
 
 </LiveCode>
+
+[rfc5280]: https://www.rfc-editor.org/rfc/rfc5280.html
+[rfc5280-section-3.3]: https://www.rfc-editor.org/rfc/rfc5280.html#section-3.3
+[rfc5280-section-5.1.2.5]: https://www.rfc-editor.org/rfc/rfc5280.html#section-5.1.2.5
+[rfc6960-section-4.2.2.1]: https://www.rfc-editor.org/rfc/rfc6960.html#section-4.2.2.1
+[rfc9919]: https://www.rfc-editor.org/rfc/rfc9919.html
+[rfc9919-section-5]: https://www.rfc-editor.org/rfc/rfc9919.html#section-5
