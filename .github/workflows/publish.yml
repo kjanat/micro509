@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: { contents: read }
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    if: github.repository == 'kjanat/micro509' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)
     outputs:
       version: ${{ steps.version.outputs.version }}
       jsr_url: ${{ steps.version.outputs.jsr_url }}

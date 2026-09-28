@@ -19,6 +19,7 @@ env:
 jobs:
   resolve:
     name: Resolve versions
+    if: github.repository == 'kjanat/micro509'
     runs-on: ubuntu-26.04
     timeout-minutes: 5
     permissions: { contents: read, packages: read }

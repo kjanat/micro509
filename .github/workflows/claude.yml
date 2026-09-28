@@ -8,6 +8,7 @@ permissions: { contents: read }
 jobs:
   claude:
     if: |
+      github.repository == 'kjanat/micro509' &&
       (github.event.comment.user.login || github.event.review.user.login || github.event.issue.user.login) == 'kjanat' && (
         (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
         (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
