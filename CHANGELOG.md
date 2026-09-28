@@ -169,7 +169,10 @@ revocation })` report a certificate carrying `noRevAvail` or
   profiles or `matchServiceIdentity` cannot decode reports its refusal, and
   `trustAnchorFromCertificate` throws it. `validateCandidatePath` and
   `checkExtendedKeyUsage` report it at the index of the chain element they
-  cannot decode. A directoryName name constraint that
+  cannot decode. An `intermediates` or `roots` entry that `buildCandidatePath`
+  or `verifyCertificateChain` cannot load has no chain index, so its refusal,
+  or its `issuer_not_found` when malformed, names the entry in the new
+  `details.source` (`VerifyFailureSource`). A directoryName name constraint that
   micro509 cannot decode fails the chain with its refusal at the index of the
   certificate checked against it. The same holds for
   `MatchCertificatePrivateKeyErrorCode`,

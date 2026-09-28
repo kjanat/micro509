@@ -5666,6 +5666,51 @@ describe('decode refusals at the verification entry points', () => {
 		expect(isResultError(thrown) ? thrown.code : undefined).toBe('unsupported');
 	});
 
+	it('names the intermediates or roots entry micro509 does not decode', async () => {
+		const chain = await issueChain();
+		const unsupportedDer = rewriteCertificateSubject(chain.intermediate.der, teletexSubject);
+		const leafRefusal = await buildCandidatePath({
+			leaf: rewriteCertificateSubject(chain.leaf.der, teletexSubject),
+			intermediates: [chain.intermediate.pem],
+			roots: [chain.root.certificate.pem],
+		});
+		expect(leafRefusal).toMatchObject({ ok: false, code: 'unsupported', index: 0 });
+		expect(leafRefusal.ok ? undefined : leafRefusal.details?.source).toBeUndefined();
+		for (const [sources, source] of [
+			[
+				{
+					leaf: chain.leaf.pem,
+					intermediates: [chain.intermediate.pem, unsupportedDer],
+					roots: [chain.root.certificate.pem],
+				},
+				{ kind: 'intermediates', position: 1 },
+			],
+			[
+				{
+					leaf: chain.leaf.pem,
+					intermediates: [chain.intermediate.pem],
+					roots: [chain.root.certificate.pem, unsupportedDer],
+				},
+				{ kind: 'roots', position: 1 },
+			],
+		] as const) {
+			const expected = { ok: false, code: 'unsupported', details: { source } };
+			expect(await buildCandidatePath(sources)).toMatchObject(expected);
+			expect(await verifyCertificateChain(sources)).toMatchObject(expected);
+		}
+		expect(
+			await verifyCertificateChain({
+				leaf: chain.leaf.pem,
+				intermediates: [chain.intermediate.pem, Uint8Array.of(0x30, 0x03, 0x02)],
+				roots: [chain.root.certificate.pem],
+			}),
+		).toMatchObject({
+			ok: false,
+			code: 'issuer_not_found',
+			details: { source: { kind: 'intermediates', position: 1 } },
+		});
+	});
+
 	it('reports the index of the chain element micro509 does not decode', async () => {
 		const chain = await issueChain();
 		const parsed = [chain.leaf.pem, chain.intermediate.pem, chain.root.certificate.pem].map((pem) =>

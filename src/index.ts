@@ -429,6 +429,7 @@ export type {
 	VerifyChainResult,
 	VerifyErrorCode,
 	VerifyFailureDetails,
+	VerifyFailureSource,
 	VerifyPurpose,
 	VerifyRequestFailure,
 	VerifyRequestResult,

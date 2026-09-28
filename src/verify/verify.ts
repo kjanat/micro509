@@ -242,6 +242,16 @@ export interface VerifyFailureDetails {
 		| 'common_name_mismatch';
 	/** The user notice DisplayText that exceeds 200 characters. Set on `display_text_oversized`. */
 	readonly userNoticeField?: 'explicitText' | 'noticeRefOrganization';
+	/** The `intermediates` or `roots` entry that failed to load, which has no chain index. */
+	readonly source?: VerifyFailureSource;
+}
+
+/** An entry of {@linkcode BuildCandidatePathInput.intermediates} or {@linkcode BuildCandidatePathInput.roots}. */
+export interface VerifyFailureSource {
+	/** The input array holding the entry. */
+	readonly kind: 'intermediates' | 'roots';
+	/** Zero-based position of the entry in that array. */
+	readonly position: number;
 }
 
 /** A chain verification failure with its error code, human message, chain index, and diagnostic details. */
@@ -552,6 +562,7 @@ interface VerifyFailureDetailsInput {
 		| 'common_name_mismatch'
 		| undefined;
 	readonly userNoticeField?: 'explicitText' | 'noticeRefOrganization' | undefined;
+	readonly source?: VerifyFailureSource | undefined;
 }
 
 /** Mutable validation state accumulated during path walks. */
@@ -583,6 +594,40 @@ type ValidationCheckResult =
 
 // buildCandidatePath
 
+function loadCertificatePool(
+	sources: readonly CertificateSource[],
+	kind: VerifyFailureSource['kind'],
+): { readonly ok: true; readonly certificates: readonly ParsedCertificate[] } | VerifyChainFailure {
+	const certificates: ParsedCertificate[] = [];
+	for (const [position, source] of sources.entries()) {
+		try {
+			certificates.push(...loadCertificates([source]));
+		} catch (error) {
+			return certificateSourceFailure(error, { kind, position });
+		}
+	}
+	return { ok: true, certificates };
+}
+
+function certificateSourceFailure(
+	error: unknown,
+	source: VerifyFailureSource | undefined,
+): VerifyChainFailure {
+	const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
+	if (refusal !== undefined) {
+		return failure(refusal.code, refusal.message, 0, detail({ actual: refusal.message, source }));
+	}
+	return failure(
+		'issuer_not_found',
+		'certificate source is malformed or leaf source does not contain exactly one certificate',
+		0,
+		detail({
+			actual: error instanceof Error ? error.message : 'certificate source is malformed',
+			source,
+		}),
+	);
+}
+
 /**
  * Discovers and signature-verifies a candidate certification path from a
  * leaf certificate to a trusted root or trust anchor. Does NOT validate
@@ -598,32 +643,21 @@ async function buildCandidatePathRaw(input: BuildCandidatePathInput): Promise<
 > {
 	assertPathBuildingChecks(input.maxPathBuildingChecks);
 	let leaf: ParsedCertificate;
-	let intermediates: readonly ParsedCertificate[];
-	let roots: readonly ParsedCertificate[];
 	try {
 		leaf = loadSingleCertificate(input.leaf);
-		intermediates = loadCertificates(input.intermediates ?? []);
-		roots = loadCertificates(input.roots);
 	} catch (error) {
-		const refusal = decodeRefusalOf(error, DECODE_REFUSAL_CODES);
-		if (refusal !== undefined) {
-			return failure(refusal.code, refusal.message, 0, detail({ actual: refusal.message }));
-		}
-		return failure(
-			'issuer_not_found',
-			'certificate source is malformed or leaf source does not contain exactly one certificate',
-			0,
-			detail({
-				actual: error instanceof Error ? error.message : 'certificate source is malformed',
-			}),
-		);
+		return certificateSourceFailure(error, undefined);
 	}
+	const intermediates = loadCertificatePool(input.intermediates ?? [], 'intermediates');
+	if (!intermediates.ok) return intermediates;
+	const roots = loadCertificatePool(input.roots, 'roots');
+	if (!roots.ok) return roots;
 	const anchors = input.trustAnchors ?? [];
 	const at = input.at ?? new Date();
 	const buildResult = await buildChainInternal(
 		leaf,
-		intermediates,
-		roots,
+		intermediates.certificates,
+		roots.certificates,
 		anchors,
 		at,
 		{ failure, detail },
@@ -1948,6 +1982,7 @@ function detail(input: VerifyFailureDetailsInput): VerifyFailureDetails {
 			? {}
 			: { commonNameFallbackReason: input.commonNameFallbackReason }),
 		...(input.userNoticeField === undefined ? {} : { userNoticeField: input.userNoticeField }),
+		...(input.source === undefined ? {} : { source: input.source }),
 	};
 }
 
