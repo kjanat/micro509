@@ -83,12 +83,12 @@ Extract it and point `OPENSSL_CONF` at its `openssl.cnf`:
 
 ```sh
 # ..
-dir='openssl'
+dir="${PWD}/openssl"
 mkdir -p "${dir}" && \
   tar -xzf "${file}" -C "${dir}"
 
-PATH="${PWD}/${dir}/bin:${PATH}"
-OPENSSL_CONF="${PWD}/${dir}/ssl/openssl.cnf"
+PATH="${dir}/bin:${PATH}"
+OPENSSL_CONF="${dir}/ssl/openssl.cnf"
 
 export PATH OPENSSL_CONF
 ```
