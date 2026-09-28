@@ -1,17 +1,16 @@
 # `docs/` - Standards And Scope
 
-Authored support claims plus the standards corpus used to verify them.
+Authored support claims plus the vendored standards corpus used to verify them.
 
 ## STRUCTURE
 
 ```tree
 docs/
-├── PKIX-SCOPE.md   # canonical support boundary and evidence links
-├── SPEC-TOOLING.md # research CLI, output contracts and operational limits
+├── PKIX-SCOPE.md  # canonical support boundary and evidence links
 ├── rfc/           # unmodified RFC Editor text plus NIST PKITS text
 ├── itu/           # local, gitignored ITU-T references; redistribution restricted
 ├── w3c/           # W3C WebCrypto and WHATWG Web IDL rendered to text
-├── idna/          # frozen IANA IDNA2008 and Unicode 12.0.0 tables
+├── idna/          # IANA IDNA2008 table and Unicode 12.0.0 UCD files, frozen by scripts/idna-tables.bun.ts
 └── CLAUDE.md      # delegates agent guidance to this file
 ```
 
@@ -20,29 +19,21 @@ JSDoc and regenerate it rather than editing generated pages.
 
 ## WHERE TO LOOK
 
-| Need                         | Location                                                    | Notes                                                                  |
-| ---------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------- |
-| Support claims and gaps      | `PKIX-SCOPE.md`                                             | Source of truth mirrored by README and site                            |
-| Research procedure           | `.claude/skills/spec-lookup/SKILL.md`                       | Canonical policy; delegate standards questions to `spec-lookup`        |
-| CLI reference                | `SPEC-TOOLING.md`                                           | Commands, JSON contracts, citation mapping, cache and gate limitations |
-| Reader and research commands | `scripts/spec/`                                             | `bun spec list`, `census`, `status`, `headings`, `read`, `search`      |
-| Spec fetcher                 | `scripts/fetch-spec.bun.ts`                                 | `bun spec fetch rfc/itu/w3c`; legacy package aliases remain supported  |
-| RFC text                     | `rfc/rfc<number>.txt`                                       | Fetched verbatim from RFC Editor                                       |
-| PKITS specification          | `rfc/pkits.txt`                                             | NIST fixture documentation and test policy                             |
-| RFC status guard             | `test/rfc/rfc-status.test.ts`                               | Live XML index with daily cache; owns explicit legacy citation pins    |
-| Research regression tests    | `test/spec-research.test.ts`                                | Local HTTP/cache tests, census, provenance and CLI integration         |
-| Reader and gate tests        | `test/spec-reader.test.ts`, `test/spec-lookup-gate.test.ts` | Format parsing and supported hook routing                              |
-| Per-RFC conformance          | `test/rfc/*.test.ts`                                        | Section-quoted behavioral evidence                                     |
-| PKITS execution              | `test/pkits.test.ts`                                        | Fixed-time path-validation harness                                     |
+| Need                    | Location                              | Notes                                                                                                                                                                                                                                          |
+| ----------------------- | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Support claims and gaps | `PKIX-SCOPE.md`                       | source of truth mirrored by README and site                                                                                                                                                                                                    |
+| RFC text                | `rfc/rfc<number>.txt`                 | fetched verbatim from RFC Editor                                                                                                                                                                                                               |
+| PKITS specification     | `rfc/pkits.txt`                       | upstream NIST fixture documentation                                                                                                                                                                                                            |
+| Spec reader             | `scripts/spec/`                       | section-level access, run with `bun spec`                                                                                                                                                                                                      |
+| Spec lookup procedure   | `.claude/skills/spec-lookup/SKILL.md` | hand spec questions to the `spec-lookup` agent; raw reads of `rfc/`, `itu/`, `w3c/` are gated to it                                                                                                                                            |
+| Spec fetcher            | `scripts/fetch-spec.bun.ts`           | `bun rfc <number>`, `bun itu <item id>` (Word item through pinned pandoc, else `pdftotext -layout`), `bun w3c <spec>` (`w3m -dump`, plus a trailer with the source URL, retrieval date and license URIs; refuses a page that links no license) |
+| RFC status guard        | `test/rfc/rfc-status.test.ts`         | live RFC Editor index, daily cache                                                                                                                                                                                                             |
+| Per-RFC conformance     | `test/rfc/*.test.ts`                  | section-quoted behavioral evidence                                                                                                                                                                                                             |
+| PKITS execution         | `test/pkits.test.ts`                  | fixed-time path-validation harness                                                                                                                                                                                                             |
 
-## PROJECT BASELINES
+## CURRENT BASELINES
 
-This table records the project's reference set, not a live currency guarantee.
-Use `bun spec status <rfc> ... --refresh` and inspect relevant successor text
-before making a current-standards claim. Support remains defined by
-`PKIX-SCOPE.md`; metadata alone does not change it.
-
-| Domain              | Project RFCs               | Legacy or supporting text                  |
+| Domain              | Current RFCs               | Legacy or supporting text                  |
 | ------------------- | -------------------------- | ------------------------------------------ |
 | PKIX validation     | RFC 5280, 6818, 9549, 9618 | NIST PKITS                                 |
 | Service identity    | RFC 9525                   | RFC 6125 only for opt-in CN compatibility  |
@@ -56,22 +47,20 @@ before making a current-standards claim. Support remains defined by
 
 ## CONVENTIONS
 
-- Use the canonical skill rather than maintaining another research checklist.
-- `census` scans the indexed corpus completely; `search` is a bounded excerpt
-  lookup. Neither includes arbitrary authored Markdown: inspect project scope
-  separately. Do not equate zero hits with absence from an unindexed document.
-- Fetch or refresh through `bun spec fetch`; never hand-edit upstream text.
-- Keep an obsolete RFC when a legacy format pins that exact text, and vendor
-  the current successor alongside it for comparison.
+- Fetch or refresh RFC text with `bun rfc <number>`, ITU-T text with
+  `bun itu <item id>`, and W3C or WHATWG text with `bun w3c <spec>`; never
+  hand-edit it.
+- Keep an obsolete RFC when a legacy format is defined against that exact text.
+- A fetched RFC joins the corpus and stays in `rfc/`.
+- Vendor the current successor beside every retained obsolete RFC.
 - Cite current RFCs in source unless behavior is deliberately pinned to frozen
   legacy text listed in `PINNED_TO_SUPERSEDED`.
 - Add pinned exceptions only in `test/rfc/rfc-status.test.ts`, with the owning
   specification and section explaining why the old text remains normative.
 - Quote the exact RFC sentence in conformance tests and group tests by section.
-  Use `read --raw --lines` or the JSON source mapping to verify quotations.
 - Keep `PKIX-SCOPE.md`, README standards status, and site standards claims aligned.
-- Inspect the scope of updates, replacements, profiles and errata before changing
-  behavior. Cache freshness is not a normative precedence rule.
+- Treat RFC "updates" and "obsoletes" differently; inspect replacement text
+  before changing behavior or citations.
 
 ## ANTI-PATTERNS
 
@@ -79,6 +68,4 @@ before making a current-standards claim. Support remains defined by
 - Removing frozen legacy RFCs solely because the RFC Editor marks them obsolete.
 - Silencing `rfc-status.test.ts` without a real normative pin.
 - Claiming complete RFC support without test-backed behavior.
-- Committing or unignoring `itu/**`, or reproducing its text in tracked/public output.
-- Treating a failed status check as proof of no successors or errata.
-- Calling the spec-lookup hook a security sandbox or using comment bypasses.
+- Committing or unignoring `itu/**`; its source is redistribution-restricted.
