@@ -525,10 +525,9 @@ function tryParseUriServiceIdentity(
 	}
 	const serviceType = value.slice(0, schemeEnd).toLowerCase();
 	const sip = serviceType === 'sip' || serviceType === 'sips';
-	const host =
-		sip && !value.startsWith('//', schemeEnd + 1)
-			? sipUriHost(value.slice(schemeEnd + 1), source)
-			: uriAuthorityHost(value, source);
+	const host = sip
+		? sipUriHost(value.slice(schemeEnd + 1), source)
+		: uriAuthorityHost(value, source);
 	const serviceHost = uriServiceHost(host, source === 'presented' && !sip);
 	return serviceHost === undefined ? undefined : { serviceType, host: serviceHost };
 }

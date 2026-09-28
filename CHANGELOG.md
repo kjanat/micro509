@@ -446,7 +446,8 @@ revocation })` report a certificate carrying `noRevAvail` or
   matched `sip:alice/phone@victim.example`. The host now follows the one "@"
   RFC 3261 §25.1 allows and ends at the first ";" or "?". A second "@", an
   empty user part, a "/" in the hostport, or a ":" with no port digits after
-  it makes the URI-ID invalid.
+  it makes the URI-ID invalid, and so does a `sip://` or `sips://` URI-ID,
+  which §25.1 does not allow.
 - A URI's userinfo was dropped unread, so a presented
   `https://bad%zz@example.com` took the host `example.com`, matched the
   URI-ID `https://example.com`, and was evaluated against URI constraints.

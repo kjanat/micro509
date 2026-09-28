@@ -1066,6 +1066,9 @@ describe('URI-ID and SRV-ID hosts in a verified chain', () => {
 		['sip:alice@victim.example:;transport=tcp', 'sip:victim.example', false],
 		['sip:[2001:db8::1]:', 'sip:[2001:db8::1]', false],
 		['sip:victim.example', 'sip:victim.example:', false],
+		['sip://victim.example', 'sip:victim.example', false],
+		['sips://victim.example/', 'sips:victim.example', false],
+		['sip:victim.example', 'sip://victim.example', false],
 		['sip:victim.example/path', 'sip:victim.example', false],
 	] as const)(
 		'reads the host of the SIP URI %s against %s by RFC 3261 §25.1',

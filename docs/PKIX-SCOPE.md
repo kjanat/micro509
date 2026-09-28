@@ -350,9 +350,10 @@ Current GeneralName matrix for `nameConstraints`:
       the identifier invalid and it is ignored. A `sip` or `sips` URI-ID takes
       no wildcard (RFC 5922 §7.2), and a reference identifier holds none.
 - [x] Take a URI-ID's host as §7 reads a URI SAN's host. A `sip` or `sips`
-      URI without `//` has no RFC 3986 authority, so its host comes from the
-      RFC 3261 §25.1 hostport, as RFC 9525 §6.2 splits
-      `sip:voice.college.example`. The hostport follows the one "@" §25.1
+      URI has no RFC 3986 authority, so its host comes from the RFC 3261
+      §25.1 hostport, as RFC 9525 §6.2 splits `sip:voice.college.example`.
+      §25.1 puts the userinfo and hostport right after the scheme, so a `//`
+      there makes the URI-ID invalid. The hostport follows the one "@" §25.1
       allows, which ends a userinfo of a non-empty user and an optional
       password, and ends at the first ";" or "?". The user part may hold "?",
       "/" and ";". A second "@", a user or password outside the §25.1
