@@ -11,12 +11,19 @@ concurrency:
 permissions: { contents: read }
 
 jobs:
+  openssl:
+    name: OpenSSL builds
+    if: github.event_name == 'push'
+    uses: $/.github/workflows/openssl.yml
+    with: { version: "4.0.2" }
+    permissions: { contents: read, packages: write, id-token: write, attestations: write }
+
   test:
     name: Test
     uses: $/.github/workflows/test.yml
-    if: github.event_name == 'push'
-    with: { publish-openssl: true }
-    permissions: { contents: read, id-token: write, packages: write, attestations: write }
+    needs: openssl
+    if: ${{ !cancelled() && github.event_name == 'push' }}
+    permissions: { contents: read, id-token: write, attestations: read }
 
   validate:
     name: Validate version
