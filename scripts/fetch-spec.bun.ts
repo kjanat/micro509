@@ -199,22 +199,39 @@ async function fetchItuItem(id: string, out: Out): Promise<Uint8Array | undefine
 	return response.ok ? await response.bytes() : undefined;
 }
 
+const RFC_COPIES = [
+	{ extension: 'txt', directory: 'docs/rfc' },
+	{ extension: 'html', directory: 'docs/rfc-html' },
+] as const;
+
 const rfc = command('rfc')
-	.description('Refresh a vendored RFC text file from the RFC Editor')
+	.description('Refresh a vendored RFC text file and its local HTML copy from the RFC Editor')
 	.arg('number', arg.number().int().min(1).env('RFC').describe('RFC number, e.g. 822'))
 	.action(async ({ args, out }) => {
-		const url = `https://www.rfc-editor.org/rfc/rfc${args.number}.txt`;
-		out.status(`fetching ${url}`);
-		const response = await fetch(url);
-		if (!response.ok) {
-			throw new CLIError(`rfc${args.number}: ${response.status} ${response.statusText}`, {
-				code: 'RFC_FETCH_FAILED',
-				suggest: 'Check the number against https://www.rfc-editor.org/',
-			});
+		const copies = await Promise.all(
+			RFC_COPIES.map(async ({ extension, directory }) => {
+				const url = `https://www.rfc-editor.org/rfc/rfc${args.number}.${extension}`;
+				out.status(`fetching ${url}`);
+				const response = await fetch(url);
+				if (!response.ok) {
+					throw new CLIError(
+						`rfc${args.number}.${extension}: ${response.status} ${response.statusText}`,
+						{
+							code: 'RFC_FETCH_FAILED',
+							suggest: 'Check the number against https://www.rfc-editor.org/',
+						},
+					);
+				}
+				return {
+					destination: `${directory}/rfc${args.number}.${extension}`,
+					bytes: await response.bytes(),
+				};
+			}),
+		);
+		for (const { destination, bytes } of copies) {
+			await Bun.write(destination, bytes);
+			out.log(destination);
 		}
-		const destination = `docs/rfc/rfc${args.number}.txt`;
-		await Bun.write(destination, await response.bytes());
-		out.log(destination);
 	});
 
 const itu = command('itu')
