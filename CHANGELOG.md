@@ -433,6 +433,11 @@ revocation })` report a certificate carrying `noRevAvail` or
   label is dropped, and a reg-name that is not a domain name after decoding,
   a percent-encoded U-label included, fails every URI constraint and matches
   no URI-ID.
+- A SIP or SIPS URI-ID was cut at "/", "?" or "#" before its userinfo "@"
+  was found, so `sip:alice/phone@attacker.example` took the host `alice` and
+  matched `sip:alice/phone@victim.example`. The host now follows the one "@"
+  RFC 3261 §25.1 allows and ends at the first ";" or "?". A second "@", an
+  empty user part, or a "/" in the hostport makes the URI-ID invalid.
 - A URI name constraint that was not a DNS name, such as
   `https://blocked.example`, matched no host, so an excluded subtree excluded
   nothing. The builder refuses it with the new `invalid_uri_name_constraint`,

@@ -1026,6 +1026,25 @@ describe('URI-ID and SRV-ID hosts in a verified chain', () => {
 	);
 
 	it.each([
+		['sip:alice/phone@attacker.example', 'sip:alice/phone@victim.example', false],
+		['sip:alice?x@victim.example', 'sip:victim.example', true],
+		['sip:alice;day=tuesday@victim.example;transport=tcp?subject=a', 'sip:victim.example', true],
+		['sip:a@b@victim.example', 'sip:victim.example', false],
+		['sip:@victim.example', 'sip:victim.example', false],
+		['sip:victim.example/path', 'sip:victim.example', false],
+	] as const)(
+		'reads the host of the SIP URI %s against %s by RFC 3261 §25.1',
+		async (presented, reference, ok) => {
+			expect(
+				await verifyServiceIdentity([{ type: 'uri', value: presented }], {
+					type: 'uri',
+					value: reference,
+				}),
+			).toBe(ok);
+		},
+	);
+
+	it.each([
 		['https://[2001:db8::1]/', 'https://[2001:DB8:0::1]:443/', true],
 		['https://192.0.2.1/', 'https://192.0.2.1:443/', true],
 		['https://192.0.2.1/', 'https://192.0.2.2/', false],

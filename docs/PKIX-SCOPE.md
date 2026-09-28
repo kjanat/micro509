@@ -347,8 +347,12 @@ Current GeneralName matrix for `nameConstraints`:
       no wildcard (RFC 5922 §7.2), and a reference identifier holds none.
 - [x] Take a URI-ID's host as §7 reads a URI SAN's host. A `sip` or `sips`
       URI without `//` has no RFC 3986 authority, so its host comes from the
-      RFC 3261 §25.1 hostport, past any userinfo and before any parameter, as
-      RFC 9525 §6.2 splits `sip:voice.college.example`. An IP host matches by
+      RFC 3261 §25.1 hostport, as RFC 9525 §6.2 splits
+      `sip:voice.college.example`. The hostport follows the one "@" §25.1
+      allows, which ends a non-empty userinfo whose user part may hold "?",
+      "/" and ";", and ends at the first ";" or "?". A second "@", an empty
+      user part, or a "/" or escaped octet in the hostport makes the URI-ID
+      invalid. An IP host matches by
       its octets (RFC 9525 §6.4).
 - [x] Hold an SRV-ID, presented or reference, to the SRVName syntax of §7.
 

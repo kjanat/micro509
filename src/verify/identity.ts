@@ -534,13 +534,17 @@ function tryParseUriServiceIdentity(
 }
 
 /**
- * RFC 3261 §25.1: the host of a SIP URI follows any userinfo and precedes its
- * parameters and headers, and its hostname holds no escaped octets.
+ * RFC 3261 §25.1: the only "@" a SIP URI may hold ends a non-empty userinfo,
+ * and the hostport after it ends at its parameters or headers and holds no
+ * escaped octets.
  */
 function sipUriHost(schemeSpecific: string, source: UriHostSource): UriHost {
-	const beforeHeaders = schemeSpecific.split(/[/?#]/, 1)[0] ?? '';
-	const hostport = beforeHeaders.slice(beforeHeaders.lastIndexOf('@') + 1).split(';', 1)[0] ?? '';
-	return hostport.includes('%') ? { type: 'invalid' } : hostportHost(hostport, source);
+	const at = schemeSpecific.indexOf('@');
+	const afterUserinfo = schemeSpecific.slice(at + 1);
+	const hostport = afterUserinfo.split(/[;?]/, 1)[0] ?? '';
+	return at === 0 || afterUserinfo.includes('@') || hostport.includes('%')
+		? { type: 'invalid' }
+		: hostportHost(hostport, source);
 }
 
 /**
