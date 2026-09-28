@@ -218,8 +218,9 @@ revocation })` report a certificate carrying `noRevAvail` or
 - A typed SRVName SAN outside the RFC 6335 service grammar or STD3 LDH Name
   syntax is refused with the new `invalid_srv_name`.
 - A critical subjectAltName holding a SRVName that is not `_Service.Name`
-  under that profile, or a SmtpUTF8Mailbox without a non-ASCII RFC 6531
-  Local-part and a domain of NR-LDH labels and A-labels, carries information
+  under that profile, or a SmtpUTF8Mailbox that holds a Byte Order Mark or
+  lacks a non-ASCII RFC 6531 Local-part and a domain of NR-LDH labels and
+  A-labels, carries information
   path validation cannot process (RFC 5280 §4.2), and the chain fails with
   `unrecognized_critical_extension`.
 - SRV-ID matching compares the Name of the reference identifier and of each
@@ -473,9 +474,9 @@ revocation })` report a certificate carrying `noRevAvail` or
   one, passed path validation. It now parses as
   `{ type: 'smtpUtf8Mailbox', value }` and rfc822Name constraints bind it by
   domain (RFC 9598 §6). A received mailbox fails whenever rfc822Name
-  constraints apply unless its Local-part is a non-ASCII RFC 6531 Local-part
-  and its domain is NR-LDH labels and A-labels that pass the RFC 5893 Bidi
-  rule. The builder emits
+  constraints apply unless it holds no Byte Order Mark, its Local-part is a
+  non-ASCII RFC 6531 Local-part, and its domain is NR-LDH labels and A-labels
+  that pass the RFC 5893 Bidi rule. The builder emits
   it and enforces RFC 9598 §3: `invalid_smtp_utf8_mailbox` for a missing `@`,
   a Byte Order Mark, a Local-part outside the RFC 6531 Dot-string or
   Quoted-string grammar, or a domain that is not lowercase NR-LDH labels and

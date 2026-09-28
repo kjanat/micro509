@@ -23,15 +23,16 @@ export function isSmtpUtf8LocalPart(localPart: string): boolean {
 }
 
 /**
- * RFC 9598 §5: the lowercased domain of a presented SmtpUTF8Mailbox whose
- * Local-part is a non-ASCII RFC 6531 Local-part and whose domain is a mailbox
- * domain, or `undefined` for any other value.
+ * RFC 9598 §3 and §5: the lowercased domain of a presented SmtpUTF8Mailbox
+ * with no Byte Order Mark, whose Local-part is a non-ASCII RFC 6531 Local-part
+ * and whose domain is a mailbox domain, or `undefined` for any other value.
  */
 export function presentedSmtpUtf8MailboxDomain(mailbox: string): string | undefined {
 	const at = mailbox.lastIndexOf('@');
 	const localPart = mailbox.slice(0, Math.max(at, 0));
 	const domain = asciiLowercase(mailbox.slice(at + 1));
 	return at > 0 &&
+		!mailbox.includes('﻿') &&
 		isSmtpUtf8LocalPart(localPart) &&
 		[...localPart].some((character) => (character.codePointAt(0) ?? 0) > 0x7f) &&
 		isMailboxDomain(domain, 'lookup')

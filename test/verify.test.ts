@@ -1145,6 +1145,7 @@ describe('chain verification', () => {
 			mailbox('user@example.com'),
 			mailbox('\u{fc}ser@-example.com'),
 			mailbox('\u{fc}ser'),
+			mailbox('\u{feff}\u{fc}ser@example.com'),
 		]) {
 			expect(await verifyCriticalSan(name)).toMatchObject({
 				ok: false,
