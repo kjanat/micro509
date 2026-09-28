@@ -7,7 +7,11 @@
  * @module
  */
 
-import { throwDecodeRefusal } from '#micro509/internal/asn1/decode-refusal';
+import {
+	DECODE_LIMIT_CODES,
+	rethrowDecodeRefusal,
+	throwDecodeRefusal,
+} from '#micro509/internal/asn1/decode-refusal';
 import type { DerElement } from '#micro509/internal/asn1/der';
 import {
 	DEFAULT_MAX_DER_DEPTH,
@@ -578,6 +582,9 @@ export type StrictDerVerdict = 'valid' | 'malformed' | 'unsupported';
  * `malformed`. Context-specific, application and private elements get framing
  * checks only, as do the rules that depend on a schema: DEFAULT omission and
  * NamedBitList trailing bits.
+ *
+ * @throws `limit_exceeded` past {@linkcode maxDepth} levels of nesting or on a
+ * tag number of 2^53 or more.
  */
 export function checkStrictDer(
 	bytes: Uint8Array,
@@ -592,7 +599,8 @@ export function checkStrictDer(
 			}
 			unsupported ||= verdict === 'unsupported';
 		});
-	} catch {
+	} catch (error) {
+		rethrowDecodeRefusal(error, DECODE_LIMIT_CODES);
 		return 'malformed';
 	}
 	return unsupported ? 'unsupported' : 'valid';

@@ -1331,6 +1331,26 @@ describe('extensions encoding', () => {
 		);
 	});
 
+	it('encodeSubjectAltName reports GeneralName contents nested past the depth limit as limit_exceeded', () => {
+		const nested = (depth: number): Uint8Array =>
+			depth === 1 ? sequence([]) : sequence([nested(depth - 1)]);
+		expect(
+			encodeSubjectAltName({ type: 'otherName', typeId: '1.2.3.4', value: nested(64) })[0],
+		).toBe(0xa0);
+		expectEncoderErrorCode(
+			() => encodeSubjectAltName({ type: 'otherName', typeId: '1.2.3.4', value: nested(65) }),
+			'limit_exceeded',
+		);
+		expectEncoderErrorCode(
+			() => encodeSubjectAltName({ type: 'x400Address', value: nested(65) }),
+			'limit_exceeded',
+		);
+		expectEncoderErrorCode(
+			() => encodeSubjectAltName({ type: 'ediPartyName', value: explicitContext(1, nested(65)) }),
+			'limit_exceeded',
+		);
+	});
+
 	it('encodeSubjectAltName encodes an RFC 4556 KRB5PrincipalName otherName', () => {
 		const kerberosString = (value: string) => tlv(0x1b, new TextEncoder().encode(value));
 		const krb5PrincipalName = sequence([

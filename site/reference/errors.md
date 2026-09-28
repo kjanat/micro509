@@ -115,7 +115,7 @@ Unions may gain members in minor releases; treat them as non-exhaustive and keep
 | `invalid_uri_name_constraint`                           | URI constraint not an FQDN or a leading-period domain (RFC 5280 §4.2.1.10)                                               |
 | `invalid_visible_string`                                | VisibleString explicitText outside printable ASCII                                                                       |
 | `key_usage_empty`                                       | keyUsage asserts no bits                                                                                                 |
-| `limit_exceeded`                                        | An OID arc encodes in more than 64 octets, a micro509 limit                                                              |
+| `limit_exceeded`                                        | An OID arc encodes in more than 64 octets, or GeneralName contents nest deeper than 64 levels, a micro509 limit          |
 | `malformed_known_extension_value`                       | `customExtensions` payload with a known OID fails to decode as it                                                        |
 | `montgomery_key_usage_forbids_both_cipher_bits`         | X25519/X448 asserts both `encipherOnly` and `decipherOnly`                                                               |
 | `montgomery_key_usage_forbids_signature_bit`            | X25519/X448 asserts a signature bit (RFC 8410 §12)                                                                       |

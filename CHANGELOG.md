@@ -132,7 +132,8 @@ revocation })` report a certificate carrying `noRevAvail` or
   EDIPartyName, with each DirectoryString validated by its encoding
   (`invalid_general_name_content`); TeletexString, the Teletex and
   extended-network-address extension attributes, and extension-attribute
-  types RFC 5280 does not define are refused as unsupported. `unknown`
+  types RFC 5280 does not define are refused as unsupported. A value or
+  contents nested deeper than 64 levels throw `limit_exceeded`. `unknown`
   remains as raw builder input.
 - TeletexString Name attribute values decode in certificate, CRL, OCSP and
   PKCS #7 names and in `decodeDerString`, which refused them before. Decoding
