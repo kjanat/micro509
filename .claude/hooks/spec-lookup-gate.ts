@@ -30,6 +30,7 @@ type Relation = 'inside' | 'ancestor' | 'none';
 const CORPUS = ['rfc', 'itu', 'w3c'] as const;
 const SPEC_RE = /docs\/(rfc|itu|w3c)(\/|$|[^A-Za-z0-9_.-])/;
 const GLOB_META = /[*?[]/;
+const INTENT_RE = /#\s*spec-intent:\s*\S.{9,}/;
 const PROSE_CONSUMERS: ReadonlySet<string> = new Set(['git', 'gh', 'glab']);
 const METADATA: ReadonlySet<string> = new Set([
 	'ls',
@@ -61,16 +62,17 @@ const SEARCHERS: ReadonlySet<string> = new Set(['rg', 'ag', 'ack', 'ugrep']);
 const GREPS: ReadonlySet<string> = new Set(['grep', 'egrep', 'fgrep']);
 const PATTERN_FLAGS = /^(?:--regexp|--file)(?:=|$)|^-[A-Za-z]*[ef]/;
 const PATTERN_VALUE_FOLLOWS = /^(?:--regexp|--file|-[A-Za-z]*[ef])$/;
-const READER_COMMANDS: ReadonlySet<string> = new Set(['read', 'search', 'headings', 'census']);
-const SPEC_RUNNERS: ReadonlySet<string> = new Set(['bun', 'node', 'deno', 'tsx', 'ts-node', 'run', 'runner', 'runner-run']);
+const READER_COMMANDS: ReadonlySet<string> = new Set(['read', 'search', 'headings']);
 
 export const EXCLUDE_GLOB = '!**/docs/{rfc,itu,w3c}/**';
 
-export const DENY_MESSAGE = `STOP. Delegate authoritative spec reads (docs/rfc, docs/itu, docs/w3c) to the spec-lookup agent.
+export const DENY_MESSAGE = `STOP. The authoritative spec corpus (docs/rfc, docs/itu, docs/w3c) is read only by the spec-lookup agent.
+
+Do not read, grep, or cat these files directly, and do not search a directory that contains them. Hand the question to the spec-lookup subagent, which censuses the whole docs/ tree, fetches missing or superseded documents, reads whole sections, and returns a cited answer:
 
   Agent(subagent_type: "spec-lookup", prompt: "<your exact spec question>")
 
-The canonical procedure is .claude/skills/spec-lookup/SKILL.md. Metadata-only maintenance (such as bun spec list or bun spec status) is allowed; shell comments do not grant an exemption. Scope source searches outside the corpus, or explicitly exclude every corpus directory. See docs/SPEC-TOOLING.md for the gate's boundaries.`;
+To search the rest of the repository, scope the search to a directory that does not contain docs/rfc, docs/itu, or docs/w3c.`;
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -417,55 +419,13 @@ export function splitHeredocs(command: string): SplitCommand {
 	return { text: text.join('\n'), bodies };
 }
 
-/** Required option operands for the command wrappers this gate recognizes. */
-const PREFIX_VALUE_OPTIONS: ReadonlyMap<string, readonly string[]> = new Map([
-	['nice', ['-n', '--adjustment']],
-	['env', ['-u', '--unset', '-C', '--chdir', '-a', '--argv0']],
-	['exec', ['-a']],
-	['time', ['-f', '--format', '-o', '--output']],
-	['sudo', ['-u', '--user', '-g', '--group', '-h', '--host', '-p', '--prompt', '-C', '--close-from', '-D', '--chdir', '-R', '--chroot', '-T', '--command-timeout', '-r', '--role', '-t', '--type']],
-	['xargs', ['-a', '--arg-file', '-d', '--delimiter', '-E', '-I', '-L', '-n', '--max-args', '-P', '--max-procs', '-s', '--max-chars']],
-	['parallel', ['-j', '--jobs', '-S', '--sshlogin', '--sshloginfile', '-a', '--arg-file', '--colsep', '--delay', '--timeout', '--joblog', '--results', '--workdir']],
-]);
-
-/** Attached operands occupy one word; a required separate operand occupies two. */
-function prefixOptionWidth(prefix: string, option: string): number {
-	const values = PREFIX_VALUE_OPTIONS.get(prefix) ?? [];
-	if (option.startsWith('--')) return values.includes(option) ? 2 : 1;
-	for (let index = 1; index < option.length; index += 1) {
-		if (values.includes(`-${option.charAt(index)}`)) {
-			return index === option.length - 1 ? 2 : 1;
-		}
-	}
-	return 1;
-}
-
-function afterPrefix(words: readonly string[], start: number, prefix: string): number {
-	let index = start;
-	while (index < words.length) {
-		const word = words[index] ?? '';
-		if (word === '--' || (prefix === 'env' && word === '-')) {
-			index += 1;
-			break;
-		}
-		if (!word.startsWith('-') || word === '-') break;
-		index += prefixOptionWidth(prefix, word);
-	}
-	// Assignments end env's option processing. A subsequent "--" is then a
-	// command name, not another option delimiter. Do not scan past that command.
-	if (prefix === 'env' || prefix === 'sudo') {
-		while (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[index] ?? '')) index += 1;
-	}
-	return Math.min(index, words.length);
-}
-
 function commandIndex(words: readonly string[]): number {
 	let index = 0;
-	while (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[index] ?? '')) index += 1;
 	while (index < words.length) {
-		const prefix = path.basename(words[index] ?? '');
-		if (!PREFIXES.has(prefix)) break;
-		index = afterPrefix(words, index + 1, prefix);
+		const word = words[index] ?? '';
+		if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(word) || word.startsWith('-')) index += 1;
+		else if (PREFIXES.has(path.basename(word))) index += 1;
+		else break;
 	}
 	return index;
 }
@@ -621,16 +581,12 @@ function searchRoots(
 
 function isReader(segment: Segment): boolean {
 	const words = segment.words;
-	const start = commandIndex(words);
-	const runner = path.basename(words[start] ?? '');
 	return words.some((word, index) => {
-		const entrypoint = /(?:^|\/)scripts\/spec\/main\.ts$/.test(word);
-		if (!entrypoint && !(word === 'spec' && SPEC_RUNNERS.has(runner))) return false;
-		if (index < start) return false;
-		// Global flags may precede the subcommand. Check the remaining argv, not
-		// just the adjacent token; command text in an echo is not an invocation.
-		if (entrypoint && index !== start && !SPEC_RUNNERS.has(runner)) return false;
-		return words.slice(index + 1).some((argument) => READER_COMMANDS.has(argument));
+		const next = words[index + 1] ?? '';
+		if (/scripts\/spec\/main\.ts$/.test(word)) return READER_COMMANDS.has(next);
+		if (word !== 'spec') return false;
+		const before = path.basename(words[index - 1] ?? '');
+		return (before === 'bun' || before === 'run') && READER_COMMANDS.has(next);
 	});
 }
 
@@ -676,6 +632,7 @@ function segmentReads(
 }
 
 function decideBash(command: string, cwd: string, dirs: readonly string[]): Decision {
+	if (INTENT_RE.test(command)) return { kind: 'pass' };
 	const split = splitHeredocs(command);
 	const script = tokenize(split.text);
 	if (isMetadataOnly(command, script)) return { kind: 'pass' };
@@ -721,7 +678,9 @@ export function decide(payload: Payload, project: string): Decision {
 			return decideGrep(payload, dirs);
 		case 'Bash': {
 			const command = stringField(payload.input, 'command');
-			return command === undefined ? { kind: 'pass' } : decideBash(command, payload.cwd, dirs);
+			return command === undefined
+				? { kind: 'pass' }
+				: decideBash(command, payload.cwd, dirs);
 		}
 		default:
 			return { kind: 'pass' };

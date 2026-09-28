@@ -1,6 +1,5 @@
 import type { Out } from 'dreamcli';
 import { arg, CLIError, cli, command, flag, isMainModule } from 'dreamcli';
-import { fetchCommand } from '../fetch-spec.bun.ts';
 import {
 	discover,
 	enclosingHeading,
@@ -10,11 +9,8 @@ import {
 	rfcRelations,
 	sectionLines,
 } from './corpus.ts';
-import { censusCommand, statusCommand } from './research-commands.ts';
-import { blocksOf, minimumIndent, renderBlocks, renderBody } from './text.ts';
+import { blocksOf, minimumIndent, renderBody } from './text.ts';
 import type { DocKind, SourceLine, SpecDocument } from './types.ts';
-
-export { censusCommand, statusCommand } from './research-commands.ts';
 
 type ListedDocument =
 	| {
@@ -244,19 +240,13 @@ export const readCommand = command('read')
 	.description('Print one whole section body, free of page headers and footers')
 	.example('spec read rfc5280 5.1.2.5', 'Read the nextUpdate section of RFC 5280')
 	.example('spec read 9608 4', 'Read section 4 of RFC 9608 by bare number')
-	.example('spec read rfc5280 5.1.2.5 --lines', 'Attach original source ranges to paragraphs')
 	.arg('doc', arg.string().describe('Document id from `spec list`, or a bare RFC number'))
 	.arg('section', arg.string().describe('Section number such as 5.1.2.5, or heading text'))
 	.flag('raw', flag.boolean().describe('Keep the original line breaks and indentation'))
-	.flag(
-		'lines',
-		flag.boolean().describe('Label paragraphs, or raw lines, with original file line numbers'),
-	)
 	.action(({ args, flags, out }) => {
 		const document = loadDocument(resolveReference(discover(), args.doc));
 		const heading = findHeading(document, args.section);
 		const body = sectionLines(document, heading);
-		const blocks = renderBlocks(blocksOf(body, document.seams), minimumIndent(body));
 		const rendered = flags.raw
 			? body.map((entry) => entry.text)
 			: renderBody(blocksOf(body, document.seams), minimumIndent(body));
@@ -272,23 +262,12 @@ export const readCommand = command('read')
 				},
 				raw: flags.raw,
 				body: rendered.join('\n'),
-				blocks,
-				sourceLines: body,
 			});
 			return;
 		}
 		out.log(`${document.id} ${sectionLabel(heading.number, heading.title)}`);
 		out.log(`${document.relativePath}:${heading.line}`);
 		out.log('');
-		if (flags.lines) {
-			if (flags.raw) {
-				for (const line of body) out.log(`[L${line.line}] ${line.text}`);
-			} else {
-				for (const block of blocks)
-					out.log(`[L${block.startLine}-L${block.endLine}] ${block.text}\n`);
-			}
-			return;
-		}
 		for (const line of rendered) out.log(line);
 	});
 
@@ -448,7 +427,7 @@ function renderHits(out: Out, hits: readonly SearchHit[]): void {
 
 export const searchCommand = command('search')
 	.description('Search the corpus and report the enclosing section of every match')
-	.example('spec search nextUpdate --context 2', 'Find excerpts; use census for complete discovery')
+	.example('spec search nextUpdate --context 2', 'Census a term across every document')
 	.example('spec search "MUST NOT" --doc rfc6960', 'Search one document')
 	.arg('terms', arg.string().variadic().describe('Pattern, matched as a regular expression'))
 	.flag('doc', flag.string().describe('Restrict the search to one document id'))
@@ -490,18 +469,14 @@ export const searchCommand = command('search')
 			return;
 		}
 		renderHits(out, hits);
-		if (truncated)
-			out.status(`stopped at --limit ${flags.limit}; use census for complete document coverage`);
+		if (truncated) out.status(`stopped at --limit ${flags.limit}`);
 	});
 
 export const specCli = cli('spec')
-	.description('Read and research the vendored standards corpus under docs/')
+	.description('Read the vendored standards corpus under docs/ by section')
 	.command(listCommand)
-	.command(statusCommand)
-	.command(censusCommand)
 	.command(headingsCommand)
 	.command(readCommand)
-	.command(searchCommand)
-	.command(fetchCommand);
+	.command(searchCommand);
 
 if (isMainModule(import.meta)) await specCli.run();
