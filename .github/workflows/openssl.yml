@@ -1,0 +1,299 @@
+name: OpenSSL
+on:
+  schedule: [cron: "23 5 * * *"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Also publish this OpenSSL release, e.g. 3.5.5"
+        type: string
+        default: ""
+        required: false
+      force: { description: Rebuild versions that are already published, type: boolean, default: false, required: false }
+
+permissions: { contents: read }
+
+env:
+  IMAGE: ghcr.io/kjanat/openssl
+  PREBUILT: ghcr.io/kjanat/openssl-prebuilt
+
+jobs:
+  resolve:
+    name: Resolve versions
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions: { contents: read, packages: read }
+    outputs: { releases: "${{ steps.resolve.outputs.releases }}" }
+    steps:
+      - { uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1, with: { persist-credentials: false } } # v7
+      - uses: oras-project/setup-oras@1d808f7d7f6995cc68b7bf507bfe5c5446e1dc9d # v2.0.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with: { registry: ghcr.io, username: "${{ github.actor }}", password: "${{ github.token }}" }
+      - id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          FORCE: ${{ inputs.force || false }}
+        run: |
+          set -euo pipefail
+          retry() {
+            local attempt status delay=2
+            for attempt in 1 2 3 4; do
+              if "$@"; then return 0; else status=$?; fi
+              if ((attempt == 4)); then return "${status}"; fi
+              printf 'Request failed (exit %s); retrying in %ss (attempt %s/4).\n' "${status}" "${delay}" "$((attempt + 1))" >&2
+              sleep "${delay}"; delay=$((delay * 2))
+            done
+          }
+          pattern='^[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta)[0-9]+)?$'
+          latest="$(retry gh api repos/openssl/openssl/releases/latest --jq .tag_name)"
+          latest="${latest#openssl-}"
+          prerelease="$(retry gh api 'repos/openssl/openssl/releases?per_page=100' --jq '[.[] | select(.prerelease and (.draft | not))][0].tag_name // empty')"
+          prerelease="${prerelease#openssl-}"
+
+          declare -A seen=()
+          entries=()
+          for version in "${latest}" "${prerelease}" "${VERSION}"; do
+            if [[ -z "${version}" || -v "seen[${version}]" ]]; then continue; fi
+            seen["${version}"]=1
+            if [[ ! "${version}" =~ ${pattern} ]]; then
+              echo "::error::${version} is not an OpenSSL release such as 3.5.5 or 4.1.0-beta1."
+              exit 1
+            fi
+            if [[ "${FORCE}" != true ]] && oras resolve "${IMAGE}:${version}" && oras resolve "${PREBUILT}:${version}"; then
+              echo "::notice::${IMAGE}:${version} and ${PREBUILT}:${version} are already published"
+              continue
+            fi
+            export ASSET="openssl-${version}.tar.gz"
+            digest="$(retry gh api "repos/openssl/openssl/releases/tags/openssl-${version}" --jq '.assets[] | select(.name == env.ASSET) | .digest')"
+            if [[ ! "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "::error::${ASSET} has no SHA-256 digest on its release."
+              exit 1
+            fi
+            entries+=("$(jq -cn --arg version "${version}" --arg sha256 "${digest#sha256:}" --arg latest "${latest}" '{version: $version, sha256: $sha256, latest: ($version == $latest)}')")
+          done
+          printf '%s\n' "${entries[@]}" | jq -rs '"releases=\(tojson)"' >> "${GITHUB_OUTPUT}"
+
+  image:
+    name: Image ${{ matrix.release.version }}
+    needs: resolve
+    if: needs.resolve.outputs.releases != '[]'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    permissions: { contents: read, packages: write, id-token: write, attestations: write }
+    strategy:
+      fail-fast: false
+      matrix: { release: "${{ fromJSON(needs.resolve.outputs.releases) }}" }
+    steps:
+      - { uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1, with: { persist-credentials: false } } # v7
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with: { registry: ghcr.io, username: "${{ github.actor }}", password: "${{ github.token }}" }
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE }}
+          flavor: latest=false
+          tags: |
+            type=raw,value=${{ matrix.release.version }}
+            type=raw,value=latest,enable=${{ matrix.release.latest }}
+          labels: |
+            org.opencontainers.image.title=openssl
+            org.opencontainers.image.description=OpenSSL ${{ matrix.release.version }}, statically linked, built from the upstream release tarball
+            org.opencontainers.image.version=${{ matrix.release.version }}
+            org.opencontainers.image.licenses=Apache-2.0
+          annotations: |
+            org.opencontainers.image.title=openssl
+            org.opencontainers.image.description=OpenSSL ${{ matrix.release.version }}, statically linked, built from the upstream release tarball
+            org.opencontainers.image.version=${{ matrix.release.version }}
+            org.opencontainers.image.licenses=Apache-2.0
+      - name: Build and export SBOMs
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .github/openssl
+          build-args: |
+            VERSION=${{ matrix.release.version }}
+            SHA256=${{ matrix.release.sha256 }}
+          provenance: false
+          sbom: true
+          outputs: type=local,dest=${{ runner.temp }}/export
+      - name: Push
+        id: push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .github/openssl
+          build-args: |
+            VERSION=${{ matrix.release.version }}
+            SHA256=${{ matrix.release.sha256 }}
+          provenance: false
+          sbom: false
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+      - name: Unwrap SPDX documents and pack the linux-x64 tarball
+        working-directory: ${{ runner.temp }}
+        env: { VERSION: "${{ matrix.release.version }}" }
+        run: |
+          set -euo pipefail
+          jq '.predicate' export/sbom.spdx.json > image.spdx.json
+          jq '.predicate' export/sbom-build.spdx.json > build.spdx.json
+          tar -C export/usr/local -czf "openssl-${VERSION}-linux-x64.tar.gz" .
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with: { subject-name: "${{ env.IMAGE }}", subject-digest: "${{ steps.push.outputs.digest }}", create-storage-record: false }
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          sbom-path: ${{ runner.temp }}/image.spdx.json
+          create-storage-record: false
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          sbom-path: ${{ runner.temp }}/build.spdx.json
+          create-storage-record: false
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: openssl-${{ matrix.release.version }}-linux-x64
+          path: ${{ runner.temp }}/openssl-${{ matrix.release.version }}-linux-x64.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
+  tarball:
+    name: ${{ matrix.release.version }} ${{ matrix.platform }}
+    needs: resolve
+    if: needs.resolve.outputs.releases != '[]'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    permissions: { contents: read }
+    strategy:
+      fail-fast: false
+      matrix:
+        release: ${{ fromJSON(needs.resolve.outputs.releases) }}
+        platform: [linux-arm64, darwin-x64, darwin-arm64, windows-x64, windows-arm64]
+        include:
+          - { platform: linux-arm64, runner: ubuntu-26.04-arm }
+          - { platform: darwin-x64, runner: macos-15-intel }
+          - { platform: darwin-arm64, runner: macos-15 }
+          - { platform: windows-x64, runner: windows-2025-vs2026, msvc-arch: x64, configure-target: VC-WIN64A }
+          - { platform: windows-arm64, runner: windows-11-vs2026-arm, msvc-arch: arm64, configure-target: VC-WIN64-CLANGASM-ARM }
+    env:
+      VERSION: ${{ matrix.release.version }}
+      SHA256: ${{ matrix.release.sha256 }}
+      ARCHIVE: openssl-${{ matrix.release.version }}-${{ matrix.platform }}.tar.gz
+      MACOSX_DEPLOYMENT_TARGET: "11.0"
+    steps:
+      - { uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1, with: { persist-credentials: false } } # v7
+      - name: Build (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          docker buildx build --build-arg "VERSION=${VERSION}" --build-arg "SHA256=${SHA256}" \
+            --output "type=local,dest=${RUNNER_TEMP}/export" .github/openssl
+          "${RUNNER_TEMP}/export/usr/local/bin/openssl" version -a
+          tar -C "${RUNNER_TEMP}/export/usr/local" -czf "${RUNNER_TEMP}/${ARCHIVE}" .
+      - name: Download and verify the release tarball
+        if: runner.os != 'Linux'
+        shell: bash
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          set -euo pipefail
+          retry() {
+            local attempt status delay=2
+            for attempt in 1 2 3 4; do
+              if "$@"; then return 0; else status=$?; fi
+              if ((attempt == 4)); then return "${status}"; fi
+              printf 'Request failed (exit %s); retrying in %ss (attempt %s/4).\n' "${status}" "${delay}" "$((attempt + 1))" >&2
+              sleep "${delay}"; delay=$((delay * 2))
+            done
+          }
+          retry gh release download "openssl-${VERSION}" --repo openssl/openssl --pattern "openssl-${VERSION}.tar.gz" --dir "${RUNNER_TEMP}" --clobber
+          cd "${RUNNER_TEMP}"
+          checksum=(sha256sum)
+          if [[ "${RUNNER_OS}" == macOS ]]; then checksum=(shasum -a 256); fi
+          printf '%s  %s\n' "${SHA256}" "openssl-${VERSION}.tar.gz" | "${checksum[@]}" --check
+          tar -xzf "openssl-${VERSION}.tar.gz"
+      - name: Build (macOS)
+        if: runner.os == 'macOS'
+        working-directory: ${{ runner.temp }}/openssl-${{ matrix.release.version }}
+        run: |
+          set -euo pipefail
+          ./Configure --prefix=/usr/local --openssldir=/usr/local/ssl --libdir=lib no-shared no-module no-tests
+          jobs="$(sysctl -n hw.ncpu)"
+          make -j"${jobs}" build_sw
+          make DESTDIR="${RUNNER_TEMP}/root" install_sw install_ssldirs
+          "${RUNNER_TEMP}/root/usr/local/bin/openssl" version -a
+          otool -L "${RUNNER_TEMP}/root/usr/local/bin/openssl"
+          tar -C "${RUNNER_TEMP}/root/usr/local" -czf "${RUNNER_TEMP}/${ARCHIVE}" .
+      - if: matrix.platform == 'windows-x64'
+        uses: ilammy/setup-nasm@72793074d3c8cdda771dba85f6deafe00623038b # v1.5.2
+      - if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
+        with: { arch: "${{ matrix.msvc-arch }}" }
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env: { CONFIGURE_TARGET: "${{ matrix.configure-target }}" }
+        working-directory: ${{ runner.temp }}/openssl-${{ matrix.release.version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          $prefix = 'C:\openssl'
+          Get-Command perl, nmake, cl | Format-Table -Property Name, Source
+          if ($env:CONFIGURE_TARGET -eq 'VC-WIN64A') { Get-Command nasm | Format-Table -Property Name, Source }
+          if ($env:CONFIGURE_TARGET -eq 'VC-WIN64-CLANGASM-ARM') { Get-Command clang-cl | Format-Table -Property Name, Source }
+          $options = @($env:CONFIGURE_TARGET, "--prefix=$prefix", "--openssldir=$prefix\ssl", 'no-shared', 'no-module', 'no-tests')
+          if (Select-String -Path Configure -Pattern 'static-vcruntime' -Quiet) { $options += 'enable-static-vcruntime' }
+          perl Configure @options
+          nmake build_sw
+          nmake install_sw install_ssldirs
+          & "$prefix\bin\openssl.exe" version -a
+          dumpbin /dependents "$prefix\bin\openssl.exe"
+          tar -C $prefix -czf "$env:RUNNER_TEMP\$env:ARCHIVE" .
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: openssl-${{ matrix.release.version }}-${{ matrix.platform }}
+          path: ${{ runner.temp }}/${{ env.ARCHIVE }}
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Tarballs ${{ matrix.release.version }}
+    needs: [resolve, image, tarball]
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions: { contents: read, packages: write, id-token: write, attestations: write }
+    strategy:
+      fail-fast: false
+      matrix: { release: "${{ fromJSON(needs.resolve.outputs.releases) }}" }
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: openssl-${{ matrix.release.version }}-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/dist
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with: { subject-path: "${{ runner.temp }}/dist/*.tar.gz" }
+      - uses: oras-project/setup-oras@1d808f7d7f6995cc68b7bf507bfe5c5446e1dc9d # v2.0.1
+      - name: Push to GHCR
+        working-directory: ${{ runner.temp }}/dist
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ matrix.release.version }}
+          LATEST: ${{ matrix.release.latest }}
+        run: |
+          set -euo pipefail
+          ls -l
+          tags="${VERSION}"
+          if [[ "${LATEST}" == true ]]; then tags="${tags},latest"; fi
+          files=()
+          for file in *.tar.gz; do files+=("${file}:application/vnd.oci.image.layer.v1.tar+gzip"); done
+          oras login ghcr.io --username "${GITHUB_ACTOR}" --password-stdin <<< "${GH_TOKEN}"
+          oras push "${PREBUILT}:${tags}" --no-tty \
+            --artifact-type application/vnd.kjanat.openssl.prebuilt.v1 \
+            --annotation "org.opencontainers.image.source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+            --annotation "org.opencontainers.image.version=${VERSION}" \
+            --annotation "org.opencontainers.image.title=openssl-prebuilt" \
+            --annotation "org.opencontainers.image.description=OpenSSL ${VERSION} tarballs for linux-x64, linux-arm64, darwin-x64, darwin-arm64, windows-x64, windows-arm64" \
+            --annotation "org.opencontainers.image.licenses=Apache-2.0" \
+            "${files[@]}"

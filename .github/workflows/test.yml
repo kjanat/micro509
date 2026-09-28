@@ -13,8 +13,10 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with: { persist-credentials: false }
-      - uses: $/.github/actions/setup-ts
-        with: { install-bun: true, install-node: true, install-deno: true }
+      - parallel:
+          - uses: $/.github/actions/setup-ts
+            with: { install-bun: true, install-node: true, install-deno: true }
+          - uses: $/.github/actions/setup-openssl
       - name: Build (runs attw + publint + unused-export checks)
         run: runner install -f build
       - run: run typecheck
@@ -22,16 +24,18 @@ jobs:
         run: run -p check:deno lint:deno docs:lint
       - run: run test:coverage
         env: { DIFFERENTIAL_OPENSSL: "1" }
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@a99c28d3f0da835de33ff2feb2e15691c7b9641f # v7
-        with: { flags: bun, fail_ci_if_error: true, use_oidc: true, report_type: coverage }
-      - name: Upload test-results to Codecov
-        uses: codecov/codecov-action@a99c28d3f0da835de33ff2feb2e15691c7b9641f # v7
-        with: { flags: bun, fail_ci_if_error: true, use_oidc: true, report_type: test_results, files: test-results.xml }
-      - name: Node smoke test (dist)
-        run: node scripts/smoke.mjs
-      - name: Deno smoke test (dist)
-        run: deno run --allow-read scripts/smoke.mjs
+      - parallel:
+          - name: Upload coverage to Codecov
+            uses: codecov/codecov-action@a99c28d3f0da835de33ff2feb2e15691c7b9641f # v7
+            with: { flags: bun, fail_ci_if_error: true, use_oidc: true, report_type: coverage }
+          - name: Upload test-results to Codecov
+            uses: codecov/codecov-action@a99c28d3f0da835de33ff2feb2e15691c7b9641f # v7
+            with: { flags: bun, fail_ci_if_error: true, use_oidc: true, report_type: test_results, files: test-results.xml }
+      - parallel:
+          - name: Node smoke test (dist)
+            run: node scripts/smoke.mjs
+          - name: Deno smoke test (dist)
+            run: deno run --allow-read scripts/smoke.mjs
 
   docs:
     name: Docs site
@@ -68,16 +72,10 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     permissions: { contents: read }
-    env: { DIFFERENTIAL_OPENSSL: "1", EXPECTED_OPENSSL_VERSION: "3.5.5" }
+    env: { DIFFERENTIAL_OPENSSL: "1" }
     steps:
       - { uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1, with: { persist-credentials: false } } # v7
-      - { uses: $/.github/actions/setup-ts, with: { install-bun: "true" } }
-      - name: Assert OpenSSL oracle version
-        run: |
-          version="$(openssl version)"
-          echo "${version}"
-          case "${version}" in
-            "OpenSSL ${EXPECTED_OPENSSL_VERSION} "*) ;;
-            *) echo "::error::expected OpenSSL ${EXPECTED_OPENSSL_VERSION}, the differential oracle is version-sensitive"; exit 1 ;;
-          esac
+      - parallel:
+          - { uses: $/.github/actions/setup-ts, with: { install-bun: "true" } }
+          - { uses: $/.github/actions/setup-openssl }
       - run: runner install -f test:differential
