@@ -29,12 +29,17 @@ export function ituSourceStem(stem: string, source = ''): string {
 	return `T-REC-${recommendation}-${date[2]}${date[1]}-I!${token}${variant?.[2] ?? ''}!MSW-E`;
 }
 
-/** Do not turn unstyled, numbered body paragraphs into multi-kilobyte titles. */
+const CLAUSE_SENTENCE_START =
+	/^(?:A|An|The|This|That|These|Those|It|Each|Every|Any|No|If|When|Where|While|Unless|There)\b/i;
+const CLAUSE_VERB =
+	/\b(?:shall|must|should|may|is|are|was|were|has|have|contains?|consists?|applies?|specifies?|indicates?|identifies?|defines?|represents?|uses?|provides?|requires?)\b/i;
+const CLAUSE_SENTENCE_END = /[.;!?]$/;
+
+/** Do not turn numbered body paragraphs into headings, regardless of sentence length. */
 export function looksLikeClauseProse(title: string): boolean {
 	return (
 		title.length > 180 ||
-		(/\b(?:shall|must|is|are|may)\b/i.test(title) &&
-			/[.;]$/.test(title) &&
-			title.split(/\s+/).length > 12)
+		(CLAUSE_SENTENCE_END.test(title) &&
+			(CLAUSE_SENTENCE_START.test(title) || CLAUSE_VERB.test(title)))
 	);
 }
