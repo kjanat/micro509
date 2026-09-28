@@ -25,8 +25,9 @@ import {
 import { OIDS } from '#micro509/internal/asn1/oids';
 import { verifySignedDataDetailed } from '#micro509/internal/crypto/sig-verify';
 import { compareDistinguishedNames } from '#micro509/internal/shared/dn';
-import { domainToAscii } from '#micro509/internal/shared/idna';
+import { asciiLowercase, domainToAscii } from '#micro509/internal/shared/idna';
 import { parseIpAddressToBytes } from '#micro509/internal/shared/ip';
+import { presentedSmtpUtf8MailboxDomain } from '#micro509/internal/shared/mailbox';
 import type { NameConstraintValidationState } from '#micro509/internal/verify/name-constraints-engine';
 import {
 	createNameConstraintValidationState,
@@ -50,6 +51,7 @@ import {
 } from '#micro509/internal/verify/verify-path';
 import {
 	normalizeLabelSeparators,
+	parsePresentedSrvName,
 	parseSrvNameRestriction,
 	parseUriNameConstraint,
 } from '#micro509/internal/x509/general-name-profile';
@@ -1776,7 +1778,14 @@ const UNINTERPRETED_GENERAL_NAME_TYPES: ReadonlySet<SubjectAltName['type']> = ne
 ]);
 
 function isUninterpretedGeneralName(name: SubjectAltName): boolean {
-	return UNINTERPRETED_GENERAL_NAME_TYPES.has(name.type);
+	switch (name.type) {
+		case 'srv':
+			return parsePresentedSrvName(asciiLowercase(name.value)) === undefined;
+		case 'smtpUtf8Mailbox':
+			return presentedSmtpUtf8MailboxDomain(name.value) === undefined;
+		default:
+			return UNINTERPRETED_GENERAL_NAME_TYPES.has(name.type);
+	}
 }
 
 /** Constructs a {@linkcode VerifyChainFailure} with the given code, message, optional chain index, and details. */

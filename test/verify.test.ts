@@ -1110,6 +1110,50 @@ describe('chain verification', () => {
 		).toMatchObject({ ok: false, code: 'unrecognized_critical_extension' });
 	});
 
+	it('rejects a critical SAN whose SRVName or SmtpUTF8Mailbox breaks its grammar', async () => {
+		const ca = await createSelfSignedCertificate({
+			subject: { commonName: 'Critical OtherName CA' },
+			extensions: { basicConstraints: { ca: true }, keyUsage: ['keyCertSign'] },
+		});
+		const leafKeys = await generateKeyPair();
+		const otherName = (typeId: string, value: Uint8Array) =>
+			tlv(0xa0, concatBytes([objectIdentifier(typeId), explicitContext(0, value)]));
+		const srv = (value: string) =>
+			otherName(OIDS.idOnDnsSrv, tlv(0x16, new TextEncoder().encode(value)));
+		const mailbox = (value: string) => otherName(OIDS.idOnSmtpUtf8Mailbox, utf8String(value));
+		const verifyCriticalSan = async (name: Uint8Array) => {
+			const leaf = await createCertificateWithRawExtensions({
+				issuer: { commonName: 'Critical OtherName CA' },
+				subject: { commonName: 'critical-other-name.example' },
+				publicKey: leafKeys.publicKey,
+				signerPrivateKey: ca.keyPair.privateKey,
+				issuerPublicKey: ca.keyPair.publicKey,
+				extensions: {
+					keyUsage: ['digitalSignature'],
+					customExtensions: [{ oid: OIDS.subjectAltName, critical: true, value: sequence([name]) }],
+				},
+			});
+			return verifyCertificateChain({ leaf: leaf.pem, roots: [ca.certificate.pem] });
+		};
+
+		for (const name of [srv('_mail.example.com'), mailbox('\u{fc}ser@example.com')]) {
+			expect(await verifyCriticalSan(name)).toMatchObject({ ok: true });
+		}
+		for (const name of [
+			srv('not-a-srv'),
+			srv('_mail.-example.com'),
+			mailbox('user@example.com'),
+			mailbox('\u{fc}ser@-example.com'),
+			mailbox('\u{fc}ser'),
+		]) {
+			expect(await verifyCriticalSan(name)).toMatchObject({
+				ok: false,
+				code: 'unrecognized_critical_extension',
+				details: { actual: OIDS.subjectAltName },
+			});
+		}
+	});
+
 	it('rejects a malformed critical directoryName SAN before applying name constraints', async () => {
 		const excludedName = buildDirectoryNameDerHex([
 			[{ oid: OIDS.organizationName, value: 'Blocked Org', encoding: 'utf8' }],

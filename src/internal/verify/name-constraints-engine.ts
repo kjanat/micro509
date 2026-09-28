@@ -32,7 +32,7 @@ import {
 	decodeIpAddress,
 	parseIpAddressToBytes,
 } from '#micro509/internal/shared/ip';
-import { isMailboxDomain, isSmtpUtf8LocalPart } from '#micro509/internal/shared/mailbox';
+import { isMailboxDomain, presentedSmtpUtf8MailboxDomain } from '#micro509/internal/shared/mailbox';
 import { uriAuthorityHost } from '#micro509/internal/shared/uri-host';
 import {
 	parsePresentedSrvName,
@@ -519,24 +519,13 @@ function checkSmtpUtf8Mailbox(
 	);
 }
 
-/**
- * RFC 9598 §5: the Local-part is a non-ASCII RFC 6531 Local-part and the
- * lowercased domain is NR-LDH labels and A-labels before the domain is compared.
- */
+/** RFC 9598 §5: a presented SmtpUTF8Mailbox whose domain the email constraints permit. */
 function isSmtpUtf8MailboxDomainPermitted(
 	mailbox: string,
 	accumulated: AccumulatedNameConstraints,
 ): boolean {
-	const at = mailbox.lastIndexOf('@');
-	const localPart = mailbox.slice(0, Math.max(at, 0));
-	const domain = asciiLowercase(mailbox.slice(at + 1));
-	return (
-		at > 0 &&
-		isSmtpUtf8LocalPart(localPart) &&
-		[...localPart].some((character) => (character.codePointAt(0) ?? 0) > 0x7f) &&
-		isMailboxDomain(domain, 'lookup') &&
-		isMailboxDomainPermitted(domain, accumulated)
-	);
+	const domain = presentedSmtpUtf8MailboxDomain(mailbox);
+	return domain !== undefined && isMailboxDomainPermitted(domain, accumulated);
 }
 
 function isMailboxDomainPermitted(

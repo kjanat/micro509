@@ -130,7 +130,7 @@ function isAscii(value: string): boolean {
 	return codePointsOf(value).every((codePoint) => codePoint < 0x80);
 }
 
-function asciiLowercase(value: string): string {
+export function asciiLowercase(value: string): string {
 	return value.replace(/[A-Z]/g, (letter) => letter.toLowerCase());
 }
 

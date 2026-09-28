@@ -217,6 +217,11 @@ revocation })` report a certificate carrying `noRevAvail` or
 
 - A typed SRVName SAN outside the RFC 6335 service grammar or STD3 LDH Name
   syntax is refused with the new `invalid_srv_name`.
+- A critical subjectAltName holding a SRVName that is not `_Service.Name`
+  under that profile, or a SmtpUTF8Mailbox without a non-ASCII RFC 6531
+  Local-part and a domain of NR-LDH labels and A-labels, carries information
+  path validation cannot process (RFC 5280 §4.2), and the chain fails with
+  `unrecognized_critical_extension`.
 - SRV-ID matching compares the Name of the reference identifier and of each
   presented SRVName without the root label, so `_imaps.example.com.` and
   `_imaps.example.com` match (RFC 3490 §2, §3.1). A Name with an empty label,
